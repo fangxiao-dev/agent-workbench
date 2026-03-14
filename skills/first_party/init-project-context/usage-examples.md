@@ -7,7 +7,7 @@ These examples show how `init-project-context` should behave in realistic reposi
 ### User Request
 
 ```text
-This is an internal AI tool project. I want to set up agent workflow first.
+This is an internal AI tool project. I need help figuring out what this repo is actually for before we build anything.
 ```
 
 ### Expected Behavior
@@ -16,12 +16,12 @@ This is an internal AI tool project. I want to set up agent workflow first.
 2. Summarize confirmed facts briefly.
 3. Identify the highest-impact missing context.
 4. Ask one narrowing question about the current milestone or smallest useful closed loop.
-5. Refuse to draft `AGENTS.md` or `CLAUDE.md` until the project goal is concrete enough.
+5. Refuse to draft `AGENTS.md` or `CLAUDE.md` until the project purpose and scope are concrete enough.
 
 ### Good Follow-Up Question
 
 ```text
-I can see the repo structure, but the current delivery target is still unclear. What is the smallest end-to-end workflow this project must complete in its first milestone?
+I can see the repo structure, but the project itself is still loosely defined. What is the smallest meaningful thing this repository is supposed to deliver first?
 ```
 
 ### What Not To Do
@@ -29,31 +29,32 @@ I can see the repo structure, but the current delivery target is still unclear. 
 - Do not ask five broad questions at once.
 - Do not start drafting instruction files from "AI tool project" alone.
 
-## Example 2: Repository Has Code But Missing Rules
+## Example 2: Course Project With Unclear Scope
 
 ### User Request
 
 ```text
-This repo already has frontend and backend code. Help me initialize AGENTS.md and CLAUDE.md.
+This is a course project for a cloud-based web app. Help me initialize the project context.
 ```
 
 ### Expected Behavior
 
-1. Discover the stack, entrypoints, tests, and major directories from the repo.
-2. Do not ask for facts already visible in the repository.
-3. Ask for the current in-scope / out-of-scope boundary and non-breakable constraints.
-4. Draft foundation docs first, then prepare instruction-file scaffolds.
+1. Discover the current repository state and any existing concept docs.
+2. Do not ask for technical facts already visible in the repository.
+3. Ask what the project is for, how it will be evaluated, and what must be delivered.
+4. Draft `project-context.md` and `tech-stack-investigate.md`.
+5. Treat agent instruction files as optional follow-up output.
 
 ### Good Follow-Up Question
 
 ```text
-I can already see the stack and repository layout. Before drafting instruction files, I need the boundary for this phase: which parts are in scope right now, and which parts should agents avoid changing?
+I can already see that this is a cloud web app repo, but I still need the real boundary for the assignment. What are the required features, and what is intentionally out of scope for the course project?
 ```
 
 ### What Not To Do
 
-- Do not ask "what tech stack are you using?" if manifests already answer it.
-- Do not put all repo facts directly into `AGENTS.md`.
+- Do not jump straight into agent rules if the project itself is still fuzzy.
+- Do not mistake candidate stack notes for finalized implementation truth.
 
 ## Example 3: User Pushes For Immediate Output
 
@@ -66,14 +67,14 @@ Just write AGENTS.md and CLAUDE.md directly.
 ### Expected Behavior
 
 1. Check whether the repository has enough stable context.
-2. If not, explain why direct drafting would lock in bad assumptions.
-3. Continue discovery until goal, scope, and rules are strong enough.
+2. If not, explain why direct drafting would lock in bad assumptions about the project.
+3. Continue discovery until project purpose, scope, and candidate technical direction are strong enough.
 4. Stop at foundation docs if critical ambiguity remains.
 
 ### Good Response Shape
 
 ```text
-The repository does not yet have enough stable project context for safe instruction drafting. I need to close the current milestone, scope boundary, and hard constraints first so the files do not encode weak assumptions.
+The repository does not yet have enough stable project context for safe instruction drafting. I need to close the project purpose, required scope, and candidate technical direction first so the files do not encode weak assumptions.
 ```
 
 ### What Not To Do
@@ -81,13 +82,34 @@ The repository does not yet have enough stable project context for safe instruct
 - Do not comply immediately when the project description is still fuzzy.
 - Do not invent rules that the repository and user have not established.
 
+## Example 4: Project Context Is Primary, Agent Files Are Secondary
+
+### User Request
+
+```text
+I need the context docs to explain the project itself. Agent rules are not the main point.
+```
+
+### Expected Behavior
+
+1. Re-center the process around project definition, deliverables, and boundaries.
+2. Draft the context files first.
+3. Keep any later `AGENTS.md` or `CLAUDE.md` content thin and dependent on the shared context docs.
+
+### Good Response Shape
+
+```text
+The first step is to make the project itself explicit: what it is for, what must be delivered, and what is out of scope. I will treat agent entry files as optional follow-up outputs instead of the main deliverable.
+```
+
 ## Stop Condition
 
 Instruction drafting is allowed only when all of these are true:
 
-- The current project goal is explicit.
+- The current project purpose is explicit.
 - The primary users or operators are explicit.
 - The current milestone is explicit.
+- The required deliverables are explicit.
 - In-scope / out-of-scope is explicit enough for planning.
-- At least one set of hard rules is explicit.
+- There is at least a provisional candidate technical direction, or an explicit statement that it is still open.
 - Future planning would not depend on repeated oral clarification of core context.
