@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-workbench"
+version = "0.1.0"
+description = "Reusable multi-agent workflow assets with bootstrap tooling."
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+agent-workbench = "agent_workbench.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

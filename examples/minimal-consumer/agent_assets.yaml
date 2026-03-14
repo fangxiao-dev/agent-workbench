@@ -1,0 +1,17 @@
+source_repo: ../agent-workbench
+agents:
+  - codex
+  - claude
+skills:
+  - agent-workbench-manager
+  - planning-with-files
+  - name: wt-plan
+    scope: global
+templates:
+  - codex
+  - claude
+verify:
+  - templates
+  - project_skills
+  - global_skills
+  - plan_tracker
