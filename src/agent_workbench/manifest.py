@@ -56,6 +56,8 @@ def manifest_from_data(data: dict[str, Any], base_dir: Path) -> AgentAssetsManif
     agents = _normalize_agent_list(data.get("agents"), field_name="agents")
     templates = _normalize_agent_list(data.get("templates"), field_name="templates", default=agents)
     verify = _normalize_string_list(data.get("verify"), field_name="verify", default=list(DEFAULT_VERIFY_CHECKS))
+    if "third_party_skills" in data:
+        raise ValueError("Manifest field third_party_skills is no longer supported; use a separate open-skills list file and script instead")
     task_prefix_raw = str(data.get("task_prefix", "")).strip()
     task_prefix = task_prefix_raw or None
 
