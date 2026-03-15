@@ -2,6 +2,24 @@
 
 > 一种面向 AI Agent 多任务并行开发的轻量协作框架。
 > 核心理念：**一个 task = 一个 worktree = 一个闭环**。
+> 本文档是 WT-PM 工作流主参考入口；`rules/*` 为同技能目录下的被引用规范库（跨目录引用使用 `~/.claude/skills/wt-pm/rules/*`）。
+
+---
+
+## 0. Rule Index (Normative References)
+
+以下规则文件提供“定义”，由 WT-PM 工作流在对应阶段引用执行：
+
+- `rules/collaboration-boundaries.md`
+  - 定义语义范围、提交约定、安全护栏（通用规则，不直接驱动阶段流转）
+- `rules/planning-with-files.md`
+  - 定义 task 状态机、plan 三文件、CLI contract 与并发约束
+- `rules/dod-and-safety.md`
+  - 定义 DoD 与通用安全底线
+
+使用原则：
+- 流程从 `wt-pm` 进入，由 `wt-plan` / `wt-dev` 执行阶段动作。
+- `rules` 负责定义约束，不作为主入口重复流程。
 
 ---
 
@@ -348,7 +366,7 @@ WT-PM 天然支持多任务并行，隔离机制如下：
 |------|------|----------|
 | File scope 定义 | 项目的目录范围划分（如 `frontend/`, `backend/`, `shared/`） | `collaboration-boundaries.md` |
 | Regression 命令 | 项目的测试命令（pytest / vitest / cargo test 等） | `collaboration-boundaries.md` |
-| Contract 来源 | API schema 所在目录 | `api-contract.md` |
+| Contract 来源 | API schema 所在目录 | 在 `collaboration-boundaries.md` 中声明 |
 | Task ID 前缀 | 如 `TC-`、`FEAT-`、`BUG-` | `plans/todo_current.md` |
 
 ### 可选定制
@@ -367,25 +385,17 @@ WT-PM 天然支持多任务并行，隔离机制如下：
 │   ├── todo_future.md           # 未来里程碑备忘（可选）
 │   └── workplans/
 │       └── README.md            # Workplan 操作说明
-├── scripts/
-│   └── plan_tracker.py          # Task 状态管理 CLI
-├── .claude/
-│   └── rules/
-│       ├── collaboration-boundaries.md
-│       ├── api-contract.md
-│       ├── planning-with-files.md
-│       └── dod-and-safety.md
 └── CLAUDE.md / AGENTS.md        # 项目级 Agent 指令
 ```
 
+> **注**：`plan_tracker.py` 已内置于 `~/.claude/skills/wt-pm/scripts/`，通过 `--root` 参数指定项目目录，无需复制到各项目。规则文件（`collaboration-boundaries.md` 等）同理，从 `~/.claude/skills/wt-pm/rules/` 全局加载。
+
 ### 移植步骤
 
-1. 复制 `scripts/plan_tracker.py`
-2. 创建 `plans/` 目录结构（`todo_current.md` + `workplans/`）
-3. 编写项目专属的 `.claude/rules/*.md`（基于本文档各章节定制）
-4. 在 `CLAUDE.md` / `AGENTS.md` 中引用规则文件
-5. 定义项目的 regression gate 命令
-6. 定义项目的 contract 来源和冻结策略
+1. 创建 `plans/` 目录结构（`todo_current.md` + `workplans/`，参考 `~/.claude/skills/wt-pm/templates/workplans-README.md`）
+2. 编写项目专属的 `CLAUDE.md` / `AGENTS.md`（引用 wt-pm 的适用约定）
+3. 定义项目的 regression gate 命令
+4. 定义项目的 contract 来源和冻结策略
 
 ---
 

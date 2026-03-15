@@ -1,5 +1,7 @@
 # planning-with-files Rule
 
+Primary entrypoint: `skills/wt-pm/SKILL.md` and `skills/wt-pm/references/wt-pm-workflow.md`.
+
 ## Purpose
 
 将 `planning-with-files` 统一为 `task tracker + per-plan workplans` 协作模式，支持并行任务 worktree 开发，降低状态冲突和上下文漂移。
@@ -16,7 +18,7 @@
 
 - `UNPLANNED -> PLANNED -> DONE`（互斥）
 - `PLANNED` 与 `DONE` 必须有 `plan_id`
-- 状态更新优先通过 `python scripts/plan_tracker.py ...`
+- 状态更新优先通过 `python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . ...`
 
 ## Trigger Semantics
 
@@ -42,12 +44,12 @@
 
 ## CLI Contract
 
-- `python scripts/plan_tracker.py list`
-- `python scripts/plan_tracker.py quick-plan --task-ids <ids>`
-- `python scripts/plan_tracker.py quick-plan --max-tasks <n>`
-- `python scripts/plan_tracker.py quick-resume [--plan-id <id> | --task-id <id>]`
-- `python scripts/plan_tracker.py set-status --task-id <id> --status <UNPLANNED|PLANNED|DONE>`
-- `python scripts/plan_tracker.py bind-task --task-id <id> --plan-id <id>`
+- `python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . list`
+- `python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . quick-plan --task-ids <ids>`
+- `python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . quick-plan --max-tasks <n>`
+- `python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . quick-resume [--plan-id <id> | --task-id <id>]`
+- `python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . set-status --task-id <id> --status <UNPLANNED|PLANNED|DONE>`
+- `python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . bind-task --task-id <id> --plan-id <id>`
 
 ## Audit & Handoff
 

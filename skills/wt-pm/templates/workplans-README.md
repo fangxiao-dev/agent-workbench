@@ -6,7 +6,7 @@
 - `findings.<plan_id>.md`
 - `progress.<plan_id>.md`
 
-详细触发语义、并行约束、命令契约见：`.claude/rules/planning-with-files.md`。
+详细触发语义、并行约束、命令契约见：`~/.claude/skills/wt-pm/rules/planning-with-files.md`。
 
 ## plan_id 规则
 
@@ -28,9 +28,9 @@
 
 ## 推荐命令
 
-```powershell
-python scripts/plan_tracker.py list
-python scripts/plan_tracker.py quick-plan --max-tasks 2
-python scripts/plan_tracker.py quick-resume
-python scripts/plan_tracker.py set-status --task-id TC-001 --status DONE --plan-id 20260218-TC-001
+```bash
+python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . list
+python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . quick-plan --max-tasks 2
+python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . quick-resume
+python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . set-status --task-id TC-001 --status DONE --plan-id 20260218-TC-001
 ```

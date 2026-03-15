@@ -11,6 +11,13 @@ from typing import Iterable
 
 TODO_PATH = Path("plans/todo_current.md")
 WORKPLAN_DIR = Path("plans/workplans")
+
+
+def set_root(root: Path) -> None:
+    """Override TODO_PATH and WORKPLAN_DIR to resolve under the given project root."""
+    global TODO_PATH, WORKPLAN_DIR
+    TODO_PATH = root / "plans/todo_current.md"
+    WORKPLAN_DIR = root / "plans/workplans"
 STATUS_VALUES = ("UNPLANNED", "PLANNED", "DONE")
 TABLE_COLUMNS = ("task_id", "task", "status", "plan_id", "updated_at", "note")
 
@@ -506,6 +513,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Track todo task lifecycle and multi-plan files under plans/workplans."
     )
+    parser.add_argument(
+        "--root",
+        default=None,
+        help="Project root directory (default: current working directory)",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     list_parser = subparsers.add_parser("list", help="List tasks from plans/todo_current.md")
@@ -546,6 +558,8 @@ def main() -> int:
     """CLI entrypoint."""
     parser = build_parser()
     args = parser.parse_args()
+    if args.root is not None:
+        set_root(Path(args.root).resolve())
     try:
         return args.func(args)
     except Exception as exc:
