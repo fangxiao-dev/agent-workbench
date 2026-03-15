@@ -1,100 +1,108 @@
 # agent-workbench
 
-Personal agent workflow assets and bootstrap tooling for Codex, Claude, and Gemini.
+个人 Agentic Coding 基础设施工具库。一次安装，在所有项目里共享同一套 skills、agents 和 commands。
 
-## What v1 includes
+**安装后能做什么？** → [docs/capabilities.md](docs/capabilities.md)
 
-- A unified first-party skill: `agent-workbench-manager`
-- Personal-use bootstrap CLI with `apply`, `verify`, and `pull`
-- Project-local and user-global skill installation
-- Smoke verification for installed skills, shared docs/rules, and `plan_tracker.py`
-- First-party assets that can be linked or synced into a business repository from the tool repo
+---
 
-## Recommended workflow
-
-1. Manually clone your personal `agent-workbench` repo to a local path.
-2. Optionally add `agent_assets.yaml` to the target business repository if you want to customize agents or skills.
-3. Open the `agent-workbench` repo when you want to sync or verify assets.
-4. Use the `agent-workbench-manager` skill in natural language, for example:
-   - `加载这个项目的 agent assets 并验证`
-   - `从工具库同步这个项目的最新 skills`
-   - `在没有 agent_assets.yaml 的仓库里直接加载默认 assets`
-
-The CLI remains available as the execution layer and fallback. Commands are launched from `agent-workbench`, and the business repo is passed as `--target-repo`:
+## 安装
 
 ```bash
-python -m agent_workbench.cli apply --target-repo ../my-project
-python -m agent_workbench.cli verify --target-repo ../my-project
-python -m agent_workbench.cli pull --target-repo ../my-project
+# 在任意目标项目目录下执行（Windows 用 install.ps1）
+bash /path/to/agent-workbench/install.sh
 ```
 
-## Workflow
+Windows 需要开启开发者模式（设置 → 系统 → 开发者选项），因为目录软链接需要该权限。
 
-1. Clone `agent-workbench` to any local path, for example `D:\Tools\agent-workbench`.
-2. Open the cloned `agent-workbench` repo when you want to install or refresh assets for a business repository.
-3. Run `apply`, `verify`, or `pull` with the business repository path passed through `--target-repo`.
-4. Edit first-party skills, shared docs, shared rules, and shared scripts in `agent-workbench`, then run `apply` or `pull` again to refresh the business repository.
+安装后的位置：
 
-## Use Cases
+| 来源 | 安装到 | 机制 |
+|------|--------|------|
+| `skills/*/` | `~/.claude/skills/` | 软链接 |
+| `agents/*/` | `~/.claude/agents/` | 软链接 |
+| `commands/*` | `~/.claude/commands/` | 软链接 |
+| `templates/CLAUDE.md.tpl` | `<目标项目>/CLAUDE.md` | 复制（仅在不存在时） |
 
-- Load assets into a repository that already has `agent_assets.yaml`:
-  `python -m agent_workbench.cli apply --target-repo ../my-project`
-- Verify installed assets in a repository with an existing manifest:
-  `python -m agent_workbench.cli verify --target-repo ../my-project`
-- Refresh a project after updating skills or shared scripts inside `agent-workbench`:
-  `python -m agent_workbench.cli pull --target-repo ../my-project`
-- Initialize a repository that has no `agent_assets.yaml` yet:
-  `python -m agent_workbench.cli apply --target-repo ../my-project`
-- Ask the manager skill to run the same flow in natural language:
-  `加载这个项目的 agent assets 并验证`
-  `从工具库同步这个项目的最新 skills`
-  `在没有 agent_assets.yaml 的仓库里直接加载默认 assets`
+> **约定**：把 agent-workbench 放在固定路径（如 `~/dev/agent-workbench`），不要随意移动——软链接依赖绝对路径。
 
-## Installed Paths
+---
 
-- First-party skills are installed to `.agents/skills/`
-- Claude project skills are also installed to `.claude/skills/`
-- Gemini project skills are also installed to `.gemini/skills/`
-- Shared workflow docs are installed to `.agents/docs/`
-- Shared workflow rules are installed to `.claude/rules/`
-- Shared workplan docs are installed to `plans/workplans/README.md`
-- Shared scripts are installed to `scripts/plan_tracker.py`, `scripts/sync_worktree_config.ps1`, and `scripts/sync_worktree_config.sh`
+## 日常使用
 
-## Consumer manifest
+### 修改立即生效
 
-```yaml
-source_repo: ../agent-workbench
-agents:
-  - codex
-  - claude
-skills:
-  - agent-workbench-manager
-  - planning-with-files
-  - cross-worktree-sync
-  - name: wt-plan
-    scope: global
-verify:
-  - project_skills
-  - global_skills
-  - shared_assets
-  - plan_tracker
+所有文件通过软链接指向本仓库。在 workbench 里改完保存，无需重跑 install.sh。
+
+### 在任意项目里运行审查
+
+```
+/audit
 ```
 
-Skill defaults:
-- `scope`: `project`
-- `mode`: `link`
+触发 `agentic-audit` subagent，对当前项目的 CLAUDE.md、agents、skills、commands 做深度质量审查，输出带改进建议的报告。
 
-Installation behavior:
-- Project-level skills are installed to `.agents/skills/`
-- If `claude` is enabled, the same project-level skills are also installed to `.claude/skills/`
-- If `gemini` is enabled, the same project-level skills are also installed to `.gemini/skills/`
-- Global skills are installed to `~/.claude/skills/`, `~/.codex/skills/`, or `~/.gemini/skills/` depending on enabled agents
-- Shared workflow assets are linked when possible, with copy fallback, to `.agents/docs/`, `.claude/rules/`, and `plans/workplans/README.md`
-- Shared tool scripts are linked when possible, with copy fallback, to `scripts/plan_tracker.py`, `scripts/sync_worktree_config.ps1`, and `scripts/sync_worktree_config.sh`
-- If `agent_assets.yaml` is missing, `apply` and `pull` load all first-party skills by default
+### 生成新项目的 CLAUDE.md
 
-Notes:
-- `agent-workbench` is the control plane. `apply`, `verify`, and `pull` are intended to run from the tool repo, not from inside the business repo.
-- `source_repo` stays in `agent_assets.yaml` mainly as a source-of-truth pointer for local setups; CLI calls from `agent-workbench` will use the current tool repo by default.
-- `task_prefix` is optional and only matters if your project wants to reuse task-tracker conventions.
-- Business-repo copies should be treated as generated install targets; edit the source files in `agent-workbench` instead.
+```bash
+bash /path/to/agent-workbench/install.sh /path/to/new-project
+```
+
+如果目标项目没有 CLAUDE.md，会从 `templates/CLAUDE.md.tpl` 生成一份带 TODO 标注的草稿。
+
+---
+
+## 目录结构
+
+```
+agent-workbench/
+├── install.sh / install.ps1    ← 安装入口
+├── skills/                     ← 自定义 skills，安装到 ~/.claude/skills/
+│   ├── agentic-audit/          ← audit 知识库（rules + examples）
+│   ├── wt-pm/                  ← WT-PM 工作流知识库
+│   │   ├── SKILL.md            ← 全流程编排入口 skill
+│   │   ├── references/         ← 工作流参考文档
+│   │   ├── rules/              ← 协作边界、DoD、planning 规则
+│   │   ├── scripts/            ← plan_tracker.py、sync_worktree_config.*
+│   │   └── templates/          ← 项目初始化模板（workplans/README.md 等）
+│   ├── wt-plan/                ← trunk 规划阶段 skill
+│   ├── wt-dev/                 ← worktree 开发阶段 skill
+│   ├── planning-with-files/
+│   └── ...
+├── agents/                     ← subagents，安装到 ~/.claude/agents/
+│   └── agentic-audit/
+│       └── agent.md
+├── commands/                   ← slash commands，安装到 ~/.claude/commands/
+│   └── audit.md
+├── templates/
+│   └── CLAUDE.md.tpl           ← 新项目初始化模板
+├── registry/
+│   ├── skills.md               ← 第三方 skills 备忘清单（手动安装，不参与 install.sh）
+│   └── plugins.md              ← MCP/plugin 备忘清单
+└── docs/design/                ← workbench 自身的设计规范
+```
+
+---
+
+## 添加新 Skill
+
+1. 在 `skills/` 下创建目录，加 `SKILL.md`（frontmatter 格式见 [design/02-skills-spec.md](docs/design/02-skills-spec.md)）
+2. 重跑 `install.sh` 创建新软链接
+
+---
+
+## 第三方 Skills
+
+不通过 install.sh 安装，需手动安装后记录在 [registry/skills.md](registry/skills.md)，方便换机器时查阅。
+
+---
+
+## 验证软链接是否正常
+
+```bash
+ls -la ~/.claude/skills/
+ls -la ~/.claude/agents/
+cat ~/.claude/skills/agentic-audit/SKILL.md   # 确认内容可读
+```
+
+如果 Claude Code 识别不到某个 skill，优先用上面命令确认链接是否指向正确路径。
