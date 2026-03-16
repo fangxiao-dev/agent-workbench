@@ -1,75 +1,194 @@
 #Requires -Version 5.1
-# 注意：创建目录软链接需要 Windows 开发者模式 或 以管理员身份运行。
-# 开启开发者模式：设置 → 系统 → 开发者选项 → 开发者模式
 $ErrorActionPreference = "Stop"
 
 $WorkbenchDir = $PSScriptRoot
-$Target = if ($args[0]) { $args[0] } else { (Get-Location).Path }
+$KnownHosts = @{
+    claude = Join-Path $env:USERPROFILE ".claude"
+    codex = Join-Path $env:USERPROFILE ".codex"
+}
+
+$Target = $null
+$RequestedHosts = @()
+
+foreach ($arg in $args) {
+    if ($KnownHosts.ContainsKey($arg)) {
+        $RequestedHosts += $arg
+    }
+    elseif (-not $Target) {
+        $Target = $arg
+    }
+    else {
+        throw "Unknown argument: $arg"
+    }
+}
+
+if (-not $Target) {
+    $Target = (Get-Location).Path
+}
 $Target = (Resolve-Path $Target).Path
-$ClaudeHome = Join-Path $env:USERPROFILE ".claude"
 
-Write-Host "🔧 Workbench: $WorkbenchDir"
-Write-Host "📁 Target project: $Target"
+if (-not $RequestedHosts) {
+    foreach ($hostName in $KnownHosts.Keys) {
+        $hostRoot = $KnownHosts[$hostName]
+        if (Test-Path $hostRoot) {
+            $RequestedHosts += $hostName
+        }
+    }
+}
+
+$InstalledCount = 0
+$SkippedCount = 0
+$ConflictCount = 0
+$HostsProcessed = 0
+
+function Write-ItemStatus {
+    param(
+        [string]$Level,
+        [string]$Message
+    )
+
+    Write-Host "  [$Level] $Message"
+}
+
+function Install-Link {
+    param(
+        [string]$Source,
+        [string]$Destination,
+        [string]$Label,
+        [string]$LinkType = "SymbolicLink"
+    )
+
+    if (Test-Path $Destination) {
+        $item = Get-Item -LiteralPath $Destination -Force
+        $linkType = $item.LinkType
+        $targetValue = $null
+        if ($item.PSObject.Properties.Name -contains "Target") {
+            $targetValue = $item.Target
+        }
+
+        if ((($linkType -eq "SymbolicLink") -or ($linkType -eq "Junction")) -and $targetValue) {
+            if ($targetValue -is [System.Array]) {
+                $targetValue = $targetValue[0]
+            }
+
+            if ($targetValue -eq $Source) {
+                Write-ItemStatus -Level "*" -Message "$Label -> already linked, skipped"
+                $script:SkippedCount++
+                return
+            }
+        }
+
+        Write-ItemStatus -Level "WARN" -Message "$Label -> conflict, skipped ($Destination already exists)"
+        $script:SkippedCount++
+        $script:ConflictCount++
+        return
+    }
+
+    New-Item -ItemType $LinkType -Path $Destination -Target $Source | Out-Null
+    Write-ItemStatus -Level "OK" -Message "$Label -> installed"
+    $script:InstalledCount++
+}
+
+function Install-FileCopy {
+    param(
+        [string]$Source,
+        [string]$Destination,
+        [string]$Label
+    )
+
+    if (Test-Path $Destination) {
+        $destinationHash = (Get-FileHash -LiteralPath $Destination).Hash
+        $sourceHash = (Get-FileHash -LiteralPath $Source).Hash
+        if ($destinationHash -eq $sourceHash) {
+            Write-ItemStatus -Level "*" -Message "$Label -> already copied, skipped"
+            $script:SkippedCount++
+            return
+        }
+
+        Write-ItemStatus -Level "WARN" -Message "$Label -> conflict, skipped ($Destination already exists)"
+        $script:SkippedCount++
+        $script:ConflictCount++
+        return
+    }
+
+    Copy-Item -LiteralPath $Source -Destination $Destination
+    Write-ItemStatus -Level "OK" -Message "$Label -> installed"
+    $script:InstalledCount++
+}
+
+function Install-Collection {
+    param(
+        [string]$HostRoot,
+        [string]$ChildName,
+        [string]$SourcePath,
+        [string]$ItemKind,
+        [string]$InstallMode
+    )
+
+    $destinationDir = Join-Path $HostRoot $ChildName
+    New-Item -ItemType Directory -Force -Path $destinationDir | Out-Null
+    Write-Host "${ChildName}:"
+
+    $items = Get-ChildItem -Path $SourcePath -ErrorAction SilentlyContinue
+    if (-not $items) {
+        Write-ItemStatus -Level "*" -Message "no entries"
+        return
+    }
+
+    foreach ($item in $items) {
+        if (($ItemKind -eq "Directory") -and (-not $item.PSIsContainer)) {
+            continue
+        }
+        if (($ItemKind -eq "File") -and $item.PSIsContainer) {
+            continue
+        }
+
+        $destination = Join-Path $destinationDir $item.Name
+        if ($InstallMode -eq "Copy") {
+            Install-FileCopy -Source $item.FullName -Destination $destination -Label $item.Name
+        }
+        else {
+            Install-Link -Source $item.FullName -Destination $destination -Label $item.Name -LinkType $InstallMode
+        }
+    }
+}
+
+Write-Host "[INFO] Workbench: $WorkbenchDir"
+Write-Host "[INFO] Target project: $Target"
 Write-Host ""
 
-# Helper: 创建软链接，先清除同名旧链接或目录
-function Set-Symlink($src, $dst) {
-    if (Test-Path $dst) { Remove-Item -Force -Recurse $dst }
-    $isDir = (Get-Item $src) -is [System.IO.DirectoryInfo]
-    New-Item -ItemType SymbolicLink -Path $dst -Target $src | Out-Null
+if (-not $RequestedHosts) {
+    Write-Host "[WARN] No known host directories detected. Skipping host installation."
+}
+else {
+    foreach ($hostName in $RequestedHosts) {
+        $hostRoot = $KnownHosts[$hostName]
+        $HostsProcessed++
+        Write-Host "Host: $hostName"
+        Write-Host "Root: $hostRoot"
+        Install-Collection -HostRoot $hostRoot -ChildName "skills" -SourcePath (Join-Path $WorkbenchDir "skills") -ItemKind "Directory" -InstallMode "Junction"
+        Install-Collection -HostRoot $hostRoot -ChildName "agents" -SourcePath (Join-Path $WorkbenchDir "agents") -ItemKind "Directory" -InstallMode "Junction"
+        Install-Collection -HostRoot $hostRoot -ChildName "commands" -SourcePath (Join-Path $WorkbenchDir "commands") -ItemKind "File" -InstallMode "Copy"
+        Write-Host ""
+    }
 }
 
-# ── 1. Skills → ~/.claude/skills/ (symlinks) ─────────────────────
-Write-Host "🔗 链接 skills 到 $ClaudeHome\skills\"
-New-Item -ItemType Directory -Force -Path (Join-Path $ClaudeHome "skills") | Out-Null
-Get-ChildItem -Path (Join-Path $WorkbenchDir "skills") -Directory | ForEach-Object {
-    $dst = Join-Path $ClaudeHome "skills\$($_.Name)"
-    Set-Symlink $_.FullName $dst
-    Write-Host "  ✅ $($_.Name)"
-}
-
-# ── 2. Agents → ~/.claude/agents/ (symlinks) ─────────────────────
-Write-Host ""
-Write-Host "🔗 链接 agents 到 $ClaudeHome\agents\"
-New-Item -ItemType Directory -Force -Path (Join-Path $ClaudeHome "agents") | Out-Null
-Get-ChildItem -Path (Join-Path $WorkbenchDir "agents") -Directory | ForEach-Object {
-    $dst = Join-Path $ClaudeHome "agents\$($_.Name)"
-    Set-Symlink $_.FullName $dst
-    Write-Host "  ✅ $($_.Name)"
-}
-
-# ── 3. Commands → ~/.claude/commands/ (symlinks) ──────────────────
-Write-Host ""
-Write-Host "🔗 链接 commands 到 $ClaudeHome\commands\"
-New-Item -ItemType Directory -Force -Path (Join-Path $ClaudeHome "commands") | Out-Null
-Get-ChildItem -Path (Join-Path $WorkbenchDir "commands") -File | ForEach-Object {
-    $dst = Join-Path $ClaudeHome "commands\$($_.Name)"
-    Set-Symlink $_.FullName $dst
-    Write-Host "  ✅ $($_.Name)"
-}
-
-# ── 4. CLAUDE.md（不覆盖已有的）─────────────────────────────────
-Write-Host ""
-$claudeMd = Join-Path $Target "CLAUDE.md"
-if (-not (Test-Path $claudeMd)) {
-    $projectName = Split-Path $Target -Leaf
-    $tpl = Get-Content (Join-Path $WorkbenchDir "templates\CLAUDE.md.tpl") -Raw
-    ($tpl -replace '\{\{PROJECT_NAME\}\}', $projectName) | Set-Content -Path $claudeMd -Encoding UTF8
-    Write-Host "📝 CLAUDE.md 已生成（来自模板）"
-} else {
-    Write-Host "⏭️  CLAUDE.md 已存在，跳过（运行 /audit 检查质量）"
-}
-
-# ── 5. .gitignore 补丁 ───────────────────────────────────────────
 $gitignore = Join-Path $Target ".gitignore"
 if (-not (Test-Path $gitignore)) {
     New-Item -ItemType File -Force -Path $gitignore | Out-Null
 }
 $content = Get-Content $gitignore -Raw -ErrorAction SilentlyContinue
-if (-not ($content | Select-String -Pattern '\.claude/settings\.local\.json' -Quiet)) {
+if (-not ($content | Select-String -Pattern "\.claude/settings\.local\.json" -Quiet)) {
     Add-Content -Path $gitignore -Value ".claude/settings.local.json"
-    Write-Host "📝 .gitignore 已更新"
+    Write-Host "[OK] .gitignore updated"
+}
+else {
+    Write-Host "[*] .gitignore already contains .claude/settings.local.json"
 }
 
 Write-Host ""
-Write-Host "✅ 完成。在任意项目的 Claude Code 里运行 /audit 开始检查。"
+Write-Host "Summary:"
+Write-Host "Hosts processed: $HostsProcessed"
+Write-Host "Installed: $InstalledCount"
+Write-Host "Skipped: $SkippedCount"
+Write-Host "Conflicts: $ConflictCount"
