@@ -210,6 +210,10 @@ timestamp: <ISO 8601>
 
 Goal: 在合并前给人工提供明确的停止点，验证功能端到端可用。
 
+重要口径：
+- 用户在这里回复 `pass`，代表“实现完成并通过人工验证”，不代表 task 已经完成。
+- 在完成 Phase 6 到 Phase 10 前，禁止使用“任务已完成”“可以开始下一个 task”这类闭环表述。
+
 根据 `task_plan.<plan_id>.md` 中的验收标准，输出**测试清单**：
 
 ```
@@ -259,6 +263,14 @@ Goal: 合并前持久化完成证据，但不提前标记 DONE。
 3. 确认 `plans/todo_current.md` 状态仍为 `PLANNED`（merge 成功前不改为 DONE）。
 
 **Stop condition:** 任何 plan 文件未更新，Phase 8 被禁止执行。
+
+此阶段完成后，最多只能表述为：
+- “实现已完成，已通过人工验证，准备 merge”
+
+禁止表述为：
+- “task 已完成”
+- “已经 done”
+- “可以按 WT-PM 结束”
 
 ---
 
@@ -368,6 +380,20 @@ Phase 10 后输出：
 Recommended next step: run a manual smoke test on trunk to confirm end-to-end behavior.
   uv run invoice-web-api   (or docker compose up for M2+)
 ```
+
+## Completion Semantics
+
+请始终区分以下两个状态：
+
+- `implementation complete`
+  - 含义：代码已经实现，自动化验证和人工测试已经通过，但尚未完成 merge / `DONE` 状态更新。
+  - 允许出现的阶段：Phase 5 到 Phase 7 之间。
+
+- `task complete`
+  - 含义：Phase 8、9 已成功完成，也就是已经 merge 回 trunk，且 `plans/todo_current.md` 已标记为 `DONE`。
+  - 唯一正式完成信号：输出 `✅ wt-dev complete for <task_id>`。
+
+在 `✅ wt-dev complete for <task_id>` 之前，不要将任务描述为“完成”“done”“结束”，最多只能说“实现完成，等待 WT-PM 收尾”。
 
 ---
 

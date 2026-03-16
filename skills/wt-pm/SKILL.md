@@ -103,7 +103,14 @@ git branch --show-current
   5. 实现功能
   6. [PAUSE] 等待你的人工测试确认
   7. Final regression gate
-  8. Merge 回 trunk + 标记 DONE + 清理 worktree
+  8. 更新 plan 证据文件
+  9. Merge 回 trunk
+  10. 标记 DONE + 清理 worktree
+
+注意：
+- “实现完成” 只表示代码和验证在 task worktree 中已经完成。
+- “任务完成” 只在 merge 回 trunk 且 `plans/todo_current.md` 已标记为 `DONE` 后成立。
+- 在 Phase 8 到 Phase 10 结束前，不要把 task 对用户表述为“已完成”。
 ```
 
 ---
@@ -120,6 +127,8 @@ wt-dev 输出 `✅ wt-dev complete` 后，输出：
 建议：在 trunk 终端做一次手动 smoke test 确认端到端行为正常。
 如需开始下一个任务，在 trunk 终端说 "wt-pm" 或 "开始新任务"。
 ```
+
+只有在看到 `✅ wt-dev complete` 之后，才可以把该 task 视为 WT-PM 意义上的真正完成。
 
 ---
 
