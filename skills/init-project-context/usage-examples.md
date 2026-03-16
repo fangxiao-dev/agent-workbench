@@ -16,7 +16,7 @@ This is an internal AI tool project. I need help figuring out what this repo is 
 2. Summarize confirmed facts briefly.
 3. Identify the highest-impact missing context.
 4. Ask one narrowing question about the current milestone or smallest useful closed loop.
-5. Refuse to draft `AGENTS.md` or `CLAUDE.md` until the project purpose and scope are concrete enough.
+5. Refuse to draft agent entry files until the project purpose and scope are concrete enough.
 
 ### Good Follow-Up Question
 
@@ -61,7 +61,7 @@ I can already see that this is a cloud web app repo, but I still need the real b
 ### User Request
 
 ```text
-Just write AGENTS.md and CLAUDE.md directly.
+Just write AGENTS.md and a separate CLAUDE.md directly.
 ```
 
 ### Expected Behavior
@@ -81,6 +81,7 @@ The repository does not yet have enough stable project context for safe instruct
 
 - Do not comply immediately when the project description is still fuzzy.
 - Do not invent rules that the repository and user have not established.
+- Do not maintain parallel `AGENTS.md` and `CLAUDE.md` content when a link would do.
 
 ## Example 4: Project Context Is Primary, Agent Files Are Secondary
 
@@ -94,7 +95,8 @@ I need the context docs to explain the project itself. Agent rules are not the m
 
 1. Re-center the process around project definition, deliverables, and boundaries.
 2. Draft the context files first.
-3. Keep any later `AGENTS.md` or `CLAUDE.md` content thin and dependent on the shared context docs.
+3. Keep any later `AGENTS.md` content thin and dependent on the shared context docs.
+4. If a Claude-compatible filename is required, create `CLAUDE.md` as an alias to `AGENTS.md`, preferring a symlink and falling back to a hard link if permissions block symlinks.
 
 ### Good Response Shape
 

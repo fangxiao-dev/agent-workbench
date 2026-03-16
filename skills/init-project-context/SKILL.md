@@ -11,12 +11,14 @@ Initialize project foundation before feature planning. The goal is to turn a vag
 
 **REQUIRED SUB-SKILL:** Use `brainstorming` for the conversational discovery style.
 
-This skill does **not** start by writing `AGENTS.md` or `CLAUDE.md`. It first stabilizes the project itself. Agent entry files are optional follow-up outputs, not the default center of gravity.
+This skill does **not** start by writing agent entry files. It first stabilizes the project itself. Agent entry files are optional follow-up outputs, not the default center of gravity.
+
+When agent entry files are needed, treat `AGENTS.md` as the single source of truth. Do not maintain parallel content in `CLAUDE.md`, `GEMINI.md`, or similar files. If a tool-specific filename is required, first try a filesystem symlink that points back to `AGENTS.md`. If symlink creation is blocked by platform permissions, fall back to a hard link. Only fall back to a copied file when linking is impossible.
 
 ## When to Use
 
 Use this skill when:
-- A repository has no `AGENTS.md` or `CLAUDE.md`
+- A repository has no usable agent entry file strategy
 - Existing docs are too thin or too vague for agent-assisted development
 - A user can describe the project only loosely
 - You need to establish project goals, scope, constraints, and candidate tech direction before planning features
@@ -44,10 +46,9 @@ Create or draft these first:
 
 ### Layer 2: Agent Entry Docs
 
-Draft these only after Layer 1 is stable and only if the user explicitly wants them:
+Create these only after Layer 1 is stable and only if the user explicitly wants them:
 - `AGENTS.md`
-- `CLAUDE.md`
-- other agent entry files such as `GEMINI.md`
+- tool-specific aliases such as `CLAUDE.md` or `GEMINI.md` that resolve back to `AGENTS.md`
 
 If the repository is still ambiguous, stop after Layer 1 and list the remaining open questions.
 
@@ -102,10 +103,14 @@ Use repository evidence plus user answers. Mark uncertain content explicitly ins
 
 Only after foundation docs are strong enough:
 - draft `AGENTS.md`
-- draft `CLAUDE.md`
-- identify what belongs in repo-level instruction files versus project context docs
+- identify which agent-specific filenames are actually required
+- if needed, create aliases from those filenames back to `AGENTS.md`
+- use this fallback order: symlink, then hard link, then copied file with a warning about duplication risk
+- keep one authoritative content file instead of duplicating instructions across agents
 
 Do not dump all details into the entry files. Keep them as navigation and operating instructions, not giant project encyclopedias.
+
+Before creating any compatibility alias, confirm the user really uses that agent. Example: if the user confirms Claude tooling, create `CLAUDE.md` as a symlink to `AGENTS.md`, or a hard link if symlink permissions are unavailable. If there is no confirmed consumer, do not create speculative aliases.
 
 ## Sufficiency Check
 
@@ -139,7 +144,7 @@ Usually fit into instruction scaffolds:
 - section structures
 - lightweight reading order
 - links back to shared context docs
-- agent-specific entrypoint wording
+- agent-specific link targets and compatibility notes
 
 ## Question Areas
 
@@ -151,7 +156,7 @@ When discovery leaves gaps, prioritize these topics in order:
 4. What must be delivered?
 5. What is explicitly out of scope?
 6. What technical direction is currently being considered?
-7. Which agent entry files are actually needed, if any?
+7. Which agent entry filenames are actually needed, if any?
 
 ## Drafting Rules
 
@@ -160,6 +165,10 @@ When discovery leaves gaps, prioritize these topics in order:
 - Separate project definition from technical speculation
 - Prefer templates with placeholders over fake certainty
 - Preserve future extensibility without forcing agent scaffolding too early
+- Keep `AGENTS.md` as the only maintained instruction body
+- Prefer links over duplicated agent-specific instruction files
+- Use symlinks first, hard links second, copies last
+- Do not create agent-specific aliases until their consumers are confirmed
 
 ## Common Mistakes
 
@@ -172,6 +181,7 @@ When discovery leaves gaps, prioritize these topics in order:
 | Making agent workflow the main story | Make the project itself the main story |
 | Stuffing project meaning into agent files | Keep the core context in shared project docs |
 | Pretending unknowns are known | Mark open questions explicitly |
+| Maintaining separate `AGENTS.md` and `CLAUDE.md` bodies | Keep one `AGENTS.md` and use links or a last-resort copy only when required |
 
 ## Files and Templates
 
@@ -179,8 +189,7 @@ Use the templates in this skill directory:
 - `templates/project-context.md`
 - `templates/tech-stack-investigate.md`
 - `templates/AGENTS.draft.md`
-- `templates/CLAUDE.draft.md`
 
-Use the first two templates by default. Only use the agent entry templates when the user explicitly asks for agent-facing files.
+Use the first two templates by default. Only use the `AGENTS.md` template when the user explicitly asks for agent-facing files. If a Claude-compatible filename is needed, alias `CLAUDE.md` to `AGENTS.md` using a symlink first, then a hard link if needed, instead of drafting a separate file.
 
 For realistic usage patterns and conversation shape, see `usage-examples.md`.
