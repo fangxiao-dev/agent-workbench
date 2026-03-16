@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
-$SkillsRegistry = Join-Path $RepoRoot "registry\skills.md"
+$SkillsRegistry = Join-Path $RepoRoot "registry\third-party-skills.md"
 $SkillsLock = Join-Path $RepoRoot "registry\skills.lock.json"
 $PluginsRegistry = Join-Path $RepoRoot "registry\plugins.md"
 $AgentsLock = Join-Path $env:USERPROFILE ".agents\.skill-lock.json"
@@ -106,6 +106,7 @@ Update-MarkdownTableStatus $PluginsRegistry {
 Write-Host "Registry 状态已刷新："
 Write-Host "  - $SkillsRegistry"
 Write-Host "  - $PluginsRegistry"
+
 
 
 

@@ -1,4 +1,4 @@
-# Third-Party Registry Design
+﻿# Third-Party Registry Design
 
 **Goal:** Record globally installed third-party skills, plugins, agents, and commands in this repo as a reproducible inventory.
 
@@ -12,7 +12,7 @@
 
 ## File Layout
 
-- `registry/skills.md`: third-party skills
+- `registry/third-party-skills.md`: third-party skills
 - `registry/plugins.md`: third-party Claude/Codex plugins and MCP-style integrations
 - `registry/agents.md`: third-party agents exposed globally or bundled by installed plugins
 - `registry/commands.md`: third-party commands exposed globally or bundled by installed plugins

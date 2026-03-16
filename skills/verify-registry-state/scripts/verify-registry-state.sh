@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-SKILLS_MD="$REPO_ROOT/registry/skills.md"
+SKILLS_MD="$REPO_ROOT/registry/third-party-skills.md"
 SKILLS_LOCK="$REPO_ROOT/registry/skills.lock.json"
 PLUGINS_MD="$REPO_ROOT/registry/plugins.md"
 AGENTS_LOCK="$HOME/.agents/.skill-lock.json"
@@ -79,4 +79,5 @@ PY
 echo "Registry 状态已刷新："
 echo "  - $SKILLS_MD"
 echo "  - $PLUGINS_MD"
+
 

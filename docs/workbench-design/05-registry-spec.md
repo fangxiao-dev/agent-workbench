@@ -1,4 +1,4 @@
-# Registry 规范
+﻿# Registry 规范
 
 ## 定位
 
@@ -7,7 +7,7 @@
 
 ## 文件格式
 
-### `registry/skills.md`
+### `registry/third-party-skills.md`
 
 ```markdown
 # Third-party Skills
@@ -42,3 +42,4 @@
 
 如果当前仓库里已有类似的清单文件（任何格式），将内容迁移到上述格式中，不要丢弃已有记录。
 如果没有，生成上述空模板即可。
+

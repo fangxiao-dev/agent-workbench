@@ -77,7 +77,7 @@ agent-workbench/
 ├── templates/
 │   └── CLAUDE.md.tpl           ← 新项目初始化模板
 ├── registry/
-│   ├── skills.md               ← 第三方 skills 可复现清单
+│   ├── third-party-skills.md   ← 第三方 skills 可复现清单
 │   ├── plugins.md              ← 第三方 plugins / MCP 可复现清单
 │   └── ...                     ← 只记录“安装单位”，不展开插件内每个文件
 └── docs/workbench-design/                ← workbench 自身的设计规范
@@ -95,11 +95,11 @@ agent-workbench/
 
 ## 第三方资产登记
 
-不通过 `install.sh` 安装的第三方资产，统一登记到 `registry/`，方便换机器时查阅、校验和重装。
+第三方资产统一登记到 `registry/`，方便换机器时查阅、校验和重装。对于第三方 skills，当前优先把实际内容 vendoring 到仓库 `skills/` 下，再由 `install.sh` 暴露到 `~/.claude/skills/`。
 
 当前按资产类型拆分：
 
-- `registry/skills.md`：第三方 skills 的人工清单
+- `registry/third-party-skills.md`：第三方 skills 的人工清单
 - `registry/skills.lock.json`：skills 的机器可读元数据
 - `registry/plugins.md`：第三方 plugins / MCP 的人工清单
 
@@ -108,6 +108,7 @@ agent-workbench/
 - 只登记第三方资产，不登记本仓库自建内容
 - 以“安装单位”记录，不展开插件内每个附带文件
 - 优先写清来源、安装方式、配置入口和当前状态
+- 第三方 skills 的上游元数据统一保存在 `registry/skills.lock.json`，不把 `.agents/` 之类的本机状态目录提交到仓库
 
 ### 刷新第三方状态
 
@@ -130,4 +131,5 @@ cat ~/.claude/skills/agentic-audit/SKILL.md   # 确认内容可读
 ```
 
 如果 Claude Code 识别不到某个 skill，优先用上面命令确认链接是否指向正确路径。
+
 

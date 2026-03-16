@@ -10,7 +10,7 @@ user-invocable: true
 
 ## 检查范围
 
-- `registry/skills.md`
+- `registry/third-party-skills.md`
 - `registry/skills.lock.json`
 - `registry/plugins.md`
 
@@ -52,8 +52,9 @@ bash skills/verify-registry-state/scripts/verify-registry-state.sh
 
 ## 预期结果
 
-- 刷新 `registry/skills.md` 的状态列
+- 刷新 `registry/third-party-skills.md` 的状态列
 - 刷新 `registry/plugins.md` 的状态列
 - 不自动安装缺失项
 - 如果发现缺失项，后续再根据 `registry` 和 lock 文件决定是否安装或同步
+
 

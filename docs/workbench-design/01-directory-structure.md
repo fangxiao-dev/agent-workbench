@@ -1,4 +1,4 @@
-# 目标目录结构
+﻿# 目标目录结构
 
 ```
 my-workbench/
@@ -35,7 +35,7 @@ my-workbench/
 │   
 │
 └── registry/                           ← 第三方工具清单，仅备忘，不参与安装
-    ├── skills.md                        ← 第三方 skills 及安装命令
+    ├── third-party-skills.md            ← 第三方 skills 及安装命令
     └── plugins.md                       ← MCP/plugin 及安装命令
 ```
 
@@ -45,3 +45,4 @@ my-workbench/
 - `agents/` 下的内容会被 `install.sh` 复制到目标项目的 `.claude/agents/`
 - `templates/` 内容只在目标项目**不存在对应文件时**才生成，不覆盖已有内容
 - `registry/` 纯粹是人类可读的备忘清单，install.sh 不读取它
+
