@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "description": "Machine-readable metadata for third-party skills managed by this repository.",
+  "skills": [
+    {
+      "name": "find-skills",
+      "host": ".agents",
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/vercel-labs/skills.git",
+      "upstreamPath": "skills/find-skills/SKILL.md",
+      "localPath": "skills/find-skills",
+      "installMethod": "managed externally by .agents",
+      "installCommand": null,
+      "updateCommand": null,
+      "configSource": "~/.agents/.skill-lock.json",
+      "status": "installed",
+      "installedAt": "2026-02-11T16:12:05.772Z",
+      "lastUpdatedAt": "2026-03-14T19:01:44.317Z",
+      "managedBy": "registry/skills.lock.json",
+      "notes": "Current source of truth is external; intended future state is vendored management from this repository."
+    },
+    {
+      "name": "continuous-learning",
+      "host": ".agents",
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/affaan-m/everything-claude-code.git",
+      "upstreamPath": "skills/continuous-learning/SKILL.md",
+      "localPath": "skills/continuous-learning",
+      "installMethod": "managed externally by .agents",
+      "installCommand": null,
+      "updateCommand": null,
+      "configSource": "~/.agents/.skill-lock.json",
+      "status": "installed",
+      "installedAt": "2026-02-13T10:19:16.111Z",
+      "lastUpdatedAt": "2026-03-14T19:02:20.584Z",
+      "managedBy": "registry/skills.lock.json",
+      "notes": "Current source of truth is external; intended future state is vendored management from this repository."
+    },
+    {
+      "name": "skill-creator",
+      "host": ".agents",
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/anthropics/skills.git",
+      "upstreamPath": "skills/skill-creator/SKILL.md",
+      "localPath": "skills/skill-creator",
+      "installMethod": "managed externally by .agents",
+      "installCommand": null,
+      "updateCommand": null,
+      "configSource": "~/.agents/.skill-lock.json",
+      "status": "installed",
+      "installedAt": "2026-02-13T21:01:02.666Z",
+      "lastUpdatedAt": "2026-03-14T19:02:29.262Z",
+      "managedBy": "registry/skills.lock.json",
+      "notes": "Current source of truth is external; intended future state is vendored management from this repository."
+    }
+  ]
+}

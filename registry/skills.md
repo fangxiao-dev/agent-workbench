@@ -1,11 +1,15 @@
-# Third-party Skills
+﻿# Third-party Skills
 
-| Skill | 安装命令 | 状态 | 备注 |
-|-------|----------|------|------|
-| brainstorming | provided by superpowers | ✅ 已装 | lock-only reference for local design workflow |
-| test-driven-development | provided by superpowers | ✅ 已装 | lock-only reference for implementation discipline |
+| Skill | 宿主 | 来源 | 状态 | 备注 |
+|-------|------|------|------|------|
+| find-skills | `.agents` skill manager | `vercel-labs/skills` | ✅ 已装 | 详细机器元数据见 `registry/skills.lock.json` |
+| continuous-learning | `.agents` skill manager | `affaan-m/everything-claude-code` | ✅ 已装 | 详细机器元数据见 `registry/skills.lock.json` |
+| skill-creator | `.agents` skill manager | `anthropics/skills` | ✅ 已装 | 详细机器元数据见 `registry/skills.lock.json` |
 
 ## 说明
-- ✅ 已装：已手动安装到 `~/.claude/skills/` 或由外部工具管理
+- 机器可读元数据见 `registry/skills.lock.json`
+- `skills.lock.json` 预期作为后续更新脚本的输入，`skills.md` 作为人工查阅入口
+- ✅ 已装：当前机器上已可用
 - ⬜ 待装：列入计划但尚未安装
-- ⏸️ 暂停：曾经使用，暂时停用
+- ⏸️ 暂停：保留记录但当前未启用
+- 自建 skills 不登记在这里；这里只记录可独立安装的第三方 skill，且以“如何重装”为主
