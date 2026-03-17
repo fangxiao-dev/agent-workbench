@@ -1,4 +1,4 @@
-"""Track todo tasks and per-task workplans for the planning-with-files workflow."""
+"""Track todo tasks and per-task workplan directories for the planning-with-files workflow."""
 
 from __future__ import annotations
 
@@ -454,7 +454,7 @@ def cmd_view_active(_: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     """Create CLI parser for task tracking operations."""
     parser = argparse.ArgumentParser(
-        description="Track todo task lifecycle and per-task workplans under plans/workplans."
+        description="Track todo task lifecycle and per-task workplan directories under plans/workplans/<task_id>/."
     )
     parser.add_argument(
         "--root",

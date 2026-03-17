@@ -1,26 +1,41 @@
 ---
 name: wt-dev
-description: Worktree-phase skill for WT-PM workflow. Auto-detects current task from branch name, loads plan context, runs environment init, implements features, pauses for manual testing, runs regression gate, merges back to trunk, then marks DONE — all from within the task worktree terminal.
+description: Use when implementing a tracked WT-PM task inside its dedicated worktree, especially when the repo may use different branch prefixes, setup commands, or verification flows.
 user-invocable: true
 ---
 
-# wt-dev: Task Implementation & Integration (Worktree Phase)
+# wt-dev: Task Implementation & Integration
 
-Worktree-side skill for the WT-PM lifecycle. Run this from the **task worktree terminal** (branch `feat/<task_id>-<slug>`).
+Worktree-side skill for the WT-PM lifecycle. Run this from the task worktree terminal.
 
 Covers:
-1. Auto-detect current task from branch name
-2. Load plan context (three-files)
-3. Environment initialization (first run only)
-4. Sync trunk + regression gate
-5. Implementation（含 BLOCKED 上报协议）
-6. **[PAUSE]** Wait for manual testing confirmation
-7. Re-sync trunk + final regression gate
-8. Update plan files (pre-merge evidence)
-9. Merge back to trunk (via `git -C`, no terminal switch needed)
-10. Mark DONE + worktree cleanup
+1. Detect current task from branch name and repo task table
+2. Load plan context from the task's workplan directory
+3. Run repo-directed environment setup if required
+4. Sync trunk and run repo-appropriate regression checks
+5. Implement the task with progress tracking
+6. Pause for manual testing
+7. Re-sync trunk and run final regression checks
+8. Update plan evidence
+9. Merge back to trunk
+10. Mark `DONE` and optionally clean up the worktree
 
-For the planning/setup phase (trunk terminal), use `wt-plan`.
+For planning on trunk, use `wt-plan`.
+
+## Core Rule
+
+Do not assume:
+- task branches are always `feat/<task_id>-<slug>`
+- all repos have standard setup commands
+- all repos use the same regression gate
+
+Detect repo conventions first from:
+1. `AGENTS.md`
+2. `CLAUDE.md`
+3. current git branch and worktree list
+4. `plans/todo_current.md`
+
+If repo documents conflict with observable repo state, surface the conflict and follow observable repo state.
 
 ## Trigger Phrases
 
@@ -32,354 +47,282 @@ For the planning/setup phase (trunk terminal), use `wt-plan`.
 - `wt-dev`
 - `继续TC-<id>`
 
----
-
 ## Phase 0: Auto-Detect Current Task
 
-Goal: 从当前环境自动识别 `task_id`、`slug`，无需用户输入。
+Goal: detect `task_id`, `slug`, current worktree path, branch prefix, and trunk branch from the actual environment.
+
+### 0a. Read branch and task table
 
 ```bash
 git branch --show-current
-```
-
-期望格式：`feat/<task_id>-<slug>`（如 `feat/TC-107-receiver-mapping-ui`）
-
-解析：
-- `task_id` = 如 `TC-107`
-- `slug` = 如 `receiver-mapping-ui`
-
-确认 task 处于可继续状态：
-
-```bash
-python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . list
-```
-
-**Stop conditions:**
-- 分支名不匹配 `feat/<task_id>-<slug>` 格式：停止，报告当前分支。
-- `task_id` 不在 `plans/todo_current.md` 中：停止，报告。
-- `task_id` 状态为 `DONE`：停止。任务已完成，建议切回 trunk。
-- `task_id` 状态为 `UNPLANNED`：停止。请先在 trunk 终端运行 `wt-plan`。
-
-同时记录当前 worktree 绝对路径，供 cleanup 阶段使用：
-
-```bash
 git rev-parse --show-toplevel
 ```
 
----
+Read `plans/todo_current.md` and collect known task ids first.
+
+### 0b. Parse branch using repo-known task ids
+
+Accepted branch patterns include:
+- `feat/<task_id>-<slug>`
+- `codex/<task_id>-<slug>`
+- any repo-consistent prefix already visible in `git branch --list` or `git worktree list`
+
+Rules:
+- Match the branch against task ids already present in `plans/todo_current.md`
+- Prefer the longest matching task id
+- Derive `slug` from the remainder after `<task_id>-`
+
+Stop conditions:
+- branch name does not contain a repo-known task id
+- task id is not in `plans/todo_current.md`
+- task status is `DONE`
+- task status is `UNPLANNED`
+
+### 0c. Detect trunk branch
+
+Inspect repo docs and git branch list.
+
+Rules:
+- Prefer explicitly documented trunk if present
+- Otherwise accept `master`, `main`, or `dev`
+- If ambiguous, stop and surface the candidates
 
 ## Phase 1: Load Plan Context
 
-Goal: 在采取任何行动之前，恢复完整的任务上下文。
+Goal: restore the complete task context before taking any implementation action.
 
-读取全部三个 plan 文件：
+### 1a. Locate workplan files
 
-```text
-plans/workplans/<task_id>/task_plan.md
-plans/workplans/<task_id>/findings.md
-plans/workplans/<task_id>/progress.md
-```
+Use the task id to locate:
+- `plans/workplans/<task_id>/task_plan.md`
+- `plans/workplans/<task_id>/findings.md`
+- `plans/workplans/<task_id>/progress.md`
+- optional `plans/workplans/<task_id>/dev-status.md`
 
-无论是首次运行还是续做，必须始终读取这三个文件。这是"加载存档"步骤。
+Stop if the current task's three core files cannot be found.
 
-读取后输出简短上下文摘要：
-- 任务目标（来自 task_plan）
-- 当前阶段 / 最后完成的步骤（来自 progress）
-- 已知阻塞项或风险（来自 findings）
+### 1b. Read context
 
-同时检查是否存在 `plans/workplans/<task_id>/dev-status.md`：
-- 如果存在且 `status` 不是 `DONE`：**优先浮出该文件中的问题**，询问用户如何处理后再继续。
-- 如果不存在或 `status` 为 `DONE`：正常继续。
+Always read:
+- task plan
+- findings
+- progress
 
----
+Also read `dev-status` if present.
 
-## Phase 2: Environment Initialization（first run only）
+After reading, summarize:
+- task goal
+- current phase or last completed step
+- blockers or risks
 
-Goal: 在当前任务 worktree 中准备可运行的本地环境。
+If `dev-status` exists and `status` is not `DONE`, stop and surface the blocker first.
 
-**跳过条件：** `plans/workplans/<task_id>/progress.md` 中记录了环境初始化已完成。
+## Phase 2: Environment Initialization
 
-原则：
-- 所有 task-local 环境准备都在这里做，而不是在 trunk 阶段做。
-- 这包括依赖安装、ignored local files 的复制/生成、以及只应存在于当前 worktree 的私有配置。
-- 无论该 worktree 是通过 Codex app handoff 创建，还是通过手动 `git worktree add` 创建，初始化语义都相同。
+Goal: prepare the current worktree only when repo rules explicitly require task-local setup.
 
-Commands:
+Skip condition:
+- progress already records setup as complete
+- or repo has no explicit setup steps to run
 
-```bash
-uv sync --extra web
-corepack enable
-corepack prepare pnpm@latest --activate
-pnpm --dir frontend install
-```
+Detection order:
+1. `AGENTS.md`
+2. `CLAUDE.md`
+3. project setup docs
 
-最小验证：
+Rules:
+- If repo explicitly says setup belongs in the worktree, do it here
+- If repo gives exact setup commands, run only those commands
+- If repo gives no explicit setup commands, do not guess generic install commands
+- Instead report: `该仓库无标准自动 setup 命令，按项目约定执行`
 
-```bash
-uv run python -c "import bills_analysis"
-pnpm --dir frontend test
-```
+Stop condition:
+- any explicit setup command fails
 
-**Stop condition:** 任何安装或验证命令失败时，停止并报告失败命令及其完整错误输出。不继续进入 Phase 3。
-
-成功后更新 `plans/workplans/<task_id>/progress.md`。
-
-If local setup is project-specific, first inspect the repo-level instructions (`AGENTS.md`, `CLAUDE.md`, setup docs) and execute only the setup that is explicitly required for this worktree.
-
----
+After successful repo-directed setup, update progress.
 
 ## Phase 3: Sync Trunk + Initial Regression Gate
 
-Goal: 集成最新 trunk 变更，验证无回归后再开始实现。
+Goal: integrate the latest trunk changes and verify no obvious regression before implementation.
+
+Sync:
 
 ```bash
 git fetch origin <trunk>
 git merge origin/<trunk>
 ```
 
-远端不可用时的 fallback：
+Fallback:
 
 ```bash
 git merge <trunk>
 ```
 
-出现 merge conflict：执行 **Conflict Triage Protocol**（见文末）。不自动解决。
+If conflicts occur, use the conflict triage protocol below.
 
-Regression gate（按顺序执行）：
+### Regression gate selection
 
-```bash
-uv run pytest tests/test_api_schema_v1.py -q
-pnpm --dir frontend test
-```
+Detection order:
+1. repo docs with explicit verification commands
+2. task plan acceptance criteria
+3. existing project test entrypoints related to changed subsystem
 
-可选：
+Rules:
+- Prefer commands explicitly documented by the repo
+- If the repo has no standard command, run the most relevant available checks and state what remains unverified
+- Never run stack-specific commands copied from another project
 
-```bash
-uv run pytest tests/test_api_e2e_smoke.py -q
-```
+Examples of valid outputs:
+- `Ran repo-documented verification command: <cmd>`
+- `No standard automated verification command found; ran <cmd> as closest relevant check`
+- `Manual verification still required in WeChat DevTools`
 
-**Stop condition:** 任何必须项失败时，停止。Regression 全绿前不进入 Phase 4。
+Stop condition:
+- any required gate fails
 
-更新 `plans/workplans/<task_id>/progress.md`，记录 sync + regression 结果。
-
----
+Update progress with sync and gate results.
 
 ## Phase 4: Implementation
 
-Goal: 按顺序执行 task plan 中的各实现阶段。
+Goal: execute the task plan phases in order.
 
 Process:
-1. 读取 `plans/workplans/<task_id>/task_plan.md` 获取实现阶段列表。
-2. 对每个阶段：实现后立即更新 `plans/workplans/<task_id>/progress.md` 标记完成。
-3. 发现新情况或决策时，同步记录到 `plans/workplans/<task_id>/findings.md`。
-4. 遵守 API contract 规则：不破坏 `v1` 冻结字段。Schema 变更必须在 consumer 变更之前 commit。
+1. Read the implementation phases from the task plan
+2. Implement one phase at a time
+3. Update progress after each completed phase
+4. Record new discoveries or decisions in findings
+5. Keep behavior within the approved task scope
 
-实现阶段全部完成后，运行与改动相关的单元测试：
-
-```bash
-uv run pytest tests/test_api_schema_v1.py -q
-pnpm --dir frontend test
-```
-
-测试失败时，修复后再进入 Phase 5。
+After implementation, run relevant verification again using the repo-directed gate selection above.
 
 ### Implementation Escalation Protocol
 
-在实现过程中遇到以下情况时，**不要自行决定**，写入 `plans/workplans/<task_id>/dev-status.md` 后停止，等待用户指示：
+If any of the following occurs, write `plans/workplans/<task_id>/dev-status.md` and stop:
 
 | 情况 | status 值 |
 |------|-----------|
 | 测试失败超过 3 次且根因不明 | `BLOCKED` |
 | 需求理解有歧义，无法推进 | `NEEDS_CLARIFICATION` |
-| 发现改动范围超出 task_plan 定义的边界 | `SCOPE_EXCEEDED` |
-| 存在方案 A vs 方案 B 的架构决策，无法自主判断 | `DECISION_NEEDED` |
+| 发现改动范围超出 task plan 边界 | `SCOPE_EXCEEDED` |
+| 存在无法自主判断的架构方案分歧 | `DECISION_NEEDED` |
 
-**文件格式：**
+Allowed self-resolution:
+- syntax errors
+- clear unit test failures
+- missing dependencies with an explicit project instruction
 
-```markdown
-# dev-status.md
+## Phase 5: Manual Testing Confirmation
 
-status: BLOCKED | NEEDS_CLARIFICATION | SCOPE_EXCEEDED | DECISION_NEEDED
-blocker: <具体描述问题>
-options: |
-  A: <方案 A 描述>（如有多方案时填写）
-  B: <方案 B 描述>
-last_completed_phase: <停在哪个子步骤，如 "Phase 4 - Step 2/5">
-timestamp: <ISO 8601>
-```
+Goal: pause before merge so the user can verify the task end-to-end.
 
-**可以自主解决（无需上报）：**
-- 语法错误、类型错误
-- 单元测试失败且根因明确
-- 依赖缺失（可直接安装）
+Test checklist source:
+1. task plan acceptance criteria
+2. adjacent regression areas touched by the task
+3. repo-specific manual verification requirements
 
-用户处理完问题后，更新 `dev-status.md` 的 status 为 `DONE`，然后继续 Phase 4 剩余步骤。
+If the repo is UI-heavy or a WeChat Mini Program, explicitly instruct verification in WeChat DevTools.
 
----
+Do not call the task complete here. At most say:
+- implementation complete
+- waiting for manual verification
 
-## Phase 5: [PAUSE] Manual Testing Confirmation
-
-Goal: 在合并前给人工提供明确的停止点，验证功能端到端可用。
-
-重要口径：
-- 用户在这里回复 `pass`，代表“实现完成并通过人工验证”，不代表 task 已经完成。
-- 在完成 Phase 6 到 Phase 10 前，禁止使用“任务已完成”“可以开始下一个 task”这类闭环表述。
-
-根据 `plans/workplans/<task_id>/task_plan.md` 中的验收标准，输出**测试清单**：
-
-```
-⏸  Implementation complete. Please test the following before I continue:
-
-  Core flows:
-  [ ] <验收标准 1>
-  [ ] <验收标准 2>
-
-  Adjacent regression check:
-  [ ] <可能受影响的相关功能>
-
-  To continue: reply with your test result (pass / fail / partial).
-  To abort:    reply with "abort" and describe what failed.
-```
-
-**等待用户回复。** 未收到回复前不继续。
-
-回复解读：
-- 肯定（如"通过"、"OK"、"passed"、"没问题"、"looks good"）：进入 Phase 6。
-- 否定或部分（如"有bug"、"failed"、"有问题"、"不对"）：停止，询问用户描述问题，协助修复，重新执行 Phase 4，再回到 Phase 5。
-- "abort"：完全停止。更新 `plans/workplans/<task_id>/progress.md` 记录 abort 原因。
-
----
+Interpret replies:
+- positive reply: continue to Phase 6
+- negative or partial reply: stop, collect issues, fix in Phase 4, then return here
+- `abort`: stop and record the reason in progress
 
 ## Phase 6: Re-sync Trunk + Final Regression Gate
 
-Goal: 人工测试签字后，再次同步最新 trunk，并基于最新集成状态完成最终回归。
+Goal: after manual signoff, re-sync trunk and re-run final checks on the latest integrated state.
 
-先重新同步 trunk：
+Use the same trunk sync logic and regression gate selection from Phase 3.
 
-```bash
-git fetch origin <trunk>
-git merge origin/<trunk>
-```
+Stop condition:
+- any sync or required gate fails
 
-远端不可用时的 fallback：
+## Phase 7: Update Plan Files
 
-```bash
-git merge <trunk>
-```
+Goal: persist completion evidence before merge, without prematurely marking `DONE`.
 
-出现 merge conflict：执行 **Conflict Triage Protocol**（见文末）。不自动解决。
+Required updates:
+- progress: final execution summary, verification results, timestamp
+- findings: final decisions, risks, noteworthy implementation details
+- `plans/todo_current.md` must still show `PLANNED` before merge succeeds
 
-```bash
-uv run pytest tests/test_api_schema_v1.py -q
-pnpm --dir frontend test
-```
+Allowed wording after this phase:
+- `实现已完成，已通过人工验证，准备 merge`
 
-**Stop condition:** 任何 sync 或测试失败，不进入 Phase 7。修复/解决冲突 → 重跑 → 全绿后继续。
+Forbidden wording:
+- `task 已完成`
+- `已经 done`
 
----
+## Phase 8: Merge Back to Trunk
 
-## Phase 7: Update Plan Files（Pre-Merge）
+Goal: merge the verified task branch into the detected trunk branch from within the worktree terminal.
 
-Goal: 合并前持久化完成证据，但不提前标记 DONE。
-
-必须更新：
-
-1. `plans/workplans/<task_id>/progress.md`：添加最终执行摘要、测试结果、完成时间戳。
-2. `plans/workplans/<task_id>/findings.md`：记录最终决策、发现的风险、值得注意的实现细节。
-3. 确认 `plans/todo_current.md` 状态仍为 `PLANNED`（merge 成功前不改为 DONE）。
-
-**Stop condition:** 任何 plan 文件未更新，Phase 8 被禁止执行。
-
-此阶段完成后，最多只能表述为：
-- “实现已完成，已通过人工验证，准备 merge”
-
-禁止表述为：
-- “task 已完成”
-- “已经 done”
-- “可以按 WT-PM 结束”
-
----
-
-## Phase 8: Merge Back to Trunk（no terminal switch required）
-
-Goal: 在 worktree 终端内直接将已验证的任务分支 merge 进 trunk。
-
-### 8a. 找到 trunk worktree 路径
+### 8a. Find the trunk worktree path
 
 ```bash
 git worktree list
 ```
 
-识别 trunk worktree 路径（branch 为 `dev` 或配置的 trunk 的条目）。记为 `<trunk_path>`。
+Locate the entry whose branch matches the detected trunk branch.
 
-### 8b. Commit 任何未提交变更
+### 8b. Commit any outstanding task changes
 
 ```bash
 git status --short
 ```
 
-如有未提交变更，stage 并 commit：
+If needed, commit task changes before merge.
+
+### 8c. Merge current task branch into trunk
+
+Use the actual current branch name, not a reconstructed `feat/...` string.
 
 ```bash
-git add -p   # 或 stage 具体文件
-git commit -m "<task_id>: <最终变更说明>"
+git -C <trunk_path> merge --no-ff <current_branch>
 ```
 
-### 8c. Merge 进 trunk
+Stop condition:
+- final re-sync or regression gate has not passed
 
-```bash
-git -C <trunk_path> merge --no-ff feat/<task_id>-<slug>
-```
-
-出现 merge conflict：执行 **Conflict Triage Protocol**（见文末）。
-
-**Stop condition:** Phase 6 的 trunk re-sync 或 final regression 未全绿时，此步骤被禁止执行。
-
-### 8d. 验证 trunk 上的 merge
+### 8d. Verify trunk state
 
 ```bash
 git -C <trunk_path> log --oneline -5
 git -C <trunk_path> status --short
 ```
 
-确认 merge commit 出现，trunk 状态为干净。
+Confirm the merge commit is present and trunk is clean.
 
----
+## Phase 9: Mark DONE
 
-## Phase 9: Mark DONE（Post-Merge Gate）
+Goal: update task state only after verified merge.
 
-Goal: trunk merge 成功后才更新任务状态为 `DONE`。
-
-Phase 8 merge 验证通过后执行：
+Preferred:
 
 ```bash
 python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . set-status --task-id <task_id> --status DONE
 ```
 
-验证 `plans/todo_current.md` 中 `task_id` 显示 `DONE`。
+If tracker output is unavailable, update `plans/todo_current.md` manually while preserving existing table structure.
 
-**Stop condition:** Phase 8 merge 失败或未经验证时，此步骤被禁止执行。
-
----
+Stop condition:
+- merge failed or has not been verified
 
 ## Phase 10: Worktree Cleanup
 
-Goal: 干净 merge 后移除任务 worktree。
+Goal: optionally remove the task worktree after a clean merge.
 
-检查 worktree 状态：
-
-```bash
-git status --short
-```
-
-如状态干净：
+If the worktree is clean:
 
 ```bash
 git worktree remove <current_worktree_path>
 git -C <trunk_path> worktree prune
 ```
 
-Windows fallback（symlinks 或 `node_modules` 阻止移除时）：
+Windows fallback:
 
 ```bash
 git worktree remove --force <current_worktree_path>
@@ -387,53 +330,50 @@ cmd /c rmdir /S /Q <current_worktree_path>
 git -C <trunk_path> worktree prune
 ```
 
-**Cleanup 是可选的：** 如果 worktree 不干净或用户希望保留，跳过 cleanup 并报告原因。
-
----
+Cleanup is optional:
+- skip if the worktree is dirty
+- skip if the user wants to keep it
 
 ## Completion
 
-Phase 10 后输出：
+Output:
 
-```
+```text
 ✅ wt-dev complete for <task_id>
 
   Task:     <task description>
   Status:   DONE
-  Merged:   feat/<task_id>-<slug> → <trunk>
+  Merged:   <current_branch> → <trunk>
   Cleanup:  worktree removed / kept (reason)
-
-Recommended next step: run a manual smoke test on trunk to confirm end-to-end behavior.
-  uv run invoice-web-api   (or docker compose up for M2+)
 ```
+
+Do not append stack-specific smoke-test examples copied from unrelated repos.
 
 ## Completion Semantics
 
-请始终区分以下两个状态：
+Keep these states distinct:
 
 - `implementation complete`
-  - 含义：代码已经实现，自动化验证和人工测试已经通过，但尚未完成 merge / `DONE` 状态更新。
-  - 允许出现的阶段：Phase 5 到 Phase 7 之间。
+  - code is written
+  - relevant automated checks passed
+  - manual verification passed
+  - merge and `DONE` update have not happened yet
 
 - `task complete`
-  - 含义：Phase 8、9 已成功完成，也就是已经 merge 回 trunk，且 `plans/todo_current.md` 已标记为 `DONE`。
-  - 唯一正式完成信号：输出 `✅ wt-dev complete for <task_id>`。
+  - merge back to trunk succeeded
+  - `plans/todo_current.md` is marked `DONE`
 
-在 `✅ wt-dev complete for <task_id>` 之前，不要将任务描述为“完成”“done”“结束”，最多只能说“实现完成，等待 WT-PM 收尾”。
+Only the final completion signal is:
 
-## Worktree Semantics
-
-- 一个 task 应只绑定一个活跃 worktree。
-- 如果某个分支已经被另一个 worktree 占用，不要尝试在当前目录再次 checkout 该分支。
-- 如果需要继续已有 task，应直接打开那个已有 worktree，而不是在 trunk 中切 branch。
-
----
+```text
+✅ wt-dev complete for <task_id>
+```
 
 ## Conflict Triage Protocol
 
-`git merge` 报告冲突时，不自动解决。
+If `git merge` reports conflicts, do not auto-resolve globally.
 
-必须执行的诊断步骤：
+Required diagnostics:
 
 ```bash
 git status --short
@@ -441,32 +381,27 @@ git diff --name-only --diff-filter=U
 git diff --merge
 ```
 
-逐文件决策规则：
+Decide file by file:
 
 | 文件类型 | 决策 | 理由 |
 |----------|------|------|
-| 任务专属文件（当前 plan 的 progress/findings、主要在本分支的功能代码） | 采用 feature branch | 这是本任务的工作成果 |
-| 共享基础/集成文件（CI 配置、lock 文件、非本任务的共享配置） | 采用 trunk | Trunk 版本更成熟 |
-| Contract/Schema/Public API 文件 | 需要人工审查 | Breaking change 需要明确理由 |
+| 当前任务专属文件 | feature branch | 这是当前任务的成果 |
+| 共享基础或集成文件 | trunk | trunk 更接近最新集成状态 |
+| Contract / Schema / Public API 文件 | manual | 需要明确审查 breaking change 风险 |
 
-禁止：
-- 不得在逐文件分析前使用 `git merge -X ours` 或 `git merge -X theirs`。
-- 不得对整个分支应用统一偏好。
+Never use:
+- `git merge -X ours`
+- `git merge -X theirs`
 
-必须输出：
-- 列出每个冲突文件。
-- 说明逐文件决策：`feature` / `trunk` / `manual`。
-- 每个文件给出一行理由后再解决。
-
----
+Report every conflicted file with:
+- chosen side: `feature` / `trunk` / `manual`
+- one-line reason
 
 ## Safety Rules
 
-- 禁止 `git reset --hard` 或 `git checkout -- <path>`。
-- 任何 commit 或 merge 前必须检查 `git status`。
-- Phase 6 regression gate 未全绿前，不执行 Phase 8（merge）。
-- Phase 8 merge 未验证前，不执行 Phase 9（标记 DONE）。
-- 标记 DONE 前必须更新 `progress` 和 `findings` 文件。
-- 不可跳过 Phase 5（人工测试暂停）。自动化测试不替代人工验证。
-- 不可跳过 Phase 6 的 trunk re-sync；人工测试通过后仍必须基于最新 trunk 再做一次最终回归。
-- Phase 10 时如果 worktree 有未提交内容，跳过 cleanup 而非强制删除。
+- 禁止 `git reset --hard` 或 `git checkout -- <path>`
+- 任何 commit 或 merge 前必须检查 `git status`
+- 不可跳过人工验证暂停
+- 不可跳过最终 trunk re-sync
+- 标记 `DONE` 前必须完成 merge 验证
+- 任务级 workplan 只允许使用 `plans/workplans/<task_id>/` 目录结构

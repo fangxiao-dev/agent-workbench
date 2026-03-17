@@ -1,6 +1,6 @@
 ---
 name: wt-pm
-description: WT-PM 全流程编排入口。当用户说"开始一个新任务"、"我要做一个新功能"、"走完整流程"、"不知道从哪开始"、或使用 wt-pm 时触发。负责引导用户在正确的终端环境中依次调用 wt-plan 和 wt-dev，自身不执行任何 git 或文件操作。
+description: WT-PM 全流程编排入口。Use when the user wants the full tracked task workflow but the repo may use different trunk branches or task branch prefixes. It routes the user to wt-plan and wt-dev without doing git or file mutations itself.
 user-invocable: true
 ---
 
@@ -47,7 +47,8 @@ WT-PM 内默认存在两层计划：
    - 用于冻结产品、设计、架构、数据模型等上层方向
    - 可以覆盖一个或多个具体任务
 2. 任务级 plan
-   - 位于 WT-PM 自己的 `plans/workplans/<task_id>/`
+   - 位于仓库自己的 `plans/workplans/<task_id>/`
+   - 目录内固定为 `task_plan.md`、`findings.md`、`progress.md`
    - 与 `plans/todo_current.md` 中的 task 一一绑定
    - 用于驱动 trunk 规划、worktree 实施、验证和 closure
 
@@ -81,8 +82,8 @@ git branch --show-current
 
 | 当前分支 | 情况 | 行动 |
 |----------|------|------|
-| `dev` / `main` | 在 trunk，准备开始新任务 | → 进入 Stage 1 |
-| `feat/<task_id>-<slug>` | 在 worktree，任务已创建 | → 进入 Stage 2 |
+| 检测到的 trunk（如 `master` / `main` / `dev`） | 在 trunk，准备开始新任务 | → 进入 Stage 1 |
+| 检测到的 task 分支（如 `codex/<task_id>-<slug>` / `feat/<task_id>-<slug>`） | 在 worktree，任务已创建 | → 进入 Stage 2 |
 | 其他 | 不明确 | → 询问用户意图 |
 
 如果用户已经明确说明情况（如"我已经写好 plan 了，现在要开发"），跳过检查直接导航到对应阶段。
@@ -91,7 +92,7 @@ git branch --show-current
 
 ## Stage 1: 规划阶段（Trunk 终端）
 
-**前提：** 用户在 trunk 终端（`dev` / `main` 分支）。
+**前提：** 用户在检测到的 trunk 终端。
 
 输出：
 
@@ -127,10 +128,11 @@ git branch --show-current
 
   A. Codex app handoff
      - 在 trunk 线程里使用 handoff
-     - 输入新的 branch 名：`feat/<task_id>-<slug>`
+     - 输入 repo 检测到的 task branch 名，例如 `codex/<task_id>-<slug>` 或 `feat/<task_id>-<slug>`
 
   B. 手动 git worktree
      - 在 trunk 终端执行 `git worktree add ...`
+     - 分支名应复用 repo 已有 task branch 前缀，而不是默认假设 `feat/`
 
 如果该 task 的 worktree 已存在，直接打开那个目录，不要重复 handoff，也不要在 trunk 目录里切 branch。
 进入 task worktree 后，再说 "开工" 触发 wt-dev。
@@ -193,9 +195,14 @@ wt-dev 输出 `✅ wt-dev complete` 后，输出：
 1. `git branch --show-current` 的输出是什么？
 2. `plans/todo_current.md` 里这个 task 的状态是什么（UNPLANNED / PLANNED / DONE）？
 3. 当前目录是否已经是该 task 的独立 worktree？
+4. `plans/workplans/<task_id>/` 和三文件是否已经存在？
 
 根据回答导航到对应阶段。
 
 **需要了解完整模型设计：**
 
-Read `references/wt-pm-workflow.md` for the full WT-PM model rationale, concurrency model, and adaptation guide.
+ Read `references/wt-pm-workflow.md` for the full WT-PM model rationale, concurrency model, and adaptation guide.
+
+**需要验证兼容性压力场景：**
+
+Read `references/wt-compat-pressure-tests.md`.

@@ -1,7 +1,7 @@
 ---
 name: planning-with-files
 version: "2.10.0"
-description: Implements Manus-style file-based planning for complex tasks. In bills__frontend, this skill is customized to bind tasks with plans/todo_current.md and create per-task workplan directories under plans/workplans.
+description: Implements Manus-style file-based planning for complex tasks, especially in repos that track tasks in plans/todo_current.md and store workplans in per-task directories under plans/workplans.
 user-invocable: true
 allowed-tools:
   - Read
@@ -57,20 +57,23 @@ hooks:
 
 Work like Manus: Use persistent markdown files as your "working memory on disk."
 
-## Project Customization (bills__frontend)
+## Project Customization
 
-This repository uses a **task table + per-task workplan directory** workflow:
+This skill is often used inside WT-PM-style repositories and assumes one directory-based workplan layout.
 
-- Task source of truth: `plans/todo_current.md`
-- Workplan files live in `plans/workplans/<task_id>/`
-- Status lifecycle is strict: `UNPLANNED -> PLANNED -> DONE`
+Common repo facts:
+
+- Task source of truth is often `plans/todo_current.md`
+- Status lifecycle is often `UNPLANNED -> PLANNED -> DONE`
+- Workplan files live under `plans/workplans/<task_id>/`
+- Each task directory contains `task_plan.md`, `findings.md`, and `progress.md`
 
 Use these fast trigger phrases:
 
 1. `/planning-with-files 规划还未规划的task`
    - Read all unfinished tasks (`UNPLANNED + PLANNED`).
    - If user specifies scope, use that scope directly.
-   - If scope is not specified, agent auto-selects one task using dependency/risk/conflict/impact heuristics and records rationale in `plans/workplans/<task_id>/findings.md`.
+   - If scope is not specified, agent auto-selects one task using dependency/risk/conflict/impact heuristics and records rationale in that task's `findings.md`.
    - Update the selected task to `PLANNED` in `plans/todo_current.md`.
 2. `/planning-with-files 读取当前未完成的task progress继续实现`
    - Continue one `PLANNED` task.
@@ -112,17 +115,18 @@ If catchup report shows unsynced context:
 | Location | What Goes There |
 |----------|-----------------|
 | Skill directory (`${CLAUDE_PLUGIN_ROOT}/`) | Templates, scripts, reference docs |
-| Your project directory | `plans/workplans/<task_id>/task_plan.md`, `plans/workplans/<task_id>/findings.md`, `plans/workplans/<task_id>/progress.md` |
+| Your project directory | Task workplan directories under `plans/workplans/` |
 
 ## Quick Start
 
 Before ANY complex task:
 
-1. Run `python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . quick-plan --task-id <task_id>` to create the task workplan
-2. Ensure `task_plan.md`, `findings.md`, `progress.md` are created under `plans/workplans/<task_id>/`
-3. Keep `plans/todo_current.md` in sync (`PLANNED` / `DONE` states)
-4. **Re-read plan before decisions** — Refreshes goals in attention window
-5. **Update after each phase** — Mark complete, log errors
+1. Ensure the repo uses `plans/workplans/<task_id>/` directories for task workplans
+2. Use `python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . quick-plan --task-id <task_id>` to create the task directory and three files
+3. Ensure the current task's `task_plan.md`, `findings.md`, and `progress.md` exist under `plans/workplans/<task_id>/`
+4. Keep `plans/todo_current.md` in sync (`PLANNED` / `DONE` states)
+5. **Re-read plan before decisions** — Refreshes goals in attention window
+6. **Update after each phase** — Mark complete, log errors
 
 > **Note:** Planning files go in `plans/workplans/` in your project, not the skill installation folder.
 
@@ -214,7 +218,7 @@ AFTER 3 FAILURES: Escalate to User
 | Browser returned data | Write to file | Screenshots don't persist |
 | Starting new phase | Read `plans/workplans/<task_id>/task_plan.md` and `findings.md` | Re-orient if context stale |
 | Error occurred | Read relevant file | Need current state to fix |
-| Resuming after gap | Read task row in `plans/todo_current.md` + that task's workplan directory | Recover state |
+| Resuming after gap | Read the task row in `plans/todo_current.md` plus that task's workplan directory | Recover state |
 
 ## The 5-Question Reboot Test
 
@@ -224,7 +228,7 @@ If you can answer these, your context management is solid:
 |----------|---------------|
 | Where am I? | Current phase in `plans/workplans/<task_id>/task_plan.md` |
 | Where am I going? | Remaining phases |
-| What's the goal? | Goal statement in plan |
+| What's the goal? | Goal statement in the plan |
 | What have I learned? | `plans/workplans/<task_id>/findings.md` |
 | What have I done? | `plans/workplans/<task_id>/progress.md` |
 
