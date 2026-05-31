@@ -103,3 +103,59 @@ Never use console.log in production. The Redis port is 6379. Be thorough.
 - [WARNING] Facts and rules are interleaved, which makes scanning hard.
 - [WARNING] Important constraints are easy to miss.
 - [SUGGESTION] Group content into sections such as Overview, Tech Stack, Behavior Rules, Verification, and Restrictions.
+
+---
+
+## Anti-Pattern 7: Heavy process with no project facts
+
+```markdown
+## Process
+- Create a plan for every task.
+- Spawn subagents for research.
+- Run a review loop.
+- Write a detailed final report.
+```
+
+**Problems:**
+- [WARNING] The setup defines process but gives no tech stack, project structure, commands, or safety boundaries.
+- [WARNING] The agent may perform a lot of ceremony while still guessing how the project works.
+- [SUGGESTION] Add project facts and exact verification before adding advanced workflow rules.
+
+---
+
+## Anti-Pattern 8: Dangerous default permissions
+
+```markdown
+## Permissions
+- Use sudo whenever a command fails.
+- Delete stale files to keep the repo clean.
+- Restart services on occupied ports.
+```
+
+**Problems:**
+- [CRITICAL] Broad privileged commands create unnecessary risk.
+- [CRITICAL] Deletion and service control rules lack approval boundaries.
+- [WARNING] "Stale files" and "occupied ports" are ambiguous and can affect unrelated work.
+
+---
+
+## Anti-Pattern 9: Verification without execution context
+
+```markdown
+## Verification
+- Run lint.
+- Run tests.
+- Build before finishing.
+```
+
+**Problems:**
+- [WARNING] No working directory is specified.
+- [WARNING] No exact commands are specified.
+- [WARNING] No success condition is specified.
+
+**Fix:**
+```markdown
+## Verification
+From `web/`, run `npm run lint`, `npm test`, and `npm run build`.
+All commands must exit with code 0 before claiming completion.
+```

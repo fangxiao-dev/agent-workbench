@@ -39,6 +39,11 @@ Run these before claiming the task is complete:
 
 All commands must exit with code 0.
 
+If a command must be run from a subdirectory, include the directory:
+
+1. From `api/`, run `npm test`.
+2. From `api/`, run `npm run build`.
+
 ## Off-Limits
 - Do not modify `prisma/migrations/` directly.
 - Do not commit `.env` files or secrets.
@@ -57,5 +62,6 @@ All commands must exit with code 0.
 - Clear project context appears before behavioral rules.
 - Rules are concrete and testable, not aspirational.
 - Verification uses exact commands instead of vague “make sure it works”.
+- Verification includes the success condition and can include the working directory.
 - Boundaries are explicit, which reduces risky agent behavior.
 - Host-specific notes are isolated from project-wide rules.

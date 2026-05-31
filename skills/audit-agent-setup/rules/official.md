@@ -1,16 +1,18 @@
-# Official Best Practices Sources
+# Official and Reference Sources
 
 ## Universal guidance
 
 - Focus on instruction quality that transfers across hosts: clear scope, actionable commands, explicit verification, conflict-free rules, and strong security boundaries.
 - Treat vendor docs as primary sources when host-specific behavior matters.
+- Distinguish verified official behavior from community references and local experience. Do not present community guidance as official vendor policy.
 
-## Vendor-specific references
+## Vendor-specific sources
 
 ### Claude
 
-- Claude Code best practices: https://easyclaude.com/post/claude-code-official-best-practices
-- CLAUDE.md guidance: https://easyclaude.com/post/claude-code-claude-md
+- Use Anthropic or Claude Code official documentation as the primary source when current Claude behavior matters.
+- Community reference, not official: https://easyclaude.com/post/claude-code-official-best-practices
+- Community reference, not official: https://easyclaude.com/post/claude-code-claude-md
 
 ### Codex
 
@@ -22,6 +24,7 @@
 
 ## Usage
 
-- 审查前优先 fetch 上述链接获取最新内容。
-- 若某个宿主的官方文档在当前环境不可用，要明确说明“基于本地快照或通用经验判断”。
-- 当规则只适用于某一宿主时，要在报告里明确标注，不要伪装成通用规则。
+- Before making host-specific claims, prefer fetching or reading official docs for that host.
+- If official docs are unavailable in the current environment, explicitly say: "based on local references or general experience".
+- When a rule applies only to one host, label it in the report. Do not present it as a universal project rule.
+- When a community reference conflicts with official docs, follow the official docs and mention the conflict only if it affects the recommendation.

@@ -1,0 +1,55 @@
+{
+  "skill_name": "audit-agent-setup",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Audit this AGENTS.md excerpt and give findings first:\n\n# My App\n\nBe helpful. Write clean code. Follow best practices. Make sure everything works. Don't break anything. We use React and Node.",
+      "expected_output": "A findings-first audit that flags vague aspirational rules, missing exact verification, and missing project execution details.",
+      "files": [],
+      "expectations": [
+        "The output starts with or prominently leads with findings instead of a generic summary.",
+        "The output flags vague or non-executable instructions such as 'write clean code' or 'follow best practices'.",
+        "The output flags missing exact verification commands and success criteria.",
+        "The output suggests concrete replacement sections or rules, not just general wording improvements."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Review this mixed-agent setup for portability problems:\n\n# Repo Instructions\n\nAlways follow Claude memory rules. Use Claude subagents for every implementation task. If Claude says a command is safe, run it. Codex and Gemini should follow the same process. Complete all work autonomously.",
+      "expected_output": "A findings-first audit that distinguishes host-specific Claude guidance from project-wide rules and flags unsafe delegation.",
+      "files": [],
+      "expectations": [
+        "The output flags Claude-specific rules being presented as universal project policy.",
+        "The output recommends moving host-specific behavior into Host notes or equivalent sections.",
+        "The output flags the unsafe instruction to trust host judgment for command safety.",
+        "The output identifies the host context as mixed-host or cross-host."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Audit this instruction file for security and safety issues:\n\n## Environment\n- Database password: prod123\n- API key: sk-live-abc123\n- Use sudo when you need to install things.\n- If tests fail, delete generated folders and rerun.\n- Production migrations are okay if they unblock the task.",
+      "expected_output": "A security-focused findings-first audit with CRITICAL findings for secrets, privileged commands, destructive cleanup, and production migrations.",
+      "files": [],
+      "expectations": [
+        "The output marks hardcoded credentials or secrets as CRITICAL.",
+        "The output marks broad sudo or privileged command guidance as dangerous.",
+        "The output flags destructive cleanup without explicit boundaries.",
+        "The output flags production migrations without explicit approval.",
+        "The output suggests removing secrets and replacing them with environment-based guidance."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Audit this setup and explain what should be universal versus host-specific:\n\n# Agent Setup\n\n## General\nRead the project files before editing. Run tests before final response. Use the fastest search tool.\n\n## Codex\nUse PowerShell commands on Windows and prefer git grep for tracked files.\n\n## Claude\nUse subagents for independent investigation. Invoke skills before clarifying questions.\n\n## Gemini\nActivate skills with activate_skill.\n\n## Verification\nMake sure everything passes.",
+      "expected_output": "A nuanced audit that preserves useful host-specific notes while flagging weak universal verification and vague tool guidance.",
+      "files": [],
+      "expectations": [
+        "The output distinguishes universal project rules from Codex, Claude, and Gemini host notes.",
+        "The output does not incorrectly reject all host-specific notes; it treats them as acceptable when isolated.",
+        "The output flags 'Run tests' or 'Make sure everything passes' as insufficient without exact commands, directory, and success criteria.",
+        "The output suggests making search-tool guidance concrete enough for the relevant host or environment.",
+        "The output includes unverified assumptions or notes if host behavior is not independently verified."
+      ]
+    }
+  ]
+}
