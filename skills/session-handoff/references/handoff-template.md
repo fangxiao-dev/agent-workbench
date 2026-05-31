@@ -14,6 +14,12 @@ Use this exact section structure in the handoff markdown:
 - Include what has been verified and what has not been verified.
 - If verification is blocked, state the blocker plainly.
 
+## Repo / Git State
+- Branch name, and whether the work is committed or only in the working tree.
+- Current HEAD and any divergence from the trunk (ahead/behind, merge-base).
+- Workspace/worktree roles: where implementation should continue, whether this is a dedicated feature worktree, and whether the main workspace should remain untouched.
+- Capture this from actual `git` output, not from memory.
+
 ## What Changed
 - Summarize the meaningful code, logic, UI, workflow, or documentation changes from this session.
 - Prefer behavior-level changes over raw edit inventories.
@@ -44,4 +50,6 @@ Use this exact section structure in the handoff markdown:
 - Write for a new session that does not know the conversation history.
 - Use concrete file paths when they help the next session move quickly.
 - Distinguish facts from assumptions.
+- Keep it high-signal: prefer behavior-level summaries over raw edit inventories; keep each list short.
+- Do not paste secrets, tokens, env values, or full logs into the handoff.
 - Do not include any section about skill extraction, manual alignment, or continuous learning review.

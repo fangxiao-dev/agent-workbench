@@ -13,6 +13,9 @@ Use this structure and fill in the concrete details:
 当前状态：
 [CURRENT_STATUS]
 
+工作区约束：
+[WORKSPACE_OR_WORKTREE_CONSTRAINTS]
+
 必读文件：
 - [FILE_1]
 - [FILE_2]
