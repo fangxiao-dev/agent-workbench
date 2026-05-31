@@ -58,19 +58,26 @@ If the user does not say which one they want, prefer `提交本session的改动`
 
 1. Inspect `git status --short` and `git diff --stat` first.
 2. Separate session changes from unrelated existing edits.
-3. Create a batching decision before staging:
+3. Before staging or committing, check repository instructions for test-design requirements:
+   - Read the applicable `AGENTS.md` files for the current repository or workspace scope.
+   - If `AGENTS.md` names a test case entry, test-layering plan, verification matrix, or other project-specific test design, read that plan before choosing verification.
+   - Map the intended commit scope to the required extra tests from that plan.
+   - Run the extra tests required for the intended commit scope before committing, unless the plan explicitly says no case is required.
+   - If a required test cannot run, report the blocker and do not claim the commit is fully verified.
+   - Include the relevant verification outcome in the commit body or final report when it materially explains the commit.
+4. Create a batching decision before staging:
    - Group changes by topic, not by convenience.
    - A topic is a coherent review unit: feature/fix, tests for that fix, docs for that change, or generated output required by that change.
    - Keep unrelated generated artifacts, local agent artifacts, data updates, code fixes, and documentation updates in separate commits unless one cannot make sense without the other.
    - If there are 2+ topics, make 2+ commits. Do not collapse them into one commit just because the user asked to commit "all" or "the workspace".
    - If making one commit despite multiple-looking file groups, state the reason before staging.
-4. Stage only the intended files. Prefer explicit paths or `git add -p` when a file mixes unrelated changes.
-5. Write a commit message with:
+5. Stage only the intended files. Prefer explicit paths or `git add -p` when a file mixes unrelated changes.
+6. Write a commit message with:
    - a short conventional title
    - a blank line
    - 2 to 5 bullet points that summarize what changed and why
-6. Commit.
-7. Verify the result with `git status --short`.
+7. Commit.
+8. Verify the result with `git status --short`.
 
 ## Commit message shape
 
