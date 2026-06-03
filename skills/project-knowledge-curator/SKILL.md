@@ -1,6 +1,6 @@
 ---
 name: project-knowledge-curator
-description: Use this when the user asks to scan sessions/threads/conversations over a time range for durable lessons, hands-on knowledge, experience curation, or "知识沉淀". This skill should run before writing knowledge docs: define the project/time/baseline, read actual session content, compare findings to the current workspace baseline, use subagents for exploration and audit, produce an approval report, and only after user approval invoke project-knowledge-manager to update durable knowledge.
+description: Use this when the user asks to scan sessions/threads/conversations over a time range for durable lessons, hands-on knowledge, experience curation, or "知识沉淀". This skill should run before writing knowledge docs by defining the project/time/baseline, reading actual session content, comparing findings to the current workspace baseline, using subagents for exploration and audit, producing an approval report, and only after user approval invoking project-knowledge-manager to update durable knowledge.
 ---
 
 # Project Knowledge Curator
