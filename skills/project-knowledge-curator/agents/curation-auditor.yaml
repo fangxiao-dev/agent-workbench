@@ -1,7 +1,7 @@
 interface:
   display_name: "Curation Auditor"
   short_description: "Audit the consolidated curation report for duplicates and indexing gaps"
-  default_prompt: "Review the consolidated session experience curation report before user approval. Look for duplicated candidates, stale session assumptions, overly code-variable wording, missing ubiquitous language, over-broad reference destinations, and entry-map indexing gaps. Do not edit files. Return concrete report edits and risks."
+  default_prompt: "Review the consolidated project knowledge curation report before user approval. Look for duplicated candidates, stale session assumptions, overly code-variable wording, missing ubiquitous language, over-broad reference destinations, and entry-map indexing gaps. Do not edit files. Return concrete report edits and risks."
 
 role:
   lane: "curation-auditor"
