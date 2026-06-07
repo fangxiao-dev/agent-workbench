@@ -33,6 +33,24 @@ When a candidate overlaps existing knowledge:
 
 If a reference starts to mix several symptoms, surfaces, or external systems, split it into short patterns/runbooks and point `entry-map.md` to those shorter paths.
 
+## Durable Pattern Gate
+
+Before calling something a hands-on candidate, ask:
+
+- What future symptom, trap, or reverse lookup would this save?
+- If this were removed from hands-on knowledge, would PRD / func-design / test-case docs already tell the implementer what to do?
+- Is the future value in reusable implementation/debug guidance, or only in preserving a business rule that is already documented elsewhere?
+
+If the answer is "this is mainly an already-decided requirement or flow contract," keep it out of hands-on knowledge unless you can name the extra trap, recovery, or reverse-lookup value that is missing from the requirement/design/test layer.
+
+Do not require repetition when a single session already proved a durable, non-obvious, and reusable lesson. One costly integration trap or one strong recovery lesson can be enough if its future lookup value is clear.
+
+Examples that usually do **not** justify hands-on knowledge on their own:
+
+- an implemented business rule already covered in PRD, functional design, and tests
+- a one-time feature decision with no recurring trap or recovery value
+- a requirement doc refresh that does not add new lookup or debugging leverage
+
 ## Approval Report Shape
 
 The report is for decision making. It should contain:
@@ -41,6 +59,12 @@ The report is for decision making. It should contain:
 - candidate lessons worth durable curation.
 - suggested destination and indexing action.
 - subagent disagreement or consistency risks.
+
+It may also conclude:
+
+- no new durable hands-on candidates
+- already covered outside hands-on knowledge
+- implementation is important but not a reusable pattern
 
 Do not include a large "not worth curation" table. Rejected one-offs can be omitted or summarized briefly if the user asked for audit traceability.
 
@@ -66,6 +90,7 @@ Do not curate:
 - secrets or env values.
 - ordinary requirements that belong in `docs/func-design/`.
 - implementation plans that are not proven by execution or debugging.
+- already-implemented requirement/design/test rules whose durable value is already adequately served by non-hands-on docs.
 
 Do curate:
 

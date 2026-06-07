@@ -1,6 +1,6 @@
 ---
 name: project-knowledge-manager
-description: Use when preserving, curating, routing, summarizing, or maintaining durable project knowledge after a task, milestone, investigation, implementation, refactor, integration, debugging session, retrospective, runbook, verification note, or hands-on experience. This is the parent entrypoint for docs/hands-on-knowledge and should decide whether to use impl-knowledge-maintainer, debug-knowledge-maintainer, both, or a higher-level project documentation destination.
+description: Use when preserving, curating, routing, summarizing, or maintaining durable project knowledge that has reusable pattern, trap, recovery, or reverse-lookup value after implementation or debugging work.
 ---
 
 # Project Knowledge Manager
@@ -10,6 +10,8 @@ Route durable project hands-on knowledge to the right maintained home.
 This skill is the parent entrypoint for `docs/hands-on-knowledge/`. It classifies incoming material, decides which maintainer skill should handle it, and keeps the project knowledge layer coherent without duplicating the detailed rules owned by the child skills.
 
 Hands-on knowledge is a reverse-indexed memory for future problem solving. It should capture experience, traps, symptoms, root causes, and fast lookup paths that help a future agent when implementation or debugging starts to go wrong. It is not the place for ordinary forward design, implementation-plan detail, or facts that are obvious from reading the current code.
+
+An implemented rule does not become hands-on knowledge just because it is important. If PRD, functional design, architecture docs, or test-case docs already carry the decision, keep it out of `docs/hands-on-knowledge/` unless you can name the extra trap, recovery, or reverse-lookup value that those other docs do not already provide.
 
 Treat references to `docs/hadns-on-experience`, `hands-on-experience`, or similar wording as the existing `docs/hands-on-knowledge/` convention unless the repository clearly defines a different path.
 
@@ -65,7 +67,7 @@ Do not force top-level project context, product background, or ordinary planning
 1. Infer the source material from the prompt, conversation, files mentioned, changed paths, plans, handoffs, logs, or notes.
 2. Confirm completion only when it is unclear whether the task, milestone, implementation, or debug investigation is done enough to preserve. Ask a short confirmation instead of curating unfinished work.
 3. Split mixed material into small candidate knowledge items.
-4. For each candidate, ask: "Would this help a future agent after they hit a confusing symptom, failed verification, wrong assumption, environment mismatch, or non-obvious implementation trap?" If no, route it to design/planning docs or ignore it.
+4. For each candidate, ask: "Would this help a future agent after they hit a confusing symptom, failed verification, wrong assumption, environment mismatch, or non-obvious implementation trap, in a way that requirement/design/test docs would not already cover?" If no, route it to design/planning docs or ignore it.
 5. Classify each item as implementation, debug, both, top-level knowledge, mandatory rule, temporary planning, one-off, stale candidate, or unclear.
 6. For implementation items, load `impl-knowledge-maintainer` and follow its workflow and references.
 7. For debug items, load `debug-knowledge-maintainer` and follow its workflow and references.
@@ -88,6 +90,12 @@ Preserve only knowledge likely to matter again as a reverse lookup or trap-avoid
 - project fact important enough to guide future planning or architecture decisions
 
 Ignore one-off logs, ordinary status updates, facts obvious from current code/tests, straightforward plan/design details, and per-session notes that do not change future behavior. If the item would be better expressed as a requirement for the feature, put it in `docs/func-design/` or `docs/impl-plans/`, not hands-on knowledge.
+
+Ignore by default:
+
+- already-implemented product or flow rules that are adequately covered by PRD / func-design / test-case docs
+- recent feature work whose only argument for curation is "we changed this"
+- requirement refreshes that add no new trap, symptom, recovery path, or reverse-lookup shortcut
 
 ## Final Report
 
@@ -127,3 +135,9 @@ Input: `把项目背景写进 top-level docs`
 Route: `docs/top-level-knowledge/`
 
 Reason: stable project context should not be forced into implementation or debug hands-on knowledge.
+
+Input: `把“已有 Customer 邮箱再次 Register 时要转去 OTP 登录而不是继续写 Customers Table”沉淀成 hands-on pattern`
+
+Route: no hands-on write; keep in `docs/func-design/`, PRD, and executable test docs unless a real trap, recovery path, or missing reverse-lookup need emerges.
+
+Reason: this is primarily a requirement/flow rule. Without extra trap or recovery value, it is not yet a reusable hands-on pattern.

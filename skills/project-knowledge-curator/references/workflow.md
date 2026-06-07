@@ -64,9 +64,18 @@ Subagents are read-only during report creation. They should not edit maintained 
 Merge subagent findings into the report:
 
 - Keep actionable candidates.
-- Keep already-covered items only when they need wording/indexing review.
+- Keep already-covered items only when an existing hands-on document needs wording/indexing review inside the hands-on layer itself.
 - Remove rejected/one-off/ordinary planning items from the main report.
+- Remove items whose only durable value is "this rule was implemented," when PRD / func-design / test-case docs already carry the rule.
 - Use ubiquitous language and scenario language; avoid leading with code variable names.
+
+Before keeping a candidate, explicitly answer:
+
+- What future trap, symptom, or reverse-lookup need does this serve?
+- Why is this better as hands-on knowledge than as requirement/design/test coverage?
+
+If that answer is weak, record `No new durable hands-on candidates` and stop trying to force the item into hands-on knowledge.
+If that answer is strong because the session exposed a non-obvious and reusable trap, recovery path, or reverse-lookup shortcut, keep the candidate even if this is the first time it appeared.
 
 Ask the user to approve the report before curation. If the user changes principles or scope, update the report first.
 
@@ -83,6 +92,7 @@ For each approved item:
 - Update `entry-map.md` after durable docs change.
 
 Keep durable docs concise. Avoid raw logs, session narration, temporary IDs, credentials, and obsolete session state.
+Do not create a pattern/runbook/investigation merely to mirror an implemented requirement that is already adequately documented elsewhere.
 
 ## 7. Verify And Close
 

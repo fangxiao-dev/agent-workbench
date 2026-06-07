@@ -31,7 +31,8 @@ scope: <time range + project path>
 - Current baseline overrides historical session state.
 - `entry-map.md` is the reverse index; durable writes must keep it effective.
 - Prefer minimal supplements; split short documents only when references become too broad.
-- Report only actionable candidates and already-covered items that need review.
+- Report only actionable candidates and already-covered hands-on items that need wording/indexing review inside the hands-on layer.
+- Keep only items with durable pattern, trap, recovery, or reverse-lookup value; do not keep implemented requirement rules already covered in PRD / func-design / tests unless you can state the extra trap, recovery, or reverse-lookup value that those artifacts do not already provide.
 
 ## Current Baseline Coverage To Review
 
@@ -40,6 +41,10 @@ scope: <time range + project path>
 | W-01 | ... | `docs/hands-on-knowledge/...` | wording / indexing / split boundary |
 
 ## Candidate Lessons
+
+If there are no qualifying durable candidates, say so explicitly:
+
+`No new durable hands-on candidates recommended in this pass.`
 
 ### C-01 <Scenario Name>
 
@@ -66,6 +71,18 @@ Evidence:
 Decision needed:
 
 - ...
+
+Why this is hands-on knowledge instead of requirement/design/test coverage:
+
+- ...
+
+## Ubiquitous Language Scan
+
+Use this section only when the project has a maintained glossary such as `docs/top-level-knowledge/ubiquitous-language.md`.
+
+- Candidate term additions:
+- Candidate clarifications or ambiguity fixes:
+- No glossary action needed: yes/no, why
 
 ## Subagent Review Summary
 
