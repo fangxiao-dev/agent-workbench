@@ -1,0 +1,115 @@
+---
+name: handoff-new-session
+description: Use when the user wants to hand off or migrate work to a new session or thread — summarize this session into a handoff, save context/progress/pitfalls to disk before switching conversations (总结落盘当前进度、坑、后续), generate a continuation prompt for a fresh session, fork or continue in a new Codex Desktop thread, or carry collaboration preferences across sessions.
+---
+
+# Handoff New Session
+
+## 目的
+
+把当前会话的工作交接给新会话：用精炼的 handoff 保留真正影响后续执行的上下文——当前状态、已验证事实、未完成边界，以及用户明确给过的协作偏好。
+
+不要路由到这里：单纯总结一份文档、把 bug 写成 issue、新写一个 skill。
+
+## 前置环境检查
+
+线程操作只在 Codex Desktop host 可执行（`create_thread` / `fork_thread`）。在其他 host 上不要调用线程工具：生成交接产物（handoff 文件 + chat 内 continuation prompt），手动移交给用户去开新会话。
+
+## 选择操作
+
+| 用户意图 | 使用 | 环境 | 上下文行为 |
+| --- | --- | --- | --- |
+| 默认：把工作交给新 thread 继续 | `create_thread`（仅 Codex） | 当前项目 local environment | 不继承旧对话历史，只使用 handoff prompt |
+| 用户明确要求继承会话历史 / fork 当前 session | `fork_thread`（仅 Codex） | `{ type: "same-directory" }` | 复制源 thread 已完成的历史 |
+| 用户明确要求新 worktree 隔离 | `create_thread` 或 `fork_thread` | worktree environment | 按 host 工具能力和用户要求创建隔离环境 |
+| 非 Codex host | 手动移交 | — | handoff 文件 + continuation prompt，由用户自己开新会话 |
+
+注意：
+
+- fork 只包含已完成的历史；源 thread 正在运行的当前 turn 不会被复制，fork 后也不再同步。
+- same-directory 表示子 thread 使用当前目录，不是新建 worktree。
+
+## 轻量 vs 耐久
+
+满足任一条即为耐久交接，必须落盘 handoff 文件并走 quality gate：
+
+- 任务跨天，或 child 将长时间无人值守推进。
+- 涉及外部状态：issue/PR/comment、邮件、外部系统等已发生或待发生的动作。
+- 多 agent 或多 worktree 分工。
+- 存在未完成验证或已知风险需要 child 接力。
+
+否则为轻量交接：chat 里一段短 continuation prompt 即可，不强制落盘、不强制 gate。
+
+## 交接产物
+
+状态一律从实际 workspace 采集（git 命令输出），不靠对话记忆。
+
+1. **handoff 文件**（耐久必须）：`docs/exchange/handoffs/handoff-<slug>-MMDDhhmm.md`（本地时间，24 小时制）。slug 取自工作流，2–5 个小写连字符词（如 `lark-webhook-debug`），不要用 `session` 这类泛词；重名时细化 slug 或追加秒数，不覆盖。结构按 `templates/durable-handoff.md`。
+2. **continuation prompt**（轻量、耐久都要）：文件写完后在 chat 直接返回，绝不写成第二个文件。结构见模板第二部分。
+
+涉及 worktree 或 branch 集成的交接，先读 `rules/worktree-handoff.md` 再写 Git 相关内容。
+
+## 耐久交接 Checkpoint
+
+按这个顺序收口——commit 在写 handoff 之前，保证 handoff 出生即新鲜：
+
+1. 确认当前要求的 gate 已通过，或明确写出未验证项。
+2. 更新进度记录、外部 issue/PR/comment 状态和关键决策。
+3. commit 当前 checkpoint；不提交则在 handoff 里明确说明原因。
+4. 读取 fresh 状态：`git status --short --branch`、`git log -1 --oneline`。
+5. 用 fresh 状态写入或刷新 handoff 文件。
+6. 读 `rules/reviewer-input.md` 组织审核材料，让审核员 subagent 按 `rules/logger-handoff-quality-gate.md` 审核；按意见修改。
+7. 创建新会话，或按前置环境检查的结果手动移交。
+
+## Child Prompt 必填内容
+
+给新会话的 prompt 不要只写“自己读历史”。至少包含：
+
+- Current objective：当前目标和本轮要推进到哪里。
+- Fresh workspace state：最新工作目录、branch、HEAD、dirty/clean 状态。
+- Completed / not completed：已完成和明确不要提前做的任务。
+- Verified / not verified：已跑过的 gate、结果，以及仍未验证的风险。
+- Collaboration contract：用户明确给过的协作方式、权限和限制。
+- Next action：新会话第一件事要做什么。
+
+按需补充 external state、important files / commands、do not repeat。完整骨架见 `templates/durable-handoff.md`。
+
+轻量交接可用短 prompt：
+
+```text
+你正在接手一个已有任务。以这条 handoff 为当前事实，先确认 workspace 状态，然后继续：<具体下一步>。
+```
+
+## Collaboration Contract
+
+协作偏好要显式继承，尤其是长任务、多 agent、worktree、提交和验证策略。
+
+- Explicit user preferences carry forward.
+  - 例子：用户说过“主线程主要做调度和验收，implementation 尽量交给 subagent”，child prompt 里要写成当前执行规则。
+- Inferred behavior must be labeled as inferred.
+  - 例子：旧 session 经常先跑测试再汇报但用户没明确要求，写成“inferred / pending confirmation：继续在汇报前做 focused verification”。
+- One-time permissions do not become standing permissions.
+  - 例子：用户批准“这次在 #9/#10/#11 前提交 checkpoint”，只能说明这个 checkpoint 已提交，不能告诉 child 以后可以自由提交。
+
+Subagent 偏好要写清所有权边界，而不只是“可以用 subagent”：worker 实现边界清晰的任务，reviewer 做 spec/quality review，main session 负责计划、seam 修补、integration gate 和最终验收。
+
+不要从旧 session 推断用户同意新 worktree、破坏性 git 操作、生产环境修改，或无限制 delegation。
+
+## Codex Desktop 操作要点
+
+- `create_thread`：项目相关任务用当前项目 local environment；用户给定的 prompt 边界原样保留；除非明确要求隔离，不新建 worktree。
+- `fork_thread`：环境 `{ type: "same-directory" }`；只有子 thread 需要继续工作时才发 follow-up prompt。
+- 命名：沿用原始 slug 加递增编号（`daily-cash-ledger-2`、`-3`），编号接已有同类 thread 的最大值。多 thread 时设可识别标题，活跃续接 thread 可以 pin。
+- 成功后按 host 当前指令输出 directive，通常是 `::created-thread{threadId="..."}`；worktree setup 被排队时为 `::created-thread{pendingWorktreeId="..."}`。
+
+## 常见错误
+
+- 用户没有明确要求继承历史，却 fork 了旧 thread（默认永远是干净新会话）。
+- 用户明确要求继承历史，却创建了干净 thread。
+- 把 same-directory fork 误认为新 worktree。
+- handoff 写完才 commit，导致 child 拿到过期 HEAD——commit 必须在写 handoff 之前。
+- 只让 child“自己读历史”，没有给当前事实摘要。
+- 复制了任务状态，但漏掉用户的协作偏好。
+- 把 continuation prompt 写成第二个文件。
+- 在 handoff 里贴 secrets、token、env 值或完整日志。
+- 声称没有实际发生的验证，或混淆 verified 与 assumed。

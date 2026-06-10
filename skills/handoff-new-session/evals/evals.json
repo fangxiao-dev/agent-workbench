@@ -1,0 +1,45 @@
+{
+  "skill_name": "handoff-new-session",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Fork 当前 session，继续刚才的 debug，不要新 worktree。给新 thread 一个能接着干的 handoff。",
+      "expected_output": "Uses fork_thread with same-directory, sends a focused handoff prompt, does not create a worktree, and includes a created-thread directive."
+    },
+    {
+      "id": 2,
+      "prompt": "用当前项目开一个新的干净 Codex session，不要继承旧历史。把我下面 USER_PROMPT 里的内容原样作为初始 prompt。",
+      "expected_output": "Uses create_thread with the current project local environment, passes the delimited USER_PROMPT verbatim, and does not fork old context."
+    },
+    {
+      "id": 3,
+      "prompt": "fork 之后还需要 handoff 吗？是让它自己读全部历史，还是我做一次提炼交接？",
+      "expected_output": "Explains that fork inherits completed history but recommends a concise handoff for long, complex, or risky work; applies the documented light-vs-durable criteria (cross-day, external state, multi-agent/worktree, unverified risk) instead of guessing."
+    },
+    {
+      "id": 4,
+      "prompt": "旧 session 里我明确允许过 subagent 并行探索，新 session 也要继承这种管理方式。请把这点写进 handoff。",
+      "expected_output": "Includes a collaboration contract section, carries explicit subagent permission with its scope, and labels any merely inferred workflow preferences as pending confirmation."
+    },
+    {
+      "id": 5,
+      "prompt": "总结这个 session，把当前目标、完成状态、遇到的坑和后续动作落盘到仓库里。我接下来要开一个新会话继续，再给我一段可以直接贴到新 session 输入框的 continuation prompt。",
+      "expected_output": "Writes exactly one handoff markdown file under docs/exchange/handoffs/ following the durable template, then returns a continuation prompt in chat (never as a second file) that includes the handoff path and a verify-state-first instruction.",
+      "expectations": [
+        "Writes exactly one handoff markdown artifact",
+        "Handoff captures completion status, verification gaps, and next action",
+        "Returns the continuation prompt in chat rather than saving a second prompt file"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "（在不提供 create_thread / fork_thread 工具的 host 上）帮我把当前工作交接到一个新会话继续。",
+      "expected_output": "Does not attempt to call thread tools. Falls back to the manual-handover path: writes the handoff file, returns a continuation prompt in chat, and tells the user to start the new session themselves."
+    },
+    {
+      "id": 7,
+      "prompt": "做一次耐久交接。注意我工作区里还有未提交的修改，外部 issue 也更新过了。",
+      "expected_output": "Follows the checkpoint order: updates external state, commits the checkpoint (or states why not) BEFORE writing the handoff, captures fresh git status/log after the commit, writes the handoff from that fresh state, runs the reviewer gate with materials per rules/reviewer-input.md, and respects the two-round review loop bound."
+    }
+  ]
+}
