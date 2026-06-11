@@ -5,6 +5,7 @@
 | frontend-design | `anthropics/skills` | `npx skills add anthropics/skills@frontend-design -g -y` | 已放入 `skills/frontend-design/` |
 | skill-creator | `anthropics/skills` | 人工迁移 | 已放入 `skills/skill-creator/` |
 | grill-me | `mattpocock/skills` | `npx skills add mattpocock/skills@grill-me -g -y` | 已放入 `skills/grill-me/` |
+| grill-with-docs | `mattpocock/skills` | `npx skills add mattpocock/skills@grill-with-docs -g -y` | 已放入 `skills/grill-with-docs/` |
 | to-issues | `mattpocock/skills` | `npx skills add mattpocock/skills@to-issues -g -y` | 已放入 `skills/to-issues/` |
 | to-prd | `mattpocock/skills` | `npx skills add mattpocock/skills@to-prd -g -y` | 已放入 `skills/to-prd/` |
 | vercel-react-best-practices | `vercel-labs/agent-skills` | `npx skills add vercel-labs/agent-skills@vercel-react-best-practices -g -y` | 已放入 `skills/vercel-react-best-practices/` |
