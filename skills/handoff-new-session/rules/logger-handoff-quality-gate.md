@@ -45,7 +45,7 @@
   - prompt 是否显式写出 handoff triggers：session context auto compact 了，或者自行识别到的大 gate。不能只引用 `auto-handoff-triggers.md`。
   - mission 是否与 rolling handoff 的 Next Action 一致。
   - 是否会导致 child 验证后停止等待；plan 已完成本地实现时，mission 是否写成 closure orchestration（准备但不执行外部动作、请求授权），而不是“等待 owner”。
-  - 推进边界与停止条件是否明确（执行规则四条是否齐全）。
+  - 推进边界与停止条件是否明确：mission 是否含“持续推进直到 trigger / blocker / closure 收口 / owner 停止”语义，第一步是否含 git 一致性验证。查语义齐全即可，不要求四条执行规则原文成块出现在 prompt 里。
   - 硬护栏（push/PR/merge 禁令等）是否在 prompt 内显式存在。
   - 长流程自动交接时，是否要求第一条可见更新只简短说明 autonomy intent 和 subagent/orchestration intent，而不是产出 PR body、issue 文案、closure packet 等 deliverables。
   - prompt 是否要求 child 在首条可见更新后继续自动推进，且不把 `create_thread` 设计成必须等待 parent ACK 的阻塞式 IPC。

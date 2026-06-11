@@ -90,7 +90,7 @@ Prompt 定规则和索引，不复述 handoff 事实。**不要复制 Fresh Work
 - [PLAN_PATH]
 
 第一步：
-切到 [WORKTREE_PATH]，运行 `git status --short --branch` 和 `git log -1 --oneline`（expected HEAD: [EXPECTED_HEAD_ONELINE]），读取 rolling handoff 的 Open Issues / Not Completed / Next Action，然后发送上述短进度更新并继续推进。
+读完“必读”清单后，切到 [WORKTREE_PATH]，运行 `git status --short --branch` 和 `git log -1 --oneline`（expected HEAD: [EXPECTED_HEAD_ONELINE]），确认 rolling handoff 的 Open Issues / Not Completed / Next Action，然后发送上述短进度更新并继续推进。
 ```
 
 要求：prompt 必含可执行 mission、执行模式、显式 subagent 授权、显式 handoff triggers、硬护栏、skill/rule/files 索引、HEAD 一行校验和、首条可见更新要求。事实细节、完整契约、开放问题全部留在 handoff 文件，prompt 只指向它们。

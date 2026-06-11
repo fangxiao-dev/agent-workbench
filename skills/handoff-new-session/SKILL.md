@@ -86,15 +86,14 @@ Child prompt 定规则和索引；**事实只住在 handoff 文件里，prompt �
 
 结构按 `templates/durable-handoff.md` 第二部分，至少包含：
 
-- Role & Mission：接手什么工作流、本轮要推进到哪里。mission 必须可执行（以 rolling handoff 的 Next Action 为准），不能是“验证后等待”。
+- Role & Mission：接手什么工作流、本轮要推进到哪里。mission 必须可执行（以 rolling handoff 的 Next Action 为准），不能是“验证后等待”。plan 已完成本地实现时，mission 写明 closure orchestration（准备但不执行外部动作、请求授权）。
 - Mode：明确 child 是 **orchestration runner**：先发一条短 progress update，说明会自动推进和如何使用 subagent，然后继续执行。不要把第一条可见回复当最终答复。
 - Delegation authorization：必须在 prompt 中显式写出“主 session / 新 session 关注调度和 seaming，尽量派用 subagent 执行单个任务”。这是 owner 给 orchestration runner 的授权，不要只放在 handoff 或 skill 文件里。
 - Handoff triggers：必须在 prompt 中显式写出“交接触发点：session context auto compact 了，或者自行识别到的大 gate”。这是 child 何时刷新 handoff / create next session 的执行条件，不要只引用 rule 文件。
-- 执行规则（四条标准文本，原样复制进 prompt）：
-  1. 先验证 `git status --short --branch` / `git log -1 --oneline` 与 handoff 一致。
-  2. 以 rolling handoff 的 Next Action 为准持续推进，不要只确认状态后停止。
-  3. 持续执行直到：下一个 handoff trigger、明确 blocker、plan 完成且 closure 收口、或 owner 要求停止。
-  4. 如果 plan 已完成本地实现，进入 closure orchestration：列出仍需 owner 授权的外部动作，准备但不执行 push/PR/issue/merge（如起草 PR 描述、issue 更新文案、merge 清单），向 owner 请求下一步授权。不要发明新实现任务。
+- 执行规则语义（不要求四条原文成块复制进 prompt，但语义必须齐全）：
+  - 验证：第一步含 `git status --short --branch` / `git log -1 --oneline` 与 handoff 的一致性校验。
+  - 持续推进与停止条件：mission 行含“按 rolling handoff 的 Next Action 持续推进，直到下一个 handoff trigger、明确 blocker、plan 完成且 closure 收口、或 owner 要求停止”，不要只确认状态后停止。
+  - closure 模式：plan 已完成本地实现时由 mission 写明（准备但不执行 push/PR/issue/merge，向 owner 请求授权，不发明新实现任务）；具体清单由 handoff 的 Next Action 承载，定义见 `rules/auto-handoff-triggers.md`。
 - Hard guardrails：最关键的 2–4 条硬护栏（如 push/PR/merge 禁令、subagent 分工）。安全关键规则不依赖 child 先读完文件才生效，必须留在 prompt 里。
 - Required skill context / Required rule context / Required files：本 skill、`rules/auto-handoff-triggers.md`、rolling handoff、计划文档等索引。rolling handoff 是唯一事实源。
 - First action：先读本 skill 和 auto-handoff rule，再验证 workspace；最多附一行 HEAD 校验和防漂移，不复制 handoff 的事实段；动手前确认 handoff 的 Open Issues / Not Completed / Next Action。

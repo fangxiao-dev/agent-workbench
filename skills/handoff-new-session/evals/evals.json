@@ -53,8 +53,8 @@
     },
     {
       "id": 10,
-      "prompt": "（审核员场景）收到的 continuation prompt 草稿整段复制了 handoff 的 Fresh Workspace State 和 Verified Gates，mission 写的是“验证状态后等待 owner 指示”。",
-      "expected_output": "Reviewer returns NEEDS CHANGES, citing both violations: the prompt mirrors handoff facts instead of indexing the rolling handoff, and the mission is a verify-and-wait dead end — when the plan is locally complete it must be rewritten as closure orchestration (prepare-not-execute, request authorization)."
+      "prompt": "（审核员场景）收到的 continuation prompt 草稿整段复制了 handoff 的 Fresh Workspace State 和 Verified Gates，内联了完整的 PR body 草稿和 closure checklist，mission 写的是“验证状态后等待 owner 指示”。",
+      "expected_output": "Reviewer returns NEEDS CHANGES, citing all three violations: the prompt mirrors handoff facts instead of indexing the rolling handoff; it inlines deliverables (PR body, closure checklist) that belong in the handoff Next Action or a closure packet, breaking the short-launcher budget; and the mission is a verify-and-wait dead end — when the plan is locally complete it must be rewritten as closure orchestration (prepare-not-execute, request authorization)."
     }
   ]
 }
