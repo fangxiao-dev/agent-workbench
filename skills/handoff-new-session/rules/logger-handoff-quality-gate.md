@@ -14,6 +14,7 @@
   - worktree、branch、HEAD、dirty/clean 状态。
   - 当前阶段、已完成、未完成、明确不要提前做的任务。
   - 下一步第一动作。
+  - 对 rolling handoff：是否明确这是当前唯一继续入口，是否避免留下多个同类过期入口。
 
 - 状态是否新鲜：
   - handoff 是否在 commit 和外部状态更新之后、基于 fresh git 输出写成（Checkpoint 规定 commit 先于写 handoff）。
@@ -39,6 +40,7 @@
 - 噪声是否被降级：
   - timeline、worker 名字、中间 gate、小修复过程是否没有挤占 handoff 的主视野。
   - 只有仍有恢复价值的错误、决策、风险进入 handoff。
+  - checkpoint 历史是否汇总为当前事实，而不是每个小 gate 都保留成新的同级入口。
 
 ## 建议输出格式
 

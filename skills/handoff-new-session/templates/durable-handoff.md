@@ -4,8 +4,15 @@
 
 按这个结构写 handoff 文件；Codex `create_thread` 路径下，child prompt 直接复用同样的段落骨架。
 
+默认文件名使用 rolling handoff：`docs/exchange/handoffs/handoff-<slug>-current.md`。只有用户要求、审计冻结、长期分叉、或多个 child 必须从不同时间点恢复时，才额外写 `handoff-<slug>-MMDDhhmm.md` 归档快照。
+
 ```md
-# Session Handoff
+# Rolling Handoff: [Workflow Name]
+
+## Handoff Mode
+- Rolling current handoff; this is the only continuation entrypoint.
+- Supersedes: [older timestamped handoffs, if relevant].
+- Archived snapshot: [only when this file is intentionally frozen].
 
 ## Current Objective
 - 当前目标、本轮要推进到哪里、为什么现在做。
@@ -55,22 +62,43 @@
 
 ## 第二部分：continuation prompt（chat 内返回，不落盘）
 
-```text
-已将 handoff 落盘。请先阅读 [HANDOFF_FILE_PATH]，然后继续这个任务。
+```md
+# Continuation Prompt
 
-当前目标：[CURRENT_GOAL]
-当前状态：[CURRENT_STATUS]
-工作区约束：[WORKSPACE_OR_WORKTREE_CONSTRAINTS]
+## Handoff
+已将 handoff 落盘。请先阅读 `[HANDOFF_FILE_PATH]`，然后继续这个任务。
 
-必读文件：
+## Current Objective
+[CURRENT_GOAL]
+
+## Current State
+[CURRENT_STATUS]
+
+## Workspace Constraints
+[WORKSPACE_OR_WORKTREE_CONSTRAINTS]
+
+## Collaboration Contract
+[COLLABORATION_CONTRACT_SUMMARY；只写最关键的 2-4 条硬规则，例如主 session 不直接实现清晰 slice、先派 worker subagent、主 session 负责 seam/integration gate、禁止未授权 push/PR。完整协作细节放在 handoff 文件和 Required Skill Context 中。]
+
+## Required Skill Context
+- `[HANDOFF_NEW_SESSION_SKILL_PATH]`
+
+## Required Rule Context
+- `[AUTO_HANDOFF_TRIGGERS_RULE_PATH]`
+
+## Required Files
 - [FILE_1]
 - [FILE_2]
 
-首个推荐动作：[FIRST_RECOMMENDED_ACTION]
+## First Recommended Action
+[FIRST_RECOMMENDED_ACTION]
 
+## Verification Rule
 继续实现前，先验证当前状态，不要假设 handoff 中提到的修复或未验证项已经成立。
+
+## Open Issues
 如果以下开放问题仍未确认，请先确认再动手：
 - [OPEN_ISSUE_1]
 ```
 
-要求：必含 handoff 文件路径、当前目标、当前状态、“先验证再继续”的指令；没有开放问题时也要写明“无已知开放问题，但仍需先验证状态”。
+要求：使用带章节的 Markdown prompt；必含 handoff 文件路径、当前目标、当前状态、工作区约束、精简协作契约、Required Skill Context、本 skill 路径、Required Rule Context、自动 handoff 触发 rule 路径、“先验证再继续”的指令；没有开放问题时也要写明“无已知开放问题，但仍需先验证状态”。协作契约在 prompt 中保持短，只放最关键护栏；完整规则写入 handoff 文件、本 skill 和 Required Rule Context。

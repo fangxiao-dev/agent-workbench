@@ -135,15 +135,15 @@ WT-PM 工作流拆成三个 skill：
 
 ### 保存 Session Handoff
 
-当你要把当前上下文迁移到新会话时，使用 `session-handoff`。
+当你要把当前上下文迁移到新会话时，使用 `handoff-new-session`。
 
 默认 handoff 文件写到：
 
 ```text
-docs/exchange/handoffs/handoff-<slug>-MMDDhhmm.md
+docs/exchange/handoffs/handoff-<slug>-current.md
 ```
 
-其中 `<slug>` 使用当前目标或工作流的 2-5 个小写 ASCII 词，例如 `checkout-integration`、`e2e-order-history`；`MMDDhhmm` 使用本地时间的 24 小时制。写入前会检查同名文件，避免覆盖已有 handoff。
+其中 `<slug>` 使用当前目标或工作流的 2-5 个小写 ASCII 词，例如 `checkout-integration`、`e2e-order-history`。默认刷新 rolling handoff；只有用户要求、审计冻结、长期分叉、或多个 child 必须从不同时间点恢复时，才额外写 timestamped 归档快照。
 
 ---
 
@@ -156,7 +156,7 @@ agent-workbench/
 ├── skills/                     ← 正式 skills：自建、第三方、工作流知识库
 │   ├── audit-agent-setup/      ← agent setup 审查知识库（rules + examples）
 │   ├── grill-me-smartly/       ← grill-me + 常驻 answer-only subagent 设计审查
-│   ├── session-handoff/        ← 会话上下文落盘和新会话接续提示词
+│   ├── handoff-new-session/    ← 会话上下文落盘和新会话接续提示词
 │   ├── wt-pm/                  ← WT-PM 工作流知识库
 │   │   ├── SKILL.md            ← 全流程编排入口 skill
 │   │   ├── references/         ← 工作流参考文档

@@ -7,7 +7,7 @@ description: Use this when the user asks to scan sessions/threads/conversations 
 
 Use this skill to turn a time-bounded set of project sessions into reviewed durable knowledge candidates, then curate approved items into the project knowledge base.
 
-This is not `session-handoff`. A handoff preserves one session's state. This skill scans many sessions and decouples them from their historical state by comparing lessons against the current project baseline.
+This is not `handoff-new-session`. A handoff preserves one session's state. This skill scans many sessions and decouples them from their historical state by comparing lessons against the current project baseline.
 
 ## Durable Pattern Gate
 

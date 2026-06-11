@@ -31,7 +31,7 @@ Search first for terms that indicate prior knowledge work:
 - `impl-knowledge-maintainer`
 - `debug-knowledge-maintainer`
 - `entry-map`
-- `session-handoff`
+- `handoff-new-session`
 
 Use those hits to classify sessions as already curated, already discussed but not covered, or needing full read.
 

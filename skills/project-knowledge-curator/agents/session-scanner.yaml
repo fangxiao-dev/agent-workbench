@@ -7,7 +7,7 @@ role:
   lane: "session-scanner"
   responsibilities:
     - "Read actual session/thread content, not just handoffs."
-    - "Search first for hands-on-knowledge, project-knowledge-manager, entry-map, and session-handoff markers."
+    - "Search first for hands-on-knowledge, project-knowledge-manager, entry-map, and handoff-new-session markers."
     - "Extract reusable implementation, debug, verification, and recovery lessons."
     - "Flag prior discussions that are not actually covered in the current baseline."
   output: "Use references/subagent-protocol.md output contract."

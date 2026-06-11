@@ -28,6 +28,7 @@ description: Use when the user wants to hand off or migrate work to a new sessio
 
 - fork 只包含已完成的历史；源 thread 正在运行的当前 turn 不会被复制，fork 后也不再同步。
 - same-directory 表示子 thread 使用当前目录，不是新建 worktree。
+- 如果无法用 `create_thread` 创建干净新会话，不要自动 fallback 到 `fork_thread`；先说明阻塞并返回 handoff 文件与 continuation prompt，除非用户明确要求继承历史。
 
 ## 轻量 vs 耐久
 
@@ -40,14 +41,28 @@ description: Use when the user wants to hand off or migrate work to a new sessio
 
 否则为轻量交接：chat 里一段短 continuation prompt 即可，不强制落盘、不强制 gate。
 
+自动 handoff 触发点见 `rules/auto-handoff-triggers.md`。长流程 continuation prompt 必须在 Required Rule Context 中显式列出该 rule 路径，让 child session 自行读取规则细节。
+
 ## 交接产物
 
 状态一律从实际 workspace 采集（git 命令输出），不靠对话记忆。
 
-1. **handoff 文件**（耐久必须）：`docs/exchange/handoffs/handoff-<slug>-MMDDhhmm.md`（本地时间，24 小时制）。slug 取自工作流，2–5 个小写连字符词（如 `lark-webhook-debug`），不要用 `session` 这类泛词；重名时细化 slug 或追加秒数，不覆盖。结构按 `templates/durable-handoff.md`。
+1. **handoff 文件**（耐久必须）：优先使用 rolling handoff：`docs/exchange/handoffs/handoff-<slug>-current.md`。slug 取自工作流，2–5 个小写连字符词（如 `lark-webhook-debug`），不要用 `session` 这类泛词。结构按 `templates/durable-handoff.md`。
 2. **continuation prompt**（轻量、耐久都要）：文件写完后在 chat 直接返回，绝不写成第二个文件。结构见模板第二部分。
 
+### Rolling vs Timestamped
+
+默认维护一个 rolling handoff，而不是每个 checkpoint 都新增时间戳文件。rolling handoff 是继续工作的唯一入口，应该覆盖更新到最新可恢复状态，避免 child session 读到过期入口。
+
+仅在以下情况额外写时间戳归档快照：用户明确要求保留历史；需要冻结审计证据；要交接给多个独立 child 且它们必须从不同时间点恢复；或某阶段完成后后续会长期分叉。归档命名为 `docs/exchange/handoffs/handoff-<slug>-MMDDhhmm.md`。如果写了归档，rolling handoff 顶部要写明 `Supersedes` / `Archived snapshot` 关系，并指向最新入口。
+
+如果某个工作流已经积累了多个过期 timestamped handoff，先征得用户同意再整理；整理时保留/创建一个 `handoff-<slug>-current.md`，删除或归档旧入口，确保目录里不会出现多个看起来都可继续的同类 handoff。
+
 涉及 worktree 或 branch 集成的交接，先读 `rules/worktree-handoff.md` 再写 Git 相关内容。
+
+长流程自动交接时，把本 skill 的 `SKILL.md` 也作为 continuation prompt 的必读文件传给 child。这样 child 后续需要再次 handoff 时，会加载同一套规则，而不是只依赖本次 prompt 摘要。
+
+长流程自动交接时，也把 `rules/auto-handoff-triggers.md` 作为 continuation prompt 的 Required Rule Context 传给 child。`SKILL.md` 只做规则索引；触发细节放在 rule 文件中。
 
 ## 耐久交接 Checkpoint
 
@@ -57,7 +72,7 @@ description: Use when the user wants to hand off or migrate work to a new sessio
 2. 更新进度记录、外部 issue/PR/comment 状态和关键决策。
 3. commit 当前 checkpoint；不提交则在 handoff 里明确说明原因。
 4. 读取 fresh 状态：`git status --short --branch`、`git log -1 --oneline`。
-5. 用 fresh 状态写入或刷新 handoff 文件。
+5. 用 fresh 状态刷新 rolling handoff；只有符合归档条件时才额外写 timestamped snapshot。
 6. 读 `rules/reviewer-input.md` 组织审核材料，让审核员 subagent 按 `rules/logger-handoff-quality-gate.md` 审核；按意见修改。
 7. 创建新会话，或按前置环境检查的结果手动移交。
 
@@ -69,7 +84,9 @@ description: Use when the user wants to hand off or migrate work to a new sessio
 - Fresh workspace state：最新工作目录、branch、HEAD、dirty/clean 状态。
 - Completed / not completed：已完成和明确不要提前做的任务。
 - Verified / not verified：已跑过的 gate、结果，以及仍未验证的风险。
-- Collaboration contract：用户明确给过的协作方式、权限和限制。
+- Collaboration contract：用户明确给过的协作方式、权限和限制。continuation prompt 必须显式写最关键的 2-4 条硬规则；完整协作细节放在 handoff 文件和本 skill 里，不要把长规则全文塞进 prompt。
+- Required skill context：长流程自动交接时必须把本 skill 文件列为必读文件。
+- Required rule context：长流程自动交接时必须把 `rules/auto-handoff-triggers.md` 列为必读 rule 文件。
 - Next action：新会话第一件事要做什么。
 
 按需补充 external state、important files / commands、do not repeat。完整骨架见 `templates/durable-handoff.md`。
@@ -93,6 +110,13 @@ description: Use when the user wants to hand off or migrate work to a new sessio
 
 Subagent 偏好要写清所有权边界，而不只是“可以用 subagent”：worker 实现边界清晰的任务，reviewer 做 spec/quality review，main session 负责计划、seam 修补、integration gate 和最终验收。
 
+Continuation prompt 只保留最小执行护栏，例如：
+- 主 session 默认不直接改生产/测试代码；清晰 implementation slice 先派 worker subagent。
+- 主 session 负责调度、seam、integration gate、checkpoint commit 和 handoff。
+- 不 push / PR / close issue，除非 owner 明确要求。
+
+其余细节写入 handoff 文件和本 skill，由 child 在 Required Skill Context / Required Files 中读取。
+
 不要从旧 session 推断用户同意新 worktree、破坏性 git 操作、生产环境修改，或无限制 delegation。
 
 ## Codex Desktop 操作要点
@@ -108,8 +132,9 @@ Subagent 偏好要写清所有权边界，而不只是“可以用 subagent”�
 - 用户明确要求继承历史，却创建了干净 thread。
 - 把 same-directory fork 误认为新 worktree。
 - handoff 写完才 commit，导致 child 拿到过期 HEAD——commit 必须在写 handoff 之前。
+- 每个小 gate 都新增 timestamped handoff，导致目录里堆积多个过期入口。默认刷新 rolling handoff；只有需要审计/分叉/用户要求时才归档快照。
 - 只让 child“自己读历史”，没有给当前事实摘要。
-- 复制了任务状态，但漏掉用户的协作偏好。
+- 复制了任务状态，但漏掉用户的协作偏好；尤其不能把主 session / 新 session / subagent / spec review / quality review 边界只留在 handoff 文件里。
 - 把 continuation prompt 写成第二个文件。
 - 在 handoff 里贴 secrets、token、env 值或完整日志。
 - 声称没有实际发生的验证，或混淆 verified 与 assumed。
