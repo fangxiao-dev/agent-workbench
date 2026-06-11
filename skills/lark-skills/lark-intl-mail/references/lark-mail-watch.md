@@ -1,7 +1,7 @@
 
 # mail +watch
 
-> **前置条件：** 先阅读 [`../lark-shared/SKILL.md`](../../lark-shared/SKILL.md) 了解认证、全局参数和安全规则。
+> **前置条件：** 先阅读 [`../lark-intl-shared/SKILL.md`](../../lark-intl-shared/SKILL.md) 了解认证、全局参数和安全规则。
 
 实时监听新邮件事件（`mail.user_mailbox.event.message_received_v1`）。
 
@@ -29,7 +29,7 @@ lark-cli mail +watch --msg-format full --format data
 lark-cli mail +watch --msg-format event --format data
 
 # 监听指定邮箱
-lark-cli mail +watch --mailbox alice@company.com
+lark-cli mail +watch --mailbox "$LARK_MAILBOX"
 
 # 按文件夹/标签过滤（客户端过滤，支持名称或 ID）
 lark-cli mail +watch --folders '["收件箱项目"]' --label-ids '["FLAGGED"]'

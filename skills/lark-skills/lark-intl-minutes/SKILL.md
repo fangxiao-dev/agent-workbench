@@ -12,6 +12,20 @@ metadata:
 
 **CRITICAL — 开始前 MUST 先用 Read 工具读取 [`../lark-intl-shared/SKILL.md`](../lark-intl-shared/SKILL.md)，其中包含认证、权限处理**
 
+## 本地示例配置
+
+本 skill 的真实示例妙记 token 只放在本目录下的 `.env`，该文件不提交。公开示例使用 `.env.example` 中的占位符；如需运行本地示例，先复制并填写：
+
+```bash
+cp .env.example .env
+set -a; . ./.env; set +a
+```
+
+当前引用的本地变量：
+
+- `LARK_MINUTE_TOKEN`：示例妙记 token
+- `LARK_MINUTE_TOKEN_2`：第二个示例妙记 token，用于批量示例
+
 ## 核心概念
 
 - **妙记 Token（minute_token）**：妙记的唯一标识符。通常可从妙记的 URL 链接中提取（例如 `https://*.larksuite.com/minutes/obcnq3b9jl72l83w4f14xxxx` 中的最后一段字符串 `obcnq3b9jl72l83w4f14xxxx`）。
@@ -41,7 +55,7 @@ metadata:
 lark-cli minutes minutes get --params '{"minute_token": "obcn***************"}'
 
 # 查妙记关联的纪要产物：逐字稿、总结、待办、章节等 → 用 lark-cli vc +notes
-lark-cli vc +notes --minute-tokens obcnhijv43vq6bcsl5xasfb2
+lark-cli vc +notes --minute-tokens "$LARK_MINUTE_TOKEN"
 ```
 本 skill 仅提供妙记**基础元信息**查询（标题、封面、时长）。如需获取纪要**内容**（逐字稿、AI 总结、待办、章节），请使用 [lark-cli vc +notes](../lark-intl-vc/references/lark-vc-notes.md)：
 
@@ -62,13 +76,13 @@ Shortcut 是对常用操作的高级封装（`lark-cli minutes +<verb> [flags]`�
 
 ```bash
 # 下载音视频文件到本地
-lark-cli minutes +download --minute-tokens obcnq3b9jl72l83w4f149w9c --output ./meeting.mp4
+lark-cli minutes +download --minute-tokens "$LARK_MINUTE_TOKEN" --output ./meeting.mp4
 
 # 仅获取下载链接
-lark-cli minutes +download --minute-tokens obcnq3b9jl72l83w4f149w9c --url-only
+lark-cli minutes +download --minute-tokens "$LARK_MINUTE_TOKEN" --url-only
 
 # 批量下载
-lark-cli minutes +download --minute-tokens obcnq3b9jl72l83w4f149w9c,obcnexa7814k4t41c446fzwj
+lark-cli minutes +download --minute-tokens "$LARK_MINUTE_TOKEN,$LARK_MINUTE_TOKEN_2"
 ```
 
 <!-- AUTO-GENERATED-START — gen-skills.py 管理，勿手动编辑 -->

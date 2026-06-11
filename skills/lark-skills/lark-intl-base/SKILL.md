@@ -14,6 +14,20 @@ metadata:
 > **执行前必做：** 执行任何 `base` 命令前，必须先阅读对应命令的 reference 文档，再调用命令。
 > **命名约定：** 仅使用 `lark-cli base +...` 形式的命令。
 
+## 本地示例配置
+
+本 skill 的真实示例资源标识只放在本目录下的 `.env`，该文件不提交。公开示例使用 `.env.example` 中的占位符；如需运行本地示例，先复制并填写：
+
+```bash
+cp .env.example .env
+set -a; . ./.env; set +a
+```
+
+当前引用的本地变量：
+
+- `LARK_BASE_TOKEN`：示例 Base token
+- `LARK_WIKI_SPACE_ID`：示例知识空间 ID
+
 ## Agent 快速执行顺序
 
 1. **先判断任务类型**
@@ -226,7 +240,7 @@ lark-cli wiki spaces get_node --params '{"token":"Pgrr***************UnRb"}'
     "obj_token": "UAJ***************E9nic",
     "title": "ai friendly 测试 - 1 副本",
     "node_type": "origin",
-    "space_id": "6946843325487906839"
+    "space_id": "${LARK_WIKI_SPACE_ID}"
   }
 }
 ```

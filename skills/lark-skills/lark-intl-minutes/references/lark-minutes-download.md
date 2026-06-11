@@ -1,7 +1,7 @@
 
 # minutes +download
 
-> **前置条件：** 先阅读 [`../lark-shared/SKILL.md`](../../lark-shared/SKILL.md) 了解认证、全局参数和安全规则。
+> **前置条件：** 先阅读 [`../lark-intl-shared/SKILL.md`](../../lark-intl-shared/SKILL.md) 了解认证、全局参数和安全规则。
 
 下载妙记的音视频媒体文件到本地，或获取有效期 1 天的下载链接。只读操作。
 
@@ -11,22 +11,22 @@
 
 ```bash
 # 下载单个妙记的音视频文件
-lark-cli minutes +download --minute-tokens obcnq3b9jl72l83w4f149w9c
+lark-cli minutes +download --minute-tokens "$LARK_MINUTE_TOKEN"
 
 # 指定输出路径
-lark-cli minutes +download --minute-tokens obcnq3b9jl72l83w4f149w9c --output ./meeting.mp4
+lark-cli minutes +download --minute-tokens "$LARK_MINUTE_TOKEN" --output ./meeting.mp4
 
 # 仅获取下载链接（有效期 1 天），不下载文件
-lark-cli minutes +download --minute-tokens obcnq3b9jl72l83w4f149w9c --url-only
+lark-cli minutes +download --minute-tokens "$LARK_MINUTE_TOKEN" --url-only
 
 # 批量下载多个妙记
-lark-cli minutes +download --minute-tokens obcnq3b9jl72l83w4f149w9c,obcnexa7814k4t41c446fzwj
+lark-cli minutes +download --minute-tokens "$LARK_MINUTE_TOKEN,$LARK_MINUTE_TOKEN_2"
 
 # 批量下载到指定目录
-lark-cli minutes +download --minute-tokens obcnq3b9jl72l83w4f149w9c,obcnexa7814k4t41c446fzwj --output ./downloads
+lark-cli minutes +download --minute-tokens "$LARK_MINUTE_TOKEN,$LARK_MINUTE_TOKEN_2" --output ./downloads
 
 # 预览 API 调用
-lark-cli minutes +download --minute-tokens obcnq3b9jl72l83w4f149w9c --dry-run
+lark-cli minutes +download --minute-tokens "$LARK_MINUTE_TOKEN" --dry-run
 ```
 
 ## 参数
@@ -91,7 +91,7 @@ API 限流 5 次/秒，批量下载时需注意控制频率。
 
 | 来源 | 获取方式 |
 |------|---------|
-| 妙记 URL | 从 URL 末尾提取，如 `https://sample.feishu.cn/minutes/obcnq3b9jl72l83w4f149w9c` → `obcnq3b9jl72l83w4f149w9c` |
+| 妙记 URL | 从 URL 末尾提取，如 `https://sample.feishu.cn/minutes/obcnxxxxxxxxxxxxxxxxxxxxxx` → `obcnxxxxxxxxxxxxxxxxxxxxxx` |
 | 妙记元信息查询 | `lark-cli minutes minutes get --params '{"minute_token": "obcn..."}'` |
 | 会议纪要查询 | `lark-cli vc +notes --meeting-ids <id>` 返回结果中关联的妙记 token |
 
@@ -110,10 +110,10 @@ API 限流 5 次/秒，批量下载时需注意控制频率。
 
 - 音视频文件可能较大，下载无固定超时限制（由用户 Ctrl+C 控制取消）。
 - 未指定 `--output` 时，默认使用妙记原始标题作为文件名（如 `Office Oncall流程2.0宣讲.mp4`）。
-- 如需获取妙记的纪要内容（逐字稿、AI 总结等），请使用 [vc +notes](../../lark-vc/references/lark-vc-notes.md)。
+- 如需获取妙记的纪要内容（逐字稿、AI 总结等），请使用 [vc +notes](../../lark-intl-vc/references/lark-vc-notes.md)。
 
 ## 参考
 
 - [lark-minutes](../SKILL.md) — 妙记全部命令
-- [lark-vc-notes](../../lark-vc/references/lark-vc-notes.md) — 会议纪要查询
-- [lark-shared](../../lark-shared/SKILL.md) — 认证和全局参数
+- [lark-vc-notes](../../lark-intl-vc/references/lark-vc-notes.md) — 会议纪要查询
+- [lark-intl-shared](../../lark-intl-shared/SKILL.md) — 认证和全局参数

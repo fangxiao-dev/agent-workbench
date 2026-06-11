@@ -12,6 +12,19 @@ metadata:
 
 **CRITICAL — 开始前 MUST 先用 Read 工具读取 [`../lark-intl-shared/SKILL.md`](../lark-intl-shared/SKILL.md)，其中包含认证、权限处理**
 
+## 本地示例配置
+
+本 skill 的示例邮箱只放在本目录下的 `.env`，该文件不提交。公开示例使用 `.env.example` 中的占位符；如需运行本地示例，先复制并填写：
+
+```bash
+cp .env.example .env
+set -a; . ./.env; set +a
+```
+
+当前引用的本地变量：
+
+- `LARK_MAILBOX`：示例监听邮箱
+
 ## 核心概念
 
 - **邮件（Message）**：一封具体的邮件，包含发件人、收件人、主题、正文（纯文本/HTML）、附件。每封邮件有唯一 `message_id`。

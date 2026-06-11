@@ -6,3 +6,6 @@ __pycache__/
 skills-lock.json
 .trae/
 skills/.system/
+skills/lark-skills/lark-intl-base/.env
+skills/lark-skills/lark-intl-minutes/.env
+skills/lark-skills/lark-intl-mail/.env
