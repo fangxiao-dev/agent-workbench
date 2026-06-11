@@ -1,11 +1,21 @@
 ---
 name: to-issues
-description: Break a plan, spec, or PRD into independently-grabbable issues on the project issue tracker using tracer-bullet vertical slices. Use when user wants to convert a plan into issues, create implementation tickets, or break down work into issues.
+description: Break a plan, spec, or PRD into independently-grabbable vertical-slice issues using tracer-bullet methodology. Use when converting an existing plan or spec into GitHub issue tickets. Do not use if the parent plan itself needs rewriting into an orchestration/scheduler-facing format—use orchestrator skill instead.
 ---
 
 # To Issues
 
 Break a plan into independently-grabbable issues using vertical slices (tracer bullets).
+
+## When To Use
+
+- User has an existing plan / spec / PRD and wants vertical-slice issues only.
+- Goals: slice granularity, dependency order, independent grabbability, acceptance criteria clarity.
+- Output: issue drafts or published issues in the tracker.
+
+**Do not use this skill:**
+- If the parent plan itself needs rewriting into an orchestration/scheduler-facing format → use `orchestrator` skill.
+- If converting a high-level requirement into a bulk implementation plan first → use `feature-impl-planing` skill.
 
 The issue tracker and triage label vocabulary should have been provided to you — run `/setup-matt-pocock-skills` if not.
 
