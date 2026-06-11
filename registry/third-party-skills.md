@@ -10,6 +10,7 @@
 | tdd | `mattpocock/skills` | `npx skills add mattpocock/skills@tdd -g -y` | 已放入 `skills/tdd/` |
 | to-issues | `mattpocock/skills` | `npx skills add mattpocock/skills@to-issues -g -y` | 已放入 `skills/to-issues/` |
 | to-prd | `mattpocock/skills` | `npx skills add mattpocock/skills@to-prd -g -y` | 已放入 `skills/to-prd/` |
+| improve-codebase-architecture | `mattpocock/skills` | `npx skills add mattpocock/skills@improve-codebase-architecture -g -y` | 已放入 `skills/improve-codebase-architecture/` |
 | zoom-out | `mattpocock/skills` | `npx skills add mattpocock/skills@zoom-out -g -y` | 已放入 `skills/zoom-out/` |
 | vercel-react-best-practices | `vercel-labs/agent-skills` | `npx skills add vercel-labs/agent-skills@vercel-react-best-practices -g -y` | 已放入 `skills/vercel-react-best-practices/` |
 | find-skills | `vercel-labs/skills` | `npx skills add vercel-labs/skills@find-skills -g -y` | 已放入 `skills/find-skills/` |
