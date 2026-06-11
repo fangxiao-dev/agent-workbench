@@ -2,7 +2,7 @@
 
 ## 第一部分：handoff 文件结构
 
-按这个结构写 handoff 文件；Codex `create_thread` 路径下，child prompt 直接复用同样的段落骨架。
+按这个结构写 handoff 文件。Codex `create_thread` 路径下，child prompt 使用第二部分的索引式结构——prompt 不复述本文件内容，本文件是唯一事实源。
 
 默认文件名使用 rolling handoff：`docs/exchange/handoffs/handoff-<slug>-current.md`。只有用户要求、审计冻结、长期分叉、或多个 child 必须从不同时间点恢复时，才额外写 `handoff-<slug>-MMDDhhmm.md` 归档快照。
 
@@ -51,6 +51,7 @@
 
 ## Next Action
 - 新会话第一动作；必读文件（短清单）；首个验证命令或手动检查。
+- 必须可执行。plan 已完成本地实现时，写成 closure orchestration 清单：仍需 owner 授权的外部动作、可先准备的材料（PR 描述、issue 更新文案、merge 清单）；禁止写成“等待 owner 指示”。
 ```
 
 写作要求：
@@ -60,25 +61,25 @@
 - 不贴 secrets、token、env 值、完整日志。
 - 不放 skill 沉淀 / continuous-learning 讨论。
 
-## 第二部分：continuation prompt（chat 内返回，不落盘）
+## 第二部分：continuation prompt（chat 内返回或用于 create_thread，不落盘）
+
+Prompt 定规则和索引，不复述 handoff 事实。**不要复制 Fresh Workspace State、Verified Gates、External State 等事实段**——它们只住在 rolling handoff 文件里。
 
 ```md
 # Continuation Prompt
 
-## Handoff
-已将 handoff 落盘。请先阅读 `[HANDOFF_FILE_PATH]`，然后继续这个任务。
+## Role & Mission
+你正在接手 [WORKFLOW_NAME] 的 rolling handoff。
+[MISSION：本轮要推进到哪里，以 rolling handoff 的 Next Action 为准；plan 已完成本地实现时写 closure orchestration 使命。]
 
-## Current Objective
-[CURRENT_GOAL]
+## Execution Rules
+1. 先验证 `git status --short --branch` / `git log -1 --oneline` 与 handoff 一致（HEAD 校验和：`[EXPECTED_HEAD_ONELINE]`）。
+2. 以 rolling handoff 的 Next Action 为准持续推进，不要只确认状态后停止。
+3. 持续执行直到：下一个 handoff trigger、明确 blocker、plan 完成且 closure 收口、或 owner 要求停止。
+4. 如果 plan 已完成本地实现，进入 closure orchestration：列出仍需 owner 授权的外部动作，准备但不执行 push/PR/issue/merge，向 owner 请求下一步授权。不要发明新实现任务。
 
-## Current State
-[CURRENT_STATUS]
-
-## Workspace Constraints
-[WORKSPACE_OR_WORKTREE_CONSTRAINTS]
-
-## Collaboration Contract
-[COLLABORATION_CONTRACT_SUMMARY；只写最关键的 2-4 条硬规则，例如主 session 不直接实现清晰 slice、先派 worker subagent、主 session 负责 seam/integration gate、禁止未授权 push/PR。完整协作细节放在 handoff 文件和 Required Skill Context 中。]
+## Hard Guardrails
+[最关键的 2–4 条，例如：不 push / PR / close issue / merge，除非 owner 明确要求；清晰 implementation slice 先派 worker subagent；主 session 负责调度、seam、integration gate、checkpoint commit 和 handoff。完整契约在 handoff 文件中。]
 
 ## Required Skill Context
 - `[HANDOFF_NEW_SESSION_SKILL_PATH]`
@@ -87,18 +88,19 @@
 - `[AUTO_HANDOFF_TRIGGERS_RULE_PATH]`
 
 ## Required Files
-- [FILE_1]
-- [FILE_2]
+- `[ROLLING_HANDOFF_PATH]`（唯一事实源：状态、gate 结果、外部状态、open issues 都在这里）
+- `[PLAN_PATH]`
+- [其他必读文件]
 
-## First Recommended Action
-[FIRST_RECOMMENDED_ACTION]
+## First Action
+执行 Execution Rules 第 1 条验证，读完 Required Files，确认 handoff 的 Open Issues 后，按 Next Action 开始推进。不要假设 handoff 中的未验证项已经成立。
 
-## Verification Rule
-继续实现前，先验证当前状态，不要假设 handoff 中提到的修复或未验证项已经成立。
-
-## Open Issues
-如果以下开放问题仍未确认，请先确认再动手：
-- [OPEN_ISSUE_1]
+## First Reply Contract
+你的第一条回复必须包含：
+- Verified state：验证结果，与 handoff 是否一致。
+- Interpreted objective：你理解的当前目标。
+- Next action：你接下来要做的第一件事。
+- Proceed or wait, and why：现在推进还是等待，理由是什么。
 ```
 
-要求：使用带章节的 Markdown prompt；必含 handoff 文件路径、当前目标、当前状态、工作区约束、精简协作契约、Required Skill Context、本 skill 路径、Required Rule Context、自动 handoff 触发 rule 路径、“先验证再继续”的指令；没有开放问题时也要写明“无已知开放问题，但仍需先验证状态”。协作契约在 prompt 中保持短，只放最关键护栏；完整规则写入 handoff 文件、本 skill 和 Required Rule Context。
+要求：prompt 必含可执行 mission、执行规则四条、硬护栏、三类索引（skill / rule / files）、HEAD 一行校验和、First Reply Contract（长流程自动交接必填；轻量交接可省略）。事实细节、完整契约、开放问题全部留在 handoff 文件，prompt 只指向它们。

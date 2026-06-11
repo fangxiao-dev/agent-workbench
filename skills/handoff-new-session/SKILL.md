@@ -73,23 +73,24 @@ description: Use when the user wants to hand off or migrate work to a new sessio
 3. commit 当前 checkpoint；不提交则在 handoff 里明确说明原因。
 4. 读取 fresh 状态：`git status --short --branch`、`git log -1 --oneline`。
 5. 用 fresh 状态刷新 rolling handoff；只有符合归档条件时才额外写 timestamped snapshot。
-6. 读 `rules/reviewer-input.md` 组织审核材料，让审核员 subagent 按 `rules/logger-handoff-quality-gate.md` 审核；按意见修改。
-7. 创建新会话，或按前置环境检查的结果手动移交。
+6. 起草 continuation prompt；读 `rules/reviewer-input.md` 组织审核材料（含 prompt 草稿），让审核员 subagent 按 `rules/logger-handoff-quality-gate.md` 同审 handoff 与 prompt 草稿；按意见修改。
+7. 创建新会话（prompt 用审核通过的草稿原样发送），或按前置环境检查的结果手动移交。
+8. handshake（Codex 自动交接默认步骤；轻量交接和手动移交不要求）：读取 child 第一条回复，核对 First Reply Contract 四项是否与 handoff intent 一致；不符则纠正一次；读取第二次回复后给出评价并退出，不做多轮监督。
 
 ## Child Prompt 必填内容
 
-给新会话的 prompt 不要只写“自己读历史”。至少包含：
+Child prompt 定规则和索引；**事实只住在 handoff 文件里，prompt 不复述 handoff 内容**。结构按 `templates/durable-handoff.md` 第二部分，至少包含：
 
-- Current objective：当前目标和本轮要推进到哪里。
-- Fresh workspace state：最新工作目录、branch、HEAD、dirty/clean 状态。
-- Completed / not completed：已完成和明确不要提前做的任务。
-- Verified / not verified：已跑过的 gate、结果，以及仍未验证的风险。
-- Collaboration contract：用户明确给过的协作方式、权限和限制。continuation prompt 必须显式写最关键的 2-4 条硬规则；完整协作细节放在 handoff 文件和本 skill 里，不要把长规则全文塞进 prompt。
-- Required skill context：长流程自动交接时必须把本 skill 文件列为必读文件。
-- Required rule context：长流程自动交接时必须把 `rules/auto-handoff-triggers.md` 列为必读 rule 文件。
-- Next action：新会话第一件事要做什么。
-
-按需补充 external state、important files / commands、do not repeat。完整骨架见 `templates/durable-handoff.md`。
+- Role & Mission：接手什么工作流、本轮要推进到哪里。mission 必须可执行（以 rolling handoff 的 Next Action 为准），不能是“验证后等待”。
+- 执行规则（四条标准文本，原样复制进 prompt）：
+  1. 先验证 `git status --short --branch` / `git log -1 --oneline` 与 handoff 一致。
+  2. 以 rolling handoff 的 Next Action 为准持续推进，不要只确认状态后停止。
+  3. 持续执行直到：下一个 handoff trigger、明确 blocker、plan 完成且 closure 收口、或 owner 要求停止。
+  4. 如果 plan 已完成本地实现，进入 closure orchestration：列出仍需 owner 授权的外部动作，准备但不执行 push/PR/issue/merge（如起草 PR 描述、issue 更新文案、merge 清单），向 owner 请求下一步授权。不要发明新实现任务。
+- Hard guardrails：最关键的 2–4 条硬护栏（如 push/PR/merge 禁令、subagent 分工）。安全关键规则不依赖 child 先读完文件才生效，必须留在 prompt 里。
+- Required skill context / Required rule context / Required files：本 skill、`rules/auto-handoff-triggers.md`、rolling handoff、计划文档等索引。rolling handoff 是唯一事实源。
+- First action：验证命令；最多附一行 HEAD 校验和防漂移，不复制 handoff 的事实段；动手前先确认 handoff 的 Open Issues。
+- First reply contract（长流程自动交接必填）：要求 child 第一条回复包含 verified state、interpreted objective、next action、proceed-or-wait-and-why 四项。
 
 轻量交接可用短 prompt：
 
@@ -136,5 +137,8 @@ Continuation prompt 只保留最小执行护栏，例如：
 - 只让 child“自己读历史”，没有给当前事实摘要。
 - 复制了任务状态，但漏掉用户的协作偏好；尤其不能把主 session / 新 session / subagent / spec review / quality review 边界只留在 handoff 文件里。
 - 把 continuation prompt 写成第二个文件。
+- prompt 镜像 handoff 文件内容（复制 Fresh State、Verified Gates 等事实段）——事实只住 handoff，prompt 只做规则与索引。
+- plan 完成本地实现时，把 child 导向“验证后等待 owner”，而不是 closure orchestration（准备但不执行外部动作、请求授权）。
+- 长流程自动交接创建 child 后不做 handshake 直接退出，child 的理解偏差没人接住。
 - 在 handoff 里贴 secrets、token、env 值或完整日志。
 - 声称没有实际发生的验证，或混淆 verified 与 assumed。

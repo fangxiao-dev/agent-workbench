@@ -37,6 +37,14 @@
   - subagent / main session 的所有权边界是否清楚。
   - 一次性权限是否没有被升级成长期权限。
 
+- continuation prompt 是否合格（材料含 prompt 草稿时必查）：
+  - 是否复述了 handoff 的事实细节（Fresh State、Verified Gates、External State 等）——prompt 应只做规则与索引，事实只住 handoff 文件。
+  - mission 是否与 rolling handoff 的 Next Action 一致。
+  - 是否会导致 child 验证后停止等待；plan 已完成本地实现时，mission 是否写成 closure orchestration（准备但不执行外部动作、请求授权），而不是“等待 owner”。
+  - 推进边界与停止条件是否明确（执行规则四条是否齐全）。
+  - 硬护栏（push/PR/merge 禁令等）是否在 prompt 内显式存在。
+  - 长流程自动交接时，First Reply Contract 是否存在且含四项。
+
 - 噪声是否被降级：
   - timeline、worker 名字、中间 gate、小修复过程是否没有挤占 handoff 的主视野。
   - 只有仍有恢复价值的错误、决策、风险进入 handoff。
