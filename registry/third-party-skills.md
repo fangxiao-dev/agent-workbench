@@ -7,6 +7,7 @@
 | grill-me | `mattpocock/skills` | `npx skills add mattpocock/skills@grill-me -g -y` | 已放入 `skills/grill-me/` |
 | grill-with-docs | `mattpocock/skills` | `npx skills add mattpocock/skills@grill-with-docs -g -y` | 已放入 `skills/grill-with-docs/` |
 | prototype | `mattpocock/skills` | `npx skills add mattpocock/skills@prototype -g -y` | 已放入 `skills/prototype/` |
+| tdd | `mattpocock/skills` | `npx skills add mattpocock/skills@tdd -g -y` | 已放入 `skills/tdd/` |
 | to-issues | `mattpocock/skills` | `npx skills add mattpocock/skills@to-issues -g -y` | 已放入 `skills/to-issues/` |
 | to-prd | `mattpocock/skills` | `npx skills add mattpocock/skills@to-prd -g -y` | 已放入 `skills/to-prd/` |
 | vercel-react-best-practices | `vercel-labs/agent-skills` | `npx skills add vercel-labs/agent-skills@vercel-react-best-practices -g -y` | 已放入 `skills/vercel-react-best-practices/` |
