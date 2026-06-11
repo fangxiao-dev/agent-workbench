@@ -44,12 +44,12 @@
     {
       "id": 8,
       "prompt": "（自动交接触发）orchestration plan 已经在本地全部完成，剩余动作只有 push、PR、issue 更新和 merge，都需要 owner 授权。context 快满了，做一次交接。",
-      "expected_output": "The continuation prompt's mission is closure orchestration: list owner-gated external actions, prepare materials (PR description draft, issue update drafts, merge checklist) WITHOUT executing push/PR/issue/merge, and request owner authorization. The prompt must NOT direct the child to 'verify state and wait for owner direction', and must NOT copy Fresh Workspace State / Verified Gates facts from the handoff — it indexes the rolling handoff as the single source of truth."
+      "expected_output": "The rolling handoff Next Action records closure orchestration details and owner-gated external actions. The continuation prompt stays short and acts as an orchestration-runner launcher: index the rolling handoff/plan/skill/rule, explicitly include the owner authorization that main/new session focuses on scheduling and seaming and should delegate single tasks to subagents where possible, explicitly include the handoff triggers (context auto-compaction or self-identified major gate), require a brief first visible update about autonomy and subagent/orchestration intent, then continue automatically. It must NOT direct the child to 'verify state and wait for owner direction', must NOT copy Fresh Workspace State / Verified Gates facts, and must NOT inline full PR bodies, issue comments, or merge checklists."
     },
     {
       "id": 9,
-      "prompt": "（自动交接后 handshake）child 的第一条回复只确认了 git 状态与 handoff 一致，没有说接下来要做什么、也没有说明是推进还是等待。",
-      "expected_output": "Parent detects the missing First Reply Contract fields (interpreted objective, next action, proceed-or-wait-and-why), corrects the child exactly once with pointed guidance, reads the second reply, gives a final assessment, and exits. No multi-round supervision loop."
+      "prompt": "（自动交接后首条进度更新）child 的第一条回复只确认了 git 状态与 handoff 一致，没有说 autonomy intent、subagent/orchestration intent、next action，也没有继续推进。",
+      "expected_output": "Parent treats this as a First Progress Update quality problem, not a blocking handshake protocol. If the host can message the child, it sends one concise correction: state autonomy intent and subagent/orchestration intent, then continue automatically unless verification failed, a blocker exists, or owner asked to stop. Parent does not design the flow as requiring child to wait for ACK before continuing."
     },
     {
       "id": 10,

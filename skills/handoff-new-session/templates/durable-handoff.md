@@ -65,42 +65,32 @@
 
 Prompt 定规则和索引，不复述 handoff 事实。**不要复制 Fresh Workspace State、Verified Gates、External State 等事实段**——它们只住在 rolling handoff 文件里。
 
-```md
 # Continuation Prompt
 
-## Role & Mission
-你正在接手 [WORKFLOW_NAME] 的 rolling handoff。
-[MISSION：本轮要推进到哪里，以 rolling handoff 的 Next Action 为准；plan 已完成本地实现时写 closure orchestration 使命。]
+长流程 prompt 应该是短启动器：10–25 行左右，只给执行模式和索引。不要在 prompt 里展开 closure checklist、PR body、issue comment、gate 结果、外部状态或 issue 细节；这些都住在 rolling handoff / plan / issue 文件里。
 
-## Execution Rules
-1. 先验证 `git status --short --branch` / `git log -1 --oneline` 与 handoff 一致（HEAD 校验和：`[EXPECTED_HEAD_ONELINE]`）。
-2. 以 rolling handoff 的 Next Action 为准持续推进，不要只确认状态后停止。
-3. 持续执行直到：下一个 handoff trigger、明确 blocker、plan 完成且 closure 收口、或 owner 要求停止。
-4. 如果 plan 已完成本地实现，进入 closure orchestration：列出仍需 owner 授权的外部动作，准备但不执行 push/PR/issue/merge，向 owner 请求下一步授权。不要发明新实现任务。
+```text
+你正在接手 [WORKFLOW_NAME] 的 rolling handoff。按 rolling handoff 的 Next Action 继续执行，直到下一个 handoff trigger、明确 blocker、plan 完成且 closure 收口、或 owner 要求停止。
 
-## Hard Guardrails
-[最关键的 2–4 条，例如：不 push / PR / close issue / merge，除非 owner 明确要求；清晰 implementation slice 先派 worker subagent；主 session 负责调度、seam、integration gate、checkpoint commit 和 handoff。完整契约在 handoff 文件中。]
+执行模式：
+- 你是 orchestration runner，不是一次性报告生成器。
+- 主 session / 新 session 关注调度和 seaming，尽量派用 subagent 执行单个任务。
+- 交接触发点：session context auto compact 了，或者自行识别到的大 gate。
+- 第一条可见更新只简短说明：1) 会继续自动推进；2) 会按协作契约使用 worker/reviewer subagent（如当前阶段不需要 subagent，说明原因）。然后继续执行，不要等待 parent ACK。
+- 先读 skill/rule，再验证 workspace；事实以 rolling handoff 为准。
 
-## Required Skill Context
-- `[HANDOFF_NEW_SESSION_SKILL_PATH]`
+硬护栏：
+- 不 push / PR / GitHub issue/comment/close / merge，除非 owner 明确授权。
+- 边界清晰的 implementation slice 先派 worker subagent；主 session/new session 负责调度、seam、review/gate、checkpoint commit、rolling handoff。
 
-## Required Rule Context
-- `[AUTO_HANDOFF_TRIGGERS_RULE_PATH]`
+必读：
+- [HANDOFF_NEW_SESSION_SKILL_PATH]
+- [AUTO_HANDOFF_TRIGGERS_RULE_PATH]
+- [ROLLING_HANDOFF_PATH]
+- [PLAN_PATH]
 
-## Required Files
-- `[ROLLING_HANDOFF_PATH]`（唯一事实源：状态、gate 结果、外部状态、open issues 都在这里）
-- `[PLAN_PATH]`
-- [其他必读文件]
-
-## First Action
-执行 Execution Rules 第 1 条验证，读完 Required Files，确认 handoff 的 Open Issues 后，按 Next Action 开始推进。不要假设 handoff 中的未验证项已经成立。
-
-## First Reply Contract
-你的第一条回复必须包含：
-- Verified state：验证结果，与 handoff 是否一致。
-- Interpreted objective：你理解的当前目标。
-- Next action：你接下来要做的第一件事。
-- Proceed or wait, and why：现在推进还是等待，理由是什么。
+第一步：
+切到 [WORKTREE_PATH]，运行 `git status --short --branch` 和 `git log -1 --oneline`（expected HEAD: [EXPECTED_HEAD_ONELINE]），读取 rolling handoff 的 Open Issues / Not Completed / Next Action，然后发送上述短进度更新并继续推进。
 ```
 
-要求：prompt 必含可执行 mission、执行规则四条、硬护栏、三类索引（skill / rule / files）、HEAD 一行校验和、First Reply Contract（长流程自动交接必填；轻量交接可省略）。事实细节、完整契约、开放问题全部留在 handoff 文件，prompt 只指向它们。
+要求：prompt 必含可执行 mission、执行模式、显式 subagent 授权、显式 handoff triggers、硬护栏、skill/rule/files 索引、HEAD 一行校验和、首条可见更新要求。事实细节、完整契约、开放问题全部留在 handoff 文件，prompt 只指向它们。

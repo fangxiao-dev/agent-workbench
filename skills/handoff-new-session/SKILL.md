@@ -75,13 +75,21 @@ description: Use when the user wants to hand off or migrate work to a new sessio
 5. 用 fresh 状态刷新 rolling handoff；只有符合归档条件时才额外写 timestamped snapshot。
 6. 起草 continuation prompt；读 `rules/reviewer-input.md` 组织审核材料（含 prompt 草稿），让审核员 subagent 按 `rules/logger-handoff-quality-gate.md` 同审 handoff 与 prompt 草稿；按意见修改。
 7. 创建新会话（prompt 用审核通过的草稿原样发送），或按前置环境检查的结果手动移交。
-8. handshake（Codex 自动交接默认步骤；轻量交接和手动移交不要求）：读取 child 第一条回复，核对 First Reply Contract 四项是否与 handoff intent 一致；不符则纠正一次；读取第二次回复后给出评价并退出，不做多轮监督。
+8. 新会话启动后按 host 能力处理首条进度更新：
+   - Codex `create_thread` 新 thread 目前不能稳定作为可阻塞 IPC 使用：不要把 child 设计成“等 parent ACK 才继续”。child prompt 必须要求首条回复是 **First Progress Update**，发出后继续自动执行，直到下一个 handoff trigger、明确 blocker、plan 完成且 closure 收口、或 owner 要求停止。
+   - 如果 host 提供可读取完整消息、可发送 follow-up、可等待的 child-session 控制能力，parent 可以做一次非阻塞纠偏：读取首条进度更新，核对 intent，不符则纠正一次；纠正后 child 仍应继续推进。
+   - subagent 与新 Codex thread 不同：`multi_agent` worker/reviewer 可以 `wait` / `send_input`，适合阻塞式审核、实现和质量 gate。
 
 ## Child Prompt 必填内容
 
-Child prompt 定规则和索引；**事实只住在 handoff 文件里，prompt 不复述 handoff 内容**。结构按 `templates/durable-handoff.md` 第二部分，至少包含：
+Child prompt 定规则和索引；**事实只住在 handoff 文件里，prompt 不复述 handoff 内容**。长流程 prompt 要短，目标是启动一个 orchestration runner，而不是把 handoff 重新写一遍，也不是让 child 一次性生成 closure report。一般控制在 10–25 行；超过这个范围时，优先把细节放进 rolling handoff / plan / issue，而不是塞进 prompt。
+
+结构按 `templates/durable-handoff.md` 第二部分，至少包含：
 
 - Role & Mission：接手什么工作流、本轮要推进到哪里。mission 必须可执行（以 rolling handoff 的 Next Action 为准），不能是“验证后等待”。
+- Mode：明确 child 是 **orchestration runner**：先发一条短 progress update，说明会自动推进和如何使用 subagent，然后继续执行。不要把第一条可见回复当最终答复。
+- Delegation authorization：必须在 prompt 中显式写出“主 session / 新 session 关注调度和 seaming，尽量派用 subagent 执行单个任务”。这是 owner 给 orchestration runner 的授权，不要只放在 handoff 或 skill 文件里。
+- Handoff triggers：必须在 prompt 中显式写出“交接触发点：session context auto compact 了，或者自行识别到的大 gate”。这是 child 何时刷新 handoff / create next session 的执行条件，不要只引用 rule 文件。
 - 执行规则（四条标准文本，原样复制进 prompt）：
   1. 先验证 `git status --short --branch` / `git log -1 --oneline` 与 handoff 一致。
   2. 以 rolling handoff 的 Next Action 为准持续推进，不要只确认状态后停止。
@@ -89,8 +97,13 @@ Child prompt 定规则和索引；**事实只住在 handoff 文件里，prompt �
   4. 如果 plan 已完成本地实现，进入 closure orchestration：列出仍需 owner 授权的外部动作，准备但不执行 push/PR/issue/merge（如起草 PR 描述、issue 更新文案、merge 清单），向 owner 请求下一步授权。不要发明新实现任务。
 - Hard guardrails：最关键的 2–4 条硬护栏（如 push/PR/merge 禁令、subagent 分工）。安全关键规则不依赖 child 先读完文件才生效，必须留在 prompt 里。
 - Required skill context / Required rule context / Required files：本 skill、`rules/auto-handoff-triggers.md`、rolling handoff、计划文档等索引。rolling handoff 是唯一事实源。
-- First action：验证命令；最多附一行 HEAD 校验和防漂移，不复制 handoff 的事实段；动手前先确认 handoff 的 Open Issues。
-- First reply contract（长流程自动交接必填）：要求 child 第一条回复包含 verified state、interpreted objective、next action、proceed-or-wait-and-why 四项。
+- First action：先读本 skill 和 auto-handoff rule，再验证 workspace；最多附一行 HEAD 校验和防漂移，不复制 handoff 的事实段；动手前确认 handoff 的 Open Issues / Not Completed / Next Action。
+- First Progress Update Contract（长流程自动交接必填）：要求 child 第一条**可见更新**是进度更新，不是最终答复。内容只需包含 autonomy intent 和 subagent/orchestration intent 两个核心判断，可附 verified state；不要在这条更新里产出 PR body、issue 文案、closure packet 等 deliverables。除非验证失败、遇到 blocker、或 owner 明确要求等待，否则发出后继续自动推进。
+
+避免在 continuation prompt 里放这些内容：
+- 完整 closure checklist、PR body、issue comment、merge checklist；这些应该由 child 从 handoff / plan 推导或写入 closure packet。
+- 大量支持文件和旧 issue 文件；只列 rolling handoff、orchestration plan、必要 skill/rule。其他文件让 child 按 Next Action 自行发现。
+- 具体完成状态、gate 结果、外部状态、ahead/behind 数字；这些是 handoff 事实。
 
 轻量交接可用短 prompt：
 
@@ -136,9 +149,12 @@ Continuation prompt 只保留最小执行护栏，例如：
 - 每个小 gate 都新增 timestamped handoff，导致目录里堆积多个过期入口。默认刷新 rolling handoff；只有需要审计/分叉/用户要求时才归档快照。
 - 只让 child“自己读历史”，没有给当前事实摘要。
 - 复制了任务状态，但漏掉用户的协作偏好；尤其不能把主 session / 新 session / subagent / spec review / quality review 边界只留在 handoff 文件里。
+- continuation prompt 过长，把 handoff、plan、issue 内容重写一遍，导致 child 把任务当成一次性报告生成，而不是继续 orchestration。
 - 把 continuation prompt 写成第二个文件。
 - prompt 镜像 handoff 文件内容（复制 Fresh State、Verified Gates 等事实段）——事实只住 handoff，prompt 只做规则与索引。
 - plan 完成本地实现时，把 child 导向“验证后等待 owner”，而不是 closure orchestration（准备但不执行外部动作、请求授权）。
-- 长流程自动交接创建 child 后不做 handshake 直接退出，child 的理解偏差没人接住。
+- 把 `create_thread` 当成可阻塞 IPC：要求 child 第一条回复后等待 parent ACK，导致自动推进中断。
+- 把 First Progress Update 当成最终答复：child 汇报 verified state / intent 后停止，而不是继续执行 Next Action。
+- 长流程自动交接创建 child 后完全不检查首条进度更新；如果 host 能看到 child 回复，应做一次轻量纠偏，但不能设计成必须等待 ACK 才继续。
 - 在 handoff 里贴 secrets、token、env 值或完整日志。
 - 声称没有实际发生的验证，或混淆 verified 与 assumed。
