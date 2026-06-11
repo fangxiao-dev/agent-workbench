@@ -19,11 +19,26 @@ Use this as an operational checklist, not as a command encyclopedia. Prefer proj
 
 ## Azure CLI On Windows
 
-If `az` is not found after installation, do not require an app restart. Look for the installed command directly, commonly:
+If `az` is not found after installation, do not require an app restart. First check whether this skill directory has a local `.env` file with an explicit Azure CLI path:
 
 ```powershell
-& 'C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin\az.cmd' account show
+$AzureCliPath = $null
+$SkillEnvPath = Join-Path $PWD "skills/using-azure/.env"
+
+if (Test-Path $SkillEnvPath) {
+    Get-Content $SkillEnvPath | ForEach-Object {
+        if ($_ -match '^AZURE_CLI_DEFAULT_PATH=(.+)$') {
+            $AzureCliPath = $Matches[1].Trim()
+        }
+    }
+}
+
+if ($AzureCliPath -and (Test-Path $AzureCliPath)) {
+    & $AzureCliPath account show
+}
 ```
+
+If `.env` is missing, empty, or points to a non-existent path, find the installed Azure CLI using the current OS and shell conventions. If Azure CLI is not installed, install it first, then retry discovery.
 
 Use `az login --use-device-code` when browser callback login is awkward inside Codex Desktop.
 
