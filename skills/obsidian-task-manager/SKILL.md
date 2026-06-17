@@ -1,12 +1,12 @@
 ---
-name: obsidian-task-manager
-description: Use this whenever the user asks to create, record, update, sync, validate, or inspect tasks in the local Obsidian TaskManager vault. This skill turns natural-language manual triggers like "新建任务", "更新任务", "标成完成", "进入验证", "阻塞", or "加到任务面板" into correct Obsidian task Markdown updates, with dry-run first and explicit apply only.
+name: task-manager
+description: Use this whenever the user asks to create, record, update, sync, validate, or inspect tasks or discussion notes in the local TaskManager vault. This skill turns natural-language manual triggers like "新建任务", "更新任务", "标成完成", "进入验证", "阻塞", "加到任务面板", "先记录讨论", "先记一下这个任务/想法", or "把这段先留档" into correct TaskManager Markdown updates, with dry-run first and explicit apply only.
 user-invocable: true
 ---
 
-# Obsidian TaskManager
+# TaskManager
 
-Use this skill to maintain the local Obsidian TaskManager vault as the task source of truth.
+Use this skill to maintain the local TaskManager vault as the task source of truth and the default local place for early discussion/source capture. Discussion capture should still create a dashboard task so the work remains visible.
 
 Default vault:
 
@@ -14,7 +14,7 @@ Default vault:
 D:\CodeSpace\TaskManager
 ```
 
-Default behavior is dry-run. Only mutate the vault when the user explicitly asks to apply, write, create, or update the task file.
+Default behavior is dry-run. Only mutate the vault when the user explicitly asks to apply, write, create, update, or record the note.
 
 ## Trigger Workflow
 
@@ -36,6 +36,32 @@ python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_ma
 python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py validate --vault D:\CodeSpace\TaskManager
 ```
 
+## Source Capture + Dashboard Workflow
+
+Use this path when the user is discussing work that is not yet a formal task or implementation plan, but still wants it recorded for follow-up. Natural phrases include:
+
+- "先记录讨论", "先把这个讨论记下来", "把这段先留档"
+- "这个任务先记一下", "先记录这个想法", "还没正式落计划"
+- "后面可能要做", "先保留上下文", "先存一下这个方向"
+
+Default destination:
+
+```text
+D:\CodeSpace\TaskManager\20_Sources
+```
+
+Use `20_Sources/` for the full session discussion, requirement draft, long context, or source excerpt. Also create or update a linked `10_Tasks/` task so the item appears in the dashboard.
+
+For source capture plus dashboard tracking:
+
+1. Pick a concise topic and target path like `20_Sources/YYYY-MM-DD-<topic>.md`.
+2. Draft the source Markdown using `templates/source-note.md`.
+3. Create/update a dashboard task in `10_Tasks/` with `来源` pointing to the source note path.
+4. Default the task to `状态=计划中`, `验证链路=不涉及`, `工作区=主工作区`; infer `任务类型` and `优先级` from wording. If the wording says it is not ready for formal planning or "后面可能要做", prefer `优先级=下一批` unless urgency is stated.
+5. Dry-run both artifacts: show the source note target/summary and run `task_manager.py upsert` for the dashboard task before writing.
+6. Apply only when the user explicitly asks to record/write/save/update it.
+7. If a later Func Design or Implementation Plan is created, keep the source note as context, update the source note "关联路径", and update the task `来源` or body if needed; do not copy the whole raw discussion into repo docs.
+
 ## Manual Trigger Interpretation
 
 Prefer natural-language interpretation. Do not ask for every field when the rules can infer it.
@@ -43,6 +69,7 @@ Prefer natural-language interpretation. Do not ask for every field when the rule
 Common phrases:
 
 - "新建任务", "记录任务", "加到任务面板" -> `operation=create`
+- "先记录讨论", "先记一下这个任务/想法", "把这段先留档", "还没正式落计划" -> create/update a source note under `20_Sources/` and a linked dashboard task under `10_Tasks/`
 - "更新任务", "同步任务", "修正任务" -> `operation=update`
 - "开始做", "开工", "进 worktree" -> `status=实施中`; usually `workspace=worktree`
 - "进入验证", "跑测试", "等人工验收" -> `status=验证中`

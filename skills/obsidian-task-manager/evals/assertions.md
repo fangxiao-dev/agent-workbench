@@ -47,6 +47,24 @@ Use these objective checks when reviewing skill/script changes.
 - Priority is preserved unless explicitly changed.
 - Next step states the unblock condition.
 
+## source-capture-discussion
+
+- Uses the Source Capture + Dashboard Workflow.
+- Drafts a source note under `20_Sources/`.
+- Creates or updates a linked `10_Tasks/` dashboard task.
+- The dashboard task has `状态=计划中`, `验证链路=不涉及`, and `工作区=主工作区`.
+- The dashboard task source/body links back to the `20_Sources/` note.
+- Draft includes discussion summary, confirmed decisions, open questions, possible next actions, and related paths.
+
+## dashboard-task-explicit
+
+- Uses the task upsert workflow.
+- `operation` is `create`.
+- Target path is under `10_Tasks/`.
+- `status` is `计划中`.
+- `priority` is `当前`.
+- Does not use `20_Sources/`.
+
 ## Script-Level Checks
 
 - All label fields in generated Markdown are YAML arrays.

@@ -1,5 +1,5 @@
 {
-  "skill_name": "obsidian-task-manager",
+  "skill_name": "task-manager",
   "evals": [
     {
       "id": "create-current-bug",
@@ -30,6 +30,16 @@
       "id": "blocked-credentials",
       "prompt": "更新任务 Lexware smoke：现在阻塞，代码做到发起真实请求前了，但是缺少有效凭据，下一步需要拿到 test credential。",
       "expected_output": "Normalize to update with 状态=阻塞, priority preserved, workspace preserved, next step names credential unblock."
+    },
+    {
+      "id": "source-capture-discussion",
+      "prompt": "这个方向还没正式落计划，先把刚才关于 checkout address review 的讨论记一下，后面可能会整理成 func design。",
+      "expected_output": "Choose Source Capture + Dashboard Workflow: draft a source note under 20_Sources/YYYY-MM-DD-<topic>.md and create a linked 10_Tasks dashboard task with 状态=计划中, 验证链路=不涉及, 工作区=主工作区, and priority inferred as 下一批 unless urgency is stated."
+    },
+    {
+      "id": "dashboard-task-explicit",
+      "prompt": "把 checkout address review 加到任务面板，状态计划中，优先级当前，后面要实现。",
+      "expected_output": "Use task upsert workflow with operation=create under 10_Tasks, 状态=计划中, 优先级=当前, and do not use 20_Sources."
     }
   ]
 }

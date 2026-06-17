@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dry-run, validate, and optionally apply Obsidian TaskManager updates."""
+"""Dry-run, validate, and optionally apply TaskManager updates."""
 
 from __future__ import annotations
 
@@ -397,7 +397,7 @@ def command_validate(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Manage Obsidian TaskManager tasks")
+    parser = argparse.ArgumentParser(description="Manage TaskManager tasks")
     sub = parser.add_subparsers(dest="command", required=True)
 
     validate = sub.add_parser("validate", help="Validate task files")
