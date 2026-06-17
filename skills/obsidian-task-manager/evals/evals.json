@@ -1,0 +1,35 @@
+{
+  "skill_name": "obsidian-task-manager",
+  "evals": [
+    {
+      "id": "create-current-bug",
+      "prompt": "新建任务：购物车抽屉关闭后数量偶尔不刷新，这是当前马上要修的 bug，来源 web/components/cart/cart-drawer.tsx。",
+      "expected_output": "Normalize to create with 状态=计划中, 优先级=当前, 任务类型=bug, 验证链路=不涉及, 工作区=主工作区."
+    },
+    {
+      "id": "create-future-feature",
+      "prompt": "记录一个未来规划：给 Supplier Admin Console 增加批量导出订单功能，现在不做，先放路线图。",
+      "expected_output": "Normalize to create with 状态=计划中, 优先级=未来规划, 任务类型=新增功能."
+    },
+    {
+      "id": "start-worktree",
+      "prompt": "更新任务 Admin i18n Copy Closure：开始做了，当前进度在 task worktree 里承载。",
+      "expected_output": "Normalize to update with 状态=实施中 and 工作区=worktree."
+    },
+    {
+      "id": "verification-partial-real",
+      "prompt": "把 Lark OAuth 回调任务标成验证中，本地测试通过，也用真实 Lark 登录跑了一段，但完整下单闭环还没测。",
+      "expected_output": "Normalize to update with 状态=验证中 and 验证链路=部分真实链路."
+    },
+    {
+      "id": "complete-merged",
+      "prompt": "把 Admin i18n Copy Closure 标成完成，早就合回主干了，本地 focused tests 和 TS 都过了，真实后台 session 没完整人工浏览。",
+      "expected_output": "Normalize to update with 状态=已完成, 工作区=主工作区, 优先级=null, 验证链路=本地链路 or 部分真实链路 depending on whether any real path is stated."
+    },
+    {
+      "id": "blocked-credentials",
+      "prompt": "更新任务 Lexware smoke：现在阻塞，代码做到发起真实请求前了，但是缺少有效凭据，下一步需要拿到 test credential。",
+      "expected_output": "Normalize to update with 状态=阻塞, priority preserved, workspace preserved, next step names credential unblock."
+    }
+  ]
+}

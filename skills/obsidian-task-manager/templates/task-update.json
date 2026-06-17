@@ -1,0 +1,14 @@
+{
+  "operation": "create",
+  "taskName": "Example Task",
+  "status": "计划中",
+  "priority": "当前",
+  "taskType": "新增功能",
+  "verificationPath": "不涉及",
+  "workspace": "主工作区",
+  "source": "",
+  "progress": "记录任务目标和当前背景。",
+  "nextStep": "确认范围后开始实施。",
+  "verificationStatus": "",
+  "residualRisk": ""
+}
