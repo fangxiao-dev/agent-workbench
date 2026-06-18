@@ -18,11 +18,13 @@ Use these prompts as starting points. Paste the relevant source plan/context; do
 - Identify candidate vertical-slice issues.
 - Mark AFK vs HITL with reasons.
 - Identify risk hotspots, integration seams, prerequisites, and final regression/cleanup needs.
+- For each candidate slice, estimate size/risk and recommend a sizing decision: keep | vertical-split | tracer-bullet + follow-ups | design-gate before implementation | escalate to user. Score on: call-sites/modules touched, cross-cutting vs localized, design uncertainty, seam coupling, independent verifiability. Cross-cutting concerns (error/path/serialization/auth) are the strongest rework predictor — prefer a design-gate over a hard split.
 
 ## Report Format
 - Status: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED
 - Phases
 - Candidate issues
+- Slice sizing (per slice: size/risk signals + recommended decision)
 - Dependencies
 - Seams / ownership risks
 - Coverage gaps
@@ -40,6 +42,7 @@ Check:
 - Every important source requirement maps to the parent plan or an issue.
 - Parent plan is orchestration-only, not a bulk checklist.
 - Prerequisites, dependency graph, HITL/AFK labels, ownership boundaries, and seams are explicit.
+- Each slice is right-sized: wide / high-risk slices (esp. cross-cutting concerns) carry an explicit sizing decision (split / design-gate / escalate), not shipped whole by default.
 - No unauthorized scope was added.
 - Drafts are not published before review and user approval.
 
@@ -59,8 +62,10 @@ Review the issue drafts for execution quality.
 
 Check:
 - Each issue is independently grabbable and demoable/verifiable.
+- Each issue has clear, testable acceptance criteria.
 - Each issue has Ownership Boundary / Out Of Scope.
 - Each issue has Verification with focused gate commands.
+- Contract-changing issues also list a schema/API gate in Verification.
 - Blocked-by relationships are real and not over-serializing.
 - Titles do not include local slice numbers once GitHub issue numbers will exist.
 - Issue bodies avoid stale file-path/line-level implementation detail unless needed for a decision-rich snippet.

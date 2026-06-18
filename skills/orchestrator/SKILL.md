@@ -34,7 +34,6 @@ description: >
 ## Required Sub-Skills
 
 - **REQUIRED SUB-SKILL:** `to-issues`，用于用户 quiz / approval、发布顺序和 issue body 模板。
-- **REQUIRED SUB-SKILL:** subagent decomposition + independent review，按本 skill 的流程和 `templates/decomposition-prompts.md`。
 - **REFERENCE:** `feature-impl-planing`，仅当输入还不是 bulk implementation plan。
 - **REFERENCE:** `superpowers:writing-plans`，作为 issue 内实现计划的质量标准。
 - **REFERENCE:** `superpowers:subagent-driven-development`，作为后续执行模式。
@@ -49,6 +48,7 @@ description: >
 - 发布后 GitHub issue number 是唯一规范 ID。父计划可保留一次 slice-to-issue 映射，之后全文使用 GitHub issue number；不要把 slice 序号写进 issue title。
 - 改写父计划前必须确认 bulk 版已 durable：已 commit，或在只读/未授权提交时保存到明确的 source snapshot。不要覆盖唯一的 bulk plan 副本。
 - Issue drafts 是临时交换产物。优先放在项目 ignored exchange 目录，例如 `docs/exchange/issue-drafts/<slug>/`；发布后 GitHub issues 是唯一耐久执行源，drafts 不提交、不回链。
+- 每个 candidate slice 必须带 size/risk 估计并给出明确 sizing decision（见 `Slice Sizing & Risk`）。偏宽或高风险 slice 不得不经决策就直接成 issue，须先 split / narrow / 加 design gate / 跟用户对齐。
 
 ## External Side Effects
 
@@ -56,6 +56,25 @@ description: >
 - “创建 / 发布 GitHub issues”需要明确发布意图、tracker 目标、用户已批准的 breakdown。
 - 不要 close、merge、push、修改 parent issue 状态，除非用户明确要求。
 - 如果用户明确只读或禁止写文件，不要落盘 plan、drafts、ledger；在聊天中维护临时版本或先请求写入授权。
+
+## Slice Sizing & Risk
+
+把"slice 多宽"当成一等公民：每个 candidate slice 都要估 size/risk，并据此选定 sizing decision。size 不按 LOC，而按以下信号判断（任一偏高即视为 wide / high-risk）：
+
+- **Call-sites / modules touched**：改动是否分散到多处文件或调用点。
+- **Cross-cutting**：是否横切关注点（错误清洗、路径/序列化、鉴权等）。横切 slice 单个 worker 极易漏掉边缘 case → 返工高发，是最强的返工预测信号。
+- **Design uncertainty**：实现方案已写明，还是要 worker 自行探索。
+- **Seam coupling**：与其他 slice 在集成处的耦合程度。
+- **Verifiability**：能否独立 demo / 验证；不能独立验证本身就是 mis-sliced 信号。
+
+Sizing decision（**不要默认就拆**，按场景选）：
+
+- **Vertical split**：能切成各自可独立验证的纵向子 slice 时，拆。
+- **Tracer-bullet + follow-ups**：先打通一条端到端最小路径固定 seam，再 fan out 其余实现。
+- **Design / interface gate（不拆）**：横切关注点优先用此——实现前先派 design/spec subagent 产出简短接口契约或受影响 call-site 清单，再交 worker。硬拆横切关注点常常放大集成 seam，慎拆。
+- **Escalate to user**：当拆分会改变交付边界，或 size 估计不确定且影响计划范围时，带上估计与可选项跟用户对齐（落在 step 7 quiz）。
+
+note：plan 阶段的估计天然不精确，做不到零返工；运行期的返工兜底（rework budget / circuit-breaker）属于执行/runner 契约，不在本 skill 范围。
 
 ## Workflow
 
@@ -74,15 +93,13 @@ description: >
 - 如果 bulk plan 未 commit，先提交 checkpoint；若没有提交授权，保存一份 source snapshot，再改写。
 - 不要把未提交 bulk checklist 直接删成 orchestration plan。
 
-### 3. Dispatch Decomposition Subagents
+### 3. Dispatch The Decomposition Worker
 
-使用 `templates/decomposition-prompts.md`。至少需要：
+使用 `templates/decomposition-prompts.md` 的 Decomposition Worker prompt 派遣 worker：提出 phases、dependency graph、risk hotspots、candidate slices，并为每个 candidate slice 给出 size/risk 估计与建议的 sizing decision（见 `Slice Sizing & Risk`）。
 
-- decomposition worker：提出 phases、dependency graph、risk hotspots、candidate slices。
-- orchestration/spec reviewer：核对 source coverage、scope、dependencies、HITL/AFK、seams。
-- issue-quality reviewer：核对 issues 是否 independently grabbable、demoable/verifiable、acceptance criteria 和 focused gates 是否明确。
+两个 reviewer 角色在第 6 步 Review Gate 派遣；它们审的是第 4、5 步的草稿，不要在此处空派。
 
-如果没有 subagent 能力，执行同样的两轮 inline review，并记录 fallback reason。
+如果没有 subagent 能力，记录 fallback reason，并在第 6 步执行同样的两轮 inline review。
 
 ### 4. Draft The Orchestration Parent Plan
 
@@ -127,11 +144,11 @@ description: >
 ## Verification
 ```
 
-`Verification` 必须列 focused gate；contract-changing issue 还要列 schema/API gate。不要把父计划 guardrails 全量复制到每个 issue，只放该 issue 必须知道的局部约束。
+`Verification` 必须列 focused gate；contract-changing issue 还要列 schema/API gate。Issue 正文遵守 `to-issues` 的"避免易过期文件路径"规则，但 `Verification` 里的 gate 命令和测试路径不受此限。不要把父计划 guardrails 全量复制到每个 issue，只放该 issue 必须知道的局部约束。
 
 ### 6. Review Gate
 
-Review 必须在用户批准和 GitHub 发布之前完成。
+Review 必须在用户批准和 GitHub 发布之前完成。使用 `templates/decomposition-prompts.md` 的对应 prompt 派遣两个独立 reviewer：
 
 - Orchestration/spec reviewer 检查 bulk plan coverage、scope creep、dependencies、HITL/AFK、seams、父计划是否仍然 orchestration-only。
 - Issue-quality reviewer 检查每个 issue 是否 independently grabbable，是否有 ownership boundary、out of scope、acceptance criteria、focused gate。
@@ -147,6 +164,7 @@ Review 必须在用户批准和 GitHub 发布之前完成。
 - user stories / source requirements covered。
 - ownership boundary。
 - verification gate。
+- slice size/risk 与 sizing decision：对 wide / high-risk slice，说明拟采取的 split / design-gate / escalate，让用户对齐是否需要进一步拆分。
 
 如果用户已经明确批准同一 breakdown，可记录该事实并继续。不要为 subagent 使用、draft 生成或父计划改写增加额外审批。
 
@@ -155,6 +173,7 @@ Review 必须在用户批准和 GitHub 发布之前完成。
 仅当用户批准 breakdown 且明确要求发布 GitHub issues 时执行：
 
 - 按依赖顺序发布 blocker，再发布 dependent issue。
+- Triage label：使用项目已提供的 label 约定；未提供时向用户确认或不加 label，不要编造 label 词汇。
 - Issue title 不包含本地 slice 序号。
 - 发布后回填父计划 issues table，使用 GitHub issue links。
 - 父计划写明：published GitHub issues are the durable execution source; local drafts are temporary.
@@ -190,6 +209,7 @@ Review 必须在用户批准和 GitHub 发布之前完成。
 - 不要跳过 `to-issues` 的用户 quiz / approval 和 dependency-order publish。
 - 不要让 subagent 继承模糊上下文。
 - 不要把 issue 拆成纯水平层，除非该层能独立验证。
+- 不要让 wide / high-risk slice 不经 sizing decision 就直接发布；oversized 横切 slice 不要默认硬拆（会放大集成 seam），优先 design gate 或与用户对齐。
 - 不要把高风险 publish/retry/recovery 语义藏在普通 AFK issue 中。
 - 不要省略 final regression / orchestration cleanup issue。
 - 不要承诺未实际发生的 gate、commit、issue publish 或 handoff。
