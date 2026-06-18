@@ -65,6 +65,14 @@ Use these objective checks when reviewing skill/script changes.
 - `priority` is `当前`.
 - Does not use `20_Sources/`.
 
+## existing-markdown-source-to-task
+
+- Uses the Existing Markdown source workflow.
+- Reads or summarizes the existing Markdown source.
+- Creates or updates a `10_Tasks/` dashboard task.
+- The task `来源` points to the provided Markdown path.
+- Does not create a new `20_Sources/` note.
+
 ## Script-Level Checks
 
 - All label fields in generated Markdown are YAML arrays.

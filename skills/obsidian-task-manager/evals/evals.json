@@ -40,6 +40,11 @@
       "id": "dashboard-task-explicit",
       "prompt": "把 checkout address review 加到任务面板，状态计划中，优先级当前，后面要实现。",
       "expected_output": "Use task upsert workflow with operation=create under 10_Tasks, 状态=计划中, 优先级=当前, and do not use 20_Sources."
+    },
+    {
+      "id": "existing-markdown-source-to-task",
+      "prompt": "把 D:/CodeSpace/prj-supplyer-webapp/docs/impl-plans/2026-06-17-business-event.md 作为源头录入 task dashboard。",
+      "expected_output": "Use existing Markdown source workflow: read/summarize the source, create or update a 10_Tasks dashboard task with 来源 pointing to that markdown path, and do not create a new 20_Sources note."
     }
   ]
 }

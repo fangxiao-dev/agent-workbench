@@ -6,7 +6,7 @@ user-invocable: true
 
 # TaskManager
 
-Use this skill to maintain the local TaskManager vault as the task source of truth and the default local place for early discussion/source capture. Discussion capture should still create a dashboard task so the work remains visible.
+Use this skill to maintain the local TaskManager vault as the task source of truth and the default local place for early discussion/source capture. Task creation is source-driven: use an existing Markdown file as the task source when one exists, or create a `20_Sources/` note first when the discussion has not yet landed in Markdown.
 
 Default vault:
 
@@ -18,31 +18,36 @@ Default behavior is dry-run. Only mutate the vault when the user explicitly asks
 
 ## Trigger Workflow
 
-1. Identify whether the user wants to create a new task or update an existing task.
-2. Convert the user's natural-language intent into the JSON shape from `templates/task-update.json`.
-3. Apply the lifecycle and field rules from:
+1. Identify the Markdown source for the task:
+   - If the work is already captured in a project Markdown file such as a Func Design, Implementation Plan, PRD/ARD note, or handoff, use that file path as `source`.
+   - If the work only exists in the current session discussion, first create a `20_Sources/` source note, then use that note path as `source`.
+2. Identify whether the user wants to create a new task or update an existing task.
+3. Convert the user's natural-language intent into the JSON shape from `templates/task-update.json`.
+4. Apply the lifecycle and field rules from:
    - `rules/task-lifecycle.md`
    - `rules/field-semantics.md`
-4. Run the script in dry-run mode first:
+5. Run the script in dry-run mode first:
 
 ```powershell
 python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py upsert --vault D:\CodeSpace\TaskManager --input <task-update.json>
 ```
 
-5. Review the dry-run output. If the user asked for actual writing, run again with `--apply`.
-6. For broad checks, run:
+6. Review the dry-run output. If the user asked for actual writing, run again with `--apply`.
+7. For broad checks, run:
 
 ```powershell
 python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py validate --vault D:\CodeSpace\TaskManager
 ```
 
-## Source Capture + Dashboard Workflow
+## Markdown Source To Dashboard Workflow
+
+Every dashboard task should point back to a Markdown source. Existing repo Markdown and newly captured `20_Sources/` notes are equivalent as sources for task creation.
 
 Use this path when the user is discussing work that is not yet a formal task or implementation plan, but still wants it recorded for follow-up. Natural phrases include:
 
 - "先记录讨论", "先把这个讨论记下来", "把这段先留档"
-- "这个任务先记一下", "先记录这个想法", "还没正式落计划"
-- "后面可能要做", "先保留上下文", "先存一下这个方向"
+- "先保留上下文", "先存一下这个方向", "先落一下计划以后继续"
+- "先记一下这个任务/想法", "后面可能要做"
 
 Default destination:
 
@@ -50,9 +55,20 @@ Default destination:
 D:\CodeSpace\TaskManager\20_Sources
 ```
 
-Use `20_Sources/` for the full session discussion, requirement draft, long context, or source excerpt. Also create or update a linked `10_Tasks/` task so the item appears in the dashboard.
+Use `20_Sources/` for the full session discussion, requirement draft, long context, source excerpt, or pre-task plan capture.
 
-For source capture plus dashboard tracking:
+### Existing Markdown source
+
+Choose this when the source already exists as Markdown in the project or vault.
+
+1. Read the source Markdown enough to summarize current status and next action.
+2. Create/update a dashboard task in `10_Tasks/` with `来源` pointing to that Markdown path.
+3. Use the source content and repo evidence to infer lifecycle fields. If it is only a plan/discussion source and no implementation has started, default to `状态=计划中`, `验证链路=不涉及`, `工作区=主工作区`.
+4. Dry-run `task_manager.py upsert` before applying.
+
+### Session discussion source
+
+Choose this when the source does not exist yet as Markdown.
 
 1. Pick a concise topic and target path like `20_Sources/YYYY-MM-DD-<topic>.md`.
 2. Draft the source Markdown using `templates/source-note.md`.
@@ -62,6 +78,10 @@ For source capture plus dashboard tracking:
 6. Apply only when the user explicitly asks to record/write/save/update it.
 7. If a later Func Design or Implementation Plan is created, keep the source note as context, update the source note "关联路径", and update the task `来源` or body if needed; do not copy the whole raw discussion into repo docs.
 
+### Source-only exception
+
+Only skip the dashboard task when the user explicitly says the material is for context only and should not be tracked, for example "只留档，不进任务面板", "不要加 dashboard", or "只进 Sources".
+
 ## Manual Trigger Interpretation
 
 Prefer natural-language interpretation. Do not ask for every field when the rules can infer it.
@@ -69,7 +89,9 @@ Prefer natural-language interpretation. Do not ask for every field when the rule
 Common phrases:
 
 - "新建任务", "记录任务", "加到任务面板" -> `operation=create`
-- "先记录讨论", "先记一下这个任务/想法", "把这段先留档", "还没正式落计划" -> create/update a source note under `20_Sources/` and a linked dashboard task under `10_Tasks/`
+- existing Markdown source, such as a Func Design or Implementation Plan -> create/update a dashboard task with `来源` pointing to that Markdown
+- "先记录讨论", "把这段先留档", "先保留上下文", "先存一下这个方向", "先落一下计划以后继续", "先记一下这个任务/想法", "后面可能要做" -> create/update a source note under `20_Sources/` and a linked dashboard task under `10_Tasks/`
+- "只留档，不进任务面板", "不要加 dashboard", "只进 Sources" -> create/update only a source note under `20_Sources/`
 - "更新任务", "同步任务", "修正任务" -> `operation=update`
 - "开始做", "开工", "进 worktree" -> `status=实施中`; usually `workspace=worktree`
 - "进入验证", "跑测试", "等人工验收" -> `status=验证中`
