@@ -11,3 +11,4 @@ skills/lark-skills/lark-intl-minutes/.env
 skills/lark-skills/lark-intl-mail/.env
 skills/using-azure/.env
 docs/exchange/discuss/
+.worktrees/
