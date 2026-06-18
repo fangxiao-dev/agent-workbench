@@ -3,48 +3,83 @@
   "evals": [
     {
       "id": "create-current-bug",
-      "prompt": "新建任务：购物车抽屉关闭后数量偶尔不刷新，这是当前马上要修的 bug，来源 web/components/cart/cart-drawer.tsx。",
-      "expected_output": "Normalize to create with 状态=计划中, 优先级=当前, 任务类型=bug, 验证链路=不涉及, 工作区=主工作区."
+      "prompt": "在项目 shop-web 新建任务：购物车抽屉关闭后数量偶尔不刷新，这是当前马上要修的 bug，来源 docs/bugs/cart-drawer-refresh.md。",
+      "expected_output": "Normalize to project create and dry-run upsert with --project shop-web. Payload includes projectId=shop-web, sourceType=source-note, sourceRelativePath=docs/bugs/cart-drawer-refresh.md, 状态=计划中, 优先级=当前, 任务类型=bug, 验证链路=不涉及, 工作区=主工作区."
     },
     {
       "id": "create-future-feature",
-      "prompt": "记录一个未来规划：给 Supplier Admin Console 增加批量导出订单功能，现在不做，先放路线图。",
-      "expected_output": "Normalize to create with 状态=计划中, 优先级=未来规划, 任务类型=新增功能."
+      "prompt": "在项目 supplier-admin 记录一个未来规划：给 Supplier Admin Console 增加批量导出订单功能，现在不做，先放路线图。讨论先落到 Sources。",
+      "expected_output": "Use session discussion source workflow. Draft a 20_Sources/supplier-admin source note, then dry-run upsert with --project supplier-admin and payload includes projectId=supplier-admin, sourceType=discussion or source-note, sourceRelativePath pointing to the new source note, 状态=计划中, 优先级=未来规划, 任务类型=新增功能."
     },
     {
       "id": "start-worktree",
-      "prompt": "更新任务 Admin i18n Copy Closure：开始做了，当前进度在 task worktree 里承载。",
-      "expected_output": "Normalize to update with 状态=实施中 and 工作区=worktree."
+      "prompt": "更新项目 prj-supplyer-webapp 的任务 Admin i18n Copy Closure：开始做了，当前进度在 task worktree 里承载。",
+      "expected_output": "Normalize to project update and dry-run upsert with --project prj-supplyer-webapp, 状态=实施中 and 工作区=worktree. Source metadata may be omitted only if the existing task already has valid 来源类型 and 来源相对路径."
     },
     {
       "id": "verification-partial-real",
-      "prompt": "把 Lark OAuth 回调任务标成验证中，本地测试通过，也用真实 Lark 登录跑了一段，但完整下单闭环还没测。",
-      "expected_output": "Normalize to update with 状态=验证中 and 验证链路=部分真实链路."
+      "prompt": "把项目 prj-supplyer-webapp 的 Lark OAuth 回调任务标成验证中，本地测试通过，也用真实 Lark 登录跑了一段，但完整下单闭环还没测。",
+      "expected_output": "Normalize to project update with --project prj-supplyer-webapp, 状态=验证中 and 验证链路=部分真实链路. Verification details go in ### 验证状态 and remaining untested order flow goes in ### 残余风险."
     },
     {
       "id": "complete-merged",
-      "prompt": "把 Admin i18n Copy Closure 标成完成，早就合回主干了，本地 focused tests 和 TS 都过了，真实后台 session 没完整人工浏览。",
-      "expected_output": "Normalize to update with 状态=已完成, 工作区=主工作区, 优先级=null, 验证链路=本地链路 or 部分真实链路 depending on whether any real path is stated."
+      "prompt": "把项目 prj-supplyer-webapp 的 Admin i18n Copy Closure 标成完成，早就合回主干了，本地 focused tests 和 TS 都过了，真实后台 session 没完整人工浏览。",
+      "expected_output": "Normalize to project update with --project prj-supplyer-webapp, 状态=已完成, 工作区=主工作区, 优先级=null, 验证链路=本地链路 or 部分真实链路 depending on whether any real path is stated."
     },
     {
       "id": "blocked-credentials",
-      "prompt": "更新任务 Lexware smoke：现在阻塞，代码做到发起真实请求前了，但是缺少有效凭据，下一步需要拿到 test credential。",
-      "expected_output": "Normalize to update with 状态=阻塞, priority preserved, workspace preserved, next step names credential unblock."
+      "prompt": "更新项目 integrations 的任务 Lexware smoke：现在阻塞，代码做到发起真实请求前了，但是缺少有效凭据，下一步需要拿到 test credential。",
+      "expected_output": "Normalize to project update with --project integrations, 状态=阻塞, priority preserved, workspace preserved, next step names credential unblock. Existing source metadata must remain valid."
     },
     {
       "id": "source-capture-discussion",
-      "prompt": "这个方向还没正式落计划，先把刚才关于 checkout address review 的讨论记一下，后面可能会整理成 func design。",
-      "expected_output": "Choose Source Capture + Dashboard Workflow: draft a source note under 20_Sources/YYYY-MM-DD-<topic>.md and create a linked 10_Tasks dashboard task with 状态=计划中, 验证链路=不涉及, 工作区=主工作区, and priority inferred as 下一批 unless urgency is stated."
+      "prompt": "项目 checkout-app 这个方向还没正式落计划，先把刚才关于 checkout address review 的讨论记一下，后面可能会整理成 func design。",
+      "expected_output": "Choose Source Capture + Dashboard Workflow: draft a source note under 20_Sources/checkout-app/discussions/YYYY-MM-DD-<topic>.md and create a linked 10_Tasks/checkout-app dashboard task with projectId=checkout-app, sourceType=discussion or source-note, sourceRelativePath pointing to the source note, 状态=计划中, 验证链路=不涉及, 工作区=主工作区, and priority inferred as 下一批 unless urgency is stated."
     },
     {
       "id": "dashboard-task-explicit",
-      "prompt": "把 checkout address review 加到任务面板，状态计划中，优先级当前，后面要实现。",
-      "expected_output": "Use task upsert workflow with operation=create under 10_Tasks, 状态=计划中, 优先级=当前, and do not use 20_Sources."
+      "prompt": "把项目 checkout-app 的 checkout address review 加到任务面板，状态计划中，优先级当前，后面要实现。来源 20_Sources/checkout-app/discussions/2026-06-18-checkout-address-review.md。",
+      "expected_output": "Use project task upsert workflow with operation=create under 10_Tasks/checkout-app, dry-run command includes --project checkout-app, payload includes projectId=checkout-app, sourceType=discussion or source-note, sourceRelativePath=20_Sources/checkout-app/discussions/2026-06-18-checkout-address-review.md, 状态=计划中, 优先级=当前."
     },
     {
       "id": "existing-markdown-source-to-task",
-      "prompt": "把 D:/CodeSpace/prj-supplyer-webapp/docs/impl-plans/2026-06-17-business-event.md 作为源头录入 task dashboard。",
-      "expected_output": "Use existing Markdown source workflow: read/summarize the source, create or update a 10_Tasks dashboard task with 来源 pointing to that markdown path, and do not create a new 20_Sources note."
+      "prompt": "把项目 prj-supplyer-webapp 的 D:/CodeSpace/prj-supplyer-webapp/docs/impl-plans/2026-06-17-business-event.md 作为源头录入 task dashboard。",
+      "expected_output": "Use existing Markdown source workflow: read/summarize the source, create or update a 10_Tasks/prj-supplyer-webapp dashboard task with --project prj-supplyer-webapp, sourceType=impl-plan, sourceRelativePath=docs/impl-plans/2026-06-17-business-event.md, and do not create a new 20_Sources note."
+    },
+    {
+      "id": "project-task-from-existing-impl-plan",
+      "prompt": "项目 billing-api 有一个现成实现计划 docs/impl-plans/2026-06-18-invoice-retry.md，请用它创建任务，先 dry-run。",
+      "expected_output": "Create a project task from the existing implementation plan with dry-run only. Command uses upsert --project billing-api, payload includes projectId=billing-api, sourceType=impl-plan, sourceRelativePath=docs/impl-plans/2026-06-18-invoice-retry.md, and target lives under 10_Tasks/billing-api/."
+    },
+    {
+      "id": "source-note-task",
+      "prompt": "项目 support-portal：先记录关于 SLA escalation 的讨论，并生成一个后续任务，来源就用这条 source note。",
+      "expected_output": "Draft a source note under 20_Sources/support-portal/discussions/ or a more specific source subfolder. Create a linked project task under 10_Tasks/support-portal with --project support-portal, projectId=support-portal, sourceType=source-note or discussion, and sourceRelativePath pointing to the new note."
+    },
+    {
+      "id": "missing-source-metadata-rejection",
+      "prompt": "项目 support-portal 新建任务：SLA escalation follow-up，先不用写来源类型和来源相对路径。",
+      "expected_output": "Reject the project create as incomplete or ask for/create a source note first. Do not run/apply a project create without sourceType and sourceRelativePath because project task create requires source metadata."
+    },
+    {
+      "id": "import-impl-plans-nonrecursive-skip-existing",
+      "prompt": "导入项目 prj-supplyer-webapp 最近 5 个 impl plans，保留已有任务不要覆盖。",
+      "expected_output": "Use import-impl-plans --vault D:\\CodeSpace\\TaskManager --project prj-supplyer-webapp --limit 5 in dry-run first. It considers only direct *.md files in the configured sourceRoot, skips README.md and nested archive/ files, and skips existing tasks unless --overwrite-existing is explicitly requested."
+    },
+    {
+      "id": "validate-project-consistency",
+      "prompt": "验证项目 prj-supplyer-webapp 的 TaskManager 任务是否一致。",
+      "expected_output": "Run validate --vault D:\\CodeSpace\\TaskManager --project prj-supplyer-webapp. Validation recursively scans 10_Tasks/prj-supplyer-webapp and fails tasks where folder name, 项目ID, and the single 项目 value do not all match, or where source metadata is missing/invalid."
+    },
+    {
+      "id": "vault-migration-baseline",
+      "prompt": "把现有 TaskManager vault 迁移到多项目 dashboard 流程，先别直接改坏。",
+      "expected_output": "Use init-vault-repo dry-run first, then apply only if requested. For existing vault content, run baseline-commit dry-run/apply before broad migration or imports so the pre-migration state is captured."
+    },
+    {
+      "id": "legacy-single-project-migration",
+      "prompt": "把旧的单项目 TaskManager vault 迁移到项目 prj-supplyer-webapp，repo 根目录是 D:\\CodeSpace\\prj-supplyer-webapp，先 dry-run。",
+      "expected_output": "Use migrate-legacy-project --vault <vault> --project prj-supplyer-webapp --repo D:\\CodeSpace\\prj-supplyer-webapp without --apply first. The command plans direct task/source moves into project folders, classifies repo-root absolute 来源 as impl-plan, classifies moved direct source notes as source-note, and refuses unclassified sources or target overwrites before applying."
     }
   ]
 }

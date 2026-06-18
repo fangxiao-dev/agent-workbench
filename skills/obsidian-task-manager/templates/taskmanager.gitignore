@@ -1,0 +1,12 @@
+# Local Obsidian state
+.obsidian/workspace-mobile.json
+.obsidian/cache/
+.obsidian/logs/
+.trash/
+.obsidian/plugins/*/data.json
+.obsidian/workspace.json
+.obsidian/hotkeys.json
+
+# Machine-local project roots
+00_Config/projects.local.yml
+

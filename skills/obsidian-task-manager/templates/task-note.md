@@ -8,6 +8,12 @@
   - {{verificationPath}}
 工作区:
   - {{workspace}}
+项目ID: {{projectId}}
+项目:
+  - {{projectId}}
+来源类型:
+  - {{sourceType}}
+来源相对路径: {{sourceRelativePath}}
 来源: {{source}}
 创建日期: {{createdDate}}
 更新日期: {{updatedDate}}

@@ -1,0 +1,370 @@
+filters:
+  and:
+    - file.ext == "md"
+    - file.inFolder("{{taskFolder}}")
+properties:
+  file.name:
+    displayName: 任务文件
+  note.任务名:
+    displayName: 任务名
+  note.项目:
+    displayName: 项目
+  note.状态:
+    displayName: 状态
+  note.优先级:
+    displayName: 优先级
+  note.任务类型:
+    displayName: 任务类型
+  note.验证链路:
+    displayName: 验证链路
+  note.工作区:
+    displayName: 工作区
+  note.来源类型:
+    displayName: 来源类型
+  note.来源相对路径:
+    displayName: 来源相对路径
+  note.来源:
+    displayName: 来源
+  note.更新日期:
+    displayName: 更新日期
+views:
+  - type: notion-table
+    name: 进行中
+    filters:
+      and:
+        - '!note["状态"].contains("已完成")'
+    order:
+      - 状态
+      - 项目
+      - 优先级
+      - 任务类型
+      - 验证链路
+      - 工作区
+      - 来源类型
+      - 来源相对路径
+      - 更新日期
+    sort:
+      - property: 优先级
+        direction: ASC
+      - property: 更新日期
+        direction: DESC
+    pillProperties:
+      - 状态
+      - 项目
+      - 优先级
+      - 任务类型
+      - 验证链路
+      - 工作区
+      - 来源类型
+    pinnedColors:
+      - 计划中=gray
+      - 实施中=blue
+      - 验证中=yellow
+      - 阻塞=red
+      - 搁置=orange
+      - 已完成=green
+      - 当前=red
+      - 下一批=yellow
+      - 未来规划=blue
+      - 新增功能=green
+      - bug=red
+      - 功能优化=blue
+      - 本地链路=blue
+      - 真实链路=green
+      - 部分真实链路=yellow
+      - 不涉及=gray
+      - 主工作区=purple
+      - worktree=orange
+      - impl-plan=blue
+      - source-note=green
+      - discussion=yellow
+      - handoff=orange
+    columnSize:
+      file.name: 135
+  - type: notion-table
+    name: 按状态分组
+    groupBy:
+      property: 状态
+      direction: ASC
+    order:
+      - file.name
+      - 项目
+      - 状态
+      - 优先级
+      - 任务类型
+      - 验证链路
+      - 工作区
+      - 来源类型
+      - 来源相对路径
+      - 更新日期
+    pillProperties:
+      - 状态
+      - 项目
+      - 优先级
+      - 任务类型
+      - 验证链路
+      - 工作区
+      - 来源类型
+    pinnedColors:
+      - 计划中=gray
+      - 实施中=blue
+      - 验证中=yellow
+      - 阻塞=red
+      - 搁置=orange
+      - 已完成=green
+      - 当前=red
+      - 下一批=yellow
+      - 未来规划=blue
+      - 新增功能=green
+      - bug=red
+      - 功能优化=blue
+      - 本地链路=blue
+      - 真实链路=green
+      - 部分真实链路=yellow
+      - 不涉及=gray
+      - 主工作区=purple
+      - worktree=orange
+      - impl-plan=blue
+      - source-note=green
+      - discussion=yellow
+      - handoff=orange
+  - type: notion-table
+    name: 当前任务
+    filters:
+      and:
+        - note["优先级"].contains("当前")
+        - '!note["状态"].contains("已完成")'
+        - '!note["状态"].contains("搁置")'
+    order:
+      - file.name
+      - 项目
+      - 状态
+      - 任务类型
+      - 验证链路
+      - 工作区
+      - 来源类型
+      - 来源相对路径
+      - 更新日期
+    pillProperties:
+      - 状态
+      - 项目
+      - 优先级
+      - 任务类型
+      - 验证链路
+      - 工作区
+      - 来源类型
+    pinnedColors:
+      - 计划中=gray
+      - 实施中=blue
+      - 验证中=yellow
+      - 阻塞=red
+      - 搁置=orange
+      - 已完成=green
+      - 当前=red
+      - 下一批=yellow
+      - 未来规划=blue
+      - 新增功能=green
+      - bug=red
+      - 功能优化=blue
+      - 本地链路=blue
+      - 真实链路=green
+      - 部分真实链路=yellow
+      - 不涉及=gray
+      - 主工作区=purple
+      - worktree=orange
+      - impl-plan=blue
+      - source-note=green
+      - discussion=yellow
+      - handoff=orange
+  - type: notion-table
+    name: 执行跟进
+    filters:
+      or:
+        - note["状态"].contains("实施中")
+        - note["状态"].contains("验证中")
+        - note["状态"].contains("阻塞")
+    groupBy:
+      property: 状态
+      direction: ASC
+    order:
+      - file.name
+      - 项目
+      - 状态
+      - 优先级
+      - 验证链路
+      - 工作区
+      - 来源类型
+      - 来源相对路径
+      - 更新日期
+    pillProperties:
+      - 状态
+      - 项目
+      - 优先级
+      - 任务类型
+      - 验证链路
+      - 工作区
+      - 来源类型
+    pinnedColors:
+      - 计划中=gray
+      - 实施中=blue
+      - 验证中=yellow
+      - 阻塞=red
+      - 搁置=orange
+      - 已完成=green
+      - 当前=red
+      - 下一批=yellow
+      - 未来规划=blue
+      - 新增功能=green
+      - bug=red
+      - 功能优化=blue
+      - 本地链路=blue
+      - 真实链路=green
+      - 部分真实链路=yellow
+      - 不涉及=gray
+      - 主工作区=purple
+      - worktree=orange
+      - impl-plan=blue
+      - source-note=green
+      - discussion=yellow
+      - handoff=orange
+  - type: notion-table
+    name: 验证风险
+    filters:
+      or:
+        - note["状态"].contains("验证中")
+        - note["状态"].contains("阻塞")
+        - note["验证链路"].contains("真实链路")
+        - note["验证链路"].contains("部分真实链路")
+    groupBy:
+      property: 验证链路
+      direction: ASC
+    order:
+      - file.name
+      - 项目
+      - 状态
+      - 优先级
+      - 验证链路
+      - 工作区
+      - 来源类型
+      - 来源相对路径
+      - 更新日期
+    pillProperties:
+      - 状态
+      - 项目
+      - 优先级
+      - 任务类型
+      - 验证链路
+      - 工作区
+      - 来源类型
+    pinnedColors:
+      - 计划中=gray
+      - 实施中=blue
+      - 验证中=yellow
+      - 阻塞=red
+      - 搁置=orange
+      - 已完成=green
+      - 当前=red
+      - 下一批=yellow
+      - 未来规划=blue
+      - 新增功能=green
+      - bug=red
+      - 功能优化=blue
+      - 本地链路=blue
+      - 真实链路=green
+      - 部分真实链路=yellow
+      - 不涉及=gray
+      - 主工作区=purple
+      - worktree=orange
+      - impl-plan=blue
+      - source-note=green
+      - discussion=yellow
+      - handoff=orange
+  - type: notion-table
+    name: 未来规划
+    filters:
+      and:
+        - note["优先级"].contains("未来规划")
+        - '!note["状态"].contains("已完成")'
+    order:
+      - file.name
+      - 项目
+      - 状态
+      - 任务类型
+      - 来源类型
+      - 来源相对路径
+      - 来源
+    pillProperties:
+      - 状态
+      - 项目
+      - 优先级
+      - 任务类型
+      - 验证链路
+      - 工作区
+      - 来源类型
+    pinnedColors:
+      - 计划中=gray
+      - 实施中=blue
+      - 验证中=yellow
+      - 阻塞=red
+      - 搁置=orange
+      - 已完成=green
+      - 当前=red
+      - 下一批=yellow
+      - 未来规划=blue
+      - 新增功能=green
+      - bug=red
+      - 功能优化=blue
+      - 本地链路=blue
+      - 真实链路=green
+      - 部分真实链路=yellow
+      - 不涉及=gray
+      - 主工作区=purple
+      - worktree=orange
+      - impl-plan=blue
+      - source-note=green
+      - discussion=yellow
+      - handoff=orange
+  - type: notion-table
+    name: 已完成
+    filters:
+      and:
+        - note["状态"].contains("已完成")
+    order:
+      - 状态
+      - 项目
+      - 验证链路
+      - 工作区
+      - 来源类型
+      - 来源相对路径
+      - 更新日期
+    pillProperties:
+      - 状态
+      - 项目
+      - 优先级
+      - 任务类型
+      - 验证链路
+      - 工作区
+      - 来源类型
+    pinnedColors:
+      - 计划中=gray
+      - 实施中=blue
+      - 验证中=yellow
+      - 阻塞=red
+      - 搁置=orange
+      - 已完成=green
+      - 当前=red
+      - 下一批=yellow
+      - 未来规划=blue
+      - 新增功能=green
+      - bug=red
+      - 功能优化=blue
+      - 本地链路=blue
+      - 真实链路=green
+      - 部分真实链路=yellow
+      - 不涉及=gray
+      - 主工作区=purple
+      - worktree=orange
+      - impl-plan=blue
+      - source-note=green
+      - discussion=yellow
+      - handoff=orange
