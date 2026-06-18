@@ -8,100 +8,100 @@ user-invocable: true
 
 Maintain a single Markdown ledger where two or more parties (typically this agent plus another agent like Codex/GPT, or the user) debate a plan/design and converge over rounds. The ledger exists so that, across many turns and many sessions, nobody re-litigates settled points and the live disagreements stay readable.
 
-The document has exactly two living parts:
+The document has two living parts:
 
-1. **收敛区 (Convergence record)** — kept at the very top. Settled decisions only, one line each. Every agent, *before* writing its own new opinion, first promotes any newly-settled points into this section. This is the single source of truth for "what's decided."
-2. **讨论记录 (Discussion log)** — round-by-round. Record **only disagreements** in full; for points you agree with, mention them in one line ("收敛入区:A、B") and move on. Signal over noise — agreements belong in 收敛区, not re-argued here.
+1. **收敛区 (Convergence record)** — at the very top. Settled decisions only, one line each. Promoted into here *before* you write new opinions, so it's always the current source of truth for "what's decided."
+2. **讨论记录 (Discussion log)** — round-by-round. **Only disagreements** in full; agreements are one line ("收敛入区:…"). Signal over noise.
 
-## Core principle
+## The script does the bookkeeping — you do the judgment
 
-Each turn is *additive and reconciling*, never destructive. You append your round; you do not rewrite the other party's words. You only edit 收敛区 (to promote settled points) and the 未决分歧 status table (to update each open point's status). The other party may have written free-form prose that ignores this template — that is expected. On your turn, normalize what you can (assign point IDs, attribute authorship) and proceed; do not demand they follow the format.
+All mechanical structure (frontmatter state machine, point IDs, section moves, round bumps, deadlock counting, gitignore) is owned by `scripts/discuss_ledger.py`. **Do not hand-edit the ledger's YAML, table, or section structure** — call the script and pass your decisions as arguments. This keeps every agent's writes consistent and removes the bookkeeping errors agents make (forgetting to bump the round, renumbering IDs, leaving the table stale).
 
-## Step 1 — Locate or initialize the ledger
+What you decide, the script can't:
 
-Discuss ledgers are **ephemeral debate scaffolding**, not deliverables — the converged plan/spec is the deliverable. So they live in the repo's untracked scratch area, never next to the tracked source doc (where they'd look like deliverables and risk being committed by accident).
+- whether a point is genuinely agreed (→ `converge`) or still contested (→ `contest`)
+- the argument text and its evidence
+- whether a round had real **movement** (new argument / evidence / concession) or was a restatement
+- which convergence marker applies (`一致` vs `用户裁决`)
+- whether to raise a new point at all
 
-Determine the target file before doing anything else. The ledger always lives under `docs/exchange/discuss/` (the repo's established scratch/exchange convention — create the folder if missing):
+Run it with the repo root so paths resolve:
 
-- **Anchored to a doc** (a plan/spec/PRD path is in play): use `docs/exchange/discuss/discuss-<basename>.md`, where `<basename>` is the source filename without extension. Example: reviewing `docs/plans/2026-06-18-foo.md` → `docs/exchange/discuss/discuss-2026-06-18-foo.md`. Record the source path in the `topic:` frontmatter so the link back is preserved.
-- **No anchor doc**: ask the user for a short slug, then use `docs/exchange/discuss/discuss-<slug>.md`. Do not guess a slug silently.
+```bash
+python <skill>/scripts/discuss_ledger.py --root <repo-root> <subcommand> ...
+```
 
-If `docs/exchange/discuss/` is not yet git-ignored, the initiator adds `docs/exchange/discuss/` to `.gitignore` (scoped — do not ignore all of `docs/exchange/`, other skills keep notes there that may be committed).
+Ledgers live at `docs/exchange/discuss/discuss-<slug>.md` — the repo's untracked scratch area. They are **ephemeral debate scaffolding**, not deliverables; the converged plan is the deliverable. `init` creates the dir and adds `docs/exchange/discuss/` to `.gitignore` (scoped) automatically.
 
-Then glob for the target path:
+## Step 1 — Locate or initialize
 
-- **Does not exist** → you are the initiator. Copy `templates/discuss-template.md`, fill the frontmatter, and write Round 1 (Step 3, initiator path).
-- **Exists** → you are a responder. Read it fully and follow Step 3, responder path.
+First decide the slug. If the discussion is anchored to a doc (a plan/spec/PRD path), the slug is that file's basename without extension (e.g. `docs/plans/2026-06-18-foo.md` → slug `2026-06-18-foo`). If there's no anchor doc, ask the user for a short slug — don't guess silently.
 
-## Step 2 — Understand the document shape
+Check whether the ledger exists (glob `docs/exchange/discuss/discuss-<slug>.md`):
 
-Use `templates/discuss-template.md` as the canonical structure. Frontmatter carries the live state machine:
+- **Does not exist → you are the initiator.** Create it:
+  ```bash
+  python ... init --topic docs/plans/2026-06-18-foo.md --participants CC,Codex --initiator <you>
+  ```
+  `--topic` may be a doc path (recorded as the review target) or free text. `--initiator` is whoever speaks round 1 (usually you).
+- **Exists → you are a responder.** Read ground truth with `status` before doing anything:
+  ```bash
+  python ... status --slug 2026-06-18-foo
+  ```
 
-- `status`: `进行中` | `已达成一致` | `僵局`
-- `round`: current round number (integer)
-- `next`: who should speak next (a participant name, or `用户` when waiting on a ruling)
-- `participants`: list of party names
+## Step 2 — Take your turn
 
-Body sections, in order: `## 收敛区(已定论,勿重开)`, `## 未决分歧`(a status table), `## 讨论记录`(rounds).
+A turn is always: **read → promote settled points → respond with disagreements → end the turn.** The order matters — promoting convergence *before* arguing is the whole discipline.
 
-## Step 3 — Take your turn
+1. **`status`** — read current round, who's next, and every open point with its 已历轮次. Don't trust your own parse of the file; ask the script.
 
-### Initiator (file did not exist)
+2. **Promote what's now settled (`converge`).** For each point you now genuinely agree on (or the user ruled), promote it *before* writing new opinions:
+   ```bash
+   python ... converge --slug S --point D1 --marker "一致" --line "保留兼容入口,重指新 dashboard"
+   ```
+   Marker is `一致` (both agree) or `用户裁决` (user ruled; write `用户裁决·覆盖CC` if it overrides a party). Convergence ≠ agreement — a user ruling settles a point even if you still disagree; record it and stop arguing it.
 
-1. Write frontmatter: `status: 进行中`, `round: 1`, `participants`, `next: <the other party>`.
-2. Leave 收敛区 empty (nothing settled yet) or seed it only with points that are genuinely not in dispute.
-3. In 未决分歧, list each point you are raising with a stable point ID (`D1`, `D2`, …), a one-line summary, status `分歧`, and `已历轮次: 1`.
-4. In 讨论记录, add `### 轮次 1 · <你的名字>` and write each point's full argument **with its reasoning** — not just the position. Reasoning is what lets the next party actually engage instead of restating.
+3. **Normalize the other party's free-form contribution.** The other agent may have edited the file directly without the script, so its new points aren't in the table. Register each as a tracked point so it can be followed:
+   ```bash
+   python ... add-point --slug S --author <them> --summary "..." --body "their argument"
+   ```
 
-### Responder (file existed)
+4. **Respond to live disputes (`contest`)** — counter an existing point in the current round:
+   ```bash
+   python ... contest --slug S --point D2 --author <you> --body - --movement true   # body via stdin
+   ```
+   Set `--movement false` when you're restating with no new ground. The script increments 已历轮次 and, at ≥2 rounds with no movement, **auto-marks the point 僵局** — so be honest about movement; that flag is what lets a dead debate actually die instead of looping.
 
-Do these in order — the order is the whole point of the skill:
+5. **Raise new disagreements (`add-point`)** — auto-allocates the next `Dn`, adds a table row, and writes the argument under the current round. Always include reasoning and evidence (file paths, line numbers, verified facts), not bare positions — that's what lets the next party engage.
 
-1. **Promote settled points first.** Re-read the last round. For every point where you now genuinely agree (or the user has ruled), move it into 收敛区 as a one-liner with a **source marker** (see below) and drop it from / mark it resolved in the 未决分歧 table. Do this *before* writing your own new opinions, so the convergence record is always current when you start arguing.
-2. **Normalize the opponent's contribution** if it was free-form: assign point IDs to any new disagreements they raised, so they can be tracked.
-3. **Bump `round`** and set `### 轮次 N · <你的名字>`.
-4. **Record only disagreements in full.** For points you accept, write one line ("收敛入区:A、B、E — 同意,不展开"). For points you contest, write your counter-argument *with reasoning and evidence* (file paths, line numbers, verified facts — ground it, don't assert).
-5. **Update the 未决分歧 table**: for each still-open point, set status and increment `已历轮次` if it was contested again this round.
-6. **Update `next`** to the other party (or `用户` if a point now needs a ruling).
+6. **`end-turn`** — closes your turn. It recomputes overall status and either bumps the round / sets who's next, or declares the exit:
+   ```bash
+   python ... end-turn --slug S --next Codex      # while debate is open
+   python ... end-turn --slug S                   # when you think it may be resolved
+   ```
 
-## Convergence source markers
+Use `--dry-run` on any mutating command to preview the resulting file without writing.
 
-A point is "converged" when it leaves the debate — but *how* it left matters, so mark the source:
+## Step 3 — Exit
 
-- `[一致]` — both parties agree. One proposed, the other accepted without counter.
-- `[用户裁决]` — the user made a final ruling. If it overrides a party, say so: `[用户裁决·覆盖CC]`.
+`end-turn` sets `status` automatically once **every point is either 收敛 or 僵局**:
 
-Convergence ≠ agreement. A point the user rules on is settled even if an agent still disagrees — record it in 收敛区 with the override marker, and stop arguing it. The dissent is preserved in the discussion log; it just no longer blocks.
+- all converged → `已达成一致`
+- any deadlocked → `僵局` (and `next: 用户`)
 
-## Deadlock detection (per-point, not whole-document)
-
-Track deadlock **per point**, not for the document as a whole — one stuck point should not keep the ledger open forever while others resolve.
-
-A point is in **僵局 (deadlock)** when it has been contested across **≥2 full rounds by both parties with no movement**. "Movement" means a genuinely new argument, new evidence, a concession, or a narrowing of scope. A mere restatement of the same position is *not* movement.
-
-When you detect a deadlocked point:
-
-- Mark its status `僵局` in the 未决分歧 table.
-- Stop arguing it. Do not open round 3 on the same ground — that wastes turns and the user's attention.
-
-## Step 4 — Exit conditions
-
-The ledger is done when **every open point is either in 收敛区 or marked 僵局**. At that point:
-
-- All points converged → set `status: 已达成一致`.
-- Some points deadlocked → set `status: 僵局`.
-
-Then **stop updating and tell the user**: summarize what converged and, if any, list the deadlocked points needing their ruling. Do not keep appending rounds after exit — if the user wants to break a deadlock, they rule, and that ruling becomes a `[用户裁决]` convergence entry.
+When the script prints an `EXIT:` line, **stop appending rounds and tell the user**: summarize what converged, and list any deadlocked points needing their ruling. If they rule, that becomes a `converge --marker "用户裁决…"` entry that can break the deadlock.
 
 ## Anti-patterns
 
-- **Re-opening 收敛区 items.** Once settled, a point stays settled unless genuinely new evidence appears (then re-open explicitly with a note, don't silently relitigate).
-- **Performative agreement.** Do not concede just to end the debate. If a counter-argument is technically wrong or unverified, say so with reasoning — this skill exists to surface real disagreement, not to manufacture consensus. (See `superpowers:receiving-code-review` for the spirit.)
-- **Restating without movement.** If you have nothing new on a point, don't re-argue it — let it deadlock.
-- **Rewriting the other party's text.** Append your round; never edit their words. Only 收敛区 and the status table are shared mutable surfaces.
-- **Dumping agreements into the discussion log.** Agreements are one line ("收敛入区:…"); their substance lives in 收敛区. The log is for live disputes only.
+- **Hand-editing structure.** Don't touch the YAML/table/section layout directly — use the script, or its invariants drift. Free-form *prose* by the other party is fine and preserved; your job is to register their points via the script on your turn.
+- **Re-opening 收敛区 items.** Settled stays settled unless genuinely new evidence appears (then say so explicitly).
+- **Performative agreement.** Don't concede just to end the debate. If a counter is wrong or unverified, contest it with reasoning — this skill surfaces real disagreement, it doesn't manufacture consensus. (See `superpowers:receiving-code-review` for the spirit.)
+- **Restating without movement.** If you have nothing new, set `--movement false` and let the point deadlock rather than looping.
+- **Dumping agreements into the log.** Agreements are a one-line `converge`; their substance lives in 收敛区, not re-argued in the discussion log.
 
 ## Safety
 
-- Only create/modify the single `discuss-<slug>.md` ledger and, if anchored, read the source doc. Do not touch the plan/spec itself unless the user explicitly asks to "落计划".
-- Default to writing the ledger directly (this is a notes artifact, not source code). There is no dry-run gate here — but never edit files outside the ledger and its directory.
+- Only create/modify the single `discuss-<slug>.md` ledger (and read the source doc). Do not touch the plan/spec itself unless the user explicitly asks to "落计划".
+- The ledger is a notes artifact, written directly (no dry-run gate required) — but never write outside `docs/exchange/discuss/`.
+
+`templates/discuss-template.md` is a human-readable illustration of the produced structure; the script is the authoritative writer.
