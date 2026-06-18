@@ -5,6 +5,7 @@
 - `D:\CodeSpace\TaskManager` 升级为独立 Git 仓，作为跨项目任务中控仓；项目 repo 继续只管源码和正式文档。
 - 项目 ID 改为 `00_Config/projects.yml` 中的显式稳定 ID：本次使用 `prj-supplyer-webapp` 和 `bills_analysis`。
 - 任务文件不再把绝对路径作为 source of truth；任务保存 `项目ID` + `来源类型` + `来源相对路径`，项目本机根路径只存在 ignored 的本地配置。
+- Dashboard 展示用 `项目名称`，由脚本从 `00_Config/projects.yml` 的 `name` 同步；`项目ID` 与 `项目` 保持为机器校验字段。
 - 仍采用“一级按功能、二级按项目、三级按材料类型”；所有初始化、迁移、Base 生成、导入动作都通过模板和脚本完成。
 - 根 `Task Dashboard.md` 保留为兼容入口，旧 `30_Bases/任务面板.base` 迁移为 `30_Bases/global-tasks.base`。
 
@@ -17,13 +18,16 @@
   - `init-project --vault --project <id> --repo <path> --name <name> --source-root docs/impl-plans [--apply]`：写 tracked `projects.yml` 元数据和 ignored `projects.local.yml` 本机 root，创建项目目录，生成项目 Base 和 Dashboard。
   - `import-impl-plans --vault --project <id> --limit 5 --default-status 计划中 [--apply]`：按 `projects.local.yml` 的 root + `projects.yml` 的 sourceRoot 找 impl plan，非递归导入 source root 直接子文件。
   - `validate --vault [--project <id>]`：递归扫描 `10_Tasks/**/*.md`，校验项目字段、相对来源、枚举和完成态规则。
+  - `refresh-project-metadata --vault [--project <id>] [--apply]`：从 `projects.yml` 同步现有项目任务的 `项目名称`，不改任务正文。
+  - `refresh-bases --vault [--project <id>] [--apply]`：从模板重建 Global Base 和项目 Base，避免手工维护视图 YAML。
+  - `refresh-dashboards --vault [--project <id>] [--apply]`：从模板重建 Dashboard Markdown，项目 Dashboard 显式嵌入 `#进行中` 和 `#已完成` 两个 Base view。
 - 新增/调整模板：
   - `.gitignore` 模板：track dashboard 必需资源，ignore 缓存、移动端 workspace、插件本地状态。
   - `projects.yml` 模板：保存项目 ID、显示名、sourceRoot、task/source/base/dashboard 路径，不保存本机绝对 root。
   - `projects.local.yml` 模板：保存本机绝对 root，加入 `.gitignore`，clone 后由 `init-project` 或专门的 local-config 命令生成。
-  - `task-note.md`：增加 `项目ID`、`项目`、`来源相对路径`、`来源类型`；保留旧 `来源` 作为可选派生显示字段或迁移兼容字段。
-  - `task-base.base`：复用现有 `任务面板.base` 的视图格式、列、排序、颜色和 view 名称；只参数化项目过滤。
-  - `project-dashboard.md`：Dashboard 文件名和标题带项目区分，嵌入 view 名称保持 `进行中`、`已完成` 等现有格式。
+  - `task-note.md`：增加 `项目ID`、`项目`、`项目名称`、`来源相对路径`、`来源类型`；保留旧 `来源` 作为可选派生显示字段或迁移兼容字段。
+  - `task-base.base`：复用现有 `任务面板.base` 的视图格式、排序、颜色和 view 名称；Global Base 显示 `项目名称` 为“项目”，项目 Base 隐藏 `项目` 和 `来源相对路径`，但展示 `来源类型`。
+  - `project-dashboard.md`：Dashboard 文件名和标题带项目区分，显式嵌入 `![[30_Bases/<project-id>.base#进行中]]` 和 `![[30_Bases/<project-id>.base#已完成]]`，避免 Obsidian 默认只显示第一个 Base view。
 - 迁移现有入口：
   - `30_Bases/任务面板.base` 重命名/迁移为 `30_Bases/global-tasks.base`，并把所有顶层任务过滤从 `file.folder == "10_Tasks"` 改为 `file.inFolder("10_Tasks")`。
   - 根 `Task Dashboard.md` 改为兼容入口，嵌入或链接 `40_Dashboards/Global Dashboard.md`，不再直接指向旧 base 文件。
@@ -64,6 +68,7 @@
 - 任务 frontmatter 标准：
   - `项目ID` 是 scalar，给脚本解析。
   - `项目` 是 YAML list，作为 Bases 分组/着色字段；模板必须写成单值 list。
+  - `项目名称` 是 scalar，作为 Global Dashboard 的展示列；脚本从 `projects.yml` 的 `name` 生成和刷新，不作为项目身份 source of truth。
   - 目录名是规范项目身份；`validate` 强制 `10_Tasks/<project-id>/`、`项目ID`、`项目[0]` 三者一致，且 `项目` 只能有一个值。
   - `来源类型` 表示 source 命名空间：`impl-plan`、`source-note`、`discussion`、`handoff`。
   - `来源相对路径` 的解释依赖 `来源类型`：`impl-plan` 相对项目 repo root；`source-note`、`discussion`、`handoff` 相对 vault root，通常落在 `20_Sources/<project-id>/...`。
@@ -72,6 +77,7 @@
   - 全局：`file.ext == "md"` + `file.inFolder("10_Tasks")`
   - 项目：只用 `file.ext == "md"` + `file.inFolder("10_Tasks/<project-id>")`
   - `项目` 字段不作为项目 Base 的 AND 过滤条件；字段与目录不一致时由 `validate` 报错，避免 Base 静默隐藏任务。
+  - Global Base 使用 `项目名称` 显示“项目”；项目 Base 不显示 `项目` 和 `来源相对路径`，因为目录已经提供项目隔离，来源追踪仍保留在 frontmatter。
 - 当前 `prj-supplyer-webapp` 迁移：
   - 现有 `10_Tasks/*.md` 移入 `10_Tasks/prj-supplyer-webapp/`。
   - 现有正式 source note 归入 `20_Sources/prj-supplyer-webapp/discussions/`；本次设计归入 `20_Sources/_design/`。
@@ -79,7 +85,7 @@
   - 指向 `D:/CodeSpace/TaskManager/20_Sources/...` 的旧绝对 `来源` 在移动 source note 后迁移为 `来源类型=source-note` 或 `discussion` + vault-relative `来源相对路径`。
   - 无法相对化的路径保留为兼容显示字段并在 validate 中提示。
 - Obsidian 类型配置：
-  - 更新 `.obsidian/types.json`，把 `项目ID`、`来源相对路径` 注册为 text，把 `项目`、`来源类型` 注册为 multitext。
+  - 更新 `.obsidian/types.json`，把 `项目ID`、`项目名称`、`来源相对路径` 注册为 text，把 `项目`、`来源类型` 注册为 multitext。
 - `bills_analysis` 导入最近 5 个非 README impl plan：
   - `2026-06-16-production-durable-runtime-migration.md`
   - `2026-06-15-demo-manager-cash-seed-card.md`

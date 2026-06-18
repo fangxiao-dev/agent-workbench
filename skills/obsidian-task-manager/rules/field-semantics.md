@@ -19,9 +19,13 @@ Project tasks live under `10_Tasks/<project-id>/`.
 
 - `项目ID` is a scalar string and must match the containing project folder.
 - `项目` is a single-item YAML list and its only value must match `项目ID`.
+- `项目名称` is a scalar string maintained by the script from `00_Config/projects.yml` project `name`.
 - `validate --project <project-id>` recursively checks project task files under that folder.
 
-The project Base filters by directory. Use `项目` for grouping and validation, not as the primary Base filter.
+The project Base filters by directory. Use `项目` for machine identity and validation, not as a visible dashboard column.
+Project-specific Bases should hide `项目` and `来源相对路径`; the global Base should display `note.项目名称` with display name `项目` so cross-project dashboards show a human-readable project label.
+
+When a project exists in `00_Config/projects.yml` and has a `name`, validation requires project tasks under `10_Tasks/<project-id>/` to have matching `项目名称`. If the project config is missing, validation should still check local task consistency and skip the configured-name comparison.
 
 Legacy top-level tasks directly under `10_Tasks/` may omit project fields, but new project work should not.
 

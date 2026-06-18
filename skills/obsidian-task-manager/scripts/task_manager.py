@@ -87,6 +87,7 @@ IGNORE_HINTS = [
 
 TYPES_ADDITIONS = {
     "项目ID": "text",
+    "项目名称": "text",
     "来源相对路径": "text",
     "项目": "multitext",
     "来源类型": "multitext",
@@ -189,6 +190,7 @@ def render_frontmatter(data: dict[str, Any]) -> str:
         "工作区",
         "项目ID",
         "项目",
+        "项目名称",
         "来源类型",
         "来源相对路径",
         "来源",
@@ -418,7 +420,12 @@ def source_body(source: str) -> str:
     return f"`{source}`"
 
 
-def apply_payload(existing_fm: dict[str, Any], existing_body: str, payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
+def apply_payload(
+    existing_fm: dict[str, Any],
+    existing_body: str,
+    payload: dict[str, Any],
+    project_name: str | None = None,
+) -> tuple[dict[str, Any], str]:
     fm = copy.deepcopy(existing_fm)
     body = existing_body or default_body(payload["taskName"])
 
@@ -441,6 +448,8 @@ def apply_payload(existing_fm: dict[str, Any], existing_body: str, payload: dict
     if project_id:
         fm["项目ID"] = str(project_id)
         fm["项目"] = [str(project_id)]
+        if project_name:
+            fm["项目名称"] = project_name
 
     for json_key, yaml_key in FIELD_MAP.items():
         if json_key == "projectId" or json_key not in merged:
@@ -540,7 +549,8 @@ def command_upsert(args: argparse.Namespace) -> int:
 def build_task_write(vault: Path, target: Path, payload: dict[str, Any], apply: bool) -> dict[str, Any]:
     existing_text = target.read_text(encoding="utf-8") if target.exists() else ""
     fm, body = load_task(target)
-    new_fm, new_body = apply_payload(fm, body, payload)
+    project_name = project_name_for_task(vault, payload.get("projectId"))
+    new_fm, new_body = apply_payload(fm, body, payload, project_name)
     next_text = render_task(new_fm, new_body)
     result = {
         "mode": "apply" if apply else "dry-run",
@@ -556,7 +566,26 @@ def build_task_write(vault: Path, target: Path, payload: dict[str, Any], apply: 
     return result
 
 
-def validate_task_content(path: Path, vault: Path, fm: dict[str, Any], body: str) -> list[str]:
+def project_name_for_task(vault: Path, project_id: Any) -> str | None:
+    if not project_id:
+        return None
+    projects_path = vault / "00_Config" / "projects.yml"
+    if not projects_path.exists():
+        return None
+    projects = parse_simple_projects(projects_path)
+    project = projects.get(str(project_id))
+    if not project:
+        return None
+    return project.get("name")
+
+
+def validate_task_content(
+    path: Path,
+    vault: Path,
+    fm: dict[str, Any],
+    body: str,
+    projects: dict[str, dict[str, str]] | None = None,
+) -> list[str]:
     errors: list[str] = []
     for field, allowed in LIST_FIELDS.items():
         if field not in fm:
@@ -572,6 +601,8 @@ def validate_task_content(path: Path, vault: Path, fm: dict[str, Any], body: str
         errors.append(f"{path}: 项目 must be a YAML list")
     if "项目ID" in fm and not isinstance(fm["项目ID"], str):
         errors.append(f"{path}: 项目ID must be a scalar string")
+    if "项目名称" in fm and not isinstance(fm["项目名称"], str):
+        errors.append(f"{path}: 项目名称 must be a scalar string")
     if "来源相对路径" in fm:
         rel = fm["来源相对路径"]
         if not isinstance(rel, str):
@@ -603,6 +634,9 @@ def validate_task_content(path: Path, vault: Path, fm: dict[str, Any], body: str
             errors.append(f"{path}: 项目ID must match folder name {project_id!r}")
         if project_values != [project_id]:
             errors.append(f"{path}: 项目 must be a single-item list matching folder name {project_id!r}")
+        expected_project_name = (projects or {}).get(project_id, {}).get("name")
+        if expected_project_name and fm.get("项目名称") != expected_project_name:
+            errors.append(f"{path}: 项目名称 must match configured project name {expected_project_name!r}")
         source_type = fm.get("来源类型")
         if "来源类型" not in fm:
             errors.append(f"{path}: project task must include 来源类型")
@@ -616,9 +650,9 @@ def validate_task_content(path: Path, vault: Path, fm: dict[str, Any], body: str
     return errors
 
 
-def validate_task(path: Path, vault: Path) -> list[str]:
+def validate_task(path: Path, vault: Path, projects: dict[str, dict[str, str]] | None = None) -> list[str]:
     fm, body = split_frontmatter(path.read_text(encoding="utf-8"))
-    return validate_task_content(path, vault, fm, body)
+    return validate_task_content(path, vault, fm, body, projects)
 
 
 def command_validate(args: argparse.Namespace) -> int:
@@ -627,6 +661,7 @@ def command_validate(args: argparse.Namespace) -> int:
     if not directory.exists():
         raise TaskError(f"Missing task directory: {directory}")
     errors: list[str] = []
+    projects = parse_simple_projects(vault / "00_Config" / "projects.yml")
     project_id = getattr(args, "project", None)
     if project_id:
         validate_project_id(project_id)
@@ -635,7 +670,7 @@ def command_validate(args: argparse.Namespace) -> int:
     else:
         paths = sorted(directory.glob("**/*.md"))
     for path in paths:
-        errors.extend(validate_task(path, vault))
+        errors.extend(validate_task(path, vault, projects))
     result = {
         "vault": str(vault),
         "project": project_id,
@@ -688,6 +723,167 @@ def plan_directory(path: Path, changes: list[dict[str, Any]], apply: bool) -> No
     changes.append({"path": str(path), "action": "mkdir", "changed": not exists})
     if apply:
         path.mkdir(parents=True, exist_ok=True)
+
+
+def detect_newline(text: str) -> str:
+    return "\r\n" if "\r\n" in text else "\n"
+
+
+def rendered_project_identity_block(project_id: str, project_name: str | None, newline: str) -> str:
+    fields: dict[str, Any] = {
+        "项目ID": project_id,
+        "项目": [project_id],
+    }
+    if project_name:
+        fields["项目名称"] = project_name
+    lines: list[str] = []
+    for key in ["项目ID", "项目", "项目名称"]:
+        if key in fields:
+            append_yaml_field(lines, key, fields[key])
+    return newline.join(lines) + newline
+
+
+def frontmatter_key_block_spans(lines: list[str], keys: set[str]) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index].rstrip("\r\n")
+        matched = any(re.match(rf"^{re.escape(key)}\s*:", line) for key in keys)
+        if not matched:
+            index += 1
+            continue
+        end = index + 1
+        while end < len(lines):
+            next_line = lines[end].rstrip("\r\n")
+            if next_line.startswith((" ", "\t")):
+                end += 1
+                continue
+            break
+        spans.append((index, end))
+        index = end
+    return spans
+
+
+def frontmatter_insert_index(lines: list[str], spans: list[tuple[int, int]]) -> int:
+    if spans:
+        return min(start for start, _end in spans)
+    for anchor in ["来源类型", "来源相对路径", "来源", "创建日期", "更新日期"]:
+        for index, line in enumerate(lines):
+            if re.match(rf"^{re.escape(anchor)}\s*:", line.rstrip("\r\n")):
+                return index
+    return len(lines)
+
+
+def splice_project_identity_frontmatter(original_text: str, project_id: str, project_name: str | None) -> str:
+    keys = {"项目ID", "项目"}
+    if project_name:
+        keys.add("项目名称")
+    newline = detect_newline(original_text)
+
+    if original_text.startswith("---\r\n"):
+        marker = "---\r\n"
+        newline = "\r\n"
+    elif original_text.startswith("---\n"):
+        marker = "---\n"
+        newline = "\n"
+    else:
+        identity_block = rendered_project_identity_block(project_id, project_name, newline)
+        return "---" + newline + identity_block + "---" + newline + newline + original_text
+
+    closing_marker = newline + "---"
+    end = original_text.find(closing_marker, len(marker))
+    if end == -1:
+        identity_block = rendered_project_identity_block(project_id, project_name, newline)
+        return "---" + newline + identity_block + "---" + newline + newline + original_text
+
+    identity_block = rendered_project_identity_block(project_id, project_name, newline)
+
+    raw_frontmatter = original_text[len(marker) : end]
+    tail = original_text[end:]
+    lines = raw_frontmatter.splitlines(keepends=True)
+    spans = frontmatter_key_block_spans(lines, keys)
+    insert_index = frontmatter_insert_index(lines, spans)
+    skip_indexes = {line_index for start, stop in spans for line_index in range(start, stop)}
+
+    new_lines: list[str] = []
+    inserted = False
+    for index, line in enumerate(lines):
+        if index == insert_index and not inserted:
+            new_lines.append(identity_block)
+            inserted = True
+        if index in skip_indexes:
+            continue
+        new_lines.append(line)
+    if not inserted:
+        new_lines.append(identity_block)
+
+    return marker + "".join(new_lines) + tail
+
+
+def refresh_task_project_metadata(
+    path: Path,
+    vault: Path,
+    project_id: str,
+    project_name: str | None,
+    apply: bool,
+) -> dict[str, Any]:
+    original_text = path.read_text(encoding="utf-8")
+    fm, _body = split_frontmatter(original_text)
+    next_text = splice_project_identity_frontmatter(original_text, project_id, project_name)
+    new_fm, _new_body = split_frontmatter(next_text)
+    tracked_keys = ["项目ID", "项目", "项目名称"]
+    frontmatter_changes = {
+        key: {"before": fm.get(key), "after": new_fm.get(key)}
+        for key in tracked_keys
+        if fm.get(key) != new_fm.get(key)
+    }
+    result = {
+        "path": str(path),
+        "project": project_id,
+        "summary": diff_summary(original_text, next_text),
+        "frontmatterChanges": frontmatter_changes,
+        "bodyChanged": split_frontmatter(original_text)[1] != split_frontmatter(next_text)[1],
+    }
+    if apply and original_text != next_text:
+        path.write_text(next_text, encoding="utf-8", newline="\n")
+    return result
+
+
+def selected_project_ids(projects: dict[str, dict[str, str]], project_id: str | None) -> list[str]:
+    if project_id:
+        validate_project_id(project_id)
+        if project_id not in projects:
+            raise TaskError(f"Missing project in 00_Config/projects.yml: {project_id}")
+        return [project_id]
+    return sorted(projects)
+
+
+def command_refresh_project_metadata(args: argparse.Namespace) -> int:
+    vault = Path(args.vault).resolve()
+    projects = parse_simple_projects(vault / "00_Config" / "projects.yml")
+    project_ids = selected_project_ids(projects, args.project)
+    results: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for project_id in project_ids:
+        project = projects.get(project_id)
+        project_name = project.get("name") if project else None
+        if not project_name:
+            warnings.append(f"{project_id}: no configured project name; 项目名称 was not updated")
+        scan_root = project_tasks_dir(vault, project_id)
+        paths = sorted(scan_root.glob("**/*.md")) if scan_root.exists() else []
+        for path in paths:
+            results.append(refresh_task_project_metadata(path, vault, project_id, project_name, args.apply))
+    result = {
+        "mode": "apply" if args.apply else "dry-run",
+        "vault": str(vault),
+        "project": args.project,
+        "projects": project_ids,
+        "task_count": len(results),
+        "warnings": warnings,
+        "results": results,
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
 
 
 def render_gitignore() -> str:
@@ -781,6 +977,20 @@ def global_base_content(vault: Path) -> tuple[str, dict[str, Any]]:
 
 def render_base(project_id: str | None = None) -> str:
     folder = f"10_Tasks/{project_id}" if project_id else "10_Tasks"
+    project_values = (
+        {
+            "projectPropertyBlock": "  note.项目名称:\n    displayName: 项目\n",
+            "projectOrderBlock": "      - 项目\n",
+            "projectPillBlock": "      - 项目\n",
+        }
+        if project_id is None
+        else {
+            "projectPropertyBlock": "",
+            "projectOrderBlock": "",
+            "projectPillBlock": "",
+        }
+    )
+    values = {"taskFolder": folder, **project_values}
     return render_template(
         "project-base.base",
         """filters:
@@ -792,9 +1002,7 @@ properties:
     displayName: 任务文件
   note.任务名:
     displayName: 任务名
-  note.项目:
-    displayName: 项目
-  note.状态:
+{{projectPropertyBlock}}  note.状态:
     displayName: 状态
   note.优先级:
     displayName: 优先级
@@ -806,8 +1014,6 @@ properties:
     displayName: 工作区
   note.来源类型:
     displayName: 来源类型
-  note.来源相对路径:
-    displayName: 来源相对路径
   note.来源:
     displayName: 来源
   note.更新日期:
@@ -820,13 +1026,11 @@ views:
         - '!note["状态"].contains("已完成")'
     order:
       - 状态
-      - 项目
-      - 优先级
+{{projectOrderBlock}}      - 优先级
       - 任务类型
       - 验证链路
       - 工作区
       - 来源类型
-      - 来源相对路径
       - 更新日期
     sort:
       - property: 优先级
@@ -835,8 +1039,7 @@ views:
         direction: DESC
     pillProperties:
       - 状态
-      - 项目
-      - 优先级
+{{projectPillBlock}}      - 优先级
       - 任务类型
       - 验证链路
       - 工作区
@@ -848,26 +1051,28 @@ views:
         - note["状态"].contains("已完成")
     order:
       - 状态
-      - 项目
-      - 验证链路
+{{projectOrderBlock}}      - 验证链路
       - 工作区
       - 来源类型
       - 更新日期
     pillProperties:
       - 状态
-      - 项目
-      - 验证链路
+{{projectPillBlock}}      - 验证链路
       - 工作区
       - 来源类型
 """,
-        {"taskFolder": folder},
+        values,
     )
 
 
 def render_project_dashboard(project_id: str, name: str) -> str:
     return render_template(
         "project-dashboard.md",
-        "# {{projectName}} Dashboard\n\n![[30_Bases/{{projectId}}.base]]\n",
+        "# {{projectName}} Dashboard\n\n"
+        "## 进行中\n\n"
+        "![[30_Bases/{{projectId}}.base#进行中]]\n\n"
+        "## 已完成\n\n"
+        "![[30_Bases/{{projectId}}.base#已完成]]\n",
         {"projectId": project_id, "projectName": name},
     )
 
@@ -1153,6 +1358,56 @@ def command_init_project(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_refresh_bases(args: argparse.Namespace) -> int:
+    vault = Path(args.vault).resolve()
+    projects = parse_simple_projects(vault / "00_Config" / "projects.yml")
+    project_ids = selected_project_ids(projects, args.project)
+    changes: list[dict[str, Any]] = []
+    plan_directory(vault / "30_Bases", changes, args.apply)
+    plan_write_file(vault / "30_Bases" / "global-tasks.base", render_base(), changes, args.apply)
+    for project_id in project_ids:
+        plan_write_file(vault / "30_Bases" / f"{project_id}.base", render_base(project_id), changes, args.apply)
+    plan_directory(vault / ".obsidian", changes, args.apply)
+    types_path = vault / ".obsidian" / "types.json"
+    existing_types = types_path.read_text(encoding="utf-8") if types_path.exists() else ""
+    plan_write_file(types_path, merge_types_json(existing_types), changes, args.apply)
+    result = {
+        "mode": "apply" if args.apply else "dry-run",
+        "vault": str(vault),
+        "project": args.project,
+        "projects": project_ids,
+        "changes": changes,
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_refresh_dashboards(args: argparse.Namespace) -> int:
+    vault = Path(args.vault).resolve()
+    projects = parse_simple_projects(vault / "00_Config" / "projects.yml")
+    project_ids = selected_project_ids(projects, args.project)
+    changes: list[dict[str, Any]] = []
+    plan_directory(vault / "40_Dashboards", changes, args.apply)
+    plan_write_file(vault / "40_Dashboards" / "Global Dashboard.md", render_global_dashboard(), changes, args.apply)
+    for project_id in project_ids:
+        project_name = projects[project_id].get("name") or project_id
+        plan_write_file(
+            vault / "40_Dashboards" / f"{project_id} Dashboard.md",
+            render_project_dashboard(project_id, project_name),
+            changes,
+            args.apply,
+        )
+    result = {
+        "mode": "apply" if args.apply else "dry-run",
+        "vault": str(vault),
+        "project": args.project,
+        "projects": project_ids,
+        "changes": changes,
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def clean_legacy_source(value: Any) -> str:
     if value is None:
         return ""
@@ -1201,6 +1456,7 @@ def build_migrated_task_content(
     target_path: Path,
     vault: Path,
     project_id: str,
+    project_name: str | None,
     source_type: str,
     source_relative_path: str,
 ) -> tuple[str, dict[str, Any], dict[str, Any], dict[str, Any]]:
@@ -1209,6 +1465,8 @@ def build_migrated_task_content(
     new_fm = copy.deepcopy(fm)
     new_fm["项目ID"] = project_id
     new_fm["项目"] = [project_id]
+    if project_name:
+        new_fm["项目名称"] = project_name
     new_fm["来源类型"] = [source_type]
     new_fm["来源相对路径"] = source_relative_path
     new_fm["更新日期"] = today()
@@ -1218,7 +1476,7 @@ def build_migrated_task_content(
     if errors:
         raise TaskError("migrated task would fail validate: " + "; ".join(errors))
 
-    tracked_keys = ["项目ID", "项目", "来源类型", "来源相对路径", "来源", "更新日期"]
+    tracked_keys = ["项目ID", "项目", "项目名称", "来源类型", "来源相对路径", "来源", "更新日期"]
     frontmatter_changes = {
         key: {"before": fm.get(key), "after": new_fm.get(key)}
         for key in tracked_keys
@@ -1231,6 +1489,7 @@ def command_migrate_legacy_project(args: argparse.Namespace) -> int:
     vault = Path(args.vault).resolve()
     project_id = args.project
     validate_project_id(project_id)
+    project_name = project_name_for_task(vault, project_id)
     repo_root = Path(args.repo).resolve()
     if not vault.exists() or not vault.is_dir():
         raise TaskError(f"Vault does not exist or is not a directory: {vault}")
@@ -1297,6 +1556,7 @@ def command_migrate_legacy_project(args: argparse.Namespace) -> int:
             target,
             vault,
             project_id,
+            project_name,
             source_type,
             source_relative_path,
         )
@@ -1449,6 +1709,27 @@ def build_parser() -> argparse.ArgumentParser:
     init_project.add_argument("--source-root", default="docs/impl-plans")
     init_project.add_argument("--apply", action="store_true")
     init_project.set_defaults(func=command_init_project)
+
+    refresh_metadata = sub.add_parser(
+        "refresh-project-metadata",
+        help="Refresh generated project task frontmatter such as 项目名称 without changing task bodies",
+    )
+    refresh_metadata.add_argument("--vault", required=True)
+    refresh_metadata.add_argument("--project")
+    refresh_metadata.add_argument("--apply", action="store_true")
+    refresh_metadata.set_defaults(func=command_refresh_project_metadata)
+
+    refresh_bases = sub.add_parser("refresh-bases", help="Regenerate project and global Base files from templates")
+    refresh_bases.add_argument("--vault", required=True)
+    refresh_bases.add_argument("--project")
+    refresh_bases.add_argument("--apply", action="store_true")
+    refresh_bases.set_defaults(func=command_refresh_bases)
+
+    refresh_dashboards = sub.add_parser("refresh-dashboards", help="Regenerate project and global dashboard Markdown from templates")
+    refresh_dashboards.add_argument("--vault", required=True)
+    refresh_dashboards.add_argument("--project")
+    refresh_dashboards.add_argument("--apply", action="store_true")
+    refresh_dashboards.set_defaults(func=command_refresh_dashboards)
 
     migrate_legacy = sub.add_parser("migrate-legacy-project", help="Move legacy single-project vault files into one project namespace")
     migrate_legacy.add_argument("--vault", required=True)

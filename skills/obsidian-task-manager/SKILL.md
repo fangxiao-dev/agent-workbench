@@ -54,6 +54,22 @@ The migration moves direct `10_Tasks/*.md` files into `10_Tasks/<project-id>/`, 
 
 Project Base files filter by task directory (`10_Tasks/<project-id>`). The `项目` field is used for grouping and validation, not for narrowing the Base query.
 
+Project tasks also carry scalar `项目名称`, maintained from `00_Config/projects.yml` project `name`. Project-specific Bases hide the machine identity fields `项目` and `来源相对路径`; the global Base displays `note.项目名称` as `项目` for cross-project scanning.
+
+Refresh generated task metadata or dashboard Bases in dry-run first:
+
+```powershell
+python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py refresh-project-metadata --vault D:\CodeSpace\TaskManager
+python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py refresh-project-metadata --vault D:\CodeSpace\TaskManager --project <project-id>
+python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py refresh-bases --vault D:\CodeSpace\TaskManager
+python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py refresh-bases --vault D:\CodeSpace\TaskManager --project <project-id>
+python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py refresh-dashboards --vault D:\CodeSpace\TaskManager
+python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py refresh-dashboards --vault D:\CodeSpace\TaskManager --project <project-id>
+```
+
+Add `--apply` only after reviewing the planned changes. `refresh-project-metadata` updates generated project identity frontmatter without changing task bodies. `refresh-bases` regenerates project Base files and the global Base from templates and refreshes `.obsidian/types.json`. `refresh-dashboards` regenerates dashboard Markdown so project dashboards visibly embed both the `进行中` and `已完成` Base views.
+When `--project <project-id>` is supplied, refresh commands require that project to exist in `00_Config/projects.yml`.
+
 ## Trigger Workflow
 
 1. Identify the target project id. For project work, all create/update/import/validate commands should pass `--project <project-id>`.
@@ -66,6 +82,7 @@ Project Base files filter by task directory (`10_Tasks/<project-id>`). The `项�
    - `projectId`: scalar project id, matching `--project`.
    - `sourceType`: one of `impl-plan`, `source-note`, `discussion`, or `handoff`.
    - `sourceRelativePath`: scalar relative path to the source.
+   Do not provide `projectName`; the script injects `项目名称` from `00_Config/projects.yml`.
 6. Apply the lifecycle and field rules from:
    - `rules/task-lifecycle.md`
    - `rules/field-semantics.md`
@@ -107,6 +124,7 @@ Choose this when the source already exists as Markdown in the project or vault.
 1. Read the source Markdown enough to summarize current status and next action.
 2. Create/update a dashboard task in `10_Tasks/<project-id>/` with `来源` pointing to that Markdown path.
 3. Set `项目ID=<project-id>`, `项目=[<project-id>]`, `来源类型`, and `来源相对路径`.
+   The script also sets `项目名称` from the project config when available.
 4. Use the source content and repo evidence to infer lifecycle fields. If it is only a plan/discussion source and no implementation has started, default to `状态=计划中`, `验证链路=不涉及`, `工作区=主工作区`.
 5. Dry-run `task_manager.py upsert --project <project-id>` before applying.
 
@@ -200,6 +218,7 @@ The script writes project frontmatter as:
 
 - `项目ID`: scalar string.
 - `项目`: single-item YAML list matching `项目ID`.
+- `项目名称`: scalar string copied from `00_Config/projects.yml` project `name`, when configured.
 - `来源类型`: single-item YAML list.
 - `来源相对路径`: scalar relative path.
 

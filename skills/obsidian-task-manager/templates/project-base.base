@@ -7,9 +7,7 @@ properties:
     displayName: 任务文件
   note.任务名:
     displayName: 任务名
-  note.项目:
-    displayName: 项目
-  note.状态:
+{{projectPropertyBlock}}  note.状态:
     displayName: 状态
   note.优先级:
     displayName: 优先级
@@ -21,8 +19,6 @@ properties:
     displayName: 工作区
   note.来源类型:
     displayName: 来源类型
-  note.来源相对路径:
-    displayName: 来源相对路径
   note.来源:
     displayName: 来源
   note.更新日期:
@@ -35,13 +31,11 @@ views:
         - '!note["状态"].contains("已完成")'
     order:
       - 状态
-      - 项目
-      - 优先级
+{{projectOrderBlock}}      - 优先级
       - 任务类型
       - 验证链路
       - 工作区
       - 来源类型
-      - 来源相对路径
       - 更新日期
     sort:
       - property: 优先级
@@ -50,8 +44,7 @@ views:
         direction: DESC
     pillProperties:
       - 状态
-      - 项目
-      - 优先级
+{{projectPillBlock}}      - 优先级
       - 任务类型
       - 验证链路
       - 工作区
@@ -88,19 +81,16 @@ views:
       direction: ASC
     order:
       - file.name
-      - 项目
-      - 状态
+{{projectOrderBlock}}      - 状态
       - 优先级
       - 任务类型
       - 验证链路
       - 工作区
       - 来源类型
-      - 来源相对路径
       - 更新日期
     pillProperties:
       - 状态
-      - 项目
-      - 优先级
+{{projectPillBlock}}      - 优先级
       - 任务类型
       - 验证链路
       - 工作区
@@ -137,18 +127,15 @@ views:
         - '!note["状态"].contains("搁置")'
     order:
       - file.name
-      - 项目
-      - 状态
+{{projectOrderBlock}}      - 状态
       - 任务类型
       - 验证链路
       - 工作区
       - 来源类型
-      - 来源相对路径
       - 更新日期
     pillProperties:
       - 状态
-      - 项目
-      - 优先级
+{{projectPillBlock}}      - 优先级
       - 任务类型
       - 验证链路
       - 工作区
@@ -188,18 +175,15 @@ views:
       direction: ASC
     order:
       - file.name
-      - 项目
-      - 状态
+{{projectOrderBlock}}      - 状态
       - 优先级
       - 验证链路
       - 工作区
       - 来源类型
-      - 来源相对路径
       - 更新日期
     pillProperties:
       - 状态
-      - 项目
-      - 优先级
+{{projectPillBlock}}      - 优先级
       - 任务类型
       - 验证链路
       - 工作区
@@ -240,18 +224,15 @@ views:
       direction: ASC
     order:
       - file.name
-      - 项目
-      - 状态
+{{projectOrderBlock}}      - 状态
       - 优先级
       - 验证链路
       - 工作区
       - 来源类型
-      - 来源相对路径
       - 更新日期
     pillProperties:
       - 状态
-      - 项目
-      - 优先级
+{{projectPillBlock}}      - 优先级
       - 任务类型
       - 验证链路
       - 工作区
@@ -287,16 +268,13 @@ views:
         - '!note["状态"].contains("已完成")'
     order:
       - file.name
-      - 项目
-      - 状态
+{{projectOrderBlock}}      - 状态
       - 任务类型
       - 来源类型
-      - 来源相对路径
       - 来源
     pillProperties:
       - 状态
-      - 项目
-      - 优先级
+{{projectPillBlock}}      - 优先级
       - 任务类型
       - 验证链路
       - 工作区
@@ -331,16 +309,13 @@ views:
         - note["状态"].contains("已完成")
     order:
       - 状态
-      - 项目
-      - 验证链路
+{{projectOrderBlock}}      - 验证链路
       - 工作区
       - 来源类型
-      - 来源相对路径
       - 更新日期
     pillProperties:
       - 状态
-      - 项目
-      - 优先级
+{{projectPillBlock}}      - 优先级
       - 任务类型
       - 验证链路
       - 工作区

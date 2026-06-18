@@ -69,7 +69,22 @@
     {
       "id": "validate-project-consistency",
       "prompt": "验证项目 prj-supplyer-webapp 的 TaskManager 任务是否一致。",
-      "expected_output": "Run validate --vault D:\\CodeSpace\\TaskManager --project prj-supplyer-webapp. Validation recursively scans 10_Tasks/prj-supplyer-webapp and fails tasks where folder name, 项目ID, and the single 项目 value do not all match, or where source metadata is missing/invalid."
+      "expected_output": "Run validate --vault D:\\CodeSpace\\TaskManager --project prj-supplyer-webapp. Validation recursively scans 10_Tasks/prj-supplyer-webapp and fails tasks where folder name, 项目ID, and the single 项目 value do not all match, where 项目名称 differs from configured project name when present, or where source metadata is missing/invalid."
+    },
+    {
+      "id": "refresh-project-metadata-project-name",
+      "prompt": "给 TaskManager 任务补齐新的项目名称字段，先 dry-run，全项目都检查。",
+      "expected_output": "Run refresh-project-metadata --vault D:\\CodeSpace\\TaskManager without --apply. It scans configured projects, plans generated frontmatter updates for 项目ID, 项目, and 项目名称 from 00_Config/projects.yml, and reports bodyChanged=false for task bodies."
+    },
+    {
+      "id": "refresh-bases-global-project-display",
+      "prompt": "重新生成 TaskManager 的 Bases，先 dry-run，只处理 prj-supplyer-webapp 和 global。",
+      "expected_output": "Run refresh-bases --vault D:\\CodeSpace\\TaskManager --project prj-supplyer-webapp without --apply. It regenerates 30_Bases/global-tasks.base and 30_Bases/prj-supplyer-webapp.base from templates, refreshes .obsidian/types.json, keeps project Base columns free of 项目 and 来源相对路径, and makes the global Base display note.项目名称 as 项目 in orders and pillProperties."
+    },
+    {
+      "id": "refresh-dashboards-visible-completed-view",
+      "prompt": "重新生成项目 dashboard，先 dry-run，让 prj-supplyer-webapp 页面上能直接看到进行中和已完成两个视图。",
+      "expected_output": "Run refresh-dashboards --vault D:\\CodeSpace\\TaskManager --project prj-supplyer-webapp without --apply. It regenerates 40_Dashboards/Global Dashboard.md and 40_Dashboards/prj-supplyer-webapp Dashboard.md from templates, and the project dashboard embeds both ![[30_Bases/prj-supplyer-webapp.base#进行中]] and ![[30_Bases/prj-supplyer-webapp.base#已完成]]."
     },
     {
       "id": "vault-migration-baseline",

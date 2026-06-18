@@ -7,6 +7,7 @@ Use these objective checks when reviewing skill/script changes.
 - `operation` is `create`.
 - Command uses `upsert --project shop-web` in dry-run first.
 - Payload includes `projectId=shop-web`.
+- Generated frontmatter includes `项目名称` from `00_Config/projects.yml` when the project name is configured.
 - Payload includes `sourceType=source-note`.
 - Payload includes `sourceRelativePath=docs/bugs/cart-drawer-refresh.md`.
 - `status` is `计划中`.
@@ -21,6 +22,7 @@ Use these objective checks when reviewing skill/script changes.
 - Uses a project source note/discussion workflow for `supplier-admin`.
 - Command uses `upsert --project supplier-admin` in dry-run first.
 - Payload includes `projectId=supplier-admin`.
+- Generated frontmatter includes configured `项目名称` when available.
 - Payload includes valid `sourceType` and `sourceRelativePath`.
 - `status` is `计划中`.
 - `priority` is `未来规划`.
@@ -150,6 +152,7 @@ Use these objective checks when reviewing skill/script changes.
 - Direct `20_Sources/*.md` files are planned for `20_Sources/<project-id>/discussions/`.
 - The command refuses target overwrites and refuses unclassified legacy `来源` values before applying.
 - Migrated task frontmatter includes scalar `项目ID`, single-item `项目`, single-item `来源类型`, and scalar `来源相对路径`.
+- Migrated task frontmatter includes scalar `项目名称` when `00_Config/projects.yml` has a name for the target project.
 - Repo-root absolute `来源` values become `来源类型=impl-plan` with repo-relative POSIX `来源相对路径`.
 - Legacy direct source-note `来源` values become `来源类型=source-note` with the moved vault-relative note path.
 - After apply, `validate --project <project-id>` passes for the migrated project.
@@ -159,13 +162,23 @@ Use these objective checks when reviewing skill/script changes.
 - Lifecycle label fields in generated Markdown are YAML arrays.
 - `项目ID` is a scalar string.
 - `项目` is a single-item YAML list matching the project folder.
+- `项目名称` is a scalar string copied from configured project `name`.
 - `来源类型` is a single-item YAML list with a valid source type.
 - `来源相对路径` is a scalar relative path.
 - `validate` reports completed tasks with priority as an error.
 - `validate` reports completed tasks outside `主工作区` as an error.
 - `validate --project <project-id>` recursively checks files under that project task folder.
 - `validate` reports project tasks whose folder, `项目ID`, and `项目[0]` do not match.
+- `validate` reports project tasks whose `项目名称` does not match configured project `name`, and skips only that comparison if config is missing.
 - `validate` reports missing source metadata on project tasks.
+- `refresh-project-metadata` can dry-run all projects or one project and updates generated project identity frontmatter without changing task bodies.
+- `refresh-bases` can dry-run all projects plus global or one project plus global, regenerates Bases from templates, and refreshes `.obsidian/types.json`.
+- `refresh-dashboards` can dry-run all projects plus global or one project plus global and regenerates dashboard Markdown from templates.
+- `refresh-project-metadata --project <project-id>`, `refresh-bases --project <project-id>`, and `refresh-dashboards --project <project-id>` reject project IDs that are not present in `00_Config/projects.yml`.
+- `refresh-project-metadata` only replaces or inserts generated `项目ID`, `项目`, and `项目名称` frontmatter blocks; it does not re-render unrelated frontmatter fields.
+- Generated project Bases do not expose `项目` or `来源相对路径` in properties, order, or pillProperties.
+- Generated global Base maps `note.项目名称` to displayName `项目` and includes `项目` in the main orders and pillProperties.
+- Generated project dashboards explicitly embed both `![[30_Bases/<project-id>.base#进行中]]` and `![[30_Bases/<project-id>.base#已完成]]`.
 - Dry-run does not modify the vault.
 - Project `upsert --apply` only writes under `10_Tasks/<project-id>/`.
 - `import-impl-plans` is non-recursive, skips `README.md`, and skips existing tasks by default.
