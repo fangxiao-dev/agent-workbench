@@ -10,7 +10,20 @@ TaskManager label fields are for filtering. Narrative details belong in the body
 任务类型: 新增功能 / bug / 功能优化
 验证链路: 本地链路 / 真实链路 / 部分真实链路 / 不涉及
 工作区: 主工作区 / worktree
+来源类型: impl-plan / source-note / discussion / handoff
 ```
+
+## Project Identity
+
+Project tasks live under `10_Tasks/<project-id>/`.
+
+- `项目ID` is a scalar string and must match the containing project folder.
+- `项目` is a single-item YAML list and its only value must match `项目ID`.
+- `validate --project <project-id>` recursively checks project task files under that folder.
+
+The project Base filters by directory. Use `项目` for grouping and validation, not as the primary Base filter.
+
+Legacy top-level tasks directly under `10_Tasks/` may omit project fields, but new project work should not.
 
 ## 状态
 
@@ -60,3 +73,15 @@ Do not use this field as a command log. Put commands and evidence in `### 验证
 - `主工作区`: planning on trunk/main, completed work merged back, archived task, or direct-main work
 
 It does not mean where the task historically happened. If a task is complete and merged, use `主工作区`.
+
+## Source Metadata
+
+Project tasks must keep source metadata in frontmatter.
+
+- `来源类型` is a single-item YAML list with one of `impl-plan`, `source-note`, `discussion`, or `handoff`.
+- `来源相对路径` is a scalar relative path. It must not be absolute or escape with `..`.
+- `来源` is the display/source link used in the task body and dashboard. It may mirror `来源相对路径` or contain the most useful human-facing path.
+
+Use `impl-plan` for imported implementation plans. Use `source-note` when the source is a written note under `20_Sources/<project-id>/`. Use `discussion` for session discussion capture. Use `handoff` for handoff notes.
+
+Project task create operations must provide `sourceType` and `sourceRelativePath`. Project task updates may omit them only when the existing task already has valid `来源类型` and `来源相对路径`.
