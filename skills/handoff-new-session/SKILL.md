@@ -15,6 +15,35 @@ description: Use when the user wants to hand off or migrate work to a new sessio
 
 线程操作只在 Codex Desktop host 可执行（`create_thread` / `fork_thread`）。在其他 host 上不要调用线程工具：生成交接产物（handoff 文件 + chat 内 continuation prompt），手动移交给用户去开新会话。
 
+一进入本 skill，就先确定交付模式，并把它当成后续流程的硬约束：
+
+- 如果当前 host 暴露 `create_thread`，且用户没有明确要求继承旧会话，默认交付模式是 `create_thread`。后续 final 前必须已经调用 `create_thread` 并报告 thread id，或明确记录创建失败的 blocker。
+- 如果当前 host 暴露 `fork_thread`，且用户明确要求继承当前会话历史，交付模式是 `fork_thread`。
+- 如果当前 host 不提供线程工具，交付模式才是 `manual_handoff`：返回 handoff 文件路径和 chat 内 continuation prompt。
+- 如果工具发现发生在流程中途（例如先写了 handoff，后面才发现 `create_thread` 可用），立刻把交付模式切回线程创建分支；不要把 continuation prompt 误当成最终交付。
+
+## Workflow At A Glance
+
+```mermaid
+flowchart TD
+    A[User asks for handoff / new session] --> B[Read this skill and select delivery mode]
+    B --> C{Durable handoff needed?}
+    C -- no --> D[Draft short continuation prompt]
+    C -- yes --> E[Collect fresh workspace / external facts]
+    E --> F[Update rolling handoff]
+    F --> G[Draft continuation prompt]
+    G --> H[Reviewer quality gate]
+    H --> I{Thread tool available?}
+    D --> I
+    I -- create_thread default --> J[Call create_thread with approved prompt]
+    I -- explicit fork --> K[Call fork_thread]
+    I -- no thread tool --> L[Manual handoff: file path + prompt]
+    J --> M[Report thread id / directive]
+    K --> M
+    L --> M
+    M --> N[Final only after creation attempt or documented blocker]
+```
+
 ## 选择操作
 
 | 用户意图 | 使用 | 环境 | 上下文行为 |
@@ -74,7 +103,7 @@ description: Use when the user wants to hand off or migrate work to a new sessio
 4. 读取 fresh 状态：`git status --short --branch`、`git log -1 --oneline`。
 5. 用 fresh 状态刷新 rolling handoff；只有符合归档条件时才额外写 timestamped snapshot。
 6. 起草 continuation prompt；读 `rules/reviewer-input.md` 组织审核材料（含 prompt 草稿），让审核员 subagent 按 `rules/logger-handoff-quality-gate.md` 同审 handoff 与 prompt 草稿；按意见修改。
-7. 创建新会话（prompt 用审核通过的草稿原样发送），或按前置环境检查的结果手动移交。
+7. 创建新会话（prompt 用审核通过的草稿原样发送），或按前置环境检查的结果手动移交。**这是 durable handoff 的交付 gate：如果交付模式是 `create_thread` / `fork_thread`，没有调用对应线程工具或记录明确 blocker，就不能 final。**
 8. 新会话启动后按 host 能力处理首条进度更新：
    - Codex `create_thread` 新 thread 目前不能稳定作为可阻塞 IPC 使用：不要把 child 设计成“等 parent ACK 才继续”。child prompt 必须要求首条回复是 **First Progress Update**，发出后继续自动执行，直到下一个 handoff trigger、明确 blocker、plan 完成且 closure 收口、或 owner 要求停止。
    - 如果 host 提供可读取完整消息、可发送 follow-up、可等待的 child-session 控制能力，parent 可以做一次非阻塞纠偏：读取首条进度更新，核对 intent，不符则纠正一次；纠正后 child 仍应继续推进。
@@ -88,7 +117,7 @@ Child prompt 定规则和索引；**事实只住在 handoff 文件里，prompt �
 
 - Role & Mission：接手什么工作流、本轮要推进到哪里。mission 必须可执行（以 rolling handoff 的 Next Action 为准），不能是“验证后等待”。plan 已完成本地实现时，mission 写明 closure orchestration（准备但不执行外部动作、请求授权）。
 - Mode：明确 child 是 **orchestration runner**：先发一条短 progress update，说明会自动推进和如何使用 subagent，然后继续执行。不要把第一条可见回复当最终答复。
-- Delegation authorization：必须在 prompt 中显式写出“主 session / 新 session 关注调度和 seaming，尽量派用 subagent 执行单个任务”。这是 owner 给 orchestration runner 的授权，不要只放在 handoff 或 skill 文件里。
+- Delegation authorization：必须在 prompt 中显式写出“你（主 session / 新 session）是 orchestration runner，必须聚焦做调度工作：使用 agent 去做包括调研、执行、验证等任务；你只做主干工作切分、分配，以及 slices 之间的 seaming 工作”。这是 owner 给 orchestration runner 的授权和行为约束，不要只放在 handoff 或 skill 文件里。
 - Handoff triggers：必须在 prompt 中显式写出“交接触发点：session context auto compact 了，或者自行识别到的大 gate”。这是 child 何时刷新 handoff / create next session 的执行条件，不要只引用 rule 文件。
 - 执行规则语义（不要求四条原文成块复制进 prompt，但语义必须齐全）：
   - 验证：第一步含 `git status --short --branch` / `git log -1 --oneline` 与 handoff 的一致性校验。
@@ -121,11 +150,10 @@ Child prompt 定规则和索引；**事实只住在 handoff 文件里，prompt �
 - One-time permissions do not become standing permissions.
   - 例子：用户批准“这次在 #9/#10/#11 前提交 checkpoint”，只能说明这个 checkpoint 已提交，不能告诉 child 以后可以自由提交。
 
-Subagent 偏好要写清所有权边界，而不只是“可以用 subagent”：worker 实现边界清晰的任务，reviewer 做 spec/quality review，main session 负责计划、seam 修补、integration gate 和最终验收。
+Subagent 偏好要写清所有权边界，而不只是“可以用 subagent”：主 session / 新 session 是 orchestration runner，聚焦主干工作切分、任务分配、跨 slice seaming、integration gate、checkpoint commit 和 handoff；调研、实现、验证等边界清晰的单个任务应优先派给 agent。只有在 subagent tooling 不可用、任务太小、任务强耦合到主 session 的即时 seam 判断，或 owner 明确要求主 session 直接做时，主 session 才直接执行具体 slice。
 
 Continuation prompt 只保留最小执行护栏，例如：
-- 主 session 默认不直接改生产/测试代码；清晰 implementation slice 先派 worker subagent。
-- 主 session 负责调度、seam、integration gate、checkpoint commit 和 handoff。
+- 你（主 session / 新 session）是 orchestration runner，必须聚焦做调度工作：使用 agent 去做包括调研、执行、验证等任务；你只做主干工作切分、分配，以及 slices 之间的 seaming 工作。
 - 不 push / PR / close issue，除非 owner 明确要求。
 
 其余细节写入 handoff 文件和本 skill，由 child 在 Required Skill Context / Required Files 中读取。
@@ -139,21 +167,20 @@ Continuation prompt 只保留最小执行护栏，例如：
 - 命名：沿用原始 slug 加递增编号（`daily-cash-ledger-2`、`-3`），编号接已有同类 thread 的最大值。多 thread 时设可识别标题，活跃续接 thread 可以 pin。
 - 成功后按 host 当前指令输出 directive，通常是 `::created-thread{threadId="..."}`；worktree setup 被排队时为 `::created-thread{pendingWorktreeId="..."}`。
 
+## Final Response Gate
+
+发送 final 前逐项检查：
+
+- 当前交付模式是什么：`create_thread`、`fork_thread` 还是 `manual_handoff`。
+- 如果是 `create_thread` / `fork_thread`：是否已经实际调用线程工具，并拿到 thread id、pending worktree id，或明确失败原因。
+- 如果是 `manual_handoff`：是否确认当前 host 没有可用线程工具，或线程工具被权限/环境阻塞。
+- 如果只生成了 continuation prompt，但没有创建线程，也没有 blocker，不能 final；先调用线程工具。
+- 如果中途发现新的线程工具，必须重新评估交付模式，不能沿用之前的 manual fallback。
+
 ## 常见错误
 
-- 用户没有明确要求继承历史，却 fork 了旧 thread（默认永远是干净新会话）。
-- 用户明确要求继承历史，却创建了干净 thread。
-- 把 same-directory fork 误认为新 worktree。
+- 当前 host 有 `create_thread`，却把 continuation prompt 当成最终交付物停下。默认新 session handoff 必须实际调用 `create_thread`，除非有明确 blocker。
+- 用户没有明确要求继承历史，却 fork 了旧 thread，或用户明确要求继承历史却创建了干净 thread。默认是 `create_thread` 干净新会话，只有用户明确要求继承历史才 `fork_thread`。
 - handoff 写完才 commit，导致 child 拿到过期 HEAD——commit 必须在写 handoff 之前。
-- 每个小 gate 都新增 timestamped handoff，导致目录里堆积多个过期入口。默认刷新 rolling handoff；只有需要审计/分叉/用户要求时才归档快照。
-- 只让 child“自己读历史”，没有给当前事实摘要。
-- 复制了任务状态，但漏掉用户的协作偏好；尤其不能把主 session / 新 session / subagent / spec review / quality review 边界只留在 handoff 文件里。
-- continuation prompt 过长，把 handoff、plan、issue 内容重写一遍，导致 child 把任务当成一次性报告生成，而不是继续 orchestration。
-- 把 continuation prompt 写成第二个文件。
-- prompt 镜像 handoff 文件内容（复制 Fresh State、Verified Gates 等事实段）——事实只住 handoff，prompt 只做规则与索引。
-- plan 完成本地实现时，把 child 导向“验证后等待 owner”，而不是 closure orchestration（准备但不执行外部动作、请求授权）。
-- 把 `create_thread` 当成可阻塞 IPC：要求 child 第一条回复后等待 parent ACK，导致自动推进中断。
-- 把 First Progress Update 当成最终答复：child 汇报 verified state / intent 后停止，而不是继续执行 Next Action。
-- 长流程自动交接创建 child 后完全不检查首条进度更新；如果 host 能看到 child 回复，应做一次轻量纠偏，但不能设计成必须等待 ACK 才继续。
-- 在 handoff 里贴 secrets、token、env 值或完整日志。
-- 声称没有实际发生的验证，或混淆 verified 与 assumed。
+
+完整错误清单见 `rules/common-errors.md`；主文件只保留最容易导致 handoff 失败的 top 3。
