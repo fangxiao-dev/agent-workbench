@@ -23,22 +23,22 @@ D:\CodeSpace\TaskManager
 Initialize or migrate the vault with dry-run first:
 
 ```powershell
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py init-vault-repo --vault D:\CodeSpace\TaskManager
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py init-vault-repo --vault D:\CodeSpace\TaskManager --apply
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py init-vault-repo --vault D:\CodeSpace\TaskManager
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py init-vault-repo --vault D:\CodeSpace\TaskManager --apply
 ```
 
 For an existing vault, create a baseline commit before migration or broad generated changes:
 
 ```powershell
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py baseline-commit --vault D:\CodeSpace\TaskManager
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py baseline-commit --vault D:\CodeSpace\TaskManager --apply
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py baseline-commit --vault D:\CodeSpace\TaskManager
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py baseline-commit --vault D:\CodeSpace\TaskManager --apply
 ```
 
 Add each tracked project before importing or upserting project tasks:
 
 ```powershell
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py init-project --vault D:\CodeSpace\TaskManager --project <project-id> --repo <repo-root> --name "<Project Name>"
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py init-project --vault D:\CodeSpace\TaskManager --project <project-id> --repo <repo-root> --name "<Project Name>" --apply
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py init-project --vault D:\CodeSpace\TaskManager --project <project-id> --repo <repo-root> --name "<Project Name>"
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py init-project --vault D:\CodeSpace\TaskManager --project <project-id> --repo <repo-root> --name "<Project Name>" --apply
 ```
 
 `init-project` writes tracked metadata to `00_Config/projects.yml` and machine-local repository roots to ignored `00_Config/projects.local.yml`. It also creates project task/source folders, a project Base, and a dashboard that embeds the Base with an Obsidian wikilink.
@@ -46,8 +46,8 @@ python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_ma
 To move a legacy single-project vault into one project namespace, use the reusable migration command in dry-run first:
 
 ```powershell
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py migrate-legacy-project --vault D:\CodeSpace\TaskManager --project <project-id> --repo <repo-root>
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py migrate-legacy-project --vault D:\CodeSpace\TaskManager --project <project-id> --repo <repo-root> --apply
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py migrate-legacy-project --vault D:\CodeSpace\TaskManager --project <project-id> --repo <repo-root>
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py migrate-legacy-project --vault D:\CodeSpace\TaskManager --project <project-id> --repo <repo-root> --apply
 ```
 
 The migration moves direct `10_Tasks/*.md` files into `10_Tasks/<project-id>/`, moves direct `20_Sources/*.md` files into `20_Sources/<project-id>/discussions/`, and refuses to apply if a target exists or any legacy `来源` cannot be classified.
@@ -59,12 +59,12 @@ Project tasks also carry scalar `项目名称`, maintained from `00_Config/proje
 Refresh generated task metadata or dashboard Bases in dry-run first:
 
 ```powershell
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py refresh-project-metadata --vault D:\CodeSpace\TaskManager
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py refresh-project-metadata --vault D:\CodeSpace\TaskManager --project <project-id>
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py refresh-bases --vault D:\CodeSpace\TaskManager
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py refresh-bases --vault D:\CodeSpace\TaskManager --project <project-id>
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py refresh-dashboards --vault D:\CodeSpace\TaskManager
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py refresh-dashboards --vault D:\CodeSpace\TaskManager --project <project-id>
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py refresh-project-metadata --vault D:\CodeSpace\TaskManager
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py refresh-project-metadata --vault D:\CodeSpace\TaskManager --project <project-id>
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py refresh-bases --vault D:\CodeSpace\TaskManager
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py refresh-bases --vault D:\CodeSpace\TaskManager --project <project-id>
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py refresh-dashboards --vault D:\CodeSpace\TaskManager
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py refresh-dashboards --vault D:\CodeSpace\TaskManager --project <project-id>
 ```
 
 Add `--apply` only after reviewing the planned changes. `refresh-project-metadata` updates generated project identity frontmatter without changing task bodies. `refresh-bases` regenerates project Base files and the global Base from templates and refreshes `.obsidian/types.json`. `refresh-dashboards` regenerates dashboard Markdown so project dashboards visibly embed both the `进行中` and `已完成` Base views.
@@ -89,14 +89,14 @@ When `--project <project-id>` is supplied, refresh commands require that project
 7. Run the script in dry-run mode first:
 
 ```powershell
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py upsert --vault D:\CodeSpace\TaskManager --project <project-id> --input <task-update.json>
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py upsert --vault D:\CodeSpace\TaskManager --project <project-id> --input <task-update.json>
 ```
 
 8. Review the dry-run output. If the user asked for actual writing, run again with `--apply`.
 9. For project checks, run recursive validation:
 
 ```powershell
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py validate --vault D:\CodeSpace\TaskManager --project <project-id>
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py validate --vault D:\CodeSpace\TaskManager --project <project-id>
 ```
 
 ## Markdown Source To Dashboard Workflow
@@ -131,7 +131,7 @@ Choose this when the source already exists as Markdown in the project or vault.
 For implementation plans, prefer `import-impl-plans` when importing a batch:
 
 ```powershell
-python D:\CodeSpace\agent-workbench\skills\obsidian-task-manager\scripts\task_manager.py import-impl-plans --vault D:\CodeSpace\TaskManager --project <project-id> --limit 5
+python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py import-impl-plans --vault D:\CodeSpace\TaskManager --project <project-id> --limit 5
 ```
 
 `import-impl-plans` scans only direct `*.md` files under the project's configured `sourceRoot`, skips `README.md`, does not recurse into folders such as `archive/`, and skips existing task files unless `--overwrite-existing` is explicitly provided.
@@ -194,6 +194,8 @@ The script accepts a normalized JSON object:
 {
   "operation": "create",
   "taskName": "Task Name",
+  "slug": "任务名称",
+  "slugAliases": ["task-name"],
   "projectId": "project-id",
   "status": "计划中",
   "priority": "当前",
@@ -211,6 +213,7 @@ The script accepts a normalized JSON object:
 ```
 
 Omit unknown fields. Use `null` for intentionally clearing `priority`.
+Use `slug` when the agent needs to locate or preserve a stable identifier separately from the dashboard display title. Prefer Chinese wording in `slug`, keeping only domain terms and product/system names in English. Put old source-derived English stems in `slugAliases` so existing agent inputs keep resolving. The script stores both fields in frontmatter and can use them to find an existing task, while `taskName` remains the visible dashboard title, Markdown filename, and task heading.
 
 Project tasks require `sourceType` and `sourceRelativePath` on create. Updates may omit them only when the existing task already has valid source metadata. `--project` and `projectId` must match when both are supplied.
 
@@ -235,3 +238,4 @@ Legacy non-project task notes can still be maintained without `--project`, but n
 ## Evals
 
 Use `evals/evals.json` and `evals/assertions.md` to sanity-check behavior after changing this skill or script.
+

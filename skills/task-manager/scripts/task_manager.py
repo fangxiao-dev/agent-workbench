@@ -37,6 +37,7 @@ FIELD_MAP = {
     "verificationPath": "验证链路",
     "workspace": "工作区",
     "source": "来源",
+    "slug": "slug",
     "projectId": "项目ID",
     "sourceType": "来源类型",
     "sourceRelativePath": "来源相对路径",
@@ -88,6 +89,8 @@ IGNORE_HINTS = [
 TYPES_ADDITIONS = {
     "项目ID": "text",
     "项目名称": "text",
+    "slug": "text",
+    "slugAliases": "multitext",
     "来源相对路径": "text",
     "项目": "multitext",
     "来源类型": "multitext",
@@ -111,6 +114,63 @@ def slug_to_filename(name: str) -> str:
     if not cleaned:
         raise TaskError("taskName cannot produce a valid filename")
     return f"{cleaned}.md"
+
+
+def task_slug_to_filename(slug: Any) -> str:
+    if not isinstance(slug, str):
+        raise TaskError("slug must be a string")
+    cleaned = slug.strip()
+    if cleaned.lower().endswith(".md"):
+        cleaned = cleaned[:-3].strip()
+    if not cleaned:
+        raise TaskError("slug is required when provided")
+    if cleaned in {".", ".."} or all(ch == "." for ch in cleaned):
+        raise TaskError("slug must not be dot-only or relative-directory syntax")
+    if "/" in cleaned.replace("\\", "/"):
+        raise TaskError("slug must not contain directories")
+    if re.search(r'[<>:"/\\|?*\x00-\x1F]', cleaned):
+        raise TaskError('slug must not contain invalid filename characters: <>:"/\\|?*')
+    return f"{cleaned}.md"
+
+
+def payload_slug(payload: dict[str, Any]) -> str | None:
+    if "slug" not in payload or payload["slug"] is None:
+        return None
+    return task_slug_to_filename(payload["slug"])[:-3]
+
+
+def normalize_slug_aliases(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        raw_values = [value]
+    elif isinstance(value, list):
+        raw_values = value
+    else:
+        raise TaskError("slugAliases must be a string or list of strings")
+    aliases: list[str] = []
+    for item in raw_values:
+        alias = task_slug_to_filename(item)[:-3]
+        if alias not in aliases:
+            aliases.append(alias)
+    return aliases
+
+
+def payload_slug_aliases(payload: dict[str, Any]) -> list[str]:
+    if "slugAliases" not in payload:
+        return []
+    return normalize_slug_aliases(payload["slugAliases"])
+
+
+def payload_slug_candidates(payload: dict[str, Any]) -> list[str]:
+    candidates: list[str] = []
+    primary = payload_slug(payload)
+    if primary:
+        candidates.append(primary)
+    for alias in payload_slug_aliases(payload):
+        if alias not in candidates:
+            candidates.append(alias)
+    return candidates
 
 
 def tasks_dir(vault: Path) -> Path:
@@ -262,6 +322,8 @@ def validate_payload(payload: dict[str, Any]) -> None:
         validate_relative_path(str(payload["sourceRelativePath"]), "sourceRelativePath")
     if payload.get("projectId"):
         validate_project_id(str(payload["projectId"]))
+    payload_slug(payload)
+    payload_slug_aliases(payload)
 
 
 def validate_project_id(project_id: str) -> None:
@@ -331,15 +393,23 @@ def ensure_project_upsert_source_metadata(target: Path, payload: dict[str, Any])
         raise TaskError("project task update requires sourceRelativePath, unless existing task has a valid 来源相对路径")
 
 
-def find_task(vault: Path, task_name: str, project_id: str | None = None) -> Path:
+def find_task(
+    vault: Path,
+    task_name: str,
+    project_id: str | None = None,
+    slug_candidates: list[str] | None = None,
+) -> Path:
+    slug_candidates = slug_candidates or []
+    filename = task_slug_to_filename(slug_candidates[0]) if slug_candidates else slug_to_filename(task_name)
+    expected_stems = {task_slug_to_filename(item)[:-3].lower() for item in slug_candidates}
+    expected_stems.add(filename[:-3].lower())
     if project_id:
         directory = project_tasks_dir(vault, project_id)
-        direct = directory / slug_to_filename(task_name)
         search_pattern = "*.md"
     else:
         directory = tasks_dir(vault)
-        direct = directory / slug_to_filename(task_name)
         search_pattern = "*.md"
+    direct = directory / filename
     if direct.exists():
         return direct
     matches: list[Path] = []
@@ -349,7 +419,16 @@ def find_task(vault: Path, task_name: str, project_id: str | None = None) -> Pat
                 fm, _ = split_frontmatter(path.read_text(encoding="utf-8"))
             except UnicodeDecodeError:
                 continue
-            if fm.get("任务名") == task_name or path.stem.lower() == task_name.lower():
+            aliases = fm.get("slugAliases", [])
+            if not isinstance(aliases, list):
+                aliases = []
+            if (
+                fm.get("任务名") == task_name
+                or (isinstance(fm.get("slug"), str) and fm["slug"].lower() in expected_stems)
+                or any(isinstance(alias, str) and alias.lower() in expected_stems for alias in aliases)
+                or path.stem.lower() == task_name.lower()
+                or path.stem.lower() in expected_stems
+            ):
                 matches.append(path)
     if len(matches) > 1:
         names = ", ".join(str(p) for p in matches)
@@ -357,15 +436,17 @@ def find_task(vault: Path, task_name: str, project_id: str | None = None) -> Pat
     if matches:
         return matches[0]
     if project_id is None:
-        project_matches = find_project_task_matches(vault, task_name)
+        project_matches = find_project_task_matches(vault, task_name, slug_candidates)
         if project_matches:
             names = ", ".join(str(p) for p in project_matches)
             raise TaskError(f"Matching project task files require --project: {names}")
     return direct
 
 
-def find_project_task_matches(vault: Path, task_name: str) -> list[Path]:
+def find_project_task_matches(vault: Path, task_name: str, slug_candidates: list[str] | None = None) -> list[Path]:
     matches: list[Path] = []
+    slug_candidates = slug_candidates or []
+    expected_stems = {task_slug_to_filename(item)[:-3].lower() for item in slug_candidates}
     directory = tasks_dir(vault)
     if not directory.exists():
         return matches
@@ -374,7 +455,16 @@ def find_project_task_matches(vault: Path, task_name: str) -> list[Path]:
             fm, _ = split_frontmatter(path.read_text(encoding="utf-8"))
         except UnicodeDecodeError:
             continue
-        if fm.get("任务名") == task_name or path.stem.lower() == task_name.lower():
+        aliases = fm.get("slugAliases", [])
+        if not isinstance(aliases, list):
+            aliases = []
+        if (
+            fm.get("任务名") == task_name
+            or (isinstance(fm.get("slug"), str) and fm["slug"].lower() in expected_stems)
+            or any(isinstance(alias, str) and alias.lower() in expected_stems for alias in aliases)
+            or path.stem.lower() == task_name.lower()
+            or path.stem.lower() in expected_stems
+        ):
             matches.append(path)
     return matches
 
@@ -389,6 +479,22 @@ def default_body(task_name: str) -> str:
     for title in REQUIRED_SECTIONS:
         blocks.append(section_block(title, ""))
     return "\n".join(blocks).rstrip() + "\n"
+
+
+def markdown_title(path: Path) -> str:
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            title = stripped[2:].strip()
+            if title:
+                return title
+    return path.stem
+
+
+def replace_document_title(body: str, task_name: str) -> str:
+    if re.match(r"^# .*$", body, re.MULTILINE):
+        return re.sub(r"^# .*$", f"# {task_name}", body, count=1, flags=re.MULTILINE)
+    return f"# {task_name}\n\n{body.lstrip()}"
 
 
 def replace_section(body: str, title: str, content: str) -> str:
@@ -429,11 +535,11 @@ def apply_payload(
     fm = copy.deepcopy(existing_fm)
     body = existing_body or default_body(payload["taskName"])
 
-    if "任务名" not in fm:
-        fm["任务名"] = payload["taskName"]
+    fm["任务名"] = payload["taskName"]
     if "创建日期" not in fm:
         fm["创建日期"] = today()
     fm["更新日期"] = today()
+    body = replace_document_title(body, payload["taskName"])
 
     defaults: dict[str, Any] = {}
     if payload["operation"] == "create":
@@ -451,8 +557,19 @@ def apply_payload(
         if project_name:
             fm["项目名称"] = project_name
 
+    skip_slug_write = False
+    if merged.get("operation") != "create" and "slug" in merged and "slugAliases" not in merged:
+        existing_slug = fm.get("slug")
+        existing_aliases = fm.get("slugAliases", [])
+        if isinstance(existing_slug, str) and isinstance(existing_aliases, list):
+            incoming_slug = payload_slug(merged)
+            normalized_aliases = normalize_slug_aliases(existing_aliases)
+            skip_slug_write = incoming_slug in normalized_aliases and incoming_slug != existing_slug
+
     for json_key, yaml_key in FIELD_MAP.items():
         if json_key == "projectId" or json_key not in merged:
+            continue
+        if json_key == "slug" and skip_slug_write:
             continue
         value = merged[json_key]
         if yaml_key in LIST_FIELDS:
@@ -469,6 +586,17 @@ def apply_payload(
                 fm.pop(yaml_key, None)
             else:
                 fm[yaml_key] = str(value)
+    if "slugAliases" in merged:
+        if merged["slugAliases"] is None:
+            fm.pop("slugAliases", None)
+        else:
+            aliases = normalize_slug_aliases(merged["slugAliases"])
+            primary_slug = payload_slug(merged)
+            aliases = [alias for alias in aliases if alias != primary_slug]
+            if aliases:
+                fm["slugAliases"] = aliases
+            else:
+                fm.pop("slugAliases", None)
 
     status_values = fm.get("状态", [])
     if isinstance(status_values, list) and "已完成" in status_values:
@@ -526,6 +654,17 @@ def safe_child(parent: Path, *parts: str) -> Path:
     return candidate
 
 
+def write_target_for_payload(target: Path, payload: dict[str, Any]) -> Path:
+    if payload_slug(payload) is None:
+        return target
+    desired = target.with_name(slug_to_filename(payload["taskName"]))
+    if desired == target:
+        return target
+    if desired.exists():
+        raise TaskError(f"Cannot rename task because target already exists: {desired}")
+    return desired
+
+
 def command_upsert(args: argparse.Namespace) -> int:
     vault = Path(args.vault).resolve()
     payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -534,19 +673,29 @@ def command_upsert(args: argparse.Namespace) -> int:
         payload["projectId"] = project_id
     validate_payload(payload)
 
-    target = find_task(vault, payload["taskName"], project_id)
+    target = find_task(vault, payload["taskName"], project_id, payload_slug_candidates(payload))
     expected_parent = project_tasks_dir(vault, project_id) if project_id else tasks_dir(vault)
     if not is_within(target, expected_parent):
         raise TaskError(f"Refusing to write outside expected task directory: {target}")
+    write_target = write_target_for_payload(target, payload)
+    if not is_within(write_target, expected_parent):
+        raise TaskError(f"Refusing to write outside expected task directory: {write_target}")
     if project_id:
         ensure_project_upsert_source_metadata(target, payload)
 
-    result = build_task_write(vault, target, payload, args.apply)
+    result = build_task_write(vault, target, payload, args.apply, write_target)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 
-def build_task_write(vault: Path, target: Path, payload: dict[str, Any], apply: bool) -> dict[str, Any]:
+def build_task_write(
+    vault: Path,
+    target: Path,
+    payload: dict[str, Any],
+    apply: bool,
+    write_target: Path | None = None,
+) -> dict[str, Any]:
+    write_target = write_target or target
     existing_text = target.read_text(encoding="utf-8") if target.exists() else ""
     fm, body = load_task(target)
     project_name = project_name_for_task(vault, payload.get("projectId"))
@@ -554,15 +703,19 @@ def build_task_write(vault: Path, target: Path, payload: dict[str, Any], apply: 
     next_text = render_task(new_fm, new_body)
     result = {
         "mode": "apply" if apply else "dry-run",
-        "target": str(target),
+        "target": str(write_target),
         "exists": target.exists(),
+        "sourceTarget": str(target) if target.exists() and write_target != target else None,
+        "renamed": target.exists() and write_target != target,
         "summary": diff_summary(existing_text, next_text),
         "frontmatter": new_fm,
         "markdown": next_text,
     }
     if apply:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(next_text, encoding="utf-8", newline="\n")
+        write_target.parent.mkdir(parents=True, exist_ok=True)
+        write_target.write_text(next_text, encoding="utf-8", newline="\n")
+        if target.exists() and write_target != target:
+            target.unlink()
     return result
 
 
@@ -612,6 +765,16 @@ def validate_task_content(
                 validate_relative_path(rel, "来源相对路径")
             except TaskError as exc:
                 errors.append(f"{path}: {exc}")
+    if "slug" in fm:
+        try:
+            task_slug_to_filename(fm["slug"])
+        except TaskError as exc:
+            errors.append(f"{path}: {exc}")
+    if "slugAliases" in fm:
+        try:
+            normalize_slug_aliases(fm["slugAliases"])
+        except TaskError as exc:
+            errors.append(f"{path}: {exc}")
 
     status = fm.get("状态", [])
     workspace = fm.get("工作区", [])
@@ -1638,9 +1801,12 @@ def command_import_impl_plans(args: argparse.Namespace) -> int:
     results: list[dict[str, Any]] = []
     for path in selected:
         rel = path.relative_to(repo_root).as_posix()
+        task_name = markdown_title(path)
         payload = {
             "operation": "create",
-            "taskName": path.stem,
+            "taskName": task_name,
+            "slug": task_name,
+            "slugAliases": [path.stem],
             "status": args.default_status,
             "verificationPath": "不涉及",
             "workspace": "主工作区",
@@ -1654,7 +1820,7 @@ def command_import_impl_plans(args: argparse.Namespace) -> int:
             "residualRisk": "",
         }
         validate_payload(payload)
-        target = find_task(vault, path.stem, project_id)
+        target = find_task(vault, payload["taskName"], project_id, payload_slug_candidates(payload))
         if target.exists() and not args.overwrite_existing:
             results.append(
                 {

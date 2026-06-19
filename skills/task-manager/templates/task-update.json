@@ -1,6 +1,8 @@
 {
   "operation": "create",
   "taskName": "Example Task",
+  "slug": "示例任务",
+  "slugAliases": ["example-task"],
   "projectId": "example-project",
   "status": "计划中",
   "priority": "当前",
