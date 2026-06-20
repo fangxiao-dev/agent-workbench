@@ -1,0 +1,34 @@
+// Minimal slice of a multi-tenant platform schema for review.
+
+model Organization {
+  id         String   @id @default(cuid())
+  name       String
+  status     String   @default("active") // active | suspended | closed
+  createdAt  DateTime @default(now())
+  members    Membership[]
+  files      FileObject[]
+}
+
+model Membership {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  role           String       // admin | member
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model FileObject {
+  id             String       @id @default(cuid())
+  organizationId String
+  objectKey      String       // e.g. organizations/<id>/uploads/<uuid>
+  status         String       // pending | uploaded
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  actor          String
+  action         String
+  createdAt      DateTime @default(now())
+}

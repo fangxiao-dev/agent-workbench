@@ -1,0 +1,111 @@
+{
+  "skill_name": "architecture-review",
+  "notes": "Fixtures carry deliberate, realistic defects. The skill's value is catching claimed-but-unverified capabilities and cross-cutting boundary bugs, and grading honestly instead of rubber-stamping. Baseline (no skill) tends to do a generic code review and often accepts the PR's own 'done' claims.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "production-ready-foundational-pr",
+      "prompt": "We're about to call our platform foundation production-ready and merge PR #42. Can you review it and tell me whether it's actually solid? The PR description and the key files are attached.",
+      "files": [
+        "evals/fixtures/eval1/PR.md",
+        "evals/fixtures/eval1/billing.service.ts",
+        "evals/fixtures/eval1/ocr.worker.ts"
+      ],
+      "expected_output": "A review that does NOT accept the '85% done / production-ready' claim at face value. It flags exportCsv() as a cross-tenant leak (raw SQL with no organization filter) at P0 severity, grades OCR as mock/design-only rather than working, notes the single-org happy-path test proves no isolation, and returns structured findings (conclusion + P0/P1).",
+      "assertions": [
+        "Identifies that exportCsv() runs a raw SQL query with no organization_id filter and therefore leaks billing data across tenants (a P0 / critical isolation defect).",
+        "Grades the OCR capability as mock / design-only / not-verified rather than accepting 'OCR extraction works' — citing the _mock return and the TODO for the real provider.",
+        "Does not rubber-stamp the PR's own 'production-ready' or '85% done' claim; treats the claim as needing evidence and distinguishes verified from claimed capabilities.",
+        "Points out that testing with a single demo organization cannot have verified tenant isolation, and recommends a cross-tenant / negative test.",
+        "Produces a structured findings output that includes an overall conclusion and at least one explicitly labeled P0 (or critical/blocking) finding."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "tenant-isolation-stats-leak",
+      "prompt": "Quick architecture check on our orders module before launch: are we tenant-isolated? Here's the repository file. list() and detail() look scoped to me but I want a second opinion.",
+      "files": [
+        "evals/fixtures/eval2/orders.repository.ts"
+      ],
+      "expected_output": "Confirms list() and detail() are org-scoped, but flags getStats() as missing tenant scope (raw aggregate over all orders with no organization filter) — the 'API safe but stats/exports global' pattern. Recommends scoping the stats query and adding a tenant-isolation test.",
+      "assertions": [
+        "Identifies getStats() as missing organization/tenant scope — it aggregates over all orders with no organization_id filter, leaking revenue and order counts across tenants.",
+        "Correctly recognizes that list() and detail() ARE organization-scoped and does not false-flag them.",
+        "Recommends a concrete fix (scope the stats query by organization) and/or a tenant-isolation test covering the stats path.",
+        "Applies a severity or status grade (e.g. P0/P1 or verified/partial) rather than only describing the code."
+      ]
+    },
+    {
+      "id": 3,
+      "name": "trust-header-and-open-download",
+      "prompt": "Please review this slice of our multi-tenant platform's auth and file handling and tell me if the foundation is sound. Schema and the request guards are attached.",
+      "files": [
+        "evals/fixtures/eval3/schema.prisma",
+        "evals/fixtures/eval3/tenant.guard.ts"
+      ],
+      "expected_output": "Flags two boundary defects despite the clean-looking schema: resolveTenant() trusts a client-supplied header as authorization (tenant/auth bypass), and downloadFile() streams any requested object key with no access check (file-access bypass / enumerable keys). Grades these P0 and separates the verified-looking schema from the unverified enforcement.",
+      "assertions": [
+        "Flags that resolveTenant() trusts the client-supplied x-organization-id header as authorization, allowing a caller to act on any organization (tenant/auth bypass).",
+        "Flags that downloadFile() streams whatever object key is requested with no ownership/authorization check (file-access bypass; object keys must not be directly fetchable).",
+        "Does not declare the foundation sound just because the schema has organization_id columns; separates a clean-looking data model from unverified runtime enforcement.",
+        "Grades at least one of the two bypasses as P0 / critical and produces a structured findings output."
+      ]
+    },
+    {
+      "id": 4,
+      "name": "subtle-verified-claim",
+      "prompt": "We want to mark temporary document access as verified in the foundation checklist. The PR says expiration and revocation are enforced and tests verify it. Please review the attached slice and tell me whether that claim is justified.",
+      "files": [
+        "evals/fixtures/eval4/PR.md",
+        "evals/fixtures/eval4/access-policy.ts",
+        "evals/fixtures/eval4/access-policy.test.ts"
+      ],
+      "expected_output": "A calibrated review that recognizes the implementation looks plausible but the evidence only covers the happy path. It downgrades the 'verified' claim to partial/unverified, recommends negative tests for expired, revoked, wrong-user, and wrong-document grants, and does not invent a P0 unless the review baseline makes temporary access a launch-blocking gate.",
+      "assertions": [
+        "Does not accept the PR's 'verified' claim at face value; explicitly says the available evidence is happy-path only or insufficient for verified status.",
+        "Assigns a calibrated status such as partial / not fully verified rather than design-only or verified.",
+        "Recommends specific negative probes or tests for expired grants, revoked grants, wrong grantee, and wrong document/resource.",
+        "Does not manufacture a P0 / critical finding solely from missing negative tests when no baseline says temporary access is launch-blocking.",
+        "Cites the positive implementation evidence, such as owner access and active-grant checks, instead of treating the policy as completely absent."
+      ]
+    },
+    {
+      "id": 5,
+      "name": "scope-creep-vs-missing-gate",
+      "prompt": "Please review this PR against the attached foundation baseline. The PR includes a useful dashboard AI summary and a membership role-change flow. Tell me what should block launch and what should not.",
+      "files": [
+        "evals/fixtures/eval5/baseline.md",
+        "evals/fixtures/eval5/PR.md",
+        "evals/fixtures/eval5/membership.service.ts",
+        "evals/fixtures/eval5/dashboard-summary.ts"
+      ],
+      "expected_output": "A review that uses the supplied baseline as the authority: it flags missing durable audit for role changes as a P0 launch blocker, recognizes the permission check as positive evidence, and treats dashboard AI summary governance/quality as out of scope or non-blocking for this review.",
+      "assertions": [
+        "Uses the supplied baseline to decide severity instead of applying a generic checklist blindly.",
+        "Flags the missing durable business audit row for role changes as a P0 / blocking foundation gap.",
+        "Recognizes that the membership service does check the actor's members.manage permission and does not falsely claim authorization is entirely absent.",
+        "Treats AI dashboard summary quality / model governance as explicitly out of scope or non-blocking for this review.",
+        "Separates scope creep from missing required foundation, rather than merging both into the same severity."
+      ]
+    },
+    {
+      "id": 6,
+      "name": "clean-non-tenant-foundation",
+      "prompt": "Review this internal job-runner foundation. It is single-tenant and operations-only; tenant isolation and RBAC do not apply. Please tell me whether there are launch-blocking architecture issues.",
+      "files": [
+        "evals/fixtures/eval6/baseline.md",
+        "evals/fixtures/eval6/PR.md",
+        "evals/fixtures/eval6/job-runner.ts",
+        "evals/fixtures/eval6/job-runner.test.ts"
+      ],
+      "expected_output": "A precision-oriented review that adapts to the non-tenant baseline, marks tenant isolation/RBAC as not applicable, acknowledges positive evidence for idempotency, leasing, audit, and post-commit dispatch, and produces no invented P0 findings.",
+      "assertions": [
+        "Does not flag missing organization_id / tenant isolation / RBAC as a defect, and marks those concerns not applicable or outside this baseline.",
+        "Acknowledges positive evidence for idempotent submission via idempotencyKey and the duplicate-submit test.",
+        "Acknowledges positive evidence for atomic worker leasing or double-claim prevention.",
+        "Acknowledges durable audit evidence for job submit and lease state changes.",
+        "Produces no P0 / critical / launch-blocking findings for the clean fixture, while allowing follow-up probes or residual risks."
+      ]
+    }
+  ]
+}
