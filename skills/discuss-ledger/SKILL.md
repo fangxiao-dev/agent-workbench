@@ -25,17 +25,23 @@ What you decide, the script can't:
 - which convergence marker applies (`一致` vs `用户裁决`)
 - whether to raise a new point at all
 
-Run it with the repo root so paths resolve:
+Before converging or contesting, verify factual premises that affect the conclusion. If the other party's premise is wrong, record that explicitly: either contest the point, or converge with a corrected rationale when the final action still holds. This keeps useful decisions while preventing false reasoning from becoming part of the source of truth.
+
+Run it from the repo root (paths are resolved relative to it):
 
 ```bash
-python <skill>/scripts/discuss_ledger.py --root <repo-root> <subcommand> ...
+python <skill>/scripts/discuss_ledger.py <subcommand> ...
 ```
+
+`--root` defaults to the current working directory, so you only need to pass `--root <repo-root>` when you are *not* already at the repo root. All subcommands except `init` take `--slug`.
 
 Ledgers live at `docs/exchange/discuss/discuss-<slug>.md` — the repo's untracked scratch area. They are **ephemeral debate scaffolding**, not deliverables; the converged plan is the deliverable. `init` creates the dir and adds `docs/exchange/discuss/` to `.gitignore` (scoped) automatically.
 
 ## Step 1 — Locate or initialize
 
 First decide the slug. If the discussion is anchored to a doc (a plan/spec/PRD path), the slug is that file's basename without extension (e.g. `docs/plans/2026-06-18-foo.md` → slug `2026-06-18-foo`). If there's no anchor doc, ask the user for a short slug — don't guess silently.
+
+Before opening or answering a ledger, read the anchored doc or explicit review target enough to form your own judgment. The ledger is a debate about that source, not a substitute for reading it. When you cite facts, verify them against the source doc, repository files, or script output; line numbers and command output are better than memory.
 
 Check whether the ledger exists (glob `docs/exchange/discuss/discuss-<slug>.md`):
 
@@ -55,16 +61,26 @@ A turn is always: **read → promote settled points → respond with disagreemen
 
 1. **`status`** — read current round, who's next, and every open point with its 已历轮次. Don't trust your own parse of the file; ask the script.
 
+   If `status` is already `已达成一致` or `僵局`, do not append another round. Report the converged outcomes or the deadlocked points to the user. Only continue if the user gives genuinely new evidence or explicitly asks to start a new discussion.
+
+   After `status`, read the ledger file itself before judging. `status` is the state summary; the full discussion log contains evidence, corrected premises, and nuances that must inform converge/contest decisions.
+
 2. **Promote what's now settled (`converge`).** For each point you now genuinely agree on (or the user ruled), promote it *before* writing new opinions:
    ```bash
    python ... converge --slug S --point D1 --marker "一致" --line "保留兼容入口,重指新 dashboard"
    ```
    Marker is `一致` (both agree) or `用户裁决` (user ruled; write `用户裁决·覆盖CC` if it overrides a party). Convergence ≠ agreement — a user ruling settles a point even if you still disagree; record it and stop arguing it.
 
+   When a point's original premise is wrong but its practical conclusion is still right, converge the corrected conclusion rather than preserving the bad premise. Write the correction in the convergence line so later agents do not inherit false reasoning.
+
+   A convergence line should include the final decision, corrected rationale if any, and the concrete change requested. Keep it one line, but make it actionable enough that the user can apply it to the target plan/spec.
+
 3. **Normalize the other party's free-form contribution.** The other agent may have edited the file directly without the script, so its new points aren't in the table. Register each as a tracked point so it can be followed:
    ```bash
    python ... add-point --slug S --author <them> --summary "..." --body "their argument"
    ```
+
+   First map free-form notes to existing points. Use `contest` for a response to an existing point, `converge` for a settled point, and `add-point` only for a materially new disagreement.
 
 4. **Respond to live disputes (`contest`)** — counter an existing point in the current round:
    ```bash
@@ -72,7 +88,11 @@ A turn is always: **read → promote settled points → respond with disagreemen
    ```
    Set `--movement false` when you're restating with no new ground. The script increments 已历轮次 and, at ≥2 rounds with no movement, **auto-marks the point 僵局** — so be honest about movement; that flag is what lets a dead debate actually die instead of looping.
 
-5. **Raise new disagreements (`add-point`)** — auto-allocates the next `Dn`, adds a table row, and writes the argument under the current round. Always include reasoning and evidence (file paths, line numbers, verified facts), not bare positions — that's what lets the next party engage.
+   Set `--movement true` only for new evidence, corrected facts, a narrowed scope, an explicit concession, or a concrete compromise. Rephrasing the same preference is `--movement false`.
+
+5. **Coverage pass + new disagreements (`add-point`).** Before ending your turn, scan the target plan/spec once for important risks not represented by existing open/converged points. Add a new point only when it is materially distinct and would change implementation, verification, or user decision-making.
+
+   `add-point` auto-allocates the next `Dn`, adds a table row, and writes the argument under the current round. Always include reasoning and evidence (file paths, line numbers, verified facts), not bare positions — that's what lets the next party engage.
 
 6. **`end-turn`** — closes your turn. It recomputes overall status and either bumps the round / sets who's next, or declares the exit:
    ```bash
@@ -80,7 +100,19 @@ A turn is always: **read → promote settled points → respond with disagreemen
    python ... end-turn --slug S                   # when you think it may be resolved
    ```
 
+   Do not run `end-turn` until every existing point has one of: converged, contested with evidence, marked no-movement, or intentionally left open for the next party. Also account for any high-impact issue you found during the coverage pass.
+
 Use `--dry-run` on any mutating command to preview the resulting file without writing.
+
+## Review discipline
+
+The ledger is useful only when each party contributes new judgment instead of duplicating a normal review.
+
+- **Separate fact checks from opinions.** A strong turn can challenge wrong evidence while still keeping a usable conclusion. If the recommendation is right for a different reason, say that and converge the corrected rationale instead of mechanically agreeing or mechanically rejecting.
+- **Record only live disagreement in the log.** If you agree with a point, use `converge`; do not add another paragraph saying the same thing. If you partly agree, converge the agreed slice and contest only the remaining live issue.
+- **Prefer narrow, actionable summaries.** A point summary should name the defect ("final integration gate has no executable hook"), not the remedy alone. The body can carry evidence and proposed fixes.
+- **Do not overfit to one partner.** Participant names may be `CC`, `Codex`, `Claude`, `GPT`, or a human reviewer. Use the names in the existing ledger; when initializing, choose the names the user used.
+- **Treat the converged plan as the deliverable.** The discuss file is scratch debate scaffolding. When all points converge, summarize what the target plan should change; do not edit the plan unless the user asks to apply the conclusions.
 
 ## Step 3 — Exit
 
