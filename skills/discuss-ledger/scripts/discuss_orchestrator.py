@@ -415,10 +415,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--topic", required=True, help="discussion topic or source document")
     parser.add_argument("--slug", help="ledger slug; defaults to topic-derived slug")
     parser.add_argument("--agents", default="codex,claude", help="comma list limited to codex,claude")
-    parser.add_argument("--max-rounds", type=int, default=6)
+    parser.add_argument("--max-rounds", type=int, default=5)
     parser.add_argument("--adapter-mode", choices=["real", "fake"], default="real")
     parser.add_argument("--fake", action="store_true", help="use deterministic fake adapters")
-    parser.add_argument("--timeout-s", type=int, default=900, help="per-agent timeout in seconds")
+    parser.add_argument("--timeout-s", type=int, default=300, help="per-agent timeout in seconds")
     return parser
 
 

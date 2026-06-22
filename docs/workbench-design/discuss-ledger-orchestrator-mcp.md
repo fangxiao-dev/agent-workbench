@@ -50,9 +50,14 @@ The MVP orchestrator supports only Codex and Claude Code:
 ```bash
 python /path/to/agent-workbench/skills/discuss-ledger/scripts/discuss_orchestrator.py \
   --root /path/to/project \
-  --topic "Plan review" \
-  --agents codex,claude
+  --topic "Plan review"
 ```
+
+Defaults:
+
+- `--agents codex,claude`
+- `--max-rounds 5`
+- `--timeout-s 300` per agent turn
 
 Strategy:
 
@@ -61,6 +66,11 @@ Strategy:
 - agents return structured JSON and never choose the next speaker
 - prompts ask agents to prefer Chinese for summaries, arguments, and convergence lines unless the task explicitly requires another language
 - stop on `已达成一致`, `僵局`, or `--max-rounds`
+
+Deadlock definition:
+
+- a point becomes `僵局` when it is contested with `movement=false` and its elapsed-round count reaches 2 or more
+- the whole ledger becomes `僵局` only after no point remains open and at least one point is `僵局`
 
 Real adapters:
 

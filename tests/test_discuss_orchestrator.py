@@ -59,6 +59,16 @@ def test_agent_result_schema_accepts_orchestrator_payload_shape() -> None:
     assert {"convergences", "contests", "new_points"}.issubset(schema["properties"])
 
 
+def test_orchestrator_parser_defaults_match_interactive_use() -> None:
+    orchestrator = load_orchestrator()
+
+    args = orchestrator.build_parser().parse_args(["--topic", "docs/plan.md"])
+
+    assert args.agents == "codex,claude"
+    assert args.max_rounds == 5
+    assert args.timeout_s == 300
+
+
 def test_parse_codex_jsonl_extracts_nested_final_result() -> None:
     orchestrator = load_orchestrator()
     final = {
