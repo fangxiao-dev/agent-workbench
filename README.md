@@ -42,6 +42,22 @@ powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\install.ps1 
 
 Windows 使用 junction，通常不需要开发者模式；Bash/Unix 侧使用符号链接。
 
+### Discuss Ledger MCP 注册
+
+`discuss-ledger` 的 MCP server 不由主安装器自动注册。需要在目标项目里启用 Codex/Claude MCP 时，单独运行：
+
+```bash
+bash /path/to/agent-workbench/scripts/install-discuss-ledger-mcp.sh /path/to/project codex claude
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\scripts\install-discuss-ledger-mcp.ps1 D:\path\to\project codex claude
+```
+
+Codex 写入项目内 `.codex/config.toml` 的 `mcp_servers.discussLedger`；Claude 优先调用 `claude mcp add --scope project`。如果本机没有 `claude` CLI，脚本只打印可手动放入 `.mcp.json` 的片段，不会失败。注册后的 server 通过 workbench 根目录的 `uv run python` 启动，以使用仓库内声明的 `mcp[cli]` 依赖。
+
+该 MCP 面向参与讨论的 agent 暴露 ledger 读写工具，但不暴露 `set_next`；下一位发言者仍由用户或编排器显式指定。
+
 默认行为：
 
 - 自动发现已知宿主目录并安装到这些宿主

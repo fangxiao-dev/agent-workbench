@@ -1,0 +1,9 @@
+[project]
+name = "agent-workbench"
+version = "0.1.0"
+description = "Multi-host agent workbench skills and local tooling"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "pyyaml>=6.0",
+  "mcp[cli]>=1.27,<2",
+]

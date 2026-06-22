@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workbench.local/discuss-ledger/agent-result.schema.json",
+  "title": "Discuss Ledger Agent Result",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "convergences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["point", "marker", "line"],
+        "properties": {
+          "point": { "type": "string", "pattern": "^D[0-9]+$" },
+          "marker": { "type": "string", "default": "一致" },
+          "line": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "contests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["point", "body", "movement"],
+        "properties": {
+          "point": { "type": "string", "pattern": "^D[0-9]+$" },
+          "body": { "type": "string", "minLength": 1 },
+          "movement": { "type": "boolean", "default": true }
+        }
+      }
+    },
+    "new_points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["summary", "body"],
+        "properties": {
+          "summary": { "type": "string", "minLength": 1 },
+          "body": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "required": ["convergences", "contests", "new_points"]
+}

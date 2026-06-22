@@ -63,6 +63,28 @@ powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\install.ps1 
 
 该文件是 Claude 的本机权限状态，不应提交到项目仓库。
 
+## 独立 MCP 注册脚本
+
+主安装器只安装 skills、agents、commands，不自动注册项目级 MCP server。需要启用 `discuss-ledger` MCP 时，使用独立脚本：
+
+```bash
+bash /path/to/agent-workbench/scripts/install-discuss-ledger-mcp.sh /path/to/project codex claude
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\scripts\install-discuss-ledger-mcp.ps1 D:\path\to\project codex claude
+```
+
+约束：
+
+- host 参数仅支持 `codex` / `claude`
+- Codex 只写目标项目内 `.codex/config.toml` 的 `[mcp_servers.discussLedger]`
+- 注册命令使用 `uv run python <mcp_server.py> --root <target-project>`，`cwd` 为 workbench 根目录
+- 如果 Codex 已存在不同的 `discussLedger` 配置，跳过并报告冲突，不覆盖
+- Claude 优先执行 `claude mcp add --scope project discuss-ledger -- uv run python <mcp_server.py> --root <target-project>`
+- 如果 `claude` CLI 不存在，打印 `.mcp.json` 片段并成功退出
+- MCP server 不向 agent 暴露 `set_next`；下一位发言者由用户或编排器通过 CLI/core 指定
+
 ## 维护要求
 
 新增宿主时必须同步更新：
