@@ -13,6 +13,10 @@ The document has two living parts:
 1. **收敛区 (Convergence record)** — at the very top. Settled decisions only, one line each. Promoted into here *before* you write new opinions, so it's always the current source of truth for "what's decided."
 2. **讨论记录 (Discussion log)** — round-by-round. **Only disagreements** in full; agreements are one line ("收敛入区:…"). Signal over noise.
 
+## Language
+
+Prefer Chinese for discussion entries, point summaries, convergence lines, and user-facing summaries. Use another language only when the user explicitly asks for it, the target document requires it, or preserving a technical term / quoted text avoids ambiguity.
+
 ## The script does the bookkeeping — you do the judgment
 
 All mechanical structure (frontmatter state machine, point IDs, section moves, round bumps, deadlock counting, gitignore) is owned by `scripts/discuss_ledger.py`. **Do not hand-edit the ledger's YAML, table, or section structure** — call the script and pass your decisions as arguments. This keeps every agent's writes consistent and removes the bookkeeping errors agents make (forgetting to bump the round, renumbering IDs, leaving the table stale).

@@ -59,6 +59,7 @@ Strategy:
 - round-robin across `codex` and `claude`
 - orchestrator calls `set_next` before every agent turn
 - agents return structured JSON and never choose the next speaker
+- prompts ask agents to prefer Chinese for summaries, arguments, and convergence lines unless the task explicitly requires another language
 - stop on `已达成一致`, `僵局`, or `--max-rounds`
 
 Real adapters:

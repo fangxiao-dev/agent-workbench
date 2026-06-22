@@ -182,6 +182,10 @@ Target document:
 Return only JSON matching this schema:
 {schema}
 
+Language:
+- Prefer Chinese for summaries, arguments, and convergence lines.
+- Use another language only when the user or target document explicitly requires it, or when preserving a technical term avoids ambiguity.
+
 Interpret the fields as:
 - convergences: points you now agree are settled
 - contests: existing points you still dispute
@@ -286,7 +290,7 @@ def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
         "--tools",
         "",
         "--system-prompt",
-        "You are a non-interactive discuss-ledger participant. Return only the requested structured result.",
+        "You are a non-interactive discuss-ledger participant. Prefer Chinese unless the task explicitly requires another language. Return only the requested structured result.",
         "--output-format",
         "json",
     ]
@@ -302,7 +306,7 @@ def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
     except json.JSONDecodeError:
         repair_prompt = (
             "Repair this output into JSON matching the discuss-ledger schema. "
-            "Return only JSON.\n\n"
+            "Return only JSON. Preserve or convert prose to Chinese unless another language is explicitly required.\n\n"
             f"Schema:\n{SCHEMA_PATH.read_text(encoding='utf-8')}\n\n"
             f"Invalid output:\n{completed.stdout}"
         )
