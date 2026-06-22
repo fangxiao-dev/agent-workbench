@@ -61,7 +61,11 @@ A turn is always: **read → promote settled points → respond with disagreemen
 
 1. **`status`** — read current round, who's next, and every open point with its 已历轮次. Don't trust your own parse of the file; ask the script.
 
-   If `status` is already `已达成一致` or `僵局`, do not append another round. Report the converged outcomes or the deadlocked points to the user. Only continue if the user gives genuinely new evidence or explicitly asks to start a new discussion.
+   If `status` is already `已达成一致` or `僵局`, treat that as "no open disputes at the last exit," not as a permanent freeze. Do not append routine restatements or reopen points just because you want another pass. However, if the user brings new evidence, a later review finds a materially new risk, implementation reveals a contradiction, or the user explicitly asks to continue, reopen the ledger deliberately:
+   - for a new issue, add a new tracked point with `add-point`;
+   - for new evidence that undermines an existing convergence line, add a new point that references the prior `Dn` and explains what changed;
+   - preserve the old convergence record instead of hand-editing it away.
+   Reopening is encouraged when it prevents a stale consensus from becoming the plan of record.
 
    After `status`, read the ledger file itself before judging. `status` is the state summary; the full discussion log contains evidence, corrected premises, and nuances that must inform converge/contest decisions.
 
@@ -121,12 +125,14 @@ The ledger is useful only when each party contributes new judgment instead of du
 - all converged → `已达成一致`
 - any deadlocked → `僵局` (and `next: 用户`)
 
-When the script prints an `EXIT:` line, **stop appending rounds and tell the user**: summarize what converged, and list any deadlocked points needing their ruling. If they rule, that becomes a `converge --marker "用户裁决…"` entry that can break the deadlock.
+When the script prints an `EXIT:` line, stop the current debate turn and tell the user: summarize what converged, and list any deadlocked points needing their ruling. If they rule, that becomes a `converge --marker "用户裁决…"` entry that can break the deadlock.
+
+`EXIT` closes the current state; it does not prohibit future reopening when genuinely new evidence, newly discovered risk, implementation feedback, or an explicit user request appears. A later turn may reopen by adding a new point as described in Step 2.
 
 ## Anti-patterns
 
 - **Hand-editing structure.** Don't touch the YAML/table/section layout directly — use the script, or its invariants drift. Free-form *prose* by the other party is fine and preserved; your job is to register their points via the script on your turn.
-- **Re-opening 收敛区 items.** Settled stays settled unless genuinely new evidence appears (then say so explicitly).
+- **Unjustified re-opening.** Reopen when there is genuinely new evidence, a newly discovered risk, implementation feedback, or an explicit user request. Preserve prior convergence lines and add a new tracked point explaining what changed; do not erase or quietly rewrite settled history.
 - **Performative agreement.** Don't concede just to end the debate. If a counter is wrong or unverified, contest it with reasoning — this skill surfaces real disagreement, it doesn't manufacture consensus. (See `superpowers:receiving-code-review` for the spirit.)
 - **Restating without movement.** If you have nothing new, set `--movement false` and let the point deadlock rather than looping.
 - **Dumping agreements into the log.** Agreements are a one-line `converge`; their substance lives in 收敛区, not re-argued in the discussion log.
