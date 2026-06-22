@@ -1,6 +1,6 @@
 ---
 name: discuss-ledger
-description: Use this whenever multiple agents (e.g. Claude and Codex/GPT, or two review passes) debate a plan, design, spec, or PRD and their opinions should be accumulated into a single shared discussion document. Triggers on natural phrases like "审一下这个计划并记录意见", "把你的意见写进 discuss 文档", "追加到讨论文档", "他也有意见,接着往里写", "继续收敛", "把刚才这个评审过程做成讨论记录", or any time you are asked to express a review opinion that another party will later respond to. Each agent maintains a convergence section first, then appends only its disagreements, until consensus or deadlock. Use this even when the user just says "discuss" plus a target file — do not hand-roll an ad-hoc review note.
+description: Use this whenever multiple agents (e.g. Claude and Codex/GPT, or two review passes) debate a plan, design, spec, PRD, or skill and their opinions should be accumulated into a single shared discussion document. Triggers on natural phrases like "用 discuss orchestrator 审 ...", "自动讨论 ...", "审一下这个计划并记录意见", "把你的意见写进 discuss 文档", "追加到讨论文档", "他也有意见,接着往里写", "继续收敛", "把刚才这个评审过程做成讨论记录", or any time you are asked to express a review opinion that another party will later respond to. Each agent maintains a convergence section first, then appends only its disagreements, until consensus or deadlock. Use this even when the user just says "discuss" plus a target file — do not hand-roll an ad-hoc review note.
 user-invocable: true
 ---
 
@@ -40,6 +40,18 @@ python <skill>/scripts/discuss_ledger.py <subcommand> ...
 `--root` defaults to the current working directory, so you only need to pass `--root <repo-root>` when you are *not* already at the repo root. All subcommands except `init` take `--slug`. Mutating commands that take `--author` automatically add that author to `participants` if missing.
 
 Ledgers live at `docs/exchange/discuss/discuss-<slug>.md` — the repo's untracked scratch area. They are **ephemeral debate scaffolding**, not deliverables; the converged plan is the deliverable. `init` creates the dir and adds `docs/exchange/discuss/` to `.gitignore` (scoped) automatically.
+
+## Orchestrated auto-discussion
+
+If the user asks for `discuss orchestrator`, `自动讨论`, "Codex 作为 orchestrator", or asks to "用 discuss 审" a target, do not perform a normal single-agent review. Run the local orchestrator unless the user explicitly asks for manual ledger editing.
+
+Use the target project root and topic/document from the request. If both are clear, start without asking for confirmation:
+
+```bash
+python <skill>/scripts/discuss_orchestrator.py --root <target-project-root> --topic <target-doc-or-topic>
+```
+
+Defaults are `--agents codex,claude`, `--max-rounds 5`, and `--timeout-s 300`. After it stops, report the ledger path, convergence summary, open/deadlocked points, and whether user裁决 is needed.
 
 ## Step 1 — Locate or initialize
 

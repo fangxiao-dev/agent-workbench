@@ -12,7 +12,7 @@
 
 - `skills/` 保存所有正式 skill，包括自建 skill、审查过的第三方 skill、以及本地工作流知识库
 - `agents/` 保存可安装到宿主的 subagent 定义，目前正式 subagent 是 `audit-agent-setup`
-- `commands/` 保存 slash command 文件，目前 `/audit` 是 agent setup 审查入口
+- `commands/` 保存 slash command 文件，目前 `/audit` 是 agent setup 审查入口，`/discuss` 是 discuss-ledger 自动讨论入口
 - `install.sh` / `install.ps1` 把这些能力安装到 `~/.claude`、`~/.codex`、`~/.gemini`
 - `registry/` 只记录第三方资产来源和重装方式，不记录宿主本机状态
 - `docs/workbench-design/` 保存当前实现规范，README 只做入口说明
@@ -117,6 +117,16 @@ powershell -ExecutionPolicy Bypass -File scripts/list-visible-skills.ps1
 ```
 
 触发 `audit-agent-setup` subagent，对当前项目的 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、agents、skills、commands 做深度质量审查，输出带改进建议的报告。
+
+### 自动讨论目标文档
+
+```
+/discuss 审 docs/plan.md
+```
+
+触发 `discuss-ledger` 的 local orchestrator，由当前 Codex 会话启动脚本，再自动调用 `codex,claude` 两个参与方轮流讨论。默认 `max-rounds=5`、`timeout-s=300`，直到一致、僵局或达到轮次上限停止。输出 ledger 位于目标项目的 `docs/exchange/discuss/`。
+
+如果不用 slash command，也可以直接说“用 discuss orchestrator 审 <目标文档>”。`/discuss` 更稳定，因为 command 会显式告诉 Codex 跑 orchestrator，而不是做普通单 agent 审查。
 
 ### 初始化项目上下文
 

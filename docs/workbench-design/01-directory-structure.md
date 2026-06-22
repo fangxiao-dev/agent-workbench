@@ -20,7 +20,7 @@ agent-workbench/
 
 - `skills/` 是 skill 的唯一仓库内正式来源。自建 skill 和第三方 skill 都直接落在这里，再由安装器暴露给 `claude`、`codex`、`gemini`。
 - `agents/` 存放 subagent 定义。安装器把每个 agent 目录链接到已选宿主的 `agents/`。
-- `commands/` 存放 slash command 文件。安装器把 command 文件复制到已选宿主的 `commands/`。
+- `commands/` 存放 slash command 文件。安装器把 command 文件复制到已选宿主的 `commands/`。当前包括 `/audit` 和 `/discuss`。
 - `templates/` 存放可复用模板。当前 `CLAUDE.md.tpl` 由 `init-project-context` 按需使用，安装器不自动生成 `CLAUDE.md`。
 - `registry/` 只登记第三方资产，方便人工审查、换机重装和来源追踪。
 
