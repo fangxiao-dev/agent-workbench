@@ -19,10 +19,18 @@ metadata:
 
 ## Instructions
 
+### Base branch rule
+
+Before branch, merge, rebase, or PR operations, resolve the repo's intended integration base from its instructions (`AGENTS.md`, `CLAUDE.md`, project docs) and current branch state. Use `<base-branch>` in commands below for that resolved branch. Do not assume a branch named `main` or `master`.
+
 ### Step 1: Branch management
 
 **Create feature branch**:
 ```bash
+# Start from the resolved integration base
+git checkout <base-branch>
+git pull origin <base-branch>
+
 # Create and switch to new branch
 git checkout -b feature/feature-name
 
@@ -108,16 +116,19 @@ git push origin feature/feature-name --force-with-lease
 
 # Set upstream and push
 git push -u origin feature/feature-name
+
+# Create a PR against the resolved integration base
+gh pr create --base <base-branch> --head feature/feature-name
 ```
 
 ### Step 5: Pulling and updating
 
 ```bash
 # Pull latest changes
-git pull origin main
+git pull origin <base-branch>
 
 # Pull with rebase (cleaner history)
-git pull --rebase origin main
+git pull --rebase origin <base-branch>
 
 # Fetch without merging
 git fetch origin
@@ -127,8 +138,8 @@ git fetch origin
 
 **Merge feature branch**:
 ```bash
-# Switch to main branch
-git checkout main
+# Switch to the resolved integration base
+git checkout <base-branch>
 
 # Merge feature
 git merge feature/feature-name
@@ -142,8 +153,8 @@ git merge --no-ff feature/feature-name
 # On feature branch
 git checkout feature/feature-name
 
-# Rebase onto main
-git rebase main
+# Rebase onto the resolved integration base
+git rebase <base-branch>
 
 # Continue after resolving conflicts
 git rebase --continue
@@ -274,8 +285,8 @@ git bisect reset
 
 ```bash
 # 1. Create feature branch
-git checkout main
-git pull origin main
+git checkout <base-branch>
+git pull origin <base-branch>
 git checkout -b feature/user-profile
 
 # 2. Make changes
@@ -289,28 +300,29 @@ git commit -m "feat(profile): add user profile page
 - Add profile API endpoints
 - Add profile tests"
 
-# 4. Keep up to date with main
+# 4. Keep up to date with the integration base
 git fetch origin
-git rebase origin/main
+git rebase origin/<base-branch>
 
 # 5. Push to remote
 git push origin feature/user-profile
 
-# 6. Create Pull Request on GitHub/GitLab
+# 6. Create Pull Request against the resolved integration base
+gh pr create --base <base-branch> --head feature/user-profile
 # ... after review and approval ...
 
 # 7. Merge and cleanup
-git checkout main
-git pull origin main
+git checkout <base-branch>
+git pull origin <base-branch>
 git branch -d feature/user-profile
 ```
 
 ### Example 2: Hotfix workflow
 
 ```bash
-# 1. Create hotfix branch from production
-git checkout main
-git pull origin main
+# 1. Create hotfix branch from the documented hotfix base
+git checkout <hotfix-base-branch>
+git pull origin <hotfix-base-branch>
 git checkout -b hotfix/critical-bug
 
 # 2. Fix the bug
@@ -329,24 +341,24 @@ git push origin hotfix/critical-bug
 
 # After merge:
 # 5. Cleanup
-git checkout main
-git pull origin main
+git checkout <hotfix-base-branch>
+git pull origin <hotfix-base-branch>
 git branch -d hotfix/critical-bug
 ```
 
 ### Example 3: Collaborative workflow
 
 ```bash
-# 1. Update main branch
-git checkout main
-git pull origin main
+# 1. Update the resolved integration base
+git checkout <base-branch>
+git pull origin <base-branch>
 
 # 2. Create feature branch
 git checkout -b feature/new-feature
 
-# 3. Regular updates from main
+# 3. Regular updates from the integration base
 git fetch origin
-git rebase origin/main
+git rebase origin/<base-branch>
 
 # 4. Push your work
 git push origin feature/new-feature
@@ -369,7 +381,7 @@ git push origin feature/new-feature --force-with-lease
 2. **Meaningful messages**: Explain what and why
 3. **Pull before push**: Stay updated
 4. **Review before commit**: Check what you're committing
-5. **Use branches**: Never commit directly to main
+5. **Use branches**: Never commit directly to a protected integration or release branch
 6. **Keep history clean**: Rebase feature branches
 7. **Test before push**: Run tests locally
 8. **Write descriptive branch names**: Easy to understand
@@ -480,12 +492,12 @@ git remote add upstream https://github.com/original/repo.git
 # Fetch upstream
 git fetch upstream
 
-# Merge upstream main
-git checkout main
-git merge upstream/main
+# Merge upstream base branch
+git checkout <base-branch>
+git merge upstream/<base-branch>
 
 # Push to your fork
-git push origin main
+git push origin <base-branch>
 ```
 
 ## Git configuration

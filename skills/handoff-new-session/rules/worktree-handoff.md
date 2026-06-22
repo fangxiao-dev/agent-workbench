@@ -20,12 +20,12 @@ Record these facts from commands:
 - `git branch --show-current`
 - `git log --oneline -1`
 - `git rev-parse HEAD`
-- `git rev-parse master` or the configured local trunk branch, if present
-- `git rev-parse origin/master` or the relevant remote trunk, if present
-- `git rev-list --left-right --count HEAD...master`
-- `git rev-list --left-right --count HEAD...origin/master`
+- `git rev-parse <local-trunk>` after resolving the configured local trunk/base branch from repo instructions, if present
+- `git rev-parse <remote-trunk>` after resolving the relevant remote trunk/base, if present
+- `git rev-list --left-right --count HEAD...<local-trunk>`
+- `git rev-list --left-right --count HEAD...<remote-trunk>`
 
-If local trunk is ahead of remote trunk, do not call `origin/master` "latest trunk" without qualification. Say which target appears intended and what still needs confirmation.
+If local trunk is ahead of remote trunk, do not call the remote branch "latest trunk" without qualification. Say which target appears intended and what still needs confirmation.
 
 ## Choose The Worktree Scenario
 
@@ -51,13 +51,13 @@ For a feature worktree that is behind trunk:
    - Fall back to a merge only when rebase is inappropriate for the repository policy or the user explicitly requests a merge-based integration.
 3. Resolve conflicts and investigate gaps in the feature worktree.
 4. Run verification in the feature worktree.
-5. Only after verification should the branch be considered for merge back to trunk/main workspace.
+5. Only after verification should the branch be considered for merge back to the trunk/base workspace.
 
-Do not describe this as "sync the feature branch to master" if that could imply directly changing trunk. Use wording like "rebase `codex/foo` onto local `master` and verify on the feature branch."
+Do not describe this as "sync the feature branch to the release branch" if that could imply directly changing the wrong trunk. Use wording like "rebase `codex/foo` onto local `<trunk>` and verify on the feature branch."
 
 ## Scenario 2: Trunk Work Should Move To Another Worktree
 
-When the current workspace is already on trunk/main and the next session should continue in a new or existing feature worktree/branch:
+When the current workspace is already on trunk/base and the next session should continue in a new or existing feature worktree/branch:
 
 1. Inspect the current trunk workspace for relevant uncommitted and untracked files.
    - Treat untracked planning, handoff, design, or case-status documents as potentially important context, especially under `docs/` and `test-cases/`.

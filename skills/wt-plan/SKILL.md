@@ -23,7 +23,7 @@ For the implementation phase inside a task worktree, use `wt-dev`.
 ## Core Rule
 
 Do not assume:
-- trunk is `dev`
+- any branch name is the trunk/base by convention
 - task branches use `feat/`
 
 Always detect actual repo conventions first from:
@@ -70,7 +70,7 @@ Inspect in this order:
 
 Rules:
 - Prefer an explicitly documented trunk branch if it exists
-- Otherwise accept `master`, `main`, or `dev`
+- Otherwise infer from the remote default branch and observable worktree state, then ask if more than one plausible trunk/base exists
 - If multiple plausible trunk branches exist, stop and surface candidates
 
 ### 2. Detect task branch prefix

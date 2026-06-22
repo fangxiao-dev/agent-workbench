@@ -84,7 +84,7 @@ Inspect repo docs and git branch list.
 
 Rules:
 - Prefer explicitly documented trunk if present
-- Otherwise accept `master`, `main`, or `dev`
+- Otherwise infer from the remote default branch and observable worktree state, then ask if more than one plausible trunk/base exists
 - If ambiguous, stop and surface the candidates
 
 ## Phase 1: Load Plan Context

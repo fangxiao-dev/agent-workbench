@@ -292,11 +292,11 @@ Contract guardrail 是 WT-PM 模型中防止跨模块 breaking change 的核心�
 
 ## 9. Regression Gate
 
-每个 worktree 合并回 main 前必须通过回归门禁：
+每个 worktree 合并回项目配置的 trunk/base 前必须通过回归门禁：
 
 ```bash
-# Step 1: 同步 main 最新代码
-git merge main
+# Step 1: 同步 trunk/base 最新代码
+git merge <trunk>
 
 # Step 2: 运行回归测试（按项目定制）
 <backend-contract-test>     # e.g. pytest tests/test_api_schema.py
@@ -304,7 +304,7 @@ git merge main
 <e2e-smoke-test>            # e.g. pytest tests/test_e2e_smoke.py（可选）
 
 # Step 3: 确认通过后合并
-git checkout main
+git checkout <trunk>
 git merge feat/<task_id>-<slug>
 git worktree remove <path>
 ```

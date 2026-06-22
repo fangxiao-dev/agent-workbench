@@ -82,7 +82,7 @@ git branch --show-current
 
 | 当前分支 | 情况 | 行动 |
 |----------|------|------|
-| 检测到的 trunk（如 `master` / `main` / `dev`） | 在 trunk，准备开始新任务 | → 进入 Stage 1 |
+| 检测到的 trunk/base（来自仓库文档或可观察仓库状态） | 在 trunk，准备开始新任务 | → 进入 Stage 1 |
 | 检测到的 task 分支（如 `codex/<task_id>-<slug>` / `feat/<task_id>-<slug>`） | 在 worktree，任务已创建 | → 进入 Stage 2 |
 | 其他 | 不明确 | → 询问用户意图 |
 
