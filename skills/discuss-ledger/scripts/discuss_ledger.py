@@ -12,7 +12,8 @@ Subcommands:
   add-point register a NEW disagreement (auto-allocates Dn, adds table row + log entry)
   contest   add a counter-argument to an existing point in the current round
   converge  promote a point into the convergence section with a source marker
-  end-turn  bump the round, set who's next, recompute overall status (+deadlock)
+  end-turn  bump the round, wait for external next-speaker assignment
+  set-next  set the next speaker explicitly (user/orchestrator decision)
 
 Edits are targeted splices, never a full re-render, so free-form prose written by
 another party (e.g. Codex editing the file directly) is preserved.
@@ -35,6 +36,7 @@ DEFAULT_DIR = "docs/exchange/discuss"
 STATUS_OPEN = "进行中"
 STATUS_AGREED = "已达成一致"
 STATUS_DEADLOCK = "僵局"
+STATUS_WAITING_NEXT = "待指定"
 
 POINT_OPEN = "分歧"
 POINT_CONVERGED = "收敛"
@@ -112,6 +114,23 @@ def replace_frontmatter(text: str, fm: dict) -> str:
     end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), -1)
     body = "\n".join(lines[end + 1 :])
     return render_frontmatter(fm) + "\n" + body
+
+
+def parse_participants(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [p.strip() for p in value.split(",") if p.strip()]
+
+
+def ensure_participant(fm: dict, name: str) -> bool:
+    name = name.strip()
+    if not name:
+        return False
+    participants = fm.setdefault("participants", [])
+    if name in participants:
+        return False
+    participants.append(name)
+    return True
 
 
 # ------------------------------------------------------------------ sections
@@ -195,14 +214,16 @@ def last_table_index(lines, start, end):
 
 
 # --------------------------------------------------------------- round blocks
-ROUND_RE = re.compile(r"^### 轮次 (\d+)\b")
+ROUND_RE = re.compile(r"^### 轮次 (\d+)(?: · (.+))?$")
 
 
-def round_header_index(lines, rnd):
+def round_header_index(lines, rnd, author=None):
     s, _ = section_bounds(lines, LOG_HEADER)
     for i in range(s + 1, len(lines)):
         m = ROUND_RE.match(lines[i])
-        if m and int(m.group(1)) == rnd:
+        if not m or int(m.group(1)) != rnd:
+            continue
+        if author is None or (m.group(2) or "").strip() == author:
             return i
     return -1
 
@@ -216,7 +237,7 @@ def round_block_end(lines, header_idx):
 
 def append_log_entry(lines, rnd, author, bullet):
     """Append a bullet under '### 轮次 <rnd> · <author>', creating it if absent."""
-    hidx = round_header_index(lines, rnd)
+    hidx = round_header_index(lines, rnd, author)
     if hidx == -1:
         # create a new round block at end of file
         while lines and lines[-1].strip() == "":
@@ -296,7 +317,7 @@ def cmd_init(args):
     path = ledger_path(args)
     if os.path.exists(path) and not args.force:
         sys.exit(f"ledger already exists: {path} (use --force to overwrite)")
-    parts = [p.strip() for p in args.participants.split(",") if p.strip()]
+    parts = parse_participants(args.participants)
     fm = {
         "topic": args.topic,
         "slug": slug,
@@ -305,6 +326,7 @@ def cmd_init(args):
         "next": args.initiator,
         "participants": parts,
     }
+    ensure_participant(fm, args.initiator)
     title = args.title or slug
     source = args.topic if ("/" in args.topic or args.topic.endswith(".md")) else ""
     text = build_skeleton(fm, title, source)
@@ -360,6 +382,7 @@ def cmd_add_point(args):
     text = read_text(path)
     fm, _ = split_frontmatter(text)
     lines = text.split("\n")
+    ensure_participant(fm, args.author)
     pid = args.id if args.id and args.id != "auto" else next_point_id(lines)
     summary = sanitize_cell(args.summary)
     rnd = fm["round"]
@@ -370,7 +393,7 @@ def cmd_add_point(args):
     # 2) add log entry under current round
     body = read_body_arg(args.body) or summary
     append_log_entry(lines, rnd, args.author, render_bullet(pid, body))
-    out("\n".join(lines), args, path)
+    out(replace_frontmatter("\n".join(lines), fm), args, path)
     print(f"added {pid} (round {rnd}, {args.author})")
 
 
@@ -379,6 +402,7 @@ def cmd_contest(args):
     text = read_text(path)
     fm, _ = split_frontmatter(text)
     lines = text.split("\n")
+    ensure_participant(fm, args.author)
     ridx, cells = find_point(lines, args.point)
     if ridx == -1:
         sys.exit(f"point not found: {args.point}")
@@ -394,7 +418,7 @@ def cmd_contest(args):
     suffix = "" if movement else "(无新进展)"
     body = read_body_arg(args.body)
     append_log_entry(lines, fm["round"], args.author, render_bullet(args.point, body, suffix))
-    out("\n".join(lines), args, path)
+    out(replace_frontmatter("\n".join(lines), fm), args, path)
     note = " → 标记僵局" if status == POINT_DEADLOCK else ""
     print(f"contested {args.point} (已历{rounds}轮, movement={movement}){note}")
 
@@ -445,20 +469,30 @@ def cmd_end_turn(args):
     new_status = recompute_status(lines)
     fm["status"] = new_status
     if new_status == STATUS_OPEN:
-        if not args.next:
-            sys.exit("debate still open: --next <party> required")
-        fm["next"] = args.next
+        fm["next"] = STATUS_WAITING_NEXT
         fm["round"] = int(fm["round"]) + 1
     else:
         fm["next"] = "用户" if new_status == STATUS_DEADLOCK else "—"
     new_text = replace_frontmatter("\n".join(lines), fm)
     out(new_text, args, path)
     if new_status == STATUS_OPEN:
-        print(f"round → {fm['round']}; next = {fm['next']}")
+        print(f"round → {fm['round']}; next = {fm['next']} (await user/orchestrator set-next)")
     elif new_status == STATUS_AGREED:
         print("EXIT: 已达成一致 — 全部分歧收敛。告知用户并停止更新。")
     else:
         print("EXIT: 僵局 — 存在 ≥2 轮无进展的分歧,交用户裁决。停止更新。")
+
+
+def cmd_set_next(args):
+    path = ledger_path(args)
+    text = read_text(path)
+    fm, _ = split_frontmatter(text)
+    if fm.get("status") != STATUS_OPEN:
+        sys.exit("cannot set next unless status is 进行中")
+    ensure_participant(fm, args.next)
+    fm["next"] = args.next.strip()
+    out(replace_frontmatter(text, fm), args, path)
+    print(f"next = {fm['next']}")
 
 
 # --------------------------------------------------------------------- parser
@@ -472,7 +506,7 @@ def build_parser():
     i.add_argument("--topic", required=True, help="source doc path or topic text")
     i.add_argument("--slug", help="default: derived from topic basename")
     i.add_argument("--title")
-    i.add_argument("--participants", required=True, help="comma list, e.g. CC,Codex")
+    i.add_argument("--participants", help="optional comma list, e.g. CC,Codex")
     i.add_argument("--initiator", required=True, help="who speaks round 1")
     i.add_argument("--force", action="store_true")
     i.add_argument("--dry-run", action="store_true")
@@ -510,9 +544,14 @@ def build_parser():
 
     e = sub.add_parser("end-turn")
     e.add_argument("--slug", required=True)
-    e.add_argument("--next", help="next party (required while debate open)")
     e.add_argument("--dry-run", action="store_true")
     e.set_defaults(func=cmd_end_turn)
+
+    n = sub.add_parser("set-next")
+    n.add_argument("--slug", required=True)
+    n.add_argument("--next", required=True, help="next party chosen by caller/user/orchestrator")
+    n.add_argument("--dry-run", action="store_true")
+    n.set_defaults(func=cmd_set_next)
     return p
 
 

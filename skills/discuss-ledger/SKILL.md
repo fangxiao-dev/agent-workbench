@@ -33,7 +33,7 @@ Run it from the repo root (paths are resolved relative to it):
 python <skill>/scripts/discuss_ledger.py <subcommand> ...
 ```
 
-`--root` defaults to the current working directory, so you only need to pass `--root <repo-root>` when you are *not* already at the repo root. All subcommands except `init` take `--slug`.
+`--root` defaults to the current working directory, so you only need to pass `--root <repo-root>` when you are *not* already at the repo root. All subcommands except `init` take `--slug`. Mutating commands that take `--author` automatically add that author to `participants` if missing.
 
 Ledgers live at `docs/exchange/discuss/discuss-<slug>.md` — the repo's untracked scratch area. They are **ephemeral debate scaffolding**, not deliverables; the converged plan is the deliverable. `init` creates the dir and adds `docs/exchange/discuss/` to `.gitignore` (scoped) automatically.
 
@@ -47,9 +47,9 @@ Check whether the ledger exists (glob `docs/exchange/discuss/discuss-<slug>.md`)
 
 - **Does not exist → you are the initiator.** Create it:
   ```bash
-  python ... init --topic docs/plans/2026-06-18-foo.md --participants CC,Codex --initiator <you>
+  python ... init --topic docs/plans/2026-06-18-foo.md --initiator <you>
   ```
-  `--topic` may be a doc path (recorded as the review target) or free text. `--initiator` is whoever speaks round 1 (usually you).
+  `--topic` may be a doc path (recorded as the review target) or free text. `--initiator` is whoever speaks round 1 (usually you). `--participants CC,Codex` is optional; if omitted, the initiator starts the list and later `--author` / `set-next --next` calls add participants as they appear.
 - **Exists → you are a responder.** Read ground truth with `status` before doing anything:
   ```bash
   python ... status --slug 2026-06-18-foo
@@ -98,13 +98,17 @@ A turn is always: **read → promote settled points → respond with disagreemen
 
    `add-point` auto-allocates the next `Dn`, adds a table row, and writes the argument under the current round. Always include reasoning and evidence (file paths, line numbers, verified facts), not bare positions — that's what lets the next party engage.
 
-6. **`end-turn`** — closes your turn. It recomputes overall status and either bumps the round / sets who's next, or declares the exit:
+6. **`end-turn`** — closes your turn. It recomputes overall status and either bumps the round / waits for the next speaker to be assigned, or declares the exit:
    ```bash
-   python ... end-turn --slug S --next Codex      # while debate is open
-   python ... end-turn --slug S                   # when you think it may be resolved
+   python ... end-turn --slug S
    ```
 
    Do not run `end-turn` until every existing point has one of: converged, contested with evidence, marked no-movement, or intentionally left open for the next party. Also account for any high-impact issue you found during the coverage pass.
+
+   If the debate remains open, `end-turn` sets `next: 待指定`. The previous speaker must not choose the next speaker. The actual caller, user, or orchestrator assigns the next turn explicitly:
+   ```bash
+   python ... set-next --slug S --next Codex
+   ```
 
 Use `--dry-run` on any mutating command to preview the resulting file without writing.
 
