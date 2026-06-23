@@ -143,6 +143,43 @@ def validate_object(
             raise AdapterError("INVALID_JSON", f"{label}.{key} must be a non-empty string")
 
 
+def validate_turn_against_ledger(status: ledger.LedgerStatus, payload: dict[str, list[dict[str, Any]]]) -> None:
+    open_ids = {point["id"] for point in status.open_points}
+    invalid_refs: list[str] = []
+    for section in ("convergences", "contests"):
+        for item in payload.get(section, []):
+            point_id = item.get("point")
+            if point_id not in open_ids:
+                invalid_refs.append(f"{section}[].point={point_id}")
+    if invalid_refs:
+        legal = ", ".join(sorted(open_ids)) if open_ids else "(none)"
+        raise AdapterError(
+            "INVALID_TURN",
+            "invalid point references for current ledger state: "
+            f"{', '.join(invalid_refs)}; legal open point IDs: {legal}. "
+            "Use new_points for new issues or evidence that undermines prior convergence.",
+        )
+
+
+def build_turn_correction_prompt(original_prompt: str, status: ledger.LedgerStatus, error: AdapterError) -> str:
+    open_ids = [point["id"] for point in status.open_points]
+    legal = ", ".join(open_ids) if open_ids else "(none)"
+    return f"""{original_prompt}
+
+Your previous response was invalid for the current discuss-ledger state:
+{error.message}
+
+Correction rules:
+- Current legal open point IDs: {legal}
+- convergences[].point and contests[].point may reference only current legal open point IDs.
+- If there are no legal open point IDs, return convergences=[] and contests=[].
+- Do not contest or converge missing, closed, or already-converged point IDs.
+- New issues, first-turn opinions, or evidence that undermines prior convergence must go in new_points.
+
+Return corrected JSON only.
+"""
+
+
 def classify_process_error(command: str, returncode: int, stdout: str, stderr: str) -> AdapterError:
     combined = f"{stdout}\n{stderr}".lower()
     if "permission denied" in combined or "not allowed" in combined:
@@ -150,6 +187,15 @@ def classify_process_error(command: str, returncode: int, stdout: str, stderr: s
     if "auth" in combined or "login" in combined or "not authenticated" in combined:
         return AdapterError("AUTH", f"{command} requires CLI login/authentication")
     return AdapterError("AGENT_FAILED", f"{command} exited with code {returncode}: {stderr.strip() or stdout.strip()}")
+
+
+def is_codex_user_config_error(stdout: str, stderr: str) -> bool:
+    combined = f"{stdout}\n{stderr}".lower()
+    return (
+        "error loading config.toml" in combined
+        and "service_tier" in combined
+        and "unknown variant" in combined
+    )
 
 
 def read_target_document(root: Path, topic: str) -> str:
@@ -189,12 +235,15 @@ def resolve_root_and_topic(root_arg: str, topic_arg: str) -> tuple[Path, str]:
 
 
 def build_prompt(agent: str, topic: str, target_document: str, status: ledger.LedgerStatus) -> str:
+    open_point_ids = [point["id"] for point in status.open_points]
     open_points = "\n".join(
         f"- {point['id']} [{point['status']}] {point['summary']} (已历{point['rounds']}轮)"
         for point in status.open_points
     )
     if not open_points:
         open_points = "- (none)"
+    legal_ids = ", ".join(open_point_ids) if open_point_ids else "(none)"
+    convergence = "\n".join(f"- {item}" for item in status.convergence) if status.convergence else "- (none)"
     schema = SCHEMA_PATH.read_text(encoding="utf-8")
     return f"""You are {agent} participating in a discuss-ledger review.
 
@@ -215,8 +264,17 @@ Interpret the fields as:
 - contests: existing points you still dispute
 - new_points: materially new disagreements
 
+Ledger state rules:
+- Current legal open point IDs for convergences/contests: {legal_ids}
+- convergences[].point and contests[].point may reference only those legal open point IDs.
+- If the legal open point list is empty, return convergences=[] and contests=[]; use new_points to start the discussion.
+- Converged points are context only. If new evidence undermines a converged point, create a new tracked issue in new_points instead of contesting the old point.
+
 Open points:
 {open_points}
+
+Converged context:
+{convergence}
 
 Current ledger markdown:
 {status.markdown}
@@ -283,10 +341,12 @@ def terminate_process_tree(pid: int) -> None:
             pass
 
 
-def run_codex(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
+def build_codex_command(root: Path, *, ignore_user_config: bool = False) -> list[str]:
     command = [
         "codex",
         "exec",
+        "-c",
+        'service_tier="fast"',
         "--json",
         "--ephemeral",
         "--output-schema",
@@ -297,8 +357,25 @@ def run_codex(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
         str(root),
         "-",
     ]
+    if ignore_user_config:
+        command.insert(2, "--ignore-user-config")
+    return command
+
+
+def run_codex(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
+    command = build_codex_command(root)
     completed = run_process(command, stdin=prompt, timeout_s=timeout_s, cwd=root)
     if completed.returncode != 0:
+        if is_codex_user_config_error(completed.stdout, completed.stderr):
+            retry_command = build_codex_command(root, ignore_user_config=True)
+            retry = run_process(retry_command, stdin=prompt, timeout_s=timeout_s, cwd=root)
+            if retry.returncode == 0:
+                print(
+                    "WARN: codex user config failed to load; retried with --ignore-user-config.",
+                    file=sys.stderr,
+                )
+                return parse_codex_jsonl(retry.stdout)
+            raise classify_process_error("codex", retry.returncode, retry.stdout, retry.stderr)
         raise classify_process_error("codex", completed.returncode, completed.stdout, completed.stderr)
     return parse_codex_jsonl(completed.stdout)
 
@@ -413,15 +490,26 @@ def orchestrate(
         target_document = read_target_document(root, topic)
         prompt = build_prompt(agent, topic, target_document, status)
         payload = normalize_result(call_agent(agent, prompt, root, status, fake, timeout_s))
-        result = ledger.record_agent_turn(
-            root=root,
-            slug=slug,
-            author=agent,
-            convergences=payload["convergences"],
-            contests=payload["contests"],
-            new_points=payload["new_points"],
-            end_turn_after=True,
-        )
+        try:
+            validate_turn_against_ledger(status, payload)
+        except AdapterError as exc:
+            if exc.code != "INVALID_TURN":
+                raise
+            correction_prompt = build_turn_correction_prompt(prompt, status, exc)
+            payload = normalize_result(call_agent(agent, correction_prompt, root, status, fake, timeout_s))
+            validate_turn_against_ledger(status, payload)
+        try:
+            result = ledger.record_agent_turn(
+                root=root,
+                slug=slug,
+                author=agent,
+                convergences=payload["convergences"],
+                contests=payload["contests"],
+                new_points=payload["new_points"],
+                end_turn_after=True,
+            )
+        except (SystemExit, ValueError) as exc:
+            raise AdapterError("INVALID_TURN", str(exc)) from exc
         print(result.message, end="")
         turn_count += 1
         agent_index += 1

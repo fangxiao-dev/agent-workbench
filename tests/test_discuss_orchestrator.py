@@ -167,6 +167,392 @@ def test_run_claude_uses_target_root_for_process(monkeypatch, tmp_path: Path) ->
     assert cwd == tmp_path
 
 
+def test_run_codex_sets_fast_service_tier_on_success(monkeypatch, tmp_path: Path) -> None:
+    orchestrator = load_orchestrator()
+    calls = []
+
+    def fake_run_process(command, *, stdin=None, timeout_s=900, cwd=None):
+        del stdin, timeout_s, cwd
+        calls.append(command)
+
+        class Completed:
+            returncode = 0
+            stdout = json.dumps({"convergences": [], "contests": [], "new_points": []})
+            stderr = ""
+
+        return Completed()
+
+    monkeypatch.setattr(orchestrator, "run_process", fake_run_process)
+
+    assert orchestrator.run_codex("prompt", tmp_path, 10) == {
+        "convergences": [],
+        "contests": [],
+        "new_points": [],
+    }
+
+    assert len(calls) == 1
+    assert "--ignore-user-config" not in calls[0]
+    config_index = calls[0].index("-c")
+    assert calls[0][config_index + 1] == 'service_tier="fast"'
+
+
+def test_run_codex_retries_with_ignore_user_config_for_service_tier_config_error(monkeypatch, tmp_path: Path) -> None:
+    orchestrator = load_orchestrator()
+    calls = []
+
+    def fake_run_process(command, *, stdin=None, timeout_s=900, cwd=None):
+        del stdin, timeout_s, cwd
+        calls.append(command)
+
+        class Completed:
+            stdout = ""
+            stderr = ""
+
+        completed = Completed()
+        if len(calls) == 1:
+            completed.returncode = 1
+            completed.stderr = "Error loading config.toml: unknown variant `priority`, expected `fast` or `flex` in `service_tier`"
+        else:
+            completed.returncode = 0
+            completed.stdout = json.dumps({"convergences": [], "contests": [], "new_points": []})
+        return completed
+
+    monkeypatch.setattr(orchestrator, "run_process", fake_run_process)
+
+    assert orchestrator.run_codex("prompt", tmp_path, 10) == {
+        "convergences": [],
+        "contests": [],
+        "new_points": [],
+    }
+
+    assert len(calls) == 2
+    assert "--ignore-user-config" not in calls[0]
+    assert "--ignore-user-config" in calls[1]
+    for command in calls:
+        config_index = command.index("-c")
+        assert command[config_index + 1] == 'service_tier="fast"'
+
+
+def test_run_codex_does_not_retry_non_config_failures(monkeypatch, tmp_path: Path) -> None:
+    orchestrator = load_orchestrator()
+    calls = []
+
+    def fake_run_process(command, *, stdin=None, timeout_s=900, cwd=None):
+        del stdin, timeout_s, cwd
+        calls.append(command)
+
+        class Completed:
+            returncode = 1
+            stdout = ""
+            stderr = "model overloaded"
+
+        return Completed()
+
+    monkeypatch.setattr(orchestrator, "run_process", fake_run_process)
+
+    try:
+        orchestrator.run_codex("prompt", tmp_path, 10)
+    except orchestrator.AdapterError as exc:
+        assert exc.code == "AGENT_FAILED"
+    else:
+        raise AssertionError("expected AdapterError")
+
+    assert len(calls) == 1
+
+
+def test_eval_happy_path_codex_opens_claude_converges_without_retry(monkeypatch, tmp_path: Path) -> None:
+    orchestrator = load_orchestrator()
+    calls = []
+
+    class Completed:
+        def __init__(self, returncode: int, stdout: str = "", stderr: str = ""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    def fake_run_process(command, *, stdin=None, timeout_s=900, cwd=None):
+        del timeout_s
+        calls.append((command, stdin, cwd))
+        assert cwd == tmp_path
+        assert "Your previous response was invalid" not in stdin
+        if command[0] == "codex":
+            config_index = command.index("-c")
+            assert command[config_index + 1] == 'service_tier="fast"'
+            assert "--ignore-user-config" not in command
+            return Completed(
+                0,
+                json.dumps(
+                    {
+                        "convergences": [],
+                        "contests": [],
+                        "new_points": [
+                            {
+                                "summary": "Codex opened the review topic",
+                                "body": "The happy path starts with Codex creating one tracked point.",
+                            }
+                        ],
+                    }
+                ),
+            )
+        if command[0] == "claude":
+            assert "Current legal open point IDs for convergences/contests: D1" in stdin
+            return Completed(
+                0,
+                json.dumps(
+                    {
+                        "convergences": [
+                            {
+                                "point": "D1",
+                                "marker": "一致",
+                                "line": "Claude agrees with the opening point.",
+                            }
+                        ],
+                        "contests": [],
+                        "new_points": [],
+                    }
+                ),
+            )
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(orchestrator, "run_process", fake_run_process)
+
+    exit_code = orchestrator.orchestrate(
+        root=tmp_path,
+        topic="Happy path eval",
+        slug="happy-path-eval",
+        agents=["codex", "claude"],
+        max_rounds=2,
+        fake=False,
+        timeout_s=300,
+    )
+
+    assert exit_code == 0
+    assert [command[0] for command, _, _ in calls] == ["codex", "claude"]
+    assert all("--ignore-user-config" not in command for command, _, _ in calls)
+
+    status = orchestrator.ledger.get_status(root=tmp_path, slug="happy-path-eval")
+    assert status.frontmatter["status"] == orchestrator.ledger.STATUS_AGREED
+    assert status.frontmatter["next"] == "—"
+    text = (tmp_path / "docs" / "exchange" / "discuss" / "discuss-happy-path-eval.md").read_text(encoding="utf-8")
+    assert "participants: [codex, claude]" in text
+    assert "Codex opened the review topic" in text
+    assert "[一致] Claude agrees with the opening point." in text
+
+
+def test_eval_codex_config_fallback_empty_ledger_correction_reaches_agreement(monkeypatch, tmp_path: Path) -> None:
+    orchestrator = load_orchestrator()
+    calls = []
+    codex_retry_payloads = [
+        {
+            "convergences": [{"point": "D01", "marker": "一致", "line": "invalid empty-ledger reference"}],
+            "contests": [],
+            "new_points": [],
+        },
+        {
+            "convergences": [],
+            "contests": [],
+            "new_points": [
+                {
+                    "summary": "Codex correction opened the real issue",
+                    "body": "Codex recovered from the empty-ledger correction prompt with a tracked point.",
+                }
+            ],
+        },
+    ]
+
+    class Completed:
+        def __init__(self, returncode: int, stdout: str = "", stderr: str = ""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    def fake_run_process(command, *, stdin=None, timeout_s=900, cwd=None):
+        del timeout_s
+        calls.append((command, stdin, cwd))
+        if command[0] == "codex":
+            assert cwd == tmp_path
+            config_index = command.index("-c")
+            assert command[config_index + 1] == 'service_tier="fast"'
+            if "--ignore-user-config" not in command:
+                return Completed(
+                    1,
+                    stderr="Error loading config.toml: unknown variant `priority`, expected `fast` or `flex` in `service_tier`",
+                )
+            return Completed(0, json.dumps(codex_retry_payloads.pop(0)))
+        if command[0] == "claude":
+            assert cwd == tmp_path
+            assert "Current legal open point IDs for convergences/contests: D1" in stdin
+            return Completed(
+                0,
+                json.dumps(
+                    {
+                        "convergences": [
+                            {
+                                "point": "D1",
+                                "marker": "一致",
+                                "line": "Claude agrees after stateful handoff.",
+                            }
+                        ],
+                        "contests": [],
+                        "new_points": [],
+                    }
+                ),
+            )
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(orchestrator, "run_process", fake_run_process)
+
+    exit_code = orchestrator.orchestrate(
+        root=tmp_path,
+        topic="Smooth flow eval",
+        slug="smooth-flow-eval",
+        agents=["codex", "claude"],
+        max_rounds=2,
+        fake=False,
+        timeout_s=300,
+    )
+
+    assert exit_code == 0
+    assert not codex_retry_payloads
+    codex_calls = [command for command, _, _ in calls if command[0] == "codex"]
+    assert len(codex_calls) == 4
+    assert "--ignore-user-config" not in codex_calls[0]
+    assert "--ignore-user-config" in codex_calls[1]
+    assert "--ignore-user-config" not in codex_calls[2]
+    assert "--ignore-user-config" in codex_calls[3]
+    assert any("Your previous response was invalid" in (stdin or "") for command, stdin, _ in calls if command[0] == "codex")
+
+    status = orchestrator.ledger.get_status(root=tmp_path, slug="smooth-flow-eval")
+    assert status.frontmatter["status"] == orchestrator.ledger.STATUS_AGREED
+    assert status.frontmatter["next"] == "—"
+    text = (tmp_path / "docs" / "exchange" / "discuss" / "discuss-smooth-flow-eval.md").read_text(encoding="utf-8")
+    assert "participants: [codex, claude]" in text
+    assert "Codex correction opened the real issue" in text
+    assert "[一致] Claude agrees after stateful handoff." in text
+    assert "D01" not in text
+
+
+def test_empty_ledger_invalid_point_references_retry_as_new_points(monkeypatch, tmp_path: Path) -> None:
+    orchestrator = load_orchestrator()
+    payloads = [
+        {
+            "convergences": [{"point": "D01", "marker": "一致", "line": "不存在的点"}],
+            "contests": [],
+            "new_points": [],
+        },
+        {
+            "convergences": [],
+            "contests": [],
+            "new_points": [{"summary": "新议题", "body": "空 ledger 应通过 new_points 发起讨论。"}],
+        },
+    ]
+    prompts = []
+
+    def fake_call_agent(agent, prompt, root, status, fake, timeout_s):
+        del agent, root, status, fake, timeout_s
+        prompts.append(prompt)
+        return payloads.pop(0)
+
+    monkeypatch.setattr(orchestrator, "call_agent", fake_call_agent)
+
+    exit_code = orchestrator.orchestrate(
+        root=tmp_path,
+        topic="Empty ledger review",
+        slug="empty-ledger-review",
+        agents=["claude"],
+        max_rounds=1,
+        fake=False,
+        timeout_s=10,
+    )
+
+    assert exit_code == 0
+    assert len(prompts) == 2
+    assert "Current legal open point IDs: (none)" in prompts[1]
+    text = (tmp_path / "docs" / "exchange" / "discuss" / "discuss-empty-ledger-review.md").read_text(encoding="utf-8")
+    assert "| D1 | 新议题 | 分歧 | 1 |" in text
+    assert "D01" not in text
+
+
+def test_invalid_point_reference_after_retry_leaves_ledger_without_points(monkeypatch, tmp_path: Path) -> None:
+    orchestrator = load_orchestrator()
+
+    def fake_call_agent(agent, prompt, root, status, fake, timeout_s):
+        del agent, prompt, root, status, fake, timeout_s
+        return {
+            "convergences": [],
+            "contests": [{"point": "D01", "body": "不存在的点", "movement": True}],
+            "new_points": [],
+        }
+
+    monkeypatch.setattr(orchestrator, "call_agent", fake_call_agent)
+
+    try:
+        orchestrator.orchestrate(
+            root=tmp_path,
+            topic="Invalid retry",
+            slug="invalid-retry",
+            agents=["claude"],
+            max_rounds=1,
+            fake=False,
+            timeout_s=10,
+        )
+    except orchestrator.AdapterError as exc:
+        assert exc.code == "INVALID_TURN"
+    else:
+        raise AssertionError("expected AdapterError")
+
+    text = (tmp_path / "docs" / "exchange" / "discuss" / "discuss-invalid-retry.md").read_text(encoding="utf-8")
+    assert "| D1 |" not in text
+    assert "不存在的点" not in text
+
+
+def test_validate_turn_allows_only_current_open_point_ids(tmp_path: Path) -> None:
+    orchestrator = load_orchestrator()
+    orchestrator.ledger.init_ledger(root=tmp_path, topic="State machine", slug="state-machine", initiator="codex")
+    orchestrator.ledger.add_point(root=tmp_path, slug="state-machine", author="codex", summary="Open point", body="Open body")
+    status = orchestrator.ledger.get_status(root=tmp_path, slug="state-machine")
+
+    orchestrator.validate_turn_against_ledger(
+        status,
+        {
+            "convergences": [],
+            "contests": [{"point": "D1", "body": "valid", "movement": True}],
+            "new_points": [],
+        },
+    )
+
+    try:
+        orchestrator.validate_turn_against_ledger(
+            status,
+            {
+                "convergences": [],
+                "contests": [{"point": "D2", "body": "invalid", "movement": True}],
+                "new_points": [],
+            },
+        )
+    except orchestrator.AdapterError as exc:
+        assert exc.code == "INVALID_TURN"
+        assert "D2" in exc.message
+    else:
+        raise AssertionError("expected AdapterError")
+
+    orchestrator.ledger.converge_point(root=tmp_path, slug="state-machine", point="D1", marker="一致", line="closed")
+    status = orchestrator.ledger.get_status(root=tmp_path, slug="state-machine")
+    try:
+        orchestrator.validate_turn_against_ledger(
+            status,
+            {
+                "convergences": [],
+                "contests": [{"point": "D1", "body": "closed", "movement": True}],
+                "new_points": [],
+            },
+        )
+    except orchestrator.AdapterError as exc:
+        assert exc.code == "INVALID_TURN"
+    else:
+        raise AssertionError("expected AdapterError")
+
+
 def test_run_process_wraps_windows_powershell_shims(monkeypatch) -> None:
     orchestrator = load_orchestrator()
     calls = []
