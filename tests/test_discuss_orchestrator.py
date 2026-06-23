@@ -604,3 +604,40 @@ def test_run_process_wraps_windows_cmd_shims(monkeypatch) -> None:
     orchestrator.run_process(["claude", "--version"])
 
     assert calls[0][0] == ["cmd", "/c", "C:/tools/claude.CMD", "--version"]
+
+
+def test_run_process_starts_new_session_on_posix(monkeypatch) -> None:
+    orchestrator = load_orchestrator()
+    calls = []
+
+    monkeypatch.setattr(orchestrator.os, "name", "posix")
+    monkeypatch.setattr(orchestrator.shutil, "which", lambda exe: f"/usr/local/bin/{exe}")
+
+    class FakePopen:
+        def __init__(self, command, **kwargs):
+            calls.append((command, kwargs))
+            self.pid = 123
+            self.returncode = 0
+
+        def communicate(self, input=None, timeout=None):
+            del input, timeout
+            return "", ""
+
+    monkeypatch.setattr(orchestrator.subprocess, "Popen", FakePopen)
+
+    orchestrator.run_process(["codex", "--version"])
+
+    assert calls[0][0] == ["codex", "--version"]
+    assert calls[0][1]["start_new_session"] is True
+
+
+def test_timeout_kills_posix_process_group(monkeypatch) -> None:
+    orchestrator = load_orchestrator()
+    killed = []
+
+    monkeypatch.setattr(orchestrator.os, "name", "posix")
+    monkeypatch.setattr(orchestrator.os, "killpg", lambda pid, sig: killed.append((pid, sig)), raising=False)
+
+    orchestrator.terminate_process_tree(123)
+
+    assert killed == [(123, orchestrator.signal.SIGTERM)]

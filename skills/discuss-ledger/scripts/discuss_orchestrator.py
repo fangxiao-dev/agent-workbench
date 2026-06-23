@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 from typing import Any
@@ -305,15 +306,17 @@ def run_process(
         ]
     elif resolved.lower().endswith((".cmd", ".bat")):
         actual_command = ["cmd", "/c", resolved, *command[1:]]
+    popen_kwargs: dict[str, Any] = {
+        "stdin": subprocess.PIPE if stdin is not None else None,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+        "cwd": str(cwd) if cwd else None,
+    }
+    if os.name != "nt":
+        popen_kwargs["start_new_session"] = True
     try:
-        process = subprocess.Popen(
-            actual_command,
-            stdin=subprocess.PIPE if stdin is not None else None,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=str(cwd) if cwd else None,
-        )
+        process = subprocess.Popen(actual_command, **popen_kwargs)
         try:
             stdout, stderr = process.communicate(input=stdin, timeout=timeout_s)
         except subprocess.TimeoutExpired as exc:
@@ -336,9 +339,12 @@ def terminate_process_tree(pid: int) -> None:
         )
     else:
         try:
-            os.kill(pid, 15)
-        except OSError:
-            pass
+            os.killpg(pid, signal.SIGTERM)
+        except (AttributeError, OSError):
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except OSError:
+                pass
 
 
 def build_codex_command(root: Path, *, ignore_user_config: bool = False) -> list[str]:
