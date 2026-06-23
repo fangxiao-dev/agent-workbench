@@ -69,6 +69,34 @@ def test_orchestrator_parser_defaults_match_interactive_use() -> None:
     assert args.timeout_s == 300
 
 
+def test_resolve_root_and_topic_detects_any_git_worktree_shape(tmp_path: Path) -> None:
+    orchestrator = load_orchestrator()
+    project = tmp_path / "some-container" / "feature-checkout"
+    target = project / "docs" / "impl-plans" / "plan.md"
+    (project / ".git").mkdir(parents=True)
+    target.parent.mkdir(parents=True)
+    target.write_text("# Plan\n", encoding="utf-8")
+
+    root, topic = orchestrator.resolve_root_and_topic(str(tmp_path), str(target))
+
+    assert root == project.resolve()
+    assert topic == "docs/impl-plans/plan.md"
+
+
+def test_resolve_root_and_topic_detects_dot_worktrees_relative_paths(tmp_path: Path) -> None:
+    orchestrator = load_orchestrator()
+    project = tmp_path / ".worktrees" / "raw-material-production-design"
+    target = project / "docs" / "impl-plans" / "patch.md"
+    (project / ".git").mkdir(parents=True)
+    target.parent.mkdir(parents=True)
+    target.write_text("# Patch\n", encoding="utf-8")
+
+    root, topic = orchestrator.resolve_root_and_topic(str(tmp_path), ".worktrees/raw-material-production-design/docs/impl-plans/patch.md")
+
+    assert root == project.resolve()
+    assert topic == "docs/impl-plans/patch.md"
+
+
 def test_parse_codex_jsonl_extracts_nested_final_result() -> None:
     orchestrator = load_orchestrator()
     final = {

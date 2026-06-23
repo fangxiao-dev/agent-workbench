@@ -59,6 +59,12 @@ Defaults:
 - `--max-rounds 5`
 - `--timeout-s 300` per agent turn
 
+Path resolution:
+
+- when `--topic` points to an existing file, the orchestrator uses the nearest ancestor containing `.git` as the effective `--root`
+- it then stores/passes the topic as a path relative to that detected root
+- this is intentionally layout-agnostic and covers normal clones, Git worktrees, `.worktrees/<name>/...`, and other checkout directories
+
 Strategy:
 
 - round-robin across `codex` and `claude`

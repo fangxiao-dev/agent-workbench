@@ -164,6 +164,30 @@ def read_target_document(root: Path, topic: str) -> str:
     return text
 
 
+def find_git_root(path: Path) -> Path | None:
+    start = path if path.is_dir() else path.parent
+    for candidate in (start, *start.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def resolve_root_and_topic(root_arg: str, topic_arg: str) -> tuple[Path, str]:
+    root = Path(root_arg).resolve()
+    topic_path = Path(topic_arg)
+    candidate = topic_path if topic_path.is_absolute() else root / topic_path
+    if not candidate.exists():
+        return root, topic_arg
+    git_root = find_git_root(candidate)
+    if git_root is None:
+        return root, topic_arg
+    try:
+        topic = candidate.resolve().relative_to(git_root).as_posix()
+    except ValueError:
+        return root, topic_arg
+    return git_root.resolve(), topic
+
+
 def build_prompt(agent: str, topic: str, target_document: str, status: ledger.LedgerStatus) -> str:
     open_points = "\n".join(
         f"- {point['id']} [{point['status']}] {point['summary']} (已历{point['rounds']}轮)"
@@ -426,13 +450,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        root = Path(args.root).resolve()
+        root, topic = resolve_root_and_topic(args.root, args.topic)
         agents = parse_agents(args.agents)
-        slug = args.slug or ledger.derive_slug(args.topic)
+        slug = args.slug or ledger.derive_slug(topic)
         fake = args.fake or args.adapter_mode == "fake"
         return orchestrate(
             root=root,
-            topic=args.topic,
+            topic=topic,
             slug=slug,
             agents=agents,
             max_rounds=args.max_rounds,
