@@ -1,5 +1,7 @@
 Use `discuss-ledger` orchestrated auto-discussion for the requested target.
 
+This command file is a host hint. If the host does not expose command files as slash commands, the same behavior is triggered by an explicit user request such as "用 discuss orchestrator 审 <target>".
+
 If the user provides a project root and target document/topic, run:
 
 ```bash

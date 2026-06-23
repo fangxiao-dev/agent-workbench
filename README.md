@@ -12,7 +12,7 @@
 
 - `skills/` 保存所有正式 skill，包括自建 skill、审查过的第三方 skill、以及本地工作流知识库
 - `agents/` 保存可安装到宿主的 subagent 定义，目前正式 subagent 是 `audit-agent-setup`
-- `commands/` 保存 slash command 文件，目前 `/audit` 是 agent setup 审查入口，`/discuss` 是 discuss-ledger 自动讨论入口
+- `commands/` 保存宿主 command 提示文件；是否能用 `/...` 唤出取决于具体宿主
 - `install.sh` / `install.ps1` 把这些能力安装到 `~/.claude`、`~/.codex`、`~/.gemini`
 - `registry/` 只记录第三方资产来源和重装方式，不记录宿主本机状态
 - `docs/workbench-design/` 保存当前实现规范，README 只做入口说明
@@ -120,13 +120,21 @@ powershell -ExecutionPolicy Bypass -File scripts/list-visible-skills.ps1
 
 ### 自动讨论目标文档
 
-```
-/discuss 审 docs/plan.md
+明确要求运行 `discuss-ledger` 的 local orchestrator，由当前 Codex 会话启动脚本，再自动调用 `codex,claude` 两个参与方轮流讨论。默认 `max-rounds=5`、`timeout-s=300`，直到一致、僵局或达到轮次上限停止。输出 ledger 位于目标项目的 `docs/exchange/discuss/`。
+
+推荐说法：
+
+```text
+用 discuss orchestrator 审 docs/plan.md
 ```
 
-触发 `discuss-ledger` 的 local orchestrator，由当前 Codex 会话启动脚本，再自动调用 `codex,claude` 两个参与方轮流讨论。默认 `max-rounds=5`、`timeout-s=300`，直到一致、僵局或达到轮次上限停止。输出 ledger 位于目标项目的 `docs/exchange/discuss/`。
+或直接运行：
 
-如果不用 slash command，也可以直接说“用 discuss orchestrator 审 <目标文档>”。`/discuss` 更稳定，因为 command 会显式告诉 Codex 跑 orchestrator，而不是做普通单 agent 审查。
+```powershell
+python D:\CodeSpace\agent-workbench\skills\discuss-ledger\scripts\discuss_orchestrator.py --root D:\your\project --topic docs\plan.md
+```
+
+`commands/discuss.md` 只是可安装到宿主 command 目录的提示文件；它不保证在所有宿主里都能用 `/discuss` 唤出。
 
 ### 初始化项目上下文
 
@@ -196,7 +204,7 @@ agent-workbench/
 ├── agents/                     ← subagents，安装到已选宿主的 agents/
 │   └── audit-agent-setup/
 │       └── agent.md
-├── commands/                   ← slash commands，安装到已选宿主的 commands/
+├── commands/                   ← 宿主 command 提示文件，安装到已选宿主的 commands/
 │   └── audit.md
 ├── scripts/                    ← 仓库级辅助脚本，如 list-visible-skills.ps1
 ├── tests/                      ← 安装器和工作流测试
