@@ -4,13 +4,23 @@
 |-------|------|----------|------|
 | frontend-design | `anthropics/skills` | `npx skills add anthropics/skills@frontend-design -g -y` | 已放入 `skills/frontend-design/` |
 | skill-creator | `anthropics/skills` | 人工迁移 | 已放入 `skills/skill-creator/` |
+| ask-matt | `mattpocock/skills` | `npx skills add mattpocock/skills@ask-matt -g -y` | 已放入 `skills/ask-matt/` |
+| diagnosing-bugs | `mattpocock/skills` | `npx skills add mattpocock/skills@diagnosing-bugs -g -y` | 已放入 `skills/diagnosing-bugs/` |
 | grill-me | `mattpocock/skills` | `npx skills add mattpocock/skills@grill-me -g -y` | 已放入 `skills/grill-me/` |
 | grill-with-docs | `mattpocock/skills` | `npx skills add mattpocock/skills@grill-with-docs -g -y` | 已放入 `skills/grill-with-docs/` |
+| triage | `mattpocock/skills` | `npx skills add mattpocock/skills@triage -g -y` | 已放入 `skills/triage/` |
 | prototype | `mattpocock/skills` | `npx skills add mattpocock/skills@prototype -g -y` | 已放入 `skills/prototype/` |
+| setup-matt-pocock-skills | `mattpocock/skills` | `npx skills add mattpocock/skills@setup-matt-pocock-skills -g -y` | 已放入 `skills/setup-matt-pocock-skills/` |
 | tdd | `mattpocock/skills` | `npx skills add mattpocock/skills@tdd -g -y` | 已放入 `skills/tdd/` |
 | to-issues | `mattpocock/skills` | `npx skills add mattpocock/skills@to-issues -g -y` | 已放入 `skills/to-issues/` |
 | to-prd | `mattpocock/skills` | `npx skills add mattpocock/skills@to-prd -g -y` | 已放入 `skills/to-prd/` |
+| domain-modeling | `mattpocock/skills` | `npx skills add mattpocock/skills@domain-modeling -g -y` | 已放入 `skills/domain-modeling/` |
+| codebase-design | `mattpocock/skills` | `npx skills add mattpocock/skills@codebase-design -g -y` | 已放入 `skills/codebase-design/` |
 | improve-codebase-architecture | `mattpocock/skills` | `npx skills add mattpocock/skills@improve-codebase-architecture -g -y` | 已放入 `skills/improve-codebase-architecture/` |
+| grilling | `mattpocock/skills` | `npx skills add mattpocock/skills@grilling -g -y` | 已放入 `skills/grilling/` |
+| handoff | `mattpocock/skills` | `npx skills add mattpocock/skills@handoff -g -y` | 已放入 `skills/handoff/` |
+| teach | `mattpocock/skills` | `npx skills add mattpocock/skills@teach -g -y` | 已放入 `skills/teach/` |
+| writing-great-skills | `mattpocock/skills` | `npx skills add mattpocock/skills@writing-great-skills -g -y` | 已放入 `skills/writing-great-skills/` |
 | zoom-out | `mattpocock/skills` | `npx skills add mattpocock/skills@zoom-out -g -y` | 已放入 `skills/zoom-out/` |
 | vercel-react-best-practices | `vercel-labs/agent-skills` | `npx skills add vercel-labs/agent-skills@vercel-react-best-practices -g -y` | 已放入 `skills/vercel-react-best-practices/` |
 | find-skills | `vercel-labs/skills` | `npx skills add vercel-labs/skills@find-skills -g -y` | 已放入 `skills/find-skills/` |
@@ -26,6 +36,6 @@
 ## 说明
 
 - 只登记第三方 skills，不登记本仓库自建 skills。
-- 第三方 skills 的正式内容直接放在 `skills/<name>/`。
-- 如需修改第三方 skill，直接修改 `skills/<name>/`；更新上游时先拉到临时位置，再人工对比合并。
+- 第三方 skills 的正式内容直接放在 `skills/<name>/`；成组资产也可以放在 `skills/<bundle>/<name>/`。
+- 如需修改第三方 skill，直接修改正式副本；更新上游时先拉到临时位置，再人工对比合并。
 

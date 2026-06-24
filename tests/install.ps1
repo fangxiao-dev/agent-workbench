@@ -12,7 +12,32 @@ function New-TestWorkspace {
 
     New-Item -ItemType Directory -Path $project | Out-Null
     New-Item -ItemType Directory -Path $testHome | Out-Null
-    Copy-Item -Path $RepoRoot -Destination $workbench -Recurse
+    New-Item -ItemType Directory -Path $workbench | Out-Null
+
+    $directoriesToCopy = @("agents", "commands", "docs", "registry", "scripts", "templates", "tests")
+    foreach ($directory in $directoriesToCopy) {
+        $source = Join-Path $RepoRoot $directory
+        if (Test-Path -LiteralPath $source) {
+            Copy-Item -LiteralPath $source -Destination (Join-Path $workbench $directory) -Recurse
+        }
+    }
+
+    $sourceSkills = Join-Path $RepoRoot "skills"
+    $targetSkills = Join-Path $workbench "skills"
+    New-Item -ItemType Directory -Path $targetSkills | Out-Null
+    Get-ChildItem -LiteralPath $sourceSkills -Force | Where-Object {
+        -not ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
+    } | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $targetSkills $_.Name) -Recurse
+    }
+
+    $filesToCopy = @(".gitignore", "AGENTS.md", "install.ps1", "install.sh", "README.md", "pyproject.toml", "uv.lock")
+    foreach ($file in $filesToCopy) {
+        $source = Join-Path $RepoRoot $file
+        if (Test-Path -LiteralPath $source) {
+            Copy-Item -LiteralPath $source -Destination (Join-Path $workbench $file)
+        }
+    }
 
     return @{
         Root = $root
@@ -166,10 +191,12 @@ function Test-PowerShellExplicitHostInstall {
         $output = $result.Output
 
         $claudeSkill = Join-Path $workspace.Home ".claude\skills\api-integration-builder"
+        $claudeBundledSkill = Join-Path $workspace.Home ".claude\skills\feishu-skills\feishu-base\SKILL.md"
         $codexSkill = Join-Path $workspace.Home ".codex\skills\api-integration-builder"
         $claudeCommand = Join-Path $workspace.Home ".claude\commands\audit.md"
 
         Assert-True (Test-Path $claudeSkill) "Claude skill link was not created."
+        Assert-True (Test-Path $claudeBundledSkill) "Claude bundled Feishu skill was not exposed."
         Assert-True (-not (Test-Path $codexSkill)) "Codex should not be installed when not selected."
         Assert-True (Test-Path $claudeCommand) "Claude command copy was not created."
         Assert-Contains $output "Host: claude" "Expected claude host output."
@@ -238,11 +265,11 @@ function Test-PowerShellSkipsExistingLinks {
             Write-Host "[SKIP] junctions unavailable; skipping existing-link test."
             return
         }
-        $claudeSkills = Join-Path $workspace.Home ".claude\skills"
-        New-Item -ItemType Directory -Path $claudeSkills -Force | Out-Null
+        $claudeHome = Join-Path $workspace.Home ".claude"
+        New-Item -ItemType Directory -Path $claudeHome -Force | Out-Null
 
-        $source = Join-Path $workspace.Workbench "skills\api-integration-builder"
-        $target = Join-Path $claudeSkills "api-integration-builder"
+        $source = Join-Path $workspace.Workbench "skills"
+        $target = Join-Path $claudeHome "skills"
         New-Item -ItemType Junction -Path $target -Target $source | Out-Null
 
         $result = Invoke-InstallPs1 -Workspace $workspace -Arguments @("claude")
@@ -300,6 +327,37 @@ function Test-PowerShellCommandsAreCopied {
     }
 }
 
+function Test-ListVisibleSkillsIncludesBundledSkills {
+    $workspace = New-TestWorkspace
+    try {
+        $script = Join-Path $workspace.Workbench "scripts\list-visible-skills.ps1"
+        $skillsRoot = Join-Path $workspace.Workbench "skills"
+        $emptyRoot = Join-Path $workspace.Root "empty-skills"
+        New-Item -ItemType Directory -Path $emptyRoot | Out-Null
+
+        $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script `
+            -ClaudeSkillsRoot $skillsRoot `
+            -CodexSkillsRoot $emptyRoot `
+            -GeminiSkillsRoot $emptyRoot `
+            -CodexSuperpowersRoot $emptyRoot `
+            -AgentsSkillsRoot $emptyRoot `
+            -Format Json 2>&1 | Out-String
+        $report = $output | ConvertFrom-Json
+        $claude = $report.Hosts | Where-Object { $_.Host -eq "Claude" } | Select-Object -First 1
+        $names = @($claude.MergedSkills | ForEach-Object { $_.Name })
+
+        Assert-True ($names -contains "feishu-shared") "Expected bundled Feishu shared skill to be visible."
+        Assert-True ($names -contains "using-feishu") "Expected bundled Feishu router skill to be visible."
+        Assert-True ($names -contains "lark-intl-shared") "Expected bundled Lark shared skill to remain visible."
+        Assert-True (-not ($names -contains "feishu-skills")) "Bundle root without SKILL.md should not be listed as a skill."
+        $feishuShared = $claude.MergedSkills | Where-Object { $_.Name -eq "feishu-shared" } | Select-Object -First 1
+        Assert-True ($feishuShared.Sources[0].RelativePath -eq "feishu-skills/feishu-shared") "Expected bundled Feishu shared skill relative path."
+    }
+    finally {
+        Remove-TestWorkspace $workspace
+    }
+}
+
 function Test-BashAutoDiscoversHosts {
     $workspace = New-TestWorkspace
     try {
@@ -319,7 +377,14 @@ function Test-BashAutoDiscoversHosts {
 
         $result = Invoke-InstallSh -Workspace $workspace -Arguments @()
         $output = $result.Output
+        $claudeBundledSkill = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\feishu-skills\feishu-base\SKILL.md")
+        $flatFeishuSkill = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\feishu-base")
+
         Assert-Contains $output "Hosts processed: 3" "Expected three processed hosts for bash installer."
+        & $bash.Source -lc "test -f '$claudeBundledSkill'"
+        Assert-True ($LASTEXITCODE -eq 0) "Bash installer should expose bundled Feishu skill through bundle link."
+        & $bash.Source -lc "test ! -e '$flatFeishuSkill'"
+        Assert-True ($LASTEXITCODE -eq 0) "Bash installer should not create flat bundled skill links."
     }
     finally {
         Remove-TestWorkspace $workspace
@@ -357,6 +422,7 @@ $tests = @(
     @{ Name = "ps1 skips existing links"; Action = { Test-PowerShellSkipsExistingLinks } }
     @{ Name = "ps1 project gitignore init"; Action = { Test-PowerShellProjectGitignoreInitializationStillWorks } }
     @{ Name = "ps1 commands are copied"; Action = { Test-PowerShellCommandsAreCopied } }
+    @{ Name = "list-visible includes bundled skills"; Action = { Test-ListVisibleSkillsIncludesBundledSkills } }
     @{ Name = "sh auto-discovers hosts"; Action = { Test-BashAutoDiscoversHosts } }
 )
 

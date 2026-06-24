@@ -128,7 +128,7 @@ install_collection() {
   local host="$1"
   local host_home="$2"
   local kind="$3"
-  local source_pattern="$4"
+  local source_root="$4"
   local item_type="$5"
   local install_mode="$6"
   local dest_dir="$host_home/$kind"
@@ -138,7 +138,10 @@ install_collection() {
 
   local matched=0
   local item
-  for item in $source_pattern; do
+  for item in "$source_root"/*; do
+    if [ ! -e "$item" ]; then
+      continue
+    fi
     if [ "$item_type" = "dir" ] && [ ! -d "$item" ]; then
       continue
     fi
@@ -172,9 +175,9 @@ else
     HOSTS_PROCESSED=$((HOSTS_PROCESSED + 1))
     echo "Host: $host"
     echo "Root: $host_home"
-    install_collection "$host" "$host_home" "skills" "$WORKBENCH_DIR"/skills/*/ dir link
-    install_collection "$host" "$host_home" "agents" "$WORKBENCH_DIR"/agents/*/ dir link
-    install_collection "$host" "$host_home" "commands" "$WORKBENCH_DIR"/commands/* file copy
+    install_collection "$host" "$host_home" "skills" "$WORKBENCH_DIR/skills" dir link
+    install_collection "$host" "$host_home" "agents" "$WORKBENCH_DIR/agents" dir link
+    install_collection "$host" "$host_home" "commands" "$WORKBENCH_DIR/commands" file copy
     echo ""
   done
 fi

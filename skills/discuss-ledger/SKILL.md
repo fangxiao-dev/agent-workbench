@@ -8,6 +8,18 @@ user-invocable: true
 
 Maintain a single Markdown ledger where two or more parties (typically this agent plus another agent like Codex/GPT, or the user) debate a plan/design and converge over rounds. The ledger exists so that, across many turns and many sessions, nobody re-litigates settled points and the live disagreements stay readable.
 
+## Critical Timeout Rule For Orchestrator Calls
+
+Read this **before** invoking `scripts/discuss_orchestrator.py`.
+
+`--timeout-s` is a per-agent, per-call timeout, not the overall orchestration timeout. When invoking the orchestrator through a tool wrapper, set the wrapper/tool timeout high enough for the whole run:
+
+```text
+agent_count * max_rounds * timeout_s + buffer
+```
+
+For the default `--agents codex,claude`, `--max-rounds 5`, and `--timeout-s 300`, use at least 3600 seconds as the outer tool timeout. If the wrapper timeout is lower, the orchestrator can still be killed even when `--timeout-s` was passed correctly.
+
 The document has two living parts:
 
 1. **收敛区 (Convergence record)** — at the very top. Settled decisions only, one line each. Promoted into here *before* you write new opinions, so it's always the current source of truth for "what's decided."
@@ -53,7 +65,7 @@ python <skill>/scripts/discuss_orchestrator.py --root <target-project-root> --to
 
 When the user gives a target file path, infer the project root before running. Prefer the nearest ancestor containing `.git` as `--root`, and pass the target path relative to that root as `--topic`. This works for ordinary clones, Git worktrees, `.worktrees/<name>/...`, and other checkout layouts. If the script is available, rely on `discuss_orchestrator.py`'s built-in root/topic resolution rather than hand-normalizing the path.
 
-Defaults are `--agents codex,claude`, `--max-rounds 5`, and `--timeout-s 300`. After it stops, report the ledger path, convergence summary, open/deadlocked points, and whether user裁决 is needed.
+Defaults are `--agents codex,claude`, `--max-rounds 5`, and `--timeout-s 300`. Before invoking, apply the **Critical Timeout Rule For Orchestrator Calls** above so the outer tool timeout is long enough for the full run. After it stops, report the ledger path, convergence summary, open/deadlocked points, and whether user裁决 is needed.
 
 ## Step 1 — Locate or initialize
 

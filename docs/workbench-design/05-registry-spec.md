@@ -19,7 +19,7 @@
 规则：
 
 - 只登记第三方 skill，不登记本仓库自建 skill。
-- 第三方 skill 的正式内容直接放在 `skills/<name>/`。
+- 第三方 skill 的正式内容直接放在 `skills/<name>/`；成组资产也可以放在 `skills/<bundle>/<name>/`。
 - `获取方式` 写 `npx skills add ...`、来源说明或人工迁移说明，保证未来能重新获取。
 - 不登记本地路径、宿主、安装状态、更新时间或机器可读 JSON。
 - 根目录 `skills-lock.json` 如果由 `npx skills` 生成，属于工具状态，继续保持 ignored。
