@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import subprocess
@@ -43,14 +44,69 @@ def parse_agents(value: str) -> list[str]:
 
 
 def parse_json_object(output: str) -> dict[str, Any]:
-    try:
-        return json.loads(output)
-    except json.JSONDecodeError:
-        start = output.find("{")
-        end = output.rfind("}")
-        if start == -1 or end == -1 or end <= start:
-            raise
-        return json.loads(output[start : end + 1])
+    for parsed in iter_json_objects_from_text(output):
+        return parsed
+    raise json.JSONDecodeError("no JSON object found", output, 0)
+
+
+def iter_json_objects_from_text(output: str):
+    seen: set[str] = set()
+    for candidate in iter_json_object_candidates(output):
+        candidate = candidate.strip()
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            yield parsed
+
+
+def iter_json_object_candidates(output: str):
+    stripped = output.strip()
+    if stripped:
+        yield stripped
+
+    for match in re.finditer(r"```(?:json)?\s*(.*?)```", output, flags=re.IGNORECASE | re.DOTALL):
+        yield match.group(1)
+
+    yield from iter_balanced_json_objects(output)
+
+
+def iter_balanced_json_objects(output: str):
+    start: int | None = None
+    depth = 0
+    in_string = False
+    escaped = False
+    for index, char in enumerate(output):
+        if start is None:
+            if char == "{":
+                start = index
+                depth = 1
+                in_string = False
+                escaped = False
+            continue
+
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                yield output[start : index + 1]
+                start = None
 
 
 def looks_like_agent_result(data: Any) -> bool:
@@ -61,11 +117,7 @@ def iter_agent_result_candidates(value: Any):
     if looks_like_agent_result(value):
         yield value
     if isinstance(value, str):
-        try:
-            parsed = parse_json_object(value)
-        except json.JSONDecodeError:
-            parsed = None
-        if parsed is not None:
+        for parsed in iter_json_objects_from_text(value):
             yield from iter_agent_result_candidates(parsed)
     elif isinstance(value, dict):
         for nested in value.values():
@@ -94,6 +146,27 @@ def parse_codex_jsonl(output: str) -> dict[str, Any]:
 def extract_agent_result(data: Any) -> dict[str, Any] | None:
     for candidate in iter_agent_result_candidates(data):
         return candidate
+    return None
+
+
+def extract_agent_result_from_text(output: str) -> dict[str, Any] | None:
+    for parsed in iter_json_objects_from_text(output):
+        result = extract_agent_result(parsed)
+        if result is not None:
+            return result
+    return None
+
+
+def extract_claude_result_text(output: str) -> str | None:
+    try:
+        parsed = json.loads(output.strip())
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    result = parsed.get("result")
+    if isinstance(result, str) and result.strip():
+        return result
     return None
 
 
@@ -404,27 +477,26 @@ def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
     completed = run_process(command, stdin=prompt, timeout_s=timeout_s, cwd=root)
     if completed.returncode != 0:
         raise classify_process_error("claude", completed.returncode, completed.stdout, completed.stderr)
-    try:
-        parsed = parse_json_object(completed.stdout)
-        result = extract_agent_result(parsed)
-        if result is not None:
-            return result
-        raise json.JSONDecodeError("no agent result in Claude output", completed.stdout, 0)
-    except json.JSONDecodeError:
-        repair_prompt = (
-            "Repair this output into JSON matching the discuss-ledger schema. "
-            "Return only JSON. Preserve or convert prose to Chinese unless another language is explicitly required.\n\n"
-            f"Schema:\n{SCHEMA_PATH.read_text(encoding='utf-8')}\n\n"
-            f"Invalid output:\n{completed.stdout}"
-        )
-        retry = run_process(command, stdin=repair_prompt, timeout_s=timeout_s, cwd=root)
-        if retry.returncode != 0:
-            raise classify_process_error("claude", retry.returncode, retry.stdout, retry.stderr)
-        parsed = parse_json_object(retry.stdout)
-        result = extract_agent_result(parsed)
-        if result is not None:
-            return result
-        raise AdapterError("INVALID_JSON", "Claude did not return a valid agent result after repair")
+    result = extract_agent_result_from_text(completed.stdout)
+    if result is not None:
+        return result
+
+    invalid_output = extract_claude_result_text(completed.stdout) or completed.stdout
+    repair_prompt = (
+        "Repair the following Claude result text into one JSON object matching the discuss-ledger schema. "
+        "Return only the repaired agent result object, not the Claude CLI wrapper, not markdown. "
+        "Preserve or convert prose to Chinese unless another language is explicitly required. "
+        "Escape quotation marks inside JSON string values.\n\n"
+        f"Schema:\n{SCHEMA_PATH.read_text(encoding='utf-8')}\n\n"
+        f"Invalid Claude result text:\n{invalid_output}"
+    )
+    retry = run_process(command, stdin=repair_prompt, timeout_s=timeout_s, cwd=root)
+    if retry.returncode != 0:
+        raise classify_process_error("claude", retry.returncode, retry.stdout, retry.stderr)
+    result = extract_agent_result_from_text(retry.stdout)
+    if result is not None:
+        return result
+    raise AdapterError("INVALID_JSON", "Claude did not return a valid agent result after repair")
 
 
 def run_fake(agent: str, status: ledger.LedgerStatus) -> dict[str, Any]:

@@ -114,6 +114,41 @@ def test_parse_codex_jsonl_extracts_nested_final_result() -> None:
     assert orchestrator.parse_codex_jsonl(stream) == final
 
 
+def test_extract_agent_result_accepts_claude_wrapper_with_fenced_result() -> None:
+    orchestrator = load_orchestrator()
+    final = {
+        "convergences": [],
+        "contests": [],
+        "new_points": [{"summary": "S", "body": "B"}],
+    }
+    claude_output = {
+        "type": "result",
+        "subtype": "success",
+        "result": "```json\n" + json.dumps(final) + "\n```",
+    }
+
+    assert orchestrator.extract_agent_result(claude_output) == final
+
+
+def test_extract_agent_result_skips_non_result_json_before_fenced_result() -> None:
+    orchestrator = load_orchestrator()
+    final = {
+        "convergences": [{"point": "D1", "marker": "一致", "line": "已收敛"}],
+        "contests": [],
+        "new_points": [],
+    }
+    mixed_text = (
+        "Schema example:\n"
+        "```json\n{\"type\":\"object\",\"properties\":{}}\n```\n\n"
+        "Actual result:\n"
+        "```json\n"
+        + json.dumps(final, ensure_ascii=False)
+        + "\n```"
+    )
+
+    assert orchestrator.extract_agent_result({"result": mixed_text}) == final
+
+
 def test_normalize_result_rejects_missing_required_shape() -> None:
     orchestrator = load_orchestrator()
 
@@ -165,6 +200,50 @@ def test_run_claude_uses_target_root_for_process(monkeypatch, tmp_path: Path) ->
     assert "prompt" not in command
     assert stdin == "prompt"
     assert cwd == tmp_path
+
+
+def test_run_claude_repairs_invalid_inner_result_without_wrapper_noise(monkeypatch, tmp_path: Path) -> None:
+    orchestrator = load_orchestrator()
+    calls = []
+    invalid_inner_result = (
+        '```json\n'
+        '{"convergences":[],"contests":[{"point":"D1","body":"Task says "quoted" text","movement":true}],"new_points":[]}'
+        '\n```'
+    )
+    repaired = {
+        "convergences": [],
+        "contests": [{"point": "D1", "body": 'Task says "quoted" text', "movement": True}],
+        "new_points": [],
+    }
+
+    def fake_run_process(command, *, stdin=None, timeout_s=900, cwd=None):
+        del command, timeout_s, cwd
+        calls.append(stdin)
+
+        class Completed:
+            returncode = 0
+            stderr = ""
+
+        completed = Completed()
+        if len(calls) == 1:
+            completed.stdout = json.dumps(
+                {
+                    "type": "result",
+                    "result": invalid_inner_result,
+                    "usage": {"input_tokens": 1},
+                }
+            )
+        else:
+            completed.stdout = json.dumps({"type": "result", "result": json.dumps(repaired)})
+        return completed
+
+    monkeypatch.setattr(orchestrator, "run_process", fake_run_process)
+
+    assert orchestrator.run_claude("prompt", tmp_path, 10) == repaired
+    assert len(calls) == 2
+    assert "Invalid Claude result text:" in calls[1]
+    assert invalid_inner_result in calls[1]
+    assert '"usage"' not in calls[1]
 
 
 def test_run_codex_sets_fast_service_tier_on_success(monkeypatch, tmp_path: Path) -> None:
