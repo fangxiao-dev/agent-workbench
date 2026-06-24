@@ -1,136 +1,223 @@
 ---
 name: grill-me-smartly
-description: Review a plan by running the grill-me skill in the main session while using a standing answer-only subagent to represent the user for codebase research and factual confirmation. The subagent must not use skills; it answers the main session's concrete questions from local investigation. Store compact answer notes under docs/exchange, then continue the grill-me decision tree with those answers.
+description: >
+  Review a plan with a Chinese Grill Ledger, a standing questioner subagent, and
+  a local-fact answerer subagent. Use this when the user wants a relentless
+  grill-me style review but also wants the agent to research local facts, record
+  every question and answer, and summarize the choices already made on their
+  behalf.
 ---
 
 # Grill Me Smartly
 
-Use this skill to review a plan with a two-lane process:
+Use this skill to stress-test a plan through a ledger-driven review loop.
 
-- The main session runs the actual `grill-me` skill and owns the decision-tree interview.
-- A standing subagent represents the user for answer gathering: it researches local files, confirms code facts, and answers the main session's concrete question.
+The ledger is the source of truth. It records every question, every answer, all
+converged decisions, unresolved user-intent questions, and the stop proof. The
+top of the ledger is written in Chinese so the user can quickly see what the
+agents decided, why, and what still needs their judgment.
 
-Keep the subagent's detailed research in `docs/exchange` so the main session stays compact. The main session then uses those answers to continue `grill-me` and decide what still needs the real user's input.
+## User Invocation
 
-## Loop Contract
+The user should only need a short request such as:
 
-This is a loop, not a one-shot review.
+```text
+用 grill-me-smartly 审 docs/plans/user-auth-migration.md。
+```
 
-For each iteration:
+Treat that as authorization to run the full workflow in this file: initialize or
+load the Grill Ledger, use the Questioner and Answerer roles as needed, record
+Chinese summaries, and stop only with proof. Do not require the user to restate
+the internal role split, ledger mechanics, or subagent choreography.
 
-1. Main session proposes exactly one `grill-me` question.
-2. The same standing subagent answers that question when it can be researched locally.
-3. Main session records the answer and marks only that decision as resolved.
-4. Main session explicitly continues to the next `grill-me` question.
+## Review Then Apply
 
-After a subagent answer, say the equivalent of: "This first decision is resolved; continue to the second decision." Do not frame a single answered question as the whole review being complete.
+This skill has two separate phases:
 
-Only produce a final decision packet when one of these termination conditions is true:
+1. **Review phase**: produce the full Chinese alignment document in the Grill
+   Ledger. Do not edit the reviewed plan, spec, PRD, or source document during
+   this phase.
+2. **Apply phase**: update the reviewed document only after the user has read
+   the alignment document and explicitly asks to apply it.
 
-- The decision tree has no remaining material branches.
-- The next unresolved question requires the real user's preference, product intent, or risk tolerance.
-- The user explicitly asks to stop and summarize.
-- Further questions would be duplicates or low-value restatements of already resolved decisions.
+The Grill Ledger is the review deliverable. It should be complete enough for the
+user to quickly understand all proposed choices, all questions asked and
+answered, and all remaining user decisions before any target document changes.
 
-## Subagent Lifecycle
+## Roles
 
-Create or reuse one standing answer-only subagent for the whole review loop. Do not create a fresh subagent per question.
+- **Main session**: scribe, judge, and user-intent gatekeeper. It is the only
+  writer of the ledger and must write through `scripts/grill_ledger.py`.
+- **Questioner subagent**: owns the decision tree. It only proposes the next
+  highest-value question and explains why it matters now.
+- **Answerer subagent**: answers only questions that can be resolved by local
+  files, code, git history, docs, or available tools. It must not answer product
+  intent, preference, or risk-tolerance questions.
+- **Optional critic subagent**: after every five answered questions, or before
+  stopping, checks whether important branches are missing or the review is
+  converging too early.
 
-- Start the subagent before the first locally answerable `grill-me` question.
-- Keep the same subagent open across all loop iterations so it preserves the plan context and prior answers.
-- For each new question, send the new question to that same subagent.
-- Close the subagent only after the loop reaches a termination condition and the main session has read or recorded the final answer note.
-- If the subagent fails or loses context, explicitly state that a replacement is being opened and pass it the accumulated exchange note before continuing.
+Subagents do not edit the ledger directly. They return structured text to the
+main session; the main session records it.
+
+## Ledger Location
+
+Ledgers live under:
+
+```text
+docs/exchange/grill/grill-<slug>.md
+```
+
+The script automatically adds `docs/exchange/grill/` to `.gitignore` when it
+initializes a ledger.
+
+Use a slug from the reviewed document basename when possible. If the review is
+not anchored to a file and no obvious slug exists, ask the user for a short
+slug.
+
+`init` refuses to overwrite an existing ledger. If a ledger exists, use
+`status` and continue from it.
+
+## Ledger Commands
+
+Run commands from the target repo root:
+
+```bash
+python <skill>/scripts/grill_ledger.py init --topic <plan-or-topic> --slug <slug> --initiator <main-session-name>
+python <skill>/scripts/grill_ledger.py status --slug <slug>
+python <skill>/scripts/grill_ledger.py add-question --slug <slug> --author Questioner --branch <branch> --question <question> --why-now <reason> --recommended-default <default>
+python <skill>/scripts/grill_ledger.py record-answer --slug <slug> --question Q1 --author Answerer --answer <answer> --evidence <evidence> --uncertainty <uncertainty> --needs-user true|false
+python <skill>/scripts/grill_ledger.py converge --slug <slug> --question Q1 --line <decision> --rationale <why> --impact <impact>
+python <skill>/scripts/grill_ledger.py need-user --slug <slug> --question Q1 --line <question-for-user>
+python <skill>/scripts/grill_ledger.py end-turn --slug <slug>
+python <skill>/scripts/grill_ledger.py stop --slug <slug> --proof <stop-proof>
+```
+
+Use PowerShell quoting rules when values contain spaces.
 
 ## Workflow
 
-1. Confirm the review target.
-   - Identify the plan being reviewed from the user's message, a specified file, or the current conversation.
-   - If important context is available in local files, inspect it before asking.
-   - Do not begin implementation while this review workflow is active.
+1. **Confirm the review target.**
+   - Identify the plan, spec, PRD, or current conversation being reviewed.
+   - Read the target enough to understand the design and likely decision tree.
+   - Do not edit the target document while this review workflow is active.
 
-2. Use the real `grill-me` skill in the main session.
-   - Load and follow `skills/grill-me/SKILL.md`; do not approximate it as "`grill-me`-style".
-   - Interview the plan relentlessly through a decision tree.
-   - Ask one concrete question at a time.
-   - If a question can be answered by exploring the codebase, answer it through investigation before asking the user.
-   - Include the main session's recommended answer when there is enough evidence.
+2. **Initialize or load the ledger.**
+   - If no ledger exists, run `init`.
+   - If one exists, run `status` and read the Markdown file before continuing.
+   - Treat the Chinese sections at the top as the current human-readable state,
+     but use the script for all updates.
 
-3. Open or reuse one standing answer-only subagent.
-   - Use a subagent only when the user explicitly requested this workflow or otherwise authorized subagents.
-   - Use the same subagent for every locally answerable question in the review loop.
-   - Tell the subagent it represents the user only for factual/codebase answers requested by the main session.
-   - Tell the subagent not to use any skills, even if a skill seems relevant.
-   - Give it the plan, the exact current question, and any local paths or context it should inspect.
-   - On later iterations, send only the next question plus any new context; do not spawn a new subagent just because the question changed.
-   - Ask for a concise answer, supporting evidence, uncertainty, and whether the answer changes the next grill-me decision.
-   - Do not ask it to classify question priority or make final irreversible decisions.
+3. **Start or reuse the standing Questioner.**
+   - Give it the plan snapshot and the current ledger summary.
+   - Tell it to ask exactly one question at a time.
+   - Tell it not to answer its own question.
+   - Require this output:
+     - branch name
+     - exact question
+     - why this question matters now
+     - recommended default when evidence is sufficient
+     - whether the question appears locally answerable
 
-4. Decide whether the real user still needs to answer.
-   - If the subagent's researched answer resolves the question, continue the `grill-me` decision tree in the main session.
-   - Treat that response as the end of the current loop iteration, not the end of the skill.
-   - Announce the transition clearly: the current decision is resolved, then move to the next decision.
-   - If the answer depends on product intent, preference, risk tolerance, or facts not discoverable locally, ask the real user one question.
-   - Do not convert the workflow into a batch priority review unless the user asks for that explicitly.
+4. **Record the question.**
+   - Use `add-question`.
+   - Do not combine unrelated questions into one Q item.
 
-5. Record the subagent answer under `docs/exchange`.
-   - Create a compact Markdown note in `docs/exchange/`, for example `docs/exchange/grill-me-smartly-YYYYMMDD-HHMMSS.md`.
-   - Store the plan snapshot, main-session question, subagent answer, inspected evidence, uncertainty, and the main session's next decision.
-   - Keep the file concise; its job is to preserve context without loading the full subagent thread into the main session.
+5. **Answer locally when possible.**
+   - If the question is locally answerable, send it to the Answerer.
+   - The Answerer must return:
+     - concise answer
+     - evidence with files, commands, or inspected sources
+     - uncertainty
+     - whether user intent is required
+   - Use `record-answer`.
 
-6. Merge and return the decision.
-   - Read the `docs/exchange` note before responding.
-   - Combine the main session's `grill-me` review with the subagent's researched answers.
-   - Return the user-facing decision packet with:
-     - the current grill-me question or decision,
-     - the answer gathered by the subagent, if any,
-     - the main session's recommended answer or default,
-     - what still needs the real user's decision,
-     - the path to the exchange note.
+6. **Converge or ask the real user.**
+   - If local evidence resolves the decision, use `converge`.
+   - The convergence line must be Chinese and say what choice was made.
+   - Include why the choice is reasonable and what it changes.
+   - If the answer depends on product intent, preference, risk tolerance, or an
+     unavailable external fact, use `need-user` and ask the real user one
+     concrete question.
 
-## Review Note Format
+7. **Continue the loop.**
+   - Use `end-turn` after each completed question cycle.
+   - If status remains `进行中`, send the updated ledger state back to the
+     Questioner for the next question.
+   - Do not stop after one answered question. A resolved question means the
+     review advances to the next material branch.
 
-When writing a temporary review note, use this minimal structure:
+8. **Run a critic pass when useful.**
+   - After every five answered questions, before a final stop, or when the
+     review feels too narrow, ask a fresh critic subagent to inspect the ledger.
+   - The critic should identify missing branches, premature convergence,
+     repeated questions, or places where user intent was mistaken for local
+     fact.
+   - Record any accepted critic point as a new question through `add-question`.
 
-```markdown
-# grill-me-smartly review
+9. **Stop only with proof.**
+   - A stop is valid only when the ledger shows one of:
+     - all material branches are converged
+     - remaining questions require the real user
+     - further questions would duplicate already resolved decisions
+   - Use `stop --proof` only after the Questioner or critic has provided the
+     stop proof. Individual converged questions do not automatically end the
+     whole review.
+   - The final response must link or name the ledger path and summarize:
+     - decisions already made
+     - questions asked and answered
+     - what still needs the user
+   - Do not update the reviewed document in this response. Ask the user to
+     inspect the alignment document and explicitly request application if they
+     want the reviewed document changed.
 
-## Source
-- Task: <one sentence>
-- Source file/context: <path or current conversation>
-- Created at: <ISO timestamp>
+10. **Apply only after user approval.**
+    - When the user explicitly asks to apply the alignment, read the latest
+      ledger and the target document.
+    - Apply only the converged decisions and user-approved裁决.
+    - Preserve unresolved items in the ledger or ask the user before changing
+      the target document.
 
-## Plan Snapshot
-<short summary of the reviewed plan>
+## Chinese Summary Requirements
 
-## Proposed Questions
-| ID | Question | Main-session recommended answer |
-| --- | --- | --- |
-| Q1 | ... | ... |
+The ledger's top sections are the user's fast-read surface:
 
-## Subagent Answer
-| ID | Answer | Evidence | Uncertainty |
-| --- | --- | --- |
-| Q1 | ... | ... | ... |
+- `已收敛决策摘要`: every choice the agents made on the user's behalf, with
+  reason, impact, and evidence.
+- `待用户裁决`: only decisions that require the real user's intent or risk
+  tolerance.
+- `问题与回答总览`: every question and answer status, so the user can audit the
+  review.
+- `停止证明`: why the automatic review may stop or why it must continue.
 
-## Decision Packet
-- Resolved locally: <questions or decisions>
-- Needs real user: <questions or decisions>
-- Recommended decision: <what to ask or decide now>
-```
-
-## Common Mistake
-
-Do not stop after the first answered question. `grill-me` intentionally asks one question at a time, so a successful first answer means the loop should advance, not finish. Use completion language only after checking the termination conditions above.
-
-Do not spawn one subagent per question. The subagent is standing for the entire review; per-question dispatch loses context and changes the intended workflow.
+Keep these sections understandable without reading the full log.
 
 ## Question Quality Bar
 
-Good questions should:
+Good questions:
 
-- Name the exact decision being forced.
-- Explain why the answer matters now.
-- State the recommended answer when evidence is sufficient.
-- Avoid asking for information already discoverable from local files, docs, git history, or available tools.
-- Avoid bundles of unrelated questions unless producing a final decision packet.
+- force one exact decision
+- name the affected branch of the plan
+- explain why the decision matters now
+- include a recommended default when evidence supports one
+- avoid facts discoverable from local files unless the Answerer is being asked
+  to verify them
+
+Bad questions:
+
+- bundle unrelated decisions
+- ask for information already recorded in the ledger
+- ask the Answerer to infer user preference
+- stop the review without a stop proof
+
+## Common Mistakes
+
+- Letting the main session own the decision tree again. The Questioner owns the
+  tree; the main session records, judges, and asks the user when needed.
+- Letting subagents write Markdown directly. The script owns ledger structure.
+- Treating the first answer as the whole review. Continue until the stop proof
+  is valid.
+- Recording only the final decision. The tool must preserve all questions and
+  answers for user auditability.
+- Editing the reviewed document during the review phase. First produce the full
+  alignment document, then wait for explicit user approval before applying it.

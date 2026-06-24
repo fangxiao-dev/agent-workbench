@@ -1,4 +1,4 @@
 interface:
   display_name: "Grill Me Smartly"
-  short_description: "Run grill-me with an answer-only research agent"
-  default_prompt: "Use $grill-me-smartly to review this plan with the main session running $grill-me and an answer-only subagent researching concrete codebase questions without skills."
+  short_description: "Run a Chinese Grill Ledger with questioner and answerer agents"
+  default_prompt: "用 $grill-me-smartly 审这个计划。"
