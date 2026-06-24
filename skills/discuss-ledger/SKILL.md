@@ -1,6 +1,6 @@
 ---
 name: discuss-ledger
-description: Use this whenever multiple agents (e.g. Claude and Codex/GPT, or two review passes) debate a plan, design, spec, PRD, or skill and their opinions should be accumulated into a single shared discussion document. Triggers on natural phrases like "组织审核 ...", "用 discuss orchestrator 审 ...", "自动讨论 ...", "审一下这个计划并记录意见", "把你的意见写进 discuss 文档", "追加到讨论文档", "他也有意见,接着往里写", "继续收敛", "把刚才这个评审过程做成讨论记录", or any time you are asked to express a review opinion that another party will later respond to. Each agent maintains a convergence section first, then appends only its disagreements, until consensus or deadlock. Use this even when the user just says "discuss" plus a target file — do not hand-roll an ad-hoc review note. If Claude Code / `claude -p` appears unavailable, hangs, or reports AUTH/login while the user is already logged in, first treat it as a likely noninteractive environment issue: inspect aliases and `ANTHROPIC_*` names without printing values, unset provider override variables, run a minimal `claude -p` probe, then run the orchestrator with a cleaned environment.
+description: Use this whenever multiple agents (e.g. Claude and Codex/GPT, or two review passes) debate a plan, design, spec, PRD, or skill and their opinions should be accumulated into a single shared discussion document. Triggers on natural phrases like "组织审核 ...", "用 discuss orchestrator 审 ...", "自动讨论 ...", "审一下这个计划并记录意见", "把你的意见写进 discuss 文档", "追加到讨论文档", "他也有意见,接着往里写", "继续收敛", "把刚才这个评审过程做成讨论记录", or any time you are asked to express a review opinion that another party will later respond to. Each agent maintains a convergence section first, then appends only its disagreements, until consensus or deadlock. Use this even when the user just says "discuss" plus a target file — do not hand-roll an ad-hoc review note.
 user-invocable: true
 ---
 
@@ -8,22 +8,18 @@ user-invocable: true
 
 Maintain a single Markdown ledger where two or more parties (typically this agent plus another agent like Codex/GPT, or the user) debate a plan/design and converge over rounds. The ledger exists so that, across many turns and many sessions, nobody re-litigates settled points and the live disagreements stay readable.
 
-## Critical Timeout Rule For Orchestrator Calls
-
-Read this **before** invoking `scripts/discuss_orchestrator.py`.
-
-`--timeout-s` is a per-agent, per-call timeout, not the overall orchestration timeout. When invoking the orchestrator through a tool wrapper, set the wrapper/tool timeout high enough for the whole run:
-
-```text
-agent_count * max_rounds * timeout_s + buffer
-```
-
-For the default `--agents codex,claude`, `--max-rounds 5`, and `--timeout-s 300`, use at least 3600 seconds as the outer tool timeout. If the wrapper timeout is lower, the orchestrator can still be killed even when `--timeout-s` was passed correctly.
-
 The document has two living parts:
 
 1. **收敛区 (Convergence record)** — at the very top. Settled decisions only, one line each. Promoted into here *before* you write new opinions, so it's always the current source of truth for "what's decided."
-2. **讨论记录 (Discussion log)** — round-by-round. **Only disagreements** in full; agreements are one line ("收敛入区:…"). Signal over noise.
+2. **讨论记录 (Discussion log)** — round-by-round. **Only disagreements** in full; agreements are one line ("收敛入区:..."). Signal over noise.
+
+## References
+
+Read only the reference needed for the current path:
+
+- Before invoking `scripts/discuss_orchestrator.py`, read `references/orchestrator.md`.
+- If Claude Code / `claude -p` reports auth/login, hangs, or looks unavailable during orchestration while the user says they are already logged in, read `references/claude-code-noninteractive.md`.
+- When you need exact `discuss_ledger.py` command syntax, read `references/ledger-cli.md`.
 
 ## Language
 
@@ -31,7 +27,7 @@ Prefer Chinese for discussion entries, point summaries, convergence lines, and u
 
 ## The script does the bookkeeping — you do the judgment
 
-All mechanical structure (frontmatter state machine, point IDs, section moves, round bumps, deadlock counting, gitignore) is owned by `scripts/discuss_ledger.py`. **Do not hand-edit the ledger's YAML, table, or section structure** — call the script and pass your decisions as arguments. This keeps every agent's writes consistent and removes the bookkeeping errors agents make (forgetting to bump the round, renumbering IDs, leaving the table stale).
+All mechanical structure (frontmatter state machine, point IDs, section moves, round bumps, deadlock counting, gitignore) is owned by `scripts/discuss_ledger.py`. **Do not hand-edit the ledger's YAML, table, or section structure** — call the script and pass your decisions as arguments. This keeps every agent's writes consistent and removes the bookkeeping errors agents make.
 
 What you decide, the script can't:
 
@@ -43,66 +39,15 @@ What you decide, the script can't:
 
 Before converging or contesting, verify factual premises that affect the conclusion. If the other party's premise is wrong, record that explicitly: either contest the point, or converge with a corrected rationale when the final action still holds. This keeps useful decisions while preventing false reasoning from becoming part of the source of truth.
 
-Run it from the repo root (paths are resolved relative to it):
-
-```bash
-python <skill>/scripts/discuss_ledger.py <subcommand> ...
-```
-
-`--root` defaults to the current working directory, so you only need to pass `--root <repo-root>` when you are *not* already at the repo root. All subcommands except `init` take `--slug`. Mutating commands that take `--author` automatically add that author to `participants` if missing.
+Run the ledger CLI from the repo root (paths are resolved relative to it). `--root` defaults to the current working directory, so pass `--root <repo-root>` only when you are not already at the repo root. See `references/ledger-cli.md` for exact commands.
 
 Ledgers live at `docs/exchange/discuss/discuss-<slug>.md` — the repo's untracked scratch area. They are **ephemeral debate scaffolding**, not deliverables; the converged plan is the deliverable. `init` creates the dir and adds `docs/exchange/discuss/` to `.gitignore` (scoped) automatically.
 
 ## Orchestrated auto-discussion
 
-If the user asks for `组织审核`, `discuss orchestrator`, `自动讨论`, "Codex 作为 orchestrator", or asks to "用 discuss 审" a target, do not perform a normal single-agent review. Run the local orchestrator unless the user explicitly asks for manual ledger editing.
+If the user asks for `组织审核`, `discuss orchestrator`, `自动讨论`, "Codex 作为 orchestrator", or asks to "用 discuss 审" a target, do not perform a normal single-agent review. Read `references/orchestrator.md`, then run the local orchestrator unless the user explicitly asks for manual ledger editing.
 
-Use the target project root and topic/document from the request. If both are clear, start without asking for confirmation:
-
-```bash
-python <skill>/scripts/discuss_orchestrator.py --root <target-project-root> --topic <target-doc-or-topic>
-```
-
-When the user gives a target file path, infer the project root before running. Prefer the nearest ancestor containing `.git` as `--root`, and pass the target path relative to that root as `--topic`. This works for ordinary clones, Git worktrees, `.worktrees/<name>/...`, and other checkout layouts. If the script is available, rely on `discuss_orchestrator.py`'s built-in root/topic resolution rather than hand-normalizing the path.
-
-Defaults are `--agents codex,claude`, `--max-rounds 5`, and `--timeout-s 300`. Before invoking, apply the **Critical Timeout Rule For Orchestrator Calls** above so the outer tool timeout is long enough for the full run. After it stops, report the ledger path, convergence summary, open/deadlocked points, and whether user裁决 is needed.
-
-### Claude Code noninteractive environment fix
-
-When the orchestrator says Claude requires login/authentication, or `claude -p` hangs after warnings while the user says Claude Code / Claude Pro is already logged in, do **not** immediately tell the user to log in again. This is often a false failure caused by noninteractive subprocess environment drift:
-
-- `subprocess.Popen(["claude", ...])` does not inherit interactive zsh aliases such as `claude --dangerously-skip-permissions`.
-- `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, or related `ANTHROPIC_*` variables can make Claude Code prefer a third-party Anthropic-compatible provider over the user's Claude.ai login.
-- Typical symptom: a warning about auth sources or disabled connectors, `duration_api_ms=0`, 0 tokens, hanging, or an orchestrator `AUTH` / login classification.
-
-Before declaring Claude unavailable, run this diagnosis without printing secret values:
-
-```bash
-zsh -lic 'printf "which claude: "; which claude; printf "alias claude: "; alias claude 2>/dev/null || true; printf "ANTHROPIC env names:\n"; env | cut -d= -f1 | rg "^ANTHROPIC" | sort'
-```
-
-Then run a minimal clean-environment probe:
-
-```bash
-zsh -lic 'unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_BASE_URL ANTHROPIC_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_REASONING_MODEL; printf %s "Return {\"ok\":true} only." | claude --dangerously-skip-permissions -p --no-session-persistence --effort low --disable-slash-commands --tools "" --system-prompt "Return only JSON." --output-format json'
-```
-
-If the probe succeeds, Claude Code is usable. Run the orchestrator with the same provider overrides removed from its process environment:
-
-```bash
-env \
-  -u ANTHROPIC_AUTH_TOKEN \
-  -u ANTHROPIC_API_KEY \
-  -u ANTHROPIC_BASE_URL \
-  -u ANTHROPIC_MODEL \
-  -u ANTHROPIC_DEFAULT_HAIKU_MODEL \
-  -u ANTHROPIC_DEFAULT_OPUS_MODEL \
-  -u ANTHROPIC_DEFAULT_SONNET_MODEL \
-  -u ANTHROPIC_REASONING_MODEL \
-  python <skill>/scripts/discuss_orchestrator.py --root <target-project-root> --topic <target-doc-or-topic>
-```
-
-Only classify the issue as real missing auth after the clean probe also fails. Never print env values, tokens, API keys, signed URLs, or provider endpoints while debugging this.
+The orchestrator timeout rule is a hard preflight requirement: before invoking `scripts/discuss_orchestrator.py`, set the outer tool/wrapper timeout high enough for the whole run, not just one agent call. Use the formula and defaults in `references/orchestrator.md`.
 
 ## Step 1 — Locate or initialize
 
@@ -112,15 +57,10 @@ Before opening or answering a ledger, read the anchored doc or explicit review t
 
 Check whether the ledger exists (glob `docs/exchange/discuss/discuss-<slug>.md`):
 
-- **Does not exist → you are the initiator.** Create it:
-  ```bash
-  python ... init --topic docs/plans/2026-06-18-foo.md --initiator <you>
-  ```
-  `--topic` may be a doc path (recorded as the review target) or free text. `--initiator` is whoever speaks round 1 (usually you). `--participants CC,Codex` is optional; if omitted, the initiator starts the list and later `--author` / `set-next --next` calls add participants as they appear.
-- **Exists → you are a responder.** Read ground truth with `status` before doing anything:
-  ```bash
-  python ... status --slug 2026-06-18-foo
-  ```
+- **Does not exist → you are the initiator.** Create it with `init`.
+- **Exists → you are a responder.** Read ground truth with `status` before doing anything.
+
+Use `references/ledger-cli.md` for exact command syntax.
 
 ## Step 2 — Take your turn
 
@@ -136,28 +76,19 @@ A turn is always: **read → promote settled points → respond with disagreemen
 
    After `status`, read the ledger file itself before judging. `status` is the state summary; the full discussion log contains evidence, corrected premises, and nuances that must inform converge/contest decisions.
 
-2. **Promote what's now settled (`converge`).** For each point you now genuinely agree on (or the user ruled), promote it *before* writing new opinions:
-   ```bash
-   python ... converge --slug S --point D1 --marker "一致" --line "保留兼容入口,重指新 dashboard"
-   ```
-   Marker is `一致` (both agree) or `用户裁决` (user ruled; write `用户裁决·覆盖CC` if it overrides a party). Convergence ≠ agreement — a user ruling settles a point even if you still disagree; record it and stop arguing it.
+2. **Promote what's now settled (`converge`).** For each point you now genuinely agree on (or the user ruled), promote it *before* writing new opinions. Marker is `一致` (both agree) or `用户裁决` (user ruled; write `用户裁决·覆盖CC` if it overrides a party).
+
+   Convergence ≠ agreement — a user ruling settles a point even if you still disagree; record it and stop arguing it.
 
    When a point's original premise is wrong but its practical conclusion is still right, converge the corrected conclusion rather than preserving the bad premise. Write the correction in the convergence line so later agents do not inherit false reasoning.
 
    A convergence line should include the final decision, corrected rationale if any, and the concrete change requested. Keep it one line, but make it actionable enough that the user can apply it to the target plan/spec.
 
-3. **Normalize the other party's free-form contribution.** The other agent may have edited the file directly without the script, so its new points aren't in the table. Register each as a tracked point so it can be followed:
-   ```bash
-   python ... add-point --slug S --author <them> --summary "..." --body "their argument"
-   ```
+3. **Normalize the other party's free-form contribution.** The other agent may have edited the file directly without the script, so its new points aren't in the table. Register each materially new disagreement as a tracked point.
 
    First map free-form notes to existing points. Use `contest` for a response to an existing point, `converge` for a settled point, and `add-point` only for a materially new disagreement.
 
-4. **Respond to live disputes (`contest`)** — counter an existing point in the current round:
-   ```bash
-   python ... contest --slug S --point D2 --author <you> --body - --movement true   # body via stdin
-   ```
-   Set `--movement false` when you're restating with no new ground. The script increments 已历轮次 and, at ≥2 rounds with no movement, **auto-marks the point 僵局** — so be honest about movement; that flag is what lets a dead debate actually die instead of looping.
+4. **Respond to live disputes (`contest`).** Counter an existing point in the current round. Set `--movement false` when you're restating with no new ground. The script increments 已历轮次 and, at ≥2 rounds with no movement, auto-marks the point 僵局.
 
    Set `--movement true` only for new evidence, corrected facts, a narrowed scope, an explicit concession, or a concrete compromise. Rephrasing the same preference is `--movement false`.
 
@@ -165,17 +96,11 @@ A turn is always: **read → promote settled points → respond with disagreemen
 
    `add-point` auto-allocates the next `Dn`, adds a table row, and writes the argument under the current round. Always include reasoning and evidence (file paths, line numbers, verified facts), not bare positions — that's what lets the next party engage.
 
-6. **`end-turn`** — closes your turn. It recomputes overall status and either bumps the round / waits for the next speaker to be assigned, or declares the exit:
-   ```bash
-   python ... end-turn --slug S
-   ```
+6. **`end-turn`** — closes your turn. It recomputes overall status and either bumps the round / waits for the next speaker to be assigned, or declares the exit.
 
    Do not run `end-turn` until every existing point has one of: converged, contested with evidence, marked no-movement, or intentionally left open for the next party. Also account for any high-impact issue you found during the coverage pass.
 
-   If the debate remains open, `end-turn` sets `next: 待指定`. The previous speaker must not choose the next speaker. The actual caller, user, or orchestrator assigns the next turn explicitly:
-   ```bash
-   python ... set-next --slug S --next Codex
-   ```
+   If the debate remains open, `end-turn` sets `next: 待指定`. The previous speaker must not choose the next speaker. The actual caller, user, or orchestrator assigns the next turn explicitly with `set-next`.
 
 Use `--dry-run` on any mutating command to preview the resulting file without writing.
 
@@ -196,7 +121,7 @@ The ledger is useful only when each party contributes new judgment instead of du
 - all converged → `已达成一致`
 - any deadlocked → `僵局` (and `next: 用户`)
 
-When the script prints an `EXIT:` line, stop the current debate turn and tell the user: summarize what converged, and list any deadlocked points needing their ruling. If they rule, that becomes a `converge --marker "用户裁决…"` entry that can break the deadlock.
+When the script prints an `EXIT:` line, stop the current debate turn and tell the user: summarize what converged, and list any deadlocked points needing their ruling. If they rule, that becomes a `converge --marker "用户裁决..."` entry that can break the deadlock.
 
 `EXIT` closes the current state; it does not prohibit future reopening when genuinely new evidence, newly discovered risk, implementation feedback, or an explicit user request appears. A later turn may reopen by adding a new point as described in Step 2.
 
@@ -204,7 +129,7 @@ When the script prints an `EXIT:` line, stop the current debate turn and tell th
 
 - **Hand-editing structure.** Don't touch the YAML/table/section layout directly — use the script, or its invariants drift. Free-form *prose* by the other party is fine and preserved; your job is to register their points via the script on your turn.
 - **Unjustified re-opening.** Reopen when there is genuinely new evidence, a newly discovered risk, implementation feedback, or an explicit user request. Preserve prior convergence lines and add a new tracked point explaining what changed; do not erase or quietly rewrite settled history.
-- **Performative agreement.** Don't concede just to end the debate. If a counter is wrong or unverified, contest it with reasoning — this skill surfaces real disagreement, it doesn't manufacture consensus. (See `superpowers:receiving-code-review` for the spirit.)
+- **Performative agreement.** Don't concede just to end the debate. If a counter is wrong or unverified, contest it with reasoning — this skill surfaces real disagreement, it doesn't manufacture consensus.
 - **Restating without movement.** If you have nothing new, set `--movement false` and let the point deadlock rather than looping.
 - **Dumping agreements into the log.** Agreements are a one-line `converge`; their substance lives in 收敛区, not re-argued in the discussion log.
 
