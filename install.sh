@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 WORKBENCH_DIR="$(cd "$(dirname "$0")" && pwd)"
 TARGET=""
