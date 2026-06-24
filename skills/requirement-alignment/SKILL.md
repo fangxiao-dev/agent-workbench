@@ -1,6 +1,6 @@
 ---
 name: requirement-alignment
-description: Use whenever a new or changed requirement for prj-supplyer-webapp needs to be checked against PRD, ARD, Ubiquitous Language, or other Top Level Knowledge before Func Design or Implementation Plan work. This is the mandatory first step for feature workflow alignment, demand drift checks, scope clarification, requirement proposals, and deciding whether Top Level Knowledge should change.
+description: Use whenever a new or changed requirement for prj-supplyer-webapp needs to be checked against PRD, ARD, CONTEXT.md project language, or other Top Level Knowledge before Func Design or Implementation Plan work. This is the mandatory first step for feature workflow alignment, demand drift checks, scope clarification, requirement proposals, and deciding whether Top Level Knowledge should change.
 ---
 
 # Requirement Alignment
@@ -22,7 +22,7 @@ Read stable knowledge from:
 - `docs/top-level-knowledge/prd.md`
 - Relevant PRD files under `docs/top-level-knowledge/`
 - `docs/top-level-knowledge/ard.md` when architecture boundaries, role boundaries, data flow, Lark-backed contracts, order lifecycle, inventory flow, or major feature surfaces are involved
-- `docs/top-level-knowledge/ubiquitous-language.md`
+- `CONTEXT.md` at the repository root for canonical project language and domain vocabulary
 - `docs/hands-on-knowledge/entry-map.md` only when the requirement names a known integration or the project rules require it
 
 Write the focused requirement artifact to:
@@ -54,7 +54,7 @@ Before writing or editing long-lived knowledge, present this structure:
 ### Top Level Knowledge Fit
 - PRD fit:
 - ARD fit:
-- Ubiquitous Language fit:
+- Project language fit:
 
 ### Drift Or Conflict Check
 - Confirmed alignment:
@@ -95,13 +95,13 @@ Use this exact structure for `docs/exchange/req-YYYYMMDD-HHMM-<topic>.md`:
 ## Knowledge Sources Checked
 - `docs/top-level-knowledge/prd.md`
 - `<specific PRD or Top Level Knowledge file>`
-- `docs/top-level-knowledge/ubiquitous-language.md`
+- `CONTEXT.md`
 - `<other file, if used>`
 
 ## Alignment Result
 - PRD fit:
 - ARD fit:
-- Ubiquitous Language fit:
+- Project language fit:
 - Scope boundary:
 
 ## Top Level Knowledge Changes
@@ -125,8 +125,8 @@ Keep the exchange artifact compact. It should preserve decisions and constraints
 
 - Never silently edit `docs/top-level-knowledge/`.
 - Ask the user to approve the alignment proposal first.
-- Prefer small, explicit edits to the relevant PRD, ARD, or Ubiquitous Language file.
-- If a term is ambiguous, propose a Ubiquitous Language update instead of inventing ad hoc wording in the exchange note.
+- Prefer small, explicit edits to the relevant PRD, ARD, or `CONTEXT.md` file.
+- If a term is ambiguous, propose a `CONTEXT.md` update instead of inventing ad hoc wording in the exchange note.
 - If the requirement conflicts with the PRD, stop and ask the user to choose whether the PRD changes or the requirement is rejected/deferred.
 
 ## User-Facing Output
