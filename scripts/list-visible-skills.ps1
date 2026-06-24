@@ -38,11 +38,41 @@ function Get-SkillEntries {
         return $entries
     }
 
-    Get-ChildItem -Path $RootPath -Directory | ForEach-Object {
-        $entries += [PSCustomObject]@{
-            Name = $_.Name
-            Path = $_.FullName
-            Source = $SourceLabel
+    function Get-SkillNameFromFile {
+        param(
+            [string]$SkillFile,
+            [string]$FallbackName
+        )
+
+        $lines = Get-Content -LiteralPath $SkillFile -TotalCount 20
+        foreach ($line in $lines) {
+            if ($line -match "^name:\s*(.+)$") {
+                return $matches[1].Trim().Trim('"').Trim("'")
+            }
+        }
+
+        return $FallbackName
+    }
+
+    Get-ChildItem -Path $RootPath -Directory -Recurse | ForEach-Object {
+        $relativePath = $_.FullName.Substring($RootPath.Length).TrimStart("\", "/")
+        $pathParts = @($relativePath -split "[\\/]")
+        $hasHiddenPart = $false
+        foreach ($pathPart in $pathParts) {
+            if ($pathPart.StartsWith(".")) {
+                $hasHiddenPart = $true
+            }
+        }
+        $skillFile = Join-Path $_.FullName "SKILL.md"
+        if ((-not $hasHiddenPart) -and (Test-Path -LiteralPath $skillFile)) {
+            $relativeName = $relativePath -replace "\\", "/"
+            $entryName = Get-SkillNameFromFile -SkillFile $skillFile -FallbackName $relativeName
+            $entries += [PSCustomObject]@{
+                Name = $entryName
+                RelativePath = $relativeName
+                Path = $_.FullName
+                Source = $SourceLabel
+            }
         }
     }
 
@@ -78,6 +108,7 @@ function Get-VisibleHostSkills {
             Sources = @($group.Group | Sort-Object Source, Path | ForEach-Object {
                 [PSCustomObject]@{
                     Source = $_.Source
+                    RelativePath = $_.RelativePath
                     Path = $_.Path
                 }
             })
@@ -111,7 +142,7 @@ function Write-HostReport {
     }
 
     foreach ($skill in $Report.MergedSkills) {
-        $sources = @($skill.Sources | ForEach-Object { "$($_.Source)=$($_.Path)" }) -join "; "
+        $sources = @($skill.Sources | ForEach-Object { "$($_.Source)=$($_.RelativePath) ($($_.Path))" }) -join "; "
         if ($skill.DuplicateCount -gt 1) {
             Write-Output "    $($skill.Name) [duplicate x$($skill.DuplicateCount)] -> $sources"
         }

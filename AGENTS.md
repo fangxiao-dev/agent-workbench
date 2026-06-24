@@ -22,7 +22,7 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `gemi
 - When writing PowerShell scripts, use [$powershell-windows](D:\CodeSpace\agent-workbench\skills\powershell-windows\SKILL.md).
 - Use `import-third-party-skill` for third-party skill governance:
   - review upstream first
-  - install or copy the approved skill into `skills/<name>/`
+  - install or copy the approved skill into `skills/<name>/` or `skills/<bundle>/<name>/`
   - register it in `registry/third-party-skills.md`
 - Use `verify-registry-state` after plugin registry changes.
 

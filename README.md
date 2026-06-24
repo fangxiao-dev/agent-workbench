@@ -70,9 +70,11 @@ Codex 写入项目内 `.codex/config.toml` 的 `mcp_servers.discussLedger`；Cla
 
 | 来源 | Windows `install.ps1` | Bash/Unix `install.sh` |
 |------|------------------------|-------------------------|
-| `skills/` | 整个目录 junction 到 `<host>/skills` | 每个 `skills/*/` 单独 symlink 到 `<host>/skills/<name>` |
+| `skills/` | 整个目录 junction 到 `<host>/skills` | 每个 `skills/*/` 顶层目录单独 symlink 到 `<host>/skills/<name>` |
 | `agents/*/` | 每个 agent 目录 junction 到 `<host>/agents/<name>` | 每个 agent 目录 symlink 到 `<host>/agents/<name>` |
 | `commands/*` | 复制到 `<host>/commands/<name>` | 复制到 `<host>/commands/<name>` |
+
+`skills/` 支持 bundle 结构，例如 `skills/feishu-skills/feishu-base/SKILL.md` 和 `skills/lark-skills/lark-intl-base/SKILL.md`。没有 `SKILL.md` 的 bundle 根目录只是分组，不是一个 skill。
 
 宿主根目录：
 
@@ -90,12 +92,12 @@ Codex 写入项目内 `.codex/config.toml` 的 `mcp_servers.discussLedger`；Cla
 
 ### 修改和同步
 
-在 Windows 安装态下，宿主 `skills/` 整体指向本仓库；在 Bash/Unix 安装态下，每个 skill 目录单独链接过去。`agents/` 也是链接安装。`commands/` 使用复制，command 内容变更后需要重跑安装器同步。
+在 Windows 安装态下，宿主 `skills/` 整体指向本仓库；在 Bash/Unix 安装态下，`skills/` 的每个顶层目录单独链接过去，bundle 内的 skill 随 bundle 一起暴露。`agents/` 也是链接安装。`commands/` 使用复制，command 内容变更后需要重跑安装器同步。
 
 新增 skill 后：
 
 - Windows：如果宿主 `skills/` 是 workbench 整目录 junction，通常立即可见
-- Bash/Unix：需要重跑安装器，把新的 `skills/<name>/` symlink 到宿主目录
+- Bash/Unix：新增顶层 `skills/<name>/` 或 `skills/<bundle>/` 后需要重跑安装器；仅新增 bundle 内的 `skills/<bundle>/<name>/` 通常随已有 bundle 链接可见
 
 ### 核对宿主最终可见 skills
 
@@ -154,16 +156,22 @@ WT-PM 工作流拆成三个 skill：
 
 ### 用 Grill Me Smartly 审设计
 
-当你想审一个方案，但希望先由 agent 代你调研代码事实时，使用 `grill-me-smartly`。
+当你想审一个方案，但希望 agent 一边追问、一边代你调研代码事实，并把自动判断过程整理成中文记录时，使用 `grill-me-smartly`。
+
+推荐说法：
+
+```text
+用 grill-me-smartly 审 docs/plans/user-auth-migration.md。
+```
 
 实际流程：
 
-- 主 session 执行真正的 `grill-me` skill，一次只推进一个关键问题
-- 常驻 answer-only subagent 代表你回答可通过本地文件、代码库、git 历史确认的问题
-- 这个 subagent 在整个 review loop 期间保持打开，不是每个问题新派一个
-- subagent 不使用任何 skill，只做事实调研和简短回答
-- 主 session 把每轮问题、回答、证据和不确定性记录到 `docs/exchange/`
-- 每解决一个问题后继续下一轮；只有决策树结束、需要你的真实偏好/风险取舍、或你要求停止时，才输出最终决策包
+- 主 session 是书记、裁判和用户意图网关，只通过脚本写入 ledger
+- 常驻 Questioner subagent 负责沿设计树提出下一个关键问题
+- Answerer subagent 只回答可通过本地文件、代码库、git 历史或工具确认的问题
+- ledger 写在 `docs/exchange/grill/grill-<slug>.md`，顶部用中文汇总已收敛决策、待用户裁决、问题与回答总览、停止证明
+- review 阶段只输出完整意见对齐文档，不直接改被审计划
+- 你检查 ledger 后明确要求应用时，才把已收敛意见更新回原文档
 
 适合用来审实现计划、架构设计、迁移方案、复杂 debug 路线；不适合让 subagent 替你拍板产品意图或风险接受度。
 
@@ -189,8 +197,10 @@ agent-workbench/
 ├── install.sh / install.ps1    ← 多宿主安装入口
 ├── skills/                     ← 正式 skills：自建、第三方、工作流知识库
 │   ├── audit-agent-setup/      ← agent setup 审查知识库（rules + examples）
-│   ├── grill-me-smartly/       ← grill-me + 常驻 answer-only subagent 设计审查
+│   ├── grill-me-smartly/       ← 中文 Grill Ledger + Questioner/Answerer 设计审查
 │   ├── handoff-new-session/    ← 会话上下文落盘和新会话接续提示词
+│   ├── feishu-skills/          ← 国内飞书 skills bundle（feishu-*）
+│   ├── lark-skills/            ← Lark International skills bundle（lark-intl-*）
 │   ├── wt-pm/                  ← WT-PM 工作流知识库
 │   │   ├── SKILL.md            ← 全流程编排入口 skill
 │   │   ├── references/         ← 工作流参考文档
@@ -221,7 +231,7 @@ agent-workbench/
 
 ## 添加新 Skill
 
-1. 在 `skills/` 下创建目录，加 `SKILL.md`（frontmatter 格式见 [docs/workbench-design/02-skills-spec.md](docs/workbench-design/02-skills-spec.md)）
+1. 在 `skills/` 下创建目录并添加 `SKILL.md`；成组能力可放在 `skills/<bundle>/<name>/SKILL.md`（frontmatter 格式见 [docs/workbench-design/02-skills-spec.md](docs/workbench-design/02-skills-spec.md)）
 2. skill 专属脚本放进该 skill 自己的 `scripts/` 目录，不要默认提取到仓库顶层
 
 Windows 整目录 junction 安装态下，新 skill 通常立即对宿主可见；Bash/Unix 逐 skill symlink 安装态下，新增 skill 后需要重跑安装器。

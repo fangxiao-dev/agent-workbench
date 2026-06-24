@@ -36,6 +36,8 @@ powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\install.ps1 
 | `agents/*/` | `<host-root>/agents/<name>/` | Windows junction；Bash/Unix symlink |
 | `commands/*` | `<host-root>/commands/<name>` | 复制文件 |
 
+`skills/` 可以包含直接 skill（`skills/<name>/SKILL.md`）和 bundle skill（`skills/<bundle>/<name>/SKILL.md`）。安装器保持非破坏策略：Windows 暴露整个 `skills/`，Bash/Unix 链接顶层目录，因此 bundle 作为一个顶层目录暴露，内部 skill 通过递归发现或宿主扫描读取。
+
 宿主根目录：
 
 - `claude` -> `~/.claude`

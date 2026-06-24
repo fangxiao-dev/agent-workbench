@@ -39,6 +39,26 @@ function Assert-Contains {
     }
 }
 
+function New-TestSkill {
+    param(
+        [string]$Root,
+        [string]$RelativePath,
+        [string]$Name
+    )
+
+    $skillDir = Join-Path $Root $RelativePath
+    New-Item -ItemType Directory -Path $skillDir -Force | Out-Null
+    $content = @"
+---
+name: $Name
+description: Test skill.
+---
+
+# $Name
+"@
+    Set-Content -Path (Join-Path $skillDir "SKILL.md") -Value $content -NoNewline
+}
+
 function Test-JsonReportMergesSources {
     $workspace = New-TestWorkspace
     try {
@@ -50,12 +70,14 @@ function Test-JsonReportMergesSources {
             New-Item -ItemType Directory -Path $_ | Out-Null
         }
 
-        New-Item -ItemType Directory -Path (Join-Path $claudeRoot "local-only") | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $agentsRoot "shared-skill") | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $claudeRoot "shared-skill") | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $codexRoot "codex-local") | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $superpowersRoot "brainstorming") | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $agentsRoot "find-skills") | Out-Null
+        New-TestSkill -Root $claudeRoot -RelativePath "local-only" -Name "local-only"
+        New-TestSkill -Root $agentsRoot -RelativePath "shared-skill" -Name "shared-skill"
+        New-TestSkill -Root $claudeRoot -RelativePath "shared-skill" -Name "shared-skill"
+        New-TestSkill -Root $codexRoot -RelativePath "codex-local" -Name "codex-local"
+        New-TestSkill -Root $superpowersRoot -RelativePath "brainstorming" -Name "brainstorming"
+        New-TestSkill -Root $agentsRoot -RelativePath "find-skills" -Name "find-skills"
+        New-TestSkill -Root $claudeRoot -RelativePath "feishu-skills\feishu-base" -Name "feishu-base"
+        New-Item -ItemType Directory -Path (Join-Path $claudeRoot "empty-bundle") | Out-Null
 
         $json = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath `
             -ClaudeSkillsRoot $claudeRoot `
@@ -70,8 +92,12 @@ function Test-JsonReportMergesSources {
 
         Assert-True ($claude.MergedSkills.Name -contains "local-only") "Claude merged set should include local-only."
         Assert-True ($claude.MergedSkills.Name -contains "shared-skill") "Claude merged set should include shared-skill."
+        Assert-True ($claude.MergedSkills.Name -contains "feishu-base") "Claude merged set should include bundled skill by frontmatter name."
+        Assert-True (-not ($claude.MergedSkills.Name -contains "feishu-skills")) "Bundle root without SKILL.md should not be listed."
         $shared = $claude.MergedSkills | Where-Object { $_.Name -eq "shared-skill" }
         Assert-True ($shared.DuplicateCount -eq 2) "shared-skill should show duplicate count 2."
+        $bundled = $claude.MergedSkills | Where-Object { $_.Name -eq "feishu-base" }
+        Assert-True ($bundled.Sources[0].RelativePath -eq "feishu-skills/feishu-base") "Bundled skill should retain relative path metadata."
         Assert-True ($codex.MergedSkills.Name -contains "brainstorming") "Codex merged set should include superpowers skill."
         Assert-True ($codex.MergedSkills.Name -contains "find-skills") "Codex merged set should include agents skill."
     }
@@ -91,8 +117,8 @@ function Test-TextReportLabelsSources {
             New-Item -ItemType Directory -Path $_ | Out-Null
         }
 
-        New-Item -ItemType Directory -Path (Join-Path $codexRoot "codex-local") | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $superpowersRoot "brainstorming") | Out-Null
+        New-TestSkill -Root $codexRoot -RelativePath "codex-local" -Name "codex-local"
+        New-TestSkill -Root $superpowersRoot -RelativePath "brainstorming" -Name "brainstorming"
 
         $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath `
             -ClaudeSkillsRoot $claudeRoot `

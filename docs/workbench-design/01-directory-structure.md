@@ -18,7 +18,7 @@ agent-workbench/
 
 ## 核心目录
 
-- `skills/` 是 skill 的唯一仓库内正式来源。自建 skill 和第三方 skill 都直接落在这里，再由安装器暴露给 `claude`、`codex`、`gemini`。
+- `skills/` 是 skill 的唯一仓库内正式来源。自建 skill 和第三方 skill 通常直接落在这里；相关能力也可以按 bundle 分组为 `skills/<bundle>/<skill>/SKILL.md`，例如 `feishu-skills/` 和 `lark-skills/`。
 - `agents/` 存放 subagent 定义。安装器把每个 agent 目录链接到已选宿主的 `agents/`。
 - `commands/` 存放宿主 command 提示文件。安装器把 command 文件复制到已选宿主的 `commands/`。是否可用 `/...` 唤出取决于具体宿主。
 - `templates/` 存放可复用模板。当前 `CLAUDE.md.tpl` 由 `init-project-context` 按需使用，安装器不自动生成 `CLAUDE.md`。
@@ -34,7 +34,7 @@ agent-workbench/
 - 根目录 `skills-lock.json`
 - `skills/.system/`
 
-如果需要修改第三方 skill，修改 `skills/<name>/` 中的正式副本。未来要和上游比较时，可以用 `npx skills` 拉取新版本到临时位置，再人工对比后决定是否更新 `skills/<name>/`。
+如果需要修改第三方 skill，修改 `skills/<name>/` 或 `skills/<bundle>/<name>/` 中的正式副本。未来要和上游比较时，可以用 `npx skills` 拉取新版本到临时位置，再人工对比后决定是否更新正式副本。
 
 ## 安装目标
 
