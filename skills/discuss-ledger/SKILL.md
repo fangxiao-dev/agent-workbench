@@ -53,7 +53,7 @@ python <skill>/scripts/discuss_orchestrator.py --root <target-project-root> --to
 
 When the user gives a target file path, infer the project root before running. Prefer the nearest ancestor containing `.git` as `--root`, and pass the target path relative to that root as `--topic`. This works for ordinary clones, Git worktrees, `.worktrees/<name>/...`, and other checkout layouts. If the script is available, rely on `discuss_orchestrator.py`'s built-in root/topic resolution rather than hand-normalizing the path.
 
-Defaults are `--agents codex,claude`, `--max-rounds 5`, and `--timeout-s 300`. After it stops, report the ledger path, convergence summary, open/deadlocked points, and whether user裁决 is needed.
+Defaults are `--agents codex,claude`, `--max-rounds 5`, and `--timeout-s 300`. `--timeout-s` is a per-agent, per-call timeout, not the overall orchestration timeout. When invoking the orchestrator through a tool wrapper, set the wrapper/tool timeout high enough for the whole run: `agent_count * max_rounds * timeout_s + buffer`. For the default `codex,claude`, `--max-rounds 5`, and `--timeout-s 300`, use at least 3600 seconds as the outer tool timeout. After it stops, report the ledger path, convergence summary, open/deadlocked points, and whether user裁决 is needed.
 
 ## Step 1 — Locate or initialize
 
