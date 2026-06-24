@@ -1,6 +1,6 @@
 ---
 name: discuss-ledger
-description: Use this whenever multiple agents (e.g. Claude and Codex/GPT, or two review passes) debate a plan, design, spec, PRD, or skill and their opinions should be accumulated into a single shared discussion document. Triggers on natural phrases like "组织审核 ...", "用 discuss orchestrator 审 ...", "自动讨论 ...", "审一下这个计划并记录意见", "把你的意见写进 discuss 文档", "追加到讨论文档", "他也有意见,接着往里写", "继续收敛", "把刚才这个评审过程做成讨论记录", or any time you are asked to express a review opinion that another party will later respond to. Each agent maintains a convergence section first, then appends only its disagreements, until consensus or deadlock. Use this even when the user just says "discuss" plus a target file — do not hand-roll an ad-hoc review note.
+description: Use this whenever multiple agents (e.g. Claude and Codex/GPT, or two review passes) debate a plan, design, spec, PRD, or skill and their opinions should be accumulated into a single shared discussion document. Triggers on natural phrases like "组织审核 ...", "用 discuss orchestrator 审 ...", "自动讨论 ...", "审一下这个计划并记录意见", "把你的意见写进 discuss 文档", "追加到讨论文档", "他也有意见,接着往里写", "继续收敛", "把刚才这个评审过程做成讨论记录", or any time you are asked to express a review opinion that another party will later respond to. Each agent maintains a convergence section first, then appends only its disagreements, until consensus or deadlock. Use this even when the user just says "discuss" plus a target file — do not hand-roll an ad-hoc review note. If Claude Code / `claude -p` appears unavailable, hangs, or reports AUTH/login while the user is already logged in, first treat it as a likely noninteractive environment issue: inspect aliases and `ANTHROPIC_*` names without printing values, unset provider override variables, run a minimal `claude -p` probe, then run the orchestrator with a cleaned environment.
 user-invocable: true
 ---
 
@@ -66,6 +66,43 @@ python <skill>/scripts/discuss_orchestrator.py --root <target-project-root> --to
 When the user gives a target file path, infer the project root before running. Prefer the nearest ancestor containing `.git` as `--root`, and pass the target path relative to that root as `--topic`. This works for ordinary clones, Git worktrees, `.worktrees/<name>/...`, and other checkout layouts. If the script is available, rely on `discuss_orchestrator.py`'s built-in root/topic resolution rather than hand-normalizing the path.
 
 Defaults are `--agents codex,claude`, `--max-rounds 5`, and `--timeout-s 300`. Before invoking, apply the **Critical Timeout Rule For Orchestrator Calls** above so the outer tool timeout is long enough for the full run. After it stops, report the ledger path, convergence summary, open/deadlocked points, and whether user裁决 is needed.
+
+### Claude Code noninteractive environment fix
+
+When the orchestrator says Claude requires login/authentication, or `claude -p` hangs after warnings while the user says Claude Code / Claude Pro is already logged in, do **not** immediately tell the user to log in again. This is often a false failure caused by noninteractive subprocess environment drift:
+
+- `subprocess.Popen(["claude", ...])` does not inherit interactive zsh aliases such as `claude --dangerously-skip-permissions`.
+- `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, or related `ANTHROPIC_*` variables can make Claude Code prefer a third-party Anthropic-compatible provider over the user's Claude.ai login.
+- Typical symptom: a warning about auth sources or disabled connectors, `duration_api_ms=0`, 0 tokens, hanging, or an orchestrator `AUTH` / login classification.
+
+Before declaring Claude unavailable, run this diagnosis without printing secret values:
+
+```bash
+zsh -lic 'printf "which claude: "; which claude; printf "alias claude: "; alias claude 2>/dev/null || true; printf "ANTHROPIC env names:\n"; env | cut -d= -f1 | rg "^ANTHROPIC" | sort'
+```
+
+Then run a minimal clean-environment probe:
+
+```bash
+zsh -lic 'unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_BASE_URL ANTHROPIC_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_REASONING_MODEL; printf %s "Return {\"ok\":true} only." | claude --dangerously-skip-permissions -p --no-session-persistence --effort low --disable-slash-commands --tools "" --system-prompt "Return only JSON." --output-format json'
+```
+
+If the probe succeeds, Claude Code is usable. Run the orchestrator with the same provider overrides removed from its process environment:
+
+```bash
+env \
+  -u ANTHROPIC_AUTH_TOKEN \
+  -u ANTHROPIC_API_KEY \
+  -u ANTHROPIC_BASE_URL \
+  -u ANTHROPIC_MODEL \
+  -u ANTHROPIC_DEFAULT_HAIKU_MODEL \
+  -u ANTHROPIC_DEFAULT_OPUS_MODEL \
+  -u ANTHROPIC_DEFAULT_SONNET_MODEL \
+  -u ANTHROPIC_REASONING_MODEL \
+  python <skill>/scripts/discuss_orchestrator.py --root <target-project-root> --topic <target-doc-or-topic>
+```
+
+Only classify the issue as real missing auth after the clean probe also fails. Never print env values, tokens, API keys, signed URLs, or provider endpoints while debugging this.
 
 ## Step 1 — Locate or initialize
 
