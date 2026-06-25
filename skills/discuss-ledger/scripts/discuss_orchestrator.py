@@ -308,6 +308,14 @@ def classify_process_error(command: str, returncode: int, stdout: str, stderr: s
     return AdapterError("AGENT_FAILED", f"{command} exited with code {returncode}: {stderr.strip() or stdout.strip()}")
 
 
+def is_claude_structured_output_retry_error(stdout: str, stderr: str) -> bool:
+    combined = f"{stdout}\n{stderr}".lower()
+    return (
+        "error_max_structured_output_retries" in combined
+        or "failed to provide valid structured output" in combined
+    )
+
+
 def is_codex_user_config_error(stdout: str, stderr: str) -> bool:
     combined = f"{stdout}\n{stderr}".lower()
     return (
@@ -504,8 +512,7 @@ def run_codex(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
     return parse_codex_jsonl(completed.stdout)
 
 
-def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
-    schema_json = json.dumps(CLAUDE_AGENT_RESULT_SCHEMA, ensure_ascii=False, separators=(",", ":"))
+def build_claude_command(schema_json: str | None = None) -> list[str]:
     command = [
         "claude",
         "-p",
@@ -519,11 +526,34 @@ def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
         "You are a non-interactive discuss-ledger participant. Prefer Chinese unless the task explicitly requires another language. Return only the requested structured result.",
         "--output-format",
         "json",
-        "--json-schema",
-        schema_json,
     ]
+    if schema_json is not None:
+        command.extend(["--json-schema", schema_json])
+    return command
+
+
+def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
+    schema_json = json.dumps(CLAUDE_AGENT_RESULT_SCHEMA, ensure_ascii=False, separators=(",", ":"))
+    command = build_claude_command(schema_json)
     completed = run_process(command, stdin=prompt, timeout_s=timeout_s, cwd=root)
     if completed.returncode != 0:
+        if is_claude_structured_output_retry_error(completed.stdout, completed.stderr):
+            fallback_prompt = (
+                f"{prompt}\n\n"
+                "The structured-output mode failed. Return exactly one JSON object as plain text now. "
+                "Do not use tools, markdown, explanations, or wrapper objects. "
+                "The object must have only these top-level keys: convergences, contests, new_points."
+            )
+            retry = run_process(build_claude_command(None), stdin=fallback_prompt, timeout_s=timeout_s, cwd=root)
+            if retry.returncode == 0:
+                result = extract_agent_result_from_text(retry.stdout)
+                if result is not None:
+                    print(
+                        "WARN: claude structured output failed; parsed plain JSON fallback.",
+                        file=sys.stderr,
+                    )
+                    return result
+            raise classify_process_error("claude", retry.returncode, retry.stdout, retry.stderr)
         raise classify_process_error("claude", completed.returncode, completed.stdout, completed.stderr)
     result = extract_agent_result_from_text(completed.stdout)
     if result is not None:
