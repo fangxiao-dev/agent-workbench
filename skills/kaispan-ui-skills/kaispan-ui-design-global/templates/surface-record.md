@@ -17,6 +17,12 @@ Do not record local absolute paths or private source paths in this template. Use
 - primary components:
 - states:
 
+## Screenshot Evidence
+
+| screenshotId | viewport | captureTool | fileHash | storagePolicy | publishabilityStatus |
+| --- | --- | --- | --- | --- | --- |
+|  | desktop / mobile / state |  | sha256: | private-local / committed-redacted / not-captured | not-reviewed / blocked / approved-summary / approved-assets |
+
 ## Interaction Inventory
 
 | interaction | trigger | expected result | notes |

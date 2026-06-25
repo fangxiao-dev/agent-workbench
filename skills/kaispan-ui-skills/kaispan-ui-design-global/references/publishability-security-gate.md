@@ -15,6 +15,8 @@ Run this gate before copying, publishing, committing, or reusing prototype sourc
 | Demo data | Whether demo data is clearly marked and cannot be mistaken for production fact |
 | Public docs | Whether submitted docs contain only public summaries, hashes, surface records, or redacted screenshots |
 
+Screenshots created during Phase 0 are private/local evidence by default. A committed document may cite a screenshot only through metadata and hash until redaction, rights, and sensitive-content checks pass. Do not commit raw screenshots just because they are useful for visual comparison.
+
 ## Status Terms
 
 - `public-ok`: may be submitted or shared.

@@ -25,6 +25,12 @@ Do not record local absolute paths in this template. Use `ksui://...` locators o
 - allowed publication:
 - prohibited usage:
 
+## Screenshot Evidence
+
+| screenshotId | surfaceId | viewport | captureTool | storagePolicy | fileHash | publishabilityStatus |
+| --- | --- | --- | --- | --- | --- | --- |
+|  |  | desktop / mobile / state |  | private-local / committed-redacted / not-captured | sha256: | not-reviewed / blocked / approved-summary / approved-assets |
+
 ## Publishability Status
 
 - status:

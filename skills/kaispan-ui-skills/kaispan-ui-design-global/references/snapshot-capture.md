@@ -39,7 +39,21 @@ Business semantics are clues only. They require module readiness bridge and high
 
 Completion criterion: every surface separates visual evidence from unverified business meaning.
 
-## Step 3: Shared UI Candidates
+## Step 3: Minimal Screenshot Evidence
+
+Screenshots are optional evidence for visual review. Use them after metadata and surface records exist, not as the first or only source of truth.
+
+For Phase 0, prefer a minimal set:
+
+- desktop view of the target surface
+- narrow/mobile view of the target surface
+- one extra screenshot only when a sub-surface or state is essential to later review
+
+Screenshots default to `private/local evidence`. Submitted docs may record screenshot metadata, viewport, capture tool, hash, storage policy, and publishability status. Do not commit raw or unredacted screenshots unless the publishability/security gate explicitly allows it.
+
+Completion criterion: screenshots support the surface record without introducing unpublished assets, local paths, or sensitive content into submitted docs.
+
+## Step 4: Shared UI Candidates
 
 Register only cross-module visual and interaction shells:
 
@@ -54,7 +68,7 @@ Do not put domain status, field semantics, permission logic, scope logic, Action
 
 Completion criterion: each candidate can be reused without importing module-specific business meaning.
 
-## Step 4: Index Updates
+## Step 5: Index Updates
 
 Update target repo global indexes, such as:
 
