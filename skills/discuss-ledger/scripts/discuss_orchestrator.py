@@ -17,6 +17,51 @@ from typing import Any
 SKILL_DIR = Path(__file__).resolve().parents[1]
 SRC = SKILL_DIR / "src"
 SCHEMA_PATH = SKILL_DIR / "schemas" / "agent-result.schema.json"
+CLAUDE_AGENT_RESULT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "convergences": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "point": {"type": "string"},
+                    "marker": {"type": "string"},
+                    "line": {"type": "string"},
+                },
+                "required": ["point", "marker", "line"],
+            },
+        },
+        "contests": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "point": {"type": "string"},
+                    "body": {"type": "string"},
+                    "movement": {"type": "boolean"},
+                },
+                "required": ["point", "body", "movement"],
+            },
+        },
+        "new_points": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "summary": {"type": "string"},
+                    "body": {"type": "string"},
+                },
+                "required": ["summary", "body"],
+            },
+        },
+    },
+    "required": ["convergences", "contests", "new_points"],
+}
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
@@ -460,6 +505,7 @@ def run_codex(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
 
 
 def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
+    schema_json = json.dumps(CLAUDE_AGENT_RESULT_SCHEMA, ensure_ascii=False, separators=(",", ":"))
     command = [
         "claude",
         "-p",
@@ -473,6 +519,8 @@ def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
         "You are a non-interactive discuss-ledger participant. Prefer Chinese unless the task explicitly requires another language. Return only the requested structured result.",
         "--output-format",
         "json",
+        "--json-schema",
+        schema_json,
     ]
     completed = run_process(command, stdin=prompt, timeout_s=timeout_s, cwd=root)
     if completed.returncode != 0:
@@ -487,7 +535,7 @@ def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
         "Return only the repaired agent result object, not the Claude CLI wrapper, not markdown. "
         "Preserve or convert prose to Chinese unless another language is explicitly required. "
         "Escape quotation marks inside JSON string values.\n\n"
-        f"Schema:\n{SCHEMA_PATH.read_text(encoding='utf-8')}\n\n"
+        f"Schema:\n{schema_json}\n\n"
         f"Invalid Claude result text:\n{invalid_output}"
     )
     retry = run_process(command, stdin=repair_prompt, timeout_s=timeout_s, cwd=root)
