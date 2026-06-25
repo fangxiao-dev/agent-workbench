@@ -83,6 +83,10 @@ Look for:
 - concatenation patterns that fail grammar in one language;
 - empty string fragments used to work around word-order differences;
 - copy embedded outside the translation system.
+- action labels that repeat an object already supplied by the surrounding row,
+  dialog title, section, or table context. Prefer concise verbs for scoped
+  controls, such as `Complete` / `Abschließen` / `完成`, instead of repeating
+  the object name in every button.
 
 Prefer full-sentence templates with placeholders over prefix/suffix fragments. Example pattern: `Confirm {action}` instead of separate `confirmPrefix` and empty `confirmSuffix`.
 
