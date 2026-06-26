@@ -1,59 +1,30 @@
 ---
 name: kaispan-ui-design
-description: KaiSpan UI design router. Use when the user asks for prototype/global capture, shared UI governance, module UI migration, readiness bridge, slice plan, closure note, Skill/toolbox review, or capture/tooling automation; first choose global, module, review, or v0 tooling-protocol mode and then load the matching child Skill.
+description: Thin router for KaiSpan and Supplier Admin (webshop) UI work — prototype absorption, business-area Overview-first layout, finance UI surfaces. Points to the repo-local source-of-truth docs and three guardrails. Use when asked to design/build/review KaiSpan or webshop admin UI, or to absorb the boss's prototype.
 ---
 
-# KaiSpan UI Design Router
+# KaiSpan UI Design (thin router)
 
-This Skill is the suite entry point. It chooses the mode, loads the correct child Skill, and keeps the protocol and safety boundaries visible. Do not store prototype surface inventory, module business mappings, closure notes, screenshots, production facts, or local paths in the Skill suite.
+> 2026-06-26:原 kaispan-ui-design 治理套件(ksui:// locator 协议、global/module/review 三个 child skill、readiness/slice/closure 模板、`.kaispan-ui-design.json` 指针)已**整套退役**——对 2 人小队过度设计,且仓库侧对应基础设施已删。本 skill 现在只做一件事:把你指到 repo 内的真实事实源 + 三条红线。不要再找 locator、模板或停机协议。
 
-## Mode Decision
+## 去哪读(事实源都在产品 repo,不在本 skill)
 
-Choose one mode before taking task actions.
+| 你要做的事 | 文件 |
+| --- | --- |
+| webshop 后台布局落地(唯一规范) | webshop repo `docs/top-level-knowledge/admin-layout-grammar.md` |
+| webshop 执行节奏 | webshop repo `docs/epic-plans/2026-06-26-admin-layout-grammar-roadmap-lean.md` |
+| webshop 需求背景 / 老板原始示例 | webshop repo `docs/epic-plans/2026-06-23-admin-canonical-ui-absorption-roadmap.md`(reference) |
+| KaiSpan 财务 UI prototype 语义 | kaispan-dev repo `docs/kaispan-ui-design/finance-prototype-notes.md` |
+| 实际写 UI 组件 | `frontend-design` skill |
 
-| Mode | Trigger | Next step |
-| --- | --- | --- |
-| Global | Preserve prototype evidence, register snapshot/surface records, extract shared UI candidates, or maintain global UI design context | Read `../kaispan-ui-design-global/SKILL.md` |
-| Module | Map global UI evidence into a module, create readiness bridge/slice plan/closure note, or implement module UI | Read `../kaispan-ui-design-module/SKILL.md` |
-| Review | Review Skill suite, global capture, module readiness, migration plan, fact-source conflict, or publishability/security risk | Read `../kaispan-ui-design-review/SKILL.md` |
-| Tooling protocol | User asks for capture/extract/hash/screenshot scripts or automation | v0 has protocol and templates only; explain that scripts and `kaispan-ui-design-tooling` belong to a later version |
+进入某个 repo 时,以该 repo 的 `AGENTS.md` / `web/AGENTS.md` 为准。
 
-If one request spans modes, process dependencies in order: global evidence, then module readiness, then review. Do not skip missing locators or fact sources.
+## 三条红线(其余都交给上面的文档)
 
-## Child Skill Index
+1. **prototype 是输入,真实 App 是 source of truth。** 不逐像素复刻 HTML;截图 + 业务语义对齐优先。
+2. **钱 / 外部副作用没接通 = disabled,不伪装成已实现。** 金额需 Decimal/币种/provenance/审计;Lexware 等真实 mutation 边界不为布局重构搬动。
+3. **committed 证据不含客户数据 / 密钥 / IBAN / token。**
 
-- `kaispan-ui-design-global`: prototype/global capture method, snapshot/surface skeletons, shared UI candidates, and publishability/security gate.
-- `kaispan-ui-design-module`: pointer discovery, readiness bridge, source priority, missing-locator blocked behavior, and module verification gates.
-- `kaispan-ui-design-review`: boundary review, fact-source conflict review, publishability/security review, and whether `discuss-ledger` is needed.
+## 想新增 skill 时(沉淀,不要预判)
 
-## Required Protocol
-
-Before entering a child flow, read `references/protocol.md`. Read `references/routing.md` for detailed routing and fallback. Read `references/safety-boundaries.md` when the task touches assets, source-of-truth conflicts, or write boundaries.
-
-Protocol minimum:
-
-- Committed pointer: `.kaispan-ui-design.json`, containing only logical locators, repo-relative paths, and public aliases.
-- Local override: `.kaispan-ui-design.local.json`, gitignored and used only for local prototype/source/cache resolution.
-- Canonical locators:
-  - `ksui://snapshot/<snapshotId>`
-  - `ksui://surface/<snapshotId>/<surfaceId>`
-  - `ksui://shared-ui/<componentOrPatternId>`
-  - `ksui://module/<moduleKey>/<surfaceId>`
-- Module mode must stop with `blocked-by-skill-missing-locator` when `globalContextPath`, `activeSnapshotId`, target `surfaceIds`, or required `ksui://...` locators cannot be resolved.
-
-## Fallback Order
-
-Use fallback only after reading the relevant child Skill and protocol.
-
-1. Child Skill references and templates.
-2. Target repo `.kaispan-ui-design.json` and repo-relative design context.
-3. Target repo official docs, API/contracts, DB/RBAC/file/audit/Action Center facts.
-4. Lower-priority UI evidence only for visual intent, naming clues, or methodology.
-5. Missing locator: stop and report `blocked-by-skill-missing-locator`; do not guess.
-
-## Safety Boundaries
-
-- The Skill suite may contain only instructions, references, gates, checklists, and empty skeleton templates.
-- Real snapshot metadata, surface records, shared UI decisions, readiness bridges, slice plans, and closure notes belong in target repo docs.
-- Formal Skill files, templates, and committed pointers must not contain local absolute paths. Use `<agent-workbench>`, repo-relative paths, or `ksui://...`.
-- Do not modify production code, contracts, migrations, or business docs unless the user explicitly asks for implementation work in the target repo.
+只有当某个流程**手工跑过 2~3 次、每次重复同样的痛、且可泛化**,才用 `skill-creator` 抽成 skill;平时用 `continuous-learning` 收集提案、由用户审批。不要为"将来可能用到"提前搭治理套件——那正是本套件被退役的原因。
