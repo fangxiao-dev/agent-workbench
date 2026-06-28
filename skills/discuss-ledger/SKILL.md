@@ -1,6 +1,6 @@
 ---
 name: discuss-ledger
-description: Use this whenever multiple agents (e.g. Claude and Codex/GPT, or two review passes) debate a plan, design, spec, PRD, or skill and their opinions should be accumulated into a single shared discussion document. Triggers on natural phrases like "组织审核 ...", "用 discuss orchestrator 审 ...", "自动讨论 ...", "审一下这个计划并记录意见", "把你的意见写进 discuss 文档", "追加到讨论文档", "他也有意见,接着往里写", "继续收敛", "把刚才这个评审过程做成讨论记录", or any time you are asked to express a review opinion that another party will later respond to. Each agent maintains a convergence section first, then appends only its disagreements, until consensus or deadlock. Use this even when the user just says "discuss" plus a target file — do not hand-roll an ad-hoc review note.
+description: Use this whenever multiple agents (e.g. Claude and Codex/GPT, or two review passes) debate a plan, design, spec, PRD, or skill and their opinions should be accumulated into a single shared discussion document. Triggers on natural phrases like "组织审核 ...", "用 discuss orchestrator 审 ...", "自动讨论 ...", "组织 3 轮 loop 审查 ...", "多轮 loop review ...", "审一下这个计划并记录意见", "把你的意见写进 discuss 文档", "追加到讨论文档", "他也有意见,接着往里写", "继续收敛", "把刚才这个评审过程做成讨论记录", or any time you are asked to express a review opinion that another party will later respond to. Each agent maintains a convergence section first, then appends only its disagreements, until consensus or deadlock. Use this even when the user just says "discuss" plus a target file — do not hand-roll an ad-hoc review note.
 user-invocable: true
 ---
 
@@ -18,6 +18,7 @@ The document has two living parts:
 Read only the reference needed for the current path:
 
 - Before invoking `scripts/discuss_orchestrator.py`, read `references/orchestrator.md`.
+- If the user asks for a bounded multi-round loop review (for example "组织 3 轮 loop 审查") or the exit evaluation suggests continued discussion may be useful and the gate may pass, read `references/loop-mode.md`.
 - If Claude Code / `claude -p` reports auth/login, hangs, or looks unavailable during orchestration while the user says they are already logged in, read `references/claude-code-noninteractive.md`.
 - When you need exact `discuss_ledger.py` command syntax, read `references/ledger-cli.md`.
 
@@ -123,6 +124,13 @@ The ledger is useful only when each party contributes new judgment instead of du
 
 When the script prints an `EXIT:` line, stop the current debate turn and tell the user: summarize what converged, and list any deadlocked points needing their ruling. If they rule, that becomes a `converge --marker "用户裁决..."` entry that can break the deadlock.
 
+After an orchestrated discussion exits, add a short **观点评估** section to the user-facing summary. This is not a new ledger point and does not reopen the debate. Judge the discussion itself:
+
+- **质量判断**: whether the debate produced implementation-grade conclusions, only surface-level restatements, or mixed value.
+- **有效贡献**: which findings changed the plan/spec/review outcome, especially evidence-backed risks that were not obvious from the target alone.
+- **薄弱处**: where coverage was narrow, evidence was weaker, points overlapped, or the orchestrator target omitted relevant docs/code.
+- **是否继续讨论**: say whether more discussion is useful. Prefer "revise the target, then run a focused follow-up review" over continuing abstract debate when all live points already converged.
+
 `EXIT` closes the current state; it does not prohibit future reopening when genuinely new evidence, newly discovered risk, implementation feedback, or an explicit user request appears. A later turn may reopen by adding a new point as described in Step 2.
 
 ## Anti-patterns
@@ -136,6 +144,7 @@ When the script prints an `EXIT:` line, stop the current debate turn and tell th
 ## Safety
 
 - Only create/modify the single `discuss-<slug>.md` ledger (and read the source doc). Do not touch the plan/spec itself unless the user explicitly asks to "落计划".
+- In loop mode only, also create/modify the loop summary and per-round temporary ledgers described in `references/loop-mode.md`; keep them under `docs/exchange/discuss/`.
 - The ledger is a notes artifact, written directly (no dry-run gate required) — but never write outside `docs/exchange/discuss/`.
 
 `templates/discuss-template.md` is a human-readable illustration of the produced structure; the script is the authoritative writer.

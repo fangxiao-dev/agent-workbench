@@ -34,6 +34,7 @@ After the orchestrator stops, report:
 - convergence summary
 - open/deadlocked points
 - whether user裁决 is needed
+- **观点评估**: briefly judge the discussion quality, the findings that materially changed the outcome, weak spots in coverage/evidence, and whether continued discussion is useful or the next step should be revising the target followed by focused review.
 
 ## Claude Availability
 

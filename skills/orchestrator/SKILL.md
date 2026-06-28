@@ -1,11 +1,10 @@
 ---
 name: orchestrator
 description: >
-  Turn an already-authored bulk implementation plan into an orchestration parent
-  plan and GitHub issue drafts or published issues. Use when a large bulk plan
-  needs a scheduler-facing 调度计划 / orchestration plan / 父计划, AFK/HITL
-  issue slices, subagent dispatch boundaries, review gates, handoff checkpoints,
-  or GitHub tracker output.
+  Orchestrate an already-authored bulk implementation plan into a scheduler-facing
+  parent plan plus AFK/HITL GitHub issue slices. Use when the user asks for
+  调度计划 / 父计划 / orchestration plan, review gates, handoff checkpoints,
+  or tracker-ready issue output from an existing implementation plan.
 ---
 
 # Orchestrator
@@ -33,7 +32,7 @@ description: >
 
 ## Required Sub-Skills
 
-- **REQUIRED SUB-SKILL:** `to-issues`，用于用户 quiz / approval、发布顺序和 issue body 模板。
+- **REFERENCE:** `to-issues`，作为 vertical-slice issue 质量背景；本 skill 的 `Tracker Contract` 是 approval / publish / issue body 的直接规范。
 - **REFERENCE:** `feature-impl-planing`，仅当输入还不是 bulk implementation plan。
 - **REFERENCE:** `superpowers:writing-plans`，作为 issue 内实现计划的质量标准。
 - **REFERENCE:** `superpowers:subagent-driven-development`，作为后续执行模式。
@@ -47,8 +46,8 @@ description: >
 - 发布 GitHub issues 前必须经过 draft、两轮 review、用户批准 breakdown；不要按草稿直接发布。
 - 发布后 GitHub issue number 是唯一规范 ID。父计划可保留一次 slice-to-issue 映射，之后全文使用 GitHub issue number；不要把 slice 序号写进 issue title。
 - 改写父计划前必须确认 bulk 版已 durable：已 commit，或在只读/未授权提交时保存到明确的 source snapshot。不要覆盖唯一的 bulk plan 副本。
-- Issue drafts 是临时交换产物。优先放在项目 ignored exchange 目录，例如 `docs/exchange/issue-drafts/<slug>/`；发布后 GitHub issues 是唯一耐久执行源，drafts 不提交、不回链。
-- 每个 candidate slice 必须带 size/risk 估计并给出明确 sizing decision（见 `Slice Sizing & Risk`）。偏宽或高风险 slice 不得不经决策就直接成 issue，须先 split / narrow / 加 design gate / 跟用户对齐。
+- Issue drafts 是临时交换产物。优先放在项目 ignored exchange 目录，例如 `docs/exchange/issue-drafts/<slug>/`；写入前必须确认 draft path 已被 ignore / exclude。若无法确认，使用 chat-only output，或先询问是否创建 ignore / exclude 规则。发布后 GitHub issues 是唯一耐久执行源，drafts 不提交、不回链。
+- 每个 candidate slice 必须带 size/risk 估计并给出明确 sizing decision（见 `Slice Sizing & Risk`）。偏宽或高风险 slice 不得不经决策就直接成 issue，须先 split / narrow / 加 `design-interface-gate` / 跟用户对齐。
 
 ## External Side Effects
 
@@ -57,24 +56,36 @@ description: >
 - 不要 close、merge、push、修改 parent issue 状态，除非用户明确要求。
 - 如果用户明确只读或禁止写文件，不要落盘 plan、drafts、ledger；在聊天中维护临时版本或先请求写入授权。
 
+## Tracker Contract
+
+`to-issues` 是背景参考，不是 mandatory behavior 的唯一来源。本 skill 直接规定 tracker contract：
+
+- Approval quiz 必须按 step 7 展示 breakdown，并迭代到用户明确批准。
+- 发布只发生在用户批准 breakdown 且明确要求创建 / 发布 GitHub issues 后。
+- 发布必须按依赖顺序：blocker 先发布，dependent issue 后发布，并用真实 tracker ID 填 `Blocked by`。
+- Issue body 必须包含：Parent（如果来源是 tracker parent issue）、What to build、Acceptance criteria、Blocked by、Ownership Boundary / Out Of Scope、Verification。
+- 不要 close 或修改 parent issue，除非用户明确要求。
+- Issue title 不包含本地 slice 序号；发布后 GitHub issue number 是唯一规范 ID。
+
 ## Slice Sizing & Risk
 
-把"slice 多宽"当成一等公民：每个 candidate slice 都要估 size/risk，并据此选定 sizing decision。size 不按 LOC，而按以下信号判断（任一偏高即视为 wide / high-risk）：
+Sizing 是 gate，不是说明文字。拆解、review、用户 approval 前都要读取并应用 `references/slice-sizing.md`。
 
-- **Call-sites / modules touched**：改动是否分散到多处文件或调用点。
-- **Cross-cutting**：是否横切关注点（错误清洗、路径/序列化、鉴权等）。横切 slice 单个 worker 极易漏掉边缘 case → 返工高发，是最强的返工预测信号。
-- **Design uncertainty**：实现方案已写明，还是要 worker 自行探索。
-- **Seam coupling**：与其他 slice 在集成处的耦合程度。
-- **Verifiability**：能否独立 demo / 验证；不能独立验证本身就是 mis-sliced 信号。
+每个 candidate slice 必须输出 size/risk signals 和 sizing decision enum：`keep` / `vertical-split` / `tracer-bullet-follow-ups` / `design-interface-gate` / `escalate-to-user`。Wide、high-risk、cross-cutting slice 不得不经决策就直接成 issue。
 
-Sizing decision（**不要默认就拆**，按场景选）：
+Completion criterion：每个 candidate slice 都有明确 sizing decision；每个 wide / high-risk / cross-cutting slice 都已 split、narrow、加 `design-interface-gate`，或在 step 7 带选项升级给用户。
 
-- **Vertical split**：能切成各自可独立验证的纵向子 slice 时，拆。
-- **Tracer-bullet + follow-ups**：先打通一条端到端最小路径固定 seam，再 fan out 其余实现。
-- **Design / interface gate（不拆）**：横切关注点优先用此——实现前先派 design/spec subagent 产出简短接口契约或受影响 call-site 清单，再交 worker。硬拆横切关注点常常放大集成 seam，慎拆。
-- **Escalate to user**：当拆分会改变交付边界，或 size 估计不确定且影响计划范围时，带上估计与可选项跟用户对齐（落在 step 7 quiz）。
+## HITL Pull-Forward Review
 
-note：plan 阶段的估计天然不精确，做不到零返工；运行期的返工兜底（rework budget / circuit-breaker）属于执行/runner 契约，不在本 skill 范围。
+HITL 是可提前消化的阻塞风险，不是默认执行期停等。拆解、review、用户 approval 前都要读取并应用 `references/hitl-pull-forward.md`。
+
+每个 HITL / gate / external-side-effect slice 必须分类为：`pull forward` / `convert to validation gate` / `simplify overdesign` / `keep HITL`。
+
+Completion criterion：每个 HITL 相关 slice 都有 pull-forward decision packet；已批准的 standing authorization 写入父计划和 issue label/gate changes；未批准或信息不足的项保留为 explicit remaining owner decision。
+
+## Example Calibration
+
+Only when the user asks for examples, plan-shape comparison, or template calibration, read `references/orchestration-exemplars.md`. Do not load examples during ordinary orchestration runs.
 
 ## Workflow
 
@@ -86,6 +97,8 @@ note：plan 阶段的估计天然不精确，做不到零返工；运行期的�
 - 确认 tracker、repo、分支、dirty worktree、已有 issue drafts 或已发布 issues。
 - 只问无法从环境发现且会改变计划边界的问题。
 
+Done when：source plan、相关 design/test/tracker context、git/tracker baseline、以及仍需用户决策的边界问题都已明确记录。
+
 ### 2. Preserve The Bulk Plan
 
 - 改写同一父计划文件前，运行并记录 `git status --short --branch` 和相关 plan 文件的 commit 状态。
@@ -93,13 +106,17 @@ note：plan 阶段的估计天然不精确，做不到零返工；运行期的�
 - 如果 bulk plan 未 commit，先提交 checkpoint；若没有提交授权，保存一份 source snapshot，再改写。
 - 不要把未提交 bulk checklist 直接删成 orchestration plan。
 
+Done when：bulk plan 已 commit，或已在授权下 checkpoint commit，或已有明确 source snapshot；只读/禁止写入时不得覆盖原计划。
+
 ### 3. Dispatch The Decomposition Worker
 
-使用 `templates/decomposition-prompts.md` 的 Decomposition Worker prompt 派遣 worker：提出 phases、dependency graph、risk hotspots、candidate slices，并为每个 candidate slice 给出 size/risk 估计与建议的 sizing decision（见 `Slice Sizing & Risk`）。
+先读取 `references/slice-sizing.md` 和 `references/hitl-pull-forward.md`，再使用 `templates/decomposition-prompts.md` 的 Decomposition Worker prompt 派遣 worker：提出 phases、dependency graph、risk hotspots、candidate slices，并为每个 candidate slice 给出 size/risk 估计与建议的 sizing decision 以及 HITL pull-forward candidates。
 
 两个 reviewer 角色在第 6 步 Review Gate 派遣；它们审的是第 4、5 步的草稿，不要在此处空派。
 
-如果没有 subagent 能力，记录 fallback reason，并在第 6 步执行同样的两轮 inline review。
+如果没有 subagent 能力，记录 fallback reason，并由主 session 使用同一 prompt inline 完成 decomposition；第 6 步仍执行同样的两轮 inline review。
+
+Done when：subagent 或 inline decomposition 返回 phases、dependency graph、risk hotspots、candidate slices、sizing decisions、HITL pull-forward candidates；no-subagent fallback reason 已记录但不能替代 decomposition output。
 
 ### 4. Draft The Orchestration Parent Plan
 
@@ -126,17 +143,15 @@ note：plan 阶段的估计天然不精确，做不到零返工；运行期的�
 - 单个 issue 的局部 acceptance criteria。
 - 易过期行号和内部 helper 细节。
 
+Done when：父计划只保留 scheduler / integrator / validator 需要的调度信息，且每个源需求映射到父计划、issue draft 或 explicit exclusion。
+
 ### 5. Draft Issue Slices Only
 
 这里不要发布。
 
-`to-issues` 接缝如下：
+遵守 `Tracker Contract`。本 skill 的 grounding 和 decomposition 替代普通 issue-splitting 的 context / explore / draft 阶段；approval quiz 在 review gate 之后；publish 只能在用户批准后执行。
 
-- `to-issues` 步骤 1-3（context / explore / draft）由本 skill 的 grounding 和 decomposition subagents 替代。
-- `to-issues` 步骤 4（quiz user，迭代到批准）原样沿用，但发生在 review gate 之后。
-- `to-issues` 步骤 5（按依赖序发布、issue body 模板）原样沿用，但只能在用户批准后执行。
-
-对 `to-issues` issue 模板做增量扩展，每个 issue 额外包含：
+在 `Tracker Contract` 的 issue body 基础上，每个 issue 额外包含：
 
 ```markdown
 ## Ownership Boundary / Out Of Scope
@@ -144,7 +159,9 @@ note：plan 阶段的估计天然不精确，做不到零返工；运行期的�
 ## Verification
 ```
 
-`Verification` 必须列 focused gate；contract-changing issue 还要列 schema/API gate。Issue 正文遵守 `to-issues` 的"避免易过期文件路径"规则，但 `Verification` 里的 gate 命令和测试路径不受此限。不要把父计划 guardrails 全量复制到每个 issue，只放该 issue 必须知道的局部约束。
+`Verification` 必须列 focused gate；contract-changing issue 还要列 schema/API gate。Issue 正文避免易过期文件路径、行号和实现细节；例外是 prototype 产出的 decision-rich snippet。`Verification` 里的 gate 命令和测试路径不受此限。不要把父计划 guardrails 全量复制到每个 issue，只放该 issue 必须知道的局部约束。
+
+Done when：每个 draft issue 都 independently grabbable，包含 acceptance criteria、Ownership Boundary / Out Of Scope、focused Verification gate、blocked-by 关系、sizing decision 和必要的 HITL/pull-forward 状态。
 
 ### 6. Review Gate
 
@@ -152,11 +169,14 @@ Review 必须在用户批准和 GitHub 发布之前完成。使用 `templates/de
 
 - Orchestration/spec reviewer 检查 bulk plan coverage、scope creep、dependencies、HITL/AFK、seams、父计划是否仍然 orchestration-only。
 - Issue-quality reviewer 检查每个 issue 是否 independently grabbable，是否有 ownership boundary、out of scope、acceptance criteria、focused gate。
+- 两个 reviewer 都必须检查 HITL pull-forward：哪些停等可提前决策、哪些 gate 可转成 agent validation、哪些设计对当前 POC 过重、哪些 HITL 必须保留。
 - Reviewer 提出问题后，必须修复并 re-review，循环直到 approve；不要用主 session 判断“差不多”跳过复审。
+
+Done when：两个 reviewer 都返回 APPROVED；如果没有 subagent 能力，inline review 也必须按两个独立角色完成并记录结果。
 
 ### 7. User Breakdown Approval
 
-沿用 `to-issues` quiz 环节，向用户展示：
+按 `Tracker Contract` 运行 approval quiz，向用户展示：
 
 - issue title。
 - type：AFK / HITL。
@@ -164,9 +184,12 @@ Review 必须在用户批准和 GitHub 发布之前完成。使用 `templates/de
 - user stories / source requirements covered。
 - ownership boundary。
 - verification gate。
-- slice size/risk 与 sizing decision：对 wide / high-risk slice，说明拟采取的 split / design-gate / escalate，让用户对齐是否需要进一步拆分。
+- slice size/risk 与 sizing decision：对 wide / high-risk slice，说明拟采取的 split / `design-interface-gate` / `escalate-to-user`，让用户对齐是否需要进一步拆分。
+- HITL pull-forward decision packet：列出可提前批准的 standing authorization、可转 agent validation 的 gate、建议删减的过度设计、仍必须保留的 owner decisions。
 
 如果用户已经明确批准同一 breakdown，可记录该事实并继续。不要为 subagent 使用、draft 生成或父计划改写增加额外审批。
+
+Done when：用户批准 breakdown，或用户要求的 merge/split/scope changes 已回流到 step 4-6 重新 draft/review。
 
 ### 8. Publish, Link, Commit
 
@@ -177,9 +200,11 @@ Review 必须在用户批准和 GitHub 发布之前完成。使用 `templates/de
 - Issue title 不包含本地 slice 序号。
 - 发布后回填父计划 issues table，使用 GitHub issue links。
 - 父计划写明：published GitHub issues are the durable execution source; local drafts are temporary.
-- 提交 checkpoint，至少包含 orchestration parent plan 和 issue-link 回填；不要提交 ignored drafts。
+- 有提交授权时提交 checkpoint，至少包含 orchestration parent plan 和 issue-link 回填；不要提交 ignored drafts。没有提交授权时，报告 modified files 和建议的 checkpoint command。
 
 如果只需要 drafts，停止在 draft + review + user-approved breakdown，并返回 draft paths。
+
+Done when：issues 已按依赖顺序发布并回填父计划，或 draft-only 路径已返回；需要 commit 时已 commit，否则已明确报告未提交状态。
 
 ### 9. Execution Handoff
 
@@ -189,27 +214,26 @@ Review 必须在用户批准和 GitHub 发布之前完成。使用 `templates/de
 - Handoff 必须包含 workspace、branch、HEAD、dirty/clean 状态、issue 顺序、已验证 gate、协作契约、next action。
 - 如果 orchestration 工作本身跨 session，使用 `templates/progress-ledger.md` 维护临时 ledger；否则发布记录回填父计划即可。
 
+Done when：handoff 由 `handoff-new-session` 生成，并包含 workspace、branch、HEAD、dirty/clean、issue 顺序、verified gates、collaboration contract、next action。
+
 ## Output Contract
 
-最终回复包含：
+最终回复按实际 branch 输出，不要虚构未发生的 path、link、commit、issue 或 handoff。
 
-- orchestration parent plan path。
-- GitHub issue links 或 issue draft paths。
-- 如果用户要求只读或禁止写文件，返回 chat-only parent plan outline 和 issue breakdown summary，而不是虚构 paths。
-- review 方法和 reviewer 结果。
-- corrections applied。
-- remaining owner decisions。
-- ready for execution: yes/no。
+- **Draft-only**：orchestration parent plan path、issue draft paths、review 方法和 reviewer 结果、corrections applied、HITL pull-forward result、ready for execution。
+- **Published**：orchestration parent plan path、GitHub issue links、issue-link 回填状态、checkpoint commit 状态、review 方法和 reviewer 结果、standing authorization scope、remaining owner decisions、ready for execution。
+- **Readonly / no-write**：chat-only parent plan outline、issue breakdown summary、review method、remaining owner decisions、ready for execution；不要声称已落盘。
+- **Handoff**：handoff target / path、workspace、branch、HEAD、dirty/clean、issue execution order、next action。
 
 ## Quality Red Lines
 
 - 不要把 bulk implementation plan 原样换标题。
 - 不要在 review 和用户批准前发布 issues。
-- 不要完整重跑 `to-issues` 的 context/draft 阶段；这部分由 orchestrator 替代。
-- 不要跳过 `to-issues` 的用户 quiz / approval 和 dependency-order publish。
+- 不要完整重跑普通 issue-splitting 的 context/draft 阶段；这部分由 orchestrator 替代。
+- 不要跳过 `Tracker Contract` 的 approval 和 dependency-order publish。
 - 不要让 subagent 继承模糊上下文。
 - 不要把 issue 拆成纯水平层，除非该层能独立验证。
-- 不要让 wide / high-risk slice 不经 sizing decision 就直接发布；oversized 横切 slice 不要默认硬拆（会放大集成 seam），优先 design gate 或与用户对齐。
+- 不要让 wide / high-risk slice 不经 sizing decision 就直接发布；oversized 横切 slice 不要默认硬拆（会放大集成 seam），优先 `design-interface-gate` 或与用户对齐。
 - 不要把高风险 publish/retry/recovery 语义藏在普通 AFK issue 中。
 - 不要省略 final regression / orchestration cleanup issue。
 - 不要承诺未实际发生的 gate、commit、issue publish 或 handoff。
