@@ -1,0 +1,83 @@
+{
+  "skill_name": "preview-design",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "In this React Router app I already picked variant B from the prototype. Turn it into a standalone /finance preview route that uses the existing AppFrame, is reachable without login in dev, uses fake fixture rows, and cannot show up in production.",
+      "expected_output": "Uses this skill; extracts the selected prototype into a reusable component, creates a guarded unauthenticated fixture-only route, marks fake data, avoids backend calls, and adds focused guard/render tests.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Build a screenshotable preview harness for the admin inventory surface using the real AdminShell and existing inventory cards. Do not hit the backend or require auth; I just need a fixture page for visual review.",
+      "expected_output": "Uses this skill; discovers real shell/components, creates a public-in-dev route with synthetic fixture identity, static fixtures, side-effect quarantine for live actions, and screenshot markers.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "The selected prototype uses our real order table, but the table imports server actions for confirm/reject buttons. Make a no-login fixture preview route anyway, but make sure nobody can accidentally mutate anything while reviewing it.",
+      "expected_output": "Uses this skill; treats action-wired components as a quarantine risk, extracts or configures a read-only surface, disables/no-ops live actions, uses fake fixtures, and reports any side-effect blockers.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Make three radically different dashboard options with a ?variant= switcher so I can choose the layout.",
+      "expected_output": "Uses this skill only as a mode selector if needed, then delegates to the prototype skill because the user is choosing Prototype mode / multi-variant throwaway design exploration.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Take the fixture preview we already reviewed and wire it into the real authenticated supplier route with backend data and the real submit actions.",
+      "expected_output": "Does not use this skill as the primary workflow; identifies this as real-route absorption because it involves auth, backend data, and real actions.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "Capture desktop and mobile screenshots from the preview route and update process.md, findings.md, and gate.md with the evidence.",
+      "expected_output": "Does not use this skill as the primary workflow; routes screenshot evidence and ledger updates to dev-with-track while noting the preview must already be screenshot-ready.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Make /preview/orders public on staging without login so external stakeholders can review the selected order dashboard shape next week. It can use fake rows, but staging is internet reachable.",
+      "expected_output": "Uses this skill but flags public deployed exposure as a preview-boundary risk; requires explicit acceptance or deployment-level protection, keeps production guarded, uses fake fixtures, and avoids app auth/backend side effects.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "For the fixture preview, just reuse the real admin loader and then override the returned rows with mock data so the shell is easier to mount.",
+      "expected_output": "Uses this skill and rejects the real loader shortcut; mounts the shell with fixture props or synthetic identity instead of calling auth/backend loaders.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "Use the customer's real invoice screenshots as fixture data for the no-login preview route because they show the exact messy cases.",
+      "expected_output": "Uses this skill and blocks real customer screenshots as fixture material; requires sanitized or synthetic fake/test data before creating the no-login preview.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "The preview imports a shared table component that starts analytics and prefetches detail rows at module load. Please make the fixture preview screenshotable anyway.",
+      "expected_output": "Uses this skill; identifies import-time telemetry/prefetch as a quarantine failure, extracts or configures a no-op/read-only presentational table path, and verifies normal preview interactions stay side-effect free.",
+      "files": []
+    },
+    {
+      "id": 11,
+      "prompt": "Add fake test data to the invoice parser unit tests and guard the production env config from missing variables.",
+      "expected_output": "Does not use this skill; this is generic test fixture and environment-guard work, not a no-login fixture preview route or screenshotable UI surface.",
+      "files": []
+    },
+    {
+      "id": 12,
+      "prompt": "For this admin dashboard, I want to start with Prototype mode only: give me a few option routes to compare. Do not wire the real component preview yet.",
+      "expected_output": "Uses this skill as a mode selector and delegates to the prototype skill; does not read the Real UI Component checklist or create the fixture-only real-component route.",
+      "files": []
+    },
+    {
+      "id": 13,
+      "prompt": "The option is already selected. Use Real UI Component mode now: mount it with our existing shell and table components on a no-login fixture preview route.",
+      "expected_output": "Uses Real UI Component mode; reads the implementation checklist and quarantine reference, creates a guarded public-in-dev fixture route with real components and fake data.",
+      "files": []
+    }
+  ]
+}

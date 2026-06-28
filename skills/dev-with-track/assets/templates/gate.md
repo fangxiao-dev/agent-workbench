@@ -1,0 +1,100 @@
+# [Project / Slice] Gate
+
+状态：[开放 / 等待人工确认 / 已通过 / 未通过]
+创建：[YYYY-MM-DD]
+对应进度：[process.md](process.md)
+对应 findings：[findings.md](findings.md)
+Evidence：[path-or-link]
+
+本文记录当前切片或阶段是否可以关闭、进入下一阶段，或转入真实页面吸收。
+
+## Scope
+
+- Phase：[Phase A Preview Alignment / Phase B Real Route Absorption]
+- Target surfaces：
+  - [surface / route / component]
+  - [surface / route / component]
+- Boundary：[fixture-only / real route / shared primitive / mixed]
+
+## Data Safety
+
+- [ ] 不使用生产数据。
+- [ ] fixture 数据可识别为 fake/test data。
+- [ ] 不读取真实 backend service，或读取边界已记录。
+- [ ] 不触发外部 mutation：billing、payment、email、ERP、Lark、Lexware、Redis 等。
+- [ ] dev-only route 有 production guard。
+
+Notes：
+
+- [记录例外或确认方式。]
+
+## UI Evidence
+
+- [ ] Desktop evidence 已保存。
+- [ ] Constrained viewport evidence 已保存。
+- [ ] Console / hydration 状态已记录。
+- [ ] 可见 overflow / clipping / density 问题已记录到 findings。
+
+Evidence files：
+
+- `[file-or-link]`
+- `[file-or-link]`
+
+## Real Route Safety
+
+适用于 Phase B；Phase A 可标记为 N/A。
+
+- [ ] auth / permission boundary 保持。
+- [ ] i18n / dictionary wiring 保持。
+- [ ] data loading / service contract 保持。
+- [ ] Server Action / Route Handler 边界保持。
+- [ ] mutation availability 未被布局重构扩大。
+
+Notes：
+
+- [记录 N/A 或风险。]
+
+## Shared UI
+
+- [ ] 新增或变更 shared primitive 已登记到 component inventory。
+- [ ] preview-only 组件没有伪装成通用组件。
+- [ ] 可复用布局语法已沉到真实组件或 shared primitive。
+
+## Verification
+
+- [ ] Typecheck：[command + result]
+- [ ] Focused tests：[command + result]
+- [ ] Build：[command + result / N/A]
+- [ ] i18n audit：[command + result / N/A]
+- [ ] Browser verification：[route + viewport + result]
+
+Skipped checks：
+
+- [check] skipped because [reason]
+
+## Manual Review
+
+- [ ] 业务方 / 用户确认“第一眼看得懂”。
+- [ ] 允许进入下一阶段。
+
+Review notes：
+
+- [记录人工判断。]
+
+## Follow-up
+
+- [ ] [finding/checklist/issue/backlog item]
+- [ ] [finding/checklist/issue/backlog item]
+
+## Gate Decision
+
+Decision：[pass / fail / blocked / defer]
+
+Reason：
+
+- [一句话说明。]
+
+Next step：
+
+1. [下一步]
+2. [下一步]
