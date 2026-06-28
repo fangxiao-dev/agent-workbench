@@ -54,7 +54,7 @@ Choose exactly one mode.
 | Default | review / 审查 / code review / 重新审核 | 1 round |
 | Fixed rounds | `N轮审查`, `run N rounds` | exactly N rounds |
 | Loop | `loop模式`, `直到收敛`, `until converged` | convergence or cap, default cap 5 |
-| Closure verification | `是否真的关闭`, `只验证是否修完`, `verify closure` | all named issues/findings verdicted |
+| Closure verification | `聚焦验证模式`, `是否真的关闭`, `只验证是否修完`, `verify closure` | all named issues/findings verdicted |
 
 In closure verification mode, do not hunt for unrelated new problems.
 
