@@ -1,6 +1,6 @@
-# Review Orchestrator Subagent Briefs
+# Do Review Subagent Briefs
 
-Copy and fill these briefs when dispatching subagents. Keep the two tracks intentionally different.
+Copy the common block plus exactly one track brief. Add the anti-duplicate block only after round 1.
 
 ## Common Context Block
 
@@ -18,7 +18,8 @@ Known findings ledger:
 <paste ledger; write "none yet" for round 1>
 
 Return format:
-- PASS/FAIL/UNCERTAIN per issue for closure verification, or findings in ledger schema for normal review.
+- Normal review: findings in ledger schema.
+- Closure verification: PASS/FAIL/UNCERTAIN per issue.
 - Every finding needs evidence.
 - Do not mutate files, issues, git state, data, or external systems.
 ```
@@ -32,18 +33,17 @@ Lens:
 - reachable code-path bugs;
 - local business invariants;
 - error handling and partial failures;
-- tests and missing regressions;
-- local/mock behavior that can hide real bugs;
-- maintainability only when it affects correctness or verification.
+- missing regression tests;
+- local/mock behavior that can hide real bugs.
 
-Do not spend time on broad architecture unless it is directly visible in code.
-Do not duplicate known findings unless you add materially new evidence.
+Avoid broad architecture unless it is directly visible in code.
+Avoid known duplicates unless you add materially new evidence.
 
 For each finding:
 - cite file:line evidence;
 - explain the concrete failure path;
-- state whether a test exists or is missing;
-- classify severity from the code-path risk.
+- say whether a test exists or is missing;
+- classify severity from code-path risk.
 ```
 
 ## review Track Brief
@@ -59,8 +59,8 @@ Lens:
 - external system boundaries;
 - release and rollback risk.
 
-Do not spend time on style or local refactors unless they hide a system risk.
-Do not duplicate known findings unless you add materially new impact.
+Avoid style/local refactors unless they hide system risk.
+Avoid known duplicates unless you add materially new impact.
 
 For each finding:
 - cite evidence where possible;
@@ -71,14 +71,12 @@ For each finding:
 
 ## Closure Verification Brief
 
-Use this instead of the normal finding-hunt brief when the user says not to find new issues.
-
 ```text
 Use the assigned skill, but run closure verification only.
 
 For each assigned issue/finding:
 1. Read the issue body and acceptance criteria.
-2. Inspect only the code/tests needed to verify those criteria.
+2. Inspect only code/tests needed to verify those criteria.
 3. Do not report unrelated new problems.
 4. Return PASS, FAIL, or UNCERTAIN.
 
@@ -93,17 +91,14 @@ For UNCERTAIN:
 
 ## Round-N Anti-Duplicate Addendum
 
-Append this from round 2 onward.
-
 ```text
 Known findings are already recorded below. Do not re-report them.
 
-You may report a related finding only if one of these is true:
-- it is a different broken invariant;
-- it affects a different owner or release decision;
-- it changes severity/classification;
-- it provides narrower evidence that changes the fix.
+Report a related finding only if it:
+- breaks a different invariant;
+- affects a different owner or release decision;
+- changes severity/classification;
+- gives narrower evidence that changes the fix.
 
-Otherwise mark it as duplicate/refinement and keep it short.
+Otherwise mark it duplicate/refinement and keep it short.
 ```
-

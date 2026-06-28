@@ -64,7 +64,7 @@ Completion criterion: the selected mode and stop rule are written in the main se
 
 Spawn two subagents in every round.
 
-For full prompt templates, read `references/subagent-briefs.md`. Use the templates there when the run needs durable or repeatable prompts.
+For durable prompts, read only the needed sections from `references/subagent-briefs.md`: [Common Context Block](references/subagent-briefs.md#common-context-block), [code-review Track Brief](references/subagent-briefs.md#code-review-track-brief), and [review Track Brief](references/subagent-briefs.md#review-track-brief). For closure verification, use [Closure Verification Brief](references/subagent-briefs.md#closure-verification-brief). From round 2 onward, append [Round-N Anti-Duplicate Addendum](references/subagent-briefs.md#round-n-anti-duplicate-addendum).
 
 ### Track A: `code-review`
 
@@ -166,7 +166,7 @@ Completion criterion: the final output states the number of rounds and why the r
 
 ## Output
 
-For full report templates, read `references/output-templates.md`.
+For report templates, read only the relevant section from `references/output-templates.md`: [Normal Review Report](references/output-templates.md#normal-review-report), [Closure Verification Report](references/output-templates.md#closure-verification-report), [Finding Record](references/output-templates.md#finding-record), or [Round Ledger](references/output-templates.md#round-ledger).
 
 Normal review:
 
