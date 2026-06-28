@@ -1,11 +1,9 @@
 ---
 name: kaispan-ui-design
-description: Thin router for KaiSpan and Supplier Admin (webshop) UI work — prototype absorption, business-area Overview-first layout, finance UI surfaces. Points to the repo-local source-of-truth docs and three guardrails. Use when asked to design/build/review KaiSpan or webshop admin UI, or to absorb the boss's prototype.
+description: KaiSpan and Supplier Admin UI migration guide for prototype absorption, billing/finance UI surfaces, business-area Overview-first layout, preview/screenshot harness flow, and real-route absorption. Use when asked to design/build/review KaiSpan or webshop admin UI, migrate a billing UI using the same preview harness pattern, or absorb the boss's prototype into the real app.
 ---
 
-# KaiSpan UI Design (thin router)
-
-> 2026-06-26:原 kaispan-ui-design 治理套件(ksui:// locator 协议、global/module/review 三个 child skill、readiness/slice/closure 模板、`.kaispan-ui-design.json` 指针)已**整套退役**——对 2 人小队过度设计,且仓库侧对应基础设施已删。本 skill 现在只做一件事:把你指到 repo 内的真实事实源 + 三条红线。不要再找 locator、模板或停机协议。
+# KaiSpan UI Design
 
 ## 去哪读(事实源都在产品 repo,不在本 skill)
 
@@ -15,9 +13,105 @@ description: Thin router for KaiSpan and Supplier Admin (webshop) UI work — pr
 | webshop 执行节奏 | webshop repo `docs/epic-plans/2026-06-26-admin-layout-grammar-roadmap-lean.md` |
 | webshop 需求背景 / 老板原始示例 | webshop repo `docs/epic-plans/2026-06-23-admin-canonical-ui-absorption-roadmap.md`(reference) |
 | KaiSpan 财务 UI prototype 语义 | kaispan-dev repo `docs/kaispan-ui-design/finance-prototype-notes.md` |
+| UI 迁移执行跟踪 / preview harness 控制 | `dev-with-track` skill |
 | 实际写 UI 组件 | `frontend-design` skill |
 
 进入某个 repo 时,以该 repo 的 `AGENTS.md` / `web/AGENTS.md` 为准。
+
+## UI 迁移流程路由
+
+当任务是 KaiSpan / Supplier Admin / finance billing 的 prototype absorption、UI 迁移、preview / screenshot harness、fixture-only migration、process/findings/gate 账本、Phase A 截图对齐或 Phase B 真实页面吸收时:
+
+- 本 skill 负责 UI 迁移流程、领域语义、事实源和红线。
+- `dev-with-track` 负责轻量执行跟踪、gate 判断和状态回写。
+- `frontend-design` 负责具体视觉和组件实现。
+
+## UI 迁移流程
+
+这套流程用于把老板 prototype、业务截图或 billing / finance UI 设想吸收到真实 App。核心原则是:prototype 是输入,真实 App 是 source of truth;先用 preview/harness 低成本对齐语义,再吸收到真实 route。
+
+### 1. 业务语义与事实源定位
+
+先确认这个 UI 迁移属于哪个真实业务上下文:
+
+- KaiSpan finance / billing surface;
+- Supplier Admin business area;
+- webshop admin Overview-first layout;
+- ERP / Lexware / Rechnung / billing document surface;
+- 其它需要用户确认的 finance/admin 子模块。
+
+需要读取对应 repo 的事实源和 `AGENTS.md`。不要只看 prototype 截图就开始改真实页面。
+
+对齐问题:
+
+- 页面有哪些子模块?
+- 哪些信息第一眼必须可见?
+- 哪个是 primary action,哪些是 secondary action?
+- action 应该进入列表、drawer、dialog、detail page,还是 disabled placeholder?
+- 哪些真实能力尚未接通,必须 disabled,不能伪装成已实现?
+
+### 2. 页面抽取与预完善
+
+从真实业务页面抽出可预览的 UI surface,建立 dev-only preview / screenshot harness。
+
+要求:
+
+- preview 使用真实 UI 组件或候选真实组件;
+- 数据使用静态 fixture,不得读取真实 backend service;
+- 不触发 Lark、Lexware、Redis、Resend、billing、payment、email、ERP mutation 或生产数据副作用;
+- dev-only route 必须有 production guard;
+- fixture 数据必须可识别为 fake/test data;
+- 先做自检:首屏是否看得懂、窄屏是否可读、primary action 是否清楚、action 去向是否明确、有没有明显布局问题。
+
+这一阶段的目标不是交付真实页面,而是快速暴露 UI 语义和布局风险。
+
+### 3. Preview 中打造目标形态
+
+在 preview / harness 中把页面打造成目标形态。
+
+要求:
+
+- preview 只负责组合和喂 fixture 数据;
+- 真正的布局、组件、row/card 语法尽量沉到真实组件或 shared primitive;
+- 不要让 preview 变成一次性假页面;
+- 每次重要调整都用 desktop + constrained viewport 截图或 DOM geometry 验证;
+- 截图暴露的 density、overflow、clipping、action 不清楚、disabled 容易误解等问题写入 findings。
+
+到这一步,UI 设计迁移的形态基本定型,但还不能视为真实业务交付。
+
+### 4. 真实页面吸收
+
+将 preview 中验证过的结构接回真实业务 route。
+
+注意:这不是单纯“接真实数据”。必须保留并验证真实业务边界:
+
+- auth / permission boundary;
+- dictionary / i18n wiring;
+- Server Action 和 Route Handler 边界;
+- data loading 和 service contract;
+- external mutation availability;
+- 已有 lifecycle action 的可用性规则。
+
+布局重构不得扩大真实 mutation 范围,不得把 disabled 能力伪装成可用。新增或调整 shared primitive 时,更新项目的 component inventory。
+
+### 5. 证据、发现与 Gate
+
+完成 preview 或真实页面吸收后,按变更类型做验证:
+
+- typecheck;
+- focused tests;
+- 必要 build;
+- browser evidence:desktop + constrained viewport;
+- i18n audit;
+- 对外部集成、金钱、开票、邮件、ERP mutation 等能力,默认不跑真实 mutation smoke,除非用户明确批准。
+
+状态回写由 `dev-with-track` 控制:
+
+- `process.md`:当前 phase、gate 状态、验证结果、下一步;
+- `findings.md`:截图 / 测试 / review 暴露的问题、风险、候选后续动作;
+- `gate.md` 或 evidence README:scope、data safety、UI evidence、real route safety、verification、manual review、follow-up。
+
+早期设计迁移阶段不要急着发布 issue。若 finding 还停留在“截图暴露的问题”“人工 review 待判断项”“可能在真实页面吸收时顺手处理”的粒度,先保留在 findings / gate checklist。只有当它具备清晰 scope、验收条件和执行边界时,才升级为 issue。
 
 ## 三条红线(其余都交给上面的文档)
 
@@ -27,4 +121,4 @@ description: Thin router for KaiSpan and Supplier Admin (webshop) UI work — pr
 
 ## 想新增 skill 时(沉淀,不要预判)
 
-只有当某个流程**手工跑过 2~3 次、每次重复同样的痛、且可泛化**,才用 `skill-creator` 抽成 skill;平时用 `continuous-learning` 收集提案、由用户审批。不要为"将来可能用到"提前搭治理套件——那正是本套件被退役的原因。
+只有当某个流程**手工跑过 2~3 次、每次重复同样的痛、且可泛化**,才用 `skill-creator` 抽成 skill;平时用 `continuous-learning` 收集提案、由用户审批。不要为“将来可能用到”提前扩展治理层。
