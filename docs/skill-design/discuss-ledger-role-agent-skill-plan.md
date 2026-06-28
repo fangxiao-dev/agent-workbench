@@ -451,4 +451,3 @@ MVP behavior:
 6. Run same-role confrontation.
 7. Normalize into Discuss Ledger points.
 8. Skip cross-role challenge in v1 unless the user asks for a deeper review.
-
