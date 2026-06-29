@@ -20,6 +20,7 @@ description: KaiSpan and admin UI migration guide for prototype absorption, bill
 | 执行节奏 / roadmap | target repo `docs/epic-plans/...` 或项目指定 roadmap |
 | 需求背景 / 原始 prototype / 老板示例 | target repo 中记录为 reference 的 prototype / roadmap / snapshot 文档 |
 | 财务 / billing UI prototype 语义 | target repo 或相关 source repo 的 `docs/kaispan-ui-design/...` 领域说明 |
+| 基于 Phase A review / 截图证据制定 Module Contract | `kaispan-ui-module-contracts` |
 | UI 迁移执行跟踪 / preview harness 控制 | `dev-with-track` skill |
 | 实际写 UI 组件 | `frontend-design` skill |
 
@@ -30,6 +31,7 @@ description: KaiSpan and admin UI migration guide for prototype absorption, bill
 当任务是 KaiSpan / Supplier Admin / finance billing 或其它后台产品的 prototype absorption、UI 迁移、preview / screenshot harness、fixture-only migration、process/findings/gate 账本、Phase A 截图对齐或 Phase B 真实页面吸收时:
 
 - 本 skill 负责 UI 迁移流程、领域语义、事实源和红线。
+- `kaispan-ui-module-contracts` 负责把人工 review、截图证据和 findings 落成 `docs/kaispan-ui-design/module-contracts/<module>.md`。
 - `dev-with-track` 负责轻量执行跟踪、gate 判断和状态回写。
 - `frontend-design` 负责具体视觉和组件实现。
 
@@ -45,6 +47,8 @@ description: KaiSpan and admin UI migration guide for prototype absorption, bill
 2. **Module Contract**:模块级 Phase A 结论,来源是 `docs/kaispan-ui-design/module-contracts/<module>-<submodule>.md`。它回答某个模块的子模块优先级、primary / secondary CTA、状态区、drawer/dialog/detail/page 决策、Phase B 真实接入边界和待确认项。
 
 `docs/kaispan-ui-design/ui-migration-mechanism.md` 解释这两层机制。Phase A 的截图不是最终交付物;截图必须配套 Module Contract。Phase B 真实 route absorption 以 Layout Grammar + Module Contract 为依据,而不是只照截图复刻。
+
+当用户要求“根据 review 更新 contract”“制定 module contract”“沉淀 Phase A 结论”或“为 Phase B 准备契约”时,本 skill 只负责事实源和边界定位;contract 写作与更新交给 `kaispan-ui-module-contracts`。
 
 ### 1. 业务语义与事实源定位
 
@@ -92,7 +96,7 @@ description: KaiSpan and admin UI migration guide for prototype absorption, bill
 - 不要让 preview 变成一次性假页面;
 - 每次重要调整都用 desktop + constrained viewport 截图或 DOM geometry 验证;
 - 截图暴露的 density、overflow、clipping、action 不清楚、disabled 容易误解等问题写入 findings。
-- 人工 review 形成的业务优先级、CTA 承载方式和 Phase B 边界必须写入对应 Module Contract。
+- 人工 review 形成的业务优先级、CTA 承载方式和 Phase B 边界必须通过 `kaispan-ui-module-contracts` 写入对应 Module Contract。
 
 到这一步,UI 设计迁移的形态基本定型,但还不能视为真实业务交付。
 
