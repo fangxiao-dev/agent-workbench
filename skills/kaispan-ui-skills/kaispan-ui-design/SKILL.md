@@ -1,26 +1,33 @@
 ---
 name: kaispan-ui-design
-description: KaiSpan and Supplier Admin UI migration guide for prototype absorption, billing/finance UI surfaces, business-area Overview-first layout, preview/screenshot harness flow, and real-route absorption. Use when asked to design/build/review KaiSpan or webshop admin UI, migrate a billing UI using the same preview harness pattern, or absorb the boss's prototype into the real app.
+description: KaiSpan and admin UI migration guide for prototype absorption, billing/finance UI surfaces, business-area Overview-first layout, preview/screenshot harness flow, and real-route absorption. Use when asked to design/build/review KaiSpan or admin UI, migrate a billing UI using the same preview harness pattern, or absorb the boss's prototype into the real app.
 ---
 
 # KaiSpan UI Design
 
-## 去哪读(事实源都在产品 repo,不在本 skill)
+## 去哪读(事实源都在目标产品 repo,不在本 skill)
+
+本 skill 是跨项目 UI 迁移流程规则。不要把某个具体产品 repo 的文档当成全局事实源。
+进入任意目标项目时,先以该项目自己的 `AGENTS.md` / app-level instructions 为准,再读取该项目内的 UI grammar、`kaispan-ui-design/`、roadmap、process/findings 等文件。
+
+推荐每个采用本流程的项目都维护下面这组结构;若项目使用不同文件名,以项目内 README / roadmap 指向为准。
 
 | 你要做的事 | 文件 |
 | --- | --- |
-| webshop 后台布局落地(唯一规范) | webshop repo `docs/top-level-knowledge/admin-layout-grammar.md` |
-| webshop 执行节奏 | webshop repo `docs/epic-plans/2026-06-26-admin-layout-grammar-roadmap-lean.md` |
-| webshop 需求背景 / 老板原始示例 | webshop repo `docs/epic-plans/2026-06-23-admin-canonical-ui-absorption-roadmap.md`(reference) |
-| KaiSpan 财务 UI prototype 语义 | kaispan-dev repo `docs/kaispan-ui-design/finance-prototype-notes.md` |
+| 后台 / admin 布局落地(项目内唯一规范) | target repo `docs/top-level-knowledge/admin-layout-grammar.md` 或项目指定 UI grammar |
+| UI 迁移机制(两层设计) | target repo `docs/kaispan-ui-design/ui-migration-mechanism.md` |
+| 模块级 Phase A 结论 / Phase B contract | target repo `docs/kaispan-ui-design/module-contracts/<module>-<submodule>.md` |
+| 执行节奏 / roadmap | target repo `docs/epic-plans/...` 或项目指定 roadmap |
+| 需求背景 / 原始 prototype / 老板示例 | target repo 中记录为 reference 的 prototype / roadmap / snapshot 文档 |
+| 财务 / billing UI prototype 语义 | target repo 或相关 source repo 的 `docs/kaispan-ui-design/...` 领域说明 |
 | UI 迁移执行跟踪 / preview harness 控制 | `dev-with-track` skill |
 | 实际写 UI 组件 | `frontend-design` skill |
 
-进入某个 repo 时,以该 repo 的 `AGENTS.md` / `web/AGENTS.md` 为准。
+进入某个 repo 时,以该 repo 的 `AGENTS.md` / app-level instructions 为准。
 
 ## UI 迁移流程路由
 
-当任务是 KaiSpan / Supplier Admin / finance billing 的 prototype absorption、UI 迁移、preview / screenshot harness、fixture-only migration、process/findings/gate 账本、Phase A 截图对齐或 Phase B 真实页面吸收时:
+当任务是 KaiSpan / Supplier Admin / finance billing 或其它后台产品的 prototype absorption、UI 迁移、preview / screenshot harness、fixture-only migration、process/findings/gate 账本、Phase A 截图对齐或 Phase B 真实页面吸收时:
 
 - 本 skill 负责 UI 迁移流程、领域语义、事实源和红线。
 - `dev-with-track` 负责轻量执行跟踪、gate 判断和状态回写。
@@ -30,13 +37,22 @@ description: KaiSpan and Supplier Admin UI migration guide for prototype absorpt
 
 这套流程用于把老板 prototype、业务截图或 billing / finance UI 设想吸收到真实 App。核心原则是:prototype 是输入,真实 App 是 source of truth;先用 preview/harness 低成本对齐语义,再吸收到真实 route。
 
+### 两层 UI 设计机制
+
+后台 / admin UI 迁移必须分成两层记录:
+
+1. **Layout Grammar**:跨模块通用语法,来源是 `docs/top-level-knowledge/admin-layout-grammar.md`。它回答 Overview-first、动作承载矩阵、detail workspace、tab 降级等共通规则。
+2. **Module Contract**:模块级 Phase A 结论,来源是 `docs/kaispan-ui-design/module-contracts/<module>-<submodule>.md`。它回答某个模块的子模块优先级、primary / secondary CTA、状态区、drawer/dialog/detail/page 决策、Phase B 真实接入边界和待确认项。
+
+`docs/kaispan-ui-design/ui-migration-mechanism.md` 解释这两层机制。Phase A 的截图不是最终交付物;截图必须配套 Module Contract。Phase B 真实 route absorption 以 Layout Grammar + Module Contract 为依据,而不是只照截图复刻。
+
 ### 1. 业务语义与事实源定位
 
 先确认这个 UI 迁移属于哪个真实业务上下文:
 
 - KaiSpan finance / billing surface;
 - Supplier Admin business area;
-- webshop admin Overview-first layout;
+- admin Overview-first layout;
 - ERP / Lexware / Rechnung / billing document surface;
 - 其它需要用户确认的 finance/admin 子模块。
 
@@ -76,6 +92,7 @@ description: KaiSpan and Supplier Admin UI migration guide for prototype absorpt
 - 不要让 preview 变成一次性假页面;
 - 每次重要调整都用 desktop + constrained viewport 截图或 DOM geometry 验证;
 - 截图暴露的 density、overflow、clipping、action 不清楚、disabled 容易误解等问题写入 findings。
+- 人工 review 形成的业务优先级、CTA 承载方式和 Phase B 边界必须写入对应 Module Contract。
 
 到这一步,UI 设计迁移的形态基本定型,但还不能视为真实业务交付。
 
