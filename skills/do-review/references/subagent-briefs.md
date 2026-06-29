@@ -1,6 +1,6 @@
 # Do Review Subagent Briefs
 
-Copy the common block plus exactly one track brief. Add the anti-duplicate block only after round 1.
+Copy the common block plus exactly one track brief. If the assigned reviewer skill is `code-review` or `review`, append the matching default lens addendum. Add the anti-duplicate block only after round 1.
 
 ## Common Context Block
 
@@ -11,6 +11,8 @@ Review target:
 - Base/head:
 - Mode:
 - Round:
+- Track label:
+- Assigned reviewer skill:
 - Out of scope:
 - User policy:
 
@@ -24,10 +26,25 @@ Return format:
 - Do not mutate files, issues, git state, data, or external systems.
 ```
 
-## code-review Track Brief
+## Generic Reviewer Track Brief
 
 ```text
-Use the code-review skill.
+Use the assigned reviewer skill.
+
+Review the target in scope. Follow the assigned skill's review method, but return results in the do-review ledger schema so the main session can deduplicate and classify consistently.
+
+For each finding:
+- cite evidence;
+- prefer file:line evidence when reviewing code;
+- explain the concrete failure mode or broken invariant;
+- classify severity from the risk described by the assigned skill;
+- avoid known duplicates unless you add materially new evidence or impact.
+```
+
+## code-review Default Lens Addendum
+
+```text
+Default lens when the assigned skill is code-review:
 
 Lens:
 - reachable code-path bugs;
@@ -46,10 +63,10 @@ For each finding:
 - classify severity from code-path risk.
 ```
 
-## review Track Brief
+## review Default Lens Addendum
 
 ```text
-Use the review skill.
+Default lens when the assigned skill is review:
 
 Lens:
 - cross-module seams;

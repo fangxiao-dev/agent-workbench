@@ -1,6 +1,6 @@
 ---
 name: do-review
-description: Orchestrate dual-track code review with code-review and review subagents. Use for PR/code review, N-round review, loop/until-converged review, or verifying whether previous review issues were actually fixed. Requires subagents by default; stop and ask if they are unavailable.
+description: Orchestrate dual-track code review with configurable reviewer-skill subagents. Use for PR/code review, N-round review, loop/until-converged review, custom review-skill orchestration, or verifying whether previous review issues were actually fixed. Requires subagents by default; stop and ask if they are unavailable.
 allowed-tools:
   - Read
   - Grep
@@ -10,7 +10,9 @@ allowed-tools:
 
 # Do Review
 
-Run a **dual-track review**: one subagent uses `code-review`, one subagent uses `review`, and the main session acts as scheduler, ledger owner, deduper, verifier, and final decision maker.
+Run a **dual-track review**: two subagents review the same target with assigned reviewer skills, and the main session acts as scheduler, ledger owner, deduper, verifier, and final decision maker.
+
+By default, Track A uses `code-review` and Track B uses `review`. If the user names custom reviewer skills, assign them through this skill's orchestration instead of changing the ledger, verification, or final-decision workflow.
 
 The main session is not a third reviewer. It verifies high-severity evidence and decides classification.
 
@@ -21,14 +23,14 @@ This skill requires subagents.
 If subagents are unavailable, disallowed, or need authorization, stop before reviewing and ask:
 
 ```text
-This do-review skill requires subagents for the code-review and review tracks. Subagents are currently unavailable or need authorization. Do you want me to stop, or explicitly authorize a degraded single-session review?
+This do-review skill requires subagents for the two review tracks. Subagents are currently unavailable or need authorization. Do you want me to stop, or explicitly authorize a degraded single-session review?
 ```
 
 Completion criterion: either subagents are available, or the user explicitly authorizes degraded mode. If neither is true, stop.
 
 ## Step 1: Scope
 
-Determine the review target and mode before spawning subagents.
+Determine the review target, mode, and reviewer tracks before spawning subagents.
 
 Scope fields:
 
@@ -37,11 +39,12 @@ Target:
 Base/head or issue set:
 Mode:
 Rounds/cap:
+Reviewer tracks:
 Known constraints:
 Out of scope:
 ```
 
-Ask only if the target or mode cannot be inferred from the prompt, repo, or issue/PR metadata.
+Ask only if the target, mode, or reviewer tracks cannot be inferred from the prompt, repo, or issue/PR metadata.
 
 Completion criterion: the target revision/issue set and mode are explicit enough that subagents can work independently without asking follow-up questions.
 
@@ -51,8 +54,7 @@ Choose exactly one mode.
 
 | Mode | Trigger | Stop rule |
 | --- | --- | --- |
-| Default | review / 审查 / code review / 重新审核 | 1 round |
-| Fixed rounds | `N轮审查`, `run N rounds` | exactly N rounds |
+| N rounds | review / 审查 / code review / 重新审核 / `N轮审查` / `run N rounds` | exactly N rounds, default N=1 |
 | Loop | `loop模式`, `直到收敛`, `until converged` | convergence or cap, default cap 5 |
 | Closure verification | `聚焦验证模式`, `是否真的关闭`, `只验证是否修完`, `verify closure` | all named issues/findings verdicted |
 
@@ -60,49 +62,60 @@ In closure verification mode, do not hunt for unrelated new problems.
 
 Completion criterion: the selected mode and stop rule are written in the main session notes or response.
 
-## Step 3: Dispatch Dual Tracks
+## Step 3: Select Reviewer Tracks
+
+Choose exactly two reviewer tracks before dispatch.
+
+Default tracks:
+
+```text
+Track A: code-review
+Track B: review
+```
+
+Custom reviewer selection uses name-list style from the user prompt, for example:
+
+- `review skills: architecture-review, cso`
+- `用 architecture-review 和 cso 做 review`
+- `用 architecture-review 审查`
+
+Assignment rules:
+
+- No custom reviewer skill specified: use the default tracks.
+- One custom reviewer skill specified: assign the same skill to Track A and Track B, and still spawn two independent subagents.
+- Two custom reviewer skills specified: assign the first to Track A and the second to Track B.
+- More than two reviewer skills specified: ask the user to choose exactly two.
+- If a named reviewer skill cannot be found or read, stop and ask instead of silently falling back.
+
+Track labels remain `Track A (<skill>)` and `Track B (<skill>)` even when both tracks use the same skill. This keeps source attribution unambiguous.
+
+Completion criterion: Track A and Track B each have a concrete reviewer skill, or the run is blocked on an unreadable/ambiguous reviewer selection.
+
+## Step 4: Dispatch Dual Tracks
 
 Spawn two subagents in every round.
 
-For durable prompts, read only the needed sections from `references/subagent-briefs.md`: [Common Context Block](references/subagent-briefs.md#common-context-block), [code-review Track Brief](references/subagent-briefs.md#code-review-track-brief), and [review Track Brief](references/subagent-briefs.md#review-track-brief). For closure verification, use [Closure Verification Brief](references/subagent-briefs.md#closure-verification-brief). From round 2 onward, append [Round-N Anti-Duplicate Addendum](references/subagent-briefs.md#round-n-anti-duplicate-addendum).
+For durable prompts, read only the needed sections from `references/subagent-briefs.md`: [Common Context Block](references/subagent-briefs.md#common-context-block) and [Generic Reviewer Track Brief](references/subagent-briefs.md#generic-reviewer-track-brief). When an assigned reviewer skill is `code-review` or `review`, append that skill's default lens addendum regardless of whether it came from the default track selection or a user-specified reviewer list. For closure verification, use [Closure Verification Brief](references/subagent-briefs.md#closure-verification-brief). From round 2 onward, append [Round-N Anti-Duplicate Addendum](references/subagent-briefs.md#round-n-anti-duplicate-addendum).
 
-### Track A: `code-review`
+### Track Prompt Intent
 
-Prompt intent:
+Every normal-review track prompt includes:
 
 ```text
-Use the code-review skill. Review the target from the concrete implementation lens:
-- reachable code-path bugs;
-- local business invariants;
-- error handling and partial failures;
-- tests and missing regressions;
-- local/mock behavior that can hide real bugs.
+You are Track <A/B> using reviewer skill <skill-name>.
+Use the assigned reviewer skill.
+Review the target in scope.
 
-Every finding needs file:line evidence. Avoid duplicates from the ledger unless you add materially new evidence.
+Every finding needs evidence. Prefer file:line evidence where the target is code.
+Avoid duplicates from the ledger unless you add materially new evidence or impact.
 Return findings in the ledger schema.
 ```
 
-### Track B: `review`
+For N-round mode with N > 1 and for loop mode, include the current ledger in every round after round 1.
 
-Prompt intent:
+Completion criterion: each round has one Track A result and one Track B result, or the run is explicitly blocked by subagent availability/authorization.
 
-```text
-Use the review skill. Review the target from the PR/system lens:
-- cross-module seams;
-- transaction semantics and crash points;
-- replay, idempotency, and concurrency;
-- runtime modes and environment matrix;
-- external systems and release risk.
-
-Prefer distinct issue classes with observable failure modes. Avoid duplicates from the ledger unless you add materially new impact.
-Return findings in the ledger schema.
-```
-
-For fixed-round and loop modes, include the current ledger in every round after round 1.
-
-Completion criterion: each round has one `code-review` result and one `review` result, or the run is explicitly blocked by subagent availability/authorization.
-
-## Step 4: Maintain The Ledger
+## Step 5: Maintain The Ledger
 
 Use one ledger across all rounds.
 
@@ -111,7 +124,7 @@ ID:
 Title:
 Severity: P0/P1/P2/P3
 Classification: blocker / follow-up / backlog / no issue
-Source: code-review / review / fused / main-session
+Source: Track A (<skill>) / Track B (<skill>) / fused / main-session
 Status: new / duplicate / refined / disputed / accepted / downgraded / fixed-verified
 Evidence:
   - file:line
@@ -122,11 +135,13 @@ Related issue/PR:
 Main-session decision:
 ```
 
-Deduplicate by broken invariant or observable failure, not by file path. If both subagents report the same issue, mark `Source: fused`.
+Use source labels from the selected tracks, for example `Track A (code-review)`, `Track B (review)`, `fused`, or `main-session`.
+
+Deduplicate by broken invariant or observable failure, not by file path. If both subagents report the same issue, mark `Source: fused` and keep the contributing track names in the evidence or decision note.
 
 Completion criterion: every accepted finding has source attribution and a main-session decision.
 
-## Step 5: Verify High-Severity Findings
+## Step 6: Verify High-Severity Findings
 
 Before reporting any P1/P2/blocker:
 
@@ -139,7 +154,7 @@ If evidence is incomplete, mark `disputed`, `downgraded`, or `UNCERTAIN`; do not
 
 Completion criterion: all P1/P2/blocker findings have main-session verification notes.
 
-## Step 6: Classify
+## Step 7: Classify
 
 Default policy when the user gives no policy:
 
@@ -156,7 +171,7 @@ Closure verification verdicts:
 
 Completion criterion: every ledger item has exactly one classification or closure verdict.
 
-## Step 7: Decide Whether To Continue
+## Step 8: Decide Whether To Continue
 
 For loop mode, continue until convergence or cap.
 
@@ -166,53 +181,7 @@ Completion criterion: the final output states the number of rounds and why the r
 
 ## Output
 
-For report templates, read only the relevant section from `references/output-templates.md`: [Normal Review Report](references/output-templates.md#normal-review-report), [Closure Verification Report](references/output-templates.md#closure-verification-report), [Finding Record](references/output-templates.md#finding-record), or [Round Ledger](references/output-templates.md#round-ledger).
-
-Normal review:
-
-```markdown
-## Summary
-- Target:
-- Mode:
-- Rounds:
-- Stop reason:
-
-## Findings
-### Blockers
-### Follow-ups
-### Backlog / Not blocking
-
-## Type Summary
-- Inventory / movement:
-- Runtime / cutover:
-- External systems:
-- Readiness / schema:
-- Test fidelity:
-
-## Source Coverage
-- code-review:
-- review:
-- fused:
-
-## Recommended Next Actions
-```
-
-Closure verification:
-
-```markdown
-## Closure Verification Summary
-
-| Issue | Verdict | Reason |
-| --- | --- | --- |
-
-## Should Reopen / Retrack
-
-## Safe To Stay Closed
-
-## Still Open / Out Of Closure Scope
-
-## Evidence Notes
-```
+For report templates, read only the relevant section from `references/output-templates.md`: [Normal Review Report](references/output-templates.md#normal-review-report), [Closure Verification Report](references/output-templates.md#closure-verification-report), [Finding Record](references/output-templates.md#finding-record), or [Round Ledger](references/output-templates.md#round-ledger). Treat that reference file as the output source of truth so template drift does not create competing report shapes.
 
 ## Guardrails
 

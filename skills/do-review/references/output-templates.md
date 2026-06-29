@@ -48,8 +48,8 @@ Use the smallest template that matches the run. Keep source attribution visible.
 
 | Source | Count | Notes |
 | --- | --- | --- |
-| code-review |  |  |
-| review |  |  |
+| Track A (<skill>) |  |  |
+| Track B (<skill>) |  |  |
 | fused |  |  |
 | main-session |  |  |
 
@@ -90,7 +90,7 @@ Use the smallest template that matches the run. Keep source attribution visible.
 
 Severity: P0 / P1 / P2 / P3
 Classification: blocker / follow-up / backlog / no issue
-Sources: code-review / review / fused / main-session
+Sources: Track A (<skill>) / Track B (<skill>) / fused / main-session
 Status: new / duplicate / refined / disputed / accepted / downgraded / fixed-verified
 Evidence:
 - `path/to/file.ts:123` - concise evidence summary.
@@ -104,7 +104,7 @@ Main-session decision:
 ```markdown
 ## Review Rounds
 
-| Round | code-review | review | New accepted | Convergence note |
+| Round | Track A (<skill>) | Track B (<skill>) | New accepted | Convergence note |
 | --- | --- | --- | --- | --- |
 
 ## Known Findings Ledger
