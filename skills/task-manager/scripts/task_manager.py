@@ -629,6 +629,38 @@ def render_task(fm: dict[str, Any], body: str) -> str:
     return render_frontmatter(fm) + "\n" + body.rstrip() + "\n"
 
 
+def frontmatter_changes(before: dict[str, Any], after: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        key: {"before": before.get(key), "after": after.get(key)}
+        for key in sorted(set(before) | set(after))
+        if before.get(key) != after.get(key)
+    }
+
+
+def section_content(body: str, title: str) -> str | None:
+    pattern = re.compile(rf"^### {re.escape(title)}\s*\n(.*?)(?=^### |\Z)", re.MULTILINE | re.DOTALL)
+    match = pattern.search(body)
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
+def payload_body_section_names(payload: dict[str, Any]) -> list[str]:
+    return [
+        SECTION_MAP[json_key]
+        for json_key in SECTION_MAP
+        if json_key in payload and payload[json_key] is not None
+    ]
+
+
+def changed_body_sections(before: str, after: str, payload: dict[str, Any]) -> list[str]:
+    return [
+        title
+        for title in payload_body_section_names(payload)
+        if section_content(before, title) != section_content(after, title)
+    ]
+
+
 def diff_summary(before: str, after: str) -> dict[str, Any]:
     before_lines = before.splitlines()
     after_lines = after.splitlines()
@@ -683,7 +715,7 @@ def command_upsert(args: argparse.Namespace) -> int:
     if project_id:
         ensure_project_upsert_source_metadata(target, payload)
 
-    result = build_task_write(vault, target, payload, args.apply, write_target)
+    result = build_task_write(vault, target, payload, args.apply, write_target, args.include_markdown)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
@@ -694,6 +726,7 @@ def build_task_write(
     payload: dict[str, Any],
     apply: bool,
     write_target: Path | None = None,
+    include_markdown: bool = False,
 ) -> dict[str, Any]:
     write_target = write_target or target
     existing_text = target.read_text(encoding="utf-8") if target.exists() else ""
@@ -703,14 +736,19 @@ def build_task_write(
     next_text = render_task(new_fm, new_body)
     result = {
         "mode": "apply" if apply else "dry-run",
+        "operation": payload["operation"],
         "target": str(write_target),
         "exists": target.exists(),
         "sourceTarget": str(target) if target.exists() and write_target != target else None,
         "renamed": target.exists() and write_target != target,
         "summary": diff_summary(existing_text, next_text),
-        "frontmatter": new_fm,
-        "markdown": next_text,
+        "fields": new_fm,
+        "fieldChanges": frontmatter_changes(fm, new_fm),
+        "bodyChanged": body != new_body,
+        "bodySectionsChanged": changed_body_sections(body, new_body, payload),
     }
+    if include_markdown:
+        result["markdown"] = next_text
     if apply:
         write_target.parent.mkdir(parents=True, exist_ok=True)
         write_target.write_text(next_text, encoding="utf-8", newline="\n")
@@ -1832,7 +1870,7 @@ def command_import_impl_plans(args: argparse.Namespace) -> int:
                 }
             )
             continue
-        results.append(build_task_write(vault, target, payload, args.apply))
+        results.append(build_task_write(vault, target, payload, args.apply, include_markdown=args.include_markdown))
 
     result = {
         "mode": "apply" if args.apply else "dry-run",
@@ -1910,6 +1948,7 @@ def build_parser() -> argparse.ArgumentParser:
     import_impl.add_argument("--limit", type=int, default=5)
     import_impl.add_argument("--default-status", default="计划中")
     import_impl.add_argument("--overwrite-existing", action="store_true")
+    import_impl.add_argument("--include-markdown", action="store_true")
     import_impl.add_argument("--apply", action="store_true")
     import_impl.set_defaults(func=command_import_impl_plans)
 
@@ -1922,6 +1961,7 @@ def build_parser() -> argparse.ArgumentParser:
     upsert.add_argument("--vault", required=True)
     upsert.add_argument("--input", required=True)
     upsert.add_argument("--project")
+    upsert.add_argument("--include-markdown", action="store_true")
     upsert.add_argument("--apply", action="store_true")
     upsert.set_defaults(func=command_upsert)
 

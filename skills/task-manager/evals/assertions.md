@@ -6,6 +6,8 @@ Use these objective checks when reviewing skill/script changes.
 
 - `operation` is `create`.
 - Command uses `upsert --project shop-web` in dry-run first.
+- Stops after dry-run and waits for explicit later confirmation before applying.
+- Dry-run confirmation shows fields and body section names only, not generated正文/full Markdown.
 - Payload includes `projectId=shop-web`.
 - Generated frontmatter includes `项目名称` from `00_Config/projects.yml` when the project name is configured.
 - Payload includes `sourceType=source-note`.
@@ -32,6 +34,8 @@ Use these objective checks when reviewing skill/script changes.
 
 - `operation` is `update`.
 - Command uses `upsert --project prj-supplyer-webapp`.
+- Stops after dry-run and waits for explicit later confirmation before applying.
+- Dry-run confirmation shows fields and body section names only, not generated正文/full Markdown.
 - `status` is `实施中`.
 - `workspace` is `worktree`.
 - Existing priority is not cleared.
@@ -41,6 +45,8 @@ Use these objective checks when reviewing skill/script changes.
 
 - `operation` is `update`.
 - Command uses `upsert --project prj-supplyer-webapp`.
+- Stops after dry-run and waits for explicit later confirmation before applying.
+- Dry-run confirmation shows fields and body section names only, not generated正文/full Markdown.
 - `status` is `验证中`.
 - `verificationPath` is `部分真实链路`.
 - Body includes `### 验证状态` and `### 残余风险`.
@@ -49,6 +55,8 @@ Use these objective checks when reviewing skill/script changes.
 
 - `operation` is `update`.
 - Command uses `upsert --project prj-supplyer-webapp`.
+- Stops after dry-run and waits for explicit later confirmation before applying.
+- Dry-run confirmation shows fields and body section names only, not generated正文/full Markdown.
 - `status` is `已完成`.
 - `workspace` is `主工作区`.
 - `priority` is `null` or omitted only if already absent.
@@ -58,6 +66,8 @@ Use these objective checks when reviewing skill/script changes.
 
 - `operation` is `update`.
 - Command uses `upsert --project integrations`.
+- Stops after dry-run and waits for explicit later confirmation before applying.
+- Dry-run confirmation shows fields and body section names only, not generated正文/full Markdown.
 - `status` is `阻塞`.
 - Priority is preserved unless explicitly changed.
 - Next step states the unblock condition.
@@ -180,5 +190,8 @@ Use these objective checks when reviewing skill/script changes.
 - Generated global Base maps `note.项目名称` to displayName `项目` and includes `项目` in the main orders and pillProperties.
 - Generated project dashboards explicitly embed both `![[30_Bases/<project-id>.base#进行中]]` and `![[30_Bases/<project-id>.base#已完成]]`.
 - Dry-run does not modify the vault.
+- Default `upsert` output includes `fields`, `fieldChanges`, `bodyChanged`, and `bodySectionsChanged`.
+- Default `upsert` output omits full rendered Markdown/body content.
+- `upsert --include-markdown` restores the rendered Markdown output for explicit inspection.
 - Project `upsert --apply` only writes under `10_Tasks/<project-id>/`.
 - `import-impl-plans` is non-recursive, skips `README.md`, and skips existing tasks by default.

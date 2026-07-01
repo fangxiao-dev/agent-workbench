@@ -10,7 +10,7 @@ Use this skill to maintain the local TaskManager vault as the task source of tru
 
 Task creation remains source-driven. Use an existing Markdown file as the task source when one exists, or create a `20_Sources/<project-id>/` note first when the discussion has not yet landed in Markdown.
 
-Default behavior is dry-run. Only mutate the vault when the user explicitly asks to apply, write, create, update, or record the note.
+Default behavior is dry-run. Even when the user initially asks to apply, write, create, update, or record the note, run dry-run first, summarize the field-only confirmation output, and stop for explicit confirmation before running any `--apply` command.
 
 ## Vault And Project Setup
 
@@ -92,8 +92,9 @@ When `--project <project-id>` is supplied, refresh commands require that project
 python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py upsert --vault D:\CodeSpace\TaskManager --project <project-id> --input <task-update.json>
 ```
 
-8. Review the dry-run output. If the user asked for actual writing, run again with `--apply`.
-9. For project checks, run recursive validation:
+8. Review the dry-run output with the user. Show target path, operation, `状态`, `优先级`, `任务类型`, `验证链路`, `工作区`, `来源类型`, `来源相对路径`, `bodyChanged`, and `bodySectionsChanged`. Do not print generated正文 or full Markdown unless the user explicitly asks to inspect it.
+9. Stop and wait for an explicit later confirmation such as "确认写入", "apply", or "执行更新" before running the same command with `--apply`.
+10. For project checks, run recursive validation:
 
 ```powershell
 python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py validate --vault D:\CodeSpace\TaskManager --project <project-id>
@@ -146,7 +147,7 @@ Choose this when the source does not exist yet as Markdown.
 4. Set `sourceType=source-note` for a written note or `sourceType=discussion` for discussion capture, and set `sourceRelativePath` to the source note's relative path.
 5. Default the task to `状态=计划中`, `验证链路=不涉及`, `工作区=主工作区`; infer `任务类型` and `优先级` from wording. If the wording says it is not ready for formal planning or "后面可能要做", prefer `优先级=下一批` unless urgency is stated.
 6. Dry-run both artifacts: show the source note target/summary and run `task_manager.py upsert --project <project-id>` for the dashboard task before writing.
-7. Apply only when the user explicitly asks to record/write/save/update it.
+7. Apply only after dry-run review and a later explicit user confirmation to record/write/save/update it.
 8. If a later Func Design or Implementation Plan is created, keep the source note as context, update the source note "关联路径", and update the task `来源`, `来源类型`, `来源相对路径`, or body if needed; do not copy the whole raw discussion into repo docs.
 
 ### Source-only exception
@@ -227,9 +228,11 @@ The script writes project frontmatter as:
 
 Legacy non-project task notes can still be maintained without `--project`, but new work should use the project-aware workflow.
 
+Default `upsert` and `import-impl-plans` output is field-only for confirmation. It includes final `fields`, `fieldChanges`, `bodyChanged`, and `bodySectionsChanged`, but does not include the rendered Markdown body. Use `--include-markdown` only when the user explicitly asks to inspect the generated note content.
+
 ## Safety Rules
 
-- Default to dry-run unless the user explicitly asked to write/apply.
+- Default to dry-run. A user's initial write/apply request is not enough to mutate; first run dry-run, show the field-only confirmation summary, then apply only after a later explicit confirmation.
 - Do not change files outside the configured vault and this skill's own workspace.
 - Do not rewrite unrelated task body sections during an update.
 - Preserve existing task content whenever the update input does not mention that section.
