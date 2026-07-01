@@ -61,8 +61,10 @@ AZURE_SERVICE_BUS_QUEUE_NAME=kaispan-jobs
 
 ## When To Open Docs
 
+For KaiSpan docs, first locate the KaiSpan repo root if the current workspace is not the KaiSpan repo, then open the relative path from that root.
+
 - Managed identities for Service Bus: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-managed-service-identity>
 - Service Bus SAS: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-sas>
 - Queue authorization rules: <https://learn.microsoft.com/en-us/cli/azure/servicebus/queue/authorization-rule?view=azure-cli-latest>
-- KaiSpan creation guide: `D:\CodeSpace\kaispan-dev\docs\project\Azure-Service-Bus-Create.md`
-- KaiSpan tech stack: `D:\CodeSpace\kaispan-dev\docs\project\Tech-Stack.md`
+- KaiSpan creation guide: `docs/project/Azure-Service-Bus-Create.md`
+- KaiSpan tech stack: `docs/project/Tech-Stack.md`

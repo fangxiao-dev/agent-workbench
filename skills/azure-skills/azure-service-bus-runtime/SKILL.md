@@ -45,10 +45,12 @@ Settlement:
 
 ## When To Open Docs
 
+For KaiSpan docs, first locate the KaiSpan repo root if the current workspace is not the KaiSpan repo, then open the relative path from that root.
+
 - Queues, topics, and subscriptions: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-queues-topics-subscriptions>
 - ServiceBusClient JS SDK: <https://learn.microsoft.com/en-us/javascript/api/@azure/service-bus/servicebusclient?view=azure-node-latest>
 - Message transfers, locks, and settlement: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/message-transfers-locks-settlement>
 - Message sessions: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/message-sessions>
 - Duplicate detection: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/duplicate-detection>
-- KaiSpan job transport plan: `D:\CodeSpace\kaispan-dev\docs\superpowers\plans\2026-06-16-azure-service-bus-job-transport.md`
-- KaiSpan transaction boundaries: `D:\CodeSpace\kaispan-dev\docs\architecture\Transaction-And-Side-Effect-Boundaries.md`
+- KaiSpan job transport plan: `docs/superpowers/plans/2026-06-16-azure-service-bus-job-transport.md`
+- KaiSpan transaction boundaries: `docs/architecture/Transaction-And-Side-Effect-Boundaries.md`

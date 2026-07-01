@@ -12,6 +12,7 @@ skills/feishu-skills/feishu-mail/.env
 skills/lark-skills/lark-intl-base/.env
 skills/lark-skills/lark-intl-minutes/.env
 skills/lark-skills/lark-intl-mail/.env
-skills/using-azure/.env
+skills/azure-skills/using-azure/.env
 docs/exchange/discuss/
 .worktrees/
+.acr-context/

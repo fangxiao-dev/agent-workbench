@@ -349,9 +349,13 @@ function Test-ListVisibleSkillsIncludesBundledSkills {
         Assert-True ($names -contains "feishu-shared") "Expected bundled Feishu shared skill to be visible."
         Assert-True ($names -contains "using-feishu") "Expected bundled Feishu router skill to be visible."
         Assert-True ($names -contains "lark-intl-shared") "Expected bundled Lark shared skill to remain visible."
+        Assert-True ($names -contains "using-azure") "Expected bundled Azure router skill to be visible."
+        Assert-True ($names -contains "azure-container-apps") "Expected bundled Azure Container Apps skill to be visible."
         Assert-True (-not ($names -contains "feishu-skills")) "Bundle root without SKILL.md should not be listed as a skill."
         $feishuShared = $claude.MergedSkills | Where-Object { $_.Name -eq "feishu-shared" } | Select-Object -First 1
         Assert-True ($feishuShared.Sources[0].RelativePath -eq "feishu-skills/feishu-shared") "Expected bundled Feishu shared skill relative path."
+        $azureContainerApps = $claude.MergedSkills | Where-Object { $_.Name -eq "azure-container-apps" } | Select-Object -First 1
+        Assert-True ($azureContainerApps.Sources[0].RelativePath -eq "azure-skills/azure-container-apps") "Expected bundled Azure Container Apps skill relative path."
     }
     finally {
         Remove-TestWorkspace $workspace

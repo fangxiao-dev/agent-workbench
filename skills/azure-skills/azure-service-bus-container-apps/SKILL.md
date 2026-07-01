@@ -5,7 +5,9 @@ description: Use when wiring Azure Service Bus into Azure Container Apps deploym
 
 # Azure Service Bus Container Apps
 
-Use this skill for Container Apps deployments that send or consume Service Bus messages. Treat API and worker as separate runtime roles even if they share an image.
+Use this skill only for Container Apps deployments that send or consume Service Bus messages. Treat API and worker as separate runtime roles even if they share an image.
+
+For general Container Apps deployment shape, target ports, ingress, replica policy, health checks, persistent files, and non-Service-Bus env review, use `azure-container-apps` first. Keep this skill focused on Service Bus secrets/env, KEDA `azure-servicebus` scaling, queue worker limits, and queue smoke verification.
 
 ## KaiSpan Defaults
 
@@ -61,7 +63,9 @@ Deployment verification:
 
 ## When To Open Docs
 
+For KaiSpan docs, first locate the KaiSpan repo root if the current workspace is not the KaiSpan repo, then open the relative path from that root.
+
 - Container Apps scaling: <https://learn.microsoft.com/en-us/azure/container-apps/scale-app>
-- KaiSpan ACA deployment notes: `D:\CodeSpace\kaispan-dev\docs\ops\GHCR-Azure-Container-Apps.md`
-- KaiSpan migration runbook: `D:\CodeSpace\kaispan-dev\docs\ops\Migration-Runbook.md`
-- KaiSpan Service Bus plan: `D:\CodeSpace\kaispan-dev\docs\superpowers\plans\2026-06-16-azure-service-bus-job-transport.md`
+- KaiSpan ACA deployment notes: `docs/ops/GHCR-Azure-Container-Apps.md`
+- KaiSpan migration runbook: `docs/ops/Migration-Runbook.md`
+- KaiSpan Service Bus plan: `docs/superpowers/plans/2026-06-16-azure-service-bus-job-transport.md`

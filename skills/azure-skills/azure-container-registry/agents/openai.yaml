@@ -1,0 +1,4 @@
+interface:
+  display_name: "Azure Container Registry"
+  short_description: "Build ACR images safely"
+  default_prompt: "Use $azure-container-registry to prepare a minimal Docker context and run or verify ACR remote builds."

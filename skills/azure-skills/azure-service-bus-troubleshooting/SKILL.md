@@ -54,10 +54,12 @@ az servicebus queue show \
 
 ## When To Open Docs
 
+For KaiSpan docs, first locate the KaiSpan repo root if the current workspace is not the KaiSpan repo, then open the relative path from that root.
+
 - Service Bus SAS: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-sas>
 - Managed identities for Service Bus: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-managed-service-identity>
 - Dead-letter queues: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-dead-letter-queues>
 - Service Bus network security: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/network-security>
 - Azure CLI queue reference: <https://learn.microsoft.com/en-us/cli/azure/servicebus/queue?view=azure-cli-latest>
-- KaiSpan creation guide: `D:\CodeSpace\kaispan-dev\docs\project\Azure-Service-Bus-Create.md`
-- KaiSpan migration runbook: `D:\CodeSpace\kaispan-dev\docs\ops\Migration-Runbook.md`
+- KaiSpan creation guide: `docs/project/Azure-Service-Bus-Create.md`
+- KaiSpan migration runbook: `docs/ops/Migration-Runbook.md`

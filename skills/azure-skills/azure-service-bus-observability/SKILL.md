@@ -39,10 +39,12 @@ Network/security review:
 
 ## When To Open Docs
 
+For KaiSpan docs, first locate the KaiSpan repo root if the current workspace is not the KaiSpan repo, then open the relative path from that root.
+
 - Monitor Service Bus: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/monitor-service-bus>
 - Supported Service Bus metrics: <https://learn.microsoft.com/en-us/azure/azure-monitor/reference/supported-metrics/microsoft-servicebus-namespaces-metrics>
 - Supported Service Bus logs: <https://learn.microsoft.com/en-us/azure/azure-monitor/reference/supported-logs/microsoft-servicebus-namespaces-logs>
 - Service Bus network security: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/network-security>
 - Service Bus Private Link: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/private-link-service>
-- KaiSpan observability design: `D:\CodeSpace\kaispan-dev\docs\architecture\Observability-Logging-Tracing-Design.md`
-- KaiSpan tech stack: `D:\CodeSpace\kaispan-dev\docs\project\Tech-Stack.md`
+- KaiSpan observability design: `docs/architecture/Observability-Logging-Tracing-Design.md`
+- KaiSpan tech stack: `docs/project/Tech-Stack.md`

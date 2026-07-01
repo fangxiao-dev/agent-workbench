@@ -46,7 +46,9 @@ az servicebus queue show \
 
 ## When To Open Docs
 
+For KaiSpan docs, first locate the KaiSpan repo root if the current workspace is not the KaiSpan repo, then open the relative path from that root.
+
 - Dead-letter queues: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-dead-letter-queues>
 - Advanced Service Bus features: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/advanced-features-overview>
-- KaiSpan migration runbook: `D:\CodeSpace\kaispan-dev\docs\ops\Migration-Runbook.md`
-- KaiSpan job transport plan: `D:\CodeSpace\kaispan-dev\docs\superpowers\plans\2026-06-16-azure-service-bus-job-transport.md`
+- KaiSpan migration runbook: `docs/ops/Migration-Runbook.md`
+- KaiSpan job transport plan: `docs/superpowers/plans/2026-06-16-azure-service-bus-job-transport.md`

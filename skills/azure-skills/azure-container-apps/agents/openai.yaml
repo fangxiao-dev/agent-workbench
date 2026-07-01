@@ -1,0 +1,4 @@
+interface:
+  display_name: "Azure Container Apps"
+  short_description: "Deploy and verify Container Apps"
+  default_prompt: "Use $azure-container-apps to review Azure Container Apps deployment shape, env, replicas, health checks, and persistent files."

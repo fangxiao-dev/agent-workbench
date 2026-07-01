@@ -76,9 +76,11 @@ Expected: `location` is Germany West Central / `germanywestcentral`; queue is `A
 
 ## When To Open Docs
 
+For KaiSpan docs, first locate the KaiSpan repo root if the current workspace is not the KaiSpan repo, then open the relative path from that root.
+
 - Azure CLI namespace reference: <https://learn.microsoft.com/en-us/cli/azure/servicebus/namespace?view=azure-cli-latest>
 - Azure CLI queue reference: <https://learn.microsoft.com/en-us/cli/azure/servicebus/queue?view=azure-cli-latest>
 - Duplicate detection behavior: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/duplicate-detection>
 - Enable duplicate detection: <https://learn.microsoft.com/en-us/azure/service-bus-messaging/enable-duplicate-detection>
-- KaiSpan creation guide: `D:\CodeSpace\kaispan-dev\docs\project\Azure-Service-Bus-Create.md`
-- KaiSpan Service Bus plan: `D:\CodeSpace\kaispan-dev\docs\superpowers\plans\2026-06-16-azure-service-bus-job-transport.md`
+- KaiSpan creation guide: `docs/project/Azure-Service-Bus-Create.md`
+- KaiSpan Service Bus plan: `docs/superpowers/plans/2026-06-16-azure-service-bus-job-transport.md`
