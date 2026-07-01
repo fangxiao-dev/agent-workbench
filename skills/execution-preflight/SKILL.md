@@ -1,67 +1,77 @@
 ---
 name: execution-preflight
-description: Use before starting a substantial task, including any prompt that attaches or references a design doc, review doc, execution plan, implementation plan, audit material, or handoff; also use before implementation, verification runs, or external-environment workflows to surface owner authorizations and HITL decisions that could block autonomous execution, including subagents, staging/Lark smoke, external mutations, open decisions, and verification scope.
+description: Use before starting a task from a handoff, plan, review, audit, or execution artifact to extract only permissions, owner authorizations, HITL decisions, and subagent mode before work begins.
 ---
 
 # Execution Preflight
 
-Use this skill before beginning a non-trivial task when missing owner authorization or human decisions could interrupt execution later. The goal is to collect the minimum useful permissions and decisions up front, then proceed without avoidable mid-task stalls.
+Use this skill before beginning work from a handoff, plan, review, audit, issue list, or execution artifact. The job is narrow: review any current-session authorization, read the referenced authorization sources, extract permissions and human-in-the-loop decisions, and ask the owner for missing authorization before execution begins.
 
-Do not use it for tiny read-only answers, simple local commands, or edits that clearly need no external access, delegation, or owner choice.
+Preflight is not readiness analysis. Do not recommend implementation order, inspect code for solution shape, create worktrees, run tests, start subagents, or make edits while this skill is running.
 
 ## Workflow
 
 ### 1. Decide If Preflight Is Needed
 
-Run preflight when the task is about to start and any of these are plausible:
+Run preflight when the active request asks you to begin or prepare work from any of these sources:
 
-- The user's prompt attaches, links, or points to a document, plan, design, review, audit, handoff, or execution artifact. Treat this as non-small by default, even if the visible request is short.
-- Subagents could materially improve research, review, implementation, or verification.
-- The task may need staging, Lark smoke, real database reads/writes, browser smoke, Lexware, email, production-like checks, or other external systems.
-- The task has open product, UX, schema, data cleanup, migration, or acceptance decisions.
-- The user wants autonomous end-to-end execution and missing authorization could block it later.
+- handoff, execution plan, implementation plan, audit, review document, or issue tracker;
+- instructions that mention subagents, external environments, staging, production, real integrations, migrations, cleanup, git publishing, or owner decisions;
+- a task where the user explicitly asks for "preflight", "readiness permissions", or "authorization".
 
-Skip preflight when the task is a small explanation, local-only inspection, or a clearly bounded edit with no external or HITL dependency. If skipped, continue normally.
+Skip preflight for small read-only answers, simple local commands, or clearly bounded edits that do not cite an execution artifact and do not need external access, delegation, git publishing, data mutation, or owner choice.
 
-Completion criterion: either preflight is skipped with an obvious reason, or the needed authorization categories are identified before execution begins.
+Completion criterion: either preflight is skipped for an explicit reason, or the authorization sources to read are identified before any execution action begins.
 
-### 2. Build The Authorization Map
+### 2. Read Only Authorization Sources
 
-Inspect the user request and immediate context just enough to identify likely blockers. Do not start implementation while building this map.
+If this is not a new session, first review the active conversation for task-scoped permissions already granted or denied. Capture only current-session authorization facts, not stale permissions from unrelated tasks. This gives the owner a concise inheritance summary for handoff.
 
-Check these categories:
+Then read the user-referenced handoff, plan, issue, review, or audit material only far enough to extract authorization and HITL facts. If a plan points to another source as required source of truth for permissions or scope, read that source too.
 
-- **Delegation:** whether subagents may be used, and for what roles: research, review, implementation, verification.
-- **External environments:** whether staging, Lark smoke, real database access, browser smoke, Lexware, email, or production-like checks are allowed; distinguish read-only from mutation.
-- **Data risk:** whether migrations, cleanup, test-order deletion, or destructive staging actions need explicit permission.
-- **Open decisions:** business, UX, schema, naming, lifecycle, or acceptance questions that would change the work.
-- **Verification:** expected test/build/smoke scope and whether failures should block completion.
-- **Git flow:** whether commits, branches, staging, pushes, or PRs are in scope.
+Do not infer extra external systems from general codebase knowledge. If a plan does not mention Azure, Lark, staging, production, browser smoke, database access, email, git publishing, or another external system, omit that system from the preflight output. If the plan mentions a system only to forbid it or require separate approval, report that exactly as a plan-stated boundary.
 
-Respect current host and conversation restrictions. If subagents, external tools, or mutations are unavailable or explicitly forbidden, mark that category as blocked/unavailable instead of asking the owner to authorize it.
+Extract only these categories when they appear in the sources:
 
-Completion criterion: every category that could block this task is either marked "not needed", "safe default", or "needs owner answer".
+- **Subagents:** whether the plan allows, forbids, or leaves ambiguous any delegation.
+- **External systems:** read-only checks, smoke checks, staging, production, real integrations, email, databases, Azure, Lark, or similar systems.
+- **Mutations and data risk:** migrations, cleanup, destructive actions, test-order deletion, external writes, or production-like changes.
+- **Verification:** local tests, builds, dry-runs, browser smoke, external smoke, and whether failures block completion.
+- **Git flow:** worktree/branch creation, staging, commits, pushes, PRs, issue updates, or thread handoff.
+- **HITL decisions:** explicit owner decisions, open product/schema/UX choices, or acceptance exceptions.
 
-### 3. Ask A Compact Preflight
+Completion criterion: every current-session and source-stated authorization/HITL statement is captured once, and no unmentioned system or implementation recommendation has been added.
 
-Ask before execution, not halfway through. Keep the ask task-specific and short.
+### 3. Ask Only For Missing Authorization
+
+Ask before execution, not halfway through. Keep the ask limited to permission gaps discovered from the sources.
+
+Always include the subagent mode when subagents are not explicitly forbidden by the active conversation or host:
+
+- **普通使用:** the main session may use subagents for bounded support tasks, while the main session owns implementation and integration.
+- **主session负责调度、记录、决策、seaming，派发 subagent 做执行:** the main session owns coordination, authorization records, decisions, integration seams, and final accountability while subagents execute assigned slices.
+- **不允许:** no subagents.
 
 Prefer this shape:
 
 ```markdown
-Preflight before I start:
-- Subagents: <needed/not needed; proposed scope>
-- External checks: <local only/staging/Lark smoke/Lexware/etc.; read-only or mutating>
-- HITL decisions: <specific open questions, or none>
+Preflight permissions from the referenced plan:
+- Current-session authorization: <already granted or denied in this session, or "none found/new session">
+- Already allowed by plan: <only plan-stated permissions>
+- Plan-stated boundaries: <forbidden or separately-authorized actions>
+- HITL / owner decisions: <open decisions, or none found>
+- Verification / git scope: <only plan-stated local tests, dry-runs, worktree, commits, pushes, etc.>
 
-Please confirm <the narrow decision(s)>.
+Please confirm:
+- Subagents: 普通使用 / 主session负责调度、记录、决策、seaming，派发 subagent 做执行 / 不允许
+- Missing authorization: <specific yes/no items, or "none">
 ```
 
-If a structured user-input tool is available, use it for one to three short questions. Otherwise ask in plain text. Do not ask for blanket permission to do everything; request only what this task is likely to need.
+Do not ask the owner to re-confirm boundaries that the plan already forbids unless the current active request explicitly asks to cross that boundary. Do not ask broad "can I do everything" questions.
 
-If the user already granted a category in the current active task, do not ask again. Restate it in the authorization record and only ask for missing or ambiguous categories.
+If the user already granted a category in the current active task, restate it and ask only for still-missing authorization.
 
-Completion criterion: the user can answer with a concise yes/no or scoped permission, and no important category is hidden behind vague wording.
+Completion criterion: the user can answer with a subagent mode plus concise yes/no permission decisions, and no implementation advice is mixed into the ask.
 
 ### 4. Record The Execution Authorization
 
@@ -69,10 +79,10 @@ After the user answers, restate the usable scope before continuing:
 
 ```markdown
 Execution authorization for this task:
-- Subagents: <allowed/blocked/scope>
-- External checks: <allowed/blocked/scope>
-- Mutations/data cleanup: <allowed/blocked/scope>
-- Open decisions: <resolved/pending>
+- Subagents: <普通使用 / 主session负责调度、记录、决策、seaming，派发 subagent 做执行 / 不允许>
+- Allowed by plan/user: <scoped permissions>
+- Blocked unless separately authorized: <plan-stated or user-stated boundaries>
+- HITL decisions: <resolved/pending>
 ```
 
 Treat authorization as task-scoped unless the user explicitly grants a standing rule. Do not silently reuse permission from an unrelated prior task.
@@ -81,7 +91,7 @@ Completion criterion: the active task has a clear permission boundary that later
 
 ### 5. During Execution
 
-If a new blocker appears outside the recorded scope, stop and ask before crossing it. If the blocker is inside the recorded scope, proceed without re-asking.
+If a new permission blocker appears outside the recorded scope, stop and ask before crossing it. If the blocker is inside the recorded scope, proceed without re-asking.
 
 In the final response, mention only authorization gaps that affected completion. Do not list every preflight decision unless it matters to the outcome.
 
@@ -89,8 +99,9 @@ Completion criterion: execution either completes within the recorded scope, or a
 
 ## Failure Modes
 
-- Asking too late, after implementation has already run into a missing authorization.
-- Asking too broadly, causing the owner to grant vague permission that is unsafe or hard to apply.
-- Asking about subagents when the current environment or conversation explicitly forbids them.
-- Treating staging or Lark smoke read access as permission for mutations.
+- Doing readiness analysis, implementation planning, issue ordering, or code reconnaissance during preflight.
+- Mentioning external systems or risks that are not in the referenced sources.
+- Asking the owner to re-confirm a plan-stated prohibition instead of recording it as blocked.
+- Starting subagents before the owner chooses a subagent mode.
+- Treating read-only access to staging or another project-specific external system as permission for mutations.
 - Treating a previous task's permission as reusable for the current task without an explicit standing rule.
