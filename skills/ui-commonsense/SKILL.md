@@ -1,6 +1,6 @@
 ---
 name: ui-commonsense
-description: Use when implementing, refactoring, or reviewing frontend UI with common usability defects: excessive spacing, stretched drawers, nested cards, awkward forms, broken combobox/dropdown behavior, misaligned fields, quantity inputs without steppers, unclear table/list structure, weak visual states, or incomplete browser verification. This is an entry-map skill: load the relevant references before changing UI.
+description: Use when implementing, refactoring, or reviewing frontend UI with common usability defects: unclear object/action ownership, mixed-abstraction navigation, excessive spacing, stretched drawers, nested cards, awkward forms, broken combobox/dropdown behavior, misaligned fields, quantity inputs without steppers, unclear table/list structure, weak visual states, or incomplete browser verification. This is an entry-map skill: load the relevant references before changing UI.
 ---
 
 # UI Commonsense
@@ -32,6 +32,9 @@ Normal UI should expose user-meaningful names, statuses, timestamps, actors, qua
 
 ## Reference Map
 
+- `references/object-owned-operations.md`
+  Use before designing operational/admin navigation, tabs, detail surfaces, row actions, or editable object workflows. Helps decide which concept owns a property or action before layout work begins.
+
 - `references/reusable-components.md`
   Use before adding reusable-looking controls, feedback messages, buttons, dialogs, tables, badges, comboboxes, editable rows, or admin UI patterns.
 
@@ -60,11 +63,12 @@ Normal UI should expose user-meaningful names, statuses, timestamps, actors, qua
 
 For most UI refactors, load these in order:
 
-1. `references/reusable-components.md`
-2. `references/layout-density.md`
-3. `references/forms-and-quantity.md`
-4. `references/comboboxes.md`
-5. `references/browser-verification.md`
+1. `references/object-owned-operations.md`
+2. `references/reusable-components.md`
+3. `references/layout-density.md`
+4. `references/forms-and-quantity.md`
+5. `references/comboboxes.md`
+6. `references/browser-verification.md`
 
 For drawer-heavy work, add `references/drawers.md`.
 For repeated data or ingredients/items/orders, add `references/tables-lists-rows.md`.
