@@ -16,7 +16,7 @@ skill_name_from_file() {
   local skill_file="$1"
   local fallback="$2"
   local name
-  name="$(sed -n "s/^name:[[:space:]]*['\"]\\{0,1\\}\\([^'\"]*\\)['\"]\\{0,1\\}[[:space:]]*$/\\1/p" "$skill_file" | head -n 1)"
+  name="$(tr -d '\r' < "$skill_file" | sed -n "s/^name:[[:space:]]*['\"]\\{0,1\\}\\([^'\"]*\\)['\"]\\{0,1\\}[[:space:]]*$/\\1/p" | head -n 1)"
   if [ -n "$name" ]; then
     printf "%s" "$name"
   else
