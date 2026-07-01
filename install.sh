@@ -54,7 +54,11 @@ discover_hosts() {
 }
 
 if [ "${#REQUESTED_HOSTS[@]}" -eq 0 ]; then
-  mapfile -t REQUESTED_HOSTS < <(discover_hosts)
+  while IFS= read -r discovered_host; do
+    if [ -n "$discovered_host" ]; then
+      REQUESTED_HOSTS+=("$discovered_host")
+    fi
+  done < <(discover_hosts)
 fi
 
 INSTALLED_COUNT=0

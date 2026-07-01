@@ -21,13 +21,19 @@ Use this as the Azure entry map. Route detailed work to focused Azure skills, an
 
 ## Azure CLI On Local Workstation
 
-If `az` is not found after installation, first check whether this skill directory has a machine-local `.env` file with `AZURE_CLI_DEFAULT_PATH`. Do not commit that file.
+If `az` is not found after installation, first check whether this skill directory has a machine-local `.env` file with `AZURE_CLI_DEFAULT_PATH`. Do not commit that file. Start from `.env.example` if needed.
 
 PowerShell:
 
 ```powershell
-$SkillEnvPath = Join-Path $PWD "skills/azure-skills/using-azure/.env"
-if (Test-Path $SkillEnvPath) {
+$SkillDirs = @(
+    (Join-Path $HOME ".codex/skills/azure-skills/using-azure")
+    (Join-Path $HOME ".claude/skills/azure-skills/using-azure")
+    (Join-Path $HOME ".gemini/skills/azure-skills/using-azure")
+    "skills/azure-skills/using-azure"
+)
+$SkillEnvPath = $SkillDirs | ForEach-Object { Join-Path $_ ".env" } | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($SkillEnvPath) {
     $AzureCliPath = (Get-Content $SkillEnvPath | Where-Object { $_ -match '^AZURE_CLI_DEFAULT_PATH=' } | Select-Object -First 1) -replace '^AZURE_CLI_DEFAULT_PATH=', ''
 }
 if ($AzureCliPath -and (Test-Path $AzureCliPath)) {
@@ -40,8 +46,20 @@ if ($AzureCliPath -and (Test-Path $AzureCliPath)) {
 bash/zsh:
 
 ```bash
-skill_env_path="skills/azure-skills/using-azure/.env"
-if [ -f "$skill_env_path" ]; then
+skill_env_path=""
+for skill_dir in \
+  "$HOME/.codex/skills/azure-skills/using-azure" \
+  "$HOME/.claude/skills/azure-skills/using-azure" \
+  "$HOME/.gemini/skills/azure-skills/using-azure" \
+  "skills/azure-skills/using-azure"
+do
+  if [ -f "$skill_dir/.env" ]; then
+    skill_env_path="$skill_dir/.env"
+    break
+  fi
+done
+
+if [ -n "$skill_env_path" ]; then
   azure_cli_path="$(awk -F= '/^AZURE_CLI_DEFAULT_PATH=/ {print $2; exit}' "$skill_env_path")"
 fi
 if [ -n "$azure_cli_path" ] && [ -x "$azure_cli_path" ]; then

@@ -14,14 +14,16 @@ ACR remote build can fail or hang before queuing when the local workspace has he
 Before running `az acr build`, prefer a cross-platform helper:
 
 ```bash
-python scripts/build_acr_context.py --dry-run
-python scripts/build_acr_context.py --output-dir .acr-context --force
+python3 <this-skill-dir>/scripts/build_acr_context.py --dry-run
+python3 <this-skill-dir>/scripts/build_acr_context.py --output-dir .acr-context --force
 az acr build --registry <registry-name> --image <repo>:<tag> .acr-context
 ```
 
+Resolve `<this-skill-dir>` to the directory containing this `SKILL.md`, for example `~/.codex/skills/azure-skills/azure-container-registry` after workbench installation. The helper is bundled with this skill so it remains available when the skill is installed on macOS/Linux.
+
 The helper reads common Dockerfile `COPY` and `ADD` sources, includes common root manifests and lockfiles, and prints the generated context path. Use `--include <path-or-glob>` for project-specific files that are needed at build time but are not visible from Dockerfile copy statements or use unusual Dockerfile syntax.
 
-If a project only has shell-specific helpers, choose by local shell and OS:
+If the target project has its own shell-specific helpers, prefer the project helper and choose by local shell and OS:
 
 - PowerShell: `scripts/build_acr_context.ps1`
 - bash/zsh: `scripts/build_acr_context.sh`

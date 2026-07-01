@@ -74,7 +74,7 @@ Codex 写入项目内 `.codex/config.toml` 的 `mcp_servers.discussLedger`；Cla
 | `agents/*/` | 每个 agent 目录 junction 到 `<host>/agents/<name>` | 每个 agent 目录 symlink 到 `<host>/agents/<name>` |
 | `commands/*` | 复制到 `<host>/commands/<name>` | 复制到 `<host>/commands/<name>` |
 
-`skills/` 支持 bundle 结构，例如 `skills/feishu-skills/feishu-base/SKILL.md` 和 `skills/lark-skills/lark-intl-base/SKILL.md`。没有 `SKILL.md` 的 bundle 根目录只是分组，不是一个 skill。
+`skills/` 支持 bundle 结构，例如 `skills/feishu-skills/feishu-base/SKILL.md`、`skills/lark-skills/lark-intl-base/SKILL.md` 和 `skills/azure-skills/using-azure/SKILL.md`。没有 `SKILL.md` 的 bundle 根目录只是分组，不是一个 skill。
 
 宿主根目录：
 
@@ -100,6 +100,10 @@ Codex 写入项目内 `.codex/config.toml` 的 `mcp_servers.discussLedger`；Cla
 - Bash/Unix：新增顶层 `skills/<name>/` 或 `skills/<bundle>/` 后需要重跑安装器；仅新增 bundle 内的 `skills/<bundle>/<name>/` 通常随已有 bundle 链接可见
 
 ### 核对宿主最终可见 skills
+
+```bash
+bash scripts/list-visible-skills.sh
+```
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/list-visible-skills.ps1

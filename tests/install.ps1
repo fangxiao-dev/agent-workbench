@@ -382,13 +382,22 @@ function Test-BashAutoDiscoversHosts {
         $result = Invoke-InstallSh -Workspace $workspace -Arguments @()
         $output = $result.Output
         $claudeBundledSkill = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\feishu-skills\feishu-base\SKILL.md")
+        $claudeAzureRouter = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\azure-skills\using-azure\SKILL.md")
+        $claudeAzureContainerApps = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\azure-skills\azure-container-apps\SKILL.md")
         $flatFeishuSkill = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\feishu-base")
+        $listScript = Convert-ToBashPath (Join-Path $workspace.Workbench "scripts\list-visible-skills.sh")
+        $claudeSkillsRoot = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills")
 
         Assert-Contains $output "Hosts processed: 3" "Expected three processed hosts for bash installer."
         & $bash.Source -lc "test -f '$claudeBundledSkill'"
         Assert-True ($LASTEXITCODE -eq 0) "Bash installer should expose bundled Feishu skill through bundle link."
+        & $bash.Source -lc "test -f '$claudeAzureRouter' && test -f '$claudeAzureContainerApps'"
+        Assert-True ($LASTEXITCODE -eq 0) "Bash installer should expose bundled Azure skills through bundle link."
         & $bash.Source -lc "test ! -e '$flatFeishuSkill'"
         Assert-True ($LASTEXITCODE -eq 0) "Bash installer should not create flat bundled skill links."
+        $visibleSkills = & $bash.Source -lc "bash '$listScript' '$claudeSkillsRoot'" 2>&1 | Out-String
+        Assert-Contains $visibleSkills "using-azure -> azure-skills/using-azure" "Bash visible-skills script should list Azure router skill."
+        Assert-Contains $visibleSkills "azure-container-apps -> azure-skills/azure-container-apps" "Bash visible-skills script should list Azure Container Apps skill."
     }
     finally {
         Remove-TestWorkspace $workspace
