@@ -13,6 +13,7 @@ Use this as an operational checklist, not as a command encyclopedia. Prefer proj
 - Resource discovery before creation
 - ACR remote builds from local workspaces
 - Container Apps deployment shape
+- Split runtime / multi-Container-App deployments
 - Persistent files
 - Provider registration
 - Verification
@@ -89,6 +90,19 @@ For a FastAPI backend in Container Apps:
 - Use `min-replicas=1` if losing in-memory state after idle scale-to-zero is unacceptable.
 
 If `min-replicas=0`, expect cold starts and loss of process memory after scale-to-zero or restart.
+
+## Split Runtime / Multi-Container-App Deployments
+
+Some environments are made of multiple Container Apps, for example an HTTP API app plus a queue worker app. Treat the environment as the deployment unit, not the API app alone.
+
+Checklist:
+
+- Discover all Container Apps that participate in the environment before changing images or env.
+- If API image/env changes affect queued work, update the worker image/env in the same rollout.
+- Verify API and worker image tags, queue names, storage mounts, and runtime config paths match the intended deployment.
+- `/healthz` only proves the API process is alive; it does not prove async workers are consuming queued jobs.
+- Include a smoke that queues one job and confirms the worker consumes it, even if the job later fails at business processing.
+- Keep CORS/env-only changes distinct from image rollouts. Do not report an env-only API update as a full backend deployment.
 
 ## Persistent Files
 
