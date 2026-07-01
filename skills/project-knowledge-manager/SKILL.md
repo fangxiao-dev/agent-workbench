@@ -23,6 +23,21 @@ Read `references/routing-taxonomy.md` when:
 
 Split mixed input into small candidate knowledge items before routing. One request may route to multiple destinations.
 
+### Atomic Knowledge Item Gate
+
+Do not route a whole incident, PR, release, or debugging session as one knowledge item just because it happened together. First split by the future lookup question a developer would ask, then route each item to the narrowest durable home.
+
+Use these split signals:
+
+- A different future reader would search for it from a different place, such as deploy verification, frontend implementation, backend adapter behavior, schema contract drift, or product requirement.
+- The lesson has a different maintenance owner or source of truth, such as deploy script/tests, frontend tests, API models, PRD, or runbook.
+- The lesson has a different action shape: diagnose/recover, implement/avoid, verify/release, decide product behavior, or record a mandatory operating rule.
+- One paragraph would need both debug steps and implementation rules to stay correct.
+
+When any split signal is present, create separate candidate items even if the user asks for "top lessons" or "summarize this incident." Cross-link related docs instead of making one catch-all doc.
+
+Example: an outage investigation might produce one debug runbook for preview-domain/CORS verification, one implementation pattern for frontend error redaction and stale state clearing, and one deploy-script rule for split-runtime rollouts. The shared incident timeline is source material, not the documentation boundary.
+
 Use `impl-knowledge-maintainer` for hands-on implementation knowledge:
 
 - build, integration, migration, structure, or reuse patterns
@@ -80,7 +95,7 @@ Route elsewhere or ignore:
 
 1. Infer source material from the prompt, conversation, files, changed paths, plans, handoffs, logs, or notes.
 2. Confirm completion only when it is unclear whether the task, milestone, implementation, or investigation is done enough to preserve.
-3. Split mixed material into candidate knowledge items.
+3. Split mixed material into atomic candidate knowledge items using the future lookup question, maintenance owner, source of truth, and action shape. Do not preserve an incident narrative as one doc when it contains multiple reusable lessons.
 4. Apply the durability gate to each candidate.
 5. Classify each item as implementation, debug, both, PRD, requirement inbox, design, planning, top-level, mandatory rule, one-off, stale candidate, or unclear.
 6. Load `impl-knowledge-maintainer` or `debug-knowledge-maintainer` only for hands-on items.

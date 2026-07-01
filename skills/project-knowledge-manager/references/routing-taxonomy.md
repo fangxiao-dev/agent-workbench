@@ -19,6 +19,25 @@ Use this reference when the short routing rules in `SKILL.md` are not enough.
 
 Source material may come from conversation context, completed plans, handoffs, logs, code review notes, verification output, changed files, temporary notes, `docs/impl-plans/`, `docs/exchange/`, repo-root `exchange/`, or retrospectives. These are sources, not final homes.
 
+## Atomic Item Triage
+
+Before choosing a home, split the source into durable knowledge items. The unit of routing is not "one incident," "one PR," "one conversation," or "one deployment"; it is the smallest reusable lesson that has a stable future lookup path.
+
+Ask these questions for each candidate:
+
+1. What would a future developer search for when they need this?
+2. Which source of truth keeps it correct: code/tests, deploy script, PRD, design doc, runbook, or operating rule?
+3. Is the action diagnostic, implementation-facing, verification/release-facing, product-facing, or mandatory process?
+4. Would merging it with a neighboring lesson make either one harder to find or maintain?
+
+If two lessons differ on any of those axes, route them separately and cross-link if useful.
+
+Examples:
+
+- A production-like preview incident can yield a debug runbook for domain/CORS/deployment verification, plus a frontend implementation pattern for error redaction and stale state cleanup. The former is found by someone asking "which environment am I really testing?"; the latter is found by someone changing UI error handling.
+- A migration PR can yield an implementation pattern for adapter boundaries, a verification note for smoke commands, and a requirement update for accepted behavior. Do not bury all three under the migration timeline.
+- A failed release can yield a mandatory deploy rule in `AGENTS.md` or a deploy skill, plus a debug recovery runbook. The mandatory rule should not be hidden inside the runbook if every future session must see it.
+
 ## Requirement Lifecycle
 
 Use this flow when the input is a new requirement, changed requirement, PRD cleanup, or product decision rather than implementation/debug experience:
