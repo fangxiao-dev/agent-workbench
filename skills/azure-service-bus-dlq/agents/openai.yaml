@@ -1,0 +1,4 @@
+interface:
+  display_name: "Azure Service Bus DLQ"
+  short_description: "Operate Service Bus dead-letter queues"
+  default_prompt: "Use $azure-service-bus-dlq to inspect and reconcile Service Bus DLQ messages."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Azure Service Bus Runtime"
+  short_description: "Apply Service Bus runtime patterns"
+  default_prompt: "Use $azure-service-bus-runtime to design Service Bus send, receive, retry, and lock behavior."

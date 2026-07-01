@@ -1,0 +1,4 @@
+interface:
+  display_name: "Service Bus Troubleshooting"
+  short_description: "Diagnose Service Bus failures"
+  default_prompt: "Use $azure-service-bus-troubleshooting to diagnose a failed KaiSpan Service Bus smoke test."

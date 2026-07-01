@@ -1,0 +1,4 @@
+interface:
+  display_name: "Azure Service Bus Provisioning"
+  short_description: "Create and verify Service Bus queues"
+  default_prompt: "Use $azure-service-bus-provisioning to create a KaiSpan Service Bus queue in Germany West Central."

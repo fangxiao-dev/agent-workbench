@@ -1,6 +1,6 @@
 ---
 name: using-azure
-description: Use this skill when working with Azure CLI, Azure Container Registry, Azure Container Apps, Azure Files, Azure AI services, or deployment from a local Windows/Codex workspace. This skill captures practical Azure deployment lessons, especially ACR remote build behavior, provider registration, resource discovery, and avoiding local workspace noise during Docker context packaging.
+description: Use this skill when working with Azure CLI, Azure Container Registry, Azure Container Apps, Azure Service Bus, Azure Files, Azure AI services, or deployment from a local Windows/Codex workspace. This skill captures practical Azure deployment lessons, especially ACR remote build behavior, provider registration, resource discovery, Service Bus skill routing, and avoiding local workspace noise during Docker context packaging.
 ---
 
 # Using Azure
@@ -14,6 +14,7 @@ Use this as an operational checklist, not as a command encyclopedia. Prefer proj
 - ACR remote builds from local workspaces
 - Container Apps deployment shape
 - Split runtime / multi-Container-App deployments
+- Azure Service Bus skill map
 - Persistent files
 - Provider registration
 - Verification
@@ -103,6 +104,20 @@ Checklist:
 - `/healthz` only proves the API process is alive; it does not prove async workers are consuming queued jobs.
 - Include a smoke that queues one job and confirms the worker consumes it, even if the job later fails at business processing.
 - Keep CORS/env-only changes distinct from image rollouts. Do not report an env-only API update as a full backend deployment.
+
+## Azure Service Bus Skill Map
+
+For non-trivial Service Bus work, use the focused skill first. Keep this file as the Azure entry map and shared operational checklist.
+
+- Use `azure-service-bus-provisioning` for namespace/queue creation, Germany West Central region checks, Standard SKU, duplicate detection, TTL, lock duration, max delivery 10, and CLI verification.
+- Use `azure-service-bus-auth` for queue-level SAS, connection strings, Managed Identity, RBAC roles, API sender permissions, worker receiver permissions, and secret handling.
+- Use `azure-service-bus-runtime` for JS SDK usage, queue vs topic decisions, peek-lock, settlement, explicit lock renewal, scheduled retry, duplicate detection, message IDs, and sessions.
+- Use `azure-service-bus-dlq` for dead-letter queue inspection, `MaxDeliveryCountExceeded`, malformed messages, final failures, DB reconciliation, and safe settlement.
+- Use `azure-service-bus-container-apps` for API/worker split deployments, Container Apps secrets/env, KEDA `azure-servicebus` scaling, worker replica limits, and smoke verification.
+- Use `azure-service-bus-observability` for Azure Monitor metrics/logs, diagnostic settings, DLQ/backlog alerts, network restrictions, private endpoints, and Premium tier triggers.
+- Use `azure-service-bus-troubleshooting` for smoke failures, Basic tier limitations, duplicate detection mistakes, queue name or `EntityPath` mismatches, auth errors, region drift, lock timeouts, and DLQ growth.
+
+KaiSpan defaults: Service Bus is transport only; Postgres `jobs` remains the source of truth. Production Azure resources default to `Germany West Central` (`germanywestcentral`), and region-sensitive verification must read Azure resource metadata `location`.
 
 ## Persistent Files
 

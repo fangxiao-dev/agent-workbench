@@ -1,0 +1,4 @@
+interface:
+  display_name: "Service Bus Observability"
+  short_description: "Monitor and secure Service Bus"
+  default_prompt: "Use $azure-service-bus-observability to set Service Bus metrics, alerts, diagnostics, and network controls."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Azure Service Bus Auth"
+  short_description: "Configure Service Bus auth safely"
+  default_prompt: "Use $azure-service-bus-auth to choose SAS or Managed Identity for Service Bus."

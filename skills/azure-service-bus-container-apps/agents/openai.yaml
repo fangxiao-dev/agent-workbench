@@ -1,0 +1,4 @@
+interface:
+  display_name: "Service Bus Container Apps"
+  short_description: "Wire Service Bus into Container Apps"
+  default_prompt: "Use $azure-service-bus-container-apps to configure API and worker Container Apps for Service Bus."
