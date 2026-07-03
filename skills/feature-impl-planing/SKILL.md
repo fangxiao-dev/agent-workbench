@@ -53,12 +53,22 @@ In fallback workflow, default to the `grill-me-smartly` review subagent as well.
 
 Do not use subagents for implementation or unrelated exploration unless the user separately asks for that.
 
+`grill-me-smartly` output is an intermediate process record only. Keep grill
+ledgers in the OS temp location defined by that skill, not in the repository.
+Do not link grill ledgers or grill review notes from Func Design,
+Implementation Plan, simplified plan artifacts, README indexes, or other formal
+project documents. Apply all accepted grill context, corrections, and owner
+decisions directly into the formal documents so they stand alone without the
+temporary grill record.
+
 Invalid review patterns:
 
 - Writing a `grill-me-smartly` review note based only on main-session self-review.
 - Saying "reviewed" without a subagent id and subagent answer evidence.
 - Treating this subagent authorization as optional in strict workflow.
 - Using inline review in fallback workflow without first checking whether `grill-me-smartly` and subagent review are available.
+- Linking a formal document to a temporary grill ledger instead of applying the
+  review context into the document.
 
 ## Output Contract
 
@@ -72,4 +82,6 @@ Return a compact summary with:
 - remaining owner decisions
 - whether the plan is ready for implementation
 
-Keep proposal drafts and review details in the repository's selected exchange path rather than the main session.
+Keep proposal drafts in the repository's selected exchange path when the route
+calls for drafts. Keep grill review details in the OS temp grill ledger only,
+and make the formal planning documents complete without links to that ledger.

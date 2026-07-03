@@ -42,9 +42,11 @@ Write one combined simplified artifact:
 
 - `docs/exchange/feature-plan-YYYYMMDD-HHMM-<topic>.md`
 
-Review note, when `grill-me-smartly` subagent review is available:
-
-- `docs/exchange/grill-me-smartly-YYYYMMDD-HHMM-<topic>.md`
+`grill-me-smartly` ledgers, when review is available, are temporary process
+records under the OS temp directory. Do not write grill review notes into
+`docs/exchange/`, and do not link temporary grill ledgers from the simplified
+artifact or other formal project documents. Apply accepted review context
+directly into the simplified artifact.
 
 Do not create `docs/func-design/`, `docs/impl-plans/`, `docs/top-level-knowledge/`, or `test-cases/` just to satisfy the strict workflow unless the user asks to introduce that structure.
 
@@ -82,9 +84,9 @@ Do not create `docs/func-design/`, `docs/impl-plans/`, `docs/top-level-knowledge
 6. Use the `superpowers:writing-plans` quality bar for the implementation section: exact files, bite-sized steps, concrete commands, and expected verification results.
 7. Review with `grill-me-smartly` by default:
    - First check whether the `grill-me-smartly` skill can be found/read and whether subagent capability is available.
-   - If available, run a review subagent against the generated artifact and relevant source files. Capture the subagent id and summarize concrete review findings in `docs/exchange/grill-me-smartly-YYYYMMDD-HHMM-<topic>.md`.
+   - If available, run a review subagent against the generated artifact and relevant source files. Record concrete review findings in the OS-temp grill ledger only.
    - If `grill-me-smartly` cannot be found/read or no subagent capability is available, run the fallback review checklist inline and record the exact fallback reason in the generated artifact or final summary.
-8. Apply obvious corrections from the review to the artifact.
+8. Apply obvious corrections and accepted review context from the review to the artifact so the formal plan stands alone without the grill ledger.
 9. Return the summary, changed path, remaining owner decisions, and the review method used (`grill-me-smartly` subagent with id, or inline fallback with reason).
 
 ## Fallback Review Checklist

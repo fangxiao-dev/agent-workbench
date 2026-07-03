@@ -62,14 +62,16 @@ main session; the main session records it.
 
 ## Ledger Location
 
-Ledgers live under:
+Ledgers live under the user's OS temporary directory, not the current
+workspace:
 
 ```text
-docs/exchange/grill/grill-<slug>.md
+<os-temp>/codex-grill/grill-<slug>.md
 ```
 
-The script automatically adds `docs/exchange/grill/` to `.gitignore` when it
-initializes a ledger.
+The script defaults to that temp location. Do not create repo-local
+`docs/exchange/grill/` ledgers and do not modify the target repository's
+`.gitignore` for grill records.
 
 Use a slug from the reviewed document basename when possible. If the review is
 not anchored to a file and no obvious slug exists, ask the user for a short
@@ -80,7 +82,8 @@ slug.
 
 ## Ledger Commands
 
-Run commands from the target repo root:
+The commands may be run from the target repo root for convenience, but the
+ledger still defaults to the OS temp directory:
 
 ```bash
 python <skill>/scripts/grill_ledger.py init --topic <plan-or-topic> --slug <slug> --initiator <main-session-name>
@@ -163,7 +166,7 @@ Use PowerShell quoting rules when values contain spaces.
    - Use `stop --proof` only after the Questioner or critic has provided the
      stop proof. Individual converged questions do not automatically end the
      whole review.
-   - The final response must link or name the ledger path and summarize:
+   - The final response must name the temp ledger path and summarize:
      - decisions already made
      - questions asked and answered
      - what still needs the user

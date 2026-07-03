@@ -4,11 +4,13 @@ import argparse
 import json
 import re
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_DIR = "docs/exchange/grill"
+DEFAULT_ROOT = Path(tempfile.gettempdir())
+DEFAULT_DIR = "codex-grill"
 STATE_START = "<!-- grill-ledger-state"
 STATE_END = "-->"
 
@@ -42,18 +44,6 @@ class LedgerStatus:
 
 def ledger_path(root: Path | str, slug: str, directory: str = DEFAULT_DIR) -> Path:
     return Path(root) / directory / f"grill-{slug}.md"
-
-
-def _ensure_gitignore(root: Path | str, directory: str = DEFAULT_DIR) -> None:
-    path = Path(root) / ".gitignore"
-    entry = directory.replace("\\", "/").rstrip("/") + "/"
-    if path.exists():
-        lines = path.read_text(encoding="utf-8").splitlines()
-    else:
-        lines = []
-    if entry not in lines:
-        lines.append(entry)
-        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
 def _slug_is_safe(slug: str) -> bool:
@@ -162,7 +152,6 @@ def init_ledger(
 ) -> CommandResult:
     if not _slug_is_safe(slug):
         raise ValueError("slug may contain only letters, numbers, dot, underscore, and dash")
-    _ensure_gitignore(root, directory)
     path = ledger_path(root, slug, directory)
     if path.exists() and not force:
         raise FileExistsError(f"ledger already exists: {path}; use status or pass force=True")
@@ -467,7 +456,7 @@ def _render(state: dict) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Deterministic writer for Grill Me Smartly ledgers.")
-    parser.add_argument("--root", default=".")
+    parser.add_argument("--root", default=str(DEFAULT_ROOT))
     parser.add_argument("--dir", default=DEFAULT_DIR)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
