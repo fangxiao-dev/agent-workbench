@@ -1,0 +1,71 @@
+{
+  "skill_name": "talk-to-boss",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "把这个任务进度写给老板看：P1 service guard fixed，service/action/integration tests pass，i18n pass，Chrome UI verification 和 Lark smoke pending，final review pending。不要写工程流水账。",
+      "expected_output": "A Chinese stakeholder status grouped by functional slices, with an overall judgment, spec-style bullets, and pending acceptance gates.",
+      "files": [],
+      "expectations": [
+        "The output starts with or includes an overall judgment explaining that local code/tests are done but the requirement is not closed.",
+        "The top-level progress sections are functional slices, not service/action/i18n/test/review buckets.",
+        "Each completed behavior bullet includes an actor or system, a condition or scope, an action, and an observable result or impact.",
+        "Chrome UI verification, Lark smoke, and final review are listed as remaining acceptance gates with a reason when they were planned but not run.",
+        "The output does not include unrelated boilerplate checks such as Lexware or email when they are not part of the prompt.",
+        "Raw commands, file paths, and agent chronology are omitted unless needed as evidence."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "这个状态太技术了，重写：改了 Inventory Item service.ts，补了 service test，action test，integration test；现在 linked Product Components 时不能改 packaging/measurement，只改 threshold 可以；Product SKU 不 fallback supplier code；Derived Products 从 Product Components 读；浏览器和 Lark 还没验。",
+      "expected_output": "A boss-readable Chinese update organized by Inventory Item threshold, packaging/measurement protection, Product SKU explicit rule, and Derived Products visibility.",
+      "files": [],
+      "expectations": [
+        "The answer uses functional slice headings such as threshold management, packaging/measurement protection, Product SKU explicit rule, and linked products visibility.",
+        "The packaging/measurement protection slice states that an Admin cannot change those definitions when the Inventory Item is referenced by active Product Components, and explains the protective result.",
+        "The threshold slice states that threshold-only updates remain allowed even when the item is referenced.",
+        "The Product SKU slice states that missing explicit SKU no longer falls back to Supplier Product Code.",
+        "The answer separates implemented/local-tested behavior from browser and Lark validation still missing, and gives the reason those planned validations are not yet complete."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "按功能 slice 汇报，不要按 T1/T2/T3。背景：订单审批退回规则已经实现，本地集成测试过了；当财务退回时采购员可以重新提交；当订单已同步 ERP 后不能直接改价格；邮件通知还没真实发信 smoke；最终 reviewer 没看。",
+      "expected_output": "A concise Chinese functional-slice report using approval resubmission, ERP-synced price protection, and notification acceptance as product slices.",
+      "files": [],
+      "expectations": [
+        "The output does not use T1/T2/T3 or implementation layer headings.",
+        "The approval slice states who can resubmit under the finance-rejected condition and what result follows.",
+        "The ERP price protection slice states who cannot change price after ERP sync and why.",
+        "The notification slice or remaining gates clearly says real email smoke is still pending and why.",
+        "The final review gap is included as a closure blocker rather than hidden in a generic risk note."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "给我一个很短的老板版进度：代码都写完了，测试也过了，但生产不能碰，Test Env 的 Lark 写入还没跑，Chrome 页面验收被中断。需求到底算不算完成？",
+      "expected_output": "A short Chinese answer that directly says the requirement is not closed, then summarizes completed behavior and remaining acceptance gates.",
+      "files": [],
+      "expectations": [
+        "The answer directly states that the requirement should not be called complete or closed yet.",
+        "It distinguishes code/test completion from real-environment acceptance.",
+        "It names Chrome UI verification and Test Environment Lark write/read smoke as remaining gates with the concrete reason they are still open.",
+        "It respects the production boundary by not suggesting production mutation.",
+        "It stays concise and boss-readable.",
+        "It omits Test-case gap judgment if no abnormal test-case gap is stated."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "写一个最终进度，任务只涉及纯前端表格列宽调整：实现了，Chrome 看过了，单测不涉及。不要给我套 Not run 模板，也不要提 Lark/Lexware/email。",
+      "expected_output": "A concise stakeholder status that reports the front-end UI slice as complete and omits irrelevant not-run and test-case gap sections.",
+      "files": [],
+      "expectations": [
+        "The answer does not mention Lark, Lexware, email, public deployment, or other unrelated external checks.",
+        "The answer does not include a separate Not run or Why not template section.",
+        "The answer does not include Test-case gap judgment when no abnormal gap is present.",
+        "The answer still states the relevant functional UI behavior and Chrome validation in boss-readable language."
+      ]
+    }
+  ]
+}
