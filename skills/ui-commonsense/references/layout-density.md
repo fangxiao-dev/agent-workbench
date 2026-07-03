@@ -9,6 +9,7 @@ Use this reference when UI feels too sparse, too cramped, visually unbalanced, o
 - Keep related controls close together. The user should not have to scan across a wide blank area to understand what a button affects.
 - Prefer compact rows for repeated operational items. Use cards only when each repeated item is truly independent.
 - Do not stretch content vertically just because the parent has available height.
+- Dense operational rows should look intentional even when there is only one item; a single row should not inflate into a large card-like panel.
 
 ## Common Defects
 
@@ -18,6 +19,7 @@ Use this reference when UI feels too sparse, too cramped, visually unbalanced, o
 - Summary cards with mostly blank content.
 - Empty states that dominate the page more than real data would.
 - A note field or secondary control taking more visual priority than the primary workflow.
+- Artificial row height from fixed `min-height`, `1fr` spacer tracks, or empty filler elements used to force alignment.
 - Adding broad `overflow-x-auto` or scroll containers to a shared shell to hide one page's wide table. This can break sticky headers, sidebars, overlays, focus containment, and viewport-specific verification.
 - Filter/tool/action grids with fixed desktop columns that push buttons or selects outside the card at medium widths.
 
@@ -25,6 +27,7 @@ Use this reference when UI feels too sparse, too cramped, visually unbalanced, o
 
 - Use explicit grid tracks, e.g. narrow supplier/action columns, medium numeric columns, flexible note/content columns.
 - Align comparable values with `flex h-[input-height] items-center` or equivalent.
+- For dense table rows, prefer table-cell vertical alignment, shared control heights, or explicit grid tracks over fixed row `min-height` and spacer rows.
 - Convert tall cards to horizontal metric rows when users only need quick comparison.
 - Remove section wrappers that do not add grouping meaning.
 - Use row dividers instead of separate cards when list items belong to one continuous set.
@@ -37,4 +40,5 @@ Use this reference when UI feels too sparse, too cramped, visually unbalanced, o
 - Are actions close to the fields they save or affect?
 - Does the layout still look intentional when only one row/item exists?
 - Is any large blank region caused by flex/grid stretching rather than real content?
+- Is alignment achieved by real control geometry rather than invisible spacers or arbitrary minimum heights?
 - If horizontal scroll exists, is it owned by the specific table/list that needs it rather than a shared shell ancestor?
