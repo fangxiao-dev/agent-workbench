@@ -1,13 +1,14 @@
-# [Project / Slice] Findings
+# [Implementation Name] Findings
 
 状态：[活跃 / 暂停 / 已关闭]
 创建：[YYYY-MM-DD]
-对应进度：[process.md](process.md)
+Plan：[plan.md](plan.md)
+DAG：[dag.md](dag.md)
 对应 gate：[gate.md](gate.md)
 
-本文记录 preview / harness / screenshot / review / verification 中产生的发现、风险和后续候选动作。稳定可复用的经验成熟后，再提升到项目知识库或团队规范。
+本文记录跨 task 的发现、风险和后续候选动作。task 局部日志留在 `tasks/` 或 `dag.md`；只有影响 plan、DAG、gate 或后续 implementation 的内容才提升到这里。稳定可复用的经验成熟后，再提升到项目知识库或团队规范。
 
-## [YYYY-MM-DD] [Phase / Slice] 发现
+## [YYYY-MM-DD] [Slice / Task / Gate] 发现
 
 ### 方法层发现
 
@@ -31,8 +32,9 @@
 - [ ] [候选 issue：只有 scope 和验收足够清楚时再升级]
 - [ ] [候选 backlog]
 
-## 记录规则
+## Promotion Rules
 
 - findings 只记录已观察到的事实、判断和候选后续动作。
-- 不在这里写详细实现步骤；实现步骤进入 issue、impl-plan 或 PR。
+- 不在这里写详细实现步骤；实现步骤进入 `plan.md`、`dag.md`、task ledger、issue 或 PR。
+- 不提升每个 task 的普通进度；只提升跨 task 或 gate-relevant 发现。
 - 若 finding 已转为 issue，在本文件补 issue 编号或链接。

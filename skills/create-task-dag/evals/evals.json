@@ -1,0 +1,69 @@
+{
+  "skill_name": "create-task-dag",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We have one vertical slice for an admin inventory UI update. It touches data sources, derived read models, one large React panel, i18n, browser verification, and a Lark smoke. I want the main session to coordinate and subagents to execute. Turn this into a task DAG with file ownership and parallel cohorts.",
+      "expected_output": "A decision-complete task DAG that keeps the work as one vertical slice, splits independent tasks, assigns non-overlapping write ownership, identifies seam files, and schedules external smoke last.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I'm worried you are making implementation too serial because two workers might both need page.tsx and admin-i18n.ts. Show me how you would freeze contracts and assign ownership so data/read-model/UI/i18n workers can still run in parallel.",
+      "expected_output": "A coordination plan that uses main-session seam ownership for shared files, has workers report NEEDS_SEAM for unowned changes, and allows parallel work where write sets are disjoint.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "We already have several task-level subagent reviews. Before closing the slice, plan the final review and verification pass for the whole vertical slice, including browser evidence and a Test Environment external smoke.",
+      "expected_output": "A whole-slice review and verification plan that distinguishes task review from slice review, runs integrated local tests, includes browser checks, and gates external smoke on confirmed non-production target identity.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Take this broad implementation plan and first split it into vertical tracker-ready slices, then for each slice build an internal task DAG so workers can run data, UI, i18n, and smoke tasks in parallel where ownership does not overlap.",
+      "expected_output": "A slice-first decomposition that keeps delivery vertical, then maps each slice to a task DAG with dependencies, file ownership, shared contracts, worker cohorts, seam ownership, and final slice-level review.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Use create-task-dag standalone. I do not have a dev-with-track workspace and I only want the DAG in this handoff message. Split a Checkout pricing-lock slice into worker cohorts and final review gates.",
+      "expected_output": "A standalone DAG artifact in the response or handoff, with no requirement to create docs/implementations, while still including contracts, cohorts, ownership, seams, verification gates, and final review.",
+      "files": [],
+      "expectations": [
+        "The output does not require or create a dev-with-track workspace.",
+        "The output provides the DAG artifacts inline or in the requested handoff form.",
+        "The output still includes task contracts, parallel cohorts, ownership boundaries, integration seams, verification gates, and final review.",
+        "The output makes persistence optional rather than mandatory.",
+        "The output does not invent process.md, Tn-evidence.md, Tn-review.md, or Tn-notes.md artifacts."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "We already have docs/implementations/inventory-ui/ with plan.md and dag.md. Use create-task-dag to assign subagents, but persist the scheduling output into the tracked workspace roles.",
+      "expected_output": "A tracked-mode DAG plan that maps stable scope to plan.md, live task contracts/cohorts/status to dag.md, durable task state to Tn-progress.md, handoffs to Tn-handoff.md, findings to findings.md, and closure to gate.md.",
+      "files": [],
+      "expectations": [
+        "The output treats dev-with-track as an optional persistence target, not a prerequisite for using the skill.",
+        "Stable scope or acceptance changes are mapped to plan.md.",
+        "Task contracts, cohorts, ownership, status, seams, and verification gates are mapped to dag.md.",
+        "Durable task-local state is mapped to tasks/Tn-progress.md and task transfer to tasks/Tn-handoff.md.",
+        "Cross-task findings go to findings.md and final review or closure goes to gate.md.",
+        "The output does not invent process.md, Tn-evidence.md, Tn-review.md, or Tn-notes.md artifacts."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "This is a bulk implementation spec, not sliced yet: rebuild supplier admin inventory, product SKU workbench, derived products, i18n, Chrome verification, and Lark smoke. Use create-task-dag.",
+      "expected_output": "A response that does not draw one oversized DAG immediately. It proposes using to-issues in slicing-only mode, asks the user to confirm before slicing, and stops before tracker publication unless explicitly requested.",
+      "files": [],
+      "expectations": [
+        "The output recognizes the source is broad and unsliced.",
+        "The output proposes using to-issues to create vertical slices before drawing task DAGs.",
+        "The output asks the user to confirm before doing the slicing step.",
+        "The output says to stop before tracker publication unless explicitly requested.",
+        "The output does not treat the entire bulk spec as one slice."
+      ]
+    }
+  ]
+}

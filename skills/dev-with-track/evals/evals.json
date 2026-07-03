@@ -1,0 +1,72 @@
+{
+  "skill_name": "dev-with-track",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我要给一个新实现建 tracking：库存 UI 调整，有 plan、DAG、高并行 subagent、最终 gate。请 scaffold 文档结构，不要沿用根 process.md。",
+      "expected_output": "Creates or proposes docs/implementations/<slug>/ with plan.md, dag.md, findings.md, gate.md, and only task ledgers that are justified.",
+      "files": [],
+      "expectations": [
+        "The output uses an implementation slug directory as the durable unit.",
+        "The output assigns plan.md as the implementation plan/control entry and dag.md as the parallel scheduling board.",
+        "The output does not create or recommend a root process.md for new implementation work.",
+        "The output explains that tasks/Tn-progress.md ledgers are created only when a trigger applies.",
+        "The output keeps findings.md and gate.md at implementation level."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "这个任务已经有 docs/impl-plans/2026-07-03-inventory-item-ui-adjustments.md，而且做了一半。现在才想接入 dev-with-track。不要强迁 legacy plan，但要把它纳入 tracking 体系。",
+      "expected_output": "Adopts the existing flat plan into a new implementation workspace without forcing legacy migration.",
+      "files": [],
+      "expectations": [
+        "The output creates or recommends a docs/implementations/<slug>/ workspace.",
+        "The output creates plan.md as an adoption wrapper or entry point that links the original impl plan.",
+        "The output explicitly says the legacy flat plan is not forcibly migrated.",
+        "The output maps current execution state into dag.md rather than copying chat/process logs verbatim.",
+        "The output preserves the original plan as a source instead of orphaning it."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "给这个 DAG 判断哪些 task 需要独立 tasks/Tn-progress.md，哪些需要 tasks/Tn-handoff.md：T1 主 session 改一个 seam 并跑测试；T2 subagent 做 Product SKU；T3 Lark Test Env smoke 要记录 marker 和 cleanup；T4 有 reviewer finding 需要后续处理；T5 要交给另一个 session 接手。",
+      "expected_output": "Identifies which tasks require task ledgers using explicit triggers and keeps trivial seam work in dag.md.",
+      "files": [],
+      "expectations": [
+        "T1 is kept as a dag.md row only unless more durable state appears.",
+        "T2 gets a task ledger because it has an independent owner/subagent.",
+        "T3 gets a task ledger because it has an external gate and evidence such as marker/cleanup.",
+        "T4 gets a task ledger because it has a reviewer finding or unresolved follow-up.",
+        "T5 gets a task handoff only because it needs a standalone transfer.",
+        "The output does not invent task-level evidence, review, or notes files.",
+        "The output uses role-based reasoning rather than relying on filenames alone."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "我不想文档爆炸。一个 implementation 里有 12 个小 task，只有 2 个跨 session，1 个有 Chrome gate，其他都是主 session 小修。dev-with-track 应该怎么记录？",
+      "expected_output": "Keeps the implementation compact by using dag.md rows for trivial tasks and task ledgers only for durable state.",
+      "files": [],
+      "expectations": [
+        "The output avoids creating 12 task ledger files by default.",
+        "The two cross-session tasks get task ledgers.",
+        "The Chrome-gated task gets a task ledger.",
+        "Main-session small fixes remain summarized in dag.md.",
+        "The output explains how findings are promoted only when cross-task or gate-relevant."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "这个 implementation 要高并行，用 subagent 做 data/read-model/UI/i18n/external smoke。dev-with-track 应该自己画 DAG，还是调用 create-task-dag？输出应该落在哪里？",
+      "expected_output": "Explains that dev-with-track provides the durable workspace while create-task-dag provides the scheduling protocol, then maps DAG outputs into plan.md, dag.md, Tn-progress.md, Tn-handoff.md, findings.md, and gate.md.",
+      "files": [],
+      "expectations": [
+        "The output says to use create-task-dag for worker cohorts, ownership boundaries, seam handling, and whole-slice review.",
+        "The output says dev-with-track should not reimplement the DAG method.",
+        "The output maps task contracts/cohorts/status/seams to dag.md.",
+        "The output maps durable task state to tasks/Tn-progress.md and task transfer to tasks/Tn-handoff.md.",
+        "The output maps final review and closure to gate.md."
+      ]
+    }
+  ]
+}

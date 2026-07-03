@@ -1,16 +1,17 @@
-# [Project / Slice] Gate
+# [Implementation Name] Gate
 
 状态：[开放 / 等待人工确认 / 已通过 / 未通过]
 创建：[YYYY-MM-DD]
-对应进度：[process.md](process.md)
+Plan：[plan.md](plan.md)
+DAG：[dag.md](dag.md)
 对应 findings：[findings.md](findings.md)
 Evidence：[path-or-link]
 
-本文记录当前切片或阶段是否可以关闭、进入下一阶段，或转入真实页面吸收。
+本文记录当前 implementation 是否可以关闭、阻塞、延期，或转入人工判断。不要用单个 task 通过代替 implementation gate 通过。
 
 ## Scope
 
-- Phase：[Phase A Preview Alignment / Phase B Real Route Absorption]
+- Implementation phase：[planning / running / integrated / verified local / verified external / closing]
 - Target surfaces：
   - [surface / route / component]
   - [surface / route / component]
@@ -71,6 +72,16 @@ Notes：
 Skipped checks：
 
 - [check] skipped because [reason]
+
+## Whole-Slice Review
+
+- [ ] Task-level approvals are not the only closure evidence.
+- [ ] Whole-slice review status：[APPROVED / NEEDS_CHANGES / N/A]
+- [ ] Review findings are resolved, deferred, or promoted to `findings.md`.
+
+Review evidence：
+
+- [reviewer / command / notes]
 
 ## Manual Review
 
