@@ -2,6 +2,7 @@
 
 状态：[Planned / Ready / Running / Needs seam / Blocked / Integrated / Verified local / Verified external / Deferred]
 创建：[YYYY-MM-DD]
+Spec：[../spec.md](../spec.md)
 Implementation：[../plan.md](../plan.md)
 DAG：[../dag.md](../dag.md)
 

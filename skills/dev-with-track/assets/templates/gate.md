@@ -2,6 +2,7 @@
 
 状态：[开放 / 等待人工确认 / 已通过 / 未通过]
 创建：[YYYY-MM-DD]
+Spec：[spec.md](spec.md)
 Plan：[plan.md](plan.md)
 DAG：[dag.md](dag.md)
 对应 findings：[findings.md](findings.md)
@@ -12,6 +13,7 @@ Evidence：[path-or-link]
 ## Scope
 
 - Implementation phase：[planning / running / integrated / verified local / verified external / closing]
+- Spec coverage：[complete / partial / deferred / N/A]
 - Target surfaces：
   - [surface / route / component]
   - [surface / route / component]
@@ -54,6 +56,16 @@ Evidence files：
 Notes：
 
 - [记录 N/A 或风险。]
+
+## Spec Backfill
+
+- [ ] `spec.md` 中仍有效的长期结论已回写到稳定 PRD / Func Design / ARD，或明确延期。
+- [ ] 本任务临时决策没有被误留在长期稳定文档之外却宣称已沉淀。
+- [ ] 不需要回写的内容已标记为 task-local / historical-only。
+
+Backfill notes：
+
+- [记录已回写路径、延期原因或 N/A。]
 
 ## Shared UI
 

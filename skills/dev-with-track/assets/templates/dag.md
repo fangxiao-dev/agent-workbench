@@ -2,11 +2,14 @@
 
 状态：[计划中 / 活跃 / 暂停 / 已关闭]
 创建：[YYYY-MM-DD]
+Spec：[spec.md](spec.md)
 Plan：[plan.md](plan.md)
 Findings：[findings.md](findings.md)
 Gate：[gate.md](gate.md)
 
 本文是 implementation 的并行调度控制面板：记录 cohort、owner、status、gate/evidence 和 seam。不要在这里写长日志；复杂任务下放到 `tasks/Tn-progress.md`，需要单独交接时再创建 `tasks/Tn-handoff.md`。
+
+任务编号在本 slug 内稳定递增。新增任务前检查 `dag.md`、`tasks/T*-progress.md`、`tasks/T*-handoff.md`、`plan.md` 和根目录 `*.patch-plan.md`，从最高 `T<number>` 继续编号，不复用或重排旧编号。
 
 ## Shared Contracts
 

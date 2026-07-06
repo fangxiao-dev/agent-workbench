@@ -3,11 +3,12 @@
 状态：[计划中 / 活跃 / 暂停 / 已关闭]
 创建：[YYYY-MM-DD]
 来源：[existing impl-plan / handoff / issue / discussion]
+Spec：[spec.md](spec.md)
 配套 DAG：[dag.md](dag.md)
 配套 Findings：[findings.md](findings.md)
 配套 Gate：[gate.md](gate.md)
 
-本文是 implementation 的唯一主控入口：记录目标、范围、验收、边界和实现策略。执行调度写入 `dag.md`，局部任务进度写入 `tasks/`。
+本文是 implementation 的执行主控入口：记录实现策略、文件范围、任务步骤和验证计划。任务局部功能合同写入 `spec.md`，执行调度写入 `dag.md`，局部任务进度写入 `tasks/`。
 
 ## 背景与目标
 
@@ -41,9 +42,18 @@
 - Adoption mode：[migrated into this file / linked as source / summarized from handoff]
 - Legacy location handling：[left in place / indexed / archived later]
 
+## Existing Spec Adoption
+
+适用于中途接入；无既有 spec 可标记 N/A。
+
+- Original spec/source：
+- Adoption mode：[migrated into spec.md / linked as stable source / summarized from handoff]
+- Legacy location handling：[left in place / indexed / archived later]
+
 ## Gate Checklist
 
 - [ ] Functional slices implemented.
+- [ ] `spec.md` represents the task-local functional contract.
 - [ ] DAG tasks integrated.
 - [ ] Required local verification completed or deferred with reason.
 - [ ] Required browser/external verification completed or deferred with reason.

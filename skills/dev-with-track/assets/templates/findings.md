@@ -2,6 +2,7 @@
 
 状态：[活跃 / 暂停 / 已关闭]
 创建：[YYYY-MM-DD]
+Spec：[spec.md](spec.md)
 Plan：[plan.md](plan.md)
 DAG：[dag.md](dag.md)
 对应 gate：[gate.md](gate.md)
@@ -35,6 +36,6 @@ DAG：[dag.md](dag.md)
 ## Promotion Rules
 
 - findings 只记录已观察到的事实、判断和候选后续动作。
-- 不在这里写详细实现步骤；实现步骤进入 `plan.md`、`dag.md`、task ledger、issue 或 PR。
+- 不在这里写详细功能合同或实现步骤；功能合同进入 `spec.md`，实现步骤进入 `plan.md`、`dag.md`、task ledger、issue 或 PR。
 - 不提升每个 task 的普通进度；只提升跨 task 或 gate-relevant 发现。
 - 若 finding 已转为 issue，在本文件补 issue 编号或链接。

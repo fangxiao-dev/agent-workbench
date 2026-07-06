@@ -1,13 +1,15 @@
 # Dev With Track Control Flow
 
 状态：通用参考
-用途：指导 implementation workspace 如何用 `plan.md` / `dag.md` / `tasks/Tn-progress.md` / optional `tasks/Tn-handoff.md` / `findings.md` / `gate.md` 记录计划、调度、证据、发现和关闭状态。
+用途：指导 implementation workspace 如何用 `spec.md` / `plan.md` / `dag.md` / `tasks/Tn-progress.md` / optional `tasks/Tn-handoff.md` / `findings.md` / `gate.md` 记录临时功能合同、计划、调度、证据、发现和关闭状态。
 
 ## 角色优先
 
 先判断文档角色，再判断文件名：
 
-- `plan`：为什么做、做什么、验收什么、有什么边界。
+- `spec`：本次 implementation 的临时 Func Design / implementation spec，记录任务局部功能合同、引用的长期 spec、本次 delta、非目标和验收语义。
+- `plan`：怎么做、文件范围、执行策略、验证计划和执行 checklist。
+- `patch plan`：同一 implementation slug 的后续 patch/follow-up 执行计划，文件名为 `YYYYMMDD-HHMM-<patch-topic>.patch-plan.md`，作为 `spec.md` / `plan.md` 之上的计划 delta 输入。
 - `dag`：谁在做、能否并行、当前状态、seam 在哪里、gate 证据是什么。
 - `task progress`：某个任务自己的局部状态、证据、blocker、seam request。
 - `task handoff`：某个任务需要单独交接时的最小移交文档。
@@ -22,14 +24,28 @@
 
 ```text
 docs/implementations/<implementation-slug>/
+├── spec.md
 ├── plan.md
+├── [YYYYMMDD-HHMM-<patch-topic>.patch-plan.md]
 ├── dag.md
 ├── findings.md
 ├── gate.md
 └── tasks/
 ```
 
-开始时只需要足够支撑当前执行的文件。不要为了形式创建很多空 task ledger。
+`spec.md` 必须存在。即使已有长期 `docs/func-design/...`，也要在 slug 内创建薄 `spec.md`，引用长期设计并说明本任务 delta。开始时只需要足够支撑当前执行的文件；不要为了形式创建很多空 task ledger。
+
+## 中途接入已有 Spec / Func Design
+
+如果已有 ad-hoc spec、临时 Func Design、handoff 中的功能合同、或旧需求说明：
+
+1. 创建 implementation slug 目录。
+2. 建立 `spec.md` 入口。
+3. 如果该文档本质是本任务临时 spec，且用户允许重组，把内容迁入 `spec.md`，并在旧位置留索引/指针或按项目规则处理旧路径。
+4. 如果该文档已经是长期稳定 spec，保留原文档；`spec.md` 写 adoption wrapper：链接长期 spec，说明本 implementation 只实现哪些 delta、非目标、验收语义和临时决策。
+5. 如果没有现成 spec，也要创建最小 `spec.md`：背景、引用、in/out scope、功能 slice、验收、待回写候选。
+
+完成标准：新 workspace 能通过 `spec.md` 恢复本任务要实现什么；长期 spec 不被误当成临时执行账本；临时 spec 后续是否沉淀回长期文档交给文档维护任务。
 
 ## 中途接入已有 Plan
 
@@ -42,6 +58,17 @@ docs/implementations/<implementation-slug>/
 5. 从旧 process/handoff 中抽取当前状态到 `dag.md`，不要逐字搬运流水账。
 
 完成标准：新 workspace 能恢复执行现场；旧 plan 没有被误删或孤立。
+
+## 接入 Patch Plan
+
+如果同一 slug 下已有 `YYYYMMDD-HHMM-<patch-topic>.patch-plan.md`：
+
+1. 读取 `spec.md`、`plan.md`、目标 patch plan、`dag.md` 和已有 task ledgers。
+2. 把 patch plan 视为计划 delta，更新 `dag.md`、必要的 `tasks/Tn-progress.md`、`findings.md` 或 `gate.md`，不要覆盖 `plan.md`。
+3. 如果 patch plan 暴露出功能合同变化，确认该变化已经进入 `spec.md`；缺失时先补 spec 或标记 blocker。
+4. 新增 task 时从当前 slug 的最高 `T<number>` 之后继续编号。
+
+完成标准：patch 进入执行调度，但初始 plan、patch plan、DAG 三者角色不互相覆盖。
 
 ## DAG Board
 
@@ -87,6 +114,18 @@ docs/implementations/<implementation-slug>/
 
 `tasks/Tn-handoff.md` 只在该 task 需要单独交接、跨 session 移交、或交给另一个 agent/worker 接手时创建。不要提前引入 `Tn-evidence.md`、`Tn-review.md`、`Tn-notes.md`；这些内容先放进 `Tn-progress.md`。
 
+## Task Numbering
+
+任务编号在一个 implementation slug 内稳定递增。新增任务前扫描：
+
+- `dag.md`
+- `tasks/T*-progress.md`
+- `tasks/T*-handoff.md`
+- `plan.md`
+- 根目录 `*.patch-plan.md`
+
+取最高 `T<number>` 后的下一个编号。不要复用、重排或压缩已有编号；patch plan 追加任务也遵循同一序列。
+
 ## Findings Promotion
 
 不要把每个 task 的局部日志都推到 `findings.md`。只提升这些内容：
@@ -100,12 +139,14 @@ docs/implementations/<implementation-slug>/
 
 `gate.md` 只回答 implementation 级别是否能关闭：
 
+- `spec.md` 的功能合同是否覆盖本次实现；
 - acceptance 是否覆盖；
 - required local/browser/external verification 是否完成或明确 defer；
 - seams 是否集成；
 - review findings 是否处理；
 - residue / cleanup / skipped checks 是否有解释；
 - follow-up 是否进入 findings、issue 或 backlog。
+- task-local `spec.md` 中哪些结论已回写到长期 spec，哪些明确延期，哪些只是本任务上下文。
 
 不要用 task 局部通过代替 implementation gate 通过。
 
