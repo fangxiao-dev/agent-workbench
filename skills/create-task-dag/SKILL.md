@@ -30,6 +30,10 @@ Do not require a tracking workspace before using this skill.
 
 Do not serialize implementation just because shared files exist. Instead, give shared files explicit ownership and make workers report seam needs instead of editing outside their lane.
 
+Use **ownership lanes** instead of a flat owned-files list. Each worker prompt and DAG task should distinguish primary owned files, conditional seam files, and forbidden files. This keeps plan ownership and worker prompts aligned, and makes intentional seam edits reviewable instead of accidental scope creep.
+
+Use **seam status** precisely. A planned dependency between parallel tasks is `NEEDS_SEAM`, not `BLOCKED`. Reserve `BLOCKED` for missing context, missing permission, unavailable data, a wrong plan, or a human decision.
+
 ## Workflow
 
 ### 1. Ground The Slice
@@ -63,13 +67,13 @@ Use `references/dag-and-ownership.md` for the task table, ownership patterns, an
 
 Record the DAG in the user's requested artifact. If a `dev-with-track` workspace exists, record task contracts, cohorts, ownership, status, seams, and verification gates in `dag.md`; use `plan.md` only for stable scope or acceptance changes.
 
-Completion criterion: every task has dependencies, parallel-safe neighbours, owned files/modules, forbidden files/modules, focused tests, and done criteria; every vertical slice names the tasks and seams required before the slice can be accepted.
+Completion criterion: every task has dependencies, parallel-safe neighbours, ownership lanes, focused tests, and done criteria; every vertical slice names the tasks and seams required before the slice can be accepted.
 
 ### 4. Dispatch Parallel Worker Cohorts
 
 Use `references/worker-prompts.md` for worker prompt shape and status handling.
 
-Dispatch all tasks in the same cohort that have stable contracts and non-overlapping write sets. Keep shared seam files with the main session or one explicitly named seam worker.
+Dispatch all tasks in the same cohort that have stable contracts and non-overlapping primary write sets. Generate worker prompts from the DAG ownership lanes; do not hand-write a narrower or broader ownership list than the DAG. Keep shared seam files with the main session or one explicitly named seam worker.
 
 Completion criterion: each worker has a bounded prompt and cannot reasonably mistake its task for the whole slice.
 

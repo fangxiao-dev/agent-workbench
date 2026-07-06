@@ -10,8 +10,9 @@ Every task should be concrete enough to dispatch without further decisions:
 ### Task <ID>: <name>
 - Depends on:
 - Can run with:
-- Owns:
-- Must not touch:
+- Primary owned files/modules:
+- Conditional seam files/modules:
+- Forbidden files/modules:
 - Input contract:
 - Output contract:
 - Focused tests:
@@ -22,12 +23,24 @@ When a `dev-with-track` workspace exists, mirror these fields in `dag.md` under 
 
 ## Ownership Rules
 
-- A worker may edit only its owned files/modules.
-- A worker must not edit unowned files to "just wire it up".
-- If unowned edits are needed, the worker returns `NEEDS_SEAM` with the exact required change.
+- Treat the DAG ownership map as the single source of truth for worker prompts. Do not manually narrow or broaden ownership while dispatching unless you also update the DAG.
+- **Primary owned files/modules** are the worker's normal write scope.
+- **Conditional seam files/modules** may be edited only when the named seam condition occurs. The worker must report the condition and the exact file changed.
+- **Forbidden files/modules** must not be edited. If they are needed, the worker returns `NEEDS_SEAM` with the exact required change.
 - Shared seam files belong to the main session unless one seam worker is explicitly assigned.
 - Two workers should not write the same component, dictionary block, generated output, local data store, dev server port, or external smoke records.
 - If a task is horizontal prerequisite work, record which vertical slice gates consume it. Do not mark a slice accepted from a horizontal worker alone.
+
+## Seam Status
+
+Use status labels to separate expected integration work from real blockers:
+
+- `DONE`: primary work and focused tests are complete.
+- `DONE_WITH_CONCERNS`: work is complete, but the worker reports a risk the main session must read before review.
+- `NEEDS_SEAM`: the worker needs another task-owned or main-session-owned change; no human decision is required.
+- `BLOCKED`: the worker cannot proceed because context, permission, data, a plan correction, or a human decision is required.
+
+Record expected seams in the DAG before dispatch when they are foreseeable. During execution, mark a task `Needs seam` rather than `Blocked` when a broader test fails only because another planned task has not landed yet.
 
 ## Common Task Shapes
 
@@ -52,23 +65,31 @@ Use cohorts to maximize parallelism without hiding dependencies:
 
 ```markdown
 Task A: Inventory threshold data/source/readiness
-- Owns inventory item types/service/source/readiness tests.
-- Does not touch Inventory UI or Product/SKU UI.
+- Primary owned files/modules: inventory item types/service/source/readiness tests.
+- Conditional seam files/modules: none.
+- Forbidden files/modules: Inventory UI, Product/SKU UI.
 
 Task B: Product/SKU explicit-only read model + UI cleanup
-- Owns Product/SKU workbench service/types/panel/tests.
-- Does not touch Inventory compact UI.
+- Primary owned files/modules: Product/SKU workbench service/types/panel/tests.
+- Conditional seam files/modules: shared read-model types only if the DAG assigns this seam.
+- Forbidden files/modules: Inventory compact UI.
 
 Task C: Derived Products 0-N source/read model
-- Owns customer-product-config source/service/types/tests.
+- Primary owned files/modules: customer-product-config source/service/types/tests.
+- Conditional seam files/modules: none.
+- Forbidden files/modules: UI implementation.
 - Outputs InventoryItemProductDisplay[] contract.
 
 Task D: Inventory compact UI shell
-- Owns inventory-items panel and tests.
+- Primary owned files/modules: inventory-items panel and tests.
+- Conditional seam files/modules: dictionary namespace only if UI copy keys were assigned here.
+- Forbidden files/modules: source internals.
 - Consumes frozen DTOs from A/C.
 
 Task E: i18n copy pass/review
-- Owns or reviews admin dictionary namespaces.
+- Primary owned files/modules: assigned admin dictionary namespaces.
+- Conditional seam files/modules: UI tests only if copy changes require assertion updates.
+- Forbidden files/modules: service/source internals.
 - Coordinates keys with UI worker through main session.
 
 Task F: Lark readiness/smoke
