@@ -59,9 +59,10 @@
       "files": [],
       "expectations": [
         "The output detects that the target is outside the repository skills directory.",
-        "The output uses docs/rubrics/<slug>.md as the fallback rubric path.",
+        "The output uses docs/rubrics/<slug>.md under the agent-workbench root as the fallback rubric path.",
         "The output includes target_path frontmatter for the external target path.",
-        "The output still reads the global rubric as a lower-priority layer."
+        "The output still reads the global rubric as a lower-priority layer.",
+        "The output does not write fallback rubrics into the current project just because that is the cwd."
       ]
     },
     {
@@ -71,10 +72,26 @@
       "files": [],
       "expectations": [
         "The output upgrades a pending principle to confirmed only when two later decision rounds support it.",
+        "The output treats one round as one Rn decision record, not one candidate item or one chat message.",
+        "The output accumulates pending-principle evidence as a list such as R3, R5 before promotion.",
         "The output removes evidence references that are no longer needed after promotion.",
         "The output keeps only the latest five decision records.",
         "The output removes stale pending principles whose evidence aged out without confirmation.",
+        "The output updates the rubric frontmatter updated date.",
         "The output treats this cleanup as mechanical and does not ask for extra confirmation beyond the inferred new preference."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "上次你记成我不接受增加流程步骤，但这次我明确说这个原则不对：安全 gate 需要时可以加步骤。以后别再按旧原则过滤。",
+      "expected_output": "Corrects or downgrades a contradicted confirmed principle and records the contradiction evidence instead of letting confirmed rules become permanent.",
+      "files": [],
+      "expectations": [
+        "The output distinguishes explicit user correction from model-inferred conflict.",
+        "The output rewrites or downgrades the confirmed principle to pending when the user explicitly contradicts it.",
+        "The output records the contradiction as a new decision record.",
+        "The output stops hard-filtering candidates based on the old principle.",
+        "The output asks for confirmation before changing a confirmed principle only when the contradiction is inferred rather than explicit."
       ]
     }
   ]
