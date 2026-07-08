@@ -53,6 +53,12 @@ plan, and separate patch plans.
 The complete semantic planning workflow is in [workflow.md](./workflow.md).
 Read it when you need more detail than the compact procedure below.
 
+When writing or updating an implementation plan, also read
+`superpowers:writing-plans/SKILL.md` if it is available. Use it as a quality
+bar for plan specificity, commands, expected results, and placeholder removal;
+do not adopt its default output location or micro-step format unless the
+granularity rule below says to.
+
 ## Slug And Patch Routing
 
 Before writing, classify the request:
@@ -95,6 +101,18 @@ When `dev-with-track` is already active, update only `spec.md` and the relevant
 plan file from this skill, then let `dev-with-track` refresh DAG/task/gate state
 from those planning inputs.
 
+## Plan Writing Quality
+
+Use `superpowers:writing-plans` as a quality reference, not as this skill's
+output contract. This skill still owns discovery, slug routing, `spec.md`, the
+plan input packet, and the `docs/implementations/<slug>/...` output path.
+
+Default plans are **repo-local executable checklists**. Use micro-steps with
+full code snippets only for very small, well-bounded changes where that detail
+reduces ambiguity. Record the chosen granularity in the plan.
+
+Detailed plan-writing rules and the thin template live in `workflow.md`.
+
 ## Semantic Discovery
 
 Discover project context by meaning, not by hard-coded folder names. Use the
@@ -125,9 +143,10 @@ workflow gates.
 5. Create or update `spec.md` as the ad-hoc Func Design for this task.
 6. Create `plan.md` for a new implementation, or create a new
    `YYYYMMDD-HHMM-<patch-topic>.patch-plan.md` for a patch/follow-up.
-7. Apply the implementation-plan quality bar: exact files, small checklist
-   steps, verification-first steps where practical, concrete commands, and
-   expected results.
+7. Apply the implementation-plan quality bar from `superpowers:writing-plans`
+   through the repo-local checklist style: exact files, small tasks,
+   verification-first steps where practical, concrete commands, expected
+   results, and no placeholders.
 8. Review the `spec.md` and plan together for consistency, missing owner
    decisions, and execution readiness. If a review subagent is available and
    appropriate in the current environment, use it; otherwise run the review
@@ -190,12 +209,19 @@ Include:
 
 - link to the task-local `spec.md`
 - whether this is the initial plan or a patch plan
+- plan granularity decision: repo-local checklist by default, or micro-step
+  fallback with reason
+- input packet used: current spec, stable docs, existing implementation context,
+  focused code facts, and verification docs
 - exact files to create or modify
-- bite-sized checkbox steps
+- repo-local executable checklist tasks
 - test-first or verification-first steps where practical
 - concrete commands with expected results
 - acceptance gates and rollback/cleanup notes where relevant
 - no placeholders or vague "add validation" steps
+
+Use `assets/templates/plan.md` unless the existing slug already has a compatible
+plan shape.
 
 For patch plans, include:
 
@@ -220,6 +246,8 @@ Before returning final output, verify:
 - Durable docs are referenced when relevant but not updated by this skill.
 - Open owner decisions are explicit and separated from implementation steps.
 - Verification commands are concrete and scoped to the change.
+- The plan records its granularity decision, and micro-step/code-snippet style is
+  used only for a very small, well-bounded task.
 
 ## Output Contract
 

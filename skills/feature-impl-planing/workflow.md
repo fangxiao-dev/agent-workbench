@@ -78,6 +78,16 @@ Do not move durable docs into the slug. Reference them.
 
 ## Plan Writing Rules
 
+Use `superpowers:writing-plans` as the quality reference for implementation
+plans, while keeping this skill's repository-local output path and structure.
+The input to the plan-writing pass is the selected slug's current `spec.md`,
+relevant PRD/design/ARD docs, verification docs, issue/handoff context, and
+focused code facts discovered earlier in the workflow.
+
+Read `superpowers:writing-plans/SKILL.md` before writing the plan when it is
+available. Use it for specificity and placeholder discipline, not for its
+default output path.
+
 For a new slug:
 
 - Write `plan.md`.
@@ -93,6 +103,32 @@ For a patch:
 - If the patch plan names tracking tasks, inspect existing `T<number>` IDs in
   `dag.md`, task ledgers, the initial plan, and prior patch plans; continue from
   the highest existing number.
+
+Default to a repo-local executable checklist:
+
+- concrete task sections;
+- exact files;
+- test-first or verification-first steps where useful;
+- commands with expected results;
+- acceptance gates and rollback/cleanup notes;
+- no vague placeholders.
+
+Record the granularity decision in the plan. For the default path, write
+`Granularity: repo-local executable checklist`. For a micro-step fallback,
+briefly explain why the task is small enough for that style.
+
+Do not default to the full `superpowers:writing-plans` micro-step style. Use
+2-5 minute steps with full code snippets only for very small, well-bounded
+tasks, usually 1-2 files with clear tests, where snippets materially reduce
+ambiguity and do not make the plan harder to maintain.
+
+Do not save plans to `docs/superpowers/plans/...` from this workflow unless the
+user explicitly asks for that. The target remains
+`docs/implementations/<slug>/plan.md` or a root-level patch plan in the selected
+slug.
+
+Use `assets/templates/plan.md` unless the slug already has a compatible plan
+shape.
 
 ## Relationship To Dev With Track
 
@@ -116,6 +152,8 @@ Review `spec.md` and the plan as a pair:
 - Did patch routing reuse the right slug?
 - Are owner decisions explicit?
 - Are verification commands concrete?
+- Did the plan record its granularity decision, and is micro-step/code-snippet
+  style limited to genuinely small, well-bounded work?
 
 Use a review subagent when the current environment and user permissions allow
 it. If subagents are unavailable or inappropriate, run the checklist inline and
