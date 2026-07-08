@@ -1,66 +1,64 @@
-# Review And Verification
+# Review 与验证
 
-Use this reference after workers return or when closing the slice.
+worker 返回后或关闭 slice 时读本文件。
 
-## Review Layers
+## Review 层次
 
-- **Task spec review:** confirms a worker satisfied its bounded task contract.
-- **Task quality review:** confirms the worker's patch is maintainable and locally tested.
-- **Whole-slice review:** confirms the integrated vertical slice satisfies the original slice source.
+- **任务 spec review**：确认 worker 满足了其有界任务契约。
+- **任务质量 review**：确认 worker 的 patch 可维护且经过本地测试。
+- **Whole-slice review**：确认集成后的 vertical slice 满足原始 slice
+  来源。
 
-Do not close the slice after task-level approvals alone. Task approvals can miss broken seams, duplicated fallback policy, missing route props, i18n drift, and external smoke gaps.
+不要只凭任务级通过就关闭 slice。任务级通过会漏掉断裂的 seam、重复的
+fallback 策略、缺失的 route prop、i18n 漂移和外部 smoke 缺口。
 
-## Main Session Integration Checks
+## Main Session 集成检查
 
-Before final review, the main session should verify:
+最终 review 前，main session 验证：
 
-- shared contracts still have one meaning;
-- no two workers implemented competing fallback rules;
-- route/page props and shared exports are wired once;
-- i18n keys exist in every locale and do not drift semantically;
-- tests cover the slice-level behavior, not only isolated helpers;
-- process, progress, handoff, or tracking notes match what actually ran.
+- 共享契约仍然只有一个含义；
+- 没有两个 worker 实现了互相竞争的 fallback 规则；
+- route/page prop 和共享导出只接线一次；
+- i18n key 在每个 locale 都存在且语义未漂移；
+- 测试覆盖 slice 级行为，不只是孤立 helper；
+- process/progress/handoff/tracking 记录与实际运行一致。
 
-## Verification Gates
+## 验证 Gate
 
-Workers run focused tests for their ownership. The main session runs the slice matrix after integration.
+worker 跑各自 ownership 的聚焦测试；main session 在集成后跑 slice 矩阵。
 
-For UI changes:
+UI 改动：
 
-- verify the changed route in a real browser;
-- cover desktop and constrained viewport when no specific viewport is reported;
-- record sticky/floating element geometry when headers, drawers, menus, or overlays change;
-- record horizontal overflow status when table/list layout changes.
+- 在真实浏览器中验证改动的 route；
+- 未指定 viewport 时覆盖 desktop 和受限 viewport；
+- header、drawer、菜单或浮层变化时记录 sticky/floating 元素几何；
+- 表格/列表布局变化时记录横向 overflow 状态。
 
-For external systems:
+外部系统：
 
-- run external smoke only after local and browser evidence;
-- print and confirm non-production target identity before mutation;
-- use a unique marker;
-- record created/updated record IDs;
-- read back the field/behavior being proven;
-- clean up or record retained residue and why cleanup failed.
+- 外部 smoke 只在本地和浏览器证据之后运行；
+- mutation 前打印并确认非生产目标身份；
+- 使用唯一 marker；
+- 记录创建/更新的 record ID；
+- 回读被证明的字段/行为；
+- 清理，或记录保留的残留及清理失败原因。
 
-## Final Report Shape
+## 最终报告形状
 
-For slice completion, report:
+slice 完成时报告：
 
-- committed changes or dirty files;
-- worker cohorts and main-session seams;
-- commands run and results;
-- browser evidence;
-- external smoke run/not run and why;
-- residual risk;
-- final whole-slice review status.
+- 已提交的改动或脏文件；
+- worker cohort 和 main session 处理的 seam；
+- 运行的命令和结果；
+- 浏览器证据；
+- 外部 smoke 运行与否及原因；
+- 残余风险；
+- 最终 whole-slice review 状态。
 
-## Persistence Mapping
+## 持久化
 
-Standalone mode can keep review and verification evidence inline, in the current plan, or in the requested handoff/progress artifact.
+standalone 模式下，review 和验证证据可留在对话内、当前 plan 或用户指定的
+handoff/进度产物中。
 
-When a `dev-with-track` workspace exists:
-
-- write whole-slice review and closure status to `gate.md`;
-- write cross-task risks or follow-ups to `findings.md`;
-- write local task review findings to `tasks/Tn-progress.md`;
-- write task transfer details to `tasks/Tn-handoff.md`;
-- keep cohort and seam status in `dag.md`.
+存在 `dev-with-track` workspace 时，按 `SKILL.md` 的持久化映射落盘；任务
+局部的 review finding 写入 `tasks/Tn-progress.md`。

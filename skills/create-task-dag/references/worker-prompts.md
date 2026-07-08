@@ -1,134 +1,143 @@
 # Worker Prompts
 
-Use this reference when dispatching implementation or review workers.
+派发实现或 review worker 时读本文件。
 
-## Implementation Worker Prompt
+## 实现 Worker Prompt
 
 ```markdown
-You are implementing Task <ID> for <slice>.
+你在为 <slice> 实现 Task <ID>。
 
-Workspace:
+Workspace：
 - <path>
 
-Tracking:
+Tracking：
 - <standalone / dev-with-track>
-- Progress ledger: <tasks/Tn-progress.md or N/A>
-- Handoff ledger: <tasks/Tn-handoff.md or N/A>
+- Progress ledger：<tasks/Tn-progress.md 或 N/A>
+- Handoff ledger：<tasks/Tn-handoff.md 或 N/A>
 
-Slice goal:
-- <summary>
+Slice 目标：
+- <摘要>
 
-Your ownership:
-- Primary owned files/modules: <normal write scope>
-- Conditional seam files/modules: <files/modules plus exact condition for editing, or none>
-- Forbidden files/modules: <must not edit>
+你的 ownership：
+- Primary owned files/modules：<正常写入范围>
+- Conditional seam files/modules：<文件/模块 + 允许编辑的精确条件，或 none>
+- Forbidden files/modules：<禁改>
 
-Contracts:
-- Input: <DTO/API/props you consume>
-- Output: <DTO/API/behavior you produce>
+契约：
+- Input：<你消费的 DTO/API/props>
+- Output：<你产出的 DTO/API/行为>
 
-Requirements:
-- <acceptance bullets>
+要求：
+- <验收要点>
 
-Tests to run:
-- <focused commands>
+要跑的测试：
+- <聚焦命令>
 
-Rules:
-- You are not alone in this codebase.
-- Do not revert changes made by others.
-- Do not edit outside primary ownership unless a listed conditional seam condition applies.
-- If a forbidden or unlisted edit is needed, return NEEDS_SEAM instead of making it.
-- Report planned cross-task dependencies as NEEDS_SEAM, not BLOCKED.
+规则：
+- 这个代码库里不止你一个人在工作。
+- 不要回滚别人做的改动。
+- 除非点名的 conditional seam 条件发生，不要在 primary ownership 之外编辑。
+- 需要 forbidden 或未列出的编辑时，返回 NEEDS_SEAM，不要直接改。
+- 计划内的跨任务依赖上报 NEEDS_SEAM，不是 BLOCKED。
 
-Return:
-- status: DONE / DONE_WITH_CONCERNS / NEEDS_SEAM / BLOCKED
-- files changed
-- tests run and results
-- conditional seam files edited and why
-- unowned seam needs, with seam owner when known
-- human action required: yes/no
-- residual risks
+返回：
+- status：DONE / DONE_WITH_CONCERNS / NEEDS_SEAM / BLOCKED
+- 改动的文件
+- 跑过的测试和结果
+- 编辑过的 conditional seam 文件及原因
+- 非属地 seam 需求，已知时写明 seam owner
+- 是否需要人类操作：yes/no
+- 剩余风险
 ```
 
-When a worker returns status or evidence and a `dev-with-track` progress ledger exists, update `tasks/Tn-progress.md`. Create `tasks/Tn-handoff.md` only when the task needs standalone transfer to another session, agent, or worker.
+worker 返回状态或证据、且存在 `dev-with-track` progress ledger 时，更新
+`tasks/Tn-progress.md`。只在任务需要向另一个 session、agent 或 worker 独立
+交接时创建 `tasks/Tn-handoff.md`。
 
-## Status Handling
+## 状态处理
 
-- `DONE`: proceed to task spec review.
-- `DONE_WITH_CONCERNS`: read concerns before review; resolve correctness or scope concerns first.
-- `NEEDS_SEAM`: main session handles the seam, waits for the named task owner, or changes ownership before continuing. Use this for planned dependencies, unowned files, broad-test failures caused by another task not landing, and integration wiring that does not need human judgment.
-- `BLOCKED`: provide missing context, split the task, change model/worker, or escalate if the plan is wrong. Use this only when progress requires context, permission, data, plan correction, or a human decision.
+- `DONE`：进入任务 spec review。
+- `DONE_WITH_CONCERNS`：review 前先读 concern；正确性或 scope concern 先
+  解决。
+- `NEEDS_SEAM`：main session 处理 seam、等待点名的任务 owner、或调整
+  ownership 后继续。用于计划内依赖、非属地文件、因另一任务未落地导致的
+  广域测试失败、以及不需要人类判断的集成接线。
+- `BLOCKED`：补上下文、拆任务、换模型/worker，或在计划有误时升级。只用于
+  需要上下文、权限、数据、计划修正或人类决策的情况。
 
-Do not ask the same worker to retry without changing the context that caused the status.
+不要在不改变致因上下文的情况下让同一个 worker 原样重试。
 
-## Status Examples
+（worker 返回状态到 DAG 板状态的映射见
+`references/dag-and-ownership.md`。）
 
-Expected seam:
+## 状态示例
+
+预期内 seam：
 
 ```markdown
 status: NEEDS_SEAM
-seam owner: T3 Inventory Movement Persistence
-reason: focused service tests pass, but integration readback needs local movement persistence owned by T3
+seam owner: T3 <本地持久化任务>
+reason: 聚焦 service 测试通过，但集成回读依赖 T3 所属的本地持久化，该任务尚未落地
 human action required: no
 ```
 
-True blocker:
+真正的 blocker：
 
 ```markdown
 status: BLOCKED
-reason: task requires mutating real external smoke, but owner approval is absent
+reason: 任务需要 mutate 真实外部系统做 smoke，但缺少 owner 授权
 human action required: yes
 ```
 
 ## Review Worker Prompts
 
-Task spec reviewer:
+任务 spec reviewer：
 
 ```markdown
-Review Task <ID> against its task contract.
+对照任务契约 review Task <ID>。
 
-Check:
-- required behavior implemented;
-- no unowned scope added;
-- promised tests are present or reported;
-- output contract matches the frozen shared contract.
+检查：
+- 要求的行为已实现；
+- 没有新增非属地 scope；
+- 承诺的测试存在或已报告；
+- output contract 与冻结的共享契约一致。
 
-Return APPROVED or NEEDS_CHANGES with concrete findings.
+返回 APPROVED 或 NEEDS_CHANGES，附具体 finding。
 ```
 
-Task quality reviewer:
+任务质量 reviewer：
 
 ```markdown
-Review Task <ID> for implementation quality.
+Review Task <ID> 的实现质量。
 
-Check:
-- maintainability;
-- local patterns;
-- test coverage for risky behavior;
-- unnecessary abstractions or coupling;
-- hidden cross-task assumptions.
+检查：
+- 可维护性；
+- 是否符合本地模式；
+- 风险行为的测试覆盖；
+- 不必要的抽象或耦合；
+- 隐藏的跨任务假设。
 
-Return APPROVED or NEEDS_CHANGES with concrete findings.
+返回 APPROVED 或 NEEDS_CHANGES，附具体 finding。
 ```
 
-Whole-slice reviewer:
+Whole-slice reviewer：
 
 ```markdown
-Review the integrated slice, not an individual task.
+Review 集成后的 slice，不是单个任务。
 
-Inputs:
-- original slice/source/plan;
-- final diff or commit range;
-- DAG, progress, handoff, or tracking artifacts;
-- verification evidence.
+输入：
+- 原始 slice/来源/plan；
+- 最终 diff 或 commit 范围；
+- DAG、progress、handoff 或 tracking 产物；
+- 验证证据。
 
-Check:
-- every acceptance item is covered;
-- task outputs fit together;
-- shared contracts stayed consistent;
-- no worker left an unintegrated seam;
-- browser/external smoke risks are explicit;
-- test matrix is sufficient or gaps are named.
+检查：
+- 每条验收项都被覆盖；
+- 任务产出能拼合在一起；
+- 共享契约保持一致；
+- 没有 worker 留下未集成的 seam；
+- 浏览器/外部 smoke 风险已显式列出；
+- 测试矩阵充分，或缺口已点名。
 
-Return APPROVED or NEEDS_CHANGES with severity-ranked findings.
+返回 APPROVED 或 NEEDS_CHANGES，finding 按严重度排序。
 ```

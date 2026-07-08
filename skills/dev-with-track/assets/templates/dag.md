@@ -1,6 +1,6 @@
 # [Implementation Name] DAG
 
-状态：[计划中 / 活跃 / 暂停 / 已关闭]
+状态：[计划中 / 活跃 / 暂停 / 已关闭 / Retired（gate passed，见当前 patch-dag）]
 创建：[YYYY-MM-DD]
 Spec：[spec.md](spec.md)
 Plan：[plan.md](plan.md)
@@ -9,7 +9,7 @@ Gate：[gate.md](gate.md)
 
 本文是 implementation 的并行调度控制面板：记录 cohort、owner、status、gate/evidence 和 seam。不要在这里写长日志；复杂任务下放到 `tasks/Tn-progress.md`，需要单独交接时再创建 `tasks/Tn-handoff.md`。
 
-任务编号在本 slug 内稳定递增。新增任务前检查 `dag.md`、`tasks/T*-progress.md`、`tasks/T*-handoff.md`、`plan.md` 和根目录 `*.patch-plan.md`，从最高 `T<number>` 继续编号，不复用或重排旧编号。
+任务编号在本 slug 内稳定递增。新增任务前检查 `dag.md`、根目录 `*.patch-dag.md`、`tasks/T*-progress.md`、`tasks/T*-handoff.md`、`plan.md` 和根目录 `*.patch-plan.md`，从最高 `T<number>` 继续编号，不复用或重排旧编号。
 
 ## Shared Contracts
 
@@ -17,9 +17,9 @@ Gate：[gate.md](gate.md)
 
 ## Task Contracts
 
-| Task | Depends on | Can run with | Owns | Must not touch | Input contract | Output contract | Focused tests | Done when |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | [dependency] | [parallel-safe tasks] | [files/modules] | [files/modules] | [input] | [output] | [commands] | [done gate] |
+| Task | Depends on | Can run with | Primary owned | Conditional seam | Forbidden | Input contract | Output contract | Focused tests | Done when |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T1 | [dependency] | [parallel-safe tasks] | [正常写入范围] | [文件 + 编辑条件] | [禁改] | [input] | [output] | [commands] | [done gate] |
 
 ## DAG Board
 

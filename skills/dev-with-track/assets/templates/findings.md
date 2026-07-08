@@ -13,19 +13,19 @@ DAG：[dag.md](dag.md)
 
 ### 方法层发现
 
-- [例如：preview route 需要等待 hydration 后再截图。]
-- [例如：fixture 必须避免真实 backend reads。]
+- [例如：某类验证必须等待异步状态稳定后再取证。]
+- [例如：测试数据必须与真实后端读写隔离。]
 
 ### UI 层发现
 
-- [例如：某个 action column 在 desktop 下过窄。]
-- [例如：某个表格在 390px 下不可读。]
-- [例如：某个 disabled 能力容易被误解为已实现。]
+- [例如：某列在 desktop 下过窄。]
+- [例如：某表格在窄 viewport 下不可读。]
+- [例如：某 disabled 能力容易被误解为已实现。]
 
 ### 业务 / 边界发现
 
-- [例如：某真实 action 尚未接通，必须保持 disabled。]
-- [例如：某真实 route 吸收时必须保留 auth / i18n / mutation availability。]
+- [例如：某真实操作尚未接通，必须保持 disabled。]
+- [例如：吸收真实入口时必须保留 auth / i18n / mutation 可用性边界。]
 
 ### 后续候选动作
 

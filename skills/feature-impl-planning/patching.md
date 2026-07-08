@@ -15,12 +15,24 @@
 
 - 在 slug 根目录新建 `YYYYMMDD-HHMM-<patch-topic>.patch-plan.md`；绝不覆盖
   `plan.md`。
+- `plan.md` 永远代表该 slug 的初始实施计划。若初始计划已完成或不再是当前执行
+  入口，在 `plan.md` 开头标记 `Deprecated / Superseded by <patch-plan-file>`，
+  保留它作为历史实施证据。
 - 写明本 patch 实现的是 `spec.md` 的哪条修订。
 - 说明相对已实现行为的 delta。
 - 除验证新行为外，附带回归验证，证明原有验收语义未被破坏。
 
+## Patch DAG
+
+- 若旧 `dag.md` 已 gate passed 或只记录上一批执行账本，可在其开头标记
+  `Retired / gate passed`。
+- 当 patch/follow-up 需要新的任务图、cohort、ownership 或 seam 调度时，在 slug
+  根目录新建 `YYYYMMDD-HHMM-<patch-topic>.patch-dag.md`，不要把新任务追加到已
+  retired 的旧 `dag.md`。
+- 新 patch DAG 是当前 patch 的执行控制板；旧 `dag.md` 保留为历史证据。
+
 ## Task ID 续编
 
 patch plan 提议 tracking task ID 时，检查该 slug 的 `dag.md`、
-`tasks/T*-progress.md`、`tasks/T*-handoff.md`、`plan.md` 和既往 patch plan；
-从已有最高 `T<number>` 继续编号。不复用、不重排旧编号。
+`tasks/T*-progress.md`、`tasks/T*-handoff.md`、`plan.md`、既往 patch plan 和
+既往 patch DAG；从已有最高 `T<number>` 继续编号。不复用、不重排旧编号。

@@ -12,8 +12,9 @@ DAG：[../dag.md](../dag.md)
 
 - Depends on：
 - Can run with：
-- Owns：
-- Must not touch：
+- Primary owned：
+- Conditional seam（含编辑条件）：
+- Forbidden：
 - Input contract：
 - Output contract：
 - Focused tests：

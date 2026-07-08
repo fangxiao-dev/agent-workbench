@@ -10,12 +10,17 @@
 ## Stable References
 
 <!-- 塑造本任务的 PRD / ARD / func-design / 数据契约文档；只链接，不复制、不修改 -->
+<!-- 含 slug 内 design.md（如存在） -->
 
 ## Context
 
 ## Current Functional Contract
 
+<!-- 可用行为表：| Slice | Actor/System | Condition | Behavior | Observable result | -->
+
 ## Scope And Non-Goals
+
+<!-- 含 Safety / mutation 边界：local / prod-like read-only / approved external mutation / no external mutation -->
 
 ## Data And Interface Semantics
 
@@ -24,6 +29,10 @@
 ## Error Handling And Edge Cases
 
 ## Acceptance Semantics
+
+## Temporary Decisions
+
+<!-- 已做出的临时决策：决策 / 理由 / owner / 日期 -->
 
 ## Revisions
 
