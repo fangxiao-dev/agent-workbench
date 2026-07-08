@@ -24,7 +24,7 @@ Evidence：[path-or-link]
 - [ ] 不使用生产数据。
 - [ ] fixture 数据可识别为 fake/test data。
 - [ ] 不读取真实 backend service，或读取边界已记录。
-- [ ] 不触发外部 mutation：billing、payment、email、ERP、Lark、Lexware、Redis 等。
+- [ ] 不触发外部 mutation：billing、payment、邮件、ERP、IM、外部存储等。
 - [ ] dev-only route 有 production guard。
 
 Notes：
@@ -32,6 +32,8 @@ Notes：
 - [记录例外或确认方式。]
 
 ## UI Evidence
+
+适用于有 UI 面的实现；无 UI 面时标记 N/A。
 
 - [ ] Desktop evidence 已保存。
 - [ ] Constrained viewport evidence 已保存。
@@ -45,7 +47,7 @@ Evidence files：
 
 ## Real Route Safety
 
-适用于 Phase B；Phase A 可标记为 N/A。
+仅当本次实现改动或吸收真实 route / 生产入口时适用；否则标记 N/A。
 
 - [ ] auth / permission boundary 保持。
 - [ ] i18n / dictionary wiring 保持。
@@ -68,6 +70,8 @@ Backfill notes：
 - [记录已回写路径、延期原因或 N/A。]
 
 ## Shared UI
+
+适用于改动共享 UI 组件的实现；否则标记 N/A。
 
 - [ ] 新增或变更 shared primitive 已登记到 component inventory。
 - [ ] preview-only 组件没有伪装成通用组件。

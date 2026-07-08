@@ -1,39 +1,40 @@
 ---
 name: dev-with-track
-description: Tracked development workflow for implementation workspaces with temporary design/spec, plan/dag/findings/gate ledgers, task-wise progress records, midstream plan adoption, evidence capture, verification gates, and follow-up tracking. Use when the user wants a tracked implementation, implementation-local design/spec roles, DAG/cohort board, gate decisions, findings updates, evidence capture, or a reusable execution ledger.
-user-invocable: true
+description: >
+  当用户想要 tracked implementation（追踪式实现）、implementation workspace
+  执行账本、DAG/cohort 调度板、gate 决策、findings 更新、证据留存，或需要
+  implementation-local design/spec/plan/账本角色划分时使用；也用于中途接入
+  已有 spec/plan 并继续追踪执行。本 skill 只拥有追踪结构，不负责撰写
+  spec/plan 本身。
 ---
 
 # Dev With Track
 
-Use this skill to create or maintain an implementation workspace that survives context loss and supports parallel execution. The durable unit is an implementation, not a chat turn and not a single slice file.
+创建或维护一个能在上下文丢失后恢复、支持并行执行的 implementation
+workspace。持久单位是 implementation，不是一次聊天轮次，也不是单个 slice
+文件。
 
-The core loop is:
+核心循环：
 
 ```text
 restore implementation -> update DAG -> execute task -> capture evidence -> promote findings -> decide gate
 ```
 
-This skill owns tracking structure only. Domain skills, repo `AGENTS.md`, implementation plans, and verification docs still own product language, safety rules, commands, and acceptance details.
+本 skill 只拥有追踪结构。产品语言、安全规则、命令和验收细节仍归 domain
+skills、repo `AGENTS.md`、implementation plan 和验证文档所有。
 
-## Companion Skills
+## 配套 Skill
 
-When the implementation needs worker cohorts, parallel-safe task decomposition, ownership boundaries, seam handling, or whole-slice review, use `create-task-dag` for the scheduling method. Persist its outputs into this implementation workspace:
-
-- implementation-local top design and stable-doc backfill source -> `design.md` when the work creates PRD/ARD/tech-stack knowledge;
-- temporary task-specific functional contract -> `spec.md`;
-- implementation execution strategy and acceptance checklist -> `plan.md`;
-- task contracts, cohorts, ownership, status, seams, and verification gates -> `dag.md`;
-- durable task-local state -> `tasks/Tn-progress.md`;
-- task transfer -> `tasks/Tn-handoff.md`;
-- cross-task risks and follow-ups -> `findings.md`;
-- final review and closure decision -> `gate.md`.
-
-Do not reimplement the DAG method here. This skill provides the durable container; `create-task-dag` provides the parallel execution protocol.
+- `feature-impl-planning` 负责规划输入的撰写规则：`spec.md`、`plan.md` 和
+  根目录 `YYYYMMDD-HHMM-<patch-topic>.patch-plan.md`。本 skill 消费这些文件
+  来刷新执行账本，不重定义它们的撰写规则。
+- 需要 worker cohort、并行安全的任务分解、ownership 边界、seam 处理或
+  whole-slice review 时，用 `create-task-dag` 提供调度方法。本 skill 提供
+  持久容器，把它的输出落进下方文件角色；不在这里重实现 DAG 方法。
 
 ## Implementation Workspace
 
-For new tracked work, create one implementation slug directory:
+新的追踪工作创建一个 implementation slug 目录：
 
 ```text
 docs/implementations/<implementation-slug>/
@@ -42,6 +43,7 @@ docs/implementations/<implementation-slug>/
 ├── plan.md
 ├── [YYYYMMDD-HHMM-<patch-topic>.patch-plan.md]
 ├── dag.md
+├── [YYYYMMDD-HHMM-<patch-topic>.patch-dag.md]
 ├── findings.md
 ├── gate.md
 └── tasks/
@@ -49,106 +51,151 @@ docs/implementations/<implementation-slug>/
     └── Tn-handoff.md
 ```
 
-If the repo already has a different conventional root, follow it, but keep the roles intact.
+仓库已有不同约定的根目录时沿用它，但保持角色不变；按角色追踪，不按文件名。
 
-`design.md` is optional. Create it when the implementation produces top-level product, architecture, or runtime knowledge that should later be backfilled into stable PRD, Func Design, ARD, Tech Stack, or hands-on knowledge docs. It is implementation-local and temporary; it is not itself the stable destination.
+## 文件角色
 
-`spec.md` is required. It is the temporary, task-specific Func Design / implementation spec for this slug. It can be thick or thin, but it must exist so the implementation workspace has one local functional-contract entrypoint.
+- `design.md`（可选）：implementation-local top design 和稳定文档回写来源：
+  产品/PRD 笔记、架构/ARD 笔记、技术栈/运行时笔记、稳定文档回写地图。仅当
+  本次实现产生了应回写 PRD / Func Design / ARD / Tech Stack / hands-on
+  knowledge 的上层知识时创建；它本身不是稳定文档目的地。不要把它的内容复制
+  进 `spec.md`；由 `spec.md` 引用它。
+- `spec.md`（必须）：本 slug 的临时任务级 Func Design / implementation
+  spec——功能合同、引用的稳定 spec、任务局部 delta、非目标、验收语义、待定
+  决策。可厚可薄，但必须存在，作为 workspace 的功能合同入口。
+- `plan.md`：初始实现计划和工程执行主控：实现策略、文件范围、任务概要、
+  验证计划、验收清单。`spec.md` 存在时不要把功能行为主要写在这里。Patch
+  模式不覆盖、不重命名 `plan.md`；如果初始计划已完成或不再是当前执行入口，
+  在文件开头标记 `Deprecated / Superseded by <patch-plan-file>`，保留它作为
+  历史实施证据。
+- `YYYYMMDD-HHMM-<patch-topic>.patch-plan.md`：同一 slug 的 patch/follow-up
+  执行输入。视为叠在 `spec.md` / `plan.md` 之上的计划 delta，映射进
+  当前 DAG 和 task ledger，不覆盖初始 plan。
+- `dag.md`：执行控制板：cohort、任务 ownership、seam、状态、gate 和验证
+  证据。它是主 session 的实时调度面，不是详细日志。Patch 模式下，如果旧
+  `dag.md` 已经 gate passed 或明确完成，可在文件开头标记
+  `Retired / gate passed`，保留为上一批执行账本。
+- `YYYYMMDD-HHMM-<patch-topic>.patch-dag.md`（可选）：当 patch/follow-up 的
+  task graph materially changes，或旧 `dag.md` 已 retired 时使用。它是当前
+  patch 的调度面，任务编号继续从 slug 内最高 `T<number>` 之后递增，不重排
+  旧 DAG 任务。
+- `tasks/Tn-progress.md`：需要独立记录的任务的局部进度账本。保持薄：恢复
+  任务现场即可，不要变成迷你实现计划。
+- `tasks/Tn-handoff.md`（可选）：仅当该任务需要跨 session 或跨 agent 的
+  独立交接时创建。
+- `findings.md`：跨任务的发现、风险、决策、后续项和可复用经验；不收普通
+  任务局部日志。
+- `gate.md`：implementation 级别的关闭档案。仅在关闭、阻塞或明确延期
+  implementation 级验收时更新。
 
-`plan.md` is the initial implementation plan. Root-level
-`YYYYMMDD-HHMM-<patch-topic>.patch-plan.md` files are patch/follow-up plan
-inputs for the same slug. This skill consumes those plan files when refreshing
-the execution ledger; it does not redefine the planner's spec/plan authoring
-rules.
+新实现不要用根 `process.md`；它会与 `plan.md` 和 `dag.md` 重复。遗留 slice
+已有 `process.md` 时只把当前事实映射进上述角色。
 
-Do not place an ad-hoc task spec directly into long-lived `docs/func-design/` by default. If an ad-hoc spec or Func Design already exists for this exact implementation, adopt it into the slug directory as `spec.md` when allowed. If the existing `docs/func-design/...` document is already a stable long-lived design, do not move it; create a thin `spec.md` that references the stable design and records only this implementation's delta, scope, non-goals, and temporary decisions.
+## 中途接入
 
-Do not migrate legacy flat plans just to clean the tree. When this skill enters midstream and an active impl plan already exists for the same implementation, adopt that plan as the workspace plan by moving it into the slug directory as `plan.md`, then adjust its links and tracking metadata in place. Do not copy the plan and do not create a wrapper plan, because duplicate plan sources drift quickly.
+已有 ad-hoc spec / Func Design / 实现计划 / 旧 `process.md` 时，把它采纳进
+slug workspace：移动为 `spec.md` / `plan.md` 并原地调整链接与追踪元数据。
+不复制、不建 wrapper plan——重复的 plan 来源会迅速漂移。仅当用户明确要求
+保留原路径、或移动会破坏已被接受的项目索引时，才让 `spec.md` / `plan.md`
+作为短指针 wrapper 指向原路径。具体接入流程读
+[references/control-flow.md](./references/control-flow.md)。
 
-Only preserve the original plan path when the user explicitly asks to keep that path stable. In that exception, make the tracked `plan.md` a short pointer and mark the original path as the plan source.
+完成标准：implementation 有唯一清晰入口，`spec.md` 和 `plan.md` 都存在，
+旧的 ad-hoc spec/plan 路径要么已移动要么被明确保留，仓库索引指向活跃的
+implementation workspace。
 
-Only preserve the original ad-hoc spec path when the user explicitly asks to keep that path stable or when moving it would break an accepted project index. In that exception, make `spec.md` a short pointer/adoption wrapper and mark the original path as the current spec source.
+## Task Ledger 触发条件
 
-Completion criterion: the implementation has one clear entry point, `spec.md` and `plan.md` both exist, previous ad-hoc spec/plan paths are either moved or explicitly preserved, and repo indexes/links point to the active implementation workspace.
+简单任务保持为 `dag.md` 一行。仅当满足至少一个触发条件时创建
+`tasks/Tn-progress.md`：
 
-## File Roles
+- 独立 owner 或 subagent；
+- 独立外部 gate（浏览器、IM、邮件、ERP、公共 smoke、production-like 验证等）；
+- `NEEDS_SEAM`、blocker、reviewer finding 或未决决策；
+- 预期跨 session 继续；
+- 有必须保存的独立证据（record ID、smoke marker、截图、清理结果、目标身份等）；
+- 影响最终 gate 但细节会挤爆 `dag.md`。
 
-- `design.md`: optional task-local top design and stable-doc backfill source: product/PRD notes, architecture/ARD notes, tech-stack/runtime notes, and a stable-doc backfill map. Use it to avoid stuffing PRD, ARD, and tech-stack material into `spec.md`.
-- `spec.md`: temporary task-specific Func Design / implementation spec: functional contract, referenced stable specs, task-local deltas, non-goals, acceptance semantics, and open decisions. It is source material for later stable-doc backfill, not automatically a long-lived design.
-- `plan.md`: implementation plan and engineering execution document: implementation strategy, file scope, task outline, verification plan, and acceptance checklist. Do not make it the primary home for functional behavior when `spec.md` exists.
-- `YYYYMMDD-HHMM-<patch-topic>.patch-plan.md`: patch/follow-up execution input for the same implementation slug. Treat it as a plan delta layered on top of `spec.md` and `plan.md`; map it into `dag.md` and task ledgers without overwriting the initial plan.
-- `dag.md`: execution control board: cohorts, task ownership, seams, status, gates, and verification evidence.
-- `tasks/Tn-progress.md`: task-wise progress ledger for tasks that need their own record.
-- `tasks/Tn-handoff.md`: optional task-level handoff, only when that task needs a standalone transfer across sessions or agents.
-- `findings.md`: cross-task findings, risks, decisions, follow-ups, and reusable lessons that are not just local task notes.
-- `gate.md`: final closure dossier for the implementation.
+完成标准：每个有持久状态的任务都有 ledger；琐碎 seam 修改和一次性测试留在
+`dag.md`。
 
-Avoid root `process.md` for new implementation work. It tends to duplicate `plan.md` and `dag.md`. For legacy tracked slices that already use `process.md`, read it as legacy state and map its current facts into the implementation roles when useful.
+不要默认发明其他任务级文档；证据、reviewer finding、局部笔记先进
+`Tn-progress.md`。`Tn-handoff.md` 只在需要独立交接时创建。
 
-## When To Create A Task Ledger
+任务编号在 slug 内稳定递增：新增任务前检查 `dag.md`、
+`tasks/T*-progress.md`、`tasks/T*-handoff.md`、`plan.md` 和根目录
+`*.patch-plan.md` / `*.patch-dag.md`，从最高 `T<number>` 之后继续编号。
+不复用、不重排已有编号。
 
-Keep simple tasks as one row in `dag.md`. Create `tasks/Tn-progress.md` only when at least one trigger applies:
+## Patch 模式
 
-- independent owner or subagent;
-- dedicated external gate such as Chrome, Lark, email, Lexware, public smoke, or production-like verification;
-- `NEEDS_SEAM`, blocker, reviewer finding, or unresolved decision;
-- expected to continue across sessions;
-- independent evidence that must be preserved, such as record IDs, smoke markers, screenshots, cleanup results, or target identity;
-- affects the final gate, but the details would make `dag.md` too crowded.
+当用户要求 patch、follow-up、补丁计划、基于已 gate 的实现继续迭代，或已有
+slug 明确拥有该功能时，默认进入 patch 模式：
 
-Completion criterion: every task with durable state has a ledger; trivial seam edits and one-off tests stay in `dag.md`.
+```text
+patch mode = same slug + updated spec + new patch-plan + retired old plan if completed + retired old dag if completed + new patch-dag when task graph materially changes + continued task numbering
+```
 
-Do not invent other task-level documents by default. Put evidence, reviewer findings, and local notes into `Tn-progress.md` until that convention proves too crowded. Create `Tn-handoff.md` only when a task needs a separate handoff for another session, agent, or worker.
+具体规则：
 
-Task IDs are stable within a slug. Before adding tasks, inspect `dag.md`,
-`tasks/T*-progress.md`, `tasks/T*-handoff.md`, `plan.md`, and root-level
-`*.patch-plan.md`; assign the next `T<number>` after the highest existing task
-number. Never renumber existing tasks just to make a patch plan look tidy.
+- 复用同一 implementation slug，不为 patch 另建第二个 slug。
+- 原地更新 `spec.md`，使最新合同无歧义。
+- 新增 `YYYYMMDD-HHMM-<patch-topic>.patch-plan.md`，不覆盖 `plan.md`。
+- `plan.md` 仍代表初始实施计划；如果已完成或不再是当前执行入口，在开头标记
+  `Deprecated / Superseded by <patch-plan-file>`。
+- `dag.md` 如果已经 gate passed 或只记录上一批执行账本，在开头标记
+  `Retired / gate passed`。
+- 当 patch 需要新的任务图、cohort、ownership 或 seam 调度时，新建
+  `YYYYMMDD-HHMM-<patch-topic>.patch-dag.md`，并把它作为当前 patch 的执行
+  控制板。
+- patch task id 从 slug 内最高 `T<number>` 继续编号，不复用、不重排旧编号。
 
-## First Reads
+## 首读
 
-1. Read repo instructions first: root `AGENTS.md`, app/workspace instructions, and relevant verification docs.
-2. Locate any existing ad-hoc spec / Func Design, implementation plan, root-level `*.patch-plan.md`, flat impl-plan file, roadmap, handoff, process ledger, findings, gate, and evidence.
-3. Read `references/control-flow.md` when adopting midstream state, deciding ledger roles, or closing gates.
-4. If scaffolding is needed, use templates in `assets/templates/`.
+1. 先读仓库指令：根 `AGENTS.md`、应用/工作区指令和相关验证文档。
+2. 定位既有的 ad-hoc spec / Func Design、实现计划、根目录
+   `*.patch-plan.md`、扁平 impl-plan、roadmap、handoff、process 账本、
+   findings、gate 和证据。
+3. 中途接入既有 spec/plan/patch plan、或判定 implementation 结束状态时读
+   [references/control-flow.md](./references/control-flow.md)。
+4. 需要脚手架时用 `assets/templates/` 下的模板。
 
-## Operating Rules
+## 操作规则
 
-- Track by role, not by filename. If the repo uses different names, preserve the roles.
-- Use `design.md` for upper-layer knowledge that cuts across stable-doc destinations. Do not duplicate its content into `spec.md`; let `spec.md` reference it and define only the current functional contract.
-- Treat `spec.md` as the task-local functional contract. Treat `plan.md` as the implementation execution source of truth. Do not turn `dag.md` or task ledgers into competing specs or plans.
-- Treat root-level `*.patch-plan.md` as planner-produced deltas for the same slug. Consume them when updating `dag.md`, task ledgers, findings, and gate state; keep the authoring rules for patch plans in the planning skill.
-- Keep temporary `spec.md` distinct from stable `docs/func-design/` / PRD / ARD documents. Stable-doc backfill is a later documentation-maintenance task unless the user explicitly includes it in the current implementation.
-- Treat `dag.md` as the live coordination surface for main-session scheduling, worker ownership, status, seams, and gates.
-- Keep task ledgers thin. They should restore local task state, not become mini implementation plans.
-- Promote only cross-task conclusions to `findings.md`.
-- Update `gate.md` only when closing, blocking, or explicitly deferring implementation-level acceptance.
-- Keep evidence honest: record what actually ran, what was skipped, and why.
-- Use project verification commands from repo docs; do not import commands from another project.
+- 临时 `spec.md` 与稳定 `docs/func-design/` / PRD / ARD 文档保持区分。
+  稳定文档回写是后续文档维护任务，除非用户明确把它纳入本次实现。
+- 只提升跨任务结论到 `findings.md`。
+- 证据诚实：记录实际运行了什么、跳过了什么、为什么。
+- 验证命令用本仓库文档里的；不要从其他项目搬命令。
 
-## Minimal Execution Checklist
+## 最小执行清单
 
-1. Restore or create the implementation workspace.
-2. Decide whether `design.md` is needed for PRD/ARD/tech-stack backfill knowledge; create or update it when needed.
-3. Ensure the active temporary task spec is represented by `spec.md`, including midstream adoption of an existing ad-hoc spec / Func Design when needed.
-4. Ensure the active plan is represented by `plan.md`, including midstream adoption of an existing plan when needed.
-5. Update `dag.md` with task/cohort status, owner, gate/evidence, and seam notes.
-6. Decide whether any task needs a `tasks/Tn-progress.md` ledger using the triggers above.
-7. Execute or coordinate the next controlled task.
-8. Capture task evidence in the task ledger or `dag.md`.
-9. Promote cross-task findings to `findings.md`.
-10. Update `gate.md` when implementation-level closure, blocker, or defer decision changes, including stable-doc backfill status if relevant.
-11. Report the implementation state by role: design status when present, spec status, plan status, DAG/cohort status, task ledgers touched, findings promoted, gate state.
+1. 恢复或创建 implementation workspace。
+2. 判断是否需要 `design.md` 承载 PRD/ARD/技术栈回写知识；需要时创建或更新。
+3. 确认活跃的临时任务 spec 已体现为 `spec.md`，含中途采纳既有 ad-hoc
+   spec / Func Design。
+4. 确认活跃 plan 已体现为 `plan.md`，含中途采纳既有 plan。
+5. 更新 `dag.md`：任务/cohort 状态、owner、gate/证据、seam 备注。
+6. 按触发条件判断哪些任务需要 `tasks/Tn-progress.md`。
+7. 执行或调度下一个受控任务。
+8. 把任务证据写进 task ledger 或 `dag.md`。
+9. 把跨任务发现提升到 `findings.md`。
+10. implementation 级关闭、阻塞或延期决策变化时更新 `gate.md`，含相关的
+    稳定文档回写状态。
+11. 按角色汇报实现状态：design 状态（如存在）、spec 状态、plan 状态、
+    DAG/cohort 状态、触碰的 task ledger、提升的 findings、gate 状态。
 
-## Templates
+## 模板
 
-Use these templates when the repo lacks the corresponding ledger:
+仓库缺少对应账本时使用：
 
 - `assets/templates/design.md`
-- `assets/templates/spec.md`
-- `assets/templates/plan.md`
 - `assets/templates/dag.md`
 - `assets/templates/progress.md`
 - `assets/templates/handoff.md`
 - `assets/templates/findings.md`
 - `assets/templates/gate.md`
+
+`spec.md` 与 `plan.md` 的 canonical 模板由 `feature-impl-planning` 维护
+（`../feature-impl-planning/assets/templates/`）；本 skill 需要脚手架这两个
+文件时使用那里的模板，不维护第二份。
