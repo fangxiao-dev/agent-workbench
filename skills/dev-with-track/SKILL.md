@@ -1,6 +1,6 @@
 ---
 name: dev-with-track
-description: Tracked development workflow for implementation workspaces with temporary spec, plan/dag/findings/gate ledgers, task-wise progress records, midstream plan adoption, evidence capture, verification gates, and follow-up tracking. Use when the user wants a tracked implementation, DAG/cohort board, gate decisions, findings updates, evidence capture, or a reusable execution ledger.
+description: Tracked development workflow for implementation workspaces with temporary design/spec, plan/dag/findings/gate ledgers, task-wise progress records, midstream plan adoption, evidence capture, verification gates, and follow-up tracking. Use when the user wants a tracked implementation, implementation-local design/spec roles, DAG/cohort board, gate decisions, findings updates, evidence capture, or a reusable execution ledger.
 user-invocable: true
 ---
 
@@ -20,6 +20,7 @@ This skill owns tracking structure only. Domain skills, repo `AGENTS.md`, implem
 
 When the implementation needs worker cohorts, parallel-safe task decomposition, ownership boundaries, seam handling, or whole-slice review, use `create-task-dag` for the scheduling method. Persist its outputs into this implementation workspace:
 
+- implementation-local top design and stable-doc backfill source -> `design.md` when the work creates PRD/ARD/tech-stack knowledge;
 - temporary task-specific functional contract -> `spec.md`;
 - implementation execution strategy and acceptance checklist -> `plan.md`;
 - task contracts, cohorts, ownership, status, seams, and verification gates -> `dag.md`;
@@ -36,6 +37,7 @@ For new tracked work, create one implementation slug directory:
 
 ```text
 docs/implementations/<implementation-slug>/
+├── [design.md]
 ├── spec.md
 ├── plan.md
 ├── [YYYYMMDD-HHMM-<patch-topic>.patch-plan.md]
@@ -48,6 +50,8 @@ docs/implementations/<implementation-slug>/
 ```
 
 If the repo already has a different conventional root, follow it, but keep the roles intact.
+
+`design.md` is optional. Create it when the implementation produces top-level product, architecture, or runtime knowledge that should later be backfilled into stable PRD, Func Design, ARD, Tech Stack, or hands-on knowledge docs. It is implementation-local and temporary; it is not itself the stable destination.
 
 `spec.md` is required. It is the temporary, task-specific Func Design / implementation spec for this slug. It can be thick or thin, but it must exist so the implementation workspace has one local functional-contract entrypoint.
 
@@ -69,6 +73,7 @@ Completion criterion: the implementation has one clear entry point, `spec.md` an
 
 ## File Roles
 
+- `design.md`: optional task-local top design and stable-doc backfill source: product/PRD notes, architecture/ARD notes, tech-stack/runtime notes, and a stable-doc backfill map. Use it to avoid stuffing PRD, ARD, and tech-stack material into `spec.md`.
 - `spec.md`: temporary task-specific Func Design / implementation spec: functional contract, referenced stable specs, task-local deltas, non-goals, acceptance semantics, and open decisions. It is source material for later stable-doc backfill, not automatically a long-lived design.
 - `plan.md`: implementation plan and engineering execution document: implementation strategy, file scope, task outline, verification plan, and acceptance checklist. Do not make it the primary home for functional behavior when `spec.md` exists.
 - `YYYYMMDD-HHMM-<patch-topic>.patch-plan.md`: patch/follow-up execution input for the same implementation slug. Treat it as a plan delta layered on top of `spec.md` and `plan.md`; map it into `dag.md` and task ledgers without overwriting the initial plan.
@@ -110,6 +115,7 @@ number. Never renumber existing tasks just to make a patch plan look tidy.
 ## Operating Rules
 
 - Track by role, not by filename. If the repo uses different names, preserve the roles.
+- Use `design.md` for upper-layer knowledge that cuts across stable-doc destinations. Do not duplicate its content into `spec.md`; let `spec.md` reference it and define only the current functional contract.
 - Treat `spec.md` as the task-local functional contract. Treat `plan.md` as the implementation execution source of truth. Do not turn `dag.md` or task ledgers into competing specs or plans.
 - Treat root-level `*.patch-plan.md` as planner-produced deltas for the same slug. Consume them when updating `dag.md`, task ledgers, findings, and gate state; keep the authoring rules for patch plans in the planning skill.
 - Keep temporary `spec.md` distinct from stable `docs/func-design/` / PRD / ARD documents. Stable-doc backfill is a later documentation-maintenance task unless the user explicitly includes it in the current implementation.
@@ -123,20 +129,22 @@ number. Never renumber existing tasks just to make a patch plan look tidy.
 ## Minimal Execution Checklist
 
 1. Restore or create the implementation workspace.
-2. Ensure the active temporary task spec is represented by `spec.md`, including midstream adoption of an existing ad-hoc spec / Func Design when needed.
-3. Ensure the active plan is represented by `plan.md`, including midstream adoption of an existing plan when needed.
-4. Update `dag.md` with task/cohort status, owner, gate/evidence, and seam notes.
-5. Decide whether any task needs a `tasks/Tn-progress.md` ledger using the triggers above.
-6. Execute or coordinate the next controlled task.
-7. Capture task evidence in the task ledger or `dag.md`.
-8. Promote cross-task findings to `findings.md`.
-9. Update `gate.md` when implementation-level closure, blocker, or defer decision changes, including stable-spec backfill status if relevant.
-10. Report the implementation state by role: spec status, plan status, DAG/cohort status, task ledgers touched, findings promoted, gate state.
+2. Decide whether `design.md` is needed for PRD/ARD/tech-stack backfill knowledge; create or update it when needed.
+3. Ensure the active temporary task spec is represented by `spec.md`, including midstream adoption of an existing ad-hoc spec / Func Design when needed.
+4. Ensure the active plan is represented by `plan.md`, including midstream adoption of an existing plan when needed.
+5. Update `dag.md` with task/cohort status, owner, gate/evidence, and seam notes.
+6. Decide whether any task needs a `tasks/Tn-progress.md` ledger using the triggers above.
+7. Execute or coordinate the next controlled task.
+8. Capture task evidence in the task ledger or `dag.md`.
+9. Promote cross-task findings to `findings.md`.
+10. Update `gate.md` when implementation-level closure, blocker, or defer decision changes, including stable-doc backfill status if relevant.
+11. Report the implementation state by role: design status when present, spec status, plan status, DAG/cohort status, task ledgers touched, findings promoted, gate state.
 
 ## Templates
 
 Use these templates when the repo lacks the corresponding ledger:
 
+- `assets/templates/design.md`
 - `assets/templates/spec.md`
 - `assets/templates/plan.md`
 - `assets/templates/dag.md`
