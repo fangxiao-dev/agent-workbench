@@ -1,0 +1,81 @@
+{
+  "skill_name": "improve-skill",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "帮我看看 skills/dev-with-track 还有哪些优化点。注意沿用我之前对这个 skill 的偏好。",
+      "expected_output": "Reads global and per-skill rubric before proposing improvements, filters confirmed conflicts, and labels candidates by preference fit.",
+      "files": [],
+      "expectations": [
+        "The output reads or creates the target skill rubric before proposing improvements.",
+        "The output reads the global rubric as a lower-priority preference layer.",
+        "The output filters candidates that conflict with confirmed principles and briefly reports the filtered category.",
+        "The output uses pending principles only for ranking or labeling, not hard filtering.",
+        "The output does not directly edit the target skill."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "我采纳合并重复 gate 模板，但不要增加回滚演练小节。帮我分析为什么，并记住这个偏好。",
+      "expected_output": "Infers a skill-level pending preference from the selection, asks for confirmation before writing, and records the decision after confirmation.",
+      "files": [],
+      "expectations": [
+        "The output separates the user's stated choice from the inferred preference.",
+        "The output asks for explicit confirmation before writing the inferred preference.",
+        "The output plans to write a skill-level pending principle by default.",
+        "The output records both accepted and rejected options as a rolling decision record after confirmation.",
+        "The output does not promote the preference to global from a single skill."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "这个 skill 还没有 rubric。以后优化它时，先别提那种为了很低频 case 增加流程步骤的建议。",
+      "expected_output": "Creates the missing rubric from the template and records the confirmed preference as a pending principle.",
+      "files": [],
+      "expectations": [
+        "The output creates or proposes creating skills/<target>/rubric.md from the bundled template.",
+        "The output writes the preference in Chinese rubric language.",
+        "The output records the new principle as pending unless prior evidence already supports confirmation.",
+        "The output updates the rubric date.",
+        "The output keeps the target SKILL.md body unchanged."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "我在第二个不同 skill 上也确认了同一个偏好。现在把它变成通用偏好。",
+      "expected_output": "Promotes the repeated confirmed preference to the global rubric only after the second distinct skill confirmation.",
+      "files": [],
+      "expectations": [
+        "The output verifies that the matching preference was confirmed for two distinct skills.",
+        "The output writes the promoted principle to global-rubric.md.",
+        "The output avoids duplicating the same stable preference unnecessarily in both skill-level and global rubrics.",
+        "The output preserves skill-level overrides when they conflict with global principles."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "帮我维护一个 plugin cache 里的第三方 skill 偏好，它不在这个 repo 的 skills 目录下。",
+      "expected_output": "Uses docs/rubrics/<slug>.md fallback with target_path frontmatter for an external target.",
+      "files": [],
+      "expectations": [
+        "The output detects that the target is outside the repository skills directory.",
+        "The output uses docs/rubrics/<slug>.md as the fallback rubric path.",
+        "The output includes target_path frontmatter for the external target path.",
+        "The output still reads the global rubric as a lower-priority layer."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "这个 rubric 里有一个 [待验证] 原则已经连续两轮被同样选择印证，还有 7 条旧决策记录。请写回这轮偏好并顺手整理 rubric。",
+      "expected_output": "Promotes repeatedly confirmed pending principles, removes promoted evidence references, keeps only the latest five decision records, and clears stale unconfirmed material.",
+      "files": [],
+      "expectations": [
+        "The output upgrades a pending principle to confirmed only when two later decision rounds support it.",
+        "The output removes evidence references that are no longer needed after promotion.",
+        "The output keeps only the latest five decision records.",
+        "The output removes stale pending principles whose evidence aged out without confirmation.",
+        "The output treats this cleanup as mechanical and does not ask for extra confirmation beyond the inferred new preference."
+      ]
+    }
+  ]
+}

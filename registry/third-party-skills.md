@@ -33,7 +33,7 @@
 | vercel-react-best-practices | `vercel-labs/agent-skills` | `npx skills add vercel-labs/agent-skills@vercel-react-best-practices -g -y` | 已放入 `skills/vercel-react-best-practices/` |
 | find-skills | `vercel-labs/skills` | `npx skills add vercel-labs/skills@find-skills -g -y` | 已放入 `skills/find-skills/` |
 | powershell-windows | `davila7/claude-code-templates` | `npx skills add davila7/claude-code-templates@powershell-windows -g -y` | 已放入 `skills/powershell-windows/` |
-| continuous-learning | `affaan-m/everything-claude-code` | 人工迁移 | 已放入 `skills/continuous-learning/` |
+| continuous-learning | `affaan-m/everything-claude-code` | 人工迁移 | 已退役，保留在 `skills-deprecated/continuous-learning/` |
 | api-integration-builder | `daffy0208/ai-dev-standards` | `npx skills add daffy0208/ai-dev-standards@api-integration-builder -g -y` | 已放入 `skills/api-integration-builder/` |
 | code-review | `supercent-io/skills-template` | `npx skills add supercent-io/skills-template@code-review -g -y` | 已放入 `skills/code-review/` |
 | git-workflow | `supercent-io/skills-template` | `npx skills add supercent-io/skills-template@git-workflow -g -y` | 已放入 `skills/git-workflow/` |

@@ -142,4 +142,4 @@ description: KaiSpan and admin UI migration guide for prototype absorption, bill
 
 ## 想新增 skill 时(沉淀,不要预判)
 
-只有当某个流程**手工跑过 2~3 次、每次重复同样的痛、且可泛化**,才用 `skill-creator` 抽成 skill;平时用 `continuous-learning` 收集提案、由用户审批。不要为“将来可能用到”提前扩展治理层。
+只有当某个流程**手工跑过 2~3 次、每次重复同样的痛、且可泛化**,才用 `skill-creator` 抽成 skill。优化既有 skill 时,用 `improve-skill` 在用户取舍后维护偏好 rubric;不要为“将来可能用到”提前扩展治理层。

@@ -1,7 +1,7 @@
 # Improve-Skill Preference Loop Skill Plan
 
 日期：2026-07-08
-状态：设计已确认（brainstorming 会话逐项确认），待实现
+状态：已实现（2026-07-08，包含 skill、rubric 模板、轻量 eval、continuous-learning 退役）
 
 ## Goal
 
@@ -29,6 +29,8 @@ skills/improve-skill/
   assets/
     templates/
       rubric.md                 # per-skill rubric 模板
+  evals/
+    evals.json                  # 轻量 prompt eval
 ```
 
 per-skill rubric 位置：`skills/<目标>/rubric.md`，不存在时按模板创建。
