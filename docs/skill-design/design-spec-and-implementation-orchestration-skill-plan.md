@@ -57,7 +57,7 @@ It must not include:
 
 ### Independence Rule
 
-The new skill should be treated as a standalone skill. Its `SKILL.md` should not reference or depend on the existing `feature-impl-planing` skill.
+The new skill should be treated as a standalone skill. Its `SKILL.md` should not reference or depend on the existing `feature-impl-planning` skill.
 
 The migration history may be documented outside the skill, but the runtime skill contract should present `design-spec` as a new first-class workflow.
 

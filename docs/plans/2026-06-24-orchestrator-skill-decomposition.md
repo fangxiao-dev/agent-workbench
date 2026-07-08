@@ -321,7 +321,7 @@ Ledger rules:
 
 1. Reduce `orchestrator` to a high-level entrypoint.
 2. Keep routing rules:
-   - raw requirement -> `feature-impl-planing`
+   - raw requirement -> `feature-impl-planning`
    - only issues -> `to-issues`
    - execute approved issues -> execution skill / project convention
 3. Keep external side-effect guardrails.
