@@ -1,6 +1,6 @@
 # Do Review Subagent Briefs
 
-Copy the common block plus exactly one track brief. If the assigned reviewer skill is `code-review` or `review`, append the matching default lens addendum. Add the anti-duplicate block only after round 1.
+Copy the common block plus exactly one track brief. If the assigned reviewer skill is `code-review` or `module-review`, append the matching default lens addendum. Add the anti-duplicate block only after round 1.
 
 ## Common Context Block
 
@@ -63,13 +63,13 @@ For each finding:
 - classify severity from code-path risk.
 ```
 
-## review Default Lens Addendum
+## module-review Default Lens Addendum
 
 ```text
-Default lens when the assigned skill is review:
+Default lens when the assigned skill is module-review:
 
 Lens:
-- cross-module seams;
+- cross-module contracts;
 - transaction semantics and crash points;
 - replay, idempotency, and concurrency;
 - runtime modes and environment matrix;

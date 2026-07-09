@@ -12,7 +12,7 @@ allowed-tools:
 
 Run a **dual-track review**: two subagents review the same target with assigned reviewer skills, and the main session acts as scheduler, ledger owner, deduper, verifier, and final decision maker.
 
-By default, Track A uses `code-review` and Track B uses `review`. If the user names custom reviewer skills, assign them through this skill's orchestration instead of changing the ledger, verification, or final-decision workflow.
+By default, Track A uses `code-review` and Track B uses `module-review`. If the user names custom reviewer skills, assign them through this skill's orchestration instead of changing the ledger, verification, or final-decision workflow.
 
 The main session is not a third reviewer. It verifies high-severity evidence and decides classification.
 
@@ -70,7 +70,7 @@ Default tracks:
 
 ```text
 Track A: code-review
-Track B: review
+Track B: module-review
 ```
 
 Custom reviewer selection uses name-list style from the user prompt, for example:
@@ -95,7 +95,7 @@ Completion criterion: Track A and Track B each have a concrete reviewer skill, o
 
 Spawn two subagents in every round.
 
-For durable prompts, read only the needed sections from `references/subagent-briefs.md`: [Common Context Block](references/subagent-briefs.md#common-context-block) and [Generic Reviewer Track Brief](references/subagent-briefs.md#generic-reviewer-track-brief). When an assigned reviewer skill is `code-review` or `review`, append that skill's default lens addendum regardless of whether it came from the default track selection or a user-specified reviewer list. For closure verification, use [Closure Verification Brief](references/subagent-briefs.md#closure-verification-brief). From round 2 onward, append [Round-N Anti-Duplicate Addendum](references/subagent-briefs.md#round-n-anti-duplicate-addendum).
+For durable prompts, read only the needed sections from `references/subagent-briefs.md`: [Common Context Block](references/subagent-briefs.md#common-context-block) and [Generic Reviewer Track Brief](references/subagent-briefs.md#generic-reviewer-track-brief). When an assigned reviewer skill is `code-review` or `module-review`, append that skill's default lens addendum regardless of whether it came from the default track selection or a user-specified reviewer list. For closure verification, use [Closure Verification Brief](references/subagent-briefs.md#closure-verification-brief). From round 2 onward, append [Round-N Anti-Duplicate Addendum](references/subagent-briefs.md#round-n-anti-duplicate-addendum).
 
 ### Track Prompt Intent
 
@@ -135,7 +135,7 @@ Related issue/PR:
 Main-session decision:
 ```
 
-Use source labels from the selected tracks, for example `Track A (code-review)`, `Track B (review)`, `fused`, or `main-session`.
+Use source labels from the selected tracks, for example `Track A (code-review)`, `Track B (module-review)`, `fused`, or `main-session`.
 
 Deduplicate by broken invariant or observable failure, not by file path. If both subagents report the same issue, mark `Source: fused` and keep the contributing track names in the evidence or decision note.
 
