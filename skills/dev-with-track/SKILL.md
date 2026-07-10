@@ -182,10 +182,12 @@ delta；登记不要求当场修改长期文档，后续 compaction/backfill 再
   `docs/module-knowledge/<module>/spec.md` 或子域契约；
 - 项目语言 -> `context-language`，即根 `CONTEXT.md`。
 
-module PRD 惰性创建。首建 evidence 必须来自顶层 PRD、已批准 design、owner
-决策或已确认 gate，不得只从代码反推意图；内容不足以形成 Purpose、用户或
-journey、Outcomes、Scope/Non-goals，以及到顶层 PRD/module spec 的链接时，
-继续登记到 `docs/module-knowledge/_pending.md`。
+module PRD 惰性创建。普通 gate 遇到尚不存在的 `prd.md` 时只登记到
+`docs/module-knowledge/_pending.md`，不得首建文件；只有 owner 审阅后的
+backfill apply 才能首次创建。已有 `prd.md` 可由正常维护流程更新。首建 evidence
+必须来自顶层 PRD、已批准 design、owner 决策或已确认 gate，不得只从代码反推
+意图；内容还必须形成 Purpose、用户或 journey、Outcomes、Scope/Non-goals，
+以及到顶层 PRD/module spec 的链接。
 
 ## 首读
 

@@ -67,7 +67,7 @@ Notes：
 - [ ] 已用两问 litmus 分类：替换实现后仍必须成立的用户价值属于意图；可由测试、接口、状态查询或故障演练验证的陈述属于行为合同。
 - [ ] 同时包含 why 与 how 的陈述已拆分，没有在 PRD 与 spec 原样复制。
 - [ ] 每条 delta 已填写 destination、statement、受影响模块与 evidence。
-- [ ] `module-prd` 首建 evidence 不是仅从代码反推；内容不足时登记到 `docs/module-knowledge/_pending.md`。
+- [ ] `module-prd` 文件不存在时只登记到 `docs/module-knowledge/_pending.md`；未在普通 gate 首建文件。只有 owner 审阅后的 backfill apply 可首次创建，已有文件才由正常维护流程更新。
 - [ ] `top-level-prd` 在 journey 重构完成前只登记 pending，未继续扩写现有巨型 PRD。
 
 Durable deltas：

@@ -60,7 +60,7 @@ Use both child skills when a session produced both implementation lessons and de
 Route outside child skills when the item is not hands-on implementation or debug knowledge:
 
 - journey/product-level intent -> top-level PRDs under `docs/top-level-knowledge/`
-- module-level intent -> `docs/module-knowledge/<module>/prd.md` (`module-prd`, created lazily)
+- module-level intent -> `module-prd`; update `docs/module-knowledge/<module>/prd.md` only when it already exists, otherwise register in `docs/module-knowledge/_pending.md`
 - module behavior contracts -> `docs/module-knowledge/<module>/spec.md` or a module subdomain contract (`module-spec`)
 - project language and canonical vocabulary -> root `CONTEXT.md` (`context-language`)
 - stable architecture, milestone, or technology-stack facts -> `docs/top-level-knowledge/`
@@ -79,12 +79,14 @@ New/changed requirements generally flow: `req` inbox -> top-level or module PRD 
 implementation-local design when a change needs design -> module spec after verified behavior becomes
 current contract -> hands-on only for reusable implementation/debug lessons.
 
-Module PRDs are lazy. Evidence for the first `prd.md` must come from a top-level PRD, approved
-design, owner decision, or confirmed gate, never code alone. Until the content can establish
+Module PRDs are lazy. Ordinary gates and project-knowledge maintenance must register a
+`module-prd` delta in `docs/module-knowledge/_pending.md` whenever the module `prd.md` does not
+exist; only an owner-reviewed backfill apply may create the first file. Normal maintenance may
+update an existing `prd.md`. Evidence for first creation must come from a top-level PRD, approved
+design, owner decision, or confirmed gate, never code alone, and the content must establish
 Purpose, users or journeys, Outcomes, Scope/Non-goals, and links to its top-level PRD and module
-spec, keep the delta in `docs/module-knowledge/_pending.md`. Until the top-level PRD journey
-restructure is complete, register new `top-level-prd` deltas as pending instead of expanding the
-existing large PRDs.
+spec. Until the top-level PRD journey restructure is complete, register new `top-level-prd` deltas
+as pending instead of expanding the existing large PRDs.
 
 ## Durability Gate
 
