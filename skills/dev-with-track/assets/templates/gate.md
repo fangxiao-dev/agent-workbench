@@ -63,24 +63,25 @@ Notes：
 
 登记不要求本次 gate 当场完成长期文档回写；后续由 compaction/backfill 压实。
 若无 durable delta，填写 `none` 并给出原因。
+Durable deltas 表与 No durable delta 字段互斥：保留并填写其中一种，删除另一种。
 
 - [ ] 已用两问 litmus 分类：替换实现后仍必须成立的用户价值属于意图；可由测试、接口、状态查询或故障演练验证的陈述属于行为合同。
 - [ ] 同时包含 why 与 how 的陈述已拆分，没有在 PRD 与 spec 原样复制。
-- [ ] 每条 delta 已填写 destination、statement、受影响模块与 evidence。
+- [ ] 每条 delta 已填写 destination、source、statement、受影响模块、authority 与 evidence。
 - [ ] `module-prd` 文件不存在时只登记到 `docs/module-knowledge/_pending.md`；未在普通 gate 首建文件。只有 owner 审阅后的 backfill apply 可首次创建，已有文件才由正常维护流程更新。
-- [ ] `top-level-prd` 在 journey 重构完成前只登记 pending，未继续扩写现有巨型 PRD。
+- [ ] `top-level-prd` 在 journey 重构完成前已持久化到项目 `docs/module-knowledge/_pending.md`，记录 destination=`top-level-prd`、source、statement 与 authority；未继续扩写现有巨型 PRD。
 
 Durable deltas：
 
-| Destination | Statement | Affected modules | Evidence |
-| --- | --- | --- | --- |
-| `[module-spec / module-prd / top-level-prd / context-language / hands-on / other]` | [一句话 delta] | `[module-slug / N/A]` | `[path-or-link / owner decision]` |
+| Destination | Source | Statement | Affected modules | Authority | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| `[module-spec / module-prd / top-level-prd / context-language / hands-on / other]` | `[implementation slug / source path]` | [一句话 delta] | `[module-slug / N/A]` | `[approved design / owner decision / confirmed gate / other]` | `[path-or-link]` |
 
-No durable delta：`[none / N/A]`
+No durable delta：`none`
 
 Reason：
 
-- [为什么本次只有 task-local / historical-only 结论。]
+- [必填：为什么本次只有 task-local / historical-only 结论。]
 
 ## Shared UI
 

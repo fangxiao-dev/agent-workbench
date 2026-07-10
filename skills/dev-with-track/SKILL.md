@@ -171,11 +171,12 @@ delta；登记不要求当场修改长期文档，后续 compaction/backfill 再
 2. 能否由测试、接口、状态查询或故障演练直接验证？是则属于行为合同。
 
 一句陈述同时含 why 与 how 时拆成两条 delta，不在 PRD 与 spec 原样复制。每条
-登记必须包含 destination、statement、受影响模块和 evidence；没有长期规则时
+登记必须包含 destination、source、statement、受影响模块、authority 和 evidence；没有长期规则时
 登记 `none` 并说明原因。四层目的地为：
 
-- journey/产品级意图 -> `top-level-prd`；顶层 PRD journey 重构完成前只登记
-  pending，不继续扩写现有巨型 PRD；
+- journey/产品级意图 -> `top-level-prd`；顶层 PRD journey 重构完成前写入
+  `docs/module-knowledge/_pending.md`，记录 destination=`top-level-prd`、source、
+  statement 与 authority，不继续扩写现有巨型 PRD；
 - 模块级意图 -> `module-prd`，即
   `docs/module-knowledge/<module>/prd.md`；
 - 模块行为合同 -> `module-spec`，即
@@ -220,7 +221,8 @@ backfill apply 才能首次创建。已有 `prd.md` 可由正常维护流程更�
 8. 把任务证据写进 task ledger 或 `dag.md`。
 9. 把跨任务发现提升到 `findings.md`。
 10. implementation 级关闭、阻塞或延期决策变化时更新 `gate.md`，登记 durable
-    delta（或 `none` + 原因）、destination、statement、受影响模块与 evidence。
+    delta（或 `none` + 原因）、destination、source、statement、受影响模块、
+    authority 与 evidence。
 11. 按角色汇报实现状态：design 状态（如存在）、spec 状态、plan 状态、
     DAG/cohort 状态、触碰的 task ledger、提升的 findings、gate 状态。
 

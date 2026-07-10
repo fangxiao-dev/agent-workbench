@@ -9,7 +9,7 @@ Use this reference when the short routing rules in `SKILL.md` are not enough.
 | `docs/hands-on-knowledge/entry-map.md` | Routing and search strategy. Keep it as a map, not a full index. |
 | `docs/hands-on-knowledge/implementation/` | Reusable implementation patterns, migration notes, verification notes, integration practices, and maintained implementation references. |
 | `docs/hands-on-knowledge/debug/` | Investigations, runbooks, known failure modes, recovery procedures, postmortems, platform traps, and diagnostic references. |
-| `docs/top-level-knowledge/` top-level PRDs | Product/journey-level intent: positioning, users, journeys, global scope/non-scope, outcomes, and success criteria. Before journey restructuring is complete, register new `top-level-prd` deltas as pending instead of expanding existing large PRDs. |
+| `docs/top-level-knowledge/` top-level PRDs | Product/journey-level intent: positioning, users, journeys, global scope/non-scope, outcomes, and success criteria. Before journey restructuring is complete, persist new deltas in project `docs/module-knowledge/_pending.md` with destination=`top-level-prd`, source, statement, and authority; do not expand existing large PRDs. |
 | `docs/module-knowledge/<module>/prd.md` | Module-level intent (`module-prd`): why the module exists and which value slice it owns. Normal maintenance may update an existing file. If absent, ordinary gates and routing write `_pending.md`; only an owner-reviewed backfill apply may create it. |
 | `docs/module-knowledge/<module>/spec.md` | Module behavior contract (`module-spec`): interfaces, states, boundaries, failure/recovery semantics, and directly verifiable acceptance behavior. A subdomain contract may be the narrower home. |
 | `CONTEXT.md` | Canonical project language and vocabulary (`context-language`). |
@@ -46,7 +46,7 @@ Examples:
 Use this flow when the input is a new requirement, changed requirement, PRD cleanup, or product decision rather than implementation/debug experience:
 
 1. Capture new or changed requirements in `docs/exchange/req-*.md` when they still need review, traceability, or owner decisions.
-2. Merge accepted journey/product intent into a top-level PRD. For accepted module intent, update the relevant `prd.md` only when it exists; otherwise register `_pending.md` for an owner-reviewed backfill apply.
+2. Route accepted journey/product intent to a top-level PRD, subject to the pre-restructure pending rule below. For accepted module intent, update the relevant `prd.md` only when it exists; otherwise register `_pending.md` for an owner-reviewed backfill apply.
 3. Use `docs/implementations/<slug>/` when a point-in-time change needs design or execution planning.
 4. Promote verified current behavior into the relevant module `spec.md` or subdomain contract.
 5. Route only reusable implementation or debugging lessons with reverse-lookup value into `docs/hands-on-knowledge/`.
@@ -59,6 +59,11 @@ does not exist, they register `docs/module-knowledge/_pending.md`. Only an owner
 apply may create it. First content still requires evidence from a top-level PRD, approved design,
 owner decision, or confirmed gate, and must establish Purpose, users or journeys, Outcomes,
 Scope/Non-goals, plus links to the top-level PRD and module spec. Code alone is not intent evidence.
+
+Before the top-level PRD journey restructure is complete, persist every `top-level-prd` delta in
+the project's `docs/module-knowledge/_pending.md`. Each record must carry
+destination=`top-level-prd`, source, statement, and authority; do not directly expand the existing
+large PRDs.
 
 ## Examples
 
@@ -88,13 +93,13 @@ Reason: stable project context should not be forced into implementation or debug
 
 Input: `新增一个 reporting workflow 需求，先帮我沉淀一下`
 
-Route: `docs/exchange/req-*.md` first; later merge accepted stable behavior into the relevant product or module PRD.
+Route: `docs/exchange/req-*.md` first; later route accepted intent to the relevant PRD and accepted stable behavior to the relevant module spec.
 
 Reason: a new requirement needs inbox traceability and owner decision history before becoming durable PRD content.
 
 Input: `这个 PRD 太大了，帮我拆成顶层和模块 PRD`
 
-Route: top-level PRDs plus relevant `docs/module-knowledge/<module>/prd.md` files.
+Route: top-level PRDs plus relevant module PRDs. Update an existing `docs/module-knowledge/<module>/prd.md`; if absent, write `_pending.md` and let only an owner-reviewed backfill apply create it.
 
 Reason: PRD structure is a product documentation concern, not hands-on implementation or debug knowledge.
 
@@ -108,7 +113,7 @@ Input: `把这次反复踩到的 API migration trap 沉淀一下`
 
 Route: `impl-knowledge-maintainer` only if the note explains a reusable migration trap, safe pattern, or verification shortcut beyond ordinary design documentation.
 
-Reason: recurring implementation traps can be hands-on knowledge, but ordinary API design decisions belong in design docs.
+Reason: recurring implementation traps can be hands-on knowledge; point-in-time API design belongs in the implementation-local design/plan input, while verified durable behavior belongs in the module spec.
 
 ## Manual Routing Fixtures
 
@@ -118,7 +123,7 @@ Use these fixtures for manual acceptance after changing the routing rules.
 | --- | --- | --- |
 | "Checkout must reject a stale price snapshot and expose a retryable conflict." | `module-spec` -> `docs/module-knowledge/checkout/spec.md` | Yes, update the existing contract. |
 | "Favorites exists so customers can resume recurring purchase intent across sessions." | `module-prd`: update `docs/module-knowledge/favorites/prd.md` if it exists; otherwise `_pending.md` | Existing file: normal update. Missing file: only owner-reviewed backfill apply may create it. |
-| "Suppliers need one journey from catalog setup through first accepted order." | `top-level-prd` | Pending only until the journey-level PRD restructure is complete. |
+| "Suppliers need one journey from catalog setup through first accepted order." | `top-level-prd` -> project `docs/module-knowledge/_pending.md` with source, statement, and authority | Pending only until the journey-level PRD restructure is complete; do not expand the large PRDs. |
 | "Use Customer and Supplier as the canonical actor names across the project." | `context-language` -> `CONTEXT.md` | Yes, update the canonical vocabulary. |
 | "For this migration, introduce an adapter before switching the persisted schema." | change design -> `docs/implementations/<slug>/` | Yes, in the active implementation package; not in evergreen PRD/spec yet. |
 | "The refactor only renamed local helpers and changed no durable behavior or intent." | `none` with reason in the gate | No. |

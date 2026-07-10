@@ -1,6 +1,6 @@
 ---
 name: project-knowledge-manager
-description: Use when preserving, curating, routing, summarizing, or maintaining durable project knowledge and documentation layers, including PRD structure, module PRDs, requirement inboxes, functional designs, implementation plans, and hands-on knowledge with reusable pattern, trap, recovery, or reverse-lookup value.
+description: Use when preserving, curating, routing, summarizing, or maintaining durable project knowledge and documentation layers, including PRD structure, module PRDs/specs, requirement inboxes, implementation-local design/plan inputs, and hands-on knowledge with reusable pattern, trap, recovery, or reverse-lookup value.
 ---
 
 # Project Knowledge Manager
@@ -16,7 +16,7 @@ Hands-on knowledge is reverse-indexed memory for future problem solving: experie
 
 Read `references/routing-taxonomy.md` when:
 
-- routing among PRD, module PRD, requirement inbox, func-design, impl-plan, and hands-on knowledge is ambiguous
+- routing among top-level PRD, module PRD/spec, requirement inbox, implementation-local design/plan inputs, and hands-on knowledge is ambiguous
 - the user asks for docs taxonomy, PRD cleanup, requirement lifecycle, or examples
 - you need neutral examples for final reporting or user explanation
 
@@ -85,8 +85,9 @@ exist; only an owner-reviewed backfill apply may create the first file. Normal m
 update an existing `prd.md`. Evidence for first creation must come from a top-level PRD, approved
 design, owner decision, or confirmed gate, never code alone, and the content must establish
 Purpose, users or journeys, Outcomes, Scope/Non-goals, and links to its top-level PRD and module
-spec. Until the top-level PRD journey restructure is complete, register new `top-level-prd` deltas
-as pending instead of expanding the existing large PRDs.
+spec. Until the top-level PRD journey restructure is complete, persist each new `top-level-prd`
+delta in the project's `docs/module-knowledge/_pending.md` with destination=`top-level-prd`,
+source, statement, and authority instead of expanding the existing large PRDs.
 
 ## Durability Gate
 
@@ -106,7 +107,7 @@ Route elsewhere or ignore:
 
 - ordinary requirements, PRD content, design decisions, and execution plans
 - one-off logs, status updates, or per-session notes that do not change future behavior
-- product or flow rules already covered by PRD, func-design, or executable tests
+- product intent already covered by PRD, or behavior contracts already covered by module spec or executable tests
 - recent feature work whose only argument is "we changed this"
 - requirement refreshes with no new trap, symptom, recovery path, or reverse-lookup shortcut
 
