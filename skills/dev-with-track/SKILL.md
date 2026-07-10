@@ -57,7 +57,7 @@ docs/implementations/<implementation-slug>/
 
 - `design.md`（可选）：implementation-local top design 和稳定文档回写来源：
   产品/PRD 笔记、架构/ARD 笔记、技术栈/运行时笔记、稳定文档回写地图。仅当
-  本次实现产生了应回写 PRD / Func Design / ARD / Tech Stack / hands-on
+  本次实现产生了应回写 top-level/module PRD、module spec、ARD、Tech Stack 或 hands-on
   knowledge 的上层知识时创建；它本身不是稳定文档目的地。不要把它的内容复制
   进 `spec.md`；由 `spec.md` 引用它。
 - `spec.md`（必须）：本 slug 的临时任务级 Func Design / implementation
@@ -129,14 +129,24 @@ implementation workspace。
 
 ## Patch 模式
 
-当用户要求 patch、follow-up、补丁计划、基于已 gate 的实现继续迭代，或已有
-slug 明确拥有该功能时，默认进入 patch 模式：
+当用户明确要求 patch、follow-up、补丁计划，或该 implementation 已经被 owner
+接受并开始执行/完成后出现新增需求、回归修复或增量范围时，进入 patch 模式。
+已有 slug 只说明应复用 implementation workspace；如果当前仍处于需求理解、
+spec/plan/DAG 规划阶段，需求纠正应原地更新现有规划文件，不得仅因 slug 已存在
+就创建 patch plan。
 
 ```text
 patch mode = same slug + updated spec + new patch-plan + retired old plan if completed + retired old dag if completed + new patch-dag when task graph materially changes + continued task numbering
 ```
 
 具体规则：
+
+- 规划期修订：implementation 尚未开始执行时，更新同一 slug 的 `spec.md`、
+  `plan.md`、`dag.md`、`findings.md` 或 `gate.md` 的当前规划状态；不新增
+  `*.patch-plan.md`、`*.patch-dag.md`，也不递增 task ID。
+- 执行期增量：只有明确满足上面的 patch 触发条件时，才创建新的 patch plan；
+  patch 必须说明它相对当前 spec/plan 的 delta，并继续使用该 slug 的 task
+  numbering。
 
 - 复用同一 implementation slug，不为 patch 另建第二个 slug。
 - 原地更新 `spec.md`，使最新合同无歧义。
@@ -150,6 +160,33 @@ patch mode = same slug + updated spec + new patch-plan + retired old plan if com
   控制板。
 - patch task id 从 slug 内最高 `T<number>` 继续编号，不复用、不重排旧编号。
 
+## 长期知识登记
+
+implementation 关闭、阻塞或明确延期时，在 `gate.md` 登记本次产生的 durable
+delta；登记不要求当场修改长期文档，后续 compaction/backfill 再执行压实。
+
+对每条候选陈述先用两问 litmus 分类：
+
+1. 若完全替换实现，只要用户价值不变，该陈述是否仍必须成立？是则属于意图。
+2. 能否由测试、接口、状态查询或故障演练直接验证？是则属于行为合同。
+
+一句陈述同时含 why 与 how 时拆成两条 delta，不在 PRD 与 spec 原样复制。每条
+登记必须包含 destination、statement、受影响模块和 evidence；没有长期规则时
+登记 `none` 并说明原因。四层目的地为：
+
+- journey/产品级意图 -> `top-level-prd`；顶层 PRD journey 重构完成前只登记
+  pending，不继续扩写现有巨型 PRD；
+- 模块级意图 -> `module-prd`，即
+  `docs/module-knowledge/<module>/prd.md`；
+- 模块行为合同 -> `module-spec`，即
+  `docs/module-knowledge/<module>/spec.md` 或子域契约；
+- 项目语言 -> `context-language`，即根 `CONTEXT.md`。
+
+module PRD 惰性创建。首建 evidence 必须来自顶层 PRD、已批准 design、owner
+决策或已确认 gate，不得只从代码反推意图；内容不足以形成 Purpose、用户或
+journey、Outcomes、Scope/Non-goals，以及到顶层 PRD/module spec 的链接时，
+继续登记到 `docs/module-knowledge/_pending.md`。
+
 ## 首读
 
 1. 先读仓库指令：根 `AGENTS.md`、应用/工作区指令和相关验证文档。
@@ -162,7 +199,7 @@ patch mode = same slug + updated spec + new patch-plan + retired old plan if com
 
 ## 操作规则
 
-- 临时 `spec.md` 与稳定 `docs/func-design/` / PRD / ARD 文档保持区分。
+- 临时 `spec.md` 与稳定 module-knowledge / top-level PRD / ARD 文档保持区分。
   稳定文档回写是后续文档维护任务，除非用户明确把它纳入本次实现。
 - 只提升跨任务结论到 `findings.md`。
 - 证据诚实：记录实际运行了什么、跳过了什么、为什么。
@@ -180,8 +217,8 @@ patch mode = same slug + updated spec + new patch-plan + retired old plan if com
 7. 执行或调度下一个受控任务。
 8. 把任务证据写进 task ledger 或 `dag.md`。
 9. 把跨任务发现提升到 `findings.md`。
-10. implementation 级关闭、阻塞或延期决策变化时更新 `gate.md`，含相关的
-    稳定文档回写状态。
+10. implementation 级关闭、阻塞或延期决策变化时更新 `gate.md`，登记 durable
+    delta（或 `none` + 原因）、destination、statement、受影响模块与 evidence。
 11. 按角色汇报实现状态：design 状态（如存在）、spec 状态、plan 状态、
     DAG/cohort 状态、触碰的 task ledger、提升的 findings、gate 状态。
 

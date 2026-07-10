@@ -59,15 +59,28 @@ Notes：
 
 - [记录 N/A 或风险。]
 
-## Spec Backfill
+## Durable Knowledge Registration
 
-- [ ] `spec.md` 中仍有效的长期结论已回写到稳定 PRD / Func Design / ARD，或明确延期。
-- [ ] 本任务临时决策没有被误留在长期稳定文档之外却宣称已沉淀。
-- [ ] 不需要回写的内容已标记为 task-local / historical-only。
+登记不要求本次 gate 当场完成长期文档回写；后续由 compaction/backfill 压实。
+若无 durable delta，填写 `none` 并给出原因。
 
-Backfill notes：
+- [ ] 已用两问 litmus 分类：替换实现后仍必须成立的用户价值属于意图；可由测试、接口、状态查询或故障演练验证的陈述属于行为合同。
+- [ ] 同时包含 why 与 how 的陈述已拆分，没有在 PRD 与 spec 原样复制。
+- [ ] 每条 delta 已填写 destination、statement、受影响模块与 evidence。
+- [ ] `module-prd` 首建 evidence 不是仅从代码反推；内容不足时登记到 `docs/module-knowledge/_pending.md`。
+- [ ] `top-level-prd` 在 journey 重构完成前只登记 pending，未继续扩写现有巨型 PRD。
 
-- [记录已回写路径、延期原因或 N/A。]
+Durable deltas：
+
+| Destination | Statement | Affected modules | Evidence |
+| --- | --- | --- | --- |
+| `[module-spec / module-prd / top-level-prd / context-language / hands-on / other]` | [一句话 delta] | `[module-slug / N/A]` | `[path-or-link / owner decision]` |
+
+No durable delta：`[none / N/A]`
+
+Reason：
+
+- [为什么本次只有 task-local / historical-only 结论。]
 
 ## Shared UI
 

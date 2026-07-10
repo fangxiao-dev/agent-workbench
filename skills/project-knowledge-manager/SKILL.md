@@ -5,7 +5,8 @@ description: Use when preserving, curating, routing, summarizing, or maintaining
 
 # Project Knowledge Manager
 
-Route durable project knowledge and documentation to the right maintained home.
+Route durable project knowledge and documentation to the right maintained home. Keep product
+intent, module intent, module behavior contracts, and point-in-time change design distinct.
 
 This skill is the parent entrypoint for `docs/hands-on-knowledge/` and a router for adjacent long-lived documentation layers. It classifies incoming material, decides which maintainer skill should handle hands-on knowledge, and keeps project docs coherent without duplicating child-skill rules.
 
@@ -54,20 +55,36 @@ Use `debug-knowledge-maintainer` for hands-on diagnostic knowledge:
 
 Use both child skills when a session produced both implementation lessons and debug/recovery lessons. Keep the implementation-facing lesson and diagnostic/recovery lesson separate.
 
-## Requirement Routing
+## Intent And Contract Routing
 
 Route outside child skills when the item is not hands-on implementation or debug knowledge:
 
-- stable product, architecture, domain, milestone, or technology-stack facts -> `docs/top-level-knowledge/`
-- product-level PRD content -> `docs/top-level-knowledge/prd.md`
-- module or domain PRD content -> `docs/top-level-knowledge/prd-*.md`
+- journey/product-level intent -> top-level PRDs under `docs/top-level-knowledge/`
+- module-level intent -> `docs/module-knowledge/<module>/prd.md` (`module-prd`, created lazily)
+- module behavior contracts -> `docs/module-knowledge/<module>/spec.md` or a module subdomain contract (`module-spec`)
+- project language and canonical vocabulary -> root `CONTEXT.md` (`context-language`)
+- stable architecture, milestone, or technology-stack facts -> `docs/top-level-knowledge/`
 - new or changed requirements needing traceability, review, or owner decisions -> `docs/exchange/req-*.md`
 - broad roadmap or milestone strategy -> `docs/epic-plans/` when the repo uses it
-- feature or module design decisions -> `docs/func-design/`
-- temporary coding plans -> `docs/impl-plans/`
+- point-in-time change design and temporary execution plans -> `docs/implementations/<slug>/`
 - mandatory operating rules -> `AGENTS.md` or `CLAUDE.md`, following the repo's canonical agent file
 
-New/changed requirements generally flow: `req` inbox -> product/module PRD after acceptance -> func-design when design details are needed -> impl-plan for execution -> hands-on only for reusable implementation/debug lessons.
+Use two questions for durable deltas:
+
+1. If the implementation were completely replaced but the user value stayed the same, must the statement still hold? If yes, it is intent.
+2. Can tests, interfaces, state queries, or failure drills directly verify it? If yes, it is a behavior contract.
+
+Split statements that contain both why and how; do not duplicate the same statement in PRD and spec.
+New/changed requirements generally flow: `req` inbox -> top-level or module PRD after acceptance ->
+implementation-local design when a change needs design -> module spec after verified behavior becomes
+current contract -> hands-on only for reusable implementation/debug lessons.
+
+Module PRDs are lazy. Evidence for the first `prd.md` must come from a top-level PRD, approved
+design, owner decision, or confirmed gate, never code alone. Until the content can establish
+Purpose, users or journeys, Outcomes, Scope/Non-goals, and links to its top-level PRD and module
+spec, keep the delta in `docs/module-knowledge/_pending.md`. Until the top-level PRD journey
+restructure is complete, register new `top-level-prd` deltas as pending instead of expanding the
+existing large PRDs.
 
 ## Durability Gate
 
@@ -97,7 +114,7 @@ Route elsewhere or ignore:
 2. Confirm completion only when it is unclear whether the task, milestone, implementation, or investigation is done enough to preserve.
 3. Split mixed material into atomic candidate knowledge items using the future lookup question, maintenance owner, source of truth, and action shape. Do not preserve an incident narrative as one doc when it contains multiple reusable lessons.
 4. Apply the durability gate to each candidate.
-5. Classify each item as implementation, debug, both, PRD, requirement inbox, design, planning, top-level, mandatory rule, one-off, stale candidate, or unclear.
+5. Classify each item as implementation, debug, both, module-spec, module-prd, top-level-prd, context-language, requirement inbox, change design, planning, mandatory rule, one-off, stale candidate, or unclear.
 6. Load `impl-knowledge-maintainer` or `debug-knowledge-maintainer` only for hands-on items.
 7. Before changing maintained docs, search existing relevant knowledge and prefer updating existing documents over creating new ones.
 8. If material changes under `docs/hands-on-knowledge/`, evaluate whether `docs/hands-on-knowledge/entry-map.md` needs a routing update.
@@ -109,7 +126,7 @@ The child skills own detailed metadata, curation rules, destination decisions, a
 Report:
 
 - implementation/debug/both-routed items and the docs updated or created
-- PRD, requirement inbox, design, planning, top-level, or mandatory-rule items routed outside hands-on knowledge
+- module-spec, module-prd, top-level-prd, context-language, requirement inbox, change-design, planning, or mandatory-rule items routed outside hands-on knowledge
 - ignored one-offs or unfinished items
 - whether `docs/hands-on-knowledge/entry-map.md` changed, and why
 
