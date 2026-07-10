@@ -22,7 +22,7 @@
 事件溯源 + 快照：
 
 - slug 的 temporary spec / design.md = append-only 事件流（事实源）；
-- 常青文档（module-spec、PRD、ARD、ubiquitous-language、tech-stack、
+- 常青文档（module-spec、PRD、ARD、项目语言（CONTEXT.md）、tech-stack、
   hands-on）= 物化读模型；
 - 回刷 = compaction / checkpoint。
 
@@ -39,7 +39,7 @@
 | 目录结构 | 按模块平铺；单文件过大才升级为子目录，切分维度是子域，永远不按 feature 切 |
 | 粒度控制 | 模块清单是封闭集：新模块须先过清单准入（owner 决策），README 写死目标区间与准入规则 |
 | `_pending.md` 定位 | 仅为加速索引，不是事实源；事实源永远是 slug 目录 |
-| 回刷范围 | 全部常青层（module-spec、PRD、ARD、ubiquitous-language、tech-stack、hands-on），不只 spec |
+| 回刷范围 | 全部常青层（module-spec、PRD、ARD、项目语言（CONTEXT.md）、tech-stack、hands-on），不只 spec |
 | 合入方式 | 定时 routine 只产报告（report 模式）；合入是独立的人工触发步骤（apply 模式） |
 | 机制自优化 | 每轮压实报告作为 `/improve-skill` 的 rubric 证据，回刷 skill 进偏好闭环 |
 
@@ -62,7 +62,7 @@ docs/module-specs/
 
 | 层 | 回答什么 | Home |
 | --- | --- | --- |
-| 产品级意图 | why / 用户得到什么 | `top-level-knowledge/`（prd-*、ard、ubiquitous-language） |
+| 产品级意图 | why / 用户得到什么 | `top-level-knowledge/`（prd-*、ard、tech-stack）与根 `CONTEXT.md`（项目语言） |
 | 模块级契约 | how-it-behaves / 接口·状态机·边界·失败模式·验收 | `module-specs/` |
 | 变更时设计（point-in-time） | 这次怎么改 | `docs/implementations/<slug>/`（dev-with-track） |
 
@@ -71,7 +71,8 @@ docs/module-specs/
 
 ## 模块清单（封闭集）
 
-- 来源：从 `ard.md` + `ubiquitous-language.md` 抽取，单一 owner。
+- 来源：从 `ard.md` + 项目语言文档（本例为根 `CONTEXT.md`；原设计所称
+  `ubiquitous-language.md` 在实例仓库不存在）抽取，单一 owner。
 - 清单即准入闸门：spec 文件只能对应清单内模块；新增模块 = 清单变更 =
   owner 决策。
 - README 写死目标区间（首版建议 10~25 个模块）。目标区间 = 清单允许的
@@ -91,7 +92,7 @@ docs/module-specs/
   ```
 
   目的地枚举：`module-spec/<module>` | `prd-*` | `ard` |
-  `ubiquitous-language` | `tech-stack` | `hands-on`。
+  `context-language` | `tech-stack` | `hands-on`。
 - 同时在受影响的模块 spec 顶部维护真相指针：
   `Pending deltas: <slug-a>, <slug-b>`（未压实期间读者以这些 slug 为准；
   压实后清空）。目标文件是空 stub 时先建 stub 再挂行。
@@ -104,12 +105,19 @@ docs/module-specs/
 
 ### report 模式（默认，定时 routine 跑它，只读）
 
-1. **双源收集**：
-   - 快路径：读 `_pending.md`；
-   - 兜底路径：watermark 对账——读 `_compaction/` 压实日志中上次水位，
-     扫描 `docs/implementations/` 中此后 gate 已关闭的 slug，与
-     `_pending` 比对；漏登 slug 从其 `spec.md` Backfill Candidates /
-     `design.md` Stable Doc Backfill Map 补收。
+1. **三源收集**：
+   - 源1 快路径：读 `_pending.md`；
+   - 源2 watermark 对账：读 `_compaction/` 压实日志中上次水位，扫描
+     `docs/implementations/` 中此后 gate 已关闭的 slug，与 `_pending`
+     比对；漏登 slug 从其 `spec.md` Backfill Candidates / `design.md`
+     Stable Doc Backfill Map 补收。
+   - 源3 无主 commit 对账（抓完全绕过任务包的变更）：
+     `git log --since=<watermark> --name-only`，排除已被 slug 认领的
+     commit（触碰 `docs/implementations/` 或消息含 slug/issue 号），
+     剩余 commit 按触碰路径映射到模块（依赖模块清单与代码接缝的对齐，
+     如 `web/lib/order` → `order-lifecycle`），在报告中列出「未经任务包
+     的模块触碰」清单。只用 commit 元数据（路径 + 消息）；diff 语义
+     抽查仅对报告标红的少数 commit 进行，由 owner/curator 按需执行。
 2. **路由**：目的地判定复用 `project-knowledge-manager` 的
    routing-taxonomy，不另造一套。
 3. **产出报告** `_compaction/YYYY-MM-DD-report.md`：
@@ -121,6 +129,11 @@ docs/module-specs/
    - **全量模块体检**：每个模块 spec 的行数与 Pending 行堆积数，超过
      README 阈值（如 400 行）时给出「升级子目录 / 合并模块」建议。
      单文件过大的守护靠这一项，不靠纪律。
+   - **边界信号**：路由歧义（delta 在两模块间犹豫）、成对挂靠（两模块
+     Pending 总同时出现）、小节自治膨胀、准入压力（新概念找不到家）。
+     发现即在报告中提出边界变更建议；执行走项目 README 的 tombstone
+     协议（旧 spec 改 tombstone、清单修订记录、`_pending` 目的地改写），
+     且清单只跟随 ard 已确认的架构事实，不预测大模块。
 
 ### apply 模式（人工审完报告后触发）
 
@@ -147,6 +160,7 @@ docs/module-specs/
 | 捕获步 + 跳过阈值 | dev-with-track `assets/templates/gate.md` |
 | 三层定位、清单准入、Pending 约定、回刷说明 | 项目 `module-specs/README.md` |
 | func-design → module-spec 定义改写 | `project-knowledge-manager` routing-taxonomy |
+| 哪些改动必须走任务包（行为契约变化必走；typo/纯重构可直连） | 项目 `AGENTS.md` |
 | 回刷流程本身 | 新 skill `backfill-stable-docs`（workbench） |
 
 ## 存量迁移策略
@@ -171,6 +185,7 @@ docs/module-specs/
 | --- | --- |
 | 压实掉链子 → spec 陈旧失信 | 定时 report + gate 阈值提示双触发；Pending deltas 真相指针保证陈旧期不误导 |
 | 捕获漏登 | watermark 对账兜底，事实源在 slug 目录，索引丢条目不丢事实 |
+| 变更完全绕过任务包 | 无主 commit 对账（源3：git log 元数据 + 代码接缝 path→module 映射）；AGENTS.md 写明行为契约变化必须走任务包，但机制不依赖该纪律；不经 git 的外部侧变更（如直接改 Lark 配置）属 readiness/smoke 检查领地，明确不在本机制内 |
 | 粒度失控 | 封闭模块清单 + 准入规则 + 目标区间；单文件过大由报告体检项发现并建议拆分 |
 | 自动合入污染常青文档 | report/apply 分离，合入必经人工审 |
 | 机制本身退化 | improve-skill 闭环，报告即证据 |
