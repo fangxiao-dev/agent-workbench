@@ -18,8 +18,9 @@
 
 1. 建立全项目长期的模块清单与模块级常青知识目录（`docs/module-knowledge/`）：
    每个模块一个目录，`spec.md` 承载行为合同，`prd.md` 承载模块级意图。
-2. 将旧 `func-design` 全量蒸馏为当前模块合同；审核通过后删除旧文档树，
-   provenance 由 Git 历史与迁移台账承担。
+2. 将旧 `func-design` 的当前行为规则全量蒸馏为模块合同，将当前纯模块意图延期
+   登记到 pending；审核通过后删除旧文档树，provenance 由 Git 历史与迁移台账
+   承担。
 3. 以 dev-with-track 任务包为默认工作形态；任务关闭时登记长期规则，定期把
    implementation 产物压实回常青文档。
 
@@ -104,6 +105,10 @@ docs/module-knowledge/
 implementation 任务包记录 point-in-time 变更。四者不得互相替代。层间纪律
 靠固定文件角色（`prd.md` / `spec.md`）保障，不靠目录分离。
 
+module `prd.md` 超过 250 行时触发 owner 内容审查；首建内容不足以形成 Purpose、
+用户或 journey、Outcomes、Scope/Non-goals 以及到顶层 PRD/module spec 的链接时，
+继续保留在 `_pending.md`，不创建薄弱文件。
+
 ## Phase 1：全量迁移
 
 ### 根更名与模块目录化（蒸馏前的机械步）
@@ -115,10 +120,14 @@ implementation 任务包记录 point-in-time 变更。四者不得互相替代�
 3. 重跑正式引用扫描，把仓库内 `docs/module-specs/` 旧字符串全部改到新路径
    （即重做一轮先前骨架引用修复的工作）。
 
+本步只做 archive 路径随根目录的机械迁移，不把旧专题语义猜测性重定向到尚未
+蒸馏完成的 module spec；从旧专题到新合同具体小节的语义重定向留到蒸馏和正式
+引用更新完成后执行。
+
 此后迁移台账、审核记录与全部后续工作只使用新路径。Phase 1 不创建任何
-`prd.md`：旧树中的意图类内容按 `distill` 进对应 `spec.md` 的 scope/non-goals
-小节，或按 `superseded-no-copy` 处理；模块级 PRD 由后续 backfill 在首个意图类
-delta 出现时惰性建档。
+`prd.md`：真正约束模块 authority 的 scope/non-goals 可按 `distill` 进入
+`spec.md`；当前仍有效的纯意图不得塞入 spec 或丢弃，按 `defer-module-prd`
+登记到 `_pending.md`，由 Phase 2 后的 backfill 在具备最小内容时惰性建档。
 
 ### 输入基线与处置台账
 
@@ -133,15 +142,26 @@ prj-supplyer-webapp 旧树实测共 99 个文件：95 Markdown、2 HTML、2 JSON
 | 源文件 | 目标文件/小节 | 处置 | 当前性 | 事实依据 | 起草 | 审核 |
 ```
 
+删除旧树后，verifier 使用 `git ls-tree -r HEAD --name-only --
+docs/module-knowledge/_archive/func-design` 从删除前的 HEAD tree 重放 99 文件覆盖
+检查并与台账对账；无需另建 manifest。该命令必须在旧树已从工作区删除、删除
+commit 尚未提交时运行。
+
+verifier 只提供一个无参数命令，每次全量执行：旧树存在时从工作区枚举，旧树
+不存在时从上述 HEAD tree 枚举，并自动应用对应的删除前/删除后断言。
+
 处置枚举：
 
 - `distill`：当前有效规则写入指定模块 `spec.md`（或子域契约文件）小节；
 - `relocate-generated`：生成物改到新路径并验证可重复生成；
 - `superseded-no-copy`：被替代规则不进入当前合同，台账记录替代依据；
 - `presentation-no-copy`：纯展示附件确认无独有规则后删除。
+- `defer-module-prd`：当前有效的纯模块意图不进入 spec；写入 `_pending.md`，
+  记录目标模块、原始来源与意图 authority，等待后续 backfill 创建或更新
+  `prd.md`。
 
 “全量”表示全部 99 个文件都有可审计处置，不表示把废弃结论原样复制进当前
-模块合同。
+模块合同。每条 `defer-module-prd` 必须在 `_pending.md` 中恰好有一条对应记录。
 
 ### 模块 spec 合同结构
 
@@ -185,16 +205,27 @@ Phase 1 只允许以下目录保留旧引用：
 KaiSpan 删除 `previousContextPath`，保留 `contextPath: docs/kaispan-ui-design`，
 不创建替代路径。
 
+除三种旧路径字符串扫描外，对本次修改过的 Markdown 链接按源文件解析相对
+路径，验证目标文件与 anchor 存在。外部 Lark 文档、routine prompt 和用户级
+junction 使用人工 checklist，不扩展为全仓链接图。
+
 ### 五轮审核
 
 1. **覆盖审核**：99 行、源文件唯一、无遗漏、无 `unmapped`；
 2. **语义审核**：对照代码/测试/顶层文档，正确处理当前、废弃与冲突结论；
-   按模块 cohort 分批由隔离 subagent 执行，逐行给出证据；
+   按模块 cohort 分批由隔离 subagent 执行，逐行给出证据；cohort reviewer 的
+   证据即 Gate 2 分片，最终只汇总核对完整性并确认 owner conflict 清零，不重跑
+   语义审核；
 3. **模块审核**：检查跨模块归属和重复定义；此轮需要合并视图，不得用隔离
    subagent 分批；
 4. **引用审核**：在明确排除范围外，三种旧路径引用均为零；
 5. **删除后审核**：删除旧树后，只读 module-knowledge、当前代码、测试与顶层
-   文档，仍能回答模块合同、状态、失败与边界问题。
+   文档，填写 18×5 链接表；每格只允许“文件#anchor + 一行结论”，回答模块
+   拥有/不拥有什么、核心行为或状态流程、主要失败与恢复语义、跨模块规则由谁
+   拥有、哪些代码或测试验证当前合同。任一格答不出或缺少具体引用即失败。
+
+Gate 5 禁止读取 Git 旧版本只约束语义 reviewer；verifier 使用 `git ls-tree`
+仅做机械覆盖对账，不属于语义输入。
 
 任一轮失败，都不得删除旧树或合入本地 `develop`。
 
@@ -213,6 +244,18 @@ gate 关闭时：
 - 没有长期规则：明确记录“没有”及原因；
 - 登记不要求当场改完长期文档；后续由 backfill report/apply 压实。
 
+长期规则分流使用两问 litmus：
+
+1. 若完全替换实现，只要用户价值不变，该陈述是否仍必须成立？是则属于意图；
+2. 能否由测试、接口、状态查询或故障演练直接验证？是则属于行为合同。
+
+一句陈述同时包含 why 与 how 时拆成两个 delta，不在 prd/spec 两处原样复制。
+gate 保持轻量，只要求 durable delta（或 `none` + 原因）、destination、statement
+与 evidence。创建首份 module PRD 的 evidence 必须来自顶层 PRD、已批准 design、
+owner 决策或已确认 gate，不得仅从代码反推意图；内容不足以形成 Purpose、用户或
+journey、Outcomes、Scope/Non-goals 以及到顶层 PRD/module spec 的链接时，继续
+保留在 `_pending.md`。
+
 routing taxonomy 与 `_pending.md` 的目的地枚举按四层定位改写：
 
 - 模块行为合同 → `docs/module-knowledge/<module>/spec.md`（或子域文件）；
@@ -222,8 +265,12 @@ routing taxonomy 与 `_pending.md` 的目的地枚举按四层定位改写：
 - 项目语言 → 根 `CONTEXT.md`（`context-language`）。
 
 本阶段不新增自动测试。实施必须保留当前 workbench `dev-with-track/SKILL.md`
-中尚未提交的 patch-mode 修订。skill worktree 合入前，全局 junction 继续使用
-当前 `main`。
+中尚未提交的 patch-mode 修订。在 routing taxonomy 末尾加入一张轻量人工 fixture
+表，覆盖 module-spec、module-prd、top-level-prd、context-language、变更时 design
+与无 durable delta 六类输入，列出预期目的地和是否建档，并纳入人工验收。
+在顶层 PRD journey 重构完成前，新增 `top-level-prd` delta 只登记 pending，
+不继续扩写现有两份巨型 PRD。skill worktree 合入前，全局 junction 继续使用当前
+`main`。
 
 ## Phase 3：有界 bootstrap 与稳态回刷
 
@@ -266,6 +313,14 @@ module-knowledge 路径，即使任务未完成也可修复链接，但不得把
 5. 用新 gate 继续真实开发；
 6. Phase 3 skill 在独立 worktree 完成 bootstrap report/apply 试金石；
 7. 审核通过后合入 Phase 3 skill，并最后创建每周 report routine。
+
+Phase 1 保持整分支一次合入，不采用结构 checkpoint 或 cohort 分批合入。迁移
+开始前同步一次本地 `develop`，最终五轮审核开始前再同步一次；若第二次同步触及
+代码、测试、PRD、ARD 或 CONTEXT，Gate 2 必须确认相关事实依据仍有效。
+
+Phase 1 完成后立即为顶层 PRD 按 journey 粗粒度重构单独立项；persona 作为适用
+范围标签，不再继续按 Customer/Supplier surface 扩张。该后继任务不属于本次
+迁移，也不在本设计中预先锁定最终文件名。
 
 ## 风险与守护
 
