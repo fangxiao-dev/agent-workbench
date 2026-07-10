@@ -3,9 +3,11 @@
 ## 来源与状态
 
 - Created at: 2026-07-09
+- Revised at: 2026-07-10
 - Source: brainstorming session（agent-workbench，基于
-  `D:\CodeSpace\TaskManager\20_Sources\2026-06-17-func-design-directory-repositioning.md` 定稿的落地设计）
-- Status: 设计已批准，待实施规划
+  `D:\CodeSpace\TaskManager\20_Sources\2026-06-17-func-design-directory-repositioning.md`
+  定稿，并由 owner 于 2026-07-10 改为全量迁移）
+- Status: 设计已批准，Phase 1/2 待按修订计划完成
 - 首个实例项目: prj-supplyer-webapp
 
 ## 目标
@@ -13,186 +15,227 @@
 把项目文档体系从「一次变更一份文档」演进为「常青真相 + 事件流 + 定期压实」：
 
 1. 建立全项目长期的模块清单与模块级常青 spec（`module-specs/`）。
-2. 存量文档按「骨架 + 归档 + 碰到才刷」处理，不做批量蒸馏。
-3. 以 dev-with-track 任务包为默认工作形态，配套「回刷」机制把 ad-hoc
-   任务产物定期压实回全部常青文档层。
+2. 将旧 `func-design` 全量蒸馏为当前模块合同；审核通过后删除旧文档树，
+   provenance 由 Git 历史与迁移台账承担。
+3. 以 dev-with-track 任务包为默认工作形态；任务关闭时登记长期规则，定期把
+   implementation 产物压实回常青文档。
 
 ## 心智模型
 
 事件溯源 + 快照：
 
-- slug 的 temporary spec / design.md = append-only 事件流（事实源）；
-- 常青文档（module-spec、PRD、ARD、项目语言（CONTEXT.md）、tech-stack、
-  hands-on）= 物化读模型；
-- 回刷 = compaction / checkpoint。
+- slug 内 `spec.md` / `design.md` = 变更事件与事实来源；
+- 常青文档（module-spec、PRD、ARD、项目语言、tech-stack、hands-on）=
+  可直接阅读的当前快照；
+- 回刷 = 对新事件做 compaction / checkpoint；
+- Git 历史 + 迁移台账 = 已删除旧设计层的 provenance。
 
-该模式唯一的死法：压实掉链子 → 读模型陈旧 → 没人信常青文档。本设计的全部
-加固都针对这一点。
+常青文档必须可以独立承载当前真相。旧专题设计不在最终仓库保留副本，也不能
+成为现行文档或工具的运行依赖。
 
 ## 已定决策
 
 | 决策点 | 结论 |
 | --- | --- |
-| 存量 83 个旧 func-design | 维持定稿：建骨架 → 整体归档 `_archive/` → 碰到才刷惰性回填，不批量蒸馏 |
-| 机制层级 | 通用 workbench skill + 项目实例（模块清单、README、Pending 约定属于各项目 repo） |
-| 常青层命名 | `module-specs/`（弃 func-design；design 一词保留给变更时意图，即 slug 内 design.md） |
-| 目录结构 | 按模块平铺；单文件过大才升级为子目录，切分维度是子域，永远不按 feature 切 |
-| 粒度控制 | 模块清单是封闭集：新模块须先过清单准入（owner 决策），README 写死目标区间与准入规则 |
-| `_pending.md` 定位 | 仅为加速索引，不是事实源；事实源永远是 slug 目录 |
-| 回刷范围 | 全部常青层（module-spec、PRD、ARD、项目语言（CONTEXT.md）、tech-stack、hands-on），不只 spec |
-| 合入方式 | 定时 routine 只产报告（report 模式）；合入是独立的人工触发步骤（apply 模式） |
-| 机制自优化 | 每轮压实报告作为 `/improve-skill` 的 rubric 证据，回刷 skill 进偏好闭环 |
+| 存量 func-design | 全量蒸馏；逐文件登记处置；五轮审核后删除整个旧树 |
+| provenance | Git 历史 + task-local 迁移台账；不保留新的 archive/evidence 副本 |
+| 常青层命名 | `module-specs/`；design 一词只用于变更时意图 |
+| 模块清单 | 18 个封闭模块；新增模块需 owner 决策 |
+| 大模块结构 | notifications、product-catalog-pricing、erp-order-documents 预先升级为子域目录 |
+| 真相裁决 | 当前代码/测试 → PRD/ARD/CONTEXT 边界 → 较新设计；仍冲突则 owner gate |
+| Phase 1 引用排除 | 只排除 `docs/exchange/**` 与 `docs/implementations/**` |
+| Phase 2 范围 | gate 模板 + dev-with-track 主说明 + project-knowledge-manager 主说明 + routing taxonomy；不新增自动测试 |
+| Phase 3 首轮 | 用明确的 5 个遗留 implementation slug 做 bootstrap，不无界扫描历史 |
+| report/apply | report 只提案；apply 经 owner 审核后执行，并修复 bootstrap 包旧引用 |
+| worktree | webapp 与 agent-workbench 均在隔离 worktree 开发；未合入 skill 不影响全局 junction |
 
-## 项目实例结构（以 prj-supplyer-webapp 为例）
+## 最终项目结构
 
 ```text
 docs/module-specs/
-  README.md            # 三层定位、模块清单与准入规则、Pending deltas 约定、回刷机制说明
-  _archive/            # 旧 func-design 整体归档，保留 provenance
-  _pending.md          # promotion candidate 索引队列
-  _compaction/         # 回刷报告与压实日志（含 watermark）
+  README.md
+  _pending.md
+  _compaction/
+    README.md
+    bootstrap-2026-07.md       # Phase 3 创建；固定首轮 slug 清单
     YYYY-MM-DD-report.md
-  <module>.md          # 一个模块 = 一个文件（默认）
-  <big-module>/        # 例外：单文件过大时升级
-    README.md          # 模块内索引
-    <sub-domain>.md
+  <15 个低密度模块>.md
+  notifications/
+    README.md
+    email-event-matrix.md
+    _generated/
+      email-event-matrix.lark.md
+      email-event-matrix.lark.json
+  product-catalog-pricing/
+    README.md
+    product-definition.md
+    pricing-and-effective-configuration.md
+    catalog-and-master-data.md
+  erp-order-documents/
+    README.md
+    delivery-notes.md
+    invoices.md
+    shared-lines-sync-and-evidence.md
 ```
 
-三层常青定位（altitude 不同，都常青）：
+最终不存在 `docs/module-specs/_archive/func-design/`。
+
+## 三层常青定位
 
 | 层 | 回答什么 | Home |
 | --- | --- | --- |
-| 产品级意图 | why / 用户得到什么 | `top-level-knowledge/`（prd-*、ard、tech-stack）与根 `CONTEXT.md`（项目语言） |
-| 模块级契约 | how-it-behaves / 接口·状态机·边界·失败模式·验收 | `module-specs/` |
-| 变更时设计（point-in-time） | 这次怎么改 | `docs/implementations/<slug>/`（dev-with-track） |
+| 产品级意图 | why / 用户得到什么 | `docs/top-level-knowledge/` 与根 `CONTEXT.md` |
+| 模块级契约 | how-it-behaves / 接口、状态、边界、失败与验收 | `docs/module-specs/` |
+| 变更时设计 | 这次为什么、怎么改 | `docs/implementations/<slug>/` |
 
-模块 PRD 与模块 spec 的边界：PRD-* = 产品意图/受众价值；module-spec =
-系统行为契约。两者都常青、都模块级，必须保持锐利。
+PRD 描述产品意图和受众价值；module-spec 描述当前系统行为合同；implementation
+任务包记录 point-in-time 变更。三者不得互相替代。
 
-## 模块清单（封闭集）
+## Phase 1：全量迁移
 
-- 来源：从 `ard.md` + 项目语言文档（本例为根 `CONTEXT.md`；原设计所称
-  `ubiquitous-language.md` 在实例仓库不存在）抽取，单一 owner。
-- 清单即准入闸门：spec 文件只能对应清单内模块；新增模块 = 清单变更 =
-  owner 决策。
-- README 写死目标区间（首版建议 10~25 个模块）。目标区间 = 清单允许的
-  模块数量带宽，是粒度的双向护栏：过少说明 spec 会变成大杂烩，过多说明
-  实际在按 feature 切。抽清单时结果落在区间外，先合并或拆分粒度再定稿；
-  接近上限时的正确动作是合并或升级子目录，不是继续铺。
+### 输入基线与处置台账
 
-## 捕获（capture）
+prj-supplyer-webapp 旧树实测共 99 个文件：95 Markdown、2 HTML、2 JSON。
+此前 `module-mapping-dryrun.md` 的「94/94」不能作为覆盖验收：其模块清单映射
+91 个 Markdown，未映射项实际是 `README.md`、`customer-poc-demo-design.md`、
+`2026-06-02-email-event-matrix.lark.md`，但报告误写成 `.lark.json`。
 
-落点：dev-with-track `gate.md` 模板的 Spec Backfill 节升级。
+实施时创建 `migration-ledger.md`，每个旧文件恰好一行：
 
-- gate 关闭时，实施者把「本 slug 改了哪些常青层持久事实」追加进项目
-  `_pending.md`，一行一条：
+```text
+| 源文件 | 目标 module-spec/小节 | 处置 | 当前性 | 事实依据 | 起草 | 审核 |
+```
 
-  ```text
-  | 目的地 | slug | 一句话 delta | 登记日期 |
-  ```
+处置枚举：
 
-  目的地枚举：`module-spec/<module>` | `prd-*` | `ard` |
-  `context-language` | `tech-stack` | `hands-on`。
-- 同时在受影响的模块 spec 顶部维护真相指针：
-  `Pending deltas: <slug-a>, <slug-b>`（未压实期间读者以这些 slug 为准；
-  压实后清空）。目标文件是空 stub 时先建 stub 再挂行。
-- 阈值：无 durable delta 的任务显式勾选跳过，不给琐碎任务加税。
-- 捕获是必过闸门但按「尽力」设计：漏登由回刷的对账兜底，不由纪律兜底。
+- `distill`：当前有效规则写入指定 module-spec 小节；
+- `relocate-generated`：生成物改到新路径并验证可重复生成；
+- `superseded-no-copy`：被替代规则不进入当前合同，台账记录替代依据；
+- `presentation-no-copy`：纯展示附件确认无独有规则后删除。
 
-## 回刷 skill：`backfill-stable-docs`
+“全量”表示全部 99 个文件都有可审计处置，不表示把废弃结论原样复制进当前
+module-spec。
 
-通用 workbench skill，两个模式：
+### Module-spec 合同结构
 
-### report 模式（默认，定时 routine 跑它，只读）
+每个模块入口包含：
 
-1. **三源收集**：
-   - 源1 快路径：读 `_pending.md`；
-   - 源2 watermark 对账：读 `_compaction/` 压实日志中上次水位，扫描
-     `docs/implementations/` 中此后 gate 已关闭的 slug，与 `_pending`
-     比对；漏登 slug 从其 `spec.md` Backfill Candidates / `design.md`
-     Stable Doc Backfill Map 补收。
-   - 源3 无主 commit 对账（抓完全绕过任务包的变更）：
-     `git log --since=<watermark> --name-only`，排除已被 slug 认领的
-     commit（触碰 `docs/implementations/` 或消息含 slug/issue 号），
-     剩余 commit 按触碰路径映射到模块（依赖模块清单与代码接缝的对齐，
-     如 `web/lib/order` → `order-lifecycle`），在报告中列出「未经任务包
-     的模块触碰」清单。只用 commit 元数据（路径 + 消息）；diff 语义
-     抽查仅对报告标红的少数 commit 进行，由 owner/curator 按需执行。
-2. **路由**：目的地判定复用 `project-knowledge-manager` 的
-   routing-taxonomy，不另造一套。
-3. **产出报告** `_compaction/YYYY-MM-DD-report.md`：
-   - 按目的地分组的待归并 delta；
-   - 冲突点（同一模块被多个 slug 改动）与建议的归并方案；
-   - 建议作废的旧结论；
-   - 漏登对账结果（登记率）；
-   - 建议的常青文档 diff（提案形式，不执行）；
-   - **全量模块体检**：每个模块 spec 的行数与 Pending 行堆积数，超过
-     README 阈值（如 400 行）时给出「升级子目录 / 合并模块」建议。
-     单文件过大的守护靠这一项，不靠纪律。
-   - **边界信号**：路由歧义（delta 在两模块间犹豫）、成对挂靠（两模块
-     Pending 总同时出现）、小节自治膨胀、准入压力（新概念找不到家）。
-     发现即在报告中提出边界变更建议；执行走项目 README 的 tombstone
-     协议（旧 spec 改 tombstone、清单修订记录、`_pending` 目的地改写），
-     且清单只跟随 ard 已确认的架构事实，不预测大模块。
+1. Scope、authority、non-goals；
+2. 核心术语与数据合同；
+3. 当前行为、状态和工作流；
+4. 模块边界与依赖；
+5. 失败模式与恢复语义；
+6. 验收与验证依据；
+7. `Pending deltas`。
 
-### apply 模式（人工审完报告后触发）
+正文不得链接即将删除的旧设计。来源到目标小节的追踪只保留在迁移台账和
+Git 历史。
 
-1. 按报告执行合入：更新 module-spec / PRD / ARD 等目标文档；
-2. 清空对应 Pending deltas 行与 `_pending.md` 条目；
-3. 推进压实日志 watermark；
-4. 报告归档。
+### 特殊文件处置
 
-### 触发
+- 旧目录 `README.md`：由新 module-spec README 和迁移台账取代；
+- `customer-poc-demo-design.md`：有效规则分散到对应模块，不保留 demo 副本；
+- `archive/customer-type-base-pricing.md`：当前规则进入 pricing 子域，旧规则
+  标为 superseded；
+- UOM HTML 看板、SKU truth HTML/JSON：用于语义核对，确认无独有当前规则后
+  删除，不建立 evidence 目录；
+- Email Matrix：权威 Markdown 与两个生成物迁到 notifications 子域，脚本改
+  新路径，重复生成一致后删除旧文件。
 
-- 主：定时 routine（首版每周一次，report 模式，跑在项目 repo）；
-- 辅：gate 关闭时若某目的地 pending ≥ 3 条，提示可顺手压实；
-- 人工随时可跑。
+### 引用处理边界
 
-## 机制自优化闭环
+Phase 1 只允许以下目录保留旧引用：
 
-每轮报告中的漏登率、冲突类型、路由误判是回刷机制自身的质量信号。用
-`/improve-skill` 对回刷 skill 做定期优化，报告即 rubric 证据来源。
+- `docs/exchange/**`：临时对齐记录；
+- `docs/implementations/**`：交给 Phase 3 bootstrap。
 
-## 机制编码落点（防失传）
+其余保留文件全部改到新 module-spec，包括 top-level 文档、impl-plans 及其
+archive、project-progress、reviews、test-cases、hands-on、项目内 skills、
+脚本与配置。引用应尽量指向具体子域文件或小节。
 
-| 规则 | 落点 |
-| --- | --- |
-| 捕获步 + 跳过阈值 | dev-with-track `assets/templates/gate.md` |
-| 三层定位、清单准入、Pending 约定、回刷说明 | 项目 `module-specs/README.md` |
-| func-design → module-spec 定义改写 | `project-knowledge-manager` routing-taxonomy |
-| 哪些改动必须走任务包（行为契约变化必走；typo/纯重构可直连） | 项目 `AGENTS.md` |
-| 回刷流程本身 | 新 skill `backfill-stable-docs`（workbench） |
+KaiSpan 删除 `previousContextPath`，保留 `contextPath: docs/kaispan-ui-design`，
+不创建替代路径。
 
-## 存量迁移策略
+### 五轮审核
 
-- 建模块骨架后，83 个旧 func-design 整体移入 `_archive/`；
-- 模块 spec 用「碰到才刷」填充：下次动到某模块时把相关旧设计 + 新变更
-  一起蒸馏进去；
-- 空模块放 stub + 「尚未回填」标记；
-- `docs/impl-plans/` 存量按同策略归档（后续任务归 dev-with-track 任务包）。
+1. **覆盖审核**：99 行、源文件唯一、无遗漏、无 `unmapped`；
+2. **语义审核**：对照代码/测试/顶层文档，正确处理当前、废弃与冲突结论；
+3. **模块审核**：检查跨模块归属和重复定义；
+4. **引用审核**：在明确排除范围外，两种旧路径引用均为零；
+5. **删除后审核**：删除旧树后，只读 module-spec、当前代码、测试与顶层文档，
+   仍能回答模块合同、状态、失败与边界问题。
 
-## 推进顺序
+任一轮失败，都不得删除旧树或合入本地 `develop`。
 
-| Phase | 内容 | 产出地 |
-| --- | --- | --- |
-| 1 | prj-supplyer-webapp 内一个 dev-with-track 任务包：抽模块清单（定 owner、粒度、目标区间）→ 建 `module-specs/` 骨架 + README → 存量归档 | webapp repo |
-| 2 | gate.md 模板捕获步升级；project-knowledge-manager routing-taxonomy 改写 | workbench + 全局 skill |
-| 3 | 回刷 skill + 定时 report routine；跑一次首压实（report → 人工审 → apply）当试金石 | workbench + webapp repo |
+## Phase 2：任务结束时登记长期规则
+
+Phase 2 与 Phase 1 并行在 agent-workbench 隔离 worktree 开发，修改：
+
+- `skills/dev-with-track/assets/templates/gate.md`；
+- `skills/dev-with-track/SKILL.md`；
+- `skills/project-knowledge-manager/SKILL.md`；
+- `skills/project-knowledge-manager/references/routing-taxonomy.md`。
+
+gate 关闭时：
+
+- 有长期规则：登记一句话 delta、目标长期文档和受影响模块；
+- 没有长期规则：明确记录“没有”及原因；
+- 登记不要求当场改完长期文档；后续由 backfill report/apply 压实。
+
+本阶段不新增自动测试。实施必须保留当前 workbench `dev-with-track/SKILL.md`
+中尚未提交的 patch-mode 修订。skill worktree 合入前，全局 junction 继续使用
+当前 `main`。
+
+## Phase 3：有界 bootstrap 与稳态回刷
+
+### Bootstrap
+
+首轮只扫描以下 5 个 slug：
+
+1. `inventory-item-default-replenishment-unit`；
+2. `manufacture-recipe-inventory-granularity`；
+3. `order-snapshot-reuse`；
+4. `product-external-spec-field-cleanup`；
+5. `products-inventory-link-cleanup`。
+
+report 读取全部 5 个并分类 gate 状态。只有 gate/owner 已确认的长期规则可进入
+module-spec；旧链接迁移与规则采纳分开判断。apply 在当前 webapp worktree 中
+把 5 个包的旧设计引用改到新 module-spec，即使任务未完成也可修复链接，但不得
+把其未确认设计写成当前合同。
+
+### 稳态 watermark
+
+稳态 watermark 使用 Phase 2 实际合入并启用的 commit，不再以 2026-07-09
+日期无界扫描历史。bootstrap 完成后，后续 report 才按 watermark 扫描新关闭
+任务和无主 commit。
+
+### Report / apply
+
+- `report`：只读，收集 pending、gate 后漏登和无主 commit，生成建议报告；
+- `apply`：人工审阅报告后触发，更新长期文档、清理 pending、修复获批引用并
+  推进 watermark；
+- 首轮从 agent-workbench Phase 3 worktree 显式调用，不修改全局 junction；
+- owner 审阅首次 report/apply 后，才合入新 skill；每周 routine 最后创建。
+
+## 两仓库交付顺序
+
+1. webapp Phase 1 与 agent-workbench Phase 2 并行完成；
+2. Phase 1 五轮审核全部通过；
+3. webapp 分支先合入本地 `develop`；
+4. agent-workbench 分支随后立即合入 `main`，全局 skill 启用新规则；
+5. 用新 gate 继续真实开发；
+6. Phase 3 skill 在独立 worktree 完成 bootstrap report/apply 试金石；
+7. 审核通过后合入 Phase 3 skill，并最后创建每周 report routine。
 
 ## 风险与守护
 
 | 风险 | 守护 |
 | --- | --- |
-| 压实掉链子 → spec 陈旧失信 | 定时 report + gate 阈值提示双触发；Pending deltas 真相指针保证陈旧期不误导 |
-| 捕获漏登 | watermark 对账兜底，事实源在 slug 目录，索引丢条目不丢事实 |
-| 变更完全绕过任务包 | 无主 commit 对账（源3：git log 元数据 + 代码接缝 path→module 映射）；AGENTS.md 写明行为契约变化必须走任务包，但机制不依赖该纪律；不经 git 的外部侧变更（如直接改 Lark 配置）属 readiness/smoke 检查领地，明确不在本机制内 |
-| 粒度失控 | 封闭模块清单 + 准入规则 + 目标区间；单文件过大由报告体检项发现并建议拆分 |
-| 自动合入污染常青文档 | report/apply 分离，合入必经人工审 |
-| 机制本身退化 | improve-skill 闭环，报告即证据 |
-
-## 开放问题
-
-- 模块清单目标区间的具体数字（首版按 10~25，Phase 1 抽清单时定）。
-- 定时频率（首版每周；跑两轮后按报告体量调整）。
-- 报告与已 apply 报告的保留策略（建议保留全部，`_compaction/` 本身就是
-  压实历史）。
+| 全量蒸馏漏文件 | 99 行唯一处置台账 + task-local verifier |
+| 废弃规则污染当前合同 | 固定真相裁决顺序 + owner conflict gate |
+| 模块边界重叠 | 独立模块审核与跨模块组合复核 |
+| 删除后文档不可用 | clean-room 删除后审核；失败即阻塞合入 |
+| 工具依赖旧路径 | 正式引用全量扫描 + Email Matrix 重复生成验证 |
+| 新 gate 早于新目录启用 | webapp 先合，agent-workbench 随后合 |
+| 首轮 backfill 报告失控 | 固定 5 个 bootstrap slug；稳态 watermark 从 Phase 2 activation commit 起 |
+| worktree 修改影响现用 skill | junction 保持指向当前 `main`；新 skill 从 worktree 显式试跑 |
