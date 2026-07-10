@@ -1,12 +1,14 @@
-# 常青 Module-Spec 体系与回刷机制设计
+# 常青 Module-Knowledge 体系与回刷机制设计
 
 ## 来源与状态
 
 - Created at: 2026-07-09
-- Revised at: 2026-07-10
+- Revised at: 2026-07-10（v2 全量迁移；v3 合并为 module-knowledge 目录 +
+  module PRD 层）
 - Source: brainstorming session（agent-workbench，基于
   `D:\CodeSpace\TaskManager\20_Sources\2026-06-17-func-design-directory-repositioning.md`
-  定稿，并由 owner 于 2026-07-10 改为全量迁移）
+  定稿；owner 于 2026-07-10 先改为全量迁移，再确认常青层合并为
+  `docs/module-knowledge/` 并新增模块级 PRD）
 - Status: 设计已批准，Phase 1/2 待按修订计划完成
 - 首个实例项目: prj-supplyer-webapp
 
@@ -14,7 +16,8 @@
 
 把项目文档体系从「一次变更一份文档」演进为「常青真相 + 事件流 + 定期压实」：
 
-1. 建立全项目长期的模块清单与模块级常青 spec（`module-specs/`）。
+1. 建立全项目长期的模块清单与模块级常青知识目录（`docs/module-knowledge/`）：
+   每个模块一个目录，`spec.md` 承载行为合同，`prd.md` 承载模块级意图。
 2. 将旧 `func-design` 全量蒸馏为当前模块合同；审核通过后删除旧文档树，
    provenance 由 Git 历史与迁移台账承担。
 3. 以 dev-with-track 任务包为默认工作形态；任务关闭时登记长期规则，定期把
@@ -25,8 +28,8 @@
 事件溯源 + 快照：
 
 - slug 内 `spec.md` / `design.md` = 变更事件与事实来源；
-- 常青文档（module-spec、PRD、ARD、项目语言、tech-stack、hands-on）=
-  可直接阅读的当前快照；
+- 常青文档（module-knowledge 的 prd/spec、顶层 PRD、ARD、项目语言、
+  tech-stack、hands-on）= 可直接阅读的当前快照；
 - 回刷 = 对新事件做 compaction / checkpoint；
 - Git 历史 + 迁移台账 = 已删除旧设计层的 provenance。
 
@@ -39,12 +42,16 @@
 | --- | --- |
 | 存量 func-design | 全量蒸馏；逐文件登记处置；五轮审核后删除整个旧树 |
 | provenance | Git 历史 + task-local 迁移台账；不保留新的 archive/evidence 副本 |
-| 常青层命名 | `module-specs/`；design 一词只用于变更时意图 |
+| 常青层根目录 | `docs/module-knowledge/`（由 `module-specs/` 更名）；与 `top-level-knowledge/`、`implementations/` 构成同族三层命名；design 一词仍只用于变更时意图 |
+| 模块目录形态 | 18 个模块全部为目录：`spec.md`（行为合同入口）+ `prd.md`（模块级意图，惰性创建）+ 按需 `_generated/`；不再有平铺单文件与升级协议 |
+| module PRD | 惰性创建：首个意图类 durable delta 出现时才建 `prd.md`，不预建 18 个 stub；Phase 1 不创建任何 prd.md |
+| journey 级意图 | 留在 `docs/top-level-knowledge/` 顶层 PRD；顶层 PRD 可继续粗粒度拆分（现有 2 份不敷使用），不新建中间层 |
 | 模块清单 | 18 个封闭模块；新增模块需 owner 决策 |
-| 大模块结构 | notifications、product-catalog-pricing、erp-order-documents 预先升级为子域目录 |
+| 大模块结构 | notifications、product-catalog-pricing、erp-order-documents 预先带子域契约文件；`spec.md` 为模块入口 |
+| cross-module 规则 | 规则归属主模块 `spec.md`；其他模块在「边界与依赖」小节放指针，不复制 |
 | 真相裁决 | 当前代码/测试 → PRD/ARD/CONTEXT 边界 → 较新设计；仍冲突则 owner gate |
 | Phase 1 引用排除 | 只排除 `docs/exchange/**` 与 `docs/implementations/**` |
-| Phase 2 范围 | gate 模板 + dev-with-track 主说明 + project-knowledge-manager 主说明 + routing taxonomy；不新增自动测试 |
+| Phase 2 范围 | gate 模板 + dev-with-track 主说明 + project-knowledge-manager 主说明 + routing taxonomy（目的地枚举含 module-prd）；不新增自动测试 |
 | Phase 3 首轮 | 用明确的 5 个遗留 implementation slug 做 bootstrap，不无界扫描历史 |
 | report/apply | report 只提案；apply 经 owner 审核后执行，并修复 bootstrap 包旧引用 |
 | worktree | webapp 与 agent-workbench 均在隔离 worktree 开发；未合入 skill 不影响全局 junction |
@@ -52,46 +59,66 @@
 ## 最终项目结构
 
 ```text
-docs/module-specs/
-  README.md
+docs/module-knowledge/
+  README.md                    # 机制文档：清单、角色、准入、压实约定
   _pending.md
   _compaction/
     README.md
     bootstrap-2026-07.md       # Phase 3 创建；固定首轮 slug 清单
     YYYY-MM-DD-report.md
-  <15 个低密度模块>.md
+  <15 个低密度模块>/
+    spec.md                    # 行为合同（模块入口）
+    prd.md                     # 模块级意图；惰性创建，初始不存在
   notifications/
-    README.md
+    spec.md
     email-event-matrix.md
     _generated/
       email-event-matrix.lark.md
       email-event-matrix.lark.json
   product-catalog-pricing/
-    README.md
+    spec.md
     product-definition.md
     pricing-and-effective-configuration.md
     catalog-and-master-data.md
   erp-order-documents/
-    README.md
+    spec.md
     delivery-notes.md
     invoices.md
     shared-lines-sync-and-evidence.md
 ```
 
-最终不存在 `docs/module-specs/_archive/func-design/`。
+最终不存在 `docs/module-knowledge/_archive/func-design/`，也不存在旧根
+`docs/module-specs/`。
 
-## 三层常青定位
+## 四层常青定位
 
 | 层 | 回答什么 | Home |
 | --- | --- | --- |
-| 产品级意图 | why / 用户得到什么 | `docs/top-level-knowledge/` 与根 `CONTEXT.md` |
-| 模块级契约 | how-it-behaves / 接口、状态、边界、失败与验收 | `docs/module-specs/` |
+| 产品级意图 | why / journey 级用户价值 | `docs/top-level-knowledge/`（顶层 PRD，可继续粗粒度拆分）与根 `CONTEXT.md` |
+| 模块级意图 | 该模块为何存在、承载什么价值切片 | `docs/module-knowledge/<module>/prd.md`（惰性创建） |
+| 模块级契约 | how-it-behaves / 接口、状态、边界、失败与验收 | `docs/module-knowledge/<module>/spec.md` 及子域契约文件 |
 | 变更时设计 | 这次为什么、怎么改 | `docs/implementations/<slug>/` |
 
-PRD 描述产品意图和受众价值；module-spec 描述当前系统行为合同；implementation
-任务包记录 point-in-time 变更。三者不得互相替代。
+顶层 PRD 描述产品全貌与 journey 级叙事，下钻引用各模块 `prd.md`；模块
+`prd.md` 描述该模块承载的意图切片；`spec.md` 描述当前系统行为合同；
+implementation 任务包记录 point-in-time 变更。四者不得互相替代。层间纪律
+靠固定文件角色（`prd.md` / `spec.md`）保障，不靠目录分离。
 
 ## Phase 1：全量迁移
+
+### 根更名与模块目录化（蒸馏前的机械步）
+
+蒸馏动工前先完成一次独立的机械结构 commit：
+
+1. `docs/module-specs/` 整体更名为 `docs/module-knowledge/`（含 `_archive/`）；
+2. 18 个平铺 `<module>.md` stub 改为 `<module>/spec.md`；
+3. 重跑正式引用扫描，把仓库内 `docs/module-specs/` 旧字符串全部改到新路径
+   （即重做一轮先前骨架引用修复的工作）。
+
+此后迁移台账、审核记录与全部后续工作只使用新路径。Phase 1 不创建任何
+`prd.md`：旧树中的意图类内容按 `distill` 进对应 `spec.md` 的 scope/non-goals
+小节，或按 `superseded-no-copy` 处理；模块级 PRD 由后续 backfill 在首个意图类
+delta 出现时惰性建档。
 
 ### 输入基线与处置台账
 
@@ -103,22 +130,22 @@ prj-supplyer-webapp 旧树实测共 99 个文件：95 Markdown、2 HTML、2 JSON
 实施时创建 `migration-ledger.md`，每个旧文件恰好一行：
 
 ```text
-| 源文件 | 目标 module-spec/小节 | 处置 | 当前性 | 事实依据 | 起草 | 审核 |
+| 源文件 | 目标文件/小节 | 处置 | 当前性 | 事实依据 | 起草 | 审核 |
 ```
 
 处置枚举：
 
-- `distill`：当前有效规则写入指定 module-spec 小节；
+- `distill`：当前有效规则写入指定模块 `spec.md`（或子域契约文件）小节；
 - `relocate-generated`：生成物改到新路径并验证可重复生成；
 - `superseded-no-copy`：被替代规则不进入当前合同，台账记录替代依据；
 - `presentation-no-copy`：纯展示附件确认无独有规则后删除。
 
 “全量”表示全部 99 个文件都有可审计处置，不表示把废弃结论原样复制进当前
-module-spec。
+模块合同。
 
-### Module-spec 合同结构
+### 模块 spec 合同结构
 
-每个模块入口包含：
+每个模块的 `spec.md` 入口包含：
 
 1. Scope、authority、non-goals；
 2. 核心术语与数据合同；
@@ -133,7 +160,7 @@ Git 历史。
 
 ### 特殊文件处置
 
-- 旧目录 `README.md`：由新 module-spec README 和迁移台账取代；
+- 旧目录 `README.md`：由新 module-knowledge README 和迁移台账取代；
 - `customer-poc-demo-design.md`：有效规则分散到对应模块，不保留 demo 副本；
 - `archive/customer-type-base-pricing.md`：当前规则进入 pricing 子域，旧规则
   标为 superseded；
@@ -149,9 +176,11 @@ Phase 1 只允许以下目录保留旧引用：
 - `docs/exchange/**`：临时对齐记录；
 - `docs/implementations/**`：交给 Phase 3 bootstrap。
 
-其余保留文件全部改到新 module-spec，包括 top-level 文档、impl-plans 及其
-archive、project-progress、reviews、test-cases、hands-on、项目内 skills、
-脚本与配置。引用应尽量指向具体子域文件或小节。
+其余保留文件全部改到新 module-knowledge 路径，包括 top-level 文档、impl-plans
+及其 archive、project-progress、reviews、test-cases、hands-on、项目内 skills、
+脚本与配置。引用应尽量指向具体模块 `spec.md`、子域文件或小节。旧路径共三种：
+`docs/func-design/`、`docs/module-specs/_archive/func-design/`，以及更名后残留
+的 `docs/module-specs/` 本身。
 
 KaiSpan 删除 `previousContextPath`，保留 `contextPath: docs/kaispan-ui-design`，
 不创建替代路径。
@@ -160,10 +189,12 @@ KaiSpan 删除 `previousContextPath`，保留 `contextPath: docs/kaispan-ui-desi
 
 1. **覆盖审核**：99 行、源文件唯一、无遗漏、无 `unmapped`；
 2. **语义审核**：对照代码/测试/顶层文档，正确处理当前、废弃与冲突结论；
-3. **模块审核**：检查跨模块归属和重复定义；
-4. **引用审核**：在明确排除范围外，两种旧路径引用均为零；
-5. **删除后审核**：删除旧树后，只读 module-spec、当前代码、测试与顶层文档，
-   仍能回答模块合同、状态、失败与边界问题。
+   按模块 cohort 分批由隔离 subagent 执行，逐行给出证据；
+3. **模块审核**：检查跨模块归属和重复定义；此轮需要合并视图，不得用隔离
+   subagent 分批；
+4. **引用审核**：在明确排除范围外，三种旧路径引用均为零；
+5. **删除后审核**：删除旧树后，只读 module-knowledge、当前代码、测试与顶层
+   文档，仍能回答模块合同、状态、失败与边界问题。
 
 任一轮失败，都不得删除旧树或合入本地 `develop`。
 
@@ -182,6 +213,14 @@ gate 关闭时：
 - 没有长期规则：明确记录“没有”及原因；
 - 登记不要求当场改完长期文档；后续由 backfill report/apply 压实。
 
+routing taxonomy 与 `_pending.md` 的目的地枚举按四层定位改写：
+
+- 模块行为合同 → `docs/module-knowledge/<module>/spec.md`（或子域文件）；
+- 模块级意图 → `docs/module-knowledge/<module>/prd.md`（`module-prd`；
+  文件不存在时由 apply 首次创建）；
+- journey 级 / 产品级意图 → 顶层 PRD；
+- 项目语言 → 根 `CONTEXT.md`（`context-language`）。
+
 本阶段不新增自动测试。实施必须保留当前 workbench `dev-with-track/SKILL.md`
 中尚未提交的 patch-mode 修订。skill worktree 合入前，全局 junction 继续使用
 当前 `main`。
@@ -199,9 +238,10 @@ gate 关闭时：
 5. `products-inventory-link-cleanup`。
 
 report 读取全部 5 个并分类 gate 状态。只有 gate/owner 已确认的长期规则可进入
-module-spec；旧链接迁移与规则采纳分开判断。apply 在当前 webapp worktree 中
-把 5 个包的旧设计引用改到新 module-spec，即使任务未完成也可修复链接，但不得
-把其未确认设计写成当前合同。
+module-knowledge（合同进 `spec.md`，意图进 `prd.md`）；旧链接迁移与规则采纳
+分开判断。apply 在当前 webapp worktree 中把 5 个包的旧设计引用改到新
+module-knowledge 路径，即使任务未完成也可修复链接，但不得把其未确认设计写成
+当前合同。
 
 ### 稳态 watermark
 
@@ -233,6 +273,8 @@ module-spec；旧链接迁移与规则采纳分开判断。apply 在当前 webap
 | --- | --- |
 | 全量蒸馏漏文件 | 99 行唯一处置台账 + task-local verifier |
 | 废弃规则污染当前合同 | 固定真相裁决顺序 + owner conflict gate |
+| 根更名造成引用断链 | 更名为独立机械 commit；verifier 把 `docs/module-specs/` 列入旧路径清单 |
+| prd/spec 层混淆 | 固定文件角色命名 + routing taxonomy 明确目的地；prd 惰性创建避免空壳 |
 | 模块边界重叠 | 独立模块审核与跨模块组合复核 |
 | 删除后文档不可用 | clean-room 删除后审核；失败即阻塞合入 |
 | 工具依赖旧路径 | 正式引用全量扫描 + Email Matrix 重复生成验证 |
