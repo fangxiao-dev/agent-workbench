@@ -1,0 +1,53 @@
+{
+  "skill_name": "safety-review",
+  "evals": [
+    {
+      "id": 1,
+      "name": "external-mutation-without-idempotency-is-p0",
+      "prompt": "Review a diff from the supplied fixed point that adds a supplier POST retry but has no idempotency key or compensation.",
+      "expected_output": "A P0 BLOCKED finding for external mutation without idempotency or compensation.",
+      "files": [],
+      "expectations": ["Requires the supplied fixed point", "Classifies the issue as P0", "Does not create a new risk ledger"]
+    },
+    {
+      "id": 2,
+      "name": "permission-bypass-is-p0",
+      "prompt": "Review a fixed-point diff that moves an authorization check behind a route that is callable without authentication.",
+      "expected_output": "A P0 BLOCKED finding for bypassing the auth/permission boundary.",
+      "files": [],
+      "expectations": ["Examines the security boundary", "Names the bypass path", "Fails closed"]
+    },
+    {
+      "id": 3,
+      "name": "data-loss-migration-without-rollback-is-p0",
+      "prompt": "Review a fixed-point diff with a destructive migration and no rollback or restore procedure.",
+      "expected_output": "A P0 BLOCKED finding for a data-loss migration without rollback.",
+      "files": [],
+      "expectations": ["Covers data integrity", "Checks failure recovery", "Requires rollback evidence"]
+    },
+    {
+      "id": 4,
+      "name": "dag-verification-gate-triggers-review",
+      "prompt": "A package diff has no auth filenames, but dag.md Verification Gates declares an external write verification. Review from the supplied fixed point.",
+      "expected_output": "The review runs because the existing DAG gate is a safety signal and reports a change map.",
+      "files": [],
+      "expectations": ["Uses Verification Gates as trigger evidence", "Produces a change map", "Does not create a duplicate registration artifact"]
+    },
+    {
+      "id": 5,
+      "name": "gate-data-safety-triggers-review",
+      "prompt": "A package gate.md Data Safety section declares a payment capture. Review from the supplied fixed point.",
+      "expected_output": "The review runs, covers external side effects and concurrency, and records evidence gaps if retry semantics are absent.",
+      "files": [],
+      "expectations": ["Uses Data Safety as trigger evidence", "Covers payment mutation", "Distinguishes P1/P2 from P0"]
+    },
+    {
+      "id": 6,
+      "name": "missing-fixed-point-fails-fast",
+      "prompt": "Review the current payment changes without a comparison point.",
+      "expected_output": "A request for a fixed point rather than a guessed diff or change map.",
+      "files": [],
+      "expectations": ["Does not guess HEAD~1", "Does not report an invented change map"]
+    }
+  ]
+}

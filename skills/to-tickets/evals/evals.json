@@ -1,0 +1,124 @@
+{
+  "skill_name": "to-tickets",
+  "evals": [
+    {
+      "id": 1,
+      "name": "two-ticket-default-draft",
+      "prompt": "Internally call to-tickets for a gated package whose spec declares tickets=true, earns two independently accepted slices, and has a plan.",
+      "expected_output": "Two local Draft ticket files and a runner-neutral handoff.",
+      "files": [],
+      "expectations": [
+        "Defaults to mode=draft",
+        "Writes two Draft files under docs/implementations/<slug>/tickets/",
+        "Uses typed blocking edges and AC evidence",
+        "Does not publish or start implementation"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "single-slice-no-ticket",
+      "prompt": "Draft tickets for a gated package whose spec declares tickets=false and whose acceptance surface earns one slice.",
+      "expected_output": "No tickets directory or ticket file is created.",
+      "files": [],
+      "expectations": [
+        "Reports tickets=false",
+        "Leaves acceptance in spec.md",
+        "Does not create the tickets directory or any ticket file"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "cyclic-publish-fails-atomically",
+      "prompt": "Publish an owner-approved tickets=true draft where ticket T2 is Blocked by implementation:T1 and ticket T1 is Blocked by acceptance:T2.",
+      "expected_output": "Publish fails atomically because the typed dependency graph is cyclic.",
+      "files": [],
+      "expectations": [
+        "Detects the cycle across typed edges",
+        "Fails publish without partial status updates"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "runner-neutral-handoff",
+      "prompt": "Return the result of a valid two-ticket draft.",
+      "expected_output": "A package, ticket, dependency, and evidence summary without execution dispatch.",
+      "files": [],
+      "expectations": [
+        "Returns package, ticket, dependency, and evidence information",
+        "Does not invoke or name an implementation runner",
+        "Does not allocate workers or select runtime work"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "composition-mismatch-fails-closed",
+      "prompt": "Draft a package whose spec says tickets=false but whose acceptance surface earns two independent slices.",
+      "expected_output": "No ticket mutation; an owner decision routes the package back through the Spec gate.",
+      "files": [],
+      "expectations": [
+        "Does not create, delete, or update ticket files",
+        "Does not silently edit spec.md",
+        "Routes to requirement-alignment with a composition revision decision"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "dangling-or-cross-package-reference",
+      "prompt": "Publish T2 with Blocked by implementation:T9, where T9 is absent from the same package but exists under another package slug.",
+      "expected_output": "Publish fails before mutation because dependencies must resolve in the same package.",
+      "files": [],
+      "expectations": [
+        "Rejects the dangling same-package reference",
+        "Does not resolve a ticket from another package",
+        "Leaves all Draft statuses unchanged"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "mid-write-failure-rolls-back",
+      "prompt": "Simulate a replacement failure after the first of two Draft tickets has been staged for publish.",
+      "expected_output": "The journal restores both original Draft files and publish fails.",
+      "files": [],
+      "expectations": [
+        "Does not report publish success during replacement",
+        "Restores every original target from the journal",
+        "Verifies rollback and leaves no persistent transaction artifact"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "draft-never-external",
+      "prompt": "Run default draft for two accepted slices while an external tracker integration is available.",
+      "expected_output": "Only local Draft files are produced.",
+      "files": [],
+      "expectations": [
+        "Does not create or update an external record",
+        "Does not mark either ticket Approved"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "typed-edge-direction",
+      "prompt": "Ticket T2 cannot be implemented until T1 completes; draft the dependency.",
+      "expected_output": "T2 declares Blocked by implementation:T1; T1 does not declare the reverse edge.",
+      "files": [],
+      "expectations": [
+        "Places the edge on the blocked ticket",
+        "Uses implementation as the edge type",
+        "Preserves blocker-to-dependent ordering as T1 then T2"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "wide-refactor-expand-contract",
+      "prompt": "Slice a shared schema rename whose callers cannot all migrate in one green change.",
+      "expected_output": "An expand ticket, bounded migration tickets, and a contract ticket with typed dependencies.",
+      "files": [],
+      "expectations": [
+        "Keeps the old and new form valid during expansion",
+        "Makes each migration batch depend on expand",
+        "Makes contract depend on every migration batch"
+      ]
+    }
+  ]
+}

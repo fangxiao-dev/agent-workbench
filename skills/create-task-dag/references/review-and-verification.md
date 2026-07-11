@@ -1,59 +1,55 @@
 # Review 与验证
 
-worker 返回后或关闭 slice 时读本文件。
+worker 返回后或请求 implementation-level review 时读本文件。共享 acceptance、
+seam 和 Stage 7 规则以
+`docs/skill-design/references/impl-package-composition-contract.md` 为准。
 
 ## Review 层次
 
-- **任务 spec review**：确认 worker 满足了其有界任务契约。
+- **任务 spec review**：确认 worker 满足其有界任务契约。
 - **任务质量 review**：确认 worker 的 patch 可维护且经过本地测试。
-- **Whole-slice review**：确认集成后的 vertical slice 满足原始 slice
-  来源。
+- **Implementation-level review**：调用 `module-review` 的 **Spec 轴**，对
+  固定 comparison point 的完整 implementation 做 contract-fidelity review。
 
-不要只凭任务级通过就关闭 slice。任务级通过会漏掉断裂的 seam、重复的
-fallback 策略、缺失的 route prop、i18n 漂移和外部 smoke 缺口。
+任务级通过不能代替 implementation-level review。create-task-dag 不另行定义
+whole-slice / contract-drift 检查项，也不代替 module-review 的 Standards 轴或
+Spec 轴。
 
-## Main Session 集成检查
+## Main Session 集成与验证
 
-最终 review 前，main session 验证：
+main session 在请求 module-review 前完成：
 
-- 共享契约仍然只有一个含义；
-- 没有两个 worker 实现了互相竞争的 fallback 规则；
-- route/page prop 和共享导出只接线一次；
-- i18n key 在每个 locale 都存在且语义未漂移；
-- 测试覆盖 slice 级行为，不只是孤立 helper；
-- process/progress/handoff/tracking 记录与实际运行一致。
+- 处理已点名的 ownership seam；
+- 汇集 worker 的聚焦测试、集成测试和所需浏览器/外部验证证据；
+- 对账任务的 `contributes-to` / `enables` 目标与已有 evidence producer；
+- 将未完成工作、外部 gate 或人工验证 owner 如实记录。
 
-## 验证 Gate
+UI 改动、外部系统 mutation 的具体验证约束继续由 package plan、repo 指令与
+task verification gates 决定；本 reference 不把它们重定义成独立 review contract。
 
-worker 跑各自 ownership 的聚焦测试；main session 在集成后跑 slice 矩阵。
+## 调用 module-review 的 Spec 轴
 
-UI 改动：
+调用者必须提供：
 
-- 在真实浏览器中验证改动的 route；
-- 未指定 viewport 时覆盖 desktop 和受限 viewport；
-- header、drawer、菜单或浮层变化时记录 sticky/floating 元素几何；
-- 表格/列表布局变化时记录横向 overflow 状态。
+- 固定 comparison point：明确的 commit、commit range、固定 diff 或等价不可变
+  基线；
+- package `spec.md` 与 `plan.md`；
+- 所有相关 Approved ticket、`dag.md` 和可用的 progress/handoff；
+- 已运行验证和未运行 gate 的证据。
 
-外部系统：
-
-- 外部 smoke 只在本地和浏览器证据之后运行；
-- mutation 前打印并确认非生产目标身份；
-- 使用唯一 marker；
-- 记录创建/更新的 record ID；
-- 回读被证明的字段/行为；
-- 清理，或记录保留的残留及清理失败原因。
+请求以 `module-review` 的 Spec 轴为 implementation-level review 的唯一来源；
+其 finding、结论和需要重开的工作按该 skill 的契约记录。若还满足 Standards
+轴的触发条件，遵从 module-review 自身的双轴流程，而不是在此复制审查规则。
 
 ## 最终报告形状
 
-slice 完成时报告：
+implementation 准备交接或关闭时报告：
 
-- 已提交的改动或脏文件；
 - worker cohort 和 main session 处理的 seam；
-- 运行的命令和结果；
-- 浏览器证据；
-- 外部 smoke 运行与否及原因；
-- 残余风险；
-- 最终 whole-slice review 状态。
+- 已运行验证及其证据，未运行 gate 及原因；
+- 固定 comparison point；
+- `module-review` Spec 轴结论；
+- 残余风险和被阻塞的 gate。
 
 ## 持久化
 

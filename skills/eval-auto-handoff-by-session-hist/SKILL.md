@@ -3,7 +3,8 @@ name: eval-auto-handoff-by-session-hist
 description: >
   Evaluate whether a multi-session auto-handoff orchestration chain actually ran
   as designed, by auditing Codex session rollout histories against the skill
-  contracts it claimed to follow (handoff-new-session, orchestrator, etc.).
+  contracts it claimed to follow (handoff-new-session and any planning skill
+  recorded in the history).
   Use whenever the user provides Codex session ids, a handoff slug, or a time
   range and asks to 评价 / 复盘 / 审计 agent 调度是否按预期, review an
   orchestration relay chain, find stuck points or abandoned work across
@@ -21,7 +22,7 @@ description: >
 ## When To Use
 
 - 用户给出一组 Codex session id（或 handoff slug / 时间范围），要求评价 agent 调度是否按预期。
-- 用户要复盘一次 orchestrator / handoff-new-session 驱动的接力执行：卡壳点、放弃点、亮点、优化建议。
+- 用户要复盘一次由规划技能 / handoff-new-session 驱动的接力执行：卡壳点、放弃点、亮点、优化建议。
 
 不要路由到这里：
 
@@ -46,7 +47,7 @@ description: >
 
 - 收集输入：session id 列表（标记为"声称顺序"）、工作 repo 路径、链条声称遵循的 skill。
 - 定位 rollout 文件：`~/.codex/sessions/YYYY/MM/DD/rollout-<timestamp>-<session-id>.jsonl`，记录每个文件的创建时间与大小。session id 是 UUIDv7、按创建时间有序，可作首轮 sanity check——id 序与声称序矛盾时，标记待查证，不要直接替用户"纠正"。
-- 建立 expected-behavior 基线：必读 `handoff-new-session` 的 SKILL.md；session 中实际引用的其他 skill（如 `orchestrator`）动态加入基线。把基线提炼成检查项清单，例如：commit-before-handoff、fresh git facts、handoff reviewer gate、create_thread-before-final、child First Progress Update、runner 只调度不实现。
+- 建立 expected-behavior 基线：必读 `handoff-new-session` 的 SKILL.md；session 中实际引用的其他 skill 动态加入基线。对已退休 skill，只将其历史合同作为审计证据，绝不将其作为当前路由目标。把基线提炼成检查项清单，例如：commit-before-handoff、fresh git facts、handoff reviewer gate、create_thread-before-final、child First Progress Update、runner 只调度不实现。
 - 创建评审工作目录：`<project-root>/agent-eval-<yyyymmdd>/`（放在 git 工作树之外，避免污染仓库），先写 `00-notes.md` 骨架，结构见 `templates/report-structure.md`。
 
 ### 2. Reconstruct The Chain
@@ -54,7 +55,7 @@ description: >
 - 链路还原以双向硬证据为准：父侧 `create_thread` 返回的 thread id ↔ 子侧 `session_meta` 的 `thread_source` / 外层 delegation 信封。digest 分析员负责提取这些字段（见 step 3 的 prompt 模板）。
 - 对账后产出链路表：环号 / session id / 运行窗口 / 时长 / 主要产出。
 - 发现缺环（某环 spawn 的 id 不在用户清单里）：补派一个 digest 分析员处理缺环文件，链补全后再综合。
-- 链头之前可能还有未提供的 session（比如运行 orchestrator 做规划/发 issue 的那个）。不在清单内就在报告中明确声明"未审计"，不要装作评过。
+- 链头之前可能还有未提供的 session（比如执行规划/发 issue 的那个）。不在清单内就在报告中明确声明"未审计"，不要装作评过。
 
 ### 3. Parallel Digests
 

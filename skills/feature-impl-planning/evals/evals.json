@@ -1,0 +1,42 @@
+{
+  "skill_name": "feature-impl-planning",
+  "evals": [
+    {
+      "id": 1,
+      "name": "tickets-only-plan-is-contract-not-task-list",
+      "prompt": "A gated spec declares Composition: tickets=true, dag=false. Create the plan and carry it through the ticket draft cross-check.",
+      "expected_output": "Creates a tickets-only Package Engineering Contract and drafts tickets without creating a DAG or task checklist.",
+      "files": [],
+      "expectations": [
+        "Uses plan → to-tickets draft → cross-check plan order",
+        "Keeps plan task-free and does not call create-task-dag",
+        "Keeps ticket AC evidence and runtime acceptance in ticket files",
+        "Records seam as none or N/A without a seam execution owner"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "only-dag-plan-keeps-execution-in-dag",
+      "prompt": "A gated spec declares Composition: tickets=false, dag=true and has a cross-module seam. Create the plan.",
+      "expected_output": "Creates an only-dag engineering contract and routes task decomposition to create-task-dag without creating tickets or plan checklists.",
+      "files": [],
+      "expectations": [
+        "Records Seam ID, contract owner, acceptance owner, and affected spec AC targets in plan",
+        "Leaves seam execution ownership for dag.md",
+        "Does not create ticket files or a second writable status source"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "composition-change-reruns-gates-before-migration",
+      "prompt": "A no-ticket plan now needs two independently accepted slices. Update Composition and keep working.",
+      "expected_output": "Routes the Composition revision through requirement-alignment, then performs a recorded controlled migration only after both gates pass.",
+      "files": [],
+      "expectations": [
+        "Does not silently edit spec Composition",
+        "Records previous/new, reason, moved content, relocation pointer, and verification",
+        "Removes the old writable maintenance entry point and does not create a per-ticket patch plan"
+      ]
+    }
+  ]
+}

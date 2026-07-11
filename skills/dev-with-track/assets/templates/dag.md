@@ -1,53 +1,60 @@
 # [Implementation Name] DAG
 
-状态：[计划中 / 活跃 / 暂停 / 已关闭 / Retired（gate passed，见当前 patch-dag）]
+> Create this artifact only when `Composition: ..., dag=true`. Its field semantics,
+> readiness and validation are defined by the shared
+> [Impl-Package Composition Contract](../../skill-design/references/impl-package-composition-contract.md).
+
+状态：[PENDING / READY / RUNNING / NEEDS_SEAM / BLOCKED / FAILED / NEEDS-REVALIDATION / DONE / WAIVED / SUPERSEDED]
 创建：[YYYY-MM-DD]
 Spec：[spec.md](spec.md)
 Plan：[plan.md](plan.md)
 Findings：[findings.md](findings.md)
 Gate：[gate.md](gate.md)
 
-本文是 implementation 的并行调度控制面板：记录 cohort、owner、status、gate/evidence 和 seam。不要在这里写长日志；复杂任务下放到 `tasks/Tn-progress.md`，需要单独交接时再创建 `tasks/Tn-handoff.md`。
-
-任务编号在本 slug 内稳定递增。新增任务前检查 `dag.md`、根目录 `*.patch-dag.md`、`tasks/T*-progress.md`、`tasks/T*-handoff.md`、`plan.md` 和根目录 `*.patch-plan.md`，从最高 `T<number>` 继续编号，不复用或重排旧编号。
+`dag.md` is the canonical execution-state source only for an earned DAG. It is not a
+ticket acceptance source. If tickets are also earned, any ticket state below is a
+read-only projection that names its `tickets/<ticket>.md` source.
 
 ## Shared Contracts
 
+- Shared composition contract: [impl-package-composition-contract.md](../../skill-design/references/impl-package-composition-contract.md)
 - [contract / DTO / route prop / external smoke protocol]
 
-## Task Contracts
+## Task Records
 
-| Task | Depends on | Can run with | Primary owned | Conditional seam | Forbidden | Input contract | Output contract | Focused tests | Done when |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | [dependency] | [parallel-safe tasks] | [正常写入范围] | [文件 + 编辑条件] | [禁改] | [input] | [output] | [commands] | [done gate] |
+### T1: [task title]
+
+- Depends on: [Tn / none]
+- Document order: [number]
+- Owner: [main session / named owner]
+- Status: [PENDING / READY / RUNNING / NEEDS_SEAM / BLOCKED / FAILED / NEEDS-REVALIDATION / DONE / WAIVED / SUPERSEDED]
+- Done when: [specific evidence]
+- contributes-to: [<ticket-id>:<AC-id> / spec:<AC-id>]
+- enables: [<acceptance-target> / none]
+- seam: [none / <seam-id>]
+- seam execution owner: [main session / named owner; `none` only when seam is none]
+- Progress ledger: [tasks/T1-progress.md / N/A]
+
+`contributes-to`, `enables`, and seam fields are validated against the shared contract;
+do not duplicate a seam contract or acceptance owner here.
 
 ## DAG Board
 
-| Cohort | Task | Owner | Status | Progress | Handoff | Gate / Evidence | Seam / Notes |
+| Task | Depends on | Owner | Status | Readiness / blocker | Evidence | Progress | Seam |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | T1 [task] | [main / worker] | Planned | [tasks/T1-progress.md](tasks/T1-progress.md) | - | [gate] | [seam] |
+| T1 | [Tn / none] | [owner] | [state] | [prerequisite] | [path/link] | [ledger/N/A] | [seam ID/none] |
 
-Status vocabulary：`Planned` / `Ready` / `Running` / `Needs seam` / `Blocked` / `Integrated` / `Verified local` / `Verified external` / `Deferred`
+## Ticket Status Projection (only tickets=true)
 
-## Task Ledger Index
+> Projection only. Acceptance fact source remains the linked ticket file; update it there.
 
-只在满足触发条件时创建 `tasks/Tn-progress.md`。只在 task 需要单独交接时创建 `tasks/Tn-handoff.md`。
-
-| Task | Progress | Handoff | Why separate |
+| Ticket | Acceptance source | Projected execution view | Last checked |
 | --- | --- | --- | --- |
-| T1 | [tasks/T1-progress.md](tasks/T1-progress.md) | - | [owner/gate/blocker/evidence/etc.] |
+| [ticket-id] | [tickets/<ticket>.md](tickets/<ticket>.md) | [state] | [YYYY-MM-DD] |
 
-## Verification Gates
+## Validation and Last Update
 
-- Local：
-- Browser：
-- External：
-- Review：
-
-## Open Seams
-
-- [seam / owner / next action]
-
-## Last Update
-
-- [YYYY-MM-DD] [meaningful status change]
+- [ ] All `Depends on` references resolve and the task graph is acyclic.
+- [ ] Every task acceptance target resolves to a ticket/spec AC.
+- [ ] Every execution seam has a matching plan seam record and execution owner.
+- [YYYY-MM-DD] [meaningful status/evidence/revalidation change]

@@ -20,10 +20,11 @@
 | prototype | `mattpocock/skills` | `npx skills add mattpocock/skills@prototype -g -y` | 已放入 `skills/prototype/` |
 | setup-matt-pocock-skills | `mattpocock/skills` | `npx skills add mattpocock/skills@setup-matt-pocock-skills -g -y` | 已放入 `skills/setup-matt-pocock-skills/` |
 | tdd | `mattpocock/skills` | `npx skills add mattpocock/skills@tdd -g -y` | 已放入 `skills/tdd/` |
-| to-issues | `mattpocock/skills` | `npx skills add mattpocock/skills@to-issues -g -y` | 已放入 `skills/to-issues/` |
-| to-prd | `mattpocock/skills` | `npx skills add mattpocock/skills@to-prd -g -y` | 已放入 `skills/to-prd/` |
+| to-spec | `mattpocock/skills` | 人工迁移上游 `skills/engineering/to-spec` | Vendored 只读参考（上游 `391a270`），不进入 Impl-Package 主链；repo facts、testing seam 与 user-semantics synthesis 方法已吸收进 `requirement-alignment` |
+| to-tickets | `mattpocock/skills` | 基于上游 `skills/engineering/to-tickets` 本地分叉 | Impl-Package 本地 fork（上游基线 `391a270`）；上游更新只做人工 diff/选择性合并，不直接覆盖 |
 | domain-modeling | `mattpocock/skills` | `npx skills add mattpocock/skills@domain-modeling -g -y` | 已放入 `skills/domain-modeling/` |
 | codebase-design | `mattpocock/skills` | `npx skills add mattpocock/skills@codebase-design -g -y` | 已放入 `skills/codebase-design/` |
+| module-review | `mattpocock/skills` | 人工迁移上游 `skills/engineering/code-review` | 基于 `391a270` 重命名并中文化后放入 `skills/module-review/` |
 | improve-codebase-architecture | `mattpocock/skills` | `npx skills add mattpocock/skills@improve-codebase-architecture -g -y` | 已放入 `skills/improve-codebase-architecture/` |
 | grilling | `mattpocock/skills` | `npx skills add mattpocock/skills@grilling -g -y` | 已放入 `skills/grilling/` |
 | handoff | `mattpocock/skills` | `npx skills add mattpocock/skills@handoff -g -y` | 已放入 `skills/handoff/` |

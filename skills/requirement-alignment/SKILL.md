@@ -1,141 +1,178 @@
 ---
 name: requirement-alignment
-description: Use whenever a new or changed requirement for prj-supplyer-webapp needs to be checked against PRD, ARD, CONTEXT.md project language, or other Top Level Knowledge before Func Design or Implementation Plan work. This is the mandatory first step for feature workflow alignment, demand drift checks, scope clarification, requirement proposals, and deciding whether Top Level Knowledge should change.
+description: Impl-Package 体系的需求对齐与 Spec 阶段：当新建或变更需求需要在 feature design、specification 或 implementation planning 前完成对齐时使用；拥有必过的 Design / Spec gates 及其 design.md / spec.md。
 ---
 
 # Requirement Alignment
 
-Align a requirement input with this repository's stable product knowledge before any Func Design or Implementation Plan is written.
+Run the two mandatory entry gates for an Impl-Package: Design, then Spec. The gates are
+equal requirements. Design is never skipped, even when its standalone `design.md` would
+be empty ceremony.
 
-This skill adapts the intent-discovery parts of `superpowers:brainstorming`, but the project path rules here override the default superpowers document destinations. Do not write to `docs/superpowers/` for this workflow.
+Repository instructions and discovered project conventions determine knowledge sources.
+Do not assume a product domain or impose another workflow's document destinations.
 
-## Purpose
+## Owned Artifacts
 
-Use this skill to turn a raw requirement into an aligned requirement artifact. The output is a compact `docs/exchange/` note that a later design-planning skill can consume without reloading the full conversation.
+Use `docs/implementations/<slug>/` as the canonical package root. This skill owns:
 
-This skill does not create Func Design documents and does not create Implementation Plans.
+- `design.md`, required whenever Design is blocked and optional only for a lightweight
+  Design-passed path whose evidence fits in the spec Design Gate Record;
+- `spec.md`, the required point-in-time implementation contract.
 
-## Required Project Paths
+Use [assets/templates/design.md](./assets/templates/design.md) and
+[assets/templates/spec.md](./assets/templates/spec.md). Do not publish a tracker spec or
+create a second spec for the same package. `feature-impl-planning` consumes the gated
+`spec.md`; it does not own or synthesize a replacement.
 
-Read stable knowledge from:
+Omitting standalone `design.md` is legal only after Design evaluates `PASSED` and the
+lightweight evidence fits in the `Design Gate Record` at the top of `spec.md`. “No design
+file” never means “no Design step.” Requirement source and alignment provenance belong in
+`design.md`; on the lightweight passed path, preserve their minimum durable form in that
+same `Design Gate Record`.
 
-- `docs/top-level-knowledge/prd.md`
-- Relevant PRD files under `docs/top-level-knowledge/`
-- `docs/top-level-knowledge/ard.md` when architecture boundaries, role boundaries, data flow, Lark-backed contracts, order lifecycle, inventory flow, or major feature surfaces are involved
-- `CONTEXT.md` at the repository root for canonical project language and domain vocabulary
-- `docs/hands-on-knowledge/entry-map.md` only when the requirement names a known integration or the project rules require it
+This skill may append to package `findings.md` when research establishes a fact, risk, or
+constraint that later stages can reuse. Keep ordinary research narrative in `design.md`;
+do not create an empty findings ledger when there is no substantive cross-stage finding.
+`dev-with-track` remains the owner of the findings format and final consolidation.
 
-Write the focused requirement artifact to:
+## Discover Project Knowledge
 
-- `docs/exchange/req-YYYYMMDD-HHMM-<topic>.md`
+1. Read every applicable `AGENTS.md` for the target repository and path.
+2. Read the repository's project-context entry point when present or referenced.
+3. Follow its routing to relevant product, architecture, domain, integration,
+   operational, decision, testing, and nearby implementation records.
+4. Inspect focused code and tests where needed to establish current behavior.
+5. Record sources checked and expected knowledge that was absent.
 
-If Top Level Knowledge should change, update only after the user approves the proposed change. The approved long-lived edits go under `docs/top-level-knowledge/`.
+Use the repository's vocabulary and source-of-truth hierarchy. If durable project
+knowledge should change, propose the change against the discovered authoritative source
+and wait for owner approval; never invent a fixed long-lived destination.
+
+## Gate 1: Design (Required)
+
+Design turns the requirement and repository facts into a decision-ready destination. Use
+the eight-section Design Research structure in the design template. The analysis and gate
+judgment always happen before `spec.md` is created. A passed lightweight Design may omit
+the file; a blocked Design may not.
+
+The Design gate passes only when all of these are verifiably true:
+
+- **Destination is answerable:** intended outcome, affected system boundary, and handoff
+  to the implementation contract are explicit.
+- **Repository fit is evidenced:** authority sources and current-state facts have been
+  checked; conflicts and missing knowledge are named.
+- **Choices are decided:** material options and trade-offs have a selected direction and
+  rationale, or an explicit owner decision blocks the gate.
+- **Open Questions are non-blocking for Spec:** every question is resolved, explicitly
+  deferred with owner and consequence, or proven not to affect the contract.
+- **Owner Decisions are durable:** resolved and outstanding decisions are written in
+  `design.md`, or in `spec.md`'s `Design Gate Record` when no design file is earned.
+
+If any criterion fails, create or update `design.md`, record `Design Gate: BLOCKED`, the
+missing evidence, and the owner decision required, and do not create `spec.md` or begin
+the Spec gate.
+
+### Design Boundary
+
+- `Decisions / Rationale` records choices and why they were selected. Put behavior,
+  state, interface, and failure semantics only in `spec.md`; do not copy those contracts
+  into design.
+- `Backfill Candidates` is a non-binding research hint. It is not a durable-delta
+  register, does not authorize stable-document edits, and need not be merged into spec.
+  Canonical durable-delta capture happens at the execution gate and downstream backfill.
+
+## Gate 2: Spec (Required)
+
+Start only after the Design gate passes. Synthesize the point-in-time contract from:
+
+- repository facts and authoritative knowledge, distinguishing facts from assumptions;
+- user-facing semantics and agreed outcomes, using repository domain language;
+- selected seam/interface decisions and the highest practical behavioral testing seams;
+- owner decisions from Design, without copying research narration into the contract.
+
+Use the thick eight-section spec template. The Spec gate passes only when:
+
+- all eight contract sections are present and substantive for the change, including
+  Error Boundaries / Failure Recovery and Constraint Contracts;
+- behavior, state transitions, workflows, boundaries, and failure recovery are
+  internally consistent and actionable without reading the plan;
+- Acceptance Semantics maps each promised outcome or constraint to observable evidence
+  and names any manual verification owner;
+- `Composition: tickets=<true|false>, dag=<true|false>` is justified by the two
+  independent earn conditions, never by S/M/L sizing;
+- blocking owner decisions and unresolved contract ambiguity are zero.
+
+If any criterion fails, record `Spec Gate: BLOCKED` with the exact missing contract or
+decision. Do not hand off to planning. A passing spec records `Spec Gate: PASSED`, date,
+evidence, and approver/owner.
+
+The spec must not contain a `Stable Doc Backfill Map`, durable-delta queue, worker task
+steps, or tracker publication metadata.
 
 ## Workflow
 
-1. Announce that you are using this skill for requirement alignment.
-2. Identify the requirement input and give it a short topic slug.
-3. Read the required Top Level Knowledge files before asking detailed questions.
-4. Use the `superpowers:brainstorming` style of clarification: ask one focused question at a time when the requirement has unresolved product intent, scope, or success criteria.
-5. Produce an alignment proposal for the user before changing long-lived docs.
-6. After user approval, write the exchange artifact. If approved Top Level Knowledge changes exist, update those files in the same pass.
-7. Return only a concise summary, changed paths, and any remaining owner decisions.
+1. Announce use of requirement-alignment and assign a stable descriptive slug.
+2. Discover authoritative project knowledge before detailed clarification.
+3. Ask one focused question at a time for unresolved intent, scope, constraints, success
+   criteria, trade-offs, or owner decisions.
+4. Run Design Research, present the selected direction plus blockers, and evaluate the
+   Design gate before creating `spec.md`.
+5. If Design is blocked, create or update `design.md` with provenance, readiness evidence,
+   blockers, and owner decisions; stop without creating `spec.md`.
+6. If Design passes, either persist its substantive research in `design.md`, or take the
+   lightweight path: create `spec.md` and write the minimum provenance, readiness, and
+   owner-decision evidence into its Design Gate Record. Append reusable, verified
+   cross-stage facts/risks/constraints to an already-needed `findings.md`; do not create
+   it for ordinary research narration.
+7. Synthesize the eight-section `spec.md` and evaluate the Spec gate. Stop when it is
+   blocked.
+8. After both gates pass, hand off the same `spec.md` to `feature-impl-planning`; do not
+   create another spec or publish to a tracker.
 
 ## Alignment Proposal
 
-Before writing or editing long-lived knowledge, present this structure:
+Before writing artifacts or editing long-lived knowledge, present:
 
 ```markdown
 ## Requirement Alignment Proposal
 
 ### Focused Requirement
-<1-3 paragraphs describing the requirement using canonical project terms>
+<requirement using repository terms>
 
-### Top Level Knowledge Fit
-- PRD fit:
-- ARD fit:
-- Project language fit:
+### Authoritative Knowledge Fit
+- Product intent fit:
+- Architecture and constraints fit:
+- Current-state facts:
+- Sources checked:
+- Expected knowledge not found:
 
 ### Drift Or Conflict Check
 - Confirmed alignment:
 - Possible drift:
 - Out of scope:
 
-### Proposed Long-Lived Knowledge Changes
-- File:
-- Change:
-- Reason:
+### Design Direction
+- Selected option and rationale:
+- Open questions:
+
+### Proposed Durable Knowledge Changes
+- File / change / reason, or "None"
 
 ### Owner Decisions
-- <decision question, or "None">
+- <decision, owner, and blocking effect, or "None">
 
 ### Recommended Next Step
-- Write exchange artifact only
-- Write exchange artifact and update Top Level Knowledge
+- Persist Design gate and proceed to Spec
 - Stop for owner decision
 ```
 
-If there are no owner decisions and no Top Level Knowledge edits, the user may approve moving directly to the exchange artifact.
-
-## Exchange Artifact Format
-
-Use this exact structure for `docs/exchange/req-YYYYMMDD-HHMM-<topic>.md`:
-
-```markdown
-# Requirement Alignment: <topic>
-
-## Source
-- Created at: <ISO timestamp>
-- Requirement input: <short quote or summary>
-- Aligned by: requirement-alignment skill
-
-## Focused Requirement
-<the approved requirement description>
-
-## Knowledge Sources Checked
-- `docs/top-level-knowledge/prd.md`
-- `<specific PRD or Top Level Knowledge file>`
-- `CONTEXT.md`
-- `<other file, if used>`
-
-## Alignment Result
-- PRD fit:
-- ARD fit:
-- Project language fit:
-- Scope boundary:
-
-## Top Level Knowledge Changes
-- Updated: `<path>` - <summary>
-- Proposed but not updated: <summary or "None">
-
-## Owner Decisions
-- Resolved:
-- Still needed:
-
-## Handoff To Feature Design Planning
-- Recommended Func Design path: `docs/func-design/YYYY-MM-DD-<topic>.md`
-- Recommended Implementation Plan path: `docs/impl-plans/YYYY-MM-DD-<topic>.md`
-- Notes for design:
-- Notes for verification:
-```
-
-Keep the exchange artifact compact. It should preserve decisions and constraints, not the full discussion transcript.
-
-## Long-Lived Knowledge Rules
-
-- Never silently edit `docs/top-level-knowledge/`.
-- Ask the user to approve the alignment proposal first.
-- Prefer small, explicit edits to the relevant PRD, ARD, or `CONTEXT.md` file.
-- If a term is ambiguous, propose a `CONTEXT.md` update instead of inventing ad hoc wording in the exchange note.
-- If the requirement conflicts with the PRD, stop and ask the user to choose whether the PRD changes or the requirement is rejected/deferred.
-
 ## User-Facing Output
 
-During the workflow, show the user only:
+Return only the slug and package path, both gate results and evidence locations, changed
+files (including `findings.md` only when appended), remaining owner decisions, and whether
+the package may enter implementation planning. Do not describe a blocked gate as
+completed or paste full artifacts after they have been written.
 
-- Summary bullets
-- Drift or conflict bullets
-- Owner decision questions
-- Paths written or changed
-
-Do not paste full intermediate drafts into the main session after the exchange artifact has been written. Reference the file path instead.
+Artifact `Status` and gate `Result` must agree: a Passed status requires `PASSED`, a
+Blocked status requires `BLOCKED`, and neither may be inferred from prose alone.

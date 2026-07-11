@@ -1,0 +1,43 @@
+{
+  "skill_name": "requirement-alignment",
+  "evals": [
+    {
+      "id": 1,
+      "name": "blocked-design-prevents-spec",
+      "prompt": "为一个新的库存同步需求建立 implementation package。目标模块边界和 owner 对外部 provider 的选择尚未决定。",
+      "expected_output": "Records Design Gate: BLOCKED in design.md and stops before creating spec.md.",
+      "files": [],
+      "expectations": [
+        "Evaluates the Design Gate before the Spec gate",
+        "Records the missing destination and required owner decision",
+        "Does not describe the Design step as optional",
+        "Does not create spec.md while Design is blocked"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "passed-design-requires-thick-spec",
+      "prompt": "The Design Gate has passed for a lightweight change with repository evidence. Create the implementation contract.",
+      "expected_output": "Creates a gated thick spec with a minimal Design Gate Record when a standalone design.md is not earned.",
+      "files": [],
+      "expectations": [
+        "Includes Scope, terms/data contracts, behavior/state/workflow, boundaries, Error Boundaries, Constraint Contracts, Acceptance Semantics, and Composition",
+        "Includes failure recovery and observable acceptance evidence",
+        "Records Composition: tickets=<true|false>, dag=<true|false> from independent earn decisions",
+        "Does not create a Stable Doc Backfill Map or durable-delta queue in spec.md"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "blocked-spec-prevents-planning",
+      "prompt": "Design has passed, but the spec draft omits state transitions and a manual verification owner for one acceptance condition. Continue to planning.",
+      "expected_output": "Records Spec Gate: BLOCKED and routes no plan or ticket work forward.",
+      "files": [],
+      "expectations": [
+        "Names the missing contract and evidence ownership",
+        "Does not hand off to feature-impl-planning or to-tickets",
+        "Requires the Spec gate to pass before planning"
+      ]
+    }
+  ]
+}

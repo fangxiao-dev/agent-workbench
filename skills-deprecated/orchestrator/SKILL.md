@@ -27,12 +27,12 @@ description: >
 不要使用本 skill：
 
 - 输入仍是原始需求、PRD 或讨论，还没有 implementation plan：先用 `feature-impl-planning`。
-- 用户只要 issues、不需要把父计划改写成调度面：直接用 `to-issues`。
+- 用户只要 tickets、不需要把父计划改写成调度面：直接用 `to-tickets`。
 - 用户只是要执行已有 issues：转入执行流程，例如 `subagent-driven-development` 或项目执行约定。
 
 ## Required Sub-Skills
 
-- **REFERENCE:** `to-issues`，作为 vertical-slice issue 质量背景；本 skill 的 `Tracker Contract` 是 approval / publish / issue body 的直接规范。
+- **REFERENCE:** `to-tickets`，作为 tracer-bullet vertical slice 与 blocking edges 的质量背景；本 skill 的 `Tracker Contract` 是 approval / publish / issue body 的直接规范。
 - **REFERENCE:** `feature-impl-planning`，仅当输入还不是 bulk implementation plan。
 - **REFERENCE:** `superpowers:writing-plans`，作为 issue 内实现计划的质量标准。
 - **REFERENCE:** `superpowers:subagent-driven-development`，作为后续执行模式。
@@ -58,7 +58,7 @@ description: >
 
 ## Tracker Contract
 
-`to-issues` 是背景参考，不是 mandatory behavior 的唯一来源。本 skill 直接规定 tracker contract：
+`to-tickets` 是背景参考，不是 mandatory behavior 的唯一来源。本 skill 直接规定 tracker contract：
 
 - Approval quiz 必须按 step 7 展示 breakdown，并迭代到用户明确批准。
 - 发布只发生在用户批准 breakdown 且明确要求创建 / 发布 GitHub issues 后。

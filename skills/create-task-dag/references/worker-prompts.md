@@ -5,7 +5,7 @@
 ## 实现 Worker Prompt
 
 ```markdown
-你在为 <slice> 实现 Task <ID>。
+你在为 <implementation package> 实现 Task <ID>。
 
 Workspace：
 - <path>
@@ -15,7 +15,7 @@ Tracking：
 - Progress ledger：<tasks/Tn-progress.md 或 N/A>
 - Handoff ledger：<tasks/Tn-handoff.md 或 N/A>
 
-Slice 目标：
+Implementation 目标：
 - <摘要>
 
 你的 ownership：
@@ -26,6 +26,8 @@ Slice 目标：
 契约：
 - Input：<你消费的 DTO/API/props>
 - Output：<你产出的 DTO/API/行为>
+- Acceptance target：<contributes-to 或 enables 的 ticket-id:AC-id / spec:AC-id>
+- Seam：<none 或 seam-id；若非 none，seam execution owner>
 
 要求：
 - <验收要点>
@@ -45,7 +47,7 @@ Slice 目标：
 - 改动的文件
 - 跑过的测试和结果
 - 编辑过的 conditional seam 文件及原因
-- 非属地 seam 需求，已知时写明 seam owner
+- 非属地 seam 需求，已知时写明 seam execution owner
 - 是否需要人类操作：yes/no
 - 剩余风险
 ```
@@ -76,7 +78,7 @@ worker 返回状态或证据、且存在 `dev-with-track` progress ledger 时，
 
 ```markdown
 status: NEEDS_SEAM
-seam owner: T3 <本地持久化任务>
+seam execution owner: T3 <本地持久化任务>
 reason: 聚焦 service 测试通过，但集成回读依赖 T3 所属的本地持久化，该任务尚未落地
 human action required: no
 ```
@@ -120,24 +122,18 @@ Review Task <ID> 的实现质量。
 返回 APPROVED 或 NEEDS_CHANGES，附具体 finding。
 ```
 
-Whole-slice reviewer：
+Implementation-level review handoff：
 
 ```markdown
-Review 集成后的 slice，不是单个任务。
+调用 `module-review` 的 Spec 轴 review 集成后的完整 implementation，不是单个任务。
 
 输入：
-- 原始 slice/来源/plan；
-- 最终 diff 或 commit 范围；
+- 固定 comparison point（commit、commit range 或固定 diff）；
+- package spec/plan；
+- 相关 Approved tickets 与 DAG；
 - DAG、progress、handoff 或 tracking 产物；
 - 验证证据。
 
-检查：
-- 每条验收项都被覆盖；
-- 任务产出能拼合在一起；
-- 共享契约保持一致；
-- 没有 worker 留下未集成的 seam；
-- 浏览器/外部 smoke 风险已显式列出；
-- 测试矩阵充分，或缺口已点名。
-
-返回 APPROVED 或 NEEDS_CHANGES，finding 按严重度排序。
+按 module-review Spec 轴既有契约返回结论；不要在 create-task-dag 内另定义
+whole-slice 或 contract-drift 检查表。
 ```

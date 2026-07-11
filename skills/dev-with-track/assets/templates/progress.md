@@ -1,41 +1,36 @@
-# [Task ID] [Task Name]
+# [Task ID or Ticket ID] Progress Ledger
 
-状态：[Planned / Ready / Running / Needs seam / Blocked / Integrated / Verified local / Verified external / Deferred]
+> This is an earned recovery ledger, not a second status or acceptance fact source. See
+> [Impl-Package Composition Contract](../../skill-design/references/impl-package-composition-contract.md).
+
+Kind：[task / ticket]
 创建：[YYYY-MM-DD]
-Spec：[../spec.md](../spec.md)
-Implementation：[../plan.md](../plan.md)
-DAG：[../dag.md](../dag.md)
+Canonical execution source：[dag.md / plan.md checklist / tickets/<ticket>.md]
+Acceptance source：[tickets/<ticket>.md / spec.md + gate.md]
 
-本文是局部任务 ledger，只记录恢复这个 task 所需的状态、证据、blocker 和 seam。不要复制 implementation plan。
+Create for a task only when the task-ledger trigger applies. Create for a ticket only when
+the whole ticket is independently resumed or transferred. A ticket ledger may index tasks
+and local recovery context but must not duplicate a task ledger or state an acceptance
+conclusion.
 
-## Scope
+## Restore Context
 
-- Depends on：
-- Can run with：
-- Primary owned：
-- Conditional seam（含编辑条件）：
-- Forbidden：
-- Input contract：
-- Output contract：
-- Focused tests：
-- Done when：
-
-## Current State
-
-- Status：
-- Owner：
-- Last meaningful update：
-- Worker return status：[DONE / DONE_WITH_CONCERNS / NEEDS_SEAM / BLOCKED / N/A]
+- Owner / handoff target:
+- Last meaningful update:
+- Canonical status at restore:
+- Evidence reconciled:
+- Open prerequisite / external gate:
 
 ## Evidence
 
-- [command / browser check / smoke marker / record id / cleanup result]
+- [command / observation / smoke marker / record ID / cleanup]
 
-## Seam / Blocker
+## Revalidation
 
-- [NEEDS_SEAM / blocker / decision / reviewer finding]
+- Upstream rework or reopened input:
+- Affected dependent evidence:
+- Required recheck before dependency may release:
 
 ## Next
 
 1. [next action]
-2. [next action]

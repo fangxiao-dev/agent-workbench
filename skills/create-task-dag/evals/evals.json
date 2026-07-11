@@ -3,66 +3,155 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "We have one vertical slice for an admin inventory UI update. It touches data sources, derived read models, one large React panel, i18n, browser verification, and a Lark smoke. I want the main session to coordinate and subagents to execute. Turn this into a task DAG with file ownership and parallel cohorts.",
-      "expected_output": "A decision-complete task DAG that keeps the work as one vertical slice, splits independent tasks, assigns non-overlapping write ownership, identifies seam files, and schedules external smoke last.",
-      "files": []
+      "prompt": "The package docs/implementations/catalog-readiness/ declares Composition: tickets=true, dag=true. I have plan.md plus the Approved catalog-readiness and admin-panel tickets; their ACs are AC-1 and AC-2. The plan defines the catalog-panel-wiring seam. Build the task DAG for this related ticket subset, with worker ownership and cohorts.",
+      "expected_output": "A task DAG based on the plan plus the supplied Approved ticket subset, not on a guessed single-ticket contract. Every task has contributes-to or enables acceptance targets, and seam work names a seam execution owner.",
+      "files": [],
+      "expectations": [
+        "The output consumes plan.md and the relevant Approved tickets as the effective input.",
+        "The output treats tickets as acceptance units rather than containers for worker tasks.",
+        "Each task records contributes-to or enables with ticket-id:AC-id targets.",
+        "Each seam task records a seam id and seam execution owner.",
+        "The output preserves primary, conditional seam, and forbidden ownership lanes."
+      ]
     },
     {
       "id": 2,
-      "prompt": "I'm worried you are making implementation too serial because two workers might both need page.tsx and admin-i18n.ts. Show me how you would freeze contracts and assign ownership so data/read-model/UI/i18n workers can still run in parallel.",
-      "expected_output": "A coordination plan that uses main-session seam ownership for shared files, has workers report NEEDS_SEAM for unowned changes, and allows parallel work where write sets are disjoint.",
-      "files": []
+      "prompt": "The gated package spec declares Composition: tickets=true, dag=true and plan.md exists. No Draft or Approved ticket files exist yet. Use create-task-dag now.",
+      "expected_output": "A response that stops execution decomposition and routes this precise, gated tickets=true package to to-tickets mode=draft. It does not cut slices itself, create a tracker item, or publish tickets.",
+      "files": [],
+      "expectations": [
+        "The output recognizes the gated spec, tickets=true composition, and package plan required for a draft route.",
+        "The output routes to to-tickets with mode=draft.",
+        "The output confirms there are no existing Draft or Approved tickets before drafting.",
+        "The output does not create delivery slices itself.",
+        "The output does not create or publish tracker work items.",
+        "The output explains that it will return only after plan and relevant Approved tickets are available."
+      ]
     },
     {
       "id": 3,
-      "prompt": "We already have several task-level subagent reviews. Before closing the slice, plan the final review and verification pass for the whole vertical slice, including browser evidence and a Test Environment external smoke.",
-      "expected_output": "A whole-slice review and verification plan that distinguishes task review from slice review, runs integrated local tests, includes browser checks, and gates external smoke on confirmed non-production target identity.",
-      "files": []
+      "prompt": "I only have the Approved billing-ui ticket. Infer the cross-ticket payment-contract seam and generate its DAG.",
+      "expected_output": "A response that declines to infer the seam from a single ticket and asks for the package plan plus the related Approved ticket subset.",
+      "files": [],
+      "expectations": [
+        "The output does not infer a cross-ticket seam contract from one ticket.",
+        "The output requests plan.md and the related Approved ticket subset.",
+        "The output does not fabricate acceptance targets or ownership."
+      ]
     },
     {
       "id": 4,
-      "prompt": "Take this broad implementation plan and first split it into vertical tracker-ready slices, then for each slice build an internal task DAG so workers can run data, UI, i18n, and smoke tasks in parallel where ownership does not overlap.",
-      "expected_output": "A slice-first decomposition that keeps delivery vertical, then maps each slice to a task DAG with dependencies, file ownership, shared contracts, worker cohorts, seam ownership, and final slice-level review.",
-      "files": []
+      "prompt": "The package declares Composition: tickets=false, dag=true. Here are plan.md and the package spec AC-1 through AC-3. Make a DAG for the plan without creating tickets.",
+      "expected_output": "A plan-only DAG that uses spec:AC-n acceptance targets and does not create ticket files or a ticket-status index.",
+      "files": [],
+      "expectations": [
+        "The output accepts plan-only input for tickets=false, dag=true.",
+        "Task acceptance targets use spec:AC-n syntax.",
+        "The output does not invent tickets or a ticket-status projection.",
+        "Any execution seam has a DAG task and its execution owner."
+      ]
     },
     {
       "id": 5,
-      "prompt": "Use create-task-dag standalone. I do not have a dev-with-track workspace and I only want the DAG in this handoff message. Split a Checkout pricing-lock slice into worker cohorts and final review gates.",
-      "expected_output": "A standalone DAG artifact in the response or handoff, with no requirement to create docs/implementations, while still including contracts, cohorts, ownership, seams, verification gates, and final review.",
+      "prompt": "I have one package plan and its Approved tickets. We need data/read-model/UI/i18n workers to run concurrently even though page.tsx and a locale file are shared. Show the DAG ownership and cohort design.",
+      "expected_output": "A coordination plan with frozen contracts, non-overlapping primary ownership, conditional seam ownership for shared files, NEEDS_SEAM handling, and acceptance-target traceability.",
       "files": [],
       "expectations": [
-        "The output does not require or create a dev-with-track workspace.",
-        "The output provides the DAG artifacts inline or in the requested handoff form.",
-        "The output still includes task contracts, parallel cohorts, ownership boundaries, integration seams, verification gates, and final review.",
-        "The output makes persistence optional rather than mandatory.",
-        "The output does not invent process.md, Tn-evidence.md, Tn-review.md, or Tn-notes.md artifacts."
+        "The output freezes shared contracts before dispatch.",
+        "The output uses primary, conditional seam, and forbidden ownership lanes.",
+        "The output keeps planned integration work as NEEDS_SEAM rather than BLOCKED.",
+        "The output links each worker task to acceptance targets."
       ]
     },
     {
       "id": 6,
-      "prompt": "We already have docs/implementations/inventory-ui/ with plan.md and dag.md. Use create-task-dag to assign subagents, but persist the scheduling output into the tracked workspace roles.",
-      "expected_output": "A tracked-mode DAG plan that maps stable scope to plan.md, live task contracts/cohorts/status to dag.md, durable task state to Tn-progress.md, handoffs to Tn-handoff.md, findings to findings.md, and closure to gate.md.",
+      "prompt": "Worker-level reviews are done. Review the whole implementation against its spec after integration at the fixed commit range abc123..def456, using plan.md, the related Approved tickets, dag.md, and verification evidence.",
+      "expected_output": "A handoff to module-review's Spec axis with the supplied fixed comparison point and package artifacts; it does not define a second whole-slice or drift checklist.",
       "files": [],
       "expectations": [
-        "The output treats dev-with-track as an optional persistence target, not a prerequisite for using the skill.",
-        "Stable scope or acceptance changes are mapped to plan.md.",
-        "Task contracts, cohorts, ownership, status, seams, and verification gates are mapped to dag.md.",
-        "Durable task-local state is mapped to tasks/Tn-progress.md and task transfer to tasks/Tn-handoff.md.",
-        "Cross-task findings go to findings.md and final review or closure goes to gate.md.",
-        "The output does not invent process.md, Tn-evidence.md, Tn-review.md, or Tn-notes.md artifacts."
+        "The output invokes module-review's Spec axis for implementation-level review.",
+        "The output carries the fixed commit range and relevant package inputs.",
+        "The output distinguishes task review from implementation-level review.",
+        "The output does not create an independent whole-slice review rubric."
       ]
     },
     {
       "id": 7,
-      "prompt": "This is a bulk implementation spec, not sliced yet: rebuild supplier admin inventory, product SKU workbench, derived products, i18n, Chrome verification, and Lark smoke. Use create-task-dag.",
-      "expected_output": "A response that does not draw one oversized DAG immediately. It proposes using to-issues in slicing-only mode, asks the user to confirm before slicing, and stops before tracker publication unless explicitly requested.",
+      "prompt": "Use create-task-dag standalone. I can provide an approved plan and related Approved tickets, but I do not have a dev-with-track workspace. Put the task DAG in this handoff message.",
+      "expected_output": "A standalone DAG artifact in the response or handoff, with no requirement to create docs/implementations, while retaining task contracts, cohorts, ownership boundaries, acceptance targets, seams, verification gates, and the implementation-review handoff.",
       "files": [],
       "expectations": [
-        "The output recognizes the source is broad and unsliced.",
-        "The output proposes using to-issues to create vertical slices before drawing task DAGs.",
-        "The output asks the user to confirm before doing the slicing step.",
-        "The output says to stop before tracker publication unless explicitly requested.",
-        "The output does not treat the entire bulk spec as one slice."
+        "The output treats persistent tracking as optional rather than mandatory.",
+        "The output provides the DAG in the requested handoff form.",
+        "The output retains acceptance-target traceability and seam execution ownership.",
+        "The output does not invent process.md, Tn-evidence.md, Tn-review.md, or Tn-notes.md artifacts."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "The package has plan.md and three related ticket files, all with Status: Draft. The owner has not approved the complete set yet. Generate the task DAG now.",
+      "expected_output": "A response that does not create a DAG or restart drafting. It waits for explicit owner approval, then routes the same draft set to to-tickets mode=publish before accepting the Approved subset.",
+      "files": [],
+      "expectations": [
+        "The output recognizes that the plan exists and the tickets are Draft rather than missing.",
+        "The output does not route the already-drafted set back to to-tickets mode=draft.",
+        "The output requires explicit owner approval before to-tickets mode=publish.",
+        "The output does not mark Draft tickets Approved itself or create a task DAG early."
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "The package claims Composition: tickets=false, dag=true, but its spec gate has not passed and it contains no stable AC identifiers. Use create-task-dag to make a plan-only DAG.",
+      "expected_output": "A response that routes to requirement-alignment to repair the Design/Spec gate and composition inputs. It does not route to to-tickets draft, invent spec:AC-n targets, or create a DAG.",
+      "files": [],
+      "expectations": [
+        "The output recognizes tickets=false, dag=true as the plan-only DAG form but rejects missing gated spec/AC input.",
+        "The output routes to requirement-alignment rather than to-tickets mode=draft.",
+        "The output does not fabricate composition, acceptance targets, or a replacement spec."
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "The package has Composition: tickets=true, dag=true and all ticket implementation blockers are released. DAG task T2 has Depends on: T1, but T1 was reopened after an upstream change and is NEEDS-REVALIDATION. Is T2 actionable?",
+      "expected_output": "T2 is not actionable: task-DAG dependencies are independent of ticket blockers, and T1 must return to a dependency-releasing DAG state before T2 starts.",
+      "files": [],
+      "expectations": [
+        "The output evaluates T2's Depends on edge as well as ticket implementation blockers.",
+        "The output treats NEEDS-REVALIDATION as non-releasing.",
+        "The output does not describe this deterministic filter as worker scheduling or leasing."
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "The plan defines seam checkout-contract with a contract owner, acceptance owner, and affected targets checkout-ui:AC-2 and checkout-api:AC-1. DAG task T8 records checkout-contract and its execution owner. T8 is DONE, but the acceptance owner has not accepted seam evidence. Can either ticket close?",
+      "expected_output": "Neither affected ticket can close. The plan remains canonical for contract and acceptance ownership; the DAG task owns only execution, and an unaccepted seam blocks every affected acceptance target.",
+      "files": [],
+      "expectations": [
+        "The output distinguishes plan contract owner, plan acceptance owner, and DAG execution owner.",
+        "The output uses the seam's affected acceptance targets rather than task completion alone.",
+        "The output blocks closure until the acceptance owner records seam acceptance."
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "A tickets=true, dag=true package has Approved ticket invoice-export with AC-1 and AC-2. The DAG maps T3 to invoice-export:AC-1, but AC-2 has neither a contributing/enabling task nor a named manual verification owner. Begin execution.",
+      "expected_output": "A response that refuses the execution start gate until invoice-export:AC-2 has a planned evidence producer or named manual verification owner; task DONE status cannot infer coverage.",
+      "files": [],
+      "expectations": [
+        "The output identifies the missing AC coverage gap before execution.",
+        "The output requires a task producer or named manual verification owner for AC-2.",
+        "The output does not infer acceptance from T3 or create a fake task."
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "The gated spec declares Composition: tickets=true, dag=false. The tickets are Approved and have AC-level evidence plans. Use create-task-dag to create worker tasks and a dag.md.",
+      "expected_output": "A response that rejects DAG creation because dag=false. It leaves task decomposition absent, retains ticket-local AC evidence planning, and refers to the shared no-DAG contract rather than creating dag.md.",
+      "files": [],
+      "expectations": [
+        "The output recognizes tickets=true, dag=false as a valid no-DAG composition.",
+        "The output does not create dag.md, worker tasks, or a ticket-status index.",
+        "The output keeps acceptance traceability at the ticket AC evidence-plan level."
       ]
     }
   ]

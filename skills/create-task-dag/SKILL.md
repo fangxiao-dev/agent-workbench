@@ -1,29 +1,63 @@
 ---
 name: create-task-dag
 description: >
-  当 vertical slice、implementation plan、spec、PRD、handoff 或 tracked
-  implementation 需要变成支持并行执行的 task DAG 时使用。触发场景：分解
-  slice、画/建 task DAG、分配 ownership、冻结契约、调度 worker、集成 seam、
-  或执行最终 whole-slice review。
+  Impl-Package 体系的执行分解阶段：当已批准的 package plan 与相关 ticket
+  子集需要变成 task DAG 时使用。触发场景：画/建 task DAG、分配 ownership、
+  冻结契约、协调 worker、集成 seam，或请求 module-review 的 Spec 轴。
 ---
 
 # Create Task DAG
 
-把一个 vertical slice 或已切片的来源变成可派发的 worker cohort：明确的
-ownership、稳定的契约、集成 seam 和最终的 slice 级 review。
+把已批准的 implementation package 输入变成可执行的 worker task DAG：明确
+ownership、稳定的契约、集成 seam 和验证交接。它只做 **execution decomposition**；
+delivery slice / ticket 的验收切分归 `to-tickets`。
 
-来源是宽泛的 implementation plan、bulk 实现请求、spec、PRD 等未切片材料时，
-不要闷头画一张超大 DAG。先提议用 `to-issues` 的 vertical slicing 流程，并在
-执行切片前征得用户确认。`to-issues` 用 slicing-only 模式：切片草案经用户
-确认即止，除非用户明确要求，不进入 tracker 发布步骤。用户确认切片或提供
-已切片来源后，再在每个 slice 内部或跨 slice 的共享契约工作上画 task DAG。
-并行发生在交付边界内部，不以丢失 vertical 验收 gate 为代价。DAG 含横向
-前置任务时，写明哪些 slice gate 消费它们。
+本 skill 的共享语义唯一引用
+`docs/skill-design/references/impl-package-composition-contract.md`。不得在本
+skill 重定义 canonical status、readiness resolution、composition migration、
+Stage 7 或 seam 关闭规则。
+
+## 输入与路由边界
+
+可开始 DAG execution decomposition 的有效输入只能是以下两种：
+
+1. `tickets=true, dag=true`：package `plan.md` + **相关且 Approved 的 ticket
+   子集**；该子集必须足以读取其受影响的 acceptance target 和 plan 中的 seam
+   contract。
+2. `tickets=false, dag=true`：package `plan.md`；其 acceptance target 由
+   package 的 `spec.md` 提供。
+
+调用者可将上述 plan 作为 standalone 输入提供，本 skill 的 DAG 产物也可只留在
+对话或 handoff；持久化始终可选。若只有单一 ticket，不能据此猜测跨 ticket
+seam contract，必须要求 plan + 相关 Approved ticket 子集。
+
+按 Composition 与 artifact 状态路由，不能一律重开 draft：
+
+- gated `spec.md` 明确为 `tickets=false, dag=true`，且有 plan 与稳定
+  `spec:AC-n`：直接使用 plan 创建 DAG；不进入 `to-tickets`。
+- gated `spec.md` 明确为 `tickets=true, dag=true`，已有 plan、尚无 Approved
+  ticket、且没有 Draft ticket：才路由 `to-tickets mode=draft`。
+- 同一组合已有 Draft ticket：等待明确 owner approval，然后路由
+  `to-tickets mode=publish`；本 skill 不把 Draft 标为 Approved。
+- gated `spec.md` 明确为 `tickets=true, dag=true`，已有相关 Approved ticket
+  子集：开始 DAG 输入校验。
+- `tickets=true, dag=false` 或 `tickets=false, dag=false`：不调用本 skill 创建
+  task-decomposition artifact；no-DAG task/seam 限制只引用共享 contract 第 3 节。
+- Composition 未决、Composition 与现有 artifact 不一致，或 gated spec 缺少
+  所需 AC：路由 `requirement-alignment` 修复 Design/Spec gate。
+- gated spec 已就绪但缺 `plan.md`：路由 `feature-impl-planning` 生成 plan；
+  宽泛或未成 package 的输入同样先走 `requirement-alignment`，不得跳到
+  `to-tickets`。
+- 只有单一 Approved ticket，且需要跨 ticket seam：请求 package plan + 相关
+  Approved ticket 子集；不得自行推断 seam。
+
+本 skill 不切 slice、不发布 tracker，也不把 draft 变成 Approved ticket。只有
+完成相应上游输入后，才继续画 task DAG。
 
 ## 持久化映射
 
 持久化可选。本 skill 可独立使用：把 DAG 产物输出到对话内、当前 plan、
-handoff、tracker 笔记或用户指定的进度文档；不要求先有 tracking workspace。
+handoff 或用户指定的进度文档；不要求先有 tracking workspace。
 
 存在 `dev-with-track` implementation workspace 时，优先落入它的文件角色。
 本节是唯一的映射来源：
@@ -41,13 +75,15 @@ handoff、tracker 笔记或用户指定的进度文档；不要求先有 trackin
 
 ## 运行原则
 
-- **Slice**：垂直交付单元，带用户可见行为、验收标准、完整测试矩阵、浏览器
-  证据，必要时含外部 smoke。
-- **Task DAG**：解锁并行 worker 的内部依赖图。
-- **Main session**：调度者、契约 owner、seam owner、集成验证者、外部
-  把关者。
+- **Ticket**：delivery slice 与验收单元；它不是 worker task 的包含容器。
+- **Task DAG**：执行依赖与 worker 协调图；task 可贡献给多个 ticket AC，seam
+  task 不属于单一 ticket。
+- **Main session**：协调者、集成验证者、外部把关者；它只有在 plan seam
+  record 被明确指定时才是 contract/acceptance owner，或在 DAG task 被指定时才是
+  seam execution owner。
 - **Worker**：单任务或窄 cohort 的有界实现者。
-- **Final reviewer**：任务产出集成后的 whole-slice reviewer。
+- **Implementation reviewer**：由 `module-review` 的 Spec 轴在固定 review
+  point 上审查完整 package 的 contract fidelity。
 
 不要因为存在共享文件就串行化实现。给共享文件明确 ownership，让 worker
 上报 seam 需求，而不是越界编辑。
@@ -63,22 +99,23 @@ handoff、tracker 笔记或用户指定的进度文档；不要求先有 trackin
 
 ## 工作流
 
-### 1. 立足 Slice
+### 1. 校验已批准输入
 
-读活跃的 slice、implementation plan、spec、handoff、仓库指令和相关验证
-文档。plan 和 spec 通常由 `feature-impl-planning` 产出在
-`docs/implementations/<slug>/`。来源宽泛未切片时，用
-`references/slice-to-dag.md`，并在以 slicing-only 模式调用 `to-issues` 前
-征得用户确认。识别：
+读 package plan、相关 Approved tickets（若 `tickets=true`）、spec 的
+Composition/AC 定义、仓库指令和相关验证文档。plan 和 spec 通常由
+`feature-impl-planning` / `requirement-alignment` 产出在
+`docs/implementations/<slug>/`。来源不满足输入契约时，读
+`references/slice-to-dag.md` 并按缺失原因路由。识别：
 
-- 最终行为与验收标准；
+- 所有将被 task 贡献或启用的 acceptance target；
 - 当前分支与脏状态；
 - 外部 mutation 权限与红线；
 - 可能的共享 seam 文件；
 - 需要的本地、浏览器和外部验证。
 
-完成标准：main session 能说出 vertical slices、必须交付什么、不能碰什么、
-哪些决策仍真正属于 owner。
+完成标准：main session 能说出受影响 acceptance target、必须交付什么、不能
+碰什么、哪些 decisions 仍真正属于 owner；未批准或缺失的 ticket 不得作为
+DAG 输入。
 
 ### 2. 冻结共享契约
 
@@ -101,8 +138,9 @@ handoff、tracker 笔记或用户指定的进度文档；不要求先有 trackin
 把 DAG 记录进用户要求的载体；存在 `dev-with-track` workspace 时按上方
 持久化映射落盘。
 
-完成标准：每个任务都有依赖、可并行邻居、ownership lanes、聚焦测试和完成
-标准；每个 vertical slice 点名验收前必须完成的任务和 seam。
+完成标准：每个任务都有依赖、可并行邻居、ownership lanes、聚焦测试、完成
+标准、acceptance contribution/enablement 与 seam execution owner；每个
+acceptance target 的证据生产者或人工验证 owner 可被追溯。
 
 ### 4. 派发并行 Worker Cohort
 
@@ -113,7 +151,7 @@ prompt 从 DAG ownership lanes 生成；不要手写比 DAG 更窄或更宽的 o
 清单。共享 seam 文件留给 main session 或一个明确点名的 seam worker。
 
 完成标准：每个 worker 拿到有界 prompt，不可能把自己的任务误当成整个
-slice。
+implementation。
 
 ### 5. 集成 Seam
 
@@ -126,19 +164,21 @@ main session 处理跨任务 seam：
 - 测试矩阵缺口；
 - worker 产出之间的冲突。
 
-完成标准：集成后的 worktree 是一个连贯的 vertical slice，不是相邻的任务
+完成标准：集成后的 worktree 是一个连贯 implementation，不是相邻的任务
 孤岛。
 
-### 6. Review 并验证整个 Slice
+### 6. Review 并验证完整 Implementation
 
-用 `references/review-and-verification.md`：任务 review、最终 review 和
-验证 gate。
+用 `references/review-and-verification.md`：任务 review、验证 gate 和
+implementation-level review 的调用方式。
 
-任务级 review 不够。集成后，针对原始 slice/来源和完整 diff 派发或执行
-whole-slice review。
+任务级 review 不够。集成后，调用 `module-review` 的 **Spec 轴**审查完整
+implementation。调用者必须提供固定 comparison point（固定 commit、diff 范围
+或等价固定基线），以及 package spec、plan、相关 tickets、DAG 和验证证据；本
+skill 不另行定义 implementation-level 检查项。
 
-完成标准：本地集成测试、必要的浏览器检查、外部 smoke gate 和最终 review
-状态都被诚实记录。
+完成标准：本地集成测试、必要的浏览器检查、外部 smoke gate 和 module-review
+Spec 轴的固定点结论都被诚实记录。
 
 ## 输出契约
 
@@ -146,8 +186,8 @@ whole-slice review。
 
 ```markdown
 ## Task DAG
-| Task | Depends on | Can run with | Primary owned | Conditional seam | Forbidden | Gate |
-| --- | --- | --- | --- | --- | --- | --- |
+| Task | Depends on | Can run with | Primary owned | Conditional seam | Forbidden | Acceptance target | Seam | Gate |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
 ## Shared Contracts
 - ...
@@ -169,5 +209,5 @@ whole-slice review。
 - 派发的 worker cohort；
 - main session 处理的 seam；
 - 实际运行的测试和浏览器/外部检查；
-- 最终 whole-slice review 结果；
+- `module-review` Spec 轴的固定点 review 结果；
 - 剩余风险或被阻塞的 gate。
