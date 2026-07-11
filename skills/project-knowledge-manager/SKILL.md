@@ -5,8 +5,7 @@ description: Use when preserving, curating, routing, summarizing, or maintaining
 
 # Project Knowledge Manager
 
-Route durable project knowledge and documentation to the right maintained home. Keep product
-intent, module intent, module behavior contracts, and point-in-time change design distinct.
+Route durable project knowledge and documentation to the right maintained home. Keep product intent, module intent, module behavior contracts, and point-in-time change design distinct.
 
 This skill is the parent entrypoint for `docs/hands-on-knowledge/` and a router for adjacent long-lived documentation layers. It classifies incoming material, decides which maintainer skill should handle hands-on knowledge, and keeps project docs coherent without duplicating child-skill rules.
 
@@ -74,20 +73,9 @@ Use two questions for durable deltas:
 1. If the implementation were completely replaced but the user value stayed the same, must the statement still hold? If yes, it is intent.
 2. Can tests, interfaces, state queries, or failure drills directly verify it? If yes, it is a behavior contract.
 
-Split statements that contain both why and how; do not duplicate the same statement in PRD and spec.
-New/changed requirements generally flow: `req` inbox -> top-level or module PRD after acceptance ->
-implementation-local design when a change needs design -> module spec after verified behavior becomes
-current contract -> hands-on only for reusable implementation/debug lessons.
+Split statements that contain both why and how; do not duplicate the same statement in PRD and spec. New/changed requirements generally flow: `req` inbox -> top-level or module PRD after acceptance -> implementation-local design when a change needs design -> module spec after verified behavior becomes current contract -> hands-on only for reusable implementation/debug lessons.
 
-Module PRDs are lazy. Ordinary gates and project-knowledge maintenance must register a
-`module-prd` delta in `docs/module-knowledge/_pending.md` whenever the module `prd.md` does not
-exist; only an owner-reviewed backfill apply may create the first file. Normal maintenance may
-update an existing `prd.md`. Evidence for first creation must come from a top-level PRD, approved
-design, owner decision, or confirmed gate, never code alone, and the content must establish
-Purpose, users or journeys, Outcomes, Scope/Non-goals, and links to its top-level PRD and module
-spec. Until the top-level PRD journey restructure is complete, persist each new `top-level-prd`
-delta in the project's `docs/module-knowledge/_pending.md` with destination=`top-level-prd`,
-source, statement, and authority instead of expanding the existing large PRDs.
+Module PRDs are lazy. Ordinary gates and project-knowledge maintenance must register a `module-prd` delta in `docs/module-knowledge/_pending.md` whenever the module `prd.md` does not exist; only an owner-reviewed backfill apply may create the first file. Normal maintenance may update an existing `prd.md`. Evidence for first creation must come from a top-level PRD, approved design, owner decision, or confirmed gate, never code alone, and the content must establish Purpose, users or journeys, Outcomes, Scope/Non-goals, and links to its top-level PRD and module spec. Until the top-level PRD journey restructure is complete, persist each new `top-level-prd` delta in the project's `docs/module-knowledge/_pending.md` with destination=`top-level-prd`, source, statement, and authority instead of expanding the existing large PRDs.
 
 ## Durability Gate
 

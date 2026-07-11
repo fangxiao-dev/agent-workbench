@@ -49,14 +49,9 @@ Use this flow when the input is a new requirement, changed requirement, PRD clea
 4. Hand verified module behavior to `backfill-stable-docs`; it decides the owning module contract and compaction action.
 5. Route only reusable implementation or debugging lessons with reverse-lookup value into `docs/hands-on-knowledge/`.
 
-Treat `req` files as inbox and audit records, not final long-term PRDs. Module-layer classification,
-first-PRD gates, pending handling, and intent/contract splitting are owned by
-`backfill-stable-docs`; this taxonomy only routes work to that maintainer.
+Treat `req` files as inbox and audit records, not final long-term PRDs. Module-layer classification, first-PRD gates, pending handling, and intent/contract splitting are owned by `backfill-stable-docs`; this taxonomy only routes work to that maintainer.
 
-Before the top-level PRD journey restructure is complete, persist every `top-level-prd` delta in
-the project's `docs/module-knowledge/_pending.md`. Each record must carry
-destination=`top-level-prd`, source, statement, and authority; do not directly expand the existing
-large PRDs.
+Before the top-level PRD journey restructure is complete, persist every `top-level-prd` delta in the project's `docs/module-knowledge/_pending.md`. Each record must carry destination=`top-level-prd`, source, statement, and authority; do not directly expand the existing large PRDs.
 
 ## Examples
 

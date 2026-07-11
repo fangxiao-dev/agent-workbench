@@ -1,12 +1,6 @@
 # [Implementation Name] Gate
 
-状态：[开放 / 等待人工确认 / 已通过 / 未通过]
-创建：[YYYY-MM-DD]
-Spec：[spec.md](spec.md)
-Plan：[plan.md](plan.md)
-DAG：[dag.md](dag.md)
-对应 findings：[findings.md](findings.md)
-Evidence：[path-or-link]
+状态：[开放 / 等待人工确认 / 已通过 / 未通过] 创建：[YYYY-MM-DD] Spec：[spec.md](spec.md) Plan：[plan.md](plan.md) DAG：[dag.md](dag.md) 对应 findings：[findings.md](findings.md) Evidence：[path-or-link]
 
 本文记录当前 implementation 是否可以关闭、阻塞、延期，或转入人工判断。不要用单个 task 通过代替 implementation gate 通过。
 
@@ -61,10 +55,7 @@ Notes：
 
 ## Durable Knowledge Registration
 
-登记不要求本次 gate 当场完成长期文档回写；后续由 compaction/backfill 压实。
-若无 durable delta，填写 `none` 并给出原因。
-Durable deltas 表与 No durable delta 字段互斥：保留并填写其中一种，删除另一种。
-约束型 delta（禁止事项、信任边界、精度、provider 义务、负依赖）也是 durable delta。
+登记不要求本次 gate 当场完成长期文档回写；后续由 compaction/backfill 压实。 若无 durable delta，填写 `none` 并给出原因。 Durable deltas 表与 No durable delta 字段互斥：保留并填写其中一种，删除另一种。 约束型 delta（禁止事项、信任边界、精度、provider 义务、负依赖）也是 durable delta。
 
 - [ ] 若完全替换实现但用户价值不变，该陈述仍必须成立，则登记为意图候选。
 - [ ] 若可由测试、接口、状态查询或故障演练直接验证，则登记为行为合同候选。
