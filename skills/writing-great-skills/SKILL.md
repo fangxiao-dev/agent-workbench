@@ -58,6 +58,10 @@ Check every line for **relevance**: does it still bear on what the skill does?
 
 Then hunt **no-ops** sentence by sentence, not just line by line: run the no-op test on each sentence in isolation, and when one fails, delete the whole sentence rather than trim words from it. Be aggressive — most prose that fails should go, not be rewritten.
 
+## Markdown prose
+
+Code line-length rules do not apply to Markdown prose. Keep one logical paragraph or list item on one physical line; use line breaks only to express a semantic block boundary. Never hard-wrap natural-language prose in the middle of a term, inline code span, or link merely to satisfy an 80-character convention.
+
 ## Leading words
 
 A **leading word** is a compact concept already living in the model's pretraining that the agent thinks with while running the skill (e.g. _lesson_, _fog of war_, _tracer bullets_). Repeated throughout the text (though not necessarily - a strong leading word might only be needed once), it accumulates a distributed definition and anchors a whole region of behaviour in the fewest tokens, by recruiting priors the model already holds.
