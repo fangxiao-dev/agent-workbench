@@ -10,8 +10,7 @@ Use this reference when the short routing rules in `SKILL.md` are not enough.
 | `docs/hands-on-knowledge/implementation/` | Reusable implementation patterns, migration notes, verification notes, integration practices, and maintained implementation references. |
 | `docs/hands-on-knowledge/debug/` | Investigations, runbooks, known failure modes, recovery procedures, postmortems, platform traps, and diagnostic references. |
 | `docs/top-level-knowledge/` top-level PRDs | Product/journey-level intent: positioning, users, journeys, global scope/non-scope, outcomes, and success criteria. Before journey restructuring is complete, persist new deltas in project `docs/module-knowledge/_pending.md` with destination=`top-level-prd`, source, statement, and authority; do not expand existing large PRDs. |
-| `docs/module-knowledge/<module>/prd.md` | Module-level intent (`module-prd`): why the module exists and which value slice it owns. Normal maintenance may update an existing file. If absent, ordinary gates and routing write `_pending.md`; only an owner-reviewed backfill apply may create it. |
-| `docs/module-knowledge/<module>/spec.md` | Module behavior contract (`module-spec`): interfaces, states, boundaries, failure/recovery semantics, and directly verifiable acceptance behavior. A subdomain contract may be the narrower home. |
+| `docs/module-knowledge/` | Module intent and behavior contracts. Route module-layer deltas to `backfill-stable-docs`; it owns module PRD/spec classification, pending registration, lazy PRD creation, and compaction. |
 | `CONTEXT.md` | Canonical project language and vocabulary (`context-language`). |
 | `docs/top-level-knowledge/` | Stable project, architecture, product, domain, or technology-stack facts that are not better represented by a PRD or module PRD. |
 | `docs/exchange/req-*.md` | Requirement inbox, change request, or mini-PRD draft. Use these to capture new or changed requirements, discussion context, and owner decisions before they are merged into stable docs. |
@@ -30,8 +29,7 @@ Ask these questions for each candidate:
 2. Which source of truth keeps it correct: code/tests, deploy script, PRD, design doc, runbook, or operating rule?
 3. Is the action diagnostic, implementation-facing, verification/release-facing, product-facing, or mandatory process?
 4. Would merging it with a neighboring lesson make either one harder to find or maintain?
-5. If implementation were replaced but user value stayed the same, must it still hold? If yes, route it as intent.
-6. Can tests, interfaces, state queries, or failure drills directly verify it? If yes, route it as a behavior contract.
+5. Does it belong to the module intent/behavior layer? If yes, hand it to `backfill-stable-docs` instead of duplicating that skill's classification rules here.
 
 If two lessons differ on any of those axes, route them separately and cross-link if useful.
 
@@ -46,19 +44,14 @@ Examples:
 Use this flow when the input is a new requirement, changed requirement, PRD cleanup, or product decision rather than implementation/debug experience:
 
 1. Capture new or changed requirements in `docs/exchange/req-*.md` when they still need review, traceability, or owner decisions.
-2. Route accepted journey/product intent to a top-level PRD, subject to the pre-restructure pending rule below. For accepted module intent, update the relevant `prd.md` only when it exists; otherwise register `_pending.md` for an owner-reviewed backfill apply.
+2. Route accepted journey/product intent to a top-level PRD, subject to the pre-restructure pending rule below. Route accepted module-layer deltas to `backfill-stable-docs`.
 3. Use `docs/implementations/<slug>/` when a point-in-time change needs design or execution planning.
-4. Promote verified current behavior into the relevant module `spec.md` or subdomain contract.
+4. Hand verified module behavior to `backfill-stable-docs`; it decides the owning module contract and compaction action.
 5. Route only reusable implementation or debugging lessons with reverse-lookup value into `docs/hands-on-knowledge/`.
 
-Treat `req` files as inbox and audit records, not final long-term PRDs. If a statement contains both
-why and how, split it into separate intent and contract deltas instead of copying it into both homes.
-
-Ordinary gates and project-knowledge maintenance never create the first module PRD: when the file
-does not exist, they register `docs/module-knowledge/_pending.md`. Only an owner-reviewed backfill
-apply may create it. First content still requires evidence from a top-level PRD, approved design,
-owner decision, or confirmed gate, and must establish Purpose, users or journeys, Outcomes,
-Scope/Non-goals, plus links to the top-level PRD and module spec. Code alone is not intent evidence.
+Treat `req` files as inbox and audit records, not final long-term PRDs. Module-layer classification,
+first-PRD gates, pending handling, and intent/contract splitting are owned by
+`backfill-stable-docs`; this taxonomy only routes work to that maintainer.
 
 Before the top-level PRD journey restructure is complete, persist every `top-level-prd` delta in
 the project's `docs/module-knowledge/_pending.md`. Each record must carry
@@ -99,9 +92,9 @@ Reason: a new requirement needs inbox traceability and owner decision history be
 
 Input: `这个 PRD 太大了，帮我拆成顶层和模块 PRD`
 
-Route: top-level PRDs plus relevant module PRDs. Update an existing `docs/module-knowledge/<module>/prd.md`; if absent, write `_pending.md` and let only an owner-reviewed backfill apply create it.
+Route: top-level PRDs plus `backfill-stable-docs` for the module layer.
 
-Reason: PRD structure is a product documentation concern, not hands-on implementation or debug knowledge.
+Reason: PRD structure is a product documentation concern, not hands-on implementation or debug knowledge; module-layer creation and compaction belong to its maintainer.
 
 Input: `把“用户重复注册时必须走账号恢复流程”沉淀成 hands-on pattern`
 
@@ -114,16 +107,3 @@ Input: `把这次反复踩到的 API migration trap 沉淀一下`
 Route: `impl-knowledge-maintainer` only if the note explains a reusable migration trap, safe pattern, or verification shortcut beyond ordinary design documentation.
 
 Reason: recurring implementation traps can be hands-on knowledge; point-in-time API design belongs in the implementation-local design/plan input, while verified durable behavior belongs in the module spec.
-
-## Manual Routing Fixtures
-
-Use these fixtures for manual acceptance after changing the routing rules.
-
-| Input | Expected destination | Create/update durable file? |
-| --- | --- | --- |
-| "Checkout must reject a stale price snapshot and expose a retryable conflict." | `module-spec` -> `docs/module-knowledge/checkout/spec.md` | Yes, update the existing contract. |
-| "Favorites exists so customers can resume recurring purchase intent across sessions." | `module-prd`: update `docs/module-knowledge/favorites/prd.md` if it exists; otherwise `_pending.md` | Existing file: normal update. Missing file: only owner-reviewed backfill apply may create it. |
-| "Suppliers need one journey from catalog setup through first accepted order." | `top-level-prd` -> project `docs/module-knowledge/_pending.md` with source, statement, and authority | Pending only until the journey-level PRD restructure is complete; do not expand the large PRDs. |
-| "Use Customer and Supplier as the canonical actor names across the project." | `context-language` -> `CONTEXT.md` | Yes, update the canonical vocabulary. |
-| "For this migration, introduce an adapter before switching the persisted schema." | change design -> `docs/implementations/<slug>/` | Yes, in the active implementation package; not in evergreen PRD/spec yet. |
-| "The refactor only renamed local helpers and changed no durable behavior or intent." | `none` with reason in the gate | No. |

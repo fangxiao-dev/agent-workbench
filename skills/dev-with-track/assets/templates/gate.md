@@ -64,8 +64,11 @@ Notes：
 登记不要求本次 gate 当场完成长期文档回写；后续由 compaction/backfill 压实。
 若无 durable delta，填写 `none` 并给出原因。
 Durable deltas 表与 No durable delta 字段互斥：保留并填写其中一种，删除另一种。
+约束型 delta（禁止事项、信任边界、精度、provider 义务、负依赖）也是 durable delta。
 
-- [ ] 已用两问 litmus 分类：替换实现后仍必须成立的用户价值属于意图；可由测试、接口、状态查询或故障演练验证的陈述属于行为合同。
+- [ ] 若完全替换实现但用户价值不变，该陈述仍必须成立，则登记为意图候选。
+- [ ] 若可由测试、接口、状态查询或故障演练直接验证，则登记为行为合同候选。
+- [ ] 具体分流、约束类别与压实交给 `backfill-stable-docs`。
 - [ ] 同时包含 why 与 how 的陈述已拆分，没有在 PRD 与 spec 原样复制。
 - [ ] 每条 delta 已填写 destination、source、statement、受影响模块、authority 与 evidence。
 - [ ] `module-prd` 文件不存在时只登记到 `docs/module-knowledge/_pending.md`；未在普通 gate 首建文件。只有 owner 审阅后的 backfill apply 可首次创建，已有文件才由正常维护流程更新。

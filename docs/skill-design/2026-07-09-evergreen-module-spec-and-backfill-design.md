@@ -9,7 +9,8 @@
   `D:\CodeSpace\TaskManager\20_Sources\2026-06-17-func-design-directory-repositioning.md`
   定稿；owner 于 2026-07-10 先改为全量迁移，再确认常青层合并为
   `docs/module-knowledge/` 并新增模块级 PRD）
-- Status: 设计已批准，Phase 1/2 待按修订计划完成
+- Status: 设计已批准；Phase 1/2 已完成，Phase 3 skill 提前创建并等待首次真实
+  report 审阅，激活与合入门不变
 - 首个实例项目: prj-supplyer-webapp
 
 ## 目标
@@ -105,6 +106,15 @@ docs/module-knowledge/
 implementation 任务包记录 point-in-time 变更。四者不得互相替代。层间纪律
 靠固定文件角色（`prd.md` / `spec.md`）保障，不靠目录分离。
 
+### 方法论归属
+
+| Owner | 拥有内容 |
+| --- | --- |
+| `dev-with-track` | gate 关闭时轻量登记 durable delta、destination 与 evidence；保留两问 litmus 本体 |
+| `project-knowledge-manager` | hands-on knowledge 维护与跨文档层的入口分流；不复制 module 层压实方法 |
+| `backfill-stable-docs` | module PRD/spec 分流与压实、约束型合同提取、pending、惰性 PRD 创建、report/apply 和 watermark |
+| 项目 `docs/module-knowledge/` | 当前模块意图与行为合同快照；项目路径和 module 清单留在项目侧 README |
+
 module `prd.md` 超过 250 行时触发 owner 内容审查；首建内容不足以形成 Purpose、
 用户或 journey、Outcomes、Scope/Non-goals 以及到顶层 PRD/module spec 的链接时，
 继续保留在 `_pending.md`，不创建薄弱文件。
@@ -172,8 +182,9 @@ verifier 只提供一个无参数命令，每次全量执行：旧树存在时�
 3. 当前行为、状态和工作流；
 4. 模块边界与依赖；
 5. 失败模式与恢复语义；
-6. 验收与验证依据；
-7. `Pending deltas`。
+6. 约束型合同：禁止事项、信任边界、数值精度与归一化、外部 provider 义务、负依赖；
+7. 验收与验证依据；
+8. `Pending deltas`。
 
 正文不得链接即将删除的旧设计。来源到目标小节的追踪只保留在迁移台账和
 Git 历史。
@@ -220,9 +231,10 @@ junction 使用人工 checklist，不扩展为全仓链接图。
    subagent 分批；
 4. **引用审核**：在明确排除范围外，三种旧路径引用均为零；
 5. **删除后审核**：删除旧树后，只读 module-knowledge、当前代码、测试与顶层
-   文档，填写 18×5 链接表；每格只允许“文件#anchor + 一行结论”，回答模块
+   文档，填写 18×6 链接表；每格只允许“文件#anchor + 一行结论”，回答模块
    拥有/不拥有什么、核心行为或状态流程、主要失败与恢复语义、跨模块规则由谁
-   拥有、哪些代码或测试验证当前合同。任一格答不出或缺少具体引用即失败。
+   拥有、哪些代码或测试验证当前合同，以及本模块承诺不做、不信任或不依赖
+   什么。任一格答不出或缺少具体引用即失败。
 
 Gate 5 禁止读取 Git 旧版本只约束语义 reviewer；verifier 使用 `git ls-tree`
 仅做机械覆盖对账，不属于语义输入。
@@ -274,6 +286,10 @@ routing taxonomy 与 `_pending.md` 的目的地枚举按四层定位改写：
 
 ## Phase 3：有界 bootstrap 与稳态回刷
 
+Phase 3 skill 的创建时机提前到 Phase 1/2 完成后、两仓库合入前，以便先做首次
+真实 report 试金石。激活门不变：不修改全局 junction，不在 owner 审阅首次
+真实运行前合入 `main`；正式启用仍遵守两仓库交付顺序。
+
 ### Bootstrap
 
 首轮只扫描以下 5 个 slug：
@@ -311,7 +327,8 @@ module-knowledge 路径，即使任务未完成也可修复链接，但不得把
 3. webapp 分支先合入本地 `develop`；
 4. agent-workbench 分支随后立即合入 `main`，全局 skill 启用新规则；
 5. 用新 gate 继续真实开发；
-6. Phase 3 skill 在独立 worktree 完成 bootstrap report/apply 试金石；
+6. Phase 3 skill 已在独立 worktree 提前创建；此处审阅其首次 report/apply
+   试金石并确认激活门；
 7. 审核通过后合入 Phase 3 skill，并最后创建每周 report routine。
 
 Phase 1 保持整分支一次合入，不采用结构 checkpoint 或 cohort 分批合入。迁移
