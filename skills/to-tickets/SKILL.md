@@ -145,7 +145,7 @@ Return only:
 - ticket ids/paths and statuses;
 - typed dependencies and validation evidence;
 - unresolved AC evidence gaps or owner decisions;
-- the next Impl-Package stage (`feature-impl-planning` cross-check or
+- the next Impl-Package stage (`impl-planning` cross-check or
   `create-task-dag` when dag is earned).
 
 Do not invoke an implementation command or name a runner. Do not allocate workers,

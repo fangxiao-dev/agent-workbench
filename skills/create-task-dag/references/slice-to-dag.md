@@ -11,7 +11,7 @@ package plan（及需要时的相关 Approved ticket 子集）时，读本文件
 | 观察到的输入状态 | 路由 | create-task-dag 的边界 |
 | --- | --- | --- |
 | gated spec 明确 `tickets=true, dag=true` + package `plan.md` 已存在，且无 Draft/Approved ticket | `to-tickets mode=draft` | 不切 slice、不发布 tracker |
-| 缺 package `plan.md` | `feature-impl-planning` | 不把缺 plan 的输入转给 `to-tickets` |
+| 缺 package `plan.md` | `impl-planning` | 不把缺 plan 的输入转给 `to-tickets` |
 | 宽泛/未成 package 输入、缺 gated spec / 两道 gate 证据，或 Composition 未决 | `req-align` | 不创建 ticket 或 DAG |
 | gated `tickets=true, dag=true` 的 plan 已存在，相关 ticket 都是 `Draft` | 等明确 owner approval 后 `to-tickets mode=publish` | 不把 Draft 变为 Approved |
 | gated `tickets=false, dag=true`，且 plan 与稳定 `spec:AC-n` 齐备 | 直接使用 plan DAG | 不进入 `to-tickets` |

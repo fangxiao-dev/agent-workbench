@@ -1,5 +1,5 @@
 ---
-target: skills/feature-impl-planning
+target: skills/impl-planning
 updated: 2026-07-08
 ---
 ## 原则

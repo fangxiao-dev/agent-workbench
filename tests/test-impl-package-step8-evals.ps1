@@ -16,7 +16,7 @@ Assert-Contains $draft '2026-07-10-impl-package-system-design.md' 'Discussion dr
 $evalPaths = @{
     'req-align' = 'skills\req-align\evals\evals.json'
     'to-tickets' = 'skills\to-tickets\evals\evals.json'
-    'feature-impl-planning' = 'skills\feature-impl-planning\evals\evals.json'
+    'impl-planning' = 'skills\impl-planning\evals\evals.json'
     'create-task-dag' = 'skills\create-task-dag\evals\evals.json'
     'dev-with-track' = 'skills\dev-with-track\evals\evals.json'
     'module-review' = 'skills\module-review\evals\evals.json'
@@ -42,9 +42,9 @@ Assert-Contains ($designBlocked.prompt + $designBlocked.expected_output + ($desi
 $thickSpec = Find-Eval $evals['req-align'] '2'
 Assert-Contains ($thickSpec.prompt + $thickSpec.expected_output + ($thickSpec.expectations -join "`n")) 'Error Boundaries' 'Requirement-alignment must evaluate the thick spec contract.'
 
-$ticketsOnlyPlan = Find-Eval $evals['feature-impl-planning'] '1'
+$ticketsOnlyPlan = Find-Eval $evals['impl-planning'] '1'
 Assert-Contains ($ticketsOnlyPlan.prompt + $ticketsOnlyPlan.expected_output + ($ticketsOnlyPlan.expectations -join "`n")) 'tickets=true, dag=false' 'Planning eval must cover tickets-only composition.'
-$onlyDagPlan = Find-Eval $evals['feature-impl-planning'] '2'
+$onlyDagPlan = Find-Eval $evals['impl-planning'] '2'
 Assert-Contains ($onlyDagPlan.prompt + $onlyDagPlan.expected_output + ($onlyDagPlan.expectations -join "`n")) 'tickets=false, dag=true' 'Planning eval must cover only-dag composition.'
 
 $ticketsOnly = Find-Eval $evals['dev-with-track'] '1'
@@ -72,7 +72,7 @@ $safetyP0 = Find-Eval $evals['safety-review'] '1'
 Assert-Contains ($safetyP0.prompt + $safetyP0.expected_output + ($safetyP0.expectations -join "`n")) 'idempotency' 'Safety-review eval must retain the external-mutation P0 guard.'
 
 $activeRoots = @(
-    'skills\req-align', 'skills\to-tickets', 'skills\feature-impl-planning',
+    'skills\req-align', 'skills\to-tickets', 'skills\impl-planning',
     'skills\create-task-dag', 'skills\dev-with-track', 'skills\module-review', 'skills\safety-review'
 )
 foreach ($relativeRoot in $activeRoots) {

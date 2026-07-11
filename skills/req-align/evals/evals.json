@@ -36,7 +36,7 @@
       "files": [],
       "expectations": [
         "Names the missing contract and evidence ownership",
-        "Does not hand off to feature-impl-planning or to-tickets",
+        "Does not hand off to impl-planning or to-tickets",
         "Requires the Spec gate to pass before planning"
       ]
     }

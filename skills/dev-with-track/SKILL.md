@@ -30,7 +30,7 @@ worker。若有多个可执行单元，按 ticket/task 文档顺序稳定选择�
 ## 上下游边界
 
 - `req-align` 拥有必过的 Design / Spec gates、`design.md` 和 `spec.md`。
-- `feature-impl-planning` 拥有 `plan.md`、patch plan 和 composition migration 的计划
+- `impl-planning` 拥有 `plan.md`、patch plan 和 composition migration 的计划
   内容；`to-tickets` 拥有 ticket 的切片、draft/publish 与验收定义；
   `create-task-dag` 拥有 execution decomposition 与 `dag.md` task 合同。
 - 本 skill 维护运行时事实、按需 task/ticket progress、findings 与 gate。它不能自行
@@ -148,7 +148,7 @@ Use the templates only for earned artifacts:
 - `assets/templates/gate.md` — implementation gate and Stage 7 capture evidence.
 
 `design.md` / `spec.md` templates remain in `req-align`; `plan.md` and
-composition migration content remain in `feature-impl-planning`; ticket templates remain
+composition migration content remain in `impl-planning`; ticket templates remain
 in `to-tickets`.
 
 ## Execution checklist

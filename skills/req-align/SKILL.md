@@ -25,7 +25,7 @@ This skill owns:
 
 Use [assets/templates/design.md](./assets/templates/design.md) and
 [assets/templates/spec.md](./assets/templates/spec.md). Do not publish a tracker spec or
-create a second spec for the same package. `feature-impl-planning` consumes the gated
+create a second spec for the same package. `impl-planning` consumes the gated
 `spec.md`; it does not own or synthesize a replacement.
 
 Omitting standalone `design.md` is legal only after Design evaluates `PASSED` and the
@@ -154,7 +154,7 @@ steps, or tracker publication metadata.
    it for ordinary research narration.
 7. Synthesize the eight-section `spec.md` and evaluate the Spec gate. Stop when it is
    blocked.
-8. After both gates pass, hand off the same `spec.md` to `feature-impl-planning`; do not
+8. After both gates pass, hand off the same `spec.md` to `impl-planning`; do not
    create another spec or publish to a tracker.
 
 ## Alignment Proposal

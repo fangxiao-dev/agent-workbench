@@ -85,7 +85,7 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
 ```text
 1 对齐与调研  req-align（通用化后）→ design.md + 首批 findings + owner decisions
 2 Spec        req-align 第二道门 → spec.md（含 Composition 判定）
-3 薄 plan     feature-impl-planning → plan.md；earn tickets 时随后 to-tickets(fork, draft) 切 slices
+3 薄 plan     impl-planning → plan.md；earn tickets 时随后 to-tickets(fork, draft) 切 slices
 4 Task DAG    create-task-dag ← plan + 相关 approved tickets 子集（有 tickets 时）或 plan（仅 dag 时）
 5 执行        dev-with-track：restore → readiness resolution → execute → evidence → findings → gate
 6 审查        code-review / module-review / safety-review（映射见下）
@@ -129,7 +129,7 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
   处理依赖终态、外部 gate、环、失败/豁免/替代传播及上游返工造成的下游失效；
   多个 actionable 单元按文档顺序稳定选择。单 package 维护完整 ticket 列表；
   ticket 状态按 composition 落到 canonical home（见下节）。patch plan / patch
-  DAG 严格保留给 post-gate 生命周期补丁（与 feature-impl-planning
+  DAG 严格保留给 post-gate 生命周期补丁（与 impl-planning
   `patching.md` 互引），不做 per-ticket patch。
   - YAGNI 边界：若未来执行模式真变成多 worker 并行跑不同 ticket，再增加
     动态派工能力；readiness resolution 不是该调度器的降级版，而是串行执行
@@ -146,8 +146,8 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
 | Artifact | Canonical Owner | 追加权 | 不应包含 |
 | --- | --- | --- | --- |
 | `design.md` | req-align | — | 行为合同副本、worker task、稳定文档改动 |
-| `spec.md` | req-align | feature-impl-planning（Composition 行）、patch 修订 | 调研流水、文件级步骤、长期知识正文、常青 backfill map（捕获在 gate → `_pending.md`） |
-| `plan.md` / patch plan | feature-impl-planning | — | earn tickets 时任何 task 细节；ticket 正文；实时状态 |
+| `spec.md` | req-align | impl-planning（Composition 行）、patch 修订 | 调研流水、文件级步骤、长期知识正文、常青 backfill map（捕获在 gate → `_pending.md`） |
+| `plan.md` / patch plan | impl-planning | — | earn tickets 时任何 task 细节；ticket 正文；实时状态 |
 | Tickets | to-tickets（本地 fork） | dev-with-track（状态） | worker ownership、文件级实现步骤 |
 | `dag.md` / patch DAG | create-task-dag 方法 + dev-with-track 持久化 | — | spec/plan/ticket 正文 |
 | `tasks/Tn-progress.md` | dev-with-track | worker 汇报 | 迷你 spec、重复计划 |
@@ -277,7 +277,7 @@ durable delta 的 canonical 捕获面是 **gate 的 Durable Deltas 表 → `_pen
 | `req-align` | 通用化：description/body 解除 prj-supplyer-webapp 绑定，项目细节退回项目 AGENTS/CONTEXT；内置两道对等必过门（Design 步骤与 Spec 步骤都不可跳过，design.md 文件可薄但门必过）；拥有 design.md + spec.md 及其模板（spec 按 2026-07-09 八节合同结构成型，含 Error Boundaries/失败恢复/约束型合同；吸收 to-spec 的模板与 synthesis 方法，不产出第二份 tracker spec）；借用 domain-modeling 分析方法但禁用其 CONTEXT.md 写入（结论进 design/findings + backfill candidate） |
 | `to-tickets` | **本地 fork**（保留名，registry 标注"已本地分叉，上游更新人工 diff"）：加 draft/publish 双模式（内部默认 draft）、runner-neutral handoff、删除 /implement 绑定；保留 tracer bullet、带类型的静态 blocking edges、wide-refactor expand–contract；删除自动派工类动态调度，增加 publish 前环/引用校验 |
 | `to-spec` | 保留 vendored 只读，不进主流程；其方法已被 req-align 吸收 |
-| `feature-impl-planning` | plan 模板增加"有 tickets"分支（去任务化的跨 slice 契约形态）与"无 tickets"分支（内含 T\<n\> checklist）；识别 `spec.md` 的 Composition 行；拥有受控 composition 升级迁移；patching.md 与 ticket 生命周期互引（patch 仅 post-gate） |
+| `impl-planning` | plan 模板增加"有 tickets"分支（去任务化的跨 slice 契约形态）与"无 tickets"分支（内含 T\<n\> checklist）；识别 `spec.md` 的 Composition 行；拥有受控 composition 升级迁移；patching.md 与 ticket 生命周期互引（patch 仅 post-gate） |
 | `create-task-dag` | 收缩到 execution decomposition：删自带 slicing 路由，宽输入改路由 to-tickets draft；全部 to-issues 引用替换为 to-tickets；输入契约 = plan + 相关 approved tickets 子集（有 tickets 时）或 plan（仅 dag 时）；记录 task→AC 与 seam owner；whole-slice review 改为调用 module-review |
 | `dev-with-track` | 核心循环增加确定性 readiness resolution（不做自动派工）；按 composition 使用 canonical status home；实现 AC 覆盖 gate、返工失效传播和完整 Stage 7 关闭契约；按 composition 开关决定 scaffold 范围；description 植入体系名 |
 | `module-review` | 已换模为 Standards + Spec 双轴双 reviewer：contract-drift 归入 Spec 轴既有职责（不新增内置检查）；Standards 轴 standards 钩子引用 codebase-design；按 composition 或 spec 契约变化信号触发 |
@@ -298,7 +298,7 @@ ticket/task 数、最大依赖深度、blocked 次数、人工改选下一单元
 | 1 | req-align 两道对等必过门 + design/spec ownership + 厚 spec 模板 | 两门都有可检验必过标准（Design 步骤不可跳）；spec 模板含八节含 Error Boundaries；design 护栏语句在位 |
 | 2 | to-tickets 本地 fork + registry 标注；to-spec 方法吸收 | fork 后 draft 模式 dry-run 通过；registry 有分叉标注 |
 | 3 | create-task-dag 收缩 + to-issues 引用替换 + review 映射 + readiness 契约 | grep 无 to-issues 残留；whole-slice review 指向 module-review；输入支持 plan + tickets 子集；task→AC 与 seam owner 字段在位 |
-| 4 | feature-impl-planning plan 双分支（有/无 tickets）+ Composition 协同 | 两个模板分支存在；与 patching.md 互引 |
+| 4 | impl-planning plan 双分支（有/无 tickets）+ Composition 协同 | 两个模板分支存在；与 patching.md 互引 |
 | 5 | safety-review 恢复 + module-review 触发映射与 standards 钩子 | 触发信号与 P0 清单落文；contract-drift 由 Spec 轴覆盖，Standards 轴引用 codebase-design |
 | 6 | dev-with-track gate/scaffold/readiness/canonical status 适配 + 体系名植入全部成员 description | gate 模板含 Durable Deltas 表 + pending + truth pointer + stub 完整关闭契约；核心循环有 readiness resolution 且无自动派工；各 description 含体系名 |
 | 7 | orchestrator 退休 + registry/docs/evals 清理 | grep 主链路无 orchestrator 活引用 |

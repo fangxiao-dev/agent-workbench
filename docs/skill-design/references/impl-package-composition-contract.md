@@ -2,7 +2,7 @@
 
 > **Normative shared contract.** This file encodes the approved implementation
 > rules in `2026-07-10-impl-package-system-design.md` for use by the main-chain
-> skills. `create-task-dag`, `feature-impl-planning`, and `dev-with-track` must
+> skills. `create-task-dag`, `impl-planning`, and `dev-with-track` must
 > reference it and must not redefine these semantics locally.
 
 ## 1. Package identity

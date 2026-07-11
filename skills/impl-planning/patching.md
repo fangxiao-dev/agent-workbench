@@ -17,7 +17,7 @@ ticket 生命周期也不产生每-ticket patch；patch 始终覆盖 package 级
 - 由 `req-align` 调整行为、数据、边界、验收各节，使最新合同无歧义。
   不要留下新旧语义冲突让实现者自行调和。
 - 仅当旧内容能解释合同为何变化时才保留它。
-- `feature-impl-planning` 只在两道 gate 均重新通过后写 patch plan；任一 gate
+- `impl-planning` 只在两道 gate 均重新通过后写 patch plan；任一 gate
   `BLOCKED` 时停止，不创建 patch plan。
 - 若修订需要改变 `Composition:`，只能由 `req-align` 记录、重新通过
   两道门后再由 planning 执行共享 contract 的受控 Composition Migration；planning

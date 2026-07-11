@@ -1,5 +1,5 @@
 ---
-name: feature-impl-planning
+name: impl-planning
 description: >
   Impl-Package 体系的薄 plan 阶段：当用户为一个具体改动索要 implementation plan、feature plan、
   patch plan、实现计划、补丁计划或 issue 实现计划时使用；也用于其他工作流在

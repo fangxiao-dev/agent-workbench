@@ -45,7 +45,7 @@ seam contract，必须要求 plan + 相关 Approved ticket 子集。
   task-decomposition artifact；no-DAG task/seam 限制只引用共享 contract 第 4 节。
 - Composition 未决、Composition 与现有 artifact 不一致，或 gated spec 缺少
   所需 AC：路由 `req-align` 修复 Design/Spec gate。
-- gated spec 已就绪但缺 `plan.md`：路由 `feature-impl-planning` 生成 plan；
+- gated spec 已就绪但缺 `plan.md`：路由 `impl-planning` 生成 plan；
   宽泛或未成 package 的输入同样先走 `req-align`，不得跳到
   `to-tickets`。
 - 只有单一 Approved ticket，且需要跨 ticket seam：请求 package plan + 相关
@@ -103,7 +103,7 @@ handoff 或用户指定的进度文档；不要求先有 tracking workspace。
 
 读 package plan、相关 Approved tickets（若 `tickets=true`）、spec 的
 Composition/AC 定义、仓库指令和相关验证文档。plan 和 spec 通常由
-`feature-impl-planning` / `req-align` 产出在
+`impl-planning` / `req-align` 产出在
 `docs/implementations/<package-id>/`。来源不满足输入契约时，读
 `references/slice-to-dag.md` 并按缺失原因路由。识别：
 

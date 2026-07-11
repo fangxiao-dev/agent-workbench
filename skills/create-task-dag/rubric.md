@@ -12,7 +12,7 @@ updated: 2026-07-08
 - 采纳「持久化映射补 spec.md 路由（验收语义变化先补 spec）、补 patch-dag 目标，并收敛为 SKILL.md 单一映射来源」— 契约级冲突，用户整批同意
 - 采纳「dag-and-ownership 补任务编号续编 + Retired 时写 patch-dag」
 - 采纳「worker 返回状态 ↔ DAG 板状态映射表」
-- 采纳「Ground The Slice 点名 feature-impl-planning 为 plan/spec 生产者」
+- 采纳「Ground The Slice 点名 impl-planning 为 plan/spec 生产者」
 - 采纳「SKILL.md 与全部 references 中文化，状态 token 保留英文」
 
 ### R2 · 2026-07-08（偏好确认轮）
