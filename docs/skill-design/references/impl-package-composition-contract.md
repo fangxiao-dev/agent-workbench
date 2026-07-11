@@ -7,7 +7,7 @@
 
 ## 1. Package identity
 
-For a new implementation package, `requirement-alignment` creates an immutable package-id
+For a new implementation package, `req-align` creates an immutable package-id
 in the form `YYMMDD-<topic-slug>` from the UTC creation date, with a `-02`, `-03`… suffix only when the
 exact name already exists. The package root is `docs/implementations/<package-id>/`.
 `topic-slug` is a human-readable subject label; package-id is the identity that paths,
@@ -34,6 +34,25 @@ One state has one fact source. A projection must name its source and must never
 overwrite an acceptance conclusion. Cross-session recovery earns a progress ledger,
 not a DAG; a DAG is earned only when execution dependencies or coordination need an
 explicit graph.
+
+### Dispatch shorthand (non-authoritative alias)
+
+For faster human dispatch, four optional shorthand names may expand to a composition.
+They are aliases only, never a sizing gate. The `Composition:` line stays the sole source
+of truth and the earn conditions decide what actually exists.
+
+| Shorthand | Expands to | Meaning |
+| --- | --- | --- |
+| `S` | `tickets=false, dag=false` | spec + plan, execute directly — the floor, not a tier |
+| `M` | `tickets=true, dag=false` | acceptance slices earned |
+| `L` | `tickets=true, dag=true` | slices plus an execution graph |
+| `D` | `tickets=false, dag=true` | no slices, but non-trivial execution dependencies |
+
+Authority flows one way: a shorthand expands into `tickets=/dag=`; it never overrides
+them. If a requested shorthand and the earned composition disagree — for example `L` was
+dispatched but only one acceptance slice is earned — the earn conditions win: correct the
+label, never manufacture a ticket or DAG to match the name. `spec.md` always records the
+canonical `Composition: tickets=<...>, dag=<...>`, not the shorthand.
 
 ## 3. Typed blockers and readiness resolution
 

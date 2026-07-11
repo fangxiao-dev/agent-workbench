@@ -4,22 +4,22 @@
 复用该 package-id：为 patch 另建第二个 package-id 会割裂实现上下文，削弱后续 handoff。
 
 Patch 只属于**已关闭 package gate 之后（post-gate）**的生命周期。未关闭 gate 的 package 仍在
-原 `plan.md` / tickets / DAG 生命周期中：合同变化回到 `requirement-alignment` 重新
+原 `plan.md` / tickets / DAG 生命周期中：合同变化回到 `req-align` 重新
 过门，计划或 DAG 修正留在原 artifact，绝不用 patch 绕过 gate。`to-tickets` 的
 ticket 生命周期也不产生每-ticket patch；patch 始终覆盖 package 级增量。
 
 ## Spec 修订
 
-- 合同发生变化时路由到 `requirement-alignment`；由它在同一 package-id 原地修订
+- 合同发生变化时路由到 `req-align`；由它在同一 package-id 原地修订
   `spec.md`，不要另起新 spec。
-- `requirement-alignment` 在 `Revisions` 小节追加带日期的条目，说明改了什么、
+- `req-align` 在 `Revisions` 小节追加带日期的条目，说明改了什么、
   为什么，并重新执行 Design 与 Spec 两道必过门。
-- 由 `requirement-alignment` 调整行为、数据、边界、验收各节，使最新合同无歧义。
+- 由 `req-align` 调整行为、数据、边界、验收各节，使最新合同无歧义。
   不要留下新旧语义冲突让实现者自行调和。
 - 仅当旧内容能解释合同为何变化时才保留它。
 - `feature-impl-planning` 只在两道 gate 均重新通过后写 patch plan；任一 gate
   `BLOCKED` 时停止，不创建 patch plan。
-- 若修订需要改变 `Composition:`，只能由 `requirement-alignment` 记录、重新通过
+- 若修订需要改变 `Composition:`，只能由 `req-align` 记录、重新通过
   两道门后再由 planning 执行共享 contract 的受控 Composition Migration；planning
   不自行改写 Composition，也不创建 per-ticket patch。
 

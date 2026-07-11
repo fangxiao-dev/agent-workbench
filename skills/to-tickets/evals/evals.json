@@ -58,7 +58,7 @@
       "expectations": [
         "Does not create, delete, or update ticket files",
         "Does not silently edit spec.md",
-        "Routes to requirement-alignment with a composition revision decision"
+        "Routes to req-align with a composition revision decision"
       ]
     },
     {

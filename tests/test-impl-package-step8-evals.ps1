@@ -14,7 +14,7 @@ Assert-Contains $draft '已由' 'Discussion draft replacement marker is missing.
 Assert-Contains $draft '2026-07-10-impl-package-system-design.md' 'Discussion draft does not point to the approved design.'
 
 $evalPaths = @{
-    'requirement-alignment' = 'skills\requirement-alignment\evals\evals.json'
+    'req-align' = 'skills\req-align\evals\evals.json'
     'to-tickets' = 'skills\to-tickets\evals\evals.json'
     'feature-impl-planning' = 'skills\feature-impl-planning\evals\evals.json'
     'create-task-dag' = 'skills\create-task-dag\evals\evals.json'
@@ -37,9 +37,9 @@ function Find-Eval([object]$EvalFile, [string]$Id) {
     return @($EvalFile.evals | Where-Object { $_.id -eq $Id })[0]
 }
 
-$designBlocked = Find-Eval $evals['requirement-alignment'] '1'
+$designBlocked = Find-Eval $evals['req-align'] '1'
 Assert-Contains ($designBlocked.prompt + $designBlocked.expected_output + ($designBlocked.expectations -join "`n")) 'Design Gate' 'Requirement-alignment must evaluate the Design gate before spec.'
-$thickSpec = Find-Eval $evals['requirement-alignment'] '2'
+$thickSpec = Find-Eval $evals['req-align'] '2'
 Assert-Contains ($thickSpec.prompt + $thickSpec.expected_output + ($thickSpec.expectations -join "`n")) 'Error Boundaries' 'Requirement-alignment must evaluate the thick spec contract.'
 
 $ticketsOnlyPlan = Find-Eval $evals['feature-impl-planning'] '1'
@@ -72,7 +72,7 @@ $safetyP0 = Find-Eval $evals['safety-review'] '1'
 Assert-Contains ($safetyP0.prompt + $safetyP0.expected_output + ($safetyP0.expectations -join "`n")) 'idempotency' 'Safety-review eval must retain the external-mutation P0 guard.'
 
 $activeRoots = @(
-    'skills\requirement-alignment', 'skills\to-tickets', 'skills\feature-impl-planning',
+    'skills\req-align', 'skills\to-tickets', 'skills\feature-impl-planning',
     'skills\create-task-dag', 'skills\dev-with-track', 'skills\module-review', 'skills\safety-review'
 )
 foreach ($relativeRoot in $activeRoots) {

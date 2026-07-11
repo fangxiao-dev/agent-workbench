@@ -1,5 +1,5 @@
 ---
-name: requirement-alignment
+name: req-align
 description: Impl-Package 体系的需求对齐与 Spec 阶段：当新建或变更需求需要在 feature design、specification 或 implementation planning 前完成对齐时使用；拥有必过的 Design / Spec gates 及其 design.md / spec.md。
 ---
 
@@ -122,7 +122,10 @@ Use the thick eight-section spec template. The Spec gate passes only when:
 - Acceptance Semantics maps each promised outcome or constraint to observable evidence
   and names any manual verification owner;
 - `Composition: tickets=<true|false>, dag=<true|false>` is justified by the two
-  independent earn conditions, never by S/M/L sizing;
+  independent earn conditions, never by S/M/L sizing. A dispatch shorthand
+  (`S`/`M`/`L`/`D`, mapped in the composition contract) may be accepted as input, but it
+  only expands into the canonical `tickets=/dag=` line; on conflict the earn conditions
+  win and the shorthand label is corrected, never the reverse;
 - blocking owner decisions and unresolved contract ambiguity are zero.
 
 If any criterion fails, record `Spec Gate: BLOCKED` with the exact missing contract or
@@ -134,7 +137,7 @@ steps, or tracker publication metadata.
 
 ## Workflow
 
-1. Announce use of requirement-alignment; for a new package assign a topic slug and an
+1. Announce use of req-align; for a new package assign a topic slug and an
    immutable date-prefixed package-id, or identify the owning existing package-id for a
    patch/follow-up.
 2. Discover authoritative project knowledge before detailed clarification.

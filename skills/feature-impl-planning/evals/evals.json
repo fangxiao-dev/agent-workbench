@@ -30,7 +30,7 @@
       "id": 3,
       "name": "composition-change-reruns-gates-before-migration",
       "prompt": "A no-ticket plan now needs two independently accepted slices. Update Composition and keep working.",
-      "expected_output": "Routes the Composition revision through requirement-alignment, then performs a recorded controlled migration only after both gates pass.",
+      "expected_output": "Routes the Composition revision through req-align, then performs a recorded controlled migration only after both gates pass.",
       "files": [],
       "expectations": [
         "Does not silently edit spec Composition",

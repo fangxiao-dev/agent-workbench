@@ -131,7 +131,7 @@ Granularity：repo-local executable checklist | micro-step fallback | N/A — ta
 
 ## Composition Migration
 
-<!-- 仅在 requirement-alignment 修订 Composition 并重新通过两道 gate 后填写；无升级标 N/A。不得创建 per-ticket patch。 -->
+<!-- 仅在 req-align 修订 Composition 并重新通过两道 gate 后填写；无升级标 N/A。不得创建 per-ticket patch。 -->
 
 - Previous: tickets=<true|false>, dag=<true|false>
 - New: tickets=<true|false>, dag=<true|false>

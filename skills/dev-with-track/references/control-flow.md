@@ -10,9 +10,9 @@
 
 如果已有 ad-hoc spec、临时 Func Design、handoff 中的功能合同、或旧需求说明：
 
-1. 路由 `requirement-alignment`，先完成其必过 Design / Spec gates；本 skill 不
+1. 路由 `req-align`，先完成其必过 Design / Spec gates；本 skill 不
    自行创建、裁剪或采纳 spec。
-2. 如有 ad-hoc 文档，作为 requirement-alignment 的输入；由该 skill 决定迁入
+2. 如有 ad-hoc 文档，作为 req-align 的输入；由该 skill 决定迁入
    canonical `spec.md`、保留指针，或把稳定文档作为权威引用。
 3. Spec gate 通过后，读取它的唯一 Composition 声明，只 scaffold earned artifacts。
 

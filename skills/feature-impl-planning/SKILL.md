@@ -9,7 +9,7 @@ description: >
 
 # Feature Impl Planning
 
-消费 `requirement-alignment` 已通过两道门的 `spec.md`，为一个具体实现任务创建
+消费 `req-align` 已通过两道门的 `spec.md`，为一个具体实现任务创建
 一份低上下文 coding agent 可以直接执行的薄 plan。Composition、状态事实源、task
 到 acceptance 追踪、seam 与升级规则以
 [Impl-Package Composition Contract](../../docs/skill-design/references/impl-package-composition-contract.md)
@@ -19,12 +19,12 @@ description: >
 
 ```text
 docs/implementations/<package-id>/
-  spec.md                                    # requirement-alignment 拥有的已过门合同
+  spec.md                                    # req-align 拥有的已过门合同
   plan.md                                    # 初始实现计划
   YYYYMMDD-HHMM-<patch-topic>.patch-plan.md  # 后续 patch plan
 ```
 
-- `spec.md`：只读规划输入；由 `requirement-alignment` 拥有和过门。
+- `spec.md`：只读规划输入；由 `req-align` 拥有和过门。
 - `plan.md`：随 `spec.md` 的 Composition 分支生成：无 tickets 时可承载可执行
   checklist；有 tickets 时只承载跨 slice 工程契约，绝不成为 ticket 或任务状态副本。
 - patch plan：同一 package-id 的后续计划，链接更新后的 `spec.md`，不复制原始计划。
@@ -35,9 +35,9 @@ docs/implementations/<package-id>/
 ## 边界
 
 - 不创建或重写 `design.md` / `spec.md`，也不更新长期 PRD、ARD、feature-design
-  文档。合同缺失或 gate 未通过时路由回 `requirement-alignment`。
+  文档。合同缺失或 gate 未通过时路由回 `req-align`。
 - `Composition:` 只由已过门 `spec.md` 定义。本 skill 可以发现不匹配、提出或记录
-  revision 请求并路由回 `requirement-alignment`，但**不得自行改写 `Composition:`**、
+  revision 请求并路由回 `req-align`，但**不得自行改写 `Composition:`**、
   以 plan 绕过任一 gate，或把 plan 变成第二个 composition 真相源。
 - 不创建或维护执行账本。`dag.md`、`tasks/Tn-progress.md`、
   `tasks/Tn-handoff.md`、`findings.md`、`gate.md` 归 `dev-with-track` 所有。
@@ -50,7 +50,7 @@ docs/implementations/<package-id>/
    implementation 做 patch/follow-up。已有 package-id 只决定“复用哪个 implementation
    目录”，不自动决定 patch 生命周期：
    - implementation 尚未 gate closed（仍在需求理解、spec/plan/DAG/执行阶段）时，
-     需求纠正或范围澄清路由 `requirement-alignment` 原地修订并重新通过 spec gate；
+     需求纠正或范围澄清路由 `req-align` 原地修订并重新通过 spec gate；
      计划修正只由本 skill 原地更新 `plan.md`；`dag.md` 修正路由 `create-task-dag`，
      tracking 修正路由 `dev-with-track`。不创建 patch plan。
    - 只有原 package 已关闭 gate，之后出现新增需求、回归修复或增量范围，才进入
@@ -70,13 +70,13 @@ docs/implementations/<package-id>/
 
 3. **验证并消费 `spec.md`。** 确认 Design Gate 与 Spec Gate 都是 `PASSED`、厚
    合同八节齐全且没有 blocking owner decision。缺失或不一致时路由回
-   `requirement-alignment`，本 skill 不补写合同。完成标准：已过门 spec 是 plan
+   `req-align`，本 skill 不补写合同。完成标准：已过门 spec 是 plan
    唯一功能合同输入。
 
 4. **读取 Composition 并选择 plan 形态。** 从已过门 spec 读取且只读取唯一一行
    `Composition: tickets=<true|false>, dag=<true|false>`，检查与现有 artifact
    一致。若计划发现必须升级 composition，记录原因和受影响内容，路由
-   `requirement-alignment` 修订并重新过两道门；通过后才执行本 skill 的受控 Composition 升级迁移。
+   `req-align` 修订并重新过两道门；通过后才执行本 skill 的受控 Composition 升级迁移。
    绝不在 plan 内自行决定或降级 composition。
 
 5. **按固定顺序创建并交叉审查。** 新 implementation 的顺序恒为
@@ -102,7 +102,7 @@ docs/implementations/<package-id>/
      owner 只在 `dag.md` task 中声明，不能回填到 plan。
    - ticket draft 返回后，交叉检查 ticket 与 plan：补足跨 slice seam、全局约束、
      migration/rollback 和 verification policy，或将 ticket 暴露的合同缺口路由回
-     `requirement-alignment`。只有 `tickets=true, dag=true` 时，owner 批准的相关
+     `req-align`。只有 `tickets=true, dag=true` 时，owner 批准的相关
      ticket 子集才可成为后续 DAG 输入。
    完成标准：plan 的形态与 spec Composition 一致，且不存在第二个可写状态源。
 
@@ -135,7 +135,7 @@ docs/implementations/<package-id>/
 
 ## 审查清单
 
-- 选定 package-id 内的 `spec.md` 已由 `requirement-alignment` 通过两道门；plan 实现的
+- 选定 package-id 内的 `spec.md` 已由 `req-align` 通过两道门；plan 实现的
   是当前 spec 合同。
 - plan 消费且不改写 spec 的唯一 Composition 行；无 tickets 与有 tickets 的形态
   满足共享 contract；`tickets=true, dag=false` 不得调用 `create-task-dag` 或建立

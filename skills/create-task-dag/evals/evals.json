@@ -102,11 +102,11 @@
     {
       "id": 9,
       "prompt": "The package claims Composition: tickets=false, dag=true, but its spec gate has not passed and it contains no stable AC identifiers. Use create-task-dag to make a plan-only DAG.",
-      "expected_output": "A response that routes to requirement-alignment to repair the Design/Spec gate and composition inputs. It does not route to to-tickets draft, invent spec:AC-n targets, or create a DAG.",
+      "expected_output": "A response that routes to req-align to repair the Design/Spec gate and composition inputs. It does not route to to-tickets draft, invent spec:AC-n targets, or create a DAG.",
       "files": [],
       "expectations": [
         "The output recognizes tickets=false, dag=true as the plan-only DAG form but rejects missing gated spec/AC input.",
-        "The output routes to requirement-alignment rather than to-tickets mode=draft.",
+        "The output routes to req-align rather than to-tickets mode=draft.",
         "The output does not fabricate composition, acceptance targets, or a replacement spec."
       ]
     },

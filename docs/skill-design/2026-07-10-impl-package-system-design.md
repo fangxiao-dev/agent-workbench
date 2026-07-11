@@ -26,7 +26,7 @@
 `docs/implementations/<package-id>/`。UTC 创建日期让同一主题的独立、短时效
 变更事件可按日期排序；同日同主题的包由续号区分。
 
-- requirement-alignment 在 Design 开始前生成并记录 package-id，同时记录 topic
+- req-align 在 Design 开始前生成并记录 package-id，同时记录 topic
   slug；创建后两者均不可改写。若精确目录名已存在，保留同一日期和 topic slug
   并追加 `-02`、`-03`…顺序后缀，直到唯一。
 - 下游 artifact、ticket ID、truth pointer 与 backfill 记录引用 package-id；不要只
@@ -53,6 +53,14 @@
 两者都有。task 与 ticket 解绑——task 可横切多个 ticket，seam/集成 task
 不属于任何单个 ticket。
 
+**Dispatch shorthand（别名，非闸门）**：为方便快速下发，允许四个可选简写
+`S`=`tickets=F,dag=F`、`M`=`tickets=T,dag=F`、`L`=`tickets=T,dag=T`、
+`D`=`tickets=F,dag=T` 展开为 composition。它只是别名，不是 sizing 闸门——
+`Composition:` 行仍是唯一事实源，earn 条件仍是权威；简写与实际 earn 冲突时改
+标签、不造 ticket/dag。这与"抛弃 S/M/L 线性档"不矛盾：废弃的是"先定档再决定
+产物"的闸门，保留的是展开成 composition 的下发口令。映射与护栏见
+composition-contract 的《Dispatch shorthand》。
+
 Review 按独立信号触发，不把 artifact 数量当风险代理：code-review 恒必选；
 有 tickets 或 dag 时 module-review 必选，无两者但 spec 声明 interface、状态机、
 模块边界或 seam 变化时同样必选；safety-review 永远按信号触发（见 Review 体系）。
@@ -75,8 +83,8 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
 ## 七阶段流水线（定稿）
 
 ```text
-1 对齐与调研  requirement-alignment（通用化后）→ design.md + 首批 findings + owner decisions
-2 Spec        requirement-alignment 第二道门 → spec.md（含 Composition 判定）
+1 对齐与调研  req-align（通用化后）→ design.md + 首批 findings + owner decisions
+2 Spec        req-align 第二道门 → spec.md（含 Composition 判定）
 3 薄 plan     feature-impl-planning → plan.md；earn tickets 时随后 to-tickets(fork, draft) 切 slices
 4 Task DAG    create-task-dag ← plan + 相关 approved tickets 子集（有 tickets 时）或 plan（仅 dag 时）
 5 执行        dev-with-track：restore → readiness resolution → execute → evidence → findings → gate
@@ -86,7 +94,7 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
 
 阶段要点（只记与讨论稿差异或收敛修正，正文以讨论稿为底）：
 
-- **Stage 1/2 一个 skill 两道对等必过门**：requirement-alignment 承载
+- **Stage 1/2 一个 skill 两道对等必过门**：req-align 承载
   Design 与 Spec 两个步骤，二者对等且都必过——不是"Design 可选、Spec 必有"。
   调研 readiness 门（Destination 可回答、Open Questions 收敛到不阻塞 spec）
   必过 → 才允许进入 spec 门生成 `spec.md`。不拆成两个 skill：design→spec 是
@@ -137,8 +145,8 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
 
 | Artifact | Canonical Owner | 追加权 | 不应包含 |
 | --- | --- | --- | --- |
-| `design.md` | requirement-alignment | — | 行为合同副本、worker task、稳定文档改动 |
-| `spec.md` | requirement-alignment | feature-impl-planning（Composition 行）、patch 修订 | 调研流水、文件级步骤、长期知识正文、常青 backfill map（捕获在 gate → `_pending.md`） |
+| `design.md` | req-align | — | 行为合同副本、worker task、稳定文档改动 |
+| `spec.md` | req-align | feature-impl-planning（Composition 行）、patch 修订 | 调研流水、文件级步骤、长期知识正文、常青 backfill map（捕获在 gate → `_pending.md`） |
 | `plan.md` / patch plan | feature-impl-planning | — | earn tickets 时任何 task 细节；ticket 正文；实时状态 |
 | Tickets | to-tickets（本地 fork） | dev-with-track（状态） | worker ownership、文件级实现步骤 |
 | `dag.md` / patch DAG | create-task-dag 方法 + dev-with-track 持久化 | — | spec/plan/ticket 正文 |
@@ -266,9 +274,9 @@ durable delta 的 canonical 捕获面是 **gate 的 Durable Deltas 表 → `_pen
 
 | Skill | 改动 |
 | --- | --- |
-| `requirement-alignment` | 通用化：description/body 解除 prj-supplyer-webapp 绑定，项目细节退回项目 AGENTS/CONTEXT；内置两道对等必过门（Design 步骤与 Spec 步骤都不可跳过，design.md 文件可薄但门必过）；拥有 design.md + spec.md 及其模板（spec 按 2026-07-09 八节合同结构成型，含 Error Boundaries/失败恢复/约束型合同；吸收 to-spec 的模板与 synthesis 方法，不产出第二份 tracker spec）；借用 domain-modeling 分析方法但禁用其 CONTEXT.md 写入（结论进 design/findings + backfill candidate） |
+| `req-align` | 通用化：description/body 解除 prj-supplyer-webapp 绑定，项目细节退回项目 AGENTS/CONTEXT；内置两道对等必过门（Design 步骤与 Spec 步骤都不可跳过，design.md 文件可薄但门必过）；拥有 design.md + spec.md 及其模板（spec 按 2026-07-09 八节合同结构成型，含 Error Boundaries/失败恢复/约束型合同；吸收 to-spec 的模板与 synthesis 方法，不产出第二份 tracker spec）；借用 domain-modeling 分析方法但禁用其 CONTEXT.md 写入（结论进 design/findings + backfill candidate） |
 | `to-tickets` | **本地 fork**（保留名，registry 标注"已本地分叉，上游更新人工 diff"）：加 draft/publish 双模式（内部默认 draft）、runner-neutral handoff、删除 /implement 绑定；保留 tracer bullet、带类型的静态 blocking edges、wide-refactor expand–contract；删除自动派工类动态调度，增加 publish 前环/引用校验 |
-| `to-spec` | 保留 vendored 只读，不进主流程；其方法已被 requirement-alignment 吸收 |
+| `to-spec` | 保留 vendored 只读，不进主流程；其方法已被 req-align 吸收 |
 | `feature-impl-planning` | plan 模板增加"有 tickets"分支（去任务化的跨 slice 契约形态）与"无 tickets"分支（内含 T\<n\> checklist）；识别 `spec.md` 的 Composition 行；拥有受控 composition 升级迁移；patching.md 与 ticket 生命周期互引（patch 仅 post-gate） |
 | `create-task-dag` | 收缩到 execution decomposition：删自带 slicing 路由，宽输入改路由 to-tickets draft；全部 to-issues 引用替换为 to-tickets；输入契约 = plan + 相关 approved tickets 子集（有 tickets 时）或 plan（仅 dag 时）；记录 task→AC 与 seam owner；whole-slice review 改为调用 module-review |
 | `dev-with-track` | 核心循环增加确定性 readiness resolution（不做自动派工）；按 composition 使用 canonical status home；实现 AC 覆盖 gate、返工失效传播和完整 Stage 7 关闭契约；按 composition 开关决定 scaffold 范围；description 植入体系名 |
@@ -286,8 +294,8 @@ ticket/task 数、最大依赖深度、blocked 次数、人工改选下一单元
 
 | 步 | 内容 | 验收 |
 | --- | --- | --- |
-| 0 | requirement-alignment 通用化（全局前置） | description 无项目绑定；dry-run 一个非 webapp 场景可触发 |
-| 1 | requirement-alignment 两道对等必过门 + design/spec ownership + 厚 spec 模板 | 两门都有可检验必过标准（Design 步骤不可跳）；spec 模板含八节含 Error Boundaries；design 护栏语句在位 |
+| 0 | req-align 通用化（全局前置） | description 无项目绑定；dry-run 一个非 webapp 场景可触发 |
+| 1 | req-align 两道对等必过门 + design/spec ownership + 厚 spec 模板 | 两门都有可检验必过标准（Design 步骤不可跳）；spec 模板含八节含 Error Boundaries；design 护栏语句在位 |
 | 2 | to-tickets 本地 fork + registry 标注；to-spec 方法吸收 | fork 后 draft 模式 dry-run 通过；registry 有分叉标注 |
 | 3 | create-task-dag 收缩 + to-issues 引用替换 + review 映射 + readiness 契约 | grep 无 to-issues 残留；whole-slice review 指向 module-review；输入支持 plan + tickets 子集；task→AC 与 seam owner 字段在位 |
 | 4 | feature-impl-planning plan 双分支（有/无 tickets）+ Composition 协同 | 两个模板分支存在；与 patching.md 互引 |

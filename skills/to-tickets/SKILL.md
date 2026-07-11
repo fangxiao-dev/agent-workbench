@@ -37,7 +37,7 @@ Before writing a draft, compare the earned result with the gated spec's exact
 Fail closed when `tickets=false` but two or more slices are earned, or when
 `tickets=true` but fewer than two slices are earned: do not create, delete, or update any
 ticket file; do not silently edit the spec. Return a composition-revision owner decision
-and route to `requirement-alignment` to pass the Spec gate again. After both gates pass,
+and route to `req-align` to pass the Spec gate again. After both gates pass,
 apply the shared controlled Composition Migration in
 `docs/skill-design/references/impl-package-composition-contract.md`; never repair the
 composition or artifacts locally.

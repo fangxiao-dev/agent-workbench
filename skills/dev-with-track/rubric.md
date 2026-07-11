@@ -18,7 +18,7 @@ updated: 2026-07-11
   用户对 create-task-dag 示例的泛化纠正
 
 ### R3 · 2026-07-11（Impl-Package Step 1 ownership 收口）
-- `design.md` / `spec.md` canonical ownership 与模板归 `requirement-alignment`；
+- `design.md` / `spec.md` canonical ownership 与模板归 `req-align`；
   `plan.md` / patch plan 归 `feature-impl-planning`；`dev-with-track` 只消费已过门
   design/spec 与当前 plan，不创建或重定义它们。
 - 删除 `dev-with-track` 的 design 模板副本与 `feature-impl-planning` 的 spec 模板

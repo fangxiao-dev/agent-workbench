@@ -12,10 +12,10 @@ package plan（及需要时的相关 Approved ticket 子集）时，读本文件
 | --- | --- | --- |
 | gated spec 明确 `tickets=true, dag=true` + package `plan.md` 已存在，且无 Draft/Approved ticket | `to-tickets mode=draft` | 不切 slice、不发布 tracker |
 | 缺 package `plan.md` | `feature-impl-planning` | 不把缺 plan 的输入转给 `to-tickets` |
-| 宽泛/未成 package 输入、缺 gated spec / 两道 gate 证据，或 Composition 未决 | `requirement-alignment` | 不创建 ticket 或 DAG |
+| 宽泛/未成 package 输入、缺 gated spec / 两道 gate 证据，或 Composition 未决 | `req-align` | 不创建 ticket 或 DAG |
 | gated `tickets=true, dag=true` 的 plan 已存在，相关 ticket 都是 `Draft` | 等明确 owner approval 后 `to-tickets mode=publish` | 不把 Draft 变为 Approved |
 | gated `tickets=false, dag=true`，且 plan 与稳定 `spec:AC-n` 齐备 | 直接使用 plan DAG | 不进入 `to-tickets` |
-| gated `tickets=false, dag=true` 但 spec/AC 缺失，或任意 Composition/现有 artifact 不一致 | `requirement-alignment` | 不猜测 composition、AC 或替代 spec |
+| gated `tickets=false, dag=true` 但 spec/AC 缺失，或任意 Composition/现有 artifact 不一致 | `req-align` | 不猜测 composition、AC 或替代 spec |
 | `tickets=true, dag=false` 或 `tickets=false, dag=false` | 不创建 DAG | no-DAG 规则仅引用 shared contract 第 4 节 |
 | 单一 Approved ticket 被要求推断跨 ticket seam | 请求 package plan + 相关 Approved ticket 子集 | 不从单 ticket 推断或补写 seam |
 
@@ -37,7 +37,7 @@ package plan（及需要时的相关 Approved ticket 子集）时，读本文件
 
 路由时交代：
 
-- 所用的原因对应路由（draft、publish、requirement-alignment、plan 或补齐输入）；
+- 所用的原因对应路由（draft、publish、req-align、plan 或补齐输入）；
 - 当前 skill 将在 plan 和相关 Approved tickets 到位后，只做 task DAG；
 - 不会创建或发布 tracker work item；
 - ticket 的验收语义仍属于 ticket/spec，task 只通过共享 contract 的

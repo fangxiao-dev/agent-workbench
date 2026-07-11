@@ -9,7 +9,7 @@ updated: 2026-07-08
 - 采纳「plan/spec 模板升级为三 skill 共享的 canonical：并入 Existing Plan/Spec Adoption、Current Next、Temporary Decisions、Safety/mutation 边界、功能合同表提示、配套账本链接行」— 用户选单一模板来源方案
 
 ### R2 · 2026-07-11（Impl-Package Step 4）
-- `requirement-alignment` 成为 design/spec 的唯一 owner；本 skill 只消费双 gate
+- `req-align` 成为 design/spec 的唯一 owner；本 skill 只消费双 gate
   已通过的厚 `spec.md`，不得维护第二份 spec 模板或自行改写 `Composition:`。
 - plan 按 `tickets ⊥ dag` 的已过门 Composition 选择形态：仅
   `tickets=false, dag=false` 可含 T<n> executable checklist；所有 `tickets=true` 或
