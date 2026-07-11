@@ -9,7 +9,7 @@
       "files": [],
       "expectations": [
         "Defaults to mode=draft",
-        "Writes two Draft files under docs/implementations/<slug>/tickets/",
+        "Writes two Draft files under docs/implementations/<package-id>/tickets/",
         "Uses typed blocking edges and AC evidence",
         "Does not publish or start implementation"
       ]
@@ -64,7 +64,7 @@
     {
       "id": 6,
       "name": "dangling-or-cross-package-reference",
-      "prompt": "Publish T2 with Blocked by implementation:T9, where T9 is absent from the same package but exists under another package slug.",
+      "prompt": "Publish T2 with Blocked by implementation:T9, where T9 is absent from the same package but exists under another package-id.",
       "expected_output": "Publish fails before mutation because dependencies must resolve in the same package.",
       "files": [],
       "expectations": [

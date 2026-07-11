@@ -8,6 +8,7 @@
       "expected_output": "Records Design Gate: BLOCKED in design.md and stops before creating spec.md.",
       "files": [],
       "expectations": [
+        "Creates a UTC timestamped package-id in the form YYYYMMDD-HHMMSSZ-<topic-slug> for the new package",
         "Evaluates the Design Gate before the Spec gate",
         "Records the missing destination and required owner decision",
         "Does not describe the Design step as optional",

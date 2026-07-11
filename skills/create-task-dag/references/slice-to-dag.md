@@ -16,7 +16,7 @@ package plan（及需要时的相关 Approved ticket 子集）时，读本文件
 | gated `tickets=true, dag=true` 的 plan 已存在，相关 ticket 都是 `Draft` | 等明确 owner approval 后 `to-tickets mode=publish` | 不把 Draft 变为 Approved |
 | gated `tickets=false, dag=true`，且 plan 与稳定 `spec:AC-n` 齐备 | 直接使用 plan DAG | 不进入 `to-tickets` |
 | gated `tickets=false, dag=true` 但 spec/AC 缺失，或任意 Composition/现有 artifact 不一致 | `requirement-alignment` | 不猜测 composition、AC 或替代 spec |
-| `tickets=true, dag=false` 或 `tickets=false, dag=false` | 不创建 DAG | no-DAG 规则仅引用 shared contract 第 3 节 |
+| `tickets=true, dag=false` 或 `tickets=false, dag=false` | 不创建 DAG | no-DAG 规则仅引用 shared contract 第 4 节 |
 | 单一 Approved ticket 被要求推断跨 ticket seam | 请求 package plan + 相关 Approved ticket 子集 | 不从单 ticket 推断或补写 seam |
 
 `to-tickets` 仍拥有 delivery-slice 的验收切分判断。create-task-dag 不创建或

@@ -5,7 +5,17 @@
 > skills. `create-task-dag`, `feature-impl-planning`, and `dev-with-track` must
 > reference it and must not redefine these semantics locally.
 
-## 1. Composition and canonical status homes
+## 1. Package identity
+
+For a new implementation package, `requirement-alignment` creates an immutable package-id
+in the form `YYYYMMDD-HHMMSSZ-<topic-slug>`, with a `-02`, `-03`… suffix only when the
+exact name already exists. The package root is `docs/implementations/<package-id>/`.
+`topic-slug` is a human-readable subject label; package-id is the identity that paths,
+truth pointers, handoffs, and cross-package references must use. Existing directories
+without the timestamp are legacy package-ids and remain valid; a post-gate patch reuses
+the owning package-id rather than creating a second package.
+
+## 2. Composition and canonical status homes
 
 `spec.md` records exactly one composition declaration:
 
@@ -25,7 +35,7 @@ overwrite an acceptance conclusion. Cross-session recovery earns a progress ledg
 not a DAG; a DAG is earned only when execution dependencies or coordination need an
 explicit graph.
 
-## 2. Typed blockers and readiness resolution
+## 3. Typed blockers and readiness resolution
 
 Every ticket dependency is typed:
 
@@ -69,7 +79,7 @@ actionable = unit is not in a completed/cancelled/superseded terminal state
 - Restore reconciles document state against evidence before selecting work; evidence wins
   over a stale status record.
 
-## 3. Task-to-acceptance traceability and seam ownership
+## 4. Task-to-acceptance traceability and seam ownership
 
 `dag.md` task records use these fields:
 
@@ -148,7 +158,7 @@ Validation gates:
    implies acceptance automatically.
 3. A ticket or no-ticket package depending on an unaccepted seam cannot close.
 
-## 4. Controlled composition upgrade
+## 5. Controlled composition upgrade
 
 Composition may only be upgraded through a recorded migration; it never creates
 per-ticket patch plans.
@@ -167,7 +177,7 @@ The migration preserves confirmed semantics, moves obsolete task/status content 
 new canonical home, leaves a relocation pointer at the old location, and removes the
 old maintenance entry point. It must not leave two writable truth sources.
 
-## 5. Stage 7 durable-delta closing contract
+## 6. Stage 7 durable-delta closing contract
 
 The only durable-delta capture path is:
 
@@ -196,14 +206,14 @@ dedupe key is:
 Before a gate with durable deltas closes, verify all of the following:
 
 1. each gate-table delta is registered in `_pending.md` using the dedupe key;
-2. every affected module spec has a `Pending deltas: <slug>` truth pointer;
+2. every affected module spec has a `Pending deltas: <package-id>` truth pointer;
 3. a missing target module spec has the required stub before the pointer is written.
 
 With no durable delta, the gate records `none` and a reason. Backfill report treats a
 missing gate capture, pending entry, or unowned commit as a capture gap, never as proof
 of no change.
 
-## 6. Shared validation checklist
+## 7. Shared validation checklist
 
 Before an affected skill may declare its work ready:
 

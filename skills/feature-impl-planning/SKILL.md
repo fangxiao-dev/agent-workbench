@@ -18,7 +18,7 @@ description: >
 ## 输出模型
 
 ```text
-docs/implementations/<slug>/
+docs/implementations/<package-id>/
   spec.md                                    # requirement-alignment 拥有的已过门合同
   plan.md                                    # 初始实现计划
   YYYYMMDD-HHMM-<patch-topic>.patch-plan.md  # 后续 patch plan
@@ -27,7 +27,7 @@ docs/implementations/<slug>/
 - `spec.md`：只读规划输入；由 `requirement-alignment` 拥有和过门。
 - `plan.md`：随 `spec.md` 的 Composition 分支生成：无 tickets 时可承载可执行
   checklist；有 tickets 时只承载跨 slice 工程契约，绝不成为 ticket 或任务状态副本。
-- patch plan：同一 slug 的后续计划，链接更新后的 `spec.md`，不复制原始计划。
+- patch plan：同一 package-id 的后续计划，链接更新后的 `spec.md`，不复制原始计划。
 
 如果仓库已有不同的 implementation-workspace 约定，在保留这三个角色的前提下
 适配该约定。
@@ -41,29 +41,29 @@ docs/implementations/<slug>/
   以 plan 绕过任一 gate，或把 plan 变成第二个 composition 真相源。
 - 不创建或维护执行账本。`dag.md`、`tasks/Tn-progress.md`、
   `tasks/Tn-handoff.md`、`findings.md`、`gate.md` 归 `dev-with-track` 所有。
-  tracked execution 开始或已激活时，交接 slug 和当前生效的 plan 文件，由
+  tracked execution 开始或已激活时，交接 package-id 和当前生效的 plan 文件，由
   `dev-with-track` 依据这些规划输入自行刷新状态。
 
 ## 工作流
 
 1. **路由请求。** 先判定需求是 new implementation，还是对已经 gate closed 的
-   implementation 做 patch/follow-up。已有 slug 只决定“复用哪个 implementation
+   implementation 做 patch/follow-up。已有 package-id 只决定“复用哪个 implementation
    目录”，不自动决定 patch 生命周期：
    - implementation 尚未 gate closed（仍在需求理解、spec/plan/DAG/执行阶段）时，
      需求纠正或范围澄清路由 `requirement-alignment` 原地修订并重新通过 spec gate；
      计划修正只由本 skill 原地更新 `plan.md`；`dag.md` 修正路由 `create-task-dag`，
      tracking 修正路由 `dev-with-track`。不创建 patch plan。
    - 只有原 package 已关闭 gate，之后出现新增需求、回归修复或增量范围，才进入
-     patch 模式；复用同一 slug，并在动笔前先读 [patching.md](./patching.md)。
+     patch 模式；复用同一 package-id，并在动笔前先读 [patching.md](./patching.md)。
      不建立每 ticket patch：patch 始终属于已关闭 package 的 post-gate 生命周期。
    - 通过语义搜索 implementation 目录、plan/spec 文件名、issue ID、feature 名和
-     涉及模块来定位 owning slug。两个候选 slug 都合理时，先问一个简短问题，
+     涉及模块来定位 owning package-id。两个候选 package-id 都合理时，先问一个简短问题，
      不要另建 workspace。
-   完成标准：routing、slug 和“原地修订 vs 新 patch plan”的依据已明确。
+   完成标准：routing、package-id 和“原地修订 vs 新 patch plan”的依据已明确。
 
 2. **按语义发现上下文，不依赖固定目录名。** 收集：来源需求、issue、handoff
    或讨论；长期 PRD/产品文档；架构、ADR、数据契约文档；已有 feature/模块
-   设计；测试与验证文档；已有 implementation workspace（含 slug 内
+   设计；测试与验证文档；已有 implementation workspace（含 package-id 内
    `design.md`、既往 plan、handoff）；以及用于校验或纠正文档的 focused code
    facts。目录缺失只是线索缺失，不是阻塞。完成标准：能说清功能合同和它触及
    的代码面。
@@ -120,7 +120,7 @@ docs/implementations/<slug>/
 
 8. **写 plan**，使用
    [assets/templates/plan.md](./assets/templates/plan.md)：新实现写
-   `plan.md`；patch 在 slug 根目录新建
+   `plan.md`；patch 在 package-id 根目录新建
    `YYYYMMDD-HHMM-<patch-topic>.patch-plan.md`（绝不覆盖 `plan.md`）。按第 5 步
    形态填入 input packet、契约或 checklist、验证和回滚；不留占位符，不写
    “加个校验”这类模糊步骤。Composition 从既有形态升级时，使用模板的
@@ -135,7 +135,7 @@ docs/implementations/<slug>/
 
 ## 审查清单
 
-- 选定 slug 内的 `spec.md` 已由 `requirement-alignment` 通过两道门；plan 实现的
+- 选定 package-id 内的 `spec.md` 已由 `requirement-alignment` 通过两道门；plan 实现的
   是当前 spec 合同。
 - plan 消费且不改写 spec 的唯一 Composition 行；无 tickets 与有 tickets 的形态
   满足共享 contract；`tickets=true, dag=false` 不得调用 `create-task-dag` 或建立
@@ -149,12 +149,12 @@ docs/implementations/<slug>/
   且没有 seam execution owner。
 - 每个 Composition 升级都有 previous/new/reason/moved content/relocation pointer/
   verification；迁移后没有双重可写事实源。
-- 新实现有 `plan.md`；patch 在 slug 根目录有新的带日期 patch plan，且复用了
-  owning slug。patch 仅能在 package gate closed 后创建，不能按 ticket 建 patch。
+- 新实现有 `plan.md`；patch 在 package-id 根目录有新的带日期 patch plan，且复用了
+  owning package-id。patch 仅能在 package gate closed 后创建，不能按 ticket 建 patch。
 - 功能语义在 `spec.md` 中，而不是只藏在 plan 里。
 - 颗粒度决策已记录；micro-step 风格仅用于非常小、边界清晰的任务。
 - 验证命令具体、限定在本次改动范围内、写明预期结果。
-- 提议的 tracking task ID 从 slug 内已有最高 `T<number>` 继续编号。
+- 提议的 tracking task ID 从 package-id 内已有最高 `T<number>` 继续编号。
 - 长期文档只被引用，未被修改。
 - 待定 owner 决策明确列出，与实现步骤分离。
 
@@ -162,7 +162,7 @@ docs/implementations/<slug>/
 
 返回：
 
-- 选定的 slug 和 routing（new implementation 或 patch/follow-up）
+- 选定的 topic slug、package-id 和 routing（new implementation 或 patch/follow-up）
 - 创建或修改的文件
 - 消费的 Composition、plan 形态，以及是否完成 `plan → to-tickets draft → cross-check plan`
 - 若有：Composition 升级迁移记录与共享 contract 验证结果

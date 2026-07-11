@@ -9,7 +9,7 @@ description: >
 # Dev With Track
 
 执行一个 implementation package 的持久恢复与闭环。持久单位是
-`docs/implementations/<slug>/`，不是聊天轮次、ticket 或 worker。它消费上游已批准
+`docs/implementations/<package-id>/`，不是聊天轮次、ticket 或 worker。它消费上游已批准
 合同，不重写需求、切片或 task-DAG 方法。
 
 本 skill 的共享规范源是
@@ -43,7 +43,7 @@ worker。若有多个可执行单元，按 ticket/task 文档顺序稳定选择�
 artifact 才能创建：
 
 ```text
-docs/implementations/<slug>/
+docs/implementations/<package-id>/
 ├── [design.md]
 ├── spec.md
 ├── plan.md
@@ -100,7 +100,7 @@ Use `tasks/Tn-progress.md` only when a task has an independent owner/subagent, e
 gate, blocker/seam/finding, cross-session recovery need, independent durable evidence, or
 gate-relevant detail too large for its canonical execution source. A normal task stays in
 that source (the DAG when earned, otherwise the no-DAG plan checklist). Task numbers remain
-stable and increment across the slug.
+stable and increment across the package-id.
 
 Ticket acceptance is not a sum of completed tasks. For ticketed composition, the ticket
 file's `Runtime Acceptance Status` is the canonical ticket runtime/acceptance fact source:

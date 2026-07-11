@@ -23,7 +23,8 @@
 
 如果已有 `docs/impl-plans/*.md`、handoff、roadmap 段落或旧 `process.md`：
 
-1. 创建 implementation slug 目录。
+1. 创建带时间戳的 implementation package-id 目录；新包格式为
+   `YYYYMMDD-HHMMSSZ-<topic-slug>`，已有 legacy package 不改名。
 2. 建立 `plan.md` 入口。
 3. 如果用户允许重组，把原 plan 内容迁入 `plan.md`，并在原位置留索引或不动
    旧文档，取决于项目规则。
@@ -37,7 +38,7 @@
 
 ## 接入 Patch Plan
 
-如果同一 slug 下已有 `YYYYMMDD-HHMM-<patch-topic>.patch-plan.md`：
+如果同一 package-id 下已有 `YYYYMMDD-HHMM-<patch-topic>.patch-plan.md`：
 
 1. 读取 `spec.md`、`plan.md`、目标 patch plan、composition 所 earn 的 DAG/tickets
    和已有 ledger。
@@ -45,7 +46,7 @@
    必要的 `tasks/Tn-progress.md`、`findings.md` 或 `gate.md`，不要覆盖 `plan.md`。
 3. 如果 patch plan 暴露出功能合同变化，确认该变化已经进入 `spec.md`；缺失
    时先补 spec 或标记 blocker。
-4. 新增 task 时从当前 slug 的最高 `T<number>` 之后继续编号。
+4. 新增 task 时从当前 package-id 的最高 `T<number>` 之后继续编号。
 
 完成标准：patch 进入有序执行，但初始 plan、patch plan、earned DAG/tickets 三者
 角色不互相覆盖；不得仅因 ticket 而创建 per-ticket patch plan。

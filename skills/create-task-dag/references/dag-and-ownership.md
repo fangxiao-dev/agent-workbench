@@ -42,7 +42,7 @@ task 不是 ticket 的子项。只为基础设施工作使用 `enables`，并指
 
 ## 任务编号续编
 
-落入已有 implementation slug 时，任务编号从该 slug 的最高 `T<number>` 之后
+落入已有 implementation package-id 时，任务编号从该 package-id 的最高 `T<number>` 之后
 继续。画图前检查 `dag.md`、根目录 `*.patch-dag.md`、`tasks/T*-progress.md`、
 `tasks/T*-handoff.md`、`plan.md` 和根目录 `*.patch-plan.md`。不复用、不重排
 已有编号。
@@ -84,7 +84,7 @@ acceptance target 受其约束，均按共享 contract 处理。
 ### Worker 返回状态与 DAG 板状态的映射
 
 Worker 返回与可释放 DAG 状态的映射、`Depends on` 的 readiness 判定，以及返工后的
-`NEEDS-REVALIDATION` 传播，全部引用 shared contract 第 2 节。不要把 worker
+`NEEDS-REVALIDATION` 传播，全部引用 shared contract 第 3 节。不要把 worker
 `DONE`、`Integrated` 或 `Verified local` 文案本身当作未验证的依赖释放；只有
 shared contract 定义的 dependency-releasing DAG 状态才允许其 dependent 开始。
 

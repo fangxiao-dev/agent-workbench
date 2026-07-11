@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "The package docs/implementations/catalog-readiness/ declares Composition: tickets=true, dag=true. I have plan.md plus the Approved catalog-readiness and admin-panel tickets; their ACs are AC-1 and AC-2. The plan defines the catalog-panel-wiring seam. Build the task DAG for this related ticket subset, with worker ownership and cohorts.",
+      "prompt": "The package docs/implementations/20260711-144512Z-catalog-readiness/ declares Composition: tickets=true, dag=true. I have plan.md plus the Approved catalog-readiness and admin-panel tickets; their ACs are AC-1 and AC-2. The plan defines the catalog-panel-wiring seam. Build the task DAG for this related ticket subset, with worker ownership and cohorts.",
       "expected_output": "A task DAG based on the plan plus the supplied Approved ticket subset, not on a guessed single-ticket contract. Every task has contributes-to or enables acceptance targets, and seam work names a seam execution owner.",
       "files": [],
       "expectations": [

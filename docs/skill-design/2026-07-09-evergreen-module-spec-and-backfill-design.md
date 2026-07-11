@@ -20,7 +20,7 @@
 
 事件溯源 + 快照：
 
-- slug 内 `spec.md` / `design.md` = 变更事件与事实来源；
+- implementation package-id 内 `spec.md` / `design.md` = 变更事件与事实来源；
 - 常青文档（module-knowledge 的 prd/spec、顶层 PRD、ARD、项目语言、 tech-stack、hands-on）= 可直接阅读的当前快照；
 - 回刷 = 对新事件做 compaction / checkpoint；
 - Git 历史 + 迁移台账 = 已删除旧设计层的 provenance。
@@ -43,7 +43,7 @@
 | 真相裁决 | 当前代码/测试 → PRD/ARD/CONTEXT 边界 → 较新设计；仍冲突则 owner gate |
 | Phase 1 引用排除 | 只排除 `docs/exchange/**` 与 `docs/implementations/**` |
 | Phase 2 范围 | gate 模板 + dev-with-track 主说明 + project-knowledge-manager 主说明 + routing taxonomy（目的地枚举含 module-prd）；不新增自动测试 |
-| Phase 3 首轮 | 用明确的 5 个遗留 implementation slug 做 bootstrap，不无界扫描历史 |
+| Phase 3 首轮 | 用明确的 5 个遗留 implementation package-id（旧称 slug）做 bootstrap，不无界扫描历史 |
 | report/apply | report 只提案；apply 经 owner 审核后执行，并修复 bootstrap 包旧引用 |
 | worktree | webapp 与 agent-workbench 均在隔离 worktree 开发；未合入 skill 不影响全局 junction |
 
@@ -55,7 +55,7 @@ docs/module-knowledge/
   _pending.md
   _compaction/
     README.md
-    bootstrap-2026-07.md       # Phase 3 创建；固定首轮 slug 清单
+    bootstrap-2026-07.md       # Phase 3 创建；固定首轮 legacy package-id 清单
     YYYY-MM-DD-report.md
   <15 个低密度模块>/
     spec.md                    # 行为合同（模块入口）
@@ -87,7 +87,7 @@ docs/module-knowledge/
 | 产品级意图 | why / journey 级用户价值 | `docs/top-level-knowledge/`（顶层 PRD，可继续粗粒度拆分）与根 `CONTEXT.md` |
 | 模块级意图 | 该模块为何存在、承载什么价值切片 | `docs/module-knowledge/<module>/prd.md`（惰性创建） |
 | 模块级契约 | how-it-behaves / 接口、状态、边界、失败与验收 | `docs/module-knowledge/<module>/spec.md` 及子域契约文件 |
-| 变更时设计 | 这次为什么、怎么改 | `docs/implementations/<slug>/` |
+| 变更时设计 | 这次为什么、怎么改 | `docs/implementations/<package-id>/` |
 
 顶层 PRD 描述产品全貌与 journey 级叙事，下钻引用各模块 `prd.md`；模块 `prd.md` 描述该模块承载的意图切片；`spec.md` 描述当前系统行为合同； implementation 任务包记录 point-in-time 变更。四者不得互相替代。层间纪律 靠固定文件角色（`prd.md` / `spec.md`）保障，不靠目录分离。
 
@@ -225,7 +225,7 @@ Phase 3 skill 的创建时机提前到 Phase 1/2 完成后、两仓库合入前�
 
 ### Bootstrap
 
-首轮只扫描以下 5 个 slug：
+首轮只扫描以下 5 个 legacy package-id：
 
 1. `inventory-item-default-replenishment-unit`；
 2. `manufacture-recipe-inventory-granularity`；
@@ -272,5 +272,5 @@ Phase 1 完成后立即为顶层 PRD 按 journey 粗粒度重构单独立项；p
 | 删除后文档不可用 | clean-room 删除后审核；失败即阻塞合入 |
 | 工具依赖旧路径 | 正式引用全量扫描 + Email Matrix 重复生成验证 |
 | 新 gate 早于新目录启用 | webapp 先合，agent-workbench 随后合 |
-| 首轮 backfill 报告失控 | 固定 5 个 bootstrap slug；稳态 watermark 从 Phase 2 activation commit 起 |
+| 首轮 backfill 报告失控 | 固定 5 个 bootstrap legacy package-id；稳态 watermark 从 Phase 2 activation commit 起 |
 | worktree 修改影响现用 skill | junction 保持指向当前 `main`；新 skill 从 worktree 显式试跑 |

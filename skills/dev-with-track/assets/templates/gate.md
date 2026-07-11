@@ -24,14 +24,14 @@ Findings：[findings.md](findings.md)
 Retain exactly one of the two subsections below. The only capture path is this table →
 project `_pending.md` → backfill report/apply. Before gate closure, every table row must
 have the matching `_pending.md` record under `<destination>|<delta-id>`, every affected
-module spec must have its `Pending deltas: <slug>` truth pointer, and any missing target
+module spec must have its `Pending deltas: <package-id>` truth pointer, and any missing target
 module-spec stub must be created before that pointer.
 
 ### Durable Deltas Table
 
 | Delta ID | Destination | Source | Statement | Affected modules | Authority | Evidence | Pending registration | Truth pointer / stub verification |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [delta-id] | [destination] | [path/slug] | [durable statement] | [module / N/A] | [authority] | [path/link] | [`<destination>|<delta-id>`] | [pointer + stub path] |
+| [delta-id] | [destination] | [path/package-id] | [durable statement] | [module / N/A] | [authority] | [path/link] | [`<destination>|<delta-id>`] | [pointer + stub path] |
 
 ### No durable delta
 

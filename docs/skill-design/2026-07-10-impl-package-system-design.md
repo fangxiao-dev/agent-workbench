@@ -11,11 +11,29 @@
 ## 命名与定位
 
 体系名定为 **Impl-Package 体系**：以 implementation package
-（`docs/implementations/<slug>/`）为持久单位的完整交付工作流。
+（`docs/implementations/<package-id>/`）为持久单位的完整交付工作流。
 `dev-with-track` 从此只指 stage 5 的执行 skill，不再兼指整套体系。
 
 体系名作为共享 leading word 写进各成员 skill 的 description
 （"Impl-Package 体系的 XX 阶段"），提升互相触发与路由可靠性。
+
+### Package ID 与时间戳命名
+
+把**语义 topic slug** 与目录身份分开：topic slug 是简短的 kebab-case 主题名，
+如 `catalog-readiness`；**package-id** 是不可变的目录名，格式为
+`YYYYMMDD-HHMMSSZ-<topic-slug>`，如 `20260711-144512Z-catalog-readiness`。
+所有**新建** implementation package 必须使用 package-id，因此目录为
+`docs/implementations/<package-id>/`。UTC 秒级时间戳让同一主题的独立、短时效
+变更事件天然可区分，并保持目录按创建时间排序。
+
+- requirement-alignment 在 Design 开始前生成并记录 package-id，同时记录 topic
+  slug；创建后两者均不可改写。若精确目录名已存在，保留同一时间戳和 topic slug
+  并追加 `-02`、`-03`…顺序后缀，直到唯一。
+- 下游 artifact、ticket ID、truth pointer 与 backfill 记录引用 package-id；不要只
+  用 topic slug 作为跨包引用。
+- 既有无时间戳目录是 legacy package-id，可被恢复和 post-gate patch 原地复用；不为
+  此规则做批量改名。post-gate patch 继续复用其 owning package-id，而不是另建一个
+  时间戳目录。
 
 ## 按需 composition，不是 sizing
 
@@ -79,7 +97,7 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
   Backfill Candidates 只是其中的**非约束调研提示**小节，供后续参考；durable
   delta 的正式捕获在 gate 关闭时发生（Stage 7），不在 spec 里维护常青 backfill
   map，也不要求执行期归并进 spec（避免与下游 backfill 体系双重登记）。
-- **spec.md 模板护栏**：slug 的 `spec.md` 按 2026-07-09 设计的模块 spec 八节
+- **spec.md 模板护栏**：package-id 内的 `spec.md` 按 2026-07-09 设计的模块 spec 八节
   合同结构成型（point-in-time 变更粒度）：Scope/authority/non-goals、术语与
   数据合同、行为/状态机/工作流、模块边界与依赖、**Error Boundaries——失败
   模式与恢复语义**、约束型合同（禁止事项/信任边界/精度/provider 义务/负依赖）、

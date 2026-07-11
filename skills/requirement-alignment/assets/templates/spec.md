@@ -3,7 +3,9 @@
 Status: Draft | Spec Gate Passed | Spec Gate Blocked | Superseded
 Created:
 Requirement source:
-Canonical package: `docs/implementations/<slug>/`
+Topic slug:
+Package ID:
+Canonical package: `docs/implementations/<package-id>/`
 Design: [design.md](design.md) | No standalone design file
 Composition: tickets=<true|false>, dag=<true|false>
 

@@ -14,7 +14,10 @@ Do not assume a product domain or impose another workflow's document destination
 
 ## Owned Artifacts
 
-Use `docs/implementations/<slug>/` as the canonical package root. This skill owns:
+Use `docs/implementations/<package-id>/` as the canonical package root. A package-id is
+`YYYYMMDD-HHMMSSZ-<topic-slug>` (UTC), for example
+`20260711-144512Z-catalog-readiness`; it is a directory identity, not a mutable title.
+This skill owns:
 
 - `design.md`, required whenever Design is blocked and optional only for a lightweight
   Design-passed path whose evidence fits in the spec Design Gate Record;
@@ -35,6 +38,25 @@ This skill may append to package `findings.md` when research establishes a fact,
 constraint that later stages can reuse. Keep ordinary research narrative in `design.md`;
 do not create an empty findings ledger when there is no substantive cross-stage finding.
 `dev-with-track` remains the owner of the findings format and final consolidation.
+
+## Package Identity
+
+For a **new** implementation package, choose a short semantic `topic-slug`, then generate
+one immutable `package-id` from the current UTC creation time:
+
+```text
+<package-id> = YYYYMMDD-HHMMSSZ-<topic-slug>
+```
+
+Record both values in the Design/Spec metadata before creating downstream artifacts. Check
+whether the exact directory already exists; if it does, append `-02`, `-03`, and so on
+until it is unique. Use the resulting package-id in every package path, cross-package
+reference, truth pointer, and handoff. This prevents distinct short-lived changes with the
+same topic from sharing a workspace.
+
+For an existing package, retain its current directory name as its legacy or timestamped
+package-id. Never rename it merely to add a timestamp. A post-gate patch remains in that
+owning package-id; it is not a new implementation package.
 
 ## Discover Project Knowledge
 
@@ -112,7 +134,9 @@ steps, or tracker publication metadata.
 
 ## Workflow
 
-1. Announce use of requirement-alignment and assign a stable descriptive slug.
+1. Announce use of requirement-alignment; for a new package assign a topic slug and an
+   immutable timestamped package-id, or identify the owning existing package-id for a
+   patch/follow-up.
 2. Discover authoritative project knowledge before detailed clarification.
 3. Ask one focused question at a time for unresolved intent, scope, constraints, success
    criteria, trade-offs, or owner decisions.
@@ -169,10 +193,10 @@ Before writing artifacts or editing long-lived knowledge, present:
 
 ## User-Facing Output
 
-Return only the slug and package path, both gate results and evidence locations, changed
-files (including `findings.md` only when appended), remaining owner decisions, and whether
-the package may enter implementation planning. Do not describe a blocked gate as
-completed or paste full artifacts after they have been written.
+Return only the topic slug, package-id and package path, both gate results and evidence
+locations, changed files (including `findings.md` only when appended), remaining owner
+decisions, and whether the package may enter implementation planning. Do not describe a
+blocked gate as completed or paste full artifacts after they have been written.
 
 Artifact `Status` and gate `Result` must agree: a Passed status requires `PASSED`, a
 Blocked status requires `BLOCKED`, and neither may be inferred from prose alone.

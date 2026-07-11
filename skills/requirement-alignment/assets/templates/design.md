@@ -3,7 +3,9 @@
 Status: Draft | Design Gate Passed | Design Gate Blocked | Superseded
 Created:
 Requirement source:
-Canonical package: `docs/implementations/<slug>/`
+Topic slug:
+Package ID:
+Canonical package: `docs/implementations/<package-id>/`
 
 This is a point-in-time research and decision record, not the behavior contract.
 Behavior, state, interface, failure, and acceptance semantics belong only in `spec.md`.

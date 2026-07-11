@@ -16,9 +16,10 @@ explicit owner approval for the same complete Draft set: a caller may then reque
 `mode=publish` to perform the Draft-to-Approved transition. `publish` is never the
 default continuation of drafting.
 
-Canonical input is the same-slug package's gated `spec.md` plus `plan.md` under
-`docs/implementations/<slug>/`. Stop if the Spec gate is not `PASSED`, the plan is absent,
-or the slugs disagree. Do not synthesize a replacement spec or plan from conversation.
+Canonical input is the same-package-id package's gated `spec.md` plus `plan.md` under
+`docs/implementations/<package-id>/`. Stop if the Spec gate is not `PASSED`, the plan is
+absent, or the package IDs disagree. Do not synthesize a replacement spec or plan from
+conversation.
 
 ## Earn Tickets Before Creating Files
 
@@ -85,7 +86,7 @@ Draft is local and non-publishing:
 3. Propose the complete slice set and typed edges for owner review.
 4. When earned, write one `Publication Status: Draft` file per slice using
    [assets/templates/ticket.md](./assets/templates/ticket.md) at
-   `docs/implementations/<slug>/tickets/<NN>-<ticket-slug>.md`.
+   `docs/implementations/<package-id>/tickets/<NN>-<ticket-slug>.md`.
 5. Leave each `Runtime Acceptance Status` field unrecorded; Draft mode owns only the
    publication status and ticket definition.
 6. Number files in a deterministic dependency-compatible order; for independent slices,
@@ -139,7 +140,7 @@ not persistent Impl-Package artifacts.
 
 Return only:
 
-- slug and package path;
+- topic slug, package-id and package path;
 - mode and tickets composition result;
 - ticket ids/paths and statuses;
 - typed dependencies and validation evidence;
