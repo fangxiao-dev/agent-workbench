@@ -22,8 +22,7 @@
 | Module | Result | Candidate IDs | Evidence note |
 | --- | --- | --- | --- |
 
-每个 module 必须出现一次。Result 仅用 `candidate`、`already covered`、
-`conflict`、`no delta`。
+每个 module 必须出现一次。Result 仅用 `candidate`、`already covered`、 `conflict`、`no delta`。
 
 ## Candidate Deltas
 

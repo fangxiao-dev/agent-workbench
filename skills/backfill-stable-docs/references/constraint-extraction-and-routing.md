@@ -5,16 +5,11 @@
 对每条原子陈述依次问：
 
 1. 完全替换实现但用户价值不变时，它是否仍必须成立？是则是 intent 候选。
-2. 它能否由测试、接口、状态查询或故障演练直接验证？是则是 behavior contract
-   候选。
+2. 它能否由测试、接口、状态查询或故障演练直接验证？是则是 behavior contract 候选。
 
-双是时，第二问优先：把可验证承诺归 module spec。外部系统速率义务既保护
-价值又可观测，属于典型双是合同。若一句话同时解释 why 和规定 how，拆成两个
-delta；不要在 PRD 与 spec 原样复制。
+双是时，第二问优先：把可验证承诺归 module spec。外部系统速率义务既保护 价值又可观测，属于典型双是合同。若一句话同时解释 why 和规定 how，拆成两个 delta；不要在 PRD 与 spec 原样复制。
 
-第二问不是“任何可测试实现都进 spec”。还要问：替换 adapter、锁实现、缓存或
-队列后，外部可观察承诺是否仍需成立？若不需要，保留测试/代码 authority，不
-提升 token、helper、具体锁顺序等机制。
+第二问不是“任何可测试实现都进 spec”。还要问：替换 adapter、锁实现、缓存或 队列后，外部可观察承诺是否仍需成立？若不需要，保留测试/代码 authority，不 提升 token、helper、具体锁顺序等机制。
 
 ## 约束型合同清单
 
@@ -28,8 +23,7 @@ delta；不要在 PRD 与 spec 原样复制。
 | 外部 provider 义务 | 主动遵守当前 provider 限速；retry 不能替代 pacing | client 调用面；env/config 常量；429 测试；官方 contract；共享 request gate |
 | 负依赖 / hard cut | 新流程不得重新读写 legacy audit store | deleted adapter；readiness/schema check；“no longer requires” test；migration decision |
 
-线索只负责发现候选，不自动证明 durability。每条候选都要找到 current authority
-和对未来替换实现仍有意义的 observable statement。
+线索只负责发现候选，不自动证明 durability。每条候选都要找到 current authority 和对未来替换实现仍有意义的 observable statement。
 
 ## Source 顺序
 
@@ -41,8 +35,7 @@ delta；不要在 PRD 与 spec 原样复制。
 4. watermark 后 commits 与无法归属的 diff；
 5. 外部 provider 合同时，使用当前官方来源确认 versioned 数值。
 
-代码能证明 current behavior，不能单独证明 product intent。旧设计能发现遗漏，
-不能在没有 current evidence 时自动复活。发生冲突时报告 owner decision，不猜。
+代码能证明 current behavior，不能单独证明 product intent。旧设计能发现遗漏， 不能在没有 current evidence 时自动复活。发生冲突时报告 owner decision，不猜。
 
 ## 分流
 
@@ -68,8 +61,7 @@ delta；不要在 PRD 与 spec 原样复制。
 - module spec 下链；
 - intent authority 来自 top-level PRD、批准 design、owner 决策或 confirmed gate。
 
-材料不足时保留 pending。不得用代码行为扩写缺失的 intent，也不得创建只有标题
-和一句 slogan 的文件。
+材料不足时保留 pending。不得用代码行为扩写缺失的 intent，也不得创建只有标题 和一句 slogan 的文件。
 
 ## 人工 fixtures
 
@@ -83,5 +75,4 @@ delta；不要在 PRD 与 spec 原样复制。
 | “只重命名 local helper，外部行为与意图未变。” | `none` |
 | “必须主动遵守 provider 当前速率限制；使用共享 pacing。” | observable 义务进 `module-spec`；可替换机制仅作 evidence/实现建议 |
 
-Fixture 通过标准不是关键词命中，而是 statement 被拆到正确层、没有重复或把
-implementation mechanism 误当常青承诺。
+Fixture 通过标准不是关键词命中，而是 statement 被拆到正确层、没有重复或把 implementation mechanism 误当常青承诺。
