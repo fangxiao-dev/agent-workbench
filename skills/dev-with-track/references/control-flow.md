@@ -23,8 +23,8 @@
 
 如果已有 `docs/impl-plans/*.md`、handoff、roadmap 段落或旧 `process.md`：
 
-1. 创建带时间戳的 implementation package-id 目录；新包格式为
-   `YYYYMMDD-HHMMSSZ-<topic-slug>`，已有 legacy package 不改名。
+1. 创建带创建日期的 implementation package-id 目录；新包格式为
+   `YYMMDD-<topic-slug>`，已有 legacy package 不改名。
 2. 建立 `plan.md` 入口。
 3. 如果用户允许重组，把原 plan 内容迁入 `plan.md`，并在原位置留索引或不动
    旧文档，取决于项目规则。

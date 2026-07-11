@@ -21,13 +21,13 @@
 
 把**语义 topic slug** 与目录身份分开：topic slug 是简短的 kebab-case 主题名，
 如 `catalog-readiness`；**package-id** 是不可变的目录名，格式为
-`YYYYMMDD-HHMMSSZ-<topic-slug>`，如 `20260711-144512Z-catalog-readiness`。
+`YYMMDD-<topic-slug>`，如 `260711-catalog-readiness`。
 所有**新建** implementation package 必须使用 package-id，因此目录为
-`docs/implementations/<package-id>/`。UTC 秒级时间戳让同一主题的独立、短时效
-变更事件天然可区分，并保持目录按创建时间排序。
+`docs/implementations/<package-id>/`。UTC 创建日期让同一主题的独立、短时效
+变更事件可按日期排序；同日同主题的包由续号区分。
 
 - requirement-alignment 在 Design 开始前生成并记录 package-id，同时记录 topic
-  slug；创建后两者均不可改写。若精确目录名已存在，保留同一时间戳和 topic slug
+  slug；创建后两者均不可改写。若精确目录名已存在，保留同一日期和 topic slug
   并追加 `-02`、`-03`…顺序后缀，直到唯一。
 - 下游 artifact、ticket ID、truth pointer 与 backfill 记录引用 package-id；不要只
   用 topic slug 作为跨包引用。

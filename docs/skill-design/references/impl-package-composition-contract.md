@@ -8,7 +8,7 @@
 ## 1. Package identity
 
 For a new implementation package, `requirement-alignment` creates an immutable package-id
-in the form `YYYYMMDD-HHMMSSZ-<topic-slug>`, with a `-02`, `-03`… suffix only when the
+in the form `YYMMDD-<topic-slug>` from the UTC creation date, with a `-02`, `-03`… suffix only when the
 exact name already exists. The package root is `docs/implementations/<package-id>/`.
 `topic-slug` is a human-readable subject label; package-id is the identity that paths,
 truth pointers, handoffs, and cross-package references must use. Existing directories

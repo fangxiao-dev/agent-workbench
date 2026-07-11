@@ -15,8 +15,8 @@ Do not assume a product domain or impose another workflow's document destination
 ## Owned Artifacts
 
 Use `docs/implementations/<package-id>/` as the canonical package root. A package-id is
-`YYYYMMDD-HHMMSSZ-<topic-slug>` (UTC), for example
-`20260711-144512Z-catalog-readiness`; it is a directory identity, not a mutable title.
+`YYMMDD-<topic-slug>` (UTC creation date), for example
+`260711-catalog-readiness`; it is a directory identity, not a mutable title.
 This skill owns:
 
 - `design.md`, required whenever Design is blocked and optional only for a lightweight
@@ -42,10 +42,10 @@ do not create an empty findings ledger when there is no substantive cross-stage 
 ## Package Identity
 
 For a **new** implementation package, choose a short semantic `topic-slug`, then generate
-one immutable `package-id` from the current UTC creation time:
+one immutable `package-id` from the current UTC creation date:
 
 ```text
-<package-id> = YYYYMMDD-HHMMSSZ-<topic-slug>
+<package-id> = YYMMDD-<topic-slug>
 ```
 
 Record both values in the Design/Spec metadata before creating downstream artifacts. Check
@@ -135,7 +135,7 @@ steps, or tracker publication metadata.
 ## Workflow
 
 1. Announce use of requirement-alignment; for a new package assign a topic slug and an
-   immutable timestamped package-id, or identify the owning existing package-id for a
+   immutable date-prefixed package-id, or identify the owning existing package-id for a
    patch/follow-up.
 2. Discover authoritative project knowledge before detailed clarification.
 3. Ask one focused question at a time for unresolved intent, scope, constraints, success
