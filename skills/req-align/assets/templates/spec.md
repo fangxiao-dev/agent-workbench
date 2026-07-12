@@ -12,11 +12,7 @@ Design: [design.md](design.md) | No standalone design file
 
 ## Design Gate Record
 
-<!-- Complete only after Design PASSED. Without design.md, this is the canonical minimal
-evidence that the mandatory lightweight Design step occurred. A Design BLOCKED path uses
-design.md and does not generate this spec. Therefore the Design Gate Result in an existing
-spec can only be PASSED. Status: Spec Gate Passed requires the Spec Gate Result PASSED;
-Status: Spec Gate Blocked requires the Spec Gate Result BLOCKED. -->
+<!-- Complete only after Design PASSED. Without design.md, this is the canonical minimal evidence that the mandatory lightweight Design step occurred. A Design BLOCKED path uses design.md and does not generate this spec. Therefore the Design Gate Result in an existing spec can only be PASSED. Status: Spec Gate Passed requires the Spec Gate Result PASSED; Status: Spec Gate Blocked requires the Spec Gate Result BLOCKED. -->
 
 - Result: PASSED
 - Destination and intended outcome:

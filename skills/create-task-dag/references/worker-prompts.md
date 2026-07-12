@@ -52,25 +52,18 @@ Implementation 目标：
 - 剩余风险
 ```
 
-worker 返回状态或证据、且存在 `dev-with-track` progress ledger 时，更新
-`tasks/Tn-progress.md`。只在任务需要向另一个 session、agent 或 worker 独立
-交接时创建 `tasks/Tn-handoff.md`。
+worker 返回状态或证据、且存在 `dev-with-track` progress ledger 时，更新 `tasks/Tn-progress.md`。只在任务需要向另一个 session、agent 或 worker 独立交接时创建 `tasks/Tn-handoff.md`。
 
 ## 状态处理
 
 - `DONE`：进入任务 spec review。
-- `DONE_WITH_CONCERNS`：review 前先读 concern；正确性或 scope concern 先
-  解决。
-- `NEEDS_SEAM`：main session 处理 seam、等待点名的任务 owner、或调整
-  ownership 后继续。用于计划内依赖、非属地文件、因另一任务未落地导致的
-  广域测试失败、以及不需要人类判断的集成接线。
-- `BLOCKED`：补上下文、拆任务、换模型/worker，或在计划有误时升级。只用于
-  需要上下文、权限、数据、计划修正或人类决策的情况。
+- `DONE_WITH_CONCERNS`：review 前先读 concern；正确性或 scope concern 先解决。
+- `NEEDS_SEAM`：main session 处理 seam、等待点名的任务 owner、或调整 ownership 后继续。用于计划内依赖、非属地文件、因另一任务未落地导致的广域测试失败、以及不需要人类判断的集成接线。
+- `BLOCKED`：补上下文、拆任务、换模型/worker，或在计划有误时升级。只用于需要上下文、权限、数据、计划修正或人类决策的情况。
 
 不要在不改变致因上下文的情况下让同一个 worker 原样重试。
 
-（worker 返回状态到 DAG 板状态的映射见
-`references/dag-and-ownership.md`。）
+（worker 返回状态到 DAG 板状态的映射见 `references/dag-and-ownership.md`。）
 
 ## 状态示例
 

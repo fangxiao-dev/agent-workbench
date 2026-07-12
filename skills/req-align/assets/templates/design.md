@@ -8,13 +8,7 @@ Topic slug:
 Package ID:
 Canonical package: `docs/implementations/<package-id>/`
 
-This is the current design choices and rationale SoT while the package is active, not the
-behavior contract. Replace superseded choices in the current body and record the revision
-in Revision History; Git preserves the full old body.
-Behavior, state, interface, failure, and acceptance semantics belong only in `spec.md`.
-When Design is blocked, use this file and do not create `spec.md`. `Status: Design Gate
-Passed` requires `Result: PASSED`; `Status: Design Gate Blocked` requires
-`Result: BLOCKED`.
+This is the current design choices and rationale SoT while the package is active, not the behavior contract. Replace superseded choices in the current body and record the revision in Revision History; Git preserves the full old body. Behavior, state, interface, failure, and acceptance semantics belong only in `spec.md`. When Design is blocked, use this file and do not create `spec.md`. `Status: Design Gate Passed` requires `Result: PASSED`; `Status: Design Gate Blocked` requires `Result: BLOCKED`.
 
 ## 1. Destination
 
@@ -73,8 +67,7 @@ Passed` requires `Result: PASSED`; `Status: Design Gate Blocked` requires
 
 ## 8. Backfill Candidates
 
-<!-- Non-binding research hints only. This is not durable-delta capture and does not
-authorize stable-document edits. Canonical capture is gate Durable Deltas -> _pending.md. -->
+<!-- Non-binding research hints only. This is not durable-delta capture and does not authorize stable-document edits. Canonical capture is gate Durable Deltas -> _pending.md. -->
 
 | Possible destination | Candidate insight | Why it might endure |
 | --- | --- | --- |

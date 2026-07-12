@@ -203,9 +203,7 @@ terminal gate entry 写入前：
 - 没有长期规则：明确记录“没有”及原因；
 - 登记不要求当场改完长期文档；后续由 backfill report/apply 压实。
 
-当前 attempt 先保留下一个 gate entry id，并以该 id 完成 `_pending.md` 注册、受影响
-module spec truth pointer 与必要 stub；随后一次性把不可变 entry 插入单一 `gate.md`
-顶部。blocked entry 的 capture gap 由后续 entry 补齐，不回改旧 entry。
+当前 attempt 先保留下一个 gate entry id，并以该 id 完成 `_pending.md` 注册、受影响 module spec truth pointer 与必要 stub；随后一次性把不可变 entry 插入单一 `gate.md` 顶部。blocked entry 的 capture gap 由后续 entry 补齐，不回改旧 entry。
 
 长期规则分流使用两问 litmus：
 

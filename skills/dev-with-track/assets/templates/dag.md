@@ -14,9 +14,7 @@ Plan：[current attempt plan](<plan-path>)
 Findings：[findings.md](findings.md)
 Gate：[gate.md](gate.md)
 
-`dag.md` is the canonical execution-state source only for an earned DAG. It is not a
-ticket acceptance source. If tickets are also earned, any ticket state below is a
-read-only projection that names its `tickets/<ticket>.md` source.
+`dag.md` is the canonical execution-state source only for an earned DAG. It is not a ticket acceptance source. If tickets are also earned, any ticket state below is a read-only projection that names its `tickets/<ticket>.md` source.
 
 ## Contract References
 
