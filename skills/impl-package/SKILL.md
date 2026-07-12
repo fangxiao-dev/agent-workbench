@@ -14,8 +14,8 @@ description: >
 
 持久单位是 `docs/implementations/<package-id>/`。体系由两部分咬合：
 
-- **文档维护层**：常青四层（产品意图 / 模块意图 / 模块契约 / 变更事件），真相住这里，每次开发最后汇回。
-- **开发 6+1 流程**：6 步把改动做出来 ＋ 1 步回刷交接把长期知识汇回文档层。
+- **文档维护层**：常青四层（产品/journey 端到端意图 / 模块贡献 / 模块契约 / 变更事件），真相住这里；跨模块 journey 通过唯一 owner 和 anchor 链接下钻，不复制正文。开发收口后可以通过 backfill 把 durable delta 汇回。
+- **开发 6 步主流程 + 可选回刷**：6 步把改动做出来；backfill 是收口后的维护提示与周期性兜底，不阻塞当前交付。
 
 ## 系统图（供 AI 读取）
 
@@ -35,12 +35,12 @@ flowchart TD
     RV -->|碰安全路径| SR[safety-review]
     RV --> CAP[保留 G id + Stage 7 登记]
     CAP --> GT[gate.md 顶部插入不可变 entry]
-    GT --> BF[backfill：定期 report/apply]
+    GT -. 可选提示 / 周期任务 .-> BF[backfill：report / apply]
     BF -. 定期 report/apply 兜底 .-> EV[(常青四层 module-knowledge)]
     EV -. 下次改动读取 .-> RA
 ```
 
-`to-tickets` 与 `create-task-dag` 是 earn-gated 的按需步：只有当前 attempt plan 判定 `tickets=true` / `dag=true` 才走。虚线是异步回路——回刷登记在 gate 发生，真正压实由定期 backfill 任务做并兜底。
+`to-tickets` 与 `create-task-dag` 是 earn-gated 的按需步：只有当前 attempt plan 判定 `tickets=true` / `dag=true` 才走。backfill 虚线是异步维护提示：gate 关闭后应提醒 owner 可以运行 `backfill-stable-docs`，但不自动执行、不要求本次完成，也不影响当前 gate 或任务的 closed 判断；真正压实可由后续 report / apply 或周期任务完成。
 
 ## 阶段地图
 
@@ -53,7 +53,7 @@ flowchart TD
 | 4 排执行图（按需） | `create-task-dag` | 当前 attempt DAG | plan 判 `dag=true` |
 | 5 执行 | `dev-with-track` | `progress` · plan Execution Record · append-only `gate.md` | 上游就绪 / 跨 session 续 |
 | 6 审查 | `code-review`（恒） · `module-review` · `safety-review` | review evidence（进入 plan ER） | 见下方路由 |
-| +1 回刷交接 | `backfill-stable-docs` | `_pending.md` | gate 关闭；定期兜底 |
+| 可选回刷 | `backfill-stable-docs` | report / approved apply；必要时更新 `_pending.md` | gate 关闭后提示；积累 durable delta 或周期维护时执行，不阻塞当前交付 |
 
 ## 正向路由：你在哪 → 进哪个 skill
 
@@ -63,11 +63,22 @@ flowchart TD
 - 当前 attempt plan 判 `dag=true`，plan（及相关 approved 票）就绪 → **`create-task-dag`**。
 - 上游产物就绪，要开始 / 恢复执行 → **`dev-with-track`**。
 - 集成后要审查：`code-review` 恒查；改动 interface / seam / 契约 → **`module-review`**；碰 auth / 支付 / webhook / 迁移 / 外部写入 → **`safety-review`**。
-- gate 已关，处理长期知识 → **`backfill-stable-docs`**（登记在 gate 已发生；压实与兜底由定期 report / apply 做）。
+- gate 已关 → **提示**可按需使用 `backfill-stable-docs` 处理 durable delta。提示不等于执行授权：只有用户要求、已有明确维护计划，或进入周期性 report / approved apply 时才实际调用；本轮不做 backfill 也可以正常收口。
 
 断链就退回上游，别硬猜：缺 plan 回 `impl-planning`；输入太宽没切片回 `to-tickets`；Composition/artifact 对不上回 `impl-planning` 修订 P revision，只有暴露出真实 contract drift 才回 `req-align` 重过相应门。
 
 体量不预先分档，只看当前 attempt 的两个开关；可用 dispatch shorthand（`S`/`M`/`L`/`D`）快速下发，但它只展开成当前 plan 的 `tickets=/dag=`，earn 条件仍是权威。
+
+用户可以主动说“按 S / M / L / D 做”，把它作为期望的执行组合交给 `impl-planning`。agent 必须先展开并校验 earn 条件：一致时采用；冲突时先用人话说明实际信号、建议组合和会增删哪些 artifact，等待 owner 决议，不能静默改模式或直接造/删 ticket、DAG。
+
+## 面向 owner 的汇报
+
+所有阶段与 review skill 向 owner 汇报 proposal、状态、review、gate 或交付时直接使用 `talk-to-boss`；本体系不复制它的通用汇报方法，只补以下适配：
+
+- `package-id`、Attempt / D-S-P-G revision、Composition、ticket/task ID、ER/gate anchor、路径和命令只作为 canonical handoff 或技术证据，不作为人类汇报开场。
+- 同一回复同时面向 owner 与下游 agent 时，先给 `talk-to-boss` 的决策摘要与功能主体，再附 canonical handoff。
+- S/M/L/D 首次出现在人类汇报时必须展开为自解释执行组合，不能裸报字母或布尔值。
+- stage 自己的 Output Contract 只定义额外 handoff/evidence 字段，不得覆盖 `talk-to-boss` 的人类汇报顺序。
 
 ## Canonical 源（只给指针，不在这里复制正文）
 

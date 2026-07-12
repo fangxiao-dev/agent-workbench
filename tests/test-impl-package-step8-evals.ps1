@@ -128,6 +128,41 @@ Assert-Contains $specAxis 'no third drift reviewer' 'Module-review reviewer topo
 $safetyP0 = Eval-Text (Find-Eval $evals['safety-review'] 1)
 Assert-Contains $safetyP0 'idempotency' 'Safety-review P0 guard'
 
+$implEntry = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\SKILL.md')
+$compositionContract = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\references\impl-package-composition-contract.md')
+$systemDesign = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\references\impl-package-system-design.md')
+$backfillDesign = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\references\evergreen-module-spec-and-backfill-design.md')
+$devWithTrack = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\dev-with-track\SKILL.md')
+$introHtml = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\assets\impl-package-intro.html')
+foreach ($surface in @($implEntry, $compositionContract, $systemDesign, $backfillDesign, $devWithTrack, $introHtml)) {
+    Assert-Contains $surface '不阻塞' 'Backfill must be explicitly non-blocking across every current guidance surface.'
+}
+Assert-Contains $compositionContract 'terminal gate entry 写入前必须完成 Stage 7 durable-delta capture' 'Composition contract must keep capture inside the terminal gate.'
+Assert-Contains $compositionContract '提示本身不构成 report/apply 授权' 'Composition contract must separate prompting from authorization.'
+Assert-Contains $backfillDesign '## 当前稳态用法' 'Backfill design must lead with current steady-state usage.'
+Assert-Contains $backfillDesign '不替 terminal gate 履行 Stage 7 capture' 'Backfill cannot replace gate capture.'
+Assert-Contains $devWithTrack '另以非阻塞 follow-up 提示可选 backfill' 'Execution owner must report optional backfill without reopening the gate.'
+Assert-Contains $introHtml '第二部分 · 6 步主流程' 'Human intro must present a six-step main flow.'
+Assert-Contains $introHtml 'Gate 后可选维护:提示 Backfill,但不自动执行' 'Human intro must place backfill outside the numbered flow.'
+Assert-NotContains $introHtml '开发 6+1' 'Human intro must not retain the obsolete 6+1 model.'
+Assert-NotContains $introHtml '+1 回刷交接' 'Human intro must not present backfill as a seventh step.'
+Assert-Contains $backfillDesign '### 跨模块 journey 与引用纪律' 'Evergreen design must define cross-module journey ownership.'
+Assert-Contains $backfillDesign 'journey anchor → module PRD contribution → primary module spec contract' 'Cross-module journey must use a non-duplicating anchor chain.'
+Assert-Contains $compositionContract 'Composition request' 'Shorthand must be treated as an owner request, not artifact authorization.'
+Assert-Contains $compositionContract '不得静默改标签' 'Shorthand conflicts must be surfaced before artifact changes.'
+Assert-Contains $introHtml '可以主动说“按 S / M / L / D 模式做”' 'Human intro must explain active shorthand selection.'
+Assert-Contains $introHtml '单一验收 · 不切票 · 不排图' 'Human shorthand cards must lead with decision meaning.'
+Assert-NotContains $introHtml 'tickets=T · dag=F' 'Human shorthand cards must not lead with canonical booleans.'
+
+$implSkillFiles = Get-ChildItem -Path (Join-Path $repo 'skills\impl-package') -Recurse -Filter 'SKILL.md'
+if ($implSkillFiles.Count -ne 10) { throw "Expected 10 Impl-Package SKILL.md files, found $($implSkillFiles.Count)." }
+foreach ($skillFile in $implSkillFiles) {
+    $skillText = Get-Content -Raw -LiteralPath $skillFile.FullName
+    Assert-Contains $skillText 'talk-to-boss' "Impl-Package skill must directly reuse talk-to-boss: $($skillFile.FullName)"
+}
+Assert-Contains $implEntry 'canonical handoff' 'Impl-Package root must keep only its canonical handoff adaptation.'
+Assert-NotContains $implEntry 'owner-facing-reporting.md' 'Impl-Package must not duplicate talk-to-boss in a local reporting reference.'
+
 $activeRoots = @('skills\impl-package\req-align', 'skills\impl-package\to-tickets', 'skills\impl-package\impl-planning', 'skills\impl-package\create-task-dag', 'skills\impl-package\dev-with-track', 'skills\impl-package\reviews\module-review', 'skills\impl-package\reviews\safety-review')
 foreach ($relativeRoot in $activeRoots) {
     $matches = Get-ChildItem -Path (Join-Path $repo $relativeRoot) -Recurse -File | Select-String -SimpleMatch -Pattern 'to-issues'

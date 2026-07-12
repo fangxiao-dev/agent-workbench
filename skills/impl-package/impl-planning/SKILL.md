@@ -54,7 +54,7 @@ Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。
 - dag=true：需要显式依赖图、多个 execution owner、cohort 或 execution seam。
 - 两者都 false：不创建 task artifact；简单执行不通过 plan checklist制造状态。需要跨 session 恢复、独立交接或外部 gate 时，由 dev-with-track 按触发条件创建 progress ledger。
 
-可接受 S/M/L/D shorthand，但只展开成本 attempt 的 tickets/dag；earn condition 冲突时修正 shorthand。
+用户可主动用 S/M/L/D 指定期望组合。把它记录为 Composition request 并展开成本 attempt 的 tickets/dag；一致时接受。若与 earn conditions 冲突，在增删任何 ticket/DAG 前向 owner 报告请求、实际信号、建议组合和 artifact 影响，并把选择列为 owner decision，不能静默修正。活动 attempt 只有 owner 接受后才升级 P revision 和迁移 artifact。
 
 plan 活动期间发现 Composition 判断错误时：
 
@@ -119,4 +119,6 @@ plan 活动期间发现 Composition 判断错误时：
 
 ## Output Contract
 
-返回 package-id、Attempt ID、D/S/P revision、Composition、plan 路径、tickets/DAG 路由、选定 verification policy、剩余 owner decision，以及是否可进入 execution。
+向 owner 汇报时使用 `talk-to-boss`：说明本次实现范围、计划阶段是否完成、为何需要或不需要交付切片/执行图、剩余决策，以及能否进入执行。若用户主动指定 S/M/L/D，先用人话说明是否接受及任何冲突。
+
+随后附 canonical handoff：package-id、Attempt ID、D/S/P revision、Composition、plan 路径、tickets/DAG 路由、选定 verification policy 与剩余 owner decision。

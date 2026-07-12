@@ -95,6 +95,8 @@ If a new permission blocker appears outside the recorded scope, stop and ask bef
 
 In the final response, mention only authorization gaps that affected completion. Do not list every preflight decision unless it matters to the outcome.
 
+If reporting readiness or status to an owner, use `talk-to-boss`; keep preflight fields as evidence rather than the opening summary.
+
 Completion criterion: execution either completes within the recorded scope, or any unresolved HITL blocker is surfaced promptly with the exact missing decision.
 
 ## Failure Modes
