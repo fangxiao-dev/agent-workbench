@@ -130,6 +130,14 @@ The spec must not contain a `Stable Doc Backfill Map`, durable-delta queue, Comp
 
 `spec.md` 声明 `Spec Revision: S<n>`，并始终记录其绑定的 `Design Revision: D<n>`；lightweight Design 没有独立 design.md 时，这一字段与 Design Gate Record 共同提供 D revision 的 canonical 落点。纯实现修复以重新符合当前 spec 时复用 revision；行为 contract 变化时升级 S revision 并重跑 Spec Gate；设计选择变化时必须先完成新的 Design revision/Gate。正文只保留当前合同，旧合同通过 Revision History 与 Git 追溯。
 
+### 自动 grill-me-smartly 通关
+
+每次真正需要评估 Spec Gate 时（首次创建，或行为 contract/设计方向变化的 patch；纯实现漂移复用 revision、不评估 Spec Gate，因此不触发），在宣布 `Spec Gate: PASSED` 之前自动运行一遍 `grill-me-smartly` 的 review phase（只审查，不 apply）对当前 spec.md 草稿做独立对抗，用来抓自我审查容易漏掉的浅显问题。
+
+- Ledger 住在 OS temp 目录，不是 package artifact，不落 `docs/implementations/<package-id>/`。
+- 把 ledger 的「已收敛决策摘要」与「待用户裁决」汇报给用户；`待用户裁决` 条目直接计入上面 Spec Gate 标准里"blocking owner decisions 为零"这条——未清空前 Spec Gate 不能 PASSED，不新造阻断机制。
+- 是否把已收敛的澄清写进 spec.md 正文，必须等用户明确要求 apply——这是 grill-me-smartly 自己的硬性契约（永不静默 apply），req-align 不得代为绕过。用户批准后按正常 S revision 流程原地修订。
+
 ## Workflow
 
 1. Announce use of req-align; for a new package assign a topic slug and an immutable date-prefixed package-id, or identify the owning existing package-id for a patch/follow-up and classify drift against current module knowledge/code.
@@ -145,7 +153,7 @@ The spec must not contain a `Stable Doc Backfill Map`, durable-delta queue, Comp
    owner-decision evidence into its Design Gate Record. Append reusable, verified
    cross-stage facts/risks/constraints to an already-needed `findings.md`; do not create
    it for ordinary research narration.
-7. Synthesize the eight-section `spec.md` and evaluate the Spec gate. For a patch, reuse D/S revisions for implementation-only drift, rerun only Spec Gate for behavioral contract changes, and rerun Design then Spec for design-direction changes. Stop when the required gate is blocked.
+7. Synthesize the eight-section `spec.md`. For a patch, reuse D/S revisions for implementation-only drift without evaluating Spec Gate, rerun only Spec Gate for behavioral contract changes, and rerun Design then Spec for design-direction changes. When Spec Gate is actually being evaluated, automatically run `grill-me-smartly`'s review phase against the draft first, resolve or surface its findings per Gate 2's rule, then evaluate the Spec gate. Stop when the required gate is blocked.
 8. After both gates pass, hand off the same `spec.md` to `impl-planning`; do not
    create another spec or publish to a tracker.
 
@@ -192,6 +200,11 @@ Return only the topic slug, package-id and package path, both gate results and e
 locations, changed files (including `findings.md` only when appended), remaining owner
 decisions, and whether the package may enter implementation planning. Do not describe a
 blocked gate as completed or paste full artifacts after they have been written.
+
+When Spec Gate was actually evaluated, name the `grill-me-smartly` ledger path and summarize
+its converged decisions and any resolved owner decisions. After Spec Gate PASSED, offer
+`grilling` as an optional deeper adversarial follow-up if the user wants more scrutiny
+before handing off to `impl-planning` — a suggestion, never a requirement.
 
 Artifact `Status` and gate `Result` must agree: a Passed status requires `PASSED`, a
 Blocked status requires `BLOCKED`, and neither may be inferred from prose alone.

@@ -107,6 +107,13 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
   Backfill Candidates 只是其中的**非约束调研提示**小节，供后续参考；durable
   delta 的正式捕获在 gate 关闭时发生（Stage 7），不在 spec 里维护常青 backfill
   map，也不要求执行期归并进 spec（避免与下游 backfill 体系双重登记）。
+- **自动 grill-me-smartly 通关**：每次真正评估 Spec Gate 前（首次创建或
+  行为/设计变化的 patch；纯实现漂移不评估 Spec Gate，不触发），自动跑一遍
+  `grill-me-smartly` review phase 抓自我审查漏掉的浅显问题；`待用户裁决`
+  条目计入既有"blocking owner decisions 为零"标准，不新造阻断机制。
+  Ledger 住 OS temp，不落 package；是否 apply 收敛结论必须等用户明确批准，
+  尊重该 skill 自己"永不静默 apply"的契约。Spec Gate 通过后另外提示
+  `grilling` 作为可选的更深对抗访谈，不强制。
 - **spec.md 模板护栏**：package-id 内的 `spec.md` 按 2026-07-09 设计的模块 spec 八节
   合同结构成型（活动变更的当前 SoT）：Scope/authority/non-goals、术语与
   数据合同、行为/状态机/工作流、模块边界与依赖、**Error Boundaries——失败
@@ -345,3 +352,6 @@ task；no-DAG attempt 没有结构化 task。attempt、task、ticket 都只有�
 5. revision 漂移防护：D/S/P revision 号绑定 git commit SHA、P 号驱动 ticket/DAG
    的 NEEDS-REVALIDATION、findings 三态阻断、Module Knowledge Watermark，四条
    均已确认并落入 composition-contract（对抗审视后补，见 §2/§3/§6/§1）。
+6. Spec Gate 前自动质检：`grill-me-smartly` 自动跑（信号 = Spec Gate 真正被
+   评估），`grilling` 留作可选深度对抗（已确认）。二者都是既有 skill，
+   req-align 只负责触发与结果分流，不复制或重定义其内部机制。
