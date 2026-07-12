@@ -92,6 +92,12 @@ def _parse_method_ref(value: str) -> tuple[str, str]:
     commit = commit.strip()
     if not identity or not commit:
         raise CollectorError("method ref must use <repository-identity>@<commit>")
+    if not re.fullmatch(
+        r"[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*", identity
+    ):
+        raise CollectorError(
+            "method repository identity must be portable owner/repository"
+        )
     return identity, commit
 
 
@@ -99,6 +105,12 @@ def _validate_method_ref(method_root: Path, method_ref: str) -> dict[str, str]:
     expected_identity, requested_commit = _parse_method_ref(method_ref)
     remote = _git(method_root, "remote", "get-url", "origin")
     actual_identity = _normalize_repository_identity(remote)
+    if not re.fullmatch(
+        r"[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*", actual_identity
+    ):
+        raise CollectorError(
+            "method origin must resolve to portable owner/repository identity"
+        )
     if actual_identity != expected_identity:
         raise CollectorError(
             "method repository identity mismatch: "
@@ -193,6 +205,28 @@ def _changed_after_watermark(
     return bool(output)
 
 
+def _changed_package_ids(
+    project_root: Path, watermark: str, source_head: str
+) -> list[str]:
+    output = _git(
+        project_root,
+        "log",
+        "--pretty=format:",
+        "--name-only",
+        f"{watermark}..{source_head}",
+        "--",
+        "docs/implementations",
+        allow_empty=True,
+    )
+    package_ids: set[str] = set()
+    for line in output.splitlines():
+        path = line.strip().replace("\\", "/")
+        parts = path.split("/")
+        if len(parts) >= 3 and parts[:2] == ["docs", "implementations"]:
+            package_ids.add(parts[2])
+    return sorted(package_ids)
+
+
 def collect_inventory(
     *,
     mode: str,
@@ -273,6 +307,10 @@ def collect_inventory(
     fixture_set = set(fixtures)
 
     known_packages = {str(row["package_id"]) for row in rows}
+    changed_packages = _changed_package_ids(
+        project, resolved_watermark, resolved_head
+    )
+    removed_packages = sorted(set(changed_packages) - known_packages)
     carry = sorted(set(carry_forward))
     unknown_carry = sorted(set(carry) - known_packages)
     if unknown_carry:
@@ -328,6 +366,8 @@ def collect_inventory(
         "bootstrap_targets": bootstrap_targets,
         "carry_forward": carry,
         "watermark_new_packages": watermark_new,
+        "removed_packages": removed_packages,
+        "eligible_removed_packages": removed_packages,
         "eligible_packages": eligible,
         "packages": rows,
     }
@@ -343,6 +383,7 @@ def _render_markdown(inventory: dict[str, object]) -> str:
         f"- Project watermark: `{project['watermark']}`",
         f"- Packages: {inventory['package_count']}",
         f"- Protected fixtures: {inventory['fixture_count']}",
+        f"- Removed packages requiring disposition: {len(inventory['removed_packages'])}",
         "",
         "| Package | Activity commit | Semantic sources | Supplemental findings | Fixture | Carry-forward | Watermark-new |",
         "| --- | --- | --- | --- | --- | --- | --- |",
@@ -365,6 +406,17 @@ def _render_markdown(inventory: dict[str, object]) -> str:
                 carry="yes" if row["carry_forward"] else "no",
                 new="yes" if row["watermark_new"] else "no",
             )
+        )
+    removed = inventory["removed_packages"]
+    assert isinstance(removed, list)
+    if removed:
+        lines.extend(
+            [
+                "",
+                "## Removed Packages Requiring Disposition",
+                "",
+                *[f"- `{package_id}`" for package_id in removed],
+            ]
         )
     return "\n".join(lines) + "\n"
 

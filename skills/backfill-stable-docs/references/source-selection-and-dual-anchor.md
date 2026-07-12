@@ -21,6 +21,8 @@ unresolved carry-forward package IDs
 
 `carry-forward` 是已经审计但尚未最终 disposition 的 package。推进 watermark 后仍必须保留这些 package ID；只有后续 report/apply 明确 applied、rejected、superseded 或 owner-approved no-delta 才能移除。
 
+Collector 还必须从完整 Git range 枚举发生过 activity 的 package path。若某个 package 在 Source HEAD 已被删除或改名，必须输出到 `removed_packages` / `eligible_removed_packages`，交给 report 明确做 tombstone、supersession 或 removal disposition；不得因为它已不在 HEAD inventory 中而静默漏掉。
+
 Bootstrap 不猜测历史下界。它读取 owner 明确批准的固定 source manifest，manifest 记录 Source HEAD、package inventory、排除/fixture 理由和 tree hash。
 
 ## Package Activity Ordering
@@ -57,6 +59,7 @@ Bootstrap 不猜测历史下界。它读取 owner 明确批准的固定 source m
 - 只有显式 `--output` 才写文件，且目标必须位于 project root；
 - repeated identical inputs 产生 deterministic payload，不含生成时间；
 - 无效 method ref、非 ancestor watermark、未知 carry-forward、路径越界或不足的 fixture inventory 全部 fail closed。
+- Method repository identity 只接受 portable `owner/repository`；drive path、UNC、`file://` 或本机 remote 必须拒绝。
 
 示例：
 

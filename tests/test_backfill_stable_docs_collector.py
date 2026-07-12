@@ -229,6 +229,49 @@ class CollectorTest(unittest.TestCase):
                 carry_forward=(),
             )
 
+    def test_rejects_machine_local_method_repository_identity(self) -> None:
+        module = load_module()
+
+        with self.assertRaisesRegex(module.CollectorError, "portable owner/repository"):
+            module.collect_inventory(
+                mode="steady-state",
+                project_root=self.project,
+                source_head=self.source_head,
+                project_watermark=self.watermark,
+                method_root=self.method,
+                method_ref=f"C:/local/agent-workbench@{self.method_commit}",
+                fixture_count=0,
+                carry_forward=(),
+            )
+
+    def test_reports_package_deleted_after_watermark(self) -> None:
+        module = load_module()
+        gone = self.project / "docs" / "implementations" / "gone"
+        gone.mkdir(parents=True)
+        (gone / "spec.md").write_text("# gone\n", encoding="utf-8")
+        deletion_watermark = commit_all(
+            self.project, "add gone", "2026-07-10T00:00:00+00:00"
+        )
+        (gone / "spec.md").unlink()
+        gone.rmdir()
+        deletion_head = commit_all(
+            self.project, "remove gone", "2026-07-11T00:00:00+00:00"
+        )
+
+        inventory = module.collect_inventory(
+            mode="steady-state",
+            project_root=self.project,
+            source_head=deletion_head,
+            project_watermark=deletion_watermark,
+            method_root=self.method,
+            method_ref=f"example/agent-workbench@{self.method_commit}",
+            fixture_count=0,
+            carry_forward=(),
+        )
+
+        self.assertEqual(inventory["removed_packages"], ["gone"])
+        self.assertEqual(inventory["eligible_removed_packages"], ["gone"])
+
     def test_cli_defaults_to_read_only_json_stdout(self) -> None:
         before = sorted(path.relative_to(self.project) for path in self.project.rglob("*"))
         command = [
@@ -252,16 +295,14 @@ class CollectorTest(unittest.TestCase):
         completed = subprocess.run(
             command,
             check=True,
-            text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
 
-        payload = json.loads(completed.stdout)
+        payload = json.loads(completed.stdout.decode("utf-8"))
         repeated = subprocess.run(
             command,
             check=True,
-            text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
@@ -269,7 +310,22 @@ class CollectorTest(unittest.TestCase):
         self.assertEqual(payload["protected_fixtures"], ["foxtrot", "echo"])
         self.assertEqual(completed.stdout, repeated.stdout)
         self.assertEqual(before, after)
-        self.assertEqual(completed.stderr, "")
+        self.assertEqual(completed.stderr, b"")
+
+        markdown = subprocess.run(
+            [*command, "--format", "markdown"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).stdout.decode("utf-8")
+        echo_blob = run_git(
+            self.project,
+            "rev-parse",
+            f"{self.source_head}:docs/implementations/echo/findings.md",
+        )
+        self.assertIn(
+            f"docs/implementations/echo/findings.md @ {echo_blob}", markdown
+        )
 
     def test_cli_rejects_unresolved_method_ref_without_writes(self) -> None:
         output = self.project / "inventory.json"
