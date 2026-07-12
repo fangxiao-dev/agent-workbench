@@ -4,11 +4,11 @@
     {
       "id": 1,
       "name": "two-ticket-default-draft",
-      "prompt": "Internally call to-tickets for a gated package whose spec declares tickets=true, earns two independently accepted slices, and has a plan.",
+      "prompt": "Internally call to-tickets for a gated S2 package whose current attempt plan declares tickets=true, dag=false and whose acceptance surface earns two independently accepted slices.",
       "expected_output": "Two local Draft ticket files and a runner-neutral handoff.",
       "files": [],
       "expectations": [
-        "Defaults to mode=draft",
+        "Defaults to mode=draft and reads Composition from the current attempt plan",
         "Writes two Draft files under docs/implementations/<package-id>/tickets/",
         "Uses typed blocking edges and AC evidence",
         "Does not publish or start implementation"
@@ -17,7 +17,7 @@
     {
       "id": 2,
       "name": "single-slice-no-ticket",
-      "prompt": "Draft tickets for a gated package whose spec declares tickets=false and whose acceptance surface earns one slice.",
+      "prompt": "Draft tickets for a gated package whose current attempt plan declares tickets=false and whose acceptance surface earns one slice.",
       "expected_output": "No tickets directory or ticket file is created.",
       "files": [],
       "expectations": [
@@ -52,24 +52,24 @@
     {
       "id": 5,
       "name": "composition-mismatch-fails-closed",
-      "prompt": "Draft a package whose spec says tickets=false but whose acceptance surface earns two independent slices.",
-      "expected_output": "No ticket mutation; an owner decision routes the package back through the Spec gate.",
+      "prompt": "Draft a package whose current attempt plan says tickets=false but whose acceptance surface earns two independent slices; D1/S1 contract remains valid.",
+      "expected_output": "No ticket mutation; route to impl-planning for a P revision without rerunning the Spec gate solely for Composition.",
       "files": [],
       "expectations": [
         "Does not create, delete, or update ticket files",
         "Does not silently edit spec.md",
-        "Routes to req-align with a composition revision decision"
+        "Routes to impl-planning with a plan-revision decision"
       ]
     },
     {
       "id": 6,
       "name": "dangling-or-cross-package-reference",
-      "prompt": "Publish T2 with Blocked by implementation:T9, where T9 is absent from the same package but exists under another package-id.",
-      "expected_output": "Publish fails before mutation because dependencies must resolve in the same package.",
+      "prompt": "Publish current-attempt T2 with Blocked by implementation:T9, where T9 is absent from this Attempt ID but exists in a historical terminal attempt and under another package-id.",
+      "expected_output": "Publish fails before mutation because dependencies must resolve in the same Attempt ID.",
       "files": [],
       "expectations": [
-        "Rejects the dangling same-package reference",
-        "Does not resolve a ticket from another package",
+        "Rejects the dangling same-Attempt-ID reference",
+        "Does not resolve a ticket from a historical attempt or another package",
         "Leaves all Draft statuses unchanged"
       ]
     },

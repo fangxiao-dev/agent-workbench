@@ -1,6 +1,6 @@
 ---
 name: to-tickets
-description: Impl-Package 体系的 ticket 验收切分阶段：当已批准 spec earn 两个或更多需要独立跟踪验收结论的 delivery slice 时使用。
+description: Impl-Package 体系的 ticket 验收切分阶段：当已批准 attempt plan 声明 tickets=true，且 spec 的验收面存在两个或更多需要独立跟踪结论的 delivery slice 时使用。
 ---
 
 # To Tickets — Impl-Package Local Fork
@@ -16,10 +16,7 @@ explicit owner approval for the same complete Draft set: a caller may then reque
 `mode=publish` to perform the Draft-to-Approved transition. `publish` is never the
 default continuation of drafting.
 
-Canonical input is the same-package-id package's gated `spec.md` plus `plan.md` under
-`docs/implementations/<package-id>/`. Stop if the Spec gate is not `PASSED`, the plan is
-absent, or the package IDs disagree. Do not synthesize a replacement spec or plan from
-conversation.
+Canonical input is the same-package-id package's gated current `spec.md` plus current attempt plan. Stop if the Spec gate is not `PASSED`, the plan is absent, Attempt ID/D-S-P revisions cannot be resolved, or the package IDs disagree. Composition is read only from the current plan.
 
 ## Earn Tickets Before Creating Files
 
@@ -32,15 +29,11 @@ If there is only one slice, keep its Acceptance Semantics in `spec.md`, report
 `tickets=false`, and DO NOT create `tickets/` or a ticket file. Never create ceremony to
 represent a single slice.
 
-Before writing a draft, compare the earned result with the gated spec's exact
+Before writing a draft, compare the earned result with the current plan's exact
 `Composition: tickets=<true|false>, dag=<true|false>` value. Write only when they agree.
 Fail closed when `tickets=false` but two or more slices are earned, or when
 `tickets=true` but fewer than two slices are earned: do not create, delete, or update any
-ticket file; do not silently edit the spec. Return a composition-revision owner decision
-and route to `req-align` to pass the Spec gate again. After both gates pass,
-apply the shared controlled Composition Migration in
-`docs/skill-design/references/impl-package-composition-contract.md`; never repair the
-composition or artifacts locally.
+ticket file; do not silently edit the spec. Return a plan-revision decision and route to `impl-planning`; Composition mismatch does not trigger D/S revision unless ticket slicing exposes an actual contract gap.
 
 ## Slice The Acceptance Surface
 
@@ -72,25 +65,24 @@ implementation snippets, automatic dispatch instructions, or runtime **task** st
 The template's `Runtime Acceptance Status` is different: it is the ticket's canonical
 runtime/acceptance fact area and is written only by `dev-with-track` after publication.
 `to-tickets` must preserve it without assigning a runtime value, evidence, or
-revalidation conclusion. Task decomposition and task-to-AC contribution belong to
-`create-task-dag`, or only for `tickets=false, dag=false` to the no-DAG `plan.md` task
-path.
+revalidation conclusion. Task decomposition and task-to-AC contribution belong to `create-task-dag`. A no-DAG attempt has no task checklist; recovery state uses a justified progress ledger.
 
 ## Draft Mode
 
 Draft is local and non-publishing:
 
-1. Read the gated spec and plan and determine whether tickets are earned.
-2. Validate that the earned result equals the spec's `Composition.tickets` value; stop
+1. Read the gated spec and current attempt plan and determine whether tickets are earned.
+2. Validate that the earned result equals the plan's `Composition.tickets` value; stop
    through the fail-closed route above on mismatch.
 3. Propose the complete slice set and typed edges for owner review.
-4. When earned, write one `Publication Status: Draft` file per slice using
+4. When earned, write one `Publication Status: Draft` file per slice, include the current Attempt ID, and use
    [assets/templates/ticket.md](./assets/templates/ticket.md) at
    `docs/implementations/<package-id>/tickets/<NN>-<ticket-slug>.md`.
 5. Leave each `Runtime Acceptance Status` field unrecorded; Draft mode owns only the
    publication status and ticket definition.
 6. Number files in a deterministic dependency-compatible order; for independent slices,
-   preserve the proposed document order.
+   preserve the proposed document order. File numbers and ticket IDs are package-wide
+   unique: continue after historical attempts and never overwrite an older attempt's ticket.
 7. Return the package path, draft ticket paths, typed-edge summary, and acceptance
    evidence gaps. Do not publish externally or mark tickets Approved.
 
@@ -100,10 +92,11 @@ Publish updates the same local ticket files; it does not create external records
 Before changing any status, require explicit owner approval of the full draft set and
 validate all of the following:
 
-1. the gated spec declares `Composition: tickets=true, ...`;
+1. the current attempt plan declares `Composition: tickets=true, ...` and every draft belongs to that Attempt ID;
 2. every ticket has at least one complete, stable AC with planned evidence or a manual
    verification owner;
-3. every typed dependency references an existing ticket in the same package;
+3. every typed dependency references an existing ticket in the same Attempt ID; a
+   historical attempt's terminal ticket cannot be a current runtime blocker;
 4. the dependency graph is acyclic across all three edge types;
 5. the complete set has a deterministic dependency-compatible ordering;
 6. no ticket contains task ownership or file-level implementation steps.

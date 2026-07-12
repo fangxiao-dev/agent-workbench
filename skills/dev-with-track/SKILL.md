@@ -1,167 +1,90 @@
 ---
 name: dev-with-track
 description: >
-  Impl-Package 体系的执行阶段：当已批准 implementation package 需要恢复执行现场、
-  确定性判定下一可执行单元、记录 task/ticket 证据、处理返工失效或关闭 gate 时使用。
-  不用于撰写 design、spec、plan、ticket 或分配 worker。
+  Impl-Package 体系的执行与 gate 阶段：当已批准 attempt 需要恢复执行现场、判定下一可执行单元、记录验证证据、处理返工失效、分流 findings 或写入 append-only gate ledger 时使用。不拥有 design/spec/plan/ticket/DAG 的定义。
 ---
 
 # Dev With Track
 
-执行一个 implementation package 的持久恢复与闭环。持久单位是
-`docs/implementations/<package-id>/`，不是聊天轮次、ticket 或 worker。它消费上游已批准
-合同，不重写需求、切片或 task-DAG 方法。
+执行并恢复 docs/implementations/<package-id>/ 中的当前 attempt。共享 artifact lifecycle、Composition、readiness 与 gate 语义只引用 ../impl-package/references/impl-package-composition-contract.md。
 
-本 skill 的共享规范源是
-[Impl-Package Composition Contract](../../docs/skill-design/references/impl-package-composition-contract.md)。
-其中四种 composition、canonical status home、typed blocker、readiness、task-to-AC、
-seam、迁移及 Stage 7 的语义均以该文件为准；本 skill 仅实施和验证，不能另行定义。
+## Ownership
 
-核心循环：
+- req-align 拥有活动 design/spec SoT 与 D/S Gate。
+- impl-planning 拥有当前 attempt plan、P revision、Composition、Planned Verification 与 Execution Record 结构。
+- to-tickets 拥有 ticket definition/publication；create-task-dag 拥有 DAG contract。
+- 本 skill 维护 ticket/DAG/progress runtime state、findings 分流、plan Execution Record 的证据追加，以及 gate.md 的 newest-first entry。
 
-```text
-restore -> readiness resolution -> execute -> evidence -> findings -> gate
-```
+本 skill 不重写长期 contract，不从历史 Composition 推断当前 attempt，也不修改旧 gate entry。
 
-这不是自动派工或动态 frontier：不做 worker leasing、并发锁、资源分配或自动启动
-worker。若有多个可执行单元，按 ticket/task 文档顺序稳定选择，并由主 session 决定
-是否实际执行。
+## Restore
 
-## 上下游边界
+1. 读取仓库规则、当前 design/spec revision、所有 attempt plans、gate.md 最新 entry、当前 attempt 的 tickets/DAG/progress、findings 与实际证据。
+2. 选择唯一未被 terminal gate 冻结的 attempt；若不存在 active attempt，停止并路由 impl-planning 创建 patch；若同时存在多个 active attempt，报告 lifecycle violation 并停止，不能按时间猜一个。
+3. 从当前 plan 读取 Attempt ID、D/S/P revision 与 Composition，校验 artifact 一致。
+4. reconcile 状态与证据；evidence 胜过 stale status。
+5. 校验 typed ticket edges、DAG Depends on、AC references 与 cycles。
+6. 执行 readiness resolution，按文档顺序选择第一个 actionable unit；不自动派工。
 
-- `req-align` 拥有必过的 Design / Spec gates、`design.md` 和 `spec.md`。
-- `impl-planning` 拥有 `plan.md`、patch plan 和 composition migration 的计划
-  内容；`to-tickets` 拥有 ticket 的切片、draft/publish 与验收定义；
-  `create-task-dag` 拥有 execution decomposition 与 `dag.md` task 合同。
-- 本 skill 维护运行时事实、按需 task/ticket progress、findings 与 gate。它不能自行
-  earn tickets/dag 或从宽需求切片；输入缺少已批准 artifact 时，路由回相应上游 skill。
+## Current attempt state
 
-## Package scaffold
+- tickets=false, dag=false：没有 task artifact。需要跨 session 恢复、独立交接、外部 gate、blocker 或大量局部证据时，创建 `tasks/<attempt-id>-progress.md`（Kind=attempt）；不向 plan 加 task checklist或伪造 task/ticket。
+- tickets=true, dag=false：ticket Runtime Acceptance Status 是 acceptance state；whole-ticket 恢复/交接触发时才创建 `tasks/<ticket-id>-progress.md`，且不得复制验收结论。
+- dag=true：当前 attempt DAG 是 task runtime state；ticketed attempt 的 ticket acceptance 仍在 ticket。
+- plan Execution Record 保存实际验证过程，不保存 task/ticket status。
 
-先读 `spec.md` 中唯一的 `Composition: tickets=<true|false>, dag=<true|false>` 声明，
-再按共享 contract 的四态表 scaffold。`spec.md` 与 `plan.md` 恒有；只有 earned 的
-artifact 才能创建：
+返工上游输出时，将依赖 task/evidence 标为 NEEDS-REVALIDATION。DONE 只有在 Done when 证据记录后才释放依赖；WAIVED/SUPERSEDED 需要替代证据和 impact note。
 
-```text
-docs/implementations/<package-id>/
-├── [design.md]
-├── spec.md
-├── plan.md
-├── [tickets/]
-│   └── <ticket>.md                 # only tickets=true
-├── [dag.md]                        # only dag=true
-├── findings.md
-├── gate.md
-└── tasks/
-    ├── Tn-progress.md              # only when task ledger trigger applies
-    ├── Tn-handoff.md               # only when independent task transfer is needed
-    └── <ticket>-progress.md        # only when whole ticket is a recovery/transfer unit
-```
+## Verification record
 
-Never create `dag.md` as a ticket index. For `tickets=true, dag=false`, ticket files are
-the execution and acceptance fact sources and `plan.md` remains task-free. For
-`tickets=true, dag=true`, any ticket status in `dag.md` is an explicitly labelled,
-read-only projection; it never overwrites a ticket's acceptance conclusion. For no-ticket
-packages, Acceptance evidence stays in `spec.md` / `gate.md`. A progress ledger restores
-local state; it does not earn a DAG or replace its execution topology.
+按 plan Planned Verification 和权威 policy 执行检查。每次实际检查在当前 plan 的 Execution Record 末尾追加稳定 ER-n entry，记录 D/S/P revision、时间、命令/检查、结果、证据路径与残余风险。不得修改旧 ER entry，也不得把通用 checklist 复制到 plan。
 
-If the declared artifacts and workspace disagree, do not silently add placeholders:
-restore evidence, identify the mismatch, and route an intended composition change through
-the contract's recorded Composition Migration. The migration must leave a relocation
-pointer and remove the old writable maintenance entry point.
+## Findings curation
 
-## Restore and readiness resolution
+gate evaluation 前逐项分流 findings：
 
-Before any execution:
+- 设计选择/rationale → req-align 更新 design revision；
+- 行为、接口、失败恢复、约束或 Acceptance Semantics → req-align 更新 spec revision；
+- 长期项目知识 → 当前 gate entry Durable Deltas 与 _pending.md；
+- 验证证据 → plan Execution Record；
+- 其余已验证调查事实/风险 → 保留 findings。
 
-1. Read repo instructions, then active `design.md` (if present), approved `spec.md`,
-   active `plan.md`, earned tickets, earned DAG, progress ledgers, findings and gate.
-2. Reconcile document status against recorded command/test/review/external evidence.
-   Evidence wins over stale status and the canonical fact source is corrected.
-3. Validate the relevant static graph: typed ticket blockers when tickets are earned;
-   `Depends on` references when dag is earned. Missing references or cycles block execution.
-4. Apply the shared-contract readiness resolution before choosing a unit. Ticket
-   `implementation` blockers and DAG task dependencies must both be dependency-releasing;
-   owner, external gate and environment prerequisites must hold.
-5. Choose the first actionable unit in documented order. Do not use acceptance/release
-   ticket edges to release implementation work, and do not let a ticket state release a
-   DAG `Depends on` edge.
+存在未完成的规范性分流时不能写 pass entry。
 
-On reopened/reworked upstream work, mark affected dependent DAG tasks and their old
-evidence `NEEDS-REVALIDATION`; do not proceed until rechecked. Worker return status maps
-to runtime state only according to the shared contract: claimed `DONE` remains running
-until `Done when` evidence is recorded; concerns and integration findings require explicit
-revalidation. `DONE`, or a justified `WAIVED`/`SUPERSEDED` with replacement evidence and
-impact note, is the only dependency-releasing outcome.
+## Append-only gate ledger
 
-## Evidence, progress, and acceptance
+package 只使用 gate.md。每次 evaluation 在 # Gate Ledger 标题之后插入最新 entry；旧 entry 不修改。
 
-Use `tasks/Tn-progress.md` only when a task has an independent owner/subagent, external
-gate, blocker/seam/finding, cross-session recovery need, independent durable evidence, or
-gate-relevant detail too large for its canonical execution source. A normal task stays in
-that source (the DAG when earned, otherwise the no-DAG plan checklist). Task numbers remain
-stable and increment across the package-id.
+entry ID 为 <attempt-id>-G<n>，同 attempt 从 G1 取已有最大编号加一且不复用。entry 必须包含 Attempt ID、Supersedes、evaluated time、D/S/P revision、Composition、comparison point、一个或多个 plan ER anchor、blocker/deferred item、verdict reason 与 Durable Deltas。
 
-Ticket acceptance is not a sum of completed tasks. For ticketed composition, the ticket
-file's `Runtime Acceptance Status` is the canonical ticket runtime/acceptance fact source:
-only this skill writes its `Value`, `Direct evidence`, and `Revalidation` fields. Its
-separate `Publication Status` remains owned by `to-tickets` and is not a runtime result.
-Do not create a ticket progress file by default. Create `<ticket>-progress.md` only when
-the *whole ticket* is independently resumed or handed over; it records local state and a
-task index, never duplicate task ledgers or the ticket's runtime acceptance conclusion.
+- blocked 后补证：保留旧 blocked entry，新增 G<n+1> 并 Supersedes 旧 entry。
+- pass/fail/defer：terminal，冻结对应 plan。
+- blocked：不冻结 plan；后续策略/证据变化升级 P revision并 append ER/gate entry。
+- D/S revision 改变后，旧 gate entry 仍只证明旧 revision；新 evaluation 必须引用新 revision。
+- Git 提供 provenance；发现旧 block 被改动时报告 contract violation，不静默接受。
 
-Before execution begins, check that every ticket AC (or no-ticket spec AC) has a planned
-evidence producer or named manual-verification owner. For DAG packages, resolve every
-`contributes-to` / `enables` target to an existing AC; an infrastructure `enables` entry
-does not by itself close an AC. Before ticket/package closure, record direct evidence for
-each relevant AC. A seam remains open until its plan contract owner, DAG execution owner,
-and plan acceptance owner have completed their respective responsibilities; an unaccepted
-seam blocks each affected acceptance target.
+## Stage 7
 
-Promote only cross-task decisions, risks, reusable findings, and explicit follow-ups to
-`findings.md`; ordinary command output remains on the task/ticket evidence path.
+每个 gate entry 的 Durable Deltas 是唯一 capture surface。有 delta 时，terminal verdict（pass/fail/defer）entry 写入前完成：
 
-## Gate and Stage 7
+1. gate entry 写完整 delta fields；
+2. _pending.md 使用 <destination>|<delta-id> 注册；
+3. 受影响 module spec 写 Pending deltas truth pointer；
+4. 缺失 target module spec 时先建 stub。
 
-Open or update `gate.md` only for implementation-level closing, blocking, or deferral.
-Its decision cannot be inferred from task `DONE` states. Before closing, verify the shared
-contract's complete Stage 7 durable-delta path:
-
-- every gate-table `Delta ID` is registered in project `_pending.md` under
-  `<destination>|<delta-id>`;
-- every affected module spec contains the pending-delta truth pointer; and
-- a required missing target module-spec stub exists before its pointer is written.
-
-With no durable delta, retain `none` and a reason in the gate. A missing capture, pending
-entry, pointer, stub, or evidence is a gate blocker/capture gap—not evidence that there was
-no change. Route report/apply work to `backfill-stable-docs`; do not write stable-document
-content as a shortcut from this skill.
-
-## Task ledger trigger and templates
-
-Use the templates only for earned artifacts:
-
-- `assets/templates/dag.md` — only `dag=true`; references the shared task and seam fields.
-- `assets/templates/progress.md` — task or justified ticket recovery ledger.
-- `assets/templates/handoff.md` — independent task transfer only.
-- `assets/templates/findings.md` — cross-task conclusions only.
-- `assets/templates/gate.md` — implementation gate and Stage 7 capture evidence.
-
-`design.md` / `spec.md` templates remain in `req-align`; `plan.md` and
-composition migration content remain in `impl-planning`; ticket templates remain
-in `to-tickets`.
+无 durable delta 时写 none 和理由。写入 terminal entry 时先保留 G id、固定 comparison point/ER anchor、完成 Stage 7，再一次性插入不可变 entry；blocked capture gap 通过后续 entry 补齐，不回改旧 entry。terminal gate 与 backfill 完成后，module knowledge 重新成为产品当前 SoT。
 
 ## Execution checklist
 
-1. Restore the package and verify approved Design/Spec/plan inputs.
-2. Read the composition declaration; scaffold only matching earned artifacts.
-3. Reconcile evidence and canonical states; validate static dependencies and AC references.
-4. Run deterministic readiness resolution and select the documented next actionable unit.
-5. Execute only under the existing owner/task contract; record real evidence.
-6. Update the canonical task/ticket status and any justified progress ledger; propagate
-   `NEEDS-REVALIDATION` after upstream rework.
-7. Check AC evidence and seam acceptance before closing tickets or no-ticket package gates.
-8. Promote cross-task findings, then complete or explicitly block/defer the gate.
-9. For a closing gate, complete Stage 7 durable-delta capture or record `none` with reason.
-10. Report composition, canonical state sources, selected/blocked unit, evidence, findings,
-    AC/seam coverage, gate state, and any capture gap.
+1. Restore 当前 attempt 与 revisions。
+2. 校验 Composition/artifacts、dependency graph 与 AC references。
+3. 选择并执行 actionable unit；状态只写对应 runtime artifact。
+4. append plan Execution Record。
+5. 分流 findings；必要时回 req-align 并重新过相应 gate。
+6. 运行 review/verification，固定 comparison point。
+7. 保留下一个 G id；terminal verdict 先完成 Stage 7，再在 gate.md 顶部一次性插入新 entry。
+8. terminal 时冻结 plan；blocked 时保留 attempt active。
+
+## Output
+
+报告 package/Attempt ID、D/S/P revision、Composition、当前状态源、执行与 evidence、findings 分流、最新 gate entry/verdict、Supersedes 链、Stage 7 与剩余 blocker。

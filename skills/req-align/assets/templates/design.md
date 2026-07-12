@@ -1,13 +1,16 @@
 # [Implementation Name] Design Research
 
-Status: Draft | Design Gate Passed | Design Gate Blocked | Superseded
+Status: Draft | Design Gate Passed | Design Gate Blocked
 Created:
+Design Revision: D<n>
 Requirement source:
 Topic slug:
 Package ID:
 Canonical package: `docs/implementations/<package-id>/`
 
-This is a point-in-time research and decision record, not the behavior contract.
+This is the current design choices and rationale SoT while the package is active, not the
+behavior contract. Replace superseded choices in the current body and record the revision
+in Revision History; Git preserves the full old body.
 Behavior, state, interface, failure, and acceptance semantics belong only in `spec.md`.
 When Design is blocked, use this file and do not create `spec.md`. `Status: Design Gate
 Passed` requires `Result: PASSED`; `Status: Design Gate Blocked` requires
@@ -75,3 +78,8 @@ authorize stable-document edits. Canonical capture is gate Durable Deltas -> _pe
 
 | Possible destination | Candidate insight | Why it might endure |
 | --- | --- | --- |
+
+## Revision History
+
+| Previous | New | Change summary | Authority | Date | Superseded note |
+| --- | --- | --- | --- | --- | --- |

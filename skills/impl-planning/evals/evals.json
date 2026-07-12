@@ -3,39 +3,91 @@
   "evals": [
     {
       "id": 1,
-      "name": "tickets-only-plan-is-contract-not-task-list",
-      "prompt": "A gated spec declares Composition: tickets=true, dag=false. Create the plan and carry it through the ticket draft cross-check.",
-      "expected_output": "Creates a tickets-only Package Engineering Contract and drafts tickets without creating a DAG or task checklist.",
+      "name": "tickets-only-attempt-plan",
+      "prompt": "Current design D2 and spec S3 have passed their required gates. Create initial attempt P1; the acceptance surface earns two independently tracked slices but no execution DAG.",
+      "expected_output": "Creates the current attempt plan with Composition: tickets=true, dag=false, Planned Verification and an empty append-only Execution Record, then routes to-tickets draft.",
       "files": [],
       "expectations": [
-        "Uses plan → to-tickets draft → cross-check plan order",
-        "Keeps plan task-free and does not call create-task-dag",
-        "Keeps ticket AC evidence and runtime acceptance in ticket files",
-        "Records seam as none or N/A without a seam execution owner"
+        "Reads contract and AC semantics from D2/S3 without copying them into plan",
+        "Uses plan-owned Composition: tickets=true, dag=false",
+        "Does not create a task checklist or DAG",
+        "Records Attempt ID initial and Plan Revision P1"
       ]
     },
     {
       "id": 2,
-      "name": "only-dag-plan-keeps-execution-in-dag",
-      "prompt": "A gated spec declares Composition: tickets=false, dag=true and has a cross-module seam. Create the plan.",
-      "expected_output": "Creates an only-dag engineering contract and routes task decomposition to create-task-dag without creating tickets or plan checklists.",
+      "name": "only-dag-attempt-plan",
+      "prompt": "Current spec S2 defines a cross-module seam and spec:AC-1 through AC-3. Create attempt P1 with explicit dependent execution owners but no independent ticket slices.",
+      "expected_output": "Creates a plan with Composition: tickets=false, dag=true and routes execution decomposition to create-task-dag while leaving the seam contract in spec.",
       "files": [],
       "expectations": [
-        "Records Seam ID, contract owner, acceptance owner, and affected spec AC targets in plan",
-        "Leaves seam execution ownership for dag.md",
-        "Does not create ticket files or a second writable status source"
+        "Keeps interface, seam contract, acceptance owner and compatibility in spec",
+        "Records execution strategy and verification selection in plan",
+        "Does not create ticket files or a plan task checklist",
+        "Leaves seam execution ownership to the DAG"
       ]
     },
     {
       "id": 3,
-      "name": "composition-change-reruns-gates-before-migration",
-      "prompt": "A no-ticket plan now needs two independently accepted slices. Update Composition and keep working.",
-      "expected_output": "Routes the Composition revision through req-align, then performs a recorded controlled migration only after both gates pass.",
+      "name": "active-attempt-composition-revision",
+      "prompt": "Initial attempt P1 was tickets=false, dag=false. Before any terminal gate, two independent acceptance slices are discovered but D1/S1 behavior remains unchanged. Revise the attempt.",
+      "expected_output": "Creates P2 with Composition: tickets=true, dag=false, records artifact relocation and routes ticket creation without rerunning Design or Spec Gate.",
       "files": [],
       "expectations": [
-        "Does not silently edit spec Composition",
-        "Records previous/new, reason, moved content, relocation pointer, and verification",
-        "Removes the old writable maintenance entry point and does not create a per-ticket patch plan"
+        "Treats Composition as attempt-local rather than spec content",
+        "Does not increment D1 or S1 without contract drift",
+        "Records previous/new Composition, reason and artifact relocation",
+        "Leaves only one writable execution-state source"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "simple-patch-has-no-task-checklist",
+      "prompt": "A gate-closed package previously used tickets=false, dag=true. A new implementation-only adapter fix has one owner, no seam and no dependency. Create its patch attempt plan.",
+      "expected_output": "Creates a dated patch attempt with Composition: tickets=false, dag=false, Planned Verification and append-only Execution Record; it has no task checklist and does not inherit the historical DAG.",
+      "files": [],
+      "expectations": [
+        "Reuses the current D/S revisions after drift reconciliation",
+        "Records Planned Verification and Execution Record",
+        "Contains no task checklist or patch DAG",
+        "Uses a progress ledger only if a recovery trigger later occurs"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "patch-independently-earns-dag",
+      "prompt": "A closed package previously had no DAG. Its new implementation-only patch has two dependent execution owners and an execution seam. Create the patch attempt plan.",
+      "expected_output": "Creates a new patch attempt with Composition: tickets=false, dag=true and routes a dated patch DAG without modifying historical attempt artifacts.",
+      "files": [],
+      "expectations": [
+        "Names dependency and seam coordination as the DAG earn reason",
+        "Uses Composition: tickets=false, dag=true in the current plan",
+        "Keeps the seam contract and acceptance semantics in spec",
+        "Does not append tasks to an old DAG"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "verification-policy-is-referenced-not-copied",
+      "prompt": "The repo has authoritative Data Safety, UI Evidence and Real Route Safety policies. Plan a change that selects one check from each.",
+      "expected_output": "Planned Verification links the policies and records only selected checks, expected results and evidence owners; later actual results append to Execution Record.",
+      "files": [],
+      "expectations": [
+        "Does not copy the generic policy checklists",
+        "Keeps actual commands and results out of the plan until execution",
+        "Does not put verification evidence in design or spec"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "terminal-plan-is-frozen",
+      "prompt": "Attempt initial has terminal gate entry initial-G2. A new regression appears. Update plan.md and append more evidence to its Execution Record.",
+      "expected_output": "Refuses to mutate the frozen initial plan and creates a new patch attempt after reconciling current module knowledge/code and D/S drift.",
+      "files": [],
+      "expectations": [
+        "Treats pass, fail and defer as terminal",
+        "Does not edit the old plan or gate entry",
+        "Creates a new Attempt ID and patch plan"
       ]
     }
   ]

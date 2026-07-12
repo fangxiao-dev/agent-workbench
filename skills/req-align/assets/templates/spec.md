@@ -1,13 +1,14 @@
 # [Implementation Name] Specification
 
-Status: Draft | Spec Gate Passed | Spec Gate Blocked | Superseded
+Status: Draft | Spec Gate Passed | Spec Gate Blocked
 Created:
+Design Revision: D<n>
+Spec Revision: S<n>
 Requirement source:
 Topic slug:
 Package ID:
 Canonical package: `docs/implementations/<package-id>/`
 Design: [design.md](design.md) | No standalone design file
-Composition: tickets=<true|false>, dag=<true|false>
 
 ## Design Gate Record
 
@@ -31,7 +32,6 @@ Status: Spec Gate Blocked requires the Spec Gate Result BLOCKED. -->
 - Result: PASSED | BLOCKED
 - Eight sections complete:
 - Acceptance evidence mapped:
-- Composition justified:
 - Blocking decisions / ambiguity:
 - Approved by / date:
 
@@ -78,16 +78,14 @@ Status: Spec Gate Blocked requires the Spec Gate Result BLOCKED. -->
 | AC ID | Promised outcome / constraint | Evidence producer or manual owner | Passing evidence |
 | --- | --- | --- | --- |
 
-## 8. Composition Decision
+## 8. Contract Coherence
 
-- Tickets earned: yes | no
-- Tickets rationale (independently tracked acceptance slices):
-- DAG earned: yes | no
-- DAG rationale (explicit execution dependencies / coordination):
-- Status home implications:
-- Decision owner / date:
+- Cross-section consistency:
+- Interface/seam ownership:
+- Acceptance coverage:
+- Remaining non-blocking assumptions:
 
 ## Revisions
 
-| Date | Contract change | Reason / authority |
-| --- | --- | --- |
+| Previous | New | Contract change | Reason / authority | Date | Superseded note |
+| --- | --- | --- | --- | --- | --- |

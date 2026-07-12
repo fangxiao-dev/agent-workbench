@@ -2,16 +2,29 @@ $ErrorActionPreference = 'Stop'
 
 $repo = Split-Path -Parent $PSScriptRoot
 $sourceDraft = 'D:\CodeSpace\TaskManager\Dev-with-Track 体系讨论.md'
-$designPath = Join-Path $repo 'docs\skill-design\2026-07-10-impl-package-system-design.md'
 
 function Assert-Contains([string]$Text, [string]$Needle, [string]$Message) {
     if (-not $Text.Contains($Needle)) { throw "$Message Missing: $Needle" }
 }
 
+function Assert-NotContains([string]$Text, [string]$Needle, [string]$Message) {
+    if ($Text.Contains($Needle)) { throw "$Message Unexpected: $Needle" }
+}
+
+function Find-Eval([object]$EvalFile, [int]$Id) {
+    $match = @($EvalFile.evals | Where-Object { [int]$_.id -eq $Id })
+    if ($match.Count -ne 1) { throw "Expected exactly one eval id $Id" }
+    return $match[0]
+}
+
+function Eval-Text([object]$Eval) {
+    return $Eval.prompt + "`n" + $Eval.expected_output + "`n" + ($Eval.expectations -join "`n")
+}
+
 if (-not (Test-Path -LiteralPath $sourceDraft)) { throw "Source discussion draft is unavailable: $sourceDraft" }
 $draft = Get-Content -Raw -LiteralPath $sourceDraft
 Assert-Contains $draft '已由' 'Discussion draft replacement marker is missing.'
-Assert-Contains $draft '2026-07-10-impl-package-system-design.md' 'Discussion draft does not point to the approved design.'
+Assert-Contains $draft 'impl-package-system-design.md' 'Discussion draft does not point to the approved design.'
 
 $evalPaths = @{
     'req-align' = 'skills\req-align\evals\evals.json'
@@ -26,59 +39,99 @@ $evalPaths = @{
 $evals = @{}
 foreach ($skill in $evalPaths.Keys) {
     $path = Join-Path $repo $evalPaths[$skill]
-    if (-not (Test-Path -LiteralPath $path)) { throw "Missing Step 8 eval file for ${skill}: $path" }
     $parsed = Get-Content -Raw -LiteralPath $path | ConvertFrom-Json
-    if ($parsed.skill_name -ne $skill) { throw "Wrong skill_name in $path" }
-    if ($parsed.evals.Count -lt 1) { throw "No eval cases in $path" }
+    if ($parsed.skill_name -ne $skill -or $parsed.evals.Count -lt 1) { throw "Invalid eval file: $path" }
     $evals[$skill] = $parsed
 }
 
-function Find-Eval([object]$EvalFile, [string]$Id) {
-    return @($EvalFile.evals | Where-Object { $_.id -eq $Id })[0]
-}
+Assert-Contains (Eval-Text (Find-Eval $evals['req-align'] 4)) 'implementation-only' 'Req-align drift eval'
+Assert-Contains (Eval-Text (Find-Eval $evals['req-align'] 4)) 'Design then Spec' 'Req-align design drift eval'
 
-$designBlocked = Find-Eval $evals['req-align'] '1'
-Assert-Contains ($designBlocked.prompt + $designBlocked.expected_output + ($designBlocked.expectations -join "`n")) 'Design Gate' 'Requirement-alignment must evaluate the Design gate before spec.'
-$thickSpec = Find-Eval $evals['req-align'] '2'
-Assert-Contains ($thickSpec.prompt + $thickSpec.expected_output + ($thickSpec.expectations -join "`n")) 'Error Boundaries' 'Requirement-alignment must evaluate the thick spec contract.'
+$simplePatch = Eval-Text (Find-Eval $evals['impl-planning'] 4)
+Assert-Contains $simplePatch 'tickets=false, dag=false' 'Simple patch composition eval'
+Assert-Contains $simplePatch 'Planned Verification' 'Simple patch planned verification eval'
+Assert-Contains $simplePatch 'Execution Record' 'Simple patch execution record eval'
+Assert-Contains $simplePatch 'no task checklist' 'Simple patch no-checklist eval'
+$dagPatch = Eval-Text (Find-Eval $evals['impl-planning'] 5)
+Assert-Contains $dagPatch 'tickets=false, dag=true' 'Patch DAG composition eval'
+Assert-NotContains $dagPatch 'Patch execution topology' 'Retired patch topology eval'
 
-$ticketsOnlyPlan = Find-Eval $evals['impl-planning'] '1'
-Assert-Contains ($ticketsOnlyPlan.prompt + $ticketsOnlyPlan.expected_output + ($ticketsOnlyPlan.expectations -join "`n")) 'tickets=true, dag=false' 'Planning eval must cover tickets-only composition.'
-$onlyDagPlan = Find-Eval $evals['impl-planning'] '2'
-Assert-Contains ($onlyDagPlan.prompt + $onlyDagPlan.expected_output + ($onlyDagPlan.expectations -join "`n")) 'tickets=false, dag=true' 'Planning eval must cover only-dag composition.'
+$ticketDraft = Eval-Text (Find-Eval $evals['to-tickets'] 1)
+Assert-Contains $ticketDraft 'current attempt plan' 'To-tickets plan composition source'
+$ticketMismatch = Eval-Text (Find-Eval $evals['to-tickets'] 5)
+Assert-Contains $ticketMismatch 'impl-planning' 'To-tickets composition mismatch routing'
+Assert-Contains $ticketMismatch 'without rerunning the Spec gate solely for Composition' 'To-tickets must not re-gate composition-only changes'
+Assert-NotContains $ticketMismatch 'Routes to req-align' 'To-tickets composition-only mismatch must not route to req-align'
+$ticketAttemptBoundary = Eval-Text (Find-Eval $evals['to-tickets'] 6)
+Assert-Contains $ticketAttemptBoundary 'same Attempt ID' 'To-tickets must reject historical-attempt blockers'
 
-$ticketsOnly = Find-Eval $evals['dev-with-track'] '1'
-Assert-Contains ($ticketsOnly.prompt + $ticketsOnly.expected_output + ($ticketsOnly.expectations -join "`n")) 'tickets=true, dag=false' 'Dev-with-track eval ID 1 must cover tickets-only status ownership.'
-$onlyDag = Find-Eval $evals['dev-with-track'] '2'
-Assert-Contains ($onlyDag.prompt + $onlyDag.expected_output + ($onlyDag.expectations -join "`n")) 'tickets=false, dag=true' 'Dev-with-track eval ID 2 must cover only-dag status ownership.'
-$both = Find-Eval $evals['dev-with-track'] '3'
-Assert-Contains ($both.prompt + $both.expected_output + ($both.expectations -join "`n")) 'tickets=true, dag=true' 'Dev-with-track eval ID 3 must cover ticket plus DAG projection ownership.'
-$readiness = Find-Eval $evals['dev-with-track'] '4'
-Assert-Contains ($readiness.prompt + $readiness.expected_output + ($readiness.expectations -join "`n")) 'readiness' 'Dev-with-track eval ID 4 must cover deterministic readiness.'
-$stage7 = Find-Eval $evals['dev-with-track'] '5'
-Assert-Contains ($stage7.prompt + $stage7.expected_output + ($stage7.expectations -join "`n")) 'Stage 7' 'Dev-with-track eval ID 5 must cover complete Stage 7 closure.'
+$dagInput = Eval-Text (Find-Eval $evals['create-task-dag'] 1)
+Assert-Contains $dagInput 'current attempt plan' 'Task-DAG current-attempt input'
+Assert-Contains $dagInput 'contributes-to' 'Task-DAG AC traceability'
+$dagPersistence = Eval-Text (Find-Eval $evals['create-task-dag'] 7)
+Assert-Contains $dagPersistence 'requires dag.md or a patch DAG' 'Task-DAG persistence contract'
+$noDagRoute = Eval-Text (Find-Eval $evals['create-task-dag'] 14)
+Assert-Contains $noDagRoute 'tickets=false, dag=false' 'Task-DAG no-DAG patch rejection'
+Assert-Contains $noDagRoute 'no task checklist' 'Task-DAG no-checklist patch behavior'
+$patchDagRoute = Eval-Text (Find-Eval $evals['create-task-dag'] 15)
+Assert-Contains $patchDagRoute 'tickets=false, dag=true' 'Task-DAG patch DAG acceptance'
 
-$ticketText = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\to-tickets\SKILL.md')
-Assert-Contains $ticketText 'Publication Status: Draft' 'To-tickets must name Draft as publication status.'
-if ($ticketText -match 'Status: Draft file') { throw 'To-tickets retains the ambiguous Status: Draft file wording.' }
-$ticketCycle = Find-Eval $evals['to-tickets'] '3'
-Assert-Contains ($ticketCycle.prompt + $ticketCycle.expected_output + ($ticketCycle.expectations -join "`n")) 'cyclic' 'To-tickets eval must preserve typed-edge cycle validation.'
-$dagTraceability = Find-Eval $evals['create-task-dag'] '1'
-Assert-Contains ($dagTraceability.prompt + $dagTraceability.expected_output + ($dagTraceability.expectations -join "`n")) 'contributes-to' 'Task-DAG eval must retain task-to-AC traceability.'
-$specAxis = Find-Eval $evals['module-review'] '4'
-Assert-Contains ($specAxis.prompt + $specAxis.expected_output + ($specAxis.expectations -join "`n")) 'seam drift' 'Module-review eval must keep seam drift on the Spec axis.'
-Assert-Contains ($specAxis.prompt + $specAxis.expected_output + ($specAxis.expectations -join "`n")) 'no third drift reviewer' 'Module-review eval must preserve the two-reviewer topology.'
-$safetyP0 = Find-Eval $evals['safety-review'] '1'
-Assert-Contains ($safetyP0.prompt + $safetyP0.expected_output + ($safetyP0.expectations -join "`n")) 'idempotency' 'Safety-review eval must retain the external-mutation P0 guard.'
+$blockedPass = Eval-Text (Find-Eval $evals['dev-with-track'] 9)
+Assert-Contains $blockedPass 'Supersedes' 'Append-only blocked-to-pass gate eval'
+Assert-Contains $blockedPass 'old entry' 'Append-only old-entry preservation'
+$revisionProof = Eval-Text (Find-Eval $evals['dev-with-track'] 10)
+Assert-Contains $revisionProof 'S1' 'Gate revision binding source'
+Assert-Contains $revisionProof 'S2' 'Gate revision binding target'
+$policyBoundary = Eval-Text (Find-Eval $evals['dev-with-track'] 11)
+Assert-Contains $policyBoundary 'policy' 'Verification policy reference eval'
+Assert-Contains $policyBoundary 'gate' 'Gate summary boundary eval'
 
-$activeRoots = @(
-    'skills\req-align', 'skills\to-tickets', 'skills\impl-planning',
-    'skills\create-task-dag', 'skills\dev-with-track', 'skills\module-review', 'skills\safety-review'
-)
+$specTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\req-align\assets\templates\spec.md')
+Assert-Contains $specTemplate 'Design Revision: D<n>' 'Spec must resolve lightweight Design revision.'
+Assert-Contains $specTemplate 'Spec Revision: S<n>' 'Spec revision header.'
+Assert-NotContains $specTemplate 'Composition:' 'Spec must not own Composition.'
+Assert-NotContains $specTemplate 'Status: Draft | Spec Gate Passed | Spec Gate Blocked | Superseded' 'Current spec SoT must not be superseded as a whole file.'
+$designTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\req-align\assets\templates\design.md')
+Assert-Contains $designTemplate 'current design choices and rationale SoT' 'Design must be current SoT.'
+Assert-NotContains $designTemplate 'point-in-time research and decision record' 'Design must not retain event-only identity.'
+
+$planTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-planning\assets\templates\plan.md')
+Assert-Contains $planTemplate '## Planned Verification' 'Plan verification selection.'
+Assert-Contains $planTemplate '## Execution Record' 'Plan execution evidence.'
+Assert-NotContains $planTemplate 'Executable Checklist' 'Plan must not contain task checklist.'
+
+$gateTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\dev-with-track\assets\templates\gate.md')
+Assert-Contains $gateTemplate '# Gate Ledger' 'Single gate ledger.'
+Assert-Contains $gateTemplate 'Supersedes:' 'Gate supersession chain.'
+Assert-Contains $gateTemplate 'Evidence:' 'Gate execution-record link.'
+Assert-Contains $gateTemplate '### Durable Deltas' 'Gate durable-delta capture.'
+Assert-NotContains $gateTemplate 'Verification checklist' 'Gate must not copy full verification checklist.'
+$progressTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\dev-with-track\assets\templates\progress.md')
+Assert-Contains $progressTemplate 'Kind：[attempt / task / ticket]' 'Progress must represent a no-DAG attempt recovery unit.'
+Assert-Contains $progressTemplate 'tasks/<attempt-id>-progress.md' 'Attempt progress path must be canonical.'
+
+$dagSkill = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\create-task-dag\SKILL.md')
+Assert-Contains $dagSkill '必须持久化为当前 attempt' 'Impl-Package DAG must be durable.'
+Assert-NotContains $dagSkill '持久化始终可选' 'Impl-Package DAG persistence cannot be optional.'
+Assert-Contains $dagSkill 'Composition 未决，或当前 plan Composition 与现有 artifact 不一致：路由' 'Composition mismatch route must be explicit.'
+Assert-Contains $dagSkill '`impl-planning` 升级 P revision' 'Composition mismatch must route to impl-planning.'
+
+$safetySkill = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\safety-review\SKILL.md')
+Assert-Contains $safetySkill 'git rev-parse <comparison-ref>^{commit}' 'Safety base ref must resolve to a commit SHA.'
+Assert-Contains $safetySkill 'git diff <base-sha>...<head-sha>' 'Safety diff must use immutable SHAs.'
+$pinnedSafety = Eval-Text (Find-Eval $evals['safety-review'] 7)
+Assert-Contains $pinnedSafety 'immutable commit SHAs' 'Safety eval must pin movable refs.'
+
+$specAxis = Eval-Text (Find-Eval $evals['module-review'] 4)
+Assert-Contains $specAxis 'seam drift' 'Module-review Spec axis'
+Assert-Contains $specAxis 'no third drift reviewer' 'Module-review reviewer topology'
+$safetyP0 = Eval-Text (Find-Eval $evals['safety-review'] 1)
+Assert-Contains $safetyP0 'idempotency' 'Safety-review P0 guard'
+
+$activeRoots = @('skills\req-align', 'skills\to-tickets', 'skills\impl-planning', 'skills\create-task-dag', 'skills\dev-with-track', 'skills\module-review', 'skills\safety-review')
 foreach ($relativeRoot in $activeRoots) {
-    $matches = Get-ChildItem -Path (Join-Path $repo $relativeRoot) -Recurse -File |
-        Select-String -SimpleMatch -Pattern 'to-issues'
+    $matches = Get-ChildItem -Path (Join-Path $repo $relativeRoot) -Recurse -File | Select-String -SimpleMatch -Pattern 'to-issues'
     if ($matches) { throw "Active Impl-Package skill retains to-issues: $($matches[0].Path):$($matches[0].LineNumber)" }
 }
 
-Write-Output 'Step 8 Impl-Package eval contract checks passed.'
+Write-Output 'Step 8 Impl-Package lifecycle eval contract checks passed.'

@@ -1,17 +1,19 @@
-# [Task ID or Ticket ID] Progress Ledger
+# [Attempt ID | Task ID | Ticket ID] Progress Ledger
 
 > This is an earned recovery ledger, not a second status or acceptance fact source. See
-> [Impl-Package Composition Contract](../../skill-design/references/impl-package-composition-contract.md).
+> [Impl-Package Composition Contract](../../../skills/impl-package/references/impl-package-composition-contract.md).
 
-Kind：[task / ticket]
+Kind：[attempt / task / ticket]
 创建：[YYYY-MM-DD]
-Canonical execution source：[dag.md / plan.md checklist / tickets/<ticket>.md]
-Acceptance source：[tickets/<ticket>.md / spec.md + gate.md]
+Attempt ID：
+Canonical execution source：[this attempt recovery ledger / dag.md / patch DAG / tickets/<ticket>.md]
+Acceptance source：[tickets/<ticket>.md / spec.md + plan Execution Record + gate.md]
 
-Create for a task only when the task-ledger trigger applies. Create for a ticket only when
-the whole ticket is independently resumed or transferred. A ticket ledger may index tasks
-and local recovery context but must not duplicate a task ledger or state an acceptance
-conclusion.
+Create `tasks/<attempt-id>-progress.md` with `Kind: attempt` only for a tickets=false,
+dag=false attempt whose interruption, independent handoff, external gate or blocker earns
+recovery state. Create task ledgers as `tasks/Tn-progress.md`; create a whole-ticket ledger
+as `tasks/<ticket-id>-progress.md` only under its recovery/transfer trigger. An attempt
+ledger must not invent T<n>, duplicate plan verification, or become an acceptance conclusion.
 
 ## Restore Context
 

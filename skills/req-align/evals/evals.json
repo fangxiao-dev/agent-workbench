@@ -22,9 +22,9 @@
       "expected_output": "Creates a gated thick spec with a minimal Design Gate Record when a standalone design.md is not earned.",
       "files": [],
       "expectations": [
-        "Includes Scope, terms/data contracts, behavior/state/workflow, boundaries, Error Boundaries, Constraint Contracts, Acceptance Semantics, and Composition",
+        "Includes Scope, terms/data contracts, behavior/state/workflow, boundaries, Error Boundaries, Constraint Contracts, Acceptance Semantics, and Contract Coherence",
         "Includes failure recovery and observable acceptance evidence",
-        "Records Composition: tickets=<true|false>, dag=<true|false> from independent earn decisions",
+        "Records current Design and Spec revisions without putting Composition in spec.md",
         "Does not create a Stable Doc Backfill Map or durable-delta queue in spec.md"
       ]
     },
@@ -38,6 +38,19 @@
         "Names the missing contract and evidence ownership",
         "Does not hand off to impl-planning or to-tickets",
         "Requires the Spec gate to pass before planning"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "patch-drift-reruns-only-required-gates",
+      "prompt": "A closed package is being patched. Case A only restores implementation to S2. Case B changes behavior but not design direction. Case C changes the selected design option. Classify the required revision and gate work.",
+      "expected_output": "Reuses D/S for implementation drift, increments only S and reruns Spec Gate for behavior drift, and increments D then S with both gates for design drift.",
+      "files": [],
+      "expectations": [
+        "Reconciles the closed package against current module knowledge and code before editing",
+        "Does not rewrite spec for an implementation-only fix",
+        "Reruns only Spec Gate for a behavior-contract change",
+        "Reruns Design then Spec when the selected design direction changes"
       ]
     }
   ]

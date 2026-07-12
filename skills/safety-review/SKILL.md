@@ -17,23 +17,30 @@ review：只报告有证据的风险和缺失的保护，不实施修复，也�
 - diff 触碰 auth、permission、payment、webhook、migration，或 external mutation
   路径；
 - `dag.md` 的 `Verification Gates` 声明外部写入或副作用验证；
-- `gate.md` 的 `Data Safety` 声明外部写入、数据迁移或不可逆影响。
+- 当前 spec 的 trust/provider/failure-recovery contract 声明外部写入、数据迁移或
+  不可逆影响；
+- 当前 attempt plan 的 `Planned Verification` 选择 Data Safety、real-route 或
+  external-mutation policy。
 
-信号只复用现有 diff、DAG 和 gate 字段：本 skill 不新增 ticket、ledger、登记表或
+信号只复用现有 diff、spec、plan 和 DAG 字段：本 skill 不新增 ticket、ledger、登记表或
 长期风险队列。没有信号时可明确记录“不触发”及检查过的信号；不要把“不触发”
 推断为“安全”。
 
 ## 输入与范围
 
-调用者必须给出 fixed point（commit、branch、tag 或 merge-base）及目标 package/
-模块；不得静默猜测比较基线。先验证引用，并使用：
+调用者必须给出 comparison ref（commit、branch、tag 或 merge-base）及目标 package/
+模块；不得静默猜测比较基线。review 开始时立即把 comparison ref 与 HEAD 都解析为
+完整 commit SHA；后续命令、plan ER 和 gate Comparison point 只记录不可变 SHA/range，
+不能记录可移动 branch/tag 名作为证据。
 
 ```text
-git diff <fixed-point>...HEAD
-git log <fixed-point>..HEAD --oneline
+git rev-parse <comparison-ref>^{commit}
+git rev-parse HEAD^{commit}
+git diff <base-sha>...<head-sha>
+git log <base-sha>..<head-sha> --oneline
 ```
 
-若 fixed point 无效、diff 为空或无法取得声明的 DAG/gate 输入，fail fast 并请求
+若 ref 不能解析为 commit SHA、diff 为空或无法取得声明的 spec/plan/DAG 输入，fail fast 并请求
 补充，而不是用当前工作树猜测 change map。项目 `AGENTS.md`、安全规范和服务协议
 是额外标准；它们可以加严本 skill 的 P1/P2，但不能放宽下列 P0。
 
@@ -73,18 +80,19 @@ git log <fixed-point>..HEAD --oneline
 - **P1 — required follow-up：**存在可信的完整性、安全、并发或副作用风险，但现有
   保护可降低其立即破坏性；在合入前必须有修复或经 owner 明确接受的缓解计划。
 - **P2 — evidence gap：**无法确认一个重要失败/恢复路径，或 change map 缺证据；
-  不把猜测升格为缺陷，但在 gate 中要求补证或明确的接受决定。
+  不把猜测升格为缺陷，但要求在 plan Execution Record 中补证或记录明确的接受决定。
 
 项目可以定义额外 P0；本 skill 不把项目特定条目硬编码进通用规则。
 
 ## 工作流与输出
 
-1. 验证 fixed point、范围及触发信号；收集 diff、相关 `dag.md` Verification Gates、
-   `gate.md` Data Safety、测试和项目安全规范。
+1. 解析并固定 base/head commit SHA，验证范围及触发信号；收集 diff、当前 spec contract、plan Planned
+   Verification / Execution Record、相关 `dag.md` Verification Gates、测试和项目安全规范。
 2. 先生成 change map，再沿五类逐项审查实现和测试证据。
 3. 每条 finding 写明 P0/P1/P2、文件/行或稳定来源、风险路径、缺失的保护/证据和
    建议动作；没有 finding 也要说明审查过的范围和未能验证的边界。
-4. 将结论交给调用者写入既有 `gate.md`；本 skill 不自行关闭 gate，也不调度实现。
+4. 将完整审查结果交给调用者 append 到 plan Execution Record；后续 gate entry 只
+   引用该稳定 ER anchor 并保存 verdict 摘要。本 skill 不自行关闭 gate，也不调度实现。
 
 输出依次为 `## Trigger evidence`、`## Change map`、`## Findings`、`## Coverage gaps`
 和一行 gate 建议。P0 必须在最前且明确写 `BLOCKED`。

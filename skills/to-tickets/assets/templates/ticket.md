@@ -2,6 +2,8 @@
 
 **Ticket ID:** <ticket-id>
 **Publication Status:** Draft
+**Attempt ID:** <attempt-id>
+**Spec Revision:** S<n>
 
 ## What to build
 

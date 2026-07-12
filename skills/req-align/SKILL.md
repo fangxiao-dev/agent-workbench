@@ -19,9 +19,8 @@ Use `docs/implementations/<package-id>/` as the canonical package root. A packag
 `260711-catalog-readiness`; it is a directory identity, not a mutable title.
 This skill owns:
 
-- `design.md`, required whenever Design is blocked and optional only for a lightweight
-  Design-passed path whose evidence fits in the spec Design Gate Record;
-- `spec.md`, the required point-in-time implementation contract.
+- `design.md`，活动变更期间的当前设计选择与 rationale SoT；blocked Design 必须持久化，lightweight passed path 可仅在 spec Design Gate Record 中保留最小证据；
+- `spec.md`，活动变更期间的当前行为、数据、边界、失败恢复、约束与 Acceptance Semantics SoT。
 
 Use [assets/templates/design.md](./assets/templates/design.md) and
 [assets/templates/spec.md](./assets/templates/spec.md). Do not publish a tracker spec or
@@ -54,9 +53,7 @@ until it is unique. Use the resulting package-id in every package path, cross-pa
 reference, truth pointer, and handoff. This prevents distinct short-lived changes with the
 same topic from sharing a workspace.
 
-For an existing package, retain its current directory name as its legacy or timestamped
-package-id. Never rename it merely to add a timestamp. A post-gate patch remains in that
-owning package-id; it is not a new implementation package.
+For an existing package, retain its current directory name as its legacy or timestamped package-id. Never rename it merely to add a timestamp. A post-gate patch remains in that owning package-id; it is not a new implementation package. 重新激活已关闭 package 前，先将 design/spec 与当前 module knowledge 和代码对账，再判断属于实现偏离、行为 contract 变化还是设计选择变化。
 
 ## Discover Project Knowledge
 
@@ -104,6 +101,8 @@ the Spec gate.
   register, does not authorize stable-document edits, and need not be merged into spec.
   Canonical durable-delta capture happens at the execution gate and downstream backfill.
 
+`design.md` 声明 `Design Revision: D<n>`。正文只保留当前选择；方向变化时升级 revision、重跑 Design Gate，并在 Revision History 中用一行记录 previous/new、变更摘要、authority、日期与 superseded 说明。完整旧正文由 Git 保存，不在当前正文并排维护。
+
 ## Gate 2: Spec (Required)
 
 Start only after the Design gate passes. Synthesize the point-in-time contract from:
@@ -121,25 +120,19 @@ Use the thick eight-section spec template. The Spec gate passes only when:
   internally consistent and actionable without reading the plan;
 - Acceptance Semantics maps each promised outcome or constraint to observable evidence
   and names any manual verification owner;
-- `Composition: tickets=<true|false>, dag=<true|false>` is justified by the two
-  independent earn conditions, never by S/M/L sizing. A dispatch shorthand
-  (`S`/`M`/`L`/`D`, mapped in the composition contract) may be accepted as input, but it
-  only expands into the canonical `tickets=/dag=` line; on conflict the earn conditions
-  win and the shorthand label is corrected, never the reverse;
 - blocking owner decisions and unresolved contract ambiguity are zero.
 
 If any criterion fails, record `Spec Gate: BLOCKED` with the exact missing contract or
 decision. Do not hand off to planning. A passing spec records `Spec Gate: PASSED`, date,
 evidence, and approver/owner.
 
-The spec must not contain a `Stable Doc Backfill Map`, durable-delta queue, worker task
-steps, or tracker publication metadata.
+The spec must not contain a `Stable Doc Backfill Map`, durable-delta queue, Composition, worker task steps, verification command log, or tracker publication metadata. `Composition` 由每次 attempt plan 独立决定。
+
+`spec.md` 声明 `Spec Revision: S<n>`，并始终记录其绑定的 `Design Revision: D<n>`；lightweight Design 没有独立 design.md 时，这一字段与 Design Gate Record 共同提供 D revision 的 canonical 落点。纯实现修复以重新符合当前 spec 时复用 revision；行为 contract 变化时升级 S revision 并重跑 Spec Gate；设计选择变化时必须先完成新的 Design revision/Gate。正文只保留当前合同，旧合同通过 Revision History 与 Git 追溯。
 
 ## Workflow
 
-1. Announce use of req-align; for a new package assign a topic slug and an
-   immutable date-prefixed package-id, or identify the owning existing package-id for a
-   patch/follow-up.
+1. Announce use of req-align; for a new package assign a topic slug and an immutable date-prefixed package-id, or identify the owning existing package-id for a patch/follow-up and classify drift against current module knowledge/code.
 2. Discover authoritative project knowledge before detailed clarification.
 3. Ask one focused question at a time for unresolved intent, scope, constraints, success
    criteria, trade-offs, or owner decisions.
@@ -152,8 +145,7 @@ steps, or tracker publication metadata.
    owner-decision evidence into its Design Gate Record. Append reusable, verified
    cross-stage facts/risks/constraints to an already-needed `findings.md`; do not create
    it for ordinary research narration.
-7. Synthesize the eight-section `spec.md` and evaluate the Spec gate. Stop when it is
-   blocked.
+7. Synthesize the eight-section `spec.md` and evaluate the Spec gate. For a patch, reuse D/S revisions for implementation-only drift, rerun only Spec Gate for behavioral contract changes, and rerun Design then Spec for design-direction changes. Stop when the required gate is blocked.
 8. After both gates pass, hand off the same `spec.md` to `impl-planning`; do not
    create another spec or publish to a tracker.
 

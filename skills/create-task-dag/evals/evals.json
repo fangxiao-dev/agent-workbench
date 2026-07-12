@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "The package docs/implementations/260711-catalog-readiness/ declares Composition: tickets=true, dag=true. I have plan.md plus the Approved catalog-readiness and admin-panel tickets; their ACs are AC-1 and AC-2. The plan defines the catalog-panel-wiring seam. Build the task DAG for this related ticket subset, with worker ownership and cohorts.",
+      "prompt": "The current attempt plan in docs/implementations/260711-catalog-readiness/ declares Composition: tickets=true, dag=true and references spec S2. I have the same-Attempt-ID Approved catalog-readiness and admin-panel tickets; their ACs are AC-1 and AC-2. S2 defines the catalog-panel-wiring seam. Build the task DAG for this related ticket subset, with worker ownership and cohorts.",
       "expected_output": "A task DAG based on the plan plus the supplied Approved ticket subset, not on a guessed single-ticket contract. Every task has contributes-to or enables acceptance targets, and seam work names a seam execution owner.",
       "files": [],
       "expectations": [
@@ -16,7 +16,7 @@
     },
     {
       "id": 2,
-      "prompt": "The gated package spec declares Composition: tickets=true, dag=true and plan.md exists. No Draft or Approved ticket files exist yet. Use create-task-dag now.",
+      "prompt": "The gated package spec S1 exists and the current attempt plan declares Composition: tickets=true, dag=true. No Draft or Approved ticket files exist yet. Use create-task-dag now.",
       "expected_output": "A response that stops execution decomposition and routes this precise, gated tickets=true package to to-tickets mode=draft. It does not cut slices itself, create a tracker item, or publish tickets.",
       "files": [],
       "expectations": [
@@ -41,7 +41,7 @@
     },
     {
       "id": 4,
-      "prompt": "The package declares Composition: tickets=false, dag=true. Here are plan.md and the package spec AC-1 through AC-3. Make a DAG for the plan without creating tickets.",
+      "prompt": "The current attempt plan declares Composition: tickets=false, dag=true. Here are the plan and package spec AC-1 through AC-3. Make a DAG without creating tickets.",
       "expected_output": "A plan-only DAG that uses spec:AC-n acceptance targets and does not create ticket files or a ticket-status index.",
       "files": [],
       "expectations": [
@@ -77,14 +77,14 @@
     },
     {
       "id": 7,
-      "prompt": "Use create-task-dag standalone. I can provide an approved plan and related Approved tickets, but I do not have a dev-with-track workspace. Put the task DAG in this handoff message.",
-      "expected_output": "A standalone DAG artifact in the response or handoff, with no requirement to create docs/implementations, while retaining task contracts, cohorts, ownership boundaries, acceptance targets, seams, verification gates, and the implementation-review handoff.",
+      "prompt": "Use create-task-dag for an Impl-Package. I can provide an approved plan and related Approved tickets, but there is no writable package workspace. Put the task DAG only in this handoff message.",
+      "expected_output": "Refuses to treat a conversation-only DAG as the Impl-Package artifact and routes creation/restoration of the package workspace before persisting the current attempt DAG.",
       "files": [],
       "expectations": [
-        "The output treats persistent tracking as optional rather than mandatory.",
-        "The output provides the DAG in the requested handoff form.",
-        "The output retains acceptance-target traceability and seam execution ownership.",
-        "The output does not invent process.md, Tn-evidence.md, Tn-review.md, or Tn-notes.md artifacts."
+        "The output requires dag.md or a patch DAG for dag=true",
+        "The output does not write task contracts or state into plan.md",
+        "The output does not call a handoff-only sketch a canonical DAG",
+        "The output preserves the approved inputs for the later persisted DAG"
       ]
     },
     {
@@ -101,7 +101,7 @@
     },
     {
       "id": 9,
-      "prompt": "The package claims Composition: tickets=false, dag=true, but its spec gate has not passed and it contains no stable AC identifiers. Use create-task-dag to make a plan-only DAG.",
+      "prompt": "The current attempt plan claims Composition: tickets=false, dag=true, but its spec gate has not passed and it contains no stable AC identifiers. Use create-task-dag to make a plan-only DAG.",
       "expected_output": "A response that routes to req-align to repair the Design/Spec gate and composition inputs. It does not route to to-tickets draft, invent spec:AC-n targets, or create a DAG.",
       "files": [],
       "expectations": [
@@ -112,7 +112,7 @@
     },
     {
       "id": 10,
-      "prompt": "The package has Composition: tickets=true, dag=true and all ticket implementation blockers are released. DAG task T2 has Depends on: T1, but T1 was reopened after an upstream change and is NEEDS-REVALIDATION. Is T2 actionable?",
+      "prompt": "The current attempt plan has Composition: tickets=true, dag=true and all ticket implementation blockers are released. DAG task T2 has Depends on: T1, but T1 was reopened after an upstream change and is NEEDS-REVALIDATION. Is T2 actionable?",
       "expected_output": "T2 is not actionable: task-DAG dependencies are independent of ticket blockers, and T1 must return to a dependency-releasing DAG state before T2 starts.",
       "files": [],
       "expectations": [
@@ -123,11 +123,11 @@
     },
     {
       "id": 11,
-      "prompt": "The plan defines seam checkout-contract with a contract owner, acceptance owner, and affected targets checkout-ui:AC-2 and checkout-api:AC-1. DAG task T8 records checkout-contract and its execution owner. T8 is DONE, but the acceptance owner has not accepted seam evidence. Can either ticket close?",
-      "expected_output": "Neither affected ticket can close. The plan remains canonical for contract and acceptance ownership; the DAG task owns only execution, and an unaccepted seam blocks every affected acceptance target.",
+      "prompt": "Spec S2 defines seam checkout-contract with a contract owner, acceptance owner, and affected targets checkout-ui:AC-2 and checkout-api:AC-1. DAG task T8 records checkout-contract and its execution owner. T8 is DONE, but the acceptance owner has not accepted seam evidence. Can either ticket close?",
+      "expected_output": "Neither affected ticket can close. Spec remains canonical for contract and acceptance ownership; the DAG task owns only execution, and an unaccepted seam blocks every affected acceptance target.",
       "files": [],
       "expectations": [
-        "The output distinguishes plan contract owner, plan acceptance owner, and DAG execution owner.",
+        "The output distinguishes spec contract owner, spec acceptance owner, and DAG execution owner.",
         "The output uses the seam's affected acceptance targets rather than task completion alone.",
         "The output blocks closure until the acceptance owner records seam acceptance."
       ]
@@ -145,13 +145,35 @@
     },
     {
       "id": 13,
-      "prompt": "The gated spec declares Composition: tickets=true, dag=false. The tickets are Approved and have AC-level evidence plans. Use create-task-dag to create worker tasks and a dag.md.",
+      "prompt": "The gated spec S1 exists, and the current attempt plan declares Composition: tickets=true, dag=false. The tickets are Approved and have AC-level evidence plans. Use create-task-dag to create worker tasks and a dag.md.",
       "expected_output": "A response that rejects DAG creation because dag=false. It leaves task decomposition absent, retains ticket-local AC evidence planning, and refers to the shared no-DAG contract rather than creating dag.md.",
       "files": [],
       "expectations": [
         "The output recognizes tickets=true, dag=false as a valid no-DAG composition.",
         "The output does not create dag.md, worker tasks, or a ticket-status index.",
         "The output keeps acceptance traceability at the ticket AC evidence-plan level."
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "一个 gate closed package 的新 patch attempt plan 声明 Composition: tickets=false, dag=false；改动只有一项 adapter mapping、无 seam、无依赖。请创建 patch DAG。",
+      "expected_output": "Refuses DAG creation because the current attempt has dag=false; the simple patch has no task checklist and uses a progress ledger only if recovery is later earned.",
+      "files": [],
+      "expectations": [
+        "The output reads current attempt Composition rather than historical topology.",
+        "The output does not append work to the retired historical dag.md.",
+        "The output does not invent T<n>, a task checklist, an execution owner, or an execution seam."
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "一个 gate closed package 的当前 patch attempt plan 声明 Composition: tickets=false, dag=true，理由是两条相互依赖的工作线和 execution seam；S2 已提供 spec:AC-1、spec:AC-2 与 seam contract。请创建 DAG。",
+      "expected_output": "Accepts the current attempt plan and creates a separate dated patch DAG without inheriting or modifying historical attempt topology.",
+      "files": [],
+      "expectations": [
+        "The output uses the target patch plan, gated spec, and spec ACs as the input contract.",
+        "The output assigns task dependencies, seam execution ownership, and spec:AC-n contributions in the patch DAG.",
+        "The output keeps historical Composition read-only and does not route to req-align merely to change current attempt topology."
       ]
     }
   ]

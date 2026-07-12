@@ -2,12 +2,14 @@
 
 > Create this artifact only when `Composition: ..., dag=true`. Its field semantics,
 > readiness and validation are defined by the shared
-> [Impl-Package Composition Contract](../../skill-design/references/impl-package-composition-contract.md).
+> [Impl-Package Composition Contract](../../../skills/impl-package/references/impl-package-composition-contract.md).
 
-状态：[PENDING / READY / RUNNING / NEEDS_SEAM / BLOCKED / FAILED / NEEDS-REVALIDATION / DONE / WAIVED / SUPERSEDED]
+状态：[PENDING / READY / RUNNING / NEEDS_SEAM / BLOCKED / FAILED / NEEDS-REVALIDATION / DONE / WAIVED / SUPERSEDED / RETIRED]
 创建：[YYYY-MM-DD]
+Attempt ID：
+Plan Revision：P<n>
 Spec：[spec.md](spec.md)
-Plan：[plan.md](plan.md)
+Plan：[current attempt plan](<plan-path>)
 Findings：[findings.md](findings.md)
 Gate：[gate.md](gate.md)
 
@@ -15,10 +17,11 @@ Gate：[gate.md](gate.md)
 ticket acceptance source. If tickets are also earned, any ticket state below is a
 read-only projection that names its `tickets/<ticket>.md` source.
 
-## Shared Contracts
+## Contract References
 
-- Shared composition contract: [impl-package-composition-contract.md](../../skill-design/references/impl-package-composition-contract.md)
-- [contract / DTO / route prop / external smoke protocol]
+- Shared composition contract: [impl-package-composition-contract.md](../../../skills/impl-package/references/impl-package-composition-contract.md)
+- Spec revision and seam IDs:
+- [DTO / route prop / external smoke protocol source]
 
 ## Task Records
 
@@ -35,8 +38,7 @@ read-only projection that names its `tickets/<ticket>.md` source.
 - seam execution owner: [main session / named owner; `none` only when seam is none]
 - Progress ledger: [tasks/T1-progress.md / N/A]
 
-`contributes-to`, `enables`, and seam fields are validated against the shared contract;
-do not duplicate a seam contract or acceptance owner here.
+`contributes-to`, `enables`, and seam fields are validated against the shared contract; do not duplicate a spec seam contract or acceptance owner here.
 
 ## DAG Board
 
@@ -52,9 +54,16 @@ do not duplicate a seam contract or acceptance owner here.
 | --- | --- | --- | --- |
 | [ticket-id] | [tickets/<ticket>.md](tickets/<ticket>.md) | [state] | [YYYY-MM-DD] |
 
+## Verification Gates
+
+<!-- 只记录 task/DAG 特有的前置条件与到 plan Planned Verification 的指针；不要复制通用 policy checklist。 -->
+
+- Plan verification source: [current attempt plan](<plan-path>#planned-verification)
+- Task/DAG-specific prerequisite or external gate:
+
 ## Validation and Last Update
 
 - [ ] All `Depends on` references resolve and the task graph is acyclic.
 - [ ] Every task acceptance target resolves to a ticket/spec AC.
-- [ ] Every execution seam has a matching plan seam record and execution owner.
+- [ ] Every execution seam has a matching spec seam contract and execution owner.
 - [YYYY-MM-DD] [meaningful status/evidence/revalidation change]

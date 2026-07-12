@@ -3,7 +3,7 @@ name: create-task-dag
 description: >
   Impl-Package 体系的执行分解阶段：当已批准的 package plan 与相关 ticket
   子集需要变成 task DAG 时使用。触发场景：画/建 task DAG、分配 ownership、
-  冻结契约、协调 worker、集成 seam，或请求 module-review 的 Spec 轴。
+  消费已冻结契约、协调 worker、集成 seam，或请求 module-review 的 Spec 轴。
 ---
 
 # Create Task DAG
@@ -13,38 +13,41 @@ ownership、稳定的契约、集成 seam 和验证交接。它只做 **executio
 delivery slice / ticket 的验收切分归 `to-tickets`。
 
 本 skill 的共享语义唯一引用
-`docs/skill-design/references/impl-package-composition-contract.md`。不得在本
+`skills/impl-package/references/impl-package-composition-contract.md`。不得在本
 skill 重定义 canonical status、readiness resolution、composition migration、
 Stage 7 或 seam 关闭规则。
 
 ## 输入与路由边界
 
-可开始 DAG execution decomposition 的有效输入只能是以下两种：
+可开始 DAG execution decomposition 的有效输入只有当前 attempt plan 声明 `dag=true` 的两种 Composition：
 
-1. `tickets=true, dag=true`：package `plan.md` + **相关且 Approved 的 ticket
-   子集**；该子集必须足以读取其受影响的 acceptance target 和 plan 中的 seam
-   contract。
-2. `tickets=false, dag=true`：package `plan.md`；其 acceptance target 由
+1. `tickets=true, dag=true`：当前 attempt plan + **属于同一 Attempt ID 且相关、Approved 的 ticket
+   子集**；该子集必须足以读取其受影响的 acceptance target，seam contract 从
+   当前 spec revision 读取。
+2. `tickets=false, dag=true`：当前 attempt plan；其 acceptance target 由
    package 的 `spec.md` 提供。
 
-调用者可将上述 plan 作为 standalone 输入提供，本 skill 的 DAG 产物也可只留在
-对话或 handoff；持久化始终可选。若只有单一 ticket，不能据此猜测跨 ticket
-seam contract，必须要求 plan + 相关 Approved ticket 子集。
+Impl-Package 中 `dag=true` 的 DAG 必须持久化为当前 attempt 的 `dag.md` 或 patch
+DAG；不得只留在对话/handoff，也不得把 task contract、ownership 或状态写入 plan。
+若只有单一 ticket，不能据此猜测跨 ticket seam context，必须要求 plan + 相关
+Approved ticket 子集，并从 spec 解析 contract。
 
-按 Composition 与 artifact 状态路由，不能一律重开 draft：
+按当前 attempt plan 的 Composition 与 artifact 状态路由，不能从 spec 或历史 attempt 猜测：
 
-- gated `spec.md` 明确为 `tickets=false, dag=true`，且有 plan 与稳定
+- 当前 plan 明确为 `tickets=false, dag=true`，且有 gated spec 与稳定
   `spec:AC-n`：直接使用 plan 创建 DAG；不进入 `to-tickets`。
-- gated `spec.md` 明确为 `tickets=true, dag=true`，已有 plan、尚无 Approved
+- 当前 plan 明确为 `tickets=true, dag=true`、尚无 Approved
   ticket、且没有 Draft ticket：才路由 `to-tickets mode=draft`。
 - 同一组合已有 Draft ticket：等待明确 owner approval，然后路由
   `to-tickets mode=publish`；本 skill 不把 Draft 标为 Approved。
-- gated `spec.md` 明确为 `tickets=true, dag=true`，已有相关 Approved ticket
+- 当前 plan 明确为 `tickets=true, dag=true`，已有同 Attempt ID 的相关 Approved ticket
   子集：开始 DAG 输入校验。
 - `tickets=true, dag=false` 或 `tickets=false, dag=false`：不调用本 skill 创建
-  task-decomposition artifact；no-DAG task/seam 限制只引用共享 contract 第 4 节。
-- Composition 未决、Composition 与现有 artifact 不一致，或 gated spec 缺少
-  所需 AC：路由 `req-align` 修复 Design/Spec gate。
+  task-decomposition artifact；no-DAG 状态与 seam 限制只引用共享 contract，不在本 skill 重定义。
+- Composition 未决，或当前 plan Composition 与现有 artifact 不一致：路由
+  `impl-planning` 升级 P revision并完成 artifact relocation；不重跑 D/S gate。
+- gated spec、D/S revision、AC 或 seam contract 缺失/漂移：路由 `req-align`
+  修复所需 Design/Spec gate。
 - gated spec 已就绪但缺 `plan.md`：路由 `impl-planning` 生成 plan；
   宽泛或未成 package 的输入同样先走 `req-align`，不得跳到
   `to-tickets`。
@@ -56,30 +59,28 @@ seam contract，必须要求 plan + 相关 Approved ticket 子集。
 
 ## 持久化映射
 
-持久化可选。本 skill 可独立使用：把 DAG 产物输出到对话内、当前 plan、
-handoff 或用户指定的进度文档；不要求先有 tracking workspace。
+本 skill 的 canonical 输出是 package 内当前 attempt DAG。缺 package-id、当前 plan
+或可写 package workspace 时停止并路由上游；对话中的草图不算 Impl-Package DAG
+产物。本节是唯一的映射来源：
 
-存在 `dev-with-track` implementation workspace 时，优先落入它的文件角色。
-本节是唯一的映射来源：
-
-- 功能合同或验收语义的变化 -> `spec.md`。DAG 工作暴露出合同变化时，先补
+- 功能合同、seam contract 或验收语义的变化 -> `spec.md`。DAG 工作暴露出合同变化时，先补
   spec 或标记 blocker，不要只改 plan。
-- 稳定 scope 与执行策略的变化 -> `plan.md`。
+- 当前 attempt 的执行顺序、具体集成动作与验证选择变化 -> 当前 plan 的新 P revision。
 - 任务契约、cohort、ownership、状态、seam、验证 gate -> `dag.md`；patch
-  模式下旧 `dag.md` 已标记 `Retired / gate passed` 时，写入当前的
+  模式下旧 `dag.md` 已标记 `Retired / terminal gate` 时，写入当前的
   `YYYYMMDD-HHMM-<patch-topic>.patch-dag.md`。
 - 持久的任务局部状态 -> `tasks/Tn-progress.md`。
 - 任务交接 -> `tasks/Tn-handoff.md`。
 - 跨任务风险与后续项 -> `findings.md`。
-- 最终 review 与关闭决策 -> `gate.md`。
+- 完整 review/verification 证据 -> 当前 plan Execution Record；关闭判决摘要 -> `gate.md` 新 entry。
 
 ## 运行原则
 
 - **Ticket**：delivery slice 与验收单元；它不是 worker task 的包含容器。
 - **Task DAG**：执行依赖与 worker 协调图；task 可贡献给多个 ticket AC，seam
   task 不属于单一 ticket。
-- **Main session**：协调者、集成验证者、外部把关者；它只有在 plan seam
-  record 被明确指定时才是 contract/acceptance owner，或在 DAG task 被指定时才是
+- **Main session**：协调者、集成验证者、外部把关者；它只有在 spec seam
+  contract 被明确指定时才是 contract/acceptance owner，或在 DAG task 被指定时才是
   seam execution owner。
 - **Worker**：单任务或窄 cohort 的有界实现者。
 - **Implementation reviewer**：由 `module-review` 的 Spec 轴在固定 review
@@ -101,8 +102,7 @@ handoff 或用户指定的进度文档；不要求先有 tracking workspace。
 
 ### 1. 校验已批准输入
 
-读 package plan、相关 Approved tickets（若 `tickets=true`）、spec 的
-Composition/AC 定义、仓库指令和相关验证文档。plan 和 spec 通常由
+读当前 attempt plan、同 Attempt ID 的相关 Approved tickets（若 tickets=true）、spec 的 D/S revision、AC 与 seam contract、仓库指令和相关验证文档。plan 和 spec 通常由
 `impl-planning` / `req-align` 产出在
 `docs/implementations/<package-id>/`。来源不满足输入契约时，读
 `references/slice-to-dag.md` 并按缺失原因路由。识别：
@@ -117,9 +117,9 @@ Composition/AC 定义、仓库指令和相关验证文档。plan 和 spec 通常
 碰什么、哪些 decisions 仍真正属于 owner；未批准或缺失的 ticket 不得作为
 DAG 输入。
 
-### 2. 冻结共享契约
+### 2. 校验共享契约
 
-派发 worker 前，冻结它们独立工作所需的契约：
+派发 worker 前，从当前 spec revision 校验它们独立工作所需的契约：
 
 - DTO / 类型 / API 字段；
 - fallback 与兼容规则；
@@ -135,8 +135,8 @@ DAG 输入。
 用 `references/dag-and-ownership.md`：任务记录、ownership 模式、cohort
 规则和任务编号续编。
 
-把 DAG 记录进用户要求的载体；存在 `dev-with-track` workspace 时按上方
-持久化映射落盘。
+把 DAG 按上方映射持久化到当前 attempt 的 `dag.md` 或 patch DAG；不得写入 plan、
+只留对话或改写历史 DAG。
 
 完成标准：每个任务都有依赖、可并行邻居、ownership lanes、聚焦测试、完成
 标准、acceptance contribution/enablement 与 seam execution owner；每个

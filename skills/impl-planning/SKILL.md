@@ -1,172 +1,111 @@
 ---
 name: impl-planning
 description: >
-  Impl-Package 体系的薄 plan 阶段：当用户为一个具体改动索要 implementation plan、feature plan、
-  patch plan、实现计划、补丁计划或 issue 实现计划时使用；也用于其他工作流在
-  tracked execution 开始前需要基于已批准 spec 创建 plan 时。不用于维护长期
-  PRD、架构或 feature-design 文档，也不用于执行追踪账本。
+  Impl-Package 体系的 attempt planning 阶段：当已通过所需 Design/Spec Gate 的变更需要初始 plan、patch plan、Composition、执行策略或验证计划时使用。不维护长期行为合同，也不维护 task runtime status。
 ---
 
-# Feature Impl Planning
+# Impl Planning
 
-消费 `req-align` 已通过两道门的 `spec.md`，为一个具体实现任务创建
-一份低上下文 coding agent 可以直接执行的薄 plan。Composition、状态事实源、task
-到 acceptance 追踪、seam 与升级规则以
-[Impl-Package Composition Contract](../../docs/skill-design/references/impl-package-composition-contract.md)
-为准；本 skill 只引用，不重新定义这些语义。
+为一个 implementation attempt 创建可追溯的过程计划。design/spec 是活动变更的当前 SoT；plan 只消费它们，并决定本次 attempt 的 tickets/DAG 形态、执行顺序与验证路径。
 
-## 输出模型
+共享 artifact lifecycle、Composition、gate 与 Stage 7 语义只引用 ../impl-package/references/impl-package-composition-contract.md。
 
-```text
+## 输出
+
+~~~text
 docs/implementations/<package-id>/
-  spec.md                                    # req-align 拥有的已过门合同
-  plan.md                                    # 初始实现计划
-  YYYYMMDD-HHMM-<patch-topic>.patch-plan.md  # 后续 patch plan
-```
+  plan.md                                    # initial attempt
+  YYYYMMDD-HHMM-<patch-topic>.patch-plan.md  # post-gate patch attempt
+~~~
 
-- `spec.md`：只读规划输入；由 `req-align` 拥有和过门。
-- `plan.md`：随 `spec.md` 的 Composition 分支生成：无 tickets 时可承载可执行
-  checklist；有 tickets 时只承载跨 slice 工程契约，绝不成为 ticket 或任务状态副本。
-- patch plan：同一 package-id 的后续计划，链接更新后的 `spec.md`，不复制原始计划。
+每个 plan 必须声明：
 
-如果仓库已有不同的 implementation-workspace 约定，在保留这三个角色的前提下
-适配该约定。
+~~~text
+Attempt ID: <initial | patch-id>
+Design Revision: D<n>
+Spec Revision: S<n>
+Plan Revision: P<n>
+Composition: tickets=<true|false>, dag=<true|false>
+~~~
+
+Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。
 
 ## 边界
 
-- 不创建或重写 `design.md` / `spec.md`，也不更新长期 PRD、ARD、feature-design
-  文档。合同缺失或 gate 未通过时路由回 `req-align`。
-- `Composition:` 只由已过门 `spec.md` 定义。本 skill 可以发现不匹配、提出或记录
-  revision 请求并路由回 `req-align`，但**不得自行改写 `Composition:`**、
-  以 plan 绕过任一 gate，或把 plan 变成第二个 composition 真相源。
-- 不创建或维护执行账本。`dag.md`、`tasks/Tn-progress.md`、
-  `tasks/Tn-handoff.md`、`findings.md`、`gate.md` 归 `dev-with-track` 所有。
-  tracked execution 开始或已激活时，交接 package-id 和当前生效的 plan 文件，由
-  `dev-with-track` 依据这些规划输入自行刷新状态。
+- 不创建或重写 design/spec。发现行为或设计 drift 时路由 req-align，等待所需 gate 通过。
+- 不把 interface、seam contract、compatibility、全局约束或 Acceptance Semantics 复制进 plan；这些属于 spec。选择 rationale 属于 design。
+- 不在 plan 保存 task checklist、task/ticket runtime status、worker ownership 或通用验证模板副本。
+- 实际验证过程可 append 到 Execution Record；terminal gate verdict 后 plan 冻结。
+- tickets 由 to-tickets 拥有，DAG 由 create-task-dag 拥有，progress/findings/gate ledger 由 dev-with-track 拥有。
 
-## 工作流
+## Routing
 
-1. **路由请求。** 先判定需求是 new implementation，还是对已经 gate closed 的
-   implementation 做 patch/follow-up。已有 package-id 只决定“复用哪个 implementation
-   目录”，不自动决定 patch 生命周期：
-   - implementation 尚未 gate closed（仍在需求理解、spec/plan/DAG/执行阶段）时，
-     需求纠正或范围澄清路由 `req-align` 原地修订并重新通过 spec gate；
-     计划修正只由本 skill 原地更新 `plan.md`；`dag.md` 修正路由 `create-task-dag`，
-     tracking 修正路由 `dev-with-track`。不创建 patch plan。
-   - 只有原 package 已关闭 gate，之后出现新增需求、回归修复或增量范围，才进入
-     patch 模式；复用同一 package-id，并在动笔前先读 [patching.md](./patching.md)。
-     不建立每 ticket patch：patch 始终属于已关闭 package 的 post-gate 生命周期。
-   - 通过语义搜索 implementation 目录、plan/spec 文件名、issue ID、feature 名和
-     涉及模块来定位 owning package-id。两个候选 package-id 都合理时，先问一个简短问题，
-     不要另建 workspace。
-   完成标准：routing、package-id 和“原地修订 vs 新 patch plan”的依据已明确。
+1. package 尚未 terminal：继续当前 attempt，按需修订当前 plan 的 P revision；不要创建 patch plan。
+2. package 已有 terminal gate，新需求或修复进入 post-gate patch：复用 package-id，创建新的 Attempt ID 与 patch plan。
+3. 重新 patch 前先确认 req-align 已将 package design/spec 与当前 module knowledge/code 对账。
+4. 两个 owning package 都合理时暂停并请求 owner 选择，不能另建重复 package。
 
-2. **按语义发现上下文，不依赖固定目录名。** 收集：来源需求、issue、handoff
-   或讨论；长期 PRD/产品文档；架构、ADR、数据契约文档；已有 feature/模块
-   设计；测试与验证文档；已有 implementation workspace（含 package-id 内
-   `design.md`、既往 plan、handoff）；以及用于校验或纠正文档的 focused code
-   facts。目录缺失只是线索缺失，不是阻塞。完成标准：能说清功能合同和它触及
-   的代码面。
+## Composition
 
-3. **验证并消费 `spec.md`。** 确认 Design Gate 与 Spec Gate 都是 `PASSED`、厚
-   合同八节齐全且没有 blocking owner decision。缺失或不一致时路由回
-   `req-align`，本 skill 不补写合同。完成标准：已过门 spec 是 plan
-   唯一功能合同输入。
+对当前 attempt 独立判断：
 
-4. **读取 Composition 并选择 plan 形态。** 从已过门 spec 读取且只读取唯一一行
-   `Composition: tickets=<true|false>, dag=<true|false>`，检查与现有 artifact
-   一致。若计划发现必须升级 composition，记录原因和受影响内容，路由
-   `req-align` 修订并重新过两道门；通过后才执行本 skill 的受控 Composition 升级迁移。
-   绝不在 plan 内自行决定或降级 composition。
+- tickets=true：至少两个值得独立跟踪验收结论的 delivery slice。
+- dag=true：需要显式依赖图、多个 execution owner、cohort 或 execution seam。
+- 两者都 false：不创建 task artifact；简单执行不通过 plan checklist制造状态。需要跨 session 恢复、独立交接或外部 gate 时，由 dev-with-track 按触发条件创建 progress ledger。
 
-5. **按固定顺序创建并交叉审查。** 新 implementation 的顺序恒为
-   **plan → to-tickets draft → cross-check plan**：
-   - 先按 Composition 写 `plan.md`。`tickets=false, dag=false` 时可写 T<n>
-     executable checklist；每项必须遵循共享 contract 的 `contributes-to` / `enables`
-     与 `seam: none` 规则，且不得写 seam execution owner。`tickets=false, dag=true`
-     时 task decomposition 归 DAG，plan 不保留 task checklist；`tickets=false, dag=true`
-     时，plan 填写 Package Engineering Contract，其中 seam contract、acceptance owner
-     和 affected targets 属于 plan，execution owner 仅在 `dag.md` task 中声明。
-   - `tickets=true` 时调用 `to-tickets` 的 **draft** 模式切 delivery slices，随后按
-     `dag` 分支处理：
-     - `tickets=true, dag=false` 时，plan 是 tickets-only 形态：不调用
-       `create-task-dag`、不建立 task artifact；ticket 文件是 AC evidence 与验收状态
-       的事实源，plan 不复制 ticket 正文、worker ownership、文件级步骤或实时状态；
-       tickets-only 仍填写 Package Engineering Contract，记录策略、验证、rollback、
-       constraints，且 seam 必须为 `none` 或 `N/A`，不声明 execution seam owner。
-     - `tickets=true, dag=true` 时，plan 完全去任务化，只保留跨 slice 策略、seam
-       contract、migration/rollback、verification policy 与全局约束；只有相关
-       approved tickets 子集才能与本 plan 一起交给 `create-task-dag`。
-   - 所有 `dag=true` 形态（only-dag 与 tickets+dag）的每条 plan seam record 都必须
-     写明 **Seam ID、Contract owner、Acceptance owner、Affected targets**；execution
-     owner 只在 `dag.md` task 中声明，不能回填到 plan。
-   - ticket draft 返回后，交叉检查 ticket 与 plan：补足跨 slice seam、全局约束、
-     migration/rollback 和 verification policy，或将 ticket 暴露的合同缺口路由回
-     `req-align`。只有 `tickets=true, dag=true` 时，owner 批准的相关
-     ticket 子集才可成为后续 DAG 输入。
-   完成标准：plan 的形态与 spec Composition 一致，且不存在第二个可写状态源。
+可接受 S/M/L/D shorthand，但只展开成本 attempt 的 tickets/dag；earn condition 冲突时修正 shorthand。
 
-6. **决定允许的 plan 颗粒度并记录**在 plan 头部的 `Granularity:` 行。仅当
-   `tickets=false, dag=false` 时，默认是 **repo-local executable checklist**；
-   仅当改动很小且边界清晰——通常 1-2 个文件、测试明确、且完整代码片段确实能
-   降低歧义——才回退到 superpowers 风格的 micro-step + 完整代码片段，并记录回退
-   原因。所有其他 Composition 形态记录 `Granularity: N/A — task decomposition outside plan`，
-   不以 plan 承载 executable task。
+plan 活动期间发现 Composition 判断错误时：
 
-7. **读 `superpowers:writing-plans` 的 SKILL.md**（可用时），在写 plan 之前。
-   只取它的质量标准：具体性、精确命令、预期结果、清除占位符。不采用它的输出
-   路径（`docs/superpowers/plans/...`）和默认 micro-step 格式——颗粒度由第 4
-   步决定，输出路径由本 skill 决定。
+1. 升级 Plan Revision。
+2. 记录 previous/new、原因、artifact relocation 与引用校验。
+3. 创建或退休当前 attempt 的 ticket/DAG 状态来源。
+4. 不修改 D/S revision，除非同时发现 contract drift。
+5. 不保留两个可写 execution-state source。
 
-8. **写 plan**，使用
-   [assets/templates/plan.md](./assets/templates/plan.md)：新实现写
-   `plan.md`；patch 在 package-id 根目录新建
-   `YYYYMMDD-HHMM-<patch-topic>.patch-plan.md`（绝不覆盖 `plan.md`）。按第 5 步
-   形态填入 input packet、契约或 checklist、验证和回滚；不留占位符，不写
-   “加个校验”这类模糊步骤。Composition 从既有形态升级时，使用模板的
-   `Composition Migration` 记录 previous/new/reason/moved content/relocation
-   pointer/verification，迁移旧内容至新的 canonical home 后删除旧维护入口；不
-   创建每 ticket patch。
+## Plan 内容
 
-9. **成对审查。** 环境允许时用 review subagent 执行下方审查清单；否则内联
-   执行，并在总结中说明用的哪种方式。应用修正，使正式文档可独立成立。
+### Execution Strategy
 
-10. **返回输出契约。**
+只记录本 attempt 的实施顺序、具体迁移操作、集成动作与回滚操作。稳定 interface、seam、compatibility 与约束必须先进入 spec。
 
-## 审查清单
+### Planned Verification
 
-- 选定 package-id 内的 `spec.md` 已由 `req-align` 通过两道门；plan 实现的
-  是当前 spec 合同。
-- plan 消费且不改写 spec 的唯一 Composition 行；无 tickets 与有 tickets 的形态
-  满足共享 contract；`tickets=true, dag=false` 不得调用 `create-task-dag` 或建立
-  task artifact，但仍填写 Package Engineering Contract 且 seam 为 `none`/`N/A`；
-  `tickets=false, dag=true` 或 `tickets=true, dag=true` 必须在 plan 记录 Seam ID、
-  Contract owner、Acceptance owner 与 Affected targets，execution owner 只在 DAG；
-  后者才能交接相关 approved tickets 子集给 DAG。
-- 新 implementation 按 **plan → to-tickets draft → cross-check plan** 执行；若不
-  earn tickets，明确记录不 earn 的理由和适用的 no-ticket plan 分支。
-- 无 DAG 的 checklist task 都有有效 `spec:AC-<n>` acceptance target、`seam: none`，
-  且没有 seam execution owner。
-- 每个 Composition 升级都有 previous/new/reason/moved content/relocation pointer/
-  verification；迁移后没有双重可写事实源。
-- 新实现有 `plan.md`；patch 在 package-id 根目录有新的带日期 patch plan，且复用了
-  owning package-id。patch 仅能在 package gate closed 后创建，不能按 ticket 建 patch。
-- 功能语义在 `spec.md` 中，而不是只藏在 plan 里。
-- 颗粒度决策已记录；micro-step 风格仅用于非常小、边界清晰的任务。
-- 验证命令具体、限定在本次改动范围内、写明预期结果。
-- 提议的 tracking task ID 从 package-id 内已有最高 `T<number>` 继续编号。
-- 长期文档只被引用，未被修改。
-- 待定 owner 决策明确列出，与实现步骤分离。
+- 引用权威 test/review policy。
+- 选择本次要运行的检查、预期结果和 evidence owner。
+- 不复制 Data Safety、UI Evidence、Real Route Safety 等通用 checklist。
 
-## 输出契约
+### Execution Record
 
-返回：
+- 每次实际检查追加一个稳定 entry anchor，例如 ER-1、ER-2。
+- 记录 D/S/P revision、时间、命令或检查、结果、证据路径和残余风险。
+- 旧 entry 不回改；补证新增 entry。
+- 这不是 task runtime status，也不替代 ticket/DAG/progress。
 
-- 选定的 topic slug、package-id 和 routing（new implementation 或 patch/follow-up）
-- 创建或修改的文件
-- 消费的 Composition、plan 形态，以及是否完成 `plan → to-tickets draft → cross-check plan`
-- 若有：Composition 升级迁移记录与共享 contract 验证结果
-- 颗粒度决策
-- 审查方式与所做修正
-- 剩余 owner 决策
-- plan 是否已可进入实现
+### Revision History
+
+记录 plan strategy、Composition 或 verification selection 的修订。terminal gate 后不得再改；后续变化创建新 patch attempt。
+
+## Workflow
+
+1. 读取当前 design/spec revision、gate ledger 最新 entry、module knowledge/code 对账结果与仓库验证政策。
+2. 确认需要的 Design/Spec Gate 已通过；实现-only drift 允许复用现有 D/S。
+3. 分配 Attempt ID 与 P1，独立决定 Composition。
+4. 写 Execution Strategy、Planned Verification、rollout/rollback 与依赖的 policy 链接。
+5. tickets=true 时调用 to-tickets draft；dag=true 时在必要输入齐备后调用 create-task-dag。
+6. 交叉检查 ticket/DAG 暴露的 contract 缺口；规范性缺口回 req-align，过程策略缺口升级 P revision。
+7. 执行期间只 append Execution Record；状态由对应 artifact 维护。
+8. gate evaluation 由 dev-with-track 在 gate.md 顶部插入摘要，并链接对应 Execution Record。
+
+## Review Checklist
+
+- Attempt ID、D/S/P revision 与 Composition 唯一且可解析。
+- plan 未复制 design/spec contract、ticket 正文、task 状态或通用 checklist。
+- 每个长期 seam/interface/constraint 都能在 spec 找到。
+- Planned Verification 引用权威 policy；Execution Record 使用稳定 anchor 且 append-only。
+- Composition 与当前 attempt earned artifacts 一致，无双重状态来源。
+- terminal gate 后 plan 已冻结。
+
+## Output Contract
+
+返回 package-id、Attempt ID、D/S/P revision、Composition、plan 路径、tickets/DAG 路由、选定 verification policy、剩余 owner decision，以及是否可进入 execution。

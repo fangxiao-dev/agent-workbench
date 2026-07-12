@@ -27,12 +27,16 @@ $body = Get-Content -Raw $skill
     'migration',
     'external mutation',
     'Verification Gates',
-    'Data Safety',
+    'Planned Verification',
+    'Execution Record',
     'idempotency',
     'compensation',
     'permission',
     'rollback',
-    'fixed point'
+    'comparison ref'
+    'git rev-parse'
+    'base-sha'
+    'head-sha'
 ) | ForEach-Object { Require-Text $body $_ }
 
 if (-not (Test-Path $evals)) {
@@ -40,7 +44,7 @@ if (-not (Test-Path $evals)) {
 }
 
 $parsed = Get-Content -Raw $evals | ConvertFrom-Json
-if ($parsed.skill_name -ne 'safety-review' -or $parsed.evals.Count -lt 5) {
+if ($parsed.skill_name -ne 'safety-review' -or $parsed.evals.Count -lt 7) {
     throw 'Safety-review evals must identify the skill and cover all five review domains.'
 }
 

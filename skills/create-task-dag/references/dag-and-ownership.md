@@ -2,7 +2,7 @@
 
 画任务图和分配文件 ownership 时读本文件。Composition、acceptance target
 语法、seam 的三类 owner、no-DAG seam 限制与关闭 gate 均以
-`docs/skill-design/references/impl-package-composition-contract.md` 为准；本
+`skills/impl-package/references/impl-package-composition-contract.md` 为准；本
 reference 只定义 DAG 的执行分解记录方式。
 
 ## 任务记录
@@ -47,7 +47,7 @@ task 不是 ticket 的子项。只为基础设施工作使用 `enables`，并指
 `tasks/T*-handoff.md`、`plan.md` 和根目录 `*.patch-plan.md`。不复用、不重排
 已有编号。
 
-旧 `dag.md` 已标记 `Retired / gate passed` 时，把新任务图写入新的
+旧 `dag.md` 已标记 `Retired / terminal gate` 时，把新任务图写入新的
 `YYYYMMDD-HHMM-<patch-topic>.patch-dag.md`（见 `dev-with-track` 的 patch
 模式），不要把新任务追加进已 retired 的旧 DAG。
 
@@ -84,7 +84,7 @@ acceptance target 受其约束，均按共享 contract 处理。
 ### Worker 返回状态与 DAG 板状态的映射
 
 Worker 返回与可释放 DAG 状态的映射、`Depends on` 的 readiness 判定，以及返工后的
-`NEEDS-REVALIDATION` 传播，全部引用 shared contract 第 3 节。不要把 worker
+`NEEDS-REVALIDATION` 传播，全部引用 shared contract 第 4 节。不要把 worker
 `DONE`、`Integrated` 或 `Verified local` 文案本身当作未验证的依赖释放；只有
 shared contract 定义的 dependency-releasing DAG 状态才允许其 dependent 开始。
 
@@ -150,7 +150,7 @@ shared contract 定义的 dependency-releasing DAG 状态才允许其 dependent 
 - Primary owned files/modules: route wiring and shared exports
 - Conditional seam files/modules: central locale merge
 - Forbidden files/modules: worker-owned source internals
-- Input contract: T12/T13 outputs and plan seam contract
+- Input contract: T12/T13 outputs and spec seam contract
 - Output contract: integrated entry point
 - enables: catalog-readiness:AC-2
 - seam: catalog-panel-wiring

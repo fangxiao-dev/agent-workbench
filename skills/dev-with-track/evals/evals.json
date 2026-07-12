@@ -3,85 +3,144 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "这个 package 的 spec 写着 Composition: tickets=true, dag=false。请 scaffold 并继续执行。不要为了记录 ticket 状态额外新建 dag.md。",
-      "expected_output": "Uses ticket files as the canonical execution and acceptance source, keeps plan task-free, and does not create dag.md.",
+      "prompt": "当前 attempt plan 声明 Composition: tickets=true, dag=false。请恢复执行，不要为了索引 ticket 状态创建 dag.md。",
+      "expected_output": "Uses same-Attempt-ID ticket files as runtime/acceptance sources, keeps plan task-free, and does not create a DAG.",
       "files": [],
       "expectations": [
-        "The output identifies ticket files as the canonical runtime and acceptance fact source.",
-        "The output distinguishes Publication Status from Runtime Acceptance Status.",
-        "The output does not create dag.md as a ticket status index.",
-        "The output requires every ticket AC to have planned evidence or a named manual verifier before execution."
+        "Reads Composition from the current attempt plan",
+        "Distinguishes Publication Status from Runtime Acceptance Status",
+        "Does not create dag.md or a plan task checklist",
+        "Requires every ticket AC to have an evidence producer or manual owner"
       ]
     },
     {
       "id": 2,
-      "prompt": "这个 package 的 spec 写着 Composition: tickets=false, dag=true。已有 plan.md 和 spec:AC-1 到 AC-3；请恢复并继续执行。",
-      "expected_output": "Uses dag.md as the canonical task status index and leaves acceptance evidence in spec.md/gate.md without creating tickets.",
+      "prompt": "当前 attempt plan 声明 Composition: tickets=false, dag=true，引用 S2 的 spec:AC-1 到 AC-3。请恢复并继续执行。",
+      "expected_output": "Uses the current attempt DAG as task state and keeps acceptance evidence in spec ACs, the plan Execution Record and gate entries without creating tickets.",
       "files": [],
       "expectations": [
-        "The output identifies dag.md as the task-status fact source.",
-        "The output uses spec:AC-n targets rather than inventing tickets.",
-        "The output does not create a ticket status projection or ticket files.",
-        "The output keeps task progress ledgers optional and evidence-backed."
+        "Reads Composition and P revision from the current plan",
+        "Uses spec:AC-n targets",
+        "Keeps progress ledgers optional and evidence-backed",
+        "Appends actual verification to the current plan Execution Record"
       ]
     },
     {
       "id": 3,
-      "prompt": "一个 Composition: tickets=true, dag=true 的 package 中 T3 contributes-to checkout:AC-2，依赖 T2。T2 被返工。恢复后我能直接继续 T3 吗？",
-      "expected_output": "Reconciles evidence first, marks dependent work NEEDS-REVALIDATION, and does not treat old task completion as acceptance evidence.",
+      "prompt": "当前 attempt 为 tickets=true, dag=true；T3 contributes-to checkout:AC-2 并依赖 T2。T2 因上游返工重开。恢复后能直接继续 T3 吗？",
+      "expected_output": "Reconciles evidence, marks T3 and dependent evidence NEEDS-REVALIDATION, and does not infer ticket acceptance from old task completion.",
       "files": [],
       "expectations": [
-        "The output uses readiness resolution rather than frontier scheduling or automatic assignment.",
-        "The output marks T3 NEEDS-REVALIDATION until dependency and evidence are explicitly rechecked.",
-        "The output treats dag ticket status as a read-only projection and ticket Runtime Acceptance Status as canonical.",
-        "The output requires direct AC-2 evidence before checkout can close."
+        "Uses deterministic readiness resolution",
+        "Treats NEEDS-REVALIDATION as non-releasing",
+        "Keeps ticket acceptance canonical in the ticket file",
+        "Requires new direct AC evidence"
       ]
     },
     {
       "id": 4,
-      "prompt": "T1 已 DONE，T2 因外部 gate BLOCKED，T3 没有 blocker，T4 依赖被 WAIVED 的 T1 但替代证据齐全。恢复后如何选择下一单元？",
-      "expected_output": "Runs deterministic readiness resolution over the static graph, chooses the documented first actionable unit, and does not dispatch or lease workers.",
+      "prompt": "T1 DONE，T2 因外部 gate BLOCKED，T3 无 blocker，T4 依赖已有替代证据的 WAIVED T1。恢复后如何选下一单元？",
+      "expected_output": "Filters the static graph deterministically and selects the first actionable unit in document order without dispatching workers.",
       "files": [],
       "expectations": [
-        "The output treats DONE and evidenced WAIVED as dependency-releasing states.",
-        "The output treats BLOCKED as non-releasing.",
-        "The output selects among actionable units in stable document order.",
-        "The output does not call the filter a scheduler, frontier, or automatic assignment."
+        "Treats DONE and evidenced WAIVED as dependency-releasing",
+        "Treats BLOCKED as non-releasing",
+        "Uses stable document order",
+        "Does not introduce frontier scheduling, leasing or automatic assignment"
       ]
     },
     {
       "id": 5,
-      "prompt": "准备关闭 gate：有两个 durable delta，一个目标 module spec 还不存在。应如何完成 Stage 7？",
-      "expected_output": "Closes only after gate Durable Deltas, _pending registration, target-spec truth pointers, and required stub creation are complete.",
+      "prompt": "准备写 terminal gate entry：有两个 durable delta，其中一个目标 module spec 不存在。应按什么顺序完成 Stage 7 和 append-only 写入？",
+      "expected_output": "Reserves the next G id, fixes comparison/evidence anchors, completes pending registration, truth pointers and required stub, then inserts the immutable terminal entry once.",
       "files": [],
       "expectations": [
-        "Each delta has a Delta ID and the required gate columns.",
-        "The output uses <destination>|<delta-id> as the pending dedupe key.",
-        "The output creates a required target spec stub before writing its truth pointer.",
-        "The output records none plus a reason only when no durable delta exists."
+        "Uses <destination>|<delta-id> as the dedupe key",
+        "Creates a required target spec stub before its truth pointer",
+        "Does not append a temporary gate entry and edit it later",
+        "Records none plus a reason only when no durable delta exists"
       ]
     },
     {
       "id": 6,
-      "prompt": "一个没有 tickets 但有 dag 的 package 有跨模块 seam。请说明三类 seam owner、task 字段和关闭限制。",
-      "expected_output": "Records the seam contract in plan.md, its execution owner on a DAG task, and its acceptance owner outside the task; an unaccepted seam blocks package closure.",
+      "prompt": "一个 tickets=false, dag=true attempt 有跨模块 seam。说明三类 owner、证据位置和关闭限制。",
+      "expected_output": "Keeps seam contract and acceptance ownership in spec, execution ownership in the DAG, and actual acceptance evidence in the plan Execution Record/gate.",
       "files": [],
       "expectations": [
-        "The output gives contract owner and acceptance owner in the plan seam record.",
-        "The output gives a matching seam ID and execution owner in dag.md.",
-        "The output validates affected spec AC evidence before gate closure.",
-        "The output does not invent a no-DAG seam execution owner."
+        "Reads contract owner, acceptance owner and affected targets from spec",
+        "Uses the matching DAG seam execution owner",
+        "Blocks closure until affected spec AC evidence is accepted",
+        "Does not copy the seam contract into plan or DAG"
       ]
     },
     {
       "id": 7,
-      "prompt": "执行到一半发现原本无 tickets 的 package 必须分成两个独立验收 slice。如何升级而不留下双重状态？",
-      "expected_output": "Uses a recorded composition migration with relocation pointers, moves status/checklist content to canonical homes, and validates fact-source and AC coverage consistency.",
+      "prompt": "活动 attempt P1 原本 tickets=false, dag=false，执行中发现必须拆成两个独立验收 slice，但 D1/S1 行为合同不变。如何升级？",
+      "expected_output": "Routes to impl-planning for P2 and current-attempt artifact relocation while keeping D1/S1 unchanged and avoiding dual writable state.",
       "files": [],
       "expectations": [
-        "The output records Previous, New, reason/date, moved content, relocation pointer, and verification.",
-        "The output preserves confirmed semantics but removes the old writable maintenance entry point.",
-        "The output does not create per-ticket patch plans merely because tickets were earned."
+        "Treats Composition as plan-owned attempt state",
+        "Does not rerun Design or Spec Gate without contract drift",
+        "Records previous/new Composition and artifact relocation",
+        "Does not create a per-ticket patch plan"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "已关闭 package 的新 implementation-only patch plan 声明 Composition: tickets=false, dag=false；只有一个 adapter 修复、无 seam、无依赖。请恢复执行。",
+      "expected_output": "Executes the simple patch without a task checklist or DAG, using an earned progress ledger only if interruption/recovery requires it, and appends verification to Execution Record.",
+      "files": [],
+      "expectations": [
+        "Does not inherit the historical attempt DAG",
+        "Does not create T<n> state or a plan checklist",
+        "Reuses current D/S revisions for implementation-only drift",
+        "Appends actual checks and results under stable ER anchors"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Attempt patch-a 的最新 gate entry 是 patch-a-G1 blocked。补齐 ER-3 证据后准备 pass；请更新 gate。",
+      "expected_output": "Leaves the old entry unchanged and inserts patch-a-G2 pass at the top with Supersedes: patch-a-G1 and an Evidence link to the plan ER entry.",
+      "files": [],
+      "expectations": [
+        "Preserves the old entry byte-for-byte",
+        "Uses the next unused same-attempt G number",
+        "Links Supersedes to patch-a-G1",
+        "Freezes the plan only after the terminal entry is written"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Gate entry initial-G1 passed Design D1 / Spec S1。之后行为合同升级为 S2。能否用 initial-G1 证明 S2 已通过 implementation gate？",
+      "expected_output": "No. The S1 gate entry proves only S1; S2 needs new plan/evidence and a new gate evaluation tied to S2.",
+      "files": [],
+      "expectations": [
+        "Does not reinterpret or edit initial-G1",
+        "Treats the revision fields as part of the verdict identity",
+        "Creates a new patch attempt if the earlier attempt was terminal"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "本次变更受 Data Safety、UI Evidence 与 Real Route Safety policy 约束。请记录验证并写 gate。",
+      "expected_output": "The plan references policy and records only selected checks plus actual results in append-only Execution Record; gate stores only evidence anchors, verdict summary and Durable Deltas.",
+      "files": [],
+      "expectations": [
+        "Does not copy the generic policy checklist into plan",
+        "Does not copy a full verification checklist into gate",
+        "Keeps commands/results/evidence in plan ER entries",
+        "Keeps gate limited to revision-bound decision metadata"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "findings.md 中混有一个设计选择、一个规范性失败恢复规则、一条长期项目知识和一次测试命令结果。gate 前如何处理？",
+      "expected_output": "Routes design choice to design, normative behavior to spec, durable knowledge to gate/_pending, and test evidence to plan Execution Record while retaining only residual investigation facts in findings.",
+      "files": [],
+      "expectations": [
+        "Does not leave a second contract SoT in findings",
+        "Reruns only the gates required by the classified drift",
+        "Does not put process evidence into design or spec"
       ]
     }
   ]

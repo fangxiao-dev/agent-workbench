@@ -2,7 +2,7 @@
 
 worker 返回后或请求 implementation-level review 时读本文件。共享 acceptance、
 seam 和 Stage 7 规则以
-`docs/skill-design/references/impl-package-composition-contract.md` 为准。
+`skills/impl-package/references/impl-package-composition-contract.md` 为准。
 
 ## Review 层次
 
@@ -53,8 +53,7 @@ implementation 准备交接或关闭时报告：
 
 ## 持久化
 
-standalone 模式下，review 和验证证据可留在对话内、当前 plan 或用户指定的
-handoff/进度产物中。
-
-存在 `dev-with-track` workspace 时，按 `SKILL.md` 的持久化映射落盘；任务
-局部的 review finding 写入 `tasks/Tn-progress.md`。
+Impl-Package review/验证必须按 `SKILL.md` 的持久化映射落盘：任务局部 review
+finding 写入 earned `tasks/Tn-progress.md`，implementation-level review 与实际
+验证结果 append 到当前 plan Execution Record，gate entry 只引用其 ER anchor 并
+保存 verdict 摘要。只留在对话或 handoff 的内容不构成可恢复、可判决的 evidence。

@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Impl-Package 体系 · 介绍</title>
+<style>
+  :root{
+    --ground:#f5f7f9; --surface:#ffffff; --surface-2:#eaeef2;
+    --ink:#161d27; --muted:#586472; --line:#d8dee6;
+    --accent:#0d857b; --accent-ink:#0a655d; --accent-soft:rgba(13,133,123,.10);
+    --old:#b0512c; --old-soft:rgba(176,81,44,.08);
+    --good:#2f9e5f; --warn:#c0851a;
+    --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,"SFMono-Regular",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --sblue:#2f6fb0;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --ground:#0d1216; --surface:#161d24; --surface-2:#1e262f;
+    --ink:#e9eef3; --muted:#95a2af; --line:#28323d;
+    --accent:#41d2c6; --accent-ink:#7fe6dd; --accent-soft:rgba(65,210,198,.13);
+    --old:#dd8f63; --old-soft:rgba(221,143,99,.13);
+    --good:#5ac686; --warn:#e3ac4d; --sblue:#6ba7de;
+  }}
+  :root[data-theme="light"]{
+    --ground:#f5f7f9; --surface:#ffffff; --surface-2:#eaeef2; --ink:#161d27; --muted:#586472; --line:#d8dee6;
+    --accent:#0d857b; --accent-ink:#0a655d; --accent-soft:rgba(13,133,123,.10);
+    --old:#b0512c; --old-soft:rgba(176,81,44,.08); --good:#2f9e5f; --warn:#c0851a; --sblue:#2f6fb0;
+  }
+  :root[data-theme="dark"]{
+    --ground:#0d1216; --surface:#161d24; --surface-2:#1e262f; --ink:#e9eef3; --muted:#95a2af; --line:#28323d;
+    --accent:#41d2c6; --accent-ink:#7fe6dd; --accent-soft:rgba(65,210,198,.13);
+    --old:#dd8f63; --old-soft:rgba(221,143,99,.13); --good:#5ac686; --warn:#e3ac4d; --sblue:#6ba7de;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  html,body{margin:0;padding:0}
+  body{background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.7;font-size:18px;-webkit-font-smoothing:antialiased}
+  .wrap{padding:clamp(26px,5vw,64px) clamp(18px,5vw,44px)}
+  .page{max-width:1180px;margin:0 auto}
+  h1,h2,h3,h4{margin:0;line-height:1.22;text-wrap:balance}
+  p{margin:0}
+  .eyebrow{font-family:var(--mono);font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  .mono{font-family:var(--mono)}
+  code{font-family:var(--mono);font-size:.82em;background:var(--surface-2);padding:2px 7px;border-radius:6px;color:var(--accent-ink);white-space:nowrap}
+  /* header */
+  header.hd{border-bottom:1px solid var(--line);padding-bottom:32px;margin-bottom:44px}
+  header.hd h1{font-size:clamp(34px,6vw,54px);font-weight:780;letter-spacing:-.025em;margin:16px 0 18px}
+  header.hd .sub{font-size:clamp(18px,2.5vw,23px);color:var(--muted);max-width:40ch;line-height:1.5;font-weight:450}
+  header.hd .sub b{color:var(--ink);font-weight:650}
+  /* layout: sticky toc + main */
+  .layout{display:grid;grid-template-columns:214px 1fr;gap:clamp(30px,4vw,54px);align-items:start}
+  .toc{position:sticky;top:22px}
+  .toc .tt{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;padding-left:12px}
+  .toc nav{display:flex;flex-direction:column;gap:1px;border-left:2px solid var(--line)}
+  .toc a{display:block;padding:7px 14px;color:var(--muted);text-decoration:none;border-left:2px solid transparent;margin-left:-2px;transition:color .15s,background .15s,border-color .15s;font-size:14.5px}
+  .toc a:hover{color:var(--ink)}
+  .toc a.active{color:var(--accent-ink);border-left-color:var(--accent);background:var(--accent-soft);font-weight:600}
+  .toc .toc-part{font-family:var(--mono);font-size:10.5px;color:var(--accent);margin:16px 0 5px;padding-left:14px;letter-spacing:.05em;font-weight:600}
+  @media (max-width:920px){
+    .layout{grid-template-columns:1fr;gap:0}
+    .toc{position:static;margin-bottom:34px;border:1px solid var(--line);border-radius:12px;padding:14px 8px;background:var(--surface)}
+    .toc .tt{display:none}
+    .toc nav{border-left:none;flex-flow:row wrap;gap:4px}
+    .toc a{border:1px solid var(--line);border-radius:20px;margin:0;padding:6px 13px}
+    .toc a.active{border-color:var(--accent)}
+    .toc .toc-part{width:100%;margin:8px 0 2px;padding-left:6px}
+  }
+  /* part divider */
+  .part{border-top:2px solid var(--line);padding-top:28px;margin:0 0 42px}
+  .part .pn{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  .part h2{font-size:clamp(25px,3.8vw,34px);font-weight:770;margin-top:9px;letter-spacing:-.015em}
+  .part p{color:var(--muted);margin-top:10px;max-width:62ch;font-size:16.5px}
+  /* section */
+  section{margin:0 0 56px;scroll-margin-top:20px}
+  section>.eyebrow{display:block;margin-bottom:10px}
+  section>h2{font-size:clamp(23px,3.2vw,30px);font-weight:750;letter-spacing:-.015em;margin-bottom:14px}
+  section>.lede{color:var(--muted);max-width:68ch;margin-bottom:28px;font-size:clamp(16px,2vw,18px)}
+  section>.lede b{color:var(--ink);font-weight:650}
+  /* value props */
+  .props{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+  .prop{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px 22px 24px}
+  .prop .ic{width:44px;height:44px;border-radius:12px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;margin-bottom:15px;color:var(--accent);font-family:var(--mono);font-weight:700;font-size:19px}
+  .prop h3{font-size:18.5px;font-weight:700;margin-bottom:8px}
+  .prop p{font-size:15px;color:var(--muted);line-height:1.6}
+  /* old vs new */
+  .cmp{border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .cmp .head{display:grid;grid-template-columns:120px 1fr 1fr;background:var(--surface-2)}
+  .cmp .head>div{padding:13px 18px;font-family:var(--mono);font-size:13px;letter-spacing:.04em;font-weight:600;color:var(--muted)}
+  .cmp .head .oldh{color:var(--old)} .cmp .head .newh{color:var(--accent)}
+  .cmp .r{display:grid;grid-template-columns:120px 1fr 1fr;border-top:1px solid var(--line)}
+  .cmp .r>div{padding:15px 18px;font-size:15px}
+  .cmp .dim{font-weight:650;background:var(--surface-2);display:flex;align-items:center}
+  .cmp .old{color:var(--muted);background:var(--old-soft)}
+  .cmp .new{color:var(--ink)} .cmp .new b{color:var(--accent-ink);font-weight:650}
+  @media (max-width:720px){
+    .cmp .head{display:none}
+    .cmp .r{grid-template-columns:1fr;gap:2px}
+    .cmp .dim{background:var(--surface);padding-bottom:2px;font-size:16px}
+    .cmp .old::before{content:"旧 · func-design + impl-plan";display:block;font-family:var(--mono);font-size:11px;color:var(--old);margin-bottom:4px}
+    .cmp .new::before{content:"新 · Impl-Package";display:block;font-family:var(--mono);font-size:11px;color:var(--accent);margin-bottom:4px}
+  }
+  /* evergreen layers */
+  .layers{display:grid;gap:10px}
+  .layer{display:grid;grid-template-columns:176px 1fr;gap:16px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px 20px;align-items:center}
+  .layer .lk{font-weight:700;font-size:16px}
+  .layer .lv{font-size:14.5px;color:var(--muted)}
+  @media (max-width:560px){.layer{grid-template-columns:1fr;gap:4px}}
+  /* timeline flow */
+  .flow{position:relative;margin-top:6px}
+  .flow::before{content:"";position:absolute;left:23px;top:26px;bottom:26px;width:2px;background:var(--line)}
+  .fstage{display:grid;grid-template-columns:48px 1fr;gap:18px;align-items:start;margin-bottom:14px}
+  .fstage .node{width:48px;height:48px;border-radius:50%;background:var(--surface);border:2.5px solid var(--accent);color:var(--accent);font-weight:750;font-size:18px;display:flex;align-items:center;justify-content:center;position:relative;z-index:1}
+  .fstage.opt .node{border-style:dashed;border-color:var(--muted);color:var(--muted);font-size:13px}
+  .fstage .node.bridge{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink);font-size:15px}
+  .fstage .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 20px}
+  .fstage.opt .card{border-style:dashed}
+  .fstage.bridgecard .card{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:var(--accent-soft)}
+  .fstage .card .h{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .fstage h3{font-size:18.5px;font-weight:700}
+  .badge{font-family:var(--mono);font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:20px;letter-spacing:.03em}
+  .badge.opt{background:var(--surface-2);color:var(--muted);border:1px dashed var(--muted)}
+  .badge.always{background:var(--accent-soft);color:var(--accent-ink)}
+  .fstage .what{color:var(--muted);font-size:15px;margin-top:6px}
+  .fstage .what b{color:var(--ink)}
+  .fstage .who{margin-top:11px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .skill{font-family:var(--mono);font-size:12.5px;padding:4px 10px;border-radius:8px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));color:var(--accent-ink);background:var(--accent-soft)}
+  .skill.cond{border-style:dashed;border-color:var(--muted);color:var(--muted);background:var(--surface-2)}
+  .skill em{font-style:normal;font-size:10.5px;opacity:.85;margin-left:6px;padding-left:6px;border-left:1px solid currentColor}
+  .art{font-family:var(--mono);font-size:12.5px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:var(--ground);color:var(--muted)}
+  .trig{margin-top:11px;font-size:14.5px;color:var(--ink);background:var(--surface-2);border-radius:9px;padding:9px 13px}
+  .trig b{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent-ink);margin-right:8px}
+  .retreat{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:0 14px 14px 0;padding:18px 22px}
+  .retreat .t{font-weight:700;font-size:16px;margin-bottom:10px}
+  .retreat ul{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+  .retreat li{font-size:15px;color:var(--muted)}
+  .retreat li b{color:var(--accent-ink);font-family:var(--mono);font-size:13.5px}
+  /* cases */
+  .cases{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+  @media (max-width:760px){.cases{grid-template-columns:1fr}}
+  .case{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px 22px 24px;display:flex;flex-direction:column}
+  .case .top{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .case .sz{width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:750;font-size:19px;color:#fff;flex:0 0 auto}
+  .case.s .sz{background:var(--sblue)} .case.m .sz{background:var(--accent)}
+  .case.l .sz{background:var(--old)} .case.d .sz{background:#7a5bb0}
+  :root[data-theme="dark"] .case .sz{color:#0d1216}
+  @media (prefers-color-scheme:dark){.case .sz{color:#0d1216}}
+  .case .lvl{font-size:16.5px;font-weight:700;line-height:1.25}
+  .case .lvl small{display:block;font-weight:500;color:var(--muted);font-size:13px;font-family:var(--mono);margin-top:2px}
+  .case .req{font-size:15px;line-height:1.55;margin-bottom:14px}
+  .case .req .k{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:block;margin-bottom:3px}
+  .case .path{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:14px}
+  .case .step{font-family:var(--mono);font-size:11.5px;padding:3px 8px;border-radius:6px;background:var(--surface-2);color:var(--muted)}
+  .case .step.on{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+  .case .sep{color:var(--muted);font-size:11px}
+  .case .win{margin-top:auto;font-size:14.5px;line-height:1.55;background:var(--accent-soft);border-radius:10px;padding:12px 14px;color:var(--ink)}
+  .case .win .k{font-weight:700;color:var(--accent-ink)}
+  footer{border-top:1px solid var(--line);margin-top:12px;padding-top:26px;color:var(--muted);font-size:13.5px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="page">
+
+  <header class="hd">
+    <span class="eyebrow">给团队的介绍</span>
+    <h1>Impl-Package 体系</h1>
+    <p class="sub">它由两部分咬合而成:<b>一套不会烂的文档结构</b>,和<b>一条可伸缩的开发流程</b>。大改动多走几步,小改动少走几步。</p>
+  </header>
+
+  <div class="layout">
+
+    <aside class="toc">
+      <div class="tt">目录</div>
+      <nav>
+        <a href="#value">好在哪</a>
+        <div class="toc-part">第一部分 · 文档维护</div>
+        <a href="#why">为什么要换</a>
+        <a href="#evergreen">常青四层</a>
+        <div class="toc-part">第二部分 · 开发 6+1</div>
+        <a href="#pipeline">开发流水线</a>
+        <a href="#cases">四种情况</a>
+      </nav>
+    </aside>
+
+    <main>
+
+      <!-- 好在哪 -->
+      <section id="value">
+        <span class="eyebrow">一句话:好在哪</span>
+        <h2>四个它真正解决的问题</h2>
+        <div class="props">
+          <div class="prop"><div class="ic">↔</div><h3>按需伸缩,不做无用功</h3><p>小改动只走「规格 + 计划」;复杂改动才长出验收票和执行图。没有一刀切的重流程。</p></div>
+          <div class="prop"><div class="ic">♻</div><h3>文档不会烂</h3><p>每次关闭时把长期知识归档进「常青文档」,旧过程退成 git 历史。不再有几十份没人维护的文档。</p></div>
+          <div class="prop"><div class="ic">◎</div><h3>一份东西一个主人</h3><p>每类产出只有一个负责的 skill、一个事实源,禁止两处维护同一状态。冲突时有固定裁决顺序。</p></div>
+          <div class="prop"><div class="ic">⇄</div><h3>自动接力,断链自动退回</h3><p>各阶段靠共享前缀互相识别接力;缺了上游产物就自动退回去补,而不是硬着头皮往下猜。</p></div>
+        </div>
+      </section>
+
+      <!-- ============ PART 1 ============ -->
+      <div class="part">
+        <div class="pn">第一部分</div>
+        <h2>目录层级与文档维护</h2>
+        <p>先看「真相住在哪、怎么不烂」——这是整个体系稳定的地基,每次开发最后都汇回这里。</p>
+      </div>
+
+      <section id="why">
+        <span class="eyebrow">为什么要换</span>
+        <h2>从「文档越堆越烂」到「变更是事件、真相常青」</h2>
+        <p class="lede">对比最早那套 <b>func-design + impl-plan</b>——每改一次就写一份设计加一份计划,永久堆在仓库里,最终堆到近百份、规则散落、无人维护。新体系换的是这套的根子。</p>
+        <div class="cmp">
+          <div class="head"><div>维度</div><div class="oldh">旧 · func-design + impl-plan</div><div class="newh">新 · Impl-Package</div></div>
+          <div class="r"><div class="dim">一次改动产出</div><div class="old">一份设计 + 一份计划,永久留在仓库</div><div class="new">一个 <b>变更事件包</b>;关闭后退成 git 历史,真相进常青快照</div></div>
+          <div class="r"><div class="dim">大小改动</div><div class="old">一刀切——改个字段也走全套重文档</div><div class="new"><b>按需伸缩</b>:小改动只要规格+计划,复杂改动才多长几件</div></div>
+          <div class="r"><div class="dim">文档演进</div><div class="old">只增不减,堆积、过时、互相矛盾,没人敢删</div><div class="new"><b>定期压实</b>:一处真相,旧事件交给 git 承担</div></div>
+          <div class="r"><div class="dim">长期知识</div><div class="old">埋在上百份历史文档里,找不到、无裁决</div><div class="new"><b>四层常青</b>:见下</div></div>
+          <div class="r"><div class="dim">结果</div><div class="old">越用越无法维护,知识事实上丢失</div><div class="new">关闭即归档 → 常青,<b>自带维护回路</b></div></div>
+        </div>
+      </section>
+
+      <section id="evergreen">
+        <span class="eyebrow">文档的骨架</span>
+        <h2>常青四层：让真相有固定的家</h2>
+        <p class="lede">每次改动是「事件」,常青文档是「当前快照」,回刷就是把新事件压实进快照。四层各答一个问题,互不替代,靠固定文件名保障纪律。</p>
+        <div class="layers">
+          <div class="layer"><span class="lk">产品级意图</span><span class="lv">为什么做、给用户什么价值 · <code>顶层 PRD / CONTEXT</code></span></div>
+          <div class="layer"><span class="lk">模块级意图</span><span class="lv">这个模块为何存在 · <code>module-knowledge/&lt;模块&gt;/prd.md</code></span></div>
+          <div class="layer"><span class="lk">模块级契约</span><span class="lv">当前怎么行为:接口/状态/边界/失败 · <code>module-knowledge/&lt;模块&gt;/spec.md</code></span></div>
+          <div class="layer"><span class="lk">变更时设计</span><span class="lv">这一次为什么、怎么改 · <code>implementations/&lt;package-id&gt;/</code></span></div>
+        </div>
+      </section>
+
+      <!-- ============ PART 2 ============ -->
+      <div class="part">
+        <div class="pn">第二部分</div>
+        <h2>开发流程:6 步开发 ＋ 1 步交接</h2>
+        <p>做一次改动怎么走这条流水线。6 步把改动做出来,第 7 步(交接)把学到的知识汇回第一部分的常青层——两部分在这里咬合。</p>
+      </div>
+
+      <section id="pipeline">
+        <span class="eyebrow">它怎么运转</span>
+        <h2>一条主线，两处按需长出</h2>
+        <p class="lede">七个阶段串成一条线,每步有唯一负责的 skill 和产出。<b>切票</b>和<b>排图</b>只有需要时才长出来(灰色虚线);缺了上游就自动退回。</p>
+        <div class="flow">
+          <div class="fstage"><div class="node">1</div><div class="card">
+            <div class="h"><h3>对齐与调研</h3><span class="badge always">必经</span></div>
+            <div class="what">把需求和仓库现状,变成一个可决策的方向。</div>
+            <div class="who"><span class="skill">req-align · Design 门</span><span class="art">design.md</span></div>
+            <div class="trig"><b>触发</b>来了新需求 / 需求变更,动手前第一步</div>
+          </div></div>
+          <div class="fstage"><div class="node">2</div><div class="card">
+            <div class="h"><h3>写规格 Spec</h3><span class="badge always">必经</span></div>
+            <div class="what">八节当前合同:行为、状态、边界、失败恢复、验收。它维护 D/S revision,不保存执行拓扑。</div>
+            <div class="who"><span class="skill">req-align · Spec 门</span><span class="art">spec.md</span></div>
+            <div class="trig"><b>触发</b>Design 门通过后,同一 skill 接着过 Spec 门</div>
+          </div></div>
+          <div class="fstage"><div class="node">3</div><div class="card">
+            <div class="h"><h3>Attempt 计划 ＋ 按需切票</h3><span class="badge always">必经</span></div>
+            <div class="what">计划声明本次 Attempt / D-S-P revision / Composition,保存执行策略、验证选择与 append-only Execution Record。≥2 个独立验收切片时才切票。</div>
+            <div class="who"><span class="skill">impl-planning</span><span class="art">plan.md</span><span class="skill cond">to-tickets<em>tickets=true 才切</em></span><span class="art">tickets/</span></div>
+            <div class="trig"><b>触发</b>Spec 通过要落地;是否切票由当前 plan 的 <code>tickets</code> 决定</div>
+          </div></div>
+          <div class="fstage opt"><div class="node">4</div><div class="card">
+            <div class="h"><h3>排执行图 DAG</h3><span class="badge opt">按需 · earn 才走</span></div>
+            <div class="what">需要多任务并行、或有 seam 要协调时,才把计划拆成可并行的任务和依赖图。</div>
+            <div class="who"><span class="skill">create-task-dag</span><span class="art">dag.md</span></div>
+            <div class="trig"><b>触发</b>当前 attempt plan 判定 <code>dag=true</code></div>
+          </div></div>
+          <div class="fstage"><div class="node">5</div><div class="card">
+            <div class="h"><h3>执行</h3><span class="badge always">必经</span></div>
+            <div class="what">恢复现场 → 确定下一步 → 执行 → 证据写入 plan Execution Record → findings 分流 → gate ledger 新判决。</div>
+            <div class="who"><span class="skill">dev-with-track</span><span class="art">progress · Execution Record · gate.md</span></div>
+            <div class="trig"><b>触发</b>上游就绪;跨 session 续上也走这里</div>
+          </div></div>
+          <div class="fstage"><div class="node">6</div><div class="card">
+            <div class="h"><h3>审查</h3><span class="badge always">1 恒查 · 2 按需</span></div>
+            <div class="what">只有 code-review 每次都跑;另两个按风险信号触发——<b>小改动可能一个都不触发</b>。结论喂给 gate 决定能不能关门。</div>
+            <div class="who"><span class="skill">code-review<em>恒查</em></span><span class="skill cond">module-review<em>契约变化时</em></span><span class="skill cond">safety-review<em>碰安全路径时</em></span></div>
+          </div></div>
+          <div class="fstage bridgecard"><div class="node bridge">+1</div><div class="card">
+            <div class="h"><h3>回刷交接</h3><span class="badge always">两部分的桥</span></div>
+            <div class="what">写 terminal gate entry 前完成<b>轻量登记</b>(把长期知识记进 <code>_pending</code>、truth pointer 与必要 stub),不用当场压实常青文档。真正的压实由<b>定期 backfill 任务</b>做;watermark 与无主 commit 扫描负责发现意外 capture gap。</div>
+            <div class="who"><span class="skill">backfill-stable-docs</span><span class="art">_pending.md</span><span class="art">定期 report / apply · 兜底</span></div>
+            <div class="trig"><b>触发</b>关门时登记;压实与兜底由定期任务做</div>
+          </div></div>
+        </div>
+        <div class="retreat">
+          <div class="t">断链时自动退回上游,而不是硬猜</div>
+          <ul>
+            <li>执行时发现缺计划 → 退回 <b>impl-planning</b> 补</li>
+            <li>输入太宽、还没切片 → 退回 <b>to-tickets</b> 先切,不自己乱切</li>
+            <li>组合和现有产物对不上 → 退回 <b>req-align</b> 重过 Spec 门</li>
+            <li>只有单张票却要跨票协调 → 要计划 + 相关票子集,不擅自推断</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="cases">
+        <span class="eyebrow">同一套体系,四种情况</span>
+        <h2>同一个「库存模块」，四种大小的需求</h2>
+        <p class="lede">最能说明伸缩力的,是拿<b>同一个模块</b>的四种大小需求,看体系自动走出四条深浅完全不同的路。判定只问两个是非题——<b>要不要切票、要不要排图</b>——体量是结果,不是预先分档。(例子为演示,不必真实)</p>
+        <div class="cases">
+          <div class="case s">
+            <div class="top"><div class="sz">S</div><div><div class="lvl">微改动</div><small>tickets=F · dag=F</small></div></div>
+            <div class="req"><span class="k">需求</span>库存列表加一个「最近盘点时间」只读列。</div>
+            <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">执行</span><span class="sep">→</span><span class="step on">关门</span></div>
+            <div class="win"><span class="k">好在哪 · </span>不被迫走重流程,不产生任何多余文件。规格+计划直接落地,十几分钟收工。</div>
+          </div>
+          <div class="case m">
+            <div class="top"><div class="sz">M</div><div><div class="lvl">中等 · 能分别验收</div><small>tickets=T · dag=F</small></div></div>
+            <div class="req"><span class="k">需求</span>做「低库存预警」:阈值设置界面 + 触发计算 + 通知邮件——三块能分别验收。</div>
+            <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">切 3 票</span><span class="sep">→</span><span class="step on">逐票执行</span><span class="sep">→</span><span class="step on">关门</span></div>
+            <div class="win"><span class="k">好在哪 · </span>三个切片能分别验收、分别交付,不用等全做完;计划不塞任务细节,每张票是自己的验收事实源。</div>
+          </div>
+          <div class="case l">
+            <div class="top"><div class="sz">L</div><div><div class="lvl">复杂 · 并行 ＋ 协调</div><small>tickets=T · dag=T</small></div></div>
+            <div class="req"><span class="k">需求</span>「多仓库库存」重构:数据迁移 + 读模型 + 多个页面 + 跨切片 seam,要多人并行。</div>
+            <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">切票</span><span class="sep">→</span><span class="step on">排执行图</span><span class="sep">→</span><span class="step on">并行执行</span><span class="sep">→</span><span class="step on">关门</span></div>
+            <div class="win"><span class="k">好在哪 · </span>多人并行有明确 ownership 和 seam 协调,不互相踩;执行图恢复「拓扑」、进度账本恢复「状态」,断了也能续。</div>
+          </div>
+          <div class="case d">
+            <div class="top"><div class="sz">D</div><div><div class="lvl">执行拧巴 · 不值得切票</div><small>tickets=F · dag=T</small></div></div>
+            <div class="req"><span class="k">需求</span>重写「库存计算引擎」内部:一次交付,但任务之间依赖复杂。</div>
+            <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">排执行图</span><span class="sep">→</span><span class="step on">执行</span><span class="sep">→</span><span class="step on">关门</span></div>
+            <div class="win"><span class="k">好在哪 · </span>复杂的执行依赖被显式画出来、按序推进,但不被迫造几张没意义的验收票。验收语义留在规格里。</div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer>Impl-Package 体系 · 团队介绍版 · 第一部分 文档维护 ／ 第二部分 开发 6+1</footer>
+
+</div></div>
+
+<script>
+(function(){
+  var links=[].slice.call(document.querySelectorAll('.toc a'));
+  var map={};
+  links.forEach(function(a){var id=a.getAttribute('href').slice(1);var el=document.getElementById(id);if(el)map[id]=a;});
+  if(!('IntersectionObserver' in window))return;
+  var obs=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        links.forEach(function(a){a.classList.remove('active');});
+        var a=map[e.target.id];if(a)a.classList.add('active');
+      }
+    });
+  },{rootMargin:'-15% 0px -75% 0px'});
+  Object.keys(map).forEach(function(id){obs.observe(document.getElementById(id));});
+})();
+</script>
+</body>
+</html>

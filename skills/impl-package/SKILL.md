@@ -1,0 +1,103 @@
+---
+name: impl-package
+description: >
+  Impl-Package 体系的入口地图与路由：不确定从哪个阶段进入、想理解整个体系如何
+  串联、需要被导航到正确的 stage skill，或要把体系介绍页推荐给人时使用。只做
+  导航与路由，不执行任何阶段，也不复制各 skill 或契约的正文。
+---
+
+# Impl-Package 体系 · 入口地图
+
+本 skill 是整个 Impl-Package 体系的**导航入口**。它只回答「这是什么、从哪进、
+下一步进哪个 skill」，把你送到正确的 stage skill 或 canonical 源。**它不执行任何
+阶段，也不把 spec / contract / design 的正文抄进来**——正文永远留在各自的事实源，
+这里只给指针。
+
+持久单位是 `docs/implementations/<package-id>/`。体系由两部分咬合：
+
+- **文档维护层**：常青四层（产品意图 / 模块意图 / 模块契约 / 变更事件），真相
+  住这里，每次开发最后汇回。
+- **开发 6+1 流程**：6 步把改动做出来 ＋ 1 步回刷交接把长期知识汇回文档层。
+
+## 系统图（供 AI 读取）
+
+```mermaid
+flowchart TD
+    Req[需求 / 改动] --> RA[req-align：Design + Spec 门]
+    RA -->|D/S revision 已过门| PL[impl-planning：attempt plan + Composition]
+    PL -->|tickets=true| TK[to-tickets：draft → publish]
+    PL -->|dag=true| DG[create-task-dag：dag.md]
+    TK -->|dag=true| DG
+    PL --> EX[dev-with-track：执行 → gate]
+    TK --> EX
+    DG --> EX
+    EX --> RV{审查}
+    RV -->|恒查| CR[code-review]
+    RV -->|契约变化| MR[module-review]
+    RV -->|碰安全路径| SR[safety-review]
+    RV --> CAP[保留 G id + Stage 7 登记]
+    CAP --> GT[gate.md 顶部插入不可变 entry]
+    GT --> BF[backfill：定期 report/apply]
+    BF -. 定期 report/apply 兜底 .-> EV[(常青四层 module-knowledge)]
+    EV -. 下次改动读取 .-> RA
+```
+
+`to-tickets` 与 `create-task-dag` 是 earn-gated 的按需步：只有当前 attempt plan 判定
+`tickets=true` / `dag=true` 才走。虚线是异步回路——回刷登记在 gate 发生，真正
+压实由定期 backfill 任务做并兜底。
+
+## 阶段地图
+
+| 阶段 | Owner skill | 产出 | 何时 |
+| --- | --- | --- | --- |
+| 1 对齐与调研 | `req-align`（Design 门） | `design.md` | 新需求 / 需求变更，动手前 |
+| 2 写规格 | `req-align`（Spec 门） | 当前 `spec.md` revision | Design 门过后 |
+| 3 Attempt 计划 | `impl-planning` | `plan.md` / patch plan（含 Composition） | Spec 过、要落地 |
+| 3b 切票（按需） | `to-tickets` | 当前 attempt 的 `tickets/` | plan 判 `tickets=true` |
+| 4 排执行图（按需） | `create-task-dag` | 当前 attempt DAG | plan 判 `dag=true` |
+| 5 执行 | `dev-with-track` | `progress` · plan Execution Record · append-only `gate.md` | 上游就绪 / 跨 session 续 |
+| 6 审查 | `code-review`（恒） · `module-review` · `safety-review` | review evidence（进入 plan ER） | 见下方路由 |
+| +1 回刷交接 | `backfill-stable-docs` | `_pending.md` | gate 关闭；定期兜底 |
+
+## 正向路由：你在哪 → 进哪个 skill
+
+- 有新改动 / 需求，还没进流水线 → **`req-align`**（先过 Design、再过 Spec 门）。
+- Spec 已过门，还没 plan → **`impl-planning`**。
+- 当前 attempt plan 判 `tickets=true`，还没票 → **`to-tickets`**（draft → owner 批准 → publish）。
+- 当前 attempt plan 判 `dag=true`，plan（及相关 approved 票）就绪 → **`create-task-dag`**。
+- 上游产物就绪，要开始 / 恢复执行 → **`dev-with-track`**。
+- 集成后要审查：`code-review` 恒查；改动 interface / seam / 契约 →
+  **`module-review`**；碰 auth / 支付 / webhook / 迁移 / 外部写入 →
+  **`safety-review`**。
+- gate 已关，处理长期知识 → **`backfill-stable-docs`**（登记在 gate 已发生；
+  压实与兜底由定期 report / apply 做）。
+
+断链就退回上游，别硬猜：缺 plan 回 `impl-planning`；输入太宽没切片回
+`to-tickets`；Composition/artifact 对不上回 `impl-planning` 修订 P revision，只有暴露出真实 contract drift 才回 `req-align` 重过相应门。
+
+体量不预先分档，只看当前 attempt 的两个开关；可用 dispatch shorthand（`S`/`M`/`L`/`D`）快速下发，但它只展开成当前 plan 的 `tickets=/dag=`，earn 条件仍是权威。
+
+## Canonical 源（只给指针，不在这里复制正文）
+
+属于 Impl-Package 依赖图的文档全部收在本 skill 的 `references/` 下，不论是否仍
+标草案——分发单位是这个 skill 目录，组内分享时不会附带整个仓库的
+`docs/skill-design/`，所以依赖图内的东西必须随 skill 一起走。`docs/skill-design/`
+只保留不属于本体系的其他设计规划。
+
+- **规则 / 跨层契约（正式）** →
+  [references/impl-package-composition-contract.md](references/impl-package-composition-contract.md)
+  （composition、canonical status、readiness resolution、seam、Stage 7、dispatch shorthand）。
+- **backfill / 常青四层（正式，已批准）** →
+  [references/evergreen-module-spec-and-backfill-design.md](references/evergreen-module-spec-and-backfill-design.md)。
+- **体系设计 rationale（仍为方案草案，内容仍会演进）** →
+  [references/impl-package-system-design.md](references/impl-package-system-design.md)。
+- **给人看的介绍页** → [assets/impl-package-intro.html](assets/impl-package-intro.html)。
+  **推荐给需要总览的人打开；本 skill 自身不读取它**（避免把整页载入上下文）。
+
+## 护栏
+
+- 只导航与路由；**不执行**任何阶段——执行永远交给对应 stage skill。
+- **不复制**各 skill / 契约 / 设计的正文；概念一律给指针，防止双重维护（这正是
+  体系反对的）。
+- `assets/impl-package-intro.html` 是给人的产物，**不主动读取**；需要时把路径
+  推荐给用户打开即可。
