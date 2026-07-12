@@ -72,6 +72,13 @@ class CollectorTest(unittest.TestCase):
             "origin",
             "https://github.com/example/agent-workbench.git",
         )
+        run_git(
+            self.project,
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/example/project.git",
+        )
         (self.method / "SKILL.md").write_text("method\n", encoding="utf-8")
         self.method_commit = commit_all(
             self.method, "method", "2026-07-01T00:00:00+00:00"
@@ -240,6 +247,35 @@ class CollectorTest(unittest.TestCase):
                 project_watermark=self.watermark,
                 method_root=self.method,
                 method_ref=f"C:/local/agent-workbench@{self.method_commit}",
+                fixture_count=0,
+                carry_forward=(),
+            )
+
+    def test_rejects_missing_or_machine_local_project_repository_identity(self) -> None:
+        module = load_module()
+
+        run_git(self.project, "remote", "remove", "origin")
+        with self.assertRaisesRegex(module.CollectorError, "project origin"):
+            module.collect_inventory(
+                mode="steady-state",
+                project_root=self.project,
+                source_head=self.source_head,
+                project_watermark=self.watermark,
+                method_root=self.method,
+                method_ref=f"example/agent-workbench@{self.method_commit}",
+                fixture_count=0,
+                carry_forward=(),
+            )
+
+        run_git(self.project, "remote", "add", "origin", "C:/local/project")
+        with self.assertRaisesRegex(module.CollectorError, "project origin"):
+            module.collect_inventory(
+                mode="steady-state",
+                project_root=self.project,
+                source_head=self.source_head,
+                project_watermark=self.watermark,
+                method_root=self.method,
+                method_ref=f"example/agent-workbench@{self.method_commit}",
                 fixture_count=0,
                 carry_forward=(),
             )

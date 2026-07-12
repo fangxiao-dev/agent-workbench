@@ -101,16 +101,26 @@ def _parse_method_ref(value: str) -> tuple[str, str]:
     return identity, commit
 
 
-def _validate_method_ref(method_root: Path, method_ref: str) -> dict[str, str]:
-    expected_identity, requested_commit = _parse_method_ref(method_ref)
-    remote = _git(method_root, "remote", "get-url", "origin")
-    actual_identity = _normalize_repository_identity(remote)
+def _portable_origin_identity(root: Path, label: str) -> str:
+    try:
+        remote = _git(root, "remote", "get-url", "origin")
+    except CollectorError as error:
+        raise CollectorError(
+            f"{label} origin must resolve to portable owner/repository identity"
+        ) from error
+    identity = _normalize_repository_identity(remote)
     if not re.fullmatch(
-        r"[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*", actual_identity
+        r"[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*", identity
     ):
         raise CollectorError(
-            "method origin must resolve to portable owner/repository identity"
+            f"{label} origin must resolve to portable owner/repository identity"
         )
+    return identity
+
+
+def _validate_method_ref(method_root: Path, method_ref: str) -> dict[str, str]:
+    expected_identity, requested_commit = _parse_method_ref(method_ref)
+    actual_identity = _portable_origin_identity(method_root, "method")
     if actual_identity != expected_identity:
         raise CollectorError(
             "method repository identity mismatch: "
@@ -258,6 +268,7 @@ def collect_inventory(
             f"project watermark {resolved_watermark} is not an ancestor of {resolved_head}"
         )
     method_state = _validate_method_ref(method, method_ref)
+    project_identity = _portable_origin_identity(project, "project")
 
     rows: list[dict[str, object]] = []
     for package_id in _package_names(project, resolved_head):
@@ -352,11 +363,7 @@ def collect_inventory(
         "mode": mode,
         "method_activation": method_state,
         "project": {
-            "repository": _normalize_repository_identity(
-                _git(project, "remote", "get-url", "origin", allow_empty=True)
-            )
-            if _git(project, "remote", allow_empty=True)
-            else None,
+            "repository": project_identity,
             "source_head": resolved_head,
             "watermark": resolved_watermark,
         },
