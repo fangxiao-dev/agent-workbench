@@ -19,7 +19,16 @@ Keep the feedback loop below as the main workflow. Load deeper techniques only w
 - When a comparable path works, diff working and broken inputs, versions, configuration, and dependencies before adding new hypotheses.
 - If two consecutive fix directions fail, stop before a third variation. Rebuild the feedback loop, revisit assumptions, consult repository debug knowledge when available, and consider whether coupling or architecture is the real problem.
 
-## Phase 1 — Build a feedback loop
+## Phase 1 — Intake evidence and build a feedback loop
+
+Start with the evidence already available before constructing a harness:
+
+- read the complete error, warning, stack trace, error code, and surrounding logs;
+- inspect relevant recent diffs and dependency or configuration changes;
+- compare the working and failing environments, inputs, versions, and runtime conditions;
+- preserve exact artifacts and timestamps when the failure is remote or intermittent.
+
+Use this intake to choose and tighten the feedback loop. It does not authorize a fix hypothesis before the failure has been reproduced and investigated.
 
 **This is the skill.** Everything else is mechanical. If you have a **tight** pass/fail signal for the bug — one that goes red on _this_ bug — you will find the cause; bisection, hypothesis-testing, and instrumentation all just consume it. If you don't have one, no amount of staring at code will save you.
 
@@ -64,10 +73,10 @@ Phase 1 is done when the loop is **tight** and **red-capable**: you can name **o
 
 - [ ] **Red-capable** — it drives the actual bug code path and asserts the **user's exact symptom**, so it can go red on this bug and green once fixed. Not "runs without erroring" — it must be able to _catch this specific bug_.
 - [ ] **Deterministic** — same verdict every run (flaky bugs: a pinned, high reproduction rate, per above).
-- [ ] **Fast** — seconds, not minutes.
+- [ ] **Tight enough for repeated experiments** — substantially narrower or faster than the original failure path. Prefer a seconds-fast signal, but allow slower build, performance, CI-only, or remote loops when no faithful narrower signal exists; record the constraint and keep searching for a cheaper proxy.
 - [ ] **Agent-runnable** — you can run it unattended; a human in the loop only through the platform-appropriate template in `scripts/`.
 
-If you catch yourself reading code to build a theory before this command exists, **stop — jumping straight to a hypothesis is the exact failure this skill prevents.** No red-capable command, no Phase 2.
+Reading code and data flow to construct the loop is allowed. What must stop is committing to a fix hypothesis without evidence that distinguishes it from alternatives. No red-capable command, no Phase 2 unless the failure is genuinely remote-only and the unavailable signal is reported as a blocker or instrumentation need.
 
 ## Phase 2 — Reproduce + minimise
 

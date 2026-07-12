@@ -36,10 +36,22 @@ subagent 使用以下状态之一：
 
 返回内容至少包括变更摘要、验证证据、涉及文件和未决问题。主 agent 不只读取状态标签，还要检查实际产物。
 
+主 agent 按状态推进：
+
+- `DONE`：进入适用的 review 与集成；
+- `DONE_WITH_CONCERNS`：先判断 concern 是否影响 correctness、scope 或后续集成，再决定修正或继续；
+- `NEEDS_CONTEXT`：补齐缺失上下文后重派；
+- `BLOCKED`：先改变前提，例如补上下文、调整任务粒度或能力、修订 plan，不能原样重试。
+
+只有在现有授权内无法消解时才交给 owner。除需要新上下文、不可消解的 blocker 或新的 owner decision 外，继续执行后续可运行单元，不逐项请求继续许可。
+
 ## Review 与集成
 
-- 高风险、跨 seam 或容易偏离规格的单元，先检查 spec compliance，再检查 code quality。
-- 普通机械单元可以合并 review，不强制为每个微任务派发两名 reviewer。
+- 每个 subagent 结果都由主 agent 做基本验收：检查实际产物、验证证据和集成状态。
+- 存在明确 spec 或 acceptance contract，且实现可能漏做、越界或误解需求时，增加 spec-compliance reviewer。
+- 改动复杂、高风险、跨公共 seam，或会显著影响可维护性、错误处理与测试质量时，增加 code-quality reviewer。
+- 同时满足两类条件时执行双 review，顺序为 spec compliance 再 code quality；先确认做对了目标，再评价实现质量。
+- typo、机械迁移、简单配置和明确低风险改动不强制独立 reviewer；多个高度相关的小单元可以按集成批次 review。
 - reviewer 发现问题后必须修正并复核；不能只记录意见就继续集成。
 - 所有单元完成后，主 agent 检查 diff 冲突、接口衔接和整体验证，再由项目正式 gate 判断是否收口。
 
