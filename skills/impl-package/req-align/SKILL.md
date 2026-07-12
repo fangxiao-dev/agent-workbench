@@ -145,7 +145,7 @@ Before writing artifacts or editing long-lived knowledge, present:
 
 ## User-Facing Output
 
-先遵循 [Owner-Facing Reporting Contract](../references/owner-facing-reporting.md)：用人话说明需求/设计/规格对齐覆盖的功能范围、Design 与 Spec 分别完成到哪、剩余 owner decision 数量、整体是否可进入实施计划。不要以 slug、revision 或路径开场，也不要把 blocked gate 描述成完成。
+向 owner 汇报时使用 `talk-to-boss`：用人话说明需求/设计/规格对齐覆盖的功能范围、Design 与 Spec 分别完成到哪、剩余 owner decision 数量、整体是否可进入实施计划。不要以 slug、revision 或路径开场，也不要把 blocked gate 描述成完成。
 
 随后附 canonical handoff：topic slug、package-id/path、两道 gate result 与 evidence location、changed files（只在 append 时列 `findings.md`）以及剩余 owner decisions。artifact 写入后不粘贴全文。
 

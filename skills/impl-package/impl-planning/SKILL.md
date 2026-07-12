@@ -119,6 +119,6 @@ plan 活动期间发现 Composition 判断错误时：
 
 ## Output Contract
 
-面向 owner 的汇报先遵循 [Owner-Facing Reporting Contract](../references/owner-facing-reporting.md)：说明本次实现范围、计划阶段是否完成、为何需要或不需要交付切片/执行图、剩余决策，以及能否进入执行。若用户主动指定 S/M/L/D，先用人话说明是否接受及任何冲突。
+向 owner 汇报时使用 `talk-to-boss`：说明本次实现范围、计划阶段是否完成、为何需要或不需要交付切片/执行图、剩余决策，以及能否进入执行。若用户主动指定 S/M/L/D，先用人话说明是否接受及任何冲突。
 
 随后附 canonical handoff：package-id、Attempt ID、D/S/P revision、Composition、plan 路径、tickets/DAG 路由、选定 verification policy 与剩余 owner decision。

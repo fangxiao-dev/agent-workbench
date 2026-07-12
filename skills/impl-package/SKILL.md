@@ -73,7 +73,12 @@ flowchart TD
 
 ## 面向 owner 的汇报
 
-所有阶段与 review skill 向 owner 汇报时统一读取并遵守 [Owner-Facing Reporting Contract](references/owner-facing-reporting.md)，使用 `talk-to-boss` 把功能结论、准确阶段、剩余数量、closed 判断和 owner decision 放在主体。canonical 代号只用于后续 agent handoff 与技术证据。
+所有阶段与 review skill 向 owner 汇报 proposal、状态、review、gate 或交付时直接使用 `talk-to-boss`；本体系不复制它的通用汇报方法，只补以下适配：
+
+- `package-id`、Attempt / D-S-P-G revision、Composition、ticket/task ID、ER/gate anchor、路径和命令只作为 canonical handoff 或技术证据，不作为人类汇报开场。
+- 同一回复同时面向 owner 与下游 agent 时，先给 `talk-to-boss` 的决策摘要与功能主体，再附 canonical handoff。
+- S/M/L/D 首次出现在人类汇报时必须展开为自解释执行组合，不能裸报字母或布尔值。
+- stage 自己的 Output Contract 只定义额外 handoff/evidence 字段，不得覆盖 `talk-to-boss` 的人类汇报顺序。
 
 ## Canonical 源（只给指针，不在这里复制正文）
 
@@ -81,7 +86,6 @@ flowchart TD
 
 - **规则 / 跨层契约（正式）** → [references/impl-package-composition-contract.md](references/impl-package-composition-contract.md)（composition、canonical status、readiness resolution、seam、Stage 7、dispatch shorthand、revision-commit binding、Module Knowledge Watermark）。
 - **backfill / 常青四层（正式，已批准）** → [references/evergreen-module-spec-and-backfill-design.md](references/evergreen-module-spec-and-backfill-design.md)。
-- **给 owner 的统一汇报合同** → [references/owner-facing-reporting.md](references/owner-facing-reporting.md)。
 - **体系设计 rationale（仍为方案草案，内容仍会演进）** → [references/impl-package-system-design.md](references/impl-package-system-design.md)。
 - **给人看的介绍页** → [assets/impl-package-intro.html](assets/impl-package-intro.html)。**推荐给需要总览的人打开；本 skill 自身不读取它**（避免把整页载入上下文）。
 

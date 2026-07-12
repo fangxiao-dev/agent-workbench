@@ -106,7 +106,7 @@ Spec reviewer 已承担 contract/interface/seam drift；不得额外派发第三
 
 ### 5. 汇总
 
-面向 owner 的开场遵循 [Owner-Facing Reporting Contract](../../references/owner-facing-reporting.md)：先说明审查的功能范围、Standards/Spec 两轴是否各自通过、阻塞项数量、整体能否进入 gate，以及需要 owner 决定什么。不要用轴名、finding code 或文件路径代替合入判断。
+向 owner 汇报时使用 `talk-to-boss`：先说明审查的功能范围、Standards/Spec 两轴是否各自通过、阻塞项数量、整体能否进入 gate，以及需要 owner 决定什么。不要用轴名、finding code 或文件路径代替合入判断。
 
 随后在 `## Standards` 和 `## Spec` 下分别呈现两个 canonical evidence 报告，可轻微清理格式，但不要合并或跨轴重新排序 finding。
 

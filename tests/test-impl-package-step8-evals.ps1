@@ -154,15 +154,14 @@ Assert-Contains $introHtml '可以主动说“按 S / M / L / D 模式做”' 'H
 Assert-Contains $introHtml '单一验收 · 不切票 · 不排图' 'Human shorthand cards must lead with decision meaning.'
 Assert-NotContains $introHtml 'tickets=T · dag=F' 'Human shorthand cards must not lead with canonical booleans.'
 
-$ownerReporting = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\references\owner-facing-reporting.md')
-Assert-Contains $ownerReporting '首段必须独立回答' 'Shared owner-facing reporting contract must be decision-first.'
-Assert-Contains $ownerReporting 'canonical handoff/evidence' 'Shared reporting contract must separate human summary from runner payload.'
 $implSkillFiles = Get-ChildItem -Path (Join-Path $repo 'skills\impl-package') -Recurse -Filter 'SKILL.md'
 if ($implSkillFiles.Count -ne 10) { throw "Expected 10 Impl-Package SKILL.md files, found $($implSkillFiles.Count)." }
 foreach ($skillFile in $implSkillFiles) {
     $skillText = Get-Content -Raw -LiteralPath $skillFile.FullName
-    Assert-Contains $skillText 'Owner-Facing Reporting Contract' "Impl-Package skill must inherit owner-facing reporting: $($skillFile.FullName)"
+    Assert-Contains $skillText 'talk-to-boss' "Impl-Package skill must directly reuse talk-to-boss: $($skillFile.FullName)"
 }
+Assert-Contains $implEntry 'canonical handoff' 'Impl-Package root must keep only its canonical handoff adaptation.'
+Assert-NotContains $implEntry 'owner-facing-reporting.md' 'Impl-Package must not duplicate talk-to-boss in a local reporting reference.'
 
 $activeRoots = @('skills\impl-package\req-align', 'skills\impl-package\to-tickets', 'skills\impl-package\impl-planning', 'skills\impl-package\create-task-dag', 'skills\impl-package\dev-with-track', 'skills\impl-package\reviews\module-review', 'skills\impl-package\reviews\safety-review')
 foreach ($relativeRoot in $activeRoots) {

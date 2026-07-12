@@ -152,7 +152,7 @@ main session 处理跨任务 seam：
 
 用于执行期时，最终汇报必须包含：
 
-先遵循 [Owner-Facing Reporting Contract](../references/owner-facing-reporting.md)，说明总执行范围、已完成/待执行的功能工作线数量、集成是否完成、剩余 blocker 和能否进入 gate。以下 cohort、task、seam 与命令属于 canonical evidence，不作为 owner 汇报开场：
+向 owner 汇报时使用 `talk-to-boss`，说明总执行范围、已完成/待执行的功能工作线数量、集成是否完成、剩余 blocker 和能否进入 gate。以下 cohort、task、seam 与命令属于 canonical evidence，不作为 owner 汇报开场：
 
 - 派发的 worker cohort；
 - main session 处理的 seam；
