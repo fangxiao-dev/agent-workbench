@@ -86,7 +86,8 @@ flowchart TD
 
 - **规则 / 跨层契约（正式）** →
   [references/impl-package-composition-contract.md](references/impl-package-composition-contract.md)
-  （composition、canonical status、readiness resolution、seam、Stage 7、dispatch shorthand）。
+  （composition、canonical status、readiness resolution、seam、Stage 7、dispatch shorthand、
+  revision-commit binding、Module Knowledge Watermark）。
 - **backfill / 常青四层（正式，已批准）** →
   [references/evergreen-module-spec-and-backfill-design.md](references/evergreen-module-spec-and-backfill-design.md)。
 - **体系设计 rationale（仍为方案草案，内容仍会演进）** →

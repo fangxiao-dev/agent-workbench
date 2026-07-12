@@ -139,6 +139,9 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
   map。去重键 `<destination>|<delta-id>` 落在 `_pending.md`/report 侧。三源
   对账（`_pending` / gate 漏登 / 无主 commit）引用并同步约束 2026-07-09 设计。
 - **Gate ledger**：package 只保留一个 `gate.md`，每次 evaluation 在顶部插入 `<attempt-id>-G<n>` 摘要。blocked→pass 通过新 entry 与 `Supersedes` 表达；旧块不改。完整验证过程放在对应 plan 的 append-only Execution Record，gate 只保存 revision/comparison point/evidence anchor/verdict 与 Durable Deltas。terminal verdict 先保留 G id 并完成 Stage 7，再一次性插入不可变 entry；不写临时 entry 后原地补字段。
+- **Revision-commit binding**：D/S/P revision 号是人类好念的别名，不是权威本身——权威是各自绑定的 git commit SHA（`D<n> (commit <sha>)` 写法）。restore/gate evaluation 时重新核对目标文件当前 `git log -1` 与声明 SHA 是否相符，不符按未分类 drift 处理，避免"revision 号没跟上内容"这种纯自觉纪律的漂移。机制细节见 composition-contract §2。
+- **findings 三态阻断**：findings.md 分流是 pass/fail/defer 全部 terminal verdict 的硬前置条件，力度等同 Stage 7，不只挡 pass；blocked entry 不受此约束。见 composition-contract §6。
+- **Module Knowledge Watermark**：每个 attempt 的 plan 记录相关 module-knowledge 文件在 attempt 打开时的 commit SHA；后续 attempt（尤其重新激活已关闭 package）打开前机械 diff 对比，把"先对账"从自觉查改成可执行检查。见 composition-contract §1。
 
 ## Artifact Ownership
 
@@ -224,6 +227,8 @@ task 可标 `enables:`，但必须指出最终由哪些 AC 消费其证据。no-
 ### Attempt Composition 修订
 
 允许活动 attempt 通过新 P revision 修订 Composition，不允许双写。记录 previous/new、理由、时间与 artifact relocation；创建或退休当前 attempt 的 tickets/DAG/progress source。该修订不改变 D/S revision，除非同时发现 contract drift。
+
+P revision 升级后，已创建但仍声明旧 P 号的 ticket/DAG 视为 `NEEDS-REVALIDATION`，直到内容被确认在新 revision 下仍成立并更新字段，或被重新生成；restore 时逐个核对，不当作可用状态直接使用。
 
 ### Stage 7 完整关闭契约
 
@@ -337,3 +342,6 @@ task；no-DAG attempt 没有结构化 task。attempt、task、ticket 都只有�
 4. 调度：删除自动派工、worker leasing、并发锁；保留静态依赖图上的确定性
    readiness resolution。真多 worker 并行场景出现前不建动态调度器（已确认，
    YAGNI）。
+5. revision 漂移防护：D/S/P revision 号绑定 git commit SHA、P 号驱动 ticket/DAG
+   的 NEEDS-REVALIDATION、findings 三态阻断、Module Knowledge Watermark，四条
+   均已确认并落入 composition-contract（对抗审视后补，见 §2/§3/§6/§1）。
