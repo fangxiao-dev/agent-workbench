@@ -9,6 +9,16 @@ A discipline for hard bugs. Skip phases only when explicitly justified.
 
 When exploring the codebase, read `CONTEXT.md` (if it exists) to get a clear mental model of the relevant modules, and check ADRs in the area you're touching.
 
+## Technique routing
+
+Keep the feedback loop below as the main workflow. Load deeper techniques only when the symptom calls for them:
+
+- For a failure deep in a call chain or a bad value with an unclear origin, read `references/root-cause-tracing.md` and trace backward to the first invalid transition.
+- For flaky async behavior, arbitrary sleeps, or load-dependent timeouts, read `references/condition-based-waiting.md` and wait on observable state rather than guessed time.
+- For multi-component systems, capture input, output, and configuration propagation at each boundary before narrowing the failing component.
+- When a comparable path works, diff working and broken inputs, versions, configuration, and dependencies before adding new hypotheses.
+- If two consecutive fix directions fail, stop before a third variation. Rebuild the feedback loop, revisit assumptions, consult repository debug knowledge when available, and consider whether coupling or architecture is the real problem.
+
 ## Phase 1 — Build a feedback loop
 
 **This is the skill.** Everything else is mechanical. If you have a **tight** pass/fail signal for the bug — one that goes red on _this_ bug — you will find the cause; bisection, hypothesis-testing, and instrumentation all just consume it. If you don't have one, no amount of staring at code will save you.
@@ -26,7 +36,7 @@ Spend disproportionate effort here. **Be aggressive. Be creative. Refuse to give
 7. **Property / fuzz loop.** If the bug is "sometimes wrong output", run 1000 random inputs and look for the failure mode.
 8. **Bisection harness.** If the bug appeared between two known states (commit, dataset, version), automate "boot at state X, check, repeat" so you can `git bisect run` it.
 9. **Differential loop.** Run the same input through old-version vs new-version (or two configs) and diff outputs.
-10. **HITL bash script.** Last resort. If a human must click, drive _them_ with `scripts/hitl-loop.template.sh` so the loop is still structured. Captured output feeds back to you.
+10. **HITL script.** Last resort. If a human must click, copy and adapt the platform template: `scripts/hitl-loop.template.ps1` for Windows PowerShell, or `scripts/hitl-loop.template.sh` for Bash on Linux, macOS, or WSL. Captured output feeds back to you.
 
 Build the right feedback loop, and the bug is 90% fixed.
 
@@ -55,7 +65,7 @@ Phase 1 is done when the loop is **tight** and **red-capable**: you can name **o
 - [ ] **Red-capable** — it drives the actual bug code path and asserts the **user's exact symptom**, so it can go red on this bug and green once fixed. Not "runs without erroring" — it must be able to _catch this specific bug_.
 - [ ] **Deterministic** — same verdict every run (flaky bugs: a pinned, high reproduction rate, per above).
 - [ ] **Fast** — seconds, not minutes.
-- [ ] **Agent-runnable** — you can run it unattended; a human in the loop only via `scripts/hitl-loop.template.sh`.
+- [ ] **Agent-runnable** — you can run it unattended; a human in the loop only through the platform-appropriate template in `scripts/`.
 
 If you catch yourself reading code to build a theory before this command exists, **stop — jumping straight to a hypothesis is the exact failure this skill prevents.** No red-capable command, no Phase 2.
 
@@ -107,19 +117,21 @@ Tool preference:
 
 ## Phase 5 — Fix + regression test
 
-Write the regression test **before the fix** — but only if there is a **correct seam** for it.
+Select the test seam before implementation. A correct seam exercises the real bug pattern as it occurs at the call site; a shallow test that bypasses the triggering chain creates false confidence.
 
-A correct seam is one where the test exercises the **real bug pattern** as it occurs at the call site. If the only available seam is too shallow (single-caller test when the bug needs multiple callers, unit test that can't replicate the chain that triggered the bug), a regression test there gives false confidence.
+If a correct automated seam exists, invoke `test-driven-development` as the fix executor. Pass it:
 
-**If no correct seam exists, that itself is the finding.** Note it. The codebase architecture is preventing the bug from being locked down. Flag this for the next phase.
+- the confirmed root cause and supporting evidence;
+- the minimised reproduction and expected behavior;
+- the selected test seam;
+- the original Phase 1 feedback loop;
+- the repository's applicable test policy.
 
-If a correct seam exists:
+`test-driven-development` owns the local RED–GREEN–REFACTOR cycle and returns its evidence. It does not reopen diagnosis or choose a different behavior contract.
 
-1. Turn the minimised repro into a failing test at that seam.
-2. Watch it fail.
-3. Apply the fix.
-4. Watch it pass.
-5. Re-run the Phase 1 feedback loop against the original (un-minimised) scenario.
+If no correct automated seam exists, record the testability gap explicitly. Do not write a token test that cannot reproduce the real chain. Implement the smallest root-cause fix using the Phase 1 feedback loop as the acceptance signal, then flag the missing seam for architectural follow-up.
+
+After either path, re-run the original, un-minimised Phase 1 feedback loop. A green regression test proves the selected seam; only the original loop proves the reported symptom is resolved.
 
 ## Phase 6 — Cleanup + post-mortem
 

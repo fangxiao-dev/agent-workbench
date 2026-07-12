@@ -13,7 +13,8 @@
 | frontend-design | `anthropics/skills` | `npx skills add anthropics/skills@frontend-design -g -y` | 已放入 `skills/frontend-design/` |
 | skill-creator | `anthropics/skills` | 人工迁移 | 已放入 `skills/skill-creator/` |
 | ask-matt | `mattpocock/skills` | `npx skills add mattpocock/skills@ask-matt -g -y` | 已放入 `skills/ask-matt/` |
-| diagnosing-bugs | `mattpocock/skills` | `npx skills add mattpocock/skills@diagnosing-bugs -g -y` | 已放入 `skills/diagnosing-bugs/` |
+| diagnosing-bugs | `mattpocock/skills` | `npx skills add mattpocock/skills@diagnosing-bugs -g -y` | 本地维护副本位于 `skills/debugging/diagnosing-bugs/` |
+| test-driven-development | `obra/superpowers` | 人工迁移并打薄 | 作为 `diagnosing-bugs` 的修复执行器，位于 `skills/debugging/test-driven-development/`；原版保存在 deprecated Superpowers 归档 |
 | grill-me | `mattpocock/skills` | `npx skills add mattpocock/skills@grill-me -g -y` | 已放入 `skills/grill-me/` |
 | grill-with-docs | `mattpocock/skills` | `npx skills add mattpocock/skills@grill-with-docs -g -y` | 已放入 `skills/grill-with-docs/` |
 | triage | `mattpocock/skills` | `npx skills add mattpocock/skills@triage -g -y` | 已放入 `skills/triage/` |
