@@ -1,5 +1,5 @@
 ---
-target: skills/create-task-dag
+target: skills/impl-package/create-task-dag
 updated: 2026-07-08
 ---
 ## 原则

@@ -10,6 +10,8 @@ description: >
 
 本 skill 是整个 Impl-Package 体系的**导航入口**。它只回答「这是什么、从哪进、下一步进哪个 skill」，把你送到正确的 stage skill 或 canonical 源。**它不执行任何阶段，也不把 spec / contract / design 的正文抄进来**——正文永远留在各自的事实源，这里只给指针。
 
+所有阶段执行器都递归聚合在本目录下；implementation-level review 统一位于 `reviews/`。skill name 保持稳定，调用方按名称路由，不依赖旧的根目录路径。
+
 持久单位是 `docs/implementations/<package-id>/`。体系由两部分咬合：
 
 - **文档维护层**：常青四层（产品意图 / 模块意图 / 模块契约 / 变更事件），真相住这里，每次开发最后汇回。

@@ -25,7 +25,7 @@
 | to-tickets | `mattpocock/skills` | 基于上游 `skills/engineering/to-tickets` 本地分叉 | Impl-Package 本地 fork（上游基线 `391a270`）；上游更新只做人工 diff/选择性合并，不直接覆盖 |
 | domain-modeling | `mattpocock/skills` | `npx skills add mattpocock/skills@domain-modeling -g -y` | 已放入 `skills/domain-modeling/` |
 | codebase-design | `mattpocock/skills` | `npx skills add mattpocock/skills@codebase-design -g -y` | 已放入 `skills/codebase-design/` |
-| module-review | `mattpocock/skills` | 人工迁移上游 `skills/engineering/code-review` | 基于 `391a270` 重命名并中文化后放入 `skills/module-review/` |
+| module-review | `mattpocock/skills` | 人工迁移上游 `skills/engineering/code-review` | 基于 `391a270` 重命名并中文化后放入 `skills/impl-package/reviews/module-review/` |
 | improve-codebase-architecture | `mattpocock/skills` | `npx skills add mattpocock/skills@improve-codebase-architecture -g -y` | 已放入 `skills/improve-codebase-architecture/` |
 | grilling | `mattpocock/skills` | `npx skills add mattpocock/skills@grilling -g -y` | 已放入 `skills/grilling/` |
 | handoff | `mattpocock/skills` | `npx skills add mattpocock/skills@handoff -g -y` | 已放入 `skills/handoff/` |
@@ -36,7 +36,7 @@
 | powershell-windows | `davila7/claude-code-templates` | `npx skills add davila7/claude-code-templates@powershell-windows -g -y` | 已放入 `skills/powershell-windows/` |
 | continuous-learning | `affaan-m/everything-claude-code` | 人工迁移 | 已退役，保留在 `skills-deprecated/continuous-learning/` |
 | api-integration-builder | `daffy0208/ai-dev-standards` | `npx skills add daffy0208/ai-dev-standards@api-integration-builder -g -y` | 已放入 `skills/api-integration-builder/` |
-| code-review | `supercent-io/skills-template` | `npx skills add supercent-io/skills-template@code-review -g -y` | 已放入 `skills/code-review/` |
+| code-review | `supercent-io/skills-template` | `npx skills add supercent-io/skills-template@code-review -g -y` | 已放入 `skills/impl-package/reviews/code-review/` |
 | git-workflow | `supercent-io/skills-template` | `npx skills add supercent-io/skills-template@git-workflow -g -y` | 已放入 `skills/git-workflow/` |
 | documentation-generator | `jorgealves/agent_skills` | `npx skills add jorgealves/agent_skills@documentation-generator -g -y` | 已放入 `skills/documentation-generator/` |
 | prompt-optimizer | `daymade/claude-code-skills` | `npx skills add daymade/claude-code-skills@prompt-optimizer -g -y` | 已放入 `skills/prompt-optimizer/` |

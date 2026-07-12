@@ -27,13 +27,13 @@ Assert-Contains $draft '已由' 'Discussion draft replacement marker is missing.
 Assert-Contains $draft 'impl-package-system-design.md' 'Discussion draft does not point to the approved design.'
 
 $evalPaths = @{
-    'req-align' = 'skills\req-align\evals\evals.json'
-    'to-tickets' = 'skills\to-tickets\evals\evals.json'
-    'impl-planning' = 'skills\impl-planning\evals\evals.json'
-    'create-task-dag' = 'skills\create-task-dag\evals\evals.json'
-    'dev-with-track' = 'skills\dev-with-track\evals\evals.json'
-    'module-review' = 'skills\module-review\evals\evals.json'
-    'safety-review' = 'skills\safety-review\evals\evals.json'
+    'req-align' = 'skills\impl-package\req-align\evals\evals.json'
+    'to-tickets' = 'skills\impl-package\to-tickets\evals\evals.json'
+    'impl-planning' = 'skills\impl-package\impl-planning\evals\evals.json'
+    'create-task-dag' = 'skills\impl-package\create-task-dag\evals\evals.json'
+    'dev-with-track' = 'skills\impl-package\dev-with-track\evals\evals.json'
+    'module-review' = 'skills\impl-package\reviews\module-review\evals\evals.json'
+    'safety-review' = 'skills\impl-package\reviews\safety-review\evals\evals.json'
 }
 
 $evals = @{}
@@ -86,37 +86,37 @@ $policyBoundary = Eval-Text (Find-Eval $evals['dev-with-track'] 11)
 Assert-Contains $policyBoundary 'policy' 'Verification policy reference eval'
 Assert-Contains $policyBoundary 'gate' 'Gate summary boundary eval'
 
-$specTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\req-align\assets\templates\spec.md')
+$specTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\req-align\assets\templates\spec.md')
 Assert-Contains $specTemplate 'Design Revision: D<n>' 'Spec must resolve lightweight Design revision.'
 Assert-Contains $specTemplate 'Spec Revision: S<n>' 'Spec revision header.'
 Assert-NotContains $specTemplate 'Composition:' 'Spec must not own Composition.'
 Assert-NotContains $specTemplate 'Status: Draft | Spec Gate Passed | Spec Gate Blocked | Superseded' 'Current spec SoT must not be superseded as a whole file.'
-$designTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\req-align\assets\templates\design.md')
+$designTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\req-align\assets\templates\design.md')
 Assert-Contains $designTemplate 'current design choices and rationale SoT' 'Design must be current SoT.'
 Assert-NotContains $designTemplate 'point-in-time research and decision record' 'Design must not retain event-only identity.'
 
-$planTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-planning\assets\templates\plan.md')
+$planTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\impl-planning\assets\templates\plan.md')
 Assert-Contains $planTemplate '## Planned Verification' 'Plan verification selection.'
 Assert-Contains $planTemplate '## Execution Record' 'Plan execution evidence.'
 Assert-NotContains $planTemplate 'Executable Checklist' 'Plan must not contain task checklist.'
 
-$gateTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\dev-with-track\assets\templates\gate.md')
+$gateTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\dev-with-track\assets\templates\gate.md')
 Assert-Contains $gateTemplate '# Gate Ledger' 'Single gate ledger.'
 Assert-Contains $gateTemplate 'Supersedes:' 'Gate supersession chain.'
 Assert-Contains $gateTemplate 'Evidence:' 'Gate execution-record link.'
 Assert-Contains $gateTemplate '### Durable Deltas' 'Gate durable-delta capture.'
 Assert-NotContains $gateTemplate 'Verification checklist' 'Gate must not copy full verification checklist.'
-$progressTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\dev-with-track\assets\templates\progress.md')
+$progressTemplate = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\dev-with-track\assets\templates\progress.md')
 Assert-Contains $progressTemplate 'Kind：[attempt / task / ticket]' 'Progress must represent a no-DAG attempt recovery unit.'
 Assert-Contains $progressTemplate 'tasks/<attempt-id>-progress.md' 'Attempt progress path must be canonical.'
 
-$dagSkill = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\create-task-dag\SKILL.md')
+$dagSkill = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\create-task-dag\SKILL.md')
 Assert-Contains $dagSkill '必须持久化为当前 attempt' 'Impl-Package DAG must be durable.'
 Assert-NotContains $dagSkill '持久化始终可选' 'Impl-Package DAG persistence cannot be optional.'
 Assert-Contains $dagSkill 'Composition 未决，或当前 plan Composition 与现有 artifact 不一致：路由' 'Composition mismatch route must be explicit.'
 Assert-Contains $dagSkill '`impl-planning` 升级 P revision' 'Composition mismatch must route to impl-planning.'
 
-$safetySkill = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\safety-review\SKILL.md')
+$safetySkill = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\reviews\safety-review\SKILL.md')
 Assert-Contains $safetySkill 'git rev-parse <comparison-ref>^{commit}' 'Safety base ref must resolve to a commit SHA.'
 Assert-Contains $safetySkill 'git diff <base-sha>...<head-sha>' 'Safety diff must use immutable SHAs.'
 $pinnedSafety = Eval-Text (Find-Eval $evals['safety-review'] 7)
@@ -128,7 +128,7 @@ Assert-Contains $specAxis 'no third drift reviewer' 'Module-review reviewer topo
 $safetyP0 = Eval-Text (Find-Eval $evals['safety-review'] 1)
 Assert-Contains $safetyP0 'idempotency' 'Safety-review P0 guard'
 
-$activeRoots = @('skills\req-align', 'skills\to-tickets', 'skills\impl-planning', 'skills\create-task-dag', 'skills\dev-with-track', 'skills\module-review', 'skills\safety-review')
+$activeRoots = @('skills\impl-package\req-align', 'skills\impl-package\to-tickets', 'skills\impl-package\impl-planning', 'skills\impl-package\create-task-dag', 'skills\impl-package\dev-with-track', 'skills\impl-package\reviews\module-review', 'skills\impl-package\reviews\safety-review')
 foreach ($relativeRoot in $activeRoots) {
     $matches = Get-ChildItem -Path (Join-Path $repo $relativeRoot) -Recurse -File | Select-String -SimpleMatch -Pattern 'to-issues'
     if ($matches) { throw "Active Impl-Package skill retains to-issues: $($matches[0].Path):$($matches[0].LineNumber)" }

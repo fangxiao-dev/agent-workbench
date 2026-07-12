@@ -1,5 +1,5 @@
 ---
-target: skills/impl-planning
+target: skills/impl-package/impl-planning
 updated: 2026-07-12
 ---
 

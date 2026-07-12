@@ -1,5 +1,5 @@
 ---
-target: skills/safety-review
+target: skills/impl-package/reviews/safety-review
 updated: 2026-07-11
 ---
 

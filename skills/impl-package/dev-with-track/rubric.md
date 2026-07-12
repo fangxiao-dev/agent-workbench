@@ -1,5 +1,5 @@
 ---
-target: skills/dev-with-track
+target: skills/impl-package/dev-with-track
 updated: 2026-07-11
 ---
 ## 原则

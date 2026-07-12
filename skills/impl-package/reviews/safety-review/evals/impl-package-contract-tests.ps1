@@ -11,7 +11,7 @@ function Require-Text {
 }
 
 if (-not (Test-Path $skill)) {
-    throw 'Expected skills/safety-review/SKILL.md to exist.'
+    throw 'Expected skills/impl-package/reviews/safety-review/SKILL.md to exist.'
 }
 
 $body = Get-Content -Raw $skill

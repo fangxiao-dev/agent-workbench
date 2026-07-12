@@ -1,5 +1,5 @@
 ---
-target: skills/req-align
+target: skills/impl-package/req-align
 updated: 2026-07-10
 ---
 ## 原则

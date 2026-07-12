@@ -52,7 +52,7 @@ description: 当用户对某个 skill 索要优化建议、在多个优化项之
 
 ```markdown
 ---
-target: skills/dev-with-track
+target: skills/impl-package/dev-with-track
 updated: 2026-07-08
 ---
 ## 原则
