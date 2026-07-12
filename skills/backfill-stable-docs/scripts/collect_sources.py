@@ -105,6 +105,12 @@ def _validate_method_ref(method_root: Path, method_ref: str) -> dict[str, str]:
             f"expected {expected_identity}, found {actual_identity}"
         )
     commit = _resolve_commit(method_root, requested_commit, "method commit")
+    method_head = _resolve_commit(method_root, "HEAD", "method root HEAD")
+    if commit != method_head:
+        raise CollectorError(
+            "method ref commit does not match method root HEAD: "
+            f"expected {commit}, found {method_head}"
+        )
     return {"repository": expected_identity, "commit": commit}
 
 
@@ -189,6 +195,7 @@ def _changed_after_watermark(
 
 def collect_inventory(
     *,
+    mode: str,
     project_root: Path | str,
     source_head: str,
     project_watermark: str,
@@ -201,6 +208,12 @@ def collect_inventory(
     method = _require_git_repository(Path(method_root), "method root")
     if fixture_count < 0:
         raise CollectorError("fixture count cannot be negative")
+    if mode not in {"bootstrap", "steady-state"}:
+        raise CollectorError(f"unsupported collection mode: {mode}")
+    if mode == "steady-state" and fixture_count != 0:
+        raise CollectorError("steady-state mode requires fixture count 0")
+    if mode == "bootstrap" and carry_forward:
+        raise CollectorError("bootstrap mode does not accept carry-forward packages")
 
     resolved_head = _resolve_commit(project, source_head, "source HEAD")
     resolved_watermark = _resolve_commit(
@@ -252,7 +265,11 @@ def collect_inventory(
         raise CollectorError(
             f"fixture count {fixture_count} exceeds package count {len(rows)}"
         )
-    fixtures = [str(row["package_id"]) for row in rows[:fixture_count]]
+    fixtures = (
+        [str(row["package_id"]) for row in rows[:fixture_count]]
+        if mode == "bootstrap"
+        else []
+    )
     fixture_set = set(fixtures)
 
     known_packages = {str(row["package_id"]) for row in rows}
@@ -271,7 +288,20 @@ def collect_inventory(
             project, resolved_watermark, resolved_head, str(row["package_id"])
         )
     )
-    eligible = sorted(set(watermark_new) | set(carry))
+    bootstrap_targets = (
+        [
+            str(row["package_id"])
+            for row in rows
+            if str(row["package_id"]) not in fixture_set
+        ]
+        if mode == "bootstrap"
+        else []
+    )
+    eligible = (
+        bootstrap_targets
+        if mode == "bootstrap"
+        else sorted(set(watermark_new) | set(carry))
+    )
 
     for row in rows:
         package_id = str(row["package_id"])
@@ -281,6 +311,7 @@ def collect_inventory(
 
     return {
         "schema_version": 1,
+        "mode": mode,
         "method_activation": method_state,
         "project": {
             "repository": _normalize_repository_identity(
@@ -294,11 +325,7 @@ def collect_inventory(
         "package_count": len(rows),
         "fixture_count": fixture_count,
         "protected_fixtures": fixtures,
-        "bootstrap_targets": [
-            str(row["package_id"])
-            for row in rows
-            if str(row["package_id"]) not in fixture_set
-        ],
+        "bootstrap_targets": bootstrap_targets,
         "carry_forward": carry,
         "watermark_new_packages": watermark_new,
         "eligible_packages": eligible,
@@ -329,7 +356,11 @@ def _render_markdown(inventory: dict[str, object]) -> str:
                 package_id=row["package_id"],
                 activity_commit=row["activity_commit"],
                 semantic="<br>".join(row["semantic_sources"]) or "none",
-                findings="<br>".join(row["supplemental_findings"]) or "none",
+                findings="<br>".join(
+                    f"{item['path']} @ {item['blob']}"
+                    for item in row["supplemental_evidence"]
+                )
+                or "none",
                 fixture="yes" if row["protected_fixture"] else "no",
                 carry="yes" if row["carry_forward"] else "no",
                 new="yes" if row["watermark_new"] else "no",
@@ -348,6 +379,7 @@ def _path_under(root: Path, candidate: Path) -> bool:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--mode", choices=("bootstrap", "steady-state"), required=True)
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--source-head", required=True)
     parser.add_argument("--project-watermark", required=True)
@@ -364,6 +396,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         inventory = collect_inventory(
+            mode=args.mode,
             project_root=args.project_root,
             source_head=args.source_head,
             project_watermark=args.project_watermark,

@@ -62,6 +62,7 @@ Bootstrap 不猜测历史下界。它读取 owner 明确批准的固定 source m
 
 ```text
 python skills/backfill-stable-docs/scripts/collect_sources.py \
+  --mode bootstrap \
   --project-root <project-root> \
   --source-head <project-commit> \
   --project-watermark <ancestor-commit> \

@@ -105,6 +105,7 @@ class CollectorTest(unittest.TestCase):
         module = load_module()
 
         first = module.collect_inventory(
+            mode="bootstrap",
             project_root=self.project,
             source_head=self.source_head,
             project_watermark=self.watermark,
@@ -114,6 +115,7 @@ class CollectorTest(unittest.TestCase):
             carry_forward=(),
         )
         second = module.collect_inventory(
+            mode="bootstrap",
             project_root=self.project,
             source_head=self.source_head,
             project_watermark=self.watermark,
@@ -159,6 +161,7 @@ class CollectorTest(unittest.TestCase):
         module = load_module()
 
         inventory = module.collect_inventory(
+            mode="steady-state",
             project_root=self.project,
             source_head=self.source_head,
             project_watermark=self.source_head,
@@ -171,6 +174,7 @@ class CollectorTest(unittest.TestCase):
         self.assertEqual(inventory["watermark_new_packages"], [])
         self.assertEqual(inventory["eligible_packages"], ["echo", "foxtrot"])
         self.assertEqual(inventory["carry_forward"], ["echo", "foxtrot"])
+        self.assertEqual(inventory["bootstrap_targets"], [])
 
     def test_rejects_non_ancestor_watermark(self) -> None:
         module = load_module()
@@ -183,6 +187,7 @@ class CollectorTest(unittest.TestCase):
 
         with self.assertRaisesRegex(module.CollectorError, "not an ancestor"):
             module.collect_inventory(
+                mode="steady-state",
                 project_root=self.project,
                 source_head=unrelated,
                 project_watermark=self.watermark,
@@ -197,11 +202,29 @@ class CollectorTest(unittest.TestCase):
 
         with self.assertRaisesRegex(module.CollectorError, "repository identity"):
             module.collect_inventory(
+                mode="steady-state",
                 project_root=self.project,
                 source_head=self.source_head,
                 project_watermark=self.watermark,
                 method_root=self.method,
                 method_ref=f"other/workbench@{self.method_commit}",
+                fixture_count=0,
+                carry_forward=(),
+            )
+
+    def test_rejects_method_ref_that_does_not_match_method_root_head(self) -> None:
+        module = load_module()
+        (self.method / "REFERENCE.md").write_text("new method\n", encoding="utf-8")
+        commit_all(self.method, "advance method", "2026-07-11T00:00:00+00:00")
+
+        with self.assertRaisesRegex(module.CollectorError, "method root HEAD"):
+            module.collect_inventory(
+                mode="steady-state",
+                project_root=self.project,
+                source_head=self.source_head,
+                project_watermark=self.watermark,
+                method_root=self.method,
+                method_ref=f"example/agent-workbench@{self.method_commit}",
                 fixture_count=0,
                 carry_forward=(),
             )
@@ -221,6 +244,8 @@ class CollectorTest(unittest.TestCase):
             str(self.method),
             "--method-ref",
             f"example/agent-workbench@{self.method_commit}",
+            "--mode",
+            "bootstrap",
             "--fixture-count",
             "2",
         ]
@@ -233,10 +258,87 @@ class CollectorTest(unittest.TestCase):
         )
 
         payload = json.loads(completed.stdout)
+        repeated = subprocess.run(
+            command,
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
         after = sorted(path.relative_to(self.project) for path in self.project.rglob("*"))
         self.assertEqual(payload["protected_fixtures"], ["foxtrot", "echo"])
+        self.assertEqual(completed.stdout, repeated.stdout)
         self.assertEqual(before, after)
         self.assertEqual(completed.stderr, "")
+
+    def test_cli_rejects_unresolved_method_ref_without_writes(self) -> None:
+        output = self.project / "inventory.json"
+        command = [
+            sys.executable,
+            str(SCRIPT),
+            "--mode",
+            "steady-state",
+            "--project-root",
+            str(self.project),
+            "--source-head",
+            self.source_head,
+            "--project-watermark",
+            self.watermark,
+            "--method-root",
+            str(self.method),
+            "--method-ref",
+            "example/agent-workbench@deadbeef",
+            "--output",
+            str(output),
+        ]
+        completed = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("does not resolve", completed.stderr)
+        self.assertFalse(output.exists())
+
+    def test_cli_rejects_missing_project_and_escaping_output(self) -> None:
+        missing = Path(self.temp.name) / "missing-project"
+        outside = Path(self.temp.name) / "outside.json"
+        common = [
+            sys.executable,
+            str(SCRIPT),
+            "--mode",
+            "steady-state",
+            "--source-head",
+            self.source_head,
+            "--project-watermark",
+            self.watermark,
+            "--method-root",
+            str(self.method),
+            "--method-ref",
+            f"example/agent-workbench@{self.method_commit}",
+        ]
+
+        missing_result = subprocess.run(
+            [*common, "--project-root", str(missing)],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        escape_result = subprocess.run(
+            [
+                *common,
+                "--project-root",
+                str(self.project),
+                "--output",
+                str(outside),
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+        self.assertEqual(missing_result.returncode, 2)
+        self.assertIn("not a directory", missing_result.stderr)
+        self.assertEqual(escape_result.returncode, 2)
+        self.assertIn("output path", escape_result.stderr)
+        self.assertFalse(outside.exists())
 
 
 if __name__ == "__main__":
