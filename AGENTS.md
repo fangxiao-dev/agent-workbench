@@ -10,6 +10,7 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `gemi
 ## Working Rules
 
 - Keep changes host-neutral unless a host-specific behavior is required.
+- Unless the user explicitly specifies a remote branch, branch references mean local branches; for example, "merge into `develop`" means the local `develop` branch.
 - Do not mutate user-level host state (`~/.claude`, `~/.codex`, `~/.gemini`) unless the task explicitly asks for it.
 - Prefer updating installer logic and docs together so behavior and guidance stay aligned.
 - Preserve non-destructive installation behavior: skip conflicts and report clearly.
