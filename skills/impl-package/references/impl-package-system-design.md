@@ -34,7 +34,7 @@
 
 两个开关任意组合合法：都无（spec+plan 直接执行）、只 dag、只 tickets、两者都有。task 与 ticket 解绑——task 可横切多个 ticket，seam/集成 task 不属于任何单个 ticket。
 
-**Dispatch shorthand（别名，非闸门）**：为方便快速下发，允许四个可选简写 `S`=`tickets=F,dag=F`、`M`=`tickets=T,dag=F`、`L`=`tickets=T,dag=T`、`D`=`tickets=F,dag=T` 展开为 composition。它只是别名，不是 sizing 闸门——当前 attempt plan 的 `Composition:` 行是唯一事实源，earn 条件仍是权威；简写与实际 earn 冲突时改标签、不造 ticket/dag。这与"抛弃 S/M/L 线性档"不矛盾：废弃的是"先定档再决定产物"的闸门，保留的是展开成 composition 的下发口令。映射与护栏见 composition-contract 的《Dispatch shorthand》。
+**Dispatch shorthand（主动下发请求，非闸门）**：用户可以直接说“按 S/M/L/D 做”。四个简写分别展开为 `S`=`tickets=F,dag=F`、`M`=`tickets=T,dag=F`、`L`=`tickets=T,dag=T`、`D`=`tickets=F,dag=T`，但它们是 Composition request，不是 artifact 授权；当前 attempt plan 的 `Composition:` 行仍是唯一事实源，earn 条件仍是权威。请求与实际信号冲突时先向 owner 展开冲突、建议组合和 artifact 影响，确认前不增删 ticket/DAG。这与"抛弃 S/M/L 线性档"不矛盾：废弃的是"先定档再决定产物"的闸门，保留的是便于 owner 主动表达期望执行形态的口令。规范处理见 composition contract。
 
 Review 按独立信号触发，不把 artifact 数量当风险代理：code-review 恒必选；有 tickets 或 dag 时 module-review 必选，无两者但 spec 声明 interface、状态机、模块边界或 seam 变化时同样必选；safety-review 永远按信号触发（见 Review 体系）。
 
@@ -60,6 +60,7 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
 
 - **Stage 1/2 一个 skill 两道对等必过门**：req-align 承载 Design 与 Spec 两个步骤，二者对等且都必过——不是"Design 可选、Spec 必有"。调研 readiness 门（Destination 可回答、Open Questions 收敛到不阻塞 spec）必过 → 才允许进入 spec 门生成 `spec.md`。不拆成两个 skill：design→spec 是紧耦合的顺序交接，拆开徒增一条 handoff seam。前置条件：先解除其 prj-supplyer-webapp 绑定（见 skill 改造清单）。
 - **design.md 护栏**：保留 Design Research 八节结构，但 Decisions 只记"选择与理由"，行为语义一律进 spec；spec 已有内容 design 不留副本。Backfill Candidates 只是其中的**非约束调研提示**小节，供后续参考；durable delta 的正式捕获是 terminal gate entry 写入前的硬性前置（Stage 7），不在 spec 里维护常青 backfill map，也不要求执行期归并进 spec（避免与下游 backfill 体系双重登记）。
+- **跨模块 journey 护栏**：顶层 journey anchor 拥有端到端 outcome，各 module PRD 只拥有自身贡献，跨模块 rule/seam 由一个 primary module spec 拥有。package design/spec 只记录本次 coordination 与 expected canonical delta，通过 anchor 引用长期事实，不创建第二份 journey 或 contract SoT。
 - **自动 grill-me-smartly 通关**：每次真正评估 Spec Gate 前（首次创建或行为/设计变化的 patch；纯实现漂移不评估 Spec Gate，不触发），自动跑一遍 `grill-me-smartly` review phase 抓自我审查漏掉的浅显问题；`待用户裁决` 条目计入既有"blocking owner decisions 为零"标准，不新造阻断机制。Ledger 住 OS temp，不落 package；是否 apply 收敛结论必须等用户明确批准，尊重该 skill 自己"永不静默 apply"的契约。Spec Gate 通过后另外提示 `grilling` 作为可选的更深对抗访谈，不强制。
 - **spec.md 模板护栏**：package-id 内的 `spec.md` 按 2026-07-09 设计的模块 spec 八节合同结构成型（活动变更的当前 SoT）：Scope/authority/non-goals、术语与数据合同、行为/状态机/工作流、模块边界与依赖、**Error Boundaries——失败模式与恢复语义**、约束型合同（禁止事项/信任边界/精度/provider 义务/负依赖）、Acceptance Semantics 与 Contract Coherence。Composition 不进入 spec。
 - **Stage 3 顺序**：attempt plan → tickets → DAG；plan 保存执行策略、具体 migration 操作、Planned Verification 与 append-only Execution Record，不复制 ticket/task 状态。稳定 seam/interface/constraints 留在 spec；任何 Composition 下 plan 都不建立 executable task checklist。

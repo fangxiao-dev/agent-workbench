@@ -106,7 +106,9 @@ Spec reviewer 已承担 contract/interface/seam drift；不得额外派发第三
 
 ### 5. 汇总
 
-在 `## Standards` 和 `## Spec` 下分别呈现两个报告，可轻微清理格式，但不要合并或跨轴重新排序 finding。
+面向 owner 的开场遵循 [Owner-Facing Reporting Contract](../../references/owner-facing-reporting.md)：先说明审查的功能范围、Standards/Spec 两轴是否各自通过、阻塞项数量、整体能否进入 gate，以及需要 owner 决定什么。不要用轴名、finding code 或文件路径代替合入判断。
+
+随后在 `## Standards` 和 `## Spec` 下分别呈现两个 canonical evidence 报告，可轻微清理格式，但不要合并或跨轴重新排序 finding。
 
 最后用一行汇总：每个轴的 finding 数量，以及各轴内部最严重的问题。不要选出跨轴的单一“最严重问题”。
 

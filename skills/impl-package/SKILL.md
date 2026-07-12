@@ -14,7 +14,7 @@ description: >
 
 持久单位是 `docs/implementations/<package-id>/`。体系由两部分咬合：
 
-- **文档维护层**：常青四层（产品意图 / 模块意图 / 模块契约 / 变更事件），真相住这里；开发收口后可以通过 backfill 把 durable delta 汇回。
+- **文档维护层**：常青四层（产品/journey 端到端意图 / 模块贡献 / 模块契约 / 变更事件），真相住这里；跨模块 journey 通过唯一 owner 和 anchor 链接下钻，不复制正文。开发收口后可以通过 backfill 把 durable delta 汇回。
 - **开发 6 步主流程 + 可选回刷**：6 步把改动做出来；backfill 是收口后的维护提示与周期性兜底，不阻塞当前交付。
 
 ## 系统图（供 AI 读取）
@@ -69,12 +69,19 @@ flowchart TD
 
 体量不预先分档，只看当前 attempt 的两个开关；可用 dispatch shorthand（`S`/`M`/`L`/`D`）快速下发，但它只展开成当前 plan 的 `tickets=/dag=`，earn 条件仍是权威。
 
+用户可以主动说“按 S / M / L / D 做”，把它作为期望的执行组合交给 `impl-planning`。agent 必须先展开并校验 earn 条件：一致时采用；冲突时先用人话说明实际信号、建议组合和会增删哪些 artifact，等待 owner 决议，不能静默改模式或直接造/删 ticket、DAG。
+
+## 面向 owner 的汇报
+
+所有阶段与 review skill 向 owner 汇报时统一读取并遵守 [Owner-Facing Reporting Contract](references/owner-facing-reporting.md)，使用 `talk-to-boss` 把功能结论、准确阶段、剩余数量、closed 判断和 owner decision 放在主体。canonical 代号只用于后续 agent handoff 与技术证据。
+
 ## Canonical 源（只给指针，不在这里复制正文）
 
 属于 Impl-Package 依赖图的文档全部收在本 skill 的 `references/` 下，不论是否仍标草案——分发单位是这个 skill 目录，组内分享时不会附带整个仓库的 `docs/skill-design/`，所以依赖图内的东西必须随 skill 一起走。`docs/skill-design/` 只保留不属于本体系的其他设计规划。
 
 - **规则 / 跨层契约（正式）** → [references/impl-package-composition-contract.md](references/impl-package-composition-contract.md)（composition、canonical status、readiness resolution、seam、Stage 7、dispatch shorthand、revision-commit binding、Module Knowledge Watermark）。
 - **backfill / 常青四层（正式，已批准）** → [references/evergreen-module-spec-and-backfill-design.md](references/evergreen-module-spec-and-backfill-design.md)。
+- **给 owner 的统一汇报合同** → [references/owner-facing-reporting.md](references/owner-facing-reporting.md)。
 - **体系设计 rationale（仍为方案草案，内容仍会演进）** → [references/impl-package-system-design.md](references/impl-package-system-design.md)。
 - **给人看的介绍页** → [assets/impl-package-intro.html](assets/impl-package-intro.html)。**推荐给需要总览的人打开；本 skill 自身不读取它**（避免把整页载入上下文）。
 

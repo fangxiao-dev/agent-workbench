@@ -79,7 +79,11 @@ At the start of any later draft or publish operation, detect an uncleared publis
 
 ## Runner-Neutral Handoff
 
-Return only:
+S/M/L/D shorthand 本身没有创建、删除或退休 ticket 的权限；只读取当前 plan 的 canonical Composition。request 与 earn condition 或 plan 不一致时 fail closed，回 `impl-planning` 形成 owner decision。
+
+面向 owner 的汇报先遵循 [Owner-Facing Reporting Contract](../references/owner-facing-reporting.md)：说明共识别多少个可独立验收的交付切片、已起草/批准多少、还缺多少验收证据或审批，以及能否进入下一阶段。
+
+随后返回 runner-neutral canonical handoff：
 
 - topic slug, package-id and package path;
 - mode and tickets composition result;

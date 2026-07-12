@@ -82,7 +82,12 @@ plan 在 attempt 活动期间可通过 Plan Revision: P&lt;n&gt; 修订策略、
 | L | tickets=true, dag=true |
 | D | tickets=false, dag=true |
 
-实际 earn condition 与 shorthand 冲突时修正 shorthand，不制造 ticket 或 DAG。
+用户主动说“按 S/M/L/D 做”时，该字母是 `Composition request`，不是 artifact 授权或最终 SoT。`impl-planning` 先展开为 tickets/dag，再独立检查 earn conditions：
+
+- 一致：接受请求；plan 只把 canonical `Composition: tickets=..., dag=...` 作为下游事实源，可记录 requested shorthand 与 accepted resolution 作为 provenance。
+- 冲突：在创建、删除或退休任何 ticket/DAG 前，向 owner 说明请求模式、实际信号、建议 composition/简写和 artifact 影响；不得静默改标签、造 artifact 或删除已挣得的状态源。
+- 新 attempt 把冲突作为 owner decision；活动 attempt 只有在 owner 接受后才升级 P revision 并执行 artifact relocation。
+- owner 坚持与 earn conditions 不一致的模式时，先调整 scope、acceptance 或 coordination 前提；不能为了服从字母制造 ceremony，也不能删掉正确交付所必需的 artifact。
 
 ## 4. Typed blockers 与 readiness
 

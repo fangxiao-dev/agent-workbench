@@ -145,7 +145,9 @@ Before writing artifacts or editing long-lived knowledge, present:
 
 ## User-Facing Output
 
-Return only the topic slug, package-id and package path, both gate results and evidence locations, changed files (including `findings.md` only when appended), remaining owner decisions, and whether the package may enter implementation planning. Do not describe a blocked gate as completed or paste full artifacts after they have been written.
+先遵循 [Owner-Facing Reporting Contract](../references/owner-facing-reporting.md)：用人话说明需求/设计/规格对齐覆盖的功能范围、Design 与 Spec 分别完成到哪、剩余 owner decision 数量、整体是否可进入实施计划。不要以 slug、revision 或路径开场，也不要把 blocked gate 描述成完成。
+
+随后附 canonical handoff：topic slug、package-id/path、两道 gate result 与 evidence location、changed files（只在 append 时列 `findings.md`）以及剩余 owner decisions。artifact 写入后不粘贴全文。
 
 When Spec Gate was actually evaluated, name the `grill-me-smartly` ledger path and summarize its converged decisions and any resolved owner decisions. After Spec Gate PASSED, offer `grilling` as an optional deeper adversarial follow-up if the user wants more scrutiny before handing off to `impl-planning` — a suggestion, never a requirement.
 

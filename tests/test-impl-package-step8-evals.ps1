@@ -146,6 +146,23 @@ Assert-Contains $introHtml '第二部分 · 6 步主流程' 'Human intro must pr
 Assert-Contains $introHtml 'Gate 后可选维护:提示 Backfill,但不自动执行' 'Human intro must place backfill outside the numbered flow.'
 Assert-NotContains $introHtml '开发 6+1' 'Human intro must not retain the obsolete 6+1 model.'
 Assert-NotContains $introHtml '+1 回刷交接' 'Human intro must not present backfill as a seventh step.'
+Assert-Contains $backfillDesign '### 跨模块 journey 与引用纪律' 'Evergreen design must define cross-module journey ownership.'
+Assert-Contains $backfillDesign 'journey anchor → module PRD contribution → primary module spec contract' 'Cross-module journey must use a non-duplicating anchor chain.'
+Assert-Contains $compositionContract 'Composition request' 'Shorthand must be treated as an owner request, not artifact authorization.'
+Assert-Contains $compositionContract '不得静默改标签' 'Shorthand conflicts must be surfaced before artifact changes.'
+Assert-Contains $introHtml '可以主动说“按 S / M / L / D 模式做”' 'Human intro must explain active shorthand selection.'
+Assert-Contains $introHtml '单一验收 · 不切票 · 不排图' 'Human shorthand cards must lead with decision meaning.'
+Assert-NotContains $introHtml 'tickets=T · dag=F' 'Human shorthand cards must not lead with canonical booleans.'
+
+$ownerReporting = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\references\owner-facing-reporting.md')
+Assert-Contains $ownerReporting '首段必须独立回答' 'Shared owner-facing reporting contract must be decision-first.'
+Assert-Contains $ownerReporting 'canonical handoff/evidence' 'Shared reporting contract must separate human summary from runner payload.'
+$implSkillFiles = Get-ChildItem -Path (Join-Path $repo 'skills\impl-package') -Recurse -Filter 'SKILL.md'
+if ($implSkillFiles.Count -ne 10) { throw "Expected 10 Impl-Package SKILL.md files, found $($implSkillFiles.Count)." }
+foreach ($skillFile in $implSkillFiles) {
+    $skillText = Get-Content -Raw -LiteralPath $skillFile.FullName
+    Assert-Contains $skillText 'Owner-Facing Reporting Contract' "Impl-Package skill must inherit owner-facing reporting: $($skillFile.FullName)"
+}
 
 $activeRoots = @('skills\impl-package\req-align', 'skills\impl-package\to-tickets', 'skills\impl-package\impl-planning', 'skills\impl-package\create-task-dag', 'skills\impl-package\dev-with-track', 'skills\impl-package\reviews\module-review', 'skills\impl-package\reviews\safety-review')
 foreach ($relativeRoot in $activeRoots) {

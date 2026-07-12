@@ -70,4 +70,6 @@ git log <base-sha>..<head-sha> --oneline
 3. 每条 finding 写明 P0/P1/P2、文件/行或稳定来源、风险路径、缺失的保护/证据和建议动作；没有 finding 也要说明审查过的范围和未能验证的边界。
 4. 将完整审查结果交给调用者 append 到 plan Execution Record；后续 gate entry 只引用该稳定 ER anchor 并保存 verdict 摘要。本 skill 不自行关闭 gate，也不调度实现。
 
-输出依次为 `## Trigger evidence`、`## Change map`、`## Findings`、`## Coverage gaps` 和一行 gate 建议。P0 必须在最前且明确写 `BLOCKED`。
+面向 owner 的开场遵循 [Owner-Facing Reporting Contract](../../references/owner-facing-reporting.md)：先说明审查覆盖的业务/数据/外部写入路径、是否存在阻止合入的风险、剩余证据缺口数量，以及 owner 是否需要接受缓解。严重性代码不能替代风险的业务含义。
+
+随后输出 canonical evidence：`## Trigger evidence`、`## Change map`、`## Findings`、`## Coverage gaps` 和一行 gate 建议。P0 必须在 evidence 区最前且明确写 `BLOCKED`。

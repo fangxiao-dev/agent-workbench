@@ -164,7 +164,7 @@
   <header class="hd">
     <span class="eyebrow">给团队的介绍</span>
     <h1>Impl-Package 体系</h1>
-    <p class="sub">它由两部分咬合而成:<b>一套不会烂的文档结构</b>,和<b>一条可伸缩的开发流程</b>。大改动多走几步,小改动少走几步。</p>
+    <p class="sub">它由两部分咬合而成:<b>一套不会烂的文档结构</b>,和<b>一条可伸缩的开发流程</b>。六步主流程保持一致,只有真正需要时才增加 tickets 或 DAG。</p>
   </header>
 
   <div class="layout">
@@ -221,13 +221,14 @@
       <section id="evergreen">
         <span class="eyebrow">文档的骨架</span>
         <h2>常青四层：让真相有固定的家</h2>
-        <p class="lede">每次改动是「事件」,常青文档是「当前快照」。gate 内 capture 记录待保留增量;backfill 是 gate 后独立的 compaction,可以延期、批量或周期执行。四层各答一个问题,互不替代,靠固定文件名保障纪律。</p>
+        <p class="lede">每次改动是「事件」,常青文档是「当前快照」。gate 内 capture 记录待保留增量;backfill 是 gate 后独立的 compaction,可以延期、批量或周期执行。四层按“端到端价值 → 模块贡献 → 可验证行为 → 本次变化”逐层下钻,只链接、不复制。</p>
         <div class="layers">
-          <div class="layer"><span class="lk">产品级意图</span><span class="lv">为什么做、给用户什么价值 · <code>顶层 PRD / CONTEXT</code></span></div>
-          <div class="layer"><span class="lk">模块级意图</span><span class="lv">这个模块为何存在 · <code>module-knowledge/&lt;模块&gt;/prd.md</code></span></div>
-          <div class="layer"><span class="lk">模块级契约</span><span class="lv">当前怎么行为:接口/状态/边界/失败 · <code>module-knowledge/&lt;模块&gt;/spec.md</code></span></div>
-          <div class="layer"><span class="lk">变更时设计</span><span class="lv">这一次为什么、怎么改 · <code>implementations/&lt;package-id&gt;/</code></span></div>
+          <div class="layer"><span class="lk">产品 / Journey 意图</span><span class="lv">端到端 journey 为什么存在、谁参与、最终得到什么结果 · <code>顶层 PRD / CONTEXT</code></span></div>
+          <div class="layer"><span class="lk">模块级意图</span><span class="lv">该模块为 journey 贡献什么、负责和不负责什么 · <code>module-knowledge/&lt;模块&gt;/prd.md</code></span></div>
+          <div class="layer"><span class="lk">模块级契约</span><span class="lv">当前怎么行为;跨模块规则由一个主模块拥有,依赖模块只引用 · <code>module-knowledge/&lt;模块&gt;/spec.md</code></span></div>
+          <div class="layer"><span class="lk">变更时设计</span><span class="lv">本次跨模块怎么改、影响哪些 journey / module anchor、如何迁移和协调 seam · <code>implementations/&lt;package-id&gt;/</code></span></div>
         </div>
+        <div class="retreat"><div class="t">跨模块 journey 怎么放</div><ul><li>一个 journey 可以跨多个模块,但端到端 intent 只有一个顶层 owner。</li><li>每个模块只写自己的价值贡献;跨模块 rule/seam 只由一个 primary module spec 拥有,其他模块链接过去。</li><li>implementation package 只记录“这次改变了什么”和 canonical anchor 的预期 delta,不复制整条 journey 或长期合同。</li></ul></div>
       </section>
 
       <!-- ============ PART 2 ============ -->
@@ -256,7 +257,7 @@
           </div></div>
           <div class="fstage"><div class="node">3</div><div class="card">
             <div class="h"><h3>Attempt 计划 ＋ 按需切票</h3><span class="badge always">必经</span></div>
-            <div class="what">计划声明本次 Attempt / D-S-P revision / Composition,保存执行策略、验证选择与 append-only Execution Record。≥2 个独立验收切片时才切票。</div>
+            <div class="what">先决定这次改动如何验收、是否需要拆成交付切片、是否需要显式执行依赖,再保存执行策略和验证选择。≥2 个独立验收切片时才切票。</div>
             <div class="who"><span class="skill">impl-planning</span><span class="art">plan.md</span><span class="skill cond">to-tickets<em>tickets=true 才切</em></span><span class="art">tickets/</span></div>
             <div class="trig"><b>触发</b>Spec 通过要落地;是否切票由当前 plan 的 <code>tickets</code> 决定</div>
           </div></div>
@@ -299,30 +300,31 @@
       </section>
 
       <section id="cases">
-        <span class="eyebrow">同一套体系,四种情况</span>
-        <h2>同一个「库存模块」，四种大小的需求</h2>
-        <p class="lede">最能说明伸缩力的,是拿<b>同一个模块</b>的四种大小需求,看体系自动走出四条深浅完全不同的路。判定只问两个是非题——<b>要不要切票、要不要排图</b>——体量是结果,不是预先分档。(例子为演示,不必真实)</p>
+        <span class="eyebrow">同一套体系,四种执行组合</span>
+        <h2>可以主动说“按 S / M / L / D 模式做”</h2>
+        <p class="lede">字母是便于下发的执行组合,不是任务大小评级。agent 会展开为两个判断——<b>要不要拆成多个可独立验收切片、要不要显式执行依赖图</b>——并校验实际需求是否匹配。匹配就采用;冲突时先解释建议和 artifact 影响,由 owner 决定,不会静默改模式。</p>
+        <div class="retreat"><div class="t">主动指定示例</div><ul><li>“这个需求按 M 做”表示希望拆成多个可独立验收切片,但不建立执行依赖图。</li><li>如果实际只有一个验收结果,agent 会建议改为 S;确认前不会为了服从字母制造 tickets。</li><li>如果已经存在必须协调的并行 seam,agent 会说明为什么需要 L 或 D;确认前不会删除必要 DAG。</li></ul></div>
         <div class="cases">
           <div class="case s">
-            <div class="top"><div class="sz">S</div><div><div class="lvl">微改动</div><small>tickets=F · dag=F</small></div></div>
+            <div class="top"><div class="sz">S</div><div><div class="lvl">直接执行</div><small>单一验收 · 不切票 · 不排图</small></div></div>
             <div class="req"><span class="k">需求</span>库存列表加一个「最近盘点时间」只读列。</div>
             <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">执行</span><span class="sep">→</span><span class="step on">Capture 后关门</span></div>
             <div class="win"><span class="k">好在哪 · </span>不被迫走重流程,不产生任何多余文件。规格+计划直接落地,十几分钟收工。</div>
           </div>
           <div class="case m">
-            <div class="top"><div class="sz">M</div><div><div class="lvl">中等 · 能分别验收</div><small>tickets=T · dag=F</small></div></div>
+            <div class="top"><div class="sz">M</div><div><div class="lvl">分片验收</div><small>多个独立验收 · 不排图</small></div></div>
             <div class="req"><span class="k">需求</span>做「低库存预警」:阈值设置界面 + 触发计算 + 通知邮件——三块能分别验收。</div>
             <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">切 3 票</span><span class="sep">→</span><span class="step on">逐票执行</span><span class="sep">→</span><span class="step on">Capture 后关门</span></div>
             <div class="win"><span class="k">好在哪 · </span>三个切片能分别验收、分别交付,不用等全做完;计划不塞任务细节,每张票是自己的验收事实源。</div>
           </div>
           <div class="case l">
-            <div class="top"><div class="sz">L</div><div><div class="lvl">复杂 · 并行 ＋ 协调</div><small>tickets=T · dag=T</small></div></div>
+            <div class="top"><div class="sz">L</div><div><div class="lvl">分片验收 ＋ 协调执行</div><small>多个独立验收 · 显式执行图</small></div></div>
             <div class="req"><span class="k">需求</span>「多仓库库存」重构:数据迁移 + 读模型 + 多个页面 + 跨切片 seam,要多人并行。</div>
             <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">切票</span><span class="sep">→</span><span class="step on">排执行图</span><span class="sep">→</span><span class="step on">并行执行</span><span class="sep">→</span><span class="step on">Capture 后关门</span></div>
             <div class="win"><span class="k">好在哪 · </span>多人并行有明确 ownership 和 seam 协调,不互相踩;执行图恢复「拓扑」、进度账本恢复「状态」,断了也能续。</div>
           </div>
           <div class="case d">
-            <div class="top"><div class="sz">D</div><div><div class="lvl">执行拧巴 · 不值得切票</div><small>tickets=F · dag=T</small></div></div>
+            <div class="top"><div class="sz">D</div><div><div class="lvl">单次验收 ＋ 协调执行</div><small>单一验收 · 显式执行图</small></div></div>
             <div class="req"><span class="k">需求</span>重写「库存计算引擎」内部:一次交付,但任务之间依赖复杂。</div>
             <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">排执行图</span><span class="sep">→</span><span class="step on">执行</span><span class="sep">→</span><span class="step on">Capture 后关门</span></div>
             <div class="win"><span class="k">好在哪 · </span>复杂的执行依赖被显式画出来、按序推进,但不被迫造几张没意义的验收票。验收语义留在规格里。</div>

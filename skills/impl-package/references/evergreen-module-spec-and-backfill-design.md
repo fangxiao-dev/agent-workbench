@@ -104,6 +104,17 @@ docs/module-knowledge/
 
 顶层 PRD 描述产品全貌与 journey 级叙事，下钻引用各模块 `prd.md`；模块 `prd.md` 描述该模块承载的意图切片；`spec.md` 描述当前系统行为合同； implementation 任务包记录 point-in-time 变更。四者不得互相替代。层间纪律 靠固定文件角色（`prd.md` / `spec.md`）保障，不靠目录分离。
 
+### 跨模块 journey 与引用纪律
+
+一个 journey 可以跨多个模块，但端到端 intent 只有一个 owner：
+
+1. 顶层 PRD 的 journey anchor 拥有端到端用户目标、参与者/阶段、跨模块 outcome 与 journey-level invariant；persona 只是适用标签，不按 Customer/Supplier surface 复制 journey。
+2. 每个受影响 module `prd.md` 只写本模块对该 journey 的价值贡献、责任边界与 non-goals，并反向链接 journey anchor，不复制完整 journey。
+3. 可验证行为、接口和状态由 module `spec.md` 拥有。真正跨模块的 rule/seam 选择一个 primary contract owner（最能执行和裁决规则的模块），其他 module spec 在“边界与依赖”引用该 anchor；若无法合理确定 owner，升级为 ARD/top-level contract owner decision，不能多模块双写。
+4. `docs/implementations/<package-id>/design.md` 只记录本次跨模块变化的选择、影响图、迁移/rollout、seam 协调和 expected canonical deltas；package `spec.md` 保存本次批准的 acceptance/contract delta。二者引用 journey/module anchors，不复制常青全文。gate capture 为每个 durable delta 指定唯一 destination；backfill 后 package 保留事件 provenance，不成为长期 SoT。
+
+引用链固定为：`journey anchor → module PRD contribution → primary module spec contract（dependent specs 只引用）→ implementation package change delta`。
+
 ### 方法论归属
 
 | Owner | 拥有内容 |

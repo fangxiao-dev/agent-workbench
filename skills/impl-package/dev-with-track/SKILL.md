@@ -90,4 +90,6 @@ terminal gate 关闭后提示 owner 可以按需使用 `backfill-stable-docs`，
 
 ## Output
 
-报告 package/Attempt ID、D/S/P revision、Composition、当前状态源、执行与 evidence、findings 分流、最新 gate entry/verdict、Supersedes 链、Stage 7 与剩余 blocker。terminal gate 已关闭时，另以非阻塞 follow-up 提示可选 backfill；不要把提示写成未完成 gate。
+先遵循 [Owner-Facing Reporting Contract](../references/owner-facing-reporting.md)：首段说明本次功能范围、实施/验证/gate 各自完成到哪、剩余 blocker 数量、整体是否 closed，以及当前需要 owner 决定什么。主体按功能 slice 说明已经支持和仍未证明的行为。
+
+随后附 canonical handoff：package/Attempt ID、D/S/P revision、Composition、当前状态源、execution evidence、findings 分流、最新 gate entry/verdict、Supersedes 链与 Stage 7。terminal gate 已关闭时，另以非阻塞 follow-up 提示可选 backfill；不要把提示写成未完成 gate。

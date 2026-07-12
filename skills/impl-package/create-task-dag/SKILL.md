@@ -29,6 +29,7 @@ Impl-Package 中 `dag=true` 的 DAG 必须持久化为当前 attempt 的 `dag.md
 - 当前 plan 明确为 `tickets=true, dag=true`，已有同 Attempt ID 的相关 Approved ticket 子集：开始 DAG 输入校验。
 - `tickets=true, dag=false` 或 `tickets=false, dag=false`：不调用本 skill 创建 task-decomposition artifact；no-DAG 状态与 seam 限制只引用共享 contract，不在本 skill 重定义。
 - Composition 未决，或当前 plan Composition 与现有 artifact 不一致：路由 `impl-planning` 升级 P revision并完成 artifact relocation；不重跑 D/S gate。
+- S/M/L/D shorthand 不是创建或删除 DAG 的授权；只有当前 plan 的 canonical Composition 可以 earn DAG。口令、实际依赖信号与 plan 不一致时回 `impl-planning`，在 owner 决议前不改变 artifact。
 - gated spec、D/S revision、AC 或 seam contract 缺失/漂移：路由 `req-align` 修复所需 Design/Spec gate。
 - gated spec 已就绪但缺 `plan.md`：路由 `impl-planning` 生成 plan；宽泛或未成 package 的输入同样先走 `req-align`，不得跳到 `to-tickets`。
 - 只有单一 Approved ticket，且需要跨 ticket seam：请求 package plan + 相关 Approved ticket 子集；不得自行推断 seam。
@@ -150,6 +151,8 @@ main session 处理跨任务 seam：
 ```
 
 用于执行期时，最终汇报必须包含：
+
+先遵循 [Owner-Facing Reporting Contract](../references/owner-facing-reporting.md)，说明总执行范围、已完成/待执行的功能工作线数量、集成是否完成、剩余 blocker 和能否进入 gate。以下 cohort、task、seam 与命令属于 canonical evidence，不作为 owner 汇报开场：
 
 - 派发的 worker cohort；
 - main session 处理的 seam；
