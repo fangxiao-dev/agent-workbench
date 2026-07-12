@@ -6,6 +6,10 @@ $template = Get-Content -Raw (Join-Path $skillRoot 'assets/templates/plan.md')
 $patching = Get-Content -Raw (Join-Path $skillRoot 'patching.md')
 $rubric = Get-Content -Raw (Join-Path $skillRoot 'rubric.md')
 $shared = Get-Content -Raw (Join-Path $skillRoot '..\impl-package\references\impl-package-composition-contract.md')
+$gateTemplate = Get-Content -Raw (Join-Path $skillRoot '..\dev-with-track\assets\templates\gate.md')
+$ticketTemplate = Get-Content -Raw (Join-Path $skillRoot '..\to-tickets\assets\templates\ticket.md')
+$dagTemplate = Get-Content -Raw (Join-Path $skillRoot '..\dev-with-track\assets\templates\dag.md')
+$devWithTrack = Get-Content -Raw (Join-Path $skillRoot '..\dev-with-track\SKILL.md')
 
 function Assert-Contains([string]$Content, [string]$Needle, [string]$Label) {
     if (-not $Content.Contains($Needle)) { throw "Missing ${Label}: $Needle" }
@@ -34,7 +38,21 @@ function Assert-NotContains([string]$Content, [string]$Needle, [string]$Label) {
     @($patching, '不建立 executable task checklist', 'no-DAG patch checklist prohibition'),
     @($patching, '不创建 patch-gate 文件', 'single gate ledger'),
     @($shared, 'Composition 的唯一事实源是当前 attempt plan', 'shared composition source'),
-    @($shared, 'Append-only Gate Ledger', 'shared gate lifecycle')
+    @($shared, 'Append-only Gate Ledger', 'shared gate lifecycle'),
+    @($shared, 'Revision-commit binding', 'revision-commit binding section'),
+    @($shared, 'git log -1 --format=%H', 'git commit resolution command'),
+    @($shared, 'NEEDS-REVALIDATION', 'ticket/DAG plan-revision drift rule'),
+    @($shared, 'Module Knowledge Watermark', 'module knowledge watermark mechanism'),
+    @($shared, '不只 pass', 'terminal-entry findings block covers fail/defer'),
+    @($template, 'Module Knowledge Watermark', 'plan-side watermark field'),
+    @($template, 'D<n> (commit <sha>)', 'plan design-revision commit binding'),
+    @($gateTemplate, 'D<n> (commit <sha>)', 'gate design-revision commit binding'),
+    @($gateTemplate, 'S<n> (commit <sha>)', 'gate spec-revision commit binding'),
+    @($gateTemplate, 'P<n> (commit <sha>)', 'gate plan-revision commit binding'),
+    @($ticketTemplate, 'Plan Revision', 'ticket plan-revision field'),
+    @($dagTemplate, 'NEEDS-REVALIDATION', 'dag plan-revision drift note'),
+    @($devWithTrack, 'terminal entry（pass/fail/defer', 'findings block covers all terminal verdicts'),
+    @($devWithTrack, '重新计算', 'restore recomputes commit SHA for drift check')
 ) | ForEach-Object { Assert-Contains $_[0] $_[1] $_[2] }
 
 @(

@@ -2,8 +2,8 @@
 
 Status: Draft | Spec Gate Passed | Spec Gate Blocked
 Created:
-Design Revision: D<n>
-Spec Revision: S<n>
+Design Revision: D<n> (commit <sha>)
+Spec Revision: S<n> (commit <sha>)
 Requirement source:
 Topic slug:
 Package ID:
@@ -87,5 +87,7 @@ Status: Spec Gate Blocked requires the Spec Gate Result BLOCKED. -->
 
 ## Revisions
 
-| Previous | New | Contract change | Reason / authority | Date | Superseded note |
-| --- | --- | --- | --- | --- | --- |
+<!-- commit = git log -1 --format=%H -- spec.md at the moment "New" became current. Gate entries and plan bind to this SHA, not just the S<n> label. -->
+
+| Previous | New | Commit | Contract change | Reason / authority | Date | Superseded note |
+| --- | --- | --- | --- | --- | --- | --- |

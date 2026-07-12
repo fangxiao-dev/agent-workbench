@@ -51,6 +51,9 @@ Each ticket MUST contain:
 
 - stable ticket id and title;
 - `Publication Status: Draft` or the publish result `Publication Status: Approved`;
+- the current Attempt ID, Spec Revision, and Plan Revision it was created/last confirmed
+  against — a ticket that still cites a superseded Plan Revision after the plan advances
+  is `NEEDS-REVALIDATION` until reconciled;
 - user-visible `What to build` boundary;
 - stable, individually identified acceptance criteria (`AC-1`, `AC-2`, ...), including
   their planned observable evidence or manual verification owner;

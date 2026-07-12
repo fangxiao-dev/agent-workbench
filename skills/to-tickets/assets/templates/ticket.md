@@ -4,6 +4,9 @@
 **Publication Status:** Draft
 **Attempt ID:** <attempt-id>
 **Spec Revision:** S<n>
+**Plan Revision:** P<n>
+
+<!-- Plan Revision 是本 ticket 创建/最后确认时依据的 P<n>。plan 升级到更新的 P 号后，仍标着旧 P 号的 ticket 视为 NEEDS-REVALIDATION，直到确认在新 revision 下仍成立并更新此字段，或被重新生成。 -->
 
 ## What to build
 

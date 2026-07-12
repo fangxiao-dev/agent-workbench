@@ -53,7 +53,7 @@ until it is unique. Use the resulting package-id in every package path, cross-pa
 reference, truth pointer, and handoff. This prevents distinct short-lived changes with the
 same topic from sharing a workspace.
 
-For an existing package, retain its current directory name as its legacy or timestamped package-id. Never rename it merely to add a timestamp. A post-gate patch remains in that owning package-id; it is not a new implementation package. 重新激活已关闭 package 前，先将 design/spec 与当前 module knowledge 和代码对账，再判断属于实现偏离、行为 contract 变化还是设计选择变化。
+For an existing package, retain its current directory name as its legacy or timestamped package-id. Never rename it merely to add a timestamp. A post-gate patch remains in that owning package-id; it is not a new implementation package. 重新激活已关闭 package 前，按 impl-package-composition-contract.md 的 Module Knowledge Watermark 机制对账：重新计算相关 module-knowledge 文件当前 commit SHA，与上一 attempt plan 记录的 watermark 比对；不符时先 diff 确认 design/spec 是否仍成立，再判断属于实现偏离、行为 contract 变化还是设计选择变化。
 
 ## Discover Project Knowledge
 

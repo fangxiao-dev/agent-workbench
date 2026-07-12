@@ -3,9 +3,9 @@
 Status: Draft | Active | Frozen
 Created:
 Attempt ID: <initial | YYYYMMDD-HHMM-patch-topic>
-Design Revision: D<n>
-Spec Revision: S<n>
-Plan Revision: P<n>
+Design Revision: D<n> (commit <sha>)
+Spec Revision: S<n> (commit <sha>)
+Plan Revision: P<n> (commit <sha>)
 Composition: tickets=<true|false>, dag=<true|false>
 Package ID:
 Design: [design.md](design.md) | lightweight Design record in spec
@@ -23,6 +23,7 @@ Gate Ledger: [gate.md](gate.md)
 - Focused code/test facts:
 - D/S gate evidence:
 - Previous terminal gate entry (patch only):
+- Module Knowledge Watermark（本 attempt 打开时，design/spec 引用的每份 module-knowledge 文件的 `git log -1` commit SHA；下次 attempt 打开时用来对账是否已被别的改动推进）：
 
 ## Composition Decision
 
@@ -71,8 +72,10 @@ Gate Ledger: [gate.md](gate.md)
 
 ## Plan Revision History
 
-| Previous | New | Strategy/Composition/verification change | Reason | Artifact relocation | Date |
-| --- | --- | --- | --- | --- | --- |
+<!-- commit = git log -1 --format=%H -- plan.md at the moment "New" became current. Any earned ticket/DAG still citing a superseded P<n> here is NEEDS-REVALIDATION until reconciled. -->
+
+| Previous | New | Commit | Strategy/Composition/verification change | Reason | Artifact relocation | Date |
+| --- | --- | --- | --- | --- | --- | --- |
 
 ## Patch Delta
 

@@ -13,6 +13,16 @@
 
 package gate 关闭并完成 backfill 后，module knowledge 重新成为产品当前 SoT。后续重新 patch 时，先将 package design/spec 与当前 module knowledge 和代码对账，再激活并修订 package SoT。
 
+### Module Knowledge Watermark（把"先对账"变成可执行检查）
+
+每个 attempt 的 plan 在 Inputs And Authority 记录一份 watermark：本 attempt 打开时，design/spec 引用到的每份 module-knowledge 文件（通常是 spec 的 Module Boundaries/Dependencies 点名的模块）的 `git log -1 --format=%H -- <path>` commit SHA。
+
+新 attempt（尤其是重新激活已关闭 package 的 patch）打开前，必须重新计算这些文件当前的 commit SHA，与上一个 attempt 记录的 watermark 比对：
+
+- 相符：module knowledge 自本 package 上次触碰以来未变，跳过对账，正常判定 drift classification。
+- 不符：module knowledge 已被其他 package/改动推进，先 `git diff` 两个 commit 之间的实际变化，确认 package design/spec 是否仍然成立，再继续；不得凭印象假设"应该没变"。
+- 找不到上一份 watermark（例如首个 attempt）：无需对账，直接记录当前 watermark 供下一次比对。
+
 ## 2. Design/Spec revision 与 drift
 
 design.md（存在时）或 spec.md 的 Design Gate Record 声明唯一当前 Design Revision: D&lt;n&gt;；spec.md 声明唯一当前 Spec Revision: S&lt;n&gt;。lightweight Design 不建 design.md 时，D revision 仍必须在 spec 中可解析。
@@ -24,15 +34,27 @@ design.md（存在时）或 spec.md 的 Design Gate Record 声明唯一当前 De
 
 Design/Spec Gate 只证明其绑定的 revision；旧 gate entry 不证明后续 revision。
 
+### Revision-commit binding（防止 revision 号与内容脱节）
+
+D&lt;n&gt;/S&lt;n&gt;/P&lt;n&gt; 是人类好念、好口头下发的**别名**，不是权威本身——权威是它们各自绑定的 git commit。任何引用某个 D/S/P revision 的地方（design.md/spec.md/plan.md 自身头部字段、Revision History/Plan Revision History 表、gate entry）必须同时记录该文件在声明该 revision 时的 `git log -1 --format=%H -- <path>` commit SHA，写作 `D<n> (commit <sha>)` / `S<n> (commit <sha>)` / `P<n> (commit <sha>)`。
+
+restore 或 gate evaluation 时，重新计算目标文件当前的 `git log -1` commit SHA，与正文头部声明的 revision 所绑定的 SHA 比对：
+
+- 相符：revision 号可信，继续。
+- 不符（文件有更新的 commit，但正文声明的 revision 号未变）：revision 号已经和内容脱节——按 evidence 胜过 stale status 处理，视为该文件已产生未分类的 drift，必须先重新判定属于哪类 drift（本节上方四类之一）并让 revision 号追上真实内容，才能继续读取或引用该 revision。
+- 不能解析出 commit（文件从未提交、或仓库不可用）：视为证据缺口，按 P2 capture gap 记录，不得默认相符。
+
+这条规则把"revision 号有没有被正确更新"变成可机械核对的问题，不依赖 agent 自觉记得升级计数器。
+
 ## 3. Attempt、plan 与 Composition
 
 每次 implementation attempt 有唯一 Attempt ID：初始实现使用 initial，patch 使用其 patch-plan 文件 stem `YYYYMMDD-HHMM-&lt;patch-topic&gt;`；精确 stem 已存在时追加 `-02`、`-03`，且创建后不可改名。对应 plan 声明：
 
 ~~~text
 Attempt ID: <initial | patch-id>
-Design Revision: D<n>
-Spec Revision: S<n>
-Plan Revision: P<n>
+Design Revision: D<n> (commit <sha>)
+Spec Revision: S<n> (commit <sha>)
+Plan Revision: P<n> (commit <sha>)
 Composition: tickets=<true|false>, dag=<true|false>
 ~~~
 
@@ -47,7 +69,9 @@ Composition 的唯一事实源是当前 attempt plan，不在 spec 中声明，�
 
 一个状态只有一个事实源。plan 不保存 task checklist、task runtime status 或 ticket 正文。简单 no-DAG attempt 没有结构化 task 状态；恢复需要由 Kind=attempt 的 progress ledger 解决，不通过给 plan 增加 executable task checklist。dag=true 时 DAG 是必需的持久过程记录，不得只留在对话/handoff 或回写 plan。
 
-plan 在 attempt 活动期间可通过 Plan Revision: P&lt;n&gt; 修订策略、Composition 或验证选择；P revision 在该 attempt 内从 P1 单调递增，每次修订记录摘要与 artifact relocation。terminal gate verdict 后冻结。Composition 变化只影响当前 attempt，不修改 D/S revision；迁移后不得保留两个可写 execution-state source。
+plan 在 attempt 活动期间可通过 Plan Revision: P&lt;n&gt; 修订策略、Composition 或验证选择；P revision 在该 attempt 内从 P1 单调递增，每次修订记录摘要与 artifact relocation（含对应 commit SHA，见上方 revision-commit binding）。terminal gate verdict 后冻结。Composition 变化只影响当前 attempt，不修改 D/S revision；迁移后不得保留两个可写 execution-state source。
+
+**Plan Revision 变化后，已创建的 ticket/DAG 必须跟进**：每个 tickets/&lt;ticket&gt;.md 与当前 attempt DAG 都声明自己创建/最后确认时所依据的 `Plan Revision: P<n>`。plan 从 P&lt;n&gt; 升级到 P&lt;n+1&gt; 后，任何仍声明旧 P&lt;n&gt; 的 ticket/DAG 视为 `NEEDS-REVALIDATION`，直到：要么其内容被确认在新 revision 下仍然成立并把字段更新为 P&lt;n+1&gt;，要么被重新生成。restore 时必须逐个比对 ticket/DAG 声明的 P 号与当前 plan 的 P 号，不一致时不得当作可用状态，需先完成上述 reconciliation。
 
 可选 dispatch shorthand 只展开当前 attempt Composition，不是 sizing gate：
 
@@ -102,6 +126,8 @@ plan 包含两类验证信息：
 
 findings.md 是发现 inbox。gate evaluation 前必须分流：设计决定进 design，规范性行为进 spec，长期项目知识进入 gate Durable Deltas → _pending.md，验证证据进 plan Execution Record，其余调查事实/风险保留在 findings。findings 不成为第二 SoT。
 
+**这是任意 terminal verdict（pass/fail/defer）的硬性前置条件，力度等同 Stage 7**：findings.md 中存在未分流、且不属于"已验证调查事实/风险，保留在 findings 是正确去处"的条目时，不得写入 pass、fail 或 defer 的 terminal gate entry——不只是 pass。blocked entry 不受此约束（blocked 本来就允许如实记录 capture gap，后续用新 entry 补齐）。
+
 ## 7. Append-only Gate Ledger 与 Stage 7
 
 package 永远只有一个 gate.md。它是 newest-first 的 append-only gate evaluation ledger；每次 evaluation 在文件顶部说明之后插入新 entry，旧 entry 不修改。
@@ -113,9 +139,9 @@ package 永远只有一个 gate.md。它是 newest-first 的 append-only gate ev
 - Attempt ID:
 - Supersedes: <gate-entry-id | none>
 - Evaluated at:
-- Design revision:
-- Spec revision:
-- Plan revision:
+- Design revision: D<n> (commit <sha>)
+- Spec revision: S<n> (commit <sha>)
+- Plan revision: P<n> (commit <sha>)
 - Composition:
 - Comparison point:
 - Evidence: <one or more plan path#execution-record-anchor>
@@ -145,10 +171,13 @@ append-only 写入顺序：先保留下一个 G id、固定 comparison point 与
 
 - design/spec 各有唯一当前 revision（lightweight Design 的 D revision 在 spec 可解析），正文无并行新旧合同；revision history 足以解释 supersession。
 - 当前 attempt plan 声明 Attempt ID、D/S/P revision 与唯一 Composition，且与 earned artifacts 一致。
+- 每个引用到的 D/S/P revision 都带 commit SHA；restore/evaluation 时该 SHA 与目标文件当前 `git log -1` 结果相符，不符则先完成 revision-commit binding 的 drift 处理，不得当作可信 revision 直接使用。
+- 每个 earned ticket/DAG 声明的 Plan Revision 与当前 plan 的 P 号一致；不一致的按 NEEDS-REVALIDATION 处理，不得当作可用状态。
 - package 同时最多一个 active attempt；多个未被 terminal entry 冻结的 plan 是 lifecycle violation，restore 必须停止。
 - plan 无 task runtime status、ticket 正文或长期 contract；通用验证政策只引用，不复制。
 - 每项 AC 有 evidence producer/manual owner；task-to-AC 与 typed dependency 引用均可解析且无环。
 - execution seam 的 contract 在 spec，execution owner 在当前 attempt DAG，acceptance evidence 在 plan/gate 或 ticket。
 - plan Execution Record 使用稳定 anchor 且 append-only；gate evidence 链接可解析到对应 record。
 - gate entry newest-first、旧块未修改；G 编号不复用，Supersedes、revision、comparison point、ER anchor、verdict 与 Durable Deltas 完整。
-- terminal gate 后 plan 已冻结；重新 patch 前已与当前 module knowledge/code 对账。
+- findings.md 在写入任意 terminal entry（pass/fail/defer，不只 pass）前已完成分流。
+- terminal gate 后 plan 已冻结；重新 patch 前已完成 Module Knowledge Watermark 对账，不是凭印象假设未变。

@@ -21,10 +21,11 @@ description: >
 
 1. 读取仓库规则、当前 design/spec revision、所有 attempt plans、gate.md 最新 entry、当前 attempt 的 tickets/DAG/progress、findings 与实际证据。
 2. 选择唯一未被 terminal gate 冻结的 attempt；若不存在 active attempt，停止并路由 impl-planning 创建 patch；若同时存在多个 active attempt，报告 lifecycle violation 并停止，不能按时间猜一个。
-3. 从当前 plan 读取 Attempt ID、D/S/P revision 与 Composition，校验 artifact 一致。
-4. reconcile 状态与证据；evidence 胜过 stale status。
-5. 校验 typed ticket edges、DAG Depends on、AC references 与 cycles。
-6. 执行 readiness resolution，按文档顺序选择第一个 actionable unit；不自动派工。
+3. 从当前 plan 读取 Attempt ID、D/S/P revision 与 Composition，校验 artifact 一致。对 design.md/spec.md/plan.md 各自重新计算 `git log -1 --format=%H -- <path>`，与正文头部声明的 revision 绑定的 commit SHA 比对；不符时该 revision 号已和内容脱节，按 impl-package-composition-contract.md §2 处理为未分类 drift，不得当作可信 revision 继续读取。
+4. reconcile 状态与证据；evidence 胜过 stale status。逐个比对每个 earned ticket/DAG 声明的 Plan Revision 与当前 plan 的 P 号；不一致的标 NEEDS-REVALIDATION，不当作可用状态。
+5. 是新 attempt（尤其重新激活已关闭 package）时，先完成 Module Knowledge Watermark 对账：重新计算 watermark 文件当前 commit SHA，与上一 attempt 记录的 watermark 比对，不符先 diff 确认 design/spec 是否仍成立。
+6. 校验 typed ticket edges、DAG Depends on、AC references 与 cycles。
+7. 执行 readiness resolution，按文档顺序选择第一个 actionable unit；不自动派工。
 
 ## Current attempt state
 
@@ -49,13 +50,13 @@ gate evaluation 前逐项分流 findings：
 - 验证证据 → plan Execution Record；
 - 其余已验证调查事实/风险 → 保留 findings。
 
-存在未完成的规范性分流时不能写 pass entry。
+存在未完成的规范性分流时不能写任何 terminal entry（pass/fail/defer，不只 pass）；blocked entry 不受此约束。
 
 ## Append-only gate ledger
 
 package 只使用 gate.md。每次 evaluation 在 # Gate Ledger 标题之后插入最新 entry；旧 entry 不修改。
 
-entry ID 为 <attempt-id>-G<n>，同 attempt 从 G1 取已有最大编号加一且不复用。entry 必须包含 Attempt ID、Supersedes、evaluated time、D/S/P revision、Composition、comparison point、一个或多个 plan ER anchor、blocker/deferred item、verdict reason 与 Durable Deltas。
+entry ID 为 <attempt-id>-G<n>，同 attempt 从 G1 取已有最大编号加一且不复用。entry 必须包含 Attempt ID、Supersedes、evaluated time、D/S/P revision（各带 commit SHA）、Composition、comparison point、一个或多个 plan ER anchor、blocker/deferred item、verdict reason 与 Durable Deltas。
 
 - blocked 后补证：保留旧 blocked entry，新增 G<n+1> 并 Supersedes 旧 entry。
 - pass/fail/defer：terminal，冻结对应 plan。

@@ -2,7 +2,7 @@
 
 Status: Draft | Design Gate Passed | Design Gate Blocked
 Created:
-Design Revision: D<n>
+Design Revision: D<n> (commit <sha>)
 Requirement source:
 Topic slug:
 Package ID:
@@ -81,5 +81,7 @@ authorize stable-document edits. Canonical capture is gate Durable Deltas -> _pe
 
 ## Revision History
 
-| Previous | New | Change summary | Authority | Date | Superseded note |
-| --- | --- | --- | --- | --- | --- |
+<!-- commit = git log -1 --format=%H -- design.md at the moment "New" became current. -->
+
+| Previous | New | Commit | Change summary | Authority | Date | Superseded note |
+| --- | --- | --- | --- | --- | --- | --- |
