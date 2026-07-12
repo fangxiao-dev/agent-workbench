@@ -166,6 +166,10 @@ def _package_tree(project_root: Path, source_head: str, package_id: str) -> str:
     )
 
 
+def _blob_identity(project_root: Path, source_head: str, path: str) -> str:
+    return _git(project_root, "rev-parse", f"{source_head}:{path}")
+
+
 def _changed_after_watermark(
     project_root: Path, watermark: str, source_head: str, package_id: str
 ) -> bool:
@@ -222,6 +226,12 @@ def collect_inventory(
         ]
         findings_path = f"{prefix}findings.md"
         supplemental_findings = [findings_path] if findings_path in files else []
+        supplemental_evidence = [
+            {
+                "path": findings_path,
+                "blob": _blob_identity(project, resolved_head, findings_path),
+            }
+        ] if findings_path in files else []
         rows.append(
             {
                 "package_id": package_id,
@@ -230,6 +240,7 @@ def collect_inventory(
                 "tree": _package_tree(project, resolved_head, package_id),
                 "semantic_sources": semantic_sources,
                 "supplemental_findings": supplemental_findings,
+                "supplemental_evidence": supplemental_evidence,
                 "gate_paths": [f"{prefix}gate.md"]
                 if f"{prefix}gate.md" in files
                 else [],

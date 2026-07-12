@@ -140,6 +140,19 @@ class CollectorTest(unittest.TestCase):
             echo["supplemental_findings"],
             ["docs/implementations/echo/findings.md"],
         )
+        self.assertEqual(
+            echo["supplemental_evidence"],
+            [
+                {
+                    "path": "docs/implementations/echo/findings.md",
+                    "blob": run_git(
+                        self.project,
+                        "rev-parse",
+                        f"{self.source_head}:docs/implementations/echo/findings.md",
+                    ),
+                }
+            ],
+        )
         self.assertNotIn("docs/implementations/echo/plan.md", echo["semantic_sources"])
 
     def test_carry_forward_is_unioned_with_watermark_new_packages(self) -> None:
