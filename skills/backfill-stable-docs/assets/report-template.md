@@ -52,6 +52,13 @@
 | ID | Competing authorities | Safe invariant | Decision needed |
 | --- | --- | --- | --- |
 
+## Current Top-Level Knowledge Boundary
+
+| Affected top-level path | Current contract disposition | Retirement / future decision | Verification |
+| --- | --- | --- | --- |
+
+`CONTEXT.md` 与 `docs/top-level-knowledge/**` 不保留历史/退役能力的兼容说明。只有 owner 已批准的 future capability 才可登记 TODO，且必须明确为非当前合同、写明目标与前提。
+
 ## Tombstones And References
 
 | Source path | Final target | Status | Recommendation |

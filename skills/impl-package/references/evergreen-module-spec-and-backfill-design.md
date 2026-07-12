@@ -27,6 +27,12 @@
 
 常青文档必须可以独立承载当前真相。旧专题设计不在最终仓库保留副本，也不能 成为现行文档或工具的运行依赖。
 
+### 顶层当前知识纪律
+
+`CONTEXT.md` 与 `docs/top-level-knowledge/**` 是当前产品知识，不是历史兼容层：只能陈述当前语言、意图、架构和行为。退役能力、历史字段和“历史只读”解释必须留在 Git 历史、migration ledger、implementation package 或 compaction record，不能保留在顶层当前合同中。
+
+只有 owner 明确批准的 future capability 才能在顶层登记 TODO；该 TODO 必须标为 future / non-current，并写明目标与前提。没有此批准时，删除退役概念，不创建推测性的 TODO。
+
 ## 已定决策
 
 | 决策点 | 结论 |

@@ -37,6 +37,17 @@ apply 只处理 owner 明确批准的 report item。批准必须指向具体 rep
 
 完成标准：本轮动作没有越过所选模式。
 
+## 顶层当前知识边界
+
+`CONTEXT.md` 与 `docs/top-level-knowledge/**` 只承载当前产品语言、意图、架构与行为；不得为了说明迁移、兼容或退役状态而保留历史能力、历史字段或“历史只读”表述。
+
+- 退役能力的 provenance 留在 Git 历史、migration ledger、implementation package 或 compaction report/apply record，不能写回顶层当前知识。
+- 只有 owner 已明确批准的未来能力才可登记 TODO；TODO 必须标为 future / non-current，写明 owner、目标和未满足的前提，且不得伪装成当前 lifecycle、PRD 或 ARD 合同。
+- 没有 owner 批准的未来能力时，移除该概念，不创建“可能以后恢复”之类 TODO。
+- 历史输入与当前顶层知识不一致时，先按 source 顺序和 owner conflict gate 裁决；不能通过把历史说明留在顶层来回避裁决。
+
+完成标准：受本轮影响的顶层路径只描述当前事实；退役与未获批准的 future 不会以合同、兼容说明或 TODO 残留。
+
 ## Report 工作流
 
 1. **冻结基线**：记录 HEAD、dirty paths、watermark、module 清单和报告目标。
@@ -45,7 +56,8 @@ apply 只处理 owner 明确批准的 report item。批准必须指向具体 rep
 4. **应用 litmus**：先判断 durable 意图，再判断可验证行为；双是时优先作为 module spec 候选。含 why/how 的句子拆成两个 delta，避免 PRD/spec 复制。
 5. **去重与裁决**：同 authority、触发条件、要求/禁止结果才可合并。检查现有 常青文档、代码/测试、批准设计和 owner 决策；冲突不得自行选边。
 6. **遵从 tombstone**：旧路径已有重定向时读取最终目标，不重新扫描被替代的 全量旧树。断链、循环或语义不等价只列报告，不在 report 修复。
-7. **生成报告**：使用 [报告模板](assets/report-template.md)，每个 module 都要有 `candidate`、`already covered`、`conflict` 或 `no delta` 结论，不能只写有发现的模块。
+7. **顶层当前性检查**：对受影响的 `CONTEXT.md` 与 `docs/top-level-knowledge/**` 区分 current contract、退役历史与 owner-approved future；把需要清除的历史表述或已批准 TODO 边界记录在报告中。
+8. **生成报告**：使用 [报告模板](assets/report-template.md)，每个 module 都要有 `candidate`、`already covered`、`conflict` 或 `no delta` 结论，不能只写有发现的模块。
 
 报告候选必须给出 source、destination、statement、constraint class、authority、 精确 evidence、现有覆盖、风险、建议动作和置信度。仅有代码事实、没有 durable 理由的条目不得提升；仅有旧设计、没有 current authority 的条目不得提升。
 
@@ -60,7 +72,8 @@ apply 只处理 owner 明确批准的 report item。批准必须指向具体 rep
 5. tombstone 指向已迁移目标时遵从重定向；除非批准项明确要求，不重写历史源。
 6. 运行项目规定的文档、链接和 module contract 验证。
 7. 所有批准项已应用、明确 deferred 或记录冲突后，watermark 最多推进到 report 审计的 source HEAD；不得吞掉 report 之后的新 commit。
-8. 使用 [Apply 模板](assets/apply-template.md) 在 `_compaction/` 记录 apply 结果、验证证据、新 watermark、未处理 item 与 carry-forward。watermark 推进不能隐式吞掉未处置 source；未处置 package 必须保留为 carry-forward，直到后续 report/apply 明确 dispose 或 supersede。
+8. 对受影响顶层路径验证：退役术语/字段没有残留；若有 TODO，逐条确认其 owner-approved future 标记、目标和前提。
+9. 使用 [Apply 模板](assets/apply-template.md) 在 `_compaction/` 记录 apply 结果、验证证据、新 watermark、未处理 item 与 carry-forward。watermark 推进不能隐式吞掉未处置 source；未处置 package 必须保留为 carry-forward，直到后续 report/apply 明确 dispose 或 supersede。
 
 完成标准：批准项与实际 diff 1:1；pending、验证和 watermark 可追溯；未批准 内容没有被顺手修改。
 
