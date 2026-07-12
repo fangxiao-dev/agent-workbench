@@ -8,7 +8,7 @@ description: >
 
 为一个 implementation attempt 创建可追溯的过程计划。design/spec 是活动变更的当前 SoT；plan 只消费它们，并决定本次 attempt 的 tickets/DAG 形态、执行顺序与验证路径。
 
-共享 artifact lifecycle、Composition、gate 与 Stage 7 语义只引用 ../impl-package/references/impl-package-composition-contract.md。
+共享 artifact lifecycle、Composition、gate 与 Stage 7 语义只引用 `../references/impl-package-composition-contract.md`。
 
 ## 输出
 

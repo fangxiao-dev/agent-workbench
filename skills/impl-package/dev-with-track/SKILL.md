@@ -6,7 +6,7 @@ description: >
 
 # Dev With Track
 
-执行并恢复 docs/implementations/<package-id>/ 中的当前 attempt。共享 artifact lifecycle、Composition、readiness 与 gate 语义只引用 ../impl-package/references/impl-package-composition-contract.md。
+执行并恢复 docs/implementations/<package-id>/ 中的当前 attempt。共享 artifact lifecycle、Composition、readiness 与 gate 语义只引用 `../references/impl-package-composition-contract.md`。
 
 ## Ownership
 

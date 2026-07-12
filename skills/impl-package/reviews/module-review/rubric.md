@@ -1,5 +1,5 @@
 ---
-target: skills/module-review
+target: skills/impl-package/reviews/module-review
 updated: 2026-07-10
 ---
 ## 原则

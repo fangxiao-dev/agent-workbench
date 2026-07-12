@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 $skill = Join-Path $PSScriptRoot '..\SKILL.md'
 if (-not (Test-Path $skill)) {
-    throw 'Expected skills/module-review/SKILL.md to exist.'
+    throw 'Expected skills/impl-package/reviews/module-review/SKILL.md to exist.'
 }
 
 $body = Get-Content -Raw $skill

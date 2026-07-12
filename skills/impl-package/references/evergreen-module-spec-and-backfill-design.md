@@ -198,8 +198,8 @@ Gate 5 禁止读取 Git 旧版本只约束语义 reviewer；verifier 使用 `git
 
 Phase 2 与 Phase 1 并行在 agent-workbench 隔离 worktree 开发，修改：
 
-- `skills/dev-with-track/assets/templates/gate.md`；
-- `skills/dev-with-track/SKILL.md`；
+- `skills/impl-package/dev-with-track/assets/templates/gate.md`；
+- `skills/impl-package/dev-with-track/SKILL.md`；
 - `skills/project-knowledge-manager/SKILL.md`；
 - `skills/project-knowledge-manager/references/routing-taxonomy.md`。
 
