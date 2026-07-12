@@ -34,6 +34,7 @@ Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。
 
 - 不创建或重写 design/spec。发现行为或设计 drift 时路由 req-align，等待所需 gate 通过。
 - 不把 interface、seam contract、compatibility、全局约束或 Acceptance Semantics 复制进 plan；这些属于 spec。选择 rationale 属于 design。
+- 不把 plan 写成逐行实现脚本：不复制完整 production code、不要求 2–5 分钟微步骤，也不内嵌每一步 commit 指令。plan 应约束实施方向和可验证边界，同时允许执行者基于当前代码完成局部判断。
 - 不在 plan 保存 task checklist、task/ticket runtime status、worker ownership 或通用验证模板副本。
 - 实际验证过程可 append 到 Execution Record；terminal gate verdict 后 plan 冻结。
 - tickets 由 to-tickets 拥有，DAG 由 create-task-dag 拥有，progress/findings/gate ledger 由 dev-with-track 拥有。
@@ -65,14 +66,21 @@ plan 活动期间发现 Composition 判断错误时：
 
 ## Plan 内容
 
+### Coverage And Change Map
+
+- 为 spec 的每项 Acceptance Semantics 指明对应的 Execution Strategy 与 Planned Verification 落点；使用引用或稳定标识，不复制 spec 正文。
+- 列出预计创建、修改或移除的模块/文件及其责任，并标明关键依赖顺序和集成点。文件清单是实施地图，不伪造尚未确认的行号或代码细节。
+- 标出迁移、兼容、rollout、rollback 和高风险步骤；需要 owner 决策的事项必须在执行前解决，不能用 `TBD`、`TODO` 或“稍后处理”占位。
+- plan 中使用的模块名、类型名、路径和术语必须与当前 spec、仓库事实及既有代码一致；发现不一致时先判断是 plan 错误还是 contract drift。
+
 ### Execution Strategy
 
-只记录本 attempt 的实施顺序、具体迁移操作、集成动作与回滚操作。稳定 interface、seam、compatibility 与约束必须先进入 spec。
+只记录本 attempt 的实施顺序、模块/文件责任、具体迁移操作、集成动作与回滚操作。执行单元应足以独立交付或验证，但不展开成机械微步骤。稳定 interface、seam、compatibility 与约束必须先进入 spec。
 
 ### Planned Verification
 
 - 引用权威 test/review policy。
-- 选择本次要运行的检查、预期结果和 evidence owner。
+- 将 Acceptance Semantics 映射到本次要运行的检查、预期结果和 evidence owner；命令只有在仓库中可确认时才写成精确命令。
 - 不复制 Data Safety、UI Evidence、Real Route Safety 等通用 checklist。
 
 ### Execution Record
@@ -91,7 +99,7 @@ plan 活动期间发现 Composition 判断错误时：
 1. 读取当前 design/spec revision、gate ledger 最新 entry、module knowledge/code 对账结果与仓库验证政策。
 2. 确认需要的 Design/Spec Gate 已通过；实现-only drift 允许复用现有 D/S。
 3. 分配 Attempt ID 与 P1，独立决定 Composition。
-4. 写 Execution Strategy、Planned Verification、rollout/rollback 与依赖的 policy 链接。
+4. 建立 spec coverage 与 change map，写 Execution Strategy、Planned Verification、rollout/rollback 与依赖的 policy 链接；清除 blocker placeholder，核对术语、模块与路径一致性。
 5. tickets=true 时调用 to-tickets draft；dag=true 时在必要输入齐备后调用 create-task-dag。
 6. 交叉检查 ticket/DAG 暴露的 contract 缺口；规范性缺口回 req-align，过程策略缺口升级 P revision。
 7. 执行期间只 append Execution Record；状态由对应 artifact 维护。
@@ -100,6 +108,9 @@ plan 活动期间发现 Composition 判断错误时：
 ## Review Checklist
 
 - Attempt ID、D/S/P revision 与 Composition 唯一且可解析。
+- 每项 Acceptance Semantics 都能定位到 Execution Strategy 与 Planned Verification；不存在覆盖缺口或 `TBD`/`TODO` blocker。
+- change map 给出预计模块/文件责任、依赖顺序和集成点，且没有伪造行号、复制完整实现代码或机械微步骤。
+- plan 中的模块名、类型名、路径和术语与当前 spec 及仓库事实一致。
 - plan 未复制 design/spec contract、ticket 正文、task 状态或通用 checklist。
 - 每个长期 seam/interface/constraint 都能在 spec 找到。
 - Planned Verification 引用权威 policy；Execution Record 使用稳定 anchor 且 append-only。
