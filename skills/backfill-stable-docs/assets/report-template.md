@@ -5,7 +5,10 @@
 - Project:
 - Branch / HEAD:
 - Dirty baseline:
-- Watermark:
+- Method Activation Ref:
+- Project Source Watermark:
+- Source HEAD:
+- Carry-forward input:
 - Module inventory source:
 - Sources inspected:
 
@@ -39,6 +42,11 @@
 | Source | Affected module | Durable delta | Disposition |
 | --- | --- | --- | --- |
 
+## Carry-Forward Sources
+
+| Package ID | Reason | Tree / evidence identity | Next disposition gate |
+| --- | --- | --- | --- |
+
 ## Conflicts And Owner Decisions
 
 | ID | Competing authorities | Safe invariant | Decision needed |
@@ -58,6 +66,7 @@
 - Current:
 - Audited through:
 - Proposed next watermark after approved apply:
+- Carry-forward after proposed advancement:
 - Blockers:
 
 ## Read-only Attestation
