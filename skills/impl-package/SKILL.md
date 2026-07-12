@@ -14,8 +14,8 @@ description: >
 
 持久单位是 `docs/implementations/<package-id>/`。体系由两部分咬合：
 
-- **文档维护层**：常青四层（产品意图 / 模块意图 / 模块契约 / 变更事件），真相住这里，每次开发最后汇回。
-- **开发 6+1 流程**：6 步把改动做出来 ＋ 1 步回刷交接把长期知识汇回文档层。
+- **文档维护层**：常青四层（产品意图 / 模块意图 / 模块契约 / 变更事件），真相住这里；开发收口后可以通过 backfill 把 durable delta 汇回。
+- **开发 6 步主流程 + 可选回刷**：6 步把改动做出来；backfill 是收口后的维护提示与周期性兜底，不阻塞当前交付。
 
 ## 系统图（供 AI 读取）
 
@@ -35,12 +35,12 @@ flowchart TD
     RV -->|碰安全路径| SR[safety-review]
     RV --> CAP[保留 G id + Stage 7 登记]
     CAP --> GT[gate.md 顶部插入不可变 entry]
-    GT --> BF[backfill：定期 report/apply]
+    GT -. 可选提示 / 周期任务 .-> BF[backfill：report / apply]
     BF -. 定期 report/apply 兜底 .-> EV[(常青四层 module-knowledge)]
     EV -. 下次改动读取 .-> RA
 ```
 
-`to-tickets` 与 `create-task-dag` 是 earn-gated 的按需步：只有当前 attempt plan 判定 `tickets=true` / `dag=true` 才走。虚线是异步回路——回刷登记在 gate 发生，真正压实由定期 backfill 任务做并兜底。
+`to-tickets` 与 `create-task-dag` 是 earn-gated 的按需步：只有当前 attempt plan 判定 `tickets=true` / `dag=true` 才走。backfill 虚线是异步维护提示：gate 关闭后应提醒 owner 可以运行 `backfill-stable-docs`，但不自动执行、不要求本次完成，也不影响当前 gate 或任务的 closed 判断；真正压实可由后续 report / apply 或周期任务完成。
 
 ## 阶段地图
 
@@ -53,7 +53,7 @@ flowchart TD
 | 4 排执行图（按需） | `create-task-dag` | 当前 attempt DAG | plan 判 `dag=true` |
 | 5 执行 | `dev-with-track` | `progress` · plan Execution Record · append-only `gate.md` | 上游就绪 / 跨 session 续 |
 | 6 审查 | `code-review`（恒） · `module-review` · `safety-review` | review evidence（进入 plan ER） | 见下方路由 |
-| +1 回刷交接 | `backfill-stable-docs` | `_pending.md` | gate 关闭；定期兜底 |
+| 可选回刷 | `backfill-stable-docs` | report / approved apply；必要时更新 `_pending.md` | gate 关闭后提示；积累 durable delta 或周期维护时执行，不阻塞当前交付 |
 
 ## 正向路由：你在哪 → 进哪个 skill
 
@@ -63,7 +63,7 @@ flowchart TD
 - 当前 attempt plan 判 `dag=true`，plan（及相关 approved 票）就绪 → **`create-task-dag`**。
 - 上游产物就绪，要开始 / 恢复执行 → **`dev-with-track`**。
 - 集成后要审查：`code-review` 恒查；改动 interface / seam / 契约 → **`module-review`**；碰 auth / 支付 / webhook / 迁移 / 外部写入 → **`safety-review`**。
-- gate 已关，处理长期知识 → **`backfill-stable-docs`**（登记在 gate 已发生；压实与兜底由定期 report / apply 做）。
+- gate 已关 → **提示**可按需使用 `backfill-stable-docs` 处理 durable delta。提示不等于执行授权：只有用户要求、已有明确维护计划，或进入周期性 report / approved apply 时才实际调用；本轮不做 backfill 也可以正常收口。
 
 断链就退回上游，别硬猜：缺 plan 回 `impl-planning`；输入太宽没切片回 `to-tickets`；Composition/artifact 对不上回 `impl-planning` 修订 P revision，只有暴露出真实 contract drift 才回 `req-align` 重过相应门。
 
