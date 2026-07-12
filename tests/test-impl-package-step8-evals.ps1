@@ -128,6 +128,25 @@ Assert-Contains $specAxis 'no third drift reviewer' 'Module-review reviewer topo
 $safetyP0 = Eval-Text (Find-Eval $evals['safety-review'] 1)
 Assert-Contains $safetyP0 'idempotency' 'Safety-review P0 guard'
 
+$implEntry = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\SKILL.md')
+$compositionContract = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\references\impl-package-composition-contract.md')
+$systemDesign = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\references\impl-package-system-design.md')
+$backfillDesign = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\references\evergreen-module-spec-and-backfill-design.md')
+$devWithTrack = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\dev-with-track\SKILL.md')
+$introHtml = Get-Content -Raw -LiteralPath (Join-Path $repo 'skills\impl-package\assets\impl-package-intro.html')
+foreach ($surface in @($implEntry, $compositionContract, $systemDesign, $backfillDesign, $devWithTrack, $introHtml)) {
+    Assert-Contains $surface '不阻塞' 'Backfill must be explicitly non-blocking across every current guidance surface.'
+}
+Assert-Contains $compositionContract 'terminal gate entry 写入前必须完成 Stage 7 durable-delta capture' 'Composition contract must keep capture inside the terminal gate.'
+Assert-Contains $compositionContract '提示本身不构成 report/apply 授权' 'Composition contract must separate prompting from authorization.'
+Assert-Contains $backfillDesign '## 当前稳态用法' 'Backfill design must lead with current steady-state usage.'
+Assert-Contains $backfillDesign '不替 terminal gate 履行 Stage 7 capture' 'Backfill cannot replace gate capture.'
+Assert-Contains $devWithTrack '另以非阻塞 follow-up 提示可选 backfill' 'Execution owner must report optional backfill without reopening the gate.'
+Assert-Contains $introHtml '第二部分 · 6 步主流程' 'Human intro must present a six-step main flow.'
+Assert-Contains $introHtml 'Gate 后可选维护:提示 Backfill,但不自动执行' 'Human intro must place backfill outside the numbered flow.'
+Assert-NotContains $introHtml '开发 6+1' 'Human intro must not retain the obsolete 6+1 model.'
+Assert-NotContains $introHtml '+1 回刷交接' 'Human intro must not present backfill as a seventh step.'
+
 $activeRoots = @('skills\impl-package\req-align', 'skills\impl-package\to-tickets', 'skills\impl-package\impl-planning', 'skills\impl-package\create-task-dag', 'skills\impl-package\dev-with-track', 'skills\impl-package\reviews\module-review', 'skills\impl-package\reviews\safety-review')
 foreach ($relativeRoot in $activeRoots) {
     $matches = Get-ChildItem -Path (Join-Path $repo $relativeRoot) -Recurse -File | Select-String -SimpleMatch -Pattern 'to-issues'

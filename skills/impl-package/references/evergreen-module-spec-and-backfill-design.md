@@ -3,9 +3,9 @@
 ## 来源与状态
 
 - Created at: 2026-07-09
-- Revised at: 2026-07-10（v2 全量迁移；v3 合并为 module-knowledge 目录 + module PRD 层）
+- Revised at: 2026-07-12（补充稳态使用与 backfill 授权边界）
 - Source: brainstorming session（agent-workbench，基于 `D:\CodeSpace\TaskManager\20_Sources\2026-06-17-func-design-directory-repositioning.md` 定稿；owner 于 2026-07-10 先改为全量迁移，再确认常青层合并为 `docs/module-knowledge/` 并新增模块级 PRD）
-- Status: 设计已批准；Phase 1/2 已完成，Phase 3 skill 提前创建并等待首次真实 report 审阅，激活与合入门不变
+- Status: 设计已批准并进入稳态使用；历史 Phase 1–3 仅记录首次项目的迁移和激活过程，不是当前调用步骤
 - 首个实例项目: prj-supplyer-webapp
 
 ## 目标
@@ -16,13 +16,20 @@
 2. 将旧 `func-design` 的当前行为规则全量蒸馏为模块合同，将当前纯模块意图延期 登记到 pending；审核通过后删除旧文档树，provenance 由 Git 历史与迁移台账 承担。
 3. 以 dev-with-track 任务包为默认工作形态；任务关闭时登记长期规则，定期把 implementation 产物压实回常青文档。
 
+## 当前稳态用法
+
+1. 任意 terminal gate（pass/fail/defer）entry 写入前，`dev-with-track` 必须完成 durable delta 或 `none + reason` capture、`_pending.md` 注册、受影响 module truth pointer 与必要 stub。这是 gate 内关闭合同，不能延期给 backfill。
+2. gate 关闭后只提示可按需调用 `backfill-stable-docs`。未运行 backfill 不影响 gate、交付或任务 closed；可以延期、批量或按周期维护。
+3. `report` 只有在用户明确要求、已有维护计划或周期任务上下文中才运行；它对 source 只读，只生成 compaction report。`apply` 还必须绑定 owner 明确批准的 report item ID。提示不构成 report/apply 授权。
+4. backfill 消费已 capture 的 delta，并通过 gate 漏登对账和无主 commit 扫描发现 capture gap；它不替 terminal gate 履行 Stage 7 capture，也不重新打开已关闭 gate。
+
 ## 心智模型
 
 事件溯源 + 快照：
 
 - implementation package-id 内 `spec.md` / `design.md` = 变更事件与事实来源；
 - 常青文档（module-knowledge 的 prd/spec、顶层 PRD、ARD、项目语言、 tech-stack、hands-on）= 可直接阅读的当前快照；
-- 回刷 = 对新事件做 compaction / checkpoint；
+- 回刷 = gate 后异步执行的 compaction / checkpoint；capture 已在 gate 内完成，回刷可以延期、批量和周期执行；
 - Git 历史 + 迁移台账 = 已删除旧设计层的 provenance。
 
 常青文档必须可以独立承载当前真相。旧专题设计不在最终仓库保留副本，也不能 成为现行文档或工具的运行依赖。
@@ -101,14 +108,18 @@ docs/module-knowledge/
 
 | Owner | 拥有内容 |
 | --- | --- |
-| `dev-with-track` | gate 关闭时轻量登记 durable delta、destination 与 evidence；保留两问 litmus 本体 |
+| `dev-with-track` | terminal gate entry 写入前完成 Stage 7 durable-delta capture；blocked 的 capture gap 只由后续 entry 补齐；保留两问 litmus 本体 |
 | `project-knowledge-manager` | hands-on knowledge 维护与跨文档层的入口分流；不复制 module 层压实方法 |
-| `backfill-stable-docs` | module PRD/spec 分流与压实、约束型合同提取、pending、惰性 PRD 创建、report/apply 和 watermark |
+| `backfill-stable-docs` | gate 后按明确授权执行 module PRD/spec 分流与压实、约束型合同提取、pending、惰性 PRD 创建、report/apply 和 watermark；不替 gate 履行 capture |
 | 项目 `docs/module-knowledge/` | 当前模块意图与行为合同快照；项目路径和 module 清单留在项目侧 README |
 
 module `prd.md` 超过 250 行时触发 owner 内容审查；首建内容不足以形成 Purpose、 用户或 journey、Outcomes、Scope/Non-goals 以及到顶层 PRD/module spec 的链接时， 继续保留在 `_pending.md`，不创建薄弱文件。
 
-## Phase 1：全量迁移
+## 附录：首次迁移与激活历史
+
+以下 Phase 1–3、bootstrap、worktree 与两仓库交付顺序只记录首个实例项目的迁移 provenance，不得作为当前 agent 的执行路由。当前用法以上文“当前稳态用法”为准。
+
+### 历史 Phase 1：全量迁移
 
 ### 根更名与模块目录化（蒸馏前的机械步）
 
@@ -194,7 +205,7 @@ Gate 5 禁止读取 Git 旧版本只约束语义 reviewer；verifier 使用 `git
 
 任一轮失败，都不得删除旧树或合入本地 `develop`。
 
-## Phase 2：任务结束时登记长期规则
+### 历史 Phase 2：建立 gate 内 capture 合同
 
 Phase 2 与 Phase 1 并行在 agent-workbench 隔离 worktree 开发，修改：
 
@@ -203,7 +214,7 @@ Phase 2 与 Phase 1 并行在 agent-workbench 隔离 worktree 开发，修改：
 - `skills/project-knowledge-manager/SKILL.md`；
 - `skills/project-knowledge-manager/references/routing-taxonomy.md`。
 
-terminal gate entry 写入前：
+terminal gate entry 写入前（延期的是后续压实，不是本次 capture）：
 
 - 有长期规则：登记一句话 delta、目标长期文档和受影响模块；
 - 没有长期规则：明确记录“没有”及原因；
@@ -227,7 +238,7 @@ routing taxonomy 与 `_pending.md` 的目的地枚举按四层定位改写：
 
 本阶段不新增自动测试。实施必须保留当前 workbench `dev-with-track/SKILL.md` 中尚未提交的 patch-mode 修订。在 routing taxonomy 末尾加入一张轻量人工 fixture 表，覆盖 module-spec、module-prd、top-level-prd、context-language、变更时 design 与无 durable delta 六类输入，列出预期目的地和是否建档，并纳入人工验收。 在顶层 PRD journey 重构完成前，新增 `top-level-prd` delta 只登记 pending， 不继续扩写现有两份巨型 PRD。skill worktree 合入前，全局 junction 继续使用当前 `main`。
 
-## Phase 3：有界 bootstrap 与稳态回刷
+### 历史 Phase 3：有界 bootstrap 与稳态回刷激活
 
 Phase 3 skill 的创建时机提前到 Phase 1/2 完成后、两仓库合入前，以便先做首次 真实 report 试金石。激活门不变：不修改全局 junction，不在 owner 审阅首次 真实运行前合入 `main`；正式启用仍遵守两仓库交付顺序。
 
@@ -249,12 +260,13 @@ report 读取全部 5 个并分类 gate 状态。只有 gate/owner 已确认的�
 
 ### Report / apply
 
-- `report`：只读，收集 pending、gate 后漏登和无主 commit，生成建议报告；
-- `apply`：人工审阅报告后触发，更新长期文档、清理 pending、修复获批引用并 推进 watermark；
+- gate 后不自动调用；`report` 只在用户明确要求、已有维护计划或周期任务上下文中运行，对 source 只读，收集 pending、gate 后漏登和无主 commit，生成建议报告；
+- `apply` 只有在 owner 明确批准具体 report item ID 后触发，更新长期文档、清理 pending、修复获批引用并推进 watermark；
+- report/apply 均可延期且不回开已关闭 gate，也不影响当前交付或任务 closed；
 - 首轮从 agent-workbench Phase 3 worktree 显式调用，不修改全局 junction；
 - owner 审阅首次 report/apply 后，才合入新 skill；每周 routine 最后创建。
 
-## 两仓库交付顺序
+### 历史两仓库交付顺序
 
 1. webapp Phase 1 与 agent-workbench Phase 2 并行完成；
 2. Phase 1 五轮审核全部通过；
@@ -282,3 +294,5 @@ Phase 1 完成后立即为顶层 PRD 按 journey 粗粒度重构单独立项；p
 | 新 gate 早于新目录启用 | webapp 先合，agent-workbench 随后合 |
 | 首轮 backfill 报告失控 | 固定 5 个 bootstrap legacy package-id；稳态 watermark 从 Phase 2 activation commit 起 |
 | worktree 修改影响现用 skill | junction 保持指向当前 `main`；新 skill 从 worktree 显式试跑 |
+| 把 backfill 当作 gate 前置条件 | 明确 gate 内 capture 与 gate 后 compaction 分层；backfill 可延期且不阻塞 terminal gate |
+| 把提示误当执行授权 | report 需要明确维护上下文；apply 还需 owner 批准具体 report item ID |

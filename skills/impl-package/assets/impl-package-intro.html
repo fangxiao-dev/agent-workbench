@@ -176,9 +176,10 @@
         <div class="toc-part">第一部分 · 文档维护</div>
         <a href="#why">为什么要换</a>
         <a href="#evergreen">常青四层</a>
-        <div class="toc-part">第二部分 · 开发 6+1</div>
+        <div class="toc-part">第二部分 · 6 步主流程</div>
         <a href="#pipeline">开发流水线</a>
         <a href="#cases">四种情况</a>
+        <a href="#backfill">可选 Backfill</a>
       </nav>
     </aside>
 
@@ -189,8 +190,8 @@
         <span class="eyebrow">一句话:好在哪</span>
         <h2>四个它真正解决的问题</h2>
         <div class="props">
-          <div class="prop"><div class="ic">↔</div><h3>按需伸缩,不做无用功</h3><p>小改动只走「规格 + 计划」;复杂改动才长出验收票和执行图。没有一刀切的重流程。</p></div>
-          <div class="prop"><div class="ic">♻</div><h3>文档不会烂</h3><p>每次关闭时把长期知识归档进「常青文档」,旧过程退成 git 历史。不再有几十份没人维护的文档。</p></div>
+          <div class="prop"><div class="ic">↔</div><h3>按需伸缩,不做无用功</h3><p>小改动不额外生成 tickets 或 DAG;复杂改动才按验收切片和执行依赖扩展。没有一刀切的重流程。</p></div>
+          <div class="prop"><div class="ic">♻</div><h3>文档不会烂</h3><p>每次关门先 capture 值得保留的知识;常青文档的整理可由后续获授权的 backfill 完成。</p></div>
           <div class="prop"><div class="ic">◎</div><h3>一份东西一个主人</h3><p>每类产出只有一个负责的 skill、一个事实源,禁止两处维护同一状态。冲突时有固定裁决顺序。</p></div>
           <div class="prop"><div class="ic">⇄</div><h3>自动接力,断链自动退回</h3><p>各阶段靠共享前缀互相识别接力;缺了上游产物就自动退回去补,而不是硬着头皮往下猜。</p></div>
         </div>
@@ -200,7 +201,7 @@
       <div class="part">
         <div class="pn">第一部分</div>
         <h2>目录层级与文档维护</h2>
-        <p>先看「真相住在哪、怎么不烂」——这是整个体系稳定的地基,每次开发最后都汇回这里。</p>
+        <p>先看「真相住在哪、怎么不烂」——这是整个体系稳定的地基。每次开发关门时先登记 durable delta,后续再按授权把它压实进这里。</p>
       </div>
 
       <section id="why">
@@ -209,18 +210,18 @@
         <p class="lede">对比最早那套 <b>func-design + impl-plan</b>——每改一次就写一份设计加一份计划,永久堆在仓库里,最终堆到近百份、规则散落、无人维护。新体系换的是这套的根子。</p>
         <div class="cmp">
           <div class="head"><div>维度</div><div class="oldh">旧 · func-design + impl-plan</div><div class="newh">新 · Impl-Package</div></div>
-          <div class="r"><div class="dim">一次改动产出</div><div class="old">一份设计 + 一份计划,永久留在仓库</div><div class="new">一个 <b>变更事件包</b>;关闭后退成 git 历史,真相进常青快照</div></div>
-          <div class="r"><div class="dim">大小改动</div><div class="old">一刀切——改个字段也走全套重文档</div><div class="new"><b>按需伸缩</b>:小改动只要规格+计划,复杂改动才多长几件</div></div>
-          <div class="r"><div class="dim">文档演进</div><div class="old">只增不减,堆积、过时、互相矛盾,没人敢删</div><div class="new"><b>定期压实</b>:一处真相,旧事件交给 git 承担</div></div>
+          <div class="r"><div class="dim">一次改动产出</div><div class="old">一份设计 + 一份计划,永久留在仓库</div><div class="new">一个 <b>变更事件包</b>;gate capture 保证知识候选不丢,获授权的 backfill 再更新常青快照</div></div>
+          <div class="r"><div class="dim">大小改动</div><div class="old">一刀切——改个字段也走全套重文档</div><div class="new"><b>按需伸缩</b>:所有改动走主流程;只有挣得时才增加 tickets / DAG</div></div>
+          <div class="r"><div class="dim">文档演进</div><div class="old">只增不减,堆积、过时、互相矛盾,没人敢删</div><div class="new"><b>异步压实</b>:gate 内 capture,gate 后可延期 backfill,旧事件交给 git 承担</div></div>
           <div class="r"><div class="dim">长期知识</div><div class="old">埋在上百份历史文档里,找不到、无裁决</div><div class="new"><b>四层常青</b>:见下</div></div>
-          <div class="r"><div class="dim">结果</div><div class="old">越用越无法维护,知识事实上丢失</div><div class="new">关闭即归档 → 常青,<b>自带维护回路</b></div></div>
+          <div class="r"><div class="dim">结果</div><div class="old">越用越无法维护,知识事实上丢失</div><div class="new">capture 与 compaction 分层,<b>交付不被文档维护阻塞</b></div></div>
         </div>
       </section>
 
       <section id="evergreen">
         <span class="eyebrow">文档的骨架</span>
         <h2>常青四层：让真相有固定的家</h2>
-        <p class="lede">每次改动是「事件」,常青文档是「当前快照」,回刷就是把新事件压实进快照。四层各答一个问题,互不替代,靠固定文件名保障纪律。</p>
+        <p class="lede">每次改动是「事件」,常青文档是「当前快照」。gate 内 capture 记录待保留增量;backfill 是 gate 后独立的 compaction,可以延期、批量或周期执行。四层各答一个问题,互不替代,靠固定文件名保障纪律。</p>
         <div class="layers">
           <div class="layer"><span class="lk">产品级意图</span><span class="lv">为什么做、给用户什么价值 · <code>顶层 PRD / CONTEXT</code></span></div>
           <div class="layer"><span class="lk">模块级意图</span><span class="lv">这个模块为何存在 · <code>module-knowledge/&lt;模块&gt;/prd.md</code></span></div>
@@ -232,14 +233,14 @@
       <!-- ============ PART 2 ============ -->
       <div class="part">
         <div class="pn">第二部分</div>
-        <h2>开发流程:6 步开发 ＋ 1 步交接</h2>
-        <p>做一次改动怎么走这条流水线。6 步把改动做出来,第 7 步(交接)把学到的知识汇回第一部分的常青层——两部分在这里咬合。</p>
+        <h2>开发流程:6 步主流程</h2>
+        <p>6 步把改动做出来并完成 gate。durable-delta capture 是 terminal gate 的关门条件;真正更新常青文档的 backfill 位于主流程之后,按需提示和授权执行。</p>
       </div>
 
       <section id="pipeline">
         <span class="eyebrow">它怎么运转</span>
         <h2>一条主线，两处按需长出</h2>
-        <p class="lede">七个阶段串成一条线,每步有唯一负责的 skill 和产出。<b>切票</b>和<b>排图</b>只有需要时才长出来(灰色虚线);缺了上游就自动退回。</p>
+        <p class="lede">六个阶段串成一条主线,每步有唯一负责的 skill 和产出。<b>切票</b>和<b>排图</b>只有需要时才长出来(灰色虚线);缺了上游就自动退回。</p>
         <div class="flow">
           <div class="fstage"><div class="node">1</div><div class="card">
             <div class="h"><h3>对齐与调研</h3><span class="badge always">必经</span></div>
@@ -272,16 +273,19 @@
             <div class="trig"><b>触发</b>上游就绪;跨 session 续上也走这里</div>
           </div></div>
           <div class="fstage"><div class="node">6</div><div class="card">
-            <div class="h"><h3>审查</h3><span class="badge always">1 恒查 · 2 按需</span></div>
-            <div class="what">只有 code-review 每次都跑;另两个按风险信号触发——<b>小改动可能一个都不触发</b>。结论喂给 gate 决定能不能关门。</div>
+            <div class="h"><h3>审查与 Gate 关闭</h3><span class="badge always">1 恒查 · 2 按需</span></div>
+            <div class="what"><code>code-review</code> 恒查;小改动可能不触发额外的 module-review 或 safety-review。terminal gate entry 写入前必须 capture durable delta 或 <code>none + reason</code>,完成 <code>_pending</code>、truth pointer 与必要 stub;不要求当场更新常青正文。</div>
             <div class="who"><span class="skill">code-review<em>恒查</em></span><span class="skill cond">module-review<em>契约变化时</em></span><span class="skill cond">safety-review<em>碰安全路径时</em></span></div>
           </div></div>
-          <div class="fstage bridgecard"><div class="node bridge">+1</div><div class="card">
-            <div class="h"><h3>回刷交接</h3><span class="badge always">两部分的桥</span></div>
-            <div class="what">写 terminal gate entry 前完成<b>轻量登记</b>(把长期知识记进 <code>_pending</code>、truth pointer 与必要 stub),不用当场压实常青文档。真正的压实由<b>定期 backfill 任务</b>做;watermark 与无主 commit 扫描负责发现意外 capture gap。</div>
-            <div class="who"><span class="skill">backfill-stable-docs</span><span class="art">_pending.md</span><span class="art">定期 report / apply · 兜底</span></div>
-            <div class="trig"><b>触发</b>关门时登记;压实与兜底由定期任务做</div>
-          </div></div>
+        </div>
+        <div id="backfill" class="retreat">
+          <div class="t">Gate 后可选维护:提示 Backfill,但不自动执行</div>
+          <ul>
+            <li>agent 可以提醒存在待 backfill 内容;owner 可以现在做、以后做或暂不做。</li>
+            <li>不执行不会重新打开 gate,也不阻塞本次交付或任务 closed。</li>
+            <li><b>report</b> 只在用户明确要求、已有维护计划或周期任务上下文中运行;<b>apply</b> 还需要 owner 批准具体 report item。</li>
+            <li>watermark、gate 漏登与无主 commit 扫描用于后续发现 capture gap,不属于每次关门的必经步骤。</li>
+          </ul>
         </div>
         <div class="retreat">
           <div class="t">断链时自动退回上游,而不是硬猜</div>
@@ -302,34 +306,35 @@
           <div class="case s">
             <div class="top"><div class="sz">S</div><div><div class="lvl">微改动</div><small>tickets=F · dag=F</small></div></div>
             <div class="req"><span class="k">需求</span>库存列表加一个「最近盘点时间」只读列。</div>
-            <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">执行</span><span class="sep">→</span><span class="step on">关门</span></div>
+            <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">执行</span><span class="sep">→</span><span class="step on">Capture 后关门</span></div>
             <div class="win"><span class="k">好在哪 · </span>不被迫走重流程,不产生任何多余文件。规格+计划直接落地,十几分钟收工。</div>
           </div>
           <div class="case m">
             <div class="top"><div class="sz">M</div><div><div class="lvl">中等 · 能分别验收</div><small>tickets=T · dag=F</small></div></div>
             <div class="req"><span class="k">需求</span>做「低库存预警」:阈值设置界面 + 触发计算 + 通知邮件——三块能分别验收。</div>
-            <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">切 3 票</span><span class="sep">→</span><span class="step on">逐票执行</span><span class="sep">→</span><span class="step on">关门</span></div>
+            <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">切 3 票</span><span class="sep">→</span><span class="step on">逐票执行</span><span class="sep">→</span><span class="step on">Capture 后关门</span></div>
             <div class="win"><span class="k">好在哪 · </span>三个切片能分别验收、分别交付,不用等全做完;计划不塞任务细节,每张票是自己的验收事实源。</div>
           </div>
           <div class="case l">
             <div class="top"><div class="sz">L</div><div><div class="lvl">复杂 · 并行 ＋ 协调</div><small>tickets=T · dag=T</small></div></div>
             <div class="req"><span class="k">需求</span>「多仓库库存」重构:数据迁移 + 读模型 + 多个页面 + 跨切片 seam,要多人并行。</div>
-            <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">切票</span><span class="sep">→</span><span class="step on">排执行图</span><span class="sep">→</span><span class="step on">并行执行</span><span class="sep">→</span><span class="step on">关门</span></div>
+            <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">切票</span><span class="sep">→</span><span class="step on">排执行图</span><span class="sep">→</span><span class="step on">并行执行</span><span class="sep">→</span><span class="step on">Capture 后关门</span></div>
             <div class="win"><span class="k">好在哪 · </span>多人并行有明确 ownership 和 seam 协调,不互相踩;执行图恢复「拓扑」、进度账本恢复「状态」,断了也能续。</div>
           </div>
           <div class="case d">
             <div class="top"><div class="sz">D</div><div><div class="lvl">执行拧巴 · 不值得切票</div><small>tickets=F · dag=T</small></div></div>
             <div class="req"><span class="k">需求</span>重写「库存计算引擎」内部:一次交付,但任务之间依赖复杂。</div>
-            <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">排执行图</span><span class="sep">→</span><span class="step on">执行</span><span class="sep">→</span><span class="step on">关门</span></div>
+            <div class="path"><span class="step on">对齐</span><span class="sep">→</span><span class="step on">Spec</span><span class="sep">→</span><span class="step on">计划</span><span class="sep">→</span><span class="step on">排执行图</span><span class="sep">→</span><span class="step on">执行</span><span class="sep">→</span><span class="step on">Capture 后关门</span></div>
             <div class="win"><span class="k">好在哪 · </span>复杂的执行依赖被显式画出来、按序推进,但不被迫造几张没意义的验收票。验收语义留在规格里。</div>
           </div>
         </div>
+        <p class="lede">以上四种 composition 都在 gate 内完成 capture；gate 后是否 backfill 不属于需求规模判定，也不阻塞本次任务完成。</p>
       </section>
 
     </main>
   </div>
 
-  <footer>Impl-Package 体系 · 团队介绍版 · 第一部分 文档维护 ／ 第二部分 开发 6+1</footer>
+  <footer>Impl-Package 体系 · 团队介绍版 · 第一部分 文档维护 ／ 第二部分 6 步主流程 ／ Gate 后可选 Backfill</footer>
 
 </div></div>
 

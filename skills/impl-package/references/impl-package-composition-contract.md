@@ -11,7 +11,7 @@
 - design.md 与 spec.md 是活动变更期间的当前设计 SoT。它们保持当前有效正文，历史变化只进入紧凑 revision/superseded 记录。
 - plan、tickets、DAG、progress 与 gate entry 属于某次 implementation attempt，是过程与判决记录，不是长期行为合同。
 
-package gate 关闭并完成 backfill 后，module knowledge 重新成为产品当前 SoT。后续重新 patch 时，先将 package design/spec 与当前 module knowledge 和代码对账，再激活并修订 package SoT。
+terminal gate entry 写入前必须完成 Stage 7 durable-delta capture。gate 关闭后，module knowledge 与 `_pending.md` truth pointer 共同表达当前长期真相及待压实增量；后续 `backfill-stable-docs` report/apply 可以延期，apply 完成后再把获批增量正式归并进 module knowledge。重新 patch 时，先将 package design/spec 与当前 module knowledge、相关 pending truth pointer 和代码对账，再激活并修订 package SoT。
 
 ### Module Knowledge Watermark（把"先对账"变成可执行检查）
 
@@ -163,6 +163,8 @@ package 永远只有一个 gate.md。它是 newest-first 的 append-only gate ev
 gate entry Durable Deltas -> project _pending.md -> backfill report/apply
 ~~~
 
+`gate entry Durable Deltas → _pending.md / truth pointer / 必要 stub` 属于 Stage 7，是任意 terminal verdict 的强制前置；`backfill-stable-docs` report/apply 位于 terminal gate 之后，只作为可选维护提示，可以延期且不阻塞 gate、任务 closed 或当前交付。实际调用需要用户明确要求、已批准维护计划或明确进入周期维护流程；提示本身不构成 report/apply 授权。
+
 每条 delta 记录 delta-id、destination、source、statement、affected modules、authority、evidence 与 pending/truth-pointer 校验。去重键是 &lt;destination&gt;|&lt;delta-id&gt;。无 durable delta 时写 none 和理由。
 
 append-only 写入顺序：先保留下一个 G id、固定 comparison point 与 plan ER anchor，组装完整 entry；若 verdict 将是 terminal（pass/fail/defer），先用该保留 id 完成 _pending.md 注册、受影响 module spec truth pointer 与必要 stub，再把完成态 entry 一次性插入 gate.md。blocked entry 可如实记录 capture gap；后续补齐通过新 entry 表达，不回改 blocked entry。禁止先写“临时 gate entry”再原地补字段。
@@ -173,6 +175,7 @@ append-only 写入顺序：先保留下一个 G id、固定 comparison point 与
 - 当前 attempt plan 声明 Attempt ID、D/S/P revision 与唯一 Composition，且与 earned artifacts 一致。
 - 每个引用到的 D/S/P revision 都带 commit SHA；restore/evaluation 时该 SHA 与目标文件当前 `git log -1` 结果相符，不符则先完成 revision-commit binding 的 drift 处理，不得当作可信 revision 直接使用。
 - 每个 earned ticket/DAG 声明的 Plan Revision 与当前 plan 的 P 号一致；不一致的按 NEEDS-REVALIDATION 处理，不得当作可用状态。
+- 任意 terminal entry 写入前，Durable Deltas 已完成 `_pending.md` 注册、truth pointer 与必要 stub；无 delta 时已记录 `none + reason`。gate 后 backfill report/apply 不属于 terminal validation checklist。
 - package 同时最多一个 active attempt；多个未被 terminal entry 冻结的 plan 是 lifecycle violation，restore 必须停止。
 - plan 无 task runtime status、ticket 正文或长期 contract；通用验证政策只引用，不复制。
 - 每项 AC 有 evidence producer/manual owner；task-to-AC 与 typed dependency 引用均可解析且无环。
