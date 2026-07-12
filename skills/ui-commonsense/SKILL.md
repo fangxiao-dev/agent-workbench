@@ -1,6 +1,6 @@
 ---
 name: ui-commonsense
-description: Use when implementing, refactoring, or reviewing frontend UI with common usability defects: unclear object/action ownership, mixed-abstraction navigation, excessive spacing, stretched drawers, nested cards, awkward forms, broken combobox/dropdown behavior, misaligned fields, quantity inputs without steppers, unclear table/list structure, weak visual states, or incomplete browser verification. This is an entry-map skill: load the relevant references before changing UI.
+description: Use when implementing, refactoring, or reviewing frontend UI with common usability defects: unclear object/action ownership, mixed-abstraction navigation, excessive spacing, stretched drawers, nested cards, awkward forms, broken combobox/dropdown behavior, misaligned fields, quantity inputs without steppers, unclear table/list structure, weak visual states, private-page loading boundaries, or incomplete browser verification. This is an entry-map skill: load the relevant references before changing UI.
 ---
 
 # UI Commonsense
@@ -55,6 +55,9 @@ Normal UI should expose user-meaningful names, statuses, timestamps, actors, qua
 
 - `references/visual-states.md`
   Use for hover, selected, disabled, loading, focus, danger, and primary/secondary action states.
+
+- `references/server-data-boundaries.md`
+  Use when structuring a private or personalized page, deciding whether data belongs behind a Suspense boundary, preserving access-before-data-read order, or extracting async content for tests. Explains when a stable shell is useful and when this pattern is unnecessary.
 
 - `references/browser-verification.md`
   Use before claiming completion. Contains browser verification scenarios and DOM measurement snippets for layout, combobox, drawer, and alignment checks.
