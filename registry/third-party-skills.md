@@ -20,7 +20,7 @@
 | prototype | `mattpocock/skills` | `npx skills add mattpocock/skills@prototype -g -y` | 已放入 `skills/prototype/` |
 | setup-matt-pocock-skills | `mattpocock/skills` | `npx skills add mattpocock/skills@setup-matt-pocock-skills -g -y` | 已放入 `skills/setup-matt-pocock-skills/` |
 | tdd | `mattpocock/skills` | `npx skills add mattpocock/skills@tdd -g -y` | 已放入 `skills/tdd/` |
-| to-spec | `mattpocock/skills` | 人工迁移上游 `skills/engineering/to-spec` | Vendored 只读参考（上游 `391a270`），不进入 Impl-Package 主链；repo facts、testing seam 与 user-semantics synthesis 方法已吸收进 `requirement-alignment` |
+| to-spec | `mattpocock/skills` | 人工迁移上游 `skills/engineering/to-spec` | Vendored 只读参考（上游 `391a270`），不进入 Impl-Package 主链；repo facts、testing seam 与 user-semantics synthesis 方法已吸收进 `req-align` |
 | to-tickets | `mattpocock/skills` | 基于上游 `skills/engineering/to-tickets` 本地分叉 | Impl-Package 本地 fork（上游基线 `391a270`）；上游更新只做人工 diff/选择性合并，不直接覆盖 |
 | domain-modeling | `mattpocock/skills` | `npx skills add mattpocock/skills@domain-modeling -g -y` | 已放入 `skills/domain-modeling/` |
 | codebase-design | `mattpocock/skills` | `npx skills add mattpocock/skills@codebase-design -g -y` | 已放入 `skills/codebase-design/` |
@@ -30,7 +30,6 @@
 | handoff | `mattpocock/skills` | `npx skills add mattpocock/skills@handoff -g -y` | 已放入 `skills/handoff/` |
 | teach | `mattpocock/skills` | `npx skills add mattpocock/skills@teach -g -y` | 已放入 `skills/teach/` |
 | writing-great-skills | `mattpocock/skills` | `npx skills add mattpocock/skills@writing-great-skills -g -y` | 已放入 `skills/writing-great-skills/` |
-| zoom-out | `mattpocock/skills` | `npx skills add mattpocock/skills@zoom-out -g -y` | 已放入 `skills/zoom-out/` |
 | vercel-react-best-practices | `vercel-labs/agent-skills` | `npx skills add vercel-labs/agent-skills@vercel-react-best-practices -g -y` | 已放入 `skills/vercel-react-best-practices/` |
 | find-skills | `vercel-labs/skills` | `npx skills add vercel-labs/skills@find-skills -g -y` | 已放入 `skills/find-skills/` |
 | powershell-windows | `davila7/claude-code-templates` | `npx skills add davila7/claude-code-templates@powershell-windows -g -y` | 已放入 `skills/powershell-windows/` |
@@ -47,4 +46,7 @@
 - 只登记第三方 skills，不登记本仓库自建 skills。
 - 第三方 skills 的正式内容直接放在 `skills/<name>/`；成组资产也可以放在 `skills/<bundle>/<name>/`。
 - 如需修改第三方 skill，直接修改正式副本；更新上游时先拉到临时位置，再人工对比合并。
+
+
+
 
