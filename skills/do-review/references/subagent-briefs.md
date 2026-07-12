@@ -9,6 +9,7 @@ Review target:
 - Repo/worktree:
 - Target revision or PR:
 - Base/head:
+- Scope source / package roots / included commits:
 - Mode:
 - Round:
 - Track label:
@@ -32,6 +33,8 @@ Return format:
 Use the assigned reviewer skill.
 
 Review the target in scope. Follow the assigned skill's review method, but return results in the do-review ledger schema so the main session can deduplicate and classify consistently.
+
+Execute the assigned skill's full required reviewer topology. A track is a skill assignment, not a one-agent limit. If your skill requires independent child reviewers, dispatch every required child role and preserve its source/axis in the returned evidence. If capacity requires phasing, report the phase order; do not omit a child review.
 
 For each finding:
 - cite evidence;
@@ -67,6 +70,8 @@ For each finding:
 
 ```text
 Default lens when the assigned skill is module-review:
+
+Run the skill's two independent axes: Standards and Spec. Return them as separate source labels (`Track B (module-review/Standards)` and `Track B (module-review/Spec)`); do not merge their findings before the main-session ledger step.
 
 Lens:
 - cross-module contracts;
