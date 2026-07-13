@@ -142,6 +142,18 @@
         "Reruns only the gates required by the classified drift",
         "Does not put process evidence into design or spec"
       ]
+    },
+    {
+      "id": 13,
+      "prompt": "适用 review、findings 分流和 Stage 7 已完成，准备写 terminal pass；测试证据来自当前 feature worktree，但最后又提交了 gate metadata，随后将合入 dev。应怎样收口并声明 closed？",
+      "expected_output": "Runs verification-before-completion before terminal pass, then audits again after metadata/target-branch changes before claiming closed, reusing unaffected evidence and rerunning only checks invalidated by the delta.",
+      "files": [],
+      "expectations": [
+        "Does not model verification-before-completion as a DAG task",
+        "Blocks terminal pass when claim evidence is stale or incomplete",
+        "Reuses evidence whose revision and environment provenance remain valid",
+        "Rechecks final HEAD, clean state and target-branch integration before the closed claim"
+      ]
     }
   ]
 }

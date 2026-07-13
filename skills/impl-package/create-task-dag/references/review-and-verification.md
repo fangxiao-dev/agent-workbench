@@ -4,11 +4,10 @@ worker 返回后或请求 implementation-level review 时读本文件。共享 a
 
 ## Review 层次
 
-- **任务 spec review**：确认 worker 满足其有界任务契约。
-- **任务质量 review**：确认 worker 的 patch 可维护且经过本地测试。
-- **Implementation-level review**：调用 `module-review` 的 **Spec 轴**，对固定 comparison point 的完整 implementation 做 contract-fidelity review。
+- **任务级 review**：由 `subagent-driven-development` 以非实现者 reviewer subagent 完成 task spec-compliance 后再做 task code-quality review；确认 worker 满足有界任务契约，且 patch 可维护并经过本地测试。
+- **Ticket acceptance review**：由 `dev-with-track` 在 ticket（无 tickets 时为 attempt）达到验收候选后固定 comparison point，并自动路由正式 reviewer。
 
-任务级通过不能代替 implementation-level review。create-task-dag 不另行定义 whole-slice / contract-drift 检查项，也不代替 module-review 的 Standards 轴或 Spec 轴。
+任务级通过不能代替 ticket acceptance review。create-task-dag 不另行定义 whole-slice / contract-drift 检查项，也不代替 `code-review`、module-review 的 Standards/Spec 双轴或 safety-review。
 
 ## Main Session 集成与验证
 
@@ -21,16 +20,16 @@ main session 在请求 module-review 前完成：
 
 UI 改动、外部系统 mutation 的具体验证约束继续由 package plan、repo 指令与 task verification gates 决定；本 reference 不把它们重定义成独立 review contract。
 
-## 调用 module-review 的 Spec 轴
+## Ticket acceptance review 路由
 
-调用者必须提供：
+`dev-with-track` 必须提供：
 
 - 固定 comparison point：明确的 commit、commit range、固定 diff 或等价不可变基线；
 - package `spec.md` 与 `plan.md`；
 - 所有相关 Approved ticket、`dag.md` 和可用的 progress/handoff；
 - 已运行验证和未运行 gate 的证据。
 
-请求以 `module-review` 的 Spec 轴为 implementation-level review 的唯一来源；其 finding、结论和需要重开的工作按该 skill 的契约记录。若还满足 Standards 轴的触发条件，遵从 module-review 自身的双轴流程，而不是在此复制审查规则。
+`code-review` 是每个 implementation 的必经 review。当前 attempt 存在 tickets/DAG，或 contract 涉及 interface、状态机、模块边界或 seam 时，必须额外运行 `module-review` 的 Standards 与 Spec 双轴。出现安全或外部副作用信号时，必须运行 `safety-review`。finding、closure verification 和 ticket acceptance 状态按各 skill 与 `dev-with-track` 的契约记录。
 
 ## 最终报告形状
 
@@ -39,7 +38,7 @@ implementation 准备交接或关闭时报告：
 - worker cohort 和 main session 处理的 seam；
 - 已运行验证及其证据，未运行 gate 及原因；
 - 固定 comparison point；
-- `module-review` Spec 轴结论；
+- `code-review`、适用的 module-review 双轴与 safety-review 结论；
 - 残余风险和被阻塞的 gate。
 
 ## 持久化

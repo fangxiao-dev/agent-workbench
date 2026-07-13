@@ -1,0 +1,40 @@
+{
+  "skill_name": "verification-before-completion",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Reviews、findings 分流和 Stage 7 已完成，准备写 terminal pass。测试与 smoke 都来自当前 revision。现在如何执行 completion gate？",
+      "expected_output": "Audits the intended pass against current revision/environment evidence, reuses fresh proof, and permits the terminal pass only when every relevant gate is covered.",
+      "files": [],
+      "expectations": [
+        "Defines the exact pass claim",
+        "Checks evidence provenance and freshness",
+        "Does not rerun every check mechanically",
+        "Does not create a DAG task"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Feature worktree 的测试通过后又改了实现代码，但没有重跑测试。可以写 pass 并说 closed 吗？",
+      "expected_output": "Rejects the pass/closed claim because the evidence predates an implementation-affecting change and reports implemented, not verified until affected checks rerun.",
+      "files": [],
+      "expectations": [
+        "Treats the prior evidence as stale",
+        "Blocks the completion claim",
+        "Names the affected checks that need fresh evidence"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Terminal metadata 已提交，feature branch 也合入 dev。行为代码没有变化，之前测试 provenance 完整。最终交付前是否必须把全部测试重跑？",
+      "expected_output": "Runs the completion audit again for final HEAD and target-branch state, reuses unaffected behavior evidence, and reruns only integration or claim-specific checks invalidated by the merge/metadata delta.",
+      "files": [],
+      "expectations": [
+        "Audits final HEAD and worktree state",
+        "Checks target-branch integration",
+        "Reuses unaffected evidence",
+        "Does not equate metadata-only changes with automatic behavior-test invalidation"
+      ]
+    }
+  ]
+}

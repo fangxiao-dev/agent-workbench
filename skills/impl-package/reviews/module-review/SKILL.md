@@ -1,8 +1,8 @@
 ---
 name: module-review
 description: >
-  Impl-Package 体系的 implementation-level module review：当固定比较点以来的改动
-  需要分别检查 Standards（仓库规范）与 Spec（来源需求/contract fidelity）时使用。
+  Use when changes since a fixed comparison point need an implementation-level module review
+  with separate Standards (repository conventions) and Spec (source requirement/contract fidelity) axes.
   两个轴由并行 reviewer 独立审查并并列汇报；适用于 branch、PR、work-in-progress
   或 “review since X”。
 ---

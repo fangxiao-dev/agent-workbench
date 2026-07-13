@@ -129,6 +129,10 @@ plan 包含两类验证信息：
 - Planned Verification：引用权威 test/review policy，记录本 attempt 选择的检查、预期结果与 evidence owner；不复制通用 Data Safety、UI Evidence、Real Route Safety 等整套模板。
 - append-only Execution Record：每条使用稳定 anchor，记录实际命令/检查、结果、证据路径、执行时间与适用的 D/S/P revision。旧 record 不回改，后续补证新增 record。
 
+`verification-before-completion` 是 completion claim 的 evidence gate，不是新的验证清单：适用 review、findings 分流和 Stage 7 准备完成后，写 terminal `pass` entry 前必须用当前 revision/worktree/environment 审计拟声明的 pass。可复用 provenance 清晰且未被后续变化影响的 ER/review/CI/smoke evidence；只补跑 stale、冲突、跨 revision/environment 或不完整的部分。审计不通过时不得写 pass，应报告 `implemented, not verified` 或具体 pending gate。
+
+terminal metadata commit、目标分支合入或相关环境变化之后，任何 complete、closed、merge-ready 或 release-ready 声明都必须重新执行该审计。纯 metadata delta 不自动使行为测试失效，但最终 HEAD、工作树状态、目标分支集成状态和声明所依赖的 metadata/proof 必须与证据对齐。该 gate 不进入 DAG，也不按 ticket/task 重复运行。
+
 findings.md 是发现 inbox。gate evaluation 前必须分流：设计决定进 design，规范性行为进 spec，长期项目知识进入 gate Durable Deltas → _pending.md，验证证据进 plan Execution Record，其余调查事实/风险保留在 findings。findings 不成为第二 SoT。
 
 **这是任意 terminal verdict（pass/fail/defer）的硬性前置条件，力度等同 Stage 7**：findings.md 中存在未分流、且不属于"已验证调查事实/风险，保留在 findings 是正确去处"的条目时，不得写入 pass、fail 或 defer 的 terminal gate entry——不只是 pass。blocked entry 不受此约束（blocked 本来就允许如实记录 capture gap，后续用新 entry 补齐）。
@@ -172,7 +176,7 @@ gate entry Durable Deltas -> project _pending.md -> backfill report/apply
 
 每条 delta 记录 delta-id、destination、source、statement、affected modules、authority、evidence 与 pending/truth-pointer 校验。去重键是 &lt;destination&gt;|&lt;delta-id&gt;。无 durable delta 时写 none 和理由。
 
-append-only 写入顺序：先保留下一个 G id、固定 comparison point 与 plan ER anchor，组装完整 entry；若 verdict 将是 terminal（pass/fail/defer），先用该保留 id 完成 _pending.md 注册、受影响 module spec truth pointer 与必要 stub，再把完成态 entry 一次性插入 gate.md。blocked entry 可如实记录 capture gap；后续补齐通过新 entry 表达，不回改 blocked entry。禁止先写“临时 gate entry”再原地补字段。
+append-only 写入顺序：先保留下一个 G id、固定 comparison point 与 plan ER anchor，组装完整 entry；若 verdict 将是 terminal（pass/fail/defer），先用该保留 id 完成 _pending.md 注册、受影响 module spec truth pointer 与必要 stub；若拟写 `pass`，再调用 `verification-before-completion` 审计该 pass claim；通过后才把完成态 entry 一次性插入 gate.md。blocked entry 可如实记录 capture gap；后续补齐通过新 entry 表达，不回改 blocked entry。禁止先写“临时 gate entry”再原地补字段。
 
 ## 8. Shared validation checklist
 
@@ -188,4 +192,5 @@ append-only 写入顺序：先保留下一个 G id、固定 comparison point 与
 - plan Execution Record 使用稳定 anchor 且 append-only；gate evidence 链接可解析到对应 record。
 - gate entry newest-first、旧块未修改；G 编号不复用，Supersedes、revision、comparison point、ER anchor、verdict 与 Durable Deltas 完整。
 - findings.md 在写入任意 terminal entry（pass/fail/defer，不只 pass）前已完成分流。
+- terminal pass entry 写入前，`verification-before-completion` 已将拟声明的 pass 与当前 revision/worktree/environment 及可追溯 evidence 对齐；未通过时没有写 pass。
 - terminal gate 后 plan 已冻结；重新 patch 前已完成 Module Knowledge Watermark 对账，不是凭印象假设未变。

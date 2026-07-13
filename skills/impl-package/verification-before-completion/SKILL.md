@@ -1,11 +1,20 @@
 ---
 name: verification-before-completion
-description: Use before claiming work is complete, fixed, passing, or ready to merge. Match each claim to direct evidence from the same revision and environment, and report any verification gap precisely.
+description: Use before claiming work is complete, closed, fixed, passing, merge-ready, or release-ready. Match each claim to direct evidence from the same revision and environment, and report any verification gap precisely.
 ---
 
 # Verification Before Completion
 
 Completion claims must be no broader than their evidence. Verification is a claim-to-evidence contract, not a requirement to rerun every possible check in the current message.
+
+## Impl-Package orchestration
+
+This skill is the completion-claim evidence gate for Impl-Package. It is not a DAG task and does not run once per ticket or implementation unit.
+
+- `dev-with-track` invokes it after applicable implementation reviews and findings closure, and after Stage 7 artifacts for the intended pass are prepared, but before writing a terminal `pass` gate entry.
+- If terminal metadata is then committed, the work is merged into a target branch, or the relevant environment changes, invoke it again before claiming `complete`, `closed`, `merge-ready`, or `release-ready`. Reuse unaffected evidence and verify only the delta and claim-specific gates.
+- A missing or stale proof blocks the completion claim, not necessarily the implementation. Report `implemented, not verified` or the exact pending gate instead of writing or repeating a pass claim.
+- This skill audits evidence. It does not replace `code-review`, `module-review`, `safety-review`, planned tests, smoke checks, or project-specific acceptance.
 
 ## Define the claim
 

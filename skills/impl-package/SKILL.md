@@ -26,15 +26,19 @@ flowchart TD
     PL -->|tickets=true| TK[to-tickets：draft → publish]
     PL -->|dag=true| DG[create-task-dag：dag.md]
     TK -->|dag=true| DG
-    PL --> EX[dev-with-track：执行 → gate]
+    PL --> EX[dev-with-track：执行 / gate]
     TK --> EX
     DG --> EX
-    EX --> RV{审查}
+    EX --> SD[subagent-driven-development：task 执行 + 即时 review]
+    SD --> RV{ticket acceptance 审查}
     RV -->|恒查| CR[code-review]
     RV -->|契约变化| MR[module-review]
     RV -->|碰安全路径| SR[safety-review]
-    RV --> CAP[保留 G id + Stage 7 登记]
-    CAP --> GT[gate.md 顶部插入不可变 entry]
+    CR --> CAP[保留 G id + Stage 7 登记]
+    MR --> CAP
+    SR --> CAP
+    CAP --> VC[verification-before-completion：completion claim evidence gate]
+    VC --> GT[gate.md 顶部插入不可变 entry]
     GT -. 可选提示 / 周期任务 .-> BF[backfill：report / apply]
     BF -. 定期 report/apply 兜底 .-> EV[(常青四层 module-knowledge)]
     EV -. 下次改动读取 .-> RA
@@ -51,8 +55,9 @@ flowchart TD
 | 3 Attempt 计划 | `impl-planning` | `plan.md` / patch plan（含 Composition） | Spec 过、要落地 |
 | 3b 切票（按需） | `to-tickets` | 当前 attempt 的 `tickets/` | plan 判 `tickets=true` |
 | 4 排执行图（按需） | `create-task-dag` | 当前 attempt DAG | plan 判 `dag=true` |
-| 5 执行 | `dev-with-track` | `progress` · plan Execution Record · append-only `gate.md` | 上游就绪 / 跨 session 续 |
+| 5 执行 | `dev-with-track` + `subagent-driven-development` | runtime state / task review evidence · plan Execution Record · append-only `gate.md` | 上游就绪 / 跨 session 续；有可委派 task 时由后者承载 |
 | 6 审查 | `code-review`（恒） · `module-review` · `safety-review` | review evidence（进入 plan ER） | 见下方路由 |
+| 6b Completion claim gate | `verification-before-completion` | claim-to-evidence audit | 写 terminal pass 或宣称 complete / closed / merge-ready / release-ready 前 |
 | 可选回刷 | `backfill-stable-docs` | report / approved apply；必要时更新 `_pending.md` | gate 关闭后提示；积累 durable delta 或周期维护时执行，不阻塞当前交付 |
 
 ## 正向路由：你在哪 → 进哪个 skill
@@ -61,8 +66,9 @@ flowchart TD
 - Spec 已过门，还没 plan → **`impl-planning`**。
 - 当前 attempt plan 判 `tickets=true`，还没票 → **`to-tickets`**（draft → owner 批准 → publish）。
 - 当前 attempt plan 判 `dag=true`，plan（及相关 approved 票）就绪 → **`create-task-dag`**。
-- 上游产物就绪，要开始 / 恢复执行 → **`dev-with-track`**。
+- 上游产物就绪，要开始 / 恢复执行 → **`dev-with-track`**；它选择可执行单元并维护状态。存在有界、可委派 task 时，进入 **`subagent-driven-development`** 完成实现和 task-level 双 review，再返回前者集成。
 - 集成后要审查：`code-review` 恒查；改动 interface / seam / 契约 → **`module-review`**；碰 auth / 支付 / webhook / 迁移 / 外部写入 → **`safety-review`**。
+- 适用 review 与 findings 已闭环、准备写 terminal pass 或对外宣称 complete / closed / merge-ready / release-ready → **`verification-before-completion`**；它审计最终 revision、环境和证据新鲜度，不是 DAG task，也不机械重跑所有检查。
 - gate 已关 → **提示**可按需使用 `backfill-stable-docs` 处理 durable delta。提示不等于执行授权：只有用户要求、已有明确维护计划，或进入周期性 report / approved apply 时才实际调用；本轮不做 backfill 也可以正常收口。
 
 断链就退回上游，别硬猜：缺 plan 回 `impl-planning`；输入太宽没切片回 `to-tickets`；Composition/artifact 对不上回 `impl-planning` 修订 P revision，只有暴露出真实 contract drift 才回 `req-align` 重过相应门。

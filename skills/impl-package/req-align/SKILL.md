@@ -1,6 +1,6 @@
 ---
 name: req-align
-description: Impl-Package 体系的需求对齐与 Spec 阶段：当新建或变更需求需要在 feature design、specification 或 implementation planning 前完成对齐时使用；拥有必过的 Design / Spec gates 及其 design.md / spec.md。
+description: Use when new or changed requirements need alignment before feature design, specification, or implementation planning. Owns the required Design and Spec gates and their design.md/spec.md artifacts.
 ---
 
 # Requirement Alignment

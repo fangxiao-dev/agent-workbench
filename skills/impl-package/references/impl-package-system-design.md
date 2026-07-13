@@ -11,7 +11,7 @@
 
 体系名定为 **Impl-Package 体系**：以 implementation package（`docs/implementations/<package-id>/`）为持久单位的完整交付工作流。`dev-with-track` 从此只指 stage 5 的执行 skill，不再兼指整套体系。
 
-体系名作为共享 leading word 写进各成员 skill 的 description（"Impl-Package 体系的 XX 阶段"），提升互相触发与路由可靠性。
+成员 skill 的 description 以自身能力和真实触发场景开头，不把 `Impl-Package 体系的` 作为共享 leading word；这样 stage、review 与 executor 可以被单独调用。体系归属由目录、正文中的 ownership/contract 指针和 `impl-package` 路由 skill 表达。
 
 ### Package ID 与时间戳命名
 
@@ -50,9 +50,9 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
 2 Spec        req-align 第二道门 → 当前 spec revision
 3 Attempt plan impl-planning → plan.md / patch plan（含本 attempt Composition）
 4 Task DAG    create-task-dag ← plan + 相关 approved tickets 子集（有 tickets 时）或 plan（仅 dag 时）
-5 执行        dev-with-track：restore → execute → plan Execution Record → findings 分流 → gate entry
+5 执行        dev-with-track：restore → subagent-driven-development（task 实现 + 即时 review）→ 集成 / plan Execution Record → findings 分流 → gate entry
 6 审查        code-review / module-review / safety-review（映射见下）
-收口条件      terminal gate entry 前完成 durable-delta capture
+收口条件      terminal pass 前完成 durable-delta capture + verification-before-completion evidence audit
 可选维护      gate 后提示 backfill-stable-docs report/apply；可延期、非阻塞、需明确授权
 ```
 
@@ -158,10 +158,12 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 
 | 层 | 载体 | 内容 |
 | --- | --- | --- |
-| Task 级 | create-task-dag worker 协议 | task spec review、task quality review（派发粒度，保持现状） |
+| Task 级 | subagent-driven-development | 非实现者 subagent 执行 task spec-compliance review 后再执行 task code-quality review；纯机械低风险例外必须留证 |
 | Implementation 级 | 三 review skill | code-review（必选）、module-review（composition/契约信号触发）、safety-review（安全信号触发） |
+| Completion claim | verification-before-completion | terminal pass 与 complete/closed/merge-ready/release-ready 声明前核对 revision、环境和 evidence freshness；不进入 DAG |
 
-- create-task-dag 的 "whole-slice review" 改写为**调用 module-review**（spec fidelity 轴），不再独立定义检查项。
+- `subagent-driven-development` 是 task 执行与即时 review 载体；`create-task-dag` 只提供 task contract、ownership 和依赖，不再拥有 worker review 流程。
+- ticket 达到验收候选时，`dev-with-track` 自动调用 `code-review`，并按下列规则补齐 `module-review` / `safety-review`；不等待 owner 显式点名。
 - module-review 现状即 **Standards + Spec 双轴、两个并行 reviewer**，无需新增第三轴或独立 drift skill：
   - **Spec 轴**承担 contract fidelity——"实现的 interface/seam 与 spec/dag 声明的 contract 是否漂移"是 Spec reviewer 的既有职责，不另设内置检查项。
   - **Standards 轴**的 repository standards 钩子引用 `codebase-design`，承载 deep module/interface/seam 基线。
@@ -177,6 +179,8 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 | `to-spec` | 保留 vendored 只读，不进主流程；其方法已被 req-align 吸收 |
 | `impl-planning` | 每次 attempt plan 独立声明 Composition；保存执行策略、Planned Verification 与 append-only Execution Record；不保存 task checklist或长期 contract；patch 仅 post-gate |
 | `create-task-dag` | 收缩到 execution decomposition：删自带 slicing 路由，宽输入改路由 to-tickets draft；全部 to-issues 引用替换为 to-tickets；输入契约 = plan + 相关 approved tickets 子集（有 tickets 时）或 plan（仅 dag 时）；记录 task→AC 与 seam owner；whole-slice review 改为调用 module-review |
+| `subagent-driven-development` | 移入 Impl-Package；成为 task execution 与即时 review 载体，要求非实现者 subagent 依次完成 task spec-compliance、task code-quality review，并将证据交回 dev-with-track |
+| `verification-before-completion` | 移入 Impl-Package；成为 terminal pass 与后续 completion/readiness 声明的 evidence gate，复用未失效证据并阻止无证据完成声明，不进入 DAG |
 | `dev-with-track` | 按当前 plan Composition 恢复 runtime state；append plan Execution Record；分流 findings；在单一 gate.md 顶部写不可变 evaluation entry；实现 AC 覆盖、返工失效传播和 Stage 7 |
 | `module-review` | 已换模为 Standards + Spec 双轴双 reviewer：contract-drift 归入 Spec 轴既有职责（不新增内置检查）；Standards 轴 standards 钩子引用 codebase-design；按 composition 或 spec 契约变化信号触发 |
 | `safety-review` | 新建（从 git 历史恢复精简）：五类范围 + 信号触发 + P0 fail-closed |
@@ -194,7 +198,7 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 | 3 | create-task-dag 收缩 + to-issues 引用替换 + review 映射 + readiness 契约 | grep 无 to-issues 残留；whole-slice review 指向 module-review；输入支持 plan + tickets 子集；task→AC 与 seam owner 字段在位 |
 | 4 | impl-planning attempt lifecycle + Composition 协同 | plan 声明 Attempt/D/S/P/Composition；含 Planned Verification 与 append-only Execution Record；无 task checklist；与 patching.md 互引 |
 | 5 | safety-review 恢复 + module-review 触发映射与 standards 钩子 | 触发信号与 P0 清单落文；contract-drift 由 Spec 轴覆盖，Standards 轴引用 codebase-design |
-| 6 | dev-with-track gate/scaffold/readiness/canonical status 适配 + 体系名植入全部成员 description | gate 模板含 Durable Deltas 表 + pending + truth pointer + stub 完整关闭契约；核心循环有 readiness resolution 且无自动派工；各 description 含体系名 |
+| 6 | dev-with-track gate/scaffold/readiness/canonical status 适配 + 成员 skill 独立触发描述 | gate 模板含 Durable Deltas 表 + pending + truth pointer + stub 完整关闭契约；核心循环有 readiness resolution 且无自动派工；各 description 以能力和触发场景开头，不依赖体系名前缀 |
 | 7 | orchestrator 退休 + registry/docs/evals 清理 | grep 主链路无 orchestrator 活引用 |
 | 8 | 原始讨论稿标注已被本方案取代 + 各 skill evals 更新 | 讨论稿顶部注明"已由本方案取代"；evals 与新行为一致 |
 

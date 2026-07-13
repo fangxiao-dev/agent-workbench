@@ -1,6 +1,6 @@
 ---
 name: to-tickets
-description: Impl-Package 体系的 ticket 验收切分阶段：当已批准 attempt plan 声明 tickets=true，且 spec 的验收面存在两个或更多需要独立跟踪结论的 delivery slice 时使用。
+description: Use when an approved implementation plan calls for tickets and the spec contains two or more delivery slices whose acceptance conclusions need independent tracking.
 ---
 
 # To Tickets — Impl-Package Local Fork

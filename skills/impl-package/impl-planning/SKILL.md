@@ -1,7 +1,7 @@
 ---
 name: impl-planning
 description: >
-  Impl-Package 体系的 attempt planning 阶段：当已通过所需 Design/Spec Gate 的变更需要初始 plan、patch plan、Composition、执行策略或验证计划时使用。不维护长期行为合同，也不维护 task runtime status。
+  Use when a change with approved Design/Spec inputs needs an initial plan, patch plan, Composition decision, execution strategy, or verification plan. Does not maintain long-lived behavior contracts or task runtime status.
 ---
 
 # Impl Planning

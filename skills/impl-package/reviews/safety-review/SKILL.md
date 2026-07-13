@@ -1,8 +1,8 @@
 ---
 name: safety-review
 description: >
-  Impl-Package 体系的安全与副作用审查：当固定比较点以来的改动触及数据完整性、
-  安全边界、并发或外部副作用等安全信号时使用。
+  Use when changes since a fixed comparison point touch data integrity, security boundaries,
+  concurrency, external side effects, or similar safety signals.
 ---
 
 # Safety Review

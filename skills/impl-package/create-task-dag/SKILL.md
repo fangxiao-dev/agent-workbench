@@ -1,9 +1,9 @@
 ---
 name: create-task-dag
 description: >
-  Impl-Package 体系的执行分解阶段：当已批准的 package plan 与相关 ticket
-  子集需要变成 task DAG 时使用。触发场景：画/建 task DAG、分配 ownership、
-  消费已冻结契约、协调 worker、集成 seam，或请求 module-review 的 Spec 轴。
+  Use when an approved implementation plan and related ticket subset need to become a task DAG.
+  Trigger for drawing/building a task DAG, assigning ownership,
+  消费已冻结契约、协调 worker 与集成 seam；task 实现与 review 交由 `subagent-driven-development`，ticket acceptance review 交由 `dev-with-track`。
 ---
 
 # Create Task DAG
@@ -54,7 +54,8 @@ Impl-Package 中 `dag=true` 的 DAG 必须持久化为当前 attempt 的 `dag.md
 - **Task DAG**：执行依赖与 worker 协调图；task 可贡献给多个 ticket AC，seam task 不属于单一 ticket。
 - **Main session**：协调者、集成验证者、外部把关者；它只有在 spec seam contract 被明确指定时才是 contract/acceptance owner，或在 DAG task 被指定时才是 seam execution owner。
 - **Worker**：单任务或窄 cohort 的有界实现者。
-- **Implementation reviewer**：由 `module-review` 的 Spec 轴在固定 review point 上审查完整 package 的 contract fidelity。
+- **Task review carrier**：`subagent-driven-development` 组织独立 reviewer subagent 完成 task spec-compliance / code-quality review。
+- **Ticket acceptance reviewers**：由 `dev-with-track` 在固定 review point 路由 code-review、适用的 module-review 和 safety-review。
 
 不要因为存在共享文件就串行化实现。给共享文件明确 ownership，让 worker 上报 seam 需求，而不是越界编辑。
 
@@ -118,13 +119,13 @@ main session 处理跨任务 seam：
 
 完成标准：集成后的 worktree 是一个连贯 implementation，不是相邻的任务孤岛。
 
-### 6. Review 并验证完整 Implementation
+### 6. 交回执行与验收
 
-用 `references/review-and-verification.md`：任务 review、验证 gate 和 implementation-level review 的调用方式。
+用 `references/review-and-verification.md`：task review、验证 gate 和 ticket acceptance review 的调用方式。
 
-任务级 review 不够。集成后，调用 `module-review` 的 **Spec 轴**审查完整 implementation。调用者必须提供固定 comparison point（固定 commit、diff 范围或等价固定基线），以及 package spec、plan、相关 tickets、DAG 和验证证据；本 skill 不另行定义 implementation-level 检查项。
+任务级 review 不够。集成后，把固定 comparison point、package spec、plan、相关 tickets、DAG 和验证证据交回 `dev-with-track`；由它自动路由完整的 ticket acceptance review。本 skill 不另行定义正式 reviewer 检查项。
 
-完成标准：本地集成测试、必要的浏览器检查、外部 smoke gate 和 module-review Spec 轴的固定点结论都被诚实记录。
+完成标准：本地集成测试、必要的浏览器检查、外部 smoke gate，以及正式 review 的固定点结论都被诚实记录。
 
 ## 输出契约
 
@@ -157,5 +158,5 @@ main session 处理跨任务 seam：
 - 派发的 worker cohort；
 - main session 处理的 seam；
 - 实际运行的测试和浏览器/外部检查；
-- `module-review` Spec 轴的固定点 review 结果；
+- ticket acceptance review 的固定点结果；
 - 剩余风险或被阻塞的 gate。

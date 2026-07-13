@@ -1,7 +1,7 @@
 ---
 name: dev-with-track
 description: >
-  Impl-Package 体系的执行与 gate 阶段：当已批准 attempt 需要恢复执行现场、判定下一可执行单元、记录验证证据、处理返工失效、分流 findings 或写入 append-only gate ledger 时使用。不拥有 design/spec/plan/ticket/DAG 的定义。
+  Use when an approved implementation attempt needs execution restored, the next actionable unit selected, verification evidence recorded, rework invalidation handled, findings routed, or an append-only gate ledger evaluated. Does not own design/spec/plan/ticket/DAG definitions.
 ---
 
 # Dev With Track
@@ -16,6 +16,26 @@ description: >
 - 本 skill 维护 ticket/DAG/progress runtime state、findings 分流、plan Execution Record 的证据追加，以及 gate.md 的 newest-first entry。
 
 本 skill 不重写长期 contract，不从历史 Composition 推断当前 attempt，也不修改旧 gate entry。
+
+## Task execution and review routing
+
+本 skill 选择 actionable unit、维护其 runtime state，并拥有 ticket acceptance 的最终入口；它不自行代替 task worker。存在有界且可委派的 implementation task 时，必须调用同体系的 `subagent-driven-development`：该 skill 负责 implementer delegation 和非实现者执行的 task spec-compliance / code-quality review。task review evidence 进入对应 progress/handoff 或当前 ticket evidence，再由本 skill 汇总。
+
+当 ticket 达到验收候选，先固定 comparison point，再自动按以下信号运行正式 review；不能等待 owner 显式点名：
+
+- `code-review`：任何 implementation 恒必做。
+- `module-review`：当前 attempt 有 tickets 或 DAG 时必做；无两者但 diff/spec 涉及 interface、状态机、模块边界或 seam 时同样必做。其 Standards 与 Spec 两轴都必须完成。
+- `safety-review`：diff 或 spec/plan/DAG 出现 auth、permission、payment、webhook、migration、外部 mutation、数据完整性或并发安全信号时必做。
+
+正式 review 的 findings 必须修复并以 closure verification 复核，才可把 ticket Runtime Acceptance Status 记为已满足或进入 gate。
+
+## Completion claim gate
+
+适用的正式 review、findings 分流和 Stage 7 准备完成后，在写入 terminal `pass` entry 前必须调用同体系的 `verification-before-completion`，用拟声明的 pass、当前 revision/worktree/environment 和 plan ER/review/smoke evidence 做 claim-to-evidence 审计。它不是 DAG task，不按 ticket 或 task 重复运行，也不替代既有 review 与验证。
+
+证据完整且仍新鲜时可以复用，不机械重跑全部检查；证据 stale、跨 revision/environment、冲突或不足时，只补跑受影响检查。审计未通过时不得写 pass 或宣称 closed，应报告 `implemented, not verified` 或具体 pending gate。
+
+terminal metadata 后若又发生 commit、合入目标分支或相关环境变化，在对外宣称 complete、closed、merge-ready 或 release-ready 前再次调用 `verification-before-completion`，核对变化是否使既有证据失效。纯 metadata delta 不自动使行为测试失效，但必须验证最终 HEAD、工作树状态和声明所依赖的 metadata/proof。
 
 ## Restore
 
@@ -81,15 +101,16 @@ terminal gate 关闭后提示 owner 可以按需使用 `backfill-stable-docs`，
 
 1. Restore 当前 attempt 与 revisions。
 2. 校验 Composition/artifacts、dependency graph 与 AC references。
-3. 选择并执行 actionable unit；状态只写对应 runtime artifact。
+3. 选择并执行 actionable unit；可委派 task 必经 `subagent-driven-development` 的独立 task review，状态只写对应 runtime artifact。
 4. append plan Execution Record。
 5. 分流 findings；必要时回 req-align 并重新过相应 gate。
-6. 运行 review/verification，固定 comparison point。
-7. 保留下一个 G id；terminal verdict 先完成 Stage 7，再在 gate.md 顶部一次性插入新 entry。
-8. terminal 时冻结 plan；blocked 时保留 attempt active。
+6. ticket 达到验收候选时自动路由 code-review、module-review 和适用的 safety-review，固定 comparison point 并闭环 findings。
+7. 保留下一个 G id；拟写 terminal pass 时先完成 Stage 7 准备，再由 `verification-before-completion` 审计 pass claim。
+8. 审计通过后在 gate.md 顶部一次性插入新 entry；terminal 时冻结 plan，blocked 时保留 attempt active。
+9. terminal metadata commit、目标分支合入或环境变化后，任何 complete / closed / merge-ready / release-ready 声明前重新执行 completion-claim evidence audit。
 
 ## Output
 
 向 owner 汇报时使用 `talk-to-boss`：首段说明本次功能范围、实施/验证/gate 各自完成到哪、剩余 blocker 数量、整体是否 closed，以及当前需要 owner 决定什么。主体按功能 slice 说明已经支持和仍未证明的行为。
 
-随后附 canonical handoff：package/Attempt ID、D/S/P revision、Composition、当前状态源、execution evidence、findings 分流、最新 gate entry/verdict、Supersedes 链与 Stage 7。terminal gate 已关闭时，另以非阻塞 follow-up 提示可选 backfill；不要把提示写成未完成 gate。
+随后附 canonical handoff：package/Attempt ID、D/S/P revision、Composition、当前状态源、execution evidence、findings 分流、最新 gate entry/verdict、Supersedes 链、Stage 7 与 completion-claim evidence audit。terminal gate 已关闭时，另以非阻塞 follow-up 提示可选 backfill；不要把提示写成未完成 gate。
