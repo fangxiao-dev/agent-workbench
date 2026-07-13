@@ -93,3 +93,9 @@ apply 只处理 owner 明确批准的 report item。批准必须指向具体 rep
 ## 输出
 
 最终回复报告：模式、双锚点、Source HEAD、报告或 apply 记录路径、候选/已覆盖/冲突计数、carry-forward、Project Source Watermark 状态、验证结果和仍需 owner 决策的 item ID。
+
+## PR 交付模板
+
+只有当用户或自动化任务明确要求以 PR 作为交付界面时，读取并使用 [PR Summary 模板](assets/pr-summary-template.md)。默认 `report` / `apply` 模式不读取该模板，也不要求创建分支、提交、推送或开 PR。
+
+PR summary 面向 owner 审阅，不承载机器审计。必须用中文业务语言说明：对象路径、内容变化、业务影响、需要 owner 判断的问题和验证结论；commit、watermark、hash、内部 item ID 等技术审计信息保留在 `_compaction/` 记录中。
