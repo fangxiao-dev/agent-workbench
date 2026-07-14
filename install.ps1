@@ -179,6 +179,197 @@ function Install-Collection {
     }
 }
 
+function Remove-ManagedLegacyCodexBackfillLink {
+    param(
+        [string]$HostRoot
+    )
+
+    $skillsRoot = Join-Path $HostRoot "skills"
+    $legacySource = Join-Path $WorkbenchDir "skills\backfill-stable-docs"
+    $legacyDestination = Join-Path $skillsRoot "backfill-stable-docs"
+    $skillsItem = Get-Item -LiteralPath $skillsRoot -Force -ErrorAction SilentlyContinue
+
+    if ($skillsItem -and $skillsItem.LinkType -and $skillsItem.Target) {
+        $skillsTarget = $skillsItem.Target
+        if ($skillsTarget -is [System.Array]) {
+            $skillsTarget = $skillsTarget[0]
+        }
+        if ($skillsTarget -eq (Join-Path $WorkbenchDir "skills")) {
+            return
+        }
+    }
+
+    $legacyItem = Get-Item -LiteralPath $legacyDestination -Force -ErrorAction SilentlyContinue
+    if (-not $legacyItem) {
+        return
+    }
+
+    $legacyTarget = $legacyItem.Target
+    if ($legacyTarget -is [System.Array]) {
+        $legacyTarget = $legacyTarget[0]
+    }
+    if ($legacyItem.LinkType -and ($legacyTarget -eq $legacySource)) {
+        if ($legacyItem.PSIsContainer) {
+            [System.IO.Directory]::Delete($legacyDestination, $false)
+        }
+        else {
+            [System.IO.File]::Delete($legacyDestination)
+        }
+        Write-ItemStatus -Level "OK" -Message "legacy backfill-stable-docs link -> removed"
+        $script:InstalledCount++
+    }
+}
+
+function Get-ComparablePath {
+    param(
+        [string]$Path
+    )
+
+    if (-not $Path) {
+        return $null
+    }
+
+    $candidate = $Path
+    if ($candidate.StartsWith("\\?\")) {
+        $candidate = $candidate.Substring(4)
+    }
+
+    try {
+        $candidate = [System.IO.Path]::GetFullPath($candidate)
+    }
+    catch {
+        return $null
+    }
+
+    return $candidate.TrimEnd([char[]]"\/").ToLowerInvariant()
+}
+
+function Invoke-CodexCommand {
+    param(
+        [System.Management.Automation.CommandInfo]$Command,
+        [string[]]$Arguments
+    )
+
+    $stderrPath = [System.IO.Path]::GetTempFileName()
+    $stdout = ""
+    $stderr = ""
+    $exitCode = 1
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $stdout = & $Command.Source @Arguments 2> $stderrPath | Out-String
+        $exitCode = $LASTEXITCODE
+        $stderr = Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+        if (Test-Path -LiteralPath $stderrPath) {
+            Remove-Item -LiteralPath $stderrPath -Force
+        }
+    }
+
+    return @{
+        Stdout = $stdout
+        Stderr = $stderr
+        ExitCode = $exitCode
+    }
+}
+
+function Install-CodexPlugin {
+    param(
+        [string]$HostRoot
+    )
+
+    Write-Host "plugin:"
+    $marketplaceManifest = Join-Path $WorkbenchDir ".agents\plugins\marketplace.json"
+    if (-not (Test-Path -LiteralPath $marketplaceManifest)) {
+        Write-ItemStatus -Level "WARN" -Message "stable-docs-backfill -> skipped (marketplace manifest is missing)"
+        $script:SkippedCount++
+        $script:ConflictCount++
+        return
+    }
+
+    $codexCommand = Get-Command codex -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $codexCommand) {
+        Write-ItemStatus -Level "WARN" -Message "stable-docs-backfill -> skipped (Codex CLI not found)"
+        $script:SkippedCount++
+        return
+    }
+
+    $marketplaceListResult = Invoke-CodexCommand -Command $codexCommand -Arguments @("plugin", "marketplace", "list", "--json")
+    if ($marketplaceListResult.ExitCode -ne 0) {
+        $detail = [string]$marketplaceListResult.Stderr
+        if (-not $detail) {
+            $detail = [string]$marketplaceListResult.Stdout
+        }
+        $detail = $detail.Trim()
+        Write-ItemStatus -Level "WARN" -Message "agent-workbench marketplace -> conflict, skipped (could not inspect marketplaces: $detail)"
+        $script:SkippedCount++
+        $script:ConflictCount++
+        return
+    }
+
+    $marketplaceListOutput = $marketplaceListResult.Stdout
+    try {
+        $marketplaceList = $marketplaceListOutput | ConvertFrom-Json
+    }
+    catch {
+        Write-ItemStatus -Level "WARN" -Message "agent-workbench marketplace -> conflict, skipped (Codex CLI returned invalid marketplace JSON)"
+        $script:SkippedCount++
+        $script:ConflictCount++
+        return
+    }
+
+    $existingMarketplace = @($marketplaceList.marketplaces | Where-Object { $_.name -eq "agent-workbench" }) | Select-Object -First 1
+    if ($existingMarketplace) {
+        $existingRoot = Get-ComparablePath -Path $existingMarketplace.root
+        $workbenchRoot = Get-ComparablePath -Path $WorkbenchDir
+        if ((-not $existingRoot) -or ($existingRoot -ne $workbenchRoot)) {
+            $configuredRoot = $existingMarketplace.root
+            Write-ItemStatus -Level "WARN" -Message "agent-workbench marketplace -> conflict, skipped (already points to $configuredRoot)"
+            $script:SkippedCount++
+            $script:ConflictCount++
+            return
+        }
+
+        Write-ItemStatus -Level "*" -Message "agent-workbench marketplace -> already registered"
+        $script:SkippedCount++
+    }
+    else {
+        $marketplaceResult = Invoke-CodexCommand -Command $codexCommand -Arguments @("plugin", "marketplace", "add", $WorkbenchDir, "--json")
+        if ($marketplaceResult.ExitCode -ne 0) {
+            $detail = [string]$marketplaceResult.Stderr
+            if (-not $detail) {
+                $detail = [string]$marketplaceResult.Stdout
+            }
+            $detail = $detail.Trim()
+            Write-ItemStatus -Level "WARN" -Message "agent-workbench marketplace -> conflict, skipped ($detail)"
+            $script:SkippedCount++
+            $script:ConflictCount++
+            return
+        }
+
+        Write-ItemStatus -Level "OK" -Message "agent-workbench marketplace -> registered"
+        $script:InstalledCount++
+    }
+
+    $pluginResult = Invoke-CodexCommand -Command $codexCommand -Arguments @("plugin", "add", "stable-docs-backfill@agent-workbench", "--json")
+    if ($pluginResult.ExitCode -ne 0) {
+        $detail = [string]$pluginResult.Stderr
+        if (-not $detail) {
+            $detail = [string]$pluginResult.Stdout
+        }
+        $detail = $detail.Trim()
+        Write-ItemStatus -Level "WARN" -Message "stable-docs-backfill -> conflict, skipped ($detail)"
+        $script:SkippedCount++
+        $script:ConflictCount++
+        return
+    }
+
+    Write-ItemStatus -Level "OK" -Message "stable-docs-backfill -> installed/refreshed"
+    $script:InstalledCount++
+}
+
 Write-Host "[INFO] Workbench: $WorkbenchDir"
 Write-Host "[INFO] Target project: $Target"
 Write-Host ""
@@ -195,6 +386,10 @@ else {
         Install-Link -Source (Join-Path $WorkbenchDir "skills") -Destination (Join-Path $hostRoot "skills") -Label "skills" -LinkType "Junction"
         Install-Collection -HostRoot $hostRoot -ChildName "agents" -SourcePath (Join-Path $WorkbenchDir "agents") -ItemKind "Directory" -InstallMode "Junction"
         Install-Collection -HostRoot $hostRoot -ChildName "commands" -SourcePath (Join-Path $WorkbenchDir "commands") -ItemKind "File" -InstallMode "Copy"
+        if ($hostName -eq "codex") {
+            Remove-ManagedLegacyCodexBackfillLink -HostRoot $hostRoot
+            Install-CodexPlugin -HostRoot $hostRoot
+        }
         Write-Host ""
     }
 }

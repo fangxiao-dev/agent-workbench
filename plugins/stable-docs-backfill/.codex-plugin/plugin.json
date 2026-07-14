@@ -1,0 +1,21 @@
+{
+  "name": "stable-docs-backfill",
+  "version": "0.1.0",
+  "description": "Audit, apply, and verify durable documentation backfills with explicit owner gates.",
+  "author": {
+    "name": "agent-workbench"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Stable Docs Backfill",
+    "shortDescription": "Keep canonical project knowledge aligned with current truth.",
+    "longDescription": "Separates read-only stable-docs audits, owner-approved application, and deterministic verification into composable Codex skills.",
+    "developerName": "agent-workbench",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": "Audit this repository for durable deltas that belong in canonical documentation."
+  }
+}

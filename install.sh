@@ -167,6 +167,117 @@ install_collection() {
   fi
 }
 
+remove_managed_legacy_codex_backfill_link() {
+  local host_home="$1"
+  local skills_root="$host_home/skills"
+  local legacy_source="$WORKBENCH_DIR/skills/backfill-stable-docs"
+  local legacy_destination="$skills_root/backfill-stable-docs"
+
+  if [ -L "$skills_root" ] && [ "$(readlink "$skills_root")" = "$WORKBENCH_DIR/skills" ]; then
+    return 0
+  fi
+
+  if [ -L "$legacy_destination" ] && [ "$(readlink "$legacy_destination")" = "$legacy_source" ]; then
+    rm "$legacy_destination"
+    echo "  [OK] legacy backfill-stable-docs link -> removed"
+    INSTALLED_COUNT=$((INSTALLED_COUNT + 1))
+  fi
+}
+
+install_codex_plugin() {
+  echo "plugin:"
+  local marketplace_manifest="$WORKBENCH_DIR/.agents/plugins/marketplace.json"
+  if [ ! -f "$marketplace_manifest" ]; then
+    echo "  [WARN] stable-docs-backfill -> skipped (marketplace manifest is missing)"
+    SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+    CONFLICT_COUNT=$((CONFLICT_COUNT + 1))
+    return 0
+  fi
+
+  if ! command -v codex >/dev/null 2>&1; then
+    echo "  [WARN] stable-docs-backfill -> skipped (Codex CLI not found)"
+    SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+    return 0
+  fi
+
+  local marketplace_list_output
+  local codex_error_file
+  local codex_error_detail
+  codex_error_file="$(mktemp)"
+  if ! marketplace_list_output="$(codex plugin marketplace list --json 2>"$codex_error_file")"; then
+    codex_error_detail="$(cat "$codex_error_file")"
+    rm -f "$codex_error_file"
+    echo "  [WARN] agent-workbench marketplace -> conflict, skipped (could not inspect marketplaces: $codex_error_detail)"
+    SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+    CONFLICT_COUNT=$((CONFLICT_COUNT + 1))
+    return 0
+  fi
+  rm -f "$codex_error_file"
+
+  local marketplace_state="missing"
+  local python_command=""
+  if command -v python3 >/dev/null 2>&1; then
+    python_command="python3"
+  elif command -v python >/dev/null 2>&1; then
+    python_command="python"
+  fi
+
+  if [ -n "$python_command" ]; then
+    if ! marketplace_state="$(printf '%s' "$marketplace_list_output" | "$python_command" -c 'import json, os, sys; data=json.load(sys.stdin); expected=os.path.normcase(os.path.realpath(sys.argv[1])); matches=[item for item in data.get("marketplaces", []) if item.get("name") == "agent-workbench"]; print("missing" if not matches else ("same" if os.path.normcase(os.path.realpath(matches[0].get("root", ""))) == expected else "conflict"))' "$WORKBENCH_DIR" 2>/dev/null)"; then
+      marketplace_state="invalid"
+    fi
+  fi
+
+  if [ "$marketplace_state" = "conflict" ]; then
+    echo "  [WARN] agent-workbench marketplace -> conflict, skipped (name already points to another source)"
+    SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+    CONFLICT_COUNT=$((CONFLICT_COUNT + 1))
+    return 0
+  fi
+
+  if [ "$marketplace_state" = "invalid" ]; then
+    echo "  [WARN] agent-workbench marketplace -> conflict, skipped (Codex CLI returned invalid marketplace JSON)"
+    SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+    CONFLICT_COUNT=$((CONFLICT_COUNT + 1))
+    return 0
+  fi
+
+  if [ "$marketplace_state" = "same" ]; then
+    echo "  [*] agent-workbench marketplace -> already registered"
+    SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+  else
+    local marketplace_output
+    codex_error_file="$(mktemp)"
+    if ! marketplace_output="$(codex plugin marketplace add "$WORKBENCH_DIR" --json 2>"$codex_error_file")"; then
+      codex_error_detail="$(cat "$codex_error_file")"
+      rm -f "$codex_error_file"
+      echo "  [WARN] agent-workbench marketplace -> conflict, skipped ($codex_error_detail)"
+      SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+      CONFLICT_COUNT=$((CONFLICT_COUNT + 1))
+      return 0
+    fi
+    rm -f "$codex_error_file"
+
+    echo "  [OK] agent-workbench marketplace -> registered"
+    INSTALLED_COUNT=$((INSTALLED_COUNT + 1))
+  fi
+
+  local plugin_output
+  codex_error_file="$(mktemp)"
+  if ! plugin_output="$(codex plugin add stable-docs-backfill@agent-workbench --json 2>"$codex_error_file")"; then
+    codex_error_detail="$(cat "$codex_error_file")"
+    rm -f "$codex_error_file"
+    echo "  [WARN] stable-docs-backfill -> conflict, skipped ($codex_error_detail)"
+    SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+    CONFLICT_COUNT=$((CONFLICT_COUNT + 1))
+    return 0
+  fi
+  rm -f "$codex_error_file"
+
+  echo "  [OK] stable-docs-backfill -> installed/refreshed"
+  INSTALLED_COUNT=$((INSTALLED_COUNT + 1))
+}
+
 echo "[INFO] Workbench: $WORKBENCH_DIR"
 echo "[INFO] Target project: $TARGET"
 echo ""
@@ -182,6 +293,10 @@ else
     install_collection "$host" "$host_home" "skills" "$WORKBENCH_DIR/skills" dir link
     install_collection "$host" "$host_home" "agents" "$WORKBENCH_DIR/agents" dir link
     install_collection "$host" "$host_home" "commands" "$WORKBENCH_DIR/commands" file copy
+    if [ "$host" = "codex" ]; then
+      remove_managed_legacy_codex_backfill_link "$host_home"
+      install_codex_plugin
+    fi
     echo ""
   done
 fi

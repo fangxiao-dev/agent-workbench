@@ -2,6 +2,8 @@
 
 Use this reference when the short routing rules in `SKILL.md` are not enough.
 
+This reference uses `backfill-stable-docs`, `audit-stable-docs`, `apply-stable-docs`, and `verify-stable-docs` as logical role or stage names. In Codex, the executable entry is `$stable-docs-backfill:backfill-stable-docs`; it routes by user intent, while audit, apply, and verify remain separately authorized and separately reported stages.
+
 ## Documentation Homes
 
 | Destination | Purpose |
@@ -10,7 +12,7 @@ Use this reference when the short routing rules in `SKILL.md` are not enough.
 | `docs/hands-on-knowledge/implementation/` | Reusable implementation patterns, migration notes, verification notes, integration practices, and maintained implementation references. |
 | `docs/hands-on-knowledge/debug/` | Investigations, runbooks, known failure modes, recovery procedures, postmortems, platform traps, and diagnostic references. |
 | `docs/top-level-knowledge/` top-level PRDs | Product/journey-level intent: positioning, users, journeys, global scope/non-scope, outcomes, and success criteria. Before journey restructuring is complete, persist new deltas in project `docs/module-knowledge/_pending.md` with destination=`top-level-prd`, source, statement, and authority; do not expand existing large PRDs. |
-| `docs/module-knowledge/` | Module intent and behavior contracts. Route module-layer deltas to `backfill-stable-docs`; it owns module PRD/spec classification, pending registration, lazy PRD creation, and compaction. |
+| `docs/module-knowledge/` | Module intent and behavior contracts. Route module-layer deltas to the `backfill-stable-docs` logical router; `audit-stable-docs` owns read-only inventory, `apply-stable-docs` owns approved item application, and `verify-stable-docs` owns independent validation. |
 | `CONTEXT.md` | Canonical project language and vocabulary (`context-language`). |
 | `docs/top-level-knowledge/` | Stable project, architecture, product, domain, or technology-stack facts that are not better represented by a PRD or module PRD. |
 | `docs/exchange/req-*.md` | Requirement inbox, change request, or mini-PRD draft. Use these to capture new or changed requirements, discussion context, and owner decisions before they are merged into stable docs. |
@@ -46,10 +48,10 @@ Use this flow when the input is a new requirement, changed requirement, PRD clea
 1. Capture new or changed requirements in `docs/exchange/req-*.md` when they still need review, traceability, or owner decisions.
 2. Route accepted journey/product intent to a top-level PRD, subject to the pre-restructure pending rule below. Route accepted module-layer deltas to `backfill-stable-docs`.
 3. Use `docs/implementations/<slug>/` when a point-in-time change needs design or execution planning.
-4. Hand verified module behavior to `backfill-stable-docs`; it decides the owning module contract and compaction action.
+4. Hand verified module behavior to the `backfill-stable-docs` logical router; audit identifies candidates, apply performs only the owner-approved compaction action, and verify independently checks the result.
 5. Route only reusable implementation or debugging lessons with reverse-lookup value into `docs/hands-on-knowledge/`.
 
-Treat `req` files as inbox and audit records, not final long-term PRDs. Module-layer classification, first-PRD gates, pending handling, and intent/contract splitting are owned by `backfill-stable-docs`; this taxonomy only routes work to that maintainer.
+Treat `req` files as inbox and audit records, not final long-term PRDs. Module-layer classification and candidate reporting belong to `audit-stable-docs`; first-PRD gates, approved pending handling, and intent/contract application belong to `apply-stable-docs`; validation belongs to `verify-stable-docs`. This taxonomy only routes work to the logical `backfill-stable-docs` maintainer.
 
 Before the top-level PRD journey restructure is complete, persist every `top-level-prd` delta in the project's `docs/module-knowledge/_pending.md`. Each record must carry destination=`top-level-prd`, source, statement, and authority; do not directly expand the existing large PRDs.
 

@@ -1,6 +1,9 @@
 __pycache__/
 *.pyc
-.agents/
+.agents/*
+!.agents/plugins/
+.agents/plugins/*
+!.agents/plugins/marketplace.json
 .claude/skills/
 .claude/settings.local.json
 skills-lock.json

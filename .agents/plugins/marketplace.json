@@ -1,0 +1,20 @@
+{
+  "name": "agent-workbench",
+  "interface": {
+    "displayName": "Agent Workbench"
+  },
+  "plugins": [
+    {
+      "name": "stable-docs-backfill",
+      "source": {
+        "source": "local",
+        "path": "./plugins/stable-docs-backfill"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

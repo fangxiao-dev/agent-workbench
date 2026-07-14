@@ -19,7 +19,7 @@ Markdown projection contract：
 - gate 直接声明判决对应的 D/S/P revision set、binding validation、comparison point、evidence 与 verdict；精确 OID 只放隐藏的 machine audit metadata。
 - canonical handoff 直接汇总当前 revision set、binding validation、派生 lifecycle/integration qualifier、evidence 与剩余 owner decision。JSON sidecar 不得成为理解或批准交付的前置阅读材料。
 
-terminal gate entry 写入前必须完成 Stage 7 durable-delta capture。gate 关闭后，module knowledge 与 `_pending.md` truth pointer 共同表达当前长期真相及待压实增量；后续 `backfill-stable-docs` report/apply 可以延期，apply 完成后再把获批增量正式归并进 module knowledge。重新 patch 时，先将 package design/spec 与当前 module knowledge、相关 pending truth pointer 和代码对账，再激活并修订 package SoT。
+terminal gate entry 写入前必须完成 Stage 7 durable-delta capture。gate 关闭后，module knowledge 与 `_pending.md` truth pointer 共同表达当前长期真相及待压实增量；后续 `audit-stable-docs`、`apply-stable-docs`、`verify-stable-docs` 可以延期且相互独立，只有 apply 才把 owner 批准的增量正式归并进 module knowledge。重新 patch 时，先将 package design/spec 与当前 module knowledge、相关 pending truth pointer 和代码对账，再激活并修订 package SoT。
 
 ### Module Knowledge Watermark（把"先对账"变成可执行检查）
 
@@ -200,10 +200,10 @@ package 永远只有一个 gate.md。它是 newest-first 的 append-only gate ev
 每个 gate entry 的 Durable Deltas 仍是唯一 capture surface：
 
 ~~~text
-gate entry Durable Deltas -> project _pending.md -> backfill report/apply
+gate entry Durable Deltas -> project _pending.md -> backfill audit/apply/verify
 ~~~
 
-`gate entry Durable Deltas → _pending.md / truth pointer / 必要 stub` 属于 Stage 7，是任意 terminal verdict 的强制前置；`backfill-stable-docs` report/apply 位于 terminal gate 之后，只作为可选维护提示，可以延期且不阻塞 gate、任务 closed 或当前交付。实际调用需要用户明确要求、已批准维护计划或明确进入周期维护流程；提示本身不构成 report/apply 授权。
+`gate entry Durable Deltas → _pending.md / truth pointer / 必要 stub` 属于 Stage 7，是任意 terminal verdict 的强制前置；`audit-stable-docs`、`apply-stable-docs`、`verify-stable-docs` 位于 terminal gate 之后，只作为可选维护阶段，可以延期且不阻塞 gate、任务 closed 或当前交付。实际调用 `$stable-docs-backfill:backfill-stable-docs` 需要用户明确要求、已批准维护计划或明确进入周期维护流程；提示本身不构成 audit/apply/verify 授权。
 
 每条 delta 记录 delta-id、destination、source、statement、affected modules、authority、evidence 与 pending/truth-pointer 校验。去重键是 &lt;destination&gt;|&lt;delta-id&gt;。无 durable delta 时写 none 和理由。
 
@@ -215,7 +215,7 @@ append-only 写入顺序：先保留下一个 G id、固定 comparison point 与
 - 当前 attempt plan 声明 Attempt ID、D/S/P revision 与唯一 Composition，且与 earned artifacts 一致。
 - 内部 sidecar 的 `current` 唯一选择当前 design/spec/attempt；每个 D/S/P alias 都能解析到唯一 artifact/mode/blob binding，design/spec 通过 exact-blob，plan 通过 plan-contract-v1 且 ER append-only。owner-facing Markdown 已直接写出 revision set、派生 lifecycle/integration qualifier 与 binding validation 结论。
 - 每个 earned ticket/DAG 声明的 Plan Revision 与当前 plan 的 P 号一致；不一致的按 NEEDS-REVALIDATION 处理，不得当作可用状态。
-- 任意 terminal entry 写入前，Durable Deltas 已完成 `_pending.md` 注册、truth pointer 与必要 stub；无 delta 时已记录 `none + reason`。gate 后 backfill report/apply 不属于 terminal validation checklist。
+- 任意 terminal entry 写入前，Durable Deltas 已完成 `_pending.md` 注册、truth pointer 与必要 stub；无 delta 时已记录 `none + reason`。gate 后 backfill audit/apply/verify 不属于 terminal validation checklist。
 - package 同时最多一个由 registry 选中的 Active attempt；未选中的 plan 是 Draft，terminal entry 对应 attempt 是 Frozen。多个 current attempt、或多个被选中且未冻结的 plan 是 lifecycle violation，restore 必须停止。
 - plan 无 task runtime status、ticket 正文或长期 contract；通用验证政策只引用，不复制。
 - 每项 AC 有 evidence producer/manual owner；task-to-AC 与 typed dependency 引用均可解析且无环。
