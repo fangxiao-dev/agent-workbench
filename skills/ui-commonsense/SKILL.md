@@ -1,6 +1,6 @@
 ---
 name: ui-commonsense
-description: Use when implementing, refactoring, or reviewing frontend UI with common usability defects: unclear object/action ownership, mixed-abstraction navigation, excessive spacing, stretched drawers, nested cards, awkward forms, broken combobox/dropdown behavior, misaligned fields, quantity inputs without steppers, unclear table/list structure, weak visual states, private-page loading boundaries, or incomplete browser verification. This is an entry-map skill: load the relevant references before changing UI.
+description: "Use when implementing, refactoring, or reviewing frontend UI with common usability defects: unclear object/action ownership, mixed-abstraction navigation, excessive spacing, stretched drawers, nested cards, awkward forms, broken combobox/dropdown behavior, misaligned fields, quantity inputs without steppers, unclear table/list structure, weak visual states, private-page loading boundaries, or incomplete browser verification. This is an entry-map skill: load the relevant references before changing UI."
 ---
 
 # UI Commonsense

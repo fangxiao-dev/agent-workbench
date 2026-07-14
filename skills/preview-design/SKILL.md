@@ -1,6 +1,6 @@
 ---
 name: preview-design
-description: Use when the user chooses a preview mode for UI exploration: Prototype mode delegates to the prototype skill for multi-variant throwaway selection, while Real UI Component mode mounts a selected surface as a non-production, no-login, fixture-only preview route inside the real app shell. Trigger for explicit prototype-vs-real-component preview mode choices, dev preview routes, fixture preview harnesses, no-login visual review routes, or screenshotable preview surfaces with quarantined backend/auth/mutation side effects. Do not use for screenshot bookkeeping, domain semantics, or real-route absorption.
+description: "Use when the user chooses a preview mode for UI exploration: Prototype mode delegates to the prototype skill for multi-variant throwaway selection, while Real UI Component mode mounts a selected surface as a non-production, no-login, fixture-only preview route inside the real app shell. Trigger for explicit prototype-vs-real-component preview mode choices, dev preview routes, fixture preview harnesses, no-login visual review routes, or screenshotable preview surfaces with quarantined backend/auth/mutation side effects. Do not use for screenshot bookkeeping, domain semantics, or real-route absorption."
 ---
 
 # Preview Design
