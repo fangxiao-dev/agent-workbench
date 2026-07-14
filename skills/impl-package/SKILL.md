@@ -62,7 +62,7 @@ flowchart TD
 
 ## 正向路由：你在哪 → 进哪个 skill
 
-- 有新改动 / 需求，还没进流水线 → **`req-align`**（先过 Design、再过 Spec 门）。
+- 有新改动 / 需求，还没进流水线 → **`req-align`**（先过 Design、再过 Spec 门；当 acceptance 依赖权威证明、发布状态、兼容投影或外部副作用时，由该 skill 条件化定义 evidence-integrity contract；provider、schema、archive、CLI 等只是例子）。
 - Spec 已过门，还没 plan → **`impl-planning`**。
 - 当前 attempt plan 判 `tickets=true`，还没票 → **`to-tickets`**（draft → owner 批准 → publish）。
 - 当前 attempt plan 判 `dag=true`，plan（及相关 approved 票）就绪 → **`create-task-dag`**。

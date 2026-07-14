@@ -27,9 +27,11 @@ description: >
 
 - `code-review`：任何 implementation 恒必做。
 - `module-review`：当前 attempt 有 tickets 或 DAG 时必做；无两者但 diff/spec 涉及 interface、状态机、模块边界或 seam 时同样必做。其 Standards 与 Spec 两轴都必须完成。
-- `safety-review`：diff 或 spec/plan/DAG 出现 auth、permission、payment、webhook、migration、外部 mutation、数据完整性或并发安全信号时必做。
+- `safety-review`：diff 或 spec/plan/DAG 出现 auth、permission、payment、webhook、migration、外部 mutation、数据完整性、并发安全，或 evidence authority / published-state / compatibility-projection / proof-equality 信号时必做。后四类是条件化风险信号，不假定所有项目存在 provider、schema、archive、CLI 或 `current` 指针。
 
 正式 review 的 findings 必须修复并以 closure verification 复核，才可把 ticket Runtime Acceptance Status 记为已满足或进入 gate。
+
+如果当前 spec 激活了 conditional evidence-integrity contract，任务只有在相关 false-PASS 反例和适用的副作用后失败/失效路径已有证据时才能 dependency-release；绿色正向测试本身不能释放该依赖。证据仍写入既有 task/ticket/Execution Record，不创建新的 runtime artifact。
 
 ## Completion claim gate
 

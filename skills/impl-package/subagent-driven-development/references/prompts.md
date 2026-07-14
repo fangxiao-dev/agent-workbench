@@ -47,6 +47,7 @@
 - 每项验收条件是否有对应实现和可核验证据。
 - 是否漏做、误解需求、实现了未授权行为或违反明确 contract。
 - 声称完成的内容是否与实际产物一致。
+- 当任务或 spec 标记了 evidence-integrity 风险时，主断言是否有相关 false-PASS 反例；若镜像权威 contract，字段、required、类型/枚举、私有字段排除和兼容格式是否与该 authority 一致。provider、schema、archive、CLI 等只是例子，不是前提。
 
 返回：
 - 结论：PASS / FAIL / NEEDS_CONTEXT
@@ -73,6 +74,7 @@
 - 测试覆盖及验证是否足以支撑变更风险。
 - 错误处理、重试、幂等性、并发、资源释放和安全副作用中适用的部分。
 - 公共 seam、兼容性、可维护性以及是否引入不必要复杂度。
+- 当任务或 spec 标记了 evidence-integrity 风险，副作用后失败、补偿或失效失败、消费者仍把结果当权威、实际数据与声明元数据不一致、或公共输出跨状态漂移是否会造成 false PASS。只检查当前任务相关的情况；这些类别及 provider、schema、archive、CLI 等名称都是例子。
 
 返回：
 - 结论：PASS / FAIL / NEEDS_CONTEXT

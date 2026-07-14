@@ -55,6 +55,8 @@ subagent 使用以下状态之一：
 4. reviewer 发现问题后必须修正并复核；不能只记录意见就继续集成。多个高度相关的小单元可以组成一个明确的 integration batch review，但仍必须保留逐 task 的结论与证据。
 5. 所有单元完成后，主 agent 检查 diff 冲突、接口衔接和整体验证，并把 task review evidence 交给 `dev-with-track`。
 
+当 task 的 spec 已激活 conditional evidence-integrity contract 时，task review 还必须验证一个与主断言相关的 false-PASS 反例，以及副作用已经发生后失败或失效的路径（若该 task 有副作用）。如果代码镜像另一个权威 contract，review 要检查字段、required、枚举/类型、私有字段排除和兼容格式的完整性。provider、archive、schema、CLI 等只是可能触发该规则的例子；没有对应信号时不增加 review 负担。
+
 Task review 不替代 ticket acceptance：当一个 ticket 达到验收候选，`dev-with-track` 必须按项目 review 路由运行正式 review——`code-review` 恒必做；存在 tickets、DAG、interface、状态机、模块边界或 seam 变化时 `module-review` 必做；出现安全或外部副作用信号时 `safety-review` 必做。正式 reviewer 的 findings 必须在 ticket acceptance 前闭环。
 
 本 skill 不拥有 worktree、plan revision、runtime ledger、Git 或发布流程；这些由项目规则及对应 owner 管理。

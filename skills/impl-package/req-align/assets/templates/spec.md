@@ -43,6 +43,7 @@ Design: [design.md](design.md) | No standalone design file
 - Domain terms:
 - Inputs, outputs, identities, and invariants:
 - Schema, normalization, precision, and ownership semantics:
+- Conditional evidence-integrity contract (only when an acceptance conclusion depends on authoritative evidence, publication/consumption state, compatibility projection, external side effect, or state-dependent public output): primary assertion and comparison unit; source authority and private-field exclusions; actual-versus-declared bounds; complete frozen-format admission; reader authority after incomplete publication; expected operational failure surface and stable public shape.
 
 ## 3. Behavior / State Machine / Workflow
 
@@ -73,6 +74,8 @@ Design: [design.md](design.md) | No standalone design file
 
 | AC ID | Promised outcome / constraint | Evidence producer or manual owner | Passing evidence |
 | --- | --- | --- | --- |
+
+<!-- When the conditional evidence-integrity contract applies, include only relevant false-PASS counterexamples here: e.g. comparison drift hidden by normalization, failure after a side effect, rollback/invalidation failure, incompatible projected input, or state-shape drift. These are examples, not mandatory scenarios. -->
 
 ## 8. Contract Coherence
 

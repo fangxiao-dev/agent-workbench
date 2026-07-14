@@ -86,6 +86,19 @@ If any criterion fails, record `Spec Gate: BLOCKED` with the exact missing contr
 
 The spec must not contain a `Stable Doc Backfill Map`, durable-delta queue, Composition, worker task steps, verification command log, or tracker publication metadata. `Composition` 由每次 attempt plan 独立决定。
 
+### Conditional Evidence-Integrity Contract
+
+Evaluate this contract only when an acceptance conclusion depends on evidence whose authority, comparison, publication, compatibility, or consumption could change whether the system falsely passes. Examples are external-provider or integration proof, a durable `current`/latest pointer, atomic publish or archive, external mutation, a schema projected from another authority, or a public payload whose shape varies by state; these are examples, not prerequisites for every package.
+
+When the signal is present, make the existing eight spec sections answer the relevant questions without creating a ninth section or a new artifact:
+
+- In Terms / Data Contracts and Acceptance Semantics, define the primary assertion, the comparison unit and normalization, actual-versus-declared bounds where relevant, and the authoritative source for every projected contract field.
+- In Behavior and Error Recovery, state the commit point, every material post-side-effect failure state, compensation or invalidation behavior, and what readers may treat as authoritative after an incomplete operation.
+- In Constraints and Coherence, bind compatibility or frozen-format admission to the complete prior contract plus any explicit deltas; do not accept a hand-written field subset when complete structural validity matters, and exclude fields that are private to the source authority.
+- In Acceptance Semantics, distinguish expected operational or acceptance failures from programmer failures, define the safe observable failure surface, and require a stable public shape across states when callers consume one.
+
+The Spec gate passes under this signal only when the contract makes false-PASS counterexamples testable. It must name only the relevant concerns; an ordinary change with no evidence-integrity signal does not gain extra ceremony.
+
 `spec.md` 声明 `Spec Revision: S<n>`，并始终记录其绑定的 `Design Revision: D<n>`；lightweight Design 没有独立 design.md 时，这一字段与 Design Gate Record 共同提供 D revision 的 canonical 落点。纯实现修复以重新符合当前 spec 时复用 revision；行为 contract 变化时升级 S revision 并重跑 Spec Gate；设计选择变化时必须先完成新的 Design revision/Gate。Gate 通过后计算最终 artifact 的 Git blob OID，在 registry 追加 S binding 并更新 current spec；lightweight Design 的 D/S 可以分别绑定同一个 spec blob。正文只保留当前合同，旧合同通过 Revision History、registry 和 Git 追溯。
 
 ### 自动 grill-me-smartly 通关
@@ -104,7 +117,7 @@ The spec must not contain a `Stable Doc Backfill Map`, durable-delta queue, Comp
 4. Run Design Research, present the selected direction plus blockers, and evaluate the Design gate before creating `spec.md`.
 5. If Design is blocked, create or update `design.md` with provenance, readiness evidence, blockers, and owner decisions; stop without creating `spec.md`.
 6. If Design passes, either persist its substantive research in `design.md`, or take the lightweight path: create `spec.md` and write the minimum provenance, readiness, and owner-decision evidence into its Design Gate Record. Append reusable, verified cross-stage facts/risks/constraints to an already-needed `findings.md`; do not create it for ordinary research narration.
-7. Synthesize the eight-section `spec.md`. For a patch, reuse D/S revisions for implementation-only drift without evaluating Spec Gate, rerun only Spec Gate for behavioral contract changes, and rerun Design then Spec for design-direction changes. When Spec Gate is actually being evaluated, automatically run `grill-me-smartly`'s review phase against the draft first, resolve or surface its findings per Gate 2's rule, then evaluate the Spec gate. Stop when the required gate is blocked.
+7. Synthesize the eight-section `spec.md`, evaluating the conditional evidence-integrity contract only when its signal is present. For a patch, reuse D/S revisions for implementation-only drift without evaluating Spec Gate, rerun only Spec Gate for behavioral contract changes, and rerun Design then Spec for design-direction changes. When Spec Gate is actually being evaluated, automatically run `grill-me-smartly`'s review phase against the draft first, resolve or surface its findings per Gate 2's rule, then evaluate the Spec gate. Stop when the required gate is blocked.
 8. 两道 gate 通过后，用 `git hash-object -- <path>` 计算最终 design/spec blob，在内部 sidecar 追加 D/S binding 并更新 current selection；commit 后用 `git rev-parse HEAD:<path>` 复核，并在 Markdown handoff 直接报告 D/S revision set 与校验结论。随后把同一份 `spec.md` 交给 `impl-planning`，不创建第二份 spec，也不发布 tracker。
 
 ## Alignment Proposal

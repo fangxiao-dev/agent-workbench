@@ -7,6 +7,7 @@ updated: 2026-07-14
 
 - [已确认] Manual acceptance handoff 保持轻量：只固定真正必须的信息，把环境、身份、mock 边界和 teardown 等列为 optional，由 agent 按场景选择，不为低复杂度验收新增重型 artifact。
 - [待验证] 优先用少量明确护栏消除高影响误判，不为内部依赖修正增加新阶段、artifact 或审批步骤。（证据: R2）
+- [待验证] 通用护栏以风险语义触发，项目技术名称只能作为例子；不得把某一项目的 provider、schema、archive、CLI 或存储结构固化为体系前提。（证据: R3）
 
 ## 决策记录（滚动，最近 ≤5 轮）
 
@@ -25,3 +26,8 @@ updated: 2026-07-14
 - 采纳「机械修正自动继续」— typed edge、顺序与 evidence 投影修正不改变业务结果时不重复请求 owner 授权。
 - 采纳「owner decision 业务结果测试」— 只有能说明选项导致不同业务结果时才暂停请求决定。
 - 暂不实施「module-review finding 分类扩展」— 用户选择保持轻量，先用前三项护栏解决高影响误判。
+
+### R3 · 2026-07-14
+
+- 采纳「条件化 evidence-integrity 护栏」— 用户确认把本次返工模式沉淀进体系，但明确要求 external provider proof、`current`、原子发布、schema compatibility、CLI 等只能作为触发示例，不能成为其他项目的前提。
+- 采纳「嵌入既有门禁」— 不新增阶段、artifact 或 owner 审批；规则分别进入 Spec、Plan、task review 与 dependency-release 的现有表面。

@@ -87,6 +87,7 @@ plan 活动期间发现 Composition 判断错误时：
 - 引用权威 test/review policy。
 - 将 Acceptance Semantics 映射到本次要运行的检查、预期结果和 evidence owner；命令只有在仓库中可确认时才写成精确命令。
 - 不复制 Data Safety、UI Evidence、Real Route Safety 等通用 checklist。
+- 当 spec 已激活 conditional evidence-integrity contract 时，在既有 Planned Verification 表中选择最小的 fault-injection matrix，而不是创建新文档或新阶段：对每个主断言至少选择一个会导致 false PASS 的反例，以及相关的副作用后失败、补偿或失效失败、投影/兼容输入漂移、公共输出跨状态漂移、预期失败输出等场景。示例按当前风险裁剪，不假定项目具有 provider、schema、archive、CLI 或 `current` 指针；每个选中的场景要写明预期的可观察 fail-closed 结果和 evidence owner。
 
 ### Execution Record
 
@@ -121,6 +122,7 @@ plan 活动期间发现 Composition 判断错误时：
 - plan 未复制 design/spec contract、ticket 正文、task 状态或通用 checklist。
 - 每个长期 seam/interface/constraint 都能在 spec 找到。
 - Planned Verification 引用权威 policy；Execution Record 使用稳定 anchor 且 append-only。
+- 已激活 conditional evidence-integrity contract 时，Planned Verification 为每个主断言选择了相关 false-PASS 反例和可观察 fail-closed 结果，没有把示例技术或不适用场景伪装成通用要求。
 - Composition 与当前 attempt earned artifacts 一致，无双重状态来源。
 - plan 无手工 `Status`；Draft/Active/Frozen 与 `Integrated, gate open` 均能从 registry、gate 和 target branch 事实派生。
 - terminal gate 后 plan 已冻结。
