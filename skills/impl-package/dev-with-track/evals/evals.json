@@ -194,13 +194,14 @@
     {
       "id": 17,
       "prompt": "请向 owner 汇报当前 package：D2/S3/P1 binding 校验通过，patch attempt 为 Active，尚未进入 dev。内部 sidecar 是 JSON。",
-      "expected_output": "Produces a self-contained Markdown handoff with the revision set, binding conclusion, derived lifecycle and integration state without requiring the owner to open the JSON sidecar.",
+      "expected_output": "Produces a self-contained Markdown handoff with the revision set, binding conclusion, derived lifecycle and integration state without requiring the owner to open the JSON sidecar or re-approve an already Active attempt.",
       "files": [],
       "expectations": [
         "Reports D2 / S3 / P1 and binding validation in readable Markdown",
         "Reports Active and the not-integrated state directly",
         "Does not expose raw JSON as the primary handoff",
-        "Mentions the sidecar only as optional machine audit metadata, if at all"
+        "Mentions the sidecar only as optional machine audit metadata, if at all",
+        "Does not invent a new owner approval gate after lifecycle is already Active"
       ]
     }
   ]

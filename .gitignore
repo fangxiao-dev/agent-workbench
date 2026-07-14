@@ -16,3 +16,5 @@ skills/azure-skills/using-azure/.env
 docs/exchange/discuss/
 .worktrees/
 .acr-context/
+skills/*-workspace/
+skills/**/*-workspace/
