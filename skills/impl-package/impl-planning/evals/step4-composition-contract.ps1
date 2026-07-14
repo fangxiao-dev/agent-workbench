@@ -7,9 +7,12 @@ $patching = Get-Content -Raw (Join-Path $skillRoot 'patching.md')
 $rubric = Get-Content -Raw (Join-Path $skillRoot 'rubric.md')
 $shared = Get-Content -Raw (Join-Path $skillRoot '..\references\impl-package-composition-contract.md')
 $gateTemplate = Get-Content -Raw (Join-Path $skillRoot '..\dev-with-track\assets\templates\gate.md')
+$bindingTemplate = Get-Content -Raw (Join-Path $skillRoot '..\assets\templates\revision-bindings.json')
+$readinessTemplate = Get-Content -Raw (Join-Path $skillRoot '..\dev-with-track\assets\templates\manual-acceptance-readiness.md')
 $ticketTemplate = Get-Content -Raw (Join-Path $skillRoot '..\to-tickets\assets\templates\ticket.md')
 $dagTemplate = Get-Content -Raw (Join-Path $skillRoot '..\dev-with-track\assets\templates\dag.md')
 $devWithTrack = Get-Content -Raw (Join-Path $skillRoot '..\dev-with-track\SKILL.md')
+$reqAlign = Get-Content -Raw (Join-Path $skillRoot '..\req-align\SKILL.md')
 
 function Assert-Contains([string]$Content, [string]$Needle, [string]$Label) {
     if (-not $Content.Contains($Needle)) { throw "Missing ${Label}: $Needle" }
@@ -39,20 +42,34 @@ function Assert-NotContains([string]$Content, [string]$Needle, [string]$Label) {
     @($patching, '不创建 patch-gate 文件', 'single gate ledger'),
     @($shared, 'Composition 的唯一事实源是当前 attempt plan', 'shared composition source'),
     @($shared, 'Append-only Gate Ledger', 'shared gate lifecycle'),
-    @($shared, 'Revision-commit binding', 'revision-commit binding section'),
-    @($shared, 'git log -1 --format=%H', 'git commit resolution command'),
+    @($shared, 'Revision-blob binding', 'revision-blob binding section'),
+    @($shared, 'git rev-parse HEAD:<package-relative-path>', 'git blob resolution command'),
     @($shared, 'NEEDS-REVALIDATION', 'ticket/DAG plan-revision drift rule'),
     @($shared, 'Module Knowledge Watermark', 'module knowledge watermark mechanism'),
     @($shared, '不只 pass', 'terminal-entry findings block covers fail/defer'),
     @($template, 'Module Knowledge Watermark', 'plan-side watermark field'),
-    @($template, 'D<n> (commit <sha>)', 'plan design-revision commit binding'),
-    @($gateTemplate, 'D<n> (commit <sha>)', 'gate design-revision commit binding'),
-    @($gateTemplate, 'S<n> (commit <sha>)', 'gate spec-revision commit binding'),
-    @($gateTemplate, 'P<n> (commit <sha>)', 'gate plan-revision commit binding'),
+    @($template, 'Binding Validation at Publication: Pending | Passed', 'human-readable plan publication conclusion'),
+    @($gateTemplate, 'Revision set: D<n> / S<n> / P<n>', 'human-readable gate revision set'),
+    @($gateTemplate, 'Binding validation: <passed | failed>', 'human-readable gate binding conclusion'),
+    @($gateTemplate, 'Machine audit metadata:', 'hidden machine audit metadata'),
+    @($bindingTemplate, '"current"', 'binding registry current selection'),
+    @($bindingTemplate, '"purpose": "internal-machine-sidecar"', 'binding sidecar internal purpose'),
+    @($bindingTemplate, '"ownerFacing": false', 'binding sidecar non-delivery marker'),
+    @($bindingTemplate, '"blob"', 'binding registry blob field'),
+    @($bindingTemplate, '"mode": "exact-blob"', 'exact artifact binding mode'),
+    @($bindingTemplate, '"mode": "plan-contract-v1"', 'plan contract projection mode'),
+    @($shared, 'Integrated, gate open', 'derived integration qualifier'),
+    @($readinessTemplate, '### 必须', 'manual readiness required fields'),
+    @($readinessTemplate, '### Optional', 'manual readiness optional fields'),
     @($ticketTemplate, 'Plan Revision', 'ticket plan-revision field'),
     @($dagTemplate, 'NEEDS-REVALIDATION', 'dag plan-revision drift note'),
     @($devWithTrack, 'terminal entry（pass/fail/defer', 'findings block covers all terminal verdicts'),
-    @($devWithTrack, '重新计算', 'restore recomputes commit SHA for drift check')
+    @($devWithTrack, 'git rev-parse HEAD:<package-relative-path>', 'restore recomputes artifact blob'),
+    @($devWithTrack, 'plan-contract-v1', 'restore permits append-only execution evidence without P drift'),
+    @($devWithTrack, 'manual-acceptance-readiness.md', 'lightweight manual readiness handoff'),
+    @($skill, '正文不得要求 owner 打开 JSON', 'planning handoff stays Markdown-first'),
+    @($devWithTrack, '正文不得要求 owner 打开 JSON', 'execution handoff stays Markdown-first'),
+    @($reqAlign, '正文不得要求 owner 打开 JSON', 'alignment handoff stays Markdown-first')
 ) | ForEach-Object { Assert-Contains $_[0] $_[1] $_[2] }
 
 @(
@@ -64,6 +81,11 @@ function Assert-NotContains([string]$Content, [string]$Needle, [string]$Label) {
 
 Assert-NotContains $skill 'Composition 由 spec' 'spec-owned composition'
 Assert-NotContains $patching '原 package 的 `Composition:`' 'inherited patch composition'
+Assert-NotContains $template 'Status: Draft | Active | Frozen' 'manually maintained plan lifecycle'
+Assert-NotContains $template '(commit <sha>)' 'self-referential plan commit binding'
+Assert-NotContains $gateTemplate '(commit <sha>)' 'legacy gate commit binding'
+Assert-NotContains $template 'Revision Bindings: [revision-bindings.json]' 'owner-facing JSON link in plan'
+Assert-NotContains $gateTemplate '- Revision bindings: revision-bindings.json' 'owner-facing JSON field in gate'
 
 Assert-Contains $rubric '每次 attempt 独立决定 Composition' 'rubric composition preference'
 Assert-Contains $rubric '简单 no-DAG attempt 不建立 task checklist' 'rubric no-checklist preference'

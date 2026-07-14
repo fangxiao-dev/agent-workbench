@@ -1,13 +1,13 @@
 # [Attempt Name] Implementation Plan
 
-Status: Draft | Active | Frozen
 Created:
 Attempt ID: <initial | YYYYMMDD-HHMM-patch-topic>
-Design Revision: D<n> (commit <sha>)
-Spec Revision: S<n> (commit <sha>)
-Plan Revision: P<n> (commit <sha>)
+Design Revision: D<n>
+Spec Revision: S<n>
+Plan Revision: P<n>
 Composition: tickets=<true|false>, dag=<true|false>
 Package ID:
+Binding Validation at Publication: Pending | Passed
 Design: [design.md](design.md) | lightweight Design record in spec
 Spec: [spec.md](spec.md)
 Gate Ledger: [gate.md](gate.md)
@@ -40,6 +40,9 @@ Gate Ledger: [gate.md](gate.md)
 - Concrete migration/integration operations:
 - Rollout/rollback operations:
 - Dependencies and prerequisites:
+- Target branch:
+- Integration order: gate-before-merge | owner-approved pre-gate integration
+- Pre-gate integration owner decision evidence: <N/A | evidence>
 
 <!-- 稳定 interface、seam contract、compatibility、global constraints 和 Acceptance Semantics 不写在这里；缺失时先修订 spec。 -->
 
@@ -72,10 +75,10 @@ Gate Ledger: [gate.md](gate.md)
 
 ## Plan Revision History
 
-<!-- commit = git log -1 --format=%H -- plan.md at the moment "New" became current. Any earned ticket/DAG still citing a superseded P<n> here is NEEDS-REVALIDATION until reconciled. -->
+<!-- Current and historical P content bindings live in the internal .impl-package/revision-bindings.json sidecar. Do not require the owner to read it. Any earned ticket/DAG still citing a superseded P<n> here is NEEDS-REVALIDATION until reconciled. -->
 
-| Previous | New | Commit | Strategy/Composition/verification change | Reason | Artifact relocation | Date |
-| --- | --- | --- | --- | --- | --- | --- |
+| Previous | New | Strategy/Composition/verification change | Reason | Artifact relocation | Date |
+| --- | --- | --- | --- | --- | --- |
 
 ## Patch Delta
 

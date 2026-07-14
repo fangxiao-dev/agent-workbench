@@ -1,6 +1,6 @@
 ---
 name: to-tickets
-description: Use when an approved implementation plan calls for tickets and the spec contains two or more delivery slices whose acceptance conclusions need independent tracking.
+description: 当已批准 implementation plan 判定需要 tickets，且 spec 含至少两个必须独立跟踪 acceptance 结论的 delivery slice 时使用。
 ---
 
 # To Tickets — Impl-Package Local Fork
@@ -47,10 +47,11 @@ Draft is local and non-publishing:
 1. Read the gated spec and current attempt plan and determine whether tickets are earned.
 2. Validate that the earned result equals the plan's `Composition.tickets` value; stop through the fail-closed route above on mismatch.
 3. Propose the complete slice set and typed edges for owner review.
-4. When earned, write one `Publication Status: Draft` file per slice, include the current Attempt ID, and use [assets/templates/ticket.md](./assets/templates/ticket.md) at `docs/implementations/<package-id>/tickets/<NN>-<ticket-slug>.md`.
-5. Leave each `Runtime Acceptance Status` field unrecorded; Draft mode owns only the publication status and ticket definition.
-6. Number files in a deterministic dependency-compatible order; for independent slices, preserve the proposed document order. File numbers and ticket IDs are package-wide unique: continue after historical attempts and never overwrite an older attempt's ticket.
-7. Return the package path, draft ticket paths, typed-edge summary, and acceptance evidence gaps. Do not publish externally or mark tickets Approved.
+4. For every AC, identify the planned observable evidence source at delivery-slice level and perform an evidence-feasibility precheck against the plan and proposed typed edges. Reject an obvious acceptance-evidence cycle; when the later task producer is not yet known, hand the unresolved producer obligation to `create-task-dag` instead of inventing task ownership in the ticket.
+5. When earned, write one `Publication Status: Draft` file per slice, include the current Attempt ID, and use [assets/templates/ticket.md](./assets/templates/ticket.md) at `docs/implementations/<package-id>/tickets/<NN>-<ticket-slug>.md`.
+6. Leave each `Runtime Acceptance Status` field unrecorded; Draft mode owns only the publication status and ticket definition.
+7. Number files in a deterministic dependency-compatible order; for independent slices, preserve the proposed document order. File numbers and ticket IDs are package-wide unique: continue after historical attempts and never overwrite an older attempt's ticket.
+8. Return the package path, draft ticket paths, typed-edge summary, unresolved evidence-producer obligations, and acceptance evidence gaps. Do not publish externally or mark tickets Approved.
 
 ## Publish Mode
 
@@ -60,8 +61,9 @@ Publish updates the same local ticket files; it does not create external records
 2. every ticket has at least one complete, stable AC with planned evidence or a manual verification owner;
 3. every typed dependency references an existing ticket in the same Attempt ID; a historical attempt's terminal ticket cannot be a current runtime blocker;
 4. the dependency graph is acyclic across all three edge types;
-5. the complete set has a deterministic dependency-compatible ordering;
-6. no ticket contains task ownership or file-level implementation steps.
+5. every AC has a feasible evidence source under the plan and proposed typed edges; no known evidence source requires implementation that is blocked by the same ticket's acceptance;
+6. the complete set has a deterministic dependency-compatible ordering;
+7. no ticket contains task ownership or file-level implementation steps.
 
 Fail publish without partial publication-status updates if any validation fails. Publish owns only the `Draft` to `Approved` publication transition. It must preserve the unrecorded or existing `Runtime Acceptance Status` content. Runtime readiness and all later ticket acceptance status belong to `dev-with-track` under the shared readiness-resolution contract.
 

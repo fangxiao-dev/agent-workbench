@@ -1,6 +1,6 @@
 ---
 name: execution-preflight
-description: Use before starting a task from a handoff, plan, review, audit, or execution artifact to extract only permissions, owner authorizations, HITL decisions, and subagent mode before work begins.
+description: 当准备从 handoff、plan、review、audit 或 execution artifact 开始任务，需要先提取 permission、owner authorization、HITL decision 与 subagent mode 时使用。
 ---
 
 # Execution Preflight

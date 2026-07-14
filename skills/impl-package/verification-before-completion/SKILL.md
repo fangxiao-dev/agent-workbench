@@ -1,62 +1,63 @@
 ---
 name: verification-before-completion
-description: Use before claiming work is complete, closed, fixed, passing, merge-ready, or release-ready. Match each claim to direct evidence from the same revision and environment, and report any verification gap precisely.
+description: 在宣称工作 complete、closed、fixed、passing、merge-ready 或 release-ready 前使用；把每项 claim 与同 revision、同 environment 的直接 evidence 对齐，并准确报告 verification gap。
 ---
 
 # Verification Before Completion
 
-Completion claims must be no broader than their evidence. Verification is a claim-to-evidence contract, not a requirement to rerun every possible check in the current message.
+Completion claim 不能宽于 evidence。Verification 是 claim-to-evidence contract，不要求在当前消息里机械重跑所有可能的检查。
 
 ## Impl-Package orchestration
 
-This skill is the completion-claim evidence gate for Impl-Package. It is not a DAG task and does not run once per ticket or implementation unit.
+本 skill 是 Impl-Package 的 completion-claim evidence gate。它不是 DAG task，也不按 ticket 或 implementation unit 重复运行。
 
-- `dev-with-track` invokes it after applicable implementation reviews and findings closure, and after Stage 7 artifacts for the intended pass are prepared, but before writing a terminal `pass` gate entry.
-- If terminal metadata is then committed, the work is merged into a target branch, or the relevant environment changes, invoke it again before claiming `complete`, `closed`, `merge-ready`, or `release-ready`. Reuse unaffected evidence and verify only the delta and claim-specific gates.
-- A missing or stale proof blocks the completion claim, not necessarily the implementation. Report `implemented, not verified` or the exact pending gate instead of writing or repeating a pass claim.
-- This skill audits evidence. It does not replace `code-review`, `module-review`, `safety-review`, planned tests, smoke checks, or project-specific acceptance.
+- `dev-with-track` 在适用 implementation review、findings closure 和拟 pass 的 Stage 7 artifact 准备完成后、写入 terminal `pass` gate entry 前调用本 skill。
+- terminal metadata commit、目标分支合入或相关 environment 变化后，在宣称 `complete`、`closed`、`merge-ready` 或 `release-ready` 前再次调用。复用未受影响的 evidence，只验证 delta 与 claim-specific gate。
+- 已合入目标分支但尚无 terminal gate 时，真实状态是 `Integrated, gate open`；只能报告 integration 阶段，不能把 merge 当成 closed evidence。
+- proof 缺失或 stale 时，阻止的是 completion claim，不一定否定 implementation。应报告 `implemented, not verified` 或具体 pending gate，不能写入或重复 pass claim。
+- 本 skill 审计 evidence，不替代 `code-review`、`module-review`、`safety-review`、planned test、smoke 或项目特定 acceptance。
 
-## Define the claim
+## 定义 claim
 
-Before reporting success, state what is being claimed:
+报告成功前先说明 claim 的范围：
 
-- a specific behavior works;
-- a targeted check passes;
-- an implementation phase is complete;
-- a merge, release, or production gate is satisfied.
+- 某个具体 behavior 可用；
+- 某项定向检查 passing；
+- 某个 implementation phase complete；
+- 某个 merge、release 或 production gate 已满足。
 
-A targeted claim may use targeted evidence. A broad readiness claim requires evidence across every relevant gate.
+定向 claim 可以使用定向 evidence；宽泛 readiness claim 必须覆盖所有相关 gate。
 
 ## Evidence contract
 
-Evidence is usable when it:
+Evidence 同时满足以下条件时才可使用：
 
-- directly exercises or checks the claimed behavior;
-- comes from the same worktree, revision, and relevant environment;
-- is newer than the last change that could affect the result;
-- includes the command or procedure, exit status, failure count, and any decisive artifact;
-- covers repository-required gates for the claim being made.
+- 直接执行或检查被 claim 的 behavior；
+- 来自同一 worktree、revision 与相关 environment；
+- 晚于最后一次可能影响结果的变化；
+- 包含 command/procedure、exit status、failure count 和决定性 artifact；
+- 覆盖 repository 对该 claim 要求的 gate。
 
-Do not substitute nearby evidence: lint does not prove a build, a unit test does not prove an integration, and a passing regression test does not by itself prove the original symptom is resolved.
+不要用相邻 evidence 替代：lint 不能证明 build，unit test 不能证明 integration，passing regression test 本身也不能证明原始 symptom 已解决。
 
-## Reuse and independent verification
+## 复用与独立 verification
 
-You may reuse complete evidence from a subagent, execution record, CI run, or earlier turn when its provenance is clear and the relevant revision and environment have not changed. Inspect the evidence and resulting diff rather than trusting a success label.
+当 provenance 清楚且相关 revision/environment 未变化时，可以复用 subagent、Execution Record、CI run 或较早 turn 的完整 evidence。必须检查 evidence 与实际 diff，不能只相信 success label。
 
-Run an independent or broader verification when:
+出现以下情况时运行独立或更宽的 verification：
 
-- evidence is incomplete, stale, conflicting, or from a different revision/environment;
-- the change since that evidence could affect the result;
-- the claim is a high-risk merge, release, migration, security, data-integrity, or external-side-effect gate;
-- project policy explicitly requires a fresh run by the current owner.
+- evidence 不完整、stale、相互冲突或来自不同 revision/environment；
+- evidence 之后的变化可能影响结果；
+- claim 属于高风险 merge、release、migration、security、data-integrity 或 external-side-effect gate；
+- project policy 明确要求当前 owner fresh run。
 
-Do not temporarily revert a fix merely to manufacture RED evidence when that operation is unsafe. Use an existing failing run, a controlled worktree, mutation of the test fixture, or document that RED was not independently demonstrated.
+不要为了制造 RED evidence 而临时回退 fix，尤其当该操作不安全时。使用已有 failing run、受控 worktree、test fixture mutation，或明确记录没有独立证明 RED。
 
-## Report the actual state
+## 报告真实状态
 
-- Evidence covers the claim: state the claim and cite the evidence.
-- Implementation exists but verification is missing: report `implemented, not verified`.
-- Verification ran and failed: report the failure and the remaining work.
-- Some gates pass and others remain: name the completed stage and the outstanding gates; do not call the whole task closed.
+- Evidence 覆盖 claim：陈述 claim 并引用 evidence。
+- Implementation 已存在但 verification 缺失：报告 `implemented, not verified`。
+- Verification 已运行但失败：报告 failure 与剩余工作。
+- 部分 gate 通过、其余仍待处理：明确已完成阶段与 outstanding gate，不得称整个任务 closed。
 
-Never turn confidence, an agent report, or a partial adjacent check into a completion claim.
+不得把 confidence、agent report 或局部相邻检查转化为 completion claim。

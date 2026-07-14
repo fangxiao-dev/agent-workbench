@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "purpose": "internal-machine-sidecar",
+  "ownerFacing": false,
+  "current": {
+    "design": {
+      "artifact": "design.md",
+      "revision": "D<n>"
+    },
+    "spec": {
+      "artifact": "spec.md",
+      "revision": "S<n>"
+    },
+    "attempt": {
+      "id": "<initial | patch-id>",
+      "plan": "plan.md",
+      "revision": "P<n>"
+    }
+  },
+  "bindings": [
+    {
+      "artifact": "design.md",
+      "revision": "D<n>",
+      "mode": "exact-blob",
+      "blob": "<git-blob-oid>"
+    },
+    {
+      "artifact": "spec.md",
+      "revision": "S<n>",
+      "mode": "exact-blob",
+      "blob": "<git-blob-oid>"
+    },
+    {
+      "artifact": "plan.md",
+      "attempt": "<initial | patch-id>",
+      "revision": "P<n>",
+      "mode": "plan-contract-v1",
+      "blob": "<git-blob-oid-at-revision-publication>"
+    }
+  ]
+}

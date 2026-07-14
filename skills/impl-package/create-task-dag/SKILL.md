@@ -1,9 +1,9 @@
 ---
 name: create-task-dag
 description: >
-  Use when an approved implementation plan and related ticket subset need to become a task DAG.
-  Trigger for drawing/building a task DAG, assigning ownership,
-  消费已冻结契约、协调 worker 与集成 seam；task 实现与 review 交由 `subagent-driven-development`，ticket acceptance review 交由 `dev-with-track`。
+  当已批准 implementation plan 与相关 ticket subset 需要转为 task DAG、分配 ownership、
+  协调 worker 或 integration seam 时使用。消费已冻结 contract；task 实现与即时 review
+  交由 `subagent-driven-development`，ticket acceptance review 交由 `dev-with-track`。
 ---
 
 # Create Task DAG
@@ -70,6 +70,7 @@ Impl-Package 中 `dag=true` 的 DAG 必须持久化为当前 attempt 的 `dag.md
 读当前 attempt plan、同 Attempt ID 的相关 Approved tickets（若 tickets=true）、spec 的 D/S revision、AC 与 seam contract、仓库指令和相关验证文档。plan 和 spec 通常由 `impl-planning` / `req-align` 产出在 `docs/implementations/<package-id>/`。来源不满足输入契约时，读 `references/slice-to-dag.md` 并按缺失原因路由。识别：
 
 - 所有将被 task 贡献或启用的 acceptance target；
+- 每个 acceptance target 的必需 evidence producer，以及尚未在 ticket 阶段解析的 producer obligation；
 - 当前分支与脏状态；
 - 外部 mutation 权限与红线；
 - 可能的共享 seam 文件；
@@ -97,6 +98,10 @@ Impl-Package 中 `dag=true` 的 DAG 必须持久化为当前 attempt 的 `dag.md
 把 DAG 按上方映射持久化到当前 attempt 的 `dag.md` 或 patch DAG；不得写入 plan、只留对话或改写历史 DAG。
 
 完成标准：每个任务都有依赖、可并行邻居、ownership lanes、聚焦测试、完成标准、acceptance contribution/enablement 与 seam execution owner；每个 acceptance target 的证据生产者或人工验证 owner 可被追溯。
+
+在持久化 DAG 前，把 ticket acceptance、typed implementation edges、task Depends on 与 task-to-AC evidence contribution 组成一个联合 readiness 图并检查 satisfiability。若某项 AC 的必需 producer task 直接或传递依赖该 AC 所属 ticket 先通过 acceptance，则这是 semantic cycle；ticket 图和 task 图各自无环也不能放行。
+
+semantic cycle 若只需重分类 typed edge、调整 task 顺序或修正 evidence producer 投影，且不改变 D/S、AC、Composition、安全规则或外部 mutation authority，则返回对应 owning skill 做机械修正并继续，不请求 owner 重新批准业务范围。只有修正产生不同业务结果或改变授权事实时才升级 owner decision。
 
 ### 4. 派发并行 Worker Cohort
 

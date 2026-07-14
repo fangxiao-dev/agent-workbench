@@ -1,8 +1,8 @@
 ---
 name: safety-review
 description: >
-  Use when changes since a fixed comparison point touch data integrity, security boundaries,
-  concurrency, external side effects, or similar safety signals.
+  当固定 comparison point 之后的变更触及 data integrity、security boundary、concurrency、
+  external side effect 或类似 safety signal 时使用。
 ---
 
 # Safety Review

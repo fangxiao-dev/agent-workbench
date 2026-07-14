@@ -1,6 +1,6 @@
 ---
 name: req-align
-description: Use when new or changed requirements need alignment before feature design, specification, or implementation planning. Owns the required Design and Spec gates and their design.md/spec.md artifacts.
+description: 当新增或变更 requirement 需要在 feature design、specification 或 implementation planning 前完成对齐时使用；拥有必过的 Design/Spec gates 及其 design.md/spec.md artifact。
 ---
 
 # Requirement Alignment
@@ -14,7 +14,8 @@ Repository instructions and discovered project conventions determine knowledge s
 Use `docs/implementations/<package-id>/` as the canonical package root. A package-id is `YYMMDD-<topic-slug>` (UTC creation date), for example `260711-catalog-readiness`; it is a directory identity, not a mutable title. This skill owns:
 
 - `design.md`，活动变更期间的当前设计选择与 rationale SoT；blocked Design 必须持久化，lightweight passed path 可仅在 spec Design Gate Record 中保留最小证据；
-- `spec.md`，活动变更期间的当前行为、数据、边界、失败恢复、约束与 Acceptance Semantics SoT。
+- `spec.md`，活动变更期间的当前行为、数据、边界、失败恢复、约束与 Acceptance Semantics SoT；
+- 内部 `.impl-package/revision-bindings.json` sidecar 中 D/S 的 current selection 与 artifact/blob binding。共享形状来自 [`../assets/templates/revision-bindings.json`](../assets/templates/revision-bindings.json)；plan/P binding 由 `impl-planning` 拥有。sidecar 不属于 owner-facing deliverable，design/spec/handoff Markdown 必须自足呈现当前 revision 与 binding validation 结论。
 
 Use [assets/templates/design.md](./assets/templates/design.md) and [assets/templates/spec.md](./assets/templates/spec.md). Do not publish a tracker spec or create a second spec for the same package. `impl-planning` consumes the gated `spec.md`; it does not own or synthesize a replacement.
 
@@ -63,7 +64,7 @@ If any criterion fails, create or update `design.md`, record `Design Gate: BLOCK
 - `Decisions / Rationale` records choices and why they were selected. Put behavior, state, interface, and failure semantics only in `spec.md`; do not copy those contracts into design.
 - `Backfill Candidates` is a non-binding research hint. It is not a durable-delta register, does not authorize stable-document edits, and need not be merged into spec. Canonical durable-delta capture happens at the execution gate and downstream backfill.
 
-`design.md` 声明 `Design Revision: D<n>`。正文只保留当前选择；方向变化时升级 revision、重跑 Design Gate，并在 Revision History 中用一行记录 previous/new、变更摘要、authority、日期与 superseded 说明。完整旧正文由 Git 保存，不在当前正文并排维护。
+`design.md` 声明 `Design Revision: D<n>`。正文只保留当前选择；方向变化时升级 revision、重跑 Design Gate，并在 Revision History 中用一行记录 previous/new、变更摘要、authority、日期与 superseded 说明。Gate 通过后计算最终 artifact 的 Git blob OID，在内部 sidecar 追加 D binding 并更新 current design；artifact 不记录自身 hash。完整旧正文由 Git 保存，不在当前正文并排维护。
 
 ## Gate 2: Spec (Required)
 
@@ -85,7 +86,7 @@ If any criterion fails, record `Spec Gate: BLOCKED` with the exact missing contr
 
 The spec must not contain a `Stable Doc Backfill Map`, durable-delta queue, Composition, worker task steps, verification command log, or tracker publication metadata. `Composition` 由每次 attempt plan 独立决定。
 
-`spec.md` 声明 `Spec Revision: S<n>`，并始终记录其绑定的 `Design Revision: D<n>`；lightweight Design 没有独立 design.md 时，这一字段与 Design Gate Record 共同提供 D revision 的 canonical 落点。纯实现修复以重新符合当前 spec 时复用 revision；行为 contract 变化时升级 S revision 并重跑 Spec Gate；设计选择变化时必须先完成新的 Design revision/Gate。正文只保留当前合同，旧合同通过 Revision History 与 Git 追溯。
+`spec.md` 声明 `Spec Revision: S<n>`，并始终记录其绑定的 `Design Revision: D<n>`；lightweight Design 没有独立 design.md 时，这一字段与 Design Gate Record 共同提供 D revision 的 canonical 落点。纯实现修复以重新符合当前 spec 时复用 revision；行为 contract 变化时升级 S revision 并重跑 Spec Gate；设计选择变化时必须先完成新的 Design revision/Gate。Gate 通过后计算最终 artifact 的 Git blob OID，在 registry 追加 S binding 并更新 current spec；lightweight Design 的 D/S 可以分别绑定同一个 spec blob。正文只保留当前合同，旧合同通过 Revision History、registry 和 Git 追溯。
 
 ### 自动 grill-me-smartly 通关
 
@@ -104,7 +105,7 @@ The spec must not contain a `Stable Doc Backfill Map`, durable-delta queue, Comp
 5. If Design is blocked, create or update `design.md` with provenance, readiness evidence, blockers, and owner decisions; stop without creating `spec.md`.
 6. If Design passes, either persist its substantive research in `design.md`, or take the lightweight path: create `spec.md` and write the minimum provenance, readiness, and owner-decision evidence into its Design Gate Record. Append reusable, verified cross-stage facts/risks/constraints to an already-needed `findings.md`; do not create it for ordinary research narration.
 7. Synthesize the eight-section `spec.md`. For a patch, reuse D/S revisions for implementation-only drift without evaluating Spec Gate, rerun only Spec Gate for behavioral contract changes, and rerun Design then Spec for design-direction changes. When Spec Gate is actually being evaluated, automatically run `grill-me-smartly`'s review phase against the draft first, resolve or surface its findings per Gate 2's rule, then evaluate the Spec gate. Stop when the required gate is blocked.
-8. After both gates pass, hand off the same `spec.md` to `impl-planning`; do not create another spec or publish to a tracker.
+8. 两道 gate 通过后，用 `git hash-object -- <path>` 计算最终 design/spec blob，在内部 sidecar 追加 D/S binding 并更新 current selection；commit 后用 `git rev-parse HEAD:<path>` 复核，并在 Markdown handoff 直接报告 D/S revision set 与校验结论。随后把同一份 `spec.md` 交给 `impl-planning`，不创建第二份 spec，也不发布 tracker。
 
 ## Alignment Proposal
 
@@ -147,7 +148,7 @@ Before writing artifacts or editing long-lived knowledge, present:
 
 向 owner 汇报时使用 `talk-to-boss`：用人话说明需求/设计/规格对齐覆盖的功能范围、Design 与 Spec 分别完成到哪、剩余 owner decision 数量、整体是否可进入实施计划。不要以 slug、revision 或路径开场，也不要把 blocked gate 描述成完成。
 
-随后附 canonical handoff：topic slug、package-id/path、两道 gate result 与 evidence location、changed files（只在 append 时列 `findings.md`）以及剩余 owner decisions。artifact 写入后不粘贴全文。
+随后附 canonical handoff：topic slug、package-id/path、当前 D/S revision set、binding validation 结论、两道 gate result 与 evidence location、changed files（只在 append 时列 `findings.md`）以及剩余 owner decisions。正文不得要求 owner 打开 JSON；内部 sidecar 路径只可放 machine audit metadata。artifact 写入后不粘贴全文。
 
 When Spec Gate was actually evaluated, name the `grill-me-smartly` ledger path and summarize its converged decisions and any resolved owner decisions. After Spec Gate PASSED, offer `grilling` as an optional deeper adversarial follow-up if the user wants more scrutiny before handing off to `impl-planning` — a suggestion, never a requirement.
 

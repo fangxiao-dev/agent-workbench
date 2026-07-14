@@ -2,7 +2,7 @@
 
 Status: Draft | Design Gate Passed | Design Gate Blocked
 Created:
-Design Revision: D<n> (commit <sha>)
+Design Revision: D<n>
 Requirement source:
 Topic slug:
 Package ID:
@@ -74,7 +74,7 @@ This is the current design choices and rationale SoT while the package is active
 
 ## Revision History
 
-<!-- commit = git log -1 --format=%H -- design.md at the moment "New" became current. -->
+<!-- Current and historical D revision content bindings live in the internal .impl-package/revision-bindings.json sidecar; do not put this file's own hash here or require the owner to read the sidecar. -->
 
-| Previous | New | Commit | Change summary | Authority | Date | Superseded note |
-| --- | --- | --- | --- | --- | --- | --- |
+| Previous | New | Change summary | Authority | Date | Superseded note |
+| --- | --- | --- | --- | --- | --- |

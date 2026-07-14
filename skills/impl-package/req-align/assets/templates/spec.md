@@ -2,8 +2,8 @@
 
 Status: Draft | Spec Gate Passed | Spec Gate Blocked
 Created:
-Design Revision: D<n> (commit <sha>)
-Spec Revision: S<n> (commit <sha>)
+Design Revision: D<n>
+Spec Revision: S<n>
 Requirement source:
 Topic slug:
 Package ID:
@@ -83,7 +83,7 @@ Design: [design.md](design.md) | No standalone design file
 
 ## Revisions
 
-<!-- commit = git log -1 --format=%H -- spec.md at the moment "New" became current. Gate entries and plan bind to this SHA, not just the S<n> label. -->
+<!-- Current and historical D/S content bindings live in the internal .impl-package/revision-bindings.json sidecar; do not put this file's own hash here or require the owner to read the sidecar. -->
 
-| Previous | New | Commit | Contract change | Reason / authority | Date | Superseded note |
-| --- | --- | --- | --- | --- | --- | --- |
+| Previous | New | Contract change | Reason / authority | Date | Superseded note |
+| --- | --- | --- | --- | --- | --- |

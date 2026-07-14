@@ -69,7 +69,7 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
   - YAGNI 边界：若未来执行模式真变成多 worker 并行跑不同 ticket，再增加动态派工能力；readiness resolution 不是该调度器的降级版，而是串行执行与恢复正确性的基础规则。
 - **Stage 7**：对任意 terminal verdict，有 durable delta 时，写入 terminal gate entry 前必须完成 `_pending.md` 捕获登记（gate 的 Durable Deltas 表为唯一捕获面）、受影响 module spec 的 truth pointer、必要 stub 创建；无 durable delta 时显式记录判定与理由。捕获与路由下沉到 gate + `_pending.md`，不在 spec 维护常青 map。下游 backfill report/apply 不属于 Stage 7 terminal gate；gate 后只提示，可延期、非阻塞，并需明确授权。去重键 `<destination>|<delta-id>` 落在 `_pending.md`/report 侧。三源对账（`_pending` / gate 漏登 / 无主 commit）引用并同步约束 backfill 设计。
 - **Gate ledger**：package 只保留一个 `gate.md`，每次 evaluation 在顶部插入 `<attempt-id>-G<n>` 摘要。blocked→pass 通过新 entry 与 `Supersedes` 表达；旧块不改。完整验证过程放在对应 plan 的 append-only Execution Record，gate 只保存 revision/comparison point/evidence anchor/verdict 与 Durable Deltas。terminal verdict 先保留 G id 并完成 Stage 7，再一次性插入不可变 entry；不写临时 entry 后原地补字段。
-- **Revision-commit binding**：D/S/P revision 号是人类好念的别名，不是权威本身——权威是各自绑定的 git commit SHA（`D<n> (commit <sha>)` 写法）。restore/gate evaluation 时重新核对目标文件当前 `git log -1` 与声明 SHA 是否相符，不符按未分类 drift 处理，避免"revision 号没跟上内容"这种纯自觉纪律的漂移。机制细节见 composition-contract §2。
+- **Revision-blob binding**：D/S/P revision 号是人类好念的别名，机器校验身份保存在 package-local `.impl-package/revision-bindings.json` sidecar 的 artifact path + Git blob OID 中。artifact 不保存自身 hash，因此 sidecar 可与最终 artifact 在同一 commit 中稳定绑定；restore/gate evaluation 用 `git rev-parse HEAD:<path>` 机械复核。sidecar 不进入 owner-facing 交付主线，Markdown 直接呈现 revision set 与校验结论。机制细节见 composition-contract §2。
 - **findings 三态阻断**：findings.md 分流是 pass/fail/defer 全部 terminal verdict 的硬前置条件，力度等同 Stage 7，不只挡 pass；blocked entry 不受此约束。见 composition-contract §6。
 - **Module Knowledge Watermark**：每个 attempt 的 plan 记录相关 module-knowledge 文件在 attempt 打开时的 commit SHA；后续 attempt（尤其重新激活已关闭 package）打开前机械 diff 对比，把"先对账"从自觉查改成可执行检查。见 composition-contract §1。
 
@@ -227,5 +227,5 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 2. composition 判定：tickets ⊥ dag 各自按需 earn（抛弃 S/M/L 线性档），earn 条件如上；跑两个真实 package 后按 rubric 校准（已确认路径）。
 3. safety-review P0 项目特定项：放各 repo standards，不进 skill 本体（已确认）。
 4. 调度：删除自动派工、worker leasing、并发锁；保留静态依赖图上的确定性 readiness resolution。真多 worker 并行场景出现前不建动态调度器（已确认，YAGNI）。
-5. revision 漂移防护：D/S/P revision 号绑定 git commit SHA、P 号驱动 ticket/DAG 的 NEEDS-REVALIDATION、findings 三态阻断、Module Knowledge Watermark，四条均已确认并落入 composition-contract（对抗审视后补，见 §2/§3/§6/§1）。
+5. revision 漂移防护：D/S/P revision 号通过外部 registry 绑定 Git blob、P 号驱动 ticket/DAG 的 NEEDS-REVALIDATION、findings 三态阻断、Module Knowledge Watermark，四条均已确认并落入 composition-contract（对抗审视后补，见 §2/§3/§6/§1）。
 6. Spec Gate 前自动质检：`grill-me-smartly` 自动跑（信号 = Spec Gate 真正被评估），`grilling` 留作可选深度对抗（已确认）。二者都是既有 skill，req-align 只负责触发与结果分流，不复制或重定义其内部机制。

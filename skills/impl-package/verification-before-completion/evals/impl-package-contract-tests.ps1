@@ -27,7 +27,7 @@ function Require-Text {
 }
 
 $skillBody = Get-Content -LiteralPath $skill -Raw
-foreach ($needle in @('Impl-Package', 'not a DAG task', 'terminal `pass`', 'implemented, not verified', 'merge-ready', 'release-ready')) {
+foreach ($needle in @('Impl-Package', '不是 DAG task', 'terminal `pass`', 'implemented, not verified', 'merge-ready', 'release-ready')) {
     Require-Text $skillBody $needle 'skill'
 }
 

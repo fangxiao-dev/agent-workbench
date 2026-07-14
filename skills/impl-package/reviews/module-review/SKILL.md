@@ -1,10 +1,9 @@
 ---
 name: module-review
 description: >
-  Use when changes since a fixed comparison point need an implementation-level module review
-  with separate Standards (repository conventions) and Spec (source requirement/contract fidelity) axes.
-  两个轴由并行 reviewer 独立审查并并列汇报；适用于 branch、PR、work-in-progress
-  或 “review since X”。
+  当固定 comparison point 之后的变更需要 implementation-level module review 时使用；
+  分别沿 Standards（repository conventions）与 Spec（source requirement/contract fidelity）
+  两轴审查并并列汇报，适用于 branch、PR、work-in-progress 或 “review since X”。
 ---
 
 # Module Review

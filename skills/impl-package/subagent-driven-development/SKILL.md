@@ -1,6 +1,6 @@
 ---
 name: subagent-driven-development
-description: Use when approved plan, ticket, or DAG work contains bounded implementation units that can be delegated with immediate independent review; the main agent retains integration and final judgment responsibility.
+description: 当已批准的 plan、ticket 或 DAG 含有边界明确、可委派且需要即时独立 review 的 implementation unit 时使用；主 agent 保留 integration 与最终判断责任。
 ---
 
 # Subagent-Driven Development

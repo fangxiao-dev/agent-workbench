@@ -19,6 +19,11 @@ foreach ($member in $members) {
     if ($frontmatter -notmatch '(?m)^description:\s*(>|\S)') {
         throw "Missing description: $($member.FullName)"
     }
+    $relative = [System.IO.Path]::GetRelativePath($implRoot, $member.FullName)
+    $vendoredEnglishAllowlist = @('reviews\code-review\SKILL.md')
+    if ($relative -notin $vendoredEnglishAllowlist -and $frontmatter -notmatch '[\p{IsCJKUnifiedIdeographs}]') {
+        throw "Locally maintained member description must use Chinese prose while retaining useful English tokens: $($member.FullName)"
+    }
 }
 
 $router = Get-Content -LiteralPath (Join-Path $implRoot 'SKILL.md') -Raw
@@ -26,4 +31,4 @@ if (-not $router.Contains('Impl-Package 体系的入口地图与路由')) {
     throw 'The impl-package router may retain the suite name because routing the suite is its standalone capability.'
 }
 
-Write-Output 'Impl-Package member descriptions are independently triggerable.'
+Write-Output 'Impl-Package member descriptions are independently triggerable and local descriptions follow the Chinese-prose preference.'

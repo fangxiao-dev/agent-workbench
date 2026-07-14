@@ -1,7 +1,9 @@
 ---
 name: dev-with-track
 description: >
-  Use when an approved implementation attempt needs execution restored, the next actionable unit selected, verification evidence recorded, rework invalidation handled, findings routed, or an append-only gate ledger evaluated. Does not own design/spec/plan/ticket/DAG definitions.
+  当已批准 implementation attempt 需要恢复执行、选择下一 actionable unit、记录 verification
+  evidence、处理返工失效、分流 findings 或评估 append-only gate ledger 时使用；不拥有
+  design/spec/plan/ticket/DAG 定义。
 ---
 
 # Dev With Track
@@ -39,13 +41,21 @@ terminal metadata 后若又发生 commit、合入目标分支或相关环境变�
 
 ## Restore
 
-1. 读取仓库规则、当前 design/spec revision、所有 attempt plans、gate.md 最新 entry、当前 attempt 的 tickets/DAG/progress、findings 与实际证据。
-2. 选择唯一未被 terminal gate 冻结的 attempt；若不存在 active attempt，停止并路由 impl-planning 创建 patch；若同时存在多个 active attempt，报告 lifecycle violation 并停止，不能按时间猜一个。
-3. 从当前 plan 读取 Attempt ID、D/S/P revision 与 Composition，校验 artifact 一致。对 design.md/spec.md/plan.md 各自重新计算 `git log -1 --format=%H -- <path>`，与正文头部声明的 revision 绑定的 commit SHA 比对；不符时该 revision 号已和内容脱节，按 impl-package-composition-contract.md §2 处理为未分类 drift，不得当作可信 revision 继续读取。
+1. 读取仓库规则、内部 `.impl-package/revision-bindings.json` sidecar、所有 attempt plans、gate.md 最新 entry、当前 attempt 的 tickets/DAG/progress、findings 与实际证据。
+2. 从 registry 的 `current.attempt` 派生唯一 lifecycle：未被选中的 plan 是 Draft；被选中且没有 terminal gate 的 attempt 是 Active；已有 terminal gate 的 attempt 是 Frozen。若不存在 Active attempt，停止并路由 impl-planning 创建或批准 patch；若 registry/current/gate 组合产生多个 Active attempt，报告 lifecycle violation 并停止，不能按时间猜一个。
+3. 从当前 plan 读取 Attempt ID、D/S/P revision 与 Composition，逐项解析 registry binding。design/spec 用 `git rev-parse HEAD:<package-relative-path>` 做 exact-blob 核对；plan 用 binding baseline blob 与 `plan-contract-v1` 比较非 ER 内容，并单独验证 ER append-only。alias/path/mode/blob 不一致、binding 缺失或重复时，按 impl-package-composition-contract.md §2 处理为 P2 capture gap 或未分类 drift，不得把该 revision 当作可信输入。
 4. reconcile 状态与证据；evidence 胜过 stale status。逐个比对每个 earned ticket/DAG 声明的 Plan Revision 与当前 plan 的 P 号；不一致的标 NEEDS-REVALIDATION，不当作可用状态。
 5. 是新 attempt（尤其重新激活已关闭 package）时，先完成 Module Knowledge Watermark 对账：重新计算 watermark 文件当前 commit SHA，与上一 attempt 记录的 watermark 比对，不符先 diff 确认 design/spec 是否仍成立。
-6. 校验 typed ticket edges、DAG Depends on、AC references 与 cycles。
+6. 校验 typed ticket edges、DAG Depends on、AC references、显式 cycles 与 readiness satisfiability；若 AC 的 evidence producer task 被同一 ticket acceptance 直接或传递阻塞，按 decomposition/readiness defect 处理。
 7. 执行 readiness resolution，按文档顺序选择第一个 actionable unit；不自动派工。
+
+目标分支已包含当前 comparison point、但 attempt 仍为 Active 时，向 owner 报告派生 qualifier `Integrated, gate open`。若 plan 没有 owner-approved pre-gate integration strategy，视为 integration-order violation；即使已有批准，最终 pass/closed evidence 仍必须来自目标分支。
+
+### 计划错误的修复权限
+
+发现 decomposition/readiness defect 时，先判断修正是否改变业务结果。若只涉及 typed edge 分类、task 顺序、evidence producer/owner 投影或 artifact 引用，并保持 D/S、业务范围、AC、Composition、安全约束与外部 mutation authority 不变，则调用 owning skill 完成机械修正、必要的 P revision 与 ticket/DAG revalidation，然后继续当前已批准 attempt；不得把它升级成 owner blocker。
+
+只有修正会新增/删除业务能力、改变 Acceptance Semantics、降低安全或数据约束、扩大外部/不可逆 mutation authority、改变 Composition earned artifacts，或存在多个会产生不同业务结果的合理方案时才请求 owner 决定。请求前先写出选项和各自业务结果；如果差异只存在于内部顺序、状态或 artifact 投影，就由执行者修正。
 
 ## Current attempt state
 
@@ -59,6 +69,12 @@ terminal metadata 后若又发生 commit、合入目标分支或相关环境变�
 ## Verification record
 
 按 plan Planned Verification 和权威 policy 执行检查。每次实际检查在当前 plan 的 Execution Record 末尾追加稳定 ER-n entry，记录 D/S/P revision、时间、命令/检查、结果、证据路径与残余风险。不得修改旧 ER entry，也不得把通用 checklist 复制到 plan。
+
+### Manual acceptance readiness
+
+Planned Verification 存在 manual owner、且准备交给人验收时，在等待前生成轻量 readiness packet。使用 [`assets/templates/manual-acceptance-readiness.md`](assets/templates/manual-acceptance-readiness.md)：始终填写“必须”四项，只从 Optional 中选择当前场景真正需要的字段，省略不适用项，不输出 `N/A` 列表。
+
+默认把 packet 追加到最新 ER 或 canonical handoff，不单独创建 package artifact。它用于让 manual owner 能立即开始并判断 pass/fail，不替代实际 acceptance evidence，也不要求没有人工验收的 attempt 增加流程。
 
 ## Findings curation
 
@@ -76,7 +92,7 @@ gate evaluation 前逐项分流 findings：
 
 package 只使用 gate.md。每次 evaluation 在 # Gate Ledger 标题之后插入最新 entry；旧 entry 不修改。
 
-entry ID 为 <attempt-id>-G<n>，同 attempt 从 G1 取已有最大编号加一且不复用。entry 必须包含 Attempt ID、Supersedes、evaluated time、D/S/P revision（各带 commit SHA）、Composition、comparison point、一个或多个 plan ER anchor、blocker/deferred item、verdict reason 与 Durable Deltas。
+entry ID 为 <attempt-id>-G<n>，同 attempt 从 G1 取已有最大编号加一且不复用。entry 的可读正文必须包含 Attempt ID、Supersedes、evaluated time、D/S/P revision set、binding validation 结论、Composition、comparison point、一个或多个 plan ER anchor、blocker/deferred item、verdict reason 与 Durable Deltas。精确 artifact blob OID 与 sidecar 路径只放 HTML comment 形式的 machine audit metadata。
 
 - blocked 后补证：保留旧 blocked entry，新增 G<n+1> 并 Supersedes 旧 entry。
 - pass/fail/defer：terminal，冻结对应 plan。
@@ -100,17 +116,18 @@ terminal gate 关闭后提示 owner 可以按需使用 `backfill-stable-docs`，
 ## Execution checklist
 
 1. Restore 当前 attempt 与 revisions。
-2. 校验 Composition/artifacts、dependency graph 与 AC references。
+2. 校验 revision bindings、派生 lifecycle、Composition/artifacts、dependency graph 与 AC references。
 3. 选择并执行 actionable unit；可委派 task 必经 `subagent-driven-development` 的独立 task review，状态只写对应 runtime artifact。
 4. append plan Execution Record。
-5. 分流 findings；必要时回 req-align 并重新过相应 gate。
-6. ticket 达到验收候选时自动路由 code-review、module-review 和适用的 safety-review，固定 comparison point 并闭环 findings。
-7. 保留下一个 G id；拟写 terminal pass 时先完成 Stage 7 准备，再由 `verification-before-completion` 审计 pass claim。
-8. 审计通过后在 gate.md 顶部一次性插入新 entry；terminal 时冻结 plan，blocked 时保留 attempt active。
-9. terminal metadata commit、目标分支合入或环境变化后，任何 complete / closed / merge-ready / release-ready 声明前重新执行 completion-claim evidence audit。
+5. 有 manual owner 时，在等待验收前输出轻量 readiness packet；没有人工验收时跳过。
+6. 分流 findings；必要时回 req-align 并重新过相应 gate。
+7. ticket 达到验收候选时自动路由 code-review、module-review 和适用的 safety-review，固定 comparison point 并闭环 findings。
+8. 保留下一个 G id；拟写 terminal pass 时先完成 Stage 7 准备，再由 `verification-before-completion` 审计 pass claim。
+9. 审计通过后在 gate.md 顶部一次性插入新 entry；terminal 时由 gate 派生 Frozen，blocked 时保持 Active。
+10. terminal metadata commit、目标分支合入或环境变化后，任何 complete / closed / merge-ready / release-ready 声明前重新执行 completion-claim evidence audit。先合入后关 gate 的 attempt 必须以目标分支 evidence 收口。
 
 ## Output
 
 向 owner 汇报时使用 `talk-to-boss`：首段说明本次功能范围、实施/验证/gate 各自完成到哪、剩余 blocker 数量、整体是否 closed，以及当前需要 owner 决定什么。主体按功能 slice 说明已经支持和仍未证明的行为。
 
-随后附 canonical handoff：package/Attempt ID、D/S/P revision、Composition、当前状态源、execution evidence、findings 分流、最新 gate entry/verdict、Supersedes 链、Stage 7 与 completion-claim evidence audit。terminal gate 已关闭时，另以非阻塞 follow-up 提示可选 backfill；不要把提示写成未完成 gate。
+随后附 canonical handoff：package/Attempt ID、D/S/P revision set、binding validation 结论、派生 lifecycle/integration qualifier、Composition、当前状态源、execution evidence、manual readiness（若适用）、findings 分流、最新 gate entry/verdict、Supersedes 链、Stage 7 与 completion-claim evidence audit。正文不得要求 owner 打开 JSON；内部 sidecar 路径只可放 machine audit metadata。terminal gate 已关闭时，另以非阻塞 follow-up 提示可选 backfill；不要把提示写成未完成 gate。

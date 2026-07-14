@@ -154,6 +154,54 @@
         "Reuses evidence whose revision and environment provenance remain valid",
         "Rechecks final HEAD, clean state and target-branch integration before the closed claim"
       ]
+    },
+    {
+      "id": 14,
+      "prompt": "package 中有 plan.md 和 patch plan；旧文件还写着 Status: Draft。内部 .impl-package/revision-bindings.json 的 current.attempt 指向 patch/P2，且该 blob 与 HEAD:path 相符，旧 attempt 已有 terminal pass。恢复时哪个 attempt 是 Active？",
+      "expected_output": "Ignores manually written plan status, derives the patch as the only Active attempt from the registry and gate ledger, and treats the old attempt as Frozen.",
+      "files": [],
+      "expectations": [
+        "Uses the internal sidecar current selection rather than a plan Status field",
+        "Verifies the selected plan blob against Git",
+        "Derives the old attempt as Frozen from its terminal gate",
+        "Stops on duplicate or missing current bindings instead of guessing by time"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Planned Verification 要教授手动验收一个本地 UI，环境已经启动。请在等待他测试前给出 handoff；没有 seed identity，也没有 mock 边界。",
+      "expected_output": "Produces a lightweight readiness packet with the required user story, shortest entry path, pass/fail observations and feedback owner, adding only relevant optional environment/teardown fields.",
+      "files": [],
+      "expectations": [
+        "Includes all four required readiness fields",
+        "Selects only relevant optional fields",
+        "Does not emit N/A placeholders for seed or mock fields",
+        "Records the packet in the latest ER or canonical handoff rather than creating a new package artifact"
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "当前 comparison point 已经进入 dev，但 attempt 还没有 terminal gate，plan 也没有 owner-approved pre-gate integration 记录。现在能否称 closed？",
+      "expected_output": "Reports Integrated, gate open, flags the missing integration-order authorization, and blocks closed until target-branch evidence and the terminal gate are complete.",
+      "files": [],
+      "expectations": [
+        "Treats Integrated, gate open as a derived qualifier rather than a writable status",
+        "Does not equate merge with gate closure",
+        "Flags the absent owner-approved pre-gate integration strategy",
+        "Requires final evidence from the target branch"
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "请向 owner 汇报当前 package：D2/S3/P1 binding 校验通过，patch attempt 为 Active，尚未进入 dev。内部 sidecar 是 JSON。",
+      "expected_output": "Produces a self-contained Markdown handoff with the revision set, binding conclusion, derived lifecycle and integration state without requiring the owner to open the JSON sidecar.",
+      "files": [],
+      "expectations": [
+        "Reports D2 / S3 / P1 and binding validation in readable Markdown",
+        "Reports Active and the not-integrated state directly",
+        "Does not expose raw JSON as the primary handoff",
+        "Mentions the sidecar only as optional machine audit metadata, if at all"
+      ]
     }
   ]
 }
