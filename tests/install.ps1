@@ -192,11 +192,13 @@ function Test-PowerShellExplicitHostInstall {
 
         $claudeSkill = Join-Path $workspace.Home ".claude\skills\api-integration-builder"
         $claudeBundledSkill = Join-Path $workspace.Home ".claude\skills\feishu-skills\feishu-base\SKILL.md"
+        $claudeGstackSkill = Join-Path $workspace.Home ".claude\skills\gstack\plan-eng-review\SKILL.md"
         $codexSkill = Join-Path $workspace.Home ".codex\skills\api-integration-builder"
         $claudeCommand = Join-Path $workspace.Home ".claude\commands\audit.md"
 
         Assert-True (Test-Path $claudeSkill) "Claude skill link was not created."
         Assert-True (Test-Path $claudeBundledSkill) "Claude bundled Feishu skill was not exposed."
+        Assert-True (Test-Path $claudeGstackSkill) "Claude bundled gstack skill was not exposed."
         Assert-True (-not (Test-Path $codexSkill)) "Codex should not be installed when not selected."
         Assert-True (Test-Path $claudeCommand) "Claude command copy was not created."
         Assert-Contains $output "Host: claude" "Expected claude host output."
@@ -351,11 +353,14 @@ function Test-ListVisibleSkillsIncludesBundledSkills {
         Assert-True ($names -contains "lark-intl-shared") "Expected bundled Lark shared skill to remain visible."
         Assert-True ($names -contains "using-azure") "Expected bundled Azure router skill to be visible."
         Assert-True ($names -contains "azure-container-apps") "Expected bundled Azure Container Apps skill to be visible."
+        Assert-True ($names -contains "plan-eng-review") "Expected bundled gstack engineering review skill to be visible."
         Assert-True (-not ($names -contains "feishu-skills")) "Bundle root without SKILL.md should not be listed as a skill."
         $feishuShared = $claude.MergedSkills | Where-Object { $_.Name -eq "feishu-shared" } | Select-Object -First 1
         Assert-True ($feishuShared.Sources[0].RelativePath -eq "feishu-skills/feishu-shared") "Expected bundled Feishu shared skill relative path."
         $azureContainerApps = $claude.MergedSkills | Where-Object { $_.Name -eq "azure-container-apps" } | Select-Object -First 1
         Assert-True ($azureContainerApps.Sources[0].RelativePath -eq "azure-skills/azure-container-apps") "Expected bundled Azure Container Apps skill relative path."
+        $gstackPlanEngReview = $claude.MergedSkills | Where-Object { $_.Name -eq "plan-eng-review" } | Select-Object -First 1
+        Assert-True ($gstackPlanEngReview.Sources[0].RelativePath -eq "gstack/plan-eng-review") "Expected bundled gstack engineering review skill relative path."
     }
     finally {
         Remove-TestWorkspace $workspace
@@ -384,6 +389,7 @@ function Test-BashAutoDiscoversHosts {
         $claudeBundledSkill = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\feishu-skills\feishu-base\SKILL.md")
         $claudeAzureRouter = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\azure-skills\using-azure\SKILL.md")
         $claudeAzureContainerApps = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\azure-skills\azure-container-apps\SKILL.md")
+        $claudeGstackSkill = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\gstack\plan-eng-review\SKILL.md")
         $flatFeishuSkill = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\feishu-base")
         $listScript = Convert-ToBashPath (Join-Path $workspace.Workbench "scripts\list-visible-skills.sh")
         $claudeSkillsRoot = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills")
@@ -393,11 +399,14 @@ function Test-BashAutoDiscoversHosts {
         Assert-True ($LASTEXITCODE -eq 0) "Bash installer should expose bundled Feishu skill through bundle link."
         & $bash.Source -lc "test -f '$claudeAzureRouter' && test -f '$claudeAzureContainerApps'"
         Assert-True ($LASTEXITCODE -eq 0) "Bash installer should expose bundled Azure skills through bundle link."
+        & $bash.Source -lc "test -f '$claudeGstackSkill'"
+        Assert-True ($LASTEXITCODE -eq 0) "Bash installer should expose bundled gstack skill through bundle link."
         & $bash.Source -lc "test ! -e '$flatFeishuSkill'"
         Assert-True ($LASTEXITCODE -eq 0) "Bash installer should not create flat bundled skill links."
         $visibleSkills = & $bash.Source -lc "bash '$listScript' '$claudeSkillsRoot'" 2>&1 | Out-String
         Assert-Contains $visibleSkills "using-azure -> azure-skills/using-azure" "Bash visible-skills script should list Azure router skill."
         Assert-Contains $visibleSkills "azure-container-apps -> azure-skills/azure-container-apps" "Bash visible-skills script should list Azure Container Apps skill."
+        Assert-Contains $visibleSkills "plan-eng-review -> gstack/plan-eng-review" "Bash visible-skills script should list bundled gstack engineering review skill."
     }
     finally {
         Remove-TestWorkspace $workspace

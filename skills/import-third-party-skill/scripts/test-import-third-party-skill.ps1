@@ -19,7 +19,7 @@ try {
     $env:HOME = $FakeHome
 
     $RegistryMd = Join-Path $RepoRoot "registry\third-party-skills.md"
-    $RegistryMdBackup = Get-Content $RegistryMd -Raw
+    $RegistryMdBackup = [System.IO.File]::ReadAllBytes($RegistryMd)
 
     $FakeInstaller = Join-Path $TempRoot "fake-installer.ps1"
     @'
@@ -65,14 +65,31 @@ Set-Content -Path (Join-Path $target "manifest.txt") -Value "fixture" -Encoding 
 
     Assert-True (($conflictOutput -join "`n") -match "Conflict detected\. Installation skipped\.") "same-name install should skip on conflict"
 
+    & python $ImportScript `
+        --skill-name "gstack-fixture" `
+        --package "garrytan/gstack@gstack-fixture" `
+        --target-dir "skills/gstack-test-bundle" `
+        --skip-review `
+        --approve `
+        --install-command "powershell -ExecutionPolicy Bypass -File $FakeInstaller" | Out-Null
+
+    $bundledPath = Join-Path $RepoRoot "skills\gstack-test-bundle\gstack-fixture\SKILL.md"
+    Assert-True (Test-Path $bundledPath) "explicit target dir should copy skill into a repo bundle"
+
+    $mdText = Get-Content $RegistryMd -Raw
+    Assert-True ($mdText.Contains("skills/gstack-test-bundle/gstack-fixture/")) "markdown registry should record bundled repo skill path"
+
     Write-Host "All import-third-party-skill tests passed."
 }
 finally {
     if (Test-Path (Join-Path $RepoRoot "skills\frontend-design-fixture")) {
         Remove-Item (Join-Path $RepoRoot "skills\frontend-design-fixture") -Recurse -Force
     }
+    if (Test-Path (Join-Path $RepoRoot "skills\gstack-test-bundle")) {
+        Remove-Item (Join-Path $RepoRoot "skills\gstack-test-bundle") -Recurse -Force
+    }
     if ($RegistryMdBackup) {
-        Set-Content -Path $RegistryMd -Value $RegistryMdBackup -Encoding UTF8
+        [System.IO.File]::WriteAllBytes($RegistryMd, $RegistryMdBackup)
     }
     if (Test-Path $TempRoot) {
         Remove-Item $TempRoot -Recurse -Force

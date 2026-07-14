@@ -2,14 +2,14 @@
 
 | Skill | 来源 | 获取方式 | 备注 |
 |-------|------|----------|------|
-| cso | `garrytan/gstack` | `npx skills add garrytan/gstack --skill cso --full-depth -y --copy` | 已放入 `skills/cso/` |
-| office-hours | `garrytan/gstack` | `npx skills add garrytan/gstack --skill office-hours --full-depth -y --copy` | 已放入 `skills/office-hours/` |
-| plan-ceo-review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill plan-ceo-review --full-depth -y --copy` | 已放入 `skills/plan-ceo-review/` |
-| plan-design-review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill plan-design-review --full-depth -y --copy` | 已放入 `skills/plan-design-review/` |
-| plan-eng-review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill plan-eng-review --full-depth -y --copy` | 已放入 `skills/plan-eng-review/` |
-| qa | `garrytan/gstack` | `npx skills add garrytan/gstack --skill qa --full-depth -y --copy` | 已放入 `skills/qa/` |
-| qa-only | `garrytan/gstack` | `npx skills add garrytan/gstack --skill qa-only --full-depth -y --copy` | 已放入 `skills/qa-only/` |
-| review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill review --full-depth -y --copy` | 已放入 `skills/review/` |
+| cso | `garrytan/gstack` | `npx skills add garrytan/gstack --skill cso --full-depth -y --copy` | 已放入 `skills/gstack/cso/` |
+| office-hours | `garrytan/gstack` | `npx skills add garrytan/gstack --skill office-hours --full-depth -y --copy` | 已放入 `skills/gstack/office-hours/` |
+| plan-ceo-review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill plan-ceo-review --full-depth -y --copy` | 已放入 `skills/gstack/plan-ceo-review/` |
+| plan-design-review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill plan-design-review --full-depth -y --copy` | 已放入 `skills/gstack/plan-design-review/` |
+| plan-eng-review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill plan-eng-review --full-depth -y --copy` | 已放入 `skills/gstack/plan-eng-review/` |
+| qa | `garrytan/gstack` | `npx skills add garrytan/gstack --skill qa --full-depth -y --copy` | 已放入 `skills/gstack/qa/` |
+| qa-only | `garrytan/gstack` | `npx skills add garrytan/gstack --skill qa-only --full-depth -y --copy` | 已放入 `skills/gstack/qa-only/` |
+| review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill review --full-depth -y --copy` | 已放入 `skills/gstack/review/` |
 | frontend-design | `anthropics/skills` | `npx skills add anthropics/skills@frontend-design -g -y` | 已放入 `skills/frontend-design/` |
 | skill-creator | `anthropics/skills` | 人工迁移 | 已放入 `skills/skill-creator/` |
 | ask-matt | `mattpocock/skills` | `npx skills add mattpocock/skills@ask-matt -g -y` | 已放入 `skills/ask-matt/` |
@@ -47,7 +47,3 @@
 - 只登记第三方 skills，不登记本仓库自建 skills。
 - 第三方 skills 的正式内容直接放在 `skills/<name>/`；成组资产也可以放在 `skills/<bundle>/<name>/`。
 - 如需修改第三方 skill，直接修改正式副本；更新上游时先拉到临时位置，再人工对比合并。
-
-
-
-

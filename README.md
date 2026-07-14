@@ -74,7 +74,7 @@ Codex 写入项目内 `.codex/config.toml` 的 `mcp_servers.discussLedger`；Cla
 | `agents/*/` | 每个 agent 目录 junction 到 `<host>/agents/<name>` | 每个 agent 目录 symlink 到 `<host>/agents/<name>` |
 | `commands/*` | 复制到 `<host>/commands/<name>` | 复制到 `<host>/commands/<name>` |
 
-`skills/` 支持 bundle 结构，例如 `skills/feishu-skills/feishu-base/SKILL.md`、`skills/lark-skills/lark-intl-base/SKILL.md` 和 `skills/azure-skills/using-azure/SKILL.md`。没有 `SKILL.md` 的 bundle 根目录只是分组，不是一个 skill。
+`skills/` 支持 bundle 结构，例如 `skills/feishu-skills/feishu-base/SKILL.md`、`skills/lark-skills/lark-intl-base/SKILL.md`、`skills/azure-skills/using-azure/SKILL.md` 和 `skills/gstack/plan-eng-review/SKILL.md`。没有 `SKILL.md` 的 bundle 根目录只是分组，不是一个 skill。
 
 宿主根目录：
 
@@ -240,7 +240,7 @@ agent-workbench/
 
 Windows 整目录 junction 安装态下，新 skill 通常立即对宿主可见；Bash/Unix 逐 skill symlink 安装态下，新增 skill 后需要重跑安装器。
 
-第三方 skill 通过 `npx skills add <pkg> -g -y` 安装，会落入本仓库 `skills/` 目录；是否需要重跑安装器取决于上面的平台安装态。安装后在 `registry/third-party-skills.md` 补登记。
+第三方 skill 通过 `npx skills add <pkg> -g -y` 安装，默认落入本仓库 `skills/<name>/`；同一上游的成组能力可归入 `skills/<bundle>/<name>/`。是否需要重跑安装器取决于上面的平台安装态，安装后在 `registry/third-party-skills.md` 补登记实际路径。
 
 ---
 
