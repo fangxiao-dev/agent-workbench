@@ -117,3 +117,29 @@ def test_upsert_include_markdown_restores_rendered_body(tmp_path: Path) -> None:
     assert "markdown" in result
     assert "### 当前进度" in result["markdown"]
     assert "Visible body detail when explicitly requested." in result["markdown"]
+
+
+def test_upsert_apply_writes_a_single_project_task(tmp_path: Path) -> None:
+    module = load_task_manager()
+    vault = tmp_path / "vault"
+    (vault / "10_Tasks" / "example-project").mkdir(parents=True)
+    input_path = tmp_path / "task-update.json"
+    write_payload(input_path)
+
+    exit_code, output = run_cli(
+        module,
+        "upsert",
+        "--vault",
+        str(vault),
+        "--project",
+        "example-project",
+        "--input",
+        str(input_path),
+        "--apply",
+    )
+
+    assert exit_code == 0
+    result = json.loads(output)
+    assert result["mode"] == "apply"
+    assert result["operation"] == "create"
+    assert (vault / "10_Tasks" / "example-project" / "Field Only Task.md").exists()

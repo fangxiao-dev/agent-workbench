@@ -9,17 +9,23 @@ Help turn ideas into fully formed designs and specs through natural collaborativ
 
 Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design and get user approval.
 
+## Trivial / Local / Reversible Fast Path
+
+Before starting the full design flow, check whether the request is a trivial, local, reversible implementation. Take this fast path only when all of the following are true: the user has made the target and success condition clear; the work is confined to one local concern and follows an existing pattern; it has no public-contract, security, data-migration, cross-host, or irreversible effect; and there is no real design choice for the owner to make.
+
+For a fast-path request, inspect the relevant context, state the bounded assumption if useful, and hand directly to the implementation owner. Do not require alternatives, a design document, a planning artifact, or design approval. If any condition is uncertain, treat that uncertainty as a design choice and use the full flow.
+
 <HARD-GATE>
-Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have presented a design and the user has approved it. This applies to EVERY project regardless of perceived simplicity.
+For work outside the trivial/local/reversible fast path, do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have presented a design and the user has approved it.
 </HARD-GATE>
 
-## Anti-Pattern: "This Is Too Simple To Need A Design"
+## When A Design Is Needed
 
-Every project goes through this process. A todo list, a single-function utility, a config change — all of them. "Simple" projects are where unexamined assumptions cause the most wasted work. The design can be short (a few sentences for truly simple projects), but you MUST present it and get approval.
+Use the full design flow when the change introduces a meaningful design choice or can affect a public contract, security, data, migration, multiple hosts, or an irreversible outcome. A short design is appropriate for a small but non-trivial change; it still needs the relevant decision and approval.
 
 ## Checklist
 
-You MUST create a task for each of these items and complete them in order:
+For work outside the fast path, create a task for each of these items and complete them in order:
 
 1. **Explore project context** — check files, docs, recent commits
 2. **Offer visual companion** (if topic will involve visual questions) — this is its own message, not combined with a clarifying question. See the Visual Companion section below.
@@ -32,6 +38,8 @@ You MUST create a task for each of these items and complete them in order:
 9. **Transition to planning** — hand the approved design to the repository's canonical planning owner
 
 ## Process Flow
+
+The following flow applies only when the request is outside the fast path.
 
 ```dot
 digraph brainstorming {

@@ -1,6 +1,6 @@
 ---
 name: task-manager
-description: Use this whenever the user asks to create, record, update, sync, validate, or inspect tasks or discussion notes in the local TaskManager vault. This skill turns natural-language manual triggers like "新建任务", "更新任务", "标成完成", "进入验证", "阻塞", "加到任务面板", "先记录讨论", "先记一下这个任务/想法", or "把这段先留档" into correct TaskManager Markdown updates, with dry-run first and explicit apply only.
+description: Use this whenever the user asks to create, record, update, sync, validate, or inspect tasks or discussion notes in the local TaskManager vault. This skill turns natural-language manual triggers like "新建任务", "更新任务", "标成完成", "进入验证", "阻塞", "加到任务面板", "先记录讨论", "先记一下这个任务/想法", or "把这段先留档" into correct TaskManager Markdown updates, applying an explicitly authorized, unique, single-task reversible upsert directly and using dry-run for broader or uncertain changes.
 user-invocable: true
 ---
 
@@ -10,7 +10,11 @@ Use this skill to maintain the local TaskManager vault as the task source of tru
 
 Task creation remains source-driven. Use an existing Markdown file as the task source when one exists, or create a `20_Sources/<project-id>/` note first when the discussion has not yet landed in Markdown.
 
-Default behavior is dry-run. Even when the user initially asks to apply, write, create, update, or record the note, run dry-run first, summarize the field-only confirmation output, and stop for explicit confirmation before running any `--apply` command.
+## Apply Routing
+
+Apply an upsert directly when the user has explicitly asked to create or update it, exactly one task target is uniquely determined, the fields and intended body changes are unambiguous, an existing Markdown source is already available when one is needed, and the operation writes only that task note. Run `upsert ... --apply` once, then report the same field-only result; do not add a dry-run or second confirmation.
+
+Use dry-run followed by explicit confirmation when any of these apply: the task target or requested fields are ambiguous; a source note must be created or changed; more than one artifact is written; the operation is bulk, import, overwrite, delete, init, migration, refresh, or baseline work; or the action could replace unrelated user content. Preserve the existing dry-run safeguards for those cases.
 
 ## Vault And Project Setup
 
@@ -86,14 +90,14 @@ When `--project <project-id>` is supplied, refresh commands require that project
 6. Apply the lifecycle and field rules from:
    - `rules/task-lifecycle.md`
    - `rules/field-semantics.md`
-7. Run the script in dry-run mode first:
+7. Use the Apply Routing rule. For a direct upsert, add `--apply` and report the field-only result. Otherwise run dry-run:
 
 ```powershell
 python D:\CodeSpace\agent-workbench\skills\task-manager\scripts\task_manager.py upsert --vault D:\CodeSpace\TaskManager --project <project-id> --input <task-update.json>
 ```
 
-8. Review the dry-run output with the user. Show target path, operation, `状态`, `优先级`, `任务类型`, `验证链路`, `工作区`, `来源类型`, `来源相对路径`, `bodyChanged`, and `bodySectionsChanged`. Do not print generated正文 or full Markdown unless the user explicitly asks to inspect it.
-9. Stop and wait for an explicit later confirmation such as "确认写入", "apply", or "执行更新" before running the same command with `--apply`.
+8. For either result, show target path, operation, `状态`, `优先级`, `任务类型`, `验证链路`, `工作区`, `来源类型`, `来源相对路径`, `bodyChanged`, and `bodySectionsChanged`. Do not print generated正文 or full Markdown unless the user explicitly asks to inspect it.
+9. Only for the dry-run route, stop and wait for an explicit later confirmation such as "确认写入", "apply", or "执行更新" before running the same command with `--apply`.
 10. For project checks, run recursive validation:
 
 ```powershell
@@ -127,7 +131,7 @@ Choose this when the source already exists as Markdown in the project or vault.
 3. Set `项目ID=<project-id>`, `项目=[<project-id>]`, `来源类型`, and `来源相对路径`.
    The script also sets `项目名称` from the project config when available.
 4. Use the source content and repo evidence to infer lifecycle fields. If it is only a plan/discussion source and no implementation has started, default to `状态=计划中`, `验证链路=不涉及`, `工作区=主工作区`.
-5. Dry-run `task_manager.py upsert --project <project-id>` before applying.
+5. Use Apply Routing: an explicitly authorized, unique, single-task upsert with this existing source can apply directly; otherwise dry-run before applying.
 
 For implementation plans, prefer `import-impl-plans` when importing a batch:
 
@@ -232,7 +236,7 @@ Default `upsert` and `import-impl-plans` output is field-only for confirmation. 
 
 ## Safety Rules
 
-- Default to dry-run. A user's initial write/apply request is not enough to mutate; first run dry-run, show the field-only confirmation summary, then apply only after a later explicit confirmation.
+- Apply an explicitly authorized, unique, single-task reversible upsert directly; for every other mutation, dry-run, show the field-only confirmation summary, and wait for a later explicit confirmation.
 - Do not change files outside the configured vault and this skill's own workspace.
 - Do not rewrite unrelated task body sections during an update.
 - Preserve existing task content whenever the update input does not mention that section.

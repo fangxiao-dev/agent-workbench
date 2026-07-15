@@ -48,13 +48,13 @@ When exploring the codebase, read `CONTEXT.md` (if it exists) so that test names
 
 Before writing any code:
 
-- [ ] Confirm with user what interface changes are needed
-- [ ] Confirm with user which behaviors to test (prioritize)
+- [ ] Reuse the interface and prioritized behaviors from a current approved spec, plan, or explicit user contract when it covers this change; do not ask for a second approval before the first tracer bullet.
+- [ ] Ask the user to decide interface or behavior priorities only when no approved contract exists, the contract is ambiguous, or the implementation would change its stated scope or acceptance semantics.
 - [ ] Identify opportunities for deep modules (small interface, deep implementation) — run the `/codebase-design` skill for the vocabulary and the testability checks
 - [ ] List the behaviors to test (not implementation steps)
-- [ ] Get user approval on the plan
+- [ ] Obtain approval only for a newly proposed or materially changed test contract.
 
-Ask: "What should the public interface look like? Which behaviors are most important to test?"
+When clarification is needed, ask: "What should the public interface look like? Which behaviors are most important to test?"
 
 **You can't test everything.** Confirm with the user exactly which behaviors matter most. Focus testing effort on critical paths and complex logic, not every possible edge case.
 

@@ -7,7 +7,9 @@ description: Create new skills, modify and improve existing skills, and measure 
 
 A skill for creating new skills and iteratively improving them.
 
-At a high level, the process of creating a skill goes like this:
+Start by choosing the validation scope described below; do not start the full evaluation loop for a focused validation change.
+
+At a high level, the full process for a new, behavioral, or otherwise high-impact skill change goes like this:
 
 - Decide what you want the skill to do and roughly how it should do it
 - Write a draft of the skill
@@ -28,6 +30,12 @@ Of course, you should always be flexible and if the user is like "I don't need t
 Then after the skill is done (but again, the order is flexible), you can also run the skill description improver, which we have a whole separate script for, to optimize the triggering of the skill.
 
 Cool? Cool.
+
+## Validation Scope
+
+Choose the smallest validation that establishes the change is safe. Default to focused validation for wording edits, rule clarifications, reference fixes, and local non-semantic corrections. Review the diff fresh, check frontmatter and referenced paths, and run the smallest relevant existing test or deterministic check. Report that evidence directly; do not create a workspace, baseline runs, grading, benchmark, or viewer for this path.
+
+Use the full benchmark loop below when creating a skill, changing its trigger description, changing a workflow or output contract, changing script behavior, addressing high uncertainty or risk, or when the user explicitly asks for comparative evaluation. In those cases, retain the with-skill/baseline runs, assertions, benchmark, and viewer because the change needs behavioral evidence rather than a local consistency check.
 
 ## Communicating with the user
 

@@ -1,12 +1,16 @@
 ---
 name: discuss-ledger
-description: Use this whenever multiple agents (e.g. Claude and Codex/GPT, or two review passes) debate a plan, design, spec, PRD, or skill and their opinions should be accumulated into a single shared discussion document. Triggers on natural phrases like "组织审核 ...", "用 discuss orchestrator 审 ...", "自动讨论 ...", "组织 3 轮 loop 审查 ...", "多轮 loop review ...", "审一下这个计划并记录意见", "把你的意见写进 discuss 文档", "追加到讨论文档", "他也有意见,接着往里写", "继续收敛", "把刚才这个评审过程做成讨论记录", or any time you are asked to express a review opinion that another party will later respond to. Each agent maintains a convergence section first, then appends only its disagreements, until consensus or deadlock. Use this even when the user just says "discuss" plus a target file — do not hand-roll an ad-hoc review note.
+description: Use this when two or more parties need to accumulate and resolve live disagreements across review rounds for a plan, design, spec, PRD, or skill. Triggers on explicit requests such as "组织审核 ...", "用 discuss orchestrator 审 ...", "自动讨论 ...", "组织 3 轮 loop 审查 ...", "多轮 loop review ...", "把你的意见写进 discuss 文档", "追加到讨论文档", "他也有意见,接着往里写", "继续收敛", or "discuss <target>". Do not use for an ordinary single-pass review, a one-way subagent findings handoff, or a review without a live responding party; return the review directly instead. Each participant maintains a convergence section first, then appends only disagreements until consensus or deadlock.
 user-invocable: true
 ---
 
 # Discuss Ledger
 
 Maintain a single Markdown ledger where two or more parties (typically this agent plus another agent like Codex/GPT, or the user) debate a plan/design and converge over rounds. The ledger exists so that, across many turns and many sessions, nobody re-litigates settled points and the live disagreements stay readable.
+
+## Trigger boundary
+
+Before creating or reading a ledger, confirm that the work needs an accumulating, multi-party discussion: an explicit `discuss`/orchestrated/multi-round request, an existing ledger continuation, or a known second party who will respond to unresolved points. An ordinary one-pass review, review report, or one-way subagent handoff is not a discussion: return findings through that workflow and do not create a ledger. Do not turn an otherwise single review into a ledger merely because another person might read the result later.
 
 The document has two living parts:
 

@@ -57,6 +57,12 @@ hooks:
 
 Work like Manus: Use persistent markdown files as your "working memory on disk."
 
+## Ledger Owner Selection
+
+Before creating `plans/workplans/<task_id>/task_plan.md`, decide whether this Skill owns persistent task state. Reuse an existing approved plan/spec, Impl Package, TaskManager record, or active workplan when it already owns the task's goals, decisions, progress and verification evidence; read and update that owner only through its own workflow. Do not create a second `task_plan.md`/`findings.md`/`progress.md` ledger beside it.
+
+Create this Skill's three-file ledger only when the task is expected to cross sessions and no existing state owner can carry the task. A short task, single-file edit, quick lookup, or task with a current owner stays on its lighter existing path. Once this Skill is the active owner, its persistence rules apply for the duration of that task.
+
 ## Project Customization
 
 This skill is often used inside WT-PM-style repositories and assumes one directory-based workplan layout.
@@ -118,9 +124,9 @@ If catchup report shows unsynced context:
 | Skill directory (`${CLAUDE_PLUGIN_ROOT}/`) | Templates, scripts, reference docs |
 | Your project directory | Task workplan directories under `plans/workplans/` |
 
-## Quick Start
+## Quick Start (only when this Skill is the ledger owner)
 
-Before ANY complex task:
+Before a complex task that has no existing state owner:
 
 1. Ensure the repo uses `plans/workplans/<task_id>/` directories for task workplans
 2. Use `python ~/.claude/skills/wt-pm/scripts/plan_tracker.py --root . quick-plan --task-id <task_id>` to create the task directory and three files
@@ -145,17 +151,17 @@ Filesystem = Disk (persistent, unlimited)
 | File | Purpose | When to Update |
 |------|---------|----------------|
 | `plans/workplans/<task_id>/task_plan.md` | Phases, progress, decisions | After each phase |
-| `plans/workplans/<task_id>/findings.md` | Research, discoveries | After ANY discovery |
+| `plans/workplans/<task_id>/findings.md` | Research, discoveries | When a material discovery needs durable handoff |
 | `plans/workplans/<task_id>/progress.md` | Session log, test results | Throughout session |
 | `plans/todo_current.md` | Task lifecycle | On user-approved status changes; executors report DONE readiness instead of self-marking DONE |
 
 ## Critical Rules
 
 ### 1. Create Plan First
-Never start a complex task without a `task_id` and `plans/workplans/<task_id>/task_plan.md`. Non-negotiable.
+When this Skill owns a complex task, do not start execution without a `task_id` and `plans/workplans/<task_id>/task_plan.md`. An existing approved state owner satisfies this requirement; do not duplicate it.
 
 ### 2. The 2-Action Rule
-> "After every 2 view/browser/search operations, IMMEDIATELY save key findings to text files."
+> "After every 2 view/browser/search operations, save key findings when this Skill is the active ledger owner and the information needs durable handoff."
 
 This prevents visual/multimodal information from being lost.
 
@@ -235,7 +241,7 @@ If you can answer these, your context management is solid:
 
 ## When to Use This Pattern
 
-**Use for:**
+**Use as ledger owner for:**
 - Multi-step tasks (3+ steps)
 - Research tasks
 - Building/creating projects
@@ -246,6 +252,7 @@ If you can answer these, your context management is solid:
 - Simple questions
 - Single-file edits
 - Quick lookups
+- Tasks with an existing approved plan/package, TaskManager record, or active workplan that already owns persistent state
 
 ## Templates
 

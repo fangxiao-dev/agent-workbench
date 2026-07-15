@@ -5,9 +5,9 @@ Use these objective checks when reviewing skill/script changes.
 ## create-current-bug
 
 - `operation` is `create`.
-- Command uses `upsert --project shop-web` in dry-run first.
-- Stops after dry-run and waits for explicit later confirmation before applying.
-- Dry-run confirmation shows fields and body section names only, not generated正文/full Markdown.
+- Command uses `upsert --project shop-web --apply` directly.
+- Does not add a dry-run or second confirmation for this explicit, unique, single-task reversible create.
+- Apply result shows fields and body section names only, not generated正文/full Markdown.
 - Payload includes `projectId=shop-web`.
 - Generated frontmatter includes `项目名称` from `00_Config/projects.yml` when the project name is configured.
 - Payload includes `sourceType=source-note`.
@@ -34,8 +34,8 @@ Use these objective checks when reviewing skill/script changes.
 
 - `operation` is `update`.
 - Command uses `upsert --project prj-supplyer-webapp`.
-- Stops after dry-run and waits for explicit later confirmation before applying.
-- Dry-run confirmation shows fields and body section names only, not generated正文/full Markdown.
+- Uses `--apply` directly when the named task is unique and existing source metadata remains valid.
+- Apply result shows fields and body section names only, not generated正文/full Markdown.
 - `status` is `实施中`.
 - `workspace` is `worktree`.
 - Existing priority is not cleared.
@@ -45,8 +45,8 @@ Use these objective checks when reviewing skill/script changes.
 
 - `operation` is `update`.
 - Command uses `upsert --project prj-supplyer-webapp`.
-- Stops after dry-run and waits for explicit later confirmation before applying.
-- Dry-run confirmation shows fields and body section names only, not generated正文/full Markdown.
+- Uses `--apply` directly when the named task is unique and existing source metadata remains valid.
+- Apply result shows fields and body section names only, not generated正文/full Markdown.
 - `status` is `验证中`.
 - `verificationPath` is `部分真实链路`.
 - Body includes `### 验证状态` and `### 残余风险`.
@@ -55,8 +55,8 @@ Use these objective checks when reviewing skill/script changes.
 
 - `operation` is `update`.
 - Command uses `upsert --project prj-supplyer-webapp`.
-- Stops after dry-run and waits for explicit later confirmation before applying.
-- Dry-run confirmation shows fields and body section names only, not generated正文/full Markdown.
+- Uses `--apply` directly when the named task is unique and existing source metadata remains valid.
+- Apply result shows fields and body section names only, not generated正文/full Markdown.
 - `status` is `已完成`.
 - `workspace` is `主工作区`.
 - `priority` is `null` or omitted only if already absent.
@@ -66,8 +66,8 @@ Use these objective checks when reviewing skill/script changes.
 
 - `operation` is `update`.
 - Command uses `upsert --project integrations`.
-- Stops after dry-run and waits for explicit later confirmation before applying.
-- Dry-run confirmation shows fields and body section names only, not generated正文/full Markdown.
+- Uses `--apply` directly when the named task is unique and existing source metadata remains valid.
+- Apply result shows fields and body section names only, not generated正文/full Markdown.
 - `status` is `阻塞`.
 - Priority is preserved unless explicitly changed.
 - Next step states the unblock condition.
@@ -85,13 +85,15 @@ Use these objective checks when reviewing skill/script changes.
 - The dashboard task has `状态=计划中`, `验证链路=不涉及`, and `工作区=主工作区`.
 - The dashboard task source/body links back to the project `20_Sources/` note.
 - Draft includes discussion summary, confirmed decisions, open questions, possible next actions, and related paths.
+- Uses dry-run and a later confirmation because it writes a source note plus a linked task.
 
 ## dashboard-task-explicit
 
 - Uses the task upsert workflow.
 - `operation` is `create`.
 - Target path is under `10_Tasks/checkout-app/`.
-- Command uses `upsert --project checkout-app`.
+- Command uses `upsert --project checkout-app --apply` directly.
+- Does not add dry-run or a second confirmation because the existing source and one target are explicit.
 - Payload includes `projectId=checkout-app`.
 - Payload includes valid `sourceType` and `sourceRelativePath`.
 - `status` is `计划中`.
