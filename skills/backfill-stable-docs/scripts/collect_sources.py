@@ -11,6 +11,15 @@ import sys
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from stable_docs_config import (
+    ConfigError,
+    load_method_activation,
+    load_repository_config,
+)
+
+
+METHOD_ROOT = Path(__file__).resolve().parents[3]
+
 
 class CollectorError(RuntimeError):
     """Raised when source inventory cannot be collected safely."""
@@ -33,16 +42,16 @@ def _git(root: Path, *args: str, allow_empty: bool = False) -> str:
     return output
 
 
-def _require_git_repository(path: Path, label: str) -> Path:
-    root = path.resolve()
+def _require_git_repository(path: Path | str) -> Path:
+    root = Path(path).resolve()
     if not root.is_dir():
-        raise CollectorError(f"{label} is not a directory: {root}")
+        raise CollectorError(f"project root is not a directory: {root}")
     try:
         top_level = Path(_git(root, "rev-parse", "--show-toplevel")).resolve()
     except CollectorError as error:
-        raise CollectorError(f"{label} is not a Git repository: {root}") from error
+        raise CollectorError(f"project root is not a Git repository: {root}") from error
     if top_level != root:
-        raise CollectorError(f"{label} must be the Git top level: {root}")
+        raise CollectorError(f"project root must be the Git top level: {root}")
     return root
 
 
@@ -61,10 +70,8 @@ def _is_ancestor(root: Path, ancestor: str, descendant: str) -> bool:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    if completed.returncode == 0:
-        return True
-    if completed.returncode == 1:
-        return False
+    if completed.returncode in (0, 1):
+        return completed.returncode == 0
     raise CollectorError(
         "git merge-base --is-ancestor failed: "
         + (completed.stderr.strip() or completed.stdout.strip())
@@ -84,157 +91,78 @@ def _normalize_repository_identity(remote: str) -> str:
     return value.strip("/").lower()
 
 
-def _parse_method_ref(value: str) -> tuple[str, str]:
-    if "@" not in value:
-        raise CollectorError("method ref must use <repository-identity>@<commit>")
-    identity, commit = value.rsplit("@", 1)
-    identity = identity.strip().strip("/").lower()
-    commit = commit.strip()
-    if not identity or not commit:
-        raise CollectorError("method ref must use <repository-identity>@<commit>")
-    if not re.fullmatch(
-        r"[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*", identity
-    ):
-        raise CollectorError(
-            "method repository identity must be portable owner/repository"
-        )
-    return identity, commit
-
-
-def _portable_origin_identity(root: Path, label: str) -> str:
+def _portable_origin_identity(root: Path) -> str:
     try:
-        remote = _git(root, "remote", "get-url", "origin")
+        identity = _normalize_repository_identity(_git(root, "remote", "get-url", "origin"))
     except CollectorError as error:
-        raise CollectorError(
-            f"{label} origin must resolve to portable owner/repository identity"
-        ) from error
-    identity = _normalize_repository_identity(remote)
-    if not re.fullmatch(
-        r"[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*", identity
-    ):
-        raise CollectorError(
-            f"{label} origin must resolve to portable owner/repository identity"
-        )
+        raise CollectorError("project origin must resolve to owner/repository") from error
+    if re.fullmatch(r"[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*", identity) is None:
+        raise CollectorError("project origin must resolve to portable owner/repository identity")
     return identity
 
 
-def _validate_method_ref(method_root: Path, method_ref: str) -> dict[str, str]:
-    expected_identity, requested_commit = _parse_method_ref(method_ref)
-    actual_identity = _portable_origin_identity(method_root, "method")
-    if actual_identity != expected_identity:
-        raise CollectorError(
-            "method repository identity mismatch: "
-            f"expected {expected_identity}, found {actual_identity}"
-        )
-    commit = _resolve_commit(method_root, requested_commit, "method commit")
-    method_head = _resolve_commit(method_root, "HEAD", "method root HEAD")
-    if commit != method_head:
-        raise CollectorError(
-            "method ref commit does not match method root HEAD: "
-            f"expected {commit}, found {method_head}"
-        )
-    return {"repository": expected_identity, "commit": commit}
-
-
-def _package_names(project_root: Path, source_head: str) -> list[str]:
+def _package_names(root: Path, head: str, implementations: str) -> list[str]:
     output = _git(
-        project_root,
+        root,
         "ls-tree",
         "-d",
         "--name-only",
-        f"{source_head}:docs/implementations",
+        f"{head}:{implementations}",
         allow_empty=True,
     )
-    names = [line.strip() for line in output.splitlines() if line.strip()]
+    names = sorted(line.strip() for line in output.splitlines() if line.strip())
     if not names:
-        raise CollectorError("no tracked implementation packages at source HEAD")
-    return sorted(names)
+        raise CollectorError(f"no tracked implementation packages at {implementations}")
+    return names
 
 
-def _package_files(project_root: Path, source_head: str, package_id: str) -> list[str]:
-    package_path = f"docs/implementations/{package_id}"
+def _package_files(root: Path, head: str, package_path: str) -> list[str]:
     output = _git(
-        project_root,
+        root,
         "ls-tree",
         "-r",
         "--name-only",
-        source_head,
+        head,
         "--",
         package_path,
         allow_empty=True,
     )
-    files = [line.strip() for line in output.splitlines() if line.strip()]
+    files = sorted(line.strip() for line in output.splitlines() if line.strip())
     if not files:
-        raise CollectorError(f"package has no tracked files at source HEAD: {package_id}")
-    return sorted(files)
+        raise CollectorError(f"package has no tracked files at source HEAD: {package_path}")
+    return files
 
 
-def _package_activity(
-    project_root: Path, source_head: str, package_id: str
-) -> tuple[str, int]:
-    package_path = f"docs/implementations/{package_id}"
-    output = _git(
-        project_root,
-        "log",
-        "-1",
-        "--format=%H%x09%ct",
-        source_head,
-        "--",
-        package_path,
-    )
+def _package_activity(root: Path, head: str, package_path: str) -> tuple[str, int]:
+    output = _git(root, "log", "-1", "--format=%H%x09%ct", head, "--", package_path)
     commit, epoch = output.split("\t", 1)
     return commit, int(epoch)
 
 
-def _package_tree(project_root: Path, source_head: str, package_id: str) -> str:
-    return _git(
-        project_root,
-        "rev-parse",
-        f"{source_head}:docs/implementations/{package_id}",
-    )
-
-
-def _blob_identity(project_root: Path, source_head: str, path: str) -> str:
-    return _git(project_root, "rev-parse", f"{source_head}:{path}")
-
-
-def _changed_after_watermark(
-    project_root: Path, watermark: str, source_head: str, package_id: str
-) -> bool:
-    package_path = f"docs/implementations/{package_id}"
-    output = _git(
-        project_root,
-        "log",
-        "-1",
-        "--format=%H",
-        f"{watermark}..{source_head}",
-        "--",
-        package_path,
-        allow_empty=True,
-    )
-    return bool(output)
-
-
 def _changed_package_ids(
-    project_root: Path, watermark: str, source_head: str
+    root: Path, watermark: str, head: str, implementations: str
 ) -> list[str]:
     output = _git(
-        project_root,
+        root,
         "log",
         "--pretty=format:",
         "--name-only",
-        f"{watermark}..{source_head}",
+        f"{watermark}..{head}",
         "--",
-        "docs/implementations",
+        implementations,
         allow_empty=True,
     )
+    prefix = implementations.split("/")
     package_ids: set[str] = set()
     for line in output.splitlines():
-        path = line.strip().replace("\\", "/")
-        parts = path.split("/")
-        if len(parts) >= 3 and parts[:2] == ["docs", "implementations"]:
-            package_ids.add(parts[2])
+        parts = line.strip().replace("\\", "/").split("/")
+        if len(parts) > len(prefix) and parts[: len(prefix)] == prefix:
+            package_ids.add(parts[len(prefix)])
     return sorted(package_ids)
+
+
+def _is_excluded(package_path: str, excludes: Sequence[str]) -> bool:
+    return any(package_path == path or package_path.startswith(path.rstrip("/") + "/") for path in excludes)
 
 
 def collect_inventory(
@@ -243,125 +171,105 @@ def collect_inventory(
     project_root: Path | str,
     source_head: str,
     project_watermark: str,
-    method_root: Path | str,
-    method_ref: str,
-    fixture_count: int,
-    carry_forward: Sequence[str],
+    fixture_count: int = 0,
+    carry_forward: Sequence[str] = (),
+    config_path: Path | str | None = None,
+    method_root: Path | str = METHOD_ROOT,
 ) -> dict[str, object]:
-    project = _require_git_repository(Path(project_root), "project root")
-    method = _require_git_repository(Path(method_root), "method root")
-    if fixture_count < 0:
-        raise CollectorError("fixture count cannot be negative")
+    project = _require_git_repository(project_root)
     if mode not in {"bootstrap", "steady-state"}:
         raise CollectorError(f"unsupported collection mode: {mode}")
-    if mode == "steady-state" and fixture_count != 0:
+    if fixture_count < 0:
+        raise CollectorError("fixture count cannot be negative")
+    if mode == "steady-state" and fixture_count:
         raise CollectorError("steady-state mode requires fixture count 0")
     if mode == "bootstrap" and carry_forward:
         raise CollectorError("bootstrap mode does not accept carry-forward packages")
+    try:
+        config, config_metadata = load_repository_config(project, config_path)
+        method_state = load_method_activation(method_root)
+    except ConfigError as error:
+        raise CollectorError(str(error)) from error
 
     resolved_head = _resolve_commit(project, source_head, "source HEAD")
-    resolved_watermark = _resolve_commit(
-        project, project_watermark, "project watermark"
-    )
+    resolved_watermark = _resolve_commit(project, project_watermark, "project watermark")
     if not _is_ancestor(project, resolved_watermark, resolved_head):
         raise CollectorError(
             f"project watermark {resolved_watermark} is not an ancestor of {resolved_head}"
         )
-    method_state = _validate_method_ref(method, method_ref)
-    project_identity = _portable_origin_identity(project, "project")
-
-    rows: list[dict[str, object]] = []
-    for package_id in _package_names(project, resolved_head):
-        files = _package_files(project, resolved_head, package_id)
-        activity_commit, activity_epoch = _package_activity(
-            project, resolved_head, package_id
+    project_identity = _portable_origin_identity(project)
+    configured_identity = config.get("repository")
+    if configured_identity and configured_identity != project_identity:
+        raise CollectorError(
+            f"configured repository mismatch: expected {configured_identity}, found {project_identity}"
         )
-        prefix = f"docs/implementations/{package_id}/"
-        semantic_sources = [
-            f"{prefix}{name}"
-            for name in ("design.md", "spec.md")
-            if f"{prefix}{name}" in files
-        ]
-        findings_path = f"{prefix}findings.md"
-        supplemental_findings = [findings_path] if findings_path in files else []
-        supplemental_evidence = [
-            {
-                "path": findings_path,
-                "blob": _blob_identity(project, resolved_head, findings_path),
-            }
-        ] if findings_path in files else []
+
+    implementations = str(config["implementationsPath"])
+    excludes = list(config["excludePaths"])
+    rows: list[dict[str, object]] = []
+    for package_id in _package_names(project, resolved_head, implementations):
+        package_path = f"{implementations}/{package_id}"
+        if _is_excluded(package_path, excludes):
+            continue
+        files = _package_files(project, resolved_head, package_path)
+        activity_commit, activity_epoch = _package_activity(project, resolved_head, package_path)
+        semantic = [f"{package_path}/{name}" for name in ("design.md", "spec.md") if f"{package_path}/{name}" in files]
+        findings = f"{package_path}/findings.md"
         rows.append(
             {
                 "package_id": package_id,
                 "activity_commit": activity_commit,
                 "activity_epoch": activity_epoch,
-                "tree": _package_tree(project, resolved_head, package_id),
-                "semantic_sources": semantic_sources,
-                "supplemental_findings": supplemental_findings,
-                "supplemental_evidence": supplemental_evidence,
-                "gate_paths": [f"{prefix}gate.md"]
-                if f"{prefix}gate.md" in files
-                else [],
+                "tree": _git(project, "rev-parse", f"{resolved_head}:{package_path}"),
+                "semantic_sources": semantic,
+                "supplemental_findings": [findings] if findings in files else [],
+                "supplemental_evidence": (
+                    [{"path": findings, "blob": _git(project, "rev-parse", f"{resolved_head}:{findings}")}]
+                    if findings in files
+                    else []
+                ),
+                "gate_paths": [f"{package_path}/gate.md"] if f"{package_path}/gate.md" in files else [],
             }
         )
-
     rows.sort(key=lambda row: (-int(row["activity_epoch"]), str(row["package_id"])))
     if fixture_count > len(rows):
-        raise CollectorError(
-            f"fixture count {fixture_count} exceeds package count {len(rows)}"
-        )
-    fixtures = (
-        [str(row["package_id"]) for row in rows[:fixture_count]]
-        if mode == "bootstrap"
-        else []
-    )
-    fixture_set = set(fixtures)
+        raise CollectorError(f"fixture count {fixture_count} exceeds package count {len(rows)}")
 
-    known_packages = {str(row["package_id"]) for row in rows}
-    changed_packages = _changed_package_ids(
-        project, resolved_watermark, resolved_head
-    )
-    removed_packages = sorted(set(changed_packages) - known_packages)
+    fixtures = [str(row["package_id"]) for row in rows[:fixture_count]] if mode == "bootstrap" else []
+    known = {str(row["package_id"]) for row in rows}
+    changed = [
+        package_id
+        for package_id in _changed_package_ids(
+            project, resolved_watermark, resolved_head, implementations
+        )
+        if not _is_excluded(f"{implementations}/{package_id}", excludes)
+    ]
+    removed = sorted(set(changed) - known)
     carry = sorted(set(carry_forward))
-    unknown_carry = sorted(set(carry) - known_packages)
+    unknown_carry = sorted(set(carry) - known)
     if unknown_carry:
         raise CollectorError(
-            "carry-forward packages do not exist at source HEAD: "
-            + ", ".join(unknown_carry)
+            "carry-forward packages do not exist at source HEAD: " + ", ".join(unknown_carry)
         )
-
-    watermark_new = sorted(
-        str(row["package_id"])
-        for row in rows
-        if _changed_after_watermark(
-            project, resolved_watermark, resolved_head, str(row["package_id"])
-        )
-    )
-    bootstrap_targets = (
-        [
-            str(row["package_id"])
-            for row in rows
-            if str(row["package_id"]) not in fixture_set
-        ]
-        if mode == "bootstrap"
-        else []
-    )
-    eligible = (
-        bootstrap_targets
-        if mode == "bootstrap"
-        else sorted(set(watermark_new) | set(carry))
-    )
-
+    watermark_new = sorted(set(changed) & known)
+    bootstrap_targets = [str(row["package_id"]) for row in rows if row["package_id"] not in set(fixtures)] if mode == "bootstrap" else []
+    eligible = bootstrap_targets if mode == "bootstrap" else sorted(set(watermark_new) | set(carry))
     for row in rows:
         package_id = str(row["package_id"])
-        row["protected_fixture"] = package_id in fixture_set
+        row["protected_fixture"] = package_id in fixtures
         row["carry_forward"] = package_id in carry
         row["watermark_new"] = package_id in watermark_new
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": mode,
         "method_activation": method_state,
+        "config": {
+            "schema_version": config["schemaVersion"],
+            "source": config_metadata["source"],
+            "sha256": config_metadata["sha256"],
+            "implementations_path": implementations,
+        },
         "project": {
             "repository": project_identity,
             "source_head": resolved_head,
@@ -373,8 +281,8 @@ def collect_inventory(
         "bootstrap_targets": bootstrap_targets,
         "carry_forward": carry,
         "watermark_new_packages": watermark_new,
-        "removed_packages": removed_packages,
-        "eligible_removed_packages": removed_packages,
+        "removed_packages": removed,
+        "eligible_removed_packages": removed,
         "eligible_packages": eligible,
         "packages": rows,
     }
@@ -382,17 +290,18 @@ def collect_inventory(
 
 def _render_markdown(inventory: dict[str, object]) -> str:
     project = inventory["project"]
-    assert isinstance(project, dict)
+    method = inventory["method_activation"]
+    assert isinstance(project, dict) and isinstance(method, dict)
     lines = [
         "# Stable Docs Backfill Source Inventory",
         "",
+        f"- Method: `{method['repository']}@{method['commit']}`",
         f"- Source HEAD: `{project['source_head']}`",
         f"- Project watermark: `{project['watermark']}`",
         f"- Packages: {inventory['package_count']}",
-        f"- Protected fixtures: {inventory['fixture_count']}",
         f"- Removed packages requiring disposition: {len(inventory['removed_packages'])}",
         "",
-        "| Package | Activity commit | Semantic sources | Supplemental findings | Fixture | Carry-forward | Watermark-new |",
+        "| Package | Activity commit | Semantic sources | Findings | Fixture | Carry-forward | Watermark-new |",
         "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     packages = inventory["packages"]
@@ -404,26 +313,11 @@ def _render_markdown(inventory: dict[str, object]) -> str:
                 package_id=row["package_id"],
                 activity_commit=row["activity_commit"],
                 semantic="<br>".join(row["semantic_sources"]) or "none",
-                findings="<br>".join(
-                    f"{item['path']} @ {item['blob']}"
-                    for item in row["supplemental_evidence"]
-                )
-                or "none",
+                findings="<br>".join(row["supplemental_findings"]) or "none",
                 fixture="yes" if row["protected_fixture"] else "no",
                 carry="yes" if row["carry_forward"] else "no",
                 new="yes" if row["watermark_new"] else "no",
             )
-        )
-    removed = inventory["removed_packages"]
-    assert isinstance(removed, list)
-    if removed:
-        lines.extend(
-            [
-                "",
-                "## Removed Packages Requiring Disposition",
-                "",
-                *[f"- `{package_id}`" for package_id in removed],
-            ]
         )
     return "\n".join(lines) + "\n"
 
@@ -440,10 +334,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("bootstrap", "steady-state"), required=True)
     parser.add_argument("--project-root", type=Path, required=True)
+    parser.add_argument("--config", type=Path)
     parser.add_argument("--source-head", required=True)
     parser.add_argument("--project-watermark", required=True)
-    parser.add_argument("--method-root", type=Path, required=True)
-    parser.add_argument("--method-ref", required=True)
     parser.add_argument("--fixture-count", type=int, default=0)
     parser.add_argument("--carry-forward", action="append", default=[])
     parser.add_argument("--format", choices=("json", "markdown"), default="json")
@@ -457,29 +350,24 @@ def main(argv: Iterable[str] | None = None) -> int:
         inventory = collect_inventory(
             mode=args.mode,
             project_root=args.project_root,
+            config_path=args.config,
             source_head=args.source_head,
             project_watermark=args.project_watermark,
-            method_root=args.method_root,
-            method_ref=args.method_ref,
             fixture_count=args.fixture_count,
             carry_forward=args.carry_forward,
         )
-        rendered = (
-            json.dumps(inventory, indent=2, sort_keys=True) + "\n"
-            if args.format == "json"
-            else _render_markdown(inventory)
-        )
+        rendered = json.dumps(inventory, indent=2, sort_keys=True) + "\n" if args.format == "json" else _render_markdown(inventory)
         if args.output is None:
             sys.stdout.write(rendered)
         else:
-            project_root = Path(args.project_root).resolve()
+            project = Path(args.project_root).resolve()
             output = args.output.resolve()
-            if not _path_under(project_root, output):
+            if not _path_under(project, output):
                 raise CollectorError("output path must remain under project root")
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(rendered, encoding="utf-8", newline="\n")
         return 0
-    except CollectorError as error:
+    except (CollectorError, ConfigError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
 

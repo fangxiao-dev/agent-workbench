@@ -146,6 +146,12 @@ python D:\CodeSpace\agent-workbench\skills\discuss-ledger\scripts\discuss_orches
 
 `init-project-context` 用于新项目或上下文不足的项目：先稳定项目目标、交付物边界、术语和文档骨架，再进入实现规划。`templates/CLAUDE.md.tpl` 是这个流程按需使用的模板；安装器不会自动生成 `CLAUDE.md`。
 
+### 回刷常青文档
+
+`$backfill-stable-docs` 是公共 Skill bundle 的唯一入口，不需要 Plugin。它按意图加载 audit、apply 或 verify runbook：默认 audit 只读扫描并生成带 item ID 的报告；apply 只处理 owner 对某报告明确批准的 item ID；verify 独立检查 authority、链接、覆盖率、pending、水位线和残留，且不补写内容。三个阶段必须分别汇报，audit 完成不表示 apply 或 verify 完成。
+
+不同仓库或 monorepo context 通过 `configs/stable-docs-backfill/*.json` 或项目根 `.stable-docs-backfill.json` 声明 canonical docs、pending、危险内容规则和 Implementation Package 路径。一份配置对应一个 context；repo-wide 与 nested domain 分次运行，不能混用 state 或 watermark。方法锚点从同一 `agent-workbench` Git commit 自动推导，和 `impl-package` 原子升级。
+
 ### 多任务 / worktree 工作流
 
 WT-PM 工作流拆成三个 skill：

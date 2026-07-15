@@ -38,6 +38,8 @@ powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\install.ps1 
 
 `skills/` 可以包含直接 skill（`skills/<name>/SKILL.md`）和 bundle skill（`skills/<bundle>/<name>/SKILL.md`）。安装器保持非破坏策略：Windows 暴露整个 `skills/`，Bash/Unix 链接顶层目录，因此 bundle 作为一个顶层目录暴露，内部 skill 通过递归发现或宿主扫描读取。
 
+`backfill-stable-docs` 随公共 `skills/` 暴露给宿主。Codex 通过 `$backfill-stable-docs` 调用；安装器不注册 marketplace、不调用 Codex Plugin CLI，也不清理用户的 Plugin 状态。
+
 宿主根目录：
 
 - `claude` -> `~/.claude`

@@ -113,7 +113,7 @@ entry ID 为 <attempt-id>-G<n>，同 attempt 从 G1 取已有最大编号加一�
 
 无 durable delta 时写 none 和理由。写入 terminal entry 时先保留 G id、固定 comparison point/ER anchor、完成 Stage 7，再一次性插入不可变 entry；blocked capture gap 通过后续 entry 补齐，不回改旧 entry。gate 关闭后，module knowledge 与 `_pending.md` truth pointer 共同表达当前长期真相和待压实增量。
 
-terminal gate 关闭后提示 owner 可以按需使用 `backfill-stable-docs`，但不自动调用、不阻塞当前交付，也不把它列为本次任务的剩余 blocker。report/apply 可以延期；只有用户明确要求、已有维护计划或进入周期维护流程时才执行，apply 仍需 owner 批准具体 report item。
+terminal gate 关闭后提示 owner 可以按需使用 `$backfill-stable-docs`，但不自动调用、不阻塞当前交付，也不把它列为本次任务的剩余 blocker。audit/apply/verify 可以延期且分别汇报；只有用户明确要求、已有维护计划或进入周期维护流程时才执行，apply 仍需 owner 批准具体 report item。
 
 ## Execution checklist
 

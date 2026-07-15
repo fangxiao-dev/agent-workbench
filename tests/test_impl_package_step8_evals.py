@@ -238,7 +238,7 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         )
         assert_contains(
             composition_contract,
-            "提示本身不构成 report/apply 授权",
+        "提示本身不构成 audit/apply/verify 授权",
             "Composition contract must separate prompting from authorization.",
         )
         assert_contains(backfill_design, "## 当前稳态用法", "Backfill design must lead with current steady-state usage.")
