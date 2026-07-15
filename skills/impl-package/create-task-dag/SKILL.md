@@ -12,6 +12,8 @@ description: >
 
 本 skill 的共享语义唯一引用 `skills/impl-package/references/impl-package-composition-contract.md`。不得在本 skill 重定义 canonical status、readiness resolution、composition migration、Stage 7 或 seam 关闭规则。
 
+P revision 变化时，先比较 plan-owned delta 与 DAG 的 task contract、Depends on、ownership、seam 和 verification producer。只重验证直接依赖该 delta 的节点及其必要下游；未受影响节点可以批量确认并机械更新 Plan Revision。不得把 hash、证据路径、分类、引用或不改变执行语义的纯减法解释为需要重画整张 DAG。
+
 ## 输入与路由边界
 
 可开始 DAG execution decomposition 的有效输入只有当前 attempt plan 声明 `dag=true` 的两种 Composition：

@@ -55,15 +55,15 @@
     },
     {
       "id": 5,
-      "name": "auto-grill-before-spec-pass-implementation-drift-skips-it",
-      "prompt": "Case A: the eight-section spec draft is complete for a new package and Spec Gate is about to be evaluated for the first time. Case B: a patch is implementation-only drift that reuses the existing S revision without evaluating Spec Gate.",
-      "expected_output": "Case A automatically runs grill-me-smartly's review phase before declaring Spec Gate PASSED and reports its ledger; Case B does not invoke grill-me-smartly at all since Spec Gate is not being evaluated.",
+      "name": "risk-driven-grill-skips-clear-spec-delta",
+      "prompt": "Case A: a complete local spec delta has no unresolved ambiguity, external interface, migration, authority, destructive mutation, or evidence-integrity risk. Case B: a spec change introduces an external provider contract and a possible false-PASS acceptance path. Classify the required Grill work.",
+      "expected_output": "Case A evaluates the Spec Gate directly without a Grill ledger; Case B runs grill-me-smartly's review phase before a Spec Gate pass and reports its ledger.",
       "files": [],
       "expectations": [
-        "Runs only grill-me-smartly's review phase, never its apply phase, without being separately asked by the user",
+        "Does not invoke grill-me-smartly for the clear local Spec delta",
+        "Runs only grill-me-smartly's review phase, never its apply phase, when the high-risk false-PASS signal is present",
         "Does not silently apply grill-me-smartly's converged clarifications to spec.md without explicit user approval",
         "Treats any 待用户裁决 item from the ledger as a blocking owner decision under existing Spec Gate criteria",
-        "Does not invoke grill-me-smartly for the implementation-only-drift case",
         "States the ledger lives in the OS temp directory, not under docs/implementations/<package-id>/",
         "Offers grilling as an optional follow-up only after Spec Gate PASSED, framed as a suggestion, not a requirement"
       ]

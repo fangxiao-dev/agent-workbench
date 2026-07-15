@@ -21,12 +21,12 @@ description: >
 
 ## Task execution and review routing
 
-本 skill 选择 actionable unit、维护其 runtime state，并拥有 ticket acceptance 的最终入口；它不自行代替 task worker。存在有界且可委派的 implementation task 时，必须调用同体系的 `subagent-driven-development`：该 skill 负责 implementer delegation 和非实现者执行的 task spec-compliance / code-quality review。task review evidence 进入对应 progress/handoff 或当前 ticket evidence，再由本 skill 汇总。
+本 skill 选择 actionable unit、维护其 runtime state，并拥有 ticket acceptance 的最终入口；它不自行代替 task worker。存在有界且委派收益明确的 implementation task 时，调用同体系的 `subagent-driven-development`：该 skill 负责 implementer delegation 和非实现者执行的 task spec-compliance / code-quality review。单 owner、机械、局部可逆且委派成本更高的 delta 由主 agent 直接完成。task review evidence 进入对应 progress/handoff 或当前 ticket evidence，再由本 skill 汇总。
 
-当 ticket 达到验收候选，先固定 comparison point，再自动按以下信号运行正式 review；不能等待 owner 显式点名：
+当 ticket 或 no-ticket attempt 达到验收候选，先固定 comparison point，再按实际 diff 与 contract impact 运行正式 review；不能仅凭 package 曾经有 tickets/DAG 推导本次 review：
 
 - `code-review`：任何 implementation 恒必做。
-- `module-review`：当前 attempt 有 tickets 或 DAG 时必做；无两者但 diff/spec 涉及 interface、状态机、模块边界或 seam 时同样必做。其 Standards 与 Spec 两轴都必须完成。
+- `module-review`：当前 diff 或本次 S/P delta 涉及 interface、状态机、模块边界、跨模块行为或 seam 时必做。tickets/DAG 的存在本身不是触发信号。
 - `safety-review`：diff 或 spec/plan/DAG 出现 auth、permission、payment、webhook、migration、外部 mutation、数据完整性、并发安全，或 evidence authority / published-state / compatibility-projection / proof-equality 信号时必做。后四类是条件化风险信号，不假定所有项目存在 provider、schema、archive、CLI 或 `current` 指针。
 
 正式 review 的 findings 必须修复并以 closure verification 复核，才可把 ticket Runtime Acceptance Status 记为已满足或进入 gate。
@@ -43,10 +43,10 @@ terminal metadata 后若又发生 commit、合入目标分支或相关环境变�
 
 ## Restore
 
-1. 读取仓库规则、内部 `.impl-package/revision-bindings.json` sidecar、所有 attempt plans、gate.md 最新 entry、当前 attempt 的 tickets/DAG/progress、findings 与实际证据。
+1. 采用 delta-first restore：先读取仓库规则、内部 `.impl-package/revision-bindings.json`、current attempt plan、gate.md 最新 entry、最近可靠 comparison point/ER anchor，以及自该点后的实际 diff。只在 current 选择冲突、provenance 缺口或 delta 无法解释时读取历史 plans 和完整 ledger；不要每次恢复都重扫全部历史 artifact。
 2. 从 registry 的 `current.attempt` 派生唯一 lifecycle：未被选中的 plan 是 Draft；被选中且没有 terminal gate 的 attempt 是 Active；已有 terminal gate 的 attempt 是 Frozen。若不存在 Active attempt，停止并路由 impl-planning 创建或批准 patch；若 registry/current/gate 组合产生多个 Active attempt，报告 lifecycle violation 并停止，不能按时间猜一个。
 3. 从当前 plan 读取 Attempt ID、D/S/P revision 与 Composition，逐项解析 registry binding。design/spec 用 `git rev-parse HEAD:<package-relative-path>` 做 exact-blob 核对；plan 用 binding baseline blob 与 `plan-contract-v1` 比较非 ER 内容，并单独验证 ER append-only。alias/path/mode/blob 不一致、binding 缺失或重复时，按 impl-package-composition-contract.md §2 处理为 P2 capture gap 或未分类 drift，不得把该 revision 当作可信输入。
-4. reconcile 状态与证据；evidence 胜过 stale status。逐个比对每个 earned ticket/DAG 声明的 Plan Revision 与当前 plan 的 P 号；不一致的标 NEEDS-REVALIDATION，不当作可用状态。
+4. reconcile 状态与证据；evidence 胜过 stale status。比对 earned ticket/DAG 的 Plan Revision 与当前 P 号；不一致的先标 `NEEDS-REVALIDATION`，再按 P delta 计算受影响 subset。受影响内容定向复核；未受影响内容批量确认并机械更新引用，不逐个重跑验收或重建 artifact。
 5. 是新 attempt（尤其重新激活已关闭 package）时，先完成 Module Knowledge Watermark 对账：重新计算 watermark 文件当前 commit SHA，与上一 attempt 记录的 watermark 比对，不符先 diff 确认 design/spec 是否仍成立。
 6. 校验 typed ticket edges、DAG Depends on、AC references、显式 cycles 与 readiness satisfiability；若 AC 的 evidence producer task 被同一 ticket acceptance 直接或传递阻塞，按 decomposition/readiness defect 处理。
 7. 执行 readiness resolution，按文档顺序选择第一个 actionable unit；不自动派工。
@@ -55,7 +55,7 @@ terminal metadata 后若又发生 commit、合入目标分支或相关环境变�
 
 ### 计划错误的修复权限
 
-发现 decomposition/readiness defect 时，先判断修正是否改变业务结果。若只涉及 typed edge 分类、task 顺序、evidence producer/owner 投影或 artifact 引用，并保持 D/S、业务范围、AC、Composition、安全约束与外部 mutation authority 不变，则调用 owning skill 完成机械修正、必要的 P revision 与 ticket/DAG revalidation，然后继续当前已批准 attempt；不得把它升级成 owner blocker。
+发现 decomposition/readiness defect 时，先判断修正是否改变业务结果。若只涉及 typed edge 分类、task 顺序、evidence producer/owner 投影或 artifact 引用，并保持 D/S、业务范围、AC、Composition、安全约束、plan-owned strategy 与外部 mutation authority 不变，则调用 owning skill 完成机械修正和受影响 subset 的定向验证，然后继续当前已批准 attempt；此类变化通常不需要 P revision，也不得升级成 owner blocker。
 
 只有修正会新增/删除业务能力、改变 Acceptance Semantics、降低安全或数据约束、扩大外部/不可逆 mutation authority、改变 Composition earned artifacts，或存在多个会产生不同业务结果的合理方案时才请求 owner 决定。请求前先写出选项和各自业务结果；如果差异只存在于内部顺序、状态或 artifact 投影，就由执行者修正。
 

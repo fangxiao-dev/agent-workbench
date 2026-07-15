@@ -19,10 +19,10 @@ description: >
 
 对 implementation package，出现任一条件时必须选择 module-review：
 
-- `spec.md` 的 Composition 声明 `tickets=true` 或 `dag=true`；
-- 即使两者都为 false，spec 明确声明 interface、state machine、module boundary 或 seam 变化。
+- 当前 comparison diff 改变 interface、state machine、module boundary、跨模块行为或 seam；
+- 本次 S/P delta 改变上述 contract，即使代码 diff 尚未完整呈现。
 
-这是调用者的触发映射，不是第三个 reviewer 或自动调度器。调用者仍必须提供 fixed point；本 skill 不会因 package 目录、当前分支或工作树状态静默猜测比较基线。纯局部且没有上述契约变化的单切片可以不触发，但仍适用其余必要 review。
+`tickets=true`、`dag=true`、package 目录存在或历史 Composition 只说明曾经如何分解工作，不足以触发本次 module-review。这是调用者的触发映射，不是第三个 reviewer 或自动调度器。调用者仍必须提供 fixed point；本 skill 不会因 package 目录、当前分支或工作树状态静默猜测比较基线。纯局部、docs/evidence-only、删除未使用内容且没有上述契约变化的 delta 可以不触发，但仍适用其余必要 review。
 
 项目应通过 `/setup-matt-pocock-skills` 提供 issue tracker 规则；缺少 `docs/agents/issue-tracker.md` 时先补 setup。
 

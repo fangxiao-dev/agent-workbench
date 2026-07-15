@@ -20,6 +20,10 @@ description: >
 
 信号只复用现有 diff、spec、plan 和 DAG 字段：本 skill 不新增 ticket、ledger、登记表或长期风险队列。没有信号时可明确记录“不触发”及检查过的信号；不要把“不触发”推断为“安全”。
 
+### 收缩型变化的 focused path
+
+若当前 delta 只删除未执行的 destructive authorization、把 classification 改为 retain/no-delete、移除外部写入路径，或以其他方式收缩 authority，且 `execution impact` 不是 `destructive-external`，不运行完整五类审查。只核对三点：实际 diff 没有引入新的 mutation 路径；既有安全保护没有随减法被误删；runtime authorization/execution eligible count 没有增加。把这次 focused monotonicity check 写入既有 ER/review evidence 即可，不创建 change map 或新 artifact。若任一点不能证明，回到完整审查。
+
 ## 输入与范围
 
 调用者必须给出 comparison ref（commit、branch、tag 或 merge-base）及目标 package/ 模块；不得静默猜测比较基线。review 开始时立即把 comparison ref 与 HEAD 都解析为完整 commit SHA；后续命令、plan ER 和 gate Comparison point 只记录不可变 SHA/range，不能记录可移动 branch/tag 名作为证据。
@@ -65,7 +69,7 @@ git log <base-sha>..<head-sha> --oneline
 
 ## 工作流与输出
 
-1. 解析并固定 base/head commit SHA，验证范围及触发信号；收集 diff、当前 spec contract、plan Planned Verification / Execution Record、相关 `dag.md` Verification Gates、测试和项目安全规范。
+1. 解析并固定 base/head commit SHA，验证范围及触发信号；先判断是否满足收缩型 focused path。完整审查才收集 diff、当前 spec contract、plan Planned Verification / Execution Record、相关 `dag.md` Verification Gates、测试和项目安全规范。
 2. 先生成 change map，再沿五类逐项审查实现和测试证据。
 3. 每条 finding 写明 P0/P1/P2、文件/行或稳定来源、风险路径、缺失的保护/证据和建议动作；没有 finding 也要说明审查过的范围和未能验证的边界。
 4. 将完整审查结果交给调用者 append 到 plan Execution Record；后续 gate entry 只引用该稳定 ER anchor 并保存 verdict 摘要。本 skill 不自行关闭 gate，也不调度实现。

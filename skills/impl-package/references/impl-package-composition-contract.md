@@ -42,23 +42,45 @@ design.md（存在时）或 spec.md 的 Design Gate Record 声明唯一当前 De
 
 Design/Spec Gate 只证明其绑定的 revision；旧 gate entry 不证明后续 revision。
 
+### Impact-scoped change routing
+
+开始返工、patch 或恢复前，先从当前 request、实际 diff 与现有 contract 推导四个瞬时信号：
+
+- `contract impact`: `none | plan | spec | design`，表示变化最远触及哪个事实 owner。
+- `acceptance impact`: `none | subset | all`，表示哪些 Acceptance Semantics 或 delivery slice 需要重新证明。
+- `authority direction`: `decrease | unchanged | increase`，表示 mutation、安全或外部权限是收缩、保持还是扩大。
+- `execution impact`: `none | local-reversible | destructive-external`，表示执行是否产生需额外授权的不可逆或外部效果。
+
+这些信号是路由判断，不是新的 stage、mode、持久 artifact 或必填 JSON schema。只在下游无法从稳定 diff/contract 重建判断，或审计必须解释边界时，把最小结论写入既有 revision history、Execution Record 或 handoff；容易推理的低影响事实不重复投影到多个文件。
+
+按实际影响决定失效范围：
+
+- `contract impact=none` 且未扩大 acceptance/authority/execution 时，复用现有 D/S/P，只修改直接 owner 的 artifact，并运行能证明该 delta 的最小验证。纯减法、证据修正、引用/分类修正通常属于此路径。
+- `contract impact=plan` 只升级 P revision；只有依赖被修改 plan 语义的 ticket、DAG 节点或 evidence 需要内容重验证。未受影响 artifact 可以批量确认并机械更新 Plan Revision 引用，不重新生成正文或重跑其验收。
+- `contract impact=spec` 只升级 S revision并重跑 Spec Gate；按 `acceptance impact` 重验直接受影响的 subset，除非变化确实覆盖全部 acceptance。
+- `contract impact=design` 才按 Design → Spec 顺序升级 D/S，并重新规划受影响范围。
+- `authority direction=increase` 或 `execution impact=destructive-external` 必须重新检查授权与 safety 路由；`decrease` 不沿用旧的破坏性授权，也不因收缩动作自动触发全量 safety 流程。
+
+若多个信号冲突，采用能覆盖真实影响的最窄保守路径。只有业务结果、Acceptance Semantics、Composition、安全约束、执行策略或 mutation authority 发生实质变化，才重新规划对应部分；不得仅因一个 hash、分类、路径、证据描述或 P 引用变化而推倒整条链。
+
 ### Revision-blob binding（防止 revision 号与内容脱节）
 
 D&lt;n&gt;/S&lt;n&gt;/P&lt;n&gt; 是人类好念、好口头下发的**别名**；机器校验使用 `.impl-package/revision-bindings.json` 中与 alias、artifact path 绑定的 Git blob OID。artifact 自身只声明 alias，不记录自身 commit SHA 或 blob OID，避免“为了写入自身 hash 又改变自身 hash”的循环依赖。对 owner 而言，Markdown 中的 revision set 与 binding validation 结论是完整交付面。
 
-内部 sidecar 使用 [`../assets/templates/revision-bindings.json`](../assets/templates/revision-bindings.json) 的形状：`current` 选择当前 design/spec/attempt，`bindings` 保存每个已发布 revision 的 artifact path、validation mode 与 blob OID。历史 binding 不覆盖、不复用；Git 继续提供 sidecar 自身的 provenance。lightweight Design 没有 design.md 时，D&lt;n&gt; 与 S&lt;n&gt; 可以分别绑定到同一个 spec.md blob。
+内部 sidecar 使用 [`../assets/templates/revision-bindings.json`](../assets/templates/revision-bindings.json) 的形状：`current` 选择当前 design/spec/attempt，`bindings` 保存每个已发布 revision 的 artifact path、validation mode 与 blob OID。语义 revision 的历史 binding 不覆盖、不复用；Git 继续提供 sidecar 自身的 provenance。lightweight Design 没有 design.md 时，D&lt;n&gt; 与 S&lt;n&gt; 可以分别绑定到同一个 spec.md blob。
 
 生成或升级 revision 时，先完成 artifact 正文，再用 `git hash-object -- <path>` 计算最终工作树内容的 blob OID并写入 registry；commit 后用 `git rev-parse HEAD:<package-relative-path>` 复核。因为 registry 位于 artifact 外部，artifact 与 registry 可以在同一 commit 中稳定绑定。
 
 validation mode 区分 contract artifact 与执行证据：
 
-- design/spec 使用 `exact-blob`：当前 artifact blob 必须与 binding 完全相等。
+- design/spec 使用 `exact-blob`：当前 artifact blob 必须与 binding 完全相等；下文定义的 editorial correction rebinding 是唯一的同 alias 例外。
 - plan 使用 `plan-contract-v1`：binding 保存 P revision 发布时的 baseline blob。restore 用 `git cat-file blob <oid>` 读取 baseline，把 baseline 与当前 plan 的 `## Execution Record` 正文统一替换为同一固定 marker 后比较；其他内容必须完全相等。ER 仍按 append-only 规则单独验证，因此正常补证不升级 P revision，策略、Composition、Planned Verification 或其他非 ER 内容变化仍会触发 P drift。
 
 restore 或 gate evaluation 时，对 `current` 指向的 D/S/P binding 执行以下检查：
 
 - artifact header 的 alias、registry revision、path 和 validation mode 一致，且 `exact-blob` 或 `plan-contract-v1` 检查通过：revision 可信，继续。
-- 对应 mode 检查不通过：按 evidence 胜过 stale status 处理，视为未分类 drift；先按本节上方四类重新分类、升级对应 revision 并登记新 binding，不能原地覆盖旧 binding。
+- design/spec 的 `exact-blob` 不匹配时，先判断是否为 **editorial correction**：只改正错字、格式、非规范性表述、普通链接或 provenance，且可证明不改变行为、Acceptance Semantics、设计选择、约束、安全/数据边界或 mutation authority。是则在既有 revision history 写明 correction、依据与 `contract impact=none`，用当前 artifact blob 更新同一 current D/S alias 的 binding，并复核；不重跑 Gate、不升级 alias。此例外不增加 JSON 字段或新 artifact，旧 blob 仍由 Git 与 revision history 追溯。
+- 不能证明为 editorial correction，或其触及任何合同语义时，按 evidence 胜过 stale status 处理为 semantic revision：按本节上方四类重新分类、升级对应 revision 并登记新 binding；不得把语义变化伪装为同 alias rebinding。
 - registry 缺失、重复 alias/path、`current` 指向不存在的 binding，或 Git 无法解析 blob：视为 P2 capture gap，不得默认相符。
 
 gate entry 为了冻结历史判决，在可读正文写 `Revision set: D<n> / S<n> / P<n>` 与 `Binding validation: passed | failed`；精确 blob OID 和内部 sidecar 路径只放 HTML comment 形式的 machine audit metadata。P blob 是 plan-contract-v1 baseline，实际 ER evidence 由 comparison point + ER anchor 固定。gate 引用其他 artifact 的 blob，不产生自引用。
@@ -98,7 +120,7 @@ plan 不保存可手工修改的 `Status`。attempt lifecycle 从 registry 与 g
 
 `Integrated, gate open` 是报告 qualifier，不是第四种可写 lifecycle status：当 plan 声明的 target branch 已包含当前 comparison point、但 attempt 仍为 Active 时派生。默认 integration order 是 gate-before-merge；只有 plan 记录 owner-approved pre-gate integration strategy 与证据时，才允许先合入。此后 terminal pass 与 closed claim 必须使用目标分支上的新鲜证据；合入本身不等于 gate 关闭。
 
-**Plan Revision 变化后，已创建的 ticket/DAG 必须跟进**：每个 tickets/&lt;ticket&gt;.md 与当前 attempt DAG 都声明自己创建/最后确认时所依据的 `Plan Revision: P<n>`。plan 从 P&lt;n&gt; 升级到 P&lt;n+1&gt; 后，任何仍声明旧 P&lt;n&gt; 的 ticket/DAG 视为 `NEEDS-REVALIDATION`，直到：要么其内容被确认在新 revision 下仍然成立并把字段更新为 P&lt;n+1&gt;，要么被重新生成。restore 时必须逐个比对 ticket/DAG 声明的 P 号与当前 plan 的 P 号，不一致时不得当作可用状态，需先完成上述 reconciliation。
+**Plan Revision 变化后，已创建的 ticket/DAG 必须跟进，但不默认全部重做**：每个 tickets/&lt;ticket&gt;.md 与当前 attempt DAG 都声明自己创建/最后确认时所依据的 `Plan Revision: P<n>`。plan 从 P&lt;n&gt; 升级到 P&lt;n+1&gt; 后，仍声明旧 P&lt;n&gt; 的 artifact 是 `NEEDS-REVALIDATION`，该状态表示需要做影响判断，不表示正文必然失效。先根据 P revision 的实际 delta 列出受影响 subset：受影响内容定向修订和验证；未受影响内容可批量确认仍成立并机械更新 Plan Revision 引用，无需重新生成、逐项重审或重跑验收。restore 必须完成这次 scoped reconciliation 后再使用相关 artifact。
 
 可选 dispatch shorthand 只展开当前 attempt Composition，不是 sizing gate：
 

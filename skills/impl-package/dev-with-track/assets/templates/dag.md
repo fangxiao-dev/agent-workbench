@@ -8,7 +8,7 @@
 创建：[YYYY-MM-DD]
 Attempt ID：
 Plan Revision：P<n>
-<!-- plan 升级到更新的 P 号后，本 DAG 若仍标着旧 P 号，视为 NEEDS-REVALIDATION，直到确认在新 revision 下仍成立并更新此字段。 -->
+<!-- plan 升级到更新的 P 号后，本 DAG 若仍标着旧 P 号，视为 NEEDS-REVALIDATION。先按 P delta 定位受影响节点；未受影响节点可批量确认后机械更新本字段，不重画整张 DAG。 -->
 Spec：[spec.md](spec.md)
 Plan：[current attempt plan](<plan-path>)
 Findings：[findings.md](findings.md)

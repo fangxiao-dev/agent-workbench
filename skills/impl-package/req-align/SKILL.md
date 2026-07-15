@@ -5,7 +5,7 @@ description: 当新增或变更 requirement 需要在 feature design、specifica
 
 # Requirement Alignment
 
-Run the two mandatory entry gates for an Impl-Package: Design, then Spec. The gates are equal requirements. Design is never skipped, even when its standalone `design.md` would be empty ceremony.
+For a new or changed behavior contract, run the two mandatory entry gates for an Impl-Package: Design, then Spec. The gates are equal requirements. Design is never skipped for a contract-impacting change, even when its standalone `design.md` would be empty ceremony. A `contract impact=none` request exits through the routing fast path below before gate execution; that is reuse of an already valid contract, not a skipped gate.
 
 Repository instructions and discovered project conventions determine knowledge sources. Do not assume a product domain or impose another workflow's document destinations.
 
@@ -18,6 +18,10 @@ Use `docs/implementations/<package-id>/` as the canonical package root. A packag
 - 内部 `.impl-package/revision-bindings.json` sidecar 中 D/S 的 current selection 与 artifact/blob binding。共享形状来自 [`../assets/templates/revision-bindings.json`](../assets/templates/revision-bindings.json)；plan/P binding 由 `impl-planning` 拥有。sidecar 不属于 owner-facing deliverable，design/spec/handoff Markdown 必须自足呈现当前 revision 与 binding validation 结论。
 
 Use [assets/templates/design.md](./assets/templates/design.md) and [assets/templates/spec.md](./assets/templates/spec.md). Do not publish a tracker spec or create a second spec for the same package. `impl-planning` consumes the gated `spec.md`; it does not own or synthesize a replacement.
+
+## No-contract fast path
+
+先按共享 contract 的 impact signals 判断当前变化是否真的触及 Design/Spec。若 `contract impact=none`，且业务结果、Acceptance Semantics、安全/数据约束与 mutation authority 均未改变，则复用当前 D/S revision，不运行 brainstorming、Design Gate、Spec Gate 或 `grill-me-smartly`，也不为这次局部修正新增 JSON 字段。把请求路由到直接 owning skill，并只返回“现有 contract 仍成立”及其依据。纯删除错误知识、修正证据/链接/分类、收缩未使用 authority，通常走这条路径；若删除会改变承诺行为或验收边界，则仍按真实 contract impact 处理。
 
 Omitting standalone `design.md` is legal only after Design evaluates `PASSED` and the lightweight evidence fits in the `Design Gate Record` at the top of `spec.md`. “No design file” never means “no Design step.” Requirement source and alignment provenance belong in `design.md`; on the lightweight passed path, preserve their minimum durable form in that same `Design Gate Record`.
 
@@ -101,12 +105,12 @@ The Spec gate passes under this signal only when the contract makes false-PASS c
 
 `spec.md` 声明 `Spec Revision: S<n>`，并始终记录其绑定的 `Design Revision: D<n>`；lightweight Design 没有独立 design.md 时，这一字段与 Design Gate Record 共同提供 D revision 的 canonical 落点。纯实现修复以重新符合当前 spec 时复用 revision；行为 contract 变化时升级 S revision 并重跑 Spec Gate；设计选择变化时必须先完成新的 Design revision/Gate。Gate 通过后计算最终 artifact 的 Git blob OID，在 registry 追加 S binding 并更新 current spec；lightweight Design 的 D/S 可以分别绑定同一个 spec blob。正文只保留当前合同，旧合同通过 Revision History、registry 和 Git 追溯。
 
-### 自动 grill-me-smartly 通关
+### 风险驱动的 Grill
 
-每次真正需要评估 Spec Gate 时（首次创建，或行为 contract/设计方向变化的 patch；纯实现漂移复用 revision、不评估 Spec Gate，因此不触发），在宣布 `Spec Gate: PASSED` 之前自动运行一遍 `grill-me-smartly` 的 review phase（只审查，不 apply）对当前 spec.md 草稿做独立对抗，用来抓自我审查容易漏掉的浅显问题。
+Spec Gate 本身不自动要求 `grill-me-smartly`。只在用户明确要求对抗审查，或当前 draft 存在高不确定性/高风险信号时运行其 review phase（只审查，不 apply）：未解决的实质 contract ambiguity、跨模块或外部接口、迁移/兼容窗口、安全或数据 authority、destructive-external mutation，或 evidence-integrity contract 的 false-PASS 风险。其余边界清晰的局部 Spec delta 直接按 Spec Gate 检查，不创建 ledger。
 
-- Ledger 住在 OS temp 目录，不是 package artifact，不落 `docs/implementations/<package-id>/`。
-- 把 ledger 的「已收敛决策摘要」与「待用户裁决」汇报给用户；`待用户裁决` 条目直接计入上面 Spec Gate 标准里"blocking owner decisions 为零"这条——未清空前 Spec Gate 不能 PASSED，不新造阻断机制。
+- Grill ledger 住在 OS temp 目录，不是 package artifact，不落 `docs/implementations/<package-id>/`。
+- 运行 Grill 后，把其「已收敛决策摘要」与「待用户裁决」汇报给用户；`待用户裁决` 条目直接计入上面 Spec Gate 标准里"blocking owner decisions 为零"这条——未清空前 Spec Gate 不能 PASSED，不新造阻断机制。
 - 是否把已收敛的澄清写进 spec.md 正文，必须等用户明确要求 apply——这是 grill-me-smartly 自己的硬性契约（永不静默 apply），req-align 不得代为绕过。用户批准后按正常 S revision 流程原地修订。
 
 ## Workflow
@@ -117,7 +121,7 @@ The Spec gate passes under this signal only when the contract makes false-PASS c
 4. Run Design Research, present the selected direction plus blockers, and evaluate the Design gate before creating `spec.md`.
 5. If Design is blocked, create or update `design.md` with provenance, readiness evidence, blockers, and owner decisions; stop without creating `spec.md`.
 6. If Design passes, either persist its substantive research in `design.md`, or take the lightweight path: create `spec.md` and write the minimum provenance, readiness, and owner-decision evidence into its Design Gate Record. Append reusable, verified cross-stage facts/risks/constraints to an already-needed `findings.md`; do not create it for ordinary research narration.
-7. Synthesize the eight-section `spec.md`, evaluating the conditional evidence-integrity contract only when its signal is present. For a patch, reuse D/S revisions for implementation-only drift without evaluating Spec Gate, rerun only Spec Gate for behavioral contract changes, and rerun Design then Spec for design-direction changes. When Spec Gate is actually being evaluated, automatically run `grill-me-smartly`'s review phase against the draft first, resolve or surface its findings per Gate 2's rule, then evaluate the Spec gate. Stop when the required gate is blocked.
+7. Synthesize the eight-section `spec.md` only when contract impact requires it, evaluating the conditional evidence-integrity contract only when its signal is present. For a patch, reuse D/S revisions for `contract impact=none` or implementation-only drift without evaluating Spec Gate, rerun only Spec Gate for behavioral contract changes, and rerun Design then Spec for design-direction changes. Run `grill-me-smartly` only when the risk-driven criteria above are present or the user asks for it; otherwise evaluate the Spec Gate directly. Stop when the required gate is blocked.
 8. 两道 gate 通过后，用 `git hash-object -- <path>` 计算最终 design/spec blob，在内部 sidecar 追加 D/S binding 并更新 current selection；commit 后用 `git rev-parse HEAD:<path>` 复核，并在 Markdown handoff 直接报告 D/S revision set 与校验结论。随后把同一份 `spec.md` 交给 `impl-planning`，不创建第二份 spec，也不发布 tracker。
 
 ## Alignment Proposal
@@ -163,6 +167,6 @@ Before writing artifacts or editing long-lived knowledge, present:
 
 随后附 canonical handoff：topic slug、package-id/path、当前 D/S revision set、binding validation 结论、两道 gate result 与 evidence location、changed files（只在 append 时列 `findings.md`）以及剩余 owner decisions。正文不得要求 owner 打开 JSON；内部 sidecar 路径只可放 machine audit metadata。artifact 写入后不粘贴全文。
 
-When Spec Gate was actually evaluated, name the `grill-me-smartly` ledger path and summarize its converged decisions and any resolved owner decisions. After Spec Gate PASSED, offer `grilling` as an optional deeper adversarial follow-up if the user wants more scrutiny before handing off to `impl-planning` — a suggestion, never a requirement.
+When Grill was actually run, name the `grill-me-smartly` ledger path and summarize its converged decisions and any resolved owner decisions. After Spec Gate PASSED, offer `grilling` as an optional deeper adversarial follow-up if the user wants more scrutiny before handing off to `impl-planning` — a suggestion, never a requirement.
 
 Artifact `Status` and gate `Result` must agree: a Passed status requires `PASSED`, a Blocked status requires `BLOCKED`, and neither may be inferred from prose alone.

@@ -36,6 +36,8 @@ Each ticket MUST contain:
 - stable, individually identified acceptance criteria (`AC-1`, `AC-2`, ...), including their planned observable evidence or manual verification owner;
 - zero or more typed blocking edges in the form `<implementation|acceptance|release>: <ticket-id>`.
 
+Plan Revision 前进时先读取 P delta，而不是重建完整票集。只有 acceptance boundary、typed edge、planned evidence 或 slice definition 依赖该 delta 的 ticket 需要内容重验证；未受影响 ticket 可作为一个 batch 确认仍成立并机械更新 Plan Revision。`NEEDS-REVALIDATION` 是待判断标记，不等于所有 ticket 失效，也不要求重新发布 owner 已批准但语义未变的 Draft/Approved 结论。
+
 The edge type states what is blocked. Do not collapse implementation, acceptance, and release dependencies into an untyped `Blocked by` list.
 
 Tickets MUST NOT contain worker ownership, worker/task assignment, file-level steps, implementation snippets, automatic dispatch instructions, or runtime **task** status. The template's `Runtime Acceptance Status` is different: it is the ticket's canonical runtime/acceptance fact area and is written only by `dev-with-track` after publication. `to-tickets` must preserve it without assigning a runtime value, evidence, or revalidation conclusion. Task decomposition and task-to-AC contribution belong to `create-task-dag`. A no-DAG attempt has no task checklist; recovery state uses a justified progress ledger.
@@ -64,6 +66,8 @@ Publish updates the same local ticket files; it does not create external records
 5. every AC has a feasible evidence source under the plan and proposed typed edges; no known evidence source requires implementation that is blocked by the same ticket's acceptance;
 6. the complete set has a deterministic dependency-compatible ordering;
 7. no ticket contains task ownership or file-level implementation steps.
+
+若 publish 前唯一差异是新 P revision 且 impact summary 证明 ticket 语义未变，可对完整未受影响 batch 做一次 reconciliation 后更新 Plan Revision；不要重新起草或要求 owner 重批相同内容。受影响 subset 仍按本节完整验证。
 
 Fail publish without partial publication-status updates if any validation fails. Publish owns only the `Draft` to `Approved` publication transition. It must preserve the unrecorded or existing `Runtime Acceptance Status` content. Runtime readiness and all later ticket acceptance status belong to `dev-with-track` under the shared readiness-resolution contract.
 

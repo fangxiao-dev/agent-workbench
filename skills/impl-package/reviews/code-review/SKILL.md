@@ -23,6 +23,11 @@ metadata:
 
 ### Step 1: Understand the context
 
+**Choose the smallest review profile that matches the diff**:
+- Code/behavior changes use the full workflow below.
+- Docs/evidence/config-metadata-only changes use a focused profile: verify factual consistency with canonical sources, links/paths, ownership, authorization claims, generated-vs-source boundaries, and whether the delta accidentally changes executable behavior. Skip function/class/performance/testing checklists that cannot apply. Escalate to the full profile only when the diff changes runtime behavior or hides an unresolved contract/safety change.
+- Deletions and direction corrections are reviewed against what remains authoritative; do not demand replacement content or broader tests unless removal changes an observable contract.
+
 **Read the PR description**:
 - What is the goal of this change?
 - Which issues does it address?

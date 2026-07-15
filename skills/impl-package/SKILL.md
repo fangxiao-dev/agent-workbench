@@ -62,16 +62,17 @@ flowchart TD
 
 ## 正向路由：你在哪 → 进哪个 skill
 
-- 有新改动 / 需求，还没进流水线 → **`req-align`**（先过 Design、再过 Spec 门；当 acceptance 依赖权威证明、发布状态、兼容投影或外部副作用时，由该 skill 条件化定义 evidence-integrity contract；provider、schema、archive、CLI 等只是例子）。
+- 先按共享 contract 的四个瞬时影响信号做轻量分流。纯减法、证据修正、引用/分类修正或局部可逆调整若不改变当前业务结果、Acceptance Semantics、D/S contract、plan-owned execution strategy、Composition、安全约束或 mutation authority，直接交给现有 artifact 的 owning skill 做局部修正和定向验证；不为了“进流程”调用 `req-align`、创建新 revision 或扩写 JSON。
+- 有新改动 / 需求，且会改变设计选择或行为 contract → **`req-align`**（先过 Design、再过 Spec 门；当 acceptance 依赖权威证明、发布状态、兼容投影或外部副作用时，由该 skill 条件化定义 evidence-integrity contract；provider、schema、archive、CLI 等只是例子）。
 - Spec 已过门，还没 plan → **`impl-planning`**。
 - 当前 attempt plan 判 `tickets=true`，还没票 → **`to-tickets`**（draft → owner 批准 → publish）。
 - 当前 attempt plan 判 `dag=true`，plan（及相关 approved 票）就绪 → **`create-task-dag`**。
-- 上游产物就绪，要开始 / 恢复执行 → **`dev-with-track`**；它从 revision registry 与 gate 派生 lifecycle、选择可执行单元并维护状态。存在有界、可委派 task 时，进入 **`subagent-driven-development`** 完成实现和 task-level 双 review，再返回前者集成；存在 manual owner 时，等待验收前按轻量模板生成 readiness handoff。
+- 上游产物就绪，要开始 / 恢复执行 → **`dev-with-track`**；它从 revision registry 与 gate 派生 lifecycle、选择可执行单元并维护状态。存在有界且委派收益明确的 task 时，进入 **`subagent-driven-development`** 完成实现和 task-level review，再返回前者集成；单 owner 的机械局部 delta 由主 agent 直接处理。存在 manual owner 时，等待验收前按轻量模板生成 readiness handoff。
 - 集成后要审查：`code-review` 恒查；改动 interface / seam / 契约 → **`module-review`**；碰 auth / 支付 / webhook / 迁移 / 外部写入 → **`safety-review`**。
 - 适用 review 与 findings 已闭环、准备写 terminal pass 或对外宣称 complete / closed / merge-ready / release-ready → **`verification-before-completion`**；它审计最终 revision、环境和证据新鲜度，不是 DAG task，也不机械重跑所有检查。
 - gate 已关 → **提示**可按需使用 `$backfill-stable-docs` 处理 durable delta。提示不等于执行授权：只有用户要求、已有明确维护计划，或进入周期性 audit / approved apply / independent verify 时才实际调用；本轮不做 backfill 也可以正常收口。
 
-断链就退回上游，别硬猜：缺 plan 回 `impl-planning`；输入太宽没切片回 `to-tickets`；Composition/artifact 对不上回 `impl-planning` 修订 P revision，只有暴露出真实 contract drift 才回 `req-align` 重过相应门。
+断链就退回真正拥有变化语义的上游，别按目录层级整链回滚：缺 plan 回 `impl-planning`；输入太宽没切片回 `to-tickets`；Composition/artifact 对不上回 `impl-planning`；只有暴露出真实 contract drift 才回 `req-align` 重过受影响的门。单个 artifact 的证据、引用或分类变化不自动使其他 artifact 失效。
 
 退回上游不等于请求 owner 再授权。若修正不改变业务结果、AC、安全/数据约束、Composition 或外部 mutation authority，只是修复 typed edge、执行顺序、evidence producer 投影或 artifact 引用，则 owning skill 机械修正并继续。只有能列出会产生不同业务结果的选项时，才把它报告为 owner decision。
 

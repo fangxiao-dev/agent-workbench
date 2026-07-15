@@ -16,7 +16,7 @@ description: 当已批准的 plan、ticket 或 DAG 含有边界明确、可委�
 - ownership 不重叠，或已有明确的 seam owner；
 - subagent 不需要自行决定产品、架构或外部副作用边界。
 
-紧密耦合、仍在设计或需要共享写入的工作由主 agent 直接处理，或先重新分解。
+紧密耦合、仍在设计或需要共享写入的工作由主 agent 直接处理，或先重新分解。委派是按收益 earn 的，不是进入 Implementation Package 后的默认步骤：单 owner、机械、局部可逆、上下文切换成本高于独立 review 收益的变化由主 agent 直接完成，并在既有 evidence 中用一句话记录未委派理由，不创建额外 task artifact。
 
 ## 调度
 
@@ -52,11 +52,11 @@ subagent 使用以下状态之一：
 1. 主 agent 先做基本验收：检查实际产物、验证证据和集成状态。
 2. 使用 [`references/prompts.md`](references/prompts.md) 的 **Spec-compliance reviewer** 模板，检查 task 契约、AC contribution、越界和遗漏。
 3. Spec-compliance 通过后，使用同一 reference 的 **Code-quality reviewer** 模板，检查该 task 的工程风险、失败路径、测试和 seam；两者必须是独立于实现者的 subagent。
-4. reviewer 发现问题后必须修正并复核；不能只记录意见就继续集成。多个高度相关的小单元可以组成一个明确的 integration batch review，但仍必须保留逐 task 的结论与证据。
+4. reviewer 发现问题后必须修正并复核；不能只记录意见就继续集成。多个高度相关、共享同一 contract 和 comparison point 的小单元优先组成一个 integration batch review；只保留能定位到 task 的 findings/结论，不复制一套完整 review 正文到每个 task。
 5. 所有单元完成后，主 agent 检查 diff 冲突、接口衔接和整体验证，并把 task review evidence 交给 `dev-with-track`。
 
 当 task 的 spec 已激活 conditional evidence-integrity contract 时，task review 还必须验证一个与主断言相关的 false-PASS 反例，以及副作用已经发生后失败或失效的路径（若该 task 有副作用）。如果代码镜像另一个权威 contract，review 要检查字段、required、枚举/类型、私有字段排除和兼容格式的完整性。provider、archive、schema、CLI 等只是可能触发该规则的例子；没有对应信号时不增加 review 负担。
 
-Task review 不替代 ticket acceptance：当一个 ticket 达到验收候选，`dev-with-track` 必须按项目 review 路由运行正式 review——`code-review` 恒必做；存在 tickets、DAG、interface、状态机、模块边界或 seam 变化时 `module-review` 必做；出现安全或外部副作用信号时 `safety-review` 必做。正式 reviewer 的 findings 必须在 ticket acceptance 前闭环。
+Task review 不替代 ticket acceptance：当一个 ticket 达到验收候选，`dev-with-track` 必须按项目 review 路由运行正式 review——`code-review` 恒必做；当前 diff 或 S/P delta 触及 interface、状态机、模块边界、跨模块行为或 seam 时 `module-review` 必做，tickets/DAG 本身不构成触发；出现安全或外部副作用信号时 `safety-review` 必做。正式 reviewer 的 findings 必须在 ticket acceptance 前闭环。
 
 本 skill 不拥有 worktree、plan revision、runtime ledger、Git 或发布流程；这些由项目规则及对应 owner 管理。

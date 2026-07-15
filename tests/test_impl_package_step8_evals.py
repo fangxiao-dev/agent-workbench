@@ -46,6 +46,35 @@ def is_eval_workspace(path: Path) -> bool:
 
 
 class ImplPackageStep8EvalContractTest(unittest.TestCase):
+    def test_impact_scoped_simplification_contract(self) -> None:
+        composition = read(IMPL_ROOT / "references" / "impl-package-composition-contract.md")
+        for signal in (
+            "contract impact",
+            "acceptance impact",
+            "authority direction",
+            "execution impact",
+        ):
+            assert_contains(composition, signal, "Shared impact routing signal")
+        assert_contains(composition, "不是新的 stage、mode、持久 artifact 或必填 JSON schema", "Impact routing must stay lightweight")
+        assert_contains(composition, "不表示正文必然失效", "Plan mismatch must not imply full invalidation")
+
+        skill_expectations = {
+            IMPL_ROOT / "SKILL.md": "不为了“进流程”调用 `req-align`",
+            IMPL_ROOT / "req-align" / "SKILL.md": "## No-contract fast path",
+            IMPL_ROOT / "impl-planning" / "SKILL.md": "不扩展 sidecar schema",
+            IMPL_ROOT / "to-tickets" / "SKILL.md": "未受影响 ticket 可作为一个 batch",
+            IMPL_ROOT / "create-task-dag" / "SKILL.md": "未受影响节点可以批量确认",
+            IMPL_ROOT / "dev-with-track" / "SKILL.md": "采用 delta-first restore",
+            IMPL_ROOT / "execution-preflight" / "SKILL.md": "Merely citing a plan",
+            IMPL_ROOT / "subagent-driven-development" / "SKILL.md": "委派是按收益 earn 的",
+            IMPL_ROOT / "reviews" / "code-review" / "SKILL.md": "Docs/evidence/config-metadata-only changes use a focused profile",
+            IMPL_ROOT / "reviews" / "module-review" / "SKILL.md": "不足以触发本次 module-review",
+            IMPL_ROOT / "reviews" / "safety-review" / "SKILL.md": "### 收缩型变化的 focused path",
+            IMPL_ROOT / "verification-before-completion" / "SKILL.md": "不是 terminal completion claim",
+        }
+        for path, expected in skill_expectations.items():
+            assert_contains(read(path), expected, f"Missing distributed simplification rule: {path}")
+
     def test_lifecycle_eval_contract(self) -> None:
         eval_paths = {
             "req-align": IMPL_ROOT / "req-align" / "evals" / "evals.json",
@@ -231,6 +260,26 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
                 "不阻塞",
                 "Backfill must be explicitly non-blocking across every current guidance surface.",
             )
+        assert_contains(
+            composition_contract,
+            "editorial correction",
+            "Exact-blob editorial corrections must rebind without re-gating.",
+        )
+        assert_contains(
+            composition_contract,
+            "不得把语义变化伪装为同 alias rebinding",
+            "Semantic binding drift must still upgrade revisions.",
+        )
+        assert_contains(
+            system_design,
+            "风险驱动的 Grill",
+            "System design must not retain automatic Grill routing.",
+        )
+        assert_not_contains(
+            system_design,
+            "Spec Gate 前自动质检",
+            "System design must retire automatic Grill routing.",
+        )
         assert_contains(
             composition_contract,
             "terminal gate entry 写入前必须完成 Stage 7 durable-delta capture",

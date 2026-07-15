@@ -49,6 +49,8 @@ Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。pl
 3. 重新 patch 前先确认 req-align 已将 package design/spec 与当前 module knowledge/code 对账。
 4. 两个 owning package 都合理时暂停并请求 owner 选择，不能另建重复 package。
 
+先区分“plan-owned 语义变化”和“实施证据/投影变化”。只有 Execution Strategy、Composition、Planned Verification、integration/rollback strategy 或其他非 ER plan contract 改变时才升级 P revision。执行记录追加、hash/binding 复核，以及发生在 plan 外部 owner artifact 中的证据路径、分类、引用修正或不改变策略的纯减法不升级 P；若确实修改 plan 的非 ER 正文，仍按 `plan-contract-v1` 发布新 P。四个 impact signals 只在无法由 diff 重建时写入最小摘要，不扩展 sidecar schema。
+
 ## Composition
 
 对当前 attempt 独立判断：
@@ -98,7 +100,7 @@ plan 活动期间发现 Composition 判断错误时：
 
 ### Revision History
 
-记录 plan strategy、Composition 或 verification selection 的修订。每次 P revision 发布时在内部 sidecar 追加新的 plan blob binding，旧 binding 保留。terminal gate 后不得再改；后续变化创建新 patch attempt。
+记录 plan strategy、Composition 或 verification selection 的修订，并用一句 impact summary 标出真正受影响的 ticket/DAG/evidence subset。每次 P revision 发布时在内部 sidecar 追加新的 plan blob binding，旧 binding 保留。terminal gate 后不得再改；后续变化创建新 patch attempt。不得为了记录容易推理的局部 delta 而升级 P。
 
 ## Workflow
 
@@ -107,7 +109,7 @@ plan 活动期间发现 Composition 判断错误时：
 3. 分配 Attempt ID 与 P1，独立决定 Composition；plan 尚未被 registry 的 `current.attempt` 选中时，其 lifecycle 派生为 Draft。
 4. 建立 spec coverage 与 change map，写 Execution Strategy、integration order、Planned Verification、rollout/rollback 与依赖的 policy 链接；清除 blocker placeholder，核对术语、模块与路径一致性。
 5. tickets=true 时调用 to-tickets draft；dag=true 时在必要输入齐备后调用 create-task-dag。
-6. 交叉检查 ticket/DAG 暴露的 contract 缺口；规范性缺口回 req-align，过程策略缺口升级 P revision。
+6. 交叉检查 ticket/DAG 暴露的 contract 缺口；规范性缺口回 req-align，真正改变 plan-owned 语义的过程策略缺口升级 P revision。仅证据、引用、分类或机械顺序投影错误由 owning skill 局部修正。
 7. owner 批准 plan 后，计算最终 plan Git blob OID，在内部 revision-binding sidecar 以 `plan-contract-v1` 追加 baseline binding并选择 `current.attempt`；commit 后复核 baseline。后续只允许 ER append，不因此升级 P revision；此时且无 terminal gate 时 lifecycle 派生为 Active。
 8. 执行期间只 append Execution Record；状态由对应 artifact 维护。
 9. gate evaluation 由 dev-with-track 在 gate.md 顶部插入摘要，并链接对应 Execution Record；terminal verdict 使 lifecycle 派生为 Frozen。

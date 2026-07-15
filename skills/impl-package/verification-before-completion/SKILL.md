@@ -11,6 +11,8 @@ Completion claim 不能宽于 evidence。Verification 是 claim-to-evidence cont
 
 本 skill 是 Impl-Package 的 completion-claim evidence gate。它不是 DAG task，也不按 ticket 或 implementation unit 重复运行。
 
+局部进度、单个文件已修改、某个定向 validator 通过或“完成了第 N 步”属于 scoped status，不是 terminal completion claim。此类陈述只需引用对应直接 evidence，不运行完整 Impl-Package terminal audit、Stage 7 或全量 gate 对账。只有准备写 terminal pass，或声称整个约定范围 complete/closed/fixed/merge-ready/release-ready 时才进入本节完整 orchestration。
+
 - `dev-with-track` 在适用 implementation review、findings closure 和拟 pass 的 Stage 7 artifact 准备完成后、写入 terminal `pass` gate entry 前调用本 skill。
 - terminal metadata commit、目标分支合入或相关 environment 变化后，在宣称 `complete`、`closed`、`merge-ready` 或 `release-ready` 前再次调用。复用未受影响的 evidence，只验证 delta 与 claim-specific gate。
 - 已合入目标分支但尚无 terminal gate 时，真实状态是 `Integrated, gate open`；只能报告 integration 阶段，不能把 merge 当成 closed evidence。

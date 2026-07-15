@@ -19,7 +19,7 @@ Run preflight when the active request asks you to begin or prepare work from any
 - instructions that mention subagents, external environments, staging, production, real integrations, migrations, cleanup, git publishing, or owner decisions;
 - a task where the user explicitly asks for "preflight", "readiness permissions", or "authorization".
 
-Skip preflight for small read-only answers, simple local commands, or clearly bounded edits that do not cite an execution artifact and do not need external access, delegation, git publishing, data mutation, or owner choice.
+Skip preflight for small read-only answers, simple local commands, or clearly bounded local reversible edits that do not need external access, delegation, git publishing, destructive/data mutation, or owner choice. Merely citing a plan, handoff, ticket, audit, or review does not force full preflight when the active request already grants the exact local scope and the source contains no additional permission boundary; record the one-line skip reason and proceed.
 
 Completion criterion: either preflight is skipped for an explicit reason, or the authorization sources to read are identified before any execution action begins.
 
@@ -27,7 +27,7 @@ Completion criterion: either preflight is skipped for an explicit reason, or the
 
 If this is not a new session, first review the active conversation for task-scoped permissions already granted or denied. Capture only current-session authorization facts, not stale permissions from unrelated tasks. This gives the owner a concise inheritance summary for handoff.
 
-Then read the user-referenced handoff, plan, issue, review, or audit material only far enough to extract authorization and HITL facts. If a plan points to another source as required source of truth for permissions or scope, read that source too.
+Then read the user-referenced handoff, plan, issue, review, or audit material only far enough to extract authorization and HITL facts. Start from its explicit permission/HITL sections or current summary; do not read every artifact field merely because it exists. If a plan points to another source as required source of truth for permissions or scope, read that source too.
 
 Do not infer extra external systems from general codebase knowledge. If a plan does not mention Azure, Lark, staging, production, browser smoke, database access, email, git publishing, or another external system, omit that system from the preflight output. If the plan mentions a system only to forbid it or require separate approval, report that exactly as a plan-stated boundary.
 

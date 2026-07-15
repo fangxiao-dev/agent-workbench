@@ -6,7 +6,7 @@
 **Spec Revision:** S<n>
 **Plan Revision:** P<n>
 
-<!-- Plan Revision 是本 ticket 创建/最后确认时依据的 P<n>。plan 升级到更新的 P 号后，仍标着旧 P 号的 ticket 视为 NEEDS-REVALIDATION，直到确认在新 revision 下仍成立并更新此字段，或被重新生成。 -->
+<!-- Plan Revision 是本 ticket 创建/最后确认时依据的 P<n>。plan 升级后，旧 P 号表示需要按实际 delta 判断影响；未受影响 ticket 可批量确认并机械更新，不重新起草或重批相同内容。 -->
 
 ## What to build
 
