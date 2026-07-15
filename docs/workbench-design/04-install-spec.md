@@ -35,11 +35,8 @@ powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\install.ps1 
 | `skills/` | `<host-root>/skills/` | Windows junction；Bash/Unix symlink |
 | `agents/*/` | `<host-root>/agents/<name>/` | Windows junction；Bash/Unix symlink |
 | `commands/*` | `<host-root>/commands/<name>` | 复制文件 |
-| `.agents/plugins/marketplace.json` + `plugins/stable-docs-backfill/` | Codex marketplace + Plugin | 仅选择 Codex 时通过 Codex CLI 注册并安装或刷新 |
 
 `skills/` 可以包含直接 skill（`skills/<name>/SKILL.md`）和 bundle skill（`skills/<bundle>/<name>/SKILL.md`）。安装器保持非破坏策略：Windows 暴露整个 `skills/`，Bash/Unix 链接顶层目录，因此 bundle 作为一个顶层目录暴露，内部 skill 通过递归发现或宿主扫描读取。
-
-`stable-docs-backfill` 是 Codex-only Plugin。Plugin 内四个 skill 的唯一源码位于 `plugins/stable-docs-backfill/skills/`，不会平铺到根 `skills/`，也不会安装给 Claude/Gemini。Codex 使用 `$stable-docs-backfill:backfill-stable-docs` 作为公共入口。
 
 宿主根目录：
 
@@ -55,9 +52,6 @@ powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\install.ps1 
 - 目标已经指向当前 workbench：跳过并报告 `already linked` 或 `already copied`。
 - 目标存在但内容或目标不同：跳过并报告 `conflict`。
 - 不删除、不覆盖已有目录、文件或其他链接。
-- Codex marketplace 不存在时注册当前 workbench；同名 marketplace 已指向当前 workbench 时复用，指向其他来源时跳过 Plugin 安装并报告冲突。
-- 只有明确指向当前 workbench 旧 `skills/backfill-stable-docs` 的受管链接可以在迁移时移除；用户目录、文件或指向其他来源的链接不得删除。
-- Codex CLI 不存在或 Plugin 安装失败时，跳过 Plugin 并报告；不影响其他已选宿主的普通 skills、agents 和 commands 安装。
 
 `commands/` 使用复制，因此 command 内容变更后需要重跑安装器同步。
 
@@ -73,7 +67,7 @@ powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\install.ps1 
 
 ## 独立 MCP 注册脚本
 
-主安装器会为 Codex 注册本仓库 marketplace 和 `stable-docs-backfill` Plugin，但不自动注册项目级 MCP server。需要启用 `discuss-ledger` MCP 时，使用独立脚本：
+主安装器只安装 skills、agents、commands，不自动注册项目级 MCP server。需要启用 `discuss-ledger` MCP 时，使用独立脚本：
 
 ```bash
 bash /path/to/agent-workbench/scripts/install-discuss-ledger-mcp.sh /path/to/project codex claude

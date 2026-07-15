@@ -1,15 +1,15 @@
-# Stable Docs Backfill Audit Report
+# Stable Docs Backfill Report
 
-- Phase: `audit`
+- Mode: `report`
 - Generated:
 - Project:
-- Branch / Source HEAD:
+- Branch / HEAD:
 - Dirty baseline:
-- Method Activation Ref: `<plugin>@<version>`
-- Config digest:
+- Method Activation Ref:
 - Project Source Watermark:
+- Source HEAD:
 - Carry-forward input:
-- Canonical inventory source:
+- Module inventory source:
 - Sources inspected:
 
 ## Executive Decision
@@ -25,7 +25,7 @@
 | Module | Result | Candidate IDs | Evidence note |
 | --- | --- | --- | --- |
 
-每个 configured module 必须出现一次。Result 仅用 `candidate`、`already-covered`、`conflict`、`no-delta`。
+每个 module 必须出现一次。Result 仅用 `candidate`、`already covered`、 `conflict`、`no delta`。
 
 ## Candidate Deltas
 
@@ -54,10 +54,10 @@
 
 ## Current Top-Level Knowledge Boundary
 
-| Affected canonical path | Current contract disposition | Retirement / future decision | Verification |
+| Affected top-level path | Current contract disposition | Retirement / future decision | Verification |
 | --- | --- | --- | --- |
 
-Canonical top-level docs 不保留历史/退役能力的兼容说明。只有 owner 已批准的 future capability 才可登记 TODO，且必须明确为非当前合同、写明目标与前提。
+`CONTEXT.md` 与 `docs/top-level-knowledge/**` 不保留历史/退役能力的兼容说明。只有 owner 已批准的 future capability 才可登记 TODO，且必须明确为非当前合同、写明目标与前提。
 
 ## Tombstones And References
 
@@ -66,7 +66,7 @@ Canonical top-level docs 不保留历史/退役能力的兼容说明。只有 ow
 
 ## Proposed Apply Order
 
-仅列 item ID、目标和依赖；audit 不执行。
+仅列 item ID、目标和依赖；report 不执行。
 
 ## Watermark
 
@@ -78,4 +78,4 @@ Canonical top-level docs 不保留历史/退役能力的兼容说明。只有 ow
 
 ## Read-only Attestation
 
-除本报告文件或用户明确指定的外部 output directory 外，未修改 canonical docs、pending、watermark、source packages 或代码。
+除本报告文件外，未修改 module docs、pending、watermark、source packages 或代码。

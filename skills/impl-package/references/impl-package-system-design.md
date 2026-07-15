@@ -53,7 +53,7 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
 5 执行        dev-with-track：restore → subagent-driven-development（task 实现 + 即时 review）→ 集成 / plan Execution Record → findings 分流 → gate entry
 6 审查        code-review / module-review / safety-review（映射见下）
 收口条件      terminal pass 前完成 durable-delta capture + verification-before-completion evidence audit
-可选维护      gate 后提示 backfill-stable-docs router；audit/apply/verify 独立、可延期、非阻塞、需明确授权
+可选维护      gate 后提示 backfill-stable-docs report/apply；可延期、非阻塞、需明确授权
 ```
 
 阶段要点（只记与讨论稿差异或收敛修正，正文以讨论稿为底）：
@@ -67,7 +67,7 @@ Review 按独立信号触发，不把 artifact 数量当风险代理：code-revi
 - **Stage 4 两层切分**：ticket 列表（delivery slices + 带阻塞语义的静态 `blocked by` 依赖标注）归 to-tickets fork；task DAG（一个 ticket 内 worker tasks，或横切多 ticket 的 seam task）归 create-task-dag。输入过宽路由回 to-tickets draft，不再自带 slicing 规则。create-task-dag 的有效输入是 package plan + 相关 approved tickets 子集，不能从单个 ticket 猜测跨 ticket seam contract。
 - **Stage 5 无动态调度器、有 readiness resolution**：删除自动派工、worker leasing、并发锁等动态调度——它们服务的是多 worker 高并行、主 session 失去全局视野的调度，而实际执行大体串行。但每次选择下一执行单元前，必须对静态图做确定性的 readiness resolution，处理依赖终态、外部 gate、环、失败/豁免/替代传播及上游返工造成的下游失效；多个 actionable 单元按文档顺序稳定选择。单 package 维护完整 ticket 列表；ticket 状态按 composition 落到 canonical home（见下节）。patch plan / patch DAG 严格保留给 post-gate 生命周期补丁（与 impl-planning `patching.md` 互引），不做 per-ticket patch。
   - YAGNI 边界：若未来执行模式真变成多 worker 并行跑不同 ticket，再增加动态派工能力；readiness resolution 不是该调度器的降级版，而是串行执行与恢复正确性的基础规则。
-- **Stage 7**：对任意 terminal verdict，有 durable delta 时，写入 terminal gate entry 前必须完成 `_pending.md` 捕获登记（gate 的 Durable Deltas 表为唯一捕获面）、受影响 module spec 的 truth pointer、必要 stub 创建；无 durable delta 时显式记录判定与理由。捕获与路由下沉到 gate + `_pending.md`，不在 spec 维护常青 map。下游 backfill audit/apply/verify 不属于 Stage 7 terminal gate；gate 后只提示，可延期、非阻塞，并需明确授权。去重键 `<destination>|<delta-id>` 落在 `_pending.md`/report 侧。三源对账（`_pending` / gate 漏登 / 无主 commit）引用并同步约束 backfill 设计。
+- **Stage 7**：对任意 terminal verdict，有 durable delta 时，写入 terminal gate entry 前必须完成 `_pending.md` 捕获登记（gate 的 Durable Deltas 表为唯一捕获面）、受影响 module spec 的 truth pointer、必要 stub 创建；无 durable delta 时显式记录判定与理由。捕获与路由下沉到 gate + `_pending.md`，不在 spec 维护常青 map。下游 backfill report/apply 不属于 Stage 7 terminal gate；gate 后只提示，可延期、非阻塞，并需明确授权。去重键 `<destination>|<delta-id>` 落在 `_pending.md`/report 侧。三源对账（`_pending` / gate 漏登 / 无主 commit）引用并同步约束 backfill 设计。
 - **Gate ledger**：package 只保留一个 `gate.md`，每次 evaluation 在顶部插入 `<attempt-id>-G<n>` 摘要。blocked→pass 通过新 entry 与 `Supersedes` 表达；旧块不改。完整验证过程放在对应 plan 的 append-only Execution Record，gate 只保存 revision/comparison point/evidence anchor/verdict 与 Durable Deltas。terminal verdict 先保留 G id 并完成 Stage 7，再一次性插入不可变 entry；不写临时 entry 后原地补字段。
 - **Revision-blob binding**：D/S/P revision 号是人类好念的别名，机器校验身份保存在 package-local `.impl-package/revision-bindings.json` sidecar 的 artifact path + Git blob OID 中。artifact 不保存自身 hash，因此 sidecar 可与最终 artifact 在同一 commit 中稳定绑定；restore/gate evaluation 用 `git rev-parse HEAD:<path>` 机械复核。sidecar 不进入 owner-facing 交付主线，Markdown 直接呈现 revision set 与校验结论。机制细节见 composition-contract §2。
 - **findings 三态阻断**：findings.md 分流是 pass/fail/defer 全部 terminal verdict 的硬前置条件，力度等同 Stage 7，不只挡 pass；blocked entry 不受此约束。见 composition-contract §6。
@@ -150,7 +150,7 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 - 有 durable delta：在 gate 的 Durable Deltas 表逐条登记 → 写 `_pending.md`、为受影响 module spec 写 truth pointer、必要时先创建 stub；三项完成才可关闭 gate。
 - 无 durable delta：在 gate 中显式记录判定与理由。
 - 回刷 report 按去重键合并 `_pending.md`、gate 漏登对账与无主 commit 三源；任一来源缺失均报告为 capture gap，不猜测为”无变化”。
-- terminal gate 后提示可通过 Codex 调用 `$stable-docs-backfill:backfill-stable-docs`；`audit-stable-docs`、`apply-stable-docs`、`verify-stable-docs` 相互独立，可以延期且不影响当前 gate 或任务 closed。提示不授权执行，只有用户明确要求、已批准维护计划或明确的周期维护流程才实际调用；apply 仍遵守逐项批准边界，audit 完成不得宣称 apply 或 verify 完成。
+- terminal gate 后提示可使用 `backfill-stable-docs`；report/apply 可以延期且不影响当前 gate 或任务 closed。提示不授权执行，只有用户明确要求、已批准维护计划或明确的周期维护流程才实际调用；apply 仍遵守其自身逐项批准边界。
 
 ## Review 体系
 

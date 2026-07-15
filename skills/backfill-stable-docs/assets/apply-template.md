@@ -1,13 +1,12 @@
 # Stable Docs Backfill Apply Record
 
-- Phase: `apply`
+- Mode: `apply`
 - Applied:
 - Project:
-- Method Activation Ref: `<plugin>@<version>`
-- Source audit:
-- Audit Source HEAD:
+- Source report:
+- Report Source HEAD:
 - Previous Project Source Watermark:
-- Owner approval: `<audit path>` + exact item IDs
+- Owner approval: `<report path>` + exact item IDs
 
 ## Applied Items
 
@@ -32,9 +31,8 @@
 ## Verification
 
 - Approved item to diff mapping:
-- Canonical owner / pointer check:
+- Module owner / pointer check:
 - Link / anchor checks:
-- Danger-rule residue:
 - Project-specific checks:
 - `git diff --check`:
 
@@ -43,10 +41,10 @@
 - Previous:
 - Current:
 - Advanced: yes / no
-- Maximum allowed by audit:
+- Maximum allowed by report:
 - Carry-forward preserved:
 - Reason / blocker:
 
 ## Scope Attestation
 
-Only owner-approved audit item IDs were applied. Unapproved items and audit-newer commits were not included.
+Only owner-approved report item IDs were applied. Unapproved items and report-newer commits were not included.

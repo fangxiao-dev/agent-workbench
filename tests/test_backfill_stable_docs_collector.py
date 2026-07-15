@@ -10,16 +10,16 @@ import unittest
 from pathlib import Path
 
 
-PLUGIN_ROOT = (
-    Path(__file__).resolve().parents[1] / "plugins" / "stable-docs-backfill"
+SCRIPT = (
+    Path(__file__).resolve().parents[1]
+    / "skills"
+    / "backfill-stable-docs"
+    / "scripts"
+    / "collect_sources.py"
 )
-SCRIPT = PLUGIN_ROOT / "scripts" / "collect_sources.py"
 
 
 def load_module():
-    scripts_path = str(SCRIPT.parent)
-    if scripts_path not in sys.path:
-        sys.path.insert(0, scripts_path)
     spec = importlib.util.spec_from_file_location("backfill_collect_sources", SCRIPT)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load {SCRIPT}")
@@ -56,10 +56,22 @@ class CollectorTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.project = Path(self.temp.name) / "project"
+        self.method = Path(self.temp.name) / "method"
         self.project.mkdir()
-        run_git(self.project, "init")
-        run_git(self.project, "config", "user.email", "test@example.com")
-        run_git(self.project, "config", "user.name", "Test User")
+        self.method.mkdir()
+
+        for root in (self.project, self.method):
+            run_git(root, "init")
+            run_git(root, "config", "user.email", "test@example.com")
+            run_git(root, "config", "user.name", "Test User")
+
+        run_git(
+            self.method,
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/example/agent-workbench.git",
+        )
         run_git(
             self.project,
             "remote",
@@ -67,32 +79,11 @@ class CollectorTest(unittest.TestCase):
             "origin",
             "https://github.com/example/project.git",
         )
-
-        self.config = Path(self.temp.name) / "repository-config.json"
-        self.config.write_text(
-            json.dumps(
-                {
-                    "schemaVersion": 1,
-                    "repository": "example/project",
-                    "canonicalDocs": [
-                        {
-                            "path": "README.md",
-                            "role": "project-knowledge",
-                            "owner": "test-owner",
-                        }
-                    ],
-                    "pendingPath": "docs/module-knowledge/_pending.md",
-                    "compactionPath": "docs/module-knowledge/_compaction",
-                    "statePath": "docs/module-knowledge/_compaction/state.json",
-                    "implementationsPath": "docs/implementations",
-                    "excludePaths": [],
-                    "dangerRules": [],
-                },
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
+        (self.method / "SKILL.md").write_text("method\n", encoding="utf-8")
+        self.method_commit = commit_all(
+            self.method, "method", "2026-07-01T00:00:00+00:00"
         )
+
         (self.project / "README.md").write_text("baseline\n", encoding="utf-8")
         self.watermark = commit_all(
             self.project, "baseline", "2026-07-01T00:00:00+00:00"
@@ -116,27 +107,32 @@ class CollectorTest(unittest.TestCase):
                 f"2026-07-0{index + 1}T00:00:00+00:00",
             )
         self.source_head = run_git(self.project, "rev-parse", "HEAD")
-        self.module = load_module()
-
-    def collect(self, **overrides):
-        arguments = {
-            "mode": "steady-state",
-            "project_root": self.project,
-            "config_path": self.config,
-            "source_head": self.source_head,
-            "project_watermark": self.watermark,
-            "fixture_count": 0,
-            "carry_forward": (),
-        }
-        arguments.update(overrides)
-        return self.module.collect_inventory(**arguments)
 
     def test_collects_deterministic_fixture_and_source_inventory(self) -> None:
-        first = self.collect(mode="bootstrap", fixture_count=2)
-        second = self.collect(mode="bootstrap", fixture_count=2)
+        module = load_module()
+
+        first = module.collect_inventory(
+            mode="bootstrap",
+            project_root=self.project,
+            source_head=self.source_head,
+            project_watermark=self.watermark,
+            method_root=self.method,
+            method_ref=f"example/agent-workbench@{self.method_commit}",
+            fixture_count=2,
+            carry_forward=(),
+        )
+        second = module.collect_inventory(
+            mode="bootstrap",
+            project_root=self.project,
+            source_head=self.source_head,
+            project_watermark=self.watermark,
+            method_root=self.method,
+            method_ref=f"example/agent-workbench@{self.method_commit}",
+            fixture_count=2,
+            carry_forward=(),
+        )
 
         self.assertEqual(first, second)
-        self.assertEqual(first["method_activation"], {"plugin": "stable-docs-backfill", "version": "0.1.0"})
         self.assertEqual(first["package_count"], 6)
         self.assertEqual(first["protected_fixtures"], ["foxtrot", "echo"])
         self.assertEqual(len(first["bootstrap_targets"]), 4)
@@ -169,8 +165,16 @@ class CollectorTest(unittest.TestCase):
         self.assertNotIn("docs/implementations/echo/plan.md", echo["semantic_sources"])
 
     def test_carry_forward_is_unioned_with_watermark_new_packages(self) -> None:
-        inventory = self.collect(
+        module = load_module()
+
+        inventory = module.collect_inventory(
+            mode="steady-state",
+            project_root=self.project,
+            source_head=self.source_head,
             project_watermark=self.source_head,
+            method_root=self.method,
+            method_ref=f"example/agent-workbench@{self.method_commit}",
+            fixture_count=0,
             carry_forward=("echo", "foxtrot"),
         )
 
@@ -180,6 +184,7 @@ class CollectorTest(unittest.TestCase):
         self.assertEqual(inventory["bootstrap_targets"], [])
 
     def test_rejects_non_ancestor_watermark(self) -> None:
+        module = load_module()
         run_git(self.project, "checkout", "--orphan", "unrelated")
         run_git(self.project, "rm", "-rf", ".")
         (self.project / "unrelated.txt").write_text("unrelated\n", encoding="utf-8")
@@ -187,27 +192,96 @@ class CollectorTest(unittest.TestCase):
             self.project, "unrelated", "2026-07-10T00:00:00+00:00"
         )
 
-        with self.assertRaisesRegex(self.module.CollectorError, "not an ancestor"):
-            self.collect(source_head=unrelated)
+        with self.assertRaisesRegex(module.CollectorError, "not an ancestor"):
+            module.collect_inventory(
+                mode="steady-state",
+                project_root=self.project,
+                source_head=unrelated,
+                project_watermark=self.watermark,
+                method_root=self.method,
+                method_ref=f"example/agent-workbench@{self.method_commit}",
+                fixture_count=0,
+                carry_forward=(),
+            )
+
+    def test_rejects_method_repository_identity_mismatch(self) -> None:
+        module = load_module()
+
+        with self.assertRaisesRegex(module.CollectorError, "repository identity"):
+            module.collect_inventory(
+                mode="steady-state",
+                project_root=self.project,
+                source_head=self.source_head,
+                project_watermark=self.watermark,
+                method_root=self.method,
+                method_ref=f"other/workbench@{self.method_commit}",
+                fixture_count=0,
+                carry_forward=(),
+            )
+
+    def test_rejects_method_ref_that_does_not_match_method_root_head(self) -> None:
+        module = load_module()
+        (self.method / "REFERENCE.md").write_text("new method\n", encoding="utf-8")
+        commit_all(self.method, "advance method", "2026-07-11T00:00:00+00:00")
+
+        with self.assertRaisesRegex(module.CollectorError, "method root HEAD"):
+            module.collect_inventory(
+                mode="steady-state",
+                project_root=self.project,
+                source_head=self.source_head,
+                project_watermark=self.watermark,
+                method_root=self.method,
+                method_ref=f"example/agent-workbench@{self.method_commit}",
+                fixture_count=0,
+                carry_forward=(),
+            )
+
+    def test_rejects_machine_local_method_repository_identity(self) -> None:
+        module = load_module()
+
+        with self.assertRaisesRegex(module.CollectorError, "portable owner/repository"):
+            module.collect_inventory(
+                mode="steady-state",
+                project_root=self.project,
+                source_head=self.source_head,
+                project_watermark=self.watermark,
+                method_root=self.method,
+                method_ref=f"C:/local/agent-workbench@{self.method_commit}",
+                fixture_count=0,
+                carry_forward=(),
+            )
 
     def test_rejects_missing_or_machine_local_project_repository_identity(self) -> None:
+        module = load_module()
+
         run_git(self.project, "remote", "remove", "origin")
-        with self.assertRaisesRegex(self.module.CollectorError, "project origin"):
-            self.collect()
+        with self.assertRaisesRegex(module.CollectorError, "project origin"):
+            module.collect_inventory(
+                mode="steady-state",
+                project_root=self.project,
+                source_head=self.source_head,
+                project_watermark=self.watermark,
+                method_root=self.method,
+                method_ref=f"example/agent-workbench@{self.method_commit}",
+                fixture_count=0,
+                carry_forward=(),
+            )
 
         run_git(self.project, "remote", "add", "origin", "C:/local/project")
-        with self.assertRaisesRegex(self.module.CollectorError, "project origin"):
-            self.collect()
-
-    def test_rejects_configured_repository_mismatch(self) -> None:
-        payload = json.loads(self.config.read_text(encoding="utf-8"))
-        payload["repository"] = "other/project"
-        self.config.write_text(json.dumps(payload), encoding="utf-8")
-
-        with self.assertRaisesRegex(self.module.CollectorError, "configured repository mismatch"):
-            self.collect()
+        with self.assertRaisesRegex(module.CollectorError, "project origin"):
+            module.collect_inventory(
+                mode="steady-state",
+                project_root=self.project,
+                source_head=self.source_head,
+                project_watermark=self.watermark,
+                method_root=self.method,
+                method_ref=f"example/agent-workbench@{self.method_commit}",
+                fixture_count=0,
+                carry_forward=(),
+            )
 
     def test_reports_package_deleted_after_watermark(self) -> None:
+        module = load_module()
         gone = self.project / "docs" / "implementations" / "gone"
         gone.mkdir(parents=True)
         (gone / "spec.md").write_text("# gone\n", encoding="utf-8")
@@ -220,9 +294,15 @@ class CollectorTest(unittest.TestCase):
             self.project, "remove gone", "2026-07-11T00:00:00+00:00"
         )
 
-        inventory = self.collect(
+        inventory = module.collect_inventory(
+            mode="steady-state",
+            project_root=self.project,
             source_head=deletion_head,
             project_watermark=deletion_watermark,
+            method_root=self.method,
+            method_ref=f"example/agent-workbench@{self.method_commit}",
+            fixture_count=0,
+            carry_forward=(),
         )
 
         self.assertEqual(inventory["removed_packages"], ["gone"])
@@ -235,12 +315,14 @@ class CollectorTest(unittest.TestCase):
             str(SCRIPT),
             "--project-root",
             str(self.project),
-            "--config",
-            str(self.config),
             "--source-head",
             self.source_head,
             "--project-watermark",
             self.watermark,
+            "--method-root",
+            str(self.method),
+            "--method-ref",
+            f"example/agent-workbench@{self.method_commit}",
             "--mode",
             "bootstrap",
             "--fixture-count",
@@ -272,12 +354,17 @@ class CollectorTest(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         ).stdout.decode("utf-8")
-        self.assertIn("docs/implementations/echo/findings.md", markdown)
+        echo_blob = run_git(
+            self.project,
+            "rev-parse",
+            f"{self.source_head}:docs/implementations/echo/findings.md",
+        )
+        self.assertIn(
+            f"docs/implementations/echo/findings.md @ {echo_blob}", markdown
+        )
 
-    def test_cli_rejects_invalid_config_without_writes(self) -> None:
+    def test_cli_rejects_unresolved_method_ref_without_writes(self) -> None:
         output = self.project / "inventory.json"
-        invalid_config = Path(self.temp.name) / "invalid.json"
-        invalid_config.write_text('{"schemaVersion": 2}', encoding="utf-8")
         command = [
             sys.executable,
             str(SCRIPT),
@@ -285,21 +372,21 @@ class CollectorTest(unittest.TestCase):
             "steady-state",
             "--project-root",
             str(self.project),
-            "--config",
-            str(invalid_config),
             "--source-head",
             self.source_head,
             "--project-watermark",
             self.watermark,
+            "--method-root",
+            str(self.method),
+            "--method-ref",
+            "example/agent-workbench@deadbeef",
             "--output",
             str(output),
         ]
-        completed = subprocess.run(
-            command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
+        completed = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         self.assertEqual(completed.returncode, 2)
-        self.assertIn("schemaVersion", completed.stderr)
+        self.assertIn("does not resolve", completed.stderr)
         self.assertFalse(output.exists())
 
     def test_cli_rejects_missing_project_and_escaping_output(self) -> None:
@@ -310,12 +397,14 @@ class CollectorTest(unittest.TestCase):
             str(SCRIPT),
             "--mode",
             "steady-state",
-            "--config",
-            str(self.config),
             "--source-head",
             self.source_head,
             "--project-watermark",
             self.watermark,
+            "--method-root",
+            str(self.method),
+            "--method-ref",
+            f"example/agent-workbench@{self.method_commit}",
         ]
 
         missing_result = subprocess.run(

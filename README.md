@@ -10,8 +10,7 @@
 
 `agent-workbench` 的目标是把可复用的 agent 能力集中维护，然后以非破坏方式暴露给不同宿主：
 
-- `skills/` 保存普通正式 skill，包括自建 skill、审查过的第三方 skill、以及本地工作流知识库
-- `plugins/` 保存本仓库自建、独立版本化和安装的 Codex Plugin；Plugin 内附带的 skill 不在根 `skills/` 保留副本
+- `skills/` 保存所有正式 skill，包括自建 skill、审查过的第三方 skill、以及本地工作流知识库
 - `agents/` 保存可安装到宿主的 subagent 定义，目前正式 subagent 是 `audit-agent-setup`
 - `commands/` 保存宿主 command 提示文件；是否能用 `/...` 唤出取决于具体宿主
 - `install.sh` / `install.ps1` 把这些能力安装到 `~/.claude`、`~/.codex`、`~/.gemini`
@@ -19,7 +18,7 @@
 - `docs/workbench-design/` 保存当前实现规范，README 只做入口说明
 - `tests/` 保存安装器和核心脚本测试
 
-仓库根目录下的 `.agents/`、`.claude/`、`.pytest_cache/`、`skills-lock.json` 等通常属于本机运行态、工具状态或缓存；唯一例外是受版本控制的 `.agents/plugins/marketplace.json`，它是本仓库自建 Codex Plugin 的 marketplace 规范源。
+仓库根目录下的 `.agents/`、`.claude/`、`.pytest_cache/`、`skills-lock.json` 等属于本机运行态、工具状态或缓存，不作为规范源。
 
 ---
 
@@ -42,8 +41,6 @@ powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\install.ps1 
 ```
 
 Windows 使用 junction，通常不需要开发者模式；Bash/Unix 侧使用符号链接。
-
-选择 `codex` 时，安装器还会注册本仓库的本地 marketplace，并安装或刷新 `stable-docs-backfill` Plugin。该 Plugin 只面向 Codex，不改变 Claude/Gemini 的安装内容；遇到同名 marketplace、Plugin 或旧 Skill 冲突时仍按非破坏策略跳过并报告。
 
 ### Discuss Ledger MCP 注册
 
@@ -149,18 +146,6 @@ python D:\CodeSpace\agent-workbench\skills\discuss-ledger\scripts\discuss_orches
 
 `init-project-context` 用于新项目或上下文不足的项目：先稳定项目目标、交付物边界、术语和文档骨架，再进入实现规划。`templates/CLAUDE.md.tpl` 是这个流程按需使用的模板；安装器不会自动生成 `CLAUDE.md`。
 
-### 回刷常青文档
-
-`stable-docs-backfill` 是 Codex-only Plugin。安装后，人工任务和 Automation 都通过 `$stable-docs-backfill:backfill-stable-docs` 调用薄入口；入口按意图路由到逻辑阶段 `audit-stable-docs`、`apply-stable-docs` 或 `verify-stable-docs`，自身不执行具体阶段。
-
-- `audit-stable-docs` 只读扫描 current truth、缺口与冲突，并生成带 item ID 的报告。
-- `apply-stable-docs` 只应用 owner 针对具体报告明确批准的 item ID。
-- `verify-stable-docs` 独立检查 authority、链接、覆盖率、pending、watermark 与残留。
-
-三个阶段必须分别汇报：audit 产出报告不等于 apply 已执行，apply 已执行也不等于 verify 已通过。Impl Package 的 terminal gate 关闭后只把 backfill 作为可延期、非阻塞的维护项；未运行 backfill 不影响该 gate 或开发任务的 closed 判断。
-
-仓库差异通过轻量 JSON 配置传入，不写死在 Plugin 中。Plugin 提供中性 schema/example；当前自有仓库配置放在 `configs/stable-docs-backfill/`，Automation 通过显式 `--config` 选择对应文件，目标仓库也可在根目录提供 `.stable-docs-backfill.json`。
-
 ### 多任务 / worktree 工作流
 
 WT-PM 工作流拆成三个 skill：
@@ -235,8 +220,6 @@ agent-workbench/
 │       └── agent.md
 ├── commands/                   ← 宿主 command 提示文件，安装到已选宿主的 commands/
 │   └── audit.md
-├── plugins/                    ← 本仓库自建、独立版本化的 Codex Plugins
-│   └── stable-docs-backfill/   ← 常青文档 audit/apply/verify Plugin
 ├── scripts/                    ← 仓库级辅助脚本，如 list-visible-skills.ps1
 ├── tests/                      ← 安装器和工作流测试
 ├── templates/
