@@ -14,7 +14,7 @@ description: Use when auditing, applying approved durable knowledge deltas, or i
 - 所有确定性脚本位于本 Skill 的 `scripts/`。它们从自身解析后的物理路径推导 enclosing `agent-workbench` Git top-level，并把其 portable `repository + commit` 写作 `methodActivation`。本机绝对 method path 不进入项目记录。
 - 该锚点同时要求同一 commit 含本 Skill 和 `skills/impl-package/SKILL.md`；它证明两者原子版本，不参与目标项目 Git range。
 - Project Source Watermark 必须在目标项目内且是固定 Source HEAD 的 ancestor。缺失或不可信时 fail closed；bootstrap 只接受 owner 明确给出的有界 source manifest。
-- Plugin-era audit/state 仅是 provenance，不能直接 apply；先重新 audit，得到当前 repository+commit 锚点的报告。
+- Plugin-era audit/state 仅是 provenance，不能直接 apply；先重新 audit，得到 schema v2 报告。不同 method repository、项目 repository 或 config context fail closed；同 repository 的 method commit 或 audit 后 descendant Source HEAD 漂移由 item-scoped fingerprint 逐项判断，不重做未受影响 item。
 
 完整的双锚点、source selection、carry-forward 合同见 [双锚点与来源选择](references/source-selection-and-dual-anchor.md)。
 
@@ -35,3 +35,5 @@ description: Use when auditing, applying approved durable knowledge deltas, or i
 ## 输出
 
 最终说明实际 runbook、method activation、Source HEAD、报告或 apply record 路径、candidate/covered/conflict/pending 计数、carry-forward、水位线验证结果与仍需 owner 决策的 item ID。只有用户明确要求 PR 时才读取 [PR Summary 模板](assets/pr-summary-template.md)。
+
+`human-report.md` 面向 owner 阅读；目标仓库存在语言规定时，按该规定编写。

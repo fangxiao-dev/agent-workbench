@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -23,6 +24,7 @@ from stable_docs_config import (
 
 METHOD_ROOT = Path(__file__).resolve().parents[3]
 ITEM_ID_RE = re.compile(r"^SDB-[0-9a-f]{12}$")
+BLOB_ID_RE = re.compile(r"^[0-9a-f]{40,64}$")
 LINK_RE = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
 HEADING_RE = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
 
@@ -159,6 +161,90 @@ def _load_json(path: Path, label: str) -> dict[str, Any]:
     return payload
 
 
+def _normalize_text(value: str) -> str:
+    return " ".join(value.split())
+
+
+def _normalize_path(value: str) -> str:
+    path = Path(value.replace("\\", "/"))
+    if path.is_absolute() or ".." in path.parts or not value.strip():
+        raise VerificationError(f"item evidence path must be project-relative: {value!r}")
+    return path.as_posix()
+
+
+def _item_fingerprint_payload(item: dict[str, Any]) -> dict[str, Any]:
+    source = item.get("source")
+    destination = item.get("destination")
+    statement = item.get("statement")
+    authority = item.get("authority")
+    evidence = item.get("evidence")
+    canonical_owner = item.get("canonicalOwner")
+    if not isinstance(source, str) or not isinstance(statement, str):
+        raise VerificationError("item fingerprint requires source and statement")
+    if destination is not None and not isinstance(destination, str):
+        raise VerificationError("item fingerprint destination must be a string or null")
+    if not isinstance(canonical_owner, str) or not canonical_owner.strip():
+        raise VerificationError("item fingerprint requires canonicalOwner")
+    if not isinstance(authority, list) or not authority or not all(
+        isinstance(value, str) and value.strip() for value in authority
+    ):
+        raise VerificationError("item fingerprint authority must be a non-empty string array")
+    if not isinstance(evidence, list) or not evidence:
+        raise VerificationError("item fingerprint evidence must be a non-empty array")
+    normalized_evidence: list[dict[str, str]] = []
+    for row in evidence:
+        if not isinstance(row, dict):
+            raise VerificationError("item fingerprint evidence entries must be objects")
+        path = row.get("path")
+        blob = row.get("blob")
+        if not isinstance(path, str) or not isinstance(blob, str) or BLOB_ID_RE.fullmatch(blob) is None:
+            raise VerificationError("item fingerprint evidence entries require path and full blob ID")
+        normalized_evidence.append({"path": _normalize_path(path), "blob": blob})
+    if len({(row["path"], row["blob"]) for row in normalized_evidence}) != len(normalized_evidence):
+        raise VerificationError("item fingerprint evidence contains duplicate identities")
+    return {
+        "source": _normalize_path(source),
+        "destination": _normalize_path(destination) if isinstance(destination, str) else None,
+        "statement": _normalize_text(statement),
+        "authority": sorted(set(_normalize_text(value) for value in authority)),
+        "evidence": sorted(normalized_evidence, key=lambda row: (row["path"], row["blob"])),
+        "canonicalOwner": _normalize_text(canonical_owner),
+    }
+
+
+def _make_item_fingerprint(item: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        _item_fingerprint_payload(item), ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def _same_method_repository(actual: Any, current: dict[str, str], label: str) -> None:
+    if not isinstance(actual, dict):
+        raise VerificationError(f"{label} methodActivation must be a repository/commit object; Plugin-era state requires a fresh audit before apply")
+    repository = actual.get("repository")
+    commit = actual.get("commit")
+    if not isinstance(repository, str) or not isinstance(commit, str):
+        raise VerificationError(f"{label} methodActivation must contain repository and commit; Plugin-era state requires a fresh audit before apply")
+    if repository != current["repository"]:
+        raise VerificationError(f"{label} methodActivation repository does not match current agent-workbench; fresh audit required")
+
+
+def _project_repository_identity(project: Path) -> str:
+    remote = _git(project, "remote", "get-url", "origin").strip().replace("\\", "/")
+    if remote.endswith(".git"):
+        remote = remote[:-4]
+    if "://" in remote:
+        remote = remote.split("://", 1)[1]
+        remote = remote.split("/", 1)[1] if "/" in remote else remote
+    elif re.match(r"^[^@]+@[^:]+:", remote):
+        remote = remote.split(":", 1)[1]
+    identity = remote.strip("/").lower()
+    if re.fullmatch(r"[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*", identity) is None:
+        raise VerificationError("project origin must resolve to portable owner/repository identity")
+    return identity
+
+
 def _check_audit(
     project: Path,
     config: dict[str, Any],
@@ -168,12 +254,18 @@ def _check_audit(
 ) -> str:
     if audit is None:
         return "audit JSON not requested"
-    if audit.get("schemaVersion") != 1 or audit.get("mode") != "audit":
-        raise VerificationError("audit JSON must use schemaVersion 1 and mode audit")
-    if audit.get("methodActivation") != method_activation:
-        raise VerificationError("audit methodActivation does not match current agent-workbench repository/commit")
+    if audit.get("schemaVersion") != 2 or audit.get("mode") != "audit":
+        raise VerificationError("audit JSON must use schemaVersion 2 and mode audit; schemaVersion 1 is legacy and cannot be applied")
+    _same_method_repository(audit.get("methodActivation"), method_activation, "audit")
     if audit.get("configSha256") != config_sha256:
         raise VerificationError("audit configSha256 does not match selected configuration")
+    audit_project = audit.get("project")
+    if not isinstance(audit_project, dict):
+        raise VerificationError("audit project must be an object")
+    audit_repository = audit_project.get("repository")
+    project_repository = _project_repository_identity(project)
+    if not isinstance(audit_repository, str) or audit_repository != project_repository:
+        raise VerificationError("audit project.repository does not match the current project repository")
     required_arrays = (
         "moduleCoverage",
         "items",
@@ -208,8 +300,15 @@ def _check_audit(
         if item.get("disposition") not in dispositions:
             raise VerificationError(f"audit item {item_id} has invalid disposition")
         if item.get("disposition") == "candidate":
-            if not isinstance(destination, str) or len(_destination_owner(destination, config["canonicalDocs"])) != 1:
+            owners = _destination_owner(destination, config["canonicalDocs"]) if isinstance(destination, str) else []
+            if not isinstance(destination, str) or len(owners) != 1:
                 raise VerificationError(f"candidate {item_id} does not have exactly one canonical owner")
+            expected_owner = next(home["owner"] for home in config["canonicalDocs"] if home["path"] == owners[0])
+            if item.get("canonicalOwner") != expected_owner:
+                raise VerificationError(f"candidate {item_id} canonicalOwner does not match its canonical destination owner")
+        expected_fingerprint = _make_item_fingerprint(item)
+        if item.get("fingerprint") != expected_fingerprint:
+            raise VerificationError(f"audit item {item_id} fingerprint does not match its item-local evidence")
     referenced: dict[str, int] = {}
     for index, row in enumerate(coverage):
         if not isinstance(row, dict):
@@ -255,13 +354,18 @@ def _check_audit(
     return f"{len(items)} stable audit items and {len(coverage)} coverage rows verified"
 
 
-def _select_source_head(
+def _select_source_heads(
     project: Path,
     audit: dict[str, Any] | None,
     explicit_source_head: str | None,
-) -> str | None:
+) -> tuple[str | None, str | None]:
     if audit is None:
-        return explicit_source_head
+        resolved = (
+            _git(project, "rev-parse", "--verify", f"{explicit_source_head or 'HEAD'}^{{commit}}")
+            if explicit_source_head is not None
+            else None
+        )
+        return None, resolved
     audit_project = audit.get("project")
     if not isinstance(audit_project, dict):
         raise VerificationError("audit project must be an object")
@@ -271,15 +375,39 @@ def _select_source_head(
     resolved_audited_head = _git(
         project, "rev-parse", "--verify", f"{audited_source_head}^{{commit}}"
     )
-    if explicit_source_head is not None:
-        resolved_explicit_head = _git(
-            project, "rev-parse", "--verify", f"{explicit_source_head}^{{commit}}"
-        )
-        if resolved_explicit_head != resolved_audited_head:
-            raise VerificationError(
-                "explicit --source-head conflicts with audit project.sourceHead"
-            )
-    return resolved_audited_head
+    resolved_current_head = _git(
+        project, "rev-parse", "--verify", f"{explicit_source_head or 'HEAD'}^{{commit}}"
+    )
+    if not _is_ancestor(project, resolved_audited_head, resolved_current_head):
+        raise VerificationError("current Source HEAD must equal or descend from audit project.sourceHead")
+    return resolved_audited_head, resolved_current_head
+
+
+def _item_fingerprint_status(
+    project: Path, audit: dict[str, Any] | None, current_source_head: str | None
+) -> tuple[list[str], list[str]]:
+    if audit is None or current_source_head is None:
+        return [], []
+    ready: list[str] = []
+    pending: list[str] = []
+    for item in audit["items"]:
+        item_id = item["id"]
+        current = dict(item)
+        current_evidence: list[dict[str, str]] = []
+        try:
+            for evidence in item["evidence"]:
+                path = _normalize_path(evidence["path"])
+                blob = _git(project, "rev-parse", f"{current_source_head}:{path}")
+                current_evidence.append({"path": path, "blob": blob})
+        except (KeyError, VerificationError):
+            pending.append(item_id)
+            continue
+        current["evidence"] = current_evidence
+        if _make_item_fingerprint(current) == item["fingerprint"]:
+            ready.append(item_id)
+        else:
+            pending.append(item_id)
+    return ready, pending
 
 
 def _check_state(
@@ -290,9 +418,7 @@ def _check_state(
     audit: dict[str, Any] | None,
 ) -> str:
     state = _load_json(resolve_project_path(project, config["statePath"]), "compaction state")
-    activation = state.get("method_activation")
-    if activation != method_activation:
-        raise VerificationError("state method_activation must equal current agent-workbench repository/commit; Plugin-era state requires a fresh audit before apply")
+    _same_method_repository(state.get("method_activation"), method_activation, "state")
     project_state = state.get("project")
     if not isinstance(project_state, dict):
         raise VerificationError("state project must be an object")
@@ -386,7 +512,7 @@ def main() -> int:
             if args.audit_json is not None
             else None
         )
-        source_head = _select_source_head(project, audit, args.source_head)
+        audited_source_head, current_source_head = _select_source_heads(project, audit, args.source_head)
     except (ConfigError, VerificationError) as error:
         sys.stdout.write(
             json.dumps({"passed": False, "error": str(error)}, indent=2) + "\n"
@@ -403,7 +529,7 @@ def main() -> int:
         ),
         (
             "state-watermark",
-            lambda: _check_state(project, config, method_activation, source_head, audit),
+            lambda: _check_state(project, config, method_activation, current_source_head, audit),
         ),
     ]
     for name, check in checks:
@@ -412,6 +538,15 @@ def main() -> int:
         except (ConfigError, VerificationError, OSError, UnicodeError) as error:
             results.append({"check": name, "result": "failed", "detail": str(error)})
     failed = sum(1 for result in results if result["result"] == "failed")
+    audit_contract_passed = any(
+        result["check"] == "audit-contract" and result["result"] == "passed"
+        for result in results
+    )
+    apply_ready, pending = (
+        _item_fingerprint_status(project, audit, current_source_head)
+        if audit is not None and audit_contract_passed
+        else ([], [])
+    )
     payload = {
         "schemaVersion": 1,
         "methodActivation": method_activation,
@@ -420,6 +555,13 @@ def main() -> int:
         "checks": results,
         "summary": {"total": len(results), "passed": len(results) - failed, "failed": failed},
     }
+    if audit is not None:
+        payload["itemFingerprintStatus"] = {
+            "auditSourceHead": audited_source_head,
+            "currentSourceHead": current_source_head,
+            "applyReadyItemIds": apply_ready,
+            "pendingItemIds": pending,
+        }
     sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return 0 if failed == 0 else 2
 
