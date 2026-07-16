@@ -39,21 +39,21 @@
 
 ## 配置驱动的分流
 
-具体 destination 必须落在配置 `canonicalDocs` 的一个且仅一个 owner home。常见 role 可包含 `module-spec`、`module-prd`、`top-level-prd`、`architecture`、`context-language`、`tech-stack` 与 `hands-on`，但公共 Skill bundle 不写死仓库的 domain 名、目录或 module taxonomy。
+具体 destination 必须落在配置 `stableDocs.systemKnowledge`、可选的 `stableDocs.contextKnowledge` 或 `stableDocs.moduleKnowledge` 覆盖的一个位置，且只写一个 canonical owner——owner 由 agent 依据实际目录归属判断，不再由配置逐路径声明。省略 `contextKnowledge` 时不发明虚假的 context 层；候选只能进入现有 system/module authority，或在没有唯一 stable home 时保持 pending。常见 role 可包含 `system-prd`、`system-architecture`、`context-prd`、`context-architecture`、`context-language`、`module-prd`、`module-spec`、`tech-stack` 与 `hands-on`，但公共 Skill bundle 不写死仓库的 domain 名、目录或 module taxonomy。
 
 | 输入 | 目的地 role |
 | --- | --- |
 | 可验证的当前模块行为、禁止项、边界、失败与恢复 | `module-spec` 或项目定义的 behavior role |
 | 模块为何存在、拥有的价值切片 | `module-prd` 或项目定义的 intent role |
-| journey/product 级 intent | `top-level-prd` |
-| canonical actor、对象或术语 | `context-language` |
+| 跨 context、无法归属单一 context 的 journey/product intent、系统 seam 或全局术语 | `system-prd`、`system-architecture` 或 system terminology role |
+| 单一 context 直接拥有、横跨多个 module 的 intent、架构、合同或术语 | 配置了 context 层时进入 `context-prd`、`context-architecture` 或 `context-language`；未配置时按现有 system/module owner 路由，无法唯一归属则 pending |
 | 本次变更的方案与取舍 | implementation-local design，不进入常青层 |
 | 可复用 trap、诊断或恢复捷径 | `hands-on` |
 | 没有 durable delta | `none` + 原因 |
 
 ## Module PRD 惰性创建门
 
-缺失的 module PRD 只有同时满足 Purpose、用户或 journey、Outcomes、Scope/Non-goals、top-level PRD 上链、module behavior/spec 下链，以及 intent authority 来自 top-level PRD、批准 design、owner 决策或 confirmed gate时才可在 apply 首建。材料不足时保留 pending；不得用代码行为扩写缺失的 intent，也不得创建只有标题和一句 slogan 的文件。
+缺失的 module PRD 只有同时满足 Purpose、用户或 journey、Outcomes、Scope/Non-goals、owning context PRD 上链（仓库未配置 context 层时链接现有 system intent；跨 context 时再上链 system PRD）、module behavior/spec 下链，以及 intent authority 来自 system/context PRD、批准 design、owner 决策或 confirmed gate 时才可在 apply 首建。材料不足时保留 pending；不得用代码行为扩写缺失的 intent，也不得创建只有标题和一句 slogan 的文件。
 
 ## 人工 fixtures
 
@@ -61,8 +61,8 @@
 | --- | --- |
 | “过期 snapshot 必须被拒绝并返回可重试冲突。” | behavior/module-spec |
 | “该模块让用户跨会话恢复未完成 journey。” | 已有 intent 文档则更新；缺失且内容门不足则 pending |
-| “多个模块共同支撑从配置到首次成功结果的 journey。” | top-level intent |
-| “Account 是全项目 canonical actor 名称。” | context-language |
+| “多个 context 共同支撑从配置到首次成功结果的 journey。” | system intent |
+| “同一 context 的多个 module 共同使用 Account 作为 canonical actor 名称。” | 配置了 context 层时进入 context-language；否则按现有 owner 路由或 pending |
 | “本次迁移先加 adapter 再切换 persisted schema。” | implementation-local design |
 | “只重命名 local helper，外部行为与意图未变。” | none |
 | “必须主动遵守 provider 当前速率限制；使用共享 pacing。” | observable 义务进 behavior/spec；可替换机制仅作 evidence/实现建议 |

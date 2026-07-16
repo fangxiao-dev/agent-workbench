@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Stable Docs Backfill repository configuration."""
+"""Validate Stable Docs Backfill repository configuration (schemaVersion 3)."""
 
 from __future__ import annotations
 
@@ -8,18 +8,18 @@ import json
 import sys
 from pathlib import Path
 
-from stable_docs_config import ConfigError, load_repository_config, resolve_project_path
+from stable_docs_config import (
+    ConfigError,
+    discover_pending_paths,
+    load_repository_config,
+    resolve_target_branch,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--config", type=Path)
-    parser.add_argument(
-        "--require-existing",
-        action="store_true",
-        help="also require configured canonical/state/source paths to exist",
-    )
     return parser
 
 
@@ -28,18 +28,19 @@ def main() -> int:
     try:
         project = args.project_root.resolve()
         config, metadata = load_repository_config(project, args.config)
-        missing: list[str] = []
-        if args.require_existing:
-            paths = [
-                *(home["path"] for home in config["canonicalDocs"]),
-                config["pendingPath"],
-                config["compactionPath"],
-                config["statePath"],
-                config["implementationsPath"],
-            ]
-            missing = [path for path in paths if not resolve_project_path(project, path).exists()]
-            if missing:
-                raise ConfigError("configured paths do not exist: " + ", ".join(missing))
+        pending_discovery = discover_pending_paths(project, config)
+        gaps = [
+            entry for entry in pending_discovery if entry["status"] in {"missing", "ambiguous"}
+        ]
+        cold_starts = [
+            entry for entry in pending_discovery if entry["status"] == "cold-start"
+        ]
+        try:
+            target_branch_commit = resolve_target_branch(project, config["targetBranch"])
+            target_branch_gap = None
+        except ConfigError as error:
+            target_branch_commit = None
+            target_branch_gap = str(error)
         sys.stdout.write(
             json.dumps(
                 {
@@ -47,15 +48,24 @@ def main() -> int:
                     "schemaVersion": config["schemaVersion"],
                     "configSource": metadata["source"],
                     "configSha256": metadata["sha256"],
-                    "canonicalDocCount": len(config["canonicalDocs"]),
-                    "dangerRuleCount": len(config["dangerRules"]),
+                    "targetBranch": config["targetBranch"],
+                    "targetBranchCommit": target_branch_commit,
+                    "targetBranchConfigGap": target_branch_gap,
+                    "implementationRootCount": len(config["implementations"]),
+                    "systemKnowledgeRootCount": len(config["stableDocs"]["systemKnowledge"]),
+                    "contextKnowledgeRootCount": len(config["stableDocs"]["contextKnowledge"]),
+                    "moduleKnowledgeRootCount": len(config["stableDocs"]["moduleKnowledge"]),
+                    "ignoreGroupCount": len(config["ignore"]),
+                    "pendingDiscovery": pending_discovery,
+                    "pendingConfigGaps": gaps,
+                    "pendingColdStarts": cold_starts,
                 },
                 indent=2,
                 sort_keys=True,
             )
             + "\n"
         )
-        return 0
+        return 0 if not gaps and target_branch_gap is None else 2
     except ConfigError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

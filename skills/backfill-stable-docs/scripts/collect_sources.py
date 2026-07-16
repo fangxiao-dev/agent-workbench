@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Collect deterministic Stable Docs backfill source inventory from Git."""
+"""Enumerate Stable Docs backfill inventory: packages, pending registrations, and
+gap-catching / retirement candidates. This is a read-only enumeration helper —
+it never decides disposition; the agent reads the listed evidence and judges."""
 
 from __future__ import annotations
 
@@ -9,314 +11,257 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Any, Iterable
 
 from stable_docs_config import (
     ConfigError,
-    load_method_activation,
+    discover_pending_paths,
+    expand_roots,
     load_repository_config,
+    path_matches_ignore,
+    resolve_project_path,
+    resolve_target_branch,
 )
-
-
-METHOD_ROOT = Path(__file__).resolve().parents[3]
 
 
 class CollectorError(RuntimeError):
     """Raised when source inventory cannot be collected safely."""
 
 
-def _git(root: Path, *args: str, allow_empty: bool = False) -> str:
-    completed = subprocess.run(
-        ["git", *args],
-        cwd=root,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip()
-        raise CollectorError(f"git {' '.join(args)} failed in {root}: {detail}")
-    output = completed.stdout.strip()
-    if not output and not allow_empty:
-        raise CollectorError(f"git {' '.join(args)} returned no result in {root}")
-    return output
+GATE_ENTRY_RE = re.compile(r"^#{1,6}\s+(?P<entry_id>\S+)\s*[·:]\s*(?P<verdict>pass|fail|blocked|defer)\b", re.IGNORECASE)
+TABLE_ROW_RE = re.compile(r"^\|(.+)\|\s*$")
+TABLE_SEP_RE = re.compile(r"^\|[\s:|-]+\|\s*$")
+TERMINAL_VERDICTS = {"pass", "fail", "defer"}
 
 
 def _require_git_repository(path: Path | str) -> Path:
     root = Path(path).resolve()
     if not root.is_dir():
         raise CollectorError(f"project root is not a directory: {root}")
-    try:
-        top_level = Path(_git(root, "rev-parse", "--show-toplevel")).resolve()
-    except CollectorError as error:
-        raise CollectorError(f"project root is not a Git repository: {root}") from error
-    if top_level != root:
-        raise CollectorError(f"project root must be the Git top level: {root}")
-    return root
-
-
-def _resolve_commit(root: Path, value: str, label: str) -> str:
-    try:
-        return _git(root, "rev-parse", "--verify", f"{value}^{{commit}}")
-    except CollectorError as error:
-        raise CollectorError(f"{label} does not resolve to a commit: {value}") from error
-
-
-def _is_ancestor(root: Path, ancestor: str, descendant: str) -> bool:
     completed = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+        ["git", "rev-parse", "--show-toplevel"],
         cwd=root,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    if completed.returncode in (0, 1):
-        return completed.returncode == 0
-    raise CollectorError(
-        "git merge-base --is-ancestor failed: "
-        + (completed.stderr.strip() or completed.stdout.strip())
-    )
+    if completed.returncode != 0:
+        raise CollectorError(f"project root is not a Git repository: {root}")
+    top_level = Path(completed.stdout.strip()).resolve()
+    if top_level != root:
+        raise CollectorError(f"project root must be the Git top level: {root}")
+    return root
 
 
-def _normalize_repository_identity(remote: str) -> str:
-    value = remote.strip().replace("\\", "/")
-    if value.endswith(".git"):
-        value = value[:-4]
-    if "://" in value:
-        value = value.split("://", 1)[1]
-        parts = value.split("/", 1)
-        value = parts[1] if len(parts) == 2 else parts[0]
-    elif re.match(r"^[^@]+@[^:]+:", value):
-        value = value.split(":", 1)[1]
-    return value.strip("/").lower()
+def _read_gate_verdict(gate_path: Path) -> str | None:
+    """Return the verdict of the newest (topmost) gate entry, or None if no entry found."""
+    if not gate_path.is_file():
+        return None
+    for line in gate_path.read_text(encoding="utf-8").splitlines():
+        match = GATE_ENTRY_RE.match(line.strip())
+        if match:
+            return match.group("verdict").lower()
+    return None
 
 
-def _portable_origin_identity(root: Path) -> str:
+def extract_markdown_tables(path: Path) -> list[dict[str, Any]]:
+    """Extract every Markdown table in a file as {"header", "rows", "line"} blocks."""
+    if not path.is_file():
+        return []
+    lines = path.read_text(encoding="utf-8").splitlines()
+    tables: list[dict[str, Any]] = []
+    index = 0
+    while index < len(lines):
+        header_match = TABLE_ROW_RE.match(lines[index].strip())
+        if header_match and index + 1 < len(lines) and TABLE_SEP_RE.match(lines[index + 1].strip()):
+            header = [cell.strip() for cell in header_match.group(1).split("|")]
+            start_line = index + 1
+            row_index = index + 2
+            rows: list[list[str]] = []
+            while row_index < len(lines):
+                row_match = TABLE_ROW_RE.match(lines[row_index].strip())
+                if not row_match:
+                    break
+                rows.append([cell.strip() for cell in row_match.group(1).split("|")])
+                row_index += 1
+            tables.append({"header": header, "rows": rows, "line": start_line})
+            index = row_index
+        else:
+            index += 1
+    return tables
+
+
+def _load_done_record(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {"items": [], "retiredPackages": []}
     try:
-        identity = _normalize_repository_identity(_git(root, "remote", "get-url", "origin"))
-    except CollectorError as error:
-        raise CollectorError("project origin must resolve to owner/repository") from error
-    if re.fullmatch(r"[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*", identity) is None:
-        raise CollectorError("project origin must resolve to portable owner/repository identity")
-    return identity
-
-
-def _package_names(root: Path, head: str, implementations: str) -> list[str]:
-    output = _git(
-        root,
-        "ls-tree",
-        "-d",
-        "--name-only",
-        f"{head}:{implementations}",
-        allow_empty=True,
-    )
-    names = sorted(line.strip() for line in output.splitlines() if line.strip())
-    if not names:
-        raise CollectorError(f"no tracked implementation packages at {implementations}")
-    return names
-
-
-def _package_files(root: Path, head: str, package_path: str) -> list[str]:
-    output = _git(
-        root,
-        "ls-tree",
-        "-r",
-        "--name-only",
-        head,
-        "--",
-        package_path,
-        allow_empty=True,
-    )
-    files = sorted(line.strip() for line in output.splitlines() if line.strip())
-    if not files:
-        raise CollectorError(f"package has no tracked files at source HEAD: {package_path}")
-    return files
-
-
-def _package_activity(root: Path, head: str, package_path: str) -> tuple[str, int]:
-    output = _git(root, "log", "-1", "--format=%H%x09%ct", head, "--", package_path)
-    commit, epoch = output.split("\t", 1)
-    return commit, int(epoch)
-
-
-def _changed_package_ids(
-    root: Path, watermark: str, head: str, implementations: str
-) -> list[str]:
-    output = _git(
-        root,
-        "log",
-        "--pretty=format:",
-        "--name-only",
-        f"{watermark}..{head}",
-        "--",
-        implementations,
-        allow_empty=True,
-    )
-    prefix = implementations.split("/")
-    package_ids: set[str] = set()
-    for line in output.splitlines():
-        parts = line.strip().replace("\\", "/").split("/")
-        if len(parts) > len(prefix) and parts[: len(prefix)] == prefix:
-            package_ids.add(parts[len(prefix)])
-    return sorted(package_ids)
-
-
-def _is_excluded(package_path: str, excludes: Sequence[str]) -> bool:
-    return any(package_path == path or package_path.startswith(path.rstrip("/") + "/") for path in excludes)
-
-
-def collect_inventory(
-    *,
-    mode: str,
-    project_root: Path | str,
-    source_head: str,
-    project_watermark: str,
-    fixture_count: int = 0,
-    carry_forward: Sequence[str] = (),
-    config_path: Path | str | None = None,
-    method_root: Path | str = METHOD_ROOT,
-) -> dict[str, object]:
-    project = _require_git_repository(project_root)
-    if mode not in {"bootstrap", "steady-state"}:
-        raise CollectorError(f"unsupported collection mode: {mode}")
-    if fixture_count < 0:
-        raise CollectorError("fixture count cannot be negative")
-    if mode == "steady-state" and fixture_count:
-        raise CollectorError("steady-state mode requires fixture count 0")
-    if mode == "bootstrap" and carry_forward:
-        raise CollectorError("bootstrap mode does not accept carry-forward packages")
-    try:
-        config, config_metadata = load_repository_config(project, config_path)
-        method_state = load_method_activation(method_root)
-    except ConfigError as error:
-        raise CollectorError(str(error)) from error
-
-    resolved_head = _resolve_commit(project, source_head, "source HEAD")
-    resolved_watermark = _resolve_commit(project, project_watermark, "project watermark")
-    if not _is_ancestor(project, resolved_watermark, resolved_head):
-        raise CollectorError(
-            f"project watermark {resolved_watermark} is not an ancestor of {resolved_head}"
-        )
-    project_identity = _portable_origin_identity(project)
-    configured_identity = config.get("repository")
-    if configured_identity and configured_identity != project_identity:
-        raise CollectorError(
-            f"configured repository mismatch: expected {configured_identity}, found {project_identity}"
-        )
-
-    implementations = str(config["implementationsPath"])
-    excludes = list(config["excludePaths"])
-    rows: list[dict[str, object]] = []
-    for package_id in _package_names(project, resolved_head, implementations):
-        package_path = f"{implementations}/{package_id}"
-        if _is_excluded(package_path, excludes):
-            continue
-        files = _package_files(project, resolved_head, package_path)
-        activity_commit, activity_epoch = _package_activity(project, resolved_head, package_path)
-        semantic = [f"{package_path}/{name}" for name in ("design.md", "spec.md") if f"{package_path}/{name}" in files]
-        findings = f"{package_path}/findings.md"
-        rows.append(
-            {
-                "package_id": package_id,
-                "activity_commit": activity_commit,
-                "activity_epoch": activity_epoch,
-                "tree": _git(project, "rev-parse", f"{resolved_head}:{package_path}"),
-                "semantic_sources": semantic,
-                "supplemental_findings": [findings] if findings in files else [],
-                "supplemental_evidence": (
-                    [{"path": findings, "blob": _git(project, "rev-parse", f"{resolved_head}:{findings}")}]
-                    if findings in files
-                    else []
-                ),
-                "gate_paths": [f"{package_path}/gate.md"] if f"{package_path}/gate.md" in files else [],
-            }
-        )
-    rows.sort(key=lambda row: (-int(row["activity_epoch"]), str(row["package_id"])))
-    if fixture_count > len(rows):
-        raise CollectorError(f"fixture count {fixture_count} exceeds package count {len(rows)}")
-
-    fixtures = [str(row["package_id"]) for row in rows[:fixture_count]] if mode == "bootstrap" else []
-    known = {str(row["package_id"]) for row in rows}
-    changed = [
-        package_id
-        for package_id in _changed_package_ids(
-            project, resolved_watermark, resolved_head, implementations
-        )
-        if not _is_excluded(f"{implementations}/{package_id}", excludes)
-    ]
-    removed = sorted(set(changed) - known)
-    carry = sorted(set(carry_forward))
-    unknown_carry = sorted(set(carry) - known)
-    if unknown_carry:
-        raise CollectorError(
-            "carry-forward packages do not exist at source HEAD: " + ", ".join(unknown_carry)
-        )
-    watermark_new = sorted(set(changed) & known)
-    bootstrap_targets = [str(row["package_id"]) for row in rows if row["package_id"] not in set(fixtures)] if mode == "bootstrap" else []
-    eligible = bootstrap_targets if mode == "bootstrap" else sorted(set(watermark_new) | set(carry))
-    for row in rows:
-        package_id = str(row["package_id"])
-        row["protected_fixture"] = package_id in fixtures
-        row["carry_forward"] = package_id in carry
-        row["watermark_new"] = package_id in watermark_new
-
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise CollectorError(f"done record must be readable JSON: {path}") from error
+    if not isinstance(payload, dict):
+        raise CollectorError(f"done record must contain a JSON object: {path}")
     return {
-        "schema_version": 2,
-        "mode": mode,
-        "method_activation": method_state,
-        "config": {
-            "schema_version": config["schemaVersion"],
-            "source": config_metadata["source"],
-            "sha256": config_metadata["sha256"],
-            "implementations_path": implementations,
-        },
-        "project": {
-            "repository": project_identity,
-            "source_head": resolved_head,
-            "watermark": resolved_watermark,
-        },
-        "package_count": len(rows),
-        "fixture_count": fixture_count,
-        "protected_fixtures": fixtures,
-        "bootstrap_targets": bootstrap_targets,
-        "carry_forward": carry,
-        "watermark_new_packages": watermark_new,
-        "removed_packages": removed,
-        "eligible_removed_packages": removed,
-        "eligible_packages": eligible,
-        "packages": rows,
+        "items": payload.get("items", []) if isinstance(payload.get("items"), list) else [],
+        "retiredPackages": (
+            payload.get("retiredPackages", []) if isinstance(payload.get("retiredPackages"), list) else []
+        ),
     }
 
 
-def _render_markdown(inventory: dict[str, object]) -> str:
+def collect_inventory(
+    *, project_root: Path | str, config_path: Path | str | None = None
+) -> dict[str, Any]:
+    project = _require_git_repository(project_root)
+    try:
+        config, config_metadata = load_repository_config(project, config_path)
+    except ConfigError as error:
+        raise CollectorError(str(error)) from error
+
+    try:
+        target_branch_commit = resolve_target_branch(project, config["targetBranch"])
+        target_branch_gap = None
+    except ConfigError as error:
+        target_branch_commit = None
+        target_branch_gap = str(error)
+
+    pending_discovery = discover_pending_paths(project, config)
+    config_gaps = [
+        entry for entry in pending_discovery if entry["status"] in {"missing", "ambiguous"}
+    ]
+    pending_cold_starts = [
+        entry for entry in pending_discovery if entry["status"] == "cold-start"
+    ]
+
+    pending_registrations: list[dict[str, Any]] = []
+    pending_owners: dict[str, dict[str, set[str]]] = {}
+    for entry in pending_discovery:
+        if entry["status"] != "ok":
+            continue
+        owner = pending_owners.setdefault(
+            entry["pendingPath"], {"layers": set(), "roots": set()}
+        )
+        owner["layers"].add(entry["stableDocsLayer"])
+        owner["roots"].update(entry["stableDocsRoots"])
+    for pending_relative, owner in sorted(pending_owners.items()):
+        pending_path = resolve_project_path(project, pending_relative)
+        for table in extract_markdown_tables(pending_path):
+            for row in table["rows"]:
+                pending_registrations.append(
+                    {
+                        "pendingFile": pending_relative,
+                        "stableDocsLayers": sorted(owner["layers"]),
+                        "stableDocsRoots": sorted(owner["roots"]),
+                        "header": table["header"],
+                        "row": row,
+                    }
+                )
+
+    done_record = _load_done_record(resolve_project_path(project, config["records"]["done"]))
+    resolved_package_ids = {
+        item.get("sourcePackage")
+        for item in done_record["items"]
+        if isinstance(item, dict) and isinstance(item.get("sourcePackage"), str)
+    }
+
+    packages: list[dict[str, Any]] = []
+    for implementations_root in expand_roots(project, config["implementations"]):
+        for package_dir in sorted(p for p in implementations_root.iterdir() if p.is_dir()):
+            relative_package_dir = package_dir.relative_to(project).as_posix()
+            if path_matches_ignore(relative_package_dir, config["ignore"]) is not None:
+                continue
+            package_id = package_dir.relative_to(implementations_root).as_posix()
+            gate_path = package_dir / "gate.md"
+            has_gate = gate_path.is_file()
+            verdict = _read_gate_verdict(gate_path)
+            # A gate.md that exists but doesn't match the new `## <id> · <verdict>` heading
+            # (i.e. every legacy/pre-redesign gate.md) is NOT the same as "no verdict yet" —
+            # the collector genuinely cannot tell, so it must not silently default to "ignore".
+            gate_verdict_parsed = has_gate and verdict is not None
+            needs_manual_gate_review = has_gate and not gate_verdict_parsed
+            referenced = any(
+                package_id in cell or relative_package_dir in cell
+                for registration in pending_registrations
+                for cell in registration["row"]
+            )
+            is_terminal = gate_verdict_parsed and verdict in TERMINAL_VERDICTS
+            packages.append(
+                {
+                    "packageId": package_id,
+                    "path": relative_package_dir,
+                    "implementationsRoot": implementations_root.relative_to(project).as_posix(),
+                    "hasDesign": (package_dir / "design.md").is_file(),
+                    "hasSpec": (package_dir / "spec.md").is_file(),
+                    "hasGate": has_gate,
+                    "gateVerdict": verdict,
+                    "gateVerdictParsed": gate_verdict_parsed,
+                    "needsManualGateReview": needs_manual_gate_review and not referenced,
+                    "referencedInOpenPending": referenced,
+                    "resolvedInDoneRecord": package_id in resolved_package_ids,
+                    "gapCatchingCandidate": (
+                        is_terminal and not referenced and package_id not in resolved_package_ids
+                    ),
+                    "retirementStructuralCandidate": (
+                        is_terminal and not referenced and package_id in resolved_package_ids
+                    ),
+                }
+            )
+
+    return {
+        "schemaVersion": 3,
+        "project": {
+            "repository": config["repository"],
+            "targetBranch": config["targetBranch"],
+            "targetBranchCommit": target_branch_commit,
+        },
+        "config": {"source": config_metadata["source"], "sha256": config_metadata["sha256"]},
+        "targetBranchConfigGap": target_branch_gap,
+        "pendingDiscovery": pending_discovery,
+        "pendingConfigGaps": config_gaps,
+        "pendingColdStarts": pending_cold_starts,
+        "pendingRegistrationCount": len(pending_registrations),
+        "pendingRegistrations": pending_registrations,
+        "packageCount": len(packages),
+        "gapCatchingCandidates": [p["packageId"] for p in packages if p["gapCatchingCandidate"]],
+        "retirementStructuralCandidates": [
+            p["packageId"] for p in packages if p["retirementStructuralCandidate"]
+        ],
+        "manualGateReviewCandidates": [
+            p["packageId"] for p in packages if p["needsManualGateReview"]
+        ],
+        "packages": packages,
+    }
+
+
+def _render_markdown(inventory: dict[str, Any]) -> str:
     project = inventory["project"]
-    method = inventory["method_activation"]
-    assert isinstance(project, dict) and isinstance(method, dict)
     lines = [
         "# Stable Docs Backfill Source Inventory",
         "",
-        f"- Method: `{method['repository']}@{method['commit']}`",
-        f"- Source HEAD: `{project['source_head']}`",
-        f"- Project watermark: `{project['watermark']}`",
-        f"- Packages: {inventory['package_count']}",
-        f"- Removed packages requiring disposition: {len(inventory['removed_packages'])}",
+        f"- Repository: `{project['repository']}`",
+        f"- Target branch: `{project['targetBranch']}` -> `{project['targetBranchCommit'] or 'unresolved'}`",
+        f"- Target branch config gap: {'yes' if inventory['targetBranchConfigGap'] else 'no'}",
+        f"- Packages: {inventory['packageCount']}",
+        f"- Open pending registrations: {inventory['pendingRegistrationCount']}",
+        f"- Config gaps (ambiguous/missing `_pending.md`): {len(inventory['pendingConfigGaps'])}",
+        f"- Pending cold starts (owner decision, non-blocking): {len(inventory['pendingColdStarts'])}",
+        f"- Gap-catching candidates: {len(inventory['gapCatchingCandidates'])}",
+        f"- Package Retirement structural candidates: {len(inventory['retirementStructuralCandidates'])}",
+        f"- Needs manual gate review (gate.md present but not machine-parseable): {len(inventory['manualGateReviewCandidates'])}",
         "",
-        "| Package | Activity commit | Semantic sources | Findings | Fixture | Carry-forward | Watermark-new |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| Package | Gate verdict | Design | Spec | Open pending ref | Gap-catching | Retirement candidate | Manual gate review |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
-    packages = inventory["packages"]
-    assert isinstance(packages, list)
-    for row in packages:
-        assert isinstance(row, dict)
+    for row in inventory["packages"]:
         lines.append(
-            "| {package_id} | `{activity_commit}` | {semantic} | {findings} | {fixture} | {carry} | {new} |".format(
-                package_id=row["package_id"],
-                activity_commit=row["activity_commit"],
-                semantic="<br>".join(row["semantic_sources"]) or "none",
-                findings="<br>".join(row["supplemental_findings"]) or "none",
-                fixture="yes" if row["protected_fixture"] else "no",
-                carry="yes" if row["carry_forward"] else "no",
-                new="yes" if row["watermark_new"] else "no",
+            "| {package_id} | {verdict} | {design} | {spec} | {referenced} | {gap} | {retire} | {manual} |".format(
+                package_id=row["packageId"],
+                verdict=row["gateVerdict"] or ("unparsed" if row["hasGate"] else "none"),
+                design="yes" if row["hasDesign"] else "no",
+                spec="yes" if row["hasSpec"] else "no",
+                referenced="yes" if row["referencedInOpenPending"] else "no",
+                gap="yes" if row["gapCatchingCandidate"] else "no",
+                retire="yes" if row["retirementStructuralCandidate"] else "no",
+                manual="yes" if row["needsManualGateReview"] else "no",
             )
         )
     return "\n".join(lines) + "\n"
@@ -332,13 +277,8 @@ def _path_under(root: Path, candidate: Path) -> bool:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("bootstrap", "steady-state"), required=True)
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--config", type=Path)
-    parser.add_argument("--source-head", required=True)
-    parser.add_argument("--project-watermark", required=True)
-    parser.add_argument("--fixture-count", type=int, default=0)
-    parser.add_argument("--carry-forward", action="append", default=[])
     parser.add_argument("--format", choices=("json", "markdown"), default="json")
     parser.add_argument("--output", type=Path)
     return parser
@@ -347,16 +287,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Iterable[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        inventory = collect_inventory(
-            mode=args.mode,
-            project_root=args.project_root,
-            config_path=args.config,
-            source_head=args.source_head,
-            project_watermark=args.project_watermark,
-            fixture_count=args.fixture_count,
-            carry_forward=args.carry_forward,
+        inventory = collect_inventory(project_root=args.project_root, config_path=args.config)
+        rendered = (
+            json.dumps(inventory, indent=2, sort_keys=True) + "\n"
+            if args.format == "json"
+            else _render_markdown(inventory)
         )
-        rendered = json.dumps(inventory, indent=2, sort_keys=True) + "\n" if args.format == "json" else _render_markdown(inventory)
         if args.output is None:
             sys.stdout.write(rendered)
         else:
