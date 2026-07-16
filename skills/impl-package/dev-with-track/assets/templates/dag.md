@@ -1,68 +1,66 @@
-# [Implementation Name] DAG
+# [实施名称] 任务 DAG
 
-> Create this artifact only when `Composition: ..., dag=true`. Its field semantics,
-> readiness and validation are defined by the shared
-> [Impl-Package Composition Contract](../../../skills/impl-package/references/impl-package-composition-contract.md).
+> 仅当 `Composition: ..., dag=true` 时创建本产物。字段语义、就绪规则与校验要求由共享的 [Impl-Package Composition Contract](../../../skills/impl-package/references/impl-package-composition-contract.md) 定义。
 
 状态：[PENDING / READY / RUNNING / NEEDS_SEAM / BLOCKED / FAILED / NEEDS-REVALIDATION / DONE / WAIVED / SUPERSEDED / RETIRED]
-创建：[YYYY-MM-DD]
-Attempt ID：
-Plan Revision：P<n>
+创建日期：[YYYY-MM-DD]
+执行尝试 ID（Attempt ID）：
+计划修订（Plan Revision）：P<n>
 <!-- plan 升级到更新的 P 号后，本 DAG 若仍标着旧 P 号，视为 NEEDS-REVALIDATION。先按 P delta 定位受影响节点；未受影响节点可批量确认后机械更新本字段，不重画整张 DAG。 -->
-Spec：[spec.md](spec.md)
-Plan：[current attempt plan](<plan-path>)
-Findings：[findings.md](findings.md)
-Gate：[gate.md](gate.md)
+规格：[spec.md](spec.md)
+计划：[当前执行尝试计划](<plan-path>)
+发现记录：[findings.md](findings.md)
+门禁：[gate.md](gate.md)
 
-`dag.md` is the canonical execution-state source only for an earned DAG. It is not a ticket acceptance source. If tickets are also earned, any ticket state below is a read-only projection that names its `tickets/<ticket>.md` source.
+`dag.md` 仅在 DAG 确实 earned 时作为规范执行状态源，不是 ticket 验收事实源。如果同时 earned tickets，下文的 ticket 状态只能是只读投影，并且必须标明其 `tickets/<ticket>.md` 来源。
 
-## Contract References
+## 合同引用
 
-- Shared composition contract: [impl-package-composition-contract.md](../../../skills/impl-package/references/impl-package-composition-contract.md)
-- Spec revision and seam IDs:
-- [DTO / route prop / external smoke protocol source]
+- 共享组合合同：[impl-package-composition-contract.md](../../../skills/impl-package/references/impl-package-composition-contract.md)
+- Spec 修订与 seam ID：
+- [DTO / route prop / 外部 smoke 协议来源]
 
-## Task Records
+## 任务记录
 
-### T1: [task title]
+### T1：[任务标题]
 
-- Depends on: [Tn / none]
-- Document order: [number]
-- Owner: [main session / named owner]
-- Status: [PENDING / READY / RUNNING / NEEDS_SEAM / BLOCKED / FAILED / NEEDS-REVALIDATION / DONE / WAIVED / SUPERSEDED]
-- Done when: [specific evidence]
-- contributes-to: [<ticket-id>:<AC-id> / spec:<AC-id>]
-- enables: [<acceptance-target> / none]
-- seam: [none / <seam-id>]
-- seam execution owner: [main session / named owner; `none` only when seam is none]
-- Progress ledger: [tasks/T1-progress.md / N/A]
+- 依赖：[Tn / 无]
+- 文档顺序：[数字]
+- Owner：[主会话 / 具名 owner]
+- 状态：[PENDING / READY / RUNNING / NEEDS_SEAM / BLOCKED / FAILED / NEEDS-REVALIDATION / DONE / WAIVED / SUPERSEDED]
+- 完成条件：[具体证据]
+- 贡献目标（contributes-to）：[<ticket-id>:<AC-id> / spec:<AC-id>]
+- 解锁目标（enables）：[<acceptance-target> / 无]
+- 执行 seam：[无 / <seam-id>]
+- seam 执行 owner：[主会话 / 具名 owner；仅当 seam 为无时可填 `none`]
+- 进度账本：[tasks/T1-progress.md / N/A]
 
-`contributes-to`, `enables`, and seam fields are validated against the shared contract; do not duplicate a spec seam contract or acceptance owner here.
+`contributes-to`、`enables` 和 seam 字段必须按共享合同校验；不要在此复制 spec 中的 seam 合同或验收 owner。
 
-## DAG Board
+## DAG 看板
 
-| Task | Depends on | Owner | Status | Readiness / blocker | Evidence | Progress | Seam |
+| 任务 | 依赖 | Owner | 状态 | 就绪条件 / blocker | 证据 | 进度 | Seam |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | [Tn / none] | [owner] | [state] | [prerequisite] | [path/link] | [ledger/N/A] | [seam ID/none] |
+| T1 | [Tn / 无] | [owner] | [状态] | [前置条件] | [路径/链接] | [账本/N/A] | [seam ID/无] |
 
-## Ticket Status Projection (only tickets=true)
+## Ticket 状态投影（仅 tickets=true）
 
-> Projection only. Acceptance fact source remains the linked ticket file; update it there.
+> 这里只做投影。验收事实源仍是链接的 ticket 文件；状态应在该文件中更新。
 
-| Ticket | Acceptance source | Projected execution view | Last checked |
+| Ticket | 验收来源 | 执行视图投影 | 最后检查时间 |
 | --- | --- | --- | --- |
-| [ticket-id] | [tickets/<ticket>.md](tickets/<ticket>.md) | [state] | [YYYY-MM-DD] |
+| [ticket-id] | [tickets/<ticket>.md](tickets/<ticket>.md) | [状态] | [YYYY-MM-DD] |
 
-## Verification Gates
+## 验证门（Verification Gates）
 
 <!-- 只记录 task/DAG 特有的前置条件与到 plan Planned Verification 的指针；不要复制通用 policy checklist。 -->
 
-- Plan verification source: [current attempt plan](<plan-path>#planned-verification)
-- Task/DAG-specific prerequisite or external gate:
+- Plan 验证来源：[当前执行尝试计划](<plan-path>#planned-verification)
+- Task/DAG 特有前置条件或外部门禁：
 
-## Validation and Last Update
+## 校验与最后更新
 
-- [ ] All `Depends on` references resolve and the task graph is acyclic.
-- [ ] Every task acceptance target resolves to a ticket/spec AC.
-- [ ] Every execution seam has a matching spec seam contract and execution owner.
-- [YYYY-MM-DD] [meaningful status/evidence/revalidation change]
+- [ ] 所有 `Depends on` 引用均可解析，且任务图无环。
+- [ ] 每个任务验收目标都能解析到 ticket/spec AC。
+- [ ] 每个 execution seam 都有对应的 spec seam 合同和执行 owner。
+- [YYYY-MM-DD] [有意义的状态/证据/重新校验变化]

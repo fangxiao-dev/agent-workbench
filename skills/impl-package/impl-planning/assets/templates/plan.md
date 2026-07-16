@@ -1,91 +1,91 @@
-# [Attempt Name] Implementation Plan
+# [执行尝试名称] 实施计划
 
-Created:
-Attempt ID: <initial | YYYYMMDD-HHMM-patch-topic>
-Design Revision: D<n>
-Spec Revision: S<n>
-Plan Revision: P<n>
-Composition: tickets=<true|false>, dag=<true|false>
-Package ID:
-Binding Validation at Publication: Pending | Passed
-Design: [design.md](design.md) | lightweight Design record in spec
-Spec: [spec.md](spec.md)
-Gate Ledger: [gate.md](gate.md)
+创建时间（Created）：
+执行尝试 ID（Attempt ID）：<initial | YYYYMMDD-HHMM-patch-topic>
+设计修订（Design Revision）：D<n>
+规格修订（Spec Revision）：S<n>
+计划修订（Plan Revision）：P<n>
+执行组合（Composition）：tickets=<true|false>, dag=<true|false>
+任务包 ID（Package ID）：
+发布时绑定校验（Binding Validation at Publication）：Pending | Passed
+设计：[design.md](design.md) | spec 中的轻量 Design 记录
+规格：[spec.md](spec.md)
+门禁账本：[gate.md](gate.md)
 
 > design/spec 是当前 contract SoT。本 plan 只记录本 attempt 的执行策略、验证计划和过程证据。terminal gate verdict 后冻结。
 
-## Summary
+## 摘要
 
-## Inputs And Authority
+## 输入与权威来源
 
-- Requirement / patch source:
-- Current module knowledge checked:
-- Focused code/test facts:
-- D/S gate evidence:
-- Previous terminal gate entry (patch only):
+- 需求 / patch 来源：
+- 已检查的当前 module knowledge：
+- 聚焦代码 / 测试事实：
+- D/S gate 证据：
+- 上一个 terminal gate entry（仅 patch）：
 - Module Knowledge Watermark（本 attempt 打开时，design/spec 引用的每份 module-knowledge 文件的 `git log -1` commit SHA；下次 attempt 打开时用来对账是否已被别的改动推进）：
 
-## Composition Decision
+## 执行组合决策
 
-- Tickets earned: yes | no
-- Tickets rationale:
-- DAG earned: yes | no
-- DAG rationale:
-- Execution-state source:
-- Acceptance-state source:
+- 是否 earned tickets：yes | no
+- Tickets 理由：
+- 是否 earned DAG：yes | no
+- DAG 理由：
+- 执行状态来源：
+- 验收状态来源：
 
-## Execution Strategy
+## 执行策略
 
-- Ordered implementation approach:
-- Concrete migration/integration operations:
-- Rollout/rollback operations:
-- Dependencies and prerequisites:
-- Target branch:
-- Integration order: gate-before-merge | owner-approved pre-gate integration
-- Pre-gate integration owner decision evidence: <N/A | evidence>
+- 有序实施方式：
+- 具体迁移 / 集成操作：
+- Rollout / rollback 操作：
+- 依赖与前置条件：
+- 目标分支：
+- 集成顺序：gate-before-merge | owner-approved pre-gate integration
+- Gate 前集成的 owner 决策证据：<N/A | evidence>
 
 <!-- 稳定 interface、seam contract、compatibility、global constraints 和 Acceptance Semantics 不写在这里；缺失时先修订 spec。 -->
 
-## Planned Verification
+## 计划验证
 
-| Policy / scenario source | Selected check | Expected result | Evidence owner |
+| Policy / 场景来源 | 选定检查 | 预期结果 | 证据 owner |
 | --- | --- | --- | --- |
 
 <!-- 引用权威 policy；不要复制通用 Data Safety、UI Evidence、Real Route Safety checklist。 -->
 
-## Execution Record
+## 执行记录
 
-<!-- Append-only。旧 entry 不改；补证新增 ER-n。 -->
+<!-- 仅允许追加。旧 entry 不改；补证新增 ER-n。 -->
 
 ### ER-<n>
 
-- Recorded at:
-- Design / Spec / Plan revision:
-- Check or command:
-- Result:
-- Evidence path:
-- Residual risk / follow-up:
+- 记录时间：
+- Design / Spec / Plan 修订：
+- 检查或命令：
+- 结果：
+- 证据路径：
+- 剩余风险 / 后续动作：
 
-## Attempt Artifact Handoff
+## 执行尝试产物交接
 
-- Ticket set: <paths | N/A>
-- DAG: <dag.md or patch-dag path | N/A>
-- Progress ledger: <path | N/A until trigger>
-- Findings inbox: [findings.md](findings.md)
+- Ticket 集合：<paths | N/A>
+- DAG：<dag.md or patch-dag path | N/A>
+- 进度账本：<path | N/A until trigger>
+- 发现 inbox：[findings.md](findings.md)
 
-## Plan Revision History
+## 计划修订历史
 
-<!-- Current and historical P content bindings live in the internal .impl-package/revision-bindings.json sidecar. Do not require the owner to read it. Any earned ticket/DAG still citing a superseded P<n> here is NEEDS-REVALIDATION until reconciled. -->
+<!-- 当前和历史 P 内容绑定保存在内部 `.impl-package/revision-bindings.json` sidecar 中，不得要求 owner 阅读它。仍引用已被取代 P<n> 的 earned ticket/DAG 在完成对账前均为 NEEDS-REVALIDATION。 -->
 
-| Previous | New | Strategy/Composition/verification change | Reason | Artifact relocation | Date |
+| 前一修订 | 新修订 | 策略 / Composition / 验证变化 | 原因 | 产物迁移 | 日期 |
 | --- | --- | --- | --- | --- | --- |
 
-## Patch Delta
+## Patch 增量
 
-<!-- Initial attempt 删除本节。 -->
+<!-- 初始 attempt 删除本节。 -->
 
-- Previous terminal gate entry:
-- Drift classification: implementation-only | behavior contract | design direction
-- Reused or updated D/S revisions:
-- Delta from accepted behavior:
-- Regression scope:
+- 上一个 terminal gate entry：
+- Drift 分类：implementation-only | behavior contract | design direction
+- 复用或更新的 D/S 修订：
+- 相对已验收行为的增量：
+- 回归范围：

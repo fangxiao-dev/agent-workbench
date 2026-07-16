@@ -9,6 +9,8 @@ Route durable project knowledge and documentation to the right maintained home. 
 
 This skill is the parent entrypoint for `docs/hands-on-knowledge/` and a router for adjacent long-lived documentation layers. It classifies incoming material, decides which maintainer skill should handle hands-on knowledge, and keeps project docs coherent without duplicating child-skill rules.
 
+**Not for physical repository reorganization.** Moving, renaming, or relocating an already-approved canonical doc directory (for example a `docs/top-level-knowledge/` → `docs/system-knowledge/` migration) is mechanical execution against a design that has already been decided elsewhere — it needs no content classification or durability judgment. Do not load this skill for that kind of task; follow the migration's own plan (e.g. `backfill-stable-docs`'s Physical Migration Plan) directly: grep for references, `git mv`, fix links, verify. Loading a knowledge-routing skill for a pure rename risks it making unrequested content decisions outside the approved scope.
+
 Hands-on knowledge is reverse-indexed memory for future problem solving: experience, traps, symptoms, root causes, and fast lookup paths that help during implementation, debugging, verification, migration, recovery, or codebase orientation.
 
 ## Load Extra Context
@@ -56,15 +58,12 @@ Use both child skills when a session produced both implementation lessons and de
 
 ## Intent And Contract Routing
 
-Route outside child skills when the item is not hands-on implementation or debug knowledge:
+Route outside child skills when the item is not hands-on implementation or debug knowledge.
 
-`backfill-stable-docs` 是公共入口 Skill。audit、apply、verify 是由入口按意图加载的 runbook 状态，不是可分别安装或调用的 Skill；在 Codex 里调用 `$backfill-stable-docs`。
+`backfill-stable-docs` is the public entrypoint Skill and owns the canonical routing taxonomy for durable product/system/context/module knowledge (PRD, architecture, behavior contracts, canonical vocabulary) — its Stable Destination Rules and `constraint-extraction-and-routing.md` are the single source of truth for that taxonomy; this skill does not keep a second copy of it. audit/apply/verify are runbook states the entrypoint loads by intent, not separately installable Skills; in Codex call `$backfill-stable-docs`. When a candidate item is a durable product/system/context/module-level statement, hand it to `backfill-stable-docs` (or, for items sourced from an active implementation package before its gate closes, follow that package's own Stage 7 `_pending.md` registration — see `impl-package-composition-contract.md` §7) instead of deciding its destination here.
 
-- journey/product-level intent -> top-level PRDs under `docs/top-level-knowledge/`
-- module-level intent -> `module-prd`; update `docs/module-knowledge/<module>/prd.md` only when it already exists, otherwise register in `docs/module-knowledge/_pending.md`
-- module behavior contracts -> `docs/module-knowledge/<module>/spec.md` or a module subdomain contract (`module-spec`)
-- project language and canonical vocabulary -> root `CONTEXT.md` (`context-language`)
-- stable architecture, milestone, or technology-stack facts -> `docs/top-level-knowledge/`
+This skill still owns routing for the layers `backfill-stable-docs` does not cover:
+
 - new or changed requirements needing traceability, review, or owner decisions -> `docs/exchange/req-*.md`
 - broad roadmap or milestone strategy -> `docs/epic-plans/` when the repo uses it
 - point-in-time change design and temporary execution plans -> `docs/implementations/<slug>/`
@@ -75,9 +74,7 @@ Use two questions for durable deltas:
 1. If the implementation were completely replaced but the user value stayed the same, must the statement still hold? If yes, it is intent.
 2. Can tests, interfaces, state queries, or failure drills directly verify it? If yes, it is a behavior contract.
 
-Split statements that contain both why and how; do not duplicate the same statement in PRD and spec. New/changed requirements generally flow: `req` inbox -> top-level or module PRD after acceptance -> implementation-local design when a change needs design -> module spec after verified behavior becomes current contract -> hands-on only for reusable implementation/debug lessons.
-
-Module PRDs are lazy. Ordinary gates and project-knowledge maintenance must register a `module-prd` delta in `docs/module-knowledge/_pending.md` whenever the module `prd.md` does not exist; only the owner-reviewed backfill apply runbook may create the first file. Normal maintenance may update an existing `prd.md`. Evidence for first creation must come from a top-level PRD, approved design, owner decision, or confirmed gate, never code alone, and the content must establish Purpose, users or journeys, Outcomes, Scope/Non-goals, and links to its top-level PRD and module spec. Until the top-level PRD journey restructure is complete, persist each new `top-level-prd` delta in the project's `docs/module-knowledge/_pending.md` with destination=`top-level-prd`, source, statement, and authority instead of expanding the existing large PRDs.
+Split statements that contain both why and how; do not duplicate the same statement in PRD and spec. New/changed requirements generally flow: `req` inbox -> PRD after acceptance (via `backfill-stable-docs`) -> implementation-local design when a change needs design -> spec after verified behavior becomes current contract (via `backfill-stable-docs`) -> hands-on only for reusable implementation/debug lessons.
 
 ## Durability Gate
 

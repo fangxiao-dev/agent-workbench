@@ -1,80 +1,80 @@
-# [Implementation Name] Design Research
+# [实施名称] 设计研究
 
-Status: Draft | Design Gate Passed | Design Gate Blocked
-Created:
-Design Revision: D<n>
-Requirement source:
-Topic slug:
-Package ID:
-Canonical package: `docs/implementations/<package-id>/`
+状态（Status）：Draft | Design Gate Passed | Design Gate Blocked
+创建时间（Created）：
+设计修订（Design Revision）：D<n>
+需求来源（Requirement source）：
+主题 slug（Topic slug）：
+任务包 ID（Package ID）：
+规范任务包路径（Canonical package）：`docs/implementations/<package-id>/`
 
-This is the current design choices and rationale SoT while the package is active, not the behavior contract. Replace superseded choices in the current body and record the revision in Revision History; Git preserves the full old body. Behavior, state, interface, failure, and acceptance semantics belong only in `spec.md`. When Design is blocked, use this file and do not create `spec.md`. `Status: Design Gate Passed` requires `Result: PASSED`; `Status: Design Gate Blocked` requires `Result: BLOCKED`.
+本文是任务包活动期间当前设计选择与理由的事实源，不是行为合同。当前正文只保留最新选择，被取代的选择写入修订历史，完整旧正文由 Git 保存。行为、状态、接口、失败和验收语义只属于 `spec.md`。Design 被阻塞时使用本文件，不创建 `spec.md`。`Status: Design Gate Passed` 必须对应 `Result: PASSED`；`Status: Design Gate Blocked` 必须对应 `Result: BLOCKED`。
 
-## 1. Destination
+## 1. 目标落点
 
-- Intended outcome:
-- Affected system boundary:
-- Contract handoff:
+- 预期结果：
+- 受影响的系统边界：
+- 合同交接点：
 
-## 2. Requirement / Outcomes
+## 2. 需求 / 结果
 
-- Focused requirement:
-- User or system outcomes:
-- Success signals:
+- 聚焦需求：
+- 用户或系统结果：
+- 成功信号：
 
-## 3. Knowledge Sources / Current State
+## 3. 知识来源 / 当前状态
 
-- Authority sources checked:
-- Focused code/test facts:
-- Expected knowledge absent:
-- Conflicts or drift:
+- 已检查的权威来源：
+- 聚焦代码 / 测试事实：
+- 预期但缺失的知识：
+- 冲突或 drift：
 
-## 4. Constraints / Non-goals
+## 4. 约束 / 非目标
 
-- Constraints:
-- Non-goals:
-- Safety or external-mutation boundary:
+- 约束：
+- 非目标：
+- 安全或外部 mutation 边界：
 
-## 5. Options / Trade-offs
+## 5. 选项 / 权衡
 
-| Option | Benefits | Costs / Risks | Repository fit |
+| 选项 | 收益 | 成本 / 风险 | 与仓库的契合度 |
 | --- | --- | --- | --- |
 
-## 6. Decisions / Rationale
+## 6. 决策 / 理由
 
-<!-- Record selected choices and why. Do not duplicate behavior contracts from spec.md. -->
+<!-- 记录选中的方向及其理由。不要复制 spec 中的行为合同。 -->
 
-| Decision | Rationale | Owner | Date |
+| 决策 | 理由 | Owner | 日期 |
 | --- | --- | --- | --- |
 
-## 7. Open Questions / Owner Decisions / Readiness
+## 7. 开放问题 / Owner 决策 / 就绪度
 
-### Open Questions
+### 开放问题
 
-| Question | Owner | Resolution / Deferral | Effect on Spec |
+| 问题 | Owner | 解决方式 / 延后安排 | 对 Spec 的影响 |
 | --- | --- | --- | --- |
 
-### Design Gate
+### Design 门
 
-- Result: PASSED | BLOCKED
-- Destination answerable:
-- Repository fit evidenced:
-- Material choices decided:
-- Open Questions non-blocking for Spec:
-- Owner decisions recorded:
-- Evidence / remaining blocker:
-- Assessed by / date:
+- 结果（Result）：PASSED | BLOCKED
+- 目标落点可回答：
+- 仓库契合度已有证据：
+- 实质选择已决定：
+- 开放问题不阻塞 Spec：
+- Owner 决策已记录：
+- 证据 / 剩余 blocker：
+- 评估人 / 日期：
 
-## 8. Backfill Candidates
+## 8. Backfill 候选
 
-<!-- Non-binding research hints only. This is not durable-delta capture and does not authorize stable-document edits. Canonical capture is gate Durable Deltas -> _pending.md. -->
+<!-- 这里只记录非约束性的研究提示，不是 durable-delta capture，也不授权修改稳定文档。规范捕获发生在 gate Durable Deltas -> `_pending.md`。 -->
 
-| Possible destination | Candidate insight | Why it might endure |
+| 可能的目标位置 | 候选洞见 | 可能长期有效的原因 |
 | --- | --- | --- |
 
-## Revision History
+## 修订历史
 
-<!-- Current and historical D revision content bindings live in the internal .impl-package/revision-bindings.json sidecar; do not put this file's own hash here or require the owner to read the sidecar. -->
+<!-- 当前和历史 D 修订的内容绑定保存在内部 `.impl-package/revision-bindings.json` sidecar 中；不要在本文写入自身 hash，也不得要求 owner 阅读 sidecar。 -->
 
-| Previous | New | Change summary | Authority | Date | Superseded note |
+| 前一修订 | 新修订 | 变化摘要 | 权威来源 | 日期 | 被取代说明 |
 | --- | --- | --- | --- | --- | --- |

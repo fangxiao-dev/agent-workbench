@@ -92,7 +92,7 @@ gate evaluation 前逐项分流 findings：
 
 ## Append-only gate ledger
 
-package 只使用 gate.md。每次 evaluation 在 # Gate Ledger 标题之后插入最新 entry；旧 entry 不修改。
+package 只使用 gate.md。每次 evaluation 在 # Gate Ledger 标题之后插入最新 entry；旧 entry 不修改。文件最顶部允许保留一行可变的"当前状态一览"（不属于 ledger 本身），可以随时改写以跟最新 entry 保持一致，但不能单独携带 entry 里没有的判断或证据；发现和最新 entry 不一致时改这一行去对齐，不能反过来改 entry（见 impl-package-composition-contract.md §7）。
 
 entry ID 为 <attempt-id>-G<n>，同 attempt 从 G1 取已有最大编号加一且不复用。entry 的可读正文必须包含 Attempt ID、Supersedes、evaluated time、D/S/P revision set、binding validation 结论、Composition、comparison point、一个或多个 plan ER anchor、blocker/deferred item、verdict reason 与 Durable Deltas。精确 artifact blob OID 与 sidecar 路径只放 HTML comment 形式的 machine audit metadata。
 

@@ -1,6 +1,6 @@
 ---
 target: skills/impl-package
-updated: 2026-07-15
+updated: 2026-07-16
 ---
 
 ## 原则
@@ -11,17 +11,9 @@ updated: 2026-07-15
 - [待验证] JSON 与跨环节 contract 只承载追踪真正需要的最小事实；容易从单一权威输入可靠推理、且错误推理不会造成高影响 false PASS 的内容，不要求重复投影、严格 binding 或额外审批。（证据: R4）
 - [待验证] 变更失效范围必须与实际影响面一致：调整方向、证据修正和能力减法只复验直接受影响的 contract/artifact；只有业务结果、Acceptance Semantics、执行策略、Composition、安全约束或 mutation authority 发生实质变化时才重新规划或扩大复验。（证据: R4）
 - [待验证] exact-blob 只保护 contract 语义而非排版噪声：可证明零语义影响的 editorial correction 更新同 alias binding evidence；无法证明时保守升级 revision 与 Gate。（证据: R5）
+- [待验证] 优化优先增加可跨场景复用的判断约束，不以单一案例引入分类法、表格或新 artifact；只有现有语言无法表达真实高影响差异时才增加结构。（证据: R6）
 
 ## 决策记录（滚动，最近 ≤5 轮）
-
-### R1 · 2026-07-14
-
-- 采纳「外部 revision binding」— 用 package-local manifest 消除 artifact 自身记录自身 commit SHA 的循环依赖。
-- 采纳「派生 attempt lifecycle」— 不再手工维护 plan 的 Draft / Active / Frozen 状态，并显式识别 integrated-but-gate-open。
-- 采纳「轻量 manual readiness 模板」— 用户原话：分 optional 和真正必须的，让 agent 自行挑选，不要做太重。
-- 采纳「JSON 内部化、Markdown 自足交付」— JSON 可作为机器处理中间态或 sidecar；owner-facing Markdown 按职责提供可读投影，canonical handoff 无需打开 JSON 即可读懂当前 revision、lifecycle、integration 与 verification 结论。
-- 采纳「本地 skill 中文行文」— 保留英文术语 token，不改 vendored 第三方 skill。
-- 暂不实施「planning review 批量决策」— 用户将单独规划后续工作。
 
 ### R2 · 2026-07-14
 
@@ -44,3 +36,8 @@ updated: 2026-07-15
 ### R5 · 2026-07-15
 
 - 采纳「editorial rebinding」— 用户明确要求 exact-blob 区分 semantic revision 与 editorial correction：后者仅更新 binding evidence，不重跑 Gate；语义不明或实质变化仍按 Gate 路由。
+
+### R6 · 2026-07-16
+
+- 否决「输入角色分类」— 用户原话：太复杂、太 specific；优化应面向通用的方法论和约束。
+- 采纳「交付路径与验证路径不得混同」— 在既有 Design Gate 增加一条通用判断约束，避免为单一案例新增分类法、表格或 artifact。

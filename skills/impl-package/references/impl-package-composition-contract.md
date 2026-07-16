@@ -194,6 +194,8 @@ findings.md 是发现 inbox。gate evaluation 前必须分流：设计决定进 
 
 package 永远只有一个 gate.md。它是 newest-first 的 append-only gate evaluation ledger；每次 evaluation 在文件顶部说明之后插入新 entry，旧 entry 不修改。
 
+gate.md 允许在正式 ledger（本节格式的 entry 序列）之前保留至多一行可变的"当前状态一览"（例如 `状态：<最新 entry 的 verdict 人话摘要>`），方便 owner 一眼看到当前状态，不必翻到最新 entry。这一行不属于 append-only ledger，可以随时改写，但只能用来复述最新 entry 已经写明的内容——不能携带任何最新 entry 里找不到的判断或证据。发现这行和最新 entry 不一致时，以最新 entry 为准，且应该把这行改到和最新 entry 一致，而不是反过来改 entry。除这一行外，ledger 正文（entry 块本身，含历史遗留下来、格式早于本节模板的旧 gate.md 里的 Gate Decision/Verification 等判决与证据内容）保持严格 append-only，旧内容一律不回改，只能通过新 entry 补充或更正。
+
 每个 entry 使用 &lt;attempt-id&gt;-G&lt;n&gt;，并记录：
 
 ~~~markdown

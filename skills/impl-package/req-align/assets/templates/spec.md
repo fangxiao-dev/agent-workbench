@@ -1,92 +1,92 @@
-# [Implementation Name] Specification
+# [实施名称] 规格
 
-Status: Draft | Spec Gate Passed | Spec Gate Blocked
-Created:
-Design Revision: D<n>
-Spec Revision: S<n>
-Requirement source:
-Topic slug:
-Package ID:
-Canonical package: `docs/implementations/<package-id>/`
-Design: [design.md](design.md) | No standalone design file
+状态（Status）：Draft | Spec Gate Passed | Spec Gate Blocked
+创建时间（Created）：
+设计修订（Design Revision）：D<n>
+规格修订（Spec Revision）：S<n>
+需求来源（Requirement source）：
+主题 slug（Topic slug）：
+任务包 ID（Package ID）：
+规范任务包路径（Canonical package）：`docs/implementations/<package-id>/`
+设计（Design）：[design.md](design.md) | 无独立 design 文件
 
-## Design Gate Record
+## Design 门记录（Design Gate Record）
 
-<!-- Complete only after Design PASSED. Without design.md, this is the canonical minimal evidence that the mandatory lightweight Design step occurred. A Design BLOCKED path uses design.md and does not generate this spec. Therefore the Design Gate Result in an existing spec can only be PASSED. Status: Spec Gate Passed requires the Spec Gate Result PASSED; Status: Spec Gate Blocked requires the Spec Gate Result BLOCKED. -->
+<!-- 仅在 Design PASSED 后填写。没有 design.md 时，本节是必经 lightweight Design 步骤的规范最小证据。Design BLOCKED 路径使用 design.md，不生成本 spec。因此，已存在 spec 中的 Design Gate Result 只能是 PASSED。`Status: Spec Gate Passed` 要求 Spec Gate Result 为 PASSED；`Status: Spec Gate Blocked` 要求 Spec Gate Result 为 BLOCKED。 -->
 
-- Result: PASSED
-- Destination and intended outcome:
-- Authority/current-state evidence:
-- Selected direction and rationale:
-- Open Questions disposition:
-- Owner Decisions (resolved / outstanding):
-- Evidence location: design.md | this record
-- Assessed by / date:
+- 结果（Result）：PASSED
+- 目标落点与预期结果：
+- 权威来源 / 当前状态证据：
+- 选定方向与理由：
+- 开放问题处理结果：
+- Owner 决策（已解决 / 未解决）：
+- 证据位置：design.md | 本记录
+- 评估人 / 日期：
 
-## Spec Gate Record
+## Spec 门记录（Spec Gate Record）
 
-- Result: PASSED | BLOCKED
-- Eight sections complete:
-- Acceptance evidence mapped:
-- Blocking decisions / ambiguity:
-- Approved by / date:
+- 结果（Result）：PASSED | BLOCKED
+- 八个章节完整：
+- 验收证据已映射：
+- 阻塞决策 / 歧义：
+- 批准人 / 日期：
 
-## 1. Scope / Authority / Non-goals
+## 1. 范围 / 权威来源 / 非目标
 
-- Scope:
-- Authority and source precedence:
-- Non-goals:
-- Assumptions requiring confirmation:
+- 范围：
+- 权威来源与优先级：
+- 非目标：
+- 需要确认的假设：
 
-## 2. Terms / Data Contracts
+## 2. 术语 / 数据合同
 
-- Domain terms:
-- Inputs, outputs, identities, and invariants:
-- Schema, normalization, precision, and ownership semantics:
-- Conditional evidence-integrity contract (only when an acceptance conclusion depends on authoritative evidence, publication/consumption state, compatibility projection, external side effect, or state-dependent public output): primary assertion and comparison unit; source authority and private-field exclusions; actual-versus-declared bounds; complete frozen-format admission; reader authority after incomplete publication; expected operational failure surface and stable public shape.
+- 领域术语：
+- 输入、输出、身份与不变量：
+- Schema、归一化、精度与 ownership 语义：
+- 条件化 evidence-integrity 合同（仅当验收结论依赖权威证据、发布/消费状态、兼容投影、外部副作用或随状态变化的公共输出时填写）：主要断言与比较单元；来源权威与私有字段排除；实际范围与声明范围；完整 frozen-format admission；发布不完整后 reader 可相信的权威状态；预期 operational failure 表面与稳定公共 shape。
 
-## 3. Behavior / State Machine / Workflow
+## 3. 行为 / 状态机 / 工作流
 
-| Actor / System | Condition / State | Action / Event | Result / Next State |
+| Actor / 系统 | 条件 / 状态 | 动作 / 事件 | 结果 / 下一状态 |
 | --- | --- | --- | --- |
 
-## 4. Module Boundaries / Dependencies
+## 4. 模块边界 / 依赖
 
-- Owning modules and responsibilities:
-- Interfaces and seams:
-- Upstream/downstream dependencies:
-- Compatibility or migration window:
+- Owning 模块及其职责：
+- 接口与 seam：
+- 上游 / 下游依赖：
+- 兼容或迁移窗口：
 
-## 5. Error Boundaries / Failure Recovery
+## 5. 错误边界 / 失败恢复
 
-| Failure mode | Observable effect | Containment | Retry / Compensation / Recovery | Owner |
+| 失败模式 | 可观察影响 | 隔离方式 | 重试 / 补偿 / 恢复 | Owner |
 | --- | --- | --- | --- | --- |
 
-## 6. Constraint Contracts
+## 6. 约束合同
 
-- Prohibited behavior:
-- Trust and permission boundaries:
-- Precision / normalization obligations:
-- External provider obligations:
-- Negative dependencies (must not depend on):
+- 禁止行为：
+- Trust 与 permission 边界：
+- 精度 / 归一化义务：
+- 外部 provider 义务：
+- 负向依赖（不得依赖）：
 
-## 7. Acceptance Semantics / Verification Evidence
+## 7. 验收语义 / 验证证据
 
-| AC ID | Promised outcome / constraint | Evidence producer or manual owner | Passing evidence |
+| AC ID | 承诺结果 / 约束 | 证据 producer 或 manual owner | 通过证据 |
 | --- | --- | --- | --- |
 
-<!-- When the conditional evidence-integrity contract applies, include only relevant false-PASS counterexamples here: e.g. comparison drift hidden by normalization, failure after a side effect, rollback/invalidation failure, incompatible projected input, or state-shape drift. These are examples, not mandatory scenarios. -->
+<!-- 当条件化 evidence-integrity 合同适用时，只加入相关的 false-PASS 反例，例如：归一化掩盖比较 drift、副作用后失败、rollback/invalidation 失败、不兼容投影输入或状态 shape 漂移。这些只是示例，不是必选场景。 -->
 
-## 8. Contract Coherence
+## 8. 合同一致性
 
-- Cross-section consistency:
-- Interface/seam ownership:
-- Acceptance coverage:
-- Remaining non-blocking assumptions:
+- 跨章节一致性：
+- 接口 / seam ownership：
+- 验收覆盖：
+- 剩余非阻塞假设：
 
-## Revisions
+## 修订记录
 
-<!-- Current and historical D/S content bindings live in the internal .impl-package/revision-bindings.json sidecar; do not put this file's own hash here or require the owner to read the sidecar. -->
+<!-- 当前和历史 D/S 内容绑定保存在内部 `.impl-package/revision-bindings.json` sidecar 中；不要在本文写入自身 hash，也不得要求 owner 阅读 sidecar。 -->
 
-| Previous | New | Contract change | Reason / authority | Date | Superseded note |
+| 前一修订 | 新修订 | 合同变化 | 原因 / 权威来源 | 日期 | 被取代说明 |
 | --- | --- | --- | --- | --- | --- |

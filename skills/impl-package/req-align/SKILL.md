@@ -55,7 +55,7 @@ Design turns the requirement and repository facts into a decision-ready destinat
 
 The Design gate passes only when all of these are verifiably true:
 
-- **Destination is answerable:** intended outcome, affected system boundary, and handoff to the implementation contract are explicit.
+- **Destination is answerable:** intended outcome, affected system boundary, and handoff to the implementation contract are explicit. When delivery and validation use different paths, state the delivery path and the limit of what validation proves; validation convenience must not silently redefine the intended product path.
 - **Repository fit is evidenced:** authority sources and current-state facts have been checked; conflicts and missing knowledge are named.
 - **Choices are decided:** material options and trade-offs have a selected direction and rationale, or an explicit owner decision blocks the gate.
 - **Open Questions are non-blocking for Spec:** every question is resolved, explicitly deferred with owner and consequence, or proven not to affect the contract.

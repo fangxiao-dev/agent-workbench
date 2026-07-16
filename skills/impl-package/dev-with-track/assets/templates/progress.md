@@ -1,34 +1,33 @@
-# [Attempt ID | Task ID | Ticket ID] Progress Ledger
+# [执行尝试 ID | 任务 ID | Ticket ID] 进度账本
 
-> This is an earned recovery ledger, not a second status or acceptance fact source. See
-> [Impl-Package Composition Contract](../../../skills/impl-package/references/impl-package-composition-contract.md).
+> 这是按需创建的恢复账本，不是第二个状态源或验收事实源。规则见 [Impl-Package Composition Contract](../../../skills/impl-package/references/impl-package-composition-contract.md)。
 
-Kind：[attempt / task / ticket]
-创建：[YYYY-MM-DD]
-Attempt ID：
-Canonical execution source：[this attempt recovery ledger / dag.md / patch DAG / tickets/<ticket>.md]
-Acceptance source：[tickets/<ticket>.md / spec.md + plan Execution Record + gate.md]
+类型：[attempt / task / ticket]
+创建日期：[YYYY-MM-DD]
+执行尝试 ID（Attempt ID）：
+规范执行来源：[本执行尝试恢复账本 / dag.md / patch DAG / tickets/<ticket>.md]
+验收来源：[tickets/<ticket>.md / spec.md + plan Execution Record + gate.md]
 
-Create `tasks/<attempt-id>-progress.md` with `Kind: attempt` only for a tickets=false, dag=false attempt whose interruption, independent handoff, external gate or blocker earns recovery state. Create task ledgers as `tasks/Tn-progress.md`; create a whole-ticket ledger as `tasks/<ticket-id>-progress.md` only under its recovery/transfer trigger. An attempt ledger must not invent T<n>, duplicate plan verification, or become an acceptance conclusion.
+仅当 tickets=false、dag=false 的 attempt 因中断、独立交接、外部门禁或 blocker 而需要恢复状态时，才创建 `tasks/<attempt-id>-progress.md` 并设置 `Kind: attempt`。任务账本使用 `tasks/Tn-progress.md`；只有在 whole-ticket 恢复/移交触发时才创建 `tasks/<ticket-id>-progress.md`。attempt 账本不得虚构 T<n>、复制 plan 验证内容或充当验收结论。
 
-## Restore Context
+## 恢复上下文
 
-- Owner / handoff target:
-- Last meaningful update:
-- Canonical status at restore:
-- Evidence reconciled:
-- Open prerequisite / external gate:
+- Owner / 交接目标：
+- 最近一次有意义的更新：
+- 恢复时的规范状态：
+- 已对账证据：
+- 未满足的前置条件 / 外部门禁：
 
-## Evidence
+## 证据
 
-- [command / observation / smoke marker / record ID / cleanup]
+- [命令 / 观察结果 / smoke 标记 / 记录 ID / 清理结果]
 
-## Revalidation
+## 重新校验
 
-- Upstream rework or reopened input:
-- Affected dependent evidence:
-- Required recheck before dependency may release:
+- 上游返工或重新打开的输入：
+- 受影响的下游证据：
+- 依赖释放前必须重查的内容：
 
-## Next
+## 下一步
 
-1. [next action]
+1. [下一步动作]

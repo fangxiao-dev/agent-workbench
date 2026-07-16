@@ -1,13 +1,13 @@
-# [Implementation Name] Findings
+# [实施名称] 发现记录
 
 状态：[活跃 / 暂停 / 已关闭]
-创建：[YYYY-MM-DD]
-Spec：[spec.md](spec.md)
-对应 gate：[gate.md](gate.md)
+创建日期：[YYYY-MM-DD]
+规格：[spec.md](spec.md)
+对应门禁：[gate.md](gate.md)
 
 本文是发现 inbox。task 局部日志留在 `tasks/` 或 `dag.md`；gate evaluation 前必须把设计决定分流到 design、规范性行为分流到 spec、长期项目知识分流到 gate Durable Deltas / `_pending.md`、验证证据分流到 plan Execution Record。
 
-## [YYYY-MM-DD] [Attempt ID] [Slice / Task / Gate] 发现
+## [YYYY-MM-DD] [执行尝试 ID] [Slice / Task / Gate] 发现
 
 ### 方法层发现
 
@@ -31,7 +31,7 @@ Spec：[spec.md](spec.md)
 - [ ] [候选 issue：只有 scope 和验收足够清楚时再升级]
 - [ ] [候选 backlog]
 
-## Promotion Rules
+## 提升规则（Promotion Rules）
 
 - findings 只记录已观察到的事实、判断和候选后续动作。
 - 不在这里写详细功能合同、最终验证证据或实现状态；它们分别进入 `spec.md`、plan Execution Record 与 runtime artifact。
