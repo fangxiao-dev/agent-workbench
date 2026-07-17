@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "purpose": "internal-machine-sidecar",
+  "ownerFacing": false,
+  "current": {
+    "design": {
+      "artifact": "design.md",
+      "revision": "D1"
+    },
+    "spec": {
+      "artifact": "spec.md",
+      "revision": "S1"
+    },
+    "attempt": {
+      "id": "initial",
+      "plan": "plan.md",
+      "revision": "P1"
+    }
+  },
+  "bindings": [
+    {
+      "artifact": "design.md",
+      "revision": "D1",
+      "mode": "exact-blob",
+      "blob": "47f4c96be556e3cf4a695c3136f8a66f0629f039"
+    },
+    {
+      "artifact": "spec.md",
+      "revision": "S1",
+      "mode": "exact-blob",
+      "blob": "9388fb35dee644ae59892d10db7ea6ae97bf1137"
+    },
+    {
+      "artifact": "plan.md",
+      "attempt": "initial",
+      "revision": "P1",
+      "mode": "plan-contract-v1",
+      "blob": "be03d4f6eabb16f8a1ae93442c03690e055ecde3"
+    }
+  ]
+}

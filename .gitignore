@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+.codex/harness-runs/
 .agents/
 .claude/skills/
 .claude/settings.local.json

@@ -1,0 +1,5 @@
+[agents]
+# Resource safety caps supplied by the Harness; they do not assign child roles or acceptance semantics.
+max_threads = 2
+max_depth = 1
+interrupt_message = true

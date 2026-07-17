@@ -1,0 +1,139 @@
+schema_version = 1
+
+[package]
+repository_root = "D:/CodeSpace/kaispan-dev"
+source_ref = "3cc2a9350d5820c236a352b7e1a756f13a837e27"
+path = "docs/domains/finance-assistant/implementations/2026-07-16-datev-accounting-rules"
+attempt_id = "initial"
+
+[runtime]
+parent_profile = "../.codex/harness/parent.toml"
+timeout_seconds = 1800
+max_parallel_parents = 2
+network_access = false
+
+[[stage]]
+id = "T1"
+cohort = "C1"
+ticket = "DATEV-RULES-01"
+ticket_path = "tickets/01-canonical-reviewed-facts.md"
+parent_role = "finance_contract_implementer"
+objective = "Implement and verify the producer-neutral CanonicalAccountingFactsV1 and Reviewed facts contract for DATEV-RULES-01."
+depends_on = []
+allowed_paths = ["apps/api/src/billing/accounting/contracts", "apps/api/src/billing/accounting/adapters"]
+skills = ["impl-package", "impl-package/dev-with-track"]
+verification_commands = []
+sandbox = "workspace_write"
+sensitive_originals = "forbidden"
+
+[[stage]]
+id = "T2"
+cohort = "C1"
+ticket = "DATEV-RULES-02"
+ticket_path = "tickets/02-policy-identity-expected-truth.md"
+parent_role = "finance_policy_implementer"
+objective = "Implement data-driven Mandant 1332 policy, identity, RBAC, and independently authored 19%/7% expected truth for DATEV-RULES-02."
+depends_on = []
+allowed_paths = ["apps/api/src/billing/accounting/policy"]
+skills = ["impl-package", "impl-package/dev-with-track"]
+verification_commands = []
+sandbox = "workspace_write"
+sensitive_originals = "forbidden"
+
+[[stage]]
+id = "T3"
+cohort = "C2"
+ticket = "DATEV-RULES-04-persistence"
+ticket_path = "tickets/04-staleness-and-duplicate-safety.md"
+parent_role = "tenant_persistence_implementer"
+objective = "Implement the minimal tenant-scoped persistence and repository seam required by DATEV delivery state without duplicating accounting facts."
+depends_on = ["T1"]
+allowed_paths = ["packages/db/prisma", "apps/api/src/billing/accounting/repositories"]
+skills = ["impl-package", "impl-package/dev-with-track"]
+verification_commands = []
+sandbox = "workspace_write"
+sensitive_originals = "forbidden"
+
+[[stage]]
+id = "T4"
+cohort = "C2"
+ticket = "DATEV-RULES-03"
+ticket_path = "tickets/03-deterministic-booking-candidate.md"
+parent_role = "accounting_resolver_implementer"
+objective = "Implement deterministic 19%/7% AccountingBookingCandidate resolution and fail-closed readiness behavior for DATEV-RULES-03."
+depends_on = ["T1", "T2"]
+allowed_paths = ["apps/api/src/billing/accounting/resolver"]
+skills = ["impl-package", "impl-package/dev-with-track"]
+verification_commands = []
+sandbox = "workspace_write"
+sensitive_originals = "forbidden"
+
+[[stage]]
+id = "T5"
+cohort = "C3"
+ticket = "DATEV-RULES-04"
+ticket_path = "tickets/04-staleness-and-duplicate-safety.md"
+parent_role = "delivery_safety_implementer"
+objective = "Implement stale propagation, duplicate delivery protection, deterministic replay, and authorized download safety for DATEV-RULES-04."
+depends_on = ["T3", "T4"]
+allowed_paths = ["apps/api/src/billing/accounting/delivery", "apps/api/src/exports"]
+skills = ["impl-package", "impl-package/dev-with-track"]
+verification_commands = []
+sandbox = "workspace_write"
+sensitive_originals = "forbidden"
+
+[[stage]]
+id = "T6"
+cohort = "C3"
+ticket = "DATEV-RULES-05"
+ticket_path = "tickets/05-extf-technical-proof.md"
+parent_role = "datev_adapter_implementer"
+objective = "Adapt validated AccountingBookingCandidate output to the existing DATEV serializer seam and establish hash-bound technical format evidence for DATEV-RULES-05."
+depends_on = ["T4"]
+allowed_paths = ["apps/api/src/billing/datev-format", "apps/api/src/billing/accounting"]
+skills = ["impl-package", "impl-package/dev-with-track"]
+verification_commands = []
+sandbox = "workspace_write"
+sensitive_originals = "forbidden"
+
+[[stage]]
+id = "T7"
+cohort = "C3"
+ticket = "DATEV-RULES-07"
+ticket_path = "tickets/07-ocr-output-convergence.md"
+parent_role = "ocr_conformance_integrator"
+objective = "Integrate the published OCR-output adapter through the frozen Canonical seam and prove complex documents route to review without conflating manual assistance with OCR capability."
+depends_on = ["T1"]
+allowed_paths = ["apps/api/src/billing/accounting", "test-cases/finance-assistant"]
+skills = ["impl-package", "impl-package/dev-with-track"]
+verification_commands = []
+sandbox = "workspace_write"
+sensitive_originals = "on_demand"
+
+[[stage]]
+id = "T8"
+cohort = "C4"
+ticket = "integration-gate"
+ticket_path = ""
+parent_role = "datev_integration_reviewer"
+objective = "Integrate accepted stage outputs, run the required reviews and verification evidence, and prepare the single package comparison point without widening the approved contract."
+depends_on = ["T5", "T6", "T7"]
+allowed_paths = ["apps/api/src/billing/accounting", "apps/api/src/billing/datev-format", "docs/domains/finance-assistant/implementations/2026-07-16-datev-accounting-rules"]
+skills = ["impl-package", "impl-package/dev-with-track", "impl-package/reviews/code-review", "impl-package/reviews/module-review", "impl-package/reviews/safety-review"]
+verification_commands = []
+sandbox = "workspace_write"
+sensitive_originals = "forbidden"
+
+[[stage]]
+id = "T9"
+cohort = "external"
+ticket = "DATEV-RULES-06"
+ticket_path = "tickets/06-datev-test-mandant-acceptance.md"
+parent_role = "manual_acceptance_handoff"
+objective = "Prepare the hash-bound readiness packet for the tax advisor's controlled DATEV Test Mandant acceptance; do not perform DATEV actions."
+depends_on = ["T5", "T6"]
+allowed_paths = ["docs/domains/finance-assistant/implementations/2026-07-16-datev-accounting-rules"]
+skills = ["impl-package", "impl-package/dev-with-track"]
+verification_commands = []
+sandbox = "read_only"
+sensitive_originals = "forbidden"
