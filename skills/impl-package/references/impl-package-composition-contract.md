@@ -8,45 +8,46 @@
 
 任务包包含两类文档：
 
-- design.md 与 spec.md 是活动变更期间的当前设计 SoT。它们保持当前有效正文，历史变化只进入紧凑 revision/superseded 记录。
+- decision.md 与 spec.md 是活动变更期间的当前决策与行为合同 SoT。它们保持当前有效正文，历史变化只进入紧凑 revision/superseded 记录。
 - plan、tickets、DAG、progress 与 gate entry 属于某次 implementation attempt，是过程与判决记录，不是长期行为合同。
+- `execution-findings.md` 是整个任务包及后续 attempt 可共享的执行发现 provenance；`investigations/<topic>.md` 只在确有原始调查材料时创建，默认无 authority，允许不完整、冲突或过期。
 - `.impl-package/revision-bindings.json` 与 `.impl-package/runtime-state.json` 是 package-local 机器 SoT：前者保存 D/S/P selection 与 append-only blob binding，后者保存 earned task/ticket current state、artifact hash chain 与 finalized gate index。字段、可变性、current-contract upgrade、projection 和 gate binding 统一由 [impl-package-state-schema.md](impl-package-state-schema.md) 定义；不得在 stage skill 重写 schema。两者都不是 owner-facing deliverable。
 
 Markdown projection contract：
 
-- design/spec 通过 machine-owned marker 投影当前 D/S alias，并在正文保留 gate 结论。
+- decision/spec 通过 machine-owned marker 投影当前 D/S alias，并在正文保留 gate 结论。
 - plan 通过 machine-owned marker 投影当前 D/S/P revision set，正文保留 Attempt ID、Composition、integration strategy 与发布时 binding validation。
 - earned DAG/ticket 通过 machine-owned marker 投影 runtime state；gate 顶部投影最新 finalized verdict。gate entry 正文直接声明判决对应的 revision set、binding validation、comparison point、evidence、verdict reason 与 Durable Deltas；精确 OID 只放隐藏的 machine audit metadata。
 - canonical handoff 直接汇总当前 revision set、binding validation、派生 lifecycle/integration qualifier、evidence 与剩余 owner decision。JSON sidecar 不得成为理解或批准交付的前置阅读材料。
 
-terminal gate entry 写入前必须完成 Stage 7 durable-delta capture。gate 关闭后，module knowledge 与 `_pending.md` truth pointer 共同表达当前长期真相及待压实增量；后续 `$backfill-stable-docs` audit/apply/verify 可以延期且相互独立，只有 apply 才把获批增量正式归并进 module knowledge。重新 patch 时，先将 package design/spec 与当前 module knowledge、相关 pending truth pointer 和代码对账，再激活并修订 package SoT。
+terminal gate entry 写入前必须完成 Stage 7 durable-delta capture。gate 关闭后，module knowledge 与 `_pending.md` truth pointer 共同表达当前长期真相及待压实增量；后续 `$backfill-stable-docs` audit/apply/verify 可以延期且相互独立，只有 apply 才把获批增量正式归并进 module knowledge。重新 patch 时，先将 package decision/spec 与当前 module knowledge、相关 pending truth pointer 和代码对账，再激活并修订 package SoT。
 
 ### Module Knowledge Watermark（把"先对账"变成可执行检查）
 
-每个 attempt 的 plan 在 Inputs And Authority 记录一份 watermark：本 attempt 打开时，design/spec 引用到的每份 module-knowledge 文件（通常是 spec 的 Module Boundaries/Dependencies 点名的模块）的 `git log -1 --format=%H -- <path>` commit SHA。
+每个 attempt 的 plan 在 Inputs And Authority 记录一份 watermark：本 attempt 打开时，decision/spec 引用到的每份 module-knowledge 文件（通常是 spec 的 Module Boundaries/Dependencies 点名的模块）的 `git log -1 --format=%H -- <path>` commit SHA。
 
 新 attempt（尤其是重新激活已关闭 package 的 patch）打开前，必须重新计算这些文件当前的 commit SHA，与上一个 attempt 记录的 watermark 比对：
 
 - 相符：module knowledge 自本 package 上次触碰以来未变，跳过对账，正常判定 drift classification。
-- 不符：module knowledge 已被其他 package/改动推进，先 `git diff` 两个 commit 之间的实际变化，确认 package design/spec 是否仍然成立，再继续；不得凭印象假设"应该没变"。
+- 不符：module knowledge 已被其他 package/改动推进，先 `git diff` 两个 commit 之间的实际变化，确认 package decision/spec 是否仍然成立，再继续；不得凭印象假设"应该没变"。
 - 找不到上一份 watermark（例如首个 attempt）：无需对账，直接记录当前 watermark 供下一次比对。
 
-## 2. Design/Spec revision 与 drift
+## 2. Decision/Spec revision 与 drift
 
-design.md（存在时）的 `revision-set` marker 声明唯一当前 D revision；spec.md 的同一 projection 声明唯一当前 D/S revision。lightweight Design 不建 design.md 时，spec 的 D projection 与 Design Gate Record 共同提供 canonical 落点。默认 projection 使用中文标签 `设计修订（Design Revision）`、`规格修订（Spec Revision）` 与 `计划修订（Plan Revision）`；这些声明不得在 marker 外重复。
+decision.md（存在时）的 `revision-set` marker 声明唯一当前 D revision；spec.md 的同一 projection 声明唯一当前 D/S revision。lightweight Decision 不建 decision.md 时，spec 的 D projection 与 Decision Gate Record 共同提供 canonical 落点。默认 projection 使用中文标签 `决策修订（Decision Revision）`、`规格修订（Spec Revision）` 与 `计划修订（Plan Revision）`；这些声明不得在 marker 外重复。
 
 - 实现偏离现有 spec，但预期行为不变：复用 D/S revision，创建新 attempt。
 - 行为、数据、边界、失败恢复、约束或 Acceptance Semantics 改变：升级 S revision，只重跑 Spec Gate。
-- 设计选择或 rationale 改变：先升级 D revision 并重跑 Design Gate，再升级 S revision 并重跑 Spec Gate。
+- 决策选择或 rationale 改变：先升级 D revision 并重跑 Decision Gate，再升级 S revision 并重跑 Spec Gate。
 - 旧正文不并排保留；在 revision history 中记录 previous/new、变更摘要、authority、日期与 superseded 说明，完整 provenance 由 Git 提供。
 
-Design/Spec Gate 只证明其绑定的 revision；旧 gate entry 不证明后续 revision。
+Decision/Spec Gate 只证明其绑定的 revision；旧 gate entry 不证明后续 revision。
 
 ### Impact-scoped change routing
 
 开始返工、patch 或恢复前，先从当前 request、实际 diff 与现有 contract 推导四个瞬时信号：
 
-- `contract impact`: `none | plan | spec | design`，表示变化最远触及哪个事实 owner。
+- `contract impact`: `none | plan | spec | decision`，表示变化最远触及哪个事实 owner。
 - `acceptance impact`: `none | subset | all`，表示哪些 Acceptance Semantics 或 delivery slice 需要重新证明。
 - `authority direction`: `decrease | unchanged | increase`，表示 mutation、安全或外部权限是收缩、保持还是扩大。
 - `execution impact`: `none | local-reversible | destructive-external`，表示执行是否产生需额外授权的不可逆或外部效果。
@@ -58,7 +59,7 @@ Design/Spec Gate 只证明其绑定的 revision；旧 gate entry 不证明后续
 - `contract impact=none` 且未扩大 acceptance/authority/execution 时，复用现有 D/S/P，只修改直接 owner 的 artifact，并运行能证明该 delta 的最小验证。纯减法、证据修正、引用/分类修正通常属于此路径。
 - `contract impact=plan` 只升级 P revision；只有依赖被修改 plan 语义的 ticket、DAG 节点或 evidence 需要内容重验证。未受影响 artifact 可以批量确认并机械更新 Plan Revision 引用，不重新生成正文或重跑其验收。
 - `contract impact=spec` 只升级 S revision并重跑 Spec Gate；按 `acceptance impact` 重验直接受影响的 subset，除非变化确实覆盖全部 acceptance。
-- `contract impact=design` 才按 Design → Spec 顺序升级 D/S，并重新规划受影响范围。
+- `contract impact=decision` 才按 Decision → Spec 顺序升级 D/S，并重新规划受影响范围。
 - `authority direction=increase` 或 `execution impact=destructive-external` 必须重新检查授权与 safety 路由；`decrease` 不沿用旧的破坏性授权，也不因收缩动作自动触发全量 safety 流程。
 
 若多个信号冲突，采用能覆盖真实影响的最窄保守路径。只有业务结果、Acceptance Semantics、Composition、安全约束、执行策略或 mutation authority 发生实质变化，才重新规划对应部分；不得仅因一个 hash、分类、路径、证据描述或 P 引用变化而推倒整条链。
@@ -67,19 +68,19 @@ Design/Spec Gate 只证明其绑定的 revision；旧 gate entry 不证明后续
 
 D&lt;n&gt;/S&lt;n&gt;/P&lt;n&gt; 是人类好念、好口头下发的**别名**；机器校验使用 `.impl-package/revision-bindings.json` 中与 alias、artifact path 绑定的 Git blob OID。artifact 自身只声明 alias，不记录自身 commit SHA 或 blob OID，避免“为了写入自身 hash 又改变自身 hash”的循环依赖。对 owner 而言，Markdown 中的 revision set 与 binding validation 结论是完整交付面。
 
-内部 sidecar 使用 [`../assets/templates/revision-bindings.json`](../assets/templates/revision-bindings.json) 的 v2 形状；完整不变量引用 [结构化状态契约 §2](impl-package-state-schema.md#2-revision-bindings-schema-v2)。语义 revision、projection/editorial rebinding 均 append-only，后者以 `supersedes` 选择同 alias 的新 terminal binding。lightweight Design 没有 design.md 时，D&lt;n&gt; 与 S&lt;n&gt; 可以分别绑定到同一个 spec.md blob。
+内部 sidecar 使用 [`../assets/templates/revision-bindings.json`](../assets/templates/revision-bindings.json) 的 v2 形状；完整不变量引用 [结构化状态契约 §2](impl-package-state-schema.md#2-revision-bindings-schema-v2)。语义 revision、projection/editorial rebinding 均 append-only，后者以 `supersedes` 选择同 alias 的新 terminal binding。lightweight Decision 没有 decision.md 时，D&lt;n&gt; 与 S&lt;n&gt; 可以分别绑定到同一个 spec.md blob。
 
-生成或升级 revision 时运行 `impl_package_state.py --package <path> register-revision ...`；命令登记最终 worktree blob 并执行 working-tree validation。artifact 与 registry 可在同一 commit，restore、ER append 与 gate evaluation 前统一运行 `validate --committed`，由它现场以 `git rev-parse HEAD:<package-relative-path>` 复核 HEAD，不保存 published/validated 状态。v1 sidecar 只读兼容，任何 mutation 前显式 `migrate --evidence <pointer>`。
+生成或升级 revision 时运行 `impl_package_state.py --package <path> register-revision ...`；命令登记最终 worktree blob 并执行 working-tree validation。artifact 与 registry 可在同一 commit，restore、ER append 与 gate evaluation 前统一运行 `validate --committed`，由它现场以 `git rev-parse HEAD:<package-relative-path>` 复核 HEAD，不保存 published/validated 状态。低于 current contract 的 sidecar 不进入运行时；先由 agent 按修订摘要直接重塑并通过 current validation。
 
 validation mode 区分 contract artifact 与执行证据：
 
-- design/spec 使用 `exact-blob`：当前 artifact blob 必须与 binding 完全相等；下文定义的 editorial correction rebinding 是唯一的同 alias 例外。
+- decision/spec 使用 `exact-blob`：当前 artifact blob 必须与 binding 完全相等；下文定义的 editorial correction rebinding 是唯一的同 alias 例外。
 - plan 使用 `plan-contract-v1`：脚本比较 baseline 与当前 plan 的非 ER contract，并沿 Git 历史机械校验 ER append-only；正常补证不升级 P revision，策略、Composition、Planned Verification 或其他非 ER 内容变化仍会触发 P drift。
 
 restore 或 gate evaluation 时，对 `current` 指向的 D/S/P binding 执行以下检查：
 
 - `validate --committed` 通过：revision 可信，继续；失败则按结构化错误报告处理 capture gap/drift，不由 agent 手工模拟 blob 算法。
-- design/spec 的 `exact-blob` 不匹配时，先判断是否为 **editorial correction**：只改正错字、格式、非规范性表述、普通链接或 provenance，且可证明不改变行为、Acceptance Semantics、设计选择、约束、安全/数据边界或 mutation authority。是则在 revision history 写明依据与 `contract impact=none`，显式运行 `rebind --reason editorial --evidence <pointer> --confirm-contract-impact-none`；不重跑 Gate、不升级 alias。
+- decision/spec 的 `exact-blob` 不匹配时，先判断是否为 **editorial correction**：只改正错字、格式、非规范性表述、普通链接或 provenance，且可证明不改变行为、Acceptance Semantics、设计选择、约束、安全/数据边界或 mutation authority。是则在 revision history 写明依据与 `contract impact=none`，显式运行 `rebind --reason editorial --evidence <pointer> --confirm-contract-impact-none`；不重跑 Gate、不升级 alias。
 - 只含 machine-owned marker body 的机械 projection refresh 运行 `refresh-projections` 并自动同 alias rebind；marker 外存在 diff 时命令拒绝，返回 owning skill 做 revision/editorial 判断，不得把语义变化洗白。
 - 不能证明为 editorial correction，或其触及任何合同语义时，按 evidence 胜过 stale status 处理为 semantic revision：按本节上方四类重新分类、升级对应 revision 并登记新 binding；不得把语义变化伪装为同 alias rebinding。
 - registry 缺失、重复 alias/path、`current` 指向不存在的 binding，或 Git 无法解析 blob：视为 P2 capture gap，不得默认相符。
@@ -93,7 +94,7 @@ ER 的 Revision set 表示写入该 ER 时的 current D/S/P set；plan 的 `revi
 ~~~markdown
 执行尝试 ID（Attempt ID）：<initial | patch-id>
 <!-- impl-package:projection revision-set begin -->
-设计修订（Design Revision）：D<n>
+决策修订（Decision Revision）：D<n>
 规格修订（Spec Revision）：S<n>
 计划修订（Plan Revision）：P<n>
 <!-- impl-package:projection revision-set end -->
@@ -169,7 +170,7 @@ semantic cycle 首先视为 decomposition/readiness defect，不自动升级为 
 
 ## 5. Contract、task 与 acceptance 分工
 
-- design 保存选择与 rationale。
+- decision 保存选择与 rationale。
 - spec 保存 interface、seam contract、contract/acceptance owner、affected targets、compatibility window、migration/rollback contract、全局约束与 Acceptance Semantics。
 - plan 保存本 attempt 的执行顺序、具体迁移操作、验证选择和过程证据。
 - DAG task 保存依赖、execution ownership、contributes-to / enables 与 seam execution owner。
@@ -178,20 +179,22 @@ semantic cycle 首先视为 decomposition/readiness defect，不自动升级为 
 
 acceptance target 使用 &lt;ticket-id&gt;:AC-&lt;n&gt; 或 spec:AC-&lt;n&gt;。每个引用必须解析到现有 AC。execution seam 必须有当前 attempt 的 dag=true 和 DAG execution owner；contract 与 acceptance 语义仍在 spec，不能在 plan 或 DAG 中建立副本。
 
-## 6. Plan verification 与 findings 分流
+## 6. Plan verification 与 execution findings 分流
 
 plan 包含两类验证信息：
 
 - Planned Verification：引用权威 test/review policy，记录本 attempt 选择的检查、预期结果与 evidence owner；不复制通用 Data Safety、UI Evidence、Real Route Safety 等整套模板。
 - append-only Execution Record：每条使用稳定 anchor，记录实际命令/检查、结果、证据路径、执行时间与适用的 D/S/P revision。旧 record 不回改，后续补证新增 record。
 
-`verification-before-completion` 是 completion claim 的 evidence gate，不是新的验证清单：适用 review、findings 分流和 Stage 7 准备完成后，写 terminal `pass` entry 前必须用当前 revision/worktree/environment 审计拟声明的 pass。可复用 provenance 清晰且未被后续变化影响的 ER/review/CI/smoke evidence；只补跑 stale、冲突、跨 revision/environment 或不完整的部分。审计不通过时不得写 pass，应报告 `implemented, not verified` 或具体 pending gate。
+`verification-before-completion` 是 completion claim 的 evidence gate，不是新的验证清单：适用 review、execution findings 分流和 Stage 7 准备完成后，写 terminal `pass` entry 前必须用当前 revision/worktree/environment 审计拟声明的 pass。可复用 provenance 清晰且未被后续变化影响的 ER/review/CI/smoke evidence；只补跑 stale、冲突、跨 revision/environment 或不完整的部分。审计不通过时不得写 pass，应报告 `implemented, not verified` 或具体 pending gate。
 
 terminal metadata commit、目标分支合入或相关环境变化之后，任何 complete、closed、merge-ready 或 release-ready 声明都必须重新执行该审计。纯 metadata delta 不自动使行为测试失效，但最终 HEAD、工作树状态、目标分支集成状态和声明所依赖的 metadata/proof 必须与证据对齐。该 gate 不进入 DAG，也不按 ticket/task 重复运行。
 
-findings.md 是发现 inbox。gate evaluation 前必须分流：设计决定进 design，规范性行为进 spec，长期项目知识进入 gate Durable Deltas → _pending.md，验证证据进 plan Execution Record，其余调查事实/风险保留在 findings。findings 不成为第二 SoT。
+`execution-findings.md` 记录执行中确认的重要发现、风险、方法性经验与跨 task 发现，可由整个任务包和后续 attempt 共同使用。gate evaluation 前判断每条发现是否要求更新 decision/spec/plan 或进入 gate Durable Deltas → `_pending.md`；验证证据进入 plan Execution Record。完成分流后，原始发现仍可作为 package-local provenance 保留。它不是第二份行为合同，也不是临时待办队列。
 
-**这是任意 terminal verdict（pass/fail/defer）的硬性前置条件，力度等同 Stage 7**：findings.md 中存在未分流、且不属于"已验证调查事实/风险，保留在 findings 是正确去处"的条目时，不得写入 pass、fail 或 defer 的 terminal gate entry——不只是 pass。blocked entry 不受此约束（blocked 本来就允许如实记录 capture gap，后续用新 entry 补齐）。
+**这是任意 terminal verdict（pass/fail/defer）的硬性前置条件，力度等同 Stage 7**：`execution-findings.md` 中存在尚未判断其 decision/spec/plan/Durable Deltas 影响的条目时，不得写入 pass、fail 或 defer 的 terminal gate entry——不只是 pass。blocked entry 不受此约束（blocked 本来就允许如实记录 capture gap，后续用新 entry 补齐）。
+
+`investigations/` 不参与上述分流状态：正式文档可按需链接 `investigations/<topic>.md` 作为 provenance，但 investigation 不维护指向正式文档的 backlink 或采用状态，不进入 runtime state、revision binding 或 machine projection。`decision.md` 与 `spec.md` 必须自足表达当前决定与合同，不能要求读者通读 investigation 才能理解。
 
 ## 7. Append-only Gate Ledger 与 Stage 7
 
@@ -238,7 +241,7 @@ append-only 写入顺序：运行 `new-gate-entry` 分配 G id 与 scaffold，�
 
 ## 8. Shared validation checklist
 
-- design/spec 各有唯一当前 revision（lightweight Design 的 D revision 在 spec 可解析），正文无并行新旧合同；revision history 足以解释 supersession。
+- decision/spec 各有唯一当前 revision（lightweight Decision 的 D revision 在 spec 可解析），正文无并行新旧合同；revision history 足以解释 supersession。
 - 当前 attempt plan 声明 Attempt ID、D/S/P revision 与唯一 Composition，且与 earned artifacts 一致。
 - `validate --committed` 证明 current D/S/P selection、terminal binding、exact-blob/plan-contract-v1、ER append-only、runtime record bijection 与 projections 一致；owner-facing Markdown 已直接写出 revision set、派生 lifecycle/integration qualifier 与 binding validation 结论。
 - 每个 earned ticket/DAG 声明的 Plan Revision 与当前 plan 的 P 号一致；不一致的按 NEEDS-REVALIDATION 处理，不得当作可用状态。
@@ -250,7 +253,7 @@ append-only 写入顺序：运行 `new-gate-entry` 分配 G id 与 scaffold，�
 - execution seam 的 contract 在 spec，execution owner 在当前 attempt DAG，acceptance evidence 在 plan/gate 或 ticket。
 - plan Execution Record 使用稳定 anchor 且 append-only；gate evidence 链接可解析到对应 record。
 - gate entry newest-first、旧块未修改；G allocation 不复用，finalized index 的 entry pointer/content binding 及 id/attempt/number/verdict/supersedes 与 Markdown 反解一致；mismatch 不得 fallback heading。
-- findings.md 在写入任意 terminal entry（pass/fail/defer，不只 pass）前已完成分流。
+- execution-findings.md 在写入任意 terminal entry（pass/fail/defer，不只 pass）前已完成分流。
 - terminal pass entry 写入前，`verification-before-completion` 已将拟声明的 pass 与当前 revision/worktree/environment 及可追溯 evidence 对齐；未通过时没有写 pass。
 - Active attempt 若已先合入 target branch，plan 已记录 owner-approved pre-gate integration strategy，状态对外报告为 `Integrated, gate open`，最终 pass/closed evidence 来自目标分支。
 - terminal gate 后 plan 已冻结；重新 patch 前已完成 Module Knowledge Watermark 对账，不是凭印象假设未变。

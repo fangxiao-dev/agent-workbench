@@ -8,13 +8,15 @@ description: >
 
 # Impl-Package 体系 · 入口地图
 
-本 skill 是整个 Impl-Package 体系的**导航入口**。它只回答「这是什么、从哪进、下一步进哪个 skill」，把你送到正确的 stage skill 或 canonical 源。**它不执行任何阶段，也不把 spec / contract / design 的正文抄进来**——正文永远留在各自的事实源，这里只给指针。
+本 skill 是整个 Impl-Package 体系的**导航入口**。它只回答「这是什么、从哪进、下一步进哪个 skill」，把你送到正确的 stage skill 或 canonical 源。**它不执行任何阶段，也不把 spec / contract / decision 的正文抄进来**——正文永远留在各自的事实源，这里只给指针。
 
 所有阶段执行器都递归聚合在本目录下；implementation-level review 统一位于 `reviews/`。`backfill-stable-docs` 也属于本体系的维护阶段，物理位于本目录下但保留公共 skill name；调用方按名称路由，不依赖旧的根目录路径。
 
 持久单位是项目约定的 implementations root（默认 `docs/implementations/`）下的 `<package-id>/`。`.impl-package/` 结构化层以 revision binding、earned runtime state、artifact hash chain 与 finalized gate index保存机器可校验状态，Markdown 只保留判断、证据叙述及 machine-owned 投影；agent 通过随 skill 分发的 `scripts/impl_package_state.py --package <path> ...` 维护，不手改投影。canonical handoff 汇总人类当前状态；attempt 的 Draft/Active/Frozen 现场派生，不落可过期 status。
 
-结构化状态引擎的数据策略统一由 [`assets/impl-package-state-config.json`](./assets/impl-package-state-config.json) 提供，当前体系契约版本为字符串 `"3.1"`：状态 vocabulary、document discovery/field regex、marker 名称、投影格式与 gate heading/字段 grammar 在该版本化配置中调整，CLI interface 不变。配置未知版本、缺字段、错误 placeholder/capture group、重复/空 vocabulary 或无效 regex 必须 fail closed。append-only、CAS、active chain、package-local path、完整 gate entry span/content hash、HEAD/worktree 两相校验与 task/ticket bijection 属于不可配置的安全内核；不得通过配置弱化。backfill gate recognition 直接复用 canonical resolver，不复制 verdict、heading 或 binding 语义。契约修订摘要保存在 [`assets/contract-revision-history.md`](./assets/contract-revision-history.md)，仅在 `contract-status` 返回 `upgradeRequired` 时读取；正常 stage、validate、audit、apply、verify 路径不得读取它。
+结构化状态引擎的数据策略统一由 [`assets/impl-package-state-config.json`](./assets/impl-package-state-config.json) 提供，当前体系契约版本为字符串 `"3.2"`：状态 vocabulary、document discovery/field regex、marker 名称、投影格式与 gate heading/字段 grammar 在该版本化配置中调整，CLI interface 不变。配置未知版本、缺字段、错误 placeholder/capture group、重复/空 vocabulary 或无效 regex 必须 fail closed。append-only、CAS、active chain、package-local path、完整 gate entry span/content hash、HEAD/worktree 两相校验与 task/ticket bijection 属于不可配置的安全内核；不得通过配置弱化。backfill gate recognition 直接复用 canonical resolver，不复制 verdict、heading 或 binding 语义。契约修订摘要保存在 [`assets/contract-revision-history.md`](./assets/contract-revision-history.md)，仅在 `contract-status` 返回 `upgradeRequired` 时读取；正常 stage、validate、audit、apply、verify 路径不得读取它。
+
+revision alias 继续使用 `D<n>` / `S<n>` / `P<n>`，其中 D 明确表示 Decision。
 
 - **文档维护层**：常青四层（产品/journey 端到端意图 / 模块贡献 / 模块契约 / 变更事件），真相住这里；跨模块 journey 通过唯一 owner 和 anchor 链接下钻，不复制正文。开发收口后可以通过 backfill 把 durable delta 汇回。
 - **开发 6 步主流程 + 可选回刷**：6 步把改动做出来；backfill 是收口后的维护提示与周期性兜底，不阻塞当前交付。
@@ -23,7 +25,7 @@ description: >
 
 ```mermaid
 flowchart TD
-    Req[需求 / 改动] --> RA[req-align：Design + Spec 门]
+    Req[需求 / 改动] --> RA[req-align：Decision + Spec 门]
     RA -->|D/S revision 已过门| PL[impl-planning：attempt plan + Composition]
     PL -->|tickets=true| TK[to-tickets：draft → publish]
     PL -->|dag=true| DG[create-task-dag：dag.md]
@@ -54,8 +56,8 @@ flowchart TD
 
 | 阶段 | Owner skill | 产出 | 何时 |
 | --- | --- | --- | --- |
-| 1 对齐与调研 | `req-align`（Design 门） | `design.md` | 新需求 / 需求变更，动手前 |
-| 2 写规格 | `req-align`（Spec 门） | 当前 `spec.md` revision | Design 门过后 |
+| 1 对齐与调研 | `req-align`（Decision 门） | `decision.md`（按需 earned） | 新需求 / 需求变更，动手前 |
+| 2 写规格 | `req-align`（Spec 门） | 当前 `spec.md` revision | Decision 门过后 |
 | 3 Attempt 计划 | `impl-planning` | `plan.md` / patch plan（含 Composition） | Spec 过、要落地 |
 | 3b 切票（按需） | `to-tickets` | 当前 attempt 的 `tickets/` | plan 判 `tickets=true` |
 | 4 排执行图（按需） | `create-task-dag` | 当前 attempt DAG | plan 判 `dag=true` |
@@ -67,13 +69,13 @@ flowchart TD
 ## 正向路由：你在哪 → 进哪个 skill
 
 - 先按共享 contract 的四个瞬时影响信号做轻量分流。纯减法、证据修正、引用/分类修正或局部可逆调整若不改变当前业务结果、Acceptance Semantics、D/S contract、plan-owned execution strategy、Composition、安全约束或 mutation authority，直接交给现有 artifact 的 owning skill 做局部修正和定向验证；不为了“进流程”调用 `req-align`、创建新 revision 或扩写 JSON。
-- 有新改动 / 需求，且会改变设计选择或行为 contract → **`req-align`**（先过 Design、再过 Spec 门；当 acceptance 依赖权威证明、发布状态、兼容投影或外部副作用时，由该 skill 条件化定义 evidence-integrity contract；provider、schema、archive、CLI 等只是例子）。
+- 有新改动 / 需求，且会改变决策选择或行为 contract → **`req-align`**（先过 Decision、再过 Spec 门；当 acceptance 依赖权威证明、发布状态、兼容投影或外部副作用时，由该 skill 条件化定义 evidence-integrity contract；provider、schema、archive、CLI 等只是例子）。
 - Spec 已过门，还没 plan → **`impl-planning`**。
 - 当前 attempt plan 判 `tickets=true`，还没票 → **`to-tickets`**（draft → owner 批准 → publish）。
 - 当前 attempt plan 判 `dag=true`，plan（及相关 approved 票）就绪 → **`create-task-dag`**。
 - 上游产物就绪，要开始 / 恢复执行 → **`dev-with-track`**；它从 revision registry 与 gate 派生 lifecycle、选择可执行单元并维护状态。存在有界且委派收益明确的 task 时，进入 **`subagent-driven-development`** 完成实现和 task-level review，再返回前者集成；单 owner 的机械局部 delta 由主 agent 直接处理。存在 manual owner 时，等待验收前按轻量模板生成 readiness handoff。
 - 集成后要审查：`code-review` 恒查；改动 interface / seam / 契约 → **`module-review`**；碰 auth / 支付 / webhook / 迁移 / 外部写入 → **`safety-review`**。
-- 适用 review 与 findings 已闭环、准备写 terminal pass 或对外宣称 complete / closed / merge-ready / release-ready → **`verification-before-completion`**；它审计最终 revision、环境和证据新鲜度，不是 DAG task，也不机械重跑所有检查。
+- 适用 review 与 execution findings 已闭环、准备写 terminal pass 或对外宣称 complete / closed / merge-ready / release-ready → **`verification-before-completion`**；它审计最终 revision、环境和证据新鲜度，不是 DAG task，也不机械重跑所有检查。
 - gate 已关 → **提示**可按需使用 `$backfill-stable-docs` 处理 durable delta。调用 backfill 时先完成独立 contract preflight：旧包由 agent 读取修订摘要并直接改成 current contract，校验通过后才进入只读 audit/apply/verify；升级失败不得继续审计。提示不等于执行授权：只有用户要求、已有明确维护计划，或进入周期性 audit / approved apply / independent verify 时才实际调用；本轮不做 backfill 也可以正常收口。
 
 断链就退回真正拥有变化语义的上游，别按目录层级整链回滚：缺 plan 回 `impl-planning`；输入太宽没切片回 `to-tickets`；Composition/artifact 对不上回 `impl-planning`；只有暴露出真实 contract drift 才回 `req-align` 重过受影响的门。单个 artifact 的证据、引用或分类变化不自动使其他 artifact 失效。

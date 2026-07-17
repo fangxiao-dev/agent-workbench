@@ -202,8 +202,9 @@ def collect_inventory(
                     "contractVersion": contract_by_path.get(package_dir.resolve(), {}).get("contractVersion"),
                     "contractStatus": contract_by_path.get(package_dir.resolve(), {}).get("status"),
                     "implementationsRoot": implementations_root.relative_to(project).as_posix(),
-                    "hasDesign": (package_dir / "design.md").is_file(),
+                    "hasDecision": (package_dir / "decision.md").is_file(),
                     "hasSpec": (package_dir / "spec.md").is_file(),
+                    "hasExecutionFindings": (package_dir / "execution-findings.md").is_file(),
                     "hasGate": has_gate,
                     "gateRecognition": gate["kind"],
                     "gateResolution": verdict,
@@ -268,12 +269,12 @@ def _render_markdown(inventory: dict[str, Any]) -> str:
         f"- 任务包退役结构候选：{len(inventory['retirementStructuralCandidates'])}",
         f"- 需要人工 Gate 复核（mismatch/manual）：{len(inventory['manualGateReviewCandidates'])}",
         "",
-        "| 任务包 | Gate 识别 | Gate 判决 | 适用于当前修订 | Design | Spec | 存在未关闭 pending 引用 | Gap-catching 结构候选 | 退役候选 | 人工 Gate 复核 | 原因 |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| 任务包 | Gate 识别 | Gate 判决 | 适用于当前修订 | Decision | Spec | Execution Findings | 存在未关闭 pending 引用 | Gap-catching 结构候选 | 退役候选 | 人工 Gate 复核 | 原因 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in inventory["packages"]:
         lines.append(
-            "| {package_id} | {recognition} | {resolution} | {applies} | {design} | {spec} | {referenced} | {gap} | {retire} | {manual} | {reason} |".format(
+            "| {package_id} | {recognition} | {resolution} | {applies} | {decision} | {spec} | {execution_findings} | {referenced} | {gap} | {retire} | {manual} | {reason} |".format(
                 package_id=row["packageId"],
                 recognition=row["gateRecognition"] or "none",
                 resolution=row["gateResolution"] or "none",
@@ -284,8 +285,9 @@ def _render_markdown(inventory: dict[str, Any]) -> str:
                     if row["gateAppliesToCurrentRevision"] is False
                     else "未知"
                 ),
-                design="是" if row["hasDesign"] else "否",
+                decision="是" if row["hasDecision"] else "否",
                 spec="是" if row["hasSpec"] else "否",
+                execution_findings="是" if row["hasExecutionFindings"] else "否",
                 referenced="是" if row["referencedInOpenPending"] else "否",
                 gap="是" if row["gapCatchingStructuralCandidate"] else "否",
                 retire="是" if row["retirementStructuralCandidate"] else "否",

@@ -4,7 +4,7 @@
     {
       "id": 1,
       "name": "tickets-only-attempt-plan",
-      "prompt": "Current design D2 and spec S3 have passed their required gates. Create initial attempt P1; the acceptance surface earns two independently tracked slices but no execution DAG.",
+      "prompt": "Current decision D2 and spec S3 have passed their required gates. Create initial attempt P1; the acceptance surface earns two independently tracked slices but no execution DAG.",
       "expected_output": "Creates the current attempt plan with Composition: tickets=true, dag=false, Planned Verification and an empty append-only Execution Record, then routes to-tickets draft.",
       "files": [],
       "expectations": [
@@ -31,7 +31,7 @@
       "id": 3,
       "name": "active-attempt-composition-revision",
       "prompt": "Initial attempt P1 was tickets=false, dag=false. Before any terminal gate, two independent acceptance slices are discovered but D1/S1 behavior remains unchanged. Revise the attempt.",
-      "expected_output": "Creates P2 with Composition: tickets=true, dag=false, records artifact relocation and routes ticket creation without rerunning Design or Spec Gate.",
+      "expected_output": "Creates P2 with Composition: tickets=true, dag=false, records artifact relocation and routes ticket creation without rerunning Decision or Spec Gate.",
       "files": [],
       "expectations": [
         "Treats Composition as attempt-local rather than spec content",
@@ -75,7 +75,7 @@
       "expectations": [
         "Does not copy the generic policy checklists",
         "Keeps actual commands and results out of the plan until execution",
-        "Does not put verification evidence in design or spec"
+        "Does not put verification evidence in decision or spec"
       ]
     },
     {

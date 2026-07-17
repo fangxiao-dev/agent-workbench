@@ -9,7 +9,7 @@
 <!-- plan 升级到更新的 P 号后，本 DAG 若仍标着旧 P 号，视为 NEEDS-REVALIDATION。先按 P delta 定位受影响节点；未受影响节点可批量确认后机械更新本字段，不重画整张 DAG。 -->
 规格：[spec.md](spec.md)
 计划：[当前执行尝试计划](<plan-path>)
-发现记录：[findings.md](findings.md)
+执行发现：<execution-findings.md | 尚未 earned>
 门禁：[gate.md](gate.md)
 
 `dag.md` 仅在 DAG 确实 earned 时作为 task contract、依赖与 ownership 的规范来源；task/ticket current state 与最后一次 evidence pointer 的机器事实源是 `.impl-package/runtime-state.json`。如果同时 earned tickets，下文状态只能是 machine-owned 只读投影。

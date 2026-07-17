@@ -5,11 +5,11 @@ Patch 只属于 package 已有 terminal gate 之后的生命周期，并继续�
 ## 进入 patch 前
 
 1. 读取 gate.md 顶部最新 entry，确认前一 attempt 已 pass、fail 或 defer。
-2. 将 package design/spec 与当前 module knowledge 和代码对账。
+2. 将 package decision/spec 与当前 module knowledge 和代码对账。
 3. 分类 drift：
    - implementation-only：复用 D/S revision；
    - behavior contract：升级 S revision并重跑 Spec Gate；
-   - design direction：升级 D revision并重跑 Design Gate，再升级 S revision并重跑 Spec Gate。
+   - decision direction：升级 D revision并重跑 Decision Gate，再升级 S revision并重跑 Spec Gate。
 4. 所需 gate 未通过时停止，不创建 patch plan。
 
 ## Patch plan

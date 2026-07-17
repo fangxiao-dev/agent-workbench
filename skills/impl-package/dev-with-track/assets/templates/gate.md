@@ -21,7 +21,7 @@
 
 ### 长期增量（Durable Deltas）
 
-<!-- 只保留一种形式。terminal verdict（pass/fail/defer，全部三种）写入前必须完成：findings.md 已分流、_pending registration、module truth pointer 与必要 stub；blocked 如实记录 capture gap，后续用新 entry 补齐。 -->
+<!-- 只保留一种形式。terminal verdict（pass/fail/defer，全部三种）写入前必须完成：若存在 execution-findings.md，其发现已完成影响判断与分流；同时完成 _pending registration、module truth pointer 与必要 stub。blocked 如实记录 capture gap，后续用新 entry 补齐。 -->
 
 | 增量 ID | 目标位置 | 来源 | 事实陈述 | 受影响模块 | 权威来源 | 证据 | Pending 登记 | Truth pointer / stub 校验 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |

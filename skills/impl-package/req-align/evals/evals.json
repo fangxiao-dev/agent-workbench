@@ -3,35 +3,35 @@
   "evals": [
     {
       "id": 1,
-      "name": "blocked-design-prevents-spec",
+      "name": "blocked-decision-prevents-spec",
       "prompt": "为一个新的库存同步需求建立 implementation package。目标模块边界和 owner 对外部 provider 的选择尚未决定。",
-      "expected_output": "Records Design Gate: BLOCKED in design.md and stops before creating spec.md.",
+      "expected_output": "Records Decision Gate: BLOCKED in decision.md and stops before creating spec.md.",
       "files": [],
       "expectations": [
         "Creates a UTC date-prefixed package-id in the form YYMMDD-<topic-slug> for the new package",
-        "Evaluates the Design Gate before the Spec gate",
+        "Evaluates the Decision Gate before the Spec gate",
         "Records the missing destination and required owner decision",
-        "Does not describe the Design step as optional",
-        "Does not create spec.md while Design is blocked"
+        "Does not describe the Decision step as optional",
+        "Does not create spec.md while Decision is blocked"
       ]
     },
     {
       "id": 2,
-      "name": "passed-design-requires-thick-spec",
-      "prompt": "The Design Gate has passed for a lightweight change with repository evidence. Create the implementation contract.",
-      "expected_output": "Creates a gated thick spec with a minimal Design Gate Record when a standalone design.md is not earned.",
+      "name": "passed-decision-requires-thick-spec",
+      "prompt": "The Decision Gate has passed for a lightweight change with repository evidence. Create the implementation contract.",
+      "expected_output": "Creates a gated thick spec with a minimal Decision Gate Record when a standalone decision.md is not earned.",
       "files": [],
       "expectations": [
         "Includes Scope, terms/data contracts, behavior/state/workflow, boundaries, Error Boundaries, Constraint Contracts, Acceptance Semantics, and Contract Coherence",
         "Includes failure recovery and observable acceptance evidence",
-        "Records current Design and Spec revisions without putting Composition in spec.md",
+        "Records current Decision and Spec revisions without putting Composition in spec.md",
         "Does not create a Stable Doc Backfill Map or durable-delta queue in spec.md"
       ]
     },
     {
       "id": 3,
       "name": "blocked-spec-prevents-planning",
-      "prompt": "Design has passed, but the spec draft omits state transitions and a manual verification owner for one acceptance condition. Continue to planning.",
+      "prompt": "Decision has passed, but the spec draft omits state transitions and a manual verification owner for one acceptance condition. Continue to planning.",
       "expected_output": "Records Spec Gate: BLOCKED and routes no plan or ticket work forward.",
       "files": [],
       "expectations": [
@@ -43,14 +43,14 @@
     {
       "id": 4,
       "name": "patch-drift-reruns-only-required-gates",
-      "prompt": "A closed package is being patched. Case A only restores implementation to S2. Case B changes behavior but not design direction. Case C changes the selected design option. Classify the required revision and gate work.",
-      "expected_output": "Reuses D/S for implementation drift, increments only S and reruns Spec Gate for behavior drift, and increments D then S with both gates for design drift.",
+      "prompt": "A closed package is being patched. Case A only restores implementation to S2. Case B changes behavior but not decision direction. Case C changes the selected decision option. Classify the required revision and gate work.",
+      "expected_output": "Reuses D/S for implementation drift, increments only S and reruns Spec Gate for behavior drift, and increments D then S with both gates for decision drift.",
       "files": [],
       "expectations": [
         "Reconciles the closed package against current module knowledge and code before editing",
         "Does not rewrite spec for an implementation-only fix",
         "Reruns only Spec Gate for a behavior-contract change",
-        "Reruns Design then Spec when the selected design direction changes"
+        "Reruns Decision then Spec when the selected decision direction changes"
       ]
     },
     {
@@ -66,6 +66,20 @@
         "Treats any 待用户裁决 item from the ledger as a blocking owner decision under existing Spec Gate criteria",
         "States the ledger lives in the OS temp directory, not under docs/implementations/<package-id>/",
         "Offers grilling as an optional follow-up only after Spec Gate PASSED, framed as a suggestion, not a requirement"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "investigations-are-earned-nonauthoritative-material",
+      "prompt": "调研中产生了候选假设、失败实验和参考笔记，但当前 decision/spec 已能自足表达已选方向与行为合同。如何保存这些材料？如果没有这类材料，新 package 应生成什么？",
+      "expected_output": "Creates topic-named investigations files only for the actual raw material, keeps them non-authoritative and outside runtime/revision/projection state, links them only from formal documents when useful, and creates no empty investigations directory for a package without such material.",
+      "files": [],
+      "expectations": [
+        "Does not create an empty investigations directory",
+        "Does not bind investigation files to D/S/P revisions or runtime state",
+        "Keeps decision.md and spec.md self-contained",
+        "Does not require investigation backlinks or adoption status",
+        "Does not use execution-findings.md as a raw hypothesis or temporary todo queue"
       ]
     }
   ]

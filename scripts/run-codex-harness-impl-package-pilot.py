@@ -23,7 +23,7 @@ def main() -> int:
         [str(parent.get("summary", "")), *(str(item) for item in parent.get("findings", [])), *(str(item.get("claim", "")) for item in parent.get("verification", []) if isinstance(item, dict))]
     ).lower()
     checks = {
-        "package_documents_present": all((package / name).is_file() for name in ("design.md", "spec.md", "plan.md", "gate.md")),
+        "package_documents_present": all((package / name).is_file() for name in ("decision.md", "spec.md", "plan.md", "gate.md")),
         "ten_spec_acs": len(re.findall(r"\| AC-\d+ \|", (package / "spec.md").read_text(encoding="utf-8"))) == 10,
         "binding_sidecar_present": (package / ".impl-package" / "revision-bindings.json").is_file(),
         "parent_result_valid": summary.get("status") == "passed" and summary.get("parent_result_valid") is True and parent.get("status") == "succeeded",

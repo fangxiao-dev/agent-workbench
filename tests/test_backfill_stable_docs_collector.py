@@ -7,7 +7,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest import mock
 from pathlib import Path
 
 import jsonschema
@@ -52,7 +51,7 @@ def commit(root: Path, message: str) -> str:
 
 def base_config(**overrides: object) -> dict[str, object]:
     config: dict[str, object] = {
-        "contractVersion": "3.1",
+        "contractVersion": "3.2",
         "repository": "example/project",
         "targetBranch": "HEAD",
         "implementations": ["docs/implementations"],
@@ -107,12 +106,12 @@ class CollectorInventoryTest(unittest.TestCase):
             (path / ".impl-package").mkdir()
             digest = hashlib.sha256(gate_text.encode("utf-8")).hexdigest()
             (path / ".impl-package/revision-bindings.json").write_text(
-                json.dumps({"contractVersion": "3.1", "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}}, "bindings": []}),
+                json.dumps({"contractVersion": "3.2", "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}}, "bindings": []}),
                 encoding="utf-8",
             )
             (path / ".impl-package/runtime-state.json").write_text(
                 json.dumps({
-                    "contractVersion": "3.1",
+                    "contractVersion": "3.2",
                     "packageId": package,
                     "tasks": [],
                     "tickets": [],
@@ -172,7 +171,7 @@ class CollectorInventoryTest(unittest.TestCase):
         self.assertIsNone(inventory["targetBranchConfigGap"])
         self.assertEqual(inventory["pendingConfigGaps"], [])
         self.assertEqual(len(inventory["pendingColdStarts"]), 1)
-        self.assertEqual(inventory["contractVersion"], "3.1")
+        self.assertEqual(inventory["contractVersion"], "3.2")
 
     def test_unresolvable_target_branch_is_reported_as_config_gap_without_stopping_inventory(self) -> None:
         config_path = self.project / ".stable-docs-backfill.json"
@@ -185,6 +184,22 @@ class CollectorInventoryTest(unittest.TestCase):
         self.assertIsNone(inventory["project"]["targetBranchCommit"])
         self.assertIn("does not resolve", inventory["targetBranchConfigGap"])
         self.assertEqual(inventory["packageCount"], 4)
+
+    def test_inventory_uses_decision_and_execution_findings_only(self) -> None:
+        package = self.project / "docs/implementations/pkg-gap"
+        (package / "decision.md").write_text("# Decision\n", encoding="utf-8")
+        (package / "execution-findings.md").write_text("# Execution Findings\n", encoding="utf-8")
+        (package / "design.md").write_text("# Legacy design\n", encoding="utf-8")
+        (package / "findings.md").write_text("# Legacy findings\n", encoding="utf-8")
+        collector = load_module("collect_sources")
+        row = next(
+            item
+            for item in collector.collect_inventory(project_root=self.project, preflight=False)["packages"]
+            if item["packageId"] == "pkg-gap"
+        )
+        self.assertTrue(row["hasDecision"])
+        self.assertTrue(row["hasExecutionFindings"])
+        self.assertNotIn("hasDesign", row)
 
 
 class ContractPreflightTest(unittest.TestCase):
@@ -207,11 +222,8 @@ class ContractPreflightTest(unittest.TestCase):
 
     def test_upgrade_required_blocks_read_only_inventory(self) -> None:
         collector = load_module("collect_sources")
-        with mock.patch.object(collector, "require_current", side_effect=collector.ContractPreflightError(
-            "contract preflight blocked backfill; upgrade and validate these packages first: stale-pkg: upgradeRequired"
-        )):
-            with self.assertRaises(collector.CollectorError) as raised:
-                collector.collect_inventory(project_root=self.project)
+        with self.assertRaises(collector.CollectorError) as raised:
+            collector.collect_inventory(project_root=self.project)
         self.assertIn("upgrade", str(raised.exception).lower())
 
 class GateRecognitionCurrentContractTest(unittest.TestCase):
@@ -235,7 +247,7 @@ class GateRecognitionCurrentContractTest(unittest.TestCase):
             sidecar.mkdir()
             (package / "plan.md").write_text("# Plan\n", encoding="utf-8")
             (sidecar / "revision-bindings.json").write_text(
-                json.dumps({"contractVersion": "3.1", "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}}, "bindings": []}),
+                json.dumps({"contractVersion": "3.2", "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}}, "bindings": []}),
                 encoding="utf-8",
             )
             if isinstance(runtime, str):
@@ -263,7 +275,7 @@ class GateRecognitionCurrentContractTest(unittest.TestCase):
     def _runtime(gate_text: str, *, entry_id: str = "initial-G1", verdict: str = "pass", digest: str | None = None) -> dict[str, object]:
         digest = digest or hashlib.sha256((gate_text.rstrip("\n") + "\n").encode("utf-8")).hexdigest()
         return {
-            "contractVersion": "3.1",
+            "contractVersion": "3.2",
             "packageId": "fixture",
             "gate": {
                 "allocations": [{"operationId": "op-1", "attempt": "initial", "number": 1, "entryId": "initial-G1"}],
@@ -308,7 +320,7 @@ class GateRecognitionCurrentContractTest(unittest.TestCase):
         empty_operation = self._runtime(valid)
         empty_operation["gate"]["allocations"][0]["operationId"] = ""  # type: ignore[index]
         cases: dict[str, object] = {
-            "missing-entry": {"contractVersion": "3.1", "gate": {"entries": []}},
+            "missing-entry": {"contractVersion": "3.2", "gate": {"entries": []}},
             "missing-hash": missing_hash,
             "missing-id": missing_id,
             "missing-verdict": missing_verdict,
@@ -316,7 +328,7 @@ class GateRecognitionCurrentContractTest(unittest.TestCase):
             "bad-id": self._runtime(valid, entry_id="initial-G2"),
             "bad-verdict": self._runtime(valid, verdict="fail"),
             "empty-operation": empty_operation,
-            "bad-contract": {"contractVersion": "3.0", "gate": self._runtime(valid)["gate"]},
+            "bad-contract": {"contractVersion": "3.1", "gate": self._runtime(valid)["gate"]},
             "corrupt-json": "{not json",
         }
         for name, runtime in cases.items():
@@ -366,10 +378,11 @@ class GateRecognitionCurrentContractTest(unittest.TestCase):
     def test_historical_indexed_gate_is_not_a_candidate_for_new_current_revisions(self) -> None:
         historical = self._gate_text(revision_set="D3 / S2 / P3")
         package = self._package("revision-drift", historical, self._runtime(historical))
+        (package / "decision.md").write_text("# Decision\n", encoding="utf-8")
         revision_path = package / ".impl-package/revision-bindings.json"
         revision = json.loads(revision_path.read_text(encoding="utf-8"))
         revision["current"] = {
-            "design": {"artifact": "design.md", "revision": "D4"},
+            "decision": {"artifact": "decision.md", "revision": "D4"},
             "spec": {"artifact": "spec.md", "revision": "S3"},
             "attempt": {"id": "initial", "plan": "plan.md", "revision": "P3"},
         }
@@ -455,6 +468,7 @@ class GateRecognitionCurrentContractTest(unittest.TestCase):
         collector = load_module("collect_sources")
         markdown = collector._render_markdown(collector.collect_inventory(project_root=self.project, preflight=False))
         self.assertIn("| 任务包 | Gate 识别 | Gate 判决 |", markdown)
+        self.assertIn("Decision | Spec | Execution Findings", markdown)
         self.assertIn("| indexed | indexed | pass |", markdown)
         self.assertIn("需要人工 Gate 复核（mismatch/manual）", markdown)
 

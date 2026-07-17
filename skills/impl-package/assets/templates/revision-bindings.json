@@ -1,10 +1,10 @@
 {
-  "contractVersion": "3.1",
+  "contractVersion": "3.2",
   "purpose": "internal-machine-sidecar",
   "ownerFacing": false,
   "current": {
-    "design": {
-      "artifact": "design.md",
+    "decision": {
+      "artifact": "decision.md",
       "revision": "D<n>"
     },
     "spec": {
@@ -20,12 +20,12 @@
   "bindings": [
     {
       "id": "D<n>@<git-blob-oid>",
-      "artifact": "design.md",
+      "artifact": "decision.md",
       "revision": "D<n>",
       "mode": "exact-blob",
       "blob": "<git-blob-oid>",
       "supersedes": null,
-      "evidence": "design.md#revision-history"
+      "evidence": "decision.md#revision-history"
     },
     {
       "id": "S<n>@<git-blob-oid>",

@@ -6,7 +6,7 @@
 
 ## Manifest
 
-Use a TOML manifest with a fixed repository, source commit, package path, attempt id, parent profile, and one `[[stage]]` per Harness stage. Each stage declares DAG dependencies, allowed mutation paths, parent role, applicable Skills, external verifier commands, sandbox mode, and whether sensitive originals may be requested on demand. [examples/datev-accounting-rules.harness.toml](../../examples/datev-accounting-rules.harness.toml) is the DATEV reference manifest.
+Use a TOML manifest with a fixed repository, source commit, package path, attempt id, parent profile, and one `[[stage]]` per Harness stage. Each stage declares DAG dependencies, allowed mutation paths, parent role, applicable Skills, external verifier commands, sandbox mode, and whether sensitive originals may be requested on demand. Adapter preparation only accepts current Impl-Package contract 3.2 snapshots. [the pinned DATEV pre-3.2 fixture](../../examples/datev-accounting-rules.pre-3.2-upgrade-fixture.toml) exists only to prove stale packages are rejected before preparation; it is not an executable reference manifest.
 
 `sensitive_originals = "on_demand"` does not grant blanket access. An actual execution additionally requires `--allow-sensitive-originals --sensitive-root <repository-relative-root>`; the prompt prohibits copying full source content, identifiers, or payloads into artifacts, logs, commits, or Parent Result.
 
@@ -17,25 +17,25 @@ Generate a reviewable adapter draft and its readiness report. This does not star
 ```powershell
 python scripts/prepare-codex-harness-package.py `
   --repository-root D:\CodeSpace\kaispan-dev `
-  --source-ref 3cc2a9350d5820c236a352b7e1a756f13a837e27 `
-  --package docs/domains/finance-assistant/implementations/2026-07-16-datev-accounting-rules `
+  --source-ref <current-3.2-commit> `
+  --package docs/implementations/<current-package-id> `
   --parent-profile D:\CodeSpace\agent-workbench\.codex\harness\parent.toml `
   --output D:\CodeSpace\kaispan-dev\.harness\datev.generated.toml `
   --readiness-output D:\CodeSpace\kaispan-dev\.harness\datev.readiness.json
 ```
 
-Review every `TODO(owner)` verifier and every stage named in `path_ownership_review`, then copy or promote the approved values into a checked-in manifest. The checked-in [examples/datev-accounting-rules.harness.toml](../../examples/datev-accounting-rules.harness.toml) remains the reviewed reference; a generated file is only an input to that review.
+Review every `TODO(owner)` verifier and every stage named in `path_ownership_review`, then copy or promote the approved values into a checked-in current manifest. A generated file is only an input to that review; the pre-3.2 fixture must never be promoted.
 
 Validate the package snapshot and print its currently ready parent stages without creating a worktree or starting Codex:
 
 ```powershell
-python scripts/run-codex-harness-package.py --manifest examples/datev-accounting-rules.harness.toml
+python scripts/run-codex-harness-package.py --manifest <reviewed-current-manifest.toml>
 ```
 
 After an integration parent has accepted preceding stages and an isolated, clean worktree exists, dispatch one parent stage:
 
 ```powershell
-python scripts/run-codex-harness-package.py --manifest examples/datev-accounting-rules.harness.toml --completed T1,T2 --execute --stage T4 --worktree D:\CodeSpace\kaispan-dev\.worktrees\datev-t4
+python scripts/run-codex-harness-package.py --manifest <reviewed-current-manifest.toml> --completed T1,T2 --execute --stage T4 --worktree D:\CodeSpace\kaispan-dev\.worktrees\datev-t4
 ```
 
 The runner refuses an unclean worktree, unknown/unsatisfied dependencies, source-binding drift, out-of-scope changed paths, invalid Parent Result, missing work-package hash, or an apparent success without configured independent verifier commands. A parent can still return `needs_owner`, which is preserved rather than retried as a failure.

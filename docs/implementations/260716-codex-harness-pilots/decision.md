@@ -1,14 +1,16 @@
-# Codex Harness Pilots 设计研究
+# Codex Harness Pilots 决策研究
 
-状态（Status）：Design Gate Passed
+状态（Status）：Decision Gate Passed
 创建时间（Created）：2026-07-16
-设计修订（Design Revision）：D1
+<!-- impl-package:projection revision-set begin -->
+决策修订（Decision Revision）：D1
+<!-- impl-package:projection revision-set end -->
 需求来源（Requirement source）：Owner 于 2026-07-16 要求将已完成的 Codex Harness 可行性调研转成粗粒度探索性 Impl-Package，重点定义 Spec 与 Gate。
 主题 slug（Topic slug）：codex-harness-pilots
 任务包 ID（Package ID）：260716-codex-harness-pilots
 规范任务包路径（Canonical package）：`docs/implementations/260716-codex-harness-pilots/`
 
-本文是本任务包当前设计选择与理由的事实源。完整调研、App Server Sources Index 与本地 POC 证据直接复用 [Codex Harness POC 设计资产](../../../skills/codex-harness/assets/codex-harness-poc-design.md)，本文不复制其研究正文；行为、失败恢复和验收语义由 [spec.md](spec.md) 独占。
+本文是本任务包当前决策选择与理由的事实源。完整调研、App Server Sources Index 与本地 POC 证据直接复用 [Codex Harness POC 设计资产](../../../skills/codex-harness/assets/codex-harness-poc-design.md)，本文不复制其研究正文；行为、失败恢复和验收语义由 [spec.md](spec.md) 独占。
 
 ## 1. 目标落点
 
@@ -63,7 +65,7 @@
 | `gpt-5.6/high` 是否是长期默认父 profile | Owner | 本 POC 作为可配置默认值使用；性能/成本数据产生后再决定 | 不阻塞；Spec 要求记录实际投影，不把具体模型写成永久合同 |
 | 多版本支持范围 | Future owner | durable runner 通过后再建立兼容矩阵 | 不阻塞本版本 POC |
 
-### Design 门
+### Decision 门
 
 - 结果（Result）：PASSED
 - 目标落点可回答：是；Harness readiness 由 10 个 Pilot evidence 分层判定。
@@ -71,7 +73,7 @@
 - 实质选择已决定：是；父-only、App Server v2、独立父结果验收、边界触发介入。
 - 开放问题不阻塞 Spec：是；模型默认值和多版本范围均有明确延后边界。
 - Owner 决策已记录：是。
-- 证据 / 剩余 blocker：设计无 blocker；实现与 Pilot evidence 尚未产生。
+- 证据 / 剩余 blocker：决策无 blocker；实现与 Pilot evidence 尚未产生。
 - 评估人 / 日期：Codex，2026-07-16。
 
 ## 8. Backfill 候选
@@ -84,4 +86,4 @@
 
 | 前一修订 | 新修订 | 变化摘要 | 权威来源 | 日期 | 被取代说明 |
 | --- | --- | --- | --- | --- | --- |
-| none | D1 | 从现有 POC 设计资产建立父-only Harness Pilot package 设计基线 | Owner 决策与 `codex-harness-poc-design.md` | 2026-07-16 | 初始修订 |
+| none | D1 | 从现有 POC 设计资产建立父-only Harness Pilot package 设计基线 | Owner 决策与 `codex-harness-poc-decision.md` | 2026-07-16 | 初始修订 |

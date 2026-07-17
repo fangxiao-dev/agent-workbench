@@ -2,23 +2,25 @@
 
 状态（Status）：Spec Gate Passed
 创建时间（Created）：2026-07-16
-设计修订（Design Revision）：D1
+<!-- impl-package:projection revision-set begin -->
+决策修订（Decision Revision）：D1
 规格修订（Spec Revision）：S1
+<!-- impl-package:projection revision-set end -->
 需求来源（Requirement source）：Owner 于 2026-07-16 批准把现有 Harness 设计转成粗粒度探索性任务包，重点定义 Spec 与 Gate。
 主题 slug（Topic slug）：codex-harness-pilots
 任务包 ID（Package ID）：260716-codex-harness-pilots
 规范任务包路径（Canonical package）：`docs/implementations/260716-codex-harness-pilots/`
-设计（Design）：[design.md](design.md)
+决策（Decision）：[decision.md](decision.md)
 
-## Design 门记录（Design Gate Record）
+## Decision 门记录（Decision Gate Record）
 
 - 结果（Result）：PASSED
 - 目标落点与预期结果：通过父-only App Server Harness 与 10 个 Pilot AC，分层证明只读 POC、durable runner 和 development-ready。
-- 权威来源 / 当前状态证据：[design.md](design.md) 与 [Codex Harness POC 设计资产](../../../skills/codex-harness/assets/codex-harness-poc-design.md)；当前 native App Server/thread feasibility 已证明，父-only live loop 尚待执行。
+- 权威来源 / 当前状态证据：[decision.md](decision.md) 与 [Codex Harness POC 设计资产](../../../skills/codex-harness/assets/codex-harness-poc-decision.md)；当前 native App Server/thread feasibility 已证明，父-only live loop 尚待执行。
 - 选定方向与理由：Harness 只绑定父角色并验收父结果；父 agent 自主选择完成方式；App Server v2 提供生命周期控制；外部 validator 防止 false PASS。
 - 开放问题处理结果：模型默认值和多版本范围明确延后，不影响当前行为合同。
 - Owner 决策（已解决 / 未解决）：已解决：父-only 边界、粗粒度 package、重点 Spec/Gate；未解决：0。
-- 证据位置：[design.md](design.md)
+- 证据位置：[decision.md](decision.md)
 - 评估人 / 日期：Codex，2026-07-16。
 
 ## Spec 门记录（Spec Gate Record）
@@ -32,7 +34,7 @@
 ## 1. 范围 / 权威来源 / 非目标
 
 - 范围：实现并验证一个以 Codex App Server v2 为控制面的父 agent Harness；Harness 加载父 profile、提交 work package、监听父 turn、解析父结构化结果、独立验证 claims，并对 timeout、retry、resume/fork、cleanup 和隔离写入提供可审计行为。
-- 权威来源与优先级：本 `spec.md` 是 package 行为与 acceptance SoT；[design.md](design.md) 拥有选择理由；[Codex Harness Skill](../../../skills/codex-harness/SKILL.md) 与其 POC asset 提供当前介绍、调研和 Sources Index；OpenAI App Server v2 protocol 是外部接口权威。
+- 权威来源与优先级：本 `spec.md` 是 package 行为与 acceptance SoT；[decision.md](decision.md) 拥有选择理由；[Codex Harness Skill](../../../skills/codex-harness/SKILL.md) 与其 POC asset 提供当前介绍、调研和 Sources Index；OpenAI App Server v2 protocol 是外部接口权威。
 - 非目标：Harness 不指定、绑定或验收 child role/数量/模型/prompt/拓扑；不以 child activity 证明任务成功；本 attempt 不承诺生产级多版本、MCP allowlist、token budget 或非隔离并行写入。
 - 需要确认的假设：目标 Codex 版本可运行配置的父模型；若不可用，capability/profile validation 必须 fail closed，不得静默换模型后仍宣称原 profile 已验证。
 

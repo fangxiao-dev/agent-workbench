@@ -1,16 +1,16 @@
-# [实施名称] 设计研究
+# [实施名称] 决策研究
 
-状态（Status）：Draft | Design Gate Passed | Design Gate Blocked
+状态（Status）：Draft | Decision Gate Passed | Decision Gate Blocked
 创建时间（Created）：
 <!-- impl-package:projection revision-set begin -->
-设计修订（Design Revision）：D<n>
+决策修订（Decision Revision）：D<n>
 <!-- impl-package:projection revision-set end -->
 需求来源（Requirement source）：
 主题 slug（Topic slug）：
 任务包 ID（Package ID）：
 规范任务包路径（Canonical package）：`docs/implementations/<package-id>/`
 
-本文是任务包活动期间当前设计选择与理由的事实源，不是行为合同。当前正文只保留最新选择，被取代的选择写入修订历史，完整旧正文由 Git 保存。行为、状态、接口、失败和验收语义只属于 `spec.md`。Design 被阻塞时使用本文件，不创建 `spec.md`。`Status: Design Gate Passed` 必须对应 `Result: PASSED`；`Status: Design Gate Blocked` 必须对应 `Result: BLOCKED`。
+本文是任务包活动期间当前决策与理由的事实源，不是行为合同。当前正文只保留最新选择，被取代的选择写入修订历史，完整旧正文由 Git 保存。行为、状态、接口、失败和验收语义只属于 `spec.md`。Decision 被阻塞时使用本文件，不创建 `spec.md`。`Status: Decision Gate Passed` 必须对应 `Result: PASSED`；`Status: Decision Gate Blocked` 必须对应 `Result: BLOCKED`。若引用 `investigations/<topic>.md`，本文件仍必须自足说明当前决定；investigation 默认无 authority，且不维护 backlink 或采用状态。
 
 ## 1. 目标落点
 
@@ -56,7 +56,7 @@
 | 问题 | Owner | 解决方式 / 延后安排 | 对 Spec 的影响 |
 | --- | --- | --- | --- |
 
-### Design 门
+### Decision 门
 
 - 结果（Result）：PASSED | BLOCKED
 - 目标落点可回答：

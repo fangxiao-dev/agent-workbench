@@ -40,7 +40,7 @@ def assert_unique_revision_projection(content: str, body: str, label: str) -> No
         content,
     )
     if re.search(
-        r"(?m)^\s*(?:设计修订（Design Revision）|规格修订（Spec Revision）|计划修订（Plan Revision）|Design Revision|Spec Revision|Plan Revision)[：:]",
+        r"(?m)^\s*(?:决策修订（Decision Revision）|规格修订（Spec Revision）|计划修订（Plan Revision）|Decision Revision|Spec Revision|Plan Revision)[：:]",
         outside_marker,
     ):
         raise AssertionError(f"{label} duplicates a revision declaration outside its machine-owned projection")
@@ -49,7 +49,7 @@ def assert_unique_revision_projection(content: str, body: str, label: str) -> No
 def main() -> None:
     skill = read(SKILL_ROOT / "SKILL.md")
     template = read(SKILL_ROOT / "assets" / "templates" / "plan.md")
-    design_template = read(IMPL_ROOT / "req-align" / "assets" / "templates" / "design.md")
+    decision_template = read(IMPL_ROOT / "req-align" / "assets" / "templates" / "decision.md")
     spec_template = read(IMPL_ROOT / "req-align" / "assets" / "templates" / "spec.md")
     patching = read(SKILL_ROOT / "patching.md")
     rubric = read(SKILL_ROOT / "rubric.md")
@@ -84,7 +84,7 @@ def main() -> None:
         (skill, "Execution Record", "execution record"),
         (skill, "不在 plan 保存 task checklist", "no task checklist rule"),
         (skill, "terminal gate verdict 后 plan 冻结", "terminal freeze"),
-        (template, "设计修订（Design Revision）：D<n>", "design revision"),
+        (template, "决策修订（Decision Revision）：D<n>", "decision revision"),
         (template, "规格修订（Spec Revision）：S<n>", "spec revision"),
         (template, "计划修订（Plan Revision）：P<n>", "plan revision"),
         (
@@ -134,7 +134,6 @@ def main() -> None:
             "绑定校验（Binding validation）：<passed | failed>",
             "human-readable gate binding conclusion",
         ),
-        (gate_template, "机器审计元数据：", "hidden machine audit metadata"),
         (binding_template, '"current"', "binding registry current selection"),
         (
             binding_template,
@@ -195,18 +194,18 @@ def main() -> None:
         assert_contains(content, needle, label)
 
     assert_unique_revision_projection(
-        design_template,
-        "设计修订（Design Revision）：D<n>",
-        "design template",
+        decision_template,
+        "决策修订（Decision Revision）：D<n>",
+        "decision template",
     )
     assert_unique_revision_projection(
         spec_template,
-        "设计修订（Design Revision）：D<n>\n规格修订（Spec Revision）：S<n>",
+        "决策修订（Decision Revision）：D<n>\n规格修订（Spec Revision）：S<n>",
         "spec template",
     )
     assert_unique_revision_projection(
         template,
-        "设计修订（Design Revision）：D<n>\n规格修订（Spec Revision）：S<n>\n计划修订（Plan Revision）：P<n>",
+        "决策修订（Decision Revision）：D<n>\n规格修订（Spec Revision）：S<n>\n计划修订（Plan Revision）：P<n>",
         "plan template",
     )
 
@@ -233,6 +232,11 @@ def main() -> None:
             gate_template,
             "- Revision bindings: revision-bindings.json",
             "owner-facing JSON field in gate",
+        ),
+        (
+            gate_template,
+            "机器审计元数据：",
+            "redundant gate machine metadata",
         ),
     )
     for content, needle, label in forbidden:

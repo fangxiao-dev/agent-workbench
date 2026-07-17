@@ -14,7 +14,7 @@
   ],
   "properties": {
     "contractVersion": {
-      "const": "3.1"
+      "const": "3.2"
     },
     "repository": {
       "type": "string",

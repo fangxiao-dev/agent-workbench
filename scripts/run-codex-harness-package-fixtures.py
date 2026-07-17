@@ -28,14 +28,28 @@ def main() -> int:
         git(root, "config", "user.email", "fixture@example.test")
         git(root, "config", "user.name", "Fixture")
         package = root / "docs" / "implementations" / "fixture"
-        write(package / "design.md", "# Design\n")
+        write(package / "decision.md", "# Decision\n")
         write(package / "spec.md", "# Spec\n")
         write(package / "plan.md", "# Plan\n")
         write(package / "dag.md", "# DAG\n")
         write(package / "tickets" / "one.md", "# One\n")
         write(package / "tickets" / "two.md", "# Two\n")
-        blobs = {name: subprocess.run(["git", "hash-object", str(package / name)], check=True, capture_output=True, text=True).stdout.strip() for name in ("design.md", "spec.md", "plan.md")}
-        sidecar = {"current": {"design": {"revision": "D1"}, "spec": {"revision": "S1"}, "attempt": {"id": "initial", "revision": "P1"}}, "bindings": [{"artifact": "design.md", "revision": "D1", "blob": blobs["design.md"]}, {"artifact": "spec.md", "revision": "S1", "blob": blobs["spec.md"]}, {"artifact": "plan.md", "revision": "P1", "blob": blobs["plan.md"]}]}
+        blobs = {name: subprocess.run(["git", "hash-object", str(package / name)], check=True, capture_output=True, text=True).stdout.strip() for name in ("decision.md", "spec.md", "plan.md")}
+        sidecar = {
+            "contractVersion": "3.2",
+            "purpose": "internal-machine-sidecar",
+            "ownerFacing": False,
+            "current": {
+                "decision": {"artifact": "decision.md", "revision": "D1"},
+                "spec": {"artifact": "spec.md", "revision": "S1"},
+                "attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"},
+            },
+            "bindings": [
+                {"id": f"D1@{blobs['decision.md']}", "artifact": "decision.md", "revision": "D1", "mode": "exact-blob", "blob": blobs["decision.md"], "supersedes": None, "evidence": "decision.md#revision-history"},
+                {"id": f"S1@{blobs['spec.md']}", "artifact": "spec.md", "revision": "S1", "mode": "exact-blob", "blob": blobs["spec.md"], "supersedes": None, "evidence": "spec.md#revision-history"},
+                {"id": f"initial:P1@{blobs['plan.md']}", "artifact": "plan.md", "attempt": "initial", "revision": "P1", "mode": "plan-contract-v1", "blob": blobs["plan.md"], "supersedes": None, "evidence": "plan.md#plan-revision-history"},
+            ],
+        }
         write(package / ".impl-package" / "revision-bindings.json", json.dumps(sidecar))
         profile = root / "parent.toml"
         write(profile, 'name="fixture"\ndescription="fixture"\nmodel="test"\nmodel_reasoning_effort="low"\ndeveloper_instructions="fixture"\n')

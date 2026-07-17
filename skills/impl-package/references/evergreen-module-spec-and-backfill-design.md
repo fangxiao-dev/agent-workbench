@@ -27,7 +27,7 @@
 
 事件溯源 + 快照：
 
-- implementation package-id 内 `spec.md` / `design.md` = 变更事件与事实来源；
+- implementation package-id 内 `spec.md` / `decision.md` = 变更事件与事实来源；
 - 常青文档（module-knowledge 的 prd/spec、顶层 PRD、ARD、项目语言、 tech-stack、hands-on）= 可直接阅读的当前快照；
 - 回刷 = gate 后异步执行的 compaction / checkpoint；capture 已在 gate 内完成，回刷可以延期、批量和周期执行；
 - Git 历史 + 迁移台账 = 已删除旧设计层的 provenance。
@@ -111,7 +111,7 @@ docs/module-knowledge/
 1. 顶层 PRD 的 journey anchor 拥有端到端用户目标、参与者/阶段、跨模块 outcome 与 journey-level invariant；persona 只是适用标签，不按 Customer/Supplier surface 复制 journey。
 2. 每个受影响 module `prd.md` 只写本模块对该 journey 的价值贡献、责任边界与 non-goals，并反向链接 journey anchor，不复制完整 journey。
 3. 可验证行为、接口和状态由 module `spec.md` 拥有。真正跨模块的 rule/seam 选择一个 primary contract owner（最能执行和裁决规则的模块），其他 module spec 在“边界与依赖”引用该 anchor；若无法合理确定 owner，升级为 ARD/top-level contract owner decision，不能多模块双写。
-4. `docs/implementations/<package-id>/design.md` 只记录本次跨模块变化的选择、影响图、迁移/rollout、seam 协调和 expected canonical deltas；package `spec.md` 保存本次批准的 acceptance/contract delta。二者引用 journey/module anchors，不复制常青全文。gate capture 为每个 durable delta 指定唯一 destination；backfill 后 package 保留事件 provenance，不成为长期 SoT。
+4. `docs/implementations/<package-id>/decision.md` 只记录本次跨模块变化的选择、影响图、迁移/rollout、seam 协调和 expected canonical deltas；package `spec.md` 保存本次批准的 acceptance/contract delta。二者引用 journey/module anchors，不复制常青全文。gate capture 为每个 durable delta 指定唯一 destination；backfill 后 package 保留事件 provenance，不成为长期 SoT。
 
 引用链固定为：`journey anchor → module PRD contribution → primary module spec contract（dependent specs 只引用）→ implementation package change delta`。
 

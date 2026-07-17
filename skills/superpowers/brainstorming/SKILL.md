@@ -116,7 +116,7 @@ digraph brainstorming {
 
 **Documentation:**
 
-- Persist the validated design through the repository's canonical design/spec owner and path. When `req-align` invoked brainstorming, return the converged decisions so `req-align` can update its owned `design.md` / `spec.md` artifacts.
+- Persist the validated decision through the repository's canonical decision/spec owner and path. When `req-align` invoked brainstorming, return the converged decisions so `req-align` can update its owned `decision.md` / `spec.md` artifacts.
 - Use elements-of-style:writing-clearly-and-concisely skill if available
 - Do not commit or publish the design unless the user or repository workflow authorizes that action.
 

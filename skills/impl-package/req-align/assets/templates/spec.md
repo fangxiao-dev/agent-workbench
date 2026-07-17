@@ -3,18 +3,18 @@
 状态（Status）：Draft | Spec Gate Passed | Spec Gate Blocked
 创建时间（Created）：
 <!-- impl-package:projection revision-set begin -->
-设计修订（Design Revision）：D<n>
+决策修订（Decision Revision）：D<n>
 规格修订（Spec Revision）：S<n>
 <!-- impl-package:projection revision-set end -->
 需求来源（Requirement source）：
 主题 slug（Topic slug）：
 任务包 ID（Package ID）：
 规范任务包路径（Canonical package）：`docs/implementations/<package-id>/`
-设计（Design）：[design.md](design.md) | 无独立 design 文件
+决策（Decision）：[decision.md](decision.md) | 无独立 decision 文件
 
-## Design 门记录（Design Gate Record）
+## Decision 门记录（Decision Gate Record）
 
-<!-- 仅在 Design PASSED 后填写。没有 design.md 时，本节是必经 lightweight Design 步骤的规范最小证据。Design BLOCKED 路径使用 design.md，不生成本 spec。因此，已存在 spec 中的 Design Gate Result 只能是 PASSED。`Status: Spec Gate Passed` 要求 Spec Gate Result 为 PASSED；`Status: Spec Gate Blocked` 要求 Spec Gate Result 为 BLOCKED。 -->
+<!-- 仅在 Decision PASSED 后填写。没有 decision.md 时，本节是必经 lightweight Decision 步骤的规范最小证据。Decision BLOCKED 路径使用 decision.md，不生成本 spec。因此，已存在 spec 中的 Decision Gate Result 只能是 PASSED。`Status: Spec Gate Passed` 要求 Spec Gate Result 为 PASSED；`Status: Spec Gate Blocked` 要求 Spec Gate Result 为 BLOCKED。若引用 investigations/<topic>.md，本 spec 仍必须自足表达当前行为合同。 -->
 
 - 结果（Result）：PASSED
 - 目标落点与预期结果：
@@ -22,7 +22,7 @@
 - 选定方向与理由：
 - 开放问题处理结果：
 - Owner 决策（已解决 / 未解决）：
-- 证据位置：design.md | 本记录
+- 证据位置：decision.md | 本记录
 - 评估人 / 日期：
 
 ## Spec 门记录（Spec Gate Record）

@@ -8,7 +8,7 @@ updated: 2026-07-11
 - no-DAG attempt 不建立 task checklist；恢复状态只在触发条件成立时进入 progress ledger。
 - 实际 review/verification 证据 append 到 plan Execution Record；gate 只保存 newest-first append-only 判决摘要与 Durable Deltas。
 - blocked→pass 通过新 G entry 与 Supersedes 表达，旧 entry 不修改；pass/fail/defer terminal 后冻结 plan。
-- gate evaluation 前分流 findings，禁止 design/spec、长期知识与过程证据互相回流。
+- gate evaluation 前分流 execution findings，禁止 decision/spec、长期知识与过程证据互相回流。
 
 ## 决策记录（滚动，最近 ≤5 轮）
 ### R1 · 2026-07-08（三 skill 互相对齐轮）
@@ -21,7 +21,7 @@ updated: 2026-07-11
 - 采纳「findings 模板示例泛化，去掉 preview/fixture 等项目味表述」— 延伸自用户对 create-task-dag 示例的泛化纠正
 
 ### R3 · 2026-07-11（Impl-Package Step 1 ownership 收口）
-- `design.md` / `spec.md` canonical ownership 与模板归 `req-align`；`plan.md` / patch plan 归 `impl-planning`；`dev-with-track` 只消费已过门 design/spec 与当前 plan，不创建或重定义它们。
+- `decision.md` / `spec.md` canonical ownership 与模板归 `req-align`；`plan.md` / patch plan 归 `impl-planning`；`dev-with-track` 只消费已过门 decision/spec 与当前 plan，不创建或重定义它们。
 - 删除 `dev-with-track` 的 design 模板副本与 `impl-planning` 的 spec 模板副本，保持每类 artifact 单一 canonical 模板来源。
 
 ### R4 · 2026-07-12（Artifact lifecycle 与 append-only gate）
@@ -29,4 +29,4 @@ updated: 2026-07-11
 - dev-with-track 追加 plan Execution Record，但不拥有 plan 的策略或结构定义。
 - package 只保留一个 gate.md；每次 evaluation 顶部插入不可变 entry，完整验证不复制进 gate。
 - terminal entry 写入前完成 Stage 7；blocked capture gap 由后续 entry 补齐。
-- findings 成为 package 级 inbox，每条记录 Attempt ID，gate 前按 design/spec/backfill/ER 分流。
+- findings 成为 package 级 inbox，每条记录 Attempt ID，gate 前按 decision/spec/backfill/ER 分流。

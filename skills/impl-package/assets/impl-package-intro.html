@@ -245,15 +245,15 @@
         <div class="flow">
           <div class="fstage"><div class="node">1</div><div class="card">
             <div class="h"><h3>对齐与调研</h3><span class="badge always">必经</span></div>
-            <div class="what">把需求和仓库现状,变成一个可决策的方向。</div>
-            <div class="who"><span class="skill">req-align · Design 门</span><span class="art">design.md</span></div>
+            <div class="what">把需求和仓库现状变成可决策方向。Decision 步骤恒定必经；只有内容值得持久化时才创建 decision.md，原始调查材料按需进入无 authority 的 investigations/。</div>
+            <div class="who"><span class="skill">req-align · Decision 门</span><span class="art">decision.md · investigations/（均按需 earned）</span></div>
             <div class="trig"><b>触发</b>来了新需求 / 需求变更,动手前第一步</div>
           </div></div>
           <div class="fstage"><div class="node">2</div><div class="card">
             <div class="h"><h3>写规格 Spec</h3><span class="badge always">必经</span></div>
             <div class="what">八节当前合同:行为、状态、边界、失败恢复、验收。它维护 D/S revision,不保存执行拓扑。</div>
             <div class="who"><span class="skill">req-align · Spec 门</span><span class="art">spec.md</span></div>
-            <div class="trig"><b>触发</b>Design 门通过后,同一 skill 接着过 Spec 门</div>
+            <div class="trig"><b>触发</b>Decision 门通过后,同一 skill 接着过 Spec 门</div>
           </div></div>
           <div class="fstage"><div class="node">3</div><div class="card">
             <div class="h"><h3>Attempt 计划 ＋ 按需切票</h3><span class="badge always">必经</span></div>
@@ -269,8 +269,8 @@
           </div></div>
           <div class="fstage"><div class="node">5</div><div class="card">
             <div class="h"><h3>执行</h3><span class="badge always">必经</span></div>
-            <div class="what">恢复现场 → 确定下一步 → 执行 → 证据写入 plan Execution Record → findings 分流 → gate ledger 新判决。</div>
-            <div class="who"><span class="skill">dev-with-track</span><span class="art">progress · Execution Record · gate.md</span></div>
+            <div class="what">恢复现场 → 确定下一步 → 执行 → 证据写入 plan Execution Record → 重要执行发现按需进入 execution-findings.md 并完成分流 → gate ledger 新判决。</div>
+            <div class="who"><span class="skill">dev-with-track</span><span class="art">progress · Execution Record · execution-findings.md（按需）· gate.md</span></div>
             <div class="trig"><b>触发</b>上游就绪;跨 session 续上也走这里</div>
           </div></div>
           <div class="fstage"><div class="node">6</div><div class="card">

@@ -2,17 +2,19 @@
 
 创建时间（Created）：2026-07-16
 执行尝试 ID（Attempt ID）：initial
-设计修订（Design Revision）：D1
+<!-- impl-package:projection revision-set begin -->
+决策修订（Decision Revision）：D1
 规格修订（Spec Revision）：S1
 计划修订（Plan Revision）：P1
+<!-- impl-package:projection revision-set end -->
 执行组合（Composition）：tickets=false, dag=false
 任务包 ID（Package ID）：260716-codex-harness-pilots
 发布时绑定校验（Binding Validation at Publication）：Passed
-设计：[design.md](design.md)
+决策：[decision.md](decision.md)
 规格：[spec.md](spec.md)
 门禁账本：[gate.md](gate.md)
 
-> design/spec 是当前 contract SoT。本 plan 只记录 initial attempt 的粗粒度执行策略、验证选择和过程证据。terminal gate verdict 后冻结。
+> decision/spec 是当前 contract SoT。本 plan 只记录 initial attempt 的粗粒度执行策略、验证选择和过程证据。terminal gate verdict 后冻结。
 
 ## 摘要
 
@@ -23,7 +25,7 @@
 - 需求 / patch 来源：Owner 要求基于现有 Harness 设计创建粗粒度探索性任务包，重点固化 Spec 与 Gate。
 - 已检查的当前 module knowledge：无；仓库没有适用于该新 Harness 模块的 `docs/module-knowledge/` 文件。
 - 聚焦代码 / 测试事实：`scripts/run-codex-app-server-pilot.py`、`scripts/run-codex-subagent-pilot.ps1`、`.codex/harness/parent.toml`、`.codex/config.toml`、`skills/codex-harness/`。
-- D/S gate 证据：[design.md](design.md) Design Gate PASSED；[spec.md](spec.md) Spec Gate PASSED。
+- D/S gate 证据：[decision.md](decision.md) Decision Gate PASSED；[spec.md](spec.md) Spec Gate PASSED。
 - 上一个 terminal gate entry（仅 patch）：N/A；initial attempt。
 - Module Knowledge Watermark：None；本 attempt 未引用现有 module-knowledge 文件。
 
@@ -79,7 +81,7 @@
 - Design / Spec / Plan 修订：D1 / S1 / P1
 - 检查或命令：解析 `.impl-package/revision-bindings.json`；用 `git hash-object` 复核 D1/S1/P1 publication blobs；检查 Design/Spec gate header、10 个 AC、Composition 与 artifact 互链。
 - 结果：Passed；D1/S1 exact-blob 与 P1 plan-contract-v1 baseline 均匹配，Design/Spec Gate 投影一致，AC 数量为 10，Composition 为 `tickets=false, dag=false`。
-- 证据路径：`.impl-package/revision-bindings.json`、本 ER-1、`design.md`、`spec.md`。
+- 证据路径：`.impl-package/revision-bindings.json`、本 ER-1、`decision.md`、`spec.md`。
 - 剩余风险 / 后续动作：该证据只证明任务包 publication/binding 可用；AC-1..AC-10 尚无 live Pilot evidence，不能声明 Harness POC、durable runner 或 development-ready。
 
 ### ER-2

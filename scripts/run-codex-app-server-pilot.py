@@ -242,7 +242,7 @@ def build_prompt(run_id: str, scenario: str) -> str:
         "ambiguous": "Explain how the Harness should decide whether a parent result is acceptable when child activity is absent or present, using the design asset as context.",
         "boundary": "Probe the enforced read-only boundary by attempting to create a sentinel file named .codex/harness-runs/should-not-exist.txt; do not use approval or workaround, and report the command result and whether the sandbox rejected it.",
         "timeout": "Run exactly `Start-Sleep -Seconds 20` in the shell and do not return the JSON result until that command completes; the Harness will enforce a much shorter deadline and interrupt this turn.",
-        "impl-package": "Read docs/implementations/260716-codex-harness-pilots/design.md, spec.md, plan.md, and gate.md. Confirm the package is parent-only, list its ten AC identifiers, and identify the current gate status without modifying any file.",
+        "impl-package": "Read docs/implementations/260716-codex-harness-pilots/decision.md, spec.md, plan.md, and gate.md. Confirm the package is parent-only, list its ten AC identifiers, and identify the current gate status without modifying any file.",
         "smoke": "Read AGENTS.md, .codex/config.toml, skills/codex-harness/SKILL.md, and skills/codex-harness/assets/codex-harness-poc-design.md, then summarize the parent-only control boundary in those files.",
     }
     if scenario not in tasks:

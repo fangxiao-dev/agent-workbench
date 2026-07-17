@@ -27,10 +27,10 @@ backfill 默认以 Git 主工作区为基准，不以当前分支名或某个特
 
 ## 共享输入合同
 
-- 目标项目必须是 Git top-level；配置取显式 `--config <path>`，否则取项目根 `.stable-docs-backfill.json`（contractVersion `"3.1"`）。`targetBranch`、`stableDocs.systemKnowledge`、`stableDocs.moduleKnowledge` 必填，`stableDocs.contextKnowledge` 可选；省略 context 层时按 system + module 两层运行。
+- 目标项目必须是 Git top-level；配置取显式 `--config <path>`，否则取项目根 `.stable-docs-backfill.json`（contractVersion `"3.2"`）。`targetBranch`、`stableDocs.systemKnowledge`、`stableDocs.moduleKnowledge` 必填，`stableDocs.contextKnowledge` 可选；省略 context 层时按 system + module 两层运行。
 - 每个 repo 只保留一个配置文件；monorepo 的差异由配置里的 glob 和 stable doc destinations 承载，不引入多份独立配置或 `contexts[]`。
-- source inventory 和 verify/audit JSON 输出 contractVersion `"3.1"`；package row 使用 `gateRecognition`、`gateResolution`、`gateAppliesToCurrentRevision`、`needsManualGateReview`、`reason`，不输出旧 heading 解析或旧 schema provenance 字段。collector 只产出 `gapCatchingStructuralCandidate(s)`：它表示 Gate/pending 结构条件满足但尚未验证 Git reachability，不是 audit 的真实候选。
-- backfill 的主要输入是 `dev-with-track` Stage 7 已经在维护的 `_pending.md` 登记队列，不是重新发现。`_pending.md` 的位置按配置 `records.pending` 的发现规则覆盖 system、可选 context 和 module 三层并按 pending 路径去重；context/module root 缺失或歧义时报告 config gap，system 级 `docs/_pending.md` 首次不存在时报告非阻塞 `cold-start` owner decision，不自动创建。只有 Gate 对当前 revision set 有可信 terminal resolution、实现已进入 `targetBranch`、却找不到对应登记的遗留 package，才成为真实 gap-catching 候选并需要重新读 `design.md`/`spec.md`/`plan.md`/代码；Git reachability 未核验前只能称结构候选。
+- source inventory 和 verify/audit JSON 输出 contractVersion `"3.2"`；package row 使用 `gateRecognition`、`gateResolution`、`gateAppliesToCurrentRevision`、`needsManualGateReview`、`reason`，不输出旧 heading 解析或旧 schema provenance 字段。collector 只产出 `gapCatchingStructuralCandidate(s)`：它表示 Gate/pending 结构条件满足但尚未验证 Git reachability，不是 audit 的真实候选。
+- backfill 的主要输入是 `dev-with-track` Stage 7 已经在维护的 `_pending.md` 登记队列，不是重新发现。`_pending.md` 的位置按配置 `records.pending` 的发现规则覆盖 system、可选 context 和 module 三层并按 pending 路径去重；context/module root 缺失或歧义时报告 config gap，system 级 `docs/_pending.md` 首次不存在时报告非阻塞 `cold-start` owner decision，不自动创建。只有 Gate 对当前 revision set 有可信 terminal resolution、实现已进入 `targetBranch`、却找不到对应登记的遗留 package，才成为真实 gap-catching 候选并需要重新读 `decision.md`/`spec.md`/`plan.md`/`execution-findings.md`/代码；Git reachability 未核验前只能称结构候选。`investigations/` 不属于 backfill runtime/state；只有正式文档明确链接时，agent 才可将其作为 provenance 补充阅读，不能把它当权威来源。
 - `ignore` 按 owner 分组，每组自带 `owner`（domain/platform 名，或 `"repo-wide"`）和 `reason`；新增排除项必须带这两个字段，不能只加路径。
 - 破坏性操作（移动/删除/重命名 stable doc 内容、Package Retirement 清理 package 目录）需要独立于普通 apply item 的显式 destructive-apply 授权，精确到路径或 package id 清单，不接受“全部处理”这类笼统批准。
 
@@ -45,13 +45,15 @@ backfill 默认以 Git 主工作区为基准，不以当前分支名或某个特
 | 检查已完全吸收、可清理的历史 package | [package retirement runbook](references/package-retirement-runbook.md) | 只报告候选，不自动删除；清理执行仍属于破坏性操作 |
 | 检查 `_pending.md`、链接、覆盖率或残留 | [verify runbook](references/verify-runbook.md) | 不补写内容、不隐式 apply |
 
-如果意图含混，默认执行 contract preflight 后进入 audit。发现 `upgradeRequired`、`unsupportedFuture` 或 `invalid` 时先停止只读 audit；由 agent 读取 [`impl-package` contract revision history](../assets/contract-revision-history.md) 并直接把包改成当前 contract，重新通过 preflight 后才可审计。升级不生成迁移记录或旧副本。apply 必须同时给出 report 路径和 owner 批准的精确 item ID；“全部处理”不是批准清单。verify 绝不因为发现问题而修复文档。
+如果意图含混，默认执行 contract preflight 后进入 audit。发现 `upgradeRequired`、`unsupportedFuture` 或 `invalid` 时先停止只读 audit；由 agent 读取 [`impl-package` contract revision history](../assets/contract-revision-history.md) 并直接把包改成当前 contract `"3.2"`，重新通过 preflight 后才可审计。升级不生成迁移记录或旧副本。apply 必须同时给出 report 路径和 owner 批准的精确 item ID；“全部处理”不是批准清单。verify 绝不因为发现问题而修复文档。
 
 ## 持久知识边界
 
 `CONTEXT.md`/`CONTEXT-MAP.md` 与配置 `stableDocs.systemKnowledge`、可选的 `stableDocs.contextKnowledge`、`stableDocs.moduleKnowledge` 指向的目录只承载当前产品语言、意图、架构与行为。物理目录名由仓库配置决定；本次 contract 保留 `module-knowledge/`，不引入 `modules/`。退役能力的 provenance 留在 Git 历史、implementation package 或 audit/apply record；只有 owner 已批准的 future 能作为明确标记的 TODO 留下。历史输入与当前权威冲突时按 Source 顺序（见 [约束提取与分流](references/constraint-extraction-and-routing.md)）和 owner conflict gate 裁决，不通过把历史说明留在常青层回避裁决。已完全吸收且 gate 已终态的空壳 implementation package 不在常规 audit/apply 里清理，走 [package retirement runbook](references/package-retirement-runbook.md)。
 
 ## 输出
+
+面向 owner 汇报 audit/apply/verify/retirement 的阶段状态与整体 closure 时直接使用 `talk-to-boss`；先给总量、已处理量、剩余量、独立 pending、是否 closed 与待决策项，再附技术证据，不把 scan、apply、verify 或 merge 混称为完成。
 
 最终说明实际 runbook、Source HEAD、报告或 apply record 路径、candidate/covered/conflict/pending 计数、来自 `_pending.md` 登记与 gap-catching 各自的候选数、Package Retirement 候选（如有）与仍需 owner 决策的 item ID。只有用户明确要求 PR 时才读取 [PR Summary 模板](assets/pr-summary-template.md)。
 

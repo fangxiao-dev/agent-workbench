@@ -32,7 +32,7 @@ Impl-Package 中 `dag=true` 的 DAG 必须持久化为当前 attempt 的 `dag.md
 - `tickets=true, dag=false` 或 `tickets=false, dag=false`：不调用本 skill 创建 task-decomposition artifact；no-DAG 状态与 seam 限制只引用共享 contract，不在本 skill 重定义。
 - Composition 未决，或当前 plan Composition 与现有 artifact 不一致：路由 `impl-planning` 升级 P revision并完成 artifact relocation；不重跑 D/S gate。
 - S/M/L/D shorthand 不是创建或删除 DAG 的授权；只有当前 plan 的 canonical Composition 可以 earn DAG。口令、实际依赖信号与 plan 不一致时回 `impl-planning`，在 owner 决议前不改变 artifact。
-- gated spec、D/S revision、AC 或 seam contract 缺失/漂移：路由 `req-align` 修复所需 Design/Spec gate。
+- gated spec、D/S revision、AC 或 seam contract 缺失/漂移：路由 `req-align` 修复所需 Decision/Spec gate。
 - gated spec 已就绪但缺 `plan.md`：路由 `impl-planning` 生成 plan；宽泛或未成 package 的输入同样先走 `req-align`，不得跳到 `to-tickets`。
 - 只有单一 Approved ticket，且需要跨 ticket seam：请求 package plan + 相关 Approved ticket 子集；不得自行推断 seam。
 
@@ -47,7 +47,7 @@ Impl-Package 中 `dag=true` 的 DAG 必须持久化为当前 attempt 的 `dag.md
 - 任务契约、cohort、ownership、seam、验证 gate -> `dag.md`；task current state/evidence -> `.impl-package/runtime-state.json`，DAG 看板只做 machine-owned projection。patch 模式下旧 `dag.md` 已标记 `Retired / terminal gate` 时，写入当前的 `YYYYMMDD-HHMM-<patch-topic>.patch-dag.md`。
 - 持久的任务局部状态 -> `tasks/Tn-progress.md`。
 - 任务交接 -> `tasks/Tn-handoff.md`。
-- 跨任务风险与后续项 -> `findings.md`。
+- 执行中确认的重要发现、风险、方法性经验与跨任务发现 -> package 级 `execution-findings.md`；它保留为可供后续 attempt 使用的 provenance，不承载行为合同或临时待办。
 - 完整 review/verification 证据 -> 当前 plan Execution Record；关闭判决摘要 -> `gate.md` 新 entry。
 
 ## 运行原则

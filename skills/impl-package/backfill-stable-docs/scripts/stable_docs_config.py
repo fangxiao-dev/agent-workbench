@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load and validate Stable Docs Backfill repository configuration (contract 3.1)."""
+"""Load and validate Stable Docs Backfill repository configuration (contract 3.2)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from typing import Any
 
 
 CONFIG_NAME = ".stable-docs-backfill.json"
-CONTRACT_VERSION = "3.1"
+CONTRACT_VERSION = "3.2"
 PORTABLE_REPOSITORY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 

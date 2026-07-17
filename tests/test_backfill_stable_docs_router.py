@@ -49,9 +49,15 @@ class RouterContractTest(unittest.TestCase):
 
     def test_current_contract_rejects_legacy_gate_and_audit_inputs(self) -> None:
         text = SKILL.read_text(encoding="utf-8")
-        self.assertIn('contractVersion `"3.1"`', text)
+        self.assertIn('contractVersion `"3.2"`', text)
         self.assertIn("旧 heading、旧 sidecar 或旧 audit JSON 不再作为 verdict", text)
         self.assertIn("升级不生成迁移记录或旧副本", text)
+
+    def test_active_package_documents_and_investigation_provenance_boundary(self) -> None:
+        text = SKILL.read_text(encoding="utf-8")
+        self.assertIn("`decision.md`/`spec.md`/`plan.md`/`execution-findings.md`", text)
+        self.assertIn("`investigations/` 不属于 backfill runtime/state", text)
+        self.assertIn("不能把它当权威来源", text)
 
 
 if __name__ == "__main__":

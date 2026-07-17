@@ -20,7 +20,8 @@ from pathlib import Path
 from typing import Any
 
 
-PACKAGE_FILES = ("design.md", "spec.md", "plan.md", "dag.md", ".impl-package/revision-bindings.json")
+PACKAGE_FILES = ("decision.md", "spec.md", "plan.md", "dag.md", ".impl-package/revision-bindings.json")
+IMPL_PACKAGE_CONTRACT_VERSION = "3.2"
 VALID_SENSITIVE_MODES = {"forbidden", "on_demand"}
 VALID_SANDBOXES = {"read_only", "workspace_write"}
 
@@ -227,16 +228,18 @@ def validate_manifest(manifest: Manifest) -> dict[str, Any]:
                 if stage.ticket_path:
                     _source_text(manifest, stage.ticket_path)
             bindings = json.loads(_source_text(manifest, ".impl-package/revision-bindings.json"))
+            if bindings.get("contractVersion") != IMPL_PACKAGE_CONTRACT_VERSION:
+                errors.append(f"package contractVersion must be {IMPL_PACKAGE_CONTRACT_VERSION}")
             current = bindings.get("current", {})
             revisions = {
-                "design": str(current.get("design", {}).get("revision", "")),
+                "decision": str(current.get("decision", {}).get("revision", "")),
                 "spec": str(current.get("spec", {}).get("revision", "")),
                 "plan": str(current.get("attempt", {}).get("revision", "")),
             }
             if current.get("attempt", {}).get("id") != manifest.attempt_id:
                 errors.append("manifest attempt_id does not match revision binding")
             expected = {
-                "design.md": revisions["design"],
+                "decision.md": revisions["decision"],
                 "spec.md": revisions["spec"],
                 "plan.md": revisions["plan"],
             }
@@ -325,7 +328,7 @@ def stage_prompt(run_id: str, work_package: dict[str, Any]) -> str:
         f"Relevant Skills allowed on demand: {', '.join(stage['skills']) or 'none declared'}\n"
         f"Sandbox: {boundary['sandbox']}; network access: {boundary['network_access']}.\n"
         f"{sensitive_instruction}\n\n"
-        "First read the pinned package design.md, spec.md, plan.md, dag.md, and the declared ticket material before acting. Do not modify files outside Allowed paths. Do not perform external side effects. Do not claim a verification command passed unless you ran it. "
+        "First read the pinned package decision.md, spec.md, plan.md, dag.md, and the declared ticket material before acting. Do not modify files outside Allowed paths. Do not perform external side effects. Do not claim a verification command passed unless you ran it. "
         "Return only one JSON object, with no Markdown fence or surrounding prose, in this exact shape: "
         f'{{"schema_version":"codex-harness.parent-result.v0","run_id":"{run_id}","stage":"{stage["id"]}","status":"succeeded","summary":"bounded conclusion","artifacts":[{{"path":"repo-relative/path","purpose":"what it proves"}}],"verification":[{{"command":"exact command or inspection","exit_code":0,"claim":"bounded claim"}}],"findings":[],"owner_decisions":[],"retry_hint":"none","boundary_violations":[],"work_package_sha256":"{work_package["sha256"]}","comparison_point":"git commit or HEAD before this stage","changed_paths":[]}}. '
         "Allowed status values are exactly succeeded, failed, needs_owner, or interrupted; use succeeded, never completed. artifacts must be objects, never strings. verification must use integer exit_code, never result/evidence fields. status must be needs_owner when a required human approval, sensitive-root declaration, or external DATEV acceptance is missing."

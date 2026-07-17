@@ -24,7 +24,7 @@ from stable_docs_config import (
 )
 
 
-CONTRACT_VERSION = "3.1"
+CONTRACT_VERSION = "3.2"
 STATUS_VALUES = frozenset({"current", "upgradeRequired", "unsupportedFuture", "invalid"})
 STATE_ENGINE = Path(__file__).resolve().parents[2] / "scripts" / "impl_package_state.py"
 
