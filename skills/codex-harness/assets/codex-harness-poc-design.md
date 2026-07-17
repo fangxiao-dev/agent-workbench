@@ -120,7 +120,7 @@ Harness 至少需要执行以下检查：JSON/schema 可解析；`run_id` 与当
 
 ### 设计目标
 
-Harness 的长期复用层应是父 profile、App Server 运行器、Parent Result 契约、敏感原件授权边界和验证器协议，而不是每个 Impl-Package 都重新手写一套调度脚本。新 package 的适配流程应只消费已批准、固定 commit 的 Design/Spec/Plan/DAG/tickets，并产生一份可审计的草案 adapter；它不能把自然语言计划直接升级成执行权限。
+Harness 的长期复用层应是父 profile、App Server 运行器、Parent Result 契约、敏感原件授权边界和验证器协议，而不是每个 Impl-Package 都重新手写一套调度脚本。新 package 的适配流程应只消费已批准、固定 commit 的 Decision/Spec/Plan/DAG/tickets，并产生一份可审计的草案 adapter；它不能把自然语言计划直接升级成执行权限。
 
 ### 三阶段边界
 
@@ -248,7 +248,7 @@ POC 首选短生命周期 App Server 进程或有界 session 池，以进程边�
 | `scripts/run-codex-app-server-pilot.py` | App Server JSON-RPC pilot、父结果验收和可选 child telemetry | POC 主入口 |
 | `scripts/prepare-codex-harness-package.py` | 从固定 approved package snapshot 自动提取 D/S/P binding、task contracts、cohorts、ticket 引用和敏感原件提示，生成待 review 的 adapter 与 readiness report | v0.1；生成草案，不自动补 verifier 或扩大路径权限 |
 | `scripts/run-codex-harness-package.py` | 固定 commit 的 Impl-Package binding 校验、DAG ready-stage 投影和显式父 stage dispatch | v0.1；不自动建/合 worktree，不自动写 gate |
-| `examples/datev-accounting-rules.harness.toml` | DATEV 7 ticket/9 task DAG 的 parent-stage manifest，包含按需敏感原件与 Impl-Package Skill 声明 | v0.1 reference；真实执行前仍需 clean isolated worktree 与 verifier commands |
+| `examples/datev-accounting-rules.pre-3.2-upgrade-fixture.toml` | 固定的旧 DATEV snapshot，用于证明 current-only adapter 在准备前拒绝旧 contract | upgrade fixture；不可作为执行 manifest |
 | `scripts/run-codex-subagent-pilot.ps1` | `codex exec --json` 对照实验 | POC 对照入口，不作为主协议 |
 
 ## POC 路线图

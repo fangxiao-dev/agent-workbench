@@ -14,6 +14,9 @@ class PrepareError(RuntimeError):
     """A source package cannot safely be adapted automatically."""
 
 
+IMPL_PACKAGE_CONTRACT_VERSION = "3.2"
+
+
 @dataclass(frozen=True)
 class PreparedStage:
     id: str
@@ -54,9 +57,11 @@ def _relative(value: str) -> str:
 
 def _binding_snapshot(repository_root: Path, source_ref: str, package_path: str) -> dict[str, Any]:
     sidecar = json.loads(_source(repository_root, source_ref, package_path, ".impl-package/revision-bindings.json"))
+    if sidecar.get("contractVersion") != IMPL_PACKAGE_CONTRACT_VERSION:
+        raise PrepareError(f"source package contractVersion must be {IMPL_PACKAGE_CONTRACT_VERSION}")
     current = sidecar.get("current", {})
     expected = {
-        "design.md": current.get("design", {}).get("revision"),
+        "decision.md": current.get("decision", {}).get("revision"),
         "spec.md": current.get("spec", {}).get("revision"),
         "plan.md": current.get("attempt", {}).get("revision"),
     }
@@ -71,7 +76,7 @@ def _binding_snapshot(repository_root: Path, source_ref: str, package_path: str)
     attempt_id = current.get("attempt", {}).get("id")
     if not isinstance(attempt_id, str) or not attempt_id:
         raise PrepareError("revision binding has no current attempt id")
-    return {"attempt_id": attempt_id, "revisions": {"design": expected["design.md"], "spec": expected["spec.md"], "plan": expected["plan.md"]}, "checks": checks}
+    return {"attempt_id": attempt_id, "revisions": {"decision": expected["decision.md"], "spec": expected["spec.md"], "plan": expected["plan.md"]}, "checks": checks}
 
 
 def _task_blocks(dag: str) -> list[tuple[str, str, str]]:

@@ -31,13 +31,27 @@ def main() -> int:
         git(root, "config", "user.email", "smoke@example.test")
         git(root, "config", "user.name", "Package smoke")
         package = root / "docs" / "implementations" / "smoke"
-        write(package / "design.md", "# Design\n")
+        write(package / "decision.md", "# Decision\n")
         write(package / "spec.md", "# Spec\n")
         write(package / "plan.md", "# Plan\n")
         write(package / "dag.md", "# DAG\n")
         write(package / "tickets" / "smoke.md", "# Smoke\nRead this package and return the requested result.\n")
-        blobs = {name: subprocess.run(["git", "hash-object", str(package / name)], check=True, capture_output=True, text=True).stdout.strip() for name in ("design.md", "spec.md", "plan.md")}
-        sidecar = {"current": {"design": {"revision": "D1"}, "spec": {"revision": "S1"}, "attempt": {"id": "initial", "revision": "P1"}}, "bindings": [{"artifact": "design.md", "revision": "D1", "blob": blobs["design.md"]}, {"artifact": "spec.md", "revision": "S1", "blob": blobs["spec.md"]}, {"artifact": "plan.md", "revision": "P1", "blob": blobs["plan.md"]}]}
+        blobs = {name: subprocess.run(["git", "hash-object", str(package / name)], check=True, capture_output=True, text=True).stdout.strip() for name in ("decision.md", "spec.md", "plan.md")}
+        sidecar = {
+            "contractVersion": "3.2",
+            "purpose": "internal-machine-sidecar",
+            "ownerFacing": False,
+            "current": {
+                "decision": {"artifact": "decision.md", "revision": "D1"},
+                "spec": {"artifact": "spec.md", "revision": "S1"},
+                "attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"},
+            },
+            "bindings": [
+                {"id": f"D1@{blobs['decision.md']}", "artifact": "decision.md", "revision": "D1", "mode": "exact-blob", "blob": blobs["decision.md"], "supersedes": None, "evidence": "decision.md#revision-history"},
+                {"id": f"S1@{blobs['spec.md']}", "artifact": "spec.md", "revision": "S1", "mode": "exact-blob", "blob": blobs["spec.md"], "supersedes": None, "evidence": "spec.md#revision-history"},
+                {"id": f"initial:P1@{blobs['plan.md']}", "artifact": "plan.md", "attempt": "initial", "revision": "P1", "mode": "plan-contract-v1", "blob": blobs["plan.md"], "supersedes": None, "evidence": "plan.md#plan-revision-history"},
+            ],
+        }
         write(package / ".impl-package" / "revision-bindings.json", json.dumps(sidecar))
         git(root, "add", ".")
         git(root, "commit", "-m", "package smoke fixture")

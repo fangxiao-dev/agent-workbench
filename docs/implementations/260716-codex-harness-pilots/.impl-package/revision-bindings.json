@@ -1,10 +1,10 @@
 {
-  "schemaVersion": 1,
+  "contractVersion": "3.2",
   "purpose": "internal-machine-sidecar",
   "ownerFacing": false,
   "current": {
-    "design": {
-      "artifact": "design.md",
+    "decision": {
+      "artifact": "decision.md",
       "revision": "D1"
     },
     "spec": {
@@ -19,23 +19,32 @@
   },
   "bindings": [
     {
-      "artifact": "design.md",
+      "id": "D1@534ec9d611ab6494ca38c9644e031e3f28516300",
+      "artifact": "decision.md",
       "revision": "D1",
       "mode": "exact-blob",
-      "blob": "47f4c96be556e3cf4a695c3136f8a66f0629f039"
+      "blob": "534ec9d611ab6494ca38c9644e031e3f28516300",
+      "supersedes": null,
+      "evidence": "decision.md#修订历史"
     },
     {
+      "id": "S1@bbb2efd112d023758565b186463d8034fe0c0fc4",
       "artifact": "spec.md",
       "revision": "S1",
       "mode": "exact-blob",
-      "blob": "9388fb35dee644ae59892d10db7ea6ae97bf1137"
+      "blob": "bbb2efd112d023758565b186463d8034fe0c0fc4",
+      "supersedes": null,
+      "evidence": "spec.md#修订记录"
     },
     {
+      "id": "initial:P1@b3f923c06c51838ad2978d9ee5b71feccff929f5",
       "artifact": "plan.md",
       "attempt": "initial",
       "revision": "P1",
       "mode": "plan-contract-v1",
-      "blob": "be03d4f6eabb16f8a1ae93442c03690e055ecde3"
+      "blob": "b3f923c06c51838ad2978d9ee5b71feccff929f5",
+      "supersedes": null,
+      "evidence": "plan.md#计划修订历史"
     }
   ]
 }
