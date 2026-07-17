@@ -161,12 +161,19 @@ def collect_inventory(
             gate = resolve_gate(package_dir)
             has_gate = gate["hasGate"]
             verdict = gate["gateResolution"]
+            applies_to_current_revision = gate.get("appliesToCurrentRevision")
             referenced = any(
                 package_id in cell or relative_package_dir in cell
                 for registration in pending_registrations
                 for cell in registration["row"]
             )
-            is_terminal = gate["kind"] in {"indexed", "legacy-heading"} and verdict in TERMINAL_GATE_VERDICTS
+            is_terminal = (
+                (
+                    gate["kind"] == "legacy-heading"
+                    or (gate["kind"] == "indexed" and applies_to_current_revision is True)
+                )
+                and verdict in TERMINAL_GATE_VERDICTS
+            )
             packages.append(
                 {
                     "packageId": package_id,
@@ -177,11 +184,12 @@ def collect_inventory(
                     "hasGate": has_gate,
                     "gateRecognition": gate["kind"],
                     "gateResolution": verdict,
+                    "gateAppliesToCurrentRevision": applies_to_current_revision,
                     "needsManualGateReview": gate["needsManualGateReview"],
                     "reason": gate["reason"],
                     "referencedInOpenPending": referenced,
                     "resolvedInDoneRecord": package_id in resolved_package_ids,
-                    "gapCatchingCandidate": (
+                    "gapCatchingStructuralCandidate": (
                         is_terminal and not referenced and package_id not in resolved_package_ids
                     ),
                     "retirementStructuralCandidate": (
@@ -191,7 +199,7 @@ def collect_inventory(
             )
 
     return {
-        "schemaVersion": 4,
+        "schemaVersion": 5,
         "project": {
             "repository": config["repository"],
             "targetBranch": config["targetBranch"],
@@ -205,7 +213,9 @@ def collect_inventory(
         "pendingRegistrationCount": len(pending_registrations),
         "pendingRegistrations": pending_registrations,
         "packageCount": len(packages),
-        "gapCatchingCandidates": [p["packageId"] for p in packages if p["gapCatchingCandidate"]],
+        "gapCatchingStructuralCandidates": [
+            p["packageId"] for p in packages if p["gapCatchingStructuralCandidate"]
+        ],
         "retirementStructuralCandidates": [
             p["packageId"] for p in packages if p["retirementStructuralCandidate"]
         ],
@@ -219,34 +229,41 @@ def collect_inventory(
 def _render_markdown(inventory: dict[str, Any]) -> str:
     project = inventory["project"]
     lines = [
-        "# Stable Docs Backfill Source Inventory",
+        "# 常青文档回刷来源清单",
         "",
-        f"- Repository: `{project['repository']}`",
-        f"- Target branch: `{project['targetBranch']}` -> `{project['targetBranchCommit'] or 'unresolved'}`",
-        f"- Target branch config gap: {'yes' if inventory['targetBranchConfigGap'] else 'no'}",
-        f"- Packages: {inventory['packageCount']}",
-        f"- Open pending registrations: {inventory['pendingRegistrationCount']}",
-        f"- Config gaps (ambiguous/missing `_pending.md`): {len(inventory['pendingConfigGaps'])}",
-        f"- Pending cold starts (owner decision, non-blocking): {len(inventory['pendingColdStarts'])}",
-        f"- Gap-catching candidates: {len(inventory['gapCatchingCandidates'])}",
-        f"- Package Retirement structural candidates: {len(inventory['retirementStructuralCandidates'])}",
-        f"- Needs manual gate review (mismatch/manual): {len(inventory['manualGateReviewCandidates'])}",
+        f"- 仓库：`{project['repository']}`",
+        f"- 目标分支：`{project['targetBranch']}` -> `{project['targetBranchCommit'] or '未解析'}`",
+        f"- 目标分支配置缺口：{'是' if inventory['targetBranchConfigGap'] else '否'}",
+        f"- 任务包数量：{inventory['packageCount']}",
+        f"- 未关闭 pending 登记：{inventory['pendingRegistrationCount']}",
+        f"- 配置缺口（`_pending.md` 歧义/缺失）：{len(inventory['pendingConfigGaps'])}",
+        f"- Pending 冷启动（需 owner 决定，非阻断）：{len(inventory['pendingColdStarts'])}",
+        f"- Gap-catching 结构候选（尚未核验 Git reachability）：{len(inventory['gapCatchingStructuralCandidates'])}",
+        f"- 任务包退役结构候选：{len(inventory['retirementStructuralCandidates'])}",
+        f"- 需要人工 Gate 复核（mismatch/manual）：{len(inventory['manualGateReviewCandidates'])}",
         "",
-        "| Package | Gate recognition | Gate resolution | Design | Spec | Open pending ref | Gap-catching | Retirement candidate | Manual gate review | Reason |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| 任务包 | Gate 识别 | Gate 判决 | 适用于当前修订 | Design | Spec | 存在未关闭 pending 引用 | Gap-catching 结构候选 | 退役候选 | 人工 Gate 复核 | 原因 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in inventory["packages"]:
         lines.append(
-            "| {package_id} | {recognition} | {resolution} | {design} | {spec} | {referenced} | {gap} | {retire} | {manual} | {reason} |".format(
+            "| {package_id} | {recognition} | {resolution} | {applies} | {design} | {spec} | {referenced} | {gap} | {retire} | {manual} | {reason} |".format(
                 package_id=row["packageId"],
                 recognition=row["gateRecognition"] or "none",
                 resolution=row["gateResolution"] or "none",
-                design="yes" if row["hasDesign"] else "no",
-                spec="yes" if row["hasSpec"] else "no",
-                referenced="yes" if row["referencedInOpenPending"] else "no",
-                gap="yes" if row["gapCatchingCandidate"] else "no",
-                retire="yes" if row["retirementStructuralCandidate"] else "no",
-                manual="yes" if row["needsManualGateReview"] else "no",
+                applies=(
+                    "是"
+                    if row["gateAppliesToCurrentRevision"] is True
+                    else "否"
+                    if row["gateAppliesToCurrentRevision"] is False
+                    else "未知"
+                ),
+                design="是" if row["hasDesign"] else "否",
+                spec="是" if row["hasSpec"] else "否",
+                referenced="是" if row["referencedInOpenPending"] else "否",
+                gap="是" if row["gapCatchingStructuralCandidate"] else "否",
+                retire="是" if row["retirementStructuralCandidate"] else "否",
+                manual="是" if row["needsManualGateReview"] else "否",
                 reason=(row["reason"] or "").replace("|", "\\|"),
             )
         )

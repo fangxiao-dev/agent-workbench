@@ -44,8 +44,8 @@ terminal metadata 后若又发生 commit、合入目标分支或相关环境变�
 ## Restore
 
 1. 采用 delta-first restore：先读取仓库规则、`.impl-package/` 两个 sidecar、current attempt plan、gate.md 最新 entry、最近可靠 comparison point/ER anchor，以及自该点后的实际 diff。只在 current 选择冲突、provenance 缺口或 delta 无法解释时读取历史 plans 和完整 ledger；不要每次恢复都重扫全部历史 artifact。
-2. 从 registry 的 `current.attempt` 派生唯一 lifecycle：未被选中的 plan 是 Draft；被选中且没有 terminal gate 的 attempt 是 Active；已有 terminal gate 的 attempt 是 Frozen。若不存在 Active attempt，停止并路由 impl-planning 创建或批准 patch；若 registry/current/gate 组合产生多个 Active attempt，报告 lifecycle violation 并停止，不能按时间猜一个。
-3. 运行 `impl_package_state.py --package <path> validate --committed`，统一检查 current D/S/P、exact-blob/plan-contract-v1、ER append-only、earned record bijection、projection 与 finalized gate binding。失败按结构化错误报告处理 P2 capture gap/drift，不得手工模拟算法后宣称可信。
+2. 从 registry 的 `current.attempt` 与 canonical Gate resolver 派生唯一 lifecycle：未被选中的 plan 是 Draft；被选中且没有适用于当前 D/S/P 的 terminal gate 的 attempt 是 Active；只有 content-bound terminal entry 与当前 D/S/P 一致时才是 Frozen。合法历史 entry 仍保留为 `indexed` evidence，但不冻结新 revision。若不存在 Active attempt，停止并路由 impl-planning 创建或批准 patch；若 registry/current/gate 组合产生多个 Active attempt，报告 lifecycle violation 并停止，不能按时间猜一个。
+3. 运行 `impl_package_state.py --package <path> validate --committed`，由它以 `git rev-parse HEAD:<package-relative-path>` 现场复核 current D/S/P，并统一检查 exact-blob/plan-contract-v1、ER append-only、earned record bijection、projection 与 finalized gate binding。失败按结构化错误报告处理 P2 capture gap/drift，不得手工模拟算法后宣称可信。
 4. reconcile 状态与证据；evidence 胜过 stale status。比对 earned ticket/DAG 的 Plan Revision 与当前 P 号；不一致的先标 `NEEDS-REVALIDATION`，再按 P delta 计算受影响 subset。受影响内容定向复核；未受影响内容批量确认并机械更新引用，不逐个重跑验收或重建 artifact。
 5. 是新 attempt（尤其重新激活已关闭 package）时，先完成 Module Knowledge Watermark 对账：重新计算 watermark 文件当前 commit SHA，与上一 attempt 记录的 watermark 比对，不符先 diff 确认 design/spec 是否仍成立。
 6. 校验 typed ticket edges、DAG Depends on、AC references、显式 cycles 与 readiness satisfiability；若 AC 的 evidence producer task 被同一 ticket acceptance 直接或传递阻塞，按 decomposition/readiness defect 处理。

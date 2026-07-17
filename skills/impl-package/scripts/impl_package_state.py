@@ -43,7 +43,7 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
     documents = config["documents"]
     document_keys = {
         "compositionPattern", "attemptPattern", "ticketIdPattern", "taskHeadingPattern", "taskBlockPattern",
-        "taskStatePattern", "ticketStatePattern", "dagArtifactPatterns", "ticketArtifactPatterns",
+        "taskStatePattern", "ticketStatePattern", "dagArtifactPatterns", "ticketArtifactPatterns", "revisionDeclarationPattern",
     }
     if not isinstance(documents, dict) or set(documents) != document_keys:
         raise RuntimeError("Impl-Package document configuration has invalid shape")
@@ -54,6 +54,7 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
         "taskHeadingPattern": 1,
         "taskStatePattern": 1,
         "ticketStatePattern": 1,
+        "revisionDeclarationPattern": 0,
     }
     for key, expected_groups in capture_arity.items():
         try:
@@ -101,7 +102,7 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
     if fields(runtime_task["row"]) != {"id", "state", "evidence"} or fields(projections["runtimeTicket"]) != {"state", "evidence"}:
         raise RuntimeError("runtime projection placeholders are invalid")
     gate = config["gate"]
-    if not isinstance(gate, dict) or set(gate) != {"headingPattern", "entryIdPattern", "attemptFieldPattern", "supersedesFieldPattern", "noneTokens", "scaffoldNoneToken"}:
+    if not isinstance(gate, dict) or set(gate) != {"headingPattern", "entryIdPattern", "attemptFieldPattern", "supersedesFieldPattern", "revisionSetFieldPattern", "noneTokens", "scaffoldNoneToken"}:
         raise RuntimeError("Impl-Package gate configuration has invalid shape")
     if any(token in gate["headingPattern"] for token in (".*", ".+", "(?s", "\\Z", "(?=")):
         raise RuntimeError("gate headingPattern may describe only one heading line; entry span is fixed by the safety kernel")
@@ -110,9 +111,10 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
         entry_id = re.compile(gate["entryIdPattern"])
         attempt_field = re.compile(gate["attemptFieldPattern"])
         supersedes_field = re.compile(gate["supersedesFieldPattern"])
+        revision_set_field = re.compile(gate["revisionSetFieldPattern"])
     except (KeyError, TypeError, re.error) as exc:
         raise RuntimeError(f"invalid configured gate regex: {exc}") from exc
-    if set(heading.groupindex) != {"id", "verdict"} or entry_id.groups < 2 or attempt_field.groups < 1 or supersedes_field.groups < 1:
+    if set(heading.groupindex) != {"id", "verdict"} or entry_id.groups < 2 or attempt_field.groups < 1 or supersedes_field.groups < 1 or revision_set_field.groups != 3:
         raise RuntimeError("configured gate regexes do not expose required capture groups")
     heading_sample = f"## initial-G1 · {vocab['gateVerdict'][0]}\n"
     heading_match = heading.fullmatch(heading_sample)
@@ -197,6 +199,19 @@ def _current_attempt(package: Path) -> tuple[str, Path] | None:
     if not attempt:
         return None
     return attempt["id"], _package_artifact(package, attempt["plan"])
+
+
+def _current_revision_set(package: Path) -> dict[str, str] | None:
+    path = package / REVISION_BINDINGS
+    if not path.is_file():
+        return None
+    state = json.loads(path.read_text(encoding="utf-8"))
+    current = state.get("current", {})
+    return {
+        "design": current.get("design", {}).get("revision", "N/A"),
+        "spec": current.get("spec", {}).get("revision", "N/A"),
+        "plan": current.get("attempt", {}).get("revision", "N/A"),
+    }
 
 
 def _composition(plan_text: str) -> tuple[bool, bool]:
@@ -519,6 +534,7 @@ def _gate_blocks(text: str) -> list[dict[str, Any]]:
         block = match.group(0)
         attempt_match = re.search(CONFIG["gate"]["attemptFieldPattern"], block)
         supersedes_match = re.search(CONFIG["gate"]["supersedesFieldPattern"], block)
+        revision_set_match = re.search(CONFIG["gate"]["revisionSetFieldPattern"], block)
         supersedes = supersedes_match.group(1) if supersedes_match else None
         if supersedes in CONFIG["gate"]["noneTokens"]:
             supersedes = None
@@ -529,6 +545,15 @@ def _gate_blocks(text: str) -> list[dict[str, Any]]:
                 "number": number,
                 "verdict": match.group("verdict"),
                 "supersedes": supersedes,
+                "revisionSet": (
+                    {
+                        "design": revision_set_match.group(1),
+                        "spec": revision_set_match.group(2),
+                        "plan": revision_set_match.group(3),
+                    }
+                    if revision_set_match
+                    else None
+                ),
                 "block": block,
             }
         )
@@ -715,6 +740,9 @@ def _validate_revision_projections(package: Path, state: dict[str, Any], committ
             raise StateError(f"revision projection mismatch in {artifact}: {exc}") from exc
         if projected != text:
             raise StateError(f"revision projection mismatch in {artifact}")
+        marker_elided = _machine_owned_contract(text, plan=False)
+        if re.search(CONFIG["documents"]["revisionDeclarationPattern"], marker_elided):
+            raise StateError(f"revision declaration outside machine-owned projection in {artifact}")
 
 
 def command_refresh_projections(package: Path) -> dict[str, Any]:
@@ -782,6 +810,11 @@ def command_finalize_gate_entry(package: Path, entry_id: str) -> dict[str, Any]:
     for field in ("attempt", "number"):
         if parsed[field] != allocation[field]:
             raise StateError(f"gate {field} mismatch for {entry_id}")
+    current_revision_set = _current_revision_set(package)
+    if parsed.get("revisionSet") is None:
+        raise StateError(f"gate revision set is missing for {entry_id}")
+    if current_revision_set is None or parsed["revisionSet"] != current_revision_set:
+        raise StateError(f"gate revision set does not match current revisions for {entry_id}")
     prior = [
         row for row in state.get("gate", {}).get("entries", [])
         if row.get("attempt") == parsed["attempt"] and row.get("id") != entry_id
@@ -823,6 +856,7 @@ def resolve_gate(package: Path) -> dict[str, Any]:
             "kind": None,
             "hasGate": False,
             "gateResolution": None,
+            "appliesToCurrentRevision": None,
             "needsManualGateReview": False,
             "reason": None,
         }
@@ -831,6 +865,7 @@ def resolve_gate(package: Path) -> dict[str, Any]:
     except StateError as exc:
         return {
             "kind": "mismatch", "hasGate": True, "entryId": None, "gateResolution": None,
+            "appliesToCurrentRevision": None,
             "needsManualGateReview": True, "reason": str(exc),
         }
     blocks = _gate_blocks(text)
@@ -843,6 +878,7 @@ def resolve_gate(package: Path) -> dict[str, Any]:
                 "hasGate": True,
                 "entryId": latest["id"],
                 "gateResolution": latest["verdict"],
+                "appliesToCurrentRevision": None,
                 "needsManualGateReview": False,
                 "reason": None,
             }
@@ -851,6 +887,7 @@ def resolve_gate(package: Path) -> dict[str, Any]:
             "hasGate": True,
             "entryId": None,
             "gateResolution": None,
+            "appliesToCurrentRevision": None,
             "needsManualGateReview": True,
             "reason": "gate.md has no structured index or parseable legacy heading",
         }
@@ -866,13 +903,29 @@ def resolve_gate(package: Path) -> dict[str, Any]:
         gate = state.get("gate", {})
         entries = [row for row in gate.get("entries", []) if row.get("attempt") == current_attempt]
         if not entries:
-            raise StateError(f"runtime gate index has no finalized entry for current attempt: {current_attempt}")
-        index = max(entries, key=lambda row: row.get("number", 0))
+            current_allocations = [row for row in gate.get("allocations", []) if row.get("attempt") == current_attempt]
+            current_blocks = [row for row in blocks if row.get("attempt") == current_attempt]
+            if current_allocations or current_blocks:
+                raise StateError(f"runtime gate index has an unfinished entry for current attempt: {current_attempt}")
+            indexed_by_id = {row.get("id"): row for row in gate.get("entries", [])}
+            index = next((indexed_by_id.get(block.get("id")) for block in blocks if block.get("id") in indexed_by_id), None)
+            if index is None:
+                return {
+                    "kind": None,
+                    "hasGate": True,
+                    "entryId": None,
+                    "gateResolution": None,
+                    "appliesToCurrentRevision": None,
+                    "needsManualGateReview": False,
+                    "reason": None,
+                }
+        else:
+            index = max(entries, key=lambda row: row.get("number", 0))
         allocations = [row for row in gate.get("allocations", []) if row.get("entryId") == index.get("id")]
         if len(allocations) != 1:
             raise StateError("finalized gate entry has no unique matching allocation")
         allocation = allocations[0]
-        expected_id = f"{current_attempt}-G{index.get('number')}"
+        expected_id = f"{index.get('attempt')}-G{index.get('number')}"
         if (
             not isinstance(index.get("number"), int)
             or isinstance(index.get("number"), bool)
@@ -885,6 +938,12 @@ def resolve_gate(package: Path) -> dict[str, Any]:
         if len(matches) != 1:
             raise StateError("indexed Markdown entry is missing or duplicated")
         parsed = matches[0]
+        entry_revision_set = parsed.get("revisionSet")
+        if entry_revision_set is None:
+            raise StateError("indexed gate entry has no parseable revision set")
+        current_revision_set = _current_revision_set(package)
+        if current_revision_set is None:
+            raise StateError("current revision set cannot be resolved")
         expected = index.get("entry", {})
         if expected.get("path") != "gate.md" or expected.get("anchor") != index.get("id"):
             raise StateError("gate pointer is not package-local gate.md")
@@ -896,13 +955,17 @@ def resolve_gate(package: Path) -> dict[str, Any]:
             if index.get(field) != parsed.get(field):
                 raise StateError(f"gate entry field mismatch: {field}")
         current_blocks = [row for row in blocks if row.get("attempt") == current_attempt]
-        if not current_blocks or current_blocks[0]["id"] != index["id"]:
+        if entries and (not current_blocks or current_blocks[0]["id"] != index["id"]):
             raise StateError("Markdown contains a newer unindexed verdict")
+        applies_to_current_revision = entry_revision_set == current_revision_set
         return {
             "kind": "indexed",
             "hasGate": True,
             "entryId": index["id"],
-            "gateResolution": index["verdict"],
+            "gateResolution": index["verdict"] if applies_to_current_revision else None,
+            "appliesToCurrentRevision": applies_to_current_revision,
+            "entryRevisionSet": entry_revision_set,
+            "currentRevisionSet": current_revision_set,
             "needsManualGateReview": False,
             "reason": None,
         }
@@ -912,6 +975,7 @@ def resolve_gate(package: Path) -> dict[str, Any]:
             "hasGate": True,
             "entryId": None,
             "gateResolution": None,
+            "appliesToCurrentRevision": None,
             "needsManualGateReview": True,
             "reason": str(exc),
         }
@@ -1200,6 +1264,7 @@ def _validate_gate_index(state: dict[str, Any], gate_text: str | None) -> None:
             or pointer.get("anchor") != row["id"]
             or pointer.get("bindingMode") != "gate-entry-v1"
             or len(matches) != 1
+            or matches[0].get("revisionSet") is None
             or pointer.get("contentSha256") != gate_block_hash(matches[0]["block"])
             or any(row.get(field) != matches[0].get(field) for field in ("id", "attempt", "number", "verdict", "supersedes"))
         ):

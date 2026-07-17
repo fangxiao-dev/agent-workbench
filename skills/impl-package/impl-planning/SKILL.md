@@ -23,15 +23,17 @@ description: >
 
 每个 plan 必须声明：
 
-~~~text
-Attempt ID: <initial | patch-id>
-Design Revision: D<n>
-Spec Revision: S<n>
-Plan Revision: P<n>
-Composition: tickets=<true|false>, dag=<true|false>
+~~~markdown
+执行尝试 ID（Attempt ID）：<initial | patch-id>
+<!-- impl-package:projection revision-set begin -->
+设计修订（Design Revision）：D<n>
+规格修订（Spec Revision）：S<n>
+计划修订（Plan Revision）：P<n>
+<!-- impl-package:projection revision-set end -->
+执行组合（Composition）：tickets=<true|false>, dag=<true|false>
 ~~~
 
-Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。plan header 的 revision set 是 machine-owned projection；批准当前 plan 时通过结构化状态 CLI 选择 current attempt 并绑定最终 plan blob。sidecar 只供机器校验；plan 与 handoff Markdown 必须直接呈现 owner 所需结论。schema 与命令引用 [`../references/impl-package-state-schema.md`](../references/impl-package-state-schema.md)，本 skill 不复制字段定义。
+Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。plan 的唯一 D/S/P 声明是 machine-owned `revision-set` projection；不得在 marker 外再写旧式 revision header。批准当前 plan 时通过结构化状态 CLI 选择 current attempt、绑定最终 plan blob 并刷新 projection。sidecar 只供机器校验；plan 与 handoff Markdown 必须直接呈现 owner 所需结论。schema 与命令引用 [`../references/impl-package-state-schema.md`](../references/impl-package-state-schema.md)，本 skill 不复制字段定义。
 
 ## 边界
 

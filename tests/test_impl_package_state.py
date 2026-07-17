@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import importlib.util
 import subprocess
@@ -83,6 +84,12 @@ class DataDrivenConfigTest(unittest.TestCase):
             invalid_capture["documents"]["compositionPattern"] = r"Composition"
             path.write_text(json.dumps(invalid_capture), encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "exactly 2 capture groups"):
+                module._load_config(path)
+
+            invalid_revision_set = json.loads(json.dumps(base))
+            invalid_revision_set["gate"]["revisionSetFieldPattern"] = r"Revision set: (D\d+) / (S\d+)"
+            path.write_text(json.dumps(invalid_revision_set), encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "required capture groups"):
                 module._load_config(path)
 
 
@@ -185,6 +192,56 @@ class RevisionMigrationTest(unittest.TestCase):
 
 
 class RevisionRegistrationTest(unittest.TestCase):
+    def test_validate_rejects_revision_declaration_outside_projection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            repo.mkdir()
+            init_repo(repo)
+            package = repo / "docs" / "implementations" / "2026-07-17-example"
+            sidecar = package / ".impl-package" / "revision-bindings.json"
+            sidecar.parent.mkdir(parents=True)
+            for declaration in (
+                "Spec Revision: S1",
+                "**Spec Revision:** S1",
+                "**规格修订（Spec Revision）：** S1 <!-- stale -->",
+            ):
+                content = (
+                    "# Spec S1\n\n"
+                    f"{declaration}\n\n"
+                    "<!-- impl-package:projection revision-set begin -->\n"
+                    "设计修订（Design Revision）：N/A\n规格修订（Spec Revision）：S1\n"
+                    "<!-- impl-package:projection revision-set end -->\n"
+                )
+                (package / "spec.md").write_text(content, encoding="utf-8")
+                blob = git(repo, "hash-object", "-w", "--", str(package / "spec.md"))
+                sidecar.write_text(
+                    json.dumps(
+                        {
+                            "schemaVersion": 2,
+                            "purpose": "internal-machine-sidecar",
+                            "ownerFacing": False,
+                            "current": {"spec": {"artifact": "spec.md", "revision": "S1"}},
+                            "bindings": [
+                                {
+                                    "artifact": "spec.md",
+                                    "revision": "S1",
+                                    "mode": "exact-blob",
+                                    "blob": blob,
+                                    "id": f"S1@{blob}",
+                                    "supersedes": None,
+                                    "evidence": "spec.md#gate",
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                failed = run_cli(package, "validate", "--working-tree", check=False)
+
+                self.assertNotEqual(failed.returncode, 0)
+                self.assertIn("revision declaration outside machine-owned projection", failed.stderr)
+
     def test_register_revision_supports_worktree_then_committed_validation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp) / "repo"
@@ -318,7 +375,7 @@ class RuntimeStateTransitionTest(unittest.TestCase):
             (package / "dag.md").write_text(
                 "# DAG\n\n执行尝试 ID（Attempt ID）：initial\n\n### T1: Build\n\n- 状态：PENDING\n\n"
                 "## DAG 看板\n\n<!-- impl-package:projection runtime-state begin -->\n"
-                "| Task | State | Evidence |\n| --- | --- | --- |\n| T1 | PENDING | dag.md#T1 |\n"
+                "| 任务 | 状态 | 证据 |\n| --- | --- | --- |\n| T1 | PENDING | dag.md#T1 |\n"
                 "<!-- impl-package:projection runtime-state end -->\n",
                 encoding="utf-8",
             )
@@ -490,6 +547,122 @@ class ArtifactChainTest(unittest.TestCase):
 
 
 class GateIndexTest(unittest.TestCase):
+    def test_indexed_historical_gate_does_not_resolve_current_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            package = Path(temp) / "2026-07-17-revision-drift"
+            package.mkdir()
+            (package / "plan.md").write_text(
+                "# Plan\n\n执行尝试 ID（Attempt ID）：initial\n\n"
+                "执行组合（Composition）：tickets=false, dag=false\n",
+                encoding="utf-8",
+            )
+            sidecar = package / ".impl-package"
+            sidecar.mkdir()
+            (sidecar / "revision-bindings.json").write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": 2,
+                        "purpose": "internal-machine-sidecar",
+                        "ownerFacing": False,
+                        "current": {
+                            "design": {"artifact": "design.md", "revision": "D2"},
+                            "spec": {"artifact": "spec.md", "revision": "S2"},
+                            "attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"},
+                        },
+                        "bindings": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            gate_block = (
+                "## initial-G1 · pass\n\n"
+                "- 执行尝试 ID（Attempt ID）：initial\n"
+                "- 取代（Supersedes）：none\n"
+                "- 修订集合（Revision set）：D1 / S1 / P1\n"
+                "- 判决理由（Verdict reason）：historical only\n"
+            )
+            (package / "gate.md").write_text(gate_block, encoding="utf-8")
+            digest = hashlib.sha256(gate_block.encode("utf-8")).hexdigest()
+            (sidecar / "runtime-state.json").write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "purpose": "internal-machine-sidecar",
+                        "ownerFacing": False,
+                        "packageId": package.name,
+                        "tasks": [],
+                        "tickets": [],
+                        "artifacts": [],
+                        "gate": {
+                            "allocations": [
+                                {
+                                    "operationId": "gate-evaluation-1",
+                                    "attempt": "initial",
+                                    "number": 1,
+                                    "entryId": "initial-G1",
+                                }
+                            ],
+                            "entries": [
+                                {
+                                    "id": "initial-G1",
+                                    "attempt": "initial",
+                                    "number": 1,
+                                    "verdict": "pass",
+                                    "supersedes": None,
+                                    "entry": {
+                                        "path": "gate.md",
+                                        "anchor": "initial-G1",
+                                        "bindingMode": "gate-entry-v1",
+                                        "contentSha256": digest,
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            resolution = json.loads(run_cli(package, "resolve-gate").stdout)
+
+            self.assertEqual(resolution["kind"], "indexed")
+            self.assertEqual(resolution["entryId"], "initial-G1")
+            self.assertIsNone(resolution["gateResolution"])
+            self.assertFalse(resolution["appliesToCurrentRevision"])
+            self.assertFalse(resolution["needsManualGateReview"])
+
+            patch_attempt = "20260717-1700-current"
+            patch_plan = f"{patch_attempt}.patch-plan.md"
+            (package / patch_plan).write_text(
+                "# Patch plan\n\n"
+                f"执行尝试 ID（Attempt ID）：{patch_attempt}\n\n"
+                "执行组合（Composition）：tickets=false, dag=false\n",
+                encoding="utf-8",
+            )
+            revision_state = json.loads((sidecar / "revision-bindings.json").read_text(encoding="utf-8"))
+            revision_state["current"]["attempt"] = {"id": patch_attempt, "plan": patch_plan, "revision": "P1"}
+            (sidecar / "revision-bindings.json").write_text(json.dumps(revision_state), encoding="utf-8")
+
+            new_attempt_resolution = json.loads(run_cli(package, "resolve-gate").stdout)
+
+            self.assertEqual(new_attempt_resolution["kind"], "indexed")
+            self.assertEqual(new_attempt_resolution["entryId"], "initial-G1")
+            self.assertIsNone(new_attempt_resolution["gateResolution"])
+            self.assertFalse(new_attempt_resolution["appliesToCurrentRevision"])
+            self.assertFalse(new_attempt_resolution["needsManualGateReview"])
+
+            runtime_state = json.loads((sidecar / "runtime-state.json").read_text(encoding="utf-8"))
+            runtime_state["gate"] = {"allocations": [], "entries": []}
+            (sidecar / "runtime-state.json").write_text(json.dumps(runtime_state), encoding="utf-8")
+            (package / "gate.md").write_text("# Gate\n", encoding="utf-8")
+
+            empty_gate_resolution = json.loads(run_cli(package, "resolve-gate").stdout)
+
+            self.assertIsNone(empty_gate_resolution["kind"])
+            self.assertTrue(empty_gate_resolution["hasGate"])
+            self.assertIsNone(empty_gate_resolution["gateResolution"])
+            self.assertFalse(empty_gate_resolution["needsManualGateReview"])
+
     def test_gate_allocation_is_idempotent_and_finalized_index_is_content_bound(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             package = Path(temp) / "2026-07-17-example"
@@ -533,6 +706,20 @@ class GateIndexTest(unittest.TestCase):
             gate_path.write_text(
                 gate_path.read_text(encoding="utf-8").replace(
                     "## initial-G1 · <pass|fail|blocked|defer>", "## initial-G1 · pass"
+                ).replace(
+                    "- 修订集合（Revision set）：",
+                    "- 修订集合（Revision set）：D1 / S1 / P1",
+                ),
+                encoding="utf-8",
+            )
+            rejected = run_cli(package, "finalize-gate-entry", "initial-G1", check=False)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("does not match current revisions", rejected.stderr)
+            state = json.loads((package / ".impl-package" / "runtime-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["gate"]["entries"], [])
+            gate_path.write_text(
+                gate_path.read_text(encoding="utf-8").replace(
+                    "D1 / S1 / P1", "N/A / N/A / P1"
                 ),
                 encoding="utf-8",
             )
@@ -541,6 +728,7 @@ class GateIndexTest(unittest.TestCase):
             resolution = json.loads(run_cli(package, "resolve-gate").stdout)
             self.assertEqual(resolution["kind"], "indexed")
             self.assertEqual(resolution["gateResolution"], "pass")
+            self.assertTrue(resolution["appliesToCurrentRevision"])
             gate_path.write_bytes(gate_path.read_text(encoding="utf-8").replace("\n", "\r\n").encode("utf-8"))
             self.assertEqual(json.loads(run_cli(package, "resolve-gate").stdout)["kind"], "indexed")
 
@@ -687,7 +875,15 @@ class ProjectionRebindTest(unittest.TestCase):
             run_cli(package, "init", "--package-id", package.name)
             run_cli(package, "new-gate-entry", "--attempt", "initial", "--operation-id", "initial-gate")
             gate_path = package / "gate.md"
-            gate_path.write_text(gate_path.read_text(encoding="utf-8").replace("## initial-G1 · <pass|fail|blocked|defer>", "## initial-G1 · pass"), encoding="utf-8")
+            gate_path.write_text(
+                gate_path.read_text(encoding="utf-8")
+                .replace("## initial-G1 · <pass|fail|blocked|defer>", "## initial-G1 · pass")
+                .replace(
+                    "- 修订集合（Revision set）：",
+                    "- 修订集合（Revision set）：N/A / N/A / P1",
+                ),
+                encoding="utf-8",
+            )
             run_cli(package, "finalize-gate-entry", "initial-G1")
 
             patch_id = "20260717-1300-fix"
@@ -697,7 +893,7 @@ class ProjectionRebindTest(unittest.TestCase):
 
             revision = json.loads(sidecar.read_text(encoding="utf-8"))
             self.assertEqual(revision["current"]["attempt"]["id"], patch_id)
-            self.assertIn("状态：尚无 finalized gate entry", gate_path.read_text(encoding="utf-8"))
+            self.assertIn("状态：尚无已定稿门禁记录", gate_path.read_text(encoding="utf-8"))
             run_cli(package, "validate", "--working-tree")
 
 
@@ -722,7 +918,7 @@ class RuntimeProjectionValidationTest(unittest.TestCase):
             dag.write_text(
                 "# DAG\n\n执行尝试 ID（Attempt ID）：initial\n\n### T1: Build\n\n- 运行时状态与证据：见看板。\n\n"
                 "## DAG 看板\n\n<!-- impl-package:projection runtime-state begin -->\n"
-                "| Task | State | Evidence |\n| --- | --- | --- |\n| T1 | PENDING | dag.md#T1 |\n"
+                "| 任务 | 状态 | 证据 |\n| --- | --- | --- |\n| T1 | PENDING | dag.md#T1 |\n"
                 "<!-- impl-package:projection runtime-state end -->\n",
                 encoding="utf-8",
             )

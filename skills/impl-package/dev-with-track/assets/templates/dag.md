@@ -40,7 +40,7 @@
 ## DAG 看板
 
 <!-- impl-package:projection runtime-state begin -->
-| Task | State | Evidence |
+| 任务 | 状态 | 证据 |
 | --- | --- | --- |
 | T1 | PENDING | dag.md#T1 |
 <!-- impl-package:projection runtime-state end -->

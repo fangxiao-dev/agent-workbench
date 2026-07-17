@@ -68,7 +68,7 @@ If any criterion fails, create or update `design.md`, record `Design Gate: BLOCK
 - `Decisions / Rationale` records choices and why they were selected. Put behavior, state, interface, and failure semantics only in `spec.md`; do not copy those contracts into design.
 - `Backfill Candidates` is a non-binding research hint. It is not a durable-delta register, does not authorize stable-document edits, and need not be merged into spec. Canonical durable-delta capture happens at the execution gate and downstream backfill.
 
-`design.md` 声明 `Design Revision: D<n>`。正文只保留当前选择；方向变化时升级 revision、重跑 Design Gate，并在 Revision History 中用一行记录 previous/new、变更摘要、authority、日期与 superseded 说明。Gate 通过后计算最终 artifact 的 Git blob OID，在内部 sidecar 追加 D binding 并更新 current design；artifact 不记录自身 hash。完整旧正文由 Git 保存，不在当前正文并排维护。
+`design.md` 的唯一 revision 声明是 machine-owned `revision-set` marker 中的 `设计修订（Design Revision）：D<n>`；不得在 marker 外再写 `Design Revision` header。正文只保留当前选择；方向变化时升级 revision、重跑 Design Gate，并在 Revision History 中用一行记录 previous/new、变更摘要、authority、日期与 superseded 说明。Gate 通过后计算最终 artifact 的 Git blob OID，在内部 sidecar 追加 D binding、更新 current design 并刷新 projection；artifact 不记录自身 hash。完整旧正文由 Git 保存，不在当前正文并排维护。
 
 ## Gate 2: Spec (Required)
 
@@ -103,7 +103,7 @@ When the signal is present, make the existing eight spec sections answer the rel
 
 The Spec gate passes under this signal only when the contract makes false-PASS counterexamples testable. It must name only the relevant concerns; an ordinary change with no evidence-integrity signal does not gain extra ceremony.
 
-`spec.md` 声明 `Spec Revision: S<n>`，并始终记录其绑定的 `Design Revision: D<n>`；lightweight Design 没有独立 design.md 时，这一字段与 Design Gate Record 共同提供 D revision 的 canonical 落点。纯实现修复以重新符合当前 spec 时复用 revision；行为 contract 变化时升级 S revision 并重跑 Spec Gate；设计选择变化时必须先完成新的 Design revision/Gate。Gate 通过后计算最终 artifact 的 Git blob OID，在 registry 追加 S binding 并更新 current spec；lightweight Design 的 D/S 可以分别绑定同一个 spec blob。正文只保留当前合同，旧合同通过 Revision History、registry 和 Git 追溯。
+`spec.md` 的唯一 revision 声明是 machine-owned `revision-set` marker 中的 `设计修订（Design Revision）：D<n>` 与 `规格修订（Spec Revision）：S<n>`；不得在 marker 外再写旧式 D/S header。lightweight Design 没有独立 design.md 时，这个 D projection 与 Design Gate Record 共同提供 D revision 的 canonical 落点。纯实现修复以重新符合当前 spec 时复用 revision；行为 contract 变化时升级 S revision 并重跑 Spec Gate；设计选择变化时必须先完成新的 Design revision/Gate。Gate 通过后计算最终 artifact 的 Git blob OID，在 registry 追加 S binding、更新 current spec 并刷新 projection；lightweight Design 的 D/S 可以分别绑定同一个 spec blob。正文只保留当前合同，旧合同通过 Revision History、registry 和 Git 追溯。
 
 ### 风险驱动的 Grill
 

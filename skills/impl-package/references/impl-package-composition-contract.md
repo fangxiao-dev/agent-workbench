@@ -33,7 +33,7 @@ terminal gate entry 写入前必须完成 Stage 7 durable-delta capture。gate �
 
 ## 2. Design/Spec revision 与 drift
 
-design.md（存在时）或 spec.md 的 Design Gate Record 声明唯一当前 Design Revision: D&lt;n&gt;；spec.md 声明唯一当前 Spec Revision: S&lt;n&gt;。lightweight Design 不建 design.md 时，D revision 仍必须在 spec 中可解析。
+design.md（存在时）的 `revision-set` marker 声明唯一当前 D revision；spec.md 的同一 projection 声明唯一当前 D/S revision。lightweight Design 不建 design.md 时，spec 的 D projection 与 Design Gate Record 共同提供 canonical 落点。默认 projection 使用中文标签 `设计修订（Design Revision）`、`规格修订（Spec Revision）` 与 `计划修订（Plan Revision）`；这些声明不得在 marker 外重复。
 
 - 实现偏离现有 spec，但预期行为不变：复用 D/S revision，创建新 attempt。
 - 行为、数据、边界、失败恢复、约束或 Acceptance Semantics 改变：升级 S revision，只重跑 Spec Gate。
@@ -69,7 +69,7 @@ D&lt;n&gt;/S&lt;n&gt;/P&lt;n&gt; 是人类好念、好口头下发的**别名**�
 
 内部 sidecar 使用 [`../assets/templates/revision-bindings.json`](../assets/templates/revision-bindings.json) 的 v2 形状；完整不变量引用 [结构化状态契约 §2](impl-package-state-schema.md#2-revision-bindings-schema-v2)。语义 revision、projection/editorial rebinding 均 append-only，后者以 `supersedes` 选择同 alias 的新 terminal binding。lightweight Design 没有 design.md 时，D&lt;n&gt; 与 S&lt;n&gt; 可以分别绑定到同一个 spec.md blob。
 
-生成或升级 revision 时运行 `impl_package_state.py --package <path> register-revision ...`；命令登记最终 worktree blob 并执行 working-tree validation。artifact 与 registry 可在同一 commit，restore、ER append 与 gate evaluation 前统一运行 `validate --committed`，由它现场复核 HEAD，不保存 published/validated 状态。v1 sidecar 只读兼容，任何 mutation 前显式 `migrate --evidence <pointer>`。
+生成或升级 revision 时运行 `impl_package_state.py --package <path> register-revision ...`；命令登记最终 worktree blob 并执行 working-tree validation。artifact 与 registry 可在同一 commit，restore、ER append 与 gate evaluation 前统一运行 `validate --committed`，由它现场以 `git rev-parse HEAD:<package-relative-path>` 复核 HEAD，不保存 published/validated 状态。v1 sidecar 只读兼容，任何 mutation 前显式 `migrate --evidence <pointer>`。
 
 validation mode 区分 contract artifact 与执行证据：
 
@@ -84,18 +84,20 @@ restore 或 gate evaluation 时，对 `current` 指向的 D/S/P binding 执行�
 - 不能证明为 editorial correction，或其触及任何合同语义时，按 evidence 胜过 stale status 处理为 semantic revision：按本节上方四类重新分类、升级对应 revision 并登记新 binding；不得把语义变化伪装为同 alias rebinding。
 - registry 缺失、重复 alias/path、`current` 指向不存在的 binding，或 Git 无法解析 blob：视为 P2 capture gap，不得默认相符。
 
-ER 的 Revision set 表示写入该 ER 时的 current D/S/P set；plan header 投影始终表示当前 set。gate entry 为了冻结历史判决，在可读正文写 `Revision set: D<n> / S<n> / P<n>` 与 `Binding validation: passed | failed`；精确 blob OID 和内部 sidecar 路径只放 HTML comment 形式的 machine audit metadata。P blob 是 plan-contract-v1 baseline，实际 ER evidence 由 comparison point + ER anchor 固定。
+ER 的 Revision set 表示写入该 ER 时的 current D/S/P set；plan 的 `revision-set` marker 始终表示当前 set。gate entry 为了冻结历史判决，在可读正文写 `Revision set: D<n> / S<n> / P<n>` 与 `Binding validation: passed | failed`；精确 blob OID 和内部 sidecar 路径只放 HTML comment 形式的 machine audit metadata。P blob 是 plan-contract-v1 baseline，实际 ER evidence 由 comparison point + ER anchor 固定。
 
 ## 3. Attempt、plan 与 Composition
 
 每次 implementation attempt 有唯一 Attempt ID：初始实现使用 initial，patch 使用其 patch-plan 文件 stem `YYYYMMDD-HHMM-&lt;patch-topic&gt;`；精确 stem 已存在时追加 `-02`、`-03`，且创建后不可改名。对应 plan 声明：
 
-~~~text
-Attempt ID: <initial | patch-id>
-Design Revision: D<n>
-Spec Revision: S<n>
-Plan Revision: P<n>
-Composition: tickets=<true|false>, dag=<true|false>
+~~~markdown
+执行尝试 ID（Attempt ID）：<initial | patch-id>
+<!-- impl-package:projection revision-set begin -->
+设计修订（Design Revision）：D<n>
+规格修订（Spec Revision）：S<n>
+计划修订（Plan Revision）：P<n>
+<!-- impl-package:projection revision-set end -->
+执行组合（Composition）：tickets=<true|false>, dag=<true|false>
 ~~~
 
 Composition 的唯一事实源是当前 attempt plan，不在 spec 中声明，也不从历史 attempt 继承。tickets 与 DAG 仍按两个正交 earn condition 决定：
@@ -109,19 +111,19 @@ Composition 的唯一事实源是当前 attempt plan，不在 spec 中声明，�
 
 一个状态只有一个事实源。plan 不保存 task checklist、task runtime status 或 ticket 正文。简单 no-DAG attempt 的 runtime-state `tasks[]` 必须为空；恢复需要由 Kind=attempt 的 progress ledger 解决，不通过给 plan 或 JSON 增加 executable task checklist。dag=true/tickets=true 时，JSON record 与 earned artifact 必须分别构成 bijection，Markdown marker 只由 `set-state`/`refresh-projections` 更新。
 
-plan 在 attempt 活动期间可通过 Plan Revision: P&lt;n&gt; 修订策略、Composition 或验证选择；P revision 在该 attempt 内从 P1 单调递增，每次修订记录摘要与 artifact relocation，并在内部 sidecar 追加新 blob binding。terminal gate verdict 后冻结。Composition 变化只影响当前 attempt，不修改 D/S revision；迁移后不得保留两个可写 execution-state source。
+plan 在 attempt 活动期间可通过计划修订（Plan Revision）P&lt;n&gt; 修订策略、Composition 或验证选择；P revision 在该 attempt 内从 P1 单调递增，每次修订记录摘要与 artifact relocation，并在内部 sidecar 追加新 blob binding。terminal gate verdict 后冻结。Composition 变化只影响当前 attempt，不修改 D/S revision；迁移后不得保留两个可写 execution-state source。
 
 ### 派生 lifecycle 与 integration qualifier
 
 plan 不保存可手工修改的 `Status`。attempt lifecycle 从 registry 与 gate ledger 派生：
 
 - **Draft**：plan artifact 已存在，但尚未被内部 sidecar 的 `current.attempt` 选中，或其 P binding 尚未通过一致性检查；不得进入执行。
-- **Active**：`current.attempt` 唯一指向该 plan/P binding，且该 Attempt ID 尚无 terminal gate entry。
-- **Frozen**：该 Attempt ID 已有 pass/fail/defer terminal entry；plan 不再修改，后续变化创建 patch attempt。
+- **Active**：`current.attempt` 唯一指向该 plan/P binding，且不存在适用于当前 D/S/P revision set 的 terminal gate entry。
+- **Frozen**：该 Attempt ID 已有 content-bound、且适用于当前 D/S/P revision set 的 pass/fail/defer terminal entry；plan 不再修改，后续变化创建 patch attempt。旧 entry 只证明其记录的 revision set，不因 attempt ID 相同自动冻结新的 D/S/P。
 
 `Integrated, gate open` 是报告 qualifier，不是第四种可写 lifecycle status：当 plan 声明的 target branch 已包含当前 comparison point、但 attempt 仍为 Active 时派生。默认 integration order 是 gate-before-merge；只有 plan 记录 owner-approved pre-gate integration strategy 与证据时，才允许先合入。此后 terminal pass 与 closed claim 必须使用目标分支上的新鲜证据；合入本身不等于 gate 关闭。
 
-**Plan Revision 变化后，已创建的 ticket/DAG 必须跟进，但不默认全部重做**：每个 tickets/&lt;ticket&gt;.md 与当前 attempt DAG 都声明自己创建/最后确认时所依据的 `Plan Revision: P<n>`。plan 从 P&lt;n&gt; 升级到 P&lt;n+1&gt; 后，仍声明旧 P&lt;n&gt; 的 artifact 是 `NEEDS-REVALIDATION`，该状态表示需要做影响判断，不表示正文必然失效。先根据 P revision 的实际 delta 列出受影响 subset：受影响内容定向修订和验证；未受影响内容可批量确认仍成立并机械更新 Plan Revision 引用，无需重新生成、逐项重审或重跑验收。restore 必须完成这次 scoped reconciliation 后再使用相关 artifact。
+**计划修订（Plan Revision）变化后，已创建的 ticket/DAG 必须跟进，但不默认全部重做**：每个 tickets/&lt;ticket&gt;.md 与当前 attempt DAG 都声明自己创建/最后确认时所依据的 `计划修订（Plan Revision）：P<n>`。plan 从 P&lt;n&gt; 升级到 P&lt;n+1&gt; 后，仍声明旧 P&lt;n&gt; 的 artifact 是 `NEEDS-REVALIDATION`，该状态表示需要做影响判断，不表示正文必然失效。先根据 P revision 的实际 delta 列出受影响 subset：受影响内容定向修订和验证；未受影响内容可批量确认仍成立并机械更新计划修订引用，无需重新生成、逐项重审或重跑验收。restore 必须完成这次 scoped reconciliation 后再使用相关 artifact。
 
 可选 dispatch shorthand 只展开当前 attempt Composition，不是 sizing gate：
 
@@ -195,7 +197,7 @@ findings.md 是发现 inbox。gate evaluation 前必须分流：设计决定进 
 
 package 永远只有一个 gate.md。它是 newest-first 的 append-only gate evaluation ledger；每次 evaluation 在文件顶部说明之后插入新 entry，旧 entry 不修改。
 
-gate.md 允许在正式 ledger（本节格式的 entry 序列）之前保留至多一行可变的"当前状态一览"（例如 `状态：<最新 entry 的 verdict 人话摘要>`），方便 owner 一眼看到当前状态，不必翻到最新 entry。这一行不属于 append-only ledger，可以随时改写，但只能用来复述最新 entry 已经写明的内容——不能携带任何最新 entry 里找不到的判断或证据。发现这行和最新 entry 不一致时，以最新 entry 为准，且应该把这行改到和最新 entry 一致，而不是反过来改 entry。除这一行外，ledger 正文（entry 块本身，含历史遗留下来、格式早于本节模板的旧 gate.md 里的 Gate Decision/Verification 等判决与证据内容）保持严格 append-only，旧内容一律不回改，只能通过新 entry 补充或更正。
+gate.md 顶部状态一览只允许存在于 `gate-status` machine-owned marker 内，由 `finalize-gate-entry` 或 `refresh-projections` 根据 canonical resolver 结果刷新；人和 agent 不直接编辑。投影只复述当前 D/S/P 可适用的 finalized entry；只有历史 entry 时必须显示当前尚无 verdict，不能把旧 pass 投影成当前 pass。marker 外遗留的人话摘要属于 legacy 输入，迁移时删除或转换，不能与新 projection 并存。除 marker body 外，ledger 正文（entry 块本身，含历史遗留下来、格式早于本节模板的旧 gate.md 里的 Gate Decision/Verification 等判决与证据内容）保持严格 append-only，旧内容一律不回改，只能通过新 entry 补充或更正。
 
 每个 entry 使用 &lt;attempt-id&gt;-G&lt;n&gt;，并记录：
 

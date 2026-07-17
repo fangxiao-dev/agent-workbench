@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
@@ -21,9 +22,35 @@ def assert_not_contains(content: str, needle: str, label: str) -> None:
         raise AssertionError(f"Unexpected {label}: {needle}")
 
 
+def assert_unique_revision_projection(content: str, body: str, label: str) -> None:
+    marker = "revision-set"
+    expected = (
+        f"<!-- impl-package:projection {marker} begin -->\n"
+        f"{body}\n"
+        f"<!-- impl-package:projection {marker} end -->"
+    )
+    assert_contains(content, expected, f"{label} revision-set projection")
+    if content.count(f"<!-- impl-package:projection {marker} begin -->") != 1:
+        raise AssertionError(f"{label} must contain exactly one revision-set begin marker")
+    if content.count(f"<!-- impl-package:projection {marker} end -->") != 1:
+        raise AssertionError(f"{label} must contain exactly one revision-set end marker")
+    outside_marker = re.sub(
+        rf"(?ms)<!-- impl-package:projection {marker} begin -->\n.*?<!-- impl-package:projection {marker} end -->",
+        "",
+        content,
+    )
+    if re.search(
+        r"(?m)^\s*(?:设计修订（Design Revision）|规格修订（Spec Revision）|计划修订（Plan Revision）|Design Revision|Spec Revision|Plan Revision)[：:]",
+        outside_marker,
+    ):
+        raise AssertionError(f"{label} duplicates a revision declaration outside its machine-owned projection")
+
+
 def main() -> None:
     skill = read(SKILL_ROOT / "SKILL.md")
     template = read(SKILL_ROOT / "assets" / "templates" / "plan.md")
+    design_template = read(IMPL_ROOT / "req-align" / "assets" / "templates" / "design.md")
+    spec_template = read(IMPL_ROOT / "req-align" / "assets" / "templates" / "spec.md")
     patching = read(SKILL_ROOT / "patching.md")
     rubric = read(SKILL_ROOT / "rubric.md")
     shared = read(IMPL_ROOT / "references" / "impl-package-composition-contract.md")
@@ -166,6 +193,22 @@ def main() -> None:
     )
     for content, needle, label in required:
         assert_contains(content, needle, label)
+
+    assert_unique_revision_projection(
+        design_template,
+        "设计修订（Design Revision）：D<n>",
+        "design template",
+    )
+    assert_unique_revision_projection(
+        spec_template,
+        "设计修订（Design Revision）：D<n>\n规格修订（Spec Revision）：S<n>",
+        "spec template",
+    )
+    assert_unique_revision_projection(
+        template,
+        "设计修订（Design Revision）：D<n>\n规格修订（Spec Revision）：S<n>\n计划修订（Plan Revision）：P<n>",
+        "plan template",
+    )
 
     for needle in (
         "Patch execution topology",

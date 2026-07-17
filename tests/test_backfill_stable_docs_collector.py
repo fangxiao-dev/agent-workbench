@@ -109,15 +109,15 @@ class CollectorInventoryTest(unittest.TestCase):
         collector = load_module("collect_sources")
         inventory = collector.collect_inventory(project_root=self.project)
         by_id = {row["packageId"]: row for row in inventory["packages"]}
-        self.assertFalse(by_id["pkg-open"]["gapCatchingCandidate"])
-        self.assertFalse(by_id["pkg-referenced"]["gapCatchingCandidate"])
+        self.assertFalse(by_id["pkg-open"]["gapCatchingStructuralCandidate"])
+        self.assertFalse(by_id["pkg-referenced"]["gapCatchingStructuralCandidate"])
         self.assertFalse(by_id["pkg-referenced"]["retirementStructuralCandidate"])
         self.assertTrue(by_id["pkg-referenced"]["referencedInOpenPending"])
 
     def test_gap_catching_candidate_is_terminal_and_unreferenced_and_unresolved(self) -> None:
         collector = load_module("collect_sources")
         inventory = collector.collect_inventory(project_root=self.project)
-        self.assertEqual(inventory["gapCatchingCandidates"], ["pkg-gap"])
+        self.assertEqual(inventory["gapCatchingStructuralCandidates"], ["pkg-gap"])
 
     def test_retirement_candidate_is_terminal_unreferenced_and_resolved_in_done_record(self) -> None:
         collector = load_module("collect_sources")
@@ -128,7 +128,7 @@ class CollectorInventoryTest(unittest.TestCase):
         collector = load_module("collect_sources")
         inventory = collector.collect_inventory(project_root=self.project)
         by_id = {row["packageId"]: row for row in inventory["packages"]}
-        self.assertFalse(by_id["pkg-open"]["gapCatchingCandidate"])
+        self.assertFalse(by_id["pkg-open"]["gapCatchingStructuralCandidate"])
         self.assertFalse(by_id["pkg-open"]["retirementStructuralCandidate"])
 
     def test_target_branch_is_resolved_with_git_rev_parse_and_reported(self) -> None:
@@ -139,7 +139,7 @@ class CollectorInventoryTest(unittest.TestCase):
         self.assertIsNone(inventory["targetBranchConfigGap"])
         self.assertEqual(inventory["pendingConfigGaps"], [])
         self.assertEqual(len(inventory["pendingColdStarts"]), 1)
-        self.assertEqual(inventory["schemaVersion"], 4)
+        self.assertEqual(inventory["schemaVersion"], 5)
 
     def test_unresolvable_target_branch_is_reported_as_config_gap_without_stopping_inventory(self) -> None:
         config_path = self.project / ".stable-docs-backfill.json"
@@ -187,12 +187,12 @@ class LegacyGateFormatTest(unittest.TestCase):
         self.assertIsNone(row["gateResolution"])
         self.assertIn("no structured index", row["reason"])
         self.assertTrue(row["needsManualGateReview"])
-        self.assertFalse(row["gapCatchingCandidate"])
+        self.assertFalse(row["gapCatchingStructuralCandidate"])
         self.assertFalse(row["retirementStructuralCandidate"])
         self.assertEqual(inventory["manualGateReviewCandidates"], ["legacy-pkg"])
 
 
-class GateRecognitionV4Test(unittest.TestCase):
+class GateRecognitionV5Test(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -223,11 +223,17 @@ class GateRecognitionV4Test(unittest.TestCase):
         return package
 
     @staticmethod
-    def _gate_text(verdict: str = "pass", entry_id: str = "initial-G1", attempt: str = "initial") -> str:
+    def _gate_text(
+        verdict: str = "pass",
+        entry_id: str = "initial-G1",
+        attempt: str = "initial",
+        revision_set: str = "N/A / N/A / P1",
+    ) -> str:
         return (
             f"## {entry_id} · {verdict}\n\n"
             f"- 执行尝试 ID（Attempt ID）：{attempt}\n"
             "- 取代（Supersedes）：none\n"
+            f"- 修订集合（Revision set）：{revision_set}\n"
             "- 判决理由（Verdict reason）：fixture\n"
         )
 
@@ -337,6 +343,26 @@ class GateRecognitionV4Test(unittest.TestCase):
         row = next(row for row in collector.collect_inventory(project_root=self.project)["packages"] if row["packageId"] == "attempt-local")
         self.assertEqual(row["gateRecognition"], "mismatch")
 
+    def test_historical_indexed_gate_is_not_a_candidate_for_new_current_revisions(self) -> None:
+        historical = self._gate_text(revision_set="D3 / S2 / P3")
+        package = self._package("revision-drift", historical, self._runtime(historical))
+        revision_path = package / ".impl-package/revision-bindings.json"
+        revision = json.loads(revision_path.read_text(encoding="utf-8"))
+        revision["current"] = {
+            "design": {"artifact": "design.md", "revision": "D4"},
+            "spec": {"artifact": "spec.md", "revision": "S3"},
+            "attempt": {"id": "initial", "plan": "plan.md", "revision": "P3"},
+        }
+        revision_path.write_text(json.dumps(revision), encoding="utf-8")
+
+        row = self._inventory()["revision-drift"]
+
+        self.assertEqual(row["gateRecognition"], "indexed")
+        self.assertIsNone(row["gateResolution"])
+        self.assertFalse(row["gateAppliesToCurrentRevision"])
+        self.assertFalse(row["gapCatchingStructuralCandidate"])
+        self.assertFalse(row["retirementStructuralCandidate"])
+
     def test_invalid_supersedes_chain_has_canonical_backfill_parity(self) -> None:
         first = self._gate_text("pass", "initial-G1", "initial")
         second = self._gate_text("defer", "initial-G2", "initial")
@@ -372,9 +398,9 @@ class GateRecognitionV4Test(unittest.TestCase):
         self._package("legacy-fail", self._gate_text("fail"))
         self._package("mismatch-fail", indexed_fail, self._runtime(indexed_fail, verdict="fail", digest="0" * 64))
         rows = self._inventory()
-        self.assertTrue(rows["indexed-fail"]["gapCatchingCandidate"])
-        self.assertTrue(rows["legacy-fail"]["gapCatchingCandidate"])
-        self.assertFalse(rows["mismatch-fail"]["gapCatchingCandidate"])
+        self.assertTrue(rows["indexed-fail"]["gapCatchingStructuralCandidate"])
+        self.assertTrue(rows["legacy-fail"]["gapCatchingStructuralCandidate"])
+        self.assertFalse(rows["mismatch-fail"]["gapCatchingStructuralCandidate"])
 
     def test_referenced_mismatch_remains_visible_and_never_becomes_candidate(self) -> None:
         package = self._package("referenced-mismatch", self._gate_text(), self._runtime(self._gate_text(), digest="0" * 64))
@@ -387,7 +413,7 @@ class GateRecognitionV4Test(unittest.TestCase):
         row = self._inventory()["referenced-mismatch"]
         self.assertTrue(row["referencedInOpenPending"])
         self.assertTrue(row["needsManualGateReview"])
-        self.assertFalse(row["gapCatchingCandidate"])
+        self.assertFalse(row["gapCatchingStructuralCandidate"])
         self.assertFalse(row["retirementStructuralCandidate"])
 
     def test_indexed_resolution_matches_canonical_helper_on_shared_package_fixture(self) -> None:
@@ -410,9 +436,9 @@ class GateRecognitionV4Test(unittest.TestCase):
         commit(self.project, "markdown fixture")
         collector = load_module("collect_sources")
         markdown = collector._render_markdown(collector.collect_inventory(project_root=self.project))
-        self.assertIn("| Package | Gate recognition | Gate resolution |", markdown)
+        self.assertIn("| 任务包 | Gate 识别 | Gate 判决 |", markdown)
         self.assertIn("| indexed | indexed | pass |", markdown)
-        self.assertIn("Needs manual gate review (mismatch/manual)", markdown)
+        self.assertIn("需要人工 Gate 复核（mismatch/manual）", markdown)
 
 
 class MonorepoPendingDiscoveryTest(unittest.TestCase):

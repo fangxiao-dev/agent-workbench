@@ -92,6 +92,8 @@ ticket record 的 canonical shape 同样为 `{attempt,id,state,evidence}`，四�
 
 v1 marker name 至少包括 `revision-set`、`runtime-state` 与 `gate-status`。同一 artifact 内 name 唯一；缺 marker、重复、嵌套、顺序错误或 body 无法从 JSON 重建均为 validate failure。
 
+当前 D/S/P revision 的唯一 Markdown 声明位于 `revision-set` marker body；默认 body 使用中文 `设计修订（Design Revision）`、`规格修订（Spec Revision）` 与 `计划修订（Plan Revision）` 标签。`validate` 必须拒绝 marker 外任何同义的 D/S/P revision declaration（包括 Markdown emphasis 或尾部注释），防止旧 header 与机器投影并存。
+
 `refresh-projections` 只能改 marker body。自动 projection rebinding 前，脚本从 active binding baseline 与当前 artifact 中排除允许追加的 ER 区域及 marker body；marker 外仍有 diff 时必须拒绝，并返回 owning skill 做 S/P revision 或 editorial correction 判断。
 
 只有 owning skill 已证明 `contract impact=none` 后，显式 `rebind --reason editorial --evidence <pointer> --confirm-contract-impact-none` 才能接受 marker 外 editorial diff；脚本不替代语义判断。`rebind --reason projection` 只接受 marker 内 diff，不能成为语义变化的洗白通道。
@@ -102,14 +104,14 @@ ER 的 Revision set 表示该 ER 写入时的 current D/S/P set。plan header �
 
 当 `gate.md` 存在时，消费方必须把 gate 识别为以下四类之一，并把 recognition kind、可信 `gateResolution` 与人工路由分开：
 
-1. `indexed`：JSON finalized index 存在，目标 entry 唯一，content binding 匹配，且 index 的 id/attempt/number/verdict/supersedes 与 Markdown 反解值一致；`gateResolution=<verdict>`，无需人工路由。
+1. `indexed`：JSON finalized index 存在，目标 entry 唯一，content binding 匹配，且 index 的 id/attempt/number/verdict/supersedes 与 Markdown 反解值一致。resolver 现场从 entry 正文反解 `revisionSet`，并与 revision registry 的 current D/S/P 比较：一致时 `appliesToCurrentRevision=true`、`gateResolution=<verdict>`；不一致时它仍是合法历史 `indexed` entry，但 `appliesToCurrentRevision=false`、`gateResolution=null`，且不进入人工异常。新 current attempt 尚未分配 Gate 时，resolver 返回 ledger 中最新的合法历史 indexed entry 并按当前 D/S/P 计算不适用；已有 current allocation/Markdown entry 却尚未 finalize 仍按 `mismatch` fail safe。entry 缺 revision set 或 finalize 时与 current D/S/P 不一致属于结构错误，不能生成 finalized index。
 2. `legacy-heading`：整个 package 没有 runtime-state JSON，旧 gate heading 可解析；`gateResolution=<verdict>` 并标 legacy，无需人工路由。
 3. `mismatch`：JSON 存在但损坏、缺 entry、entry 缺失/重复、pointer 越界、content/字段 binding 不符、JSON 陈旧或无法解析；`gateResolution=null`、`needsManualGateReview=true`，不得 fallback 信任 heading。
 4. `manual`：gate.md 存在、整个 package 没有 runtime-state JSON、且无合法 legacy heading；`gateResolution=null`、`needsManualGateReview=true`。
 
-没有 `gate.md` 时 `hasGate=false`、`gateRecognition=null`、`gateResolution=null`，表示 attempt 尚无 verdict；它不是第五种 recognition result，也不默认等于人工异常。若某个消费动作本身要求 terminal gate，应由该动作正常判定未满足前提。
+没有 `gate.md` 时 `hasGate=false`、`gateRecognition=null`、`gateResolution=null`；已有空 ledger 模板、且 runtime gate 没有 allocation/entry 时 `hasGate=true` 但其余结果相同。两者都表示 attempt 尚无 verdict，不是第五种 recognition result，也不默认等于人工异常。若某个消费动作本身要求 terminal gate，应由该动作正常判定未满足前提。
 
-这四类是 compatibility result，不是新的 package lifecycle。backfill、retirement 与 verify 可以投影结果，但不得把 `mismatch` 降级成 legacy success。backfill inventory 因新增 `gateRecognition`、`gateResolution` 与 mismatch/manual 计数升到 schemaVersion 4；旧 `gateVerdictParsed` 等字段只可作为派生兼容投影，不能继续作为内部判断依据。识别可信度与 `_pending.md` 引用资格正交，referenced package 的 mismatch/manual 不得被抑制。
+这四类是 compatibility result，不是新的 package lifecycle。backfill、retirement 与 verify 可以投影结果，但不得把 `mismatch` 降级成 legacy success，也不得把历史 indexed verdict 投影到新的 current revision set。backfill inventory 因新增 `gateAppliesToCurrentRevision` 与结构候选/真实候选分层升到 schemaVersion 5；旧 `gateVerdictParsed` 等字段只可作为派生兼容投影，不能继续作为内部判断依据。识别可信度与 `_pending.md` 引用资格正交，referenced package 的 mismatch/manual 不得被抑制。
 
 ## 7. Schema migration
 
@@ -140,7 +142,7 @@ impl_package_state.py --package <path> finalize-gate-entry <gate-id>
 
 命令可以增加纯输出选项，但不得静默推断 package root、current attempt、previous state、editorial judgment 或 verdict reason。
 
-CLI 的数据策略来自 skill-owned [`../assets/impl-package-state-config.json`](../assets/impl-package-state-config.json)。配置只承载 vocabulary、artifact discovery、字段及 gate heading grammar、marker 名称与 projection format；脚本自动按自身 skill 位置加载，不接受调用方任意覆盖 canonical policy。配置使用独立 `schemaVersion`，并对 placeholder、capture group 与单行 heading 范围 fail closed。完整 gate entry span、append-only、identity/content binding、active backward chain、CAS、package-local path、HEAD/worktree context 与 earned-artifact bijection 保持为代码内不可配置不变量。
+CLI 的数据策略来自 skill-owned [`../assets/impl-package-state-config.json`](../assets/impl-package-state-config.json)。配置只承载 vocabulary、artifact discovery、字段及 gate heading/revision-set grammar（含 `revisionSetFieldPattern`）、marker 名称与 projection format；脚本自动按自身 skill 位置加载，不接受调用方任意覆盖 canonical policy。配置使用独立 `schemaVersion`，并对 placeholder、capture group 与单行 heading 范围 fail closed。完整 gate entry span、append-only、identity/content binding、active backward chain、CAS、package-local path、HEAD/worktree context 与 earned-artifact bijection 保持为代码内不可配置不变量。
 
 ## 9. Schema gate acceptance
 

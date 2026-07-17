@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Stable Docs Backfill verification checks (inventory schemaVersion 4)."""
+"""Run Stable Docs Backfill verification checks (inventory schemaVersion 5)."""
 
 from __future__ import annotations
 
@@ -175,7 +175,7 @@ def _check_inventory_candidates(project: Path, config_path: Path | None) -> str:
         f"{inventory['packageCount']} packages enumerated; "
         f"indexed={recognition_counts['indexed']}, legacy-heading={recognition_counts['legacy-heading']}, "
         f"mismatch={recognition_counts['mismatch']}, manual={recognition_counts['manual']}; "
-        f"{len(inventory['gapCatchingCandidates'])} gap-catching candidates; "
+        f"{len(inventory['gapCatchingStructuralCandidates'])} gap-catching structural candidates pending Git reachability review; "
         f"{len(inventory['retirementStructuralCandidates'])} Package Retirement structural candidates; "
         f"{len(inventory['manualGateReviewCandidates'])} need manual gate.md review (mismatch/manual)"
     )

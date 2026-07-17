@@ -1,7 +1,7 @@
 # 门禁账本（Gate Ledger）
 
 <!-- impl-package:projection gate-status begin -->
-状态：<最新 finalized entry 的 verdict 人话摘要；这一行不是 ledger 本身，不能单独携带 entry 里没有的判断或证据>
+状态：<最新已定稿记录的判决摘要；这一行不是账本本身，不能单独携带记录里没有的判断或证据>
 <!-- impl-package:projection gate-status end -->
 
 > 最新记录在前、仅允许追加。每次 evaluation 在本说明之后插入新 entry；已存在 entry 不得修改。完整验证过程在对应 plan 的 Execution Record，gate 只保存判决摘要与 Durable Deltas。正文必须让 owner 直接读懂 revision 与校验结论；精确 blob 从内部 sidecar 解析并用 `git rev-parse HEAD:<path>` 复核，不符先按 impl-package-composition-contract.md §2 处理 drift。

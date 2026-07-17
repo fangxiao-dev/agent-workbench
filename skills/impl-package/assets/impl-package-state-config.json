@@ -9,14 +9,15 @@
   },
   "documents": {
     "compositionPattern": "Composition[^\\n]*tickets=(true|false),\\s*dag=(true|false)",
-    "attemptPattern": "(?m)(?:\\*\\*)?执行尝试 ID（Attempt ID）[：:](?:\\*\\*)?\\s*([^\\s]+)",
+    "attemptPattern": "(?m)(?:(?:\\*\\*)?执行尝试 ID（Attempt ID）(?:\\*\\*)?|(?:\\*\\*)?Attempt ID(?:\\*\\*)?)[：:](?:\\*\\*)?\\s*([^\\s]+)",
     "ticketIdPattern": "\\*\\*Ticket ID[：:]\\*\\*\\s*([^\\s]+)",
     "taskHeadingPattern": "(?m)^###\\s+(T\\d+)\\s*[:：]",
     "taskBlockPattern": "(?ms)^###\\s+{task_id}\\s*[:：].*?(?=^###\\s+T\\d+\\s*[:：]|^##\\s|\\Z)",
     "taskStatePattern": "(?m)^-\\s*状态[：:]\\s*([A-Z_-]+)",
     "ticketStatePattern": "(?m)^-\\s*值[：:]\\s*\\[?([^]\\n]+)",
     "dagArtifactPatterns": ["dag.md", "*.patch-dag.md"],
-    "ticketArtifactPatterns": ["tickets/*.md"]
+    "ticketArtifactPatterns": ["tickets/*.md"],
+    "revisionDeclarationPattern": "(?m)^\\s*\\*{0,2}(?:设计修订（Design Revision）|规格修订（Spec Revision）|计划修订（Plan Revision）|Design Revision|Spec Revision|Plan Revision)\\*{0,2}\\s*[：:]\\*{0,2}\\s*(?:[DSP]\\d+|N/A)(?:\\s+.*)?$"
   },
   "projections": {
     "markers": {
@@ -30,20 +31,21 @@
       "plan": "设计修订（Design Revision）：{design}\n规格修订（Spec Revision）：{spec}\n计划修订（Plan Revision）：{plan}"
     },
     "runtimeTask": {
-      "header": ["| Task | State | Evidence |", "| --- | --- | --- |"],
+      "header": ["| 任务 | 状态 | 证据 |", "| --- | --- | --- |"],
       "row": "| {id} | {state} | {evidence} |"
     },
     "runtimeTicket": "- 值：{state}\n- 直接证据：{evidence}",
     "gateStatus": {
-      "empty": "状态：尚无 finalized gate entry",
+      "empty": "状态：尚无已定稿门禁记录",
       "finalized": "状态：{id} · {verdict}"
     }
   },
   "gate": {
     "headingPattern": "^##\\s+(?P<id>[^\\s]+)\\s+·\\s+(?P<verdict>{verdicts})[ \\t]*\\n",
     "entryIdPattern": "(.+)-G([1-9]\\d*)",
-    "attemptFieldPattern": "(?m)^-\\s*执行尝试 ID（Attempt ID）[：:]\\s*([^\\s]+)",
-    "supersedesFieldPattern": "(?m)^-\\s*取代（Supersedes）[：:]\\s*([^\\s]+)",
+    "attemptFieldPattern": "(?m)^-\\s*(?:执行尝试 ID（Attempt ID）|Attempt ID)[：:]\\s*([^\\s]+)",
+    "supersedesFieldPattern": "(?m)^-\\s*(?:取代（Supersedes）|Supersedes)[：:]\\s*([^\\s]+)",
+    "revisionSetFieldPattern": "(?m)^-\\s*(?:修订集合（Revision set）|Revision set)[：:]\\s*(D\\d+|N/A)\\s*/\\s*(S\\d+|N/A)\\s*/\\s*(P\\d+|N/A)\\s*$",
     "noneTokens": ["none", "None", "无"],
     "scaffoldNoneToken": "none"
   }
