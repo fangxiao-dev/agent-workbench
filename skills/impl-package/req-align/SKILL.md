@@ -11,11 +11,11 @@ Repository instructions and discovered project conventions determine knowledge s
 
 ## Owned Artifacts
 
-Use `docs/implementations/<package-id>/` as the canonical package root. A package-id is `YYMMDD-<topic-slug>` (UTC creation date), for example `260711-catalog-readiness`; it is a directory identity, not a mutable title. This skill owns:
+Use the project's configured implementations root (default `docs/implementations/`) as the canonical package parent. A package-id is an immutable date-prefixed topic slug; the project owns the date format, and the ID is a directory identity rather than a mutable title. This skill owns:
 
 - `design.md`，活动变更期间的当前设计选择与 rationale SoT；blocked Design 必须持久化，lightweight passed path 可仅在 spec Design Gate Record 中保留最小证据；
 - `spec.md`，活动变更期间的当前行为、数据、边界、失败恢复、约束与 Acceptance Semantics SoT；
-- 内部 `.impl-package/revision-bindings.json` sidecar 中 D/S 的 current selection 与 artifact/blob binding。共享形状来自 [`../assets/templates/revision-bindings.json`](../assets/templates/revision-bindings.json)；plan/P binding 由 `impl-planning` 拥有。sidecar 不属于 owner-facing deliverable，design/spec/handoff Markdown 必须自足呈现当前 revision 与 binding validation 结论。
+- 内部 `.impl-package/revision-bindings.json` 中 D/S current selection 与 append-only binding。共享 schema 与命令来自 [`../references/impl-package-state-schema.md`](../references/impl-package-state-schema.md)；plan/P binding 由 `impl-planning` 拥有。sidecar 不属于 owner-facing deliverable，design/spec/handoff Markdown 必须自足呈现投影与校验结论。
 
 Use [assets/templates/design.md](./assets/templates/design.md) and [assets/templates/spec.md](./assets/templates/spec.md). Do not publish a tracker spec or create a second spec for the same package. `impl-planning` consumes the gated `spec.md`; it does not own or synthesize a replacement.
 
@@ -122,7 +122,7 @@ Spec Gate 本身不自动要求 `grill-me-smartly`。只在用户明确要求对
 5. If Design is blocked, create or update `design.md` with provenance, readiness evidence, blockers, and owner decisions; stop without creating `spec.md`.
 6. If Design passes, either persist its substantive research in `design.md`, or take the lightweight path: create `spec.md` and write the minimum provenance, readiness, and owner-decision evidence into its Design Gate Record. Append reusable, verified cross-stage facts/risks/constraints to an already-needed `findings.md`; do not create it for ordinary research narration.
 7. Synthesize the eight-section `spec.md` only when contract impact requires it, evaluating the conditional evidence-integrity contract only when its signal is present. For a patch, reuse D/S revisions for `contract impact=none` or implementation-only drift without evaluating Spec Gate, rerun only Spec Gate for behavioral contract changes, and rerun Design then Spec for design-direction changes. Run `grill-me-smartly` only when the risk-driven criteria above are present or the user asks for it; otherwise evaluate the Spec Gate directly. Stop when the required gate is blocked.
-8. 两道 gate 通过后，用 `git hash-object -- <path>` 计算最终 design/spec blob，在内部 sidecar 追加 D/S binding 并更新 current selection；commit 后用 `git rev-parse HEAD:<path>` 复核，并在 Markdown handoff 直接报告 D/S revision set 与校验结论。随后把同一份 `spec.md` 交给 `impl-planning`，不创建第二份 spec，也不发布 tracker。
+8. 两道 gate 通过后，对最终 design/spec 分别运行 `impl_package_state.py --package <path> register-revision ...`，再运行 `refresh-projections`；命令失败时先处理 capture gap/drift，不手改 JSON 或 marker body。artifact 与 sidecar commit 后运行 `validate --committed`，并在 Markdown handoff 报告 D/S revision set 与校验结论。随后把同一份 `spec.md` 交给 `impl-planning`，不创建第二份 spec，也不发布 tracker。
 
 ## Alignment Proposal
 

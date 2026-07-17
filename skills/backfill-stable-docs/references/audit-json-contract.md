@@ -2,6 +2,8 @@
 
 `audit.json` 是可选的机器辅助记录，帮 agent 和脚本对账候选清单；`human-report.md` 才是给 owner 看的主产物。两者的候选计数必须一致，但 `audit.json` 本身不是 apply 的唯一合法输入——owner 批准的是 `human-report.md` 里的 item ID，不是这份 JSON 的哈希。
 
+`collect_sources.py` 的 source inventory 与本文件的 audit record 是不同合同：inventory 使用 `schemaVersion: 4`，每个 package row 以 `gateRecognition`（`indexed | legacy-heading | mismatch | manual | null`）、可信 `gateResolution`、`needsManualGateReview` 和 `reason` 报告 gate；`gateRecognition=null` 只用于没有 `gate.md` 的 open/no-verdict package。`mismatch`/`manual` 的 `gateResolution` 必须为 `null`，且即使 package 已被 `_pending.md` 引用也不得从 manual review 清单隐藏。
+
 ## Minimum Shape
 
 ```json

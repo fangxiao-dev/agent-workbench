@@ -2,7 +2,9 @@
 
 状态（Status）：Draft | Design Gate Passed | Design Gate Blocked
 创建时间（Created）：
+<!-- impl-package:projection revision-set begin -->
 设计修订（Design Revision）：D<n>
+<!-- impl-package:projection revision-set end -->
 需求来源（Requirement source）：
 主题 slug（Topic slug）：
 任务包 ID（Package ID）：

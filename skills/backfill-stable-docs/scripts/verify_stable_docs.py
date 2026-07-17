@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Stable Docs Backfill verification checks (schemaVersion 3, agent-first model)."""
+"""Run Stable Docs Backfill verification checks (inventory schemaVersion 4)."""
 
 from __future__ import annotations
 
@@ -167,11 +167,17 @@ def _check_audit(audit: dict[str, Any] | None) -> str:
 
 def _check_inventory_candidates(project: Path, config_path: Path | None) -> str:
     inventory = collect_inventory(project_root=project, config_path=config_path)
+    recognition_counts = {
+        kind: sum(1 for row in inventory["packages"] if row["gateRecognition"] == kind)
+        for kind in ("indexed", "legacy-heading", "mismatch", "manual")
+    }
     return (
         f"{inventory['packageCount']} packages enumerated; "
+        f"indexed={recognition_counts['indexed']}, legacy-heading={recognition_counts['legacy-heading']}, "
+        f"mismatch={recognition_counts['mismatch']}, manual={recognition_counts['manual']}; "
         f"{len(inventory['gapCatchingCandidates'])} gap-catching candidates; "
         f"{len(inventory['retirementStructuralCandidates'])} Package Retirement structural candidates; "
-        f"{len(inventory['manualGateReviewCandidates'])} need manual gate.md review (unparseable verdict)"
+        f"{len(inventory['manualGateReviewCandidates'])} need manual gate.md review (mismatch/manual)"
     )
 
 
@@ -213,7 +219,7 @@ def main() -> int:
             results.append({"check": name, "result": "failed", "detail": str(error)})
     failed = sum(1 for result in results if result["result"] == "failed")
     payload = {
-        "schemaVersion": 3,
+        "schemaVersion": 4,
         "configSha256": metadata["sha256"],
         "passed": failed == 0,
         "checks": results,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import subprocess
 import sys
@@ -13,6 +14,7 @@ import jsonschema
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_DIR = ROOT / "skills" / "backfill-stable-docs" / "scripts"
+IMPL_STATE = ROOT / "skills" / "impl-package" / "scripts" / "impl_package_state.py"
 
 
 def load_module(name: str):
@@ -137,6 +139,7 @@ class CollectorInventoryTest(unittest.TestCase):
         self.assertIsNone(inventory["targetBranchConfigGap"])
         self.assertEqual(inventory["pendingConfigGaps"], [])
         self.assertEqual(len(inventory["pendingColdStarts"]), 1)
+        self.assertEqual(inventory["schemaVersion"], 4)
 
     def test_unresolvable_target_branch_is_reported_as_config_gap_without_stopping_inventory(self) -> None:
         config_path = self.project / ".stable-docs-backfill.json"
@@ -180,11 +183,236 @@ class LegacyGateFormatTest(unittest.TestCase):
         inventory = collector.collect_inventory(project_root=self.project)
         row = next(p for p in inventory["packages"] if p["packageId"] == "legacy-pkg")
         self.assertTrue(row["hasGate"])
-        self.assertFalse(row["gateVerdictParsed"])
+        self.assertEqual(row["gateRecognition"], "manual")
+        self.assertIsNone(row["gateResolution"])
+        self.assertIn("no structured index", row["reason"])
         self.assertTrue(row["needsManualGateReview"])
         self.assertFalse(row["gapCatchingCandidate"])
         self.assertFalse(row["retirementStructuralCandidate"])
         self.assertEqual(inventory["manualGateReviewCandidates"], ["legacy-pkg"])
+
+
+class GateRecognitionV4Test(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.project = Path(self.temp.name) / "project"
+        init_repo(self.project, "https://github.com/example/project.git")
+        (self.project / "docs/module-knowledge").mkdir(parents=True)
+        (self.project / "docs/module-knowledge/_pending.md").write_text("# Pending\n", encoding="utf-8")
+        (self.project / ".stable-docs-backfill.json").write_text(json.dumps(base_config()), encoding="utf-8")
+
+    def _package(self, name: str, gate: str | None, runtime: object = ...,) -> Path:
+        package = self.project / "docs/implementations" / name
+        package.mkdir(parents=True)
+        (package / "spec.md").write_text(f"# {name}\n", encoding="utf-8")
+        if gate is not None:
+            (package / "gate.md").write_text(gate, encoding="utf-8", newline="\n")
+        if runtime is not ...:
+            sidecar = package / ".impl-package"
+            sidecar.mkdir()
+            (package / "plan.md").write_text("# Plan\n", encoding="utf-8")
+            (sidecar / "revision-bindings.json").write_text(
+                json.dumps({"schemaVersion": 2, "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}}, "bindings": []}),
+                encoding="utf-8",
+            )
+            if isinstance(runtime, str):
+                (sidecar / "runtime-state.json").write_text(runtime, encoding="utf-8")
+            else:
+                (sidecar / "runtime-state.json").write_text(json.dumps(runtime), encoding="utf-8")
+        return package
+
+    @staticmethod
+    def _gate_text(verdict: str = "pass", entry_id: str = "initial-G1", attempt: str = "initial") -> str:
+        return (
+            f"## {entry_id} · {verdict}\n\n"
+            f"- 执行尝试 ID（Attempt ID）：{attempt}\n"
+            "- 取代（Supersedes）：none\n"
+            "- 判决理由（Verdict reason）：fixture\n"
+        )
+
+    @staticmethod
+    def _runtime(gate_text: str, *, entry_id: str = "initial-G1", verdict: str = "pass", digest: str | None = None) -> dict[str, object]:
+        digest = digest or hashlib.sha256((gate_text.rstrip("\n") + "\n").encode("utf-8")).hexdigest()
+        return {
+            "schemaVersion": 1,
+            "packageId": "fixture",
+            "gate": {
+                "allocations": [{"operationId": "op-1", "attempt": "initial", "number": 1, "entryId": "initial-G1"}],
+                "entries": [{
+                    "id": entry_id,
+                    "attempt": "initial",
+                    "number": 1,
+                    "verdict": verdict,
+                    "supersedes": None,
+                    "entry": {"path": "gate.md", "anchor": entry_id, "bindingMode": "gate-entry-v1", "contentSha256": digest},
+                }],
+            },
+        }
+
+    def _inventory(self) -> dict[str, dict[str, object]]:
+        commit(self.project, "gate fixtures")
+        collector = load_module("collect_sources")
+        return {row["packageId"]: row for row in collector.collect_inventory(project_root=self.project)["packages"]}
+
+    def test_four_results_and_no_gate_open_state(self) -> None:
+        valid = self._gate_text()
+        self._package("indexed", valid, self._runtime(valid))
+        self._package("legacy-heading", self._gate_text("fail"))
+        self._package("manual", "# Gate\n\nVerdict: prose only\n")
+        self._package("no-gate", None)
+        rows = self._inventory()
+
+        self.assertEqual((rows["indexed"]["gateRecognition"], rows["indexed"]["gateResolution"]), ("indexed", "pass"))
+        self.assertEqual((rows["legacy-heading"]["gateRecognition"], rows["legacy-heading"]["gateResolution"]), ("legacy-heading", "fail"))
+        self.assertEqual((rows["manual"]["gateRecognition"], rows["manual"]["gateResolution"]), ("manual", None))
+        self.assertEqual((rows["no-gate"]["gateRecognition"], rows["no-gate"]["gateResolution"]), (None, None))
+        self.assertFalse(rows["no-gate"]["needsManualGateReview"])
+        self.assertNotIn("gateVerdict", rows["indexed"])
+        self.assertNotIn("gateVerdictParsed", rows["indexed"])
+
+    def test_runtime_state_failures_are_mismatch_without_heading_fallback(self) -> None:
+        valid = self._gate_text()
+        missing_hash = self._runtime(valid)
+        del missing_hash["gate"]["entries"][0]["entry"]["contentSha256"]  # type: ignore[index]
+        missing_id = self._runtime(valid)
+        del missing_id["gate"]["entries"][0]["id"]  # type: ignore[index]
+        missing_verdict = self._runtime(valid)
+        del missing_verdict["gate"]["entries"][0]["verdict"]  # type: ignore[index]
+        empty_operation = self._runtime(valid)
+        empty_operation["gate"]["allocations"][0]["operationId"] = ""  # type: ignore[index]
+        cases: dict[str, object] = {
+            "missing-entry": {"schemaVersion": 1, "gate": {"entries": []}},
+            "missing-hash": missing_hash,
+            "missing-id": missing_id,
+            "missing-verdict": missing_verdict,
+            "bad-hash": self._runtime(valid, digest="0" * 64),
+            "bad-id": self._runtime(valid, entry_id="initial-G2"),
+            "bad-verdict": self._runtime(valid, verdict="fail"),
+            "empty-operation": empty_operation,
+            "bad-schema": {"schemaVersion": 99, "gate": self._runtime(valid)["gate"]},
+            "corrupt-json": "{not json",
+        }
+        for name, runtime in cases.items():
+            self._package(name, valid, runtime)
+        stale = "## initial-G2 · pass\n\n- 执行尝试 ID（Attempt ID）：initial\n- 取代（Supersedes）：initial-G1\n\n" + valid
+        self._package("stale", stale, self._runtime(valid))
+        rows = self._inventory()
+        for name in cases.keys() | {"stale"}:
+            with self.subTest(name=name):
+                self.assertEqual(rows[name]["gateRecognition"], "mismatch")
+                self.assertIsNone(rows[name]["gateResolution"])
+                self.assertTrue(rows[name]["needsManualGateReview"])
+                self.assertTrue(rows[name]["reason"])
+
+    def test_current_attempt_and_matching_allocation_control_indexed_resolution(self) -> None:
+        initial = self._gate_text("pass", "initial-G1", "initial")
+        patch = self._gate_text("defer", "patch-G1", "patch")
+        package = self._package("attempt-local", patch + "\n" + initial, self._runtime(initial))
+        runtime_path = package / ".impl-package/runtime-state.json"
+        runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
+        runtime["gate"]["allocations"].append({"operationId": "op-patch", "attempt": "patch", "number": 1, "entryId": "patch-G1"})
+        runtime["gate"]["entries"].append({
+            "id": "patch-G1", "attempt": "patch", "number": 1, "verdict": "defer", "supersedes": None,
+            "entry": {"path": "gate.md", "anchor": "patch-G1", "bindingMode": "gate-entry-v1", "contentSha256": hashlib.sha256((patch.rstrip("\n") + "\n").encode("utf-8")).hexdigest()},
+        })
+        runtime_path.write_text(json.dumps(runtime), encoding="utf-8")
+        revision_path = package / ".impl-package/revision-bindings.json"
+        revision = json.loads(revision_path.read_text(encoding="utf-8"))
+        revision["current"]["attempt"] = {"id": "patch", "plan": "patch.md", "revision": "P1"}
+        revision_path.write_text(json.dumps(revision), encoding="utf-8")
+        (package / "patch.md").write_text("# Patch\n", encoding="utf-8")
+        rows = self._inventory()
+        self.assertEqual((rows["attempt-local"]["gateRecognition"], rows["attempt-local"]["gateResolution"]), ("indexed", "defer"))
+        spec = importlib.util.spec_from_file_location("impl_package_state_attempt_test", IMPL_STATE)
+        assert spec is not None and spec.loader is not None
+        canonical = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(canonical)
+        self.assertEqual(canonical.resolve_gate(package)["gateResolution"], "defer")
+
+        runtime["gate"]["allocations"] = [row for row in runtime["gate"]["allocations"] if row["entryId"] != "patch-G1"]
+        runtime_path.write_text(json.dumps(runtime), encoding="utf-8")
+        commit(self.project, "remove matching allocation")
+        collector = load_module("collect_sources")
+        row = next(row for row in collector.collect_inventory(project_root=self.project)["packages"] if row["packageId"] == "attempt-local")
+        self.assertEqual(row["gateRecognition"], "mismatch")
+
+    def test_invalid_supersedes_chain_has_canonical_backfill_parity(self) -> None:
+        first = self._gate_text("pass", "initial-G1", "initial")
+        second = self._gate_text("defer", "initial-G2", "initial")
+        runtime = self._runtime(first)
+        runtime["gate"]["allocations"].append({"operationId": "op-2", "attempt": "initial", "number": 2, "entryId": "initial-G2"})
+        runtime["gate"]["entries"].append({
+            "id": "initial-G2", "attempt": "initial", "number": 2, "verdict": "defer", "supersedes": None,
+            "entry": {"path": "gate.md", "anchor": "initial-G2", "bindingMode": "gate-entry-v1", "contentSha256": hashlib.sha256((second.rstrip("\n") + "\n").encode("utf-8")).hexdigest()},
+        })
+        package = self._package("invalid-chain", second + "\n" + first, runtime)
+        rows = self._inventory()
+        self.assertEqual(rows["invalid-chain"]["gateRecognition"], "mismatch")
+        spec = importlib.util.spec_from_file_location("impl_package_state_chain_test", IMPL_STATE)
+        assert spec is not None and spec.loader is not None
+        canonical = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(canonical)
+        self.assertEqual(canonical.resolve_gate(package)["kind"], "mismatch")
+
+    def test_invalid_current_plan_pointer_is_mismatch(self) -> None:
+        valid = self._gate_text()
+        package = self._package("invalid-plan-pointer", valid, self._runtime(valid))
+        revision_path = package / ".impl-package/revision-bindings.json"
+        revision = json.loads(revision_path.read_text(encoding="utf-8"))
+        revision["current"]["attempt"]["plan"] = "../outside.md"
+        revision_path.write_text(json.dumps(revision), encoding="utf-8")
+        row = self._inventory()["invalid-plan-pointer"]
+        self.assertEqual(row["gateRecognition"], "mismatch")
+        self.assertIn("escapes package", row["reason"])
+
+    def test_fail_is_terminal_only_when_indexed_or_legacy_heading_is_trusted(self) -> None:
+        indexed_fail = self._gate_text("fail")
+        self._package("indexed-fail", indexed_fail, self._runtime(indexed_fail, verdict="fail"))
+        self._package("legacy-fail", self._gate_text("fail"))
+        self._package("mismatch-fail", indexed_fail, self._runtime(indexed_fail, verdict="fail", digest="0" * 64))
+        rows = self._inventory()
+        self.assertTrue(rows["indexed-fail"]["gapCatchingCandidate"])
+        self.assertTrue(rows["legacy-fail"]["gapCatchingCandidate"])
+        self.assertFalse(rows["mismatch-fail"]["gapCatchingCandidate"])
+
+    def test_referenced_mismatch_remains_visible_and_never_becomes_candidate(self) -> None:
+        package = self._package("referenced-mismatch", self._gate_text(), self._runtime(self._gate_text(), digest="0" * 64))
+        pending = self.project / "docs/module-knowledge/_pending.md"
+        pending.write_text(
+            "# Pending\n\n| Delta ID | Destination | Source | Statement |\n| --- | --- | --- | --- |\n"
+            f"| D-1 | module | {package.relative_to(self.project).as_posix()}/spec.md | delta |\n",
+            encoding="utf-8",
+        )
+        row = self._inventory()["referenced-mismatch"]
+        self.assertTrue(row["referencedInOpenPending"])
+        self.assertTrue(row["needsManualGateReview"])
+        self.assertFalse(row["gapCatchingCandidate"])
+        self.assertFalse(row["retirementStructuralCandidate"])
+
+    def test_indexed_resolution_matches_canonical_helper_on_shared_package_fixture(self) -> None:
+        valid = self._gate_text()
+        package = self._package("shared-valid", valid, self._runtime(valid))
+        commit(self.project, "shared canonical fixture")
+        spec = importlib.util.spec_from_file_location("impl_package_state_for_backfill_test", IMPL_STATE)
+        assert spec is not None and spec.loader is not None
+        canonical = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(canonical)
+        collector = load_module("collect_sources")
+        row = next(p for p in collector.collect_inventory(project_root=self.project)["packages"] if p["packageId"] == "shared-valid")
+        canonical_result = canonical.resolve_gate(package)
+        self.assertEqual(row["gateRecognition"], canonical_result["kind"])
+        self.assertEqual(row["gateResolution"], canonical_result["gateResolution"])
+
+    def test_markdown_inventory_summarizes_recognition_and_resolution_separately(self) -> None:
+        valid = self._gate_text()
+        self._package("indexed", valid, self._runtime(valid))
+        commit(self.project, "markdown fixture")
+        collector = load_module("collect_sources")
+        markdown = collector._render_markdown(collector.collect_inventory(project_root=self.project))
+        self.assertIn("| Package | Gate recognition | Gate resolution |", markdown)
+        self.assertIn("| indexed | indexed | pass |", markdown)
+        self.assertIn("Needs manual gate review (mismatch/manual)", markdown)
 
 
 class MonorepoPendingDiscoveryTest(unittest.TestCase):

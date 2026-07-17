@@ -19,14 +19,14 @@ Package 有多轮 patch gate（`<slug>.patch-gate.md` 这类命名）时，以�
 
 按以下条件识别候选，不自动清理：
 
-1. append-only gate ledger 已 terminal（pass/fail/defer）；顶部摘要或 checklist 只作导航，真正 Active（代码未合并或未开始）的 package 永不作为候选。
+1. append-only gate ledger 已可信 terminal（机械识别仅接受 `indexed`/`legacy-heading` 的 pass/fail/defer，fail 仍为 terminal）；`mismatch`/`manual` 必须先由 agent 读证据并正常分类，不能由脚本列为结构候选。顶部摘要或 checklist 只作导航，真正 Active（代码未合并或未开始）的 package 永不作为候选。
 2. Git 已证明 package 声称的实现实际进入解析后的 `targetBranch` commit；`targetBranch` 无法解析或实现 commit 不可确认时不得列为候选。
 3. 该 package 产生的所有登记在任何已发现的 `_pending.md` 里都已关闭（没有仍指向它的未决条目）。
 4. package 目录下 `design.md`/`spec.md` 要么不存在，要么其内容已被判定为 already-covered（已被当前 stable docs 完整吸收），且没有其他文档的 inbound reference，不再提供任何仍需保留的信息。
 
 满足以上四条时列为"可清理候选"，附上 gate 终态、target branch Git 证据、closure 时间、吸收去向（具体 stable doc 路径）、inbound reference 检查和目录当前剩余内容清单。四条缺一即保留，不因为"看起来只有 evidence"就放宽判断——必须真的核对过目标分支、`_pending.md`、stable docs 和 gate ledger。
 
-脚本对 gate 终态的机械识别只认新模板的 `## <attempt-id>-G<n> · <verdict>` heading；存量 package 的 `gate.md` 几乎全部写在这次重设计之前，verdict 藏在正文一句话里（例如「Decision：retirement scope closed」），脚本认不出来，会单独标成"需要人工读 gate.md"，不会被误判为"不满足条件、跳过"。这类 package 往往正是最值得优先核实的清理候选——机械识别不到只是脚本的能力上限，不是 agent 的能力上限：agent 必须当场打开这些 `gate.md` 自己读完、按上面四条标准逐一判断，把结果并入正常的候选表格，不能因为脚本没标记（或只标了"需要人工"）就跳过或搁置。
+脚本按 `indexed`、`legacy-heading`、`mismatch`、`manual` 四类报告 gate。runtime-state 完全不存在时才允许 legacy heading fallback；一旦 runtime-state 存在，缺 entry、entry/字段/content binding 不符、陈旧或损坏都按 `mismatch`，`gateResolution=null`，宁可人工判断也不信陈旧 JSON 或裸 heading。没有 `gate.md` 是 open/no-verdict，不是第五类。`mismatch`/`manual` package 必须当场读完并按上面四条标准正常分类，不能因为脚本没有给出可信 terminal resolution 就跳过或搁置。
 
 ## 清理执行
 

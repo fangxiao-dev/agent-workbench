@@ -156,8 +156,8 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         assert_contains(policy_boundary, "gate", "Gate summary boundary eval")
 
         spec_template = read(IMPL_ROOT / "req-align" / "assets" / "templates" / "spec.md")
-        assert_contains(spec_template, "Design Revision: D<n>", "Spec must resolve lightweight Design revision.")
-        assert_contains(spec_template, "Spec Revision: S<n>", "Spec revision header.")
+        assert_contains(spec_template, "设计修订（Design Revision）：D<n>", "Spec must resolve lightweight Design revision.")
+        assert_contains(spec_template, "规格修订（Spec Revision）：S<n>", "Spec revision header.")
         assert_not_contains(spec_template, "Composition:", "Spec must not own Composition.")
         assert_not_contains(
             spec_template,
@@ -165,7 +165,7 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
             "Current spec SoT must not be superseded as a whole file.",
         )
         design_template = read(IMPL_ROOT / "req-align" / "assets" / "templates" / "design.md")
-        assert_contains(design_template, "current design choices and rationale SoT", "Design must be current SoT.")
+        assert_contains(design_template, "当前设计选择与理由的事实源", "Design must be current SoT.")
         assert_not_contains(
             design_template,
             "point-in-time research and decision record",
@@ -173,17 +173,17 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         )
 
         plan_template = read(IMPL_ROOT / "impl-planning" / "assets" / "templates" / "plan.md")
-        assert_contains(plan_template, "## Planned Verification", "Plan verification selection.")
-        assert_contains(plan_template, "## Execution Record", "Plan execution evidence.")
+        assert_contains(plan_template, "## 计划验证", "Plan verification selection.")
+        assert_contains(plan_template, "## 执行记录", "Plan execution evidence.")
         assert_not_contains(plan_template, "Executable Checklist", "Plan must not contain task checklist.")
 
         gate_template = read(
             IMPL_ROOT / "dev-with-track" / "assets" / "templates" / "gate.md"
         )
-        assert_contains(gate_template, "# Gate Ledger", "Single gate ledger.")
-        assert_contains(gate_template, "Supersedes:", "Gate supersession chain.")
-        assert_contains(gate_template, "Evidence:", "Gate execution-record link.")
-        assert_contains(gate_template, "### Durable Deltas", "Gate durable-delta capture.")
+        assert_contains(gate_template, "# 门禁账本（Gate Ledger）", "Single gate ledger.")
+        assert_contains(gate_template, "取代（Supersedes）：", "Gate supersession chain.")
+        assert_contains(gate_template, "证据（Evidence）：", "Gate execution-record link.")
+        assert_contains(gate_template, "### 长期增量（Durable Deltas）", "Gate durable-delta capture.")
         assert_not_contains(
             gate_template,
             "Verification checklist",
@@ -194,7 +194,7 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         )
         assert_contains(
             progress_template,
-            "Kind：[attempt / task / ticket]",
+            "类型：[attempt / task / ticket]",
             "Progress must represent a no-DAG attempt recovery unit.",
         )
         assert_contains(

@@ -2,9 +2,11 @@
 
 创建时间（Created）：
 执行尝试 ID（Attempt ID）：<initial | YYYYMMDD-HHMM-patch-topic>
+<!-- impl-package:projection revision-set begin -->
 设计修订（Design Revision）：D<n>
 规格修订（Spec Revision）：S<n>
 计划修订（Plan Revision）：P<n>
+<!-- impl-package:projection revision-set end -->
 执行组合（Composition）：tickets=<true|false>, dag=<true|false>
 任务包 ID（Package ID）：
 发布时绑定校验（Binding Validation at Publication）：Pending | Passed

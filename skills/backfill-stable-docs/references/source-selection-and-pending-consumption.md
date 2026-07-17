@@ -29,7 +29,7 @@ Stable Docs Backfill 不再依赖强制的双锚点 fail-closed 校验、item-sc
 ## 候选来源：主渠道与 gap-catching
 
 1. **主渠道**：枚举每个已发现 `_pending.md` 中尚未关闭的登记条目——每条已经带 destination、delta-id、statement 和来源 package 指针（Stage 7 登记时写入）。agent 的工作是核验（destination 仍然对、evidence 仍然站得住、没被后续改动推翻），不是重新分类。
-2. **gap-catching（兜底）**：只对“gate ledger 已 terminal、相关实现 commit 已进入 `targetBranch`、但 `_pending.md` 里找不到对应登记”的 package，才重新读 `design.md`/`spec.md`/`plan.md`/review/handoff/tickets 和 Git commit 去发现候选。这类 package 通常是 Stage 7 纪律建立之前的遗留 package，或登记时误判为 `none`。`targetBranch` 无法解析时报告 config gap，不用 gate 自述或 checklist 替代 Git 验证。
+2. **gap-catching（兜底）**：只对“gate ledger 有可信 terminal resolution、相关实现 commit 已进入 `targetBranch`、但 `_pending.md` 里找不到对应登记”的 package，才重新读 `design.md`/`spec.md`/`plan.md`/review/handoff/tickets 和 Git commit 去发现候选。可信机械 resolution 只来自 content binding 完整核验的 `indexed` 或 runtime-state 完全不存在时的 `legacy-heading`，terminal 为 pass/fail/defer；`mismatch`/`manual` fail closed，不能进入机械候选。这类 package 通常是 Stage 7 纪律建立之前的遗留 package，或登记时误判为 `none`。`targetBranch` 无法解析时报告 config gap，不用 gate 自述或 checklist 替代 Git 验证。
 
 `_pending.md`（连同其登记条目指向的来源 package）永远在扫描范围内，不受 `ignore` 列表影响；`ignore` 只影响 gap-catching 阶段要不要重新扫描某个 package 目录。
 
