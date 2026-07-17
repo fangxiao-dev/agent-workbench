@@ -97,7 +97,7 @@ Evaluate this contract only when an acceptance conclusion depends on evidence wh
 When the signal is present, make the existing eight spec sections answer the relevant questions without creating a ninth section or a new artifact:
 
 - In Terms / Data Contracts and Acceptance Semantics, define the primary assertion, the comparison unit and normalization, actual-versus-declared bounds where relevant, and the authoritative source for every projected contract field.
-- In Behavior and Error Recovery, state the commit point, every material post-side-effect failure state, compensation or invalidation behavior, and what readers may treat as authoritative after an incomplete operation.
+- In Behavior and Error Recovery, state each commit point; enumerate every input it trusts, such as caller declarations, persisted snapshots, external evidence, or upstream hashes, together with the authoritative source used to revalidate that input before the commit point; and state every material post-side-effect failure state, compensation or invalidation behavior, and what readers may treat as authoritative after an incomplete operation. A commit point whose trusted inputs or revalidation sources cannot be enumerated is unresolved contract ambiguity.
 - In Constraints and Coherence, bind compatibility or frozen-format admission to the complete prior contract plus any explicit deltas; do not accept a hand-written field subset when complete structural validity matters, and exclude fields that are private to the source authority.
 - In Acceptance Semantics, distinguish expected operational or acceptance failures from programmer failures, define the safe observable failure surface, and require a stable public shape across states when callers consume one.
 
