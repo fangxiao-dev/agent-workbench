@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Stable Docs Backfill repository configuration (schemaVersion 3)."""
+"""Validate Stable Docs Backfill repository configuration (contract 3.1)."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from stable_docs_config import (
+    CONTRACT_VERSION,
     ConfigError,
     discover_pending_paths,
     load_repository_config,
@@ -45,7 +46,7 @@ def main() -> int:
             json.dumps(
                 {
                     "valid": True,
-                    "schemaVersion": config["schemaVersion"],
+                    "contractVersion": CONTRACT_VERSION,
                     "configSource": metadata["source"],
                     "configSha256": metadata["sha256"],
                     "targetBranch": config["targetBranch"],

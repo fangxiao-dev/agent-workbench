@@ -201,7 +201,7 @@ Owner 提议：把 canonical 的过程性状态从 Markdown 挪进专门的结�
 - sidecar 模板：`skills/impl-package/assets/templates/revision-bindings.json`（有 schemaVersion 机制，扩展基点）
 - stage skills：`skills/impl-package/{req-align,impl-planning,dev-with-track}/SKILL.md`（procedure prose → 脚本调用点）
 - 偏好档案：`skills/impl-package/rubric.md`（R7 决策记录与守界原则；实施决策与其冲突时以 rubric 已确认原则为准）
-- backfill 侧：`skills/backfill-stable-docs/scripts/collect_sources.py` 的 `_read_gate_verdict()`，及 `references/package-retirement-runbook.md`、`references/audit-json-contract.md`、`scripts/verify_stable_docs.py` 三处描述
+- backfill 侧：`skills/impl-package/backfill-stable-docs/scripts/collect_sources.py` 的 `_read_gate_verdict()`，及 `references/package-retirement-runbook.md`、`references/audit-json-contract.md`、`scripts/verify_stable_docs.py` 三处描述
 - 实例参照（只读）：本报告头部的 DATEV package 路径，含现成的 capture gap 样本（sidecar 缺 S8/S9 binding、plan header 停在 S7）可用作 validate 的负向测试素材
 
 **实施顺序**：按"采纳路径建议"四步；第 1 步 schema 与守界清单先行并请 owner 过目——schema 提案必须显式回答"Schema gate 六项边界"节的全部六项（重点是发布边界、写入安全、gate 索引可信度三项），再动脚本与契约。

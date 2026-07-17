@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Stable Docs Backfill verification checks (inventory schemaVersion 5)."""
+"""Run Stable Docs Backfill verification checks (Impl-Package contract 3.1)."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from typing import Any, Callable
 from urllib.parse import unquote
 
 from collect_sources import CollectorError, collect_inventory
+from contract_preflight import CONTRACT_VERSION, ContractPreflightError, require_current
 from stable_docs_config import (
     ConfigError,
     discover_pending_paths,
@@ -28,6 +29,14 @@ VALID_ORIGINS = {"pending-registry", "gap-catching"}
 
 class VerificationError(RuntimeError):
     """Raised for a failed verification check."""
+
+
+def _check_contract_preflight(project: Path, config: dict[str, Any]) -> str:
+    try:
+        result = require_current(project, config)
+    except ContractPreflightError as error:
+        raise VerificationError(str(error)) from error
+    return f"contract {result['contractVersion']} current for {result['packageCount']} package(s)"
 
 
 def _slug(value: str) -> str:
@@ -140,9 +149,9 @@ def _load_json(path: Path, label: str) -> dict[str, Any]:
 def _check_audit(audit: dict[str, Any] | None) -> str:
     if audit is None:
         return "audit JSON not requested"
-    if audit.get("schemaVersion") != 3 or audit.get("mode") != "audit":
+    if audit.get("contractVersion") != CONTRACT_VERSION or audit.get("mode") != "audit":
         raise VerificationError(
-            "audit JSON must use schemaVersion 3 and mode audit; schemaVersion 1/2 is legacy provenance only"
+            f"audit JSON must use contractVersion {CONTRACT_VERSION} and mode audit"
         )
     items = audit.get("items")
     if not isinstance(items, list):
@@ -169,11 +178,11 @@ def _check_inventory_candidates(project: Path, config_path: Path | None) -> str:
     inventory = collect_inventory(project_root=project, config_path=config_path)
     recognition_counts = {
         kind: sum(1 for row in inventory["packages"] if row["gateRecognition"] == kind)
-        for kind in ("indexed", "legacy-heading", "mismatch", "manual")
+        for kind in ("indexed", "mismatch", "manual")
     }
     return (
         f"{inventory['packageCount']} packages enumerated; "
-        f"indexed={recognition_counts['indexed']}, legacy-heading={recognition_counts['legacy-heading']}, "
+        f"indexed={recognition_counts['indexed']}, mismatch={recognition_counts['mismatch']}, "
         f"mismatch={recognition_counts['mismatch']}, manual={recognition_counts['manual']}; "
         f"{len(inventory['gapCatchingStructuralCandidates'])} gap-catching structural candidates pending Git reachability review; "
         f"{len(inventory['retirementStructuralCandidates'])} Package Retirement structural candidates; "
@@ -204,6 +213,7 @@ def main() -> int:
         return 2
 
     checks: list[tuple[str, Callable[[], str]]] = [
+        ("contract-preflight", lambda: _check_contract_preflight(project, config)),
         ("configured-paths", lambda: _check_paths(project, config)),
         ("target-branch", lambda: _check_target_branch(project, config)),
         ("pending-discovery", lambda: _check_pending_discovery(project, config)),
@@ -219,7 +229,7 @@ def main() -> int:
             results.append({"check": name, "result": "failed", "detail": str(error)})
     failed = sum(1 for result in results if result["result"] == "failed")
     payload = {
-        "schemaVersion": 4,
+        "contractVersion": CONTRACT_VERSION,
         "configSha256": metadata["sha256"],
         "passed": failed == 0,
         "checks": results,

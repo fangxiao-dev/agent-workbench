@@ -354,6 +354,8 @@ function Test-ListVisibleSkillsIncludesBundledSkills {
         Assert-True ($names -contains "using-azure") "Expected bundled Azure router skill to be visible."
         Assert-True ($names -contains "azure-container-apps") "Expected bundled Azure Container Apps skill to be visible."
         Assert-True ($names -contains "plan-eng-review") "Expected bundled gstack engineering review skill to be visible."
+        Assert-True ($names -contains "impl-package") "Expected Impl-Package entry skill to be visible."
+        Assert-True ($names -contains "backfill-stable-docs") "Expected nested Impl-Package backfill skill to be visible."
         Assert-True (-not ($names -contains "feishu-skills")) "Bundle root without SKILL.md should not be listed as a skill."
         $feishuShared = $claude.MergedSkills | Where-Object { $_.Name -eq "feishu-shared" } | Select-Object -First 1
         Assert-True ($feishuShared.Sources[0].RelativePath -eq "feishu-skills/feishu-shared") "Expected bundled Feishu shared skill relative path."
@@ -361,6 +363,8 @@ function Test-ListVisibleSkillsIncludesBundledSkills {
         Assert-True ($azureContainerApps.Sources[0].RelativePath -eq "azure-skills/azure-container-apps") "Expected bundled Azure Container Apps skill relative path."
         $gstackPlanEngReview = $claude.MergedSkills | Where-Object { $_.Name -eq "plan-eng-review" } | Select-Object -First 1
         Assert-True ($gstackPlanEngReview.Sources[0].RelativePath -eq "gstack/plan-eng-review") "Expected bundled gstack engineering review skill relative path."
+        $backfillSkill = $claude.MergedSkills | Where-Object { $_.Name -eq "backfill-stable-docs" } | Select-Object -First 1
+        Assert-True ($backfillSkill.Sources[0].RelativePath -eq "impl-package/backfill-stable-docs") "Expected Impl-Package backfill skill relative path."
     }
     finally {
         Remove-TestWorkspace $workspace

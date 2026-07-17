@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "skills" / "backfill-stable-docs" / "scripts"
+SCRIPTS = ROOT / "skills" / "impl-package" / "backfill-stable-docs" / "scripts"
 VERIFY = SCRIPTS / "verify_stable_docs.py"
 
 
@@ -21,7 +21,7 @@ def git(root: Path, *args: str) -> str:
 
 def base_config(**overrides: object) -> dict[str, object]:
     config: dict[str, object] = {
-        "schemaVersion": 3,
+        "contractVersion": "3.1",
         "repository": "example/project",
         "targetBranch": "HEAD",
         "implementations": ["docs/implementations"],
@@ -53,6 +53,30 @@ def build_healthy_repo(project: Path) -> None:
     (project / "docs/module-knowledge/_pending.md").write_text("# Pending\n", encoding="utf-8")
     (project / "docs/implementations/alpha").mkdir(parents=True)
     (project / "docs/implementations/alpha/spec.md").write_text("# alpha\n", encoding="utf-8")
+    (project / "docs/implementations/alpha/.impl-package").mkdir()
+    (project / "docs/implementations/alpha/.impl-package/runtime-state.json").write_text(
+        json.dumps({
+            "contractVersion": "3.1",
+            "purpose": "internal-machine-sidecar",
+            "ownerFacing": False,
+            "packageId": "alpha",
+            "tasks": [],
+            "tickets": [],
+            "artifacts": [],
+            "gate": {"allocations": [], "entries": []},
+        }),
+        encoding="utf-8",
+    )
+    (project / "docs/implementations/alpha/.impl-package/revision-bindings.json").write_text(
+        json.dumps({
+            "contractVersion": "3.1",
+            "purpose": "internal-machine-sidecar",
+            "ownerFacing": False,
+            "current": {},
+            "bindings": [],
+        }),
+        encoding="utf-8",
+    )
     (project / ".stable-docs-backfill.json").write_text(json.dumps(base_config()), encoding="utf-8")
     git(project, "add", ".")
     git(project, "commit", "-m", "baseline")
@@ -76,12 +100,13 @@ class HealthyRepoTest(unittest.TestCase):
             returncode, payload = run_verify(project)
             self.assertEqual(returncode, 0)
             self.assertTrue(payload["passed"])
-            self.assertEqual(payload["schemaVersion"], 4)
+            self.assertEqual(payload["contractVersion"], "3.1")
             self.assertEqual(payload["summary"]["failed"], 0)
             names = {check["check"] for check in payload["checks"]}
             self.assertEqual(
                 names,
                 {
+                    "contract-preflight",
                     "configured-paths",
                     "target-branch",
                     "pending-discovery",
@@ -94,7 +119,6 @@ class HealthyRepoTest(unittest.TestCase):
             self.assertIn("1 cold-start", pending_check["detail"])
             inventory_check = next(c for c in payload["checks"] if c["check"] == "inventory-candidates")
             self.assertIn("indexed=0", inventory_check["detail"])
-            self.assertIn("legacy-heading=0", inventory_check["detail"])
             self.assertIn("mismatch=0", inventory_check["detail"])
             self.assertIn("manual=0", inventory_check["detail"])
 
@@ -145,16 +169,16 @@ class AuditContractTest(unittest.TestCase):
         return run_verify(self.project, "--audit-json", str(self.audit_path))
 
     def test_legacy_schema_version_is_rejected(self) -> None:
-        self.audit_path.write_text(json.dumps({"schemaVersion": 2, "mode": "audit", "items": []}), encoding="utf-8")
+        self.audit_path.write_text(json.dumps({"contractVersion": "3.0", "mode": "audit", "items": []}), encoding="utf-8")
         returncode, payload = self._run()
         self.assertEqual(returncode, 2)
         audit_check = next(c for c in payload["checks"] if c["check"] == "audit-contract")
         self.assertEqual(audit_check["result"], "failed")
-        self.assertIn("legacy provenance", audit_check["detail"])
+        self.assertIn("contractVersion", audit_check["detail"])
 
     def test_pending_registry_item_without_pending_ref_is_rejected(self) -> None:
         audit = {
-            "schemaVersion": 3,
+            "contractVersion": "3.1",
             "mode": "audit",
             "items": [
                 {
@@ -177,9 +201,9 @@ class AuditContractTest(unittest.TestCase):
         self.assertEqual(audit_check["result"], "failed")
         self.assertIn("pendingRef", audit_check["detail"])
 
-    def test_valid_schema_v3_audit_passes(self) -> None:
+    def test_valid_current_contract_audit_passes(self) -> None:
         audit = {
-            "schemaVersion": 3,
+            "contractVersion": "3.1",
             "mode": "audit",
             "items": [
                 {

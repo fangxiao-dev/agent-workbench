@@ -63,9 +63,9 @@ class DataDrivenConfigTest(unittest.TestCase):
             finally:
                 module.CONFIG = original_config
 
-            configured["schemaVersion"] = 99
+            configured["contractVersion"] = "3.2"
             path.write_text(json.dumps(configured), encoding="utf-8")
-            with self.assertRaisesRegex(RuntimeError, "unsupported.*schemaVersion"):
+            with self.assertRaisesRegex(RuntimeError, "unsupported.*contractVersion"):
                 module._load_config(path)
 
             invalid_projection = json.loads(json.dumps(base))
@@ -108,7 +108,7 @@ class InitStateTest(unittest.TestCase):
             self.assertEqual(
                 state,
                 {
-                    "schemaVersion": 1,
+                    "contractVersion": "3.1",
                     "purpose": "internal-machine-sidecar",
                     "ownerFacing": False,
                     "packageId": package.name,
@@ -120,75 +120,50 @@ class InitStateTest(unittest.TestCase):
             )
 
 
-class RevisionMigrationTest(unittest.TestCase):
-    def test_migrate_v1_preserves_current_and_adds_deterministic_binding_ids(self) -> None:
+class ContractStatusTest(unittest.TestCase):
+    def _write_components(self, package: Path, revision: object, runtime: object) -> None:
+        sidecar = package / ".impl-package"
+        sidecar.mkdir(parents=True)
+        (sidecar / "revision-bindings.json").write_text(json.dumps(revision), encoding="utf-8")
+        (sidecar / "runtime-state.json").write_text(json.dumps(runtime), encoding="utf-8")
+
+    def test_contract_status_reports_current_and_is_read_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            repo = Path(temp) / "repo"
-            repo.mkdir()
-            init_repo(repo)
-            package = repo / "docs" / "implementations" / "2026-07-17-example"
-            sidecar = package / ".impl-package" / "revision-bindings.json"
-            package.mkdir(parents=True)
-            (package / "spec.md").write_text(
-                "# Spec\n\n<!-- impl-package:projection revision-set begin -->\n"
-                "设计修订（Design Revision）：D1\n规格修订（Spec Revision）：S1\n"
-                "<!-- impl-package:projection revision-set end -->\n",
-                encoding="utf-8",
-            )
-            blob = git(repo, "hash-object", "-w", "--", str(package / "spec.md"))
-            sidecar.parent.mkdir()
-            sidecar.write_text(
-                json.dumps(
-                    {
-                        "schemaVersion": 1,
-                        "purpose": "internal-machine-sidecar",
-                        "ownerFacing": False,
-                        "current": {
-                            "design": {"artifact": "spec.md", "revision": "D1"},
-                            "spec": {"artifact": "spec.md", "revision": "S1"},
-                        },
-                        "bindings": [
-                            {"artifact": "spec.md", "revision": "D1", "mode": "exact-blob", "blob": blob},
-                            {"artifact": "spec.md", "revision": "S1", "mode": "exact-blob", "blob": blob},
-                        ],
-                    }
-                ),
-                encoding="utf-8",
-            )
+            package = Path(temp) / "2026-07-17-example"
+            package.mkdir()
+            current = {"contractVersion": "3.1"}
+            self._write_components(package, current, current)
+            result = run_cli(package, "contract-status")
+            self.assertEqual(result.returncode, 0)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["status"], "current")
+            self.assertEqual(payload["contractVersion"], "3.1")
+            self.assertEqual(payload["currentContractVersion"], "3.1")
 
-            run_cli(package, "migrate", "--evidence", "plan.md#ER-1")
-            first = sidecar.read_text(encoding="utf-8")
-            run_cli(package, "migrate", "--evidence", "plan.md#ER-1")
+    def test_contract_status_classifies_old_future_and_invalid_versions(self) -> None:
+        cases = (
+            ({"schemaVersion": 2}, {"contractVersion": "3.1"}, "upgradeRequired", 3),
+            ({"contractVersion": "3.2"}, {"contractVersion": "3.1"}, "unsupportedFuture", 4),
+            ({"contractVersion": 3.1}, {"contractVersion": "3.1"}, "invalid", 2),
+            ({"contractVersion": "3.1", "schemaVersion": 2}, {"contractVersion": "3.1"}, "invalid", 2),
+        )
+        for revision, runtime, expected_status, expected_exit in cases:
+            with self.subTest(expected_status=expected_status), tempfile.TemporaryDirectory() as temp:
+                package = Path(temp) / "2026-07-17-example"
+                package.mkdir()
+                self._write_components(package, revision, runtime)
+                result = run_cli(package, "contract-status", check=False)
+                payload = json.loads(result.stdout)
+                self.assertEqual(result.returncode, expected_exit)
+                self.assertEqual(payload["status"], expected_status)
 
-            migrated = json.loads(first)
-            self.assertEqual(sidecar.read_text(encoding="utf-8"), first)
-            self.assertEqual(migrated["schemaVersion"], 2)
-            self.assertEqual(migrated["current"]["spec"]["revision"], "S1")
-            self.assertEqual(
-                [row["id"] for row in migrated["bindings"]],
-                [f"D1@{blob}", f"S1@{blob}"],
-            )
-            self.assertTrue(all(row["evidence"] == "plan.md#ER-1" for row in migrated["bindings"]))
-
-    def test_invalid_v1_migration_leaves_source_unchanged(self) -> None:
+    def test_migrate_command_is_removed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            repo = Path(temp) / "repo"
-            repo.mkdir()
-            init_repo(repo)
-            package = repo / "docs/implementations/2026-07-17-invalid"
-            sidecar = package / ".impl-package/revision-bindings.json"
-            sidecar.parent.mkdir(parents=True)
-            invalid = {
-                "schemaVersion": 1, "purpose": "internal-machine-sidecar", "ownerFacing": False,
-                "current": {"spec": {"artifact": "spec.md", "revision": "X1"}},
-                "bindings": [{"artifact": "spec.md", "revision": "X1", "mode": "exact-blob", "blob": "0" * 40}],
-            }
-            original = json.dumps(invalid)
-            sidecar.write_text(original, encoding="utf-8")
-            failed = run_cli(package, "migrate", "--evidence", "spec.md#gate", check=False)
-            self.assertNotEqual(failed.returncode, 0)
-            self.assertIn("revision alias", failed.stderr)
-            self.assertEqual(sidecar.read_text(encoding="utf-8"), original)
+            package = Path(temp) / "2026-07-17-example"
+            package.mkdir()
+            result = run_cli(package, "migrate", "--evidence", "old", check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("invalid choice", result.stderr)
 
 
 class RevisionRegistrationTest(unittest.TestCase):
@@ -217,7 +192,7 @@ class RevisionRegistrationTest(unittest.TestCase):
                 sidecar.write_text(
                     json.dumps(
                         {
-                            "schemaVersion": 2,
+                            "contractVersion": "3.1",
                             "purpose": "internal-machine-sidecar",
                             "ownerFacing": False,
                             "current": {"spec": {"artifact": "spec.md", "revision": "S1"}},
@@ -259,7 +234,7 @@ class RevisionRegistrationTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "schemaVersion": 2,
+                        "contractVersion": "3.1",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {},
@@ -313,7 +288,7 @@ class PlanContractValidationTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "schemaVersion": 2,
+                        "contractVersion": "3.1",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {},
@@ -391,7 +366,7 @@ class RuntimeStateTransitionTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "schemaVersion": 2,
+                        "contractVersion": "3.1",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {
@@ -456,7 +431,7 @@ class RuntimeStateTransitionTest(unittest.TestCase):
             tickets.mkdir()
             (tickets / "01-old.md").write_text("# Old\n\n**Ticket ID：** old\n**执行尝试 ID（Attempt ID）：** initial\n", encoding="utf-8")
             revision = {
-                "schemaVersion": 2, "purpose": "internal-machine-sidecar", "ownerFacing": False,
+                "contractVersion": "3.1", "purpose": "internal-machine-sidecar", "ownerFacing": False,
                 "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}}, "bindings": [],
             }
             sidecar.write_text(json.dumps(revision), encoding="utf-8")
@@ -561,7 +536,7 @@ class GateIndexTest(unittest.TestCase):
             (sidecar / "revision-bindings.json").write_text(
                 json.dumps(
                     {
-                        "schemaVersion": 2,
+                        "contractVersion": "3.1",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {
@@ -586,7 +561,7 @@ class GateIndexTest(unittest.TestCase):
             (sidecar / "runtime-state.json").write_text(
                 json.dumps(
                     {
-                        "schemaVersion": 1,
+                        "contractVersion": "3.1",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "packageId": package.name,
@@ -672,7 +647,7 @@ class GateIndexTest(unittest.TestCase):
             revision_path.parent.mkdir()
             revision_path.write_text(
                 json.dumps({
-                    "schemaVersion": 2,
+                    "contractVersion": "3.1",
                     "purpose": "internal-machine-sidecar",
                     "ownerFacing": False,
                     "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}},
@@ -777,7 +752,7 @@ class ProjectionRebindTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "schemaVersion": 2,
+                        "contractVersion": "3.1",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {},
@@ -868,7 +843,7 @@ class ProjectionRebindTest(unittest.TestCase):
             )
             (package / "plan.md").write_text("# Initial\n\n" + plan_body, encoding="utf-8")
             sidecar.write_text(json.dumps({
-                "schemaVersion": 2, "purpose": "internal-machine-sidecar", "ownerFacing": False,
+                "contractVersion": "3.1", "purpose": "internal-machine-sidecar", "ownerFacing": False,
                 "current": {}, "bindings": [],
             }), encoding="utf-8")
             run_cli(package, "register-revision", "plan", "P1", "--attempt", "initial", "--artifact", "plan.md", "--evidence", "plan.md#publication")
@@ -925,7 +900,7 @@ class RuntimeProjectionValidationTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "schemaVersion": 2,
+                        "contractVersion": "3.1",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {},

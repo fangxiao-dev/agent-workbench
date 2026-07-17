@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 
-IMPL_STATE_PATH = Path(__file__).resolve().parents[2] / "impl-package" / "scripts" / "impl_package_state.py"
+IMPL_STATE_PATH = Path(__file__).resolve().parents[2] / "scripts" / "impl_package_state.py"
 
 
 def _load_canonical_module() -> Any:

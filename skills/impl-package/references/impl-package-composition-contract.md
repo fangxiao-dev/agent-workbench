@@ -10,7 +10,7 @@
 
 - design.md 与 spec.md 是活动变更期间的当前设计 SoT。它们保持当前有效正文，历史变化只进入紧凑 revision/superseded 记录。
 - plan、tickets、DAG、progress 与 gate entry 属于某次 implementation attempt，是过程与判决记录，不是长期行为合同。
-- `.impl-package/revision-bindings.json` 与 `.impl-package/runtime-state.json` 是 package-local 机器 SoT：前者保存 D/S/P selection 与 append-only blob binding，后者保存 earned task/ticket current state、artifact hash chain 与 finalized gate index。字段、可变性、migration、projection 和 gate binding 统一由 [impl-package-state-schema.md](impl-package-state-schema.md) 定义；不得在 stage skill 重写 schema。两者都不是 owner-facing deliverable。
+- `.impl-package/revision-bindings.json` 与 `.impl-package/runtime-state.json` 是 package-local 机器 SoT：前者保存 D/S/P selection 与 append-only blob binding，后者保存 earned task/ticket current state、artifact hash chain 与 finalized gate index。字段、可变性、current-contract upgrade、projection 和 gate binding 统一由 [impl-package-state-schema.md](impl-package-state-schema.md) 定义；不得在 stage skill 重写 schema。两者都不是 owner-facing deliverable。
 
 Markdown projection contract：
 
@@ -197,7 +197,7 @@ findings.md 是发现 inbox。gate evaluation 前必须分流：设计决定进 
 
 package 永远只有一个 gate.md。它是 newest-first 的 append-only gate evaluation ledger；每次 evaluation 在文件顶部说明之后插入新 entry，旧 entry 不修改。
 
-gate.md 顶部状态一览只允许存在于 `gate-status` machine-owned marker 内，由 `finalize-gate-entry` 或 `refresh-projections` 根据 canonical resolver 结果刷新；人和 agent 不直接编辑。投影只复述当前 D/S/P 可适用的 finalized entry；只有历史 entry 时必须显示当前尚无 verdict，不能把旧 pass 投影成当前 pass。marker 外遗留的人话摘要属于 legacy 输入，迁移时删除或转换，不能与新 projection 并存。除 marker body 外，ledger 正文（entry 块本身，含历史遗留下来、格式早于本节模板的旧 gate.md 里的 Gate Decision/Verification 等判决与证据内容）保持严格 append-only，旧内容一律不回改，只能通过新 entry 补充或更正。
+gate.md 顶部状态一览只允许存在于 `gate-status` machine-owned marker 内，由 `finalize-gate-entry` 或 `refresh-projections` 根据 canonical resolver 结果刷新；人和 agent 不直接编辑。投影只复述当前 D/S/P 可适用的 finalized entry；只有历史 entry 时必须显示当前尚无 verdict，不能把旧 pass 投影成当前 pass。新建或升级后的 package 不得保留 marker 外机器摘要；agent 升级时直接整理为唯一 projection，不创建 migration record。除 marker body 外，ledger 正文（entry 块本身）保持严格 append-only，当前 contract 不回写既有已提交的人类证据。
 
 每个 entry 使用 &lt;attempt-id&gt;-G&lt;n&gt;，并记录：
 

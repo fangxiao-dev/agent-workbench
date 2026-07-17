@@ -19,7 +19,7 @@
 ## 当前稳态用法
 
 1. 任意 terminal gate（pass/fail/defer）entry 写入前，`dev-with-track` 必须完成 durable delta 或 `none + reason` capture、`_pending.md` 注册、受影响 module truth pointer 与必要 stub。这是 gate 内关闭合同，不能延期给 backfill。
-2. gate 关闭后只提示可按需调用 `$backfill-stable-docs`。未运行 backfill 不影响 gate、交付或任务 closed；可以延期、批量或按周期维护。
+2. gate 关闭后只提示可按需调用 `$backfill-stable-docs`。调用时先完成独立 contract preflight：旧包直接改成当前 contract 并校验，随后才进入只读 audit/apply/verify；未运行 backfill 不影响 gate、交付或任务 closed，可以延期、批量或按周期维护。
 3. `audit` 只有在用户明确要求、已有维护计划或周期任务上下文中才运行；它对 source 只读，只生成 compaction report。`apply` 还必须绑定 owner 明确批准的 report item ID；`verify` 独立检查结果。提示不构成 audit/apply/verify 授权。
 4. backfill 消费已 capture 的 delta，并通过 gate 漏登对账和无主 commit 扫描发现 capture gap；它不替 terminal gate 履行 Stage 7 capture，也不重新打开已关闭 gate。
 
@@ -121,7 +121,7 @@ docs/module-knowledge/
 | --- | --- |
 | `dev-with-track` | terminal gate entry 写入前完成 Stage 7 durable-delta capture；blocked 的 capture gap 只由后续 entry 补齐；保留两问 litmus 本体 |
 | `project-knowledge-manager` | hands-on knowledge 维护与跨文档层的入口分流；不复制 module 层压实方法 |
-| `$backfill-stable-docs` | gate 后按明确授权路由 audit/apply/verify runbook，处理 module PRD/spec 分流、pending、惰性 PRD 创建和 watermark；不替 gate 履行 capture |
+| `$backfill-stable-docs` | gate 后按明确授权先做 contract preflight，再路由 audit/apply/verify runbook，处理 module PRD/spec 分流、pending、惰性 PRD 创建和 watermark；不替 gate 履行 capture |
 | 项目 `docs/module-knowledge/` | 当前模块意图与行为合同快照；项目路径和 module 清单留在项目侧 README |
 
 module `prd.md` 超过 250 行时触发 owner 内容审查；首建内容不足以形成 Purpose、 用户或 journey、Outcomes、Scope/Non-goals 以及到顶层 PRD/module spec 的链接时， 继续保留在 `_pending.md`，不创建薄弱文件。

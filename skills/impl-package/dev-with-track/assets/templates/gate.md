@@ -13,7 +13,6 @@
 - 评估时间（Evaluated at）：
 - 修订集合（Revision set）：D<n> / S<n> / P<n>
 - 绑定校验（Binding validation）：<passed | failed>
-<!-- 机器审计元数据：sidecar=.impl-package/revision-bindings.json; D=<oid>; S=<oid>; P=<oid> -->
 - 执行组合（Composition）：tickets=<true|false>, dag=<true|false>
 - 比较点（Comparison point）：
 - 证据（Evidence）：<一个或多个 plan path#ER-n>

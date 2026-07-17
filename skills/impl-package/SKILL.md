@@ -10,11 +10,11 @@ description: >
 
 本 skill 是整个 Impl-Package 体系的**导航入口**。它只回答「这是什么、从哪进、下一步进哪个 skill」，把你送到正确的 stage skill 或 canonical 源。**它不执行任何阶段，也不把 spec / contract / design 的正文抄进来**——正文永远留在各自的事实源，这里只给指针。
 
-所有阶段执行器都递归聚合在本目录下；implementation-level review 统一位于 `reviews/`。skill name 保持稳定，调用方按名称路由，不依赖旧的根目录路径。
+所有阶段执行器都递归聚合在本目录下；implementation-level review 统一位于 `reviews/`。`backfill-stable-docs` 也属于本体系的维护阶段，物理位于本目录下但保留公共 skill name；调用方按名称路由，不依赖旧的根目录路径。
 
 持久单位是项目约定的 implementations root（默认 `docs/implementations/`）下的 `<package-id>/`。`.impl-package/` 结构化层以 revision binding、earned runtime state、artifact hash chain 与 finalized gate index保存机器可校验状态，Markdown 只保留判断、证据叙述及 machine-owned 投影；agent 通过随 skill 分发的 `scripts/impl_package_state.py --package <path> ...` 维护，不手改投影。canonical handoff 汇总人类当前状态；attempt 的 Draft/Active/Frozen 现场派生，不落可过期 status。
 
-结构化状态引擎的数据策略统一由 [`assets/impl-package-state-config.json`](./assets/impl-package-state-config.json) 提供：状态 vocabulary、document discovery/field regex、marker 名称、投影格式与 gate heading/字段 grammar 在该版本化配置中调整，CLI interface 不变。配置未知版本、缺字段、错误 placeholder/capture group、重复/空 vocabulary 或无效 regex 必须 fail closed。append-only、CAS、active chain、package-local path、完整 gate entry span/content hash、HEAD/worktree 两相校验与 task/ticket bijection 属于不可配置的安全内核；不得通过配置弱化。backfill gate recognition 直接复用 canonical resolver，不复制 verdict、heading 或 binding 语义。
+结构化状态引擎的数据策略统一由 [`assets/impl-package-state-config.json`](./assets/impl-package-state-config.json) 提供，当前体系契约版本为字符串 `"3.1"`：状态 vocabulary、document discovery/field regex、marker 名称、投影格式与 gate heading/字段 grammar 在该版本化配置中调整，CLI interface 不变。配置未知版本、缺字段、错误 placeholder/capture group、重复/空 vocabulary 或无效 regex 必须 fail closed。append-only、CAS、active chain、package-local path、完整 gate entry span/content hash、HEAD/worktree 两相校验与 task/ticket bijection 属于不可配置的安全内核；不得通过配置弱化。backfill gate recognition 直接复用 canonical resolver，不复制 verdict、heading 或 binding 语义。契约修订摘要保存在 [`assets/contract-revision-history.md`](./assets/contract-revision-history.md)，仅在 `contract-status` 返回 `upgradeRequired` 时读取；正常 stage、validate、audit、apply、verify 路径不得读取它。
 
 - **文档维护层**：常青四层（产品/journey 端到端意图 / 模块贡献 / 模块契约 / 变更事件），真相住这里；跨模块 journey 通过唯一 owner 和 anchor 链接下钻，不复制正文。开发收口后可以通过 backfill 把 durable delta 汇回。
 - **开发 6 步主流程 + 可选回刷**：6 步把改动做出来；backfill 是收口后的维护提示与周期性兜底，不阻塞当前交付。
@@ -42,7 +42,9 @@ flowchart TD
     CAP --> VC[verification-before-completion：completion claim evidence gate]
     VC --> GT[gate.md 顶部插入不可变 entry]
     GT -. 可选提示 / 周期任务 .-> BF[backfill router]
-    BF -. audit / approved apply / verify .-> EV[(常青四层 module-knowledge)]
+    BF -->|contract preflight| UP[旧包直接升级到 current contract]
+    UP -->|校验通过| BF2[backfill audit / approved apply / verify]
+    BF2 -.-> EV[(常青四层 module-knowledge)]
     EV -. 下次改动读取 .-> RA
 ```
 
@@ -60,7 +62,7 @@ flowchart TD
 | 5 执行 | `dev-with-track` + `subagent-driven-development` | runtime state / task review evidence · plan Execution Record · append-only `gate.md` | 上游就绪 / 跨 session 续；有可委派 task 时由后者承载 |
 | 6 审查 | `code-review`（恒） · `module-review` · `safety-review` | review evidence（进入 plan ER） | 见下方路由 |
 | 6b Completion claim gate | `verification-before-completion` | claim-to-evidence audit | 写 terminal pass 或宣称 complete / closed / merge-ready / release-ready 前 |
-| 可选回刷 | `$backfill-stable-docs` | audit report / approved apply / independent verify；必要时更新 `_pending.md` | gate 关闭后提示；积累 durable delta 或周期维护时执行，不阻塞当前交付 |
+| 可选回刷 | `$backfill-stable-docs`（体系内维护阶段） | contract preflight、audit report / approved apply / independent verify；必要时更新 `_pending.md` | gate 关闭后提示；积累 durable delta 或周期维护时执行，不阻塞当前交付 |
 
 ## 正向路由：你在哪 → 进哪个 skill
 
@@ -72,7 +74,7 @@ flowchart TD
 - 上游产物就绪，要开始 / 恢复执行 → **`dev-with-track`**；它从 revision registry 与 gate 派生 lifecycle、选择可执行单元并维护状态。存在有界且委派收益明确的 task 时，进入 **`subagent-driven-development`** 完成实现和 task-level review，再返回前者集成；单 owner 的机械局部 delta 由主 agent 直接处理。存在 manual owner 时，等待验收前按轻量模板生成 readiness handoff。
 - 集成后要审查：`code-review` 恒查；改动 interface / seam / 契约 → **`module-review`**；碰 auth / 支付 / webhook / 迁移 / 外部写入 → **`safety-review`**。
 - 适用 review 与 findings 已闭环、准备写 terminal pass 或对外宣称 complete / closed / merge-ready / release-ready → **`verification-before-completion`**；它审计最终 revision、环境和证据新鲜度，不是 DAG task，也不机械重跑所有检查。
-- gate 已关 → **提示**可按需使用 `$backfill-stable-docs` 处理 durable delta。提示不等于执行授权：只有用户要求、已有明确维护计划，或进入周期性 audit / approved apply / independent verify 时才实际调用；本轮不做 backfill 也可以正常收口。
+- gate 已关 → **提示**可按需使用 `$backfill-stable-docs` 处理 durable delta。调用 backfill 时先完成独立 contract preflight：旧包由 agent 读取修订摘要并直接改成 current contract，校验通过后才进入只读 audit/apply/verify；升级失败不得继续审计。提示不等于执行授权：只有用户要求、已有明确维护计划，或进入周期性 audit / approved apply / independent verify 时才实际调用；本轮不做 backfill 也可以正常收口。
 
 断链就退回真正拥有变化语义的上游，别按目录层级整链回滚：缺 plan 回 `impl-planning`；输入太宽没切片回 `to-tickets`；Composition/artifact 对不上回 `impl-planning`；只有暴露出真实 contract drift 才回 `req-align` 重过受影响的门。单个 artifact 的证据、引用或分类变化不自动使其他 artifact 失效。
 
@@ -96,7 +98,7 @@ flowchart TD
 属于 Impl-Package 依赖图的文档全部收在本 skill 的 `references/` 下，不论是否仍标草案——分发单位是这个 skill 目录，组内分享时不会附带整个仓库的 `docs/skill-design/`，所以依赖图内的东西必须随 skill 一起走。`docs/skill-design/` 只保留不属于本体系的其他设计规划。
 
 - **规则 / 跨层契约（正式）** → [references/impl-package-composition-contract.md](references/impl-package-composition-contract.md)（composition、derived lifecycle、readiness resolution、seam、Stage 7、dispatch shorthand、revision-blob binding、Module Knowledge Watermark）。
-- **结构化状态 schema（正式）** → [references/impl-package-state-schema.md](references/impl-package-state-schema.md)（sidecar shape、CLI、projection、migration、gate content binding 与四类消费结果）。
+- **结构化状态 schema（正式）** → [references/impl-package-state-schema.md](references/impl-package-state-schema.md)（sidecar shape、CLI、projection、current-contract 校验、gate content binding 与消费结果；旧 schema 不再由运行时兼容解析）。
 - **backfill / 常青四层（正式，已批准）** → [references/evergreen-module-spec-and-backfill-design.md](references/evergreen-module-spec-and-backfill-design.md)。
 - **体系设计 rationale（仍为方案草案，内容仍会演进）** → [references/impl-package-system-design.md](references/impl-package-system-design.md)。
 - **给人看的介绍页** → [assets/impl-package-intro.html](assets/impl-package-intro.html)。**推荐给需要总览的人打开；本 skill 自身不读取它**（避免把整页载入上下文）。

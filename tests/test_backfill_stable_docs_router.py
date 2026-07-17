@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 
-SKILL = Path(__file__).resolve().parents[1] / "skills" / "backfill-stable-docs" / "SKILL.md"
+SKILL = Path(__file__).resolve().parents[1] / "skills" / "impl-package" / "backfill-stable-docs" / "SKILL.md"
 
 
 class RouterContractTest(unittest.TestCase):
@@ -12,6 +12,7 @@ class RouterContractTest(unittest.TestCase):
         text = SKILL.read_text(encoding="utf-8")
         self.assertIn("默认执行 audit", text)
         self.assertIn("只允许配置 `records.reports` 目录下的新报告", text)
+        self.assertIn("contract preflight", text)
 
     def test_apply_requires_report_and_item_ids(self) -> None:
         text = SKILL.read_text(encoding="utf-8")
@@ -45,6 +46,12 @@ class RouterContractTest(unittest.TestCase):
         self.assertIn("`targetBranch` 与主工作区基准承担不同职责", text)
         self.assertIn("不自动 fetch", text)
         self.assertIn("非阻塞 `cold-start` owner decision", text)
+
+    def test_current_contract_rejects_legacy_gate_and_audit_inputs(self) -> None:
+        text = SKILL.read_text(encoding="utf-8")
+        self.assertIn('contractVersion `"3.1"`', text)
+        self.assertIn("旧 heading、旧 sidecar 或旧 audit JSON 不再作为 verdict", text)
+        self.assertIn("升级不生成迁移记录或旧副本", text)
 
 
 if __name__ == "__main__":
