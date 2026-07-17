@@ -1,4 +1,4 @@
-# [实施名称] 决策研究
+# [实施名称] 需求与决策
 
 状态（Status）：Draft | Decision Gate Passed | Decision Gate Blocked
 创建时间（Created）：
@@ -10,19 +10,25 @@
 任务包 ID（Package ID）：
 规范任务包路径（Canonical package）：`docs/implementations/<package-id>/`
 
-本文是任务包活动期间当前决策与理由的事实源，不是行为合同。当前正文只保留最新选择，被取代的选择写入修订历史，完整旧正文由 Git 保存。行为、状态、接口、失败和验收语义只属于 `spec.md`。Decision 被阻塞时使用本文件，不创建 `spec.md`。`Status: Decision Gate Passed` 必须对应 `Result: PASSED`；`Status: Decision Gate Blocked` 必须对应 `Result: BLOCKED`。若引用 `investigations/<topic>.md`，本文件仍必须自足说明当前决定；investigation 默认无 authority，且不维护 backlink 或采用状态。
+本文是任务包活动期间“聚焦需求定义 + 当前方案决策与理由”的事实源：回答为什么做、要达到什么结果、为什么选择该方向。系统必须如何表现、字段与状态合同、错误处理和 Acceptance Semantics 只属于 `spec.md`；如何拆解、实现和验证只属于 `plan.md`。当前正文只保留最新需求与选择，被取代内容写入修订历史，完整旧正文由 Git 保存。Decision 被阻塞时使用本文件，不创建 `spec.md`。`Status: Decision Gate Passed` 必须对应 `Result: PASSED`；`Status: Decision Gate Blocked` 必须对应 `Result: BLOCKED`。若引用 `investigations/<topic>.md`，本文件仍必须自足说明当前需求与决定；investigation 默认无 authority，且不维护 backlink 或采用状态。
 
-## 1. 目标落点
+## 1. 需求定义（Focused PRD）
 
-- 预期结果：
+<!-- 聚焦表达本次变化的产品需求，不复制 spec 的字段级合同、状态机、错误处理或逐条 Acceptance Criteria。 -->
+
+- 目标用户 / 使用场景：
+- 当前问题与触发条件：
+- 期望结果与用户价值：
+- 范围：
+- 非目标：
+- 核心体验或业务流程：
+- 成功判断信号：
+
+## 2. 目标落点与合同交接
+
 - 受影响的系统边界：
-- 合同交接点：
-
-## 2. 需求 / 结果
-
-- 聚焦需求：
-- 用户或系统结果：
-- 成功信号：
+- 交给 `spec.md` 定义的行为合同范围：
+- 交给 `plan.md` 解决的实施范围：
 
 ## 3. 知识来源 / 当前状态
 
@@ -31,10 +37,9 @@
 - 预期但缺失的知识：
 - 冲突或 drift：
 
-## 4. 约束 / 非目标
+## 4. 约束 / Authority 边界
 
 - 约束：
-- 非目标：
 - 安全或外部 mutation 边界：
 
 ## 5. 选项 / 权衡
@@ -44,7 +49,7 @@
 
 ## 6. 决策 / 理由
 
-<!-- 记录选中的方向及其理由。不要复制 spec 中的行为合同。 -->
+<!-- 只记录选中的方向及其理由；不要重复第 1 节的需求背景，也不要复制 spec 中的行为合同。 -->
 
 | 决策 | 理由 | Owner | 日期 |
 | --- | --- | --- | --- |

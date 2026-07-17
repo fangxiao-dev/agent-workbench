@@ -229,6 +229,16 @@ def _empty_runtime_state(package_id: str) -> dict[str, Any]:
     }
 
 
+def _empty_revision_bindings() -> dict[str, Any]:
+    return {
+        "contractVersion": CURRENT_CONTRACT_VERSION,
+        "purpose": "internal-machine-sidecar",
+        "ownerFacing": False,
+        "current": {},
+        "bindings": [],
+    }
+
+
 def _current_attempt(package: Path) -> tuple[str, Path] | None:
     path = package / REVISION_BINDINGS
     if not path.is_file():
@@ -391,21 +401,35 @@ def _seed_earned_records(package: Path, state: dict[str, Any]) -> None:
 def command_init(package: Path, package_id: str) -> dict[str, Any]:
     if not package.is_dir():
         raise StateError(f"package directory does not exist: {package}")
-    path = package / RUNTIME_STATE
-    expected = _empty_runtime_state(package_id)
-    if path.exists():
-        actual = json.loads(path.read_text(encoding="utf-8"))
-        _require_current_contract(actual, "runtime state")
-        if actual.get("packageId") != package_id:
-            raise StateError(f"packageId mismatch: expected {package_id!r}, found {actual.get('packageId')!r}")
-        before = json.dumps(actual, sort_keys=True)
-        _seed_earned_records(package, actual)
-        if json.dumps(actual, sort_keys=True) != before:
-            _atomic_write_json(path, actual)
-        return actual
-    _seed_earned_records(package, expected)
-    _atomic_write_json(path, expected)
-    return expected
+    runtime_path = package / RUNTIME_STATE
+    revision_path = package / REVISION_BINDINGS
+    runtime = _empty_runtime_state(package_id)
+    revision = _empty_revision_bindings()
+
+    if runtime_path.exists():
+        runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
+        _require_current_contract(runtime, "runtime state")
+        if runtime.get("packageId") != package_id:
+            raise StateError(f"packageId mismatch: expected {package_id!r}, found {runtime.get('packageId')!r}")
+    if revision_path.exists():
+        revision = json.loads(revision_path.read_text(encoding="utf-8"))
+        _require_current_contract(revision, "revision bindings")
+        if (
+            set(revision) != {"contractVersion", "purpose", "ownerFacing", "current", "bindings"}
+            or revision.get("purpose") != "internal-machine-sidecar"
+            or revision.get("ownerFacing") is not False
+            or not isinstance(revision.get("current"), dict)
+            or not isinstance(revision.get("bindings"), list)
+        ):
+            raise StateError("revision sidecar has invalid initialization envelope")
+
+    before = json.dumps(runtime, sort_keys=True)
+    _seed_earned_records(package, runtime)
+    if not revision_path.exists():
+        _atomic_write_json(revision_path, revision)
+    if not runtime_path.exists() or json.dumps(runtime, sort_keys=True) != before:
+        _atomic_write_json(runtime_path, runtime)
+    return runtime
 
 
 def _load_runtime_state(package: Path) -> tuple[Path, dict[str, Any]]:

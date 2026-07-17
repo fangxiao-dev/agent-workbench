@@ -13,7 +13,7 @@ Repository instructions and discovered project conventions determine knowledge s
 
 Use the project's configured implementations root (default `docs/implementations/`) as the canonical package parent. A package-id is an immutable date-prefixed topic slug; the project owns the date format, and the ID is a directory identity rather than a mutable title. This skill owns:
 
-- `decision.md`，活动变更期间的当前决策与 rationale SoT；blocked Decision 必须持久化，lightweight passed path 可仅在 spec Decision Gate Record 中保留最小证据；
+- `decision.md`，活动变更期间的聚焦需求定义（Focused PRD）与当前决策/rationale SoT；回答为什么做、要达到什么结果、为什么选择该方向。blocked Decision 必须持久化，lightweight passed path 可仅在 spec Decision Gate Record 中保留最小证据；
 - `spec.md`，活动变更期间的当前行为、数据、边界、失败恢复、约束与 Acceptance Semantics SoT；
 - 内部 `.impl-package/revision-bindings.json` 中 D/S current selection 与 append-only binding。共享 schema 与命令来自 [`../references/impl-package-state-schema.md`](../references/impl-package-state-schema.md)；plan/P binding 由 `impl-planning` 拥有。sidecar 不属于 owner-facing deliverable，decision/spec/handoff Markdown 必须自足呈现投影与校验结论。
 
@@ -25,7 +25,11 @@ Use [assets/templates/decision.md](./assets/templates/decision.md) and [assets/t
 
 Omitting standalone `decision.md` is legal only after Decision evaluates `PASSED` and the lightweight evidence fits in the `Decision Gate Record` at the top of `spec.md`. “No decision file” never means “no Decision step.” Requirement source and alignment provenance belong in `decision.md`; on the lightweight passed path, preserve their minimum durable form in that same `Decision Gate Record`.
 
+`decision.md` 按内容价值 earn：新功能、明显体验变化或业务能力变化通常必须创建，因为其 Focused PRD 对后续理解和取舍具有持久价值；已有产品定义下、无需重述用户问题与价值的小型行为修正可以走 lightweight Decision。`contract impact=none` 的实现修复继续复用现有 D/S，不创建或扩写 `decision.md`。是否有独立文件不改变 Decision 步骤与 Gate 必经这一事实。
+
 This skill may append to package `execution-findings.md` when research establishes an important confirmed fact, risk, methodological lesson, or cross-task finding that the package or later attempts can reuse. It is package-local provenance, not a second behavior contract or a temporary todo queue. Keep raw ideas, candidate hypotheses, experiment material, and incomplete investigation notes in an earned-only `investigations/<topic>.md`; never create an empty `investigations/` directory. Investigation content has no authority, runtime state, revision binding, or machine projection. Formal documents may link to it when useful, but `decision.md` and `spec.md` must remain self-contained and investigation files do not maintain backlinks or adoption status.
+
+当用户点名一份由本次工作拥有的非权威调研文档，并要求“基于它对齐需求”时，该文档已经 earn `investigations/`：建立 package identity 后，把原文件移动为 `investigations/<topic>.md`，保留原始内容并用主题化文件名解决命名冲突，不在旧位置保留副本或迁移说明。随后从中提炼当前决定与行为合同到 `decision.md` / `spec.md`，正式文档只在有助于 provenance 时链接该 investigation。项目级权威知识、跨 package 共享文档、只读或不归本次任务拥有的来源不得移动，继续原位引用；“移动调研文档”不能改变 authority 层级，也不能让正式文档依赖读者通读原始材料。
 
 ## Package Identity
 
@@ -51,11 +55,12 @@ Use the repository's vocabulary and source-of-truth hierarchy. If durable projec
 
 ## Gate 1: Decision (Required)
 
-Decision turns the requirement and repository facts into a decision-ready destination. Use the eight-section Decision Research structure in the decision template. The analysis and gate judgment always happen before `spec.md` is created. A passed lightweight Decision may omit the file; a blocked Decision may not.
+Decision turns the focused product need and repository facts into a decision-ready destination. Use the eight-section Focused PRD + Decision Research structure in the decision template. The analysis and gate judgment always happen before `spec.md` is created. A new feature, material experience change, or business capability change normally earns the file; a passed lightweight correction under an existing product definition may omit it, while a blocked Decision may not.
 
 The Decision gate passes only when all of these are verifiably true:
 
 - **Destination is answerable:** intended outcome, affected system boundary, and handoff to the implementation contract are explicit. When delivery and validation use different paths, state the delivery path and the limit of what validation proves; validation convenience must not silently redefine the intended product path.
+- **Focused need is defined at the right layer:** target user/scenario, current problem and trigger, expected result/value, scope/non-goals, core experience or business flow, and success signals are explicit when the change earns a Focused PRD; a lightweight correction points to the existing product definition and records the minimum delta evidence instead of manufacturing a duplicate PRD.
 - **Repository fit is evidenced:** authority sources and current-state facts have been checked; conflicts and missing knowledge are named.
 - **Choices are decided:** material options and trade-offs have a selected direction and rationale, or an explicit owner decision blocks the gate.
 - **Open Questions are non-blocking for Spec:** every question is resolved, explicitly deferred with owner and consequence, or proven not to affect the contract.
@@ -65,10 +70,12 @@ If any criterion fails, create or update `decision.md`, record `Decision Gate: B
 
 ### Decision Boundary
 
-- `Decisions / Rationale` records choices and why they were selected. Put behavior, state, interface, and failure semantics only in `spec.md`; do not copy those contracts into decision.
+- `decision.md` owns the Focused PRD and selected direction: why this change exists, which user/business result it must reach, and why the chosen option is preferred. Focused PRD does not copy field-level contracts, state machines, error handling, or line-by-line Acceptance Criteria; `Decisions / Rationale` does not repeat the requirement background.
+- `spec.md` owns the behavior contract: how the system must behave, including data/field contracts, states, boundaries, failure recovery, constraints, and Acceptance Semantics.
+- `plan.md` owns implementation: how the approved contract is decomposed, implemented, integrated, and verified. Decision and spec do not grow file steps, task topology, or verification command logs.
 - `Backfill Candidates` is a non-binding research hint. It is not a durable-delta register, does not authorize stable-document edits, and need not be merged into spec. Canonical durable-delta capture happens at the execution gate and downstream backfill.
 
-`decision.md` 的唯一 revision 声明是 machine-owned `revision-set` marker 中的 `决策修订（Decision Revision）：D<n>`；不得在 marker 外再写 `Decision Revision` header。正文只保留当前选择；方向变化时升级 revision、重跑 Decision Gate，并在 Revision History 中用一行记录 previous/new、变更摘要、authority、日期与 superseded 说明。Gate 通过后计算最终 artifact 的 Git blob OID，在内部 sidecar 追加 D binding、更新 current decision 并刷新 projection；artifact 不记录自身 hash。完整旧正文由 Git 保存，不在当前正文并排维护。
+`decision.md` 的唯一 revision 声明是 machine-owned `revision-set` marker 中的 `决策修订（Decision Revision）：D<n>`；不得在 marker 外再写 `Decision Revision` header。正文只保留当前聚焦需求与选择；用户/业务结果或决策方向发生实质变化时升级 revision、重跑 Decision Gate，并在 Revision History 中用一行记录 previous/new、变更摘要、authority、日期与 superseded 说明。纯模板重排、标题校准或把已存在信息归入 Focused PRD 不单独升级 D；应按 contract-impact-none editorial correction 规则处理。Gate 通过后计算最终 artifact 的 Git blob OID，在内部 sidecar 追加 D binding、更新 current decision 并刷新 projection；artifact 不记录自身 hash。完整旧正文由 Git 保存，不在当前正文并排维护。
 
 ## Gate 2: Spec (Required)
 
@@ -115,14 +122,14 @@ Spec Gate 本身不自动要求 `grill-me-smartly`。只在用户明确要求对
 
 ## Workflow
 
-1. Announce use of req-align; for a new package assign a topic slug and an immutable date-prefixed package-id, or identify the owning existing package-id for a patch/follow-up and classify drift against current module knowledge/code.
-2. Discover authoritative project knowledge before detailed clarification.
+1. Announce use of req-align; for a new package assign a topic slug and an immutable date-prefixed package-id, create the package directory, then run `impl_package_state.py --package <path> init --package-id <id>` once so both empty sidecars exist before any D/S registration. For a patch/follow-up identify the owning existing package-id and classify drift against current module knowledge/code; do not reinitialize it from templates.
+2. Discover authoritative project knowledge before detailed clarification. If the user supplied a task-owned non-authoritative research document as the alignment input, move it into the earned-only `investigations/<topic>.md` location after package identity is fixed; leave authoritative/shared/read-only sources in place.
 3. Ask one focused question at a time for unresolved intent, scope, constraints, success criteria, trade-offs, or owner decisions.
-4. Run Decision Research, present the selected direction plus blockers, and evaluate the Decision gate before creating `spec.md`.
+4. Run Focused PRD + Decision Research, classify whether the standalone file is earned, present the focused outcome and selected direction plus blockers, and evaluate the Decision gate before creating `spec.md`.
 5. If Decision is blocked, create or update `decision.md` with provenance, readiness evidence, blockers, and owner decisions; stop without creating `spec.md`.
-6. If Decision passes, either persist its substantive research in `decision.md`, or take the lightweight path: create `spec.md` and write the minimum provenance, readiness, and owner-decision evidence into its Decision Gate Record. Append reusable confirmed cross-stage findings to an already-needed `execution-findings.md`; place raw investigation material in earned-only topic files under `investigations/` and never create either artifact as empty ceremony.
+6. If Decision passes, persist `decision.md` for a new feature, material experience change, business capability change, or any case where the Focused PRD/choice has durable value. For a small behavior correction under an existing product definition, take the lightweight path: create `spec.md` and write the minimum product-definition pointer, delta provenance, readiness, and owner-decision evidence into its Decision Gate Record. Append reusable confirmed cross-stage findings to an already-needed `execution-findings.md`; place raw investigation material in earned-only topic files under `investigations/` and never create either artifact as empty ceremony. A `contract impact=none` implementation fix does neither.
 7. Synthesize the eight-section `spec.md` only when contract impact requires it, evaluating the conditional evidence-integrity contract only when its signal is present. For a patch, reuse D/S revisions for `contract impact=none` or implementation-only drift without evaluating Spec Gate, rerun only Spec Gate for behavioral contract changes, and rerun Decision then Spec for decision-direction changes. Run `grill-me-smartly` only when the risk-driven criteria above are present or the user asks for it; otherwise evaluate the Spec Gate directly. Stop when the required gate is blocked.
-8. 两道 gate 通过后，对最终 decision/spec 分别运行 `impl_package_state.py --package <path> register-revision ...`，再运行 `refresh-projections`；命令失败时先处理 capture gap/drift，不手改 JSON 或 marker body。artifact 与 sidecar commit 后运行 `validate --committed`，并在 Markdown handoff 报告 D/S revision set 与校验结论。随后把同一份 `spec.md` 交给 `impl-planning`，不创建第二份 spec，也不发布 tracker。
+8. 两道 gate 通过后，对最终 decision/spec 分别运行 `impl_package_state.py --package <path> register-revision ...`，再运行 `refresh-projections`；新 package 的两份空 sidecar 已由步骤 1 的单次 `init` 建立，`register-revision` 继续对缺失 sidecar fail closed，不承担隐式初始化。命令失败时先处理 capture gap/drift，不手改 JSON 或 marker body。artifact 与 sidecar commit 后运行 `validate --committed`，并在 Markdown handoff 报告 D/S revision set 与校验结论。随后把同一份 `spec.md` 交给 `impl-planning`，不创建第二份 spec，也不发布 tracker。
 
 ## Alignment Proposal
 

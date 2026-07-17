@@ -99,6 +99,11 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         req_drift = eval_text(find_eval(evals["req-align"], 4))
         assert_contains(req_drift, "implementation-only", "Req-align drift eval")
         assert_contains(req_drift, "Decision then Spec", "Req-align decision drift eval")
+        focused_prd = eval_text(find_eval(evals["req-align"], 8))
+        assert_contains(focused_prd, "focused PRD", "New capability must earn a Focused PRD decision")
+        assert_contains(focused_prd, "lightweight Decision", "Small correction may stay lightweight")
+        assert_contains(focused_prd, "does not create or expand decision.md", "Implementation-only fix must not grow decision")
+        assert_contains(focused_prd, "plan.md alone owns", "Implementation planning boundary")
 
         simple_patch = eval_text(find_eval(evals["impl-planning"], 4))
         assert_contains(simple_patch, "tickets=false, dag=false", "Simple patch composition eval")
@@ -165,7 +170,19 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
             "Current spec SoT must not be superseded as a whole file.",
         )
         decision_template = read(IMPL_ROOT / "req-align" / "assets" / "templates" / "decision.md")
-        assert_contains(decision_template, "当前决策与理由的事实源", "Decision must be current SoT.")
+        assert_contains(decision_template, "聚焦需求定义 + 当前方案决策与理由", "Decision must own the focused need and current choice.")
+        for focused_prd_field in (
+            "目标用户 / 使用场景",
+            "当前问题与触发条件",
+            "期望结果与用户价值",
+            "范围",
+            "非目标",
+            "核心体验或业务流程",
+            "成功判断信号",
+        ):
+            assert_contains(decision_template, focused_prd_field, f"Focused PRD field: {focused_prd_field}")
+        assert_contains(decision_template, "只属于 `spec.md`", "Decision/spec boundary.")
+        assert_contains(decision_template, "只属于 `plan.md`", "Decision/plan boundary.")
         assert_not_contains(
             decision_template,
             "point-in-time research and decision record",

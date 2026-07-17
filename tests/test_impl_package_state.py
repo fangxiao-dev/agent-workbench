@@ -94,7 +94,7 @@ class DataDrivenConfigTest(unittest.TestCase):
 
 
 class InitStateTest(unittest.TestCase):
-    def test_init_creates_empty_runtime_state_and_is_idempotent(self) -> None:
+    def test_init_creates_both_empty_sidecars_and_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             package = Path(temp) / "2026-07-17-example"
             package.mkdir()
@@ -105,6 +105,7 @@ class InitStateTest(unittest.TestCase):
             self.assertEqual(first.returncode, 0)
             self.assertEqual(second.returncode, 0)
             state = json.loads((package / ".impl-package" / "runtime-state.json").read_text(encoding="utf-8"))
+            revisions = json.loads((package / ".impl-package" / "revision-bindings.json").read_text(encoding="utf-8"))
             self.assertEqual(
                 state,
                 {
@@ -118,6 +119,90 @@ class InitStateTest(unittest.TestCase):
                     "gate": {"allocations": [], "entries": []},
                 },
             )
+            self.assertEqual(
+                revisions,
+                {
+                    "contractVersion": "3.2",
+                    "purpose": "internal-machine-sidecar",
+                    "ownerFacing": False,
+                    "current": {},
+                    "bindings": [],
+                },
+            )
+
+    def test_new_package_can_register_decision_and_spec_immediately_after_init(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            repo.mkdir()
+            init_repo(repo)
+            package = repo / "docs/implementations/260717-example"
+            package.mkdir(parents=True)
+            (package / "decision.md").write_text(
+                "# 决策\n\n"
+                "<!-- impl-package:projection revision-set begin -->\n"
+                "决策修订（Decision Revision）：D1\n"
+                "<!-- impl-package:projection revision-set end -->\n",
+                encoding="utf-8",
+            )
+            (package / "spec.md").write_text(
+                "# 规格\n\n"
+                "<!-- impl-package:projection revision-set begin -->\n"
+                "决策修订（Decision Revision）：D1\n"
+                "规格修订（Spec Revision）：S1\n"
+                "<!-- impl-package:projection revision-set end -->\n",
+                encoding="utf-8",
+            )
+
+            run_cli(package, "init", "--package-id", package.name)
+            run_cli(
+                package,
+                "register-revision",
+                "decision",
+                "D1",
+                "--artifact",
+                "decision.md",
+                "--evidence",
+                "decision.md#decision-gate",
+            )
+            run_cli(
+                package,
+                "register-revision",
+                "spec",
+                "S1",
+                "--artifact",
+                "spec.md",
+                "--evidence",
+                "spec.md#spec-gate",
+            )
+
+            revisions = json.loads((package / ".impl-package/revision-bindings.json").read_text(encoding="utf-8"))
+            self.assertEqual(revisions["current"]["decision"]["revision"], "D1")
+            self.assertEqual(revisions["current"]["spec"]["revision"], "S1")
+            run_cli(package, "validate", "--working-tree")
+
+    def test_register_revision_still_fails_closed_without_explicit_init(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            repo.mkdir()
+            init_repo(repo)
+            package = repo / "docs/implementations/260717-uninitialized"
+            package.mkdir(parents=True)
+            (package / "decision.md").write_text("# 决策\n", encoding="utf-8")
+
+            result = run_cli(
+                package,
+                "register-revision",
+                "decision",
+                "D1",
+                "--artifact",
+                "decision.md",
+                "--evidence",
+                "decision.md#decision-gate",
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("revision sidecar does not exist", result.stderr)
 
 
 class ContractStatusTest(unittest.TestCase):

@@ -56,7 +56,7 @@ flowchart TD
 
 | 阶段 | Owner skill | 产出 | 何时 |
 | --- | --- | --- | --- |
-| 1 对齐与调研 | `req-align`（Decision 门） | `decision.md`（按需 earned） | 新需求 / 需求变更，动手前 |
+| 1 对齐与调研 | `req-align`（Decision 门） | Focused PRD + 方案决策的 `decision.md`（新功能/体验/业务变化通常 earned；小修正可 lightweight） | 新需求 / 需求变更，动手前 |
 | 2 写规格 | `req-align`（Spec 门） | 当前 `spec.md` revision | Decision 门过后 |
 | 3 Attempt 计划 | `impl-planning` | `plan.md` / patch plan（含 Composition） | Spec 过、要落地 |
 | 3b 切票（按需） | `to-tickets` | 当前 attempt 的 `tickets/` | plan 判 `tickets=true` |

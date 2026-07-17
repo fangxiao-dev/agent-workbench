@@ -8,7 +8,7 @@
 
 任务包包含两类文档：
 
-- decision.md 与 spec.md 是活动变更期间的当前决策与行为合同 SoT。它们保持当前有效正文，历史变化只进入紧凑 revision/superseded 记录。
+- decision.md 与 spec.md 是活动变更期间的当前需求/决策与行为合同 SoT：decision 拥有聚焦需求定义（Focused PRD）和方案选择/rationale，spec 拥有系统行为、边界、失败恢复与 Acceptance Semantics。它们保持当前有效正文，历史变化只进入紧凑 revision/superseded 记录。
 - plan、tickets、DAG、progress 与 gate entry 属于某次 implementation attempt，是过程与判决记录，不是长期行为合同。
 - `execution-findings.md` 是整个任务包及后续 attempt 可共享的执行发现 provenance；`investigations/<topic>.md` 只在确有原始调查材料时创建，默认无 authority，允许不完整、冲突或过期。
 - `.impl-package/revision-bindings.json` 与 `.impl-package/runtime-state.json` 是 package-local 机器 SoT：前者保存 D/S/P selection 与 append-only blob binding，后者保存 earned task/ticket current state、artifact hash chain 与 finalized gate index。字段、可变性、current-contract upgrade、projection 和 gate binding 统一由 [impl-package-state-schema.md](impl-package-state-schema.md) 定义；不得在 stage skill 重写 schema。两者都不是 owner-facing deliverable。
@@ -36,9 +36,11 @@ terminal gate entry 写入前必须完成 Stage 7 durable-delta capture。gate �
 
 decision.md（存在时）的 `revision-set` marker 声明唯一当前 D revision；spec.md 的同一 projection 声明唯一当前 D/S revision。lightweight Decision 不建 decision.md 时，spec 的 D projection 与 Decision Gate Record 共同提供 canonical 落点。默认 projection 使用中文标签 `决策修订（Decision Revision）`、`规格修订（Spec Revision）` 与 `计划修订（Plan Revision）`；这些声明不得在 marker 外重复。
 
+`decision.md` 按持久产品价值 earn：新功能、明显体验变化或业务能力变化通常需要独立文件；已有产品定义下的小型行为修正可由 spec 顶部的 lightweight Decision 记录承载；`contract impact=none` 的实现修复不创建或扩写 decision。Focused PRD 只回答目标用户/场景、问题与触发、期望结果/价值、范围/非目标、核心体验或业务流程及成功信号，不复制 spec 的字段级合同、状态机、错误处理或逐条 Acceptance Criteria。`plan.md` 独立拥有拆解、实现和验证方案。
+
 - 实现偏离现有 spec，但预期行为不变：复用 D/S revision，创建新 attempt。
 - 行为、数据、边界、失败恢复、约束或 Acceptance Semantics 改变：升级 S revision，只重跑 Spec Gate。
-- 决策选择或 rationale 改变：先升级 D revision 并重跑 Decision Gate，再升级 S revision 并重跑 Spec Gate。
+- Focused PRD 的用户/业务结果、决策选择或 rationale 实质改变：先升级 D revision 并重跑 Decision Gate，再按实际行为合同影响升级 S revision 并重跑 Spec Gate。仅把已存在信息重排进新模板不单独升级 D。
 - 旧正文不并排保留；在 revision history 中记录 previous/new、变更摘要、authority、日期与 superseded 说明，完整 provenance 由 Git 提供。
 
 Decision/Spec Gate 只证明其绑定的 revision；旧 gate entry 不证明后续 revision。

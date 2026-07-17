@@ -80,6 +80,8 @@ ticket record 的 canonical shape 同样为 `{attempt,id,state,evidence}`，四�
 
 所有 JSON 写入使用同目录临时文件、flush 后 replace；重复调用必须得到相同结果。init、binding/artifact/finalize 使用确定性 identity；`set-state` 在 current state/evidence 已等于目标时先返回幂等 no-op，再检查旧 expectation；gate allocator 使用稳定 operationId。v1 执行模型是单写者，subagent 不拥有 runtime ledger；不使用 package-local lock，也不承诺 multi-writer lost-update protection。
 
+`init --package-id <id>` 是新 package 唯一的结构化初始化入口：一次幂等调用同时创建空的 `revision-bindings.json` 与 `runtime-state.json`。它不登记或猜测 D/S/P revision；正式 artifact 完成后仍由 owning stage 显式运行 `register-revision`。若任一 sidecar 已存在，init 只校验其 current-contract envelope 并保留内容，不以空模板覆盖已有状态；完整 binding、projection 与 artifact 校验仍属于显式 `validate`。跨两文件不宣称原子事务，任一中断或缺失可由 `contract-status` / `validate` 现场发现。
+
 ## 5. Projection ownership 与 rebinding
 
 机器投影必须位于成对 marker 内：

@@ -38,7 +38,7 @@
 
 Review 按当前 delta 的独立信号触发，不把 artifact 数量或历史 Composition 当风险代理：code-review 恒必选；diff 或本次 S/P delta 改变 interface、状态机、模块边界、跨模块行为或 seam 时 module-review 必选；safety-review 按效果与 authority 信号触发（见 Review 体系）。
 
-- **Decision 步骤恒定必过**：调研 + 需求对齐 + readiness 门是 Stage 1 的必经步骤，与 composition 无关，不可跳过。`decision.md` / `execution-findings.md` 作为文件产物可薄可无——调研沉淀少时文件轻，但 readiness 门判定与 owner decisions 必须留痕。"步骤必过"不等于"文件必建"：沿用"不为形式建空 ledger"约束的是文件，不是步骤。
+- **Decision 步骤恒定必过，正文按价值 earned**：调研 + 需求对齐 + readiness 门是 Stage 1 的必经步骤，与 composition 无关，不可跳过。新功能、明显体验变化或业务能力变化通常生成 `decision.md`，因为其中的 Focused PRD 与方案理由有持久价值；已有产品定义下的小型行为修正可走 spec 顶部的 lightweight Decision，`contract impact=none` 的实现修复不创建或扩写 decision。`execution-findings.md` 仍只在确有共享执行发现时 earned。
 - `tasks/Tn-progress.md` 触发条件维持 dev-with-track 现行规则，不随开关自动创建。
 - 跨 session 恢复本身不 earn dag：progress ledger 恢复状态，plan/tickets/dag 恢复拓扑。若执行拓扑无法由 plan/tickets 清晰重建，则因“执行依赖需要显式化”earn dag，而不是因“跨 session”earn dag。
 - ceremony 守护：tickets 与 dag 都必须由 earn 条件挣得存在；报告/复盘发现某 package 的 artifact 空转（如只 1 个 ticket、dag 没有非平凡依赖或协调价值）时，视为 composition 判定错误回记 rubric。
@@ -59,7 +59,7 @@ Review 按当前 delta 的独立信号触发，不把 artifact 数量或历史 C
 阶段要点（只记与讨论稿差异或收敛修正，正文以讨论稿为底）：
 
 - **Stage 1/2 一个 skill 两道对等必过门**：req-align 承载 Decision 与 Spec 两个步骤，二者对等且都必过——不是"Decision 可选、Spec 必有"。调研 readiness 门（Destination 可回答、Open Questions 收敛到不阻塞 spec）必过 → 才允许进入 spec 门生成 `spec.md`。不拆成两个 skill：decision→spec 是紧耦合的顺序交接，拆开徒增一条 handoff seam。前置条件：先解除其 prj-supplyer-webapp 绑定（见 skill 改造清单）。
-- **decision.md 护栏**：保留 Decision Research 八节结构，但 Decisions 只记"选择与理由"，行为语义一律进 spec；spec 已有内容 decision 不留副本。Backfill Candidates 只是其中的**非约束调研提示**小节，供后续参考；durable delta 的正式捕获是 terminal gate entry 写入前的硬性前置（Stage 7），不在 spec 里维护常青 backfill map，也不要求执行期归并进 spec（避免与下游 backfill 体系双重登记）。
+- **decision.md 护栏**：八节结构以前置 `需求定义（Focused PRD）` 承载目标用户/场景、问题与触发、期望结果/价值、范围/非目标、核心体验/业务流程和成功信号，随后记录选择与理由。它回答“为什么做、要达到什么结果、为什么选该方向”；字段级合同、状态机、错误处理与 Acceptance Semantics 一律进 spec，拆解、实现与验证一律进 plan。Decision rationale 不重复需求背景。Backfill Candidates 仍只是**非约束调研提示**，durable delta 的正式捕获留在 terminal gate Stage 7。
 - **跨模块 journey 护栏**：顶层 journey anchor 拥有端到端 outcome，各 module PRD 只拥有自身贡献，跨模块 rule/seam 由一个 primary module spec 拥有。package decision/spec 只记录本次 coordination 与 expected canonical delta，通过 anchor 引用长期事实，不创建第二份 journey 或 contract SoT。
 - **风险驱动的 Grill**：Spec Gate 不是 `grill-me-smartly` 的自动触发器。只有用户明确要求，或存在未解决的实质 contract ambiguity、跨模块/外部接口、迁移/兼容窗口、安全或数据 authority、destructive-external mutation、evidence-integrity false-PASS 风险时，才跑其 review phase；清晰局部 Spec delta 直接 Gate。运行后，`待用户裁决` 仍计入既有"blocking owner decisions 为零"标准，不新造阻断机制。Ledger 住 OS temp，不落 package；是否 apply 收敛结论必须等用户明确批准。Spec Gate 通过后可提示 `grilling` 作为可选深度对抗访谈。
 - **spec.md 模板护栏**：package-id 内的 `spec.md` 按 2026-07-09 设计的模块 spec 八节合同结构成型（活动变更的当前 SoT）：Scope/authority/non-goals、术语与数据合同、行为/状态机/工作流、模块边界与依赖、**Error Boundaries——失败模式与恢复语义**、约束型合同（禁止事项/信任边界/精度/provider 义务/负依赖）、Acceptance Semantics 与 Contract Coherence。Composition 不进入 spec。
@@ -78,7 +78,7 @@ Review 按当前 delta 的独立信号触发，不把 artifact 数量或历史 C
 
 | Artifact | Canonical Owner | 追加权 | 不应包含 |
 | --- | --- | --- | --- |
-| `decision.md` | req-align | revision history | 行为合同副本、worker task、执行证据 |
+| `decision.md` | req-align | revision history | 字段级行为合同、状态机、错误处理、逐条 AC、worker task、执行证据 |
 | `spec.md` | req-align | revision history | 调研流水、Composition、文件级步骤、验证命令、常青 backfill map |
 | `plan.md` / patch plan | impl-planning | Execution Record、P revision | 长期 contract、ticket/task runtime status、通用 checklist 副本 |
 | Tickets | to-tickets（本地 fork） | dev-with-track（状态） | worker ownership、文件级实现步骤 |
@@ -177,7 +177,7 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 
 | Skill | 改动 |
 | --- | --- |
-| `req-align` | 通用化：description/body 解除 prj-supplyer-webapp 绑定，项目细节退回项目 AGENTS/CONTEXT；内置两道对等必过门（Decision 步骤与 Spec 步骤都不可跳过，decision.md 文件可薄但门必过）；拥有 decision.md + spec.md 及其模板（spec 按 2026-07-09 八节合同结构成型，含 Error Boundaries/失败恢复/约束型合同；吸收 to-spec 的模板与 synthesis 方法，不产出第二份 tracker spec）；借用 domain-modeling 分析方法但禁用其 CONTEXT.md 写入（结论进 decision/execution-findings，原始材料按需进 investigations） |
+| `req-align` | 通用化：description/body 解除项目绑定，项目细节退回项目 AGENTS/CONTEXT；内置两道对等必过门（Decision 与 Spec 步骤都不可跳过）。新功能/明显体验/业务能力变化通常 earn 含 Focused PRD 的 decision.md，已有产品定义下的小修正可 lightweight，contract-impact-none 修复不扩写；拥有 decision.md + spec.md 及其模板（spec 为八节行为合同，含 Error Boundaries/失败恢复/约束型合同，不产出第二份 tracker spec）；原始材料按需进 investigations，确认的跨阶段发现按需进 execution-findings。 |
 | `to-tickets` | **本地 fork**（保留名，registry 标注"已本地分叉，上游更新人工 diff"）：加 draft/publish 双模式（内部默认 draft）、runner-neutral handoff、删除 /implement 绑定；保留 tracer bullet、带类型的静态 blocking edges、wide-refactor expand–contract；删除自动派工类动态调度，增加 publish 前环/引用校验 |
 | `to-spec` | 保留 vendored 只读，不进主流程；其方法已被 req-align 吸收 |
 | `impl-planning` | 每次 attempt plan 独立声明 Composition；保存执行策略、Planned Verification 与 append-only Execution Record；不保存 task checklist或长期 contract；patch 仅 post-gate |

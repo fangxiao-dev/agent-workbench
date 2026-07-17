@@ -81,6 +81,36 @@
         "Does not require investigation backlinks or adoption status",
         "Does not use execution-findings.md as a raw hypothesis or temporary todo queue"
       ]
+    },
+    {
+      "id": 7,
+      "name": "named-research-input-is-relocated-into-investigations",
+      "prompt": "仓库里有一份由本任务独占的非权威调研草稿 docs/research/provider-options.md。请基于这份调研文档建立并对齐一个新的 implementation package。",
+      "expected_output": "Initializes both empty package sidecars, moves the task-owned research draft into a topic-named investigations file without leaving a duplicate, and synthesizes self-contained decision/spec artifacts from it.",
+      "files": [],
+      "expectations": [
+        "Runs one init command before the first D/S register-revision so both sidecars exist",
+        "Moves the task-owned draft into investigations/<topic>.md instead of copying it",
+        "Does not leave a legacy alias or migration note at the old draft path",
+        "Keeps the investigation non-authoritative and outside revision/runtime/projection state",
+        "Keeps decision.md and spec.md self-contained",
+        "Does not move authoritative, shared, read-only, or externally owned source documents"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "focused-prd-earned-boundary-and-layering",
+      "prompt": "分别处理三类请求：A 新增面向财务用户的批量复核能力；B 在已有产品定义下修正一个小型行为边界；C 只修复实现以重新符合现有 spec。判断是否生成 decision.md，并说明 decision/spec/plan 各自写什么。",
+      "expected_output": "Creates a decision.md with a focused PRD and option rationale for A, permits a lightweight Decision record in spec.md for B, and reuses the current D/S without creating or expanding decision.md for C, while keeping product need, behavior contract, and implementation plan in separate layers.",
+      "files": [],
+      "expectations": [
+        "A records target user/scenario, problem/trigger, expected result/value, scope/non-goals, core experience or business flow, and success signals in decision.md",
+        "A keeps field contracts, state machines, error handling, and line-by-line Acceptance Criteria out of the Focused PRD",
+        "B may use the spec Decision Gate Record with a pointer to the existing product definition and minimum delta evidence",
+        "C does not create or expand decision.md and does not increment D/S",
+        "Decision rationale does not repeat requirement background",
+        "plan.md alone owns implementation decomposition and verification strategy"
+      ]
     }
   ]
 }
