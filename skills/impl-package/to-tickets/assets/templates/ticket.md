@@ -27,8 +27,9 @@
 
 > 仅由 `dev-with-track` 在发布后维护。`to-tickets` 不记录这些字段；它们不是 worker/task/file-step 跟踪信息。
 
+<!-- impl-package:projection runtime-state begin -->
 - 值：[unrecorded]
 - 直接证据：[unrecorded]
-- 重新校验：[unrecorded]
+<!-- impl-package:projection runtime-state end -->
 
 不要添加 worker ownership、task 分配、文件级步骤或 runtime task status。

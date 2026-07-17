@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "stateVocabulary": {
+    "task": ["PENDING", "READY", "RUNNING", "NEEDS_SEAM", "BLOCKED", "FAILED", "NEEDS-REVALIDATION", "DONE", "WAIVED", "SUPERSEDED"],
+    "ticket": ["UNRECORDED", "IN_PROGRESS", "BLOCKED", "NEEDS-REVALIDATION", "SATISFIED", "WAIVED", "SUPERSEDED"],
+    "gateVerdict": ["pass", "fail", "blocked", "defer"],
+    "terminalGateVerdict": ["pass", "fail", "defer"],
+    "initialState": {"task": "PENDING", "ticket": "UNRECORDED"}
+  },
+  "documents": {
+    "compositionPattern": "Composition[^\\n]*tickets=(true|false),\\s*dag=(true|false)",
+    "attemptPattern": "(?m)(?:\\*\\*)?执行尝试 ID（Attempt ID）[：:](?:\\*\\*)?\\s*([^\\s]+)",
+    "ticketIdPattern": "\\*\\*Ticket ID[：:]\\*\\*\\s*([^\\s]+)",
+    "taskHeadingPattern": "(?m)^###\\s+(T\\d+)\\s*[:：]",
+    "taskBlockPattern": "(?ms)^###\\s+{task_id}\\s*[:：].*?(?=^###\\s+T\\d+\\s*[:：]|^##\\s|\\Z)",
+    "taskStatePattern": "(?m)^-\\s*状态[：:]\\s*([A-Z_-]+)",
+    "ticketStatePattern": "(?m)^-\\s*值[：:]\\s*\\[?([^]\\n]+)",
+    "dagArtifactPatterns": ["dag.md", "*.patch-dag.md"],
+    "ticketArtifactPatterns": ["tickets/*.md"]
+  },
+  "projections": {
+    "markers": {
+      "revisionSet": "revision-set",
+      "runtimeState": "runtime-state",
+      "gateStatus": "gate-status"
+    },
+    "revisionSet": {
+      "design": "设计修订（Design Revision）：{design}",
+      "spec": "设计修订（Design Revision）：{design}\n规格修订（Spec Revision）：{spec}",
+      "plan": "设计修订（Design Revision）：{design}\n规格修订（Spec Revision）：{spec}\n计划修订（Plan Revision）：{plan}"
+    },
+    "runtimeTask": {
+      "header": ["| Task | State | Evidence |", "| --- | --- | --- |"],
+      "row": "| {id} | {state} | {evidence} |"
+    },
+    "runtimeTicket": "- 值：{state}\n- 直接证据：{evidence}",
+    "gateStatus": {
+      "empty": "状态：尚无 finalized gate entry",
+      "finalized": "状态：{id} · {verdict}"
+    }
+  },
+  "gate": {
+    "headingPattern": "^##\\s+(?P<id>[^\\s]+)\\s+·\\s+(?P<verdict>{verdicts})[ \\t]*\\n",
+    "entryIdPattern": "(.+)-G([1-9]\\d*)",
+    "attemptFieldPattern": "(?m)^-\\s*执行尝试 ID（Attempt ID）[：:]\\s*([^\\s]+)",
+    "supersedesFieldPattern": "(?m)^-\\s*取代（Supersedes）[：:]\\s*([^\\s]+)",
+    "noneTokens": ["none", "None", "无"],
+    "scaffoldNoneToken": "none"
+  }
+}

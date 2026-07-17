@@ -44,7 +44,7 @@ Impl-Package 中 `dag=true` 的 DAG 必须持久化为当前 attempt 的 `dag.md
 
 - 功能合同、seam contract 或验收语义的变化 -> `spec.md`。DAG 工作暴露出合同变化时，先补 spec 或标记 blocker，不要只改 plan。
 - 当前 attempt 的执行顺序、具体集成动作与验证选择变化 -> 当前 plan 的新 P revision。
-- 任务契约、cohort、ownership、状态、seam、验证 gate -> `dag.md`；patch 模式下旧 `dag.md` 已标记 `Retired / terminal gate` 时，写入当前的 `YYYYMMDD-HHMM-<patch-topic>.patch-dag.md`。
+- 任务契约、cohort、ownership、seam、验证 gate -> `dag.md`；task current state/evidence -> `.impl-package/runtime-state.json`，DAG 看板只做 machine-owned projection。patch 模式下旧 `dag.md` 已标记 `Retired / terminal gate` 时，写入当前的 `YYYYMMDD-HHMM-<patch-topic>.patch-dag.md`。
 - 持久的任务局部状态 -> `tasks/Tn-progress.md`。
 - 任务交接 -> `tasks/Tn-handoff.md`。
 - 跨任务风险与后续项 -> `findings.md`。
@@ -69,7 +69,7 @@ Impl-Package 中 `dag=true` 的 DAG 必须持久化为当前 attempt 的 `dag.md
 
 ### 1. 校验已批准输入
 
-读当前 attempt plan、同 Attempt ID 的相关 Approved tickets（若 tickets=true）、spec 的 D/S revision、AC 与 seam contract、仓库指令和相关验证文档。plan 和 spec 通常由 `impl-planning` / `req-align` 产出在 `docs/implementations/<package-id>/`。来源不满足输入契约时，读 `references/slice-to-dag.md` 并按缺失原因路由。识别：
+读当前 attempt plan、同 Attempt ID 的相关 Approved tickets（若 tickets=true）、spec 的 D/S revision、AC 与 seam contract、仓库指令和相关验证文档。plan 和 spec 位于项目约定 implementations root 下的 package。来源不满足输入契约时，读 `references/slice-to-dag.md` 并按缺失原因路由。识别：
 
 - 所有将被 task 贡献或启用的 acceptance target；
 - 每个 acceptance target 的必需 evidence producer，以及尚未在 ticket 阶段解析的 producer obligation；
@@ -98,6 +98,8 @@ Impl-Package 中 `dag=true` 的 DAG 必须持久化为当前 attempt 的 `dag.md
 用 `references/dag-and-ownership.md`：任务记录、ownership 模式、cohort 规则和任务编号续编。
 
 把 DAG 按上方映射持久化到当前 attempt 的 `dag.md` 或 patch DAG；不得写入 plan、只留对话或改写历史 DAG。
+
+文件校验通过后运行 `impl_package_state.py --package <path> init --package-id <id>` 机械同步 current attempt 的 task records，再运行 `refresh-projections`。每个 earned DAG task 必须恰有一个 runtime record；命令失败时不进入 worker 派发。
 
 完成标准：每个任务都有依赖、可并行邻居、ownership lanes、聚焦测试、完成标准、acceptance contribution/enablement 与 seam execution owner；每个 acceptance target 的证据生产者或人工验证 owner 可被追溯。
 

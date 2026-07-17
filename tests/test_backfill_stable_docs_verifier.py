@@ -76,6 +76,7 @@ class HealthyRepoTest(unittest.TestCase):
             returncode, payload = run_verify(project)
             self.assertEqual(returncode, 0)
             self.assertTrue(payload["passed"])
+            self.assertEqual(payload["schemaVersion"], 4)
             self.assertEqual(payload["summary"]["failed"], 0)
             names = {check["check"] for check in payload["checks"]}
             self.assertEqual(
@@ -91,6 +92,11 @@ class HealthyRepoTest(unittest.TestCase):
             )
             pending_check = next(c for c in payload["checks"] if c["check"] == "pending-discovery")
             self.assertIn("1 cold-start", pending_check["detail"])
+            inventory_check = next(c for c in payload["checks"] if c["check"] == "inventory-candidates")
+            self.assertIn("indexed=0", inventory_check["detail"])
+            self.assertIn("legacy-heading=0", inventory_check["detail"])
+            self.assertIn("mismatch=0", inventory_check["detail"])
+            self.assertIn("manual=0", inventory_check["detail"])
 
 
 class PendingDiscoveryAmbiguityTest(unittest.TestCase):

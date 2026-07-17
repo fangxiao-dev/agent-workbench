@@ -14,8 +14,9 @@ description: >
 ## 输出
 
 ~~~text
-docs/implementations/<package-id>/
+<project implementations root>/<package-id>/
   .impl-package/revision-bindings.json        # internal machine sidecar; not an owner-facing deliverable
+  .impl-package/runtime-state.json            # earned runtime/artifact/gate machine state
   plan.md                                    # initial attempt
   YYYYMMDD-HHMM-<patch-topic>.patch-plan.md  # post-gate patch attempt
 ~~~
@@ -30,7 +31,7 @@ Plan Revision: P<n>
 Composition: tickets=<true|false>, dag=<true|false>
 ~~~
 
-Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。plan header 只保存 revision alias；批准当前 plan 时，以 [`../assets/templates/revision-bindings.json`](../assets/templates/revision-bindings.json) 为形状，在内部 sidecar 选择 current attempt 并绑定最终 plan blob。sidecar 只供机器校验；plan 与 handoff Markdown 必须直接呈现 owner 所需结论。
+Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。plan header 的 revision set 是 machine-owned projection；批准当前 plan 时通过结构化状态 CLI 选择 current attempt 并绑定最终 plan blob。sidecar 只供机器校验；plan 与 handoff Markdown 必须直接呈现 owner 所需结论。schema 与命令引用 [`../references/impl-package-state-schema.md`](../references/impl-package-state-schema.md)，本 skill 不复制字段定义。
 
 ## 边界
 
@@ -110,7 +111,7 @@ plan 活动期间发现 Composition 判断错误时：
 4. 建立 spec coverage 与 change map，写 Execution Strategy、integration order、Planned Verification、rollout/rollback 与依赖的 policy 链接；清除 blocker placeholder，核对术语、模块与路径一致性。
 5. tickets=true 时调用 to-tickets draft；dag=true 时在必要输入齐备后调用 create-task-dag。
 6. 交叉检查 ticket/DAG 暴露的 contract 缺口；规范性缺口回 req-align，真正改变 plan-owned 语义的过程策略缺口升级 P revision。仅证据、引用、分类或机械顺序投影错误由 owning skill 局部修正。
-7. owner 批准 plan 后，计算最终 plan Git blob OID，在内部 revision-binding sidecar 以 `plan-contract-v1` 追加 baseline binding并选择 `current.attempt`；commit 后复核 baseline。后续只允许 ER append，不因此升级 P revision；此时且无 terminal gate 时 lifecycle 派生为 Active。
+7. owner 批准 plan 后运行 `register-revision plan <P> --attempt <id> --artifact <plan-path> --evidence <pointer>`，以 `plan-contract-v1` 追加 binding 并选择 current attempt；随后 `init --package-id <id>` 初始化 earned runtime records、`refresh-projections` 刷新投影。commit 后运行 `validate --committed`。后续 ER append 不升级 P revision；ER 写入前再次 committed validate，此时且无 terminal gate 时 lifecycle 派生为 Active。
 8. 执行期间只 append Execution Record；状态由对应 artifact 维护。
 9. gate evaluation 由 dev-with-track 在 gate.md 顶部插入摘要，并链接对应 Execution Record；terminal verdict 使 lifecycle 派生为 Frozen。
 

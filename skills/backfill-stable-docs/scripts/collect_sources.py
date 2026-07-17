@@ -22,16 +22,15 @@ from stable_docs_config import (
     resolve_project_path,
     resolve_target_branch,
 )
+from gate_recognition import TERMINAL_GATE_VERDICTS, resolve_gate
 
 
 class CollectorError(RuntimeError):
     """Raised when source inventory cannot be collected safely."""
 
 
-GATE_ENTRY_RE = re.compile(r"^#{1,6}\s+(?P<entry_id>\S+)\s*[·:]\s*(?P<verdict>pass|fail|blocked|defer)\b", re.IGNORECASE)
 TABLE_ROW_RE = re.compile(r"^\|(.+)\|\s*$")
 TABLE_SEP_RE = re.compile(r"^\|[\s:|-]+\|\s*$")
-TERMINAL_VERDICTS = {"pass", "fail", "defer"}
 
 
 def _require_git_repository(path: Path | str) -> Path:
@@ -51,17 +50,6 @@ def _require_git_repository(path: Path | str) -> Path:
     if top_level != root:
         raise CollectorError(f"project root must be the Git top level: {root}")
     return root
-
-
-def _read_gate_verdict(gate_path: Path) -> str | None:
-    """Return the verdict of the newest (topmost) gate entry, or None if no entry found."""
-    if not gate_path.is_file():
-        return None
-    for line in gate_path.read_text(encoding="utf-8").splitlines():
-        match = GATE_ENTRY_RE.match(line.strip())
-        if match:
-            return match.group("verdict").lower()
-    return None
 
 
 def extract_markdown_tables(path: Path) -> list[dict[str, Any]]:
@@ -170,20 +158,15 @@ def collect_inventory(
             if path_matches_ignore(relative_package_dir, config["ignore"]) is not None:
                 continue
             package_id = package_dir.relative_to(implementations_root).as_posix()
-            gate_path = package_dir / "gate.md"
-            has_gate = gate_path.is_file()
-            verdict = _read_gate_verdict(gate_path)
-            # A gate.md that exists but doesn't match the new `## <id> · <verdict>` heading
-            # (i.e. every legacy/pre-redesign gate.md) is NOT the same as "no verdict yet" —
-            # the collector genuinely cannot tell, so it must not silently default to "ignore".
-            gate_verdict_parsed = has_gate and verdict is not None
-            needs_manual_gate_review = has_gate and not gate_verdict_parsed
+            gate = resolve_gate(package_dir)
+            has_gate = gate["hasGate"]
+            verdict = gate["gateResolution"]
             referenced = any(
                 package_id in cell or relative_package_dir in cell
                 for registration in pending_registrations
                 for cell in registration["row"]
             )
-            is_terminal = gate_verdict_parsed and verdict in TERMINAL_VERDICTS
+            is_terminal = gate["kind"] in {"indexed", "legacy-heading"} and verdict in TERMINAL_GATE_VERDICTS
             packages.append(
                 {
                     "packageId": package_id,
@@ -192,9 +175,10 @@ def collect_inventory(
                     "hasDesign": (package_dir / "design.md").is_file(),
                     "hasSpec": (package_dir / "spec.md").is_file(),
                     "hasGate": has_gate,
-                    "gateVerdict": verdict,
-                    "gateVerdictParsed": gate_verdict_parsed,
-                    "needsManualGateReview": needs_manual_gate_review and not referenced,
+                    "gateRecognition": gate["kind"],
+                    "gateResolution": verdict,
+                    "needsManualGateReview": gate["needsManualGateReview"],
+                    "reason": gate["reason"],
                     "referencedInOpenPending": referenced,
                     "resolvedInDoneRecord": package_id in resolved_package_ids,
                     "gapCatchingCandidate": (
@@ -207,7 +191,7 @@ def collect_inventory(
             )
 
     return {
-        "schemaVersion": 3,
+        "schemaVersion": 4,
         "project": {
             "repository": config["repository"],
             "targetBranch": config["targetBranch"],
@@ -246,22 +230,24 @@ def _render_markdown(inventory: dict[str, Any]) -> str:
         f"- Pending cold starts (owner decision, non-blocking): {len(inventory['pendingColdStarts'])}",
         f"- Gap-catching candidates: {len(inventory['gapCatchingCandidates'])}",
         f"- Package Retirement structural candidates: {len(inventory['retirementStructuralCandidates'])}",
-        f"- Needs manual gate review (gate.md present but not machine-parseable): {len(inventory['manualGateReviewCandidates'])}",
+        f"- Needs manual gate review (mismatch/manual): {len(inventory['manualGateReviewCandidates'])}",
         "",
-        "| Package | Gate verdict | Design | Spec | Open pending ref | Gap-catching | Retirement candidate | Manual gate review |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Package | Gate recognition | Gate resolution | Design | Spec | Open pending ref | Gap-catching | Retirement candidate | Manual gate review | Reason |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in inventory["packages"]:
         lines.append(
-            "| {package_id} | {verdict} | {design} | {spec} | {referenced} | {gap} | {retire} | {manual} |".format(
+            "| {package_id} | {recognition} | {resolution} | {design} | {spec} | {referenced} | {gap} | {retire} | {manual} | {reason} |".format(
                 package_id=row["packageId"],
-                verdict=row["gateVerdict"] or ("unparsed" if row["hasGate"] else "none"),
+                recognition=row["gateRecognition"] or "none",
+                resolution=row["gateResolution"] or "none",
                 design="yes" if row["hasDesign"] else "no",
                 spec="yes" if row["hasSpec"] else "no",
                 referenced="yes" if row["referencedInOpenPending"] else "no",
                 gap="yes" if row["gapCatchingCandidate"] else "no",
                 retire="yes" if row["retirementStructuralCandidate"] else "no",
                 manual="yes" if row["needsManualGateReview"] else "no",
+                reason=(row["reason"] or "").replace("|", "\\|"),
             )
         )
     return "\n".join(lines) + "\n"

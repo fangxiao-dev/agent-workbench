@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "purpose": "internal-machine-sidecar",
+  "ownerFacing": false,
+  "packageId": "<immutable-date-prefixed-slug>",
+  "tasks": [],
+  "tickets": [],
+  "artifacts": [],
+  "gate": {
+    "allocations": [],
+    "entries": []
+  }
+}

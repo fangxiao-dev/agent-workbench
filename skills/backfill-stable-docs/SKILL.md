@@ -11,7 +11,7 @@ description: Use when auditing, applying approved durable knowledge deltas, reti
 
 backfill 是 agent 的阅读、判断和写作任务，不是纯命令行工具。脚本只能提供清单、差异、校验和记录辅助（枚举 package、找 `_pending.md` 登记、搜索 touched files 和 commit range、生成 report skeleton、校验链接/done 去重/pending 覆盖），不能用一个状态字段代替 agent 对代码、Git commit、implementation package 与 stable docs 的实际阅读，也不强制要求 fingerprint、双锚点这类机械 state machine 作为唯一事实形态。
 
-机械识别不到的信号（比如 legacy gate.md 把 verdict 写成自由文本、不是新模板的固定 heading）只是脚本的能力上限，不是 agent 的能力上限。规则本来就是"能读懂就能判断"，固定格式只是给脚本一个加速识别的捷径，不是判断能力的天花板。脚本标出"无法机械解析"时，agent 必须在同一轮里把这些内容自己读完、给出正常分类（candidate / already-covered / conflict / no-delta，或 Package Retirement 候选），不能把它当成流程终点晾在那里、假装留给下一个人工来处理；只有真正读不出结论（证据本身矛盾或缺失）才升级为 owner 决策。
+Gate 机械识别分为 `indexed`、`legacy-heading`、`mismatch`、`manual` 四类；没有 `gate.md` 表示 open/no-verdict，不是第五类。只有 `indexed` 和 `legacy-heading` 提供可信 `gateResolution`；runtime-state 存在时不得回退信任 heading，任何缺 entry、字段/content binding 不符、陈旧或损坏 JSON 都按 `mismatch` fail closed。`mismatch`/`manual` 只是脚本的能力与信任边界，不是 agent 的阅读能力上限：agent 必须在同一轮里读完证据并给出正常分类（candidate / already-covered / conflict / no-delta，或 Package Retirement 候选），只有证据本身矛盾或缺失才升级为 owner 决策。
 
 ## 工作区基准
 
@@ -29,6 +29,7 @@ backfill 默认以 Git 主工作区为基准，不以当前分支名或某个特
 
 - 目标项目必须是 Git top-level；配置取显式 `--config <path>`，否则取项目根 `.stable-docs-backfill.json`（schemaVersion 3）。`targetBranch`、`stableDocs.systemKnowledge`、`stableDocs.moduleKnowledge` 必填，`stableDocs.contextKnowledge` 可选；省略 context 层时按 system + module 两层运行。
 - 每个 repo 只保留一个配置文件；monorepo 的差异由配置里的 glob 和 stable doc destinations 承载，不引入多份独立配置或 `contexts[]`。
+- source inventory 输出 `schemaVersion: 4`；package row 使用 `gateRecognition`、`gateResolution`、`needsManualGateReview`、`reason`，不再输出会混淆可信 verdict 与可解析 heading 的 `gateVerdict`/`gateVerdictParsed`。
 - backfill 的主要输入是 `dev-with-track` Stage 7 已经在维护的 `_pending.md` 登记队列，不是重新发现。`_pending.md` 的位置按配置 `records.pending` 的发现规则覆盖 system、可选 context 和 module 三层并按 pending 路径去重；context/module root 缺失或歧义时报告 config gap，system 级 `docs/_pending.md` 首次不存在时报告非阻塞 `cold-start` owner decision，不自动创建。只有 gate 已 terminal、实现已进入 `targetBranch`、却找不到对应登记的遗留 package，才需要 gap-catching 式地重新读 `design.md`/`spec.md`/`plan.md`/代码。
 - `ignore` 按 owner 分组，每组自带 `owner`（domain/platform 名，或 `"repo-wide"`）和 `reason`；新增排除项必须带这两个字段，不能只加路径。
 - 破坏性操作（移动/删除/重命名 stable doc 内容、Package Retirement 清理 package 目录）需要独立于普通 apply item 的显式 destructive-apply 授权，精确到路径或 package id 清单，不接受“全部处理”这类笼统批准。

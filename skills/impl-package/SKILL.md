@@ -12,7 +12,9 @@ description: >
 
 所有阶段执行器都递归聚合在本目录下；implementation-level review 统一位于 `reviews/`。skill name 保持稳定，调用方按名称路由，不依赖旧的根目录路径。
 
-持久单位是 `docs/implementations/<package-id>/`。内部 sidecar `.impl-package/revision-bindings.json` 以外部 Git blob binding 选择当前 D/S/attempt，避免 artifact 自身保存自身 hash；它只服务机器校验，不是 owner-facing deliverable。人类交付仍由 design/spec/plan/gate/handoff Markdown 按职责提供可读投影，并由 canonical handoff 汇总当前状态；attempt 的 Draft/Active/Frozen 由内部 registry 与 gate ledger 派生，不在 plan 手工维护。体系由两部分咬合：
+持久单位是项目约定的 implementations root（默认 `docs/implementations/`）下的 `<package-id>/`。`.impl-package/` 结构化层以 revision binding、earned runtime state、artifact hash chain 与 finalized gate index保存机器可校验状态，Markdown 只保留判断、证据叙述及 machine-owned 投影；agent 通过随 skill 分发的 `scripts/impl_package_state.py --package <path> ...` 维护，不手改投影。canonical handoff 汇总人类当前状态；attempt 的 Draft/Active/Frozen 现场派生，不落可过期 status。
+
+结构化状态引擎的数据策略统一由 [`assets/impl-package-state-config.json`](./assets/impl-package-state-config.json) 提供：状态 vocabulary、document discovery/field regex、marker 名称、投影格式与 gate heading/字段 grammar 在该版本化配置中调整，CLI interface 不变。配置未知版本、缺字段、错误 placeholder/capture group、重复/空 vocabulary 或无效 regex 必须 fail closed。append-only、CAS、active chain、package-local path、完整 gate entry span/content hash、HEAD/worktree 两相校验与 task/ticket bijection 属于不可配置的安全内核；不得通过配置弱化。backfill gate recognition 直接复用 canonical resolver，不复制 verdict、heading 或 binding 语义。
 
 - **文档维护层**：常青四层（产品/journey 端到端意图 / 模块贡献 / 模块契约 / 变更事件），真相住这里；跨模块 journey 通过唯一 owner 和 anchor 链接下钻，不复制正文。开发收口后可以通过 backfill 把 durable delta 汇回。
 - **开发 6 步主流程 + 可选回刷**：6 步把改动做出来；backfill 是收口后的维护提示与周期性兜底，不阻塞当前交付。
@@ -94,6 +96,7 @@ flowchart TD
 属于 Impl-Package 依赖图的文档全部收在本 skill 的 `references/` 下，不论是否仍标草案——分发单位是这个 skill 目录，组内分享时不会附带整个仓库的 `docs/skill-design/`，所以依赖图内的东西必须随 skill 一起走。`docs/skill-design/` 只保留不属于本体系的其他设计规划。
 
 - **规则 / 跨层契约（正式）** → [references/impl-package-composition-contract.md](references/impl-package-composition-contract.md)（composition、derived lifecycle、readiness resolution、seam、Stage 7、dispatch shorthand、revision-blob binding、Module Knowledge Watermark）。
+- **结构化状态 schema（正式）** → [references/impl-package-state-schema.md](references/impl-package-state-schema.md)（sidecar shape、CLI、projection、migration、gate content binding 与四类消费结果）。
 - **backfill / 常青四层（正式，已批准）** → [references/evergreen-module-spec-and-backfill-design.md](references/evergreen-module-spec-and-backfill-design.md)。
 - **体系设计 rationale（仍为方案草案，内容仍会演进）** → [references/impl-package-system-design.md](references/impl-package-system-design.md)。
 - **给人看的介绍页** → [assets/impl-package-intro.html](assets/impl-package-intro.html)。**推荐给需要总览的人打开；本 skill 自身不读取它**（避免把整页载入上下文）。

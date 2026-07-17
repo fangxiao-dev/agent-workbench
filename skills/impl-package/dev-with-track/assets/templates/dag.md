@@ -12,7 +12,7 @@
 发现记录：[findings.md](findings.md)
 门禁：[gate.md](gate.md)
 
-`dag.md` 仅在 DAG 确实 earned 时作为规范执行状态源，不是 ticket 验收事实源。如果同时 earned tickets，下文的 ticket 状态只能是只读投影，并且必须标明其 `tickets/<ticket>.md` 来源。
+`dag.md` 仅在 DAG 确实 earned 时作为 task contract、依赖与 ownership 的规范来源；task/ticket current state 与最后一次 evidence pointer 的机器事实源是 `.impl-package/runtime-state.json`。如果同时 earned tickets，下文状态只能是 machine-owned 只读投影。
 
 ## 合同引用
 
@@ -27,7 +27,7 @@
 - 依赖：[Tn / 无]
 - 文档顺序：[数字]
 - Owner：[主会话 / 具名 owner]
-- 状态：[PENDING / READY / RUNNING / NEEDS_SEAM / BLOCKED / FAILED / NEEDS-REVALIDATION / DONE / WAIVED / SUPERSEDED]
+- 运行时状态与证据：见下方 machine-owned DAG 看板。
 - 完成条件：[具体证据]
 - 贡献目标（contributes-to）：[<ticket-id>:<AC-id> / spec:<AC-id>]
 - 解锁目标（enables）：[<acceptance-target> / 无]
@@ -39,13 +39,15 @@
 
 ## DAG 看板
 
-| 任务 | 依赖 | Owner | 状态 | 就绪条件 / blocker | 证据 | 进度 | Seam |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | [Tn / 无] | [owner] | [状态] | [前置条件] | [路径/链接] | [账本/N/A] | [seam ID/无] |
+<!-- impl-package:projection runtime-state begin -->
+| Task | State | Evidence |
+| --- | --- | --- |
+| T1 | PENDING | dag.md#T1 |
+<!-- impl-package:projection runtime-state end -->
 
 ## Ticket 状态投影（仅 tickets=true）
 
-> 这里只做投影。验收事实源仍是链接的 ticket 文件；状态应在该文件中更新。
+> 这里只做投影。ticket 文件保存 Acceptance Semantics，current state/evidence 由 `.impl-package/runtime-state.json` 维护并投影，禁止手工在本表或 ticket marker 中改状态。
 
 | Ticket | 验收来源 | 执行视图投影 | 最后检查时间 |
 | --- | --- | --- | --- |

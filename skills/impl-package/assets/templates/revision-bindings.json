@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "purpose": "internal-machine-sidecar",
   "ownerFacing": false,
   "current": {
@@ -19,23 +19,32 @@
   },
   "bindings": [
     {
+      "id": "D<n>@<git-blob-oid>",
       "artifact": "design.md",
       "revision": "D<n>",
       "mode": "exact-blob",
-      "blob": "<git-blob-oid>"
+      "blob": "<git-blob-oid>",
+      "supersedes": null,
+      "evidence": "design.md#revision-history"
     },
     {
+      "id": "S<n>@<git-blob-oid>",
       "artifact": "spec.md",
       "revision": "S<n>",
       "mode": "exact-blob",
-      "blob": "<git-blob-oid>"
+      "blob": "<git-blob-oid>",
+      "supersedes": null,
+      "evidence": "spec.md#revision-history"
     },
     {
+      "id": "<initial | patch-id>:P<n>@<git-blob-oid-at-revision-publication>",
       "artifact": "plan.md",
       "attempt": "<initial | patch-id>",
       "revision": "P<n>",
       "mode": "plan-contract-v1",
-      "blob": "<git-blob-oid-at-revision-publication>"
+      "blob": "<git-blob-oid-at-revision-publication>",
+      "supersedes": null,
+      "evidence": "plan.md#plan-revision-history"
     }
   ]
 }
