@@ -1,11 +1,11 @@
 ---
 name: handoff
-description: Compact the current conversation into a focused handoff document for another agent to pick up. Use this when the user asks for a handoff, context snapshot, continuation note, or preparation for another session/agent/worktree, especially when there are existing plans, commits, issues, or artifacts that should be referenced instead of copied.
-argument-hint: "What will the next session be used for?"
+description: 将当前会话压缩为下一位 agent 可直接接手的聚焦交接文档。适用于用户要求交接、上下文快照、续接说明，或为另一会话、agent、worktree 做准备，尤其适合已有计划、提交、Issue 或产物应被引用而非复制的情形。
+argument-hint: "下一会话将用于处理什么？"
 disable-model-invocation: true
 ---
 
-# handoff
+# 交接
 
 把当前会话压缩成一份下一位 agent 能直接接手的交接文档。交接文档的价值在于保存当前状态、入口和风险，而不是复制已有计划或日志。
 
@@ -57,31 +57,31 @@ disable-model-invocation: true
 默认使用这个结构；如果任务很小，可以删减空章节。
 
 ```markdown
-# Handoff: <short task name>
+# 交接：<简短任务名称>
 
-Date: <YYYY-MM-DD>
+日期：<YYYY-MM-DD>
 
-## Next Session Focus
+## 下一会话目标
 
-## Current Snapshot
+## 当前快照
 
-## Authoritative Artifacts
+## 权威产物
 
-## Already Done
+## 已完成
 
-## Must Not Forget / Gates
+## 必须记住 / 门禁
 
-## Suggested Skills
+## 建议使用的 Skills
 
-## Residual User Decisions
+## 待用户决定事项
 
-## Notes
+## 备注
 ```
 
 ## 安全与脱敏
 
 Redact API keys、passwords、tokens、PII 和其他敏感信息。不要粘贴完整外部 API payload、完整客户/订单/商品敏感数据或可复现凭证；给摘要和 evidence 路径即可。
 
-## Suggested Skills
+## 建议使用的 Skills
 
-交接文档必须包含 `Suggested Skills` 章节。只推荐下一 session 真的可能需要调用的 skills，并用一句短说明解释原因。
+交接文档必须包含 `建议使用的 Skills` 章节。只推荐下一会话确实可能需要调用的 skill，并用一句短说明解释原因。
