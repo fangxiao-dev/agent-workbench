@@ -1,0 +1,23 @@
+{
+  "skill_name": "datev-tax-accounting",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "解释一个德国采购发票行如何从 Canonical facts 进入 DATEV EXTF，并明确哪些字段只能在 policy/resolver 阶段决定。",
+      "expected_output": "按 source facts → canonical → review → policy mapping → resolver/grouping → BookingCandidate → EXTF 说明边界；不会让 OCR 或税率直接决定最终 Sachkonto/BU/Kreditor。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "给定 SKR03、2026 年度资料和一个没有稳定供应商身份的票据，判断能否自动生成 Kreditor、Sachkonto 和 BU。",
+      "expected_output": "识别稳定身份缺失，返回 review_required 或 fail_closed；说明标准 SKR/税率不能替代 Mandant policy，不猜测账号或税码。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "审查 Finance 当前 DATEV 链路已经实现到哪里，以及真实 OCR provider 和税务师 Test Mandant 验收是否已经完成。",
+      "expected_output": "区分 verified-local 的 contract/adapter/controlled-vector/后半链路与仍为 0/2 的 Test Mandant 外部验收；不把 controlled fixture 宣称为真实 OCR 或生产 DATEV 成功。",
+      "files": []
+    }
+  ]
+}
