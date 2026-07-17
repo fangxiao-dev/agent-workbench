@@ -4,7 +4,7 @@
 
 ## 1. 边界与事实源
 
-`.impl-package/` 只保存脚本无需理解业务即可写入和校验的 package-local 状态与指针。Acceptance Semantics、设计选择、执行策略、verdict reason、review findings、残余风险和 Durable Deltas 继续以 Markdown 为事实源，不进入 JSON。
+`.impl-package/` 只保存脚本无需理解业务即可写入和校验的 package-local 状态与指针。Acceptance Semantics、决策选择、执行策略、verdict reason、review findings、残余风险和 Durable Deltas 继续以 Markdown 为事实源，不进入 JSON。
 
 package 目录由调用方通过 `--package <path>` 显式指定；脚本不假定 implementations root。package ID 是不可变、带日期前缀的 slug，日期格式由项目约定，不锁死为六位或八位。
 
@@ -19,13 +19,13 @@ Markdown 中由脚本维护的内容只是 JSON 的可读投影，不是第二�
 
 `revision-bindings.json` 使用 [`../assets/templates/revision-bindings.json`](../assets/templates/revision-bindings.json) 的 v2 形状。
 
-- `current.design`、`current.spec` 与 `current.attempt` 选择当前 alias、artifact 和 attempt；current 可更新。
+- `current.decision`、`current.spec` 与 `current.attempt` 选择当前 alias、artifact 和 attempt；current 可更新。
 - `bindings[]` append-only。每条 binding 的 `id` 由 revision identity 与 blob OID 确定；重复登记同一 binding 是幂等 no-op。
 - semantic revision 追加新 alias 的 binding；projection/editorial rebinding 追加同 alias binding，并用 `supersedes` 指向被替代 binding。历史记录不覆盖、不复用、不物理删除。
 - 对同一 revision identity，未被其他记录 supersede 的 terminal binding 必须唯一；缺失或多于一个均为 validate failure。
 - `evidence` 只保存 rebinding 判断或发布记录的 Markdown pointer，不复制理由正文。
 
-`id` 的 canonical 形式为：design/spec 使用 `<revision>@<blob>`；plan 使用 `<attempt>:<revision>@<blob>`。同一输入必须得到同一 ID。
+`id` 的 canonical 形式为：decision/spec 使用 `<revision>@<blob>`；plan 使用 `<attempt>:<revision>@<blob>`。同一输入必须得到同一 ID。
 
 ## 3. Runtime state schema v1
 
@@ -92,7 +92,7 @@ ticket record 的 canonical shape 同样为 `{attempt,id,state,evidence}`，四�
 
 v1 marker name 至少包括 `revision-set`、`runtime-state` 与 `gate-status`。同一 artifact 内 name 唯一；缺 marker、重复、嵌套、顺序错误或 body 无法从 JSON 重建均为 validate failure。
 
-当前 D/S/P revision 的唯一 Markdown 声明位于 `revision-set` marker body；默认 body 使用中文 `设计修订（Design Revision）`、`规格修订（Spec Revision）` 与 `计划修订（Plan Revision）` 标签。`validate` 必须拒绝 marker 外任何同义的 D/S/P revision declaration（包括 Markdown emphasis 或尾部注释），防止旧 header 与机器投影并存。
+当前 D/S/P revision 的唯一 Markdown 声明位于 `revision-set` marker body；默认 body 使用中文 `决策修订（Decision Revision）`、`规格修订（Spec Revision）` 与 `计划修订（Plan Revision）` 标签。`validate` 必须拒绝 marker 外任何同义的 D/S/P revision declaration（包括 Markdown emphasis 或尾部注释），防止旧 header 与机器投影并存。
 
 `refresh-projections` 只能改 marker body。自动 projection rebinding 前，脚本从 active binding baseline 与当前 artifact 中排除允许追加的 ER 区域及 marker body；marker 外仍有 diff 时必须拒绝，并返回 owning skill 做 S/P revision 或 editorial correction 判断。
 
@@ -110,7 +110,7 @@ ER 的 Revision set 表示该 ER 写入时的 current D/S/P set。plan header �
 
 没有 `gate.md` 时 `hasGate=false`、`gateRecognition=null`、`gateResolution=null`；已有空 ledger 模板、且 runtime gate 没有 allocation/entry 时 `hasGate=true` 但其余结果相同。两者都表示 attempt 尚无 verdict，不是额外的 recognition result，也不默认等于人工异常。若某个消费动作本身要求 terminal gate，应由该动作正常判定未满足前提。
 
-这三类是当前 contract 的消费结果，不是新的 package lifecycle。缺失或低于当前 `contractVersion="3.1"` 的 package 必须先走 contract preflight，不能由 gate resolver 读取旧 heading 或旧 schema 猜测；backfill、retirement 与 verify 可以投影结果，但不得把 `mismatch` 降级成成功，也不得把历史 indexed verdict 投影到新的 current revision set。inventory、audit 与 verify 输出统一携带 `contractVersion="3.1"`；旧字段不再作为内部判断依据。识别可信度与 `_pending.md` 引用资格正交，referenced package 的 mismatch/manual 不得被抑制。
+这三类是当前 contract 的消费结果，不是新的 package lifecycle。缺失或低于当前 `contractVersion="3.2"` 的 package 必须先走 contract preflight，不能由 gate resolver 读取旧 heading 或旧 schema 猜测；backfill、retirement 与 verify 可以投影结果，但不得把 `mismatch` 降级成成功，也不得把历史 indexed verdict 投影到新的 current revision set。inventory、audit 与 verify 输出统一携带 `contractVersion="3.2"`；旧字段不再作为内部判断依据。识别可信度与 `_pending.md` 引用资格正交，referenced package 的 mismatch/manual 不得被抑制。
 
 ## 7. Current contract 与升级
 
@@ -118,7 +118,7 @@ package 的 canonical 版本位于 `.impl-package/runtime-state.json` 顶层 `co
 
 升级是 agent-owned 的直接重塑动作：只在 preflight 判定 `upgradeRequired` 时读取 [`../assets/contract-revision-history.md`](../assets/contract-revision-history.md)，结合最新模板和实际内容改写当前任务包；不生成 migration ledger、不保存旧 schema 副本、不提供运行时 `migrate` 命令。改写后必须重新执行 current contract validate，成功后才能进入 stage 或 backfill。
 
-## 8. Current CLI contract (contract 3.1)
+## 8. Current CLI contract (contract 3.2)
 
 单文件、Python 标准库、显式 package path：
 
@@ -126,7 +126,7 @@ package 的 canonical 版本位于 `.impl-package/runtime-state.json` 顶层 `co
 impl_package_state.py --package <path> init --package-id <id>
 impl_package_state.py --package <path> contract-status
 impl_package_state.py --package <path> validate --working-tree|--committed
-impl_package_state.py --package <path> register-revision <design|spec|plan> <alias> [--attempt <id>] --evidence <pointer>
+impl_package_state.py --package <path> register-revision <decision|spec|plan> <alias> [--attempt <id>] --evidence <pointer>
 impl_package_state.py --package <path> rebind <alias> --reason <projection|editorial> --evidence <pointer> [--confirm-contract-impact-none]
 impl_package_state.py --package <path> refresh-projections
 impl_package_state.py --package <path> set-state <task|ticket> <id> <state> --attempt <id> --expect <state|absent> --evidence <pointer>
@@ -139,7 +139,9 @@ impl_package_state.py --package <path> finalize-gate-entry <gate-id>
 
 命令可以增加纯输出选项，但不得静默推断 package root、current attempt、previous state、editorial judgment 或 verdict reason。
 
-CLI 的数据策略来自 skill-owned [`../assets/impl-package-state-config.json`](../assets/impl-package-state-config.json)。配置只承载 vocabulary、artifact discovery、字段及 gate heading/revision-set grammar（含 `revisionSetFieldPattern`）、marker 名称与 projection format；脚本自动按自身 skill 位置加载，不接受调用方任意覆盖 canonical policy。配置和 package contract 都使用字符串 `contractVersion`，当前为 `"3.1"`；对 placeholder、capture group 与单行 heading 范围 fail closed。完整 gate entry span、append-only、identity/content binding、active backward chain、CAS、package-local path、HEAD/worktree context 与 earned-artifact bijection 保持为代码内不可配置不变量。
+CLI 的数据策略来自 skill-owned [`../assets/impl-package-state-config.json`](../assets/impl-package-state-config.json)。配置只承载 vocabulary、artifact discovery、字段及 gate heading/revision-set grammar（含 `revisionSetFieldPattern`）、marker 名称与 projection format；脚本自动按自身 skill 位置加载，不接受调用方任意覆盖 canonical policy。配置和 package contract 都使用字符串 `contractVersion`，当前为 `"3.2"`；对 placeholder、capture group 与单行 heading 范围 fail closed。完整 gate entry span、append-only、identity/content binding、active backward chain、CAS、package-local path、HEAD/worktree context 与 earned-artifact bijection 保持为代码内不可配置不变量。
+
+当前 artifact discovery 只认 `decision.md`，不得兼容读取 `design.md`；package 级共享发现只使用可选 `execution-findings.md`。`investigations/` 不属于 discovery、runtime state、revision binding 或 projection surface；目录不存在是正常状态，只有真实调查材料产生时才创建。
 
 ## 9. Schema gate acceptance
 
@@ -150,4 +152,4 @@ CLI 的数据策略来自 skill-owned [`../assets/impl-package-state-config.json
 - projection marker/allowlist 明确，marker 外 diff 不能自动 rebind。
 - gate index 绑定完整 entry，reserve/finalize 分离，mismatch 进入 manual。
 - revision/artifact/gate 历史 append-only；task/ticket 只存 current + last evidence，未复制 transition ledger。
-- fixtures 覆盖 current contract、upgradeRequired、unsupportedFuture、损坏/部分写入、projection drift、idempotence、stale expectation、含空格路径、CRLF/LF 和 gate 三类结果；并发写 fixture 只验证 atomic replace 不产生半截 JSON，不宣称 lost-update protection；DATEV 用作真实 3.1 演练。
+- fixtures 覆盖 current contract、upgradeRequired、unsupportedFuture、损坏/部分写入、projection drift、idempotence、stale expectation、含空格路径、CRLF/LF 和 gate 三类识别结果；并发写 fixture 只验证 atomic replace 不产生半截 JSON，不宣称 lost-update protection；DATEV 用作真实 3.2 演练。

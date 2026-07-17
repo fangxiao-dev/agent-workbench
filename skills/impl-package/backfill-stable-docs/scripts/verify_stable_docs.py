@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Stable Docs Backfill verification checks (Impl-Package contract 3.1)."""
+"""Run Stable Docs Backfill verification checks (Impl-Package contract 3.2)."""
 
 from __future__ import annotations
 

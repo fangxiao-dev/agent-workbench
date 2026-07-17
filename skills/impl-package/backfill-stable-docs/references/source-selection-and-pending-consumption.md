@@ -1,10 +1,10 @@
 # 来源选择与 pending 消费
 
-Stable Docs Backfill 不再依赖强制的双锚点 fail-closed 校验、item-scoped fingerprint 或 `configSha256` 全局一致性作为唯一事实形态；这些机制曾经存在于旧版 schema（v1/v2）里，现在降级为可选的机器辅助（脚本可以算 fingerprint 帮 agent 发现"证据是否变了"，但 apply 决策不由它单独裁决）。真正的事实来源是 agent 对 `_pending.md`、design/spec、代码和 stable docs 的实际阅读。
+Stable Docs Backfill 不再依赖强制的双锚点 fail-closed 校验、item-scoped fingerprint 或 `configSha256` 全局一致性作为唯一事实形态；这些机制属于历史实现，不是当前 contract 输入。当前事实来源是 agent 对 `_pending.md`、decision/spec/plan、execution-findings、代码和 stable docs 的实际阅读；`review findings` 保持 review 证据语义，`investigations/` 只有正式文档明确链接时才可作为 provenance 补充，不作为权威来源。
 
 ## Config Model
 
-每个 repo 只保留一个 `.stable-docs-backfill.json`（contractVersion `"3.1"`）。字段：
+每个 repo 只保留一个 `.stable-docs-backfill.json`（contractVersion `"3.2"`）。字段：
 
 - `repository`：git remote 的 `owner/repo` 身份，不是本地文件夹名。
 - `targetBranch`：package completion 的 Git 目标 ref；脚本按 `git rev-parse <targetBranch>` 解析本地已有 ref，不自动 fetch，也不区分远程跟踪分支和本地分支。它不替代主工作区 Source HEAD：前者判断实现是否已合入，后者定义本轮读取 current docs/code 的工作区快照。
@@ -29,7 +29,7 @@ Stable Docs Backfill 不再依赖强制的双锚点 fail-closed 校验、item-sc
 ## 候选来源：主渠道与 gap-catching
 
 1. **主渠道**：枚举每个已发现 `_pending.md` 中尚未关闭的登记条目——每条已经带 destination、delta-id、statement 和来源 package 指针（Stage 7 登记时写入）。agent 的工作是核验（destination 仍然对、evidence 仍然站得住、没被后续改动推翻），不是重新分类。
-2. **gap-catching（兜底）**：collector 只提供尚未核验 Git reachability 的 `gapCatchingStructuralCandidates`；agent 只对“Gate 对当前 revision set 有可信 terminal resolution、相关实现 commit 已进入 `targetBranch`、但 `_pending.md` 里找不到对应登记”的 package 建立真实 `gapCatchingCandidates`，再读 `design.md`/`spec.md`/`plan.md`/review/handoff/tickets 和 Git commit 去发现候选。可信当前 resolution 来自 content binding 完整核验、且 entry D/S/P 与当前 revision set 一致的 `indexed`，terminal 为 pass/fail/defer；旧格式 package 必须先完成 contract preflight 升级，`mismatch`/`manual` fail closed。这类 package 通常是 Stage 7 纪律建立之前的遗留 package，或登记时误判为 `none`。`targetBranch` 无法解析时报告 config gap，不用 gate 自述或 checklist 替代 Git 验证。
+2. **gap-catching（兜底）**：collector 只提供尚未核验 Git reachability 的 `gapCatchingStructuralCandidates`；agent 只对“Gate 对当前 revision set 有可信 terminal resolution、相关实现 commit 已进入 `targetBranch`、但 `_pending.md` 里找不到对应登记”的 package 建立真实 `gapCatchingCandidates`，再读 `decision.md`/`spec.md`/`plan.md`/`execution-findings.md`、review、handoff、tickets 和 Git commit 去发现候选。可信当前 resolution 来自 content binding 完整核验、且 entry D/S/P 与当前 revision set 一致的 `indexed`，terminal 为 pass/fail/defer；旧格式 package 必须先完成 contract preflight 升级，`mismatch`/`manual` fail closed。`investigations/` 不进入 backfill runtime/state；只有正式文档明确链接时才可作为 provenance 补充输入，不能作为权威来源。这类 package 通常是 Stage 7 纪律建立之前的遗留 package，或登记时误判为 `none`。`targetBranch` 无法解析时报告 config gap，不用 gate 自述或 checklist 替代 Git 验证。
 
 `_pending.md`（连同其登记条目指向的来源 package）永远在扫描范围内，不受 `ignore` 列表影响；`ignore` 只影响 gap-catching 阶段要不要重新扫描某个 package 目录。
 

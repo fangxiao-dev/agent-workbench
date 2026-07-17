@@ -2,8 +2,8 @@
 name: dev-with-track
 description: >
   当已批准 implementation attempt 需要恢复执行、选择下一 actionable unit、记录 verification
-  evidence、处理返工失效、分流 findings 或评估 append-only gate ledger 时使用；不拥有
-  design/spec/plan/ticket/DAG 定义。
+  evidence、处理返工失效、分流 execution findings 或评估 append-only gate ledger 时使用；不拥有
+  decision/spec/plan/ticket/DAG 定义。
 ---
 
 # Dev With Track
@@ -12,10 +12,10 @@ description: >
 
 ## Ownership
 
-- req-align 拥有活动 design/spec SoT 与 D/S Gate。
+- req-align 拥有活动 decision/spec SoT 与 D/S Gate。
 - impl-planning 拥有当前 attempt plan、P revision、Composition、Planned Verification 与 Execution Record 结构。
 - to-tickets 拥有 ticket definition/publication；create-task-dag 拥有 DAG contract。
-- 本 skill 通过结构化状态 CLI 维护 earned ticket/DAG runtime state、artifact hash chain 与 finalized gate index，同时维护 progress、findings 分流、plan Execution Record 证据叙述和 gate.md entry 正文。
+- 本 skill 通过结构化状态 CLI 维护 earned ticket/DAG runtime state、artifact hash chain 与 finalized gate index，同时维护 progress、`execution-findings.md` 分流、plan Execution Record 证据叙述和 gate.md entry 正文。
 
 本 skill 不重写长期 contract，不从历史 Composition 推断当前 attempt，也不修改旧 gate entry。
 
@@ -35,7 +35,7 @@ description: >
 
 ## Completion claim gate
 
-适用的正式 review、findings 分流和 Stage 7 准备完成后，在写入 terminal `pass` entry 前必须调用同体系的 `verification-before-completion`，用拟声明的 pass、当前 revision/worktree/environment 和 plan ER/review/smoke evidence 做 claim-to-evidence 审计。它不是 DAG task，不按 ticket 或 task 重复运行，也不替代既有 review 与验证。
+适用的正式 review、execution findings 分流和 Stage 7 准备完成后，在写入 terminal `pass` entry 前必须调用同体系的 `verification-before-completion`，用拟声明的 pass、当前 revision/worktree/environment 和 plan ER/review/smoke evidence 做 claim-to-evidence 审计。它不是 DAG task，不按 ticket 或 task 重复运行，也不替代既有 review 与验证。
 
 证据完整且仍新鲜时可以复用，不机械重跑全部检查；证据 stale、跨 revision/environment、冲突或不足时，只补跑受影响检查。审计未通过时不得写 pass 或宣称 closed，应报告 `implemented, not verified` 或具体 pending gate。
 
@@ -47,7 +47,7 @@ terminal metadata 后若又发生 commit、合入目标分支或相关环境变�
 2. 从 registry 的 `current.attempt` 与 canonical Gate resolver 派生唯一 lifecycle：未被选中的 plan 是 Draft；被选中且没有适用于当前 D/S/P 的 terminal gate 的 attempt 是 Active；只有 content-bound terminal entry 与当前 D/S/P 一致时才是 Frozen。合法历史 entry 仍保留为 `indexed` evidence，但不冻结新 revision。若不存在 Active attempt，停止并路由 impl-planning 创建或批准 patch；若 registry/current/gate 组合产生多个 Active attempt，报告 lifecycle violation 并停止，不能按时间猜一个。
 3. 运行 `impl_package_state.py --package <path> validate --committed`，由它以 `git rev-parse HEAD:<package-relative-path>` 现场复核 current D/S/P，并统一检查 exact-blob/plan-contract-v1、ER append-only、earned record bijection、projection 与 finalized gate binding。失败按结构化错误报告处理 P2 capture gap/drift，不得手工模拟算法后宣称可信。
 4. reconcile 状态与证据；evidence 胜过 stale status。比对 earned ticket/DAG 的 Plan Revision 与当前 P 号；不一致的先标 `NEEDS-REVALIDATION`，再按 P delta 计算受影响 subset。受影响内容定向复核；未受影响内容批量确认并机械更新引用，不逐个重跑验收或重建 artifact。
-5. 是新 attempt（尤其重新激活已关闭 package）时，先完成 Module Knowledge Watermark 对账：重新计算 watermark 文件当前 commit SHA，与上一 attempt 记录的 watermark 比对，不符先 diff 确认 design/spec 是否仍成立。
+5. 是新 attempt（尤其重新激活已关闭 package）时，先完成 Module Knowledge Watermark 对账：重新计算 watermark 文件当前 commit SHA，与上一 attempt 记录的 watermark 比对，不符先 diff 确认 decision/spec 是否仍成立。
 6. 校验 typed ticket edges、DAG Depends on、AC references、显式 cycles 与 readiness satisfiability；若 AC 的 evidence producer task 被同一 ticket acceptance 直接或传递阻塞，按 decomposition/readiness defect 处理。
 7. 执行 readiness resolution，按文档顺序选择第一个 actionable unit；不自动派工。
 
@@ -78,15 +78,19 @@ Planned Verification 存在 manual owner、且准备交给人验收时，在等�
 
 默认把 packet 追加到最新 ER 或 canonical handoff，不单独创建 package artifact。它用于让 manual owner 能立即开始并判断 pass/fail，不替代实际 acceptance evidence，也不要求没有人工验收的 attempt 增加流程。
 
-## Findings curation
+## Execution findings curation
 
-gate evaluation 前逐项分流 findings：
+`execution-findings.md` 记录执行过程中确认的重要发现、风险、方法性经验和跨 task 发现，可由整个 package 与后续 attempt 共同使用并作为 package-local provenance 保留。它不是第二份行为合同，也不是临时待办队列；没有实质发现时不创建空文件。
 
-- 设计选择/rationale → req-align 更新 design revision；
+gate evaluation 前逐项分流 execution findings：
+
+- 决策/rationale → req-align 更新 decision revision；
 - 行为、接口、失败恢复、约束或 Acceptance Semantics → req-align 更新 spec revision；
 - 长期项目知识 → 当前 gate entry Durable Deltas 与 _pending.md；
 - 验证证据 → plan Execution Record；
-- 其余已验证调查事实/风险 → 保留 findings。
+- 其余已确认的重要发现、风险、方法性经验与跨 task 发现 → 保留在 `execution-findings.md`。
+
+原始 ideas、调查过程、候选假设、实验材料和参考笔记可在真正产生材料时写入 `investigations/<topic>.md`；不得创建空 `investigations/` 目录。investigation 默认无 authority，可不完整、冲突或过期，不进入 runtime state、不绑定 revision、不设 machine projection。`decision.md`、`spec.md` 或 `plan.md` 可按需单向链接 investigation，但 investigation 不维护 backlink 或采用状态，且 `decision.md` 与 `spec.md` 必须脱离 investigation 仍能自足表达当前决定与合同。
 
 存在未完成的规范性分流时不能写任何 terminal entry（pass/fail/defer，不只 pass）；blocked entry 不受此约束。
 
@@ -124,8 +128,8 @@ terminal gate 关闭后提示 owner 可以按需使用 `$backfill-stable-docs`�
 3. 选择并执行 actionable unit；可委派 task 必经 `subagent-driven-development` 的独立 task review，状态只通过 `set-state` 写入 runtime-state 并刷新投影。
 4. committed validate 通过后 append plan Execution Record；外部 artifact hash delta 通过 artifact commands 登记。
 5. 有 manual owner 时，在等待验收前输出轻量 readiness packet；没有人工验收时跳过。
-6. 分流 findings；必要时回 req-align 并重新过相应 gate。
-7. ticket 达到验收候选时自动路由 code-review、module-review 和适用的 safety-review，固定 comparison point 并闭环 findings。
+6. 分流 execution findings；必要时回 req-align 并重新过相应 gate。
+7. ticket 达到验收候选时自动路由 code-review、module-review 和适用的 safety-review，固定 comparison point 并闭环 review findings。
 8. 用稳定 operation-id 分配 G id/scaffold；拟写 terminal pass 时先完成 Stage 7 准备，再由 `verification-before-completion` 审计 pass claim。
 9. 完成 Markdown entry 后立即 finalize content-bound index；terminal 时由可信 finalized verdict 派生 Frozen，blocked 时保持 Active。
 10. terminal metadata commit、目标分支合入或环境变化后，任何 complete / closed / merge-ready / release-ready 声明前重新执行 completion-claim evidence audit。先合入后关 gate 的 attempt 必须以目标分支 evidence 收口。
@@ -134,4 +138,4 @@ terminal gate 关闭后提示 owner 可以按需使用 `$backfill-stable-docs`�
 
 向 owner 汇报时使用 `talk-to-boss`：首段说明本次功能范围、实施/验证/gate 各自完成到哪、剩余 blocker 数量、整体是否 closed，以及当前需要 owner 决定什么。主体按功能 slice 说明已经支持和仍未证明的行为。
 
-随后附 canonical handoff：package/Attempt ID、D/S/P revision set、binding validation 结论、派生 lifecycle/integration qualifier、Composition、当前状态源、execution evidence、manual readiness（若适用）、findings 分流、最新 gate entry/verdict、Supersedes 链、Stage 7 与 completion-claim evidence audit。正文不得要求 owner 打开 JSON；内部 sidecar 路径只可放 machine audit metadata。terminal gate 已关闭时，另以非阻塞 follow-up 提示可选 backfill；不要把提示写成未完成 gate。
+随后附 canonical handoff：package/Attempt ID、D/S/P revision set、binding validation 结论、派生 lifecycle/integration qualifier、Composition、当前状态源、execution evidence、manual readiness（若适用）、execution findings 分流、最新 gate entry/verdict、Supersedes 链、Stage 7 与 completion-claim evidence audit。正文不得要求 owner 打开 JSON；内部 sidecar 路径只可放 machine audit metadata。terminal gate 已关闭时，另以非阻塞 follow-up 提示可选 backfill；不要把提示写成未完成 gate。

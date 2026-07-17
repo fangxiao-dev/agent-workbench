@@ -21,7 +21,7 @@ def git(root: Path, *args: str) -> str:
 
 def base_config(**overrides: object) -> dict[str, object]:
     config: dict[str, object] = {
-        "contractVersion": "3.1",
+        "contractVersion": "3.2",
         "repository": "example/project",
         "targetBranch": "HEAD",
         "implementations": ["docs/implementations"],
@@ -56,7 +56,7 @@ def build_healthy_repo(project: Path) -> None:
     (project / "docs/implementations/alpha/.impl-package").mkdir()
     (project / "docs/implementations/alpha/.impl-package/runtime-state.json").write_text(
         json.dumps({
-            "contractVersion": "3.1",
+            "contractVersion": "3.2",
             "purpose": "internal-machine-sidecar",
             "ownerFacing": False,
             "packageId": "alpha",
@@ -69,7 +69,7 @@ def build_healthy_repo(project: Path) -> None:
     )
     (project / "docs/implementations/alpha/.impl-package/revision-bindings.json").write_text(
         json.dumps({
-            "contractVersion": "3.1",
+            "contractVersion": "3.2",
             "purpose": "internal-machine-sidecar",
             "ownerFacing": False,
             "current": {},
@@ -100,7 +100,7 @@ class HealthyRepoTest(unittest.TestCase):
             returncode, payload = run_verify(project)
             self.assertEqual(returncode, 0)
             self.assertTrue(payload["passed"])
-            self.assertEqual(payload["contractVersion"], "3.1")
+            self.assertEqual(payload["contractVersion"], "3.2")
             self.assertEqual(payload["summary"]["failed"], 0)
             names = {check["check"] for check in payload["checks"]}
             self.assertEqual(
@@ -121,6 +121,22 @@ class HealthyRepoTest(unittest.TestCase):
             self.assertIn("indexed=0", inventory_check["detail"])
             self.assertIn("mismatch=0", inventory_check["detail"])
             self.assertIn("manual=0", inventory_check["detail"])
+
+    def test_stale_contract_blocks_verify_before_inventory_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "project"
+            build_healthy_repo(project)
+            for name in ("runtime-state.json", "revision-bindings.json"):
+                path = project / "docs/implementations/alpha/.impl-package" / name
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload["contractVersion"] = "3.1"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+            returncode, payload = run_verify(project)
+            self.assertEqual(returncode, 2)
+            self.assertFalse(payload["passed"])
+            preflight = next(check for check in payload["checks"] if check["check"] == "contract-preflight")
+            self.assertEqual(preflight["result"], "failed")
+            self.assertIn("upgrade", preflight["detail"].lower())
 
 
 class PendingDiscoveryAmbiguityTest(unittest.TestCase):
@@ -178,7 +194,7 @@ class AuditContractTest(unittest.TestCase):
 
     def test_pending_registry_item_without_pending_ref_is_rejected(self) -> None:
         audit = {
-            "contractVersion": "3.1",
+            "contractVersion": "3.2",
             "mode": "audit",
             "items": [
                 {
@@ -203,7 +219,7 @@ class AuditContractTest(unittest.TestCase):
 
     def test_valid_current_contract_audit_passes(self) -> None:
         audit = {
-            "contractVersion": "3.1",
+            "contractVersion": "3.2",
             "mode": "audit",
             "items": [
                 {

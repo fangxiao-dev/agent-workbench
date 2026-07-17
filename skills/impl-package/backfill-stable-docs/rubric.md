@@ -33,4 +33,4 @@ updated: 2026-07-15
 
 ### R6 · 2026-07-17
 - 采纳 current-only contract：backfill 归入 Impl-Package，先运行独立 contract preflight；旧包必须由 agent 直接改造成当前 contract 并重新校验，不保留运行时 legacy 兼容或迁移记录。
-- 当前 backfill contract 为字符串 `"3.1"`；audit、inventory、verify 与 repository config 统一使用该字段。
+- 当前 backfill contract 为字符串 `"3.2"`；audit、inventory、verify 与 repository config 统一使用该字段。

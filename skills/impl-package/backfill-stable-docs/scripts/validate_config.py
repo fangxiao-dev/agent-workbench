@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Stable Docs Backfill repository configuration (contract 3.1)."""
+"""Validate Stable Docs Backfill repository configuration (contract 3.2)."""
 
 from __future__ import annotations
 

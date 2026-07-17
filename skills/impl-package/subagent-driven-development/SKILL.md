@@ -5,7 +5,7 @@ description: 当已批准的 plan、ticket 或 DAG 含有边界明确、可委�
 
 # Subagent-Driven Development
 
-主 agent 负责授权、调度、seam、集成和最终判断；subagent 负责边界清楚的执行单元。委派不能转移最终责任。本 skill 是 task 级的执行与即时 review 载体，不拥有 ticket 验收状态、plan Execution Record、findings 分流或 gate；它们仍由 `dev-with-track` 维护。
+主 agent 负责授权、调度、seam、集成和最终判断；subagent 负责边界清楚的执行单元。委派不能转移最终责任。本 skill 是 task 级的执行与即时 review 载体，不拥有 ticket 验收状态、plan Execution Record、package 级 execution findings 分流或 gate；它们仍由 `dev-with-track` 维护。
 
 ## 适用条件
 

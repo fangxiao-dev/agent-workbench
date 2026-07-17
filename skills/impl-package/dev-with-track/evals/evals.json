@@ -80,7 +80,7 @@
       "files": [],
       "expectations": [
         "Treats Composition as plan-owned attempt state",
-        "Does not rerun Design or Spec Gate without contract drift",
+        "Does not rerun Decision or Spec Gate without contract drift",
         "Records previous/new Composition and artifact relocation",
         "Does not create a per-ticket patch plan"
       ]
@@ -111,7 +111,7 @@
     },
     {
       "id": 10,
-      "prompt": "Gate entry initial-G1 passed Design D1 / Spec S1。之后行为合同升级为 S2。能否用 initial-G1 证明 S2 已通过 implementation gate？",
+      "prompt": "Gate entry initial-G1 passed Decision D1 / Spec S1。之后行为合同升级为 S2。能否用 initial-G1 证明 S2 已通过 implementation gate？",
       "expected_output": "No. The S1 gate entry proves only S1; S2 needs new plan/evidence and a new gate evaluation tied to S2.",
       "files": [],
       "expectations": [
@@ -134,18 +134,18 @@
     },
     {
       "id": 12,
-      "prompt": "findings.md 中混有一个设计选择、一个规范性失败恢复规则、一条长期项目知识和一次测试命令结果。gate 前如何处理？",
-      "expected_output": "Routes design choice to design, normative behavior to spec, durable knowledge to gate/_pending, and test evidence to plan Execution Record while retaining only residual investigation facts in findings.",
+      "prompt": "execution-findings.md 中混有一个设计选择、一个规范性失败恢复规则、一条长期项目知识和一次测试命令结果。gate 前如何处理？",
+      "expected_output": "Routes decision choice to decision, normative behavior to spec, durable knowledge to gate/_pending, and test evidence to plan Execution Record while retaining only residual confirmed execution findings in execution-findings.md.",
       "files": [],
       "expectations": [
-        "Does not leave a second contract SoT in findings",
+        "Does not leave a second contract SoT in execution-findings.md",
         "Reruns only the gates required by the classified drift",
-        "Does not put process evidence into design or spec"
+        "Does not put process evidence into decision or spec"
       ]
     },
     {
       "id": 13,
-      "prompt": "适用 review、findings 分流和 Stage 7 已完成，准备写 terminal pass；测试证据来自当前 feature worktree，但最后又提交了 gate metadata，随后将合入 dev。应怎样收口并声明 closed？",
+      "prompt": "适用 review、execution findings 分流和 Stage 7 已完成，准备写 terminal pass；测试证据来自当前 feature worktree，但最后又提交了 gate metadata，随后将合入 dev。应怎样收口并声明 closed？",
       "expected_output": "Runs verification-before-completion before terminal pass, then audits again after metadata/target-branch changes before claiming closed, reusing unaffected evidence and rerunning only checks invalidated by the delta.",
       "files": [],
       "expectations": [

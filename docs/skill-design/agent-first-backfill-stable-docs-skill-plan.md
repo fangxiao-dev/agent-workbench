@@ -44,9 +44,9 @@
 
 backfill 的输入是已实现变更的短期设计，输出是 stable docs 中的当前事实。implementation package 是变更事件，stable docs 是当前快照。
 
-backfill 的主要输入不是从零重新发现，而是消费 `dev-with-track` Stage 7 在每个 terminal gate entry 写入前已经强制登记的 `_pending.md` durable-delta 队列——那里的每条登记本来就带着 destination、delta-id、statement 和来源 evidence 指针，是 Stage 7 已经做过一次分类判断的结果。`design.md`/`spec.md` 仍是语义来源，但作用是核验和补充 `_pending.md` 已登记条目（确认 destination 仍然对、evidence 仍然站得住、没有被后续改动推翻），而不是重新做一遍 Stage 7 已经做过的分流。
+backfill 的主要输入不是从零重新发现，而是消费 `dev-with-track` Stage 7 在每个 terminal gate entry 写入前已经强制登记的 `_pending.md` durable-delta 队列——那里的每条登记本来就带着 destination、delta-id、statement 和来源 evidence 指针，是 Stage 7 已经做过一次分类判断的结果。`decision.md`/`spec.md` 仍是语义来源，但作用是核验和补充 `_pending.md` 已登记条目（确认 destination 仍然对、evidence 仍然站得住、没有被后续改动推翻），而不是重新做一遍 Stage 7 已经做过的分流。
 
-只有当某个 package 的 gate ledger 已经 terminal 关闭、实现也已经进入目标分支，却在对应 `_pending.md` 里找不到任何登记条目时（Stage 7 纪律建立之前的遗留 package，或登记时误判为 `none`），才需要 agent 退回到重新读 `design.md`/`spec.md`/`plan.md`/`gate.md`/代码去做 gap-catching 式发现——这是兜底通道，不是默认通道。`plan.md`、review、handoff、tickets 和 Git commit 仍用于理解实际落地范围；代码和 commit diff 仍是必要证据，不因为 `_pending.md` 已经登记就免检：如果短期设计没有实际落地或尚未进入目标分支，不能回刷为 stable truth。
+只有当某个 package 的 gate ledger 已经 terminal 关闭、实现也已经进入目标分支，却在对应 `_pending.md` 里找不到任何登记条目时（Stage 7 纪律建立之前的遗留 package，或登记时误判为 `none`），才需要 agent 退回到重新读 `decision.md`/`spec.md`/`plan.md`/`gate.md`/代码去做 gap-catching 式发现——这是兜底通道，不是默认通道。`plan.md`、review、handoff、tickets 和 Git commit 仍用于理解实际落地范围；代码和 commit diff 仍是必要证据，不因为 `_pending.md` 已经登记就免检：如果短期设计没有实际落地或尚未进入目标分支，不能回刷为 stable truth。
 
 ## Stable Knowledge Levels And Physical Layout
 
@@ -178,7 +178,7 @@ prj-supplyer-webapp 是扁平结构，没有多 context 分区：`docs/module-kn
 
 - KaiSpan 当前有 9 个 implementation roots（已独立核实为真）。
 - 现有 5 个 `module-knowledge/` root 里，`_pending.md` 自动发现出现 1 个歧义和 4 个缺失；finance-assistant 已确认使用父级 `docs/domains/finance-assistant/_pending.md`（已独立核实存在）。其余缺失在配置或目录迁移明确前都必须报告 config gap，不能猜。
-- 12 个历史 gate 经人工分类：8 个 historical non-current、2 个 nonterminal、1 个 docs-refactor 虽 terminal 且已合入但仍有 design/spec 与 inbound references，不能 retirement、1 个 DATEV gate 文本 terminal 但代码未进入 `origin/develop`（`2026-07-14-datev-format-validator-spike` 的判断方向与此一致：gate 里同时出现"terminal pass"与"do not describe the whole package as closed"的措辞，用户主工作区当时也确实检出在个人分支而非 `develop`）。机械识别失败不是请求 owner 裁决的充分理由；agent 必须先完整阅读，只有证据真的矛盾或缺失时才升级。这 12 个的精确编号未留存可复核的持久化记录，标记为 unverified，仅作方向性参考。
+- 12 个历史 gate 经人工分类：8 个 historical non-current、2 个 nonterminal、1 个 docs-refactor 虽 terminal 且已合入但仍有 decision/spec 与 inbound references，不能 retirement、1 个 DATEV gate 文本 terminal 但代码未进入 `origin/develop`（`2026-07-14-datev-format-validator-spike` 的判断方向与此一致：gate 里同时出现"terminal pass"与"do not describe the whole package as closed"的措辞，用户主工作区当时也确实检出在个人分支而非 `develop`）。机械识别失败不是请求 owner 裁决的充分理由；agent 必须先完整阅读，只有证据真的矛盾或缺失时才升级。这 12 个的精确编号未留存可复核的持久化记录，标记为 unverified，仅作方向性参考。
 - KaiSpan 本轮读到的 Stage 7 registered candidates 为 0、gap-catching candidates 为 0、Package Retirement candidates 为 0。零候选是有完整解释的有效结果，不能为了满足测试数量制造候选；但这个结论同样需要在 Phase 1 schema 同步、Phase 2 物理迁移完成后，用真正落地的 config 重新正式跑一遍 audit 并留存 report 才能确认，不能只依赖这次人工核对。
 - package 是否完成由代码是否实际进入配置的目标分支决定，不由 gate checklist 是否打勾决定。已经落地的 package 即使仍有非阻塞遗留项，也可视为本次实现闭合；遗留项建议作为独立 GitHub issue 跟踪，不能据此把 package 永久挂成未完成。创建 issue 仍是外部副作用，必须在当前 session 获得 owner 对具体事项的明确授权。
 
@@ -198,8 +198,8 @@ Audit 是只读阶段，输出候选报告，不修改 stable docs。
 
 1. 读取单 repo 配置，展开 implementation roots、stable doc roots（含按 Config Model 规则发现的 `_pending.md` 位置）和 ignore paths。
 2. 枚举每个已发现 `_pending.md` 中尚未关闭的登记条目——这是本轮 audit 的主渠道候选种子，每条已经带 destination、delta-id、statement 和来源 package 指针（Stage 7 登记时写入）。
-3. 对每条 `_pending.md` 登记条目：回到其来源 package 重新核对 `design.md`/`spec.md`/`plan.md`/gate entry，确认 statement 仍然准确；核对当前代码和测试，确认设计仍然落地、没有被后续改动推翻；核对 destination 处的 stable docs，判断是否已被别的 apply 覆盖。三者任一冲突就写入报告并标记为需要 owner 裁决；agent 不自行改写 `_pending.md` 登记内容本身——登记内容的修改权属于来源 package 的 gate，不属于 backfill。
-4. 补充做 gap-catching 扫描：枚举 gate ledger 有 terminal entry、实现也已进入目标分支、但在对应 `_pending.md` 中找不到任何登记条目的 implementation package。这类 package 要么是 Stage 7 纪律建立之前的遗留 package，要么是 gate 登记时误判为 `none`。只有这些 package 才需要 agent 从 `design.md`、`spec.md`、`plan.md`、review、handoff、tickets 和 Git commit 重新发现候选。
+3. 对每条 `_pending.md` 登记条目：回到其来源 package 重新核对 `decision.md`/`spec.md`/`plan.md`/gate entry，确认 statement 仍然准确；核对当前代码和测试，确认设计仍然落地、没有被后续改动推翻；核对 destination 处的 stable docs，判断是否已被别的 apply 覆盖。三者任一冲突就写入报告并标记为需要 owner 裁决；agent 不自行改写 `_pending.md` 登记内容本身——登记内容的修改权属于来源 package 的 gate，不属于 backfill。
+4. 补充做 gap-catching 扫描：枚举 gate ledger 有 terminal entry、实现也已进入目标分支、但在对应 `_pending.md` 中找不到任何登记条目的 implementation package。这类 package 要么是 Stage 7 纪律建立之前的遗留 package，要么是 gate 登记时误判为 `none`。只有这些 package 才需要 agent 从 `decision.md`、`spec.md`、`plan.md`、review、handoff、tickets 和 Git commit 重新发现候选。
 5. 对 gap-catching 发现的候选，同样解析相关 Git commit / branch / diff（缺少显式 commit 时按 package 日期、相关文件、plan execution record 和 Git history 做有界确认），并对照目标分支当前代码和测试确认设计是否实际落地；代码与短期设计冲突时，以当前实现和最终 evidence 为准，并把冲突写入报告。仍未进入目标分支的实现不进入 durable-delta candidate，而是作为 package-not-closed 报告。
 6. 对照 stable docs，判断每条候选（无论来自主渠道还是 gap-catching）是否已覆盖、需要回刷、应 pending，或不属于 stable docs。
 7. 生成 audit report，明确区分“来自 `_pending.md` 登记的候选”和“gap-catching 发现的候选”两类来源，并列出 candidate、pending proposal、already-covered、rejected-with-reason 和需要 owner 决策的 item。
@@ -259,7 +259,7 @@ Verify（或独立的 `gc` 扫描）按以下条件识别候选，不自动清�
 1. append-only gate ledger 已 terminal（pass/fail/defer）——顶部摘要或 checklist 不足以证明 terminal，Active/blocked 的 package 永不作为候选。
 2. Git 已证明 package 声称的实现实际进入配置的目标分支；gate 自述已 merge 不能替代这一条。
 3. 该 package 产生的所有登记在任何已发现的 `_pending.md` 里都已关闭（没有仍指向它的未决条目）。
-4. package 目录下 `design.md`/`spec.md` 要么不存在，要么其内容已被判定为 already-covered（已被当前 stable docs 完整吸收），且没有其他文档的 inbound reference，不再提供任何仍需保留的信息。
+4. package 目录下 `decision.md`/`spec.md` 要么不存在，要么其内容已被判定为 already-covered（已被当前 stable docs 完整吸收），且没有其他文档的 inbound reference，不再提供任何仍需保留的信息。
 
 满足以上四条时列为“可清理候选”，附上 gate 终态、目标分支 Git 证据、closure 时间、吸收去向（具体 stable doc 路径）、inbound reference 检查和目录当前剩余内容清单。四条缺一即保留，不因为“看起来只有 evidence”就放宽判断——必须真的核对过目标分支、`_pending.md`、stable docs 和 gate ledger。
 
@@ -270,7 +270,7 @@ Verify（或独立的 `gc` 扫描）按以下条件识别候选，不自动清�
 清理属于 Destructive Apply（见 Apply Workflow），需要 owner 对具体 package id 清单显式批准，不能用“全部清理”当批准。批准后：
 
 - 确认待删除内容已经反映进当前 stable docs（逐条对照 `done.json` 或 `_pending.md` 关闭记录）；
-- 确认没有其他 package 或 stable doc 仍在引用这里的具体文件（比如别的 `design.md` 链接到本 package 的截图或数据），有引用时改为暂缓清理并报告；
+- 确认没有其他 package 或 stable doc 仍在引用这里的具体文件（比如别的 `decision.md` 链接到本 package 的截图或数据），有引用时改为暂缓清理并报告；
 - 删除整个 package 目录，提交为一次独立 commit，不与其他内容变更混在一起，方便日后按 commit 找回；
 - 在 `done.json`（或新增的轻量 `retired.json`）记录被删除的 package id、closure 证据（gate entry id）、吸收去向和删除 commit——这条记录本身就是新的 provenance 指针，替代原来的目录。
 
@@ -369,7 +369,7 @@ Agent 在 audit/apply 时必须承担判断责任：
 - KaiSpan 旧 finance-assistant 配置的 15 条 exclude 在迁移测试中必须保持逐条分类结果（1 条 already-covered、14 条 no-delta），且不出现在新 v3 ignore 列表里。
 - Apply 只处理 owner 批准 item，并能把已处理或明确不处理的 item 记录为 `done`；apply 一个来自 `_pending.md` 的 item 后，对应登记行必须被关闭，下一轮 audit 不再重复报告同一条。
 - Verify 能检查 `_pending.md`/done/stable docs 的一致性，但不隐式修复。
-- Audit/verify 允许给出零 gap-catching candidate 或零 Package Retirement candidate，只要逐项排除理由完整；若出现 retirement 候选，必须同时满足 gate terminal、代码已进入目标分支、pending 全关闭、stable docs 已完整吸收、无仍需保留的 design/spec 或 inbound reference，不能为了满足测试数量放宽条件。
+- Audit/verify 允许给出零 gap-catching candidate 或零 Package Retirement candidate，只要逐项排除理由完整；若出现 retirement 候选，必须同时满足 gate terminal、代码已进入目标分支、pending 全关闭、stable docs 已完整吸收、无仍需保留的 decision/spec 或 inbound reference，不能为了满足测试数量放宽条件。
 - 破坏性操作（destructive apply、Package Retirement）在提案里与普通 apply item 明确区分，且都要求精确到路径/package id 的显式批准，不接受“全部处理”这类笼统批准。
 
 ## Confirmed Decisions And Remaining Implementation Work

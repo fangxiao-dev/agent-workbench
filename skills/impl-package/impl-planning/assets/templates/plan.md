@@ -3,18 +3,18 @@
 创建时间（Created）：
 执行尝试 ID（Attempt ID）：<initial | YYYYMMDD-HHMM-patch-topic>
 <!-- impl-package:projection revision-set begin -->
-设计修订（Design Revision）：D<n>
+决策修订（Decision Revision）：D<n>
 规格修订（Spec Revision）：S<n>
 计划修订（Plan Revision）：P<n>
 <!-- impl-package:projection revision-set end -->
 执行组合（Composition）：tickets=<true|false>, dag=<true|false>
 任务包 ID（Package ID）：
 发布时绑定校验（Binding Validation at Publication）：Pending | Passed
-设计：[design.md](design.md) | spec 中的轻量 Design 记录
+决策：[decision.md](decision.md) | spec 中的轻量 Decision 记录
 规格：[spec.md](spec.md)
 门禁账本：[gate.md](gate.md)
 
-> design/spec 是当前 contract SoT。本 plan 只记录本 attempt 的执行策略、验证计划和过程证据。terminal gate verdict 后冻结。
+> decision/spec 是当前 contract SoT。本 plan 只记录本 attempt 的执行策略、验证计划和过程证据。terminal gate verdict 后冻结。
 
 ## 摘要
 
@@ -25,7 +25,7 @@
 - 聚焦代码 / 测试事实：
 - D/S gate 证据：
 - 上一个 terminal gate entry（仅 patch）：
-- Module Knowledge Watermark（本 attempt 打开时，design/spec 引用的每份 module-knowledge 文件的 `git log -1` commit SHA；下次 attempt 打开时用来对账是否已被别的改动推进）：
+- Module Knowledge Watermark（本 attempt 打开时，decision/spec 引用的每份 module-knowledge 文件的 `git log -1` commit SHA；下次 attempt 打开时用来对账是否已被别的改动推进）：
 
 ## 执行组合决策
 
@@ -62,7 +62,7 @@
 ### ER-<n>
 
 - 记录时间：
-- Design / Spec / Plan 修订：
+- Decision / Spec / Plan 修订：
 - 检查或命令：
 - 结果：
 - 证据路径：
@@ -73,7 +73,8 @@
 - Ticket 集合：<paths | N/A>
 - DAG：<dag.md or patch-dag path | N/A>
 - 进度账本：<path | N/A until trigger>
-- 发现 inbox：[findings.md](findings.md)
+- 执行发现：<execution-findings.md | 尚未 earned>
+- 调查材料：<investigations/<topic>.md | 尚未 earned；仅按需链接>
 
 ## 计划修订历史
 
@@ -87,7 +88,7 @@
 <!-- 初始 attempt 删除本节。 -->
 
 - 上一个 terminal gate entry：
-- Drift 分类：implementation-only | behavior contract | design direction
+- Drift 分类：implementation-only | behavior contract | decision direction
 - 复用或更新的 D/S 修订：
 - 相对已验收行为的增量：
 - 回归范围：

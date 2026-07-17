@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Reviews、findings 分流和 Stage 7 已完成，准备写 terminal pass。测试与 smoke 都来自当前 revision。现在如何执行 completion gate？",
+      "prompt": "Reviews、execution findings 分流和 Stage 7 已完成，准备写 terminal pass。测试与 smoke 都来自当前 revision。现在如何执行 completion gate？",
       "expected_output": "Audits the intended pass against current revision/environment evidence, reuses fresh proof, and permits the terminal pass only when every relevant gate is covered.",
       "files": [],
       "expectations": [

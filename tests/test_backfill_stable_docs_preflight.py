@@ -34,12 +34,12 @@ class ContractPreflightTest(unittest.TestCase):
             state = Path(temp) / "state.py"
             state.write_text(
                 "import json\n"
-                "print(json.dumps({'status': 'current', 'contractVersion': '3.1', 'currentContractVersion': '3.1'}))\n",
+                "print(json.dumps({'status': 'current', 'contractVersion': '3.2', 'currentContractVersion': '3.2'}))\n",
                 encoding="utf-8",
             )
             result = preflight.inspect_package(package, state_engine=state)
         self.assertEqual(result["status"], "current")
-        self.assertEqual(result["contractVersion"], "3.1")
+        self.assertEqual(result["contractVersion"], "3.2")
 
     def test_upgrade_required_is_not_treated_as_current(self) -> None:
         preflight = load_module("contract_preflight")
@@ -49,7 +49,7 @@ class ContractPreflightTest(unittest.TestCase):
             state = Path(temp) / "state.py"
             state.write_text(
                 "import json,sys\n"
-                "print(json.dumps({'status': 'upgradeRequired', 'contractVersion': '3.0', 'currentContractVersion': '3.1'}))\n"
+                "print(json.dumps({'status': 'upgradeRequired', 'contractVersion': '3.1', 'currentContractVersion': '3.2'}))\n"
                 "sys.exit(2)\n",
                 encoding="utf-8",
             )
@@ -80,7 +80,7 @@ class ContractPreflightTest(unittest.TestCase):
                 "package": str(package),
                 "status": "upgradeRequired",
                 "contractVersion": "3.0",
-                "currentContractVersion": "3.1",
+                "currentContractVersion": "3.2",
             }
             with mock.patch.object(preflight, "inspect_package", return_value=stale):
                 with self.assertRaises(preflight.ContractPreflightError):

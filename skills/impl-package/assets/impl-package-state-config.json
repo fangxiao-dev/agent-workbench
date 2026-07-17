@@ -1,5 +1,5 @@
 {
-  "contractVersion": "3.1",
+  "contractVersion": "3.2",
   "stateVocabulary": {
     "task": ["PENDING", "READY", "RUNNING", "NEEDS_SEAM", "BLOCKED", "FAILED", "NEEDS-REVALIDATION", "DONE", "WAIVED", "SUPERSEDED"],
     "ticket": ["UNRECORDED", "IN_PROGRESS", "BLOCKED", "NEEDS-REVALIDATION", "SATISFIED", "WAIVED", "SUPERSEDED"],
@@ -17,7 +17,7 @@
     "ticketStatePattern": "(?m)^-\\s*值[：:]\\s*\\[?([^]\\n]+)",
     "dagArtifactPatterns": ["dag.md", "*.patch-dag.md"],
     "ticketArtifactPatterns": ["tickets/*.md"],
-    "revisionDeclarationPattern": "(?m)^\\s*\\*{0,2}(?:设计修订（Design Revision）|规格修订（Spec Revision）|计划修订（Plan Revision）|Design Revision|Spec Revision|Plan Revision)\\*{0,2}\\s*[：:]\\*{0,2}\\s*(?:[DSP]\\d+|N/A)(?:\\s+.*)?$"
+    "revisionDeclarationPattern": "(?m)^\\s*\\*{0,2}(?:决策修订（Decision Revision）|Decision Revision|规格修订（Spec Revision）|Spec Revision|计划修订（Plan Revision）)\\*{0,2}\\s*[：:]\\*{0,2}\\s*(?:[DSP]\\d+|N/A)(?:\\s+.*)?$"
   },
   "projections": {
     "markers": {
@@ -26,9 +26,9 @@
       "gateStatus": "gate-status"
     },
     "revisionSet": {
-      "design": "设计修订（Design Revision）：{design}",
-      "spec": "设计修订（Design Revision）：{design}\n规格修订（Spec Revision）：{spec}",
-      "plan": "设计修订（Design Revision）：{design}\n规格修订（Spec Revision）：{spec}\n计划修订（Plan Revision）：{plan}"
+      "decision": "决策修订（Decision Revision）：{decision}",
+      "spec": "决策修订（Decision Revision）：{decision}\n规格修订（Spec Revision）：{spec}",
+      "plan": "决策修订（Decision Revision）：{decision}\n规格修订（Spec Revision）：{spec}\n计划修订（Plan Revision）：{plan}"
     },
     "runtimeTask": {
       "header": ["| 任务 | 状态 | 证据 |", "| --- | --- | --- |"],

@@ -49,7 +49,7 @@ class DataDrivenConfigTest(unittest.TestCase):
             configured = json.loads(json.dumps(base))
             configured["stateVocabulary"]["task"].append("CUSTOM")
             configured["documents"]["attemptPattern"] = r"Attempt=([^\s]+)"
-            configured["projections"]["revisionSet"]["design"] = "D={design}"
+            configured["projections"]["revisionSet"]["decision"] = "D={decision}"
             configured["gate"]["scaffoldNoneToken"] = "无"
             path.write_text(json.dumps(configured), encoding="utf-8")
             loaded = module._load_config(path)
@@ -58,12 +58,12 @@ class DataDrivenConfigTest(unittest.TestCase):
             try:
                 module.CONFIG = loaded
                 self.assertEqual(module._document_attempt("Attempt=patch-1"), "patch-1")
-                self.assertEqual(module._revision_projection({"current": {"design": {"revision": "D7"}}}, "design"), "D=D7")
+                self.assertEqual(module._revision_projection({"current": {"decision": {"revision": "D7"}}}, "decision"), "D=D7")
                 self.assertIn("取代（Supersedes）：无", module._gate_scaffold("patch-G1", "patch", None))
             finally:
                 module.CONFIG = original_config
 
-            configured["contractVersion"] = "3.2"
+            configured["contractVersion"] = "3.3"
             path.write_text(json.dumps(configured), encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "unsupported.*contractVersion"):
                 module._load_config(path)
@@ -108,7 +108,7 @@ class InitStateTest(unittest.TestCase):
             self.assertEqual(
                 state,
                 {
-                    "contractVersion": "3.1",
+                    "contractVersion": "3.2",
                     "purpose": "internal-machine-sidecar",
                     "ownerFacing": False,
                     "packageId": package.name,
@@ -131,21 +131,23 @@ class ContractStatusTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             package = Path(temp) / "2026-07-17-example"
             package.mkdir()
-            current = {"contractVersion": "3.1"}
+            current = {"contractVersion": "3.2"}
             self._write_components(package, current, current)
             result = run_cli(package, "contract-status")
             self.assertEqual(result.returncode, 0)
             payload = json.loads(result.stdout)
             self.assertEqual(payload["status"], "current")
-            self.assertEqual(payload["contractVersion"], "3.1")
-            self.assertEqual(payload["currentContractVersion"], "3.1")
+            self.assertEqual(payload["contractVersion"], "3.2")
+            self.assertEqual(payload["currentContractVersion"], "3.2")
 
     def test_contract_status_classifies_old_future_and_invalid_versions(self) -> None:
         cases = (
-            ({"schemaVersion": 2}, {"contractVersion": "3.1"}, "upgradeRequired", 3),
-            ({"contractVersion": "3.2"}, {"contractVersion": "3.1"}, "unsupportedFuture", 4),
-            ({"contractVersion": 3.1}, {"contractVersion": "3.1"}, "invalid", 2),
-            ({"contractVersion": "3.1", "schemaVersion": 2}, {"contractVersion": "3.1"}, "invalid", 2),
+            ({"contractVersion": "3.1"}, {"contractVersion": "3.2"}, "upgradeRequired", 3),
+            ({"contractVersion": "3.1", "current": {"design": {"artifact": "design.md"}}}, {"contractVersion": "3.2"}, "upgradeRequired", 3),
+            ({"contractVersion": "3.3"}, {"contractVersion": "3.2"}, "unsupportedFuture", 4),
+            ({"contractVersion": 3.2}, {"contractVersion": "3.2"}, "invalid", 2),
+            ({"contractVersion": "3.2", "schemaVersion": 2}, {"contractVersion": "3.2"}, "invalid", 2),
+            ({"contractVersion": "3.2", "current": {"design": {"artifact": "design.md"}}}, {"contractVersion": "3.2"}, "invalid", 2),
         )
         for revision, runtime, expected_status, expected_exit in cases:
             with self.subTest(expected_status=expected_status), tempfile.TemporaryDirectory() as temp:
@@ -166,6 +168,143 @@ class ContractStatusTest(unittest.TestCase):
             self.assertIn("invalid choice", result.stderr)
 
 
+class DecisionArtifactContractTest(unittest.TestCase):
+    def test_current_reader_rejects_legacy_design_path_and_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            repo.mkdir()
+            init_repo(repo)
+            package = repo / "docs/implementations/2026-07-17-legacy-design"
+            package.mkdir(parents=True)
+            content = (
+                "# Decision D1\n\n"
+                "<!-- impl-package:projection revision-set begin -->\n"
+                "决策修订（Decision Revision）：D1\n"
+                "<!-- impl-package:projection revision-set end -->\n"
+            )
+            legacy = package / "design.md"
+            legacy.write_text(content, encoding="utf-8")
+            blob = git(repo, "hash-object", "-w", "--", str(legacy))
+            sidecar = package / ".impl-package/revision-bindings.json"
+            sidecar.parent.mkdir()
+            sidecar.write_text(
+                json.dumps(
+                    {
+                        "contractVersion": "3.2",
+                        "purpose": "internal-machine-sidecar",
+                        "ownerFacing": False,
+                        "current": {"design": {"artifact": "design.md", "revision": "D1"}},
+                        "bindings": [
+                            {
+                                "artifact": "design.md",
+                                "revision": "D1",
+                                "mode": "exact-blob",
+                                "blob": blob,
+                                "id": f"D1@{blob}",
+                                "supersedes": None,
+                                "evidence": "design.md#revision-history",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            rejected = run_cli(package, "validate", "--working-tree", check=False)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("legacy design.md artifact is not supported", rejected.stderr)
+
+    def test_mechanical_rename_updates_path_but_keeps_alias_blob_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            repo.mkdir()
+            init_repo(repo)
+            package = repo / "docs/implementations/2026-07-17-rename"
+            package.mkdir(parents=True)
+            decision = package / "decision.md"
+            decision.write_text(
+                "# Decision D1\n\n"
+                "<!-- impl-package:projection revision-set begin -->\n"
+                "决策修订（Decision Revision）：D1\n"
+                "<!-- impl-package:projection revision-set end -->\n",
+                encoding="utf-8",
+            )
+            sidecar = package / ".impl-package/revision-bindings.json"
+            sidecar.parent.mkdir()
+            sidecar.write_text(
+                json.dumps(
+                    {
+                        "contractVersion": "3.2",
+                        "purpose": "internal-machine-sidecar",
+                        "ownerFacing": False,
+                        "current": {"decision": {"artifact": "decision.md", "revision": "D1"}},
+                        "bindings": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            run_cli(
+                package,
+                "register-revision",
+                "decision",
+                "D1",
+                "--artifact",
+                "decision.md",
+                "--evidence",
+                "decision.md#revision-history",
+            )
+            state = json.loads(sidecar.read_text(encoding="utf-8"))
+            binding = state["bindings"][0]
+            self.assertEqual(binding["id"], f"D1@{binding['blob']}")
+            self.assertEqual(binding["artifact"], "decision.md")
+            self.assertEqual(state["current"], {"decision": {"artifact": "decision.md", "revision": "D1"}})
+            run_cli(package, "validate", "--working-tree")
+
+    def test_investigations_are_rejected_from_revision_bindings(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            repo.mkdir()
+            init_repo(repo)
+            package = repo / "docs/implementations/2026-07-17-investigation-binding"
+            package.mkdir(parents=True)
+            artifact = package / "investigations/spec.md"
+            artifact.parent.mkdir()
+            artifact.write_text(
+                "# Spec S1\n\n"
+                "<!-- impl-package:projection revision-set begin -->\n"
+                "决策修订（Decision Revision）：N/A\n规格修订（Spec Revision）：S1\n"
+                "<!-- impl-package:projection revision-set end -->\n",
+                encoding="utf-8",
+            )
+            blob = git(repo, "hash-object", "-w", "--", str(artifact))
+            sidecar = package / ".impl-package/revision-bindings.json"
+            sidecar.parent.mkdir()
+            sidecar.write_text(
+                json.dumps(
+                    {
+                        "contractVersion": "3.2",
+                        "purpose": "internal-machine-sidecar",
+                        "ownerFacing": False,
+                        "current": {"spec": {"artifact": "investigations/spec.md", "revision": "S1"}},
+                        "bindings": [
+                            {
+                                "artifact": "investigations/spec.md",
+                                "revision": "S1",
+                                "mode": "exact-blob",
+                                "blob": blob,
+                                "id": f"S1@{blob}",
+                                "supersedes": None,
+                                "evidence": "investigations/spec.md#revision-history",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            rejected = run_cli(package, "validate", "--working-tree", check=False)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("investigations are not structured runtime artifacts", rejected.stderr)
+
+
 class RevisionRegistrationTest(unittest.TestCase):
     def test_validate_rejects_revision_declaration_outside_projection(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -184,7 +323,7 @@ class RevisionRegistrationTest(unittest.TestCase):
                     "# Spec S1\n\n"
                     f"{declaration}\n\n"
                     "<!-- impl-package:projection revision-set begin -->\n"
-                    "设计修订（Design Revision）：N/A\n规格修订（Spec Revision）：S1\n"
+                    "决策修订（Decision Revision）：N/A\n规格修订（Spec Revision）：S1\n"
                     "<!-- impl-package:projection revision-set end -->\n"
                 )
                 (package / "spec.md").write_text(content, encoding="utf-8")
@@ -192,7 +331,7 @@ class RevisionRegistrationTest(unittest.TestCase):
                 sidecar.write_text(
                     json.dumps(
                         {
-                            "contractVersion": "3.1",
+                            "contractVersion": "3.2",
                             "purpose": "internal-machine-sidecar",
                             "ownerFacing": False,
                             "current": {"spec": {"artifact": "spec.md", "revision": "S1"}},
@@ -227,14 +366,14 @@ class RevisionRegistrationTest(unittest.TestCase):
             sidecar.parent.mkdir(parents=True)
             (package / "spec.md").write_text(
                 "# Spec S1\n\n<!-- impl-package:projection revision-set begin -->\n"
-                "设计修订（Design Revision）：N/A\n规格修订（Spec Revision）：S1\n"
+                "决策修订（Decision Revision）：N/A\n规格修订（Spec Revision）：S1\n"
                 "<!-- impl-package:projection revision-set end -->\n",
                 encoding="utf-8",
             )
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.1",
+                        "contractVersion": "3.2",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {},
@@ -280,7 +419,7 @@ class PlanContractValidationTest(unittest.TestCase):
             plan = package / "plan.md"
             plan.write_text(
                 "# Plan\n\n<!-- impl-package:projection revision-set begin -->\n"
-                "设计修订（Design Revision）：N/A\n规格修订（Spec Revision）：N/A\n计划修订（Plan Revision）：P1\n"
+                "决策修订（Decision Revision）：N/A\n规格修订（Spec Revision）：N/A\n计划修订（Plan Revision）：P1\n"
                 "<!-- impl-package:projection revision-set end -->\n\n"
                 "## Strategy\n\nKeep this.\n\n## Execution Record\n\n<!-- append only -->\n",
                 encoding="utf-8",
@@ -288,7 +427,7 @@ class PlanContractValidationTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.1",
+                        "contractVersion": "3.2",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {},
@@ -366,7 +505,7 @@ class RuntimeStateTransitionTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.1",
+                        "contractVersion": "3.2",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {
@@ -431,7 +570,7 @@ class RuntimeStateTransitionTest(unittest.TestCase):
             tickets.mkdir()
             (tickets / "01-old.md").write_text("# Old\n\n**Ticket ID：** old\n**执行尝试 ID（Attempt ID）：** initial\n", encoding="utf-8")
             revision = {
-                "contractVersion": "3.1", "purpose": "internal-machine-sidecar", "ownerFacing": False,
+                "contractVersion": "3.2", "purpose": "internal-machine-sidecar", "ownerFacing": False,
                 "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}}, "bindings": [],
             }
             sidecar.write_text(json.dumps(revision), encoding="utf-8")
@@ -520,6 +659,30 @@ class ArtifactChainTest(unittest.TestCase):
             self.assertEqual(state["artifacts"][2]["tombstones"], "delivery-v2")
             self.assertEqual(state["artifacts"][0]["path"], str(external))
 
+    def test_investigations_are_not_runtime_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            package = Path(temp) / "2026-07-17-investigation"
+            package.mkdir()
+            source = package / "investigations" / "raw.md"
+            source.parent.mkdir()
+            source.write_text("raw evidence", encoding="utf-8")
+            run_cli(package, "init", "--package-id", package.name)
+            rejected = run_cli(
+                package,
+                "record-artifact",
+                "investigation-1",
+                str(source),
+                "--kind",
+                "investigations",
+                "--evidence",
+                "decision.md#investigation",
+                check=False,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("not structured runtime artifacts", rejected.stderr)
+            state = json.loads((package / ".impl-package/runtime-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["artifacts"], [])
+
 
 class GateIndexTest(unittest.TestCase):
     def test_indexed_historical_gate_does_not_resolve_current_revision(self) -> None:
@@ -536,11 +699,11 @@ class GateIndexTest(unittest.TestCase):
             (sidecar / "revision-bindings.json").write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.1",
+                        "contractVersion": "3.2",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {
-                            "design": {"artifact": "design.md", "revision": "D2"},
+                            "decision": {"artifact": "decision.md", "revision": "D2"},
                             "spec": {"artifact": "spec.md", "revision": "S2"},
                             "attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"},
                         },
@@ -561,7 +724,7 @@ class GateIndexTest(unittest.TestCase):
             (sidecar / "runtime-state.json").write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.1",
+                        "contractVersion": "3.2",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "packageId": package.name,
@@ -647,7 +810,7 @@ class GateIndexTest(unittest.TestCase):
             revision_path.parent.mkdir()
             revision_path.write_text(
                 json.dumps({
-                    "contractVersion": "3.1",
+                    "contractVersion": "3.2",
                     "purpose": "internal-machine-sidecar",
                     "ownerFacing": False,
                     "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}},
@@ -728,14 +891,14 @@ class ProjectionRebindTest(unittest.TestCase):
             package = repo / "docs" / "implementations" / "2026-07-17-example"
             sidecar = package / ".impl-package" / "revision-bindings.json"
             sidecar.parent.mkdir(parents=True)
-            (package / "design.md").write_text(
-                "# Design D1\n\n<!-- impl-package:projection revision-set begin -->\n"
-                "设计修订（Design Revision）：D1\n<!-- impl-package:projection revision-set end -->\n",
+            (package / "decision.md").write_text(
+                "# Decision D1\n\n<!-- impl-package:projection revision-set begin -->\n"
+                "决策修订（Decision Revision）：D1\n<!-- impl-package:projection revision-set end -->\n",
                 encoding="utf-8",
             )
             (package / "spec.md").write_text(
                 "# Spec S1\n\n<!-- impl-package:projection revision-set begin -->\n"
-                "设计修订（Design Revision）：D1\n规格修订（Spec Revision）：S1\n"
+                "决策修订（Decision Revision）：D1\n规格修订（Spec Revision）：S1\n"
                 "<!-- impl-package:projection revision-set end -->\n",
                 encoding="utf-8",
             )
@@ -743,7 +906,7 @@ class ProjectionRebindTest(unittest.TestCase):
             plan.write_text(
                 "# Plan\n\n"
                 "<!-- impl-package:projection revision-set begin -->\n"
-                "设计修订（Design Revision）：D1\n规格修订（Spec Revision）：S1\n计划修订（Plan Revision）：P1\n"
+                "决策修订（Decision Revision）：D1\n规格修订（Spec Revision）：S1\n计划修订（Plan Revision）：P1\n"
                 "<!-- impl-package:projection revision-set end -->\n\n"
                 "执行组合（Composition）：tickets=false, dag=false\n\n"
                 "## Strategy\n\nKeep this.\n\n## Execution Record\n\n<!-- append only -->\n",
@@ -752,7 +915,7 @@ class ProjectionRebindTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.1",
+                        "contractVersion": "3.2",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {},
@@ -762,7 +925,7 @@ class ProjectionRebindTest(unittest.TestCase):
                 encoding="utf-8",
             )
             for kind, alias, artifact in (
-                ("design", "D1", "design.md"),
+                ("decision", "D1", "decision.md"),
                 ("spec", "S1", "spec.md"),
             ):
                 run_cli(
@@ -792,7 +955,7 @@ class ProjectionRebindTest(unittest.TestCase):
 
             (package / "spec.md").write_text(
                 "# Spec S2\n\n<!-- impl-package:projection revision-set begin -->\n"
-                "设计修订（Design Revision）：D1\n规格修订（Spec Revision）：S2\n"
+                "决策修订（Decision Revision）：D1\n规格修订（Spec Revision）：S2\n"
                 "<!-- impl-package:projection revision-set end -->\n",
                 encoding="utf-8",
             )
@@ -837,13 +1000,13 @@ class ProjectionRebindTest(unittest.TestCase):
             sidecar.parent.mkdir(parents=True)
             plan_body = (
                 "<!-- impl-package:projection revision-set begin -->\n"
-                "设计修订（Design Revision）：N/A\n规格修订（Spec Revision）：N/A\n计划修订（Plan Revision）：P1\n"
+                "决策修订（Decision Revision）：N/A\n规格修订（Spec Revision）：N/A\n计划修订（Plan Revision）：P1\n"
                 "<!-- impl-package:projection revision-set end -->\n\n"
                 "执行组合（Composition）：tickets=false, dag=false\n\n## Execution Record\n\n<!-- append only -->\n"
             )
             (package / "plan.md").write_text("# Initial\n\n" + plan_body, encoding="utf-8")
             sidecar.write_text(json.dumps({
-                "contractVersion": "3.1", "purpose": "internal-machine-sidecar", "ownerFacing": False,
+                "contractVersion": "3.2", "purpose": "internal-machine-sidecar", "ownerFacing": False,
                 "current": {}, "bindings": [],
             }), encoding="utf-8")
             run_cli(package, "register-revision", "plan", "P1", "--attempt", "initial", "--artifact", "plan.md", "--evidence", "plan.md#publication")
@@ -883,7 +1046,7 @@ class RuntimeProjectionValidationTest(unittest.TestCase):
             sidecar.parent.mkdir(parents=True)
             (package / "plan.md").write_text(
                 "# Plan\n\n<!-- impl-package:projection revision-set begin -->\n"
-                "设计修订（Design Revision）：N/A\n规格修订（Spec Revision）：N/A\n计划修订（Plan Revision）：P1\n"
+                "决策修订（Decision Revision）：N/A\n规格修订（Spec Revision）：N/A\n计划修订（Plan Revision）：P1\n"
                 "<!-- impl-package:projection revision-set end -->\n\n"
                 "执行组合（Composition）：tickets=false, dag=true\n\n"
                 "## Execution Record\n\n<!-- append only -->\n",
@@ -900,7 +1063,7 @@ class RuntimeProjectionValidationTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.1",
+                        "contractVersion": "3.2",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {},

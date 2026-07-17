@@ -98,7 +98,7 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
 
         req_drift = eval_text(find_eval(evals["req-align"], 4))
         assert_contains(req_drift, "implementation-only", "Req-align drift eval")
-        assert_contains(req_drift, "Design then Spec", "Req-align design drift eval")
+        assert_contains(req_drift, "Decision then Spec", "Req-align decision drift eval")
 
         simple_patch = eval_text(find_eval(evals["impl-planning"], 4))
         assert_contains(simple_patch, "tickets=false, dag=false", "Simple patch composition eval")
@@ -156,7 +156,7 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         assert_contains(policy_boundary, "gate", "Gate summary boundary eval")
 
         spec_template = read(IMPL_ROOT / "req-align" / "assets" / "templates" / "spec.md")
-        assert_contains(spec_template, "设计修订（Design Revision）：D<n>", "Spec must resolve lightweight Design revision.")
+        assert_contains(spec_template, "决策修订（Decision Revision）：D<n>", "Spec must resolve lightweight Decision revision.")
         assert_contains(spec_template, "规格修订（Spec Revision）：S<n>", "Spec revision header.")
         assert_not_contains(spec_template, "Composition:", "Spec must not own Composition.")
         assert_not_contains(
@@ -164,12 +164,12 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
             "Status: Draft | Spec Gate Passed | Spec Gate Blocked | Superseded",
             "Current spec SoT must not be superseded as a whole file.",
         )
-        design_template = read(IMPL_ROOT / "req-align" / "assets" / "templates" / "design.md")
-        assert_contains(design_template, "当前设计选择与理由的事实源", "Design must be current SoT.")
+        decision_template = read(IMPL_ROOT / "req-align" / "assets" / "templates" / "decision.md")
+        assert_contains(decision_template, "当前决策与理由的事实源", "Decision must be current SoT.")
         assert_not_contains(
-            design_template,
+            decision_template,
             "point-in-time research and decision record",
-            "Design must not retain event-only identity.",
+            "Decision must not retain event-only identity.",
         )
 
         plan_template = read(IMPL_ROOT / "impl-planning" / "assets" / "templates" / "plan.md")
@@ -348,7 +348,7 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         impl_skill_files = sorted(
             path for path in IMPL_ROOT.rglob("SKILL.md") if not is_eval_workspace(path)
         )
-        self.assertEqual(12, len(impl_skill_files))
+        self.assertEqual(13, len(impl_skill_files))
         non_reporting_skills = {
             Path("skills/impl-package/subagent-driven-development/SKILL.md"),
             Path("skills/impl-package/verification-before-completion/SKILL.md"),

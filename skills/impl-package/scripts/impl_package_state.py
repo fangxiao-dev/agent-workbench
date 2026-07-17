@@ -16,7 +16,7 @@ from typing import Any
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "assets" / "impl-package-state-config.json"
-CURRENT_CONTRACT_VERSION = "3.1"
+CURRENT_CONTRACT_VERSION = "3.2"
 CONTRACT_VERSION_PATTERN = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 
@@ -95,7 +95,7 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
     projections = config["projections"]
     if not isinstance(projections, dict) or set(projections) != {"markers", "revisionSet", "runtimeTask", "runtimeTicket", "gateStatus"}:
         raise RuntimeError("Impl-Package projection configuration has invalid shape")
-    if set(projections["markers"]) != {"revisionSet", "runtimeState", "gateStatus"} or set(projections["revisionSet"]) != {"design", "spec", "plan"}:
+    if set(projections["markers"]) != {"revisionSet", "runtimeState", "gateStatus"} or set(projections["revisionSet"]) != {"decision", "spec", "plan"}:
         raise RuntimeError("Impl-Package marker or revision projection configuration is invalid")
     marker_values = list(projections["markers"].values())
     if len(marker_values) != len(set(marker_values)) or any(not isinstance(value, str) or not value or re.search(r"\s", value) for value in marker_values):
@@ -107,9 +107,9 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
             raise RuntimeError("Impl-Package projection templates must be non-empty strings")
         return {field for _, field, _, _ in string.Formatter().parse(template) if field is not None}
     expected_projection_fields = {
-        ("revisionSet", "design"): {"design"},
-        ("revisionSet", "spec"): {"design", "spec"},
-        ("revisionSet", "plan"): {"design", "spec", "plan"},
+        ("revisionSet", "decision"): {"decision"},
+        ("revisionSet", "spec"): {"decision", "spec"},
+        ("revisionSet", "plan"): {"decision", "spec", "plan"},
         ("gateStatus", "empty"): set(),
         ("gateStatus", "finalized"): {"id", "verdict"},
     }
@@ -246,11 +246,20 @@ def _current_revision_set(package: Path) -> dict[str, str] | None:
         return None
     state = json.loads(path.read_text(encoding="utf-8"))
     current = state.get("current", {})
+    _assert_revision_selection_keys(current)
     return {
-        "design": current.get("design", {}).get("revision", "N/A"),
+        "decision": current.get("decision", {}).get("revision", "N/A"),
         "spec": current.get("spec", {}).get("revision", "N/A"),
         "plan": current.get("attempt", {}).get("revision", "N/A"),
     }
+
+
+def _assert_revision_selection_keys(current: Any) -> None:
+    if not isinstance(current, dict):
+        raise StateError("revision current selection must be an object")
+    unsupported = sorted(set(current) - {"decision", "spec", "attempt"})
+    if unsupported:
+        raise StateError(f"unsupported revision selection key: {unsupported[0]}")
 
 
 def _composition(plan_text: str) -> tuple[bool, bool]:
@@ -267,12 +276,20 @@ def _document_attempt(text: str) -> str | None:
 
 def _package_file_names(package: Path, committed: bool) -> list[str]:
     if not committed:
-        return [path.relative_to(package).as_posix() for path in package.rglob("*") if path.is_file()]
+        return [
+            path.relative_to(package).as_posix()
+            for path in package.rglob("*")
+            if path.is_file() and not _is_investigation_path(path.relative_to(package).as_posix())
+        ]
     repo = _git_root(package)
     package_relative = package.resolve().relative_to(repo).as_posix()
     output = _git(repo, "ls-tree", "-r", "--name-only", "HEAD", "--", package_relative)
     prefix = package_relative.rstrip("/") + "/"
-    return [line[len(prefix) :] for line in output.splitlines() if line.startswith(prefix)]
+    return [
+        line[len(prefix) :]
+        for line in output.splitlines()
+        if line.startswith(prefix) and not _is_investigation_path(line[len(prefix) :])
+    ]
 
 
 def _attempt_dag_artifact(package: Path, attempt: str, committed: bool = False) -> str | None:
@@ -506,6 +523,16 @@ def _append_artifact(state: dict[str, Any], record: dict[str, Any]) -> bool:
     return True
 
 
+def _is_investigation_path(artifact_path: str) -> bool:
+    path_parts = [part.casefold() for part in artifact_path.replace("\\", "/").split("/") if part]
+    return "investigations" in path_parts
+
+
+def _reject_investigation_artifact(artifact_path: str, kind: str) -> None:
+    if kind.casefold() in {"investigation", "investigations"} or _is_investigation_path(artifact_path):
+        raise StateError("investigations are not structured runtime artifacts")
+
+
 def command_record_artifact(
     package: Path,
     identifier: str,
@@ -515,6 +542,7 @@ def command_record_artifact(
     supersedes: list[str] | None = None,
 ) -> dict[str, Any]:
     path, state = _load_runtime_state(package)
+    _reject_investigation_artifact(artifact_path, kind)
     source = Path(artifact_path).resolve()
     if not source.is_file():
         raise StateError(f"artifact file does not exist: {source}")
@@ -584,7 +612,7 @@ def _gate_blocks(text: str) -> list[dict[str, Any]]:
                 "supersedes": supersedes,
                 "revisionSet": (
                     {
-                        "design": revision_set_match.group(1),
+                        "decision": revision_set_match.group(1),
                         "spec": revision_set_match.group(2),
                         "plan": revision_set_match.group(3),
                     }
@@ -696,7 +724,7 @@ def _machine_owned_contract(text: str, plan: bool) -> str:
 
 def _selection_for_alias(state: dict[str, Any], alias: str) -> dict[str, Any]:
     matches = []
-    for key in ("design", "spec", "attempt"):
+    for key in ("decision", "spec", "attempt"):
         selection = state.get("current", {}).get(key)
         if selection and selection.get("revision") == alias:
             matches.append(selection)
@@ -747,17 +775,17 @@ def command_rebind(
 
 def _revision_projection(state: dict[str, Any], kind: str) -> str:
     current = state.get("current", {})
-    design = current.get("design", {}).get("revision", "N/A")
+    decision = current.get("decision", {}).get("revision", "N/A")
     spec = current.get("spec", {}).get("revision", "N/A")
     plan = current.get("attempt", {}).get("revision", "N/A")
-    return CONFIG["projections"]["revisionSet"][kind].format(design=design, spec=spec, plan=plan)
+    return CONFIG["projections"]["revisionSet"][kind].format(decision=decision, spec=spec, plan=plan)
 
 
 def _validate_revision_projections(package: Path, state: dict[str, Any], committed: bool) -> None:
     marker = CONFIG["projections"]["markers"]["revisionSet"]
     targets: dict[str, tuple[str, list[dict[str, Any]]]] = {}
-    priority = {"design": 0, "spec": 1, "plan": 2}
-    for key, kind in (("design", "design"), ("spec", "spec"), ("attempt", "plan")):
+    priority = {"decision": 0, "spec": 1, "plan": 2}
+    for key, kind in (("decision", "decision"), ("spec", "spec"), ("attempt", "plan")):
         selection = state.get("current", {}).get(key)
         if not selection:
             continue
@@ -780,8 +808,8 @@ def _validate_revision_projections(package: Path, state: dict[str, Any], committ
 def command_refresh_projections(package: Path) -> dict[str, Any]:
     _, revision_state = _load_revision_state(package)
     targets: dict[str, tuple[str, list[dict[str, Any]]]] = {}
-    priority = {"design": 0, "spec": 1, "plan": 2}
-    for key, kind in (("design", "design"), ("spec", "spec"), ("attempt", "plan")):
+    priority = {"decision": 0, "spec": 1, "plan": 2}
+    for key, kind in (("decision", "decision"), ("spec", "spec"), ("attempt", "plan")):
         selection = revision_state.get("current", {}).get(key)
         if not selection:
             continue
@@ -1173,6 +1201,7 @@ def _validate_artifact_chain(records: Any) -> None:
             digest = row.get("hash")
             if not isinstance(row.get("kind"), str) or not row["kind"] or not isinstance(row.get("path"), str) or not row["path"]:
                 raise StateError(f"artifact metadata is invalid: {identifier}")
+            _reject_investigation_artifact(row["path"], row["kind"])
             if not isinstance(digest, dict) or digest.get("algorithm") != "sha256" or not sha256.fullmatch(str(digest.get("value", ""))):
                 raise StateError(f"artifact hash is invalid: {identifier}")
             if row.get("tombstones") is not None or not isinstance(row.get("supersedes"), list):
@@ -1415,7 +1444,7 @@ def command_register_revision(
     evidence: str,
 ) -> dict[str, Any]:
     path, state = _load_revision_state(package)
-    expected_prefix = {"design": "D", "spec": "S", "plan": "P"}[kind]
+    expected_prefix = {"decision": "D", "spec": "S", "plan": "P"}[kind]
     if re.fullmatch(rf"{expected_prefix}[1-9]\d*", alias) is None:
         raise StateError(f"invalid {kind} revision alias: {alias}")
     current = state.setdefault("current", {})
@@ -1424,6 +1453,11 @@ def command_register_revision(
         artifact = existing.get("artifact") or existing.get("plan")
     if not artifact:
         raise StateError("--artifact is required when no current artifact exists")
+    _reject_investigation_artifact(artifact, "revision-binding")
+    if artifact == "design.md":
+        raise StateError("legacy design.md artifact is not supported; use decision.md")
+    if kind == "decision" and artifact != "decision.md":
+        raise StateError("decision revision artifact must be decision.md")
     blob = _worktree_blob(package, artifact)
     binding: dict[str, Any] = {
         "artifact": artifact,
@@ -1479,6 +1513,11 @@ def _validate_revision_bindings(package: Path, state: dict[str, Any], committed:
             required.add("attempt")
         if set(row) != required:
             raise StateError("revision binding has invalid canonical shape")
+        _reject_investigation_artifact(row["artifact"], "revision-binding")
+        if row["artifact"] == "design.md":
+            raise StateError("legacy design.md artifact is not supported; use decision.md")
+        if row["revision"].startswith("D") and row["artifact"] != "decision.md":
+            raise StateError("decision revision binding artifact must be decision.md")
         if not all(isinstance(row.get(field), str) and row[field] for field in ("artifact", "revision", "blob")):
             raise StateError("revision binding has empty identity fields")
         if not re.fullmatch(r"[0-9a-f]{40,64}", row["blob"]):
@@ -1502,15 +1541,14 @@ def _validate_revision_bindings(package: Path, state: dict[str, Any], committed:
     if any(count != 1 for count in semantic_terminals.values()):
         raise StateError("revision identity does not have exactly one terminal binding")
     current = state.get("current", {})
-    if not isinstance(current, dict):
-        raise StateError("revision current selection must be an object")
+    _assert_revision_selection_keys(current)
     checked: list[str] = []
-    for key in ("design", "spec", "attempt"):
+    for key in ("decision", "spec", "attempt"):
         selection = current.get(key)
         if not selection:
             continue
         binding = _active_binding(state, selection)
-        expected_prefix = {"design": "D", "spec": "S", "attempt": "P"}[key]
+        expected_prefix = {"decision": "D", "spec": "S", "attempt": "P"}[key]
         expected_mode = "plan-contract-v1" if key == "attempt" else "exact-blob"
         if not re.fullmatch(rf"{expected_prefix}[1-9]\d*", str(selection.get("revision", ""))) or binding.get("mode") != expected_mode:
             raise StateError(f"current {key} selection has invalid revision identity")
@@ -1566,11 +1604,18 @@ def _contract_component_status(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {"status": "invalid", "contractVersion": None, "reason": "top-level-not-object"}
     if "contractVersion" not in value:
-        # A pre-3.1 sidecar is upgradeable in place; no compatibility reader trusts it.
+        # A pre-3.2 sidecar is upgradeable in place; no compatibility reader trusts it.
         return {
             "status": "upgradeRequired",
             "contractVersion": None,
             "reason": "missing-contractVersion",
+        }
+    status = _contract_status_for_version(value.get("contractVersion"))
+    if status != "current":
+        return {
+            "status": status,
+            "contractVersion": value.get("contractVersion"),
+            "reason": "contract-version",
         }
     if "schemaVersion" in value:
         return {
@@ -1578,7 +1623,32 @@ def _contract_component_status(path: Path) -> dict[str, Any]:
             "contractVersion": value.get("contractVersion"),
             "reason": "legacy-schemaVersion",
         }
-    status = _contract_status_for_version(value.get("contractVersion"))
+    if path.name == REVISION_BINDINGS.name and isinstance(value.get("current"), dict):
+        current = value["current"]
+        if "design" in current:
+            return {
+                "status": "invalid",
+                "contractVersion": value.get("contractVersion"),
+                "reason": "legacy-design-selection",
+            }
+        decision = current.get("decision")
+        if isinstance(decision, dict) and decision.get("artifact") == "design.md":
+            return {
+                "status": "invalid",
+                "contractVersion": value.get("contractVersion"),
+                "reason": "legacy-design-artifact",
+            }
+    if path.name == REVISION_BINDINGS.name and isinstance(value.get("bindings"), list):
+        for binding in value["bindings"]:
+            if isinstance(binding, dict) and (
+                binding.get("artifact") == "design.md"
+                or (str(binding.get("revision", "")).startswith("D") and binding.get("artifact") != "decision.md")
+            ):
+                return {
+                    "status": "invalid",
+                    "contractVersion": value.get("contractVersion"),
+                    "reason": "legacy-design-artifact",
+                }
     return {
         "status": status,
         "contractVersion": value.get("contractVersion"),
@@ -1631,7 +1701,7 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("--package-id", required=True)
     subparsers.add_parser("contract-status")
     register_parser = subparsers.add_parser("register-revision")
-    register_parser.add_argument("kind", choices=("design", "spec", "plan"))
+    register_parser.add_argument("kind", choices=("decision", "spec", "plan"))
     register_parser.add_argument("alias")
     register_parser.add_argument("--artifact")
     register_parser.add_argument("--attempt")

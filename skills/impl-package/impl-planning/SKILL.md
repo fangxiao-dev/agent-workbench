@@ -1,13 +1,13 @@
 ---
 name: impl-planning
 description: >
-  当已有批准的 Design/Spec 输入，需要创建 initial plan、patch plan、Composition decision、
+  当已有批准的 Decision/Spec 输入，需要创建 initial plan、patch plan、Composition decision、
   execution strategy 或 verification plan 时使用；不维护长期 behavior contract 或 task runtime status。
 ---
 
 # Impl Planning
 
-为一个 implementation attempt 创建可追溯的过程计划。design/spec 是活动变更的当前 SoT；plan 只消费它们，并决定本次 attempt 的 tickets/DAG 形态、执行顺序与验证路径。
+为一个 implementation attempt 创建可追溯的过程计划。decision/spec 是活动变更的当前 SoT；plan 只消费它们，并决定本次 attempt 的 tickets/DAG 形态、执行顺序与验证路径。
 
 共享 artifact lifecycle、Composition、gate 与 Stage 7 语义只引用 `../references/impl-package-composition-contract.md`。
 
@@ -26,7 +26,7 @@ description: >
 ~~~markdown
 执行尝试 ID（Attempt ID）：<initial | patch-id>
 <!-- impl-package:projection revision-set begin -->
-设计修订（Design Revision）：D<n>
+决策修订（Decision Revision）：D<n>
 规格修订（Spec Revision）：S<n>
 计划修订（Plan Revision）：P<n>
 <!-- impl-package:projection revision-set end -->
@@ -37,19 +37,19 @@ Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。pl
 
 ## 边界
 
-- 不创建或重写 design/spec。发现行为或设计 drift 时路由 req-align，等待所需 gate 通过。
-- 不把 interface、seam contract、compatibility、全局约束或 Acceptance Semantics 复制进 plan；这些属于 spec。选择 rationale 属于 design。
+- 不创建或重写 decision/spec。发现行为或设计 drift 时路由 req-align，等待所需 gate 通过。
+- 不把 interface、seam contract、compatibility、全局约束或 Acceptance Semantics 复制进 plan；这些属于 spec。选择 rationale 属于 decision。
 - 不把 plan 写成逐行实现脚本：不复制完整 production code、不要求 2–5 分钟微步骤，也不内嵌每一步 commit 指令。plan 应约束实施方向和可验证边界，同时允许执行者基于当前代码完成局部判断。
 - 不在 plan 保存 task checklist、task/ticket runtime status、worker ownership 或通用验证模板副本。
 - 实际验证过程可 append 到 Execution Record；terminal gate verdict 后 plan 冻结。
 - plan 不保存 `Status`。Draft/Active/Frozen 由内部 sidecar 的 current selection 与 gate ledger 派生。
-- tickets 由 to-tickets 拥有，DAG 由 create-task-dag 拥有，progress/findings/gate ledger 由 dev-with-track 拥有。
+- tickets 由 to-tickets 拥有，DAG 由 create-task-dag 拥有，progress/execution-findings/gate ledger 由 dev-with-track 拥有。
 
 ## Routing
 
 1. package 尚未 terminal：继续当前 attempt，按需修订当前 plan 的 P revision；不要创建 patch plan。
 2. package 已有 terminal gate，新需求或修复进入 post-gate patch：复用 package-id，创建新的 Attempt ID 与 patch plan。
-3. 重新 patch 前先确认 req-align 已将 package design/spec 与当前 module knowledge/code 对账。
+3. 重新 patch 前先确认 req-align 已将 package decision/spec 与当前 module knowledge/code 对账。
 4. 两个 owning package 都合理时暂停并请求 owner 选择，不能另建重复 package。
 
 先区分“plan-owned 语义变化”和“实施证据/投影变化”。只有 Execution Strategy、Composition、Planned Verification、integration/rollback strategy 或其他非 ER plan contract 改变时才升级 P revision。执行记录追加、hash/binding 复核，以及发生在 plan 外部 owner artifact 中的证据路径、分类、引用修正或不改变策略的纯减法不升级 P；若确实修改 plan 的非 ER 正文，仍按 `plan-contract-v1` 发布新 P。四个 impact signals 只在无法由 diff 重建时写入最小摘要，不扩展 sidecar schema。
@@ -107,8 +107,8 @@ plan 活动期间发现 Composition 判断错误时：
 
 ## Workflow
 
-1. 读取当前 design/spec revision、gate ledger 最新 entry、module knowledge/code 对账结果与仓库验证政策。
-2. 确认需要的 Design/Spec Gate 已通过；实现-only drift 允许复用现有 D/S。
+1. 读取当前 decision/spec revision、gate ledger 最新 entry、module knowledge/code 对账结果与仓库验证政策。
+2. 确认需要的 Decision/Spec Gate 已通过；实现-only drift 允许复用现有 D/S。
 3. 分配 Attempt ID 与 P1，独立决定 Composition；plan 尚未被 registry 的 `current.attempt` 选中时，其 lifecycle 派生为 Draft。
 4. 建立 spec coverage 与 change map，写 Execution Strategy、integration order、Planned Verification、rollout/rollback 与依赖的 policy 链接；清除 blocker placeholder，核对术语、模块与路径一致性。
 5. tickets=true 时调用 to-tickets draft；dag=true 时在必要输入齐备后调用 create-task-dag。
@@ -124,7 +124,7 @@ plan 活动期间发现 Composition 判断错误时：
 - 每项 Acceptance Semantics 都能定位到 Execution Strategy 与 Planned Verification；不存在覆盖缺口或 `TBD`/`TODO` blocker。
 - change map 给出预计模块/文件责任、依赖顺序和集成点，且没有伪造行号、复制完整实现代码或机械微步骤。
 - plan 中的模块名、类型名、路径和术语与当前 spec 及仓库事实一致。
-- plan 未复制 design/spec contract、ticket 正文、task 状态或通用 checklist。
+- plan 未复制 decision/spec contract、ticket 正文、task 状态或通用 checklist。
 - 每个长期 seam/interface/constraint 都能在 spec 找到。
 - Planned Verification 引用权威 policy；Execution Record 使用稳定 anchor 且 append-only。
 - 已激活 conditional evidence-integrity contract 时，Planned Verification 为每个主断言选择了相关 false-PASS 反例和可观察 fail-closed 结果，没有把示例技术或不适用场景伪装成通用要求。

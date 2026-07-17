@@ -1,5 +1,5 @@
 {
-  "contractVersion": "3.1",
+  "contractVersion": "3.2",
   "purpose": "internal-machine-sidecar",
   "ownerFacing": false,
   "packageId": "<immutable-date-prefixed-slug>",
