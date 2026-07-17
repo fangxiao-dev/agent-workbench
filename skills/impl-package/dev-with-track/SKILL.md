@@ -115,7 +115,7 @@ entry 的可读正文必须包含 Attempt ID、Supersedes、evaluated time、D/S
 
 无 durable delta 时写 none 和理由。写入 terminal entry 时先分配 G id、固定 comparison point/ER anchor、完成 Stage 7 与必要 claim audit，再 finalize immutable index；blocked capture gap 通过后续 entry 补齐，不回改旧 entry。gate 关闭后，module knowledge 与 `_pending.md` truth pointer 共同表达当前长期真相和待压实增量。
 
-terminal gate 关闭后提示 owner 可以按需使用 `$backfill-stable-docs`，但不自动调用、不阻塞当前交付，也不把它列为本次任务的剩余 blocker。audit/apply/verify 可以延期且分别汇报；只有用户明确要求、已有维护计划或进入周期维护流程时才执行，apply 仍需 owner 批准具体 report item。
+terminal gate 关闭后提示 owner 可以按需使用 `$backfill-stable-docs`，但不自动调用、不阻塞当前交付，也不把它列为本次任务的剩余 blocker。backfill 调用先独立执行 contract preflight：旧包直接按 current contract 改造并校验，失败则停止；校验通过后才进入 audit/apply/verify。三个动作可以延期且分别汇报，只有用户明确要求、已有维护计划或进入周期维护流程时才执行，apply 仍需 owner 批准具体 report item。
 
 ## Execution checklist
 

@@ -53,7 +53,7 @@ Review 按当前 delta 的独立信号触发，不把 artifact 数量或历史 C
 5 执行        dev-with-track：restore → subagent-driven-development（task 实现 + 即时 review）→ 集成 / plan Execution Record → findings 分流 → gate entry
 6 审查        code-review / module-review / safety-review（映射见下）
 收口条件      terminal pass 前完成 durable-delta capture + verification-before-completion evidence audit
-可选维护      gate 后提示 $backfill-stable-docs audit/apply/verify；可延期、非阻塞、需明确授权
+可选维护      gate 后提示 $backfill-stable-docs；先做 contract preflight，再 audit/apply/verify；可延期、非阻塞、需明确授权
 ```
 
 阶段要点（只记与讨论稿差异或收敛修正，正文以讨论稿为底）：
@@ -149,6 +149,7 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 
 - 有 durable delta：在 gate 的 Durable Deltas 表逐条登记 → 写 `_pending.md`、为受影响 module spec 写 truth pointer、必要时先创建 stub；三项完成才可关闭 gate。
 - 无 durable delta：在 gate 中显式记录判定与理由。
+- 调用 `$backfill-stable-docs` 时先做独立 contract preflight；旧包由 agent 按 current contract 直接改造并校验，只有校验通过后才进入 audit/apply/verify，升级失败不得进入审计。三个动作仍可延期且不影响当前 gate 或任务 closed，提示不授权执行；apply 仍遵守其逐项批准边界。
 - 回刷 report 按去重键合并 `_pending.md`、gate 漏登对账与无主 commit 三源；任一来源缺失均报告为 capture gap，不猜测为”无变化”。
 - terminal gate 后提示可使用 `$backfill-stable-docs`；audit/apply/verify 可以延期且不影响当前 gate 或任务 closed。提示不授权执行，只有用户明确要求、已批准维护计划或明确的周期维护流程才实际调用；apply 仍遵守其自身逐项批准边界。
 

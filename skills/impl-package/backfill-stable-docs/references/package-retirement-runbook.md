@@ -19,14 +19,14 @@
 
 按以下条件识别候选，不自动清理：
 
-1. append-only gate ledger 已可信 terminal：`indexed` 必须同时满足 `gateAppliesToCurrentRevision=true` 且 resolution 为 pass/fail/defer；无 runtime-state 存量 package 的 `legacy-heading` 可作为兼容 terminal evidence；fail 仍为 terminal。合法历史 indexed entry 不证明当前 D/S/P，不能列为结构候选；`mismatch`/`manual` 必须先由 agent 读证据并正常分类，不能由脚本列为结构候选。顶部投影、legacy 摘要或 checklist 只作导航，真正 Active（代码未合并或未开始）的 package 永不作为候选。
+1. append-only gate ledger 已可信 terminal：`indexed` 必须同时满足 `gateAppliesToCurrentRevision=true` 且 resolution 为 pass/fail/defer；旧 heading、旧 sidecar 或旧 projection 不能作为 terminal evidence，必须先由 contract preflight 升级；fail 仍为 terminal。合法历史 indexed entry 不证明当前 D/S/P，不能列为结构候选；`mismatch`/`manual` 必须先由 agent 读证据并正常分类，不能由脚本列为结构候选。顶部 projection 或 checklist 只作导航，真正 Active（代码未合并或未开始）的 package 永不作为候选。
 2. Git 已证明 package 声称的实现实际进入解析后的 `targetBranch` commit；`targetBranch` 无法解析或实现 commit 不可确认时不得列为候选。
 3. 该 package 产生的所有登记在任何已发现的 `_pending.md` 里都已关闭（没有仍指向它的未决条目）。
 4. package 目录下 `design.md`/`spec.md` 要么不存在，要么其内容已被判定为 already-covered（已被当前 stable docs 完整吸收），且没有其他文档的 inbound reference，不再提供任何仍需保留的信息。
 
 满足以上四条时列为"可清理候选"，附上 gate 终态、target branch Git 证据、closure 时间、吸收去向（具体 stable doc 路径）、inbound reference 检查和目录当前剩余内容清单。四条缺一即保留，不因为"看起来只有 evidence"就放宽判断——必须真的核对过目标分支、`_pending.md`、stable docs 和 gate ledger。
 
-脚本按 `indexed`、`legacy-heading`、`mismatch`、`manual` 四类报告 gate。runtime-state 完全不存在时才允许 legacy heading fallback；一旦 runtime-state 存在，缺 entry、entry/字段/content binding 不符、陈旧或损坏都按 `mismatch`，`gateResolution=null`，宁可人工判断也不信陈旧 JSON 或裸 heading。没有 `gate.md`，或只有空 ledger 且尚无 allocation/entry，是 open/no-verdict，不是第五类。`mismatch`/`manual` package 必须当场读完并按上面四条标准正常分类，不能因为脚本没有给出可信 terminal resolution 就跳过或搁置。
+脚本按 `indexed`、`mismatch`、`manual` 三类报告 gate。runtime-state 缺失或 contractVersion 过期时，contract preflight 先阻断；当前 runtime-state 缺 entry、entry/字段/content binding 不符、陈旧或损坏都按 `mismatch`，`gateResolution=null`，宁可人工判断也不信陈旧 JSON 或裸 heading。没有 `gate.md`，或只有空 ledger 且尚无 allocation/entry，是 open/no-verdict，不是额外类别。`mismatch`/`manual` package 必须当场读完并按上面标准正常分类，不能因为脚本没有给出可信 terminal resolution 就跳过或搁置。
 
 ## 清理执行
 

@@ -1,5 +1,5 @@
 ---
-target: skills/backfill-stable-docs
+target: skills/impl-package/backfill-stable-docs
 updated: 2026-07-15
 ---
 ## 原则
@@ -30,3 +30,7 @@ updated: 2026-07-15
 ### R5 · 2026-07-16
 - 采纳「gate.md 顶部说明性 prose 和账本 entry 分开对待」— 用户原话：append-only 这套对两三人团队价值不大，我们也不会真的回去看那个 ledger，这可能更适合全自动场景，一次性迁移已经做完，后续可以轻量操作；对抗后收敛为：不可变性本身保留（今天的 litmus dry-run 全程靠读多轮 gate 历史才能分清 `order-document-completion-workflow` 的 5 轮 patch 里哪份权威、`module-specs-restructure` 是否真的 stale），但 gate.md 顶部允许一行可变的"当前状态一览"，与下面严格 append-only 的判决/证据内容分开处理。
 - 落地：`impl-package-composition-contract.md` §7、`dev-with-track` 的 gate.md 模板与 SKILL.md、`package-retirement-runbook.md` 都补充了这条区分——顶部一行摘要可随时改写以对齐最新 entry/结论，但不能单独携带 entry 里没有的判断或证据；entry 本身（含存量旧格式 gate.md 里的 Gate Decision/Verification 段落）继续严格 append-only。
+
+### R6 · 2026-07-17
+- 采纳 current-only contract：backfill 归入 Impl-Package，先运行独立 contract preflight；旧包必须由 agent 直接改造成当前 contract 并重新校验，不保留运行时 legacy 兼容或迁移记录。
+- 当前 backfill contract 为字符串 `"3.1"`；audit、inventory、verify 与 repository config 统一使用该字段。

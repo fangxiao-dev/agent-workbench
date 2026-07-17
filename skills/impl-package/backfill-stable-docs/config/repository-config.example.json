@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "contractVersion": "3.1",
   "repository": "fangxiao-dev/KaiSpan",
   "targetBranch": "origin/develop",
   "implementations": [

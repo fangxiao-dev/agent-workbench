@@ -100,34 +100,31 @@ v1 marker name 至少包括 `revision-set`、`runtime-state` 与 `gate-status`�
 
 ER 的 Revision set 表示该 ER 写入时的 current D/S/P set。plan header 的 revision-set 投影表示当前 set；S/D 的机械刷新走 projection rebind，不升级 P。
 
-## 6. Gate 消费四类结果
+## 6. Gate 消费三类结果
 
-当 `gate.md` 存在时，消费方必须把 gate 识别为以下四类之一，并把 recognition kind、可信 `gateResolution` 与人工路由分开：
+当 `gate.md` 存在且 package 已通过 current contract preflight 时，消费方必须把 gate 识别为以下三类之一，并把 recognition kind、可信 `gateResolution` 与人工路由分开：
 
 1. `indexed`：JSON finalized index 存在，目标 entry 唯一，content binding 匹配，且 index 的 id/attempt/number/verdict/supersedes 与 Markdown 反解值一致。resolver 现场从 entry 正文反解 `revisionSet`，并与 revision registry 的 current D/S/P 比较：一致时 `appliesToCurrentRevision=true`、`gateResolution=<verdict>`；不一致时它仍是合法历史 `indexed` entry，但 `appliesToCurrentRevision=false`、`gateResolution=null`，且不进入人工异常。新 current attempt 尚未分配 Gate 时，resolver 返回 ledger 中最新的合法历史 indexed entry 并按当前 D/S/P 计算不适用；已有 current allocation/Markdown entry 却尚未 finalize 仍按 `mismatch` fail safe。entry 缺 revision set 或 finalize 时与 current D/S/P 不一致属于结构错误，不能生成 finalized index。
-2. `legacy-heading`：整个 package 没有 runtime-state JSON，旧 gate heading 可解析；`gateResolution=<verdict>` 并标 legacy，无需人工路由。
-3. `mismatch`：JSON 存在但损坏、缺 entry、entry 缺失/重复、pointer 越界、content/字段 binding 不符、JSON 陈旧或无法解析；`gateResolution=null`、`needsManualGateReview=true`，不得 fallback 信任 heading。
-4. `manual`：gate.md 存在、整个 package 没有 runtime-state JSON、且无合法 legacy heading；`gateResolution=null`、`needsManualGateReview=true`。
+2. `mismatch`：JSON 存在但损坏、缺 entry、entry 缺失/重复、pointer 越界、content/字段 binding 不符、JSON 陈旧或无法解析；`gateResolution=null`、`needsManualGateReview=true`，不得 fallback 信任 heading。
+3. `manual`：current contract 已存在但证据仍矛盾或缺失；`gateResolution=null`、`needsManualGateReview=true`。
 
-没有 `gate.md` 时 `hasGate=false`、`gateRecognition=null`、`gateResolution=null`；已有空 ledger 模板、且 runtime gate 没有 allocation/entry 时 `hasGate=true` 但其余结果相同。两者都表示 attempt 尚无 verdict，不是第五种 recognition result，也不默认等于人工异常。若某个消费动作本身要求 terminal gate，应由该动作正常判定未满足前提。
+没有 `gate.md` 时 `hasGate=false`、`gateRecognition=null`、`gateResolution=null`；已有空 ledger 模板、且 runtime gate 没有 allocation/entry 时 `hasGate=true` 但其余结果相同。两者都表示 attempt 尚无 verdict，不是额外的 recognition result，也不默认等于人工异常。若某个消费动作本身要求 terminal gate，应由该动作正常判定未满足前提。
 
-这四类是 compatibility result，不是新的 package lifecycle。backfill、retirement 与 verify 可以投影结果，但不得把 `mismatch` 降级成 legacy success，也不得把历史 indexed verdict 投影到新的 current revision set。backfill inventory 因新增 `gateAppliesToCurrentRevision` 与结构候选/真实候选分层升到 schemaVersion 5；旧 `gateVerdictParsed` 等字段只可作为派生兼容投影，不能继续作为内部判断依据。识别可信度与 `_pending.md` 引用资格正交，referenced package 的 mismatch/manual 不得被抑制。
+这三类是当前 contract 的消费结果，不是新的 package lifecycle。缺失或低于当前 `contractVersion="3.1"` 的 package 必须先走 contract preflight，不能由 gate resolver 读取旧 heading 或旧 schema 猜测；backfill、retirement 与 verify 可以投影结果，但不得把 `mismatch` 降级成成功，也不得把历史 indexed verdict 投影到新的 current revision set。inventory、audit 与 verify 输出统一携带 `contractVersion="3.1"`；旧字段不再作为内部判断依据。识别可信度与 `_pending.md` 引用资格正交，referenced package 的 mismatch/manual 不得被抑制。
 
-## 7. Schema migration
+## 7. Current contract 与升级
 
-revision-bindings v1 仍可由 `validate` 以 legacy compatibility mode 只读解析：每个旧 binding 视为该 alias 的唯一 terminal binding，并继续执行原 exact-blob/plan-contract-v1 检查；结果必须报告 `migrationRequired=true`。除显式 migration 外，其他 mutating command 遇到 v1 必须拒绝。
+package 的 canonical 版本位于 `.impl-package/runtime-state.json` 顶层 `contractVersion`；缺失 runtime-state、缺字段或低于 current contract 都返回 `upgradeRequired`，不得当作合法 legacy 输入。未知更高 contractVersion、损坏 JSON 或互相矛盾的 sidecar 必须 fail closed。
 
-`migrate --evidence <pointer>` 将 v1 原子转换为 v2：为现有记录生成 deterministic ID，设 `supersedes=null`，写入同一 migration evidence pointer，保持 current 与 blob 不变，然后执行 working-tree validation。相同输入与 evidence 重复运行是幂等 no-op；v1 缺字段、重复 alias/path 或 binding 本身无法验证时迁移失败且原文件保持不变。v2 不提供 downgrade。
+升级是 agent-owned 的直接重塑动作：只在 preflight 判定 `upgradeRequired` 时读取 [`../assets/contract-revision-history.md`](../assets/contract-revision-history.md)，结合最新模板和实际内容改写当前任务包；不生成 migration ledger、不保存旧 schema 副本、不提供运行时 `migrate` 命令。改写后必须重新执行 current contract validate，成功后才能进入 stage 或 backfill。
 
-runtime-state 不存在表示 legacy package，`init` 显式创建 v1；不得把 absence 当损坏。未知更高 schemaVersion 必须 fail closed，不得猜测字段。
-
-## 8. v1 CLI contract
+## 8. Current CLI contract (contract 3.1)
 
 单文件、Python 标准库、显式 package path：
 
 ```text
 impl_package_state.py --package <path> init --package-id <id>
-impl_package_state.py --package <path> migrate --evidence <pointer>
+impl_package_state.py --package <path> contract-status
 impl_package_state.py --package <path> validate --working-tree|--committed
 impl_package_state.py --package <path> register-revision <design|spec|plan> <alias> [--attempt <id>] --evidence <pointer>
 impl_package_state.py --package <path> rebind <alias> --reason <projection|editorial> --evidence <pointer> [--confirm-contract-impact-none]
@@ -142,7 +139,7 @@ impl_package_state.py --package <path> finalize-gate-entry <gate-id>
 
 命令可以增加纯输出选项，但不得静默推断 package root、current attempt、previous state、editorial judgment 或 verdict reason。
 
-CLI 的数据策略来自 skill-owned [`../assets/impl-package-state-config.json`](../assets/impl-package-state-config.json)。配置只承载 vocabulary、artifact discovery、字段及 gate heading/revision-set grammar（含 `revisionSetFieldPattern`）、marker 名称与 projection format；脚本自动按自身 skill 位置加载，不接受调用方任意覆盖 canonical policy。配置使用独立 `schemaVersion`，并对 placeholder、capture group 与单行 heading 范围 fail closed。完整 gate entry span、append-only、identity/content binding、active backward chain、CAS、package-local path、HEAD/worktree context 与 earned-artifact bijection 保持为代码内不可配置不变量。
+CLI 的数据策略来自 skill-owned [`../assets/impl-package-state-config.json`](../assets/impl-package-state-config.json)。配置只承载 vocabulary、artifact discovery、字段及 gate heading/revision-set grammar（含 `revisionSetFieldPattern`）、marker 名称与 projection format；脚本自动按自身 skill 位置加载，不接受调用方任意覆盖 canonical policy。配置和 package contract 都使用字符串 `contractVersion`，当前为 `"3.1"`；对 placeholder、capture group 与单行 heading 范围 fail closed。完整 gate entry span、append-only、identity/content binding、active backward chain、CAS、package-local path、HEAD/worktree context 与 earned-artifact bijection 保持为代码内不可配置不变量。
 
 ## 9. Schema gate acceptance
 
@@ -153,4 +150,4 @@ CLI 的数据策略来自 skill-owned [`../assets/impl-package-state-config.json
 - projection marker/allowlist 明确，marker 外 diff 不能自动 rebind。
 - gate index 绑定完整 entry，reserve/finalize 分离，mismatch 进入 manual。
 - revision/artifact/gate 历史 append-only；task/ticket 只存 current + last evidence，未复制 transition ledger。
-- fixtures 覆盖 legacy、schema migration、损坏/部分写入、projection drift、idempotence、stale expectation、含空格路径、CRLF/LF 和 gate 四类结果；并发写 fixture 只验证 atomic replace 不产生半截 JSON，不宣称 lost-update protection；DATEV 只用于后续副本演练。
+- fixtures 覆盖 current contract、upgradeRequired、unsupportedFuture、损坏/部分写入、projection drift、idempotence、stale expectation、含空格路径、CRLF/LF 和 gate 三类结果；并发写 fixture 只验证 atomic replace 不产生半截 JSON，不宣称 lost-update protection；DATEV 用作真实 3.1 演练。

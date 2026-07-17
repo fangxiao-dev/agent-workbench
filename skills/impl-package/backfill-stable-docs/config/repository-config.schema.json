@@ -5,7 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schemaVersion",
+    "contractVersion",
     "repository",
     "targetBranch",
     "implementations",
@@ -13,8 +13,8 @@
     "records"
   ],
   "properties": {
-    "schemaVersion": {
-      "const": 3
+    "contractVersion": {
+      "const": "3.1"
     },
     "repository": {
       "type": "string",

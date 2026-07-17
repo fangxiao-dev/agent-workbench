@@ -16,6 +16,26 @@ from typing import Any
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "assets" / "impl-package-state-config.json"
+CURRENT_CONTRACT_VERSION = "3.1"
+CONTRACT_VERSION_PATTERN = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+
+
+def _contract_version(value: Any) -> tuple[int, int] | None:
+    """Parse the canonical string contract version without float semantics."""
+    if not isinstance(value, str):
+        return None
+    match = CONTRACT_VERSION_PATTERN.fullmatch(value)
+    return (int(match.group(1)), int(match.group(2))) if match else None
+
+
+def _contract_status_for_version(value: Any) -> str:
+    parsed = _contract_version(value)
+    current = _contract_version(CURRENT_CONTRACT_VERSION)
+    if parsed is None or current is None:
+        return "invalid"
+    if parsed == current:
+        return "current"
+    return "upgradeRequired" if parsed < current else "unsupportedFuture"
 
 
 def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
@@ -23,10 +43,10 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
         config = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"cannot load Impl-Package state config: {path}: {exc}") from exc
-    if not isinstance(config, dict) or set(config) != {"schemaVersion", "stateVocabulary", "documents", "projections", "gate"}:
+    if not isinstance(config, dict) or set(config) != {"contractVersion", "stateVocabulary", "documents", "projections", "gate"}:
         raise RuntimeError("Impl-Package state config has invalid top-level shape")
-    if config.get("schemaVersion") != 1:
-        raise RuntimeError(f"unsupported Impl-Package state config schemaVersion: {config.get('schemaVersion')!r}")
+    if config.get("contractVersion") != CURRENT_CONTRACT_VERSION:
+        raise RuntimeError(f"unsupported Impl-Package contractVersion: {config.get('contractVersion')!r}")
     vocab = config["stateVocabulary"]
     if not isinstance(vocab, dict) or set(vocab) != {"task", "ticket", "gateVerdict", "terminalGateVerdict", "initialState"}:
         raise RuntimeError("Impl-Package state vocabulary has invalid shape")
@@ -142,6 +162,25 @@ class StateError(RuntimeError):
     pass
 
 
+def _require_current_contract(state: Any, label: str) -> None:
+    if not isinstance(state, dict):
+        raise StateError(f"{label} is not a JSON object")
+    status = (
+        "upgradeRequired"
+        if "contractVersion" not in state
+        else _contract_status_for_version(state.get("contractVersion"))
+    )
+    if status == "current":
+        if "schemaVersion" in state:
+            raise StateError(f"invalid {label}: legacy schemaVersion is not supported")
+        return
+    if status == "upgradeRequired":
+        raise StateError(f"{label} contract upgrade required (current: {CURRENT_CONTRACT_VERSION})")
+    if status == "unsupportedFuture":
+        raise StateError(f"unsupported future {label} contractVersion: {state.get('contractVersion')!r}")
+    raise StateError(f"invalid {label} contractVersion: {state.get('contractVersion')!r}")
+
+
 def _atomic_write_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
@@ -179,7 +218,7 @@ def _atomic_write_text(path: Path, payload: str) -> None:
 
 def _empty_runtime_state(package_id: str) -> dict[str, Any]:
     return {
-        "schemaVersion": 1,
+        "contractVersion": CURRENT_CONTRACT_VERSION,
         "purpose": "internal-machine-sidecar",
         "ownerFacing": False,
         "packageId": package_id,
@@ -339,8 +378,7 @@ def command_init(package: Path, package_id: str) -> dict[str, Any]:
     expected = _empty_runtime_state(package_id)
     if path.exists():
         actual = json.loads(path.read_text(encoding="utf-8"))
-        if actual.get("schemaVersion") != 1:
-            raise StateError(f"unsupported runtime schemaVersion: {actual.get('schemaVersion')!r}")
+        _require_current_contract(actual, "runtime state")
         if actual.get("packageId") != package_id:
             raise StateError(f"packageId mismatch: expected {package_id!r}, found {actual.get('packageId')!r}")
         before = json.dumps(actual, sort_keys=True)
@@ -358,8 +396,7 @@ def _load_runtime_state(package: Path) -> tuple[Path, dict[str, Any]]:
     if not path.is_file():
         raise StateError(f"runtime state does not exist: {path}")
     state = json.loads(path.read_text(encoding="utf-8"))
-    if state.get("schemaVersion") != 1:
-        raise StateError(f"unsupported runtime schemaVersion: {state.get('schemaVersion')!r}")
+    _require_current_contract(state, "runtime state")
     return path, state
 
 
@@ -581,7 +618,6 @@ def _gate_scaffold(entry_id: str, attempt: str, supersedes: str | None) -> str:
         "- 评估时间（Evaluated at）：\n"
         "- 修订集合（Revision set）：\n"
         "- 绑定校验（Binding validation）：\n"
-        "<!-- 机器审计元数据：sidecar=.impl-package/revision-bindings.json; D=<oid>; S=<oid>; P=<oid> -->\n"
         "- 执行组合（Composition）：\n"
         "- 比较点（Comparison point）：\n"
         "- 证据（Evidence）：\n"
@@ -684,8 +720,6 @@ def command_rebind(
     confirm_contract_impact_none: bool,
 ) -> dict[str, Any]:
     path, state = _load_revision_state(package)
-    if state.get("schemaVersion") != 2:
-        raise StateError("revision schema migration required before mutation")
     selection = _selection_for_alias(state, alias)
     active = _active_binding(state, selection)
     artifact = active["artifact"]
@@ -720,8 +754,6 @@ def _revision_projection(state: dict[str, Any], kind: str) -> str:
 
 
 def _validate_revision_projections(package: Path, state: dict[str, Any], committed: bool) -> None:
-    if state.get("schemaVersion") != 2:
-        return
     marker = CONFIG["projections"]["markers"]["revisionSet"]
     targets: dict[str, tuple[str, list[dict[str, Any]]]] = {}
     priority = {"design": 0, "spec": 1, "plan": 2}
@@ -871,17 +903,6 @@ def resolve_gate(package: Path) -> dict[str, Any]:
     blocks = _gate_blocks(text)
     runtime_path = package / RUNTIME_STATE
     if not runtime_path.is_file():
-        if blocks:
-            latest = blocks[0]
-            return {
-                "kind": "legacy-heading",
-                "hasGate": True,
-                "entryId": latest["id"],
-                "gateResolution": latest["verdict"],
-                "appliesToCurrentRevision": None,
-                "needsManualGateReview": False,
-                "reason": None,
-            }
         return {
             "kind": "manual",
             "hasGate": True,
@@ -889,12 +910,11 @@ def resolve_gate(package: Path) -> dict[str, Any]:
             "gateResolution": None,
             "appliesToCurrentRevision": None,
             "needsManualGateReview": True,
-            "reason": "gate.md has no structured index or parseable legacy heading",
+            "reason": "runtime state is missing; gate cannot be trusted",
         }
     try:
         state = json.loads(runtime_path.read_text(encoding="utf-8"))
-        if not isinstance(state, dict) or state.get("schemaVersion") != 1:
-            raise StateError(f"unsupported runtime schemaVersion: {state.get('schemaVersion') if isinstance(state, dict) else None!r}")
+        _require_current_contract(state, "runtime state")
         _validate_gate_index(state, text)
         current = _current_attempt(package)
         if current is None:
@@ -986,40 +1006,6 @@ def _binding_id(binding: dict[str, Any]) -> str:
     blob = binding["blob"]
     attempt = binding.get("attempt")
     return f"{attempt}:{revision}@{blob}" if attempt else f"{revision}@{blob}"
-
-
-def command_migrate(package: Path, evidence: str) -> dict[str, Any]:
-    path = package / REVISION_BINDINGS
-    if not path.is_file():
-        raise StateError(f"revision sidecar does not exist: {path}")
-    state = json.loads(path.read_text(encoding="utf-8"))
-    version = state.get("schemaVersion")
-    if version == 2:
-        return state
-    if version != 1:
-        raise StateError(f"unsupported revision schemaVersion: {version!r}")
-    _validate_revision_bindings(package, state, committed=False)
-    migrated = dict(state)
-    migrated["schemaVersion"] = 2
-    migrated_bindings: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for original in state.get("bindings", []):
-        binding = dict(original)
-        identifier = _binding_id(binding)
-        if identifier in seen:
-            raise StateError(f"duplicate binding identity: {identifier}")
-        seen.add(identifier)
-        binding["id"] = identifier
-        binding["supersedes"] = None
-        binding["evidence"] = evidence
-        migrated_bindings.append(binding)
-    migrated["bindings"] = migrated_bindings
-    _validate_revision_bindings(package, migrated, committed=False)
-    _validate_revision_projections(package, migrated, committed=False)
-    if (package / RUNTIME_STATE).is_file():
-        _validate_runtime_state(package, migrated, committed=False)
-    _atomic_write_json(path, migrated)
-    return migrated
 
 
 def _git_root(path: Path) -> Path:
@@ -1279,9 +1265,8 @@ def _validate_runtime_state(package: Path, revision_state: dict[str, Any], commi
         state = json.loads(runtime_text)
     except json.JSONDecodeError as exc:
         raise StateError("runtime state is not valid JSON") from exc
-    if state.get("schemaVersion") != 1:
-        raise StateError(f"unsupported runtime schemaVersion: {state.get('schemaVersion')!r}")
-    required = {"schemaVersion", "purpose", "ownerFacing", "packageId", "tasks", "tickets", "artifacts", "gate"}
+    _require_current_contract(state, "runtime state")
+    required = {"contractVersion", "purpose", "ownerFacing", "packageId", "tasks", "tickets", "artifacts", "gate"}
     if set(state) != required or state.get("purpose") != "internal-machine-sidecar" or state.get("ownerFacing") is not False:
         raise StateError("runtime state has invalid top-level shape")
     if not isinstance(state.get("packageId"), str) or not state["packageId"]:
@@ -1388,8 +1373,7 @@ def _load_revision_state(package: Path) -> tuple[Path, dict[str, Any]]:
     if not path.is_file():
         raise StateError(f"revision sidecar does not exist: {path}")
     state = json.loads(path.read_text(encoding="utf-8"))
-    if state.get("schemaVersion") not in (1, 2):
-        raise StateError(f"unsupported revision schemaVersion: {state.get('schemaVersion')!r}")
+    _require_current_contract(state, "revision bindings")
     return path, state
 
 
@@ -1400,8 +1384,7 @@ def _revision_state_for_context(package: Path, committed: bool) -> dict[str, Any
         state = json.loads(_artifact_text(package, REVISION_BINDINGS.as_posix(), True))
     except json.JSONDecodeError as exc:
         raise StateError("committed revision sidecar is not valid JSON") from exc
-    if state.get("schemaVersion") not in (1, 2):
-        raise StateError(f"unsupported revision schemaVersion: {state.get('schemaVersion')!r}")
+    _require_current_contract(state, "revision bindings")
     return state
 
 
@@ -1432,8 +1415,6 @@ def command_register_revision(
     evidence: str,
 ) -> dict[str, Any]:
     path, state = _load_revision_state(package)
-    if state.get("schemaVersion") != 2:
-        raise StateError("revision schema migration required before mutation")
     expected_prefix = {"design": "D", "spec": "S", "plan": "P"}[kind]
     if re.fullmatch(rf"{expected_prefix}[1-9]\d*", alias) is None:
         raise StateError(f"invalid {kind} revision alias: {alias}")
@@ -1474,12 +1455,11 @@ def command_register_revision(
 
 
 def _validate_revision_bindings(package: Path, state: dict[str, Any], committed: bool) -> list[str]:
-    version = state.get("schemaVersion")
-    if version == 2:
-        if set(state) != {"schemaVersion", "purpose", "ownerFacing", "current", "bindings"}:
-            raise StateError("revision sidecar has invalid top-level shape")
-        if state.get("purpose") != "internal-machine-sidecar" or state.get("ownerFacing") is not False:
-            raise StateError("revision sidecar discriminator is invalid")
+    _require_current_contract(state, "revision bindings")
+    if set(state) != {"contractVersion", "purpose", "ownerFacing", "current", "bindings"}:
+        raise StateError("revision sidecar has invalid top-level shape")
+    if state.get("purpose") != "internal-machine-sidecar" or state.get("ownerFacing") is not False:
+        raise StateError("revision sidecar discriminator is invalid")
     bindings = state.get("bindings")
     if not isinstance(bindings, list) or any(not isinstance(row, dict) for row in bindings):
         raise StateError("revision bindings must be an array of objects")
@@ -1494,11 +1474,9 @@ def _validate_revision_bindings(package: Path, state: dict[str, Any], committed:
         alias_pattern = r"[DS][1-9]\d*" if mode == "exact-blob" else r"P[1-9]\d*"
         if not isinstance(row.get("revision"), str) or re.fullmatch(alias_pattern, row["revision"]) is None:
             raise StateError(f"revision alias does not match binding mode: {row.get('revision')!r}")
-        required = {"artifact", "revision", "mode", "blob"}
+        required = {"artifact", "revision", "mode", "blob", "id", "supersedes", "evidence"}
         if mode == "plan-contract-v1":
             required.add("attempt")
-        if version == 2:
-            required.update({"id", "supersedes", "evidence"})
         if set(row) != required:
             raise StateError("revision binding has invalid canonical shape")
         if not all(isinstance(row.get(field), str) and row[field] for field in ("artifact", "revision", "blob")):
@@ -1509,20 +1487,19 @@ def _validate_revision_bindings(package: Path, state: dict[str, Any], committed:
             raise StateError(f"revision binding blob is missing: {row['blob']}")
         semantic = (row.get("attempt"), row["revision"], row["artifact"])
         semantic_terminals[semantic] = semantic_terminals.get(semantic, 0) + 1
-        if version == 2:
-            if row["id"] != _binding_id(row) or not isinstance(row.get("evidence"), str) or not row["evidence"]:
-                raise StateError("revision binding ID or evidence is invalid")
-            if row["id"] in known:
-                raise StateError(f"duplicate binding identity: {row['id']}")
-            pointer = row.get("supersedes")
-            if pointer is not None:
-                target = known.get(pointer)
-                if target is None or (target.get("attempt"), target["revision"], target["artifact"]) != semantic or pointer in superseded:
-                    raise StateError("revision supersedes is not an active backward reference for the same revision")
-                superseded.add(pointer)
-                semantic_terminals[semantic] -= 1
-            known[row["id"]] = row
-    if version == 2 and any(count != 1 for count in semantic_terminals.values()):
+        if row["id"] != _binding_id(row) or not isinstance(row.get("evidence"), str) or not row["evidence"]:
+            raise StateError("revision binding ID or evidence is invalid")
+        if row["id"] in known:
+            raise StateError(f"duplicate binding identity: {row['id']}")
+        pointer = row.get("supersedes")
+        if pointer is not None:
+            target = known.get(pointer)
+            if target is None or (target.get("attempt"), target["revision"], target["artifact"]) != semantic or pointer in superseded:
+                raise StateError("revision supersedes is not an active backward reference for the same revision")
+            superseded.add(pointer)
+            semantic_terminals[semantic] -= 1
+        known[row["id"]] = row
+    if any(count != 1 for count in semantic_terminals.values()):
         raise StateError("revision identity does not have exactly one terminal binding")
     current = state.get("current", {})
     if not isinstance(current, dict):
@@ -1566,8 +1543,83 @@ def command_validate(package: Path, committed: bool) -> dict[str, Any]:
     return {
         "ok": True,
         "context": "committed" if committed else "working-tree",
-        "migrationRequired": state.get("schemaVersion") == 1,
+        "contractVersion": CURRENT_CONTRACT_VERSION,
         "checked": checked,
+    }
+
+
+CONTRACT_STATUS_EXIT_CODES = {
+    "current": 0,
+    "invalid": 2,
+    "upgradeRequired": 3,
+    "unsupportedFuture": 4,
+}
+
+
+def _contract_component_status(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {"status": "upgradeRequired", "contractVersion": None, "reason": "missing"}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {"status": "invalid", "contractVersion": None, "reason": "invalid-json"}
+    if not isinstance(value, dict):
+        return {"status": "invalid", "contractVersion": None, "reason": "top-level-not-object"}
+    if "contractVersion" not in value:
+        # A pre-3.1 sidecar is upgradeable in place; no compatibility reader trusts it.
+        return {
+            "status": "upgradeRequired",
+            "contractVersion": None,
+            "reason": "missing-contractVersion",
+        }
+    if "schemaVersion" in value:
+        return {
+            "status": "invalid",
+            "contractVersion": value.get("contractVersion"),
+            "reason": "legacy-schemaVersion",
+        }
+    status = _contract_status_for_version(value.get("contractVersion"))
+    return {
+        "status": status,
+        "contractVersion": value.get("contractVersion"),
+        "reason": None if status == "current" else "contract-version",
+    }
+
+
+def command_contract_status(package: Path) -> dict[str, Any]:
+    if not package.is_dir():
+        return {
+            "ok": False,
+            "status": "invalid",
+            "contractVersion": CURRENT_CONTRACT_VERSION,
+            "currentContractVersion": CURRENT_CONTRACT_VERSION,
+            "components": {},
+            "reason": "package-directory-missing",
+        }
+    components = {
+        "revisionBindings": _contract_component_status(package / REVISION_BINDINGS),
+        "runtimeState": _contract_component_status(package / RUNTIME_STATE),
+    }
+    statuses = [component["status"] for component in components.values()]
+    if "unsupportedFuture" in statuses:
+        status = "unsupportedFuture"
+        reason = "component-uses-future-contract"
+    elif "invalid" in statuses:
+        status = "invalid"
+        reason = "component-contract-is-invalid"
+    elif "upgradeRequired" in statuses:
+        status = "upgradeRequired"
+        reason = "component-requires-upgrade"
+    else:
+        status = "current"
+        reason = None
+    return {
+        "ok": status == "current",
+        "status": status,
+        "contractVersion": CURRENT_CONTRACT_VERSION,
+        "currentContractVersion": CURRENT_CONTRACT_VERSION,
+        "components": components,
+        "reason": reason,
     }
 
 
@@ -1577,8 +1629,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     init_parser = subparsers.add_parser("init")
     init_parser.add_argument("--package-id", required=True)
-    migrate_parser = subparsers.add_parser("migrate")
-    migrate_parser.add_argument("--evidence", required=True)
+    subparsers.add_parser("contract-status")
     register_parser = subparsers.add_parser("register-revision")
     register_parser.add_argument("kind", choices=("design", "spec", "plan"))
     register_parser.add_argument("alias")
@@ -1633,8 +1684,8 @@ def main(argv: list[str] | None = None) -> int:
         package = args.package.resolve()
         if args.command == "init":
             result = command_init(package, args.package_id)
-        elif args.command == "migrate":
-            result = command_migrate(package, args.evidence)
+        elif args.command == "contract-status":
+            result = command_contract_status(package)
         elif args.command == "register-revision":
             result = command_register_revision(
                 package, args.kind, args.alias, args.artifact, args.attempt, args.evidence
@@ -1690,6 +1741,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    if args.command == "contract-status":
+        return CONTRACT_STATUS_EXIT_CODES[result["status"]]
     return 0
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load and validate Stable Docs Backfill repository configuration (schemaVersion 3)."""
+"""Load and validate Stable Docs Backfill repository configuration (contract 3.1)."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from typing import Any
 
 
 CONFIG_NAME = ".stable-docs-backfill.json"
+CONTRACT_VERSION = "3.1"
 PORTABLE_REPOSITORY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
@@ -104,7 +105,7 @@ def validate_config(payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ConfigError("configuration must contain a JSON object")
     allowed = {
-        "schemaVersion",
+        "contractVersion",
         "repository",
         "targetBranch",
         "implementations",
@@ -115,8 +116,8 @@ def validate_config(payload: Any) -> dict[str, Any]:
     unknown = sorted(set(payload) - allowed)
     if unknown:
         raise ConfigError("unknown configuration fields: " + ", ".join(unknown))
-    if payload.get("schemaVersion") != 3:
-        raise ConfigError("schemaVersion must equal 3")
+    if payload.get("contractVersion") != CONTRACT_VERSION:
+        raise ConfigError(f"contractVersion must equal {CONTRACT_VERSION!r}")
 
     repository = _require_non_empty_string(payload.get("repository"), "repository").lower()
     if PORTABLE_REPOSITORY_RE.fullmatch(repository) is None:
@@ -184,7 +185,7 @@ def validate_config(payload: Any) -> dict[str, Any]:
     }
 
     return {
-        "schemaVersion": 3,
+        "contractVersion": CONTRACT_VERSION,
         "repository": repository,
         "targetBranch": target_branch,
         "implementations": implementations,

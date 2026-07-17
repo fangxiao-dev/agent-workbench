@@ -22,6 +22,11 @@ from stable_docs_config import (
     resolve_project_path,
     resolve_target_branch,
 )
+from contract_preflight import (
+    CONTRACT_VERSION,
+    ContractPreflightError,
+    require_current,
+)
 from gate_recognition import TERMINAL_GATE_VERDICTS, resolve_gate
 
 
@@ -97,13 +102,30 @@ def _load_done_record(path: Path) -> dict[str, Any]:
 
 
 def collect_inventory(
-    *, project_root: Path | str, config_path: Path | str | None = None
+    *,
+    project_root: Path | str,
+    config_path: Path | str | None = None,
+    preflight: bool = True,
 ) -> dict[str, Any]:
     project = _require_git_repository(project_root)
     try:
         config, config_metadata = load_repository_config(project, config_path)
     except ConfigError as error:
         raise CollectorError(str(error)) from error
+
+    try:
+        contract_preflight = require_current(project, config) if preflight else {
+            "contractVersion": CONTRACT_VERSION,
+            "status": "skipped",
+            "packageCount": 0,
+            "blockedPackageCount": 0,
+            "packages": [],
+        }
+    except ContractPreflightError as error:
+        raise CollectorError(str(error)) from error
+    contract_by_path = {
+        Path(row["package"]).resolve(): row for row in contract_preflight["packages"]
+    }
 
     try:
         target_branch_commit = resolve_target_branch(project, config["targetBranch"])
@@ -169,8 +191,7 @@ def collect_inventory(
             )
             is_terminal = (
                 (
-                    gate["kind"] == "legacy-heading"
-                    or (gate["kind"] == "indexed" and applies_to_current_revision is True)
+                    gate["kind"] == "indexed" and applies_to_current_revision is True
                 )
                 and verdict in TERMINAL_GATE_VERDICTS
             )
@@ -178,6 +199,8 @@ def collect_inventory(
                 {
                     "packageId": package_id,
                     "path": relative_package_dir,
+                    "contractVersion": contract_by_path.get(package_dir.resolve(), {}).get("contractVersion"),
+                    "contractStatus": contract_by_path.get(package_dir.resolve(), {}).get("status"),
                     "implementationsRoot": implementations_root.relative_to(project).as_posix(),
                     "hasDesign": (package_dir / "design.md").is_file(),
                     "hasSpec": (package_dir / "spec.md").is_file(),
@@ -199,7 +222,8 @@ def collect_inventory(
             )
 
     return {
-        "schemaVersion": 5,
+        "contractVersion": CONTRACT_VERSION,
+        "contractPreflight": contract_preflight,
         "project": {
             "repository": config["repository"],
             "targetBranch": config["targetBranch"],
@@ -232,6 +256,8 @@ def _render_markdown(inventory: dict[str, Any]) -> str:
         "# 常青文档回刷来源清单",
         "",
         f"- 仓库：`{project['repository']}`",
+        f"- Impl-Package contract：`{inventory['contractVersion']}`",
+        f"- Contract preflight：`{inventory['contractPreflight']['status']}`",
         f"- 目标分支：`{project['targetBranch']}` -> `{project['targetBranchCommit'] or '未解析'}`",
         f"- 目标分支配置缺口：{'是' if inventory['targetBranchConfigGap'] else '否'}",
         f"- 任务包数量：{inventory['packageCount']}",
