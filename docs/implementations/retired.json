@@ -31,7 +31,7 @@
         "scripts/codex_harness_crew.py",
         "scripts/codex_harness_dispatch.py"
       ],
-      "deleted_in_commit": null
+      "deleted_in_commit": "861055a3d8c54266d81de3b25f14f87efb31d117"
     }
   ]
 }
