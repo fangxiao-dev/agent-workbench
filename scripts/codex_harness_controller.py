@@ -201,7 +201,8 @@ def build_prompt(run_id: str, scenario: str) -> str:
         f"Return only one JSON object for run_id=\"{run_id}\" with schema_version=\"codex-harness.parent-result.v0\", "
         "stage, status, summary, artifacts, verification, findings, owner_decisions, retry_hint, and "
         "boundary_violations. Use status=\"succeeded\" when the read-only task completed; artifacts and findings "
-        "may be empty; verification must be an array of objects each containing command (string), exit_code (integer), "
+        "may be empty; artifacts must be an array of objects each containing path (string) and purpose (string); "
+        "verification must be an array of objects each containing command (string), exit_code (integer), "
         "and claim (string), for example {\"command\":\"read-only inspection\",\"exit_code\":0,\"claim\":\"files reviewed\"}. "
         "retry_hint must be \"none\", and boundary_violations must be an array of strings."
     )
