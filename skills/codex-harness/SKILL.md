@@ -1,9 +1,13 @@
 ---
 name: codex-harness
-description: Use when explaining, designing, prototyping, validating, or operating a Codex Harness built on Codex App Server, especially a parent-agent harness where the outer harness assigns and validates one parent execution role while that parent independently chooses whether and how to use native subagents. Also use for parent thread lifecycle, structured-result validation, retries, timeouts, boundary enforcement, Impl-Package integration, and Codex CLI harness feasibility work. 当前为介绍与设计驱动的 POC 雏形，不代表生产就绪。
+description: Explicitly invoked entry point for operating or changing the Codex Harness/Crew system. Use only when the user names $codex-harness or directly asks to operate this Harness; do not implicitly invoke it because a task mentions agents, worktrees, App Server, or Harness concepts. 当前为介绍与设计驱动的 POC 雏形，不代表生产就绪。
+disable-model-invocation: true
+user-invocable: true
 ---
 
 # Codex Harness
+
+> **Invocation gate:** This Skill is opt-in. Do not continue reading this file or its design assets, references, or scripts merely because it is discoverable or a task mentions Harness/Crew. Continue only after the user explicitly invokes `$codex-harness`, `$codex-crew`, or `$codex-crew-lite`, or directly asks to operate this system; otherwise stop here.
 
 把 Codex Harness 视为围绕一个父 Codex agent 的确定性控制层：Harness 为父 agent 绑定执行角色，控制其 thread/turn、输入、外部验证与生命周期；父 agent 自主选择完成任务的方式，包括是否以及如何使用原生 subagents，并向 Harness 返回可校验的最终结果。
 

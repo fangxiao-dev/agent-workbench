@@ -1,9 +1,13 @@
 ---
 name: codex-crew-lite
-description: Use as the Lite execution profile of codex-harness when a persistent parent can handle a clear, bounded issue through isolated Codex App Server workers in separate Git worktrees without loading the full Harness or Impl-Package lifecycle. Also use when explicitly asked for codex-crew-lite.
+description: Explicitly invoked Lite execution profile for codex-harness. Use only when the user names $codex-crew-lite or directly asks to run a bounded issue through Crew Lite; do not implicitly invoke it because a task mentions worktrees, workers, or parallel fixes.
+disable-model-invocation: true
+user-invocable: true
 ---
 
 # Codex Crew Lite
+
+> **Invocation gate:** This Skill is opt-in. Do not continue reading it or its shared contract/assets merely because it is discoverable. Continue only after the user explicitly invokes `$codex-crew-lite` or directly asks to run Crew Lite; otherwise stop here.
 
 Use this as a mode selected and confirmed for the persistent parent, not as a second main-session scheduler. The parent owns issue analysis, creates the dispatch manifest, starts isolated workers, judges their questions, and gathers results. The main session only confirms the mode, forwards user decisions, and presents delivery. Each worker gets a fresh thread and worktree.
 

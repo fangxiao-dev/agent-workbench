@@ -1,9 +1,13 @@
 ---
 name: codex-crew
-description: Use as the Full execution profile of codex-harness when a persistent parent needs the complete Harness policy, approved Impl-Package binding, isolated Codex workers, independent verification, structured continuation, and a post-implementation do-review loop. Also use when explicitly asked for codex-crew.
+description: Explicitly invoked Full execution profile for codex-harness. Use only when the user names $codex-crew or directly asks to run the complete Crew flow; do not implicitly invoke it because a task mentions Impl-Package, review, gates, or parallel agents.
+disable-model-invocation: true
+user-invocable: true
 ---
 
 # Codex Crew
+
+> **Invocation gate:** This Skill is opt-in. Do not continue reading it or its shared contract/assets merely because it is discoverable. Continue only after the user explicitly invokes `$codex-crew` or directly asks to run the Full Crew flow; otherwise stop here.
 
 Codex Crew is the Full execution profile of the same persistent parent used by Crew Lite. The interactive main session remains accountable for the issue and owner communication; it confirms the parent’s Full proposal and forwards decisions. The parent performs all task decomposition, worker dispatch, package coordination, verification and review orchestration. It combines the shared worker/worktree dispatcher with the existing Harness lifecycle and Impl-Package gates rather than replacing either.
 
