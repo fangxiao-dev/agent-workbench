@@ -50,9 +50,10 @@ python scripts/codex_harness_dispatch.py start-workers --state .codex/crew/lite.
 
 - 共同 continuation、single-writer、owner routing 和 cleanup 边界：[codex-crew-continuation-contract.md](codex-crew-continuation-contract.md)
 - Parent route/status/state 协议：[codex-crew-parent.schema.json](../assets/codex-crew-parent.schema.json)
-- Worker/worktree dispatch 协议：[codex-crew-dispatch.schema.json](../assets/codex-crew-dispatch.schema.json)
-- Lite manifest 示例：[codex-crew-lite.v0.json](../assets/codex-crew-lite.v0.json)
-- Full manifest 示例：[codex-crew.v0.json](../assets/codex-crew.v0.json)
+- Worker/worktree dispatch 协议：[codex-crew-dispatch.v1.schema.json](../assets/codex-crew-dispatch.v1.schema.json)
+- Execution profiles：[codex-harness-execution-profiles.v0.json](../assets/codex-harness-execution-profiles.v0.json) 及其 [JSON Schema](../assets/codex-harness-execution-profiles.schema.json)
+- Lite manifest 示例：[codex-crew-lite.v1.json](../assets/codex-crew-lite.v1.json)
+- Full manifest 示例：[codex-crew.v1.json](../assets/codex-crew.v1.json)
 - Harness runtime policy：[codex-harness-runtime-policy.v0.json](../assets/codex-harness-runtime-policy.v0.json) 及其 [JSON Schema](../assets/codex-harness-runtime-policy.schema.json)
 
 上述结构化资产是配置和协议的事实源；Skill 文本只说明入口和边界，不在多处复制 policy 值。

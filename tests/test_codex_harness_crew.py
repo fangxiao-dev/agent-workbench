@@ -19,10 +19,16 @@ from scripts.codex_harness_crew import (
     parse_status,
     validate_state,
 )
+from scripts.codex_harness_controller import load_parent_profile
 from scripts.codex_harness_dispatch import initialise_state, write_json_atomic
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def parent_execution() -> dict:
+    profile = load_parent_profile(ROOT / ".codex" / "harness" / "crew-parent.toml")
+    return {"profile": profile["execution_profile"], "model": profile["model"], "reasoning_effort": profile["model_reasoning_effort"], "identity": profile["execution_profile_identity"]}
 
 
 def route_message(run_id: str, mode: str = "lite") -> str:
@@ -49,6 +55,7 @@ class CodexHarnessCrewTest(unittest.TestCase):
             state_path = Path(directory) / "parent.state.json"
             state = new_state(ROOT, "Fix the issue", ROOT / ".codex" / "harness" / "crew-parent.toml", run_id="run-lite")
             state["parent"]["thread_id"] = "parent-thread-1"
+            state["parent_execution"] = parent_execution()
             state["mode"] = {"status": "awaiting_confirmation", "proposed": "lite", "confirmed": None, "rationale": "bounded"}
             state["status"] = "awaiting_mode_confirmation"
             with patch("scripts.codex_harness_crew._run_turn", return_value={"thread_id": "parent-thread-1", "turn_id": "turn-2", "message": status_message("run-lite")}):
@@ -62,6 +69,7 @@ class CodexHarnessCrewTest(unittest.TestCase):
             state_path = Path(directory) / "parent-owner.state.json"
             state = new_state(ROOT, "Fix the issue", ROOT / ".codex" / "harness" / "crew-parent.toml", run_id="run-owner")
             state["parent"]["thread_id"] = "parent-thread-2"
+            state["parent_execution"] = parent_execution()
             state["mode"] = {"status": "confirmed", "proposed": "lite", "confirmed": "lite", "rationale": "bounded"}
             state["status"] = "awaiting_owner"
             with patch("scripts.codex_harness_crew._run_turn", return_value={"thread_id": "parent-thread-2", "turn_id": "turn-3", "message": status_message("run-owner", "completed")}):
@@ -76,6 +84,7 @@ class CodexHarnessCrewTest(unittest.TestCase):
             state_path = Path(directory) / "parent-upgrade.state.json"
             state = new_state(ROOT, "Issue expanded", ROOT / ".codex" / "harness" / "crew-parent.toml", run_id="run-upgrade")
             state["parent"]["thread_id"] = "parent-thread-3"
+            state["parent_execution"] = parent_execution()
             state["mode"] = {"status": "awaiting_confirmation", "proposed": "full", "confirmed": "lite", "rationale": "scope expanded"}
             state["status"] = "awaiting_mode_confirmation"
             with patch("scripts.codex_harness_crew._load_full_policy", return_value=(None, None)) as load_policy, patch("scripts.codex_harness_crew._run_turn", return_value={"thread_id": "parent-thread-3", "turn_id": "turn-4", "message": status_message("run-upgrade")}):
@@ -100,11 +109,13 @@ class CodexHarnessCrewTest(unittest.TestCase):
             state = new_state(ROOT, "Fix the issue", ROOT / ".codex" / "harness" / "crew-parent.toml", run_id="run-dispatch")
             state["state_path"] = str(state_path)
             state["parent"]["thread_id"] = "parent-thread-dispatch"
+            state["parent_execution"] = parent_execution()
             state["mode"] = {"status": "confirmed", "proposed": "lite", "confirmed": "lite", "rationale": "bounded"}
             state["status"] = "running"
             dispatch = {
-                "schema_version": "codex-crew.dispatch.v0",
+                "schema_version": "codex-crew.dispatch.v1",
                 "profile": "lite",
+                "worker_profile": "worker-lite-luna-max",
                 "repository_root": str(ROOT),
                 "parent_run_id": "run-dispatch",
                 "parent_thread_id": "parent-thread-dispatch",

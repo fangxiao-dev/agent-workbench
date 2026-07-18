@@ -73,16 +73,21 @@ try {
     $resolvedRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
     $projectConfig = Get-RequiredPath -BasePath $resolvedRoot -RelativePath ".codex\config.toml"
     $parentProfile = Get-RequiredPath -BasePath $resolvedRoot -RelativePath ".codex\harness\parent.toml"
+    $executionProfilesPath = Get-RequiredPath -BasePath $resolvedRoot -RelativePath "skills\codex-harness\assets\codex-harness-execution-profiles.v0.json"
     [void](Get-RequiredPath -BasePath $resolvedRoot -RelativePath "skills\codex-harness\SKILL.md")
 
     $parentProfileContent = Get-Content -LiteralPath $parentProfile -Raw
-    $modelMatch = [regex]::Match($parentProfileContent, '(?m)^model\s*=\s*"([^"]+)"\s*$')
-    $effortMatch = [regex]::Match($parentProfileContent, '(?m)^model_reasoning_effort\s*=\s*"([^"]+)"\s*$')
-    if (-not $modelMatch.Success -or -not $effortMatch.Success -or $parentProfileContent.IndexOf('developer_instructions = ', [System.StringComparison]::Ordinal) -lt 0) {
-        throw "Parent profile must define model, model_reasoning_effort, and developer_instructions: $parentProfile"
+    $profileIdMatch = [regex]::Match($parentProfileContent, '(?m)^execution_profile\s*=\s*"([^"]+)"\s*$')
+    if (-not $profileIdMatch.Success -or $parentProfileContent.IndexOf('developer_instructions = ', [System.StringComparison]::Ordinal) -lt 0) {
+        throw "Parent profile must define execution_profile and developer_instructions: $parentProfile"
     }
-    $parentModel = $modelMatch.Groups[1].Value
-    $parentReasoningEffort = $effortMatch.Groups[1].Value
+    $executionProfiles = Get-Content -LiteralPath $executionProfilesPath -Raw | ConvertFrom-Json
+    $parentExecutionProfile = @($executionProfiles.profiles | Where-Object { $_.id -eq $profileIdMatch.Groups[1].Value -and $_.role -eq "parent" })
+    if ($parentExecutionProfile.Count -ne 1) {
+        throw "Parent execution profile is missing or not a parent profile: $($profileIdMatch.Groups[1].Value)"
+    }
+    $parentModel = [string]$parentExecutionProfile[0].model
+    $parentReasoningEffort = [string]$parentExecutionProfile[0].reasoning_effort
 
     $configContent = Get-Content -LiteralPath $projectConfig -Raw
     if ($configContent.IndexOf("max_threads = 4", [System.StringComparison]::Ordinal) -lt 0) {

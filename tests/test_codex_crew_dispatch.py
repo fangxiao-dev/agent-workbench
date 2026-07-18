@@ -3,14 +3,17 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.codex_harness_dispatch import (
+    DISPATCH_SCHEMA_VERSION,
     STATE_SCHEMA_VERSION,
     WORKER_RESULT_SCHEMA_VERSION,
     initialise_state,
     record_worker_result,
     validate_parent_binding,
     validate_manifest,
+    run_worker,
 )
 
 
@@ -19,8 +22,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def lite_manifest() -> dict:
     return {
-        "schema_version": "codex-crew.dispatch.v0",
+        "schema_version": DISPATCH_SCHEMA_VERSION,
         "profile": "lite",
+        "worker_profile": "worker-lite-luna-max",
         "repository_root": str(ROOT),
         "parent_run_id": "run-test",
         "parent_thread_id": "parent-thread-test",
@@ -92,6 +96,48 @@ class CodexCrewDispatchTest(unittest.TestCase):
         manifest["tasks"].append({"id": "duplicate-path", "prompt": "Another bounded repair.", "worktree": {"path": manifest["tasks"][0]["worktree"]["path"], "branch": "codex/other", "base_ref": "HEAD"}})
         with self.assertRaises(ValueError):
             validate_manifest(manifest)
+
+    def test_manifest_rejects_worker_profile_that_does_not_match_mode_binding(self) -> None:
+        manifest = lite_manifest()
+        manifest["worker_profile"] = "worker-full-terra-high"
+        with self.assertRaises(ValueError):
+            validate_manifest(manifest)
+
+    def test_worker_thread_receives_canonical_model_and_reasoning_effort(self) -> None:
+        manifest = lite_manifest()
+        state = initialise_state(manifest)
+        task = state["tasks"]["fix-one"]
+
+        class FakeSession:
+            requests: list[tuple[int, str, dict]] = []
+
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def request(self, request_id, method, params, _timeout):
+                self.requests.append((request_id, method, params))
+                if method == "thread/start":
+                    return {"thread": {"id": "worker-thread"}}, []
+                if method == "turn/start":
+                    return {"turn": {"id": "worker-turn"}}, []
+                return {}, []
+
+            def collect_until_turn_complete(self, _thread_id, _timeout):
+                return []
+
+        result = {"schema_version": WORKER_RESULT_SCHEMA_VERSION, "task_id": "fix-one", "status": "succeeded", "summary": "ok", "verification": [], "owner_request": None}
+        with patch("scripts.codex_harness_dispatch.JsonRpcSession", FakeSession), patch("scripts.codex_harness_dispatch.app_server_command", return_value=["codex"]), patch("scripts.codex_harness_dispatch.initialize_params", return_value={}), patch("scripts.codex_harness_dispatch.parse_worker_result", return_value=result):
+            outcome = run_worker("fix-one", task, 30)
+        start_request = next(item for item in FakeSession.requests if item[1] == "thread/start")
+        self.assertEqual(start_request[2]["model"], "luna")
+        self.assertEqual(start_request[2]["config"], {"model_reasoning_effort": "max"})
+        self.assertEqual(outcome["worker_execution"]["id"], "worker-lite-luna-max")
         manifest = lite_manifest()
         manifest["tasks"].append({"id": "duplicate-branch", "prompt": "Another bounded repair.", "worktree": {"path": str(ROOT.parent / "crew-test-fix-two"), "branch": manifest["tasks"][0]["worktree"]["branch"], "base_ref": "HEAD"}})
         with self.assertRaises(ValueError):
@@ -99,7 +145,7 @@ class CodexCrewDispatchTest(unittest.TestCase):
 
     def test_parent_binding_rejects_wrong_profile_or_repository(self) -> None:
         manifest = lite_manifest()
-        parent = {"schema_version": "codex-crew.parent-state.v0", "run_id": manifest["parent_run_id"], "repository_root": str(ROOT), "parent": {"thread_id": manifest["parent_thread_id"]}, "mode": {"confirmed": "lite"}}
+        parent = {"schema_version": "codex-crew.parent-state.v1", "run_id": manifest["parent_run_id"], "repository_root": str(ROOT), "parent": {"thread_id": manifest["parent_thread_id"]}, "mode": {"confirmed": "lite"}}
         validate_parent_binding(manifest, parent)
         wrong_profile = dict(manifest, profile="full")
         with self.assertRaises(ValueError):

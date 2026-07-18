@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-workbench.local/schemas/codex-crew-parent.v0.schema.json",
-  "title": "Codex Crew Parent Protocol v0",
+  "$id": "https://agent-workbench.local/schemas/codex-crew-parent.v1.schema.json",
+  "title": "Codex Crew Parent Protocol v1",
   "type": "object",
   "oneOf": [
     {"$ref": "#/$defs/route"},
@@ -66,9 +66,9 @@
     "state": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema_version", "run_id", "repository_root", "harness_root", "artifact_root", "issue", "parent", "mode", "status", "policy_identity", "decision_requests", "dispatch_refs", "last_message", "worktree_status_baseline", "events"],
+      "required": ["schema_version", "run_id", "repository_root", "harness_root", "artifact_root", "issue", "parent", "parent_execution", "mode", "status", "policy_identity", "decision_requests", "dispatch_refs", "last_message", "worktree_status_baseline", "events"],
       "properties": {
-        "schema_version": {"const": "codex-crew.parent-state.v0"},
+        "schema_version": {"const": "codex-crew.parent-state.v1"},
         "run_id": {"type": "string", "minLength": 1},
         "repository_root": {"type": "string", "minLength": 1},
         "harness_root": {"type": "string", "minLength": 1},
@@ -84,6 +84,17 @@
             "profile_path": {"type": "string", "minLength": 1},
             "sandbox": {"enum": ["read-only", "workspace-write"]},
             "approval_policy": {"type": "string", "minLength": 1}
+          }
+        },
+        "parent_execution": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["profile", "model", "reasoning_effort", "identity"],
+          "properties": {
+            "profile": {"type": "string", "minLength": 1},
+            "model": {"type": "string", "minLength": 1},
+            "reasoning_effort": {"type": "string", "minLength": 1},
+            "identity": {"type": "object"}
           }
         },
         "mode": {

@@ -28,7 +28,7 @@ user-invocable: true
 - 子 thread id、`subAgentActivity`、`agentPath` 和状态只属于可选 telemetry，不是当前硬验收门。
 - 当前 Codex `0.144.4` 的 `thread/start`/`thread/read` thread projection 只返回 `modelProvider`，但 `config/read(includeLayers=true)` 可返回 effective model/effort；涉及 resume/fork 时必须结合 effective-config projection、canary 和 history continuity 验证，若该 seam 缺失或漂移仍要 fail closed，不能把请求参数当成实际配置。
 - Harness 只接受父 agent 的结构化最终结果，并用独立的外部检查验证其中的 artifact、测试和断言。
-- 当前只优先固定父 agent 的 `model` 与 `model_reasoning_effort`；MCP 白名单、token/time budget 留到后续风险驱动阶段。
+- 当前优先固定父 agent 及 dispatcher worker execution profile 的 `model` 与 `model_reasoning_effort`；MCP 白名单、token/time budget 留到后续风险驱动阶段。
 - 只有父 agent 触及明确边界时 Harness 才介入，包括权限/沙箱、允许路径与 mutation authority、外部副作用、deadline/cancel、并发/成本上限以及结果契约。
 
 ## 使用流程
@@ -60,9 +60,10 @@ user-invocable: true
 - Impl-Package adapter preparation：`scripts/prepare-codex-harness-package.py`；从固定 approved package snapshot 生成待 review 的 manifest 和 readiness report，不会自动授予 verifier 或推断路径写权限。
 - Impl-Package parent-stage runner：`scripts/run-codex-harness-package.py`；用已审核 manifest 校验固定 D/S/P binding、投影 ready stage，并在显式 execute 时控制一个父 App Server session。
 - 早期 `codex exec` 对照脚本：`scripts/run-codex-subagent-pilot.ps1`
-- 传统 Harness 父角色 profile：`.codex/harness/parent.toml`；Crew parent profile：`.codex/harness/crew-parent.toml`；两者都由 controller 显式读取并映射到 parent thread，不是 native child catalog。
+- 传统 Harness 父角色 profile：`.codex/harness/parent.toml`；Crew parent profile：`.codex/harness/crew-parent.toml`；两者通过 `execution_profile` 绑定到 canonical execution-profile JSON，再由 controller 显式映射到 parent thread，不是 native child catalog。
 - 统一 parent controller：`scripts/codex_harness_crew.py`；主会话通过它启动/恢复同一 parent、确认 Lite/Full 模式和转发 owner/纠偏消息。
 - Canonical runtime policy：`assets/codex-harness-runtime-policy.v0.json` 及其 JSON Schema；当前 `maturity` 为 `design_baseline`。App Server/package/resume 入口已形成部分 loader、lease/ledger seam，但尚未证明所有字段、失败路径和入口均被强制采用。
+- Canonical execution profiles：`assets/codex-harness-execution-profiles.v0.json` 及其 JSON Schema；parent TOML 只绑定 profile ID，worker dispatch 只接受与 Lite/Full mode 对应的 canonical worker profile。
 - 项目级运行边界：`.codex/config.toml`
 
 ### 底层调用入口
@@ -92,4 +93,4 @@ with JsonRpcSession(app_server_command(), worktree / ".codex-app-server.stderr.l
 - `codex-crew-lite`：parent 确认后的轻量 execution profile，适用于明确、小范围、非 redesign 问题；parent 通过 dispatcher 创建 worktree 和 fresh worker。
 - `codex-crew`：parent 确认后的完整 execution profile，适用于 Impl-Package、revision binding、独立验证、review/gate 或持续恢复要求；parent 在 dispatcher 之上组合现有 Harness/Package controls。
 - 主会话通过 `scripts/codex_harness_crew.py` 先启动 routing turn，确认 parent 的模式建议后再恢复同一 thread；不要由主会话直接调用 worker dispatcher。
-- 两者共享 `references/codex-crew-continuation-contract.md`、`assets/codex-crew-dispatch.schema.json` 和 `assets/codex-crew-parent.schema.json`。canonical 配置值放在结构化 manifest/state，不在两个 Skill 中复制。
+- 两者共享 `references/codex-crew-continuation-contract.md`、`assets/codex-crew-dispatch.v1.schema.json`、`assets/codex-crew-parent.schema.json` 和 `assets/codex-harness-execution-profiles.v0.json`。canonical 配置值放在结构化 profile/manifest/state，不在两个 Skill 中复制。

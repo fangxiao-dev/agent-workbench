@@ -6,15 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import time
-import tomllib
 from pathlib import Path
 
 try:
     from codex_harness_cli import JsonRpcSession, app_server_command
-    from codex_harness_controller import build_prompt, run
+    from codex_harness_controller import build_prompt, load_parent_profile, run
 except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
     from scripts.codex_harness_cli import JsonRpcSession, app_server_command
-    from scripts.codex_harness_controller import build_prompt, run
+    from scripts.codex_harness_controller import build_prompt, load_parent_profile, run
 
 
 def main() -> int:
@@ -22,8 +21,7 @@ def main() -> int:
     parser.add_argument("--repository-root", type=Path, default=Path(__file__).resolve().parents[1])
     args = parser.parse_args()
     root = args.repository_root.resolve()
-    with (root / ".codex" / "harness" / "parent.toml").open("rb") as stream:
-        profile = tomllib.load(stream)
+    profile = load_parent_profile(root / ".codex" / "harness" / "parent.toml")
     artifact_dir = root / ".codex" / "harness-runs"
     artifact_dir.mkdir(parents=True, exist_ok=True)
     run_id = time.strftime("%Y%m%d-%H%M%S") + "-live-kill"

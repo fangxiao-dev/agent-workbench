@@ -15,26 +15,25 @@ import hashlib
 import json
 import sys
 import time
-import tomllib
 import uuid
 from pathlib import Path
 from typing import Any
 
 try:
     from codex_harness_cli import JsonRpcSession, app_server_command, initialize_params
-    from codex_harness_controller import git_status, walk_root_agent_messages
-    from codex_harness_dispatch import read_json, validate_state as validate_dispatch_state, write_json_atomic
+    from codex_harness_controller import git_status, load_parent_profile, walk_root_agent_messages
+    from codex_harness_dispatch import STATE_SCHEMA_VERSION as DISPATCH_STATE_SCHEMA_VERSION, read_json, validate_state as validate_dispatch_state, write_json_atomic
     from codex_harness_policy import PolicyError, load_runtime_policy
     from codex_harness_runtime import LedgerIntegrityError, ResourceLedger, ThreadLease
 except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
     from scripts.codex_harness_cli import JsonRpcSession, app_server_command, initialize_params
-    from scripts.codex_harness_controller import git_status, walk_root_agent_messages
-    from scripts.codex_harness_dispatch import read_json, validate_state as validate_dispatch_state, write_json_atomic
+    from scripts.codex_harness_controller import git_status, load_parent_profile, walk_root_agent_messages
+    from scripts.codex_harness_dispatch import STATE_SCHEMA_VERSION as DISPATCH_STATE_SCHEMA_VERSION, read_json, validate_state as validate_dispatch_state, write_json_atomic
     from scripts.codex_harness_policy import PolicyError, load_runtime_policy
     from scripts.codex_harness_runtime import LedgerIntegrityError, ResourceLedger, ThreadLease
 
 
-PARENT_STATE_SCHEMA_VERSION = "codex-crew.parent-state.v0"
+PARENT_STATE_SCHEMA_VERSION = "codex-crew.parent-state.v1"
 PARENT_ROUTE_SCHEMA_VERSION = "codex-crew.parent-route.v0"
 PARENT_STATUS_SCHEMA_VERSION = "codex-crew.parent-status.v0"
 MODES = {"lite", "full"}
@@ -42,13 +41,8 @@ STATUSES = {"starting", "awaiting_mode_confirmation", "running", "awaiting_owner
 OWNER_CATEGORIES = {"scope_change", "authority_expansion", "irreversible_external_side_effect", "acceptance_ambiguity"}
 
 
-def _read_profile(path: Path) -> dict[str, str]:
-    with path.open("rb") as stream:
-        profile = tomllib.load(stream)
-    required = ("name", "description", "model", "model_reasoning_effort", "developer_instructions")
-    if any(not isinstance(profile.get(key), str) or not profile[key].strip() for key in required):
-        raise ValueError(f"parent profile is missing required values: {path}")
-    return {key: profile[key] for key in required}
+def _read_profile(path: Path) -> dict[str, Any]:
+    return load_parent_profile(path)
 
 
 def _event(state: dict[str, Any], kind: str, **fields: Any) -> None:
@@ -72,6 +66,7 @@ def new_state(repository_root: Path, issue: str, profile_path: Path, run_id: str
             "sandbox": "read-only",
             "approval_policy": "never",
         },
+        "parent_execution": None,
         "mode": {"status": "routing", "proposed": None, "confirmed": None, "rationale": ""},
         "status": "starting",
         "policy_identity": None,
@@ -83,8 +78,8 @@ def new_state(repository_root: Path, issue: str, profile_path: Path, run_id: str
     }
 
 
-def validate_state(state: dict[str, Any]) -> None:
-    required = {"schema_version", "run_id", "repository_root", "harness_root", "artifact_root", "issue", "parent", "mode", "status", "policy_identity", "decision_requests", "dispatch_refs", "last_message", "worktree_status_baseline", "events"}
+def validate_state(state: dict[str, Any], *, allow_unbound_execution: bool = False) -> None:
+    required = {"schema_version", "run_id", "repository_root", "harness_root", "artifact_root", "issue", "parent", "parent_execution", "mode", "status", "policy_identity", "decision_requests", "dispatch_refs", "last_message", "worktree_status_baseline", "events"}
     if state.get("schema_version") != PARENT_STATE_SCHEMA_VERSION or required - set(state):
         raise ValueError("unsupported or incomplete parent state")
     if any(not isinstance(state.get(field), str) or not state[field].strip() for field in ("run_id", "repository_root", "harness_root", "artifact_root", "issue")):
@@ -98,6 +93,9 @@ def validate_state(state: dict[str, Any]) -> None:
         raise ValueError("parent state has malformed parent projection")
     if parent["thread_id"] is not None and (not isinstance(parent["thread_id"], str) or not parent["thread_id"].strip()):
         raise ValueError("parent.thread_id must be null or a non-empty string")
+    execution = state["parent_execution"]
+    if execution is not None and (not isinstance(execution, dict) or set(execution) != {"profile", "model", "reasoning_effort", "identity"} or any(not isinstance(execution.get(key), str) or not execution[key].strip() for key in ("profile", "model", "reasoning_effort")) or not isinstance(execution["identity"], dict)):
+        raise ValueError("parent execution profile projection is malformed")
     mode = state["mode"]
     if not isinstance(mode, dict) or set(mode) != {"status", "proposed", "confirmed", "rationale"}:
         raise ValueError("parent state has malformed mode projection")
@@ -126,6 +124,8 @@ def validate_state(state: dict[str, Any]) -> None:
         seen_dispatch_paths.add(resolved)
     if state["status"] != "starting" and not state["parent"]["thread_id"]:
         raise ValueError("non-starting parent state requires a thread id")
+    if state["status"] in {"running", "awaiting_owner", "completed"} and state["parent_execution"] is None and not allow_unbound_execution:
+        raise ValueError("non-starting parent state requires an execution profile projection")
     if state["status"] in {"running", "awaiting_owner", "completed"} and mode["confirmed"] not in MODES:
         raise ValueError("active parent state requires a confirmed profile")
 
@@ -145,8 +145,8 @@ def register_dispatch(parent_state_path: Path, parent_state: dict[str, Any], dis
     validate_state(parent_state)
     dispatch = read_json(dispatch_state_path)
     validate_dispatch_state(dispatch)
-    required = {"schema_version", "profile", "repository_root", "parent_run_id", "parent_thread_id", "status", "tasks"}
-    if required - set(dispatch) or dispatch.get("schema_version") != "codex-crew.state.v0":
+    required = {"schema_version", "profile", "worker_profile", "worker_execution", "repository_root", "parent_run_id", "parent_thread_id", "status", "tasks"}
+    if required - set(dispatch) or dispatch.get("schema_version") != DISPATCH_STATE_SCHEMA_VERSION:
         raise ValueError("dispatch state is not a current Crew dispatch state")
     if parent_state["mode"]["confirmed"] not in MODES:
         raise ValueError("dispatch registration requires a confirmed parent profile")
@@ -257,9 +257,19 @@ def _load_full_policy(state: dict[str, Any], state_path: Path) -> tuple[dict[str
 
 
 def _run_turn(state: dict[str, Any], state_path: Path, prompt: str, *, resume: bool, timeout_seconds: int) -> dict[str, Any]:
-    validate_state(state)
+    validate_state(state, allow_unbound_execution=True)
     parent = state["parent"]
     profile = _read_profile(Path(parent["profile_path"]))
+    execution = {
+        "profile": profile["execution_profile"],
+        "model": profile["model"],
+        "reasoning_effort": profile["model_reasoning_effort"],
+        "identity": profile["execution_profile_identity"],
+    }
+    if state["parent_execution"] is None:
+        state["parent_execution"] = execution
+    elif state["parent_execution"] != execution:
+        raise RuntimeError("parent execution profile changed across continuation")
     mode = state["mode"]["confirmed"]
     if resume and mode not in MODES:
         raise ValueError("parent cannot resume before the main session confirms Lite or Full")
@@ -295,7 +305,14 @@ def _run_turn(state: dict[str, Any], state_path: Path, prompt: str, *, resume: b
         after = git_status(Path(state["repository_root"]))
         if before != after:
             raise RuntimeError("parent modified the controller repository worktree; worker mutations must stay in isolated worktrees")
-        return {"thread_id": parent["thread_id"], "turn_id": started_turn.get("turn", {}).get("id"), "message": message}
+        return {
+            "thread_id": parent["thread_id"],
+            "turn_id": started_turn.get("turn", {}).get("id"),
+            "message": message,
+            "execution_profile": profile["execution_profile"],
+            "model": profile["model"],
+            "reasoning_effort": profile["model_reasoning_effort"],
+        }
     finally:
         if session is not None:
             session.close()
@@ -339,14 +356,14 @@ def _apply_control(state: dict[str, Any], message: str) -> dict[str, Any] | None
 def start_parent(state_path: Path, state: dict[str, Any], timeout_seconds: int) -> dict[str, Any]:
     result = _run_turn(state, state_path, _parent_prompt(state, "route"), resume=False, timeout_seconds=timeout_seconds)
     state["last_message"] = result["message"]
-    _event(state, "parent_started", thread_id=result["thread_id"], turn_id=result["turn_id"])
+    _event(state, "parent_started", thread_id=result["thread_id"], turn_id=result["turn_id"], execution_profile=result.get("execution_profile"), model=result.get("model"), reasoning_effort=result.get("reasoning_effort"))
     control = _apply_control(state, result["message"])
     write_json_atomic(state_path, state)
     return {"state": state, "control": control, **result}
 
 
 def confirm_mode(state_path: Path, state: dict[str, Any], mode: str, timeout_seconds: int) -> dict[str, Any]:
-    validate_state(state)
+    validate_state(state, allow_unbound_execution=True)
     if mode not in MODES:
         raise ValueError("mode must be lite or full")
     if state["status"] != "awaiting_mode_confirmation":
@@ -373,7 +390,7 @@ def confirm_mode(state_path: Path, state: dict[str, Any], mode: str, timeout_sec
         write_json_atomic(state_path, state)
         raise
     state["last_message"] = result["message"]
-    _event(state, "parent_continued", thread_id=result["thread_id"], turn_id=result["turn_id"], mode=mode)
+    _event(state, "parent_continued", thread_id=result["thread_id"], turn_id=result["turn_id"], mode=mode, execution_profile=result.get("execution_profile"), model=result.get("model"), reasoning_effort=result.get("reasoning_effort"))
     control = _apply_control(state, result["message"])
     write_json_atomic(state_path, state)
     return {"state": state, "control": control, **result}

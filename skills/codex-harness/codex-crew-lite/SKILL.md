@@ -11,7 +11,7 @@ user-invocable: true
 
 Use this as a mode selected and confirmed for the persistent parent, not as a second main-session scheduler. The parent owns issue analysis, creates the dispatch manifest, starts isolated workers, judges their questions, and gathers results. The main session only confirms the mode, forwards user decisions, and presents delivery. Each worker gets a fresh thread and worktree.
 
-Read the shared [continuation contract](../references/codex-crew-continuation-contract.md) and use the canonical [Lite manifest example](../assets/codex-crew-lite.v0.json) with [its schema](../assets/codex-crew-dispatch.schema.json). Do not copy configuration values into Markdown prompts.
+Read the shared [continuation contract](../references/codex-crew-continuation-contract.md), the canonical [execution profiles](../assets/codex-harness-execution-profiles.v0.json), and use the [Lite manifest example](../assets/codex-crew-lite.v1.json) with [its schema](../assets/codex-crew-dispatch.v1.schema.json). Do not copy configuration values into Markdown prompts.
 
 ## Route selection
 

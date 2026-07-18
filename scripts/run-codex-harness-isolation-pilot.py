@@ -9,16 +9,15 @@ import shutil
 import subprocess
 import tempfile
 import time
-import tomllib
 import hashlib
 from pathlib import Path
 
 try:
     from codex_harness_cli import JsonRpcSession, app_server_command
-    from codex_harness_controller import artifacts_valid, parse_parent_result, walk_agent_messages
+    from codex_harness_controller import artifacts_valid, load_parent_profile, parse_parent_result, walk_agent_messages
 except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
     from scripts.codex_harness_cli import JsonRpcSession, app_server_command
-    from scripts.codex_harness_controller import artifacts_valid, parse_parent_result, walk_agent_messages
+    from scripts.codex_harness_controller import artifacts_valid, load_parent_profile, parse_parent_result, walk_agent_messages
 
 
 def snapshot_files(root: Path) -> dict[str, str]:
@@ -37,8 +36,7 @@ def main() -> int:
     parser.add_argument("--repository-root", type=Path, default=Path(__file__).resolve().parents[1])
     args = parser.parse_args()
     root = args.repository_root.resolve()
-    with (root / ".codex" / "harness" / "parent.toml").open("rb") as stream:
-        profile = tomllib.load(stream)
+    profile = load_parent_profile(root / ".codex" / "harness" / "parent.toml")
     artifact_dir = root / ".codex" / "harness-runs"
     artifact_dir.mkdir(parents=True, exist_ok=True)
     run_id = time.strftime("%Y%m%d-%H%M%S") + "-isolation"

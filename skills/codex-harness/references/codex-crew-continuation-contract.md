@@ -23,4 +23,6 @@ stateDiagram-v2
 
 `needs_parent` and `needs_owner` are not terminal outcomes for the overall request. The parent first reasons from the issue, task evidence, and existing authority. For an ordinary correction it continues its own thread; for `needs_owner`, it sends a structured request through the main session only when the decision changes scope, authority, irreversible external side effects, or acceptance. Once the main session forwards an owner decision, the same parent thread receives a new turn; it must not be silently replaced with a fresh task.
 
+Parent and worker effective execution profiles must come from the canonical profile binding and be recorded in state/evidence; resume or continuation must not silently drift the model or reasoning effort.
+
 The low-level dispatcher intentionally does not delete worktrees. Cleanup/merge/promotion happens only after the caller has inspected status, diffs, verification evidence, and the chosen terminal disposition.

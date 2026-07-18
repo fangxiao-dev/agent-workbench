@@ -24,12 +24,14 @@ from typing import Any
 
 try:
     from codex_harness_cli import JsonRpcSession, app_server_command, initialize_params
+    from codex_harness_profiles import ExecutionProfileError, load_execution_profiles, worker_profile_for_mode
 except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
     from scripts.codex_harness_cli import JsonRpcSession, app_server_command, initialize_params
+    from scripts.codex_harness_profiles import ExecutionProfileError, load_execution_profiles, worker_profile_for_mode
 
 
-DISPATCH_SCHEMA_VERSION = "codex-crew.dispatch.v0"
-STATE_SCHEMA_VERSION = "codex-crew.state.v0"
+DISPATCH_SCHEMA_VERSION = "codex-crew.dispatch.v1"
+STATE_SCHEMA_VERSION = "codex-crew.state.v1"
 WORKER_RESULT_SCHEMA_VERSION = "codex-crew.worker-result.v0"
 OWNER_CATEGORIES = {"scope_change", "authority_expansion", "irreversible_external_side_effect", "acceptance_ambiguity"}
 WORKER_STATUSES = {"succeeded", "needs_parent", "needs_owner", "failed"}
@@ -65,11 +67,20 @@ def write_json_atomic(path: Path, value: dict[str, Any]) -> None:
 
 
 def validate_manifest(manifest: dict[str, Any]) -> None:
-    required = {"schema_version", "profile", "repository_root", "parent_run_id", "parent_thread_id", "tasks"}
+    required = {"schema_version", "profile", "worker_profile", "repository_root", "parent_run_id", "parent_thread_id", "tasks"}
     if set(manifest) - {"$schema", *required} or required - set(manifest):
         raise ValueError("dispatch manifest has unsupported or missing fields")
     if manifest["schema_version"] != DISPATCH_SCHEMA_VERSION or manifest["profile"] not in {"lite", "full"}:
         raise ValueError("unsupported dispatch manifest version or profile")
+    if not isinstance(manifest["worker_profile"], str) or not manifest["worker_profile"].strip():
+        raise ValueError("worker_profile must be a non-empty string")
+    try:
+        profiles = load_execution_profiles(Path(__file__).resolve().parents[1])
+        expected_worker = worker_profile_for_mode(profiles, manifest["profile"])
+    except ExecutionProfileError as exc:
+        raise ValueError(f"worker execution profile configuration is invalid: {exc}") from exc
+    if manifest["worker_profile"] != expected_worker["id"]:
+        raise ValueError(f"worker_profile must use the canonical {manifest['profile']} binding: {expected_worker['id']}")
     if not isinstance(manifest["repository_root"], str) or not manifest["repository_root"].strip():
         raise ValueError("repository_root must be a non-empty string")
     if any(not isinstance(manifest.get(key), str) or not manifest[key].strip() for key in ("parent_run_id", "parent_thread_id")):
@@ -113,7 +124,7 @@ def validate_parent_binding(manifest: dict[str, Any], parent_state: dict[str, An
     only validates the cross-layer binding.
     """
 
-    if parent_state.get("schema_version") != "codex-crew.parent-state.v0":
+    if parent_state.get("schema_version") != "codex-crew.parent-state.v1":
         raise ValueError("parent state is not a current Crew parent state")
     parent = parent_state.get("parent")
     mode = parent_state.get("mode")
@@ -138,30 +149,46 @@ def validate_parent_binding(manifest: dict[str, Any], parent_state: dict[str, An
 
 def initialise_state(manifest: dict[str, Any]) -> dict[str, Any]:
     validate_manifest(manifest)
+    profiles = load_execution_profiles(Path(__file__).resolve().parents[1])
+    worker = worker_profile_for_mode(profiles, manifest["profile"])
     return {
         "schema_version": STATE_SCHEMA_VERSION,
         "profile": manifest["profile"],
+        "worker_profile": worker["id"],
+        "worker_execution": worker,
         "repository_root": manifest["repository_root"],
         "parent_run_id": manifest["parent_run_id"],
         "parent_thread_id": manifest["parent_thread_id"],
         "status": "running",
-        "tasks": {task["id"]: {"worktree": task["worktree"], "prompt": task["prompt"], "verification_commands": task.get("verification_commands", []), "status": "pending"} for task in manifest["tasks"]},
+        "tasks": {task["id"]: {"worktree": task["worktree"], "prompt": task["prompt"], "verification_commands": task.get("verification_commands", []), "worker_execution": worker, "status": "pending"} for task in manifest["tasks"]},
         "events": [{"at": time.time(), "kind": "state_initialized"}],
     }
 
 
 def validate_state(state: dict[str, Any]) -> None:
-    required = {"schema_version", "profile", "repository_root", "parent_run_id", "parent_thread_id", "status", "tasks", "events"}
+    required = {"schema_version", "profile", "worker_profile", "worker_execution", "repository_root", "parent_run_id", "parent_thread_id", "status", "tasks", "events"}
     if required - set(state) or state.get("schema_version") != STATE_SCHEMA_VERSION:
         raise ValueError("unsupported or incomplete crew state")
     if state["status"] not in DISPATCH_STATUSES:
         raise ValueError("unsupported crew state status")
     if state.get("profile") not in {"lite", "full"} or not isinstance(state.get("repository_root"), str) or not state["repository_root"].strip():
         raise ValueError("crew state profile or repository_root is malformed")
+    if not isinstance(state.get("worker_profile"), str) or not state["worker_profile"].strip() or not isinstance(state.get("worker_execution"), dict):
+        raise ValueError("crew state worker execution binding is malformed")
+    try:
+        profiles = load_execution_profiles(Path(__file__).resolve().parents[1])
+        expected_worker = worker_profile_for_mode(profiles, state["profile"])
+    except ExecutionProfileError as exc:
+        raise ValueError(f"worker execution profile configuration is invalid: {exc}") from exc
+    if state["worker_profile"] != expected_worker["id"] or state["worker_execution"] != expected_worker:
+        raise ValueError("crew state worker execution binding does not match the canonical profile")
     if any(not isinstance(state.get(key), str) or not state[key].strip() for key in ("parent_run_id", "parent_thread_id")):
         raise ValueError("dispatch state parent binding is malformed")
     if not isinstance(state["tasks"], dict) or not state["tasks"] or not isinstance(state["events"], list):
         raise ValueError("crew state tasks/events are malformed")
+    for task_id, task in state["tasks"].items():
+        if not isinstance(task, dict) or task.get("worker_execution") != expected_worker:
+            raise ValueError(f"task {task_id} worker execution binding does not match the state profile")
 
 
 def _event(state: dict[str, Any], kind: str, **fields: Any) -> None:
@@ -264,7 +291,8 @@ def run_worker(task_id: str, task: dict[str, Any], timeout_seconds: int) -> dict
     stderr_path = worktree / ".codex-crew-worker.stderr.log"
     with JsonRpcSession(app_server_command(approval_policy="never"), stderr_path) as session:
         session.request(1, "initialize", initialize_params("codex-crew-worker"), 30)
-        started, _ = session.request(2, "thread/start", {"cwd": str(worktree), "sandbox": "workspace-write", "approvalPolicy": "never", "ephemeral": True}, 30)
+        execution = task["worker_execution"]
+        started, _ = session.request(2, "thread/start", {"cwd": str(worktree), "sandbox": "workspace-write", "approvalPolicy": "never", "ephemeral": True, "model": execution["model"], "config": {"model_reasoning_effort": execution["reasoning_effort"]}}, 30)
         thread_id = started["thread"]["id"]
         started_turn, start_events = session.request(3, "turn/start", {"threadId": thread_id, "input": [{"type": "text", "text": worker_prompt(task_id, task["prompt"])}], "approvalPolicy": "never", "sandboxPolicy": {"type": "workspaceWrite", "networkAccess": False}}, 30)
         events = list(start_events)
@@ -277,6 +305,7 @@ def run_worker(task_id: str, task: dict[str, Any], timeout_seconds: int) -> dict
             result = {"schema_version": WORKER_RESULT_SCHEMA_VERSION, "task_id": task_id, "status": "failed", "summary": "worker did not return a valid structured result", "verification": [], "owner_request": None, "raw_result": raw}
         result["worker_thread_id"] = thread_id
         result["turn_id"] = started_turn.get("turn", {}).get("id")
+        result["worker_execution"] = execution
         return result
 
 
@@ -289,6 +318,7 @@ def record_worker_result(state: dict[str, Any], task_id: str, result: dict[str, 
         raise ValueError("worker result does not satisfy the structured worker-result contract")
     result = parsed
     task = state["tasks"][task_id]
+    result["worker_execution"] = task["worker_execution"]
     task["result"] = result
     task["status"] = result["status"]
     if result["status"] in {"needs_owner", "needs_parent", "failed"}:

@@ -41,7 +41,7 @@ def main() -> int:
         write(package / "tickets" / "one.md", "# One\n")
         write(package / "tickets" / "two.md", "# Two\n")
         profile = root / "parent.toml"
-        write(profile, 'name="fixture"\ndescription="fixture"\nmodel="test"\nmodel_reasoning_effort="low"\ndeveloper_instructions="fixture"\n')
+        write(profile, 'name="fixture"\ndescription="fixture"\nexecution_profile="parent-sol-high"\ndeveloper_instructions="fixture"\n')
         git(root, "add", ".")
         git(root, "commit", "-m", "fixture")
         state_cli(root, package, "init", "--package-id", "260716-fixture")

@@ -85,7 +85,7 @@ def main() -> int:
         )
         write(package / "gate.md", "# Gate Ledger\n\n<!-- impl-package:projection gate-status begin -->\n状态：尚无已定稿门禁记录\n<!-- impl-package:projection gate-status end -->\n")
         profile = root / "parent.toml"
-        write(profile, 'name="fixture"\ndescription="fixture"\nmodel="test"\nmodel_reasoning_effort="low"\ndeveloper_instructions="fixture"\n')
+        write(profile, 'name="fixture"\ndescription="fixture"\nexecution_profile="parent-sol-high"\ndeveloper_instructions="fixture"\n')
         git(root, "add", ".")
         git(root, "commit", "-m", "fixture")
         state_cli(package, "init", "--package-id", "260716-fixture")

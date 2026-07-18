@@ -7,17 +7,16 @@ import argparse
 import json
 import sys
 import time
-import tomllib
 from pathlib import Path
 
 try:
     from codex_harness_cli import JsonRpcSession, app_server_command
-    from codex_harness_controller import walk_root_agent_messages
+    from codex_harness_controller import load_parent_profile, walk_root_agent_messages
     from codex_harness_policy import PolicyError, load_runtime_policy
     from codex_harness_runtime import ThreadLease
 except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
     from scripts.codex_harness_cli import JsonRpcSession, app_server_command
-    from scripts.codex_harness_controller import walk_root_agent_messages
+    from scripts.codex_harness_controller import load_parent_profile, walk_root_agent_messages
     from scripts.codex_harness_policy import PolicyError, load_runtime_policy
     from scripts.codex_harness_runtime import ThreadLease
 
@@ -122,8 +121,7 @@ def main() -> int:
         print(f"[X] runtime policy validation failed: {error}", file=sys.stderr)
         return 1
     profile_path = root / ".codex" / "harness" / "parent.toml"
-    with profile_path.open("rb") as stream:
-        profile = tomllib.load(stream)
+    profile = load_parent_profile(profile_path)
     artifact_dir = root / ".codex" / "harness-runs"
     artifact_dir.mkdir(parents=True, exist_ok=True)
     run_id = time.strftime("%Y%m%d-%H%M%S") + "-resume"

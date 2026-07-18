@@ -1,7 +1,6 @@
 name = "codex_harness_parent"
 description = "Parent execution role controlled and validated by the Codex Harness POC."
-model = "gpt-5.6-terra"
-model_reasoning_effort = "high"
+execution_profile = "parent-sol-high"
 developer_instructions = """
 You are the single parent execution agent controlled by the Codex Harness.
 Own the assigned work end to end and return the requested structured result to the Harness.

@@ -11,7 +11,6 @@ import hashlib
 import json
 import subprocess
 import time
-import tomllib
 import uuid
 from pathlib import Path
 from typing import Any
@@ -19,10 +18,12 @@ from typing import Any
 try:
     from codex_harness_cli import JsonRpcSession, app_server_command, codex_version
     from codex_harness_policy import PolicyError, load_runtime_policy
+    from codex_harness_profiles import load_parent_profile as _load_parent_profile
     from codex_harness_runtime import ResourceLedger
 except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
     from scripts.codex_harness_cli import JsonRpcSession, app_server_command, codex_version
     from scripts.codex_harness_policy import PolicyError, load_runtime_policy
+    from scripts.codex_harness_profiles import load_parent_profile as _load_parent_profile
     from scripts.codex_harness_runtime import ResourceLedger
 
 __all__ = [
@@ -157,14 +158,7 @@ def parse_parent_result(message: str, expected_run_id: str) -> dict[str, Any] | 
 
 def load_parent_profile(path: Path) -> dict[str, Any]:
     """Load and validate the Harness parent profile without starting Codex."""
-
-    with path.open("rb") as stream:
-        profile = tomllib.load(stream)
-    required = {"name", "description", "model", "model_reasoning_effort", "developer_instructions"}
-    missing = sorted(key for key in required if not isinstance(profile.get(key), str) or not profile[key].strip())
-    if missing:
-        raise RuntimeError("Parent profile is missing required values: " + ", ".join(missing))
-    return profile
+    return _load_parent_profile(path)
 
 
 def git_status(repository_root: Path) -> str:
@@ -214,6 +208,8 @@ def run(repository_root: Path, timeout_seconds: int, scenario: str = "smoke") ->
     required_paths = [
         repository_root / ".codex" / "config.toml",
         repository_root / ".codex" / "harness" / "parent.toml",
+        repository_root / "skills" / "codex-harness" / "assets" / "codex-harness-execution-profiles.v0.json",
+        repository_root / "skills" / "codex-harness" / "assets" / "codex-harness-execution-profiles.schema.json",
         repository_root / "skills" / "codex-harness" / "SKILL.md",
     ]
     missing = [str(path) for path in required_paths if not path.is_file()]
@@ -371,6 +367,8 @@ def run(repository_root: Path, timeout_seconds: int, scenario: str = "smoke") ->
             "status": "interrupted" if interrupted and passed else ("passed" if passed else "failed"),
             "root_thread_id": root_thread_id,
             "parent_profile": parent_profile["name"],
+            "parent_execution_profile": parent_profile["execution_profile"],
+            "parent_execution_profile_identity": parent_profile["execution_profile_identity"],
             "parent_profile_sha256": hashlib.sha256((repository_root / ".codex" / "harness" / "parent.toml").read_bytes()).hexdigest(),
             "codex_version": codex_version(),
             "initialize_result": initialize_result,
