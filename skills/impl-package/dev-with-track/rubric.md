@@ -5,7 +5,7 @@ updated: 2026-07-11
 ## 原则
 
 - 当前 attempt plan 是 Attempt ID、P revision 与 Composition 的事实源；spec 只提供当前 D/S contract 与 AC。
-- no-DAG attempt 不建立 task checklist；恢复状态只在触发条件成立时进入 progress ledger。
+- no-DAG attempt 不建立 task checklist 或 progress ledger；恢复事实进入 Execution Record 或 handoff。
 - 实际 review/verification 证据 append 到 plan Execution Record；gate 只保存 newest-first append-only 判决摘要与 Durable Deltas。
 - blocked→pass 通过新 G entry 与 Supersedes 表达，旧 entry 不修改；pass/fail/defer terminal 后冻结 plan。
 - gate evaluation 前分流 execution findings，禁止 decision/spec、长期知识与过程证据互相回流。
@@ -15,6 +15,7 @@ updated: 2026-07-11
 - 采纳「删除本地 spec/plan 模板，canonical 归 impl-planning，模板清单改为跨 skill 指针」— 用户在单一模板来源 (a) 与双模板分工 (b) 中选 (a)
   - **Superseded（2026-07-11 Impl-Package Step 1）：**仅其中“spec canonical 归 impl-planning”已被 R3 取代；本条保留历史 provenance，plan ownership 与删除重复模板的方向不变。
 - 采纳「dag/progress 模板 ownership 升级为三车道（Primary owned / Conditional seam / Forbidden），对齐 create-task-dag 的 ownership lanes」
+  - **Superseded（2026-07-18）：**普通 DAG 改为最小 primary ownership 与 known seam/risk；不再要求三车道 ownership 或完整 Task contract。
 - 采纳「dag 模板状态补 Retired（gate passed）、编号检查清单补 *.patch-dag.md」— 承接用户手工加入的 patch 模式语义
 
 ### R2 · 2026-07-08（偏好确认轮）

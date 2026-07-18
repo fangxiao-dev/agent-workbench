@@ -21,13 +21,13 @@
       "expectations": [
         "Reads Composition and P revision from the current plan",
         "Uses spec:AC-n targets",
-        "Keeps progress ledgers optional and evidence-backed",
+        "Does not create progress without a Task-specific trigger",
         "Appends actual verification to the current plan Execution Record"
       ]
     },
     {
       "id": 3,
-      "prompt": "当前 attempt 为 tickets=true, dag=true；T3 contributes-to checkout:AC-2 并依赖 T2。T2 因上游返工重开。恢复后能直接继续 T3 吗？",
+      "prompt": "当前 attempt 为 tickets=true, dag=true；T3 contributes-to checkout 并依赖 T2。T2 因上游返工重开。恢复后能直接继续 T3 吗？",
       "expected_output": "Reconciles evidence, marks T3 and dependent evidence NEEDS-REVALIDATION, and does not infer ticket acceptance from old task completion.",
       "files": [],
       "expectations": [
@@ -63,12 +63,12 @@
     },
     {
       "id": 6,
-      "prompt": "一个 tickets=false, dag=true attempt 有跨模块 seam。说明三类 owner、证据位置和关闭限制。",
-      "expected_output": "Keeps seam contract and acceptance ownership in spec, execution ownership in the DAG, and actual acceptance evidence in the plan Execution Record/gate.",
+      "prompt": "一个 tickets=false, dag=true attempt 有跨模块 seam。说明 integration responsibility、证据位置和关闭限制。",
+      "expected_output": "Keeps seam contract and acceptance ownership in spec, Working Branch owner integration responsibility, and actual acceptance evidence in the plan Execution Record/gate.",
       "files": [],
       "expectations": [
         "Reads contract owner, acceptance owner and affected targets from spec",
-        "Uses the matching DAG seam execution owner",
+        "Uses the existing Working Branch owner for the integration step",
         "Blocks closure until affected spec AC evidence is accepted",
         "Does not copy the seam contract into plan or DAG"
       ]
@@ -88,7 +88,7 @@
     {
       "id": 8,
       "prompt": "已关闭 package 的新 implementation-only patch plan 声明 Composition: tickets=false, dag=false；只有一个 adapter 修复、无 seam、无依赖。请恢复执行。",
-      "expected_output": "Executes the simple patch without a task checklist or DAG, using an earned progress ledger only if interruption/recovery requires it, and appends verification to Execution Record.",
+      "expected_output": "Executes the simple patch without a task checklist, DAG or progress ledger, and appends verification to Execution Record.",
       "files": [],
       "expectations": [
         "Does not inherit the historical attempt DAG",

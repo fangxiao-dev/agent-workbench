@@ -40,7 +40,7 @@ Plan Revision 前进时先读取 P delta，而不是重建完整票集。只有 
 
 The edge type states what is blocked. Do not collapse implementation, acceptance, and release dependencies into an untyped `Blocked by` list.
 
-Tickets MUST NOT contain worker ownership, worker/task assignment, file-level steps, implementation snippets, automatic dispatch instructions, or runtime **task** status. The template's `Runtime Acceptance Status` is a machine-owned projection of the package runtime-state ticket record and is updated only through `dev-with-track`; `to-tickets` leaves its marker body at the unrecorded initial projection. Task decomposition and task-to-AC contribution belong to `create-task-dag`. A no-DAG attempt has no task checklist; recovery state uses a justified progress ledger.
+Tickets MUST NOT contain worker ownership, worker/task assignment, file-level steps, implementation snippets, automatic dispatch instructions, or runtime **task** status. The template's `Runtime Acceptance Status` is a machine-owned projection of the package runtime-state ticket record and is updated only through `dev-with-track`; `to-tickets` leaves its marker body at the unrecorded initial projection. Task decomposition and Task-to-Ticket many-to-many contribution belong to `create-task-dag`; Task completion never updates this acceptance status automatically. A no-DAG attempt has no task checklist or progress ledger; recovery evidence stays in the existing Execution Record or handoff.
 
 ## Draft Mode
 

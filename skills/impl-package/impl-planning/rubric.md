@@ -7,7 +7,7 @@ updated: 2026-07-12
 
 - 每次 attempt 独立决定 Composition；不得从 spec、历史 plan 或原 package 的拓扑继承 tickets/dag。
 - decision 保存选择与 rationale，spec 保存长期 contract，plan 只保存本 attempt 的策略、具体 migration、验证选择与过程证据。
-- 简单 no-DAG attempt 不建立 task checklist；需要恢复时按触发条件创建 progress ledger。
+- 简单 no-DAG attempt 不建立 task checklist 或 progress ledger；需要恢复时记录在 Execution Record 或 handoff。
 - Planned Verification 只引用权威 policy 并选择本次检查；Execution Record append-only 记录实际命令、结果与证据。
 - gate 只保存 newest-first append-only 判决摘要与 Durable Deltas；完整验证过程留在 plan Execution Record。
 - terminal gate 冻结对应 plan；后续工作创建新 patch attempt，不能回写旧 attempt 记录。
@@ -18,6 +18,7 @@ updated: 2026-07-12
 
 - Composition 从 spec 移到每次 attempt plan；活动期间只通过 P revision 修订。
 - 撤销 R3 的 no-DAG patch executable checklist；no-DAG 不制造 task 状态，恢复由 progress ledger 承担。
+  - **Superseded（2026-07-18）：**progress 收缩为 trigger-only 的 Task ledger；no-DAG recovery 使用 Execution Record 或 handoff。
 - interface、seam、compatibility、约束与 Acceptance Semantics 归 spec；plan 只保留执行与验证过程。
 - gate.md 成为 package 唯一 ledger；旧 evaluation entry 不修改，blocked→pass 用 Supersedes 新增 entry。
 

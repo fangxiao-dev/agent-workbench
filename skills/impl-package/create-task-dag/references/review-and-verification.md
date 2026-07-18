@@ -1,46 +1,23 @@
 # Review 与验证
 
-worker 返回后或请求 implementation-level review 时读本文件。共享 acceptance、seam 和 Stage 7 规则以 `skills/impl-package/references/impl-package-composition-contract.md` 为准。
+Task 局部验证用于让 Working Branch owner 判断其产出是否可集成；它不是 Task-level formal acceptance，也不能替代 Ticket review。共享 acceptance、状态和最终 package gate 以 `skills/impl-package/references/impl-package-composition-contract.md` 与 `dev-with-track` 为准。
 
-## Review 层次
+## 集成与 Ticket 验收
 
-- **任务级 review**：由 `subagent-driven-development` 以非实现者 reviewer subagent 完成 task spec-compliance 后再做 task code-quality review；确认 worker 满足有界任务契约，且 patch 可维护并经过本地测试。
-- **Ticket acceptance review**：由 `dev-with-track` 在 ticket（无 tickets 时为 attempt）达到验收候选后固定 comparison point，并自动路由正式 reviewer。
+Working Branch owner 在并行 Task 返回、发现 BLOCKED、以及 Ticket 最终验收前执行 integration step：合并 Task 产出，处理已出现的 seam/冲突，运行共享验证和正式 review，将实际 evidence 映射回 Ticket AC，并决定 Ticket 是否可验收。
 
-任务级通过不能代替 ticket acceptance review。create-task-dag 不另行定义 whole-slice / contract-drift 检查项，也不代替 `code-review`、module-review 的 Standards/Spec 双轴或 safety-review。
+进入某 Ticket 的最终验收前，只扫描 contributes-to 该 Ticket 的 BLOCKED Task：
 
-## Main Session 集成与验证
+- blocker 会影响该 Ticket 的 AC、声明行为或风险边界时，Ticket 不可通过，必须先完成 seaming 或解除阻塞；
+- blocker 不贡献且不影响该 Ticket 时，不阻塞该 Ticket；
+- 真实影响扩大时，先更新 Task 的 contribution mapping，再重新判断，不能静默绕过。
 
-main session 在请求 module-review 前完成：
+`DONE` 不是 acceptance verdict。Ticket 的 AC、evidence、正式 review 和 acceptance status 是唯一权威；no-ticket DAG 仍由 Spec AC/plan gate 判定，不借 Task 状态伪造 Ticket。
 
-- 处理已点名的 ownership seam；
-- 汇集 worker 的聚焦测试、集成测试和所需浏览器/外部验证证据；
-- 对账任务的 `contributes-to` / `enables` 目标与已有 evidence producer；
-- 将未完成工作、外部 gate 或人工验证 owner 如实记录。
+## 质量要求与最终收口
 
-UI 改动、外部系统 mutation 的具体验证约束继续由 package plan、repo 指令与 task verification gates 决定；本 reference 不把它们重定义成独立 review contract。
+普通 Task 不自动触发独立正式 review。tenant isolation、auth/permission、migration、真实外部写入、金额、不可逆数据等高风险工作，可按实际 diff 提前要求更严格的验证/review；优先不拆，或拆为可独立验收的 Ticket，而不是创建严格 Task 流程。
 
-## Ticket acceptance review 路由
+最终 package review 前，Working Branch owner 全局扫描所有 Task：每个 Task 必须 DONE，或有明确、已批准且带理由的 WAIVED/SUPERSEDED；不得遗留 BLOCKED。之后按既有 `dev-with-track` 路由运行正式 Ticket/Spec review，并确认所有 Ticket AC 都有实际 evidence、active Spec 全覆盖。最终 review 以 Ticket/Spec 为中心，不以 Task 状态或数量为中心。
 
-`dev-with-track` 必须提供：
-
-- 固定 comparison point：明确的 commit、commit range、固定 diff 或等价不可变基线；
-- package `spec.md` 与 `plan.md`；
-- 所有相关 Approved ticket、`dag.md` 和可用的 progress/handoff；
-- 已运行验证和未运行 gate 的证据。
-
-`code-review` 是每个 implementation 的必经 review。当前 attempt 存在 tickets/DAG，或 contract 涉及 interface、状态机、模块边界或 seam 时，必须额外运行 `module-review` 的 Standards 与 Spec 双轴。出现安全或外部副作用信号时，必须运行 `safety-review`。finding、closure verification 和 ticket acceptance 状态按各 skill 与 `dev-with-track` 的契约记录。
-
-## 最终报告形状
-
-implementation 准备交接或关闭时报告：
-
-- worker cohort 和 main session 处理的 seam；
-- 已运行验证及其证据，未运行 gate 及原因；
-- 固定 comparison point；
-- `code-review`、适用的 module-review 双轴与 safety-review 结论；
-- 残余风险和被阻塞的 gate。
-
-## 持久化
-
-Impl-Package review/验证必须按 `SKILL.md` 的持久化映射落盘：任务局部 review finding 写入 earned `tasks/Tn-progress.md`，implementation-level review 与实际验证结果 append 到当前 plan Execution Record，gate entry 只引用其 ER anchor 并保存 verdict 摘要。只留在对话或 handoff 的内容不构成可恢复、可判决的 evidence。
+验证和 review evidence 进入既有 Execution Record/gate；Task progress 只在其条件满足时补充局部 blocker、evidence 和下一动作。不要建立默认 Ticket progress，或让 Task review 产物成为 Ticket acceptance status。

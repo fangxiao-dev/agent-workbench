@@ -86,6 +86,12 @@ class DataDrivenConfigTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "exactly 2 capture groups"):
                 module._load_config(path)
 
+            invalid_legacy_task_state = json.loads(json.dumps(base))
+            invalid_legacy_task_state["stateVocabulary"]["legacyTaskRead"] = ["PENDING"]
+            path.write_text(json.dumps(invalid_legacy_task_state), encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "legacyTaskRead"):
+                module._load_config(path)
+
             invalid_revision_set = json.loads(json.dumps(base))
             invalid_revision_set["gate"]["revisionSetFieldPattern"] = r"Revision set: (D\d+) / (S\d+)"
             path.write_text(json.dumps(invalid_revision_set), encoding="utf-8")
@@ -717,6 +723,74 @@ class RuntimeStateTransitionTest(unittest.TestCase):
             runtime = json.loads((package / ".impl-package/runtime-state.json").read_text(encoding="utf-8"))
             self.assertEqual([(row["attempt"], row["id"]) for row in runtime["tasks"]], [("initial", "T1"), (patch_id, "T2")])
             self.assertEqual([(row["attempt"], row["id"]) for row in runtime["tickets"]], [("initial", "old"), (patch_id, "new")])
+
+    def test_minimal_task_table_rejects_new_needs_seam_but_reads_legacy_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            package = Path(temp) / "2026-07-17-example"
+            sidecar = package / ".impl-package" / "revision-bindings.json"
+            sidecar.parent.mkdir(parents=True)
+            (package / "plan.md").write_text(
+                "# Plan\n\n执行组合（Composition）：tickets=false, dag=true\n", encoding="utf-8"
+            )
+            (package / "dag.md").write_text(
+                "# Task DAG\n\n执行尝试 ID（Attempt ID）：initial\n\n## Task DAG\n\n"
+                "| Task | Primary ownership | Known depends on | Contributes to tickets | Known seam / risk |\n"
+                "| --- | --- | --- | --- | --- |\n"
+                "| T1 | runner | none | none | none |\n\n"
+                "<!-- impl-package:projection runtime-state begin -->\n"
+                "| 任务 | 状态 | 证据 |\n| --- | --- | --- |\n| T1 | PENDING | dag.md#T1 |\n"
+                "<!-- impl-package:projection runtime-state end -->\n",
+                encoding="utf-8",
+            )
+            sidecar.write_text(
+                json.dumps(
+                    {
+                        "contractVersion": "3.2",
+                        "purpose": "internal-machine-sidecar",
+                        "ownerFacing": False,
+                        "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}},
+                        "bindings": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            run_cli(package, "init", "--package-id", package.name)
+
+            rejected = run_cli(
+                package,
+                "set-state",
+                "task",
+                "T1",
+                "NEEDS_SEAM",
+                "--attempt",
+                "initial",
+                "--expect",
+                "PENDING",
+                "--evidence",
+                "dag.md#T1",
+                check=False,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("unsupported task state", rejected.stderr)
+
+            state_path = package / ".impl-package" / "runtime-state.json"
+            runtime = json.loads(state_path.read_text(encoding="utf-8"))
+            runtime["tasks"][0]["state"] = "NEEDS_SEAM"
+            state_path.write_text(json.dumps(runtime), encoding="utf-8")
+            run_cli(
+                package,
+                "set-state",
+                "task",
+                "T1",
+                "BLOCKED",
+                "--attempt",
+                "initial",
+                "--expect",
+                "NEEDS_SEAM",
+                "--evidence",
+                "tasks/T1-progress.md",
+            )
+            self.assertEqual(json.loads(state_path.read_text(encoding="utf-8"))["tasks"][0]["state"], "BLOCKED")
 
 
 class ArtifactChainTest(unittest.TestCase):

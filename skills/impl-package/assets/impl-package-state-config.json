@@ -1,7 +1,8 @@
 {
   "contractVersion": "3.2",
   "stateVocabulary": {
-    "task": ["PENDING", "READY", "RUNNING", "NEEDS_SEAM", "BLOCKED", "FAILED", "NEEDS-REVALIDATION", "DONE", "WAIVED", "SUPERSEDED"],
+    "task": ["PENDING", "READY", "RUNNING", "BLOCKED", "FAILED", "NEEDS-REVALIDATION", "DONE", "WAIVED", "SUPERSEDED"],
+    "legacyTaskRead": ["NEEDS_SEAM"],
     "ticket": ["UNRECORDED", "IN_PROGRESS", "BLOCKED", "NEEDS-REVALIDATION", "SATISFIED", "WAIVED", "SUPERSEDED"],
     "gateVerdict": ["pass", "fail", "blocked", "defer"],
     "terminalGateVerdict": ["pass", "fail", "defer"],
@@ -14,6 +15,7 @@
     "taskHeadingPattern": "(?m)^###\\s+(T\\d+)\\s*[:：]",
     "taskBlockPattern": "(?ms)^###\\s+{task_id}\\s*[:：].*?(?=^###\\s+T\\d+\\s*[:：]|^##\\s|\\Z)",
     "taskStatePattern": "(?m)^-\\s*状态[：:]\\s*([A-Z_-]+)",
+    "taskTableRowPattern": "(?m)^\\|\\s*(T\\d+)\\s*\\|",
     "ticketStatePattern": "(?m)^-\\s*值[：:]\\s*\\[?([^]\\n]+)",
     "dagArtifactPatterns": ["dag.md", "*.patch-dag.md"],
     "ticketArtifactPatterns": ["tickets/*.md"],

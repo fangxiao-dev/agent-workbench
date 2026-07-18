@@ -35,7 +35,7 @@ flowchart TD
     PL --> EX[dev-with-track：执行 / gate]
     TK --> EX
     DG --> EX
-    EX --> SD[subagent-driven-development：task 执行 + 即时 review]
+    EX --> SD[subagent-driven-development：task 执行 + 局部验证]
     SD --> RV{ticket acceptance 审查}
     RV -->|恒查| CR[code-review]
     RV -->|契约变化| MR[module-review]
@@ -63,7 +63,7 @@ flowchart TD
 | 3 Attempt 计划 | `impl-planning` | `plan.md` / patch plan（含 Composition） | Spec 过、要落地 |
 | 3b 切票（按需） | `to-tickets` | 当前 attempt 的 `tickets/` | plan 判 `tickets=true` |
 | 4 排执行图（按需） | `create-task-dag` | 当前 attempt DAG | plan 判 `dag=true` |
-| 5 执行 | `dev-with-track` + `subagent-driven-development` | runtime state / task review evidence · plan Execution Record · append-only `gate.md` | 上游就绪 / 跨 session 续；有可委派 task 时由后者承载 |
+| 5 执行 | `dev-with-track` + `subagent-driven-development` | runtime state / Task 局部验证 evidence · plan Execution Record · append-only `gate.md` | 上游就绪 / 跨 session 续；有可委派 task 时由后者承载 |
 | 6 审查 | `code-review`（恒） · `module-review` · `safety-review` | review evidence（进入 plan ER） | 见下方路由 |
 | 6b Completion claim gate | `verification-before-completion` | claim-to-evidence audit | 写 terminal pass 或宣称 complete / closed / merge-ready / release-ready 前 |
 | 可选回刷 | `$backfill-stable-docs`（体系内维护阶段） | contract preflight、audit report / approved apply / independent verify；必要时更新 `_pending.md` | gate 关闭后提示；积累 durable delta 或周期维护时执行，不阻塞当前交付 |
@@ -75,7 +75,7 @@ flowchart TD
 - Spec 已过门，还没 plan → **`impl-planning`**。
 - 当前 attempt plan 判 `tickets=true`，还没票 → **`to-tickets`**（draft → owner 批准 → publish）。
 - 当前 attempt plan 判 `dag=true`，plan（及相关 approved 票）就绪 → **`create-task-dag`**。
-- 上游产物就绪，要开始 / 恢复执行 → **`dev-with-track`**；它从 revision registry 与 gate 派生 lifecycle、选择可执行单元并维护状态。存在有界且委派收益明确的 task 时，进入 **`subagent-driven-development`** 完成实现和 task-level review，再返回前者集成；单 owner 的机械局部 delta 由主 agent 直接处理。存在 manual owner 时，等待验收前按轻量模板生成 readiness handoff。
+- 上游产物就绪，要开始 / 恢复执行 → **`dev-with-track`**；它从 revision registry 与 gate 派生 lifecycle、选择可执行单元并维护状态。存在有界且委派收益明确的 task 时，进入 **`subagent-driven-development`** 完成实现、局部验证或 BLOCKED 回报，再由 Working Branch owner 集成；单 owner 的机械局部 delta 由主 agent 直接处理。存在 manual owner 时，等待验收前按轻量模板生成 readiness handoff。
 - 集成后要审查：`code-review` 恒查；改动 interface / seam / 契约 → **`module-review`**；碰 auth / 支付 / webhook / 迁移 / 外部写入 → **`safety-review`**。
 - 适用 review 与 execution findings 已闭环、准备写 terminal pass 或对外宣称 complete / closed / merge-ready / release-ready → **`verification-before-completion`**；它审计最终 revision、环境和证据新鲜度，不是 DAG task，也不机械重跑所有检查。
 - gate 已关 → **提示**可按需使用 `$backfill-stable-docs` 处理 durable delta。调用 backfill 时先完成独立 contract preflight：旧包由 agent 读取修订摘要并直接改成 current contract，校验通过后才进入只读 audit/apply/verify；升级失败不得继续审计。提示不等于执行授权：只有用户要求、已有明确维护计划，或进入周期性 audit / approved apply / independent verify 时才实际调用；本轮不做 backfill 也可以正常收口。

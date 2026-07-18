@@ -107,12 +107,12 @@ Composition 的唯一事实源是当前 attempt plan，不在 spec 中声明，�
 
 | Composition | Current execution state | Acceptance state |
 | --- | --- | --- |
-| tickets=false, dag=false | 无 task record；需要中断恢复、独立交接或外部 gate 时才创建 `tasks/<attempt-id>-progress.md` attempt ledger | spec AC + plan Execution Record + gate entry |
-| tickets=true, dag=false | runtime-state ticket records 是机器 SoT，ticket files 投影；whole-ticket 恢复时按触发创建 `tasks/<ticket-id>-progress.md` | ticket Runtime Acceptance Status projection |
-| tickets=false, dag=true | runtime-state task records 是机器 SoT，attempt DAG Runtime State 表投影；task progress ledger 按需创建 | spec AC + plan Execution Record + gate entry |
-| tickets=true, dag=true | runtime-state task/ticket records 是机器 SoT，DAG 与 ticket files 各自投影；whole-ticket progress 按触发创建 | ticket Runtime Acceptance Status projection |
+| tickets=false, dag=false | 无 task record；恢复事实进入现有 plan Execution Record 或 handoff，不创建 progress | spec AC + plan Execution Record + gate entry |
+| tickets=true, dag=false | runtime-state ticket records 是机器 SoT，ticket files 投影；不创建 ticket progress | ticket Runtime Acceptance Status projection |
+| tickets=false, dag=true | runtime-state task records 是机器 SoT，attempt DAG Runtime State 表投影；Task 仅在 blocker、handoff、重试或并行派发时按需创建 `tasks/Tn-progress.md` | spec AC + plan Execution Record + gate entry |
+| tickets=true, dag=true | runtime-state task/ticket records 是机器 SoT，DAG 与 ticket files 各自投影；Task progress 同上，Ticket 不创建 progress | ticket Runtime Acceptance Status projection |
 
-一个状态只有一个事实源。plan 不保存 task checklist、task runtime status 或 ticket 正文。简单 no-DAG attempt 的 runtime-state `tasks[]` 必须为空；恢复需要由 Kind=attempt 的 progress ledger 解决，不通过给 plan 或 JSON 增加 executable task checklist。dag=true/tickets=true 时，JSON record 与 earned artifact 必须分别构成 bijection，Markdown marker 只由 `set-state`/`refresh-projections` 更新。
+一个状态只有一个事实源。plan 不保存 task checklist、task runtime status 或 ticket 正文。简单 no-DAG attempt 的 runtime-state `tasks[]` 必须为空；恢复使用既有 Execution Record 或 handoff，不通过给 plan、JSON 或 progress 伪造 executable task checklist。dag=true/tickets=true 时，JSON record 与 earned artifact 必须分别构成 bijection，Markdown marker 只由 `set-state`/`refresh-projections` 更新。
 
 plan 在 attempt 活动期间可通过计划修订（Plan Revision）P&lt;n&gt; 修订策略、Composition 或验证选择；P revision 在该 attempt 内从 P1 单调递增，每次修订记录摘要与 artifact relocation，并在内部 sidecar 追加新 blob binding。terminal gate verdict 后冻结。Composition 变化只影响当前 attempt，不修改 D/S revision；迁移后不得保留两个可写 execution-state source。
 
@@ -166,20 +166,20 @@ actionable = unit 非 terminal
 
 DONE 是 dependency-releasing；WAIVED / SUPERSEDED 只有在记录替代证据与 impact note 后释放。其他状态均不释放。上游返工使依赖任务与旧证据进入 NEEDS-REVALIDATION。恢复时 evidence 胜过 stale status；多项 actionable 时按文档顺序稳定选择，不把该过滤器描述成 scheduler、leasing 或自动派工。
 
-typed edge 图无环还不够；ticket 与 DAG 共存时必须检查 **readiness satisfiability**。对每个 ticket AC，解析其必需 evidence producer；若 producer task 或其任一传递依赖要求该 ticket 先达到 Runtime Acceptance Status，则形成 acceptance-evidence semantic cycle，即使 ticket edge 图和 task DAG 各自都无环也必须拒绝。每项 AC 至少存在一条不经过自身 acceptance 的可执行 evidence path，才能把相关 ticket/DAG 当作可用输入。
+Task DAG 只解析 Task 的执行依赖，不把 task DONE 或 task dependency 变成 Ticket acceptance 的前置/结论图。Task 与 Ticket 以 `contributes-to` 多对多映射关联；Ticket AC 的证据、正式 review 与 acceptance status 仍只由 Ticket/Spec、plan Execution Record 和 gate 共同判定。Ticket 最终验收前，Working Branch owner 只扫描贡献该 Ticket 的 BLOCKED Task：未完成内容影响 AC、已声明行为或风险边界时必须先解除 blocker；不贡献且不影响该 Ticket 时不阻塞；真实影响扩大时先更新 contribution mapping。
 
-semantic cycle 首先视为 decomposition/readiness defect，不自动升级为 contract drift 或 owner decision。若修正只改变 typed edge 分类、task 顺序、evidence producer/owner 投影或对应 artifact 引用，并且保持 D/S、业务范围、AC、Composition、安全约束与外部 mutation authority 不变，则 owning skill 应修正、完成必要的 P/ticket/DAG revalidation 后继续执行。只有修正会改变上述任一业务或授权事实，或存在多个会产生不同业务结果的合理方案时才请求 owner 决定。请求前必须说清选项及其不同业务结果；无法指出业务结果差异时，不得把机械修正报告为 owner blocker。
+贡献映射或 Task 顺序的机械修正不自动升级 contract 或 owner decision。只有修正改变业务结果、Acceptance Semantics、Composition、安全约束或外部 mutation authority，或存在多个会产生不同业务结果的方案时才请求 owner 决定。
 
 ## 5. Contract、task 与 acceptance 分工
 
 - decision 保存选择与 rationale。
 - spec 保存 interface、seam contract、contract/acceptance owner、affected targets、compatibility window、migration/rollback contract、全局约束与 Acceptance Semantics。
 - plan 保存本 attempt 的执行顺序、具体迁移操作、验证选择和过程证据。
-- DAG task 保存依赖、execution ownership、contributes-to / enables 与 seam execution owner。
+- DAG task 保存 primary ownership、已知依赖、contributes-to tickets 与已知 seam/risk；它不保存 Ticket AC、完整 task contract 或新的执行角色。
 - ticket 保存独立 delivery slice、AC 与 Runtime Acceptance Status。
 - gate entry 保存对绑定 revision 的判决摘要，不保存完整验证 checklist。
 
-acceptance target 使用 &lt;ticket-id&gt;:AC-&lt;n&gt; 或 spec:AC-&lt;n&gt;。每个引用必须解析到现有 AC。execution seam 必须有当前 attempt 的 dag=true 和 DAG execution owner；contract 与 acceptance 语义仍在 spec，不能在 plan 或 DAG 中建立副本。
+有 tickets 时 `contributes-to` 使用一个或多个 Ticket ID；tickets=false 时可为 `none`，由 spec AC、plan Execution Record 和 gate 保持验收链。共享 seam 的合同与 acceptance 语义仍在 spec，不能在 plan 或 DAG 中建立副本；Working Branch owner 在 integration step 处理已出现的 seam 与冲突。
 
 ## 6. Plan verification 与 execution findings 分流
 
@@ -250,9 +250,10 @@ append-only 写入顺序：运行 `new-gate-entry` 分配 G id 与 scaffold，�
 - 任意 terminal entry 写入前，Durable Deltas 已完成 `_pending.md` 注册、truth pointer 与必要 stub；无 delta 时已记录 `none + reason`。gate 后 backfill audit/apply/verify 不属于 terminal validation checklist。
 - package 同时最多一个由 registry 选中的 Active attempt；未选中的 plan 是 Draft，terminal entry 对应 attempt 是 Frozen。多个 current attempt、或多个被选中且未冻结的 plan 是 lifecycle violation，restore 必须停止。
 - plan 无 task runtime status、ticket 正文或长期 contract；通用验证政策只引用，不复制。
-- 每项 AC 有 evidence producer/manual owner；task-to-AC 与 typed dependency 引用均可解析且无环。
-- ticket AC 的 evidence producer 与 task 传递依赖通过 readiness satisfiability 检查；不存在 producer 被自身 ticket acceptance 阻塞的 semantic cycle。
-- execution seam 的 contract 在 spec，execution owner 在当前 attempt DAG，acceptance evidence 在 plan/gate 或 ticket。
+- 每个 Ticket AC 有实际 evidence 或明确 manual owner；Task 的 contribution mapping 不替代 AC evidence、正式 review 或 Runtime Acceptance Status。
+- 每个 Ticket 最终验收前已扫描其 contributes-to BLOCKED Task；实际影响扩大时已先更新 mapping。
+- 最终 package review 前，所有 Task 都是 DONE，或是有替代证据与 impact note 的 WAIVED/SUPERSEDED；不得遗留 BLOCKED，且 active Spec 的 Acceptance Semantics 已被整体覆盖。
+- execution seam 的 contract 在 spec，acceptance evidence 在 plan/gate 或 ticket；Working Branch owner 在 integration step 处理执行期出现的 seam。
 - plan Execution Record 使用稳定 anchor 且 append-only；gate evidence 链接可解析到对应 record。
 - gate entry newest-first、旧块未修改；G allocation 不复用，finalized index 的 entry pointer/content binding 及 id/attempt/number/verdict/supersedes 与 Markdown 反解一致；mismatch 不得 fallback heading。
 - execution-findings.md 在写入任意 terminal entry（pass/fail/defer，不只 pass）前已完成分流。

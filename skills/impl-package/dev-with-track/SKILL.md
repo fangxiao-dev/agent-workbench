@@ -15,13 +15,15 @@ description: >
 - req-align 拥有活动 decision/spec SoT 与 D/S Gate。
 - impl-planning 拥有当前 attempt plan、P revision、Composition、Planned Verification 与 Execution Record 结构。
 - to-tickets 拥有 ticket definition/publication；create-task-dag 拥有 DAG contract。
-- 本 skill 通过结构化状态 CLI 维护 earned ticket/DAG runtime state、artifact hash chain 与 finalized gate index，同时维护 progress、`execution-findings.md` 分流、plan Execution Record 证据叙述和 gate.md entry 正文。
+- 本 skill 通过结构化状态 CLI 维护 earned ticket/DAG runtime state、artifact hash chain 与 finalized gate index，同时维护条件化 Task progress、`execution-findings.md` 分流、plan Execution Record 证据叙述和 gate.md entry 正文。
 
 本 skill 不重写长期 contract，不从历史 Composition 推断当前 attempt，也不修改旧 gate entry。
 
 ## Task execution and review routing
 
-本 skill 选择 actionable unit、维护其 runtime state，并拥有 ticket acceptance 的最终入口；它不自行代替 task worker。存在有界且委派收益明确的 implementation task 时，调用同体系的 `subagent-driven-development`：该 skill 负责 implementer delegation 和非实现者执行的 task spec-compliance / code-quality review。单 owner、机械、局部可逆且委派成本更高的 delta 由主 agent 直接完成。task review evidence 进入对应 progress/handoff 或当前 ticket evidence，再由本 skill 汇总。
+本 skill 选择 actionable unit、维护其 runtime state，并拥有 Ticket acceptance 的最终入口；它不自行代替 task worker。存在有界且委派收益明确的 Task 时，调用同体系的 `subagent-driven-development`；普通 Task 只派发目标、primary ownership、禁改范围、已知依赖、贡献 Ticket、局部验证与 `BLOCKED` 返回格式。单 owner、机械、局部可逆且委派成本更高的 delta 由 Working Branch owner 直接完成。Task 的局部证据可记入条件化 progress/handoff 或当前 Ticket evidence，但不构成独立正式 review。
+
+Task 是横向执行拆分，Ticket 是纵向验收单元；二者以多对多 `contributes-to` coverage 关联，不建立默认父子层级。Task `DONE` 只说明产出与局部证据可交给 Working Branch owner 集成，不能自动更新 Ticket acceptance status。Working Branch owner 在并行 Task 返回、出现 `BLOCKED` 或 Ticket 最终验收前完成 integration step：合并产出、处理实际 seam/冲突、运行共享验证和正式 review、将证据映射回 Ticket AC，并据此决定 Ticket 是否可验收。
 
 当 ticket 或 no-ticket attempt 达到验收候选，先固定 comparison point，再按实际 diff 与 contract impact 运行正式 review；不能仅凭 package 曾经有 tickets/DAG 推导本次 review：
 
@@ -48,22 +50,22 @@ terminal metadata 后若又发生 commit、合入目标分支或相关环境变�
 3. 运行 `impl_package_state.py --package <path> validate --committed`，由它以 `git rev-parse HEAD:<package-relative-path>` 现场复核 current D/S/P，并统一检查 exact-blob/plan-contract-v1、ER append-only、earned record bijection、projection 与 finalized gate binding。失败按结构化错误报告处理 P2 capture gap/drift，不得手工模拟算法后宣称可信。
 4. reconcile 状态与证据；evidence 胜过 stale status。比对 earned ticket/DAG 的 Plan Revision 与当前 P 号；不一致的先标 `NEEDS-REVALIDATION`，再按 P delta 计算受影响 subset。受影响内容定向复核；未受影响内容批量确认并机械更新引用，不逐个重跑验收或重建 artifact。
 5. 是新 attempt（尤其重新激活已关闭 package）时，先完成 Module Knowledge Watermark 对账：重新计算 watermark 文件当前 commit SHA，与上一 attempt 记录的 watermark 比对，不符先 diff 确认 decision/spec 是否仍成立。
-6. 校验 typed ticket edges、DAG Depends on、AC references、显式 cycles 与 readiness satisfiability；若 AC 的 evidence producer task 被同一 ticket acceptance 直接或传递阻塞，按 decomposition/readiness defect 处理。
+6. 校验 typed ticket edges、DAG Depends on、Task-to-Ticket contribution mapping 与显式 cycles；DAG 只表达 Task execution dependency，不把 Task state 或 mapping 当作 Ticket AC acceptance 的自动结论。
 7. 执行 readiness resolution，按文档顺序选择第一个 actionable unit；不自动派工。
 
 目标分支已包含当前 comparison point、但 attempt 仍为 Active 时，向 owner 报告派生 qualifier `Integrated, gate open`。若 plan 没有 owner-approved pre-gate integration strategy，视为 integration-order violation；即使已有批准，最终 pass/closed evidence 仍必须来自目标分支。
 
 ### 计划错误的修复权限
 
-发现 decomposition/readiness defect 时，先判断修正是否改变业务结果。若只涉及 typed edge 分类、task 顺序、evidence producer/owner 投影或 artifact 引用，并保持 D/S、业务范围、AC、Composition、安全约束、plan-owned strategy 与外部 mutation authority 不变，则调用 owning skill 完成机械修正和受影响 subset 的定向验证，然后继续当前已批准 attempt；此类变化通常不需要 P revision，也不得升级成 owner blocker。
+发现 decomposition/readiness defect 时，先判断修正是否改变业务结果。若只涉及 typed edge 分类、Task 顺序、contribution mapping 或 artifact 引用，并保持 D/S、业务范围、AC、Composition、安全约束、plan-owned strategy 与外部 mutation authority 不变，则调用 owning skill 完成机械修正和受影响 subset 的定向验证，然后继续当前已批准 attempt；此类变化通常不需要 P revision，也不得升级成 owner blocker。
 
 只有修正会新增/删除业务能力、改变 Acceptance Semantics、降低安全或数据约束、扩大外部/不可逆 mutation authority、改变 Composition earned artifacts，或存在多个会产生不同业务结果的合理方案时才请求 owner 决定。请求前先写出选项和各自业务结果；如果差异只存在于内部顺序、状态或 artifact 投影，就由执行者修正。
 
 ## Current attempt state
 
-- tickets=false, dag=false：没有 task artifact。需要跨 session 恢复、独立交接、外部 gate、blocker 或大量局部证据时，创建 `tasks/<attempt-id>-progress.md`（Kind=attempt）；不向 plan 加 task checklist或伪造 task/ticket。
-- tickets=true, dag=false：runtime-state ticket record 是机器 SoT，ticket Runtime Acceptance Status 是只读投影；whole-ticket 恢复/交接触发时才创建 `tasks/<ticket-id>-progress.md`，且不得复制验收结论。
-- dag=true：runtime-state task record 是机器 SoT，当前 attempt DAG Runtime State 表是投影；ticketed attempt 的 ticket acceptance 同样由 ticket record 投影到 ticket。
+- 默认不创建 progress 文件。仅当某个 DAG Task 实际 `BLOCKED`、跨 session handoff、需要重试，或主 session 分发并行 subagent 时，才创建或更新 `tasks/<task-id>-progress.md`；它只记录当前 blocker/原因、已做证据、下一可执行动作和影响 Ticket。
+- `tickets=false, dag=false` 与 `tickets=true, dag=false` 不创建 attempt 或 ticket progress，也不以 progress 复制 Ticket AC、acceptance status 或第二套 Ticket 状态。
+- dag=true：runtime-state task record 是机器 SoT，当前 attempt DAG Runtime State 表是投影；ticketed attempt 的 Ticket acceptance 同样由 ticket record 投影到 ticket。
 - plan Execution Record 保存实际验证过程，不保存 task/ticket status。
 
 状态变化运行 `set-state ... --attempt <id> --expect <previous> --evidence <pointer>`；命令同时刷新投影并用 CAS-lite 拒绝 stale transition。返工上游输出时，将依赖 task/evidence 标为 NEEDS-REVALIDATION。DONE 只有在 Done when 证据记录后才释放依赖；WAIVED/SUPERSEDED 需要替代证据和 impact note。
@@ -125,11 +127,11 @@ terminal gate 关闭后提示 owner 可以按需使用 `$backfill-stable-docs`�
 
 1. Restore 当前 attempt 与 revisions。
 2. 校验 revision bindings、派生 lifecycle、Composition/artifacts、dependency graph 与 AC references。
-3. 选择并执行 actionable unit；可委派 task 必经 `subagent-driven-development` 的独立 task review，状态只通过 `set-state` 写入 runtime-state 并刷新投影。
+3. 选择并执行 actionable unit；可委派 Task 使用 `subagent-driven-development` 的最小派发，状态只通过 `set-state` 写入 runtime-state 并刷新投影。普通 Task 不触发完整 contract、独立正式 review 或逐 Task gate；高风险 diff 只按实际风险加严局部验证/审查。
 4. committed validate 通过后 append plan Execution Record；外部 artifact hash delta 通过 artifact commands 登记。
 5. 有 manual owner 时，在等待验收前输出轻量 readiness packet；没有人工验收时跳过。
 6. 分流 execution findings；必要时回 req-align 并重新过相应 gate。
-7. ticket 达到验收候选时自动路由 code-review、module-review 和适用的 safety-review，固定 comparison point 并闭环 review findings。
+7. Ticket 达到验收候选前，只扫描 `contributes-to` 该 Ticket 的 `BLOCKED` Task：未完成内容若影响其 AC、已声明行为或风险边界，先解除阻塞；若真实影响扩大，先更新 contribution mapping。随后自动路由 code-review、module-review 和适用的 safety-review，固定 comparison point 并闭环 review findings。最终 package review 前全局确认没有 `BLOCKED`，且所有 Task 为 `DONE` 或有明确、已批准理由的 `WAIVED` / `SUPERSEDED`；再确认所有 Ticket AC evidence 和 active Spec 全覆盖。
 8. 用稳定 operation-id 分配 G id/scaffold；拟写 terminal pass 时先完成 Stage 7 准备，再由 `verification-before-completion` 审计 pass claim。
 9. 完成 Markdown entry 后立即 finalize content-bound index；terminal 时由可信 finalized verdict 派生 Frozen，blocked 时保持 Active。
 10. terminal metadata commit、目标分支合入或环境变化后，任何 complete / closed / merge-ready / release-ready 声明前重新执行 completion-claim evidence audit。先合入后关 gate 的 attempt 必须以目标分支 evidence 收口。

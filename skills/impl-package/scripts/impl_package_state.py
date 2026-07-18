@@ -48,12 +48,20 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
     if config.get("contractVersion") != CURRENT_CONTRACT_VERSION:
         raise RuntimeError(f"unsupported Impl-Package contractVersion: {config.get('contractVersion')!r}")
     vocab = config["stateVocabulary"]
-    if not isinstance(vocab, dict) or set(vocab) != {"task", "ticket", "gateVerdict", "terminalGateVerdict", "initialState"}:
+    if not isinstance(vocab, dict) or set(vocab) != {"task", "legacyTaskRead", "ticket", "gateVerdict", "terminalGateVerdict", "initialState"}:
         raise RuntimeError("Impl-Package state vocabulary has invalid shape")
     for name in ("task", "ticket", "gateVerdict", "terminalGateVerdict"):
         values = vocab[name]
         if not isinstance(values, list) or not values or len(values) != len(set(values)) or any(not isinstance(value, str) or not value for value in values):
             raise RuntimeError(f"Impl-Package {name} vocabulary must contain unique non-empty strings")
+    legacy_task_read = vocab["legacyTaskRead"]
+    if (
+        not isinstance(legacy_task_read, list)
+        or len(legacy_task_read) != len(set(legacy_task_read))
+        or any(not isinstance(value, str) or not value for value in legacy_task_read)
+        or set(legacy_task_read) & set(vocab["task"])
+    ):
+        raise RuntimeError("legacyTaskRead must contain unique task states outside the writable vocabulary")
     if not set(vocab["terminalGateVerdict"]).issubset(vocab["gateVerdict"]):
         raise RuntimeError("terminal gate verdicts must be a subset of gate verdicts")
     if not isinstance(vocab["initialState"], dict) or set(vocab["initialState"]) != {"task", "ticket"}:
@@ -63,7 +71,7 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
     documents = config["documents"]
     document_keys = {
         "compositionPattern", "attemptPattern", "ticketIdPattern", "taskHeadingPattern", "taskBlockPattern",
-        "taskStatePattern", "ticketStatePattern", "dagArtifactPatterns", "ticketArtifactPatterns", "revisionDeclarationPattern",
+        "taskStatePattern", "taskTableRowPattern", "ticketStatePattern", "dagArtifactPatterns", "ticketArtifactPatterns", "revisionDeclarationPattern",
     }
     if not isinstance(documents, dict) or set(documents) != document_keys:
         raise RuntimeError("Impl-Package document configuration has invalid shape")
@@ -73,6 +81,7 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
         "ticketIdPattern": 1,
         "taskHeadingPattern": 1,
         "taskStatePattern": 1,
+        "taskTableRowPattern": 1,
         "ticketStatePattern": 1,
         "revisionDeclarationPattern": 0,
     }
@@ -151,6 +160,8 @@ CONFIG = _load_config()
 RUNTIME_STATE = Path(".impl-package/runtime-state.json")
 REVISION_BINDINGS = Path(".impl-package/revision-bindings.json")
 TASK_STATES = frozenset(CONFIG["stateVocabulary"]["task"])
+LEGACY_TASK_READ_STATES = frozenset(CONFIG["stateVocabulary"]["legacyTaskRead"])
+TASK_READ_STATES = TASK_STATES | LEGACY_TASK_READ_STATES
 TICKET_STATES = frozenset(CONFIG["stateVocabulary"]["ticket"])
 GATE_VERDICTS = frozenset(CONFIG["stateVocabulary"]["gateVerdict"])
 TERMINAL_GATE_VERDICTS = frozenset(CONFIG["stateVocabulary"]["terminalGateVerdict"])
@@ -326,6 +337,21 @@ def _attempt_ticket_documents(package: Path, attempt: str, committed: bool = Fal
     return documents
 
 
+def _dag_task_ids(dag_text: str) -> tuple[list[str], bool]:
+    """Return task IDs from a legacy task-record DAG or the current minimal table."""
+    legacy_ids = re.findall(CONFIG["documents"]["taskHeadingPattern"], dag_text)
+    if legacy_ids:
+        if len(legacy_ids) != len(set(legacy_ids)):
+            raise StateError("earned DAG has duplicate task records")
+        return legacy_ids, True
+    runtime_marker = f"<!-- impl-package:projection {CONFIG['projections']['markers']['runtimeState']} begin -->"
+    task_graph = dag_text.split(runtime_marker, 1)[0]
+    table_ids = re.findall(CONFIG["documents"]["taskTableRowPattern"], task_graph)
+    if len(table_ids) != len(set(table_ids)):
+        raise StateError("minimal Task DAG table has duplicate task IDs")
+    return table_ids, False
+
+
 def _seed_earned_records(package: Path, state: dict[str, Any], revision_state: dict[str, Any] | None = None) -> None:
     if revision_state is None:
         current = _current_attempt(package)
@@ -341,23 +367,25 @@ def _seed_earned_records(package: Path, state: dict[str, Any], revision_state: d
         if dag_artifact:
             dag_path = package / dag_artifact
             dag_text = dag_path.read_text(encoding="utf-8")
-            blocks = re.findall(CONFIG["documents"]["taskHeadingPattern"], dag_text)
-            if not blocks:
+            task_ids, legacy_records = _dag_task_ids(dag_text)
+            if not task_ids:
                 raise StateError("earned DAG contains no task records")
             task_records = []
             existing_tasks = {
                 row["id"]: row for row in state.get("tasks", []) if row.get("attempt") == attempt
             }
-            for task_id in blocks:
+            for task_id in task_ids:
                 if task_id in existing_tasks:
                     task_records.append(existing_tasks[task_id])
                     continue
-                block_pattern = CONFIG["documents"]["taskBlockPattern"].format(task_id=re.escape(task_id))
-                block_match = re.search(block_pattern, dag_text)
-                assert block_match is not None
-                state_match = re.search(CONFIG["documents"]["taskStatePattern"], block_match.group(0))
-                task_state = state_match.group(1) if state_match else CONFIG["stateVocabulary"]["initialState"]["task"]
-                if task_state not in TASK_STATES:
+                task_state = CONFIG["stateVocabulary"]["initialState"]["task"]
+                if legacy_records:
+                    block_pattern = CONFIG["documents"]["taskBlockPattern"].format(task_id=re.escape(task_id))
+                    block_match = re.search(block_pattern, dag_text)
+                    assert block_match is not None
+                    state_match = re.search(CONFIG["documents"]["taskStatePattern"], block_match.group(0))
+                    task_state = state_match.group(1) if state_match else task_state
+                if task_state not in TASK_READ_STATES:
                     raise StateError(f"unsupported task state for {task_id}: {task_state}")
                 task_records.append(
                     {
@@ -1342,7 +1370,7 @@ def _validate_runtime_state(package: Path, revision_state: dict[str, Any], commi
             dag_relative = _attempt_dag_artifact(package, attempt, committed)
             if dag_relative:
                 dag_text = _state_document(package, dag_relative, committed)
-                expected_tasks = re.findall(CONFIG["documents"]["taskHeadingPattern"], dag_text)
+                expected_tasks, _ = _dag_task_ids(dag_text)
                 if not expected_tasks:
                     raise StateError("earned DAG contains no task records")
             else:
@@ -1355,7 +1383,7 @@ def _validate_runtime_state(package: Path, revision_state: dict[str, Any], commi
         if tickets_earned:
             ticket_documents = {identifier: text for identifier, (_, text) in _attempt_ticket_documents(package, attempt, committed).items()}
         expected_tickets = list(ticket_documents)
-    tasks = _validate_record_set(state["tasks"], kind="task", attempt=attempt, expected_ids=expected_tasks, allowed_states=TASK_STATES)
+    tasks = _validate_record_set(state["tasks"], kind="task", attempt=attempt, expected_ids=expected_tasks, allowed_states=TASK_READ_STATES)
     tickets = _validate_record_set(state["tickets"], kind="ticket", attempt=attempt, expected_ids=expected_tickets, allowed_states=TICKET_STATES)
     runtime_marker = CONFIG["projections"]["markers"]["runtimeState"]
     if tasks and dag_text is not None and _replace_projection(dag_text, runtime_marker, _runtime_projection_body(tasks)) != dag_text:

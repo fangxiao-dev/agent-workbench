@@ -60,7 +60,7 @@ Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。pl
 
 - tickets=true：至少两个值得独立跟踪验收结论的 delivery slice。
 - dag=true：需要显式依赖图、多个 execution owner、cohort 或 execution seam。
-- 两者都 false：不创建 task artifact；简单执行不通过 plan checklist制造状态。需要跨 session 恢复、独立交接或外部 gate 时，由 dev-with-track 按触发条件创建 progress ledger。
+- 两者都 false：不创建 task artifact；简单执行不通过 plan checklist 或 progress ledger 制造状态。跨 session 恢复、独立交接或外部 gate 的事实写入现有 Execution Record 或 handoff。
 
 用户可主动用 S/M/L/D 指定期望组合。把它记录为 Composition request 并展开成本 attempt 的 tickets/dag；一致时接受。若与 earn conditions 冲突，在增删任何 ticket/DAG 前向 owner 报告请求、实际信号、建议组合和 artifact 影响，并把选择列为 owner decision，不能静默修正。活动 attempt 只有 owner 接受后才升级 P revision 和迁移 artifact。
 

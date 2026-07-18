@@ -24,7 +24,7 @@
         "Keeps interface, seam contract, acceptance owner and compatibility in spec",
         "Records execution strategy and verification selection in plan",
         "Does not create ticket files or a plan task checklist",
-        "Leaves seam execution ownership to the DAG"
+        "Leaves seam integration to the existing Working Branch owner"
       ]
     },
     {
@@ -50,7 +50,7 @@
         "Reuses the current D/S revisions after drift reconciliation",
         "Records Planned Verification and Execution Record",
         "Contains no task checklist or patch DAG",
-        "Uses a progress ledger only if a recovery trigger later occurs"
+        "Keeps recovery facts in the Execution Record or handoff without creating a progress ledger"
       ]
     },
     {

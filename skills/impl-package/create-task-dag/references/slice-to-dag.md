@@ -25,4 +25,4 @@
 
 ## 交接信息
 
-路由时说明原因、缺失 artifact、当前 Attempt ID 与恢复条件。ticket/spec 保存验收语义，DAG task 只通过 contributes-to / enables 建立贡献关系；不得复制 spec seam contract。
+路由时说明原因、缺失 artifact、当前 Attempt ID 与恢复条件。Ticket/spec 保存验收语义；DAG Task 只通过 `contributes-to` 记录多对多执行贡献，不得复制 spec seam contract、把 Task 变成 Ticket 子项，或从 Task 状态推断 acceptance。
