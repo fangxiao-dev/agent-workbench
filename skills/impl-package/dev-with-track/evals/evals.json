@@ -10,7 +10,8 @@
         "Reads Composition from the current attempt plan",
         "Distinguishes Publication Status from Runtime Acceptance Status",
         "Does not create dag.md or a plan task checklist",
-        "Requires every ticket AC to have an evidence producer or manual owner"
+        "Requires every ticket AC to have an evidence producer or manual owner",
+        "Requires the earned plan-decomposition bundle to be approved before execution"
       ]
     },
     {
@@ -22,7 +23,8 @@
         "Reads Composition and P revision from the current plan",
         "Uses spec:AC-n targets",
         "Does not create progress without a Task-specific trigger",
-        "Appends actual verification to the current plan Execution Record"
+        "Appends actual verification to the current plan Execution Record",
+        "Requires the current DAG to be part of the approved earned bundle before selecting a Task"
       ]
     },
     {

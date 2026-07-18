@@ -9,9 +9,9 @@ This repository-local fork turns an approved implementation contract into accept
 
 ## Invocation Contract
 
-Use `mode=draft|publish`. Calls from another Impl-Package skill normally omit the mode or set `mode=draft`; omitted mode means `draft`. The sole cross-skill exception is a recorded explicit owner approval for the same complete Draft set: a caller may then request `mode=publish` to perform the Draft-to-Approved transition. `publish` is never the default continuation of drafting.
+Use `mode=draft|publish`. Calls from another Impl-Package skill normally omit the mode or set `mode=draft`; omitted mode means `draft`. `Draft` is the normal handoff from ticket slicing to `create-task-dag` when the current Composition earns a DAG. `mode=publish` is reserved for the single owner-approved decomposition bundle: every artifact earned by the current Composition (Tickets, and DAG when `dag=true`) must have passed joint validation before the Draft-to-Approved transition. `publish` is never the default continuation of drafting and never represents an independent Ticket-only approval gate.
 
-Canonical input is the same-package-id package's gated current `spec.md` plus current attempt plan. Stop if the Spec gate is not `PASSED`, the plan is absent, Attempt ID/D-S-P revisions cannot be resolved, or the package IDs disagree. Composition is read only from the current plan.
+Canonical input is the same-package-id package's gated current `spec.md` plus current attempt plan. Stop if the Spec gate is not `PASSED`, the plan is absent, Attempt ID/D-S-P revisions cannot be resolved, or the package IDs disagree. Composition is read only from the current plan. The plan remains the only source for whether Tickets and/or a DAG are earned; this skill does not create a DAG to satisfy an approval precondition and does not publish a Ticket set before an earned DAG is ready for the same review.
 
 ## Earn Tickets Before Creating Files
 
@@ -53,11 +53,11 @@ Draft is local and non-publishing:
 5. When earned, write one `Publication Status: Draft` file per slice, include the current Attempt ID, and use [assets/templates/ticket.md](./assets/templates/ticket.md) under the project-configured package root at `tickets/<NN>-<ticket-slug>.md`.
 6. Leave each `Runtime Acceptance Status` field unrecorded; Draft mode owns only the publication status and ticket definition.
 7. Number files in a deterministic dependency-compatible order; for independent slices, preserve the proposed document order. File numbers and ticket IDs are package-wide unique: continue after historical attempts and never overwrite an older attempt's ticket.
-8. Return the package path, draft ticket paths, typed-edge summary, unresolved evidence-producer obligations, and acceptance evidence gaps. Do not publish externally or mark tickets Approved.
+8. Return the package path, draft ticket paths, typed-edge summary, unresolved evidence-producer obligations, and acceptance evidence gaps. When `dag=true`, hand the complete Draft set to `create-task-dag`; do not publish externally or mark tickets Approved while the DAG and joint review are still pending.
 
 ## Publish Mode
 
-Publish updates the same local ticket files; it does not create external records. Before changing any status, require explicit owner approval of the full draft set and validate all of the following:
+Publish updates the same local ticket files; it does not create external records. It is the final publication step of the plan-decomposition review, not a separate Ticket approval stage. Before changing any status, require one explicit owner approval of the complete earned bundle and validate all of the following:
 
 1. the current attempt plan declares `Composition: tickets=true, ...` and every draft belongs to that Attempt ID;
 2. every ticket has at least one complete, stable AC with planned evidence or a manual verification owner;
@@ -65,9 +65,17 @@ Publish updates the same local ticket files; it does not create external records
 4. the dependency graph is acyclic across all three edge types;
 5. every AC has a feasible evidence source under the plan and proposed typed edges; no known evidence source requires implementation that is blocked by the same ticket's acceptance;
 6. the complete set has a deterministic dependency-compatible ordering;
-7. no ticket contains task ownership or file-level implementation steps.
+7. no ticket contains task ownership or file-level implementation steps;
+8. when `dag=true`, the same-Attempt Draft DAG exists and has passed the joint Ticket↔DAG validation: earned-ticket coverage, typed blocker ↔ Task dependency consistency, non-overlapping Task primary ownership, many-to-many `contributes-to` mappings, AC evidence feasibility, and D/S/P revision plus gate/preflight binding. The DAG must not copy Ticket ACs, assign Ticket ownership, or create a Task→AC acceptance mapping;
+9. when `dag=false`, the absence of a DAG is the earned Composition and is recorded as such; do not create one merely to satisfy this checklist.
 
 若 publish 前唯一差异是新 P revision 且 impact summary 证明 ticket 语义未变，可对完整未受影响 batch 做一次 reconciliation 后更新 Plan Revision；不要重新起草或要求 owner 重批相同内容。受影响 subset 仍按本节完整验证。
+
+The owner approval covers the Tickets and, when earned, the DAG as one revision-bound bundle. After the atomic transition succeeds, report the bundle as `approved` and only then hand it to execution preflight. `create-task-dag` does not have an independent publication or approval gate.
+
+### Material changes and scoped re-review
+
+After bundle approval, a change to an acceptance boundary, typed dependency, Task contribution, primary ownership, execution ordering, AC evidence feasibility, Composition, safety/gate boundary, or D/S/P binding supersedes the approval for the affected scope. Reconcile only the affected Tickets and DAG nodes (or regenerate the affected DAG portion when needed), run joint validation again, and return the bundle to review before execution resumes. Keep unaffected artifacts as a confirmed batch when the impact evidence supports it; do not silently edit an approved structure. Pure formatting, citation, classification, or mechanical Plan Revision rebinding that cannot change those semantics does not require a new approval, but its evidence must be recorded in the existing handoff/Execution Record.
 
 Fail publish without partial publication-status updates if any validation fails. Publish owns only the `Draft` to `Approved` publication transition. It must preserve the runtime-state marker body. Runtime readiness and all later ticket acceptance status belong to `dev-with-track` through the shared structured-state contract.
 
@@ -97,7 +105,8 @@ S/M/L/D shorthand 本身没有创建、删除或退休 ticket 的权限；只读
 - mode and tickets composition result;
 - ticket ids/paths and statuses;
 - typed dependencies and validation evidence;
+- joint Ticket↔DAG validation result and revision/gate binding when `dag=true`;
 - unresolved AC evidence gaps or owner decisions;
-- the next Impl-Package stage (`impl-planning` cross-check or `create-task-dag` when dag is earned).
+- the next Impl-Package stage (`impl-planning` cross-check, `create-task-dag` when `dag=true` and the bundle is still drafting, or execution preflight only after the joint bundle is approved).
 
 Do not invoke an implementation command or name a runner. Do not allocate workers, coordinate concurrent execution, or perform runtime scheduling. Execution selects work later through the shared deterministic readiness-resolution contract.

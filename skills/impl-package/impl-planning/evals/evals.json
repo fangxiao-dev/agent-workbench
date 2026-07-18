@@ -5,26 +5,28 @@
       "id": 1,
       "name": "tickets-only-attempt-plan",
       "prompt": "Current decision D2 and spec S3 have passed their required gates. Create initial attempt P1; the acceptance surface earns two independently tracked slices but no execution DAG.",
-      "expected_output": "Creates the current attempt plan with Composition: tickets=true, dag=false, Planned Verification and an empty append-only Execution Record, then routes to-tickets draft.",
+      "expected_output": "Creates the current attempt plan with Composition: tickets=true, dag=false, Planned Verification and an empty append-only Execution Record, then routes to the plan-decomposition bundle: to-tickets draft followed by one owner review before publish.",
       "files": [],
       "expectations": [
         "Reads contract and AC semantics from D2/S3 without copying them into plan",
         "Uses plan-owned Composition: tickets=true, dag=false",
         "Does not create a task checklist or DAG",
-        "Records Attempt ID initial and Plan Revision P1"
+        "Records Attempt ID initial and Plan Revision P1",
+        "Does not create a separate Ticket approval gate"
       ]
     },
     {
       "id": 2,
       "name": "only-dag-attempt-plan",
       "prompt": "Current spec S2 defines a cross-module seam and spec:AC-1 through AC-3. Create attempt P1 with explicit dependent execution owners but no independent ticket slices.",
-      "expected_output": "Creates a plan with Composition: tickets=false, dag=true and routes execution decomposition to create-task-dag while leaving the seam contract in spec.",
+      "expected_output": "Creates a plan with Composition: tickets=false, dag=true and routes the plan-decomposition bundle to create-task-dag, followed by one owner review before execution, while leaving the seam contract in spec.",
       "files": [],
       "expectations": [
         "Keeps interface, seam contract, acceptance owner and compatibility in spec",
         "Records execution strategy and verification selection in plan",
         "Does not create ticket files or a plan task checklist",
-        "Leaves seam integration to the existing Working Branch owner"
+        "Leaves seam integration to the existing Working Branch owner",
+        "Uses the DAG as the complete earned bundle when tickets=false"
       ]
     },
     {

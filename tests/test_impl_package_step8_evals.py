@@ -61,12 +61,12 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         skill_expectations = {
             IMPL_ROOT / "SKILL.md": "不为了“进流程”调用 `req-align`",
             IMPL_ROOT / "req-align" / "SKILL.md": "## No-contract fast path",
-            IMPL_ROOT / "impl-planning" / "SKILL.md": "不扩展 sidecar schema",
+            IMPL_ROOT / "impl-planning" / "SKILL.md": "计划拆解 bundle",
             IMPL_ROOT / "to-tickets" / "SKILL.md": "未受影响 ticket 可作为一个 batch",
             IMPL_ROOT / "create-task-dag" / "SKILL.md": "未受影响节点可以批量确认",
-            IMPL_ROOT / "dev-with-track" / "SKILL.md": "采用 delta-first restore",
-            IMPL_ROOT / "execution-preflight" / "SKILL.md": "Merely citing a plan",
-            IMPL_ROOT / "subagent-driven-development" / "SKILL.md": "委派是按收益 earn 的",
+            IMPL_ROOT / "dev-with-track" / "SKILL.md": "bundle approval",
+            IMPL_ROOT / "execution-preflight" / "SKILL.md": "plan-decomposition bundle is `approved`",
+            IMPL_ROOT / "subagent-driven-development" / "SKILL.md": "委派成本高于收益",
             IMPL_ROOT / "reviews" / "code-review" / "SKILL.md": "Docs/evidence/config-metadata-only changes use a focused profile",
             IMPL_ROOT / "reviews" / "module-review" / "SKILL.md": "不足以触发本次 module-review",
             IMPL_ROOT / "reviews" / "safety-review" / "SKILL.md": "### 收缩型变化的 focused path",
@@ -74,6 +74,9 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         }
         for path, expected in skill_expectations.items():
             assert_contains(read(path), expected, f"Missing distributed simplification rule: {path}")
+        assert_contains(read(IMPL_ROOT / "impl-planning" / "SKILL.md"), "不扩展 sidecar schema", "Impl-planning schema boundary")
+        assert_contains(read(IMPL_ROOT / "dev-with-track" / "SKILL.md"), "采用 delta-first restore", "Dev restore strategy")
+        assert_contains(read(IMPL_ROOT / "execution-preflight" / "SKILL.md"), "Merely citing a plan", "Preflight skip boundary")
 
     def test_lifecycle_eval_contract(self) -> None:
         eval_paths = {
@@ -116,6 +119,7 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
 
         ticket_draft = eval_text(find_eval(evals["to-tickets"], 1))
         assert_contains(ticket_draft, "current attempt plan", "To-tickets plan composition source")
+        assert_contains(ticket_draft, "bundle", "To-tickets joint decomposition bundle")
         ticket_mismatch = eval_text(find_eval(evals["to-tickets"], 5))
         assert_contains(ticket_mismatch, "impl-planning", "To-tickets composition mismatch routing")
         assert_contains(
@@ -138,6 +142,7 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         dag_input = eval_text(find_eval(evals["create-task-dag"], 1))
         assert_contains(dag_input, "current attempt plan", "Task-DAG current-attempt input")
         assert_contains(dag_input, "contributes-to", "Task-DAG AC traceability")
+        assert_contains(dag_input, "Draft", "Task-DAG accepts Draft Tickets before joint review")
         dag_persistence = eval_text(find_eval(evals["create-task-dag"], 7))
         assert_contains(
             dag_persistence,
@@ -211,27 +216,27 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         )
         assert_contains(
             progress_template,
-            "类型：[attempt / task / ticket]",
-            "Progress must represent a no-DAG attempt recovery unit.",
+            "仅当该 Task 实际",
+            "Progress must remain conditional on an earned Task event.",
         )
         assert_contains(
             progress_template,
-            "tasks/<attempt-id>-progress.md",
-            "Attempt progress path must be canonical.",
+            "不是 Ticket 验收或第二套状态源",
+            "Progress must not become a second Ticket state source.",
         )
 
         dag_skill = read(IMPL_ROOT / "create-task-dag" / "SKILL.md")
-        assert_contains(dag_skill, "必须持久化为当前 attempt", "Impl-Package DAG must be durable.")
+        assert_contains(dag_skill, "DAG 必须持久化在当前 attempt", "Impl-Package DAG must be durable.")
         assert_not_contains(dag_skill, "持久化始终可选", "Impl-Package DAG persistence cannot be optional.")
         assert_contains(
             dag_skill,
-            "Composition 未决，或当前 plan Composition 与现有 artifact 不一致：路由",
+            "Composition 不一致、plan/spec/AC 缺失或漂移：路由",
             "Composition mismatch route must be explicit.",
         )
         assert_contains(
             dag_skill,
-            "`impl-planning` 升级 P revision",
-            "Composition mismatch must route to impl-planning.",
+            "`impl-planning` 或 `req-align`",
+            "Composition mismatch must route upstream.",
         )
 
         safety_skill = read(IMPL_ROOT / "reviews" / "safety-review" / "SKILL.md")

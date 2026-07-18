@@ -89,7 +89,7 @@ restore 或 gate evaluation 时，对 `current` 指向的 D/S/P binding 执行�
 
 ER 的 Revision set 表示写入该 ER 时的 current D/S/P set；plan 的 `revision-set` marker 始终表示当前 set。gate entry 为了冻结历史判决，在可读正文写 `Revision set: D<n> / S<n> / P<n>` 与 `Binding validation: passed | failed`；精确 blob OID 和内部 sidecar 路径只放 HTML comment 形式的 machine audit metadata。P blob 是 plan-contract-v1 baseline，实际 ER evidence 由 comparison point + ER anchor 固定。
 
-## 3. Attempt、plan 与 Composition
+## 3. Attempt、plan、Composition 与计划拆解
 
 每次 implementation attempt 有唯一 Attempt ID：初始实现使用 initial，patch 使用其 patch-plan 文件 stem `YYYYMMDD-HHMM-&lt;patch-topic&gt;`；精确 stem 已存在时追加 `-02`、`-03`，且创建后不可改名。对应 plan 声明：
 
@@ -112,6 +112,14 @@ Composition 的唯一事实源是当前 attempt plan，不在 spec 中声明，�
 | tickets=false, dag=true | runtime-state task records 是机器 SoT，attempt DAG Runtime State 表投影；Task 仅在 blocker、handoff、重试或并行派发时按需创建 `tasks/Tn-progress.md` | spec AC + plan Execution Record + gate entry |
 | tickets=true, dag=true | runtime-state task/ticket records 是机器 SoT，DAG 与 ticket files 各自投影；Task progress 同上，Ticket 不创建 progress | ticket Runtime Acceptance Status projection |
 
+### 计划拆解 bundle 与一次 review
+
+Ticket 与 DAG 是同一计划拆解阶段的两个职责 artifact，不是两个独立审批阶段。`tickets=true` 时，`to-tickets` 先生成当前 Attempt/P revision 的完整 Draft Ticket 集合；`dag=true` 时，`create-task-dag` 再消费该集合与 plan，或在 `tickets=false` 时直接消费 plan 生成 DAG。随后对 earned artifacts 做一次联合校验，至少覆盖覆盖范围、typed dependency 与 DAG dependency、primary ownership、Ticket AC 的 evidence feasibility、Task contribution、gate/preflight 边界和 D/S/P revision binding。
+
+联合校验通过后，owner 对当前 earned artifacts 作为一个 bundle 一次 review/approval；任何 Ticket 或 DAG 的实质变化都会使该 bundle approval 失效，必须按 impact-scoped reconciliation 修订受影响部分，若 Ticket 变化触及 DAG dependency、contribution、ownership 或顺序则重新生成或修订受影响 DAG，再联合校验并重新 review。未获 bundle approval 不得进入 execution/preflight；不存在 earned artifact 的 Composition 不创建空 bundle，也不新增审批 ceremony。
+
+面向 owner 的计划拆解进度可报告为 `drafting`（earned artifacts 未齐或联合校验未通过）、`ready-for-review`（earned artifacts 齐备且校验通过）与 `approved`（当前 bundle 已获 owner approval）；`in-progress` 与 `completed` 继续由现有 Attempt、Task、Ticket acceptance 和 gate 推导。这些标签是汇报语义，不是新的 sidecar 字段、CLI 或可写状态 SoT，也不替代 Draft/Active/Frozen lifecycle。
+
 一个状态只有一个事实源。plan 不保存 task checklist、task runtime status 或 ticket 正文。简单 no-DAG attempt 的 runtime-state `tasks[]` 必须为空；恢复使用既有 Execution Record 或 handoff，不通过给 plan、JSON 或 progress 伪造 executable task checklist。dag=true/tickets=true 时，JSON record 与 earned artifact 必须分别构成 bijection，Markdown marker 只由 `set-state`/`refresh-projections` 更新。
 
 plan 在 attempt 活动期间可通过计划修订（Plan Revision）P&lt;n&gt; 修订策略、Composition 或验证选择；P revision 在该 attempt 内从 P1 单调递增，每次修订记录摘要与 artifact relocation，并在内部 sidecar 追加新 blob binding。terminal gate verdict 后冻结。Composition 变化只影响当前 attempt，不修改 D/S revision；迁移后不得保留两个可写 execution-state source。
@@ -126,7 +134,7 @@ plan 不保存可手工修改的 `Status`。attempt lifecycle 从 registry 与 g
 
 `Integrated, gate open` 是报告 qualifier，不是第四种可写 lifecycle status：当 plan 声明的 target branch 已包含当前 comparison point、但 attempt 仍为 Active 时派生。默认 integration order 是 gate-before-merge；只有 plan 记录 owner-approved pre-gate integration strategy 与证据时，才允许先合入。此后 terminal pass 与 closed claim 必须使用目标分支上的新鲜证据；合入本身不等于 gate 关闭。
 
-**计划修订（Plan Revision）变化后，已创建的 ticket/DAG 必须跟进，但不默认全部重做**：每个 tickets/&lt;ticket&gt;.md 与当前 attempt DAG 都声明自己创建/最后确认时所依据的 `计划修订（Plan Revision）：P<n>`。plan 从 P&lt;n&gt; 升级到 P&lt;n+1&gt; 后，仍声明旧 P&lt;n&gt; 的 artifact 是 `NEEDS-REVALIDATION`，该状态表示需要做影响判断，不表示正文必然失效。先根据 P revision 的实际 delta 列出受影响 subset：受影响内容定向修订和验证；未受影响内容可批量确认仍成立并机械更新计划修订引用，无需重新生成、逐项重审或重跑验收。restore 必须完成这次 scoped reconciliation 后再使用相关 artifact。
+**计划修订（Plan Revision）或 bundle artifact 变化后，已创建的 ticket/DAG 必须跟进，但不默认全部重做**：每个 tickets/&lt;ticket&gt;.md 与当前 attempt DAG 都声明自己创建/最后确认时所依据的 `计划修订（Plan Revision）：P<n>`。plan 从 P&lt;n&gt; 升级到 P&lt;n+1&gt; 后，仍声明旧 P&lt;n&gt; 的 artifact 是 `NEEDS-REVALIDATION`，该状态表示需要做影响判断，不表示正文必然失效；Ticket 或 DAG 的 acceptance boundary、typed dependency、Task contribution、ownership、执行顺序或 gate 发生实质变化时，当前 bundle approval 同样失效。先根据实际 delta 列出受影响 subset：受影响内容定向修订、联合校验并重新 review；未受影响内容可批量确认仍成立并机械更新计划修订引用，无需重新生成、逐项重审或重跑验收。纯 projection、引用或格式修正按 §2 的 editorial correction 规则处理。restore 必须完成这次 scoped reconciliation 后再使用相关 artifact。
 
 可选 dispatch shorthand 只展开当前 attempt Composition，不是 sizing gate：
 
@@ -245,6 +253,7 @@ append-only 写入顺序：运行 `new-gate-entry` 分配 G id 与 scaffold，�
 
 - decision/spec 各有唯一当前 revision（lightweight Decision 的 D revision 在 spec 可解析），正文无并行新旧合同；revision history 足以解释 supersession。
 - 当前 attempt plan 声明 Attempt ID、D/S/P revision 与唯一 Composition，且与 earned artifacts 一致。
+- 计划拆解作为一个 bundle 完成：`tickets=true` 时先有完整 Draft Tickets，`dag=true` 时再有由 plan 与 Draft Tickets（或仅 plan）生成的 DAG；覆盖、依赖、ownership、acceptance/evidence、gate 与 revision binding 联合校验通过后，才允许一次 owner review/approval 与 execution/preflight。
 - `validate --committed` 证明 current D/S/P selection、terminal binding、exact-blob/plan-contract-v1、ER append-only、runtime record bijection 与 projections 一致；owner-facing Markdown 已直接写出 revision set、派生 lifecycle/integration qualifier 与 binding validation 结论。
 - 每个 earned ticket/DAG 声明的 Plan Revision 与当前 plan 的 P 号一致；不一致的按 NEEDS-REVALIDATION 处理，不得当作可用状态。
 - 任意 terminal entry 写入前，Durable Deltas 已完成 `_pending.md` 注册、truth pointer 与必要 stub；无 delta 时已记录 `none + reason`。gate 后 backfill audit/apply/verify 不属于 terminal validation checklist。

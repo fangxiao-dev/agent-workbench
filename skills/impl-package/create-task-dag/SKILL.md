@@ -7,7 +7,7 @@ description: >
 
 # Create Task DAG
 
-把当前 implementation package 的已批准输入转成最小横向执行图。**Ticket** 是纵向、独立可验收的功能/质量单元；**Task** 是用于 ownership、并行和依赖协调的横向执行拆分；**DAG** 只描述 Task 之间的执行依赖。Task 与 Ticket 是多对多 contribution，不是父子树：Task `DONE` 只表示其局部产出和证据可交给现有 Working Branch owner 集成，绝不自动表示任一 Ticket 已验收。
+把当前 implementation package 的 approved Plan 与已形成的 Draft/Approved Ticket 输入转成最小横向执行图。**Ticket** 是纵向、独立可验收的功能/质量单元；**Task** 是用于 ownership、并行和依赖协调的横向执行拆分；**DAG** 只描述 Task 之间的执行依赖。Task 与 Ticket 是多对多 contribution，不是父子树：Task `DONE` 只表示其局部产出和证据可交给现有 Working Branch owner 集成，绝不自动表示任一 Ticket 已验收。Draft Ticket 是合法的 decomposition 输入，不代表 Ticket 已批准；Ticket publication 与 DAG 一起在同一个 review bundle 中完成。
 
 本 skill 的共享语义唯一引用 `skills/impl-package/references/impl-package-composition-contract.md`。不得在本 skill 重定义 canonical status、readiness resolution、composition migration 或 Stage 7。不要引入 Loose/Strict DAG、Workstream、Integrator、Seam Task 或新的 Task 类型；feature、test、documentation、verification 和 seaming 都是同一种 Task。
 
@@ -15,19 +15,31 @@ description: >
 
 可开始 DAG decomposition 的有效输入是当前 attempt plan 声明 `dag=true`，以及：
 
-1. `tickets=true, dag=true`：当前 plan 和同 Attempt ID、相关、Approved 的 Ticket 子集。
+1. `tickets=true, dag=true`：当前 plan 和同 Attempt ID、完整且相关的 Draft Ticket 集合（或已批准的同一 bundle Ticket 集合）。Draft 是正常输入，不需要先经过独立 Ticket approval。
 2. `tickets=false, dag=true`：当前 plan 和 gated `spec.md`；验收仍以 `spec:AC-n` 为准，不创建或伪造 Ticket。
 
 按当前 attempt plan 路由，不能从历史 attempt 或单个 Ticket 猜测：
 
-- `tickets=true, dag=true` 且尚无 Draft/Approved Ticket：路由 `to-tickets mode=draft`。
-- 已有 Draft Ticket：等待明确 owner approval 后路由 `to-tickets mode=publish`；本 skill 不标记 Approved。
-- `tickets=true, dag=true` 且已有相关 Approved Ticket：开始最小 DAG。
+- `tickets=true, dag=true` 且尚无完整 Draft/Approved Ticket：路由 `to-tickets mode=draft`。
+- 已有完整 Draft Ticket：直接开始最小 DAG；联合校验通过后，将 Tickets + DAG 一起交 owner review，再由 `to-tickets mode=publish` 原子发布，不在 DAG 阶段自行标记 Approved。
+- `tickets=true, dag=true` 且已有相关 Approved Ticket：仅在当前 bundle 的 revision/binding 仍有效时复用并验证；发现实质变化时按 scoped reconciliation 处理并重新联合 review。
 - `tickets=false, dag=true` 且 gated spec 有稳定 AC：直接创建 no-ticket DAG。
 - 任一 `dag=false`：不创建 DAG；保留既有 ticket/spec 验收路径。
 - Composition 不一致、plan/spec/AC 缺失或漂移：路由 `impl-planning` 或 `req-align` 修正后再继续。
 
 本 skill 不切 delivery slice、不发布 tracker、不把 Draft 变 Approved。DAG 必须持久化在当前 attempt 的 `dag.md` 或 patch DAG；不可只留在对话或写进 `plan.md`。
+
+## 联合拆解校验（Ticket ↔ DAG）
+
+当 `tickets=true, dag=true` 时，DAG 生成的后半段必须与完整 Draft Ticket 集合一起完成一次联合校验；这是一项 review-ready 条件，不是独立的 DAG approval gate。校验结果进入 runner-neutral handoff/既有 Execution Record，不新增持久状态源或 manifest。至少覆盖：
+
+- **Coverage**：每个 earned Ticket 都有一个或多个 Task 的 `Contributes to tickets` 贡献路径；Task 不指向不存在、历史 Attempt 或其他 package 的 Ticket，且不把未挣得的 Ticket 伪造为验收目标。
+- **Typed dependencies**：Ticket 的 `implementation|acceptance|release` blockers 与 Task `Known depends on` 保持可解释且无环；只把 implementation edge 作为执行 readiness 前置，其他 edge 不被降格为调度依赖。
+- **Ownership/contribution**：每个 Task 有一个不重叠的 primary ownership；贡献映射允许多对多，但 Ticket 不保存 worker ownership，DAG 不把贡献映射变成父子树或 Task→AC 验收映射。
+- **AC evidence feasibility**：每个 Ticket AC 仍由 Ticket/Spec 声明 planned evidence 或 manual owner；DAG 只能证明存在可产出 evidence 的执行贡献并发现循环，不复制 AC 文本或替代正式 acceptance。
+- **Gate/P binding**：Ticket、DAG、Plan 与同一 package/Attempt、D/S/P revision 和 binding 对齐；DAG 的依赖、ownership 或 contribution 不能绕过 plan verification、safety authorization、external gate 或 Working Branch owner integration。
+
+任何一项失败都保持 bundle 在 `drafting`，修正后重新校验；全部 earned artifacts 齐备且校验通过后才可报告 `ready-for-review`。owner 一次批准 Tickets + DAG 后，`to-tickets mode=publish` 才能执行 Ticket publication，bundle 才能进入 execution preflight。
 
 ## 最小记录与拆分规则
 
@@ -68,13 +80,20 @@ Ticket 最终验收前只扫描 contributes-to 该 Ticket 的 BLOCKED Task：若
 
 ## 工作流
 
-1. 读取当前 plan、gated spec、相关 Approved Ticket（如有）、仓库约束与现有 DAG/runtime state；确认可验收目标及外部 mutation 红线。
+1. 读取当前 plan、gated spec、完整同 Attempt Draft/Approved Ticket 集合（如有）、仓库约束与现有 DAG/runtime state；确认可验收目标及外部 mutation 红线。
 2. 用最小表格划分可安全独立启动的 Task；记录确定依赖、primary ownership、Ticket contribution 和已知 seam/risk。不能安全并行就不拆。
-3. 派发 primary ownership 不重叠、依赖已释放的 Task；普通 prompt 只给目标、ownership、禁改范围、依赖、贡献 Ticket、局部验证与 BLOCKED 返回格式（见 `references/worker-prompts.md`）。
-4. 收集局部 evidence；BLOCKED 直接记录原因、建议动作和影响 Ticket。实际 seam 可以通过调整/新增普通 Task 处理。
-5. 由 Working Branch owner 集成并执行共享验证和 Ticket 层正式 review；本 skill 不把局部验证升格为 Ticket acceptance。
+3. 运行本节联合 Ticket↔DAG 校验，确认 coverage、typed dependency、ownership/contribution、AC evidence feasibility 与 gate/P binding；失败则返回 `to-tickets`/`impl-planning` 修正，不发布任何 Ticket。
+4. 持久化最小 `dag.md`/patch DAG、联合校验结果与 review handoff，并报告 `ready-for-review`；此时不派发 worker、不创建 Task progress、不收集执行 evidence，也不触发 Ticket publication。
+5. owner 批准完整 bundle、`to-tickets mode=publish` 成功并进入 execution preflight 后，由 `dev-with-track`/`subagent-driven-development` 按 DAG 派发 primary ownership 不重叠、依赖已释放的 Task；普通 prompt 只给目标、ownership、禁改范围、依赖、贡献 Ticket、局部验证与 BLOCKED 返回格式（见 `references/worker-prompts.md`）。
+6. 执行阶段收集局部 evidence；BLOCKED 直接记录原因、建议动作和影响 Ticket。由 Working Branch owner 集成并执行共享验证和 Ticket 层正式 review；本 skill 不把局部验证升格为 Ticket acceptance。
 
 高风险 Task（tenant isolation、auth/permission、migration、真实外部写入、金额、不可逆数据风险）可按实际 diff 要求更严格验证或 review；这是同一 Task 的额外质量要求，不是 Strict Task 机制。优先选择不拆，或拆成可独立验收的 Ticket。
+
+## 联合 review 与后续修订
+
+当完整 Ticket 集合与 DAG 通过联合校验后，状态只能报告为 `ready-for-review`；Tickets 与 DAG 作为一个 revision-bound bundle 交由 owner 一次 review/approval。owner 批准前，DAG 不得触发 Ticket publication；批准后由 `to-tickets mode=publish` 原子完成 Draft→Approved，并共同进入 execution preflight。`in-progress`/`completed` 仍由 Attempt、Task、Ticket acceptance 与 gate 的既有运行时事实派生，不在 DAG 中新增状态字段。
+
+任何影响 acceptance boundary、typed blocker、Task contribution、primary ownership、执行顺序、AC evidence feasibility、Composition、gate/safety boundary 或 D/S/P binding 的实质变更都会使受影响 bundle approval 失效。按影响范围修订 Ticket 与 DAG 节点、重新运行联合校验并重新 review；未受影响节点可以批量确认，未受影响部分可机械更新 Plan Revision。仅格式、引用、分类或不改变上述语义的机械投影修正不要求重新审批，但必须保留在既有 handoff/Execution Record 中，不能静默改写已批准结构。
 
 ## 示例：测试系统最小图
 
@@ -102,4 +121,4 @@ T1 完成不自动验收 TST-01，仍由 TST-01 的 evidence/review 判定。T2/
 
 ## 输出与汇报
 
-输出持久化的最小 DAG、条件化的 Task progress（如 earned）和实际验证 evidence。Ticket 的长期事实仍是 AC、evidence 和 acceptance status。向 owner 汇报进度或最终状态时使用 `talk-to-boss`：先说明总范围、已完成阶段、剩余工作、是否 closed 和需要的 owner 决定；再给出 Task/validation 证据。
+输出持久化的最小 DAG、条件化的 Task progress（如 earned）、联合校验结果和实际验证 evidence。Ticket 的长期事实仍是 AC、evidence 和 acceptance status。向 owner 汇报进度或最终状态时使用 `talk-to-boss`：先说明总范围、已完成阶段、剩余工作、是否 closed 和需要的 owner 决定；再给出 Task/validation 证据。runner-neutral handoff 必须列出当前 Composition、Draft/Approved Ticket 状态、DAG 路径、coverage/typed dependency/ownership/contribution/AC evidence/gate-P binding 结果、未决 owner decision，以及下一步是 `to-tickets mode=publish`（owner 已批准后）还是 execution preflight。

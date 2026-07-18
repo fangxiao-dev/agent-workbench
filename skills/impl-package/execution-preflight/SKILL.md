@@ -29,6 +29,8 @@ If this is not a new session, first review the active conversation for task-scop
 
 Then read the user-referenced handoff, plan, issue, review, or audit material only far enough to extract authorization and HITL facts. Start from its explicit permission/HITL sections or current summary; do not read every artifact field merely because it exists. If a plan points to another source as required source of truth for permissions or scope, read that source too.
 
+When the referenced implementation plan earns Tickets and/or a DAG, also verify that the plan-decomposition bundle is `approved` for the same Attempt/P revision and complete earned artifact set. If the Composition earns both Tickets and a DAG, a Ticket-only approval, a missing DAG, or a stale joint-review reference is a preflight blocker; for tickets-only or DAG-only Composition, the corresponding complete earned artifact set is sufficient. Do not begin execution until the applicable bundle review is complete.
+
 Do not infer extra external systems from general codebase knowledge. If a plan does not mention Azure, Lark, staging, production, browser smoke, database access, email, git publishing, or another external system, omit that system from the preflight output. If the plan mentions a system only to forbid it or require separate approval, report that exactly as a plan-stated boundary.
 
 Extract only these categories when they appear in the sources:

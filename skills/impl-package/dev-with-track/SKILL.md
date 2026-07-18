@@ -14,7 +14,7 @@ description: >
 
 - req-align 拥有活动 decision/spec SoT 与 D/S Gate。
 - impl-planning 拥有当前 attempt plan、P revision、Composition、Planned Verification 与 Execution Record 结构。
-- to-tickets 拥有 ticket definition/publication；create-task-dag 拥有 DAG contract。
+- to-tickets 拥有 ticket definition/publication；create-task-dag 拥有 DAG contract；两者在执行前必须作为同一计划拆解 bundle 通过联合 review。
 - 本 skill 通过结构化状态 CLI 维护 earned ticket/DAG runtime state、artifact hash chain 与 finalized gate index，同时维护条件化 Task progress、`execution-findings.md` 分流、plan Execution Record 证据叙述和 gate.md entry 正文。
 
 本 skill 不重写长期 contract，不从历史 Composition 推断当前 attempt，也不修改旧 gate entry。
@@ -48,16 +48,19 @@ terminal metadata 后若又发生 commit、合入目标分支或相关环境变�
 1. 采用 delta-first restore：先读取仓库规则、`.impl-package/` 两个 sidecar、current attempt plan、gate.md 最新 entry、最近可靠 comparison point/ER anchor，以及自该点后的实际 diff。只在 current 选择冲突、provenance 缺口或 delta 无法解释时读取历史 plans 和完整 ledger；不要每次恢复都重扫全部历史 artifact。
 2. 从 registry 的 `current.attempt` 与 canonical Gate resolver 派生唯一 lifecycle：未被选中的 plan 是 Draft；被选中且没有适用于当前 D/S/P 的 terminal gate 的 attempt 是 Active；只有 content-bound terminal entry 与当前 D/S/P 一致时才是 Frozen。合法历史 entry 仍保留为 `indexed` evidence，但不冻结新 revision。若不存在 Active attempt，停止并路由 impl-planning 创建或批准 patch；若 registry/current/gate 组合产生多个 Active attempt，报告 lifecycle violation 并停止，不能按时间猜一个。
 3. 运行 `impl_package_state.py --package <path> validate --committed`，由它以 `git rev-parse HEAD:<package-relative-path>` 现场复核 current D/S/P，并统一检查 exact-blob/plan-contract-v1、ER append-only、earned record bijection、projection 与 finalized gate binding。失败按结构化错误报告处理 P2 capture gap/drift，不得手工模拟算法后宣称可信。
-4. reconcile 状态与证据；evidence 胜过 stale status。比对 earned ticket/DAG 的 Plan Revision 与当前 P 号；不一致的先标 `NEEDS-REVALIDATION`，再按 P delta 计算受影响 subset。受影响内容定向复核；未受影响内容批量确认并机械更新引用，不逐个重跑验收或重建 artifact。
-5. 是新 attempt（尤其重新激活已关闭 package）时，先完成 Module Knowledge Watermark 对账：重新计算 watermark 文件当前 commit SHA，与上一 attempt 记录的 watermark 比对，不符先 diff 确认 decision/spec 是否仍成立。
-6. 校验 typed ticket edges、DAG Depends on、Task-to-Ticket contribution mapping 与显式 cycles；DAG 只表达 Task execution dependency，不把 Task state 或 mapping 当作 Ticket AC acceptance 的自动结论。
-7. 执行 readiness resolution，按文档顺序选择第一个 actionable unit；不自动派工。
+4. 校验计划拆解 bundle 已达到 `approved`：当前 Composition earned 的 Ticket 集合已完整发布（如 tickets=true），当前 DAG 已存在且与 Attempt/P revision 对齐（如 dag=true），并且 canonical handoff 记录了同一完整集合的联合 review/approval 证据。缺任一条件时停止，不把 Ticket-only approval 或存在 DAG 文件误判为 bundle approval。
+5. reconcile 状态与证据；evidence 胜过 stale status。比对 earned ticket/DAG 的 Plan Revision 与当前 P 号；不一致的先标 `NEEDS-REVALIDATION`，再按 P delta 计算受影响 subset。受影响内容定向复核；未受影响内容批量确认并机械更新引用，不逐个重跑验收或重建 artifact。
+6. 是新 attempt（尤其重新激活已关闭 package）时，先完成 Module Knowledge Watermark 对账：重新计算 watermark 文件当前 commit SHA，与上一 attempt 记录的 watermark 比对，不符先 diff 确认 decision/spec 是否仍成立。
+7. 校验 typed ticket edges、DAG Depends on、Task-to-Ticket contribution mapping 与显式 cycles；DAG 只表达 Task execution dependency，不把 Task state 或 mapping 当作 Ticket AC acceptance 的自动结论。
+8. 执行 readiness resolution，按文档顺序选择第一个 actionable unit；不自动派工。
 
 目标分支已包含当前 comparison point、但 attempt 仍为 Active 时，向 owner 报告派生 qualifier `Integrated, gate open`。若 plan 没有 owner-approved pre-gate integration strategy，视为 integration-order violation；即使已有批准，最终 pass/closed evidence 仍必须来自目标分支。
 
 ### 计划错误的修复权限
 
 发现 decomposition/readiness defect 时，先判断修正是否改变业务结果。若只涉及 typed edge 分类、Task 顺序、contribution mapping 或 artifact 引用，并保持 D/S、业务范围、AC、Composition、安全约束、plan-owned strategy 与外部 mutation authority 不变，则调用 owning skill 完成机械修正和受影响 subset 的定向验证，然后继续当前已批准 attempt；此类变化通常不需要 P revision，也不得升级成 owner blocker。
+
+若修正影响 Ticket acceptance boundary、typed edge、planned evidence、Task contribution、ownership、执行顺序或 gate，当前 bundle approval 立即失效；先回到计划拆解 bundle 的 `drafting`/`ready-for-review` 路径，完成受影响 subset 的联合校验和重新 review，不得继续执行旧结构。
 
 只有修正会新增/删除业务能力、改变 Acceptance Semantics、降低安全或数据约束、扩大外部/不可逆 mutation authority、改变 Composition earned artifacts，或存在多个会产生不同业务结果的合理方案时才请求 owner 决定。请求前先写出选项和各自业务结果；如果差异只存在于内部顺序、状态或 artifact 投影，就由执行者修正。
 
@@ -140,4 +143,4 @@ terminal gate 关闭后提示 owner 可以按需使用 `$backfill-stable-docs`�
 
 向 owner 汇报时使用 `talk-to-boss`：首段说明本次功能范围、实施/验证/gate 各自完成到哪、剩余 blocker 数量、整体是否 closed，以及当前需要 owner 决定什么。主体按功能 slice 说明已经支持和仍未证明的行为。
 
-随后附 canonical handoff：package/Attempt ID、D/S/P revision set、binding validation 结论、派生 lifecycle/integration qualifier、Composition、当前状态源、execution evidence、manual readiness（若适用）、execution findings 分流、最新 gate entry/verdict、Supersedes 链、Stage 7 与 completion-claim evidence audit。正文不得要求 owner 打开 JSON；内部 sidecar 路径只可放 machine audit metadata。terminal gate 已关闭时，另以非阻塞 follow-up 提示可选 backfill；不要把提示写成未完成 gate。
+随后附 canonical handoff：package/Attempt ID、D/S/P revision set、binding validation 结论、派生 lifecycle/integration qualifier、Composition、计划拆解 bundle 状态与联合 review 证据、当前状态源、execution evidence、manual readiness（若适用）、execution findings 分流、最新 gate entry/verdict、Supersedes 链、Stage 7 与 completion-claim evidence audit。正文不得要求 owner 打开 JSON；内部 sidecar 路径只可放 machine audit metadata。terminal gate 已关闭时，另以非阻塞 follow-up 提示可选 backfill；不要把提示写成未完成 gate。

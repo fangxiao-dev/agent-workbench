@@ -7,7 +7,7 @@ description: >
 
 # Impl Planning
 
-为一个 implementation attempt 创建可追溯的过程计划。decision/spec 是活动变更的当前 SoT；plan 只消费它们，并决定本次 attempt 的 tickets/DAG 形态、执行顺序与验证路径。
+为一个 implementation attempt 创建可追溯的过程计划。decision/spec 是活动变更的当前 SoT；plan 只消费它们，并决定本次 attempt 的 tickets/DAG 形态、计划拆解顺序与验证路径。Ticket 与 DAG 是同一计划拆解 bundle 的两个职责产物，不是两个独立审批阶段。
 
 共享 artifact lifecycle、Composition、gate 与 Stage 7 语义只引用 `../references/impl-package-composition-contract.md`。
 
@@ -43,7 +43,7 @@ Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。pl
 - 不在 plan 保存 task checklist、task/ticket runtime status、worker ownership 或通用验证模板副本。
 - 实际验证过程可 append 到 Execution Record；terminal gate verdict 后 plan 冻结。
 - plan 不保存 `Status`。Draft/Active/Frozen 由内部 sidecar 的 current selection 与 gate ledger 派生。
-- tickets 由 to-tickets 拥有，DAG 由 create-task-dag 拥有，progress/execution-findings/gate ledger 由 dev-with-track 拥有。
+- tickets 由 to-tickets 拥有，DAG 由 create-task-dag 拥有；impl-planning 只拥有两者的拆解顺序、Composition 和联合就绪判断。progress/execution-findings/gate ledger 由 dev-with-track 拥有。
 
 ## Routing
 
@@ -71,6 +71,16 @@ plan 活动期间发现 Composition 判断错误时：
 3. 创建或退休当前 attempt 的 ticket/DAG 状态来源。
 4. 不修改 D/S revision，除非同时发现 contract drift。
 5. 不保留两个可写 execution-state source。
+
+## 计划拆解 bundle
+
+当前 plan 的 Composition 决定 bundle 中必须出现哪些 artifact：tickets=true 时必须有完整 Ticket 集合，dag=true 时必须有当前 attempt DAG，未 earned 的 artifact 不创建。计划拆解按以下顺序运行：先起草完整 Ticket 集合，再在需要时基于 Draft Ticket 集合生成 DAG，随后联合校验覆盖、typed dependency、Task ownership/contribution、AC evidence feasibility、gate 边界和 D/S/P binding。
+
+bundle 的派生汇报状态为 `drafting`、`ready-for-review`、`approved`。`ready-for-review` 只表示当前 Composition earned 的 artifact 齐备且联合校验通过；`approved` 表示 owner 已批准该 Attempt、P revision 和完整 artifact 集合。它们不是新的 sidecar 状态源，也不替代 Attempt、Task 或 Ticket runtime state。
+
+只有 bundle review/approval 完成后，才调用 Ticket publish（如 tickets=true）并进入 execution preflight/dev-with-track。DAG 不设置独立 approval 门；它必须在 review 前存在且与当前 Ticket 集合、Attempt 和 P revision 对齐。
+
+批准后若 Ticket 的 acceptance boundary、typed edge、planned evidence、Task contribution、ownership、执行顺序或 gate 影响发生实质变化，旧 bundle approval 失效；按 impact-scoped 规则修订受影响 Ticket/DAG subset，完成联合校验并重新 review。纯引用、格式、分类或 machine projection 修正不触发重新审批。
 
 ## Plan 内容
 
@@ -111,11 +121,12 @@ plan 活动期间发现 Composition 判断错误时：
 2. 确认需要的 Decision/Spec Gate 已通过；实现-only drift 允许复用现有 D/S。
 3. 分配 Attempt ID 与 P1，独立决定 Composition；plan 尚未被 registry 的 `current.attempt` 选中时，其 lifecycle 派生为 Draft。
 4. 建立 spec coverage 与 change map，写 Execution Strategy、integration order、Planned Verification、rollout/rollback 与依赖的 policy 链接；清除 blocker placeholder，核对术语、模块与路径一致性。
-5. tickets=true 时调用 to-tickets draft；dag=true 时在必要输入齐备后调用 create-task-dag。
-6. 交叉检查 ticket/DAG 暴露的 contract 缺口；规范性缺口回 req-align，真正改变 plan-owned 语义的过程策略缺口升级 P revision。仅证据、引用、分类或机械顺序投影错误由 owning skill 局部修正。
-7. 新 package 必须先运行一次 `init --package-id <id>` 建立两份 current-contract sidecar；owner 批准 plan 后再运行 `register-revision plan <P> --attempt <id> --artifact <plan-path> --evidence <pointer>`（或同一 semantic revision 的 `register-revisions`），以 `plan-contract-v1` 追加 binding、选择 current attempt、seed earned runtime records 并刷新投影。commit 后运行 `validate --committed`。后续 ER append 不升级 P revision；ER 写入前再次 committed validate，此时且无 terminal gate 时 lifecycle 派生为 Active。
-8. 执行期间只 append Execution Record；状态由对应 artifact 维护。
-9. gate evaluation 由 dev-with-track 在 gate.md 顶部插入摘要，并链接对应 Execution Record；terminal verdict 使 lifecycle 派生为 Frozen。
+5. 当 tickets=true 时调用 to-tickets draft 形成完整集合；当 dag=true 时在 Ticket 集合为 Draft 且输入齐备后调用 create-task-dag，形成当前 attempt DAG。
+6. 联合校验 Ticket/DAG 的覆盖、依赖、ownership/contribution、acceptance evidence、gate 边界和 revision binding；校验未通过时保持 `drafting`，修订受影响 artifact 后重跑，不进入单独 Ticket approval。
+7. 交叉检查 bundle 暴露的 contract 缺口；规范性缺口回 req-align，真正改变 plan-owned 语义的过程策略缺口升级 P revision。仅证据、引用、分类或机械顺序投影错误由 owning skill 局部修正。
+8. 新 package 必须先运行一次 `init --package-id <id>` 建立两份 current-contract sidecar；owner 批准 plan 后再运行 `register-revision plan <P> --attempt <id> --artifact <plan-path> --evidence <pointer>`（或同一 semantic revision 的 `register-revisions`），以 `plan-contract-v1` 追加 binding、选择 current attempt、seed earned runtime records 并刷新投影。commit 后运行 `validate --committed`。后续 ER append 不升级 P revision；ER 写入前再次 committed validate，此时且无 terminal gate 时 lifecycle 派生为 Active。
+9. 执行期间只 append Execution Record；状态由对应 artifact 维护。
+10. gate evaluation 由 dev-with-track 在 gate.md 顶部插入摘要，并链接对应 Execution Record；terminal verdict 使 lifecycle 派生为 Frozen。
 
 ## Review Checklist
 
@@ -129,6 +140,8 @@ plan 活动期间发现 Composition 判断错误时：
 - Planned Verification 引用权威 policy；Execution Record 使用稳定 anchor 且 append-only。
 - 已激活 conditional evidence-integrity contract 时，Planned Verification 为每个主断言选择了相关 false-PASS 反例和可观察 fail-closed 结果，没有把示例技术或不适用场景伪装成通用要求。
 - Composition 与当前 attempt earned artifacts 一致，无双重状态来源。
+- 当前 Composition earned 的 Ticket/DAG 已组成一个 bundle；联合校验通过后才进入 `ready-for-review`，没有 Ticket-only approval 或 DAG-pending 中间门。
+- bundle approval 绑定当前 Attempt、P revision、完整 artifact 集合和联合校验证据；实质变化会使旧 approval 失效并触发 scoped re-review。
 - plan 无手工 `Status`；Draft/Active/Frozen 与 `Integrated, gate open` 均能从 registry、gate 和 target branch 事实派生。
 - terminal gate 后 plan 已冻结。
 
@@ -136,4 +149,4 @@ plan 活动期间发现 Composition 判断错误时：
 
 向 owner 汇报时使用 `talk-to-boss`：说明本次实现范围、计划阶段是否完成、为何需要或不需要交付切片/执行图、剩余决策，以及能否进入执行。若用户主动指定 S/M/L/D，先用人话说明是否接受及任何冲突。
 
-随后附 canonical handoff：package-id、Attempt ID、D/S/P revision set、binding validation 结论、派生 lifecycle、Composition、plan 路径、integration order、tickets/DAG 路由、选定 verification policy 与剩余 owner decision。正文不得要求 owner 打开 JSON；内部 sidecar 路径只可放 machine audit metadata。
+随后附 canonical handoff：package-id、Attempt ID、D/S/P revision set、binding validation 结论、派生 lifecycle、Composition、计划拆解 bundle 状态、Ticket/DAG 联合校验证据、plan 路径、integration order、tickets/DAG 路由、选定 verification policy 与剩余 owner decision。正文不得要求 owner 打开 JSON；内部 sidecar 路径只可放 machine audit metadata。

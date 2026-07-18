@@ -1,6 +1,6 @@
 # Task DAG
 
-> 仅当 `Composition: ..., dag=true` 时创建。本文件描述 Task 的执行依赖；Ticket 仍是独立、纵向验收单位。字段语义与 runtime state 见 [Impl-Package Composition Contract](../../../references/impl-package-composition-contract.md)。
+> 仅当 `Composition: ..., dag=true` 时创建。本文件是计划拆解 bundle 的 DAG 部分，描述 Task 的执行依赖；Ticket 仍是独立、纵向验收单位。它不设置独立 approval 门，必须与当前 earned Ticket 集合（如有）联合校验和 review。字段语义与 runtime state 见 [Impl-Package Composition Contract](../../../references/impl-package-composition-contract.md)。
 
 Integration responsibility: Working Branch owner
 
@@ -9,6 +9,8 @@ Integration responsibility: Working Branch owner
 计划修订（Plan Revision）：P<n>
 规格：[spec.md](spec.md)
 计划：[当前执行尝试计划](<plan-path>)
+
+Plan Revision 前进后，仍声明旧 P 号的 DAG 为 `NEEDS-REVALIDATION`；先按实际 delta 判断受影响节点，定向修订或验证，未受影响节点可批量确认并机械更新引用，不默认重建整张图。
 
 ## Task graph
 
@@ -27,6 +29,12 @@ Integration responsibility: Working Branch owner
 | --- | --- | --- |
 | T1 | PENDING | dag.md#task-graph |
 <!-- impl-package:projection runtime-state end -->
+
+## Joint decomposition review and integration
+
+Ticket 与 DAG 在此 attempt、P revision 和完整 earned artifact 集合上联合 review。联合校验至少覆盖 Ticket/Spec coverage、typed dependency 与 Task dependency、primary ownership/contribution、AC evidence feasibility、gate/preflight 边界和 revision binding；校验未通过时保持计划拆解 `drafting`，不进入 Ticket publish 或 execution。
+
+实质修改 Ticket acceptance boundary、typed edge、planned evidence、Task contribution、ownership、执行顺序或 gate 后，当前 bundle approval 失效，按影响范围修订 Ticket/DAG 并重新 review。纯引用、格式、分类或 machine projection 修正不触发重新审批。
 
 ## Integration and acceptance
 

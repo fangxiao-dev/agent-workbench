@@ -8,6 +8,8 @@
 
 <!-- Plan Revision 是本 ticket 创建/最后确认时依据的 P<n>。plan 升级后，旧 P 号表示需要按实际 delta 判断影响；未受影响 ticket 可批量确认并机械更新，不重新起草或重批相同内容。 -->
 
+<!-- 当当前 Composition earned DAG 时，Draft Ticket 先交给 create-task-dag 形成联合拆解 bundle；只有 bundle 联合校验通过并经 owner 一次 review 后，才可发布为 Approved。Ticket Approved 不代表 DAG 已创建或已单独通过。 -->
+
 ## 建设内容
 
 <一个范围窄、边界完整、用户可见的交付与验收切片。>
