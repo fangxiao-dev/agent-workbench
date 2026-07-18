@@ -85,8 +85,8 @@ try {
     $parentReasoningEffort = $effortMatch.Groups[1].Value
 
     $configContent = Get-Content -LiteralPath $projectConfig -Raw
-    if (($configContent.IndexOf("max_threads = 2", [System.StringComparison]::Ordinal) -lt 0) -or ($configContent.IndexOf("max_depth = 1", [System.StringComparison]::Ordinal) -lt 0)) {
-        throw "Project config must define the Harness resource safety caps max_threads=2 and max_depth=1. These caps do not assign child roles or acceptance semantics."
+    if ($configContent.IndexOf("max_threads = 4", [System.StringComparison]::Ordinal) -lt 0) {
+        throw "Project config must define the Harness resource safety cap max_threads=4. This cap does not assign child roles or acceptance semantics."
     }
 
     if ($ValidateOnly) {
@@ -103,7 +103,7 @@ try {
         $summaryPath = Join-Path $artifactDirectory ("{0}.summary.json" -f $runId)
         $statusBefore = (& git -C $resolvedRoot status --porcelain=v1 | Out-String).TrimEnd()
         $prompt = @'
-Act as the parent execution agent for a read-only Codex Harness smoke task. Read AGENTS.md, .codex/config.toml, skills/codex-harness/SKILL.md, and skills/codex-harness/assets/codex-harness-poc-design.md, then summarize the parent-only control boundary in those files. You own the execution method, including whether and how to use native subagents; the Harness does not assign child roles or accept child activity as proof. The max_threads/max_depth values are Harness-supplied resource safety caps, not child roles or an acceptance requirement. Do not modify files or use network access. Report a boundary violation only for an actual violation during this run. Return only one JSON object with schema_version="codex-harness.parent-result.v0", status="succeeded" or "failed", a concise summary, and boundary_violations as an array of strings.
+ Act as the parent execution agent for a read-only Codex Harness smoke task. Read AGENTS.md, .codex/config.toml, skills/codex-harness/SKILL.md, and skills/codex-harness/references/codex-harness-guide.md, then summarize the parent-only control boundary in those files. You own the execution method, including whether and how to use native subagents; the Harness does not assign child roles or accept child activity as proof. The max_threads value is a Harness-supplied resource safety cap, not a child-role or acceptance requirement. Do not modify files or use network access. Report a boundary violation only for an actual violation during this run. Return only one JSON object with schema_version="codex-harness.parent-result.v0", status="succeeded" or "failed", a concise summary, and boundary_violations as an array of strings.
 '@
         $prompt = "Parent role profile:`n$parentProfileContent`n`nAssigned work:`n$prompt"
         $arguments = @(

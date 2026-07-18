@@ -28,11 +28,17 @@ def _run_state(root: Path, package: Path, *arguments: str) -> tuple[bool, dict |
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository-root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--package", type=Path, required=True, help="Repository-relative or absolute Impl-Package path.")
     parser.add_argument("--summary", type=Path, required=True)
     parser.add_argument("--write-back", action="store_true", help="Retained for compatibility; direct plan/gate mutation is disabled.")
     args = parser.parse_args()
     root = args.repository_root.resolve()
-    package = root / "docs" / "implementations" / "260716-codex-harness-pilots"
+    package = args.package if args.package.is_absolute() else root / args.package
+    package = package.resolve()
+    try:
+        package.relative_to(root)
+    except ValueError as error:
+        raise ValueError("--package must be inside --repository-root") from error
     summary = json.loads(args.summary.read_text(encoding="utf-8"))
     parent = summary.get("parent_result") or {}
     sidecar_path = package / ".impl-package" / "revision-bindings.json"

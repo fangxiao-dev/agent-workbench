@@ -11,13 +11,13 @@ user-invocable: true
 
 把 Codex Harness 视为围绕一个父 Codex agent 的确定性控制层：Harness 为父 agent 绑定执行角色，控制其 thread/turn、输入、外部验证与生命周期；父 agent 自主选择完成任务的方式，包括是否以及如何使用原生 subagents，并向 Harness 返回可校验的最终结果。
 
-本 Skill 是 Codex Crew/Harness 体系的入口。它提供共同语言、已验证边界、设计入口、Sources Index、parent 生命周期和 early-runner 的 package adapter/parent-stage 入口；parent thread 是唯一的执行编排者，主会话只负责面向用户的交付、转发和模式确认。`codex-crew-lite` 与 `codex-crew` 是同一 parent 的两种 execution profile，复用底层 dispatcher，但不把 POC 误报为生产级 verifier catalog、跨版本兼容、长期 cleanup 或生产级隔离。
+本 Skill 是 Codex Crew/Harness 体系的入口。它提供共同语言、已验证边界、当前运行指南、parent 生命周期和 early-runner 的 package adapter/parent-stage 入口；parent thread 是唯一的执行编排者，主会话只负责面向用户的交付、转发和模式确认。`codex-crew-lite` 与 `codex-crew` 是同一 parent 的两种 execution profile，复用底层 dispatcher，但不把 POC 误报为生产级 verifier catalog、跨版本兼容、长期 cleanup 或生产级隔离。
 
-## 必读设计资产
+## 必读运行指南
 
-处理 Codex Harness 的设计、实现或验证任务前，完整阅读 [assets/codex-harness-poc-design.md](assets/codex-harness-poc-design.md)。它是当前架构语义与证据事实源，包含目标、实测证据、已接受决策、App Server Sources Index、风险和路线图。涉及上下文复用、委派授权、任务分区、决策路由、验收或生命周期策略时，还要读取 [assets/codex-harness-runtime-policy.v0.json](assets/codex-harness-runtime-policy.v0.json) 及其 [JSON Schema](assets/codex-harness-runtime-policy.schema.json)；具体策略值以该 canonical policy 为准，不在 Markdown 中维护第二份配置。
+处理 Codex Harness 的设计、实现或验证任务前，完整阅读 [references/codex-harness-guide.md](references/codex-harness-guide.md)。涉及上下文复用、委派授权、任务分区、决策路由、验收或生命周期策略时，还要读取 [assets/codex-harness-runtime-policy.v0.json](assets/codex-harness-runtime-policy.v0.json) 及其 [JSON Schema](assets/codex-harness-runtime-policy.schema.json)；具体策略值以该 canonical policy 为准，不在 Markdown 中维护第二份配置。
 
-当该资产与此文件重复处不一致时，以资产中的最新明确决策为准，并同步收敛本文件中的入口性表述，避免长期维护两份设计正文。
+运行指南负责当前操作边界；Skill 负责入口与路由；结构化 JSON/Schema 负责 policy 和 protocol 值。三者不应复制同一份配置正文。
 
 ## 当前控制边界
 
@@ -33,13 +33,13 @@ user-invocable: true
 
 ## 使用流程
 
-1. 读取设计资产，先区分“官方接口事实”“本地实测事实”“GitHub issue 风险信号”和“尚未验证的设计假设”。
+1. 读取运行指南和适用的 canonical structured assets，先区分“官方接口事实”“本地实测事实”和“尚未验证的设计假设”。
 2. 明确本次工作属于介绍、设计、POC 实现还是验证；不要把前一阶段的完成表述成生产 Harness 已完成。
 3. 若进入实现，先加载并校验 canonical runtime policy，再通过 App Server v2 的 thread/turn API 控制父 agent，并保持父 agent 对实现方法和 subagents 的所有权。
 4. 若进入验收，解析父 agent 的结构化结果，再独立检查文件、命令、测试或其他 gate；不要只相信自然语言结论。
 5. 若要将新的 Impl-Package 接入 Harness，先固定 approved commit，再运行 adapter preparation；把输出当作草案，逐项完成 verifier 与 ownership review 后才可执行。
-6. 若涉及 retry、timeout、resume、fork 或 cleanup，按父 stage/turn 粒度设计，记录 Codex 版本和恢复策略，并重新核验 Sources Index 中的生命周期风险。
-7. 将新的稳定结论、反例和版本差异先写回设计资产，再据此改进 Skill 的执行规则或添加脚本、references 和 evals。
+6. 若涉及 retry、timeout、resume、fork 或 cleanup，按父 stage/turn 粒度设计，记录 Codex 版本和恢复策略，并重新核验目标 App Server 版本的生命周期能力。
+7. 将新的稳定结论、反例和版本差异写回对应的 Skill、structured asset、脚本或 eval；设计记录只用于人工回顾，不是运行时事实源。
 
 ## 护栏
 
@@ -62,7 +62,7 @@ user-invocable: true
 - 早期 `codex exec` 对照脚本：`scripts/run-codex-subagent-pilot.ps1`
 - 传统 Harness 父角色 profile：`.codex/harness/parent.toml`；Crew parent profile：`.codex/harness/crew-parent.toml`；两者都由 controller 显式读取并映射到 parent thread，不是 native child catalog。
 - 统一 parent controller：`scripts/codex_harness_crew.py`；主会话通过它启动/恢复同一 parent、确认 Lite/Full 模式和转发 owner/纠偏消息。
-- Canonical runtime policy：`assets/codex-harness-runtime-policy.v0.json` 及其 JSON Schema；当前 `maturity` 为 `design_baseline`，其内部术语定义位于设计资产。App Server/package/resume 入口已形成部分 loader、lease/ledger seam，但尚未证明所有字段、失败路径和入口均被强制采用。
+- Canonical runtime policy：`assets/codex-harness-runtime-policy.v0.json` 及其 JSON Schema；当前 `maturity` 为 `design_baseline`。App Server/package/resume 入口已形成部分 loader、lease/ledger seam，但尚未证明所有字段、失败路径和入口均被强制采用。
 - 项目级运行边界：`.codex/config.toml`
 
 ### 底层调用入口

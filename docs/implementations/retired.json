@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "packages": [
+    {
+      "package_id": "260716-codex-harness-pilots",
+      "retired_at": "2026-07-18",
+      "retirement_reason": "The bounded POC design and implementation were absorbed into the current Harness guide, design record, canonical policy, scripts, and focused verification assets; remaining production-hardening work is deferred to a future approved package.",
+      "gate": {
+        "entry_id": "20260718-1211-codex-harness-runtime-G1",
+        "resolution": "defer",
+        "binding_validation": "Impl-Package 3.2 current; validate --committed passed",
+        "revision_set": {
+          "decision": "D2",
+          "spec": "S2",
+          "plan": "P1"
+        },
+        "comparison_point": "main HEAD 3d00424",
+        "evidence": [
+          "focused Harness/Crew/Impl-Package tests: 44 passed",
+          "package runner, prepare adapter, upgrade rejection, and runtime-policy fixtures passed",
+          "policy maturity remains design_baseline"
+        ]
+      },
+      "source_head": "3d00424fbff52c0c76452af04f8b2a9246d421bc",
+      "absorbed_into": [
+        "skills/codex-harness/references/codex-harness-guide.md",
+        "skills/codex-harness/assets/codex-harness-poc-design.md",
+        "skills/codex-harness/assets/codex-harness-runtime-policy.v0.json",
+        "scripts/codex_harness_cli.py",
+        "scripts/codex_harness_controller.py",
+        "scripts/codex_harness_crew.py",
+        "scripts/codex_harness_dispatch.py"
+      ],
+      "deleted_in_commit": null
+    }
+  ]
+}

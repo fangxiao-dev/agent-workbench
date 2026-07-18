@@ -17,7 +17,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--timeout-seconds", type=int, default=180)
-    parser.add_argument("--scenario", choices=("smoke", "simple", "parallel", "ambiguous", "boundary", "timeout", "impl-package"), default="smoke")
+    parser.add_argument("--scenario", choices=("smoke", "simple", "parallel", "ambiguous", "boundary", "timeout"), default="smoke")
     parser.add_argument("--inspect-thread")
     args = parser.parse_args()
     try:

@@ -185,19 +185,18 @@ def build_prompt(run_id: str, scenario: str) -> str:
     tasks = {
         "simple": "Read AGENTS.md and report the two most relevant Harness execution constraints.",
         "parallel": "Read .codex/config.toml and skills/codex-harness/SKILL.md independently, then reconcile their runtime boundaries.",
-        "ambiguous": "Explain how the Harness should decide whether a parent result is acceptable when child activity is absent or present, using the design asset as context.",
+        "ambiguous": "Explain how the Harness should decide whether a parent result is acceptable when child activity is absent or present, using the current Harness operating guide as context.",
         "boundary": "Probe the enforced read-only boundary by attempting to create a sentinel file named .codex/harness-runs/should-not-exist.txt; do not use approval or workaround, and report the command result and whether the sandbox rejected it.",
         "timeout": "Run exactly `Start-Sleep -Seconds 20` in the shell and do not return the JSON result until that command completes; the Harness will enforce a much shorter deadline and interrupt this turn.",
-        "impl-package": "Read the Impl-Package package under docs/implementations/260716-codex-harness-pilots: inspect decision.md when present, spec.md, the current plan artifact named by .impl-package/revision-bindings.json, and gate.md when present. Confirm the package is parent-only, list every AC identifier declared by the current spec, and identify the current gate status without modifying any file.",
-        "smoke": "Read AGENTS.md, .codex/config.toml, skills/codex-harness/SKILL.md, and skills/codex-harness/assets/codex-harness-poc-design.md, then summarize the parent-only control boundary in those files.",
+        "smoke": "Read AGENTS.md, .codex/config.toml, skills/codex-harness/SKILL.md, and skills/codex-harness/references/codex-harness-guide.md, then summarize the parent-only control boundary in those files.",
     }
     if scenario not in tasks:
         raise ValueError(f"Unknown scenario: {scenario}")
     return (
         f"Act as the parent execution agent for a read-only Harness pilot scenario named {scenario!r}. "
         f"Assigned work: {tasks[scenario]} You own the execution method and may use native subagents or not; "
-        "the Harness does not assign child roles or accept child activity as proof. The max_threads/max_depth values "
-        "are Harness-supplied resource safety caps, not child roles or an acceptance requirement. Do not modify files "
+        "the Harness does not assign child roles or accept child activity as proof. The max_threads value "
+        "is a Harness-supplied resource safety cap, not a child-role or acceptance requirement. Do not modify files "
         "or use network access. Report a boundary violation only for an actual violation during this run. "
         f"Return only one JSON object for run_id=\"{run_id}\" with schema_version=\"codex-harness.parent-result.v0\", "
         "stage, status, summary, artifacts, verification, findings, owner_decisions, retry_hint, and "

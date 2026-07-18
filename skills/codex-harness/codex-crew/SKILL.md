@@ -11,7 +11,7 @@ user-invocable: true
 
 Codex Crew is the Full execution profile of the same persistent parent used by Crew Lite. The interactive main session remains accountable for the issue and owner communication; it confirms the parent’s Full proposal and forwards decisions. The parent performs all task decomposition, worker dispatch, package coordination, verification and review orchestration. It combines the shared worker/worktree dispatcher with the existing Harness lifecycle and Impl-Package gates rather than replacing either.
 
-Read the shared [continuation contract](../references/codex-crew-continuation-contract.md), the canonical [full manifest example](../assets/codex-crew.v0.json), the [dispatch schema](../assets/codex-crew-dispatch.schema.json), and `skills/codex-harness/assets/codex-harness-poc-design.md` before running it. Treat the structured profile as canonical; do not encode policy values in this Skill.
+Read the shared [continuation contract](../references/codex-crew-continuation-contract.md), the current [Harness operating guide](../references/codex-harness-guide.md), the canonical [full manifest example](../assets/codex-crew.v0.json), and the [dispatch schema](../assets/codex-crew-dispatch.schema.json) before running it. Treat the structured profile as canonical; do not encode policy values in this Skill.
 
 ## When to select it
 

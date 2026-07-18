@@ -23,7 +23,7 @@
       "const": "codex-harness.runtime-policy.v0"
     },
     "maturity": {
-      "description": "Internal Codex Harness policy vocabulary. Its normative definitions are in codex-harness-poc-design.md under 术语定义; it is not an external maturity standard.",
+      "description": "Internal Codex Harness policy vocabulary; it is not an external maturity standard.",
       "enum": [
         "design_baseline",
         "runtime_enforced"
