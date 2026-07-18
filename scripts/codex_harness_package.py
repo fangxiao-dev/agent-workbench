@@ -8,7 +8,6 @@ acceptance dependency.
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
 import re
 import subprocess
@@ -22,9 +21,13 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from codex_harness_cli import JsonRpcSession, app_server_command
+    from codex_harness_controller import artifacts_valid, load_parent_profile, parse_parent_result, walk_root_agent_messages
     from codex_harness_impl_package_compat import attempt_id as canonical_attempt_id
     from codex_harness_impl_package_compat import composition_flags, matches_artifact_pattern
 except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
+    from scripts.codex_harness_cli import JsonRpcSession, app_server_command
+    from scripts.codex_harness_controller import artifacts_valid, load_parent_profile, parse_parent_result, walk_root_agent_messages
     from scripts.codex_harness_impl_package_compat import attempt_id as canonical_attempt_id
     from scripts.codex_harness_impl_package_compat import composition_flags, matches_artifact_pattern
 
@@ -443,17 +446,6 @@ def stage_prompt(run_id: str, work_package: dict[str, Any]) -> str:
     )
 
 
-def _load_pilot_module() -> Any:
-    path = Path(__file__).with_name("run-codex-app-server-pilot.py")
-    spec = importlib.util.spec_from_file_location("codex_app_server_pilot", path)
-    if spec is None or spec.loader is None:
-        raise ManifestError("cannot load App Server pilot module")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
 def _changed_paths(repository_root: Path) -> list[str]:
     paths = set(_git(repository_root, "diff", "--name-only").splitlines())
     paths.update(_status_paths(repository_root))
@@ -504,8 +496,7 @@ def execute_stage(manifest: Manifest, stage: Stage, worktree: Path, timeout_seco
     except PolicyError as error:
         raise ManifestError(f"runtime policy validation failed: {error}") from error
     work_package = build_work_package(manifest, stage, sensitive_roots)
-    pilot = _load_pilot_module()
-    profile = pilot.load_parent_profile(manifest.parent_profile)
+    profile = load_parent_profile(manifest.parent_profile)
     run_id = time.strftime("%Y%m%d-%H%M%S") + "-" + stage.id.lower() + "-" + uuid.uuid4().hex[:8]
     # Runner-owned evidence must not create an untracked mutation in the target
     # worktree; target artifacts are accepted only when the stage owns that path.
@@ -522,7 +513,7 @@ def execute_stage(manifest: Manifest, stage: Stage, worktree: Path, timeout_seco
     session_closed = False
     disposition_recorded = False
     try:
-        session = pilot.JsonRpcSession(pilot.app_server_command(), stderr_path)
+        session = JsonRpcSession(app_server_command(), stderr_path)
         session.request(1, "initialize", {"clientInfo": {"name": "codex-harness-package-runner", "version": "0.1"}, "capabilities": {"experimentalApi": True}}, 30)
         sandbox = "read-only" if stage.sandbox == "read_only" else "workspace-write"
         start_result, _ = session.request(
@@ -548,9 +539,9 @@ def execute_stage(manifest: Manifest, stage: Stage, worktree: Path, timeout_seco
             history, history_notifications = session.request(4, "thread/read", {"threadId": root_thread_id, "includeTurns": True}, 30)
         except RuntimeError:
             history, history_notifications = {}, []
-        messages = pilot.walk_root_agent_messages(notifications + history_notifications + [history], root_thread_id)
+        messages = walk_root_agent_messages(notifications + history_notifications + [history], root_thread_id)
         raw_result = messages[-1] if messages else ""
-        parent_result = pilot.parse_parent_result(raw_result, run_id)
+        parent_result = parse_parent_result(raw_result, run_id)
         changed_paths = _changed_paths(worktree)
         after = _status_paths(worktree)
         extended_result_valid = bool(
@@ -565,7 +556,7 @@ def execute_stage(manifest: Manifest, stage: Stage, worktree: Path, timeout_seco
         stage_matches = bool(parent_result and parent_result.get("stage") == stage.id)
         parent_paths_match = bool(extended_result_valid and sorted(parent_result["changed_paths"]) == changed_paths)
         allowed = _paths_allowed(changed_paths, stage.allowed_paths)
-        artifacts_safe = bool(parent_result and pilot.artifacts_valid(worktree, parent_result))
+        artifacts_safe = bool(parent_result and artifacts_valid(worktree, parent_result))
         sensitive_artifacts_safe = _artifacts_outside_sensitive_roots(parent_result, tuple(_relative_path(path, "sensitive root") for path in sensitive_roots))
         verifier_results = _run_verifiers(worktree, stage.verification_commands)
         verifiers_passed = bool(verifier_results) and all(item["exit_code"] == 0 for item in verifier_results)

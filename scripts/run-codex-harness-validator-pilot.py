@@ -4,17 +4,14 @@
 from __future__ import annotations
 
 import json
-import importlib.util
 import sys
 from pathlib import Path
 from typing import Any
 
-RUNNER_PATH = Path(__file__).with_name("run-codex-app-server-pilot.py")
-SPEC = importlib.util.spec_from_file_location("codex_harness_runner", RUNNER_PATH)
-assert SPEC is not None and SPEC.loader is not None
-RUNNER = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(RUNNER)
-parse_parent_result = RUNNER.parse_parent_result
+try:
+    from codex_harness_controller import parse_parent_result
+except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
+    from scripts.codex_harness_controller import parse_parent_result
 
 
 def classify(raw: str, expected_run_id: str, repository_root: Path, expected_revision: str) -> str:

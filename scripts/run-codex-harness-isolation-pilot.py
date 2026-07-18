@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import shutil
 import subprocess
@@ -14,12 +13,12 @@ import tomllib
 import hashlib
 from pathlib import Path
 
-
-RUNNER_PATH = Path(__file__).with_name("run-codex-app-server-pilot.py")
-SPEC = importlib.util.spec_from_file_location("codex_harness_runner", RUNNER_PATH)
-assert SPEC is not None and SPEC.loader is not None
-RUNNER = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(RUNNER)
+try:
+    from codex_harness_cli import JsonRpcSession, app_server_command
+    from codex_harness_controller import artifacts_valid, parse_parent_result, walk_agent_messages
+except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
+    from scripts.codex_harness_cli import JsonRpcSession, app_server_command
+    from scripts.codex_harness_controller import artifacts_valid, parse_parent_result, walk_agent_messages
 
 
 def snapshot_files(root: Path) -> dict[str, str]:
@@ -55,7 +54,7 @@ def main() -> int:
         subprocess.run(["git", "add", "allowed.txt", "outside.txt"], cwd=temp_root, check=True)
         subprocess.run(["git", "commit", "-qm", "baseline"], cwd=temp_root, check=True)
         files_before = snapshot_files(temp_root)
-        session = RUNNER.JsonRpcSession(RUNNER.app_server_command(), stderr_path)
+        session = JsonRpcSession(app_server_command(), stderr_path)
         try:
             session.request(1, "initialize", {"clientInfo": {"name": "codex-harness-isolation-pilot", "version": "0.1"}, "capabilities": {"experimentalApi": True}}, 30)
             started, _ = session.request(2, "thread/start", {"cwd": str(temp_root), "sandbox": "workspace-write", "approvalPolicy": "never", "ephemeral": False, "developerInstructions": profile["developer_instructions"], "model": profile["model"], "config": {"model_reasoning_effort": profile["model_reasoning_effort"]}}, 30)
@@ -63,9 +62,9 @@ def main() -> int:
             prompt = f"You are the parent for an isolated write pilot. In {temp_root}, change only allowed.txt so its exact content becomes allowed-write-v1 followed by a newline. Do not modify outside.txt, create files, use network, or touch any other path. Return exactly one JSON object (no prose or markdown) for run_id=\"{run_id}\" with schema_version=\"codex-harness.parent-result.v0\", stage=\"isolated-write-pilot\", status=\"succeeded\". The literal status value MUST be succeeded; closed, success, complete, and done are invalid. Artifact paths MUST be repository-relative (use \"allowed.txt\", never an absolute path). Include summary, artifacts (each with path and purpose), verification (objects with command, exit_code, claim), findings, owner_decisions, retry_hint=\"none\", and boundary_violations."
             turn, notifications = session.request(3, "turn/start", {"threadId": thread_id, "input": [{"type": "text", "text": prompt}], "approvalPolicy": "never", "sandboxPolicy": {"type": "workspaceWrite", "writableRoots": [str(temp_root)], "networkAccess": False}}, 30)
             notifications.extend(session.collect_until_turn_complete(thread_id, 240))
-            messages = RUNNER.walk_agent_messages(notifications)
+            messages = walk_agent_messages(notifications)
             parent_raw = messages[-1] if messages else ""
-            parent_result = RUNNER.parse_parent_result(parent_raw, run_id)
+            parent_result = parse_parent_result(parent_raw, run_id)
         finally:
             session.close()
         diff = subprocess.run(["git", "diff", "--name-only"], cwd=temp_root, check=True, capture_output=True, text=True).stdout.splitlines()
@@ -81,7 +80,7 @@ def main() -> int:
 
         checks = {
             "parent_result_valid": parent_result is not None and parent_result.get("status") == "succeeded",
-            "artifact_paths_canonical": parent_result is not None and RUNNER.artifacts_valid(temp_root, parent_result),
+            "artifact_paths_canonical": parent_result is not None and artifacts_valid(temp_root, parent_result),
             "allowed_write_exact": allowed_content == "allowed-write-v1\n",
             "outside_unchanged": outside_content == "outside-before\n",
             "diff_allowlist": diff_allowed(changed_paths, {"allowed.txt"}),

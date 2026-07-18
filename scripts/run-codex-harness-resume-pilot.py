@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import sys
 import time
@@ -12,23 +11,20 @@ import tomllib
 from pathlib import Path
 
 try:
+    from codex_harness_cli import JsonRpcSession, app_server_command
+    from codex_harness_controller import walk_root_agent_messages
     from codex_harness_policy import PolicyError, load_runtime_policy
     from codex_harness_runtime import ThreadLease
 except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
+    from scripts.codex_harness_cli import JsonRpcSession, app_server_command
+    from scripts.codex_harness_controller import walk_root_agent_messages
     from scripts.codex_harness_policy import PolicyError, load_runtime_policy
     from scripts.codex_harness_runtime import ThreadLease
 
 
-RUNNER_PATH = Path(__file__).with_name("run-codex-app-server-pilot.py")
-SPEC = importlib.util.spec_from_file_location("codex_harness_runner", RUNNER_PATH)
-assert SPEC is not None and SPEC.loader is not None
-RUNNER = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(RUNNER)
-
-
 def start_session(root: Path, stderr_path: Path):
-    session = RUNNER.JsonRpcSession(
-        RUNNER.app_server_command(),
+    session = JsonRpcSession(
+        app_server_command(),
         stderr_path,
     )
     session.request(1, "initialize", {"clientInfo": {"name": "codex-harness-resume-pilot", "version": "0.1"}, "capabilities": {"experimentalApi": True}}, 30)
@@ -111,7 +107,7 @@ def run_canary(session, thread_id: str, request_id: int, label: str) -> dict:
     result, notifications = session.request(request_id, "turn/start", {"threadId": thread_id, "input": [{"type": "text", "text": prompt}], "approvalPolicy": "never", "sandboxPolicy": {"type": "readOnly", "networkAccess": False}}, 30)
     turn_id = result["turn"]["id"]
     notifications.extend(session.collect_until_turn_complete(thread_id, 120))
-    messages = RUNNER.walk_root_agent_messages(notifications, thread_id)
+    messages = walk_root_agent_messages(notifications, thread_id)
     return {"thread_id": thread_id, "turn_id": turn_id, "canary": any("PARENT_ROLE_CANARY" in message for message in messages), "messages": messages[-1:]}
 
 

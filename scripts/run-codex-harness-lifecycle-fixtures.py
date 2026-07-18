@@ -3,18 +3,15 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import time
 from pathlib import Path
 
-
-RUNNER_PATH = Path(__file__).with_name("run-codex-app-server-pilot.py")
-SPEC = importlib.util.spec_from_file_location("codex_harness_runner", RUNNER_PATH)
-assert SPEC is not None and SPEC.loader is not None
-RUNNER = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(RUNNER)
+try:
+    from codex_harness_cli import JsonRpcSession
+except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
+    from scripts.codex_harness_cli import JsonRpcSession
 
 
 class FakeProcess:
@@ -52,7 +49,7 @@ class FakeReader:
 def main() -> int:
     process = FakeProcess()
     reader = FakeReader()
-    session = object.__new__(RUNNER.JsonRpcSession)
+    session = object.__new__(JsonRpcSession)
     session.process = process
     session.reader = reader
     session.close()
