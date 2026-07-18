@@ -82,6 +82,12 @@ Harness 预授权父 agent 在已声明边界内自主完成任务，包括自�
 
 “任务不冲突”只表示调度前按责任边界把任务拆成默认不重叠的工作单元；它不宣称 worktree 能消除合并冲突、共享服务竞争或外部副作用。写任务仍需要独立 workspace，责任确有重叠时必须显式协调，外部副作用必须受单独边界约束。
 
+### 9. Crew 是 opt-in 外部 worktree worker 工作流，不改变核心 Harness 默认边界
+
+主会话通过统一 parent controller 启动一个持久 parent thread，并确认 parent 提出的 Lite/Full 模式；它只负责面向用户的交付、转发和决策，不直接创建 worker。parent 根据确认的 profile 调用独立的 App Server worker session，在多个 worktree 上处理已经分区的工作单元。它复用底层 CLI/JSON-RPC 能力；这不是对 Codex native child topology 的复制性验收，也不替代核心 Harness 的“外层只控制父 agent”默认边界。Lite 不加载 Full-mode runtime policy、policy-bound ledger 或 Impl-Package；parent controller 仍对所有 continuation 使用单写者 lease 并记录 dispatch binding，完整 Crew 在共享 dispatcher 之上再组合 canonical policy、ledger、package、verifier 和 review seams。
+
+worker 的 `needs_parent`、`needs_owner` 或失败结果不终止整个用户请求。parent 先在既有授权内判断并向同一 logical parent task 发送 correction；只有 scope change、authority expansion、不可逆外部副作用或验收歧义才通过主会话向 owner 请求决策。owner 决策由主会话转发后，同一 parent thread 通过新 turn 或 `thread/resume` 继续，而不是被一个无关的新任务替代。独立 worker task 仍必须使用新 thread，且 worktree 并不消除最终 merge、共享服务或外部副作用冲突。
+
 ### Canonical runtime policy
 
 上述可配置决策的 canonical 表达位于 `assets/codex-harness-runtime-policy.v0.json`，字段约束位于 `assets/codex-harness-runtime-policy.schema.json`。当前 policy 的 `maturity` 是 `design_baseline`：它固定已接受的策略语义，App Server/package/resume 入口已形成部分 loader、lease/ledger seam，但尚未证明所有字段、失败路径和入口均闭合；术语的准确含义见本文档的“术语定义”，实现和验证完成前不得把 canonical 配置误报为 `runtime_enforced`。Markdown 只解释架构含义、证据和迁移边界，具体策略值只修改 canonical policy。
@@ -213,7 +219,7 @@ stateDiagram-v2
     Retryable --> Starting: fork or fresh thread
     Interrupted --> Retryable: policy permits
     Succeeded --> [*]
-    NeedsOwner --> [*]
+    NeedsOwner --> Running: owner decision + same thread continuation
 ```
 
 ### 超时和取消
@@ -270,11 +276,16 @@ POC 首选短生命周期 App Server 进程或有界 session 池，以进程边�
 | 路径 | 作用 | 成熟度 |
 | --- | --- | --- |
 | `.codex/config.toml` | 限制 agent 并发/深度并记录中断消息 | POC |
-| `.codex/harness/parent.toml` | Harness 显式加载的父角色、模型与推理强度 profile | POC；不是 native child agent 文件 |
+| `.codex/harness/parent.toml` | 传统 Harness 显式加载的父角色、模型与推理强度 profile | POC；不是 native child agent 文件 |
+| `.codex/harness/crew-parent.toml` | Crew 统一 parent 的 routing 与 Lite/Full execution profile | POC；不是 native child agent 文件 |
 | `skills/codex-harness/SKILL.md` | 父 agent 的 Harness 角色与行为边界入口 | POC |
 | `skills/codex-harness/assets/codex-harness-runtime-policy.v0.json` | 上下文、委派、任务分区、决策路由、验收与生命周期策略的 canonical 配置 | v0 design baseline；部分入口已消费，未闭合全路径 |
 | `skills/codex-harness/assets/codex-harness-runtime-policy.schema.json` | canonical runtime policy 的机器可校验字段契约 | v0 design schema；loader 已接入，仍需全路径 evidence |
-| `scripts/run-codex-app-server-pilot.py` | App Server JSON-RPC pilot、父结果验收和可选 child telemetry | POC 主入口 |
+| `scripts/codex_harness_cli.py` | Codex executable discovery、App Server command construction、JSON-RPC stdio transport | 可被非 Harness 小任务直接复用的底层能力 |
+| `scripts/codex_harness_crew.py` | 主会话控制一个持久 parent：routing、Lite/Full 确认、同 thread continuation 和 owner 决策转发 | Crew parent controller；所有 continuation 使用 lease，Full 再加载 policy/ledger seam |
+| `scripts/codex_harness_dispatch.py` | parent 调用的 worktree 创建、fresh worker session、结构化 worker result 与基础状态 | Lite/Full 共享的底层 primitive；不持有 parent 或 owner 状态 |
+| `scripts/codex_harness_controller.py` | 父 thread/turn 生命周期、Parent Result 解析、外部 artifact 检查和可选 child telemetry | Harness 控制层；不承载底层进程协议 |
+| `scripts/run-codex-app-server-pilot.py` | 场景参数解析并转交 controller | POC 场景薄壳 |
 | `scripts/prepare-codex-harness-package.py` | 从固定 approved package snapshot 自动提取 D/S/P binding、task contracts、cohorts、ticket 引用和敏感原件提示，生成待 review 的 adapter 与 readiness report | v0.1；生成草案，不自动补 verifier 或扩大路径权限 |
 | `scripts/run-codex-harness-package.py` | 固定 commit 的 Impl-Package binding 校验、DAG ready-stage 投影和显式父 stage dispatch | v0.1；不自动建/合 worktree，不自动写 gate |
 | `examples/datev-accounting-rules.pre-3.2-upgrade-fixture.toml` | 固定的旧 DATEV snapshot，用于证明 current-only adapter 在准备前拒绝旧 contract | upgrade fixture；不可作为执行 manifest |

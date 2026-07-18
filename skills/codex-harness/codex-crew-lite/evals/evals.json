@@ -1,0 +1,20 @@
+{
+  "skill_name": "codex-crew-lite",
+  "cases": [
+    {
+      "id": "bounded-fix-fanout",
+      "prompt": "两个互不重叠的空值修复已经定位，请在独立 worktree 并行修复。",
+      "expected": ["parent proposes Lite", "main session confirms mode", "parent creates structured manifest/state", "uses fresh worker context per worktree", "collects diff and focused test evidence"]
+    },
+    {
+      "id": "worker-needs-parent",
+      "prompt": "worker 发现测试 fixture 与实现描述不一致，但未改变公开接口。",
+      "expected": ["parent judges first", "continues the same parent thread with a correction", "main session only forwards delivery/decision", "does not terminate the overall request"]
+    },
+    {
+      "id": "scope-boundary",
+      "prompt": "worker 发现修复必须改变外部 API 版本。",
+      "expected": ["does not grant expanded authority", "returns a structured owner or mode-change request through the main session", "resumes the same parent after confirmation", "preserves worktree evidence"]
+    }
+  ]
+}

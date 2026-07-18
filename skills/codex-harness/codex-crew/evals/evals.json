@@ -1,0 +1,20 @@
+{
+  "skill_name": "codex-crew",
+  "cases": [
+    {
+      "id": "s-composition-review-loop",
+      "prompt": "已批准 S Composition；实现后希望以整个 commits 范围做 do-review，修 P1 后返回。",
+      "expected": ["parent proposes Full", "main session confirms Full", "explains S is a composition route", "keeps D/S/P binding", "captures base..head", "runs review after implementation", "fixes P0/P1 only within scope"]
+    },
+    {
+      "id": "parent-owner-resume",
+      "prompt": "父 agent 发现是否允许外部迁移不清楚；用户稍后会给结论。",
+      "expected": ["parent records awaiting_owner", "main session forwards the decision", "does not close the overall task", "resumes same parent thread after owner decision"]
+    },
+    {
+      "id": "parallel-conflict-boundary",
+      "prompt": "两个 worker 都要改同一份 migration 和同一个外部服务。",
+      "expected": ["rejects unsafe parallel split", "requires explicit coordination", "does not claim worktrees eliminate system conflicts"]
+    }
+  ]
+}

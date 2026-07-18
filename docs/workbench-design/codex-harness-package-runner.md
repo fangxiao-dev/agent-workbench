@@ -4,6 +4,10 @@
 
 `scripts/prepare-codex-harness-package.py` is the fast-adaptation entry point. Given a fixed approved package snapshot, it derives a draft TOML adapter and a readiness report from its task contracts, dependencies, cohorts, ticket references and current D/S/P bindings. It works for arbitrary ticket ID formats; it is not DATEV-specific. The generated draft is deliberately non-executable until an owner provides independent verifier commands and confirms any inferred ownership boundary.
 
+底层 Codex CLI/App Server 能力位于 `scripts/codex_harness_cli.py`，只负责 executable discovery、命令构造和 JSON-RPC stdio session；`scripts/codex_harness_controller.py` 才负责 Harness 的父生命周期、Parent Result 与外部 verdict。这样只需要在多个独立 worktree 中调用 Codex 的轻量 caller 可以复用 CLI 模块，而不必加载 package adapter、policy、lease 或 ledger。
+
+`scripts/codex_harness_crew.py` 是统一的 parent controller：主会话用它启动一个持久 parent、确认 parent 提出的 Lite/Full 模式，并把纠偏或 owner 决策转回同一 thread。`scripts/codex_harness_dispatch.py` 只提供 parent 调用的 worktree/worker primitive：它从 `codex-crew.dispatch.v0` JSON manifest 创建隔离 worktree、以 fresh App Server thread 运行 worker、记录结构化 worker outcome；它不持有 parent continuation、mode 或 owner 状态。parent controller 对所有 continuation 使用单写者 lease，Full profile 再加载 canonical policy、ledger、package 和 verifier seam；worktree 不会由 dispatcher 自动删除或合并。
+
 ## Runtime policy contract
 
 Configurable context, delegation, task-partitioning, decision-routing, validation and lifecycle policy lives in the canonical JSON asset at `skills/codex-harness/assets/codex-harness-runtime-policy.v0.json`; its shape is defined by the adjacent JSON Schema. The internal definitions of `design_baseline` and `runtime_enforced` live in the Codex Harness design asset's `术语定义` section, not in this runner document or the Schema enum. The package runner now loads the canonical policy and records policy identity/resource-ledger evidence for its explicit stage path; continuation, failure-path and all-entry enforcement are not yet closed, so the policy remains `design_baseline`.

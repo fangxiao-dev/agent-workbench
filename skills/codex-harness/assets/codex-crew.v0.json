@@ -1,0 +1,16 @@
+{
+  "$schema": "./codex-crew-dispatch.schema.json",
+  "schema_version": "codex-crew.dispatch.v0",
+  "profile": "full",
+  "repository_root": "D:/CodeSpace/example-repository",
+  "parent_run_id": "replace-with-parent-run-id",
+  "parent_thread_id": "replace-with-parent-thread-id",
+  "tasks": [
+    {
+      "id": "S-implementation",
+      "prompt": "执行已获批准的 S Composition。保持 D/S/P revision binding；按工作包完成实现并提供结构化 worker result。",
+      "worktree": {"path": "D:/CodeSpace/example-repository-wt/S-implementation", "branch": "codex/S-implementation", "base_ref": "HEAD"},
+      "verification_commands": ["python -m pytest -q"]
+    }
+  ]
+}

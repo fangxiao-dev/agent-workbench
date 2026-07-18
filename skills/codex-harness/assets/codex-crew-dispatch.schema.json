@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workbench.local/schemas/codex-crew-dispatch.v0.schema.json",
+  "title": "Codex Crew Dispatch v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile", "repository_root", "parent_run_id", "parent_thread_id", "tasks"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {"const": "codex-crew.dispatch.v0"},
+    "profile": {"enum": ["lite", "full"]},
+    "repository_root": {"type": "string", "minLength": 1},
+    "parent_run_id": {"type": "string", "minLength": 1},
+    "parent_thread_id": {"type": "string", "minLength": 1},
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "prompt", "worktree"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+          "prompt": {"type": "string", "minLength": 1},
+          "worktree": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "branch", "base_ref"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "branch": {"type": "string", "minLength": 1},
+              "base_ref": {"type": "string", "minLength": 1}
+            }
+          },
+          "verification_commands": {"type": "array", "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    }
+  }
+}
