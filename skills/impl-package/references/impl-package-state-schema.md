@@ -129,6 +129,7 @@ impl_package_state.py --package <path> init --package-id <id>
 impl_package_state.py --package <path> contract-status
 impl_package_state.py --package <path> validate --working-tree|--committed
 impl_package_state.py --package <path> register-revision <decision|spec|plan> <alias> [--attempt <id>] --evidence <pointer>
+impl_package_state.py --package <path> register-revisions [--decision <D<n>> --decision-evidence <pointer>] [--spec <S<n>> --spec-evidence <pointer>] [--plan <P<n>> --plan-artifact <path> --attempt <id> --plan-evidence <pointer>]
 impl_package_state.py --package <path> rebind <alias> --reason <projection|editorial> --evidence <pointer> [--confirm-contract-impact-none]
 impl_package_state.py --package <path> refresh-projections
 impl_package_state.py --package <path> set-state <task|ticket> <id> <state> --attempt <id> --expect <state|absent> --evidence <pointer>
@@ -141,9 +142,11 @@ impl_package_state.py --package <path> finalize-gate-entry <gate-id>
 
 命令可以增加纯输出选项，但不得静默推断 package root、current attempt、previous state、editorial judgment 或 verdict reason。
 
+当同一 semantic revision 需要同时切换多个当前 artifact（例如 post-gate patch 的 D/S 与新 attempt P1）时，使用 `register-revisions` 做一次候选 state 校验与 revision sidecar 原子替换；它不改变 exact-blob、plan-contract-v1、append-only 或 projection 约束，也不接受手工 JSON。命令会在候选 revision state 上预置 earned runtime records 并随后刷新 projection，但 revision sidecar、runtime-state 与 Markdown 不宣称跨文件事务；中断或部分写入必须由 `contract-status` / `validate` 发现。单个 artifact 的正常首次登记仍可使用 `register-revision`。
+
 CLI 的数据策略来自 skill-owned [`../assets/impl-package-state-config.json`](../assets/impl-package-state-config.json)。配置只承载 vocabulary、artifact discovery、字段及 gate heading/revision-set grammar（含 `revisionSetFieldPattern`）、marker 名称与 projection format；脚本自动按自身 skill 位置加载，不接受调用方任意覆盖 canonical policy。配置和 package contract 都使用字符串 `contractVersion`，当前为 `"3.2"`；对 placeholder、capture group 与单行 heading 范围 fail closed。完整 gate entry span、append-only、identity/content binding、active backward chain、CAS、package-local path、HEAD/worktree context 与 earned-artifact bijection 保持为代码内不可配置不变量。
 
-当前 artifact discovery 只认 `decision.md`，不得兼容读取 `design.md`；package 级共享发现只使用可选 `execution-findings.md`。`investigations/` 不属于 discovery、runtime state、revision binding 或 projection surface；目录不存在是正常状态，只有真实调查材料产生时才创建。
+当前 artifact discovery 优先读取 `decision.md`；lightweight Decision 可由 `spec.md` 承载 D revision，但不得兼容读取 `design.md`。package 级共享发现只使用可选 `execution-findings.md`。`investigations/` 不属于 discovery、runtime state、revision binding 或 projection surface；目录不存在是正常状态，只有真实调查材料产生时才创建。
 
 ## 9. Schema gate acceptance
 

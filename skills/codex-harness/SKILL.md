@@ -11,7 +11,7 @@ description: Use when explaining, designing, prototyping, validating, or operati
 
 ## 必读设计资产
 
-处理 Codex Harness 的设计、实现或验证任务前，完整阅读 [assets/codex-harness-poc-design.md](assets/codex-harness-poc-design.md)。它是当前设计事实源，包含目标、实测证据、已接受决策、App Server Sources Index、风险和路线图。
+处理 Codex Harness 的设计、实现或验证任务前，完整阅读 [assets/codex-harness-poc-design.md](assets/codex-harness-poc-design.md)。它是当前架构语义与证据事实源，包含目标、实测证据、已接受决策、App Server Sources Index、风险和路线图。涉及上下文复用、委派授权、任务分区、决策路由、验收或生命周期策略时，还要读取 [assets/codex-harness-runtime-policy.v0.json](assets/codex-harness-runtime-policy.v0.json) 及其 [JSON Schema](assets/codex-harness-runtime-policy.schema.json)；具体策略值以该 canonical policy 为准，不在 Markdown 中维护第二份配置。
 
 当该资产与此文件重复处不一致时，以资产中的最新明确决策为准，并同步收敛本文件中的入口性表述，避免长期维护两份设计正文。
 
@@ -19,7 +19,8 @@ description: Use when explaining, designing, prototyping, validating, or operati
 
 - Harness 只为父 agent 绑定角色并直接控制它的 thread/turn、work package 和外部执行环境。
 - 父角色由 thread-level developer instructions、模型/推理强度、适用的 Skill/AGENTS.md 和任务契约共同定义。
-- 父 agent 自行决定是否以及如何 spawn、steer、wait 和 close 原生 subagents；Harness 不为 child 绑定角色，也不规定 child 数量、模型、prompt 或拓扑。
+- 父 agent 在已声明的任务与授权边界内自行决定实现、委派和协作方式，包括是否以及如何 spawn、steer、wait 和 close 原生 subagents；Harness 不逐操作审批、不为 child 绑定角色，也不规定 child 数量、模型、prompt 或拓扑。
+- 不同任务使用新上下文；同一 work package 内的 correction、retry 或进程恢复才可延续既有 thread，而且一个持久 thread 同时只能由一个 controller 驱动。
 - 子 thread id、`subAgentActivity`、`agentPath` 和状态只属于可选 telemetry，不是当前硬验收门。
 - 当前 Codex `0.144.4` 的 `thread/start`/`thread/read` thread projection 只返回 `modelProvider`，但 `config/read(includeLayers=true)` 可返回 effective model/effort；涉及 resume/fork 时必须结合 effective-config projection、canary 和 history continuity 验证，若该 seam 缺失或漂移仍要 fail closed，不能把请求参数当成实际配置。
 - Harness 只接受父 agent 的结构化最终结果，并用独立的外部检查验证其中的 artifact、测试和断言。
@@ -30,7 +31,7 @@ description: Use when explaining, designing, prototyping, validating, or operati
 
 1. 读取设计资产，先区分“官方接口事实”“本地实测事实”“GitHub issue 风险信号”和“尚未验证的设计假设”。
 2. 明确本次工作属于介绍、设计、POC 实现还是验证；不要把前一阶段的完成表述成生产 Harness 已完成。
-3. 若进入实现，优先通过 App Server v2 的 thread/turn API 控制父 agent，并保持父 agent 对 subagents 的所有权。
+3. 若进入实现，先加载并校验 canonical runtime policy，再通过 App Server v2 的 thread/turn API 控制父 agent，并保持父 agent 对实现方法和 subagents 的所有权。
 4. 若进入验收，解析父 agent 的结构化结果，再独立检查文件、命令、测试或其他 gate；不要只相信自然语言结论。
 5. 若要将新的 Impl-Package 接入 Harness，先固定 approved commit，再运行 adapter preparation；把输出当作草案，逐项完成 verifier 与 ownership review 后才可执行。
 6. 若涉及 retry、timeout、resume、fork 或 cleanup，按父 stage/turn 粒度设计，记录 Codex 版本和恢复策略，并重新核验 Sources Index 中的生命周期风险。
@@ -41,6 +42,8 @@ description: Use when explaining, designing, prototyping, validating, or operati
 - 新集成使用 App Server v2；不要以 `codex exec --json` 作为可靠的 child provenance 或 durable session 控制面。
 - 不在 Harness 中复制一个 child scheduler，除非后续证据证明父 agent 自编排不能满足已定义的验收语义。
 - 不把 child 角色绑定、数量或调用顺序加入验收；父 agent 是否使用 subagents 是其内部实现选择。
+- 不跨独立任务复用 thread 上下文，也不允许两个 controller 并发驱动同一持久 thread。
+- 不因能力被 sandbox 或 policy 阻断而自动扩大权限；可在既有授权内解决的纠偏由 Harness 继续，涉及范围、权限、不可逆外部副作用或验收歧义时交给 owner。
 - 不把未实现的 retry、timeout、resume、cleanup 或 version probe 描述成现有能力。
 - 不把 GitHub issue 当成接口契约；它们只用于识别需要防御、回归测试或版本复核的风险。
 - 对写密集并发保持保守；在没有 worktree/ownership 隔离前，POC 优先只读探索、审查和验证。
@@ -52,6 +55,7 @@ description: Use when explaining, designing, prototyping, validating, or operati
 - Impl-Package parent-stage runner：`scripts/run-codex-harness-package.py`；用已审核 manifest 校验固定 D/S/P binding、投影 ready stage，并在显式 execute 时控制一个父 App Server session。
 - 早期 `codex exec` 对照脚本：`scripts/run-codex-subagent-pilot.ps1`
 - 父角色 profile：`.codex/harness/parent.toml`；由 Harness 读取并映射到父 thread，Codex 不会把它当作 native child catalog。
+- Canonical runtime policy：`assets/codex-harness-runtime-policy.v0.json` 及其 JSON Schema；当前 `maturity` 为 `design_baseline`，其内部术语定义位于设计资产。App Server/package/resume 入口已形成部分 loader、lease/ledger seam，但尚未证明所有字段、失败路径和入口均被强制采用。
 - 项目级运行边界：`.codex/config.toml`
 
 这些文件仍处于 POC/early-runner 阶段，不是稳定公开 API。package adapter 的生成、manifest、敏感原件按需授权、worktree 边界与 verifier 要求见 `docs/workbench-design/codex-harness-package-runner.md`；设计变化先进入资产文档，确认后再决定是否把可复用能力迁入稳定 API。

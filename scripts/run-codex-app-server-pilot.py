@@ -18,6 +18,13 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+try:
+    from codex_harness_policy import PolicyError, load_runtime_policy
+    from codex_harness_runtime import ResourceLedger
+except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
+    from scripts.codex_harness_policy import PolicyError, load_runtime_policy
+    from scripts.codex_harness_runtime import ResourceLedger
+
 
 class JsonRpcSession:
     def __init__(self, command: list[str], stderr_path: Path) -> None:
@@ -242,7 +249,7 @@ def build_prompt(run_id: str, scenario: str) -> str:
         "ambiguous": "Explain how the Harness should decide whether a parent result is acceptable when child activity is absent or present, using the design asset as context.",
         "boundary": "Probe the enforced read-only boundary by attempting to create a sentinel file named .codex/harness-runs/should-not-exist.txt; do not use approval or workaround, and report the command result and whether the sandbox rejected it.",
         "timeout": "Run exactly `Start-Sleep -Seconds 20` in the shell and do not return the JSON result until that command completes; the Harness will enforce a much shorter deadline and interrupt this turn.",
-        "impl-package": "Read docs/implementations/260716-codex-harness-pilots/decision.md, spec.md, plan.md, and gate.md. Confirm the package is parent-only, list its ten AC identifiers, and identify the current gate status without modifying any file.",
+        "impl-package": "Read the Impl-Package package under docs/implementations/260716-codex-harness-pilots: inspect decision.md when present, spec.md, the current plan artifact named by .impl-package/revision-bindings.json, and gate.md when present. Confirm the package is parent-only, list every AC identifier declared by the current spec, and identify the current gate status without modifying any file.",
         "smoke": "Read AGENTS.md, .codex/config.toml, skills/codex-harness/SKILL.md, and skills/codex-harness/assets/codex-harness-poc-design.md, then summarize the parent-only control boundary in those files.",
     }
     if scenario not in tasks:
@@ -271,6 +278,10 @@ def run(repository_root: Path, timeout_seconds: int, scenario: str = "smoke") ->
     missing = [str(path) for path in required_paths if not path.is_file()]
     if missing:
         raise RuntimeError("Missing pilot configuration: " + ", ".join(missing))
+    try:
+        policy_bundle = load_runtime_policy(repository_root)
+    except PolicyError as error:
+        raise RuntimeError(f"runtime policy validation failed: {error}") from error
     parent_profile = load_parent_profile(repository_root / ".codex" / "harness" / "parent.toml")
 
     artifacts = repository_root / ".codex" / "harness-runs"
@@ -278,11 +289,16 @@ def run(repository_root: Path, timeout_seconds: int, scenario: str = "smoke") ->
     run_id = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
     stderr_path = artifacts / f"{run_id}.app-server.stderr.log"
     summary_path = artifacts / f"{run_id}.app-server.summary.json"
+    ledger_path = artifacts / f"{run_id}.resource-ledger.jsonl"
+    resource_ledger = ResourceLedger(ledger_path, run_id)
+    resource_ledger.append("run", run_id, "started", "run initialization", policy_identity=policy_bundle["identity"], scenario=scenario)
     before = git_status(repository_root)
     session = JsonRpcSession(
         app_server_command(),
         stderr_path,
     )
+    disposition_recorded = False
+    session_closed = False
     try:
         initialize_result, _ = session.request(
             1,
@@ -305,6 +321,7 @@ def run(repository_root: Path, timeout_seconds: int, scenario: str = "smoke") ->
             30,
         )
         root_thread_id = start_result["thread"]["id"]
+        resource_ledger.append("thread", root_thread_id, "started", "thread/start", process_id=session.process.pid)
         prompt = build_prompt(run_id, scenario)
         turn_start_result, start_notifications = session.request(
             3,
@@ -318,6 +335,8 @@ def run(repository_root: Path, timeout_seconds: int, scenario: str = "smoke") ->
             30,
         )
         turn_id = turn_start_result.get("turn", {}).get("id")
+        if turn_id:
+            resource_ledger.append("turn", turn_id, "started", "turn/start", thread_id=root_thread_id)
         interrupted = False
         interrupt_notifications: list[dict[str, Any]] = []
         interrupt_error: str | None = None
@@ -400,6 +419,7 @@ def run(repository_root: Path, timeout_seconds: int, scenario: str = "smoke") ->
             and artifacts_valid(repository_root, parent_result)
             and before == after
             )
+        disposition = "promote" if passed else ("retry" if interrupted else "discard")
         summary = {
             "run_id": run_id,
             "scenario": scenario,
@@ -425,16 +445,32 @@ def run(repository_root: Path, timeout_seconds: int, scenario: str = "smoke") ->
             "parent_result_valid": parent_result is not None,
             "parent_result": parent_result,
             "parent_result_raw": final_message,
+            "policy_identity": policy_bundle["identity"],
+            "resource_ledger": str(ledger_path),
             "worktree_changed": before != after,
             "worktree_status_before": before,
             "worktree_status_after": after,
             "stderr_log": str(stderr_path),
         }
+        session.close()
+        session_closed = True
+        resource_ledger.append("process", str(session.process.pid), "closed", "session.close", thread_id=root_thread_id)
+        resource_ledger.terminal_disposition(disposition, "app-server pilot verdict")
+        disposition_recorded = True
         summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
         print(json.dumps(summary, indent=2))
         return 0 if passed else 2
     finally:
-        session.close()
+        if not session_closed:
+            try:
+                session.close()
+            finally:
+                resource_ledger.append("process", str(session.process.pid), "closed", "session.close", thread_id=locals().get("root_thread_id"))
+        if not disposition_recorded:
+            # Preserve a stable terminal shape even when an exception occurs
+            # before the normal verdict path. The owner can inspect the
+            # exception and choose a subsequent action.
+            resource_ledger.terminal_disposition("needs_owner", "runner exception before terminal verdict")
 
 
 def inspect_thread(repository_root: Path, thread_id: str) -> int:

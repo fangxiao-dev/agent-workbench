@@ -5,46 +5,46 @@
   "current": {
     "decision": {
       "artifact": "decision.md",
-      "revision": "D1"
+      "revision": "D2"
     },
     "spec": {
       "artifact": "spec.md",
-      "revision": "S1"
+      "revision": "S2"
     },
     "attempt": {
-      "id": "initial",
-      "plan": "plan.md",
+      "id": "20260718-1211-codex-harness-runtime",
+      "plan": "20260718-1211-codex-harness-runtime.patch-plan.md",
       "revision": "P1"
     }
   },
   "bindings": [
     {
-      "id": "D1@534ec9d611ab6494ca38c9644e031e3f28516300",
+      "id": "D2@65802aa0a8cfc39d31496b5ec96b222460331290",
       "artifact": "decision.md",
-      "revision": "D1",
+      "revision": "D2",
       "mode": "exact-blob",
-      "blob": "534ec9d611ab6494ca38c9644e031e3f28516300",
+      "blob": "65802aa0a8cfc39d31496b5ec96b222460331290",
       "supersedes": null,
       "evidence": "decision.md#修订历史"
     },
     {
-      "id": "S1@bbb2efd112d023758565b186463d8034fe0c0fc4",
+      "id": "S2@e368db49b71e7cf31ffe8b0f3ff0d2eef1970a0b",
       "artifact": "spec.md",
-      "revision": "S1",
+      "revision": "S2",
       "mode": "exact-blob",
-      "blob": "bbb2efd112d023758565b186463d8034fe0c0fc4",
+      "blob": "e368db49b71e7cf31ffe8b0f3ff0d2eef1970a0b",
       "supersedes": null,
       "evidence": "spec.md#修订记录"
     },
     {
-      "id": "initial:P1@b3f923c06c51838ad2978d9ee5b71feccff929f5",
-      "artifact": "plan.md",
-      "attempt": "initial",
+      "id": "20260718-1211-codex-harness-runtime:P1@887bd470ed6e59489c01c9a89756e29a9ae18506",
+      "artifact": "20260718-1211-codex-harness-runtime.patch-plan.md",
       "revision": "P1",
       "mode": "plan-contract-v1",
-      "blob": "b3f923c06c51838ad2978d9ee5b71feccff929f5",
+      "blob": "887bd470ed6e59489c01c9a89756e29a9ae18506",
       "supersedes": null,
-      "evidence": "plan.md#计划修订历史"
+      "evidence": "20260718-1211-codex-harness-runtime.patch-plan.md#计划修订历史",
+      "attempt": "20260718-1211-codex-harness-runtime"
     }
   ]
 }

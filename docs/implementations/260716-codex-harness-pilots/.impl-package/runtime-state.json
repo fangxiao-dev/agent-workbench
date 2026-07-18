@@ -7,28 +7,7 @@
   "tickets": [],
   "artifacts": [],
   "gate": {
-    "allocations": [
-      {
-        "operationId": "current-3.2-rebaseline",
-        "attempt": "initial",
-        "number": 1,
-        "entryId": "initial-G1"
-      }
-    ],
-    "entries": [
-      {
-        "id": "initial-G1",
-        "attempt": "initial",
-        "number": 1,
-        "verdict": "pass",
-        "supersedes": null,
-        "entry": {
-          "path": "gate.md",
-          "anchor": "initial-G1",
-          "bindingMode": "gate-entry-v1",
-          "contentSha256": "96c059bee5eb38a8b2aa0e93c02b7d68b00d9f388399c23d17880e64921b6786"
-        }
-      }
-    ]
+    "allocations": [],
+    "entries": []
   }
 }

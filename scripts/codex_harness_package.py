@@ -10,8 +10,10 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
 import uuid
@@ -19,9 +21,24 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+try:
+    from codex_harness_impl_package_compat import attempt_id as canonical_attempt_id
+    from codex_harness_impl_package_compat import composition_flags, matches_artifact_pattern
+except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
+    from scripts.codex_harness_impl_package_compat import attempt_id as canonical_attempt_id
+    from scripts.codex_harness_impl_package_compat import composition_flags, matches_artifact_pattern
 
-PACKAGE_FILES = ("decision.md", "spec.md", "plan.md", "dag.md", ".impl-package/revision-bindings.json")
+try:
+    from codex_harness_policy import PolicyError, load_runtime_policy
+    from codex_harness_runtime import ResourceLedger
+except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
+    from scripts.codex_harness_policy import PolicyError, load_runtime_policy
+    from scripts.codex_harness_runtime import ResourceLedger
+
+
+REQUIRED_PACKAGE_FILES = ("spec.md", ".impl-package/revision-bindings.json", ".impl-package/runtime-state.json")
 IMPL_PACKAGE_CONTRACT_VERSION = "3.2"
+TERMINAL_GATE_VERDICTS = {"pass", "fail", "defer"}
 VALID_SENSITIVE_MODES = {"forbidden", "on_demand"}
 VALID_SANDBOXES = {"read_only", "workspace_write"}
 
@@ -179,6 +196,57 @@ def _source_blob(manifest: Manifest, relative_path: str) -> str:
     return _git(manifest.repository_root, "rev-parse", f"{manifest.source_ref}:{manifest.package_path}/{relative_path}")
 
 
+def _canonical_state_cli() -> Path:
+    return Path(__file__).resolve().parents[1] / "skills" / "impl-package" / "scripts" / "impl_package_state.py"
+
+
+def _canonical_source_validation(manifest: Manifest, source_commit: str) -> dict[str, Any]:
+    """Validate a committed source snapshot in a detached temporary worktree."""
+    worktree_root = Path(tempfile.mkdtemp(prefix="codex-harness-package-source-"))
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(manifest.repository_root), "worktree", "add", "--detach", str(worktree_root), source_commit],
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode:
+            raise ManifestError(completed.stderr.strip() or "cannot create source validation worktree")
+        package = worktree_root / manifest.package_path
+        validate = subprocess.run(
+            [sys.executable, str(_canonical_state_cli()), "--package", str(package), "validate", "--committed"],
+            capture_output=True,
+            text=True,
+        )
+        if validate.returncode:
+            raise ManifestError("canonical Impl-Package validation failed: " + (validate.stderr.strip() or validate.stdout.strip()))
+        resolve = subprocess.run(
+            [sys.executable, str(_canonical_state_cli()), "--package", str(package), "resolve-gate"],
+            capture_output=True,
+            text=True,
+        )
+        if resolve.returncode:
+            raise ManifestError("canonical gate resolution failed: " + (resolve.stderr.strip() or resolve.stdout.strip()))
+        try:
+            gate = json.loads(resolve.stdout)
+        except json.JSONDecodeError as exc:
+            raise ManifestError("canonical gate resolver returned invalid JSON") from exc
+        if gate.get("kind") == "mismatch" or gate.get("needsManualGateReview"):
+            raise ManifestError("source package gate requires manual review")
+        if gate.get("appliesToCurrentRevision") and gate.get("gateResolution") in TERMINAL_GATE_VERDICTS:
+            raise ManifestError("current package attempt is frozen by a terminal gate; create a post-gate patch attempt")
+        try:
+            validate_payload = json.loads(validate.stdout)
+        except json.JSONDecodeError as exc:
+            raise ManifestError("canonical validate returned non-JSON output") from exc
+        return {"validate": validate_payload, "gate": gate}
+    finally:
+        subprocess.run(
+            ["git", "-C", str(manifest.repository_root), "worktree", "remove", "--force", str(worktree_root)],
+            capture_output=True,
+            text=True,
+        )
+
+
 def _status_paths(repository_root: Path) -> list[str]:
     paths: list[str] = []
     completed = subprocess.run(["git", "-C", str(repository_root), "status", "--porcelain=v1"], check=True, capture_output=True, text=True)
@@ -220,9 +288,10 @@ def validate_manifest(manifest: Manifest) -> dict[str, Any]:
             errors.append("stage dependency graph contains a cycle")
     binding_checks: dict[str, bool] = {}
     revisions: dict[str, str] = {}
+    canonical_state: dict[str, Any] = {}
     if not errors:
         try:
-            for filename in PACKAGE_FILES:
+            for filename in REQUIRED_PACKAGE_FILES:
                 _source_text(manifest, filename)
             for stage in manifest.stages:
                 if stage.ticket_path:
@@ -231,26 +300,64 @@ def validate_manifest(manifest: Manifest) -> dict[str, Any]:
             if bindings.get("contractVersion") != IMPL_PACKAGE_CONTRACT_VERSION:
                 errors.append(f"package contractVersion must be {IMPL_PACKAGE_CONTRACT_VERSION}")
             current = bindings.get("current", {})
+            attempt_selection = current.get("attempt", {})
+            plan_artifact = attempt_selection.get("plan")
+            if not isinstance(plan_artifact, str) or not plan_artifact:
+                raise ManifestError("revision binding has no current attempt plan artifact")
+            plan_text = _source_text(manifest, plan_artifact)
+            try:
+                tickets_earned, dag_earned = composition_flags(plan_text)
+            except (RuntimeError, ValueError) as error:
+                raise ManifestError(str(error)) from error
+            if current.get("attempt", {}).get("id") != manifest.attempt_id:
+                errors.append("manifest attempt_id does not match revision binding")
             revisions = {
-                "decision": str(current.get("decision", {}).get("revision", "")),
+                "decision": str(current.get("decision", {}).get("revision", "N/A")) if current.get("decision") else "N/A",
                 "spec": str(current.get("spec", {}).get("revision", "")),
                 "plan": str(current.get("attempt", {}).get("revision", "")),
             }
-            if current.get("attempt", {}).get("id") != manifest.attempt_id:
-                errors.append("manifest attempt_id does not match revision binding")
-            expected = {
-                "decision.md": revisions["decision"],
-                "spec.md": revisions["spec"],
-                "plan.md": revisions["plan"],
-            }
-            for filename, revision in expected.items():
-                entry = next((item for item in bindings.get("bindings", []) if item.get("artifact") == filename and item.get("revision") == revision), None)
+            expected: list[tuple[str, str, str]] = [
+                ("spec", "spec.md", revisions["spec"]),
+                ("plan", plan_artifact, revisions["plan"]),
+            ]
+            if current.get("decision"):
+                decision_artifact = current["decision"].get("artifact", "decision.md")
+                expected.insert(0, ("decision", decision_artifact, revisions["decision"]))
+            for kind, filename, revision in expected:
+                entry = next(
+                    (
+                        item
+                        for item in bindings.get("bindings", [])
+                        if item.get("artifact") == filename
+                        and item.get("revision") == revision
+                        and (kind != "plan" or item.get("attempt") == manifest.attempt_id)
+                    ),
+                    None,
+                )
                 actual_blob = _source_blob(manifest, filename)
-                binding_checks[filename] = bool(entry and entry.get("blob") == actual_blob)
+                binding_checks[f"{kind}:{filename}"] = bool(entry and entry.get("blob") == actual_blob)
             if not all(binding_checks.values()):
                 errors.append("D/S/P source blobs do not match the current revision binding")
+            if dag_earned:
+                candidates = [
+                    name for name in _git(manifest.repository_root, "ls-tree", "-r", "--name-only", manifest.source_ref, manifest.package_path).splitlines()
+                    if name.startswith(manifest.package_path + "/")
+                    and matches_artifact_pattern(name[len(manifest.package_path) + 1 :], "dagArtifactPatterns")
+                ]
+                matching = [
+                    name
+                    for name in candidates
+                    if canonical_attempt_id(_source_text(manifest, name[len(manifest.package_path) + 1 :])) == manifest.attempt_id
+                ]
+                if len(matching) != 1:
+                    errors.append("current plan earns DAG but source package has no unique attempt DAG artifact")
         except (ManifestError, json.JSONDecodeError) as error:
             errors.append(f"package binding validation failed: {error}")
+        if not errors:
+            try:
+                canonical_state = _canonical_source_validation(manifest, source_commit)
+            except ManifestError as error:
+                errors.append(str(error))
     return {
         "valid": not errors,
         "errors": errors,
@@ -261,6 +368,7 @@ def validate_manifest(manifest: Manifest) -> dict[str, Any]:
         "attempt_id": manifest.attempt_id,
         "revisions": revisions,
         "binding_checks": binding_checks,
+        "canonical_state": canonical_state,
         "repository_status": _status_paths(manifest.repository_root) if not errors else [],
     }
 
@@ -323,12 +431,12 @@ def stage_prompt(run_id: str, work_package: dict[str, Any]) -> str:
         f"Package: {work_package['package']['path']} at {work_package['package']['source_ref']}\n"
         f"Stage: {stage['id']} ({stage['ticket']}), parent role: {stage['parent_role']}\n"
         f"Objective: {stage['objective']}\n"
-        f"Ticket material: {work_package['package']['path']}/{stage['ticket_path'] or 'not separately published; use plan.md and dag.md'}\n"
+        f"Ticket material: {work_package['package']['path']}/{stage['ticket_path'] or 'not separately published; use the current plan and any earned DAG artifact'}\n"
         f"Allowed paths: {', '.join(stage['allowed_paths'])}\n"
         f"Relevant Skills allowed on demand: {', '.join(stage['skills']) or 'none declared'}\n"
         f"Sandbox: {boundary['sandbox']}; network access: {boundary['network_access']}.\n"
         f"{sensitive_instruction}\n\n"
-        "First read the pinned package decision.md, spec.md, plan.md, dag.md, and the declared ticket material before acting. Do not modify files outside Allowed paths. Do not perform external side effects. Do not claim a verification command passed unless you ran it. "
+        "First read the pinned package spec.md, the current attempt plan, optional decision/DAG/ticket material, and the declared ticket material before acting. Do not assume an optional artifact exists. Do not modify files outside Allowed paths. Do not perform external side effects. Do not claim a verification command passed unless you ran it. "
         "Return only one JSON object, with no Markdown fence or surrounding prose, in this exact shape: "
         f'{{"schema_version":"codex-harness.parent-result.v0","run_id":"{run_id}","stage":"{stage["id"]}","status":"succeeded","summary":"bounded conclusion","artifacts":[{{"path":"repo-relative/path","purpose":"what it proves"}}],"verification":[{{"command":"exact command or inspection","exit_code":0,"claim":"bounded claim"}}],"findings":[],"owner_decisions":[],"retry_hint":"none","boundary_violations":[],"work_package_sha256":"{work_package["sha256"]}","comparison_point":"git commit or HEAD before this stage","changed_paths":[]}}. '
         "Allowed status values are exactly succeeded, failed, needs_owner, or interrupted; use succeeded, never completed. artifacts must be objects, never strings. verification must use integer exit_code, never result/evidence fields. status must be needs_owner when a required human approval, sensitive-root declaration, or external DATEV acceptance is missing."
@@ -390,6 +498,11 @@ def execute_stage(manifest: Manifest, stage: Stage, worktree: Path, timeout_seco
         raise ManifestError("worktree does not descend from the manifest source commit")
     if sensitive_roots and stage.sensitive_originals != "on_demand":
         raise ManifestError("sensitive roots require a stage with sensitive_originals='on_demand'")
+    policy_root = Path(__file__).resolve().parents[1]
+    try:
+        policy_bundle = load_runtime_policy(policy_root)
+    except PolicyError as error:
+        raise ManifestError(f"runtime policy validation failed: {error}") from error
     work_package = build_work_package(manifest, stage, sensitive_roots)
     pilot = _load_pilot_module()
     profile = pilot.load_parent_profile(manifest.parent_profile)
@@ -399,11 +512,17 @@ def execute_stage(manifest: Manifest, stage: Stage, worktree: Path, timeout_seco
     artifact_dir = Path(__file__).resolve().parents[1] / ".codex" / "harness-runs" / "package"
     artifact_dir.mkdir(parents=True, exist_ok=True)
     stderr_path = artifact_dir / f"{run_id}.package.stderr.log"
+    ledger_path = artifact_dir / f"{run_id}.resource-ledger.jsonl"
+    resource_ledger = ResourceLedger(ledger_path, run_id)
+    resource_ledger.append("run", run_id, "started", "package stage initialization", policy_identity=policy_bundle["identity"], package_path=manifest.package_path, attempt_id=manifest.attempt_id, stage=stage.id)
     before = _status_paths(worktree)
     if before:
         raise ManifestError("worktree must be clean before a parent stage starts")
-    session = pilot.JsonRpcSession(pilot.app_server_command(), stderr_path)
+    session = None
+    session_closed = False
+    disposition_recorded = False
     try:
+        session = pilot.JsonRpcSession(pilot.app_server_command(), stderr_path)
         session.request(1, "initialize", {"clientInfo": {"name": "codex-harness-package-runner", "version": "0.1"}, "capabilities": {"experimentalApi": True}}, 30)
         sandbox = "read-only" if stage.sandbox == "read_only" else "workspace-write"
         start_result, _ = session.request(
@@ -413,12 +532,16 @@ def execute_stage(manifest: Manifest, stage: Stage, worktree: Path, timeout_seco
             30,
         )
         root_thread_id = start_result["thread"]["id"]
+        resource_ledger.append("thread", root_thread_id, "started", "thread/start", process_id=session.process.pid, worktree=str(worktree.resolve()))
         turn_result, notifications = session.request(
             3,
             "turn/start",
             {"threadId": root_thread_id, "input": [{"type": "text", "text": stage_prompt(run_id, work_package)}], "approvalPolicy": "never", "sandboxPolicy": {"type": "readOnly" if stage.sandbox == "read_only" else "workspaceWrite", "networkAccess": manifest.network_access}},
             30,
         )
+        turn_id = turn_result.get("turn", {}).get("id")
+        if turn_id:
+            resource_ledger.append("turn", turn_id, "started", "turn/start", thread_id=root_thread_id)
         if not any(item.get("method") == "turn/completed" and item.get("params", {}).get("threadId") == root_thread_id for item in notifications):
             notifications.extend(session.collect_until_turn_complete(root_thread_id, timeout_seconds))
         try:
@@ -470,11 +593,25 @@ def execute_stage(manifest: Manifest, stage: Stage, worktree: Path, timeout_seco
             "worktree_status_after": after,
             "verifier_results": verifier_results,
             "stderr_log": str(stderr_path),
+            "policy_identity": policy_bundle["identity"],
+            "resource_ledger": str(ledger_path),
         }
+        session.close()
+        session_closed = True
+        resource_ledger.append("process", str(session.process.pid), "closed", "session.close", thread_id=locals().get("root_thread_id"))
+        disposition = "promote" if verdict == "passed" else ("needs_owner" if verdict == "needs_owner" else "discard")
+        resource_ledger.terminal_disposition(disposition, f"package stage verdict: {verdict}")
+        disposition_recorded = True
         (artifact_dir / f"{run_id}.package.summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
         return summary
     finally:
-        session.close()
+        if session is not None and not session_closed:
+            try:
+                session.close()
+            finally:
+                resource_ledger.append("process", str(session.process.pid), "closed", "session.close", thread_id=locals().get("root_thread_id"))
+        if not disposition_recorded:
+            resource_ledger.terminal_disposition("needs_owner", "package runner exception before terminal verdict")
 
 
 def plan_summary(manifest: Manifest, completed: set[str], sensitive_roots: tuple[str, ...] = ()) -> dict[str, Any]:

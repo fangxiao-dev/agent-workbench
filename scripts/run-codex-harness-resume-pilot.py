@@ -6,9 +6,17 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import sys
 import time
 import tomllib
 from pathlib import Path
+
+try:
+    from codex_harness_policy import PolicyError, load_runtime_policy
+    from codex_harness_runtime import ThreadLease
+except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
+    from scripts.codex_harness_policy import PolicyError, load_runtime_policy
+    from scripts.codex_harness_runtime import ThreadLease
 
 
 RUNNER_PATH = Path(__file__).with_name("run-codex-app-server-pilot.py")
@@ -112,6 +120,11 @@ def main() -> int:
     parser.add_argument("--repository-root", type=Path, default=Path(__file__).resolve().parents[1])
     args = parser.parse_args()
     root = args.repository_root.resolve()
+    try:
+        policy_bundle = load_runtime_policy(root)
+    except PolicyError as error:
+        print(f"[X] runtime policy validation failed: {error}", file=sys.stderr)
+        return 1
     profile_path = root / ".codex" / "harness" / "parent.toml"
     with profile_path.open("rb") as stream:
         profile = tomllib.load(stream)
@@ -125,16 +138,23 @@ def main() -> int:
     first.close()
 
     second = start_session(root, artifact_dir / f"{run_id}.second.stderr.log")
-    resume_result, _ = second.request(2, "thread/resume", {"threadId": root_thread_id, "cwd": str(root), "sandbox": "read-only", "approvalPolicy": "never", "developerInstructions": profile["developer_instructions"], "model": profile["model"], "config": {"model_reasoning_effort": profile["model_reasoning_effort"]}}, 30)
-    resumed = run_canary(second, root_thread_id, 3, "resumed")
-    resumed_projection = projection(second, root_thread_id, 6, resume_result, profile["model"], profile["model_reasoning_effort"], root)
-    fork_result, _ = second.request(4, "thread/fork", {"threadId": root_thread_id, "ephemeral": False, "cwd": str(root), "sandbox": "read-only", "approvalPolicy": "never", "developerInstructions": profile["developer_instructions"], "model": profile["model"], "config": {"model_reasoning_effort": profile["model_reasoning_effort"]}}, 30)
-    fork_thread_id = fork_result["thread"]["id"]
-    forked = run_canary(second, fork_thread_id, 5, "forked")
+    lease = ThreadLease(artifact_dir, root_thread_id, run_id)
+    lease_evidence = None
+    try:
+        lease_evidence = lease.acquire()
+        resume_result, _ = second.request(2, "thread/resume", {"threadId": root_thread_id, "cwd": str(root), "sandbox": "read-only", "approvalPolicy": "never", "developerInstructions": profile["developer_instructions"], "model": profile["model"], "config": {"model_reasoning_effort": profile["model_reasoning_effort"]}}, 30)
+        resumed = run_canary(second, root_thread_id, 3, "resumed")
+        resumed_projection = projection(second, root_thread_id, 6, resume_result, profile["model"], profile["model_reasoning_effort"], root)
+        fork_result, _ = second.request(4, "thread/fork", {"threadId": root_thread_id, "ephemeral": False, "cwd": str(root), "sandbox": "read-only", "approvalPolicy": "never", "developerInstructions": profile["developer_instructions"], "model": profile["model"], "config": {"model_reasoning_effort": profile["model_reasoning_effort"]}}, 30)
+        fork_thread_id = fork_result["thread"]["id"]
+        forked = run_canary(second, fork_thread_id, 5, "forked")
+    finally:
+        if lease.acquired:
+            lease.release()
+        second.close()
     mismatch_model = "gpt-5.6"
     # Fail closed before calling App Server: this version accepts unknown model names and falls back silently.
     mismatch_api_called = False
-    second.close()
     # The Harness rejects a mismatched profile before reuse and falls back to a fresh thread.
     mismatch_rejected = mismatch_model != profile["model"]
     third = start_session(root, artifact_dir / f"{run_id}.fresh.stderr.log")
@@ -144,7 +164,7 @@ def main() -> int:
     third.close()
     profile_projection_observed = all("model" in item.get("observed", {}) and any(key in item.get("observed", {}) for key in ("reasoningEffort", "modelReasoningEffort", "model_reasoning_effort")) for item in (initial_projection, resumed_projection, fresh_projection))
     passed = initial["canary"] and resume_result and resumed["canary"] and forked["canary"] and mismatch_rejected and fresh["canary"] and profile_projection_observed
-    summary = {"run_id": run_id, "status": "passed" if passed else "failed", "requested_model": profile["model"], "requested_reasoning_effort": profile["model_reasoning_effort"], "profile_projection_observed": profile_projection_observed, "initial": initial, "initial_projection": initial_projection, "resumed": resumed, "resumed_projection": resumed_projection, "forked": forked, "mismatch_model": mismatch_model, "mismatch_api_called": mismatch_api_called, "mismatch_rejected_by_harness": mismatch_rejected, "fresh_fallback": fresh, "fresh_projection": fresh_projection, "root_thread_id": root_thread_id, "fork_thread_id": fork_thread_id, "fresh_thread_id": fresh_thread_id}
+    summary = {"run_id": run_id, "status": "passed" if passed else "failed", "requested_model": profile["model"], "requested_reasoning_effort": profile["model_reasoning_effort"], "profile_projection_observed": profile_projection_observed, "policy_identity": policy_bundle["identity"], "continuation_lease": {"acquired": True, "owner_token": lease_evidence["owner_token"], "released": not lease.path.exists()}, "initial": initial, "initial_projection": initial_projection, "resumed": resumed, "resumed_projection": resumed_projection, "forked": forked, "mismatch_model": mismatch_model, "mismatch_api_called": mismatch_api_called, "mismatch_rejected_by_harness": mismatch_rejected, "fresh_fallback": fresh, "fresh_projection": fresh_projection, "root_thread_id": root_thread_id, "fork_thread_id": fork_thread_id, "fresh_thread_id": fresh_thread_id}
     output = artifact_dir / f"{run_id}.summary.json"
     output.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))

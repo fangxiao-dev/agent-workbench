@@ -5,9 +5,18 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+try:
+    from codex_harness_impl_package_compat import attempt_id as canonical_attempt_id
+    from codex_harness_impl_package_compat import composition_flags, matches_artifact_pattern, task_blocks as canonical_task_blocks, ticket_id as canonical_ticket_id
+except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
+    from scripts.codex_harness_impl_package_compat import attempt_id as canonical_attempt_id
+    from scripts.codex_harness_impl_package_compat import composition_flags, matches_artifact_pattern, task_blocks as canonical_task_blocks, ticket_id as canonical_ticket_id
 
 
 class PrepareError(RuntimeError):
@@ -48,6 +57,32 @@ def _source_blob(repository_root: Path, source_ref: str, package_path: str, path
     return _git(repository_root, "rev-parse", f"{source_ref}:{package_path}/{path}")
 
 
+def _canonical_source_validation(repository_root: Path, source_commit: str, package_path: str) -> dict[str, Any]:
+    state_cli = Path(__file__).resolve().parents[1] / "skills" / "impl-package" / "scripts" / "impl_package_state.py"
+    worktree_root = Path(tempfile.mkdtemp(prefix="codex-harness-prepare-source-"))
+    try:
+        add = subprocess.run(["git", "-C", str(repository_root), "worktree", "add", "--detach", str(worktree_root), source_commit], capture_output=True, text=True)
+        if add.returncode:
+            raise PrepareError(add.stderr.strip() or "cannot create source validation worktree")
+        package = worktree_root / package_path
+        validate = subprocess.run([sys.executable, str(state_cli), "--package", str(package), "validate", "--committed"], capture_output=True, text=True)
+        if validate.returncode:
+            raise PrepareError("canonical Impl-Package validation failed: " + (validate.stderr.strip() or validate.stdout.strip()))
+        resolve = subprocess.run([sys.executable, str(state_cli), "--package", str(package), "resolve-gate"], capture_output=True, text=True)
+        if resolve.returncode:
+            raise PrepareError("canonical gate resolution failed: " + (resolve.stderr.strip() or resolve.stdout.strip()))
+        gate = json.loads(resolve.stdout)
+        if gate.get("kind") == "mismatch" or gate.get("needsManualGateReview"):
+            raise PrepareError("source package gate requires manual review")
+        if gate.get("appliesToCurrentRevision") and gate.get("gateResolution") in {"pass", "fail", "defer"}:
+            raise PrepareError("current package attempt is frozen by a terminal gate; create a post-gate patch attempt")
+        return {"validation": json.loads(validate.stdout), "gate": gate}
+    except json.JSONDecodeError as exc:
+        raise PrepareError("canonical source validation returned invalid JSON") from exc
+    finally:
+        subprocess.run(["git", "-C", str(repository_root), "worktree", "remove", "--force", str(worktree_root)], capture_output=True, text=True)
+
+
 def _relative(value: str) -> str:
     path = Path(value)
     if not value or path.is_absolute() or ".." in path.parts:
@@ -60,38 +95,51 @@ def _binding_snapshot(repository_root: Path, source_ref: str, package_path: str)
     if sidecar.get("contractVersion") != IMPL_PACKAGE_CONTRACT_VERSION:
         raise PrepareError(f"source package contractVersion must be {IMPL_PACKAGE_CONTRACT_VERSION}")
     current = sidecar.get("current", {})
-    expected = {
-        "decision.md": current.get("decision", {}).get("revision"),
-        "spec.md": current.get("spec", {}).get("revision"),
-        "plan.md": current.get("attempt", {}).get("revision"),
-    }
-    if not all(isinstance(value, str) and value for value in expected.values()):
-        raise PrepareError("revision binding has no current D/S/P selection")
+    expected: list[tuple[str, str, str]] = []
+    for key in ("decision", "spec"):
+        selection = current.get(key)
+        if selection:
+            artifact = selection.get("artifact")
+            revision = selection.get("revision")
+            if not isinstance(artifact, str) or not isinstance(revision, str) or not artifact or not revision:
+                raise PrepareError(f"revision binding has invalid current {key} selection")
+            expected.append((key, artifact, revision))
+    attempt_selection = current.get("attempt")
+    if not isinstance(attempt_selection, dict):
+        raise PrepareError("revision binding has no current attempt selection")
+    plan_artifact = attempt_selection.get("plan")
+    plan_revision = attempt_selection.get("revision")
+    attempt_id = attempt_selection.get("id")
+    if not all(isinstance(value, str) and value for value in (plan_artifact, plan_revision, attempt_id)):
+        raise PrepareError("revision binding has invalid current attempt selection")
+    expected.append(("plan", plan_artifact, plan_revision))
     checks: dict[str, bool] = {}
-    for artifact, revision in expected.items():
-        entry = next((item for item in sidecar.get("bindings", []) if item.get("artifact") == artifact and item.get("revision") == revision), None)
-        checks[artifact] = bool(entry and entry.get("blob") == _source_blob(repository_root, source_ref, package_path, artifact))
+    for kind, artifact, revision in expected:
+        entry = next(
+            (
+                item
+                for item in sidecar.get("bindings", [])
+                if item.get("artifact") == artifact
+                and item.get("revision") == revision
+                and (kind != "plan" or item.get("attempt") == attempt_id)
+            ),
+            None,
+        )
+        checks[f"{kind}:{artifact}"] = bool(entry and entry.get("blob") == _source_blob(repository_root, source_ref, package_path, artifact))
     if not all(checks.values()):
         raise PrepareError("source package D/S/P blobs do not match its current revision binding")
-    attempt_id = current.get("attempt", {}).get("id")
-    if not isinstance(attempt_id, str) or not attempt_id:
-        raise PrepareError("revision binding has no current attempt id")
-    return {"attempt_id": attempt_id, "revisions": {"decision": expected["decision.md"], "spec": expected["spec.md"], "plan": expected["plan.md"]}, "checks": checks}
+    return {"attempt_id": attempt_id, "plan_artifact": plan_artifact, "revisions": {"decision": current.get("decision", {}).get("revision", "N/A") if current.get("decision") else "N/A", "spec": current.get("spec", {}).get("revision", "N/A"), "plan": plan_revision}, "checks": checks}
 
 
 def _task_blocks(dag: str) -> list[tuple[str, str, str]]:
-    matches = list(re.finditer(r"^### (T\d+)：([^\n]+)\n", dag, re.MULTILINE))
-    if not matches:
-        raise PrepareError("DAG has no '### Tn：title' task contracts")
-    blocks: list[tuple[str, str, str]] = []
-    for index, match in enumerate(matches):
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(dag)
-        blocks.append((match.group(1), match.group(2).strip(), dag[match.end() : end]))
-    return blocks
+    try:
+        return canonical_task_blocks(dag)
+    except (RuntimeError, ValueError) as error:
+        raise PrepareError(str(error)) from error
 
 
 def _line_value(block: str, label: str) -> str:
-    match = re.search(rf"^- {re.escape(label)}：([^\n]+)$", block, re.MULTILINE)
+    match = re.search(rf"^- {re.escape(label)}[:：]([^\n]+)$", block, re.MULTILINE)
     return match.group(1).strip() if match else ""
 
 
@@ -104,9 +152,9 @@ def _ticket_paths(repository_root: Path, source_ref: str, package_path: str) -> 
             continue
         relative = absolute_path[len(prefix) :]
         text = _git(repository_root, "show", f"{source_ref}:{absolute_path}")
-        match = re.search(r"\*\*Ticket ID：\*\*\s*([^\n]+)", text)
-        if match:
-            paths[match.group(1).strip()] = relative
+        identifier = canonical_ticket_id(text)
+        if identifier:
+            paths[identifier] = relative
     return paths
 
 
@@ -122,7 +170,7 @@ def _cohorts(dag: str) -> dict[str, str]:
     if not section:
         return {}
     result: dict[str, str] = {}
-    for match in re.finditer(r"^- Cohort (\d+)：([^\n]+)$", section.group("body"), re.MULTILINE):
+    for match in re.finditer(r"^- Cohort (\d+)[:：]([^\n]+)$", section.group("body"), re.MULTILINE):
         for task_id in re.findall(r"T\d+", match.group(2)):
             # Later cohort prose can mention a task as a concurrent neighbour;
             # the first declaration is its owning cohort.
@@ -179,7 +227,27 @@ def prepare_adapter(repository_root: Path, source_ref: str, package_path: str, p
     package_path = _relative(package_path)
     source_commit = _git(repository_root, "rev-parse", f"{source_ref}^{{commit}}")
     binding = _binding_snapshot(repository_root, source_commit, package_path)
-    dag = _source(repository_root, source_commit, package_path, "dag.md")
+    canonical = _canonical_source_validation(repository_root, source_commit, package_path)
+    plan_text = _source(repository_root, source_commit, package_path, binding["plan_artifact"])
+    try:
+        tickets_earned, dag_earned = composition_flags(plan_text)
+    except (RuntimeError, ValueError) as error:
+        raise PrepareError(str(error)) from error
+    if not dag_earned:
+        raise PrepareError("current package has a legal no-DAG Composition; automatic parent-stage preparation is not applicable")
+    dag_candidates = [
+        name[len(package_path) + 1 :]
+        for name in _git(repository_root, "ls-tree", "-r", "--name-only", source_commit, package_path).splitlines()
+        if name.startswith(package_path + "/") and matches_artifact_pattern(name[len(package_path) + 1 :], "dagArtifactPatterns")
+    ]
+    matching_dags = [
+        name
+        for name in dag_candidates
+        if canonical_attempt_id(_source(repository_root, source_commit, package_path, name)) == binding["attempt_id"]
+    ]
+    if len(matching_dags) != 1:
+        raise PrepareError("current plan earns DAG but no unique attempt DAG artifact is present")
+    dag = _source(repository_root, source_commit, package_path, matching_dags[0])
     tickets = _ticket_paths(repository_root, source_commit, package_path)
     ticket_ids = tuple(tickets)
     cohorts = _cohorts(dag)
@@ -214,6 +282,9 @@ def prepare_adapter(repository_root: Path, source_ref: str, package_path: str, p
         "source_commit": source_commit,
         "package_path": package_path,
         "attempt_id": binding["attempt_id"],
+        "canonical_validation": canonical,
+        "composition": {"tickets": tickets_earned, "dag": dag_earned},
+        "dag_artifact": matching_dags[0],
         "revisions": binding["revisions"],
         "binding_checks": binding["checks"],
         "stage_count": len(stages),

@@ -72,7 +72,7 @@ D&lt;n&gt;/S&lt;n&gt;/P&lt;n&gt; 是人类好念、好口头下发的**别名**�
 
 内部 sidecar 使用 [`../assets/templates/revision-bindings.json`](../assets/templates/revision-bindings.json) 的 v2 形状；完整不变量引用 [结构化状态契约 §2](impl-package-state-schema.md#2-revision-bindings-schema-v2)。语义 revision、projection/editorial rebinding 均 append-only，后者以 `supersedes` 选择同 alias 的新 terminal binding。lightweight Decision 没有 decision.md 时，D&lt;n&gt; 与 S&lt;n&gt; 可以分别绑定到同一个 spec.md blob。
 
-生成或升级 revision 时运行 `impl_package_state.py --package <path> register-revision ...`；命令登记最终 worktree blob 并执行 working-tree validation。artifact 与 registry 可在同一 commit，restore、ER append 与 gate evaluation 前统一运行 `validate --committed`，由它现场以 `git rev-parse HEAD:<package-relative-path>` 复核 HEAD，不保存 published/validated 状态。低于 current contract 的 sidecar 不进入运行时；先由 agent 按修订摘要直接重塑并通过 current validation。
+新 package 先通过 `impl_package_state.py --package <path> init --package-id <id>` 建立两份 current-contract sidecar；生成或升级 revision 时再运行 `register-revision ...`（多个当前 artifact 同步切换时使用 `register-revisions ...`）。命令登记最终 worktree blob、必要时 seed earned runtime records 并执行 working-tree validation。artifact 与 registry 可在同一 commit，restore、ER append 与 gate evaluation 前统一运行 `validate --committed`，由它现场以 `git rev-parse HEAD:<package-relative-path>` 复核 HEAD，不保存 published/validated 状态。低于 current contract 的 sidecar 不进入运行时；先由 agent 按修订摘要直接重塑并通过 current validation。
 
 validation mode 区分 contract artifact 与执行证据：
 

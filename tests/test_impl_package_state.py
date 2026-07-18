@@ -327,6 +327,7 @@ class DecisionArtifactContractTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            run_cli(package, "init", "--package-id", package.name)
             run_cli(
                 package,
                 "register-revision",
@@ -391,6 +392,42 @@ class DecisionArtifactContractTest(unittest.TestCase):
 
 
 class RevisionRegistrationTest(unittest.TestCase):
+    def test_register_revisions_supports_lightweight_decision_and_atomic_dsp_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            repo.mkdir()
+            init_repo(repo)
+            package = repo / "docs" / "implementations" / "2026-07-18-lightweight"
+            package.mkdir(parents=True)
+            (package / "spec.md").write_text(
+                "# Spec\n\n"
+                "<!-- impl-package:projection revision-set begin -->\n"
+                "决策修订（Decision Revision）：D1\n规格修订（Spec Revision）：S1\n"
+                "<!-- impl-package:projection revision-set end -->\n",
+                encoding="utf-8",
+            )
+            (package / "patch.md").write_text(
+                "# Patch\n\n执行尝试 ID（Attempt ID）：initial\n"
+                "<!-- impl-package:projection revision-set begin -->\n"
+                "决策修订（Decision Revision）：D1\n规格修订（Spec Revision）：S1\n计划修订（Plan Revision）：P1\n"
+                "<!-- impl-package:projection revision-set end -->\n"
+                "执行组合（Composition）：tickets=false, dag=false\n\n## Execution Record\n\n",
+                encoding="utf-8",
+            )
+            run_cli(package, "init", "--package-id", package.name)
+            run_cli(
+                package,
+                "register-revisions",
+                "--decision", "D1", "--decision-artifact", "spec.md", "--decision-evidence", "spec.md#decision",
+                "--spec", "S1", "--spec-artifact", "spec.md", "--spec-evidence", "spec.md#spec",
+                "--plan", "P1", "--plan-artifact", "patch.md", "--attempt", "initial", "--plan-evidence", "patch.md#plan",
+            )
+            state = json.loads((package / ".impl-package/revision-bindings.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["current"]["decision"], {"artifact": "spec.md", "revision": "D1"})
+            self.assertEqual(state["current"]["spec"], {"artifact": "spec.md", "revision": "S1"})
+            self.assertEqual(state["current"]["attempt"], {"id": "initial", "plan": "patch.md", "revision": "P1"})
+            run_cli(package, "validate", "--working-tree")
+
     def test_validate_rejects_revision_declaration_outside_projection(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp) / "repo"
@@ -467,6 +504,7 @@ class RevisionRegistrationTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            run_cli(package, "init", "--package-id", package.name)
 
             run_cli(
                 package,
@@ -506,6 +544,7 @@ class PlanContractValidationTest(unittest.TestCase):
                 "# Plan\n\n<!-- impl-package:projection revision-set begin -->\n"
                 "决策修订（Decision Revision）：N/A\n规格修订（Spec Revision）：N/A\n计划修订（Plan Revision）：P1\n"
                 "<!-- impl-package:projection revision-set end -->\n\n"
+                "执行组合（Composition）：tickets=false, dag=false\n\n"
                 "## Strategy\n\nKeep this.\n\n## Execution Record\n\n<!-- append only -->\n",
                 encoding="utf-8",
             )
@@ -521,6 +560,7 @@ class PlanContractValidationTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            run_cli(package, "init", "--package-id", package.name)
             run_cli(
                 package,
                 "register-revision",
@@ -1009,6 +1049,7 @@ class ProjectionRebindTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            run_cli(package, "init", "--package-id", package.name)
             for kind, alias, artifact in (
                 ("decision", "D1", "decision.md"),
                 ("spec", "S1", "spec.md"),
@@ -1094,6 +1135,7 @@ class ProjectionRebindTest(unittest.TestCase):
                 "contractVersion": "3.2", "purpose": "internal-machine-sidecar", "ownerFacing": False,
                 "current": {}, "bindings": [],
             }), encoding="utf-8")
+            run_cli(package, "init", "--package-id", package.name)
             run_cli(package, "register-revision", "plan", "P1", "--attempt", "initial", "--artifact", "plan.md", "--evidence", "plan.md#publication")
             run_cli(package, "init", "--package-id", package.name)
             run_cli(package, "new-gate-entry", "--attempt", "initial", "--operation-id", "initial-gate")
@@ -1157,6 +1199,7 @@ class RuntimeProjectionValidationTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            run_cli(package, "init", "--package-id", package.name)
             run_cli(
                 package,
                 "register-revision",

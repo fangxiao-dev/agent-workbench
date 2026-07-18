@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workbench.local/schemas/codex-harness-runtime-policy.v0.schema.json",
+  "title": "Codex Harness Runtime Policy v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "maturity",
+    "context",
+    "delegation",
+    "task_partitioning",
+    "decision_routing",
+    "validation",
+    "lifecycle",
+    "boundary_failures"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "codex-harness.runtime-policy.v0"
+    },
+    "maturity": {
+      "description": "Internal Codex Harness policy vocabulary. Its normative definitions are in codex-harness-poc-design.md under 术语定义; it is not an external maturity standard.",
+      "enum": [
+        "design_baseline",
+        "runtime_enforced"
+      ]
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cross_task_start",
+        "same_task_continuation",
+        "thread_single_writer",
+        "continuity_evidence_required"
+      ],
+      "properties": {
+        "cross_task_start": {
+          "enum": [
+            "fresh_thread"
+          ]
+        },
+        "same_task_continuation": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "same_thread_new_turn",
+              "resume",
+              "fork",
+              "fresh_thread"
+            ]
+          }
+        },
+        "thread_single_writer": {
+          "type": "boolean"
+        },
+        "continuity_evidence_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "delegation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "parent_owns_execution_method",
+        "per_child_approval",
+        "authority_expansion",
+        "topology_is_acceptance_gate"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "bounded_autonomy"
+          ]
+        },
+        "parent_owns_execution_method": {
+          "type": "boolean"
+        },
+        "per_child_approval": {
+          "enum": [
+            "not_required_within_boundaries",
+            "required"
+          ]
+        },
+        "authority_expansion": {
+          "enum": [
+            "owner_decision"
+          ]
+        },
+        "topology_is_acceptance_gate": {
+          "type": "boolean"
+        }
+      }
+    },
+    "task_partitioning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "responsibility_partition",
+        "overlap_coordination",
+        "write_workspace_isolation",
+        "physical_conflict_claim",
+        "external_side_effects"
+      ],
+      "properties": {
+        "responsibility_partition": {
+          "enum": [
+            "disjoint_by_default"
+          ]
+        },
+        "overlap_coordination": {
+          "enum": [
+            "explicit"
+          ]
+        },
+        "write_workspace_isolation": {
+          "enum": [
+            "per_task_worktree"
+          ]
+        },
+        "physical_conflict_claim": {
+          "enum": [
+            "not_guaranteed"
+          ]
+        },
+        "external_side_effects": {
+          "enum": [
+            "explicit_boundary"
+          ]
+        }
+      }
+    },
+    "decision_routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness_resolvable",
+        "owner_required"
+      ],
+      "properties": {
+        "harness_resolvable": {
+          "enum": [
+            "continue_same_task"
+          ]
+        },
+        "owner_required": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "scope_change",
+              "authority_expansion",
+              "irreversible_external_side_effect",
+              "acceptance_ambiguity"
+            ]
+          }
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parent_result",
+        "external_verification",
+        "natural_language_only_is_sufficient"
+      ],
+      "properties": {
+        "parent_result": {
+          "enum": [
+            "structured"
+          ]
+        },
+        "external_verification": {
+          "enum": [
+            "required"
+          ]
+        },
+        "natural_language_only_is_sufficient": {
+          "type": "boolean"
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "thread_lease",
+        "run_resource_ledger",
+        "promotion",
+        "cleanup",
+        "orphan_reconciliation"
+      ],
+      "properties": {
+        "thread_lease": {
+          "enum": [
+            "required_for_continuation"
+          ]
+        },
+        "run_resource_ledger": {
+          "enum": [
+            "required"
+          ]
+        },
+        "promotion": {
+          "enum": [
+            "manifest_policy"
+          ]
+        },
+        "cleanup": {
+          "enum": [
+            "after_terminal_disposition"
+          ]
+        },
+        "orphan_reconciliation": {
+          "type": "boolean"
+        }
+      }
+    },
+    "boundary_failures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "automatic_privilege_escalation",
+        "capability_blocked",
+        "boundary_rejected"
+      ],
+      "properties": {
+        "automatic_privilege_escalation": {
+          "type": "boolean"
+        },
+        "capability_blocked": {
+          "enum": [
+            "needs_decision"
+          ]
+        },
+        "boundary_rejected": {
+          "enum": [
+            "non_retryable"
+          ]
+        }
+      }
+    }
+  }
+}

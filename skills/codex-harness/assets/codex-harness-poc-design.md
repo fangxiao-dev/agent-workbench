@@ -2,16 +2,25 @@
 
 ## 文档状态
 
-- 状态：POC 设计基线 v0.2，尚非生产规格。
-- 最后核验：2026-07-17。
+- 状态：POC 设计基线 v0.3，尚非生产规格。
+- 最后核验：2026-07-18。
 - 本地验证版本：`codex-cli 0.144.4`，Windows，Codex App Server stdio/JSON-RPC。
-- 维护约定：本文件是 `codex-harness` Skill 的演进事实源；后续先完善设计和证据，再用它驱动 Skill 规则、脚本与 eval 的完善。
+- 维护约定：本文件是 `codex-harness` Skill 的架构语义与证据事实源；可配置策略的字段和值以 `codex-harness-runtime-policy.v0.json` 及其 JSON Schema 为 canonical source，不在 Markdown 中复制另一份配置正文。后续先完善设计、canonical policy 和证据，再用它们驱动 Skill 规则、脚本与 eval 的完善。
+
+## 术语定义
+
+以下术语是本仓库 `codex-harness` 的内部 canonical vocabulary，不是 Codex、OpenAI 或任何行业标准的成熟度分级；它们只描述某一版 canonical runtime policy 被运行时采用和强制的程度，不能用于推断整个 Harness、某个 parent agent 或项目已经生产就绪。
+
+- **Canonical runtime policy**：带版本、可机器解析的策略值来源。它定义上下文、委派、任务分区、决策路由、验收、生命周期和边界失败的预期行为；JSON Schema 只校验其结构和值域，架构语义和证据仍以本设计文档为准。
+- **`design_baseline`**：策略语义已审核、已编码为 canonical JSON、且通过 Schema 校验，但 runner 尚未证明会在所有相关路径加载、应用和拒绝违反策略的行为。它可以指导设计和实现，不能作为“该策略已在运行时生效”的证据。
+- **`runtime_enforced`**：对该 policy version，运行时会加载并校验策略，在全部相关执行路径应用其约束，并对允许与拒绝路径保留直接验证证据。只要任一声明的策略字段仍只是文档约定、被执行路径绕过，或缺少相应验证，policy 都不得标为 `runtime_enforced`。
+- **Maturity transition**：从 `design_baseline` 升为 `runtime_enforced` 是整份 policy 的原子状态迁移，不是对单个字段的乐观标记；必须先完成实现、deterministic validation 和证据复核。局部实现可以在路线图中记录，但不改变该 policy 的 maturity。
 
 ## 目标
 
 构建一个真正可程序化的 Codex Harness：外层程序通过 Codex App Server 启动和持续控制父 agent，会话内的任务拆分与 subagent 编排仍交给父 agent；Harness 用明确输入、结构化父结果、独立验证和可恢复生命周期把概率性的 agent 工作包装成可审计的执行单元。
 
-我们希望保留 Codex 原生 agent 能力，而不是在外层重新实现一个与模型争夺控制权的多 agent scheduler。Harness 通过 thread-level developer instructions、模型/推理强度、Skills、AGENTS.md 和 work package 为父 agent 绑定角色、流程和交付约束；父 agent 如何完成任务属于其内部实现。Impl-Package 继续定义任务图、依赖、并发价值和 gate，Harness 补齐进程级控制、协议适配、超时、重试、恢复和可观测性。
+我们希望信任高能力父 agent 的判断并保留 Codex 原生 agent 能力，而不是在外层重新实现一个与模型争夺控制权的多 agent scheduler。Harness 通过 thread-level developer instructions、模型/推理强度、Skills、AGENTS.md 和 work package 为父 agent 绑定角色、授权边界和交付约束；父 agent 在边界内自主选择实现、委派和协作方式。Impl-Package 继续用适合人工审阅的 Decision/Spec/Plan/DAG 与 revision binding 定义语义图，Harness 用机器可校验的 JSON/TOML 契约补齐进程级控制、协议适配、超时、重试、恢复和可观测性；两者都把“agent 如何做”与“系统如何判定边界和结果”解耦，载体不同不改变该原则。
 
 ### 成功形态
 
@@ -62,6 +71,20 @@ Harness 只配置父 agent：通过 `thread/start` 的 developer instructions、
 ### 6. 介入条件必须是边界，不是过程偏好
 
 Harness 可以限制父运行的权限/沙箱、允许读写路径、mutation authority、外部副作用、deadline/cancel、最大并发/成本和最终结果 schema，也可以在这些边界被违反时中断、拒绝或重试。除此以外，Harness 不因父 agent 没有使用预想工具、没有生成 child、生成了不同数量的 child 或采用不同任务分解而判失败。
+
+### 7. 边界内采用自主委派，不逐步遥控父 agent
+
+Harness 预授权父 agent 在已声明边界内自主完成任务，包括自行决定是否委派、如何拆分责任、怎样向 worker 提供指导以及何时汇总。父 agent 和 worker 的过程报告可以作为高价值判断输入，但不能替代结构化 Parent Result、外部 verifier 或安全边界。放宽委派授权的含义是减少逐操作审批和过程指令，不是允许父 agent 扩大任务范围、权限、外部副作用或验收口径。
+
+### 8. 任务上下文、责任分区和物理隔离分开建模
+
+不同任务从新上下文开始；只有同一 work package 的纠偏、重试或进程恢复才允许延续既有 thread 历史，并且恢复前仍要验证角色、配置和 history continuity。同一持久 thread 只能有一个 controller 写入，后续实现必须用 lease 或等价机制阻止并发驱动。
+
+“任务不冲突”只表示调度前按责任边界把任务拆成默认不重叠的工作单元；它不宣称 worktree 能消除合并冲突、共享服务竞争或外部副作用。写任务仍需要独立 workspace，责任确有重叠时必须显式协调，外部副作用必须受单独边界约束。
+
+### Canonical runtime policy
+
+上述可配置决策的 canonical 表达位于 `assets/codex-harness-runtime-policy.v0.json`，字段约束位于 `assets/codex-harness-runtime-policy.schema.json`。当前 policy 的 `maturity` 是 `design_baseline`：它固定已接受的策略语义，App Server/package/resume 入口已形成部分 loader、lease/ledger seam，但尚未证明所有字段、失败路径和入口均闭合；术语的准确含义见本文档的“术语定义”，实现和验证完成前不得把 canonical 配置误报为 `runtime_enforced`。Markdown 只解释架构含义、证据和迁移边界，具体策略值只修改 canonical policy。
 
 ## 调研与实测结论
 
@@ -172,6 +195,8 @@ flowchart LR
 
 把“一个父 agent 执行一个有界 stage”作为最小可重试单元，而不是把每个 child agent 当作 Harness job。每个 run 记录 `run_id`、Codex 版本、配置摘要、父 thread id、turn id、输入 hash、父结果、验证结果、超时/中断原因和恢复决策。
 
+不同 stage 或其他独立任务不能因为复用同一个命名 worker 而继承旧 thread 上下文。同一 stage 内的 continuation 可以选择新 turn、resume、fork 或 fresh thread，但选择和权限必须来自 canonical runtime policy；涉及既有 thread 时先取得单写者 lease，并把 lease、worktree、进程与处置状态写入 run resource ledger。
+
 ### 状态机草案
 
 ```mermaid
@@ -203,6 +228,8 @@ Harness 的 deadline 作用于父 turn。到期时先调用 `turn/interrupt`，�
 - fresh thread：适合上下文污染、角色/配置变化、协议不兼容或 cleanup 不可信的情况。
 
 所有重试都生成新的 attempt id，保持原始父结果和 validator 证据不可变；只有 transient/explicitly retryable failure 自动重试，`needs_owner`、安全拒绝、确定性测试失败和未知副作用状态默认不自动重试。
+
+父 agent 请求建议时，Harness 先按 canonical policy 判断问题是否仍在已授权的同一任务内：可由 Harness 回答的执行纠偏继续同一任务；涉及 scope、authority、不可逆外部副作用或验收歧义的请求进入 owner decision。能力被沙箱或 policy 阻断时不得自动提升权限；边界拒绝也不能伪装成 transient failure 重试。
 
 ### 清理
 
@@ -245,6 +272,8 @@ POC 首选短生命周期 App Server 进程或有界 session 池，以进程边�
 | `.codex/config.toml` | 限制 agent 并发/深度并记录中断消息 | POC |
 | `.codex/harness/parent.toml` | Harness 显式加载的父角色、模型与推理强度 profile | POC；不是 native child agent 文件 |
 | `skills/codex-harness/SKILL.md` | 父 agent 的 Harness 角色与行为边界入口 | POC |
+| `skills/codex-harness/assets/codex-harness-runtime-policy.v0.json` | 上下文、委派、任务分区、决策路由、验收与生命周期策略的 canonical 配置 | v0 design baseline；部分入口已消费，未闭合全路径 |
+| `skills/codex-harness/assets/codex-harness-runtime-policy.schema.json` | canonical runtime policy 的机器可校验字段契约 | v0 design schema；loader 已接入，仍需全路径 evidence |
 | `scripts/run-codex-app-server-pilot.py` | App Server JSON-RPC pilot、父结果验收和可选 child telemetry | POC 主入口 |
 | `scripts/prepare-codex-harness-package.py` | 从固定 approved package snapshot 自动提取 D/S/P binding、task contracts、cohorts、ticket 引用和敏感原件提示，生成待 review 的 adapter 与 readiness report | v0.1；生成草案，不自动补 verifier 或扩大路径权限 |
 | `scripts/run-codex-harness-package.py` | 固定 commit 的 Impl-Package binding 校验、DAG ready-stage 投影和显式父 stage dispatch | v0.1；不自动建/合 worktree，不自动写 gate |
@@ -265,6 +294,9 @@ POC 首选短生命周期 App Server 进程或有界 session 池，以进程边�
 
 - 已实现：固定 package snapshot 的 D/S/P binding 校验、DAG ready-stage 投影、父 work package、Parent Result work-package hash/allowed paths/verifier seam，以及从任意符合约定的 package 自动生成 draft adapter/readiness。DATEV 9-stage package 是首个 golden fixture。
 - 已验证：同一 DATEV snapshot 的 generated manifest 能被 package runner 重新校验并投影出 T1/T2 初始 ready stage；生成草案不会授予 verifier 或不确定路径的写入权限。
+- 已形成最小 runtime seam：上下文重置、边界内自主委派、责任分区、决策路由、thread lease、资源账本、promotion/cleanup 和权限阻断策略已进入 canonical JSON policy/schema；App Server/package/resume 入口已接入其中一部分，policy maturity 仍保持 `design_baseline`。
+- 已实现并验证：package runner 与 App Server runner 加载 canonical runtime policy，记录 policy identity/resource ledger；resume pilot 使用 single-writer lease，policy/lease/ledger/routing deterministic fixtures 覆盖正常、伪造、冲突、篡改和 owner-route 场景。
+- 待实现：将 continuation lease、terminal cleanup、orphan reconciliation 与失败路径证据闭合到所有受支持入口，并补齐 reviewed verifier profile 的结构化复用。
 - 待实现：将 reviewed manifest 的 verifier profile 结构化复用，减少 owner 对重复命令的填写，同时保持每个 stage 的独立验收语义。
 - 待验证：以 clean isolated worktree 执行一个非外部副作用的 generated-and-reviewed stage，验证生成→审核→父执行→独立 verifier 的完整闭环。
 - 待验证：至少两个受支持 Codex 版本的 capability/compatibility matrix，以及多轮 soak（interrupted child、slot recovery、进程重启、session cleanup）。
@@ -278,4 +310,4 @@ POC 首选短生命周期 App Server 进程或有界 session 池，以进程边�
 
 ## 下一项建议
 
-下一项应先定义并试行 reviewed verifier profile：把仓库常见的 typecheck、focused test、migration、build 等可安全重跑命令做成显式可选模板，再由 owner 为每个 stage 选择和补充。这能减少 adapter 审核成本，同时不把“命令看似相近”误当成“验收语义相同”。随后选取一个无外部副作用、拥有 clean isolated worktree 的 stage，完成一次 generated-and-reviewed manifest 的真实父执行闭环；DATEV 的外部 Test Mandant 验收仍留在其单独 gate 内。
+下一项应补齐所有入口的 continuation lease、terminal cleanup、orphan reconciliation 和 failure-path evidence，并继续只强制当前能够证明的规则；只有 AC-11..AC-16 的 direct evidence、独立 verifier 和 policy-specific evidence 全部闭合后，才能把 policy maturity 提升为 `runtime_enforced`。reviewed verifier profile 继续作为并行的结构化复用项：把仓库常见的 typecheck、focused test、migration、build 等可安全重跑命令做成显式可选模板，再由 owner 为每个 stage 选择和补充。随后选取一个无外部副作用、拥有 clean isolated worktree 的 stage，完成一次 generated-and-reviewed manifest 的真实父执行闭环；DATEV 的外部 Test Mandant 验收仍留在其单独 gate 内。

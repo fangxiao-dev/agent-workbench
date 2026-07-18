@@ -16,6 +16,8 @@ description: >
 
 结构化状态引擎的数据策略统一由 [`assets/impl-package-state-config.json`](./assets/impl-package-state-config.json) 提供，当前体系契约版本为字符串 `"3.2"`：状态 vocabulary、document discovery/field regex、marker 名称、投影格式与 gate heading/字段 grammar 在该版本化配置中调整，CLI interface 不变。配置未知版本、缺字段、错误 placeholder/capture group、重复/空 vocabulary 或无效 regex 必须 fail closed。append-only、CAS、active chain、package-local path、完整 gate entry span/content hash、HEAD/worktree 两相校验与 task/ticket bijection 属于不可配置的安全内核；不得通过配置弱化。backfill gate recognition 直接复用 canonical resolver，不复制 verdict、heading 或 binding 语义。契约修订摘要保存在 [`assets/contract-revision-history.md`](./assets/contract-revision-history.md)，仅在 `contract-status` 返回 `upgradeRequired` 时读取；正常 stage、validate、audit、apply、verify 路径不得读取它。
 
+旧 schema 不兼容；发现 `upgradeRequired` 时，直接按当前 schema 重塑 package，重新通过 canonical preflight 后再进入后续阶段。
+
 revision alias 继续使用 `D<n>` / `S<n>` / `P<n>`，其中 D 明确表示 Decision。
 
 - **文档维护层**：常青四层（产品/journey 端到端意图 / 模块贡献 / 模块契约 / 变更事件），真相住这里；跨模块 journey 通过唯一 owner 和 anchor 链接下钻，不复制正文。开发收口后可以通过 backfill 把 durable delta 汇回。

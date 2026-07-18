@@ -113,7 +113,7 @@ plan 活动期间发现 Composition 判断错误时：
 4. 建立 spec coverage 与 change map，写 Execution Strategy、integration order、Planned Verification、rollout/rollback 与依赖的 policy 链接；清除 blocker placeholder，核对术语、模块与路径一致性。
 5. tickets=true 时调用 to-tickets draft；dag=true 时在必要输入齐备后调用 create-task-dag。
 6. 交叉检查 ticket/DAG 暴露的 contract 缺口；规范性缺口回 req-align，真正改变 plan-owned 语义的过程策略缺口升级 P revision。仅证据、引用、分类或机械顺序投影错误由 owning skill 局部修正。
-7. owner 批准 plan 后运行 `register-revision plan <P> --attempt <id> --artifact <plan-path> --evidence <pointer>`，以 `plan-contract-v1` 追加 binding 并选择 current attempt；随后 `init --package-id <id>` 初始化 earned runtime records、`refresh-projections` 刷新投影。commit 后运行 `validate --committed`。后续 ER append 不升级 P revision；ER 写入前再次 committed validate，此时且无 terminal gate 时 lifecycle 派生为 Active。
+7. 新 package 必须先运行一次 `init --package-id <id>` 建立两份 current-contract sidecar；owner 批准 plan 后再运行 `register-revision plan <P> --attempt <id> --artifact <plan-path> --evidence <pointer>`（或同一 semantic revision 的 `register-revisions`），以 `plan-contract-v1` 追加 binding、选择 current attempt、seed earned runtime records 并刷新投影。commit 后运行 `validate --committed`。后续 ER append 不升级 P revision；ER 写入前再次 committed validate，此时且无 terminal gate 时 lifecycle 派生为 Active。
 8. 执行期间只 append Execution Record；状态由对应 artifact 维护。
 9. gate evaluation 由 dev-with-track 在 gate.md 顶部插入摘要，并链接对应 Execution Record；terminal verdict 使 lifecycle 派生为 Frozen。
 

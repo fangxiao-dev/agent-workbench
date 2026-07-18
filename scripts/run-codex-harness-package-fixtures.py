@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -20,6 +21,11 @@ def write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def state_cli(root: Path, package: Path, *args: str) -> None:
+    script = Path(__file__).resolve().parents[1] / "skills" / "impl-package" / "scripts" / "impl_package_state.py"
+    subprocess.run([sys.executable, str(script), "--package", str(package), *args], check=True, capture_output=True, text=True)
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary) / "repo"
@@ -28,33 +34,22 @@ def main() -> int:
         git(root, "config", "user.email", "fixture@example.test")
         git(root, "config", "user.name", "Fixture")
         package = root / "docs" / "implementations" / "fixture"
-        write(package / "decision.md", "# Decision\n")
-        write(package / "spec.md", "# Spec\n")
-        write(package / "plan.md", "# Plan\n")
-        write(package / "dag.md", "# DAG\n")
+        write(package / "decision.md", "# Decision\n\n<!-- impl-package:projection revision-set begin -->\n决策修订（Decision Revision）：D1\n<!-- impl-package:projection revision-set end -->\n")
+        write(package / "spec.md", "# Spec\n\n<!-- impl-package:projection revision-set begin -->\n决策修订（Decision Revision）：D1\n规格修订（Spec Revision）：S1\n<!-- impl-package:projection revision-set end -->\n")
+        write(package / "plan.md", "# Plan\n\n执行尝试 ID（Attempt ID）：initial\n<!-- impl-package:projection revision-set begin -->\n决策修订（Decision Revision）：D1\n规格修订（Spec Revision）：S1\n计划修订（Plan Revision）：P1\n<!-- impl-package:projection revision-set end -->\n执行组合（Composition）：tickets=false, dag=false\n\n## Execution Record\n\n")
+        write(package / "gate.md", "# Gate Ledger\n\n<!-- impl-package:projection gate-status begin -->\n状态：尚无已定稿门禁记录\n<!-- impl-package:projection gate-status end -->\n")
         write(package / "tickets" / "one.md", "# One\n")
         write(package / "tickets" / "two.md", "# Two\n")
-        blobs = {name: subprocess.run(["git", "hash-object", str(package / name)], check=True, capture_output=True, text=True).stdout.strip() for name in ("decision.md", "spec.md", "plan.md")}
-        sidecar = {
-            "contractVersion": "3.2",
-            "purpose": "internal-machine-sidecar",
-            "ownerFacing": False,
-            "current": {
-                "decision": {"artifact": "decision.md", "revision": "D1"},
-                "spec": {"artifact": "spec.md", "revision": "S1"},
-                "attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"},
-            },
-            "bindings": [
-                {"id": f"D1@{blobs['decision.md']}", "artifact": "decision.md", "revision": "D1", "mode": "exact-blob", "blob": blobs["decision.md"], "supersedes": None, "evidence": "decision.md#revision-history"},
-                {"id": f"S1@{blobs['spec.md']}", "artifact": "spec.md", "revision": "S1", "mode": "exact-blob", "blob": blobs["spec.md"], "supersedes": None, "evidence": "spec.md#revision-history"},
-                {"id": f"initial:P1@{blobs['plan.md']}", "artifact": "plan.md", "attempt": "initial", "revision": "P1", "mode": "plan-contract-v1", "blob": blobs["plan.md"], "supersedes": None, "evidence": "plan.md#plan-revision-history"},
-            ],
-        }
-        write(package / ".impl-package" / "revision-bindings.json", json.dumps(sidecar))
         profile = root / "parent.toml"
         write(profile, 'name="fixture"\ndescription="fixture"\nmodel="test"\nmodel_reasoning_effort="low"\ndeveloper_instructions="fixture"\n')
         git(root, "add", ".")
         git(root, "commit", "-m", "fixture")
+        state_cli(root, package, "init", "--package-id", "260716-fixture")
+        state_cli(root, package, "register-revision", "decision", "D1", "--artifact", "decision.md", "--evidence", "decision.md#revision-history")
+        state_cli(root, package, "register-revision", "spec", "S1", "--artifact", "spec.md", "--evidence", "spec.md#revision-history")
+        state_cli(root, package, "register-revision", "plan", "P1", "--artifact", "plan.md", "--attempt", "initial", "--evidence", "plan.md#plan-revision-history")
+        git(root, "add", ".")
+        git(root, "commit", "-m", "fixture structured package state")
         manifest_path = root / "fixture.toml"
         write(manifest_path, f'''schema_version = 1
 [package]

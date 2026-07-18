@@ -326,8 +326,12 @@ def _attempt_ticket_documents(package: Path, attempt: str, committed: bool = Fal
     return documents
 
 
-def _seed_earned_records(package: Path, state: dict[str, Any]) -> None:
-    current = _current_attempt(package)
+def _seed_earned_records(package: Path, state: dict[str, Any], revision_state: dict[str, Any] | None = None) -> None:
+    if revision_state is None:
+        current = _current_attempt(package)
+    else:
+        selection = revision_state.get("current", {}).get("attempt")
+        current = (selection["id"], _package_artifact(package, selection["plan"])) if selection else None
     if current is None:
         return
     attempt, plan_path = current
@@ -1459,29 +1463,34 @@ def _active_binding(state: dict[str, Any], current: dict[str, Any]) -> dict[str,
     return matches[0]
 
 
-def command_register_revision(
+def _registration_binding(
     package: Path,
+    state: dict[str, Any],
     kind: str,
     alias: str,
     artifact: str | None,
     attempt: str | None,
     evidence: str,
-) -> dict[str, Any]:
-    path, state = _load_revision_state(package)
+) -> tuple[dict[str, Any], dict[str, Any]]:
     expected_prefix = {"decision": "D", "spec": "S", "plan": "P"}[kind]
     if re.fullmatch(rf"{expected_prefix}[1-9]\d*", alias) is None:
         raise StateError(f"invalid {kind} revision alias: {alias}")
     current = state.setdefault("current", {})
+    current_key = kind if kind != "plan" else "attempt"
     if artifact is None:
-        existing = current.get(kind if kind != "plan" else "attempt", {})
+        existing = current.get(current_key, {})
         artifact = existing.get("artifact") or existing.get("plan")
     if not artifact:
-        raise StateError("--artifact is required when no current artifact exists")
+        raise StateError(f"--artifact is required when no current {kind} artifact exists")
     _reject_investigation_artifact(artifact, "revision-binding")
     if artifact == "design.md":
         raise StateError("legacy design.md artifact is not supported; use decision.md")
-    if kind == "decision" and artifact != "decision.md":
-        raise StateError("decision revision artifact must be decision.md")
+    if kind == "decision" and artifact not in {"decision.md", "spec.md"}:
+        raise StateError("decision revision artifact must be decision.md or lightweight spec.md")
+    if not isinstance(evidence, str) or not evidence:
+        raise StateError(f"{kind} revision evidence is required")
+    if kind == "plan" and (not isinstance(attempt, str) or not attempt):
+        raise StateError("--attempt is required for plan registration")
     blob = _worktree_blob(package, artifact)
     binding: dict[str, Any] = {
         "artifact": artifact,
@@ -1492,24 +1501,77 @@ def command_register_revision(
         "evidence": evidence,
     }
     if kind == "plan":
-        if not attempt:
-            raise StateError("--attempt is required for plan registration")
         binding["attempt"] = attempt
     binding["id"] = _binding_id(binding)
-    existing = next((row for row in state.get("bindings", []) if row.get("id") == binding["id"]), None)
-    if existing is not None and existing != binding:
-        raise StateError(f"binding ID collision: {binding['id']}")
-    if existing is None:
-        state.setdefault("bindings", []).append(binding)
-    if kind == "plan":
-        current["attempt"] = {"id": attempt, "plan": artifact, "revision": alias}
-    else:
-        current[kind] = {"artifact": artifact, "revision": alias}
-    _validate_revision_bindings(package, state, committed=False)
-    _atomic_write_json(path, state)
+    return binding, ({"id": attempt, "plan": artifact, "revision": alias} if kind == "plan" else {"artifact": artifact, "revision": alias})
+
+
+def command_register_revisions(
+    package: Path,
+    registrations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not registrations:
+        raise StateError("at least one revision registration is required")
+    path, state = _load_revision_state(package)
+    candidate = json.loads(json.dumps(state))
+    current = candidate.setdefault("current", {})
+    seen_kinds: set[str] = set()
+    for registration in registrations:
+        kind = registration.get("kind")
+        if kind not in {"decision", "spec", "plan"}:
+            raise StateError(f"unsupported revision kind: {kind!r}")
+        if kind in seen_kinds:
+            raise StateError(f"duplicate registration kind: {kind}")
+        seen_kinds.add(kind)
+        binding, selection = _registration_binding(
+            package,
+            candidate,
+            kind,
+            registration.get("alias", ""),
+            registration.get("artifact"),
+            registration.get("attempt"),
+            registration.get("evidence", ""),
+        )
+        existing = next((row for row in candidate.get("bindings", []) if row.get("id") == binding["id"]), None)
+        if existing is not None and existing != binding:
+            raise StateError(f"binding ID collision: {binding['id']}")
+        if existing is None:
+            same_semantic = [
+                row for row in candidate.get("bindings", [])
+                if row.get("artifact") == binding["artifact"]
+                and row.get("revision") == binding["revision"]
+                and row.get("attempt") == binding.get("attempt")
+                and row.get("id") not in {row.get("supersedes") for row in candidate.get("bindings", []) if row.get("supersedes")}
+            ]
+            if same_semantic and any(row.get("blob") != binding["blob"] for row in same_semantic):
+                raise StateError(f"revision {binding['revision']} already exists with a different blob; use rebind for editorial changes")
+            candidate.setdefault("bindings", []).append(binding)
+        if kind == "plan":
+            current["attempt"] = selection
+        else:
+            current[kind] = selection
+    runtime_path, runtime_state = _load_runtime_state(package)
+    _seed_earned_records(package, runtime_state, candidate)
+    _validate_revision_bindings(package, candidate, committed=False)
+    _atomic_write_json(path, candidate)
+    _atomic_write_json(runtime_path, runtime_state)
     command_refresh_projections(package)
     command_validate(package, committed=False)
-    return state
+    return candidate
+
+
+def command_register_revision(
+    package: Path,
+    kind: str,
+    alias: str,
+    artifact: str | None,
+    attempt: str | None,
+    evidence: str,
+) -> dict[str, Any]:
+    return command_register_revisions(
+        package,
+        [{"kind": kind, "alias": alias, "artifact": artifact, "attempt": attempt, "evidence": evidence}],
+    )
 
 
 def _validate_revision_bindings(package: Path, state: dict[str, Any], committed: bool) -> list[str]:
@@ -1540,8 +1602,8 @@ def _validate_revision_bindings(package: Path, state: dict[str, Any], committed:
         _reject_investigation_artifact(row["artifact"], "revision-binding")
         if row["artifact"] == "design.md":
             raise StateError("legacy design.md artifact is not supported; use decision.md")
-        if row["revision"].startswith("D") and row["artifact"] != "decision.md":
-            raise StateError("decision revision binding artifact must be decision.md")
+        if row["revision"].startswith("D") and row["artifact"] not in {"decision.md", "spec.md"}:
+            raise StateError("decision revision binding artifact must be decision.md or lightweight spec.md")
         if not all(isinstance(row.get(field), str) and row[field] for field in ("artifact", "revision", "blob")):
             raise StateError("revision binding has empty identity fields")
         if not re.fullmatch(r"[0-9a-f]{40,64}", row["blob"]):
@@ -1566,6 +1628,15 @@ def _validate_revision_bindings(package: Path, state: dict[str, Any], committed:
         raise StateError("revision identity does not have exactly one terminal binding")
     current = state.get("current", {})
     _assert_revision_selection_keys(current)
+    selection_shapes = {
+        "decision": {"artifact", "revision"},
+        "spec": {"artifact", "revision"},
+        "attempt": {"id", "plan", "revision"},
+    }
+    for key, expected_shape in selection_shapes.items():
+        selection = current.get(key)
+        if selection is not None and (not isinstance(selection, dict) or set(selection) != expected_shape):
+            raise StateError(f"current {key} selection has invalid canonical shape")
     checked: list[str] = []
     for key in ("decision", "spec", "attempt"):
         selection = current.get(key)
@@ -1600,8 +1671,9 @@ def command_validate(package: Path, committed: bool) -> dict[str, Any]:
     state = _revision_state_for_context(package, committed)
     checked = _validate_revision_bindings(package, state, committed)
     _validate_revision_projections(package, state, committed)
-    if _artifact_exists(package, RUNTIME_STATE.as_posix(), committed):
-        _validate_runtime_state(package, state, committed)
+    if not _artifact_exists(package, RUNTIME_STATE.as_posix(), committed):
+        raise StateError("runtime state is missing (contract upgrade required)")
+    _validate_runtime_state(package, state, committed)
     return {
         "ok": True,
         "context": "committed" if committed else "working-tree",
@@ -1628,7 +1700,7 @@ def _contract_component_status(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {"status": "invalid", "contractVersion": None, "reason": "top-level-not-object"}
     if "contractVersion" not in value:
-        # A pre-3.2 sidecar is upgradeable in place; no compatibility reader trusts it.
+        # Pre-3.2 sidecars are not parsed; callers must migrate them to the current schema.
         return {
             "status": "upgradeRequired",
             "contractVersion": None,
@@ -1666,7 +1738,7 @@ def _contract_component_status(path: Path) -> dict[str, Any]:
         for binding in value["bindings"]:
             if isinstance(binding, dict) and (
                 binding.get("artifact") == "design.md"
-                or (str(binding.get("revision", "")).startswith("D") and binding.get("artifact") != "decision.md")
+                or (str(binding.get("revision", "")).startswith("D") and binding.get("artifact") not in {"decision.md", "spec.md"})
             ):
                 return {
                     "status": "invalid",
@@ -1730,6 +1802,12 @@ def build_parser() -> argparse.ArgumentParser:
     register_parser.add_argument("--artifact")
     register_parser.add_argument("--attempt")
     register_parser.add_argument("--evidence", required=True)
+    batch_register_parser = subparsers.add_parser("register-revisions")
+    for kind in ("decision", "spec", "plan"):
+        batch_register_parser.add_argument(f"--{kind}", dest=f"{kind}_alias")
+        batch_register_parser.add_argument(f"--{kind}-artifact", dest=f"{kind}_artifact")
+        batch_register_parser.add_argument(f"--{kind}-evidence", dest=f"{kind}_evidence")
+    batch_register_parser.add_argument("--attempt")
     validate_parser = subparsers.add_parser("validate")
     validate_mode = validate_parser.add_mutually_exclusive_group(required=True)
     validate_mode.add_argument("--working-tree", action="store_true")
@@ -1784,6 +1862,29 @@ def main(argv: list[str] | None = None) -> int:
             result = command_register_revision(
                 package, args.kind, args.alias, args.artifact, args.attempt, args.evidence
             )
+        elif args.command == "register-revisions":
+            registrations = []
+            for kind in ("decision", "spec", "plan"):
+                alias = getattr(args, f"{kind}_alias")
+                if alias is None:
+                    if any(getattr(args, f"{kind}_{suffix}") is not None for suffix in ("artifact", "evidence")):
+                        raise StateError(f"--{kind}-artifact/--{kind}-evidence require --{kind}")
+                    continue
+                evidence = getattr(args, f"{kind}_evidence")
+                if not evidence:
+                    raise StateError(f"--{kind}-evidence is required with --{kind}")
+                registrations.append(
+                    {
+                        "kind": kind,
+                        "alias": alias,
+                        "artifact": getattr(args, f"{kind}_artifact"),
+                        "attempt": args.attempt if kind == "plan" else None,
+                        "evidence": evidence,
+                    }
+                )
+            if args.attempt and not args.plan_alias:
+                raise StateError("--attempt requires --plan")
+            result = command_register_revisions(package, registrations)
         elif args.command == "validate":
             result = command_validate(package, committed=args.committed)
         elif args.command == "set-state":
