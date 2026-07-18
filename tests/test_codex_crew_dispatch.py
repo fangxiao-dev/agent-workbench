@@ -10,7 +10,9 @@ from scripts.codex_harness_dispatch import (
     STATE_SCHEMA_VERSION,
     WORKER_RESULT_SCHEMA_VERSION,
     initialise_state,
+    ensure_worktrees,
     record_worker_result,
+    ready_task_ids,
     validate_parent_binding,
     validate_manifest,
     run_worker,
@@ -35,6 +37,24 @@ def lite_manifest() -> dict:
                 "worktree": {"path": str(ROOT.parent / "crew-test-fix-one"), "branch": "codex/crew-test-fix-one", "base_ref": "HEAD"},
                 "verification_commands": ["python -m unittest"],
             }
+        ],
+    }
+
+
+def parallel_manifest() -> dict:
+    return {
+        "schema_version": "codex-crew.dispatch.v2",
+        "execution_topology": "worker_parallel",
+        "profile": "full",
+        "worker_profile": "worker-full-terra-high",
+        "repository_root": str(ROOT),
+        "parent_run_id": "run-parallel",
+        "parent_thread_id": "parent-thread-parallel",
+        "max_active_write_worktrees": 2,
+        "parallelism_rationale": "DTO is frozen and implementation/test paths are disjoint.",
+        "tasks": [
+            {"id": "dto-map", "prompt": "Implement frozen DTO mapping.", "depends_on": [], "write_ownership": {"paths": ["src/mapping"], "external_resources": []}, "worktree": {"path": str(ROOT.parent / "crew-test-dto-map"), "branch": "codex/crew-test-dto-map", "base_ref": "HEAD"}},
+            {"id": "dto-tests", "prompt": "Add frozen DTO contract tests.", "depends_on": [], "write_ownership": {"paths": ["tests/dto"], "external_resources": []}, "worktree": {"path": str(ROOT.parent / "crew-test-dto-tests"), "branch": "codex/crew-test-dto-tests", "base_ref": "HEAD"}},
         ],
     }
 
@@ -102,6 +122,31 @@ class CodexCrewDispatchTest(unittest.TestCase):
         manifest["worker_profile"] = "worker-full-terra-high"
         with self.assertRaises(ValueError):
             validate_manifest(manifest)
+
+    def test_frozen_dto_with_disjoint_writes_allows_worker_parallel(self) -> None:
+        manifest = parallel_manifest()
+        validate_manifest(manifest)
+        state = initialise_state(manifest)
+        self.assertEqual(state["schema_version"], "codex-crew.state.v2")
+        self.assertEqual(ready_task_ids(state), ["dto-map", "dto-tests"])
+
+    def test_worker_parallel_rejects_overlapping_write_ownership(self) -> None:
+        manifest = parallel_manifest()
+        manifest["tasks"][1]["write_ownership"]["paths"] = ["src/mapping/contracts"]
+        with self.assertRaises(ValueError):
+            validate_manifest(manifest)
+
+    def test_owner_attention_blocks_strictly_dependent_downstream_worktree(self) -> None:
+        manifest = parallel_manifest()
+        manifest["tasks"][1]["depends_on"] = ["dto-map"]
+        state = initialise_state(manifest)
+        self.assertEqual(ready_task_ids(state), ["dto-map"])
+        record_worker_result(state, "dto-map", {"schema_version": WORKER_RESULT_SCHEMA_VERSION, "task_id": "dto-map", "status": "needs_owner", "summary": "Need API approval.", "verification": [], "owner_request": {"category": "scope_change", "detail": "DTO shape changes."}})
+        self.assertEqual(state["status"], "attention")
+        self.assertEqual(ready_task_ids(state), [])
+        with patch("scripts.codex_harness_dispatch.ensure_worktree") as create_worktree:
+            self.assertEqual(ensure_worktrees(state), [])
+        create_worktree.assert_not_called()
 
     def test_worker_thread_receives_canonical_model_and_reasoning_effort(self) -> None:
         manifest = lite_manifest()

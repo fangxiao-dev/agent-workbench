@@ -1,20 +1,128 @@
 {
+  "$schema": "../../assets/codex-harness-eval.v0.2.schema.json",
+  "schema_version": "codex-harness.eval.v0.2",
   "skill_name": "codex-crew",
   "cases": [
     {
       "id": "s-composition-review-loop",
-      "prompt": "已批准 S Composition；实现后希望以整个 commits 范围做 do-review，修 P1 后返回。",
-      "expected": ["parent proposes Full", "main session confirms Full", "explains S is a composition route", "keeps D/S/P binding", "captures base..head", "runs review after implementation", "fixes P0/P1 only within scope"]
+      "prompt": "已批准 S Composition；Full assignment 实现后希望以整个 commits 范围做 do-review，修复确认的 P1 后返回。",
+      "skill_behaviors": ["The codex-crew Skill routes an approved S Composition to a bounded Full assignment", "Orchestrator keeps D/S/P binding as input evidence", "Worker performs implementation and review preparation within the assignment"],
+      "expected_output": ["The explicit base..head range is captured", "Independent review runs after implementation and confirmed P0/P1 findings are fixed only within scope", "Broker receives verifier evidence and terminal disposition"],
+      "hard_invariants": ["Acceptance is bound to the explicit assignment commit range and verification evidence", "Scope or permission changes are routed to Owner instead of silently applied"],
+      "forbidden_actions": ["Do not make Worker count or topology a business acceptance gate", "Do not merge, release or claim the package gate without independent evidence"],
+      "advisory_quality": ["The review summary separates confirmed findings from follow-up P2 suggestions", "The final delivery names the review range and affected checks"],
+      "evidence": [{"kind": "package", "description": "Approved D/S/P binding and S Composition evidence are present."}, {"kind": "review", "description": "Base..head review output and rerun checks are recorded."}, {"kind": "verifier", "description": "Independent acceptance evidence is bound to the same commit range."}],
+      "terminal_state": "succeeded",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Review is fixture-only and does not publish or merge."}
     },
     {
-      "id": "parent-owner-resume",
-      "prompt": "父 agent 发现是否允许外部迁移不清楚；用户稍后会给结论。",
-      "expected": ["parent records awaiting_owner", "main session forwards the decision", "does not close the overall task", "resumes same parent thread after owner decision"]
+      "id": "owner-boundary-resume",
+      "prompt": "Full Worker 发现是否允许外部迁移不清楚；用户稍后会给结论。",
+      "skill_behaviors": ["The codex-crew Full Skill keeps ordinary business communication through the Orchestrator", "Orchestrator asks Owner only for the external-side-effect boundary", "The same run resumes after Broker forwards the Owner decision"],
+      "expected_output": ["A structured Owner request records the migration ambiguity and affected assignment", "The run remains awaiting_owner until a decision is returned"],
+      "hard_invariants": ["An irreversible external side effect requires an explicit Owner decision", "The Worker cannot proceed with the side effect while the decision is unresolved"],
+      "forbidden_actions": ["Do not treat an inferred approval as Owner authorization", "Do not close the run or create a parallel controller while awaiting the decision"],
+      "advisory_quality": ["The request presents reversible alternatives and the smallest decision needed", "Owner decision provenance is preserved without exposing internal Subagent traffic"],
+      "evidence": [{"kind": "owner_request", "description": "Structured request names the external migration boundary."}, {"kind": "provenance", "description": "Broker-to-Orchestrator decision provenance is recorded."}],
+      "terminal_state": "awaiting_owner",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "No migration is executed in the eval."}
     },
     {
-      "id": "parallel-conflict-boundary",
-      "prompt": "两个 worker 都要改同一份 migration 和同一个外部服务。",
-      "expected": ["rejects unsafe parallel split", "requires explicit coordination", "does not claim worktrees eliminate system conflicts"]
+      "id": "frozen-dto-parallel",
+      "prompt": "DTO 已冻结；服务映射和 contract 测试的写入目录互斥，且并行能缩短交付时间。",
+      "skill_behaviors": ["The codex-crew Skill gives the Orchestrator autonomy to choose worker_parallel when evidence supports it", "Each Full assignment declares disjoint write ownership and its own acceptance evidence", "Workers remain the business writers and may manage their own Subagents"],
+      "expected_output": ["Only ready assignments start in separate workspaces", "The run records a concrete parallel-benefit rationale and bounded active writers", "Shared-service and merge risks remain visible in the summary"],
+      "hard_invariants": ["Parallel write ownership is disjoint and mechanically checkable", "Strictly dependent assignments cannot start before their prerequisites are accepted"],
+      "forbidden_actions": ["Do not split overlapping files or shared external resources to inflate parallelism", "Do not use the number of Workers as an acceptance gate"],
+      "advisory_quality": ["The rationale explains the expected waiting-time reduction", "The Orchestrator calls out any residual integration risk despite worktree isolation"],
+      "evidence": [{"kind": "ownership", "description": "Assignment ownership and workspace bindings are recorded."}, {"kind": "dispatch", "description": "Only ready Workers are started under the declared bound."}],
+      "terminal_state": "succeeded",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "No real service or registry is contacted."}
+    },
+    {
+      "id": "full-verifier-nonrecursive",
+      "prompt": "Full Worker 提交了实现和自验结果，要求完成独立验收。",
+      "skill_behaviors": ["The codex-crew Skill requires independent verification for a Full assignment", "Orchestrator binds the verifier to the fixed assignment commit and evidence", "Worker-local Subagents remain non-addressable and cannot become the top-level verifier"],
+      "expected_output": ["A read-only verifier or equivalent independent check returns a structured verdict", "The acceptance record distinguishes Worker self-checks from independent evidence", "Verification terminates without spawning a verifier-of-verifier"],
+      "hard_invariants": ["Full acceptance requires independent evidence bound to the same assignment revision and commit", "Verifier execution is non-recursive"],
+      "forbidden_actions": ["Do not accept a Full assignment solely from Worker natural language or Subagent output", "Do not create an unbounded verification chain"],
+      "advisory_quality": ["The verifier summary states coverage and remaining risk", "The Orchestrator explains why the evidence is sufficient for this assignment boundary"],
+      "evidence": [{"kind": "worker_result", "description": "Worker result includes commit and self-check evidence."}, {"kind": "independent_verifier", "description": "Fresh read-only verifier evidence and provenance are recorded."}, {"kind": "acceptance", "description": "Acceptance disposition binds both evidence sets."}],
+      "terminal_state": "succeeded",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Verifier runs against local fixture state only."}
+    },
+    {
+      "id": "cancel-uncertain",
+      "prompt": "Worker 在执行中取消，但无法证明受控进程和 workspace 已完全停止。",
+      "skill_behaviors": ["The codex-crew Full Skill routes cancellation through the Orchestrator control action", "Orchestrator stops new dispatch before interrupting the active Worker", "Broker receives a control incident when stop or cleanup cannot be proven"],
+      "expected_output": ["The run enters attention or blocked quarantine rather than claiming cancellation is complete", "The affected workspace cannot be reused by an overlapping attempt"],
+      "hard_invariants": ["Cancellation is terminal only after the controlled activity is proven stopped", "Uncertain cancellation quarantines the workspace and prevents automatic reuse"],
+      "forbidden_actions": ["Do not start a retry on uncertain resources", "Do not report cancelled as a successful terminal disposition while activity is unverified"],
+      "advisory_quality": ["The control incident identifies what evidence is missing", "The final status distinguishes blocked attention from a clean cancellation"],
+      "evidence": [{"kind": "cancel", "description": "Interrupt request and stop acknowledgement state are recorded."}, {"kind": "quarantine", "description": "Workspace quarantine reason and reuse prohibition are recorded."}],
+      "terminal_state": "attention",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "No real external process or service is used."}
+    },
+    {
+      "id": "production-serial-handoff",
+      "prompt": "脱敏的生产问题包含五条问题线：四条严格串行的代码交付线和一条 Bot read-only 预检；每条后继代码线只能在前一项提交、clean、祖先连续且验证通过后接手同一工作区。",
+      "skill_behaviors": ["The codex-crew Skill uses a realistic production-shaped fixture without contacting production", "Orchestrator keeps fresh Worker contexts separate from serial workspace reuse", "Full acceptance remains assignment-scoped and evidence-based"],
+      "expected_output": ["Each dependent code assignment starts only after the preceding handoff gate passes", "The fixture records one active write worktree, four fresh delivery Worker contexts and a read-only Bot preflight", "The delivery summary is suitable for a production-style handoff while remaining sanitized"],
+      "hard_invariants": ["A serial handoff requires committed, clean, ancestor-continuous and verified evidence", "No strict downstream workspace or Worker starts before the upstream handoff is accepted"],
+      "forbidden_actions": ["Do not use fresh context as a reason to allocate another worktree", "Do not perform any real production mutation or use a real credential", "Do not make Worker count a hard acceptance criterion"],
+      "advisory_quality": ["The handoff report names each of the three code handoff gates and the evidence that passed it", "The fixture makes clear which values are sanitized placeholders"],
+      "evidence": [{"kind": "fixture", "description": "The sanitized production-shaped fixture is loaded from fixtures/production-serial-handoff.json."}, {"kind": "handoff", "description": "Both assignment handoff records bind commits, workspace state and verification evidence."}, {"kind": "safety", "description": "External mutation is explicitly disabled and no credential or endpoint is present."}],
+      "terminal_state": "succeeded",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Production-shaped data is synthetic and all external writes are disabled."},
+      "fixture_path": "fixtures/production-serial-handoff.json"
+    },
+    {
+      "id": "turn-timeout-without-finish",
+      "prompt": "只读 Orchestrator turn 等待 turn/completed 超时；history 与终态通知都没有有效 finish envelope。",
+      "skill_behaviors": ["The codex-crew Skill treats the run terminal state as unknown until controller reconciliation obtains terminal evidence", "Orchestrator records only observed control-plane facts and quarantines the run when terminal evidence remains absent", "Broker may report the blocked state without promoting a candidate plan into a dispatch decision"],
+      "expected_output": ["The snapshot records timeout, reconciliation and quarantine evidence", "The run remains blocked and no assignment, Worker or workspace is created", "The delivery states that no authoritative scheduling conclusion exists without a valid finish"],
+      "hard_invariants": ["A valid finish envelope is required before a run produces an authoritative dispatch conclusion", "Unknown turn completion prevents dispatch, finish and run reuse"],
+      "forbidden_actions": ["Do not label a timeout as interrupted unless interrupt acknowledgement is evidenced", "Do not dispatch from a natural-language candidate plan after timeout", "Do not claim a production mutation or acceptance occurred without corresponding evidence"],
+      "advisory_quality": ["The report separates observed counts from unresolved execution state", "The quarantine explanation names the next safe reconciliation step"],
+      "evidence": [{"kind": "snapshot", "description": "Requested execution, started turn, completion phase and notification summary are recorded."}, {"kind": "terminal", "description": "History and terminal-event reconciliation show no valid finish envelope."}, {"kind": "git_boundary", "description": "Pre/post workspace evidence is retained even on the exception path."}],
+      "terminal_state": "blocked",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "The timeout fixture is read-only and never dispatches a Worker."}
+    },
+    {
+      "id": "broker-correction-continuation",
+      "prompt": "Broker 收到 Owner 对当前 assignment 的澄清，需要把 message 传给既有 Orchestrator thread 后继续同一 run。",
+      "skill_behaviors": ["The codex-crew Skill persists the Broker message before requesting continuation", "Orchestrator resumes the same controller identity and retains Owner decision provenance", "The correction stays inside the existing assignment contract unless it explicitly requests a new boundary"],
+      "expected_output": ["The message record distinguishes its message kind from the control event kind", "Continuation targets the existing Orchestrator thread and updates the same run snapshot", "The result exposes whether the run continued, asked Owner again or remained blocked"],
+      "hard_invariants": ["A Broker correction cannot create a second business controller for the same run", "Persisted message provenance precedes the continuation request"],
+      "forbidden_actions": ["Do not lose the Broker message when continuation transport fails", "Do not silently turn a correction into a scope or authority expansion"],
+      "advisory_quality": ["The continuation record is concise and identifies the affected assignment", "The surfaced status distinguishes transport failure from business disposition"],
+      "evidence": [{"kind": "message", "description": "Persisted Broker message includes provenance and message kind."}, {"kind": "continuation", "description": "Continuation request and same-controller identity are recorded."}],
+      "terminal_state": "succeeded",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "The correction only exercises local control-plane continuation."}
+    },
+    {
+      "id": "code-handoff-and-owner-gate-separated",
+      "prompt": "一个代码 assignment 已提交并通过独立验证；后续 production schema write 仍需 Owner 授权，但另一个纯代码 assignment 不依赖该 write。",
+      "skill_behaviors": ["The codex-crew Skill records code delivery handoff separately from external operator or promotion work", "Orchestrator routes the production write to ask_owner while preserving accepted code evidence", "Only assignments with an explicit dependency on the external operation remain blocked"],
+      "expected_output": ["The code handoff is accepted with commit and verifier evidence", "The external operation remains awaiting_owner with its own Owner request", "The unrelated pure-code assignment may remain ready without claiming the external operation is complete"],
+      "hard_invariants": ["Unapproved external mutation remains fail closed and does not receive a fake code completion", "An Owner gate blocks only the assignments that explicitly depend on that operation"],
+      "forbidden_actions": ["Do not infer global code-chain blockage merely because the same Issue has an unresolved operator gate", "Do not execute, merge or promote the external operation without Owner authorization"],
+      "advisory_quality": ["The summary presents separate delivery and promotion dependency views", "The Owner request names the exact external resource and decision boundary"],
+      "evidence": [{"kind": "acceptance", "description": "Code commit, verifier evidence and handoff disposition are recorded."}, {"kind": "owner_request", "description": "External operation is represented as a distinct Owner-gated activity."}, {"kind": "dependency", "description": "Only explicitly dependent assignments are marked not-ready."}],
+      "terminal_state": "awaiting_owner",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "The schema write is a represented gate, not an executed fixture action."}
+    },
+    {
+      "id": "parallel-complete-write-ownership",
+      "prompt": "T1 已冻结 DTO、共享测试、i18n/barrel 和 integration ownership；T2、T3、T4 都已 ready，完整允许写路径互斥且并行有明确收益。",
+      "skill_behaviors": ["The codex-crew Skill permits worker_parallel only after the complete writable surface is assigned", "Orchestrator retains shared DTO, shared tests, i18n, barrel and conflict resolution in upstream or integration assignments", "Each parallel Worker receives a separate workspace and assignment-scoped acceptance"],
+      "expected_output": ["T2, T3 and T4 may start together only after T1 acceptance", "The summary names all shared surfaces and their non-parallel owner", "T5 integration remains a later acceptance boundary rather than an overlapping writer"],
+      "hard_invariants": ["Every concurrently writable path and shared resource has exactly one declared owner", "Parallel assignments start only after their common contract-freezing dependency is accepted"],
+      "forbidden_actions": ["Do not approve parallelism from primary ownership labels alone", "Do not place DTO, shared tests, i18n, barrel or final conflict resolution in overlapping Worker ownership"],
+      "advisory_quality": ["The parallel-benefit rationale quantifies avoided waiting or a comparable concrete benefit", "Residual merge and integration risk is explicit despite disjoint worktrees"],
+      "evidence": [{"kind": "ownership", "description": "Complete writable paths and shared-resource ownership are recorded."}, {"kind": "dependency", "description": "T1 acceptance and ready-state evidence precede the parallel dispatch."}, {"kind": "workspace", "description": "Each concurrent Writer is bound to a distinct workspace."}],
+      "terminal_state": "succeeded",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "The parallel fixture only models local source ownership."}
     }
   ]
 }

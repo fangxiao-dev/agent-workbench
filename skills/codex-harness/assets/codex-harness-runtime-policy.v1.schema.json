@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workbench.local/schemas/codex-harness-runtime-policy.v1.schema.json",
+  "title": "Codex Harness Runtime Policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "maturity", "roles", "assignment", "topology", "validation", "cancellation", "actions"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {"const": "codex-harness.runtime-policy.v1"},
+    "maturity": {"enum": ["design_baseline", "runtime_enforced"]},
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["broker", "orchestrator", "worker"],
+      "properties": {
+        "broker": {
+          "type": "object", "additionalProperties": false,
+          "required": ["business_channel", "global_observation", "break_glass"],
+          "properties": {"business_channel": {"const": "orchestrator_only"}, "global_observation": {"const": true}, "break_glass": {"const": "thread_administration_only"}}
+        },
+        "orchestrator": {
+          "type": "object", "additionalProperties": false,
+          "required": ["workspace", "owns", "subagent_control"],
+          "properties": {"workspace": {"const": "read_only"}, "owns": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"enum": ["assignment_routing", "worker_control", "acceptance"]}}, "subagent_control": {"const": "forbidden"}}
+        },
+        "worker": {
+          "type": "object", "additionalProperties": false,
+          "required": ["workspace", "subagent_control"],
+          "properties": {"workspace": {"const": "assignment_write"}, "subagent_control": {"const": "worker_owned"}}
+        }
+      }
+    },
+    "assignment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["required", "owner_boundaries", "worker_statuses"],
+      "properties": {
+        "required": {"type": "array", "minItems": 9, "uniqueItems": true, "items": {"enum": ["run_id", "assignment_id", "goal", "non_goals", "assurance_mode", "execution_profile", "allowed_paths", "acceptance", "workspace"]}},
+        "owner_boundaries": {"type": "array", "minItems": 4, "uniqueItems": true, "items": {"enum": ["scope_change", "authority_expansion", "irreversible_external_side_effect", "acceptance_ambiguity"]}},
+        "worker_statuses": {"type": "array", "minItems": 8, "uniqueItems": true, "items": {"enum": ["planned", "running", "awaiting_orchestrator", "awaiting_owner", "submitted", "accepted", "failed", "attention"]}}
+      }
+    },
+    "topology": {
+      "type": "object", "additionalProperties": false,
+      "required": ["default", "allowed", "parallel_requires", "dispatcher_required", "max_active_write_worktrees", "downstream_prebuild"],
+      "properties": {
+        "default": {"const": "worker_serial"},
+        "allowed": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"enum": ["orchestrator_read_only", "worker_serial", "worker_parallel"]}},
+        "parallel_requires": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"enum": ["disjoint_write_ownership", "documented_parallel_benefit", "at_least_two_ready_assignments"]}},
+        "dispatcher_required": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"enum": ["worker_serial", "worker_parallel"]}},
+        "max_active_write_worktrees": {"const": "simultaneous_writers"},
+        "downstream_prebuild": {"const": "forbidden"}
+      }
+    },
+    "validation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["commit_required", "clean_tree_required", "path_boundary_required", "verification_commands_required", "full_independent_verifier", "natural_language_only"],
+      "properties": {"commit_required": {"const": true}, "clean_tree_required": {"const": true}, "path_boundary_required": {"const": true}, "verification_commands_required": {"const": true}, "full_independent_verifier": {"const": true}, "natural_language_only": {"const": false}}
+    },
+    "cancellation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["interrupt_required", "uncertain_disposition", "quarantine_reuse"],
+      "properties": {"interrupt_required": {"const": true}, "uncertain_disposition": {"const": "blocked_quarantine"}, "quarantine_reuse": {"const": "forbidden"}}
+    },
+    "actions": {
+      "type": "object", "additionalProperties": false,
+      "required": ["allowed", "max_actions_per_run"],
+      "properties": {"allowed": {"type": "array", "minItems": 4, "uniqueItems": true, "items": {"enum": ["dispatch", "control", "ask_owner", "finish"]}}, "max_actions_per_run": {"type": "integer", "minimum": 1}}
+    }
+  }
+}

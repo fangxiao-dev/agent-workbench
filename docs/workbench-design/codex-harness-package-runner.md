@@ -48,6 +48,8 @@ python scripts/run-codex-harness-package.py --manifest <reviewed-current-manifes
 
 The runner refuses an unclean worktree, unknown/unsatisfied dependencies, source-binding drift, out-of-scope changed paths, invalid Parent Result, missing work-package hash, or an apparent success without configured independent verifier commands. A parent can still return `needs_owner`, which is preserved rather than retried as a failure.
 
+When a later parent stage deliberately reuses a serial worktree, pass `--serial-handoff <committed-and-verified-handoff.json> --delivery-program-id <id>`. The runner then checks that the worktree is clean, the prior commit remains an ancestor of `HEAD`, and prior verification evidence is successful; this is a reuse gate, not a scheduler or promotion action.
+
 ## Current boundary
 
 v0.1 deliberately does not create worktrees, merge parent branches, run an entire cohort automatically, write an Impl-Package gate, or perform DATEV actions. It only enforces the subset of canonical runtime policy currently evidenced by its loader/resource-ledger seam; continuation, complete failure-path enforcement and external acceptance remain under an integration parent and owner-controlled process. The runner does provide automatic draft preparation, immutable work packages, App Server parent dispatch, timeout, parent-result parsing, declared Skill context, sensitive-source consent boundary, diff allowlist, and independent verifier seam needed for the next iteration.

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,9 @@ from typing import Any
 POLICY_RELATIVE_PATH = Path("skills/codex-harness/assets/codex-harness-runtime-policy.v0.json")
 SCHEMA_RELATIVE_PATH = Path("skills/codex-harness/assets/codex-harness-runtime-policy.schema.json")
 POLICY_VERSION = "codex-harness.runtime-policy.v0"
+ORCHESTRATOR_POLICY_RELATIVE_PATH = Path("skills/codex-harness/assets/codex-harness-runtime-policy.v1.json")
+ORCHESTRATOR_SCHEMA_RELATIVE_PATH = Path("skills/codex-harness/assets/codex-harness-runtime-policy.v1.schema.json")
+ORCHESTRATOR_POLICY_VERSION = "codex-harness.runtime-policy.v1"
 MATURITIES = {"design_baseline", "runtime_enforced"}
 
 
@@ -65,6 +69,13 @@ def _validate_schema(value: Any, schema: dict[str, Any], path: str = "$", root: 
         raise PolicyError(f"policy value at {path} must equal {schema['const']!r}")
     if "enum" in schema and value not in schema["enum"]:
         raise PolicyError(f"policy value at {path} is not an allowed enum")
+    if isinstance(value, str):
+        if "minLength" in schema and len(value) < schema["minLength"]:
+            raise PolicyError(f"policy value at {path} is shorter than the schema minimum")
+        if "pattern" in schema and re.search(schema["pattern"], value) is None:
+            raise PolicyError(f"policy value at {path} does not match the schema pattern")
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and "minimum" in schema and value < schema["minimum"]:
+        raise PolicyError(f"policy value at {path} is below the schema minimum")
     expected_type = schema.get("type")
     if expected_type is not None:
         expected_types = expected_type if isinstance(expected_type, list) else [expected_type]
@@ -129,6 +140,49 @@ def load_runtime_policy(repository_root: Path, policy_path: Path | None = None, 
         "maturity": policy_value["maturity"],
     }
     return {"policy": policy_value, "schema": schema_value, "identity": identity}
+
+
+def load_orchestrator_policy(repository_root: Path, policy_path: Path | None = None, schema_path: Path | None = None) -> dict[str, Any]:
+    """Load the versioned thin-control policy used by the Orchestrator.
+
+    The legacy v0 loader intentionally remains unchanged because its nested
+    topology contracts are still consumed by the parent pilot.  The new
+    Orchestrator has a separate v1 policy surface so protocol evolution cannot
+    silently alter legacy parent behavior.
+    """
+
+    root = repository_root.resolve()
+    policy = (policy_path or root / ORCHESTRATOR_POLICY_RELATIVE_PATH).resolve()
+    schema = (schema_path or root / ORCHESTRATOR_SCHEMA_RELATIVE_PATH).resolve()
+    if not policy.is_file() or not schema.is_file():
+        raise PolicyError(f"orchestrator runtime policy/schema is missing: {policy}, {schema}")
+    try:
+        policy_value = json.loads(policy.read_text(encoding="utf-8"))
+        schema_value = json.loads(schema.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise PolicyError(f"orchestrator runtime policy/schema cannot be parsed: {exc}") from exc
+    _validate_schema(policy_value, schema_value, "$", schema_value)
+    if policy_value.get("schema_version") != ORCHESTRATOR_POLICY_VERSION:
+        raise PolicyError(f"unsupported orchestrator runtime policy version: {policy_value.get('schema_version')!r}")
+    if policy_value.get("maturity") not in MATURITIES:
+        raise PolicyError(f"unsupported orchestrator runtime policy maturity: {policy_value.get('maturity')!r}")
+    try:
+        relative_policy = policy.relative_to(root).as_posix()
+        relative_schema = schema.relative_to(root).as_posix()
+    except ValueError as exc:
+        raise PolicyError("orchestrator runtime policy and schema must remain inside repository root") from exc
+    return {
+        "policy": policy_value,
+        "schema": schema_value,
+        "identity": {
+            "policy_path": relative_policy,
+            "schema_path": relative_schema,
+            "policy_sha256": _sha256(policy),
+            "schema_sha256": _sha256(schema),
+            "schema_version": policy_value["schema_version"],
+            "maturity": policy_value["maturity"],
+        },
+    }
 
 
 def decision_audience(policy_bundle: dict[str, Any], category: str) -> str:

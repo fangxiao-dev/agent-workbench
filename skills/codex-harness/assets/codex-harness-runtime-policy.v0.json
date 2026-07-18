@@ -23,9 +23,45 @@
   "task_partitioning": {
     "responsibility_partition": "disjoint_by_default",
     "overlap_coordination": "explicit",
-    "write_workspace_isolation": "per_task_worktree",
+    "worker_parallel_workspace_isolation": "per_worker_worktree",
     "physical_conflict_claim": "not_guaranteed",
     "external_side_effects": "explicit_boundary"
+  },
+  "execution_topology": {
+    "selection_required_after_mode_confirmation": true,
+    "default": "parent_serial",
+    "allowed": [
+      "read_only",
+      "parent_serial",
+      "worker_parallel"
+    ],
+    "worker_parallel_requires": [
+      "disjoint_write_ownership",
+      "documented_parallel_benefit"
+    ],
+    "downstream_workspace_prebuild": "forbidden",
+    "blocked_dependency_start": "forbidden",
+    "parent_serial_promotion_boundary": "committed_and_verified",
+    "contracts": {
+      "read_only": {
+        "dispatcher_required": false,
+        "max_active_write_worktrees": 0,
+        "workspace_reuse_policy": "not_applicable",
+        "promotion_boundary": "not_applicable"
+      },
+      "parent_serial": {
+        "dispatcher_required": false,
+        "max_active_write_worktrees": 1,
+        "workspace_reuse_policy": "same_delivery_after_committed_and_verified",
+        "promotion_boundary": "committed_and_verified"
+      },
+      "worker_parallel": {
+        "dispatcher_required": true,
+        "minimum_active_write_worktrees": 2,
+        "workspace_reuse_policy": "per_worker_worktree",
+        "promotion_boundary": "per_worker_verification"
+      }
+    }
   },
   "decision_routing": {
     "harness_resolvable": "continue_same_task",

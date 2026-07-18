@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workbench.local/schemas/codex-crew-execution-topology.v0.schema.json",
+  "title": "Codex Crew Execution Topology v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "execution_topology", "dispatcher_required", "max_active_write_worktrees", "workspace_reuse_policy", "promotion_boundary", "selection_rationale", "not_parallel_rationale"],
+  "properties": {
+    "schema_version": {"const": "codex-crew.execution-topology.v0"},
+    "execution_topology": {"enum": ["read_only", "parent_serial", "worker_parallel"]},
+    "dispatcher_required": {"type": "boolean"},
+    "max_active_write_worktrees": {"type": "integer", "minimum": 0},
+    "workspace_reuse_policy": {"type": "string", "minLength": 1},
+    "promotion_boundary": {"type": "string", "minLength": 1},
+    "selection_rationale": {"type": "string", "minLength": 1},
+    "not_parallel_rationale": {"type": ["string", "null"]}
+  }
+}

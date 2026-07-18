@@ -21,6 +21,8 @@ def main() -> int:
     parser.add_argument("--execute", action="store_true", help="Run one parent stage through App Server. Omit for read-only planning.")
     parser.add_argument("--stage", help="Stage ID required with --execute.")
     parser.add_argument("--worktree", type=Path, help="Existing isolated Git worktree required with --execute.")
+    parser.add_argument("--serial-handoff", type=Path, help="Optional committed-and-verified handoff JSON required to reuse a serial worktree.")
+    parser.add_argument("--delivery-program-id", help="Delivery program identity bound to --serial-handoff.")
     parser.add_argument("--timeout-seconds", type=int)
     args = parser.parse_args()
     try:
@@ -33,12 +35,15 @@ def main() -> int:
             raise ManifestError("--execute requires --stage and --worktree")
         if args.sensitive_root and not args.allow_sensitive_originals:
             raise ManifestError("--sensitive-root requires explicit --allow-sensitive-originals for execution")
+        if (args.serial_handoff is None) != (args.delivery_program_id is None):
+            raise ManifestError("--serial-handoff and --delivery-program-id must be supplied together")
         stage = next((item for item in manifest.stages if item.id == args.stage), None)
         if stage is None:
             raise ManifestError(f"unknown stage: {args.stage}")
         if stage not in ready_stages(manifest, completed):
             raise ManifestError(f"stage {args.stage} is not ready for the supplied completed set")
-        result = execute_stage(manifest, stage, args.worktree.resolve(), args.timeout_seconds or manifest.timeout_seconds, tuple(args.sensitive_root))
+        handoff = json.loads(args.serial_handoff.read_text(encoding="utf-8")) if args.serial_handoff else None
+        result = execute_stage(manifest, stage, args.worktree.resolve(), args.timeout_seconds or manifest.timeout_seconds, tuple(args.sensitive_root), serial_handoff=handoff, delivery_program_id=args.delivery_program_id)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result["status"] in {"passed", "needs_owner"} else 2
     except ManifestError as error:

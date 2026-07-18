@@ -1,0 +1,91 @@
+{
+  "$schema": "./codex-harness-runtime-policy.v1.schema.json",
+  "schema_version": "codex-harness.runtime-policy.v1",
+  "maturity": "design_baseline",
+  "roles": {
+    "broker": {
+      "business_channel": "orchestrator_only",
+      "global_observation": true,
+      "break_glass": "thread_administration_only"
+    },
+    "orchestrator": {
+      "workspace": "read_only",
+      "owns": ["assignment_routing", "worker_control", "acceptance"],
+      "subagent_control": "forbidden"
+    },
+    "worker": {
+      "workspace": "assignment_write",
+      "subagent_control": "worker_owned"
+    }
+  },
+  "assignment": {
+    "required": [
+      "run_id",
+      "assignment_id",
+      "goal",
+      "non_goals",
+      "assurance_mode",
+      "execution_profile",
+      "allowed_paths",
+      "acceptance",
+      "workspace"
+    ],
+    "owner_boundaries": [
+      "scope_change",
+      "authority_expansion",
+      "irreversible_external_side_effect",
+      "acceptance_ambiguity"
+    ],
+    "worker_statuses": [
+      "planned",
+      "running",
+      "awaiting_orchestrator",
+      "awaiting_owner",
+      "submitted",
+      "accepted",
+      "failed",
+      "attention"
+    ]
+  },
+  "topology": {
+    "default": "worker_serial",
+    "allowed": [
+      "orchestrator_read_only",
+      "worker_serial",
+      "worker_parallel"
+    ],
+    "parallel_requires": [
+      "disjoint_write_ownership",
+      "documented_parallel_benefit",
+      "at_least_two_ready_assignments"
+    ],
+    "dispatcher_required": [
+      "worker_serial",
+      "worker_parallel"
+    ],
+    "max_active_write_worktrees": "simultaneous_writers",
+    "downstream_prebuild": "forbidden"
+  },
+  "validation": {
+    "commit_required": true,
+    "clean_tree_required": true,
+    "path_boundary_required": true,
+    "verification_commands_required": true,
+    "full_independent_verifier": true,
+    "natural_language_only": false
+  },
+  "cancellation": {
+    "interrupt_required": true,
+    "uncertain_disposition": "blocked_quarantine",
+    "quarantine_reuse": "forbidden"
+  },
+  "actions": {
+    "allowed": [
+      "dispatch",
+      "control",
+      "ask_owner",
+      "finish"
+    ],
+    "max_actions_per_run": 32
+  }
+}

@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from scripts.codex_harness_controller import load_parent_profile
+from scripts.codex_harness_policy import load_orchestrator_policy
 from scripts.codex_harness_profiles import load_execution_profiles, resolve_execution_profile, worker_profile_for_mode
 
 
@@ -25,6 +26,12 @@ class CodexHarnessExecutionProfilesTest(unittest.TestCase):
         self.assertEqual(profile["model"], "gpt-5.6-sol")
         self.assertEqual(profile["model_reasoning_effort"], "high")
         self.assertEqual(profile["execution_profile_identity"]["schema_version"], "codex-harness.execution-profiles.v0")
+
+    def test_thin_orchestrator_policy_is_versioned_and_validated_separately(self) -> None:
+        bundle = load_orchestrator_policy(ROOT)
+        self.assertEqual(bundle["identity"]["schema_version"], "codex-harness.runtime-policy.v1")
+        self.assertEqual(bundle["policy"]["topology"]["default"], "worker_serial")
+        self.assertEqual(bundle["policy"]["actions"]["max_actions_per_run"], 32)
 
 
 if __name__ == "__main__":

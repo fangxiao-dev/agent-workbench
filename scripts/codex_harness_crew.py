@@ -25,19 +25,21 @@ try:
     from codex_harness_dispatch import STATE_SCHEMA_VERSION as DISPATCH_STATE_SCHEMA_VERSION, read_json, validate_state as validate_dispatch_state, write_json_atomic
     from codex_harness_policy import PolicyError, load_runtime_policy
     from codex_harness_runtime import LedgerIntegrityError, ResourceLedger, ThreadLease
+    from codex_harness_topology import TOPOLOGY_SCHEMA_VERSION, TopologyError, ensure_serial_worktree, serial_worktree_spec, validate_execution_topology
 except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
     from scripts.codex_harness_cli import JsonRpcSession, app_server_command, initialize_params
     from scripts.codex_harness_controller import git_status, load_parent_profile, walk_root_agent_messages
     from scripts.codex_harness_dispatch import STATE_SCHEMA_VERSION as DISPATCH_STATE_SCHEMA_VERSION, read_json, validate_state as validate_dispatch_state, write_json_atomic
     from scripts.codex_harness_policy import PolicyError, load_runtime_policy
     from scripts.codex_harness_runtime import LedgerIntegrityError, ResourceLedger, ThreadLease
+    from scripts.codex_harness_topology import TOPOLOGY_SCHEMA_VERSION, TopologyError, ensure_serial_worktree, serial_worktree_spec, validate_execution_topology
 
 
-PARENT_STATE_SCHEMA_VERSION = "codex-crew.parent-state.v1"
+PARENT_STATE_SCHEMA_VERSION = "codex-crew.parent-state.v2"
 PARENT_ROUTE_SCHEMA_VERSION = "codex-crew.parent-route.v0"
 PARENT_STATUS_SCHEMA_VERSION = "codex-crew.parent-status.v0"
 MODES = {"lite", "full"}
-STATUSES = {"starting", "awaiting_mode_confirmation", "running", "awaiting_owner", "completed", "failed"}
+STATUSES = {"starting", "awaiting_mode_confirmation", "awaiting_execution_topology", "running", "awaiting_owner", "completed", "failed"}
 OWNER_CATEGORIES = {"scope_change", "authority_expansion", "irreversible_external_side_effect", "acceptance_ambiguity"}
 
 
@@ -67,7 +69,10 @@ def new_state(repository_root: Path, issue: str, profile_path: Path, run_id: str
             "approval_policy": "never",
         },
         "parent_execution": None,
+        "parent_context": {"fresh": True, "scope": "work_package"},
         "mode": {"status": "routing", "proposed": None, "confirmed": None, "rationale": ""},
+        "execution_topology": None,
+        "serial_workspace": None,
         "status": "starting",
         "policy_identity": None,
         "decision_requests": [],
@@ -79,7 +84,7 @@ def new_state(repository_root: Path, issue: str, profile_path: Path, run_id: str
 
 
 def validate_state(state: dict[str, Any], *, allow_unbound_execution: bool = False) -> None:
-    required = {"schema_version", "run_id", "repository_root", "harness_root", "artifact_root", "issue", "parent", "parent_execution", "mode", "status", "policy_identity", "decision_requests", "dispatch_refs", "last_message", "worktree_status_baseline", "events"}
+    required = {"schema_version", "run_id", "repository_root", "harness_root", "artifact_root", "issue", "parent", "parent_execution", "parent_context", "mode", "execution_topology", "serial_workspace", "status", "policy_identity", "decision_requests", "dispatch_refs", "last_message", "worktree_status_baseline", "events"}
     if state.get("schema_version") != PARENT_STATE_SCHEMA_VERSION or required - set(state):
         raise ValueError("unsupported or incomplete parent state")
     if any(not isinstance(state.get(field), str) or not state[field].strip() for field in ("run_id", "repository_root", "harness_root", "artifact_root", "issue")):
@@ -96,6 +101,9 @@ def validate_state(state: dict[str, Any], *, allow_unbound_execution: bool = Fal
     execution = state["parent_execution"]
     if execution is not None and (not isinstance(execution, dict) or set(execution) != {"profile", "model", "reasoning_effort", "identity"} or any(not isinstance(execution.get(key), str) or not execution[key].strip() for key in ("profile", "model", "reasoning_effort")) or not isinstance(execution["identity"], dict)):
         raise ValueError("parent execution profile projection is malformed")
+    context = state["parent_context"]
+    if context != {"fresh": True, "scope": "work_package"}:
+        raise ValueError("parent context must explicitly be fresh for one work package")
     mode = state["mode"]
     if not isinstance(mode, dict) or set(mode) != {"status", "proposed", "confirmed", "rationale"}:
         raise ValueError("parent state has malformed mode projection")
@@ -105,6 +113,15 @@ def validate_state(state: dict[str, Any], *, allow_unbound_execution: bool = Fal
         raise ValueError("mode.confirmed is invalid")
     if mode["status"] not in {"routing", "awaiting_confirmation", "confirmed"}:
         raise ValueError("mode.status is invalid")
+    topology = state["execution_topology"]
+    if topology is not None:
+        try:
+            validate_execution_topology(topology)
+        except TopologyError as error:
+            raise ValueError(f"execution topology is invalid: {error}") from error
+    serial_workspace = state["serial_workspace"]
+    if serial_workspace is not None and (not isinstance(serial_workspace, dict) or set(serial_workspace) != {"path", "branch", "base_ref", "created"} or any(not isinstance(serial_workspace.get(key), str) or not serial_workspace[key].strip() for key in serial_workspace)):
+        raise ValueError("serial workspace projection is malformed")
     if not isinstance(state["decision_requests"], list) or not isinstance(state["dispatch_refs"], list) or not isinstance(state["events"], list):
         raise ValueError("parent state event/request collections are malformed")
     expected_artifact_root = Path(state["harness_root"]).resolve() / ".codex" / "harness-runs" / "crew" / state["run_id"]
@@ -126,8 +143,10 @@ def validate_state(state: dict[str, Any], *, allow_unbound_execution: bool = Fal
         raise ValueError("non-starting parent state requires a thread id")
     if state["status"] in {"running", "awaiting_owner", "completed"} and state["parent_execution"] is None and not allow_unbound_execution:
         raise ValueError("non-starting parent state requires an execution profile projection")
-    if state["status"] in {"running", "awaiting_owner", "completed"} and mode["confirmed"] not in MODES:
+    if state["status"] in {"awaiting_execution_topology", "running", "awaiting_owner", "completed"} and mode["confirmed"] not in MODES:
         raise ValueError("active parent state requires a confirmed profile")
+    if state["status"] in {"running", "awaiting_owner", "completed"} and topology is None:
+        raise ValueError("active parent state requires an execution topology")
 
 
 def artifact_root(state: dict[str, Any]) -> Path:
@@ -146,10 +165,13 @@ def register_dispatch(parent_state_path: Path, parent_state: dict[str, Any], dis
     dispatch = read_json(dispatch_state_path)
     validate_dispatch_state(dispatch)
     required = {"schema_version", "profile", "worker_profile", "worker_execution", "repository_root", "parent_run_id", "parent_thread_id", "status", "tasks"}
-    if required - set(dispatch) or dispatch.get("schema_version") != DISPATCH_STATE_SCHEMA_VERSION:
-        raise ValueError("dispatch state is not a current Crew dispatch state")
+    if required - set(dispatch) or dispatch.get("schema_version") != "codex-crew.state.v2":
+        raise ValueError("parent state v2 registers only dispatch v2 worker_parallel state")
     if parent_state["mode"]["confirmed"] not in MODES:
         raise ValueError("dispatch registration requires a confirmed parent profile")
+    topology = parent_state.get("execution_topology")
+    if not isinstance(topology, dict) or topology.get("execution_topology") != "worker_parallel" or topology.get("dispatcher_required") is not True:
+        raise ValueError("dispatch registration requires the parent worker_parallel topology")
     if dispatch["profile"] != parent_state["mode"]["confirmed"] or Path(dispatch["repository_root"]).resolve() != Path(parent_state["repository_root"]).resolve() or dispatch["parent_run_id"] != parent_state["run_id"] or dispatch["parent_thread_id"] != parent_state["parent"]["thread_id"]:
         raise ValueError("dispatch state is not bound to the current parent run/thread/profile")
     resolved = dispatch_state_path.resolve()
@@ -210,12 +232,48 @@ def parse_status(message: str, expected_run_id: str) -> dict[str, Any] | None:
     return value
 
 
+def parse_execution_topology(message: str, expected_run_id: str) -> dict[str, Any] | None:
+    """Parse a topology-only parent turn bound to the current run."""
+
+    try:
+        value = json.loads(_strip_json_block(message))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(value, dict) or value.get("run_id") != expected_run_id:
+        return None
+    value = dict(value)
+    value.pop("run_id", None)
+    try:
+        return validate_execution_topology(value)
+    except TopologyError:
+        return None
+
+
+def _parent_cwd(state: dict[str, Any]) -> Path:
+    topology = state.get("execution_topology") or {}
+    if topology.get("execution_topology") == "parent_serial":
+        workspace = state.get("serial_workspace")
+        if workspace is not None:
+            return Path(workspace["path"]).resolve()
+    return Path(state["repository_root"]).resolve()
+
+
+def _prepare_serial_workspace(state: dict[str, Any]) -> None:
+    topology = state.get("execution_topology") or {}
+    if topology.get("execution_topology") != "parent_serial" or state.get("serial_workspace") is not None:
+        return
+    spec = serial_worktree_spec(Path(state["repository_root"]), state["run_id"])
+    ready = ensure_serial_worktree(Path(state["repository_root"]), spec)
+    state["serial_workspace"] = {**spec, "created": ready["created"]}
+    _event(state, "serial_workspace_ready", path=ready["path"], created=ready["created"])
+
+
 def _parent_prompt(state: dict[str, Any], phase: str, message: str = "") -> str:
     common = (
         "You are the single persistent Codex Crew parent for this user request. "
         "The interactive main session is a user-facing broker: it forwards the issue, mode confirmation, ordinary corrections, and owner decisions. "
         "Do all execution orchestration here. Do not ask the main session to create worktrees, start workers, collect worker results, or perform implementation actions. "
-        f"Use {Path(__file__).resolve().as_posix()} for worker/worktree primitives. Every independent worker gets a fresh thread and a distinct worktree. Do not edit the controller repository root; only update the parent/dispatch state, harness artifacts, and isolated worker worktrees. "
+        f"Use {Path(__file__).resolve().as_posix()} for parent control and {Path(__file__).resolve().parent.joinpath('codex_harness_dispatch.py').as_posix()} only when worker_parallel is selected. Fresh parent context, worker dispatch, and write-worktree count are separate facts. Do not edit the controller repository root. "
     )
     if phase == "route":
         return common + (
@@ -225,6 +283,13 @@ def _parent_prompt(state: dict[str, Any], phase: str, message: str = "") -> str:
             f"Issue:\n{state['issue']}"
         )
     mode = state["mode"]["confirmed"]
+    if phase == "topology":
+        return common + (
+            "This is a read-only execution-topology turn. Inspect the issue and confirmed mode, but do not modify files, create worktrees, prepare a manifest, or dispatch workers. "
+            "Choose the smallest topology. Default to parent_serial when parallel benefit is not proven; fresh parent context never implies a fresh worktree. "
+            "worker_parallel is allowed only for at least two disjoint write responsibilities with a documented parallel benefit. "
+            f"Return exactly one JSON object with run_id={state['run_id']!r}, schema_version={TOPOLOGY_SCHEMA_VERSION!r}, execution_topology='read_only|parent_serial|worker_parallel', dispatcher_required (boolean), max_active_write_worktrees (integer), workspace_reuse_policy, promotion_boundary, selection_rationale, and not_parallel_rationale (string for read_only/parent_serial, null for worker_parallel)."
+        )
     mode_rules = (
         "Use the Lite profile: the issue must remain bounded and non-redesign; use the dispatcher for worktrees, fresh workers, structured worker results, and basic diff/test evidence. Do not load or invent full Harness policy."
         if mode == "lite"
@@ -239,7 +304,7 @@ def _parent_prompt(state: dict[str, Any], phase: str, message: str = "") -> str:
     )
     binding = (
         f"Parent run_id={state['run_id']}, parent_thread_id={state['parent']['thread_id']}, parent_state={state.get('state_path', '')}, artifact_root={state['artifact_root']}. "
-        "Every dispatch manifest must include the exact parent_run_id, parent_thread_id, confirmed profile, and repository_root. "
+        "Only worker_parallel may create a v2 dispatch manifest, and it must include the exact parent_run_id, parent_thread_id, confirmed profile, repository_root, write ownership, dependency edges and active-write-worktree bound. parent_serial must execute directly in its one controller-prepared serial worktree and must not create a dispatch manifest. "
         f"Initialize a parent-bound dispatch state with `{Path(__file__).resolve().parent.joinpath('codex_harness_dispatch.py').as_posix()} init-state --manifest <manifest> --parent-state {state.get('state_path', '<parent-state>')} --state {state['artifact_root']}/<dispatch>.state.json`, keep it under artifact_root, and register it with `{Path(__file__).resolve().as_posix()} register-dispatch --state {state.get('state_path', '<parent-state>')} --dispatch-state <dispatch-state>` so the main session can inspect task outcomes. "
     )
     return common + mode_rules + "\n" + binding + contract + "\nMain-session update:\n" + message
@@ -283,15 +348,18 @@ def _run_turn(state: dict[str, Any], state_path: Path, prompt: str, *, resume: b
         if ledger is not None:
             ledger.append("thread", parent["thread_id"], "continuation_started", "crew parent controller", mode=mode)
     stderr_path = artifact_root(state) / "parent.stderr.log"
-    before = git_status(Path(state["repository_root"]))
+    controller_root = Path(state["repository_root"]).resolve()
+    execution_cwd = _parent_cwd(state)
+    before_controller = git_status(controller_root)
+    before_execution = git_status(execution_cwd)
     session: JsonRpcSession | None = None
     try:
         session = JsonRpcSession(app_server_command(approval_policy=parent["approval_policy"]), stderr_path)
         session.request(1, "initialize", initialize_params("codex-crew-parent"), 30)
         if resume:
-            session.request(2, "thread/resume", {"threadId": parent["thread_id"], "cwd": state["repository_root"], "sandbox": parent["sandbox"], "approvalPolicy": parent["approval_policy"], "developerInstructions": profile["developer_instructions"], "model": profile["model"], "config": {"model_reasoning_effort": profile["model_reasoning_effort"]}}, 30)
+            session.request(2, "thread/resume", {"threadId": parent["thread_id"], "cwd": str(execution_cwd), "sandbox": parent["sandbox"], "approvalPolicy": parent["approval_policy"], "developerInstructions": profile["developer_instructions"], "model": profile["model"], "config": {"model_reasoning_effort": profile["model_reasoning_effort"]}}, 30)
         else:
-            started, _ = session.request(2, "thread/start", {"cwd": state["repository_root"], "sandbox": parent["sandbox"], "approvalPolicy": parent["approval_policy"], "ephemeral": False, "developerInstructions": profile["developer_instructions"], "model": profile["model"], "config": {"model_reasoning_effort": profile["model_reasoning_effort"]}}, 30)
+            started, _ = session.request(2, "thread/start", {"cwd": str(execution_cwd), "sandbox": parent["sandbox"], "approvalPolicy": parent["approval_policy"], "ephemeral": False, "developerInstructions": profile["developer_instructions"], "model": profile["model"], "config": {"model_reasoning_effort": profile["model_reasoning_effort"]}}, 30)
             parent["thread_id"] = started["thread"]["id"]
         started_turn, notifications = session.request(3, "turn/start", {"threadId": parent["thread_id"], "input": [{"type": "text", "text": prompt}], "approvalPolicy": parent["approval_policy"], "sandboxPolicy": {"type": "readOnly" if parent["sandbox"] == "read-only" else "workspaceWrite", "networkAccess": False}}, 30)
         if not any(item.get("method") == "turn/completed" and item.get("params", {}).get("threadId") == parent["thread_id"] for item in notifications):
@@ -302,9 +370,13 @@ def _run_turn(state: dict[str, Any], state_path: Path, prompt: str, *, resume: b
             history, history_notifications = {}, []
         messages = walk_root_agent_messages(notifications + history_notifications + [history], parent["thread_id"])
         message = messages[-1] if messages else ""
-        after = git_status(Path(state["repository_root"]))
-        if before != after:
+        after_controller = git_status(controller_root)
+        after_execution = git_status(execution_cwd)
+        if before_controller != after_controller:
             raise RuntimeError("parent modified the controller repository worktree; worker mutations must stay in isolated worktrees")
+        topology = (state.get("execution_topology") or {}).get("execution_topology")
+        if topology != "parent_serial" and before_execution != after_execution:
+            raise RuntimeError("parent modified a worktree before selecting parent_serial")
         return {
             "thread_id": parent["thread_id"],
             "turn_id": started_turn.get("turn", {}).get("id"),
@@ -312,6 +384,7 @@ def _run_turn(state: dict[str, Any], state_path: Path, prompt: str, *, resume: b
             "execution_profile": profile["execution_profile"],
             "model": profile["model"],
             "reasoning_effort": profile["model_reasoning_effort"],
+            "execution_cwd": str(execution_cwd),
         }
     finally:
         if session is not None:
@@ -353,6 +426,32 @@ def _apply_control(state: dict[str, Any], message: str) -> dict[str, Any] | None
     return status
 
 
+def _apply_topology(state: dict[str, Any], topology: dict[str, Any]) -> dict[str, Any]:
+    try:
+        policy_bundle = load_runtime_policy(Path(state["harness_root"]))
+    except PolicyError as error:
+        raise RuntimeError(f"execution topology policy validation failed: {error}") from error
+    policy_topology = policy_bundle["policy"]["execution_topology"]
+    if topology.get("execution_topology") not in policy_topology["allowed"]:
+        raise TopologyError("selected topology is not allowed by the canonical runtime policy")
+    selected = validate_execution_topology(topology, policy_topology["contracts"])
+    state["execution_topology"] = selected
+    state["policy_identity"] = policy_bundle["identity"]
+    state["serial_workspace"] = None
+    state["parent"]["sandbox"] = "workspace-write" if selected["execution_topology"] == "parent_serial" else "read-only"
+    state["status"] = "running"
+    _event(
+        state,
+        "execution_topology_selected",
+        execution_topology=selected["execution_topology"],
+        dispatcher_required=selected["dispatcher_required"],
+        max_active_write_worktrees=selected["max_active_write_worktrees"],
+        workspace_reuse_policy=selected["workspace_reuse_policy"],
+        promotion_boundary=selected["promotion_boundary"],
+    )
+    return selected
+
+
 def start_parent(state_path: Path, state: dict[str, Any], timeout_seconds: int) -> dict[str, Any]:
     result = _run_turn(state, state_path, _parent_prompt(state, "route"), resume=False, timeout_seconds=timeout_seconds)
     state["last_message"] = result["message"]
@@ -376,24 +475,27 @@ def confirm_mode(state_path: Path, state: dict[str, Any], mode: str, timeout_sec
         raise ValueError("full mode cannot be downgraded within a parent run")
     if mode == "full":
         _load_full_policy(state, state_path)
-        state["parent"]["sandbox"] = "workspace-write"
-    else:
-        state["parent"]["sandbox"] = "workspace-write"
     state["mode"] = {"status": "confirmed", "proposed": mode, "confirmed": mode, "rationale": state["mode"]["rationale"]}
-    state["status"] = "running"
+    state["status"] = "awaiting_execution_topology"
     _event(state, "mode_confirmed", mode=mode)
     try:
-        result = _run_turn(state, state_path, _parent_prompt(state, "execute", f"Main session confirmed mode={mode}. Continue the issue now."), resume=True, timeout_seconds=timeout_seconds)
+        result = _run_turn(state, state_path, _parent_prompt(state, "topology", f"Main session confirmed mode={mode}. Select execution topology before mutation."), resume=True, timeout_seconds=timeout_seconds)
     except BaseException as error:
         state["status"] = "failed"
         _event(state, "parent_continuation_failed", mode=mode, error=str(error))
         write_json_atomic(state_path, state)
         raise
     state["last_message"] = result["message"]
-    _event(state, "parent_continued", thread_id=result["thread_id"], turn_id=result["turn_id"], mode=mode, execution_profile=result.get("execution_profile"), model=result.get("model"), reasoning_effort=result.get("reasoning_effort"))
-    control = _apply_control(state, result["message"])
+    _event(state, "execution_topology_turn_completed", thread_id=result["thread_id"], turn_id=result["turn_id"], mode=mode, execution_profile=result.get("execution_profile"), model=result.get("model"), reasoning_effort=result.get("reasoning_effort"))
+    topology = parse_execution_topology(result["message"], state["run_id"])
+    if topology is None:
+        state["status"] = "failed"
+        _event(state, "execution_topology_protocol_invalid")
+        control = None
+    else:
+        control = _apply_topology(state, topology)
     write_json_atomic(state_path, state)
-    return {"state": state, "control": control, **result}
+    return {"state": state, "control": control, "execution_topology": topology, **result}
 
 
 def continue_parent(state_path: Path, state: dict[str, Any], message: str, timeout_seconds: int) -> dict[str, Any]:
@@ -402,6 +504,7 @@ def continue_parent(state_path: Path, state: dict[str, Any], message: str, timeo
         raise ValueError("parent continuation requires running or awaiting_owner state")
     if state["status"] == "awaiting_owner":
         _event(state, "owner_decision_forwarded", detail=message)
+    _prepare_serial_workspace(state)
     try:
         result = _run_turn(state, state_path, _parent_prompt(state, "execute", message), resume=True, timeout_seconds=timeout_seconds)
     except BaseException as error:
@@ -492,6 +595,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (ValueError, PolicyError, LedgerIntegrityError, RuntimeError, TimeoutError) as error:
+    except (ValueError, PolicyError, LedgerIntegrityError, TopologyError, RuntimeError, TimeoutError) as error:
         print(f"[X] {error}", file=sys.stderr)
         raise SystemExit(1)

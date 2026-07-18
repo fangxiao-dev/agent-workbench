@@ -10,6 +10,7 @@
     "context",
     "delegation",
     "task_partitioning",
+    "execution_topology",
     "decision_routing",
     "validation",
     "lifecycle",
@@ -106,7 +107,7 @@
       "required": [
         "responsibility_partition",
         "overlap_coordination",
-        "write_workspace_isolation",
+        "worker_parallel_workspace_isolation",
         "physical_conflict_claim",
         "external_side_effects"
       ],
@@ -121,9 +122,9 @@
             "explicit"
           ]
         },
-        "write_workspace_isolation": {
+        "worker_parallel_workspace_isolation": {
           "enum": [
-            "per_task_worktree"
+            "per_worker_worktree"
           ]
         },
         "physical_conflict_claim": {
@@ -135,6 +136,54 @@
           "enum": [
             "explicit_boundary"
           ]
+        }
+      }
+    },
+    "execution_topology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selection_required_after_mode_confirmation",
+        "default",
+        "allowed",
+        "worker_parallel_requires",
+        "downstream_workspace_prebuild",
+        "blocked_dependency_start",
+        "parent_serial_promotion_boundary",
+        "contracts"
+      ],
+      "properties": {
+        "selection_required_after_mode_confirmation": {"const": true},
+        "default": {"const": "parent_serial"},
+        "allowed": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"enum": ["read_only", "parent_serial", "worker_parallel"]}},
+        "worker_parallel_requires": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"enum": ["disjoint_write_ownership", "documented_parallel_benefit"]}},
+        "downstream_workspace_prebuild": {"const": "forbidden"},
+        "blocked_dependency_start": {"const": "forbidden"},
+        "parent_serial_promotion_boundary": {"const": "committed_and_verified"},
+        "contracts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["read_only", "parent_serial", "worker_parallel"],
+          "properties": {
+            "read_only": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["dispatcher_required", "max_active_write_worktrees", "workspace_reuse_policy", "promotion_boundary"],
+              "properties": {"dispatcher_required": {"const": false}, "max_active_write_worktrees": {"const": 0}, "workspace_reuse_policy": {"const": "not_applicable"}, "promotion_boundary": {"const": "not_applicable"}}
+            },
+            "parent_serial": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["dispatcher_required", "max_active_write_worktrees", "workspace_reuse_policy", "promotion_boundary"],
+              "properties": {"dispatcher_required": {"const": false}, "max_active_write_worktrees": {"const": 1}, "workspace_reuse_policy": {"const": "same_delivery_after_committed_and_verified"}, "promotion_boundary": {"const": "committed_and_verified"}}
+            },
+            "worker_parallel": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["dispatcher_required", "minimum_active_write_worktrees", "workspace_reuse_policy", "promotion_boundary"],
+              "properties": {"dispatcher_required": {"const": true}, "minimum_active_write_worktrees": {"const": 2}, "workspace_reuse_policy": {"const": "per_worker_worktree"}, "promotion_boundary": {"const": "per_worker_verification"}}
+            }
+          }
         }
       }
     },

@@ -34,9 +34,11 @@ except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
 try:
     from codex_harness_policy import PolicyError, load_runtime_policy
     from codex_harness_runtime import ResourceLedger
+    from codex_harness_topology import TopologyError, validate_serial_reuse
 except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
     from scripts.codex_harness_policy import PolicyError, load_runtime_policy
     from scripts.codex_harness_runtime import ResourceLedger
+    from scripts.codex_harness_topology import TopologyError, validate_serial_reuse
 
 
 REQUIRED_PACKAGE_FILES = ("spec.md", ".impl-package/revision-bindings.json", ".impl-package/runtime-state.json")
@@ -480,12 +482,19 @@ def _run_verifiers(worktree: Path, commands: tuple[str, ...]) -> list[dict[str, 
     return results
 
 
-def execute_stage(manifest: Manifest, stage: Stage, worktree: Path, timeout_seconds: int, sensitive_roots: tuple[str, ...] = ()) -> dict[str, Any]:
+def execute_stage(manifest: Manifest, stage: Stage, worktree: Path, timeout_seconds: int, sensitive_roots: tuple[str, ...] = (), serial_handoff: dict[str, Any] | None = None, delivery_program_id: str | None = None) -> dict[str, Any]:
     validation = validate_manifest(manifest)
     if not validation["valid"]:
         raise ManifestError("manifest is not executable: " + "; ".join(validation["errors"]))
     if not worktree.is_dir() or _git(worktree, "rev-parse", "--is-inside-work-tree", check=False) != "true":
         raise ManifestError("worktree must be an existing Git worktree")
+    if (serial_handoff is None) != (delivery_program_id is None):
+        raise ManifestError("serial_handoff and delivery_program_id must be supplied together")
+    if serial_handoff is not None:
+        try:
+            validate_serial_reuse(worktree, serial_handoff, delivery_program_id or "")
+        except TopologyError as error:
+            raise ManifestError(f"serial worktree reuse gate failed: {error}") from error
     if not _git_succeeds(worktree, "merge-base", "--is-ancestor", validation["source_commit"], "HEAD"):
         raise ManifestError("worktree does not descend from the manifest source commit")
     if sensitive_roots and stage.sensitive_originals != "on_demand":
