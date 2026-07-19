@@ -17,7 +17,7 @@ def require_text(text: str, needle: str) -> None:
 def main() -> None:
     if not SKILL.exists():
         raise AssertionError(
-            "Expected skills/impl-package/reviews/module-review/SKILL.md to exist."
+            "Expected skills/reviews/module-review/SKILL.md to exist."
         )
 
     body = SKILL.read_text(encoding="utf-8")
@@ -30,9 +30,7 @@ def main() -> None:
         "interface",
         "seam",
         "contract fidelity",
-        "tickets",
-        "dag",
-        "state machine",
+        "状态机",
         "module boundary",
         "fixed point",
     ):
@@ -42,7 +40,7 @@ def main() -> None:
         raise AssertionError("module-review must not introduce a third drift reviewer.")
     if not EVALS.exists():
         raise AssertionError(
-            "Expected module-review evals.json to cover the Impl-Package trigger mapping."
+            "Expected module-review evals.json to cover fixed-point and dual-axis review."
         )
 
     parsed = json.loads(EVALS.read_text(encoding="utf-8"))
@@ -52,7 +50,7 @@ def main() -> None:
             "fixed-point, and dual-axis behavior."
         )
 
-    print("module-review Impl-Package contract checks passed")
+    print("module-review generic contract checks passed")
 
 
 if __name__ == "__main__":

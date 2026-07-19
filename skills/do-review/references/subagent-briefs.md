@@ -14,6 +14,7 @@ Review target:
 - Round:
 - Track label:
 - Assigned reviewer skill:
+- Assigned reviewer skill path:
 - Out of scope:
 - User policy:
 
@@ -30,7 +31,7 @@ Return format:
 ## Generic Reviewer Track Brief
 
 ```text
-Use the assigned reviewer skill.
+Read and use exactly the assigned reviewer skill path. Do not resolve a similarly named skill yourself.
 
 Review the target in scope. Follow the assigned skill's review method, but return results in the do-review ledger schema so the main session can deduplicate and classify consistently.
 

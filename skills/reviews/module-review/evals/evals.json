@@ -3,19 +3,19 @@
   "evals": [
     {
       "id": 1,
-      "name": "tickets-composition-requires-dual-axis-review",
-      "prompt": "Review an implementation package from the supplied fixed point. Its spec declares Composition: tickets=true, dag=false.",
+      "name": "interface-contract-requires-dual-axis-review",
+      "prompt": "Review a change from the supplied fixed point. Its spec changes a public interface and state machine.",
       "expected_output": "A module-review run with independent Standards and Spec reports.",
       "files": [],
-      "expectations": ["Triggers because tickets=true", "Requires the supplied fixed point", "Runs exactly Standards and Spec reviewers"]
+      "expectations": ["Requires the supplied fixed point", "Runs exactly Standards and Spec reviewers", "Keeps contract checking in the Spec axis"]
     },
     {
       "id": 2,
       "name": "contract-signal-requires-review-without-composition-artifacts",
-      "prompt": "Review a fixed-point package whose spec has tickets=false and dag=false but changes a public interface and state machine.",
-      "expected_output": "A dual-axis module review because contract signals trigger it even for one slice.",
+      "prompt": "Review a fixed-point change that alters a module boundary and a cross-module compatibility contract.",
+      "expected_output": "A dual-axis module review with contract fidelity checked by the Spec axis.",
       "files": [],
-      "expectations": ["Triggers on interface/state machine change", "Spec reviewer checks contract fidelity", "Does not treat single-slice as low risk"]
+      "expectations": ["Checks module-boundary change", "Spec reviewer checks contract fidelity", "Keeps Standards and Spec independent"]
     },
     {
       "id": 3,
@@ -28,7 +28,7 @@
     {
       "id": 4,
       "name": "spec-axis-owns-seam-drift",
-      "prompt": "Review a fixed-point diff where an implementation changes a plan-declared compatibility window for a cross-ticket seam.",
+      "prompt": "Review a fixed-point diff where an implementation changes a design-declared compatibility window for a cross-module seam.",
       "expected_output": "The Spec reviewer reports contract/interface/seam drift; no third drift reviewer is created.",
       "files": [],
       "expectations": ["Cites the plan/spec/dag contract", "Assigns drift to the Spec axis", "Keeps two-reviewer topology"]

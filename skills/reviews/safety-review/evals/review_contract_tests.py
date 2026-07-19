@@ -17,7 +17,7 @@ def require_text(text: str, needle: str) -> None:
 def main() -> None:
     if not SKILL.exists():
         raise AssertionError(
-            "Expected skills/impl-package/reviews/safety-review/SKILL.md to exist."
+            "Expected skills/reviews/safety-review/SKILL.md to exist."
         )
 
     body = SKILL.read_text(encoding="utf-8")
@@ -32,9 +32,6 @@ def main() -> None:
         "webhook",
         "migration",
         "external mutation",
-        "Verification Gates",
-        "Planned Verification",
-        "Execution Record",
         "idempotency",
         "compensation",
         "permission",
@@ -55,7 +52,7 @@ def main() -> None:
             "Safety-review evals must identify the skill and cover all five review domains."
         )
 
-    print("safety-review Impl-Package contract checks passed")
+    print("safety-review generic contract checks passed")
 
 
 if __name__ == "__main__":

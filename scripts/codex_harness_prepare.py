@@ -213,7 +213,7 @@ def _role(task_id: str, title: str) -> str:
 def _skills(title: str) -> tuple[str, ...]:
     base = ["impl-package", "impl-package/dev-with-track"]
     if "集成" in title or re.search(r"\breview\b", title, re.IGNORECASE):
-        base.extend(["impl-package/reviews/code-review", "impl-package/reviews/module-review", "impl-package/reviews/safety-review"])
+        base.extend(["reviews/code-review", "reviews/module-review", "reviews/safety-review"])
     return tuple(base)
 
 

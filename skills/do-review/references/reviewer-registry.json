@@ -1,0 +1,11 @@
+{
+  "code-review": {
+    "canonical_skill_path": "skills/reviews/code-review/SKILL.md"
+  },
+  "module-review": {
+    "canonical_skill_path": "skills/reviews/module-review/SKILL.md"
+  },
+  "safety-review": {
+    "canonical_skill_path": "skills/reviews/safety-review/SKILL.md"
+  }
+}

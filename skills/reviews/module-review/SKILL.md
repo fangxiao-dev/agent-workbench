@@ -15,17 +15,6 @@ description: >
 
 两个轴使用并行 subagent，避免彼此的上下文污染；主 session 只负责准备输入和汇总结果。
 
-## Impl-Package 触发映射
-
-对 implementation package，出现任一条件时必须选择 module-review：
-
-- 当前 comparison diff 改变 interface、state machine、module boundary、跨模块行为或 seam；
-- 本次 S/P delta 改变上述 contract，即使代码 diff 尚未完整呈现。
-
-`tickets=true`、`dag=true`、package 目录存在或历史 Composition 只说明曾经如何分解工作，不足以触发本次 module-review。这是调用者的触发映射，不是第三个 reviewer 或自动调度器。调用者仍必须提供 fixed point；本 skill 不会因 package 目录、当前分支或工作树状态静默猜测比较基线。纯局部、docs/evidence-only、删除未使用内容且没有上述契约变化的 delta 可以不触发，但仍适用其余必要 review。
-
-项目应通过 `/setup-matt-pocock-skills` 提供 issue tracker 规则；缺少 `docs/agents/issue-tracker.md` 时先补 setup。
-
 ## 工作流
 
 ### 1. 固定比较点
@@ -50,7 +39,7 @@ git log <fixed-point>..HEAD --oneline
 
 按顺序查找：
 
-1. commit message 中的 issue 引用（如 `#123`、`Closes #45`、GitLab `!67`），按 `docs/agents/issue-tracker.md` 获取完整内容；
+1. commit message 中的 issue 引用（如 `#123`、`Closes #45`、GitLab `!67`），按当前仓库的 issue tracker 规则获取完整内容；
 2. 用户传入的路径；
 3. `docs/`、`specs/`、`.scratch/` 中与 branch 或 feature 匹配的 PRD/spec；
 4. 都找不到时询问用户。用户确认没有 spec 时跳过 Spec reviewer，并明确报告 `no spec available`。
@@ -97,15 +86,13 @@ Spec reviewer 输入：
 
 - 完整 diff 命令和 commit 列表；
 - spec 路径或完整内容；
-- 要求报告：缺失或部分实现的需求、diff 中未被要求的 scope creep、看似实现但行为错误的需求；并检查 implementation 的 interface/seam 是否忠实遵守 spec、plan 或 dag 声明的 contract fidelity（包括兼容窗口、状态机和跨 slice seam）。每项引用 spec 原文；控制在 400 words 内。
+- 要求报告：缺失或部分实现的需求、diff 中未被要求的 scope creep、看似实现但行为错误的需求；并检查 implementation 的 interface/seam 和 module boundary 是否忠实遵守 spec、plan 或 dag 声明的 contract fidelity（包括兼容窗口、状态机和跨 slice seam）。每项引用 spec 原文；控制在 400 words 内。
 
 Spec reviewer 已承担 contract/interface/seam drift；不得额外派发第三个 drift reviewer，也不得把这项检查转移到 Standards 轴。
 
 没有 spec 时不派发 Spec reviewer。
 
 ### 5. 汇总
-
-向 owner 汇报时使用 `talk-to-boss`：先说明审查的功能范围、Standards/Spec 两轴是否各自通过、阻塞项数量、整体能否进入 gate，以及需要 owner 决定什么。不要用轴名、finding code 或文件路径代替合入判断。
 
 随后在 `## Standards` 和 `## Spec` 下分别呈现两个 canonical evidence 报告，可轻微清理格式，但不要合并或跨轴重新排序 finding。
 

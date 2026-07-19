@@ -27,19 +27,19 @@
     },
     {
       "id": 4,
-      "name": "dag-verification-gate-triggers-review",
-      "prompt": "A package diff has no auth filenames, but dag.md Verification Gates declares an external write verification. Review from the supplied fixed point.",
-      "expected_output": "The review runs because the existing DAG gate is a safety signal and reports a change map.",
+      "name": "declared-external-write-triggers-review",
+      "prompt": "A diff has no auth filenames, but its release constraint declares external write verification. Review from the supplied fixed point.",
+      "expected_output": "The review runs because the declared external write is a safety signal and reports a change map.",
       "files": [],
-      "expectations": ["Uses Verification Gates as trigger evidence", "Produces a change map", "Does not create a duplicate registration artifact"]
+      "expectations": ["Uses the declared constraint as trigger evidence", "Produces a change map", "Does not create a duplicate registration artifact"]
     },
     {
       "id": 5,
-      "name": "plan-policy-triggers-review",
-      "prompt": "The current attempt plan Planned Verification selects the authoritative Data Safety policy for a payment capture. Review from the supplied fixed point.",
-      "expected_output": "The review runs, covers external side effects and concurrency, and returns full evidence for the plan Execution Record while gate keeps only an anchor and summary.",
+      "name": "verification-policy-triggers-review",
+      "prompt": "The declared verification plan selects the authoritative Data Safety policy for a payment capture. Review from the supplied fixed point.",
+      "expected_output": "The review runs, covers external side effects and concurrency, and returns full review evidence.",
       "files": [],
-      "expectations": ["Uses the selected policy as trigger evidence", "Covers payment mutation", "Keeps the full review out of gate.md", "Distinguishes P1/P2 from P0"]
+      "expectations": ["Uses the selected policy as trigger evidence", "Covers payment mutation", "Distinguishes P1/P2 from P0"]
     },
     {
       "id": 6,
@@ -53,7 +53,7 @@
       "id": 7,
       "name": "movable-ref-is-pinned-to-sha",
       "prompt": "Review the safety-sensitive change from branch release-candidate to the current HEAD.",
-      "expected_output": "Resolves both refs to immutable commit SHAs before diffing and records only the SHA range in Execution Record and the gate comparison point.",
+      "expected_output": "Resolves both refs to immutable commit SHAs before diffing and records only the SHA range in review evidence.",
       "files": [],
       "expectations": ["Does not persist the branch name as comparison evidence", "Uses base-sha...head-sha", "Produces a replayable immutable range"]
     }

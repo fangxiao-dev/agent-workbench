@@ -382,12 +382,6 @@ API_KEY = os.environ.get("API_KEY")
 - CodeClimate
 - Codacy
 
-## Impl-Package owner-facing report
-
-When this review runs inside Impl-Package, use `talk-to-boss`. Lead with the reviewed functional scope, finding count and highest business risk, whether the change is merge/gate ready, and any owner decision. Put severity labels, files, lines, tools, and commands in the evidence that follows; do not open with review codes or raw file lists.
-
-The detailed review format remains the canonical evidence payload for downstream gate handling.
-
 ## References
 
 - [Google Code Review Guidelines](https://google.github.io/eng-practices/review/)

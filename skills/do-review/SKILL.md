@@ -28,9 +28,33 @@ If subagents are unavailable, disallowed, or need authorization, stop before rev
 This do-review skill requires subagents for the two review tracks. Subagents are currently unavailable or need authorization. Do you want me to stop, or explicitly authorize a degraded single-session review?
 ```
 
-Before dispatch, read every assigned reviewer skill and determine its internal reviewer requirement. Reserve enough slots to execute every required reviewer role. If the runtime cannot host all roles simultaneously but can run them safely in phases, state the phase order and execute every required role; do not silently omit a child reviewer to preserve outer-track parallelism.
+Before dispatch, resolve every assigned reviewer skill through the canonical registry and run the preflight below. Then read every resolved reviewer skill and determine its internal reviewer requirement. Reserve enough slots to execute every required reviewer role. If the runtime cannot host all roles simultaneously but can run them safely in phases, state the phase order and execute every required role; do not silently omit a child reviewer to preserve outer-track parallelism.
 
 Completion criterion: every required reviewer role is available, scheduled in a safe phase order, or the user explicitly authorizes a named degraded topology. If neither is true, stop.
+
+### Step 0.5: Canonical reviewer-path preflight
+
+`do-review` is the reviewer router. It owns reviewer discovery and path validation; generic reviewer skills do not contain Impl-Package lifecycle routing.
+
+1. Resolve `code-review`、`module-review`、`safety-review` using [reviewer-registry.json](references/reviewer-registry.json). For a custom reviewer, resolve one unique canonical path from the active skill catalog; do not infer it from a folder-name match.
+2. Before reserving capacity or dispatching a subagent, verify every selected canonical `SKILL.md` exists, is readable, and has frontmatter whose `name` equals the requested reviewer name:
+
+```text
+python <do-review-skill-dir>/scripts/verify-reviewer-skills.py --workbench-root <agent-workbench-root> --skills <track-a-skill> <track-b-skill>
+```
+
+For custom tracks, pass each catalog-resolved canonical path instead of treating it as a registry default. If both tracks are custom, omit `--skills`:
+
+```text
+python <do-review-skill-dir>/scripts/verify-reviewer-skills.py --workbench-root <agent-workbench-root> --skill-path <custom-skill-a>=<absolute-skill-path-a> --skill-path <custom-skill-b>=<absolute-skill-path-b>
+```
+
+3. If the registry has no unique entry, the file is missing/unreadable, or its frontmatter name disagrees, stop before dispatch. Report the requested skill, expected canonical path, and the exact validation failure. Do not silently use a similarly named or legacy path.
+4. Put the resolved absolute path in every reviewer prompt. The subagent must read that exact file before reviewing.
+
+When the target is an Impl-Package, also route its package root and relevant decision/spec/plan/DAG material into the review context. This supplies evidence only: `impl-package/dev-with-track` remains the lifecycle owner for applying findings, updating package records, and deciding gates.
+
+Completion criterion: each Track A/Track B assignment has a verified, unique canonical `SKILL.md` path before any reviewer subagent is dispatched.
 
 ## Step 1: Scope
 
@@ -99,7 +123,7 @@ Assignment rules:
 - One custom reviewer skill specified: assign the same skill to Track A and Track B, and still spawn two independent subagents.
 - Two custom reviewer skills specified: assign the first to Track A and the second to Track B.
 - More than two reviewer skills specified: ask the user to choose exactly two.
-- If a named reviewer skill cannot be found or read, stop and ask instead of silently falling back.
+- If a named reviewer skill cannot be resolved through the canonical registry, found, or read, stop and ask instead of silently falling back.
 
 Track labels remain `Track A (<skill>)` and `Track B (<skill>)` even when both tracks use the same skill. Nested reviewer results retain their axis in the source label, for example `Track B (module-review/Standards)` and `Track B (module-review/Spec)`.
 
@@ -118,7 +142,7 @@ Track B: module-review → Standards reviewer + Spec reviewer
 
 When capacity is insufficient for all leaves at once, phase only the constrained child reviewers. Preserve independent evidence: for `module-review`, Standards and Spec must remain separate, even if one starts after the other. Report the phased topology and reason in the review summary.
 
-For durable prompts, read only the needed sections from `references/subagent-briefs.md`: [Common Context Block](references/subagent-briefs.md#common-context-block) and [Generic Reviewer Track Brief](references/subagent-briefs.md#generic-reviewer-track-brief). When an assigned reviewer skill is `code-review` or `module-review`, append that skill's default lens addendum regardless of whether it came from the default track selection or a user-specified reviewer list. For closure verification, use [Closure Verification Brief](references/subagent-briefs.md#closure-verification-brief). From round 2 onward, append [Round-N Anti-Duplicate Addendum](references/subagent-briefs.md#round-n-anti-duplicate-addendum).
+For durable prompts, read only the needed sections from `references/subagent-briefs.md`: [Common Context Block](references/subagent-briefs.md#common-context-block) and [Generic Reviewer Track Brief](references/subagent-briefs.md#generic-reviewer-track-brief). Include the preflight-verified absolute path in the common context. When an assigned reviewer skill is `code-review` or `module-review`, append that skill's default lens addendum regardless of whether it came from the default track selection or a user-specified reviewer list. For closure verification, use [Closure Verification Brief](references/subagent-briefs.md#closure-verification-brief). From round 2 onward, append [Round-N Anti-Duplicate Addendum](references/subagent-briefs.md#round-n-anti-duplicate-addendum).
 
 ### Track Prompt Intent
 
@@ -126,7 +150,7 @@ Every normal-review track prompt includes:
 
 ```text
 You are Track <A/B> using reviewer skill <skill-name>.
-Use the assigned reviewer skill.
+Read and use exactly this assigned reviewer skill path: <absolute-skill-path>.
 Review the target in scope.
 
 Every finding needs evidence. Prefer file:line evidence where the target is code.
