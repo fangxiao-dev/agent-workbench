@@ -14,18 +14,18 @@ from codex_harness_runtime import LedgerIntegrityError, LeaseConflict, ResourceL
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
     bundle = load_runtime_policy(root)
-    policy_checks = {"normal": bundle["identity"]["schema_version"] == "codex-harness.runtime-policy.v0", "maturity": bundle["identity"]["maturity"] == "design_baseline"}
+    policy_checks = {"normal": bundle["identity"]["schema_version"] == "codex-harness.runtime-policy.v1.3", "maturity": bundle["identity"]["maturity"] == "design_baseline"}
     with tempfile.TemporaryDirectory(prefix="codex-harness-runtime-fixture-") as temporary:
         temporary_root = Path(temporary)
         malformed = temporary_root / "malformed.json"
-        malformed.write_text("{\"schema_version\": \"codex-harness.runtime-policy.v0\"}\n", encoding="utf-8")
+        malformed.write_text("{\"schema_version\": \"codex-harness.runtime-policy.v1.3\"}\n", encoding="utf-8")
         try:
             load_runtime_policy(root, policy_path=malformed)
         except PolicyError:
             policy_checks["malformed_rejected"] = True
         else:
             policy_checks["malformed_rejected"] = False
-        unknown_maturity = json.loads((root / "skills/codex-harness/assets/codex-harness-runtime-policy.v0.json").read_text(encoding="utf-8"))
+        unknown_maturity = json.loads((root / "skills/codex-harness/assets/codex-harness-runtime-policy.v1.3.json").read_text(encoding="utf-8"))
         unknown_maturity["maturity"] = "future_runtime"
         unknown_path = temporary_root / "unknown-maturity.json"
         unknown_path.write_text(json.dumps(unknown_maturity), encoding="utf-8")

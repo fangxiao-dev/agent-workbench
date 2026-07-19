@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workbench.local/schemas/codex-harness-execution-profiles.v0.2.schema.json",
+  "title": "Codex Harness Execution Profiles v0.2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schema_version", "profiles", "worker_bindings", "verifier_bindings"],
+  "properties": {
+    "$schema": {"const": "./codex-harness-execution-profiles.v0.2.schema.json"},
+    "schema_version": {"const": "codex-harness.execution-profiles.v0.2"},
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "role", "model", "reasoning_effort"],
+        "properties": {"id": {"type": "string", "minLength": 1}, "role": {"enum": ["parent", "worker", "verifier"]}, "model": {"type": "string", "minLength": 1}, "reasoning_effort": {"enum": ["low", "medium", "high", "xhigh", "max"]}}
+      }
+    },
+    "worker_bindings": {"type": "object", "additionalProperties": false, "required": ["lite", "full"], "properties": {"lite": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}, "full": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}}},
+    "verifier_bindings": {"type": "object", "additionalProperties": false, "required": ["full"], "properties": {"full": {"type": "array", "minItems": 1, "maxItems": 1, "uniqueItems": true, "items": {"const": "verifier-sol-high"}}}}
+  }
+}

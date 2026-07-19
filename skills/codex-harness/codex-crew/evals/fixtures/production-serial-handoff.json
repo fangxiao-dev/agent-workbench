@@ -1,5 +1,5 @@
 {
-  "fixture_version": "codex-harness.fixture.v0.2",
+  "fixture_version": "codex-harness.fixture.v0.3",
   "scenario": "production_serial_handoff",
   "sanitized": true,
   "repository": {
@@ -17,8 +17,8 @@
   "run": {
     "run_id": "fixture-production-serial",
     "assurance_mode": "full",
-    "topology": "worker_serial",
-    "active_write_worktrees": 1,
+    "crew_intent": {"shape": "single_writer", "reason": "The assignments are strictly dependent and this fixture explicitly exercises verified workspace reuse."},
+    "observed_active_write_leases": 1,
     "fresh_worker_contexts": 4
   },
   "assignments": [
@@ -30,7 +30,7 @@
       "depends_on": [],
       "goal": "补齐订单安全状态的边界检查。",
       "allowed_paths": ["src/orders", "tests/orders"],
-      "workspace": {"id": "serial-workspace", "path": "<fixture-root>/serial-worktree", "branch": "codex/production-serial-handoff", "base_ref": "base-0000000000000000000000000000000000000000", "head_ref": "commit-order-2222222222222222222222222222222222222222"},
+      "workspace": {"strategy": "new", "handoff_from": null, "id": "serial-workspace", "path": "<fixture-root>/serial-worktree", "branch": "codex/crew/fixture-production-serial/order-safety/work", "base_ref": "base-0000000000000000000000000000000000000000", "head_ref": "commit-order-2222222222222222222222222222222222222222"},
       "worker": {"thread_id": "fixture-worker-order", "context_fresh": true},
       "result": {"commit": "commit-order-2222222222222222222222222222222222222222", "changed_paths": ["src/orders/safety.py", "tests/orders/test_safety.py"], "verification": ["pytest tests/orders/test_safety.py -q"], "clean": true},
       "acceptance": {"disposition": "accepted", "independent_verifier": "fixture-verifier-order", "evidence": ["commit", "clean", "verification"]}
@@ -43,7 +43,7 @@
       "depends_on": ["order-safety"],
       "goal": "保持 delivery note schema 与订单状态投影一致。",
       "allowed_paths": ["src/delivery", "tests/delivery"],
-      "workspace": {"id": "serial-workspace", "path": "<fixture-root>/serial-worktree", "branch": "codex/production-serial-handoff", "base_ref": "commit-order-2222222222222222222222222222222222222222", "head_ref": "commit-note-3333333333333333333333333333333333333333"},
+      "workspace": {"strategy": "reuse", "handoff_from": "order-safety", "id": "serial-workspace", "path": "<fixture-root>/serial-worktree", "branch": "codex/crew/fixture-production-serial/order-safety/work", "base_ref": "commit-order-2222222222222222222222222222222222222222", "head_ref": "commit-note-3333333333333333333333333333333333333333"},
       "worker": {"thread_id": "fixture-worker-note", "context_fresh": true},
       "result": {"commit": "commit-note-3333333333333333333333333333333333333333", "changed_paths": ["src/delivery/note_schema.py", "tests/delivery/test_note_schema.py"], "verification": ["pytest tests/delivery/test_note_schema.py -q"], "clean": true},
       "acceptance": {"disposition": "accepted", "independent_verifier": "fixture-verifier-note", "evidence": ["commit", "ancestor_continuity", "clean", "verification"]}
@@ -56,7 +56,7 @@
       "depends_on": ["delivery-note-schema"],
       "goal": "在 invoice ready 事件中生成受约束的邮件投影。",
       "allowed_paths": ["src/invoice", "tests/invoice"],
-      "workspace": {"id": "serial-workspace", "path": "<fixture-root>/serial-worktree", "branch": "codex/production-serial-handoff", "base_ref": "commit-note-3333333333333333333333333333333333333333", "head_ref": "commit-email-4444444444444444444444444444444444444444"},
+      "workspace": {"strategy": "reuse", "handoff_from": "delivery-note-schema", "id": "serial-workspace", "path": "<fixture-root>/serial-worktree", "branch": "codex/crew/fixture-production-serial/order-safety/work", "base_ref": "commit-note-3333333333333333333333333333333333333333", "head_ref": "commit-email-4444444444444444444444444444444444444444"},
       "worker": {"thread_id": "fixture-worker-email", "context_fresh": true},
       "result": {"commit": "commit-email-4444444444444444444444444444444444444444", "changed_paths": ["src/invoice/ready_email.py", "tests/invoice/test_ready_email.py"], "verification": ["pytest tests/invoice/test_ready_email.py -q"], "clean": true},
       "acceptance": {"disposition": "accepted", "independent_verifier": "fixture-verifier-email", "evidence": ["commit", "ancestor_continuity", "clean", "verification"]}
@@ -69,7 +69,7 @@
       "depends_on": ["invoice-ready-email"],
       "goal": "稳定 contact resolution 的输入校验和失败投影。",
       "allowed_paths": ["src/contacts", "tests/contacts"],
-      "workspace": {"id": "serial-workspace", "path": "<fixture-root>/serial-worktree", "branch": "codex/production-serial-handoff", "base_ref": "commit-email-4444444444444444444444444444444444444444", "head_ref": "commit-contact-5555555555555555555555555555555555555555"},
+      "workspace": {"strategy": "reuse", "handoff_from": "invoice-ready-email", "id": "serial-workspace", "path": "<fixture-root>/serial-worktree", "branch": "codex/crew/fixture-production-serial/order-safety/work", "base_ref": "commit-email-4444444444444444444444444444444444444444", "head_ref": "commit-contact-5555555555555555555555555555555555555555"},
       "worker": {"thread_id": "fixture-worker-contact", "context_fresh": true},
       "result": {"commit": "commit-contact-5555555555555555555555555555555555555555", "changed_paths": ["src/contacts/resolution.py", "tests/contacts/test_resolution.py"], "verification": ["pytest tests/contacts/test_resolution.py -q"], "clean": true},
       "acceptance": {"disposition": "accepted", "independent_verifier": "fixture-verifier-contact", "evidence": ["commit", "ancestor_continuity", "clean", "verification"]}

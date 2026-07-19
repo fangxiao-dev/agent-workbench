@@ -1,6 +1,6 @@
 {
-  "$schema": "../../assets/codex-harness-eval.v0.2.schema.json",
-  "schema_version": "codex-harness.eval.v0.2",
+  "$schema": "../../assets/codex-harness-eval.v0.6.schema.json",
+  "schema_version": "codex-harness.eval.v0.6",
   "skill_name": "codex-crew-lite",
   "cases": [
     {
@@ -18,7 +18,7 @@
     {
       "id": "strict-serial-handoff",
       "prompt": "两个修复必须严格按顺序落在同一条交付线，第二项依赖第一项的提交与验证。",
-      "skill_behaviors": ["The codex-crew-lite Skill keeps this assignment in Lite assurance", "Orchestrator selects the minimum worker_serial topology", "Each assignment may use a fresh Worker context", "The run-owned serial workspace is reused only after a verified handoff"],
+      "skill_behaviors": ["The codex-crew-lite Skill keeps this assignment in Lite assurance", "Orchestrator explicitly chooses a single-writer intent and selected Worker order", "Each assignment may use a fresh Worker context", "A run-owned workspace is reused only after an explicit verified handoff"],
       "expected_output": ["The dependent assignment remains blocked until the first assignment is committed, clean, ancestor-continuous and independently verified", "At most one write worktree is active during the handoff"],
       "hard_invariants": ["Strict dependencies cannot prebuild or start before the upstream acceptance boundary", "Workspace reuse requires commit, clean-tree, ancestor and verification evidence"],
       "forbidden_actions": ["Do not infer a fresh worktree from a fresh Worker context", "Do not create parallel tasks merely because an issue has multiple findings", "Do not use Worker count as an acceptance gate"],
@@ -30,8 +30,8 @@
     {
       "id": "bounded-fix-parallel",
       "prompt": "两个互不重叠的 Lite assignment 已定位，写路径互斥且并行可明显缩短等待。",
-      "skill_behaviors": ["The codex-crew-lite Skill permits bounded Lite parallel work", "Orchestrator selects worker_parallel only after checking ready assignments", "Workers receive disjoint write ownership and separate workspaces", "Worker-local Subagent use remains opaque to the top-level control plane"],
-      "expected_output": ["Only ready assignments start", "The result records the ownership boundary and evidence for the parallel benefit"],
+      "skill_behaviors": ["The codex-crew-lite Skill permits a bounded concurrent cohort", "Orchestrator explicitly selects assignment identities after checking readiness", "Workers receive disjoint write ownership and separate workspaces", "Worker-local Subagent use remains opaque to the top-level control plane"],
+      "expected_output": ["Only ready assignments explicitly named by start_workers begin", "The result records the ownership boundary and evidence for the concurrency benefit"],
       "hard_invariants": ["Simultaneous write worktrees have disjoint declared ownership", "A blocked dependency prevents downstream workspace creation and Worker start"],
       "forbidden_actions": ["Do not split overlapping files or shared external resources just to increase concurrency", "Do not treat the number of Workers as a pass/fail requirement"],
       "advisory_quality": ["The parallelism rationale identifies a concrete waiting-time benefit", "The final summary calls out residual shared-service or merge risk"],
@@ -54,13 +54,13 @@
     {
       "id": "downstream-blocked",
       "prompt": "上游 Lite assignment 处于 needs_owner，存在严格依赖的下游修复。",
-      "skill_behaviors": ["The codex-crew-lite Skill preserves the blocked Lite assignment state", "Orchestrator keeps the downstream assignment not-ready", "Broker remains the only Owner-facing business channel", "The run exposes the blocked dependency without speculative workspace allocation"],
+      "skill_behaviors": ["The codex-crew-lite Skill preserves the local Owner request", "Orchestrator keeps the downstream assignment not-ready", "Broker remains the only Owner-facing business channel", "The run exposes the blocked dependency without speculative workspace allocation"],
       "expected_output": ["The downstream workspace is not prebuilt and its Worker is not started", "The summary identifies the upstream Owner decision required to proceed"],
       "hard_invariants": ["A strict downstream dependency cannot start while the upstream assignment is awaiting_owner", "No workspace is allocated for a not-ready assignment"],
       "forbidden_actions": ["Do not prebuild a downstream worktree as an optimization", "Do not claim the run succeeded while the dependency is unresolved"],
       "advisory_quality": ["The blocked summary is actionable and names the exact dependency", "The run retains enough state to continue after the Owner decision"],
       "evidence": [{"kind": "dependency", "description": "Upstream status and downstream dependency are recorded."}, {"kind": "workspace", "description": "No downstream workspace or Worker thread exists."}],
-      "terminal_state": "blocked",
+      "terminal_state": "awaiting_owner",
       "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "No external resource is touched while blocked."}
     }
   ]

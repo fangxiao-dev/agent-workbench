@@ -34,11 +34,11 @@ except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
 try:
     from codex_harness_policy import PolicyError, load_runtime_policy
     from codex_harness_runtime import ResourceLedger
-    from codex_harness_topology import TopologyError, validate_serial_reuse
+    from codex_harness_workspace import WorkspaceError, validate_serial_reuse
 except ModuleNotFoundError:  # pragma: no cover - supports package-style imports
     from scripts.codex_harness_policy import PolicyError, load_runtime_policy
     from scripts.codex_harness_runtime import ResourceLedger
-    from scripts.codex_harness_topology import TopologyError, validate_serial_reuse
+    from scripts.codex_harness_workspace import WorkspaceError, validate_serial_reuse
 
 
 REQUIRED_PACKAGE_FILES = ("spec.md", ".impl-package/revision-bindings.json", ".impl-package/runtime-state.json")
@@ -493,7 +493,7 @@ def execute_stage(manifest: Manifest, stage: Stage, worktree: Path, timeout_seco
     if serial_handoff is not None:
         try:
             validate_serial_reuse(worktree, serial_handoff, delivery_program_id or "")
-        except TopologyError as error:
+        except WorkspaceError as error:
             raise ManifestError(f"serial worktree reuse gate failed: {error}") from error
     if not _git_succeeds(worktree, "merge-base", "--is-ancestor", validation["source_commit"], "HEAD"):
         raise ManifestError("worktree does not descend from the manifest source commit")

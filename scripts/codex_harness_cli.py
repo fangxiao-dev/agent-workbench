@@ -17,7 +17,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 
 DEFAULT_DISABLED_MCP_SERVERS = (
@@ -33,11 +33,20 @@ DEFAULT_DISABLED_MCP_SERVERS = (
 __all__ = [
     "DEFAULT_DISABLED_MCP_SERVERS",
     "JsonRpcSession",
+    "TurnControlRequested",
     "app_server_command",
     "codex_version",
     "find_codex_command",
     "initialize_params",
 ]
+
+
+class TurnControlRequested(RuntimeError):
+    """Yield an explicit caller-owned control request without closing the session."""
+
+    def __init__(self, request: dict[str, Any]) -> None:
+        super().__init__("an explicit turn control request is pending")
+        self.request = request
 
 
 def find_codex_command() -> list[str]:
@@ -152,22 +161,94 @@ class JsonRpcSession:
             notifications.append(message)
         raise TimeoutError(f"Timed out waiting for {method}")
 
-    def collect_until_turn_complete(self, thread_id: str, timeout: float) -> list[dict[str, Any]]:
-        """Collect notifications through the terminal event for ``thread_id``."""
+    def collect_until_turn_complete(
+        self,
+        thread_id: str,
+        timeout: float | None = None,
+        *,
+        expected_turn_id: str | None = None,
+        observation_interval_seconds: float | None = None,
+        on_observation: Callable[[dict[str, Any]], None] | None = None,
+        control_poll_interval_seconds: float | None = None,
+        on_control_poll: Callable[[], dict[str, Any] | None] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Collect notifications through the terminal event for ``thread_id``.
 
-        deadline = time.monotonic() + timeout
+        ``timeout=None`` means that an active turn has no elapsed-time
+        cancellation path.  Clients may still supply a finite timeout for
+        legacy probes, but that only raises ``TimeoutError``; this transport
+        primitive never interrupts a turn.  Optional observations give a
+        controller a compact liveness signal without adding another scheduler.
+        """
+
+        if timeout is not None and timeout <= 0:
+            raise ValueError("timeout must be positive when supplied")
+        if observation_interval_seconds is not None and observation_interval_seconds <= 0:
+            raise ValueError("observation_interval_seconds must be positive when supplied")
+        if control_poll_interval_seconds is not None and control_poll_interval_seconds <= 0:
+            raise ValueError("control_poll_interval_seconds must be positive when supplied")
+        if (control_poll_interval_seconds is None) != (on_control_poll is None):
+            raise ValueError("control polling requires both an interval and callback")
+        deadline = None if timeout is None else time.monotonic() + timeout
+        next_observation = None if observation_interval_seconds is None else time.monotonic() + observation_interval_seconds
+        next_control_poll = None if control_poll_interval_seconds is None else time.monotonic()
         notifications: list[dict[str, Any]] = []
-        while time.monotonic() < deadline:
+        last_notification_at: float | None = None
+        last_notification_method: str | None = None
+
+        def observe(*, process_alive: bool) -> None:
+            if on_observation is not None:
+                on_observation(
+                    {
+                        "observed_at": time.time(),
+                        "process_alive": process_alive,
+                        "last_notification_at": last_notification_at,
+                        "last_notification_method": last_notification_method,
+                    }
+                )
+
+        while deadline is None or time.monotonic() < deadline:
+            now = time.monotonic()
+            if next_control_poll is not None and now >= next_control_poll:
+                assert on_control_poll is not None
+                request = on_control_poll()
+                if request is not None:
+                    raise TurnControlRequested(request)
+                next_control_poll = now + control_poll_interval_seconds
+            if next_observation is not None and now >= next_observation:
+                alive = self.process.poll() is None
+                observe(process_alive=alive)
+                if not alive:
+                    raise RuntimeError(f"App Server exited with code {self.process.returncode}")
+                next_observation = now + observation_interval_seconds
             try:
-                message = self.messages.get(timeout=min(1, deadline - time.monotonic()))
+                wakeups = [1.0]
+                if deadline is not None:
+                    wakeups.append(max(0.001, deadline - time.monotonic()))
+                if next_observation is not None:
+                    wakeups.append(max(0.001, next_observation - time.monotonic()))
+                if next_control_poll is not None:
+                    wakeups.append(max(0.001, next_control_poll - time.monotonic()))
+                remaining = min(wakeups)
+                message = self.messages.get(timeout=remaining)
             except queue.Empty:
                 if self.process.poll() is not None:
+                    observe(process_alive=False)
                     raise RuntimeError(f"App Server exited with code {self.process.returncode}")
                 continue
             notifications.append(message)
+            method = message.get("method")
+            if isinstance(method, str) and method:
+                last_notification_at = time.time()
+                last_notification_method = method
             if message.get("method") == "turn/completed":
                 params = message.get("params", {})
-                if params.get("threadId") == thread_id:
+                nested_turn = params.get("turn") if isinstance(params, dict) else None
+                completed_turn_id = params.get("turnId") if isinstance(params, dict) else None
+                if completed_turn_id is None and isinstance(nested_turn, dict):
+                    completed_turn_id = nested_turn.get("id") or nested_turn.get("turnId")
+                if params.get("threadId") == thread_id and (expected_turn_id is None or completed_turn_id == expected_turn_id):
+                    observe(process_alive=True)
                     return notifications
         raise TimeoutError("Timed out waiting for turn/completed")
 

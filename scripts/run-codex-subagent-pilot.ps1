@@ -73,7 +73,7 @@ try {
     $resolvedRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
     $projectConfig = Get-RequiredPath -BasePath $resolvedRoot -RelativePath ".codex\config.toml"
     $parentProfile = Get-RequiredPath -BasePath $resolvedRoot -RelativePath ".codex\harness\parent.toml"
-    $executionProfilesPath = Get-RequiredPath -BasePath $resolvedRoot -RelativePath "skills\codex-harness\assets\codex-harness-execution-profiles.v0.json"
+    $executionProfilesPath = Get-RequiredPath -BasePath $resolvedRoot -RelativePath "skills\codex-harness\assets\codex-harness-execution-profiles.v0.2.json"
     [void](Get-RequiredPath -BasePath $resolvedRoot -RelativePath "skills\codex-harness\SKILL.md")
 
     $parentProfileContent = Get-Content -LiteralPath $parentProfile -Raw

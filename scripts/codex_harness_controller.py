@@ -208,8 +208,8 @@ def run(repository_root: Path, timeout_seconds: int, scenario: str = "smoke") ->
     required_paths = [
         repository_root / ".codex" / "config.toml",
         repository_root / ".codex" / "harness" / "parent.toml",
-        repository_root / "skills" / "codex-harness" / "assets" / "codex-harness-execution-profiles.v0.json",
-        repository_root / "skills" / "codex-harness" / "assets" / "codex-harness-execution-profiles.schema.json",
+        repository_root / "skills" / "codex-harness" / "assets" / "codex-harness-execution-profiles.v0.2.json",
+        repository_root / "skills" / "codex-harness" / "assets" / "codex-harness-execution-profiles.v0.2.schema.json",
         repository_root / "skills" / "codex-harness" / "SKILL.md",
     ]
     missing = [str(path) for path in required_paths if not path.is_file()]

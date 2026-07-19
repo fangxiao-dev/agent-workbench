@@ -11,7 +11,7 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[1]
 HARNESS_ROOT = ROOT / "skills" / "codex-harness"
-SCHEMA_PATH = HARNESS_ROOT / "assets" / "codex-harness-eval.v0.2.schema.json"
+SCHEMA_PATH = HARNESS_ROOT / "assets" / "codex-harness-eval.v0.6.schema.json"
 ENTRY_SKILL_PATH = HARNESS_ROOT / "SKILL.md"
 EVAL_PATHS = (
     HARNESS_ROOT / "codex-crew" / "evals" / "evals.json",
@@ -46,7 +46,7 @@ class CodexHarnessEvalAssetsTest(unittest.TestCase):
             document = _read_json(eval_path)
             with self.subTest(eval_path=str(eval_path)):
                 validator.validate(document)
-                self.assertEqual(document["schema_version"], "codex-harness.eval.v0.2")
+                self.assertEqual(document["schema_version"], "codex-harness.eval.v0.6")
 
     def test_case_ids_are_unique_within_and_across_eval_documents(self) -> None:
         seen: set[str] = set()
@@ -94,31 +94,57 @@ class CodexHarnessEvalAssetsTest(unittest.TestCase):
 
     def test_entry_skill_exposes_the_eval_contract(self) -> None:
         skill = ENTRY_SKILL_PATH.read_text(encoding="utf-8")
-        for marker in ("hard_invariants", "forbidden_actions", "advisory_quality", "worker_serial", "Owner gate", "有效结构化 `finish`", "终态是未知", "人工/operator evidence"):
+        for marker in ("hard_invariants", "forbidden_actions", "advisory_quality", "crew.capabilities", "Owner gate", "有效结构化 `finish`", "没有基于时长的自动 interrupt", "人工/operator evidence", "notification 不等于 Owner approval"):
             with self.subTest(marker=marker):
                 self.assertIn(marker, skill)
 
-    def test_v0_2_contains_the_rehearsal_regression_cases(self) -> None:
+    def test_v0_6_contains_the_capability_host_regression_cases(self) -> None:
         full_document = _read_json(EVAL_PATHS[0])
         cases = {case["id"]: case for case in full_document["cases"]}
         expected = {
-            "turn-timeout-without-finish",
+            "nonterminal-observation-no-interrupt",
             "broker-correction-continuation",
             "code-handoff-and-owner-gate-separated",
             "parallel-complete-write-ownership",
+            "broker-does-not-replan",
+            "cohesive-worker-delivery-boundary",
+            "same-run-multi-branch-serial",
+            "full-verifier-controller-owned",
+            "explicit-live-cancel-sidecar",
+            "dispatch-defines-without-executing",
+            "selected-worker-cohort-only",
+            "crew-panorama-and-broker-notification",
+            "orchestrator-workspace-decision",
+            "local-owner-gate-allows-unrelated-work",
+            "explicit-verifier-accept-and-finish",
+            "canonical-read-only-worker-cohort",
+            "long-run-without-fixed-action-budget",
         }
-        self.assertTrue(expected.issubset(cases), "Eval v0.2 must cover every rehearsal regression")
-        self.assertEqual(cases["turn-timeout-without-finish"]["terminal_state"], "blocked")
+        self.assertTrue(expected.issubset(cases), "Eval v0.6 must cover every capability-host regression")
+        self.assertEqual(cases["nonterminal-observation-no-interrupt"]["terminal_state"], "running")
         self.assertEqual(cases["code-handoff-and-owner-gate-separated"]["terminal_state"], "awaiting_owner")
-        self.assertTrue(any("finish" in item.lower() for item in cases["turn-timeout-without-finish"]["hard_invariants"]))
+        self.assertTrue(any("finish" in item.lower() for item in cases["nonterminal-observation-no-interrupt"]["hard_invariants"]))
+        self.assertTrue(any("cannot interrupt" in item.lower() for item in cases["nonterminal-observation-no-interrupt"]["hard_invariants"]))
         self.assertTrue(any("explicitly depend" in item.lower() for item in cases["code-handoff-and-owner-gate-separated"]["hard_invariants"]))
         self.assertTrue(any("完整" in item or "Every concurrently writable" in item for item in cases["parallel-complete-write-ownership"]["hard_invariants"]))
+        self.assertTrue(any("cannot materialize" in item for item in cases["dispatch-defines-without-executing"]["hard_invariants"]))
+        self.assertTrue(any("Unselected ready" in item for item in cases["selected-worker-cohort-only"]["hard_invariants"]))
+        self.assertTrue(any("not Owner approval" in item for item in cases["crew-panorama-and-broker-notification"]["hard_invariants"]))
+        self.assertTrue(any("one run" in item.lower() or "run identity" in item.lower() for item in cases["orchestrator-workspace-decision"]["forbidden_actions"] + cases["orchestrator-workspace-decision"]["hard_invariants"]))
+        self.assertTrue(any("cannot globally suspend" in item for item in cases["local-owner-gate-allows-unrelated-work"]["hard_invariants"]))
+        self.assertTrue(any("Do not auto-finish" in item for item in cases["explicit-verifier-accept-and-finish"]["forbidden_actions"]))
+        self.assertTrue(any("cannot materialize" in item for item in cases["canonical-read-only-worker-cohort"]["hard_invariants"]))
+        self.assertTrue(any("fixed action count" in item.lower() for item in cases["long-run-without-fixed-action-budget"]["hard_invariants"]))
 
-    def test_eval_v0_1_is_replaced_without_a_compatibility_asset(self) -> None:
+    def test_eval_v0_5_is_replaced_without_a_compatibility_asset(self) -> None:
         self.assertFalse((HARNESS_ROOT / "assets" / "codex-harness-eval.v0.1.schema.json").exists())
+        self.assertFalse((HARNESS_ROOT / "assets" / "codex-harness-eval.v0.2.schema.json").exists())
+        self.assertFalse((HARNESS_ROOT / "assets" / "codex-harness-eval.v0.3.schema.json").exists())
+        self.assertFalse((HARNESS_ROOT / "assets" / "codex-harness-eval.v0.4.schema.json").exists())
+        self.assertFalse((HARNESS_ROOT / "assets" / "codex-harness-eval.v0.5.schema.json").exists())
         for eval_path in EVAL_PATHS:
             document = _read_json(eval_path)
-            self.assertTrue(document["$schema"].endswith("codex-harness-eval.v0.2.schema.json"))
+            self.assertTrue(document["$schema"].endswith("codex-harness-eval.v0.6.schema.json"))
 
     def test_fixture_has_no_real_credentials_endpoint_or_external_mutation(self) -> None:
         fixture = _read_json(FIXTURE_PATH)
@@ -148,12 +174,12 @@ class CodexHarnessEvalAssetsTest(unittest.TestCase):
 
     def test_fixture_models_verified_serial_workspace_reuse(self) -> None:
         fixture = _read_json(FIXTURE_PATH)
-        self.assertEqual(fixture["fixture_version"], "codex-harness.fixture.v0.2")
+        self.assertEqual(fixture["fixture_version"], "codex-harness.fixture.v0.3")
         self.assertEqual(fixture["problem_lines"]["issue_count"], 5)
         self.assertEqual(len(fixture["problem_lines"]["code_delivery_lines"]), 4)
         self.assertEqual(len(fixture["problem_lines"]["read_only_lines"]), 1)
-        self.assertEqual(fixture["run"]["topology"], "worker_serial")
-        self.assertEqual(fixture["run"]["active_write_worktrees"], 1)
+        self.assertEqual(fixture["run"]["crew_intent"]["shape"], "single_writer")
+        self.assertEqual(fixture["run"]["observed_active_write_leases"], 1)
         assignments = fixture["assignments"]
         self.assertEqual(len(assignments), 5)
         deliveries = [assignment for assignment in assignments if assignment["kind"] == "delivery"]
@@ -164,6 +190,8 @@ class CodexHarnessEvalAssetsTest(unittest.TestCase):
         self.assertEqual([assignment["depends_on"] for assignment in deliveries], [[], ["order-safety"], ["delivery-note-schema"], ["invoice-ready-email"]])
         self.assertEqual({assignment["workspace"]["id"] for assignment in deliveries}, {"serial-workspace"})
         self.assertEqual({assignment["workspace"]["path"] for assignment in deliveries}, {"<fixture-root>/serial-worktree"})
+        self.assertEqual([assignment["workspace"]["strategy"] for assignment in deliveries], ["new", "reuse", "reuse", "reuse"])
+        self.assertEqual([assignment["workspace"]["handoff_from"] for assignment in deliveries], [None, "order-safety", "delivery-note-schema", "invoice-ready-email"])
         self.assertEqual(len(fixture["handoffs"]), 3)
         self.assertTrue(all(all(handoff["gates"].values()) for handoff in fixture["handoffs"]))
         self.assertIsNone(read_only[0]["workspace"])

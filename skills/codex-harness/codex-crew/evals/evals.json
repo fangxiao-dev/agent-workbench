@@ -1,6 +1,6 @@
 {
-  "$schema": "../../assets/codex-harness-eval.v0.2.schema.json",
-  "schema_version": "codex-harness.eval.v0.2",
+  "$schema": "../../assets/codex-harness-eval.v0.6.schema.json",
+  "schema_version": "codex-harness.eval.v0.6",
   "skill_name": "codex-crew",
   "cases": [
     {
@@ -30,7 +30,7 @@
     {
       "id": "frozen-dto-parallel",
       "prompt": "DTO 已冻结；服务映射和 contract 测试的写入目录互斥，且并行能缩短交付时间。",
-      "skill_behaviors": ["The codex-crew Skill gives the Orchestrator autonomy to choose worker_parallel when evidence supports it", "Each Full assignment declares disjoint write ownership and its own acceptance evidence", "Workers remain the business writers and may manage their own Subagents"],
+      "skill_behaviors": ["The codex-crew Skill gives the Orchestrator autonomy to select a concurrent Worker cohort when evidence supports it", "Each Full assignment declares disjoint write ownership and its own acceptance evidence", "Workers remain the business writers and may manage their own Subagents"],
       "expected_output": ["Only ready assignments start in separate workspaces", "The run records a concrete parallel-benefit rationale and bounded active writers", "Shared-service and merge risks remain visible in the summary"],
       "hard_invariants": ["Parallel write ownership is disjoint and mechanically checkable", "Strictly dependent assignments cannot start before their prerequisites are accepted"],
       "forbidden_actions": ["Do not split overlapping files or shared external resources to inflate parallelism", "Do not use the number of Workers as an acceptance gate"],
@@ -43,7 +43,7 @@
       "id": "full-verifier-nonrecursive",
       "prompt": "Full Worker 提交了实现和自验结果，要求完成独立验收。",
       "skill_behaviors": ["The codex-crew Skill requires independent verification for a Full assignment", "Orchestrator binds the verifier to the fixed assignment commit and evidence", "Worker-local Subagents remain non-addressable and cannot become the top-level verifier"],
-      "expected_output": ["A read-only verifier or equivalent independent check returns a structured verdict", "The acceptance record distinguishes Worker self-checks from independent evidence", "Verification terminates without spawning a verifier-of-verifier"],
+      "expected_output": ["A controller-owned fresh read-only verifier returns a structured attempt", "The acceptance record distinguishes Worker self-checks from independent evidence", "Verification terminates without spawning a verifier assignment or verifier-of-verifier"],
       "hard_invariants": ["Full acceptance requires independent evidence bound to the same assignment revision and commit", "Verifier execution is non-recursive"],
       "forbidden_actions": ["Do not accept a Full assignment solely from Worker natural language or Subagent output", "Do not create an unbounded verification chain"],
       "advisory_quality": ["The verifier summary states coverage and remaining risk", "The Orchestrator explains why the evidence is sufficient for this assignment boundary"],
@@ -77,16 +77,16 @@
       "fixture_path": "fixtures/production-serial-handoff.json"
     },
     {
-      "id": "turn-timeout-without-finish",
-      "prompt": "只读 Orchestrator turn 等待 turn/completed 超时；history 与终态通知都没有有效 finish envelope。",
-      "skill_behaviors": ["The codex-crew Skill treats the run terminal state as unknown until controller reconciliation obtains terminal evidence", "Orchestrator records only observed control-plane facts and quarantines the run when terminal evidence remains absent", "Broker may report the blocked state without promoting a candidate plan into a dispatch decision"],
-      "expected_output": ["The snapshot records timeout, reconciliation and quarantine evidence", "The run remains blocked and no assignment, Worker or workspace is created", "The delivery states that no authoritative scheduling conclusion exists without a valid finish"],
-      "hard_invariants": ["A valid finish envelope is required before a run produces an authoritative dispatch conclusion", "Unknown turn completion prevents dispatch, finish and run reuse"],
-      "forbidden_actions": ["Do not label a timeout as interrupted unless interrupt acknowledgement is evidenced", "Do not dispatch from a natural-language candidate plan after timeout", "Do not claim a production mutation or acceptance occurred without corresponding evidence"],
-      "advisory_quality": ["The report separates observed counts from unresolved execution state", "The quarantine explanation names the next safe reconciliation step"],
-      "evidence": [{"kind": "snapshot", "description": "Requested execution, started turn, completion phase and notification summary are recorded."}, {"kind": "terminal", "description": "History and terminal-event reconciliation show no valid finish envelope."}, {"kind": "git_boundary", "description": "Pre/post workspace evidence is retained even on the exception path."}],
-      "terminal_state": "blocked",
-      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "The timeout fixture is read-only and never dispatches a Worker."}
+      "id": "nonterminal-observation-no-interrupt",
+      "prompt": "只读 Orchestrator turn 仍在执行；Broker 完成一次三分钟观察但未收到 terminal envelope。",
+      "skill_behaviors": ["The codex-crew Skill records a current App Server observation without treating it as a terminal result", "Broker keeps waiting and does not send a correction or interrupt merely because a polling window ended", "Orchestrator does not create an assignment, Worker or worktree before a valid finish envelope"],
+      "expected_output": ["The snapshot contains the latest observation time, process status and latest notification summary", "The run remains in its active state until terminal evidence or a process failure is observed", "The delivery explicitly distinguishes silent-but-not-proven-lost from a blocked or completed run"],
+      "hard_invariants": ["A normal elapsed observation interval cannot interrupt Broker, Orchestrator or Worker execution", "A valid finish envelope is required before a run produces an authoritative dispatch conclusion"],
+      "forbidden_actions": ["Do not convert a wait or polling interval into turn timeout, interrupt or quarantine", "Do not dispatch from a natural-language candidate plan before valid finish", "Do not claim a production mutation or acceptance occurred without corresponding evidence"],
+      "advisory_quality": ["The report separates current observation from terminal evidence", "The Broker progress update is concise and does not steer the active agent"],
+      "evidence": [{"kind": "observation", "description": "Snapshot stores the latest observation rather than a heartbeat history."}, {"kind": "terminal", "description": "No terminal envelope has been observed, so no authoritative scheduling conclusion exists."}, {"kind": "git_boundary", "description": "Pre/post workspace evidence remains available if a process failure occurs."}],
+      "terminal_state": "running",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "The fixture is read-only and never dispatches a Worker."}
     },
     {
       "id": "broker-correction-continuation",
@@ -115,7 +115,7 @@
     {
       "id": "parallel-complete-write-ownership",
       "prompt": "T1 已冻结 DTO、共享测试、i18n/barrel 和 integration ownership；T2、T3、T4 都已 ready，完整允许写路径互斥且并行有明确收益。",
-      "skill_behaviors": ["The codex-crew Skill permits worker_parallel only after the complete writable surface is assigned", "Orchestrator retains shared DTO, shared tests, i18n, barrel and conflict resolution in upstream or integration assignments", "Each parallel Worker receives a separate workspace and assignment-scoped acceptance"],
+      "skill_behaviors": ["The codex-crew Skill permits an explicit concurrent cohort only after the complete writable surface is assigned", "Orchestrator retains shared DTO, shared tests, i18n, barrel and conflict resolution in upstream or integration assignments", "Each concurrent Worker receives a separate workspace and assignment-scoped acceptance"],
       "expected_output": ["T2, T3 and T4 may start together only after T1 acceptance", "The summary names all shared surfaces and their non-parallel owner", "T5 integration remains a later acceptance boundary rather than an overlapping writer"],
       "hard_invariants": ["Every concurrently writable path and shared resource has exactly one declared owner", "Parallel assignments start only after their common contract-freezing dependency is accepted"],
       "forbidden_actions": ["Do not approve parallelism from primary ownership labels alone", "Do not place DTO, shared tests, i18n, barrel or final conflict resolution in overlapping Worker ownership"],
@@ -123,6 +123,162 @@
       "evidence": [{"kind": "ownership", "description": "Complete writable paths and shared-resource ownership are recorded."}, {"kind": "dependency", "description": "T1 acceptance and ready-state evidence precede the parallel dispatch."}, {"kind": "workspace", "description": "Each concurrent Writer is bound to a distinct workspace."}],
       "terminal_state": "succeeded",
       "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "The parallel fixture only models local source ownership."}
+    },
+    {
+      "id": "broker-does-not-replan",
+      "prompt": "一个只读 dry-run 以有效 finish 收口且 canonical snapshot 中 assignments 为空；Broker 根据输入想到了四条候选交付线。",
+      "skill_behaviors": ["Broker reports the canonical zero-assignment result", "Any Broker-authored delivery idea is clearly labeled non-authoritative and routed back to the same Orchestrator before it can change control state"],
+      "expected_output": ["The authoritative result remains zero assignments until a later Orchestrator action changes it", "The Broker does not invent run splits, assurance modes, dependencies or topology"],
+      "hard_invariants": ["Only an Orchestrator structured action may create or revise canonical assignments", "Broker summaries cannot replace the assignment graph in the snapshot"],
+      "forbidden_actions": ["Do not publish Broker candidate lines as a fixed canonical execution plan", "Do not dispatch a Worker from Broker-authored state"],
+      "advisory_quality": ["The summary cleanly separates observed facts from optional advice", "A proposed adjustment is phrased as input for the Orchestrator"],
+      "evidence": [{"kind": "snapshot", "description": "The valid finish snapshot contains an empty assignments array."}, {"kind": "broker", "description": "Broker output preserves canonical authority and labels its own suggestions."}],
+      "terminal_state": "succeeded",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Read-only planning boundary eval."}
+    },
+    {
+      "id": "cohesive-worker-delivery-boundary",
+      "prompt": "一个 Full 交付包含 package、implementation、review loop 和内部 T1–T5 步骤，但它们共享同一 ownership、权限、目标和 acceptance boundary。",
+      "skill_behaviors": ["Orchestrator assigns the cohesive delivery boundary to one Worker owner", "Worker autonomously manages package binding, implementation, review and internal Subagents"],
+      "expected_output": ["The assignment acceptance criteria cover the complete delivery", "Internal stages remain natural-language Worker workflow rather than top-level assignments"],
+      "hard_invariants": ["Assignment splitting requires a real change in ownership, authority, delivery responsibility or independent acceptance boundary", "Worker remains accountable for the complete result and evidence"],
+      "forbidden_actions": ["Do not mechanically create a top-level assignment for each package or T-step", "Do not expose Worker-owned Subagents as Orchestrator-controlled assignments"],
+      "advisory_quality": ["The Worker explains its internal sequencing and risk controls", "The Orchestrator keeps the top-level graph small enough to reflect responsibility rather than procedure"],
+      "evidence": [{"kind": "assignment", "description": "One cohesive assignment binds goals, non-goals, ownership and acceptance criteria."}, {"kind": "worker_result", "description": "The Worker result aggregates implementation, review and validation evidence."}],
+      "terminal_state": "succeeded",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Local delivery fixture only."}
+    },
+    {
+      "id": "same-run-multi-branch-serial",
+      "prompt": "一个 Orchestrator run 顺序交付两个互相依赖但需要独立 branch/PR 的 assignment，并始终保持单写者。",
+      "skill_behaviors": ["Each assignment defaults to workspace strategy new and receives an assignment-scoped branch and path", "The second Worker starts only after the first write lease is released and its dependency is accepted"],
+      "expected_output": ["The same run records two distinct branch/workspace identities", "Observed lease evidence shows at most one active writer throughout the serial delivery"],
+      "hard_invariants": ["Run identity does not determine branch or worktree identity", "A single-writer intent limits simultaneous write leases rather than total branches in the run"],
+      "forbidden_actions": ["Do not split the work into multiple runs merely to obtain independent branches", "Do not reuse a workspace unless strategy reuse and a valid handoff_from gate are explicit"],
+      "advisory_quality": ["The summary names each assignment branch without treating branch count as Worker count", "The reason for new versus reuse is concise"],
+      "evidence": [{"kind": "workspace", "description": "Both assignment-scoped workspace DTOs and their strategies are recorded."}, {"kind": "lease", "description": "Lease history proves at most one active writer."}],
+      "terminal_state": "succeeded",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Temporary local worktrees only."}
+    },
+    {
+      "id": "full-verifier-controller-owned",
+      "prompt": "Full Worker 已提交 clean commit 和自验；controller 需要接通真实独立 verifier 后再允许 Orchestrator accept。",
+      "skill_behaviors": ["Controller starts one fresh read-only verifier with the canonical Full verifier profile", "Verifier is bound to assignment revision, base/head commits and the Worker result digest", "Orchestrator consumes only the controller-owned verifier attempt history"],
+      "expected_output": ["A normalized verifier-result records passed, failed or blocked with findings and evidence", "Only a passed latest attempt for the same revision and commit can support acceptance"],
+      "hard_invariants": ["Full acceptance cannot use an Orchestrator-supplied or Worker-supplied verdict", "Verifier is independent, non-recursive and cannot write canonical state"],
+      "forbidden_actions": ["Do not accept on Worker self-checks alone", "Do not silently fall back from verifier-sol-high", "Do not start verifier-of-verifier"],
+      "advisory_quality": ["Verifier findings are actionable and scoped to the fixed comparison", "Bounded correction preserves earlier verifier attempts as provenance"],
+      "evidence": [{"kind": "verifier", "description": "Controller-owned attempt history binds revision, commits, result digest, profile, thread and turn."}, {"kind": "acceptance", "description": "Acceptance references the passed latest attempt."}],
+      "terminal_state": "succeeded",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Verifier is read-only and uses a local fixture."}
+    },
+    {
+      "id": "explicit-live-cancel-sidecar",
+      "prompt": "Owner 明确取消一个仍在运行的 Orchestrator、Worker 或 Verifier turn；另一个 CLI 需要在不争抢 controller lock 的情况下请求停止。",
+      "skill_behaviors": ["Cancel CLI atomically persists an idempotent sidecar request", "The active runner stops new dispatch, records cancelling and interrupts its currently controlled turn", "Terminal evidence determines cancelled versus blocked quarantine"],
+      "expected_output": ["A confirmed stop produces canonical cancelled state", "An unhandled request remains pending and an unconfirmed stop enters quarantine rather than claiming success"],
+      "hard_invariants": ["Only an explicit cancel request triggers interrupt", "Cancellation is terminal only after stop evidence is recorded"],
+      "forbidden_actions": ["Do not turn observation silence or elapsed time into cancel", "Do not force-kill a process and report it as a clean cancellation", "Do not reuse a workspace after uncertain stop"],
+      "advisory_quality": ["Status names the active role and terminal evidence", "Repeated requests report the same request identity and disposition"],
+      "evidence": [{"kind": "cancel_request", "description": "The atomic sidecar records run, request, reason, provenance and time."}, {"kind": "interrupt", "description": "The owning runner records interrupt acknowledgement and terminal evidence."}, {"kind": "quarantine", "description": "Uncertain stop records reuse prohibition."}],
+      "terminal_state": "cancelled",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "The canary interrupts only a local read-only turn."}
+    },
+    {
+      "id": "dispatch-defines-without-executing",
+      "prompt": "Orchestrator 需要先定义两个完整交付 assignment，再观察全景并决定是否启动；本 turn 只发出 dispatch。",
+      "skill_behaviors": ["Dispatch creates or revises canonical assignment state only", "Crew observed state remains free of Workers, workspaces and write leases until an explicit start_workers control action"],
+      "expected_output": ["Both assignment revisions are visible in the snapshot", "No physical execution side effect occurs"],
+      "hard_invariants": ["Dispatch cannot materialize a workspace or start a Worker", "Ready state alone cannot trigger controller execution"],
+      "forbidden_actions": ["Do not auto-dispatch from the ready set", "Do not pre-create a downstream workspace"],
+      "advisory_quality": ["Assignment goals and acceptance criteria are cohesive", "The Orchestrator can explain its later cohort choice in natural language"],
+      "evidence": [{"kind": "snapshot", "description": "Assignments exist while Worker, workspace and lease projections remain empty."}, {"kind": "git", "description": "No run-owned worktree or branch was created by dispatch."}],
+      "terminal_state": "running",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Definition-only control turn."}
+    },
+    {
+      "id": "selected-worker-cohort-only",
+      "prompt": "三个 assignment 都 ready；Orchestrator 本轮只选择其中两个 ownership 互斥的 assignment 作为 cohort。",
+      "skill_behaviors": ["Controller preflights the complete selected cohort before any physical creation", "Only assignment identities named by start_workers are materialized and started", "The controller waits for the selected cohort to settle without becoming a scheduler"],
+      "expected_output": ["Two selected Workers run with disjoint leases", "The third ready assignment remains unchanged"],
+      "hard_invariants": ["A failed cohort preflight produces zero worktrees and zero Workers for that cohort", "Unselected ready assignments cannot start implicitly"],
+      "forbidden_actions": ["Do not fill spare capacity from the ready set", "Do not start a fifth active Worker beyond the canonical resource limit"],
+      "advisory_quality": ["The Orchestrator explains why these assignments belong in one cohort", "The summary distinguishes resource capacity from desired Worker count"],
+      "evidence": [{"kind": "control_action", "description": "start_workers names the exact assignment cohort."}, {"kind": "observed", "description": "Worker identities, workspaces and leases match only the selected cohort."}],
+      "terminal_state": "running",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Temporary local cohort only."}
+    },
+    {
+      "id": "crew-panorama-and-broker-notification",
+      "prompt": "Orchestrator 将执行意图从单写者调整为多写者，并重派一个 assignment；Owner 希望看到全景和重大调整通知。",
+      "skill_behaviors": ["Crew capabilities, intent and observed facts remain separate projections", "Orchestrator emits a concise notification for the material adjustment", "Broker presents canonical state without turning the notification into a decision"],
+      "expected_output": ["The panorama shows current Workers, workspace bindings, leases, Verifier and Owner request state", "The notification records controller-generated identity, time, summary and related assignments"],
+      "hard_invariants": ["Crew intent cannot overwrite observed execution facts", "A Broker notification is not Owner approval"],
+      "forbidden_actions": ["Do not let Broker rewrite assignment or intent state", "Do not block or authorize work merely because a notification exists"],
+      "advisory_quality": ["The notification explains Owner-visible impact without narrating Worker-internal steps", "The Broker summary separates intent from observed facts"],
+      "evidence": [{"kind": "crew", "description": "Capabilities, intent and observed projections are all present and internally consistent."}, {"kind": "notification", "description": "The adjustment notification has identity, time, summary and assignment references."}],
+      "terminal_state": "running",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Control-plane observation only."}
+    },
+    {
+      "id": "orchestrator-workspace-decision",
+      "prompt": "同一 run 的两个 assignment 需要不同 PR；Orchestrator 为前者选择 new path/branch，为后者在依赖 accepted 后选择另一个 new path/branch。",
+      "skill_behaviors": ["Orchestrator explicitly selects workspace strategy, path, branch and base ref per assignment", "Controller validates the selected physical layout without deriving it from run identity or ready state"],
+      "expected_output": ["Two distinct run-owned workspace and branch bindings are recorded", "At most the selected active write leases exist at any moment"],
+      "hard_invariants": ["New workspaces stay under the run-owned root and use the canonical branch namespace", "Reuse requires an explicit same-run accepted handoff rather than a serial-intent shortcut"],
+      "forbidden_actions": ["Do not equate one run with one branch or one worktree", "Do not auto-select a similarly named historical worktree"],
+      "advisory_quality": ["The Orchestrator records a concise reason for new versus reuse", "The delivery summary keeps PR identity separate from run identity"],
+      "evidence": [{"kind": "workspace", "description": "Each assignment records its explicit strategy, path, branch and base ref."}, {"kind": "lease", "description": "Observed leases prove the actual active writer count."}],
+      "terminal_state": "running",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Run-owned local workspaces only."}
+    },
+    {
+      "id": "local-owner-gate-allows-unrelated-work",
+      "prompt": "Assignment A 请求 Owner 决定外部权限；B 严格依赖 A，C 与 A 无依赖且已 ready。",
+      "skill_behaviors": ["Orchestrator creates an assignment-scoped Owner request for A", "B remains ineligible through its declared dependency while C remains available", "Broker resolves only the request identity it was given"],
+      "expected_output": ["The panorama lists A as waiting Owner, B as dependency-blocked and C as startable", "An Owner decision closes only A's request and does not auto-continue its Worker"],
+      "hard_invariants": ["A local Owner request cannot globally suspend unrelated work", "Owner decisions bind request identity and provenance"],
+      "forbidden_actions": ["Do not derive run-wide awaiting_owner while unrelated work remains executable", "Do not auto-continue A or start B after recording the decision"],
+      "advisory_quality": ["The Owner question is atomic and scoped", "The Broker summary names which work can continue"],
+      "evidence": [{"kind": "owner_request", "description": "The open request binds scope, assignment, identity, category and detail."}, {"kind": "observed", "description": "Ready and blocked projections distinguish A, B and C."}],
+      "terminal_state": "running",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "The external operation remains unauthorized."}
+    },
+    {
+      "id": "explicit-verifier-accept-and-finish",
+      "prompt": "Full Worker 已成功提交；Orchestrator 先观察 submitted，再显式运行 Verifier、accept assignment，最后显式 finish。",
+      "skill_behaviors": ["Worker success records submitted without triggering verification", "Orchestrator explicitly runs a fresh controller-owned Verifier and accepts only a matching passed attempt", "Assignment acceptance does not create terminal state; finish is a separate explicit action"],
+      "expected_output": ["The snapshot exposes each evidence transition without auto-chaining", "Terminal status is finished with a supported succeeded disposition only after finish"],
+      "hard_invariants": ["Full acceptance requires the latest matching controller-owned verifier attempt", "Finish requires no active Worker or Verifier and a terminal claim consistent with canonical facts"],
+      "forbidden_actions": ["Do not auto-run Verifier after Worker success", "Do not auto-finish after acceptance", "Do not accept an Orchestrator-supplied verifier verdict"],
+      "advisory_quality": ["The Orchestrator chooses verification timing based on evidence readiness", "The final summary cites assignment, commit and verifier facts"],
+      "evidence": [{"kind": "worker_result", "description": "The submitted result is stored before any verifier attempt exists."}, {"kind": "verifier", "description": "The explicit attempt binds assignment revision, commit and Worker result digest."}, {"kind": "terminal", "description": "The explicit finish records disposition, summary, fact references and time."}],
+      "terminal_state": "succeeded",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Local Full verification only."}
+    },
+    {
+      "id": "canonical-read-only-worker-cohort",
+      "prompt": "Orchestrator 需要让多个 Worker 对固定仓库 revision 做只读审计，同时保持零 branch、零 worktree、零 write lease。",
+      "skill_behaviors": ["Orchestrator explicitly defines repository_read_only assignments and selects the Worker cohort", "Controller binds the repository HEAD and porcelain before execution and records each Worker identity and result", "Workers use fresh read-only threads and may manage their own read-only Subagents"],
+      "expected_output": ["Crew panorama exposes the selected read-only Workers without an active write lease", "Repository HEAD and porcelain are identical before and after every Worker turn"],
+      "hard_invariants": ["A repository_read_only assignment cannot materialize a workspace, create a branch or declare write ownership", "Any repository boundary drift blocks acceptance and quarantines the run"],
+      "forbidden_actions": ["Do not introduce a separate dry-run scheduler or automatic rehearsal workflow", "Do not describe an ordinary collaboration rehearsal as a canonical controller run"],
+      "advisory_quality": ["The Broker summary distinguishes canonical facts from Orchestrator recommendations", "Worker binding and Subagent aggregate telemetry remain visible without exposing Worker-internal topology"],
+      "evidence": [{"kind": "assignment", "description": "Each read-only assignment records access mode, fixed revision and Worker binding."}, {"kind": "git_boundary", "description": "Pre/post HEAD and porcelain prove zero repository mutation."}, {"kind": "panorama", "description": "Active Worker identities are observable while active write leases remain empty."}],
+      "terminal_state": "running",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Read-only repository rehearsal only."}
+    },
+    {
+      "id": "long-run-without-fixed-action-budget",
+      "prompt": "一个长期 run 已完成 32 次合法 Orchestrator action，仍有一个受授权的 assignment 需要继续。",
+      "skill_behaviors": ["Controller evaluates the next explicit capability call against current hard boundaries", "No hidden action counter converts a healthy run into terminal or blocked state"],
+      "expected_output": ["The thirty-third legal action is processed normally", "Status changes only from explicit finish/cancel or a real safety, resource, authority or evidence failure"],
+      "hard_invariants": ["A fixed action count cannot terminate or block a run", "Ordinary observation never consumes an execution budget"],
+      "forbidden_actions": ["Do not restore max_actions as a hidden workflow length", "Do not interrupt a healthy role turn because the run is long"],
+      "advisory_quality": ["The Orchestrator may summarize history to control context size", "Future resource budgets, if added, are Owner-visible and run-scoped"],
+      "evidence": [{"kind": "history", "description": "More than 32 valid structured actions are persisted in the same run."}, {"kind": "snapshot", "description": "The run remains controllable without action_count or max_actions fields."}],
+      "terminal_state": "running",
+      "external_mutation": {"allowed": false, "observed": false, "resources": [], "notes": "Control-plane longevity eval."}
     }
   ]
 }

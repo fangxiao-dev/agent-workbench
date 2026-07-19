@@ -15,12 +15,9 @@ from pathlib import Path
 from typing import Any
 
 
-POLICY_RELATIVE_PATH = Path("skills/codex-harness/assets/codex-harness-runtime-policy.v0.json")
-SCHEMA_RELATIVE_PATH = Path("skills/codex-harness/assets/codex-harness-runtime-policy.schema.json")
-POLICY_VERSION = "codex-harness.runtime-policy.v0"
-ORCHESTRATOR_POLICY_RELATIVE_PATH = Path("skills/codex-harness/assets/codex-harness-runtime-policy.v1.json")
-ORCHESTRATOR_SCHEMA_RELATIVE_PATH = Path("skills/codex-harness/assets/codex-harness-runtime-policy.v1.schema.json")
-ORCHESTRATOR_POLICY_VERSION = "codex-harness.runtime-policy.v1"
+POLICY_RELATIVE_PATH = Path("skills/codex-harness/assets/codex-harness-runtime-policy.v1.3.json")
+SCHEMA_RELATIVE_PATH = Path("skills/codex-harness/assets/codex-harness-runtime-policy.v1.3.schema.json")
+POLICY_VERSION = "codex-harness.runtime-policy.v1.3"
 MATURITIES = {"design_baseline", "runtime_enforced"}
 
 
@@ -143,52 +140,15 @@ def load_runtime_policy(repository_root: Path, policy_path: Path | None = None, 
 
 
 def load_orchestrator_policy(repository_root: Path, policy_path: Path | None = None, schema_path: Path | None = None) -> dict[str, Any]:
-    """Load the versioned thin-control policy used by the Orchestrator.
+    """Role-specific name for the single canonical runtime policy loader."""
 
-    The legacy v0 loader intentionally remains unchanged because its nested
-    topology contracts are still consumed by the parent pilot.  The new
-    Orchestrator has a separate v1 policy surface so protocol evolution cannot
-    silently alter legacy parent behavior.
-    """
-
-    root = repository_root.resolve()
-    policy = (policy_path or root / ORCHESTRATOR_POLICY_RELATIVE_PATH).resolve()
-    schema = (schema_path or root / ORCHESTRATOR_SCHEMA_RELATIVE_PATH).resolve()
-    if not policy.is_file() or not schema.is_file():
-        raise PolicyError(f"orchestrator runtime policy/schema is missing: {policy}, {schema}")
-    try:
-        policy_value = json.loads(policy.read_text(encoding="utf-8"))
-        schema_value = json.loads(schema.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise PolicyError(f"orchestrator runtime policy/schema cannot be parsed: {exc}") from exc
-    _validate_schema(policy_value, schema_value, "$", schema_value)
-    if policy_value.get("schema_version") != ORCHESTRATOR_POLICY_VERSION:
-        raise PolicyError(f"unsupported orchestrator runtime policy version: {policy_value.get('schema_version')!r}")
-    if policy_value.get("maturity") not in MATURITIES:
-        raise PolicyError(f"unsupported orchestrator runtime policy maturity: {policy_value.get('maturity')!r}")
-    try:
-        relative_policy = policy.relative_to(root).as_posix()
-        relative_schema = schema.relative_to(root).as_posix()
-    except ValueError as exc:
-        raise PolicyError("orchestrator runtime policy and schema must remain inside repository root") from exc
-    return {
-        "policy": policy_value,
-        "schema": schema_value,
-        "identity": {
-            "policy_path": relative_policy,
-            "schema_path": relative_schema,
-            "policy_sha256": _sha256(policy),
-            "schema_sha256": _sha256(schema),
-            "schema_version": policy_value["schema_version"],
-            "maturity": policy_value["maturity"],
-        },
-    }
+    return load_runtime_policy(repository_root, policy_path=policy_path, schema_path=schema_path)
 
 
 def decision_audience(policy_bundle: dict[str, Any], category: str) -> str:
     policy = policy_bundle["policy"]
-    if category == "same_task_correction" and policy["decision_routing"]["harness_resolvable"] == "continue_same_task":
+    if category == "same_task_correction":
         return "harness"
-    if category in policy["decision_routing"]["owner_required"]:
+    if category in policy["assignment"]["owner_boundaries"]:
         return "owner"
     raise PolicyError(f"unknown decision category: {category}")

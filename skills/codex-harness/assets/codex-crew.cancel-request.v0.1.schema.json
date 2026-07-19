@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workbench.local/schemas/codex-crew.cancel-request.v0.1.schema.json",
+  "title": "Codex Crew Cancel Request v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "request_id", "reason", "provenance", "requested_at"],
+  "properties": {
+    "schema_version": {"const": "codex-crew.cancel-request.v0.1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "request_id": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1},
+    "provenance": {"type": "string", "minLength": 1},
+    "requested_at": {"type": "number"}
+  }
+}

@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-workbench.local/schemas/codex-harness-eval.v0.2.schema.json",
-  "title": "Codex Harness Eval v0.2",
-  "description": "Canonical behavioral eval cases for the thin Codex Crew control plane.",
+  "$id": "https://agent-workbench.local/schemas/codex-harness-eval.v0.6.schema.json",
+  "title": "Codex Harness Eval v0.6",
+  "description": "Canonical behavioral eval cases for the Orchestrator-driven Codex Crew capability host.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "skill_name", "cases"],
   "properties": {
     "$schema": {"type": "string"},
-    "schema_version": {"const": "codex-harness.eval.v0.2"},
+    "schema_version": {"const": "codex-harness.eval.v0.6"},
     "skill_name": {"enum": ["codex-crew", "codex-crew-lite"]},
     "cases": {
       "type": "array",
@@ -17,10 +17,7 @@
     }
   },
   "$defs": {
-    "assertion": {
-      "type": "string",
-      "minLength": 1
-    },
+    "assertion": {"type": "string", "minLength": 1},
     "evidence": {
       "type": "object",
       "additionalProperties": false,
@@ -49,24 +46,9 @@
     "case": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "prompt",
-        "skill_behaviors",
-        "expected_output",
-        "hard_invariants",
-        "forbidden_actions",
-        "advisory_quality",
-        "evidence",
-        "terminal_state",
-        "external_mutation"
-      ],
+      "required": ["id", "prompt", "skill_behaviors", "expected_output", "hard_invariants", "forbidden_actions", "advisory_quality", "evidence", "terminal_state", "external_mutation"],
       "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
-        },
+        "id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"},
         "prompt": {"type": "string", "minLength": 1},
         "skill_behaviors": {
           "type": "array",
@@ -98,14 +80,9 @@
           "minItems": 1,
           "items": {"$ref": "#/$defs/evidence"}
         },
-        "terminal_state": {
-          "enum": ["succeeded", "awaiting_owner", "blocked", "attention", "cancelled", "failed"]
-        },
+        "terminal_state": {"enum": ["running", "succeeded", "awaiting_owner", "blocked", "attention", "cancelled", "failed"]},
         "external_mutation": {"$ref": "#/$defs/externalMutation"},
-        "fixture_path": {
-          "type": "string",
-          "pattern": "^fixtures/[A-Za-z0-9_.-]+\\.json$"
-        }
+        "fixture_path": {"type": "string", "pattern": "^fixtures/[A-Za-z0-9_.-]+\\.json$"}
       }
     }
   }

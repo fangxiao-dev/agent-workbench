@@ -3,259 +3,354 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
+import uuid
 from pathlib import Path
 from unittest.mock import patch
 
+from jsonschema import Draft202012Validator, ValidationError
+
 from scripts.codex_harness_orchestrator import (
+    CONTROL_SCHEMA_VERSION,
+    ORCHESTRATOR_TURN_SCHEMA_VERSION,
     FullVerificationRequired,
     OrchestratorError,
-    apply_topology,
-    cancel_run,
-    choose_topology,
+    accept_assignment,
+    apply_orchestrator_turn,
     make_assignment,
     new_snapshot,
     ready_assignment_ids,
     record_broker_message,
     record_worker_result,
-    recover_run,
     run_full_verifier,
     run_orchestrator_turn,
+    start_worker_cohort,
     validate_snapshot,
-    validate_worker_diff,
+    worker_git_writable_roots,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
+CATALOG = {
+    "data": [
+        {"id": "gpt-5.6-luna", "supportedReasoningEfforts": [{"reasoningEffort": "max"}]},
+        {"id": "gpt-5.6-terra", "supportedReasoningEfforts": [{"reasoningEffort": "high"}]},
+        {"id": "gpt-5.6-sol", "supportedReasoningEfforts": [{"reasoningEffort": "high"}]},
+    ]
+}
 
 
-def snapshot() -> dict:
-    return new_snapshot(ROOT, "thin control test", ROOT / ".tmp-orchestrator-state.json", run_id="orchestrator-test")
+def snapshot(root: Path = ROOT, *, run_id: str | None = None) -> dict:
+    state_root = Path(tempfile.gettempdir()) / "codex-harness-tests"
+    state_root.mkdir(parents=True, exist_ok=True)
+    state_path = state_root / f"orchestrator-{uuid.uuid4().hex}.json"
+    return new_snapshot(root, "capability host test", state_path, run_id=run_id or f"test-{uuid.uuid4().hex[:8]}")
+
+
+def definition(state: dict, assignment_id: str, path: str, *, revision: int = 1, assurance: str = "lite", depends_on: list[str] | None = None, allowed_paths: list[str] | None = None, access_mode: str = "workspace_write") -> dict:
+    return {
+        "assignment_id": assignment_id,
+        "kind": "delivery",
+        "revision": revision,
+        "goal": f"deliver {assignment_id}",
+        "non_goals": [],
+        "acceptance_criteria": [f"{assignment_id} is complete"],
+        "assurance_mode": assurance,
+        "execution_profile": "worker-full-terra-high" if assurance == "full" else "worker-lite-luna-max",
+        "access_mode": access_mode,
+        "allowed_paths": [] if access_mode == "repository_read_only" else (allowed_paths or [path]),
+        "external_resources": [],
+        "verification_commands": ["check"],
+        "depends_on": depends_on or [],
+        "context": {"fresh": True, "continuation_allowed": True},
+        "workspace": None if access_mode == "repository_read_only" else {
+            "strategy": "new",
+            "handoff_from": None,
+            "path": str((Path(state["workspace_root"]) / assignment_id).resolve()),
+            "branch": f"codex/crew/{state['run_id']}/{assignment_id}/work",
+            "base_ref": "HEAD",
+        },
+    }
+
+
+def turn(state: dict, action: str, **fields: object) -> dict:
+    return {"schema_version": ORCHESTRATOR_TURN_SCHEMA_VERSION, "run_id": state["run_id"], "action": action, "summary": f"{action} action", **fields}
+
+
+def terminal_role(envelope: dict) -> dict:
+    thread_id = "orchestrator-thread"
+    return {
+        "status": "completed",
+        "thread_id": thread_id,
+        "turn_id": "orchestrator-turn",
+        "cancel_request": None,
+        "interrupt": {"attempted": False, "acknowledged": False, "error": None},
+        "terminal": {"observed": True, "status": "completed", "source": "turn/completed"},
+        "notifications": [{"method": "turn/completed", "params": {"threadId": thread_id, "turn": {"status": "completed"}}}],
+        "history": {"items": [{"type": "agentMessage", "threadId": thread_id, "text": json.dumps(envelope)}]},
+    }
 
 
 class CodexHarnessOrchestratorTest(unittest.TestCase):
-    def test_orchestrator_is_read_only_and_has_no_worker_worktree(self) -> None:
+    def test_snapshot_is_capability_panorama_without_topology_or_action_budget(self) -> None:
         state = snapshot()
-        self.assertEqual(state["execution"]["topology"], "orchestrator_read_only")
-        self.assertEqual(state["execution"]["max_active_write_worktrees"], 0)
-        self.assertEqual(state["orchestrator"]["sandbox"], "read-only")
-        self.assertEqual(state["orchestrator"]["turn"]["phase"], "not_started")
-        self.assertEqual(state["orchestrator"]["requested_execution"]["model"], None)
+        self.assertEqual(state["schema_version"], CONTROL_SCHEMA_VERSION)
+        self.assertEqual(state["crew"]["intent"]["shape"], "orchestrator_read_only")
+        self.assertEqual(state["crew"]["observed"]["active_worker_ids"], [])
+        self.assertNotIn("execution", state)
+        self.assertNotIn("action_count", state)
+        self.assertNotIn("max_actions", state)
 
-    def test_default_artifact_root_is_outside_repository_and_override_is_preserved(self) -> None:
+    def test_control_schema_accepts_snapshot_and_rejects_retired_fields(self) -> None:
+        schema = json.loads((ROOT / "skills/codex-harness/assets/codex-crew.control.v0.5.schema.json").read_text(encoding="utf-8"))
+        Draft202012Validator.check_schema(schema)
         state = snapshot()
-        self.assertNotIn(ROOT.resolve(), Path(state["artifact_root"]).resolve().parents)
-        override = ROOT.parent / "explicit-harness-artifacts"
-        overridden = new_snapshot(ROOT, "override artifacts", ROOT / ".tmp-orchestrator-state.json", run_id="artifact-override", artifact_root=override)
-        self.assertEqual(Path(overridden["artifact_root"]), override.resolve())
+        Draft202012Validator(schema).validate(state)
+        state["action_count"] = 1
+        with self.assertRaises(ValidationError):
+            Draft202012Validator(schema).validate(state)
 
-    def test_broker_message_persists_with_non_conflicting_event_metadata(self) -> None:
+    def test_orchestrator_turn_schema_accepts_read_and_write_assignments(self) -> None:
+        schema = json.loads((ROOT / "skills/codex-harness/assets/codex-crew.orchestrator-turn.v0.3.schema.json").read_text(encoding="utf-8"))
+        Draft202012Validator.check_schema(schema)
         state = snapshot()
-        state["orchestrator"]["thread_id"] = "thread-existing"
-        persisted = record_broker_message(state, "continue with the accepted scope")
-        self.assertEqual(persisted["kind"], "ordinary_correction")
-        self.assertEqual(state["messages"][-1]["body"], "continue with the accepted scope")
-        self.assertEqual(state["events"][-1]["kind"], "broker_message_received")
-        self.assertEqual(state["events"][-1]["message_kind"], "ordinary_correction")
+        envelope = turn(state, "dispatch", assignments=[definition(state, "audit", "", access_mode="repository_read_only"), definition(state, "delivery", "src/delivery")])
+        Draft202012Validator(schema).validate(envelope)
 
-    def test_worker_diff_outside_assignment_paths_is_rejected(self) -> None:
-        assignment = make_assignment("a", "fix", allowed_paths=["src/api"])
-        with self.assertRaises(OrchestratorError):
-            validate_worker_diff(assignment, ["src/api/ok.py", "tests/other.py"])
-
-    def test_stale_worker_result_revision_is_rejected(self) -> None:
+    def test_dispatch_defines_assignment_without_worker_or_worktree(self) -> None:
         state = snapshot()
-        state["assignments"] = [make_assignment("a", "fix", allowed_paths=["src"])]
-        with self.assertRaises(OrchestratorError):
-            record_worker_result(state, "a", {"assignment_id": "a", "revision": 2, "status": "succeeded", "summary": "stale", "changed_paths": [], "verification": []})
+        proposal = definition(state, "delivery", "src/delivery")
+        apply_orchestrator_turn(state, turn(state, "dispatch", assignments=[proposal]))
+        assignment = state["assignments"][0]
+        self.assertEqual(assignment["status"], "planned")
+        self.assertFalse(assignment["workspace"]["materialized"])
+        self.assertEqual(assignment["worker"]["status"], "pending")
+        self.assertEqual(state["crew"]["observed"]["ready_assignment_ids"], ["delivery"])
 
-    def test_strict_serial_topology_allows_one_active_writer(self) -> None:
+    def test_dispatch_revision_requires_inactive_unaccepted_revision_plus_one(self) -> None:
         state = snapshot()
-        state["assignments"] = [make_assignment("a", "one", allowed_paths=["src/a"]), make_assignment("b", "two", allowed_paths=["src/b"])]
-        validate_snapshot(state)
-        apply_topology(state, "worker_serial")
-        self.assertEqual(state["execution"]["max_active_write_worktrees"], 1)
-        self.assertEqual(ready_assignment_ids(state), ["a", "b"])
-        from scripts.codex_harness_orchestrator import materialize_workspaces
+        apply_orchestrator_turn(state, turn(state, "dispatch", assignments=[definition(state, "delivery", "src/delivery")]))
+        revised = definition(state, "delivery", "src/delivery", revision=2)
+        revised["goal"] = "revised cohesive delivery"
+        apply_orchestrator_turn(state, turn(state, "dispatch", assignments=[revised]))
+        self.assertEqual(state["assignments"][0]["revision"], 2)
+        with self.assertRaisesRegex(OrchestratorError, "revision"):
+            apply_orchestrator_turn(state, turn(state, "dispatch", assignments=[definition(state, "delivery", "src/delivery", revision=4)]))
 
-        with self.assertRaises(OrchestratorError):
-            materialize_workspaces(state, ["a", "b"])
+    def test_more_than_32_valid_actions_are_not_mechanically_stopped(self) -> None:
+        state = snapshot()
+        for revision in range(1, 41):
+            apply_orchestrator_turn(state, turn(state, "dispatch", assignments=[definition(state, "delivery", "src/delivery", revision=revision)]))
+        self.assertEqual(state["assignments"][0]["revision"], 40)
+        self.assertEqual(state["status"], "running")
 
-    def test_serial_reuse_requires_accepted_clean_handoff(self) -> None:
-        from scripts.codex_harness_orchestrator import accept_assignment, materialize_workspaces
+    def test_start_workers_runs_only_selected_assignment(self) -> None:
+        state = snapshot()
+        apply_orchestrator_turn(state, turn(state, "dispatch", assignments=[definition(state, "a", "src/a"), definition(state, "b", "src/b")]))
+        seen: list[str] = []
 
+        def runner(assignment_id: str, _task: dict) -> dict:
+            seen.append(assignment_id)
+            return {"status": "needs_orchestrator", "summary": "pause", "changed_paths": [], "verification": [], "worker_thread_id": f"thread-{assignment_id}", "turn_id": f"turn-{assignment_id}"}
+
+        with patch("scripts.codex_harness_orchestrator.fetch_model_catalog", return_value=CATALOG), patch("scripts.codex_harness_orchestrator.ensure_worktree", side_effect=lambda _root, workspace: {"path": workspace["path"], "branch": workspace["branch"], "created": True}), patch("scripts.codex_harness_orchestrator._git", return_value="base"), patch("scripts.codex_harness_orchestrator.worker_git_writable_roots", return_value=[str(ROOT)]):
+            results = start_worker_cohort(state, ["a"], worker_runner=runner)
+        self.assertEqual(seen, ["a"])
+        self.assertEqual(results[0]["status"], "needs_orchestrator")
+        self.assertEqual(state["assignments"][1]["status"], "planned")
+        self.assertFalse(state["assignments"][1]["workspace"]["materialized"])
+
+    def test_disjoint_workers_actually_overlap_in_one_explicit_cohort(self) -> None:
+        state = snapshot()
+        apply_orchestrator_turn(state, turn(state, "dispatch", assignments=[definition(state, "a", "src/a"), definition(state, "b", "src/b")]))
+        barrier = threading.Barrier(2)
+        intervals: dict[str, tuple[float, float]] = {}
+
+        def runner(assignment_id: str, _task: dict) -> dict:
+            started = time.monotonic()
+            barrier.wait(timeout=2)
+            time.sleep(0.05)
+            intervals[assignment_id] = (started, time.monotonic())
+            return {"status": "needs_orchestrator", "summary": "pause", "changed_paths": [], "verification": [], "worker_thread_id": f"thread-{assignment_id}", "turn_id": f"turn-{assignment_id}"}
+
+        with patch("scripts.codex_harness_orchestrator.fetch_model_catalog", return_value=CATALOG), patch("scripts.codex_harness_orchestrator.ensure_worktree", side_effect=lambda _root, workspace: {"path": workspace["path"], "branch": workspace["branch"], "created": True}), patch("scripts.codex_harness_orchestrator._git", return_value="base"), patch("scripts.codex_harness_orchestrator.worker_git_writable_roots", return_value=[str(ROOT)]):
+            start_worker_cohort(state, ["a", "b"], worker_runner=runner)
+        self.assertLess(max(value[0] for value in intervals.values()), min(value[1] for value in intervals.values()))
+        self.assertEqual(state["crew"]["observed"]["active_worker_ids"], [])
+
+    def test_read_only_cohort_runs_without_branch_worktree_or_write_lease(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory) / "repo"
-            root.mkdir()
-            for args in (("init",), ("config", "user.email", "crew@example.test"), ("config", "user.name", "Crew Test")):
-                subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
-            (root / "README.md").write_text("base\n", encoding="utf-8")
-            subprocess.run(["git", "-C", str(root), "add", "README.md"], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(root), "commit", "-m", "base"], check=True, capture_output=True)
-            state_path = Path(directory) / "state.json"
-            state = new_snapshot(root, "serial handoff", state_path, run_id="serial-handoff-test", artifact_root=root / "artifacts")
-            state["assignments"] = [make_assignment("one", "write one", allowed_paths=["README.md"], verification_commands=["check"]), make_assignment("two", "write two", allowed_paths=["README.md"], depends_on=["one"], verification_commands=["check"])]
-            apply_topology(state, "worker_serial")
-            materialize_workspaces(state, ["one"])
-            workspace = Path(state["assignments"][0]["workspace"]["path"])
-            (workspace / "README.md").write_text("one\n", encoding="utf-8")
-            subprocess.run(["git", "-C", str(workspace), "add", "README.md"], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(workspace), "commit", "-m", "one"], check=True, capture_output=True)
-            commit = subprocess.run(["git", "-C", str(workspace), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
-            record_worker_result(state, "one", {"status": "succeeded", "summary": "one", "commit": commit, "changed_paths": ["README.md"], "verification": [{"command": "check", "exit_code": 0}]})
-            accept_assignment(state, "one")
-            materialize_workspaces(state, ["two"])
-            self.assertEqual(state["assignments"][1]["workspace"]["path"], state["assignments"][0]["workspace"]["path"])
+            repo = Path(directory) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.email", "crew@example.test"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.name", "Crew Test"], check=True, capture_output=True)
+            (repo / "README.md").write_text("base\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "-m", "base"], check=True, capture_output=True)
+            head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+            state = snapshot(repo, run_id="read-only-cohort")
+            apply_orchestrator_turn(state, turn(state, "dispatch", assignments=[definition(state, "audit-a", "", access_mode="repository_read_only"), definition(state, "audit-b", "", access_mode="repository_read_only")]))
+            barrier = threading.Barrier(2)
 
-    def test_disjoint_frozen_assignments_allow_worker_parallel(self) -> None:
-        state = snapshot()
-        state["assignments"] = [make_assignment("dto", "map", allowed_paths=["src/dto"]), make_assignment("tests", "test", allowed_paths=["tests/dto"])]
-        selected = choose_topology(state, "worker_parallel", rationale="DTO is frozen and write ownership is disjoint.")
-        self.assertEqual(selected["topology"], "worker_parallel")
-        state["assignments"][1]["allowed_paths"] = ["src/dto/contracts"]
-        with self.assertRaises(OrchestratorError):
-            choose_topology(state, "worker_parallel", rationale="overlap")
+            def runner(assignment_id: str, task: dict) -> dict:
+                self.assertEqual(task["access_mode"], "repository_read_only")
+                self.assertEqual(Path(task["worktree"]["path"]).resolve(), repo.resolve())
+                self.assertNotIn("writable_roots", task)
+                barrier.wait(timeout=2)
+                return {"status": "succeeded", "summary": f"audited {assignment_id}", "changed_paths": [], "verification": [{"command": "inspect", "exit_code": 0, "claim": "observed"}], "worker_thread_id": f"thread-{assignment_id}", "turn_id": f"turn-{assignment_id}"}
 
-    def test_parallel_topology_requires_two_currently_ready_writers(self) -> None:
-        state = snapshot()
-        state["assignments"] = [make_assignment("owner", "blocked", allowed_paths=["src/a"]), make_assignment("ready", "ready", allowed_paths=["src/b"], depends_on=["owner"])]
-        state["assignments"][0]["status"] = "awaiting_owner"
-        with self.assertRaises(OrchestratorError):
-            choose_topology(state, "worker_parallel", rationale="not currently ready")
+            with patch("scripts.codex_harness_orchestrator.fetch_model_catalog", return_value=CATALOG), patch("scripts.codex_harness_orchestrator.ensure_worktree", side_effect=AssertionError("read-only cohort must not create a worktree")):
+                results = start_worker_cohort(state, ["audit-a", "audit-b"], worker_runner=runner)
+        self.assertEqual([item["status"] for item in results], ["succeeded", "succeeded"])
+        self.assertTrue(all(item["workspace"] is None for item in state["assignments"]))
+        self.assertTrue(all(item["boundary_evidence"]["source_revision"] == head for item in state["assignments"]))
+        self.assertTrue(all(item["boundary_evidence"]["pre_git"]["porcelain"] == item["boundary_evidence"]["post_git"]["porcelain"] for item in state["assignments"]))
+        self.assertEqual(state["crew"]["observed"]["active_write_leases"], [])
 
-    def test_assignment_dependency_cycle_is_rejected_before_dispatch(self) -> None:
-        state = snapshot()
-        state["assignments"] = [make_assignment("a", "a", allowed_paths=["src/a"], depends_on=["b"]), make_assignment("b", "b", allowed_paths=["src/b"], depends_on=["a"])]
-        with self.assertRaises(OrchestratorError):
-            validate_snapshot(state)
-
-    def test_upstream_owner_request_blocks_dependent_downstream(self) -> None:
-        state = snapshot()
-        state["assignments"] = [make_assignment("upstream", "ask", allowed_paths=["src/a"]), make_assignment("downstream", "use", allowed_paths=["src/b"], depends_on=["upstream"])]
-        validate_snapshot(state)
-        result = record_worker_result(state, "upstream", {"status": "needs_owner", "summary": "need API decision", "owner_request": {"category": "scope_change", "detail": "Choose API shape."}, "changed_paths": []})
-        self.assertEqual(result["status"], "needs_owner")
-        self.assertEqual(ready_assignment_ids(state), [])
-
-    def test_worker_dispatch_reuses_existing_dispatch_primitive_boundary(self) -> None:
-        from scripts.codex_harness_orchestrator import dispatch_worker
-
-        state = snapshot()
-        assignment = make_assignment("worker", "bounded fix", allowed_paths=["src"])
-        assignment["workspace"] = {"path": str(ROOT.parent / "fixture-worker"), "branch": "codex/fixture-worker", "base_ref": "HEAD"}
-        state["assignments"] = [assignment]
-        apply_topology(state, "worker_serial")
-        seen = []
-
-        def fake_runner(task_id: str, task: dict, timeout: int) -> dict:
-            seen.append((task_id, task["worker_execution"]["id"], timeout))
-            return {"status": "succeeded", "summary": "worker complete", "changed_paths": [], "verification": [{"command": "check", "exit_code": 0}]}
-
-        result = dispatch_worker(state, "worker", timeout_seconds=17, worker_runner=fake_runner)
-        self.assertEqual(result["status"], "succeeded")
-        self.assertEqual(seen, [("worker", "worker-lite-luna-max", 17)])
-
-    def test_full_verifier_is_one_shot_and_never_recurses(self) -> None:
-        state = snapshot()
-        state["assignments"] = [make_assignment("full", "review", assurance_mode="full", kind="verification", allowed_paths=[])]
-        calls = []
-
-        def verifier(current: dict, assignment: dict) -> dict:
-            calls.append(assignment["assignment_id"])
-            self.assertEqual(len(current["assignments"]), 1)
-            return {"status": "passed", "independent": True, "summary": "verified", "verification": [{"exit_code": 0}]}
-
-        verdict = run_full_verifier(state, "full", verifier)
-        self.assertEqual(verdict["status"], "passed")
-        self.assertEqual(calls, ["full"])
-        with self.assertRaises(FullVerificationRequired):
-            from scripts.codex_harness_orchestrator import accept_assignment
-
-            state["assignments"][0]["result"] = {"status": "succeeded", "changed_paths": [], "verification": [{"exit_code": 0}], "commit": None}
-            state["assignments"][0]["status"] = "submitted"
-            accept_assignment(state, "full")
-
-    def test_uncertain_cancel_is_blocked_and_quarantined(self) -> None:
-        state = snapshot()
-        state["orchestrator"]["thread_id"] = "thread-live"
+    def test_read_only_worker_repository_drift_blocks_run(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            state_path = Path(directory) / "state.json"
-            state["state_path"] = str(state_path)
-            state["controller"]["lock_path"] = str(state_path.with_suffix(".controller.lock"))
-            result = cancel_run(state, state_path, "owner requested stop")
-        self.assertEqual(result["status"], "blocked")
-        self.assertEqual(result["quarantine"]["reason"], "cancellation_uncertain")
+            repo = Path(directory) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.email", "crew@example.test"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.name", "Crew Test"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "--allow-empty", "-m", "base"], check=True, capture_output=True)
+            state = snapshot(repo, run_id="read-only-drift")
+            apply_orchestrator_turn(state, turn(state, "dispatch", assignments=[definition(state, "audit", "", access_mode="repository_read_only")]))
 
-    def test_active_assignment_cancel_without_stop_proof_is_fail_closed(self) -> None:
-        from scripts.codex_harness_orchestrator import apply_orchestrator_turn, ORCHESTRATOR_TURN_SCHEMA_VERSION
+            def runner(_assignment_id: str, _task: dict) -> dict:
+                (repo / "unexpected.txt").write_text("mutation\n", encoding="utf-8")
+                return {"status": "succeeded", "summary": "invalid", "changed_paths": [], "verification": [{"command": "inspect", "exit_code": 0, "claim": "observed"}]}
 
+            with patch("scripts.codex_harness_orchestrator.fetch_model_catalog", return_value=CATALOG), patch("scripts.codex_harness_orchestrator.ensure_worktree", side_effect=AssertionError("read-only assignment must not create a worktree")):
+                results = start_worker_cohort(state, ["audit"], worker_runner=runner)
+        self.assertEqual(results[0]["status"], "failed")
+        self.assertEqual(state["status"], "blocked")
+        self.assertEqual(state["quarantine"]["reason"], "read_only_worker_boundary_changed")
+        schema = json.loads((ROOT / "skills/codex-harness/assets/codex-crew.control.v0.5.schema.json").read_text(encoding="utf-8"))
+        Draft202012Validator(schema).validate(state)
+
+    def test_full_read_only_assignment_uses_explicit_verifier_and_acceptance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.email", "crew@example.test"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.name", "Crew Test"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "--allow-empty", "-m", "base"], check=True, capture_output=True)
+            head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+            state = snapshot(repo, run_id="full-read-only")
+            apply_orchestrator_turn(state, turn(state, "dispatch", assignments=[definition(state, "audit", "", assurance="full", access_mode="repository_read_only")]))
+
+            def worker(_assignment_id: str, _task: dict) -> dict:
+                return {"status": "succeeded", "summary": "audited", "changed_paths": [], "verification": [{"command": "inspect", "exit_code": 0, "claim": "observed"}], "worker_thread_id": "worker-thread", "turn_id": "worker-turn"}
+
+            def verifier(_request: dict) -> dict:
+                return {"status": "passed", "summary": "verified", "findings": [], "verification": [{"command": "inspect", "exit_code": 0}], "_controller_evidence": {"thread_id": "verifier-thread", "turn_id": "verifier-turn"}}
+
+            with patch("scripts.codex_harness_orchestrator.fetch_model_catalog", return_value=CATALOG):
+                start_worker_cohort(state, ["audit"], worker_runner=worker)
+                result = run_full_verifier(state, "audit", verifier)
+                acceptance = accept_assignment(state, "audit")
+        self.assertEqual(result["status"], "passed")
+        self.assertEqual(acceptance["commit"], head)
+        self.assertIsNone(acceptance["handoff"])
+
+    def test_cohort_preflight_rejects_overlap_and_fifth_worker_before_materialization(self) -> None:
         state = snapshot()
-        assignment = make_assignment("active", "active", allowed_paths=["src"])
+        proposals = [definition(state, f"a{index}", "src/shared" if index < 2 else f"src/a{index}") for index in range(5)]
+        apply_orchestrator_turn(state, turn(state, "dispatch", assignments=proposals))
+        with patch("scripts.codex_harness_orchestrator.ensure_worktree") as ensure:
+            with self.assertRaisesRegex(OrchestratorError, "overlapping"):
+                start_worker_cohort(state, ["a0", "a1"])
+            with self.assertRaisesRegex(OrchestratorError, "one to 4"):
+                start_worker_cohort(state, [f"a{index}" for index in range(5)])
+        ensure.assert_not_called()
+
+    def test_worker_git_roots_are_limited_to_linked_metadata_objects_and_assignment_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.email", "crew@example.test"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.name", "Crew Test"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "--allow-empty", "-m", "base"], check=True, capture_output=True)
+            worktree = Path(directory) / "worker"
+            branch = "codex/crew/git-roots/assignment/work"
+            subprocess.run(["git", "-C", str(repo), "worktree", "add", "-b", branch, str(worktree), "HEAD"], check=True, capture_output=True)
+            roots = [Path(item) for item in worker_git_writable_roots(worktree, branch, "git-roots", "assignment")]
+            common = Path(subprocess.run(["git", "-C", str(worktree), "rev-parse", "--git-common-dir"], check=True, capture_output=True, text=True).stdout.strip()).resolve()
+        self.assertEqual(len(roots), 4)
+        self.assertNotIn(common, roots)
+        self.assertIn((common / "objects").resolve(), roots)
+        self.assertIn((common / "refs/heads/codex/crew/git-roots/assignment").resolve(), roots)
+
+    def test_local_owner_gate_does_not_block_unrelated_assignment(self) -> None:
+        state = snapshot()
+        apply_orchestrator_turn(state, turn(state, "dispatch", assignments=[definition(state, "blocked", "src/blocked"), definition(state, "free", "src/free")]))
+        apply_orchestrator_turn(state, turn(state, "ask_owner", request={"scope": "assignment", "assignment_id": "blocked", "category": "scope_change", "detail": "Choose the bounded scope."}))
+        self.assertEqual(ready_assignment_ids(state), ["free"])
+        self.assertEqual(state["status"], "running")
+
+    def test_owner_decision_binds_one_request_and_does_not_start_worker(self) -> None:
+        state = snapshot()
+        apply_orchestrator_turn(state, turn(state, "dispatch", assignments=[definition(state, "blocked", "src/blocked")]))
+        apply_orchestrator_turn(state, turn(state, "ask_owner", request={"scope": "assignment", "assignment_id": "blocked", "category": "scope_change", "detail": "Choose the bounded scope."}))
+        request_id = state["owner_requests"][0]["request_id"]
+        record_broker_message(state, "approved within current scope", kind="owner_decision", request_id=request_id, decision={"disposition": "approved", "detail": "Proceed."})
+        self.assertEqual(state["owner_requests"][0]["status"], "resolved")
+        self.assertEqual(state["assignments"][0]["status"], "planned")
+        self.assertEqual(state["assignments"][0]["worker"]["status"], "pending")
+        with self.assertRaisesRegex(OrchestratorError, "open request"):
+            record_broker_message(state, "duplicate", kind="owner_decision", request_id=request_id, decision={"disposition": "approved", "detail": "Again."})
+
+    def test_worker_success_does_not_auto_run_verifier_or_finish(self) -> None:
+        state = snapshot()
+        assignment = make_assignment("full", "full delivery", run_id=state["run_id"], assurance_mode="full", allowed_paths=["src"], verification_commands=["check"], workspace_path=str(Path(state["workspace_root"]) / "full"), workspace_branch=f"codex/crew/{state['run_id']}/full/work", workspace_base_ref="HEAD")
+        assignment["workspace"]["materialized"] = True
         assignment["status"] = "running"
         assignment["worker"]["status"] = "running"
+        assignment["workspace"]["lease"] = {"status": "active", "acquired_at": time.time(), "released_at": None}
         state["assignments"] = [assignment]
-        with self.assertRaises(OrchestratorError):
-            apply_orchestrator_turn(state, {"schema_version": ORCHESTRATOR_TURN_SCHEMA_VERSION, "run_id": state["run_id"], "action": "control", "operation": "cancel", "assignment_id": "active", "summary": "stop"})
-        self.assertEqual(state["status"], "blocked")
+        record_worker_result(state, "full", {"status": "succeeded", "summary": "submitted", "commit": "abc", "changed_paths": [], "verification": [{"command": "check", "exit_code": 0}], "worker_thread_id": "worker-thread", "turn_id": "worker-turn"})
+        self.assertEqual(assignment["status"], "submitted")
+        self.assertEqual(assignment["verifier"]["status"], "pending")
+        self.assertEqual(state["status"], "running")
+        self.assertIsNone(state["terminal"])
+        with patch("scripts.codex_harness_orchestrator._git", return_value="abc"), patch("scripts.codex_harness_orchestrator.git_status", return_value=[]):
+            with self.assertRaises(FullVerificationRequired):
+                accept_assignment(state, "full")
 
-    def test_cancellation_uncertain_cannot_be_recovered_into_workspace_reuse(self) -> None:
+    def test_full_verifier_accept_and_finish_are_three_explicit_steps(self) -> None:
         state = snapshot()
-        state["status"] = "blocked"
-        state["quarantine"] = {"reason": "cancellation_uncertain"}
-        with tempfile.TemporaryDirectory() as directory:
-            state_path = Path(directory) / "state.json"
-            with self.assertRaises(OrchestratorError):
-                recover_run(state, state_path, force=True)
+        assignment = make_assignment("full", "full delivery", run_id=state["run_id"], assurance_mode="full", allowed_paths=["src"], verification_commands=["check"], workspace_path=str(Path(state["workspace_root"]) / "full"), workspace_branch=f"codex/crew/{state['run_id']}/full/work", workspace_base_ref="base")
+        assignment["workspace"]["materialized"] = True
+        assignment["status"] = "submitted"
+        assignment["result"] = {"schema_version": "codex-crew.worker-result.v0.1", "assignment_id": "full", "revision": 1, "status": "succeeded", "summary": "done", "commit": "head", "artifacts": [], "verification": [{"command": "check", "exit_code": 0}], "changed_paths": [], "owner_request": None, "subagent_telemetry": {"delegated": False, "active_count": 0}, "worker_thread_id": "worker-thread", "worker_turn_id": "worker-turn"}
+        state["assignments"] = [assignment]
+        binding = {"run_id": state["run_id"], "assignment_id": "full", "revision": 1, "base_commit": "base", "head_commit": "head", "worker_result_digest": "digest", "workspace_path": assignment["workspace"]["path"], "goal": assignment["goal"], "non_goals": [], "acceptance_criteria": assignment["acceptance_criteria"], "verification_commands": ["check"]}
 
-    def test_timeout_reconciles_history_without_interrupt_when_terminal_is_known(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory) / "repo"
-            root.mkdir()
-            subprocess.run(["git", "-C", str(root), "init"], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(root), "config", "user.email", "crew@example.test"], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(root), "config", "user.name", "Crew Test"], check=True, capture_output=True)
-            (root / "README.md").write_text("base\n", encoding="utf-8")
-            subprocess.run(["git", "-C", str(root), "add", "README.md"], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(root), "commit", "-m", "base"], check=True, capture_output=True)
-            state_path = Path(directory) / "state.json"
-            state = new_snapshot(root, "history reconciliation", state_path, run_id="history-reconciliation", artifact_root=Path(directory) / "artifacts")
-            calls: list[str] = []
-            envelope = json.dumps({"schema_version": "codex-crew.orchestrator-turn.v0", "run_id": state["run_id"], "action": "finish", "summary": "read-only dry run complete"})
+        def verifier(_request: dict) -> dict:
+            return {"status": "passed", "summary": "verified", "findings": [], "verification": [{"command": "check", "exit_code": 0}], "_controller_evidence": {"thread_id": "verifier-thread", "turn_id": "verifier-turn"}}
 
-            class FakeSession:
-                def __init__(self, *_args: object) -> None:
-                    pass
+        handoff = {"schema_version": "codex-crew.serial-handoff.v0", "delivery_program_id": state["run_id"], "worktree": assignment["workspace"]["path"], "commit": "head", "verification": assignment["result"]["verification"]}
+        with patch("scripts.codex_harness_orchestrator._verifier_binding", return_value=binding), patch("scripts.codex_harness_orchestrator.fetch_model_catalog", return_value=CATALOG), patch("scripts.codex_harness_orchestrator._git", return_value="head"), patch("scripts.codex_harness_orchestrator.git_status", return_value=[]), patch("scripts.codex_harness_orchestrator.serial_handoff_evidence", return_value=handoff):
+            verdict = run_full_verifier(state, "full", verifier)
+            self.assertEqual(verdict["status"], "passed")
+            self.assertEqual(state["status"], "running")
+            acceptance = accept_assignment(state, "full")
+        self.assertEqual(acceptance["disposition"], "accepted")
+        self.assertEqual(state["status"], "running")
+        apply_orchestrator_turn(state, turn(state, "finish", disposition="succeeded", fact_refs=["acceptance:full"], incomplete_facts=[]))
+        self.assertEqual(state["status"], "finished")
+        self.assertEqual(state["terminal"]["disposition"], "succeeded")
+        schema = json.loads((ROOT / "skills/codex-harness/assets/codex-crew.control.v0.5.schema.json").read_text(encoding="utf-8"))
+        Draft202012Validator(schema).validate(state)
 
-                def __enter__(self) -> "FakeSession":
-                    return self
-
-                def __exit__(self, *_args: object) -> None:
-                    return None
-
-                def request(self, _request_id: int, method: str, _params: dict, _timeout: int) -> tuple[dict, list[dict]]:
-                    calls.append(method)
-                    if method == "initialize":
-                        return {}, []
-                    if method == "thread/start":
-                        return {"thread": {"id": "thread-history"}}, []
-                    if method == "turn/start":
-                        return {"turn": {"id": "turn-history"}}, []
-                    if method == "thread/read":
-                        return {"turns": [{"id": "turn-history", "status": "completed"}], "items": [{"type": "agentMessage", "threadId": "thread-history", "text": envelope}]}, []
-                    raise AssertionError(method)
-
-                def collect_until_turn_complete(self, *_args: object) -> list[dict]:
-                    raise TimeoutError("no notification")
-
-            with patch("scripts.codex_harness_orchestrator.JsonRpcSession", FakeSession), patch("scripts.codex_harness_orchestrator.app_server_command", return_value=["fake"]):
-                result = run_orchestrator_turn(state, state_path, timeout_seconds=1, resume=False)
-            self.assertEqual(result["action"], "finish")
-            self.assertEqual(state["status"], "succeeded")
-            self.assertNotIn("turn/interrupt", calls)
-            self.assertEqual(state["orchestrator"]["turn"]["terminal"]["source"], "thread_history")
-            self.assertTrue(state["orchestrator"]["turn"]["terminal"]["valid_envelope"])
-
-    def test_timeout_unknown_is_interrupted_once_and_quarantined_without_worker_dispatch(self) -> None:
+    def test_run_orchestrator_dispatch_turn_does_not_call_worker_runner(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "repo"
             root.mkdir()
@@ -265,146 +360,21 @@ class CodexHarnessOrchestratorTest(unittest.TestCase):
             (root / "README.md").write_text("base\n", encoding="utf-8")
             subprocess.run(["git", "-C", str(root), "add", "README.md"], check=True, capture_output=True)
             subprocess.run(["git", "-C", str(root), "commit", "-m", "base"], check=True, capture_output=True)
-            state_path = Path(directory) / "state.json"
-            state = new_snapshot(root, "timeout quarantine", state_path, run_id="timeout-quarantine", artifact_root=Path(directory) / "artifacts")
-            calls: list[str] = []
+            state = snapshot(root, run_id="dispatch-only")
+            envelope = turn(state, "dispatch", assignments=[definition(state, "delivery", "README.md")])
 
-            class FakeSession:
-                def __init__(self, *_args: object) -> None:
-                    pass
+            def fake_role(**kwargs: object) -> dict:
+                kwargs["on_thread_started"]("orchestrator-thread")
+                kwargs["on_turn_started"]("orchestrator-thread", "orchestrator-turn")
+                return terminal_role(envelope)
 
-                def __enter__(self) -> "FakeSession":
-                    return self
+            def forbidden_worker(_assignment_id: str, _task: dict) -> dict:
+                raise AssertionError("dispatch must not start a Worker")
 
-                def __exit__(self, *_args: object) -> None:
-                    return None
-
-                def request(self, _request_id: int, method: str, _params: dict, _timeout: int) -> tuple[dict, list[dict]]:
-                    calls.append(method)
-                    if method == "initialize":
-                        return {}, []
-                    if method == "thread/start":
-                        return {"thread": {"id": "thread-timeout"}}, []
-                    if method == "turn/start":
-                        return {"turn": {"id": "turn-timeout"}}, []
-                    if method in {"thread/read", "turn/interrupt"}:
-                        return {}, []
-                    raise AssertionError(method)
-
-                def collect_until_turn_complete(self, *_args: object) -> list[dict]:
-                    raise TimeoutError("still no terminal")
-
-            with patch("scripts.codex_harness_orchestrator.JsonRpcSession", FakeSession), patch("scripts.codex_harness_orchestrator.app_server_command", return_value=["fake"]):
-                with self.assertRaises(OrchestratorError):
-                    run_orchestrator_turn(state, state_path, timeout_seconds=1, resume=False)
-            self.assertEqual(calls.count("turn/interrupt"), 1)
-            self.assertEqual(state["status"], "blocked")
-            self.assertEqual(state["quarantine"]["reason"], "turn_completion_unknown")
-            self.assertEqual(state["orchestrator"]["turn"]["phase"], "completion_unknown")
-            self.assertEqual(state["execution"]["max_active_write_worktrees"], 0)
-            self.assertEqual(state["assignments"], [])
-            self.assertEqual(state["orchestrator"]["boundary_evidence"]["post_git"]["availability"], "observed")
-            persisted = json.loads(state_path.read_text(encoding="utf-8"))
-            self.assertEqual(persisted["quarantine"]["reason"], "turn_completion_unknown")
-            with self.assertRaises(OrchestratorError):
-                recover_run(state, state_path, force=True)
-
-    def test_timeout_with_terminal_after_interrupt_remains_blocked_and_non_reusable(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory) / "repo"
-            root.mkdir()
-            subprocess.run(["git", "-C", str(root), "init"], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(root), "config", "user.email", "crew@example.test"], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(root), "config", "user.name", "Crew Test"], check=True, capture_output=True)
-            (root / "README.md").write_text("base\n", encoding="utf-8")
-            subprocess.run(["git", "-C", str(root), "add", "README.md"], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(root), "commit", "-m", "base"], check=True, capture_output=True)
-            state_path = Path(directory) / "state.json"
-            state = new_snapshot(root, "interrupted terminal", state_path, run_id="interrupted-terminal", artifact_root=Path(directory) / "artifacts")
-            calls: list[str] = []
-
-            class FakeSession:
-                def __init__(self, *_args: object) -> None:
-                    self.collections = 0
-
-                def __enter__(self) -> "FakeSession":
-                    return self
-
-                def __exit__(self, *_args: object) -> None:
-                    return None
-
-                def request(self, _request_id: int, method: str, _params: dict, _timeout: int) -> tuple[dict, list[dict]]:
-                    calls.append(method)
-                    if method == "initialize":
-                        return {}, []
-                    if method == "thread/start":
-                        return {"thread": {"id": "thread-interrupted"}}, []
-                    if method == "turn/start":
-                        return {"turn": {"id": "turn-interrupted"}}, []
-                    if method == "thread/read":
-                        return {}, []
-                    if method == "turn/interrupt":
-                        return {}, [{"method": "turn/completed", "params": {"threadId": "thread-interrupted", "turn": {"status": "interrupted"}}}]
-                    raise AssertionError(method)
-
-                def collect_until_turn_complete(self, *_args: object) -> list[dict]:
-                    self.collections += 1
-                    if self.collections == 1:
-                        raise TimeoutError("initial timeout")
-                    return []
-
-            with patch("scripts.codex_harness_orchestrator.JsonRpcSession", FakeSession), patch("scripts.codex_harness_orchestrator.app_server_command", return_value=["fake"]):
-                with self.assertRaises(OrchestratorError):
-                    run_orchestrator_turn(state, state_path, timeout_seconds=1, resume=False)
-            self.assertEqual(calls.count("turn/interrupt"), 1)
-            self.assertEqual(state["quarantine"]["reason"], "orchestrator_turn_interrupted")
-            self.assertEqual(state["orchestrator"]["turn"]["terminal"]["status"], "interrupted")
-            self.assertEqual(state["orchestrator"]["turn"]["phase"], "terminal_observed")
-            with self.assertRaises(OrchestratorError):
-                recover_run(state, state_path, force=True)
-
-    def test_post_turn_git_boundary_is_persisted_when_app_server_fails(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory) / "repo"
-            root.mkdir()
-            subprocess.run(["git", "-C", str(root), "init"], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(root), "config", "user.email", "crew@example.test"], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(root), "config", "user.name", "Crew Test"], check=True, capture_output=True)
-            (root / "README.md").write_text("base\n", encoding="utf-8")
-            subprocess.run(["git", "-C", str(root), "add", "README.md"], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(root), "commit", "-m", "base"], check=True, capture_output=True)
-            state_path = Path(directory) / "state.json"
-            state = new_snapshot(root, "boundary failure", state_path, run_id="boundary-failure", artifact_root=Path(directory) / "artifacts")
-
-            class FakeSession:
-                def __init__(self, *_args: object) -> None:
-                    pass
-
-                def __enter__(self) -> "FakeSession":
-                    return self
-
-                def __exit__(self, *_args: object) -> None:
-                    return None
-
-                def request(self, _request_id: int, method: str, _params: dict, _timeout: int) -> tuple[dict, list[dict]]:
-                    if method == "initialize":
-                        (root / "unexpected.txt").write_text("changed\n", encoding="utf-8")
-                        raise RuntimeError("App Server failed")
-                    raise AssertionError(method)
-
-            with patch("scripts.codex_harness_orchestrator.JsonRpcSession", FakeSession), patch("scripts.codex_harness_orchestrator.app_server_command", return_value=["fake"]):
-                with self.assertRaises(RuntimeError):
-                    run_orchestrator_turn(state, state_path, timeout_seconds=1, resume=False)
-            self.assertEqual(state["status"], "blocked")
-            self.assertEqual(state["quarantine"]["reason"], "orchestrator_write_boundary")
-            self.assertEqual(state["orchestrator"]["boundary_evidence"]["pre_git"]["availability"], "observed")
-            self.assertEqual(state["orchestrator"]["boundary_evidence"]["post_git"]["availability"], "observed")
-            self.assertFalse(state["orchestrator"]["boundary_evidence"]["post_git"]["is_clean"])
-
-    def test_schema_asset_is_parseable_and_versioned(self) -> None:
-        schema = json.loads((ROOT / "skills" / "codex-harness" / "assets" / "codex-crew.control.v0.1.schema.json").read_text(encoding="utf-8"))
-        self.assertEqual(schema["$id"], "codex-crew.control.v0.1")
-        self.assertTrue({"runSnapshot", "orchestratorTurn", "assignment", "workerResult", "acceptance", "turnEvidence", "boundaryEvidence"}.issubset(schema["$defs"]))
+            with patch("scripts.codex_harness_orchestrator.run_role_turn", side_effect=fake_role):
+                result = run_orchestrator_turn(state, Path(state["state_path"]), resume=False, worker_runner=forbidden_worker)
+        self.assertEqual(result["worker_results"], [])
+        self.assertEqual(state["assignments"][0]["status"], "planned")
 
 
 if __name__ == "__main__":
