@@ -69,7 +69,7 @@ Choose exactly one mode.
 | Mode | Trigger | Stop rule |
 | --- | --- | --- |
 | N rounds | review / 审查 / code review / 重新审核 / `N轮审查` / `run N rounds` | exactly N rounds, default N=1 |
-| Loop | `loop模式`, `直到收敛`, `until converged` | convergence or cap, default cap 7 |
+| Loop | `loop模式`, `直到收敛`, `until converged` | convergence or cap, default cap 10 |
 | Closure verification | `聚焦验证模式`, `是否真的关闭`, `只验证是否修完`, `verify closure` | all named issues/findings verdicted |
 
 In closure verification mode, do not hunt for unrelated new problems.
