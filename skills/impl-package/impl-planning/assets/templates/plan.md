@@ -12,7 +12,7 @@
 发布时绑定校验（Binding Validation at Publication）：Pending | Passed
 决策：[decision.md](decision.md) | spec 中的轻量 Decision 记录
 规格：[spec.md](spec.md)
-门禁账本：[gate.md](gate.md)
+门禁账本：首次 gate evaluation 由 `dev-with-track` 创建 `gate.md`；未创建表示当前 attempt 尚无 gate verdict。
 
 > decision/spec 是当前 contract SoT。本 plan 只记录本 attempt 的执行策略、验证计划和过程证据。terminal gate verdict 后冻结。
 
@@ -44,7 +44,7 @@
 - 依赖与前置条件：
 - 目标分支：
 - 集成顺序：gate-before-merge | owner-approved pre-gate integration
-- Gate 前集成的 owner 决策证据：<N/A | evidence>
+- Gate 前集成的 owner 决策证据：<仅在 owner-approved pre-gate integration 时填写；否则 N/A>
 
 <!-- 稳定 interface、seam contract、compatibility、global constraints 和 Acceptance Semantics 不写在这里；缺失时先修订 spec。 -->
 

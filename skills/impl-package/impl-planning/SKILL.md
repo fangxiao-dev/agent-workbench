@@ -95,7 +95,11 @@ bundle 的派生汇报状态为 `drafting`、`ready-for-review`、`approved`。`
 
 只记录本 attempt 的实施顺序、模块/文件责任、具体迁移操作、集成动作与回滚操作。执行单元应足以独立交付或验证，但不展开成机械微步骤。稳定 interface、seam、compatibility 与约束必须先进入 spec。
 
-默认声明 `gate-before-merge`。若 owner 明确要求先合入再完成 gate，记录 target branch、`owner-approved pre-gate integration` 与决策证据；这只授权 integration order，不把 attempt 标为 closed。目标分支包含 comparison point 且尚无 terminal gate 时，对外状态派生为 `Integrated, gate open`，最终 pass/closed verification 必须在目标分支完成。
+默认声明 `gate-before-merge`。在该默认路径中，只有当前 attempt 的 finalized `pass` gate entry 才允许 merge；`blocked`、`fail`、`defer` 或没有 `gate.md` 都不满足该前提。`gate.md` 不在 plan 创建时预建：首次 gate evaluation 由 dev-with-track 创建；此前缺文件只表示尚无 verdict，不能被写成链接或通过校验伪装为 gate evidence。
+
+若 owner 明确要求先合入再完成 gate，plan 必须在实际 integration 前记录 target branch、`owner-approved pre-gate integration` 与可定位的决策证据。此授权只改变 integration order，不把 attempt 标为 closed；目标分支包含 comparison point 且尚无 terminal gate 时，对外状态派生为 `Integrated, gate open`，最终 pass/closed verification 必须在目标分支完成。若已合入却没有这条预先记录的授权，不得事后补写成已授权；报告 process violation，保持 gate open，并请求 owner 决定补救路径。
+
+当 owner 只授权 spec 的一个可独立验收子切片时，必须在 merge 前把该子切片的 acceptance boundary 反映到当前 Decision/Spec/Plan，或创建独立 attempt/package。不得让同一 attempt 一面保留未实现 AC、一面把该子切片描述为整个 package 的 merge/gate completion。
 
 ### Planned Verification
 
@@ -126,7 +130,7 @@ bundle 的派生汇报状态为 `drafting`、`ready-for-review`、`approved`。`
 7. 交叉检查 bundle 暴露的 contract 缺口；规范性缺口回 req-align，真正改变 plan-owned 语义的过程策略缺口升级 P revision。仅证据、引用、分类或机械顺序投影错误由 owning skill 局部修正。
 8. 新 package 必须先运行一次 `init --package-id <id>` 建立两份 current-contract sidecar；owner 批准 plan 后再运行 `register-revision plan <P> --attempt <id> --artifact <plan-path> --evidence <pointer>`（或同一 semantic revision 的 `register-revisions`），以 `plan-contract-v1` 追加 binding、选择 current attempt、seed earned runtime records 并刷新投影。commit 后运行 `validate --committed`。后续 ER append 不升级 P revision；ER 写入前再次 committed validate，此时且无 terminal gate 时 lifecycle 派生为 Active。
 9. 执行期间只 append Execution Record；状态由对应 artifact 维护。
-10. gate evaluation 由 dev-with-track 在 gate.md 顶部插入摘要，并链接对应 Execution Record；terminal verdict 使 lifecycle 派生为 Frozen。
+10. gate evaluation 由 dev-with-track 首次创建 gate.md，并在顶部插入 content-bound entry、链接对应 Execution Record；terminal verdict 使 lifecycle 派生为 Frozen。默认 merge 前，确认该 entry 已 finalized 为 current attempt 的 `pass`；pre-gate integration 只接受 plan 中已存在的 owner authorization，不得事后推定。
 
 ## Review Checklist
 
@@ -143,6 +147,9 @@ bundle 的派生汇报状态为 `drafting`、`ready-for-review`、`approved`。`
 - 当前 Composition earned 的 Ticket/DAG 已组成一个 bundle；联合校验通过后才进入 `ready-for-review`，没有 Ticket-only approval 或 DAG-pending 中间门。
 - bundle approval 绑定当前 Attempt、P revision、完整 artifact 集合和联合校验证据；实质变化会使旧 approval 失效并触发 scoped re-review。
 - plan 无手工 `Status`；Draft/Active/Frozen 与 `Integrated, gate open` 均能从 registry、gate 和 target branch 事实派生。
+- 初始 plan 不链接不存在的 gate.md；首次 gate evaluation 前缺 gate.md 只能表示 open/no-verdict，不是成功或异常 evidence。
+- 默认 `gate-before-merge` 已把 finalized current-attempt `pass` 设为 merge 前提；任何 pre-gate integration 都有 plan 中预先记录的 owner 决策证据。未授权先合入按 process violation 报告，不得事后补写授权。
+- 如果只交付 spec 的子切片，当前 attempt 的 AC/范围或 package 边界已经同步收窄；不存在“未实现 AC 与整体完成声明”并存的状态。
 - terminal gate 后 plan 已冻结。
 
 ## Output Contract

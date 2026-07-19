@@ -75,6 +75,9 @@ def main() -> None:
     )
     dev_with_track = read(IMPL_ROOT / "dev-with-track" / "SKILL.md")
     dev_evals = read(IMPL_ROOT / "dev-with-track" / "evals" / "evals.json")
+    completion_verification = read(
+        IMPL_ROOT / "verification-before-completion" / "SKILL.md"
+    )
     req_align = read(IMPL_ROOT / "req-align" / "SKILL.md")
 
     required = (
@@ -149,6 +152,41 @@ def main() -> None:
             "plan contract projection mode",
         ),
         (shared, "Integrated, gate open", "derived integration qualifier"),
+        (
+            template,
+            "首次 gate evaluation 由 `dev-with-track` 创建 `gate.md`",
+            "deferred gate-ledger creation",
+        ),
+        (
+            skill,
+            "只有当前 attempt 的 finalized `pass` gate entry 才允许 merge",
+            "default merge gate",
+        ),
+        (
+            skill,
+            "不得事后补写成已授权",
+            "pre-gate authorization must precede integration",
+        ),
+        (
+            skill,
+            "只授权 spec 的一个可独立验收子切片",
+            "partial-slice boundary rule",
+        ),
+        (
+            dev_with_track,
+            "初始 attempt 不要求预建 gate.md",
+            "open attempt has no precreated gate ledger",
+        ),
+        (
+            dev_with_track,
+            "不得事后补写授权来清除该事实",
+            "execution process-violation rule",
+        ),
+        (
+            completion_verification,
+            "不得事后把授权或 terminal pass 倒灌到已发生的 merge",
+            "completion claim cannot backfill pre-gate authority",
+        ),
         (readiness_template, "### 必须", "manual readiness required fields"),
         (readiness_template, "### 可选项（Optional", "manual readiness optional fields"),
         (ticket_template, "Plan Revision", "ticket plan-revision field"),
@@ -221,6 +259,7 @@ def main() -> None:
         (skill, "Composition 由 spec", "spec-owned composition"),
         (patching, "原 package 的 `Composition:`", "inherited patch composition"),
         (template, "Status: Draft | Active | Frozen", "manually maintained plan lifecycle"),
+        (template, "门禁账本：[gate.md](gate.md)", "dangling gate-ledger link"),
         (template, "(commit <sha>)", "self-referential plan commit binding"),
         (gate_template, "(commit <sha>)", "legacy gate commit binding"),
         (

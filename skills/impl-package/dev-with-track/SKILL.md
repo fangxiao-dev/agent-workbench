@@ -103,7 +103,9 @@ gate evaluation 前逐项分流 execution findings：
 
 ## Append-only gate ledger
 
-package 只使用 gate.md。顶部状态一览是 `gate-status` machine-owned projection，正文判断只能来自 finalized entry；旧 entry 不修改。创建 evaluation 时运行 `new-gate-entry --attempt <id> --operation-id <stable-id>` 分配 G id/scaffold，不手算或保存 counter。
+package 只使用 gate.md。顶部状态一览是 `gate-status` machine-owned projection，正文判断只能来自 finalized entry；旧 entry 不修改。初始 attempt 不要求预建 gate.md：不存在只表示 open/no-verdict。创建 evaluation 时运行 `new-gate-entry --attempt <id> --operation-id <stable-id>` 分配 G id/scaffold，不手算或保存 counter。
+
+默认 `gate-before-merge` 路径中，在 merge 前确认 current attempt 的 finalized entry 为 `pass`。若计划声明 `owner-approved pre-gate integration`，先核对 target branch 与可定位的 owner evidence，再允许 integration，并只报告 `Integrated, gate open`；不得把 merge 或 schema 子切片的局部证据写成 terminal pass。若 target branch 已有 comparison point、但 plan 没有预先记录该授权，停止 completion/merge-ready claim，记录 process violation 并请求 owner 决定补救；不得事后补写授权来清除该事实。
 
 entry 的可读正文必须包含 Attempt ID、Supersedes、evaluated time、D/S/P revision set、binding validation 结论、Composition、comparison point、一个或多个 plan ER anchor、blocker/deferred item、verdict reason 与 Durable Deltas。正文完成后立即运行 `finalize-gate-entry <G-id>`；它校验 allocation、逐字段反解、完整 entry content binding 与 package-local pointer，再刷新顶部投影。两步之间被消费方识别为 mismatch/manual 是有意 fail-safe，工作流中不得插入无关步骤。
 
@@ -135,7 +137,7 @@ terminal gate 关闭后提示 owner 可以按需使用 `$backfill-stable-docs`�
 5. 有 manual owner 时，在等待验收前输出轻量 readiness packet；没有人工验收时跳过。
 6. 分流 execution findings；必要时回 req-align 并重新过相应 gate。
 7. Ticket 达到验收候选前，只扫描 `contributes-to` 该 Ticket 的 `BLOCKED` Task：未完成内容若影响其 AC、已声明行为或风险边界，先解除阻塞；若真实影响扩大，先更新 contribution mapping。随后自动路由 code-review、module-review 和适用的 safety-review，固定 comparison point 并闭环 review findings。最终 package review 前全局确认没有 `BLOCKED`，且所有 Task 为 `DONE` 或有明确、已批准理由的 `WAIVED` / `SUPERSEDED`；再确认所有 Ticket AC evidence 和 active Spec 全覆盖。
-8. 用稳定 operation-id 分配 G id/scaffold；拟写 terminal pass 时先完成 Stage 7 准备，再由 `verification-before-completion` 审计 pass claim。
+8. 默认 merge 前，用稳定 operation-id 分配 G id/scaffold，完成当前 attempt 的 pass evaluation；拟写 terminal pass 时先完成 Stage 7 准备，再由 `verification-before-completion` 审计 pass claim。只有 plan 已预先记录的 owner-approved pre-gate integration 可以跳过这一时序。
 9. 完成 Markdown entry 后立即 finalize content-bound index；terminal 时由可信 finalized verdict 派生 Frozen，blocked 时保持 Active。
 10. terminal metadata commit、目标分支合入或环境变化后，任何 complete / closed / merge-ready / release-ready 声明前重新执行 completion-claim evidence audit。先合入后关 gate 的 attempt 必须以目标分支 evidence 收口。
 
