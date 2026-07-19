@@ -1237,6 +1237,33 @@ class ProjectionRebindTest(unittest.TestCase):
 
 
 class RuntimeProjectionValidationTest(unittest.TestCase):
+    def test_terminal_gate_rejects_stale_dag_revision_binding(self) -> None:
+        spec = importlib.util.spec_from_file_location("impl_package_state_gate_binding_test", SCRIPT)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temp:
+            package = Path(temp) / "package"
+            sidecar = package / ".impl-package"
+            sidecar.mkdir(parents=True)
+            (package / "plan.md").write_text(
+                "执行组合（Composition）：tickets=false, dag=true\n", encoding="utf-8"
+            )
+            (package / "dag.md").write_text(
+                "执行尝试 ID（Attempt ID）：initial\n"
+                "- 修订集合（Revision set）：D1 / S1 / P1\n", encoding="utf-8"
+            )
+            (sidecar / "revision-bindings.json").write_text(json.dumps({
+                "contractVersion": "3.2", "purpose": "internal-machine-sidecar", "ownerFacing": False,
+                "current": {"decision": {"revision": "D1"}, "spec": {"revision": "S2"},
+                            "attempt": {"id": "initial", "plan": "plan.md", "revision": "P2"}},
+                "bindings": [],
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(module.StateError, "DAG revision binding"):
+                module._assert_attempt_decomposition_revision_bindings(
+                    package, "initial", {"decision": "D1", "spec": "S2", "plan": "P2"}
+                )
+
     def test_validate_rejects_runtime_projection_drift(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp) / "repo"

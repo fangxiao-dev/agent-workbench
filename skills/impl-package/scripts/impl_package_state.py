@@ -910,6 +910,39 @@ def command_refresh_projections(package: Path) -> dict[str, Any]:
     return {"changed": changed_paths}
 
 
+def _assert_attempt_decomposition_revision_bindings(
+    package: Path, attempt: str, current_revision_set: dict[str, str]
+) -> None:
+    """Fail terminal gates when earned Ticket/DAG artifacts still describe an older contract."""
+    revision_state = _load_revision_state(package)[1]
+    attempt_selection = revision_state.get("current", {}).get("attempt")
+    if not attempt_selection or attempt_selection.get("id") != attempt:
+        raise StateError("gate attempt does not match the current plan attempt")
+    plan_text = _artifact_text(package, attempt_selection["plan"], committed=False)
+    tickets_earned, dag_earned = _composition(plan_text)
+
+    if dag_earned:
+        dag_relative = _attempt_dag_artifact(package, attempt, committed=False)
+        if not dag_relative:
+            raise StateError("earned DAG is missing its revision binding")
+        dag_text = _artifact_text(package, dag_relative, committed=False)
+        dag_match = re.search(
+            r"(?m)^-\\s*修订集合（Revision set）：\\s*(D\\d+|N/A)\\s*/\\s*(S\\d+|N/A)\\s*/\\s*(P\\d+|N/A)\\s*$",
+            dag_text,
+        )
+        if not dag_match or dag_match.groups() != (
+            current_revision_set["decision"], current_revision_set["spec"], current_revision_set["plan"]
+        ):
+            raise StateError("DAG revision binding does not match current revisions; revalidate the decomposition before finalizing a gate")
+
+    if tickets_earned:
+        for ticket_id, (_, ticket_text) in _attempt_ticket_documents(package, attempt, committed=False).items():
+            spec_match = re.search(r"(?m)^\\*\\*规格修订（Spec Revision）：\\*\\*\\s*(S\\d+|N/A)\\s*$", ticket_text)
+            plan_match = re.search(r"(?m)^\\*\\*计划修订（Plan Revision）：\\*\\*\\s*(P\\d+|N/A)\\s*$", ticket_text)
+            if not spec_match or not plan_match or spec_match.group(1) != current_revision_set["spec"] or plan_match.group(1) != current_revision_set["plan"]:
+                raise StateError(f"ticket {ticket_id} revision binding does not match current revisions; revalidate the decomposition before finalizing a gate")
+
+
 def command_finalize_gate_entry(package: Path, entry_id: str) -> dict[str, Any]:
     state_path, state = _load_runtime_state(package)
     allocations = [
@@ -931,6 +964,7 @@ def command_finalize_gate_entry(package: Path, entry_id: str) -> dict[str, Any]:
         raise StateError(f"gate revision set is missing for {entry_id}")
     if current_revision_set is None or parsed["revisionSet"] != current_revision_set:
         raise StateError(f"gate revision set does not match current revisions for {entry_id}")
+    _assert_attempt_decomposition_revision_bindings(package, parsed["attempt"], current_revision_set)
     prior = [
         row for row in state.get("gate", {}).get("entries", [])
         if row.get("attempt") == parsed["attempt"] and row.get("id") != entry_id
