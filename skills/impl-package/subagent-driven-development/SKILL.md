@@ -15,10 +15,24 @@ Working Branch owner 是既有 branch/ticket owner，不是新增角色：其在
 
 单 owner、机械、局部可逆且委派成本高于收益的修改，由 Working Branch owner 直接完成，不创建额外 Task artifact。Task 可以是 feature、test、documentation、verification 或实际出现的 seaming 工作；它们没有额外类型系统。
 
+## 集成性工作委派
+
+Working Branch owner 对集成决策、边界、验收证据和最终状态负责；这表示 owner 对结果负责，不表示 owner 必须亲自编写跨模块、跨阶段或被称为 seaming 的代码。已经决策闭合且可隔离的集成性实现应优先派发，让 owner 保持在决策、验收和冲突处理位置。
+
+当一项集成性工作同时满足下列条件时，优先作为普通 Task 派发给专门 worker：
+
+1. **边界可声明**：输入、输出、不可改变的约束和完成判据可在派发前写清。
+2. **写入可隔离**：可限定文件、资源和外部权限；不会与活跃 worker 的核心写入范围重叠，或冲突已被明确串行化。
+3. **决策已闭合**：worker 不需要自行选择业务语义、mutation authority、兼容策略或风险取舍。
+4. **结果可复核**：owner 能以测试、diff、运行记录或明确人工检查独立验收。
+5. **失败可回收**：发现接口漂移、权限不足、验证矛盾或范围扩张时，worker 停止并交回 owner，而不是自行扩大任务。
+
+任一条件不满足时，owner 先完成澄清、接口冻结、排序或风险决策，再重新评估是否派发。这里的“集成性工作”同样适用于测试补强、迁移适配、文档回填、跨 worktree 合并前验证和配置接入；不要因名称不同绕过这套判断。
+
 ## 调度与返回
 
 1. Working Branch owner 读取批准的 plan、关联 Ticket 和最小 Task DAG，只确认已知依赖、primary ownership 与禁改范围。
-2. 使用 [`references/prompts.md`](references/prompts.md) 的 implementer 模板派发：目标、primary ownership、禁止越界范围、Known depends on、Contributes-to tickets、局部验证要求和 `BLOCKED` 返回格式是普通 Task 的完整默认输入。
+2. 使用 [`references/prompts.md`](references/prompts.md) 的 implementer 模板派发：目标、primary ownership、禁止越界范围、Known depends on、Contributes-to tickets、局部验证要求和 `BLOCKED` 返回格式是普通 Task 的完整默认输入。对已决策闭合的集成性 Task，额外写清两侧冻结接口、允许修改的连接层、不得修改的核心实现及必须证明的正反向行为。
 3. 可独立运行的 Task 可以并行；已知依赖必须先满足。不要为了证明所有潜在依赖而在派发前进行广泛调研。
 4. worker 不扩大 primary ownership。发现共享 seam、未决 contract、越权动作或无法可靠继续时返回 `BLOCKED`，附最小 blocker 原因、建议动作和受影响 Ticket；seam 直接记录为 blocker，不新增实体或状态。
 

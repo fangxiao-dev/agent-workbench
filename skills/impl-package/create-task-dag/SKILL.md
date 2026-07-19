@@ -60,6 +60,7 @@ Integration responsibility: Working Branch owner
 - Primary ownership 按模块、目录或共享 seam 划分，不必穷举文件。只有能独立启动、且不抢占其他 Task primary ownership 的工作才拆 Task。
 - 能形成独立纵向验收结果的工作，拆成 Ticket，不要增加复杂 Task。
 - 共享 migration、tenant/auth/permission、安全边界、公共 contract 或 rollback 边界的工作默认不拆；保持一个串行 Task 或一个 Ticket。
+- 跨模块、跨阶段或 seaming 本身不等于必须由 Working Branch owner 亲自实现。上游接口与风险取舍已经闭合后，若连接层的写入范围可隔离、结果可独立复核且失败会交回 owner，可增加一个依赖上游 Task 的普通集成性 Task；它不获得新类型、状态或验收权。
 - 默认不写完整 Task Contract、所有 consumer、完整 review basis、cohort/lanes 或逐 Task formal review。共享 seam、跨 session handoff 或高风险边界真实出现时，仅补受影响 Task 的最小必要细节。
 - 有 Ticket 时 `Contributes to tickets` 写 ticket ID；no-ticket DAG 写 `none`，由 spec AC、plan Execution Record 和 gate 保持验收链。该列只表示执行贡献，不建立 Task→AC acceptance mapping。
 
@@ -84,7 +85,7 @@ Ticket 最终验收前只扫描 contributes-to 该 Ticket 的 BLOCKED Task：若
 2. 用最小表格划分可安全独立启动的 Task；记录确定依赖、primary ownership、Ticket contribution 和已知 seam/risk。不能安全并行就不拆。
 3. 运行本节联合 Ticket↔DAG 校验，确认 coverage、typed dependency、ownership/contribution、AC evidence feasibility 与 gate/P binding；失败则返回 `to-tickets`/`impl-planning` 修正，不发布任何 Ticket。
 4. 持久化最小 `dag.md`/patch DAG、联合校验结果与 review handoff，并报告 `ready-for-review`；此时不派发 worker、不创建 Task progress、不收集执行 evidence，也不触发 Ticket publication。
-5. owner 批准完整 bundle、`to-tickets mode=publish` 成功并进入 execution preflight 后，由 `dev-with-track`/`subagent-driven-development` 按 DAG 派发 primary ownership 不重叠、依赖已释放的 Task；普通 prompt 只给目标、ownership、禁改范围、依赖、贡献 Ticket、局部验证与 BLOCKED 返回格式（见 `references/worker-prompts.md`）。
+5. owner 批准完整 bundle、`to-tickets mode=publish` 成功并进入 execution preflight 后，由 `dev-with-track`/`subagent-driven-development` 按 DAG 派发 primary ownership 不重叠、依赖已释放的 Task；普通 prompt 只给目标、ownership、禁改范围、依赖、贡献 Ticket、局部验证与 BLOCKED 返回格式。集成性 Task 还要给出冻结接口、连接层写入范围、核心禁改范围及正反向证明；这些信息属于派发输入，不新增 DAG artifact 或角色。
 6. 执行阶段收集局部 evidence；BLOCKED 直接记录原因、建议动作和影响 Ticket。由 Working Branch owner 集成并执行共享验证和 Ticket 层正式 review；本 skill 不把局部验证升格为 Ticket acceptance。
 
 高风险 Task（tenant isolation、auth/permission、migration、真实外部写入、金额、不可逆数据风险）可按实际 diff 要求更严格验证或 review；这是同一 Task 的额外质量要求，不是 Strict Task 机制。优先选择不拆，或拆成可独立验收的 Ticket。

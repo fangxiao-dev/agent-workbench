@@ -1,6 +1,6 @@
 ---
 target: skills/impl-package/subagent-driven-development
-updated: 2026-07-17
+updated: 2026-07-19
 ---
 ## 原则
 
@@ -16,3 +16,7 @@ updated: 2026-07-17
 
 - **Supersedes R1 的默认机制：**普通 Task 只需要有界派发、局部验证与 BLOCKED 回报；不再默认创建 review basis、双 reviewer 或 closure review。
 - 高风险实际 diff 仍按 auth/permission、migration、外部写入、金额、不可逆数据等信号追加必要验证或 review；Ticket 正式 review 与 acceptance 继续由 `dev-with-track` 负责。
+
+### R3 · 2026-07-19（集成委派）
+
+- 采纳「主 session owns integration 不等于亲自编码；用可声明边界、可隔离写入、决策闭合、可复核结果和可回收失败决定是否派发」— 用户原话：希望“当 seam 满足以下条件”更泛化，而非 case-specific；随后明确同意修改。
