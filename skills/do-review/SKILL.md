@@ -42,6 +42,10 @@ Completion criterion: every selected reviewer has a verified canonical path and 
 
 Determine the target, mode, reviewer selection, complete change unit, immutable base SHA, immutable head SHA, diff range, and included commits once before dispatch. Review the complete requested change unit, not merely `HEAD^`: use a user-supplied base/PR base/branch/tag/issue set; for a plan or implementation package include the package's reachable commits; otherwise use the integration or PR merge base through head. Ask before dispatch if this cannot be determined reliably.
 
+Before preparing context or reserving capacity, fail fast on the fixed range: resolve both references with `git rev-parse <base>^{commit}` and `git rev-parse <head>^{commit}`, pin the resulting SHAs, then inspect `git diff <base-sha>...<head-sha>` and the included commit list. An invalid reference or empty diff stops the review before any leaf dispatch; do not turn either condition into a reviewer evidence gap.
+
+`do-review` owns Spec evidence discovery. Resolve and record sources in this order: (1) issue/PR references in the included commit messages and their complete tracker content under repository rules; (2) user-provided paths; (3) matching PRD/spec material in `docs/`, `specs/`, or `.scratch/` for the branch or feature; (4) relevant Impl-Package Decision, Spec, Plan, and DAG material. Record each searched source and its result, including explicit empty results. If no usable contract evidence is found, ask the user when a source can reasonably be supplied; if review must continue, record the evidence gap and still dispatch the default `spec-review` leaf. Only an explicit reviewer selection or a user-approved named degraded topology may omit Track C.
+
 Prepare one immutable shared context for every selected reviewer:
 
 ```text
@@ -57,6 +61,8 @@ Scope source/package roots:
 Known constraints and out of scope:
 Repository standards sources:
 Issue/Decision/Spec/Plan/DAG sources:
+Spec source discovery record (searched sources and results):
+Spec evidence gap / user confirmation, if any:
 User classification policy:
 Prior-round canonical ledger:
 Assigned track label:
@@ -66,7 +72,7 @@ Assigned canonical SKILL.md path:
 
 When the target is an Impl-Package, include its package root and relevant Decision, Spec, Plan, and DAG material as evidence only. `impl-package/dev-with-track` remains the lifecycle owner for applying findings and package gates.
 
-Completion criterion: every selected reviewer receives the same complete diff, base SHA, head SHA, commit list, and comparison point.
+Completion criterion: base/head are verified immutable commits, the diff is non-empty, Spec source discovery is recorded, and every selected reviewer receives the same complete diff, base SHA, head SHA, commit list, and comparison point.
 
 ## Step 2: Select Mode And Reviewers
 

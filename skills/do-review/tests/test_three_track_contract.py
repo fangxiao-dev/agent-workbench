@@ -83,6 +83,18 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertIn("prior round's canonical ledger", skill)
         self.assertIn("phases", skill)
 
+    def test_scope_contract_fails_fast_and_records_spec_discovery(self) -> None:
+        skill = SKILL_PATH.read_text(encoding="utf-8")
+        self.assertIn("git rev-parse <base>^{commit}", skill)
+        self.assertIn("git rev-parse <head>^{commit}", skill)
+        self.assertIn("empty diff stops the review before any leaf dispatch", skill)
+        self.assertIn("Spec evidence discovery", skill)
+        self.assertIn("issue/PR references in the included commit messages", skill)
+        self.assertIn("user-provided paths", skill)
+        self.assertIn("matching PRD/spec material in `docs/`, `specs/`, or `.scratch/`", skill)
+        self.assertIn("Spec source discovery record (searched sources and results):", skill)
+        self.assertIn("still dispatch the default `spec-review` leaf", skill)
+
     def test_skill_has_fail_closed_default_three_track_verdicts(self) -> None:
         skill = SKILL_PATH.read_text(encoding="utf-8")
         templates = TEMPLATES_PATH.read_text(encoding="utf-8")
