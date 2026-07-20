@@ -1,6 +1,6 @@
 ---
 name: do-review
-description: Orchestrate dual-track code review at reviewer-skill granularity, including each assigned skill's required internal reviewers. Use for PR/code review, N-round review, loop/until-converged review, custom review-skill orchestration, or verifying whether previous review issues were actually fixed. Requires subagents by default; stop and ask if they are unavailable.
+description: Orchestrate independent leaf reviewer skills for PR/code review, N-round review, loop/until-converged review, custom reviewer selection, and closure verification. Requires subagents by default; stop and ask if they are unavailable.
 allowed-tools:
   - Read
   - Grep
@@ -10,171 +10,115 @@ allowed-tools:
 
 # Do Review
 
-Run a **dual-track review at reviewer-skill granularity**: assign two reviewer skills to the same target, then execute each assigned skill's own workflow completely. A track is not synonymous with one subagent. For example, the default `module-review` track has independent Standards and Spec reviewers; both are required for that track.
+`do-review` is the sole review orchestrator. It fixes the complete review scope and comparison point, prepares shared context, plans capacity, dispatches leaf reviewers, owns the cross-track ledger, verifies P1/P2 evidence, classifies findings, controls loop convergence, and writes the final report. The main session is not another reviewer.
 
-The main session acts as scheduler, ledger owner, deduper, verifier, and final decision maker. It does not replace an assigned skill's required internal reviewers with its own opinion.
+Every dispatched reviewer is a leaf reviewer. A leaf reviewer performs only its assigned skill's review role: it must not invoke `$do-review`, run its subagent gate, dispatch subagents, re-resolve reviewer topology, re-plan capacity, read another track's same-round findings, classify cross-track results, or decide the overall verdict.
 
-By default, Track A uses `code-review` and Track B uses `module-review`. If the user names custom reviewer skills, assign them through this skill's orchestration instead of changing the ledger, verification, or final-decision workflow.
+The default topology comes only from [reviewer-registry.json](references/reviewer-registry.json): Track A `code-review`, Track B `standards-review`, and Track C `spec-review`. `safety-review` remains an opt-in reviewer, not a default track. Do not infer internal reviewer topology from a reviewer skill; every resolved reviewer is already one leaf.
 
-The main session is not a third reviewer. It verifies high-severity evidence and decides classification.
+## Step 0: Subagent Gate, Preflight, And Capacity
 
-## Step 0: Subagent Gate
-
-This skill requires subagents. Capacity must be evaluated against the full reviewer topology, not just the two outer tracks.
-
-If subagents are unavailable, disallowed, or need authorization, stop before reviewing and ask:
+This skill requires subagents. If they are unavailable, disallowed, or need authorization, stop before reviewing and ask:
 
 ```text
-This do-review skill requires subagents for the two review tracks. Subagents are currently unavailable or need authorization. Do you want me to stop, or explicitly authorize a degraded single-session review?
+This do-review skill requires subagents for every selected leaf reviewer. Subagents are currently unavailable or need authorization. Do you want me to stop, or explicitly authorize a named degraded single-session review?
 ```
 
-Before dispatch, resolve every assigned reviewer skill through the canonical registry and run the preflight below. Then read every resolved reviewer skill and determine its internal reviewer requirement. Reserve enough slots to execute every required reviewer role. If the runtime cannot host all roles simultaneously but can run them safely in phases, state the phase order and execute every required role; do not silently omit a child reviewer to preserve outer-track parallelism.
-
-Completion criterion: every required reviewer role is available, scheduled in a safe phase order, or the user explicitly authorizes a named degraded topology. If neither is true, stop.
-
-### Step 0.5: Canonical reviewer-path preflight
-
-`do-review` is the reviewer router. It owns reviewer discovery and path validation; generic reviewer skills do not contain Impl-Package lifecycle routing.
-
-1. Resolve `code-review`、`module-review`、`safety-review` using [reviewer-registry.json](references/reviewer-registry.json). For a custom reviewer, resolve one unique canonical path from the active skill catalog; do not infer it from a folder-name match.
-2. Before reserving capacity or dispatching a subagent, verify every selected canonical `SKILL.md` exists, is readable, and has frontmatter whose `name` equals the requested reviewer name:
+Resolve the selected reviewer names through [reviewer-registry.json](references/reviewer-registry.json), then preflight every canonical path before reserving capacity or dispatching. The registry is the single source for the default topology and canonical paths.
 
 ```text
-python <do-review-skill-dir>/scripts/verify-reviewer-skills.py --workbench-root <agent-workbench-root> --skills <track-a-skill> <track-b-skill>
+python <do-review-skill-dir>/scripts/verify-reviewer-skills.py --workbench-root <agent-workbench-root>
+python <do-review-skill-dir>/scripts/verify-reviewer-skills.py --workbench-root <agent-workbench-root> --skills <selected-skill-1> <selected-skill-2> <selected-skill-3>
+python <do-review-skill-dir>/scripts/verify-reviewer-skills.py --workbench-root <agent-workbench-root> --skill-path <custom-skill>=<absolute-skill-path>
 ```
 
-For custom tracks, pass each catalog-resolved canonical path instead of treating it as a registry default. If both tracks are custom, omit `--skills`:
+For an explicit reviewer selection, resolve each name once through the registry or active skill catalog, pass every resolved registry name with `--skills`, and pass every catalog-resolved custom name/path with `--skill-path`. A path must exist, be readable, remain inside the workbench root, and have frontmatter whose `name` exactly matches the requested name. Fail before dispatch if any selection is ambiguous or invalid; never substitute a similarly named or removed skill.
+
+Reserve one subagent slot for every selected leaf reviewer. Prefer concurrent dispatch. If capacity requires phases, schedule every selected reviewer with the same already-fixed context; phases change only start time. Do not omit a reviewer merely to preserve parallelism. A named degraded topology is valid only when the user explicitly authorizes its exact reviewer list.
+
+Completion criterion: every selected reviewer has a verified canonical path and a capacity slot or safe phase; otherwise the run stops.
+
+## Step 1: Fix Scope And Shared Context
+
+Determine the target, mode, reviewer selection, complete change unit, immutable base SHA, immutable head SHA, diff range, and included commits once before dispatch. Review the complete requested change unit, not merely `HEAD^`: use a user-supplied base/PR base/branch/tag/issue set; for a plan or implementation package include the package's reachable commits; otherwise use the integration or PR merge base through head. Ask before dispatch if this cannot be determined reliably.
+
+Prepare one immutable shared context for every selected reviewer:
 
 ```text
-python <do-review-skill-dir>/scripts/verify-reviewer-skills.py --workbench-root <agent-workbench-root> --skill-path <custom-skill-a>=<absolute-skill-path-a> --skill-path <custom-skill-b>=<absolute-skill-path-b>
+Review target:
+Repo/worktree:
+Mode and round/cap:
+Comparison point input:
+Resolved base SHA:
+Resolved head SHA:
+Diff command/range:
+Included commits:
+Scope source/package roots:
+Known constraints and out of scope:
+Repository standards sources:
+Issue/Decision/Spec/Plan/DAG sources:
+User classification policy:
+Prior-round canonical ledger:
+Assigned track label:
+Assigned reviewer skill:
+Assigned canonical SKILL.md path:
 ```
 
-3. If the registry has no unique entry, the file is missing/unreadable, or its frontmatter name disagrees, stop before dispatch. Report the requested skill, expected canonical path, and the exact validation failure. Do not silently use a similarly named or legacy path.
-4. Put the resolved absolute path in every reviewer prompt. The subagent must read that exact file before reviewing.
+When the target is an Impl-Package, include its package root and relevant Decision, Spec, Plan, and DAG material as evidence only. `impl-package/dev-with-track` remains the lifecycle owner for applying findings and package gates.
 
-When the target is an Impl-Package, also route its package root and relevant decision/spec/plan/DAG material into the review context. This supplies evidence only: `impl-package/dev-with-track` remains the lifecycle owner for applying findings, updating package records, and deciding gates.
+Completion criterion: every selected reviewer receives the same complete diff, base SHA, head SHA, commit list, and comparison point.
 
-Completion criterion: each Track A/Track B assignment has a verified, unique canonical `SKILL.md` path before any reviewer subagent is dispatched.
+## Step 2: Select Mode And Reviewers
 
-## Step 1: Scope
-
-Determine the review target, mode, and reviewer tracks before spawning subagents.
-
-Scope fields:
-
-```text
-Target:
-Base/head or issue set:
-Mode:
-Rounds/cap:
-Reviewer tracks:
-Known constraints:
-Out of scope:
-Scope source / package roots / included commits:
-```
-
-### Commit-range resolution
-
-Review the complete requested change unit, not merely the most recent commit.
-
-- If the user names a base, PR base, branch, tag, or issue set, use it.
-- If the request refers to a **plan package**, implementation package, handoff package, or a plan directory, locate the package root and include every reachable commit from the parent of the earliest package-related commit through the chosen head. Record the resulting base/head and included commits.
-- Otherwise, for a branch/PR review, use the merge base with the repository's integration branch (or the PR base) through head; do not default to `HEAD^` merely because the user asked after a commit.
-- If the package root or intended integration base cannot be determined reliably, ask before dispatch. Do not infer a one-commit range as a fallback.
-
-Ask only if the target, mode, reviewer tracks, or complete change-unit range cannot be inferred from the prompt, repo, or issue/PR metadata.
-
-Completion criterion: the target revision/issue set and mode are explicit enough that subagents can work independently without asking follow-up questions.
-
-## Step 2: Select Mode
-
-Choose exactly one mode.
+Choose exactly one mode:
 
 | Mode | Trigger | Stop rule |
 | --- | --- | --- |
-| N rounds | review / 审查 / code review / 重新审核 / `N轮审查` / `run N rounds` | exactly N rounds, default N=1 |
-| Loop | `loop模式`, `直到收敛`, `until converged` | convergence or cap, default cap 10 |
-| Closure verification | `聚焦验证模式`, `是否真的关闭`, `只验证是否修完`, `verify closure` | all named issues/findings verdicted |
+| N rounds | review / 审查 / code review / 重新审核 / `N轮审查` / `run N rounds` | exactly N rounds, default 1 |
+| Loop | `loop模式`, `直到收敛`, `until converged` | convergence or cap, default 10 |
+| Closure verification | `聚焦验证模式`, `是否真的关闭`, `只验证是否修完`, `verify closure` | all named findings verdicted |
 
-In closure verification mode, do not hunt for unrelated new problems.
+In closure verification, do not hunt unrelated problems.
 
-Completion criterion: the selected mode and stop rule are written in the main session notes or response.
+With no explicit reviewer names, read `default_tracks` from the registry in its configured order. Its current entries are Track A (`code-review`), Track B (`standards-review`), and Track C (`spec-review`). With explicit reviewer names, run exactly those names once in the user's stated order: do not duplicate one selection, auto-fill omitted defaults, or infer missing reviewers. Assign labels sequentially (`Track A`, `Track B`, `Track C`, then later letters only if the user explicitly provides more reviewers).
 
-## Step 3: Select Reviewer Tracks
+Completion criterion: the mode and every selected track label/name/path are fixed before dispatch.
 
-Choose exactly two outer reviewer-skill tracks before dispatch. These are skill assignments, not a cap on the total number of reviewer agents.
+## Step 3: Dispatch Independent Leaf Tracks
 
-Default tracks:
+For each round, dispatch every selected reviewer as an independent leaf. Use [subagent-briefs.md](references/subagent-briefs.md) for the common context and one generic leaf brief, plus the closure brief when applicable. Include the exact preflight-verified absolute `SKILL.md` path.
 
-```text
-Track A: code-review
-Track B: module-review
-```
-
-Custom reviewer selection uses name-list style from the user prompt, for example:
-
-- `review skills: architecture-review, cso`
-- `用 architecture-review 和 cso 做 review`
-- `用 architecture-review 审查`
-
-Assignment rules:
-
-- No custom reviewer skill specified: use the default tracks.
-- One custom reviewer skill specified: assign the same skill to Track A and Track B, and still spawn two independent subagents.
-- Two custom reviewer skills specified: assign the first to Track A and the second to Track B.
-- More than two reviewer skills specified: ask the user to choose exactly two.
-- If a named reviewer skill cannot be resolved through the canonical registry, found, or read, stop and ask instead of silently falling back.
-
-Track labels remain `Track A (<skill>)` and `Track B (<skill>)` even when both tracks use the same skill. Nested reviewer results retain their axis in the source label, for example `Track B (module-review/Standards)` and `Track B (module-review/Spec)`.
-
-Completion criterion: Track A and Track B each have a concrete reviewer skill, or the run is blocked on an unreadable/ambiguous reviewer selection.
-
-## Step 4: Dispatch Dual Tracks
-
-Dispatch both outer tracks in every round, then let each assigned skill run its prescribed topology. Do not flatten a multi-reviewer skill into a single generic reviewer.
-
-Default topology:
+Every normal-review prompt must include this contract:
 
 ```text
-Track A: code-review → one code-reviewer
-Track B: module-review → Standards reviewer + Spec reviewer
+You are <Track label> using reviewer skill <skill-name>.
+Read and use exactly this canonical reviewer skill: <absolute SKILL.md path>.
+You are a leaf reviewer in a topology already resolved by the parent do-review run.
+Do not invoke do-review. Do not dispatch subagents. Do not re-evaluate reviewer topology or capacity.
+Perform only the review role defined by the assigned reviewer skill.
+Review exactly the supplied complete diff and fixed comparison point.
+Do not inspect, request, or use findings produced by other tracks in the current round.
+If this round is executed in phases, treat other same-round track results as unavailable.
+Return findings in the supplied ledger schema. Do not make the final cross-track classification or overall verdict.
 ```
 
-When capacity is insufficient for all leaves at once, phase only the constrained child reviewers. Preserve independent evidence: for `module-review`, Standards and Spec must remain separate, even if one starts after the other. Report the phased topology and reason in the review summary.
+All same-round tracks are isolated, including phased tracks. Do not deduplicate, classify, summarize, or inject one track's output into another track until every selected reviewer has finished the round. In round 1 provide no ledger. From round 2 onward provide only the prior round's canonical ledger, after main-session deduplication and required evidence verification; never provide raw reviewer output.
 
-For durable prompts, read only the needed sections from `references/subagent-briefs.md`: [Common Context Block](references/subagent-briefs.md#common-context-block) and [Generic Reviewer Track Brief](references/subagent-briefs.md#generic-reviewer-track-brief). Include the preflight-verified absolute path in the common context. When an assigned reviewer skill is `code-review` or `module-review`, append that skill's default lens addendum regardless of whether it came from the default track selection or a user-specified reviewer list. For closure verification, use [Closure Verification Brief](references/subagent-briefs.md#closure-verification-brief). From round 2 onward, append [Round-N Anti-Duplicate Addendum](references/subagent-briefs.md#round-n-anti-duplicate-addendum).
+Completion criterion: every selected track has completed independently for the round, or the run is explicitly blocked.
 
-### Track Prompt Intent
+## Step 4: Ledger, Verification, Classification, And Loop
 
-Every normal-review track prompt includes:
-
-```text
-You are Track <A/B> using reviewer skill <skill-name>.
-Read and use exactly this assigned reviewer skill path: <absolute-skill-path>.
-Review the target in scope.
-
-Every finding needs evidence. Prefer file:line evidence where the target is code.
-Avoid duplicates from the ledger unless you add materially new evidence or impact.
-Return findings in the ledger schema.
-```
-
-For N-round mode with N > 1 and for loop mode, include the current ledger in every round after round 1.
-
-Completion criterion: each round has a completed result from every required reviewer role in Track A and Track B, or the run is explicitly blocked by subagent availability/authorization.
-
-## Step 5: Maintain The Ledger
-
-Use one ledger across all rounds.
+Maintain one canonical ledger across all rounds:
 
 ```text
 ID:
 Title:
 Severity: P0/P1/P2/P3
 Classification: blocker / follow-up / backlog / no issue
-Source: Track A (<skill>) / Track B (<skill>/<axis>) / fused / main-session
+Source: Track <label> (<skill>) / fused / main-session
+Contributing sources:
 Status: new / duplicate / refined / disputed / accepted / downgraded / fixed-verified
 Evidence:
-  - file:line
 Issue class:
 Impact:
 Recommended action:
@@ -182,58 +126,33 @@ Related issue/PR:
 Main-session decision:
 ```
 
-Use source labels from the actual reviewer roles, for example `Track A (code-review)`, `Track B (module-review/Standards)`, `Track B (module-review/Spec)`, `fused`, or `main-session`.
+Use these default source labels exactly: `Track A (code-review)`, `Track B (standards-review)`, and `Track C (spec-review)`. Deduplicate by the broken invariant or observable failure, not by path or reviewer. For one shared issue use `Source: fused` and retain every contributor in `Contributing sources`. `main-session` is a decision source, never a fourth reviewer.
 
-Deduplicate by broken invariant or observable failure, not by file path. If both subagents report the same issue, mark `Source: fused` and keep the contributing track names in the evidence or decision note.
+Before reporting a P1, P2, or blocker, read its cited target-revision evidence, confirm the citation supports the claim and is in fixed scope, then apply the user's policy or the default classification. Mark insufficient evidence as `disputed`, `downgraded`, or `UNCERTAIN`; do not present it as a verified blocker.
 
-Completion criterion: every accepted finding has source attribution and a main-session decision.
+Default classification: blocker risks business data, money, inventory, order/customer state, security, or runtime-visible product data; follow-up is real but non-blocking under stated release constraints; backlog is non-urgent cleanup or optional hardening; no issue is duplicate, fixed, out of scope, or unsupported.
 
-## Step 6: Verify High-Severity Findings
+For loop mode, converge only after the latest completed round adds no distinct blocker/follow-up issue class, or only duplicates/refinements remain. A PASS/no-finding result from one track never skips another selected track or proves overall convergence. A round is incomplete if any selected reviewer is missing, unless the user explicitly authorized that named degraded topology.
 
-Before reporting any P1/P2/blocker:
+Completion criterion: every accepted finding has source attribution and main-session decision; every P1/P2/blocker has an evidence verification note; the stop reason is recorded.
 
-1. Read the cited code at the target revision.
-2. Confirm the line exists and supports the claim.
-3. Confirm the finding is in scope.
-4. Classify using the user's policy if provided.
+## Step 5: Report
 
-If evidence is incomplete, mark `disputed`, `downgraded`, or `UNCERTAIN`; do not present it as a verified blocker.
+Read [output-templates.md](references/output-templates.md) and use the smallest matching template. Show every selected track's verdict separately. For the default topology, show:
 
-Completion criterion: all P1/P2/blocker findings have main-session verification notes.
+```text
+Track A (code-review): PASS / FAIL / UNCERTAIN
+Track B (standards-review): PASS / FAIL / UNCERTAIN
+Track C (spec-review): PASS / FAIL / UNCERTAIN
+Overall: PASS / FAIL / UNCERTAIN
+```
 
-## Step 7: Classify
-
-Default policy when the user gives no policy:
-
-- `blocker`: can corrupt future business data, money, inventory, order/customer state, security, or runtime-visible product data.
-- `follow-up`: real risk, but not blocking under stated release constraints.
-- `backlog`: old data cleanup, automation convenience, optional hardening, or environment governance without immediate business risk.
-- `no issue`: duplicate, fixed, out of scope, or unsupported.
-
-Closure verification verdicts:
-
-- `PASS`: acceptance criteria satisfied.
-- `FAIL`: acceptance criteria not satisfied.
-- `UNCERTAIN`: evidence insufficient; state the missing check.
-
-Completion criterion: every ledger item has exactly one classification or closure verdict.
-
-## Step 8: Decide Whether To Continue
-
-For loop mode, continue until convergence or cap.
-
-Converged means the latest round adds no distinct blocker/follow-up issue class, or only duplicates/refinements remain. The main session decides convergence and records why.
-
-Completion criterion: the final output states the number of rounds and why the run stopped.
-
-## Output
-
-For report templates, read only the relevant section from `references/output-templates.md`: [Normal Review Report](references/output-templates.md#normal-review-report), [Closure Verification Report](references/output-templates.md#closure-verification-report), [Finding Record](references/output-templates.md#finding-record), or [Round Ledger](references/output-templates.md#round-ledger). Treat that reference file as the output source of truth so template drift does not create competing report shapes.
+Aggregate fail-closed: any required `FAIL` makes Overall `FAIL`; otherwise any required `UNCERTAIN` makes Overall `UNCERTAIN`; Overall is `PASS` only when every required track passes. A passing track never offsets another track's failure, and finding count is not a vote.
 
 ## Guardrails
 
 - Do not mutate code, issues, or git state unless the user explicitly asks.
-- Do not create new issues unless the user asked for tracking updates.
+- Do not create tracking issues unless the user asks.
 - Do not broaden closure verification into new-problem hunting.
-- Do not hide subagent unavailability.
-- Do not let subagents decide final classification.
+- Do not hide subagent unavailability or an incomplete/degraded topology.
+- Only revise a reviewer's responsibility or topology when that reviewer's own skill definition changes.

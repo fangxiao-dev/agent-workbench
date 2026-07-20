@@ -1,14 +1,18 @@
 ---
 target: skills/do-review
-updated: 2026-07-10
+updated: 2026-07-20
 ---
+
 ## 原则
 
-- [已确认] 双轨按 reviewer skill 粒度定义；必须保留被选 skill 自身要求的内部审查角色。
+- [已确认] `do-review` 是唯一 orchestrator；默认三个并列 leaf track 为 code、standards 与 spec。
+- [已确认] 同一完整 diff 与 fixed comparison point 只由主会话确定一次；三轨同轮独立，第二轮起只接收 canonical ledger。
+- [已确认] 本轮只调整 Ownership 与拓扑；不重写 `code-review` 或三个 reviewer 的内部审查设计。
 - [已确认] 涉及计划包时，审查范围覆盖整个计划包的 commits，不只审查最后一个实现 commit。
 
 ## 决策记录（滚动，最近 ≤5 轮）
 
-### R1 · 2026-07-10
-- 采纳「skill 粒度双轨与 module-review 双轴拓扑」— 用户原话：双轨的轨指的是 SKILL 粒度。
-- 采纳「plan package 全量 commit range」— 用户原话：应该审查的是整个计划包范围的 commits。
+### R1 · 2026-07-20
+- 采纳「默认 A/B/C 三轨」：`code-review`、`standards-review`、`spec-review`。
+- 采纳「所有 dispatched reviewer 均为 leaf」：禁止调用 `do-review`、调度 subagent 或重新推导 topology/capacity。
+- 采纳「默认 topology 与 canonical path 由 registry 驱动」：Python 不维护另一份默认 reviewer 名单。

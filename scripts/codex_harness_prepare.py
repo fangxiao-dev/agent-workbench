@@ -24,6 +24,7 @@ class PrepareError(RuntimeError):
 
 
 IMPL_PACKAGE_CONTRACT_VERSION = "3.2"
+REVIEWER_REGISTRY_PATH = Path(__file__).resolve().parents[1] / "skills" / "do-review" / "references" / "reviewer-registry.json"
 
 
 @dataclass(frozen=True)
@@ -210,10 +211,51 @@ def _role(task_id: str, title: str) -> str:
     return f"impl_package_{task_id.lower()}_parent"
 
 
+def _reviewer_skill_paths(*names: str) -> tuple[str, ...]:
+    """Resolve manifest skill names from do-review's canonical reviewer registry."""
+    try:
+        registry = json.loads(REVIEWER_REGISTRY_PATH.read_text(encoding="utf-8"))
+        reviewers = registry["reviewers"]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
+        raise PrepareError(f"cannot read canonical reviewer registry: {error}") from error
+
+    paths: list[str] = []
+    for name in names:
+        try:
+            canonical_path = reviewers[name]["canonical_skill_path"]
+        except (KeyError, TypeError) as error:
+            raise PrepareError(f"canonical reviewer registry has no path for {name!r}") from error
+        if not isinstance(canonical_path, str):
+            raise PrepareError(f"canonical reviewer path for {name!r} must be a string")
+        path = Path(canonical_path)
+        if path.parts[:1] != ("skills",) or path.name != "SKILL.md" or ".." in path.parts:
+            raise PrepareError(f"canonical reviewer path for {name!r} is unsafe: {canonical_path!r}")
+        manifest_skill = path.relative_to("skills").parent.as_posix()
+        if manifest_skill in paths:
+            raise PrepareError(f"canonical reviewer registry repeats manifest skill path: {manifest_skill!r}")
+        paths.append(manifest_skill)
+    return tuple(paths)
+
+
+def _default_reviewer_skill_paths() -> tuple[str, ...]:
+    try:
+        registry = json.loads(REVIEWER_REGISTRY_PATH.read_text(encoding="utf-8"))
+        default_tracks = registry["default_tracks"]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
+        raise PrepareError(f"cannot read canonical reviewer defaults: {error}") from error
+    if not isinstance(default_tracks, list) or not default_tracks:
+        raise PrepareError("canonical reviewer registry has no default tracks")
+    names = tuple(track.get("skill") for track in default_tracks if isinstance(track, dict))
+    if len(names) != len(default_tracks) or not all(isinstance(name, str) and name for name in names):
+        raise PrepareError("canonical reviewer registry has an invalid default track")
+    return _reviewer_skill_paths(*names)
+
+
 def _skills(title: str) -> tuple[str, ...]:
     base = ["impl-package", "impl-package/dev-with-track"]
     if "集成" in title or re.search(r"\breview\b", title, re.IGNORECASE):
-        base.extend(["reviews/code-review", "reviews/module-review", "reviews/safety-review"])
+        base.extend(_default_reviewer_skill_paths())
+        base.extend(_reviewer_skill_paths("safety-review"))
     return tuple(base)
 
 

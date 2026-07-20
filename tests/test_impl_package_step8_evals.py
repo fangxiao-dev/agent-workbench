@@ -8,6 +8,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 IMPL_ROOT = ROOT / "skills" / "impl-package"
+REVIEW_ROOT = ROOT / "skills" / "reviews"
 
 
 def read(path: Path) -> str:
@@ -67,9 +68,10 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
             IMPL_ROOT / "dev-with-track" / "SKILL.md": "bundle approval",
             IMPL_ROOT / "execution-preflight" / "SKILL.md": "plan-decomposition bundle is `approved`",
             IMPL_ROOT / "subagent-driven-development" / "SKILL.md": "委派成本高于收益",
-            IMPL_ROOT / "reviews" / "code-review" / "SKILL.md": "Docs/evidence/config-metadata-only changes use a focused profile",
-            IMPL_ROOT / "reviews" / "module-review" / "SKILL.md": "不足以触发本次 module-review",
-            IMPL_ROOT / "reviews" / "safety-review" / "SKILL.md": "### 收缩型变化的 focused path",
+            REVIEW_ROOT / "code-review" / "SKILL.md": "Docs/evidence/config-metadata-only changes use a focused profile",
+            REVIEW_ROOT / "standards-review" / "SKILL.md": "Fowler code-smell baseline",
+            REVIEW_ROOT / "spec-review" / "SKILL.md": "scope creep",
+            REVIEW_ROOT / "safety-review" / "SKILL.md": "### 收缩型变化的 focused path",
             IMPL_ROOT / "verification-before-completion" / "SKILL.md": "不是 terminal completion claim",
         }
         for path, expected in skill_expectations.items():
@@ -85,12 +87,9 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
             "impl-planning": IMPL_ROOT / "impl-planning" / "evals" / "evals.json",
             "create-task-dag": IMPL_ROOT / "create-task-dag" / "evals" / "evals.json",
             "dev-with-track": IMPL_ROOT / "dev-with-track" / "evals" / "evals.json",
-            "module-review": (
-                IMPL_ROOT / "reviews" / "module-review" / "evals" / "evals.json"
-            ),
-            "safety-review": (
-                IMPL_ROOT / "reviews" / "safety-review" / "evals" / "evals.json"
-            ),
+            "standards-review": REVIEW_ROOT / "standards-review" / "evals" / "evals.json",
+            "spec-review": REVIEW_ROOT / "spec-review" / "evals" / "evals.json",
+            "safety-review": REVIEW_ROOT / "safety-review" / "evals" / "evals.json",
         }
         evals: dict[str, dict[str, Any]] = {}
         for skill, path in eval_paths.items():
@@ -239,7 +238,7 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
             "Composition mismatch must route upstream.",
         )
 
-        safety_skill = read(IMPL_ROOT / "reviews" / "safety-review" / "SKILL.md")
+        safety_skill = read(REVIEW_ROOT / "safety-review" / "SKILL.md")
         assert_contains(
             safety_skill,
             "git rev-parse <comparison-ref>^{commit}",
@@ -253,9 +252,12 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         pinned_safety = eval_text(find_eval(evals["safety-review"], 7))
         assert_contains(pinned_safety, "immutable commit SHAs", "Safety eval must pin movable refs.")
 
-        spec_axis = eval_text(find_eval(evals["module-review"], 4))
-        assert_contains(spec_axis, "seam drift", "Module-review Spec axis")
-        assert_contains(spec_axis, "no third drift reviewer", "Module-review reviewer topology")
+        standards_axis = eval_text(find_eval(evals["standards-review"], 2))
+        assert_contains(standards_axis, "codebase-design", "Standards-review design baseline")
+        assert_contains(standards_axis, "Keeps contract fidelity out", "Standards-review ownership boundary")
+        spec_axis = eval_text(find_eval(evals["spec-review"], 2))
+        assert_contains(spec_axis, "compatibility window", "Spec-review compatibility contract")
+        assert_contains(spec_axis, "state machine", "Spec-review state-machine contract")
         safety_p0 = eval_text(find_eval(evals["safety-review"], 1))
         assert_contains(safety_p0, "idempotency", "Safety-review P0 guard")
 
@@ -370,7 +372,7 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         impl_skill_files = sorted(
             path for path in IMPL_ROOT.rglob("SKILL.md") if not is_eval_workspace(path)
         )
-        self.assertEqual(13, len(impl_skill_files))
+        self.assertEqual(10, len(impl_skill_files))
         non_reporting_skills = {
             Path("skills/impl-package/subagent-driven-development/SKILL.md"),
             Path("skills/impl-package/verification-before-completion/SKILL.md"),
@@ -401,8 +403,9 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
             IMPL_ROOT / "impl-planning",
             IMPL_ROOT / "create-task-dag",
             IMPL_ROOT / "dev-with-track",
-            IMPL_ROOT / "reviews" / "module-review",
-            IMPL_ROOT / "reviews" / "safety-review",
+            REVIEW_ROOT / "standards-review",
+            REVIEW_ROOT / "spec-review",
+            REVIEW_ROOT / "safety-review",
         )
         for active_root in active_roots:
             for path in active_root.rglob("*"):
@@ -410,6 +413,59 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
                     encoding="utf-8", errors="ignore"
                 ):
                     raise AssertionError(f"Active Impl-Package skill retains to-issues: {path}")
+
+    def test_module_review_routes_migrate_to_the_standards_spec_pair(self) -> None:
+        registry = json.loads(
+            read(ROOT / "skills" / "do-review" / "references" / "reviewer-registry.json")
+        )
+        self.assertEqual(
+            [track["skill"] for track in registry["default_tracks"]],
+            ["code-review", "standards-review", "spec-review"],
+        )
+        self.assertNotIn("module-review", registry["reviewers"])
+        self.assertFalse(
+            (REVIEW_ROOT / "module-review").exists(),
+            "active reviews/module-review must be deleted; only the explicit deprecated archive may remain",
+        )
+
+        active_surfaces = (
+            ROOT / "examples" / "datev-accounting-rules.pre-3.2-upgrade-fixture.toml",
+            IMPL_ROOT / "SKILL.md",
+            IMPL_ROOT / "dev-with-track" / "SKILL.md",
+            IMPL_ROOT / "references" / "impl-package-system-design.md",
+            IMPL_ROOT / "verification-before-completion" / "SKILL.md",
+            IMPL_ROOT / "assets" / "impl-package-intro.html",
+        )
+        for surface in active_surfaces:
+            text = read(surface)
+            assert_not_contains(text, "module-review", f"Active module reviewer reference: {surface}")
+            assert_not_contains(text, "reviews/module-review", f"Active module path: {surface}")
+            assert_contains(text, "standards-review", f"Standards route missing: {surface}")
+            assert_contains(text, "spec-review", f"Spec route missing: {surface}")
+
+        routing = read(IMPL_ROOT / "dev-with-track" / "SKILL.md")
+        assert_contains(routing, "`code-review`：任何 implementation 恒必做。", "Code review must remain always-on")
+        assert_contains(
+            routing,
+            "当前 diff 或本次 S/P delta 涉及 interface、状态机、模块边界、跨模块行为或 seam 时一对二必做。tickets/DAG 的存在本身不是触发信号。",
+            "Standards and Spec must preserve their paired conditional route",
+        )
+        assert_contains(
+            routing,
+            "`safety-review`：diff 或 spec/plan/DAG 出现 auth、permission、payment、webhook、migration、外部 mutation、数据完整性、并发安全",
+            "Safety must keep its independent conditional route",
+        )
+
+        fixture = read(ROOT / "examples" / "datev-accounting-rules.pre-3.2-upgrade-fixture.toml")
+        assert_contains(
+            fixture,
+            'skills = ["impl-package", "impl-package/dev-with-track", "reviews/code-review", "reviews/standards-review", "reviews/spec-review", "reviews/safety-review"]',
+            "Integration fixture must list the migrated reviewer pair",
+        )
+
+        harness = read(ROOT / "scripts" / "codex_harness_prepare.py")
+        assert_contains(harness, "_default_reviewer_skill_paths", "Harness must read configured default reviewers")
+        assert_contains(harness, "_reviewer_skill_paths(\"safety-review\")", "Harness must preserve conditional safety addition")
 
 
 if __name__ == "__main__":

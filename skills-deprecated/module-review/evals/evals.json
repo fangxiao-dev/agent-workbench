@@ -1,0 +1,46 @@
+{
+  "skill_name": "module-review",
+  "deprecated": true,
+  "evals": [
+    {
+      "id": 1,
+      "name": "interface-contract-requires-dual-axis-review",
+      "prompt": "Review a change from the supplied fixed point. Its spec changes a public interface and state machine.",
+      "expected_output": "A deprecated module-review archive describes independent Standards and Spec reports.",
+      "files": [],
+      "expectations": ["Requires the supplied fixed point", "Keeps contract checking in the Spec axis", "Does not claim active three-track dispatch"]
+    },
+    {
+      "id": 2,
+      "name": "contract-signal-requires-review-without-composition-artifacts",
+      "prompt": "Review a fixed-point change that alters a module boundary and a cross-module compatibility contract.",
+      "expected_output": "The archived dual-axis method keeps contract fidelity in the Spec axis.",
+      "files": [],
+      "expectations": ["Checks module-boundary change", "Spec checks contract fidelity", "Keeps Standards and Spec independent"]
+    },
+    {
+      "id": 3,
+      "name": "standards-axis-uses-codebase-design-vocabulary",
+      "prompt": "Review a fixed-point diff that adds a pass-through adapter and duplicates interface knowledge across callers.",
+      "expected_output": "The archived Standards report evaluates deep-module vocabulary as judgement calls.",
+      "files": [],
+      "expectations": ["References codebase-design vocabulary", "Does not invent a hard repository rule", "Keeps Standards separate from Spec"]
+    },
+    {
+      "id": 4,
+      "name": "spec-axis-owns-seam-drift",
+      "prompt": "Review a fixed-point diff where an implementation changes a design-declared compatibility window for a cross-module seam.",
+      "expected_output": "The archived Spec method reports contract/interface/seam drift without creating a third drift reviewer.",
+      "files": [],
+      "expectations": ["Cites the plan/spec/dag contract", "Assigns drift to the Spec axis", "Does not claim active dispatch"]
+    },
+    {
+      "id": 5,
+      "name": "missing-fixed-point-fails-fast",
+      "prompt": "Review the current implementation package without identifying a comparison point.",
+      "expected_output": "The archived method asks for a fixed point rather than inferring one.",
+      "files": [],
+      "expectations": ["Does not guess a baseline", "Does not dispatch before diff validation"]
+    }
+  ]
+}

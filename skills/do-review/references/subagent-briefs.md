@@ -1,6 +1,6 @@
 # Do Review Subagent Briefs
 
-Copy the common block plus exactly one track brief. If the assigned reviewer skill is `code-review` or `module-review`, append the matching default lens addendum. Add the anti-duplicate block only after round 1.
+Copy the common block and exactly one applicable review brief. Add the anti-duplicate block only after round 1. Do not append another track's output or same-round summary.
 
 ## Common Context Block
 
@@ -8,18 +8,24 @@ Copy the common block plus exactly one track brief. If the assigned reviewer ski
 Review target:
 - Repo/worktree:
 - Target revision or PR:
-- Base/head:
-- Scope source / package roots / included commits:
+- Comparison point input:
+- Resolved base SHA:
+- Resolved head SHA:
+- Diff command/range:
+- Included commits:
+- Scope source / package roots:
 - Mode:
 - Round:
 - Track label:
 - Assigned reviewer skill:
 - Assigned reviewer skill path:
+- Repository standards sources:
+- Issue/Decision/Spec/Plan/DAG sources:
 - Out of scope:
 - User policy:
 
 Known findings ledger:
-<paste ledger; write "none yet" for round 1>
+<paste only the previous round's canonical ledger; write "none yet" for round 1>
 
 Return format:
 - Normal review: findings in ledger schema.
@@ -28,14 +34,16 @@ Return format:
 - Do not mutate files, issues, git state, data, or external systems.
 ```
 
-## Generic Reviewer Track Brief
+## Generic Leaf Reviewer Brief
 
 ```text
 Read and use exactly the assigned reviewer skill path. Do not resolve a similarly named skill yourself.
 
-Review the target in scope. Follow the assigned skill's review method, but return results in the do-review ledger schema so the main session can deduplicate and classify consistently.
+You are a leaf reviewer in a topology already resolved by the parent do-review run. Do not invoke do-review, do not run its subagent gate, do not dispatch subagents, and do not re-evaluate reviewer topology or capacity. Perform only the review role defined by the assigned reviewer skill.
 
-Execute the assigned skill's full required reviewer topology. A track is a skill assignment, not a one-agent limit. If your skill requires independent child reviewers, dispatch every required child role and preserve its source/axis in the returned evidence. If capacity requires phasing, report the phase order; do not omit a child review.
+Review exactly the supplied complete diff and fixed comparison point. Do not inspect, request, or use findings produced by other tracks in the current round. This restriction remains in effect when the parent runs reviewers in phases.
+
+Return results in the do-review ledger schema. The parent owns cross-track deduplication, evidence verification, classification, loop convergence, and the overall verdict.
 
 For each finding:
 - cite evidence;
@@ -43,53 +51,6 @@ For each finding:
 - explain the concrete failure mode or broken invariant;
 - classify severity from the risk described by the assigned skill;
 - avoid known duplicates unless you add materially new evidence or impact.
-```
-
-## code-review Default Lens Addendum
-
-```text
-Default lens when the assigned skill is code-review:
-
-Lens:
-- reachable code-path bugs;
-- local business invariants;
-- error handling and partial failures;
-- missing regression tests;
-- local/mock behavior that can hide real bugs.
-
-Avoid broad architecture unless it is directly visible in code.
-Avoid known duplicates unless you add materially new evidence.
-
-For each finding:
-- cite file:line evidence;
-- explain the concrete failure path;
-- say whether a test exists or is missing;
-- classify severity from code-path risk.
-```
-
-## module-review Default Lens Addendum
-
-```text
-Default lens when the assigned skill is module-review:
-
-Run the skill's two independent axes: Standards and Spec. Return them as separate source labels (`Track B (module-review/Standards)` and `Track B (module-review/Spec)`); do not merge their findings before the main-session ledger step.
-
-Lens:
-- cross-module contracts;
-- transaction semantics and crash points;
-- replay, idempotency, and concurrency;
-- runtime modes and environment matrix;
-- external system boundaries;
-- release and rollback risk.
-
-Avoid style/local refactors unless they hide system risk.
-Avoid known duplicates unless you add materially new impact.
-
-For each finding:
-- cite evidence where possible;
-- name the broken invariant or seam;
-- describe the observable failure mode;
-- classify severity from business/release risk.
 ```
 
 ## Closure Verification Brief
@@ -115,7 +76,7 @@ For UNCERTAIN:
 ## Round-N Anti-Duplicate Addendum
 
 ```text
-Known findings are already recorded below. Do not re-report them.
+The ledger below is the prior round's canonical ledger. Do not re-report those findings.
 
 Report a related finding only if it:
 - breaks a different invariant;

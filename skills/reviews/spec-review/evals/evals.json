@@ -1,0 +1,29 @@
+{
+  "skill_name": "spec-review",
+  "evals": [
+    {
+      "id": 1,
+      "name": "spec-review-uses-supplied-contract-and-immutable-range",
+      "prompt": "Review the supplied complete diff, immutable base/head SHA, commit list, and Decision, Spec, Plan, and DAG evidence.",
+      "expected_output": "A Spec-only evidence report that consumes the supplied range and contract without selecting a comparison point or coordinating reviewers.",
+      "files": [],
+      "expectations": ["Uses the supplied fixed comparison point and complete diff", "Does not infer a baseline or dispatch another reviewer", "Returns contract-fidelity evidence to the caller"]
+    },
+    {
+      "id": 2,
+      "name": "spec-axis-owns-contract-and-seam-drift",
+      "prompt": "Review the supplied diff where an implementation changes a design-declared compatibility window and state machine for a cross-module seam.",
+      "expected_output": "The Spec reviewer reports contract/interface/seam drift using the supplied contract evidence.",
+      "files": [],
+      "expectations": ["Cites the Decision, Spec, Plan, or DAG contract", "Checks compatibility window and state machine", "Checks cross-slice and cross-module seams"]
+    },
+    {
+      "id": 3,
+      "name": "spec-axis-detects-requirement-fidelity-gaps",
+      "prompt": "Review the supplied diff and issue where one requirement is partially implemented while an unrelated extension was added.",
+      "expected_output": "The report identifies partial implementation and scope creep with contract and diff evidence.",
+      "files": [],
+      "expectations": ["Detects missing or partial requirements", "Detects scope creep", "Does not turn repository style preferences into Spec findings"]
+    }
+  ]
+}

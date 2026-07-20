@@ -28,7 +28,7 @@ Task 是横向执行拆分，Ticket 是纵向验收单元；二者以多对多 `
 当 ticket 或 no-ticket attempt 达到验收候选，先固定 comparison point，再按实际 diff 与 contract impact 运行正式 review；不能仅凭 package 曾经有 tickets/DAG 推导本次 review：
 
 - `code-review`：任何 implementation 恒必做。
-- `module-review`：当前 diff 或本次 S/P delta 涉及 interface、状态机、模块边界、跨模块行为或 seam 时必做。tickets/DAG 的存在本身不是触发信号。
+- `standards-review` + `spec-review`：当前 diff 或本次 S/P delta 涉及 interface、状态机、模块边界、跨模块行为或 seam 时一对二必做。tickets/DAG 的存在本身不是触发信号。
 - `safety-review`：diff 或 spec/plan/DAG 出现 auth、permission、payment、webhook、migration、外部 mutation、数据完整性、并发安全，或 evidence authority / published-state / compatibility-projection / proof-equality 信号时必做。后四类是条件化风险信号，不假定所有项目存在 provider、schema、archive、CLI 或 `current` 指针。
 
 正式 review 的 findings 必须修复并以 closure verification 复核，才可把 ticket Runtime Acceptance Status 记为已满足或进入 gate。
@@ -136,7 +136,7 @@ terminal gate 关闭后提示 owner 可以按需使用 `$backfill-stable-docs`�
 4. committed validate 通过后 append plan Execution Record；外部 artifact hash delta 通过 artifact commands 登记。
 5. 有 manual owner 时，在等待验收前输出轻量 readiness packet；没有人工验收时跳过。
 6. 分流 execution findings；必要时回 req-align 并重新过相应 gate。
-7. Ticket 达到验收候选前，只扫描 `contributes-to` 该 Ticket 的 `BLOCKED` Task：未完成内容若影响其 AC、已声明行为或风险边界，先解除阻塞；若真实影响扩大，先更新 contribution mapping。随后自动路由 code-review、module-review 和适用的 safety-review，固定 comparison point 并闭环 review findings。最终 package review 前全局确认没有 `BLOCKED`，且所有 Task 为 `DONE` 或有明确、已批准理由的 `WAIVED` / `SUPERSEDED`；再确认所有 Ticket AC evidence 和 active Spec 全覆盖。
+7. Ticket 达到验收候选前，只扫描 `contributes-to` 该 Ticket 的 `BLOCKED` Task：未完成内容若影响其 AC、已声明行为或风险边界，先解除阻塞；若真实影响扩大，先更新 contribution mapping。随后把 code-review、standards-review + spec-review 和适用的 safety-review 作为明确 reviewer selection 交给唯一编排器 `do-review`，由它固定 comparison point、调度 leaf reviewer 并闭环 review findings。最终 package review 前全局确认没有 `BLOCKED`，且所有 Task 为 `DONE` 或有明确、已批准理由的 `WAIVED` / `SUPERSEDED`；再确认所有 Ticket AC evidence 和 active Spec 全覆盖。
 8. 默认 merge 前，用稳定 operation-id 分配 G id/scaffold，完成当前 attempt 的 pass evaluation；拟写 terminal pass 时先完成 Stage 7 准备，再由 `verification-before-completion` 审计 pass claim。只有 plan 已预先记录的 owner-approved pre-gate integration 可以跳过这一时序。
 9. 完成 Markdown entry 后立即 finalize content-bound index；terminal 时由可信 finalized verdict 派生 Frozen，blocked 时保持 Active。
 10. terminal metadata commit、目标分支合入或环境变化后，任何 complete / closed / merge-ready / release-ready 声明前重新执行 completion-claim evidence audit。先合入后关 gate 的 attempt 必须以目标分支 evidence 收口。

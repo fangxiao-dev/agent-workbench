@@ -1,6 +1,6 @@
 # Do Review Output Templates
 
-Use the smallest template that matches the run. Keep source attribution visible.
+Use the smallest template that matches the run. Keep source attribution and per-track verdicts visible.
 
 ## Normal Review Report
 
@@ -14,7 +14,15 @@ Use the smallest template that matches the run. Keep source attribution visible.
 | Mode |  |
 | Rounds |  |
 | Stop reason |  |
-| Verdict |  |
+| Overall verdict | PASS / FAIL / UNCERTAIN |
+
+## Track Verdicts
+
+| Track | Verdict | Coverage / note |
+| --- | --- | --- |
+| Track A (code-review) | PASS / FAIL / UNCERTAIN |  |
+| Track B (standards-review) | PASS / FAIL / UNCERTAIN |  |
+| Track C (spec-review) | PASS / FAIL / UNCERTAIN |  |
 
 ## Findings
 
@@ -33,23 +41,13 @@ Use the smallest template that matches the run. Keep source attribution visible.
 | ID | Title | Source | Evidence | Decision |
 | --- | --- | --- | --- | --- |
 
-## Type Summary
-
-| Type | Findings |
-| --- | --- |
-| Inventory / movement |  |
-| Product/runtime/cutover |  |
-| External systems |  |
-| Readiness / schema |  |
-| Test fidelity |  |
-| Security / auth |  |
-
 ## Source Coverage
 
 | Source | Count | Notes |
 | --- | --- | --- |
-| Track A (<skill>) |  |  |
-| Track B (<skill>) |  |  |
+| Track A (code-review) |  |  |
+| Track B (standards-review) |  |  |
+| Track C (spec-review) |  |  |
 | fused |  |  |
 | main-session |  |  |
 
@@ -59,10 +57,18 @@ Use the smallest template that matches the run. Keep source attribution visible.
 3.
 ```
 
+For a custom selection, replace the rows with exactly the selected Track label/skill pairs; retain one verdict row per selected reviewer and the same fail-closed aggregation rule.
+
 ## Closure Verification Report
 
 ```markdown
 ## Closure Verification Summary
+
+| Track | Verdict | Coverage / note |
+| --- | --- | --- |
+| Track A (<skill>) | PASS / FAIL / UNCERTAIN |  |
+| Track B (<skill>) | PASS / FAIL / UNCERTAIN |  |
+| Track C (<skill>) | PASS / FAIL / UNCERTAIN |  |
 
 | Issue | Verdict | Reason | Evidence |
 | --- | --- | --- | --- |
@@ -90,7 +96,8 @@ Use the smallest template that matches the run. Keep source attribution visible.
 
 Severity: P0 / P1 / P2 / P3
 Classification: blocker / follow-up / backlog / no issue
-Sources: Track A (<skill>) / Track B (<skill>) / fused / main-session
+Source: Track <label> (<skill>) / fused / main-session
+Contributing sources:
 Status: new / duplicate / refined / disputed / accepted / downgraded / fixed-verified
 Evidence:
 - `path/to/file.ts:123` - concise evidence summary.
@@ -104,8 +111,8 @@ Main-session decision:
 ```markdown
 ## Review Rounds
 
-| Round | Track A (<skill>) | Track B (<skill>) | New accepted | Convergence note |
-| --- | --- | --- | --- | --- |
+| Round | Track A (<skill>) | Track B (<skill>) | Track C (<skill>) | New accepted | Convergence note |
+| --- | --- | --- | --- | --- | --- |
 
 ## Known Findings Ledger
 

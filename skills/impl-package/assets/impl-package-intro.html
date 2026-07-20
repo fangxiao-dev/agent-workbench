@@ -274,9 +274,9 @@
             <div class="trig"><b>触发</b>上游就绪;跨 session 续上也走这里</div>
           </div></div>
           <div class="fstage"><div class="node">6</div><div class="card">
-            <div class="h"><h3>审查与 Gate 关闭</h3><span class="badge always">1 恒查 · 2 按需</span></div>
-            <div class="what"><code>code-review</code> 恒查;小改动可能不触发额外的 module-review 或 safety-review。terminal gate entry 写入前必须 capture durable delta 或 <code>none + reason</code>,完成 <code>_pending</code>、truth pointer 与必要 stub;不要求当场更新常青正文。</div>
-            <div class="who"><span class="skill">code-review<em>恒查</em></span><span class="skill cond">module-review<em>契约变化时</em></span><span class="skill cond">safety-review<em>碰安全路径时</em></span></div>
+            <div class="h"><h3>审查与 Gate 关闭</h3><span class="badge always">1 恒查 · 3 按需</span></div>
+            <div class="what"><code>code-review</code> 恒查;小改动可能不触发成对的 standards-review + spec-review 或 safety-review。terminal gate entry 写入前必须 capture durable delta 或 <code>none + reason</code>,完成 <code>_pending</code>、truth pointer 与必要 stub;不要求当场更新常青正文。</div>
+            <div class="who"><span class="skill">code-review<em>恒查</em></span><span class="skill cond">standards-review<em>契约变化时</em></span><span class="skill cond">spec-review<em>契约变化时</em></span><span class="skill cond">safety-review<em>碰安全路径时</em></span></div>
           </div></div>
         </div>
         <div id="backfill" class="retreat">

@@ -36,7 +36,7 @@
 
 **Dispatch shorthand（主动下发请求，非闸门）**：用户可以直接说“按 S/M/L/D 做”。四个简写分别展开为 `S`=`tickets=F,dag=F`、`M`=`tickets=T,dag=F`、`L`=`tickets=T,dag=T`、`D`=`tickets=F,dag=T`，但它们是 Composition request，不是 artifact 授权；当前 attempt plan 的 `Composition:` 行仍是唯一事实源，earn 条件仍是权威。请求与实际信号冲突时先向 owner 展开冲突、建议组合和 artifact 影响，确认前不增删 ticket/DAG。这与"抛弃 S/M/L 线性档"不矛盾：废弃的是"先定档再决定产物"的闸门，保留的是便于 owner 主动表达期望执行形态的口令。规范处理见 composition contract。
 
-Review 按当前 delta 的独立信号触发，不把 artifact 数量或历史 Composition 当风险代理：code-review 恒必选；diff 或本次 S/P delta 改变 interface、状态机、模块边界、跨模块行为或 seam 时 module-review 必选；safety-review 按效果与 authority 信号触发（见 Review 体系）。
+Review 按当前 delta 的独立信号触发，不把 artifact 数量或历史 Composition 当风险代理：code-review 恒必选；diff 或本次 S/P delta 改变 interface、状态机、模块边界、跨模块行为或 seam 时 standards-review 与 spec-review 必须成对运行；safety-review 按效果与 authority 信号触发（见 Review 体系）。
 
 - **Decision 步骤恒定必过，正文按价值 earned**：调研 + 需求对齐 + readiness 门是 Stage 1 的必经步骤，与 composition 无关，不可跳过。新功能、明显体验变化或业务能力变化通常生成 `decision.md`，因为其中的 Focused PRD 与方案理由有持久价值；已有产品定义下的小型行为修正可走 spec 顶部的 lightweight Decision，`contract impact=none` 的实现修复不创建或扩写 decision。`execution-findings.md` 仍只在确有共享执行发现时 earned。
 - `tasks/Tn-progress.md` 只在实际 Task 因 blocker、handoff、重试或并行派发需要继续时创建，不随开关自动创建。
@@ -51,7 +51,7 @@ Review 按当前 delta 的独立信号触发，不把 artifact 数量或历史 C
 3 Attempt plan impl-planning → plan.md / patch plan（含本 attempt Composition）
 4 计划拆解    to-tickets draft →（按需）create-task-dag → 联合校验 → 一次 owner review/approval
 5 执行        dev-with-track：restore → subagent-driven-development（task 实现 + 局部验证）→ Working Branch owner 集成 / plan Execution Record → execution findings 分流 → gate entry
-6 审查        code-review / module-review / safety-review（映射见下）
+6 审查        code-review / standards-review + spec-review / safety-review（映射见下）
 收口条件      terminal pass 前完成 durable-delta capture + verification-before-completion evidence audit
 可选维护      gate 后提示 $backfill-stable-docs；先做 contract preflight，再 audit/apply/verify；可延期、非阻塞、需明确授权
 ```
@@ -168,16 +168,13 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 | 层 | 载体 | 内容 |
 | --- | --- | --- |
 | Task 局部执行 | subagent-driven-development | 有界实现、局部验证与 blocker 回报；仅高风险实际 diff 按风险追加 review |
-| Implementation 级 | 三 review skill | code-review（必选）、module-review（当前 diff/契约 delta 触发）、safety-review（安全效果/authority 信号触发） |
+| Implementation 级 | 四个 leaf review skill | code-review（必选）、standards-review + spec-review（当前 diff/契约 delta 触发）、safety-review（安全效果/authority 信号触发） |
 | Completion claim | verification-before-completion | terminal pass 与 complete/closed/merge-ready/release-ready 声明前核对 revision、环境和 evidence freshness；不进入 DAG |
 
 - `subagent-driven-development` 是 task 执行与局部验证载体；`create-task-dag` 只提供最小 ownership、依赖和 contribution mapping，并参与计划拆解联合校验，不再拥有独立批准门或 worker review 流程。
-- ticket 达到验收候选时，`dev-with-track` 自动调用 `code-review`，并按下列规则补齐 `module-review` / `safety-review`；不等待 owner 显式点名。
-- module-review 现状即 **Standards + Spec 双轴、两个并行 reviewer**，无需新增第三轴或独立 drift skill：
-  - **Spec 轴**承担 contract fidelity——"实现的 interface/seam 与 spec/dag 声明的 contract 是否漂移"是 Spec reviewer 的既有职责，不另设内置检查项。
-  - **Standards 轴**的 repository standards 钩子引用 `codebase-design`，承载 deep module/interface/seam 基线。
-  - 触发规则：当前 diff 或 S/P delta 涉及 interface、状态机、模块边界、跨模块行为或 seam 时必选；tickets/DAG 本身不是触发信号。
-- safety-review 从 git 历史旧 module-review 精简恢复，范围五类（data integrity / security boundary / concurrency / external side effects / change map + P0–P2）。触发用可观察信号：diff 触碰 auth/payment/webhook/migration/外部 mutation 路径，或 spec trust/provider contract、plan Planned Verification / `dag.md` Verification Gates 声明外部写入 → 自动运行。P0 fail-closed：外部 mutation 无幂等/补偿语义；auth/permission 边界绕过；可致数据丢失的 migration 无回滚。信号复用 spec/plan/DAG 既有字段，不新增登记面。
+- ticket 达到验收候选时，`dev-with-track` 将 `code-review` 与按下列规则成对补齐的 `standards-review` + `spec-review` 和适用的 `safety-review` 作为明确 reviewer selection 交给 `do-review`；不等待 owner 显式点名。只有 `do-review` 固定范围、调度 leaf reviewer、汇总 ledger 并作最终分类。
+- `standards-review` 与 `spec-review` 是由 `do-review` 调度的独立 leaf reviewer：二者接收同一完整 diff 与 comparison point，不共享同轮结论；主会话只准备共享上下文、汇总和最终分类。Standards 保留 repository standards 与 codebase-design 基线；Spec 保留 contract fidelity（包括 interface/seam、兼容窗口、状态机与跨 slice seam）。当前 diff 或 S/P delta 涉及 interface、状态机、模块边界、跨模块行为或 seam 时成对必选；tickets/DAG 本身不是触发信号。
+- safety-review 范围五类（data integrity / security boundary / concurrency / external side effects / change map + P0–P2）。触发用可观察信号：diff 触碰 auth/payment/webhook/migration/外部 mutation 路径，或 spec trust/provider contract、plan Planned Verification / `dag.md` Verification Gates 声明外部写入 → 自动运行。P0 fail-closed：外部 mutation 无幂等/补偿语义；auth/permission 边界绕过；可致数据丢失的 migration 无回滚。信号复用 spec/plan/DAG 既有字段，不新增登记面。
 
 ## Skill 改造清单
 
@@ -191,7 +188,7 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 | `subagent-driven-development` | 移入 Impl-Package；成为 task execution 与局部验证载体，按实际高风险 diff 追加必要 review，并将证据交回 dev-with-track |
 | `verification-before-completion` | 移入 Impl-Package；成为 terminal pass 与后续 completion/readiness 声明的 evidence gate，复用未失效证据并阻止无证据完成声明，不进入 DAG |
 | `dev-with-track` | 按当前 plan Composition 恢复 runtime state；append plan Execution Record；分流 execution findings；在单一 gate.md 顶部写不可变 evaluation entry；实现 AC 覆盖、返工失效传播和 Stage 7 |
-| `module-review` | 已换模为 Standards + Spec 双轴双 reviewer：contract-drift 归入 Spec 轴既有职责（不新增内置检查）；Standards 轴 standards 钩子引用 codebase-design；只按当前 diff 或 S/P contract delta 触发，tickets/DAG 本身不触发 |
+| `standards-review` + `spec-review` | 两个独立 leaf reviewer，由 do-review 三轨拓扑调度：Standards 保留 standards 钩子与 codebase-design；Spec 保留 contract-drift；二者只按当前 diff 或 S/P contract delta 成对触发，tickets/DAG 本身不触发 |
 | `safety-review` | 新建（从 git 历史恢复精简）：五类范围 + 信号触发 + P0 fail-closed |
 | `orchestrator` | 退休至 `skills-deprecated/`；清理 registry、docs、evals 引用 |
 
@@ -206,7 +203,7 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 | 2 | to-tickets 本地 fork + registry 标注；to-spec 方法吸收 | fork 后 draft 模式 dry-run 通过；registry 有分叉标注 |
 | 3 | create-task-dag 最小化 + Ticket contribution + integration 语义 | 输入支持 plan + 完整 Draft Tickets（或仅 plan）；五列表格在位；Task→Ticket 多对多且无父子层级；联合拆解 review 与 Working Branch owner integration 路由清晰 |
 | 4 | impl-planning attempt lifecycle + Composition 协同 | plan 声明 Attempt/D/S/P/Composition；含 Planned Verification 与 append-only Execution Record；无 task checklist；与 patching.md 互引 |
-| 5 | safety-review 恢复 + module-review 触发映射与 standards 钩子 | 触发信号与 P0 清单落文；contract-drift 由 Spec 轴覆盖，Standards 轴引用 codebase-design |
+| 5 | safety-review 恢复 + standards-review/spec-review 成对触发映射与 standards 钩子 | 触发信号与 P0 清单落文；contract-drift 由 Spec reviewer 覆盖，Standards reviewer 引用 codebase-design |
 | 6 | dev-with-track gate/scaffold/readiness/canonical status 适配 + 成员 skill 独立触发描述 | gate 模板含 Durable Deltas 表 + pending + truth pointer + stub 完整关闭契约；核心循环有 readiness resolution 且无自动派工；各 description 以能力和触发场景开头，不依赖体系名前缀 |
 | 7 | orchestrator 退休 + registry/docs/evals 清理 | grep 主链路无 orchestrator 活引用 |
 | 8 | 原始讨论稿标注已被本方案取代 + 各 skill evals 更新 | 讨论稿顶部注明"已由本方案取代"；evals 与新行为一致 |

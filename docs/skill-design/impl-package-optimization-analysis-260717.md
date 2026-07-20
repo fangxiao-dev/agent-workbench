@@ -72,7 +72,7 @@ spec §6 的 tenant/授权约束条目在历轮 remediation 中被逐次追加�
 你说 subagent-driven-development 对 spec review 的规则不完善导致反复 review。实例证据分两层：
 
 - **Task 级**：T1 四轮 spec-compliance + 两轮 quality（拒绝码 → decimal 递归 → treatment evidence → controlled label），每轮 reviewer 只审"上轮 finding 修没修 + 顺手再发现一个"，没有首轮完整覆盖承诺。工作区未提交的 review basis + closure review + coverage gap 改动直接命中这个问题（basis 先行、closure 只复查受影响行、基线外新发现必须补基线后完整重审），方向正确，且 prompts.md 已把覆盖对照表写进三个模板。**这层不需要再提案，建议按现状落地并用下一个实例验证。**
-- **正式 review 级（缺口仍在）**：module-review/safety-review 的 fixed-range 循环没有 basis 概念——ER-25 到 ER-36 每轮都是全量三轴重审，发现 1–2 个 P1，修完换 fixed head 再全量来一轮，六轮才收敛，且 subagent quota 正是被这个循环烧穿的。**候选 G（中高优先级）**：把同一方法论推广到正式 review 层——首轮建立风险行基线；后续轮只复查受修复影响的行加相邻边界；出现基线外新发现才升级为全量重审。
+- **正式 review 级（缺口仍在）**：do-review/safety-review 的 fixed-range 循环没有 basis 概念——ER-25 到 ER-36 每轮都是全量三轨重审，发现 1–2 个 P1，修完换 fixed head 再全量来一轮，六轮才收敛，且 subagent quota 正是被这个循环烧穿的。**候选 G（中高优先级）**：把同一方法论推广到正式 review 层——首轮建立风险行基线；后续轮只复查受修复影响的行加相邻边界；出现基线外新发现才升级为全量重审。
 
 - **配套缺口**：quota 耗尽后 agent 临场发明了 "main-session read-only fallback review"，并以它作为 T1/T2 的最终释放依据。记录得诚实，但这是未定义行为且独立性弱化是真实风险。**候选 H（中优先级）**：subagent-driven-development 定义降级规则——允许的 fallback 形式、必须的标注方式、是否需要后续补独立复核。
 
