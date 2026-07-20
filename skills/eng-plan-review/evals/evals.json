@@ -1,0 +1,93 @@
+{
+  "skill_name": "eng-plan-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "用 $eng-plan-review 审查我给出的唯一 implementation plan，只做 review，不要改文件。",
+      "expected_output": "Directly binds the unique plan, reports role/tool choices, runs a fresh Outside Voice, records all five materiality dimensions, and leaves the target byte-identical.",
+      "files": [],
+      "expectations": [
+        "Does not ask the user to choose the already unique target.",
+        "Checks whether the plan is current, already implemented, superseded, or points at removed/deprecated targets.",
+        "Reports Outside Voice and other role/tool choices with reasons.",
+        "Uses an independent Outside Voice before decision waves.",
+        "Records scope, architecture, code quality, tests, and performance as reviewed, not applicable with reason, or finding.",
+        "Does not modify the target during Review."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "审查这个包含 REST contract 变化和数据迁移的计划，尽量把问题统一问我。",
+      "expected_output": "Keeps owner-only contract and irreversible decisions out of auto-resolution, continues independent branches, and presents a small dependency-aware decision wave.",
+      "files": [],
+      "expectations": [
+        "Treats external contract and irreversible migration choices as owner-gated.",
+        "Continues branches that do not depend on those choices.",
+        "Batches independent decisions and early-flushes only materially blocking choices.",
+        "Uses formal findings with verifiable evidence and evidence dependencies."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "审查一个单路径 parser 行为变更计划，重点看测试，不要为了形式画图。",
+      "expected_output": "Produces a coverage map with behavior, risk, level, oracle, and failure mode; upgrades to a diagram only if relationships are actually complex.",
+      "files": [],
+      "expectations": [
+        "Detects the existing test framework before recommending tests.",
+        "Produces a coverage map for the behavior change.",
+        "Checks regression, error handling, and user-visible failure.",
+        "Does not require a diagram for a simple single-path change."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Outside Voice 当前不可用，但请继续审查并告诉我能否算通过。",
+      "expected_output": "Continues the primary review in degraded mode while refusing a fully reviewed or cleared verdict.",
+      "files": [],
+      "expectations": [
+        "Does not simulate Outside Voice inline.",
+        "Reports the capability degradation and its reason.",
+        "Still returns primary-review findings.",
+        "Does not claim fully reviewed or cleared."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "对刚才展示的 manifest 执行 apply。",
+      "expected_output": "Binds one explicit authorization to the exact manifest hash, verifies the target and referenced evidence dependencies, and writes only authorized decisions.",
+      "files": [],
+      "expectations": [
+        "Does not ask for a second ratification of the same manifest.",
+        "Stops on baseline or manifest mismatch.",
+        "Locally invalidates findings whose evidence dependencies changed.",
+        "Does not append a temp ledger path or review report to the plan by default."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "审查一个同时重构状态模块、修改 CLI contract 并迁移旧格式的 implementation plan，判断它是否真的 implementation-ready。",
+      "expected_output": "Applies cross-cutting outcome and completeness lenses together with focused code-quality checks, finding source-of-truth drift, consumer compatibility, lifecycle coupling, cleanup, and verification gaps without imposing a fixed checklist.",
+      "files": [],
+      "expectations": [
+        "Traces material changes from goal and contract through consumers to observable acceptance or operator outcomes.",
+        "Checks repository conventions, authoritative source of truth, derived-state drift, and all real consumers or compatibility paths.",
+        "Distinguishes structural refactoring, behavior change, and migration sequencing where that affects rollback or verification.",
+        "Checks error categories, lifecycle transitions, temporal coupling, and removal of dead or legacy paths.",
+        "Maps accepted findings to actionable changes, real dependencies, affected modules, and verification oracles without inventing effort estimates."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "审查一个跨 API、queue worker 和 UI 结果页的异步用户流程计划，重点判断测试和运行失败是否完整。",
+      "expected_output": "Discovers material behaviors by tracing entry points through validation, state and side effects to user or operator outcomes, then selects risk-appropriate unit, integration, E2E, or eval coverage.",
+      "files": [],
+      "expectations": [
+        "Traces input, validation, transforms or branches, state or side effects, and externally observable outcomes.",
+        "Checks duplicate actions, stale state, timeout, partial success, recovery, and operator-visible signals when relevant.",
+        "Selects test level based on boundary risk and whether mocks would hide real serialization, queue, transaction, permission, or version failures.",
+        "Defines setup or input, execution boundary, oracle, and expected failure for material tests.",
+        "Does not require 100 percent coverage, a per-file diagram, or one question per finding."
+      ]
+    }
+  ]
+}

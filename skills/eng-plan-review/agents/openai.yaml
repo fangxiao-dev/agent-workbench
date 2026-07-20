@@ -1,0 +1,7 @@
+interface:
+  display_name: "Engineering Plan Review"
+  short_description: "独立审查工程实施计划，校验证据、测试、风险与安全写回边界"
+  default_prompt: "Use $eng-plan-review to review this implementation plan before applying changes."
+
+policy:
+  allow_implicit_invocation: false
