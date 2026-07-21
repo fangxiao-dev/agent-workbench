@@ -14,6 +14,6 @@
 
 ## Apply 输出
 
-说明应用了哪些 manifest decisions、哪些未应用、验证结果和目标是否仍有开放风险。默认不要在目标 plan 追加运行报告或 OS-temp ledger 路径；聊天中可以给当前用户 ledger 的绝对路径。
+说明应用了哪些 manifest decisions、哪些未应用、验证结果和目标是否仍有开放风险。成功或中断过 guarded Apply 时必须从 ledger 的 `apply_backups` 枚举全部同目录、run-bound preimage backup 绝对路径，并说明它们是持久恢复物：owner 确认目标内容及无迟到写入需要恢复后才可清理；skill 不自动删除。默认不要在目标 plan 追加运行报告或 OS-temp ledger 路径；聊天中可以给当前用户 ledger 的绝对路径。
 
 不要输出含糊的“review passed”。使用 `cleared`、`not cleared` 或 `applied with degraded review`，并立即解释未决、stale 或降级边界。

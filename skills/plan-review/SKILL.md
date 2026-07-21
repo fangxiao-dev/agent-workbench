@@ -1,5 +1,5 @@
 ---
-name: eng-plan-review
+name: plan-review
 description: 审查 implementation plan、technical plan 或 plan package 的工程完整性、架构、代码质量、测试与性能风险，并在 owner 明确授权后安全写回。用户要求“审查计划”“工程 review”“挑战实现方案”“锁定技术计划”或对 plan 执行 apply 时使用；纯代码 diff、产品战略和视觉设计审查不要使用。
 ---
 
@@ -15,6 +15,7 @@ description: 审查 implementation plan、technical plan 或 plan package 的工
 - 在审查开始时简短报告本轮角色、工具与测试表达形式的选择及理由；后续选择变化时只报告增量，不建立恢复协议。
 - 把产品意图、外部 contract、风险偏好和不可逆选择交给 owner；不得用“recommended”代替授权。
 - 只在 owner 对当前 manifest hash 明确要求 Apply 后写回；manifest、目标基线或相关证据变化时重新确认。
+- 必读的 rubric、reference 或脚本缺失、路径错误或读取失败时立即返回 `BLOCKED`，报告准确路径与工具错误；禁止凭记忆替代、继续生成 findings 或执行 Apply。
 
 ## 1. 绑定目标与基线
 
@@ -22,9 +23,13 @@ description: 审查 implementation plan、technical plan 或 plan package 的工
 
 读取目标、项目指令、目标明确引用的 design/spec，以及决定当前 contract 所必需的相邻资料。不要遍历与判断无关的背景文档。
 
-从目标仓库根目录运行 `python <skill-dir>/scripts/review_ledger.py init --target <path> --skill-version <version>`，在 OS temp 中创建唯一 JSON ledger 并记录目标 hash。后续 CLI 也保持同一工作目录，使相对 evidence paths 稳定解析；Ledger 是临时安全记录，不是项目交付物。
+从目标仓库根目录先运行 `python <skill-dir>/scripts/review_ledger.py discover --target <path>`。没有 unfinished run 时才运行 `init`；当前会话已持有明确 ledger path 时用 `resume --ledger <ledger.json> --target <path>` 继续。发现一个或多个 unfinished run（`active` 或中断于写入的 `applying`）且当前上下文无法证明应继续哪个时，列出 run ID、状态、创建时间、baseline 是否匹配和未决集合，请 owner 明确选择 resume 或 abandon；`applying` 必须先 resume，由脚本按目标 hash 收敛为 `active`/`applied` 或要求 owner 检查。在所有同目标旧 run 被选择或审计性关闭前不要创建并行 ledger。
 
-完成条件：目标、必要 contract baseline 和唯一 ledger 路径已经确定，目标当前内容尚未变化。
+Owner 明确放弃旧 run 时，使用 `abandon --ledger <ledger.json> --source <abandonment.json>`；该命令只把 run 标为 abandoned、使旧授权失效并保留审计记录，不删除 temp 文件。不要恢复角色编制、问题树、消息往返或隐藏推理，只恢复 ledger 中的 baseline、formal findings、resolution、authorization 和 stale 状态。
+
+`init` 或 `resume` 后立即向用户报告 ledger 绝对路径，而不是等到最终回复。后续 CLI 保持同一仓库工作目录，使相对 evidence paths 稳定解析；Ledger 是临时安全记录，不是项目交付物。
+
+完成条件：目标、必要 contract baseline 和唯一 unfinished ledger 路径已经确定，所有同目标旧 run 已显式继续、完成或放弃，目标当前内容尚未变化。
 
 ## 2. 加载审查镜头、扫描材料性并报告本轮配置
 
@@ -88,7 +93,7 @@ description: 审查 implementation plan、technical plan 或 plan package 的工
 - Evidence dependency 变化时只把引用它的 findings 标为 stale，局部复核后生成新 manifest。
 - 授权缺失、hash 不匹配、存在未接受的 P0、owner-required finding 未裁决或存在 stale 时停止写入。
 
-先在 OS temp 生成完整 proposed plan，不修改目标；然后运行 `verify --apply-output <proposed-plan>`。该 guarded Apply 在 ledger 与目标锁内重新核验完整 baseline hash、当前 authorization 和 evidence freshness，再用同目录原子替换写入，并保存 preimage backup；baseline 不匹配时零写入停止。写入后逐 hunk 对照授权 manifest，发现语义超出授权时不得宣称 Apply 成功，并报告 backup 供人工恢复。多目标 package 首版不使用 guarded Apply，保持未写入并请求 owner 拆分或选择明确目标。默认不要向目标 plan 追加 ledger 路径或 review report；仅当项目模板要求、ledger 已导出到稳定位置或 owner 明确要求时写摘要。
+先在 OS temp 生成完整 proposed plan，不修改目标；然后运行 `verify --apply-output <proposed-plan>`。该 guarded Apply 在 ledger 与目标锁内重新核验完整 baseline hash、当前 authorization 和 evidence freshness，先持久化可恢复的 `applying` receipt，再把原目标 inode 保留为同目录、run-bound 的 preimage backup，并以 create-if-absent 安装 proposal；因此已打开旧句柄的迟到写入仍留在报告的 backup 中，不会被静默删除。baseline 不匹配时目标零写入停止。若进程在目标写入与最终 ledger 落盘之间中断，下一次 `resume` 只按 target/backup 的 preimage/output hash 收敛状态，不猜测意图；可恢复的 preimage 会恢复为 `active`，已有 backup 不会被覆盖，重试使用新的 run-bound 后缀。写入后逐 hunk 对照授权 manifest，发现语义超出授权时不得宣称 Apply 成功，并报告 backup 供人工恢复。Backup 是持久恢复物，只有 owner 确认目标内容且无需恢复迟到写入后才清理，skill 不自动删除。多目标 package 首版不使用 guarded Apply，保持未写入并请求 owner 拆分或选择明确目标。默认不要向目标 plan 追加 ledger 路径或 review report；仅当项目模板要求、ledger 已导出到稳定位置或 owner 明确要求时写摘要。
 
 完成条件：`verify` 通过，目标 diff 只包含当前授权 manifest 的决定，未决、stale 和 degraded 状态没有被隐藏。
 
@@ -103,7 +108,10 @@ Review 结束时给出 ledger 的绝对路径供当前用户审计，但不要�
 ## CLI 快速参考
 
 ```text
+python <skill-dir>/scripts/review_ledger.py discover --target <path> [--include-closed]
 python <skill-dir>/scripts/review_ledger.py init --target <path> --skill-version <version>
+python <skill-dir>/scripts/review_ledger.py resume --ledger <ledger.json> --target <path>
+python <skill-dir>/scripts/review_ledger.py abandon --ledger <ledger.json> --source <abandonment.json>
 python <skill-dir>/scripts/review_ledger.py record --ledger <ledger.json> --input <record.json>
 python <skill-dir>/scripts/review_ledger.py status --ledger <ledger.json>
 python <skill-dir>/scripts/review_ledger.py authorize --ledger <ledger.json> --manifest-hash <hash> --source <authorization.json>

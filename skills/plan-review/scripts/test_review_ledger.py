@@ -99,12 +99,102 @@ class ReviewLedgerTests(unittest.TestCase):
             "statement": f"apply {manifest_hash}",
         }
 
+    def abandonment_source(self, run_id: str, reference: str = "turn-abandon") -> dict:
+        return {
+            **self.owner_source(reference),
+            "action": "abandon",
+            "run_id": run_id,
+            "statement": f"abandon {run_id}",
+        }
+
     def test_init_uses_unique_os_temp_run_identity(self) -> None:
         second = ledger.init_ledger([str(self.target)], temp_root=self.root / "runtime")
         self.assertNotEqual(self.ledger_path.parent, second.parent)
         state = json.loads(self.ledger_path.read_text(encoding="utf-8"))
         self.assertTrue(state["run"]["run_id"].startswith("epr-"))
+        self.assertEqual(state["run"]["status"], "active")
         self.assertEqual(state["baseline"]["targets"][0]["sha256"], ledger._sha256_file(self.target))
+
+    def test_required_skill_resources_exist_and_are_readable(self) -> None:
+        skill_root = MODULE_PATH.parent.parent
+        required = [
+            "rubric.md",
+            "references/scope-review.md",
+            "references/architecture-review.md",
+            "references/code-quality-review.md",
+            "references/test-review.md",
+            "references/performance-review.md",
+            "references/decision-policy.md",
+            "references/ledger-records.md",
+            "references/final-report.md",
+            "references/subagent-prompts.md",
+        ]
+        skill_text = (skill_root / "SKILL.md").read_text(encoding="utf-8")
+        for relative in required:
+            with self.subTest(relative=relative):
+                resource = skill_root / relative
+                self.assertTrue(resource.is_file(), f"missing required skill resource: {relative}")
+                self.assertTrue(resource.read_text(encoding="utf-8").strip())
+                self.assertIn(relative, skill_text)
+
+    def test_discover_lists_only_matching_active_runs(self) -> None:
+        second = ledger.init_ledger([str(self.target)], temp_root=self.root / "runtime")
+        other_target = self.root / "other.md"
+        other_target.write_text("# Other\n", encoding="utf-8")
+        ledger.init_ledger([str(other_target)], temp_root=self.root / "runtime")
+        result = ledger.discover_ledgers(self.target, temp_root=self.root / "runtime")
+        self.assertEqual(
+            {item["run_id"] for item in result["runs"]},
+            {
+                ledger.status_ledger(self.ledger_path)["run_id"],
+                ledger.status_ledger(second)["run_id"],
+            },
+        )
+        self.assertEqual(result["invalid"], [])
+        self.assertTrue(all(item["run_status"] == "active" for item in result["runs"]))
+
+    def test_resume_binds_target_and_refreshes_stale_state(self) -> None:
+        other_target = self.root / "other.md"
+        other_target.write_text("# Other\n", encoding="utf-8")
+        with self.assertRaisesRegex(ledger.LedgerError, "does not match"):
+            ledger.resume_ledger(self.ledger_path, other_target)
+        self.target.write_text("# Changed\n", encoding="utf-8")
+        status = ledger.resume_ledger(self.ledger_path, self.target)
+        self.assertEqual(status["run_status"], "active")
+        self.assertTrue(status["baseline_stale"])
+
+    def test_abandon_preserves_ledger_and_removes_it_from_unfinished_discovery(self) -> None:
+        before_hash = ledger.status_ledger(self.ledger_path)["manifest_hash"]
+        run_id = ledger.status_ledger(self.ledger_path)["run_id"]
+        status = ledger.abandon_ledger(
+            self.ledger_path,
+            self.abandonment_source(run_id),
+        )
+        self.assertEqual(status["run_status"], "abandoned")
+        self.assertEqual(status["manifest_hash"], before_hash)
+        self.assertTrue(self.ledger_path.exists())
+        self.assertEqual(
+            ledger.discover_ledgers(self.target, temp_root=self.root / "runtime")["runs"],
+            [],
+        )
+        closed = ledger.discover_ledgers(
+            self.target,
+            temp_root=self.root / "runtime",
+            include_closed=True,
+        )["runs"]
+        self.assertEqual([item["run_status"] for item in closed], ["abandoned"])
+        with self.assertRaisesRegex(ledger.LedgerError, "abandoned review run"):
+            ledger.resume_ledger(self.ledger_path, self.target)
+
+    def test_abandon_requires_exact_owner_bound_run_id(self) -> None:
+        run_id = ledger.status_ledger(self.ledger_path)["run_id"]
+        source = self.abandonment_source("wrong-run")
+        with self.assertRaisesRegex(ledger.LedgerError, "exact run id"):
+            ledger.abandon_ledger(self.ledger_path, source)
+        source = self.abandonment_source(run_id)
+        source["action"] = "apply"
+        with self.assertRaisesRegex(ledger.LedgerError, "action=abandon"):
+            ledger.abandon_ledger(self.ledger_path, source)
 
     def test_candidate_is_not_a_ledger_record(self) -> None:
         with self.assertRaisesRegex(ledger.LedgerError, "cannot be recorded"):
@@ -403,8 +493,141 @@ class ReviewLedgerTests(unittest.TestCase):
         proposed.write_text("# Revised plan\n", encoding="utf-8")
         result = ledger.apply_verified_output(self.ledger_path, proposed)
         self.assertTrue(result["applied"])
+        self.assertEqual(result["run_status"], "applied")
         self.assertEqual(self.target.read_text(encoding="utf-8"), "# Revised plan\n")
         self.assertEqual(Path(result["preimage_backup"]).read_text(encoding="utf-8"), "# Plan\n")
+        self.assertEqual(
+            ledger.discover_ledgers(self.target, temp_root=self.root / "runtime")["runs"],
+            [],
+        )
+
+    def test_statusless_v1_ledger_preserves_existing_authorization(self) -> None:
+        self.materiality()
+        current_hash = ledger.status_ledger(self.ledger_path)["manifest_hash"]
+        ledger.authorize_ledger(
+            self.ledger_path,
+            current_hash,
+            self.authorization_source(current_hash),
+        )
+        state = json.loads(self.ledger_path.read_text(encoding="utf-8"))
+        state["run"].pop("status")
+        self.ledger_path.write_text(json.dumps(state), encoding="utf-8")
+        status = ledger.status_ledger(self.ledger_path)
+        self.assertEqual(status["run_status"], "active")
+        self.assertEqual(status["manifest_hash"], current_hash)
+        self.assertTrue(status["authorized"])
+
+    def test_interrupted_apply_is_recoverable_after_final_ledger_write_failure(self) -> None:
+        self.materiality()
+        current_hash = ledger.status_ledger(self.ledger_path)["manifest_hash"]
+        ledger.authorize_ledger(
+            self.ledger_path,
+            current_hash,
+            self.authorization_source(current_hash),
+        )
+        proposed = self.root / "proposed.md"
+        proposed.write_text("# Revised plan\n", encoding="utf-8")
+        original_write = ledger._atomic_write
+        calls = 0
+
+        def fail_final_write(path: Path, state: dict[str, object]) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("simulated final ledger failure")
+            original_write(path, state)
+
+        with mock.patch.object(ledger, "_atomic_write", side_effect=fail_final_write):
+            with self.assertRaisesRegex(OSError, "simulated final ledger failure"):
+                ledger.apply_verified_output(self.ledger_path, proposed)
+        self.assertEqual(self.target.read_text(encoding="utf-8"), "# Revised plan\n")
+        interrupted = ledger.status_ledger(self.ledger_path)
+        self.assertEqual(interrupted["run_status"], "applying")
+        self.assertEqual(
+            ledger.discover_ledgers(self.target, temp_root=self.root / "runtime")["runs"][0]["run_status"],
+            "applying",
+        )
+        resumed = ledger.resume_ledger(self.ledger_path, self.target)
+        self.assertEqual(resumed["run_status"], "applied")
+
+    def test_resume_restores_missing_target_from_adjacent_preimage_backup(self) -> None:
+        self.materiality()
+        current_hash = ledger.status_ledger(self.ledger_path)["manifest_hash"]
+        ledger.authorize_ledger(
+            self.ledger_path,
+            current_hash,
+            self.authorization_source(current_hash),
+        )
+        proposed = self.root / "proposed.md"
+        proposed.write_text("# Revised plan\n", encoding="utf-8")
+        with mock.patch.object(ledger.os, "link", side_effect=OSError("simulated crash window")):
+            with self.assertRaisesRegex(OSError, "simulated crash window"):
+                ledger.apply_verified_output(self.ledger_path, proposed)
+        self.assertFalse(self.target.exists())
+        interrupted = json.loads(self.ledger_path.read_text(encoding="utf-8"))
+        backup = Path(interrupted["run"]["apply_receipt"]["preimage_backup"])
+        self.assertEqual(backup.read_text(encoding="utf-8"), "# Plan\n")
+        resumed = ledger.resume_ledger(self.ledger_path, self.target)
+        self.assertEqual(resumed["run_status"], "active")
+        self.assertEqual(self.target.read_text(encoding="utf-8"), "# Plan\n")
+        self.assertEqual(resumed["apply_backups"], [str(backup)])
+        retried = ledger.apply_verified_output(self.ledger_path, proposed)
+        self.assertEqual(retried["run_status"], "applied")
+        self.assertEqual(self.target.read_text(encoding="utf-8"), "# Revised plan\n")
+        self.assertEqual(len(retried["apply_backups"]), 2)
+        self.assertEqual(retried["apply_backups"][0], str(backup))
+
+    def test_final_replacement_does_not_overwrite_racing_writer(self) -> None:
+        self.materiality()
+        current_hash = ledger.status_ledger(self.ledger_path)["manifest_hash"]
+        ledger.authorize_ledger(
+            self.ledger_path,
+            current_hash,
+            self.authorization_source(current_hash),
+        )
+        proposed = self.root / "proposed.md"
+        proposed.write_text("# Revised plan\n", encoding="utf-8")
+        original_replace = ledger.os.replace
+
+        def race_before_displace(source: Path, destination: Path) -> None:
+            if Path(source) == self.target and str(destination).endswith(".bak"):
+                self.target.write_text("# Concurrent edit\n", encoding="utf-8")
+            original_replace(source, destination)
+
+        with mock.patch.object(ledger.os, "replace", side_effect=race_before_displace):
+            with self.assertRaisesRegex(ledger.LedgerError, "changed during final replacement"):
+                ledger.apply_verified_output(self.ledger_path, proposed)
+        self.assertEqual(self.target.read_text(encoding="utf-8"), "# Concurrent edit\n")
+
+    def test_open_handle_style_write_after_displace_remains_in_reported_backup(self) -> None:
+        self.materiality()
+        current_hash = ledger.status_ledger(self.ledger_path)["manifest_hash"]
+        ledger.authorize_ledger(
+            self.ledger_path,
+            current_hash,
+            self.authorization_source(current_hash),
+        )
+        proposed = self.root / "proposed.md"
+        proposed.write_text("# Revised plan\n", encoding="utf-8")
+        original_link = ledger.os.link
+        injected = False
+
+        def race_after_displace(source: Path, destination: Path) -> None:
+            nonlocal injected
+            if Path(destination) == self.target and not injected:
+                backup = next(self.target.parent.glob(f".{self.target.name}.plan-review-*.bak"))
+                backup.write_text("# Concurrent edit through open handle\n", encoding="utf-8")
+                injected = True
+            original_link(source, destination)
+
+        with mock.patch.object(ledger.os, "link", side_effect=race_after_displace):
+            result = ledger.apply_verified_output(self.ledger_path, proposed)
+        self.assertTrue(result["applied"])
+        self.assertEqual(self.target.read_text(encoding="utf-8"), "# Revised plan\n")
+        self.assertEqual(
+            Path(result["preimage_backup"]).read_text(encoding="utf-8"),
+            "# Concurrent edit through open handle\n",
+        )
 
     def test_guarded_apply_rejects_changed_target(self) -> None:
         self.materiality()
@@ -442,7 +665,10 @@ class ReviewLedgerTests(unittest.TestCase):
             with self.assertRaisesRegex(ledger.LedgerError, "target changed after verification"):
                 ledger.apply_verified_output(self.ledger_path, proposed)
         self.assertEqual(self.target.read_text(encoding="utf-8"), "# Concurrent edit\n")
-        self.assertEqual(list(self.ledger_path.parent.glob("pre-apply-*.bak")), [])
+        self.assertEqual(
+            list(self.target.parent.glob(f".{self.target.name}.plan-review-*.bak")),
+            [],
+        )
 
 
 if __name__ == "__main__":

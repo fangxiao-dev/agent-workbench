@@ -46,3 +46,11 @@ Absence-proof 对有界目录使用 `kind: tree`，使新增、删除或修改�
 ```
 
 把包含 `action` 与 `manifest_hash` 的对象保存为文件传给 `authorize --source`；脚本拒绝非 Apply action 或不匹配的 hash，并记录 statement hash。Owner resolution 可以使用不带 Apply 字段的基础 source。脚本验证授权记录的结构与绑定关系，不声称独立证明消息发送者身份。
+
+## Abandonment Source
+
+```json
+{"actor":"owner","channel":"chat","reference":"稳定的消息或 turn 引用","action":"abandon","run_id":"<exact-run-id>","statement":"abandon <exact-run-id>"}
+```
+
+`abandon` 只关闭明确绑定的 active run、撤销其 authorization 并保留 ledger；不会删除记录，也不能用于角色或推理状态恢复。`applying` 表示 Apply receipt 已落盘但最终结果尚未收敛，必须先 `resume`：目标仍是 preimage 时回到 `active`，目标等于 proposed output 时收敛为 `applied`，两者都不匹配时停止并要求 owner 检查。

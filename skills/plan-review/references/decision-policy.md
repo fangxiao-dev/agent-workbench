@@ -43,4 +43,8 @@ resolution: pending | accepted | rejected | deferred
 
 只预问无法绑定目标或开始审查的问题。继续独立分支，把 owner 决定按依赖分为少量 waves；同波决定彼此独立。只有决定冻结多个 material branches、使大量结论失效或涉及不可逆 contract 时 early flush。校验漏答和冲突，只重问受影响项。
 
+每个 wave 为每个决定展示稳定编号和字母到完整选项文本的唯一映射，例如 `1A 2B 3A`；只接受当前 wave 仍有效的编号与选项。允许空格、逗号、分号、换行或清楚的自然语言等价表达，不要求 owner 学习严格 parser 语法，也不跨尚未展示的 wave 猜测答案。
+
+未知编号或选项只回显该项的有效映射；同一编号出现冲突答案时只重问该项；漏答不使已明确答案失效；上游选择使下游答案失效时说明依赖原因并只重问受影响下游。不要因一个格式错误重放整波，也不要为此建立持久 parsing 状态机。
+
 Owner 对展示过的 canonical manifest hash 明确要求 Apply，即同时完成 ratification 和写入授权。任何受保护状态变化都使旧授权失效。

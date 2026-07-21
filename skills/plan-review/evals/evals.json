@@ -1,9 +1,9 @@
 {
-  "skill_name": "eng-plan-review",
+  "skill_name": "plan-review",
   "evals": [
     {
       "id": 1,
-      "prompt": "用 $eng-plan-review 审查我给出的唯一 implementation plan，只做 review，不要改文件。",
+      "prompt": "用 $plan-review 审查我给出的唯一 implementation plan，只做 review，不要改文件。",
       "expected_output": "Directly binds the unique plan, reports role/tool choices, runs a fresh Outside Voice, records all five materiality dimensions, and leaves the target byte-identical.",
       "files": [],
       "expectations": [
@@ -87,6 +87,54 @@
         "Selects test level based on boundary risk and whether mocks would hide real serialization, queue, transaction, permission, or version failures.",
         "Defines setup or input, execution boundary, oracle, and expected failure for material tests.",
         "Does not require 100 percent coverage, a per-file diagram, or one question per finding."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "先运行提供的 setup_interrupted_runs.py，并以其 JSON 输出中的 target 与 temp_root 继续被中断的工程计划审查；不要创建第三个 run。",
+      "expected_output": "Discovers matching runs before initialization, exposes enough state for an explicit resume-or-abandon choice, and never reconstructs reviewer roles or hidden reasoning.",
+      "files": ["evals/fixtures/setup_interrupted_runs.py"],
+      "expectations": [
+        "Does not create a third ledger before the existing matching runs are explicitly handled.",
+        "Shows run id, creation time, target-baseline match, and pending state for each matching active run.",
+        "Asks the owner to select resume or abandon for each ambiguous run rather than choosing silently.",
+        "Does not restore role rosters, question trees, message history, or hidden reasoning."
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "按提供的 decision-wave.md 处理这一波 owner 回复，不要重新开始整波决定。",
+      "expected_output": "Preserves the unambiguous answer, reports conflicting, missing, and dependency-invalidated items precisely, and re-asks only the affected decisions without restarting the wave.",
+      "files": ["evals/fixtures/decision-wave.md"],
+      "expectations": [
+        "Keeps the valid 1A answer.",
+        "Treats 2B and 2C as a conflict and re-displays only decision 2's valid mapping.",
+        "Marks decision 3 unanswered without invalidating decision 1.",
+        "Does not accept decision 4 while its dependency decision 2 is unresolved.",
+        "Does not introduce a parser state machine or require exact punctuation."
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "先运行提供的 setup_missing_resource.py；然后仅以其输出的 skill snapshot 运行工程计划审查 preflight。该脚本复制真实 skill 并删除一个必读 focused reference。",
+      "expected_output": "Stops with an explicit BLOCKED result naming the exact missing resource and tool error rather than reviewing from memory.",
+      "files": ["evals/fixtures/setup_missing_resource.py"],
+      "expectations": [
+        "Reports BLOCKED and the exact missing or unreadable path.",
+        "Does not synthesize the missing focused rules from memory.",
+        "Does not create formal findings, a cleared verdict, or Apply authorization after the read failure."
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "运行 setup_interrupted_runs.py；把本条 prompt 视为 owner 明确要求：resume 较新的 run，abandon 较旧的 run。使用脚本输出的 exact run IDs/target/temp_root 完成操作。",
+      "expected_output": "Resumes exactly the selected newer run, abandons the older run with an owner source bound to its exact run id, preserves both ledgers, and creates no third run.",
+      "files": ["evals/fixtures/setup_interrupted_runs.py"],
+      "expectations": [
+        "Resumes only the newer selected run against the exact target and refreshes stale state.",
+        "Abandons only the older run with an owner source bound to its exact run id.",
+        "Preserves both ledger files while unfinished discovery returns only the resumed run.",
+        "Creates no third run and reconstructs no role or hidden-reasoning state."
       ]
     }
   ]

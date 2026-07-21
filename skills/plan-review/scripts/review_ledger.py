@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal, deterministic state ledger for eng-plan-review.
+"""Minimal, deterministic state ledger for plan-review.
 
 The ledger protects review/apply invariants. It intentionally does not model
 reviewer roles, question trees, critic passes, or branch scheduling.
@@ -30,6 +30,7 @@ RESOLUTION_STATES = {"pending", "accepted", "rejected", "deferred"}
 AUTHORITIES = {"agent", "owner"}
 OWNER_GATES = {"required", "not_required"}
 OUTSIDE_VOICE_STATES = {"complete", "unavailable"}
+RUN_STATES = {"active", "applying", "applied", "abandoned"}
 
 
 class LedgerError(ValueError):
@@ -159,6 +160,23 @@ def _new_run_id() -> str:
     return f"epr-{timestamp}-{secrets.token_hex(4)}"
 
 
+def _runtime_root(temp_root: str | os.PathLike[str] | None = None) -> Path:
+    return Path(temp_root).expanduser().resolve() if temp_root else Path(tempfile.gettempdir()) / "plan-review"
+
+
+def _run_status(ledger: dict[str, Any]) -> str:
+    status = ledger["run"].get("status", "active")
+    if status not in RUN_STATES:
+        raise LedgerError(f"invalid run status: {status}")
+    return status
+
+
+def _require_active_run(ledger: dict[str, Any], action: str) -> None:
+    status = _run_status(ledger)
+    if status != "active":
+        raise LedgerError(f"cannot {action} a {status} review run")
+
+
 def _atomic_write(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -180,7 +198,7 @@ def _atomic_write(path: Path, data: dict[str, Any]) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _atomic_replace_bytes(path: Path, value: bytes, expected_sha256: str) -> None:
+def _atomic_replace_bytes(path: Path, value: bytes, expected_sha256: str, backup: Path) -> None:
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".apply", dir=path.parent)
     temporary = Path(temporary_name)
     try:
@@ -190,22 +208,32 @@ def _atomic_replace_bytes(path: Path, value: bytes, expected_sha256: str) -> Non
             os.fsync(stream.fileno())
         if _sha256_file(path) != expected_sha256:
             raise LedgerError("target changed after verification; guarded Apply stopped")
-        os.replace(temporary, path)
+        # Keep the displaced inode as the adjacent backup. An editor that
+        # already holds it open may write late, but those bytes remain
+        # recoverable instead of disappearing when Apply returns.
+        if backup.exists():
+            raise LedgerError(f"preimage backup already exists: {backup}")
+        os.replace(path, backup)
+        if _sha256_file(backup) != expected_sha256:
+            try:
+                os.link(backup, path)
+            except FileExistsError:
+                pass
+            raise LedgerError("target changed during final replacement; guarded Apply stopped")
+        try:
+            os.link(temporary, path)
+        except FileExistsError as exc:
+            raise LedgerError("target reappeared during final replacement; guarded Apply stopped") from exc
         if _sha256_file(path) != _sha256_bytes(value):
             raise LedgerError("guarded Apply output verification failed")
     finally:
+        if backup.exists():
+            if not path.exists():
+                try:
+                    os.link(backup, path)
+                except FileExistsError:
+                    pass
         temporary.unlink(missing_ok=True)
-
-
-def _write_backup(path: Path, value: bytes) -> None:
-    try:
-        with path.open("xb") as stream:
-            stream.write(value)
-            stream.flush()
-            os.fsync(stream.fileno())
-    except FileExistsError:
-        if path.read_bytes() != value:
-            raise LedgerError(f"preimage backup collision: {path}")
 
 
 @contextlib.contextmanager
@@ -281,7 +309,7 @@ def init_ledger(
     reference_snapshots = [snapshot_path(item) for item in (baselines or [])]
     target_path = Path(target_snapshots[0]["path"])
     run_id = _new_run_id()
-    root = Path(temp_root) if temp_root else Path(tempfile.gettempdir()) / "eng-plan-review"
+    root = _runtime_root(temp_root)
     run_directory = root / run_id
     run_directory.mkdir(parents=True, exist_ok=False)
     ledger_path = run_directory / "ledger.json"
@@ -290,6 +318,7 @@ def init_ledger(
         "run": {
             "run_id": run_id,
             "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "status": "active",
             "skill_version": skill_version,
             "repo": _repo_metadata(repo_root, target_path),
         },
@@ -327,6 +356,17 @@ def _validate_authorization_source(source: Any, expected_manifest_hash: str) -> 
         raise LedgerError("authorization source must bind the exact manifest hash")
     normalized["action"] = "apply"
     normalized["manifest_hash"] = expected_manifest_hash
+    return normalized
+
+
+def _validate_abandon_source(source: Any, run_id: str) -> dict[str, Any]:
+    normalized = _validate_source(source)
+    if source.get("action") != "abandon":
+        raise LedgerError("abandon source requires action=abandon")
+    if source.get("run_id") != run_id:
+        raise LedgerError("abandon source must bind the exact run id")
+    normalized["action"] = "abandon"
+    normalized["run_id"] = run_id
     return normalized
 
 
@@ -402,6 +442,7 @@ def record_ledger(ledger_path: str | os.PathLike[str], record: dict[str, Any]) -
     path = Path(ledger_path).resolve()
     with _ledger_lock(path):
         ledger = _read_ledger(path)
+        _require_active_run(ledger, "record into")
         record_type = record.get("type")
         if record_type == "candidate":
             raise LedgerError("candidates are exploratory and cannot be recorded in the ledger")
@@ -526,6 +567,7 @@ def status_ledger(ledger_path: str | os.PathLike[str]) -> dict[str, Any]:
     authorization = ledger.get("authorization")
     return {
         "run_id": ledger["run"]["run_id"],
+        "run_status": _run_status(ledger),
         "ledger": str(Path(ledger_path).resolve()),
         "revision": ledger["revision"],
         "manifest_hash": current_hash,
@@ -536,8 +578,59 @@ def status_ledger(ledger_path: str | os.PathLike[str]) -> dict[str, Any]:
         "owner_required": sorted(owner_required),
         "stale_findings": sorted(stale),
         "baseline_stale": ledger["verification"]["baseline_stale"],
+        "apply_backups": list(ledger["run"].get("apply_backups", [])),
         "authorized": bool(authorization and authorization.get("manifest_hash") == current_hash),
     }
+
+
+def _same_identity(left: str | os.PathLike[str], right: str | os.PathLike[str]) -> bool:
+    return os.path.normcase(str(Path(left).expanduser().resolve())) == os.path.normcase(
+        str(Path(right).expanduser().resolve())
+    )
+
+
+def discover_ledgers(
+    target: str | os.PathLike[str],
+    *,
+    temp_root: str | os.PathLike[str] | None = None,
+    include_closed: bool = False,
+) -> dict[str, Any]:
+    target_path = Path(target).expanduser().resolve()
+    root = _runtime_root(temp_root)
+    runs: list[dict[str, Any]] = []
+    invalid: list[dict[str, str]] = []
+    if not root.exists():
+        return {"target": str(target_path), "runs": runs, "invalid": invalid}
+    for ledger_path in sorted(root.glob("*/ledger.json")):
+        try:
+            ledger = _read_ledger(ledger_path)
+            matching_target = next(
+                (item for item in ledger["baseline"]["targets"] if _same_identity(item["path"], target_path)),
+                None,
+            )
+            if matching_target is None:
+                continue
+            run_status = _run_status(ledger)
+            if run_status not in {"active", "applying"} and not include_closed:
+                continue
+            status = status_ledger(ledger_path)
+            runs.append(
+                {
+                    "run_id": ledger["run"]["run_id"],
+                    "run_status": run_status,
+                    "created_at": ledger["run"]["created_at"],
+                    "ledger": str(ledger_path.resolve()),
+                    "repo": ledger["run"].get("repo"),
+                    "manifest_hash": status["manifest_hash"],
+                    "authorized": status["authorized"],
+                    "pending": status["pending"],
+                    "target_matches_baseline": _current_digest(matching_target) == matching_target["sha256"],
+                }
+            )
+        except (KeyError, LedgerError, OSError, TypeError) as exc:
+            invalid.append({"ledger": str(ledger_path.resolve()), "error": str(exc)})
+    runs.sort(key=lambda item: item["created_at"], reverse=True)
+    return {"target": str(target_path), "runs": runs, "invalid": invalid}
 
 
 def _current_digest(resource: dict[str, Any]) -> str | None:
@@ -545,6 +638,11 @@ def _current_digest(resource: dict[str, Any]) -> str | None:
         return snapshot_path(resource["path"], resource["kind"])["sha256"]
     except (FileNotFoundError, LedgerError):
         return None
+
+
+def _apply_recovery_paths(target: Path) -> list[str]:
+    candidates = [*target.parent.glob(f".{target.name}.*.conflict-output")]
+    return [str(item.resolve()) for item in sorted(candidates)]
 
 
 def _verify_in_place(ledger: dict[str, Any]) -> bool:
@@ -572,12 +670,82 @@ def _verify_in_place(ledger: dict[str, Any]) -> bool:
     return changed
 
 
+def resume_ledger(
+    ledger_path: str | os.PathLike[str], target: str | os.PathLike[str]
+) -> dict[str, Any]:
+    path = Path(ledger_path).resolve()
+    target_path = Path(target).expanduser().resolve()
+    with _ledger_lock(path):
+        ledger = _read_ledger(path)
+        if not any(_same_identity(item["path"], target_path) for item in ledger["baseline"]["targets"]):
+            raise LedgerError("resume target does not match this review run")
+        if _run_status(ledger) == "applying":
+            _reconcile_applying(ledger)
+            _atomic_write(path, ledger)
+            return status_ledger(path)
+        _require_active_run(ledger, "resume")
+        changed = _verify_in_place(ledger)
+        if changed:
+            _atomic_write(path, ledger)
+        return status_ledger(path)
+
+
+def _reconcile_applying(ledger: dict[str, Any]) -> None:
+    receipt = ledger["run"].get("apply_receipt")
+    if not isinstance(receipt, dict):
+        raise LedgerError("applying review run is missing its recovery receipt")
+    target = Path(receipt["target"])
+    recovery_paths = sorted(set(receipt.get("recovery_paths", [])) | set(_apply_recovery_paths(target)))
+    if receipt.get("recovery_required") or recovery_paths:
+        paths = ", ".join(recovery_paths)
+        raise LedgerError(f"interrupted Apply requires owner recovery inspection: {paths}")
+    if not target.exists():
+        backup = Path(receipt["preimage_backup"])
+        if backup.is_file() and _sha256_file(backup) == receipt["preimage_sha256"]:
+            try:
+                os.link(backup, target)
+            except FileExistsError:
+                pass
+        else:
+            raise LedgerError("interrupted Apply target is missing and no valid preimage backup is available")
+    current_sha256 = _sha256_file(target)
+    if current_sha256 == receipt["output_sha256"]:
+        ledger["run"]["status"] = "applied"
+        ledger["run"]["completed_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    elif current_sha256 == receipt["preimage_sha256"]:
+        ledger["run"]["status"] = "active"
+        ledger["run"].pop("apply_receipt", None)
+    else:
+        raise LedgerError(
+            "interrupted Apply target matches neither preimage nor proposed output; owner inspection required"
+        )
+    ledger["revision"] += 1
+
+
+def abandon_ledger(
+    ledger_path: str | os.PathLike[str], source: dict[str, Any]
+) -> dict[str, Any]:
+    path = Path(ledger_path).resolve()
+    with _ledger_lock(path):
+        ledger = _read_ledger(path)
+        _require_active_run(ledger, "abandon")
+        normalized_source = _validate_abandon_source(source, ledger["run"]["run_id"])
+        ledger["run"]["status"] = "abandoned"
+        ledger["run"]["abandoned_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        ledger["run"]["abandonment_source"] = normalized_source
+        ledger["authorization"] = None
+        ledger["revision"] += 1
+        _atomic_write(path, ledger)
+        return status_ledger(path)
+
+
 def verify_ledger(
     ledger_path: str | os.PathLike[str], expected_manifest_hash: str | None = None
 ) -> dict[str, Any]:
     path = Path(ledger_path).resolve()
     with _ledger_lock(path):
         ledger = _read_ledger(path)
+        _require_active_run(ledger, "verify")
         changed = _verify_in_place(ledger)
         if changed:
             _atomic_write(path, ledger)
@@ -604,6 +772,7 @@ def authorize_ledger(
     normalized_source = _validate_authorization_source(source, expected_manifest_hash)
     with _ledger_lock(path):
         ledger = _read_ledger(path)
+        _require_active_run(ledger, "authorize")
         changed = _verify_in_place(ledger)
         if changed:
             _atomic_write(path, ledger)
@@ -657,6 +826,7 @@ def apply_verified_output(
     proposed_bytes = proposed_path.read_bytes()
     with _ledger_lock(path):
         ledger = _read_ledger(path)
+        _require_active_run(ledger, "apply")
         changed = _verify_in_place(ledger)
         if changed:
             _atomic_write(path, ledger)
@@ -675,19 +845,39 @@ def apply_verified_output(
             raise LedgerError("guarded Apply currently supports exactly one target file")
         target = Path(targets[0]["path"])
         expected_sha256 = targets[0]["sha256"]
-        backup = path.parent / f"pre-apply-{expected_sha256[:12]}.bak"
+        backup = target.with_name(
+            f".{target.name}.plan-review-{ledger['run']['run_id']}.bak"
+        )
+        if backup.exists():
+            backup = target.with_name(
+                f".{target.name}.plan-review-{ledger['run']['run_id']}-{secrets.token_hex(4)}.bak"
+            )
+        output_sha256 = _sha256_bytes(proposed_bytes)
+        ledger["run"]["status"] = "applying"
+        ledger["run"]["apply_receipt"] = {
+            "target": str(target),
+            "output_sha256": output_sha256,
+            "preimage_sha256": expected_sha256,
+            "preimage_backup": str(backup),
+        }
+        ledger["run"].setdefault("apply_backups", []).append(str(backup))
+        ledger["revision"] += 1
+        _atomic_write(path, ledger)
         with _ledger_lock(target):
             preimage = target.read_bytes()
             if _sha256_bytes(preimage) != expected_sha256:
                 raise LedgerError("target changed after verification; guarded Apply stopped")
-            _write_backup(backup, preimage)
-            _atomic_replace_bytes(target, proposed_bytes, expected_sha256)
+            _atomic_replace_bytes(target, proposed_bytes, expected_sha256, backup)
+        ledger["run"]["status"] = "applied"
+        ledger["run"]["completed_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        ledger["revision"] += 1
+        _atomic_write(path, ledger)
         result = status_ledger(path)
         result.update(
             {
                 "applied": True,
                 "target": str(target),
-                "output_sha256": _sha256_bytes(proposed_bytes),
+                "output_sha256": output_sha256,
                 "preimage_backup": str(backup),
             }
         )
@@ -714,6 +904,20 @@ def _parser() -> argparse.ArgumentParser:
     init.add_argument("--baseline", action="append", default=[])
     init.add_argument("--repo")
     init.add_argument("--skill-version", default="dev")
+    init.add_argument("--temp-root")
+
+    discover = subparsers.add_parser("discover")
+    discover.add_argument("--target", required=True)
+    discover.add_argument("--temp-root")
+    discover.add_argument("--include-closed", action="store_true")
+
+    resume = subparsers.add_parser("resume")
+    resume.add_argument("--ledger", required=True)
+    resume.add_argument("--target", required=True)
+
+    abandon = subparsers.add_parser("abandon")
+    abandon.add_argument("--ledger", required=True)
+    abandon.add_argument("--source", required=True)
 
     record = subparsers.add_parser("record")
     record.add_argument("--ledger", required=True)
@@ -743,8 +947,19 @@ def main(argv: list[str] | None = None) -> int:
                 args.baseline,
                 repo_root=args.repo,
                 skill_version=args.skill_version,
+                temp_root=args.temp_root,
             )
             output: dict[str, Any] = {"ledger": str(ledger_path), **status_ledger(ledger_path)}
+        elif args.command == "discover":
+            output = discover_ledgers(
+                args.target,
+                temp_root=args.temp_root,
+                include_closed=args.include_closed,
+            )
+        elif args.command == "resume":
+            output = resume_ledger(args.ledger, args.target)
+        elif args.command == "abandon":
+            output = abandon_ledger(args.ledger, _load_json_argument(args.source))
         elif args.command == "record":
             record_ledger(args.ledger, _load_json_argument(args.input))
             output = status_ledger(args.ledger)
