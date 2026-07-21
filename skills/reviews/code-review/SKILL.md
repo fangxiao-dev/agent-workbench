@@ -198,6 +198,12 @@ def calculate_total(items: List[Item], tax_rate: float) -> Decimal:
 
 ### Step 8: Provide feedback
 
+**No-finding evidence (required)**:
+- Do not return a bare `PASS` or "no issues found".
+- Include a concise Coverage record: changed production entry points/modules inspected, review dimensions applied (for example behavior, errors, security, resource handling, tests), and the result.
+- Name high-risk paths that were inspected without a finding, and any paths that could not be verified from the diff or supplied context.
+- This is review evidence, not a requirement to invent findings, run unrelated tools, or duplicate a dedicated Spec/Safety review.
+
 **Be constructive**:
 ```
 ✅ Good:

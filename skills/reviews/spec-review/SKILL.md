@@ -28,6 +28,8 @@ description: >
 
 ## 输出合同
 
-在不超过 400 words 内输出 canonical Spec evidence。对每个 finding 写明：需求或合同项、缺失/部分实现/scope creep/错误行为/contract drift 的类型、合同原文或稳定来源、文件/行或稳定 hunk、可观察的不忠实行为，以及建议动作。无 finding 时说明覆盖的合同来源和无法验证的边界。
+在不超过 400 words 内输出 canonical Spec evidence。对每个 finding 写明：需求或合同项、缺失/部分实现/scope creep/错误行为/contract drift 的类型、合同原文或稳定来源、文件/行或稳定 hunk、可观察的不忠实行为，以及建议动作。
+
+无 finding 时不得只写 `PASS`。输出必须包含精简的 Coverage record：列出已对照的合同来源或关键条款、对应检查过的 diff module/interface/seam、未形成 finding 的结论，以及无法验证的边界。Coverage record 是本轮 Spec 审查证据，不是新的 ledger、reviewer 或跨轨结论；它不得以仓库规范或个人偏好替代合同证据，也不得修改既有 400 words 上限。
 
 不要审查 repository conventions、Fowler code-smell baseline、deep module design quality、代码组织或实现约定；这些属于 `standards-review`。不要预合并、重排或反驳其他轨道的 finding。

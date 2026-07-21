@@ -42,6 +42,14 @@ description: >
 
 ## 输出合同
 
-在不超过 400 words 内输出 canonical Standards evidence。对每个 finding 写明：严重性或硬性/判断性分类、文件/行或稳定 hunk、违反的仓库规则或点名的 baseline smell、具体证据与建议动作。仓库规范硬性违规必须引用规则文件；smell 必须引用相关 hunk。明确区分 hard violation 与 judgement call，并在无 finding 时说明覆盖范围与无法验证的边界。
+在不超过 400 words 内输出 canonical Standards evidence。对每个 finding 写明：严重性或硬性/判断性分类、文件/行或稳定 hunk、违反的仓库规则或点名的 baseline smell、具体证据与建议动作。仓库规范硬性违规必须引用规则文件；smell 必须引用相关 hunk。明确区分 hard violation 与 judgement call。
+
+无 finding 时不得只写 `PASS`。输出必须包含精简的 Coverage record：
+
+- 列出本 diff 中已实际检查的新增或变更模块、public API、adapter、persistence/state entry point；每项写出检查的 Standards 维度（例如 interface depth、locality、vendor containment、重复逻辑）和结果。
+- 对高风险但未形成 Standards finding 的区域，写明“已检查、无 Standards 证据”，或写明其为何属于 Spec/Safety 并交由该轨判断；不得把它伪装为 Standards PASS。
+- 写出无法从 diff 或调用者共享上下文验证的边界。
+
+Coverage record 是审查证据，不是新的 reviewer、长期台账或跨轨 finding；它不得重做 Spec 的合同忠实度审查，也不得修改既有 400 words 上限。
 
 不要审查 issue、Decision、Spec、Plan 或 DAG 的合同忠实度、遗漏需求、scope creep、兼容窗口、状态机或跨模块 seam；这些属于 `spec-review`。不要预合并、重排或反驳其他轨道的 finding。
