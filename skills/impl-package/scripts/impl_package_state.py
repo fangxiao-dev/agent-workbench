@@ -927,7 +927,7 @@ def _assert_attempt_decomposition_revision_bindings(
             raise StateError("earned DAG is missing its revision binding")
         dag_text = _artifact_text(package, dag_relative, committed=False)
         dag_match = re.search(
-            r"(?m)^-\\s*修订集合（Revision set）：\\s*(D\\d+|N/A)\\s*/\\s*(S\\d+|N/A)\\s*/\\s*(P\\d+|N/A)\\s*$",
+            r"(?m)^-\s*修订集合（Revision set）：\s*(D\d+|N/A)\s*/\s*(S\d+|N/A)\s*/\s*(P\d+|N/A)\s*$",
             dag_text,
         )
         if not dag_match or dag_match.groups() != (
@@ -937,8 +937,8 @@ def _assert_attempt_decomposition_revision_bindings(
 
     if tickets_earned:
         for ticket_id, (_, ticket_text) in _attempt_ticket_documents(package, attempt, committed=False).items():
-            spec_match = re.search(r"(?m)^\\*\\*规格修订（Spec Revision）：\\*\\*\\s*(S\\d+|N/A)\\s*$", ticket_text)
-            plan_match = re.search(r"(?m)^\\*\\*计划修订（Plan Revision）：\\*\\*\\s*(P\\d+|N/A)\\s*$", ticket_text)
+            spec_match = re.search(r"(?m)^\*\*规格修订（Spec Revision）：\*\*\s*(S\d+|N/A)\s*$", ticket_text)
+            plan_match = re.search(r"(?m)^\*\*计划修订（Plan Revision）：\*\*\s*(P\d+|N/A)\s*$", ticket_text)
             if not spec_match or not plan_match or spec_match.group(1) != current_revision_set["spec"] or plan_match.group(1) != current_revision_set["plan"]:
                 raise StateError(f"ticket {ticket_id} revision binding does not match current revisions; revalidate the decomposition before finalizing a gate")
 

@@ -115,6 +115,30 @@ entry 的可读正文必须包含 Attempt ID、Supersedes、evaluated time、D/S
 - D/S revision 改变后，旧 gate entry 仍只证明旧 revision；新 evaluation 必须引用新 revision。
 - Git 提供 provenance；发现旧 block 被改动时报告 contract violation，不静默接受。
 
+### 执行授权后的自动收口（不得二次请示）
+
+Owner 已批准当前 attempt 的 plan / 明确 **GO 执行**（或等价「按 plan 实现」）后，**本 skill 拥有从实现到 gate evaluation 的连续运行时**，不得把「验证」或「写 gate」再当成独立 owner 决策点。
+
+**必须自动完成（无需再问 owner 是否验证 / 是否写 gate）：**
+
+1. 按 Planned Verification 与适用 review 跑检查，append ER；
+2. 分流 execution findings；适用时跑 `do-review` / 修复闭环；
+3. 在证据齐全时跑 `verification-before-completion` claim audit；
+4. 立刻 `new-gate-entry` → 写 verdict 正文 → `finalize-gate-entry`：
+   - 证据支持 → terminal **pass**（或 fail/defer 若合同如此）；
+   - 证据不足或 blocker → **blocked**（写清缺口），仍不卡住「请同意验证」；
+5. 向 owner 汇报结果（含 gate 结论），而不是汇报「等你同意后我再关 gate」。
+
+**仍须 owner 明确授权的（远端 / 共享状态，不在自动收口内）：** push、合入 `master`/`release`、生产可变操作、pre-gate integration（仅当 plan 预先记录了该授权路径）、以及会改变业务结果的 contract 选项。
+
+**禁止：**
+
+- 实现与本地验证已完成后停住，单独问「要不要写 gate / 要不要再验证」；
+- 把 gate 写成「owner 批准验证」的闸门——gate 是 **证据已发生后的 verdict 登记**，不是二次开工许可；
+- 在 GO 执行范围内把 Planned Verification 留到「你确认后再跑」。
+
+若 plan 未批准或未 GO，不得进入上述自动收口；仍停在 Draft / 待授权执行。
+
 ## Stage 7
 
 每个 gate entry 的 Durable Deltas 是唯一 capture surface。有 delta 时，terminal verdict（pass/fail/defer）entry 写入前完成：
@@ -131,13 +155,13 @@ terminal gate 关闭后提示 owner 可以按需使用 `$backfill-stable-docs`�
 ## Execution checklist
 
 1. Restore 当前 attempt 与 revisions。
-2. 校验 revision bindings、派生 lifecycle、Composition/artifacts、dependency graph 与 AC references。
+2. 校验 revision bindings、派生 lifecycle、Composition/bindings、dependency graph 与 AC references。
 3. 选择并执行 actionable unit；可委派 Task 使用 `subagent-driven-development` 的最小派发，状态只通过 `set-state` 写入 runtime-state 并刷新投影。普通 Task 不触发完整 contract、独立正式 review 或逐 Task gate；高风险 diff 只按实际风险加严局部验证/审查。
 4. committed validate 通过后 append plan Execution Record；外部 artifact hash delta 通过 artifact commands 登记。
 5. 有 manual owner 时，在等待验收前输出轻量 readiness packet；没有人工验收时跳过。
 6. 分流 execution findings；必要时回 req-align 并重新过相应 gate。
 7. Ticket 达到验收候选前，只扫描 `contributes-to` 该 Ticket 的 `BLOCKED` Task：未完成内容若影响其 AC、已声明行为或风险边界，先解除阻塞；若真实影响扩大，先更新 contribution mapping。随后把 code-review、standards-review + spec-review 和适用的 safety-review 作为明确 reviewer selection 交给唯一编排器 `do-review`，由它固定 comparison point、调度 leaf reviewer 并闭环 review findings。最终 package review 前全局确认没有 `BLOCKED`，且所有 Task 为 `DONE` 或有明确、已批准理由的 `WAIVED` / `SUPERSEDED`；再确认所有 Ticket AC evidence 和 active Spec 全覆盖。
-8. 默认 merge 前，用稳定 operation-id 分配 G id/scaffold，完成当前 attempt 的 pass evaluation；拟写 terminal pass 时先完成 Stage 7 准备，再由 `verification-before-completion` 审计 pass claim。只有 plan 已预先记录的 owner-approved pre-gate integration 可以跳过这一时序。
+8. **在同一执行授权下自动收口（见上节）：** 默认 merge 前用稳定 operation-id 分配 G id/scaffold，完成当前 attempt 的 gate evaluation；拟写 terminal pass 时先完成 Stage 7 准备，再由 `verification-before-completion` 审计 pass claim，然后 **立即 finalize**。不得因「尚未请示 owner 是否验证」而停在 open/no-verdict。只有 plan 已预先记录的 owner-approved pre-gate integration 可以改变 integration 与 gate 的先后时序，且不得把该授权误当成「跳过 claim audit」。
 9. 完成 Markdown entry 后立即 finalize content-bound index；terminal 时由可信 finalized verdict 派生 Frozen，blocked 时保持 Active。
 10. terminal metadata commit、目标分支合入或环境变化后，任何 complete / closed / merge-ready / release-ready 声明前重新执行 completion-claim evidence audit。先合入后关 gate 的 attempt 必须以目标分支 evidence 收口。
 
