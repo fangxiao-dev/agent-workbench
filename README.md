@@ -119,10 +119,12 @@ powershell -ExecutionPolicy Bypass -File scripts/list-visible-skills.ps1
 ### 在任意项目里运行审查
 
 ```
-/audit
+/audit [path ...]
+/audit --full
+/audit --full --include-global [host ...]
 ```
 
-触发 `audit-agent-setup` subagent，对当前项目的 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、agents、skills、commands 做深度质量审查，输出带改进建议的报告。
+默认只审指定文件；未指定时只审根 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md`。`--full` 才扩展到项目级 agent setup，`--include-global [host ...]` 才读取指定的用户级宿主状态，并同步收窄项目级专属宿主目录。审计只输出带证据的改进建议，不修改文件。
 
 ### 自动讨论目标文档
 
