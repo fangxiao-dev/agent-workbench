@@ -24,6 +24,22 @@
       "expected_output": "The report applies repository rules first and treats Fowler smells as evidence-backed judgement calls.",
       "files": [],
       "expectations": ["Preserves repository-standard precedence", "Names applicable Fowler smells with hunk evidence", "Distinguishes hard violations from judgement calls"]
+    },
+    {
+      "id": 4,
+      "name": "standards-review-can-deepen-on-structural-signals",
+      "prompt": "Review a supplied full diff where a shared path gains feature-specific flags across modules and a thin wrapper hides a loosely typed boundary.",
+      "expected_output": "The reviewer may use strict maintainability heuristics to describe the added complexity, maintenance risk, and a viable simplifying direction.",
+      "files": [],
+      "expectations": ["Treats structural signals as non-exhaustive heuristics rather than a fixed gate", "Uses diff evidence and maintenance consequences", "Does not make elegance or a line threshold an automatic blocker"]
+    },
+    {
+      "id": 5,
+      "name": "standards-review-keeps-structural-focus-with-mixed-risk-evidence",
+      "prompt": "Review a supplied diff with a module-boundary concern that also suggests an authorization failure path.",
+      "expected_output": "The reviewer returns Standards evidence for the module-boundary concern and describes any additional evidence without changing its structural focus.",
+      "files": [],
+      "expectations": ["Keeps structural maintainability as the primary focus", "Reports concrete evidence rather than suppressing it", "Does not turn a mixed-risk observation into an unsupported Standards finding"]
     }
   ]
 }

@@ -10,6 +10,12 @@ metadata:
 
 # Code Review
 
+## 审查偏重
+
+优先关注变更后的行为、错误处理、安全、性能、资源、并发/原子性和测试风险；下方既有审查知识与 checklist 仍完整适用，不因该偏重而失效。
+
+结构、模块归属、抽象与一般 code-quality 现象同样可以继续被发现和报告。审查偏重是选择注意力的启发式，不是能力禁令；每项输出只说明自身证据、风险与建议。
+
 ## When to use this skill
 - Reviewing pull requests
 - Checking code quality
@@ -154,15 +160,7 @@ metadata:
 - [ ] Proper test data setup/teardown
 
 **Test naming**:
-```python
-# Good
-def test_user_creation_with_valid_data_succeeds():
-    pass
-
-# Bad
-def test1():
-    pass
-```
+详见 [审查示例](references/examples.md#test-naming)。
 
 ### Step 7: Documentation review
 
@@ -173,23 +171,7 @@ def test1():
 - [ ] Comments are accurate
 
 **Function documentation**:
-```python
-def calculate_total(items: List[Item], tax_rate: float) -> Decimal:
-    """
-    Calculate the total price including tax.
-
-    Args:
-        items: List of items to calculate total for
-        tax_rate: Tax rate as decimal (e.g., 0.1 for 10%)
-
-    Returns:
-        Total price including tax
-
-    Raises:
-        ValueError: If tax_rate is negative
-    """
-    pass
-```
+详见 [审查示例](references/examples.md#function-documentation)。
 
 **README/docs**:
 - [ ] README updated if needed
@@ -202,32 +184,13 @@ def calculate_total(items: List[Item], tax_rate: float) -> Decimal:
 - Do not return a bare `PASS` or "no issues found".
 - Include a concise Coverage record: changed production entry points/modules inspected, review dimensions applied (for example behavior, errors, security, resource handling, tests), and the result.
 - Name high-risk paths that were inspected without a finding, and any paths that could not be verified from the diff or supplied context.
-- This is review evidence, not a requirement to invent findings, run unrelated tools, or duplicate a dedicated Spec/Safety review.
+- This is review evidence, not a requirement to invent findings or run unrelated tools.
 
 **Be constructive**:
-```
-✅ Good:
-"Consider extracting this logic into a separate function for better
-testability and reusability:
-
-def validate_email(email: str) -> bool:
-    return '@' in email and '.' in email.split('@')[1]
-
-This would make it easier to test and reuse across the codebase."
-
-❌ Bad:
-"This is wrong. Rewrite it."
-```
+详见 [审查示例](references/examples.md#constructive-feedback)。
 
 **Be specific**:
-```
-✅ Good:
-"On line 45, this query could cause N+1 problem. Consider using
-.select_related('author') to fetch related objects in a single query."
-
-❌ Bad:
-"Performance issues here."
-```
+详见 [审查示例](references/examples.md#specific-feedback)。
 
 **Prioritize issues**:
 - 🔴 Critical: Security, data loss, major bugs
@@ -235,10 +198,7 @@ This would make it easier to test and reuse across the codebase."
 - 🟢 Nice-to-have: Style, minor improvements
 
 **Acknowledge good work**:
-```
-"Nice use of the strategy pattern here! This makes it easy to add
-new payment methods in the future."
-```
+详见 [审查示例](references/examples.md#acknowledge-good-work)。
 
 ## Review checklist
 
@@ -282,80 +242,7 @@ new payment methods in the future."
 
 ## Common issues
 
-### Anti-patterns
-
-**God class**:
-```python
-# Bad: One class doing everything
-class UserManager:
-    def create_user(self): pass
-    def send_email(self): pass
-    def process_payment(self): pass
-    def generate_report(self): pass
-```
-
-**Magic numbers**:
-```python
-# Bad
-if user.age > 18:
-    pass
-
-# Good
-MINIMUM_AGE = 18
-if user.age > MINIMUM_AGE:
-    pass
-```
-
-**Deep nesting**:
-```python
-# Bad
-if condition1:
-    if condition2:
-        if condition3:
-            if condition4:
-                # deeply nested code
-
-# Good (early returns)
-if not condition1:
-    return
-if not condition2:
-    return
-if not condition3:
-    return
-if not condition4:
-    return
-# flat code
-```
-
-### Security vulnerabilities
-
-**SQL Injection**:
-```python
-# Bad
-query = f"SELECT * FROM users WHERE id = {user_id}"
-
-# Good
-query = "SELECT * FROM users WHERE id = %s"
-cursor.execute(query, (user_id,))
-```
-
-**XSS**:
-```javascript
-// Bad
-element.innerHTML = userInput;
-
-// Good
-element.textContent = userInput;
-```
-
-**Hardcoded secrets**:
-```python
-# Bad
-API_KEY = "sk-1234567890abcdef"
-
-# Good
-API_KEY = os.environ.get("API_KEY")
-```
+详见 [审查示例](references/examples.md#common-issues)。
 
 ## Best practices
 

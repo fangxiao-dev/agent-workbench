@@ -12,7 +12,9 @@ allowed-tools:
 
 `do-review` is the sole review orchestrator. It fixes the complete review scope and comparison point, prepares shared context, plans capacity, dispatches leaf reviewers, owns the cross-track ledger, verifies P1/P2 evidence, classifies findings, controls loop convergence, and writes the final report. The main session is not another reviewer.
 
-Every dispatched reviewer is a leaf reviewer. A leaf reviewer performs only its assigned skill's review role: it must not invoke `$do-review`, run its subagent gate, dispatch subagents, re-resolve reviewer topology, re-plan capacity, read another track's same-round findings, classify cross-track results, or decide the overall verdict.
+The canonical ledger is a Markdown artifact owned and updated by the main session. Create it in the user temp directory as `%TEMP%\\do-review\\<YYMMDDHHMM>-<slug>-<shortsha>.md` (the helper is `scripts/review_ledger.py`). Keep the same absolute path for every round, let leaf reviewers read it only, and cite that path in the final report. The ledger is not repository or Git state and must not be maintained only in the conversation context.
+
+Every dispatched reviewer is a leaf reviewer. A leaf reviewer performs its assigned skill's review role: it must not invoke `$do-review`, run its subagent gate, dispatch subagents, re-resolve reviewer topology, re-plan capacity, read another track's same-round findings, classify cross-track results, or decide the overall verdict. Reviewer roles state primary review intent and handoff direction, not exclusive capability boundaries; a leaf may surface an evidence-backed cross-domain candidate for the parent to attribute, deduplicate, and classify.
 
 The default topology comes only from [reviewer-registry.json](references/reviewer-registry.json): Track A `code-review`, Track B `standards-review`, and Track C `spec-review`. `safety-review` remains an opt-in reviewer, not a default track. Do not infer internal reviewer topology from a reviewer skill; every resolved reviewer is already one leaf.
 
@@ -64,11 +66,14 @@ Issue/Decision/Spec/Plan/DAG sources:
 Spec source discovery record (searched sources and results):
 Spec evidence gap / user confirmation, if any:
 User classification policy:
+User review-depth preference:
 Prior-round canonical ledger:
 Assigned track label:
 Assigned reviewer skill:
 Assigned canonical SKILL.md path:
 ```
+
+Create the canonical ledger immediately after the base/head SHAs and review slug are fixed. Use `python scripts/review_ledger.py create` (or an equivalent temp-aware file operation) and record its absolute path in the shared context as `Canonical ledger artifact`. If the generated filename already exists, fail closed rather than overwriting it; start a new timestamped run or ask the user. The main session must write the initial scope, source-discovery record, user classification policy, and round state before dispatch.
 
 When the target is an Impl-Package, include its package root and relevant Decision, Spec, Plan, and DAG material as evidence only. `impl-package/dev-with-track` remains the lifecycle owner for applying findings and package gates.
 
@@ -102,19 +107,28 @@ Read and use exactly this canonical reviewer skill: <absolute SKILL.md path>.
 You are a leaf reviewer in a topology already resolved by the parent do-review run.
 Do not invoke do-review. Do not dispatch subagents. Do not re-evaluate reviewer topology or capacity.
 Perform only the review role defined by the assigned reviewer skill.
+Treat that role as a primary review intent, not an exclusive capability boundary. You may return an evidence-backed cross-domain candidate and suggested handoff, but do not classify or deduplicate it.
 Review exactly the supplied complete diff and fixed comparison point.
 Do not inspect, request, or use findings produced by other tracks in the current round.
 If this round is executed in phases, treat other same-round track results as unavailable.
-Return findings in the supplied ledger schema. Do not make the final cross-track classification or overall verdict.
+Return findings naturally, with enough location, evidence, and failure-mode detail for the parent to record and verify them. Do not make the final cross-track classification or overall verdict.
 ```
 
-All same-round tracks are isolated, including phased tracks. Do not deduplicate, classify, summarize, or inject one track's output into another track until every selected reviewer has finished the round. In round 1 provide no ledger. From round 2 onward provide only the prior round's canonical ledger, after main-session deduplication and required evidence verification; never provide raw reviewer output.
+The prompt must also include `Canonical ledger artifact: <absolute temp path>`. In round 1, reviewers may read the artifact's scope metadata but must treat the findings table as empty. From round 2 onward, they may read the prior-round canonical findings from that path; they must not edit, replace, classify, or append to it. If a reviewer cannot read the path, the parent may provide a read-only copy of the relevant section, but the temp artifact remains authoritative.
+
+All same-round tracks are isolated, including phased tracks. Do not deduplicate, classify, summarize, or inject one track's output into another track until every selected reviewer has finished the round. In round 1 provide no ledger. From round 2 onward provide only the prior round's canonical review context, after main-session deduplication and required evidence verification; never provide raw reviewer output.
+
+The canonical review context may remain concise, free-form Markdown; it is not a rigid wire schema and must not turn leaf reviewers into form-fillers. It must nevertheless preserve the semantic facts needed to avoid rediscovering or splitting an existing finding: the broken invariant or failure mode, the best evidence, the parent decision/status, and any boundary on what is already covered or remains open. Do not replace it with topic labels such as "storage issues" or "labeling concerns". When it is too large for a prompt, provide it through a readable context artifact rather than deleting those facts.
+
+Start each review round with a fresh leaf-worker session. Resume a worker only to finish the same interrupted round; never carry a worker's raw session into a later round. A cancelled, timed-out, stalled, or max-turns worker is incomplete, not PASS, even if it emitted partial prose. Treat a worker that explicitly reports `PARTIAL` the same way: finish that round or mark it blocked; do not silently reinterpret it as PASS.
 
 Completion criterion: every selected track has completed independently for the round, or the run is explicitly blocked.
 
 ## Step 4: Ledger, Verification, Classification, And Loop
 
-Maintain one canonical ledger across all rounds:
+A leaf result is a review candidate, not an accepted finding. The parent preserves reviewer freedom to surface any plausible risk, then decides whether the candidate is accepted, duplicate/refined, disputed, downgraded, or out of scope. This gate exists to distinguish a real new risk from a plausible architectural concern without suppressing either.
+
+The parent maintains one canonical ledger across all rounds; the Markdown file at `Canonical ledger artifact` is authoritative, and this is the parent's record format, not a form that leaf reviewers must fill:
 
 ```text
 ID:
@@ -134,17 +148,19 @@ Main-session decision:
 
 Use these default source labels exactly: `Track A (code-review)`, `Track B (standards-review)`, and `Track C (spec-review)`. Deduplicate by the broken invariant or observable failure, not by path or reviewer. For one shared issue use `Source: fused` and retain every contributor in `Contributing sources`. `main-session` is a decision source, never a fourth reviewer.
 
-Before reporting a P1, P2, or blocker, read its cited target-revision evidence, confirm the citation supports the claim and is in fixed scope, then apply the user's policy or the default classification. Mark insufficient evidence as `disputed`, `downgraded`, or `UNCERTAIN`; do not present it as a verified blocker.
+Before reporting a P1, P2, or blocker, read its cited target-revision evidence, confirm the citation supports the claim and is in fixed scope, then apply the user's policy or the default classification. For each candidate, establish whether the changed diff directly contains it, the changed behavior directly triggers it, or it is a pre-existing/baseline concern. Also establish the concrete failure mode and the relevant contract, acceptance criterion, or repository rule when one exists. Mark insufficient evidence as `disputed`, `downgraded`, `out of scope`, or `UNCERTAIN`; do not present it as a verified blocker.
 
 Default classification: blocker risks business data, money, inventory, order/customer state, security, or runtime-visible product data; follow-up is real but non-blocking under stated release constraints; backlog is non-urgent cleanup or optional hardening; no issue is duplicate, fixed, out of scope, or unsupported.
 
-For loop mode, converge only after the latest completed round adds no distinct blocker/follow-up issue class, or only duplicates/refinements remain. A PASS/no-finding result from one track never skips another selected track or proves overall convergence. A round is incomplete if any selected reviewer is missing, unless the user explicitly authorized that named degraded topology.
+For loop mode, converge only after the latest completed round adds no distinct **accepted** blocker/follow-up issue class, or only duplicates/refinements/disputed/out-of-scope candidates remain. A genuinely new risk that survives parent verification is added to the canonical context and must continue the loop. A PASS/no-finding result from one track never skips another selected track or proves overall convergence. A round is incomplete if any selected reviewer is missing or incomplete, unless the user explicitly authorized that named degraded topology.
 
-Completion criterion: every accepted finding has source attribution and main-session decision; every P1/P2/blocker has an evidence verification note; the stop reason is recorded.
+Completion criterion: every accepted finding has source attribution and main-session decision; every P1/P2/blocker has an evidence verification note; the stop reason is recorded. Keep disputed and out-of-scope candidates visible separately so a later closure review can revisit them without treating them as merge gates.
+
+After every round, wait for all selected tracks, deduplicate and verify candidates in the main session, then atomically rewrite the same temp ledger with the round verdicts, finding status, evidence, and convergence decision. Do not create a second ledger for a later round. A reviewer result is never authoritative until this main-session update is complete.
 
 ## Step 5: Report
 
-Read [output-templates.md](references/output-templates.md) and use the smallest matching template. Show every selected track's verdict separately. For the default topology, show:
+Read [output-templates.md](references/output-templates.md) and use the smallest matching template. Show every selected track's verdict separately and include the absolute `Canonical ledger artifact` path. The final report must reference the same ledger used for dispatch and state its stop reason. For the default topology, show:
 
 ```text
 Track A (code-review): PASS / FAIL / UNCERTAIN

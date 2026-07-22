@@ -664,7 +664,7 @@ Spec 输出合同必须保留：
 
 以下内容可以在本次 Ownership 重构 closed 后另立任务，不得混入本轮实施：
 
-- 收敛 `code-review` 与 `standards-review` 的内容重叠。
+- 收敛 `code-review` 与 `standards-review` 的内容重叠（已由 [严格可维护性审查吸收方案](do-review-strict-maintainability-absorption-plan.md) 接管）。
 - 重新校准三轨 severity 与 finding schema。
 - 评估 safety-review 与默认三轨的组合策略。
 - 优化 reviewer prompt 长度或上下文成本。

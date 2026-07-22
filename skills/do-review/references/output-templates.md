@@ -13,6 +13,7 @@ Use the smallest template that matches the run. Keep source attribution and per-
 | Base / Head |  |
 | Mode |  |
 | Rounds |  |
+| Canonical ledger artifact | `<absolute %TEMP%\\do-review\\...md>` |
 | Stop reason |  |
 | Overall verdict | PASS / FAIL / UNCERTAIN |
 
@@ -98,10 +99,11 @@ Severity: P0 / P1 / P2 / P3
 Classification: blocker / follow-up / backlog / no issue
 Source: Track <label> (<skill>) / fused / main-session
 Contributing sources:
-Status: new / duplicate / refined / disputed / accepted / downgraded / fixed-verified
+Status: candidate / new / duplicate / refined / disputed / accepted / downgraded / out of scope / fixed-verified
 Evidence:
 - `path/to/file.ts:123` - concise evidence summary.
 Impact:
+Suggested handoff:
 Recommended action:
 Main-session decision:
 ```

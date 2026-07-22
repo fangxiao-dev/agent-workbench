@@ -80,8 +80,19 @@ class ThreeTrackContractTests(unittest.TestCase):
             self.assertIn("do not dispatch subagents", normalized)
             self.assertIn("do not re-evaluate reviewer topology or capacity", normalized)
             self.assertIn("other tracks in the current round", normalized)
-        self.assertIn("prior round's canonical ledger", skill)
+        self.assertIn("prior round's canonical review context", skill)
         self.assertIn("phases", skill)
+
+    def test_leaf_roles_use_primary_intent_and_parent_handoff(self) -> None:
+        skill = SKILL_PATH.read_text(encoding="utf-8")
+        briefs = BRIEFS_PATH.read_text(encoding="utf-8")
+        standards = (ROOT / "skills" / "reviews" / "standards-review" / "SKILL.md").read_text(encoding="utf-8")
+        code = (ROOT / "skills" / "reviews" / "code-review" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("primary review intent", skill)
+        self.assertIn("cross-domain candidate", skill)
+        self.assertIn("not an exclusive capability boundary", briefs)
+        self.assertIn("首要深挖方向", standards)
+        self.assertIn("审查偏重", code)
 
     def test_scope_contract_fails_fast_and_records_spec_discovery(self) -> None:
         skill = SKILL_PATH.read_text(encoding="utf-8")

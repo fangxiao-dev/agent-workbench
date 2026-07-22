@@ -444,16 +444,16 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
             assert_contains(text, "spec-review", f"Spec route missing: {surface}")
 
         routing = read(IMPL_ROOT / "dev-with-track" / "SKILL.md")
-        assert_contains(routing, "`code-review`：任何 implementation 恒必做。", "Code review must remain always-on")
+        assert_contains(routing, "`code-review` 是普通实现的默认选择", "Code review must remain the normal implementation default")
         assert_contains(
             routing,
-            "当前 diff 或本次 S/P delta 涉及 interface、状态机、模块边界、跨模块行为或 seam 时一对二必做。tickets/DAG 的存在本身不是触发信号。",
-            "Standards and Spec must preserve their paired conditional route",
+            "涉及 interface、状态机、模块边界、跨模块行为或 seam 时，`standards-review` / `spec-review` 是强信号",
+            "Standards and Spec must preserve their risk-driven paired route",
         )
         assert_contains(
             routing,
-            "`safety-review`：diff 或 spec/plan/DAG 出现 auth、permission、payment、webhook、migration、外部 mutation、数据完整性、并发安全",
-            "Safety must keep its independent conditional route",
+            "auth、permission、payment、webhook、migration、外部 mutation、数据完整性、并发安全",
+            "Safety must keep its independent risk route",
         )
 
         fixture = read(ROOT / "examples" / "datev-accounting-rules.pre-3.2-upgrade-fixture.toml")

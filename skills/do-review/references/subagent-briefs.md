@@ -23,12 +23,14 @@ Review target:
 - Issue/Decision/Spec/Plan/DAG sources:
 - Out of scope:
 - User policy:
+- User review-depth preference:
+- Canonical ledger artifact (read-only):
 
 Known findings ledger:
-<paste only the previous round's canonical ledger; write "none yet" for round 1>
+<read the previous round's canonical ledger from the artifact; write "none yet" for round 1>
 
 Return format:
-- Normal review: findings in ledger schema.
+- Normal review: natural-language candidates with enough location, evidence, impact, and suggested handoff for the parent to record and verify.
 - Closure verification: PASS/FAIL/UNCERTAIN per issue.
 - Every finding needs evidence.
 - Do not mutate files, issues, git state, data, or external systems.
@@ -39,17 +41,19 @@ Return format:
 ```text
 Read and use exactly the assigned reviewer skill path. Do not resolve a similarly named skill yourself.
 
-You are a leaf reviewer in a topology already resolved by the parent do-review run. Do not invoke do-review, do not run its subagent gate, do not dispatch subagents, and do not re-evaluate reviewer topology or capacity. Perform only the review role defined by the assigned reviewer skill.
+You are a leaf reviewer in a topology already resolved by the parent do-review run. Do not invoke do-review, do not run its subagent gate, do not dispatch subagents, and do not re-evaluate reviewer topology or capacity. Follow the assigned skill's primary review intent and handoff guidance; it is not an exclusive capability boundary.
 
 Review exactly the supplied complete diff and fixed comparison point. Do not inspect, request, or use findings produced by other tracks in the current round. This restriction remains in effect when the parent runs reviewers in phases.
 
-Return results in the do-review ledger schema. The parent owns cross-track deduplication, evidence verification, classification, loop convergence, and the overall verdict.
+Return natural-language candidates with enough location, evidence, impact, and suggested handoff for the parent to record and verify. You may surface an evidence-backed cross-domain candidate, but the parent owns cross-track attribution, deduplication, classification, loop convergence, and the overall verdict.
+
+The canonical ledger artifact is owned by the main session. Read it only; never create, edit, replace, classify, or append to the file. Do not treat a copied prompt excerpt as a second source of truth.
 
 For each finding:
 - cite evidence;
 - prefer file:line evidence when reviewing code;
 - explain the concrete failure mode or broken invariant;
-- classify severity from the risk described by the assigned skill;
+- state the risk urgency described by the assigned skill without making final classification;
 - avoid known duplicates unless you add materially new evidence or impact.
 ```
 
@@ -76,7 +80,9 @@ For UNCERTAIN:
 ## Round-N Anti-Duplicate Addendum
 
 ```text
-The ledger below is the prior round's canonical ledger. Do not re-report those findings.
+The supplied artifact is the prior round's canonical ledger. Do not re-report those findings.
+
+Read the prior round from the supplied `Canonical ledger artifact` path. The parent will update that same file after all tracks finish; do not write a round-specific ledger.
 
 Report a related finding only if it:
 - breaks a different invariant;

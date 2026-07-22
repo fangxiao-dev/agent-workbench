@@ -17,7 +17,7 @@ description: >
 - 当前需求、设计或发布约束声明外部写入、数据迁移或不可逆影响；
 - 已声明的验证计划选择 Data Safety、real-route 或 external-mutation policy。
 
-信号只复用现有 diff、spec、plan 和 DAG 字段：本 skill 不新增 ticket、ledger、登记表或长期风险队列。没有信号时可明确记录“不触发”及检查过的信号；不要把“不触发”推断为“安全”。
+信号只复用现有 diff、spec、plan 和 DAG 字段：本 skill 不新增 ticket、登记表或长期风险队列。没有信号时可明确记录“不触发”及检查过的信号；不要把“不触发”推断为“安全”。
 
 ### 收缩型变化的 focused path
 
