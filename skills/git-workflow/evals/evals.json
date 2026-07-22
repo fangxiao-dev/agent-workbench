@@ -1,0 +1,69 @@
+{
+  "skill_name": "git-workflow",
+  "baseline": {
+    "commit": "6fb1a02d4d4924a9bad996f7c4c952f6950e5e47",
+    "skill_blob": "5260adb724682c9d1313cfa42d2d1b5dfea17f10",
+    "source": "6fb1a02d4d4924a9bad996f7c4c952f6950e5e47:skills/git-workflow/SKILL.md",
+    "purpose": "Compare the redesigned skill with the legacy version before this change."
+  },
+  "evals": [
+    {
+      "id": 1,
+      "name": "dirty-tree-branch-start",
+      "prompt": "The repository instructions say develop is the integration base. I have uncommitted changes in docs/notes.md and need a feature/filters branch. Create it for me.",
+      "expected_output": "Inspects the worktree, explains that the dirty state blocks a branch switch, and asks how to preserve the change without stashing or discarding it.",
+      "files": [],
+      "expectations": [
+        "Checks the working tree before changing branches.",
+        "Does not suggest automatic stash, discard, or branch creation.",
+        "Uses the documented integration base rather than assuming main."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "rebase-conflict-resolution",
+      "prompt": "My local feature/search branch is being rebased onto origin/develop and Git reports a conflict in src/search.ts. Help me finish only if the intended resolution is clear; otherwise restore the branch safely.",
+      "expected_output": "Uses status and an explicit-file diff, gives the rebase continue path after review and staging, and gives rebase abort as the uncertainty fallback.",
+      "files": [],
+      "expectations": [
+        "Identifies that a rebase is already in progress.",
+        "Stages only the resolved file and uses git rebase --continue.",
+        "Offers git rebase --abort instead of inventing a resolution."
+      ]
+    },
+    {
+      "id": 3,
+      "name": "merged-local-branch-cleanup",
+      "prompt": "The task branch feature/filters has been merged into the documented integration base. Remove the local branch if it is safe, but do not affect the remote branch or another worktree.",
+      "expected_output": "Checks merged status, current branch, and worktree use before proposing only git branch -d.",
+      "files": [],
+      "expectations": [
+        "Verifies merge status against the resolved base branch.",
+        "Checks that the branch is not current or checked out by another worktree.",
+        "Uses non-force local deletion only and does not mention remote deletion."
+      ]
+    }
+  ],
+  "trigger_evals": [
+    {"query": "仓库说明说 integration base 是 develop。我想从它新建 feature/invoice-export 分支，先帮我确认当前工作区能不能切换。", "should_trigger": true},
+    {"query": "这个 repo 到底应该从哪个分支开任务？AGENTS.md 和当前分支状态都要一起看。", "should_trigger": true},
+    {"query": "我的本地 feature/catalog 分支落后于 origin/develop，想安全 rebase 上去，先确认这是不是共享分支。", "should_trigger": true},
+    {"query": "rebase 卡在 api/client.ts 冲突了；如果不能确定语义就回到 rebase 前。", "should_trigger": true},
+    {"query": "merge conflict 还在进行，告诉我如何检查、暂存已解决文件并继续。", "should_trigger": true},
+    {"query": "feature/cleanup 已合进规定的基线，能否只删除本地分支并确保没有其他 worktree 在用？", "should_trigger": true},
+    {"query": "我需要切到任务分支前先确认脏工作区会不会被带过去。", "should_trigger": true},
+    {"query": "帮我把本地 task branch 同步到项目规定的 integration branch，不要 merge 回基线。", "should_trigger": true},
+    {"query": "在不猜 main/develop 名称的前提下，从项目集成分支创建一个新任务分支。", "should_trigger": true},
+    {"query": "我已经在 merge 中遇到冲突，无法判断如何取舍时该怎样安全退出？", "should_trigger": true},
+    {"query": "把当前修改都 git add 并写一个规范的 commit message。", "should_trigger": false},
+    {"query": "帮我把这次 session 的改动拆成几个提交。", "should_trigger": false},
+    {"query": "我的 PR 准备好了，推送这个分支并创建 GitHub PR。", "should_trigger": false},
+    {"query": "rebase 后请帮我 force-with-lease 推送到 origin。", "should_trigger": false},
+    {"query": "刚才错误提交了，reset --hard 到上一个提交。", "should_trigger": false},
+    {"query": "删掉远程上已经合并的 feature/cleanup 分支。", "should_trigger": false},
+    {"query": "给我看最近十个提交和每个作者。", "should_trigger": false},
+    {"query": "配置全局 Git 用户名、邮箱和常用 alias。", "should_trigger": false},
+    {"query": "我的 stash 里有一份旧改动，帮我清空它们。", "should_trigger": false},
+    {"query": "这个 Git 仓库一般有哪些常见命令？", "should_trigger": false}
+  ]
+}

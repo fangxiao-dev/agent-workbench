@@ -1,537 +1,110 @@
 ---
 name: git-workflow
-description: Manage Git workflows including commits, branches, merges, and collaboration. Use when working with Git repositories, creating commits, managing branches, or resolving conflicts.
+description: >
+  Guide safe local Git branch and integration-base workflows. Use this skill whenever
+  the user needs to create or switch a task branch, determine the repository's
+  integration base, update a local task branch with that base, resolve an in-progress
+  merge or rebase conflict, or remove a confirmed merged local branch. Do not use it
+  for staging or commits (use git-commit), push/PR work, routine status or log queries,
+  Git configuration, or history rewriting and recovery.
 metadata:
-  tags: git, version-control, branching, commits, collaboration
-  platforms: Claude, ChatGPT, Gemini
+  tags: git, branches, rebase, merge-conflicts, integration-base
+  platforms: Codex, Claude, Gemini
 ---
-
 
 # Git Workflow
 
-## When to use this skill
-- Creating meaningful commit messages
-- Managing branches
-- Merging code
-- Resolving conflicts
-- Collaborating with team
-- Git best practices
+Manage the local lifecycle of a task branch. Keep the working tree, branch ownership, and integration base explicit so a convenience command does not turn into an unrelated state change.
 
-## Instructions
+## Scope
 
-### Base branch rule
+Use this skill for exactly these workflows:
 
-Before branch, merge, rebase, or PR operations, resolve the repo's intended integration base from its instructions (`AGENTS.md`, `CLAUDE.md`, project docs) and current branch state. Use `<base-branch>` in commands below for that resolved branch. Do not assume a branch named `main` or `master`.
+- start a task branch from the repository's intended integration base;
+- bring a local task branch up to date with that base;
+- continue or abort an already-started merge or rebase after a conflict;
+- delete a local branch only after confirming that it was merged and is unused by another worktree.
 
-### Step 1: Branch management
+Do not use this skill for staging, commits, commit messages, push, pull requests, merging a task branch into an integration branch, remote branch deletion, Git configuration, stash operations, `reset`, force-push, reflog recovery, or general Git reference questions. Route commit work to `git-commit`. Handle excluded operations only when the user explicitly asks for them under the repository's general safety rules.
 
-**Create feature branch**:
+## Required preflight
+
+Before changing branches or history:
+
+1. Read the applicable repository instructions and resolve the intended integration base. Do not assume `main`, `master`, `develop`, or a remote name. If the base is ambiguous, stop and ask.
+2. Inspect the current state:
+
+   ```bash
+   git status --short
+   git branch --show-current
+   git worktree list
+   ```
+
+3. Treat unrelated or uncommitted changes as a boundary. Do not automatically stash, discard, or carry them across a branch switch. Explain the state and ask the user how to preserve it.
+4. Use the repository's existing task-branch naming convention. Do not invent one when instructions do not define it.
+
+## Workflows
+
+### Start a task branch
+
+Use this only from a clean working tree and after resolving `<base-branch>` and the configured remote `<remote>`.
+
 ```bash
-# Start from the resolved integration base
-git checkout <base-branch>
-git pull origin <base-branch>
-
-# Create and switch to new branch
-git checkout -b feature/feature-name
-
-# Or create from specific commit
-git checkout -b feature/feature-name <commit-hash>
+git switch <base-branch>
+git pull --ff-only <remote> <base-branch>
+git switch -c <task-branch>
 ```
 
-**Naming conventions**:
-- `feature/description`: New features
-- `bugfix/description`: Bug fixes
-- `hotfix/description`: Urgent fixes
-- `refactor/description`: Code refactoring
-- `docs/description`: Documentation updates
+`--ff-only` prevents this update step from creating an unexpected merge commit. If it cannot fast-forward, stop and report the divergence rather than choosing a merge or rebase strategy implicitly.
 
-### Step 2: Making changes
+To switch to an existing local task branch, complete the same preflight and then run only:
 
-**Stage changes**:
 ```bash
-# Stage specific files
-git add file1.py file2.js
-
-# Stage all changes
-git add .
-
-# Stage with patch mode (interactive)
-git add -p
+git switch <task-branch>
 ```
 
-**Check status**:
+Do not fetch, rebase, or otherwise update the branch merely because the user asked to switch to it.
+
+### Update a local task branch from its integration base
+
+Use rebase only for a local task branch that is not shared or published for collaborators to build on. If that ownership is unclear, stop and ask. Fetch first; do not use `--autostash`.
+
 ```bash
-# See what's changed
+git fetch <remote>
+git rebase <remote>/<base-branch>
+```
+
+This skill does not merge a task branch into the integration branch. It only updates the task branch from the base.
+
+### Resolve an in-progress merge or rebase
+
+First identify the active operation with `git status`. Read each conflict before editing it, resolve only the intended content, and stage explicit paths.
+
+```bash
 git status
-
-# See detailed diff
-git diff
-
-# See staged diff
-git diff --staged
+git diff -- <resolved-file>
+git add <resolved-file>
+git rebase --continue   # during a rebase
+git merge --continue    # during a merge
 ```
 
-### Step 3: Committing
-
-**Write good commit messages**:
-```bash
-git commit -m "type(scope): subject
-
-Detailed description of what changed and why.
-
-- Change 1
-- Change 2
-
-Fixes #123"
-```
-
-**Commit types**:
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation
-- `style`: Formatting, no code change
-- `refactor`: Code refactoring
-- `test`: Adding tests
-- `chore`: Maintenance
-
-**Example**:
-```bash
-git commit -m "feat(auth): add JWT authentication
-
-- Implement JWT token generation
-- Add token validation middleware
-- Update user model with refresh token
-
-Closes #42"
-```
-
-### Step 4: Pushing changes
+Run the repository-required verification before continuing when the conflict changes executable behavior. If the resolution is not reliable, preserve the evidence and return to the pre-operation state instead of guessing:
 
 ```bash
-# Push to remote
-git push origin feature/feature-name
-
-# Force push (use with caution!)
-git push origin feature/feature-name --force-with-lease
-
-# Set upstream and push
-git push -u origin feature/feature-name
-
-# Create a PR against the resolved integration base
-gh pr create --base <base-branch> --head feature/feature-name
+git rebase --abort      # during a rebase
+git merge --abort       # during a merge
 ```
 
-### Step 5: Pulling and updating
+### Remove a confirmed merged local branch
+
+Confirm all three conditions before deletion: the target is not the current branch, it appears in `git branch --merged <base-branch>`, and `git worktree list` shows it is not checked out elsewhere. Then use only non-force deletion:
 
 ```bash
-# Pull latest changes
-git pull origin <base-branch>
-
-# Pull with rebase (cleaner history)
-git pull --rebase origin <base-branch>
-
-# Fetch without merging
-git fetch origin
+git branch -d <task-branch>
 ```
 
-### Step 6: Merging
+If any condition fails, do not use `-D` or delete a remote branch. Report the condition that prevented cleanup.
 
-**Merge feature branch**:
-```bash
-# Switch to the resolved integration base
-git checkout <base-branch>
+## Completion report
 
-# Merge feature
-git merge feature/feature-name
-
-# Merge with no fast-forward (creates merge commit)
-git merge --no-ff feature/feature-name
-```
-
-**Rebase instead of merge**:
-```bash
-# On feature branch
-git checkout feature/feature-name
-
-# Rebase onto the resolved integration base
-git rebase <base-branch>
-
-# Continue after resolving conflicts
-git rebase --continue
-
-# Abort rebase
-git rebase --abort
-```
-
-### Step 7: Resolving conflicts
-
-**When conflicts occur**:
-```bash
-# See conflicted files
-git status
-
-# Open files and resolve conflicts
-# Look for markers:
-<<<<<<< HEAD
-Current branch code
-=======
-Incoming branch code
->>>>>>> feature-branch
-
-# After resolving
-git add <resolved-files>
-git commit  # For merge
-git rebase --continue  # For rebase
-```
-
-### Step 8: Cleaning up
-
-```bash
-# Delete local branch
-git branch -d feature/feature-name
-
-# Force delete
-git branch -D feature/feature-name
-
-# Delete remote branch
-git push origin --delete feature/feature-name
-
-# Clean up stale references
-git fetch --prune
-```
-
-## Advanced workflows
-
-### Interactive rebase
-
-```bash
-# Rebase last 3 commits
-git rebase -i HEAD~3
-
-# Commands in editor:
-# pick: use commit
-# reword: change commit message
-# edit: amend commit
-# squash: combine with previous
-# fixup: like squash, discard message
-# drop: remove commit
-```
-
-### Stashing changes
-
-```bash
-# Stash current changes
-git stash
-
-# Stash with message
-git stash save "Work in progress on feature X"
-
-# List stashes
-git stash list
-
-# Apply most recent stash
-git stash apply
-
-# Apply and remove stash
-git stash pop
-
-# Apply specific stash
-git stash apply stash@{2}
-
-# Drop stash
-git stash drop stash@{0}
-
-# Clear all stashes
-git stash clear
-```
-
-### Cherry-picking
-
-```bash
-# Apply specific commit
-git cherry-pick <commit-hash>
-
-# Cherry-pick multiple commits
-git cherry-pick <hash1> <hash2> <hash3>
-
-# Cherry-pick without committing
-git cherry-pick -n <commit-hash>
-```
-
-### Bisect (finding bugs)
-
-```bash
-# Start bisect
-git bisect start
-
-# Mark current as bad
-git bisect bad
-
-# Mark known good commit
-git bisect good <commit-hash>
-
-# Git will checkout commits to test
-# Test and mark each:
-git bisect good  # if works
-git bisect bad   # if broken
-
-# When found, reset
-git bisect reset
-```
-
-## Examples
-
-### Example 1: Feature development workflow
-
-```bash
-# 1. Create feature branch
-git checkout <base-branch>
-git pull origin <base-branch>
-git checkout -b feature/user-profile
-
-# 2. Make changes
-# ... edit files ...
-
-# 3. Commit changes
-git add src/profile/
-git commit -m "feat(profile): add user profile page
-
-- Create profile component
-- Add profile API endpoints
-- Add profile tests"
-
-# 4. Keep up to date with the integration base
-git fetch origin
-git rebase origin/<base-branch>
-
-# 5. Push to remote
-git push origin feature/user-profile
-
-# 6. Create Pull Request against the resolved integration base
-gh pr create --base <base-branch> --head feature/user-profile
-# ... after review and approval ...
-
-# 7. Merge and cleanup
-git checkout <base-branch>
-git pull origin <base-branch>
-git branch -d feature/user-profile
-```
-
-### Example 2: Hotfix workflow
-
-```bash
-# 1. Create hotfix branch from the documented hotfix base
-git checkout <hotfix-base-branch>
-git pull origin <hotfix-base-branch>
-git checkout -b hotfix/critical-bug
-
-# 2. Fix the bug
-# ... make fixes ...
-
-# 3. Commit
-git add .
-git commit -m "hotfix: fix critical login bug
-
-Fixes authentication bypass vulnerability
-
-Fixes #999"
-
-# 4. Push and merge immediately
-git push origin hotfix/critical-bug
-
-# After merge:
-# 5. Cleanup
-git checkout <hotfix-base-branch>
-git pull origin <hotfix-base-branch>
-git branch -d hotfix/critical-bug
-```
-
-### Example 3: Collaborative workflow
-
-```bash
-# 1. Update the resolved integration base
-git checkout <base-branch>
-git pull origin <base-branch>
-
-# 2. Create feature branch
-git checkout -b feature/new-feature
-
-# 3. Regular updates from the integration base
-git fetch origin
-git rebase origin/<base-branch>
-
-# 4. Push your work
-git push origin feature/new-feature
-
-# 5. If teammate made changes to your branch
-git pull origin feature/new-feature --rebase
-
-# 6. Resolve any conflicts
-# ... resolve conflicts ...
-git add .
-git rebase --continue
-
-# 7. Force push after rebase
-git push origin feature/new-feature --force-with-lease
-```
-
-## Best practices
-
-1. **Commit often**: Small, focused commits
-2. **Meaningful messages**: Explain what and why
-3. **Pull before push**: Stay updated
-4. **Review before commit**: Check what you're committing
-5. **Use branches**: Never commit directly to a protected integration or release branch
-6. **Keep history clean**: Rebase feature branches
-7. **Test before push**: Run tests locally
-8. **Write descriptive branch names**: Easy to understand
-9. **Delete merged branches**: Keep repository clean
-10. **Use .gitignore**: Don't commit generated files
-
-## Common patterns
-
-### Undo last commit (keep changes)
-
-```bash
-git reset --soft HEAD~1
-```
-
-### Undo last commit (discard changes)
-
-```bash
-git reset --hard HEAD~1
-```
-
-### Amend last commit
-
-```bash
-# Change commit message
-git commit --amend -m "New message"
-
-# Add files to last commit
-git add forgotten-file.txt
-git commit --amend --no-edit
-```
-
-### View history
-
-```bash
-# Detailed log
-git log
-
-# One line per commit
-git log --oneline
-
-# With graph
-git log --oneline --graph --all
-
-# Last 5 commits
-git log -5
-
-# Commits by author
-git log --author="John"
-
-# Commits in date range
-git log --since="2 weeks ago"
-```
-
-### Find commits
-
-```bash
-# Search commit messages
-git log --grep="keyword"
-
-# Search code changes
-git log -S "function_name"
-
-# Show file history
-git log --follow -- path/to/file
-```
-
-## Troubleshooting
-
-### Accidentally committed to wrong branch
-
-```bash
-# 1. Create correct branch from current state
-git branch feature/correct-branch
-
-# 2. Reset current branch
-git reset --hard HEAD~1
-
-# 3. Switch to correct branch
-git checkout feature/correct-branch
-```
-
-### Need to undo a merge
-
-```bash
-# If not pushed yet
-git reset --hard HEAD~1
-
-# If already pushed (creates revert commit)
-git revert -m 1 <merge-commit-hash>
-```
-
-### Recover deleted branch
-
-```bash
-# Find lost commit
-git reflog
-
-# Create branch from lost commit
-git checkout -b recovered-branch <commit-hash>
-```
-
-### Sync fork with upstream
-
-```bash
-# Add upstream remote
-git remote add upstream https://github.com/original/repo.git
-
-# Fetch upstream
-git fetch upstream
-
-# Merge upstream base branch
-git checkout <base-branch>
-git merge upstream/<base-branch>
-
-# Push to your fork
-git push origin <base-branch>
-```
-
-## Git configuration
-
-### User setup
-
-```bash
-git config --global user.name "Your Name"
-git config --global user.email "your.email@example.com"
-```
-
-### Aliases
-
-```bash
-git config --global alias.co checkout
-git config --global alias.br branch
-git config --global alias.ci commit
-git config --global alias.st status
-git config --global alias.unstage 'reset HEAD --'
-git config --global alias.last 'log -1 HEAD'
-git config --global alias.lg 'log --oneline --graph --all'
-```
-
-### Editor
-
-```bash
-git config --global core.editor "code --wait"  # VS Code
-git config --global core.editor "vim"           # Vim
-```
-
-## References
-
-- [Pro Git Book](https://git-scm.com/book/en/v2)
-- [Git Cheat Sheet](https://education.github.com/git-cheat-sheet-education.pdf)
-- [Conventional Commits](https://www.conventionalcommits.org/)
-- [Git Flow](https://nvie.com/posts/a-successful-git-branching-model/)
-- [GitHub Flow](https://guides.github.com/introduction/flow/)
+Report the resolved integration base and its source, the starting branch state, the workflow performed, whether a conflict was continued or aborted, and the final branch plus `git status --short` result. State any unresolved divergence or user decision separately; do not call the workflow complete when one remains.
