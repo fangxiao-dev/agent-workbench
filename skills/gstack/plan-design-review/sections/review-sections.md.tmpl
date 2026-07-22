@@ -195,11 +195,13 @@ Substitute values from the Completion Summary:
 
 After displaying the Review Readiness Dashboard, recommend the next review(s) based on what this design review discovered. Read the dashboard output to see which reviews have already been run and whether they are stale.
 
-**Recommend /plan-eng-review if eng review is not skipped globally** — check the dashboard output for `skip_eng_review`. If it is `true`, eng review is opted out — do not recommend it. Otherwise, eng review is the required shipping gate. If this design review added significant interaction specifications, new user flows, or changed the information architecture, emphasize that eng review needs to validate the architectural implications. If an eng review already exists but the commit hash shows it predates this design review, note that it may be stale and should be re-run.
+**Keep the dashboard gate separate.** Its required Eng Review is `/review`, which runs against the implementation diff before landing. If that dashboard entry is missing or stale, note that `/review` will still be required at pre-landing; running `/plan-review` does not clear this row.
+
+**Recommend /plan-review only as an independent plan-stage review** when this design review added material interaction specifications, new user flows, or information-architecture changes with engineering consequences. Do not infer its freshness from the gstack dashboard because `plan-review` keeps its own review state.
 
 **Consider recommending /plan-ceo-review** — but only if this design review revealed fundamental product direction gaps. Specifically: if the overall design score started below 4/10, if the information architecture had major structural problems, or if the review surfaced questions about whether the right problem is being solved. AND no CEO review exists in the dashboard. This is a selective recommendation — most design reviews should NOT trigger a CEO review.
 
-**If both are needed, recommend eng review first** (required gate).
+**If both plan and CEO review are needed, recommend the review that resolves the newly discovered uncertainty first.** The pre-landing `/review` gate remains later in the implementation workflow.
 
 **Recommend design exploration skills when appropriate** — /design-shotgun and /design-html
 produce design artifacts (mockups, HTML previews), not application code. They belong in
@@ -208,7 +210,7 @@ from exploring new directions, recommend /design-shotgun. If approved mockups ex
 need to be turned into working HTML, recommend /design-html.
 
 Use AskUserQuestion to present the next step. Include only applicable options:
-- **A)** Run /plan-eng-review next (required gate)
+- **A)** Run /plan-review next (independent plan-stage review)
 - **B)** Run /plan-ceo-review (only if fundamental product gaps found)
 - **C)** Run /design-shotgun — explore visual design variants for issues found
 - **D)** Run /design-html — generate Pretext-native HTML from approved mockups

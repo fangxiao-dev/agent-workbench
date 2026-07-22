@@ -3,13 +3,13 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "The current attempt plan declares Composition: tickets=true, dag=true. I have a complete same-Attempt-ID Draft ticket set TST-01 through TST-05 for D:\\CodeSpace\\kaispan-dev\\docs\\implementations\\2026-07-17-testing-system (or the same set already Approved after bundle review). packages/db and apps/api contain the relevant implementation. Create the minimal DAG and prepare the joint Ticket↔DAG review handoff.",
-      "expected_output": "A five-column minimal Task DAG with Working Branch owner integration responsibility and T1-T5 matching the testing-system example, plus joint coverage/dependency/ownership/contribution/evidence/gate-P validation. It treats Task/Ticket as many-to-many `contributes-to` contribution, not a parent hierarchy, and does not dispatch work or publish Draft Tickets before one owner approval.",
+      "prompt": "The current attempt plan declares Composition: tickets=true, dag=true. I have a complete same-Attempt-ID Draft ticket set TST-01 through TST-05 for D:\\CodeSpace\\kaispan-dev\\docs\\implementations\\2026-07-17-testing-system (or the same set already Approved after admission and bundle approval). packages/db and apps/api contain the relevant implementation. Create the minimal DAG and prepare the joint Ticket↔DAG handoff for fresh plan-review admission.",
+      "expected_output": "A five-column minimal Task DAG with Working Branch owner integration responsibility and T1-T5 matching the testing-system example, plus joint coverage/dependency/ownership/contribution/evidence/gate-P validation. It treats Task/Ticket as many-to-many `contributes-to` contribution, not a parent hierarchy, and does not dispatch work or publish Draft Tickets before fresh plan-review admission and one owner approval.",
       "files": [],
       "expectations": [
         "The table columns are Task, Primary ownership, Known depends on, Contributes to tickets, and Known seam / risk.",
         "T1 completion does not accept TST-01, T2/T3 can become BLOCKED over a fixture seam, T4 waits for actual evidence, and T5 remains independent.",
-        "Accepts a complete Draft Ticket set as DAG input and defers Ticket publication until the Tickets + DAG bundle is jointly reviewed.",
+        "Accepts a complete Draft Ticket set as DAG input and defers Ticket publication until the Tickets + DAG bundle has fresh plan-review admission and owner approval.",
         "Validates earned-ticket coverage, typed dependencies, primary ownership/contribution, AC evidence feasibility, and Attempt/D-S-P gate binding.",
         "The output does not add a complete Task Contract, ownership lanes, cohorts, an Integrator, a Seam Task, Workstream, or Loose/Strict mode.",
         "The output assigns integration responsibility to the existing Working Branch owner."
@@ -110,7 +110,7 @@
     {
       "id": 15,
       "prompt": "A post-gate patch plan declares Composition: tickets=false, dag=true with two dependent execution owners and a shared seam. Create the patch DAG.",
-      "expected_output": "Creates a current-attempt patch DAG with contributes-to tickets set to none, records the seam risk, and prepares it for the single plan-decomposition review before execution.",
+      "expected_output": "Creates a current-attempt patch DAG with contributes-to tickets set to none, records the seam risk, and prepares it for fresh plan-review admission plus the single owner approval before execution.",
       "files": [],
       "expectations": [
         "Uses tickets=false, dag=true",

@@ -57,7 +57,7 @@ Draft is local and non-publishing:
 
 ## Publish Mode
 
-Publish updates the same local ticket files; it does not create external records. It is the final publication step of the plan-decomposition review, not a separate Ticket approval stage. Before changing any status, require one explicit owner approval of the complete earned bundle and validate all of the following:
+Publish updates the same local ticket files; it does not create external records. It is the final publication step of the plan-decomposition review, not a separate Ticket approval stage. Before changing any status, require `impl-planning` to have completed fresh `$plan-review mode=bundle-admission` with `ready`, or to have completed the normal full plan-review workflow with `cleared` after an admission `full review`; then require one explicit owner approval of the complete earned bundle and validate all of the following:
 
 1. the current attempt plan declares `Composition: tickets=true, ...` and every draft belongs to that Attempt ID;
 2. every ticket has at least one complete, stable AC with planned evidence or a manual verification owner;
@@ -71,11 +71,11 @@ Publish updates the same local ticket files; it does not create external records
 
 若 publish 前唯一差异是新 P revision 且 impact summary 证明 ticket 语义未变，可对完整未受影响 batch 做一次 reconciliation 后更新 Plan Revision；不要重新起草或要求 owner 重批相同内容。受影响 subset 仍按本节完整验证。
 
-The owner approval covers the Tickets and, when earned, the DAG as one revision-bound bundle. After the atomic transition succeeds, report the bundle as `approved` and only then hand it to execution preflight. `create-task-dag` does not have an independent publication or approval gate.
+The owner approval covers the Tickets and, when earned, the DAG as one revision-bound bundle. `revise` or `unavailable` admission conclusions cannot be owner-waived into publish. After the atomic transition succeeds, report the bundle as `approved` and only then hand it to execution preflight. `create-task-dag` does not have an independent publication or approval gate.
 
 ### Material changes and scoped re-review
 
-After bundle approval, a change to an acceptance boundary, typed dependency, Task contribution, primary ownership, execution ordering, AC evidence feasibility, Composition, safety/gate boundary, or D/S/P binding supersedes the approval for the affected scope. Reconcile only the affected Tickets and DAG nodes (or regenerate the affected DAG portion when needed), run joint validation again, and return the bundle to review before execution resumes. Keep unaffected artifacts as a confirmed batch when the impact evidence supports it; do not silently edit an approved structure. Pure formatting, citation, classification, or mechanical Plan Revision rebinding that cannot change those semantics does not require a new approval, but its evidence must be recorded in the existing handoff/Execution Record.
+After bundle approval, a change to an acceptance boundary, typed dependency, Task contribution, primary ownership, execution ordering, AC evidence feasibility, Composition, safety/gate boundary, or D/S/P binding supersedes the approval for the affected scope. Reconcile only the affected Tickets and DAG nodes (or regenerate the affected DAG portion when needed), run joint validation again, return to `impl-planning` for fresh admission, then request owner approval before execution resumes. Keep unaffected artifacts as a confirmed batch when the impact evidence supports it; do not silently edit an approved structure. Pure formatting, citation, classification, or mechanical Plan Revision rebinding that cannot change those semantics does not require a new approval, but its evidence must be recorded in the existing handoff/Execution Record.
 
 Fail publish without partial publication-status updates if any validation fails. Publish owns only the `Draft` to `Approved` publication transition. It must preserve the runtime-state marker body. Runtime readiness and all later ticket acceptance status belong to `dev-with-track` through the shared structured-state contract.
 

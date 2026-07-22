@@ -4,14 +4,14 @@
     {
       "id": 1,
       "name": "two-ticket-default-draft",
-      "prompt": "Internally call to-tickets for a gated S2 package whose current attempt plan declares tickets=true, dag=false and whose acceptance surface earns two independently accepted slices; prepare the ticket-only decomposition bundle for one owner review.",
+      "prompt": "Internally call to-tickets for a gated S2 package whose current attempt plan declares tickets=true, dag=false and whose acceptance surface earns two independently accepted slices; prepare the ticket-only decomposition bundle for fresh plan-review admission before one owner approval.",
       "expected_output": "Two local Draft ticket files and a runner-neutral bundle handoff.",
       "files": [],
       "expectations": [
         "Defaults to mode=draft and reads Composition from the current attempt plan",
         "Writes two Draft files under docs/implementations/<package-id>/tickets/",
         "Uses typed blocking edges and AC evidence",
-        "Reports the Draft ticket set as a bundle ready for the single review required by the tickets-only Composition",
+        "Reports the Draft ticket set as ready-for-review and routes it to impl-planning for fresh plan-review admission before the single owner approval",
         "Does not publish or start implementation"
       ]
     },
@@ -30,7 +30,7 @@
     {
       "id": 3,
       "name": "cyclic-publish-fails-atomically",
-      "prompt": "Publish the owner-approved tickets-only decomposition bundle where ticket T2 is Blocked by implementation:T1 and ticket T1 is Blocked by acceptance:T2.",
+      "prompt": "Publish the admission-reviewed and owner-approved tickets-only decomposition bundle where ticket T2 is Blocked by implementation:T1 and ticket T1 is Blocked by acceptance:T2.",
       "expected_output": "Publish fails atomically because the typed dependency graph is cyclic.",
       "files": [],
       "expectations": [

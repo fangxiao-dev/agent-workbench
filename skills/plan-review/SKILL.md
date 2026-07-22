@@ -1,9 +1,12 @@
 ---
 name: plan-review
-description: 审查 implementation plan、technical plan 或 plan package 的工程完整性、架构、代码质量、测试与性能风险，并在 owner 明确授权后安全写回。用户要求“审查计划”“工程 review”“挑战实现方案”“锁定技术计划”或对 plan 执行 apply 时使用；纯代码 diff、产品战略和视觉设计审查不要使用。
+description: Explicitly invoked engineering plan review. 仅当用户明确点名 `$plan-review` / `plan-review`，或上游编排合同按确切名称或路径显式选择本 skill 时使用；不得因为请求包含“审查计划”“implementation-ready”、复杂工程风险或类似语义而由模型主动推断调用。负责审查 implementation plan、technical plan 或 plan package，并在 owner 明确授权后安全写回。
+user-invocable: true
 ---
 
 # Engineering Plan Review
+
+> **Invocation gate：**本 skill 是 opt-in 能力。只有用户明确调用 `$plan-review` / `plan-review`，或已激活的上游编排 workflow 以确切 skill 名称或路径选择它时才继续读取 references、创建/恢复 ledger 或开展审查。仅仅因为任务看起来需要工程计划审查、计划复杂、存在风险或使用了“review/implementation-ready”等词，不构成调用授权；此时停止使用本 skill，并把控制权交还调用方。
 
 把工程计划审查成可实施、可验证、可追责的决策集合。给 agent 足够的证据工具和判断空间，只把目标绑定、证据、owner 主权与写入安全设为硬边界。
 
@@ -16,6 +19,19 @@ description: 审查 implementation plan、technical plan 或 plan package 的工
 - 把产品意图、外部 contract、风险偏好和不可逆选择交给 owner；不得用“recommended”代替授权。
 - 只在 owner 对当前 manifest hash 明确要求 Apply 后写回；manifest、目标基线或相关证据变化时重新确认。
 - 必读的 reference 或脚本缺失、路径错误或读取失败时立即返回 `BLOCKED`，报告准确路径与工具错误；禁止凭记忆替代、继续生成 findings 或执行 Apply。
+
+## Bundle-admission mode（仅由明确编排选择）
+
+当活跃的 `impl-planning` 编排以确切 skill 名称选择 `plan-review`，并明确标注 `mode=bundle-admission` 时，本 skill 执行一次轻量、只读的 admission review。该调用必须运行在相对产出 bundle 的主 session 而言 fresh 的 subagent context；这个 admission reviewer 本身就是独立视角，不再为轻量路径额外启动 Outside Voice 或创建 ledger。用户直接调用 `$plan-review` 时一律走下方既有完整 workflow，不能因为计划看起来简单而自行选择 admission mode。
+
+admission 输入只包含当前 plan、当前 Composition earned 的 Ticket/DAG（若存在）、必要的 Decision/Spec contract、联合校验结论和审查目标；不得附带主 session findings、materiality 结论或期望 verdict。沿本 skill 的工程判断基线快速检查 Scope、Architecture、Code Quality、Tests、Performance 中实际相关的维度，并返回以下唯一 verdict 之一及简短证据：
+
+- `ready`：未发现 material signal；说明已检查的风险、为何其余维度不适用，以及计划可以进入 owner approval。
+- `full review`：发现 material signal；指出触发信号，停止 admission，由调用方以正常 `plan-review` workflow 取得 `cleared` 结果后再判断 owner approval。
+- `revise`：计划、contract、acceptance oracle、联合校验或 owner decision 不足；指出 owning skill 和最小修订动作。
+- `unavailable`：没有 fresh context、输入不可读取或无法形成独立判断；给出具体原因。调用方只能重试、暂停或取消 approval，不能把它改写成 `ready`。
+
+admission mode 不创建 ledger、manifest、receipt 或跨 session state，也不执行 Apply。主 session 可以基于新事实把 `ready` 升级为 `full review`，但不能把 `full review`、`revise` 或 `unavailable` 降级为 `ready`；owner 也不能以 waiver 伪造独立通过。
 
 ## 工程判断基线
 

@@ -17,7 +17,7 @@
     },
     {
       "id": 2,
-      "prompt": "审查这个包含 REST contract 变化和数据迁移的计划，尽量把问题统一问我。",
+      "prompt": "用 $plan-review 审查这个包含 REST contract 变化和数据迁移的计划，尽量把问题统一问我。",
       "expected_output": "Keeps owner-only contract and irreversible decisions out of auto-resolution, continues independent branches, and presents a small dependency-aware decision wave.",
       "files": [],
       "expectations": [
@@ -29,7 +29,7 @@
     },
     {
       "id": 3,
-      "prompt": "审查一个单路径 parser 行为变更计划，重点看测试，不要为了形式画图。",
+      "prompt": "用 $plan-review 审查一个单路径 parser 行为变更计划，重点看测试，不要为了形式画图。",
       "expected_output": "Produces a coverage map with behavior, risk, level, oracle, and failure mode; upgrades to a diagram only if relationships are actually complex.",
       "files": [],
       "expectations": [
@@ -41,7 +41,7 @@
     },
     {
       "id": 4,
-      "prompt": "Outside Voice 当前不可用，但请继续审查并告诉我能否算通过。",
+      "prompt": "用 $plan-review 继续审查；Outside Voice 当前不可用，请告诉我能否算通过。",
       "expected_output": "Continues the primary review in degraded mode while refusing a fully reviewed or cleared verdict.",
       "files": [],
       "expectations": [
@@ -53,7 +53,7 @@
     },
     {
       "id": 5,
-      "prompt": "对刚才展示的 manifest 执行 apply。",
+      "prompt": "用 $plan-review 对刚才展示的 manifest 执行 apply。",
       "expected_output": "Binds one explicit authorization to the exact manifest hash, verifies the target and referenced evidence dependencies, and writes only authorized decisions.",
       "files": [],
       "expectations": [
@@ -65,7 +65,7 @@
     },
     {
       "id": 6,
-      "prompt": "审查一个同时重构状态模块、修改 CLI contract 并迁移旧格式的 implementation plan，判断它是否真的 implementation-ready。",
+      "prompt": "用 $plan-review 审查一个同时重构状态模块、修改 CLI contract 并迁移旧格式的 implementation plan，判断它是否真的 implementation-ready。",
       "expected_output": "Applies cross-cutting outcome and completeness lenses together with focused code-quality checks, finding source-of-truth drift, consumer compatibility, lifecycle coupling, cleanup, and verification gaps without imposing a fixed checklist.",
       "files": [],
       "expectations": [
@@ -80,7 +80,7 @@
     },
     {
       "id": 7,
-      "prompt": "审查一个跨 API、queue worker 和 UI 结果页的异步用户流程计划，重点判断测试和运行失败是否完整。",
+      "prompt": "用 $plan-review 审查一个跨 API、queue worker 和 UI 结果页的异步用户流程计划，重点判断测试和运行失败是否完整。",
       "expected_output": "Discovers material behaviors by tracing entry points through validation, state and side effects to user or operator outcomes, then selects risk-appropriate unit, integration, E2E, or eval coverage.",
       "files": [],
       "expectations": [
@@ -93,7 +93,7 @@
     },
     {
       "id": 8,
-      "prompt": "先运行提供的 setup_interrupted_runs.py，并以其 JSON 输出中的 target 与 temp_root 继续被中断的工程计划审查；不要创建第三个 run。",
+      "prompt": "用 $plan-review 先运行提供的 setup_interrupted_runs.py，并以其 JSON 输出中的 target 与 temp_root 继续被中断的工程计划审查；不要创建第三个 run。",
       "expected_output": "Discovers matching runs before initialization, exposes enough state for an explicit resume-or-abandon choice, and never reconstructs reviewer roles or hidden reasoning.",
       "files": ["evals/fixtures/setup_interrupted_runs.py"],
       "expectations": [
@@ -105,7 +105,7 @@
     },
     {
       "id": 9,
-      "prompt": "按提供的 decision-wave.md 处理这一波 owner 回复，不要重新开始整波决定。",
+      "prompt": "用 $plan-review 按提供的 decision-wave.md 处理这一波 owner 回复，不要重新开始整波决定。",
       "expected_output": "Preserves the unambiguous answer, reports conflicting, missing, and dependency-invalidated items precisely, and re-asks only the affected decisions without restarting the wave.",
       "files": ["evals/fixtures/decision-wave.md"],
       "expectations": [
@@ -118,7 +118,7 @@
     },
     {
       "id": 10,
-      "prompt": "先运行提供的 setup_missing_resource.py；然后仅以其输出的 skill snapshot 运行工程计划审查 preflight。该脚本复制真实 skill 并删除一个必读 focused reference。",
+      "prompt": "用 $plan-review 先运行提供的 setup_missing_resource.py；然后仅以其输出的 skill snapshot 运行工程计划审查 preflight。该脚本复制真实 skill 并删除一个必读 focused reference。",
       "expected_output": "Stops with an explicit BLOCKED result naming the exact missing resource and tool error rather than reviewing from memory.",
       "files": ["evals/fixtures/setup_missing_resource.py"],
       "expectations": [
@@ -129,7 +129,7 @@
     },
     {
       "id": 11,
-      "prompt": "运行 setup_interrupted_runs.py；把本条 prompt 视为 owner 明确要求：resume 较新的 run，abandon 较旧的 run。使用脚本输出的 exact run IDs/target/temp_root 完成操作。",
+      "prompt": "用 $plan-review 运行 setup_interrupted_runs.py；把本条 prompt 视为 owner 明确要求：resume 较新的 run，abandon 较旧的 run。使用脚本输出的 exact run IDs/target/temp_root 完成操作。",
       "expected_output": "Resumes exactly the selected newer run, abandons the older run with an owner source bound to its exact run id, preserves both ledgers, and creates no third run.",
       "files": ["evals/fixtures/setup_interrupted_runs.py"],
       "expectations": [
@@ -137,6 +137,73 @@
         "Abandons only the older run with an owner source bound to its exact run id.",
         "Preserves both ledger files while unfinished discovery returns only the resumed run.",
         "Creates no third run and reconstructs no role or hidden-reasoning state."
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "帮我看看这个 implementation plan 是否完整，重点检查架构和测试风险。",
+      "expected_output": "Does not invoke or execute plan-review because neither the user nor an active orchestrator explicitly selected the skill.",
+      "files": [],
+      "expectations": [
+        "Does not read plan-review references or create, discover, resume, or modify a plan-review ledger.",
+        "Does not claim that semantic similarity, plan complexity, or engineering risk authorizes plan-review invocation.",
+        "Returns control to the caller so it can answer normally or choose another explicitly authorized workflow."
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "当前编排步骤明确选择 skill `$plan-review` 审查这个 plan package；按该显式路由继续。",
+      "expected_output": "Accepts the exact orchestrated selection as an authorized invocation and follows the normal plan-review binding and review workflow.",
+      "files": [],
+      "expectations": [
+        "Treats the exact orchestrator selection as explicit invocation rather than requiring the end user to repeat it.",
+        "Continues with target binding, ledger safety, and Outside Voice requirements.",
+        "Does not broaden orchestration authority beyond the selected plan-review task."
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "impl-planning 当前步骤明确在 fresh subagent 中选择 `$plan-review mode=bundle-admission`：这是单模块、无外部写入的 plan package，Decision/Spec、Composition 和联合校验均已提供。",
+      "expected_output": "Returns a concise evidence-backed ready verdict without creating a ledger, manifest, receipt, Outside Voice, or Apply authorization.",
+      "files": [],
+      "expectations": [
+        "Treats the exact impl-planning route as authorized admission mode rather than a semantic implicit invocation.",
+        "Checks the relevant dimensions and explains why no material signal requires full review.",
+        "Returns only ready, full review, revise, or unavailable plus evidence and next action.",
+        "Does not create or describe durable review state."
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "impl-planning 当前步骤明确在 fresh subagent 中选择 `$plan-review mode=bundle-admission`：bundle plan 包含外部 mutation、response-lost recovery 和跨服务 contract。",
+      "expected_output": "Returns full review with the triggering material signals and blocks owner approval until the normal plan-review workflow completes.",
+      "files": [],
+      "expectations": [
+        "Does not label the plan ready merely because a plan document exists.",
+        "Routes to the normal full plan-review workflow instead of inventing a new manifest or receipt.",
+        "Does not let the caller downgrade the verdict to ready."
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "impl-planning 当前步骤明确在 fresh subagent 中选择 `$plan-review mode=bundle-admission`，但 plan 缺少 acceptance oracle，且有一个不可逆 product choice 尚未得到 owner 决定。",
+      "expected_output": "Returns revise, names the missing owner decision and the owning skill, and does not request owner approval.",
+      "files": [],
+      "expectations": [
+        "Does not fill in the missing product choice on behalf of the owner.",
+        "Routes the contract or plan correction to its owning skill before re-admission.",
+        "Does not create a ledger or convert revise into ready."
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "impl-planning 明确选择 `$plan-review mode=bundle-admission`，但 host 无法启动 fresh subagent。请继续完成 bundle approval。",
+      "expected_output": "Reports unavailable with the host failure, then requires retry, pause, or cancellation; it never treats the request as owner-waivable approval.",
+      "files": [],
+      "expectations": [
+        "Does not simulate an independent review inline.",
+        "Does not create a pass-equivalent receipt, manifest, or ledger entry.",
+        "Does not allow owner approval without an independent verdict."
       ]
     }
   ]

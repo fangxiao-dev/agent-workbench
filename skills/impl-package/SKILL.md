@@ -29,8 +29,9 @@ revision alias 继续使用 `D<n>` / `S<n>` / `P<n>`，其中 D 明确表示 Dec
 flowchart TD
     Req[需求 / 改动] --> RA[req-align：Decision + Spec 门]
     RA -->|D/S revision 已过门| PL[impl-planning：attempt plan + Composition]
-    PL -->|按 Composition earn| PD[计划拆解：to-tickets draft → optional DAG → 联合校验 / owner review]
-    PD --> EX[dev-with-track：执行 / gate]
+    PL -->|按 Composition earn| PD[计划拆解：to-tickets draft → optional DAG → 联合校验]
+    PD --> PR[plan-review admission：fresh subagent]
+    PR -->|ready 或完整 review 收敛 + owner approval| EX[dev-with-track：执行 / gate]
     EX --> SD[subagent-driven-development：task 执行 + 局部验证]
     SD --> RV{验收证据 + 风险判断}
     RV -->|需要正式审查| DR[do-review：按风险选择 tracks]
@@ -45,7 +46,7 @@ flowchart TD
     EV -. 下次改动读取 .-> RA
 ```
 
-`to-tickets` 与 `create-task-dag` 是同一 earn-gated 计划拆解阶段的两个工具化步骤：按当前 Composition 先生成完整 Draft Tickets（`tickets=true` 时），再按需生成 DAG（`dag=true` 时；无 tickets 时直接消费 plan），完成覆盖、依赖、ownership、acceptance/evidence、gate 与 revision binding 联合校验，并由 owner 一次 review/approval；未 earned 的 artifact 不创建，未获 bundle approval 不进入 execution/preflight。backfill 虚线是异步维护提示：gate 关闭后应提醒 owner 可以运行 `$backfill-stable-docs`，但不自动执行、不要求本次完成，也不影响当前 gate 或任务的 closed 判断；真正压实可由后续 audit / approved apply / verify 或周期任务完成。
+`to-tickets` 与 `create-task-dag` 是同一 earn-gated 计划拆解阶段的两个工具化步骤：按当前 Composition 先生成完整 Draft Tickets（`tickets=true` 时），再按需生成 DAG（`dag=true` 时；无 tickets 时直接消费 plan），完成覆盖、依赖、ownership、acceptance/evidence、gate 与 revision binding 联合校验。联合校验后由 `impl-planning` 明确编排 fresh `$plan-review mode=bundle-admission`；只有 `ready`，或 material risk 已经完成并 `cleared` 正常 `plan-review`，才请求 owner 一次 approval。未 earned 的 artifact 不创建，未获 bundle approval 不进入 execution/preflight。backfill 虚线是异步维护提示：gate 关闭后应提醒 owner 可以运行 `$backfill-stable-docs`，但不自动执行、不要求本次完成，也不影响当前 gate 或任务的 closed 判断；真正压实可由后续 audit / approved apply / verify 或周期任务完成。
 
 ## 阶段地图
 
@@ -54,7 +55,7 @@ flowchart TD
 | 1 对齐与调研 | `req-align`（Decision 门） | Focused PRD + 方案决策的 `decision.md`（新功能/体验/业务变化通常 earned；小修正可 lightweight） | 新需求 / 需求变更，动手前 |
 | 2 写规格 | `req-align`（Spec 门） | 当前 `spec.md` revision | Decision 门过后 |
 | 3 Attempt 计划 | `impl-planning` | `plan.md` / patch plan（含 Composition） | Spec 过、要落地 |
-| 4 计划拆解（按需） | `to-tickets` → `create-task-dag` | 按 Composition earned 的 `tickets/` 与/或当前 attempt DAG；联合校验与一次 owner review | plan 判 `tickets=true` 或 `dag=true` |
+| 4 计划拆解（按需） | `to-tickets` → `create-task-dag` → `plan-review` admission | 按 Composition earned 的 `tickets/` 与/或当前 attempt DAG；联合校验、fresh admission 与一次 owner approval | plan 判 `tickets=true` 或 `dag=true` |
 | 5 执行 | `dev-with-track` + `subagent-driven-development` | runtime state / Task 局部验证 evidence · plan Execution Record · append-only `gate.md` | 上游就绪 / 跨 session 续；有可委派 task 时由后者承载 |
 | 6 审查 | agent 风险判断后按需交给 `do-review`；可选择 `code-review`、`standards-review`、`spec-review` 与 `safety-review` | review evidence 或简化理由（进入 plan ER） | 见下方路由 |
 | 6b Completion claim gate | `verification-before-completion` | claim-to-evidence audit | 写 terminal pass 或宣称 complete / closed / merge-ready / release-ready 前 |
@@ -65,7 +66,7 @@ flowchart TD
 - 先按共享 contract 的四个瞬时影响信号做轻量分流。纯减法、证据修正、引用/分类修正或局部可逆调整若不改变当前业务结果、Acceptance Semantics、D/S contract、plan-owned execution strategy、Composition、安全约束或 mutation authority，直接交给现有 artifact 的 owning skill 做局部修正和定向验证；不为了“进流程”调用 `req-align`、创建新 revision 或扩写 JSON。
 - 有新改动 / 需求，且会改变决策选择或行为 contract → **`req-align`**（先过 Decision、再过 Spec 门；当 acceptance 依赖权威证明、发布状态、兼容投影或外部副作用时，由该 skill 条件化定义 evidence-integrity contract；provider、schema、archive、CLI 等只是例子）。
 - Spec 已过门，还没 plan → **`impl-planning`**。
-- 当前 attempt plan 判 `tickets=true` 或 `dag=true`，计划拆解 bundle 尚未 ready → 进入计划拆解：先由 **`to-tickets`** 生成完整 Draft Tickets（若 earned），再由 **`create-task-dag`** 生成 DAG（若 earned），随后联合校验并一次 owner review/approval。
+- 当前 attempt plan 判 `tickets=true` 或 `dag=true`，计划拆解 bundle 尚未 ready → 进入计划拆解：先由 **`to-tickets`** 生成完整 Draft Tickets（若 earned），再由 **`create-task-dag`** 生成 DAG（若 earned），随后联合校验；`impl-planning` 明确编排 fresh **`plan-review mode=bundle-admission`**，只有 `ready` 或完整 review 返回 `cleared` 后才请求一次 owner approval。
 - 上游产物就绪，要开始 / 恢复执行 → **`dev-with-track`**（**运行时计划执行与 gate 的唯一 owner**）：从 revision registry 与 gate 派生 lifecycle、选择可执行单元、跑 Planned Verification、维护 ER、并在执行授权下 **自动完成 claim audit + gate evaluation/finalize**。存在有界且委派收益明确的 task 时，进入 **`subagent-driven-development`** 完成实现、局部验证或 BLOCKED 回报，再由 Working Branch owner 集成；单 owner 的机械局部 delta 由主 agent 直接处理。存在 manual owner 时，等待验收前按轻量模板生成 readiness handoff。**不要**在 GO 执行后再问 owner「是否验证 / 是否写 gate」——细则只在 `dev-with-track`，本入口不复制正文。
 - 集成后先作简短风险判断并记录到 ER：局部、可逆、无共享 contract/状态/外部副作用且已有定向证据的改动，可以不触发正式 `do-review`，直接进入 completion claim audit；需要独立审查时，把明确 reviewer selection 交给 `do-review`。接口、状态机、模块边界、跨模块行为或 seam 是选择 `standards-review` / `spec-review` 的强信号；auth、权限、支付、webhook、迁移、外部 mutation、数据完整性或并发安全是选择 `safety-review` 的不可简化信号。`code-review` 是普通实现的默认选择，但 agent 可以在 ER 中写明低风险理由和已覆盖的定向验证后省略。`do-review` 是一旦被选择时唯一负责范围固定、leaf 调度、ledger 与最终分类的编排器；只有它提出 P1/P2 findings 后才需要 closure verification。
 - 适用 review 与 execution findings 已闭环、准备写 terminal pass 或对外宣称 complete / closed / merge-ready / release-ready → **`verification-before-completion`**（由 **`dev-with-track` 在自动收口中调用**）；它审计最终 revision、环境和证据新鲜度，不是 DAG task，也不机械重跑所有检查。

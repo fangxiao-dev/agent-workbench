@@ -415,14 +415,16 @@ Before running this command, substitute the placeholder values from the Completi
 
 After displaying the Review Readiness Dashboard, recommend the next review(s) based on what this CEO review discovered. Read the dashboard output to see which reviews have already been run and whether they are stale.
 
-**Recommend /plan-eng-review if eng review is not skipped globally** — check the dashboard output for `skip_eng_review`. If it is `true`, eng review is opted out — do not recommend it. Otherwise, eng review is the required shipping gate. If this CEO review expanded scope, changed architectural direction, or accepted scope expansions, emphasize that a fresh eng review is needed. If an eng review already exists in the dashboard but the commit hash shows it predates this CEO review, note that it may be stale and should be re-run.
+**Keep the dashboard gate separate.** Its required Eng Review is `/review`, which runs against the implementation diff before landing. If that dashboard entry is missing or stale, note that `/review` will still be required at pre-landing; running `/plan-review` does not clear this row.
+
+**Recommend /plan-review only as an independent plan-stage review** when this CEO review materially expanded scope, changed architectural direction, or accepted scope expansions. Do not infer its freshness from the gstack dashboard because `plan-review` keeps its own review state.
 
 **Recommend /plan-design-review if UI scope was detected** — specifically if Section 11 (Design & UX Review) was NOT skipped, or if accepted scope expansions included UI-facing features. If an existing design review is stale (commit hash drift), note that. In SCOPE REDUCTION mode, skip this recommendation — design review is unlikely relevant for scope cuts.
 
-**If both are needed, recommend eng review first** (required gate), then design review.
+**If both plan and design review are needed, recommend plan review first**, then design review. The pre-landing `/review` gate remains later in the implementation workflow.
 
 Use AskUserQuestion to present the next step. Include only applicable options:
-- **A)** Run /plan-eng-review next (required gate)
+- **A)** Run /plan-review next (independent plan-stage review)
 - **B)** Run /plan-design-review next (only if UI scope detected)
 - **C)** Skip — I'll handle reviews manually
 

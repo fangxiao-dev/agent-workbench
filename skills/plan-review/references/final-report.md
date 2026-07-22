@@ -1,5 +1,11 @@
 # Final Report
 
+## Bundle admission 输出
+
+admission mode 只输出 `Admission verdict`、简短证据、已检查或不适用的维度、material signal（如有）和下一动作。`ready` 可以交回 `impl-planning` 请求 owner approval；`full review` 必须转入正常 `plan-review` workflow 并取得 `cleared`；`revise` 回到对应 owning skill；`unavailable` 只能重试、暂停或取消 approval。
+
+不得为 admission 输出 ledger 路径、manifest hash、receipt、`cleared`、Apply 授权或跨 session 状态。它是当前 approval 前的独立判断，不是新的 canonical artifact。
+
 ## Review 输出顺序
 
 1. **整体判断**：是否可进入 owner 决策或 Apply；存在未决、stale 或 degraded 时明确不能称为 cleared。

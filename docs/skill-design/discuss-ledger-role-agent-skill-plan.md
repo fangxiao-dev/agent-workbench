@@ -59,7 +59,7 @@ roles:
 
   architect:
     label: Architecture Reviewer
-    borrowed_from: gstack /plan-eng-review
+    borrowed_from: local /plan-review
     focus:
       - system boundaries
       - data flow

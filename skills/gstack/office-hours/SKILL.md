@@ -61,7 +61,7 @@ Proactively invoke this skill (do NOT answer directly) when the user describes
 a new product idea, asks whether something is worth building, wants to think
 through design decisions for something that doesn't exist yet, or is exploring
 a concept before any code is written.
-Use before /plan-ceo-review or /plan-eng-review.
+Use before /plan-ceo-review or /plan-review.
 
 ## Preamble (run first)
 
@@ -285,7 +285,7 @@ If `ACTIVATED` is `no` but `FIRST_TASK:` is empty or `nongit` (headless, non-git
 
 Else if `ACTIVATED` is `yes` AND `FIRST_LOOP_SHOWN` is `no`: say once as a heads-up (then continue):
 
-> Tip: gstack pays off when you complete one loop — **plan → review → ship**. A common first loop: `/office-hours` or `/spec` to shape it, `/plan-eng-review` to lock it, then `/ship`.
+> Tip: gstack pays off when you complete one loop — **plan → review → ship**. A common first loop: `/office-hours` or `/spec` to shape it, `/plan-review` to lock it, then `/ship`.
 
 Then run `touch ~/.gstack/.first-loop-tip-shown 2>/dev/null || true`.
 
@@ -313,7 +313,7 @@ When the user's request matches an available skill, invoke it via the Skill tool
 Key routing rules:
 - Product ideas/brainstorming → invoke /office-hours
 - Strategy/scope → invoke /plan-ceo-review
-- Architecture → invoke /plan-eng-review
+- Architecture → invoke /plan-review
 - Design system/plan review → invoke /design-consultation or /plan-design-review
 - Full review pipeline → invoke /autoplan
 - Bugs/errors → invoke /investigate

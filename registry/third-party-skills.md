@@ -6,7 +6,6 @@
 | office-hours | `garrytan/gstack` | `npx skills add garrytan/gstack --skill office-hours --full-depth -y --copy` | 已放入 `skills/gstack/office-hours/` |
 | plan-ceo-review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill plan-ceo-review --full-depth -y --copy` | 已放入 `skills/gstack/plan-ceo-review/` |
 | plan-design-review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill plan-design-review --full-depth -y --copy` | 已放入 `skills/gstack/plan-design-review/` |
-| plan-eng-review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill plan-eng-review --full-depth -y --copy` | 已放入 `skills/gstack/plan-eng-review/` |
 | qa | `garrytan/gstack` | `npx skills add garrytan/gstack --skill qa --full-depth -y --copy` | 已放入 `skills/gstack/qa/` |
 | qa-only | `garrytan/gstack` | `npx skills add garrytan/gstack --skill qa-only --full-depth -y --copy` | 已放入 `skills/gstack/qa-only/` |
 | review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill review --full-depth -y --copy` | 已放入 `skills/gstack/review/` |
@@ -39,7 +38,7 @@
 | continuous-learning | `affaan-m/everything-claude-code` | 人工迁移 | 已退役，保留在 `skills-deprecated/continuous-learning/` |
 | api-integration-builder | `daffy0208/ai-dev-standards` | `npx skills add daffy0208/ai-dev-standards@api-integration-builder -g -y` | 已放入 `skills/api-integration-builder/` |
 | code-review | `supercent-io/skills-template` | `npx skills add supercent-io/skills-template@code-review -g -y` | 已放入 `skills/reviews/code-review/` |
-| git-workflow | `supercent-io/skills-template` | `npx skills add supercent-io/skills-template@git-workflow -g -y` | 已放入 `skills/git-workflow/` |
+| git-workflow | `supercent-io/skills-template`（历史来源） | 历史命令：`npx skills add supercent-io/skills-template@git-workflow -g -y` | 本地维护分叉位于 `skills/git-workflow/`；上游在 2026-07-22 不可解析，后续不直接覆盖本地版本。 |
 | documentation-generator | `jorgealves/agent_skills` | `npx skills add jorgealves/agent_skills@documentation-generator -g -y` | 已放入 `skills/documentation-generator/` |
 | prompt-optimizer | `daymade/claude-code-skills` | `npx skills add daymade/claude-code-skills@prompt-optimizer -g -y` | 已放入 `skills/prompt-optimizer/` |
 | test-generator | `oimiragieo/agent-studio` | `npx skills add oimiragieo/agent-studio@test-generator -g -y` | 已放入 `skills/test-generator/` |

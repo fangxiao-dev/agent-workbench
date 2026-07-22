@@ -192,7 +192,7 @@ function Test-PowerShellExplicitHostInstall {
 
         $claudeSkill = Join-Path $workspace.Home ".claude\skills\api-integration-builder"
         $claudeBundledSkill = Join-Path $workspace.Home ".claude\skills\feishu-skills\feishu-base\SKILL.md"
-        $claudeGstackSkill = Join-Path $workspace.Home ".claude\skills\gstack\plan-eng-review\SKILL.md"
+        $claudeGstackSkill = Join-Path $workspace.Home ".claude\skills\gstack\office-hours\SKILL.md"
         $codexSkill = Join-Path $workspace.Home ".codex\skills\api-integration-builder"
         $claudeCommand = Join-Path $workspace.Home ".claude\commands\audit.md"
 
@@ -353,7 +353,7 @@ function Test-ListVisibleSkillsIncludesBundledSkills {
         Assert-True ($names -contains "lark-intl-shared") "Expected bundled Lark shared skill to remain visible."
         Assert-True ($names -contains "using-azure") "Expected bundled Azure router skill to be visible."
         Assert-True ($names -contains "azure-container-apps") "Expected bundled Azure Container Apps skill to be visible."
-        Assert-True ($names -contains "plan-eng-review") "Expected bundled gstack engineering review skill to be visible."
+        Assert-True ($names -contains "office-hours") "Expected bundled gstack office-hours skill to be visible."
         Assert-True ($names -contains "impl-package") "Expected Impl-Package entry skill to be visible."
         Assert-True ($names -contains "backfill-stable-docs") "Expected nested Impl-Package backfill skill to be visible."
         Assert-True (-not ($names -contains "feishu-skills")) "Bundle root without SKILL.md should not be listed as a skill."
@@ -361,8 +361,8 @@ function Test-ListVisibleSkillsIncludesBundledSkills {
         Assert-True ($feishuShared.Sources[0].RelativePath -eq "feishu-skills/feishu-shared") "Expected bundled Feishu shared skill relative path."
         $azureContainerApps = $claude.MergedSkills | Where-Object { $_.Name -eq "azure-container-apps" } | Select-Object -First 1
         Assert-True ($azureContainerApps.Sources[0].RelativePath -eq "azure-skills/azure-container-apps") "Expected bundled Azure Container Apps skill relative path."
-        $gstackPlanEngReview = $claude.MergedSkills | Where-Object { $_.Name -eq "plan-eng-review" } | Select-Object -First 1
-        Assert-True ($gstackPlanEngReview.Sources[0].RelativePath -eq "gstack/plan-eng-review") "Expected bundled gstack engineering review skill relative path."
+        $gstackOfficeHours = $claude.MergedSkills | Where-Object { $_.Name -eq "office-hours" } | Select-Object -First 1
+        Assert-True ($gstackOfficeHours.Sources[0].RelativePath -eq "gstack/office-hours") "Expected bundled gstack office-hours skill relative path."
         $backfillSkill = $claude.MergedSkills | Where-Object { $_.Name -eq "backfill-stable-docs" } | Select-Object -First 1
         Assert-True ($backfillSkill.Sources[0].RelativePath -eq "impl-package/backfill-stable-docs") "Expected Impl-Package backfill skill relative path."
     }
@@ -393,7 +393,7 @@ function Test-BashAutoDiscoversHosts {
         $claudeBundledSkill = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\feishu-skills\feishu-base\SKILL.md")
         $claudeAzureRouter = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\azure-skills\using-azure\SKILL.md")
         $claudeAzureContainerApps = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\azure-skills\azure-container-apps\SKILL.md")
-        $claudeGstackSkill = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\gstack\plan-eng-review\SKILL.md")
+        $claudeGstackSkill = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\gstack\office-hours\SKILL.md")
         $flatFeishuSkill = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills\feishu-base")
         $listScript = Convert-ToBashPath (Join-Path $workspace.Workbench "scripts\list-visible-skills.sh")
         $claudeSkillsRoot = Convert-ToBashPath (Join-Path $workspace.Home ".claude\skills")
@@ -410,7 +410,7 @@ function Test-BashAutoDiscoversHosts {
         $visibleSkills = & $bash.Source -lc "bash '$listScript' '$claudeSkillsRoot'" 2>&1 | Out-String
         Assert-Contains $visibleSkills "using-azure -> azure-skills/using-azure" "Bash visible-skills script should list Azure router skill."
         Assert-Contains $visibleSkills "azure-container-apps -> azure-skills/azure-container-apps" "Bash visible-skills script should list Azure Container Apps skill."
-        Assert-Contains $visibleSkills "plan-eng-review -> gstack/plan-eng-review" "Bash visible-skills script should list bundled gstack engineering review skill."
+        Assert-Contains $visibleSkills "office-hours -> gstack/office-hours" "Bash visible-skills script should list bundled gstack office-hours skill."
     }
     finally {
         Remove-TestWorkspace $workspace

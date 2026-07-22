@@ -60,14 +60,14 @@ S4 和计划列出了 `intent_recorded -> provider_call_started -> provider_succ
 | Browser acceptance 缺 stale/partial-success | 测试图不具体 | 很高 | 是 |
 | AC-8 crash-boundary injection 缺失 | fault injection 未产品化 | 很高 | 是 |
 
-因此，`plan-eng-review` 有望显著减少后期返工，尤其是 authority、transition、readback、notification 和 E2E fault path；但它不能替代代码审查。TOCTOU、错误 API 使用、漏掉 lock 内重验等问题，最终仍必须通过 implementation/seam review 和并发测试发现。
+因此，`plan-review` 有望显著减少后期返工，尤其是 authority、transition、readback、notification 和 E2E fault path；但它不能替代代码审查。TOCTOU、错误 API 使用、漏掉 lock 内重验等问题，最终仍必须通过 implementation/seam review 和并发测试发现。
 
 ## 为什么看起来像“一直边做边错”
 
 外部观感来自反馈进入得太晚：大范围实现先完成，最终 review 才一次次揭开 authority、state、readback 和 browser fixture 的深层约束。每轮修复局部 blocker 后，下一个 review 又沿新 codepath 找到另一类问题，于是表现为不断返工。这里既有正常的高风险分布式 workflow 复杂度，也有流程失配：最终 review 被当作主要设计发现机制，而不是最后一道验证机制。
 
-更理想的节奏应是：实施前关闭 mutation/state/failure/test 四张表；每个 task 先写关键 red tests；共享 store、provider boundary、approval boundary 和 browser seam 分别 review；最终 review 只验证整合和残余漂移。这样总工作量不会消失，但错误会在成本更低的位置暴露，review 轮次和大范围返工会显著减少。
+更理想的节奏应是：实施前由独立 reviewer 沿 mutation、state、failure 和 test 四个视角确认计划是否存在 material gap；表达形式由 agent 按实际风险选择，不要求固定产出四张表。实施期继续对共享 store、provider boundary、approval boundary 和 browser seam 做针对性 review，最终 review 只验证整合和残余漂移。这样总工作量不会消失，但错误会在成本更低的位置暴露，review 轮次和大范围返工会显著减少。
 
 ## 反事实判断
 
-如果最初只增加一次普通人工通读，改善有限，因为原计划语言本身看起来完整。若按完整 `plan-eng-review` 做 data-flow、state-machine、failure-mode 和 test-diagram 演练，并把输出设成 implementation gate，则大概率能在编码前暴露一半以上的后期核心返工点。剩余部分仍属于实现层缺陷，需要 task/seam review、fault tests 与最终 `do-review` 捕获。
+如果最初只由产出计划的同一 session 再通读一次，改善有限，因为原计划语言本身看起来完整。若在 owner approval 前由 fresh subagent 使用 `plan-review` 客观判断，并在发现 material signal 时升级到完整 data-flow、state-machine、failure-mode 和 test review，则大概率能更早暴露相当一部分核心返工点。这里的矩阵和图只是本案例中可能有用的审查表达，不是所有计划必须提交的固定 gate 工件；剩余实现层缺陷仍由 task/seam review、fault tests 与最终 `do-review` 捕获。

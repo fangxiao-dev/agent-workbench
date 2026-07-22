@@ -70,6 +70,10 @@
 
 ## 执行尝试产物交接
 
+- 计划审查交接：仅在 earned bundle 联合校验后由 fresh `plan-review mode=bundle-admission` 填写；未执行审查时不要以 `Pending`、hash 或 receipt 伪造状态。
+- 独立审查结论：
+- 简短理由 / material signal：
+- 下一动作：
 - Ticket 集合：<paths | N/A>
 - DAG：<dag.md or patch-dag path | N/A>
 - 进度账本：<path | N/A until trigger>

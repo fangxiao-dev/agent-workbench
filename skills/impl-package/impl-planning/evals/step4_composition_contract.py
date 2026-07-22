@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
 
@@ -79,6 +80,13 @@ def main() -> None:
         IMPL_ROOT / "verification-before-completion" / "SKILL.md"
     )
     req_align = read(IMPL_ROOT / "req-align" / "SKILL.md")
+    impl_entry = read(IMPL_ROOT / "SKILL.md")
+    to_tickets = read(IMPL_ROOT / "to-tickets" / "SKILL.md")
+    create_task_dag = read(IMPL_ROOT / "create-task-dag" / "SKILL.md")
+    plan_review_root = IMPL_ROOT.parent / "plan-review"
+    plan_review = read(plan_review_root / "SKILL.md")
+    plan_review_evals = json.loads(read(plan_review_root / "evals" / "evals.json"))["evals"]
+    planning_evals = json.loads(read(SKILL_ROOT / "evals" / "evals.json"))["evals"]
 
     required = (
         (skill, "Attempt ID", "attempt identity"),
@@ -218,6 +226,51 @@ def main() -> None:
         ),
         (skill, "正文不得要求 owner 打开 JSON", "planning handoff stays Markdown-first"),
         (
+            skill,
+            "$plan-review mode=bundle-admission",
+            "fresh admission before owner approval",
+        ),
+        (
+            skill,
+            "不能把其余三种结论改写成 `ready`",
+            "admission verdict cannot be downgraded",
+        ),
+        (
+            skill,
+            "取得 `cleared` 后再决定是否请求 approval",
+            "full review must clear before approval",
+        ),
+        (
+            template,
+            "计划审查交接",
+            "human-readable admission handoff",
+        ),
+        (
+            plan_review,
+            "## Bundle-admission mode（仅由明确编排选择）",
+            "plan-review admission mode",
+        ),
+        (
+            plan_review,
+            "admission mode 不创建 ledger、manifest、receipt",
+            "nonpersistent admission boundary",
+        ),
+        (
+            impl_entry,
+            "plan-review admission：fresh subagent",
+            "package entry admission route",
+        ),
+        (
+            to_tickets,
+            "require `impl-planning` to have completed fresh `$plan-review mode=bundle-admission`",
+            "ticket publication requires admission",
+        ),
+        (
+            create_task_dag,
+            "交回 `impl-planning` 编排 fresh `$plan-review mode=bundle-admission`",
+            "dag handoff requires admission",
+        ),
+        (
             dev_with_track,
             "正文不得要求 owner 打开 JSON",
             "execution handoff stays Markdown-first",
@@ -230,6 +283,30 @@ def main() -> None:
     )
     for content, needle, label in required:
         assert_contains(content, needle, label)
+
+    plan_review_by_id = {item["id"]: item for item in plan_review_evals}
+    for eval_id in (14, 15, 16, 17):
+        if eval_id not in plan_review_by_id:
+            raise AssertionError(f"Missing plan-review admission eval {eval_id}")
+        assert_contains(
+            plan_review_by_id[eval_id]["prompt"],
+            "$plan-review mode=bundle-admission",
+            f"plan-review admission eval {eval_id} exact orchestration",
+        )
+    planning_by_id = {item["id"]: item for item in planning_evals}
+    assert_contains(
+        planning_by_id[4]["expected_output"],
+        "fresh plan-review admission",
+        "zero-artifact bundle still requires admission",
+    )
+    for eval_id in (8, 9):
+        if eval_id not in planning_by_id:
+            raise AssertionError(f"Missing impl-planning admission eval {eval_id}")
+        assert_contains(
+            planning_by_id[eval_id]["prompt"],
+            "$plan-review mode=bundle-admission",
+            f"impl-planning admission eval {eval_id} exact orchestration",
+        )
 
     assert_unique_revision_projection(
         decision_template,

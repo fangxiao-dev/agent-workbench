@@ -74,7 +74,7 @@ Codex 写入项目内 `.codex/config.toml` 的 `mcp_servers.discussLedger`；Cla
 | `agents/*/` | 每个 agent 目录 junction 到 `<host>/agents/<name>` | 每个 agent 目录 symlink 到 `<host>/agents/<name>` |
 | `commands/*` | 复制到 `<host>/commands/<name>` | 复制到 `<host>/commands/<name>` |
 
-`skills/` 支持 bundle 结构，例如 `skills/feishu-skills/feishu-base/SKILL.md`、`skills/lark-skills/lark-intl-base/SKILL.md`、`skills/azure-skills/using-azure/SKILL.md` 和 `skills/gstack/plan-eng-review/SKILL.md`。没有 `SKILL.md` 的 bundle 根目录只是分组，不是一个 skill。
+`skills/` 支持 bundle 结构，例如 `skills/feishu-skills/feishu-base/SKILL.md`、`skills/lark-skills/lark-intl-base/SKILL.md`、`skills/azure-skills/using-azure/SKILL.md` 和 `skills/gstack/office-hours/SKILL.md`。没有 `SKILL.md` 的 bundle 根目录只是分组，不是一个 skill。
 
 宿主根目录：
 

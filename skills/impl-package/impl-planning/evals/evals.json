@@ -5,54 +5,58 @@
       "id": 1,
       "name": "tickets-only-attempt-plan",
       "prompt": "Current decision D2 and spec S3 have passed their required gates. Create initial attempt P1; the acceptance surface earns two independently tracked slices but no execution DAG.",
-      "expected_output": "Creates the current attempt plan with Composition: tickets=true, dag=false, Planned Verification and an empty append-only Execution Record, then routes to the plan-decomposition bundle: to-tickets draft followed by one owner review before publish.",
+      "expected_output": "Creates the current attempt plan with Composition: tickets=true, dag=false, Planned Verification and an empty append-only Execution Record, then routes to the plan-decomposition bundle: to-tickets draft, fresh plan-review admission, then one owner review before publish.",
       "files": [],
       "expectations": [
         "Reads contract and AC semantics from D2/S3 without copying them into plan",
         "Uses plan-owned Composition: tickets=true, dag=false",
         "Does not create a task checklist or DAG",
         "Records Attempt ID initial and Plan Revision P1",
-        "Does not create a separate Ticket approval gate"
+        "Does not create a separate Ticket approval gate",
+        "Explicitly routes the joint-valid bundle to fresh plan-review admission before requesting owner approval"
       ]
     },
     {
       "id": 2,
       "name": "only-dag-attempt-plan",
       "prompt": "Current spec S2 defines a cross-module seam and spec:AC-1 through AC-3. Create attempt P1 with explicit dependent execution owners but no independent ticket slices.",
-      "expected_output": "Creates a plan with Composition: tickets=false, dag=true and routes the plan-decomposition bundle to create-task-dag, followed by one owner review before execution, while leaving the seam contract in spec.",
+      "expected_output": "Creates a plan with Composition: tickets=false, dag=true and routes the plan-decomposition bundle to create-task-dag, fresh plan-review admission, then one owner review before execution, while leaving the seam contract in spec.",
       "files": [],
       "expectations": [
         "Keeps interface, seam contract, acceptance owner and compatibility in spec",
         "Records execution strategy and verification selection in plan",
         "Does not create ticket files or a plan task checklist",
         "Leaves seam integration to the existing Working Branch owner",
-        "Uses the DAG as the complete earned bundle when tickets=false"
+        "Uses the DAG as the complete earned bundle when tickets=false",
+        "Does not treat ready-for-review as admission-reviewed or request owner approval before fresh plan-review admission"
       ]
     },
     {
       "id": 3,
       "name": "active-attempt-composition-revision",
       "prompt": "Initial attempt P1 was tickets=false, dag=false. Before any terminal gate, two independent acceptance slices are discovered but D1/S1 behavior remains unchanged. Revise the attempt.",
-      "expected_output": "Creates P2 with Composition: tickets=true, dag=false, records artifact relocation and routes ticket creation without rerunning Decision or Spec Gate.",
+      "expected_output": "Creates P2 with Composition: tickets=true, dag=false, records artifact relocation, routes ticket creation, and requires fresh plan-review admission before renewed owner approval without rerunning Decision or Spec Gate.",
       "files": [],
       "expectations": [
         "Treats Composition as attempt-local rather than spec content",
         "Does not increment D1 or S1 without contract drift",
         "Records previous/new Composition, reason and artifact relocation",
-        "Leaves only one writable execution-state source"
+        "Leaves only one writable execution-state source",
+        "Treats the revised bundle as requiring fresh admission rather than reusing a prior ready conclusion"
       ]
     },
     {
       "id": 4,
       "name": "simple-patch-has-no-task-checklist",
       "prompt": "A gate-closed package previously used tickets=false, dag=true. A new implementation-only adapter fix has one owner, no seam and no dependency. Create its patch attempt plan.",
-      "expected_output": "Creates a dated patch attempt with Composition: tickets=false, dag=false, Planned Verification and append-only Execution Record; it has no task checklist and does not inherit the historical DAG.",
+      "expected_output": "Creates a dated patch attempt with Composition: tickets=false, dag=false, Planned Verification and append-only Execution Record; it has no task checklist and does not inherit the historical DAG, but still routes its zero-artifact bundle to fresh plan-review admission before owner approval.",
       "files": [],
       "expectations": [
         "Reuses the current D/S revisions after drift reconciliation",
         "Records Planned Verification and Execution Record",
         "Contains no task checklist or patch DAG",
-        "Keeps recovery facts in the Execution Record or handoff without creating a progress ledger"
+        "Keeps recovery facts in the Execution Record or handoff without creating a progress ledger",
+        "Requires fresh plan-review admission even though tickets and DAG are both false"
       ]
     },
     {
@@ -90,6 +94,31 @@
         "Treats pass, fail and defer as terminal",
         "Does not edit the old plan or gate entry",
         "Creates a new Attempt ID and patch plan"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "admission-unavailable-blocks-owner-approval",
+      "prompt": "A current attempt has passed Ticket/DAG joint validation, but the host cannot launch the fresh subagent selected as `$plan-review mode=bundle-admission`. The owner asks to approve the bundle immediately. Continue impl-planning.",
+      "expected_output": "Reports the bundle as unable to proceed to owner approval, asks for retry, pause, or cancellation, and does not register the plan revision or publish Tickets.",
+      "files": [],
+      "expectations": [
+        "Does not simulate or self-declare independent plan review",
+        "Does not treat an owner waiver as a substitute for admission",
+        "Does not create a new schema field, receipt, hash, or runtime state",
+        "Keeps the bundle at the existing pre-approval boundary"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "admission-full-review-is-not-downgradable",
+      "prompt": "A fresh `$plan-review mode=bundle-admission` for a joint-valid bundle reports full review because the plan mutates an external provider and has response-lost recovery ambiguity. The main session wants to call it low risk and request owner approval.",
+      "expected_output": "Routes immediately to the normal full plan-review workflow and prevents owner approval until that review returns cleared.",
+      "files": [],
+      "expectations": [
+        "Allows the main session to add risk evidence but not downgrade full review to ready",
+        "Does not create a second approval ceremony or a receipt schema",
+        "Preserves the existing Ticket/DAG joint-validation and owner approval sequence"
       ]
     }
   ]

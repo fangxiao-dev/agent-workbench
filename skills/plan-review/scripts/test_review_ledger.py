@@ -136,6 +136,9 @@ class ReviewLedgerTests(unittest.TestCase):
                 self.assertTrue(resource.read_text(encoding="utf-8").strip())
                 self.assertIn(relative, skill_text)
         for contract in [
+            "user-invocable: true",
+            "**Invocation gate：**",
+            "不得因为请求包含",
             "## 工程判断基线",
             "blast radius",
             "成熟、简单、仓库已有的方案",
@@ -144,6 +147,50 @@ class ReviewLedgerTests(unittest.TestCase):
         ]:
             with self.subTest(contract=contract):
                 self.assertIn(contract, skill_text)
+
+    def test_skill_is_explicit_or_orchestrated_only(self) -> None:
+        skill_root = MODULE_PATH.parent.parent
+        skill_text = (skill_root / "SKILL.md").read_text(encoding="utf-8")
+        openai_text = (skill_root / "agents" / "openai.yaml").read_text(encoding="utf-8")
+        evals = json.loads((skill_root / "evals" / "evals.json").read_text(encoding="utf-8"))["evals"]
+        self.assertIn("user-invocable: true", skill_text)
+        self.assertNotIn("disable-model-invocation: true", skill_text)
+        self.assertIn("allow_implicit_invocation: false", openai_text)
+        self.assertIn("仅当用户明确点名", skill_text)
+        self.assertIn("上游编排合同", skill_text)
+        negative = next(item for item in evals if item["id"] == 12)
+        self.assertNotIn("$plan-review", negative["prompt"])
+        for item in evals:
+            if item["id"] != 12:
+                with self.subTest(eval_id=item["id"]):
+                    self.assertIn("$plan-review", item["prompt"])
+
+    def test_bundle_admission_is_explicit_and_nonpersistent(self) -> None:
+        skill_root = MODULE_PATH.parent.parent
+        skill_text = (skill_root / "SKILL.md").read_text(encoding="utf-8")
+        prompt_text = (skill_root / "references" / "subagent-prompts.md").read_text(
+            encoding="utf-8"
+        )
+        report_text = (skill_root / "references" / "final-report.md").read_text(
+            encoding="utf-8"
+        )
+        evals = json.loads((skill_root / "evals" / "evals.json").read_text(encoding="utf-8"))["evals"]
+        for contract in [
+            "## Bundle-admission mode（仅由明确编排选择）",
+            "mode=bundle-admission",
+            "用户直接调用 `$plan-review` 时一律走下方既有完整 workflow",
+            "admission mode 不创建 ledger、manifest、receipt 或跨 session state",
+            "不能把 `full review`、`revise` 或 `unavailable` 降级为 `ready`",
+        ]:
+            with self.subTest(contract=contract):
+                self.assertIn(contract, skill_text)
+        self.assertIn("## Bundle admission：由 `impl-planning` 启动的 fresh reviewer", prompt_text)
+        self.assertIn("## Bundle admission 输出", report_text)
+        by_id = {item["id"]: item for item in evals}
+        for eval_id in (14, 15, 16, 17):
+            with self.subTest(eval_id=eval_id):
+                self.assertIn(eval_id, by_id)
+                self.assertIn("$plan-review mode=bundle-admission", by_id[eval_id]["prompt"])
 
     def test_discover_lists_only_matching_active_runs(self) -> None:
         second = ledger.init_ledger([str(self.target)], temp_root=self.root / "runtime")
