@@ -70,6 +70,8 @@
       "files": [],
       "expectations": [
         "Traces material changes from goal and contract through consumers to observable acceptance or operator outcomes.",
+        "Prefers a local, reversible blast radius and mature existing mechanisms unless real requirements justify expansion.",
+        "Checks that verification and recovery rely on repeatable evidence rather than memory or manual heroics, and accounts for build, test, debug, release, and maintenance cost.",
         "Checks repository conventions, authoritative source of truth, derived-state drift, and all real consumers or compatibility paths.",
         "Distinguishes structural refactoring, behavior change, and migration sequencing where that affects rollback or verification.",
         "Checks error categories, lifecycle transitions, temporal coupling, and removal of dead or legacy paths.",

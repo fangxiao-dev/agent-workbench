@@ -15,7 +15,20 @@ description: 审查 implementation plan、technical plan 或 plan package 的工
 - 在审查开始时简短报告本轮角色、工具与测试表达形式的选择及理由；后续选择变化时只报告增量，不建立恢复协议。
 - 把产品意图、外部 contract、风险偏好和不可逆选择交给 owner；不得用“recommended”代替授权。
 - 只在 owner 对当前 manifest hash 明确要求 Apply 后写回；manifest、目标基线或相关证据变化时重新确认。
-- 必读的 rubric、reference 或脚本缺失、路径错误或读取失败时立即返回 `BLOCKED`，报告准确路径与工具错误；禁止凭记忆替代、继续生成 findings 或执行 Apply。
+- 必读的 reference 或脚本缺失、路径错误或读取失败时立即返回 `BLOCKED`，报告准确路径与工具错误；禁止凭记忆替代、继续生成 findings 或执行 Apply。
+
+## 工程判断基线
+
+Material 指会影响行为、contract、数据、安全、运营、发布或显著工程成本的事项；不得用文件数、类数量、角色数量、阶段数量或 completeness score 代替材料性判断。每个 candidate 和 finding 都沿 `goal → contract → consumer → user/operator outcome → acceptance oracle` 追踪；最小完整变更按实际风险覆盖 success、error、recovery、migration、distribution 和 verification，不适用路径可以说明理由后跳过。
+
+以下原则横切 Scope、Architecture、Code Quality、Tests 和 Performance：
+
+- 优先局部、边界清楚、可回退的改动；扩大 blast radius 必须有真实需求依据。
+- 优先复用成熟、简单、仓库已有的方案；不得以“简单”为由遗漏完整 contract、失败处理或分发链路。
+- 让验证、ownership 和故障恢复依赖可重复机制与证据，不依赖个人记忆、隐式调用顺序或手工救火。
+- 把构建、测试、调试、发布和长期维护成本纳入材料性判断。
+
+五个专项 reference 只扩展观察面，不替代这些横切原则。它们是帮助 agent 形成判断的启发式工具，不是逐项评分表；根据实际信号选择能改变 scope、architecture、test、rollout、finding 或 owner decision 的镜头，不在结论中机械复述原则名。
 
 ## 1. 绑定目标与基线
 
@@ -31,15 +44,15 @@ Owner 明确放弃旧 run 时，使用 `abandon --ledger <ledger.json> --source 
 
 完成条件：目标、必要 contract baseline 和唯一 unfinished ledger 路径已经确定，所有同目标旧 run 已显式继续、完成或放弃，目标当前内容尚未变化。
 
-## 2. 加载审查镜头、扫描材料性并报告本轮配置
+## 2. 应用工程判断基线、加载审查镜头并报告本轮配置
 
-先读取 [rubric.md](rubric.md) 和五个短聚焦 reference，再对 Scope、Architecture、Code Quality、Tests、Performance 做 materiality scan。每个维度最终必须记录以下一种状态：
+使用本文件的工程判断基线并读取五个短聚焦 reference，再对 Scope、Architecture、Code Quality、Tests、Performance 做 materiality scan。每个维度最终必须记录以下一种状态：
 
 - `reviewed`：已检查且没有 formal finding。
 - `not_applicable`：不适用，并给出与本计划相关的理由。
 - `finding`：存在至少一个 formal finding。
 
-把 rubric 的横切镜头应用于每个 candidate 和 finding，而不是只做一次总评；聚焦规则只增加观察面，不替代横切规则：
+把上述横切原则应用于每个 candidate 和 finding，而不是只做一次总评；聚焦规则只增加观察面，不替代横切规则：
 
 - Scope 或 distribution：`references/scope-review.md`
 - 架构、数据流、安全边界或 rollout：`references/architecture-review.md`

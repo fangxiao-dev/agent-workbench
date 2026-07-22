@@ -118,7 +118,6 @@ class ReviewLedgerTests(unittest.TestCase):
     def test_required_skill_resources_exist_and_are_readable(self) -> None:
         skill_root = MODULE_PATH.parent.parent
         required = [
-            "rubric.md",
             "references/scope-review.md",
             "references/architecture-review.md",
             "references/code-quality-review.md",
@@ -136,6 +135,15 @@ class ReviewLedgerTests(unittest.TestCase):
                 self.assertTrue(resource.is_file(), f"missing required skill resource: {relative}")
                 self.assertTrue(resource.read_text(encoding="utf-8").strip())
                 self.assertIn(relative, skill_text)
+        for contract in [
+            "## 工程判断基线",
+            "blast radius",
+            "成熟、简单、仓库已有的方案",
+            "可重复机制与证据",
+            "构建、测试、调试、发布和长期维护成本",
+        ]:
+            with self.subTest(contract=contract):
+                self.assertIn(contract, skill_text)
 
     def test_discover_lists_only_matching_active_runs(self) -> None:
         second = ledger.init_ledger([str(self.target)], temp_root=self.root / "runtime")
