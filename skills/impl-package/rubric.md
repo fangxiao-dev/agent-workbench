@@ -1,6 +1,6 @@
 ---
 target: skills/impl-package
-updated: 2026-07-17
+updated: 2026-07-22
 ---
 
 ## 原则
@@ -14,14 +14,9 @@ updated: 2026-07-17
 - [待验证] 变更失效范围必须与实际影响面一致：调整方向、证据修正和能力减法只复验直接受影响的 contract/artifact；只有业务结果、Acceptance Semantics、执行策略、Composition、安全约束或 mutation authority 发生实质变化时才重新规划或扩大复验。（证据: R4）
 - [待验证] exact-blob 只保护 contract 语义而非排版噪声：可证明零语义影响的 editorial correction 更新同 alias binding evidence；无法证明时保守升级 revision 与 Gate。（证据: R5）
 - [待验证] 优化优先增加可跨场景复用的判断约束，不以单一案例引入分类法、表格或新 artifact；只有现有语言无法表达真实高影响差异时才增加结构。（证据: R6）
+- [待验证] 除真正的权限、风险或 canonical 边界外，不用反复声明“本 skill 不做什么”充当正文；应直接说明 skill 的审查/路由意图、判断启发式和产出。（证据: R9）
 
 ## 决策记录（滚动，最近 ≤5 轮）
-
-### R4 · 2026-07-15
-
-- 采纳「分布式减负」— 用户明确选择把简化规则下沉到各 owning Skill/配置，中央只保留最小影响语义，不新建统一 Micro 阶段、模式或 artifact。
-- 采纳「轻量 JSON contract」— 用户原话：JSON 用于环节间 contract 和追踪，应尽量轻量；容易推理的内容不需要过度严格。
-- 采纳「影响范围内失效」— 用户明确反对环环相扣、轻微变动导致全量推倒重来；方向调整、证据修正和能力减法应局部复验，只有较大变动才重新规划。
 
 ### R5 · 2026-07-15
 
@@ -42,3 +37,7 @@ updated: 2026-07-17
 
 - 采纳「数据驱动状态引擎」— 用户要求脚本优化为数据驱动、配置收进 Impl-Package skill，方便后续解耦调整。状态 vocabulary、artifact discovery、字段/heading grammar、marker 与 projection format 进入单一版本化 JSON；CLI interface 不变，backfill 直接复用 canonical resolver。
 - 校准「配置不越过安全内核」— 完整 gate entry span/content hash、append-only、CAS、active chain、package-local path、HEAD/worktree 两相校验与 earned-artifact bijection 不开放配置，配置 loader 对 schema、placeholder、capture group 与 heading 单行范围 fail closed。
+
+### R9 · 2026-07-22
+
+- 记录反例「非必要免责声明」— 用户指出 `impl-package` 中的“本 skill 不承担汇总、去重或最终分类”一类写法，如果不是实际的安全、权限或 canonical 边界，只是无意义的免责声明，会反噬正文；应以正向意图、启发式和产出指导替代。
