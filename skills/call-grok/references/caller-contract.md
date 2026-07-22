@@ -28,7 +28,8 @@ python ~/.grok/skills/call-grok/scripts/grok_task.py \
   --role reviewer \
   --cwd /path/to/repo \
   --prompt-file /tmp/review-prompt.txt \
-  --max-run 120
+  --review-round 2 \
+  --context-file /tmp/review-context.md
 ```
 
 ## Flags (public)
@@ -38,10 +39,12 @@ python ~/.grok/skills/call-grok/scripts/grok_task.py \
 | `--role` | required | `explore` \| `reviewer` \| `implement` |
 | `--prompt` / `--prompt-file` | one required | Task text |
 | `--cwd` | process cwd | Repo/workdir for Grok |
-| `--max-run` | **120** | Maps to `grok --max-turns` |
+| `--max-run` | **15 reviewer; 120 otherwise** | Maps to `grok --max-turns` |
 | `--model` | host default | Model id |
 | `--effort` | host default | Reasoning effort |
 | `--plan-file` | none | Inject plan path + content into prompt |
+| `--context-file` | none | Inject free-form parent context; it must be readable or the wrapper fails before model execution |
+| `--review-round` | none | Reviewer round label; records session round/cwd and rejects cross-round or cross-cwd resume |
 | `--rules` | none | Extra rules text |
 | `--resume` | none | Resume Grok session id |
 | `--worktree [NAME]` | none | Pass through to Grok |
@@ -97,6 +100,7 @@ Do not parse heartbeats from stdout. Treat missing heartbeats longer than `stall
 | 2 | `max_turns` | Partial; resume with `--resume sessionId` if useful |
 | 3 | `stalled` | Partial; resume or re-prompt with tighter scope |
 | 4 | `timeout` | Partial; raise overall timeout or shrink task |
+| 5 | `cancelled` | Partial; do not treat the text as PASS; resume only to finish the same round |
 | 1 | `error` / `preflight_failed` | Fix env/auth/prompt; read `error_message` |
 
 ## Resume pattern
@@ -108,6 +112,8 @@ python "...\grok_task.py" `
   --resume $sessionId `
   --prompt "Continue from where you left off. Finish the remaining plan items only."
 ```
+
+For review, keep a resume inside its original `--review-round`. The wrapper writes minimal session-to-round metadata under Grok's local state and rejects a mismatched resume. Start the next review round without `--resume`, carry only the parent-reviewed context forward, and allow the reviewer to inspect the fixed scope afresh.
 
 ## Safety
 

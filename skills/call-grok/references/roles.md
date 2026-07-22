@@ -6,7 +6,7 @@ Maps `--role` to Grok CLI tool/permission policy and the prompt envelope injecte
 
 | Setting | Value |
 |---------|--------|
-| `max-run` → `--max-turns` | `120` unless overridden |
+| `max-run` → `--max-turns` | `15` for `reviewer`; `120` for other roles unless overridden |
 | Subagents | Off (`--no-subagents` + `--disallowed-tools Agent`) unless `--allow-subagents` |
 | Output | Always `--output-format streaming-json` (wrapper parses it) |
 
@@ -27,9 +27,9 @@ Use when the parent agent needs a short map of a module, search result, or doc t
 | Tools (default) | `--tools read_file,grep,list_dir` |
 | Tools (`--allow-git-shell`) | add `run_terminal_cmd`, `--allow Bash(git *)`, deny `git push*` |
 | Always-approve | No |
-| Intent | Defect-first review; findings with severity/location/evidence |
+| Intent | Defect-first review; findings with severity/location/evidence and an explicit PASS/findings/PARTIAL completion state |
 
-Use for PR/diff/plan review. Do not use for applying patches.
+Use for PR/diff/plan review. Do not use for applying patches. A parent may attach a free-form context file and a review-round label; they guide scope and continuation without restricting the reviewer's own reasoning. The wrapper records a labelled session and allows resume only for the same round/cwd.
 
 ## `implement`
 

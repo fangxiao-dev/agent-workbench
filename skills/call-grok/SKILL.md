@@ -15,7 +15,7 @@ Spawn a **short-lived Grok CLI worker** via `scripts/grok_task.py`. Do not re-de
 ## When to use
 
 - Another agent needs Grok for a **bounded** task: review, explore, or small plan-based implement.
-- You want **`max-run`** (→ `--max-turns`) with a high default (**120**) and **liveness** (stream heartbeats + stall/timeout).
+- You want bounded `max-run` (→ `--max-turns`) with reviewer rounds defaulting to **15** and **liveness** (stream heartbeats + stall/timeout).
 
 Do **not** use for multi-hour ownership, interactive TUI sessions, or replacing this host’s internal `spawn_subagent` when an in-process subagent is enough.
 
@@ -54,7 +54,7 @@ For implement of non-trivial patches, prefer `--plan-file` and consider `--workt
 
 | Knob | Default |
 |------|---------|
-| `--max-run` | **120** (all roles; override only when needed) |
+| `--max-run` | **15** for `reviewer`; **120** for `explore` and `implement`; override when needed |
 | Stall | 180s without stream events |
 | Overall timeout | 2400s |
 | Heartbeat | stderr every 15s |
@@ -68,15 +68,15 @@ Role tool policy: [references/roles.md](references/roles.md).
 - **stdout**: one JSON object (`ok`, `status`, `text`, `sessionId`, `num_turns`, `max_run`, `liveness`, `exit_code`, …).
 - **stderr**: `[heartbeat]` / `[liveness]` / child diagnostics — use for progress, not as the answer body.
 
-Exit codes: `0` completed · `2` max_turns · `3` stalled · `4` timeout · `1` error/preflight.
+Exit codes: `0` completed · `2` max_turns · `3` stalled · `4` timeout · `5` cancelled · `1` error/preflight.
 
-On `2`/`3`/`4`, if `sessionId` is present, prefer:
+On `2`/`3`/`4`/`5`, if `sessionId` is present, prefer:
 
 ```text
 --resume <sessionId> --prompt "Continue and finish only the remaining work."
 ```
 
-instead of a cold restart when context matters.
+instead of a cold restart when context matters. For a multi-round review, resume only to finish the same interrupted round; start the next round as a fresh worker with the parent's reviewed context. With `--review-round`, the wrapper records the session's round/cwd and rejects a resume from a different round or worktree.
 
 ## Safety
 
