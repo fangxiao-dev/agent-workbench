@@ -14,6 +14,7 @@ user-invocable: true
 
 - 在 Review 阶段保持目标 plan byte-identical；不要修改 plan、spec、代码或仓库配置。
 - 每轮都使用 fresh context 的 Outside Voice。先让它独立阅读目标与必要基线，不向它泄漏主审 findings。
+- Outside Voice 默认采用 5 分钟的等待。不要因第一个短轮询超时就将其标为 unavailable；在此窗口内保持目标只读。窗口届满仍无结果则主动 message 要求先返回已有的结论，确认仍在工作就继续等待直到完成。
 - 根据风险决定是否启用 Section Reviewer、Answerer、Judge 或 Critic；不要为了角色齐全而创建 agent。
 - 在审查开始时简短报告本轮角色、工具与测试表达形式的选择及理由；后续选择变化时只报告增量，不建立恢复协议。
 - 把产品意图、外部 contract、风险偏好和不可逆选择交给 owner；不得用“recommended”代替授权。
