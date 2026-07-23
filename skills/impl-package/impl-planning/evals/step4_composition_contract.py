@@ -242,6 +242,16 @@ def main() -> None:
         ),
         (
             skill,
+            "正常 review 只以 `--target` 绑定可写 plan",
+            "bundle review has one writable target",
+        ),
+        (
+            skill,
+            "都以重复 `--baseline` 绑定",
+            "Ticket and DAG remain review evidence rather than Apply targets",
+        ),
+        (
+            skill,
             "必须升级为 `full review`",
             "main session conservatively escalates intrinsic risk",
         ),
