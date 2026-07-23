@@ -1,0 +1,35 @@
+{
+  "skill_name": "handoff-to-new-session",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Dry-run only: the completed invoice-import ticket is recorded in D:\\Repos\\finance\\.worktrees\\invoice-import. Its current Codex thread cwd is exactly that path, HEAD is 0123456789abcdef0123456789abcdef01234567, and docs\\tickets\\invoice-import\\progress.md plus plan.md are authoritative. Prepare the exact clean-new-thread handoff without calling create_thread. The child must continue the documented reconciliation task after setup validation.",
+      "expected_output": "Produces a complete prompt using the three anchors, preserves uncommitted work without a fingerprint, imposes child setup validation, and directs continuation to the documented next action.",
+      "expectations": [
+        "Uses create_thread rather than fork_thread as the eventual delivery mechanism, while honoring the dry-run request not to invoke it.",
+        "Uses only the worktree path, full HEAD, and authoritative entry records as recovery anchors; it does not add a project ID, branch, or dirty-state fingerprint to the child prompt.",
+        "Requires the child to stop without repair when HEAD, entries, or validation fail and to continue the named next action when they pass."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Dry-run a handoff to a fresh Codex thread. The owner names D:\\Repos\\warehouse\\.worktrees\\stock-reconcile as the implementation worktree, but this thread's actual cwd is D:\\Repos\\warehouse. Do not create a child. The package records are otherwise complete.",
+      "expected_output": "Fails closed before thread creation, reports a source-thread/worktree mismatch, and does not propose copying files or repairing Git state.",
+      "expectations": [
+        "Stops before create_thread because the parent Codex thread cwd does not equal the named implementation worktree.",
+        "Reports the worktree mismatch as the blocker.",
+        "Does not copy, cherry-pick, reset, checkout, clean, or rebuild changes."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Dry-run a fresh-session handoff for a completed OCR export checkpoint. The implementation worktree and full HEAD have been verified; the authoritative package directory contains progress.md, plan.md, and a package validation command that calls a provider, so it cannot run in the child's read-only first turn. A controlled PDF, profile root, and oracle remain outside the repository. The parent may run local tests, but provider calls, database writes, object storage, commits, pushes, and PRs still require separate authorization. The main session orchestrates and integrates; bounded slices go to subagents. The next action is to run stub acceptance only after the controlled inputs are authorized and supplied.",
+      "expected_output": "Produces a complete authorization-preserving child prompt that references controlled inputs without exposing them and stops only on the named input/authorization blocker.",
+      "expectations": [
+        "Carries the main-session/subagent ownership boundary and the explicit authorization matrix into the child prompt.",
+        "Prohibits putting controlled inputs, credentials, or oracle data in Git, chat bodies, or repository temporary files.",
+        "Keeps the provider-calling validation out of the read-only first turn and makes the child continue to stub acceptance after authorized inputs arrive, otherwise stopping only for that explicit blocker."
+      ]
+    }
+  ]
+}
