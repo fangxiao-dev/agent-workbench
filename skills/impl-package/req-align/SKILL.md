@@ -27,9 +27,9 @@ Omitting standalone `decision.md` is legal only after Decision evaluates `PASSED
 
 `decision.md` 按内容价值 earn：新功能、明显体验变化或业务能力变化通常必须创建，因为其 Focused PRD 对后续理解和取舍具有持久价值；已有产品定义下、无需重述用户问题与价值的小型行为修正可以走 lightweight Decision。`contract impact=none` 的实现修复继续复用现有 D/S，不创建或扩写 `decision.md`。是否有独立文件不改变 Decision 步骤与 Gate 必经这一事实。
 
-This skill may append to package `execution-findings.md` when research establishes an important confirmed fact, risk, methodological lesson, or cross-task finding that the package or later attempts can reuse. It is package-local provenance, not a second behavior contract or a temporary todo queue. Keep raw ideas, candidate hypotheses, experiment material, and incomplete investigation notes in an earned-only `investigations/<topic>.md`; never create an empty `investigations/` directory. Investigation content has no authority, runtime state, revision binding, or machine projection. Formal documents may link to it when useful, but `decision.md` and `spec.md` must remain self-contained and investigation files do not maintain backlinks or adoption status.
+This skill may append to package `execution-findings.md` when research establishes an important confirmed fact, risk, methodological lesson, or cross-task finding that the package or later attempts can reuse. It is package-local provenance, not a second behavior contract or a temporary todo queue. Keep raw ideas, candidate hypotheses, experiment material, incomplete investigation notes, and the method, evidence, failed paths, and option comparison used to close a blocking uncertainty in an earned-only `investigations/<topic>.md`; never create an empty `investigations/` directory. Investigation content has no authority, runtime state, revision binding, or machine projection. Formal documents may link to it when useful, but `decision.md` and `spec.md` must remain self-contained and investigation files do not maintain backlinks or adoption status.
 
-当用户点名一份由本次工作拥有的非权威调研文档，并要求“基于它对齐需求”时，该文档已经 earn `investigations/`：建立 package identity 后，把原文件移动为 `investigations/<topic>.md`，保留原始内容并用主题化文件名解决命名冲突，不在旧位置保留副本或迁移说明。随后从中提炼当前决定与行为合同到 `decision.md` / `spec.md`，正式文档只在有助于 provenance 时链接该 investigation。项目级权威知识、跨 package 共享文档、只读或不归本次任务拥有的来源不得移动，继续原位引用；“移动调研文档”不能改变 authority 层级，也不能让正式文档依赖读者通读原始材料。
+req-align 开始前已有、且由当前 package 拥有的非权威调研文档已经 earn `investigations/`：建立 package identity 后，把原文件移动为 `investigations/<topic>.md`，保留原始内容并用主题化文件名解决命名冲突，不在旧位置保留副本或迁移说明。随后从中提炼当前决定与行为合同到 `decision.md` / `spec.md`，正式文档只在有助于 provenance 时链接该 investigation。项目级权威知识、跨 package 共享文档、只读或不归本次任务拥有的来源不得移动，继续原位引用；“移动调研文档”不能改变 authority 层级，也不能让正式文档依赖读者通读原始材料。
 
 ## Package Identity
 
@@ -53,6 +53,14 @@ For an existing package, retain its current directory name as its legacy or time
 
 Use the repository's vocabulary and source-of-truth hierarchy. If durable project knowledge should change, propose the change against the discovered authoritative source and wait for owner approval; never invent a fixed long-lived destination.
 
+## Blocking Decision Uncertainty
+
+Triage every unknown before passing the Decision gate. An unknown is a **blocking decision uncertainty** when a negative, unavailable, or disproving answer would change the selected option, Decision direction, Spec boundary, critical security or data authority, delivery path, or Acceptance Semantics. This is a contract-impacting uncertainty, not an implementation risk or an execution gate: the default Decision result is `BLOCKED`, and neither a passed Decision/Spec nor a plan may be written first and rely on later feasibility verification to settle it.
+
+For each uncertainty, record the question, its `blocking` or `non-blocking` classification, the contract impact if it fails, the evidence required, whether a read-only investigation may proceed directly, and whether Owner authorization is required. A question may be deferred only when evidence proves it cannot affect the contract, or its owner, consequence, defer boundary, and non-blocking effect on Spec are explicit. Recording an owner alone never makes a blocking uncertainty deferrable.
+
+Perform ordinary read-only, task-scoped investigation directly. If investigation needs new external permission, external side effects, material cost, a code spike, environment change, or a material scope expansion, record the reason and required Owner decision in a `BLOCKED` Decision instead of starting it. Put the investigation detail in `investigations/<topic>.md`; record only the conclusion, options, rationale, and blocker or Owner decision in `decision.md`, and only the selected behavior contract in `spec.md`. If investigation changes the direction, return to Decision and re-evaluate the Decision gate before writing or revising Spec or Plan.
+
 ## Gate 1: Decision (Required)
 
 Decision turns the focused product need and repository facts into a decision-ready destination. Use the eight-section Focused PRD + Decision Research structure in the decision template. The analysis and gate judgment always happen before `spec.md` is created. A new feature, material experience change, or business capability change normally earns the file; a passed lightweight correction under an existing product definition may omit it, while a blocked Decision may not.
@@ -63,7 +71,8 @@ The Decision gate passes only when all of these are verifiably true:
 - **Focused need is defined at the right layer:** target user/scenario, current problem and trigger, expected result/value, scope/non-goals, core experience or business flow, and success signals are explicit when the change earns a Focused PRD; a lightweight correction points to the existing product definition and records the minimum delta evidence instead of manufacturing a duplicate PRD.
 - **Repository fit is evidenced:** authority sources and current-state facts have been checked; conflicts and missing knowledge are named.
 - **Choices are decided:** material options and trade-offs have a selected direction and rationale, or an explicit owner decision blocks the gate.
-- **Open Questions are non-blocking for Spec:** every question is resolved, explicitly deferred with owner and consequence, or proven not to affect the contract.
+- **Blocking decision uncertainty is closed:** every material uncertainty has the required feasibility or architecture-fit evidence before the gate passes. It has not been relabeled as a plan execution gate or implementation risk.
+- **Open Questions are non-blocking for Spec:** every remaining question is resolved, or is deferred only with an explicit owner, consequence, defer boundary, and evidence that it cannot affect the contract.
 - **Owner Decisions are durable:** resolved and outstanding decisions are written in `decision.md`, or in `spec.md`'s `Decision Gate Record` when no decision file is earned.
 
 If any criterion fails, create or update `decision.md`, record `Decision Gate: BLOCKED`, the missing evidence, and the owner decision required, and do not create `spec.md` or begin the Spec gate.
@@ -123,13 +132,14 @@ Spec Gate 本身不自动要求 `grill-me-smartly`。只在用户明确要求对
 ## Workflow
 
 1. Announce use of req-align; for a new package assign a topic slug and an immutable date-prefixed package-id, create the package directory, then run `impl_package_state.py --package <path> init --package-id <id>` once so both empty sidecars exist before any D/S registration. For a patch/follow-up identify the owning existing package-id and classify drift against current module knowledge/code; do not reinitialize it from templates.
-2. Discover authoritative project knowledge before detailed clarification. If the user supplied a task-owned non-authoritative research document as the alignment input, move it into the earned-only `investigations/<topic>.md` location after package identity is fixed; leave authoritative/shared/read-only sources in place.
-3. Ask one focused question at a time for unresolved intent, scope, constraints, success criteria, trade-offs, or owner decisions.
-4. Run Focused PRD + Decision Research, classify whether the standalone file is earned, present the focused outcome and selected direction plus blockers, and evaluate the Decision gate before creating `spec.md`.
-5. If Decision is blocked, create or update `decision.md` with provenance, readiness evidence, blockers, and owner decisions; stop without creating `spec.md`.
-6. If Decision passes, persist `decision.md` for a new feature, material experience change, business capability change, or any case where the Focused PRD/choice has durable value. For a small behavior correction under an existing product definition, take the lightweight path: create `spec.md` and write the minimum product-definition pointer, delta provenance, readiness, and owner-decision evidence into its Decision Gate Record. Append reusable confirmed cross-stage findings to an already-needed `execution-findings.md`; place raw investigation material in earned-only topic files under `investigations/` and never create either artifact as empty ceremony. A `contract impact=none` implementation fix does neither.
-7. Synthesize the eight-section `spec.md` only when contract impact requires it, evaluating the conditional evidence-integrity contract only when its signal is present. For a patch, reuse D/S revisions for `contract impact=none` or implementation-only drift without evaluating Spec Gate, rerun only Spec Gate for behavioral contract changes, and rerun Decision then Spec for decision-direction changes. Run `grill-me-smartly` only when the risk-driven criteria above are present or the user asks for it; otherwise evaluate the Spec Gate directly. Stop when the required gate is blocked.
-8. 两道 gate 通过后，对最终 decision/spec 分别运行 `impl_package_state.py --package <path> register-revision ...`，再运行 `refresh-projections`；新 package 的两份空 sidecar 已由步骤 1 的单次 `init` 建立，`register-revision` 继续对缺失 sidecar fail closed，不承担隐式初始化。命令失败时先处理 capture gap/drift，不手改 JSON 或 marker body。artifact 与 sidecar commit 后运行 `validate --committed`，并在 Markdown handoff 报告 D/S revision set 与校验结论。随后把同一份 `spec.md` 交给 `impl-planning`，不创建第二份 spec，也不发布 tracker。
+2. Discover authoritative project knowledge before detailed clarification. Move any pre-existing package-owned non-authoritative investigation into the earned-only `investigations/<topic>.md` location after package identity is fixed; leave authoritative/shared/read-only sources in place.
+3. Run blocking-uncertainty triage: classify each unknown, its failure impact, required evidence, and investigation authority. Perform ordinary read-only investigation directly; if further investigation needs Owner authorization, record `Decision Gate: BLOCKED` and the required decision instead of performing it.
+4. Ask one focused question at a time only for unresolved intent, scope, constraints, success criteria, trade-offs, or Owner decisions that discovery and permitted investigation cannot answer.
+5. Run Focused PRD + Decision Research, archive earned investigation detail, classify whether the standalone file is earned, present the focused outcome and selected direction plus blockers, then re-evaluate the Decision gate before creating `spec.md`. If investigation changes the direction, update Decision rather than silently carrying it into Spec or Plan.
+6. If Decision is blocked, create or update `decision.md` with provenance, readiness evidence, blocking-uncertainty triage, blockers, and Owner decisions; stop without creating `spec.md`.
+7. If Decision passes, persist `decision.md` for a new feature, material experience change, business capability change, or any case where the Focused PRD/choice has durable value. For a small behavior correction under an existing product definition, take the lightweight path: create `spec.md` and write the minimum product-definition pointer, delta provenance, readiness, investigation disposition, and Owner-decision evidence into its Decision Gate Record. Append reusable confirmed cross-stage findings to an already-needed `execution-findings.md`; place raw investigation material in earned-only topic files under `investigations/` and never create either artifact as empty ceremony. A `contract impact=none` implementation fix does neither.
+8. Synthesize the eight-section `spec.md` only when contract impact requires it, evaluating the conditional evidence-integrity contract only when its signal is present. For a patch, reuse D/S revisions for `contract impact=none` or implementation-only drift without evaluating Spec Gate, rerun only Spec Gate for behavioral contract changes, and rerun Decision then Spec for decision-direction changes. Run `grill-me-smartly` only when the risk-driven criteria above are present or the user asks for it; otherwise evaluate the Spec Gate directly. Stop when the required gate is blocked.
+9. 两道 gate 通过后，对最终 decision/spec 分别运行 `impl_package_state.py --package <path> register-revision ...`，再运行 `refresh-projections`；新 package 的两份空 sidecar 已由步骤 1 的单次 `init` 建立，`register-revision` 继续对缺失 sidecar fail closed，不承担隐式初始化。命令失败时先处理 capture gap/drift，不手改 JSON 或 marker body。artifact 与 sidecar commit 后运行 `validate --committed`，并在 Markdown handoff 报告 D/S revision set 与校验结论。随后把同一份 `spec.md` 交给 `impl-planning`，不创建第二份 spec，也不发布 tracker。
 
 ## Alignment Proposal
 
@@ -155,7 +165,13 @@ Before writing artifacts or editing long-lived knowledge, present:
 
 ### Decision Direction
 - Selected option and rationale:
-- Open questions:
+
+### Open Questions / Blocking-Uncertainty Triage
+
+| Question | Classification | Contract impact if unanswered or disproved | Required evidence | Read-only investigation may proceed directly | Owner authorization required |
+| --- | --- | --- | --- | --- | --- |
+
+<!-- Classification is `blocking` or `non-blocking`. A deferred non-blocking row must state its owner, consequence, and defer boundary in the relevant cells or Owner Decisions. -->
 
 ### Proposed Durable Knowledge Changes
 - File / change / reason, or "None"
@@ -164,13 +180,22 @@ Before writing artifacts or editing long-lived knowledge, present:
 - <decision, owner, and blocking effect, or "None">
 
 ### Recommended Next Step
+- Investigate and re-evaluate Decision Gate
 - Persist Decision gate and proceed to Spec
-- Stop for owner decision
+- Stop for Owner decision
 ```
 
 ## User-Facing Output
 
 向 owner 汇报时使用 `talk-to-boss`：用人话说明需求/决策/规格对齐覆盖的功能范围、Decision 与 Spec 分别完成到哪、剩余 owner decision 数量、整体是否可进入实施计划。不要以 slug、revision 或路径开场，也不要把 blocked gate 描述成完成。
+
+Handoff 的展示状态是由现有 Markdown gate facts 和已记录的下游 closure evidence 推导出的文案，不是 schema、sidecar、revision binding 或新的 artifact status。使用一个最具体且真实的状态：
+
+- `Decision blocked: investigation pending`：Decision Gate 为 `BLOCKED`，且 blocker 是尚未完成、允许或等待授权的 investigation。
+- `Decision blocked: owner decision pending`：Decision Gate 为 `BLOCKED`，且 blocker 是 Owner 决定而非 investigation；不要误标为 investigation pending。
+- `Decision passed / ready for Spec`：Decision Gate 为 `PASSED`，但 Spec 尚未创建或尚未通过。
+- `ready for implementation planning`：Decision Gate 与 Spec Gate 均为 `PASSED`，且没有已记录的下游 package-closure evidence gap。
+- `implementation may proceed, package closure evidence pending`：Decision Gate 与 Spec Gate 均为 `PASSED`，且下游已明确记录 implementation、verification、backfill 或 merge 的 package-closure evidence 尚未收口。不得只因尚未检查下游就推断此状态，也不得据此宣称 package closed。
 
 随后附 canonical handoff：topic slug、package-id/path、当前 D/S revision set、binding validation 结论、两道 gate result 与 evidence location、changed files（只在 append 时列 `execution-findings.md`）以及剩余 owner decisions。正文不得要求 owner 打开 JSON；内部 sidecar 路径只可放 machine audit metadata。artifact 写入后不粘贴全文。
 

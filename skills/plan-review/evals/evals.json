@@ -164,10 +164,11 @@
     {
       "id": 14,
       "prompt": "impl-planning 当前步骤明确在 fresh subagent 中选择 `$plan-review mode=bundle-admission`：这是单模块、无外部写入的 plan package，Decision/Spec、Composition 和联合校验均已提供。",
-      "expected_output": "Returns a concise evidence-backed ready verdict without creating a ledger, manifest, receipt, Outside Voice, or Apply authorization.",
+      "expected_output": "Reports the admission configuration and a none trigger scan, then returns a concise evidence-backed ready verdict without creating a ledger, manifest, receipt, extra Outside Voice, or Apply authorization.",
       "files": [],
       "expectations": [
         "Treats the exact impl-planning route as authorized admission mode rather than a semantic implicit invocation.",
+        "Reports Mode=bundle-admission, fresh reviewer, no extra Outside Voice or ledger, and trigger scan none even though the report is non-blocking.",
         "Checks the relevant dimensions and explains why no material signal requires full review.",
         "Returns only ready, full review, revise, or unavailable plus evidence and next action.",
         "Does not create or describe durable review state."
@@ -175,11 +176,12 @@
     },
     {
       "id": 15,
-      "prompt": "impl-planning 当前步骤明确在 fresh subagent 中选择 `$plan-review mode=bundle-admission`：bundle plan 包含外部 mutation、response-lost recovery 和跨服务 contract。",
-      "expected_output": "Returns full review with the triggering material signals and blocks owner approval until the normal plan-review workflow completes.",
+      "prompt": "impl-planning 当前步骤明确在 fresh subagent 中选择 `$plan-review mode=bundle-admission`：bundle plan 包含外部 mutation、response-lost recovery 和跨服务 contract；计划已经写全 recovery、rollback、负向测试和 acceptance oracle，没有当前已知缺口。",
+      "expected_output": "Reports the admission configuration and returns full review because intrinsic high-risk signals remain even when the plan documents complete mitigations, blocking owner approval until the normal plan-review workflow completes.",
       "files": [],
       "expectations": [
         "Does not label the plan ready merely because a plan document exists.",
+        "Treats external mutation, unknown-outcome recovery and cross-service contract as intrinsic escalation signals rather than unresolved-gap counts.",
         "Routes to the normal full plan-review workflow instead of inventing a new manifest or receipt.",
         "Does not let the caller downgrade the verdict to ready."
       ]
@@ -204,6 +206,18 @@
         "Does not simulate an independent review inline.",
         "Does not create a pass-equivalent receipt, manifest, or ledger entry.",
         "Does not allow owner approval without an independent verdict."
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "impl-planning 明确选择 `$plan-review mode=bundle-admission`。上一轮因缺少 acceptance oracle 返回 revise；现在 oracle 已补齐，但计划仍涉及 tenant-scoped RBAC policy 持久化、single-use claim、并发 replay/crash recovery，以及 stub 不能替代 real provider。重新 admission。",
+      "expected_output": "Reports the admission configuration and routes to full review after the blocking omission is repaired because the package still has intrinsic authorization, mutation, replay/recovery and real-boundary signals.",
+      "files": [],
+      "expectations": [
+        "Does not treat a repaired revise finding as evidence that all material signals disappeared.",
+        "Names tenant authorization, persistent mutation, single-use replay or crash recovery, and stub-versus-provider boundary in the trigger scan.",
+        "Returns full review and requires the normal ledgered workflow before owner approval.",
+        "Does not create admission-mode durable state."
       ]
     }
   ]

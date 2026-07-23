@@ -111,6 +111,36 @@
         "Decision rationale does not repeat requirement background",
         "plan.md alone owns implementation decomposition and verification strategy"
       ]
+    },
+    {
+      "id": 9,
+      "name": "blocking-feasibility-is-closed-before-decision-passes",
+      "prompt": "新功能拟复用现有事件总线；但尚不清楚它能否提供所需的 ordering guarantee。若不能，所选架构、delivery path 和验收语义都要改变。仓库中已有只读配置、代码和测试可供检查。请对齐需求并制定计划。",
+      "expected_output": "Treats the ordering question as a blocking decision uncertainty, performs the task-scoped read-only investigation, and keeps Decision BLOCKED until the required feasibility evidence closes it; no Spec or plan is created first to defer the proof.",
+      "files": [],
+      "expectations": [
+        "Records the question as blocking with its contract impact and required evidence",
+        "Performs ordinary read-only repository investigation without turning it into an Owner confirmation queue",
+        "Places detailed method, evidence, failed paths, and option comparison in an earned investigations/<topic>.md only when material exists",
+        "Keeps decision.md to the conclusion, options, rationale, and blocker or Owner decision",
+        "Does not relabel the uncertainty as an execution gate or implementation risk",
+        "Does not create spec.md or an implementation plan before the Decision Gate can pass"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "handoff-status-is-derived-without-schema-change",
+      "prompt": "分别汇报以下 package 状态：A Decision BLOCKED，等待允许的只读 investigation；B Decision PASSED，尚未通过 Spec；C D/S 均 PASSED；D D/S 均 PASSED，但下游已记录 merge evidence pending；E Decision BLOCKED，只等待 Owner 选择。",
+      "expected_output": "Derives accurate Markdown handoff wording from the gate facts and the recorded downstream evidence without adding schema, sidecar, revision-binding, or artifact-status fields.",
+      "files": [],
+      "expectations": [
+        "A reports Decision blocked: investigation pending",
+        "B reports Decision passed / ready for Spec",
+        "C reports ready for implementation planning",
+        "D reports implementation may proceed, package closure evidence pending and does not call the package closed",
+        "E reports Decision blocked: owner decision pending rather than investigation pending",
+        "Does not infer downstream closure pending merely because it has not been checked"
+      ]
     }
   ]
 }

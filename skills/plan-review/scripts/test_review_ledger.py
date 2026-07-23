@@ -181,13 +181,18 @@ class ReviewLedgerTests(unittest.TestCase):
             "用户直接调用 `$plan-review` 时一律走下方既有完整 workflow",
             "admission mode 不创建 ledger、manifest、receipt 或跨 session state",
             "不能把 `full review`、`revise` 或 `unavailable` 降级为 `ready`",
+            "它们描述计划所处理问题的固有风险性质",
+            "必须把 `ready` 升级为 `full review`",
         ]:
             with self.subTest(contract=contract):
                 self.assertIn(contract, skill_text)
         self.assertIn("## Bundle admission：由 `impl-planning` 启动的 fresh reviewer", prompt_text)
+        self.assertIn("Additional Outside Voice=no", prompt_text)
+        self.assertIn("Signal 描述固有风险", prompt_text)
         self.assertIn("## Bundle admission 输出", report_text)
+        self.assertIn("即使不阻塞也不能省略", report_text)
         by_id = {item["id"]: item for item in evals}
-        for eval_id in (14, 15, 16, 17):
+        for eval_id in (14, 15, 16, 17, 18):
             with self.subTest(eval_id=eval_id):
                 self.assertIn(eval_id, by_id)
                 self.assertIn("$plan-review mode=bundle-admission", by_id[eval_id]["prompt"])

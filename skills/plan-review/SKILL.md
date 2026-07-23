@@ -24,14 +24,26 @@ user-invocable: true
 
 当活跃的 `impl-planning` 编排以确切 skill 名称选择 `plan-review`，并明确标注 `mode=bundle-admission` 时，本 skill 执行一次轻量、只读的 admission review。该调用必须运行在相对产出 bundle 的主 session 而言 fresh 的 subagent context；这个 admission reviewer 本身就是独立视角，不再为轻量路径额外启动 Outside Voice 或创建 ledger。用户直接调用 `$plan-review` 时一律走下方既有完整 workflow，不能因为计划看起来简单而自行选择 admission mode。
 
-admission 输入只包含当前 plan、当前 Composition earned 的 Ticket/DAG（若存在）、必要的 Decision/Spec contract、联合校验结论和审查目标；不得附带主 session findings、materiality 结论或期望 verdict。沿本 skill 的工程判断基线快速检查 Scope、Architecture、Code Quality、Tests、Performance 中实际相关的维度，并返回以下唯一 verdict 之一及简短证据：
+admission 输入只包含当前 plan、当前 Composition earned 的 Ticket/DAG（若存在）、必要的 Decision/Spec contract、联合校验结论和审查目标；不得附带主 session findings、materiality 结论或期望 verdict。沿本 skill 的工程判断基线快速检查 Scope、Architecture、Code Quality、Tests、Performance 中实际相关的维度。
 
-- `ready`：未发现 material signal；说明已检查的风险、为何其余维度不适用，以及计划可以进入 owner approval。
-- `full review`：发现 material signal；指出触发信号，停止 admission，由调用方以正常 `plan-review` workflow 取得 `cleared` 结果后再判断 owner approval。
-- `revise`：计划、contract、acceptance oracle、联合校验或 owner decision 不足；指出 owning skill 和最小修订动作。
+每次 admission 在开始和返回 verdict 时都用一行向 owner 报告本轮配置：`Mode=bundle-admission`、独立 reviewer 是否 fresh、额外 Outside Voice/ledger 明确不启用、发现的 full-review escalation signals 及路由结果。该报告是非阻塞的人类可读说明，不创建新 artifact、receipt 或 schema；即使没有 signal 也要明确写 `none`，不能让 owner 从“独立审查”反推实际配置。
+
+以下是 full-review escalation signals。它们描述计划所处理问题的固有风险性质，不是“当前文本仍有缺口”的同义词；即使 plan 已写出 recovery、测试和 acceptance oracle，只要命中任一项仍进入完整 review：
+
+- 跨模块、跨服务、跨系统或外部 contract 变化。
+- 权限、身份、租户/数据范围、资金或会计正确性、外部或持久化 mutation、通知、不可逆或 single-use 动作。
+- 并发、锁、CAS/claim、重复执行、replay、partial success、unknown outcome、crash recovery、迁移或 rollback。
+- 错误路径、operator signal、mutation authority、恢复责任或 acceptance oracle 存在多个合理解释。
+- mock、stub 或静态 fixture 可能遮蔽真实协议、provider、序列化、权限、事务或版本边界。
+
+按以下优先级返回唯一 verdict 及简短、可核验证据：
+
 - `unavailable`：没有 fresh context、输入不可读取或无法形成独立判断；给出具体原因。调用方只能重试、暂停或取消 approval，不能把它改写成 `ready`。
+- `revise`：计划、contract、acceptance oracle、联合校验或 owner decision 不足，导致当前无法有效进入完整审查；指出 owning skill 和最小修订动作。修订后必须重新扫描固有 escalation signals，不能因缺口已修复而默认转成 `ready`。
+- `full review`：存在任一 escalation signal；指出触发信号，停止 admission，由调用方以正常 `plan-review` workflow 取得 `cleared` 结果后再判断 owner approval。
+- `ready`：材料足以判断、没有待修订缺口且 escalation signal 为 `none`；说明已检查的风险、为何其余维度不适用，以及计划可以进入 owner approval。
 
-admission mode 不创建 ledger、manifest、receipt 或跨 session state，也不执行 Apply。主 session 可以基于新事实把 `ready` 升级为 `full review`，但不能把 `full review`、`revise` 或 `unavailable` 降级为 `ready`；owner 也不能以 waiver 伪造独立通过。
+admission mode 不创建 ledger、manifest、receipt 或跨 session state，也不执行 Apply。reviewer 返回后，主 session 必须基于已提供材料做一次保守 escalation scan 并报告结果；若材料中存在上述 signal，必须把 `ready` 升级为 `full review`。主 session 不能把 `full review`、`revise` 或 `unavailable` 降级为 `ready`；owner 也不能以 waiver 伪造独立通过。
 
 ## 工程判断基线
 

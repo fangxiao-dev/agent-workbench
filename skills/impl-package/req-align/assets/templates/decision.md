@@ -58,8 +58,10 @@
 
 ### 开放问题
 
-| 问题 | Owner | 解决方式 / 延后安排 | 对 Spec 的影响 |
-| --- | --- | --- | --- |
+| 问题 | 分类 | 若未证实 / 不成立的合同影响 | 所需证据 | 可直接只读调查 | Owner / 授权或延后边界 |
+| --- | --- | --- | --- | --- |
+
+<!-- 分类只能是 blocking 或 non-blocking。blocking 默认阻塞 Decision Gate；non-blocking 延后必须在最后一列写明 Owner、后果与 defer boundary，并已证明不阻塞 Spec。 -->
 
 ### Decision 门
 
@@ -67,6 +69,7 @@
 - 目标落点可回答：
 - 仓库契合度已有证据：
 - 实质选择已决定：
+- blocking decision uncertainty 已关闭：
 - 开放问题不阻塞 Spec：
 - Owner 决策已记录：
 - 证据 / 剩余 blocker：

@@ -71,6 +71,7 @@
 ## 执行尝试产物交接
 
 - 计划审查交接：仅在 earned bundle 联合校验后由 fresh `plan-review mode=bundle-admission` 填写；未执行审查时不要以 `Pending`、hash 或 receipt 伪造状态。
+- 审查配置 / trigger scan：<Mode、fresh reviewer、额外 Outside Voice/ledger、signals 与路由；非阻塞信息也必须报告>
 - 独立审查结论：
 - 简短理由 / material signal：
 - 下一动作：

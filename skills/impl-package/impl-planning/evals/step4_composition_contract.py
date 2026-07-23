@@ -241,9 +241,19 @@ def main() -> None:
             "full review must clear before approval",
         ),
         (
+            skill,
+            "必须升级为 `full review`",
+            "main session conservatively escalates intrinsic risk",
+        ),
+        (
             template,
             "计划审查交接",
             "human-readable admission handoff",
+        ),
+        (
+            template,
+            "审查配置 / trigger scan",
+            "human-readable admission configuration",
         ),
         (
             plan_review,
@@ -285,7 +295,7 @@ def main() -> None:
         assert_contains(content, needle, label)
 
     plan_review_by_id = {item["id"]: item for item in plan_review_evals}
-    for eval_id in (14, 15, 16, 17):
+    for eval_id in (14, 15, 16, 17, 18):
         if eval_id not in plan_review_by_id:
             raise AssertionError(f"Missing plan-review admission eval {eval_id}")
         assert_contains(
@@ -299,7 +309,7 @@ def main() -> None:
         "fresh plan-review admission",
         "zero-artifact bundle still requires admission",
     )
-    for eval_id in (8, 9):
+    for eval_id in (8, 9, 10):
         if eval_id not in planning_by_id:
             raise AssertionError(f"Missing impl-planning admission eval {eval_id}")
         assert_contains(

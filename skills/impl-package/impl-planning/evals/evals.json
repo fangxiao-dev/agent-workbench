@@ -120,6 +120,19 @@
         "Does not create a second approval ceremony or a receipt schema",
         "Preserves the existing Ticket/DAG joint-validation and owner approval sequence"
       ]
+    },
+    {
+      "id": 10,
+      "name": "main-session-conservatively-escalates-ready",
+      "prompt": "A fresh `$plan-review mode=bundle-admission` reports ready for a joint-valid package. The supplied Decision/Spec/Plan nevertheless show tenant-scoped authorization, persistent policy mutation, single-use claim/replay recovery and a stub-versus-real-provider acceptance boundary. Continue impl-planning.",
+      "expected_output": "Reports the admission configuration and trigger scan, upgrades ready to full review, and blocks owner approval until the normal plan-review workflow returns cleared.",
+      "files": [],
+      "expectations": [
+        "Does not accept the reviewer ready verdict when the supplied bundle contains intrinsic escalation signals",
+        "Explains that documented mitigations do not erase the risk-class trigger",
+        "Routes to normal full plan-review without creating a second approval or canonical state",
+        "Keeps Ticket publication and execution preflight blocked until cleared"
+      ]
     }
   ]
 }

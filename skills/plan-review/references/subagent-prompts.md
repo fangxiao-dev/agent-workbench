@@ -7,7 +7,11 @@
 给 admission reviewer 的输入只包含当前 plan、earned Ticket/DAG（如存在）、必要 Decision/Spec contract、Composition、联合校验结论与以下目标：
 
 ```text
-独立判断这个 bundle plan 能否进入 owner approval。只基于提供的材料检查实际相关的 Scope、Architecture、Code Quality、Tests、Performance 风险；不要修改任何文件，不要推断 owner 的产品意图，也不要把缺失信息补成通过。返回唯一 verdict：ready、full review、revise 或 unavailable；附简短、可核验证据、material signal（如有）和下一动作。full review 表示调用方必须转入正常 plan-review workflow；revise 表示指出 owning skill 的最小修订；unavailable 表示没有独立判断条件，不能当作通过。
+独立判断这个 bundle plan 能否进入 owner approval。只基于提供的材料检查实际相关的 Scope、Architecture、Code Quality、Tests、Performance 风险；不要修改任何文件，不要推断 owner 的产品意图，也不要把缺失信息补成通过。
+
+先报告一行配置：Mode=bundle-admission、Independent reviewer=fresh、Additional Outside Voice=no、Ledger=no。再显式扫描以下 full-review escalation signals：跨模块/服务/系统或外部 contract；权限、身份、租户/数据范围、资金或会计正确性、外部或持久化 mutation、通知、不可逆或 single-use 动作；并发、锁、CAS/claim、重复执行、replay、partial success、unknown outcome、crash recovery、迁移或 rollback；错误路径、operator signal、mutation authority、恢复责任或 acceptance oracle 存在多种合理解释；mock/stub/fixture 可能遮蔽真实协议、provider、序列化、权限、事务或版本边界。Signal 描述固有风险，不因计划已经写出缓解措施而消失。
+
+按 unavailable → revise → full review → ready 的优先级返回唯一 verdict，并附简短、可核验证据、trigger scan 和下一动作。材料不足以有效审查时 revise；修订后仍须重新扫描固有 signal。存在任一 signal 时 full review，即使计划完整；只有没有缺口且 signal=none 时 ready。full review 表示调用方必须转入正常 plan-review workflow；revise 表示指出 owning skill 的最小修订；unavailable 表示没有独立判断条件，不能当作通过。
 ```
 
 不要向它提供主 session findings、预期 verdict、预设 materiality 或 owner 偏好。收到结果后，调用方只能保留 verdict 或把 `ready` 升级为 `full review`，不能反向降级。

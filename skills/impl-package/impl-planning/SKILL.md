@@ -128,7 +128,7 @@ bundle 的派生汇报状态为 `drafting`、`ready-for-review`、`approved`。`
 5. 当 tickets=true 时调用 to-tickets draft 形成完整集合；当 dag=true 时在 Ticket 集合为 Draft 且输入齐备后调用 create-task-dag，形成当前 attempt DAG。
 6. 联合校验 Ticket/DAG 的覆盖、依赖、ownership/contribution、acceptance evidence、gate 边界和 revision binding；校验未通过时保持 `drafting`，修订受影响 artifact 后重跑，不进入单独 Ticket approval。
 7. 交叉检查 bundle 暴露的 contract 缺口；规范性缺口回 req-align，真正改变 plan-owned 语义的过程策略缺口升级 P revision。仅证据、引用、分类或机械顺序投影错误由 owning skill 局部修正。
-8. 联合校验通过后，以确切名称在 fresh subagent 中编排 `$plan-review mode=bundle-admission`。输入仅含当前 plan、earned Ticket/DAG、必要 D/S contract、Composition 与联合校验结论，不发送本 session 的预设 verdict。`ready` 时把结论、简短理由和下一动作写入计划审查交接并请求 owner approval；`full review` 时立即按正常 `$plan-review` workflow 取得 `cleared` 后再决定是否请求 approval；`revise` 时回到对应 owning skill 修订后重新 admission；`unavailable` 时重试、暂停或取消 approval。主 session 可以因新事实把 `ready` 升级为 `full review`，不能把其余三种结论改写成 `ready`，owner 也不能 waiver 无独立结论的 approval。
+8. 联合校验通过后，以确切名称在 fresh subagent 中编排 `$plan-review mode=bundle-admission`。输入仅含当前 plan、earned Ticket/DAG、必要 D/S contract、Composition 与联合校验结论，不发送本 session 的预设 verdict。开始与结果交接都要报告 admission 配置、full-review trigger scan 和实际路由；这是非阻塞的人类说明，不新增状态 artifact。`ready` 返回后，主 session 仍必须按 `plan-review` 的固有 escalation signals 做一次保守扫描：存在跨边界 contract、权限/租户/财务或持久化 mutation、single-use/replay/partial success/recovery、或 mock 遮蔽真实边界等信号时，必须升级为 `full review`。`ready` 且主 session 扫描仍为 none 时，才把结论、简短理由和下一动作写入计划审查交接并请求 owner approval；`full review` 时立即按正常 `$plan-review` workflow 取得 `cleared` 后再决定是否请求 approval；`revise` 时回到对应 owning skill 修订后重新 admission，修订完成不消除固有高风险信号；`unavailable` 时重试、暂停或取消 approval。主 session 不能把其余三种结论改写成 `ready`，owner 也不能 waiver 无独立结论的 approval。
 9. 新 package 必须先运行一次 `init --package-id <id>` 建立两份 current-contract sidecar；只有完成第 8 步且 owner 批准 plan 后，再运行 `register-revision plan <P> --attempt <id> --artifact <plan-path> --evidence <pointer>`（或同一 semantic revision 的 `register-revisions`），以 `plan-contract-v1` 追加 binding、选择 current attempt、seed earned runtime records 并刷新投影。commit 后运行 `validate --committed`。后续 ER append 不升级 P revision；ER 写入前再次 committed validate，此时且无 terminal gate 时 lifecycle 派生为 Active。
 10. 执行期间只 append Execution Record；状态由对应 artifact 维护。
 11. gate evaluation 由 dev-with-track 首次创建 gate.md，并在顶部插入 content-bound entry、链接对应 Execution Record；terminal verdict 使 lifecycle 派生为 Frozen。默认 merge 前，确认该 entry 已 finalized 为 current attempt 的 `pass`；pre-gate integration 只接受 plan 中已存在的 owner authorization，不得事后推定。
@@ -147,6 +147,7 @@ bundle 的派生汇报状态为 `drafting`、`ready-for-review`、`approved`。`
 - Composition 与当前 attempt earned artifacts 一致，无双重状态来源。
 - 当前 Composition earned 的 Ticket/DAG 已组成一个 bundle；联合校验通过后才进入 `ready-for-review`，没有 Ticket-only approval 或 DAG-pending 中间门。
 - `ready-for-review` 后已经由 fresh subagent 执行一次明确编排的 bundle-admission；`ready` 或返回 `cleared` 的完整 plan review 才能请求 owner approval，`full review`、`revise` 与 `unavailable` 都不能被主 session 或 owner 降级为通过。
+- admission 配置与 trigger scan 已向 owner 报告；固有高风险 signal 不因计划已有缓解措施而消失，主 session 已对 reviewer 的 `ready` 执行保守升级检查。
 - bundle approval 绑定当前 Attempt、P revision、完整 artifact 集合和联合校验证据；实质变化会使旧 approval 失效并触发 scoped re-review。
 - plan 无手工 `Status`；Draft/Active/Frozen 与 `Integrated, gate open` 均能从 registry、gate 和 target branch 事实派生。
 - 初始 plan 不链接不存在的 gate.md；首次 gate evaluation 前缺 gate.md 只能表示 open/no-verdict，不是成功或异常 evidence。
