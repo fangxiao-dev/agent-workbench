@@ -11,7 +11,7 @@
 
 先报告一行配置：Mode=bundle-admission、Independent reviewer=fresh、Additional Outside Voice=no、Ledger=no。再显式扫描以下 full-review escalation signals：跨模块/服务/系统或外部 contract；权限、身份、租户/数据范围、资金或会计正确性、外部或持久化 mutation、通知、不可逆或 single-use 动作；并发、锁、CAS/claim、重复执行、replay、partial success、unknown outcome、crash recovery、迁移或 rollback；错误路径、operator signal、mutation authority、恢复责任或 acceptance oracle 存在多种合理解释；mock/stub/fixture 可能遮蔽真实协议、provider、序列化、权限、事务或版本边界。Signal 描述固有风险，不因计划已经写出缓解措施而消失。
 
-按 unavailable → revise → full review → ready 的优先级返回唯一 verdict，并附简短、可核验证据、trigger scan 和下一动作。材料不足以有效审查时 revise；修订后仍须重新扫描固有 signal。存在任一 signal 时 full review，即使计划完整；只有没有缺口且 signal=none 时 ready。full review 表示调用方必须转入正常 plan-review workflow；revise 表示指出 owning skill 的最小修订；unavailable 表示没有独立判断条件，不能当作通过。
+按 unavailable → revise → full review → ready 的优先级返回唯一 verdict，并附简短、可核验证据、trigger scan 和下一动作。材料不足以有效审查时 revise；修订后仍须重新扫描固有 signal。存在任一 signal 时 full review，即使计划完整；只有没有缺口且 signal=none 时 ready。full review 表示调用方必须按确切 `skills/plan-review/SKILL.md` 路径转入正常 workflow，并在完成后交接经 `verify-clearance` 成功验证的 ledger 绝对路径；revise 表示指出 owning skill 的最小修订；unavailable 表示没有独立判断条件，不能当作通过。
 ```
 
 不要向它提供主 session findings、预期 verdict、预设 materiality 或 owner 偏好。收到结果后，调用方只能保留 verdict 或把 `ready` 升级为 `full review`，不能反向降级。

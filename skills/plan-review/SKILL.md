@@ -17,7 +17,8 @@ user-invocable: true
 - 根据风险决定是否启用 Section Reviewer、Answerer、Judge 或 Critic；不要为了角色齐全而创建 agent。
 - 在审查开始时简短报告本轮角色、工具与测试表达形式的选择及理由；后续选择变化时只报告增量，不建立恢复协议。
 - 把产品意图、外部 contract、风险偏好和不可逆选择交给 owner；不得用“recommended”代替授权。
-- 只在 owner 对当前 manifest hash 明确要求 Apply 后写回；manifest、目标基线或相关证据变化时重新确认。
+- owner 对已展示且唯一的候选回复 `apply` 即构成语义授权；脚本在锁内把该消息引用绑定到当前 manifest hash。hash 只作机器审计，候选、目标基线或相关证据变化时旧授权失效。
+- `cleared` 只可由 `finalize-clearance` 写入临时 ledger；调用方在 owner approval、publish 或 plan registration 前必须用同一绝对路径运行 `verify-clearance`，裸文本 verdict 无效。
 - 必读的 reference 或脚本缺失、路径错误或读取失败时立即返回 `BLOCKED`，报告准确路径与工具错误；禁止凭记忆替代、继续生成 findings 或执行 Apply。
 
 ## Bundle-admission mode（仅由明确编排选择）
@@ -40,7 +41,7 @@ admission 输入只包含当前 plan、当前 Composition earned 的 Ticket/DAG�
 
 - `unavailable`：没有 fresh context、输入不可读取或无法形成独立判断；给出具体原因。调用方只能重试、暂停或取消 approval，不能把它改写成 `ready`。
 - `revise`：计划、contract、acceptance oracle、联合校验或 owner decision 不足，导致当前无法有效进入完整审查；指出 owning skill 和最小修订动作。修订后必须重新扫描固有 escalation signals，不能因缺口已修复而默认转成 `ready`。
-- `full review`：存在任一 escalation signal；指出触发信号，停止 admission，由调用方以正常 `plan-review` workflow 取得 `cleared` 结果后再判断 owner approval。
+- `full review`：存在任一 escalation signal；指出触发信号，停止 admission，由调用方按确切 `plan-review` skill 路径启动正常 workflow，取得已 `verify-clearance` 的 ledger 绝对路径后再判断 owner approval。
 - `ready`：材料足以判断、没有待修订缺口且 escalation signal 为 `none`；说明已检查的风险、为何其余维度不适用，以及计划可以进入 owner approval。
 
 admission mode 不创建 ledger、manifest、receipt 或跨 session state，也不执行 Apply。reviewer 返回后，主 session 必须基于已提供材料做一次保守 escalation scan 并报告结果；若材料中存在上述 signal，必须把 `ready` 升级为 `full review`。主 session 不能把 `full review`、`revise` 或 `unavailable` 降级为 `ready`；owner 也不能以 waiver 伪造独立通过。
@@ -48,6 +49,8 @@ admission mode 不创建 ledger、manifest、receipt 或跨 session state，也�
 ## 工程判断基线
 
 Material 指会影响行为、contract、数据、安全、运营、发布或显著工程成本的事项；不得用文件数、类数量、角色数量、阶段数量或 completeness score 代替材料性判断。每个 candidate 和 finding 都沿 `goal → contract → consumer → user/operator outcome → acceptance oracle` 追踪；最小完整变更按实际风险覆盖 success、error、recovery、migration、distribution 和 verification，不适用路径可以说明理由后跳过。
+
+流程顺序是推荐路径，不是额外权限门。纯格式、ID 重命名、machine-owned projection、状态 seed 或经同一候选校验器证明的 mechanical binding 修正不自动触发 full review。AGENT 在拥有等价或更强证据时可以跳过重复 admission/review，并在 handoff 或 Execution Record 说明：跳过了什么、为什么仍安全、使用的证据、残余风险。这个 judgment escape hatch 不能跳过明确 owner 授权、候选/输出漂移检查、完整 baseline/manifest/receipt 证据、未决或 stale/degraded 暴露，也不能把 semantic 或安全边界变化降级为 mechanical change。
 
 以下原则横切 Scope、Architecture、Code Quality、Tests 和 Performance：
 
@@ -64,7 +67,7 @@ Material 指会影响行为、contract、数据、安全、运营、发布或显
 
 读取目标、项目指令、目标明确引用的 design/spec，以及决定当前 contract 所必需的相邻资料。不要遍历与判断无关的背景文档。
 
-从目标仓库根目录先运行 `python <skill-dir>/scripts/review_ledger.py discover --target <path>`。没有 unfinished run 时才运行 `init`；当前会话已持有明确 ledger path 时用 `resume --ledger <ledger.json> --target <path>` 继续。发现一个或多个 unfinished run（`active` 或中断于写入的 `applying`）且当前上下文无法证明应继续哪个时，列出 run ID、状态、创建时间、baseline 是否匹配和未决集合，请 owner 明确选择 resume 或 abandon；`applying` 必须先 resume，由脚本按目标 hash 收敛为 `active`/`applied` 或要求 owner 检查。在所有同目标旧 run 被选择或审计性关闭前不要创建并行 ledger。
+从目标仓库根目录先以 plan 为 discover target 运行 `python <skill-dir>/scripts/review_ledger.py discover --target <plan-path>`。没有 unfinished run 时才运行 `init`；guarded Apply 的唯一 `--target` 永远是可写的 plan。完整 package review 把全部 earned Ticket 路径（集合可传目录）、DAG、联合校验证据和必要 Decision/Spec contract 作为重复 `--baseline` 传入，使它们可被 review 与 applied-evidence 复验、却不成为 Apply 写入对象。当前会话已持有明确 ledger path 时用 `resume --ledger <ledger.json> --target <plan-path>` 继续。发现一个或多个 unfinished run（`active` 或中断于写入的 `applying`）且当前上下文无法证明应继续哪个时，列出 run ID、状态、创建时间、baseline 是否匹配和未决集合，请 owner 明确选择 resume 或 abandon；`applying` 必须先 resume，由脚本按目标 hash 收敛为 `active`/`applied` 或要求 owner 检查。在所有同目标旧 run 被选择或审计性关闭前不要创建并行 ledger。
 
 Owner 明确放弃旧 run 时，使用 `abandon --ledger <ledger.json> --source <abandonment.json>`；该命令只把 run 标为 abandoned、使旧授权失效并保留审计记录，不删除 temp 文件。不要恢复角色编制、问题树、消息往返或隐藏推理，只恢复 ledger 中的 baseline、formal findings、resolution、authorization 和 stale 状态。
 
@@ -120,13 +123,13 @@ Owner 明确放弃旧 run 时，使用 `abandon --ledger <ledger.json> --source 
 
 只有一个决定冻结多个 material branches、会使大量后续结论失效或涉及不可逆 contract 时才 early flush。校验漏答、冲突和因上游选择而失效的下游回答，只重问受影响项。
 
-生成 canonical manifest，包含 run ID、基线、formal findings 的 revision/resolution、未决集合和 degraded 状态。展示简短摘要和 manifest hash；此时尚不写目标 plan。
+生成 canonical manifest，包含 run ID、基线、formal findings 的 revision/resolution、未决集合和 degraded 状态。展示简短语义摘要；脚本可同时运行 `present-candidate --ledger <ledger.json>`，内部记录展示时的 manifest hash，但不要要求 owner 阅读、复制或确认该 hash。若本轮需要向 `impl-planning` 交接通过结果，运行 `finalize-clearance --ledger <ledger.json>`；它只在五维完整、Outside Voice=complete、非 degraded、无 pending/deferred/stale finding 且所有 bundle snapshot 未变化时写入 clearance。随后运行 `verify-clearance --ledger <ledger.json>`，把成功的 ledger 绝对路径作为 runtime handoff；任何失败都只能报告 `not cleared`，不能用聊天文本替代。
 
 完成条件：所有独立分支已检查；owner-required 决定已经回答或明确保持未决；展示内容与当前 manifest hash 一致。
 
 ## 6. Apply
 
-只有用户对展示过的 manifest hash 明确要求 Apply 时，才运行 `authorize` 记录授权。该一次授权同时完成 ratification 与写入许可，不再要求重复确认。
+展示唯一候选后，owner 回复 `apply` 即表示授权；宿主把这条已解析为 `action=apply` 的消息交给 `authorize-contextual`，脚本在锁内绑定其引用与当前 manifest hash。该一次授权同时完成 ratification 与写入许可，不再要求 owner 复制或确认 hash。`authorize --manifest-hash` 仅保留给旧自动化兼容调用。
 
 运行 `verify`：
 
@@ -142,7 +145,7 @@ Owner 明确放弃旧 run 时，使用 `abandon --ledger <ledger.json> --source 
 
 读取 `references/final-report.md`。按 owner 可快速判断的顺序输出：整体 verdict、角色/工具配置、五维材料性、What already exists、NOT in scope、formal findings、测试与 failure modes、待 owner 决策、stale/degraded 状态和 Apply 授权状态。
 
-Review 结束时给出 ledger 的绝对路径供当前用户审计，但不要把 OS-temp 路径写入持久 plan。若仍有未决、stale 或 degraded 状态，明确说明不能称为 cleared。
+Review 结束时给出 ledger 的绝对路径供当前用户审计或下游 runtime handoff，但不要把 OS-temp 路径写入持久 plan。默认调用 `present-candidate` 后等待 owner 回复 `apply`，再用 `authorize-contextual`；带 hash 的 `authorize` 仅为旧自动化兼容。只有 `verify-clearance` 成功的正常 full review 才能报告 `cleared`；若仍有未决、stale 或 degraded 状态，明确说明 `not cleared`。
 
 完成条件：只读最终回复即可判断审查是否 cleared、还缺什么、是否已授权 Apply，以及 owner 下一步需要决定什么。
 
@@ -155,6 +158,11 @@ python <skill-dir>/scripts/review_ledger.py resume --ledger <ledger.json> --targ
 python <skill-dir>/scripts/review_ledger.py abandon --ledger <ledger.json> --source <abandonment.json>
 python <skill-dir>/scripts/review_ledger.py record --ledger <ledger.json> --input <record.json>
 python <skill-dir>/scripts/review_ledger.py status --ledger <ledger.json>
+python <skill-dir>/scripts/review_ledger.py finalize-clearance --ledger <ledger.json>
+python <skill-dir>/scripts/review_ledger.py verify-clearance --ledger <ledger.json>
+python <skill-dir>/scripts/review_ledger.py present-candidate --ledger <ledger.json>
+python <skill-dir>/scripts/review_ledger.py authorize-contextual --ledger <ledger.json> --source <owner-apply-message.json>
+python <skill-dir>/scripts/review_ledger.py verify-applied-evidence --ledger <ledger.json>
 python <skill-dir>/scripts/review_ledger.py authorize --ledger <ledger.json> --manifest-hash <hash> --source <authorization.json>
 python <skill-dir>/scripts/review_ledger.py verify --ledger <ledger.json> [--manifest-hash <hash>] [--apply-output <proposed-plan>]
 ```

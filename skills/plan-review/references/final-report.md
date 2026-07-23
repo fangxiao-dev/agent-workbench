@@ -2,9 +2,9 @@
 
 ## Bundle admission 输出
 
-admission mode 先输出一行本轮配置，再输出 `Admission verdict`、简短证据、已检查或不适用的维度、full-review trigger scan 和下一动作。本轮配置必须明确 `Mode=bundle-admission`、fresh reviewer、额外 Outside Voice/ledger 未启用以及 signal 路由；它只负责让 owner 看见实际审查深度，即使不阻塞也不能省略。`ready` 可以交回 `impl-planning` 请求 owner approval；`full review` 必须转入正常 `plan-review` workflow 并取得 `cleared`；`revise` 回到对应 owning skill；`unavailable` 只能重试、暂停或取消 approval。
+admission mode 先输出一行本轮配置，再输出 `Admission verdict`、简短证据、已检查或不适用的维度、full-review trigger scan 和下一动作。本轮配置必须明确 `Mode=bundle-admission`、fresh reviewer、额外 Outside Voice/ledger 未启用以及 signal 路由；它只负责让 owner 看见实际审查深度，即使不阻塞也不能省略。`ready` 可以交回 `impl-planning` 请求 owner approval；`full review` 必须按确切 `skills/plan-review/SKILL.md` 路径转入正常 workflow，并只交接经 `verify-clearance` 成功验证的 ledger 绝对路径；`revise` 回到对应 owning skill；`unavailable` 只能重试、暂停或取消 approval。
 
-不得为 admission 输出 ledger 路径、manifest hash、receipt、`cleared`、Apply 授权或跨 session 状态。它是当前 approval 前的独立判断，不是新的 canonical artifact。
+不得为 admission 输出 ledger 路径、manifest hash、receipt、`cleared`、Apply 授权或跨 session 状态。它是当前 approval 前的独立判断，不是新的 canonical artifact；只有后续正常 full review 的临时 ledger 可以作为 runtime handoff。
 
 ## Review 输出顺序
 

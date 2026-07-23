@@ -372,6 +372,126 @@ class ReviewLedgerTests(unittest.TestCase):
         self.assertTrue(status["authorized"])
         self.assertEqual(status["pending"], ["ENG-T1"])
 
+    def test_finalize_and_verify_clearance_for_a_complete_full_review(self) -> None:
+        self.materiality()
+        finalized = ledger.finalize_clearance(self.ledger_path)
+        self.assertEqual(finalized["clearance"]["verdict"], "cleared")
+        self.assertFalse(finalized["clearance"]["stale"])
+        verified = ledger.verify_clearance(self.ledger_path)
+        self.assertTrue(verified["ok"])
+        self.assertEqual(verified["clearance_blockers"], [])
+
+    def test_contextual_apply_binds_plain_owner_reply_to_one_unchanged_candidate(self) -> None:
+        self.materiality()
+        ledger.present_candidate(self.ledger_path)
+        source = {**self.owner_source("turn-apply"), "action": "apply"}
+        status = ledger.authorize_contextual(self.ledger_path, source)
+        self.assertTrue(status["authorized"])
+        source = json.loads(self.ledger_path.read_text(encoding="utf-8"))["authorization"]["source"]
+        self.assertEqual(source["reference"], "turn-apply")
+        self.assertEqual(source["manifest_hash"], status["manifest_hash"])
+
+    def test_contextual_apply_rejects_a_message_without_host_verified_apply_intent(self) -> None:
+        self.materiality()
+        ledger.present_candidate(self.ledger_path)
+        with self.assertRaisesRegex(ledger.LedgerError, "action=apply"):
+            ledger.authorize_contextual(self.ledger_path, self.owner_source("turn-not-apply"))
+
+    def test_contextual_apply_fails_when_the_shown_candidate_changed(self) -> None:
+        self.materiality()
+        ledger.present_candidate(self.ledger_path)
+        ledger.record_ledger(
+            self.ledger_path,
+            {"type": "materiality", "dimension": "scope", "status": "reviewed", "reason": "narrowed scope"},
+        )
+        with self.assertRaisesRegex(ledger.LedgerError, "unchanged candidate"):
+            ledger.authorize_contextual(self.ledger_path, {**self.owner_source("turn-apply"), "action": "apply"})
+
+    def test_applied_evidence_reuses_clearance_authorization_and_receipt_without_re_review(self) -> None:
+        self.materiality()
+        ledger.finalize_clearance(self.ledger_path)
+        ledger.present_candidate(self.ledger_path)
+        ledger.authorize_contextual(self.ledger_path, {**self.owner_source("turn-apply"), "action": "apply"})
+        proposed = self.root / "proposed.md"
+        proposed.write_text("# Revised plan\n", encoding="utf-8")
+        ledger.apply_verified_output(self.ledger_path, proposed)
+        verified = ledger.verify_applied_evidence(self.ledger_path)
+        self.assertTrue(verified["ok"])
+        self.target.write_text("# Drifted plan\n", encoding="utf-8")
+        self.assertFalse(ledger.verify_applied_evidence(self.ledger_path)["ok"])
+
+    def test_applied_evidence_rejects_drift_in_a_non_target_bundle_reference(self) -> None:
+        bundle = self.root / "dag.md"
+        bundle.write_text("# DAG\n", encoding="utf-8")
+        self.ledger_path = ledger.init_ledger([str(self.target)], [str(bundle)], temp_root=self.root / "bundle-runtime")
+        self.materiality()
+        ledger.finalize_clearance(self.ledger_path)
+        ledger.present_candidate(self.ledger_path)
+        ledger.authorize_contextual(self.ledger_path, {**self.owner_source("turn-apply"), "action": "apply"})
+        proposed = self.root / "proposed.md"
+        proposed.write_text("# Revised plan\n", encoding="utf-8")
+        ledger.apply_verified_output(self.ledger_path, proposed)
+        bundle.write_text("# Drifted DAG\n", encoding="utf-8")
+        verified = ledger.verify_applied_evidence(self.ledger_path)
+        self.assertFalse(verified["ok"])
+        self.assertTrue(any("review baseline changed" in item for item in verified["applied_evidence_blockers"]))
+
+    def test_finalize_clearance_rejects_degraded_or_pending_review(self) -> None:
+        self.materiality()
+        ledger.record_ledger(
+            self.ledger_path,
+            {
+                "type": "review_state",
+                "outside_voice": "unavailable",
+                "reason": "fresh context is unavailable",
+            },
+        )
+        with self.assertRaisesRegex(ledger.LedgerError, "Outside Voice is not complete"):
+            ledger.finalize_clearance(self.ledger_path)
+
+        pending_ledger = ledger.init_ledger([str(self.target)], temp_root=self.root / "pending-runtime")
+        original_ledger = self.ledger_path
+        self.ledger_path = pending_ledger
+        try:
+            ledger.record_ledger(self.ledger_path, self.finding())
+            self.materiality({"tests": ["ENG-T1"]})
+            with self.assertRaisesRegex(ledger.LedgerError, "unresolved findings"):
+                ledger.finalize_clearance(self.ledger_path)
+        finally:
+            self.ledger_path = original_ledger
+
+    def test_bundle_target_change_stales_clearance(self) -> None:
+        tickets = self.root / "tickets"
+        tickets.mkdir()
+        ticket = tickets / "01-review.md"
+        ticket.write_text("# Ticket\n", encoding="utf-8")
+        self.ledger_path = ledger.init_ledger(
+            [str(self.target), str(tickets)], temp_root=self.root / "bundle-runtime"
+        )
+        self.materiality()
+        ledger.finalize_clearance(self.ledger_path)
+        ticket.write_text("# Changed ticket\n", encoding="utf-8")
+        verified = ledger.verify_clearance(self.ledger_path)
+        self.assertFalse(verified["ok"])
+        self.assertTrue(verified["baseline_stale"])
+        self.assertTrue(verified["clearance"]["stale"])
+        self.assertEqual(verified["clearance"]["stale_reason"], "bundle-baseline-changed")
+        with self.assertRaisesRegex(ledger.LedgerError, "existing clearance is stale"):
+            ledger.finalize_clearance(self.ledger_path)
+
+    def test_evidence_change_stales_clearance(self) -> None:
+        ledger.record_ledger(
+            self.ledger_path,
+            self.finding(resolution={"state": "accepted", "authority": "agent"}),
+        )
+        self.materiality({"tests": ["ENG-T1"]})
+        ledger.finalize_clearance(self.ledger_path)
+        self.evidence_a.write_text("A = 2\n", encoding="utf-8")
+        verified = ledger.verify_clearance(self.ledger_path)
+        self.assertFalse(verified["ok"])
+        self.assertTrue(verified["clearance"]["stale"])
+        self.assertEqual(verified["clearance"]["stale_reason"], "evidence-dependency-changed")
+
     def test_outside_voice_degradation_is_bound_to_manifest(self) -> None:
         self.materiality()
         first_hash = ledger.status_ledger(self.ledger_path)["manifest_hash"]

@@ -57,7 +57,7 @@ Draft is local and non-publishing:
 
 ## Publish Mode
 
-Publish updates the same local ticket files; it does not create external records. It is the final publication step of the plan-decomposition review, not a separate Ticket approval stage. Before changing any status, require `impl-planning` to have completed fresh `$plan-review mode=bundle-admission` with `ready`, or to have completed the normal full plan-review workflow with `cleared` after an admission `full review`; then require one explicit owner approval of the complete earned bundle and validate all of the following:
+Publish updates the same local ticket files; it does not create external records. It is the final publication step of the plan-decomposition review, not a separate Ticket approval stage. Before changing any status, require `impl-planning` to have completed fresh `$plan-review mode=bundle-admission` with `ready`, or, after an admission `full review`, to have passed the normal full workflow's runtime ledger absolute path to publish and successfully run `verify-clearance` immediately before mutation; a plain `cleared` message is invalid. Then require one explicit owner approval of the complete earned bundle and validate all of the following:
 
 1. the current attempt plan declares `Composition: tickets=true, ...` and every draft belongs to that Attempt ID;
 2. every ticket has at least one complete, stable AC with planned evidence or a manual verification owner;

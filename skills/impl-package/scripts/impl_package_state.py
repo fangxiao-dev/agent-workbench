@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import fnmatch
 import hashlib
 import json
@@ -70,7 +71,7 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
         raise RuntimeError("initialState values must belong to their vocabularies")
     documents = config["documents"]
     document_keys = {
-        "compositionPattern", "attemptPattern", "ticketIdPattern", "taskHeadingPattern", "taskBlockPattern",
+        "compositionPattern", "attemptPattern", "ticketIdPattern", "taskIdPattern", "taskHeadingPattern", "taskBlockPattern",
         "taskStatePattern", "taskTableRowPattern", "ticketStatePattern", "dagArtifactPatterns", "ticketArtifactPatterns", "revisionDeclarationPattern",
     }
     if not isinstance(documents, dict) or set(documents) != document_keys:
@@ -79,9 +80,7 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
         "compositionPattern": 2,
         "attemptPattern": 1,
         "ticketIdPattern": 1,
-        "taskHeadingPattern": 1,
         "taskStatePattern": 1,
-        "taskTableRowPattern": 1,
         "ticketStatePattern": 1,
         "revisionDeclarationPattern": 0,
     }
@@ -92,12 +91,23 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
             raise RuntimeError(f"invalid configured regex {key}: {exc}") from exc
         if compiled.groups != expected_groups:
             raise RuntimeError(f"configured regex {key} must expose exactly {expected_groups} capture groups")
-    if "{task_id}" not in documents["taskBlockPattern"]:
-        raise RuntimeError("taskBlockPattern must contain {task_id}")
     try:
+        task_id = re.compile(documents["taskIdPattern"])
+    except (TypeError, re.error) as exc:
+        raise RuntimeError(f"invalid configured regex taskIdPattern: {exc}") from exc
+    if task_id.groups or task_id.fullmatch("T1") is None:
+        raise RuntimeError("taskIdPattern must be a capture-free grammar that accepts T1")
+    for key in ("taskHeadingPattern", "taskTableRowPattern", "taskBlockPattern"):
+        if "{task_id}" not in documents[key]:
+            raise RuntimeError(f"{key} must contain {{task_id}}")
+    try:
+        heading = re.compile(documents["taskHeadingPattern"].format(task_id=documents["taskIdPattern"]))
+        table = re.compile(documents["taskTableRowPattern"].format(task_id=documents["taskIdPattern"]))
         re.compile(documents["taskBlockPattern"].format(task_id="T1"))
     except (TypeError, re.error) as exc:
-        raise RuntimeError(f"invalid configured regex taskBlockPattern: {exc}") from exc
+        raise RuntimeError(f"invalid configured task grammar: {exc}") from exc
+    if heading.groups != 1 or table.groups != 1:
+        raise RuntimeError("configured Task extractors must expose exactly one ID capture group")
     for key in ("dagArtifactPatterns", "ticketArtifactPatterns"):
         if not isinstance(documents[key], list) or not documents[key] or any(not isinstance(value, str) or not value for value in documents[key]):
             raise RuntimeError(f"{key} must contain non-empty glob strings")
@@ -159,9 +169,11 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
 CONFIG = _load_config()
 RUNTIME_STATE = Path(".impl-package/runtime-state.json")
 REVISION_BINDINGS = Path(".impl-package/revision-bindings.json")
+REGISTRATION_JOURNAL = Path(".impl-package/registration-transaction.json")
 TASK_STATES = frozenset(CONFIG["stateVocabulary"]["task"])
 LEGACY_TASK_READ_STATES = frozenset(CONFIG["stateVocabulary"]["legacyTaskRead"])
 TASK_READ_STATES = TASK_STATES | LEGACY_TASK_READ_STATES
+TASK_ID_PATTERN = CONFIG["documents"]["taskIdPattern"]
 TICKET_STATES = frozenset(CONFIG["stateVocabulary"]["ticket"])
 GATE_VERDICTS = frozenset(CONFIG["stateVocabulary"]["gateVerdict"])
 TERMINAL_GATE_VERDICTS = frozenset(CONFIG["stateVocabulary"]["terminalGateVerdict"])
@@ -215,6 +227,23 @@ def _atomic_write_text(path: Path, payload: str) -> None:
     handle, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
         with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp_name, path)
+    except BaseException:
+        try:
+            os.unlink(temp_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _atomic_write_bytes(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(handle, "wb") as stream:
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
@@ -339,14 +368,15 @@ def _attempt_ticket_documents(package: Path, attempt: str, committed: bool = Fal
 
 def _dag_task_ids(dag_text: str) -> tuple[list[str], bool]:
     """Return task IDs from a legacy task-record DAG or the current minimal table."""
-    legacy_ids = re.findall(CONFIG["documents"]["taskHeadingPattern"], dag_text)
+    task_id = CONFIG["documents"]["taskIdPattern"]
+    legacy_ids = re.findall(CONFIG["documents"]["taskHeadingPattern"].format(task_id=task_id), dag_text)
     if legacy_ids:
         if len(legacy_ids) != len(set(legacy_ids)):
             raise StateError("earned DAG has duplicate task records")
         return legacy_ids, True
     runtime_marker = f"<!-- impl-package:projection {CONFIG['projections']['markers']['runtimeState']} begin -->"
     task_graph = dag_text.split(runtime_marker, 1)[0]
-    table_ids = re.findall(CONFIG["documents"]["taskTableRowPattern"], task_graph)
+    table_ids = re.findall(CONFIG["documents"]["taskTableRowPattern"].format(task_id=task_id), task_graph)
     if len(table_ids) != len(set(table_ids)):
         raise StateError("minimal Task DAG table has duplicate task IDs")
     return table_ids, False
@@ -1568,10 +1598,10 @@ def _registration_binding(
     return binding, ({"id": attempt, "plan": artifact, "revision": alias} if kind == "plan" else {"artifact": artifact, "revision": alias})
 
 
-def command_register_revisions(
+def _build_registration_candidate(
     package: Path,
     registrations: list[dict[str, Any]],
-) -> dict[str, Any]:
+) -> tuple[Path, Path, dict[str, Any], dict[str, Any]]:
     if not registrations:
         raise StateError("at least one revision registration is required")
     path, state = _load_revision_state(package)
@@ -1613,13 +1643,152 @@ def command_register_revisions(
         else:
             current[kind] = selection
     runtime_path, runtime_state = _load_runtime_state(package)
-    _seed_earned_records(package, runtime_state, candidate)
+    runtime_candidate = json.loads(json.dumps(runtime_state))
+    _seed_earned_records(package, runtime_candidate, candidate)
     _validate_revision_bindings(package, candidate, committed=False)
-    _atomic_write_json(path, candidate)
-    _atomic_write_json(runtime_path, runtime_state)
-    command_refresh_projections(package)
-    command_validate(package, committed=False)
+    _preflight_candidate_runtime(package, runtime_candidate, candidate)
+    return path, runtime_path, candidate, runtime_candidate
+
+
+def _preflight_candidate_runtime(package: Path, runtime_state: dict[str, Any], revision_state: dict[str, Any]) -> None:
+    """Validate the exact future attempt before any sidecar or projection is written."""
+    selection = revision_state.get("current", {}).get("attempt")
+    if not selection:
+        return
+    attempt = selection["id"]
+    plan_path = _package_artifact(package, selection["plan"])
+    tickets_earned, dag_earned = _composition(plan_path.read_text(encoding="utf-8"))
+    expected_tasks: list[str] = []
+    if dag_earned:
+        dag_relative = _attempt_dag_artifact(package, attempt)
+        if not dag_relative:
+            raise StateError("earned DAG is missing for candidate attempt")
+        dag_text = _package_artifact(package, dag_relative).read_text(encoding="utf-8")
+        expected_tasks, _ = _dag_task_ids(dag_text)
+        if not expected_tasks:
+            raise StateError("earned DAG contains no task records")
+        _replace_projection(dag_text, CONFIG["projections"]["markers"]["runtimeState"], _runtime_projection_body([
+            row for row in runtime_state["tasks"] if row.get("attempt") == attempt
+        ]))
+    ticket_documents = _attempt_ticket_documents(package, attempt) if tickets_earned else {}
+    expected_tickets = list(ticket_documents)
+    _validate_record_set(runtime_state["tasks"], kind="task", attempt=attempt, expected_ids=expected_tasks, allowed_states=TASK_READ_STATES)
+    _validate_record_set(runtime_state["tickets"], kind="ticket", attempt=attempt, expected_ids=expected_tickets, allowed_states=TICKET_STATES)
+    for identifier, (_, text) in ticket_documents.items():
+        row = next(item for item in runtime_state["tickets"] if item.get("attempt") == attempt and item.get("id") == identifier)
+        _replace_projection(text, CONFIG["projections"]["markers"]["runtimeState"], CONFIG["projections"]["runtimeTicket"].format(**row))
+    marker = CONFIG["projections"]["markers"]["revisionSet"]
+    priority = {"decision": 0, "spec": 1, "plan": 2}
+    projection_targets: dict[str, str] = {}
+    for key, kind in (("decision", "decision"), ("spec", "spec"), ("attempt", "plan")):
+        item = revision_state.get("current", {}).get(key)
+        if item:
+            artifact = item.get("artifact") or item.get("plan")
+            projection_targets[artifact] = kind if priority[kind] >= priority.get(projection_targets.get(artifact, kind), 0) else projection_targets[artifact]
+    for artifact, kind in projection_targets.items():
+        _replace_projection(_package_artifact(package, artifact).read_text(encoding="utf-8"), marker, _revision_projection(revision_state, kind))
+
+
+def command_preflight_registration(package: Path, registrations: list[dict[str, Any]]) -> dict[str, Any]:
+    _, _, candidate, runtime_candidate = _build_registration_candidate(package, registrations)
+    attempt = candidate.get("current", {}).get("attempt", {})
+    return {
+        "ok": True,
+        "attempt": attempt.get("id"),
+        "revision": attempt.get("revision"),
+        "taskIds": [row["id"] for row in runtime_candidate["tasks"] if row.get("attempt") == attempt.get("id")],
+        "ticketIds": [row["id"] for row in runtime_candidate["tickets"] if row.get("attempt") == attempt.get("id")],
+    }
+
+
+def _restore_snapshot(snapshot: dict[Path, bytes | None]) -> None:
+    for file_path, original in snapshot.items():
+        if original is None:
+            if file_path.exists():
+                file_path.unlink()
+        else:
+            _atomic_write_bytes(file_path, original)
+
+
+def _journal_snapshot(package: Path, snapshot: dict[Path, bytes | None]) -> None:
+    entries = []
+    for file_path, original in snapshot.items():
+        relative = file_path.resolve().relative_to(package.resolve()).as_posix()
+        entries.append({"path": relative, "content": None if original is None else base64.b64encode(original).decode("ascii")})
+    _atomic_write_json(package / REGISTRATION_JOURNAL, {"version": 1, "files": entries})
+
+
+def _recover_registration_transaction(package: Path) -> bool:
+    journal_path = package / REGISTRATION_JOURNAL
+    if not journal_path.exists():
+        return False
+    try:
+        journal = json.loads(journal_path.read_text(encoding="utf-8"))
+        if set(journal) != {"version", "files"} or journal["version"] != 1 or not isinstance(journal["files"], list):
+            raise StateError("registration recovery journal is invalid")
+        snapshot: dict[Path, bytes | None] = {}
+        for entry in journal["files"]:
+            if not isinstance(entry, dict) or set(entry) != {"path", "content"} or not isinstance(entry["path"], str):
+                raise StateError("registration recovery journal entry is invalid")
+            target = _package_artifact(package, entry["path"])
+            content = entry["content"]
+            snapshot[target] = None if content is None else base64.b64decode(content, validate=True)
+        _restore_snapshot(snapshot)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise StateError(f"registration recovery journal is invalid: {exc}") from exc
+    journal_path.unlink()
+    return True
+
+
+def command_register_revisions(
+    package: Path,
+    registrations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    _recover_registration_transaction(package)
+    path, runtime_path, candidate, runtime_candidate = _build_registration_candidate(package, registrations)
+    snapshot = {path: path.read_bytes(), runtime_path: runtime_path.read_bytes()}
+    for artifact in {row.get("artifact") or row.get("plan") for row in candidate.get("current", {}).values()}:
+        if artifact:
+            artifact_path = _package_artifact(package, artifact)
+            snapshot[artifact_path] = artifact_path.read_bytes()
+    attempt = candidate.get("current", {}).get("attempt", {}).get("id")
+    if attempt:
+        dag_artifact = _attempt_dag_artifact(package, attempt)
+        if dag_artifact:
+            dag_path = _package_artifact(package, dag_artifact)
+            snapshot[dag_path] = dag_path.read_bytes()
+        for ticket_artifact, _ in _attempt_ticket_documents(package, attempt).values():
+            ticket_path = _package_artifact(package, ticket_artifact)
+            snapshot[ticket_path] = ticket_path.read_bytes()
+    gate_path = package / "gate.md"
+    if gate_path.exists():
+        snapshot[gate_path] = gate_path.read_bytes()
+    _journal_snapshot(package, snapshot)
+    try:
+        _atomic_write_json(path, candidate)
+        _atomic_write_json(runtime_path, runtime_candidate)
+        command_refresh_projections(package)
+        command_validate(package, committed=False)
+    except BaseException:
+        _restore_snapshot(snapshot)
+        (package / REGISTRATION_JOURNAL).unlink(missing_ok=True)
+        raise
+    (package / REGISTRATION_JOURNAL).unlink(missing_ok=True)
     return candidate
+
+
+def command_allocate_task_id(package: Path, attempt: str) -> dict[str, Any]:
+    if not isinstance(attempt, str) or not attempt:
+        raise StateError("--attempt is required")
+    dag_artifact = _attempt_dag_artifact(package, attempt)
+    existing: list[str] = []
+    if dag_artifact:
+        existing, _ = _dag_task_ids(_package_artifact(package, dag_artifact).read_text(encoding="utf-8"))
+    numbers = [int(match.group(1)) for identifier in existing if (match := re.fullmatch(r"T(\d+)", identifier))]
+    identifier = f"T{max(numbers, default=0) + 1}"
+    if re.fullmatch(TASK_ID_PATTERN, identifier) is None:
+        raise StateError("configured Task ID grammar cannot allocate the canonical next Task ID")
+    return {"attempt": attempt, "id": identifier, "identity": f"{attempt}:{identifier}"}
 
 
 def command_register_revision(
@@ -1870,6 +2039,14 @@ def build_parser() -> argparse.ArgumentParser:
         batch_register_parser.add_argument(f"--{kind}-artifact", dest=f"{kind}_artifact")
         batch_register_parser.add_argument(f"--{kind}-evidence", dest=f"{kind}_evidence")
     batch_register_parser.add_argument("--attempt")
+    preflight_parser = subparsers.add_parser("preflight-register")
+    for kind in ("decision", "spec", "plan"):
+        preflight_parser.add_argument(f"--{kind}", dest=f"{kind}_alias")
+        preflight_parser.add_argument(f"--{kind}-artifact", dest=f"{kind}_artifact")
+        preflight_parser.add_argument(f"--{kind}-evidence", dest=f"{kind}_evidence")
+    preflight_parser.add_argument("--attempt")
+    allocate_task_parser = subparsers.add_parser("allocate-task-id")
+    allocate_task_parser.add_argument("--attempt", required=True)
     validate_parser = subparsers.add_parser("validate")
     validate_mode = validate_parser.add_mutually_exclusive_group(required=True)
     validate_mode.add_argument("--working-tree", action="store_true")
@@ -1916,6 +2093,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         package = args.package.resolve()
+        if args.command != "contract-status":
+            _recover_registration_transaction(package)
         if args.command == "init":
             result = command_init(package, args.package_id)
         elif args.command == "contract-status":
@@ -1947,6 +2126,23 @@ def main(argv: list[str] | None = None) -> int:
             if args.attempt and not args.plan_alias:
                 raise StateError("--attempt requires --plan")
             result = command_register_revisions(package, registrations)
+        elif args.command == "preflight-register":
+            registrations = []
+            for kind in ("decision", "spec", "plan"):
+                alias = getattr(args, f"{kind}_alias")
+                if alias is None:
+                    if any(getattr(args, f"{kind}_{suffix}") is not None for suffix in ("artifact", "evidence")):
+                        raise StateError(f"--{kind}-artifact/--{kind}-evidence require --{kind}")
+                    continue
+                evidence = getattr(args, f"{kind}_evidence")
+                if not evidence:
+                    raise StateError(f"--{kind}-evidence is required with --{kind}")
+                registrations.append({"kind": kind, "alias": alias, "artifact": getattr(args, f"{kind}_artifact"), "attempt": args.attempt if kind == "plan" else None, "evidence": evidence})
+            if args.attempt and not args.plan_alias:
+                raise StateError("--attempt requires --plan")
+            result = command_preflight_registration(package, registrations)
+        elif args.command == "allocate-task-id":
+            result = command_allocate_task_id(package, args.attempt)
         elif args.command == "validate":
             result = command_validate(package, committed=args.committed)
         elif args.command == "set-state":

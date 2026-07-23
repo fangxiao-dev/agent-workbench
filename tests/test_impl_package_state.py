@@ -793,6 +793,58 @@ class RuntimeStateTransitionTest(unittest.TestCase):
             self.assertEqual(json.loads(state_path.read_text(encoding="utf-8"))["tasks"][0]["state"], "BLOCKED")
 
 
+class CandidateRegistrationTest(unittest.TestCase):
+    def test_preflight_seeds_candidate_uses_allocator_and_leaves_no_partial_state_on_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            repo.mkdir()
+            init_repo(repo)
+            package = repo / "docs/implementations/260723-candidate"
+            package.mkdir(parents=True)
+            (package / "plan.md").write_text(
+                "# Plan\n\n<!-- impl-package:projection revision-set begin -->\n"
+                "决策修订（Decision Revision）：N/A\n规格修订（Spec Revision）：N/A\n计划修订（Plan Revision）：P1\n"
+                "<!-- impl-package:projection revision-set end -->\n\n"
+                "执行组合（Composition）：tickets=false, dag=true\n\n## Execution Record\n\n<!-- append only -->\n",
+                encoding="utf-8",
+            )
+            dag = package / "dag.md"
+            dag.write_text(
+                "# DAG\n\n执行尝试 ID（Attempt ID）：initial\n\n"
+                "| Task | Primary ownership | Known depends on | Contributes to tickets | Known seam / risk |\n"
+                "| --- | --- | --- | --- | --- |\n| T1 | owner | none | none | none |\n\n"
+                "<!-- impl-package:projection runtime-state begin -->\n| 任务 | 状态 | 证据 |\n| --- | --- | --- |\n"
+                "| T1 | PENDING | dag.md#T1 |\n<!-- impl-package:projection runtime-state end -->\n",
+                encoding="utf-8",
+            )
+            run_cli(package, "init", "--package-id", package.name)
+            args = ("--plan", "P1", "--plan-artifact", "plan.md", "--plan-evidence", "plan.md#publication", "--attempt", "initial")
+            preflight = json.loads(run_cli(package, "preflight-register", *args).stdout)
+            self.assertEqual(preflight["taskIds"], ["T1"])
+            self.assertEqual(json.loads(run_cli(package, "allocate-task-id", "--attempt", "initial").stdout)["identity"], "initial:T2")
+            run_cli(package, "register-revisions", *args)
+            self.assertEqual(
+                json.loads((package / ".impl-package/runtime-state.json").read_text(encoding="utf-8"))["tasks"],
+                [{"attempt": "initial", "id": "T1", "state": "PENDING", "evidence": "dag.md#T1"}],
+            )
+            module_spec = importlib.util.spec_from_file_location("impl_package_state_recovery_test", SCRIPT)
+            assert module_spec is not None and module_spec.loader is not None
+            module = importlib.util.module_from_spec(module_spec)
+            module_spec.loader.exec_module(module)
+            state_path = package / ".impl-package/runtime-state.json"
+            original_state = state_path.read_bytes()
+            module._journal_snapshot(package, {state_path: original_state})
+            state_path.write_text("{}\n", encoding="utf-8")
+            run_cli(package, "validate", "--working-tree")
+            self.assertEqual(state_path.read_bytes(), original_state)
+            self.assertFalse((package / ".impl-package/registration-transaction.json").exists())
+            before = (package / ".impl-package/runtime-state.json").read_bytes()
+            dag.write_text(dag.read_text(encoding="utf-8").replace("runtime-state begin", "missing-state begin"), encoding="utf-8")
+            rejected = run_cli(package, "register-revisions", *args, check=False)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertEqual((package / ".impl-package/runtime-state.json").read_bytes(), before)
+
+
 class ArtifactChainTest(unittest.TestCase):
     def test_external_artifacts_are_identified_by_hash_and_updated_append_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

@@ -120,6 +120,18 @@
         "Makes each migration batch depend on expand",
         "Makes contract depend on every migration batch"
       ]
+    },
+    {
+      "id": 11,
+      "name": "full-review-ledger-is-required-at-publish",
+      "prompt": "Publish a full-review-escalated ticket bundle after the caller supplies only a reviewer message saying cleared, with no runtime plan-review ledger path.",
+      "expected_output": "Publish fails before any Draft status changes because only a supplied ledger path with successful verify-clearance can satisfy a full-review admission.",
+      "files": [],
+      "expectations": [
+        "Does not accept the bare cleared text",
+        "Does not create a durable receipt to compensate",
+        "Leaves every ticket Draft"
+      ]
     }
   ]
 }

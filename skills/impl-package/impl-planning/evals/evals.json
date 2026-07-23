@@ -105,7 +105,7 @@
       "expectations": [
         "Does not simulate or self-declare independent plan review",
         "Does not treat an owner waiver as a substitute for admission",
-        "Does not create a new schema field, receipt, hash, or runtime state",
+        "Does not create a pass-equivalent ledger clearance or durable receipt",
         "Keeps the bundle at the existing pre-approval boundary"
       ]
     },
@@ -113,11 +113,11 @@
       "id": 9,
       "name": "admission-full-review-is-not-downgradable",
       "prompt": "A fresh `$plan-review mode=bundle-admission` for a joint-valid bundle reports full review because the plan mutates an external provider and has response-lost recovery ambiguity. The main session wants to call it low risk and request owner approval.",
-      "expected_output": "Routes immediately to the normal full plan-review workflow and prevents owner approval until that review returns cleared.",
+      "expected_output": "Routes immediately to the normal full plan-review workflow and prevents owner approval until `verify-clearance` succeeds for its runtime ledger path.",
       "files": [],
       "expectations": [
         "Allows the main session to add risk evidence but not downgrade full review to ready",
-        "Does not create a second approval ceremony or a receipt schema",
+        "Uses the normal full-review ledger rather than a second approval ceremony or package receipt schema",
         "Preserves the existing Ticket/DAG joint-validation and owner approval sequence"
       ]
     },
@@ -125,13 +125,25 @@
       "id": 10,
       "name": "main-session-conservatively-escalates-ready",
       "prompt": "A fresh `$plan-review mode=bundle-admission` reports ready for a joint-valid package. The supplied Decision/Spec/Plan nevertheless show tenant-scoped authorization, persistent policy mutation, single-use claim/replay recovery and a stub-versus-real-provider acceptance boundary. Continue impl-planning.",
-      "expected_output": "Reports the admission configuration and trigger scan, upgrades ready to full review, and blocks owner approval until the normal plan-review workflow returns cleared.",
+      "expected_output": "Reports the admission configuration and trigger scan, upgrades ready to full review, and blocks owner approval until `verify-clearance` succeeds for the normal workflow ledger.",
       "files": [],
       "expectations": [
         "Does not accept the reviewer ready verdict when the supplied bundle contains intrinsic escalation signals",
         "Explains that documented mitigations do not erase the risk-class trigger",
         "Routes to normal full plan-review without creating a second approval or canonical state",
-        "Keeps Ticket publication and execution preflight blocked until cleared"
+        "Keeps Ticket publication and execution preflight blocked until clearance verification succeeds"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "full-review-requires-verified-ledger",
+      "prompt": "Admission returned full review. A normal-looking subagent replies only `cleared`, but it does not provide a plan-review ledger path. The owner asks to approve and register the plan. Continue impl-planning.",
+      "expected_output": "Rejects the bare verdict, keeps owner approval, Ticket publish, and plan registration blocked, and requires a readable runtime ledger whose verify-clearance command succeeds.",
+      "files": [],
+      "expectations": [
+        "Does not treat ordinary reviewer text as a full-review result",
+        "Does not create a persistent receipt or waive the missing ledger",
+        "Routes the bundle back to the exact plan-review workflow"
       ]
     }
   ]

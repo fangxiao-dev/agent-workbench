@@ -54,3 +54,18 @@ Absence-proof 对有界目录使用 `kind: tree`，使新增、删除或修改�
 ```
 
 `abandon` 只关闭明确绑定的 active run、撤销其 authorization 并保留 ledger；不会删除记录，也不能用于角色或推理状态恢复。`applying` 表示 Apply receipt 已落盘但最终结果尚未收敛，必须先 `resume`：目标仍是 preimage 时回到 `active`，目标等于 proposed output 时收敛为 `applied`，两者都不匹配时停止并要求 owner 检查。
+
+## Full-review Clearance
+
+正常 full review 在所有 materiality、Outside Voice、finding resolution 和 bundle snapshot 已收敛后运行：
+
+```text
+python <skill-dir>/scripts/review_ledger.py finalize-clearance --ledger <ledger.json>
+python <skill-dir>/scripts/review_ledger.py verify-clearance --ledger <ledger.json>
+```
+
+`finalize-clearance` 由脚本写入唯一的 `cleared` 结论，绑定当前 manifest 和完整 baseline（所有 `--target` 与 `--baseline`）。它拒绝缺失五维、Outside Voice 未完成或 degraded、pending/deferred/stale finding 以及任何 stale baseline。`verify-clearance` 每次重新计算快照；成功的 ledger 绝对路径才可在 runtime handoff 中传给 `impl-planning`、Ticket publish 或 plan registration。不要在 Markdown plan 中保存该 OS-temp 路径，也不要用普通 subagent 文本或手写 receipt 替代。
+
+展示候选时，AGENT 可调用 `present-candidate`，脚本只在临时 ledger 中记录当时 hash；owner 看到的是语义摘要，不是 hash。owner 的消息 `apply` 通过 `authorize-contextual` 在锁内绑定其 channel/reference 与唯一、未漂移的 candidate。旧 `authorize --manifest-hash` 继续支持自动化与兼容调用。
+
+Apply 之后不要对已改写 target 重跑 `verify-clearance`。使用 `verify-applied-evidence` 检查 cleared manifest、owner authorization、Apply receipt 和当前 output hash 的组合；任何缺失或 output 漂移均 fail closed，但正常 applied 状态本身不要求重新 full review。

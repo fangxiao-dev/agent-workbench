@@ -70,11 +70,12 @@
 
 ## 执行尝试产物交接
 
-- 计划审查交接：仅在 earned bundle 联合校验后由 fresh `plan-review mode=bundle-admission` 填写；未执行审查时不要以 `Pending`、hash 或 receipt 伪造状态。
-- 审查配置 / trigger scan：<Mode、fresh reviewer、额外 Outside Voice/ledger、signals 与路由；非阻塞信息也必须报告>
-- 独立审查结论：
+- Admission handoff：仅在 earned bundle 联合校验后由 fresh `plan-review mode=bundle-admission` 填写；未执行 admission 时不要以 `Pending`、hash 或 receipt 伪造状态。
+- Admission 配置 / trigger scan：<Mode、fresh reviewer、额外 Outside Voice/ledger、signals 与路由；非阻塞信息也必须报告>
+- Admission verdict：
 - 简短理由 / material signal：
 - 下一动作：
+- Full-review clearance：仅当 Admission=`full review` 时在 runner handoff 中传递临时 ledger 绝对路径；不写入本 plan。owner approval、Ticket publish 与 plan registration 必须现场运行 `verify-clearance`，普通 reviewer 的 `cleared` 文本无效。
 - Ticket 集合：<paths | N/A>
 - DAG：<dag.md or patch-dag path | N/A>
 - 进度账本：<path | N/A until trigger>

@@ -31,6 +31,7 @@ AUTHORITIES = {"agent", "owner"}
 OWNER_GATES = {"required", "not_required"}
 OUTSIDE_VOICE_STATES = {"complete", "unavailable"}
 RUN_STATES = {"active", "applying", "applied", "abandoned"}
+CLEARANCE_VERDICTS = {"cleared"}
 
 
 class LedgerError(ValueError):
@@ -326,6 +327,8 @@ def init_ledger(
         "materiality": {},
         "review_state": {"outside_voice": "pending", "reason": None, "degraded": False},
         "findings": {},
+        "clearance": None,
+        "presentation": None,
         "authorization": None,
         "verification": {"baseline_stale": False},
         "revision": 0,
@@ -494,6 +497,8 @@ def record_ledger(ledger_path: str | os.PathLike[str], record: dict[str, Any]) -
         if changed:
             ledger["revision"] += 1
             ledger["authorization"] = None
+            ledger["presentation"] = None
+            _invalidate_clearance(ledger, "review-state-changed")
             _atomic_write(path, ledger)
         return ledger
 
@@ -565,6 +570,7 @@ def status_ledger(ledger_path: str | os.PathLike[str]) -> dict[str, Any]:
             stale.append(finding_id)
     current_hash = manifest_hash(ledger)
     authorization = ledger.get("authorization")
+    clearance = ledger.get("clearance")
     return {
         "run_id": ledger["run"]["run_id"],
         "run_status": _run_status(ledger),
@@ -580,6 +586,7 @@ def status_ledger(ledger_path: str | os.PathLike[str]) -> dict[str, Any]:
         "baseline_stale": ledger["verification"]["baseline_stale"],
         "apply_backups": list(ledger["run"].get("apply_backups", [])),
         "authorized": bool(authorization and authorization.get("manifest_hash") == current_hash),
+        "clearance": clearance,
     }
 
 
@@ -667,7 +674,237 @@ def _verify_in_place(ledger: dict[str, Any]) -> bool:
     if changed:
         ledger["revision"] += 1
         ledger["authorization"] = None
+        if baseline_stale:
+            _invalidate_clearance(ledger, "bundle-baseline-changed")
+        elif any(finding["stale"] for finding in ledger["findings"].values()):
+            _invalidate_clearance(ledger, "evidence-dependency-changed")
     return changed
+
+
+def _bundle_baseline_hash(ledger: dict[str, Any]) -> str:
+    return _sha256_bytes(_canonical_bytes(ledger["baseline"]))
+
+
+def _invalidate_clearance(ledger: dict[str, Any], reason: str) -> bool:
+    clearance = ledger.get("clearance")
+    if not clearance or clearance.get("stale"):
+        return False
+    clearance["stale"] = True
+    clearance["stale_reason"] = reason
+    return True
+
+
+def _clearance_blockers(ledger: dict[str, Any]) -> list[str]:
+    blockers = []
+    missing = [item for item in DIMENSIONS if item not in ledger["materiality"]]
+    if missing:
+        blockers.append(f"missing materiality: {', '.join(missing)}")
+    else:
+        try:
+            _validate_materiality_consistency(ledger)
+        except LedgerError as exc:
+            blockers.append(str(exc))
+    if ledger["review_state"]["outside_voice"] != "complete":
+        blockers.append("Outside Voice is not complete")
+    if ledger["review_state"]["degraded"]:
+        blockers.append("review is degraded")
+    pending = sorted(
+        finding_id
+        for finding_id, finding in ledger["findings"].items()
+        if finding["resolution"]["state"] in {"pending", "deferred"}
+    )
+    if pending:
+        blockers.append(f"unresolved findings: {', '.join(pending)}")
+    stale = sorted(
+        finding_id for finding_id, finding in ledger["findings"].items() if finding["stale"]
+    )
+    if stale:
+        blockers.append(f"stale findings: {', '.join(stale)}")
+    if ledger["verification"]["baseline_stale"]:
+        blockers.append("bundle baseline is stale")
+    return blockers
+
+
+def finalize_clearance(ledger_path: str | os.PathLike[str]) -> dict[str, Any]:
+    path = Path(ledger_path).resolve()
+    with _ledger_lock(path):
+        ledger = _read_ledger(path)
+        _require_active_run(ledger, "finalize clearance for")
+        changed = _verify_in_place(ledger)
+        blockers = _clearance_blockers(ledger)
+        existing_clearance = ledger.get("clearance")
+        if existing_clearance and existing_clearance.get("stale"):
+            blockers.append(
+                f"existing clearance is stale: {existing_clearance.get('stale_reason')}"
+            )
+        if blockers:
+            if changed:
+                _atomic_write(path, ledger)
+            raise LedgerError(f"cannot finalize clearance: {'; '.join(blockers)}")
+        if existing_clearance and existing_clearance.get("verdict") == "cleared":
+            return status_ledger(path)
+        ledger["revision"] += 1
+        ledger["clearance"] = {
+            "verdict": "cleared",
+            "issued_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "ledger_revision": ledger["revision"],
+            "manifest_hash": manifest_hash(ledger),
+            "bundle_baseline_hash": _bundle_baseline_hash(ledger),
+            "stale": False,
+            "stale_reason": None,
+        }
+        _atomic_write(path, ledger)
+        return status_ledger(path)
+
+
+def verify_clearance(ledger_path: str | os.PathLike[str]) -> dict[str, Any]:
+    path = Path(ledger_path).resolve()
+    with _ledger_lock(path):
+        ledger = _read_ledger(path)
+        _require_active_run(ledger, "verify clearance for")
+        changed = _verify_in_place(ledger)
+        clearance = ledger.get("clearance")
+        blockers = _clearance_blockers(ledger)
+        clearance_changed = False
+        if not clearance:
+            blockers.append("no clearance has been finalized")
+        elif clearance.get("verdict") not in CLEARANCE_VERDICTS:
+            blockers.append("clearance verdict is not cleared")
+        else:
+            if clearance.get("stale"):
+                blockers.append(f"clearance is stale: {clearance.get('stale_reason')}")
+            if clearance.get("manifest_hash") != manifest_hash(ledger):
+                clearance_changed = _invalidate_clearance(ledger, "review-manifest-changed")
+                blockers.append("clearance manifest no longer matches")
+            if clearance.get("bundle_baseline_hash") != _bundle_baseline_hash(ledger):
+                clearance_changed = _invalidate_clearance(ledger, "bundle-baseline-changed") or clearance_changed
+                blockers.append("clearance bundle baseline no longer matches")
+        if changed or clearance_changed:
+            _atomic_write(path, ledger)
+        result = status_ledger(path)
+        result["clearance_blockers"] = blockers
+        result["ok"] = not blockers
+        return result
+
+
+def present_candidate(ledger_path: str | os.PathLike[str]) -> dict[str, Any]:
+    """Seal the manifest shown to an owner without making it an owner-facing hash ritual."""
+    path = Path(ledger_path).resolve()
+    with _ledger_lock(path):
+        ledger = _read_ledger(path)
+        _require_active_run(ledger, "present a candidate from")
+        changed = _verify_in_place(ledger)
+        if changed:
+            ledger["authorization"] = None
+        manifest = manifest_hash(ledger)
+        presentation = {
+            "manifest_hash": manifest,
+            "presented_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        }
+        if ledger.get("presentation") != presentation:
+            ledger["presentation"] = presentation
+            ledger["revision"] += 1
+            _atomic_write(path, ledger)
+        return status_ledger(path)
+
+
+def _authorize_locked(ledger: dict[str, Any], expected_manifest_hash: str, source: dict[str, Any]) -> None:
+    changed = _verify_in_place(ledger)
+    if changed:
+        ledger["presentation"] = None
+    missing = [item for item in DIMENSIONS if item not in ledger["materiality"]]
+    stale = [item["id"] for item in ledger["findings"].values() if item["stale"]]
+    blocking_p0 = [
+        item["id"] for item in ledger["findings"].values()
+        if item["severity"] == "P0" and item["resolution"]["state"] != "accepted"
+    ]
+    owner_required = [
+        item["id"] for item in ledger["findings"].values()
+        if item["owner_gate"] == "required" and item["resolution"]["state"] in {"pending", "deferred"}
+    ]
+    if missing:
+        raise LedgerError(f"cannot authorize before materiality scan: {', '.join(missing)}")
+    _validate_materiality_consistency(ledger)
+    if ledger["review_state"]["outside_voice"] == "pending":
+        raise LedgerError("cannot authorize before Outside Voice completes or is marked unavailable")
+    if ledger["verification"]["baseline_stale"]:
+        raise LedgerError("cannot authorize a stale baseline")
+    if stale:
+        raise LedgerError(f"cannot authorize stale findings: {', '.join(sorted(stale))}")
+    if owner_required:
+        raise LedgerError(f"cannot authorize unresolved owner-gated findings: {', '.join(sorted(owner_required))}")
+    if blocking_p0:
+        raise LedgerError(f"cannot authorize unresolved P0 findings: {', '.join(sorted(blocking_p0))}")
+    current_hash = manifest_hash(ledger)
+    if expected_manifest_hash != current_hash:
+        raise LedgerError("manifest hash does not match current ledger state")
+    normalized_source = _validate_authorization_source(source, current_hash)
+    authorization = {
+        "manifest_hash": current_hash,
+        "actor": "owner",
+        "source": normalized_source,
+        "authorized_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+    }
+    if ledger.get("authorization") != authorization:
+        ledger["authorization"] = authorization
+        ledger["revision"] += 1
+
+
+def authorize_contextual(ledger_path: str | os.PathLike[str], source: dict[str, Any]) -> dict[str, Any]:
+    """Bind an owner's plain `apply` reply to the single unchanged shown candidate."""
+    path = Path(ledger_path).resolve()
+    with _ledger_lock(path):
+        ledger = _read_ledger(path)
+        _require_active_run(ledger, "contextually authorize")
+        if source.get("action") != "apply":
+            raise LedgerError("contextual apply requires host-verified action=apply")
+        presentation = ledger.get("presentation")
+        current_hash = manifest_hash(ledger)
+        if not isinstance(presentation, dict) or presentation.get("manifest_hash") != current_hash:
+            raise LedgerError("contextual apply requires one unchanged candidate already shown to the owner")
+        contextual_source = dict(source)
+        contextual_source["action"] = "apply"
+        contextual_source["manifest_hash"] = current_hash
+        _authorize_locked(ledger, current_hash, contextual_source)
+        _atomic_write(path, ledger)
+        return status_ledger(path)
+
+
+def verify_applied_evidence(ledger_path: str | os.PathLike[str]) -> dict[str, Any]:
+    """Verify immutable review, authorization, receipt, and current output after Apply.
+
+    This deliberately does not re-snapshot the pre-Apply target: Apply is expected to
+    change it. A later divergence from the receipt remains fail-closed.
+    """
+    path = Path(ledger_path).resolve()
+    with _ledger_lock(path):
+        ledger = _read_ledger(path)
+        blockers: list[str] = []
+        if _run_status(ledger) != "applied":
+            blockers.append("review run is not applied")
+        clearance = ledger.get("clearance")
+        authorization = ledger.get("authorization")
+        receipt = ledger["run"].get("apply_receipt")
+        current_hash = manifest_hash(ledger)
+        if not isinstance(clearance, dict) or clearance.get("verdict") != "cleared" or clearance.get("stale"):
+            blockers.append("no current cleared review evidence")
+        elif clearance.get("manifest_hash") != current_hash:
+            blockers.append("clearance manifest no longer matches")
+        if not isinstance(authorization, dict) or authorization.get("manifest_hash") != current_hash:
+            blockers.append("no owner authorization for the cleared manifest")
+        if not isinstance(receipt, dict):
+            blockers.append("applied run has no Apply receipt")
+        else:
+            target = Path(receipt.get("target", ""))
+            if not target.is_file() or _sha256_file(target) != receipt.get("output_sha256"):
+                blockers.append("current target no longer matches the Apply receipt output")
+        for resource in ledger["baseline"]["references"]:
+            if _current_digest(resource) != resource["sha256"]:
+                blockers.append(f"review baseline changed after Apply: {resource['identity']}")
+        result = status_ledger(path)
+        result["applied_evidence_blockers"] = blockers
+        result["ok"] = not blockers
+        return result
 
 
 def resume_ledger(
@@ -769,52 +1006,11 @@ def authorize_ledger(
     ledger_path: str | os.PathLike[str], expected_manifest_hash: str, source: dict[str, Any]
 ) -> dict[str, Any]:
     path = Path(ledger_path).resolve()
-    normalized_source = _validate_authorization_source(source, expected_manifest_hash)
     with _ledger_lock(path):
         ledger = _read_ledger(path)
         _require_active_run(ledger, "authorize")
-        changed = _verify_in_place(ledger)
-        if changed:
-            _atomic_write(path, ledger)
-        missing = [item for item in DIMENSIONS if item not in ledger["materiality"]]
-        stale = [item["id"] for item in ledger["findings"].values() if item["stale"]]
-        blocking_p0 = [
-            item["id"]
-            for item in ledger["findings"].values()
-            if item["severity"] == "P0" and item["resolution"]["state"] != "accepted"
-        ]
-        owner_required = [
-            item["id"]
-            for item in ledger["findings"].values()
-            if item["owner_gate"] == "required" and item["resolution"]["state"] in {"pending", "deferred"}
-        ]
-        if missing:
-            raise LedgerError(f"cannot authorize before materiality scan: {', '.join(missing)}")
-        _validate_materiality_consistency(ledger)
-        if ledger["review_state"]["outside_voice"] == "pending":
-            raise LedgerError("cannot authorize before Outside Voice completes or is marked unavailable")
-        if ledger["verification"]["baseline_stale"]:
-            raise LedgerError("cannot authorize a stale baseline")
-        if stale:
-            raise LedgerError(f"cannot authorize stale findings: {', '.join(sorted(stale))}")
-        if owner_required:
-            raise LedgerError(f"cannot authorize unresolved owner-gated findings: {', '.join(sorted(owner_required))}")
-        if blocking_p0:
-            raise LedgerError(f"cannot authorize unresolved P0 findings: {', '.join(sorted(blocking_p0))}")
-        current_hash = manifest_hash(ledger)
-        if expected_manifest_hash != current_hash:
-            raise LedgerError("manifest hash does not match current ledger state")
-        existing = ledger.get("authorization")
-        authorization = {
-            "manifest_hash": current_hash,
-            "actor": "owner",
-            "source": normalized_source,
-            "authorized_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-        }
-        if not existing or existing.get("manifest_hash") != current_hash or existing.get("source") != normalized_source:
-            ledger["authorization"] = authorization
-            ledger["revision"] += 1
-            _atomic_write(path, ledger)
+        _authorize_locked(ledger, expected_manifest_hash, source)
+        _atomic_write(path, ledger)
         return status_ledger(path)
 
 
@@ -926,6 +1122,22 @@ def _parser() -> argparse.ArgumentParser:
     status = subparsers.add_parser("status")
     status.add_argument("--ledger", required=True)
 
+    finalize_clearance = subparsers.add_parser("finalize-clearance")
+    finalize_clearance.add_argument("--ledger", required=True)
+
+    verify_clearance = subparsers.add_parser("verify-clearance")
+    verify_clearance.add_argument("--ledger", required=True)
+
+    present = subparsers.add_parser("present-candidate")
+    present.add_argument("--ledger", required=True)
+
+    contextual_authorize = subparsers.add_parser("authorize-contextual")
+    contextual_authorize.add_argument("--ledger", required=True)
+    contextual_authorize.add_argument("--source", required=True)
+
+    applied_evidence = subparsers.add_parser("verify-applied-evidence")
+    applied_evidence.add_argument("--ledger", required=True)
+
     authorize = subparsers.add_parser("authorize")
     authorize.add_argument("--ledger", required=True)
     authorize.add_argument("--manifest-hash", required=True)
@@ -965,6 +1177,16 @@ def main(argv: list[str] | None = None) -> int:
             output = status_ledger(args.ledger)
         elif args.command == "status":
             output = status_ledger(args.ledger)
+        elif args.command == "finalize-clearance":
+            output = finalize_clearance(args.ledger)
+        elif args.command == "verify-clearance":
+            output = verify_clearance(args.ledger)
+        elif args.command == "present-candidate":
+            output = present_candidate(args.ledger)
+        elif args.command == "authorize-contextual":
+            output = authorize_contextual(args.ledger, _load_json_argument(args.source))
+        elif args.command == "verify-applied-evidence":
+            output = verify_applied_evidence(args.ledger)
         elif args.command == "authorize":
             output = authorize_ledger(args.ledger, args.manifest_hash, _load_json_argument(args.source))
         elif args.command == "verify" and args.apply_output:
@@ -972,7 +1194,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             output = verify_ledger(args.ledger, args.manifest_hash)
         print(json.dumps(output, ensure_ascii=False, sort_keys=True))
-        return 0 if args.command != "verify" or output.get("applied") or output["ok"] else 1
+        verification_commands = {"verify", "verify-clearance", "verify-applied-evidence"}
+        return 0 if args.command not in verification_commands or output.get("applied") or output["ok"] else 1
     except (LedgerError, OSError, json.JSONDecodeError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 2

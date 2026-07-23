@@ -237,8 +237,8 @@ def main() -> None:
         ),
         (
             skill,
-            "取得 `cleared` 后再决定是否请求 approval",
-            "full review must clear before approval",
+            "verify-clearance",
+            "full review must verify clearance before approval",
         ),
         (
             skill,
@@ -247,12 +247,12 @@ def main() -> None:
         ),
         (
             template,
-            "计划审查交接",
+            "Admission handoff",
             "human-readable admission handoff",
         ),
         (
             template,
-            "审查配置 / trigger scan",
+            "Admission 配置 / trigger scan",
             "human-readable admission configuration",
         ),
         (
@@ -272,7 +272,7 @@ def main() -> None:
         ),
         (
             to_tickets,
-            "require `impl-planning` to have completed fresh `$plan-review mode=bundle-admission`",
+            "runtime ledger absolute path",
             "ticket publication requires admission",
         ),
         (

@@ -182,7 +182,7 @@
       "expectations": [
         "Does not label the plan ready merely because a plan document exists.",
         "Treats external mutation, unknown-outcome recovery and cross-service contract as intrinsic escalation signals rather than unresolved-gap counts.",
-        "Routes to the normal full plan-review workflow instead of inventing a new manifest or receipt.",
+        "Routes to the normal full plan-review workflow, whose temporary ledger must later be finalized and verified for clearance.",
         "Does not let the caller downgrade the verdict to ready."
       ]
     },
@@ -218,6 +218,17 @@
         "Names tenant authorization, persistent mutation, single-use replay or crash recovery, and stub-versus-provider boundary in the trigger scan.",
         "Returns full review and requires the normal ledgered workflow before owner approval.",
         "Does not create admission-mode durable state."
+      ]
+    },
+    {
+      "id": 19,
+      "prompt": "impl-planning 已因 external mutation 将 bundle admission 升级为 full review。正常 `$plan-review` 已以 plan、Tickets、DAG、joint-validation evidence 为 targets，并以 Decision/Spec 为 baselines 完成审查；现在交接 ledger 给 owner approval。",
+      "expected_output": "Finalizes clearance only when all five dimensions, a complete Outside Voice, fresh bundle snapshots, and resolved findings permit it, then reports a verify-clearance-successful ledger absolute path as the only pass credential.",
+      "files": [],
+      "expectations": [
+        "Uses repeated targets to bind the complete bundle rather than only plan.md",
+        "Does not treat a chat verdict as clearance",
+        "Reports not cleared when any target or baseline becomes stale"
       ]
     }
   ]
