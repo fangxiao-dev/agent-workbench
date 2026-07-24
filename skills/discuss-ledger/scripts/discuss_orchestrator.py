@@ -11,12 +11,17 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 from typing import Any
 
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 SRC = SKILL_DIR / "src"
 SCHEMA_PATH = SKILL_DIR / "schemas" / "agent-result.schema.json"
+LEDGER_PARTICIPANT_PROMPT_PATH = SKILL_DIR / "references" / "ledger-participant-prompt.md"
+CALL_CODEX = SKILL_DIR.parent / "call-codex" / "scripts" / "call_codex.py"
+CALL_CLAUDE = SKILL_DIR.parent / "call-claude" / "scripts" / "call_claude.py"
+CALL_GROK = SKILL_DIR.parent / "call-grok" / "scripts" / "grok_task.py"
 CLAUDE_AGENT_RESULT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
@@ -68,7 +73,7 @@ if str(SRC) not in sys.path:
 from discuss_ledger_core import ledger
 
 
-SUPPORTED_AGENTS = {"codex", "claude"}
+SUPPORTED_AGENTS = {"codex", "claude", "grok"}
 
 
 class AdapterError(RuntimeError):
@@ -82,7 +87,7 @@ def parse_agents(value: str) -> list[str]:
     agents = [part.strip().lower() for part in value.split(",") if part.strip()]
     unsupported = [agent for agent in agents if agent not in SUPPORTED_AGENTS]
     if unsupported:
-        raise ValueError(f"unsupported agents: {', '.join(unsupported)}; supported: codex, claude")
+        raise ValueError(f"unsupported agents: {', '.join(unsupported)}; supported: codex, claude, grok")
     if not agents:
         raise ValueError("at least one agent is required")
     return agents
@@ -202,19 +207,6 @@ def extract_agent_result_from_text(output: str) -> dict[str, Any] | None:
     return None
 
 
-def extract_claude_result_text(output: str) -> str | None:
-    try:
-        parsed = json.loads(output.strip())
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    result = parsed.get("result")
-    if isinstance(result, str) and result.strip():
-        return result
-    return None
-
-
 def normalize_result(data: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     normalized: dict[str, list[dict[str, Any]]] = {}
     allowed_top = {"convergences", "contests", "new_points"}
@@ -299,32 +291,6 @@ Return corrected JSON only.
 """
 
 
-def classify_process_error(command: str, returncode: int, stdout: str, stderr: str) -> AdapterError:
-    combined = f"{stdout}\n{stderr}".lower()
-    if "permission denied" in combined or "not allowed" in combined:
-        return AdapterError("PERMISSION", f"{command} could not access the requested project or files")
-    if "auth" in combined or "login" in combined or "not authenticated" in combined:
-        return AdapterError("AUTH", f"{command} requires CLI login/authentication")
-    return AdapterError("AGENT_FAILED", f"{command} exited with code {returncode}: {stderr.strip() or stdout.strip()}")
-
-
-def is_claude_structured_output_retry_error(stdout: str, stderr: str) -> bool:
-    combined = f"{stdout}\n{stderr}".lower()
-    return (
-        "error_max_structured_output_retries" in combined
-        or "failed to provide valid structured output" in combined
-    )
-
-
-def is_codex_user_config_error(stdout: str, stderr: str) -> bool:
-    combined = f"{stdout}\n{stderr}".lower()
-    return (
-        "error loading config.toml" in combined
-        and "service_tier" in combined
-        and "unknown variant" in combined
-    )
-
-
 def read_target_document(root: Path, topic: str) -> str:
     topic_path = Path(topic)
     candidate = topic_path if topic_path.is_absolute() else root / topic
@@ -371,41 +337,20 @@ def build_prompt(agent: str, topic: str, target_document: str, status: ledger.Le
         open_points = "- (none)"
     legal_ids = ", ".join(open_point_ids) if open_point_ids else "(none)"
     convergence = "\n".join(f"- {item}" for item in status.convergence) if status.convergence else "- (none)"
-    schema = SCHEMA_PATH.read_text(encoding="utf-8")
-    return f"""You are {agent} participating in a discuss-ledger review.
-
-Topic: {topic}
-
-Target document:
-{target_document}
-
-Return only JSON matching this schema:
-{schema}
-
-Language:
-- Prefer Chinese for summaries, arguments, and convergence lines.
-- Use another language only when the user or target document explicitly requires it, or when preserving a technical term avoids ambiguity.
-
-Interpret the fields as:
-- convergences: points you now agree are settled
-- contests: existing points you still dispute
-- new_points: materially new disagreements
-
-Ledger state rules:
-- Current legal open point IDs for convergences/contests: {legal_ids}
-- convergences[].point and contests[].point may reference only those legal open point IDs.
-- If the legal open point list is empty, return convergences=[] and contests=[]; use new_points to start the discussion.
-- Converged points are context only. If new evidence undermines a converged point, create a new tracked issue in new_points instead of contesting the old point.
-
-Open points:
-{open_points}
-
-Converged context:
-{convergence}
-
-Current ledger markdown:
-{status.markdown}
-"""
+    replacements = {
+        "{{AGENT}}": agent,
+        "{{TOPIC}}": topic,
+        "{{TARGET_DOCUMENT}}": target_document,
+        "{{SCHEMA}}": SCHEMA_PATH.read_text(encoding="utf-8"),
+        "{{LEGAL_IDS}}": legal_ids,
+        "{{OPEN_POINTS}}": open_points,
+        "{{CONVERGENCE}}": convergence,
+        "{{LEDGER_MARKDOWN}}": status.markdown,
+    }
+    prompt = LEDGER_PARTICIPANT_PROMPT_PATH.read_text(encoding="utf-8")
+    for placeholder, value in replacements.items():
+        prompt = prompt.replace(placeholder, value)
+    return prompt
 
 
 def run_process(
@@ -473,93 +418,78 @@ def terminate_process_tree(pid: int) -> None:
                 pass
 
 
-def build_codex_command(root: Path, *, ignore_user_config: bool = False) -> list[str]:
-    command = [
-        "codex",
-        "exec",
-        "-c",
-        'service_tier="fast"',
-        "--json",
-        "--ephemeral",
-        "--output-schema",
-        str(SCHEMA_PATH),
-        "--sandbox",
-        "read-only",
-        "--cd",
-        str(root),
-        "-",
-    ]
-    if ignore_user_config:
-        command.insert(2, "--ignore-user-config")
-    return command
+def run_executor(script: Path, arguments: list[str], prompt: str, root: Path, timeout_s: int) -> str:
+    if not script.is_file():
+        raise AdapterError("EXECUTOR_NOT_FOUND", f"executor not found: {script}")
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".prompt", delete=False) as handle:
+        handle.write(prompt)
+        prompt_path = Path(handle.name)
+    try:
+        command = [sys.executable, str(script), "--cwd", str(root), "--prompt-file", str(prompt_path), *arguments]
+        completed = run_process(command, timeout_s=timeout_s + 30, cwd=root)
+    finally:
+        prompt_path.unlink(missing_ok=True)
+    try:
+        envelope = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise AdapterError("INVALID_EXECUTOR_OUTPUT", f"{script.name} did not return a JSON envelope") from exc
+    if not isinstance(envelope, dict):
+        raise AdapterError("INVALID_EXECUTOR_OUTPUT", f"{script.name} returned a non-object envelope")
+    if completed.returncode != 0 or not envelope.get("ok"):
+        error = envelope.get("error") if isinstance(envelope.get("error"), dict) else {}
+        code = error.get("code") if isinstance(error.get("code"), str) else "AGENT_FAILED"
+        message = error.get("message") if isinstance(error.get("message"), str) else completed.stderr.strip()
+        raise AdapterError(code, message or f"{script.name} failed")
+    text = envelope.get("text")
+    if not isinstance(text, str) or not text.strip():
+        raise AdapterError("INVALID_EXECUTOR_OUTPUT", f"{script.name} returned no final text")
+    return text
 
 
 def run_codex(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
-    command = build_codex_command(root)
-    completed = run_process(command, stdin=prompt, timeout_s=timeout_s, cwd=root)
-    if completed.returncode != 0:
-        if is_codex_user_config_error(completed.stdout, completed.stderr):
-            retry_command = build_codex_command(root, ignore_user_config=True)
-            retry = run_process(retry_command, stdin=prompt, timeout_s=timeout_s, cwd=root)
-            if retry.returncode == 0:
-                print(
-                    "WARN: codex user config failed to load; retried with --ignore-user-config.",
-                    file=sys.stderr,
-                )
-                return parse_codex_jsonl(retry.stdout)
-            raise classify_process_error("codex", retry.returncode, retry.stdout, retry.stderr)
-        raise classify_process_error("codex", completed.returncode, completed.stdout, completed.stderr)
-    return parse_codex_jsonl(completed.stdout)
-
-
-def build_claude_command(schema_json: str | None = None) -> list[str]:
-    command = [
-        "claude",
-        "-p",
-        "--no-session-persistence",
-        "--effort",
-        "low",
-        "--disable-slash-commands",
-        "--tools",
-        "",
-        "--system-prompt",
-        "You are a non-interactive discuss-ledger participant. Prefer Chinese unless the task explicitly requires another language. Return only the requested structured result.",
-        "--output-format",
-        "json",
-    ]
-    if schema_json is not None:
-        command.extend(["--json-schema", schema_json])
-    return command
+    text = run_executor(
+        CALL_CODEX,
+        [
+            "--config",
+            'service_tier="fast"',
+            "--sandbox",
+            "read-only",
+            "--ephemeral",
+            "--output-schema",
+            str(SCHEMA_PATH),
+        ],
+        prompt,
+        root,
+        timeout_s,
+    )
+    return parse_json_object(text)
 
 
 def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
     schema_json = json.dumps(CLAUDE_AGENT_RESULT_SCHEMA, ensure_ascii=False, separators=(",", ":"))
-    command = build_claude_command(schema_json)
-    completed = run_process(command, stdin=prompt, timeout_s=timeout_s, cwd=root)
-    if completed.returncode != 0:
-        if is_claude_structured_output_retry_error(completed.stdout, completed.stderr):
-            fallback_prompt = (
-                f"{prompt}\n\n"
-                "The structured-output mode failed. Return exactly one JSON object as plain text now. "
-                "Do not use tools, markdown, explanations, or wrapper objects. "
-                "The object must have only these top-level keys: convergences, contests, new_points."
-            )
-            retry = run_process(build_claude_command(None), stdin=fallback_prompt, timeout_s=timeout_s, cwd=root)
-            if retry.returncode == 0:
-                result = extract_agent_result_from_text(retry.stdout)
-                if result is not None:
-                    print(
-                        "WARN: claude structured output failed; parsed plain JSON fallback.",
-                        file=sys.stderr,
-                    )
-                    return result
-            raise classify_process_error("claude", retry.returncode, retry.stdout, retry.stderr)
-        raise classify_process_error("claude", completed.returncode, completed.stdout, completed.stderr)
-    result = extract_agent_result_from_text(completed.stdout)
+    text = run_executor(
+        CALL_CLAUDE,
+        [
+            "--no-session-persistence",
+            "--disable-slash-commands",
+            "--effort",
+            "low",
+            "--tools",
+            "",
+            "--system-prompt",
+            "You are a non-interactive discuss-ledger participant. Prefer Chinese unless the task explicitly requires another language. Return only the requested structured result.",
+            "--json-schema",
+            schema_json,
+        ],
+        prompt,
+        root,
+        timeout_s,
+    )
+    result = extract_agent_result_from_text(text)
     if result is not None:
         return result
 
-    invalid_output = extract_claude_result_text(completed.stdout) or completed.stdout
+    invalid_output = text
     repair_prompt = (
         "Repair the following Claude result text into one JSON object matching the discuss-ledger schema. "
         "Return only the repaired agent result object, not the Claude CLI wrapper, not markdown. "
@@ -568,13 +498,48 @@ def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
         f"Schema:\n{schema_json}\n\n"
         f"Invalid Claude result text:\n{invalid_output}"
     )
-    retry = run_process(command, stdin=repair_prompt, timeout_s=timeout_s, cwd=root)
-    if retry.returncode != 0:
-        raise classify_process_error("claude", retry.returncode, retry.stdout, retry.stderr)
-    result = extract_agent_result_from_text(retry.stdout)
+    retry_text = run_executor(
+        CALL_CLAUDE,
+        [
+            "--no-session-persistence",
+            "--disable-slash-commands",
+            "--effort",
+            "low",
+            "--tools",
+            "",
+            "--system-prompt",
+            "You are a non-interactive discuss-ledger participant. Prefer Chinese unless the task explicitly requires another language. Return only the requested structured result.",
+        ],
+        repair_prompt,
+        root,
+        timeout_s,
+    )
+    result = extract_agent_result_from_text(retry_text)
     if result is not None:
         return result
     raise AdapterError("INVALID_JSON", "Claude did not return a valid agent result after repair")
+
+
+def run_grok(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
+    text = run_executor(
+        CALL_GROK,
+        [
+            "--effort",
+            "low",
+            "--tools",
+            "",
+            "--no-subagents",
+            "--overall-timeout-sec",
+            str(timeout_s),
+        ],
+        prompt,
+        root,
+        timeout_s,
+    )
+    result = extract_agent_result_from_text(text)
+    if result is None:
+        raise AdapterError("INVALID_JSON", "Grok did not return a valid agent result")
+    return result
 
 
 def run_fake(agent: str, status: ledger.LedgerStatus) -> dict[str, Any]:
@@ -612,6 +577,8 @@ def call_agent(agent: str, prompt: str, root: Path, status: ledger.LedgerStatus,
         return run_codex(prompt, root, timeout_s)
     if agent == "claude":
         return run_claude(prompt, root, timeout_s)
+    if agent == "grok":
+        return run_grok(prompt, root, timeout_s)
     raise AdapterError("UNSUPPORTED_AGENT", agent)
 
 
@@ -633,47 +600,52 @@ def orchestrate(
     timeout_s: int,
 ) -> int:
     ensure_ledger(root, topic, slug, agents)
-    turn_count = 0
-    agent_index = 0
-    while turn_count < max_rounds:
-        status = ledger.get_status(root=root, slug=slug)
-        if status.frontmatter.get("status") in (ledger.STATUS_AGREED, ledger.STATUS_DEADLOCK):
-            print(f"EXIT: {status.frontmatter.get('status')}")
-            return 0
-        agent = agents[agent_index % len(agents)]
-        ledger.set_next(root=root, slug=slug, next_agent=agent)
-        status = ledger.get_status(root=root, slug=slug)
-        target_document = read_target_document(root, topic)
-        prompt = build_prompt(agent, topic, target_document, status)
-        payload = normalize_result(call_agent(agent, prompt, root, status, fake, timeout_s))
-        try:
-            validate_turn_against_ledger(status, payload)
-        except AdapterError as exc:
-            if exc.code != "INVALID_TURN":
-                raise
-            correction_prompt = build_turn_correction_prompt(prompt, status, exc)
-            payload = normalize_result(call_agent(agent, correction_prompt, root, status, fake, timeout_s))
-            validate_turn_against_ledger(status, payload)
-        try:
-            result = ledger.record_agent_turn(
-                root=root,
-                slug=slug,
-                author=agent,
-                convergences=payload["convergences"],
-                contests=payload["contests"],
-                new_points=payload["new_points"],
-                end_turn_after=True,
-            )
-        except (SystemExit, ValueError) as exc:
-            raise AdapterError("INVALID_TURN", str(exc)) from exc
-        print(result.message, end="")
-        turn_count += 1
-        agent_index += 1
-        status = ledger.get_status(root=root, slug=slug)
-        if status.frontmatter.get("status") in (ledger.STATUS_AGREED, ledger.STATUS_DEADLOCK):
-            print(f"EXIT: {status.frontmatter.get('status')}")
-            return 0
-    print(f"STOP: max rounds reached ({max_rounds})")
+    for _round_index in range(max_rounds):
+        for agent_index, agent in enumerate(agents):
+            status = ledger.get_status(root=root, slug=slug)
+            if status.frontmatter.get("status") in (ledger.STATUS_AGREED, ledger.STATUS_DEADLOCK):
+                print(f"EXIT: {status.frontmatter.get('status')}")
+                return 0
+            ledger.set_next(root=root, slug=slug, next_agent=agent)
+            status = ledger.get_status(root=root, slug=slug)
+            target_document = read_target_document(root, topic)
+            prompt = build_prompt(agent, topic, target_document, status)
+            payload = normalize_result(call_agent(agent, prompt, root, status, fake, timeout_s))
+            try:
+                validate_turn_against_ledger(status, payload)
+            except AdapterError as exc:
+                if exc.code != "INVALID_TURN":
+                    raise
+                correction_prompt = build_turn_correction_prompt(prompt, status, exc)
+                payload = normalize_result(call_agent(agent, correction_prompt, root, status, fake, timeout_s))
+                validate_turn_against_ledger(status, payload)
+            try:
+                result = ledger.record_agent_turn(
+                    root=root,
+                    slug=slug,
+                    author=agent,
+                    convergences=payload["convergences"],
+                    contests=payload["contests"],
+                    new_points=payload["new_points"],
+                    end_turn_after=False,
+                )
+            except (SystemExit, ValueError) as exc:
+                raise AdapterError("INVALID_TURN", str(exc)) from exc
+            print(result.message, end="")
+
+            status = ledger.get_status(root=root, slug=slug)
+            end_round = agent_index == len(agents) - 1 or not status.open_points
+            if not end_round:
+                continue
+            result = ledger.end_turn(root=root, slug=slug)
+            print(result.message, end="")
+            status = ledger.get_status(root=root, slug=slug)
+            if status.frontmatter.get("status") in (ledger.STATUS_AGREED, ledger.STATUS_DEADLOCK):
+                print(f"EXIT: {status.frontmatter.get('status')}")
+                return 0
+            if agent_index != len(agents) - 1:
+                break
+    print(f"STOP: max rounds reached ({max_rounds} full participant cycles)")
     return 0
 
 
@@ -682,8 +654,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", default=os.getcwd(), help="target project root")
     parser.add_argument("--topic", required=True, help="discussion topic or source document")
     parser.add_argument("--slug", help="ledger slug; defaults to topic-derived slug")
-    parser.add_argument("--agents", default="codex,claude", help="comma list limited to codex,claude")
-    parser.add_argument("--max-rounds", type=int, default=5)
+    parser.add_argument("--agents", default="codex,claude", help="comma list: codex, claude, grok")
+    parser.add_argument("--max-rounds", type=int, default=5, help="full participant cycles (default 5)")
     parser.add_argument("--adapter-mode", choices=["real", "fake"], default="real")
     parser.add_argument("--fake", action="store_true", help="use deterministic fake adapters")
     parser.add_argument("--timeout-s", type=int, default=300, help="per-agent timeout in seconds")

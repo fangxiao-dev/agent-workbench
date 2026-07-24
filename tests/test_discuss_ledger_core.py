@@ -93,3 +93,25 @@ def test_end_turn_and_set_next_remain_explicit(tmp_path: Path) -> None:
     status = ledger.get_status(root=tmp_path, slug="next")
     assert status.frontmatter["next"] == "Claude"
     assert status.frontmatter["participants"] == ["Codex", "Claude"]
+
+
+def test_no_movement_is_log_only_and_does_not_create_a_deadlock(tmp_path: Path) -> None:
+    from discuss_ledger_core import ledger
+
+    ledger.init_ledger(root=tmp_path, topic="No movement", slug="no-movement", initiator="Codex")
+    ledger.add_point(root=tmp_path, slug="no-movement", author="Codex", summary="Open", body="Opening point")
+    ledger.end_turn(root=tmp_path, slug="no-movement")
+    ledger.contest_point(
+        root=tmp_path,
+        slug="no-movement",
+        point="D1",
+        author="Claude",
+        body="No new ground this round.",
+        movement=False,
+    )
+    ledger.end_turn(root=tmp_path, slug="no-movement")
+
+    status = ledger.get_status(root=tmp_path, slug="no-movement")
+    assert status.frontmatter["status"] == ledger.STATUS_OPEN
+    assert status.open_points == [{"id": "D1", "summary": "Open", "status": "分歧", "rounds": "2"}]
+    assert "(无新进展)" in ledger.read_markdown(root=tmp_path, slug="no-movement")

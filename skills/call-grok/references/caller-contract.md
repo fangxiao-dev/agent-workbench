@@ -1,123 +1,62 @@
 # Caller contract
 
-How foreign agents (Claude, Codex, Cursor, parent Grok) should invoke `call-grok`.
+`call-grok` is a thin, short-lived Grok CLI executor. The caller supplies the
+complete task prompt and any desired Grok configuration.
 
-## Resolve skill path
-
-```text
-%USERPROFILE%\.grok\skills\call-grok\scripts\grok_task.py
-# or
-$env:USERPROFILE\.grok\skills\call-grok\scripts\grok_task.py
-# Unix:
-~/.grok/skills/call-grok/scripts/grok_task.py
-```
-
-Override binary with `GROK_BIN` if `grok` is not on `PATH`.
-
-## Minimal invoke
+## Minimal invocation
 
 ```powershell
-python "$env:USERPROFILE\.grok\skills\call-grok\scripts\grok_task.py" `
-  --role explore `
+python "D:\CodeSpace\agent-workbench\skills\call-grok\scripts\grok_task.py" `
   --cwd "D:\path\to\repo" `
-  --prompt "Summarize the layout of web/app."
+  --prompt "Summarize this change."
 ```
 
-```bash
-python ~/.grok/skills/call-grok/scripts/grok_task.py \
-  --role reviewer \
-  --cwd /path/to/repo \
-  --prompt-file /tmp/review-prompt.txt \
-  --review-round 2 \
-  --context-file /tmp/review-context.md
-```
+Provide exactly one of `--prompt` or `--prompt-file`.
 
-## Flags (public)
+## Public flags
 
 | Flag | Default | Meaning |
-|------|---------|---------|
-| `--role` | required | `explore` \| `reviewer` \| `implement` |
-| `--prompt` / `--prompt-file` | one required | Task text |
-| `--cwd` | process cwd | Repo/workdir for Grok |
-| `--max-run` | **15 reviewer; 120 otherwise** | Maps to `grok --max-turns` |
-| `--model` | host default | Model id |
-| `--effort` | host default | Reasoning effort |
-| `--plan-file` | none | Inject plan path + content into prompt |
-| `--context-file` | none | Inject free-form parent context; it must be readable or the wrapper fails before model execution |
-| `--review-round` | none | Reviewer round label; records session round/cwd and rejects cross-round or cross-cwd resume |
-| `--rules` | none | Extra rules text |
-| `--resume` | none | Resume Grok session id |
-| `--worktree [NAME]` | none | Pass through to Grok |
-| `--stall-timeout-sec` | 180 | No stream event ⇒ stall |
-| `--overall-timeout-sec` | 2400 | Hard wall clock |
-| `--heartbeat-sec` | 15 | Stderr heartbeat period |
-| `--allow-git-shell` | off | Reviewer: allow git shell reads |
-| `--allow-subagents` | off | Allow nested Grok subagents |
-| `--preflight` | off | Also require auth.json or `XAI_API_KEY` |
-| `--dry-run` | off | Print argv JSON only |
-| `--raw-json` | off | Include raw `end` event object |
+|---|---:|---|
+| `--cwd` | process cwd | Working directory for Grok |
+| `--prompt` / `--prompt-file` | required | Caller-owned task text |
+| `--max-run` | 120 | Maps to Grok `--max-turns` |
+| `--model` | CLI default | Model id |
+| `--effort` | CLI default | Reasoning effort |
+| `--tools` | unset | Grok tool list |
+| `--allow` / `--deny` | unset | Repeatable Grok permission rules |
+| `--always-approve` | off | Pass through write approval |
+| `--no-subagents` | off | Disable Grok subagents |
+| `--worktree [NAME]` | unset | Pass through Grok worktree option |
+| `--rules` | unset | Pass through Grok rules |
+| `--stall-timeout-sec` | 180 | No stream event before declaring a stall |
+| `--overall-timeout-sec` | 2400 | Hard wall-clock timeout |
+| `--heartbeat-sec` | 15 | Stderr heartbeat interval |
+| `--preflight` | off | Also require auth before model execution |
+| `--dry-run` | off | Return the redacted would-be command in `text` |
 
-## Streams
+No prompt envelope, tool policy, permission policy, or subagent policy is
+injected by default. Put task-specific instructions and context directly in the
+prompt or prompt file.
 
-| Stream | Content |
-|--------|---------|
-| **stdout** | Exactly one JSON object (result envelope) |
-| **stderr** | `[call-grok]`, `[heartbeat]`, `[liveness]`, `[grok-stderr]` |
+## Output contract
 
-Do not parse heartbeats from stdout. Treat missing heartbeats longer than `stall-timeout + heartbeat` as a likely dead runner if you wrap the process yourself.
-
-## Result envelope
+stdout is exactly one JSON object:
 
 ```json
 {
   "ok": true,
   "status": "completed",
-  "role": "explore",
-  "sessionId": "...",
-  "num_turns": 4,
-  "max_run": 120,
-  "text": "...",
-  "stopReason": "EndTurn",
-  "liveness": {
-    "last_event_type": "end",
-    "last_event_age_sec": 0.1,
-    "heartbeats": 1,
-    "stall_timeout_sec": 180,
-    "overall_timeout_sec": 2400,
-    "elapsed_sec": 22.4
-  },
+  "text": "Grok's final response",
   "usage": {},
   "exit_code": 0,
-  "cmd": ["grok", "-p", "<prompt N chars>", "--max-turns", "120", "..."]
+  "error": null
 }
 ```
 
-## Exit codes
+`error`, when present, has stable `code` and diagnostic `message`. Statuses are
+`completed`, `dry_run`, `max_turns`, `stalled`, `timeout`, `cancelled`,
+`preflight_failed`, or `error`. stderr is reserved for `[heartbeat]`,
+`[liveness]`, and child diagnostics.
 
-| Code | `status` | Caller action |
-|------|----------|---------------|
-| 0 | `completed` | Use `text` |
-| 2 | `max_turns` | Partial; resume with `--resume sessionId` if useful |
-| 3 | `stalled` | Partial; resume or re-prompt with tighter scope |
-| 4 | `timeout` | Partial; raise overall timeout or shrink task |
-| 5 | `cancelled` | Partial; do not treat the text as PASS; resume only to finish the same round |
-| 1 | `error` / `preflight_failed` | Fix env/auth/prompt; read `error_message` |
-
-## Resume pattern
-
-```powershell
-python "...\grok_task.py" `
-  --role implement `
-  --cwd $repo `
-  --resume $sessionId `
-  --prompt "Continue from where you left off. Finish the remaining plan items only."
-```
-
-For review, keep a resume inside its original `--review-round`. The wrapper writes minimal session-to-round metadata under Grok's local state and rejects a mismatched resume. Start the next review round without `--resume`, carry only the parent-reviewed context forward, and allow the reviewer to inspect the fixed scope afresh.
-
-## Safety
-
-- Prefer `explore` / `reviewer` when writes are not required.
-- For `implement`, prefer `--worktree` when isolation matters.
-- Do not put secrets in `--prompt`.
-- Do not treat a successful child run as authorization to push/merge/deploy; that stays with the outer user/agent policy.
+Each call starts a fresh Grok process. The wrapper does not resume sessions;
+callers that need previous context must include it in a new prompt.

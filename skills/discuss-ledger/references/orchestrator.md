@@ -26,7 +26,7 @@ When the user gives a target file path, infer the project root before running. P
 
 If the script is available, rely on `discuss_orchestrator.py`'s built-in root/topic resolution rather than hand-normalizing the path.
 
-Defaults are `--agents codex,claude`, `--max-rounds 5`, and `--timeout-s 300`. Before invoking, apply the Critical Timeout Rule above so the outer tool timeout is long enough for the full run.
+Defaults are `--agents codex,claude`, `--max-rounds 5`, and `--timeout-s 300`. One round means every listed participant speaks once; before invoking, apply the Critical Timeout Rule above so the outer tool timeout is long enough for the full run.
 
 After the orchestrator stops, report:
 

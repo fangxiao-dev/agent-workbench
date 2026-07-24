@@ -8,22 +8,30 @@ SKILL = ROOT / "skills" / "discuss-ledger" / "SKILL.md"
 REFERENCES = ROOT / "skills" / "discuss-ledger" / "references"
 
 
-def test_discuss_ledger_skill_routes_large_details_to_references() -> None:
+def test_discuss_ledger_skill_routes_modes_to_references() -> None:
     text = SKILL.read_text(encoding="utf-8")
 
-    assert "## References" in text
-    assert "references/orchestrator.md" in text
-    assert "references/claude-code-noninteractive.md" in text
-    assert "references/ledger-cli.md" in text
+    assert "Discuss Ledger Router" in text
+    assert "Blind Opening" in text
+    assert "Blind Opening + Ledger" in text
+    assert "references/blind-opening.md" in text
+    assert "references/ledger-discussion.md" in text
+    assert "references/blind-opening-plus-ledger.md" in text
 
+    assert (REFERENCES / "blind-opening.md").is_file()
+    assert (REFERENCES / "ledger-discussion.md").is_file()
+    assert (REFERENCES / "blind-opening-plus-ledger.md").is_file()
     assert (REFERENCES / "orchestrator.md").is_file()
     assert (REFERENCES / "claude-code-noninteractive.md").is_file()
     assert (REFERENCES / "ledger-cli.md").is_file()
+    assert (REFERENCES / "ledger-participant-prompt.md").is_file()
 
 
-def test_discuss_ledger_core_instructions_stay_in_skill_body() -> None:
+def test_normal_ledger_reference_preserves_deterministic_writer_boundary() -> None:
     text = SKILL.read_text(encoding="utf-8")
+    normal = (REFERENCES / "ledger-discussion.md").read_text(encoding="utf-8")
 
-    assert "Do not hand-edit the ledger's YAML, table, or section structure" in text
-    assert "read → promote settled points → respond with disagreements → end the turn" in text
-    assert "Only create/modify the single `discuss-<slug>.md` ledger" in text
+    assert "Existing Discuss Ledger triggers default to normal Ledger" in text
+    assert "Do not hand-edit those structures" in normal
+    assert "promote genuinely settled points first" in normal
+    assert "ledger-participant-prompt.md" in normal

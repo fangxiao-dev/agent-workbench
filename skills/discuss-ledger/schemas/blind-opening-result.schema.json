@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workbench.local/discuss-ledger/blind-opening-result.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ideas", "new_points"],
+  "properties": {
+    "ideas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["summary", "body"],
+        "properties": {
+          "summary": {"type": "string", "minLength": 1},
+          "body": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "new_points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["summary", "body"],
+        "properties": {
+          "summary": {"type": "string", "minLength": 1},
+          "body": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

@@ -56,7 +56,7 @@ Counter an existing point in the current round:
 python <skill>/scripts/discuss_ledger.py contest --slug S --point D2 --author <you> --body - --movement true
 ```
 
-Set `--movement false` when you are restating with no new ground. Set `--movement true` only for new evidence, corrected facts, a narrowed scope, an explicit concession, or a concrete compromise.
+Set `--movement false` when you are restating with no new ground. Set `--movement true` only for new evidence, corrected facts, a narrowed scope, an explicit concession, or a concrete compromise. `movement=false` is a per-participant log signal only: it never marks a point as a deadlock or stops the discussion. Only `converge` closes a point.
 
 ## End Turn
 

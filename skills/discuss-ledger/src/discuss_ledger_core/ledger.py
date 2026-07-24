@@ -451,7 +451,7 @@ def cmd_add_point(args):
     # 1) add table row
     s, e = section_bounds(lines, POINTS_HEADER)
     idx = last_table_index(lines, s, e)
-    lines.insert(idx + 1, render_row([pid, summary, POINT_OPEN, "1"]))
+    lines.insert(idx + 1, render_row([pid, summary, POINT_OPEN, str(rnd)]))
     # 2) add log entry under current round
     body = read_body_arg(args.body) or summary
     append_log_entry(lines, rnd, args.author, render_bullet(pid, body))
@@ -470,12 +470,9 @@ def cmd_contest(args):
         sys.exit(f"point not found: {args.point}")
     if cells[2] == POINT_CONVERGED:
         sys.exit(f"{args.point} already converged; re-open explicitly instead")
-    rounds = int(cells[3]) if cells[3].isdigit() else 1
-    rounds += 1
+    rounds = max(int(cells[3]) if cells[3].isdigit() else 1, int(fm["round"]))
     movement = args.movement.lower() in ("true", "1", "yes", "y")
     status = cells[2]
-    if not movement and rounds >= 2:
-        status = POINT_DEADLOCK
     lines[ridx] = render_row([cells[0], cells[1], status, str(rounds)])
     suffix = "" if movement else "(无新进展)"
     body = read_body_arg(args.body)
@@ -542,7 +539,7 @@ def cmd_end_turn(args):
     elif new_status == STATUS_AGREED:
         print("EXIT: 已达成一致 — 全部分歧收敛。告知用户并停止更新。")
     else:
-        print("EXIT: 僵局 — 存在 ≥2 轮无进展的分歧,交用户裁决。停止更新。")
+        print("EXIT: 僵局 — 存在未解的僵局分歧,交用户裁决。停止更新。")
 
 
 def cmd_set_next(args):

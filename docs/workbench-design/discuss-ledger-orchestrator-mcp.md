@@ -98,6 +98,69 @@ python /path/to/agent-workbench/skills/discuss-ledger/scripts/discuss_orchestrat
 
 The fake mode does not require CLI auth and is intended for installation and CI smoke checks.
 
+## Proposed discussion router and shared executors
+
+`discuss-ledger` will evolve from a single discussion workflow into a router for
+three explicitly selected modes. Existing normal-ledger behavior remains the
+default for existing triggers and invocations.
+
+This evolution does not use, extend, or require MCP. The existing MCP server is
+outside this change and remains an optional interactive ledger interface. The
+compatibility baseline is the current normal Discuss Ledger workflow: its
+prompt, state-machine rules, CLI behavior, and fake-mode smoke path must remain
+available after the executor extraction.
+
+| Mode | Use case | Orchestration |
+|---|---|---|
+| Blind Opening | Independent brainstorming, option discovery, or risk discovery | Every participant receives only the original target and the blind-opening output contract; no participant receives another participant's result. The workflow may end after a consolidated result. |
+| Discuss Ledger | Live disagreement, convergence, or a decision trail | The existing round-robin ledger state machine runs unchanged. |
+| Blind Opening + Ledger | Open-ended design work that must later resolve material disagreements | Run Blind Opening, consolidate its independent findings into initial ledger points, then invoke the unchanged Discuss Ledger workflow. |
+
+The skill's `SKILL.md` is a thin router: it selects one of these modes from
+explicit user intent, reads only that mode's reference, and asks one clarifying
+question when the requested mode is ambiguous. Detailed operating instructions
+live in separate references for Blind Opening, normal Ledger discussion, and
+the combined workflow. `loop-mode.md` remains an optional upper-level control
+for bounded repeated reviews.
+
+Blind Opening is not a special first turn in the existing ledger state machine.
+It is an independent capability with its own prompt and result schema. In the
+combined mode, its consolidated output is the only hand-off to Ledger: duplicate
+findings may be merged, but conflicting recommendations and their supporting
+evidence must be retained as initial open points. The normal ledger prompt,
+CLI, and state machine do not learn about or depend on Blind Opening.
+
+### Shared CLI executors
+
+`call-codex` and `call-claude` will be separate repository-wide foundation
+skills, usable by `discuss-ledger` and future skills. They own only the
+model-specific execution boundary:
+
+- command-line construction and stdin/file prompt input;
+- process lifetime, timeout, cancellation, and error classification;
+- host-specific structured-output parsing and retries;
+- one common JSON result envelope containing at least `ok`, `status`, `text`,
+  `usage`, `exit_code`, and `error`.
+
+They do not define task roles, generate task prompts, choose permissions, or
+interpret a caller's business schema. A caller explicitly supplies its model
+configuration (for example Codex sandbox/config/model or Claude tools,
+system prompt, effort, and schema). This keeps the existing discuss-ledger
+read-only behavior as an upstream choice while allowing another skill to use
+the same executor for an implementation task.
+
+The existing `discuss_orchestrator.py` adapters will be reduced to calls to
+these executors while preserving its current discussion prompt, state-machine
+rules, and command-line semantics. A separate `blind_opening.py` will build
+only blind-opening prompts and invoke the same executors. A combined
+orchestration layer connects their artifacts without duplicating either
+workflow.
+
+The minimum implementation scope is therefore limited to the two generic
+executors, the three-mode skill router and references, the independent
+Blind-Opening workflow, and the thin combined hand-off. It excludes MCP changes,
+new role presets, loop-mode changes, and changes to the normal Ledger design.
+
 ## Registration
 
 MCP registration is independent from the main `install.sh` / `install.ps1` host installer. Use:

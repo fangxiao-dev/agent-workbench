@@ -26,7 +26,7 @@ Every later major round must pass the continuation gate. The continuation gate p
 1. **Soft signal**: the exit **观点评估** says continued discussion may produce new value.
 2. **Hard signal**: at least one observable rule fires:
    - the ledger exited as `僵局`;
-   - a point reached two rounds with no movement;
+   - participants explicitly report an unresolved, material conflict after reviewing the available evidence;
    - high-impact new evidence appeared after the previous exit;
    - the target was revised after the previous discussion;
    - reviewers found materially different risks in separate domains.

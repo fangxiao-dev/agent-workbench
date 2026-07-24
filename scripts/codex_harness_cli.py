@@ -19,6 +19,13 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+try:
+    from scripts.executor_env import load_executor_env
+except ModuleNotFoundError:
+    from executor_env import load_executor_env
+
+load_executor_env(Path(__file__).resolve().parents[1])
+
 
 DEFAULT_DISABLED_MCP_SERVERS = (
     "openaiDeveloperDocs",
@@ -50,7 +57,7 @@ class TurnControlRequested(RuntimeError):
 
 
 def find_codex_command() -> list[str]:
-    """Resolve the Codex executable, honoring ``CODEX_EXECUTABLE`` first."""
+    """Resolve a usable Codex executable, honoring ``CODEX_EXECUTABLE`` first."""
 
     override = os.environ.get("CODEX_EXECUTABLE")
     if override:
@@ -61,9 +68,16 @@ def find_codex_command() -> list[str]:
         if cli_script.is_file():
             return [node, str(cli_script)]
     codex_command = shutil.which("codex.cmd") or shutil.which("codex")
-    if codex_command:
+    if codex_command and "\\windowsapps\\" not in codex_command.lower().replace("/", "\\"):
         return [codex_command]
-    raise RuntimeError("Cannot locate the Codex CLI. Set CODEX_EXECUTABLE to its executable path.")
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        desktop_bin = Path(local_app_data) / "OpenAI" / "Codex" / "bin"
+        desktop_candidates = [desktop_bin / "codex.exe", *desktop_bin.glob("*/codex.exe")]
+        usable_candidates = [candidate for candidate in desktop_candidates if candidate.is_file()]
+        if usable_candidates:
+            return [str(max(usable_candidates, key=lambda candidate: candidate.stat().st_mtime))]
+    raise RuntimeError("Cannot locate a usable Codex CLI. Set CODEX_EXECUTABLE to its executable path.")
 
 
 def app_server_command(
@@ -80,14 +94,17 @@ def app_server_command(
     construction site.
     """
 
-    command = find_codex_command() + ["app-server", "--stdio"]
+    command = find_codex_command() + ["app-server"]
     if enable_multi_agent:
         command.extend(["--enable", "multi_agent"])
     command.extend(["-c", f'approval_policy="{approval_policy}"'])
     if disable_vercel_plugin:
         command.extend(["-c", 'plugins."vercel-plugin@plugins-cli".enabled=false'])
-    for server in disabled_mcp_servers:
-        command.extend(["-c", f"mcp_servers.{server}.enabled=false"])
+    # Newer Codex versions reject a partial entry without a transport. A
+    # non-empty disable request therefore clears the MCP registry as a whole;
+    # callers can pass an empty iterable to retain their configured servers.
+    if tuple(disabled_mcp_servers):
+        command.extend(["-c", "mcp_servers={}"])
     return command
 
 
@@ -112,15 +129,20 @@ class JsonRpcSession:
 
     def __init__(self, command: list[str], stderr_path: Path) -> None:
         stderr_path.parent.mkdir(parents=True, exist_ok=True)
-        self.process = subprocess.Popen(
-            command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=stderr_path.open("w", encoding="utf-8"),
-            text=True,
-            encoding="utf-8",
-            bufsize=1,
-        )
+        self._stderr_file = stderr_path.open("w", encoding="utf-8")
+        try:
+            self.process = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=self._stderr_file,
+                text=True,
+                encoding="utf-8",
+                bufsize=1,
+            )
+        except BaseException:
+            self._stderr_file.close()
+            raise
         self.messages: queue.Queue[dict[str, Any]] = queue.Queue()
         self.reader = threading.Thread(target=self._read_stdout, daemon=True)
         self.reader.start()
@@ -256,13 +278,17 @@ class JsonRpcSession:
         """Terminate the process and join the reader; safe to call repeatedly."""
 
         if self.process.poll() is None:
-            self.process.terminate()
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(self.process.pid), "/T", "/F"], capture_output=True, check=False)
+            else:
+                self.process.terminate()
             try:
                 self.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait(timeout=5)
         self.reader.join(timeout=5)
+        self._stderr_file.close()
 
     def __enter__(self) -> "JsonRpcSession":
         return self

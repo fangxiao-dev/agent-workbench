@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -20,15 +21,31 @@ class CodexCliLayerTest(unittest.TestCase):
     def test_default_app_server_command_keeps_poc_safety_defaults(self) -> None:
         with patch.dict(os.environ, {"CODEX_EXECUTABLE": "C:/tools/codex.cmd"}, clear=False):
             command = app_server_command()
-        self.assertEqual(command[:3], ["C:/tools/codex.cmd", "app-server", "--stdio"])
+        self.assertEqual(command[:2], ["C:/tools/codex.cmd", "app-server"])
         self.assertIn("multi_agent", command)
         self.assertIn('approval_policy="never"', command)
-        self.assertIn('mcp_servers.playwright.enabled=false', command)
+        self.assertIn("mcp_servers={}", command)
+
+    def test_discovery_skips_windowsapps_resource_for_user_desktop_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            stale_cli = Path(directory) / "OpenAI" / "Codex" / "bin" / "codex.exe"
+            desktop_cli = stale_cli.parent / "current" / "codex.exe"
+            stale_cli.parent.mkdir(parents=True)
+            stale_cli.touch()
+            desktop_cli.parent.mkdir()
+            desktop_cli.touch()
+            os.utime(stale_cli, (1, 1))
+            os.utime(desktop_cli, (2, 2))
+            with patch.dict(os.environ, {"LOCALAPPDATA": directory}, clear=False), patch(
+                "scripts.codex_harness_cli.shutil.which",
+                return_value="C:/Program Files/WindowsApps/codex.exe",
+            ):
+                self.assertEqual(find_codex_command(), [str(desktop_cli)])
 
     def test_command_construction_can_be_used_without_harness_policy(self) -> None:
         with patch.dict(os.environ, {"CODEX_EXECUTABLE": "codex"}, clear=False):
             command = app_server_command(enable_multi_agent=False, disabled_mcp_servers=(), disable_vercel_plugin=False, approval_policy="on-request")
-        self.assertEqual(command, ["codex", "app-server", "--stdio", "-c", 'approval_policy="on-request"'])
+        self.assertEqual(command, ["codex", "app-server", "-c", 'approval_policy="on-request"'])
 
 
 class ControllerLayerTest(unittest.TestCase):

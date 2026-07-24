@@ -1,0 +1,13 @@
+{
+  "contractVersion": "3.2",
+  "purpose": "internal-machine-sidecar",
+  "ownerFacing": false,
+  "packageId": "260724-discussion-router-executors",
+  "tasks": [],
+  "tickets": [],
+  "artifacts": [],
+  "gate": {
+    "allocations": [],
+    "entries": []
+  }
+}

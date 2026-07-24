@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Thin Grok CLI runner for short-task agents (review / explore / implement).
+"""Thin Grok CLI runner for one short-lived caller-owned task.
 
 Stdout: one JSON result object.
 Stderr: heartbeats and diagnostics.
@@ -8,7 +8,6 @@ Stderr: heartbeats and diagnostics.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import shutil
@@ -20,8 +19,15 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+SCRIPT_ROOT = Path(__file__).resolve().parents[3] / "scripts"
+if str(SCRIPT_ROOT) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_ROOT))
+
+from executor_env import load_executor_env
+
+load_executor_env(SCRIPT_ROOT.parent)
+
 DEFAULT_MAX_RUN = 120
-DEFAULT_REVIEWER_MAX_RUN = 15
 DEFAULT_STALL_TIMEOUT_SEC = 180
 DEFAULT_OVERALL_TIMEOUT_SEC = 2400
 DEFAULT_HEARTBEAT_SEC = 15
@@ -33,38 +39,15 @@ EXIT_STALLED = 3
 EXIT_TIMEOUT = 4
 EXIT_CANCELLED = 5
 
-ROLE_ENVELOPES = {
-    "explore": (
-        "You are a read-only explorer. Investigate the request using only the "
-        "allowed tools. Do not edit, create, or delete files. Do not run shell "
-        "commands that change state. Return concise findings with concrete file "
-        "paths and residual unknowns."
-    ),
-    "reviewer": (
-        "You are a defect-first reviewer. Read and inspect only. Do not implement "
-        "fixes unless the prompt explicitly asks for patch suggestions in text. "
-        "Report actionable findings first (severity, location, evidence, impact). "
-        "If nothing material is wrong, say so briefly. Finish with a clear PASS, "
-        "findings, or PARTIAL state so the parent can tell whether this review "
-        "round actually completed."
-    ),
-    "implement": (
-        "You are a plan-bounded implementer for a short task. Make the minimal "
-        "diff needed to satisfy the request/plan. Do not expand scope. Prefer "
-        "existing patterns. After changes, report: files changed, what you did, "
-        "how to verify, and residual risk. Do not push, force-push, open PRs, or "
-        "mutate production systems unless the prompt explicitly authorizes that."
-    ),
-}
-
-
 def eprint(*args: Any, **kwargs: Any) -> None:
     print(*args, file=sys.stderr, **kwargs)
 
 
-def resolve_grok_bin() -> Optional[str]:
-    env = os.environ.get("GROK_BIN")
-    if env and Path(env).exists():
+def resolve_grok_bin(explicit: Optional[str] = None) -> Optional[str]:
+    if explicit:
+        return explicit
+    env = os.environ.get("GROK_EXECUTABLE") or os.environ.get("GROK_BIN")
+    if env:
         return env
     found = shutil.which("grok")
     if found:
@@ -79,56 +62,6 @@ def resolve_grok_bin() -> Optional[str]:
 
 def grok_home() -> Path:
     return Path(os.environ.get("GROK_HOME") or (Path.home() / ".grok"))
-
-
-def review_round_session_path(session_id: str) -> Path:
-    digest = hashlib.sha256(session_id.encode("utf-8")).hexdigest()
-    return grok_home() / "review-round-sessions" / f"{digest}.json"
-
-
-def load_review_round_session(session_id: str) -> Optional[Dict[str, str]]:
-    path = review_round_session_path(session_id)
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return None
-    if not isinstance(raw, dict) or raw.get("sessionId") != session_id:
-        return None
-    if not isinstance(raw.get("round"), str) or not isinstance(raw.get("cwd"), str):
-        return None
-    return raw
-
-
-def record_review_round_session(session_id: Optional[str], review_round: Optional[str], cwd: Optional[str]) -> None:
-    if not session_id or not review_round:
-        return
-    path = review_round_session_path(session_id)
-    payload = {
-        "sessionId": session_id,
-        "round": review_round,
-        "cwd": str(Path(cwd).resolve()) if cwd else "",
-    }
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        temporary.replace(path)
-    except OSError as exc:
-        eprint(f"[call-grok] could not record review-round session: {exc}")
-
-
-def validate_review_round_resume(args: argparse.Namespace) -> Optional[str]:
-    if not args.review_round or not args.resume:
-        return None
-    recorded = load_review_round_session(args.resume)
-    expected_cwd = str(Path(args.cwd).resolve()) if args.cwd else ""
-    if recorded is None:
-        return "review-round resume rejected: session has no recorded review-round metadata"
-    if recorded["round"] != args.review_round or recorded["cwd"] != expected_cwd:
-        return "review-round resume rejected: session belongs to a different review round or cwd"
-    return None
 
 
 def auth_present() -> bool:
@@ -173,60 +106,8 @@ def read_prompt(args: argparse.Namespace) -> str:
     return args.prompt
 
 
-def _append_context_file(parts: List[str], label: str, path_text: Optional[str]) -> None:
-    if not path_text:
-        return
-    path = Path(path_text)
-    parts.extend(["", "---", "", f"{label} path: {path.resolve()}"])
-    try:
-        content = path.read_text(encoding="utf-8")
-        if len(content) > 120_000:
-            content = content[:120_000] + f"\n\n[{label} truncated]\n"
-        parts.extend(["", f"{label} content:", content])
-    except (OSError, UnicodeError) as exc:
-        raise ValueError(f"could not read {label.lower()} {path}: {exc}") from exc
-
-
-def build_prompt(
-    role: str,
-    user_prompt: str,
-    plan_file: Optional[str],
-    context_file: Optional[str],
-    review_round: Optional[str],
-    rules: Optional[str],
-) -> str:
-    parts = [ROLE_ENVELOPES[role], "", "---", "", user_prompt.strip()]
-    if review_round:
-        parts.extend(
-            [
-                "",
-                "Review round:",
-                str(review_round),
-                "Use the supplied scope and parent review context as the only prior-round "
-                "review knowledge. The parent may resume this worker only to finish this "
-                "same interrupted round.",
-            ]
-        )
-    if plan_file:
-        plan_path = Path(plan_file)
-        parts.extend(["", "---", "", f"Plan file path: {plan_path.resolve()}"])
-        try:
-            content = plan_path.read_text(encoding="utf-8")
-            # Cap plan injection so the wrapper stays usable for large plans.
-            if len(content) > 120_000:
-                content = content[:120_000] + "\n\n[truncated plan content]\n"
-            parts.extend(["", "Plan file content:", content])
-        except OSError as exc:
-            parts.extend(["", f"(Could not read plan file: {exc})"])
-    _append_context_file(parts, "Context file", context_file)
-    if rules:
-        parts.extend(["", "---", "", "Additional rules:", rules.strip()])
-    return "\n".join(parts).strip() + "\n"
-
-
 def build_cmd(
     grok_bin: str,
-    role: str,
     prompt: str,
     args: argparse.Namespace,
 ) -> List[str]:
@@ -246,8 +127,6 @@ def build_cmd(
         cmd.extend(["-m", args.model])
     if args.effort:
         cmd.extend(["--effort", args.effort])
-    if args.resume:
-        cmd.extend(["--resume", args.resume])
     if args.worktree is not None:
         # argparse nargs='?' yields None when flag absent; '' or name when present.
         if args.worktree == "":
@@ -255,27 +134,17 @@ def build_cmd(
         else:
             cmd.extend(["--worktree", args.worktree])
 
-    if not args.allow_subagents:
-        cmd.append("--no-subagents")
-        cmd.extend(["--disallowed-tools", "Agent"])
-
-    if role == "explore":
-        tools = "read_file,grep,list_dir,web_search,web_fetch"
-        cmd.extend(["--tools", tools])
-    elif role == "reviewer":
-        if args.allow_git_shell:
-            # Keep shell available for git inspection; still no always-approve.
-            tools = "read_file,grep,list_dir,run_terminal_cmd"
-            cmd.extend(["--tools", tools])
-            cmd.extend(["--allow", "Bash(git *)"])
-            cmd.extend(["--deny", "Bash(git push*)", "--deny", "Bash(git push *)"])
-        else:
-            cmd.extend(["--tools", "read_file,grep,list_dir"])
-    elif role == "implement":
+    if args.tools is not None:
+        cmd.extend(["--tools", args.tools])
+    for value in args.allow:
+        cmd.extend(["--allow", value])
+    for value in args.deny:
+        cmd.extend(["--deny", value])
+    if args.always_approve:
         cmd.append("--always-approve")
-
-    if args.rules and role == "implement":
-        # rules already folded into prompt; also pass as CLI rules for extra weight
+    if args.no_subagents:
+        cmd.append("--no-subagents")
+    if args.rules:
         cmd.extend(["--rules", args.rules])
 
     return cmd
@@ -333,8 +202,6 @@ def run_with_liveness(
     stop_reason: Optional[str] = None
     num_turns: Optional[int] = None
     usage: Any = None
-    model_usage: Any = None
-    raw_end: Optional[Dict[str, Any]] = None
     max_turns_seen = False
     error_message: Optional[str] = None
     status = "completed"
@@ -359,7 +226,7 @@ def run_with_liveness(
 
     def on_event(event: Dict[str, Any]) -> None:
         nonlocal last_event_at, last_event_type, session_id, stop_reason
-        nonlocal num_turns, usage, model_usage, raw_end, max_turns_seen, error_message, status
+        nonlocal num_turns, usage, max_turns_seen, error_message, status
         etype = event.get("type") or event.get("sessionUpdate") or "unknown"
         last_event_at = time.time()
         last_event_type = str(etype)
@@ -373,13 +240,11 @@ def run_with_liveness(
         elif etype == "thought":
             pass
         elif etype == "end":
-            raw_end = event
             session_id = event.get("sessionId") or session_id
             stop_reason = event.get("stopReason")
             if "num_turns" in event:
                 num_turns = event.get("num_turns")
             usage = event.get("usage", usage)
-            model_usage = event.get("modelUsage", model_usage)
             if str(stop_reason or "").lower() in {"maxturns", "max_turns", "max_turns_reached"}:
                 max_turns_seen = True
                 status = "max_turns"
@@ -485,9 +350,7 @@ def run_with_liveness(
         if final_status == "completed":
             if max_turns_seen:
                 final_status = "max_turns"
-            elif exit_code not in (0, None) and not text_parts and error_message:
-                final_status = "error"
-            elif exit_code not in (0, None) and not text_parts and not raw_end:
+            elif exit_code not in (0, None):
                 final_status = "error"
                 error_message = error_message or f"grok exited with code {exit_code}"
 
@@ -498,9 +361,7 @@ def run_with_liveness(
             "text": "".join(text_parts),
             "stopReason": stop_reason,
             "usage": usage,
-            "modelUsage": model_usage,
             "error_message": error_message,
-            "raw_end": raw_end,
             "process_exit_code": exit_code,
             "liveness": {
                 "last_event_type": last_event_type,
@@ -526,43 +387,30 @@ def status_to_exit(status: str) -> int:
     }.get(status, EXIT_ERROR)
 
 
-def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Run a short Grok CLI task with role presets and liveness checks.",
-    )
-    p.add_argument(
-        "--role",
-        required=True,
-        choices=sorted(ROLE_ENVELOPES.keys()),
-        help="Task role: explore | reviewer | implement",
+        description="Run one short-lived Grok CLI task with caller-owned configuration.",
     )
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--prompt", help="Prompt text")
     g.add_argument("--prompt-file", help="Path to prompt file")
 
     p.add_argument("--cwd", help="Working directory for grok")
+    p.add_argument("--executable", help="Grok executable path or command; otherwise use discovery")
     p.add_argument(
         "--max-run",
         type=int,
-        default=None,
-        help=(
-            "Maps to grok --max-turns (default 15 for reviewer, "
-            f"{DEFAULT_MAX_RUN} for other roles)"
-        ),
+        default=DEFAULT_MAX_RUN,
+        help=f"Maps to grok --max-turns (default {DEFAULT_MAX_RUN})",
     )
     p.add_argument("--model", help="Model id")
     p.add_argument("--effort", help="Reasoning effort")
-    p.add_argument("--plan-file", help="Plan file to inject into the prompt")
-    p.add_argument(
-        "--context-file",
-        help="Optional free-form parent context to inject into the prompt",
-    )
-    p.add_argument(
-        "--review-round",
-        help="Reviewer round label; parent owns fresh-session boundaries between rounds",
-    )
-    p.add_argument("--rules", help="Extra rules text")
-    p.add_argument("--resume", help="Resume grok session id")
+    p.add_argument("--tools", help="Pass through Grok --tools")
+    p.add_argument("--allow", action="append", default=[], help="Repeatable Grok --allow rule")
+    p.add_argument("--deny", action="append", default=[], help="Repeatable Grok --deny rule")
+    p.add_argument("--always-approve", action="store_true", help="Pass through Grok --always-approve")
+    p.add_argument("--no-subagents", action="store_true", help="Pass through Grok --no-subagents")
+    p.add_argument("--rules", help="Pass through Grok --rules")
     p.add_argument(
         "--worktree",
         nargs="?",
@@ -589,16 +437,6 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help=f"Stderr heartbeat interval (default {DEFAULT_HEARTBEAT_SEC})",
     )
     p.add_argument(
-        "--allow-git-shell",
-        action="store_true",
-        help="Reviewer only: allow git shell commands for inspection",
-    )
-    p.add_argument(
-        "--allow-subagents",
-        action="store_true",
-        help="Allow Grok to spawn subagents (off by default for short tasks)",
-    )
-    p.add_argument(
         "--preflight",
         action="store_true",
         help="Also require auth.json or XAI_API_KEY before running",
@@ -608,118 +446,89 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Print the would-be command as JSON and exit 0",
     )
-    p.add_argument(
-        "--raw-json",
-        action="store_true",
-        help="Include raw end event object under raw_end (always present when available)",
-    )
-    return p.parse_args(argv)
+    return p
+
+
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    return build_parser().parse_args(argv)
+
+
+def error_for_status(status: str, message: Optional[str]) -> Optional[Dict[str, str]]:
+    if status in {"completed", "dry_run"}:
+        return None
+    code = {
+        "max_turns": "MAX_TURNS",
+        "stalled": "STALLED",
+        "timeout": "TIMEOUT",
+        "cancelled": "CANCELLED",
+        "preflight_failed": "PREFLIGHT_FAILED",
+        "error": "EXECUTION_FAILED",
+    }.get(status, "EXECUTION_FAILED")
+    return {"code": code, "message": message or status.replace("_", " ")}
+
+
+def envelope(
+    status: str,
+    *,
+    text: Optional[str] = None,
+    usage: Any = None,
+    exit_code: int,
+    message: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {
+        "ok": status in {"completed", "dry_run"},
+        "status": status,
+        "text": text,
+        "usage": usage,
+        "exit_code": exit_code,
+        "error": error_for_status(status, message),
+    }
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
-    if args.max_run is None:
-        args.max_run = DEFAULT_REVIEWER_MAX_RUN if args.role == "reviewer" else DEFAULT_MAX_RUN
     if args.max_run < 1:
         eprint("--max-run must be >= 1")
         return EXIT_ERROR
 
-    resume_error = validate_review_round_resume(args)
-    if resume_error:
-        result = {
-            "ok": False,
-            "status": "preflight_failed",
-            "role": args.role,
-            "reviewRound": args.review_round,
-            "max_run": args.max_run,
-            "text": "",
-            "error_message": resume_error,
-            "exit_code": EXIT_ERROR,
-            "cmd": [],
-        }
-        print(json.dumps(result, ensure_ascii=False))
-        return EXIT_ERROR
-
-    grok_bin = resolve_grok_bin()
+    grok_bin = resolve_grok_bin(args.executable)
     if not grok_bin:
-        result = {
-            "ok": False,
-            "status": "preflight_failed",
-            "role": args.role,
-            "max_run": args.max_run,
-            "text": "",
-            "error_message": "grok binary not found (set GROK_BIN or install grok on PATH)",
-            "exit_code": EXIT_ERROR,
-            "cmd": [],
-        }
-        print(json.dumps(result, ensure_ascii=False))
+        print(json.dumps(envelope(
+            "preflight_failed",
+            text=None,
+            exit_code=EXIT_ERROR,
+            message="grok binary not found (set --executable, GROK_EXECUTABLE, or install grok on PATH)",
+        ), ensure_ascii=False))
         return EXIT_ERROR
 
-    ok, msg, pf = preflight(grok_bin, check_auth=args.preflight)
+    ok, msg, _pf = preflight(grok_bin, check_auth=args.preflight)
     if not ok:
-        result = {
-            "ok": False,
-            "status": "preflight_failed",
-            "role": args.role,
-            "max_run": args.max_run,
-            "text": "",
-            "error_message": msg,
-            "preflight": pf,
-            "exit_code": EXIT_ERROR,
-            "cmd": [],
-        }
-        print(json.dumps(result, ensure_ascii=False))
+        print(json.dumps(envelope(
+            "preflight_failed", text=None, exit_code=EXIT_ERROR, message=msg,
+        ), ensure_ascii=False))
         return EXIT_ERROR
 
-    user_prompt = read_prompt(args)
     try:
-        prompt = build_prompt(
-            args.role,
-            user_prompt,
-            args.plan_file,
-            args.context_file,
-            args.review_round,
-            args.rules,
-        )
-    except ValueError as exc:
-        result = {
-            "ok": False,
-            "status": "preflight_failed",
-            "role": args.role,
-            "reviewRound": args.review_round,
-            "max_run": args.max_run,
-            "text": "",
-            "error_message": str(exc),
-            "preflight": pf,
-            "exit_code": EXIT_ERROR,
-            "cmd": [],
-        }
-        print(json.dumps(result, ensure_ascii=False))
+        prompt = read_prompt(args)
+    except (OSError, UnicodeError) as exc:
+        print(json.dumps(envelope(
+            "preflight_failed", text=None, exit_code=EXIT_ERROR, message=str(exc),
+        ), ensure_ascii=False))
         return EXIT_ERROR
-    cmd = build_cmd(grok_bin, args.role, prompt, args)
+    cmd = build_cmd(grok_bin, prompt, args)
 
     if args.dry_run:
         # Avoid dumping huge plan bodies in dry-run command display.
         display_cmd = list(cmd)
         if len(display_cmd) >= 3 and display_cmd[1] == "-p":
             display_cmd[2] = f"<prompt {len(prompt)} chars>"
-        result = {
-            "ok": True,
-            "status": "dry_run",
-            "role": args.role,
-            "reviewRound": args.review_round,
-            "max_run": args.max_run,
-            "text": "",
-            "preflight": pf,
-            "cmd": display_cmd,
-            "prompt_chars": len(prompt),
-            "exit_code": EXIT_OK,
-        }
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        print(json.dumps(envelope(
+            "dry_run", text=json.dumps(display_cmd, ensure_ascii=False), exit_code=EXIT_OK,
+        ), ensure_ascii=False))
         return EXIT_OK
 
     eprint(
-        f"[call-grok] role={args.role} max_run={args.max_run} "
+        f"[call-grok] max_run={args.max_run} "
         f"stall={args.stall_timeout_sec}s overall={args.overall_timeout_sec}s"
     )
     run = run_with_liveness(
@@ -728,40 +537,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         overall_timeout_sec=args.overall_timeout_sec,
         heartbeat_sec=args.heartbeat_sec,
     )
-    record_review_round_session(run.get("sessionId"), args.review_round, args.cwd)
-
     status = run["status"]
     exit_code = status_to_exit(status)
-    ok = status == "completed"
-
-    # Redact full prompt from cmd in result; keep structure.
-    display_cmd = list(cmd)
-    if len(display_cmd) >= 3 and display_cmd[1] == "-p":
-        display_cmd[2] = f"<prompt {len(prompt)} chars>"
-
-    result: Dict[str, Any] = {
-        "ok": ok,
-        "status": status,
-        "role": args.role,
-        "reviewRound": args.review_round,
-        "sessionId": run.get("sessionId"),
-        "num_turns": run.get("num_turns"),
-        "max_run": args.max_run,
-        "text": run.get("text") or "",
-        "stopReason": run.get("stopReason"),
-        "liveness": run.get("liveness"),
-        "usage": run.get("usage"),
-        "modelUsage": run.get("modelUsage"),
-        "error_message": run.get("error_message"),
-        "process_exit_code": run.get("process_exit_code"),
-        "preflight": pf,
-        "exit_code": exit_code,
-        "cmd": display_cmd,
-    }
-    if args.raw_json and run.get("raw_end") is not None:
-        result["raw_end"] = run.get("raw_end")
-
-    print(json.dumps(result, ensure_ascii=False))
+    print(json.dumps(envelope(
+        status,
+        text=run.get("text") or None,
+        usage=run.get("usage"),
+        exit_code=exit_code,
+        message=run.get("error_message"),
+    ), ensure_ascii=False))
     return exit_code
 
 

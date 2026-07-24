@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import io
 import queue
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from scripts.codex_harness_cli import JsonRpcSession, TurnControlRequested
 
@@ -30,6 +34,21 @@ class CodexHarnessCliTest(unittest.TestCase):
             )
 
         self.assertEqual(raised.exception.request, request)
+
+    def test_session_closes_parent_stderr_handle(self) -> None:
+        class Process:
+            returncode = 0
+            stdin = io.StringIO()
+            stdout = io.StringIO()
+
+            @staticmethod
+            def poll() -> int:
+                return 0
+
+        with TemporaryDirectory() as directory, patch("scripts.codex_harness_cli.subprocess.Popen", return_value=Process()):
+            session = JsonRpcSession(["codex"], Path(directory) / "stderr.log")
+            session.close()
+            self.assertTrue(session._stderr_file.closed)
 
 
 if __name__ == "__main__":
