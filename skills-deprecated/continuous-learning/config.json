@@ -1,7 +1,0 @@
-{
-  "min_session_length": 10,
-  "candidate_name_prefix": "learned",
-  "pending_dir": "skills/continuous-learning/pending",
-  "state_file": "skills/continuous-learning/pending/state.json",
-  "index_file": "skills/continuous-learning/pending/index.json"
-}
