@@ -30,7 +30,7 @@ flowchart TD
     Req[需求 / 改动] --> RA[req-align：Decision + Spec 门]
     RA -->|D/S revision 已过门| PL[impl-planning：attempt plan + Composition]
     PL -->|按 Composition earn| PD[计划拆解：to-tickets draft → optional DAG → 联合校验]
-    PD --> PR[plan-review admission：fresh subagent]
+    PD --> PR[impl-planning 选择 fresh plan-review：admission / full / focused closure]
     PR -->|review 收敛 + 一次 bundle approval| EX[dev-with-track：执行 / gate]
     EX --> SD[subagent-driven-development：task 执行 + 局部验证]
     SD --> RV{验收证据 + 风险判断}
@@ -55,7 +55,7 @@ flowchart TD
 | 1 对齐与调研 | `req-align`（Decision 门） | Focused PRD + 方案决策的 `decision.md`（新功能/体验/业务变化通常 earned；小修正可 lightweight） | 新需求 / 需求变更，动手前 |
 | 2 写规格 | `req-align`（Spec 门） | 当前 `spec.md` revision | Decision 门过后 |
 | 3 Attempt 计划 | `impl-planning` | `plan.md` / patch plan（含 Composition） | Spec 过、要落地 |
-| 4 计划拆解（按需） | `to-tickets` → `create-task-dag` → `plan-review` admission | 按 Composition earned 的 `tickets/` 与/或当前 attempt DAG；联合校验、fresh admission 与一次 owner approval | plan 判 `tickets=true` 或 `dag=true` |
+| 4 计划拆解（按需） | `to-tickets` → `create-task-dag` → `impl-planning` 选择适用的 `plan-review` | 按 Composition earned 的 `tickets/` 与/或当前 attempt DAG；联合校验、fresh 独立审查与一次 owner approval | plan 判 `tickets=true` 或 `dag=true` |
 | 5 执行 | `dev-with-track` + `subagent-driven-development` | runtime state / Task 局部验证 evidence · plan Execution Record · append-only `gate.md` | 上游就绪 / 跨 session 续；有可委派 task 时由后者承载 |
 | 6 审查 | agent 风险判断后按需交给 `do-review`；可选择 `code-review`、`standards-review`、`spec-review` 与 `safety-review` | review evidence 或简化理由（进入 plan ER） | 见下方路由 |
 | 6b Completion claim gate | `verification-before-completion` | claim-to-evidence audit | 写 terminal pass 或宣称 complete / closed / merge-ready / release-ready 前 |

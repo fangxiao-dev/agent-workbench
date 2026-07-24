@@ -4,14 +4,14 @@
     {
       "id": 1,
       "name": "two-ticket-default-draft",
-      "prompt": "Internally call to-tickets for a gated S2 package whose current attempt plan declares tickets=true, dag=false and whose acceptance surface earns two independently accepted slices; prepare the ticket-only decomposition bundle for fresh plan-review admission before one owner approval.",
+      "prompt": "Internally call to-tickets for a gated S2 package whose current attempt plan declares tickets=true, dag=false and whose acceptance surface earns two independently accepted slices; prepare the ticket-only decomposition bundle for impl-planning to select the applicable fresh plan-review before one owner approval.",
       "expected_output": "Two local Draft ticket files and a runner-neutral bundle handoff.",
       "files": [],
       "expectations": [
         "Defaults to mode=draft and reads Composition from the current attempt plan",
         "Writes two Draft files under docs/implementations/<package-id>/tickets/",
         "Uses typed blocking edges and AC evidence",
-        "Reports the Draft ticket set as ready-for-review and routes it to impl-planning for fresh plan-review admission before the single owner approval",
+        "Reports the Draft ticket set as ready-for-review and routes it to impl-planning for applicable fresh plan-review before the single owner approval",
         "Does not publish or start implementation"
       ]
     },

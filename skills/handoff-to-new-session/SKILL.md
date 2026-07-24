@@ -1,12 +1,12 @@
 ---
 name: handoff-to-new-session
-description: Create a clean new Codex Desktop thread for a task or ticket whose authoritative records are already complete, using create_thread and a fully filled continuation prompt. Use whenever the user asks to hand off a finished checkpoint to a fresh new session, especially when the implementation worktree, HEAD, and task/package entry documents must survive the switch. Do not use for a partial-work summary, a rolling handoff, an automatic multi-hop relay, or any request to fork conversation history.
-compatibility: Requires Codex Desktop thread tools (list_projects, create_thread, and optionally wait_threads) plus local Git access.
+description: Create a clean normal Codex Desktop thread for a task or ticket whose authoritative records are already complete, using create_thread and a compact continuation prompt that names the existing implementation worktree, task package directory and Impl-Package entry point. Use whenever the user asks to hand off a finished checkpoint to a fresh new session, especially when the implementation worktree, HEAD, and task/package state must survive the switch. Do not use for a partial-work summary, a rolling handoff, an automatic multi-hop relay, or any request to fork conversation history.
+compatibility: Requires Codex Desktop thread tools (create_thread and optionally wait_threads) plus local Git access.
 ---
 
 # Handoff To New Session
 
-Create a fresh Codex thread from a verified implementation worktree. The handoff is a complete initial prompt, not a temporary handoff document and not a compressed conversation summary.
+Create a fresh normal Codex thread that explicitly uses a verified existing implementation worktree. The handoff is a compact, complete initial prompt, not a temporary handoff document and not a compressed conversation summary.
 
 ## Scope
 
@@ -14,20 +14,20 @@ Use this skill only when all of these are true:
 
 - The user wants a new, clean thread rather than inherited conversation history.
 - A task or ticket reached a documented checkpoint and its package, issue, plan, or progress records are the current authority.
-- The user identifies the implementation worktree that must be the source of the new thread's working-tree snapshot.
+- The user identifies the existing implementation worktree that the new session must use.
 - The next action is known, even when it is blocked on named input or authorization.
 
 Do not use this skill for a half-finished task that needs a rolling handoff, a general session summary, a fork, or a workflow that has no authoritative entry record yet. Route those requests to the appropriate handoff or planning workflow instead.
 
 ## Safety Model
 
-`create_thread` with `startingState: working-tree` snapshots the current Codex thread checkout. A shell command run with another `workdir` does not rebind the Codex thread. Creating a child from the wrong checkout can silently produce a plausible but unusable worktree.
+Do not create a worktree child or snapshot any checkout. The new session starts normally and uses the exact existing implementation worktree named in the prompt. A shell command run with another `workdir` does not rebind the Codex thread; the prompt must therefore state the target working directory before its read-only checks.
 
 Use only three recovery anchors:
 
-1. The absolute path of the parent implementation worktree.
+1. The absolute path of the existing implementation worktree.
 2. Its full current Git HEAD.
-3. The authoritative entry directory or document set and the purpose of each entry.
+3. The task package directory and the single Impl-Package entry point that owns the next action.
 
 Do not put a project ID, branch name, or dirty-state fingerprint in the child prompt. Preserve existing uncommitted implementation without attempting to enumerate it or clean it.
 
@@ -35,13 +35,11 @@ Do not put a project ID, branch name, or dirty-state fingerprint in the child pr
 
 Perform these read-only checks before drafting or creating the child:
 
-1. Resolve the user-supplied implementation worktree and compare it with the current Codex thread `cwd` from the environment context. They must be the same resolved path. Do not treat a shell `workdir` override as evidence.
+1. Resolve the user-supplied existing implementation worktree. It does not need to equal the parent thread `cwd`; the new normal session will be explicitly directed to use this path.
 2. In that worktree, read the full HEAD with `git rev-parse HEAD`.
-3. Confirm every stated entry directory or document exists. Read the progress or package records needed to fill the prompt from those sources, not from chat memory.
-4. If a package-level validation command is part of the task contract, use it in the child's first turn only when it is confirmed to be read-only: it must not modify the worktree or call an external system. Otherwise record `N/A — no read-only package validation command is defined` and leave that validation for the authorized Next Action.
-5. Resolve the one saved Codex project that is bound to this verified current checkout with `list_projects`. A project that merely contains the same repository is insufficient. If there is no exact match or more than one plausible match, treat it as a mismatch; do not select one automatically. Keep its ID only for the tool call.
+3. Confirm the stated package directory and Impl-Package entry point exist. Read the package records needed to fill the prompt from those sources, not from chat memory.
 
-If step 1, 2, 3, or 5 cannot be confirmed, stop before `create_thread`. Report `source-thread/worktree mismatch` with the expected worktree and failed anchor. Do not create a child, copy files, cherry-pick, reset, checkout, rebuild changes, or choose another worktree automatically.
+If step 1, 2, or 3 cannot be confirmed, stop before `create_thread`. Report `source worktree setup mismatch` with the expected worktree and failed anchor. Do not create a child, copy files, cherry-pick, reset, checkout, rebuild changes, or choose another worktree automatically.
 
 ## Fill The Initial Prompt
 
@@ -49,18 +47,18 @@ Read [references/handoff-prompt-template.md](references/handoff-prompt-template.
 
 The resulting prompt must:
 
-- Name the source implementation worktree and expected HEAD. Explain that the child receives a new Codex-managed worktree, so its path may differ while its HEAD and authority records must match.
-- State the task or ticket status, complete and incomplete work, verification evidence, external state, and the exact next action.
+- Name the existing source implementation worktree and expected HEAD. State that the normal session must use that path before running any command.
+- State the task or ticket status, complete and incomplete work, verification evidence, external state, and the single entry point that owns the next action.
 - Preserve explicit collaboration and execution-preflight authorization without converting one-time permission into standing permission.
-- Require that the child's first turn is only the stated read-only checks. On a mismatch, it must stop without a repair attempt. On success, it must continue the stated next action, stopping only for an explicitly named input, authorization, or other blocker.
+- Require that the child's first turn is only the stated working-directory, package-entry and HEAD checks. On a mismatch, it must stop without a repair attempt. On success, it must continue the stated next action, stopping only for an explicitly named input, authorization, or other blocker.
 - Keep controlled inputs, credentials, customer data, and oracle artifacts out of Git, chat bodies, and repository temporary files.
-- Carry every applicable fact from the stated authority into its matching template field. Do not use “见文件”, “同上”, “略”, or a link as a replacement for a fact; use literal `N/A` only for a truly inapplicable field.
+- Use the package directory and Impl-Package entry point as the authority route; do not enumerate every package file or restate a plan that is already authoritative on disk. Do not copy concrete commands or parameters, design details, Task steps, file ownership/boundaries, test commands, or implementation instructions into the child prompt; the entry point must recover them from the package. Carry only the current snapshot, verification, authorization and blocker facts needed to resume safely. Use literal `N/A` only for a truly inapplicable field.
 
 ## Create And Deliver
 
 1. Call `create_thread`; never call `fork_thread` in this skill.
-2. Use the resolved project target with `{ type: "worktree", startingState: { type: "working-tree" } }` and pass the filled prompt unchanged as `prompt`.
-3. If the tool returns a `threadId` and `hostId`, make one non-blocking `wait_threads` call with that exact pair and `timeoutMs: 0`. This may surface an immediately completed setup-mismatch report, but the child must not depend on a parent acknowledgement to continue.
+2. Create a normal session without `startingState: { type: "working-tree" }`, without a worktree target, and without any worktree snapshot option. Pass the filled prompt unchanged as `prompt`; it must name the target working directory directly.
+3. If the tool returns a `threadId` and `hostId`, make one non-blocking `wait_threads` call with that exact pair and `timeoutMs: 0`. This may surface an immediately completed source-worktree report, but the child must not depend on a parent acknowledgement to continue.
 4. If the tool returns a queued `clientThreadId`, report the queued setup instead of polling an unavailable thread ID.
 5. In the final response, state whether delivery succeeded or stopped at a mismatch and emit `::created-thread{threadId="..."}` for an immediate thread or `::created-thread{clientThreadId="..."}` for queued worktree setup. Do not write another handoff file.
 
@@ -68,19 +66,18 @@ The resulting prompt must:
 
 The initial prompt must impose this exact sequence:
 
-1. Read only the listed entry records.
-2. Confirm the current full HEAD equals the expected HEAD.
-3. Confirm the required entry directory or documents exist.
-4. Run the listed package validation only when one is defined.
-5. Inspect `git status --short` only to preserve existing work. It is informational, is never compared with parent output, and is never a mismatch condition; never clean, reset, checkout, copy, or reconstruct it.
+1. Before running commands, make the exact existing source worktree named in the prompt the session working directory.
+2. Read the package entry directory and use the named Impl-Package entry point to select only the current records needed for restore.
+3. Confirm the current full HEAD equals the expected HEAD.
+4. Confirm the required entry directory or documents exist.
 
-If any check fails, report `new worktree setup mismatch` and stop. If all checks pass, continue the filled `Next Action`. Do not stop merely to ask for a second confirmation.
+If the source worktree cannot be selected or any check fails, report `source worktree setup mismatch` and stop. If all checks pass, use the named Impl-Package entry point to continue its recorded `Next Action`. Do not stop merely to ask for a second confirmation.
 
 ## Final Check
 
 Before reporting delivery, verify that:
 
-- The current thread was genuinely bound to the stated implementation worktree before creation.
-- The prompt contains the three anchors, complete facts from the authoritative records, the child mismatch rule, the next action, and the authorization/collaboration boundaries.
+- The stated implementation worktree, HEAD and authority records were verified before creation.
+- The prompt contains the three anchors, the target-working-directory rule, package directory, Impl-Package entry point, current snapshot, mismatch rule, next action, and authorization/collaboration boundaries.
 - No project ID, branch, dirty-state fingerprint, secret, or controlled input was copied into the prompt.
-- The child was created with `create_thread` or the process stopped before creation for a documented source mismatch.
+- The child was created as a normal session with `create_thread`, never as a worktree snapshot, or the process stopped before creation for a documented source mismatch.

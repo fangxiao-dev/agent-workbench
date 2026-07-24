@@ -222,6 +222,38 @@
     },
     {
       "id": 19,
+      "prompt": "impl-planning 提供了正常 full review 后冻结的 closure brief：F-1 到 F-4 分别覆盖完整 EXTF 语义、deny-audit 例外、unknown update 终止和 stub 无 PDF。当前 candidate 只实现这些既有 resolution，closure brief 为每项提供了 input→storage→consumer→audit/privacy→recovery→verification evidence 链，且声明 D/S/P、authority 与 public contract 未扩大。现在明确选择 fresh `$plan-review mode=focused-closure-verification`。",
+      "expected_output": "Uses a fresh bounded verifier to check only the four named closure items, reports per-item evidence, does not open a new problem hunt or create unrelated formal findings, and returns closure-verified only if the normal ledger can also pass verify-clearance.",
+      "files": [],
+      "expectations": [
+        "Requires an explicit finite closure brief and treats it as verification input rather than a preordained verdict.",
+        "Preserves independent review while constraining scope to the named closure items and their full impact chains.",
+        "Does not request another owner approval or treat closure-verified prose as a substitute for verified ledger clearance."
+      ]
+    },
+    {
+      "id": 20,
+      "prompt": "impl-planning explicitly selects fresh `$plan-review mode=focused-closure-verification` for a finite closure brief. During verification, evidence shows that the candidate now persists a new tenant-scoped policy field that was not present in the reviewed bundle and crosses the declared authority boundary.",
+      "expected_output": "Stops bounded verification with reopen-full-review, identifies the authority-boundary contradiction as the single escalation reason, and requires a new closure batch plus normal full review rather than adding serial findings or patching in place.",
+      "files": [],
+      "expectations": [
+        "Does not silently keep the candidate in focused mode after a material boundary change.",
+        "Does not broaden the current round into an open-ended new-problem hunt.",
+        "Does not allow owner approval or clearance until the normal full review closes the new batch."
+      ]
+    },
+    {
+      "id": 21,
+      "prompt": "impl-planning selects `$plan-review mode=focused-closure-verification`, but supplies only a list of old finding IDs and no accepted resolution, impact chain, verification evidence, or assertion that the candidate boundary is unchanged.",
+      "expected_output": "Returns blocked and identifies the incomplete closure brief; it neither guesses the missing closure contract nor falls back to an unbounded review without an explicit reroute.",
+      "files": [],
+      "expectations": [
+        "Requires the finite closure brief fields before starting bounded verification.",
+        "Does not produce closure-verified, cleared, or owner approval."
+      ]
+    },
+    {
+      "id": 22,
       "prompt": "impl-planning 已因 external mutation 将 bundle admission 升级为 full review。正常 `$plan-review` 已以 plan、Tickets、DAG、joint-validation evidence 为 targets，并以 Decision/Spec 为 baselines 完成审查；现在交接 ledger 给 owner approval。",
       "expected_output": "Finalizes clearance only when all five dimensions, a complete Outside Voice, fresh bundle snapshots, and resolved findings permit it, then reports a verify-clearance-successful ledger absolute path as the only pass credential.",
       "files": [],

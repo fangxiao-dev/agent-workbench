@@ -232,6 +232,11 @@ def main() -> None:
         ),
         (
             skill,
+            "$plan-review mode=focused-closure-verification",
+            "frozen closure batches use bounded independent verification",
+        ),
+        (
+            skill,
             "不能降级为通过",
             "admission verdict cannot be downgraded",
         ),
@@ -267,13 +272,18 @@ def main() -> None:
         ),
         (
             plan_review,
+            "## Focused-closure-verification mode（仅由明确编排选择）",
+            "plan-review bounded closure mode",
+        ),
+        (
+            plan_review,
             "admission mode 不创建 ledger、manifest、receipt",
             "nonpersistent admission boundary",
         ),
         (
             impl_entry,
-            "plan-review admission：fresh subagent",
-            "package entry admission route",
+            "impl-planning 选择 fresh plan-review：admission / full / focused closure",
+            "package entry selects the applicable review route",
         ),
         (
             to_tickets,
@@ -282,8 +292,8 @@ def main() -> None:
         ),
         (
             create_task_dag,
-            "交回 `impl-planning` 编排 fresh `$plan-review mode=bundle-admission`",
-            "dag handoff requires admission",
+            "交回 `impl-planning` 选择 fresh、适用的 `$plan-review`",
+            "dag handoff routes review selection to impl-planning",
         ),
         (
             dev_with_track,
@@ -307,6 +317,14 @@ def main() -> None:
             plan_review_by_id[eval_id]["prompt"],
             "$plan-review mode=bundle-admission",
             f"plan-review admission eval {eval_id} exact orchestration",
+        )
+    for eval_id in (19, 20, 21):
+        if eval_id not in plan_review_by_id:
+            raise AssertionError(f"Missing plan-review focused closure eval {eval_id}")
+        assert_contains(
+            plan_review_by_id[eval_id]["prompt"],
+            "$plan-review mode=focused-closure-verification",
+            f"plan-review focused closure eval {eval_id} exact orchestration",
         )
     planning_by_id = {item["id"]: item for item in planning_evals}
     assert_contains(

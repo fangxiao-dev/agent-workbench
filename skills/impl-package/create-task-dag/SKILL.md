@@ -39,7 +39,7 @@ description: >
 - **AC evidence feasibility**：每个 Ticket AC 仍由 Ticket/Spec 声明 planned evidence 或 manual owner；DAG 只能证明存在可产出 evidence 的执行贡献并发现循环，不复制 AC 文本或替代正式 acceptance。
 - **Gate/P binding**：Ticket、DAG、Plan 与同一 package/Attempt、D/S/P revision 和 binding 对齐；DAG 的依赖、ownership 或 contribution 不能绕过 plan verification、safety authorization、external gate 或 Working Branch owner integration。
 
-任何一项失败都保持 bundle 在 `drafting`，修正后重新校验；全部 earned artifacts 齐备且校验通过后才可报告 `ready-for-review`。`ready-for-review` 后交回 `impl-planning` 编排 fresh `$plan-review mode=bundle-admission`；只有 `ready` 或完整 review 返回 `cleared` 后才请求 owner 一次批准 Tickets + DAG，随后 `to-tickets mode=publish` 才能执行 Ticket publication，bundle 才能进入 execution preflight。
+任何一项失败都保持 bundle 在 `drafting`，修正后重新校验；全部 earned artifacts 齐备且校验通过后才可报告 `ready-for-review`。`ready-for-review` 后交回 `impl-planning` 选择 fresh、适用的 `$plan-review`；只有 admission `ready` 或 normal/focused review 已验证 ledger `cleared` 后才请求 owner 一次批准 Tickets + DAG，随后 `to-tickets mode=publish` 才能执行 Ticket publication，bundle 才能进入 execution preflight。
 
 ## 最小记录与拆分规则
 
@@ -84,7 +84,7 @@ Ticket 最终验收前只扫描 contributes-to 该 Ticket 的 BLOCKED Task：若
 1. 读取当前 plan、gated spec、完整同 Attempt Draft/Approved Ticket 集合（如有）、仓库约束与现有 DAG/runtime state；确认可验收目标及外部 mutation 红线。
 2. 用最小表格划分可安全独立启动的 Task；记录确定依赖、primary ownership、Ticket contribution 和已知 seam/risk。不能安全并行就不拆。
 3. 运行本节联合 Ticket↔DAG 校验，确认 coverage、typed dependency、ownership/contribution、AC evidence feasibility 与 gate/P binding；失败则返回 `to-tickets`/`impl-planning` 修正，不发布任何 Ticket。
-4. 持久化最小 `dag.md`/patch DAG、联合校验结果与 review handoff，并报告 `ready-for-review`；交回 `impl-planning` 做 fresh `$plan-review mode=bundle-admission`，此时不派发 worker、不创建 Task progress、不收集执行 evidence，也不触发 Ticket publication。
+4. 持久化最小 `dag.md`/patch DAG、联合校验结果与 review handoff，并报告 `ready-for-review`；交回 `impl-planning` 选择 fresh、适用的 `$plan-review`，此时不派发 worker、不创建 Task progress、不收集执行 evidence，也不触发 Ticket publication。
 5. admission `ready` 或正常 full plan-review 返回 `cleared` 后，owner 批准完整 bundle、`to-tickets mode=publish` 成功并进入 execution preflight 后，由 `dev-with-track`/`subagent-driven-development` 按 DAG 派发 primary ownership 不重叠、依赖已释放的 Task；普通 prompt 只给目标、ownership、禁改范围、依赖、贡献 Ticket、局部验证与 BLOCKED 返回格式。集成性 Task 还要给出冻结接口、连接层写入范围、核心禁改范围及正反向证明；这些信息属于派发输入，不新增 DAG artifact 或角色。
 6. 执行阶段收集局部 evidence；BLOCKED 直接记录原因、建议动作和影响 Ticket。由 Working Branch owner 集成并执行共享验证和 Ticket 层正式 review；本 skill 不把局部验证升格为 Ticket acceptance。
 

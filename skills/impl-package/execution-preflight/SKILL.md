@@ -52,6 +52,7 @@ Always include the subagent mode when subagents are not explicitly forbidden by 
 
 - **普通使用:** the main session may use subagents for bounded support tasks, while the main session owns implementation and integration.
 - **主session负责调度、记录、决策、seaming，派发 subagent 做执行:** the main session owns coordination, authorization records, decisions, integration seams, and final accountability while subagents execute assigned slices.
+  - 默认模型配置（除非当前任务、用户或 host 另有指定）：实施类 `spawn_agent` 使用 `gpt-5.6-terra`、`reasoning_effort=high`；review 类 `spawn_agent` 使用 `gpt-5.6-sol`、`reasoning_effort=medium`。
 - **不允许:** no subagents.
 
 Prefer this shape:

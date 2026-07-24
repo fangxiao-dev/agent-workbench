@@ -6,6 +6,12 @@ admission mode 先输出一行本轮配置，再输出 `Admission verdict`、简
 
 不得为 admission 输出 ledger 路径、manifest hash、receipt、`cleared`、Apply 授权或跨 session 状态。它是当前 approval 前的独立判断，不是新的 canonical artifact；只有后续正常 full review 的临时 ledger 可以作为 runtime handoff。
 
+## Focused closure verification 输出
+
+先说明 `Mode=focused-closure-verification`、fresh verifier、closure brief 的项数与已验证项数，再按 brief 顺序列出每项的 `verified / failed / blocked` 及最短证据。全局只可为 `closure-verified`、`reopen-full-review` 或 `blocked`：`closure-verified` 还必须说明 `verify-clearance` 已成功，verified ledger 绝对路径仍是唯一可交给 `impl-planning` 的凭据；`reopen-full-review` 只说明直接矛盾或边界漂移的升级理由与下一动作，不扩展成一轮新 findings；`blocked` 说明缺失的输入或证据。
+
+本模式不请求额外 owner approval、不新增长期 artifact，也不把 mode verdict 当作 `cleared` 的替代品。
+
 ## Review 输出顺序
 
 1. **整体判断**：是否可进入 owner 决策或 Apply；存在未决、stale 或 degraded 时明确不能称为 cleared。

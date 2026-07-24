@@ -1,21 +1,20 @@
 # Handoff Initial Prompt Template
 
-Fill every bracketed field from the verified source records. Keep every section. Use `N/A` only when the section has no applicable fact. Send the filled result directly as the `create_thread` prompt; do not save it as a handoff file.
+Fill every bracketed field from the verified source records. Keep every section. Use `N/A` only when the section has no applicable fact. Keep concrete commands and parameters, design details, Task steps, file boundaries, tests and implementation instructions out of the prompt; name the single Impl-Package entry point and let it recover those details. Send the filled result directly as the `create_thread` prompt; do not save it as a handoff file.
 
 ```text
-接手 [TASK_OR_TICKET_NAME]。这是一个干净的新 Codex thread：从已完成的 [CHECKPOINT_OR_PHASE] 快照继续，不继承旧会话历史，也不要回溯重做已记录的工作。
+接手 [TASK_OR_TICKET_NAME]：从已完成的 [CHECKPOINT_OR_PHASE] 快照继续，不继承旧会话历史，也不要回溯重做已记录的工作。开始前请将本 session 的工作目录设为下列既有 implementation worktree。
 
 恢复锚点：
-- Parent implementation worktree（本次 working-tree snapshot 的唯一来源）：[ABSOLUTE_WORKTREE_PATH]
+- Target working directory：[ABSOLUTE_WORKTREE_PATH]
 - Expected HEAD：[FULL_GIT_HEAD]
-- 注意：你的 Codex-managed child worktree 路径可以不同；只要 HEAD 与下列权威入口一致即可。不要尝试切换、复制或重建到 parent 路径。
+- 首轮核对前，请确认当前工作目录就是该路径。
 
-权威合同与入口：
+权威入口：
 - Task / ticket：[TASK_OR_TICKET_IDENTIFIER_AND_PURPOSE]
-- Entry [1]：[PATH] — [PURPOSE]
-- Entry [2]：[PATH] — [PURPOSE]
-- Entry [3]：[PATH_OR_N/A] — [PURPOSE_OR_N/A]
-- Current binding / decision / scope（仅来自上列入口记录）：[VALUE_OR_N/A]
+- Package directory：[PACKAGE_DIRECTORY]
+- Impl-Package entry point：[IMPL_PACKAGE_ENTRY_POINT] — [PURPOSE]
+- Current binding / scope：[VALUE_OR_N/A]
 
 当前快照：
 - 总量与阶段状态：[COUNTED_STATUS_OR_N/A]
@@ -26,16 +25,13 @@ Fill every bracketed field from the verified source records. Keep every section.
 已验证与未验证：
 - 已验证：[VERIFICATION_SUMMARY_OR_N/A]
 - 尚未验证及原因：[UNVERIFIED_ITEMS_OR_N/A]
-- Package read-only working-tree validation：[EXACT_READ_ONLY_COMMAND_AND_EXPECTED_RESULT_OR_N/A_NO_READ_ONLY_COMMAND_DEFINED]。不得在首轮运行会修改工作树或调用外部系统的命令。
 
 首轮只读核对：
-1. 先只读 [ENTRY_DOCUMENTS_TO_READ_FIRST]。
-2. 确认当前完整 HEAD 等于 `[FULL_GIT_HEAD]`。
-3. 确认 [REQUIRED_ENTRY_DIRECTORY_OR_DOCUMENTS] 存在并可读取。
-4. 仅当上方定义了 read-only package validation command 时运行它。
-5. 查看 `git status --short` 仅用于保护现有改动；不与 parent 输出比较，也不作为 mismatch 条件。
+1. 先确认本 session 的工作目录是 `[ABSOLUTE_WORKTREE_PATH]`。
+2. 再从 `[PACKAGE_DIRECTORY]` 读取当前记录，并通过 `[IMPL_PACKAGE_ENTRY_POINT]` 选择恢复所需的最小材料。
+3. 确认当前完整 HEAD 等于 `[FULL_GIT_HEAD]`。
 
-任一项不符时：立即停止并报告 `new worktree setup mismatch`，说明失败的锚点。不得自行复制、cherry-pick、reset、checkout、clean 或重做实现。
+当前工作目录不等于目标路径或任一项不符时：立即停止并报告 `source worktree setup mismatch`，说明失败的锚点。不得自行复制、cherry-pick、reset、checkout、clean 或重做实现。
 
 硬协作与授权合同：
 - 协作模式：[EXPLICIT_MAIN_SESSION_AND_SUBAGENT_OWNERSHIP]
@@ -49,8 +45,7 @@ Fill every bracketed field from the verified source records. Keep every section.
 - 已发生的外部状态：[EXTERNAL_STATE_OR_N/A]
 - 禁止的外部动作：[PROHIBITED_EXTERNAL_ACTIONS_OR_N/A]
 
-通过上述首轮核对后，继续以下 Next Action，不要再次等待确认：
-[NEXT_ACTION]
+通过上述首轮核对后，直接通过 `[IMPL_PACKAGE_ENTRY_POINT]` 恢复并继续 package 已登记的 Next Action，不要再次等待确认。具体命令、参数、设计细节、Task 拆解、文件边界和测试选择均由该 entry point 从 package 中恢复，本 prompt 不重复。
 
 若 Next Action 需要但尚未具备的输入、授权或环境：[EXPLICIT_BLOCKER_AND_STOP_CONDITION_OR_N/A]。只有该 blocker、核对失败或 owner 要求停止时才停止。
 ```

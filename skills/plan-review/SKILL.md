@@ -14,9 +14,9 @@ user-invocable: true
 
 - 在 Review 阶段保持目标 plan byte-identical；不要修改 plan、spec、代码或仓库配置。
 - **审查对象是同一 revision 的 candidate bundle。**它由 candidate plan、该 candidate 已 earned 的 Ticket/DAG、candidate projection、必要的 D/S contract 与联合校验证据组成。registry 的 current projection 只说明已登记历史；不得用它判定未登记 candidate 的 drift、设计缺陷或风险。candidate projection 缺失时只报告 `review input incomplete`，先补齐输入，不晋升为产品、架构或 P0/P1 finding。
-- 每轮都使用 fresh context 的 Outside Voice。先让它独立阅读目标与必要基线，不向它泄漏主审 findings。
+- 每轮都使用 fresh context 的 Outside Voice。正常 full review 让它独立发现遗漏；`focused-closure-verification` 则给它规范化 closure brief，只独立验证已冻结的收口项，不把 fresh context 误用为重新开放的问题搜索。
 - Outside Voice 默认采用 5 分钟的等待。不要因第一个短轮询超时就将其标为 unavailable；在此窗口内保持目标只读。窗口届满仍无结果则主动 message 要求先返回已有的结论，确认仍在工作就继续等待直到完成。
-- 根据风险决定是否启用 Section Reviewer、Answerer、Judge 或 Critic；不要为了角色齐全而创建 agent。
+- 正常 full review 固定启用本 skill 定义的 B/C 维度 reviewer；根据风险决定是否额外启用 Answerer、Judge 或 Critic，避免无理由扩编。
 - 在审查开始时简短报告本轮角色、工具与测试表达形式的选择及理由；后续选择变化时只报告增量，不建立恢复协议。
 - 把产品意图、外部 contract、风险偏好和不可逆选择交给 owner；不得用“recommended”代替授权。
 - owner 对已展示且唯一的候选回复 `apply` 即构成语义授权；脚本在锁内把该消息引用绑定到当前 manifest hash。hash 只作机器审计，候选、目标基线或相关证据变化时旧授权失效。
@@ -49,6 +49,20 @@ admission 输入只包含同一 candidate bundle 的 plan、Composition earned �
 
 admission mode 不创建 ledger、manifest、receipt 或跨 session state，也不执行 Apply。admission reviewer 如发现调用方遗漏的 signal，主 session 必须把 `ready` 升级为 `full review`，不得降级该结果。主 session 不能把 `full review`、`revise` 或 `unavailable` 降级为 `ready`；owner 也不能以 waiver 伪造独立通过。
 
+## Focused-closure-verification mode（仅由明确编排选择）
+
+当一个正常 full review 已完成材料性 discovery、owner decision wave 与完整 impact sweep，`impl-planning` 可以为其后只实现该批已知决议的同一 candidate bundle 明确选择 `mode=focused-closure-verification`。它不是低风险 admission，也不是重新做一轮开放式审查：调用方必须提供一个有限的 closure brief，逐项列出原 formal finding、已接受的 resolution/owner decision、需要重验的 `input → state/storage → consumer → audit/privacy → failure recovery → verification evidence` 链路，以及候选未扩大 D/S/P、authority 或 public contract 边界的声明。缺少任一项即返回 `blocked`，不得猜测或把它补成 closure。
+
+该模式仍以 fresh Outside Voice 保持独立性，并照常绑定同一 candidate bundle、建立当前 ledger、检查 bundle snapshot 和运行 `verify-clearance`；不同之处只是审查范围。主审和 Outside Voice 仅验证 closure brief 所列项是否在完整链路上自洽、证据是否支持、以及候选是否确实没有越出声明的边界。不要追加“顺手发现”的 formal finding、建议或 D/S/P 修订；fresh 指独立的验证者，而非无限扩张的审查范围。
+
+按以下优先级返回唯一 mode verdict，并附逐项证据与下一动作：
+
+- `blocked`：closure brief、candidate bundle、所需基线或独立上下文不完整；修复输入后重验，不能 clearance。
+- `reopen-full-review`：发现已知收口项的直接矛盾、声明链路中的材料性遗漏，或新证据证明目标、D/S/P、authority/public contract 边界已经改变。只报告这一升级理由；不要在聚焦模式中继续拆分连续补丁。调用方必须将该理由连同现有收口项合成新的 closure batch，再走正常 full review。
+- `closure-verified`：每项均已验证，未出现上述升级信号，且当前 ledger 也满足 `finalize-clearance` 与 `verify-clearance`。此时对调用方的可用凭据仍是 verified ledger 的 `cleared`，不是聊天中的 mode verdict。
+
+用户直接调用 `$plan-review` 默认走正常 full review；不能因为存在旧 findings 自行选择本模式。`impl-planning` 也只能在明确的 closure brief 和上述前提成立时选择它。该模式不新增公共 schema、长期 registry 或额外 owner approval；它复用正常 full review 的 ledger 安全边界。
+
 ## 工程判断基线
 
 Material 指会影响行为、contract、数据、安全、运营、发布或显著工程成本的事项；不得用文件数、类数量、角色数量、阶段数量或 completeness score 代替材料性判断。每个 candidate 和 finding 都沿 `goal → contract → consumer → user/operator outcome → acceptance oracle` 追踪；最小完整变更按实际风险覆盖 success、error、recovery、migration、distribution 和 verification，不适用路径可以说明理由后跳过。
@@ -64,6 +78,16 @@ Material 指会影响行为、contract、数据、安全、运营、发布或显
 
 五个专项 reference 只扩展观察面，不替代这些横切原则。它们是帮助 agent 形成判断的启发式工具，不是逐项评分表；根据实际信号选择能改变 scope、architecture、test、rollout、finding 或 owner decision 的镜头，不在结论中机械复述原则名。
 
+## Full-review subagent 分工与收发协议
+
+正常 full review 固定采用三路 fresh subagent，以减少主 session 对五个维度的重复深读；若编排器可选择模型，三路均使用 `gpt-5.6-sol`、`reasoning_effort=medium`。A 是 mandatory fresh Outside Voice，保持完整、独立的开放式审查；B 只审 Scope + Architecture，重点检查 authority、tenant、transaction、lineage、custody；C 只审 Code Quality + Tests + Performance，重点检查实现边界、failure/recovery、验证充分性与调用放大。`bundle-admission` 与 `focused-closure-verification` 保持各自已定义的角色约束，不适用本固定分工。
+
+主 session 在派发前建立一次精简、同 revision 的 candidate bundle：candidate plan、earned Ticket/DAG、candidate projection、必要 D/S contract、联合校验证据、审查边界与只读约束。三路获得同一 bundle，且不接收主审 findings、预期 verdict、materiality 结论或 owner 偏好；A 仍按 Outside Voice prompt 保持独立发现。不要为每个维度重新拼装或扩展上下文。
+
+每路返回统一的结构化结论：`assigned_dimensions`、每个维度的 `reviewed/not_applicable/finding` 状态及理由、candidates（claim、evidence pointer、reasoning、risk）、检查过但未成 finding 的关键边界、tensions/未知项，以及最值得挑战的一个假设。evidence pointer 必须能由主 session 在同一 bundle 或仓库中复核；subagent 不写 ledger、不晋升 formal finding、不向 owner 提问或修改文件。
+
+主 session 不重复深读各维度；它只复核被引用的证据和冲突点，去重合并 candidates，按 evidence gate 晋升 formal findings，处理 tension，并组织真正需要 owner 决定的 decision waves。主 session 仍负责 ledger 原子写入、manifest、clearance 与最终报告。subagent 无结果或 evidence 无法复核时，不得把对应维度记为 `reviewed` 或 `not_applicable`；先标记 `review input incomplete` 并重试或补齐输入，不能 clearance。只有 A（Outside Voice）不可用会触发既有 degraded 限制，B/C 的不足同样不得伪装成主审已完成审查。
+
 ## 1. 绑定目标与基线
 
 当用户给出唯一存在的 plan 文件或 package 时直接绑定，不再提问。目标缺失、存在多个合理候选、目标不存在或请求与目标类型冲突时，只询问阻止有效审查的最小问题。
@@ -78,7 +102,7 @@ Material 指会影响行为、contract、数据、安全、运营、发布或显
 
 ## 2. 应用工程判断基线、加载审查镜头并报告本轮配置
 
-使用本文件的工程判断基线并读取五个短聚焦 reference，再对 Scope、Architecture、Code Quality、Tests、Performance 做 materiality scan。每个维度最终必须记录以下一种状态：
+使用本文件的工程判断基线并读取五个短聚焦 reference，再按“Full-review subagent 分工与收发协议”并行派发 Scope、Architecture、Code Quality、Tests、Performance 的 materiality scan。每个维度最终必须记录以下一种状态：
 
 - `reviewed`：已检查且没有 formal finding。
 - `not_applicable`：不适用，并给出与本计划相关的理由。
@@ -94,13 +118,13 @@ Material 指会影响行为、contract、数据、安全、运营、发布或显
 
 加载全部镜头不等于机械深挖全部维度：根据实际信号决定仓库调查深度、图示、角色和输出篇幅；没有 material 风险时记录有目标依据的 `not_applicable` 或 `reviewed`。
 
-向用户报告一行配置，例如：`本轮配置：Outside Voice=独立；Sections=主审 inline；Judge/Critic=跳过（证据无冲突且变更可逆）；Tests=coverage map。`
+向用户报告一行配置，例如：`本轮配置：Outside Voice=A 独立；Scope+Architecture=B；Code Quality+Tests+Performance=C；Judge/Critic=跳过（证据无冲突且变更可逆）；Tests=coverage map。`
 
 完成条件：五个维度都有初始材料性判断，本轮配置已对 owner 可见。
 
 ## 3. 形成候选并晋升 findings
 
-探索时只记录 candidate 的 `claim`、初步 `evidence/reasoning` 和 `risk`。沿 `goal → contract → consumer → user/operator outcome → acceptance oracle` 检查它是否 material；不要在尚未证实时填写完整表格或制造置信度精度。对已证实的 material candidate，在展示候选前做与风险相称的有界 closure sweep：检查可能受影响的相邻合同、实施边界和验证证据，并把同一闭环的 findings 合并；这不是新阶段或新产物，只避免把一个问题拆成连续补丁。
+正常 full review 探索时只记录 candidate 的 `claim`、初步 `evidence/reasoning` 和 `risk`。沿 `goal → contract → consumer → user/operator outcome → acceptance oracle` 检查它是否 material；不要在尚未证实时填写完整表格或制造置信度精度。对已证实的 material candidate，在展示候选前做与风险相称的有界 closure sweep：检查可能受影响的相邻合同、实施边界和验证证据，并把同一闭环的 findings 合并；这不是新阶段或新产物，只避免把一个问题拆成连续补丁。`focused-closure-verification` 跳过此开放式探索，只验证其 closure brief；发现直接矛盾或材料性边界漂移时返回 `reopen-full-review`，不在该模式继续产生新 finding。
 
 读取 `references/decision-policy.md`。只有通过 evidence gate 的 candidate 才晋升为 formal finding；正式 finding 必须包含 severity、可核验证据、具体风险、recommendation、owner gate 和同轮可比较的 confidence。Accepted finding 还必须能映射到实施动作、受影响模块、真实依赖和 verification oracle；只有真实存在依赖或 owner choice 时才添加 dependency 或 alternatives。
 
@@ -110,7 +134,7 @@ Material 指会影响行为、contract、数据、安全、运营、发布或显
 
 ## 4. 获取独立视角
 
-读取 `references/subagent-prompts.md`，始终启动 Outside Voice。第一轮只提供目标路径、审查边界和必要契约，让其独立发现遗漏、错误假设和 failure modes；完成独立输出后再与主审 findings 合并、去重或记录 tension。
+读取 `references/subagent-prompts.md`，始终启动 Outside Voice。正常 full review 按“Full-review subagent 分工与收发协议”同时启动 A、B、C；A 的第一轮只基于同一精简 candidate bundle 独立发现遗漏、错误假设和 failure modes，完成后主 session 才合并三路结果、去重或记录 tension。`focused-closure-verification` 使用其中的 bounded closure prompt：提供 closure brief 与必要基线，要求逐项独立证伪或确认，不要求也不允许开放式找新问题。
 
 在高影响自动归纳、证据冲突、不可逆性、跨边界影响或主审明显不确定时，要求 fresh reviewer 继续承担 Judge/Critic 检查。若工具允许，同一个 Outside Voice 上下文可以在独立观察完成后承担这些能力，避免额外固定编制。
 
