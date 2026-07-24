@@ -17,6 +17,7 @@
 - “同事需要知情但暂不行动”使用一次 `@mention` 加 GitHub Subscribe，不使用 assignee。assignee 只表示对下一步行动负责。
 - triage 先提案、后发布。读取和提出分类建议无需确认；任何创建、编辑、加 label、添加父子/依赖关系、评论或关闭 Issue 都必须等用户明确确认。
 - 不引入 `work:delivery`。普通的叶子 Issue 默认就是交付工作；`work:` 只标注两个需要特殊路由的形态：initiative 和 investigation。
+- `triage:managed` 是由 `$triage` 创建或规范化成功的 Issue 的唯一 provenance 标识。带有该 label 的开放 Issue 必须满足本设计的组合合同；没有该 label 的 Issue 是 legacy 或人工外部输入，进入 Unmanaged view，不假设其符合合同。
 - 现有 `$triage` 是唯一入口，直接替换为本设计的 GitHub Issue router；不创建并行的 `$issue-triage`。保留 `skills/triage/` 路径和 `name: triage`，使团队不需要记忆第二个命令。
 - 不把 GitHub Project 的执行 `Status` 与 Issue 的 readiness label 混为一个状态机。Project `Status` 可展示 Todo/In progress/In review/Done；readiness label 决定当前谁可以推进以及是否具备条件。
 
@@ -56,6 +57,22 @@
 | `blocker` | 不完成会阻碍父事项、合入或关键目标关闭。 |
 
 可执行的叶子 Issue 与 investigation 各有一个 type label；`blocker` 是可选例外标签。`blocker` 不等于 `blocked`：前者说明它阻碍别人，后者说明它自己现在无法推进，二者可以同时出现。
+
+### Managed-combination contract
+
+`triage:managed` 不表达优先级、工作类型或推进状态；它只声明 Issue 已被 router 依据本合同处理。writer 只能在 label 组合、父子关系和依赖关系均通过本地校验后添加它。
+
+| Managed Issue | 组合约束 | 至少覆盖的 view |
+| --- | --- | --- |
+| 父事项 | `work:initiative`；readiness 可省略。 | Initiatives |
+| 普通交付或 investigation，agent 可开始 | 一个 type + `ready-for-agent`。 | Agent queue |
+| 普通交付或 investigation，等待人处理 | 一个 type + `needs-info` 或 `ready-for-human`。 | Human inbox |
+| 已知依赖阻塞 | 一个 type + `blocked`，且正文或 GitHub 关系声明依赖。 | Blocked |
+| 不做 | `wontfix` 后关闭。 | Archive，不进入开放 view |
+
+`blocker` 不改变基础 view；`work:investigation` 也不形成独立状态队列，它按 readiness 进入 Agent queue、Human inbox 或 Blocked。
+
+GitHub Project filter 只能展示组合，不能可靠验证“恰好一个 readiness label”这类基数约束。因此 `$triage` 在 publish 前校验组合，并提供一个只读 contract audit：列出带 `triage:managed` 但 label 缺失、冲突或没有归属 view 的 Issue。Unmanaged view 使用 `-label:"triage:managed"` 暴露外部或历史输入，避免它们静默消失在面板之外。
 
 ### Retirement and migration mapping
 
@@ -112,6 +129,7 @@ Triage proposal
 ### Publication behavior
 
 - 创建/更新时，writer 只写已确认的标题、正文最小模板、labels、assignee、父子关系和依赖关系。
+- writer 在完成组合校验后添加 `triage:managed`；若现有 managed Issue 已违反合同，先给出最小修正提案，不静默覆盖。
 - 不自动发表 AI triage 评论、不自动 @mention、不自动创建 Agent Brief、不自动关闭 Issue。
 - Issue 进入实际实施协作并开始分支工作时，由开始执行的工作流写入唯一有效的 Working Branch 指针；router 不因创建任务而虚构分支。
 - 如果现有 Issue label 不完整或冲突，router 仍可读取和解释它；提案中标出最小修正，而不拒绝服务。
@@ -132,6 +150,7 @@ Triage proposal
 | Human inbox | `label:"ready-for-human","needs-info"` | 需要 owner 决策或补信息的事项。 |
 | Blocked | `label:"blocked"` | 跟踪已知依赖。 |
 | Initiatives | `label:"work:initiative"` | 查看大事项及子事项进度。 |
+| Unmanaged | `-label:"triage:managed"` | 暴露尚未由 router 规范化的 legacy 或人工输入。 |
 
 Project `Status` 只用于 board 执行可视化，不作为 router 判断 readiness 的唯一事实。
 
@@ -184,7 +203,7 @@ Project `Status` 只用于 board 执行可视化，不作为 router 判断 readi
 | Skill ecosystem | `setup-matt-pocock-skills`、seed/reference 和相邻消费者不再假设 `needs-triage`、外部 PR 入站或自动 Agent Brief。 |
 | KaiSpan tracker contract | `docs/agents/issue-tracker.md` 与 `docs/agents/triage-labels.md` 采用本设计的 label、父子关系和 PR 边界。 |
 | GitHub materialization | GitHub labels 和一个 Project 的保存 view 与文档一致；Project 设置前需要具备相应 GitHub 权限。 |
-| Open-issue migration | 仅开放 Issue 迁移到新语义；无状态的历史叶子 Issue 先由 router 产生提案，不进行猜测性批量标注。 |
+| Open-issue migration | 仅开放 Issue 迁移到新语义；无状态的历史叶子 Issue 先由 router 产生提案，不进行猜测性批量标注。成功规范化后才添加 `triage:managed`。 |
 
 关闭门：任何一个 slice 未完成时，都只能称为“实现或迁移进行中”，不能称为新的 issue-triage 体系已启用。
 
@@ -194,6 +213,7 @@ Project `Status` 只用于 board 执行可视化，不作为 router 判断 readi
 - 用户确认前，不发生 GitHub Issue、label、评论、依赖、assignee、Project 或分支变更。
 - router 能正确区分 `needs-info`、`ready-for-human`、`blocked` 与 `blocker`，并将真实依赖映射为 GitHub 原生关系。
 - `work:initiative` 不出现在 Agent queue；普通 leaf 与 `work:investigation` 在 `ready-for-agent` 时可以出现。
+- 每个由 router 成功创建或规范化的开放 Issue 都带 `triage:managed`，满足组合合同，并至少出现在一个开放 Project view；只读 contract audit 能报告所有 managed contract violation。
 - router 读取旧 Issue 时可报告 label 缺失或冲突，但不因历史数据不整洁而拒绝给出建议。
 - router 不把 PR 作为新需求入口，也不创建 Draft PR。
 - 对“同事仅需知情”的请求，提案使用通知/Subscribe 建议，不把同事自动设为 assignee。
@@ -205,4 +225,4 @@ Project `Status` 只用于 board 执行可视化，不作为 router 判断 readi
 3. 同步更新 `setup-matt-pocock-skills`、其 label seed/reference，以及仍假设 `needs-triage` 或 PR 入站的相邻 skill；补齐 router 的 fixture，覆盖父/子 Issue、依赖、label、无副作用和确认后发布。
 4. 经 owner 明确批准后，在 GitHub 创建/重命名目标 labels，更新 KaiSpan 的 `docs/agents/issue-tracker.md` 与 `docs/agents/triage-labels.md`，并配置一个 Project 的保存 view；Project 操作需先取得所需 GitHub 权限。
 5. 先由 router 对每个开放 Issue 生成迁移提案，再按确认的批次写入；已关闭历史 Issue 保留原 label 作为历史证据。
-6. 在所有 slices 一致后，以真实 Issue dry-run 验证 Agent queue、Human inbox、Blocked、Initiatives 四个 view 的筛选结果，再宣布新体系启用。
+6. 在所有 slices 一致后，以真实 Issue dry-run 验证 Agent queue、Human inbox、Blocked、Initiatives、Unmanaged 五个 view 的筛选结果，并运行 managed-combination contract audit；两者均无遗漏后才宣布新体系启用。
