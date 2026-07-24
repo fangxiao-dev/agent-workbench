@@ -232,27 +232,22 @@ def main() -> None:
         ),
         (
             skill,
-            "不能把其余三种结论改写成 `ready`",
+            "不能降级为通过",
             "admission verdict cannot be downgraded",
         ),
         (
-            skill,
+            plan_review,
             "verify-clearance",
             "full review must verify clearance before approval",
         ),
         (
             skill,
-            "正常 review 只以 `--target` 绑定可写 plan",
-            "bundle review has one writable target",
+            "同一 candidate bundle",
+            "bundle review uses one candidate",
         ),
         (
-            skill,
-            "都以重复 `--baseline` 绑定",
-            "Ticket and DAG remain review evidence rather than Apply targets",
-        ),
-        (
-            skill,
-            "必须升级为 `full review`",
+            plan_review,
+            "必须把 `ready` 升级为 `full review`",
             "main session conservatively escalates intrinsic risk",
         ),
         (

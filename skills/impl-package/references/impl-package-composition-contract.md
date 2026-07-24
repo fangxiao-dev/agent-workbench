@@ -112,11 +112,11 @@ Composition 的唯一事实源是当前 attempt plan，不在 spec 中声明，�
 | tickets=false, dag=true | runtime-state task records 是机器 SoT，attempt DAG Runtime State 表投影；Task 仅在 blocker、handoff、重试或并行派发时按需创建 `tasks/Tn-progress.md` | spec AC + plan Execution Record + gate entry |
 | tickets=true, dag=true | runtime-state task/ticket records 是机器 SoT，DAG 与 ticket files 各自投影；Task progress 同上，Ticket 不创建 progress | ticket Runtime Acceptance Status projection |
 
-### 计划拆解 bundle 与一次 review
+### 计划拆解 bundle 的唯一 owner checkpoint
 
-Ticket 与 DAG 是同一计划拆解阶段的两个职责 artifact，不是两个独立审批阶段。`tickets=true` 时，`to-tickets` 先生成当前 Attempt/P revision 的完整 Draft Ticket 集合；`dag=true` 时，`create-task-dag` 再消费该集合与 plan，或在 `tickets=false` 时直接消费 plan 生成 DAG。随后对 earned artifacts 做一次联合校验，至少覆盖覆盖范围、typed dependency 与 DAG dependency、primary ownership、Ticket AC 的 evidence feasibility、Task contribution、gate/preflight 边界和 D/S/P revision binding。
+Ticket 与 DAG 是同一计划拆解阶段的职责 artifact，不是独立审批阶段。`tickets=true` 时，`to-tickets` 必须先形成当前 Attempt/P revision 的完整 Draft Ticket 集合；`dag=true` 时，`create-task-dag` 再消费该集合与 plan，或在 `tickets=false` 时直接消费 plan 生成 DAG。随后联合校验覆盖范围、typed dependency 与 DAG dependency、primary ownership、Ticket AC evidence feasibility、Task contribution、gate/preflight 边界和 D/S/P revision binding。`impl-planning` 将这些内容连同 candidate projection、必要 D/S contract 与联合校验证据形成同一 revision 的 candidate bundle，并只进行一次适用的 `plan-review`。review 内部的 decision wave / early flush 只处理真实产品意图、外部合同、风险偏好或不可逆选择；ledger、manifest、reviewer 调度、旧 run、机械 projection 和验证命令由执行者自动处理，绝不成为 owner decision。
 
-联合校验通过后，owner 对当前 earned artifacts 作为一个 bundle 一次 review/approval；任何 Ticket 或 DAG 的实质变化都会使该 bundle approval 失效，必须按 impact-scoped reconciliation 修订受影响部分，若 Ticket 变化触及 DAG dependency、contribution、ownership 或顺序则重新生成或修订受影响 DAG，再联合校验并重新 review。未获 bundle approval 不得进入 execution/preflight；不存在 earned artifact 的 Composition 不创建空 bundle，也不新增审批 ceremony。
+review 收敛后，owner 只在此处决定是否将已审查的完整 candidate bundle 写入、登记并路由到 execution/preflight。该一次 approval 覆盖 Attempt、P revision 及全部 earned Ticket/DAG，不拆出 Ticket、DAG、ledger 或 register 的子审批；已批准后，调度器自动完成既定写入、校验和下游路由。实质改变业务结果、Acceptance Semantics、Composition、安全/数据约束、计划策略或外部 mutation authority 时，旧 approval 失效并回到新的 candidate；纯引用、格式、分类或 machine projection 修正保持连续授权。不存在 earned artifact 的 Composition 不创建空 bundle 或额外 ceremony。
 
 面向 owner 的计划拆解进度可报告为 `drafting`（earned artifacts 未齐或联合校验未通过）、`ready-for-review`（earned artifacts 齐备且校验通过）与 `approved`（当前 bundle 已获 owner approval）；`in-progress` 与 `completed` 继续由现有 Attempt、Task、Ticket acceptance 和 gate 推导。这些标签是汇报语义，不是新的 sidecar 字段、CLI 或可写状态 SoT，也不替代 Draft/Active/Frozen lifecycle。
 

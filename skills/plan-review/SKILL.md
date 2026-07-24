@@ -13,6 +13,7 @@ user-invocable: true
 ## 核心合同
 
 - 在 Review 阶段保持目标 plan byte-identical；不要修改 plan、spec、代码或仓库配置。
+- **审查对象是同一 revision 的 candidate bundle。**它由 candidate plan、该 candidate 已 earned 的 Ticket/DAG、candidate projection、必要的 D/S contract 与联合校验证据组成。registry 的 current projection 只说明已登记历史；不得用它判定未登记 candidate 的 drift、设计缺陷或风险。candidate projection 缺失时只报告 `review input incomplete`，先补齐输入，不晋升为产品、架构或 P0/P1 finding。
 - 每轮都使用 fresh context 的 Outside Voice。先让它独立阅读目标与必要基线，不向它泄漏主审 findings。
 - Outside Voice 默认采用 5 分钟的等待。不要因第一个短轮询超时就将其标为 unavailable；在此窗口内保持目标只读。窗口届满仍无结果则主动 message 要求先返回已有的结论，确认仍在工作就继续等待直到完成。
 - 根据风险决定是否启用 Section Reviewer、Answerer、Judge 或 Critic；不要为了角色齐全而创建 agent。
@@ -20,13 +21,14 @@ user-invocable: true
 - 把产品意图、外部 contract、风险偏好和不可逆选择交给 owner；不得用“recommended”代替授权。
 - owner 对已展示且唯一的候选回复 `apply` 即构成语义授权；脚本在锁内把该消息引用绑定到当前 manifest hash。hash 只作机器审计，候选、目标基线或相关证据变化时旧授权失效。
 - `cleared` 只可由 `finalize-clearance` 写入临时 ledger；调用方在 owner approval、publish 或 plan registration 前必须用同一绝对路径运行 `verify-clearance`，裸文本 verdict 无效。
+- 调用上下文决定停点：`impl-planning` 只在 review 收敛后交回一次完整 bundle approval；已 GO 的 `dev-with-track` 通过 `do-review` 自动闭环 findings、验证与 gate；用户直接调用 `$do-review` 时只得到 review checkpoint，由用户或上层决定是否修订/继续。ledger 不改变这些 owner-facing 语义。
 - 必读的 reference 或脚本缺失、路径错误或读取失败时立即返回 `BLOCKED`，报告准确路径与工具错误；禁止凭记忆替代、继续生成 findings 或执行 Apply。
 
 ## Bundle-admission mode（仅由明确编排选择）
 
-当活跃的 `impl-planning` 编排以确切 skill 名称选择 `plan-review`，并明确标注 `mode=bundle-admission` 时，本 skill 执行一次轻量、只读的 admission review。该调用必须运行在相对产出 bundle 的主 session 而言 fresh 的 subagent context；这个 admission reviewer 本身就是独立视角，不再为轻量路径额外启动 Outside Voice 或创建 ledger。用户直接调用 `$plan-review` 时一律走下方既有完整 workflow，不能因为计划看起来简单而自行选择 admission mode。
+当活跃的 `impl-planning` 编排以确切 skill 名称选择 `plan-review`，并明确标注 `mode=bundle-admission` 时，本 skill 执行一次轻量、只读的 admission review。调用方先扫描下方 escalation signals；命中任一项时直接启动完整 workflow，不先运行 admission。该调用必须运行在相对产出 bundle 的主 session 而言 fresh 的 subagent context；这个 admission reviewer 本身就是独立视角，不再为轻量路径额外启动 Outside Voice 或创建 ledger。用户直接调用 `$plan-review` 时一律走下方既有完整 workflow，不能因为计划看起来简单而自行选择 admission mode。
 
-admission 输入只包含当前 plan、当前 Composition earned 的 Ticket/DAG（若存在）、必要的 Decision/Spec contract、联合校验结论和审查目标；不得附带主 session findings、materiality 结论或期望 verdict。沿本 skill 的工程判断基线快速检查 Scope、Architecture、Code Quality、Tests、Performance 中实际相关的维度。
+admission 输入只包含同一 candidate bundle 的 plan、Composition earned 的 Ticket/DAG（若存在）、candidate projection、必要的 Decision/Spec contract、联合校验结论和审查目标；不得附带 registry current projection、主 session findings、materiality 结论或期望 verdict。沿本 skill 的工程判断基线快速检查 Scope、Architecture、Code Quality、Tests、Performance 中实际相关的维度。
 
 每次 admission 在开始和返回 verdict 时都用一行向 owner 报告本轮配置：`Mode=bundle-admission`、独立 reviewer 是否 fresh、额外 Outside Voice/ledger 明确不启用、发现的 full-review escalation signals 及路由结果。该报告是非阻塞的人类可读说明，不创建新 artifact、receipt 或 schema；即使没有 signal 也要明确写 `none`，不能让 owner 从“独立审查”反推实际配置。
 
@@ -45,7 +47,7 @@ admission 输入只包含当前 plan、当前 Composition earned 的 Ticket/DAG�
 - `full review`：存在任一 escalation signal；指出触发信号，停止 admission，由调用方按确切 `plan-review` skill 路径启动正常 workflow，取得已 `verify-clearance` 的 ledger 绝对路径后再判断 owner approval。
 - `ready`：材料足以判断、没有待修订缺口且 escalation signal 为 `none`；说明已检查的风险、为何其余维度不适用，以及计划可以进入 owner approval。
 
-admission mode 不创建 ledger、manifest、receipt 或跨 session state，也不执行 Apply。reviewer 返回后，主 session 必须基于已提供材料做一次保守 escalation scan 并报告结果；若材料中存在上述 signal，必须把 `ready` 升级为 `full review`。主 session 不能把 `full review`、`revise` 或 `unavailable` 降级为 `ready`；owner 也不能以 waiver 伪造独立通过。
+admission mode 不创建 ledger、manifest、receipt 或跨 session state，也不执行 Apply。admission reviewer 如发现调用方遗漏的 signal，主 session 必须把 `ready` 升级为 `full review`，不得降级该结果。主 session 不能把 `full review`、`revise` 或 `unavailable` 降级为 `ready`；owner 也不能以 waiver 伪造独立通过。
 
 ## 工程判断基线
 
@@ -68,13 +70,11 @@ Material 指会影响行为、contract、数据、安全、运营、发布或显
 
 读取目标、项目指令、目标明确引用的 design/spec，以及决定当前 contract 所必需的相邻资料。不要遍历与判断无关的背景文档。
 
-从目标仓库根目录先以 plan 为 discover target 运行 `python <skill-dir>/scripts/review_ledger.py discover --target <plan-path>`。没有 unfinished run 时才运行 `init`；guarded Apply 的唯一 `--target` 永远是可写的 plan。完整 package review 把全部 earned Ticket 路径（集合可传目录）、DAG、联合校验证据和必要 Decision/Spec contract 作为重复 `--baseline` 传入，使它们可被 review 与 applied-evidence 复验、却不成为 Apply 写入对象。当前会话已持有明确 ledger path 时用 `resume --ledger <ledger.json> --target <plan-path>` 继续。发现一个或多个 unfinished run（`active` 或中断于写入的 `applying`）且当前上下文无法证明应继续哪个时，列出 run ID、状态、创建时间、baseline 是否匹配和未决集合，请 owner 明确选择 resume 或 abandon；`applying` 必须先 resume，由脚本按目标 hash 收敛为 `active`/`applied` 或要求 owner 检查。在所有同目标旧 run 被选择或审计性关闭前不要创建并行 ledger。
+从目标仓库根目录绑定 candidate plan；完整 package review 把同一 candidate 的全部 earned Ticket 路径（集合可传目录）、DAG、candidate projection、联合校验证据和必要 Decision/Spec contract 作为重复 `--baseline` 传入，使它们可被 review 与 applied-evidence 复验、却不成为 Apply 写入对象。按 [`references/ledger-cli.md`](references/ledger-cli.md) 建立或恢复内部 ledger：`init` 自动 supersede 候选/基线已变化的旧 run，`resume` 遇到漂移也自动终结为 `superseded`。不向 owner 询问路径、恢复、归档、清理或旧 run 的选择；`abandon` 只用于 owner 明确取消整个 stage。
 
-Owner 明确放弃旧 run 时，使用 `abandon --ledger <ledger.json> --source <abandonment.json>`；该命令只把 run 标为 abandoned、使旧授权失效并保留审计记录，不删除 temp 文件。不要恢复角色编制、问题树、消息往返或隐藏推理，只恢复 ledger 中的 baseline、formal findings、resolution、authorization 和 stale 状态。
+后续 CLI 保持同一仓库工作目录，使相对 evidence paths 稳定解析；ledger 绝对路径只进入内部 runtime handoff 或审计记录，不是默认 owner-facing deliverable。
 
-`init` 或 `resume` 后立即向用户报告 ledger 绝对路径，而不是等到最终回复。后续 CLI 保持同一仓库工作目录，使相对 evidence paths 稳定解析；Ledger 是临时安全记录，不是项目交付物。
-
-完成条件：目标、必要 contract baseline 和唯一 unfinished ledger 路径已经确定，所有同目标旧 run 已显式继续、完成或放弃，目标当前内容尚未变化。
+完成条件：目标、必要 contract baseline 和唯一可恢复 ledger 已由 CLI 自动确定；同目标旧 run 已自动复用、supersede 或保留为关闭审计历史，目标当前内容尚未变化。
 
 ## 2. 应用工程判断基线、加载审查镜头并报告本轮配置
 
@@ -100,7 +100,7 @@ Owner 明确放弃旧 run 时，使用 `abandon --ledger <ledger.json> --source 
 
 ## 3. 形成候选并晋升 findings
 
-探索时只记录 candidate 的 `claim`、初步 `evidence/reasoning` 和 `risk`。沿 `goal → contract → consumer → user/operator outcome → acceptance oracle` 检查它是否 material；不要在尚未证实时填写完整表格或制造置信度精度。
+探索时只记录 candidate 的 `claim`、初步 `evidence/reasoning` 和 `risk`。沿 `goal → contract → consumer → user/operator outcome → acceptance oracle` 检查它是否 material；不要在尚未证实时填写完整表格或制造置信度精度。对已证实的 material candidate，在展示候选前做与风险相称的有界 closure sweep：检查可能受影响的相邻合同、实施边界和验证证据，并把同一闭环的 findings 合并；这不是新阶段或新产物，只避免把一个问题拆成连续补丁。
 
 读取 `references/decision-policy.md`。只有通过 evidence gate 的 candidate 才晋升为 formal finding；正式 finding 必须包含 severity、可核验证据、具体风险、recommendation、owner gate 和同轮可比较的 confidence。Accepted finding 还必须能映射到实施动作、受影响模块、真实依赖和 verification oracle；只有真实存在依赖或 owner choice 时才添加 dependency 或 alternatives。
 
@@ -120,7 +120,7 @@ Owner 明确放弃旧 run 时，使用 `abandon --ledger <ledger.json> --source 
 
 ## 5. 批量收敛 owner 决策
 
-先继续所有不依赖 owner 决定的分支。按依赖关系把剩余决定组织成少量 waves；同一 wave 只放彼此独立的选择，并允许 owner 用 `1A 2B 3A` 批量回答。
+先完成上一节的 closure sweep，并继续所有不依赖 owner 决定的分支。按依赖关系把剩余决定组织成少量 waves；同一 wave 只放彼此独立的真实产品意图、外部合同、风险偏好或不可逆选择，并允许 owner 用 `1A 2B 3A` 批量回答。ledger、manifest、reviewer 调度、旧 run、机械 projection 与验证命令不得进入 wave。
 
 只有一个决定冻结多个 material branches、会使大量后续结论失效或涉及不可逆 contract 时才 early flush。校验漏答、冲突和因上游选择而失效的下游回答，只重问受影响项。
 
@@ -138,34 +138,16 @@ Owner 明确放弃旧 run 时，使用 `abandon --ledger <ledger.json> --source 
 - Evidence dependency 变化时只把引用它的 findings 标为 stale，局部复核后生成新 manifest。
 - 授权缺失、hash 不匹配、存在未接受的 P0、owner-required finding 未裁决或存在 stale 时停止写入。
 
-先在 OS temp 生成完整 proposed plan，不修改目标；然后运行 `verify --apply-output <proposed-plan>`。该 guarded Apply 在 ledger 与目标锁内重新核验完整 baseline hash、当前 authorization 和 evidence freshness，先持久化可恢复的 `applying` receipt，再把原目标 inode 保留为同目录、run-bound 的 preimage backup，并以 create-if-absent 安装 proposal；因此已打开旧句柄的迟到写入仍留在报告的 backup 中，不会被静默删除。baseline 不匹配时目标零写入停止。若进程在目标写入与最终 ledger 落盘之间中断，下一次 `resume` 只按 target/backup 的 preimage/output hash 收敛状态，不猜测意图；可恢复的 preimage 会恢复为 `active`，已有 backup 不会被覆盖，重试使用新的 run-bound 后缀。写入后逐 hunk 对照授权 manifest，发现语义超出授权时不得宣称 Apply 成功，并报告 backup 供人工恢复。Backup 是持久恢复物，只有 owner 确认目标内容且无需恢复迟到写入后才清理，skill 不自动删除。多目标 package 首版不使用 guarded Apply，保持未写入并请求 owner 拆分或选择明确目标。默认不要向目标 plan 追加 ledger 路径或 review report；仅当项目模板要求、ledger 已导出到稳定位置或 owner 明确要求时写摘要。
+先在 OS temp 生成完整 proposed plan，不修改目标；然后运行 `verify --apply-output <proposed-plan>`。guarded Apply 必须在 baseline、授权或证据漂移时零写入停止，并保留可恢复 preimage。按 [`references/guarded-apply.md`](references/guarded-apply.md) 执行恢复、backup 与多目标限制；不要把临时 ledger 路径写入持久 plan。
 
 完成条件：`verify` 通过，目标 diff 只包含当前授权 manifest 的决定，未决、stale 和 degraded 状态没有被隐藏。
 
 ## 7. 输出
 
-读取 `references/final-report.md`。按 owner 可快速判断的顺序输出：整体 verdict、角色/工具配置、五维材料性、What already exists、NOT in scope、formal findings、测试与 failure modes、待 owner 决策、stale/degraded 状态和 Apply 授权状态。
+读取 `references/final-report.md`，按其中结构输出 owner 可快速判断的结论。
 
-Review 结束时给出 ledger 的绝对路径供当前用户审计或下游 runtime handoff，但不要把 OS-temp 路径写入持久 plan。默认调用 `present-candidate` 后等待 owner 回复 `apply`，再用 `authorize-contextual`；带 hash 的 `authorize` 仅为旧自动化兼容。只有 `verify-clearance` 成功的正常 full review 才能报告 `cleared`；若仍有未决、stale 或 degraded 状态，明确说明 `not cleared`。
+由 `impl-planning` 调用时，正常 full review 只交回经 `verify-clearance` 验证的内部 runtime handoff；随后由 `impl-planning` 展示同一完整 bundle 并请求唯一 approval。plan-review 不单独制造第二次 owner approval。直接 `$plan-review` 则停在 review checkpoint，只有用户随后明确要求 Apply 才执行 `present-candidate`、`authorize-contextual` 和 guarded Apply；带 hash 的 `authorize` 仅为旧自动化兼容。若仍有未决、stale 或 degraded 状态，明确说明 `not cleared`。
 
 完成条件：只读最终回复即可判断审查是否 cleared、还缺什么、是否已授权 Apply，以及 owner 下一步需要决定什么。
 
-## CLI 快速参考
-
-```text
-python <skill-dir>/scripts/review_ledger.py discover --target <path> [--include-closed]
-python <skill-dir>/scripts/review_ledger.py init --target <path> --skill-version <version>
-python <skill-dir>/scripts/review_ledger.py resume --ledger <ledger.json> --target <path>
-python <skill-dir>/scripts/review_ledger.py abandon --ledger <ledger.json> --source <abandonment.json>
-python <skill-dir>/scripts/review_ledger.py record --ledger <ledger.json> --input <record.json>
-python <skill-dir>/scripts/review_ledger.py status --ledger <ledger.json>
-python <skill-dir>/scripts/review_ledger.py finalize-clearance --ledger <ledger.json>
-python <skill-dir>/scripts/review_ledger.py verify-clearance --ledger <ledger.json>
-python <skill-dir>/scripts/review_ledger.py present-candidate --ledger <ledger.json>
-python <skill-dir>/scripts/review_ledger.py authorize-contextual --ledger <ledger.json> --source <owner-apply-message.json>
-python <skill-dir>/scripts/review_ledger.py verify-applied-evidence --ledger <ledger.json>
-python <skill-dir>/scripts/review_ledger.py authorize --ledger <ledger.json> --manifest-hash <hash> --source <authorization.json>
-python <skill-dir>/scripts/review_ledger.py verify --ledger <ledger.json> [--manifest-hash <hash>] [--apply-output <proposed-plan>]
-```
-
-不要把 CLI 扩展为角色编排器。它只保护 baseline、formal finding、resolution、owner authorization、未决集合、原子写入和 stale 检测。
+需要执行 CLI 时读取 [`references/ledger-cli.md`](references/ledger-cli.md)。不要把 CLI 扩展为角色编排器；它只保护 baseline、formal finding、resolution、owner authorization、未决集合、原子写入和 stale 检测。

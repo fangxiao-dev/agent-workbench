@@ -53,11 +53,28 @@ For an existing package, retain its current directory name as its legacy or time
 
 Use the repository's vocabulary and source-of-truth hierarchy. If durable project knowledge should change, propose the change against the discovered authoritative source and wait for owner approval; never invent a fixed long-lived destination.
 
+## Core / Capability Boundary
+
+Before selecting a direction, identify the boundary between the stable business core and the capability that exposes it to the current caller. This is a design discipline, not a mandate to create a new package, service, API, database model, queue, or generic framework.
+
+- **Core** owns reusable business semantics: invariants, authoritative inputs and outputs, state transitions, failure/recovery rules, and the owner-local domain boundary. It must not inherit transport, fixture, CLI, UI, provider, delivery, or acceptance-evidence details from one caller.
+- **Capability** exposes that core to a specific caller through an API, UI, CLI, job, permission, persistence workflow, delivery mechanism, or test harness. It is added only when the current authorized requirement needs it; it must call rather than duplicate, bypass, or redefine the core.
+
+For every contract-impacting change, make one coherent boundary judgment before the Decision gate:
+
+1. State the Core that changes or is reused, its owner, and its stable authority/invariants. If no stable Core exists beyond the current local behavior, say so instead of inventing an abstraction.
+2. State the one or more current Capabilities, their callers, and the exact authority they need to expose.
+3. Separate caller-specific transport, acceptance, fixture, and delivery details from Core semantics.
+4. Evaluate likely reuse with evidence: a second caller should be able to add or change a Capability without copying Core semantics. Do not treat an imagined future caller as authorization to expose API, persistence, permission, orchestration, UI, or delivery infrastructure now.
+5. Record deliberately deferred Capability expansion and the condition that would re-open it when that distinction affects scope, authority, migration, recovery, or Acceptance Semantics.
+
+The Decision records the selected boundary and why it is proportionate. The Spec makes the selected Core invariants and current Capability behavior actionable. The plan only decomposes those already-selected responsibilities. A Decision gate cannot pass when a material change leaves this boundary ambiguous, duplicates Core behavior across callers, or expands a Capability solely because Core might later be reused.
+
 ## Blocking Decision Uncertainty
 
 Triage every unknown before passing the Decision gate. An unknown is a **blocking decision uncertainty** when a negative, unavailable, or disproving answer would change the selected option, Decision direction, Spec boundary, critical security or data authority, delivery path, or Acceptance Semantics. This is a contract-impacting uncertainty, not an implementation risk or an execution gate: the default Decision result is `BLOCKED`, and neither a passed Decision/Spec nor a plan may be written first and rely on later feasibility verification to settle it.
 
-For each uncertainty, record the question, its `blocking` or `non-blocking` classification, the contract impact if it fails, the evidence required, whether a read-only investigation may proceed directly, and whether Owner authorization is required. A question may be deferred only when evidence proves it cannot affect the contract, or its owner, consequence, defer boundary, and non-blocking effect on Spec are explicit. Recording an owner alone never makes a blocking uncertainty deferrable.
+For each uncertainty, record the question, its `blocking` or `non-blocking` classification, the contract impact if it fails, the evidence required, whether a read-only investigation may proceed directly, and whether Owner authorization is required. A question may be deferred only when evidence proves it cannot affect the contract, or its owner, consequence, defer boundary, and non-blocking effect on Spec are explicit. Recording an owner alone never makes a blocking uncertainty deferrable. When a material contract delta is confirmed, first consolidate its relevant contract and acceptance consequences into the same D/S revision; this is a bounded alignment check, not a new gate or artifact.
 
 Perform ordinary read-only, task-scoped investigation directly. If investigation needs new external permission, external side effects, material cost, a code spike, environment change, or a material scope expansion, record the reason and required Owner decision in a `BLOCKED` Decision instead of starting it. Put the investigation detail in `investigations/<topic>.md`; record only the conclusion, options, rationale, and blocker or Owner decision in `decision.md`, and only the selected behavior contract in `spec.md`. If investigation changes the direction, return to Decision and re-evaluate the Decision gate before writing or revising Spec or Plan.
 
@@ -69,6 +86,7 @@ The Decision gate passes only when all of these are verifiably true:
 
 - **Destination is answerable:** intended outcome, affected system boundary, and handoff to the implementation contract are explicit. When delivery and validation use different paths, state the delivery path and the limit of what validation proves; validation convenience must not silently redefine the intended product path.
 - **Focused need is defined at the right layer:** target user/scenario, current problem and trigger, expected result/value, scope/non-goals, core experience or business flow, and success signals are explicit when the change earns a Focused PRD; a lightweight correction points to the existing product definition and records the minimum delta evidence instead of manufacturing a duplicate PRD.
+- **Core / Capability boundary is decided:** the selected Core, current Capability, ownership, caller-specific details, and any deliberately deferred exposure are classified under the `Core / Capability Boundary` discipline above; reuse is neither ignored nor used to smuggle in unneeded surface area.
 - **Repository fit is evidenced:** authority sources and current-state facts have been checked; conflicts and missing knowledge are named.
 - **Choices are decided:** material options and trade-offs have a selected direction and rationale, or an explicit owner decision blocks the gate.
 - **Blocking decision uncertainty is closed:** every material uncertainty has the required feasibility or architecture-fit evidence before the gate passes. It has not been relabeled as a plan execution gate or implementation risk.
@@ -135,7 +153,7 @@ Spec Gate 本身不自动要求 `grill-me-smartly`。只在用户明确要求对
 2. Discover authoritative project knowledge before detailed clarification. Move any pre-existing package-owned non-authoritative investigation into the earned-only `investigations/<topic>.md` location after package identity is fixed; leave authoritative/shared/read-only sources in place.
 3. Run blocking-uncertainty triage: classify each unknown, its failure impact, required evidence, and investigation authority. Perform ordinary read-only investigation directly; if further investigation needs Owner authorization, record `Decision Gate: BLOCKED` and the required decision instead of performing it.
 4. Ask one focused question at a time only for unresolved intent, scope, constraints, success criteria, trade-offs, or Owner decisions that discovery and permitted investigation cannot answer.
-5. Run Focused PRD + Decision Research, archive earned investigation detail, classify whether the standalone file is earned, present the focused outcome and selected direction plus blockers, then re-evaluate the Decision gate before creating `spec.md`. If investigation changes the direction, update Decision rather than silently carrying it into Spec or Plan.
+5. Run Focused PRD + Decision Research, including one coherent Core / Capability boundary judgment; archive earned investigation detail, classify whether the standalone file is earned, present the focused outcome and selected direction plus blockers, then re-evaluate the Decision gate before creating `spec.md`. If investigation changes the direction, update Decision rather than silently carrying it into Spec or Plan.
 6. If Decision is blocked, create or update `decision.md` with provenance, readiness evidence, blocking-uncertainty triage, blockers, and Owner decisions; stop without creating `spec.md`.
 7. If Decision passes, persist `decision.md` for a new feature, material experience change, business capability change, or any case where the Focused PRD/choice has durable value. For a small behavior correction under an existing product definition, take the lightweight path: create `spec.md` and write the minimum product-definition pointer, delta provenance, readiness, investigation disposition, and Owner-decision evidence into its Decision Gate Record. Append reusable confirmed cross-stage findings to an already-needed `execution-findings.md`; place raw investigation material in earned-only topic files under `investigations/` and never create either artifact as empty ceremony. A `contract impact=none` implementation fix does neither.
 8. Synthesize the eight-section `spec.md` only when contract impact requires it, evaluating the conditional evidence-integrity contract only when its signal is present. For a patch, reuse D/S revisions for `contract impact=none` or implementation-only drift without evaluating Spec Gate, rerun only Spec Gate for behavioral contract changes, and rerun Decision then Spec for decision-direction changes. Run `grill-me-smartly` only when the risk-driven criteria above are present or the user asks for it; otherwise evaluate the Spec Gate directly. Stop when the required gate is blocked.
@@ -157,6 +175,12 @@ Before writing artifacts or editing long-lived knowledge, present:
 - Current-state facts:
 - Sources checked:
 - Expected knowledge not found:
+
+### Core / Capability Boundary
+- Core and owner:
+- Current Capability and caller:
+- Caller-specific details excluded from Core:
+- Reuse evidence and deliberately deferred exposure:
 
 ### Drift Or Conflict Check
 - Confirmed alignment:

@@ -107,9 +107,9 @@ class ReviewLedgerTests(unittest.TestCase):
             "statement": f"abandon {run_id}",
         }
 
-    def test_init_uses_unique_os_temp_run_identity(self) -> None:
+    def test_init_reuses_the_current_candidate_run(self) -> None:
         second = ledger.init_ledger([str(self.target)], temp_root=self.root / "runtime")
-        self.assertNotEqual(self.ledger_path.parent, second.parent)
+        self.assertEqual(self.ledger_path, second)
         state = json.loads(self.ledger_path.read_text(encoding="utf-8"))
         self.assertTrue(state["run"]["run_id"].startswith("epr-"))
         self.assertEqual(state["run"]["status"], "active")
@@ -197,6 +197,27 @@ class ReviewLedgerTests(unittest.TestCase):
                 self.assertIn(eval_id, by_id)
                 self.assertIn("$plan-review mode=bundle-admission", by_id[eval_id]["prompt"])
 
+    def test_authorization_contexts_keep_one_bundle_checkpoint(self) -> None:
+        workbench = MODULE_PATH.parents[3]
+        contract = (
+            workbench / "skills" / "impl-package" / "references" / "impl-package-composition-contract.md"
+        ).read_text(encoding="utf-8")
+        planning = (
+            workbench / "skills" / "impl-package" / "impl-planning" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        dev_with_track = (
+            workbench / "skills" / "impl-package" / "dev-with-track" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        do_review = (workbench / "skills" / "do-review" / "SKILL.md").read_text(encoding="utf-8")
+        plan_review = (workbench / "skills" / "plan-review" / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertIn("### 计划拆解 bundle 的唯一 owner checkpoint", contract)
+        self.assertIn("一次 approval 覆盖 Attempt、P revision 及全部 earned Ticket/DAG", contract)
+        self.assertIn("candidate → 一次适用 review → 一次完整 bundle approval → 自动 register/route", planning)
+        self.assertIn("ledger、manifest、reviewer 调度、旧 run、机械 projection 与验证命令不得进入 wave", plan_review)
+        self.assertIn("## 执行授权后的自动收口（不得二次请示）", dev_with_track)
+        self.assertIn("Do not create, request, or infer owner approval", do_review)
+
     def test_discover_lists_only_matching_active_runs(self) -> None:
         second = ledger.init_ledger([str(self.target)], temp_root=self.root / "runtime")
         other_target = self.root / "other.md"
@@ -205,23 +226,109 @@ class ReviewLedgerTests(unittest.TestCase):
         result = ledger.discover_ledgers(self.target, temp_root=self.root / "runtime")
         self.assertEqual(
             {item["run_id"] for item in result["runs"]},
-            {
-                ledger.status_ledger(self.ledger_path)["run_id"],
-                ledger.status_ledger(second)["run_id"],
-            },
+            {ledger.status_ledger(self.ledger_path)["run_id"], ledger.status_ledger(second)["run_id"]},
         )
         self.assertEqual(result["invalid"], [])
         self.assertTrue(all(item["run_status"] == "active" for item in result["runs"]))
 
-    def test_resume_binds_target_and_refreshes_stale_state(self) -> None:
+    def test_resume_supersedes_a_changed_candidate_without_owner_input(self) -> None:
         other_target = self.root / "other.md"
         other_target.write_text("# Other\n", encoding="utf-8")
         with self.assertRaisesRegex(ledger.LedgerError, "does not match"):
             ledger.resume_ledger(self.ledger_path, other_target)
         self.target.write_text("# Changed\n", encoding="utf-8")
         status = ledger.resume_ledger(self.ledger_path, self.target)
-        self.assertEqual(status["run_status"], "active")
+        self.assertEqual(status["run_status"], "superseded")
         self.assertTrue(status["baseline_stale"])
+        self.assertEqual(status["supersession"]["reason"], "candidate-or-baseline-changed")
+
+    def test_init_supersedes_changed_baselines_and_preserves_audit_history(self) -> None:
+        self.materiality()
+        ledger.finalize_clearance(self.ledger_path)
+        ledger.present_candidate(self.ledger_path)
+        manifest_hash = ledger.status_ledger(self.ledger_path)["manifest_hash"]
+        ledger.authorize_ledger(
+            self.ledger_path,
+            manifest_hash,
+            self.authorization_source(manifest_hash),
+        )
+        self.target.write_text("# Revised candidate\n", encoding="utf-8")
+
+        replacement = ledger.init_ledger([str(self.target)], temp_root=self.root / "runtime")
+        old_status = ledger.status_ledger(self.ledger_path)
+        self.assertEqual(old_status["run_status"], "superseded")
+        self.assertFalse(old_status["authorized"])
+        self.assertTrue(old_status["clearance"]["stale"])
+        self.assertEqual(old_status["supersession"]["replacement_run_id"], ledger.status_ledger(replacement)["run_id"])
+        self.assertEqual(
+            [item["run_id"] for item in ledger.discover_ledgers(self.target, temp_root=self.root / "runtime")["runs"]],
+            [ledger.status_ledger(replacement)["run_id"]],
+        )
+        closed = ledger.discover_ledgers(
+            self.target, temp_root=self.root / "runtime", include_closed=True
+        )["runs"]
+        self.assertIn("superseded", [item["run_status"] for item in closed])
+        with self.assertRaisesRegex(ledger.LedgerError, "superseded review run"):
+            ledger.verify_clearance(self.ledger_path)
+
+    def test_init_supersedes_when_a_reference_baseline_changes(self) -> None:
+        reference_run = ledger.init_ledger(
+            [str(self.target)],
+            [str(self.evidence_a)],
+            temp_root=self.root / "runtime",
+        )
+        self.evidence_a.write_text("A = 2\n", encoding="utf-8")
+
+        replacement = ledger.init_ledger(
+            [str(self.target)],
+            [str(self.evidence_a)],
+            temp_root=self.root / "runtime",
+        )
+        status = ledger.status_ledger(reference_run)
+        self.assertEqual(status["run_status"], "superseded")
+        self.assertEqual(status["supersession"]["reason"], "candidate-or-baseline-changed")
+        self.assertEqual(status["supersession"]["replacement_run_id"], ledger.status_ledger(replacement)["run_id"])
+
+    def test_init_does_not_reuse_a_candidate_that_changes_during_reconciliation(self) -> None:
+        original_verify = ledger._verify_in_place
+        changed = False
+
+        def change_before_verify(state: dict[str, object]) -> bool:
+            nonlocal changed
+            if not changed:
+                self.target.write_text("# Changed during reconcile\n", encoding="utf-8")
+                changed = True
+            return original_verify(state)
+
+        with mock.patch.object(ledger, "_verify_in_place", side_effect=change_before_verify):
+            replacement = ledger.init_ledger([str(self.target)], temp_root=self.root / "runtime")
+        old_status = ledger.status_ledger(self.ledger_path)
+        self.assertEqual(old_status["run_status"], "superseded")
+        self.assertNotEqual(replacement, self.ledger_path)
+        self.assertEqual(
+            ledger.status_ledger(replacement)["baseline_stale"],
+            False,
+        )
+        self.assertEqual(
+            json.loads(replacement.read_text(encoding="utf-8"))["baseline"]["targets"][0]["sha256"],
+            ledger._sha256_file(self.target),
+        )
+
+    def test_supersession_points_to_a_reused_current_run(self) -> None:
+        self.target.write_text("# New candidate\n", encoding="utf-8")
+        current_directory = self.root / "runtime" / "current-run"
+        current_directory.mkdir()
+        current_path = current_directory / "ledger.json"
+        current = json.loads(self.ledger_path.read_text(encoding="utf-8"))
+        current["run"]["run_id"] = "epr-current"
+        current["run"]["created_at"] = "2099-01-01T00:00:00+00:00"
+        current["baseline"]["targets"][0]["sha256"] = ledger._sha256_file(self.target)
+        current_path.write_text(json.dumps(current), encoding="utf-8")
+
+        reused = ledger.init_ledger([str(self.target)], temp_root=self.root / "runtime")
+        self.assertEqual(reused, current_path.resolve())
+        supersession = ledger.status_ledger(self.ledger_path)["supersession"]
+        self.assertEqual(supersession["replacement_run_id"], "epr-current")
 
     def test_abandon_preserves_ledger_and_removes_it_from_unfinished_discovery(self) -> None:
         before_hash = ledger.status_ledger(self.ledger_path)["manifest_hash"]

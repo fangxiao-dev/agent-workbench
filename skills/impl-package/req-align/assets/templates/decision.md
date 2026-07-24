@@ -27,6 +27,8 @@
 ## 2. 目标落点与合同交接
 
 - 受影响的系统边界：
+- Core / Capability 边界与 owner：
+- 当前 Capability、调用者与延后暴露：
 - 交给 `spec.md` 定义的行为合同范围：
 - 交给 `plan.md` 解决的实施范围：
 

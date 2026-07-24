@@ -119,6 +119,15 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertIn("Aggregate fail-closed", skill)
         self.assertIn("any required `FAIL` makes Overall `FAIL`", skill)
 
+    def test_owner_report_keeps_ledger_internal_without_hiding_track_verdicts(self) -> None:
+        skill = SKILL_PATH.read_text(encoding="utf-8")
+        templates = TEMPLATES_PATH.read_text(encoding="utf-8")
+        self.assertIn("Ledger paths remain internal unless requested", skill)
+        self.assertIn("Do not create, request, or infer owner approval", skill)
+        self.assertIn("| Audit record | retained internally |", templates)
+        self.assertNotIn("Canonical ledger artifact | `<absolute", templates)
+        self.assertIn("## Track Verdicts", templates)
+
 
 if __name__ == "__main__":
     unittest.main()

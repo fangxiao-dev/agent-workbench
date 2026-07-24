@@ -30,7 +30,7 @@ RESOLUTION_STATES = {"pending", "accepted", "rejected", "deferred"}
 AUTHORITIES = {"agent", "owner"}
 OWNER_GATES = {"required", "not_required"}
 OUTSIDE_VOICE_STATES = {"complete", "unavailable"}
-RUN_STATES = {"active", "applying", "applied", "abandoned"}
+RUN_STATES = {"active", "applying", "applied", "abandoned", "superseded"}
 CLEARANCE_VERDICTS = {"cleared"}
 
 
@@ -309,8 +309,31 @@ def init_ledger(
     target_snapshots = [snapshot_path(item) for item in targets]
     reference_snapshots = [snapshot_path(item) for item in (baselines or [])]
     target_path = Path(target_snapshots[0]["path"])
-    run_id = _new_run_id()
     root = _runtime_root(temp_root)
+    run_id = _new_run_id()
+    baseline = {"targets": target_snapshots, "references": reference_snapshots}
+    existing = _reconcile_unfinished_runs(
+        root,
+        target_path,
+        baseline,
+        replacement_run_id=run_id,
+    )
+    if existing is not None:
+        return existing
+    refreshed_targets = [snapshot_path(item) for item in targets]
+    refreshed_references = [snapshot_path(item) for item in (baselines or [])]
+    refreshed_baseline = {"targets": refreshed_targets, "references": refreshed_references}
+    if _canonical_bytes(refreshed_baseline) != _canonical_bytes(baseline):
+        target_snapshots = refreshed_targets
+        reference_snapshots = refreshed_references
+        existing = _reconcile_unfinished_runs(
+            root,
+            Path(target_snapshots[0]["path"]),
+            refreshed_baseline,
+            replacement_run_id=run_id,
+        )
+        if existing is not None:
+            return existing
     run_directory = root / run_id
     run_directory.mkdir(parents=True, exist_ok=False)
     ledger_path = run_directory / "ledger.json"
@@ -585,6 +608,7 @@ def status_ledger(ledger_path: str | os.PathLike[str]) -> dict[str, Any]:
         "stale_findings": sorted(stale),
         "baseline_stale": ledger["verification"]["baseline_stale"],
         "apply_backups": list(ledger["run"].get("apply_backups", [])),
+        "supersession": ledger["run"].get("supersession"),
         "authorized": bool(authorization and authorization.get("manifest_hash") == current_hash),
         "clearance": clearance,
     }
@@ -632,6 +656,8 @@ def discover_ledgers(
                     "authorized": status["authorized"],
                     "pending": status["pending"],
                     "target_matches_baseline": _current_digest(matching_target) == matching_target["sha256"],
+                    "baseline_stale": status["baseline_stale"],
+                    "supersession": status["supersession"],
                 }
             )
         except (KeyError, LedgerError, OSError, TypeError) as exc:
@@ -683,6 +709,94 @@ def _verify_in_place(ledger: dict[str, Any]) -> bool:
 
 def _bundle_baseline_hash(ledger: dict[str, Any]) -> str:
     return _sha256_bytes(_canonical_bytes(ledger["baseline"]))
+
+
+def _supersede_locked(
+    ledger: dict[str, Any],
+    reason: str,
+    *,
+    replacement_run_id: str | None = None,
+) -> None:
+    if not isinstance(reason, str) or not reason.strip():
+        raise LedgerError("supersede reason is required")
+    _require_active_run(ledger, "supersede")
+    supersession = {
+        "reason": reason.strip(),
+        "superseded_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "bundle_baseline_hash": _bundle_baseline_hash(ledger),
+    }
+    if replacement_run_id:
+        supersession["replacement_run_id"] = replacement_run_id
+    ledger["run"]["status"] = "superseded"
+    ledger["run"]["supersession"] = supersession
+    ledger["authorization"] = None
+    _invalidate_clearance(ledger, "review-run-superseded")
+    ledger["revision"] += 1
+
+
+def _reconcile_unfinished_runs(
+    root: Path,
+    target: Path,
+    requested_baseline: dict[str, Any],
+    *,
+    replacement_run_id: str,
+) -> Path | None:
+    """Reuse one exact active run and supersede stale/duplicate internal runs."""
+    if not root.exists():
+        return None
+    requested_hash = _sha256_bytes(_canonical_bytes(requested_baseline))
+    matches: list[tuple[str, Path]] = []
+    stale_paths: list[Path] = []
+    for ledger_path in root.glob("*/ledger.json"):
+        with _ledger_lock(ledger_path):
+            ledger = _read_ledger(ledger_path)
+            if not any(_same_identity(item["path"], target) for item in ledger["baseline"]["targets"]):
+                continue
+            status = _run_status(ledger)
+            if status == "applying":
+                _reconcile_applying(ledger)
+                _atomic_write(ledger_path, ledger)
+                status = _run_status(ledger)
+            if status != "active":
+                continue
+            if _bundle_baseline_hash(ledger) != requested_hash:
+                stale_paths.append(ledger_path.resolve())
+                continue
+            if _verify_in_place(ledger):
+                _atomic_write(ledger_path, ledger)
+            if ledger["verification"]["baseline_stale"]:
+                stale_paths.append(ledger_path.resolve())
+                continue
+            matches.append((ledger["run"]["created_at"], ledger_path.resolve()))
+    matches.sort(reverse=True)
+    newest = matches[0][1] if matches else None
+    final_replacement_run_id = (
+        _read_ledger(newest)["run"]["run_id"] if newest is not None else replacement_run_id
+    )
+    for stale_path in stale_paths:
+        with _ledger_lock(stale_path):
+            stale = _read_ledger(stale_path)
+            if _run_status(stale) == "active":
+                _supersede_locked(
+                    stale,
+                    "candidate-or-baseline-changed",
+                    replacement_run_id=final_replacement_run_id,
+                )
+                _atomic_write(stale_path, stale)
+    if newest is None:
+        return None
+    newest_run_id = final_replacement_run_id
+    for _, duplicate_path in matches[1:]:
+        with _ledger_lock(duplicate_path):
+            duplicate = _read_ledger(duplicate_path)
+            if _run_status(duplicate) == "active":
+                _supersede_locked(
+                    duplicate,
+                    "duplicate-current-candidate",
+                    replacement_run_id=newest_run_id,
+                )
+                _atomic_write(duplicate_path, duplicate)
+    return newest
 
 
 def _invalidate_clearance(ledger: dict[str, Any], reason: str) -> bool:
@@ -918,10 +1032,17 @@ def resume_ledger(
             raise LedgerError("resume target does not match this review run")
         if _run_status(ledger) == "applying":
             _reconcile_applying(ledger)
-            _atomic_write(path, ledger)
-            return status_ledger(path)
+            if _run_status(ledger) != "active":
+                _atomic_write(path, ledger)
+                return status_ledger(path)
+            changed = True
+        else:
+            changed = False
         _require_active_run(ledger, "resume")
-        changed = _verify_in_place(ledger)
+        changed = _verify_in_place(ledger) or changed
+        if ledger["verification"]["baseline_stale"]:
+            _supersede_locked(ledger, "candidate-or-baseline-changed")
+            changed = True
         if changed:
             _atomic_write(path, ledger)
         return status_ledger(path)
@@ -972,6 +1093,25 @@ def abandon_ledger(
         ledger["run"]["abandonment_source"] = normalized_source
         ledger["authorization"] = None
         ledger["revision"] += 1
+        _atomic_write(path, ledger)
+        return status_ledger(path)
+
+
+def supersede_ledger(
+    ledger_path: str | os.PathLike[str],
+    reason: str,
+    *,
+    replacement_run_id: str | None = None,
+) -> dict[str, Any]:
+    """Preserve an obsolete review run without treating it as an owner decision."""
+    path = Path(ledger_path).resolve()
+    with _ledger_lock(path):
+        ledger = _read_ledger(path)
+        _supersede_locked(
+            ledger,
+            reason,
+            replacement_run_id=replacement_run_id,
+        )
         _atomic_write(path, ledger)
         return status_ledger(path)
 
@@ -1115,6 +1255,11 @@ def _parser() -> argparse.ArgumentParser:
     abandon.add_argument("--ledger", required=True)
     abandon.add_argument("--source", required=True)
 
+    supersede = subparsers.add_parser("supersede")
+    supersede.add_argument("--ledger", required=True)
+    supersede.add_argument("--reason", required=True)
+    supersede.add_argument("--replacement-run")
+
     record = subparsers.add_parser("record")
     record.add_argument("--ledger", required=True)
     record.add_argument("--input", required=True)
@@ -1172,6 +1317,12 @@ def main(argv: list[str] | None = None) -> int:
             output = resume_ledger(args.ledger, args.target)
         elif args.command == "abandon":
             output = abandon_ledger(args.ledger, _load_json_argument(args.source))
+        elif args.command == "supersede":
+            output = supersede_ledger(
+                args.ledger,
+                args.reason,
+                replacement_run_id=args.replacement_run,
+            )
         elif args.command == "record":
             record_ledger(args.ledger, _load_json_argument(args.input))
             output = status_ledger(args.ledger)

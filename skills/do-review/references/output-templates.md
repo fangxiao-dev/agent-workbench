@@ -1,6 +1,6 @@
 # Do Review Output Templates
 
-Use the smallest template that matches the run. Keep source attribution and per-track verdicts visible.
+Use the smallest template that matches the run. Keep source attribution and per-track verdicts visible; default review output reports conclusions, findings and next actions without turning those details into an owner approval gate.
 
 ## Normal Review Report
 
@@ -13,7 +13,7 @@ Use the smallest template that matches the run. Keep source attribution and per-
 | Base / Head |  |
 | Mode |  |
 | Rounds |  |
-| Canonical ledger artifact | `<absolute %TEMP%\\do-review\\...md>` |
+| Audit record | retained internally |
 | Stop reason |  |
 | Overall verdict | PASS / FAIL / UNCERTAIN |
 

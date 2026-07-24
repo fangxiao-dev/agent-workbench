@@ -141,6 +141,20 @@
         "E reports Decision blocked: owner decision pending rather than investigation pending",
         "Does not infer downstream closure pending merely because it has not been checked"
       ]
+    },
+    {
+      "id": 11,
+      "name": "core-capability-boundary-preserves-reuse-without-premature-exposure",
+      "prompt": "为一个本地受控 PDF 到账务导出的 POC 对齐需求。已批准事实到确定性导出的业务语义未来可能被正式产品复用，但当前只授权本地 CLI 与自动 oracle 验收。",
+      "expected_output": "Separates the reusable approved-facts-to-materialization Core from the locally authorized CLI/evidence Capability, records the boundary in the Decision/Spec path, and does not prebuild public delivery infrastructure.",
+      "files": [],
+      "expectations": [
+        "Identifies the Core owner, stable authority/invariants, and whether it changes or is reused",
+        "Identifies the current Capability and its caller without putting PDF, fixture, CLI, or oracle details into Core semantics",
+        "Treats future reuse as a design check rather than authorization for a public API, durable export model, queue, UI, or broader permissions",
+        "Records any deferred Capability expansion and re-entry condition when it affects the contract",
+        "Keeps the plan limited to implementing and testing the selected Core and current Capability rather than inventing a second product path"
+      ]
     }
   ]
 }

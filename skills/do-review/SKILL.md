@@ -12,7 +12,7 @@ allowed-tools:
 
 `do-review` is the sole review orchestrator. It fixes the complete review scope and comparison point, prepares shared context, plans capacity, dispatches leaf reviewers, owns the cross-track ledger, verifies P1/P2 evidence, classifies findings, controls loop convergence, and writes the final report. The main session is not another reviewer.
 
-The canonical ledger is a Markdown artifact owned and updated by the main session. Create it in the user temp directory as `%TEMP%\\do-review\\<YYMMDDHHMM>-<slug>-<shortsha>.md` (the helper is `scripts/review_ledger.py`). Keep the same absolute path for every round, let leaf reviewers read it only, and cite that path in the final report. The ledger is not repository or Git state and must not be maintained only in the conversation context.
+The canonical ledger is a Markdown artifact owned and updated by the main session. Create it in the user temp directory as `%TEMP%\\do-review\\<YYMMDDHHMM>-<slug>-<shortsha>.md` (the helper is `scripts/review_ledger.py`). Keep the same absolute path for every round and let leaf reviewers read it only. The ledger is an internal audit artifact, not repository/Git state or a default owner-facing deliverable.
 
 Every dispatched reviewer is a leaf reviewer. A leaf reviewer performs its assigned skill's review role: it must not invoke `$do-review`, run its subagent gate, dispatch subagents, re-resolve reviewer topology, re-plan capacity, read another track's same-round findings, classify cross-track results, or decide the overall verdict. Reviewer roles state primary review intent and handoff direction, not exclusive capability boundaries; a leaf may surface an evidence-backed cross-domain candidate for the parent to attribute, deduplicate, and classify.
 
@@ -73,7 +73,7 @@ Assigned reviewer skill:
 Assigned canonical SKILL.md path:
 ```
 
-Create the canonical ledger immediately after the base/head SHAs and review slug are fixed. Use `python scripts/review_ledger.py create` (or an equivalent temp-aware file operation) and record its absolute path in the shared context as `Canonical ledger artifact`. If the generated filename already exists, fail closed rather than overwriting it; start a new timestamped run or ask the user. The main session must write the initial scope, source-discovery record, user classification policy, and round state before dispatch.
+Create the canonical ledger immediately after the base/head SHAs and review slug are fixed. Use `python scripts/review_ledger.py create` (or an equivalent temp-aware file operation) and record its absolute path in the shared context as `Canonical ledger artifact`. If the generated filename already exists, fail closed rather than overwriting it and start a new timestamped run. The main session must write the initial scope, source-discovery record, user classification policy, and round state before dispatch.
 
 When the target is an Impl-Package, include its package root and relevant Decision, Spec, Plan, and DAG material as evidence only. `impl-package/dev-with-track` remains the lifecycle owner for applying findings and package gates.
 
@@ -160,14 +160,7 @@ After every round, wait for all selected tracks, deduplicate and verify candidat
 
 ## Step 5: Report
 
-Read [output-templates.md](references/output-templates.md) and use the smallest matching template. Show every selected track's verdict separately and include the absolute `Canonical ledger artifact` path. The final report must reference the same ledger used for dispatch and state its stop reason. For the default topology, show:
-
-```text
-Track A (code-review): PASS / FAIL / UNCERTAIN
-Track B (standards-review): PASS / FAIL / UNCERTAIN
-Track C (spec-review): PASS / FAIL / UNCERTAIN
-Overall: PASS / FAIL / UNCERTAIN
-```
+Read [output-templates.md](references/output-templates.md) and use the smallest matching template. Default review output states the overall verdict, every selected track's verdict, material findings and next action. Ledger paths remain internal unless requested; track verdicts are review evidence, not an owner approval request or a request to decide reviewer topology. The final report states its stop reason without turning the review into an owner approval request.
 
 Aggregate fail-closed: any required `FAIL` makes Overall `FAIL`; otherwise any required `UNCERTAIN` makes Overall `UNCERTAIN`; Overall is `PASS` only when every required track passes. A passing track never offsets another track's failure, and finding count is not a vote.
 
@@ -177,4 +170,5 @@ Aggregate fail-closed: any required `FAIL` makes Overall `FAIL`; otherwise any r
 - Do not create tracking issues unless the user asks.
 - Do not broaden closure verification into new-problem hunting.
 - Do not hide subagent unavailability or an incomplete/degraded topology.
+- Do not create, request, or infer owner approval. In a GO execution attempt, return findings to `dev-with-track` so it automatically repairs, verifies and evaluates the gate; a direct `$do-review` invocation stops at the review checkpoint.
 - Only revise a reviewer's responsibility or topology when that reviewer's own skill definition changes.

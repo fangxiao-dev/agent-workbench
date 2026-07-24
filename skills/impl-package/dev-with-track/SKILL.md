@@ -159,7 +159,7 @@ terminal gate 关闭后提示 owner 可以按需使用 `$backfill-stable-docs`�
 5. 有 manual owner 时，在等待验收前输出轻量 readiness packet；没有人工验收时跳过。
 6. 分流 execution findings；必要时回 req-align 并重新过相应 gate。
 7. Ticket 达到验收候选前，只扫描 `contributes-to` 该 Ticket 的 `BLOCKED` Task：未完成内容若影响其 AC、已声明行为或风险边界，先解除阻塞；若真实影响扩大，先更新 contribution mapping。随后固定 comparison point，记录本次 diff 的风险判断与定向证据：低风险局部 delta 可简化为 ER 证据后直接进入 completion claim audit；需要独立审查时才把所选 tracks 作为明确 reviewer selection 交给唯一编排器 `do-review`，由它固定范围、调度 leaf reviewer 并闭环 findings。安全/外部 mutation/数据完整性/并发等不可简化信号必须进入正式 review。最终 package review 前全局确认没有 `BLOCKED`，且所有 Task 为 `DONE` 或有明确、已批准理由的 `WAIVED` / `SUPERSEDED`；再确认所有 Ticket AC evidence 和 active Spec 全覆盖。
-8. **在同一执行授权下自动收口（见上节）：** 默认 merge 前用稳定 operation-id 分配 G id/scaffold，完成当前 attempt 的 gate evaluation；拟写 terminal pass 时先完成 Stage 7 准备，再由 `verification-before-completion` 审计 pass claim，然后 **立即 finalize**。不得因「尚未请示 owner 是否验证」而停在 open/no-verdict。只有 plan 已预先记录的 owner-approved pre-gate integration 可以改变 integration 与 gate 的先后时序，且不得把该授权误当成「跳过 claim audit」。
+8. 按“执行授权后的自动收口”完成适用 review、修复、verification、Stage 7 与 gate evaluation；pre-gate integration 只遵循 plan 预先记录的 owner authorization，且不跳过 claim audit。
 9. 完成 Markdown entry 后立即 finalize content-bound index；terminal 时由可信 finalized verdict 派生 Frozen，blocked 时保持 Active。
 10. terminal metadata commit、目标分支合入或环境变化后，任何 complete / closed / merge-ready / release-ready 声明前重新执行 completion-claim evidence audit。先合入后关 gate 的 attempt 必须以目标分支 evidence 收口。
 
