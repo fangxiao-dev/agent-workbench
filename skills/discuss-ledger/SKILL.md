@@ -8,6 +8,18 @@ user-invocable: true
 
 Choose the requested mode before creating an artifact. Keep user-facing discussion and summaries in Chinese unless the target requires otherwise.
 
+## Router settings
+
+Mode and participants are separate choices. The default is normal `ledger` with `codex,claude`, preserving the former two-party behavior. Use `--mode blind` for independent discovery or `--mode combined` for Blind Opening followed by Ledger; use `--agents full` only when all three participants (`codex,claude,grok`) are wanted, or specify exactly two distinct participants such as `codex,grok`.
+
+The full public contract is in [references/router.md](references/router.md).
+
+```powershell
+python <skill>\scripts\discuss_router.py --topic <target>
+python <skill>\scripts\discuss_router.py --mode blind --agents codex,grok --topic <target>
+python <skill>\scripts\discuss_router.py --mode combined --agents full --topic <target>
+```
+
 | User intent | Mode | Read first |
 | --- | --- | --- |
 | Independent ideas, brainstorming, or “do not let participants influence each other” | Blind Opening | [references/blind-opening.md](references/blind-opening.md) |

@@ -3,10 +3,11 @@
 Use this mode when a problem first needs unconstrained independent exploration and then requires a durable resolution of material disagreements.
 
 ```powershell
-python <skill>\scripts\blind_opening_then_ledger.py `
+python <skill>\scripts\discuss_router.py `
+  --mode combined `
   --root <target-project-root> `
   --topic <target-document-or-topic> `
-  --agents codex,claude,grok `
+  --agents full `
   --max-rounds 5
 ```
 

@@ -17,6 +17,7 @@ def test_discuss_ledger_skill_routes_modes_to_references() -> None:
     assert "references/blind-opening.md" in text
     assert "references/ledger-discussion.md" in text
     assert "references/blind-opening-plus-ledger.md" in text
+    assert "references/router.md" in text
 
     assert (REFERENCES / "blind-opening.md").is_file()
     assert (REFERENCES / "ledger-discussion.md").is_file()
@@ -25,6 +26,7 @@ def test_discuss_ledger_skill_routes_modes_to_references() -> None:
     assert (REFERENCES / "claude-code-noninteractive.md").is_file()
     assert (REFERENCES / "ledger-cli.md").is_file()
     assert (REFERENCES / "ledger-participant-prompt.md").is_file()
+    assert (REFERENCES / "router.md").is_file()
 
 
 def test_normal_ledger_reference_preserves_deterministic_writer_boundary() -> None:
