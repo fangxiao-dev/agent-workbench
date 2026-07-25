@@ -10,19 +10,23 @@
 任务包 ID（Package ID）：
 规范任务包路径（Canonical package）：`docs/implementations/<package-id>/`
 
-本文是任务包活动期间“聚焦需求定义 + 当前方案决策与理由”的事实源：回答为什么做、要达到什么结果、为什么选择该方向。系统必须如何表现、字段与状态合同、错误处理和 Acceptance Semantics 只属于 `spec.md`；如何拆解、实现和验证只属于 `plan.md`。当前正文只保留最新需求与选择，被取代内容写入修订历史，完整旧正文由 Git 保存。Decision 被阻塞时使用本文件，不创建 `spec.md`。`Status: Decision Gate Passed` 必须对应 `Result: PASSED`；`Status: Decision Gate Blocked` 必须对应 `Result: BLOCKED`。若引用 `investigations/<topic>.md`，本文件仍必须自足说明当前需求与决定；investigation 默认无 authority，且不维护 backlink 或采用状态。
+本文是任务包活动期间“聚焦需求定义 + 当前方案决策与理由”的事实源：回答为什么做、要达到什么结果、为什么选择该方向。系统必须如何表现、字段与状态合同、错误处理和 Acceptance Semantics 只属于 `spec.md`；如何拆解、实现和验证只属于 `plan.md`。当前正文只保留最新需求与选择，修订历史只记录最近变更。Decision 被阻塞时使用本文件，不创建 `spec.md`。`Status: Decision Gate Passed` 必须对应 `Result: PASSED`；`Status: Decision Gate Blocked` 必须对应 `Result: BLOCKED`。若引用 `investigations/<topic>.md`，本文件仍必须自足说明当前需求与决定；investigation 默认无 authority，且不维护 backlink 或采用状态。
 
 ## 1. 需求定义（Focused PRD）
 
-<!-- 聚焦表达本次变化的产品需求，不复制 spec 的字段级合同、状态机、错误处理或逐条 Acceptance Criteria。 -->
+<!-- 聚焦表达本次变化的产品需求，不复制 spec 的字段级合同、状态机、错误处理或逐条 Acceptance Criteria。写作和 Gate 判断须遵循 `req-align/references/requirement-inputs.md` 与 `req-align/references/focused-prd.md`：第一版承接已确认的口头/文档输入；后续版本先读取当前 D/S，再合并本次 delta。存在条件式产品信号时，在相关小节内补充回答；不要为未出现的信号制造空章节。 -->
 
-- 目标用户 / 使用场景：
-- 当前问题与触发条件：
-- 期望结果与用户价值：
-- 范围：
-- 非目标：
-- 核心体验或业务流程：
-- 成功判断信号：
+### 1.1 目标受益者与使用 / 调用情境
+
+### 1.2 当前问题或机会，以及改变原因
+
+### 1.3 期望结果与产品 / 业务价值
+
+### 1.4 核心产品行为或体验
+
+### 1.5 范围与边界
+
+### 1.6 成功信号
 
 ## 2. 目标落点与合同交接
 
@@ -86,7 +90,7 @@
 
 ## 修订历史
 
-<!-- 当前和历史 D 修订的内容绑定保存在内部 `.impl-package/revision-bindings.json` sidecar 中；不要在本文写入自身 hash，也不得要求 owner 阅读 sidecar。 -->
+<!-- 每次写入新行后仅保留最近 3 条；不要在本文写入自身 hash。 -->
 
 | 前一修订 | 新修订 | 变化摘要 | 权威来源 | 日期 | 被取代说明 |
 | --- | --- | --- | --- | --- | --- |

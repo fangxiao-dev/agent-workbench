@@ -25,6 +25,7 @@
         "Includes Scope, terms/data contracts, behavior/state/workflow, boundaries, Error Boundaries, Constraint Contracts, Acceptance Semantics, and Contract Coherence",
         "Includes failure recovery and observable acceptance evidence",
         "Records current Decision and Spec revisions without putting Composition in spec.md",
+        "On the lightweight path, binds D and S separately to the same spec.md blob without creating decision.md solely for registration",
         "Does not create a Stable Doc Backfill Map or durable-delta queue in spec.md"
       ]
     },
@@ -130,7 +131,7 @@
     {
       "id": 10,
       "name": "handoff-status-is-derived-without-schema-change",
-      "prompt": "分别汇报以下 package 状态：A Decision BLOCKED，等待允许的只读 investigation；B Decision PASSED，尚未通过 Spec；C D/S 均 PASSED；D D/S 均 PASSED，但下游已记录 merge evidence pending；E Decision BLOCKED，只等待 Owner 选择。",
+      "prompt": "分别汇报以下 package 状态：A Decision BLOCKED，等待允许的只读 investigation；B Decision PASSED，Spec 尚未创建或评估；C D/S 均 PASSED；D D/S 均 PASSED，但下游已记录 merge evidence pending；E Decision BLOCKED，只等待 Owner 选择；F Decision PASSED，但 Spec BLOCKED，等待缺失合同或 Owner 决策。",
       "expected_output": "Derives accurate Markdown handoff wording from the gate facts and the recorded downstream evidence without adding schema, sidecar, revision-binding, or artifact-status fields.",
       "files": [],
       "expectations": [
@@ -139,6 +140,7 @@
         "C reports ready for implementation planning",
         "D reports implementation may proceed, package closure evidence pending and does not call the package closed",
         "E reports Decision blocked: owner decision pending rather than investigation pending",
+        "F reports Spec blocked: contract or owner decision pending rather than ready for Spec",
         "Does not infer downstream closure pending merely because it has not been checked"
       ]
     },
@@ -154,6 +156,138 @@
         "Treats future reuse as a design check rather than authorization for a public API, durable export model, queue, UI, or broader permissions",
         "Records any deferred Capability expansion and re-entry condition when it affects the contract",
         "Keeps the plan limited to implementing and testing the selected Core and current Capability rather than inventing a second product path"
+      ]
+    },
+    {
+      "id": 12,
+      "name": "focused-prd-human-workflow-is-business-readable",
+      "prompt": "为仓库管理员新增“到货异常复核”界面：仓库管理员看到系统标记的数量差异，可确认收货或退回供应商处理；确认后采购团队需要看到结果。请对齐需求。",
+      "expected_output": "Creates an earned Focused PRD that explains the warehouse user's situation, current handling gap, observable review experience, handoff, boundaries, and business-visible success without substituting UI components or API work for product outcomes.",
+      "files": [],
+      "expectations": [
+        "States what the warehouse administrator sees, does, receives as feedback, and does next",
+        "Names the handoff to procurement and when responsibility changes",
+        "Keeps field validation, state machine, and API details out of the Focused PRD",
+        "Uses a user or business observable success signal rather than test completion"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "focused-prd-multi-role-control-is-not-demoted-to-spec",
+      "prompt": "会计可在发票复核时接受或覆盖系统建议的付款分类；财务主管只在金额超过阈值时最终确认。系统无法分类时必须交给会计处理。请建立 Focused PRD 并判断哪些内容进入 Spec。",
+      "expected_output": "Records role ownership, override control, escalation, and undecidable behavior as product semantics in the Focused PRD while routing storage, validation, and expiry mechanics to Spec.",
+      "files": [],
+      "expectations": [
+        "Names who initiates, who may override, who finally confirms, and the handoff condition",
+        "States what happens when the automated decision cannot be made",
+        "Keeps override persistence and validation rules in Spec",
+        "Does not introduce a fixed field-authority matrix unless the form/review signal makes it useful"
+      ]
+    },
+    {
+      "id": 14,
+      "name": "focused-prd-background-rule-does-not-invent-a-user-journey",
+      "prompt": "每天夜间，系统应在供应商税号失效前 30 天标记相关付款为待复核，避免自动付款继续使用过期税务资料。没有新的 UI 或人工流程，现有复核队列会自然展示这些项目。请对齐需求。",
+      "expected_output": "Creates a business-readable Focused PRD for a backend rule, naming the beneficiary, trigger, observable business result, scope, and success signal without inventing UI steps, Persona narratives, or a fixed workflow table.",
+      "files": [],
+      "expectations": [
+        "Describes the current risk and why the nightly trigger matters",
+        "Explains the observable business outcome in the existing review process",
+        "Does not require a user journey merely because the PRD must be product-readable",
+        "Routes tax-number data shape, scheduling, and exact state transitions to Spec"
+      ]
+    },
+    {
+      "id": 15,
+      "name": "focused-prd-external-handoff-names-responsibility-boundary",
+      "prompt": "客户在本产品确认退款后，退款请求交给支付服务商执行。产品需要展示请求已提交，但支付服务商最终到账或拒绝的结果不由本产品在本阶段追踪。请对齐需求。",
+      "expected_output": "Defines the product's responsibility endpoint and the externally observable submission result, without implying that downstream settlement is managed or accepted by this product.",
+      "files": [],
+      "expectations": [
+        "States what the customer can observe after confirmation",
+        "Clearly separates submitted-to-provider from provider settlement or rejection",
+        "Uses the responsibility boundary as a scope and success-signal constraint",
+        "Leaves provider payload, retry, and failure-recovery contracts to Spec"
+      ]
+    },
+    {
+      "id": 16,
+      "name": "focused-prd-mvp-depth-is-conditional",
+      "prompt": "为本地 CLI 导出已批准账务记录的 POC 对齐需求。此阶段只验证从已批准事实得到确定性导出的业务价值；不验证多租户交付、人工复核 UI 或外部会计系统回写。后续只有两个真实业务调用方需要时才考虑产品化。",
+      "expected_output": "Uses the MVP/POC signal to state the stage hypothesis, explicit non-validation, and re-entry condition without turning an MVP trade-off table into a universal PRD requirement.",
+      "files": [],
+      "expectations": [
+        "Explains the business hypothesis the POC validates",
+        "Names the excluded product paths and the condition for later expansion",
+        "Does not invent a current user problem or triggering event when the POC is justified by a stage hypothesis",
+        "Keeps the Core/Capability boundary proportional to the authorized CLI path",
+        "Does not require an MVP table for non-MVP requirements"
+      ]
+    },
+    {
+      "id": 17,
+      "name": "contract-impact-none-correction-reuses-current-prd",
+      "prompt": "修正一个帮助中心链接：链接文本错误地把现有付款复核流程称为“自动批准”，但页面、业务结果、权限、Acceptance Semantics 和现有 D/S 都不变。请处理此请求。",
+      "expected_output": "Classifies the change as contract impact=none, routes it to the owning documentation work, and reuses the current Decision/Spec without creating a Focused PRD, Decision Gate, Spec Gate, or new product artifact.",
+      "files": [],
+      "expectations": [
+        "Explains why no user/business contract or authority changes",
+        "Does not manufacture a lightweight Decision record or duplicate product definition",
+        "Does not create or expand decision.md or spec.md",
+        "Returns the existing-contract rationale and the direct owning route"
+      ]
+    },
+    {
+      "id": 18,
+      "name": "revision-history-is-a-three-entry-view-not-an-evidence-deletion",
+      "prompt": "一个 package 已有 D1→D2、D2→D3、D3→D4 三条 decision revision history。现在通过 Decision Gate 写入 D4→D5；对应 spec 也已有四条 revision history 并写入 S5。应如何更新这些 artifact？",
+      "expected_output": "Keeps only the newest three Markdown revision-history rows in decision.md and spec.md while continuing the normal append-only revision-binding registration and without adding an owner-facing archival notice.",
+      "files": [],
+      "expectations": [
+        "Retains D2→D3, D3→D4, and D4→D5 in decision.md and removes only the oldest displayed row",
+        "Retains only the newest three spec revision-history rows after S5",
+        "Does not delete or rewrite revision bindings as part of history compaction",
+        "Does not add a Markdown statement telling the owner where older versions are stored",
+        "Treats the compaction as part of writing the new revision, not as a separate Gate or owner prompt"
+      ]
+    },
+    {
+      "id": 19,
+      "name": "zero-shot-capture-preserves-explicit-product-surface",
+      "prompt": "第一版需求来自口头说明：本轮要给获授权成员提供共享编辑 UI，使他们能复核并修改同一张单据；界面可见性可由权限和体验规则决定，但所有写入必须经过 permission gate，并按 organization membership 与 ticket data scope 校验。请建立 Focused PRD 与对齐方向。",
+      "expected_output": "Captures shared editing as an explicit product surface and authorized user capability, while keeping mutation enforcement and scope mechanics in their correct contract layers.",
+      "files": [],
+      "expectations": [
+        "Places the shared editing UI and the authorized member's review/edit action in the Focused PRD core product behavior or equivalent product commitment",
+        "Does not replace the UI promise with a generic statement that permissions determine who can manipulate documents",
+        "Keeps API permission enforcement and exact membership/data-scope checks in Spec-level contract work",
+        "Treats the oral instruction as confirmed requirement input without demanding a pre-existing document"
+      ]
+    },
+    {
+      "id": 20,
+      "name": "follow-up-delta-carries-forward-prior-oral-promise",
+      "prompt": "当前 decision.md 已承诺“获授权成员可在共享编辑 UI 中复核并修改同一张单据”。新 session 中 owner 只说：“把权限范围改为按 business unit 限制。”请更新需求对齐。",
+      "expected_output": "Reads the current Decision/Spec first, treats the new instruction as a scoped delta, preserves the shared editing UI promise, and changes only the authorization scope as required.",
+      "files": [],
+      "expectations": [
+        "Does not treat the absence of shared editing UI in the new conversation as its removal",
+        "States that the UI capability carries forward while business-unit scope is the requested delta",
+        "Classifies the appropriate Decision versus Spec impact of the authorization-scope change",
+        "Asks a focused question only if the requested scope could conflict with the current contract"
+      ]
+    },
+    {
+      "id": 21,
+      "name": "follow-up-full-replacement-requires-explicit-owner-intent",
+      "prompt": "当前 package 承诺共享编辑 UI。owner 说：“本阶段完整替换原需求：不再提供 UI，只输出供税务师离线处理的 DATEV 文件。”请更新对齐。",
+      "expected_output": "Treats the explicit full replacement as an authorized removal of the earlier UI promise, records the changed product direction, and reruns the required Decision then Spec work rather than silently preserving or deleting the old capability.",
+      "files": [],
+      "expectations": [
+        "Recognizes the statement as an explicit replacement rather than an omission",
+        "Records the removal of the UI promise and the new offline-output direction as a material Decision change",
+        "Requires a new Decision revision and Decision Gate before the affected Spec revision/Gate",
+        "Does not require consultation of every historical revision when the current D/S is clear"
       ]
     }
   ]
