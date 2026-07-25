@@ -1,112 +1,57 @@
 ---
 name: execution-preflight
-description: 当准备从 handoff、plan、review、audit 或 execution artifact 开始任务，需要先提取 permission、owner authorization、HITL decision 与 subagent mode 时使用。
+description: 当准备从 handoff、plan、review、audit、Issue 或 execution artifact 开始任务时使用；在执行前一次性收齐 permission、owner authorization、HITL decision 与 subagent mode，并默认采用主 session 调度、subagent 充分执行的协作模式。
 ---
 
 # Execution Preflight
 
-Use this skill before beginning work from a handoff, plan, review, audit, issue list, or execution artifact. The job is narrow: review any current-session authorization, read the referenced authorization sources, extract permissions and human-in-the-loop decisions, and ask the owner for missing authorization before execution begins.
+在基于既有执行材料开工前，建立一次有边界的 execution authorization bundle。它只负责授权与协作合同，不做 readiness 分析、实现排序、代码侦察、测试、编辑或 subagent 派发。
 
-Preflight is not readiness analysis. Do not recommend implementation order, inspect code for solution shape, create worktrees, run tests, start subagents, or make edits while this skill is running.
+## 核心合同
+
+- 沿当前批准范围检查完整生命周期：实现、验证、证据、清理、外部工具以及计划内 Git/Issue 收口；不要只申请下一步权限。
+- 将结果分为 `已授权`、`本次请求授权`、`明确禁止/不适用`。每项说明对象、环境、数据边界和最大副作用，使 owner 能以“全部批准 + 例外”一次作答。
+- host 允许且 owner 未禁止时，默认推荐“调度优先”：主 session 负责授权、调度、决策、实际 seam、共享验证、验收和最终责任；subagent 充分承担可隔离、可复核的执行切片。
+- 一次性授权只属于当前任务。它可按明确 Task 边界传递给 subagent，但不扩展到新系统、更高环境、真实数据或 materially broader/destructive scope。
 
 ## Workflow
 
-### 1. Decide If Preflight Is Needed
+### 1. 判断是否需要 Preflight
 
-Run preflight when the active request asks you to begin or prepare work from any of these sources:
+以下情况运行：请求从 handoff/plan/review/audit/Issue/execution artifact 开工，或涉及 delegation、外部环境、migration、cleanup、Git 发布、真实集成或 owner decision。
 
-- handoff, execution plan, implementation plan, audit, review document, or issue tracker;
-- instructions that mention subagents, external environments, staging, production, real integrations, migrations, cleanup, git publishing, or owner decisions;
-- a task where the user explicitly asks for "preflight", "readiness permissions", or "authorization".
+小型只读回答、简单本地命令，或授权已精确覆盖且来源没有额外权限边界的局部可逆修改可跳过；记录一句具体理由后继续。
 
-Skip preflight for small read-only answers, simple local commands, or clearly bounded local reversible edits that do not need external access, delegation, git publishing, destructive/data mutation, or owner choice. Merely citing a plan, handoff, ticket, audit, or review does not force full preflight when the active request already grants the exact local scope and the source contains no additional permission boundary; record the one-line skip reason and proceed.
+完成标准：已明确跳过理由，或已识别需要读取的授权来源。
 
-Completion criterion: either preflight is skipped for an explicit reason, or the authorization sources to read are identified before any execution action begins.
+### 2. 提取完整授权边界
 
-### 2. Read Only Authorization Sources
+先收集当前 session 对本任务已经明确允许或禁止的事项，再读来源中的 permission/HITL、执行、验证、清理、发布和外部依赖部分。若 preflight 需要继续，在输出授权包前完整读取 [authorization-contract.md](references/authorization-contract.md)，按其中的生命周期扫描表检查遗漏。
 
-If this is not a new session, first review the active conversation for task-scoped permissions already granted or denied. Capture only current-session authorization facts, not stale permissions from unrelated tasks. This gives the owner a concise inheritance summary for handoff.
+若当前 plan earns Tickets/DAG，同时验证同一 Attempt/P revision 的完整 earned artifact set 已联合批准；缺失、错版或只批准部分 bundle 都阻止开工。不要从一般代码库知识推测来源未提及的外部系统。
 
-Then read the user-referenced handoff, plan, issue, review, or audit material only far enough to extract authorization and HITL facts. Start from its explicit permission/HITL sections or current summary; do not read every artifact field merely because it exists. If a plan points to another source as required source of truth for permissions or scope, read that source too.
+完成标准：每项 source-stated/current-session authorization 与 HITL 事实只记录一次，没有遗漏可预见的 permission stop，也没有引入相邻系统。
 
-When the referenced implementation plan earns Tickets and/or a DAG, also verify that the plan-decomposition bundle is `approved` for the same Attempt/P revision and complete earned artifact set. If the Composition earns both Tickets and a DAG, a Ticket-only approval, a missing DAG, or a stale joint-review reference is a preflight blocker; for tickets-only or DAG-only Composition, the corresponding complete earned artifact set is sufficient. Do not begin execution until the applicable bundle review is complete.
+### 3. 一次询问全部缺口
 
-Do not infer extra external systems from general codebase knowledge. If a plan does not mention Azure, Lark, staging, production, browser smoke, database access, email, git publishing, or another external system, omit that system from the preflight output. If the plan mentions a system only to forbid it or require separate approval, report that exactly as a plan-stated boundary.
+使用 reference 中的授权包模板，一次列出所有缺失权限；不要按执行顺序连续提问。已经回答的类别只重述，不再申请。计划明确禁止的事项只记录边界，除非 owner 主动要求跨越，否则不要求其反向确认。
 
-Extract only these categories when they appear in the sources:
+用户说“充分使用”“尽量派发”“subagent 干活”或同义表达时，直接采用调度优先模式；否则按 reference 中三个模式让 owner 选择，并把推荐模式放在第一位。
 
-- **Subagents:** whether the plan allows, forbids, or leaves ambiguous any delegation.
-- **External systems:** read-only checks, smoke checks, staging, production, real integrations, email, databases, Azure, Lark, or similar systems.
-- **Mutations and data risk:** migrations, cleanup, destructive actions, test-order deletion, external writes, or production-like changes.
-- **Verification:** local tests, builds, dry-runs, browser smoke, external smoke, and whether failures block completion.
-- **Git flow:** worktree/branch creation, staging, commits, pushes, PRs, issue updates, or thread handoff.
-- **HITL decisions:** explicit owner decisions, open product/schema/UX choices, or acceptance exceptions.
+完成标准：owner 可以用“全部批准”加可选例外，给出覆盖当前任务完整可预见生命周期的有界授权。
 
-Completion criterion: every current-session and source-stated authorization/HITL statement is captured once, and no unmentioned system or implementation recommendation has been added.
+### 4. 记录并继续
 
-### 3. Ask Only For Missing Authorization
+用 reference 中的执行授权模板记录：subagent mode、完整 allowed scope、仍被禁止的边界及 HITL 结论。调度优先时还要记录主 session 保留职责、subagent 可执行范围、授权传递方式和必须串行化的共享资源。
 
-Ask before execution, not halfway through. Keep the ask limited to permission gaps discovered from the sources.
+授权只在当前任务内有效。记录完成后直接进入既定执行入口，不为已授权的验证、清理、同边界命令或执行者从主 session 变为明确派发的 subagent 再次询问。
 
-Always include the subagent mode when subagents are not explicitly forbidden by the active conversation or host:
+完成标准：后续 session/agent 能从记录唯一判断某个操作是否在授权包内。
 
-- **普通使用:** the main session may use subagents for bounded support tasks, while the main session owns implementation and integration.
-- **主session负责调度、记录、决策、seaming，派发 subagent 做执行:** the main session owns coordination, authorization records, decisions, integration seams, and final accountability while subagents execute assigned slices.
-  - 默认模型配置（除非当前任务、用户或 host 另有指定）：实施类 `spawn_agent` 使用 `gpt-5.6-terra`、`reasoning_effort=high`；review 类 `spawn_agent` 使用 `gpt-5.6-sol`、`reasoning_effort=medium`。
-- **不允许:** no subagents.
+### 5. 执行期边界
 
-Prefer this shape:
+只有操作引入未提及的外部系统、更高环境、真实/敏感数据、显著扩大或更具破坏性的范围、新财务/法律副作用，或真正 owner decision 时，才再次请求授权。预检遗漏计划中已可见的权限属于 preflight defect；若无法避免修正，应把全部剩余缺口一次补齐。
 
-```markdown
-Preflight permissions from the referenced plan:
-- Current-session authorization: <already granted or denied in this session, or "none found/new session">
-- Already allowed by plan: <only plan-stated permissions>
-- Plan-stated boundaries: <forbidden or separately-authorized actions>
-- HITL / owner decisions: <open decisions, or none found>
-- Verification / git scope: <only plan-stated local tests, dry-runs, worktree, commits, pushes, etc.>
+最终只报告实际影响完成度的授权缺口。面向 owner 汇报 readiness/status 时使用 `talk-to-boss`。
 
-Please confirm:
-- Subagents: 普通使用 / 主session负责调度、记录、决策、seaming，派发 subagent 做执行 / 不允许
-- Missing authorization: <specific yes/no items, or "none">
-```
-
-Do not ask the owner to re-confirm boundaries that the plan already forbids unless the current active request explicitly asks to cross that boundary. Do not ask broad "can I do everything" questions.
-
-If the user already granted a category in the current active task, restate it and ask only for still-missing authorization.
-
-Completion criterion: the user can answer with a subagent mode plus concise yes/no permission decisions, and no implementation advice is mixed into the ask.
-
-### 4. Record The Execution Authorization
-
-After the user answers, restate the usable scope before continuing:
-
-```markdown
-Execution authorization for this task:
-- Subagents: <普通使用 / 主session负责调度、记录、决策、seaming，派发 subagent 做执行 / 不允许>
-- Allowed by plan/user: <scoped permissions>
-- Blocked unless separately authorized: <plan-stated or user-stated boundaries>
-- HITL decisions: <resolved/pending>
-```
-
-Treat authorization as task-scoped unless the user explicitly grants a standing rule. Do not silently reuse permission from an unrelated prior task.
-
-Completion criterion: the active task has a clear permission boundary that later agents or resumptions can follow.
-
-### 5. During Execution
-
-If a new permission blocker appears outside the recorded scope, stop and ask before crossing it. If the blocker is inside the recorded scope, proceed without re-asking.
-
-In the final response, mention only authorization gaps that affected completion. Do not list every preflight decision unless it matters to the outcome.
-
-If reporting readiness or status to an owner, use `talk-to-boss`; keep preflight fields as evidence rather than the opening summary.
-
-Completion criterion: execution either completes within the recorded scope, or any unresolved HITL blocker is surfaced promptly with the exact missing decision.
-
-## Failure Modes
-
-- Doing readiness analysis, implementation planning, issue ordering, or code reconnaissance during preflight.
-- Mentioning external systems or risks that are not in the referenced sources.
-- Asking the owner to re-confirm a plan-stated prohibition instead of recording it as blocked.
-- Starting subagents before the owner chooses a subagent mode.
-- Treating read-only access to staging or another project-specific external system as permission for mutations.
-- Treating a previous task's permission as reusable for the current task without an explicit standing rule.
+完成标准：执行在授权包内连续推进，或以唯一、精确的新权限/决策 blocker 停止。
