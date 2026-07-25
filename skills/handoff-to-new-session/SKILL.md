@@ -56,11 +56,13 @@ The resulting prompt must:
 
 ## Create And Deliver
 
-1. Call `create_thread`; never call `fork_thread` in this skill.
-2. Create a normal session without `startingState: { type: "working-tree" }`, without a worktree target, and without any worktree snapshot option. Pass the filled prompt unchanged as `prompt`; it must name the target working directory directly.
-3. If the tool returns a `threadId` and `hostId`, make one non-blocking `wait_threads` call with that exact pair and `timeoutMs: 0`. This may surface an immediately completed source-worktree report, but the child must not depend on a parent acknowledgement to continue.
-4. If the tool returns a queued `clientThreadId`, report the queued setup instead of polling an unavailable thread ID.
-5. In the final response, state whether delivery succeeded or stopped at a mismatch and emit `::created-thread{threadId="..."}` for an immediate thread or `::created-thread{clientThreadId="..."}` for queued worktree setup. Do not write another handoff file.
+1. Resolve the current thread's selected model and reasoning effort from the host context before creating the child. Treat this as part of the delivery contract: a clean session should retain the caller's capability and reasoning configuration, not silently fall back to an app default. If the owner explicitly requests a different child configuration, that explicit request overrides inheritance.
+2. Confirm that the destination supports the exact model/reasoning-effort pair. If the current configuration is not available from host context, or the pair is unsupported, stop and report `session configuration inheritance unavailable`; do not create a fallback child with an inferred or default configuration.
+3. Call `create_thread`; never call `fork_thread` in this skill. Pass the resolved `model` and `thinking` values explicitly, together with the filled prompt unchanged as `prompt`.
+4. Create a normal session without `startingState: { type: "working-tree" }`, without a worktree snapshot option, and without supplying the source worktree as a creation-state target. Follow the current desktop `create_thread` schema for its required project/environment wrapper, but let the prompt bind the child to the verified existing implementation worktree.
+5. If the tool returns a `threadId` and `hostId`, make one non-blocking `wait_threads` call with that exact pair and `timeoutMs: 0`. This may surface an immediately completed source-worktree report, but the child must not depend on a parent acknowledgement to continue.
+6. If the tool returns a queued `clientThreadId`, report the queued setup instead of polling an unavailable thread ID.
+7. In the final response, state whether delivery succeeded or stopped at a mismatch and emit `::created-thread{threadId="..."}` for an immediate thread or `::created-thread{clientThreadId="..."}` for queued worktree setup. Do not write another handoff file.
 
 ## Child First-Turn Contract
 
@@ -78,6 +80,7 @@ If the source worktree cannot be selected or any check fails, report `source wor
 Before reporting delivery, verify that:
 
 - The stated implementation worktree, HEAD and authority records were verified before creation.
+- The child `model` and `thinking` exactly inherit the current thread configuration, unless the owner supplied a supported explicit override.
 - The prompt contains the three anchors, the target-working-directory rule, package directory, Impl-Package entry point, current snapshot, mismatch rule, next action, and authorization/collaboration boundaries.
 - No project ID, branch, dirty-state fingerprint, secret, or controlled input was copied into the prompt.
 - The child was created as a normal session with `create_thread`, never as a worktree snapshot, or the process stopped before creation for a documented source mismatch.
