@@ -80,7 +80,7 @@ Material 指会影响行为、contract、数据、安全、运营、发布或显
 
 ## Full-review subagent 分工与收发协议
 
-正常 full review 固定采用三路 fresh subagent，以减少主 session 对五个维度的重复深读；若编排器可选择模型，三路均使用 `gpt-5.6-sol`、`reasoning_effort=medium`。A 是 mandatory fresh Outside Voice，保持完整、独立的开放式审查；B 只审 Scope + Architecture，重点检查 authority、tenant、transaction、lineage、custody；C 只审 Code Quality + Tests + Performance，重点检查实现边界、failure/recovery、验证充分性与调用放大。`bundle-admission` 与 `focused-closure-verification` 保持各自已定义的角色约束，不适用本固定分工。
+正常 full review 固定采用三路 fresh subagent，以减少主 session 对五个维度的重复深读。若编排器可以选择模型，A、B、C 分别从 `gpt-5.6-terra` / `reasoning_effort=high` 与 `gpt-5.6-sol` / `reasoning_effort=high` 两档中选择；编排 agent 根据各路的审查对象、风险和上下文复杂度决定，不因选择不同 profile 改变三路独立性、输入或责任边界。task、owner 或 host 的明确要求优先。A 是 mandatory fresh Outside Voice，保持完整、独立的开放式审查；B 只审 Scope + Architecture，重点检查 authority、tenant、transaction、lineage、custody；C 只审 Code Quality + Tests + Performance，重点检查实现边界、failure/recovery、验证充分性与调用放大。`bundle-admission` 与 `focused-closure-verification` 保持各自已定义的角色约束，不适用本固定分工。
 
 主 session 在派发前建立一次精简、同 revision 的 candidate bundle：candidate plan、earned Ticket/DAG、candidate projection、必要 D/S contract、联合校验证据、审查边界与只读约束。三路获得同一 bundle，且不接收主审 findings、预期 verdict、materiality 结论或 owner 偏好；A 仍按 Outside Voice prompt 保持独立发现。不要为每个维度重新拼装或扩展上下文。
 

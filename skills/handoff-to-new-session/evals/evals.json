@@ -33,11 +33,11 @@
     },
     {
       "id": 4,
-      "prompt": "Dry-run a clean-session handoff for a completed local checkpoint. The current Codex thread uses gpt-5.6-terra with high reasoning effort. The implementation worktree, full HEAD, package directory, and next action are all verified. Prepare the delivery request but do not call create_thread.",
-      "expected_output": "Produces a normal create_thread request that explicitly carries model gpt-5.6-terra and thinking high, while keeping the source worktree in the child prompt rather than a creation snapshot.",
+      "prompt": "Dry-run a clean-session handoff for a completed local checkpoint. The parent thread configuration is unavailable. The implementation worktree, full HEAD, package directory, and next action are all verified. Prepare the delivery request but do not call create_thread.",
+      "expected_output": "Produces a normal create_thread request that explicitly carries model gpt-5.6-terra and thinking xhigh, while keeping the source worktree in the child prompt rather than a creation snapshot.",
       "expectations": [
-        "Passes the current model and reasoning effort explicitly to create_thread unless the owner supplied a supported override.",
-        "Stops with session configuration inheritance unavailable rather than silently defaulting when the current configuration cannot be determined or is unsupported.",
+        "Uses the fixed gpt-5.6-terra/xhigh configuration explicitly unless the owner supplied a supported override.",
+        "Does not require the parent configuration to be readable; stops with session configuration unavailable only when the selected pair is unsupported.",
         "Does not use fork_thread, a working-tree snapshot, or the source worktree as creation-state input."
       ]
     }

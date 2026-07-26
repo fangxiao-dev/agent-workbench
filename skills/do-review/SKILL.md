@@ -18,6 +18,8 @@ Every dispatched reviewer is a leaf reviewer. A leaf reviewer performs its assig
 
 The default topology comes only from [reviewer-registry.json](references/reviewer-registry.json): Track A `code-review`, Track B `standards-review`, and Track C `spec-review`. `safety-review` remains an opt-in reviewer, not a default track. Do not infer internal reviewer topology from a reviewer skill; every resolved reviewer is already one leaf.
 
+When the dispatcher can select a model, each review leaf uses one of two default profiles: `gpt-5.6-terra` with `reasoning_effort=high`, or `gpt-5.6-sol` with `reasoning_effort=high`. The orchestrating agent selects the suitable profile for each leaf from the review scope and risk; task, owner, host, or explicit capacity constraints override this default. Keep that selection independent of the reviewer topology: choosing a profile must not omit, merge, or weaken a selected review track.
+
 ## Step 0: Subagent Gate, Preflight, And Capacity
 
 This skill requires subagents. If they are unavailable, disallowed, or need authorization, stop before reviewing and ask:
