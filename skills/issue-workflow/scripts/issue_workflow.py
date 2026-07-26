@@ -145,15 +145,58 @@ def gh_read(repo: str, kind: str) -> list[dict[str, Any]]:
     return value
 
 
+def graphql_issues(repo: str) -> list[dict[str, Any]]:
+    owner, name = repo.split("/", 1)
+    query = """
+query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    issues(first: 100, states: OPEN) {
+      nodes {
+        number title body state url
+        labels(first: 100) { nodes { name } }
+        assignees(first: 20) { nodes { login } }
+        parent { number }
+        subIssues(first: 100) { nodes { number } }
+        blockedBy(first: 100) { nodes { number } }
+        blocking(first: 100) { nodes { number } }
+      }
+    }
+  }
+}
+"""
+    command = ["gh", "api", "graphql", "-f", f"query={query}", "-F", f"owner={owner}", "-F", f"name={name}"]
+    result = subprocess.run(command, check=False, text=True, capture_output=True)
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "gh GraphQL issue read failed")
+    nodes = json.loads(result.stdout)["data"]["repository"]["issues"]["nodes"]
+    normalized: list[dict[str, Any]] = []
+    for issue in nodes:
+        normalized.append({
+            **issue,
+            "labels": issue["labels"]["nodes"],
+            "assignees": issue["assignees"]["nodes"],
+            "parent": issue["parent"]["number"] if issue["parent"] else None,
+            "subIssues": [child["number"] for child in issue["subIssues"]["nodes"]],
+            "blockedBy": [dependency["number"] for dependency in issue["blockedBy"]["nodes"]],
+            "blocking": [dependency["number"] for dependency in issue["blocking"]["nodes"]],
+            "relationsKnown": True,
+        })
+    return normalized
+
+
 def snapshot_from_gh(repo: str, contract: dict[str, Any]) -> dict[str, Any]:
     unknowns: list[dict[str, str]] = []
     try:
-        issues = gh_read(repo, "issue")
-        for issue in issues:
-            issue["relationsKnown"] = False
+        issues = graphql_issues(repo)
     except Exception as exc:  # report read scope honestly
-        issues = []
-        unknowns.append({"scope": "issues", "reason": str(exc)})
+        try:
+            issues = gh_read(repo, "issue")
+            for issue in issues:
+                issue["relationsKnown"] = False
+            unknowns.append({"scope": "native-relations", "reason": str(exc)})
+        except Exception as fallback_exc:
+            issues = []
+            unknowns.append({"scope": "issues", "reason": f"{exc}; fallback failed: {fallback_exc}"})
     try:
         prs = gh_read(repo, "pr")
     except Exception as exc:
