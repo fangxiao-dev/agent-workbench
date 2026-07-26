@@ -14,11 +14,11 @@
     {
       "id": 2,
       "prompt": "Dry-run a handoff to a fresh Codex thread. The owner names D:\\Repos\\warehouse\\.worktrees\\stock-reconcile as the implementation worktree, but this thread's actual cwd is D:\\Repos\\warehouse. Do not create a child. The package records are otherwise complete.",
-      "expected_output": "Fails closed before thread creation, reports a source-thread/worktree mismatch, and does not propose copying files or repairing Git state.",
+      "expected_output": "Uses the named implementation worktree as the child command workdir after verifying its own HEAD and package anchors; the parent thread cwd difference alone is not a mismatch.",
       "expectations": [
-        "Stops before create_thread because the parent Codex thread cwd does not equal the named implementation worktree.",
-        "Reports the worktree mismatch as the blocker.",
-        "Does not copy, cherry-pick, reset, checkout, clean, or rebuild changes."
+        "Does not require the parent Codex thread cwd to equal the named implementation worktree.",
+        "Makes the target worktree path, its full HEAD, and package entry the child recovery anchors.",
+        "Requires mismatch only when the target worktree cannot be used as command workdir or its in-worktree anchors fail."
       ]
     },
     {
@@ -39,6 +39,16 @@
         "Uses the fixed gpt-5.6-terra/xhigh configuration explicitly unless the owner supplied a supported override.",
         "Does not require the parent configuration to be readable; stops with session configuration unavailable only when the selected pair is unsupported.",
         "Does not use fork_thread, a working-tree snapshot, or the source worktree as creation-state input."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Dry-run a fresh-session handoff. The child cannot change its thread-level cwd, but every command can run with D:\\Repos\\ledger\\.worktrees\\close-period as workdir. In that worktree, the supplied full HEAD, package directory and Impl-Package entry point are all verified. Do not create a child.",
+      "expected_output": "Produces a handoff that continues using the target worktree as command workdir and does not report a mismatch merely because thread-level cwd cannot change.",
+      "expectations": [
+        "Requires first-turn and later commands to use the exact target worktree as workdir.",
+        "Checks HEAD and package anchors inside that worktree.",
+        "Reports source worktree setup mismatch only if the workdir cannot be used or its in-worktree anchors fail."
       ]
     }
   ]

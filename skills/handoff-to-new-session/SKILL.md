@@ -1,6 +1,6 @@
 ---
 name: handoff-to-new-session
-description: Create a clean normal Codex Desktop thread for a task or ticket whose authoritative records are already complete, using create_thread and a compact continuation prompt that first directs the child to switch to the existing implementation worktree, then verifies its HEAD and package anchors. Use whenever the user asks to hand off a finished checkpoint to a fresh new session, especially when the implementation worktree, HEAD, and task/package state must survive the switch. Do not use for a partial-work summary, a rolling handoff, an automatic multi-hop relay, or any request to fork conversation history.
+description: Create a clean normal Codex Desktop thread for a task or ticket whose authoritative records are already complete, using create_thread and a compact continuation prompt that runs the child’s work in an existing implementation worktree, then verifies its HEAD and package anchors. Use whenever the user asks to hand off a finished checkpoint to a fresh new session, especially when the implementation worktree, HEAD, and task/package state must survive the switch. Do not use for a partial-work summary, a rolling handoff, an automatic multi-hop relay, or any request to fork conversation history.
 compatibility: Requires Codex Desktop thread tools (create_thread and optionally wait_threads) plus local Git access.
 ---
 
@@ -14,20 +14,20 @@ Use this skill only when all of these are true:
 
 - The user wants a new, clean thread rather than inherited conversation history.
 - A task or ticket reached a documented checkpoint and its package, issue, plan, or progress records are the current authority.
-- The user identifies the existing implementation worktree that the new session must switch to and use.
+- The user identifies the existing implementation worktree in which the new session must run its commands.
 - The next action is known, even when it is blocked on named input or authorization.
 
 Do not use this skill for a half-finished task that needs a rolling handoff, a general session summary, a fork, or a workflow that has no authoritative entry record yet. Route those requests to the appropriate handoff or planning workflow instead.
 
 ## Safety Model
 
-Do not create a worktree child or snapshot any checkout. The new session starts normally, then immediately switches to the exact existing implementation worktree named in the prompt. The new session's inherited initial directory is not an anchor and must never itself cause a mismatch. A shell command run with another `workdir` does not rebind the Codex thread; the prompt must therefore make the target working directory an explicit navigation instruction before any read-only checks.
+Do not create a worktree child or snapshot any checkout. The new session starts normally; its inherited initial directory is not an anchor and must never itself cause a mismatch. Every first-turn check and later task command must use the exact existing implementation worktree as its execution `workdir`; no thread-level cwd switch is required or assumed.
 
-## Navigation before anchor verification
+## Execution location before anchor verification
 
-Treat the source worktree path as the child's execution location, not as a condition the child's inherited startup directory must already satisfy. The child's first action is to select that exact directory as its session working directory. Only after that navigation may it verify the directory, HEAD, package, and entry-point anchors.
+Treat the source worktree path as the child's execution location, not as a condition its inherited startup directory must already satisfy. The child's first action is to run the stated read-only checks with that exact path as `workdir`, then verify HEAD, package, and entry-point anchors there.
 
-If the child cannot select the exact worktree, or the selected worktree's HEAD/package anchors do not match, it must report `source worktree setup mismatch` and stop. It must not stop merely because it initially opened at the saved project's root or another inherited directory.
+If the child cannot execute in the exact worktree, or anchors inside that worktree do not match, it must report `source worktree setup mismatch` and stop. It must not stop merely because it initially opened at the saved project's root or another inherited directory.
 
 Use only three recovery anchors:
 
@@ -41,7 +41,7 @@ Do not put a project ID, branch name, or dirty-state fingerprint in the child pr
 
 Perform these read-only checks before drafting or creating the child:
 
-1. Resolve the user-supplied existing implementation worktree. It does not need to equal the parent thread `cwd`; the new normal session will be explicitly directed to use this path.
+1. Resolve the user-supplied existing implementation worktree. It does not need to equal the parent thread `cwd`; the child will use it as the execution `workdir`.
 2. In that worktree, read the full HEAD with `git rev-parse HEAD`.
 3. Confirm the stated package directory and Impl-Package entry point exist. Read the package records needed to fill the prompt from those sources, not from chat memory.
 
@@ -53,7 +53,7 @@ Read [references/handoff-prompt-template.md](references/handoff-prompt-template.
 
 The resulting prompt must:
 
-- Name the existing source implementation worktree and expected HEAD. State that the normal session must first switch to that path, then verify its anchors before running any other command.
+- Name the existing source implementation worktree and expected HEAD. State that first-turn checks and later task commands must execute with that path as `workdir`, then verify its anchors before continuing.
 - State the task or ticket status, complete and incomplete work, verification evidence, external state, and the single entry point that owns the next action.
 - Preserve explicit collaboration and execution-preflight authorization without converting one-time permission into standing permission.
 - Require that the child's first turn is only the stated working-directory, package-entry and HEAD checks. On a mismatch, it must stop without a repair attempt. On success, it must continue the stated next action, stopping only for an explicitly named input, authorization, or other blocker.
@@ -74,12 +74,11 @@ The resulting prompt must:
 
 The initial prompt must impose this exact sequence:
 
-1. First switch the session working directory to the exact existing source worktree named in the prompt. Do not compare the inherited startup directory with the target.
-2. After switching, confirm the current directory is the target, read the package entry directory, and use the named Impl-Package entry point to select only the current records needed for restore.
-3. Confirm the current full HEAD equals the expected HEAD.
-4. Confirm the required entry directory or documents exist.
+1. Run the first read-only checks with the exact existing source worktree named in the prompt as `workdir`. Do not compare the inherited startup directory with the target.
+2. In that worktree, read the package entry directory and use the named Impl-Package entry point to select only the current records needed for restore.
+3. In that worktree, confirm the current full HEAD equals the expected HEAD and required entry directory or documents exist.
 
-If the source worktree cannot be selected or any check fails, report `source worktree setup mismatch` and stop. If all checks pass, use the named Impl-Package entry point to continue its recorded `Next Action`. Do not stop merely to ask for a second confirmation.
+If the source worktree cannot be used as `workdir` or any in-worktree check fails, report `source worktree setup mismatch` and stop. If all checks pass, use the named Impl-Package entry point to continue its recorded `Next Action`. Do not stop merely to ask for a second confirmation.
 
 ## Final Check
 
@@ -87,6 +86,6 @@ Before reporting delivery, verify that:
 
 - The stated implementation worktree, HEAD and authority records were verified before creation.
 - The child explicitly uses `gpt-5.6-terra` with `xhigh` reasoning effort, unless the owner supplied a supported explicit override.
-- The prompt contains the three anchors, the navigation-first target-working-directory rule, package directory, Impl-Package entry point, current snapshot, mismatch rule, next action, and authorization/collaboration boundaries.
+- The prompt contains the three anchors, the target-`workdir` execution rule, package directory, Impl-Package entry point, current snapshot, mismatch rule, next action, and authorization/collaboration boundaries.
 - No project ID, branch, dirty-state fingerprint, secret, or controlled input was copied into the prompt.
 - The child was created as a normal session with `create_thread`, never as a worktree snapshot, or the process stopped before creation for a documented source mismatch.

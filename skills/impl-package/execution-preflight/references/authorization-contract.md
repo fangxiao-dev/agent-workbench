@@ -16,9 +16,9 @@
 
 最后按顺序做一次 permission-stop sweep：实现写入与生成物 → schema/migration → local DB/fixture/temp/browser cleanup → install/codegen/test/build → provider/network/credential → desktop GUI/manual verdict → Issue/Git/PR/merge/deploy。该扫描用于防遗漏，不授权引入来源未提及的相邻系统。
 
-## Readiness 扫描表
+## 当前启动前置检查
 
-只对生命周期扫描表中实际涉及的项目检查，不因通用清单引入相邻系统。每项结论为 `ready`、`repairable` 或 `blocked`：
+只对当前即将开始的高风险单元、或 plan 明确标为启动前必须存在的资源检查；不因通用清单或后续验证步骤引入相邻系统。记录实际检查或精确 blocker，不创建独立状态表：
 
 - **环境与配置：** 必需环境变量存在；连接/endpoint 的 host、port、database-name、environment tag 与 plan allow-list 一致；日志只写存在性和安全分类，不写 secret 或完整 URL。
 - **本地可变资源：** 已有 loopback test DB/container/service 是否存在、可启动、端口可达；fixture namespace、temporary storage 和 cleanup owner 是否明确。仅在当前授权覆盖时才启动既有资源，绝不自行创建数据库、云资源或共享环境。
@@ -26,7 +26,7 @@
 - **身份与外部依赖：** 计划使用的 browser identity、provider credential/endpoint、manual/native verdict path 是否存在；除非已授权为 preflight smoke，不发送业务 payload、不调用外部业务操作。
 - **顺序与隔离：** shared migration/codegen/singleton provider/browser/DB 是否有串行顺序、run identity 和 deterministic cleanup；不把“可启动”误写成正式 acceptance 已通过。
 
-计划中已经可预见的缺口必须在 Task 执行前修复或记录为 blocker；仅实际执行后才暴露的故障、真实数据冲突或外部工具临时失效才属于 runtime finding。
+当前单元的明确启动前置缺口必须修复或阻止该单元；后续、可隔离的验证资源由 Planned Verification 按需处理。仅实际执行后才暴露的故障、真实数据冲突或外部工具临时失效才属于 runtime finding。
 
 ## Subagent 模式
 
@@ -58,7 +58,7 @@
 - 明确禁止/不适用：<来源排除的系统、环境或数据>
 - HITL / owner decisions：<开放决策，或“无”>
 - Subagents：主 session 治理、subagent 执行（默认） / 不允许；默认模式下，主 session 保留调度、授权记录、决策、跨 Task seaming、共享验证、Ticket acceptance 与最终集成，其余工作按明确 Task 边界委派，已授权权限可随 Task 传递
-- Readiness：<已就绪项；可由已授权低副作用动作修复项；需要 owner/环境输入的 blocker；均不得含 secret>
+- 当前启动前置：<只记录当前单元的实际检查、已授权低副作用修复或精确 blocker；均不得含 secret>
 
 可以回复“全部批准”，或只列出不批准/需要缩小的例外；未列例外即按上述精确边界授权当前任务，不再逐项追问。
 ```
@@ -73,12 +73,12 @@ Execution authorization for this task:
 - Allowed by plan/user: <task-scoped 的实现、验证、外部工具、清理及 Git/Issue 权限>
 - Blocked unless separately authorized: <plan/user 禁止或要求另行授权的边界>
 - HITL decisions: <resolved/pending>
-- Readiness: <ready / repaired / blocked；环境、工具、临时资源、cleanup 和串行资源的最小证据，不含 secret>
+- Current start prerequisites: <当前单元的最小证据或 blocker；不含 secret>
 ```
 
 ## 边界与失败模式
 
-- 不做 implementation planning、issue ordering 或 code reconnaissance；不创建 worktree、不运行 migration/正式测试/业务浏览器流程、不编辑代码或计划、不提前派发。readiness sweep 仅允许最小只读检查，以及已授权的低副作用本地修复。
+- 不做 implementation planning、issue ordering 或 code reconnaissance；不创建 worktree、不运行 migration/正式测试/业务浏览器流程、不编辑代码或计划、不提前派发。当前启动前置检查仅允许最小只读检查，以及已授权的低副作用本地修复；不得形成全量 readiness inventory 或第二份执行合同。
 - 不从一般知识补充来源未提及的系统；来源只为禁止或单独授权而提到的系统，原样记录该边界。
 - 不把 read-only/staging 权限扩大成 mutation，也不复用无关任务的旧权限。
 - 不把计划已禁止事项变成反向确认问题。
