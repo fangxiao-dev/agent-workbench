@@ -10,6 +10,8 @@
 
 > 2026-07-26 更新：本文保留历史 `$triage` 命名；现行调用名是 `$issue-triage`，路径为 `skills/issue-workflow/issue-triage/`。
 
+> 2026-07-26 修订：本文关于 `priority:blocker` 的设计已被废止；现行合同只以 `blocked` 表示已知依赖阻塞。
+
 ## Goal
 
 为 2–3 人团队建立一个以 GitHub Issues 为协作入口、对 agent 友好的轻量 `issue-triage` skill。它根据用户自然语言、现有 Issue、父子关系、依赖与仓库上下文，先给出简短 triage 建议；只有用户明确确认后，才创建或更新 GitHub Issue、label 和原生关系。

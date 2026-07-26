@@ -12,7 +12,7 @@
 
 ## Context links
 
-<!-- 稳定文档、父项、依赖或 PR。 -->
+<!-- 稳定文档、父项、依赖或 PR；若为 blocked，写明阻塞原因和解除条件。 -->
 
 ## Working Branch
 
