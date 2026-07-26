@@ -18,7 +18,7 @@ Set up repository-local documents for the engineering skills. For GitHub Issue w
 
 ## Contract boundary
 
-Do not add `needs-triage`, an agent-brief requirement, PR-as-request handling, or a provenance label. Use `work:initiative`, `work:investigation`, the readiness labels, type labels, and optional `priority:blocker` defined by the shared contract. A normal leaf has no `work:` label.
+Do not add `needs-triage`, an agent-brief requirement, PR-as-request handling, a provenance label, or a priority label. Use `work:initiative`, `work:investigation`, the readiness labels, and type labels defined by the shared contract. A normal leaf has no `work:` label.
 
 ## Done
 
