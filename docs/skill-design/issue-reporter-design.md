@@ -4,7 +4,7 @@
 
 状态：决策已批准，待与 Issue Triage Router 一起实现
 
-相关设计：[Issue Triage Router 设计](issue-triage-router-design.md)
+相关设计：[Issue Triage Router 设计](issue-triage-router-design.md) · [Issue Workflow 运行时实现设计](issue-workflow-implementation-design.md)
 
 ## Goal
 
@@ -78,7 +78,7 @@ bundle 根目录没有 `SKILL.md`，只是分组和共享资产位置；两个 l
 1. 工作形态、type、readiness 与 `priority:blocker` 的解释。
 2. 父 Issue、直接 sub-issue、直接 dependencies，以及它们对关闭条件的影响。
 3. Issue 正文或 GitHub 关系中的当前 Working Branch、稳定文档链接和直接关联 PR；查看 parent 时另列直接关联 PR 与子树 PR。缺失时明确写“未记录”，不猜测。
-4. 当前下一道门：可以领取、等待人类、等待依赖、等待子项，或已经可关闭。
+4. 当前下一道门：基于 readiness 和关联 PR 事实说明当前 agent、owner、依赖或子项谁应行动；若 Issue 与 PR 状态不一致，明确写“需要 `$triage` 确认交接”，不自行改 label。
 5. 若发现合同违规，给出只读诊断和建议通过 `$triage` 修复的原因。
 
 ### Focused report
