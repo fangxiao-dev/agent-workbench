@@ -8,6 +8,8 @@
 
 > 本文是设计存档，不是 skill 的运行时依赖。日常调用只读取共享合同和模板；需要追溯决策时才显式打开本文。
 
+> 2026-07-26 更新：本文保留历史 `$triage` 命名；现行调用名是 `$issue-triage`，路径为 `skills/issue-workflow/issue-triage/`。
+
 ## Goal
 
 为 2–3 人团队建立一个以 GitHub Issues 为协作入口、对 agent 友好的轻量 `issue-triage` skill。它根据用户自然语言、现有 Issue、父子关系、依赖与仓库上下文，先给出简短 triage 建议；只有用户明确确认后，才创建或更新 GitHub Issue、label 和原生关系。

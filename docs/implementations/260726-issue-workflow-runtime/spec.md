@@ -3,8 +3,8 @@
 状态（Status）：Spec Gate Passed
 创建时间（Created）：2026-07-26
 <!-- impl-package:projection revision-set begin -->
-决策修订（Decision Revision）：D1
-规格修订（Spec Revision）：S1
+决策修订（Decision Revision）：D2
+规格修订（Spec Revision）：S2
 <!-- impl-package:projection revision-set end -->
 需求来源（Requirement source）：[decision.md](decision.md) 与已批准运行时设计
 主题 slug（Topic slug）：issue-workflow-runtime
@@ -33,7 +33,7 @@
 
 ## 1. 范围 / 权威来源 / 非目标
 
-- 范围：建立 `skills/issue-workflow/` 的 contract、templates、Python CLI、`$triage` 和 `$issue-reporter`；更新 `$write-issue` 的模板引用和旧 triage 生态的冲突词汇。
+- 范围：建立 `skills/issue-workflow/` 的 contract、templates、Python CLI、`$issue-triage` 和 `$issue-reporter`；更新 `$write-issue` 的模板引用和旧 triage 生态的冲突词汇。
 - 权威来源与优先级：`issue-contract.yaml` 是机器规则唯一来源；运行时设计解释实现边界；GitHub 的当前 Issue/PR 数据是报告事实源。
 - 非目标：GitHub Project、bot/webhook、数据库、Python 写 GitHub、自动分支/评论/关闭、KaiSpan label migration。
 - 需要确认的假设：运行环境存在已认证的 `gh`；否则只返回 unknown。
@@ -49,9 +49,9 @@
 
 | Actor / 系统 | 条件 / 状态 | 动作 / 事件 | 结果 / 下一状态 |
 | --- | --- | --- | --- |
-| `$triage` | 用户给出工作或现有 Issue | 调用 snapshot/validate，完成最小澄清 | 输出 read-only proposal |
+| `$issue-triage` | 用户给出工作或现有 Issue | 调用 snapshot/validate，完成最小澄清 | 输出 read-only proposal |
 | 用户 | proposal 完整 | 明确确认 | triage 通过 `gh` 执行已列 operation |
-| `$triage` | 未确认或新增范围 | 任意写入候选 | 不执行 `gh` 写命令，重新提案 |
+| `$issue-triage` | 未确认或新增范围 | 任意写入候选 | 不执行 `gh` 写命令，重新提案 |
 | `$issue-reporter` | 用户请求状态 | 调用 snapshot/validate/report | 输出事实、分类、违规、提示与 unknown |
 | 当前行动者 | Draft PR 可 review | 调用 triage 交接 | `ready-for-agent` 转 `ready-for-human` |
 | 当前行动者 | review 要求修改 | 调用 triage 交接 | `ready-for-human` 转 `ready-for-agent` |
@@ -62,7 +62,7 @@
 - Core 不变量与 Capability 暴露边界：Python 没有 `apply`；`gh` 是唯一远程适配器；triage 是唯一写入 skill。
 - 接口与 seam：Python 以 stdout JSON 与 skill 交接；`gh` 认证和私库权限透传，失败返回 unknown。
 - 上游 / 下游依赖：KaiSpan 的 repo-local identity config、tracker 文档与 labels 由协调 package 负责。
-- 兼容或迁移窗口：旧 `skills/triage/` 在同一变更中迁移；不得保留两个 `$triage`。
+- 兼容或迁移窗口：旧 `skills/triage/` 在同一变更中迁移；不得保留两个 `$issue-triage`。
 
 ## 5. 错误边界 / 失败恢复
 
@@ -103,3 +103,4 @@
 | 前一修订 | 新修订 | 合同变化 | 原因 / 权威来源 | 日期 | 被取代说明 |
 | --- | --- | --- | --- | --- | --- |
 | 无 | S1 | 初始运行时合同 | owner 批准设计 | 2026-07-26 | 无 |
+| S1 | S2 | 同步 `$issue-triage` 调用名 | owner 批准 rename | 2026-07-26 | S1 |

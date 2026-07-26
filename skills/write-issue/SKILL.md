@@ -10,7 +10,7 @@ disable-model-invocation: true
 
 ## 输入与边界
 
-先读取用户提供的事实、相关 Issue/PR 和仓库 Issue 约定。若已有 `$triage` proposal，只使用其中已确认的 work shape、labels、关系、人员和链接；不自行补全或修改它们。没有 proposal 但用户在问“要建什么、谁负责、如何标记、是否建 sub-issue”时，转交 `$triage`。
+先读取用户提供的事实、相关 Issue/PR 和仓库 Issue 约定。若已有 `$issue-triage` proposal，只使用其中已确认的 work shape、labels、关系、人员和链接；不自行补全或修改它们。没有 proposal 但用户在问“要建什么、谁负责、如何标记、是否建 sub-issue”时，转交 `$issue-triage`。
 
 绝不调用 `gh`、Python runtime 或任何远端写入。它也不创建评论、分支、assignee、reviewer、labels 或关系。
 
@@ -24,4 +24,4 @@ disable-model-invocation: true
 
 ## 输出
 
-返回建议标题和 Markdown 正文，并标明仍缺的事实。用户要发布时，要求通过 `$triage` 将这份正文纳入完整 proposal 后确认。
+返回建议标题和 Markdown 正文，并标明仍缺的事实。用户要发布时，要求通过 `$issue-triage` 将这份正文纳入完整 proposal 后确认。

@@ -1,6 +1,6 @@
 # Issue Workflow 合同说明
 
-机器可校验的 label、基数和交接边只在 [issue-contract.yaml](issue-contract.yaml) 定义；本文件只说明如何判断。
+机器可校验的 label、基数和交接边只在 [issue-contract.yaml](issue-contract.yaml) 定义；本文件只说明如何判断。`$issue-triage` 使用该合同生成并确认写入 proposal，`$issue-reporter` 使用同一合同作只读诊断。
 
 普通 leaf 是默认交付工作，不带 `work:` label。`work:investigation` 的交付物是事实、结论或决策；它和 leaf 一样需要一个 type 与一个 readiness。`work:initiative` 是协调父事项，默认不进入可执行队列，只有它自身等待 owner 决策或被阻塞时才带 readiness。
 
