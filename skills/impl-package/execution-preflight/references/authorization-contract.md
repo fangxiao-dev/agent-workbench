@@ -6,7 +6,7 @@
 
 只纳入 active request 或授权来源实际涉及的类别：
 
-- **Subagents：** delegation 是否允许；owner 是否要求充分利用；哪些 task-scoped 权限可随派发传递；哪些共享资源或未决决策必须由主 session 串行化。
+- **Subagents：** 哪些调研、实现、验证和记录工作可按 Task 委派；哪些 task-scoped 权限可随派发传递；哪些共享资源或未决决策必须由主 session 串行化。
 - **实现与数据 mutation：** 本地文件、生成物、schema、migration、fixture、reset、cleanup、删除和其他不可逆或 production-like 操作。
 - **验证：** 依赖安装、code generation、测试、build、dry-run、browser automation、desktop GUI、manual/native verdict，以及失败是否阻止 acceptance。
 - **外部系统：** read-only/smoke、真实 provider、network call、owner-supplied credentials/config、staging/production、database、Azure/Lark/email 等来源明确提及的系统及其成本或速率副作用。
@@ -16,27 +16,35 @@
 
 最后按顺序做一次 permission-stop sweep：实现写入与生成物 → schema/migration → local DB/fixture/temp/browser cleanup → install/codegen/test/build → provider/network/credential → desktop GUI/manual verdict → Issue/Git/PR/merge/deploy。该扫描用于防遗漏，不授权引入来源未提及的相邻系统。
 
+## Readiness 扫描表
+
+只对生命周期扫描表中实际涉及的项目检查，不因通用清单引入相邻系统。每项结论为 `ready`、`repairable` 或 `blocked`：
+
+- **环境与配置：** 必需环境变量存在；连接/endpoint 的 host、port、database-name、environment tag 与 plan allow-list 一致；日志只写存在性和安全分类，不写 secret 或完整 URL。
+- **本地可变资源：** 已有 loopback test DB/container/service 是否存在、可启动、端口可达；fixture namespace、temporary storage 和 cleanup owner 是否明确。仅在当前授权覆盖时才启动既有资源，绝不自行创建数据库、云资源或共享环境。
+- **执行工具：** package manager、generator、test runner、browser/desktop/native tool 是否可启动；版本或安装缺口是否需要额外 mutation/owner input。
+- **身份与外部依赖：** 计划使用的 browser identity、provider credential/endpoint、manual/native verdict path 是否存在；除非已授权为 preflight smoke，不发送业务 payload、不调用外部业务操作。
+- **顺序与隔离：** shared migration/codegen/singleton provider/browser/DB 是否有串行顺序、run identity 和 deterministic cleanup；不把“可启动”误写成正式 acceptance 已通过。
+
+计划中已经可预见的缺口必须在 Task 执行前修复或记录为 blocker；仅实际执行后才暴露的故障、真实数据冲突或外部工具临时失效才属于 runtime finding。
+
 ## Subagent 模式
 
-### 调度优先（推荐）
+### 主 session 治理、subagent 执行（默认）
 
-主 session 负责 authorization record、Task/DAG 选择与依赖排序、业务/安全决策、实际跨 Task seam、冲突处理、共享验证、Ticket acceptance 和最终集成。subagent 承担所有目标可声明、写入可隔离、结果可复核、失败可回收的代码实现、测试、迁移适配、文档、验证、错误复现和已决策闭合的集成工作。
+主 session 只负责调度、authorization record、决策、跨 Task seaming、共享验证、Ticket acceptance 和最终集成。调研、实现、验证和记录等其余工作，均可按目标可声明、写入可隔离、结果可复核、失败可回收的 Task 切片委派给 subagent。
 
-- 不得仅因工作叫 integration/seaming 就收回主 session；只有接口未冻结、业务语义未决、写入无法隔离或风险无法复核时，主 session 才先解除阻碍。
+- 不得仅因工作叫 integration/seaming 就收回主 session；只有跨 Task seam、未决决策或共享验证需要其保留职责时，主 session 才处理该部分，其余可隔离工作仍委派。
 - 已授权对象、环境、数据和副作用可随明确 Task 派发传递，不逐 subagent 重复申请，也不允许 subagent 扩大 ownership。
 - 独立且写入不冲突的切片按 wave 并行；真实依赖、shared migration/codegen、同文件核心写入和单实例外部资源必须串行。
-- 主 session 不重复实现 subagent 已交付切片；通过 diff、测试、证据和必要抽查复核，只在实际 seam、finding 或返工时接管。
-- 默认模型（除非 task、owner 或 host 另有指定）：实施 `gpt-5.6-terra` / `high`；review `gpt-5.6-sol` / `medium`。
-
-### 普通使用
-
-subagent 只承担有界辅助，主 session 是主要实现者。仅在 owner 明确偏好时采用，不得把模糊回答自动降级到此模式。
+- 主 session 不重复实现 subagent 已交付切片；通过 diff、测试、证据和必要抽查履行共享验证与最终集成职责，只将返工委派给相应 subagent。
+- 默认模型（除非 task、owner 或 host 另有指定）：implementation 用途从 `gpt-5.6-terra` / `medium` 与 `gpt-5.6-terra` / `high` 两档中选择；调度 agent 按切片风险、复杂度和验证负担决定。review 用途维持 `gpt-5.6-sol` / `medium`。
 
 ### 不允许
 
-禁止使用 subagent。host 禁止或 owner 明确选择时采用。
+禁止使用 subagent。仅在 host 禁止或 owner 明确选择时采用；记录这与默认协作模式的偏离及由谁承担未能委派的工作。
 
-不得在模式确认前启动 subagent；owner 已明确说“充分利用”等同调度优先，不需要再次确认。
+默认模式无需再次确认即可启动 subagent；host 禁止或 owner 明确禁止 delegation 时才记录例外。
 
 ## 一次性授权包模板
 
@@ -49,7 +57,8 @@ subagent 只承担有界辅助，主 session 是主要实现者。仅在 owner �
   3. <Git、Issue 或 PR 收口；精确边界>
 - 明确禁止/不适用：<来源排除的系统、环境或数据>
 - HITL / owner decisions：<开放决策，或“无”>
-- Subagents：调度优先（推荐） / 普通使用 / 不允许；调度优先时，已授权权限按明确 Task 边界传递
+- Subagents：主 session 治理、subagent 执行（默认） / 不允许；默认模式下，主 session 保留调度、授权记录、决策、跨 Task seaming、共享验证、Ticket acceptance 与最终集成，其余工作按明确 Task 边界委派，已授权权限可随 Task 传递
+- Readiness：<已就绪项；可由已授权低副作用动作修复项；需要 owner/环境输入的 blocker；均不得含 secret>
 
 可以回复“全部批准”，或只列出不批准/需要缩小的例外；未列例外即按上述精确边界授权当前任务，不再逐项追问。
 ```
@@ -60,20 +69,21 @@ subagent 只承担有界辅助，主 session 是主要实现者。仅在 owner �
 
 ```markdown
 Execution authorization for this task:
-- Subagents: <调度优先 / 普通使用 / 不允许>；<主 session 保留职责、subagent 可执行范围、授权传递和必须串行化资源>
+- Subagents: <主 session 治理、subagent 执行 / 不允许>；<主 session 保留职责、subagent 可委派范围、授权传递和必须串行化资源>
 - Allowed by plan/user: <task-scoped 的实现、验证、外部工具、清理及 Git/Issue 权限>
 - Blocked unless separately authorized: <plan/user 禁止或要求另行授权的边界>
 - HITL decisions: <resolved/pending>
+- Readiness: <ready / repaired / blocked；环境、工具、临时资源、cleanup 和串行资源的最小证据，不含 secret>
 ```
 
 ## 边界与失败模式
 
-- 不做 readiness、implementation planning、issue ordering 或 code reconnaissance；不创建 worktree、不运行测试、不编辑、不提前派发。
+- 不做 implementation planning、issue ordering 或 code reconnaissance；不创建 worktree、不运行 migration/正式测试/业务浏览器流程、不编辑代码或计划、不提前派发。readiness sweep 仅允许最小只读检查，以及已授权的低副作用本地修复。
 - 不从一般知识补充来源未提及的系统；来源只为禁止或单独授权而提到的系统，原样记录该边界。
 - 不把 read-only/staging 权限扩大成 mutation，也不复用无关任务的旧权限。
 - 不把计划已禁止事项变成反向确认问题。
 - 不按实现顺序逐项申请权限，或遗漏 migration、provider、browser/GUI、cleanup、Git/Issue、acceptance tool 后中途停顿。
-- owner 已要求充分利用 subagent 时，不得记录为普通使用、再次询问模式，或把 subagent 限制为调研/审查。
+- 不得把默认模式降级为由主 session 承担普通执行工作、再次询问模式，或把 subagent 限制为调研/审查。
 - 不以 integration/seaming 为名拒绝可隔离委派，不重复实现 subagent 已交付内容，也不把一次性授权解释成仅主 session 可用。
 - 充分利用不等于无边界并发；不得忽略依赖、共享写入和单实例外部资源。
 - 新权限 blocker 若仍在已授权对象/环境/数据/副作用范围内，直接继续；只有跨出该 envelope 才重新申请。
