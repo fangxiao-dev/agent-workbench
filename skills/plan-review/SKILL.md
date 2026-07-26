@@ -28,7 +28,7 @@ user-invocable: true
 
 当活跃的 `impl-planning` 编排以确切 skill 名称选择 `plan-review`，并明确标注 `mode=bundle-admission` 时，本 skill 执行一次轻量、只读的 admission review。调用方先扫描下方 escalation signals；命中任一项时直接启动完整 workflow，不先运行 admission。该调用必须运行在相对产出 bundle 的主 session 而言 fresh 的 subagent context；这个 admission reviewer 本身就是独立视角，不再为轻量路径额外启动 Outside Voice 或创建 ledger。用户直接调用 `$plan-review` 时一律走下方既有完整 workflow，不能因为计划看起来简单而自行选择 admission mode。
 
-admission 输入只包含同一 candidate bundle 的 plan、Composition earned 的 Ticket/DAG（若存在）、candidate projection、必要的 Decision/Spec contract、联合校验结论和审查目标；不得附带 registry current projection、主 session findings、materiality 结论或期望 verdict。沿本 skill 的工程判断基线快速检查 Scope、Architecture、Code Quality、Tests、Performance 中实际相关的维度。
+admission 输入只包含同一 candidate bundle 的 plan、Composition earned 的 Ticket/DAG（若存在）、candidate projection、必要的 Decision/Spec contract、联合校验结论和审查目标；不得附带 registry current projection、主 session findings、materiality 结论或期望 verdict。沿本 skill 的工程判断基线快速检查 Scope、Architecture、Code Quality、Tests、Performance 中实际相关的维度；Tests 按 `references/test-review.md` 判断 material 高风险边界是否已形成执行者无需重新设计的验证链。
 
 每次 admission 在开始和返回 verdict 时都用一行向 owner 报告本轮配置：`Mode=bundle-admission`、独立 reviewer 是否 fresh、额外 Outside Voice/ledger 明确不启用、发现的 full-review escalation signals 及路由结果。该报告是非阻塞的人类可读说明，不创建新 artifact、receipt 或 schema；即使没有 signal 也要明确写 `none`，不能让 owner 从“独立审查”反推实际配置。
 
@@ -43,7 +43,7 @@ admission 输入只包含同一 candidate bundle 的 plan、Composition earned �
 按以下优先级返回唯一 verdict 及简短、可核验证据：
 
 - `unavailable`：没有 fresh context、输入不可读取或无法形成独立判断；给出具体原因。调用方只能重试、暂停或取消 approval，不能把它改写成 `ready`。
-- `revise`：计划、contract、acceptance oracle、联合校验或 owner decision 不足，导致当前无法有效进入完整审查；指出 owning skill 和最小修订动作。修订后必须重新扫描固有 escalation signals，不能因缺口已修复而默认转成 `ready`。
+- `revise`：计划、contract、acceptance oracle、联合校验或 owner decision 不足，导致当前无法有效进入完整审查；指出 owning skill 和最小修订动作。行为边界或 Acceptance Semantics 缺失时路由 `req-align`，实施验证选择、入口、oracle 或 evidence owner 缺失时路由 `impl-planning`。修订后必须重新扫描固有 escalation signals，不能因缺口已修复而默认转成 `ready`。
 - `full review`：存在任一 escalation signal；指出触发信号，停止 admission，由调用方按确切 `plan-review` skill 路径启动正常 workflow，取得已 `verify-clearance` 的 ledger 绝对路径后再判断 owner approval。
 - `ready`：材料足以判断、没有待修订缺口且 escalation signal 为 `none`；说明已检查的风险、为何其余维度不适用，以及计划可以进入 owner approval。
 
@@ -118,9 +118,9 @@ Material 指会影响行为、contract、数据、安全、运营、发布或显
 
 加载全部镜头不等于机械深挖全部维度：根据实际信号决定仓库调查深度、图示、角色和输出篇幅；没有 material 风险时记录有目标依据的 `not_applicable` 或 `reviewed`。
 
-向用户报告一行配置，例如：`本轮配置：Outside Voice=A 独立；Scope+Architecture=B；Code Quality+Tests+Performance=C；Judge/Critic=跳过（证据无冲突且变更可逆）；Tests=coverage map。`
+向用户报告一行配置，例如：`本轮配置：Outside Voice=A 独立；Scope+Architecture=B；Code Quality+Tests+Performance=C；Judge/Critic=跳过（证据无冲突且变更可逆）；Tests=compact coverage judgment。`
 
-完成条件：五个维度都有初始材料性判断，本轮配置已对 owner 可见。
+完成条件：五个维度都有初始材料性判断，本轮配置已对 owner 可见；material 高风险边界的验证链已确认可执行，或已形成带 owning skill 的 finding/revise 结论。
 
 ## 3. 形成候选并晋升 findings
 

@@ -205,6 +205,52 @@
         "Mentions the sidecar only as optional machine audit metadata, if at all",
         "Does not invent a new owner approval gate after lifecycle is already Active"
       ]
+    },
+    {
+      "id": 18,
+      "prompt": "恢复一个 approved attempt。下一 actionable unit 修改 cursor pagination 和并发 claim；Spec 已定义边界，但 Planned Verification 只有‘补测试’，没有测试入口、oracle 或 ER evidence owner。请开始执行。",
+      "expected_output": "Blocks only the affected high-risk unit, invalidates the current bundle approval as required for planned-evidence changes, and routes the verification-design gap to impl-planning without inventing execution-time cases or IDs.",
+      "files": [],
+      "expectations": [
+        "Runs the high-risk verification-readiness guard before execution or dispatch",
+        "Routes to impl-planning because the behavior contract already exists",
+        "Does not create a case matrix, mandatory IDs or a second plan",
+        "Does not redefine the gap inside a subagent dispatch prompt"
+      ]
+    },
+    {
+      "id": 19,
+      "prompt": "恢复一个 approved attempt。下一 actionable unit 是单 owner、局部可逆的文案修正，现有局部测试和 ER owner 已明确。请继续执行。",
+      "expected_output": "Continues through the normal lightweight execution path without demanding a high-risk trace matrix, new IDs, a plan revision or an extra review gate.",
+      "files": [],
+      "expectations": [
+        "Does not apply the high-risk readiness guard mechanically to a low-risk local change",
+        "Preserves the existing direct-or-delegate decision",
+        "Does not create new artifacts or owner checkpoints"
+      ]
+    },
+    {
+      "id": 20,
+      "prompt": "恢复一个 approved attempt。下一 actionable unit 修改 tenant-scoped authorization，但当前 Spec/AC 没有定义允许范围、拒绝语义或 authority fence；plan 写了几个测试名称。请开始执行。",
+      "expected_output": "Blocks only the affected high-risk unit and routes the missing behavior and acceptance contract to req-align; test names cannot substitute for the absent contract.",
+      "files": [],
+      "expectations": [
+        "Runs the high-risk verification-readiness guard before execution or dispatch",
+        "Routes to req-align because the behavior boundary and Acceptance Semantics are missing",
+        "Does not let impl-planning, the executor or existing test names invent the authority contract",
+        "Does not broaden the blocker into a new gate for unrelated low-risk units"
+      ]
+    },
+    {
+      "id": 21,
+      "prompt": "恢复一个 approved attempt。下一 actionable unit 修改 cursor pagination；Spec/AC 边界、描述性 integration test 名称、关键边界场景、oracle 和 ER owner 都能稳定定位，但没有统一 Verification ID。请继续执行。",
+      "expected_output": "Passes the high-risk verification-readiness guard and continues through the existing execution path without inventing IDs, a matrix artifact or a plan revision.",
+      "files": [],
+      "expectations": [
+        "Accepts stable semantic anchors and descriptive test names without a uniform ID",
+        "Does not create a case matrix or second verification contract",
+        "Preserves the normal risk-based execution and review routing"
+      ]
     }
   ]
 }

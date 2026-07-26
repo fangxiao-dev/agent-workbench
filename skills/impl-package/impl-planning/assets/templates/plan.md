@@ -54,6 +54,7 @@
 | --- | --- | --- | --- |
 
 <!-- 引用权威 policy；不要复制通用 Data Safety、UI Evidence、Real Route Safety checklist。 -->
+<!-- material 高风险边界在本表内引用 spec/AC，覆盖能区分正确与错误实现的正常流和关键负向/竞态场景，并注明可执行测试层级或入口、可观察 oracle 与后续 ER owner。复用现有 anchor/名称即可；无歧义时不要另造 ID、矩阵或文档。 -->
 
 ## 执行记录
 

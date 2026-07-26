@@ -101,6 +101,7 @@ bundle 的派生汇报状态为 `drafting`、`ready-for-review`、`approved`。`
 
 - 引用权威 test/review policy。
 - 将 Acceptance Semantics 映射到本次要运行的检查、预期结果和 evidence owner；命令只有在仓库中可确认时才写成精确命令。
+- 对分页/cursor、并发/锁、权限范围、持久化或外部 mutation、single-use/replay/recovery 等 material 高风险边界，在同一 Planned Verification 中给出执行者可直接落实的最小证据链：引用 spec 行为边界，选择能区分正确与错误实现的正常流及关键负向/竞态场景，注明测试层级或入口、可观察 oracle 与 ER evidence owner。优先复用现有 AC anchor、场景名或测试名；只有跨 Task/session 会产生歧义时才增加稳定 ID，不为格式对齐创建 invariant matrix、新文档或新阶段。
 - 不复制 Data Safety、UI Evidence、Real Route Safety 等通用 checklist。
 - 当 spec 已激活 conditional evidence-integrity contract 时，在既有 Planned Verification 表中选择最小的 fault-injection matrix，而不是创建新文档或新阶段：对每个主断言至少选择一个会导致 false PASS 的反例，以及相关的副作用后失败、补偿或失效失败、投影/兼容输入漂移、公共输出跨状态漂移、预期失败输出等场景。示例按当前风险裁剪，不假定项目具有 provider、schema、archive、CLI 或 `current` 指针；每个选中的场景要写明预期的可观察 fail-closed 结果和 evidence owner。
 
@@ -120,7 +121,7 @@ bundle 的派生汇报状态为 `drafting`、`ready-for-review`、`approved`。`
 1. 读取当前 decision/spec revision、gate ledger 最新 entry、module knowledge/code 对账结果与仓库验证政策。
 2. 确认需要的 Decision/Spec Gate 已通过；实现-only drift 允许复用现有 D/S。
 3. 分配 Attempt ID 与 P1，独立决定 Composition；plan 尚未被 registry 的 `current.attempt` 选中时，其 lifecycle 派生为 Draft。
-4. 建立 spec coverage 与 change map，写 Execution Strategy、integration order、Planned Verification、rollout/rollback 与依赖的 policy 链接；清除 blocker placeholder，核对术语、模块与路径一致性。
+4. 建立 spec coverage 与 change map，写 Execution Strategy、integration order、Planned Verification、rollout/rollback 与依赖的 policy 链接；对 material 高风险边界确认验证已可直接执行并能落到后续 ER，清除 blocker placeholder，核对术语、模块与路径一致性。
 5. 形成 candidate bundle：`tickets=true` 时调用 `to-tickets` draft 形成完整集合；`dag=true` 时在 Draft Ticket 集合与输入齐备后调用 `create-task-dag`，无 Tickets 时直接消费 plan 形成当前 attempt DAG。随后补齐 candidate projection，并联合校验覆盖、依赖、ownership/contribution、acceptance evidence、gate 边界和 revision binding。缺口由 owning skill 修正；候选缺 projection、证据、引用、分类或机械顺序问题不晋升为 owner decision。
 6. 对同一 candidate bundle 做一次适用的 `plan-review`：首次或范围已变化的 candidate，命中固有高风险 signal 时直接 full review，否则 fresh `$plan-review mode=bundle-admission`。正常 full review 的真实材料性选择必须先完成一次完整 closure sweep，再将全部已知 findings、owner decisions、影响链与证据合成有限 closure brief；若后续 candidate 只实现该 batch 且未扩大 D/S/P、authority 或 public-contract 边界，改由 fresh `$plan-review mode=focused-closure-verification` 逐项验证，不重新开放问题搜索。该模式 `closure-verified` 后仍须取得正常 ledger 的 `verify-clearance` 成功；`reopen-full-review` 将升级理由与既有 brief 合并为新的 closure batch 后回到 normal full review；`blocked` 补齐输入后重验。`revise` 回 owning skill，`unavailable` 重试、暂停或取消本次 checkpoint，不能降级为通过。
 7. review 收敛后请求**一次**完整 bundle approval。获批即自动执行 register/publish/preflight：新 package 先 `init --package-id`，`preflight-register` 只作只读校验，`register-revision` / `register-revisions` 原子选择 attempt、seed runtime records 并刷新 projection，随后 `validate --committed`；不再为 ledger、登记、Ticket/DAG 或下游路由单独请示。
@@ -136,6 +137,7 @@ bundle 的派生汇报状态为 `drafting`、`ready-for-review`、`approved`。`
 - plan 未复制 decision/spec contract、ticket 正文、task 状态或通用 checklist。
 - 每个长期 seam/interface/constraint 都能在 spec 找到。
 - Planned Verification 引用权威 policy；Execution Record 使用稳定 anchor 且 append-only。
+- material 高风险边界已由 spec anchor 贯通到可执行场景、测试层级/入口、可观察 oracle 与 ER evidence owner；链路可语义定位即可，不要求统一 ID 或固定表格。
 - 已激活 conditional evidence-integrity contract 时，Planned Verification 为每个主断言选择了相关 false-PASS 反例和可观察 fail-closed 结果，没有把示例技术或不适用场景伪装成通用要求。
 - Composition 与当前 attempt earned artifacts 一致，无双重状态来源。
 - Candidate bundle 仅比较同一 P revision 的 plan、earned Ticket/DAG、candidate projection、必要 contract 与联合校验证据；current registry projection 不是 candidate drift 依据。

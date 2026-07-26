@@ -145,6 +145,19 @@
         "Does not create a persistent receipt or waive the missing ledger",
         "Routes the bundle back to the exact plan-review workflow"
       ]
+    },
+    {
+      "id": 12,
+      "name": "high-risk-verification-is-executable-without-new-id-system",
+      "prompt": "S4 defines cursor stability under insert/delete and same-timestamp ordering plus concurrent claim behavior. Plan the attempt. Existing AC anchors and descriptive integration-test names are unique; the repository has no case-ID convention.",
+      "expected_output": "Uses the existing Planned Verification surface to connect the S4/AC boundaries to discriminating normal and race/boundary scenarios, test entry or level, observable oracles and ER evidence owners without inventing an invariant registry or mandatory case IDs.",
+      "files": [],
+      "expectations": [
+        "Covers insertion, deletion, tie ordering and a material concurrent interleaving rather than only a green path",
+        "Names an executable test level or entry, observable oracle and ER evidence owner",
+        "Reuses existing AC anchors and descriptive test names",
+        "Does not create a separate matrix document, stage or fixed ID format"
+      ]
     }
   ]
 }

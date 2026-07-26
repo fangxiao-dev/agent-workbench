@@ -30,11 +30,11 @@
     {
       "id": 3,
       "prompt": "用 $plan-review 审查一个单路径 parser 行为变更计划，重点看测试，不要为了形式画图。",
-      "expected_output": "Produces a coverage map with behavior, risk, level, oracle, and failure mode; upgrades to a diagram only if relationships are actually complex.",
+      "expected_output": "Produces a compact coverage judgment with behavior, risk, level, oracle, and failure mode; uses a map or diagram only if the relationships need it.",
       "files": [],
       "expectations": [
         "Detects the existing test framework before recommending tests.",
-        "Produces a coverage map for the behavior change.",
+        "Covers the behavior, risk, test level, oracle and failure mode without requiring a fixed table.",
         "Checks regression, error handling, and user-visible failure.",
         "Does not require a diagram for a simple single-path change."
       ]
@@ -261,6 +261,29 @@
         "Uses repeated targets to bind the complete bundle rather than only plan.md",
         "Does not treat a chat verdict as clearance",
         "Reports not cleared when any target or baseline becomes stale"
+      ]
+    },
+    {
+      "id": 23,
+      "prompt": "impl-planning 明确选择 fresh `$plan-review mode=bundle-admission`。Spec 已定义 cursor 在插入、删除和同时间戳下的稳定语义，但 plan 只写‘补分页测试’，没有测试入口、可观察 oracle 或 evidence owner。",
+      "expected_output": "Returns revise and routes the verification-design gap to impl-planning instead of filling it during review or allowing execution to invent cases.",
+      "files": [],
+      "expectations": [
+        "Recognizes that the high-risk behavior contract exists but the verification plan is not executable",
+        "Names the missing test entry or level, oracle and evidence owner",
+        "Routes to impl-planning rather than req-align",
+        "Does not create case IDs, a matrix artifact or a second verification contract"
+      ]
+    },
+    {
+      "id": 24,
+      "prompt": "impl-planning 明确选择 fresh `$plan-review mode=bundle-admission`。Plan 用现有 AC-3、场景名称和三个 integration test 名称覆盖 cursor 边界及并发 interleaving，并写明 oracle 与 ER owner；它没有统一 Verification ID。",
+      "expected_output": "Accepts the semantic traceability as sufficient for verification readiness and does not return revise merely because a uniform case-ID format is absent; intrinsic concurrency signals still route to full review.",
+      "files": [],
+      "expectations": [
+        "Treats AC anchors, scenario names and test names as valid stable references",
+        "Does not require an invariant registry or fixed matrix",
+        "Preserves the intrinsic concurrency full-review escalation"
       ]
     }
   ]

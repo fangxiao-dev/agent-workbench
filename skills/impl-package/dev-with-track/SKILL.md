@@ -21,7 +21,7 @@ description: >
 
 ## Task execution and review routing
 
-本 skill 选择 actionable unit、维护其 runtime state，并拥有 Ticket acceptance 的最终入口；它不自行代替 task worker。存在有界且委派收益明确的 Task 时，调用同体系的 `subagent-driven-development`；普通 Task 只派发目标、primary ownership、禁改范围、已知依赖、贡献 Ticket、局部验证与 `BLOCKED` 返回格式。单 owner、机械、局部可逆且委派成本更高的 delta 由 Working Branch owner 直接完成。Task 的局部证据可记入条件化 progress/handoff 或当前 Ticket evidence，但不构成独立正式 review。
+主 session 负责调度、授权记录、决策、跨 Task seaming、共享验证、Ticket acceptance 与最终集成；其余任何工作（包括调研、实现、验证与记录）均可主动委派 subagent。主 session 选择 actionable unit、维护其 runtime state，并拥有 Ticket acceptance 的最终入口；它不自行代替 task worker。委派时提供目标、primary ownership、禁改范围、已知依赖、贡献 Ticket、局部验证与 `BLOCKED` 返回格式。Task 的局部证据可记入条件化 progress/handoff 或当前 Ticket evidence，但不构成独立正式 review。
 
 Task 是横向执行拆分，Ticket 是纵向验收单元；二者以多对多 `contributes-to` coverage 关联，不建立默认父子层级。Task `DONE` 只说明产出与局部证据可交给 Working Branch owner 集成，不能自动更新 Ticket acceptance status。Working Branch owner 在并行 Task 返回、出现 `BLOCKED` 或 Ticket 最终验收前完成 integration step：合并产出、处理实际 seam/冲突、运行共享验证，并按风险判断决定是否发起正式 review；随后将证据映射回 Ticket AC，并据此决定 Ticket 是否可验收。
 
@@ -50,9 +50,15 @@ terminal metadata 后若又发生 commit、合入目标分支或相关环境变�
 5. reconcile 状态与证据；evidence 胜过 stale status。比对 earned ticket/DAG 的 Plan Revision 与当前 P 号；不一致的先标 `NEEDS-REVALIDATION`，再按 P delta 计算受影响 subset。受影响内容定向复核；未受影响内容批量确认并机械更新引用，不逐个重跑验收或重建 artifact。
 6. 是新 attempt（尤其重新激活已关闭 package）时，先完成 Module Knowledge Watermark 对账：重新计算 watermark 文件当前 commit SHA，与上一 attempt 记录的 watermark 比对，不符先 diff 确认 decision/spec 是否仍成立。
 7. 校验 typed ticket edges、DAG Depends on、Task-to-Ticket contribution mapping 与显式 cycles；DAG 只表达 Task execution dependency，不把 Task state 或 mapping 当作 Ticket AC acceptance 的自动结论。
-8. 执行 readiness resolution，按文档顺序选择第一个 actionable unit；不自动派工。
+8. 执行 readiness resolution，按文档顺序选择第一个 actionable unit；开始或派发前应用下方“高风险验证就绪”规则，不自动派工。
 
 目标分支已包含当前 comparison point、但 attempt 仍为 Active 时，向 owner 报告派生 qualifier `Integrated, gate open`。若 plan 没有 owner-approved pre-gate integration strategy，视为 integration-order violation；即使已有批准，最终 pass/closed evidence 仍必须来自目标分支。
+
+### 高风险验证就绪
+
+actionable unit 明确涉及分页/cursor、并发/锁、权限范围、持久化或外部 mutation、single-use/replay/recovery 等 material 高风险边界时，开始或派发前确认当前 approved plan 已把相关 spec/AC 边界贯通到可执行场景、测试层级或入口、可观察 oracle 与 ER evidence owner。已有 anchor、场景名或测试名能稳定定位即可，不要求统一 ID，也不创建矩阵、case contract 或第二套计划。
+
+缺口按 authority 定向回流：spec/AC 没有定义行为边界或 Acceptance Semantics 时路由 `req-align`；计划缺少选定场景、测试入口/层级、oracle 或 ER evidence owner 时路由 `impl-planning`；只有现有 Ticket/DAG 对 approved plan 的引用或 contribution 明显错误时才路由其 owning skill。该 guard 只阻塞受影响 unit，不把普通低风险 Task 升级为新 gate，也不由执行者临时补写计划合同。
 
 ### 计划错误的修复权限
 
@@ -154,7 +160,7 @@ terminal gate 关闭后提示 owner 可以按需使用 `$backfill-stable-docs`�
 
 1. Restore 当前 attempt 与 revisions。
 2. 校验 revision bindings、派生 lifecycle、Composition/bindings、dependency graph 与 AC references。
-3. 选择并执行 actionable unit；可委派 Task 使用 `subagent-driven-development` 的最小派发，状态只通过 `set-state` 写入 runtime-state 并刷新投影。普通 Task 不触发完整 contract、独立正式 review 或逐 Task gate；高风险 diff 只按实际风险加严局部验证/审查。
+3. 选择 actionable unit；material 高风险 unit 先通过 Restore 中的验证就绪 guard，再执行或委派。可委派 Task 使用 `subagent-driven-development` 的最小派发，状态只通过 `set-state` 写入 runtime-state 并刷新投影。普通 Task 不触发完整 contract、独立正式 review 或逐 Task gate；高风险 diff 只按实际风险加严局部验证/审查。
 4. committed validate 通过后 append plan Execution Record；外部 artifact hash delta 通过 artifact commands 登记。
 5. 有 manual owner 时，在等待验收前输出轻量 readiness packet；没有人工验收时跳过。
 6. 分流 execution findings；必要时回 req-align 并重新过相应 gate。

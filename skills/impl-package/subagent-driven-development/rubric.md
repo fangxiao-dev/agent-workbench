@@ -1,10 +1,11 @@
 ---
 target: skills/impl-package/subagent-driven-development
-updated: 2026-07-19
+updated: 2026-07-26
 ---
 ## 原则
 
 - [待验证] 复审机制应从可泛化的风险与契约覆盖方法出发，避免把单一事故或技术形态固化成所有 task 的必经步骤。（证据: R1）
+- [待验证] 本 skill 保持通用 executor：消费调用方给出的目标、边界与局部验证要求，但不治理 plan-specific Verification/case ID 或判断计划合同是否完备。（证据: R4）
 
 ## 决策记录（滚动，最近 ≤5 轮）
 
@@ -20,3 +21,7 @@ updated: 2026-07-19
 ### R3 · 2026-07-19（集成委派）
 
 - 采纳「主 session owns integration 不等于亲自编码；用可声明边界、可隔离写入、决策闭合、可复核结果和可回收失败决定是否派发」— 用户原话：希望“当 seam 满足以下条件”更泛化，而非 case-specific；随后明确同意修改。
+
+### R4 · 2026-07-26（保持通用 executor）
+
+- 否决让 executor 携带并治理 plan-specific Verification/case ID 完备性的方案 — 用户原话：这个 skill 更像是 executor 而不是调度者，应该偏通用。

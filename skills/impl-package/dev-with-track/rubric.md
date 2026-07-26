@@ -1,6 +1,6 @@
 ---
 target: skills/impl-package/dev-with-track
-updated: 2026-07-11
+updated: 2026-07-26
 ---
 ## 原则
 
@@ -9,6 +9,7 @@ updated: 2026-07-11
 - 实际 review/verification 证据 append 到 plan Execution Record；gate 只保存 newest-first append-only 判决摘要与 Durable Deltas。
 - blocked→pass 通过新 G entry 与 Supersedes 表达，旧 entry 不修改；pass/fail/defer terminal 后冻结 plan。
 - gate evaluation 前分流 execution findings，禁止 decision/spec、长期知识与过程证据互相回流。
+- [待验证] 高风险执行前只检查既有 contract 到可执行验证与 ER owner 的语义可追踪性；能复用 AC anchor、场景名或测试名时不强制 invariant/case ID、固定矩阵或新 artifact。（证据: R5）
 
 ## 决策记录（滚动，最近 ≤5 轮）
 ### R1 · 2026-07-08（三 skill 互相对齐轮）
@@ -31,3 +32,7 @@ updated: 2026-07-11
 - package 只保留一个 gate.md；每次 evaluation 顶部插入不可变 entry，完整验证不复制进 gate。
 - terminal entry 写入前完成 Stage 7；blocked capture gap 由后续 entry 补齐。
 - findings 成为 package 级 inbox，每条记录 Attempt ID，gate 前按 decision/spec/backfill/ER 分流。
+
+### R5 · 2026-07-26（轻量高风险验证就绪）
+
+- 采纳「执行前检查既有设计边界到测试与 ER evidence owner 的可追踪性，但不为格式对齐强制 invariant/case ID 或固定矩阵」— 用户原话：轻量化运作，不要总是在对齐格式。
