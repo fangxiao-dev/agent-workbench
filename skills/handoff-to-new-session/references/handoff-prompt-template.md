@@ -3,12 +3,12 @@
 Fill every bracketed field from the verified source records. Keep every section. Use `N/A` only when the section has no applicable fact. Keep concrete commands and parameters, design details, Task steps, file boundaries, tests and implementation instructions out of the prompt; name the single Impl-Package entry point and let it recover those details. Send the filled result directly as the `create_thread` prompt; do not save it as a handoff file.
 
 ```text
-接手 [TASK_OR_TICKET_NAME]：从已完成的 [CHECKPOINT_OR_PHASE] 快照继续，不继承旧会话历史，也不要回溯重做已记录的工作。开始前请将本 session 的工作目录设为下列既有 implementation worktree。
+接手 [TASK_OR_TICKET_NAME]：从已完成的 [CHECKPOINT_OR_PHASE] 快照继续，不继承旧会话历史，也不要回溯重做已记录的工作。第一步请将本 session 切换至下列既有 implementation worktree；不要把新 session 继承的初始目录当作锚点或 mismatch。
 
 恢复锚点：
 - Target working directory：[ABSOLUTE_WORKTREE_PATH]
 - Expected HEAD：[FULL_GIT_HEAD]
-- 首轮核对前，请确认当前工作目录就是该路径。
+- 首先切换至该路径；切换后才核对当前工作目录与其余锚点。
 
 权威入口：
 - Task / ticket：[TASK_OR_TICKET_IDENTIFIER_AND_PURPOSE]
@@ -26,12 +26,12 @@ Fill every bracketed field from the verified source records. Keep every section.
 - 已验证：[VERIFICATION_SUMMARY_OR_N/A]
 - 尚未验证及原因：[UNVERIFIED_ITEMS_OR_N/A]
 
-首轮只读核对：
-1. 先确认本 session 的工作目录是 `[ABSOLUTE_WORKTREE_PATH]`。
-2. 再从 `[PACKAGE_DIRECTORY]` 读取当前记录，并通过 `[IMPL_PACKAGE_ENTRY_POINT]` 选择恢复所需的最小材料。
+首轮导航与只读核对：
+1. 先将本 session 的工作目录切换至 `[ABSOLUTE_WORKTREE_PATH]`。不要比较或报告继承的初始目录。
+2. 切换后确认当前工作目录是该路径，再从 `[PACKAGE_DIRECTORY]` 读取当前记录，并通过 `[IMPL_PACKAGE_ENTRY_POINT]` 选择恢复所需的最小材料。
 3. 确认当前完整 HEAD 等于 `[FULL_GIT_HEAD]`。
 
-当前工作目录不等于目标路径或任一项不符时：立即停止并报告 `source worktree setup mismatch`，说明失败的锚点。不得自行复制、cherry-pick、reset、checkout、clean 或重做实现。
+无法切换至目标工作目录，或切换后任一锚点不符时：立即停止并报告 `source worktree setup mismatch`，说明失败的锚点。不得自行复制、cherry-pick、reset、checkout、clean 或重做实现。
 
 硬协作与授权合同：
 - 协作模式：[EXPLICIT_MAIN_SESSION_AND_SUBAGENT_OWNERSHIP]
