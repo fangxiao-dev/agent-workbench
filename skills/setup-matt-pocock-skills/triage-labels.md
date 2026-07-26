@@ -7,4 +7,4 @@ The shared `skills/issue-workflow/references/issue-contract.yaml` owns canonical
 - `priority:blocker` is optional and means the work blocks others; it is different from `blocked`.
 - `wontfix` is closed, and `blocked` records an explicit dependency.
 
-Do not introduce `needs-triage` or a provenance label. `$triage` proposes label and relation changes before publishing.
+Do not introduce `needs-triage` or a provenance label. `$issue-triage` proposes label and relation changes before publishing.

@@ -22,8 +22,8 @@ disable-model-invocation: true
 
 ## 报告边界
 
-label 只说明工作形态与下一位行动者，不证明代码已实现或 PR 已合并。发现 Issue readiness 与 PR 证据不一致时写“需要 `$triage` 确认交接”。Hygiene 是当前事实计算出的异常，不是新 label 或待办状态。
+label 只说明工作形态与下一位行动者，不证明代码已实现或 PR 已合并。发现 Issue readiness 与 PR 证据不一致时写“需要 `$issue-triage` 确认交接”。Hygiene 是当前事实计算出的异常，不是新 label 或待办状态。
 
 ## 输出
 
-先给可独立阅读的结论与计数，再给必要的 Issue/PR 编号、事实、合同推论和 unknown。每个异常说明为什么应交给 `$triage` 提出最小修正，但 reporter 本身不追问、不制作计划、不写入。
+先给可独立阅读的结论与计数，再给必要的 Issue/PR 编号、事实、合同推论和 unknown。每个异常说明为什么应交给 `$issue-triage` 提出最小修正，但 reporter 本身不追问、不制作计划、不写入。

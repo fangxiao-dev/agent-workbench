@@ -1,5 +1,5 @@
 ---
-name: triage
+name: issue-triage
 description: 根据自然语言和 GitHub 上下文路由 Issue；先给简短 proposal，获得确认后才发布已列出的 GitHub 变更。
 disable-model-invocation: true
 ---
@@ -14,7 +14,7 @@ disable-model-invocation: true
 
 ## 路由
 
-1. 收集刚好足够的事实：用户输入、指定的 Issue/PR、相关 parent/sub-issue、已知依赖、当前 branch 和稳定文档链接。需要仓库事实时，调用 `issue_workflow.py snapshot`；关系读不到时保留 unknown。不要为了普通 triage 强制代码复现、grilling 或全仓检索。
+1. 收集刚好足够的事实：用户输入、指定的 Issue/PR、相关 parent/sub-issue、已知依赖、当前 branch 和稳定文档链接。需要仓库事实时，调用 `issue_workflow.py snapshot`；关系读不到时保留 unknown。不要为了普通 issue triage 强制代码复现、grilling 或全仓检索。
 2. 判断最小工作形态：需要多个独立切片、协调 owner 或关闭条件时建 `work:initiative`；主要未知是事实/决策时建 `work:investigation`；单一可验收工作建普通 leaf；只有独立验收、assignee、branch 或依赖才建 sub-issue。PR 可直接关联 parent 或 leaf。
 3. 选择 type 与当前 readiness。`needs-info` 是定义不足，`ready-for-human` 是下一位需要决策/授权/review，`blocked` 是已知依赖，`priority:blocker` 是阻碍别人而不是自身等待。状态交接只反映下一位行动者。
 4. 用 `issue_workflow.py validate` 和 `plan` 计算组合、label diff、关系和人员 operation。Python 不决定业务分类，也没有 apply 子命令；若计划无效、snapshot 过期或关系未知，缩小结论或问一个最小问题。
