@@ -1,0 +1,35 @@
+{
+  "contractVersion": "3.2",
+  "purpose": "internal-machine-sidecar",
+  "ownerFacing": false,
+  "current": {
+    "decision": {
+      "artifact": "decision.md",
+      "revision": "D1"
+    },
+    "spec": {
+      "artifact": "spec.md",
+      "revision": "S1"
+    }
+  },
+  "bindings": [
+    {
+      "artifact": "decision.md",
+      "revision": "D1",
+      "mode": "exact-blob",
+      "blob": "7b2f88b3caf62cecc06f98c8d46138dc85bdc954",
+      "supersedes": null,
+      "evidence": "decision.md",
+      "id": "D1@7b2f88b3caf62cecc06f98c8d46138dc85bdc954"
+    },
+    {
+      "artifact": "spec.md",
+      "revision": "S1",
+      "mode": "exact-blob",
+      "blob": "fd9993c6145e3433d1854c33ad78ed576571acd2",
+      "supersedes": null,
+      "evidence": "spec.md",
+      "id": "S1@fd9993c6145e3433d1854c33ad78ed576571acd2"
+    }
+  ]
+}

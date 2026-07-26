@@ -1,0 +1,27 @@
+contractVersion: 1
+labels:
+  shape: ["work:initiative", "work:investigation"]
+  readiness: ["needs-info", "ready-for-agent", "ready-for-human", "blocked", "wontfix"]
+  type: ["bug", "enhancement", "doc", "maintenance"]
+  priority: ["priority:blocker"]
+rules:
+  leaf:
+    type: exactly-one
+    readiness: exactly-one
+  investigation:
+    type: exactly-one
+    readiness: exactly-one
+  initiative:
+    type: optional
+    readiness: optional-one
+    allowedReadiness: ["ready-for-human", "blocked"]
+  blocked:
+    requiresBlockedBy: true
+  wontfix:
+    requiresClosed: true
+handoff:
+  needs-info: ["ready-for-agent", "ready-for-human"]
+  ready-for-agent: ["ready-for-human", "blocked"]
+  ready-for-human: ["ready-for-agent", "blocked", "closed"]
+  blocked: ["needs-info", "ready-for-agent", "ready-for-human"]
+reportGroups: ["next-actions", "blocked", "initiatives", "hygiene"]

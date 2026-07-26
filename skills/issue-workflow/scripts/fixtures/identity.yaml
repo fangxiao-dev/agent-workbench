@@ -1,0 +1,8 @@
+version: 1
+people:
+  owner:
+    github: fangxiao-dev
+    aliases: ["我", "我自己", "@我"]
+  teammate:
+    github: haisapan
+    aliases: ["同事", "@同事", "haisapan", "@haisapan"]
