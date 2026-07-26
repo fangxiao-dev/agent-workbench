@@ -2,9 +2,15 @@
 
 日期：2026-07-23
 
-状态：决策已批准，待实现
+状态：设计存档；运行时实现进行中
 
-相关设计：[Issue Reporter 设计](issue-reporter-design.md)
+相关设计：[Issue Reporter 设计](issue-reporter-design.md) · [Issue Workflow 运行时实现设计](issue-workflow-implementation-design.md)
+
+> 本文是设计存档，不是 skill 的运行时依赖。日常调用只读取共享合同和模板；需要追溯决策时才显式打开本文。
+
+> 2026-07-26 更新：本文保留历史 `$triage` 命名；现行调用名是 `$issue-triage`，路径为 `skills/issue-workflow/issue-triage/`。
+
+> 2026-07-26 修订：本文关于 `priority:blocker` 的设计已被废止；现行合同只以 `blocked` 表示已知依赖阻塞。
 
 ## Goal
 
@@ -18,6 +24,7 @@
 - 大事项使用 GitHub 原生父子关系表达。父 Issue 负责目标、范围、稳定文档链接、知情人与关闭条件，并有一个协调 owner assignee。PR 必须关联已有 parent 或 leaf Issue；只有工作需要独立验收、assignee、Working Branch 或依赖时，才创建 sub-issue。
 - “同事需要知情但暂不行动”不使用 assignee。经用户确认后，writer 可在父 Issue 的 `Stakeholders` 中写入一次 `@mention`（例如“FYI，当前无需行动”），并建议对方 Subscribe；assignee 只表示对下一步行动负责。
 - triage 先提案、后发布。读取和提出分类建议无需确认；任何创建、编辑、加 label、添加父子/依赖关系、评论或关闭 Issue 都必须等用户明确确认。
+- V1 不为微小 PR 设置“无 Issue”豁免：每个进入 code review 的 PR 都关联已有 parent 或 leaf Issue；关联 PR 不要求创建 sub-issue。
 - 不引入 `work:delivery`。普通的叶子 Issue 默认就是交付工作；`work:` 只标注两个需要特殊路由的形态：initiative 和 investigation。
 - 不使用来源或“已管理”label。`$triage` 应一次性写出正确组合；`$issue-reporter` 在读取时对全部开放 Issue 计算合同健康度，把偏离规范的事项列为异常，交由 `$triage` 提出最小修正。
 - 现有 `$triage` 是唯一入口，直接替换为本设计的 GitHub Issue router；不创建并行的 `$issue-triage`。保留调用名 `triage`，但将其 canonical skill 移入共享 bundle `skills/issue-workflow/triage/`，使共同合同与两个 skill 同处一个目录。
@@ -39,14 +46,27 @@
 | Label | 含义 | 与相邻状态的边界 |
 | --- | --- | --- |
 | `needs-info` | 工作本身尚未定义充分，例如事实、复现、验收目标或范围缺失。 | 不假定谁会补充；信息不足时使用。 |
-| `ready-for-agent` | 输入、边界和验收已足够，agent 或开发者可以开始。 | 开始后可保留该 label；实际执行进度由实施协作记录，将来可投影到 Project `Status`。 |
-| `ready-for-human` | 信息已足够，但需要 owner 的决策、授权或评审。 | 不是“必须由人手写代码”。 |
+| `ready-for-agent` | 输入、边界和验收已足够，agent 或开发者是当前下一位行动者。 | agent 实现或 Draft PR 期间保留；进入可供人 review 的交接时切换为 `ready-for-human`。 |
+| `ready-for-human` | 信息已足够，但 owner 是当前下一位行动者，需要决策、授权或 PR review。 | 不是“必须由人手写代码”；若 review 要求修改，切回 `ready-for-agent`。 |
 | `blocked` | 工作和验收已明确，但存在明确的外部或 Issue 依赖。 | 必须在正文或 GitHub `blocked by` 关系中指出依赖。 |
 | `wontfix` | 已决定不做。 | 添加后立即关闭；不作为开放工作状态。 |
 
 每个开放的 investigation 或普通叶子 Issue 必须有且仅有一个 readiness label。`work:initiative` 默认没有 readiness label；只有父事项本身需要 owner 决策或被外部依赖阻塞时，才添加相应 readiness label。
 
 `needs-info` 表示任务定义缺失；`ready-for-human` 表示定义充分但等待决定；`blocked` 表示定义充分但等待已知依赖。这三者不得同时存在。
+
+### Readiness handoff
+
+readiness 表示“现在谁必须行动”，而不是历史上谁曾经能够开始。当前行动者完成自己的阶段时调用 `$triage` 提出下一状态；没有自动 bot 改 label。
+
+```text
+needs-info → ready-for-agent / ready-for-human   信息补足后
+ready-for-agent → ready-for-human                PR 可供人 review 或需要 owner 决策
+ready-for-human → ready-for-agent                review 要求修改或需要 agent 继续处理
+ready-for-human → close                          review 通过且 PR 合并，或 owner 已完成决定
+任一开放状态 → blocked                           出现已知外部或 Issue 依赖
+blocked → 原先的可行动 readiness                依赖解除后
+```
 
 ### Type and urgency
 
@@ -227,7 +247,7 @@ Hygiene 不是第四个 Project view：GitHub filter 无法可靠表达组合基
 
 1. 审计 `$triage` 的所有消费者和 Matt triage vocabulary 的引用，锁定需要同步替换的文件清单；不在此阶段修改 GitHub。
 2. 在同一 Working Branch 内建立共享 `skills/issue-workflow/` bundle，在其中实现 `$triage` 的 read-only router 和 proposal 输出，再增加以确认后的 proposal 为唯一输入的 publish writer；同步移除旧 `skills/triage/` 并归档不再适用的 Agent Brief 与 `.out-of-scope` 依赖。
-3. 同步更新 `setup-matt-pocock-skills`、其 label seed/reference、`write-issue` 和仍假设 `needs-triage` 或 PR 入站的相邻 skill；补齐六个 fixture：普通 leaf、parent 直接关联 PR、parent + sub-issue、investigation、`blocked` 依赖和历史不规范 Issue 的迁移。每个 fixture 都验证确认前零写入、确认后正确组合/关系，以及 reporter 的分类与 PR 证据一致。
+3. 同步更新 `setup-matt-pocock-skills`、其 label seed/reference、`write-issue` 和仍假设 `needs-triage` 或 PR 入站的相邻 skill；补齐六个 fixture：普通 leaf、parent 直接关联 PR、parent + sub-issue、investigation、`blocked` 依赖和历史不规范 Issue 的迁移。每个 fixture 都验证确认前零写入、确认后正确组合/关系、readiness handoff，以及 reporter 的分类与 PR 证据一致。
 4. 经 owner 明确批准后，在 GitHub 创建/重命名目标 labels，并更新 KaiSpan 的 `docs/agents/issue-tracker.md` 与 `docs/agents/triage-labels.md`；不创建或配置 Project。
 5. reporter 对全部开放 Issue 做 dry-run，再由 router 提出统一批量迁移；用户一次确认后写入。已关闭历史 Issue 保留原 label 作为历史证据。
 6. 在所有 slices 一致后，以真实 Issue dry-run 验证 `$issue-reporter` 的全量 combination contract audit 与 PR Hygiene；两者均无遗漏后才宣布新体系启用。

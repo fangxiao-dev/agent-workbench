@@ -1,0 +1,12 @@
+{
+  "repository": "KaiSpan/kaispan-dev",
+  "issues": [
+    {"number": 101, "title": "leaf", "state": "OPEN", "labels": ["enhancement", "ready-for-agent"], "relationsKnown": true},
+    {"number": 102, "title": "parent with direct PR", "state": "OPEN", "labels": ["work:initiative"], "body": "## Closure condition\nAll slices are merged.", "pullRequests": [201], "relationsKnown": true},
+    {"number": 103, "title": "sub issue", "state": "OPEN", "labels": ["doc", "ready-for-human"], "parent": 102, "relationsKnown": true},
+    {"number": 104, "title": "investigation", "state": "OPEN", "labels": ["work:investigation", "enhancement", "ready-for-agent"], "relationsKnown": true},
+    {"number": 105, "title": "blocked", "state": "OPEN", "labels": ["bug", "blocked"], "blockedBy": [103], "relationsKnown": true},
+    {"number": 106, "title": "incomplete issue", "state": "OPEN", "labels": ["maintenance"], "relationsKnown": true}
+  ],
+  "pullRequests": [{"number": 201, "title": "direct parent PR", "state": "OPEN", "linkedIssue": 102}]
+}
