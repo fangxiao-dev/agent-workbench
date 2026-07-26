@@ -21,18 +21,18 @@
 | `Beraternummer` | DATEV 顾问/事务所编号 | EXTF Header 技术输入，需 profile 绑定 |
 | `Mandantennummer` | DATEV 客户账套编号 | EXTF Header 技术输入，需 profile 绑定 |
 | `Wirtschaftsjahr` | 经济年度 | 影响 Header 和年度税务资料适用范围 |
-| `EXTF` | 外部应用生成的 DATEV-Format 标识 | KaiSpan test-only serializer 输出目标 |
-| `DTVF` | DATEV 原生导出格式标识 | 可能作为受控输入或 golden reference；不是 KaiSpan 目标输出 |
+| `EXTF` | 外部应用生成的 DATEV-Format 标识 | DATEV 传输格式；当前产品 artifact 的类型由产品 Spec 定义 |
+| `DTVF` | DATEV 原生导出格式标识 | 不同于 EXTF；是否为产品输入或输出由适用 Spec 定义 |
 | `Buchungsstapel` | DATEV 记账批次 | EXTF 的数据对象 |
-| `Festschreibung` | 批次是否已锁定 | 测试/草稿输出保持未锁定 |
+| `Festschreibung` | 批次是否已锁定 | 批次状态；是否适用及其值由产品 Spec、profile 与交付流程决定 |
 | `Canonical facts` | 带 evidence、source hash 和确定性 hash 的票据事实 | OCR/结构化输入到 Review 的共同 contract |
 | `Reviewed facts` | 人工检查和修订后的不可变事实快照 | 正式会计规则的安全上游 |
 | `BookingCandidate` | 准备映射成 DATEV 行的结构化会计候选 | resolver/grouping 到 EXTF serializer 的 seam |
-| `test-only` | 仅用于受控测试环境的 policy/EXTF 状态 | 不表示 production-ready 或税务正确 |
+| `test-only` | 仅用于受控测试环境的输入、policy 或 artifact | 不表示 production-ready、DATEV import 或税务正确 |
 
 ## 关键区别
 
 - 税率不是 BU/Steuerschlüssel 的充分条件。
 - 标准 SKR 账号名称不是 Mandant 已启用科目的证明。
 - Canonical facts 不包含最终 `Sachkonto`、`Kreditor`、`BU` 或 `Soll/Haben`。
-- `technical_export_ready` 只表示格式和前置校验通过，不表示会计正确或 DATEV 已成功导入。
+- 某个导出 readiness 状态只表示适用 Spec 所定义的准备条件；它不自动表示会计正确或 DATEV 已成功导入。

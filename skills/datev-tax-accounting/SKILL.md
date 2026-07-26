@@ -8,25 +8,24 @@ compatibility: Requires access to the KaiSpan Finance current-knowledge routes w
 
 Use this skill as the navigation and reasoning protocol for the invoice-to-DATEV chain. The skill is not a free-form tax adviser and it is not the runtime accounting policy. It tells the agent which knowledge to load, how to classify evidence, and how to report an answer that a reviewer can audit.
 
-## Load order
+## KaiSpan routing (conditional)
 
-For KaiSpan work, read the current domain knowledge before any implementation package or historical note:
+For KaiSpan work, start with `docs/domains/finance-assistant/context/datev-accounting/README.md`, then read only the owner document needed by the question:
 
-1. `docs/domains/finance-assistant/context/datev-accounting/README.md`
-2. `docs/domains/finance-assistant/context/datev-accounting/terminology-and-rules.md`
-3. `docs/domains/finance-assistant/context/datev-accounting/source-and-authority-policy.md`
-4. `docs/domains/finance-assistant/module-knowledge/datev-accounting/prd.md`
-5. `docs/domains/finance-assistant/module-knowledge/datev-accounting/spec.md`
-6. `docs/domains/finance-assistant/module-knowledge/datev-accounting/capability-registry.yaml`
+- workflow, field authority, EXTF registry, correction, draft/export semantics, or audit/UI wording: read the DATEV module PRD and Spec plus `context/datev-accounting/workflow-and-field-authority.md`;
+- Category/Taxonomy, Kreditor, 0%, KOST, or Sachkonto recommendation: read `terminology-and-rules.md` plus `business-classification-and-tax-boundaries.md`;
+- current implementation, verification, external acceptance, readiness, or closure claim: read `module-knowledge/datev-accounting/capability-registry.yaml` first, then its cited evidence only if needed;
+- executable mapping for one Mandant: read the approved runtime profile/policy and applicable annual/source material; the domain wiki never supplies a final tenant value;
+- implementation-package history: use it only to trace a cited decision, evidence anchor, or transition. It never establishes current behavior.
 
-Read the relevant implementation package only to verify a cited decision, evidence anchor, or current transition. The package is a change record, not the long-term source of truth.
+Do not load a full implementation package, capability ledger, or every DATEV context page for a narrow terminology question.
 
 For general terminology or the public 2026 baseline, use the bundled references:
 
 - `references/datev-glossary.md` for terms and field meanings.
 - `references/source-policy.md` for authority classes, effective dates, and provenance.
 - `references/sources/2026-official/` for the copied public SKR03/SKR04 and DATEV annual tables.
-- `references/supported-knowledge-map.md` for the bridge from the public baseline to KaiSpan runtime capability.
+- `references/supported-knowledge-map.md` for the boundary between public references and KaiSpan owner documents; it is not a capability ledger.
 
 ## Knowledge layers
 
@@ -43,7 +42,7 @@ Never promote a glossary definition, model suggestion, BWA observation, or stand
 
 ## Required context
 
-Before evaluating a mapping or an export, identify the applicable values. If one is unknown, say so explicitly and use `review_required` or `fail_closed` as appropriate.
+Before evaluating a mapping or an export, identify the applicable values required by the runtime policy and product Spec. If one is unknown, say so explicitly and use the applicable review/fail-closed outcome rather than guessing.
 
 - jurisdiction and tax period;
 - Wirtschaftsjahr and DATEV format/profile version;
@@ -51,58 +50,51 @@ Before evaluating a mapping or an export, identify the applicable values. If one
 - Mandant/profile identity and account length;
 - currency, document treatment, supplier and receiver identity evidence;
 - the versioned Kontenplan, annual Steuerschlüssel table, Kontenfunktions table, and any approved custom override;
-- the current Finance capability status and evidence pointer;
-- whether the requested artifact is a controlled test-only output or a production action.
+- current capability status and evidence pointer, when the question makes an implementation or readiness claim;
+- artifact type and product boundary, when the question concerns generation or external action.
 
 ## Invoice-to-DATEV reasoning path
 
 Use this order and preserve the boundaries:
 
-1. **Source facts** — establish source hash, document/file/run identity, invoice treatment, dates, parties, totals, tax breakdown, and line-level facts.
-2. **Canonical facts** — map Finance-visible OCR output or structured input into `CanonicalAccountingFactsV1` with evidence and deterministic hash. The existing `CanonicalEvaluation` envelope is the result contract; do not invent another envelope.
-3. **Review** — record explicit human corrections and approval. Machine output is not a formal invoice fact until the review gate succeeds.
-4. **Tax semantics** — classify the business/tax situation using the applicable jurisdiction, period, tax notices, rate, account function, and policy. A VAT percentage alone is not a tax key.
-5. **Policy mapping** — resolve supplier identity to `Kreditor/Gegenkonto` and business/tax semantics to `Sachkonto`, using the profile-bound policy version and provenance.
-6. **Resolver/grouping** — aggregate only source lines with the same final `Sachkonto` and tax mode; preserve every `sourceLineId`. Conflicting or multi-account results go to review.
-7. **BookingCandidate** — determine amount, `Konto`, `Gegenkonto`, `Soll/Haben`, `BU/Steuerschlüssel`, date, and lineage from the validated policy and reviewed facts.
-8. **EXTF** — serialize only a validated candidate through the existing serializer. A test-only EXTF is a technical artifact for controlled review, not a production DATEV write or proof of tax correctness.
+1. **Observed and reviewed facts** — establish evidence-bound business facts. The actual facts contract and review checkpoint belong to the product Spec.
+2. **Business and tax semantics** — classify the business situation using applicable jurisdiction, period, tax notices, rate, account function, and policy. A VAT percentage alone is not a tax key; an AI category suggestion is not a final account decision.
+3. **Profile-bound mapping** — resolve supplier identity to `Kreditor/Gegenkonto` and business/tax semantics to `Sachkonto` only through the approved Mandant policy.
+4. **Resolver/grouping** — create a candidate only when final account and tax semantics are compatible; preserve the relevant source lineage. Conflicts or non-unique results go to review.
+5. **Serialization and external boundary** — serialize a validated candidate through the product's serializer. Artifact type, checkpoint gates, UI wording, technical validation, and any DATEV-facing action must be read from the Spec and capability registry, not inferred from this reasoning path.
 
 ## Fail-closed rules
 
-Return a structured blocker or review state instead of inventing a value when any of the following occurs:
+Return the review or fail-closed outcome defined by the applicable Spec and runtime policy; do not invent a value when:
 
-- unknown contract/profile/schema/map or unsupported version;
-- missing or conflicting Mandant, source, file, or OCR-run identity;
-- missing source field, unsupported page/evidence anchor, invalid hash, or broken lineage;
-- supplier identity is only a fuzzy name, or a receiver is not uniquely bound;
-- no unique approved mapping, same-priority mapping conflict, or account excluded by Kontenplan/Kontenfunktion;
-- tax mode, BU/Steuerschlüssel, automatic-account behavior, or DATEV program-version constraint is unresolved;
-- a blocking provider warning or a required OCR capability is absent;
-- a candidate is stale because its fact, policy, batch, profile, or reference version changed;
-- an action would write to production DATEV or mutate an external system without an explicit approved workflow.
+- public knowledge, an AI suggestion, or an input without one unique approved Mandant policy would determine a tenant booking;
+- required input, identity, evidence, policy/version, or tax-treatment gates are not met; or
+- an action would write to DATEV or another external system outside an explicitly approved workflow.
 
 Do not use a reserved, free, error-catching, or range account as an automatic fallback. Do not infer a final account from a standard SKR label alone. Do not treat a controlled fixture as real OCR provider validation.
 
 ## Provenance and privacy
 
-Every normative or mapping statement should include its source class, version/effective scope, and an evidence path or hash where available. Keep raw customer files, VAT IDs, contact details, full invoice text, credentials, and Mandant-specific account rows outside the skill and repository unless the user has explicitly approved a controlled redacted fixture. A fixture path/hash is test-vector provenance; it is not part of stable runtime contract identity.
+Every normative or mapping statement should identify its source class, version/effective scope, and an evidence pointer when the task requires an execution or audit decision. Keep raw customer files, VAT IDs, contact details, full invoice text, credentials, and Mandant-specific account rows outside the skill and repository unless the user has explicitly approved a controlled redacted fixture. A fixture path/hash is test-vector provenance; it is not part of stable runtime contract identity.
 
-The stable runtime identity for a contract/profile is the registered tuple `family/profile/profileVersion/schemaVersion/mapId/mapFingerprint/version`. A legal replacement fixture may have a different path or raw-byte hash without changing that identity.
+Internal identity/hash/version data can be necessary evidence without being default user-facing content. UI visibility follows the product Spec; do not turn raw hashes into ordinary business copy.
+
+Read the applicable contract or Spec for the registered runtime identity. A legal replacement fixture can have a different path or raw-byte hash without changing the relevant registered identity.
 
 ## Output contract
 
 For a mapping or capability question, answer in this order:
 
-1. **Scope** — jurisdiction, period, SKR, profile, and whether the result is test-only.
+1. **Scope** — jurisdiction, period, SKR, profile, and the artifact type/boundary defined by the applicable product Spec and runtime policy.
 2. **Observed facts** — only facts supported by source/evidence; mark unavailable, ambiguous, or inferred states.
 3. **Rule basis** — the relevant official/reference rule and its applicability.
 4. **Mapping or capability result** — candidate values, implementation status, and lineage.
-5. **Gate decision** — `verified-local`, `review_required`, `fail_closed`, `external-acceptance-pending`, or `blocked`.
+5. **Gate decision** — use the status vocabulary and evidence scope defined by the applicable Spec or capability registry; do not invent a capability label in the skill.
 6. **Evidence** — exact document/section, test, artifact, or hash pointer.
 7. **Next action** — the smallest missing input or human decision; never silently guess.
 
-For implementation reviews, explicitly distinguish `implemented`, `locally verified`, `externally accepted`, `production-ready`, and `closed`. The current Finance capability ledger is the authority for those labels.
+For implementation reviews, read the current Finance capability registry before asserting any status. The registry, not this skill, is the authority for capability labels and evidence scope.
 
 ## Maintenance
 
-Update the public reference baseline only with a versioned source, hash, effective scope, and a note about what changed. Update KaiSpan current knowledge only after implementation evidence or owner-approved policy has been reviewed. Do not copy implementation-package history into current knowledge merely because it is recent. When a rule or runtime capability changes, update the relevant context page and capability registry together, then re-check inbound links and source hashes.
+Update the public reference baseline only with a versioned source, hash, effective scope, and a note about what changed. Update KaiSpan current knowledge only after implementation evidence or owner-approved policy has been reviewed. Do not copy implementation-package history into current knowledge merely because it is recent. Update the capability registry only when a capability claim or evidence scope changes; a conceptual domain-document change alone does not change runtime status.
