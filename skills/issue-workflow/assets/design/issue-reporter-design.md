@@ -5,7 +5,6 @@
 状态：设计存档；运行时实现进行中
 
 相关设计：[Issue Triage Router 设计](issue-triage-router-design.md) · [Issue Workflow 运行时实现设计](issue-workflow-implementation-design.md)
-
 > 本文是设计存档，不是 skill 的运行时依赖。日常调用只读取共享合同和模板；需要追溯决策时才显式打开本文。
 
 > 2026-07-26 修订：本文关于 `priority:blocker` 的设计已被废止；现行合同只以 `blocked` 表示已知依赖阻塞。
