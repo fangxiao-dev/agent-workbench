@@ -867,17 +867,51 @@ def _revision_projection(state: dict[str, Any], kind: str) -> str:
     return CONFIG["projections"]["revisionSet"][kind].format(decision=decision, spec=spec, plan=plan)
 
 
-def _validate_revision_projections(package: Path, state: dict[str, Any], committed: bool) -> None:
-    marker = CONFIG["projections"]["markers"]["revisionSet"]
+def _attempt_projection_is_historical(package: Path, state: dict[str, Any], committed: bool) -> bool:
+    """Keep a terminal attempt's bound revision projection immutable after a later D/S amendment."""
+    attempt = state.get("current", {}).get("attempt")
+    if not attempt:
+        return False
+    artifact = attempt.get("plan")
+    if not isinstance(artifact, str):
+        return False
+    try:
+        plan_text = _artifact_text(package, artifact, committed)
+        projected = _replace_projection(
+            plan_text,
+            CONFIG["projections"]["markers"]["revisionSet"],
+            _revision_projection(state, "plan"),
+        )
+        gate_text = _artifact_text(package, "gate.md", committed)
+    except StateError:
+        return False
+    if projected == plan_text:
+        return False
+    return any(
+        block.get("attempt") == attempt.get("id") and block.get("verdict") == "pass"
+        for block in _gate_blocks(gate_text)
+    )
+
+
+def _revision_projection_targets(package: Path, state: dict[str, Any], committed: bool) -> dict[str, tuple[str, list[dict[str, Any]]]]:
     targets: dict[str, tuple[str, list[dict[str, Any]]]] = {}
     priority = {"decision": 0, "spec": 1, "plan": 2}
+    historical_attempt = _attempt_projection_is_historical(package, state, committed)
     for key, kind in (("decision", "decision"), ("spec", "spec"), ("attempt", "plan")):
+        if key == "attempt" and historical_attempt:
+            continue
         selection = state.get("current", {}).get(key)
         if not selection:
             continue
         artifact = selection.get("artifact") or selection.get("plan")
         current_kind, selections = targets.get(artifact, (kind, []))
         targets[artifact] = (kind if priority[kind] > priority[current_kind] else current_kind, selections + [selection])
+    return targets
+
+
+def _validate_revision_projections(package: Path, state: dict[str, Any], committed: bool) -> None:
+    marker = CONFIG["projections"]["markers"]["revisionSet"]
+    targets = _revision_projection_targets(package, state, committed)
     for artifact, (kind, _) in targets.items():
         text = _artifact_text(package, artifact, committed)
         try:
@@ -893,15 +927,7 @@ def _validate_revision_projections(package: Path, state: dict[str, Any], committ
 
 def command_refresh_projections(package: Path) -> dict[str, Any]:
     _, revision_state = _load_revision_state(package)
-    targets: dict[str, tuple[str, list[dict[str, Any]]]] = {}
-    priority = {"decision": 0, "spec": 1, "plan": 2}
-    for key, kind in (("decision", "decision"), ("spec", "spec"), ("attempt", "plan")):
-        selection = revision_state.get("current", {}).get(key)
-        if not selection:
-            continue
-        artifact = selection.get("artifact") or selection.get("plan")
-        current_kind, selections = targets.get(artifact, (kind, []))
-        targets[artifact] = (kind if priority[kind] > priority[current_kind] else current_kind, selections + [selection])
+    targets = _revision_projection_targets(package, revision_state, committed=False)
     changes: list[tuple[list[str], Path, str, str]] = []
     for artifact, (kind, selections) in targets.items():
         artifact_path = _package_artifact(package, artifact)
@@ -1473,7 +1499,7 @@ def _validate_runtime_state(package: Path, revision_state: dict[str, Any], commi
             raise StateError("gate status projection mismatch")
 
 
-PLAN_ER_PATTERN = re.compile(r"(?ms)^## (?:执行记录|Execution Record)[ \t]*\n.*?(?=^## [^#]|\Z)")
+PLAN_ER_PATTERN = re.compile(r"(?ims)^## (?:执行记录|Execution Record)[ \t]*\n.*?(?=^## [^#]|\Z)")
 
 
 def _execution_record(text: str) -> str:
@@ -1678,14 +1704,7 @@ def _preflight_candidate_runtime(package: Path, runtime_state: dict[str, Any], r
         row = next(item for item in runtime_state["tickets"] if item.get("attempt") == attempt and item.get("id") == identifier)
         _replace_projection(text, CONFIG["projections"]["markers"]["runtimeState"], CONFIG["projections"]["runtimeTicket"].format(**row))
     marker = CONFIG["projections"]["markers"]["revisionSet"]
-    priority = {"decision": 0, "spec": 1, "plan": 2}
-    projection_targets: dict[str, str] = {}
-    for key, kind in (("decision", "decision"), ("spec", "spec"), ("attempt", "plan")):
-        item = revision_state.get("current", {}).get(key)
-        if item:
-            artifact = item.get("artifact") or item.get("plan")
-            projection_targets[artifact] = kind if priority[kind] >= priority.get(projection_targets.get(artifact, kind), 0) else projection_targets[artifact]
-    for artifact, kind in projection_targets.items():
+    for artifact, (kind, _) in _revision_projection_targets(package, revision_state, committed=False).items():
         _replace_projection(_package_artifact(package, artifact).read_text(encoding="utf-8"), marker, _revision_projection(revision_state, kind))
 
 
