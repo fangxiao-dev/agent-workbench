@@ -30,21 +30,25 @@
 
 ## Subagent 模式
 
-### 主 session 治理、subagent 执行（默认）
+### `default-long`：主 session 仅治理与收口（默认/长任务）
 
-主 session 只负责调度、authorization record、决策、跨 Task seaming、共享验证、Ticket acceptance 和最终集成。调研、实现、验证和记录等其余工作，均可按目标可声明、写入可隔离、结果可复核、失败可回收的 Task 切片委派给 subagent。
+适用于 handoff、implementation package、DAG、多阶段验证、长任务，或普通执行会明显挤占主 session 上下文的工作。主 session **只保留**调度、authorization record、owner decision、跨 Task seaming、共享验证、Ticket acceptance、completion-claim audit、gate 和最终集成。Subagent 应充分承担目标可声明、写入可隔离、结果可复核、失败可回收且 primary ownership 不重叠的调研、实现、验证、review 准备和记录切片。
 
-- 不得仅因工作叫 integration/seaming 就收回主 session；只有跨 Task seam、未决决策或共享验证需要其保留职责时，主 session 才处理该部分，其余可隔离工作仍委派。
+- 跨 Task seam、未决决策和共享验证由主 session 处理；其余可隔离工作保持委派给对应 subagent。
 - 已授权对象、环境、数据和副作用可随明确 Task 派发传递，不逐 subagent 重复申请，也不允许 subagent 扩大 ownership。
 - 独立且写入不冲突的切片按 wave 并行；真实依赖、shared migration/codegen、同文件核心写入和单实例外部资源必须串行。
-- 主 session 不重复实现 subagent 已交付切片；通过 diff、测试、证据和必要抽查履行共享验证与最终集成职责，只将返工委派给相应 subagent。
+- 主 session 通过 diff、测试、证据和必要抽查履行共享验证与最终集成职责；返工由相应 subagent 完成。
 - 默认模型（除非 task、owner 或 host 另有指定）：implementation 用途从 `gpt-5.6-terra` / `medium` 与 `gpt-5.6-terra` / `high` 两档中选择；调度 agent 按切片风险、复杂度和验证负担决定。review 用途维持 `gpt-5.6-sol` / `medium`。
 
-### 不允许
+### `ordinary`：主 session 治理并可直接执行（普通）
 
-禁止使用 subagent。仅在 host 禁止或 owner 明确选择时采用；记录这与默认协作模式的偏离及由谁承担未能委派的工作。
+仅用于小型、短时、低耦合工作，或 owner 明确选择时。主 session 保留上述治理和最终收口职责，也可直接处理小型、紧耦合的执行工作。Subagent 仍可负责明确、bounded 的调研、实现、验证或 review；按任务收益选择派发粒度。
 
-默认模式无需再次确认即可启动 subagent；host 禁止或 owner 明确禁止 delegation 时才记录例外。
+### 无 delegation capability / owner local-execution choice
+
+host 没有 delegation capability 或 owner 明确选择本地执行时采用；记录这与 `default-long` 的偏离，以及由主 session 承担的工作范围。
+
+handoff / package execution 默认采用 `default-long`；owner 明确选择 `ordinary` 时采用普通模式。两种可委派模式均可直接启动 subagent；host 无 delegation capability 或 owner 选择本地执行时记录例外。
 
 ## 一次性授权包模板
 
@@ -57,7 +61,7 @@
   3. <Git、Issue 或 PR 收口；精确边界>
 - 明确禁止/不适用：<来源排除的系统、环境或数据>
 - HITL / owner decisions：<开放决策，或“无”>
-- Subagents：主 session 治理、subagent 执行（默认） / 不允许；默认模式下，主 session 保留调度、授权记录、决策、跨 Task seaming、共享验证、Ticket acceptance 与最终集成，其余工作按明确 Task 边界委派，已授权权限可随 Task 传递
+- Subagents：`default-long`（默认） / `ordinary` / 无 delegation capability；`default-long` 下主 session 仅保留调度、授权记录、决策、跨 Task seaming、共享验证、Ticket acceptance、claim audit、gate 和最终集成，subagent 充分承担其余可隔离执行；`ordinary` 下主 session 可直接处理小型/紧耦合工作；已授权权限可随明确 Task 传递
 - 当前启动前置：<只记录当前单元的实际检查、已授权低副作用修复或精确 blocker；均不得含 secret>
 
 可以回复“全部批准”，或只列出不批准/需要缩小的例外；未列例外即按上述精确边界授权当前任务，不再逐项追问。
@@ -69,7 +73,7 @@
 
 ```markdown
 Execution authorization for this task:
-- Subagents: <主 session 治理、subagent 执行 / 不允许>；<主 session 保留职责、subagent 可委派范围、授权传递和必须串行化资源>
+- Subagents: <default-long / ordinary / 无 delegation capability>；<模式理由、主 session 保留职责、subagent 可委派范围、授权传递和必须串行化资源>
 - Allowed by plan/user: <task-scoped 的实现、验证、外部工具、清理及 Git/Issue 权限>
 - Blocked unless separately authorized: <plan/user 禁止或要求另行授权的边界>
 - HITL decisions: <resolved/pending>
@@ -83,7 +87,7 @@ Execution authorization for this task:
 - 不把 read-only/staging 权限扩大成 mutation，也不复用无关任务的旧权限。
 - 不把计划已禁止事项变成反向确认问题。
 - 不按实现顺序逐项申请权限，或遗漏 migration、provider、browser/GUI、cleanup、Git/Issue、acceptance tool 后中途停顿。
-- 不得把默认模式降级为由主 session 承担普通执行工作、再次询问模式，或把 subagent 限制为调研/审查。
-- 不以 integration/seaming 为名拒绝可隔离委派，不重复实现 subagent 已交付内容，也不把一次性授权解释成仅主 session 可用。
+- `default-long` 中保持普通执行切片由 subagent 承担，并将授权随明确 Task 边界传递。
+- 跨 Task seam、未决决策和共享验证由主 session 收口；其余可隔离部分由对应 subagent 交付，主 session 以 diff、测试与证据完成验收。
 - 充分利用不等于无边界并发；不得忽略依赖、共享写入和单实例外部资源。
 - 新权限 blocker 若仍在已授权对象/环境/数据/副作用范围内，直接继续；只有跨出该 envelope 才重新申请。

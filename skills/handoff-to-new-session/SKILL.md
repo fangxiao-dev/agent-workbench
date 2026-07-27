@@ -23,6 +23,16 @@ Do not use this skill for a half-finished task that needs a rolling handoff, a g
 
 Do not create a worktree child or snapshot any checkout. The new session starts normally; its inherited initial directory is not an anchor and must never itself cause a mismatch. Every first-turn check and later task command must use the exact existing implementation worktree as its execution `workdir`; no thread-level cwd switch is required or assumed.
 
+### Create-thread environment override
+
+For this skill, the existing implementation worktree is an execution anchor **inside the child prompt**, not a thread-creation target. When `create_thread` is called for a Git project, explicitly set:
+
+```text
+target.environment = { type: "local" }
+```
+
+This rule overrides the generic `create_thread` advice to default Git projects to a new worktree. Never pass `target.environment.type = "worktree"`, `startingState`, a branch, or a source-worktree snapshot for this handoff. A UI/result that says `Worktree created` is a delivery failure: stop, report it, and do not treat the child as a valid clean-session handoff.
+
 ## Execution location before anchor verification
 
 Treat the source worktree path as the child's execution location, not as a condition its inherited startup directory must already satisfy. The child's first action is to run the stated read-only checks with that exact path as `workdir`, then verify HEAD, package, and entry-point anchors there.
@@ -49,26 +59,27 @@ If step 1, 2, or 3 cannot be confirmed, stop before `create_thread`. Report `sou
 
 ## Fill The Initial Prompt
 
-Read [references/handoff-prompt-template.md](references/handoff-prompt-template.md) in full. Fill every placeholder from the verified records. Write `N/A` where a section genuinely does not apply; do not silently remove sections or abbreviate material facts.
+Read [references/handoff-prompt-template.md](references/handoff-prompt-template.md) in full. The prompt is an **anchor card**, not a history dump: fill only its fields from verified records. It should normally stay within 16 bullets / roughly 900 Chinese characters. Do not add a second summary of plan, DAG, ticket ACs, historical evidence, test commands, file boundaries, or design decisions that the package already owns.
 
 The resulting prompt must:
 
 - Name the existing source implementation worktree and expected HEAD. State that first-turn checks and later task commands must execute with that path as `workdir`, then verify its anchors before continuing.
-- State the task or ticket status, complete and incomplete work, verification evidence, external state, and the single entry point that owns the next action.
-- Preserve explicit collaboration and execution-preflight authorization without converting one-time permission into standing permission.
+- State only the current attempt/status, the single next action, the one material proof already earned, and the remaining proof that prevents closure. Let the entry point recover all detail.
+- Carry the recorded subagent mode in one line. For `default-long`, say that the main session is **only** responsible for scheduling, authorization/decision records, cross-Task seaming, shared verification, Ticket acceptance, claim audit, gate and final integration, while subagents should be used fully for non-overlapping bounded execution work. For `ordinary`, say that the main session may also execute small/tightly-coupled work and subagents may own bounded work. Preserve any recorded GO rule that lets the main session complete verification, review, claim audit and gate evaluation without a second confirmation; do not reproduce the entire prior authorization contract.
 - Require that the child's first turn is only the stated working-directory, package-entry and HEAD checks. On a mismatch, it must stop without a repair attempt. On success, it must continue the stated next action, stopping only for an explicitly named input, authorization, or other blocker.
 - Keep controlled inputs, credentials, customer data, and oracle artifacts out of Git, chat bodies, and repository temporary files.
-- Use the package directory and Impl-Package entry point as the authority route; do not enumerate every package file or restate a plan that is already authoritative on disk. Do not copy concrete commands or parameters, design details, Task steps, file ownership/boundaries, test commands, or implementation instructions into the child prompt; the entry point must recover them from the package. Carry only the current snapshot, verification, authorization and blocker facts needed to resume safely. Use literal `N/A` only for a truly inapplicable field.
+- Use the package directory and Impl-Package entry point as the authority route. Do not copy concrete commands or parameters, design details, Task steps, file ownership/boundaries, test commands, or implementation instructions into the child prompt. Use literal `N/A` only for a truly inapplicable field.
 
 ## Create And Deliver
 
 1. Create every child with the fixed default configuration `model=gpt-5.6-terra` and `thinking=xhigh`. This clean-session contract is explicit rather than inherited: do not attempt to inspect or infer the parent thread's configuration. An owner may override the pair only by naming a supported replacement configuration.
 2. Confirm that the destination supports the selected pair. If the default pair, or an owner-specified replacement, is unsupported, stop and report `session configuration unavailable`; do not silently fall back to another model or reasoning effort.
-3. Call `create_thread`; never call `fork_thread`. Pass `model=gpt-5.6-terra` and `thinking=xhigh` explicitly, or the supported owner override, together with the filled prompt unchanged as `prompt`.
-4. Create a normal session without `startingState: { type: "working-tree" }`, without a worktree snapshot option, and without supplying the source worktree as a creation-state target. Follow the current desktop `create_thread` schema for its required project/environment wrapper, but let the prompt bind the child to the verified existing implementation worktree.
-5. If the tool returns a `threadId` and `hostId`, make one non-blocking `wait_threads` call with that exact pair and `timeoutMs: 0`. This may surface an immediately completed source-worktree report, but the child must not depend on a parent acknowledgement to continue.
-6. If the tool returns a queued `clientThreadId`, report the queued setup instead of polling an unavailable thread ID.
-7. In the final response, state whether delivery succeeded or stopped at a mismatch and emit `::created-thread{threadId="..."}` for an immediate thread or `::created-thread{clientThreadId="..."}` for queued worktree setup. Do not write another handoff file.
+3. Call `create_thread`; never call `fork_thread`. Pass `model=gpt-5.6-terra` and `thinking=xhigh` explicitly, or the supported owner override, together with the filled prompt unchanged as `prompt`. Normalize the tool result before branching: the desktop wrapper may return the creation payload as serialized JSON text rather than an object, so parse that text and extract `threadId` / `hostId` or `clientThreadId`; never infer a queued result from the wrapper shape alone.
+4. Create a normal session with `target.environment = { type: "local" }`, without `startingState: { type: "working-tree" }`, a worktree snapshot option, a branch, or the source worktree as a creation-state target. Let the prompt bind the child to the verified existing implementation worktree.
+5. Obtain the original session title from the thread manager before creation. Derive the title by adding `01` if it has no numeric suffix, or incrementing the existing suffix (`01` → `02`). `create_thread` has no title parameter, so after an immediate result with `threadId`, call `set_thread_title` with that exact derived title. Do not claim the naming step succeeded until that call succeeds.
+6. If the tool returns a `threadId` and `hostId`, set the title first, then make one non-blocking `wait_threads` call with that exact pair and `timeoutMs: 0`. This may surface an immediately completed source-worktree report, but the child must not depend on a parent acknowledgement to continue.
+7. A correct `local` creation should normally return `threadId`. If a `clientThreadId` is returned, do not poll it or claim naming succeeded; report the queued creation as incomplete delivery because no thread ID is available for `set_thread_title`.
+8. In the final response, state whether delivery succeeded or stopped at an environment/title mismatch and emit `::created-thread{threadId="..."}` only after local creation and renaming both succeed. For an incomplete queued result, emit `::created-thread{clientThreadId="..."}` and explicitly state that the requested handoff has not yet met its no-worktree/naming contract. Do not write another handoff file.
 
 ## Child First-Turn Contract
 
@@ -86,6 +97,9 @@ Before reporting delivery, verify that:
 
 - The stated implementation worktree, HEAD and authority records were verified before creation.
 - The child explicitly uses `gpt-5.6-terra` with `xhigh` reasoning effort, unless the owner supplied a supported explicit override.
-- The prompt contains the three anchors, the target-`workdir` execution rule, package directory, Impl-Package entry point, current snapshot, mismatch rule, next action, and authorization/collaboration boundaries.
+- The `create_thread` target explicitly used `environment: { type: "local" }`; no result or UI reports a newly created worktree.
+- The child title was derived from the source title and confirmed through `set_thread_title`, or delivery was reported incomplete.
+- The prompt contains the three anchors, the target-`workdir` execution rule, package directory, Impl-Package entry point, current snapshot, mismatch rule, next action, selected subagent mode, and authorization/gate boundaries.
+- The prompt remains an anchor card: it contains no duplicated plan/DAG/Ticket/history/test detail and stays within the template's compact limit unless a named authorization or blocker required the exception.
 - No project ID, branch, dirty-state fingerprint, secret, or controlled input was copied into the prompt.
 - The child was created as a normal session with `create_thread`, never as a worktree snapshot, or the process stopped before creation for a documented source mismatch.
