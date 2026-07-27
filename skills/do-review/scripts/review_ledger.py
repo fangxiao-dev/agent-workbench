@@ -59,6 +59,13 @@ def create(args: argparse.Namespace) -> int:
 - Owner: `main-session`
 - Status: `in-progress`
 
+## Track lifecycle
+
+| Track | State | Consecutive clean rounds | Last completed round | Reactivation reason |
+| --- | --- | --- | --- | --- |
+
+- The main session initializes this table before Round 1. It is required only for `Loop` mode; `N rounds` and `Closure verification` keep every selected track active.
+
 ## Review rounds
 
 | Round | Track verdicts | New accepted | Convergence note |

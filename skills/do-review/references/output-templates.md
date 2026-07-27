@@ -60,6 +60,15 @@ Use the smallest template that matches the run. Keep source attribution and per-
 
 For a custom selection, replace the rows with exactly the selected Track label/skill pairs; retain one verdict row per selected reviewer and the same fail-closed aggregation rule.
 
+当 `Mode` 为 `Loop` 时，在 `Track Verdicts` 后补充 track lifecycle，明确哪些 track 仍在 `active` / `probation`、哪些已因连续两轮 clean 而 `dormant`，以及是否曾因新 finding 重新激活：
+
+```markdown
+## Track Lifecycle
+
+| Track | Final state | Consecutive clean rounds | Last review round | Reactivated because |
+| --- | --- | --- | --- | --- |
+```
+
 ## Closure Verification Report
 
 ```markdown
@@ -115,6 +124,11 @@ Main-session decision:
 
 | Round | Track A (<skill>) | Track B (<skill>) | Track C (<skill>) | New accepted | Convergence note |
 | --- | --- | --- | --- | --- | --- |
+
+## Track Lifecycle
+
+| Track | State | Consecutive clean rounds | Last completed round | Reactivation reason |
+| --- | --- | --- | --- | --- |
 
 ## Known Findings Ledger
 

@@ -40,6 +40,8 @@ For an explicit reviewer selection, resolve each name once through the registry 
 
 Reserve one subagent slot for every selected leaf reviewer. Prefer concurrent dispatch. If capacity requires phases, schedule every selected reviewer with the same already-fixed context; phases change only start time. Do not omit a reviewer merely to preserve parallelism. A named degraded topology is valid only when the user explicitly authorizes its exact reviewer list.
 
+`Loop` 模式的动态 track lifecycle 不改变 registry 中的已选 reviewer topology：所有 selected track 必须参加 Round 1；首次没有新增 accepted blocker/follow-up 的 track 仍须参加下一轮。主会话只可在该 track 连续两轮 clean 后将它标记为 `dormant`，后续只为 `active` 或被重新激活的 track 预留容量。`N rounds` 与 `Closure verification` 不使用此优化，仍要求每轮全部 selected track 完成。
+
 Completion criterion: every selected reviewer has a verified canonical path and a capacity slot or safe phase; otherwise the run stops.
 
 ## Step 1: Fix Scope And Shared Context
@@ -97,9 +99,21 @@ With no explicit reviewer names, read `default_tracks` from the registry in its 
 
 Completion criterion: the mode and every selected track label/name/path are fixed before dispatch.
 
+### Loop Track Lifecycle
+
+本节只适用于 `Loop` 模式。主会话在 canonical ledger 中为每个 selected track 维护 `active`、`probation` 或 `dormant` 状态及连续 clean 计数：
+
+- 每个 selected track 从 `active`、计数 0 开始，并参加 Round 1。
+- 一轮结束后，只有主会话完成候选去重、证据核验和分类后，才能判定该 track 是否 clean。clean 的定义是该 track 没有带来新的、distinct、已接受的 blocker 或 follow-up；duplicate、refinement、disputed、out-of-scope 和 backlog-only 不会重置计数。
+- 第一次 clean 后标记为 `probation`，下一轮仍必须调度；连续第二次 clean 后标记为 `dormant`，该 loop 的后续轮次不再调度它。
+- 新的已接受 blocker/follow-up 会把其来源 track 的计数重置为 0 并保持 `active`。如果其他 track 的新 finding 实质影响 dormant track 的审查职责、证据边界或可能修复面，主会话必须在下一轮重新激活该 track 并重置其计数。
+- incomplete、timeout、PARTIAL、UNCERTAIN 或 evidence gap 绝不算 clean；它们保持 `active`。`dormant` 表示已完成两次独立 clean 审查，不表示 PASS、无需证据或永久移除。
+
+收敛前，最后一轮不得有新的已接受 blocker/follow-up，且每个 selected track 必须是 `dormant`，除非该 track 因新 finding 被重新激活后尚未完成两次 clean。这样至少保留两轮独立审查，同时避免在静态 comparison point 上无限重复无发现的 track。
+
 ## Step 3: Dispatch Independent Leaf Tracks
 
-For each round, dispatch every selected reviewer as an independent leaf. Use [subagent-briefs.md](references/subagent-briefs.md) for the common context and one generic leaf brief, plus the closure brief when applicable. Include the exact preflight-verified absolute `SKILL.md` path.
+For each round, dispatch every `active` selected reviewer as an independent leaf. In `N rounds` and `Closure verification`, every selected reviewer remains `active`; only `Loop` may mark a track `dormant` under the lifecycle rule above. Use [subagent-briefs.md](references/subagent-briefs.md) for the common context and one generic leaf brief, plus the closure brief when applicable. Include the exact preflight-verified absolute `SKILL.md` path.
 
 Every normal-review prompt must include this contract:
 
@@ -124,7 +138,7 @@ The canonical review context may remain concise, free-form Markdown; it is not a
 
 Start each review round with a fresh leaf-worker session. Resume a worker only to finish the same interrupted round; never carry a worker's raw session into a later round. A cancelled, timed-out, stalled, or max-turns worker is incomplete, not PASS, even if it emitted partial prose. Treat a worker that explicitly reports `PARTIAL` the same way: finish that round or mark it blocked; do not silently reinterpret it as PASS.
 
-Completion criterion: every selected track has completed independently for the round, or the run is explicitly blocked.
+Completion criterion: every active track has completed independently for the round, or the run is explicitly blocked. A dormant Loop track is explicitly recorded in the canonical ledger and is not a missing reviewer or degraded topology.
 
 ## Step 4: Ledger, Verification, Classification, And Loop
 
@@ -154,7 +168,7 @@ Before reporting a P1, P2, or blocker, read its cited target-revision evidence, 
 
 Default classification: blocker risks business data, money, inventory, order/customer state, security, or runtime-visible product data; follow-up is real but non-blocking under stated release constraints; backlog is non-urgent cleanup or optional hardening; no issue is duplicate, fixed, out of scope, or unsupported.
 
-For loop mode, converge only after the latest completed round adds no distinct **accepted** blocker/follow-up issue class, or only duplicates/refinements/disputed/out-of-scope candidates remain. A genuinely new risk that survives parent verification is added to the canonical context and must continue the loop. A PASS/no-finding result from one track never skips another selected track or proves overall convergence. A round is incomplete if any selected reviewer is missing or incomplete, unless the user explicitly authorized that named degraded topology.
+For Loop mode, apply the track lifecycle above after every completed round. A genuinely new risk that survives parent verification is added to the canonical context, resets the relevant track lifecycle, and continues the loop. Converge only when the latest completed round adds no distinct **accepted** blocker/follow-up issue class and every selected track is `dormant`; duplicates, refinements, disputed, out-of-scope, and backlog-only candidates may still be recorded but do not by themselves continue the loop. A no-finding result never skips the required probation round: a track becomes dormant only after two consecutive parent-classified clean rounds. A round is incomplete if any active reviewer is missing or incomplete, unless the user explicitly authorized that named degraded topology.
 
 Completion criterion: every accepted finding has source attribution and main-session decision; every P1/P2/blocker has an evidence verification note; the stop reason is recorded. Keep disputed and out-of-scope candidates visible separately so a later closure review can revisit them without treating them as merge gates.
 
