@@ -251,6 +251,127 @@
         "Does not create a case matrix or second verification contract",
         "Preserves the normal risk-based execution and review routing"
       ]
+    },
+    {
+      "id": 22,
+      "prompt": "真实 E2E 发现两个 consumer 对同一版本化事实不兼容解释。当前业务动作还包含 browser/provider 独有风险。应如何推进？",
+      "expected_output": "Treats the conflict as a material seam, establishes cheaper faithful evidence retaining real consumers, limits any sweep to semantic neighbours in the current action, and retains E2E for browser/provider-specific risk.",
+      "files": [],
+      "expectations": [
+        "Does not use producer-only or mock evidence as a substitute for real E2E",
+        "Does not create a consumer registry or full-repository sweep",
+        "Records actual evidence in ER without a new runtime state"
+      ]
+    },
+    {
+      "id": 23,
+      "prompt": "人工决定从 UI 经 DTO 和 confirm 到权威提交时被静默丢失；局部字段检查都是绿色。如何调查、修复并验证？",
+      "expected_output": "Finds the first contract-violating boundary, uses checkpoints to locate the last valid and first invalid assumption, and verifies authority/provenance without fixture or field-name special cases.",
+      "files": [],
+      "expectations": [
+        "Does not let UI or cached projection alone prove authoritative commit",
+        "Repairs an implementation defect when existing contract uniquely decides behaviour",
+        "Does not invent an arbitrary-field passthrough framework"
+      ]
+    },
+    {
+      "id": 24,
+      "prompt": "Failure appears only in a real browser lifecycle and native-tool file interaction. Local logic cannot retain that causal mechanism. How should execution proceed?",
+      "expected_output": "Keeps real E2E as the authoritative evidence, adds only useful readiness or observability, and refuses to present mock or unit success as final acceptance.",
+      "files": [],
+      "expectations": [
+        "Does not force a lower-level regression that loses the causal mechanism",
+        "Does not create a hard E2E admission gate",
+        "Records the actual environment evidence in ER"
+      ]
+    },
+    {
+      "id": 25,
+      "prompt": "A provider times out once in E2E and cannot be stably reproduced; the product contract promises no particular retry behavior. What should be recorded and tested?",
+      "expected_output": "Treats the classification as provisional, improves readiness/runbook/observability as appropriate, and does not manufacture a deterministic code regression test.",
+      "files": [],
+      "expectations": [
+        "Allows a later purposeful run when it has new diagnostic value",
+        "Does not mislabel the incident as an internal logic regression",
+        "Does not create a new gate or evidence matrix"
+      ]
+    },
+    {
+      "id": 26,
+      "prompt": "The team cannot distinguish an internal adapter defect from real protocol behavior. A sandbox E2E can produce the decisive response and boundary artifact, but some internal evidence is not yet available. Continue execution.",
+      "expected_output": "Allows a bounded exploratory E2E with candidate hypotheses, decisive artifact and result routing; it does not claim all preconditions are proven and requires information gain before a repeat run.",
+      "files": [],
+      "expectations": [
+        "Does not treat missing evidence as a hard E2E admission block",
+        "Does not repeat the run without new hypothesis, delta or observation",
+        "Keeps diagnostic detail in ER rather than a second Planned Verification contract"
+      ]
+    },
+    {
+      "id": 27,
+      "prompt": "A stable local algorithm boundary bug affects no version compatibility, mapping, authority switch, cross-consumer interpretation or silent information loss. What is the regression path?",
+      "expected_output": "Uses a faithful local regression and explicitly does not run a seam sweep or expand consumer scope.",
+      "files": [],
+      "expectations": [
+        "Does not create a matrix or consumer registry",
+        "Does not request a new owner decision",
+        "Keeps the change on the lightweight path"
+      ]
+    },
+    {
+      "id": 28,
+      "prompt": "The current package claim has complete evidence, but another historical package has an unrelated internal failure with no lower-level regression. Can the current package close?",
+      "expected_output": "Audits only the current claim-related, confirmed material failure set and does not make the current package pay unrelated historical technical debt.",
+      "files": [],
+      "expectations": [
+        "Preserves completion audit non-retrospectivity",
+        "Does not create a debt registry or broaden verification scope",
+        "Reports any current-claim residual risk precisely"
+      ]
+    },
+    {
+      "id": 29,
+      "prompt": "An approved real-provider check fails. The executor adds a control variable and authoritative response checkpoint to distinguish protocol drift from an adapter defect. A variant proposes replacing the required real-provider evidence with a mock for the same completion claim. What is the routing?",
+      "expected_output": "Appends the diagnostic refinement to ER without P revision in the first case; routes the mock substitution to impl-planning as a verification-strategy change and rejects it as real-provider acceptance evidence.",
+      "files": [],
+      "expectations": [
+        "Treats failure classification as revisable and potentially multi-causal",
+        "Does not create a second Planned Verification contract in ER or execution-findings",
+        "Does not use a mock to replace required real-provider acceptance"
+      ]
+    },
+    {
+      "id": 30,
+      "prompt": "一个跨 consumer seam 的回归测试只有在 production mapper 中按测试 document ID、snapshot hash 和固定时间特判时才会通过。现有 contract 并未赋予这些常量业务语义。应如何修复？",
+      "expected_output": "Rejects the production fixture special case, keeps the regression focused on the shared representation or invariant, and uses fixture data only as test setup rather than platformizing its constants.",
+      "files": [],
+      "expectations": [
+        "Does not create a production branch keyed by fixture IDs, hashes or timestamps",
+        "Distinguishes fixture constants from domain facts and system invariants",
+        "Does not introduce an arbitrary generic framework merely to carry one fixture"
+      ]
+    },
+    {
+      "id": 31,
+      "prompt": "真实 E2E 已确认版本化 consumer mapping 不一致；修复尚未建立能同时保留两个真实 consumer 的忠实 seam evidence，browser/provider 输入、环境和诊断假设也没有变化。团队要求立刻再跑完整 E2E。应如何推进？",
+      "expected_output": "Declines the information-free repeat, first establishes the faithful cross-consumer evidence for the confirmed deterministic seam, and keeps a later E2E for its browser/provider-specific residual risk or a new diagnostic delta.",
+      "files": [],
+      "expectations": [
+        "Does not treat the next full E2E as the first regression for a known internal seam",
+        "Does not forbid a later E2E when there is a new hypothesis, delta or environment-specific risk",
+        "Does not create a fixed E2E retry count or admission gate"
+      ]
+    },
+    {
+      "id": 32,
+      "prompt": "现有 Spec 只规定人工 review 必须传递到下游，但没有定义两个会导致不同权威状态和业务结果的结构化表示中哪一个正确。executor 想自行选一个 DTO 映射并补测试。应如何路由？",
+      "expected_output": "Stops only the affected unit and routes the unresolved business/acceptance semantics to req-align; it does not let the executor, mapper or test choose a shared meaning.",
+      "files": [],
+      "expectations": [
+        "Distinguishes contract ambiguity from an implementation defect",
+        "Does not turn a guessed DTO mapping into a regression oracle",
+        "Keeps unrelated low-risk work moving without a new global gate"
+      ]
     }
   ]
 }

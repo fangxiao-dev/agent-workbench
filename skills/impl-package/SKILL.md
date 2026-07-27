@@ -66,6 +66,7 @@ flowchart TD
 **计划 bundle 的授权连续性**只由[共享 contract 的一次 checkpoint](references/impl-package-composition-contract.md)定义；本入口不复制其行为细节。
 
 - 先按共享 contract 的四个瞬时影响信号做轻量分流。纯减法、证据修正、引用/分类修正或局部可逆调整若不改变当前业务结果、Acceptance Semantics、D/S contract、plan-owned execution strategy、Composition、安全约束或 mutation authority，直接交给现有 artifact 的 owning skill 做局部修正和定向验证；不为了“进流程”调用 `req-align`、创建新 revision 或扩写 JSON。
+- 复杂业务动作、`material seam` 或昂贵系统验证需要选择渐进式证据时，读取 [渐进式系统证据](references/progressive-system-evidence.md)，再继续由当前 owning stage 执行；它不是新 stage、gate 或 approval。
 - 有新改动 / 需求，且会改变决策选择或行为 contract → **`req-align`**（先过 Decision、再过 Spec 门；当 acceptance 依赖权威证明、发布状态、兼容投影或外部副作用时，由该 skill 条件化定义 evidence-integrity contract；provider、schema、archive、CLI 等只是例子）。
 - Spec 已过门，还没 plan → **`impl-planning`**。
 - 当前 attempt plan 判 `tickets=true` 或 `dag=true`，计划拆解 bundle 尚未 ready → 交给 **`impl-planning`** 编排 `to-tickets`、`create-task-dag`、同一 candidate bundle 的 review 与一次 approval。
@@ -98,6 +99,7 @@ flowchart TD
 - **规则 / 跨层契约（正式）** → [references/impl-package-composition-contract.md](references/impl-package-composition-contract.md)（composition、derived lifecycle、readiness resolution、seam、Stage 7、dispatch shorthand、revision-blob binding、Module Knowledge Watermark）。
 - **结构化状态 schema（正式）** → [references/impl-package-state-schema.md](references/impl-package-state-schema.md)（sidecar shape、CLI、projection、current-contract 校验、gate content binding 与消费结果；旧 schema 不再由运行时兼容解析）。
 - **backfill / 常青四层（正式，已批准）** → [references/evergreen-module-spec-and-backfill-design.md](references/evergreen-module-spec-and-backfill-design.md)。
+- **渐进式系统证据（指导性）** → [references/progressive-system-evidence.md](references/progressive-system-evidence.md)（围绕 system assumption、忠实边界、昂贵 E2E、checkpoint、failure learning 与 claim-scoped freshness 选择证据；不改变 artifact lifecycle）。
 - **体系设计 rationale（仍为方案草案，内容仍会演进）** → [references/impl-package-system-design.md](references/impl-package-system-design.md)。
 - **给人看的介绍页** → [assets/impl-package-intro.html](assets/impl-package-intro.html)。**推荐给需要总览的人打开；本 skill 自身不读取它**（避免把整页载入上下文）。
 

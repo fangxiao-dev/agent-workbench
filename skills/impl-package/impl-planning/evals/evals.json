@@ -158,6 +158,54 @@
         "Reuses existing AC anchors and descriptive test names",
         "Does not create a separate matrix document, stage or fixed ID format"
       ]
+    },
+    {
+      "id": 13,
+      "name": "material-seam-preserves-real-e2e-residue",
+      "prompt": "A versioned producer and two consumers disagree on the same business fact. The browser/provider path is also required for one real-environment risk. Plan Planned Verification.",
+      "expected_output": "Selects a faithful seam or integration check that retains the real consumers, states the system assumption and oracle, limits any sweep to semantic neighbours in this action, and retains E2E only for its browser/provider-specific residue.",
+      "files": [],
+      "expectations": [
+        "Treats the disagreement as a material seam because local green evidence could false-pass the AC",
+        "Does not use a mock or producer-only check as the real E2E substitute",
+        "Does not create a consumer registry, case-ID system or mandatory matrix"
+      ]
+    },
+    {
+      "id": 14,
+      "name": "bounded-exploratory-e2e-is-allowed",
+      "prompt": "The team cannot yet distinguish an internal adapter defect from a real provider protocol behavior. A sandbox E2E can return the decisive response and boundary artifact, but internal preconditions are incomplete. Plan verification.",
+      "expected_output": "Allows a bounded exploratory E2E with candidate hypotheses, decisive artifact and result routing instead of treating missing internal evidence as a hard admission block.",
+      "files": [],
+      "expectations": [
+        "Does not claim the exploratory run proves every internal precondition",
+        "Requires new hypothesis, delta or observation before a repeat expensive run",
+        "Does not create an approval gate or a separate verification artifact"
+      ]
+    },
+    {
+      "id": 15,
+      "name": "faithful-boundary-total-cost",
+      "prompt": "A new lower-level harness and an existing assembled runner both retain the same counterexample. The new harness is much more expensive to build and maintain; the assembled runner is stable and cheaper overall. Plan verification.",
+      "expected_output": "Chooses the existing assembled runner because it is faithful and has lower total evidence cost; earlier feedback wins only when faithful candidates have comparable total cost.",
+      "files": [],
+      "expectations": [
+        "Does not treat structurally lowest as automatically best",
+        "Names the oracle and retained causal mechanism",
+        "Does not use the cost rule to select an unfaithful boundary"
+      ]
+    },
+    {
+      "id": 16,
+      "name": "low-risk-change-has-no-evidence-ceremony",
+      "prompt": "A single-owner, local reversible copy correction has direct existing evidence and no shared state, contract or external side effect. Plan the change.",
+      "expected_output": "Uses the normal lightweight verification path without an expensive-test declaration, evidence ladder, matrix, extra gate or new artifact.",
+      "files": [],
+      "expectations": [
+        "Does not upgrade P only to record the heuristic",
+        "Does not create Tickets, a DAG or case IDs for the local change",
+        "Keeps the scoped claim supported by direct evidence"
+      ]
     }
   ]
 }

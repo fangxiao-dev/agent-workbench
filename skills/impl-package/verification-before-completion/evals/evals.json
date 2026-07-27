@@ -35,6 +35,50 @@
         "Reuses unaffected evidence",
         "Does not equate metadata-only changes with automatic behavior-test invalidation"
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "代码 revision 和 environment 名称都未变，但当前 claim 依赖的 provider 协议版本和 schema 已变化；另一项显示配置变化与 claim 无关。completion audit 应如何处理？",
+      "expected_output": "Marks only protocol/schema-dependent evidence stale and reruns affected checks, while reusing evidence unaffected by the display-config change.",
+      "files": [],
+      "expectations": [
+        "Checks claim-scoped causal inputs beyond revision and environment",
+        "Does not create a freshness registry",
+        "Does not mechanically rerun all checks"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "The completion claim includes real browser and provider behavior. A mock-backed seam regression is green, but the real E2E has not run. Can the package claim closed?",
+      "expected_output": "Rejects the closed claim until the required real E2E evidence exists; the mock regression can support its internal seam claim but cannot substitute for browser/provider acceptance.",
+      "files": [],
+      "expectations": [
+        "Separates internal deterministic evidence from real-environment residue",
+        "Reports implemented, not verified when appropriate",
+        "Does not downgrade real E2E to mock success"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "The current claim has fresh direct evidence. A different historical package has an unrelated material internal failure that was never downshifted into a regression. Must this claim remain open?",
+      "expected_output": "Audits only current-claim-related confirmed material failures and does not require repayment of unrelated historical technical debt.",
+      "files": [],
+      "expectations": [
+        "Preserves claim scope",
+        "Does not create a historical-failure registry",
+        "Names only current residual gaps"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "A current-claim-related deterministic mapping failure was reproduced at a faithful seam and has a stable regression. A separate provider timeout was not reproducible and is documented in readiness/runbook. Can completion audit use both records?",
+      "expected_output": "Accepts the stable seam regression as future evidence and the timeout as an honestly bounded environment risk, without demanding a fabricated deterministic test for the timeout.",
+      "files": [],
+      "expectations": [
+        "Applies conditional failure learning only to the reproducible faithful case",
+        "Does not turn an environment incident into fake green code evidence",
+        "Keeps the audit scoped to the current claim"
+      ]
     }
   ]
 }

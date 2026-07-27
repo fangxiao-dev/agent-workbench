@@ -55,6 +55,7 @@
 
 <!-- 引用权威 policy；不要复制通用 Data Safety、UI Evidence、Real Route Safety checklist。 -->
 <!-- material 高风险边界在本表内引用 spec/AC，覆盖能区分正确与错误实现的正常流和关键负向/竞态场景，并注明可执行测试层级或入口、可观察 oracle 与后续 ER owner。复用现有 anchor/名称即可；无歧义时不要另造 ID、矩阵或文档。 -->
+<!-- material seam 或昂贵系统验证在“选定检查/预期结果”中简短写明 system assumption、忠实边界/oracle、必要 checkpoint 与真实环境独有风险。多个忠实候选按总证据成本选择，成本接近才优先更早反馈；探索运行写候选假设、决定性 artifact 与结果分流。使用既有表列，不新增字段、ID、矩阵、artifact 或 gate。 -->
 
 ## 执行记录
 

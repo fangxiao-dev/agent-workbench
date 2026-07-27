@@ -7,6 +7,8 @@ description: 在宣称工作 complete、closed、fixed、passing、merge-ready �
 
 Completion claim 不能宽于 evidence。Verification 是 claim-to-evidence contract，不要求在当前消息里机械重跑所有可能的检查。
 
+当 claim 涉及 material seam、昂贵 E2E 或 failure learning 时，读取 [`../references/progressive-system-evidence.md`](../references/progressive-system-evidence.md)。本 skill 只审计当前 claim 是否被正确证据支持，不重新选择 Planned Verification。
+
 ## Impl-Package orchestration
 
 本 skill 是 Impl-Package 的 completion-claim evidence gate。它不是 DAG task，也不按 ticket 或 implementation unit 重复运行。
@@ -42,7 +44,11 @@ Evidence 同时满足以下条件时才可使用：
 - 包含 command/procedure、exit status、failure count 和决定性 artifact；
 - 覆盖 repository 对该 claim 要求的 gate。
 
-不要用相邻 evidence 替代：lint 不能证明 build，unit test 不能证明 integration，passing regression test 本身也不能证明原始 symptom 已解决。
+不要用相邻 evidence 替代：lint 不能证明 build，unit test 不能证明 integration，passing regression test 本身也不能证明原始 symptom 已解决。当前 claim 要求的真实 browser/provider/native-tool/E2E evidence 也不能由 mock、unit 或 seam regression 冒充。
+
+除 revision/environment 外，按当前 claim 检查关键因果输入是否仍成立，例如外部协议版本、feature flag、schema、部署配置、共享数据前置和认证策略。与当前风险相关的变化只使依赖它的 evidence stale；无关变化不触发机械重跑或 freshness registry。
+
+与当前 claim 相关、已确认且 material 的确定性内部 failure，应有稳定回归证据，或有可信理由说明它不满足条件化下沉标准。偶发环境问题可以保留为 readiness、runbook、observability 或真实验证风险，不能为了 completion 伪造绿色代码测试。不要追溯清偿与当前 claim 无关的历史 failure、旧 package 技术债或未触及风险。
 
 ## 复用与独立 verification
 
@@ -54,6 +60,8 @@ Evidence 同时满足以下条件时才可使用：
 - evidence 之后的变化可能影响结果；
 - claim 属于高风险 merge、release、migration、security、data-integrity 或 external-side-effect gate；
 - project policy 明确要求当前 owner fresh run。
+
+关键因果输入变化时，只补跑依赖该输入的 check；无关的 metadata、显示配置或环境 delta 可以继续复用已有 evidence。此判断审计当前 claim，不重新设计 Planned Verification。
 
 不要为了制造 RED evidence 而临时回退 fix，尤其当该操作不安全时。使用已有 failing run、受控 worktree、test fixture mutation，或明确记录没有独立证明 RED。
 

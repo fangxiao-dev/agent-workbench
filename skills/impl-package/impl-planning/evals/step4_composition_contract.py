@@ -75,7 +75,16 @@ def main() -> None:
         IMPL_ROOT / "dev-with-track" / "assets" / "templates" / "dag.md"
     )
     dev_with_track = read(IMPL_ROOT / "dev-with-track" / "SKILL.md")
+    runtime_protocol = read(
+        IMPL_ROOT / "dev-with-track" / "references" / "runtime-protocol.md"
+    )
+    progressive_evidence = read(
+        IMPL_ROOT / "references" / "progressive-system-evidence.md"
+    )
     dev_evals = read(IMPL_ROOT / "dev-with-track" / "evals" / "evals.json")
+    dev_evals_by_id = {
+        item["id"]: item for item in json.loads(dev_evals)["evals"]
+    }
     completion_verification = read(
         IMPL_ROOT / "verification-before-completion" / "SKILL.md"
     )
@@ -181,12 +190,12 @@ def main() -> None:
             "partial-slice boundary rule",
         ),
         (
-            dev_with_track,
-            "初始 attempt 不要求预建 gate.md",
+            runtime_protocol,
+            "初始 attempt 不要求预建",
             "open attempt has no precreated gate ledger",
         ),
         (
-            dev_with_track,
+            runtime_protocol,
             "不得事后补写授权来清除该事实",
             "execution process-violation rule",
         ),
@@ -200,22 +209,22 @@ def main() -> None:
         (ticket_template, "Plan Revision", "ticket plan-revision field"),
         (dag_template, "NEEDS-REVALIDATION", "dag plan-revision drift note"),
         (
-            dev_with_track,
-            "terminal entry（pass/fail/defer",
+            runtime_protocol,
+            "terminal pass/fail/defer entry",
             "findings block covers all terminal verdicts",
         ),
         (
-            dev_with_track,
-            "git rev-parse HEAD:<package-relative-path>",
-            "restore recomputes artifact blob",
+            runtime_protocol,
+            "validate --committed",
+            "runtime protocol keeps committed-artifact validation",
         ),
         (
-            dev_with_track,
-            "plan-contract-v1",
-            "restore permits append-only execution evidence without P drift",
+            runtime_protocol,
+            "evidence 胜过 stale status",
+            "runtime protocol keeps evidence over stale status",
         ),
         (
-            dev_with_track,
+            runtime_protocol,
             "manual-acceptance-readiness.md",
             "lightweight manual readiness handoff",
         ),
@@ -297,12 +306,57 @@ def main() -> None:
         ),
         (
             dev_with_track,
-            "正文不得要求 owner 打开 JSON",
+            "references/runtime-protocol.md",
+            "execution entry delegates detailed runtime protocol",
+        ),
+        (
+            runtime_protocol,
+            "## Progressive system evidence",
+            "runtime progressive evidence protocol",
+        ),
+        (
+            dev_with_track,
+            "修复已证实 seam 的实现任务才派发",
+            "confirmed seam repair dispatch boundary",
+        ),
+        (
+            dev_with_track,
+            "seam 尚未确认时派发",
+            "investigation remains dispatchable before seam confirmation",
+        ),
+        (
+            runtime_protocol,
+            "`do-review` 是范围固定、leaf 调度、ledger 与 finding 分类的唯一编排器",
+            "formal review retains do-review orchestration",
+        ),
+        (
+            progressive_evidence,
+            "总证据成本",
+            "shared faithful-boundary cost decision",
+        ),
+        (
+            progressive_evidence,
+            "不是 E2E admission gate",
+            "shared exploratory E2E guardrail",
+        ),
+        (
+            skill,
+            "progressive-system-evidence.md",
+            "planning references shared progressive evidence",
+        ),
+        (
+            template,
+            "总证据成本",
+            "plan template records progressive evidence in existing table",
+        ),
+        (
+            dev_with_track,
+            "不要要求 owner 打开 JSON",
             "execution handoff stays Markdown-first",
         ),
         (
             req_align,
-            "正文不得要求 owner 打开 JSON",
+            "Do not make owners inspect sidecars",
             "alignment handoff stays Markdown-first",
         ),
     )
@@ -340,6 +394,37 @@ def main() -> None:
             "$plan-review mode=bundle-admission",
             f"impl-planning admission eval {eval_id} exact orchestration",
         )
+    for eval_id in (13, 14, 15, 16):
+        if eval_id not in planning_by_id:
+            raise AssertionError(f"Missing progressive-evidence planning eval {eval_id}")
+    assert_contains(
+        planning_by_id[14]["expected_output"],
+        "bounded exploratory E2E",
+        "exploratory E2E remains available",
+    )
+    assert_contains(
+        planning_by_id[15]["expected_output"],
+        "total evidence cost",
+        "faithful-boundary total-cost choice",
+    )
+    for eval_id in (30, 31, 32):
+        if eval_id not in dev_evals_by_id:
+            raise AssertionError(f"Missing progressive-evidence runtime eval {eval_id}")
+    assert_contains(
+        dev_evals_by_id[30]["expected_output"],
+        "fixture special case",
+        "fixture constants stay out of production semantics",
+    )
+    assert_contains(
+        dev_evals_by_id[31]["expected_output"],
+        "information-free repeat",
+        "known internal seam does not trigger an information-free E2E repeat",
+    )
+    assert_contains(
+        dev_evals_by_id[32]["expected_output"],
+        "req-align",
+        "contract ambiguity routes to req-align",
+    )
 
     assert_unique_revision_projection(
         decision_template,

@@ -19,7 +19,9 @@ def main() -> None:
     skill = SKILL_DIR / "SKILL.md"
     router = IMPL_ROOT / "SKILL.md"
     executor = IMPL_ROOT / "dev-with-track" / "SKILL.md"
+    runtime_protocol = IMPL_ROOT / "dev-with-track" / "references" / "runtime-protocol.md"
     contract = IMPL_ROOT / "references" / "impl-package-composition-contract.md"
+    progressive_evidence = IMPL_ROOT / "references" / "progressive-system-evidence.md"
     old_skill = (
         REPO_ROOT
         / "skills"
@@ -28,7 +30,7 @@ def main() -> None:
         / "SKILL.md"
     )
 
-    for path in (skill, router, executor, contract):
+    for path in (skill, router, executor, runtime_protocol, contract, progressive_evidence):
         if not path.exists():
             raise AssertionError(f"Expected Impl-Package verification contract file: {path}")
     if old_skill.exists():
@@ -45,6 +47,9 @@ def main() -> None:
         "implemented, not verified",
         "merge-ready",
         "release-ready",
+        "关键因果输入",
+        "真实 browser/provider/native-tool/E2E evidence",
+        "历史 failure",
     ):
         require_text(skill_body, needle, "skill")
 
@@ -55,13 +60,26 @@ def main() -> None:
     )
 
     executor_body = executor.read_text(encoding="utf-8")
+    runtime_body = runtime_protocol.read_text(encoding="utf-8")
     for needle in (
-        "## Completion claim gate",
-        "terminal `pass`",
-        "不机械重跑全部检查",
-        "目标分支",
+        "references/runtime-protocol.md",
+        "GO 后自动完成",
     ):
         require_text(executor_body, needle, "dev-with-track")
+    for needle in (
+        "## Claim and gate",
+        "terminal `pass`",
+        "只补受影响检查",
+        "目标分支",
+        "关键因果输入",
+    ):
+        require_text(runtime_body, needle, "runtime protocol")
+    for needle in (
+        "不要创建 freshness registry",
+        "真实 E2E",
+        "不追溯清偿",
+    ):
+        require_text(progressive_evidence.read_text(encoding="utf-8"), needle, "progressive evidence")
 
     contract_body = contract.read_text(encoding="utf-8")
     for needle in ("completion claim", "不进入 DAG", "terminal pass entry 写入前"):
@@ -70,11 +88,16 @@ def main() -> None:
     evals = json.loads((EVALS_DIR / "evals.json").read_text(encoding="utf-8"))
     if evals.get("skill_name") != "verification-before-completion" or len(
         evals.get("evals", [])
-    ) < 3:
+    ) < 7:
         raise AssertionError(
             "Expected verification-before-completion evals to cover pass, stale "
-            "evidence and post-merge claims."
+            "evidence, post-merge claims, causal freshness, real E2E residue and "
+            "claim-scoped failure learning."
         )
+    by_id = {item["id"]: item for item in evals["evals"]}
+    for eval_id in (4, 5, 6, 7):
+        if eval_id not in by_id:
+            raise AssertionError(f"Missing progressive-evidence completion eval {eval_id}")
 
     print("verification-before-completion Impl-Package contract checks passed")
 

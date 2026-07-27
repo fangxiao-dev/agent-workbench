@@ -57,6 +57,8 @@ Task 返回后，Working Branch owner 检查实际产出与局部证据，并执
 → 决定 Ticket 是否可验收
 ```
 
+Task worker 可以提供 primary ownership 内的局部、seam 或 checkpoint evidence；`DONE` 与局部绿色不能证明跨 Task 信息保真、authority 提交或完整业务动作。Working Branch owner 在 integration step 合并实际 checkpoint、确认其 authority/provenance，并选择必要的 shared/seam/assembled-action evidence。只有出现版本兼容、序列化/映射、authority 切换、跨 consumer 解释分歧或静默信息丢失时，owner 才对当前业务动作中共享受损表示或 authority fact 的语义相邻边界做有限 sweep；worker 派发前不需要穷举 consumer。遇到 contract ambiguity、超出 primary ownership 的 shared seam 或无法判定 authority 时，worker 返回 `BLOCKED`，不得自行定义共享语义。
+
 每个 Ticket 进入最终验收前，只扫描 `contributes-to` 该 Ticket 的 `BLOCKED` Task：
 
 - blocker 的未完成内容影响该 Ticket 的 AC、已声明行为或风险边界时，必须先解除阻塞，Ticket 不可验收通过；
