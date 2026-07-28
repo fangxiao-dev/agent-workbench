@@ -43,6 +43,18 @@ Push too little down and the top bloats; push too much and you hide material the
 
 Where the ladder decides _how far down_ a piece sits, **co-location** decides _what sits beside it_ once there: keep a concept's definition, rules, and caveats under one heading rather than scattered, so reading one part brings its neighbours with it.
 
+## Progressive load shedding
+
+Skills accrete **sediment** when every correction becomes another paragraph in the main body. The cure is not merely moving lines: use **progressive load shedding** to rewrite the skill around its live decisions.
+
+Keep in `SKILL.md` only what every run must know immediately: the job and boundary, the main workflow, decision heuristics, non-negotiable safety/completion rules, and a context pointer that says exactly when to load a reference. Push branch-only procedures, templates, field tables, command details, and exceptional paths behind that pointer.
+
+When shedding load, **rewrite rather than patch**. Collapse repeated rules into one executable principle; group each reference around one subject; delete text already implied by the new outline. Do not turn a reference into an archive of copied paragraphs.
+
+Before finishing, perform a **semantic coverage audit**: enumerate the old skill's behavior-changing constraints and mark each one as retained in the main body, disclosed through a named reference, or deliberately deleted with a reason. Never trade away permissions, failure paths, state transitions, evidence rules, or completion criteria merely to shorten the entry file.
+
+If a new rule does not naturally fit the rewritten outline, revise the outline first. Do not keep appending “one more exception” to either the main skill or a reference; that only relocates sediment.
+
 ## When to split
 
 **Granularity** is how finely you divide skills, and each cut spends one of the two loads, so split only when the cut earns it. Two cuts:

@@ -126,6 +126,13 @@ While drafting, apply these writing decisions:
 - **Failure modes**: revise places that invite premature completion,
   duplication, sediment, sprawl, or no-ops.
 
+When revising an existing skill whose main body has accumulated branch-only
+detail or repeated exceptions, apply `writing-great-skills`'s **Progressive load
+shedding** section: rewrite the entry workflow and disclose branch-only protocol
+behind explicit pointers. Before editing, make a semantic coverage audit of the
+old behavior-changing constraints; do not use line-count reduction as evidence
+that the revision is safe.
+
 This is an editing pass on the artifact, not a separate report unless the user
 asked for a critique.
 
