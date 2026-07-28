@@ -42,6 +42,7 @@
 | documentation-generator | `jorgealves/agent_skills` | `npx skills add jorgealves/agent_skills@documentation-generator -g -y` | 已放入 `skills/documentation-generator/` |
 | prompt-optimizer | `daymade/claude-code-skills` | `npx skills add daymade/claude-code-skills@prompt-optimizer -g -y` | 已放入 `skills/prompt-optimizer/` |
 | test-generator | `oimiragieo/agent-studio` | `npx skills add oimiragieo/agent-studio@test-generator -g -y` | 已放入 `skills/test-generator/` |
+| explain-diff-html | `geoffreylitt/a29df1b5f9865506e8952488eac3d524` | 人工迁移并本地改良 | 基于 Gist 的本地 fork，已放入 `skills/explain-diff-html/`；固定渲染器、schema 校验与离线安全边界为本地改动 |
 
 ## 说明
 
