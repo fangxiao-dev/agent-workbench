@@ -57,10 +57,11 @@ Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。pl
 
 ## Composition
 
-对当前 attempt 独立判断：
+对当前 attempt 独立判断，并以 `references/impl-package-composition-contract.md` 的 Composition triage 为唯一规则源。默认是 `tickets=true, dag=false`：Ticket 承载交付/验收切片；DAG 只在额外协调价值已被证明时才 earned。
 
-- tickets=true：至少两个值得独立跟踪验收结论的 delivery slice。
-- dag=true：需要显式依赖图、多个 execution owner、cohort 或 execution seam。
+- `tickets=true`：默认采用；只有单一、局部且一次验收即可收口的变更才选 `tickets=false`。
+- `dag=true`：必须同时证明至少两项工作可安全独立启动，且删去 DAG 会丢失真实 blocker、跨 owner/跨 session handoff 或 primary ownership 边界的调度信息。自然实现顺序、多个文件或多个 Ticket 都不是 DAG 依据。
+- `tickets=true, dag=true`：Ticket/Task 接近一对一（例如 5 个 Ticket 对 6 个 Task）是反证信号；若 Task 只重复 Ticket 的实现顺序，保持 `tickets=true, dag=false`。
 - 两者都 false：不创建 task artifact；简单执行不通过 plan checklist 或 progress ledger 制造状态。跨 session 恢复、独立交接或外部 gate 的事实写入现有 Execution Record 或 handoff。
 
 用户可主动用 S/M/L/D 指定期望组合。把它记录为 Composition request 并展开成本 attempt 的 tickets/dag；一致时接受。若与 earn conditions 冲突，在增删任何 ticket/DAG 前向 owner 报告请求、实际信号、建议组合和 artifact 影响，并把选择列为 owner decision，不能静默修正。活动 attempt 只有 owner 接受后才升级 P revision 和迁移 artifact。

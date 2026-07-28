@@ -43,6 +43,8 @@ description: >
 
 ## 最小记录与拆分规则
 
+DAG 不是 Ticket 的默认伴随物。只有当前 plan 已按 shared Composition triage 证明：至少两项工作可安全独立启动，且删去 DAG 会丢失真实 blocker、跨 owner/跨 session handoff 或 primary ownership 边界的协调信息，才创建 DAG。单一 owner 下的串行实现、自然步骤顺序、多个文件或多个 Ticket 都不构成依据；此时保持 `tickets=true, dag=false`。Ticket/Task 接近一对一（例如 5 个 Ticket 对 6 个 Task）时，先证明每个 Task 的独立执行或协调价值；不能证明则不建 DAG。
+
 默认只使用下列模板。`Integration responsibility` 是现有 Working Branch owner 的职责说明，不是新角色、ID、状态机或 artifact：
 
 ```markdown

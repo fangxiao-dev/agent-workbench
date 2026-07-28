@@ -103,7 +103,18 @@ ER 的 Revision set 表示写入该 ER 时的 current D/S/P set；plan 的 `revi
 执行组合（Composition）：tickets=<true|false>, dag=<true|false>
 ~~~
 
-Composition 的唯一事实源是当前 attempt plan，不在 spec 中声明，也不从历史 attempt 继承。tickets 与 DAG 仍按两个正交 earn condition 决定：
+Composition 的唯一事实源是当前 attempt plan，不在 spec 中声明，也不从历史 attempt 继承。
+
+### Composition triage
+
+默认是 `tickets=true, dag=false`：Ticket 是交付与验收切片；DAG 不是 Ticket 的默认伴随物，只在它提供不可替代的协调价值时才 earned。
+
+- `tickets=true` 是默认。只有单一、局部且一次验收即可收口的变更，才选择 `tickets=false`。
+- `dag=true` 必须同时满足：至少两项工作可安全独立启动；存在真实 blocker、跨 owner/跨 session handoff 或 primary ownership 边界；删去 DAG 会丢失该调度或阻塞信息。自然实现顺序、多个文件或多个 Ticket 不是 DAG 依据。
+- `tickets=true, dag=true` 只在上述条件成立时使用。Ticket/Task 接近一对一（例如 5 个 Ticket 对 6 个 Task）是反证信号：若 Task 只是重述各 Ticket 的实现步骤，应省略 DAG 并保持 `tickets=true, dag=false`。
+- `tickets=false, dag=false` 适用于不需要独立交付切片的单一局部变更；`tickets=false, dag=true` 仍要求同一套 DAG earn condition，不能因缺少 Ticket 而放宽。
+
+四种 Composition 的运行时与验收语义如下：
 
 | Composition | Current execution state | Acceptance state |
 | --- | --- | --- |
