@@ -372,6 +372,19 @@
         "Does not turn a guessed DTO mapping into a regression oracle",
         "Keeps unrelated low-risk work moving without a new global gate"
       ]
+    },
+    {
+      "id": 33,
+      "prompt": "上游 Ticket 仍为 IN_PROGRESS、对应 Task 仍为 RUNNING，但下游依赖的 typed mutation-unknown/cache-clear 行为已提交、有局部测试证据且下游执行基线可用。上游只剩经实际 diff 与 open findings 确认不会改变该行为的真实 caller 并发测试；另一变体中上游仍可能修改 callback、deadline 或错误分类。主 session 能否提前派发下游 Ticket/Task？并行后依赖事实变化又如何处理？",
+      "expected_output": "Allows only the first variant's downstream Ticket/Task implementation to start from an ER-recorded reusable implementation checkpoint, rejects the seam-changing variant, keeps acceptance/release on their existing gates, and revalidates only affected downstream work if the dependency facts later change.",
+      "files": [],
+      "expectations": [
+        "Uses the same checkpoint principle for Ticket and Task while preserving SATISFIED versus DONE",
+        "Requires committed local evidence and a downstream execution baseline that can use the implementation",
+        "Lets the main session append the dispatch rationale to the existing Execution Record without a new state, artifact or checklist",
+        "Does not treat implementation dispatch as dependency release or acceptance evidence",
+        "Stops using affected downstream work and evidence, marks the related Ticket/Task NEEDS-REVALIDATION, and performs scoped reconciliation when dependency facts change"
+      ]
     }
   ]
 }

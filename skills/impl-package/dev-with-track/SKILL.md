@@ -32,7 +32,8 @@ description: >
 1. 先按 delta-first restore 读取 current package、sidecar、最新 gate、可靠 ER/comparison point 与后续 diff；运行 committed binding validation。
 2. 确认唯一 Active attempt、approved Composition、ticket/DAG bindings 和第一个 actionable unit。高风险 unit 必须已有 spec/AC、可执行入口、oracle 和 ER owner；缺口按 authority 回流。
 3. evidence 胜过 stale state；P revision 变化只重验受影响 subset。状态只能通过 `impl_package_state.py set-state --expect --evidence` 变更。
-4. 派发 worker 时给出 primary ownership、禁改范围、已知依赖、贡献 Ticket、局部验证和 `BLOCKED` 返回格式。Task `DONE` 不等于 Ticket acceptance。
+4. 默认等待上游 Ticket `SATISFIED` 或 Task `DONE`；若主 session 判断上游已形成可复用实现检查点，可按 runtime protocol 提前派发仅依赖该检查点的下游 Ticket/Task implementation。该例外只影响 implementation readiness，不释放 acceptance 或 release dependency。
+5. 派发 worker 时给出 primary ownership、禁改范围、已知依赖、贡献 Ticket、局部验证和 `BLOCKED` 返回格式。Task `DONE` 不等于 Ticket acceptance。
 
 需要详细 restore/readiness、渐进式系统证据、runtime state、ER、review、finding 分流、claim audit、gate 或 Stage 7 时，读取 [`references/runtime-protocol.md`](references/runtime-protocol.md) 的相应章节；跨阶段判断同时引用 [`../references/progressive-system-evidence.md`](../references/progressive-system-evidence.md)，不在本入口复制方法论正文。
 

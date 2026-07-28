@@ -17,6 +17,14 @@
 
 若 decomposition/readiness defect 不改变业务结果，只涉及 typed edge、Task 顺序、contribution 或 artifact 引用，调用 owning skill 机械修正并做受影响 subset 验证即可。若改变 Ticket acceptance boundary、planned evidence、ownership、执行顺序或 gate，bundle approval 失效，必须回 planning/review；只有改变业务结果、Acceptance Semantics、安全/外部 authority、Composition earned artifact，或存在多个不同业务结果的方案时才请求 owner。
 
+低频情况下，上游 Ticket 仍为 `IN_PROGRESS` 或 Task 仍为 `RUNNING`，但已形成可复用实现检查点时，主 session 可提前派发仅依赖该检查点的下游 Ticket/Task implementation。主 session 按实际 seam、diff、证据与 open findings 判断，不新增状态、artifact、checklist 或自动算法。提前派发必须同时满足：
+
+- 下游实际依赖的接口或行为已经提交并有局部测试证据，且下游执行基线能够使用该实现。
+- 主 session 确认实际剩余工作与 open findings 不会改变下游依赖的合同或可观察行为；不能仅按测试覆盖、review closure、观测性等类别认定安全。
+- 派发前，主 session 根据当前 diff 与证据在既有 plan Execution Record 追加一次记录，说明共享 seam、工作边界与回退条件；不要求上游预先写好专用检查点记录。
+- 只提前启动 implementation；acceptance 和 release dependency 均不因该例外释放，继续按各自既有 gate 与语义判断。下游 implementation 启动也不表示原 dependency edge 已正式释放，不能支持任何 acceptance 结论。
+- 上游若改变下游依赖的合同、行为、错误语义、时序、兼容性或其他关键事实，主 session 停止沿用受影响的下游工作与旧证据，将相关 Ticket/Task 置为 `NEEDS-REVALIDATION`，完成 scoped reconciliation 后再继续。
+
 ## Runtime state and evidence
 
 - dag=true 时，runtime-state 是 task SoT，Ticket acceptance 同样由 ticket record 投影；状态只能经 `set-state --expect --evidence` 变更。

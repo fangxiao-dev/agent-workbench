@@ -183,7 +183,9 @@ actionable = unit 非 terminal
              AND owner、external gate 与 environment prerequisites 成立
 ~~~
 
-DONE 是 dependency-releasing；WAIVED / SUPERSEDED 只有在记录替代证据与 impact note 后释放。其他状态均不释放。上游返工使依赖任务与旧证据进入 NEEDS-REVALIDATION。恢复时 evidence 胜过 stale status；多项 actionable 时按文档顺序稳定选择，不把该过滤器描述成 scheduler、leasing 或自动派工。
+默认情况下，Ticket implementation blocker 等待上游 Ticket `SATISFIED`，Task `Depends on` 等待上游 Task `DONE`；`WAIVED` / `SUPERSEDED` 只有在记录替代证据与 impact note 后释放，其他状态均不释放。作为低频例外，上游 Ticket 仍为 `IN_PROGRESS` 或 Task 仍为 `RUNNING`、但已形成可复用实现检查点时，主 session 可提前派发仅依赖该检查点的下游 Ticket/Task implementation。该例外只影响 implementation readiness，不改变上游状态，也不释放 acceptance 或 release dependency；下游 implementation 启动同样不表示原 dependency edge 已正式释放，不能支持任何 acceptance 结论。
+
+可复用实现检查点不是新的 JSON 状态、artifact 或 checklist；主 session 按 `dev-with-track` runtime protocol 判断并在既有 plan Execution Record 记录理由。上游若改变下游正在复用的合同、行为或其他关键依赖事实，主 session 停止沿用受影响的下游工作与旧证据，将相关 Ticket/Task 置为 `NEEDS-REVALIDATION`，完成 scoped reconciliation 后再继续。恢复时 evidence 胜过 stale status；多项 actionable 时按文档顺序稳定选择，不把该过滤器描述成 scheduler、leasing 或自动派工。
 
 Task DAG 只解析 Task 的执行依赖，不把 task DONE 或 task dependency 变成 Ticket acceptance 的前置/结论图。Task 与 Ticket 以 `contributes-to` 多对多映射关联；Ticket AC 的证据、正式 review 与 acceptance status 仍只由 Ticket/Spec、plan Execution Record 和 gate 共同判定。Ticket 最终验收前，Working Branch owner 只扫描贡献该 Ticket 的 BLOCKED Task：未完成内容影响 AC、已声明行为或风险边界时必须先解除 blocker；不贡献且不影响该 Ticket 时不阻塞；真实影响扩大时先更新 contribution mapping。
 
