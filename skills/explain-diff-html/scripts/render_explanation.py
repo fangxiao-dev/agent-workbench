@@ -16,7 +16,29 @@ from typing import Any
 
 SECTION_IDS = ("background", "intuition", "code")
 BLOCK_TYPES = {"paragraph", "callout", "code", "list", "table", "flow", "comparison"}
+ROLE_VALUES = ("removed", "retained", "added", "transition", "neutral")
 DATE_PREFIX = re.compile(r"^\d{4}-\d{2}-\d{2}-")
+LANGUAGE_TAG = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
+ROLE_LABELS = {
+    "en": {
+        "removed": "Removed",
+        "retained": "Retained",
+        "added": "Added",
+        "transition": "Transition",
+        "neutral": "Context",
+    },
+    "zh": {
+        "removed": "移除",
+        "retained": "保留",
+        "added": "新增",
+        "transition": "迁移期",
+        "neutral": "背景",
+    },
+}
+UI_LABELS = {
+    "en": {"assumption": "Assumption", "contents": "Contents", "quiz": "Quiz", "legend": "Visual legend"},
+    "zh": {"assumption": "前提", "contents": "目录", "quiz": "理解检查", "legend": "视觉图例"},
+}
 
 
 def fail(message: str) -> None:
@@ -29,6 +51,21 @@ def text(value: Any, field: str) -> str:
     return value
 
 
+def validate_role(value: Any, field: str) -> None:
+    if value is not None and value not in ROLE_VALUES:
+        fail(f"{field} must be one of {list(ROLE_VALUES)}")
+
+
+def validate_annotated_text(value: Any, field: str) -> None:
+    if isinstance(value, str):
+        text(value, field)
+        return
+    if not isinstance(value, dict):
+        fail(f"{field} must be a string or annotated text object")
+    text(value.get("text"), f"{field}.text")
+    validate_role(value.get("role"), f"{field}.role")
+
+
 def validate_spec(spec: Any) -> dict[str, Any]:
     if not isinstance(spec, dict):
         fail("root must be an object")
@@ -37,6 +74,9 @@ def validate_spec(spec: Any) -> dict[str, Any]:
     assumption = spec.get("assumption", "")
     if not isinstance(assumption, str):
         fail("assumption must be a string when provided")
+    lang = spec.get("lang", "en")
+    if not isinstance(lang, str) or not LANGUAGE_TAG.fullmatch(lang):
+        fail("lang must be a simple BCP 47 language tag such as en or zh-CN")
     sections = spec.get("sections")
     if not isinstance(sections, list) or [s.get("id") for s in sections if isinstance(s, dict)] != list(SECTION_IDS):
         fail("sections must contain background, intuition, and code in that order")
@@ -82,13 +122,15 @@ def validate_block(block: Any, field: str) -> None:
         text(block.get("text"), f"{field}.text")
         if kind == "callout":
             text(block.get("label"), f"{field}.label")
+            validate_role(block.get("role"), f"{field}.role")
     elif kind == "code":
         text(block.get("code"), f"{field}.code")
+        validate_role(block.get("role"), f"{field}.role")
     elif kind == "list":
         if not isinstance(block.get("items"), list) or not block["items"]:
             fail(f"{field}.items must be a non-empty array")
         for index, item in enumerate(block["items"]):
-            text(item, f"{field}.items[{index}]")
+            validate_annotated_text(item, f"{field}.items[{index}]")
     elif kind == "table":
         headers = block.get("headers")
         rows = block.get("rows")
@@ -96,9 +138,11 @@ def validate_block(block: Any, field: str) -> None:
             fail(f"{field}.headers must be a non-empty string array")
         if not isinstance(rows, list):
             fail(f"{field}.rows must be an array")
-        for row in rows:
-            if not isinstance(row, list) or len(row) != len(headers) or not all(isinstance(v, str) for v in row):
+        for row_index, row in enumerate(rows):
+            if not isinstance(row, list) or len(row) != len(headers):
                 fail(f"{field}.rows must match headers")
+            for cell_index, cell in enumerate(row):
+                validate_annotated_text(cell, f"{field}.rows[{row_index}][{cell_index}]")
     elif kind == "flow":
         steps = block.get("steps")
         if not isinstance(steps, list) or not steps:
@@ -108,6 +152,7 @@ def validate_block(block: Any, field: str) -> None:
                 fail(f"{field}.steps[{index}] must be an object")
             text(step.get("label"), f"{field}.steps[{index}].label")
             text(step.get("text"), f"{field}.steps[{index}].text")
+            validate_role(step.get("role"), f"{field}.steps[{index}].role")
     elif kind == "comparison":
         for side in ("before", "after"):
             value = block.get(side)
@@ -115,39 +160,97 @@ def validate_block(block: Any, field: str) -> None:
                 fail(f"{field}.{side} must be an object")
             text(value.get("label"), f"{field}.{side}.label")
             text(value.get("text"), f"{field}.{side}.text")
+            validate_role(value.get("role"), f"{field}.{side}.role")
 
 
 def esc(value: Any) -> str:
     return html.escape(str(value), quote=True)
 
 
-def render_block(block: dict[str, Any]) -> str:
+def role_class(role: Any) -> str:
+    return f" role-{esc(role)}" if role else ""
+
+
+def role_panel_class(role: Any) -> str:
+    return f" role-panel{role_class(role)}" if role else ""
+
+
+def role_label(role: str, lang: str) -> str:
+    labels = ROLE_LABELS["zh"] if lang.lower().startswith("zh") else ROLE_LABELS["en"]
+    return labels[role]
+
+
+def ui_labels(lang: str) -> dict[str, str]:
+    return UI_LABELS["zh"] if lang.lower().startswith("zh") else UI_LABELS["en"]
+
+
+def role_chip(role: Any, lang: str) -> str:
+    if not role:
+        return ""
+    return f'<span class="role-chip">{esc(role_label(role, lang))}</span>'
+
+
+def render_annotated(value: Any, lang: str) -> str:
+    if isinstance(value, str):
+        return esc(value)
+    role = value.get("role")
+    return f'<span class="annotated{role_class(role)}">{role_chip(role, lang)}<span>{esc(value["text"])}</span></span>'
+
+
+def render_block(block: dict[str, Any], lang: str) -> str:
     kind = block["type"]
     if kind == "paragraph":
         return f"<p>{esc(block['text'])}</p>"
     if kind == "callout":
-        return f"<aside class=\"callout\"><strong>{esc(block['label'])}</strong><p>{esc(block['text'])}</p></aside>"
+        role = block.get("role")
+        return f'<aside class="callout{role_panel_class(role)}">{role_chip(role, lang)}<strong>{esc(block["label"])}</strong><p>{esc(block["text"])}</p></aside>'
     if kind == "code":
         language = esc(block.get("language", "text"))
-        return f"<pre><code class=\"language-{language}\">{esc(block['code'])}</code></pre>"
+        role = block.get("role")
+        classes = f' class="role-panel{role_class(role)}"' if role else ""
+        return f'<pre{classes}><code class="language-{language}">{esc(block["code"])}</code></pre>'
     if kind == "list":
-        items = "".join(f"<li>{esc(item)}</li>" for item in block["items"])
-        return f"<ul>{items}</ul>"
+        items = "".join(
+            f'<li class="{role_class(item.get("role")).strip() if isinstance(item, dict) else ""}">{render_annotated(item, lang)}</li>'
+            for item in block["items"]
+        )
+        return f'<ul class="content-list">{items}</ul>'
     if kind == "table":
         headers = "".join(f"<th>{esc(value)}</th>" for value in block["headers"])
-        rows = "".join("<tr>" + "".join(f"<td>{esc(value)}</td>" for value in row) + "</tr>" for row in block["rows"])
+        rows = "".join("<tr>" + "".join(f"<td>{render_annotated(value, lang)}</td>" for value in row) + "</tr>" for row in block["rows"])
         return f"<div class=\"table-wrap\"><table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table></div>"
     if kind == "flow":
-        steps = "".join(f"<li><strong>{esc(step['label'])}</strong><span>{esc(step['text'])}</span></li>" for step in block["steps"])
+        steps = "".join(
+            f'<li class="{role_panel_class(step.get("role")).strip()}">{role_chip(step.get("role"), lang)}<strong>{esc(step["label"])}</strong><span>{esc(step["text"])}</span></li>'
+            for step in block["steps"]
+        )
         return f"<ol class=\"flow\">{steps}</ol>"
     before = block["before"]
     after = block["after"]
     return (
         '<div class="comparison">'
-        f"<article><h3>{esc(before['label'])}</h3><p>{esc(before['text'])}</p></article>"
-        f"<article><h3>{esc(after['label'])}</h3><p>{esc(after['text'])}</p></article>"
+        f'<article class="{role_panel_class(before.get("role")).strip()}">{role_chip(before.get("role"), lang)}<h3>{esc(before["label"])}</h3><p>{esc(before["text"])}</p></article>'
+        f'<article class="{role_panel_class(after.get("role")).strip()}">{role_chip(after.get("role"), lang)}<h3>{esc(after["label"])}</h3><p>{esc(after["text"])}</p></article>'
         "</div>"
     )
+
+
+def roles_used(spec: dict[str, Any]) -> list[str]:
+    found: set[str] = set()
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            role = value.get("role")
+            if role in ROLE_VALUES:
+                found.add(role)
+            for nested in value.values():
+                visit(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                visit(nested)
+
+    visit(spec["sections"])
+    return [role for role in ROLE_VALUES if role in found]
 
 
 def ordered_options(title: str, index: int, options: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -172,17 +275,28 @@ def ordered_options(title: str, index: int, options: list[dict[str, Any]]) -> li
 
 
 def render(spec: dict[str, Any]) -> str:
+    lang = spec.get("lang", "en")
+    labels = ui_labels(lang)
     toc = "".join(f"<li><a href=\"#{esc(section['id'])}\">{esc(section['title'])}</a></li>" for section in spec["sections"])
     sections = "".join(
         f"<section id=\"{esc(section['id'])}\"><h2>{esc(section['title'])}</h2>"
-        + "".join(render_block(block) for block in section["blocks"])
+        + "".join(render_block(block, lang) for block in section["blocks"])
         + "</section>"
         for section in spec["sections"]
     )
     if spec.get("assumption"):
-        assumption = f"<aside class=\"callout assumption\"><strong>Assumption</strong><p>{esc(spec['assumption'])}</p></aside>"
+        assumption = f'<aside class="callout assumption"><strong>{esc(labels["assumption"])}</strong><p>{esc(spec["assumption"])}</p></aside>'
     else:
         assumption = ""
+    used_roles = roles_used(spec)
+    legend_title = labels["legend"]
+    legend = ""
+    if used_roles:
+        legend_items = "".join(
+            f'<li class="role-panel role-{esc(role)}">{role_chip(role, lang)}</li>'
+            for role in used_roles
+        )
+        legend = f'<aside class="role-legend" aria-label="{esc(legend_title)}"><strong>{esc(legend_title)}</strong><ul>{legend_items}</ul></aside>'
     cards = []
     answers = []
     for index, question in enumerate(spec["quiz"], start=1):
@@ -197,48 +311,86 @@ def render(spec: dict[str, Any]) -> str:
                 answers.append(option_index)
         cards.append(f"<article class=\"quiz-card\"><h3>{index}. {esc(question['question'])}</h3><div class=\"quiz-options\">{''.join(options)}</div>{''.join(feedback)}<p class=\"quiz-feedback\" hidden></p></article>")
     return f'''<!doctype html>
-<html lang="en">
+<html lang="{esc(lang)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <title>{esc(spec['title'])}</title>
 <style>
-:root {{ color-scheme: light; font-family: system-ui, sans-serif; line-height: 1.6; color: #1f2937; background: #f5f7fb; }}
-body {{ max-width: 980px; margin: 0 auto; padding: 2rem 1rem 4rem; }}
-header, section, .quiz-card {{ background: #fff; border: 1px solid #dbe2ea; border-radius: 14px; padding: 1.4rem; margin: 1rem 0; box-shadow: 0 3px 16px #1620330d; }}
-h1, h2, h3 {{ line-height: 1.25; color: #102a43; }}
-h1 {{ margin-top: 0; }}
-a {{ color: #0b63ce; }}
+:root {{
+  color-scheme: light;
+  font-family: ui-sans-serif, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  line-height: 1.62;
+  color: #263442;
+  background: #edf1f3;
+  --ink: #142b3b;
+  --line: #cfd9df;
+  --paper: #fffefb;
+  --removed: #c93b5d;
+  --removed-soft: #fff1f4;
+  --retained: #316bc7;
+  --retained-soft: #edf5ff;
+  --added: #258b68;
+  --added-soft: #edf9f4;
+  --transition: #c77b17;
+  --transition-soft: #fff7e8;
+  --neutral: #687985;
+  --neutral-soft: #f2f5f6;
+}}
+body {{ max-width: 1040px; margin: 0 auto; padding: 2.5rem 1rem 5rem; }}
+header, section, .quiz-card {{ background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 1.6rem; margin: 1rem 0; box-shadow: 0 10px 30px #1b34420a; }}
+header {{ border-top: 7px solid var(--ink); }}
+h1, h2, h3 {{ font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif; line-height: 1.18; color: var(--ink); letter-spacing: -.015em; }}
+h1 {{ margin-top: 0; font-size: clamp(2rem, 5vw, 3.35rem); max-width: 18ch; }}
+h2 {{ border-bottom: 1px solid var(--line); padding-bottom: .55rem; }}
+a {{ color: #155aa8; text-underline-offset: .18em; }}
 .toc ul {{ display: flex; flex-wrap: wrap; gap: .7rem 1.4rem; padding-left: 1.2rem; }}
 .callout {{ border-left: 4px solid #0b63ce; background: #eef6ff; padding: .8rem 1rem; margin: 1rem 0; }}
 .callout p {{ margin: .3rem 0 0; }}
 .assumption {{ border-left-color: #9a6700; background: #fff8dc; }}
-pre {{ overflow-x: auto; padding: 1rem; border-radius: 10px; background: #172033; color: #edf2f7; white-space: pre-wrap; }}
+pre {{ overflow-x: auto; padding: 1rem; border-radius: 4px; background: #152a38; color: #f3f7f8; white-space: pre-wrap; }}
 code {{ font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }}
 .table-wrap {{ overflow-x: auto; }}
 table {{ width: 100%; border-collapse: collapse; }}
 th, td {{ text-align: left; vertical-align: top; border-bottom: 1px solid #dbe2ea; padding: .6rem; }}
+.content-list {{ padding-left: 1.25rem; }}
+.content-list > li {{ margin: .45rem 0; }}
 .flow {{ display: grid; gap: .8rem; padding-left: 1.5rem; }}
-.flow li {{ padding: .7rem 1rem; background: #f0f5fa; border-radius: 10px; }}
+.flow li {{ padding: .8rem 1rem; background: #f0f5fa; border-radius: 4px; }}
 .flow span {{ display: block; }}
 .comparison {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }}
-.comparison article {{ padding: 1rem; border: 1px solid #dbe2ea; border-radius: 10px; }}
+.comparison article {{ padding: 1rem; border: 1px solid #dbe2ea; border-radius: 4px; }}
+.role-panel {{ --role: var(--neutral); --role-soft: var(--neutral-soft); border-left: 4px solid var(--role) !important; background: var(--role-soft) !important; }}
+.role-removed {{ --role: var(--removed); --role-soft: var(--removed-soft); }}
+.role-retained {{ --role: var(--retained); --role-soft: var(--retained-soft); }}
+.role-added {{ --role: var(--added); --role-soft: var(--added-soft); }}
+.role-transition {{ --role: var(--transition); --role-soft: var(--transition-soft); }}
+.role-neutral {{ --role: var(--neutral); --role-soft: var(--neutral-soft); }}
+pre.role-panel {{ background: #152a38 !important; color: #f3f7f8; }}
+.role-chip {{ display: inline-flex; align-items: center; width: max-content; margin: 0 .5rem .45rem 0; border: 1px solid var(--role); border-radius: 999px; padding: .1rem .48rem; color: var(--role); background: var(--paper); font-size: .72rem; font-weight: 750; line-height: 1.35; letter-spacing: .04em; text-transform: uppercase; }}
+.annotated {{ display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: .15rem; }}
+.annotated .role-chip {{ margin-bottom: 0; }}
+.role-legend {{ display: grid; grid-template-columns: minmax(8rem, auto) 1fr; align-items: center; gap: 1rem; margin: 1rem 0; padding: .8rem 1rem; border: 1px solid var(--line); border-radius: 6px; background: #f9fbfb; }}
+.role-legend ul {{ display: flex; flex-wrap: wrap; gap: .55rem; margin: 0; padding: 0; list-style: none; }}
+.role-legend li {{ border: 0 !important; background: transparent !important; }}
+.role-legend .role-chip {{ margin: 0; }}
 .quiz-options {{ display: grid; gap: .6rem; }}
-.quiz-options button {{ text-align: left; border: 1px solid #9fb3c8; border-radius: 9px; background: #fff; padding: .7rem .9rem; cursor: pointer; font: inherit; }}
+.quiz-options button {{ text-align: left; border: 1px solid #9fb3c8; border-radius: 4px; background: #fff; padding: .7rem .9rem; cursor: pointer; font: inherit; }}
 .quiz-options button:hover, .quiz-options button:focus-visible {{ border-color: #0b63ce; outline: 3px solid #bfdbfe; }}
 .quiz-options button[disabled] {{ cursor: default; opacity: .8; }}
 .quiz-options button.selected-correct {{ border-color: #18794e; background: #e8f7ef; }}
 .quiz-options button.selected-wrong {{ border-color: #b42318; background: #fff0ee; }}
 .quiz-feedback {{ padding: .7rem 1rem; border-radius: 9px; background: #f0f5fa; }}
-@media (max-width: 640px) {{ body {{ padding: 1rem .6rem 3rem; }} .comparison {{ grid-template-columns: 1fr; }} }}
+@media (max-width: 640px) {{ body {{ padding: 1rem .6rem 3rem; }} .comparison {{ grid-template-columns: 1fr; }} .role-legend {{ grid-template-columns: 1fr; }} }}
 </style>
 </head>
 <body>
 <header><h1>{esc(spec['title'])}</h1><p>{esc(spec['summary'])}</p>{assumption}</header>
-<nav class="toc" aria-label="Table of contents"><h2>Contents</h2><ul>{toc}<li><a href="#quiz">Quiz</a></li></ul></nav>
+{legend}
+<nav class="toc" aria-label="{esc(labels['contents'])}"><h2>{esc(labels['contents'])}</h2><ul>{toc}<li><a href="#quiz">{esc(labels['quiz'])}</a></li></ul></nav>
 {sections}
-<section id="quiz"><h2>Quiz</h2>{''.join(cards)}</section>
+<section id="quiz"><h2>{esc(labels['quiz'])}</h2>{''.join(cards)}</section>
 <script>
 (() => {{
   const answers = {json.dumps(answers)};

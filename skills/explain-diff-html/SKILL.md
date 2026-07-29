@@ -35,6 +35,10 @@ Produce JSON matching `references/content-schema.md`. Include exactly these thre
 
 Add exactly five medium-difficulty quiz questions. Each question must have three or four comparable options, exactly one correct option, and feedback for every option. Ask about behavior, causality, contracts, edge cases, or trade-offs; do not ask trivia. The renderer's deterministic ordering only removes fixed-position bias; it is not security randomness and must not be described as unpredictable protection.
 
+Use semantic visual roles from the schema when lifecycle meaning helps the reader distinguish removed, retained, added, and transition-only elements. Apply each role to the actual comparison side, flow step, list item, table cell, callout, or code block it describes. The renderer creates the legend from roles that are genuinely used; do not write a decorative legend as prose or encode the same meaning with ad hoc emoji. Because the renderer also shows a text chip, color remains a secondary cue rather than the only carrier of meaning.
+
+Set the root `lang` to the lesson's primary language so the offline document and built-in role labels are accessible and consistent.
+
 Completion criterion: every required section is present, the facts are supported by the inspected source, and the five questions test understanding rather than recall of wording.
 
 ### 4. Render the artifact
@@ -65,6 +69,8 @@ Run the render command; it validates the content specification before writing, t
 - all content-derived text is escaped;
 - no external script, stylesheet, font, image, link, fetch, or network request was added;
 - the artifact is outside the repository and the source spec is not left in the repository unless requested.
+
+Capture and inspect at least one desktop-width screenshot and one narrow-width screenshot when the lesson uses comparisons, tables, architecture flows, or semantic roles. Confirm that legend roles are reused in the content, text chips remain visible, tables scroll instead of clipping, comparison cards stack on narrow screens, and dense diagrams remain readable. Screenshot inspection is a layout check, not evidence that the underlying architecture claims are true.
 
 If a browser or local HTML inspection tool is available, use it for a quick interaction check. Report any validation limitation instead of claiming the artifact is fully verified.
 
