@@ -18,12 +18,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--agents", default="codex,claude", help="comma list: codex, claude, grok")
     parser.add_argument("--max-rounds", type=int, default=5, help="full participant cycles (default 5)")
     parser.add_argument("--timeout-s", type=int, default=300, help="per agent timeout in seconds")
+    parser.add_argument("--claude-effort", choices=["low", "medium"], default="low", help="Claude effort selected by the calling agent from target scale")
     parser.add_argument("--output-dir", default=str(Path(tempfile.gettempdir()) / "discuss-ledger"))
     parser.add_argument("--fake", action="store_true", help="use deterministic fake participants")
     return parser
 
 
-def run_combined(*, root: Path, topic: str, slug: str, agents: list[str], max_rounds: int, timeout_s: int, output_dir: Path, fake: bool) -> int:
+def run_combined(
+    *,
+    root: Path,
+    topic: str,
+    slug: str,
+    agents: list[str],
+    max_rounds: int,
+    timeout_s: int,
+    output_dir: Path,
+    fake: bool,
+    claude_effort: str = "low",
+) -> int:
     ledger_path = root / orchestrator.ledger.DEFAULT_DIR / f"discuss-{slug}.md"
     if ledger_path.exists():
         raise blind_opening.BlindOpeningError(f"LEDGER_EXISTS: {ledger_path}")
@@ -35,6 +47,7 @@ def run_combined(*, root: Path, topic: str, slug: str, agents: list[str], max_ro
         timeout_s=timeout_s,
         output_dir=output_dir,
         fake=fake,
+        claude_effort=claude_effort,
     )
     print(f"Blind Opening Markdown: {opening['artifacts']['markdown']}")
     orchestrator.ledger.init_ledger(root=root, topic=topic, slug=slug, initiator=agents[0], participants=agents)
@@ -48,6 +61,7 @@ def run_combined(*, root: Path, topic: str, slug: str, agents: list[str], max_ro
         max_rounds=max_rounds,
         fake=fake,
         timeout_s=timeout_s,
+        claude_effort=claude_effort,
     )
 
 
@@ -66,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout_s=args.timeout_s,
             output_dir=Path(args.output_dir),
             fake=args.fake,
+            claude_effort=args.claude_effort,
         )
     except (blind_opening.BlindOpeningError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

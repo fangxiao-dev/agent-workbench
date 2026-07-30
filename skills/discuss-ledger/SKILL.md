@@ -14,10 +14,12 @@ Mode and participants are separate choices. The default is normal `ledger` with 
 
 The full public contract is in [references/router.md](references/router.md).
 
+当参与者包含 Claude 时，调用 agent 在启动 workflow 前按讨论对象规模选择 `--claude-effort`：跨模块/系统、迁移或 cutover、权限/数据正确性/recovery、多阶段交付等大计划使用 `medium`；单模块、聚焦修订、短文档或窄决策等小计划使用 `low`。存在任一大计划信号就选 `medium`，否则选 `low`；不要向用户追加规模确认。模型仍由 Claude Code 当前默认配置选择。
+
 ```powershell
-python <skill>\scripts\discuss_router.py --topic <target>
+python <skill>\scripts\discuss_router.py --claude-effort low --topic <target>
 python <skill>\scripts\discuss_router.py --mode blind --agents codex,grok --topic <target>
-python <skill>\scripts\discuss_router.py --mode combined --agents full --topic <target>
+python <skill>\scripts\discuss_router.py --mode combined --agents full --claude-effort medium --topic <target>
 ```
 
 | User intent | Mode | Read first |

@@ -465,7 +465,7 @@ def run_codex(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
     return parse_json_object(text)
 
 
-def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
+def run_claude(prompt: str, root: Path, timeout_s: int, effort: str = "low") -> dict[str, Any]:
     schema_json = json.dumps(CLAUDE_AGENT_RESULT_SCHEMA, ensure_ascii=False, separators=(",", ":"))
     text = run_executor(
         CALL_CLAUDE,
@@ -473,7 +473,7 @@ def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
             "--no-session-persistence",
             "--disable-slash-commands",
             "--effort",
-            "low",
+            effort,
             "--tools",
             "",
             "--system-prompt",
@@ -504,7 +504,7 @@ def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
             "--no-session-persistence",
             "--disable-slash-commands",
             "--effort",
-            "low",
+            effort,
             "--tools",
             "",
             "--system-prompt",
@@ -570,13 +570,21 @@ def run_fake(agent: str, status: ledger.LedgerStatus) -> dict[str, Any]:
     return {"convergences": [], "contests": [], "new_points": []}
 
 
-def call_agent(agent: str, prompt: str, root: Path, status: ledger.LedgerStatus, fake: bool, timeout_s: int) -> dict[str, Any]:
+def call_agent(
+    agent: str,
+    prompt: str,
+    root: Path,
+    status: ledger.LedgerStatus,
+    fake: bool,
+    timeout_s: int,
+    claude_effort: str = "low",
+) -> dict[str, Any]:
     if fake:
         return run_fake(agent, status)
     if agent == "codex":
         return run_codex(prompt, root, timeout_s)
     if agent == "claude":
-        return run_claude(prompt, root, timeout_s)
+        return run_claude(prompt, root, timeout_s, claude_effort)
     if agent == "grok":
         return run_grok(prompt, root, timeout_s)
     raise AdapterError("UNSUPPORTED_AGENT", agent)
@@ -598,6 +606,7 @@ def orchestrate(
     max_rounds: int,
     fake: bool,
     timeout_s: int,
+    claude_effort: str = "low",
 ) -> int:
     ensure_ledger(root, topic, slug, agents)
     for _round_index in range(max_rounds):
@@ -610,14 +619,14 @@ def orchestrate(
             status = ledger.get_status(root=root, slug=slug)
             target_document = read_target_document(root, topic)
             prompt = build_prompt(agent, topic, target_document, status)
-            payload = normalize_result(call_agent(agent, prompt, root, status, fake, timeout_s))
+            payload = normalize_result(call_agent(agent, prompt, root, status, fake, timeout_s, claude_effort))
             try:
                 validate_turn_against_ledger(status, payload)
             except AdapterError as exc:
                 if exc.code != "INVALID_TURN":
                     raise
                 correction_prompt = build_turn_correction_prompt(prompt, status, exc)
-                payload = normalize_result(call_agent(agent, correction_prompt, root, status, fake, timeout_s))
+                payload = normalize_result(call_agent(agent, correction_prompt, root, status, fake, timeout_s, claude_effort))
                 validate_turn_against_ledger(status, payload)
             try:
                 result = ledger.record_agent_turn(
@@ -659,6 +668,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--adapter-mode", choices=["real", "fake"], default="real")
     parser.add_argument("--fake", action="store_true", help="use deterministic fake adapters")
     parser.add_argument("--timeout-s", type=int, default=300, help="per-agent timeout in seconds")
+    parser.add_argument("--claude-effort", choices=["low", "medium"], default="low", help="Claude effort selected by the calling agent from target scale")
     return parser
 
 
@@ -678,6 +688,7 @@ def main(argv: list[str] | None = None) -> int:
             max_rounds=args.max_rounds,
             fake=fake,
             timeout_s=args.timeout_s,
+            claude_effort=args.claude_effort,
         )
     except (AdapterError, ValueError) as exc:
         print(str(exc), file=sys.stderr)

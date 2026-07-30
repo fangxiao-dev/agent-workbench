@@ -33,13 +33,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--agents", default=",".join(DEFAULT_AGENTS), help="full, or exactly two of: codex, claude, grok")
     parser.add_argument("--max-rounds", type=int, default=5, help="full participant cycles for ledger/combined (default 5)")
     parser.add_argument("--timeout-s", type=int, default=300, help="per-agent timeout in seconds")
+    parser.add_argument("--claude-effort", choices=["low", "medium"], default="low", help="Claude effort selected by the calling agent from target scale")
     parser.add_argument("--output-dir", default=str(Path(tempfile.gettempdir()) / "discuss-ledger"), help="Blind Opening artifact directory")
     parser.add_argument("--fake", action="store_true", help="use deterministic fake participants")
     return parser
 
 
 def downstream_args(args: argparse.Namespace, agents: list[str]) -> list[str]:
-    common = ["--root", args.root, "--topic", args.topic, "--agents", ",".join(agents), "--timeout-s", str(args.timeout_s)]
+    common = [
+        "--root",
+        args.root,
+        "--topic",
+        args.topic,
+        "--agents",
+        ",".join(agents),
+        "--timeout-s",
+        str(args.timeout_s),
+        "--claude-effort",
+        args.claude_effort,
+    ]
     if args.slug:
         common.extend(["--slug", args.slug])
     if args.fake:

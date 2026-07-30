@@ -22,11 +22,13 @@ Use the target project root and topic/document from the request. If both are cle
 python <skill>/scripts/discuss_orchestrator.py --root <target-project-root> --topic <target-doc-or-topic>
 ```
 
+调用前按目标规模显式传 `--claude-effort low|medium`。大计划使用 `medium`，小计划使用 `low`；判断规则见 [router.md](router.md)。该参数只控制 Claude reasoning effort，不固定 Claude model。
+
 When the user gives a target file path, infer the project root before running. Prefer the nearest ancestor containing `.git` as `--root`, and pass the target path relative to that root as `--topic`. This works for ordinary clones, Git worktrees, `.worktrees/<name>/...`, and other checkout layouts.
 
 If the script is available, rely on `discuss_orchestrator.py`'s built-in root/topic resolution rather than hand-normalizing the path.
 
-Defaults are `--agents codex,claude`, `--max-rounds 5`, and `--timeout-s 300`. One round means every listed participant speaks once; before invoking, apply the Critical Timeout Rule above so the outer tool timeout is long enough for the full run.
+默认值为 `--agents codex,claude`、`--max-rounds 5`、`--timeout-s 300`，兼容性 fallback 为 `--claude-effort low`。一轮表示每位 participant 各发言一次；调用前按上面的 Critical Timeout Rule 为外层工具设置足够的总超时。
 
 After the orchestrator stops, report:
 

@@ -18,6 +18,8 @@ def test_discuss_ledger_skill_routes_modes_to_references() -> None:
     assert "references/ledger-discussion.md" in text
     assert "references/blind-opening-plus-ledger.md" in text
     assert "references/router.md" in text
+    assert "--claude-effort" in text
+    assert "大计划" in text and "小计划" in text
 
     assert (REFERENCES / "blind-opening.md").is_file()
     assert (REFERENCES / "ledger-discussion.md").is_file()
