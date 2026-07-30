@@ -342,7 +342,7 @@ body {{ max-width: 1040px; margin: 0 auto; padding: 2.5rem 1rem 5rem; }}
 header, section, .quiz-card {{ background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 1.6rem; margin: 1rem 0; box-shadow: 0 10px 30px #1b34420a; }}
 header {{ border-top: 7px solid var(--ink); }}
 h1, h2, h3 {{ font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif; line-height: 1.18; color: var(--ink); letter-spacing: -.015em; }}
-h1 {{ margin-top: 0; font-size: clamp(2rem, 5vw, 3.35rem); max-width: 18ch; }}
+h1 {{ margin-top: 0; font-size: clamp(2rem, 5vw, 3.35rem); max-width: none; }}
 h2 {{ border-bottom: 1px solid var(--line); padding-bottom: .55rem; }}
 a {{ color: #155aa8; text-underline-offset: .18em; }}
 .toc ul {{ display: flex; flex-wrap: wrap; gap: .7rem 1.4rem; padding-left: 1.2rem; }}
