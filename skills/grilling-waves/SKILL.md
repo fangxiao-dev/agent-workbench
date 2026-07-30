@@ -1,123 +1,89 @@
 ---
 name: grilling-waves
-description: Orchestrate the existing grilling skill as recommendation-led decision waves, anchored by an explicit upper-level product intent and followed by one consolidated writeback. Use whenever the user wants to grill, align, or refine a PRD, MVP, product decision, or spec in batches/waves instead of answering one question at a time, especially when avoiding overdesign matters.
+description: 以 recommendation-led decision waves 编排现有 grilling skill，用明确的 upper-level product context 约束 PRD、MVP、产品决策或 Spec 的批量对齐，并在收敛后统一 writeback。用户希望分 wave 推演、批量裁决而非逐题问答，尤其需要控制 overdesign 时使用。
 ---
 
 # Grilling Waves
 
-Use this skill as a thin orchestration layer over `grilling`. Do not restate or independently implement the interrogation method.
+## 依赖边界与交互优先级
 
-## Dependency
+开始时读取并使用 [`../grilling/SKILL.md`](../grilling/SKILL.md)。只复用其中的问题质量、推荐答案、决策依赖遍历和本地事实调查规则，不继承 `one-question-per-turn` 交互格式。基础规则中的 `one-by-one` 只表示按逻辑依赖解析 decision tree，不表示每个 assistant turn 只呈现一个问题。
 
-At the start, read and use [`../grilling/SKILL.md`](../grilling/SKILL.md). It remains the source of truth for question quality, recommendations, dependency traversal, and local-fact research.
+本 skill 定义用户可见的交互单位：一个 wave 必须在一次 assistant 输出中完整呈现该 wave 的所有 Decisions，然后只等待一次用户批量回复。遇到基础 `grilling` 的逐题等待要求时，以这里的 wave 合同为准；其余规则继续有效。
 
-This skill changes only the interaction unit and lifecycle:
+保留下列完整生命周期：先对齐 upper-level product context，再调查事实并遍历 decision tree，以 waves 收敛 Decisions，持续维护 decision ledger，最后统一 writeback。
 
-- organize related grilling decisions into waves instead of presenting one question at a time;
-- anchor every decision to an upper-level product context;
-- recheck user changes against that context;
-- defer target-document edits until the grilling is complete, then write back once.
+## 1. 对齐 upper-level product context
 
-If this file conflicts with `grilling` only about asking one question at a time, this skill's wave batching takes precedence. All other `grilling` rules remain in force.
+开始 waves 前需要具备：
 
-## 1. Establish the upper-level context
+1. 一份基础 PRD、plan、Decision 草案或同等问题陈述；
+2. 一份说明持久产品意图的 upper-level product context，用来判断具体选择。
 
-Before starting waves, require both:
+upper-level product context 不是第二份 PRD，只记录必要的决策过滤器：
 
-1. a basic PRD, plan, decision draft, or equivalent problem statement;
-2. an upper-level product context explaining the enduring intent used to judge detailed choices.
+- 目标用户与产品价值；
+- 为什么现在要做；
+- MVP 必须证明或解锁什么；
+- MVP 应主动避免什么；
+- 哪些未来兼容性值得保留，但不授权当前实现。
 
-The upper-level context is not a second PRD. Capture only the decision filter:
+如果用户尚未提供这些内容，先根据已有证据给出一份短的推荐草案，明确标注假设，请用户确认或修改，不让用户从空白开始撰写。对齐后保持其稳定；只有后续选择暴露真实冲突或缺失原则时才重新打开。
 
-- target user and product value;
-- why this work exists now;
-- what the MVP must prove or unlock;
-- what the MVP should deliberately avoid;
-- which future compatibility matters without authorizing present-day implementation.
+## 2. 调查 decision tree 并划定 wave
 
-If the user did not provide this context, stop before grilling. Infer a short recommended draft from available evidence, label assumptions, and ask the user to confirm or edit it. Do not make the user author it from a blank page.
+遵循 `grilling` 调查代码、文档和其他可用证据；能够从事实回答的问题直接调查，不转交用户。沿依赖关系识别当前主题的 material Decisions，再决定哪些可以一起理解和裁决。
 
-Once aligned, keep it compact and stable. Do not repeatedly reopen it unless a later choice exposes a real conflict or missing principle.
+wave 不设硬性或默认问题数量，数量由真实 decision tree 决定。一个主题有 3 个 material Decisions 就完整呈现 3 个；有 10 个且可以一起理解和裁决，就完整呈现 10 个。不得为了控制篇幅而忽略、压缩、合并或静默延后 material Decisions。
 
-## 2. Plan and run waves
+只有真实依赖才构成拆 wave 的理由，例如前一个答案会决定后续问题是否存在、改变后续选项，或暴露 upper-level context conflict。若同一主题因此拆成连续 waves，先说明当前已发现的 Decisions、本轮覆盖范围、留待下一 wave 的 Decisions，以及后者依赖什么答案。新分支只能在获得前置答案后发现时，在下一 wave 补充并说明来源。
 
-Ask `grilling` to explore the decision tree, but group tightly related decisions into a wave. Each wave should be small enough to review as one unit and should include recommended answers.
+单问题 wave 是依赖结构造成的例外，不是默认交互方式。只有当前 Decision 会改变后续问题是否存在、暴露 upper-level context conflict，或后续 Decisions 的内容与选项确实依赖它的答案时，才单独呈现。不能仅因为某个问题重要、不确定性高、解释较长或想简化输出，就退化为逐题询问；高不确定性应通过补足事实、失败例子、选项差异与恢复影响来处理。输出可能过长时，按真实依赖拆 wave，不缩短每个 Decision 应有的说明。
 
-Choose wave themes dynamically. The following is an optional menu, not a required sequence or completeness checklist:
+## 3. 一次完整呈现 wave
 
-- user, value, scope, and non-goals;
-- business facts and field authority;
-- workflow, checkpoints, and state;
-- rules, recommendations, and manual overrides;
-- failures, blockers, and recovery boundaries;
-- permissions, audit, and external responsibility;
-- acceptance evidence and future extensions.
+> Wave 批处理的是用户回复轮次，不是问题数量、背景、推理、例子或推荐理由的详细程度。
 
-Skip irrelevant themes, combine small ones, split dense ones, and reorder them according to decision dependencies. Do not manufacture questions merely to fill the menu.
+每个 wave 先说明主题及为什么现在需要裁决，然后在同一次 assistant 输出中呈现该 wave 的全部 Decisions。为每项分配稳定 ID，如 `W2-D1`、`W2-D2`；后续追问、修改、ledger 和 writeback 都沿用该 ID，避免编号漂移。
 
-For each wave, present:
+每个 Decision 都应自然地给出足够信息，使用户无需追问基本背景即可裁决：为什么现在需要这个决定；必要的具体场景、边界或失败例子；真正有差异的选项；推荐选择及其证据或判断依据；以及实质性的 MVP 成本、风险、失败恢复或未来兼容影响。没有实际差异的选项不要为了形式完整而制造出来。
 
-1. the wave topic and why it matters now;
-2. a numbered set of related decisions;
-3. the recommended choice for each decision and its concise rationale;
-4. material MVP cost or future-compatibility implications;
-5. an easy response contract, such as accepting the whole wave or changing selected item numbers.
+这些是内容完整性要求，不是固定输出模板。根据问题使用连贯段落、少量 bullets、表格或例子；不要机械拆成“背景、例子、选项、推荐、理由、成本”等固定小节，也不要因为同一 wave 中 Decisions 较多而把任何一项缩成一两句话。
 
-Prefer a wave of roughly 3–7 decisions. Use fewer when the decisions are consequential or weakly coupled. Never hide a high-uncertainty choice inside a large batch.
+完整呈现后只等待一次批量回复，并明确回复合同。用户可以说“全部采纳”“除 `W2-D3` 外全部采纳”“`W2-D4` 选 B”或“展开 `W2-D5`”。在收到这次回复前，不逐项停顿等待确认。
 
-## 3. Recheck modifications against context
+## 4. 校验回复并维护 decision ledger
 
-After every user response, update the working decision ledger and compare changed choices with the upper-level context and prior accepted decisions.
+收到用户的批量回复后，一次性处理整组采纳、修改、否决和展开请求，更新 working decision ledger，并将变化与 upper-level product context 和已接受 Decisions 对照：
 
-Classify the result internally:
+- **Aligned：**吸收选择，继续下一 wave。
+- **Trade-off：**说明具体代价；用户选择清楚时继续。
+- **Context conflict：**暂停后续依赖分支，请用户选择修改具体 Decision，或有意修订 upper-level product context。
+- **Context gap：**推荐对 upper-level product context 做最小补充，请用户裁决是否采纳。
 
-- **Aligned:** absorb it and continue.
-- **Trade-off:** state the concrete cost briefly; continue if the user's choice is clear.
-- **Context conflict:** stop and ask whether to revise the detailed choice or intentionally amend the upper-level context.
-- **Context gap:** recommend a minimal addition to the upper-level context and ask whether to adopt it.
+只为真实 conflict 或 gap 中断。不要把 context 检查变成每轮仪式，也不要把未来兼容性解释为构建推测性抽象或扩大 MVP 的许可。用户的明确修改保持权威，除非它与用户尚未选择修改的上层约束冲突。
 
-Only interrupt for a genuine conflict or gap. Do not turn the context check into repetitive ceremony. In particular, do not treat future compatibility as permission to build speculative abstractions or broaden the MVP.
+working decision ledger 持续记录：
 
-When a question can be answered from code, documents, or other available evidence, follow `grilling` and research it instead of asking the user.
+- 已对齐的 upper-level product context；
+- 已接受的 Decisions 及后续修订；
+- 明确的 non-goals 与 deferrals；
+- 未解决的 Decisions；
+- 被取代含义及其预期处置。
 
-## 4. Converge before writing
+## 5. 收敛后统一 writeback
 
-During grilling, do not edit the target PRD, Decision, Spec, plan, or implementation documents. Maintain a working ledger containing:
+在 grilling 期间不编辑目标 PRD、Decision、Spec、plan 或实现文档。所有 material branches 都已解决、有意延期或明确保留为 open 后，向用户呈现一份完整的 consolidated decision ledger 供确认。
 
-- aligned upper-level context;
-- accepted decisions and later amendments;
-- explicit non-goals and deferrals;
-- unresolved decisions;
-- superseded meanings and their intended disposition.
+如果最初调用已经明确授权“收敛后 writeback”，展示 ledger 后即可执行；否则在修改目标文档前请求一次最终确认。
 
-Finish the waves when all material branches are resolved, intentionally deferred, or explicitly left open. Then present one compact consolidated ledger for confirmation.
+将已接受 Decisions 一次性应用到所有获授权的目标文档，并保持产品意图、需求、合同和实现细节之间的区别。删除或弱化既有文本前，将每项受影响含义明确归入以下一种处置：
 
-If the original invocation already explicitly authorized writeback after convergence, proceed after showing the ledger. Otherwise request one final confirmation before mutating target documents.
+- 原位保留；
+- 迁移到具名目标；
+- 被已接受的 Decision 取代；
+- 由用户明确 deprecated。
 
-## 5. Perform one consolidated writeback
+不能因为新结构更短就静默删除旧的产品承诺。除非用户另行授权，不运行 approval gates、不发布、不绑定 revisions、不实现代码，也不扩大修改范围。
 
-Apply the accepted decisions to all authorized target documents together. Preserve the distinction between product intent, requirements, contracts, and implementation details.
-
-Before deleting or weakening existing text, account for every affected meaning as one of:
-
-- preserved in place;
-- migrated to a named destination;
-- superseded by an accepted decision;
-- explicitly deprecated by the user.
-
-Do not silently remove an older product promise merely because the new structure is shorter. Do not run approval gates, publish, bind revisions, implement code, or expand the mutation scope unless the user separately authorized those actions.
-
-After writeback, report:
-
-- which documents changed;
-- which decision groups were absorbed;
-- unresolved or deferred items;
-- any stage that remains intentionally undone.
-
-## Interaction principles
-
-- Recommend confidently where evidence supports a default; make it easy to accept a whole wave.
-- Keep MVP proportionality visible without repeatedly lecturing the user about it.
-- Separate durable product context from changeable PRD detail.
-- Use waves to reduce interaction overhead, not to reduce decision clarity.
-- Preserve user amendments as authoritative unless they conflict with a higher-level constraint that the user has not chosen to change.
+writeback 后报告修改了哪些文档、吸收了哪些 Decision groups、仍有哪些 unresolved 或 deferred items，以及哪些阶段有意未执行。
