@@ -2,7 +2,7 @@
 
 ## Normal full review：三路并行与统一返回
 
-正常 full review 启动三个 fresh subagent。编排器支持模型选择时，A、B、C 各自从 `gpt-5.6-terra` / `reasoning_effort=high` 与 `gpt-5.6-sol` / `reasoning_effort=high` 两档中选用合适 profile；由编排 agent 按审查对象、风险与上下文复杂度决定，task、owner 或 host 的明确要求优先。模型选择不改变三路的独立性、输入或职责。主 session 向三路发送同一个精简、同 revision 的 candidate bundle：candidate plan、earned Ticket/DAG、candidate projection、必要 D/S contract、联合校验证据、审查边界与只读约束。不得附带主审 findings、预期 verdict、预设 materiality 或 owner 偏好。三路均不得修改文件、写 ledger、晋升 formal finding 或向 owner 提问。
+正常 full review 启动三个 fresh reviewer context，默认各自使用新建 subagent。宿主因 thread/concurrency limit 明确拒绝新建时，可按 [`SKILL.md` 的 fresh reviewer fallback](../SKILL.md#fresh-reviewer-的实现与-fallback) 改用一次性 ephemeral runner；它是允许的编排 fallback，不是本 skill 指定的 CLI，也不能靠工具名称替代 fresh 证明。编排器支持模型选择时，A、B、C 各自从 `gpt-5.6-terra` / `reasoning_effort=high` 与 `gpt-5.6-sol` / `reasoning_effort=high` 两档中选用合适 profile；由编排 agent 按审查对象、风险与上下文复杂度决定，task、owner 或 host 的明确要求优先。模型或 runtime 选择不改变三路的独立性、输入或职责。主 session 向三路发送同一个精简、同 revision 的 candidate bundle：candidate plan、earned Ticket/DAG、candidate projection、必要 D/S contract、联合校验证据、审查边界与只读约束。不得附带主审 findings、预期 verdict、预设 materiality 或 owner 偏好。三路均不得修改文件、写 ledger、晋升 formal finding 或向 owner 提问。
 
 - A：使用下方 Outside Voice prompt，对完整 bundle 独立开展开放式审查。
 - B：只检查 Scope 与 Architecture，优先追踪 authority、tenant、transaction、lineage、custody；不要代替 C 深读实现质量、测试或性能。

@@ -24,9 +24,22 @@ user-invocable: true
 - 调用上下文决定停点：`impl-planning` 只在 review 收敛后交回一次完整 bundle approval；已 GO 的 `dev-with-track` 通过 `do-review` 自动闭环 findings、验证与 gate；用户直接调用 `$do-review` 时只得到 review checkpoint，由用户或上层决定是否修订/继续。ledger 不改变这些 owner-facing 语义。
 - 必读的 reference 或脚本缺失、路径错误或读取失败时立即返回 `BLOCKED`，报告准确路径与工具错误；禁止凭记忆替代、继续生成 findings 或执行 Apply。
 
+## Fresh reviewer 的实现与 fallback
+
+`fresh` 是上下文隔离合同，不是对某个工具名的别名。默认用新建 subagent 承担独立 reviewer，因为它便于并行编排、收发和状态观察；但 skill 真正要求的是 reviewer 不继承主 session、既有 reviewer 或先前调查的上下文，也不接收主审 findings、预期 verdict、materiality 或 owner 偏好。
+
+当宿主明确拒绝创建新 subagent（例如返回 thread/concurrency limit）时，可以使用有界的一次性 ephemeral runner 作为 fallback，但必须同时满足：
+
+- 每次创建新的 process/session，不 resume、不复用或共享历史上下文；给它的第一份输入仍只是同一冻结 candidate bundle、该角色 prompt、只读边界与统一输出合同。
+- 使用只读 sandbox，不能修改目标、写 ledger、晋升 finding 或向 owner 提问；主 session 仍负责 evidence 复核、ledger 和 clearance。
+- 编排器能保存 runner 的独立输出，并确认它没有因工具包装而隐式恢复旧 session。工具名字含有 CLI、agent 或 ephemeral 不自动证明 fresh。
+- 开始配置和最终报告都披露每个 reviewer 的实际 runtime（`subagent` 或 `ephemeral runner`）及 fallback 的具体原因，让 owner 能区分 skill 的独立性要求与编排器选择的实现。
+
+这个 fallback 是允许的编排实现，不是本 skill 指定必须调用某个 CLI 或 helper。不能把已有非 fresh agent 重新发一条 prompt、让主 session inline 模拟，或把“无法创建 subagent”直接改写成“已独立审查”。无法证明上述隔离时按该角色 `unavailable` / `review input incomplete` 处理，并保持禁止 clearance 的既有规则。
+
 ## Bundle-admission mode（仅由明确编排选择）
 
-当活跃的 `impl-planning` 编排以确切 skill 名称选择 `plan-review`，并明确标注 `mode=bundle-admission` 时，本 skill 执行一次轻量、只读的 admission review。调用方先扫描下方 escalation signals；命中任一项时直接启动完整 workflow，不先运行 admission。该调用必须运行在相对产出 bundle 的主 session 而言 fresh 的 subagent context；这个 admission reviewer 本身就是独立视角，不再为轻量路径额外启动 Outside Voice 或创建 ledger。用户直接调用 `$plan-review` 时一律走下方既有完整 workflow，不能因为计划看起来简单而自行选择 admission mode。
+当活跃的 `impl-planning` 编排以确切 skill 名称选择 `plan-review`，并明确标注 `mode=bundle-admission` 时，本 skill 执行一次轻量、只读的 admission review。调用方先扫描下方 escalation signals；命中任一项时直接启动完整 workflow，不先运行 admission。该调用必须运行在相对产出 bundle 的主 session 而言 fresh 的 reviewer context；默认使用新建 subagent，只有满足上节 fallback 合同才可使用 ephemeral runner。这个 admission reviewer 本身就是独立视角，不再为轻量路径额外启动 Outside Voice 或创建 ledger。用户直接调用 `$plan-review` 时一律走下方既有完整 workflow，不能因为计划看起来简单而自行选择 admission mode。
 
 admission 输入只包含同一 candidate bundle 的 plan、Composition earned 的 Ticket/DAG（若存在）、candidate projection、必要的 Decision/Spec contract、联合校验结论和审查目标；不得附带 registry current projection、主 session findings、materiality 结论或期望 verdict。沿本 skill 的工程判断基线快速检查 Scope、Architecture、Code Quality、Tests、Performance 中实际相关的维度；Tests 按 `references/test-review.md` 判断 material 高风险边界是否已形成执行者无需重新设计的验证链。
 
@@ -78,15 +91,15 @@ Material 指会影响行为、contract、数据、安全、运营、发布或显
 
 五个专项 reference 只扩展观察面，不替代这些横切原则。它们是帮助 agent 形成判断的启发式工具，不是逐项评分表；根据实际信号选择能改变 scope、architecture、test、rollout、finding 或 owner decision 的镜头，不在结论中机械复述原则名。
 
-## Full-review subagent 分工与收发协议
+## Full-review reviewer 分工与收发协议
 
-正常 full review 固定采用三路 fresh subagent，以减少主 session 对五个维度的重复深读。若编排器可以选择模型，A、B、C 分别从 `gpt-5.6-terra` / `reasoning_effort=high` 与 `gpt-5.6-sol` / `reasoning_effort=high` 两档中选择；编排 agent 根据各路的审查对象、风险和上下文复杂度决定，不因选择不同 profile 改变三路独立性、输入或责任边界。task、owner 或 host 的明确要求优先。A 是 mandatory fresh Outside Voice，保持完整、独立的开放式审查；B 只审 Scope + Architecture，重点检查 authority、tenant、transaction、lineage、custody；C 只审 Code Quality + Tests + Performance，重点检查实现边界、failure/recovery、验证充分性与调用放大。`bundle-admission` 与 `focused-closure-verification` 保持各自已定义的角色约束，不适用本固定分工。
+正常 full review 固定采用三路 fresh reviewer context，默认各由新建 subagent 承担；只有“Fresh reviewer 的实现与 fallback”所述条件成立时，某一路才可改用一次性 ephemeral runner。若编排器可以选择模型，A、B、C 分别从 `gpt-5.6-terra` / `reasoning_effort=high` 与 `gpt-5.6-sol` / `reasoning_effort=high` 两档中选择；编排 agent 根据各路的审查对象、风险和上下文复杂度决定，不因选择不同 profile 或合规 fallback 改变三路独立性、输入或责任边界。task、owner 或 host 的明确要求优先。A 是 mandatory fresh Outside Voice，保持完整、独立的开放式审查；B 只审 Scope + Architecture，重点检查 authority、tenant、transaction、lineage、custody；C 只审 Code Quality + Tests + Performance，重点检查实现边界、failure/recovery、验证充分性与调用放大。`bundle-admission` 与 `focused-closure-verification` 保持各自已定义的角色约束，不适用本固定分工。
 
 主 session 在派发前建立一次精简、同 revision 的 candidate bundle：candidate plan、earned Ticket/DAG、candidate projection、必要 D/S contract、联合校验证据、审查边界与只读约束。三路获得同一 bundle，且不接收主审 findings、预期 verdict、materiality 结论或 owner 偏好；A 仍按 Outside Voice prompt 保持独立发现。不要为每个维度重新拼装或扩展上下文。
 
-每路返回统一的结构化结论：`assigned_dimensions`、每个维度的 `reviewed/not_applicable/finding` 状态及理由、candidates（claim、evidence pointer、reasoning、risk）、检查过但未成 finding 的关键边界、tensions/未知项，以及最值得挑战的一个假设。evidence pointer 必须能由主 session 在同一 bundle 或仓库中复核；subagent 不写 ledger、不晋升 formal finding、不向 owner 提问或修改文件。
+每路返回统一的结构化结论：`assigned_dimensions`、每个维度的 `reviewed/not_applicable/finding` 状态及理由、candidates（claim、evidence pointer、reasoning、risk）、检查过但未成 finding 的关键边界、tensions/未知项，以及最值得挑战的一个假设。evidence pointer 必须能由主 session 在同一 bundle 或仓库中复核；reviewer context 不写 ledger、不晋升 formal finding、不向 owner 提问或修改文件。
 
-主 session 不重复深读各维度；它只复核被引用的证据和冲突点，去重合并 candidates，按 evidence gate 晋升 formal findings，处理 tension，并组织真正需要 owner 决定的 decision waves。主 session 仍负责 ledger 原子写入、manifest、clearance 与最终报告。subagent 无结果或 evidence 无法复核时，不得把对应维度记为 `reviewed` 或 `not_applicable`；先标记 `review input incomplete` 并重试或补齐输入，不能 clearance。只有 A（Outside Voice）不可用会触发既有 degraded 限制，B/C 的不足同样不得伪装成主审已完成审查。
+主 session 不重复深读各维度；它只复核被引用的证据和冲突点，去重合并 candidates，按 evidence gate 晋升 formal findings，处理 tension，并组织真正需要 owner 决定的 decision waves。主 session 仍负责 ledger 原子写入、manifest、clearance 与最终报告。reviewer context 无结果或 evidence 无法复核时，不得把对应维度记为 `reviewed` 或 `not_applicable`；先标记 `review input incomplete` 并重试或补齐输入，不能 clearance。只有 A（Outside Voice）不可用会触发既有 degraded 限制，B/C 的不足同样不得伪装成主审已完成审查。
 
 ## 1. 绑定目标与基线
 
@@ -102,7 +115,7 @@ Material 指会影响行为、contract、数据、安全、运营、发布或显
 
 ## 2. 应用工程判断基线、加载审查镜头并报告本轮配置
 
-使用本文件的工程判断基线并读取五个短聚焦 reference，再按“Full-review subagent 分工与收发协议”并行派发 Scope、Architecture、Code Quality、Tests、Performance 的 materiality scan。每个维度最终必须记录以下一种状态：
+使用本文件的工程判断基线并读取五个短聚焦 reference，再按“Full-review reviewer 分工与收发协议”并行派发 Scope、Architecture、Code Quality、Tests、Performance 的 materiality scan。每个维度最终必须记录以下一种状态：
 
 - `reviewed`：已检查且没有 formal finding。
 - `not_applicable`：不适用，并给出与本计划相关的理由。
@@ -118,7 +131,7 @@ Material 指会影响行为、contract、数据、安全、运营、发布或显
 
 加载全部镜头不等于机械深挖全部维度：根据实际信号决定仓库调查深度、图示、角色和输出篇幅；没有 material 风险时记录有目标依据的 `not_applicable` 或 `reviewed`。
 
-向用户报告一行配置，例如：`本轮配置：Outside Voice=A 独立；Scope+Architecture=B；Code Quality+Tests+Performance=C；Judge/Critic=跳过（证据无冲突且变更可逆）；Tests=compact coverage judgment。`
+向用户报告一行配置，例如：`本轮配置：Outside Voice=A/subagent；Scope+Architecture=B/subagent；Code Quality+Tests+Performance=C/ephemeral runner（fallback：host thread limit）；Judge/Critic=跳过（证据无冲突且变更可逆）；Tests=compact coverage judgment。`没有 fallback 时也标出实际 runtime，避免把“fresh”误读为某个固定工具。
 
 完成条件：五个维度都有初始材料性判断，本轮配置已对 owner 可见；material 高风险边界的验证链已确认可执行，或已形成带 owning skill 的 finding/revise 结论。
 
@@ -134,7 +147,7 @@ Material 指会影响行为、contract、数据、安全、运营、发布或显
 
 ## 4. 获取独立视角
 
-读取 `references/subagent-prompts.md`，始终启动 Outside Voice。正常 full review 按“Full-review subagent 分工与收发协议”同时启动 A、B、C；A 的第一轮只基于同一精简 candidate bundle 独立发现遗漏、错误假设和 failure modes，完成后主 session 才合并三路结果、去重或记录 tension。`focused-closure-verification` 使用其中的 bounded closure prompt：提供 closure brief 与必要基线，要求逐项独立证伪或确认，不要求也不允许开放式找新问题。
+读取 `references/subagent-prompts.md`，始终启动 Outside Voice。正常 full review 按“Full-review reviewer 分工与收发协议”同时启动 A、B、C；默认新建 subagent，只有已记录的 thread/concurrency 拒绝且满足 fresh 隔离合同才使用 ephemeral runner fallback。A 的第一轮只基于同一精简 candidate bundle 独立发现遗漏、错误假设和 failure modes，完成后主 session 才合并三路结果、去重或记录 tension。`focused-closure-verification` 使用其中的 bounded closure prompt：提供 closure brief 与必要基线，要求逐项独立证伪或确认，不要求也不允许开放式找新问题。
 
 在高影响自动归纳、证据冲突、不可逆性、跨边界影响或主审明显不确定时，要求 fresh reviewer 继续承担 Judge/Critic 检查。若工具允许，同一个 Outside Voice 上下文可以在独立观察完成后承担这些能力，避免额外固定编制。
 
