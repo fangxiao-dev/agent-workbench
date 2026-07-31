@@ -72,9 +72,9 @@ The resulting prompt must:
 
 ## Create And Deliver
 
-1. Create every child with the fixed default configuration `model=gpt-5.6-terra` and `thinking=xhigh`. This clean-session contract is explicit rather than inherited: do not attempt to inspect or infer the parent thread's configuration. An owner may override the pair only by naming a supported replacement configuration.
+1. Create every child with the fixed default configuration `model=gpt-5.6-luna` and `thinking=max`. This clean-session contract is explicit rather than inherited: do not attempt to inspect or infer the parent thread's configuration. An owner may override the pair only by naming a supported replacement configuration.
 2. Confirm that the destination supports the selected pair. If the default pair, or an owner-specified replacement, is unsupported, stop and report `session configuration unavailable`; do not silently fall back to another model or reasoning effort.
-3. Call `create_thread`; never call `fork_thread`. Pass `model=gpt-5.6-terra` and `thinking=xhigh` explicitly, or the supported owner override, together with the filled prompt unchanged as `prompt`. Normalize the tool result before branching: the desktop wrapper may return the creation payload as serialized JSON text rather than an object, so parse that text and extract `threadId` / `hostId` or `clientThreadId`; never infer a queued result from the wrapper shape alone.
+3. Call `create_thread`; never call `fork_thread`. Pass `model=gpt-5.6-luna` and `thinking=max` explicitly, or the supported owner override, together with the filled prompt unchanged as `prompt`. Normalize the tool result before branching: the desktop wrapper may return the creation payload as serialized JSON text rather than an object, so parse that text and extract `threadId` / `hostId` or `clientThreadId`; never infer a queued result from the wrapper shape alone.
 4. Create a normal session with `target.environment = { type: "local" }`, without `startingState: { type: "working-tree" }`, a worktree snapshot option, a branch, or the source worktree as a creation-state target. Let the prompt bind the child to the verified existing implementation worktree.
 5. Obtain the original session title from the thread manager before creation. Derive the title by adding `01` if it has no numeric suffix, or incrementing the existing suffix (`01` → `02`). `create_thread` has no title parameter, so after an immediate result with `threadId`, call `set_thread_title` with that exact derived title. Do not claim the naming step succeeded until that call succeeds.
 6. If the tool returns a `threadId` and `hostId`, set the title first, then make one non-blocking `wait_threads` call with that exact pair and `timeoutMs: 0`. This may surface an immediately completed source-worktree report, but the child must not depend on a parent acknowledgement to continue.
@@ -96,7 +96,7 @@ If the source worktree cannot be used as `workdir` or any in-worktree check fail
 Before reporting delivery, verify that:
 
 - The stated implementation worktree, HEAD and authority records were verified before creation.
-- The child explicitly uses `gpt-5.6-terra` with `xhigh` reasoning effort, unless the owner supplied a supported explicit override.
+- The child explicitly uses `gpt-5.6-luna` with `max` reasoning effort, unless the owner supplied a supported explicit override.
 - The `create_thread` target explicitly used `environment: { type: "local" }`; no result or UI reports a newly created worktree.
 - The child title was derived from the source title and confirmed through `set_thread_title`, or delivery was reported incomplete.
 - The prompt contains the three anchors, the target-`workdir` execution rule, package directory, Impl-Package entry point, current snapshot, mismatch rule, next action, selected subagent mode, and authorization/gate boundaries.
