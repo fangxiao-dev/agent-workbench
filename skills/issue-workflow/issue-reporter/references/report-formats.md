@@ -18,7 +18,7 @@ readiness 与 PR 证据不一致时写明冲突的具体形态，不要只写"�
 
 用户给定模块、主题、label、assignee 或上下文时使用。
 
-开头一行写明本次的筛选依据和它排除了什么，例如"按 label `area:auth` 筛选，未包含标题含 auth 但无该 label 的 Issue"。之后沿用 portfolio 骨架。不因名称相似把 Issue 纳入范围。
+开头仍是结论句：现在最该处理的是哪一件、为什么。筛选依据写在结论句之后的一行，例如"按 label `area:auth` 筛选，未包含标题含 auth 但无该 label 的 Issue"——它是限定范围的补充说明，不是开场白，不能顶替结论句排到最前面。之后沿用 portfolio 骨架。不因名称相似把 Issue 纳入范围。
 
 ## Contract audit
 
