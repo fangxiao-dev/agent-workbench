@@ -385,6 +385,19 @@
         "Does not treat implementation dispatch as dependency release or acceptance evidence",
         "Stops using affected downstream work and evidence, marks the related Ticket/Task NEEDS-REVALIDATION, and performs scoped reconciliation when dependency facts change"
       ]
+    },
+    {
+      "id": 34,
+      "prompt": "上游 Ticket 已进入 review/revise 循环。code/standards/spec review 只发现一个 docstring P2，修复已提交并有局部证据。变体 A 的 safety review 仍未完成且其范围可能改变 callback、deadline 或并发行为；变体 B 的相关 review 已完成，剩余 closure 只验证不会改变下游依赖 seam 的文档与证据。主 session 在启动下一轮 closure review 前应如何处理下游 implementation？",
+      "expected_output": "Notices the checkpoint opportunity only because a downstream is blocked and new review evidence suggests its seam may be stable; keeps variant A blocked, but records and dispatches variant B alongside continuing upstream closure without claiming acceptance or dependency release.",
+      "files": [],
+      "expectations": [
+        "Checks checkpoint readiness only when a downstream is actually blocked and new review/revise evidence suggests its seam is stable",
+        "Keeps checkpoint and dispatch judgment with the main session rather than do-review or a leaf reviewer",
+        "Treats an incomplete or timed-out relevant review as unresolved seam uncertainty without making unrelated review gaps a blanket blocker",
+        "Allows upstream review/closure and downstream implementation to continue in parallel only when the existing checkpoint conditions hold",
+        "Does not add a new stage, state or checklist and does not release acceptance or release dependencies"
+      ]
     }
   ]
 }

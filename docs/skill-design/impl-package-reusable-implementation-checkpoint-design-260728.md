@@ -54,6 +54,10 @@ Ticket 和 Task 使用同一原则，仅默认终态名称不同：
 
 在 restore/readiness 部分承载第 3 节的判断条件、派发时 ER 记录和 scoped revalidation 要求。reference 不定义 checkpoint ID、固定 commit 字段、固定记录格式、自动恢复算法、worker 通知协议或额外审批。
 
+### 4.4 Review/revise 中的机会判断
+
+`Review and gate entry` 主路径只提醒一个低频机会：存在受阻下游，且新证据表明其依赖 seam 已稳定时，主 session 可重新判断可复用实现检查点。详细条件继续放在 runtime protocol；满足时上游 review/closure 与下游 implementation 可以并行，相关 review 尚未完成且可能改变 seam 时继续等待。该判断不交给 `do-review` 或 leaf reviewer，也不形成固定触发、必经步骤或新 stage。
+
 ## 5. 非目标
 
 - 不新增 JSON 状态、sidecar 字段、artifact、模板或 CLI 行为。
@@ -82,17 +86,18 @@ LARK-01 已提交 typed mutation-unknown 与 cache-clear 接口并有局部测�
 
 ## 7. 实施与验证
 
-本设计已新增一个 `dev-with-track` eval，同时覆盖正反例：
+本设计已新增两个 `dev-with-track` eval：ID 33 覆盖检查点正反例与失效处理，ID 34 覆盖 review/revise 中的检查点机会判断：
 
 - 正例确认主 session 能基于已提交 seam 和局部证据提前派发 Ticket/Task implementation。
 - 反例确认 seam 仍可能变化时不提前派发。
 - 断言下游执行基线能够使用已提交实现，且 ER 可以由主 session 在派发时根据当前 diff 与证据补写。
 - 断言 ER 如实记录理由，不伪造 `SATISFIED` / `DONE`，不释放 acceptance/release，不新增状态或 artifact。
 - 断言关键依赖事实变化后，主 session 不再沿用受影响工作与旧证据，并对相关下游使用 `NEEDS-REVALIDATION` 和 scoped revalidation。
+- 断言相关 review 未完成且可能改变 seam 时继续等待；相关 review 已收口到不影响 seam 的尾项时，上游 closure 与下游 implementation 可以并行。
 
 验证结果：
 
-- eval JSON 可解析，新增 ID 33 唯一。
+- eval JSON 可解析，新增 ID 33 与 34 唯一。
 - `git diff --check` 通过。
 - `python -m unittest tests.test_impl_package_step8_evals` 仍有 apply 前已经存在的 3 个基线失败：`req-align` 缺旧断言标题、decision 模板缺旧字段、`dev-with-track` 既有 review token 与测试不一致；本次 apply 未新增失败，也不在本轮顺手修复这些旁支。
 - 两轮只读 subagent review 已完成：design review 的 2 个 P2 和 apply review 的 1 个 P2 均已修正，实际检查点语义无剩余 finding。

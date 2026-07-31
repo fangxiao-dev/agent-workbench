@@ -39,7 +39,7 @@ description: >
 
 ## Review and gate entry
 
-基于实际 diff、contract impact 和已有定向证据选择 review：局部可逆且无共享 contract/状态/外部副作用的改动可简化；普通实现的正式 review 默认 `code-review`；interface/state/seam 倾向 standards/spec review；data integrity、evidence authority、auth、external mutation 或 concurrency 必须 safety review。需要正式 review 时，主 session 将明确的 reviewer selection 交给 `do-review`；它是范围固定、leaf 调度、ledger 与 finding 分类的唯一编排器。P1/P2 必须修复并 closure verify。
+基于实际 diff、contract impact 和已有定向证据选择 review：局部可逆且无共享 contract/状态/外部副作用的改动可简化；普通实现的正式 review 默认 `code-review`；interface/state/seam 倾向 standards/spec review；data integrity、evidence authority、auth、external mutation 或 concurrency 必须 safety review。需要正式 review 时，主 session 将明确的 reviewer selection 交给 `do-review`；它是范围固定、leaf 调度、ledger 与 finding 分类的唯一编排器。P1/P2 必须修复并 closure verify。Review/revise 期间，若存在被当前上游阻塞的下游，且新证据表明其依赖 seam 已稳定，主 session 可按 runtime protocol 重新判断可复用实现检查点；满足时无需等待 review closure 即可并行派发下游 implementation。
 
 GO 后自动完成适用验证、ER、review、finding 分流、claim audit 和 gate verdict；不得将 gate 或验证变成二次 owner approval。Push、merge、生产/共享可变操作和会改变业务结果的方案仍须明确授权。
 

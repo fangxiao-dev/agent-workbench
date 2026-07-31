@@ -53,6 +53,8 @@ completion claim 仍由 `verification-before-completion` 审计。复用 evidenc
 
 Task `DONE` 不是 Ticket acceptance。主 session 负责跨 Task 集成和 acceptance，但不自行代替 task worker 或 leaf reviewer。Ticket 候选前先检查所有 contributes-to 的 BLOCKED task；固定 comparison point，按实际 diff、contract impact 和定向证据做风险判断。
 
+Review/revise 期间，只有“存在受阻下游”和“新证据表明其依赖 seam 已稳定”同时成立时，主 session 才进入可复用实现检查点分支。相关未完成 review 或 open finding 仍可能改变该 seam 时继续等待；否则复用上面的既有条件记录 ER 并派发，下游 implementation 与上游 review/closure 可并行。`do-review` 与 leaf reviewer 不作调度判断；这不是新的 stage、状态或 checklist，也不改变 acceptance/release gate。
+
 - 局部、可逆、无共享 contract/状态/外部副作用的 diff 可直接记录理由与证据后进入 claim audit。
 - 普通实现需要正式 review 时默认选择 `code-review`；interface、状态机、模块 seam 倾向 `standards-review` / `spec-review`；数据完整性、证据 authority、auth、外部 mutation、并发等必须 `safety-review`。
 - 一旦需要正式 review，主 session 只把明确 reviewer selection 交给 `do-review`；`do-review` 是范围固定、leaf 调度、ledger 与 finding 分类的唯一编排器，不能由本 skill 或 worker 直接替代。
