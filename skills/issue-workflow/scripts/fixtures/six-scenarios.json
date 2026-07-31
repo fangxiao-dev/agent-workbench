@@ -6,7 +6,10 @@
     {"number": 103, "title": "sub issue", "state": "OPEN", "labels": ["doc", "ready-for-human"], "parent": 102, "relationsKnown": true},
     {"number": 104, "title": "investigation", "state": "OPEN", "labels": ["work:investigation", "enhancement", "ready-for-agent"], "relationsKnown": true},
     {"number": 105, "title": "blocked", "state": "OPEN", "labels": ["bug", "blocked"], "blockedBy": [103], "relationsKnown": true},
-    {"number": 106, "title": "incomplete issue", "state": "OPEN", "labels": ["maintenance"], "relationsKnown": true}
+    {"number": 106, "title": "incomplete issue", "state": "OPEN", "labels": ["maintenance"], "relationsKnown": true},
+    {"number": 107, "title": "needs-info with PR evidence", "state": "OPEN", "labels": ["enhancement", "needs-info"], "pullRequests": [202], "relationsKnown": true},
+    {"number": 108, "title": "needs-info missing acceptance", "state": "OPEN", "labels": ["enhancement", "needs-info"], "body": "## Outcome\nShip the export button.\n\n## Acceptance\n", "relationsKnown": true},
+    {"number": 109, "title": "needs-info empty body", "state": "OPEN", "labels": ["enhancement", "needs-info"], "relationsKnown": true}
   ],
-  "pullRequests": [{"number": 201, "title": "direct parent PR", "state": "OPEN", "linkedIssue": 102}]
+  "pullRequests": [{"number": 201, "title": "direct parent PR", "state": "OPEN", "linkedIssue": 102}, {"number": 202, "title": "evidence PR", "state": "OPEN", "linkedIssue": 107}]
 }

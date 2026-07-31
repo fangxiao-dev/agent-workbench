@@ -58,6 +58,23 @@ def contract_labels(contract: dict[str, Any]) -> set[str]:
     return {label for family in contract["labels"].values() for label in family}
 
 
+def section_nonempty(body: str, heading: str) -> bool:
+    match = re.search(rf"^##\s+{heading}\s*$\n+([^#\n].*?)(?=^##\s|\Z)", body, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+    return bool(match and match.group(1).strip())
+
+
+def needs_info_bucket(issue: dict[str, Any]) -> str:
+    """Mechanical needs-info triage. Bucket assignment uses only structural
+    signals (relations, sections present); no semantic judgment of content."""
+    body = str(issue.get("body", ""))
+    has_evidence = bool(issue.get("pullRequests")) or bool(issue.get("assignees")) or section_nonempty(body, "Acceptance")
+    if has_evidence:
+        return "label-lag"
+    if section_nonempty(body, "Outcome") and not issue.get("blockedBy"):
+        return "single-gap"
+    return "empty"
+
+
 def validate_issue(issue: dict[str, Any], contract: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     labels = labels_of(issue)
     families = contract["labels"]
@@ -85,8 +102,7 @@ def validate_issue(issue: dict[str, Any], contract: dict[str, Any]) -> tuple[lis
         invalid = readiness - set(contract["rules"]["initiative"]["allowedReadiness"])
         if invalid:
             hard("initiative-readiness", f"not allowed: {sorted(invalid)}")
-        closure = re.search(r"^##\s+Closure condition\s*$\n+([^#\n].*?)(?=^##\s|\Z)", str(issue.get("body", "")), flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
-        if not closure or not closure.group(1).strip():
+        if not section_nonempty(str(issue.get("body", "")), "Closure condition"):
             hard("initiative-closure-condition", "missing non-empty ## Closure condition section")
     if "blocked" in readiness and not issue.get("blockedBy"):
         if issue.get("relationsKnown", True):
@@ -134,7 +150,7 @@ def normalize_snapshot(raw: dict[str, Any], contract: dict[str, Any], repository
 def gh_read(repo: str, kind: str) -> list[dict[str, Any]]:
     if kind not in READ_ONLY_GH:
         raise ValueError("only gh issue/pr list reads are allowed")
-    fields = "number,title,body,labels,assignees,state,url" if kind == "issue" else "number,title,body,labels,assignees,state,url,isDraft"
+    fields = "number,title,body,labels,assignees,state,url,updatedAt" if kind == "issue" else "number,title,body,labels,assignees,state,url,isDraft,updatedAt"
     command = ["gh", kind, "list", "--repo", repo, "--state", "open", "--limit", "100", "--json", fields]
     result = subprocess.run(command, check=False, text=True, capture_output=True)
     if result.returncode:
@@ -152,7 +168,7 @@ query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     issues(first: 100, states: OPEN) {
       nodes {
-        number title body state url
+        number title body state url updatedAt
         labels(first: 100) { nodes { name } }
         assignees(first: 20) { nodes { login } }
         parent { number }
@@ -211,18 +227,27 @@ def report(snapshot: dict[str, Any], contract: dict[str, Any], mode: str, issue_
     if issue_number is not None:
         issues = [issue for issue in issues if issue.get("number") == issue_number]
     groups = {"next-actions": [], "blocked": [], "initiatives": [], "hygiene": audit["hardViolations"]}
+    needs_info_buckets: dict[str, list[dict[str, Any]]] = {"label-lag": [], "single-gap": [], "empty": []}
     for issue in issues:
         labels = labels_of(issue)
-        item = {"number": number_of(issue), "title": issue.get("title", ""), "labels": sorted(labels), "directPullRequests": issue.get("pullRequests", [])}
+        item = {"number": number_of(issue), "title": issue.get("title", ""), "labels": sorted(labels), "directPullRequests": issue.get("pullRequests", []), "updatedAt": issue.get("updatedAt")}
         if "work:initiative" in labels:
             groups["initiatives"].append(item)
         if "blocked" in labels:
             groups["blocked"].append(item)
         if "work:initiative" not in labels and labels & {"needs-info", "ready-for-agent", "ready-for-human"}:
             groups["next-actions"].append(item)
+        if "needs-info" in labels and "work:initiative" not in labels:
+            needs_info_buckets[needs_info_bucket(issue)].append(item)
     if mode == "issue" and issue_number is None:
         raise ValueError("--issue is required for issue mode")
-    return {"mode": mode, "repository": snapshot.get("repository"), "counts": {key: len(value) for key, value in groups.items()}, "groups": groups, "advisories": audit["advisories"], "unknowns": audit["unknowns"]}
+    needs_info = {
+        "counts": {name: len(items) for name, items in needs_info_buckets.items()},
+        "labelLag": needs_info_buckets["label-lag"],
+        "singleGap": needs_info_buckets["single-gap"],
+        "emptyNumbers": [item["number"] for item in needs_info_buckets["empty"]],
+    }
+    return {"mode": mode, "repository": snapshot.get("repository"), "counts": {key: len(value) for key, value in groups.items()}, "groups": groups, "needsInfo": needs_info, "advisories": audit["advisories"], "unknowns": audit["unknowns"]}
 
 
 def load_identity(path: str) -> dict[str, str]:

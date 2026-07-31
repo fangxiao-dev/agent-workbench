@@ -31,6 +31,10 @@ class IssueWorkflowTests(unittest.TestCase):
             portfolio = run("report", "--snapshot", str(snapshot_path), "--mode", "portfolio")
             self.assertEqual(portfolio["counts"]["initiatives"], 1)
             self.assertEqual(portfolio["counts"]["blocked"], 1)
+            self.assertEqual(portfolio["needsInfo"]["counts"], {"label-lag": 1, "single-gap": 1, "empty": 1})
+            self.assertEqual([item["number"] for item in portfolio["needsInfo"]["labelLag"]], [107])
+            self.assertEqual([item["number"] for item in portfolio["needsInfo"]["singleGap"]], [108])
+            self.assertEqual(portfolio["needsInfo"]["emptyNumbers"], [109])
             intent = {"snapshotContractVersion": snapshot["contractVersion"], "changes": [{"issue": 103, "labels": ["doc", "ready-for-agent"], "people": [{"kind": "issueAssignee", "alias": "@同事"}]}]}
             intent_path = Path(temp_dir) / "intent.json"
             intent_path.write_text(json.dumps(intent), encoding="utf-8")
