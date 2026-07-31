@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "coordination_id": "replace-with-stable-coordination-id",
+  "context": {
+    "topic": "Required coordination goal or topic",
+    "repository": "required-git-repository-name"
+  },
+  "controller": {
+    "node_id": "controller",
+    "topic": "Required current session goal or topic",
+    "current_session_id": "replace-with-current-session-id",
+    "previous_session_ids": [],
+    "worktree": "required-absolute-current-context-worktree-path",
+    "branch": "required-branch-in-current-context-worktree",
+    "updated_at": "required-ISO-8601-timestamp"
+  },
+  "children": {
+    "replace-with-stable-node-id": {
+      "topic": "Required current session goal or topic",
+      "current_session_id": "replace-with-current-session-id",
+      "previous_session_ids": [],
+      "worktree": "required-absolute-current-context-worktree-path",
+      "branch": "required-branch-in-current-context-worktree",
+      "updated_at": "required-ISO-8601-timestamp"
+    }
+  }
+}

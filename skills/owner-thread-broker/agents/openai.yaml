@@ -1,0 +1,4 @@
+interface:
+  display_name: "Owner Thread Broker"
+  short_description: "Broker Owner decisions and maintain thread session routing"
+  default_prompt: "Use $owner-thread-broker to coordinate an Owner decision with controller and child threads."
