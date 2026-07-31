@@ -28,8 +28,8 @@ Provide exactly one of `--prompt` or `--prompt-file`.
 | `--no-subagents` | off | Disable Grok subagents |
 | `--worktree [NAME]` | unset | Pass through Grok worktree option |
 | `--rules` | unset | Pass through Grok rules |
-| `--stall-timeout-sec` | 180 | No stream event before declaring a stall |
-| `--overall-timeout-sec` | 2400 | Hard wall-clock timeout |
+| `--stall-timeout-sec` | 600 (max 1800) | No stream event before declaring a stall |
+| `--overall-timeout-sec` | 600 (max 1800) | Hard wall-clock timeout |
 | `--heartbeat-sec` | 15 | Stderr heartbeat interval |
 | `--preflight` | off | Also require auth before model execution |
 | `--dry-run` | off | Return the redacted would-be command in `text` |
@@ -60,3 +60,7 @@ stdout is exactly one JSON object:
 
 Each call starts a fresh Grok process. The wrapper does not resume sessions;
 callers that need previous context must include it in a new prompt.
+
+Timeouts default to 600 seconds (10 minutes). Callers may increase either
+timeout for a larger task, but the runner rejects values above 1800 seconds (30
+minutes). `--max-run` is a Grok turn limit, not a seconds-based timeout.

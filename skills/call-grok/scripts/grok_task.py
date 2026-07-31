@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import signal
@@ -28,8 +29,9 @@ from executor_env import load_executor_env
 load_executor_env(SCRIPT_ROOT.parent)
 
 DEFAULT_MAX_RUN = 120
-DEFAULT_STALL_TIMEOUT_SEC = 180
-DEFAULT_OVERALL_TIMEOUT_SEC = 2400
+DEFAULT_STALL_TIMEOUT_SEC = 600
+DEFAULT_OVERALL_TIMEOUT_SEC = 600
+MAX_TIMEOUT_SEC = 1800
 DEFAULT_HEARTBEAT_SEC = 15
 
 EXIT_OK = 0
@@ -422,13 +424,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--stall-timeout-sec",
         type=float,
         default=DEFAULT_STALL_TIMEOUT_SEC,
-        help=f"No stream event for this many seconds => stalled (default {DEFAULT_STALL_TIMEOUT_SEC})",
+        help=f"No stream event for this many seconds => stalled (default {DEFAULT_STALL_TIMEOUT_SEC}, max {MAX_TIMEOUT_SEC})",
     )
     p.add_argument(
         "--overall-timeout-sec",
         type=float,
         default=DEFAULT_OVERALL_TIMEOUT_SEC,
-        help=f"Hard wall-clock timeout (default {DEFAULT_OVERALL_TIMEOUT_SEC})",
+        help=f"Hard wall-clock timeout (default {DEFAULT_OVERALL_TIMEOUT_SEC}, max {MAX_TIMEOUT_SEC})",
     )
     p.add_argument(
         "--heartbeat-sec",
@@ -490,6 +492,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.max_run < 1:
         eprint("--max-run must be >= 1")
         return EXIT_ERROR
+    for option, value in (
+        ("--stall-timeout-sec", args.stall_timeout_sec),
+        ("--overall-timeout-sec", args.overall_timeout_sec),
+    ):
+        if not math.isfinite(value) or value <= 0:
+            eprint(f"{option} must be a positive finite number")
+            return EXIT_ERROR
+        if value > MAX_TIMEOUT_SEC:
+            eprint(f"{option} must be <= {MAX_TIMEOUT_SEC} seconds (30 minutes)")
+            return EXIT_ERROR
 
     grok_bin = resolve_grok_bin(args.executable)
     if not grok_bin:

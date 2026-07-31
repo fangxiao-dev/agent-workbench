@@ -17,7 +17,8 @@ python "<repo>\skills\call-grok\scripts\grok_task.py" `
   --executable "<grok-executable>" `
   --prompt-file "<prompt-file>" `
   --max-run 120 `
-  --model "grok-4" `
+  --overall-timeout-sec 600 `
+  --model "grok-4.5" `
   --effort high `
   --tools "read_file,grep,list_dir" `
   --allow "Bash(git *)" `
@@ -31,6 +32,15 @@ a CLI; the legacy `GROK_BIN` environment name remains supported. All model,
 tool, permission, worktree, and rule flags are optional and are forwarded only
 when explicitly supplied. Each invocation launches a new Grok process and never
 resumes or shares a session.
+
+The example model is the current standard environment model, `grok-4.5`. If a
+caller needs to override it, first run `grok models` and pass an id listed as
+available by that CLI.
+
+The runner defaults to a 600-second (10-minute) stall and wall-clock timeout.
+For a larger task, callers may raise the relevant timeout explicitly, up to
+1800 seconds (30 minutes); values above that limit fail closed. `--max-run`
+controls Grok turns and is independent of the timeout in seconds.
 
 The wrapper emits exactly one JSON envelope on stdout with `ok`, `status`,
 `text`, `usage`, `exit_code`, and `error`; diagnostics, heartbeats, and liveness
