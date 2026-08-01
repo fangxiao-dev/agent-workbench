@@ -128,7 +128,7 @@ def call_executor(
                 "--effort",
                 claude_effort,
                 "--tools",
-                "",
+                "Read,Glob,Grep",
                 "--system-prompt",
                 "You are a non-interactive Blind Opening participant. Return only the requested structured result.",
                 "--json-schema",

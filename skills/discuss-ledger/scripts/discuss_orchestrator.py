@@ -475,7 +475,7 @@ def run_claude(prompt: str, root: Path, timeout_s: int, effort: str = "low") -> 
             "--effort",
             effort,
             "--tools",
-            "",
+            "Read,Glob,Grep",
             "--system-prompt",
             "You are a non-interactive discuss-ledger participant. Prefer Chinese unless the task explicitly requires another language. Return only the requested structured result.",
             "--json-schema",
