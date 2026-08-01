@@ -9,6 +9,9 @@ Use `scripts/call_codex.py` when a skill needs one bounded Codex CLI invocation.
 
 The caller owns the task prompt, output schema, permission/sandbox policy, model configuration, and how to interpret the returned text. This skill does not provide roles or task templates.
 
+**调用流程：**启动 `call_codex.py` 后让它后台运行，主 session 立即继续执行不冲突工作，不要同步等待其最终 JSON。
+只有在依赖 Codex 结果或到达验证控制点时才轮询/读取完成状态。
+
 ```powershell
 python "<repo>\skills\call-codex\scripts\call_codex.py" `
   --cwd "<target-repo>" `

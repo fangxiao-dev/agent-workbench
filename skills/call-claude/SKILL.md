@@ -12,6 +12,9 @@ Run `scripts/call_claude.py` when another skill needs one non-interactive
 Claude CLI invocation. Each invocation starts a new process; context must be
 passed explicitly in the prompt or caller-owned artifacts.
 
+**调用流程：**启动 `call_claude.py` 后让它后台运行，主 session 立即继续执行不冲突工作，不要同步等待其最终 JSON。
+只有在依赖 Claude 结果或到达验证控制点时才轮询/读取完成状态。
+
 ## Invoke
 
 ```powershell

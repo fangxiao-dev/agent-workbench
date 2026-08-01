@@ -11,6 +11,9 @@ The caller owns the task prompt, tool and permission policy, model configuration
 and interpretation of the returned text. This skill provides no task presets,
 templates, or default tool policy.
 
+**调用流程：**启动 `grok_task.py` 后让它后台运行，主 session 立即继续执行不冲突工作，不要同步等待其最终 JSON。
+只有在依赖 Grok 结果或到达验证控制点时才轮询/读取完成状态。
+
 ```powershell
 python "<repo>\skills\call-grok\scripts\grok_task.py" `
   --cwd "<target-repo>" `
