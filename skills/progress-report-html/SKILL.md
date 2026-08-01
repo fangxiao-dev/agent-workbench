@@ -11,10 +11,12 @@ description: Create or incrementally update a human-readable HTML progress panel
 
 - 先识别真实 scope，再决定面板大小。Scope 可以是一个任务包、一个任务包里的串行步骤、几条并行工作线，或者一个多 thread coordination group；不要假设一定有多个 thread，也不要写死数量。
 - 主视图面向人，不面向开发工具。业务状态、结果、影响、下一步和依赖优先；内部编号、变量名、commit、branch、worktree、seam、ledger、migration number 等只放在折叠的审计区。
+- 主视图默认使用简体中文和业务语言。英文只保留产品名、协议名、代码标识或确实没有自然中文替代的专有名词；首次出现时必须先给中文解释，不能把多个英文术语用斜杠或连字符堆在一句话里。
 - 只在用户触发时刷新。除非用户明确要求，否则不使用定时器、后台轮询、自动 fetch、WebSocket 或远端 API。
 - 如果已有 HTML，增量更新同一个文件；不要每轮创建副本。保留已有历史和可追溯信息，只追加真实变化。
 - 局部阶段完成不等于整个任务完成。只有父任务的最终验收、集成、必要验证和 gate 都满足时，才显示整体 closed。
 - 不能从不可访问的主会话或 thread 猜测状态。明确区分已观察、已交付、等待确认、陈旧和推断状态。
+- 在 side chat 中，package ledger 只能证明登记状态，不能替代主会话的实际进展；生成报告前必须先核对主会话，或明确标记主会话实际进展不可观测。
 
 ## 触发后的工作流
 
@@ -36,7 +38,22 @@ description: Create or incrementally update a human-readable HTML progress panel
 | 并行工作线 | 每条线做什么、各自状态、汇合点 |
 | 多 thread coordination | producer/consumer、依赖、共享验收门、总体关闭条件 |
 
-如果当前 side chat 不能直接读取主会话或 thread，说明数据边界；使用已给出的快照或让用户提供新快照，不要假装完成了实时查询。
+如果当前 side chat 不能直接读取主会话或 thread，说明数据边界；只能生成明确标记为“package evidence snapshot”的报告，不能把 package-only 数据写成当前实际进展，也不能用 `0/7` 这类 ledger 数字概括实际实现程度。必要时让用户提供主会话 checkpoint。
+
+### 1A. Side chat：主会话实际进展核对（强制）
+
+当当前会话被标记为 `side chat` / `side conversation` / fork，或用户询问“实际进展”时，必须在生成或刷新报告前执行以下核对：
+
+1. **定位主会话。** 优先使用当前 app/thread context 或 `owner-thread-broker` 中该 coordination group 的最新 `current_session_id`；不得使用继承历史中的旧 session ID、旧 handoff 或凭记忆猜测主会话。
+2. **读取主会话最新状态。** 获取最近的主会话 checkpoint、实现/WIP 描述、已运行验证、数据库/外部系统边界、阻塞与下一动作。若平台提供 thread/app read API 或主会话 terminal，应读取其最新可访问内容。
+3. **只读交叉核对本地证据。** 对照当前 worktree diff、任务包 runtime state、Execution Record、Ticket acceptance projection 和 gate 文件，区分代码实际变化、已运行证据、ledger 登记和最终 closure。
+4. **分开记录四种状态：**
+   - `主会话实际进展`：主会话最新明确报告的实现/WIP；
+   - `可复核证据`：worktree、测试输出、报告或其他可重读证据；
+   - `正式登记状态`：Ticket/runtime ledger/gate 的 machine-owned 状态；
+   - `冲突或缺口`：主会话已完成但尚未 backfill，或主会话声明无法被当前证据复核。
+5. **冲突时不抹平差异。** 主会话可以显示“已实现/待验收”，而 ledger 仍显示 `UNRECORDED`；报告应同时展示两者，不能将任一方静默覆盖另一方。主会话进展领先 ledger 时，写明“已在主会话完成、待 package backfill”，不得因此宣称 Ticket closed。
+6. **主会话不可访问时降级。** 报告必须明确写“主会话实际进展：不可观测”，只能输出 package evidence snapshot，并将“实际实现程度”留空或标为未知；不得把 package-only 的 `0/7` 解释为“没有实现”。
 
 ### 2. 决定页面层级
 
@@ -57,6 +74,7 @@ description: Create or incrementally update a human-readable HTML progress panel
    - 总体状态：进行中、等待决策、等待依赖、需要刷新、已关闭。
    - 当前阶段：用业务语言描述正在发生的事。
    - 一句话说明已经完成的阶段和仍未完成的阶段。
+   - 若状态可计数，分开显示“实际实现/WIP”“可复核验证”“正式 Ticket 验收”和“terminal gate”；不要用一个未注明口径的 `0/7` 代表全部进展。
    - 若存在 Owner 决策，直接写清需要决定什么；没有时明确写“当前没有新的 Owner 决策”。
 
 2. **全局推进路径**
@@ -98,6 +116,31 @@ description: Create or incrementally update a human-readable HTML progress panel
 - “Test apply/readback passed” → “共享测试环境验证和结果核对已通过”。
 
 主视图可以出现产品名、角色名和用户熟悉的领域词；不必为了消除所有英文而改写公认的产品名称。关键标准是读者能理解它对业务意味着什么。
+
+### 4A. 中文可读性规则（强制）
+
+生成或刷新报告时，先把技术事实翻译成“谁做什么、结果是什么、还缺什么”的中文句子，再决定是否保留英文原词。下面这些词在主视图中应优先使用中文：
+
+| 原词 | 主视图推荐说法 |
+| --- | --- |
+| source catalog / compiler / current policy | 规则来源目录 / 规则编译器 / 当前生效规则 |
+| snapshot / checkpoint | 不可变结果快照 / 可持久化检查点 |
+| hash | 内容指纹 |
+| runtime acceptance / Ticket closure / gate | 运行时验收 / 事项闭环 / 最终门禁 |
+| WIP / readiness | 尚未收口的改动 / 可用性准备 |
+| reviewed facts / fail closed | 已复核事实 / 遇到异常就停止 |
+| selection intent / retain-or-refresh | 用户选择记录 / 保留仍合法选择或要求重新选择 |
+| materialize / pipeline | 正式生成 / 正式处理链 |
+| seam / typed contract / guard chain | 接入点 / 带类型的接口约定 / 真实权限校验链 |
+| claim / DML / caller-owned transaction | 幂等占位 / 数据库业务写入 / 由调用方统一控制的事务 |
+
+执行要求：
+
+- 主视图标题、状态徽章、阶段说明、工作线、下一步和最近进展，除产品名/协议名/必要代码标识外，使用中文自然句；不要出现 `source catalog、compiler、current policy` 这类连续英文串。
+- 英文原词只能作为中文后的短括号补充，例如“内容指纹（hash）”“运行时验收（runtime acceptance）”；同一原词在同一段不必重复。
+- `API`、`UI`、`DATEV`、`PostgreSQL`、`OpenAPI` 等可保留，但必须让上下文说明它们对业务意味着什么；`WIP`、`seam`、`readiness`、`gate`、`DML` 等内部缩写或行话不得裸露在主视图。
+- 折叠审计区可以保留精确英文状态、文件名和命令，但每一项必须附中文含义；审计区也不能用英文堆叠替代事实说明。
+- 如果翻译后仍无法让非开发人员理解，继续改写句子，不要仅通过增加更多英文术语来“补充准确性”。
 
 ### 5. 同一个 HTML 的增量更新
 
@@ -165,8 +208,12 @@ HTML 可以提供一个手动导入快照的入口，但这个入口是辅助功
 - 主视图不出现未经解释的 ID、commit、分支、内部枚举或过程编号。
 - 7 个 thread 的假设没有泄漏到小范围任务；页面只显示实际存在的 scope。
 - overall state、next milestone、goal、work item 状态和事件之间没有相互矛盾。
+- side chat 报告已标明主会话实际进展、package evidence 与正式 ledger 的来源；主会话不可访问时没有把 package-only 快照写成实时实际状态。
+- 主视图的技术英文已被翻译或首次解释；未解释的英文仅限产品名、协议名和必要代码标识。
 - 若有浏览器环境，打开实际文件验证至少一个手动更新交互，并检查窄屏和宽屏；浏览器不可用时要明确报告未验证部分。
 
 ## 向用户汇报
 
 汇报时先说功能层结论：总范围、已完成的阶段、剩余收口、整体是否 closed、需要的 Owner 决策。然后给文件路径和最小验证证据。不要把 HTML 内部数据模型、线程调度过程或工具调用顺序当成主结果。
+在 side chat 中，额外说明主会话实际进展是否已读取，并分别报告“实际实现/WIP”和“正式 Ticket 验收”；若两者不同，保留差异并说明是否需要 package backfill。
+报告正文优先用中文说明业务结果；如果读者仍需原始技术词，将其放入括号或折叠审计区，不把英文术语串直接当作进度结论。
