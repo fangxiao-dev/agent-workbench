@@ -21,6 +21,7 @@ text(JSON.stringify({
   v: 1,
   n: ids.length,
   wake: r.wake || null,
+  timedOut: r.timedOut,
   polls: (r.polls || []).map(p => ({
     id: p.thread?.id,
     status: p.thread?.status?.type,
@@ -56,15 +57,39 @@ text(JSON.stringify({
 3. 读取 `sync` 的紧凑摘要：
    - `idle_nodes`：该派活。
    - `changed_nodes`：有新 head，需要读或推进。
+   - `advance_kinds`：本轮 HEAD 推进类型，`docs` 不清零 dispatch 计数，`code` / `unknown` 会清零。
    - `unchanged`：本轮没有变化。
+   - `timedOut`：`true (timeout, no change)` 表示 wait 超时且没有 poll 内容，区别于被唤醒但无文本。
    - `head_unavailable`：这些 node 的 worktree/git HEAD 取不到；不要把它当成"无变化"。
    - `never_reported`：这些 node 从未通过 `ledger.py report` 自报；用来判断 H1 是否真实遵守。
+   - `stale_reports`：这些 node 的最后一次 report 后又出现 git HEAD 变化；不要把旧 report 当成当前阻塞状态。
+   - `unknown_status`：这些 node 的 Desktop status 不在已知映射内；不要默认当成 `working`。
    - `pending_decisions`：大于 0 时准备上报 owner。
    - `stall_streak`：接近 `3/3` 时必须准备二选一。
    - `seams_unowned`：第一轮只报数，用来决定后续是否开启阻断校验。
-   - `dispatches_since_progress`：自最近一次 git head 推进以来，rollout 中 `send_message_to_thread` 与 `create_thread` 调用次数。它只测量，不阻断。
+   - `malformed_waiting_on`：历史 report 中不合法的 `waiting_on` 项数量。
+   - `dispatches_since_progress`：自最近一次 code 级 git head 推进以来，rollout 中有配对 output 的 `tools.codex_app__send_message_to_thread` 与 `tools.codex_app__create_thread` 调用次数。它只测量，不阻断。
+   - `docs_only_advances`：自最近一次 code 级推进以来的 docs-only HEAD 推进次数。
+   - `corrupt_ledger_lines`：JSONL 中无法解析的坏行数量。
 4. 执行 `python skills/thread-harness/scripts/ledger.py stall-check --coordination-id <id>`。
 5. 按退出码决策。
+
+接手新 session 时先执行：
+
+```powershell
+python skills/thread-harness/scripts/ledger.py status --coordination-id <id>
+```
+
+`status` 只读账本和 registry，不读 rollout，也不要求新 session 已经跑过首轮 poll。它用于恢复各 node 最新 state/head/turn/最后 report 时间、pending decisions、未交付 seams、`stall_streak` 和最近一次 `act`。
+
+`stall-check` 返回 `MUST_ACT` 后，用 `act` 留下本轮选择：
+
+```powershell
+python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --dispatch --seam-id <s> --producer <node> --deliverable "<一句话>"
+python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --escalate --decision-id <d>
+```
+
+`act --dispatch` 的 `--seam-id`、`--producer`、`--deliverable` 都必填，且 producer 必须是 registry node。`stall-check` 会输出 `last_must_act_answered: yes|no`，只报告上一次 `MUST_ACT` 后是否有新 `act` 行，不改变退出码。
 
 ## 退出码表（全部子命令通用）
 
@@ -88,7 +113,7 @@ text(JSON.stringify({
 python skills/thread-harness/scripts/selftest.py
 ```
 
-它用独立构造的 fixture 覆盖 `sync` 自检判据、`SYNC STALE` 的错误信息完整性、决策与停滞的退出码优先级、`decide --raise/--answer`、多值参数空格分隔、`report` 状态不被 poll 覆盖、真实 git HEAD 停滞判断、用法错误退 64。**这份 fixture 刻意不复用 `ledger.py` 自身的解析逻辑**——用被测代码的假设去造测试数据，测不出假设本身是错的。（初版轮询契约就是这样漏掉了"rollout 只记录打印内容"这个事实。）
+它用独立构造的 fixture 覆盖 `sync` 自检判据、`SYNC STALE` 的错误信息完整性、决策与停滞的退出码优先级、`decide --raise/--answer`、多值参数空格分隔、`report` 状态不被 poll 覆盖、陈旧 report、重复 `round`、docs-only/code 推进分类、`act` 留痕、`status` 接手路径、真实 git HEAD 停滞判断、用法错误退 64。**这份 fixture 刻意不复用 `ledger.py` 自身的解析逻辑**——用被测代码的假设去造测试数据，测不出假设本身是错的。（初版轮询契约就是这样漏掉了"rollout 只记录打印内容"这个事实。）
 
 ## 自检失败处理
 
@@ -111,6 +136,8 @@ ROUND INVALID: poll snippet altered (<具体原因>)
 | 输出含 `n` 与 `polls` 两个键 | `projection shape altered (missing <key>)` |
 | `n` 等于实际 ids 数量 | `projection n=<a> != actual targets <b>` |
 | `polls` 每个元素含 `id` / `status` / `turn` / `turnStatus` / `txt` 五个键 | `poll entry shape altered` |
+| 输出含 `timedOut` | `projection shape altered (missing timedOut)` |
+| `polls[].id` 属于 registry children 且不重复 | `poll id not in registry (<id>)` / `duplicate poll id (<id>)` |
 
 如果 `ledger.py sync` 输出：
 
@@ -119,3 +146,9 @@ SYNC STALE: rollout not flushed (path=<absolute-path>, bytes=<size>, mtime=<mtim
 ```
 
 表示 rollout 中还没有本轮 `wait_threads` 输出，或输出 payload 暂不可解析。broker 不得静默复用旧数据；应等待下一轮或重新执行固定片段后再跑 `sync`。
+
+## 已知限制
+
+- BLK-4 decoy 绕过 `validate_call`：rollout 只记录 exec 打印的内容，结构上无法证明实际传给 `wait_threads` 的参数是什么。放一个未使用的正确 `const ids=[...]` 再实际传 `targets: []` 能通过全部校验。这一层封不死。部分缓解是 `polls[].id` 必须属于 registry children。威胁模型上，本 harness 防的是长跑压力下逐步简化，不是主动伪造；decoy 需要写更多代码而非更少，不在退化路径上。
+- seam producer 被后续行改写、`artifact` 只是自由文本：第一轮 H4 只登记不校验语义。
+- 失败的 dispatch 调用与真实成功与否：当前只统计有配对 output 的调用，并要求 `arguments` 中出现 `tools.codex_app__send_message_to_thread` / `tools.codex_app__create_thread`；不做调用结果追踪。

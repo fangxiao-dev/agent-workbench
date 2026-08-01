@@ -24,11 +24,12 @@
 
 1) 敲这段 JS，原样敲，不要"优化"它：
 
-const ids=[<各 node 的 current_session_id>];
+const ids=[<全部 children 的 current_session_id，不含你自己>];
 const r=await tools.codex_app__wait_threads({targets:ids.map(threadId=>({threadId})),timeoutMs:180000});
-text(JSON.stringify({v:1,n:ids.length,wake:r.wake||null,polls:(r.polls||[]).map(p=>({id:p.thread?.id,status:p.thread?.status?.type,turn:p.latestTurn?.id,turnStatus:p.latestTurn?.status,txt:(p.latestAssistantMessage?.text||"").slice(0,500)}))}));
+text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,polls:(r.polls||[]).map(p=>({id:p.thread?.id,status:p.thread?.status?.type,turn:p.latestTurn?.id,turnStatus:p.latestTurn?.status,txt:(p.latestAssistantMessage?.text||"").slice(0,500)}))}));
 
 字段一个都不能少。你不打印的东西 ledger.py 读不到——rollout 记录的是你打印的内容，不是工具的原始返回。
+以 references/poll-contract.md 的版本为准，那里和自检判据一起更新。
 
 2) python <repo>/skills/thread-harness/scripts/ledger.py sync --coordination-id <coordination-id> --round <n>
 3) python <repo>/skills/thread-harness/scripts/ledger.py stall-check --coordination-id <coordination-id>
@@ -39,8 +40,21 @@ text(JSON.stringify({v:1,n:ids.length,wake:r.wake||null,polls:(r.polls||[]).map(
 
 ### 不可违反
 
-1. stall-check 返回 2 时，你只有两个选项：派发新工作（含 create_thread 开新 Foundation 线），
-   或向我报告并结束 loop。禁止输出"继续等待"、"本轮无变化"、"保持现状"这类第三选项。
+1. stall-check 返回 2（MUST_ACT）时，你只有两个选项，且**必须把选择记进账本**：
+
+   (a) 派发新工作 —— 记：
+       ledger.py act --coordination-id <id> --dispatch --seam-id <s> --producer <node> --deliverable "<一句话>"
+   (b) 向我报告并结束 loop —— 记：
+       ledger.py act --coordination-id <id> --escalate --decision-id <d>
+
+   禁止"继续等待"、"本轮无变化"、"保持现状"这类第三选项。
+
+   注意 (a) 要求你说出**派给谁、要造哪个 seam、交付什么**。如果这三样填不出来，
+   那说明你想做的其实不是派活，请选 (b)。
+
+   MUST_ACT 的准确含义是"没有 committed progress"，不是"全线都死了"。
+   可能有线正在活跃工作只是还没 commit——这时正确动作仍是给**别的**空闲线派活，
+   而不是把这一轮解释成"不算停滞"。
 2. wake.reason == "inactiveStatus" 表示有线程闲着，是"该派活"的信号，不是"没有变化"。
 3. seam 缺失是你的待办，不是外部阻塞。所有人都在等某个跨域契约时，正确的动作是派一条
    Foundation 线去造它，而不是把它记成阻塞。
@@ -139,21 +153,36 @@ text(JSON.stringify({v:1,n:ids.length,wake:r.wake||null,polls:(r.polls||[]).map(
 按这个顺序做，顺序不能换：
 
 1) 先用 $owner-thread-broker 把 registry 里 controller 的 current_session_id 更新成你自己的 session id。
-   ledger.py sync 是靠这个字段去定位要读哪个 rollout 的。不先更新，第一次 sync 会去读上一任的 rollout。
-2) 再跑 sync 恢复全局状态，不要从对话历史重建：
-   python <repo>/skills/thread-harness/scripts/ledger.py sync --coordination-id <id> --round <n>
-3) 按 references/goal-and-delegation.md 的主控模板重新设置 goal 文本，
-   其中内联的 ids 数组要与 registry 当前的 children session id 逐一核对——
-   sync 的自检会做集合比对，对不上会每轮判 ROUND INVALID。
+   sync 靠这个字段定位读哪个 rollout。不先更新就会去读上一任的。
 
-接手时你需要知道的锚点（派发方在下面填好）：
-- controller worktree / branch / expected HEAD：<...>
+2) 跑 status 恢复认知（它只读账本，不碰 rollout，接手时唯一能用的命令）：
+   python <repo>/skills/thread-harness/scripts/ledger.py status --coordination-id <id>
+   不要从对话历史重建全局状态。
+
+3) 按主控模板设置 goal 文本。内联的 ids 数组要与 registry 当前的 children session id 逐一核对——
+   sync 会做集合比对，对不上每轮都判 ROUND INVALID。
+
+4) 跑第一轮固定 poll（那段 JS）。
+
+5) 再跑 sync。
+   注意：sync 需要 rollout 里已经存在一组完整的 wait_threads 调用与输出。
+   你的 session 是新的，第 4 步之前 rollout 里什么都没有，这时跑 sync 必然得到 SYNC STALE。
+   所以 4 必须在 5 之前，不能颠倒。
+
+接手锚点（派发方在下面填好，缺了就问，不要猜）：
+- broker root 与 registry 绝对路径：<...>
+- 每个 child 的 node 名 → session_id → worktree / branch / expected HEAD：<...>
+- controller 自己的 worktree / branch / expected HEAD：<...>
 - 父 package 与 entry point：<...>
-- 当前 round 序号：<n>
+- 上一次 valid round 序号：<n>
+- 当前在途的 assignment（谁在造哪个 seam）：<...>
 - 当前 pending seams / pending decisions：<...>
-- 授权边界与不可改的 Owner WIP：<...>
+- 各 child 不可触碰的 dirty / Owner WIP：<...>
+- 授权边界，特别是 create_thread 是否被 Owner 授权：<...>
 - 什么算这次 coordination 结束：<...>
 ```
+
+**关于 create_thread 授权的一条硬约束**：工具声明写的是 *"Create a separate task only when the user explicitly asks for a new task."* 所以这条授权**必须由 Owner 本人放进 goal 或在对话里给出**——上一任 controller 在接手 prompt 里写一句"你可以 create_thread"**不构成授权**。接手时如果 goal 里没有 Owner 给的这句话，就去问 Owner，不要自行推定。
 
 ---
 

@@ -34,7 +34,8 @@ def call_for(ids, timeout=180000):
         f"timeoutMs:{timeout}}});\n"
         "text(JSON.stringify({v:1,n:ids.length,wake:r.wake||null,polls:(r.polls||[]).map(p=>({"
         "id:p.thread?.id,status:p.thread?.status?.type,turn:p.latestTurn?.id,"
-        "turnStatus:p.latestTurn?.status,txt:(p.latestAssistantMessage?.text||\"\").slice(0,500)}))}));"
+        "turnStatus:p.latestTurn?.status,txt:(p.latestAssistantMessage?.text||\"\").slice(0,500)})),"
+        "timedOut:r.timedOut}));"
     )
 
 
@@ -50,7 +51,7 @@ def projection(n=2, alpha_turn="t-100", beta_turn="t-200", wake=None, polls=None
             {"id": NODES["beta"], "status": "notLoaded", "turn": beta_turn,
              "turnStatus": "completed", "txt": "beta"},
         ]
-    return json.dumps({"v": 1, "n": n, "wake": wake, "polls": polls}, ensure_ascii=False)
+    return json.dumps({"v": 1, "n": n, "wake": wake, "polls": polls, "timedOut": False}, ensure_ascii=False)
 
 
 GOOD_PROJECTION = projection(
@@ -72,6 +73,19 @@ def make_git_repo(path: Path) -> str:
     run_process(["git", "config", "user.name", "Thread Harness Selftest"], cwd=path)
     run_process(["git", "commit", "--allow-empty", "-m", "initial"], cwd=path)
     return run_process(["git", "rev-parse", "HEAD"], cwd=path).strip()
+
+
+def git_head(path: Path) -> str:
+    return run_process(["git", "rev-parse", "HEAD"], cwd=path).strip()
+
+
+def commit_file(path: Path, rel: str, text: str, message: str) -> str:
+    target = path / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+    run_process(["git", "add", rel], cwd=path)
+    run_process(["git", "commit", "-m", message], cwd=path)
+    return git_head(path)
 
 
 def reset_fixture(*, git_worktrees=False):
@@ -140,9 +154,14 @@ def append_wait(call_args, printed_text, call_id="c1", *, dispatch_calls=0):
     roll.parent.mkdir(parents=True, exist_ok=True)
     with roll.open("a", encoding="utf-8") as fh:
         for index in range(dispatch_calls):
+            dispatch_call_id = f"d{call_id}{index}"
             line = {"timestamp": "2026-08-01T06:00:00.000Z", "type": "response_item",
-                    "payload": {"type": "custom_tool_call", "call_id": f"d{call_id}{index}", "name": "exec",
+                    "payload": {"type": "custom_tool_call", "call_id": dispatch_call_id, "name": "exec",
                                 "arguments": "await tools.codex_app__send_message_to_thread({});"}}
+            fh.write(json.dumps(line, ensure_ascii=False) + "\n")
+            line = {"timestamp": "2026-08-01T06:00:00.100Z", "type": "response_item",
+                    "payload": {"type": "custom_tool_call_output", "call_id": dispatch_call_id,
+                                "output": "ok"}}
             fh.write(json.dumps(line, ensure_ascii=False) + "\n")
         for line in rollout_lines(call_args, printed_text, call_id):
             fh.write(json.dumps(line, ensure_ascii=False) + "\n")
@@ -181,9 +200,12 @@ CASES = [
     ("退化输出 text({pollCount:0}) 必须被拦下", CALL_OK, '{"pollCount":0}', 1, "projection missing or wrong version"),
     ("timeoutMs 被调低必须被拦下", CALL_BAD_TIMEOUT, GOOD_PROJECTION, 1, "1000 < 180000"),
     ("缺 polls 键必须被拦下", CALL_OK, '{"v":1,"n":2}', 1, "shape altered"),
+    ("缺 timedOut 键必须被拦下", CALL_OK,
+     json.dumps({"v": 1, "n": 2, "wake": None, "polls": []}), 1, "missing timedOut"),
     ("poll 元素缺 status 必须被拦下", CALL_OK,
      json.dumps({"v": 1, "n": 2, "wake": None,
-                 "polls": [{"id": NODES["alpha"], "turn": "t", "turnStatus": "completed", "txt": ""}]}),
+                 "polls": [{"id": NODES["alpha"], "turn": "t", "turnStatus": "completed", "txt": ""}],
+                 "timedOut": False}),
      1, "poll entry shape altered"),
     ("ids 混入 controller 必须被拦下", call_for([NODES["controller"], NODES["alpha"], NODES["beta"]]),
      projection(n=3), 1, "targets mismatch"),
@@ -298,6 +320,139 @@ rc, out = run("stall-check", "--coordination-id", CID)
 fails += check("stall-check 无停滞时退出 0", rc == 0 and out.startswith("OK "), out.strip())
 rc, out = run("sync", "--coordination-id", CID, "--round", "1", "--no-such-arg")
 fails += check("usage error 退出码 64", rc == 64, f"rc={rc} {out.strip()}")
+
+print("-" * 78)
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+for index in range(4):
+    append_wait(CALL_OK, projection(alpha_turn=f"same-{index}", beta_turn=f"same-{index}"),
+                call_id=f"sameround{index}", dispatch_calls=1 if index else 0)
+    run("sync", "--coordination-id", CID, "--round", "7")
+rc, out = run("stall-check", "--coordination-id", CID)
+fails += check("同一个 --round 重复 4 次时 stall_streak 仍按 append 顺序累计到 3",
+               rc == 2 and "MUST_ACT stall_streak=3/3" in out,
+               out.strip())
+
+rc, out = run("report", "--coordination-id", CID, "--node", "alpha", "--state", "awaiting_seam")
+fails += check("awaiting_seam 缺 waiting_on 必须退出 64",
+               rc == 64 and "requires --waiting-on seam:<id>" in out,
+               f"rc={rc} {out.strip()}")
+rc, out = run("report", "--coordination-id", CID, "--node", "alpha", "--state", "awaiting_seam",
+              "--waiting-on", "free text")
+fails += check("awaiting_seam 使用自由文本 waiting_on 必须退出 64",
+               rc == 64 and "requires --waiting-on seam:<id>" in out,
+               f"rc={rc} {out.strip()}")
+
+alpha_repo = BASE / "git" / "alpha"
+old_head = git_head(alpha_repo)
+rc, out = run("report", "--coordination-id", CID, "--node", "alpha", "--state", "awaiting_seam",
+              "--waiting-on", "seam:x", "--head", old_head)
+commit_file(alpha_repo, "work.py", "print('stale')\n", "code after report")
+append_wait(CALL_OK, projection(alpha_turn="stale-a", beta_turn="stale-b"), call_id="stale")
+rc, out = run("sync", "--coordination-id", CID, "--round", "8")
+fails += check("report 之后 HEAD 变化必须暴露 stale_reports",
+               rc == 0 and "stale_reports:" in out and "alpha" in out,
+               out.strip())
+
+print("-" * 78)
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+append_wait(CALL_OK, projection(alpha_turn="m4-0", beta_turn="m4-0"), call_id="m40")
+run("sync", "--coordination-id", CID, "--round", "1")
+commit_file(BASE / "git" / "alpha", "docs/progress.md", "docs only\n", "docs only")
+append_wait(CALL_OK, projection(alpha_turn="m4-1", beta_turn="m4-1"), call_id="m41", dispatch_calls=1)
+rc, out = run("sync", "--coordination-id", CID, "--round", "2")
+fails += check("docs-only commit 不清零 dispatches_since_progress 且 docs_only_advances 加 1",
+               rc == 0 and "dispatches_since_progress: 1" in out and "docs_only_advances: 1" in out,
+               out.strip())
+commit_file(BASE / "git" / "alpha", "feature.py", "print('code')\n", "code work")
+append_wait(CALL_OK, projection(alpha_turn="m4-2", beta_turn="m4-2"), call_id="m42", dispatch_calls=1)
+rc, out = run("sync", "--coordination-id", CID, "--round", "3")
+fails += check(".py commit 作为 code 推进会清零 dispatches_since_progress",
+               rc == 0 and "dispatches_since_progress: 0" in out and "docs_only_advances: 0" in out,
+               out.strip())
+
+print("-" * 78)
+rc, out = run("act", "--coordination-id", CID, "--dispatch", "--seam-id", "x", "--producer", "alpha")
+fails += check("act --dispatch 缺 deliverable 必须退出 64",
+               rc == 64 and "requires --deliverable" in out,
+               f"rc={rc} {out.strip()}")
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+for index in range(4):
+    append_wait(CALL_OK, projection(alpha_turn=f"act-{index}", beta_turn=f"act-{index}"),
+                call_id=f"act{index}")
+    run("sync", "--coordination-id", CID, "--round", "1")
+rc, out = run("stall-check", "--coordination-id", CID)
+before_ok = rc == 2 and "last_must_act_answered: no" in out
+rc_act, out_act = run("act", "--coordination-id", CID, "--dispatch", "--seam-id", "x",
+                      "--producer", "alpha", "--deliverable", "one sentence")
+rc_after, out_after = run("stall-check", "--coordination-id", CID)
+fails += check("stall-check 的 last_must_act_answered 在 act 前后分别为 no/yes",
+               before_ok and rc_act == 0 and rc_after == 2 and "last_must_act_answered: yes" in out_after,
+               f"before={out.strip()} act={out_act.strip()} after={out_after.strip()}")
+
+print("-" * 78)
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+rc, out = run("status", "--coordination-id", CID)
+fails += check("status 在从未 sync 的新账本上也能输出",
+               rc == 0 and out.startswith("STATUS") and "stall_streak:" in out,
+               out.strip())
+
+(BROKER / CID / "progress.jsonl").write_text("{bad json\n", encoding="utf-8")
+rc, out = run("status", "--coordination-id", CID)
+fails += check("status 摘要必须暴露 corrupt_ledger_lines",
+               rc == 0 and "corrupt_ledger_lines: 1" in out,
+               out.strip())
+
+bad_waiting = {"ts": "2026-08-01T06:00:00+02:00", "src": "report", "round": 0,
+               "node": "alpha", "head": None, "state": "awaiting_seam",
+               "waiting_on": ["free text", "seam:"], "last_report_ts": "2026-08-01T06:00:00+02:00",
+               "note": "legacy bad row"}
+(BROKER / CID / "progress.jsonl").write_text(json.dumps(bad_waiting, ensure_ascii=False) + "\n",
+                                             encoding="utf-8")
+rc, out = run("status", "--coordination-id", CID)
+fails += check("status 摘要必须暴露 malformed_waiting_on",
+               rc == 0 and "malformed_waiting_on: 2" in out,
+               out.strip())
+
+timed_out_projection = json.dumps({"v": 1, "n": 2, "wake": None, "polls": [], "timedOut": True},
+                                  ensure_ascii=False)
+write_fixture(CALL_OK, timed_out_projection, git_worktrees=True)
+run("init", "--coordination-id", CID)
+rc, out = run("sync", "--coordination-id", CID, "--round", "1")
+fails += check("timedOut true 且 polls 为空时摘要标注 timeout no change",
+               rc == 0 and "timedOut:        true (timeout, no change)" in out,
+               out.strip())
+
+write_fixture(CALL_OK, projection(polls=[
+    {"id": UNKNOWN, "status": "notLoaded", "turn": "u", "turnStatus": "completed", "txt": "unknown"},
+    {"id": NODES["beta"], "status": "notLoaded", "turn": "b", "turnStatus": "completed", "txt": "beta"},
+]), git_worktrees=True)
+run("init", "--coordination-id", CID)
+rc, out = run("sync", "--coordination-id", CID, "--round", "1")
+fails += check("陌生 poll id 必须 INVALID",
+               rc == 1 and "ROUND INVALID: poll id not in registry" in out,
+               out.strip())
+
+write_fixture(CALL_OK, projection(polls=[
+    {"id": NODES["alpha"], "status": "notLoaded", "turn": "a1", "turnStatus": "completed", "txt": "alpha"},
+    {"id": NODES["alpha"], "status": "notLoaded", "turn": "a2", "turnStatus": "completed", "txt": "alpha again"},
+]), git_worktrees=True)
+run("init", "--coordination-id", CID)
+rc, out = run("sync", "--coordination-id", CID, "--round", "1")
+fails += check("重复 poll id 必须 INVALID",
+               rc == 1 and "ROUND INVALID: duplicate poll id" in out,
+               out.strip())
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+rc, out = run("decide", "--coordination-id", CID, "--answer", "missing", "--text", "no")
+fails += check("decide --answer 不存在的 id 必须退出 64",
+               rc == 64 and "decision is not pending: missing" in out,
+               f"rc={rc} {out.strip()}")
 
 shutil.rmtree(BASE, ignore_errors=True)
 print("=" * 78)

@@ -20,7 +20,13 @@
 | --- | --- | --- |
 | H1 | **回报触发条件**：任一 thread 在 turn 结束前，若 ①`head` 变了 ②状态从 working 转为 waiting ③产生 owner 级阻塞——三者之一成立，必须写账本并 `send_message_to_thread` 回 broker | F3：7 条线里 5 条从不主动回报，F6 唯一能解环的 Owner 请求因此永远没送达 |
 | H2 | **账本字段与写入时机**：状态变更即 append，字段按 §5 schema | F9：全局进度只活在 context 里，末期每 12 分钟被 compaction 清洗一次 |
-| H3 | **停滞上限 + 二选一**：连续 3 轮所有 node 的 `head` 无变化，broker 必须二选一——(a) 派发新工作（含 create_thread 开新 Foundation 线），(b) 向 Owner 报告并结束 loop。**禁止第三种输出。** 另：`decisions.jsonl` 有 `pending` 项时立即上报，不进入下一轮 | F1：Owner 是唯一解卡装置；F7：broker 把自己的待办归类成外部阻塞。上一轮它输出了 104 次"本轮 loop 检查完成" |
+| H3 | **停滞上限 + 二选一**：连续 3 轮所有 node 的 git HEAD 无变化，broker 必须二选一——(a) 派发新工作（含 create_thread 开新 Foundation 线），(b) 向 Owner 报告并结束 loop。**禁止第三种输出。** 另：`decisions.jsonl` 有 `pending` 项时立即上报，不进入下一轮 | F1：Owner 是唯一解卡装置；F7：broker 把自己的待办归类成外部阻塞。上一轮它输出了 104 次"本轮 loop 检查完成" |
+
+**H3 的 `MUST_ACT` 准确含义是「无 committed progress」，不是「整体停止」。** 一条线可能正在活跃工作、只是还没 commit（复审指出这在真实压力下概率不低：3 轮 ×3 分钟 = 9 分钟不 commit 就会触发）。所以：
+
+- 摘要里的 `active_nodes` 要一起看——有线在 running 时的 `MUST_ACT` 通常意味着"该给别人派活了"，而不是"全线死了"。
+- 但**不因此放宽 H3**。误报一次的代价是 broker 多派一次活或多问一句；漏报的代价是整晚白跑。方向必须 fail-closed。
+- broker 面对 `MUST_ACT` 时若判断某线确实在推进，正确动作仍是选 (a)——给**别的**空闲线派活，而不是把这一轮解释成"不算停滞"。
 | H4 | **seam 必须登记生产者**：任何 `awaiting_seam` 都要指向一个 `seam_id`，该 seam 必须在 `seams.jsonl` 里有一条带 `producer` 的记录 | F2/F7：环的成因是"跨域上游契约"是个没有归属的名词 |
 
 H4 的分阶段：**第一轮只登记不校验**；阶段 2 打开校验（`waiting_on` 指向的 seam 查不到 producer → broker 必须立即指派，否则报错阻断）。schema 一次写全，不迁移。
@@ -56,11 +62,13 @@ H4 的分阶段：**第一轮只登记不校验**；阶段 2 打开校验（`wai
 
 `fork_thread` 本 harness 不使用。
 
-补充的平台约束（2026-08-01 外部评审提供，未独立复验，标注为**采信但未验证**）：
+补充的平台约束（2026-08-01 复审已核对工具声明原文）：
 
-- **`wait_threads` 单次最多 8 个 targets。** 本 harness 当前假设 children ≤ 8（上一轮是 7）。超过 8 需要稳定分片 + 跨片合并，**本轮明确不做**，见 §9。
-- **`create_thread` 不是无条件的自授权动作**，需要 Owner 在 goal 或对话里明确授权。主控 goal 模板已含该授权，所以 §4.4 说的"broker 手上一直有 create_thread"在本 harness 成立，但不是普遍成立。
-- **`create_thread` 无法给子线设置持久 goal**，只有初始 prompt。这意味着 §7 那条"goal 免疫 compaction"的优势**只有主控享有**，子线的 H1/H2 会随 compaction 流失。这是平台限制，不是设计选择——缓解手段只能是主控靠 `last_report_ts` / `never_reported` 检测漏报，而不是相信子线记得。
+- **`wait_threads` 单次最多 8 个 targets。** 声明原文：*"Wait for the first of up to eight Codex threads to complete or need attention."* 本 harness 假设 children ≤ 8（上一轮是 7）。超过 8 需要稳定分片 + 跨片合并，**本轮明确不做**，见 §9.2。
+- **`create_thread` 不是无条件的自授权动作。** 声明原文：*"Create a separate task only when the user explicitly asks for a new task."*
+  推论很重要：**授权必须来自 Owner 本人在 goal 或对话里给出，controller 自己写一段"允许 create_thread"不构成自授权。** 主控 goal 模板里那句授权必须是你亲手放进去的，不能由上一任 controller 代写进接手 prompt。
+- **`create_thread` 无法给子线设置持久 goal。** 它的参数只有 prompt、target、可选 model/thinking；`create_goal` 只作用于当前 task，没有目标 thread 参数。所以 §7 那条"goal 免疫 compaction"的优势**只有主控享有**，子线的 H1/H2 会随 compaction 流失。
+  这是平台能力缺口，不是设计选择。缓解手段只能是主控用 `never_reported` / `stale_reports` 检测漏报，而不是相信子线记得。（用户事后手动进 child 设置 goal 属于 UI 能力，不在此结论内。）
 
 ### 3.1.1 rollout 写入行为（已探针验证，2026-08-01）
 
@@ -113,7 +121,9 @@ text(JSON.stringify({
 }));
 ```
 
-四条不可动摇：`timeoutMs` 固定 `180000`；`targets` 覆盖 registry 的**全部 children，不含 controller 自己**（主控轮询自身没有意义）；输出是**这个投影**，字段一个不能少；`txt` 截断到 500 字符。
+四条不可动摇：`timeoutMs` **不得低于** `180000`（推荐固定 180000，更保守的等待不判无效）；`targets` 覆盖 registry 的**全部 children，不含 controller 自己**（主控轮询自身没有意义）；输出是**这个投影**，字段一个不能少；`txt` 截断到 500 字符。
+
+投影的确切字段以 [poll-contract.md](poll-contract.md) 为准——它随自检判据一起演进，本页只讲为什么。
 
 **所有语法都是实跑验证过的**：可选链 `?.`、`(x||[])`、`String.slice` 在上一轮主控 06:30 的真实片段里都出现过。刻意不用 `??`（未见证据）。
 
@@ -312,9 +322,17 @@ skills/thread-harness/
 
 完整解法需要定义：deliverable 与验收条件、producer 必须转 `working`、audit/sidecar 不得计入、下一轮验证 assignment 真的进入执行。这是一整套语义，属于阶段 2 的 I1（依赖必须有 owner）范畴。
 
-**本轮改为测量而非阻断**：`sync` 从 rollout 数派发次数，`head` 从 git 取真实产出，两者一比就得到 `dispatches_since_progress`。这个数持续增长而 HEAD 不动，就是"在派活但没派出成果"的直接证据。
+**本轮做最小版：留痕，不验证。** `MUST_ACT` 之后 broker 必须调 `ledger.py act`，`--dispatch` 要求填 `seam_id` + `producer` + `deliverable` 三个字段，缺一个就退 64。
 
-理由：机读判据设计错了比没有更糟——会把合法的探索性派发也堵死，逼模型学会绕过判据本身。先用一轮真实数据看清"伪装派活"到底占多大比例，再决定判据怎么写。
+它证明不了派发是真的，但**逼你说出派给谁、要造什么**——"已派 Foundation 做一次增量 readiness 检查"填不进这三个字段。`stall-check` 会报 `last_must_act_answered: yes|no`，只报告不阻断。
+
+配套的测量：`dispatches_since_progress` 从 rollout 数派发次数，且**只被 code 级 HEAD 推进清零**（docs-only commit 不清零，见下）。这个数持续增长而 code 不动，就是"在派活但没派出成果"的直接证据。
+
+> docs/code 之分是必须的：上一轮七条分支里**六条的终态 commit 都是 `docs(...)` 记录阻塞**。如果不区分，任何一次"提交一份说明我被阻塞的文档"都会把计数清零，读数 6 直接失去意义。分类用 `git show --name-only` 看触及路径，是客观判据不是启发式。
+>
+> 但 `stall_streak` 本轮**不**收紧——任何 HEAD 变化仍算推进。收紧要等看过真实数据，否则容易把合法文档工作误杀。
+
+理由：完整的机读判据（assignment 生命周期、验收条件、下一轮执行证明）设计错了比没有更糟——会把合法的探索性派发也堵死，逼模型学会绕过判据本身。先用一轮真实数据看清"伪装派活"占多大比例。
 
 ### 9.2 children > 8 的分片
 
@@ -329,3 +347,17 @@ skills/thread-harness/
 ### 9.4 `polls: []` 不判为退化
 
 空的 `polls` 数组在"真的没有变化"时是合法返回，无法与"模型偷懒不打印"区分。**接受这个假阴性**——强行拒绝会在正常无变化的轮次里持续误报，反而训练 broker 忽略 `ROUND INVALID`。
+
+缓解：投影里加了 `timedOut` 字段，可以把"等满 180 秒确实没变化"与"被唤醒却没内容"分开，后者更可疑。复审提到工具声明暗示 timeout 返回时会带全部 target 的 compact progress，但这一点未经实测确认，所以不作为判据，只作为读数。
+
+### 9.5 `validate_call` 的 decoy 绕过 —— 结构上封不死
+
+复审构造了一个能通过全部自检的伪造：放一个未使用的正确 `const ids = [...]`，实际却传 `targets: []` 和 `timeoutMs: 1000`。
+
+**这一层封不死，原因是结构性的**：rollout 只记录 exec 打印的内容（§3.3），**无法证明实际传给 `wait_threads` 的参数是什么**。任何基于源码文本的校验都能被"多写一段没用的正确代码"绕过。
+
+不修的判断依据是威胁模型：本 harness 防的是**长跑压力下的逐步简化**（上一轮的真实退化路径：`text(r)` → `text({pollCount, wake})` → `text({pollCount})`），不是主动伪造。decoy 需要写**更多**代码而不是更少，不在退化路径上。
+
+部分缓解：`polls[].id` 必须属于 registry children 且不重复——这能抓住返回内容与目标集合对不上的情况。
+
+**记录它是为了：如果第一轮真的观察到 decoy 类行为，说明威胁模型判断错了，那时要换的是整个校验层的位置（比如让子线也各自记账、交叉对账），而不是继续加正则。**
