@@ -25,6 +25,24 @@
 
 H4 的分阶段：**第一轮只登记不校验**；阶段 2 打开校验（`waiting_on` 指向的 seam 查不到 producer → broker 必须立即指派，否则报错阻断）。schema 一次写全，不迁移。
 
+### 2.1 贯穿性原则：地面真相优先于账本纪律
+
+**凡是能从 git、rollout 等客观来源直接读到的事实，就不要依赖模型主动上报。**
+
+这条来自 2026-08-01 的外部评审。它指出的最严重缺陷是：`head` 字段一度混用 Desktop 的 `latestTurn.id` 与 git SHA，于是一条线只要产生一个新 turn（哪怕什么都没做）停滞计数就被重置——**H3 正是要抓"只出 turn 不出活"，却被这个混用废掉了。**
+
+修法不是要求模型更认真地上报，而是换数据源：
+
+| 事实 | 错误做法（依赖纪律） | 现在的做法（地面真相） |
+| --- | --- | --- |
+| 某条线有没有真的产出 | 读 Desktop turn id | `git -C <worktree> rev-parse HEAD`，worktree 来自 registry |
+| broker 有没有真的派活 | 让 broker 自己记 dispatch 行 | `sync` 读 rollout 时数 `send_message_to_thread` / `create_thread` 调用 |
+| 轮询是否覆盖了全部子线 | 信任投影里模型打印的 `n` | 从调用 arguments 解析实际 ids，与 registry children 做**集合**比对 |
+
+判断规则：**一个事实如果模型有动机漏报或美化，就必须找到不经模型的来源；找不到的，才退回账本纪律并接受它可能失效。**
+
+子线的 `state` / `waiting_on` 属于后者——只有子线自己知道它在等什么，没有客观来源。所以这两个字段仍靠 H1 上报，代价是 `sync` **不得覆盖**它们（poll 行只写 poll 能证明的东西）。
+
 ## 3. 轮询契约（poll contract）
 
 ### 3.1 已核实的运行时约束
@@ -37,6 +55,12 @@ H4 的分阶段：**第一轮只登记不校验**；阶段 2 打开校验（`wai
 - **结论：无法让模型"执行一个文件"。那段 JS 必须由模型每轮亲手敲出来。**
 
 `fork_thread` 本 harness 不使用。
+
+补充的平台约束（2026-08-01 外部评审提供，未独立复验，标注为**采信但未验证**）：
+
+- **`wait_threads` 单次最多 8 个 targets。** 本 harness 当前假设 children ≤ 8（上一轮是 7）。超过 8 需要稳定分片 + 跨片合并，**本轮明确不做**，见 §9。
+- **`create_thread` 不是无条件的自授权动作**，需要 Owner 在 goal 或对话里明确授权。主控 goal 模板已含该授权，所以 §4.4 说的"broker 手上一直有 create_thread"在本 harness 成立，但不是普遍成立。
+- **`create_thread` 无法给子线设置持久 goal**，只有初始 prompt。这意味着 §7 那条"goal 免疫 compaction"的优势**只有主控享有**，子线的 H1/H2 会随 compaction 流失。这是平台限制，不是设计选择——缓解手段只能是主控靠 `last_report_ts` / `never_reported` 检测漏报，而不是相信子线记得。
 
 ### 3.1.1 rollout 写入行为（已探针验证，2026-08-01）
 
@@ -271,3 +295,37 @@ skills/thread-harness/
 | 5 | 无归属 seam 数量（决定 H4 校验值不值得开） | 未测量；环由此形成 |
 
 **读数 2 是最关键的。** 整套设计里风险最高且完全未验证的假设是：模型在 compaction 每 12 分钟一次的条件下能不能守住硬规则。若守不住，方向要换成"把 broker 拆成短生命周期的多轮 session"，而不是继续加固一条 13 小时长 thread。
+
+第一轮新增一个读数（来自外部评审）：
+
+| # | 读数 | 用途 |
+| --- | --- | --- |
+| 6 | `dispatches_since_progress` —— 派了多少次消息但没有任何 node 的 git HEAD 变化 | 判断 H3 的选项 (a) 是否被"派一次 audit"伪装。见 §9 |
+
+## 9. 明确不做（本轮），及理由
+
+写下来是为了避免下一轮有人重新捡起来当成遗漏。
+
+### 9.1 H3 选项 (a) 的完整机读定义
+
+评审指出："派发新工作"没有可验证的 deliverable 要求，所以 broker 可以用「已派 Foundation 做一次增量 readiness 检查；若无新 artifact 则保持等待」蒙混过关——形式上像 (a)，实质是等待的包装版。**这个批评是对的**，上一轮确实反复出现过这种行为。
+
+完整解法需要定义：deliverable 与验收条件、producer 必须转 `working`、audit/sidecar 不得计入、下一轮验证 assignment 真的进入执行。这是一整套语义，属于阶段 2 的 I1（依赖必须有 owner）范畴。
+
+**本轮改为测量而非阻断**：`sync` 从 rollout 数派发次数，`head` 从 git 取真实产出，两者一比就得到 `dispatches_since_progress`。这个数持续增长而 HEAD 不动，就是"在派活但没派出成果"的直接证据。
+
+理由：机读判据设计错了比没有更糟——会把合法的探索性派发也堵死，逼模型学会绕过判据本身。先用一轮真实数据看清"伪装派活"到底占多大比例，再决定判据怎么写。
+
+### 9.2 children > 8 的分片
+
+`wait_threads` 单次上限 8 个 target。当前场景 7 条线够用。分片需要稳定的分组规则加跨片轮次合并，会显著复杂化 `sync` 的增量语义。**已知限制，超过 8 条线时本 harness 不适用。**
+
+### 9.3 子线的持久 goal 与 turn-finalizer hook
+
+`create_thread` 没有 goal 参数，平台也没有 turn 结束时自动写账本的 hook。所以子线的 H1/H2 无法获得主控那样的 compaction 免疫。
+
+**这是平台能力缺口，不是可以靠设计补上的东西。** 能做的只有让主控检测漏报（`never_reported` / `last_report_ts`），把"子线忘了上报"从静默失效变成可见信号。第一轮读数 4 就是量这个的。
+
+### 9.4 `polls: []` 不判为退化
+
+空的 `polls` 数组在"真的没有变化"时是合法返回，无法与"模型偷懒不打印"区分。**接受这个假阴性**——强行拒绝会在正常无变化的轮次里持续误报，反而训练 broker 忽略 `ROUND INVALID`。

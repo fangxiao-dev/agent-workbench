@@ -135,13 +135,25 @@ text(JSON.stringify({v:1,n:ids.length,wake:r.wake||null,polls:(r.polls||[]).map(
 
 ```text
 你接手 coordination_id <id> 的主控。读 $thread-harness 的 Role C 段。
-当前账本在 %TEMP%\codex-thread-broker\<id>\，先跑一次
-  python <repo>/skills/thread-harness/scripts/ledger.py sync --coordination-id <id> --round <n>
-恢复全局状态，不要从对话历史重建。
-goal 文本按 references/goal-and-delegation.md 的主控模板重新设置。
-```
 
-**注意**：换 session 后要用 `$owner-thread-broker` 更新 registry 里 controller 的 `current_session_id`，否则 `ledger.py sync` 会去读旧 session 的 rollout。
+按这个顺序做，顺序不能换：
+
+1) 先用 $owner-thread-broker 把 registry 里 controller 的 current_session_id 更新成你自己的 session id。
+   ledger.py sync 是靠这个字段去定位要读哪个 rollout 的。不先更新，第一次 sync 会去读上一任的 rollout。
+2) 再跑 sync 恢复全局状态，不要从对话历史重建：
+   python <repo>/skills/thread-harness/scripts/ledger.py sync --coordination-id <id> --round <n>
+3) 按 references/goal-and-delegation.md 的主控模板重新设置 goal 文本，
+   其中内联的 ids 数组要与 registry 当前的 children session id 逐一核对——
+   sync 的自检会做集合比对，对不上会每轮判 ROUND INVALID。
+
+接手时你需要知道的锚点（派发方在下面填好）：
+- controller worktree / branch / expected HEAD：<...>
+- 父 package 与 entry point：<...>
+- 当前 round 序号：<n>
+- 当前 pending seams / pending decisions：<...>
+- 授权边界与不可改的 Owner WIP：<...>
+- 什么算这次 coordination 结束：<...>
+```
 
 ---
 

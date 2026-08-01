@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -140,7 +142,14 @@ def registry_nodes(registry: dict) -> list[dict]:
     def add(name: str, value: dict, role: str) -> None:
         session_id = node_session_id(value)
         if session_id:
-            nodes.append({"name": name, "session_id": session_id, "role": role})
+            nodes.append(
+                {
+                    "name": name,
+                    "session_id": session_id,
+                    "role": role,
+                    "worktree": value.get("worktree") if isinstance(value.get("worktree"), str) else None,
+                }
+            )
 
     controller = registry.get("controller")
     if isinstance(controller, dict):
@@ -253,6 +262,24 @@ def latest_wait_round(events: list[dict]) -> tuple[dict | None, dict | None]:
     return (calls[order[-1]], None) if order else (None, None)
 
 
+def count_dispatch_calls(events: list[dict]) -> int:
+    count = 0
+    needles = ("codex_app__send_message_to_thread", "codex_app__create_thread")
+    for obj in events:
+        item = response_item(obj)
+        if not item:
+            continue
+        payload = payload_of(item)
+        item_type = item.get("type") or payload.get("type")
+        if item_type != "custom_tool_call":
+            continue
+        text = stringify(payload.get("arguments") if "arguments" in payload else item.get("arguments"))
+        name = stringify(payload.get("name") or item.get("name") or "")
+        if any(needle in text or needle in name for needle in needles):
+            count += 1
+    return count
+
+
 def text_candidates(output_value) -> list[str]:
     candidates = []
     if isinstance(output_value, list):
@@ -287,30 +314,56 @@ def extract_projection(output_value):
     return None
 
 
-def validate_call(arguments: str) -> str | None:
+def parse_ids_array(arguments: str) -> list[str] | None:
+    match = re.search(r"\bconst\s+ids\s*=\s*(\[[\s\S]*?\])\s*;", arguments)
+    if not match:
+        return None
+    try:
+        value = ast.literal_eval(match.group(1))
+    except (SyntaxError, ValueError):
+        return None
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        return None
+    return value
+
+
+def validate_call(arguments: str, expected_session_ids: list[str]) -> tuple[str | None, list[str]]:
     timeout_match = re.search(r'"?timeoutMs"?\s*[:=]\s*(\d+)', arguments)
     if not timeout_match:
-        return "timeoutMs missing < 180000"
+        return "timeoutMs missing < 180000", []
     timeout_ms = int(timeout_match.group(1))
     if timeout_ms < 180000:
-        return f"timeoutMs {timeout_ms} < 180000"
-    return None
+        return f"timeoutMs {timeout_ms} < 180000", []
+
+    actual_ids = parse_ids_array(arguments)
+    if actual_ids is None:
+        return "cannot parse ids array from call", []
+    actual = set(actual_ids)
+    expected = set(expected_session_ids)
+    missing = sorted(expected - actual)
+    unexpected = sorted(actual - expected)
+    if missing or unexpected:
+        return f"targets mismatch (missing={missing}, unexpected={unexpected})", actual_ids
+    if len(actual_ids) != len(actual):
+        duplicates = sorted({item for item in actual_ids if actual_ids.count(item) > 1})
+        return f"targets mismatch (missing=[], unexpected=duplicate:{duplicates})", actual_ids
+    return None, actual_ids
 
 
-def validate_projection(payload: dict | None, expected_nodes: int) -> str | None:
+def validate_projection(payload: dict | None, actual_targets: int) -> str | None:
     if not isinstance(payload, dict) or payload.get("v") != 1:
         return "projection missing or wrong version"
     for key in ("n", "polls"):
         if key not in payload:
             return f"projection shape altered (missing {key})"
     n = payload.get("n")
-    if n != expected_nodes:
-        return f"targets {n} != registry children {expected_nodes}"
+    if n != actual_targets:
+        return f"projection n={n} != actual targets {actual_targets}"
     polls = payload.get("polls")
     if not isinstance(polls, list):
         return "poll entry shape altered"
     for poll in polls:
-        if not isinstance(poll, dict) or "id" not in poll or "status" not in poll:
+        if not isinstance(poll, dict) or any(key not in poll for key in ("id", "status", "turn", "turnStatus", "txt")):
             return "poll entry shape altered"
     return None
 
@@ -346,6 +399,29 @@ def normalize_state(raw, waiting_on=None) -> str:
     return "working"
 
 
+def git_head(worktree: str | None) -> str | None:
+    if not worktree:
+        return None
+    path = Path(worktree)
+    if not path.exists():
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    head = (result.stdout or "").strip()
+    if result.returncode != 0 or not re.fullmatch(r"[0-9a-fA-F]{40}", head):
+        return None
+    return head.lower()
+
+
 def wake_thread_ids(wake: dict) -> set[str]:
     ids = set()
     for key in ("threadId", "thread_id", "target", "session_id", "sessionId"):
@@ -371,6 +447,7 @@ def classify_and_rows(payload: dict, nodes: list[dict], round_no: int, previous:
     by_name = {node["name"]: node for node in nodes}
     rows_by_name = {}
     polls = payload.get("polls") if isinstance(payload.get("polls"), list) else []
+    heads = {node["name"]: git_head(node.get("worktree")) for node in nodes}
 
     for poll in polls:
         if not isinstance(poll, dict):
@@ -380,17 +457,18 @@ def classify_and_rows(payload: dict, nodes: list[dict], round_no: int, previous:
         node = by_session.get(session_id) or by_name.get(name)
         if not node:
             continue
-        head = field(poll, "turn")
         status = field(poll, "status")
         note = field(poll, "txt")
         rows_by_name[node["name"]] = {
             "ts": ts,
+            "src": "poll",
             "round": round_no,
             "node": node["name"],
-            "head": head,
+            "head": heads.get(node["name"]),
+            "turn": field(poll, "turn"),
+            "status": status,
+            "turn_status": field(poll, "turnStatus"),
             "state": normalize_state(status),
-            "waiting_on": [],
-            "last_report_ts": to_local_iso(field(poll, "lastReportTs", "last_report_ts", "updatedAt", "ts")) or ts,
             "note": str(note or status or "")[:500],
         }
 
@@ -399,12 +477,14 @@ def classify_and_rows(payload: dict, nodes: list[dict], round_no: int, previous:
             prev = previous.get(node["name"], {})
             rows_by_name[node["name"]] = {
                 "ts": ts,
+                "src": "poll",
                 "round": round_no,
                 "node": node["name"],
-                "head": prev.get("head"),
+                "head": heads.get(node["name"]),
+                "turn": prev.get("turn"),
+                "status": prev.get("status"),
+                "turn_status": prev.get("turn_status"),
                 "state": prev.get("state") if prev.get("state") in STATE_VALUES else "working",
-                "waiting_on": prev.get("waiting_on") if isinstance(prev.get("waiting_on"), list) else [],
-                "last_report_ts": prev.get("last_report_ts") or ts,
                 "note": "no poll payload for node",
             }
 
@@ -425,18 +505,25 @@ def classify_and_rows(payload: dict, nodes: list[dict], round_no: int, previous:
 
     changed_nodes = []
     unchanged = []
+    head_changed = False
     for node in nodes:
         name = node["name"]
-        if name in idle_nodes:
-            continue
         row = rows_by_name[name]
         old_head = previous.get(name, {}).get("head")
         new_head = row.get("head")
         if new_head and old_head and new_head != old_head:
+            head_changed = True
+            if name in idle_nodes:
+                continue
             changed_nodes.append((name, new_head, old_head))
         elif new_head and not old_head:
+            head_changed = True
+            if name in idle_nodes:
+                continue
             changed_nodes.append((name, new_head, None))
         else:
+            if name in idle_nodes:
+                continue
             unchanged.append(name)
 
     return list(rows_by_name.values()), {
@@ -444,15 +531,49 @@ def classify_and_rows(payload: dict, nodes: list[dict], round_no: int, previous:
         "idle_nodes": sorted(idle_nodes),
         "changed_nodes": changed_nodes,
         "unchanged": unchanged,
+        "head_changed": head_changed,
+        "head_unavailable": sorted(name for name, head in heads.items() if head is None),
     }
 
 
-def latest_progress(coordination_id: str) -> dict:
-    latest = {}
+def latest_progress_parts(coordination_id: str) -> tuple[dict, dict]:
+    latest_poll = {}
+    latest_report = {}
     for row in read_jsonl(jsonl_path(coordination_id, "progress.jsonl")):
         node = row.get("node")
-        if node:
-            latest[node] = row
+        if not node:
+            continue
+        if row.get("src") == "report":
+            latest_report[node] = row
+        elif row.get("src") == "poll":
+            latest_poll[node] = row
+        else:
+            latest_report[node] = row
+    return latest_poll, latest_report
+
+
+def latest_progress(coordination_id: str) -> dict:
+    latest_poll, latest_report = latest_progress_parts(coordination_id)
+    names = set(latest_poll) | set(latest_report)
+    latest = {}
+    for name in names:
+        poll = latest_poll.get(name, {})
+        report = latest_report.get(name, {})
+        row = dict(poll or report)
+        if report:
+            row["state"] = report.get("state")
+            row["waiting_on"] = report.get("waiting_on") if isinstance(report.get("waiting_on"), list) else []
+            row["last_report_ts"] = report.get("last_report_ts") or report.get("ts")
+        else:
+            row["state"] = poll.get("state") if poll.get("state") in STATE_VALUES else "working"
+            row["waiting_on"] = []
+            row["last_report_ts"] = None
+        if poll:
+            row["head"] = poll.get("head")
+            row["turn"] = poll.get("turn")
+            row["status"] = poll.get("status")
+            row["turn_status"] = poll.get("turn_status")
+        latest[name] = row
     return latest
 
 
@@ -478,6 +599,8 @@ def seam_producers(coordination_id: str) -> dict:
 def latest_by_round(coordination_id: str) -> list[tuple[int, dict]]:
     rounds = {}
     for row in read_jsonl(jsonl_path(coordination_id, "progress.jsonl")):
+        if row.get("src") != "poll":
+            continue
         round_no = row.get("round")
         node = row.get("node")
         if isinstance(round_no, int) and node:
@@ -486,15 +609,33 @@ def latest_by_round(coordination_id: str) -> list[tuple[int, dict]]:
 
 
 def stall_streak(coordination_id: str) -> int:
+    """连续多少轮没有任何 node 的 git HEAD 推进。
+
+    head 取不到（worktree 缺失/不是 git 仓库）时**沿用该 node 上次已知值**，
+    即"无证据表明有推进"，而不是重置计数。
+
+    这里必须 fail-closed：曾经的实现是"任一 head 为 None 就把 streak 清零"，
+    后果是一条线的 worktree 路径写错就永久关掉整组的停滞检测，而且完全无声——
+    正是本 harness 要消灭的那种失效。误报一次 MUST_ACT 的代价远低于永不报警。
+    取不到这件事本身由摘要的 head_unavailable 单独暴露。
+    """
     rounds = latest_by_round(coordination_id)
     streak = 0
     previous = None
+    carried: dict = {}
     for _, heads in rounds:
-        if previous is not None and heads == previous:
+        effective = {}
+        for node, head in heads.items():
+            if head is None:
+                effective[node] = carried.get(node)
+            else:
+                effective[node] = head
+                carried[node] = head
+        if previous is not None and effective == previous:
             streak += 1
         else:
             streak = 0
-        previous = heads
+        previous = effective
     return streak
 
 
@@ -548,9 +689,12 @@ def format_summary(round_no: int, valid: bool, offset: int, classification: dict
             f"idle_nodes:      {', '.join(classification['idle_nodes']) or '-'}",
             f"changed_nodes:   {changed_text}",
             f"unchanged:       {', '.join(classification['unchanged']) or '-'}",
+            f"head_unavailable: {', '.join(classification.get('head_unavailable') or []) or '-'}",
+            f"never_reported:  {', '.join(classification.get('never_reported') or []) or '-'}",
             f"pending_decisions: {pending_text}",
             f"stall_streak:    {stall_streak(coordination_id)}/{streak_limit}",
             f"seams_unowned:   {seams_unowned_count(coordination_id)}",
+            f"dispatches_since_progress: {load_state(coordination_id).get('dispatches_since_progress', 0)}",
         ]
     )
 
@@ -590,7 +734,12 @@ def cmd_sync(args) -> int:
         print(format_sync_stale(rollout, scanned_lines))
         return 1
 
-    reason = validate_call(call["arguments"])
+    dispatches = count_dispatch_calls(events)
+    state["dispatches_since_progress"] = int(state.get("dispatches_since_progress") or 0) + dispatches
+
+    # 轮询目标是全部 children，不含 controller 自己——主控轮询自身没有意义。
+    poll_targets = [node for node in nodes if node["role"] != "controller"]
+    reason, actual_ids = validate_call(call["arguments"], [node["session_id"] for node in poll_targets])
     if reason:
         state["invalid_rounds"] = int(state.get("invalid_rounds") or 0) + 1
         state["offset"] = new_offset
@@ -599,9 +748,7 @@ def cmd_sync(args) -> int:
         return 1
 
     payload = extract_projection(output["output"])
-    # 轮询目标是全部 children，不含 controller 自己——主控轮询自身没有意义。
-    poll_targets = [node for node in nodes if node["role"] != "controller"]
-    reason = validate_projection(payload, len(poll_targets))
+    reason = validate_projection(payload, len(actual_ids))
     if reason:
         state["invalid_rounds"] = int(state.get("invalid_rounds") or 0) + 1
         state["offset"] = new_offset
@@ -609,9 +756,13 @@ def cmd_sync(args) -> int:
         print(f"ROUND INVALID: poll snippet altered ({reason})")
         return 1
 
-    rows, classification = classify_and_rows(payload, nodes, args.round, latest_progress(args.coordination_id))
+    latest_poll, latest_report = latest_progress_parts(args.coordination_id)
+    rows, classification = classify_and_rows(payload, poll_targets, args.round, latest_progress(args.coordination_id))
+    classification["never_reported"] = sorted(node["name"] for node in poll_targets if node["name"] not in latest_report)
     for row in rows:
         append_jsonl(jsonl_path(args.coordination_id, "progress.jsonl"), row)
+    if classification["head_changed"]:
+        state["dispatches_since_progress"] = 0
     state["offset"] = new_offset
     save_state(args.coordination_id, state)
     print(format_summary(args.round, True, new_offset, classification, args.coordination_id, args.streak))
@@ -626,6 +777,7 @@ def cmd_report(args) -> int:
         jsonl_path(args.coordination_id, "progress.jsonl"),
         {
             "ts": now_local(),
+            "src": "report",
             "round": args.round,
             "node": args.node,
             "head": args.head,
@@ -641,6 +793,13 @@ def cmd_report(args) -> int:
 
 def cmd_seam(args) -> int:
     ensure_runtime(args.coordination_id)
+    registry = load_registry(args.coordination_id)
+    known_nodes = {node["name"] for node in registry_nodes(registry)}
+    if args.producer not in known_nodes:
+        raise LedgerError(f"unknown producer node: {args.producer}")
+    for consumer in args.consumers or []:
+        if consumer not in known_nodes:
+            raise LedgerError(f"unknown consumer node: {consumer}")
     status = "delivered" if args.deliver else "assigned"
     append_jsonl(
         jsonl_path(args.coordination_id, "seams.jsonl"),
@@ -694,16 +853,17 @@ def cmd_decide(args) -> int:
 
 def cmd_stall_check(args) -> int:
     ensure_runtime(args.coordination_id)
+    dispatches = int(load_state(args.coordination_id).get("dispatches_since_progress") or 0)
     pending = pending_decisions(args.coordination_id)
     if pending:
         items = ", ".join(f"{row.get('decision_id')} raised_by={row.get('raised_by')}" for row in pending)
-        print(f"MUST_ESCALATE pending_decisions: {items}")
+        print(f"MUST_ESCALATE pending_decisions: {items} dispatches_since_progress={dispatches}")
         return 3
     streak = stall_streak(args.coordination_id)
     if streak >= args.streak:
-        print(f"MUST_ACT stall_streak={streak}/{args.streak}")
+        print(f"MUST_ACT stall_streak={streak}/{args.streak} dispatches_since_progress={dispatches}")
         return 2
-    print(f"OK stall_streak={streak}/{args.streak}")
+    print(f"OK stall_streak={streak}/{args.streak} dispatches_since_progress={dispatches}")
     return 0
 
 

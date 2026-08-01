@@ -8,23 +8,34 @@
 
 记录每个 node 的最新可观测进度。写入者包括 `ledger.py sync` 和各子线通过 `ledger.py report` 主动上报。
 
+字段按来源合成当前状态：
+
+- `src=="poll"` 是 broker 从 rollout 与 registry worktree 读到的地面真相，负责 `head` / `turn` / `status`。
+- `src=="report"` 是子线自报，负责 `state` / `waiting_on` / `last_report_ts`。
+- 某 node 从未 `report` 时，`state` 回落到 poll 推导值，`waiting_on` 视为空；`sync` 摘要会在 `never_reported` 中列出该 node。
+- `head` 只表示 git commit SHA，来源是 `git -C <worktree> rev-parse HEAD` 或 `report --head` 显式传入的 git SHA。Desktop `latestTurn.id` 存在 `turn`，不参与停滞判断。
+
 | 字段 | 类型 | 必填 | 枚举 / 格式 | 写入者 | 含义 |
 | --- | --- | --- | --- | --- | --- |
 | `ts` | string | 是 | 本地时区 ISO 8601，带偏移 | `sync` / `report` | 本行写入账本的时间。 |
+| `src` | string | 是 | `poll` / `report` | `sync` / `report` | 本行事实来源；读取当前状态时按字段分源合成。 |
 | `round` | number | 是 | 整数 | `sync` / `report` | broker 轮询轮次；手动 report 不知道轮次时可写 `0`。 |
 | `node` | string | 是 | registry node 名称 | `sync` / `report` | 进度所属 node。 |
-| `head` | string 或 null | 是 | session 最新 turn/head 标识 | `sync` / `report` | 用于判断该 node 是否推进。未知时写 `null`。 |
-| `state` | string | 是 | `working` / `awaiting_seam` / `awaiting_owner` / `done` | `sync` / `report` | node 当前状态。 |
-| `waiting_on` | array[string] | 是 | seam 引用必须写成 `seam:<id>` | `sync` / `report` | 当前阻塞依赖。空数组表示未登记依赖。 |
-| `last_report_ts` | string | 是 | 本地时区 ISO 8601，带偏移 | `sync` / `report` | node 最近一次已知状态更新时间。rollout 中 UTC `Z` 时间戳必须转换成本地时区。 |
+| `head` | string 或 null | poll 必填；report 可选 | 40 位 git SHA 或 `null` | `sync` / `report` | git HEAD。`sync` 取不到 worktree/git 仓库/git 命令时写 `null`，并在摘要 `head_unavailable` 列出。 |
+| `turn` | string 或 null | poll 必填 | Desktop `latestTurn.id` | `sync` | 最近一次 poll 看到的 turn id；不参与 `stall_streak`。 |
+| `status` | string 或 null | poll 必填 | Desktop thread status | `sync` | 最近一次 poll 看到的 thread status。 |
+| `turn_status` | string 或 null | poll 必填 | Desktop `latestTurn.status` | `sync` | 最近一次 poll 看到的 turn status。 |
+| `state` | string | 是 | `working` / `awaiting_seam` / `awaiting_owner` / `done` | `sync` / `report` | node 当前状态；有 report 时以最近 report 为准。 |
+| `waiting_on` | array[string] | report 必填；poll 不写 | seam 引用必须写成 `seam:<id>` | `report` | 当前阻塞依赖。poll 行不得伪造空数组来覆盖自报依赖。 |
+| `last_report_ts` | string | report 必填；poll 不写 | 本地时区 ISO 8601，带偏移 | `report` | node 最近一次主动上报时间。 |
 | `note` | string | 是 | 自由短文本 | `sync` / `report` | 面向 broker 的简短状态说明。 |
 
 示例：
 
 ```jsonl
-{"ts":"2026-08-01T04:48:07+02:00","round":412,"node":"catalog","head":"f69a8b73","state":"awaiting_seam","waiting_on":["seam:order_core_writer"],"last_report_ts":"2026-08-01T04:48:07+02:00","note":"T1/T2/T3/T5 BLOCKED"}
-{"ts":"2026-08-01T04:48:07+02:00","round":412,"node":"checkout","head":"71f19b74","state":"working","waiting_on":[],"last_report_ts":"2026-08-01T04:47:58+02:00","note":"turnCompleted"}
-{"ts":"2026-08-01T04:50:10+02:00","round":413,"node":"foundation","head":null,"state":"working","waiting_on":[],"last_report_ts":"2026-08-01T04:50:10+02:00","note":"inactiveStatus"}
+{"ts":"2026-08-01T04:48:07+02:00","src":"report","round":412,"node":"catalog","head":"f69a8b73f69a8b73f69a8b73f69a8b73f69a8b73","state":"awaiting_seam","waiting_on":["seam:order_core_writer"],"last_report_ts":"2026-08-01T04:48:07+02:00","note":"T1/T2/T3/T5 BLOCKED"}
+{"ts":"2026-08-01T04:48:10+02:00","src":"poll","round":412,"node":"checkout","head":"71f19b7471f19b7471f19b7471f19b7471f19b74","turn":"turn-200","status":"notLoaded","turn_status":"completed","state":"working","note":"turnCompleted"}
+{"ts":"2026-08-01T04:50:10+02:00","src":"poll","round":413,"node":"foundation","head":null,"turn":"turn-201","status":"notLoaded","turn_status":"completed","state":"working","note":"inactiveStatus"}
 ```
 
 ## seams.jsonl
@@ -87,7 +98,7 @@
 python skills/thread-harness/scripts/selftest.py
 ```
 
-覆盖：五条 `sync` 自检判据各自的失败路径（含 `text({pollCount:0})` 这种退化输出）、正常投影合并、`inactiveStatus` 归入 `idle_nodes` 且与 `unchanged` 分开、`SYNC STALE` 错误信息含 path/bytes/mtime/scanned_lines、`stall-check` 的 0/2/3 优先级、用法错误退 64。
+覆盖：`sync` 自检判据各自的失败路径（含 `text({pollCount:0})` 这种退化输出）、实际 ids 集合与 registry children 不一致的失败路径、投影 `n` 与实际 ids 数量不一致、poll 字段完整性、正常投影合并、`inactiveStatus` 归入 `idle_nodes` 且与 `unchanged` 分开、`SYNC STALE` 错误信息含 path/bytes/mtime/scanned_lines、`report` 后 `state` / `waiting_on` 不被下一轮 `sync` 覆盖、真实 git fixture 下 turn 变化不重置 `stall_streak`、`stall-check` 的 0/2/3 优先级、`decide --raise/--answer`、多值参数空格分隔、`seam` producer/consumer registry 校验、用法错误退 64。
 
 自检用 `THREAD_HARNESS_BROKER_ROOT` 与 `THREAD_HARNESS_SESSIONS_ROOT` 指向隔离目录，**不会碰生产运行时**。
 
