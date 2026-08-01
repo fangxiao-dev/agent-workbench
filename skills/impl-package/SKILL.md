@@ -48,6 +48,8 @@ flowchart TD
 
 `to-tickets` 与 `create-task-dag` 是同一 earn-gated 计划拆解阶段的工具化步骤。`impl-planning` 形成并审查完整 candidate bundle 后，只在一次 bundle approval 写入、登记并路由到执行；权威细则见 [共享 contract](references/impl-package-composition-contract.md)。backfill 虚线是异步维护提示：gate 关闭后应提醒 owner 可以运行 `$backfill-stable-docs`，但不自动执行、不要求本次完成，也不影响当前 gate 或任务的 closed 判断；真正压实可由后续 audit / approved apply / verify 或周期任务完成。
 
+当 review baseline fresh、owner 已批准当前 manifest、没有 unresolved blocker，且变更只涉及规划文档、Ticket publication 与 D/S/P binding 时，使用 [planning-only fast apply runbook](references/plan-apply-runbook.md)。它把授权校验、Ticket 原子发布、revision 注册、projection 刷新和一轮汇总验证收敛为一次可恢复本地事务；commit/push 与 PR/Issue 摘要同步保持为独立后续动作。
+
 ## 阶段地图
 
 | 阶段 | Owner skill | 产出 | 何时 |
@@ -98,6 +100,7 @@ flowchart TD
 
 - **规则 / 跨层契约（正式）** → [references/impl-package-composition-contract.md](references/impl-package-composition-contract.md)（composition、derived lifecycle、readiness resolution、seam、Stage 7、dispatch shorthand、revision-blob binding、Module Knowledge Watermark）。
 - **结构化状态 schema（正式）** → [references/impl-package-state-schema.md](references/impl-package-state-schema.md)（sidecar shape、CLI、projection、current-contract 校验、gate content binding 与消费结果；旧 schema 不再由运行时兼容解析）。
+- **planning-only fast apply（正式操作 runbook）** → [references/plan-apply-runbook.md](references/plan-apply-runbook.md)（clearance/owner authorization、原子 Ticket publish、D/S/P binding、恢复、输出和独立 Git/GitHub handoff）。
 - **backfill / 常青四层（正式，已批准）** → [references/evergreen-module-spec-and-backfill-design.md](references/evergreen-module-spec-and-backfill-design.md)。
 - **渐进式系统证据（指导性）** → [references/progressive-system-evidence.md](references/progressive-system-evidence.md)（围绕 system assumption、忠实边界、昂贵 E2E、checkpoint、failure learning 与 claim-scoped freshness 选择证据；不改变 artifact lifecycle）。
 - **体系设计 rationale（仍为方案草案，内容仍会演进）** → [references/impl-package-system-design.md](references/impl-package-system-design.md)。

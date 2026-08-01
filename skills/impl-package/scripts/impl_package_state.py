@@ -1762,6 +1762,8 @@ def _recover_registration_transaction(package: Path) -> bool:
 def command_register_revisions(
     package: Path,
     registrations: list[dict[str, Any]],
+    *,
+    validate: bool = True,
 ) -> dict[str, Any]:
     _recover_registration_transaction(package)
     path, runtime_path, candidate, runtime_candidate = _build_registration_candidate(package, registrations)
@@ -1787,7 +1789,8 @@ def command_register_revisions(
         _atomic_write_json(path, candidate)
         _atomic_write_json(runtime_path, runtime_candidate)
         command_refresh_projections(package)
-        command_validate(package, committed=False)
+        if validate:
+            command_validate(package, committed=False)
     except BaseException:
         _restore_snapshot(snapshot)
         (package / REGISTRATION_JOURNAL).unlink(missing_ok=True)

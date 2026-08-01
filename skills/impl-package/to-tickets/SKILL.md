@@ -81,19 +81,38 @@ After bundle approval, a change to an acceptance boundary, typed dependency, Tas
 
 Fail publish without partial publication-status updates if any validation fails. Publish owns only the `Draft` to `Approved` publication transition. It must preserve the runtime-state marker body. Runtime readiness and all later ticket acceptance status belong to `dev-with-track` through the shared structured-state contract.
 
-完整 ticket set 发布成功后运行 `impl_package_state.py --package <path> init --package-id <id>` 机械同步 current attempt ticket records，再运行 `refresh-projections`；每个 earned ticket 必须恰有一个 `UNRECORDED` 或既有 current record。同步失败视为 publish 尚未完成收口，不得让 ticket file 与 JSON 成为两个可写状态源。
+完整 ticket set 的 planning-only publish 统一交给 [Fast planning apply](#fast-planning-apply)：它通过共享 state engine 在同一事务中注册 current attempt、seed earned ticket/task records 并刷新 projections；不再在 publish 后手工重复运行 `init` 或 `refresh-projections`。每个 earned ticket 必须恰有一个 `UNRECORDED` 或既有 current record；同步失败视为 publish 尚未完成收口，不得让 ticket file 与 JSON 成为两个可写状态源。
 
-### Atomic local publish protocol
+### Fast planning apply
 
-After every semantic validation passes, perform the status transition as one recoverable package-local transaction:
+When the review baseline is fresh, the owner has approved the exact current
+manifest, no blocker is unresolved, and the change is planning-only, use the
+single package-local transaction in
+[plan-apply-runbook](../references/plan-apply-runbook.md):
 
-1. Create a temporary staging directory and journal inside the package. The journal lists the complete target set and stores or references an original byte-for-byte snapshot of every target; staged files contain the complete intended `Approved` contents.
-2. Validate the entire staged set again, including ACs, typed references, acyclicity, deterministic order, and the exact target paths.
-3. Replace every target from staging. Do not report success during replacement.
-4. If any replacement or verification fails, use the journal to restore every original target, verify the restored set, then remove temporary transaction data. Report the publish as failed; never call a partial replacement successful.
-5. Only after all replacements and final verification succeed, remove staging and the journal and report every ticket's Publication Status as `Approved`.
+```powershell
+python skills/impl-package/scripts/impl_package_apply.py publish-plan `
+  --package <package> `
+  --decision <D<n>> `
+  --spec <S<n>> `
+  --plan <P<n>> `
+  --ledger <ledger> `
+  --authorization <owner-authorization.json>
+```
 
-At the start of any later draft or publish operation, detect an uncleared publish journal. Restore and verify the recorded originals before continuing; if recovery cannot be verified, stop for owner intervention. Staging and journal are transient transaction data, not persistent Impl-Package artifacts.
+The helper verifies clearance and owner authorization, validates the complete
+Ticket/AC/typed-edge/DAG bundle once, atomically publishes all Draft tickets,
+registers D/S/P and projections through the shared state engine, performs one
+final summary validation, then cleans its transient journal. It returns only
+`APPLIED` or a concrete `BLOCKER`; on failure it restores and verifies the
+original bytes. It does not create manual backup/staging directories and does
+not commit, push, or update GitHub. Inspect the actual worktree before retrying
+an interrupted parent process; never infer transaction completion from a
+cleanup attempt.
+
+The separate `sync-working-unit` helper can generate a PR/Issue Markdown
+summary from package state after commit/push. Remote updates remain an
+independent, explicitly authorized workflow.
 
 ## Runner-Neutral Handoff
 

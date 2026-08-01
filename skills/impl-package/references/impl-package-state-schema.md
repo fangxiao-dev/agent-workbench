@@ -140,9 +140,20 @@ impl_package_state.py --package <path> new-gate-entry --attempt <id> --operation
 impl_package_state.py --package <path> finalize-gate-entry <gate-id>
 ```
 
+Planning-only 的快速发布由上层事务编排器提供，不把 commit/push 或远程更新混入 state engine：
+
+```text
+impl_package_apply.py publish-plan --package <path> --decision <D<n>> --spec <S<n>> --plan <P<n>> --ledger <ledger> --authorization <owner-message.json>
+impl_package_apply.py sync-working-unit --package <path> --repo <owner/repository> --pr <number> --issue <number> [--committed]
+```
+
+`publish-plan` 只允许 fresh clearance、精确 owner authorization、无 unresolved blocker 且 `Composition.tickets=true` 的 planning-only bundle。它复用本 state engine，不手写 sidecar：Ticket publication、revision registration、projection refresh 与最终汇总验证属于一个带 transient journal 的本地事务；失败自动恢复并校验原始 bytes。成功只输出 `APPLIED`，失败只输出明确 `BLOCKER`。`sync-working-unit` 只从 working-tree/committed package state 生成确定性 PR/Issue Markdown 摘要，不执行 commit、push 或 GitHub 写入。
+
 命令可以增加纯输出选项，但不得静默推断 package root、current attempt、previous state、editorial judgment 或 verdict reason。
 
 当同一 semantic revision 需要同时切换多个当前 artifact（例如 post-gate patch 的 D/S 与新 attempt P1）时，使用 `register-revisions` 做一次候选 state 校验与 revision sidecar 原子替换；它不改变 exact-blob、plan-contract-v1、append-only 或 projection 约束，也不接受手工 JSON。命令会在候选 revision state 上预置 earned runtime records 并随后刷新 projection，但 revision sidecar、runtime-state 与 Markdown 不宣称跨文件事务；中断或部分写入必须由 `contract-status` / `validate` 发现。单个 artifact 的正常首次登记仍可使用 `register-revision`。
+
+`register-revisions` 默认在写入后执行 working-tree validation；`publish-plan` 在自身已完成 Ticket/AC/DAG preflight 后以编排模式调用同一 API，暂缓这一次内部 validation，待 Ticket、sidecar 与 projection 全部写入后执行唯一一轮 final summary validation。普通 state CLI 调用保持默认验证行为。
 
 CLI 的数据策略来自 skill-owned [`../assets/impl-package-state-config.json`](../assets/impl-package-state-config.json)。配置只承载 vocabulary、artifact discovery、字段及 gate heading/revision-set grammar（含 `revisionSetFieldPattern`）、marker 名称与 projection format；脚本自动按自身 skill 位置加载，不接受调用方任意覆盖 canonical policy。配置和 package contract 都使用字符串 `contractVersion`，当前为 `"3.2"`；对 placeholder、capture group 与单行 heading 范围 fail closed。完整 gate entry span、append-only、identity/content binding、active backward chain、CAS、package-local path、HEAD/worktree context 与 earned-artifact bijection 保持为代码内不可配置不变量。
 
