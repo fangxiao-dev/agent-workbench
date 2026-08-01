@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thread Harness｜多 Thread 长跑控制台</title>
+  <style>
+    :root {
+      --bg: #09111f;
+      --panel: #101b2c;
+      --panel-2: #14243a;
+      --line: #2a405d;
+      --text: #e8f0fb;
+      --muted: #9cb0c8;
+      --cyan: #5eead4;
+      --blue: #7dd3fc;
+      --amber: #fbbf24;
+      --rose: #fb7185;
+      --violet: #c4b5fd;
+      --green: #86efac;
+      --shadow: 0 18px 50px rgba(0, 0, 0, .25);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 0%, rgba(94, 234, 212, .10), transparent 32rem),
+        radial-gradient(circle at 90% 8%, rgba(125, 211, 252, .10), transparent 28rem),
+        var(--bg);
+      font: 15px/1.7 Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+
+    a { color: var(--blue); }
+    code, .mono { font: 0.92em/1.5 Consolas, "Cascadia Code", monospace; }
+    code {
+      color: #d8f7f0;
+      background: rgba(94, 234, 212, .09);
+      border: 1px solid rgba(94, 234, 212, .17);
+      border-radius: 5px;
+      padding: .12em .35em;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h2 { margin-bottom: 12px; font-size: clamp(22px, 3vw, 32px); letter-spacing: -.02em; }
+    h3 { margin-bottom: 6px; font-size: 17px; }
+
+    .wrap { width: min(1180px, calc(100% - 36px)); margin: 0 auto; }
+    .topbar {
+      position: sticky; top: 0; z-index: 10;
+      backdrop-filter: blur(16px);
+      background: rgba(9, 17, 31, .78);
+      border-bottom: 1px solid rgba(156, 176, 200, .12);
+    }
+    .topbar-inner { display: flex; align-items: center; justify-content: space-between; min-height: 64px; gap: 18px; }
+    .brand { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; font-weight: 700; letter-spacing: .02em; }
+    .brand-mark { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; color: var(--bg); background: linear-gradient(135deg, var(--cyan), var(--blue)); font-weight: 900; }
+    nav { display: flex; gap: 16px; overflow-x: auto; white-space: nowrap; }
+    nav a { color: var(--muted); text-decoration: none; font-size: 13px; }
+    nav a:hover { color: var(--text); }
+
+    header { padding: 82px 0 52px; }
+    .eyebrow { color: var(--cyan); font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    .hero-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 44px; align-items: center; }
+    h1 { max-width: 720px; margin: 12px 0 18px; font-size: clamp(38px, 6vw, 72px); line-height: 1.05; letter-spacing: -.055em; }
+    .lede { max-width: 680px; color: var(--muted); font-size: 18px; }
+    .lede strong { color: var(--text); }
+    .hero-note { padding: 24px; border: 1px solid rgba(94, 234, 212, .25); border-radius: 20px; background: linear-gradient(145deg, rgba(20, 36, 58, .9), rgba(16, 27, 44, .7)); box-shadow: var(--shadow); }
+    .hero-note .big { margin: 0 0 10px; color: var(--cyan); font-size: 28px; font-weight: 800; line-height: 1.15; }
+    .hero-note p { margin-bottom: 0; color: var(--muted); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+    .chip { padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: rgba(20, 36, 58, .65); font-size: 12px; }
+    .chip.cyan { color: var(--cyan); border-color: rgba(94, 234, 212, .35); }
+    .chip.amber { color: var(--amber); border-color: rgba(251, 191, 36, .35); }
+
+    section { padding: 54px 0; }
+    .section-intro { max-width: 720px; margin-bottom: 24px; color: var(--muted); }
+    .panel { border: 1px solid rgba(156, 176, 200, .16); border-radius: 20px; background: linear-gradient(150deg, rgba(20, 36, 58, .86), rgba(16, 27, 44, .72)); box-shadow: var(--shadow); }
+    .panel-pad { padding: 24px; }
+    .callout { margin: 18px 0 0; padding: 16px 18px; border-left: 3px solid var(--amber); background: rgba(251, 191, 36, .07); color: #f9e7ae; }
+    .callout strong { color: var(--amber); }
+
+    .relationship { position: relative; overflow: hidden; padding: 24px; }
+    .relationship svg { display: block; width: 100%; min-height: 440px; }
+    .diagram-label { fill: #e8f0fb; font: 700 15px Inter, "Segoe UI", sans-serif; }
+    .diagram-sub { fill: #9cb0c8; font: 12px Inter, "Segoe UI", sans-serif; }
+    .diagram-edge { fill: none; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 7 7; }
+    .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+    .legend span { display: inline-flex; align-items: center; gap: 7px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+    .role-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .role-card { min-height: 250px; padding: 20px; border: 1px solid var(--line); border-top: 3px solid var(--blue); border-radius: 16px; background: rgba(16, 27, 44, .8); }
+    .role-card.owner { border-top-color: var(--amber); }
+    .role-card.controller { border-top-color: var(--cyan); }
+    .role-card.package { border-top-color: var(--blue); }
+    .role-card.foundation { border-top-color: var(--violet); }
+    .role-tag { color: var(--muted); font: 12px Consolas, monospace; }
+    .role-card p { color: var(--muted); }
+    .role-card ul { margin: 10px 0 0; padding-left: 18px; color: var(--muted); }
+    .role-card li + li { margin-top: 5px; }
+    .role-card li::marker { color: var(--cyan); }
+    .mini-pill { display: inline-block; margin-top: 12px; padding: 3px 8px; border-radius: 999px; background: rgba(125, 211, 252, .10); color: var(--blue); font-size: 11px; }
+
+    .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; align-items: stretch; }
+    .flow-step { position: relative; min-height: 190px; padding: 20px 18px; border: 1px solid var(--line); border-right: 0; background: rgba(16, 27, 44, .78); }
+    .flow-step:first-child { border-radius: 16px 0 0 16px; }
+    .flow-step:last-child { border-right: 1px solid var(--line); border-radius: 0 16px 16px 0; }
+    .flow-step::after { content: "→"; position: absolute; right: -14px; top: 50%; z-index: 1; display: grid; place-items: center; width: 28px; height: 28px; transform: translateY(-50%); border-radius: 50%; background: var(--cyan); color: var(--bg); font-weight: 900; }
+    .flow-step:last-child::after { display: none; }
+    .step-no { color: var(--cyan); font: 800 12px Consolas, monospace; }
+    .flow-step h3 { margin-top: 16px; }
+    .flow-step p { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+    .signal-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 14px; }
+    .signal { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(9, 17, 31, .45); }
+    .signal b { display: block; margin-bottom: 3px; }
+    .signal span { color: var(--muted); font-size: 13px; }
+    .signal.act b { color: var(--amber); }
+    .signal.escalate b { color: var(--rose); }
+    .signal.invalid b { color: var(--rose); }
+
+    .rule-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .rule { padding: 18px; border-radius: 16px; background: rgba(16, 27, 44, .8); border: 1px solid var(--line); }
+    .rule .rule-id { color: var(--cyan); font: 900 13px Consolas, monospace; }
+    .rule h3 { margin-top: 9px; }
+    .rule p { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+    .rule.h3 { border-color: rgba(251, 191, 36, .35); }
+    .rule.h3 .rule-id { color: var(--amber); }
+    .rule.h4 { border-color: rgba(196, 181, 253, .35); }
+    .rule.h4 .rule-id { color: var(--violet); }
+
+    .channel-table, .ledger-table, .script-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { color: var(--text); text-align: left; font-size: 12px; letter-spacing: .05em; }
+    th, td { padding: 13px 12px; border-bottom: 1px solid rgba(156, 176, 200, .14); vertical-align: top; }
+    td { color: var(--muted); }
+    td:first-child { color: var(--text); white-space: nowrap; }
+    tr:last-child td { border-bottom: 0; }
+    .table-wrap { overflow-x: auto; }
+    .source { color: var(--cyan); font: 12px Consolas, monospace; }
+
+    .ledger-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .ledger-card { padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(16, 27, 44, .8); }
+    .ledger-card h3 { color: var(--blue); }
+    .ledger-card p { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+    .ledger-card .file { color: var(--cyan); font: 800 13px Consolas, monospace; }
+    .truth { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+    .truth-card { padding: 18px; border-radius: 16px; border: 1px solid rgba(134, 239, 172, .25); background: rgba(134, 239, 172, .06); }
+    .truth-card h3 { color: var(--green); }
+    .truth-card p { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+
+    .failure { display: grid; grid-template-columns: 1fr 1.15fr; gap: 18px; align-items: center; }
+    .failure-list { display: grid; gap: 10px; }
+    .failure-item { display: flex; gap: 12px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(9, 17, 31, .45); }
+    .failure-item .icon { flex: 0 0 24px; display: grid; place-items: center; height: 24px; border-radius: 8px; color: var(--bg); background: var(--rose); font-weight: 900; }
+    .failure-item p { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+    .failure-item strong { color: var(--text); }
+    .before-after { display: grid; gap: 12px; }
+    .state-box { padding: 18px; border-radius: 16px; border: 1px solid var(--line); }
+    .state-box.before { background: rgba(251, 113, 133, .08); border-color: rgba(251, 113, 133, .30); }
+    .state-box.after { background: rgba(94, 234, 212, .08); border-color: rgba(94, 234, 212, .30); }
+    .state-box .label { display: block; margin-bottom: 6px; font: 800 11px Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; }
+    .state-box.before .label { color: var(--rose); }
+    .state-box.after .label { color: var(--cyan); }
+    .state-box p { margin-bottom: 0; color: var(--muted); }
+
+    .limits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .limit { padding: 18px; border: 1px solid rgba(251, 191, 36, .25); border-radius: 16px; background: rgba(251, 191, 36, .05); }
+    .limit h3 { color: var(--amber); }
+    .limit p { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+    footer { padding: 34px 0 64px; color: var(--muted); font-size: 13px; }
+    footer .sources { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; }
+
+    @media (max-width: 900px) {
+      .hero-grid, .failure { grid-template-columns: 1fr; }
+      .role-grid, .rule-grid { grid-template-columns: repeat(2, 1fr); }
+      .flow { grid-template-columns: 1fr; gap: 10px; }
+      .flow-step, .flow-step:first-child, .flow-step:last-child { min-height: auto; border: 1px solid var(--line); border-radius: 14px; }
+      .flow-step::after { content: "↓"; right: 50%; top: auto; bottom: -19px; transform: translateX(50%); }
+      .flow-step:last-child::after { display: none; }
+    }
+    @media (max-width: 640px) {
+      .wrap { width: min(100% - 24px, 1180px); }
+      .topbar-inner { align-items: flex-start; flex-direction: column; padding: 12px 0; }
+      header { padding-top: 48px; }
+      .role-grid, .rule-grid, .ledger-grid, .truth, .limits, .signal-row { grid-template-columns: 1fr; }
+      .relationship { padding: 8px; }
+      .relationship svg { min-height: 550px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#top"><span class="brand-mark">TH</span><span>Thread Harness</span></a>
+      <nav aria-label="页面导航">
+        <a href="#roles">角色</a>
+        <a href="#loop">控制流</a>
+        <a href="#rules">四条硬规则</a>
+        <a href="#channels">沟通渠道</a>
+        <a href="#scripts">脚本与账本</a>
+        <a href="#limits">边界</a>
+      </nav>
+    </div>
+  </div>
+
+  <main id="top">
+    <header>
+      <div class="wrap hero-grid">
+        <div>
+          <div class="eyebrow">A visual field guide for long-running multi-thread work</div>
+          <h1>让系统卡住时，<span style="color:var(--cyan)">会叫人</span>。</h1>
+          <p class="lede">Thread Harness 是一套给“<strong>一个主控 thread + 多条子 thread 长时间并行</strong>”使用的控制流约定。它关注的不是怎么把线程开出来，而是：谁负责推进整体、谁负责生产共享 seam、何时上报、何时派活、何时叫醒 Owner。</p>
+          <div class="chips">
+            <span class="chip cyan">1 Controller + N Children</span>
+            <span class="chip">Append-only Ledger</span>
+            <span class="chip amber">Fail-closed Stall Detection</span>
+            <span class="chip">当前 wait_threads 上限：8 个 child</span>
+          </div>
+        </div>
+        <aside class="hero-note">
+          <p class="big">核心心智模型</p>
+          <p>把“工作是否真的推进”从模型的短期记忆里拿出来：Git HEAD、rollout、registry 是地面真相；子线无法被外部观察的状态，必须通过回报写入账本。</p>
+          <div class="callout"><strong>最终目标：</strong>减少“大家都在等，但没有人负责造那个中间产物”的静默死锁。</div>
+        </aside>
+      </div>
+    </header>
+
+    <section id="map">
+      <div class="wrap">
+        <h2>先看全景：谁和谁发生什么关系？</h2>
+        <p class="section-intro">Owner 负责授权和 Owner 级决策；Controller 负责让整体推进；Package Child 完成明确任务包；Foundation Child 专门生产跨线共享的 seam。artifact 沿 seam 流向消费者，状态和异常沿回报通道回到 Controller。</p>
+        <div class="panel relationship">
+          <svg viewBox="0 0 1100 470" role="img" aria-label="Owner、Controller、任务包子线、Foundation 子线和 seam artifact 的关系图">
+            <defs>
+              <marker id="arrow-cyan" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#5eead4" /></marker>
+              <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#7dd3fc" /></marker>
+              <marker id="arrow-violet" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#c4b5fd" /></marker>
+              <marker id="arrow-amber" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#fbbf24" /></marker>
+            </defs>
+            <path d="M170 110 C280 110 300 180 390 205" class="diagram-edge" stroke="#fbbf24" marker-end="url(#arrow-amber)" />
+            <path d="M390 255 C290 285 260 360 170 360" class="diagram-edge" stroke="#fbbf24" marker-end="url(#arrow-amber)" />
+            <path d="M530 180 C530 125 530 105 530 73" class="diagram-edge" stroke="#5eead4" marker-end="url(#arrow-cyan)" />
+            <path d="M530 280 C530 335 530 355 530 397" class="diagram-edge" stroke="#5eead4" marker-end="url(#arrow-cyan)" />
+            <path d="M650 212 C725 185 760 142 825 130" class="diagram-edge" stroke="#7dd3fc" marker-end="url(#arrow-blue)" />
+            <path d="M650 248 C725 270 760 330 825 340" class="diagram-edge" stroke="#7dd3fc" marker-end="url(#arrow-blue)" />
+            <path d="M825 168 C750 205 730 215 650 225" class="diagram-edge" stroke="#c4b5fd" marker-end="url(#arrow-violet)" />
+            <path d="M825 302 C750 270 730 255 650 245" class="diagram-edge" stroke="#c4b5fd" marker-end="url(#arrow-violet)" />
+
+            <rect x="35" y="65" width="170" height="90" rx="16" fill="#241e14" stroke="#fbbf24" />
+            <text x="120" y="100" text-anchor="middle" class="diagram-label">Owner</text>
+            <text x="120" y="124" text-anchor="middle" class="diagram-sub">授权 · 业务目标 · 决策</text>
+            <rect x="35" y="315" width="170" height="90" rx="16" fill="#241e14" stroke="#fbbf24" />
+            <text x="120" y="350" text-anchor="middle" class="diagram-label">Owner 反馈</text>
+            <text x="120" y="374" text-anchor="middle" class="diagram-sub">回答 pending decision</text>
+
+            <rect x="390" y="175" width="260" height="110" rx="20" fill="#0d2a2b" stroke="#5eead4" stroke-width="2" />
+            <text x="520" y="215" text-anchor="middle" class="diagram-label">Controller / 主控</text>
+            <text x="520" y="241" text-anchor="middle" class="diagram-sub">poll → sync → stall-check → act</text>
+            <text x="520" y="263" text-anchor="middle" class="diagram-sub">不写业务代码，负责整体推进</text>
+
+            <rect x="430" y="25" width="200" height="48" rx="14" fill="#10283a" stroke="#5eead4" />
+            <text x="530" y="54" text-anchor="middle" class="diagram-label">Registry / 路由表</text>
+            <rect x="430" y="397" width="200" height="48" rx="14" fill="#10283a" stroke="#5eead4" />
+            <text x="530" y="426" text-anchor="middle" class="diagram-label">Ledger / 运行账本</text>
+
+            <rect x="825" y="85" width="240" height="90" rx="16" fill="#10243a" stroke="#7dd3fc" />
+            <text x="945" y="120" text-anchor="middle" class="diagram-label">Role A · Package Child</text>
+            <text x="945" y="145" text-anchor="middle" class="diagram-sub">完成一个明确任务包</text>
+            <rect x="825" y="295" width="240" height="90" rx="16" fill="#211a38" stroke="#c4b5fd" />
+            <text x="945" y="330" text-anchor="middle" class="diagram-label">Role B · Foundation Child</text>
+            <text x="945" y="355" text-anchor="middle" class="diagram-sub">生产共享 seam / artifact</text>
+            <text x="737" y="203" text-anchor="middle" class="diagram-sub" fill="#7dd3fc">dispatch / poll</text>
+            <text x="741" y="275" text-anchor="middle" class="diagram-sub" fill="#c4b5fd">report / artifact</text>
+          </svg>
+          <div class="legend">
+            <span><i class="dot" style="background:var(--amber)"></i>Owner 决策与授权</span>
+            <span><i class="dot" style="background:var(--cyan)"></i>主控控制流</span>
+            <span><i class="dot" style="background:var(--blue)"></i>任务分派与观察</span>
+            <span><i class="dot" style="background:var(--violet)"></i>共享 seam 与交付</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="roles">
+      <div class="wrap">
+        <h2>四个关键角色</h2>
+        <p class="section-intro">严格说，skill 定义的是三个 thread 角色；Owner 是系统外的决策者，但没有 Owner 的授权与决策，上面的控制流就不完整。</p>
+        <div class="role-grid">
+          <article class="role-card owner">
+            <div class="role-tag">SYSTEM OWNER</div>
+            <h3>Owner · 决策者</h3>
+            <p>知道业务目标、结束判据和不可越过的边界。</p>
+            <ul>
+              <li>开主控并写 goal</li>
+              <li>亲手授权是否允许创建子任务</li>
+              <li>处理 Owner 级 pending decision</li>
+              <li>确认 effort 档位，盯首个停滞信号</li>
+            </ul>
+            <span class="mini-pill" style="color:var(--amber)">不能被 broker 自行替代</span>
+          </article>
+          <article class="role-card controller">
+            <div class="role-tag">ROLE C</div>
+            <h3>Controller · 主控</h3>
+            <p>系统的推进责任人，不直接写业务代码。</p>
+            <ul>
+              <li>维护路由，轮询全部 children</li>
+              <li>读取账本，判断 idle / changed / stall</li>
+              <li>缺 seam 就派 Foundation 线</li>
+              <li>三轮无 committed progress 必须行动或升级</li>
+            </ul>
+            <span class="mini-pill" style="color:var(--cyan)">负责“整体有没有前进”</span>
+          </article>
+          <article class="role-card package">
+            <div class="role-tag">ROLE A</div>
+            <h3>Package Child · 任务包子线</h3>
+            <p>负责一个明确任务包，开发方式由其他执行 skill 定义。</p>
+            <ul>
+              <li>按自己的任务包推进实现</li>
+              <li>HEAD 变化、转 waiting、Owner 阻塞时主动回报</li>
+              <li>只把共享 seam 问题上报给主控</li>
+              <li>等上游时必须引用 <code>seam:id</code></li>
+            </ul>
+            <span class="mini-pill">产出业务任务包</span>
+          </article>
+          <article class="role-card foundation">
+            <div class="role-tag">ROLE B</div>
+            <h3>Foundation Child · 基座子线</h3>
+            <p>没有自己的任务包，专门生产被多条线依赖的共享 seam。</p>
+            <ul>
+              <li>由主控指派 seam 和交付物</li>
+              <li>“保持待命”是非法指令</li>
+              <li>空闲时要下一个 seam，或报告交付</li>
+              <li>交付时登记 producer、consumers、artifact</li>
+            </ul>
+            <span class="mini-pill" style="color:var(--violet)">生产共享契约 / artifact</span>
+          </article>
+        </div>
+        <div class="callout"><strong>最容易搞反的一点：</strong>“大家都在等跨域契约”不是外部阻塞，而是主控尚未安排生产者。Controller 手里有 <code>create_thread</code>，可以派一条 Foundation 线去造它——当然，前提是 Owner 已明确授权。</div>
+        <div class="panel panel-pad" style="margin-top:14px">
+          <h3 style="color:var(--cyan)">执行层辅助：<code>$call-grok</code> 在哪里参与？</h3>
+          <p style="color:var(--muted); margin-bottom:14px"><code>call-grok</code> 参与的是实现与调查过程，不是 Harness 的调度闭环。它通常由 Package Child 或 Foundation Child 调用，作为独立 CLI 进程只返回结论；子线仍然负责把结论落到自己的任务、commit、seam 登记和 H1/H2 回报上。</p>
+          <div class="signal-row">
+            <div class="signal"><b><code>impl / investigate</code></b><span>优先用 call-grok，回收结论，减少主线被实现过程占满上下文。</span></div>
+            <div class="signal"><b><code>review</code></b><span>不走 call-grok，走 <code>$do-review</code> 的既有 review tracks。</span></div>
+            <div class="signal"><b><code>acceptance</code></b><span>不外包，由当前 session 自己验收，避免判断失真。</span></div>
+          </div>
+          <div class="callout" style="margin-bottom:0"><strong>边界：</strong>call-grok 不是 registry child，不参与 <code>wait_threads</code> 轮询，也不负责账本、停滞判断或 Owner 决策；它只缩短“做实现/调查”这段过程。</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="loop">
+      <div class="wrap">
+        <h2>主控每一轮怎么跑？</h2>
+        <p class="section-intro">这是一条固定控制回路。最重要的是顺序：先拿到当前 session id，再用固定 poll 片段观察，随后由磁盘脚本判断，最后才做派活或升级。</p>
+        <div class="panel panel-pad">
+          <div class="flow">
+            <div class="flow-step">
+              <div class="step-no">01 · ROUTE</div>
+              <h3>读 Registry</h3>
+              <p>获取全部 child 的 <code>current_session_id</code>。不凭记忆使用旧 ID，避免子线换 session 后每轮失效。</p>
+            </div>
+            <div class="flow-step">
+              <div class="step-no">02 · POLL</div>
+              <h3>固定 wait</h3>
+              <p>对全部 children 调 <code>wait_threads</code>，至少等待 180 秒，并打印固定、有界的 projection。</p>
+            </div>
+            <div class="flow-step">
+              <div class="step-no">03 · SYNC</div>
+              <h3>同步地面真相</h3>
+              <p><code>ledger.py sync</code> 从主控 rollout 读 projection，从 registry worktree 读 Git HEAD，合成紧凑摘要。</p>
+            </div>
+            <div class="flow-step">
+              <div class="step-no">04 · CHECK</div>
+              <h3>判定停滞</h3>
+              <p><code>stall-check</code> 检查 pending decision 和连续无 committed progress 的轮数。</p>
+            </div>
+            <div class="flow-step">
+              <div class="step-no">05 · ROUTE</div>
+              <h3>派活或升级</h3>
+              <p>闲线派任务；有 Owner 决策立即上报；三轮无推进只能 dispatch 或 escalate。</p>
+            </div>
+          </div>
+          <div class="signal-row">
+            <div class="signal act"><b><code>inactiveStatus</code> → idle_nodes</b><span>有线程闲着，是“该派活”的信号，不是“没有变化”。</span></div>
+            <div class="signal escalate"><b><code>MUST_ESCALATE</code></b><span><code>decisions.jsonl</code> 有 pending，立即叫醒 Owner，本轮结束。</span></div>
+            <div class="signal invalid"><b><code>ROUND INVALID</code> / <code>SYNC STALE</code></b><span>本轮数据无效或 rollout 未就绪；修复/重跑，不能静默复用旧数据。</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="rules">
+      <div class="wrap">
+        <h2>四条硬规则：系统的护栏</h2>
+        <p class="section-intro">其余内容是建议和工作方法，真正必须守住的是 H1–H4。每一条都对应一次真实的失效模式。</p>
+        <div class="rule-grid">
+          <article class="rule">
+            <div class="rule-id">H1 · REPORT</div>
+            <h3>触发就回报</h3>
+            <p>HEAD 变了、状态从 working 转 waiting、出现 Owner 级阻塞，任一发生都要写账本并给主控发消息。不要等主控来问。</p>
+          </article>
+          <article class="rule">
+            <div class="rule-id">H2 · LEDGER</div>
+            <h3>状态变更即追加</h3>
+            <p>进度不能只留在上下文里，因为 compaction 会清掉它。JSONL 账本只追加新事实，不改写旧行。</p>
+          </article>
+          <article class="rule h3">
+            <div class="rule-id">H3 · STALL</div>
+            <h3>三轮无提交，二选一</h3>
+            <p>连续 3 轮所有 node 的 Git HEAD 无变化：必须派新工作，或向 Owner 报告并结束 loop。禁止“继续等待”。</p>
+          </article>
+          <article class="rule h4">
+            <div class="rule-id">H4 · SEAM</div>
+            <h3>等待必须有生产者</h3>
+            <p>任何 <code>awaiting_seam</code> 都要写 <code>seam:id</code>，且 seam 必须登记 producer。等一个没人负责造的东西，是错误状态。</p>
+          </article>
+        </div>
+        <div class="callout"><strong>H3 的精确含义：</strong>没有 committed progress，不等于所有线程都停止。即使某条线正在工作但尚未 commit，主控仍要给其他空闲线派活，或上报 Owner。</div>
+      </div>
+    </section>
+
+    <section id="channels">
+      <div class="wrap">
+        <h2>沟通渠道：消息、观察、路由、账本各司其职</h2>
+        <p class="section-intro">Thread Harness 不把所有信息都塞进消息里。消息是即时沟通，registry 是“谁对应哪个 session”，ledger 是可恢复的事实账本，Git/rollout 是不依赖模型自述的观察源。</p>
+        <div class="panel panel-pad table-wrap">
+          <table class="channel-table">
+            <thead><tr><th>渠道 / 载体</th><th>方向</th><th>用途</th><th>关键边界</th></tr></thead>
+            <tbody>
+              <tr><td><code>create_thread</code></td><td>Controller → Child</td><td>创建任务包线或 Foundation 线，派出新的工作单元。</td><td>不是主控自授权动作；Owner 必须在 goal 或对话中明确授权。</td></tr>
+              <tr><td><code>wait_threads</code></td><td>Controller → 全部 children</td><td>按固定 poll contract 等待首个可行动变化，并拿回有限投影。</td><td>当前单次最多 8 个 target；不包含 Controller 自己。</td></tr>
+              <tr><td><code>send_message_to_thread</code></td><td>Child ↔ Controller</td><td>H1 触发时主动回报；主控也用它传达派活、决策和边界。</td><td>主动回报不能只依赖主控拉取，因为拉取机制不可靠。</td></tr>
+              <tr><td><code>read_thread</code></td><td>Controller → 指定 child</td><td>当 500 字符摘要不够时，按需读取某条线全文。</td><td>默认 poll 有界，避免把所有长文本灌进主控上下文。</td></tr>
+              <tr><td>Registry JSON</td><td>Controller / broker 维护</td><td>绑定稳定 <code>node_id</code>、当前 session、topic、worktree、branch。</td><td>它是路由元数据，不是审批账本、密钥仓库或实现证据仓库。</td></tr>
+              <tr><td>Git HEAD</td><td>sync 读取</td><td>判断是否有真实的代码提交推进。</td><td>不能用 Desktop turn id 代替；turn 变化不等于工作产出。</td></tr>
+              <tr><td>rollout JSONL</td><td>sync 读取</td><td>读取主控刚打印的 poll projection，并统计派发调用痕迹。</td><td>“没打印的东西”不在 rollout 里；脚本必须打印固定 projection。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="scripts">
+      <div class="wrap">
+        <h2>脚本与账本：一个负责路由，一个负责控制流</h2>
+        <p class="section-intro">可以把整个体系看成两层：<code>owner-thread-broker</code> 解决“谁是谁、消息发到哪里、授权边界是什么”；<code>ledger.py</code> 解决“现在发生了什么、是否停滞、下一步必须做什么”。</p>
+        <div class="panel panel-pad table-wrap">
+          <table class="script-table">
+            <thead><tr><th>组件 / 命令</th><th>它负责什么</th><th>在整体控制流中的位置</th></tr></thead>
+            <tbody>
+              <tr><td><code>owner-thread-broker</code></td><td>维护 coordination group 的 registry；处理 session handoff、worktree/branch 路由和 Owner 授权边界。</td><td>先于消息发送定位当前 session；不把审批混进路由文件。</td></tr>
+              <tr><td><code>ledger.py init</code></td><td>创建运行时目录和空账本。</td><td>协调组启动时执行。</td></tr>
+              <tr><td><code>$call-grok</code></td><td>作为独立 CLI 辅助实现或调查，只回收结论，不承接协调责任。</td><td>由 Package / Foundation Child 在执行层按需调用；不进入 registry、poll 或 ledger。</td></tr>
+              <tr><td><code>ledger.py sync</code></td><td>读取 rollout projection，校验 poll 契约；读取 registry worktree 的 Git HEAD；合并 progress 并输出摘要。</td><td>每轮 poll 之后的事实同步层。</td></tr>
+              <tr><td><code>ledger.py report</code></td><td>子线主动写入自己的 state、waiting_on、note。</td><td>H1/H2 的子线回报入口。</td></tr>
+              <tr><td><code>ledger.py seam</code></td><td>登记 seam 的 producer、consumers、交付 artifact。</td><td>让“等待什么”与“谁生产”形成可追踪关系。</td></tr>
+              <tr><td><code>ledger.py decide</code></td><td>提出或回答 Owner 级决策。</td><td>pending 时阻断普通轮询，优先上报。</td></tr>
+              <tr><td><code>ledger.py stall-check</code></td><td>根据 pending decision 和 stall streak 给出退出码。</td><td><code>0</code> 正常、<code>2</code> 必须行动、<code>3</code> 必须升级。</td></tr>
+              <tr><td><code>ledger.py act</code></td><td>把 H3 二选一的实际选择记下来：dispatch 或 escalate。</td><td>防止主控口头上说“有动作”，账本却没有证据。</td></tr>
+              <tr><td><code>ledger.py status</code></td><td>只读账本和 registry，恢复最新 state、seam、decision、stall 状态。</td><td>主控换 session 接手时的恢复入口。</td></tr>
+              <tr><td><code>selftest.py</code></td><td>用隔离 fixture 回归验证 sync 自检、状态合并、停滞和退出码优先级。</td><td>脚本修改后的安全网，不触碰生产运行时。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="ledger-grid" style="margin-top:14px">
+          <article class="ledger-card"><div class="file">progress.jsonl</div><h3>进度事实</h3><p>Git HEAD / turn / status 来自 poll；state / waiting_on / last_report 来自 child report。两类事实合成当前状态，不能互相覆盖。</p></article>
+          <article class="ledger-card"><div class="file">seams.jsonl</div><h3>共享产物归属</h3><p>记录 seam 的生产者、消费者、assigned/delivered 状态和 artifact 指针。没有 producer 的 seam 就没有真正的等待闭环。</p></article>
+          <article class="ledger-card"><div class="file">decisions.jsonl</div><h3>Owner 决策队列</h3><p>记录谁提出了什么 Owner 级问题、阻塞哪些 node、当前是否 pending。pending 会优先触发升级。</p></article>
+          <article class="ledger-card"><div class="file">acts.jsonl + sync-state.json</div><h3>动作与运行游标</h3><p><code>acts.jsonl</code> 记录 MUST_ACT 后选择了 dispatch 还是 escalate；<code>sync-state.json</code> 保存 offset、序号、停滞和 dispatch 计数。</p></article>
+        </div>
+        <div class="truth">
+          <article class="truth-card"><h3>地面真相优先</h3><p>能从 Git、rollout、registry 直接读到的事实，不依赖模型主动报告：真实推进看 Git HEAD，派发痕迹看 rollout，轮询覆盖看实际 ids 集合。</p></article>
+          <article class="truth-card"><h3>模型只补充不可观察状态</h3><p>子线是否在等待哪个 seam，外部无法直接知道，所以由子线通过 H1/H2 report 写入；主控用 never_reported、stale_reports 识别漏报或过期报告。</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="workflow">
+      <div class="wrap">
+        <h2>它解决的失败模式是什么？</h2>
+        <div class="failure">
+          <div class="failure-list">
+            <div class="failure-item"><span class="icon">!</span><p><strong>主控把自己当成“只调度、不负责产出的人”</strong>，于是缺失的共享契约被误判成外部阻塞。</p></div>
+            <div class="failure-item"><span class="icon">!</span><p><strong>子线把等待状态留在上下文里</strong>，compaction 后没人知道它为什么停着。</p></div>
+            <div class="failure-item"><span class="icon">!</span><p><strong>把 <code>inactiveStatus</code> 当成“没有变化”</strong>，错过了“这条线闲了，该派活”的信号。</p></div>
+            <div class="failure-item"><span class="icon">!</span><p><strong>用 turn id 代替 Git HEAD</strong>，导致“只产生对话、不产生提交”也被算成进展。</p></div>
+          </div>
+          <div class="before-after">
+            <div class="state-box before"><span class="label">Before · 静默死锁</span><p>多条线等待一个没有 owner 的 seam → Foundation 线被要求待命 → 主控继续轮询 → 没有明确的停滞上限 → Owner 很久都收不到需要决策的消息。</p></div>
+            <div class="state-box after"><span class="label">After · 显式控制回路</span><p>等待必须绑定 <code>seam:id</code> 和 producer；闲线进入 <code>idle_nodes</code>；三轮没有 committed progress 就触发 <code>MUST_ACT</code>；pending decision 立即变成 <code>MUST_ESCALATE</code>。</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="limits">
+      <div class="wrap">
+        <h2>当前边界：它不是魔法</h2>
+        <div class="limits">
+          <article class="limit"><h3>子线 ≤ 8</h3><p>当前 poll contract 依赖单次 <code>wait_threads</code> 最多 8 个 target。超过 8 条线的分片与跨片合并尚未纳入本设计。</p></article>
+          <article class="limit"><h3>子线没有持久 goal</h3><p><code>create_thread</code> 只能给初始 prompt，不能为子线设置持久 goal。因此 H1/H2 仍依赖子线回报，主控要观察漏报。</p></article>
+          <article class="limit"><h3>防退化，不防恶意伪造</h3><p>projection 自检主要防长跑压力下逐步简化；rollout 不能完全证明模型实际传给工具的参数，主动 decoy 仍是结构性限制。</p></article>
+          <article class="limit"><h3>H4 分阶段</h3><p>第一阶段先登记并暴露无主 seam 数量；更严格的 producer 校验属于后续阶段，schema 先一次写全。</p></article>
+          <article class="limit"><h3>docs 不等于 code progress</h3><p>dispatch 计数只在 code 级 HEAD 推进后清零，避免“提交一份阻塞说明文档”伪装成真正交付。</p></article>
+          <article class="limit"><h3>Owner 仍不可缺席</h3><p>系统可以把需要人的时刻变得响亮，但不能替 Owner 做不可逆的授权、所有权和外部影响决策。</p></article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div><strong>Thread Harness 讲解页</strong> · 依据仓库中的 skill、references 和 scripts 整理；页面本身不改变运行时逻辑。</div>
+      <div class="sources">
+        <a href="../skills/thread-harness/SKILL.md">SKILL.md</a>
+        <a href="../skills/thread-harness/references/design-notes.md">design-notes.md</a>
+        <a href="../skills/thread-harness/references/poll-contract.md">poll-contract.md</a>
+        <a href="../skills/thread-harness/references/ledger-schema.md">ledger-schema.md</a>
+        <a href="../skills/thread-harness/references/goal-and-delegation.md">goal-and-delegation.md</a>
+        <a href="../skills/thread-harness/owner-thread-broker/SKILL.md">owner-thread-broker/SKILL.md</a>
+        <a href="../skills/call-grok/SKILL.md">call-grok/SKILL.md</a>
+        <a href="../skills/thread-harness/scripts/ledger.py">ledger.py</a>
+        <a href="../skills/thread-harness/scripts/selftest.py">selftest.py</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
