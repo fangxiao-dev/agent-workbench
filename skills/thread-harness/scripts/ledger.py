@@ -477,12 +477,29 @@ def git_head(worktree: str | None) -> str | None:
     return head.lower()
 
 
-def git_commit_paths(worktree: str | None, head: str | None) -> list[str] | None:
+def git_commit_paths(worktree: str | None, head: str | None, old_head: str | None = None) -> list[str] | None:
     if not worktree or not head:
         return None
+    if old_head:
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(Path(worktree)), "merge-base", "--is-ancestor", old_head, head],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=5,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if result.returncode != 0:
+            return None
+        command = ["git", "-C", str(Path(worktree)), "log", "--name-only", "--pretty=format:", f"{old_head}..{head}"]
+    else:
+        command = ["git", "-C", str(Path(worktree)), "show", "--name-only", "--pretty=format:", head]
     try:
         result = subprocess.run(
-            ["git", "-C", str(Path(worktree)), "show", "--name-only", "--pretty=format:", head],
+            command,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -496,8 +513,8 @@ def git_commit_paths(worktree: str | None, head: str | None) -> list[str] | None
     return [line.strip().replace("\\", "/") for line in (result.stdout or "").splitlines() if line.strip()]
 
 
-def advance_kind(worktree: str | None, head: str | None) -> str:
-    paths = git_commit_paths(worktree, head)
+def advance_kind(worktree: str | None, head: str | None, old_head: str | None = None) -> str:
+    paths = git_commit_paths(worktree, head, old_head)
     if paths is None or not paths:
         return "unknown"
     for path in paths:
@@ -602,7 +619,7 @@ def classify_and_rows(payload: dict, nodes: list[dict], round_no: int, seq: int,
             head_changed = True
             if name in idle_nodes:
                 continue
-            advance_kinds[name] = advance_kind(node.get("worktree"), new_head)
+            advance_kinds[name] = advance_kind(node.get("worktree"), new_head, old_head)
             changed_nodes.append((name, new_head, old_head))
         elif new_head and not old_head:
             head_changed = True
@@ -775,13 +792,21 @@ def stall_streak(coordination_id: str) -> int:
     return streak
 
 
-def seams_waiting_counts(coordination_id: str) -> tuple[int, int]:
+def seams_waiting_counts(coordination_id: str) -> tuple[int, int, int]:
     producers = seam_producers(coordination_id)
     latest = latest_progress(coordination_id)
     missing = set()
     malformed = 0
+    stale_waiting_on = 0
     for row in latest.values():
         waiting_on = row.get("waiting_on")
+        state = row.get("state")
+        if state != "awaiting_seam":
+            if state == "awaiting_seam(stale)" and isinstance(waiting_on, list):
+                stale_waiting_on += len(waiting_on)
+            elif state == "awaiting_seam(stale)" and waiting_on:
+                stale_waiting_on += 1
+            continue
         if not isinstance(waiting_on, list):
             if waiting_on:
                 malformed += 1
@@ -797,7 +822,7 @@ def seams_waiting_counts(coordination_id: str) -> tuple[int, int]:
                 malformed += 1
             else:
                 malformed += 1
-    return len(missing), malformed
+    return len(missing), malformed, stale_waiting_on
 
 
 def seams_unowned_count(coordination_id: str) -> int:
@@ -824,7 +849,7 @@ def format_sync_stale(path: Path, scanned_lines: int) -> str:
 def format_summary(round_no: int, valid: bool, offset: int, classification: dict, coordination_id: str, streak_limit: int) -> str:
     changed = classification["changed_nodes"]
     pending = pending_decisions(coordination_id)
-    unowned, malformed = seams_waiting_counts(coordination_id)
+    unowned, malformed, stale_waiting_on = seams_waiting_counts(coordination_id)
     state = load_state(coordination_id)
     changed_text = ", ".join(
         f"{name}({new} <- {old})" if old else f"{name}({new} <- none)"
@@ -850,6 +875,7 @@ def format_summary(round_no: int, valid: bool, offset: int, classification: dict
             f"pending_decisions: {pending_text}",
             f"stall_streak:    {stall_streak(coordination_id)}/{streak_limit}",
             f"seams_unowned:   {unowned}",
+            f"stale_waiting_on: {stale_waiting_on}",
             f"malformed_waiting_on: {malformed}",
             f"dispatches_since_progress: {state.get('dispatches_since_progress', 0)}",
             f"docs_only_advances: {state.get('docs_only_advances', 0)}",
@@ -954,6 +980,27 @@ def cmd_report(args) -> int:
         ]
         if not valid_seams:
             raise UsageError("state awaiting_seam requires --waiting-on seam:<id>")
+
+    # head 缺省时自己从 registry 的 worktree 读，不要依赖子线记得传 --head。
+    # 依据 design-notes §2.1：报告没带 head 会被判成 stale，其 waiting_on 就不计入
+    # seams_unowned——那样读数 5 会不管实际情况一律接近 0。head 是有客观来源的事实，
+    # 不该退回账本纪律。
+    head = args.head
+    head_source = "arg"
+    if not head:
+        try:
+            node = next(
+                (n for n in registry_nodes(load_registry(args.coordination_id)) if n["name"] == args.node),
+                None,
+            )
+            if node:
+                head = git_head(node.get("worktree"))
+                head_source = "worktree" if head else "unavailable"
+            else:
+                head_source = "node-not-in-registry"
+        except LedgerError:
+            head_source = "registry-unavailable"
+
     append_jsonl(
         jsonl_path(args.coordination_id, "progress.jsonl"),
         {
@@ -961,7 +1008,8 @@ def cmd_report(args) -> int:
             "src": "report",
             "round": args.round,
             "node": args.node,
-            "head": args.head,
+            "head": head,
+            "head_source": head_source,
             "state": args.state,
             "waiting_on": waiting_on,
             "last_report_ts": now_local(),
@@ -971,7 +1019,9 @@ def cmd_report(args) -> int:
     suffix = ""
     if args.state in {"working", "done"} and waiting_on:
         suffix = " (note: waiting_on is ignored for working/done state summaries)"
-    print(f"reported {args.node} state={args.state}{suffix}")
+    if head_source == "unavailable":
+        suffix += " (warning: head unavailable, report will be treated as stale once HEAD advances)"
+    print(f"reported {args.node} state={args.state} head={head or 'none'}({head_source}){suffix}")
     return 0
 
 
@@ -1058,6 +1108,12 @@ def cmd_act(args) -> int:
         known_nodes = {node["name"] for node in registry_nodes(registry)}
         if args.producer not in known_nodes:
             raise UsageError(f"unknown producer node: {args.producer}")
+        current_producer = seam_producers(args.coordination_id).get(args.seam_id)
+        if current_producer and current_producer != args.producer:
+            print(
+                f"producer changed for seam {args.seam_id}: "
+                f"{current_producer} -> {args.producer}; appending new assignment"
+            )
         row.update(
             {
                 "kind": "dispatch",
@@ -1082,6 +1138,18 @@ def cmd_act(args) -> int:
     else:
         raise UsageError("act requires --dispatch or --escalate")
     append_jsonl(jsonl_path(args.coordination_id, "acts.jsonl"), row)
+    if args.dispatch:
+        append_jsonl(
+            jsonl_path(args.coordination_id, "seams.jsonl"),
+            {
+                "ts": now_local(),
+                "seam_id": args.seam_id,
+                "producer": args.producer,
+                "consumers": [],
+                "status": "assigned",
+                "artifact": None,
+            },
+        )
     save_state(args.coordination_id, state)
     print(f"act {row['kind']} seq={seq}")
     return 0
@@ -1091,7 +1159,7 @@ def format_status(coordination_id: str, registry: dict, streak_limit: int = 3) -
     latest = latest_progress(coordination_id)
     registry_names = sorted(node["name"] for node in registry_nodes(registry) if node["role"] != "controller")
     pending = pending_decisions(coordination_id)
-    unowned, malformed = seams_waiting_counts(coordination_id)
+    unowned, malformed, stale_waiting_on = seams_waiting_counts(coordination_id)
     act = latest_act(coordination_id)
     node_lines = []
     for name in sorted(set(registry_names) | set(latest)):
@@ -1115,6 +1183,7 @@ def format_status(coordination_id: str, registry: dict, streak_limit: int = 3) -
             *(node_lines or ["  -"]),
             f"pending_decisions: {pending_text}",
             f"seams_unowned:   {unowned}",
+            f"stale_waiting_on: {stale_waiting_on}",
             f"malformed_waiting_on: {malformed}",
             f"stale_reports:   {', '.join(sorted(stale_report_nodes(coordination_id))) or '-'}",
             f"stall_streak:    {stall_streak(coordination_id)}/{streak_limit}",

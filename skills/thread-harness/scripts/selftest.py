@@ -185,6 +185,17 @@ def run(*args):
     return p.returncode, (p.stdout or "") + (p.stderr or "")
 
 
+def ledger_rows(name):
+    path = BROKER / CID / name
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            rows.append(json.loads(line))
+    return rows
+
+
 def check(name, ok, detail=""):
     print(f"[{'PASS' if ok else 'FAIL'}] {name}")
     if detail:
@@ -243,8 +254,19 @@ fails += check("sync 摘要包含 head_unavailable/never_reported/dispatches_sin
                and "dispatches_since_progress: 0" in out,
                out.strip())
 
+append_wait(CALL_OK, projection(alpha_turn="t-idle-only", beta_turn="t-idle-old", polls=[
+    {"id": NODES["alpha"], "status": "notLoaded", "turn": "t-idle-only",
+     "turnStatus": "completed", "txt": "alpha only"},
+]), call_id="idle-missing")
+rc, out = run("sync", "--coordination-id", CID, "--round", "2")
+progress_rows = [row for row in ledger_rows("progress.jsonl") if row.get("round") == 2]
+beta_rows = [row for row in progress_rows if row.get("node") == "beta"]
+fails += check("polls[] 缺 child 时仍写 progress 行并读取 head",
+               rc == 0 and len(progress_rows) == 2 and beta_rows and beta_rows[0].get("head"),
+               out.strip())
+
 rc, out = run("report", "--coordination-id", CID, "--node", "alpha", "--state", "awaiting_seam",
-              "--waiting-on", "seam:x", "seam:y", "--head", "a" * 40)
+              "--waiting-on", "seam:x", "seam:y", "--head", git_head(BASE / "git" / "alpha"))
 fails += check("report 支持 --waiting-on 空格分隔并写 src=report", rc == 0, out.strip())
 append_wait(CALL_OK, projection(alpha_turn="t-101", beta_turn="t-201"), call_id="c2")
 rc, out = run("sync", "--coordination-id", CID, "--round", "2")
@@ -359,6 +381,46 @@ reset_fixture(git_worktrees=True)
 run("init", "--coordination-id", CID)
 append_wait(CALL_OK, projection(alpha_turn="m4-0", beta_turn="m4-0"), call_id="m40")
 run("sync", "--coordination-id", CID, "--round", "1")
+commit_file(BASE / "git" / "alpha", "feature.py", "print('code')\n", "code first")
+commit_file(BASE / "git" / "alpha", "docs/progress.md", "docs gate\n", "docs gate")
+append_wait(CALL_OK, projection(alpha_turn="m4-code-docs", beta_turn="m4-code-docs"),
+            call_id="m4-code-docs", dispatch_calls=1)
+rc, out = run("sync", "--coordination-id", CID, "--round", "2")
+fails += check("区间内先 code 后 docs 必须判 code 并清零 dispatches_since_progress",
+               rc == 0 and "advance_kinds:   alpha=code" in out
+               and "dispatches_since_progress: 0" in out and "docs_only_advances: 0" in out,
+               out.strip())
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+append_wait(CALL_OK, projection(alpha_turn="m4-docs-0", beta_turn="m4-docs-0"), call_id="m4-docs-0")
+run("sync", "--coordination-id", CID, "--round", "1")
+commit_file(BASE / "git" / "alpha", "docs/progress.md", "docs only 1\n", "docs only 1")
+commit_file(BASE / "git" / "alpha", "notes.md", "docs only 2\n", "docs only 2")
+append_wait(CALL_OK, projection(alpha_turn="m4-docs-2", beta_turn="m4-docs-2"),
+            call_id="m4-docs-2", dispatch_calls=1)
+rc, out = run("sync", "--coordination-id", CID, "--round", "2")
+fails += check("区间内两个 docs commit 必须判 docs 且 dispatch 计数不归零",
+               rc == 0 and "advance_kinds:   alpha=docs" in out
+               and "dispatches_since_progress: 1" in out and "docs_only_advances: 1" in out,
+               out.strip())
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+commit_file(BASE / "git" / "alpha", "docs/first.md", "first docs\n", "first docs")
+commit_file(BASE / "git" / "beta", "docs/first.md", "first docs\n", "first docs")
+append_wait(CALL_OK, projection(alpha_turn="m4-first", beta_turn="m4-first"),
+            call_id="m4-first", dispatch_calls=1)
+rc, out = run("sync", "--coordination-id", CID, "--round", "1")
+fails += check("首次观测仍按单 commit 逻辑识别 docs-only",
+               rc == 0 and "alpha=docs" in out and "beta=docs" in out
+               and "dispatches_since_progress: 1" in out and "docs_only_advances: 2" in out,
+               out.strip())
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+append_wait(CALL_OK, projection(alpha_turn="m4-0", beta_turn="m4-0"), call_id="m40")
+run("sync", "--coordination-id", CID, "--round", "1")
 commit_file(BASE / "git" / "alpha", "docs/progress.md", "docs only\n", "docs only")
 append_wait(CALL_OK, projection(alpha_turn="m4-1", beta_turn="m4-1"), call_id="m41", dispatch_calls=1)
 rc, out = run("sync", "--coordination-id", CID, "--round", "2")
@@ -377,6 +439,36 @@ rc, out = run("act", "--coordination-id", CID, "--dispatch", "--seam-id", "x", "
 fails += check("act --dispatch 缺 deliverable 必须退出 64",
                rc == 64 and "requires --deliverable" in out,
                f"rc={rc} {out.strip()}")
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+rc, out = run("report", "--coordination-id", CID, "--node", "beta", "--state", "awaiting_seam",
+              "--waiting-on", "seam:s9")
+rc_before, out_before = run("status", "--coordination-id", CID)
+rc_act, out_act = run("act", "--coordination-id", CID, "--dispatch", "--seam-id", "s9",
+                      "--producer", "alpha", "--deliverable", "x")
+rc_after, out_after = run("status", "--coordination-id", CID)
+seam_rows = ledger_rows("seams.jsonl")
+fails += check("act --dispatch 同步形成 seam ownership，s9 不再无主",
+               rc == 0 and rc_before == 0 and "seams_unowned:   1" in out_before
+               and rc_act == 0 and rc_after == 0 and "seams_unowned:   0" in out_after
+               and any(row.get("seam_id") == "s9" and row.get("producer") == "alpha"
+                       and row.get("status") == "assigned" and row.get("artifact") is None
+                       for row in seam_rows),
+               f"before={out_before.strip()} act={out_act.strip()} after={out_after.strip()}")
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+alpha_head = git_head(BASE / "git" / "alpha")
+rc, out = run("report", "--coordination-id", CID, "--node", "alpha", "--state", "awaiting_seam",
+              "--waiting-on", "seam:stale", "--head", alpha_head)
+commit_file(BASE / "git" / "alpha", "work.py", "print('fresh')\n", "fresh code")
+append_wait(CALL_OK, projection(alpha_turn="r2b-a", beta_turn="r2b-b"), call_id="r2b")
+rc, out = run("sync", "--coordination-id", CID, "--round", "1")
+fails += check("stale awaiting_seam 的 waiting_on 不计入 seams_unowned 并计入 stale_waiting_on",
+               rc == 0 and "stale_reports:" in out and "alpha" in out
+               and "seams_unowned:   0" in out and "stale_waiting_on: 1" in out,
+               out.strip())
 
 reset_fixture(git_worktrees=True)
 run("init", "--coordination-id", CID)
@@ -453,6 +545,23 @@ rc, out = run("decide", "--coordination-id", CID, "--answer", "missing", "--text
 fails += check("decide --answer 不存在的 id 必须退出 64",
                rc == 64 and "decision is not pending: missing" in out,
                f"rc={rc} {out.strip()}")
+
+print("-" * 78)
+# --- 回归：report 不带 --head 时必须自己从 worktree 读，不得立刻被判 stale ---
+# 曾经的 bug：head 缺省 -> 报告立刻 stale -> 其 waiting_on 永不计入 seams_unowned，
+# 读数 5 会不管实际情况一律接近 0。head 有客观来源，不该退回"子线记得传参"的纪律。
+write_fixture(CALL_OK, GOOD_PROJECTION, git_worktrees=True)
+run("init", "--coordination-id", CID)
+rc, out = run("report", "--coordination-id", CID, "--node", "alpha", "--state", "awaiting_seam",
+              "--waiting-on", "seam:auto-head")
+fails += check("report 省略 --head 时应自行从 worktree 读到 head",
+               rc == 0 and "(worktree)" in out, out.strip())
+_, sync_out = run("sync", "--coordination-id", CID, "--round", "1")
+_fields = {k.strip(): v.strip() for k, _, v in
+           (line.partition(":") for line in sync_out.splitlines() if ":" in line)}
+fails += check("省略 --head 的 report 不得立刻被判 stale，其 waiting_on 必须计入 seams_unowned",
+               _fields.get("seams_unowned") == "1" and _fields.get("stale_reports") == "-",
+               sync_out.strip()[:400])
 
 shutil.rmtree(BASE, ignore_errors=True)
 print("=" * 78)
