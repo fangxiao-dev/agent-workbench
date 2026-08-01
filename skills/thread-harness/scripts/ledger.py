@@ -17,6 +17,8 @@ from pathlib import Path
 
 
 STATE_VALUES = {"working", "awaiting_seam", "awaiting_owner", "done"}
+DEFAULT_STALL_LIMIT = 5
+HEARTBEAT_LEAD_ROUNDS = 2
 KNOWN_WORKING_STATUSES = {
     "notloaded",
     "not_loaded",
@@ -784,6 +786,9 @@ def stall_streak(coordination_id: str) -> int:
     取不到这件事本身由摘要的 head_unavailable 单独暴露。
     """
     rounds = latest_by_round(coordination_id)
+    reset_seq = load_state(coordination_id).get("stall_reset_seq")
+    if isinstance(reset_seq, int):
+        rounds = [(seq, heads) for seq, heads in rounds if seq >= reset_seq]
     streak = 0
     previous = None
     carried: dict = {}
@@ -1166,7 +1171,7 @@ def cmd_act(args) -> int:
     return 0
 
 
-def format_status(coordination_id: str, registry: dict, streak_limit: int = 3) -> str:
+def format_status(coordination_id: str, registry: dict, streak_limit: int = DEFAULT_STALL_LIMIT) -> str:
     latest = latest_progress(coordination_id)
     registry_names = sorted(node["name"] for node in registry_nodes(registry) if node["role"] != "controller")
     pending = pending_decisions(coordination_id)
@@ -1213,6 +1218,40 @@ def cmd_status(args) -> int:
     return 0
 
 
+def cmd_heartbeat(args) -> int:
+    """Controller 读取 thread 后，用 concrete progress 重置 HEAD 停滞计数。"""
+    ensure_runtime(args.coordination_id)
+    registry = load_registry(args.coordination_id)
+    children = {
+        node["name"]
+        for node in registry_nodes(registry)
+        if node["role"] != "controller"
+    }
+    if args.node not in children:
+        raise UsageError(f"unknown child node: {args.node}")
+    streak = stall_streak(args.coordination_id)
+    minimum = max(1, args.streak - HEARTBEAT_LEAD_ROUNDS)
+    if not minimum <= streak < args.streak:
+        raise UsageError(
+            f"heartbeat requires {minimum}/{args.streak} <= stall_streak < "
+            f"{args.streak}/{args.streak}; current={streak}/{args.streak}"
+        )
+    evidence = args.evidence.strip()
+    if not evidence:
+        raise UsageError("heartbeat requires non-empty --evidence")
+    state = load_state(args.coordination_id)
+    reset_seq = int(state.get("next_poll_seq") or 0)
+    if reset_seq < 1:
+        raise UsageError("heartbeat requires at least one valid sync")
+    state["stall_reset_seq"] = reset_seq
+    save_state(args.coordination_id, state)
+    print(
+        f"heartbeat reset node={args.node} stall_streak={streak}/{args.streak} "
+        f"reset_seq={reset_seq}"
+    )
+    return 0
+
+
 def cmd_stall_check(args) -> int:
     ensure_runtime(args.coordination_id)
     state = load_state(args.coordination_id)
@@ -1229,6 +1268,12 @@ def cmd_stall_check(args) -> int:
         save_state(args.coordination_id, state)
         print(f"MUST_ACT stall_streak={streak}/{args.streak} dispatches_since_progress={dispatches}\n{answered_line}")
         return 2
+    if streak >= max(1, args.streak - HEARTBEAT_LEAD_ROUNDS):
+        print(
+            f"CHECK_HEARTBEAT stall_streak={streak}/{args.streak} "
+            f"dispatches_since_progress={dispatches} read_thread_required=yes\n{answered_line}"
+        )
+        return 0
     print(f"OK stall_streak={streak}/{args.streak} dispatches_since_progress={dispatches}\n{answered_line}")
     return 0
 
@@ -1258,7 +1303,7 @@ def build_parser() -> argparse.ArgumentParser:
     sync = sub.add_parser("sync")
     sync.add_argument("--coordination-id", required=True)
     sync.add_argument("--round", required=True, type=int)
-    sync.add_argument("--streak", type=int, default=3)
+    sync.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
     sync.set_defaults(func=cmd_sync)
 
     report = sub.add_parser("report")
@@ -1304,9 +1349,16 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--coordination-id", required=True)
     status.set_defaults(func=cmd_status)
 
+    heartbeat = sub.add_parser("heartbeat")
+    heartbeat.add_argument("--coordination-id", required=True)
+    heartbeat.add_argument("--node", required=True)
+    heartbeat.add_argument("--evidence", required=True)
+    heartbeat.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
+    heartbeat.set_defaults(func=cmd_heartbeat)
+
     stall = sub.add_parser("stall-check")
     stall.add_argument("--coordination-id", required=True)
-    stall.add_argument("--streak", type=int, default=3)
+    stall.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
     stall.set_defaults(func=cmd_stall_check)
     return parser
 

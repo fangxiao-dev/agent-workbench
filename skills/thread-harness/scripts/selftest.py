@@ -317,15 +317,20 @@ fails += check("seam consumer 拼错必须失败", rc == 1 and "unknown consumer
 print("-" * 78)
 write_fixture(CALL_OK, projection(alpha_turn="t-1", beta_turn="t-1"), git_worktrees=True)
 run("init", "--coordination-id", CID)
-for round_no in range(1, 5):
+for round_no in range(1, 7):
     if round_no > 1:
         append_wait(CALL_OK, projection(alpha_turn=f"t-{round_no}", beta_turn=f"t-{round_no}"),
                     call_id=f"stall{round_no}", dispatch_calls=1)
     run("sync", "--coordination-id", CID, "--round", str(round_no))
 rc, out = run("stall-check", "--coordination-id", CID)
-fails += check("turn 变化但 git head 不变时 stall-check 连续 3 轮后退出 2",
-               rc == 2 and "MUST_ACT stall_streak=3/3" in out and "dispatches_since_progress=3" in out,
+fails += check("turn 变化但 git head 不变时 stall-check 连续 5 轮后退出 2",
+               rc == 2 and "MUST_ACT stall_streak=5/5" in out and "dispatches_since_progress=5" in out,
                out.strip())
+rc, out = run("heartbeat", "--coordination-id", CID, "--node", "alpha",
+              "--evidence", "new focused test is running")
+fails += check("达到 5/5 后不得用 heartbeat 绕过 MUST_ACT",
+               rc == 64 and "requires 3/5 <= stall_streak < 5/5" in out,
+               f"rc={rc} {out.strip()}")
 
 # --- 回归：git HEAD 真推进后必须归零（否则会常态误报 MUST_ACT）---
 subprocess.run(["git", "-C", str(BASE / "git" / "alpha"), "commit", "--allow-empty", "-q",
@@ -334,14 +339,57 @@ append_wait(CALL_OK, projection(alpha_turn="t-9", beta_turn="t-9"), call_id="pro
 run("sync", "--coordination-id", CID, "--round", "9")
 rc, out = run("stall-check", "--coordination-id", CID)
 fails += check("git head 真推进后 stall_streak 必须归零",
-               rc == 0 and "stall_streak=0/3" in out, out.strip())
+               rc == 0 and "stall_streak=0/5" in out, out.strip())
+
+# --- 回归：3/5 起由 controller 读 thread；具体新进展只重置运行时 streak ---
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+append_wait(CALL_OK, projection(alpha_turn="hb-1", beta_turn="hb-1"), call_id="hb1")
+run("sync", "--coordination-id", CID, "--round", "1")
+rc, out = run("heartbeat", "--coordination-id", CID, "--node", "alpha",
+              "--evidence", "new focused test is running")
+fails += check("3/5 之前不得用 heartbeat 绕过 HEAD 停滞",
+               rc == 64 and "requires 3/5 <= stall_streak < 5/5" in out,
+               f"rc={rc} {out.strip()}")
+for round_no in range(2, 5):
+    append_wait(CALL_OK, projection(alpha_turn=f"hb-{round_no}", beta_turn=f"hb-{round_no}"),
+                call_id=f"hb{round_no}")
+    run("sync", "--coordination-id", CID, "--round", str(round_no))
+rc, out = run("stall-check", "--coordination-id", CID)
+fails += check("3/5 时 stall-check 提示 controller 直接 read_thread",
+               rc == 0 and "CHECK_HEARTBEAT stall_streak=3/5" in out,
+               out.strip())
+rc, out = run("heartbeat", "--coordination-id", CID, "--node", "typo",
+              "--evidence", "new focused test is running")
+fails += check("heartbeat node 必须是 registry child",
+               rc == 64 and "unknown child node: typo" in out,
+               f"rc={rc} {out.strip()}")
+ledger_dir = BROKER / CID
+jsonl_before = {
+    name: (ledger_dir / name).read_bytes()
+    for name in ("progress.jsonl", "seams.jsonl", "decisions.jsonl", "acts.jsonl")
+}
+rc, out = run("heartbeat", "--coordination-id", CID, "--node", "alpha",
+              "--evidence", "new focused test is running")
+rc_after, out_after = run("stall-check", "--coordination-id", CID)
+jsonl_after = {
+    name: (ledger_dir / name).read_bytes()
+    for name in ("progress.jsonl", "seams.jsonl", "decisions.jsonl", "acts.jsonl")
+}
+runtime_state = json.loads((ledger_dir / "sync-state.json").read_text(encoding="utf-8"))
+fails += check("read_thread 确认 concrete heartbeat 后 streak 归零且不改 JSONL",
+               rc == 0 and "heartbeat reset" in out and rc_after == 0
+               and "stall_streak=0/5" in out_after and jsonl_after == jsonl_before
+               and runtime_state.get("stall_reset_seq") == 4
+               and not any(key.startswith("last_heartbeat_") for key in runtime_state),
+               f"heartbeat={out.strip()} after={out_after.strip()}")
 
 # --- 回归：head 取不到时必须 fail-closed，继续累计停滞 ---
 # 曾经的 bug：任一 head 为 None 就把 streak 清零，导致一条线的 worktree 路径写错
 # 就永久关掉整组的停滞检测，而且完全无声。无法确认有推进 = 没有推进。
 shutil.rmtree(BASE / "git" / "alpha", ignore_errors=True)
 sync_out = ""
-for round_no in range(10, 14):
+for round_no in range(10, 15):
     append_wait(CALL_OK, projection(alpha_turn=f"t-{round_no}", beta_turn=f"t-{round_no}"),
                 call_id=f"gone{round_no}")
     # 注意：sync 必须先有新的 rollout 内容才不会判 SYNC STALE，所以复用本轮输出，
@@ -375,13 +423,13 @@ fails += check("usage error 退出码 64", rc == 64, f"rc={rc} {out.strip()}")
 print("-" * 78)
 reset_fixture(git_worktrees=True)
 run("init", "--coordination-id", CID)
-for index in range(4):
+for index in range(6):
     append_wait(CALL_OK, projection(alpha_turn=f"same-{index}", beta_turn=f"same-{index}"),
                 call_id=f"sameround{index}", dispatch_calls=1 if index else 0)
     run("sync", "--coordination-id", CID, "--round", "7")
 rc, out = run("stall-check", "--coordination-id", CID)
-fails += check("同一个 --round 重复 4 次时 stall_streak 仍按 append 顺序累计到 3",
-               rc == 2 and "MUST_ACT stall_streak=3/3" in out,
+fails += check("同一个 --round 重复 6 次时 stall_streak 仍按 append 顺序累计到 5",
+               rc == 2 and "MUST_ACT stall_streak=5/5" in out,
                out.strip())
 
 rc, out = run("report", "--coordination-id", CID, "--node", "alpha", "--state", "awaiting_seam")
@@ -501,7 +549,7 @@ fails += check("stale awaiting_seam 的 waiting_on 不计入 seams_unowned 并�
 
 reset_fixture(git_worktrees=True)
 run("init", "--coordination-id", CID)
-for index in range(4):
+for index in range(6):
     append_wait(CALL_OK, projection(alpha_turn=f"act-{index}", beta_turn=f"act-{index}"),
                 call_id=f"act{index}")
     run("sync", "--coordination-id", CID, "--round", "1")

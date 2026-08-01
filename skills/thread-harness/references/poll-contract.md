@@ -67,14 +67,14 @@ text(JSON.stringify({
    - `stale_reports`：这些 node 的最后一次 report 后又出现 git HEAD 变化；不要把旧 report 当成当前阻塞状态。
    - `unknown_status`：这些 node 的 Desktop status 不在已知映射内；不要默认当成 `working`。
    - `pending_decisions`：大于 0 时准备上报 owner。
-   - `stall_streak`：接近 `3/3` 时必须准备二选一。
+   - `stall_streak`：默认阈值为 `5/5`；从 `3/5` 起每轮执行一次直接 thread 心跳检查，`5/5` 时必须二选一。
    - `seams_unowned`：第一轮只报数，用来决定后续是否开启阻断校验。
    - `malformed_waiting_on`：历史 report 中不合法的 `waiting_on` 项数量。
    - `dispatches_since_progress`：自最近一次 code 级 git head 推进以来，rollout 中有配对 output 的 `tools.codex_app__send_message_to_thread` 与 `tools.codex_app__create_thread` 调用次数。它只测量，不阻断。
    - `docs_only_advances`：自最近一次 code 级推进以来的 docs-only HEAD 推进次数。
    - `corrupt_ledger_lines`：JSONL 中无法解析的坏行数量。
 4. 执行 `python skills/thread-harness/scripts/ledger.py stall-check --coordination-id <id>`。
-5. 按退出码决策。
+5. 按退出码和输出标记决策。`CHECK_HEARTBEAT` 的退出码也是 `0`，但不能当普通 `OK` 略过。
 
 接手新 session 时先执行：
 
@@ -83,6 +83,20 @@ python skills/thread-harness/scripts/ledger.py status --coordination-id <id>
 ```
 
 `status` 只读账本和 registry，不读 rollout，也不要求新 session 已经跑过首轮 poll。它用于恢复各 node 最新 state/head/turn/最后 report 时间、pending decisions、未交付 seams、`stall_streak` 和最近一次 `act`。
+
+`stall-check` 从 `3/5` 起、到 `5/5` 前输出 `CHECK_HEARTBEAT` 时：
+
+1. 若 poll / 当前 report 显示仍有 active / working node，直接对这些 node 的 current session 调 `codex_app__read_thread`，看最新内容；不新增每轮消息缓存。
+2. 任一 thread 出现具体且最新的执行心跳（例如新测试正在运行、新 finding 已闭合、正在执行的新命令），执行：
+
+```powershell
+python skills/thread-harness/scripts/ledger.py heartbeat --coordination-id <id> --node <node> --evidence "<一句话具体进展>"
+```
+
+3. heartbeat 只允许在 `3/5` 或 `4/5` 时执行，并把全局 `stall_streak` 归零。重复等待文案、旧进展、笼统的“仍在工作”或仅有 active 状态都不算心跳；没有具体新进展时不执行 heartbeat，下一轮继续检查，直到 `5/5`。
+4. 若全员 idle，不做 heartbeat；`idle_nodes` 直接按派活信号处理。
+
+该命令只更新 `sync-state.json` 的 reset marker；`--evidence` 只用于迫使 controller 当场说清具体进展，不落盘。它不修改任何 append-only JSONL，也不保存 thread 消息。
 
 `stall-check` 返回 `MUST_ACT` 后，用 `act` 留下本轮选择：
 
@@ -97,7 +111,7 @@ python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --esca
 
 | 码 | 含义 | broker 动作 |
 | --- | --- | --- |
-| `0` | 正常 | 按 `sync` 摘要处理普通事项，进入下一轮 |
+| `0` | `OK` 或 `CHECK_HEARTBEAT` | `OK` 按摘要处理；`CHECK_HEARTBEAT` 必须按上方流程直接读 thread，再决定是否 reset |
 | `1` | `sync` 自检失败（`ROUND INVALID`）或 rollout 未就绪（`SYNC STALE`） | 见下方「自检失败处理」。**本轮作废，不要当成"无变化"** |
 | `2` | `stall-check` 输出 `MUST_ACT` | 二选一：派发新工作，或向 Owner 报告并结束 loop |
 | `3` | `stall-check` 输出 `MUST_ESCALATE` | 立即上报 pending decision，不进入下一轮。**优先级高于 `2`** |
@@ -115,7 +129,7 @@ python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --esca
 python skills/thread-harness/scripts/selftest.py
 ```
 
-它用独立构造的 fixture 覆盖 `sync` 自检判据、`SYNC STALE` 的错误信息完整性、决策与停滞的退出码优先级、`decide --raise/--answer`、多值参数空格分隔、`report` 状态不被 poll 覆盖、陈旧 report、重复 `round`、docs-only/code 推进分类、`act` 留痕、`status` 接手路径、真实 git HEAD 停滞判断、用法错误退 64。**这份 fixture 刻意不复用 `ledger.py` 自身的解析逻辑**——用被测代码的假设去造测试数据，测不出假设本身是错的。（初版轮询契约就是这样漏掉了"rollout 只记录打印内容"这个事实。）
+它用独立构造的 fixture 覆盖 `sync` 自检判据、`SYNC STALE` 的错误信息完整性、决策与停滞的退出码优先级、默认 `5/5` 阈值、从 `3/5` 开始的 `CHECK_HEARTBEAT`、heartbeat reset 不修改 JSONL、`decide --raise/--answer`、多值参数空格分隔、`report` 状态不被 poll 覆盖、陈旧 report、重复 `round`、docs-only/code 推进分类、`act` 留痕、`status` 接手路径、真实 git HEAD 停滞判断、用法错误退 64。**这份 fixture 刻意不复用 `ledger.py` 自身的解析逻辑**——用被测代码的假设去造测试数据，测不出假设本身是错的。（初版轮询契约就是这样漏掉了"rollout 只记录打印内容"这个事实。）
 
 ## 自检失败处理
 

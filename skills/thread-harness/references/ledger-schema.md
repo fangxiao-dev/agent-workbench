@@ -109,9 +109,11 @@
 
 ## sync-state.json
 
-`sync-state.json` 不是 append-only 账本；它是本地运行状态。当前字段包括 rollout offset、`next_poll_seq`、`next_act_seq`、`dispatches_since_progress`、`docs_only_advances`、`last_must_act_seq` 与 invalid round 计数。
+`sync-state.json` 不是 append-only 账本；它是本地运行状态。当前字段包括 rollout offset、`next_poll_seq`、`next_act_seq`、`dispatches_since_progress`、`docs_only_advances`、`last_must_act_seq`、invalid round 计数，以及 heartbeat reset 的 `stall_reset_seq`。
 
 `dispatches_since_progress` 只在 code 级 git HEAD 推进后清零；docs-only 推进只增加 `docs_only_advances`。推进分类按上一条已知 head 到当前 head 的 git 区间计算：区间内任一 commit 触及非 Markdown / `docs/` 路径即为 code，区间内全部 commit 都是文档才计 docs-only。首次观测没有旧 head 时退回单 commit 判断；区间不可判定时按 `unknown`，并保守视为 code 推进。
+
+`heartbeat` 仅允许在默认阈值的 `3/5` 或 `4/5` 执行。controller 直接读取 thread 并确认具体、最新的工作心跳后，它把当前 poll seq 写入 `stall_reset_seq`，使该轮成为新的 streak baseline；不追加或改写 `progress.jsonl`、`seams.jsonl`、`decisions.jsonl`、`acts.jsonl`，也不保存 thread 消息。
 
 `seams_unowned` 只统计当前合成状态为 `awaiting_seam` 且 report 未陈旧的 `waiting_on` seam；因 report 陈旧而被排除的条目数显示为 `stale_waiting_on`。
 
@@ -134,7 +136,7 @@
 python skills/thread-harness/scripts/selftest.py
 ```
 
-覆盖：`sync` 自检判据各自的失败路径（含 `text({pollCount:0})` 这种退化输出）、实际 ids 集合与 registry children 不一致的失败路径、投影 `n` 与实际 ids 数量不一致、`timedOut` 与 poll 字段完整性、陌生/重复 poll id、正常投影合并、`inactiveStatus` 归入 `idle_nodes` 且与 `unchanged` 分开、`polls[]` 缺 child 时仍为该 child 写 progress 并读取 head、`SYNC STALE` 错误信息含 path/bytes/mtime/scanned_lines、`report` 后 `state` / `waiting_on` 不被下一轮 `sync` 覆盖、陈旧 report 暴露为 `stale_reports` 且 stale waiting_on 不计入无主 seam、重复 `round` 时按追加顺序累计 `stall_streak`、多 commit 区间内 docs-only 与 code 推进区分、首次观测单 commit 推进分类、`act --dispatch` 留痕并同步形成 seam ownership、`status` 无 sync 时可读、真实 git fixture 下 turn 变化不重置 `stall_streak`、`stall-check` 的 0/2/3 优先级、`decide --raise/--answer`、多值参数空格分隔、`seam` producer/consumer registry 校验、用法错误退 64。
+覆盖：`sync` 自检判据各自的失败路径（含 `text({pollCount:0})` 这种退化输出）、实际 ids 集合与 registry children 不一致的失败路径、投影 `n` 与实际 ids 数量不一致、`timedOut` 与 poll 字段完整性、陌生/重复 poll id、正常投影合并、`inactiveStatus` 归入 `idle_nodes` 且与 `unchanged` 分开、`polls[]` 缺 child 时仍为该 child 写 progress 并读取 head、`SYNC STALE` 错误信息含 path/bytes/mtime/scanned_lines、`report` 后 `state` / `waiting_on` 不被下一轮 `sync` 覆盖、陈旧 report 暴露为 `stale_reports` 且 stale waiting_on 不计入无主 seam、重复 `round` 时按追加顺序累计 `stall_streak`、默认 `5/5` 阈值与从 `3/5` 开始的 heartbeat reset、heartbeat 不修改 JSONL、多 commit 区间内 docs-only 与 code 推进区分、首次观测单 commit 推进分类、`act --dispatch` 留痕并同步形成 seam ownership、`status` 无 sync 时可读、真实 git fixture 下 turn 变化不重置 `stall_streak`、`stall-check` 的 0/2/3 优先级、`decide --raise/--answer`、多值参数空格分隔、`seam` producer/consumer registry 校验、用法错误退 64。
 
 自检用 `THREAD_HARNESS_BROKER_ROOT` 与 `THREAD_HARNESS_SESSIONS_ROOT` 指向隔离目录，**不会碰生产运行时**。
 

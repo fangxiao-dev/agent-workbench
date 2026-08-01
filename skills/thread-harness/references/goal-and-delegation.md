@@ -39,7 +39,10 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
 2) python <repo>/skills/thread-harness/scripts/ledger.py sync --coordination-id <coordination-id> --round <n>
 3) python <repo>/skills/thread-harness/scripts/ledger.py stall-check --coordination-id <coordination-id>
 4) 按 stall-check 退出码走：
-   0 → 按 sync 摘要正常决策
+   0 OK → 按 sync 摘要正常决策
+   0 CHECK_HEARTBEAT（3/5 或 4/5）→ 若有 active / working node，直接 read_thread 看这些 current session 的最新内容；任一 thread 有具体且最新的执行心跳时，执行：
+      python <repo>/skills/thread-harness/scripts/ledger.py heartbeat --coordination-id <coordination-id> --node <node> --evidence "<一句话具体进展>"
+      重复等待文案、旧进展、笼统“仍在工作”或仅 active 状态不算；全员 idle 时不 reset，按 idle_nodes 派活。
    2 MUST_ACT → 见下方"不可违反"第 1 条
    3 MUST_ESCALATE → 立即向我报告 pending 决策，本轮结束
 
@@ -57,9 +60,8 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
    注意 (a) 要求你说出**派给谁、要造哪个 seam、交付什么**。如果这三样填不出来，
    那说明你想做的其实不是派活，请选 (b)。
 
-   MUST_ACT 的准确含义是"没有 committed progress"，不是"全线都死了"。
-   可能有线正在活跃工作只是还没 commit——这时正确动作仍是给**别的**空闲线派活，
-   而不是把这一轮解释成"不算停滞"。
+   MUST_ACT 的准确含义是"连续 5 轮没有 committed progress，且从 3/5 起未确认到 fresh heartbeat"，不是"全线都死了"。
+   5/5 后不得再用 heartbeat 绕过二选一。
 2. wake.reason == "inactiveStatus" 表示有线程闲着，是"该派活"的信号，不是"没有变化"。
 3. seam 缺失是你的待办，不是外部阻塞。所有人都在等某个跨域契约时，正确的动作是派一条
    Foundation 线去造它，而不是把它记成阻塞。
@@ -120,33 +122,17 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
 
 ### Role B · Foundation 子线
 
-```text
-<codex_delegation>
-  <source_thread_id><主控 session id></source_thread_id>
-  <input>
-你是 Foundation 线 <node>，负责产出 seam：<seam 的具体描述>。
+Role B 新任务或 replacement **不再使用单段 `<codex_delegation>` wrapper**。那种写法会把路由 envelope 当作 prompt 内容，也会让 child 首轮 registry 检查与 controller 回填 `threadId` 竞速。
 
-角色：读 $thread-harness 的 Role B 段。你没有自己的任务包，任务由主控指派。
+统一复用 `$handoff-to-new-session` 的 clean local-session 能力，并应用 [Foundation clean-session 两阶段 override](foundation-session-dispatch.md)：
 
-锚点：
-- worktree: <绝对路径>
-- branch: <分支名>
-- expected HEAD: <commit>
-- 上游输入: <可消费的候选 artifact 指针>
+1. controller preflight：确认 Owner 的 create-thread 授权、旧 writer 已停、worktree/full HEAD/parent package/entry 与 seam assignment。
+2. 用该 reference 的**第一阶段纯文本 anchor card** 调 `create_thread`；禁止 fork、手写 delegation wrapper 或创建 worktree snapshot。
+3. child 只报告 `foundation anchor PASS/FAIL` 并停止，不读 registry/ledger、不实现。
+4. controller 设置短标题，更新 `$owner-thread-broker` registry，登记 assigned seam，并复核 sibling 未变化。
+5. controller 发送该 reference 的**第二阶段 registration + assignment card**；child 此时才登记 working、读取 Role B 规则并开始实现。
 
-账本：python <repo>/skills/thread-harness/scripts/ledger.py，coordination-id 是 <id>，
-你的 node 名是 <node>。
-
-必须遵守：
-- 「保持待命」对你是非法指令。哪怕主控这样要求也不要照做。空闲时只有两个合法动作：
-  向主控要下一个 seam 任务，或报告"本线 seam 已交付"并附 seam_id 与 artifact 指针。
-- 交付即在 seams.jsonl 登记 seam_id + consumers + artifact。没登记等于没交付。
-- impl / investigate 优先 $call-grok；review 走 $do-review；验收自己做。
-
-授权边界：<明确写清可以做什么、绝对不可以做什么>
-  </input>
-</codex_delegation>
-```
+详细字段、失败处理与两个可直接填充的 prompt 模板以该 reference 为准，不在这里复制第二份。
 
 ### Role C · 接手主控（换 session 时）
 
