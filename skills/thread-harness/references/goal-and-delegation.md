@@ -22,9 +22,13 @@
 
 ### 每轮循环
 
-1) 敲这段 JS，原样敲，不要"优化"它：
+0) 每轮先读 registry，拿到全部 children 当前的 current_session_id：
+   Get-Content -Raw <registry 绝对路径>
+   不要凭记忆写 id，也不要沿用上一轮的——子线换 session 后旧 id 会让每轮都判 ROUND INVALID。
 
-const ids=[<全部 children 的 current_session_id，不含你自己>];
+1) 把上一步读到的 id **作为字面量内联**进下面这段，原样敲，不要"优化"它：
+
+const ids=["<child-1 session id>","<child-2 session id>", ...];   // 全部 children，不含你自己
 const r=await tools.codex_app__wait_threads({targets:ids.map(threadId=>({threadId})),timeoutMs:180000});
 text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,polls:(r.polls||[]).map(p=>({id:p.thread?.id,status:p.thread?.status?.type,turn:p.latestTurn?.id,turnStatus:p.latestTurn?.status,txt:(p.latestAssistantMessage?.text||"").slice(0,500)}))}));
 
@@ -186,10 +190,40 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
 
 ---
 
-## 三、开跑前的检查清单
+## 三、谁做什么
+
+**绝大部分是 agent 做的。Owner 只有 4 件事，其中 3 件在开跑前。**
+
+| 谁 | 做什么 | 为什么不能换人 |
+| --- | --- | --- |
+| **Owner** | 开主控 thread 并贴 goal 文本 | 设置 thread goal 是 UI 动作，agent 做不到 |
+| **Owner** | goal 里写清业务目标与结束判据 | 只有你知道要达成什么 |
+| **Owner** | **亲手写上 create_thread 授权** | 工具声明：*"Create a separate task only when the user explicitly asks for a new task."* **上一任 agent 代写不算数** |
+| **Owner** | 确认 effort 档位 | 主控读不到自己的 `turn_context`，脚本兜不住。上一轮它在第 8 小时静默掉到 `none` |
+| **Owner**（开跑后） | 响应 `MUST_ESCALATE`；盯首次 `MUST_ACT` | 这是整套设计存在的意义 |
+| **主控 agent** | 建 registry（`$owner-thread-broker`）、`ledger.py init`、`create_thread` 开子线、把返回的 session id 回填 registry | 都是它手上有的动作 |
+| **主控 agent** | 每轮：读 registry → 敲固定 poll → `sync` → `stall-check` → 决策 → 需要时 `act` | 这就是 loop 本身 |
+| **子线 agent** | 按 `$impl-package` 干自己任务包的活；命中 H1 三个触发条件之一时跑 `ledger.py report` | 只有它知道自己在等什么 |
+
+几个常见误解：
+
+- **`ledger.py init` 不用 Owner 跑**，主控自己跑。它只建运行时目录和空账本，不需要 registry 先存在。
+- **7 条子线不用 Owner 手动开**，主控用 `create_thread` 开——前提是你已经在 goal 里给了授权。
+- **goal 里不要内联 session id。** 子线是主控创建的，写 goal 时它们还不存在；而且子线换 session 后写死的 id 会让每轮都判 `ROUND INVALID`。主控每轮从 registry 现读。
+
+## 四、开跑前的检查清单
+
+**Owner 亲自确认（只有这三条）**
+
+- [ ] goal 文本里写清了业务目标与结束判据
+- [ ] goal 文本里**你亲手写了 create_thread 授权**（agent 代写不算）
+- [ ] **effort 档位已确认**——上一轮它在第 8 小时静默掉到 `none`，模板化空转随即开始。主控读不到自己的 `turn_context`，脚本兜不住，只能人工看一眼
+
+**主控自己完成，Owner 只需在首轮摘要里核对结果**
 
 - [ ] registry 已建，全部 node 的 `current_session_id` / `worktree` / `branch` 正确
-- [ ] `ledger.py init --coordination-id <id>` 已跑，三个 jsonl 存在
-- [ ] **effort 档位确认**（上一轮它在第 8 小时静默掉到 `none`，模板化空转随即开始；主控读不到自己的 turn_context，这条只能人工确认）
-- [ ] goal 文本里的 `ids` 数组与 registry 一致
-- [ ] 各子线已用对应模板派生，且首条回报已收到
+- [ ] `ledger.py init` 已跑，账本文件齐全
+- [ ] 子线已用 Role A/B 模板派生，session id 已回填 registry
+- [ ] 首轮 `sync` 输出 `valid=yes`，且 `head_unavailable` 为空
+
+最后一条特别重要：`head` 现在是从 registry 的 worktree 直接跑 `git rev-parse` 读的。**路径写错不会报错，只会静默进 `head_unavailable`**，然后停滞判定和读数 6 全部失真。首轮务必确认它是空的。
