@@ -16,7 +16,7 @@ python "<repo>\skills\call-grok\scripts\grok_task.py" `
   --cwd "<target-repo>" `
   --executable "<grok-executable>" `
   --prompt-file "<prompt-file>" `
-  --max-run 120 `
+  --max-run 100 `
   --overall-timeout-sec 600 `
   --model "grok-4.5" `
   --effort high `

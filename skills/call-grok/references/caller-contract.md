@@ -19,7 +19,7 @@ Provide exactly one of `--prompt` or `--prompt-file`.
 |---|---:|---|
 | `--cwd` | process cwd | Working directory for Grok |
 | `--prompt` / `--prompt-file` | required | Caller-owned task text |
-| `--max-run` | 120 | Maps to Grok `--max-turns` |
+| `--max-run` | 100 | Maps to Grok `--max-turns` |
 | `--model` | CLI default | Model id |
 | `--effort` | CLI default | Reasoning effort |
 | `--tools` | unset | Grok tool list |

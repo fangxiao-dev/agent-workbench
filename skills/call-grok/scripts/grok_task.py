@@ -28,7 +28,7 @@ from executor_env import load_executor_env
 
 load_executor_env(SCRIPT_ROOT.parent)
 
-DEFAULT_MAX_RUN = 120
+DEFAULT_MAX_RUN = 100
 DEFAULT_STALL_TIMEOUT_SEC = 600
 DEFAULT_OVERALL_TIMEOUT_SEC = 600
 MAX_TIMEOUT_SEC = 1800
