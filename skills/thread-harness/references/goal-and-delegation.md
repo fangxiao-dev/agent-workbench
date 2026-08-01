@@ -29,7 +29,8 @@
 1) 把上一步读到的 id **作为字面量内联**进下面这段，原样敲，不要"优化"它：
 
 const ids=["<child-1 session id>","<child-2 session id>", ...];   // 全部 children，不含你自己
-const r=await tools.codex_app__wait_threads({targets:ids.map(threadId=>({threadId})),timeoutMs:180000});
+const raw=await tools.codex_app__wait_threads({targets:ids.map(threadId=>({threadId})),timeoutMs:120000});
+const r=typeof raw==="string"?JSON.parse(raw):raw;
 text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,polls:(r.polls||[]).map(p=>({id:p.thread?.id,status:p.thread?.status?.type,turn:p.latestTurn?.id,turnStatus:p.latestTurn?.status,txt:(p.latestAssistantMessage?.text||"").slice(0,500)}))}));
 
 字段一个都不能少。你不打印的东西 ledger.py 读不到——rollout 记录的是你打印的内容，不是工具的原始返回。
@@ -75,7 +76,7 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
 
 | 上一轮原文 | 问题 | 现在 |
 | --- | --- | --- |
-| 「loop模式：wait threads -> 每隔3min检查」 | 自然语言的时间词不会变成阻塞语义。实测 1707 次调用里只有 5 次真用了 180000ms，964 次用的是 0 或 1000ms，退化成 13 秒一轮的忙等 | 写成参数 `timeoutMs: 180000`，并给出原样片段 |
+| 「loop模式：wait threads -> 每隔2min检查」 | 自然语言的时间词不会变成阻塞语义。历史实测中绝大多数退化调用使用 0 或 1000ms，形成忙等 | 写成平台允许的固定参数 `timeoutMs: 120000`，并给出原样片段 |
 | 「Foundation…由主控操控…而不实际参与写代码」 | 主控据此把"没人造契约"归类成外部阻塞 | 「seam 缺失是你的待办」+ 明确 create_thread 是可用动作 |
 | 「直到任务完成或者真正的阻塞」 | "真正的阻塞"无判据，模型可以无限自证 | stall-check 退出码 + 二选一，判据外置到脚本 |
 

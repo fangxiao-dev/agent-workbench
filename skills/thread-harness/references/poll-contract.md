@@ -6,17 +6,18 @@
 
 四条不可动摇的约束：
 
-1. `timeoutMs` 不得低于 `180000`，推荐固定为 `180000`。
+1. `timeoutMs` 固定为 `120000`，与当前 `wait_threads` 平台上限一致。
 2. `targets` 必须覆盖 registry 中**全部 children，不含 controller 自己**。主控轮询自身没有意义，且会让 `n` 多算一个而每轮判 `ROUND INVALID`。
 3. `text()` 输出**下面这个投影**，字段一个都不能少。`ledger.py sync` 从 controller rollout 里读这个投影——**你不打印的东西，任何地方都不存在**（rollout 记录的是 exec 打印的内容，不是工具原始返回）。
 4. `txt` 截断到 500 字符。需要某条线的全文时用 `codex_app__read_thread` 单独取，不要放宽这里。
 
 ```js
 const ids = [/* registry 中各 node 的 current_session_id，内联 */];
-const r = await tools.codex_app__wait_threads({
+const raw = await tools.codex_app__wait_threads({
   targets: ids.map(threadId => ({ threadId })),
-  timeoutMs: 180000
+  timeoutMs: 120000
 });
+const r = typeof raw === "string" ? JSON.parse(raw) : raw;
 text(JSON.stringify({
   v: 1,
   n: ids.length,
@@ -37,9 +38,10 @@ text(JSON.stringify({
 ## 平台约束
 
 - `wait_threads` 单次最多接受 8 个 `targets`。本 harness 当前假设 children <= 8；超过 8 的分片轮询方案本轮不做，属于已知限制。
+- 当前 Desktop bridge 可能把工具结果包装为 JSON 字符串；固定片段必须先做 object/string 双态解包，再输出规定投影。
 - `create_thread` 不是无条件自授权动作，需要 Owner 在 goal 或对话中明确授权。主控 goal 模板里已包含该授权。
 - `create_thread` 无法给子线设置持久 goal，只有初始 prompt。因此子线的 H1/H2 不像主控那样免疫 compaction；缓解手段是主控靠 `last_report_ts` 与 `never_reported` 检测漏报，而不是相信子线记得。
-- timeout 契约是不得低于 `180000`，推荐固定 `180000`。实现接受 `>= 180000`，避免把更保守的等待误判成无效轮次。
+- timeout 契约固定为 `120000`。更小会退化为忙等，更大会被当前平台参数校验拒绝。
 
 ## wake.reason 语义
 
@@ -123,13 +125,13 @@ python skills/thread-harness/scripts/selftest.py
 ROUND INVALID: poll snippet altered (<具体原因>)
 ```
 
-本轮 payload 不会合并进 `progress.jsonl`。broker 应立即停止普通轮询，恢复固定 JS 片段，确认 `timeoutMs >= 180000` 且 `targets` 数量等于 registry 的 children 总数，然后重新发起下一轮。
+本轮 payload 不会合并进 `progress.jsonl`。broker 应立即停止普通轮询，恢复固定 JS 片段，确认 `timeoutMs == 120000` 且 `targets` 数量等于 registry 的 children 总数，然后重新发起下一轮。
 
 当前 `sync` 自检只接受固定投影契约。五类失败文案如下：
 
 | 判据 | 不符时的报错 |
 | --- | --- |
-| 调用 arguments 里 `timeoutMs >= 180000` | `timeoutMs <n> < 180000` |
+| 调用 source（legacy `arguments` / modern `input`）里 `timeoutMs == 120000` | `timeoutMs <n> != 120000` |
 | 调用 arguments 里能解析出 `const ids = [...]` | `cannot parse ids array from call` |
 | 实际 ids 集合等于 registry 中全部 children 的 `current_session_id` 集合 | `targets mismatch (missing=<...>, unexpected=<...>)` |
 | 输出可解析为 JSON 且 `v == 1` | `projection missing or wrong version` |

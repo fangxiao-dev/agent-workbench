@@ -26,12 +26,13 @@ NODES = {
 UNKNOWN = "019fbccc-9999-7000-8000-000000000009"
 
 
-def call_for(ids, timeout=180000):
+def call_for(ids, timeout=120000):
     quoted = ",".join(json.dumps(item) for item in ids)
     return (
         f"const ids=[{quoted}];\n"
-        "const r=await tools.codex_app__wait_threads({targets:ids.map(threadId=>({threadId})),"
+        "const raw=await tools.codex_app__wait_threads({targets:ids.map(threadId=>({threadId})),"
         f"timeoutMs:{timeout}}});\n"
+        "const r=typeof raw===\"string\"?JSON.parse(raw):raw;\n"
         "text(JSON.stringify({v:1,n:ids.length,wake:r.wake||null,polls:(r.polls||[]).map(p=>({"
         "id:p.thread?.id,status:p.thread?.status?.type,turn:p.latestTurn?.id,"
         "turnStatus:p.latestTurn?.status,txt:(p.latestAssistantMessage?.text||\"\").slice(0,500)})),"
@@ -41,6 +42,7 @@ def call_for(ids, timeout=180000):
 
 CALL_OK = call_for([NODES["alpha"], NODES["beta"]])
 CALL_BAD_TIMEOUT = call_for([NODES["alpha"], NODES["beta"]], timeout=1000)
+CALL_HIGH_TIMEOUT = call_for([NODES["alpha"], NODES["beta"]], timeout=180000)
 
 
 def projection(n=2, alpha_turn="t-100", beta_turn="t-200", wake=None, polls=None):
@@ -135,11 +137,12 @@ def rollout_path():
     return SESSIONS / f"rollout-2026-08-01T06-00-00-{CTRL}.jsonl"
 
 
-def rollout_lines(call_args, printed_text, call_id):
+def rollout_lines(call_args, printed_text, call_id, *, source_field="arguments"):
+    call_payload = {"type": "custom_tool_call", "call_id": call_id, "name": "exec",
+                    source_field: call_args}
     return [
         {"timestamp": "2026-08-01T06:00:00.000Z", "type": "response_item",
-         "payload": {"type": "custom_tool_call", "call_id": call_id, "name": "exec",
-                     "arguments": call_args}},
+         "payload": call_payload},
         {"timestamp": "2026-08-01T06:00:01.000Z", "type": "response_item",
          "payload": {"type": "custom_tool_call_output", "call_id": call_id,
                      "output": [
@@ -149,7 +152,8 @@ def rollout_lines(call_args, printed_text, call_id):
     ]
 
 
-def append_wait(call_args, printed_text, call_id="c1", *, dispatch_calls=0):
+def append_wait(call_args, printed_text, call_id="c1", *, dispatch_calls=0,
+                source_field="arguments"):
     roll = rollout_path()
     roll.parent.mkdir(parents=True, exist_ok=True)
     with roll.open("a", encoding="utf-8") as fh:
@@ -157,19 +161,19 @@ def append_wait(call_args, printed_text, call_id="c1", *, dispatch_calls=0):
             dispatch_call_id = f"d{call_id}{index}"
             line = {"timestamp": "2026-08-01T06:00:00.000Z", "type": "response_item",
                     "payload": {"type": "custom_tool_call", "call_id": dispatch_call_id, "name": "exec",
-                                "arguments": "await tools.codex_app__send_message_to_thread({});"}}
+                                source_field: "await tools.codex_app__send_message_to_thread({});"}}
             fh.write(json.dumps(line, ensure_ascii=False) + "\n")
             line = {"timestamp": "2026-08-01T06:00:00.100Z", "type": "response_item",
                     "payload": {"type": "custom_tool_call_output", "call_id": dispatch_call_id,
                                 "output": "ok"}}
             fh.write(json.dumps(line, ensure_ascii=False) + "\n")
-        for line in rollout_lines(call_args, printed_text, call_id):
+        for line in rollout_lines(call_args, printed_text, call_id, source_field=source_field):
             fh.write(json.dumps(line, ensure_ascii=False) + "\n")
 
 
-def write_fixture(call_args, printed_text, *, git_worktrees=False):
+def write_fixture(call_args, printed_text, *, git_worktrees=False, source_field="arguments"):
     reset_fixture(git_worktrees=git_worktrees)
-    append_wait(call_args, printed_text)
+    append_wait(call_args, printed_text, source_field=source_field)
 
 
 def env():
@@ -209,7 +213,8 @@ fails = 0
 CASES = [
     ("正常投影应通过", CALL_OK, GOOD_PROJECTION, 0, None),
     ("退化输出 text({pollCount:0}) 必须被拦下", CALL_OK, '{"pollCount":0}', 1, "projection missing or wrong version"),
-    ("timeoutMs 被调低必须被拦下", CALL_BAD_TIMEOUT, GOOD_PROJECTION, 1, "1000 < 180000"),
+    ("timeoutMs 被调低必须被拦下", CALL_BAD_TIMEOUT, GOOD_PROJECTION, 1, "1000 != 120000"),
+    ("timeoutMs 超过平台上限必须被拦下", CALL_HIGH_TIMEOUT, GOOD_PROJECTION, 1, "180000 != 120000"),
     ("缺 polls 键必须被拦下", CALL_OK, '{"v":1,"n":2}', 1, "shape altered"),
     ("缺 timedOut 键必须被拦下", CALL_OK,
      json.dumps({"v": 1, "n": 2, "wake": None, "polls": []}), 1, "missing timedOut"),
@@ -224,7 +229,7 @@ CASES = [
     ("ids 换成陌生 id 必须被拦下", call_for([NODES["alpha"], UNKNOWN]), projection(n=2), 1, "targets mismatch"),
     ("投影 n 与实际 ids 数量不符必须被拦下", CALL_OK, projection(n=3), 1,
      "projection n=3 != actual targets 2"),
-    ("解析不出 ids 数组必须被拦下", 'const targets=[]; await tools.codex_app__wait_threads({targets,timeoutMs:180000});',
+    ("解析不出 ids 数组必须被拦下", 'const targets=[]; await tools.codex_app__wait_threads({targets,timeoutMs:120000});',
      GOOD_PROJECTION, 1, "cannot parse ids array"),
 ]
 
@@ -235,6 +240,30 @@ for i, (name, call, printed, want_rc, want_sub) in enumerate(CASES, 1):
     ok = (rc == want_rc) and (want_sub is None or want_sub in out)
     first = out.strip().splitlines()[0] if out.strip() else "(no output)"
     fails += check(name, ok, f"rc={rc} (want {want_rc}) {first}")
+
+print("-" * 78)
+write_fixture(CALL_OK, GOOD_PROJECTION, source_field="input")
+run("init", "--coordination-id", CID)
+rc, out = run("sync", "--coordination-id", CID, "--round", "101")
+fails += check("modern input wait call 必须被识别并同步",
+               rc == 0 and "valid=yes" in out,
+               f"rc={rc} {out.strip().splitlines()[0] if out.strip() else '(no output)'}")
+
+write_fixture(CALL_HIGH_TIMEOUT, GOOD_PROJECTION, source_field="input")
+run("init", "--coordination-id", CID)
+rc, out = run("sync", "--coordination-id", CID, "--round", "102")
+fails += check("modern input wait call 仍须执行 timeout 自检",
+               rc == 1 and "180000 != 120000" in out,
+               f"rc={rc} {out.strip().splitlines()[0] if out.strip() else '(no output)'}")
+
+reset_fixture()
+append_wait(CALL_OK, GOOD_PROJECTION, call_id="modern-dispatch", dispatch_calls=1,
+            source_field="input")
+run("init", "--coordination-id", CID)
+rc, out = run("sync", "--coordination-id", CID, "--round", "103")
+fails += check("modern input dispatch call 必须计数",
+               rc == 0 and "dispatches_since_progress: 1" in out,
+               f"rc={rc} {out.strip().splitlines()[0] if out.strip() else '(no output)'}")
 
 print("-" * 78)
 write_fixture('const x=1; text("hello");', '"hello"')

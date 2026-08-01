@@ -103,10 +103,11 @@ H4 的分阶段：**第一轮只登记不校验**；阶段 2 打开校验（`wai
 
 ```js
 const ids = [/* registry 中各 node 的 current_session_id，内联 */];
-const r = await tools.codex_app__wait_threads({
+const raw = await tools.codex_app__wait_threads({
   targets: ids.map(threadId => ({ threadId })),
-  timeoutMs: 180000
+  timeoutMs: 120000
 });
+const r = typeof raw === "string" ? JSON.parse(raw) : raw;
 text(JSON.stringify({
   v: 1,
   n: ids.length,
@@ -121,7 +122,7 @@ text(JSON.stringify({
 }));
 ```
 
-四条不可动摇：`timeoutMs` **不得低于** `180000`（推荐固定 180000，更保守的等待不判无效）；`targets` 覆盖 registry 的**全部 children，不含 controller 自己**（主控轮询自身没有意义）；输出是**这个投影**，字段一个不能少；`txt` 截断到 500 字符。
+四条不可动摇：`timeoutMs` 固定为平台允许的 `120000`；`targets` 覆盖 registry 的**全部 children，不含 controller 自己**（主控轮询自身没有意义）；输出是**这个投影**，字段一个不能少；`txt` 截断到 500 字符。
 
 投影的确切字段以 [poll-contract.md](poll-contract.md) 为准——它随自检判据一起演进，本页只讲为什么。
 
@@ -135,7 +136,7 @@ text(JSON.stringify({
 
 | 判据 | 不符时的报错 |
 | --- | --- |
-| 调用 arguments 里 `timeoutMs >= 180000` | `timeoutMs <n> < 180000` |
+| 调用 source（legacy `arguments` / modern `input`）里 `timeoutMs == 120000` | `timeoutMs <n> != 120000` |
 | 输出可解析为 JSON 且 `v == 1` | `projection missing or wrong version` |
 | 输出含 `n` 与 `polls` 两个键 | `projection shape altered (missing <key>)` |
 | `n` == registry 中 **children** 数量 | `targets <n> != registry children <m>` |

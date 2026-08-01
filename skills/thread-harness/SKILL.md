@@ -108,7 +108,7 @@ description: >
 
 ### 每轮做什么
 
-1. 敲 [poll-contract.md](references/poll-contract.md) 里的固定 JS 片段（`timeoutMs: 180000`，覆盖全部 node，只回一行短确认）
+1. 敲 [poll-contract.md](references/poll-contract.md) 里的固定 JS 片段（`timeoutMs: 120000`，覆盖全部 node，只回一行短确认）
 2. 跑 `ledger.py sync`，读那段紧凑摘要
 3. 跑 `ledger.py stall-check`，按退出码走：
    - `0` → 正常，按摘要决策

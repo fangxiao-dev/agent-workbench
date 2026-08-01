@@ -250,6 +250,18 @@ def stringify(value) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
+def tool_call_source_text(payload: dict, item: dict) -> str:
+    """Read exec source from legacy `arguments` or modern `input` fields."""
+    for container in (payload, item):
+        if not isinstance(container, dict):
+            continue
+        if "arguments" in container:
+            return stringify(container.get("arguments"))
+        if "input" in container:
+            return stringify(container.get("input"))
+    return ""
+
+
 def read_rollout_events(path: Path, offset: int) -> tuple[list[dict], int, int]:
     events = []
     scanned = 0
@@ -287,8 +299,7 @@ def latest_wait_round(events: list[dict]) -> tuple[dict | None, dict | None]:
         if not call_id:
             continue
         if item_type == "custom_tool_call":
-            arguments = payload.get("arguments") if "arguments" in payload else item.get("arguments")
-            text = stringify(arguments)
+            text = tool_call_source_text(payload, item)
             if "codex_app__wait_threads" in text:
                 calls[call_id] = {"call_id": call_id, "arguments": text}
                 order.append(call_id)
@@ -315,7 +326,7 @@ def count_dispatch_calls(events: list[dict]) -> int:
         if not call_id:
             continue
         if item_type == "custom_tool_call":
-            text = stringify(payload.get("arguments") if "arguments" in payload else item.get("arguments"))
+            text = tool_call_source_text(payload, item)
             if any(needle in text for needle in needles):
                 calls.append(call_id)
         elif item_type == "custom_tool_call_output":
@@ -376,10 +387,10 @@ def parse_ids_array(arguments: str) -> list[str] | None:
 def validate_call(arguments: str, expected_session_ids: list[str]) -> tuple[str | None, list[str]]:
     timeout_match = re.search(r'"?timeoutMs"?\s*[:=]\s*(\d+)', arguments)
     if not timeout_match:
-        return "timeoutMs missing < 180000", []
+        return "timeoutMs missing (expected 120000)", []
     timeout_ms = int(timeout_match.group(1))
-    if timeout_ms < 180000:
-        return f"timeoutMs {timeout_ms} < 180000", []
+    if timeout_ms != 120000:
+        return f"timeoutMs {timeout_ms} != 120000", []
 
     actual_ids = parse_ids_array(arguments)
     if actual_ids is None:
