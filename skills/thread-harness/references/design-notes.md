@@ -209,6 +209,20 @@ role 段开头必须写明：*"你的使命是完成任务包，方式由 `/impl
 
 硬规则：H3（停滞二选一 + 尚未上报的 pending 决策立即上报）、H4 登记、不自己做审计。
 
+### 4.5 为什么 session 交接分两阶段
+
+一次性把 registration 和任务一起发给 child，会出现一个无法消除的竞速：child 第一个 turn 就去读 registry，而 controller 此时还没拿到新 `threadId`、registry 里还是旧值，于是 child 报 mismatch。2026-08-02 实跑里这类 mismatch 出现过，且需要 Owner 手工介入才解开。
+
+拆成两阶段消除了这个窗口：第一阶段 child 只核对锚点然后停住，controller 在这个停顿里更新 registry，第二阶段才真正开工。
+
+**为什么替换由退休 session 自己发起 `create_thread`**（Role A / Role C）：只有它知道自己的 WIP 边界、已获证据与单一 Next Action，这些必须先写回恢复权威再交接才是原子的；主控代劳就得先把这些吸进自己的上下文，而它的上下文是最稀缺的。Role B 例外——Foundation 没有自述状态，恢复权威是主控写的 assignment card，自交接没有意义。
+
+**为什么不另造中间态 handoff 卡片**：`$handoff-to-new-session` 原文即 *"a compact, complete initial prompt, **not a temporary handoff document**"*。交接材料就是 child 的首条 prompt 本身；再写一份临时卡片让主控转手，既违反被引用 skill 的约定，也把一个原子动作拆成两步。
+
+**为什么只在轮边界交接**：固定 poll 的 ids 是在轮次开头内联进 JS 的，轮中交接会让 registry 变而本轮 ids 不变，`sync` 的集合比对判 `ROUND INVALID`，白白作废一轮并污染读数 1。不放宽 `sync` 校验——它是整个设计里最重要的单点。
+
+**为什么档位要显式指定**：实测 `create_thread` 时显式给 `model` / `thinking` 是生效的，不给会落到平台默认。但它只决定起点——session 跑过多轮后档位会被平台自动降到 terra，这是 Codex 的机制，本 harness 不对抗它。后果是长跑的主控逐渐变钝，而主控读不到自己的 `turn_context`，所以 `session_age_h` 是唯一可用的代理信号。
+
 ## 5. 账本 schema
 
 正式运行时目录：由 `--registry <absolute-registry-json>` 的 registry sibling 与其中 `coordination_id` 推导；旧的 `THREAD_HARNESS_BROKER_ROOT` + `--coordination-id` 兼容路径仍可用。

@@ -13,17 +13,7 @@
 | 作用 | **一次性**把摊子铺开：建 registry、init、开子线、preflight、跑通首轮，然后**停下** | **循环期间每个 turn 重注入**的那几条规则 |
 | 里面是什么 | 这一轮要建哪些线（业务信息，只有你知道） | 每轮三步 + 8 条不可违反 + 目标与结束判据 |
 
-**两份都带 coordination_id / registry / 授权，这是刻意重复不是冗余**：goal 是全系统唯一免疫 compaction 的通道，启动 prompt 会被压缩掉，所以循环期间还要用到的锚点必须在 goal 里再写一遍。
-
-## 什么该进 goal
-
-goal 是全系统**唯一免疫 compaction 的通道**（每 turn 原样重注入），也是最贵的位置：每一行都乘以轮数重复付出。**长文本会稀释真正关键的那几句——全是重点等于没有重点。**
-
-判据只有一条：
-
-> **忘了会让系统「安静地失效」的，进 goal；忘了只是「做得差一点」或者「会立刻报错」的，留在 skill。**
-
-所以这里的每一条都对应一次真实失效，机制说明、命令语法、完整退出码表全部留在 [poll-contract.md](references/poll-contract.md) 与 [design-notes.md](references/design-notes.md)。
+两份都带 `coordination_id` / registry / 授权，**这是刻意重复，不要删**。
 
 ## 贴之前
 

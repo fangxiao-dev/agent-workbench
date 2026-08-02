@@ -43,8 +43,6 @@ description: >
 - **review 回到 subagent**：走 `$do-review` 路由到 `skills/reviews/` 的四条 track（code / standards / spec / safety）。**不要自己造审计 agent**——那四条已经存在了。
 - **验收由你自己做**：`$verification-before-completion`，不外包。
 
-为什么前两条分得这么开：review 和验收需要吃你本 session 的上下文才能判断，外包出去会失真；而 impl 和 investigate 的**过程**对你毫无价值，只有结论有价值——那正是最该外包的部分。上一轮各线 compaction 达 18–32 次，绝大部分上下文就是被 impl 过程占掉的。
-
 ### 一轮循环长什么样
 
 主控每轮：敲固定 JS 片段 → `ledger.py sync` → 读摘要 → `ledger.py stall-check` → 按退出码决策。
@@ -54,7 +52,7 @@ description: >
 
 ### 一个容易搞反的语义
 
-`wait_threads` 返回的 `wake.reason == "inactiveStatus"` 意思是**有线程闲着**，不是"没有变化"。前者要派活，后者才是等。上一轮它出现了 468 次，被当成了后者，于是主控安静地空转了几个小时。
+`wait_threads` 返回的 `wake.reason == "inactiveStatus"` 意思是**有线程闲着**，不是"没有变化"。前者要派活，后者才是等。
 
 ### 最小 H1 envelope（无新 API）
 
@@ -85,11 +83,11 @@ description: >
 
 > 非 seam / 共享基座类的问题，优先自己完成。确认是共享的东西，才上报给主控转给 Foundation。
 
-判断"是不是共享"的启发式：如果修好它只对你这个包有意义，那是你的活；如果别的包也在等同一个东西，那是 seam。拿不准就上报并说明你的判断依据——**误报的成本远低于漏报**，上一轮的死锁就是漏报堆出来的。
+判断"是不是共享"的启发式：如果修好它只对你这个包有意义，那是你的活；如果别的包也在等同一个东西，那是 seam。拿不准就上报并说明判断依据——**误报的成本远低于漏报**。
 
 ### 一个反模式
 
-当你发现"当前没有安全的独立 lane"时，**"提交一份记录我被阻塞的文档"不算产出**。它看起来像进展，实际是停滞的伪装。上一轮七条分支里六条的最后一个 commit 都是这种 `docs(...)`。
+当你发现"当前没有安全的独立 lane"时，**"提交一份记录我被阻塞的文档"不算产出**。它看起来像进展，实际是停滞的伪装。
 
 正确动作是 H1：把阻塞写成带 `seam:<id>` 的 envelope 回报主控，然后**明确说自己空了**。空闲是一个需要被调度的信号，不是一个需要被文档化的状态。
 
@@ -104,7 +102,7 @@ description: >
 1. 向主控要下一个 seam 任务；
 2. 报告"本线 seam 已交付"，附 `seam_id` 与 artifact 指针（commit hash 之类）。
 
-原因很直白：所有人都在等 seam，而你是造 seam 的。**让生产者去等消费者，环就闭上了。** 上一轮主控亲手让一条 Foundation 线待命，那条线此后两小时零产出，是死锁闭合的关键一步。
+**让生产者去等消费者，环就闭上了。**
 
 交付时向主控发送包含 `seam:<id>` 与 artifact 事实的 H1；由 controller 在账本 `seams.jsonl` 登记 `seam_id` + `consumers` + `artifact`。没登记的 seam 等于没交付——下游查不到 producer，会按 H4 判成错误状态。
 
@@ -122,7 +120,7 @@ description: >
 
 ### 开跑前
 
-正式调用统一使用 `--registry <absolute-registry-json>`；runtime 由 registry sibling 与 `coordination_id` 推导。旧的 `--coordination-id` + 环境变量路径仅为兼容旧调用。跑 `ledger.py preflight --registry <absolute-registry-json>`，**`PREFLIGHT OK` 才能开始轮询**。它拦的是 worktree 写错、两个 node 共用 worktree/branch、registry 分支与实际不符这类**全程无声**的问题——不拦的话，`head` 会串号或静默进 `head_unavailable`，停滞判定从第一轮起就是失真的。冷启动的完整顺序（goal 是最后一步）见 [run-procedure.md §四](references/run-procedure.md)。
+正式调用统一使用 `--registry <absolute-registry-json>`；runtime 由 registry sibling 与 `coordination_id` 推导。旧的 `--coordination-id` + 环境变量路径仅为兼容旧调用。跑 `ledger.py preflight --registry <absolute-registry-json>`，**`PREFLIGHT OK` 才能开始轮询**。它拦的是 worktree 写错、两个 node 共用 worktree/branch、registry 分支与实际不符这类**全程无声**的问题。冷启动的完整顺序（goal 是最后一步）见 [run-procedure.md §四](references/run-procedure.md)。
 
 ### 每轮做什么
 
@@ -139,7 +137,7 @@ description: >
 
 ### 你不做的事
 
-- **不做审计。** 需要 review 就走 `$do-review`。上一轮主控开头 1.5 小时全在给自己造 review agent，而那些 track 仓库里本来就有。你的上下文是稀缺资源。
+- **不做审计。** 需要 review 就走 `$do-review`，不要自己造 review agent。你的上下文是稀缺资源。
 - **不让 Foundation 线待命。**（见 Role B）
 - **不自行批准 Owner 级决策。** 授权边界与提案格式用 `$owner-thread-broker`。
 
@@ -147,7 +145,7 @@ description: >
 
 `decisions.jsonl` 里出现 `pending` 就叫，不要攒。判断"这是不是 Owner 级"的启发式：如果这个决定会改变谁拥有什么、或者会产生不可逆的外部影响，那就是 Owner 的。技术选型和执行顺序是你的。
 
-拿不准就报——上一轮有一条 Owner 级阻塞在子线里躺了三小时没被上报，代价是整条链空转。
+拿不准就报。**误报的成本远低于漏报。**
 
 ---
 

@@ -4,11 +4,7 @@
 
 **不要手写一段带 `<codex_delegation>` 的委派 prompt。** 那种写法把路由 envelope 当成了 prompt 内容，还会让 child 首轮的 registry 检查与 controller 回填 `threadId` 竞速。统一复用 `$handoff-to-new-session` 的 clean local-session 能力；下方 thread-harness replacement override 优先于该通用 skill 的“source 自己 create/no doc”说法。
 
-## 为什么分两阶段
-
-一次性把 registration 和任务一起发给 child，会出现一个无法消除的竞速：child 第一个 turn 就去读 registry，而 controller 这时还没拿到新 `threadId`、registry 里还是旧值，于是 child 报 mismatch。
-
-拆成两阶段就没有这个窗口——**第一阶段 child 只核对锚点然后停住，controller 在这个停顿里更新 registry，第二阶段才真正开工。** child 不直接写 ledger。
+**第一阶段 child 只核对锚点然后停住，controller 在这个停顿里更新 registry，第二阶段才开工。** child 不直接写 ledger。依据见 [design-notes.md](design-notes.md) §4.5。
 
 ## 固定骨架
 
@@ -32,26 +28,23 @@
 | 起因 | 某条线太长 / 接近 compaction 上限 / 已经变笨 | 为新识别的 seam 开一条 Foundation 线，或首次建线 |
 | 谁发起 | **主控**，依据是 `sync` 摘要里的 `session_age_h`（子线自己不自知，主控也看不到对方的 compaction 次数——平台没有这个数据，**session 年龄是唯一可用的代理信号**） | 主控 |
 | 谁调 `create_thread` | **那条线自己**（Role A / Role C） | **主控** |
-| 为什么 | 只有它知道自己的 WIP 边界、已获证据与单一 Next Action。这些必须先写回恢复权威、再交接，才是原子的——主控代劳就得先把这些吸进自己的上下文，而它的上下文是最稀缺的 | 没有 source session 可提示 |
 | Role B 例外 | **也由主控建**。Foundation 没有自述状态，恢复权威是主控写的 assignment card，让它自交接没有意义 | 主控建 |
 | 前置 | source 停在原子 checkpoint、owned process 已停 | Owner 已授权 `create_thread`、seam assignment 明确 |
 
 **主控的触发消息只需要三件事**：说明要做自交接、指向 `$handoff-to-new-session`、给出本 skill 的路径作为 override 依据。不要在触发消息里复述交接步骤——那是被引用 skill 的职责。
 
-**只在轮边界发起交接。** 固定 poll 的 ids 是在轮次开头内联进 JS 的；交接若在轮中完成，registry 变了而本轮的 ids 没变，`sync` 的集合比对会判 `ROUND INVALID`，白白作废一轮并污染读数 1。不要为此放宽 `sync` 的校验——它是整个设计里最重要的单点，宁可把交接推迟一轮。
+**只在轮边界发起交接。** 轮中交接会让本轮 `sync` 判 `ROUND INVALID`（内联的 ids 与变更后的 registry 对不上）。宁可推迟一轮，**不要放宽 `sync` 校验**。
 
 ### registry 由谁写：当时的主控，永远
 
 `previous_session_ids` 与 `current_session_id` 的写入**只由那一刻的 controller 执行**（用 `ledger.py route`，见 poll-contract）。这条对三个角色一致：
 
 - **Role A / Role B 替换**：现任主控在收到 `handed_off` H1 后写。
-- **Role C 交接**：**退休主控在退出前把 registry 指向继任者**——它此刻仍然是 controller，且已经拿着新 id；而继任者此时还没有任何上下文。新主控上任后**只核对**这个字段是否已指向自己，只有在退休方没写成时才补写。
+- **Role C 交接**：**退休主控在退出前把 registry 指向继任者**。新主控上任后只核对该字段是否已指向自己，没写成才补写。
 
 ### 复用 `$handoff-to-new-session`，不要重造
 
-自交接的通用能力全部在 `$handoff-to-new-session` 里：clean local session、anchor check、不 fork、不建 worktree，以及交接 prompt 的形状与长度约束（见它的 `references/handoff-prompt-template.md`）。**本页只写 harness 特有的 override，不复述它的流程，也不另造中间产物。**
-
-注意它的一条原文：*"The handoff is a compact, complete initial prompt, **not a temporary handoff document**"*。交接材料就是 child 的首条 prompt 本身——**不要再往临时目录写一份中间卡片再让主控转手**，那既违反被引用 skill 的约定，也把一个原子动作拆成了可能失败的两步。
+交接的通用流程、prompt 形状与长度约束全在 `$handoff-to-new-session`（见它的 `references/handoff-prompt-template.md`）。**本页只写 override，不复述它，也不另造中间产物**——交接材料就是 child 的首条 prompt 本身，不要往临时目录写中间卡片再让主控转手。
 
 两条 override：
 
@@ -75,7 +68,7 @@
 
 ### 第一阶段 prompt
 
-**这是对 `$handoff-to-new-session` 那份 `handoff-prompt-template.md` 的 override，不是另一套模板。** 锚点字段沿用它的，唯一的改动是结尾：它的模板让 child 核对完就**继续推进 next action**，我们改成**报 PASS 后停住**，把开工推迟到第二阶段。维护时只同步锚点字段，不要把「继续」那句同步回来。
+锚点字段沿用 `$handoff-to-new-session` 的模板，唯一改动是结尾：**报 PASS 后停住**，不继续推进 next action。维护时只同步锚点字段。
 
 ```text
 <角色与任务一句话>。这是全新、独立的 local session；不继承任何旧 session 的聊天历史。

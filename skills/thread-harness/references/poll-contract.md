@@ -99,7 +99,6 @@ python skills/thread-harness/scripts/ledger.py preflight --registry <absolute-re
 
 `dirty_worktree`（Owner WIP）与 `child_rollout_missing` 只报警告，不阻断——前者是合法状态但派发 prompt 里必须写明不可触碰，后者不影响判定，因为子线状态从 `wait_threads` 投影读、不从 rollout 读。
 
-> 为什么值得单列一步：`head` 是从 registry 的 worktree 直接 `git rev-parse` 读的。路径写错只会静默进 `head_unavailable`；**两个 node 共用 worktree 更隐蔽——两条线读出同一个 HEAD，停滞判定分不开它们，还会产生假的 `stale_reports`。** 上一轮实跑两种都发生了，全程无声。
 
 接手新 session 时先执行：
 
@@ -124,8 +123,6 @@ python skills/thread-harness/scripts/ledger.py heartbeat --registry <absolute-re
 该命令只更新 `sync-state.json` 的 reset marker；`--evidence` 只用于迫使 controller 当场说清具体进展，不落盘。它不修改任何 append-only JSONL，也不保存 thread 消息。
 
 `stall-check` 看最近一次 halt 及其记录的 `halt_poll_seq`。若还没有更大的有效 poll seq，输出 `HALTED (ts=<...>, reason=<...>, pending=<...>)` 并返回 `4`；`dispatch` / `escalate` 不会隐式 resume。Owner 在 controller 对话明确恢复后，controller 运行新的有效 poll + sync，新 poll seq 自动使旧 halt 失效；halt 历史保留。
-
-`HALTED` 单独占一个退出码而不是复用 `0`，理由和 `64` 一样：`0` 已经同时承载 `OK` 与 `CHECK_HEARTBEAT`，而 goal 模板里写的是「`0 OK` → 按 sync 摘要正常决策」。若 `HALTED` 也退 `0`，一个只按退出码分支的接手主控会把「loop 已终止」读成「一切正常」，静默续跑一个已经停掉的 coordination——正是本 harness 要消灭的那类无声失效。
 
 `stall-check` 返回 `MUST_ESCALATE` 时，只列出尚未上报的 pending decision。上报后用 `act --escalate` 留下已上报事实；同一 id 在 `answered` 后重新 `raise` 时，必须重新上报，因为判断会比较 escalate 行 `ts` 是否不早于最新 raise 行 `ts`：
 
@@ -156,7 +153,7 @@ python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry
 | `5` | `preflight` 输出 `PREFLIGHT FAILED` | 修掉列出的每一条再开跑。**不要带着失败开始轮询** |
 | `64` | 命令用法错误（参数拼错、缺必填项） | 修正命令重跑。**这不是业务信号** |
 
-`64` 是刻意选的，不用 argparse 默认的 `2`：如果用法错误也退 `2`，一次拼错的命令会被读成 `MUST_ACT`，或者反过来让真正的 `MUST_ACT` 被当成拼写问题忽略掉。**退出码在语义上必须唯一。**
+**退出码在语义上必须唯一**——不要复用，理由见 [design-notes.md](design-notes.md) §6。
 
 多值参数（`--blocks` / `--consumers` / `--waiting-on`）**空格分隔和重复传都支持**：`--blocks alpha beta` 与 `--blocks alpha --blocks beta` 等价。
 
