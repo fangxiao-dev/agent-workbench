@@ -127,7 +127,7 @@ description: >
 ### 每轮做什么
 
 1. 敲 [poll-contract.md](references/poll-contract.md) 里的固定 JS 片段（`timeoutMs: 120000`，覆盖全部 node，只回一行短确认）
-2. 跑 `ledger.py sync`，读那段紧凑摘要
+2. 跑 `ledger.py sync`，读那段紧凑摘要；其中 `session_age_h` 是主控判断是否触发 session 交接的测量信号
 3. 跑 `ledger.py stall-check`，按退出码走：
    - `0` `OK` → 正常，按摘要决策
    - `0` `CHECK_HEARTBEAT` → 已到 `3/5` 或 `4/5`；直接读取 active / working thread。若确认具体、最新进展，执行 `ledger.py heartbeat --node <node> --evidence "<一句话>"`；否则不重置

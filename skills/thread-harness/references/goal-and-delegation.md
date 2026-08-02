@@ -10,71 +10,11 @@
 
 ---
 
-## 一、主控 goal 模板
+## 一、goal 模板在哪
 
-粘进 Codex Desktop 的 goal 框。把 `<>` 占位符换掉。
+**全部可粘贴文本都在 [goal-prompt.md](../goal-prompt.md)**：三个角色的 goal、冷启动第一条消息、create_thread 授权原文，以及一张「什么时机贴什么」的 Owner 粘贴清单。
 
-```text
-### 你的角色
-
-你是主控（broker）。读 $thread-harness 的 Role C 段并按它工作。
-线程路由（thread-id 与 topic 绑定）用 $owner-thread-broker，coordination_id 是 <coordination-id>。
-正式 ledger 命令统一使用 `--registry <absolute-registry-json>`；runtime 由 registry sibling 与 coordination_id 推导。
-
-### 每轮循环
-
-0) 每轮先读 registry，拿到全部 active children 当前的 current_session_id：
-   Get-Content -Raw <registry 绝对路径>
-   不要凭记忆写 id，也不要沿用上一轮的——子线换 session 后旧 id 会让每轮都判 ROUND INVALID。
-
-1) 把上一步读到的 id **作为字面量内联**进下面这段，原样敲，不要"优化"它：
-
-const ids=["<child-1 session id>","<child-2 session id>", ...];   // 全部 active children，不含你自己
-const raw=await tools.codex_app__wait_threads({targets:ids.map(threadId=>({threadId})),timeoutMs:120000});
-const r=typeof raw==="string"?JSON.parse(raw):raw;
-text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,polls:(r.polls||[]).map(p=>({id:p.thread?.id,status:p.thread?.status?.type,turn:p.latestTurn?.id,turnStatus:p.latestTurn?.status,txt:(p.latestAssistantMessage?.text||"").slice(0,500)}))}));
-
-字段一个都不能少。你不打印的东西 ledger.py 读不到——rollout 记录的是你打印的内容，不是工具的原始返回。
-以 references/poll-contract.md 的版本为准，那里和自检判据一起更新。
-
-2) python <repo>/skills/thread-harness/scripts/ledger.py sync --registry <absolute-registry-json> --round <n>
-3) python <repo>/skills/thread-harness/scripts/ledger.py stall-check --registry <absolute-registry-json>
-4) 按 stall-check 退出码走：
-   0 OK → 按 sync 摘要正常决策
-   0 CHECK_HEARTBEAT（3/5 或 4/5）→ 若有 active / working node，直接 read_thread 看这些 current session 的最新内容；任一 thread 有具体且最新的执行心跳时，执行：
-      python <repo>/skills/thread-harness/scripts/ledger.py heartbeat --registry <absolute-registry-json> --node <node> --evidence "<一句话具体进展>"
-      重复等待文案、旧进展、笼统“仍在工作”或仅 active 状态不算；全员 idle 时不 reset，按 idle_nodes 派活。
-   2 MUST_ACT → 见下方"不可违反"第 1 条
-   3 MUST_ESCALATE → 有尚未上报的 pending 决策；立即向我报告列出的决策，执行 ledger.py act --registry <absolute-registry-json> --escalate --decision-id <d> 留痕，本轮结束
-
-### 不可违反
-
-1. stall-check 返回 2（MUST_ACT）时，你只有两个选项，且**必须把选择记进账本**：
-
-   (a) 派发新工作 —— 记：
-       ledger.py act --registry <absolute-registry-json> --dispatch --seam-id <s> --producer <node> --deliverable "<一句话>"
-   (b) 向我报告并结束 loop —— 记：
-       ledger.py act --registry <absolute-registry-json> --halt --reason "<一句话>"
-
-   禁止"继续等待"、"本轮无变化"、"保持现状"这类第三选项。
-
-   注意 (a) 要求你说出**派给谁、要造哪个 seam、交付什么**。如果这三样填不出来，
-   那说明你想做的其实不是派活，请选 (b)。
-
-   MUST_ACT 的准确含义是"连续 5 轮没有 committed progress，且从 3/5 起未确认到 fresh heartbeat"，不是"全线都死了"。
-   退出码 3 的准确含义是"有尚未上报的决策"；已通过 act --escalate 上报的 pending 决策不会继续屏蔽 MUST_ACT。
-   5/5 后不得再用 heartbeat 绕过二选一。
-2. wake.reason == "inactiveStatus" 表示有线程闲着，是"该派活"的信号，不是"没有变化"。只有 active 且最新 ledger state 为 working 的 node 才进入 idle_nodes。
-3. seam 缺失是你的待办，不是外部阻塞。所有人都在等某个跨域契约时，正确的动作是派一条
-   Foundation 线去造它，而不是把它记成阻塞。
-4. 不要让 Foundation 线"保持待命"。它们是 seam 的生产者，让生产者等消费者会造成死锁。
-5. 不自己做审计。需要 review 走 $do-review。
-6. impl / investigate 优先用 $call-grok，只回收结论。
-
-### 目标
-
-<具体业务目标：要达成什么、什么算完成、已知的边界与禁止项>
-```
+本页只写**为什么**与**流程**，不放第二份模板——这一轮实跑用的就是本页曾经存在的那份旧模板，它把 `MUST_ACT` 的选项 (b) 和 `MUST_ESCALATE` 的响应都映射到了 `act --escalate`，直接促成了 26 次重复上报。**同一件事有两份模板，迟早有一份是旧的。**
 
 ### 与上一轮 goal 的差异（保留说明，便于对照）
 
@@ -137,7 +77,9 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
 
 **五步全绿之后**，再把 [goal-prompt.md](../goal-prompt.md) 的 Role C 模板贴进 goal 框。
 
-> 为什么 preflight 单列一步：`head` 是从 registry 的 worktree 直接 `git rev-parse` 读的。**路径写错不会报错，只会静默进 `head_unavailable`**；两个 node 共用 worktree 更隐蔽——两条线读出同一个 HEAD，停滞判定分不开它们，还会产生假的 `stale_reports`。上一轮实跑里这两种情况都发生了。
+### 要粘贴的两段文本
+
+冷启动的第一条消息（普通消息，不是 goal）与 create_thread 授权原文都在 [goal-prompt.md](../goal-prompt.md)。授权那段**两处都要贴**：冷启动消息里一份管 bootstrap 建线，Role C goal 里一份管跑起来之后；换主控时 goal 是新的，没重贴就等于没授权。
 
 ### 开跑前检查清单
 

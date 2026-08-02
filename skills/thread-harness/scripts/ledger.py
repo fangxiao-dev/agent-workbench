@@ -10,7 +10,9 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -300,6 +302,98 @@ def registry_nodes(registry: dict) -> list[dict]:
     if not nodes:
         raise LedgerError("registry has no controller/children with current_session_id")
     return nodes
+
+
+def route_registry_entries(registry: dict) -> list[dict]:
+    """Return raw registry node objects with stable labels for route verification."""
+    entries = []
+    controller = registry.get("controller")
+    if isinstance(controller, dict):
+        aliases = {"controller"}
+        for key in ("name", "node_id", "node"):
+            value = controller.get(key)
+            if isinstance(value, str) and value:
+                aliases.add(value)
+        entries.append(
+            {
+                "label": "controller",
+                "role": "controller",
+                "name": str(controller.get("name") or "controller"),
+                "aliases": aliases,
+                "active": True,
+                "node": controller,
+                "container_key": None,
+                "item_key": None,
+            }
+        )
+
+    children = registry.get("children")
+    children_key = "children"
+    if not children:
+        children = registry.get("nodes")
+        children_key = "nodes"
+    if isinstance(children, dict):
+        child_items = children.items()
+    elif isinstance(children, list):
+        child_items = enumerate(children)
+    else:
+        child_items = []
+    for key, value in child_items:
+        if not isinstance(value, dict):
+            continue
+        aliases = {str(key)}
+        for name_key in ("name", "node", "node_id"):
+            name = value.get(name_key)
+            if isinstance(name, str) and name:
+                aliases.add(name)
+        if isinstance(children, dict):
+            name = value.get("name") or str(key)
+        else:
+            name = value.get("name") or value.get("node") or f"child_{key}"
+        entries.append(
+            {
+                "label": f"{children_key}[{key!r}]",
+                "role": "child",
+                "name": str(name),
+                "aliases": aliases,
+                "active": value.get("active", True) is not False,
+                "node": value,
+                "container_key": children_key,
+                "item_key": key,
+            }
+        )
+    return entries
+
+
+def session_age_text(registry: dict) -> str:
+    """Format active-child session ages; malformed timestamps are measurements, not errors."""
+    now = datetime.now().astimezone()
+    ages = []
+    for entry in route_registry_entries(registry):
+        if entry["role"] != "child" or not entry["active"]:
+            continue
+        age = None
+        try:
+            timestamp = parse_iso_ts(entry["node"].get("updated_at"))
+            if timestamp is not None and timestamp.tzinfo is not None:
+                age = (
+                    now.astimezone(timezone.utc) - timestamp.astimezone(timezone.utc)
+                ).total_seconds() / 3600
+        except (OverflowError, TypeError, ValueError):
+            age = None
+        ages.append((entry["name"], age))
+
+    ages.sort(
+        key=lambda item: (
+            item[1] is None,
+            -(item[1] if item[1] is not None else 0),
+            item[0],
+        )
+    )
+    return ", ".join(
+        f"{name}={age:.1f}" if age is not None else f"{name}=?"
+        for name, age in ages
+    ) or "-"
 
 
 def find_rollout(session_id: str) -> Path:
@@ -1298,7 +1392,15 @@ def format_sync_stale(path: Path, scanned_lines: int) -> str:
     )
 
 
-def format_summary(round_no: int, valid: bool, offset: int, classification: dict, coordination_id: str, streak_limit: int) -> str:
+def format_summary(
+    round_no: int,
+    valid: bool,
+    offset: int,
+    classification: dict,
+    coordination_id: str,
+    streak_limit: int,
+    registry: dict | None = None,
+) -> str:
     changed = classification["changed_nodes"]
     pending = pending_decisions(coordination_id)
     unowned, malformed, stale_waiting_on = seams_waiting_counts(coordination_id)
@@ -1318,6 +1420,7 @@ def format_summary(round_no: int, valid: bool, offset: int, classification: dict
             f"changed_nodes:   {changed_text}",
             f"advance_kinds:   {', '.join(f'{name}={kind}' for name, kind in sorted((classification.get('advance_kinds') or {}).items())) or '-'}",
             f"unchanged:       {', '.join(classification['unchanged']) or '-'}",
+            f"session_age_h:   {session_age_text(registry or {})}",
             f"timedOut:        {str(bool(classification.get('timed_out'))).lower()}"
             + (" (timeout, no change)" if classification.get("timed_out_no_change") else ""),
             f"head_unavailable: {', '.join(classification.get('head_unavailable') or []) or '-'}",
@@ -1419,12 +1522,156 @@ def cmd_sync(args) -> int:
             state["docs_only_advances"] = int(state.get("docs_only_advances") or 0) + docs_count
     state["offset"] = new_offset
     save_state(args.coordination_id, state)
-    print(format_summary(args.round, True, new_offset, classification, args.coordination_id, args.streak))
+    print(
+        format_summary(
+            args.round,
+            True,
+            new_offset,
+            classification,
+            args.coordination_id,
+            args.streak,
+            registry,
+        )
+    )
     return 0
 
 
 def registry_node_by_name(registry: dict, node_name: str) -> dict | None:
     return next((node for node in registry_nodes(registry) if node["name"] == node_name), None)
+
+
+def route_entry_by_name(registry: dict, node_name: str) -> dict:
+    matches = [entry for entry in route_registry_entries(registry) if node_name in entry["aliases"]]
+    if not matches:
+        raise UsageError(f"unknown node: {node_name}")
+    if len(matches) > 1:
+        labels = ", ".join(entry["label"] for entry in matches)
+        raise UsageError(f"ambiguous node {node_name}: {labels}")
+    return matches[0]
+
+
+def route_masked_serialization(registry: dict, target: dict) -> str:
+    masked = deepcopy(registry)
+    container_key = target["container_key"]
+    if container_key is None:
+        masked["controller"] = None
+    else:
+        masked[container_key][target["item_key"]] = None
+    return json.dumps(masked, ensure_ascii=False, separators=(",", ":"), sort_keys=False)
+
+
+def route_entry_by_label(registry: dict, label: str) -> dict | None:
+    return next((entry for entry in route_registry_entries(registry) if entry["label"] == label), None)
+
+
+def route_registry_bytes(registry: dict, original_bytes: bytes) -> bytes:
+    original_text = original_bytes.decode("utf-8")
+    stripped = original_text.strip()
+    if "\n" not in stripped and "\r" not in stripped:
+        rendered = json.dumps(registry, ensure_ascii=False, separators=(",", ":"))
+    else:
+        indent = "  "
+        for line in original_text.splitlines()[1:]:
+            if line.strip():
+                leading = line[: len(line) - len(line.lstrip())]
+                if leading:
+                    indent = leading
+                break
+        rendered = json.dumps(registry, ensure_ascii=False, indent=indent)
+    if original_text.endswith("\r\n"):
+        rendered += "\r\n"
+    elif original_text.endswith("\n"):
+        rendered += "\n"
+    return rendered.encode("utf-8")
+
+
+def replace_file_bytes(path: Path, data: bytes) -> None:
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=str(path.parent),
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as fh:
+            temporary = Path(fh.name)
+            fh.write(data)
+        os.replace(str(temporary), str(path))
+        temporary = None
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+
+
+def cmd_route(args) -> int:
+    path = registry_path(args.coordination_id)
+    try:
+        original_bytes = path.read_bytes()
+        registry = json.loads(original_bytes.decode("utf-8"))
+    except FileNotFoundError as exc:
+        raise LedgerError(f"registry not found: {path}") from exc
+    except (OSError, UnicodeError) as exc:
+        raise LedgerError(f"registry unreadable: {path} ({exc})") from exc
+    except json.JSONDecodeError as exc:
+        raise LedgerError(f"registry is not valid JSON: {path} ({exc})") from exc
+    if not isinstance(registry, dict):
+        raise LedgerError(f"registry root must be an object: {path}")
+
+    target = route_entry_by_name(registry, args.node)
+    node = target["node"]
+    old_session = node.get("current_session_id")
+    if not isinstance(old_session, str) or not old_session:
+        raise UsageError(f"node {args.node} has no current_session_id")
+    if args.expect_current is not None and args.expect_current != old_session:
+        raise UsageError(
+            f"current session mismatch for {args.node}: "
+            f"registry={old_session} expected={args.expect_current}"
+        )
+    new_session = args.new_session
+    if not new_session.strip():
+        raise UsageError("--new-session must be non-empty")
+    if any(entry["node"].get("current_session_id") == new_session for entry in route_registry_entries(registry)):
+        raise UsageError(f"new session is already current: {new_session}")
+
+    previous = node.get("previous_session_ids")
+    if previous is None:
+        previous = []
+    if not isinstance(previous, list):
+        raise UsageError(f"node {args.node} previous_session_ids must be a list")
+
+    masked_before = route_masked_serialization(registry, target)
+    if old_session not in previous:
+        previous.append(old_session)
+    node["previous_session_ids"] = previous
+    node["current_session_id"] = new_session
+    node["updated_at"] = now_local()
+
+    try:
+        replace_file_bytes(path, route_registry_bytes(registry, original_bytes))
+        reread_bytes = path.read_bytes()
+        reread = json.loads(reread_bytes.decode("utf-8"))
+        if not isinstance(reread, dict):
+            raise ValueError("registry root is no longer an object")
+        reread_target = route_entry_by_label(reread, target["label"])
+        if not reread_target or reread_target["node"].get("current_session_id") != new_session:
+            raise ValueError("target current_session_id verification failed")
+        if route_masked_serialization(reread, reread_target) != masked_before:
+            raise ValueError("non-target registry content changed")
+    except Exception as exc:
+        try:
+            replace_file_bytes(path, original_bytes)
+        except OSError as restore_exc:
+            raise LedgerError(
+                f"route verification failed: {exc}; registry restore failed: {restore_exc}"
+            ) from exc
+        raise LedgerError(f"route verification failed: {exc}") from exc
+
+    print(f"ROUTED {args.node} {old_session} -> {new_session}")
+    return 0
 
 
 def validate_report_source(coordination_id: str, node_name: str, source_session: str, head: str, registry: dict) -> dict:
@@ -1849,6 +2096,13 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--round", required=True, type=int)
     sync.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
     sync.set_defaults(func=cmd_sync)
+
+    route = sub.add_parser("route")
+    route.add_argument("--registry", required=True)
+    route.add_argument("--node", required=True)
+    route.add_argument("--new-session", required=True)
+    route.add_argument("--expect-current")
+    route.set_defaults(func=cmd_route)
 
     report = sub.add_parser("report")
     add_routing_args(report)

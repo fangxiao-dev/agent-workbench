@@ -6,6 +6,12 @@
 
 四个账本文件都是 JSON Lines，均为 append-only：只能追加新行，不重写旧行，不删除旧行。**controller 是唯一 ledger writer**；child 只发送 H1 envelope，controller 验证后使用现有命令追加。字段依据见 `design-notes.md` §5。
 
+## route：registry 路由回填
+
+`route --registry <absolute-json> --node <node> --new-session <session-id> [--expect-current <session-id>]` 只修改 registry，不写任何账本 JSONL，也不创建或修改 `sync-state.json`。它要求 `--expect-current`（若提供）匹配目标 node 当前的 `current_session_id`，并拒绝与任一 node 当前 session id 重复的新值；这两类校验失败都退出 `64` 且 registry 一字不改。
+
+成功时仅更新目标 node：把旧 `current_session_id` 追加进 `previous_session_ids`（若尚未存在），设置新的 `current_session_id`，并刷新 `updated_at`。写回后命令会重新读取 registry，确认目标值已生效且其他 node 对象未变；未知字段与原有键序保留。controller 可用自己的 node 名或字面量 `controller` 定位。
+
 ## progress.jsonl
 
 记录每个 node 的最新可观测进度。写入者包括 `ledger.py sync` 和 controller 验证 H1 后通过 `ledger.py report` 追加。

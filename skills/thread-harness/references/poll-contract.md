@@ -61,6 +61,7 @@ text(JSON.stringify({
    - `changed_nodes`：有新 head，需要读或推进。
    - `advance_kinds`：本轮 HEAD 推进类型，`docs` 不清零 dispatch 计数，`code` / `unknown` 会清零。
    - `unchanged`：本轮没有变化。
+   - `session_age_h`：只测量 active child 的 registry `updated_at` 距当前时间的小时数，按从大到小排列；缺失或不可解析显示为 `?`，不含 controller 和 inactive child。它是主控判断是否触发 session 交接的信号，但不影响退出码、`stall_streak` 或 halt 判定。
    - `timedOut`：`true (timeout, no change)` 表示 wait 超时且没有 poll 内容，区别于被唤醒但无文本。
    - `head_unavailable`：这些 node 的 worktree/git HEAD 取不到；不要把它当成"无变化"。
    - `never_reported`：这些 node 从未通过 controller 验证的 H1 写入 state；用来判断 H1 是否真实遵守。
@@ -75,6 +76,16 @@ text(JSON.stringify({
    - `corrupt_ledger_lines`：JSONL 中无法解析的坏行数量。
 4. 执行 `python skills/thread-harness/scripts/ledger.py stall-check --registry <absolute-registry-json>`。
 5. 按退出码和输出标记决策。`CHECK_HEARTBEAT` 的退出码也是 `0`，但不能当普通 `OK` 略过。
+
+## Session 路由
+
+交接完成后由当时的 controller 用 `route` 回填 registry，避免手工编辑 JSON：
+
+```powershell
+python skills/thread-harness/scripts/ledger.py route --registry <absolute-registry-json> --node <node> --new-session <session-id> [--expect-current <session-id>]
+```
+
+`--expect-current`（若提供）必须等于目标 node 当前的 `current_session_id`；`--new-session` 不能等于任何 node 当前的 session id（包括目标自身），两项校验失败都退出 `64` 且不改 registry。成功时只更新目标 node：旧 session 追加到 `previous_session_ids`（不重复）、写入新 `current_session_id`，并刷新 `updated_at`。命令会写回后重新读取，校验目标值及其他 node 的序列化对象均未被改变；未知字段与原有键序保留。`route` 不写四个 JSONL，也不创建或修改 `sync-state.json`。
 
 ## 开跑前：preflight
 

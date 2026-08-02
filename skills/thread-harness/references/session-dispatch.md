@@ -15,7 +15,8 @@
 ### 固定约束
 
 - 用 `create_thread` + `target.environment={type:"local"}`。禁 fork、禁 worktree/snapshot/`startingState`。
-- 默认 `model=gpt-5.6-luna`、`thinking=max`，除非 Owner 覆盖。
+- **档位在 `create_thread` 时显式指定，别靠默认。** 子线默认 `model=gpt-5.6-luna`、`thinking=max`；**主控交接时显式指定 `model=gpt-5.6-sol`、`thinking=xhigh`**——实测这样指定是生效的，而不指定就会落到平台默认。
+  > 注意这只决定**起点**：session 跑过多轮后档位会被平台自动降到 terra，这是 Codex 的机制，本 harness 不对抗它。它的后果是长跑的主控会逐渐变钝——**这正是 `session_age_h` 要提示你换人的原因之一**。主控读不到自己的 `turn_context`，所以跑久了值得人工看一眼当前档位。
 - **一个 node 一个 worktree 一个 branch。** 复用 worktree 前必须确认旧 writer 与 owned process 已停止。两个 node 共用一个 worktree 会让 `head` 串号——它们的 `git rev-parse HEAD` 读出同一个值，停滞判定分不开这两条线，还会产生假的 `stale_reports`。`preflight` 会拦这个。
 - 第一阶段 prompt **不含** harness、coordination、registry、ledger 或角色规则。只有锚点。
 - prompt 里不放旧聊天摘要、project ID、dirty fingerprint 或 secret。
@@ -29,13 +30,22 @@
 | | **替换：主控提示现有 session 自交接**（最常见） | **冷启动：节点还不存在** |
 | --- | --- | --- |
 | 起因 | 某条线太长 / 接近 compaction 上限 / 已经变笨 | 为新识别的 seam 开一条 Foundation 线，或首次建线 |
-| 谁发起 | **主控**——它看得到轮次与 compaction 迹象，子线自己往往不自知 | 主控 |
+| 谁发起 | **主控**，依据是 `sync` 摘要里的 `session_age_h`（子线自己不自知，主控也看不到对方的 compaction 次数——平台没有这个数据，**session 年龄是唯一可用的代理信号**） | 主控 |
 | 谁调 `create_thread` | **那条线自己**（Role A / Role C） | **主控** |
 | 为什么 | 只有它知道自己的 WIP 边界、已获证据与单一 Next Action。这些必须先写回恢复权威、再交接，才是原子的——主控代劳就得先把这些吸进自己的上下文，而它的上下文是最稀缺的 | 没有 source session 可提示 |
 | Role B 例外 | **也由主控建**。Foundation 没有自述状态，恢复权威是主控写的 assignment card，让它自交接没有意义 | 主控建 |
 | 前置 | source 停在原子 checkpoint、owned process 已停 | Owner 已授权 `create_thread`、seam assignment 明确 |
 
 **主控的触发消息只需要三件事**：说明要做自交接、指向 `$handoff-to-new-session`、给出本 skill 的路径作为 override 依据。不要在触发消息里复述交接步骤——那是被引用 skill 的职责。
+
+**只在轮边界发起交接。** 固定 poll 的 ids 是在轮次开头内联进 JS 的；交接若在轮中完成，registry 变了而本轮的 ids 没变，`sync` 的集合比对会判 `ROUND INVALID`，白白作废一轮并污染读数 1。不要为此放宽 `sync` 的校验——它是整个设计里最重要的单点，宁可把交接推迟一轮。
+
+### registry 由谁写：当时的主控，永远
+
+`previous_session_ids` 与 `current_session_id` 的写入**只由那一刻的 controller 执行**（用 `ledger.py route`，见 poll-contract）。这条对三个角色一致：
+
+- **Role A / Role B 替换**：现任主控在收到 `handed_off` H1 后写。
+- **Role C 交接**：**退休主控在退出前把 registry 指向继任者**——它此刻仍然是 controller，且已经拿着新 id；而继任者此时还没有任何上下文。新主控上任后**只核对**这个字段是否已指向自己，只有在退休方没写成时才补写。
 
 ### 复用 `$handoff-to-new-session`，不要重造
 
@@ -64,6 +74,8 @@
 6. 做一次 `wait_threads(..., timeoutMs:0)` 快照。registry race 修正后**复用同一 clean session**，不再创建新 session。
 
 ### 第一阶段 prompt
+
+**这是对 `$handoff-to-new-session` 那份 `handoff-prompt-template.md` 的 override，不是另一套模板。** 锚点字段沿用它的，唯一的改动是结尾：它的模板让 child 核对完就**继续推进 next action**，我们改成**报 PASS 后停住**，把开工推迟到第二阶段。维护时只同步锚点字段，不要把「继续」那句同步回来。
 
 ```text
 <角色与任务一句话>。这是全新、独立的 local session；不继承任何旧 session 的聊天历史。
@@ -137,13 +149,13 @@ Assignment card（本轮唯一任务）：
 | **role-recovery-block** | `Package checkpoint：package / entry / checkpoint 指针` | 无——**不得**把 parent entry 当恢复入口，不读旧 plan/Task progress/历史 evidence | 见下方「Role C 特有顺序」 |
 | **交付登记义务** | 无 | H1 报告 seam artifact，由 controller 登记（`ledger.py seam --deliver commit:<sha>`）；没登记等于没交付 | 无 |
 | **替换时谁调 `create_thread`** | 退休 session 自己 | **controller**（Foundation 无自述状态） | 退休主控自己 |
-| **source 侧额外动作** | 先把 checkpoint 写回任务包 entry：当前 HEAD、计数状态、单一 Next Action、已获/剩余证据、授权与 WIP 边界 | 无（assignment card 是恢复权威，不把 parent entry 当恢复入口） | 广播新 controller id 给全部 child |
+| **source 侧额外动作** | 先把 checkpoint 写回任务包 entry：当前 HEAD、计数状态、单一 Next Action、已获/剩余证据、授权与 WIP 边界 | 无（assignment card 是恢复权威，不把 parent entry 当恢复入口） | 先用 `route` 把 registry 指向继任者，再广播新 controller id |
 
 ### Role C 特有顺序（不能换）
 
 主控交接比 A/B 多一层：**它自己就是读账本的那个人，顺序错了会读到上一任的 rollout。**
 
-1. **先**用 `$owner-thread-broker` 把 registry 里 controller 的 `current_session_id` 改成自己。`sync` 靠这个字段定位读哪个 rollout，不先改就会去读上一任的。
+1. **先**核对 registry 里 controller 的 `current_session_id` 已经是你自己（正常情况下退休主控在退出前已用 `route` 写好）。**没写成才由你补写**。`sync` 靠这个字段定位读哪个 rollout，指向上一任就会去读它的 rollout。
 2. 跑 `ledger.py status --registry <absolute_registry_path>` 恢复认知。它只读账本不碰 rollout，是接手时唯一能用的命令；runtime 缺失时也不得由 status 初始化。**不要从对话历史重建全局状态。**
 3. 设置 goal 文本（模板见 [goal-prompt.md](../goal-prompt.md)）。内联的 ids 要与 registry 当前 children 逐一核对——`sync` 会做集合比对，对不上每轮判 `ROUND INVALID`。
 4. 跑第一轮固定 poll。
@@ -174,3 +186,5 @@ Role C 的第二阶段 prompt 除了通用 routing 段，还要带上这份接�
 | child 把 controller id 当成"自己的 session" | 第二阶段 routing 段没写清哪个字段是自己、哪个是对方 | routing 段逐字写 `node=<n>；expected current session=<id>`，两个 id 不并列出现在同一行 |
 | 两条线 `head` 永远相同 | 共用 worktree | 一 node 一 worktree 一 branch；`preflight` 会拦 |
 | 交付了但下游查不到 | Role B 没登记 seam artifact | 交付即登记，见 delta 表 |
+| 交接后第一轮判 `ROUND INVALID` | 交接落在轮中，registry 变了而本轮内联的 ids 没变 | 只在轮边界发起交接；本轮作废重来，不要放宽 `sync` 校验 |
+| 广播了新 controller id，子线却仍发给旧的 | 子线用了记忆里的 id | 广播只用于唤醒闲着的线；回报路由的权威是 registry，子线每次回报前必须现读 |

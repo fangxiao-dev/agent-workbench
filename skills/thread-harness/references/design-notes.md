@@ -254,6 +254,7 @@ routing registry 由 `owner-thread-broker` 管，**本设计不改动其路由�
 | --- | --- |
 | `init --registry <absolute-json>` | 建 registry sibling/coordination_id 运行时目录与四个空 jsonl；已存在则幂等返回 |
 | `sync --registry <absolute-json> --round <n>` | 定位主控 rollout（按 registry 的 `controller.current_session_id`），**按 byte offset 增量读**，只轮询 active children，抽最近一次 `wait_threads` 的完整输出；跑 §3.5 自检；合并进 `progress.jsonl`；打印决策就绪摘要 |
+| `route --registry <absolute-json> --node <n> --new-session <session> [--expect-current <session>]` | 只更新 registry 中一个 node 的 session 路由：旧 session 进入 `previous_session_ids`，刷新 `updated_at`；校验乐观锁与全 registry 当前 session 冲突；不写 JSONL 或 `sync-state.json` |
 | `report --registry <absolute-json> --node <n> --source-session <session> --state <s> [--head H] [--waiting-on ...] [--note ...]` | controller 验证 H1 source session 与 HEAD 后代后写 progress 行；旧 `--coordination-id` 调用兼容 |
 | `seam --registry <absolute-json> --seam-id <s> --producer <p> [--consumers ...] [--deliver <artifact>]` | controller 登记/交付 seam |
 | `decide --registry <absolute-json> --raise <decision-id> --by <node> --blocks ... --question ...` / `--answer <decision-id> --text ...` | controller/Owner 决策队列 |
@@ -268,6 +269,7 @@ ROUND 412  valid=yes  offset=51203941
 idle_nodes:      f5_catalog, foundation          <- inactiveStatus，该派活
 changed_nodes:   catalog(f69a8b73 <- 71f19b74)
 unchanged:       customer, checkout, inventory, f6_order_core
+session_age_h:   f6_order_core=7.2, checkout=5.8, inventory=2.1
 pending_decisions: 1  (freeze_order_core_ownership, raised_by=f6_order_core, blocks=3)
 stall_streak:    0/5
 seams_unowned:   0        # 阶段1 仅报数，阶段2 阻断

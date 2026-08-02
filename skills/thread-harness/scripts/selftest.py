@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -180,6 +181,81 @@ def write_preflight_registry(registry):
     (BROKER / f"{CID}.json").write_text(
         json.dumps(registry, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
     )
+
+
+def fixture_local_timestamp(hours_ago):
+    return (datetime.now().astimezone() - timedelta(hours=hours_ago)).isoformat(timespec="seconds")
+
+
+def make_session_age_fixture():
+    """独立构造 session_age_h 数据；不调用 ledger.py 的解析或写入函数。"""
+    registry = reset_fixture()
+    registry["controller"]["updated_at"] = fixture_local_timestamp(30)
+    registry["children"]["alpha"]["updated_at"] = fixture_local_timestamp(7.2)
+    registry["children"]["beta"]["updated_at"] = fixture_local_timestamp(2.1)
+    registry["children"]["historical"] = {
+        "active": False,
+        "topic": "retained history",
+        "current_session_id": "inactive-history-session",
+        "updated_at": fixture_local_timestamp(20),
+    }
+    registry["children"]["gamma"] = {
+        "active": True,
+        "topic": "missing timestamp",
+        "current_session_id": "019fbccc-4444-7000-8000-000000000004",
+    }
+    write_preflight_registry(registry)
+    age_polls = [
+        {"id": NODES["alpha"], "status": "notLoaded", "turn": "age-alpha",
+         "turnStatus": "completed", "txt": "alpha"},
+        {"id": NODES["beta"], "status": "notLoaded", "turn": "age-beta",
+         "turnStatus": "completed", "txt": "beta"},
+        {"id": registry["children"]["gamma"]["current_session_id"], "status": "notLoaded",
+         "turn": "age-gamma", "turnStatus": "completed", "txt": "gamma"},
+    ]
+    age_projection = json.dumps(
+        {"v": 1, "n": 3, "wake": None, "polls": age_polls, "timedOut": False},
+        ensure_ascii=False,
+    )
+    return call_for([NODES["alpha"], NODES["beta"], age_polls[2]["id"]]), age_projection
+
+
+def make_route_fixture():
+    """独立构造 route 数据；不调用 ledger.py 的解析或写入函数。"""
+    registry = reset_fixture()
+    registry["context"]["unknown_context_field"] = {"keep": ["context", 7]}
+    registry["controller"]["unknown_controller_field"] = {"keep": True}
+    registry["children"]["alpha"]["unknown_child_field"] = ["preserve", {"x": 1}]
+    registry["children"]["alpha"]["updated_at"] = fixture_local_timestamp(6)
+    registry["children"]["beta"]["unknown_sibling_field"] = "untouched"
+    write_preflight_registry(registry)
+
+    runtime = BROKER / CID
+    runtime.mkdir(parents=True, exist_ok=True)
+    for name, content in {
+        "progress.jsonl": b"progress sentinel\n",
+        "seams.jsonl": b"seams sentinel\n",
+        "decisions.jsonl": b"decisions sentinel\n",
+        "acts.jsonl": b"acts sentinel\n",
+        "sync-state.json": b"{\"sentinel\":true}\n",
+    }.items():
+        (runtime / name).write_bytes(content)
+    return (BROKER / f"{CID}.json").resolve()
+
+
+def route_other_registry_bytes(registry):
+    """序列化除目标 alpha node 外的 registry 部分，独立于 ledger.py 实现。"""
+    other = json.loads(json.dumps(registry, ensure_ascii=False))
+    del other["children"]["alpha"]
+    return json.dumps(other, ensure_ascii=False, separators=(",", ":"), sort_keys=False).encode("utf-8")
+
+
+def route_runtime_snapshot():
+    runtime = BROKER / CID
+    return {
+        name: (runtime / name).read_bytes() if (runtime / name).exists() else None
+        for name in ("progress.jsonl", "seams.jsonl", "decisions.jsonl", "acts.jsonl", "sync-state.json")
+    }
 
 
 def make_preflight_fixture(child_count=2):
@@ -971,6 +1047,118 @@ after_missing = {str(path.relative_to(BROKER)) for path in BROKER.rglob("*")}
 fails += check("status registry 不存在时只报清晰错误且不创建父目录",
                rc == 1 and "registry not found" in out and before_missing == after_missing,
                out.strip())
+
+print("-" * 78)
+# --- session_age_h：独立构造时间、active/inactive/controller fixture ---
+age_call, age_projection = make_session_age_fixture()
+append_wait(age_call, age_projection, call_id="session-age")
+run("init", "--coordination-id", CID)
+rc, out = run("sync", "--coordination-id", CID, "--round", "1")
+age_line = next((line for line in out.splitlines() if line.startswith("session_age_h:")), "")
+age_fields = {}
+if age_line:
+    for item in age_line.split(":", 1)[1].split(","):
+        if "=" in item:
+            name, value = item.split("=", 1)
+            age_fields[name.strip()] = value.strip()
+try:
+    numeric_age_ok = (
+        abs(float(age_fields["alpha"]) - 7.2) <= 0.2
+        and abs(float(age_fields["beta"]) - 2.1) <= 0.2
+    )
+except (KeyError, TypeError, ValueError):
+    numeric_age_ok = False
+fails += check(
+    "sync 摘要 session_age_h 数值与 updated_at 相符并按小时倒序",
+    rc == 0 and list(age_fields)[:3] == ["alpha", "beta", "gamma"] and numeric_age_ok,
+    out.strip(),
+)
+fails += check(
+    "updated_at 缺失显示 ? 且 sync 正常退出",
+    rc == 0 and age_fields.get("gamma") == "?",
+    out.strip(),
+)
+fails += check(
+    "session_age_h 排除 inactive child 与 controller",
+    rc == 0 and "historical" not in age_fields and "controller" not in age_fields,
+    age_line or out.strip(),
+)
+
+print("-" * 78)
+# --- route：独立构造 registry/runtime，验证 optimistic lock、collision 与只改一个 node ---
+route_path = make_route_fixture()
+before_route_bytes = route_path.read_bytes()
+rc, out = run(
+    "route", "--registry", str(route_path), "--node", "alpha",
+    "--new-session", "alpha-new-session", "--expect-current", "stale-session",
+)
+fails += check(
+    "route --expect-current 不符退 64 且 registry 一字未改",
+    rc == 64 and route_path.read_bytes() == before_route_bytes,
+    f"rc={rc} {out.strip()}",
+)
+
+route_path = make_route_fixture()
+before_route_bytes = route_path.read_bytes()
+rc, out = run(
+    "route", "--registry", str(route_path), "--node", "alpha",
+    "--new-session", NODES["beta"],
+)
+fails += check(
+    "route --new-session 撞当前 session 退 64 且 registry 一字未改",
+    rc == 64 and route_path.read_bytes() == before_route_bytes,
+    f"rc={rc} {out.strip()}",
+)
+
+route_path = make_route_fixture()
+before_registry = json.loads(route_path.read_text(encoding="utf-8"))
+before_other_bytes = route_other_registry_bytes(before_registry)
+before_runtime = route_runtime_snapshot()
+old_session = before_registry["children"]["alpha"]["current_session_id"]
+new_session = "alpha-routed-session"
+rc, out = run(
+    "route", "--registry", str(route_path), "--node", "alpha",
+    "--new-session", new_session, "--expect-current", old_session,
+)
+after_registry = json.loads(route_path.read_text(encoding="utf-8"))
+alpha_after = after_registry["children"]["alpha"]
+try:
+    refreshed_at = datetime.fromisoformat(alpha_after["updated_at"])
+    refreshed_ok = (
+        refreshed_at.tzinfo is not None
+        and abs((datetime.now().astimezone() - refreshed_at.astimezone()).total_seconds()) < 60
+    )
+except (KeyError, TypeError, ValueError):
+    refreshed_ok = False
+route_normal_ok = (
+    rc == 0
+    and out.strip() == f"ROUTED alpha {old_session} -> {new_session}"
+    and alpha_after["current_session_id"] == new_session
+    and old_session in alpha_after["previous_session_ids"]
+    and refreshed_ok
+)
+fails += check(
+    "route 正常路径更新 current、追加 previous 并刷新 updated_at",
+    route_normal_ok,
+    f"rc={rc} {out.strip()} {alpha_after}",
+)
+fails += check(
+    "route 之后其他 node 对象逐字节序列化未变",
+    route_other_registry_bytes(after_registry) == before_other_bytes,
+    route_path.read_text(encoding="utf-8"),
+)
+fails += check(
+    "route 保留 registry 未知字段",
+    after_registry["context"].get("unknown_context_field") == {"keep": ["context", 7]}
+    and after_registry["controller"].get("unknown_controller_field") == {"keep": True}
+    and after_registry["children"]["alpha"].get("unknown_child_field") == ["preserve", {"x": 1}],
+    route_path.read_text(encoding="utf-8"),
+)
+fails += check(
+    "route 不创建也不修改 JSONL 与 sync-state.json",
+    route_runtime_snapshot() == before_runtime,
+    str(route_runtime_snapshot()),
+)
 
 shutil.rmtree(BASE, ignore_errors=True)
 print("=" * 78)
