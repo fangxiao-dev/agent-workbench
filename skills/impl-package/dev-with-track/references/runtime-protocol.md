@@ -29,6 +29,7 @@
 
 - dag=true 时，runtime-state 是 task SoT，Ticket acceptance 同样由 ticket record 投影；状态只能经 `set-state --expect --evidence` 变更。
 - 只在 BLOCKED、handoff、retry 或并行派发时写 task progress；它不复制 Ticket AC 或第二套状态。
+- 有 tickets 时，恢复先读取 Ticket 顶部 `Phase / Runtime Acceptance Status / Next` 与最后一条 `Progress`，再以 sidecar、ER 和实际 diff 校准。主 session 只在 Ticket 创建、阶段/阻塞/Next 实质变化或跨 session handoff 时更新顶部摘要并追加 Progress；不按命令或 bounded task 记流水账，worker 默认不编辑 Ticket。
 - 返工上游输出时将依赖标为 `NEEDS-REVALIDATION`；DONE 只有在 Done-when 证据存在时释放依赖，WAIVED/SUPERSEDED 必须有替代证据和 impact note。
 - 每次实际检查前先通过 committed validate，再在 plan Execution Record 追加 append-only ER，记录 command/check、结果、证据位置与残余风险。外部 artifact hash 用 artifact CLI 维护。
 - 手工验收前，按 `assets/templates/manual-acceptance-readiness.md` 将必要 readiness packet 追加到最新 ER 或 canonical handoff；只填写适用 optional 项，不输出 N/A；它不替代验收证据。

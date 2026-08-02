@@ -1,13 +1,13 @@
 ---
 target: skills/impl-package/impl-planning
-updated: 2026-07-12
+updated: 2026-08-02
 ---
 
 ## 原则
 
 - 每次 attempt 独立决定 Composition；不得从 spec、历史 plan 或原 package 的拓扑继承 tickets/dag。
 - decision 保存选择与 rationale，spec 保存长期 contract，plan 只保存本 attempt 的策略、具体 migration、验证选择与过程证据。
-- 简单 no-DAG attempt 不建立 task checklist 或 progress ledger；需要恢复时记录在 Execution Record 或 handoff。
+- 简单 no-DAG attempt 不建立 task checklist 或独立 progress ledger；tickets=false 时恢复记录在 Execution Record 或 handoff，tickets=true 时由 Ticket 自身保存最小恢复摘要。
 - Planned Verification 只引用权威 policy 并选择本次检查；Execution Record append-only 记录实际命令、结果与证据。
 - gate 只保存 newest-first append-only 判决摘要与 Durable Deltas；完整验证过程留在 plan Execution Record。
 - terminal gate 冻结对应 plan；后续工作创建新 patch attempt，不能回写旧 attempt 记录。

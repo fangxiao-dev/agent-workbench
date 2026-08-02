@@ -207,6 +207,14 @@ def main() -> None:
         (readiness_template, "### 必须", "manual readiness required fields"),
         (readiness_template, "### 可选项（Optional", "manual readiness optional fields"),
         (ticket_template, "Plan Revision", "ticket plan-revision field"),
+        (ticket_template, "**阶段（Phase）：**", "ticket recovery phase"),
+        (ticket_template, "**下一步（Next）：**", "ticket recovery next action"),
+        (ticket_template, "## Progress", "ticket-local recovery progress"),
+        (
+            dev_with_track,
+            "已明确完成且仍新鲜的 investigation 不重做",
+            "ticket restore avoids repeated investigation",
+        ),
         (dag_template, "NEEDS-REVALIDATION", "dag plan-revision drift note"),
         (
             runtime_protocol,
@@ -475,6 +483,19 @@ def main() -> None:
     )
     for content, needle, label in forbidden:
         assert_not_contains(content, needle, label)
+
+    if not (
+        ticket_template.index("**阶段（Phase）：**")
+        < ticket_template.index("## 运行时验收状态（Runtime Acceptance Status）")
+        < ticket_template.index("**下一步（Next）：**")
+        < ticket_template.index("## 建设内容")
+        < ticket_template.index("## Progress")
+    ):
+        raise AssertionError("Ticket recovery summary must stay near the top and Progress at the end")
+    if ticket_template.count("<!-- impl-package:projection runtime-state begin -->") != 1:
+        raise AssertionError("Ticket must keep exactly one runtime-state projection")
+    if "checkpoint" in ticket_template.lower():
+        raise AssertionError("Ticket recovery template must not introduce checkpoint IDs")
 
     assert_contains(rubric, "每次 attempt 独立决定 Composition", "rubric composition preference")
     assert_contains(

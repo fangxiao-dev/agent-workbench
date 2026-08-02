@@ -40,7 +40,7 @@ Plan Revision 前进时先读取 P delta，而不是重建完整票集。只有 
 
 The edge type states what is blocked. Do not collapse implementation, acceptance, and release dependencies into an untyped `Blocked by` list.
 
-Tickets MUST NOT contain worker ownership, worker/task assignment, file-level steps, implementation snippets, automatic dispatch instructions, or runtime **task** status. The template's `Runtime Acceptance Status` is a machine-owned projection of the package runtime-state ticket record and is updated only through `dev-with-track`; `to-tickets` leaves its marker body at the unrecorded initial projection. Task decomposition and Task-to-Ticket many-to-many contribution belong to `create-task-dag`; Task completion never updates this acceptance status automatically. A no-DAG attempt has no task checklist or progress ledger; recovery evidence stays in the existing Execution Record or handoff.
+Tickets MUST NOT contain worker ownership, worker/task assignment, file-level steps, implementation snippets, automatic dispatch instructions, or runtime **task** status. The template's top `Runtime Acceptance Status` is a machine-owned projection of the package runtime-state ticket record and is updated only through `dev-with-track`; `to-tickets` leaves its marker body at the unrecorded initial projection. `Phase` and `Next` are a short human recovery summary, not a second runtime state. Task decomposition and Task-to-Ticket many-to-many contribution belong to `create-task-dag`; Task completion never updates ticket acceptance automatically. A no-DAG attempt still has no task checklist or separate progress ledger; when tickets are earned, recovery context stays in each ticket's own `Progress` section and points to the existing Execution Record evidence.
 
 ## Draft Mode
 
@@ -50,14 +50,16 @@ Draft is local and non-publishing:
 2. Validate that the earned result equals the plan's `Composition.tickets` value; stop through the fail-closed route above on mismatch.
 3. Propose the complete slice set and typed edges for owner review.
 4. For every AC, identify the planned observable evidence source at delivery-slice level and perform an evidence-feasibility precheck against the plan and proposed typed edges. Reject an obvious acceptance-evidence cycle; when the later task producer is not yet known, hand the unresolved producer obligation to `create-task-dag` instead of inventing task ownership in the ticket.
-5. When earned, write one `Publication Status: Draft` file per slice, include the current Attempt ID, and use [assets/templates/ticket.md](./assets/templates/ticket.md) under the project-configured package root at `tickets/<NN>-<ticket-slug>.md`.
-6. Leave each `Runtime Acceptance Status` field unrecorded; Draft mode owns only the publication status and ticket definition.
+5. When earned, write one `Publication Status: Draft` file per slice, include the current Attempt ID, and use [assets/templates/ticket.md](./assets/templates/ticket.md) under the project-configured package root at `tickets/<NN>-<ticket-slug>.md`. Initialize `Phase: planning`, one concrete `Next`, and one creation entry under `Progress` that summarizes the drafted boundary and points to the current D/S/P evidence.
+6. Leave each `Runtime Acceptance Status` field unrecorded; Draft mode owns the publication status, ticket definition, and initial recovery summary, but no runtime acceptance judgment.
 7. Number files in a deterministic dependency-compatible order; for independent slices, preserve the proposed document order. File numbers and ticket IDs are package-wide unique: continue after historical attempts and never overwrite an older attempt's ticket.
 8. Return the package path, draft ticket paths, typed-edge summary, unresolved evidence-producer obligations, and acceptance evidence gaps. When `dag=true`, hand the complete Draft set to `create-task-dag`; do not publish externally or mark tickets Approved while the DAG and joint review are still pending.
 
 ## Publish Mode
 
 Publish updates the same local ticket files; it does not create external records. It is the final publication step of the plan-decomposition review, not a separate Ticket approval stage.
+
+After a successful publish, update the ticket's top `Phase` / `Next` and append one concise `Progress` entry that routes to execution preflight. This human recovery update must not alter the machine-owned status marker or duplicate the publication transaction's evidence.
 
 Before changing any status, require `impl-planning` to have completed the applicable fresh `plan-review`: admission `ready`, or normal/focused review with a runtime ledger absolute path that passes `verify-clearance` immediately before mutation; a focused `closure-verified` chat verdict and any plain `cleared` message are invalid. Then require one explicit owner approval of the complete earned bundle and validate all of the following:
 
@@ -125,6 +127,7 @@ S/M/L/D shorthand 本身没有创建、删除或退休 ticket 的权限；只读
 - topic slug, package-id and package path;
 - mode and tickets composition result;
 - ticket ids/paths and statuses;
+- each ticket's current Phase / Next and latest Progress evidence anchor;
 - typed dependencies and validation evidence;
 - joint Ticket↔DAG validation result and revision/gate binding when `dag=true`;
 - unresolved AC evidence gaps or owner decisions;

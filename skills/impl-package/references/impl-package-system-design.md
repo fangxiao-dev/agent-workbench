@@ -212,18 +212,18 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 
 ## Progress 记录的维度：attempt vs task vs ticket
 
-原则：**progress 只服务需要继续的 Task，不跟随命令层级或 Ticket。** DAG attempt 的执行单元是 task；no-DAG attempt 没有结构化 task，也不因此创建 progress ledger。
+原则：**progress 只服务跨 session 恢复，不跟随命令层级。** DAG attempt 的执行单元是 task；Ticket 是验收单元，但也需要在自身文件里保留最小恢复上下文，避免新 session 仅因状态粗粒度而重复 investigation。
 
 | 记录 | 维度 | 触发 |
 | --- | --- | --- |
 | `tasks/Tn-progress.md` | task（执行单元） | 仅 BLOCKED、跨 session handoff、重试或主 session 分发并行 subagent 时创建；只记录 blocker/原因、已有证据、下一动作和影响 Ticket |
-| ticket 验收状态 | ticket（验收单元） | canonical home 恒为 `tickets/<ticket>.md`；有 dag 时可在 `dag.md` 建只读投影索引；**不新增 progress 文件** |
+| ticket 恢复摘要与验收状态 | ticket（验收单元） | canonical home 恒为 `tickets/<ticket>.md`；顶部保存 Phase、runtime Status 投影与唯一 Next，末尾只在实质变化或 handoff 时追加 Progress；**不新增 progress 文件** |
 
 要点：
 
 - ticket 验收 ≠ Task DONE 的相加，它有独立 acceptance criteria；因此 ticket 验收状态以 ticket 文件为事实源；有 dag 时其状态索引只是投影，不靠聚合 Task progress 得出。
-- 只有 Task progress 按触发条件存在；Ticket 的 AC、evidence 和 Runtime Acceptance Status 是唯一长期验收事实。
-- 落点：ticket 文件承载验收状态；`create-task-dag` 的 `dag.md` 可承载明确标为投影的 ticket 状态索引，但不创建 ticket-level progress。
+- 只有 Task progress 使用独立文件；Ticket 的 AC、evidence 和 Runtime Acceptance Status 仍是唯一长期验收事实，Phase/Next/Progress 只用于恢复，不参与 acceptance 或 dependency release。
+- 落点：ticket 文件同时承载验收状态与最小恢复摘要；`create-task-dag` 的 `dag.md` 可承载明确标为投影的 ticket 状态索引，但不创建独立 ticket-level progress artifact。
 
 ## 已定开放决策
 

@@ -398,6 +398,19 @@
         "Allows upstream review/closure and downstream implementation to continue in parallel only when the existing checkpoint conditions hold",
         "Does not add a new stage, state or checklist and does not release acceptance or release dependencies"
       ]
+    },
+    {
+      "id": 35,
+      "prompt": "恢复一个 tickets=true、dag=false 的 approved attempt。Ticket 顶部写明 Phase=implementation、Status=IN_PROGRESS、Next=运行 loopback integration，末尾 Progress 已记录 investigation 和 unit implementation 完成并引用当前 ER；sidecar、ER 与实际 diff 一致。请继续执行。",
+      "expected_output": "Restores directly from the Ticket recovery summary, verifies it against canonical state and evidence, and runs the named next action without repeating the completed investigation.",
+      "files": [],
+      "expectations": [
+        "Reads the Ticket Phase, runtime Status, Next and latest Progress before selecting work",
+        "Cross-checks the recovery summary against sidecar, ER and actual diff",
+        "Does not repeat the completed investigation while its evidence remains fresh",
+        "Updates Ticket Progress only when phase, blocker, Next or handoff materially changes",
+        "Does not create a separate Ticket progress file, checkpoint ID or second acceptance state"
+      ]
     }
   ]
 }

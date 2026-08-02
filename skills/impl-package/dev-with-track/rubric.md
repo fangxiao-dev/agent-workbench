@@ -1,11 +1,11 @@
 ---
 target: skills/impl-package/dev-with-track
-updated: 2026-07-26
+updated: 2026-08-02
 ---
 ## 原则
 
 - 当前 attempt plan 是 Attempt ID、P revision 与 Composition 的事实源；spec 只提供当前 D/S contract 与 AC。
-- no-DAG attempt 不建立 task checklist 或 progress ledger；恢复事实进入 Execution Record 或 handoff。
+- no-DAG attempt 不建立 task checklist 或独立 progress ledger；tickets=false 时恢复事实进入 Execution Record 或 handoff，tickets=true 时 Ticket 自身保存最小 Phase/Next/Progress 恢复摘要。
 - 实际 review/verification 证据 append 到 plan Execution Record；gate 只保存 newest-first append-only 判决摘要与 Durable Deltas。
 - blocked→pass 通过新 G entry 与 Supersedes 表达，旧 entry 不修改；pass/fail/defer terminal 后冻结 plan。
 - gate evaluation 前分流 execution findings，禁止 decision/spec、长期知识与过程证据互相回流。

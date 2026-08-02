@@ -71,6 +71,6 @@ Ticket 的 AC、evidence、正式 review 与 acceptance status 仍是唯一权�
 
 ## 条件化 progress
 
-默认不创建 progress 文件。只有 Task 实际 `BLOCKED`、跨 session handoff、需要重试，或主 session 需要分发并行 subagent 时，才创建或更新 `docs/implementations/<package-id>/tasks/<task-id>-progress.md`。它只记录 blocker/原因、已做证据、下一可执行动作、影响 Ticket；不得复制 Ticket AC、维护第二套 Ticket 状态，或创建 attempt/ticket progress。
+默认不创建 progress 文件。只有 Task 实际 `BLOCKED`、跨 session handoff、需要重试，或主 session 需要分发并行 subagent 时，才创建或更新 `docs/implementations/<package-id>/tasks/<task-id>-progress.md`。它只记录 blocker/原因、已做证据、下一可执行动作、影响 Ticket；不得复制 Ticket AC 或维护第二套 Ticket 状态。subagent 返回 evidence anchor，由主 session 在必要时更新 Ticket 自身的 Phase/Next/Progress；subagent 默认不直接编辑 Ticket。
 
 本 skill 不拥有 worktree、plan revision、runtime ledger、Git 或发布流程；这些由对应 owner 和 `dev-with-track` 管理。

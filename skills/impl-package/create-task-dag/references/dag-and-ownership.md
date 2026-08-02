@@ -24,7 +24,7 @@ Task 是横向 execution unit；Ticket 是独立纵向 acceptance unit。`Contri
 
 最小状态为 `PENDING`、`RUNNING`、`DONE`、`BLOCKED`。`DONE` 指局部产出和 evidence 可交给 Working Branch owner；不等于 Ticket accepted。`BLOCKED` 必须记录原因、建议下一动作及受影响 Ticket（如有）。不要产生 `NEEDS_SEAM`：实际 seam 以 blocker 原因记录，或通过调整/新增普通 Task 解决。
 
-Task 的默认运行事实在 DAG/runtime state。仅 BLOCKED、跨 session handoff、重试或主 session 并行派发时才写 `tasks/Tn-progress.md`，仅包含 blocker/原因、已做 evidence、下一可执行动作、影响 Ticket；不复制 Ticket AC 或维护 Ticket progress。
+Task 的默认运行事实在 DAG/runtime state。仅 BLOCKED、跨 session handoff、重试或主 session 并行派发时才写 `tasks/Tn-progress.md`，仅包含 blocker/原因、已做 evidence、下一可执行动作、影响 Ticket；不复制 Ticket AC。Ticket 内的最小 Phase/Next/Progress 由主 session 在实质变化或 handoff 时维护，不由 Task progress 聚合得出。
 
 ## 拆分与集成
 

@@ -29,11 +29,13 @@ description: >
 
 ## Restore and dispatch
 
-1. 先按 delta-first restore 读取 current package、sidecar、最新 gate、可靠 ER/comparison point 与后续 diff；运行 committed binding validation。
+1. 先按 delta-first restore 读取 current package、sidecar、最新 gate、可靠 ER/comparison point 与后续 diff；运行 committed binding validation。有 tickets 时先读各 Ticket 顶部的 `Phase / Runtime Acceptance Status / Next` 和最后一条 `Progress`，把它们作为恢复索引并用 sidecar、ER 与实际 diff 校准；已明确完成且仍新鲜的 investigation 不重做。
 2. 确认唯一 Active attempt、approved Composition、ticket/DAG bindings 和第一个 actionable unit。高风险 unit 必须已有 spec/AC、可执行入口、oracle 和 ER owner；缺口按 authority 回流。
 3. evidence 胜过 stale state；P revision 变化只重验受影响 subset。状态只能通过 `impl_package_state.py set-state --expect --evidence` 变更。
 4. 默认等待上游 Ticket `SATISFIED` 或 Task `DONE`；若主 session 判断上游已形成可复用实现检查点，可按 runtime protocol 提前派发仅依赖该检查点的下游 Ticket/Task implementation。该例外只影响 implementation readiness，不释放 acceptance 或 release dependency。
 5. 派发 worker 时给出 primary ownership、禁改范围、已知依赖、贡献 Ticket、局部验证和 `BLOCKED` 返回格式。Task `DONE` 不等于 Ticket acceptance。
+
+主 session 在 Ticket 创建、阶段/阻塞/Next 实质变化或跨 session handoff 时，更新顶部 `Phase / Next` 并在该 Ticket 末尾追加一条简短 `Progress`。不要按命令、worker 返回或每个 bounded task 逐条追加；详细命令、完整 evidence 与 claim 仍进入 plan Execution Record。worker 默认只返回摘要和 evidence anchor，不并发编辑 Ticket。
 
 需要详细 restore/readiness、渐进式系统证据、runtime state、ER、review、finding 分流、claim audit、gate 或 Stage 7 时，读取 [`references/runtime-protocol.md`](references/runtime-protocol.md) 的相应章节；跨阶段判断同时引用 [`../references/progressive-system-evidence.md`](../references/progressive-system-evidence.md)，不在本入口复制方法论正文。
 

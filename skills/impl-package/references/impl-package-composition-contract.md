@@ -119,9 +119,9 @@ Composition 的唯一事实源是当前 attempt plan，不在 spec 中声明，�
 | Composition | Current execution state | Acceptance state |
 | --- | --- | --- |
 | tickets=false, dag=false | 无 task record；恢复事实进入现有 plan Execution Record 或 handoff，不创建 progress | spec AC + plan Execution Record + gate entry |
-| tickets=true, dag=false | runtime-state ticket records 是机器 SoT，ticket files 投影；不创建 ticket progress | ticket Runtime Acceptance Status projection |
+| tickets=true, dag=false | runtime-state ticket records 是机器 SoT，ticket files 投影；Ticket 内用最小 Phase/Next/Progress 恢复执行，不创建独立 progress artifact | ticket Runtime Acceptance Status projection |
 | tickets=false, dag=true | runtime-state task records 是机器 SoT，attempt DAG Runtime State 表投影；Task 仅在 blocker、handoff、重试或并行派发时按需创建 `tasks/Tn-progress.md` | spec AC + plan Execution Record + gate entry |
-| tickets=true, dag=true | runtime-state task/ticket records 是机器 SoT，DAG 与 ticket files 各自投影；Task progress 同上，Ticket 不创建 progress | ticket Runtime Acceptance Status projection |
+| tickets=true, dag=true | runtime-state task/ticket records 是机器 SoT，DAG 与 ticket files 各自投影；Task progress 同上，Ticket 内保存最小恢复摘要，不创建独立 progress artifact | ticket Runtime Acceptance Status projection |
 
 ### 计划拆解 bundle 的唯一 owner checkpoint
 
@@ -131,7 +131,7 @@ review 收敛后，owner 只在此处决定是否将已审查的完整 candidate
 
 面向 owner 的计划拆解进度可报告为 `drafting`（earned artifacts 未齐或联合校验未通过）、`ready-for-review`（earned artifacts 齐备且校验通过）与 `approved`（当前 bundle 已获 owner approval）；`in-progress` 与 `completed` 继续由现有 Attempt、Task、Ticket acceptance 和 gate 推导。这些标签是汇报语义，不是新的 sidecar 字段、CLI 或可写状态 SoT，也不替代 Draft/Active/Frozen lifecycle。
 
-一个状态只有一个事实源。plan 不保存 task checklist、task runtime status 或 ticket 正文。简单 no-DAG attempt 的 runtime-state `tasks[]` 必须为空；恢复使用既有 Execution Record 或 handoff，不通过给 plan、JSON 或 progress 伪造 executable task checklist。dag=true/tickets=true 时，JSON record 与 earned artifact 必须分别构成 bijection，Markdown marker 只由 `set-state`/`refresh-projections` 更新。
+一个状态只有一个事实源。plan 不保存 task checklist、task runtime status 或 ticket 正文。简单 no-DAG attempt 的 runtime-state `tasks[]` 必须为空；tickets=false 时恢复使用既有 Execution Record 或 handoff，tickets=true 时 Ticket 内的 Phase/Next/Progress 只索引恢复上下文，不能伪造 executable task checklist 或第二套 acceptance 状态。dag=true/tickets=true 时，JSON record 与 earned artifact 必须分别构成 bijection，Markdown marker 只由 `set-state`/`refresh-projections` 更新。
 
 plan 在 attempt 活动期间可通过计划修订（Plan Revision）P&lt;n&gt; 修订策略、Composition 或验证选择；P revision 在该 attempt 内从 P1 单调递增，每次修订记录摘要与 artifact relocation，并在内部 sidecar 追加新 blob binding。terminal gate verdict 后冻结。Composition 变化只影响当前 attempt，不修改 D/S revision；迁移后不得保留两个可写 execution-state source。
 
@@ -197,7 +197,7 @@ Task DAG 只解析 Task 的执行依赖，不把 task DONE 或 task dependency �
 - spec 保存 interface、seam contract、contract/acceptance owner、affected targets、compatibility window、migration/rollback contract、全局约束与 Acceptance Semantics。
 - plan 保存本 attempt 的执行顺序、具体迁移操作、验证选择和过程证据。
 - DAG task 保存 primary ownership、已知依赖、contributes-to tickets 与已知 seam/risk；它不保存 Ticket AC、完整 task contract 或新的执行角色。
-- ticket 保存独立 delivery slice、AC 与 Runtime Acceptance Status。
+- ticket 保存独立 delivery slice、AC、Runtime Acceptance Status，以及只在实质变化或 handoff 时追加的最小恢复摘要。
 - gate entry 保存对绑定 revision 的判决摘要，不保存完整验证 checklist。
 
 有 tickets 时 `contributes-to` 使用一个或多个 Ticket ID；tickets=false 时可为 `none`，由 spec AC、plan Execution Record 和 gate 保持验收链。共享 seam 的合同与 acceptance 语义仍在 spec，不能在 plan 或 DAG 中建立副本；Working Branch owner 在 integration step 处理已出现的 seam 与冲突。

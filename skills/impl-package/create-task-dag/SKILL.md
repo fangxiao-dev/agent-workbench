@@ -66,7 +66,7 @@ Integration responsibility: Working Branch owner
 - 默认不写完整 Task Contract、所有 consumer、完整 review basis、cohort/lanes 或逐 Task formal review。共享 seam、跨 session handoff 或高风险边界真实出现时，仅补受影响 Task 的最小必要细节。
 - 有 Ticket 时 `Contributes to tickets` 写 ticket ID；no-ticket DAG 写 `none`，由 spec AC、plan Execution Record 和 gate 保持验收链。该列只表示执行贡献，不建立 Task→AC acceptance mapping。
 
-Task identity 的唯一来源是 state CLI：调用 `allocate-task-id --attempt <attempt>` 取得下一个 ID；返回的 `attempt:Tn` 是完整 identity，DAG 中只显示该 attempt 内的 `Tn`。不要手工扫描或发明编号格式。创建或更新 DAG 后，`preflight-register`/正式登记会以同一 grammar 初始化 runtime records 并刷新 Task 投影；每个 Task 有一个 runtime record。不要为每个 Task 或每个 Ticket 默认创建 progress。仅 Task 实际 BLOCKED、跨 session handoff、需重试或由主 session 派发并行 subagent 时，才记录 `tasks/Tn-progress.md`；内容只包括 blocker/原因、已做 evidence、下一可执行动作及受影响 Ticket，不能复制 Ticket AC 或维护第二套 Ticket 状态。
+Task identity 的唯一来源是 state CLI：调用 `allocate-task-id --attempt <attempt>` 取得下一个 ID；返回的 `attempt:Tn` 是完整 identity，DAG 中只显示该 attempt 内的 `Tn`。不要手工扫描或发明编号格式。创建或更新 DAG 后，`preflight-register`/正式登记会以同一 grammar 初始化 runtime records 并刷新 Task 投影；每个 Task 有一个 runtime record。不要默认创建独立 progress 文件。仅 Task 实际 BLOCKED、跨 session handoff、需重试或由主 session 派发并行 subagent 时，才记录 `tasks/Tn-progress.md`；内容只包括 blocker/原因、已做 evidence、下一可执行动作及受影响 Ticket，不能复制 Ticket AC。Ticket 的最小恢复摘要由主 session写回 Ticket 自身，不由本 skill 或 Task worker 维护。
 
 ## 状态、BLOCKED 与集成
 
@@ -124,4 +124,4 @@ T1 完成不自动验收 TST-01，仍由 TST-01 的 evidence/review 判定。T2/
 
 ## 输出与汇报
 
-输出持久化的最小 DAG、条件化的 Task progress（如 earned）、联合校验结果和实际验证 evidence。Ticket 的长期事实仍是 AC、evidence 和 acceptance status。向 owner 汇报进度或最终状态时使用 `talk-to-boss`：先说明总范围、已完成阶段、剩余工作、是否 closed 和需要的 owner 决定；再给出 Task/validation 证据。runner-neutral handoff 必须列出当前 Composition、Draft/Approved Ticket 状态、DAG 路径、coverage/typed dependency/ownership/contribution/AC evidence/gate-P binding 结果、未决 owner decision，以及下一步是 `to-tickets mode=publish`（owner 已批准后）还是 execution preflight。
+输出持久化的最小 DAG、条件化的 Task progress（如 earned）、联合校验结果和实际验证 evidence。Ticket 的长期验收事实仍是 AC、evidence 和 acceptance status；Phase/Next/Progress 只提供恢复索引。向 owner 汇报进度或最终状态时使用 `talk-to-boss`：先说明总范围、已完成阶段、剩余工作、是否 closed 和需要的 owner 决定；再给出 Task/validation 证据。runner-neutral handoff 必须列出当前 Composition、Draft/Approved Ticket 状态、DAG 路径、coverage/typed dependency/ownership/contribution/AC evidence/gate-P binding 结果、未决 owner decision，以及下一步是 `to-tickets mode=publish`（owner 已批准后）还是 execution preflight。

@@ -10,6 +10,8 @@
       "expectations": [
         "Defaults to mode=draft and reads Composition from the current attempt plan",
         "Writes two Draft files under docs/implementations/<package-id>/tickets/",
+        "Each Ticket puts Phase, the existing runtime Status projection, and one concrete Next near the top",
+        "Each Ticket ends with one initial concise Progress entry and does not create a separate progress artifact",
         "Uses typed blocking edges and AC evidence",
         "Reports the Draft ticket set as ready-for-review and routes it to impl-planning for applicable fresh plan-review before the single owner approval",
         "Does not publish or start implementation"
