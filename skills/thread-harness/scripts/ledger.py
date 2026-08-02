@@ -19,6 +19,7 @@ STATE_VALUES = {"working", "awaiting_seam", "awaiting_owner", "done"}
 DEFAULT_STALL_LIMIT = 5
 HEARTBEAT_LEAD_ROUNDS = 2
 KNOWN_WORKING_STATUSES = {
+    "idle",
     "notloaded",
     "not_loaded",
     "inactive",
@@ -36,9 +37,11 @@ SESSIONS_ROOT_ENV = "THREAD_HARNESS_SESSIONS_ROOT"
 BROKER_ROOT_ENV = "THREAD_HARNESS_BROKER_ROOT"
 PREFLIGHT_CHILD_LIMIT = 8
 PREFLIGHT_RUNTIME_FILES = ("progress.jsonl", "seams.jsonl", "decisions.jsonl", "acts.jsonl")
+IDLE_STATUS_VALUES = {"idle", "inactive", "notloaded", "not_loaded"}
 
 
 PROGRESS_ROOT = Path(r"D:\ProgressRecord")
+ACTIVE_REGISTRY_PATH: Path | None = None
 
 
 def broker_dir() -> Path:
@@ -115,10 +118,12 @@ def ts_not_earlier(candidate, baseline) -> bool:
 
 
 def runtime_dir(coordination_id: str) -> Path:
-    return broker_dir() / coordination_id
+    return registry_path(coordination_id).parent / coordination_id
 
 
 def registry_path(coordination_id: str) -> Path:
+    if ACTIVE_REGISTRY_PATH is not None:
+        return ACTIVE_REGISTRY_PATH
     return broker_dir() / f"{coordination_id}.json"
 
 
@@ -208,6 +213,46 @@ def load_registry(coordination_id: str) -> dict:
     return registry
 
 
+def configure_routing(args) -> None:
+    """Resolve the explicit registry path, with legacy coordination-id fallback."""
+    global ACTIVE_REGISTRY_PATH
+
+    registry_arg = getattr(args, "registry", None)
+    coordination_id = getattr(args, "coordination_id", None)
+    if registry_arg:
+        path = Path(registry_arg).expanduser()
+        if not path.is_absolute():
+            raise UsageError("--registry must be an absolute JSON path")
+        path = path.resolve(strict=False)
+        try:
+            registry = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError as exc:
+            raise LedgerError(f"registry not found: {path}") from exc
+        except (OSError, UnicodeError) as exc:
+            raise LedgerError(f"registry unreadable: {path} ({exc})") from exc
+        except json.JSONDecodeError as exc:
+            raise LedgerError(f"registry is not valid JSON: {path} ({exc})") from exc
+        if not isinstance(registry, dict):
+            raise LedgerError(f"registry root must be an object: {path}")
+        registry_coordination_id = registry.get("coordination_id")
+        if not isinstance(registry_coordination_id, str) or not registry_coordination_id.strip():
+            raise LedgerError(f"registry missing coordination_id: {path}")
+        registry_coordination_id = registry_coordination_id.strip()
+        if coordination_id and coordination_id != registry_coordination_id:
+            raise UsageError(
+                f"--coordination-id {coordination_id} does not match registry coordination_id "
+                f"{registry_coordination_id}"
+            )
+        ACTIVE_REGISTRY_PATH = path
+        args.coordination_id = registry_coordination_id
+        return
+
+    ACTIVE_REGISTRY_PATH = None
+    if not isinstance(coordination_id, str) or not coordination_id.strip():
+        raise UsageError("one of --registry or --coordination-id is required")
+    args.coordination_id = coordination_id.strip()
+
+
 def node_session_id(node: dict) -> str | None:
     for key in ("current_session_id", "session_id", "thread_id", "threadId"):
         value = node.get(key)
@@ -228,6 +273,7 @@ def registry_nodes(registry: dict) -> list[dict]:
                     "session_id": session_id,
                     "role": role,
                     "worktree": value.get("worktree") if isinstance(value.get("worktree"), str) else None,
+                    "active": value.get("active", True) is not False,
                 }
             )
 
@@ -362,6 +408,7 @@ def preflight_registry_nodes(registry: dict, issues: list[tuple[str, str]]) -> t
                 "session_id": controller.get("current_session_id"),
                 "worktree": controller.get("worktree"),
                 "branch": controller.get("branch"),
+                "active": True,
             }
         )
 
@@ -377,10 +424,14 @@ def preflight_registry_nodes(registry: dict, issues: list[tuple[str, str]]) -> t
         issues.append(("registry_invalid_children", "children"))
         return nodes, 0
 
+    active_children_count = 0
     for index, value in child_items:
         if not isinstance(value, dict):
             issues.append(("registry_invalid_child", str(index)))
             continue
+        if value.get("active", True) is False:
+            continue
+        active_children_count += 1
         nodes.append(
             {
                 "name": str(value.get("name") or value.get("node") or index),
@@ -388,9 +439,10 @@ def preflight_registry_nodes(registry: dict, issues: list[tuple[str, str]]) -> t
                 "session_id": value.get("current_session_id"),
                 "worktree": value.get("worktree"),
                 "branch": value.get("branch"),
+                "active": True,
             }
         )
-    return nodes, len(child_items)
+    return nodes, active_children_count
 
 
 def preflight_field_issues(nodes: list[dict], issues: list[tuple[str, str]]) -> None:
@@ -794,6 +846,23 @@ def git_head(worktree: str | None) -> str | None:
     return head.lower()
 
 
+def git_is_ancestor(worktree: str | None, ancestor: str, descendant: str) -> bool:
+    if not worktree or not ancestor or not descendant:
+        return False
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(Path(worktree)), "merge-base", "--is-ancestor", ancestor, descendant],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
 def git_commit_paths(worktree: str | None, head: str | None, old_head: str | None = None) -> list[str] | None:
     if not worktree or not head:
         return None
@@ -910,18 +979,33 @@ def classify_and_rows(payload: dict, nodes: list[dict], round_no: int, seq: int,
 
     wake = payload.get("wake") if isinstance(payload.get("wake"), dict) else {}
     wake_reason = wake.get("reason")
+
+    def latest_state(name: str) -> str:
+        previous_state = previous.get(name, {}).get("state")
+        if previous_state in STATE_VALUES:
+            return previous_state
+        return rows_by_name[name].get("state") or "unknown"
+
+    def may_be_idle(name: str) -> bool:
+        return latest_state(name) == "working"
+
     idle_sessions = wake_thread_ids(wake) if wake_reason == "inactiveStatus" else set()
-    idle_nodes = {by_session[sid]["name"] for sid in idle_sessions if sid in by_session}
-    if wake_reason == "inactiveStatus" and not idle_nodes:
-        for poll in polls:
-            if not isinstance(poll, dict):
-                continue
-            status_text = str(field(poll, "status") or "").lower()
-            session_id = field(poll, "id")
-            if "inactive" in status_text or "notloaded" in status_text or "not_loaded" in status_text:
-                node = by_session.get(session_id)
-                if node:
-                    idle_nodes.add(node["name"])
+    idle_nodes = {
+        by_session[sid]["name"]
+        for sid in idle_sessions
+        if sid in by_session and by_session[sid].get("active", True) and may_be_idle(by_session[sid]["name"])
+    }
+    # Desktop may expose an idle thread through polls[].status even when wake.reason
+    # is turnCompleted or absent.  Treat status as the primary per-node signal and
+    # inactiveStatus only as an additional wake hint.
+    for poll in polls:
+        if not isinstance(poll, dict):
+            continue
+        status_text = str(field(poll, "status") or "").lower().replace("-", "_")
+        session_id = field(poll, "id")
+        node = by_session.get(session_id)
+        if node and status_text in IDLE_STATUS_VALUES and node.get("active", True) and may_be_idle(node["name"]):
+            idle_nodes.add(node["name"])
 
     changed_nodes = []
     advance_kinds = {}
@@ -934,14 +1018,10 @@ def classify_and_rows(payload: dict, nodes: list[dict], round_no: int, seq: int,
         new_head = row.get("head")
         if new_head and old_head and new_head != old_head:
             head_changed = True
-            if name in idle_nodes:
-                continue
             advance_kinds[name] = advance_kind(node.get("worktree"), new_head, old_head)
             changed_nodes.append((name, new_head, old_head))
         elif new_head and not old_head:
             head_changed = True
-            if name in idle_nodes:
-                continue
             advance_kinds[name] = advance_kind(node.get("worktree"), new_head)
             changed_nodes.append((name, new_head, None))
         else:
@@ -1073,8 +1153,19 @@ def latest_act(coordination_id: str) -> dict | None:
 
 
 def halted_act(coordination_id: str) -> dict | None:
-    act = latest_act(coordination_id)
-    return act if act and act.get("kind") == "halt" else None
+    acts = read_jsonl(jsonl_path(coordination_id, "acts.jsonl"))
+    halt = next((row for row in reversed(acts) if row.get("kind") == "halt"), None)
+    if not halt:
+        return None
+    halt_poll_seq = halt.get("halt_poll_seq")
+    if not isinstance(halt_poll_seq, int):
+        # Legacy halt rows had no poll sequence and remain halted until a new
+        # valid sync establishes a sequence after the halt.
+        halt_poll_seq = halt.get("seq", 0)
+    current_poll_seq = int(load_state(coordination_id).get("next_poll_seq") or 0)
+    if current_poll_seq > halt_poll_seq:
+        return None
+    return halt
 
 
 def last_must_act_answered(coordination_id: str) -> bool:
@@ -1275,8 +1366,11 @@ def cmd_sync(args) -> int:
     dispatches = count_dispatch_calls(events)
     state["dispatches_since_progress"] = int(state.get("dispatches_since_progress") or 0) + dispatches
 
-    # 轮询目标是全部 children，不含 controller 自己——主控轮询自身没有意义。
-    poll_targets = [node for node in nodes if node["role"] != "controller"]
+    # 轮询目标是全部 active children，不含 controller 自己——主控轮询自身没有意义。
+    poll_targets = [
+        node for node in nodes
+        if node["role"] != "controller" and node.get("active", True)
+    ]
     reason, actual_ids = validate_call(call["arguments"], [node["session_id"] for node in poll_targets])
     if reason:
         state["invalid_rounds"] = int(state.get("invalid_rounds") or 0) + 1
@@ -1321,6 +1415,43 @@ def cmd_sync(args) -> int:
     return 0
 
 
+def registry_node_by_name(registry: dict, node_name: str) -> dict | None:
+    return next((node for node in registry_nodes(registry) if node["name"] == node_name), None)
+
+
+def validate_report_source(coordination_id: str, node_name: str, source_session: str, head: str, registry: dict) -> dict:
+    node = registry_node_by_name(registry, node_name)
+    if not node:
+        raise UsageError(f"unknown node: {node_name}")
+    if node["role"] == "controller":
+        raise UsageError("H1 source must be a child node")
+    if not node.get("active", True):
+        raise UsageError(f"inactive node cannot submit H1: {node_name}")
+    if source_session != node["session_id"]:
+        raise UsageError(
+            f"H1 source session mismatch for {node_name}: "
+            f"registry={node['session_id']} source={source_session}"
+        )
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", head or ""):
+        raise UsageError("H1 head must be a full 40-character git SHA")
+
+    baseline = latest_progress(coordination_id).get(node_name, {}).get("head")
+    if baseline and baseline != head and not git_is_ancestor(node.get("worktree"), baseline, head):
+        raise UsageError(
+            f"H1 head is not a descendant of latest ledger HEAD for {node_name}: "
+            f"baseline={baseline} source={head}"
+        )
+    current_head = git_head(node.get("worktree"))
+    if not current_head:
+        raise UsageError(f"H1 worktree HEAD unavailable for {node_name}")
+    if current_head != head and not git_is_ancestor(node.get("worktree"), head, current_head):
+        raise UsageError(
+            f"H1 head is not on current worktree history for {node_name}: "
+            f"source={head} worktree={current_head}"
+        )
+    return node
+
+
 def cmd_report(args) -> int:
     ensure_runtime(args.coordination_id)
     if args.state not in STATE_VALUES:
@@ -1334,6 +1465,13 @@ def cmd_report(args) -> int:
         if not valid_seams:
             raise UsageError("state awaiting_seam requires --waiting-on seam:<id>")
 
+    registry = load_registry(args.coordination_id)
+    node = registry_node_by_name(registry, args.node)
+    if not node:
+        raise UsageError(f"unknown node: {args.node}")
+    if args.registry and node["role"] != "controller" and not args.source_session:
+        raise UsageError("explicit --registry report requires --source-session")
+
     # head 缺省时自己从 registry 的 worktree 读，不要依赖子线记得传 --head。
     # 依据 design-notes §2.1：报告没带 head 会被判成 stale，其 waiting_on 就不计入
     # seams_unowned——那样读数 5 会不管实际情况一律接近 0。head 是有客观来源的事实，
@@ -1341,34 +1479,28 @@ def cmd_report(args) -> int:
     head = args.head
     head_source = "arg"
     if not head:
-        try:
-            node = next(
-                (n for n in registry_nodes(load_registry(args.coordination_id)) if n["name"] == args.node),
-                None,
-            )
-            if node:
-                head = git_head(node.get("worktree"))
-                head_source = "worktree" if head else "unavailable"
-            else:
-                head_source = "node-not-in-registry"
-        except LedgerError:
-            head_source = "registry-unavailable"
+        head = git_head(node.get("worktree"))
+        head_source = "worktree" if head else "unavailable"
 
-    append_jsonl(
-        jsonl_path(args.coordination_id, "progress.jsonl"),
-        {
-            "ts": now_local(),
-            "src": "report",
-            "round": args.round,
-            "node": args.node,
-            "head": head,
-            "head_source": head_source,
-            "state": args.state,
-            "waiting_on": waiting_on,
-            "last_report_ts": now_local(),
-            "note": args.note or "",
-        },
-    )
+    if args.source_session:
+        node = validate_report_source(args.coordination_id, args.node, args.source_session, head, registry)
+
+    row = {
+        "ts": now_local(),
+        "src": "report",
+        "round": args.round,
+        "node": args.node,
+        "head": head,
+        "head_source": head_source,
+        "state": args.state,
+        "waiting_on": waiting_on,
+        "last_report_ts": now_local(),
+        "note": args.note or "",
+    }
+    if args.source_session:
+        row["source_session_id"] = args.source_session
+        row["source_registry"] = str(registry_path(args.coordination_id).resolve())
+    append_jsonl(jsonl_path(args.coordination_id, "progress.jsonl"), row)
     suffix = ""
     if args.state in {"working", "done"} and waiting_on:
         suffix = " (note: waiting_on is ignored for working/done state summaries)"
@@ -1501,6 +1633,7 @@ def cmd_act(args) -> int:
                 "decision_id": None,
                 "reason": reason,
                 "pending_decision_ids": decision_ids(pending_decisions(args.coordination_id)),
+                "halt_poll_seq": int(state.get("next_poll_seq") or 0),
             }
         )
     else:
@@ -1525,7 +1658,8 @@ def cmd_act(args) -> int:
 
 def format_status(coordination_id: str, registry: dict, streak_limit: int = DEFAULT_STALL_LIMIT) -> str:
     latest = latest_progress(coordination_id)
-    registry_names = sorted(node["name"] for node in registry_nodes(registry) if node["role"] != "controller")
+    registry_by_name = {node["name"]: node for node in registry_nodes(registry)}
+    registry_names = sorted(node["name"] for node in registry_by_name.values() if node["role"] != "controller")
     pending = pending_decisions(coordination_id)
     unowned, malformed, stale_waiting_on = seams_waiting_counts(coordination_id)
     act = latest_act(coordination_id)
@@ -1533,8 +1667,12 @@ def format_status(coordination_id: str, registry: dict, streak_limit: int = DEFA
     node_lines = []
     for name in sorted(set(registry_names) | set(latest)):
         row = latest.get(name, {})
+        registry_node = registry_by_name.get(name)
+        lifecycle = "active" if registry_node and registry_node.get("active", True) else "retired"
+        if not registry_node:
+            lifecycle = "unregistered"
         node_lines.append(
-            f"  {name}: state={row.get('state') or '-'} head={row.get('head') or '-'} "
+            f"  {name}: lifecycle={lifecycle} state={row.get('state') or '-'} head={row.get('head') or '-'} "
             f"turn={row.get('turn') or '-'} last_report_ts={row.get('last_report_ts') or '-'}"
         )
     pending_text = ", ".join(row.get("decision_id") for row in pending if row.get("decision_id")) or "-"
@@ -1557,9 +1695,23 @@ def format_status(coordination_id: str, registry: dict, streak_limit: int = DEFA
                 f"halt_pending_decisions: {format_id_list(halt.get('pending_decision_ids') or [])}",
             ]
         )
+    runtime_root = runtime_dir(coordination_id)
+    missing_runtime = []
+    for name in PREFLIGHT_RUNTIME_FILES:
+        if not (runtime_root / name).is_file():
+            missing_runtime.append(name)
+    if missing_runtime:
+        runtime_line = (
+            f"runtime_uninitialized: yes; runtime: missing ({', '.join(missing_runtime)}); "
+            f"run init --registry {registry_path(coordination_id)}"
+        )
+    else:
+        runtime_line = f"runtime_uninitialized: no; runtime: ready ({runtime_root})"
     return "\n".join(
         header_lines
         + [
+            f"registry: {registry_path(coordination_id)}",
+            runtime_line,
             "nodes:",
             *(node_lines or ["  -"]),
             f"pending_decisions: {pending_text}",
@@ -1577,7 +1729,6 @@ def format_status(coordination_id: str, registry: dict, streak_limit: int = DEFA
 
 
 def cmd_status(args) -> int:
-    ensure_runtime(args.coordination_id)
     registry = load_registry(args.coordination_id)
     print(format_status(args.coordination_id, registry))
     return 0
@@ -1590,7 +1741,7 @@ def cmd_heartbeat(args) -> int:
     children = {
         node["name"]
         for node in registry_nodes(registry)
-        if node["role"] != "controller"
+        if node["role"] != "controller" and node.get("active", True)
     }
     if args.node not in children:
         raise UsageError(f"unknown child node: {args.node}")
@@ -1676,28 +1827,34 @@ def build_parser() -> argparse.ArgumentParser:
     parser = UsageErrorParser(description="thread-harness append-only ledger")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    def add_routing_args(command):
+        routing = command.add_mutually_exclusive_group(required=True)
+        routing.add_argument("--registry")
+        routing.add_argument("--coordination-id")
+
     init = sub.add_parser("init")
-    init.add_argument("--coordination-id", required=True)
+    add_routing_args(init)
     init.set_defaults(func=cmd_init)
 
     sync = sub.add_parser("sync")
-    sync.add_argument("--coordination-id", required=True)
+    add_routing_args(sync)
     sync.add_argument("--round", required=True, type=int)
     sync.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
     sync.set_defaults(func=cmd_sync)
 
     report = sub.add_parser("report")
-    report.add_argument("--coordination-id", required=True)
+    add_routing_args(report)
     report.add_argument("--node", required=True)
     report.add_argument("--state", required=True)
     report.add_argument("--round", type=int, default=0)
     report.add_argument("--head")
+    report.add_argument("--source-session")
     report.add_argument("--waiting-on", action="extend", nargs="+", default=[])
     report.add_argument("--note")
     report.set_defaults(func=cmd_report)
 
     seam = sub.add_parser("seam")
-    seam.add_argument("--coordination-id", required=True)
+    add_routing_args(seam)
     seam.add_argument("--seam-id", required=True)
     seam.add_argument("--producer", required=True)
     seam.add_argument("--consumers", action="extend", nargs="+", default=[])
@@ -1705,7 +1862,7 @@ def build_parser() -> argparse.ArgumentParser:
     seam.set_defaults(func=cmd_seam)
 
     decide = sub.add_parser("decide")
-    decide.add_argument("--coordination-id", required=True)
+    add_routing_args(decide)
     decide.add_argument("--raise", dest="raise_id")
     decide.add_argument("--by")
     decide.add_argument("--blocks", action="extend", nargs="+", default=[])
@@ -1715,7 +1872,7 @@ def build_parser() -> argparse.ArgumentParser:
     decide.set_defaults(func=cmd_decide)
 
     act = sub.add_parser("act")
-    act.add_argument("--coordination-id", required=True)
+    add_routing_args(act)
     mode = act.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dispatch", action="store_true")
     mode.add_argument("--escalate", action="store_true")
@@ -1728,23 +1885,23 @@ def build_parser() -> argparse.ArgumentParser:
     act.set_defaults(func=cmd_act)
 
     status = sub.add_parser("status")
-    status.add_argument("--coordination-id", required=True)
+    add_routing_args(status)
     status.set_defaults(func=cmd_status)
 
     heartbeat = sub.add_parser("heartbeat")
-    heartbeat.add_argument("--coordination-id", required=True)
+    add_routing_args(heartbeat)
     heartbeat.add_argument("--node", required=True)
     heartbeat.add_argument("--evidence", required=True)
     heartbeat.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
     heartbeat.set_defaults(func=cmd_heartbeat)
 
     stall = sub.add_parser("stall-check")
-    stall.add_argument("--coordination-id", required=True)
+    add_routing_args(stall)
     stall.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
     stall.set_defaults(func=cmd_stall_check)
 
     preflight = sub.add_parser("preflight")
-    preflight.add_argument("--coordination-id", required=True)
+    add_routing_args(preflight)
     preflight.set_defaults(func=cmd_preflight)
     return parser
 
@@ -1752,6 +1909,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        configure_routing(args)
         return args.func(args)
     except UsageError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

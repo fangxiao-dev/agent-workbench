@@ -13,6 +13,8 @@ Use this runtime directory on Windows:
 
 `D:\ProgressRecord\<repo>\codex-thread-broker\` (override with `THREAD_HARNESS_BROKER_ROOT`)
 
+每个 assignment card 与正式 ledger 命令都必须携带该 coordination 的**绝对 registry JSON 路径**。`ledger.py <command> --registry <absolute-json>` 以 registry sibling + `coordination_id` 推导 runtime；旧环境变量/`--coordination-id` 仅为兼容旧调用，不新增 `--broker-root`。
+
 Create one file for each independent controller/child group:
 
 `<broker-root>\<coordination_id>.json`, where `coordination_id` is `<YYMMDDHH>-<slug>`
@@ -38,11 +40,13 @@ Before contacting another thread, resolve and re-read that group's file and use 
 When the Owner establishes a new controller/child group:
 
 1. Choose a stable lowercase `coordination_id` that is independent of session IDs and display names.
-2. Create a new `<coordination_id>.json` directly under the runtime directory from `references/thread-group-template.json`.
+2. Create a new `<coordination_id>.json` directly under the runtime directory from `references/thread-group-template.json`，并记录它的绝对路径。
 3. Fill the required group context: `topic` and Git repository name.
-4. Register the controller and known children with stable `node_id` values. Each node requires `topic`, `current_session_id`, the absolute current-context `worktree`, its `branch`, and `updated_at`.
-5. Report the absolute group file path. Include this path and each participant's `node_id` in future handoffs.
+4. Register the controller and known children with stable `node_id` values. Each node requires `topic`, `current_session_id`, the absolute current-context `worktree`, its `branch`, and `updated_at`; child `active` defaults to `true` when omitted, and set it to `false` only to retain inactive history.
+5. Report the absolute group file path. Include this registry path and each participant's `node_id` in future assignment cards and handoffs.
 6. Never reuse another group's file or add the new group to an existing file.
+
+Child lifecycle 只使用一个 `active` boolean：缺失视为 `true`。replacement 只更换同一 node 的 current session，不退休 node；只有 controller 验收该 node 已不再参与本 coordination 的 poll、派活或交付后，才显式设为 `false`。retired child 保留原路由历史，不移动到 archive，也不自动由 ledger `state=done` 推导。
 
 ## Register a new session or context worktree
 

@@ -19,16 +19,17 @@
 
 你是主控（broker）。读 $thread-harness 的 Role C 段并按它工作。
 线程路由（thread-id 与 topic 绑定）用 $owner-thread-broker，coordination_id 是 <coordination-id>。
+正式 ledger 命令统一使用 `--registry <absolute-registry-json>`；runtime 由 registry sibling 与 coordination_id 推导。
 
 ### 每轮循环
 
-0) 每轮先读 registry，拿到全部 children 当前的 current_session_id：
+0) 每轮先读 registry，拿到全部 active children 当前的 current_session_id：
    Get-Content -Raw <registry 绝对路径>
    不要凭记忆写 id，也不要沿用上一轮的——子线换 session 后旧 id 会让每轮都判 ROUND INVALID。
 
 1) 把上一步读到的 id **作为字面量内联**进下面这段，原样敲，不要"优化"它：
 
-const ids=["<child-1 session id>","<child-2 session id>", ...];   // 全部 children，不含你自己
+const ids=["<child-1 session id>","<child-2 session id>", ...];   // 全部 active children，不含你自己
 const raw=await tools.codex_app__wait_threads({targets:ids.map(threadId=>({threadId})),timeoutMs:120000});
 const r=typeof raw==="string"?JSON.parse(raw):raw;
 text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,polls:(r.polls||[]).map(p=>({id:p.thread?.id,status:p.thread?.status?.type,turn:p.latestTurn?.id,turnStatus:p.latestTurn?.status,txt:(p.latestAssistantMessage?.text||"").slice(0,500)}))}));
@@ -36,24 +37,24 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
 字段一个都不能少。你不打印的东西 ledger.py 读不到——rollout 记录的是你打印的内容，不是工具的原始返回。
 以 references/poll-contract.md 的版本为准，那里和自检判据一起更新。
 
-2) python <repo>/skills/thread-harness/scripts/ledger.py sync --coordination-id <coordination-id> --round <n>
-3) python <repo>/skills/thread-harness/scripts/ledger.py stall-check --coordination-id <coordination-id>
+2) python <repo>/skills/thread-harness/scripts/ledger.py sync --registry <absolute-registry-json> --round <n>
+3) python <repo>/skills/thread-harness/scripts/ledger.py stall-check --registry <absolute-registry-json>
 4) 按 stall-check 退出码走：
    0 OK → 按 sync 摘要正常决策
    0 CHECK_HEARTBEAT（3/5 或 4/5）→ 若有 active / working node，直接 read_thread 看这些 current session 的最新内容；任一 thread 有具体且最新的执行心跳时，执行：
-      python <repo>/skills/thread-harness/scripts/ledger.py heartbeat --coordination-id <coordination-id> --node <node> --evidence "<一句话具体进展>"
+      python <repo>/skills/thread-harness/scripts/ledger.py heartbeat --registry <absolute-registry-json> --node <node> --evidence "<一句话具体进展>"
       重复等待文案、旧进展、笼统“仍在工作”或仅 active 状态不算；全员 idle 时不 reset，按 idle_nodes 派活。
    2 MUST_ACT → 见下方"不可违反"第 1 条
-   3 MUST_ESCALATE → 有尚未上报的 pending 决策；立即向我报告列出的决策，执行 ledger.py act --coordination-id <id> --escalate --decision-id <d> 留痕，本轮结束
+   3 MUST_ESCALATE → 有尚未上报的 pending 决策；立即向我报告列出的决策，执行 ledger.py act --registry <absolute-registry-json> --escalate --decision-id <d> 留痕，本轮结束
 
 ### 不可违反
 
 1. stall-check 返回 2（MUST_ACT）时，你只有两个选项，且**必须把选择记进账本**：
 
    (a) 派发新工作 —— 记：
-       ledger.py act --coordination-id <id> --dispatch --seam-id <s> --producer <node> --deliverable "<一句话>"
+       ledger.py act --registry <absolute-registry-json> --dispatch --seam-id <s> --producer <node> --deliverable "<一句话>"
    (b) 向我报告并结束 loop —— 记：
-       ledger.py act --coordination-id <id> --halt --reason "<一句话>"
+       ledger.py act --registry <absolute-registry-json> --halt --reason "<一句话>"
 
    禁止"继续等待"、"本轮无变化"、"保持现状"这类第三选项。
 
@@ -63,7 +64,7 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
    MUST_ACT 的准确含义是"连续 5 轮没有 committed progress，且从 3/5 起未确认到 fresh heartbeat"，不是"全线都死了"。
    退出码 3 的准确含义是"有尚未上报的决策"；已通过 act --escalate 上报的 pending 决策不会继续屏蔽 MUST_ACT。
    5/5 后不得再用 heartbeat 绕过二选一。
-2. wake.reason == "inactiveStatus" 表示有线程闲着，是"该派活"的信号，不是"没有变化"。
+2. wake.reason == "inactiveStatus" 表示有线程闲着，是"该派活"的信号，不是"没有变化"。只有 active 且最新 ledger state 为 working 的 node 才进入 idle_nodes。
 3. seam 缺失是你的待办，不是外部阻塞。所有人都在等某个跨域契约时，正确的动作是派一条
    Foundation 线去造它，而不是把它记成阻塞。
 4. 不要让 Foundation 线"保持待命"。它们是 seam 的生产者，让生产者等消费者会造成死锁。
@@ -110,13 +111,13 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
 | **Owner** | **亲手写上 create_thread 授权** | 工具声明：*"Create a separate task only when the user explicitly asks for a new task."* **上一任 agent 代写不算数** |
 | **Owner** | 确认 effort 档位 | 主控读不到自己的 `turn_context`，脚本兜不住。上一轮它在第 8 小时静默掉到 `none` |
 | **Owner**（开跑后） | 响应 `MUST_ESCALATE`；盯首次 `MUST_ACT` | 这是整套设计存在的意义 |
-| **主控 agent** | 建 registry（`$owner-thread-broker`）、`ledger.py init`、`create_thread` 开子线、把返回的 session id 回填 registry | 都是它手上有的动作 |
+| **主控 agent** | 建 registry（`$owner-thread-broker`）、`ledger.py init --registry <absolute-registry-json>`、`create_thread` 开子线、把返回的 session id 回填 registry | 都是它手上有的动作 |
 | **主控 agent** | 每轮：读 registry → 敲固定 poll → `sync` → `stall-check` → 决策 → 需要时 `act` | 这就是 loop 本身 |
-| **子线 agent** | 按 `$impl-package` 干自己任务包的活；命中 H1 三个触发条件之一时跑 `ledger.py report` | 只有它知道自己在等什么 |
+| **子线 agent** | 按 `$impl-package` 干自己任务包的活；命中 H1 三个触发条件之一时发送结构化 H1，由 controller 验证后写 ledger | 只有它知道自己在等什么 |
 
 几个常见误解：
 
-- **`ledger.py init` 不用 Owner 跑**，主控自己跑。它只建运行时目录和空账本，不需要 registry 先存在。
+- **`ledger.py init --registry <absolute-registry-json>` 不用 Owner 跑**，主控自己跑。它只建运行时目录和空账本，registry 必须先存在。
 - **7 条子线不用 Owner 手动开**，主控用 `create_thread` 开——前提是你已经在 goal 里给了授权。
 - **goal 里不要内联 session id。** 子线是主控创建的，写 goal 时它们还不存在；而且子线换 session 后写死的 id 会让每轮都判 `ROUND INVALID`。主控每轮从 registry 现读。
 
@@ -128,8 +129,8 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
 
 用**普通消息**（不是 goal）引导主控走完这五步：
 
-1. 建 registry（`$owner-thread-broker`），填好每个 node 的 `worktree` / `branch`
-2. `ledger.py init`
+1. 建 registry（`$owner-thread-broker`），填好每个 node 的 `worktree` / `branch`，并把绝对 registry 路径交给所有 assignment card
+2. `ledger.py init --registry <absolute-registry-json>`
 3. 按 [session-dispatch.md](session-dispatch.md) 开子线，把返回的 session id 回填 registry
 4. `ledger.py preflight` —— 必须 `PREFLIGHT OK`。它拦的是 worktree 写错、两个 node 共用 worktree/branch、registry 分支与实际 checkout 不一致、children > 8、session id 重复这些**全程无声**的问题
 5. 跑一轮 poll + `sync`，确认 `valid=yes` 且 `head_unavailable` 为空
@@ -149,7 +150,7 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
 **主控自己完成，Owner 只需在首轮摘要里核对结果**
 
 - [ ] registry 已建，全部 node 的 `current_session_id` / `worktree` / `branch` 正确
-- [ ] `ledger.py init` 已跑，账本文件齐全
+- [ ] `ledger.py init --registry <absolute-registry-json>` 已跑，账本文件齐全
 - [ ] 子线已按 [session-dispatch.md](session-dispatch.md) 两阶段派生，session id 已回填 registry
 - [ ] `ledger.py preflight` 输出 `PREFLIGHT OK`
 - [ ] 首轮 `sync` 输出 `valid=yes`，且 `head_unavailable` 为空

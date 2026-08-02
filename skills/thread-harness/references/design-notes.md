@@ -18,8 +18,8 @@
 
 | # | 硬规则 | 对应 finding |
 | --- | --- | --- |
-| H1 | **回报触发条件**：任一 thread 在 turn 结束前，若 ①`head` 变了 ②状态从 working 转为 waiting ③产生 owner 级阻塞——三者之一成立，必须写账本并 `send_message_to_thread` 回 broker | F3：7 条线里 5 条从不主动回报，F6 唯一能解环的 Owner 请求因此永远没送达 |
-| H2 | **账本字段与写入时机**：状态变更即 append，字段按 §5 schema | F9：全局进度只活在 context 里，末期每 12 分钟被 compaction 清洗一次 |
+| H1 | **回报触发条件**：任一 thread 在 turn 结束前，若 ①`head` 变了 ②状态从 working 转为 waiting ③产生 owner 级阻塞——三者之一成立，必须发送结构化 H1 envelope 回 broker；child 不直接写 ledger | F3：7 条线里 5 条从不主动回报，F6 唯一能解环的 Owner 请求因此永远没送达 |
+| H2 | **账本字段与写入时机**：controller 验证 H1 的 registry source session 与 HEAD 后代关系后，代 child append；字段按 §5 schema | F9：全局进度只活在 context 里，末期每 12 分钟被 compaction 清洗一次 |
 | H3 | **停滞上限 + 二选一**：连续 5 轮所有 node 的 git HEAD 无变化，broker 必须二选一——(a) 派发新工作（含 create_thread 开新 Foundation 线），(b) 向 Owner 报告并结束 loop（即 `act --halt --reason`）。**禁止第三种输出。** 从第 3 轮起若仍有 active / working node，每轮必须直接 `read_thread`；只有具体且最新的执行心跳可将 streak 归零。另：`decisions.jsonl` 有尚未上报的 `pending` 项时立即上报，不进入下一轮；已上报但仍 pending 的决策不再豁免停滞判定 | F1：Owner 是唯一解卡装置；F7：broker 把自己的待办归类成外部阻塞。上一轮它输出了 104 次"本轮 loop 检查完成" |
 
 **H3 的 `MUST_ACT` 准确含义是「既没有 committed progress，也没有在阈值前确认到 fresh heartbeat」，不是「整体停止」。** 一条线可能正在活跃工作、只是还没 commit，所以：
@@ -29,7 +29,7 @@
 - fresh heartbeat 通过 `ledger.py heartbeat` 在 `sync-state.json` 写 reset marker，将 streak 归零；全员 idle 时不重置，按 `idle_nodes` 派活。
 - 到 `5/5` 后不再允许 heartbeat 绕过 `MUST_ACT`，仍执行二选一。
 - 已通过 `act --escalate` 上报且 `ts` 不早于最新 raise 的 pending decision 只作为 `pending_escalated` 显示，不再屏蔽 `MUST_ACT`。
-| H4 | **seam 必须登记生产者**：任何 `awaiting_seam` 都要指向一个 `seam_id`，该 seam 必须在 `seams.jsonl` 里有一条带 `producer` 的记录 | F2/F7：环的成因是"跨域上游契约"是个没有归属的名词 |
+| H4 | **seam 必须登记生产者**：任何 `awaiting_seam` 都要指向一个 `seam_id`，该 seam 必须由 controller 在 `seams.jsonl` 里登记一条带 `producer` 的记录 | F2/F7：环的成因是"跨域上游契约"是个没有归属的名词 |
 
 H4 的分阶段：**第一轮只登记不校验**；阶段 2 打开校验（`waiting_on` 指向的 seam 查不到 producer → broker 必须立即指派，否则报错阻断）。schema 一次写全，不迁移。
 
@@ -50,7 +50,7 @@ H4 的分阶段：**第一轮只登记不校验**；阶段 2 打开校验（`wai
 
 判断规则：**一个事实如果模型有动机漏报或美化，就必须找到不经模型的来源；找不到的，才退回账本纪律并接受它可能失效。**
 
-子线的 `state` / `waiting_on` 属于后者——只有子线自己知道它在等什么，没有客观来源。所以这两个字段仍靠 H1 上报，代价是 `sync` **不得覆盖**它们（poll 行只写 poll 能证明的东西）。
+子线的 `state` / `waiting_on` 属于后者——只有子线自己知道它在等什么，没有客观来源。所以这两个字段仍靠 H1 上报，controller 验证后写入；代价是 `sync` **不得覆盖**它们（poll 行只写 poll 能证明的东西）。
 
 ## 3. 轮询契约（poll contract）
 
@@ -125,7 +125,7 @@ text(JSON.stringify({
 }));
 ```
 
-四条不可动摇：`timeoutMs` 固定为平台允许的 `120000`；`targets` 覆盖 registry 的**全部 children，不含 controller 自己**（主控轮询自身没有意义）；输出是**这个投影**，字段一个不能少；`txt` 截断到 500 字符。
+四条不可动摇：`timeoutMs` 固定为平台允许的 `120000`；`targets` 覆盖 registry 的**全部 active children，不含 controller 自己**（主控轮询自身没有意义）；输出是**这个投影**，字段一个不能少；`txt` 截断到 500 字符。
 
 投影的确切字段以 [poll-contract.md](poll-contract.md) 为准——它随自检判据一起演进，本页只讲为什么。
 
@@ -210,10 +210,10 @@ role 段开头必须写明：*"你的使命是完成任务包，方式由 `/impl
 
 ## 5. 账本 schema
 
-运行时目录：`<broker-root>\<coordination_id>\`，`<broker-root>` 默认 `D:\ProgressRecord\codex-thread-broker`，按仓库归档时用 `THREAD_HARNESS_BROKER_ROOT` 覆盖
-routing registry 仍是同级的 `<broker-root>\<coordination_id>.json`，由 `owner-thread-broker` 管，**本设计不改动它**（它 13.75 小时零串线，是上一轮唯一完全没出问题的部件）。
+正式运行时目录：由 `--registry <absolute-registry-json>` 的 registry sibling 与其中 `coordination_id` 推导；旧的 `THREAD_HARNESS_BROKER_ROOT` + `--coordination-id` 兼容路径仍可用。
+routing registry 由 `owner-thread-broker` 管，**本设计不改动其路由职责**（它 13.75 小时零串线，是上一轮唯一完全没出问题的部件）。
 
-三个 append-only jsonl。字段一次写全，第一轮不迁移。
+四个 append-only JSONL。字段一次写全，第一轮不迁移；controller 是唯一写入者，child 只发送 H1 envelope。
 
 ### progress.jsonl
 
@@ -251,14 +251,14 @@ routing registry 仍是同级的 `<broker-root>\<coordination_id>.json`，由 `o
 
 | 子命令 | 行为 |
 | --- | --- |
-| `init --coordination-id <id>` | 建运行时目录与三个空 jsonl；已存在则幂等返回 |
-| `sync --coordination-id <id> --round <n>` | 定位主控 rollout（按 registry 的 `controller.current_session_id`），**按 byte offset 增量读**，抽最近一次 `wait_threads` 的完整输出；跑 §3.5 自检；合并进 `progress.jsonl`；打印决策就绪摘要 |
-| `report --coordination-id <id> --node <n> --state <s> [--head H] [--waiting-on ...] [--note ...]` | 子线写自己的 progress 行 |
-| `seam --coordination-id <id> --seam-id <s> --producer <p> [--consumers ...] [--deliver <artifact>]` | 登记/交付 seam |
-| `decide --coordination-id <id> --raise <decision-id> --by <node> --blocks ... --question ...` / `--answer <decision-id> --text ...` | owner 决策队列 |
-| `heartbeat --coordination-id <id> --node <n> --evidence <text>` | 仅在 `3/5` 或 `4/5` 且 controller 已直接读 thread 确认 fresh heartbeat 后使用；只写 `sync-state.json` reset marker，不写 JSONL |
-| `preflight --coordination-id <id>` | 开跑前只读校验 registry：worktree 存在且可读 HEAD、无两个 node 共用 worktree/branch、registry branch 与实际 checkout 一致、`children <= 8`、session id 不重复、controller rollout 可定位、运行时已 `init`。失败退 5 |
-| `stall-check --coordination-id <id>` | `acts.jsonl` 最后一行是 `halt` → 退出码 4 并打印 `HALTED`；连续 N 轮（默认 5）所有 node 的 `head` 无变化 → 退出码 2 并打印 `MUST_ACT`；从 `3/5` 起、到 `5/5` 前 → 退出码 0 并打印 `CHECK_HEARTBEAT`；有尚未上报的 pending decision → 退出码 3 并打印 `MUST_ESCALATE`；否则 0 |
+| `init --registry <absolute-json>` | 建 registry sibling/coordination_id 运行时目录与四个空 jsonl；已存在则幂等返回 |
+| `sync --registry <absolute-json> --round <n>` | 定位主控 rollout（按 registry 的 `controller.current_session_id`），**按 byte offset 增量读**，只轮询 active children，抽最近一次 `wait_threads` 的完整输出；跑 §3.5 自检；合并进 `progress.jsonl`；打印决策就绪摘要 |
+| `report --registry <absolute-json> --node <n> --source-session <session> --state <s> [--head H] [--waiting-on ...] [--note ...]` | controller 验证 H1 source session 与 HEAD 后代后写 progress 行；旧 `--coordination-id` 调用兼容 |
+| `seam --registry <absolute-json> --seam-id <s> --producer <p> [--consumers ...] [--deliver <artifact>]` | controller 登记/交付 seam |
+| `decide --registry <absolute-json> --raise <decision-id> --by <node> --blocks ... --question ...` / `--answer <decision-id> --text ...` | controller/Owner 决策队列 |
+| `heartbeat --registry <absolute-json> --node <n> --evidence <text>` | 仅在 `3/5` 或 `4/5` 且 controller 已直接读 thread 确认 fresh heartbeat 后使用；只写 `sync-state.json` reset marker，不写 JSONL |
+| `preflight --registry <absolute-json>` | 开跑前只读校验 registry：worktree 存在且可读 HEAD、active child 无共享 worktree/branch、registry branch 与实际 checkout 一致、active `children <= 8`、active session id 不重复、controller rollout 可定位、运行时已 `init`。失败退 5 |
+| `stall-check --registry <absolute-json>` | 最近 halt 的 `halt_poll_seq` 未被更大的有效 poll seq 超过 → 退出码 4 并打印 `HALTED`；连续 N 轮（默认 5）所有 node 的 `head` 无变化 → 退出码 2 并打印 `MUST_ACT`；从 `3/5` 起、到 `5/5` 前 → 退出码 0 并打印 `CHECK_HEARTBEAT`；有尚未上报的 pending decision → 退出码 3 并打印 `MUST_ESCALATE`；否则 0 |
 
 `sync` 的决策就绪摘要格式（给 broker 读的，必须紧凑）：
 
@@ -346,7 +346,7 @@ skills/thread-harness/
 
 ### 9.3 子线的持久 goal 与 turn-finalizer hook
 
-`create_thread` 没有 goal 参数，平台也没有 turn 结束时自动写账本的 hook。所以子线的 H1/H2 无法获得主控那样的 compaction 免疫。
+`create_thread` 没有 goal 参数，平台也没有 turn 结束时自动写账本的 hook。所以子线的 H1 无法获得主控那样的 compaction 免疫；子线发送 envelope，controller 单写 ledger。
 
 **这是平台能力缺口，不是可以靠设计补上的东西。** 能做的只有让主控检测漏报（`never_reported` / `last_report_ts`），把"子线忘了上报"从静默失效变成可见信号。第一轮读数 4 就是量这个的。
 

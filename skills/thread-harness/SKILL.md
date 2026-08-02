@@ -30,8 +30,8 @@ description: >
 
 只有这四条是硬的，其余全是引导。每条都对应一次真实失效。
 
-- **H1 回报触发**：turn 结束前，若 ①`head` 变了 ②状态从 working 转为 waiting ③产生 Owner 级阻塞——三者任一成立，**必须**写账本并 `send_message_to_thread` 回主控。
-- **H2 账本**：状态变更即 append，字段见 [ledger-schema.md](references/ledger-schema.md)。**不要把进度只留在自己的上下文里**，它会被 compaction 清掉。
+- **H1 回报触发**：turn 结束前，若 ①`head` 变了 ②状态从 working 转为 waiting ③产生 Owner 级阻塞——三者任一成立，**必须**向主控发送结构化 H1 envelope。子线不直接写 ledger。
+- **H2 账本**：controller 是 ledger 的唯一写入者；状态变更即由 controller append，字段见 [ledger-schema.md](references/ledger-schema.md)。**不要把进度只留在自己的上下文里**，它会被 compaction 清掉。
 - **H3 停滞二选一**（主控专属）：连续 5 轮所有 node 的 `head` 无变化 → 必须二选一：派发新工作，或向 Owner 报告并结束 loop。**没有第三个选项。** 从 `3/5` 起，若仍有 active / working node，每轮必须直接 `read_thread` 看最新进展；任一 thread 有具体、最新的工作心跳才可执行 `ledger.py heartbeat` 把 streak 归零。重复等待文案、旧进展或仅有 active 状态都不算心跳。全员 idle 时不重置，`idle_nodes` 仍是独立派活信号。账本里有尚未上报的 pending 决策时立即上报，不进入下一轮；已上报但仍 pending 的决策不再豁免停滞判定。
 - **H4 seam 归属**：任何"我在等某个上游产物"都要指向一个 `seam_id`，且该 seam 在账本里必须有 `producer`。**等一个没人负责造的东西，是错误状态，不是阻塞状态。**
 
@@ -48,13 +48,23 @@ description: >
 ### 一轮循环长什么样
 
 主控每轮：敲固定 JS 片段 → `ledger.py sync` → 读摘要 → `ledger.py stall-check` → 按退出码决策。
-子线每轮：干活 → 若命中 H1 触发条件则 `ledger.py report` + 回报主控。
+子线每轮：干活 → 若命中 H1 触发条件则发送 H1 envelope + 回报主控；controller 验证后代写 ledger。
 
 轮询的固定片段与 `wake.reason` 语义见 [poll-contract.md](references/poll-contract.md)。**那段 JS 要原样敲，不要"优化"它。** 它打印的那个投影就是 `ledger.py` 的全部输入——**rollout 只记录你打印的内容，不记录工具的原始返回**，所以少打印一个字段，主控就永久少一份判断依据。任何简化都会被 `sync` 的自检当场拦下并作废本轮。
 
 ### 一个容易搞反的语义
 
 `wait_threads` 返回的 `wake.reason == "inactiveStatus"` 意思是**有线程闲着**，不是"没有变化"。前者要派活，后者才是等。上一轮它出现了 468 次，被当成了后者，于是主控安静地空转了几个小时。
+
+### 最小 H1 envelope（无新 API）
+
+子线通过现有 `send_message_to_thread` 发送一段 JSON，不运行 `ledger.py report`、`seam` 或 `decide`。字段固定为：
+
+```json
+{"v":1,"registry":"<absolute-registry-json>","coordination_id":"<id>","node":"<node>","session_id":"<current-session-id>","event":"head_changed|state_changed|owner_blocked|seam_delivered|handoff_prepared","state":"working|awaiting_seam|awaiting_owner|done","head":"<full-git-sha>","waiting_on":[],"artifact":null,"details":null,"note":"<short-fact>"}
+```
+
+`awaiting_seam` 必须带 `waiting_on:["seam:<id>"]`；其他状态通常为空数组。`session_id` 必须是 child 当前 session，`artifact` 在无交付物时为 `null`。`details` 只承载事件所需的机械字段：seam 交付带 `seam_id/consumers`，Owner 阻塞带 `decision_id/blocks/question`，handoff 带 `card_path/card_sha256`；其他事件为 `null`。controller 重新读取 `registry`，确认 session 仍是该 node 的 current session，并确认 H1 的 HEAD 既是最新 ledger HEAD 的后代、又位于该 node 当前 worktree HEAD 的历史上，才可用现有 ledger 命令 append。seam 登记与 Owner decision 也只由 controller 写入。
 
 ---
 
@@ -68,8 +78,8 @@ description: >
 
 调度接口只有两条：
 
-- **H1**：状态变化就回报主控，不要等它来问。它拉取你的机制不可靠。
-- **H2**：写账本。
+- **H1**：状态变化就发送 H1 envelope 回主控，不要等它来问。它拉取你的机制不可靠。
+- **H2**：不直接写账本；由主控验证 envelope 后 append。
 
 上报边界（什么该自己扛、什么该往上递）：
 
@@ -81,7 +91,7 @@ description: >
 
 当你发现"当前没有安全的独立 lane"时，**"提交一份记录我被阻塞的文档"不算产出**。它看起来像进展，实际是停滞的伪装。上一轮七条分支里六条的最后一个 commit 都是这种 `docs(...)`。
 
-正确动作是 H1：把阻塞写成一条带 `seam_id` 的账本记录并回报主控，然后**明确说自己空了**。空闲是一个需要被调度的信号，不是一个需要被文档化的状态。
+正确动作是 H1：把阻塞写成带 `seam:<id>` 的 envelope 回报主控，然后**明确说自己空了**。空闲是一个需要被调度的信号，不是一个需要被文档化的状态。
 
 ---
 
@@ -96,7 +106,7 @@ description: >
 
 原因很直白：所有人都在等 seam，而你是造 seam 的。**让生产者去等消费者，环就闭上了。** 上一轮主控亲手让一条 Foundation 线待命，那条线此后两小时零产出，是死锁闭合的关键一步。
 
-交付时在账本 `seams.jsonl` 登记 `seam_id` + `consumers` + `artifact`。没登记的 seam 等于没交付——下游查不到 producer，会按 H4 判成错误状态。
+交付时向主控发送包含 `seam:<id>` 与 artifact 事实的 H1；由 controller 在账本 `seams.jsonl` 登记 `seam_id` + `consumers` + `artifact`。没登记的 seam 等于没交付——下游查不到 producer，会按 H4 判成错误状态。
 
 其余开发方式与 Role A 相同（impl-package 体系、公共约定）。
 
@@ -112,7 +122,7 @@ description: >
 
 ### 开跑前
 
-跑 `ledger.py preflight --coordination-id <id>`，**`PREFLIGHT OK` 才能开始轮询**。它拦的是 worktree 写错、两个 node 共用 worktree/branch、registry 分支与实际不符这类**全程无声**的问题——不拦的话，`head` 会串号或静默进 `head_unavailable`，停滞判定从第一轮起就是失真的。冷启动的完整顺序（goal 是最后一步）见 [goal-and-delegation.md §四](references/goal-and-delegation.md)。
+正式调用统一使用 `--registry <absolute-registry-json>`；runtime 由 registry sibling 与 `coordination_id` 推导。旧的 `--coordination-id` + 环境变量路径仅为兼容旧调用。跑 `ledger.py preflight --registry <absolute-registry-json>`，**`PREFLIGHT OK` 才能开始轮询**。它拦的是 worktree 写错、两个 node 共用 worktree/branch、registry 分支与实际不符这类**全程无声**的问题——不拦的话，`head` 会串号或静默进 `head_unavailable`，停滞判定从第一轮起就是失真的。冷启动的完整顺序（goal 是最后一步）见 [goal-and-delegation.md §四](references/goal-and-delegation.md)。
 
 ### 每轮做什么
 
@@ -145,6 +155,6 @@ description: >
 
 - [design-notes.md](references/design-notes.md) — 设计依据、四条硬规则的证据、第一轮要观察的读数
 - [poll-contract.md](references/poll-contract.md) — 固定 JS 片段、wake 语义、一轮的动作序列
-- [ledger-schema.md](references/ledger-schema.md) — 三个 jsonl 的字段定义
+- [ledger-schema.md](references/ledger-schema.md) — 四个 JSONL 的字段定义
 - [session-dispatch.md](references/session-dispatch.md) — 三个角色统一的两阶段交接契约 + 角色 delta 表
 - [owner-thread-broker](owner-thread-broker/SKILL.md) — 线程路由与 Owner 授权边界

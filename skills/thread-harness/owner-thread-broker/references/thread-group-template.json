@@ -16,6 +16,7 @@
   },
   "children": {
     "replace-with-stable-node-id": {
+      "active": true,
       "topic": "Required current session goal or topic",
       "current_session_id": "replace-with-current-session-id",
       "previous_session_ids": [],

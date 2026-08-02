@@ -7,7 +7,7 @@
 四条不可动摇的约束：
 
 1. `timeoutMs` 固定为 `120000`，与当前 `wait_threads` 平台上限一致。
-2. `targets` 必须覆盖 registry 中**全部 children，不含 controller 自己**。主控轮询自身没有意义，且会让 `n` 多算一个而每轮判 `ROUND INVALID`。
+2. `targets` 必须覆盖 registry 中**全部 active children，不含 controller 自己**。inactive child 只保留历史，不进入 poll；主控轮询自身没有意义，且会让 `n` 多算一个而每轮判 `ROUND INVALID`。
 3. `text()` 输出**下面这个投影**，字段一个都不能少。`ledger.py sync` 从 controller rollout 里读这个投影——**你不打印的东西，任何地方都不存在**（rollout 记录的是 exec 打印的内容，不是工具原始返回）。
 4. `txt` 截断到 500 字符。需要某条线的全文时用 `codex_app__read_thread` 单独取，不要放宽这里。
 
@@ -37,10 +37,10 @@ text(JSON.stringify({
 
 ## 平台约束
 
-- `wait_threads` 单次最多接受 8 个 `targets`。本 harness 当前假设 children <= 8；超过 8 的分片轮询方案本轮不做，属于已知限制。
+- `wait_threads` 单次最多接受 8 个 `targets`。本 harness 当前假设 active children <= 8；超过 8 的分片轮询方案本轮不做，属于已知限制。
 - 当前 Desktop bridge 可能把工具结果包装为 JSON 字符串；固定片段必须先做 object/string 双态解包，再输出规定投影。
 - `create_thread` 不是无条件自授权动作，需要 Owner 在 goal 或对话中明确授权。主控 goal 模板里已包含该授权。
-- `create_thread` 无法给子线设置持久 goal，只有初始 prompt。因此子线的 H1/H2 不像主控那样免疫 compaction；缓解手段是主控靠 `last_report_ts` 与 `never_reported` 检测漏报，而不是相信子线记得。
+- `create_thread` 无法给子线设置持久 goal，只有初始 prompt。因此子线的 H1 不像主控那样免疫 compaction；缓解手段是主控靠 `last_report_ts` 与 `never_reported` 检测漏报，而不是相信子线记得。子线不直接运行 `ledger.py report/seam/decide`。
 - timeout 契约固定为 `120000`。更小会退化为忙等，更大会被当前平台参数校验拒绝。
 
 ## wake.reason 语义
@@ -55,15 +55,15 @@ text(JSON.stringify({
 ## 一轮动作序列
 
 1. 在 exec JS 中原样敲固定片段，只替换 `ids` 的内联 session id 列表。
-2. 执行 `python skills/thread-harness/scripts/ledger.py sync --coordination-id <id> --round <n>`。
+2. 执行 `python skills/thread-harness/scripts/ledger.py sync --registry <absolute-registry-json> --round <n>`。
 3. 读取 `sync` 的紧凑摘要：
-   - `idle_nodes`：该派活。
+   - `idle_nodes`：该派活；只有 active 且最新 ledger state 为 `working` 的 node 才进入。`idle`、`inactive`、`notLoaded`、`not_loaded` 都可作为 idle 信号；`awaiting_seam`、`awaiting_owner`、`done` 和 inactive registry child 排除。
    - `changed_nodes`：有新 head，需要读或推进。
    - `advance_kinds`：本轮 HEAD 推进类型，`docs` 不清零 dispatch 计数，`code` / `unknown` 会清零。
    - `unchanged`：本轮没有变化。
    - `timedOut`：`true (timeout, no change)` 表示 wait 超时且没有 poll 内容，区别于被唤醒但无文本。
    - `head_unavailable`：这些 node 的 worktree/git HEAD 取不到；不要把它当成"无变化"。
-   - `never_reported`：这些 node 从未通过 `ledger.py report` 自报；用来判断 H1 是否真实遵守。
+   - `never_reported`：这些 node 从未通过 controller 验证的 H1 写入 state；用来判断 H1 是否真实遵守。
    - `stale_reports`：这些 node 的最后一次 report 后又出现 git HEAD 变化；不要把旧 report 当成当前阻塞状态。
    - `unknown_status`：这些 node 的 Desktop status 不在已知映射内；不要默认当成 `working`。
    - `pending_decisions`：大于 0 时准备上报 owner。
@@ -73,18 +73,18 @@ text(JSON.stringify({
    - `dispatches_since_progress`：自最近一次 code 级 git head 推进以来，rollout 中有配对 output 的 `tools.codex_app__send_message_to_thread` 与 `tools.codex_app__create_thread` 调用次数。它只测量，不阻断。
    - `docs_only_advances`：自最近一次 code 级推进以来的 docs-only HEAD 推进次数。
    - `corrupt_ledger_lines`：JSONL 中无法解析的坏行数量。
-4. 执行 `python skills/thread-harness/scripts/ledger.py stall-check --coordination-id <id>`。
+4. 执行 `python skills/thread-harness/scripts/ledger.py stall-check --registry <absolute-registry-json>`。
 5. 按退出码和输出标记决策。`CHECK_HEARTBEAT` 的退出码也是 `0`，但不能当普通 `OK` 略过。
 
 ## 开跑前：preflight
 
 ```powershell
-python skills/thread-harness/scripts/ledger.py preflight --coordination-id <id>
+python skills/thread-harness/scripts/ledger.py preflight --registry <absolute-registry-json>
 ```
 
 只读，不写任何 JSONL。`PREFLIGHT OK`（退出码 `0`）才能开始轮询；`PREFLIGHT FAILED`（退出码 `5`）时先修。
 
-它拦的全是**会静默扭曲读数**的问题：worktree 路径写错、两个 node 共用 worktree 或 branch、registry 的 branch 与该 worktree 实际 checkout 的分支不一致、`children > 8`、`current_session_id` 重复、controller 的 session id 找不到 rollout、运行时目录未 `init`。
+它拦的全是**会静默扭曲读数**的问题：worktree 路径写错、两个 active node 共用 worktree 或 branch、registry 的 branch 与该 worktree 实际 checkout 的分支不一致、active `children > 8`、active `current_session_id` 重复、controller 的 session id 找不到 rollout、运行时目录未 `init`。inactive child 保留历史，不参与这些 active-child 检查。
 
 `dirty_worktree`（Owner WIP）与 `child_rollout_missing` 只报警告，不阻断——前者是合法状态但派发 prompt 里必须写明不可触碰，后者不影响判定，因为子线状态从 `wait_threads` 投影读、不从 rollout 读。
 
@@ -93,10 +93,10 @@ python skills/thread-harness/scripts/ledger.py preflight --coordination-id <id>
 接手新 session 时先执行：
 
 ```powershell
-python skills/thread-harness/scripts/ledger.py status --coordination-id <id>
+python skills/thread-harness/scripts/ledger.py status --registry <absolute-registry-json>
 ```
 
-`status` 只读账本和 registry，不读 rollout，也不要求新 session 已经跑过首轮 poll。它用于恢复各 node 最新 state/head/turn/最后 report 时间、pending decisions、未交付 seams、`stall_streak` 和最近一次 `act`。
+`status` 先读 registry，再只读账本，不读 rollout，也不要求新 session 已经跑过首轮 poll；registry 或 runtime 缺失时报告 `runtime_uninitialized` 或清晰错误，不创建目录、空 JSONL 或 `sync-state.json`。它用于恢复各 node 最新 state/head/turn/最后 H1 时间、pending decisions、未交付 seams、`stall_streak` 和最近一次 `act`。
 
 `stall-check` 从 `3/5` 起、到 `5/5` 前输出 `CHECK_HEARTBEAT` 时：
 
@@ -104,7 +104,7 @@ python skills/thread-harness/scripts/ledger.py status --coordination-id <id>
 2. 任一 thread 出现具体且最新的执行心跳（例如新测试正在运行、新 finding 已闭合、正在执行的新命令），执行：
 
 ```powershell
-python skills/thread-harness/scripts/ledger.py heartbeat --coordination-id <id> --node <node> --evidence "<一句话具体进展>"
+python skills/thread-harness/scripts/ledger.py heartbeat --registry <absolute-registry-json> --node <node> --evidence "<一句话具体进展>"
 ```
 
 3. heartbeat 只允许在 `3/5` 或 `4/5` 时执行，并把全局 `stall_streak` 归零。重复等待文案、旧进展、笼统的“仍在工作”或仅有 active 状态都不算心跳；没有具体新进展时不执行 heartbeat，下一轮继续检查，直到 `5/5`。
@@ -112,14 +112,14 @@ python skills/thread-harness/scripts/ledger.py heartbeat --coordination-id <id> 
 
 该命令只更新 `sync-state.json` 的 reset marker；`--evidence` 只用于迫使 controller 当场说清具体进展，不落盘。它不修改任何 append-only JSONL，也不保存 thread 消息。
 
-`stall-check` 先看 `acts.jsonl` 的最后一行。若最后一行是 `kind=="halt"`，输出 `HALTED (ts=<...>, reason=<...>, pending=<...>)` 并返回 `4`；追加任何 `dispatch` / `escalate` 行都会自动解除 halted。
+`stall-check` 看最近一次 halt 及其记录的 `halt_poll_seq`。若还没有更大的有效 poll seq，输出 `HALTED (ts=<...>, reason=<...>, pending=<...>)` 并返回 `4`；`dispatch` / `escalate` 不会隐式 resume。Owner 在 controller 对话明确恢复后，controller 运行新的有效 poll + sync，新 poll seq 自动使旧 halt 失效；halt 历史保留。
 
 `HALTED` 单独占一个退出码而不是复用 `0`，理由和 `64` 一样：`0` 已经同时承载 `OK` 与 `CHECK_HEARTBEAT`，而 goal 模板里写的是「`0 OK` → 按 sync 摘要正常决策」。若 `HALTED` 也退 `0`，一个只按退出码分支的接手主控会把「loop 已终止」读成「一切正常」，静默续跑一个已经停掉的 coordination——正是本 harness 要消灭的那类无声失效。
 
 `stall-check` 返回 `MUST_ESCALATE` 时，只列出尚未上报的 pending decision。上报后用 `act --escalate` 留下已上报事实；同一 id 在 `answered` 后重新 `raise` 时，必须重新上报，因为判断会比较 escalate 行 `ts` 是否不早于最新 raise 行 `ts`：
 
 ```powershell
-python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --escalate --decision-id <d>
+python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry-json> --escalate --decision-id <d>
 ```
 
 全部 pending decision 都已上报时，`stall-check` 不再返回 `3`，会继续进入 streak 判定；输出行会带 `pending_escalated: <id...>`，避免这些 pending 从主控视野消失。
@@ -127,8 +127,8 @@ python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --esca
 `stall-check` 返回 `MUST_ACT` 后，用 `act` 留下本轮选择：
 
 ```powershell
-python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --dispatch --seam-id <s> --producer <node> --deliverable "<一句话>"
-python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --halt --reason "<一句话>"
+python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry-json> --dispatch --seam-id <s> --producer <node> --deliverable "<一句话>"
+python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry-json> --halt --reason "<一句话>"
 ```
 
 `act --dispatch` 的 `--seam-id`、`--producer`、`--deliverable` 都必填，且 producer 必须是 registry node。`act --halt` 的 `--reason` 必填，缺失时退出 `64`；halt 行会记录当时全部 pending decision id 的快照。`stall-check` 会输出 `last_must_act_answered: yes|no`，只报告上一次 `MUST_ACT` 后是否有新 `act` 行，不改变退出码。
@@ -141,7 +141,7 @@ python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --halt
 | `1` | `sync` 自检失败（`ROUND INVALID`）或 rollout 未就绪（`SYNC STALE`） | 见下方「自检失败处理」。**本轮作废，不要当成"无变化"** |
 | `2` | `stall-check` 输出 `MUST_ACT` | 二选一：派发新工作，或向 Owner 报告并结束 loop |
 | `3` | `stall-check` 输出 `MUST_ESCALATE` | 立即上报尚未上报的 pending decision，并写 `act --escalate`；本轮结束。已上报 pending 不再屏蔽 `2` |
-| `4` | `stall-check` 输出 `HALTED` | loop 已由最后一条 halt act 终止。**不要继续轮询**，先向 Owner 确认；恢复只能由追加 `dispatch` / `escalate` 行完成 |
+| `4` | `stall-check` 输出 `HALTED` | loop 已由最近一次 halt 终止。**不要继续轮询**，先向 Owner 确认；恢复只能由 Owner 明确恢复后产生新的有效 poll/sync seq 完成 |
 | `5` | `preflight` 输出 `PREFLIGHT FAILED` | 修掉列出的每一条再开跑。**不要带着失败开始轮询** |
 | `64` | 命令用法错误（参数拼错、缺必填项） | 修正命令重跑。**这不是业务信号** |
 
@@ -157,7 +157,7 @@ python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --halt
 python skills/thread-harness/scripts/selftest.py
 ```
 
-它用独立构造的 fixture 覆盖 `sync` 自检判据、`SYNC STALE` 的错误信息完整性、决策与停滞的退出码优先级、已上报 pending 不屏蔽 `MUST_ACT`、同 id 重新 raise 需要重新上报、`act --halt` 与 halted 自动解除、默认 `5/5` 阈值、从 `3/5` 开始的 `CHECK_HEARTBEAT`、heartbeat reset 不修改 JSONL、`decide --raise/--answer`、多值参数空格分隔、`report` 状态不被 poll 覆盖、陈旧 report、重复 `round`、docs-only/code 推进分类、`act` 留痕、`status` 接手路径、真实 git HEAD 停滞判断、用法错误退 64。**这份 fixture 刻意不复用 `ledger.py` 自身的解析逻辑**——用被测代码的假设去造测试数据，测不出假设本身是错的。（初版轮询契约就是这样漏掉了"rollout 只记录打印内容"这个事实。）
+它用独立构造的 fixture 覆盖 `sync` 自检判据、`SYNC STALE` 的错误信息完整性、决策与停滞的退出码优先级、已上报 pending 不屏蔽 `MUST_ACT`、同 id 重新 raise 需要重新上报、`act --halt` 直到新的有效 poll seq 才恢复、默认 `5/5` 阈值、从 `3/5` 开始的 `CHECK_HEARTBEAT`、heartbeat reset 不修改 JSONL、`decide --raise/--answer`、多值参数空格分隔、controller 验证 H1 source session 与 HEAD 后代、`report` 状态不被 poll 覆盖、陈旧 report、重复 `round`、docs-only/code 推进分类、active/inactive child 过滤、只读 `status`、`act` 留痕、真实 git HEAD 停滞判断、用法错误退 64。**这份 fixture 刻意不复用 `ledger.py` 自身的解析逻辑**——用被测代码的假设去造测试数据，测不出假设本身是错的。（初版轮询契约就是这样漏掉了"rollout 只记录打印内容"这个事实。）
 
 ## 自检失败处理
 
@@ -175,7 +175,7 @@ ROUND INVALID: poll snippet altered (<具体原因>)
 | --- | --- |
 | 调用 source（legacy `arguments` / modern `input`）里 `timeoutMs == 120000` | `timeoutMs <n> != 120000` |
 | 调用 arguments 里能解析出 `const ids = [...]` | `cannot parse ids array from call` |
-| 实际 ids 集合等于 registry 中全部 children 的 `current_session_id` 集合 | `targets mismatch (missing=<...>, unexpected=<...>)` |
+| 实际 ids 集合等于 registry 中全部 active children 的 `current_session_id` 集合 | `targets mismatch (missing=<...>, unexpected=<...>)` |
 | 输出可解析为 JSON 且 `v == 1` | `projection missing or wrong version` |
 | 输出含 `n` 与 `polls` 两个键 | `projection shape altered (missing <key>)` |
 | `n` 等于实际 ids 数量 | `projection n=<a> != actual targets <b>` |

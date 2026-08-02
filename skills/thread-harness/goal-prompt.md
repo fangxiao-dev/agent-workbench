@@ -36,12 +36,12 @@ poll 契约：<repo>\skills\thread-harness\references\poll-contract.md
 
 ### 每轮固定三步
 
-每轮先重读 registry，取全部 children 当前的 current_session_id。
+每轮先重读 registry，取全部 active children 当前的 current_session_id。
 不得使用记忆里的 id——子线换 session 后，旧 id 会让每轮都判 ROUND INVALID。
 
-1. 按 poll 契约原样轮询全部 children（不含你自己），timeoutMs 固定 120000
-2. ledger.py sync
-3. ledger.py stall-check
+1. 按 poll 契约原样轮询全部 active children（不含你自己），timeoutMs 固定 120000
+2. ledger.py sync --registry <绝对路径> --round <n>
+3. ledger.py stall-check --registry <绝对路径>
 
 确切参数在 poll 契约里。拼错会退 64，按报错改，不要猜。
 
@@ -50,7 +50,7 @@ poll 契约：<repo>\skills\thread-harness\references\poll-contract.md
 0  OK / CHECK_HEARTBEAT —— 按 sync 摘要决策。CHECK_HEARTBEAT 不能当普通 OK 略过
 1  本轮 poll 无效或 rollout 未就绪 —— 本轮作废。不得复用旧数据，更不得当成"无变化"
 2  MUST_ACT —— 二选一，见下
-3  MUST_ESCALATE —— 有尚未上报的 Owner 决策；立即上报并 act --escalate 留痕，本轮结束
+3  MUST_ESCALATE —— 有尚未上报的 Owner 决策；立即上报并 act --registry <绝对路径> --escalate --decision-id <d> 留痕，本轮结束
 4  HALTED —— loop 已终止，停止轮询，等 Owner
 64 用法错误 —— 修命令重跑。这不是业务信号
 
@@ -111,9 +111,13 @@ ledger：<repo>\skills\thread-harness\scripts\ledger.py
 不得使用历史记忆、旧 prompt 或上一轮缓存的 id——主控换 session 后，
 发给旧 id 的回报不会到达任何人，而且你不会收到任何错误。
 
+H1 只发送结构化 JSON，不直接运行 ledger.py：
+`{"v":1,"registry":"<absolute-registry-json>","coordination_id":"<id>","node":"<node>","session_id":"<current-session-id>","event":"head_changed|state_changed|owner_blocked|seam_delivered|handoff_prepared","state":"working|awaiting_seam|awaiting_owner|done","head":"<full-git-sha>","waiting_on":[],"artifact":null,"details":null,"note":"<short-fact>"}`。`details` 仅按事件携带 seam 的 `seam_id/consumers`、Owner 阻塞的 `decision_id/blocks/question`，或 handoff 的 `card_path/card_sha256`。
+controller 验证当前 session、ledger HEAD 与 worktree HEAD 的祖先关系后，才代写 ledger。
+
 ### 每个 turn 结束前必须检查
 
-下列任一成立，先写账本（ledger.py report），再向最新 controller.current_session_id 回报：
+下列任一成立，先向最新 controller.current_session_id 发送 H1 envelope，再回报：
 
 1. git HEAD 变了
 2. 状态从 working 转为等待
@@ -158,9 +162,9 @@ ledger：<repo>\skills\thread-harness\scripts\ledger.py
   ① 向主控要下一个明确的 seam；② 报告本线 seam 已交付并附 artifact 指针。
   所有人都在等 seam 而你是造 seam 的——让生产者去等消费者，环就闭上了。
 
-- **交付即登记，没登记等于没交付。** 用 ledger.py seam 登记 seam id、consumers
-  和可核验的 artifact（例如 commit:<完整 sha>）。没登记的 seam 下游查不到 producer，
-  会被判成错误状态。
+- **交付即登记，没登记等于没交付。** 在 H1 envelope 中报告 seam id、consumers
+和可核验的 artifact（例如 commit:<完整 sha>），由 controller 用 ledger.py seam 登记。
+没登记的 seam 下游查不到 producer，会被判成错误状态。
 
 - 一个 worktree 同时只能有一个写入者。不得继承、联系或恢复旧 Foundation session。
 
@@ -172,7 +176,7 @@ ledger：<repo>\skills\thread-harness\scripts\ledger.py
 ### 每个 turn 结束前必须检查
 
 git HEAD 变了 / 状态从 working 转为等待 / 出现只有 Owner 能决定的阻塞——
-任一成立，先写账本（ledger.py report），再向最新 controller.current_session_id 回报。
+任一成立，先向最新 controller.current_session_id 发送 H1 envelope，再回报。
 ```
 
 ---

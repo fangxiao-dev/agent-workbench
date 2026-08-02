@@ -254,6 +254,10 @@ def run(*args):
     return p.returncode, (p.stdout or "") + (p.stderr or "")
 
 
+def run_registry(*args):
+    return run(*args, "--registry", str((BROKER / f"{CID}.json").resolve()))
+
+
 def ledger_rows(name):
     path = BROKER / CID / name
     if not path.exists():
@@ -622,11 +626,16 @@ run("act", "--coordination-id", CID, "--halt", "--reason", "temporary stop")
 rc_halted, out_halted = run("stall-check", "--coordination-id", CID)
 rc_dispatch, out_dispatch = run("act", "--coordination-id", CID, "--dispatch", "--seam-id", "resume-seam",
                                 "--producer", "alpha", "--deliverable", "resume concrete work")
+rc_still_halted, out_still_halted = run("stall-check", "--coordination-id", CID)
+append_wait(CALL_OK, projection(alpha_turn="owner-resume", beta_turn="owner-resume"), call_id="owner-resume")
+rc_sync_resume, out_sync_resume = run("sync", "--coordination-id", CID, "--round", "8")
 rc, out = run("stall-check", "--coordination-id", CID)
-fails += check("halt 后追加 dispatch 行会自动解除 halted 并恢复 MUST_ACT 判据",
+fails += check("halt 只阻止当前 loop，dispatch 不得隐式 resume；新 valid poll 才解除",
                rc_halted == 4 and "HALTED" in out_halted
-               and rc_dispatch == 0 and rc == 2 and "MUST_ACT" in out and "HALTED" not in out,
-               f"halted={out_halted.strip()} dispatch={out_dispatch.strip()} after={out.strip()}")
+               and rc_dispatch == 0 and rc_still_halted == 4 and "HALTED" in out_still_halted
+               and rc_sync_resume == 0 and rc == 0 and "HALTED" not in out,
+               f"halted={out_halted.strip()} dispatch={out_dispatch.strip()} "
+               f"still={out_still_halted.strip()} sync={out_sync_resume.strip()} after={out.strip()}")
 
 print("-" * 78)
 write_fixture(CALL_OK, GOOD_PROJECTION, git_worktrees=True)
@@ -855,6 +864,113 @@ _fields = {k.strip(): v.strip() for k, _, v in
 fails += check("省略 --head 的 report 不得立刻被判 stale，其 waiting_on 必须计入 seams_unowned",
                _fields.get("seams_unowned") == "1" and _fields.get("stale_reports") == "-",
                sync_out.strip()[:400])
+
+# --- 新契约：显式 registry、active child、controller H1 写入与只读 status ---
+reset_fixture(git_worktrees=True)
+runtime_path = BROKER / CID
+before_status = {str(path.relative_to(BROKER)) for path in BROKER.rglob("*")}
+rc, out = run_registry("status")
+after_status = {str(path.relative_to(BROKER)) for path in BROKER.rglob("*")}
+fails += check("显式 --registry 的 status 在 runtime 缺失时只读且不建目录/JSONL",
+               rc == 0 and "runtime: missing" in out and before_status == after_status
+               and not runtime_path.exists(), out.strip())
+
+rc, out = run_registry("init")
+fails += check("显式 --registry 的 runtime 位于 registry sibling/coordination_id",
+               rc == 0 and runtime_path.is_dir() and "initialized" in out, out.strip())
+
+registry = json.loads((BROKER / f"{CID}.json").read_text(encoding="utf-8"))
+registry["children"]["historical"] = {
+    "active": False,
+    "topic": "retained history",
+    "current_session_id": "inactive-history-session",
+    "worktree": registry["children"]["alpha"]["worktree"],
+    "branch": registry["children"]["alpha"]["branch"],
+}
+write_preflight_registry(registry)
+append_wait(CALL_OK, GOOD_PROJECTION, call_id="active-only-poll")
+rc, out = run_registry("sync", "--round", "1")
+fails += check("poll targets 只包含 active children，inactive 历史 child 保留但不入 poll",
+               rc == 0 and "valid=yes" in out and "historical" not in out,
+               out.strip())
+
+beta_head = git_head(BASE / "git" / "beta")
+rc_done, out_done = run_registry(
+    "report", "--node", "beta", "--source-session", NODES["beta"],
+    "--state", "done", "--head", beta_head,
+)
+append_wait(CALL_OK, GOOD_PROJECTION, call_id="done-not-idle")
+rc_done_sync, out_done_sync = run_registry("sync", "--round", "2")
+fails += check("done child 保留在 registry 但不得进入 idle_nodes",
+               rc_done == 0 and rc_done_sync == 0 and "idle_nodes:      alpha" in out_done_sync
+               and "idle_nodes:      beta" not in out_done_sync
+               and "historical" not in out_done_sync,
+               f"report={out_done.strip()} sync={out_done_sync.strip()}")
+
+reset_fixture(git_worktrees=True)
+run_registry("init")
+idle_without_inactive_wake = projection(
+    wake={"reason": "turnCompleted", "threadId": NODES["beta"], "hostId": "local"},
+    polls=[
+        {"id": NODES["alpha"], "status": "idle", "turn": "idle-turn",
+         "turnStatus": "completed", "txt": "alpha idle"},
+        {"id": NODES["beta"], "status": "running", "turn": "running-turn",
+         "turnStatus": "inProgress", "txt": "beta running"},
+    ],
+)
+append_wait(CALL_OK, idle_without_inactive_wake, call_id="idle-status-with-turn-completed")
+rc, out = run_registry("sync", "--round", "1")
+fails += check("poll status=idle 在非 inactiveStatus wake 下仍进入 idle_nodes",
+               rc == 0 and "idle_nodes:      alpha" in out and "idle_nodes:      beta" not in out,
+               out.strip())
+
+controller_head = git_head(BASE / "git" / "controller")
+rc, out = run_registry("report", "--node", "controller", "--state", "working", "--head", controller_head)
+fails += check("显式 registry 允许 controller 登记自身状态且不伪装 child H1",
+               rc == 0 and "reported controller state=working" in out,
+               out.strip())
+
+registry = json.loads((BROKER / f"{CID}.json").read_text(encoding="utf-8"))
+registry["children"]["alpha"]["active"] = True
+registry["children"]["beta"]["active"] = True
+write_preflight_registry(registry)
+rc, out = run_registry("report", "--node", "alpha", "--source-session", NODES["beta"],
+                       "--state", "working", "--head", git_head(BASE / "git" / "alpha"))
+fails += check("H1 source session 不匹配时 controller 不得写 ledger",
+               rc == 64 and "source session mismatch" in out, out.strip())
+
+alpha_head = git_head(BASE / "git" / "alpha")
+rc, out = run_registry("report", "--node", "alpha", "--source-session", NODES["alpha"],
+                       "--state", "working", "--head", alpha_head)
+commit_file(BASE / "git" / "alpha", "h1.py", "print('h1')\n", "h1 child progress")
+alpha_child_head = git_head(BASE / "git" / "alpha")
+rc_descendant, out_descendant = run_registry(
+    "report", "--node", "alpha", "--source-session", NODES["alpha"],
+    "--state", "working", "--head", alpha_child_head,
+)
+rc_non_descendant, out_non_descendant = run_registry(
+    "report", "--node", "alpha", "--source-session", NODES["alpha"],
+    "--state", "working", "--head", "f" * 40,
+)
+fails += check("controller 只接受 source HEAD 的后代 H1",
+               rc == 0 and rc_descendant == 0 and rc_non_descendant == 64
+               and "not a descendant" in out_non_descendant,
+               f"first={out.strip()} descendant={out_descendant.strip()} non_descendant={out_non_descendant.strip()}")
+
+reset_fixture(git_worktrees=True)
+rc, out = run_registry("status")
+fails += check("status 显式 registry 不存在时不创建任何 runtime 文件",
+               rc == 0 and "runtime_uninitialized: yes" in out
+               and "runtime: missing" in out
+               and not (BROKER / CID).joinpath("progress.jsonl").exists(),
+               out.strip())
+missing_registry = (BROKER / "missing-registry.json").resolve()
+before_missing = {str(path.relative_to(BROKER)) for path in BROKER.rglob("*")}
+rc, out = run("status", "--registry", str(missing_registry))
+after_missing = {str(path.relative_to(BROKER)) for path in BROKER.rglob("*")}
+fails += check("status registry 不存在时只报清晰错误且不创建父目录",
+               rc == 1 and "registry not found" in out and before_missing == after_missing,
+               out.strip())
 
 shutil.rmtree(BASE, ignore_errors=True)
 print("=" * 78)

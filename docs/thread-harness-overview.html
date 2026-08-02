@@ -308,7 +308,7 @@
               <li>维护路由，轮询全部 children</li>
               <li>读取账本，判断 idle / changed / stall</li>
               <li>缺 seam 就派 Foundation 线</li>
-              <li>三轮无 committed progress 必须行动或升级</li>
+              <li>五轮无 committed progress 必须行动或升级</li>
             </ul>
             <span class="mini-pill" style="color:var(--cyan)">负责“整体有没有前进”</span>
           </article>
@@ -380,7 +380,7 @@
             <div class="flow-step">
               <div class="step-no">05 · ROUTE</div>
               <h3>派活或升级</h3>
-              <p>闲线派任务；有 Owner 决策立即上报；三轮无推进只能 dispatch 或 escalate。</p>
+              <p>闲线派任务；有 Owner 决策立即上报；五轮无推进只能 dispatch 或 halt。</p>
             </div>
           </div>
           <div class="signal-row">
@@ -400,22 +400,22 @@
           <article class="rule">
             <div class="rule-id">H1 · REPORT</div>
             <h3>触发就回报</h3>
-            <p>HEAD 变了、状态从 working 转 waiting、出现 Owner 级阻塞，任一发生都要写账本并给主控发消息。不要等主控来问。</p>
+            <p>HEAD 变了、状态从 working 转 waiting、出现 Owner 级阻塞，任一发生都要发送结构化 H1；child 不直接写账本。不要等主控来问。</p>
           </article>
           <article class="rule">
             <div class="rule-id">H2 · LEDGER</div>
             <h3>状态变更即追加</h3>
-            <p>进度不能只留在上下文里，因为 compaction 会清掉它。JSONL 账本只追加新事实，不改写旧行。</p>
+            <p>进度不能只留在上下文里，因为 compaction 会清掉它。controller 验证 current session 与 worktree HEAD 关系后单写 JSONL；账本只追加新事实，不改写旧行。</p>
           </article>
           <article class="rule h3">
             <div class="rule-id">H3 · STALL</div>
-            <h3>三轮无提交，二选一</h3>
-            <p>连续 3 轮所有 node 的 Git HEAD 无变化：必须派新工作，或向 Owner 报告并结束 loop。禁止“继续等待”。</p>
+            <h3>五轮无提交，二选一</h3>
+            <p>连续 5 轮所有 node 的 Git HEAD 无变化：必须派新工作，或向 Owner 报告并结束 loop。禁止“继续等待”。从第 3/5 起先直接读取 active / working thread；新鲜具体的执行心跳才可重置计数。</p>
           </article>
           <article class="rule h4">
             <div class="rule-id">H4 · SEAM</div>
             <h3>等待必须有生产者</h3>
-            <p>任何 <code>awaiting_seam</code> 都要写 <code>seam:id</code>，且 seam 必须登记 producer。等一个没人负责造的东西，是错误状态。</p>
+            <p>任何 <code>awaiting_seam</code> 都要写 <code>seam:id</code>，且 seam 必须由 controller 登记 producer。等一个没人负责造的东西，是错误状态。</p>
           </article>
         </div>
         <div class="callout"><strong>H3 的精确含义：</strong>没有 committed progress，不等于所有线程都停止。即使某条线正在工作但尚未 commit，主控仍要给其他空闲线派活，或上报 Owner。</div>
@@ -452,12 +452,12 @@
             <thead><tr><th>组件 / 命令</th><th>它负责什么</th><th>在整体控制流中的位置</th></tr></thead>
             <tbody>
               <tr><td><code>owner-thread-broker</code></td><td>维护 coordination group 的 registry；处理 session handoff、worktree/branch 路由和 Owner 授权边界。</td><td>先于消息发送定位当前 session；不把审批混进路由文件。</td></tr>
-              <tr><td><code>ledger.py init</code></td><td>创建运行时目录和空账本。</td><td>协调组启动时执行。</td></tr>
+              <tr><td><code>ledger.py init --registry &lt;absolute-json&gt;</code></td><td>在 registry sibling/coordination_id 下创建运行时目录和空账本。</td><td>协调组启动时执行；旧 coordination-id 调用仍兼容。</td></tr>
               <tr><td><code>$call-grok</code></td><td>作为独立 CLI 辅助实现或调查，只回收结论，不承接协调责任。</td><td>由 Package / Foundation Child 在执行层按需调用；不进入 registry、poll 或 ledger。</td></tr>
               <tr><td><code>ledger.py sync</code></td><td>读取 rollout projection，校验 poll 契约；读取 registry worktree 的 Git HEAD；合并 progress 并输出摘要。</td><td>每轮 poll 之后的事实同步层。</td></tr>
-              <tr><td><code>ledger.py report</code></td><td>子线主动写入自己的 state、waiting_on、note。</td><td>H1/H2 的子线回报入口。</td></tr>
-              <tr><td><code>ledger.py seam</code></td><td>登记 seam 的 producer、consumers、交付 artifact。</td><td>让“等待什么”与“谁生产”形成可追踪关系。</td></tr>
-              <tr><td><code>ledger.py decide</code></td><td>提出或回答 Owner 级决策。</td><td>pending 时阻断普通轮询，优先上报。</td></tr>
+              <tr><td><code>H1 envelope + ledger.py report</code></td><td>子线发送含 <code>v/node/session_id/event/state/head/waiting_on/artifact/note</code> 的结构化 H1；controller 验证 registry current session 与 worktree HEAD 关系后写入 state、waiting_on、note。</td><td>H1/H2 的单写 ledger 回报入口。</td></tr>
+              <tr><td><code>ledger.py seam</code></td><td>controller 登记 seam 的 producer、consumers、交付 artifact。</td><td>让“等待什么”与“谁生产”形成可追踪关系。</td></tr>
+              <tr><td><code>ledger.py decide</code></td><td>controller/Owner 提出或回答 Owner 级决策。</td><td>pending 时阻断普通轮询，优先上报。</td></tr>
               <tr><td><code>ledger.py stall-check</code></td><td>根据 pending decision 和 stall streak 给出退出码。</td><td><code>0</code> 正常、<code>2</code> 必须行动、<code>3</code> 必须升级。</td></tr>
               <tr><td><code>ledger.py act</code></td><td>把 H3 二选一的实际选择记下来：dispatch 或 escalate。</td><td>防止主控口头上说“有动作”，账本却没有证据。</td></tr>
               <tr><td><code>ledger.py status</code></td><td>只读账本和 registry，恢复最新 state、seam、decision、stall 状态。</td><td>主控换 session 接手时的恢复入口。</td></tr>
@@ -474,7 +474,7 @@
         </div>
         <div class="truth">
           <article class="truth-card"><h3>地面真相优先</h3><p>能从 Git、rollout、registry 直接读到的事实，不依赖模型主动报告：真实推进看 Git HEAD，派发痕迹看 rollout，轮询覆盖看实际 ids 集合。</p></article>
-          <article class="truth-card"><h3>模型只补充不可观察状态</h3><p>子线是否在等待哪个 seam，外部无法直接知道，所以由子线通过 H1/H2 report 写入；主控用 never_reported、stale_reports 识别漏报或过期报告。</p></article>
+          <article class="truth-card"><h3>模型只补充不可观察状态</h3><p>子线是否在等待哪个 seam，外部无法直接知道，所以由子线通过结构化 H1 envelope 回报；controller 验证后写 report/seam/decide，主控用 never_reported、stale_reports 识别漏报或过期报告。</p></article>
         </div>
       </div>
     </section>
@@ -491,7 +491,7 @@
           </div>
           <div class="before-after">
             <div class="state-box before"><span class="label">Before · 静默死锁</span><p>多条线等待一个没有 owner 的 seam → Foundation 线被要求待命 → 主控继续轮询 → 没有明确的停滞上限 → Owner 很久都收不到需要决策的消息。</p></div>
-            <div class="state-box after"><span class="label">After · 显式控制回路</span><p>等待必须绑定 <code>seam:id</code> 和 producer；闲线进入 <code>idle_nodes</code>；三轮没有 committed progress 就触发 <code>MUST_ACT</code>；pending decision 立即变成 <code>MUST_ESCALATE</code>。</p></div>
+            <div class="state-box after"><span class="label">After · 显式控制回路</span><p>等待必须绑定 <code>seam:id</code> 和 producer；仅 active/working 线进入 <code>idle_nodes</code>；五轮没有 committed progress 就触发 <code>MUST_ACT</code>；pending decision 立即变成 <code>MUST_ESCALATE</code>。</p></div>
           </div>
         </div>
       </div>
@@ -502,7 +502,7 @@
         <h2>当前边界：它不是魔法</h2>
         <div class="limits">
           <article class="limit"><h3>子线 ≤ 8</h3><p>当前 poll contract 依赖单次 <code>wait_threads</code> 最多 8 个 target。超过 8 条线的分片与跨片合并尚未纳入本设计。</p></article>
-          <article class="limit"><h3>子线没有持久 goal</h3><p><code>create_thread</code> 只能给初始 prompt，不能为子线设置持久 goal。因此 H1/H2 仍依赖子线回报，主控要观察漏报。</p></article>
+          <article class="limit"><h3>子线没有持久 goal</h3><p><code>create_thread</code> 只能给初始 prompt，不能为子线设置持久 goal。因此 H1 仍依赖子线发送 envelope，主控要观察漏报；ledger 由 controller 单写。</p></article>
           <article class="limit"><h3>防退化，不防恶意伪造</h3><p>projection 自检主要防长跑压力下逐步简化；rollout 不能完全证明模型实际传给工具的参数，主动 decoy 仍是结构性限制。</p></article>
           <article class="limit"><h3>H4 分阶段</h3><p>第一阶段先登记并暴露无主 seam 数量；更严格的 producer 校验属于后续阶段，schema 先一次写全。</p></article>
           <article class="limit"><h3>docs 不等于 code progress</h3><p>dispatch 计数只在 code 级 HEAD 推进后清零，避免“提交一份阻塞说明文档”伪装成真正交付。</p></article>

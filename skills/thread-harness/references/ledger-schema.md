@@ -1,21 +1,21 @@
 # Thread Harness Ledger Schema
 
-本页是账本文件的字段参考。运行时目录为 `<broker-root>\<coordination_id>\`；routing registry 是同级的 `<broker-root>\<coordination_id>.json`，由 broker 维护，账本脚本只读。
+本页是账本文件的字段参考。正式调用显式传入 `<absolute-registry-json>`；运行时目录由 registry sibling 与其中的 `coordination_id` 推导，即 `<registry-parent>\<coordination_id>\`。旧的 `THREAD_HARNESS_BROKER_ROOT` + `--coordination-id` 仍兼容，routing registry 由 broker 维护，账本脚本不重写。
 
 `<broker-root>` 默认 `D:\ProgressRecord\codex-thread-broker`，按仓库归档时用 `THREAD_HARNESS_BROKER_ROOT` 指到 `D:\ProgressRecord\<repo>\codex-thread-broker`。`coordination_id` 用 `<YYMMDDHH>-<slug>`，时间戳取该 coordination 的起始小时。**不要放在 `%TEMP%`**——账本是接手与复盘唯一的事实来源。
 
-四个账本文件都是 JSON Lines，均为 append-only：只能追加新行，不重写旧行，不删除旧行。字段依据见 `design-notes.md` §5。
+四个账本文件都是 JSON Lines，均为 append-only：只能追加新行，不重写旧行，不删除旧行。**controller 是唯一 ledger writer**；child 只发送 H1 envelope，controller 验证后使用现有命令追加。字段依据见 `design-notes.md` §5。
 
 ## progress.jsonl
 
-记录每个 node 的最新可观测进度。写入者包括 `ledger.py sync` 和各子线通过 `ledger.py report` 主动上报。
+记录每个 node 的最新可观测进度。写入者包括 `ledger.py sync` 和 controller 验证 H1 后通过 `ledger.py report` 追加。
 
 字段按来源合成当前状态：
 
 - `src=="poll"` 是 broker 从 rollout 与 registry worktree 读到的地面真相，负责 `head` / `turn` / `status`。
-- `src=="report"` 是子线自报，负责 `state` / `waiting_on` / `last_report_ts`。
-- 某 node 从未 `report` 时，`state` 回落到 poll 推导值，`waiting_on` 视为空；`sync` 摘要会在 `never_reported` 中列出该 node。
-- `head` 只表示 git commit SHA，来源是 `git -C <worktree> rev-parse HEAD` 或 `report --head` 显式传入的 git SHA。Desktop `latestTurn.id` 存在 `turn`，不参与停滞判断。
+- `src=="report"` 是 controller 验证 H1 后写入的 state，负责 `state` / `waiting_on` / `last_report_ts`。
+- 某 node 从未有 controller 验证的 H1 report 时，`state` 回落到 poll 推导值，`waiting_on` 视为空；`sync` 摘要会在 `never_reported` 中列出该 node。
+- `head` 只表示 git commit SHA，来源是 registry worktree 的 `git rev-parse HEAD` 或经过 source session 与后代校验的 H1 head。Desktop `latestTurn.id` 存在 `turn`，不参与停滞判断。
 - `round` 只是模型自述标签，不参与计算；`sync` 写入的 poll 行使用 `sync-state.json` 中的 `seq` 按追加顺序分组，`stall_streak` 只按 `seq` 判断。
 - 如果某 node 的 git HEAD 在最后一条 report 之后发生变化，合成状态会显示为 `<state>(stale)`，摘要会在 `stale_reports` 中列出该 node。脚本只暴露陈旧，不自动改写 child state。
 
@@ -34,6 +34,8 @@
 | `waiting_on` | array[string] | report 必填；poll 不写 | seam 引用必须写成 `seam:<id>` | `report` | 当前阻塞依赖。poll 行不得伪造空数组来覆盖自报依赖。 |
 | `last_report_ts` | string | report 必填；poll 不写 | 本地时区 ISO 8601，带偏移 | `report` | node 最近一次主动上报时间。 |
 | `note` | string | 是 | 自由短文本 | `sync` / `report` | 面向 broker 的简短状态说明。 |
+| `source_session_id` | string | H1 report 必填；legacy report 可缺省 | registry 当前 child session id | controller | controller 验证 H1 来源仍是 registry 当前 session。 |
+| `source_registry` | string | H1 report 必填；legacy report 可缺省 | absolute registry JSON path | controller | 记录 controller 实际验证的 registry。 |
 
 示例：
 
@@ -43,9 +45,19 @@
 {"ts":"2026-08-01T04:50:10+02:00","src":"poll","seq":42,"round":413,"node":"foundation","head":null,"turn":"turn-201","status":"notLoaded","turn_status":"completed","state":"working","note":"inactiveStatus"}
 ```
 
+### H1 envelope（消息格式，不是新 API）
+
+子线只发送以下最小 JSON 给当前 controller；它不运行 `ledger.py report`、`seam` 或 `decide`：
+
+```json
+{"v":1,"registry":"D:\\ProgressRecord\\repo\\codex-thread-broker\\coordination.json","coordination_id":"26080200-example","node":"catalog","session_id":"session-current","event":"state_changed","state":"awaiting_seam","head":"0123456789012345678901234567890123456789","waiting_on":["seam:order_core_writer"],"artifact":null,"details":null,"note":"waiting for writer contract"}
+```
+
+controller 读取 envelope 后必须重新读取 `registry`，确认 `session_id` 等于该 node 的 current session；若已有 ledger HEAD，H1 head 必须是其 git 后代，且必须位于该 node 当前 worktree HEAD 的历史上，才允许写入 progress。`event` 用于说明触发原因，`artifact` 无交付物时为 `null`。`details` 是事件特有的最小对象：`seam_delivered` 带 `seam_id/consumers`，`owner_blocked` 带 `decision_id/blocks/question`，`handoff_prepared` 带 `card_path/card_sha256`，其他事件为 `null`。seam ownership 与 Owner decision 同样由 controller 写入。
+
 ## seams.jsonl
 
-记录 seam 的生产者、消费者与交付状态。写入者是 broker 或 Foundation 子线通过 `ledger.py seam` 登记；broker 使用 `ledger.py act --dispatch` 派活时，也会同步追加一条 `status=assigned` 的 ownership 行。
+记录 seam 的生产者、消费者与交付状态。写入者是 controller；Foundation child 在 H1 中报告交付事实，controller 通过 `ledger.py seam` 登记；controller 使用 `ledger.py act --dispatch` 派活时，也会同步追加一条 `status=assigned` 的 ownership 行。
 
 | 字段 | 类型 | 必填 | 枚举 / 格式 | 写入者 | 含义 |
 | --- | --- | --- | --- | --- | --- |
@@ -66,7 +78,7 @@
 
 ## decisions.jsonl
 
-记录 owner 级决策队列。写入者是 broker 或需要 owner 裁决的子线通过 `ledger.py decide` 发起，owner/broker 通过同一命令追加回答行。
+记录 owner 级决策队列。child 在 H1 中报告 Owner 级阻塞，controller 通过 `ledger.py decide` 发起；owner/controller 通过同一命令追加回答行。
 
 | 字段 | 类型 | 必填 | 枚举 / 格式 | 写入者 | 含义 |
 | --- | --- | --- | --- | --- | --- |
@@ -92,7 +104,7 @@
 
 `act --dispatch` 成功时还会向 `seams.jsonl` 追加同一 `seam_id` 的 `status=assigned` 行，`consumers=[]`、`artifact=null`；如果该 seam 最新 producer 与本次不同，命令会提示 producer 变更并继续追加，最新行代表当前 ownership。
 
-halted 状态只由 `acts.jsonl` 判定：最后一行 `kind=="halt"` 表示 loop 已终止；追加任何 `dispatch` / `escalate` 行都会自动解除。`act --halt` 必须带 `--reason`，并记录 halt 当时全部 pending decision id 的快照。
+halted 状态由 `acts.jsonl` 的最近 halt 与其 `halt_poll_seq` 判定：没有更大的有效 poll seq 时 loop 已终止；追加 `dispatch` / `escalate` 行不会自动解除。`act --halt` 必须带 `--reason`，并记录 halt 当时全部 pending decision id 的快照。
 
 | 字段 | 类型 | 必填 | 枚举 / 格式 | 写入者 | 含义 |
 | --- | --- | --- | --- | --- | --- |
@@ -105,6 +117,7 @@ halted 状态只由 `acts.jsonl` 判定：最后一行 `kind=="halt"` 表示 loo
 | `decision_id` | string 或 null | escalate 必填 | 稳定 id | `act --escalate` | 本次升级关联的决策项。 |
 | `reason` | string 或 null | halt 必填 | 一句话 | `act --halt` | 结束整个 loop 的原因。 |
 | `pending_decision_ids` | array[string] | halt 必填 | decision id 列表 | `act --halt` | halt 当时全部 pending decision id 的快照。 |
+| `halt_poll_seq` | number | halt 必填 | 当前有效 poll seq | `act --halt` | 只有 Owner 明确恢复后产生更大的有效 poll seq，旧 halt 才失效。 |
 
 示例：
 
@@ -116,7 +129,7 @@ halted 状态只由 `acts.jsonl` 判定：最后一行 `kind=="halt"` 表示 loo
 
 ## sync-state.json
 
-`sync-state.json` 不是 append-only 账本；它是本地运行状态。当前字段包括 rollout offset、`next_poll_seq`、`next_act_seq`、`dispatches_since_progress`、`docs_only_advances`、`last_must_act_seq`、invalid round 计数，以及 heartbeat reset 的 `stall_reset_seq`。
+`sync-state.json` 不是 append-only 账本；它是本地运行状态。当前字段包括 rollout offset、`next_poll_seq`、`next_act_seq`、`dispatches_since_progress`、`docs_only_advances`、`last_must_act_seq`、invalid round 计数，以及 heartbeat reset 的 `stall_reset_seq`。halt 行记录当时的 `halt_poll_seq`；`dispatch` / `escalate` 不会清除 halt。
 
 `dispatches_since_progress` 只在 code 级 git HEAD 推进后清零；docs-only 推进只增加 `docs_only_advances`。推进分类按上一条已知 head 到当前 head 的 git 区间计算：区间内任一 commit 触及非 Markdown / `docs/` 路径即为 code，区间内全部 commit 都是文档才计 docs-only。首次观测没有旧 head 时退回单 commit 判断；区间不可判定时按 `unknown`，并保守视为 code 推进。
 
