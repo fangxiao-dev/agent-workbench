@@ -31,7 +31,25 @@
 | Role B 例外 | **也由主控建**。Foundation 没有自述状态，恢复权威是主控写的 assignment card，让它自交接没有意义 | 主控建 |
 | 前置 | source 停在原子 checkpoint、owned process 已停 | Owner 已授权 `create_thread`、seam assignment 明确 |
 
-**主控的触发消息只需要三件事**：说明要做自交接、指向 `$handoff-to-new-session`、给出本 skill 的路径作为 override 依据。不要在触发消息里复述交接步骤——那是被引用 skill 的职责。
+### 触发消息（发给要退休的那条 session）
+
+主控发给 child 时用它；Owner 让主控自己交接时也用它。**不要在触发消息里复述交接步骤**——那是被引用 skill 的职责。
+
+```text
+你该做 session 自交接了。
+
+按 $handoff-to-new-session 执行，override 以
+<repo>\skills\thread-harness\references\session-dispatch.md 为准：
+
+1. 先把 checkpoint 写回你的恢复权威（Role A = 当前任务包 entry；Role C = 账本，已有，不必另写）。
+2. 停掉你自己的 owned process。
+3. 用该页「第一阶段 prompt」建 clean local session：只核对 anchor 就停住，不开工。
+   禁 fork、禁新建 worktree、禁 snapshot。
+4. 【仅 Role C】用 ledger.py route 把 registry 的 controller 指向继任者。
+5. 把新 session id 用 handed_off H1 报给我，然后停止，不再继续本线工作。
+
+registry：<registry 绝对路径 .json>
+```
 
 **只在轮边界发起交接。** 轮中交接会让本轮 `sync` 判 `ROUND INVALID`（内联的 ids 与变更后的 registry 对不上）。宁可推迟一轮，**不要放宽 `sync` 校验**。
 

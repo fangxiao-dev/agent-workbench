@@ -19,17 +19,18 @@
 
 **Role C 的 goal 不要在子线还没建好时就贴。** goal 一设就自驱循环，此时 registry 里没有 children，每轮都判 `ROUND INVALID`，从第一分钟起污染读数。完整冷启动顺序见 [run-procedure.md §四](references/run-procedure.md)。
 
-## Owner 粘贴清单（你手工要做的全部动作）
+## Owner 粘贴清单（*用户*手工要做的全部动作）
 
 | 时机 | 贴什么 | 本文件哪一节 |
 | --- | --- | --- |
 | 开主控 thread 后第一条消息 | 启动 prompt，里面嵌一份授权原文 | §启动 prompt + §create_thread 授权原文 |
 | bootstrap 五步全绿之后 | 主控 goal（填空区里再嵌一份授权原文） | §主控 goal |
+| 要让某条 session 退休 | 触发消息 | [session-dispatch.md](references/session-dispatch.md) §触发消息 |
 | 每次主控换 session | 主控 goal，**授权原文要重贴** | §主控 goal |
 
-除此之外你只有三件反应式的事：**响应 `MUST_ESCALATE`**、**点掉 Desktop 的审批弹窗**、**盯首次 `MUST_ACT`**。
+除此之外，*用户*只有三件需要反应的事：**响应 `MUST_ESCALATE`**、**点掉 Desktop 的审批弹窗**、**盯首次 `MUST_ACT`**。
+其余的动作理论上都应该可以由*主控*thread作为broker来完成。
 
-> **主控没法在你睡觉时换掉自己**——继任者拿不到 goal（设 goal 是 UI 动作，agent 做不到）。所以无人值守的运行时长上限不是工作量，而是主控的上下文预算。
 
 ---
 
