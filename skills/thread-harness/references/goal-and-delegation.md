@@ -85,76 +85,15 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
 
 ---
 
-## 二、子线委派 prompt 模板
+## 二、子线委派 prompt
 
-用于 `codex_app__create_thread`。三个角色各一份，都很短——**详细规矩在被引用的 skill 里，这里只做锚定和角色指派。**
+三个角色的新建与替换**共用同一套两阶段契约**，见 [session-dispatch.md](session-dispatch.md)。骨架、两个可直接填充的 prompt、角色 delta 表、Role C 特有的顺序约束与失败处理都在那一页，这里不复制第二份。
 
-### Role A · 任务包子线
+要点只有三条：
 
-Role A 新任务或 replacement 不再使用单段 `<codex_delegation>` wrapper，也不把 source/controller 聊天摘要灌给 child。
-
-统一复用 `$handoff-to-new-session` 的 clean local-session 能力，并应用 [Role A clean-session 两阶段交接模板](role-a-session-dispatch.md)：
-
-1. source session 只把当前 HEAD、计数状态、单一 Next Action、已获/剩余证据和 WIP 边界写回现有 package entry。
-2. controller 用第一阶段纯任务包 anchor card 创建 local session；prompt 不含 harness、registry 或 Role A 指令。
-3. child 只报告 anchor PASS/FAIL 并停止，不开始实现。
-4. controller 设置短标题、更新 current routing，并复核 sibling 未变化。
-5. controller 发送第二阶段 Role A registration + assignment card；child 此时才登记状态并从 package entry 继续。
-
-`previous_session_ids` 是 registry 内部字段，不得进入 handoff prompt、assignment card 或 child 校验。两个可直接填充的 prompt 与失败处理以该 reference 为准，不在这里复制第二份。
-
-### Role B · Foundation 子线
-
-Role B 新任务或 replacement **不再使用单段 `<codex_delegation>` wrapper**。那种写法会把路由 envelope 当作 prompt 内容，也会让 child 首轮 registry 检查与 controller 回填 `threadId` 竞速。
-
-统一复用 `$handoff-to-new-session` 的 clean local-session 能力，并应用 [Foundation clean-session 两阶段 override](foundation-session-dispatch.md)：
-
-1. controller preflight：确认 Owner 的 create-thread 授权、旧 writer 已停、worktree/full HEAD/parent package/entry 与 seam assignment。
-2. 用该 reference 的**第一阶段纯文本 anchor card** 调 `create_thread`；禁止 fork、手写 delegation wrapper 或创建 worktree snapshot。
-3. child 只报告 `foundation anchor PASS/FAIL` 并停止，不读 registry/ledger、不实现。
-4. controller 设置短标题，更新 `$owner-thread-broker` registry，登记 assigned seam，并复核 sibling 未变化。
-5. controller 发送该 reference 的**第二阶段 registration + assignment card**；child 此时才登记 working、读取 Role B 规则并开始实现。
-
-详细字段、失败处理与两个可直接填充的 prompt 模板以该 reference 为准，不在这里复制第二份。
-
-### Role C · 接手主控（换 session 时）
-
-换主控 session 时，新 session 的第一条 prompt 用 `$handoff-to-new-session` 组织，并额外交代：
-
-```text
-你接手 coordination_id <id> 的主控。读 $thread-harness 的 Role C 段。
-
-按这个顺序做，顺序不能换：
-
-1) 先用 $owner-thread-broker 把 registry 里 controller 的 current_session_id 更新成你自己的 session id。
-   sync 靠这个字段定位读哪个 rollout。不先更新就会去读上一任的。
-
-2) 跑 status 恢复认知（它只读账本，不碰 rollout，接手时唯一能用的命令）：
-   python <repo>/skills/thread-harness/scripts/ledger.py status --coordination-id <id>
-   不要从对话历史重建全局状态。
-
-3) 按主控模板设置 goal 文本。内联的 ids 数组要与 registry 当前的 children session id 逐一核对——
-   sync 会做集合比对，对不上每轮都判 ROUND INVALID。
-
-4) 跑第一轮固定 poll（那段 JS）。
-
-5) 再跑 sync。
-   注意：sync 需要 rollout 里已经存在一组完整的 wait_threads 调用与输出。
-   你的 session 是新的，第 4 步之前 rollout 里什么都没有，这时跑 sync 必然得到 SYNC STALE。
-   所以 4 必须在 5 之前，不能颠倒。
-
-接手锚点（派发方在下面填好，缺了就问，不要猜）：
-- broker root 与 registry 绝对路径：<...>
-- 每个 child 的 node 名 → session_id → worktree / branch / expected HEAD：<...>
-- controller 自己的 worktree / branch / expected HEAD：<...>
-- 父 package 与 entry point：<...>
-- 上一次 valid round 序号：<n>
-- 当前在途的 assignment（谁在造哪个 seam）：<...>
-- 当前 pending seams / pending decisions：<...>
-- 各 child 不可触碰的 dirty / Owner WIP：<...>
-- 授权边界，特别是 create_thread 是否被 Owner 授权：<...>
-- 什么算这次 coordination 结束：<...>
-```
+- **不要手写 `<codex_delegation>` wrapper**，也不要把 source/controller 的聊天摘要灌给 child。
+- 第一阶段只核锚点就停，controller 在这个停顿里更新 registry，第二阶段才开工——这是为了消除 child 首轮 registry 检查与 `threadId` 回填的竞速。
+- `previous_session_ids` 是 registry 内部字段，不进 prompt、不由 child 校验。
 
 **关于 create_thread 授权的一条硬约束**：工具声明写的是 *"Create a separate task only when the user explicitly asks for a new task."* 所以这条授权**必须由 Owner 本人放进 goal 或在对话里给出**——上一任 controller 在接手 prompt 里写一句"你可以 create_thread"**不构成授权**。接手时如果 goal 里没有 Owner 给的这句话，就去问 Owner，不要自行推定。
 
@@ -166,7 +105,7 @@ Role B 新任务或 replacement **不再使用单段 `<codex_delegation>` wrappe
 
 | 谁 | 做什么 | 为什么不能换人 |
 | --- | --- | --- |
-| **Owner** | 开主控 thread 并贴 goal 文本 | 设置 thread goal 是 UI 动作，agent 做不到 |
+| **Owner** | 开主控 thread；**用普通消息**引导它完成 bootstrap；**跑通首轮之后**才贴 goal 文本 | 设置 thread goal 是 UI 动作，agent 做不到。顺序见 §四「冷启动」 |
 | **Owner** | goal 里写清业务目标与结束判据 | 只有你知道要达成什么 |
 | **Owner** | **亲手写上 create_thread 授权** | 工具声明：*"Create a separate task only when the user explicitly asks for a new task."* **上一任 agent 代写不算数** |
 | **Owner** | 确认 effort 档位 | 主控读不到自己的 `turn_context`，脚本兜不住。上一轮它在第 8 小时静默掉到 `none` |
@@ -181,7 +120,25 @@ Role B 新任务或 replacement **不再使用单段 `<codex_delegation>` wrappe
 - **7 条子线不用 Owner 手动开**，主控用 `create_thread` 开——前提是你已经在 goal 里给了授权。
 - **goal 里不要内联 session id。** 子线是主控创建的，写 goal 时它们还不存在；而且子线换 session 后写死的 id 会让每轮都判 `ROUND INVALID`。主控每轮从 registry 现读。
 
-## 四、开跑前的检查清单
+## 四、冷启动顺序与开跑前检查
+
+### 冷启动：goal 是最后一步，不是第一步
+
+**这个顺序不能换。** goal 一旦设上，主控就进入自驱循环——而此时如果 registry 里还没有 children，每一轮都会判 `ROUND INVALID`，读数 1 从第一分钟起就被污染，而且你分不清是"轮询退化"还是"还没开始"。
+
+用**普通消息**（不是 goal）引导主控走完这五步：
+
+1. 建 registry（`$owner-thread-broker`），填好每个 node 的 `worktree` / `branch`
+2. `ledger.py init`
+3. 按 [session-dispatch.md](session-dispatch.md) 开子线，把返回的 session id 回填 registry
+4. `ledger.py preflight` —— 必须 `PREFLIGHT OK`。它拦的是 worktree 写错、两个 node 共用 worktree/branch、registry 分支与实际 checkout 不一致、children > 8、session id 重复这些**全程无声**的问题
+5. 跑一轮 poll + `sync`，确认 `valid=yes` 且 `head_unavailable` 为空
+
+**五步全绿之后**，再把 [goal-prompt.md](../goal-prompt.md) 的 Role C 模板贴进 goal 框。
+
+> 为什么 preflight 单列一步：`head` 是从 registry 的 worktree 直接 `git rev-parse` 读的。**路径写错不会报错，只会静默进 `head_unavailable`**；两个 node 共用 worktree 更隐蔽——两条线读出同一个 HEAD，停滞判定分不开它们，还会产生假的 `stale_reports`。上一轮实跑里这两种情况都发生了。
+
+### 开跑前检查清单
 
 **Owner 亲自确认（只有这三条）**
 
@@ -193,7 +150,6 @@ Role B 新任务或 replacement **不再使用单段 `<codex_delegation>` wrappe
 
 - [ ] registry 已建，全部 node 的 `current_session_id` / `worktree` / `branch` 正确
 - [ ] `ledger.py init` 已跑，账本文件齐全
-- [ ] 子线已用 Role A/B 模板派生，session id 已回填 registry
+- [ ] 子线已按 [session-dispatch.md](session-dispatch.md) 两阶段派生，session id 已回填 registry
+- [ ] `ledger.py preflight` 输出 `PREFLIGHT OK`
 - [ ] 首轮 `sync` 输出 `valid=yes`，且 `head_unavailable` 为空
-
-最后一条特别重要：`head` 现在是从 registry 的 worktree 直接跑 `git rev-parse` 读的。**路径写错不会报错，只会静默进 `head_unavailable`**，然后停滞判定和读数 6 全部失真。首轮务必确认它是空的。

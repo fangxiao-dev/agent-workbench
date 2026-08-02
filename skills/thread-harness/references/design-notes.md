@@ -257,6 +257,7 @@ routing registry 仍是同级的 `%TEMP%\codex-thread-broker\<coordination_id>.j
 | `seam --coordination-id <id> --seam-id <s> --producer <p> [--consumers ...] [--deliver <artifact>]` | 登记/交付 seam |
 | `decide --coordination-id <id> --raise <decision-id> --by <node> --blocks ... --question ...` / `--answer <decision-id> --text ...` | owner 决策队列 |
 | `heartbeat --coordination-id <id> --node <n> --evidence <text>` | 仅在 `3/5` 或 `4/5` 且 controller 已直接读 thread 确认 fresh heartbeat 后使用；只写 `sync-state.json` reset marker，不写 JSONL |
+| `preflight --coordination-id <id>` | 开跑前只读校验 registry：worktree 存在且可读 HEAD、无两个 node 共用 worktree/branch、registry branch 与实际 checkout 一致、`children <= 8`、session id 不重复、controller rollout 可定位、运行时已 `init`。失败退 5 |
 | `stall-check --coordination-id <id>` | `acts.jsonl` 最后一行是 `halt` → 退出码 4 并打印 `HALTED`；连续 N 轮（默认 5）所有 node 的 `head` 无变化 → 退出码 2 并打印 `MUST_ACT`；从 `3/5` 起、到 `5/5` 前 → 退出码 0 并打印 `CHECK_HEARTBEAT`；有尚未上报的 pending decision → 退出码 3 并打印 `MUST_ESCALATE`；否则 0 |
 
 `sync` 的决策就绪摘要格式（给 broker 读的，必须紧凑）：

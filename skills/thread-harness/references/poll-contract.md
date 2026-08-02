@@ -76,6 +76,20 @@ text(JSON.stringify({
 4. 执行 `python skills/thread-harness/scripts/ledger.py stall-check --coordination-id <id>`。
 5. 按退出码和输出标记决策。`CHECK_HEARTBEAT` 的退出码也是 `0`，但不能当普通 `OK` 略过。
 
+## 开跑前：preflight
+
+```powershell
+python skills/thread-harness/scripts/ledger.py preflight --coordination-id <id>
+```
+
+只读，不写任何 JSONL。`PREFLIGHT OK`（退出码 `0`）才能开始轮询；`PREFLIGHT FAILED`（退出码 `5`）时先修。
+
+它拦的全是**会静默扭曲读数**的问题：worktree 路径写错、两个 node 共用 worktree 或 branch、registry 的 branch 与该 worktree 实际 checkout 的分支不一致、`children > 8`、`current_session_id` 重复、controller 的 session id 找不到 rollout、运行时目录未 `init`。
+
+`dirty_worktree`（Owner WIP）与 `child_rollout_missing` 只报警告，不阻断——前者是合法状态但派发 prompt 里必须写明不可触碰，后者不影响判定，因为子线状态从 `wait_threads` 投影读、不从 rollout 读。
+
+> 为什么值得单列一步：`head` 是从 registry 的 worktree 直接 `git rev-parse` 读的。路径写错只会静默进 `head_unavailable`；**两个 node 共用 worktree 更隐蔽——两条线读出同一个 HEAD，停滞判定分不开它们，还会产生假的 `stale_reports`。** 上一轮实跑两种都发生了，全程无声。
+
 接手新 session 时先执行：
 
 ```powershell
@@ -128,6 +142,7 @@ python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --halt
 | `2` | `stall-check` 输出 `MUST_ACT` | 二选一：派发新工作，或向 Owner 报告并结束 loop |
 | `3` | `stall-check` 输出 `MUST_ESCALATE` | 立即上报尚未上报的 pending decision，并写 `act --escalate`；本轮结束。已上报 pending 不再屏蔽 `2` |
 | `4` | `stall-check` 输出 `HALTED` | loop 已由最后一条 halt act 终止。**不要继续轮询**，先向 Owner 确认；恢复只能由追加 `dispatch` / `escalate` 行完成 |
+| `5` | `preflight` 输出 `PREFLIGHT FAILED` | 修掉列出的每一条再开跑。**不要带着失败开始轮询** |
 | `64` | 命令用法错误（参数拼错、缺必填项） | 修正命令重跑。**这不是业务信号** |
 
 `64` 是刻意选的，不用 argparse 默认的 `2`：如果用法错误也退 `2`，一次拼错的命令会被读成 `MUST_ACT`，或者反过来让真正的 `MUST_ACT` 被当成拼写问题忽略掉。**退出码在语义上必须唯一。**

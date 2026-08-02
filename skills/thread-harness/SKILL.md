@@ -62,7 +62,7 @@ description: >
 
 **你的使命是完成任务包，方式由 `$impl-package` 定义。本段只规定你什么时候必须跟主控说话，不改变你的开发方式。**
 
-新建或替换 Role A session 时，使用 `$handoff-to-new-session` 的 clean local-session 能力，并按 [Role A clean-session 交接模板](references/role-a-session-dispatch.md) 分两阶段执行：source 先把 checkpoint 写回当前任务包 entry；第一阶段 child 只核对任务包 anchor；controller 更新 current routing 后，第二阶段 child 才读取 Role A 规则并继续 Next Action。`previous_session_ids` 只留在 registry 内部，不进入 child prompt，也不由 child 校验。
+新建或替换 Role A session 时走 [session-dispatch.md](references/session-dispatch.md) 的两阶段契约。Role A 的差异只有一处：**恢复权威是当前任务包 entry**，所以 source 必须先把 checkpoint 写回 entry 再交接。
 
 按 impl-package 的 6 步主流程走，执行阶段用 `$dev-with-track` + `$subagent-driven-development`。这些已经设计好了，本 skill 不复述也不覆盖。
 
@@ -108,7 +108,11 @@ description: >
 
 这是主控最容易犯的错，值得单独说清楚：当所有子线都报"我在等某个跨域上游契约"时，正确的读法不是"外部条件不具备"，而是"**我还没安排人去造它**"。你手上一直有 `create_thread` 这个动作，派一条新的 Foundation 线去造，这条路是通的。
 
-新建或替换 Foundation session 时，不得手写一段带 `<codex_delegation>` 的 Role B prompt，也不得 fork 主控历史。必须以 `$handoff-to-new-session` 为 clean-session 基线，并按 [Foundation clean-session 派发模板](references/foundation-session-dispatch.md) 的两阶段 override 执行：第一阶段只核对 anchor；拿到新 `threadId` 后由 controller 更新 registry / assigned seam；第二阶段 child 才注册 working 并开始实现。这样既保持空白 session，也消除 child 首轮与 registry 更新的竞速。
+新建或替换任何一条线的 session（含你自己交班）都走 [session-dispatch.md](references/session-dispatch.md) 的两阶段契约。**不要手写 `<codex_delegation>` wrapper，也不要 fork 主控历史。** 三个角色共用同一套骨架，差异见那页的 delta 表；你自己交班还多一条不能换的顺序（先改 registry 再 status，poll 必须在 sync 之前）。
+
+### 开跑前
+
+跑 `ledger.py preflight --coordination-id <id>`，**`PREFLIGHT OK` 才能开始轮询**。它拦的是 worktree 写错、两个 node 共用 worktree/branch、registry 分支与实际不符这类**全程无声**的问题——不拦的话，`head` 会串号或静默进 `head_unavailable`，停滞判定从第一轮起就是失真的。冷启动的完整顺序（goal 是最后一步）见 [goal-and-delegation.md §四](references/goal-and-delegation.md)。
 
 ### 每轮做什么
 
@@ -142,6 +146,5 @@ description: >
 - [design-notes.md](references/design-notes.md) — 设计依据、四条硬规则的证据、第一轮要观察的读数
 - [poll-contract.md](references/poll-contract.md) — 固定 JS 片段、wake 语义、一轮的动作序列
 - [ledger-schema.md](references/ledger-schema.md) — 三个 jsonl 的字段定义
-- [role-a-session-dispatch.md](references/role-a-session-dispatch.md) — 新建/替换 Role A 的 clean-session 两阶段交接模板
-- [foundation-session-dispatch.md](references/foundation-session-dispatch.md) — 新建/替换 Role B 的 clean-session 两阶段派发模板
+- [session-dispatch.md](references/session-dispatch.md) — 三个角色统一的两阶段交接契约 + 角色 delta 表
 - [owner-thread-broker](owner-thread-broker/SKILL.md) — 线程路由与 Owner 授权边界

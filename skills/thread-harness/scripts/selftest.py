@@ -176,6 +176,71 @@ def write_fixture(call_args, printed_text, *, git_worktrees=False, source_field=
     append_wait(call_args, printed_text, source_field=source_field)
 
 
+def write_preflight_registry(registry):
+    (BROKER / f"{CID}.json").write_text(
+        json.dumps(registry, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    )
+
+
+def make_preflight_fixture(child_count=2):
+    """独立构造 preflight 数据；不调用 ledger.py 的解析或写入函数。"""
+    shutil.rmtree(BROKER / CID, ignore_errors=True)
+    (BROKER / f"{CID}.json").unlink(missing_ok=True)
+    shutil.rmtree(FAKE_SESSIONS, ignore_errors=True)
+    preflight_root = BASE / "preflight-git"
+    shutil.rmtree(preflight_root, ignore_errors=True)
+    preflight_root.mkdir(parents=True, exist_ok=True)
+    BROKER.mkdir(parents=True, exist_ok=True)
+    SESSIONS.mkdir(parents=True, exist_ok=True)
+
+    if child_count == 2:
+        child_names = ["foundation_catalog", "foundation_customer_runtime"]
+    else:
+        child_names = [f"child_{index}" for index in range(1, child_count + 1)]
+    node_names = ["controller", *child_names]
+    sessions = {
+        name: f"preflight-{index:02d}-session"
+        for index, name in enumerate(node_names, 1)
+    }
+    worktrees = {}
+    branches = {}
+    for name in node_names:
+        path = preflight_root / name
+        branch = f"preflight/{name.replace('_', '-')}"
+        make_git_repo(path)
+        run_process(["git", "branch", "-M", branch], cwd=path)
+        worktrees[name] = str(path)
+        branches[name] = branch
+        (SESSIONS / f"rollout-{sessions[name]}.jsonl").write_text("", encoding="utf-8")
+
+    registry = {
+        "schema_version": 1,
+        "coordination_id": CID,
+        "controller": {
+            "node_id": "controller",
+            "current_session_id": sessions["controller"],
+            "worktree": worktrees["controller"],
+            "branch": branches["controller"],
+        },
+        "children": {
+            name: {
+                "current_session_id": sessions[name],
+                "worktree": worktrees[name],
+                "branch": branches[name],
+            }
+            for name in child_names
+        },
+    }
+    write_preflight_registry(registry)
+    return {
+        "registry": registry,
+        "sessions": sessions,
+        "worktrees": worktrees,
+        "branches": branches,
+        "children": child_names,
+    }
+
+
 def env():
     e = dict(os.environ)
     e["THREAD_HARNESS_SESSIONS_ROOT"] = str(FAKE_SESSIONS)

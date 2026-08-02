@@ -35,6 +35,8 @@ KNOWN_WORKING_STATUSES = {
 SEAM_STATUS_VALUES = {"assigned", "delivered"}
 SESSIONS_ROOT_ENV = "THREAD_HARNESS_SESSIONS_ROOT"
 BROKER_ROOT_ENV = "THREAD_HARNESS_BROKER_ROOT"
+PREFLIGHT_CHILD_LIMIT = 8
+PREFLIGHT_RUNTIME_FILES = ("progress.jsonl", "seams.jsonl", "decisions.jsonl", "acts.jsonl")
 
 
 def broker_dir() -> Path:
@@ -255,6 +257,270 @@ def find_rollout(session_id: str) -> Path:
         )
     matches.sort(key=lambda path: str(path))
     return matches[-1]
+
+
+def normalized_worktree(worktree: str) -> str:
+    """用于 preflight 的 Windows 路径比较：规范化、绝对化并忽略大小写。"""
+    try:
+        path = Path(worktree).expanduser().resolve(strict=False)
+        return os.path.normcase(os.path.normpath(str(path)))
+    except (OSError, RuntimeError, ValueError):
+        return os.path.normcase(os.path.normpath(os.path.abspath(os.path.expanduser(worktree))))
+
+
+def preflight_git_command(worktree: str, arguments: list[str], *, text: bool = True):
+    try:
+        return subprocess.run(
+            ["git", "-C", worktree, *arguments],
+            capture_output=True,
+            text=text,
+            encoding="utf-8" if text else None,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def preflight_dirty_file_count(worktree: str) -> int | None:
+    """只用 diff/ls-files 读取 WIP，避免 status 刷新 index。"""
+    paths = set()
+    for arguments in (
+        ["diff", "--name-only", "-z"],
+        ["diff", "--cached", "--name-only", "-z"],
+        ["ls-files", "--others", "--exclude-standard", "-z"],
+    ):
+        result = preflight_git_command(worktree, arguments, text=False)
+        if result is None or result.returncode != 0:
+            return None
+        for raw_path in (result.stdout or b"").split(b"\0"):
+            if raw_path:
+                paths.add(raw_path)
+    return len(paths)
+
+
+def preflight_git_info(worktree: str) -> dict:
+    path = Path(worktree)
+    try:
+        if not path.exists():
+            return {"kind": "missing"}
+        if not path.is_dir():
+            return {"kind": "not_git"}
+    except OSError:
+        return {"kind": "missing"}
+
+    inside = preflight_git_command(worktree, ["rev-parse", "--is-inside-work-tree"])
+    if inside is None or inside.returncode != 0 or (inside.stdout or "").strip().lower() != "true":
+        return {"kind": "not_git"}
+
+    head_result = preflight_git_command(worktree, ["rev-parse", "HEAD"])
+    head = (head_result.stdout or "").strip() if head_result else ""
+    head_ok = bool(head_result and head_result.returncode == 0 and re.fullmatch(r"[0-9a-fA-F]{40}", head))
+
+    branch_result = preflight_git_command(worktree, ["symbolic-ref", "--quiet", "--short", "HEAD"])
+    if branch_result and branch_result.returncode == 0 and (branch_result.stdout or "").strip():
+        actual_branch = branch_result.stdout.strip()
+    elif branch_result and branch_result.returncode == 1:
+        actual_branch = "<detached>"
+    else:
+        actual_branch = "<unknown>"
+
+    return {
+        "kind": "ok" if head_ok else "head_unavailable",
+        "head": head.lower() if head_ok else None,
+        "branch": actual_branch,
+        "dirty_count": preflight_dirty_file_count(worktree),
+    }
+
+
+def preflight_registry_nodes(registry: dict, issues: list[tuple[str, str]]) -> tuple[list[dict], int]:
+    nodes = []
+
+    controller = registry.get("controller")
+    if not isinstance(controller, dict):
+        issues.append(
+            (
+                "registry_missing_controller" if "controller" not in registry else "registry_invalid_controller",
+                "controller",
+            )
+        )
+    else:
+        nodes.append(
+            {
+                "name": str(controller.get("name") or controller.get("node_id") or "controller"),
+                "role": "controller",
+                "session_id": controller.get("current_session_id"),
+                "worktree": controller.get("worktree"),
+                "branch": controller.get("branch"),
+            }
+        )
+
+    children = registry.get("children")
+    if "children" not in registry:
+        issues.append(("registry_missing_children", "children"))
+        return nodes, 0
+    if isinstance(children, dict):
+        child_items = list(children.items())
+    elif isinstance(children, list):
+        child_items = [(index, value) for index, value in enumerate(children)]
+    else:
+        issues.append(("registry_invalid_children", "children"))
+        return nodes, 0
+
+    for index, value in child_items:
+        if not isinstance(value, dict):
+            issues.append(("registry_invalid_child", str(index)))
+            continue
+        nodes.append(
+            {
+                "name": str(value.get("name") or value.get("node") or index),
+                "role": "child",
+                "session_id": value.get("current_session_id"),
+                "worktree": value.get("worktree"),
+                "branch": value.get("branch"),
+            }
+        )
+    return nodes, len(child_items)
+
+
+def preflight_field_issues(nodes: list[dict], issues: list[tuple[str, str]]) -> None:
+    for node in nodes:
+        name = node["name"]
+        session_id = node.get("session_id")
+        if not isinstance(session_id, str) or not session_id.strip():
+            issues.append(("missing_session_id", name))
+        elif session_id != session_id.strip():
+            node["session_id"] = session_id.strip()
+
+        worktree = node.get("worktree")
+        if not isinstance(worktree, str) or not worktree.strip():
+            issues.append(("worktree_missing", f"{name} -> <missing>"))
+        elif worktree != worktree.strip():
+            node["worktree"] = worktree.strip()
+
+        branch = node.get("branch")
+        if not isinstance(branch, str) or not branch.strip():
+            issues.append(("branch_missing", name))
+        elif branch != branch.strip():
+            node["branch"] = branch.strip()
+
+
+def preflight_duplicate_issues(nodes: list[dict], field_name: str, tag: str, normalizer=None) -> list[tuple[str, str]]:
+    groups = {}
+    displays = {}
+    for node in nodes:
+        value = node.get(field_name)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        key = normalizer(value) if normalizer else value
+        groups.setdefault(key, []).append(node["name"])
+        displays.setdefault(key, value)
+
+    findings = []
+    for key in sorted(groups, key=str):
+        names = sorted(groups[key])
+        if len(names) > 1:
+            findings.append((tag, f"{', '.join(names)} -> {displays[key]}"))
+    return findings
+
+
+def cmd_preflight(args) -> int:
+    issues: list[tuple[str, str]] = []
+    warnings: list[tuple[str, str]] = []
+    path = registry_path(args.coordination_id)
+    registry = None
+
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        issues.append(("registry_missing", str(path)))
+    except (OSError, UnicodeError) as exc:
+        issues.append(("registry_unreadable", f"{path} ({exc})"))
+    else:
+        try:
+            registry = json.loads(raw)
+        except (json.JSONDecodeError, UnicodeError) as exc:
+            issues.append(("registry_unparseable", f"{path} ({exc})"))
+        if registry is not None and not isinstance(registry, dict):
+            issues.append(("registry_unparseable", "registry root must be an object"))
+            registry = None
+
+    nodes: list[dict] = []
+    children_count = 0
+    if registry is not None:
+        nodes, children_count = preflight_registry_nodes(registry, issues)
+        if children_count > PREFLIGHT_CHILD_LIMIT:
+            issues.append(("children_limit", f"children={children_count} max={PREFLIGHT_CHILD_LIMIT}"))
+        preflight_field_issues(nodes, issues)
+        issues.extend(preflight_duplicate_issues(nodes, "session_id", "duplicate_session_id"))
+        issues.extend(preflight_duplicate_issues(nodes, "branch", "duplicate_branch"))
+        issues.extend(
+            preflight_duplicate_issues(nodes, "worktree", "shared_worktree", normalized_worktree)
+        )
+
+        for node in nodes:
+            worktree = node.get("worktree")
+            if not isinstance(worktree, str) or not worktree.strip():
+                continue
+            info = preflight_git_info(worktree)
+            if info["kind"] == "missing":
+                issues.append(("worktree_missing", f"{node['name']} -> {worktree}"))
+                continue
+            if info["kind"] == "not_git":
+                issues.append(("not_git_repository", f"{node['name']} -> {worktree}"))
+                continue
+            if info["kind"] == "head_unavailable":
+                issues.append(("head_unavailable", f"{node['name']} -> {worktree}"))
+
+            registry_branch = node.get("branch")
+            if isinstance(registry_branch, str) and registry_branch.strip():
+                if info.get("branch") != registry_branch:
+                    issues.append(
+                        (
+                            "branch_mismatch",
+                            f"{node['name']} registry={registry_branch} actual={info.get('branch') or '<unknown>'}",
+                        )
+                    )
+
+            dirty_count = info.get("dirty_count")
+            if isinstance(dirty_count, int) and dirty_count:
+                warnings.append(("dirty_worktree", f"{node['name']} ({dirty_count} files)"))
+
+        for node in nodes:
+            session_id = node.get("session_id")
+            if not isinstance(session_id, str) or not session_id:
+                continue
+            try:
+                find_rollout(session_id)
+            except (LedgerError, OSError):
+                if node["role"] == "controller":
+                    issues.append(("controller_rollout_missing", session_id))
+                else:
+                    warnings.append(("child_rollout_missing", node["name"]))
+
+    runtime_missing = []
+    for name in PREFLIGHT_RUNTIME_FILES:
+        runtime_path = jsonl_path(args.coordination_id, name)
+        try:
+            present = runtime_path.is_file()
+        except OSError:
+            present = False
+        if not present:
+            runtime_missing.append(name)
+    if runtime_missing:
+        issues.append(("runtime_uninitialized", f"missing={', '.join(runtime_missing)}; run init first"))
+
+    if issues:
+        print("PREFLIGHT FAILED")
+        for tag, detail in issues:
+            print(f"  {tag:<24} {detail}")
+    else:
+        print(f"PREFLIGHT OK  nodes={len(nodes)} children={children_count}")
+    if warnings:
+        print("warnings:")
+        for tag, detail in sorted(warnings, key=lambda item: (item[0], item[1])):
+            print(f"  {tag:<24} {detail}")
+    return 5 if issues else 0
 
 
 def response_item(obj: dict) -> dict | None:
@@ -1466,6 +1732,10 @@ def build_parser() -> argparse.ArgumentParser:
     stall.add_argument("--coordination-id", required=True)
     stall.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
     stall.set_defaults(func=cmd_stall_check)
+
+    preflight = sub.add_parser("preflight")
+    preflight.add_argument("--coordination-id", required=True)
+    preflight.set_defaults(func=cmd_preflight)
     return parser
 
 
