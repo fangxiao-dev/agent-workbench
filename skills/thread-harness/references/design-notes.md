@@ -47,6 +47,7 @@ H4 的分阶段：**第一轮只登记不校验**；阶段 2 打开校验（`wai
 | 无 commit 时是否仍有真实执行心跳 | 每轮缓存消息或只看 active 状态 | 从 `3/5` 起直接 `read_thread`；具体新进展才 reset |
 | broker 有没有真的派活 | 让 broker 自己记 dispatch 行 | `sync` 读 rollout 时数 `send_message_to_thread` / `create_thread` 调用 |
 | 轮询是否覆盖了全部子线 | 信任投影里模型打印的 `n` | 从调用 arguments 解析实际 ids，与 registry children 做**集合**比对 |
+| 子线上报的 `head` 是不是真的 | 子线自己跑 `report --head`，没有任何东西能证伪 | 子线只发 H1 envelope，controller 用 `validate_report_source` 校验：source session 必须等于 registry 里该 node 的 current session、head 必须是完整 40 位 SHA、必须是上一条账本 head 的后代、且必须在该 worktree 的当前历史上 |
 
 判断规则：**一个事实如果模型有动机漏报或美化，就必须找到不经模型的来源；找不到的，才退回账本纪律并接受它可能失效。**
 

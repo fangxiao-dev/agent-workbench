@@ -100,7 +100,6 @@ push、PR、merge、deploy、Production 与未授权的共享远端 mutation，�
 node_id：<node>
 coordination_id：<id>
 registry：<绝对路径>
-ledger：<repo>\skills\thread-harness\scripts\ledger.py
 
 你是上面 node_id 对应的任务包子线。使命、任务包与授权范围由当前委派 prompt 和任务包合同
 定义；本 goal 只补充长期 harness 协议，不扩大授权，也不改变你的开发方式。
@@ -145,7 +144,6 @@ controller 验证当前 session、ledger HEAD 与 worktree HEAD 的祖先关系�
 node_id：<node>
 coordination_id：<id>
 registry：<绝对路径>
-ledger：<repo>\skills\thread-harness\scripts\ledger.py
 
 你是 Foundation 子线，共享 seam 的生产者。你没有自己的任务包；
 当前 seam、交付物、消费者与授权范围由主控最新的派发指令决定。
