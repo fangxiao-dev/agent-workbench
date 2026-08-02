@@ -10,7 +10,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -39,11 +38,22 @@ PREFLIGHT_CHILD_LIMIT = 8
 PREFLIGHT_RUNTIME_FILES = ("progress.jsonl", "seams.jsonl", "decisions.jsonl", "acts.jsonl")
 
 
+PROGRESS_ROOT = Path(r"D:\ProgressRecord")
+
+
 def broker_dir() -> Path:
-    """运行时根目录。测试必须用 THREAD_HARNESS_BROKER_ROOT 指到别处——
-    默认目录是生产运行时，跑测试时往里写会和在跑的 harness 抢同一棵目录树。"""
+    """运行时根目录。
+
+    默认落在持久盘而不是 %TEMP%：账本是接手与复盘唯一的事实来源，
+    放在操作系统随时可以清空的目录里，等于把可靠层建在最不可靠的存储上。
+
+    按仓库归档时用 THREAD_HARNESS_BROKER_ROOT 指到
+    D:\\ProgressRecord\\<repo>\\codex-thread-broker，coordination 目录仍在其下按
+    <YYMMDDHH>-<slug> 分。测试也必须用这个变量指到临时目录——默认目录是生产
+    运行时，往里写会和在跑的 harness 抢同一棵目录树。
+    """
     override = os.environ.get(BROKER_ROOT_ENV)
-    return Path(override) if override else Path(tempfile.gettempdir()) / "codex-thread-broker"
+    return Path(override) if override else PROGRESS_ROOT / "codex-thread-broker"
 
 
 class LedgerError(Exception):

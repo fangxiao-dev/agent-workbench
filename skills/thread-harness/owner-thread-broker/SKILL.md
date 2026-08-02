@@ -11,15 +11,15 @@ Act as the Owner's broker between one controller thread and its child threads. K
 
 Use this runtime directory on Windows:
 
-`%TEMP%\codex-thread-broker\`
+`D:\ProgressRecord\<repo>\codex-thread-broker\` (override with `THREAD_HARNESS_BROKER_ROOT`)
 
 Create one file for each independent controller/child group:
 
-`%TEMP%\codex-thread-broker\<coordination_id>.json`
+`<broker-root>\<coordination_id>.json`, where `coordination_id` is `<YYMMDDHH>-<slug>`
 
 For the current user the directory normally resolves to:
 
-`C:\Users\Xiao\AppData\Local\Temp\codex-thread-broker\`
+`D:\ProgressRecord\prj-supplyer-webapp\codex-thread-broker\`
 
 Do not combine multiple groups into one JSON file and do not create a shared mutable index. A handoff must carry the exact group file path or its `coordination_id`, plus the node's stable `node_id`.
 
@@ -64,7 +64,7 @@ Never invent a session ID. If the group path, current ID, or node identity is un
 
 If a group file is missing, recover only that group from the reference template and explicit handoff facts. If an existing group file is malformed or the node is ambiguous, stop and ask the Owner how to recover it; do not reconstruct it silently from stale chat history or inspect unrelated group files.
 
-Because `%TEMP%` may be cleared by the operating system, treat group-file loss as a recoverable routing incident, not as loss of authorization history.
+Group files live on a persistent drive rather than `%TEMP%`, so loss is no longer expected. If a group file is still missing, treat it as a recoverable routing incident, not as loss of authorization history.
 
 ## Classify every child-thread request
 

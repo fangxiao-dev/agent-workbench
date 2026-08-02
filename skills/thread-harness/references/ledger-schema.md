@@ -1,6 +1,8 @@
 # Thread Harness Ledger Schema
 
-本页是账本文件的字段参考。运行时目录固定为 `%TEMP%\codex-thread-broker\<coordination_id>\`；routing registry 固定为同级 `%TEMP%\codex-thread-broker\<coordination_id>.json`，由 broker 维护，账本脚本只读。
+本页是账本文件的字段参考。运行时目录为 `<broker-root>\<coordination_id>\`；routing registry 是同级的 `<broker-root>\<coordination_id>.json`，由 broker 维护，账本脚本只读。
+
+`<broker-root>` 默认 `D:\ProgressRecord\codex-thread-broker`，按仓库归档时用 `THREAD_HARNESS_BROKER_ROOT` 指到 `D:\ProgressRecord\<repo>\codex-thread-broker`。`coordination_id` 用 `<YYMMDDHH>-<slug>`，时间戳取该 coordination 的起始小时。**不要放在 `%TEMP%`**——账本是接手与复盘唯一的事实来源。
 
 四个账本文件都是 JSON Lines，均为 append-only：只能追加新行，不重写旧行，不删除旧行。字段依据见 `design-notes.md` §5。
 

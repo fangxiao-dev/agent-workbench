@@ -210,8 +210,8 @@ role 段开头必须写明：*"你的使命是完成任务包，方式由 `/impl
 
 ## 5. 账本 schema
 
-运行时目录：`%TEMP%\codex-thread-broker\<coordination_id>\`
-routing registry 仍是同级的 `%TEMP%\codex-thread-broker\<coordination_id>.json`，由 `owner-thread-broker` 管，**本设计不改动它**（它 13.75 小时零串线，是上一轮唯一完全没出问题的部件）。
+运行时目录：`<broker-root>\<coordination_id>\`，`<broker-root>` 默认 `D:\ProgressRecord\codex-thread-broker`，按仓库归档时用 `THREAD_HARNESS_BROKER_ROOT` 覆盖
+routing registry 仍是同级的 `<broker-root>\<coordination_id>.json`，由 `owner-thread-broker` 管，**本设计不改动它**（它 13.75 小时零串线，是上一轮唯一完全没出问题的部件）。
 
 三个 append-only jsonl。字段一次写全，第一轮不迁移。
 
