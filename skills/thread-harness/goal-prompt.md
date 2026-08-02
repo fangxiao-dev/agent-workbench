@@ -1,6 +1,6 @@
 # Owner 要粘贴的全部文本
 
-**这一页是唯一的模板来源。** 冷启动第一条消息、create_thread 授权原文、三个角色的 goal 都在这里，其他文件只指过来、不放第二份——[goal-and-delegation.md](references/goal-and-delegation.md) 曾经放过一份主控 goal，结果这一轮实跑用的就是那份旧的，它把 `MUST_ACT` 的选项 (b) 和 `MUST_ESCALATE` 的响应都写成了 `act --escalate`，直接促成 26 次重复上报。**同一件事有两份模板，迟早有一份是旧的。**
+**这一页是唯一的模板来源。** 冷启动第一条消息、create_thread 授权原文、主控 goal 都在这里，其他文件只指过来、不放第二份——[run-procedure.md](references/run-procedure.md) 曾经放过一份主控 goal，结果这一轮实跑用的就是那份旧的，它把 `MUST_ACT` 的选项 (b) 和 `MUST_ESCALATE` 的响应都写成了 `act --escalate`，直接促成 26 次重复上报。**同一件事有两份模板，迟早有一份是旧的。**
 
 每份模板开头都是**填空区**，用 `---` 与正文隔开——只有那几行要你替换，正文里没有埋占位符。
 
@@ -16,7 +16,7 @@ goal 是全系统**唯一免疫 compaction 的通道**（每 turn 原样重注�
 
 ## 贴之前
 
-**Role C 的 goal 不要在子线还没建好时就贴。** goal 一设就自驱循环，此时 registry 里没有 children，每轮都判 `ROUND INVALID`，从第一分钟起污染读数。完整冷启动顺序见 [goal-and-delegation.md §四](references/goal-and-delegation.md)。
+**Role C 的 goal 不要在子线还没建好时就贴。** goal 一设就自驱循环，此时 registry 里没有 children，每轮都判 `ROUND INVALID`，从第一分钟起污染读数。完整冷启动顺序见 [run-procedure.md §四](references/run-procedure.md)。
 
 ## Owner 粘贴清单（你手工要做的全部动作）
 
@@ -25,7 +25,6 @@ goal 是全系统**唯一免疫 compaction 的通道**（每 turn 原样重注�
 | 开主控 thread 后第一条消息 | 冷启动 bootstrap prompt（**普通消息，不是 goal**），里面嵌一份授权原文 | §冷启动第一条消息 + §create_thread 授权原文 |
 | bootstrap 五步全绿之后 | Role C goal（填空区里再嵌一份授权原文） | §Role C |
 | 每次主控换 session | Role C goal，**授权原文要重贴** | §Role C |
-| 想给子线也上 goal 时（可选） | Role A / Role B goal | §Role A / §Role B |
 
 除此之外你只有三件反应式的事：**响应 `MUST_ESCALATE`**、**点掉 Desktop 的审批弹窗**、**盯首次 `MUST_ACT`**。
 
@@ -107,7 +106,7 @@ registry：<registry 的绝对路径 .json>
 父包 entry：<绝对路径>
 
 授权：
-<贴 goal-and-delegation.md §四 的 create_thread 授权原文整段>
+<贴本文件「create_thread 授权原文」整段>
 push / PR / merge / deploy / Production 与共享远端 mutation 一律需要我单独授权。
 
 目标：<这次 coordination 要达成什么>
@@ -148,82 +147,23 @@ push / PR / merge / deploy / Production 与共享远端 mutation 一律需要我
 
 ---
 
-## Role A · 任务包子线
+## 为什么没有子线 goal
 
-```text
-node_id：<node>
-coordination_id：<id>
-registry：<registry 的绝对路径 .json>
+**只有主控有 goal。Role A / Role B 不设 goal，这是实测结论，不是省事。**
 
----
+2026-08-01 试过给 child 加 goal，跑了半小时**进入死循环**，随后撤掉，撤掉后影响不大。原因是角色本身冲突：
 
-你是上面 node_id 对应的任务包子线。使命、任务包与授权范围由当前委派 prompt 和任务包
-合同定义；本 goal 只补充长期 harness 协议，不扩大授权，也不改变你的开发方式。
-协议细节读 $thread-harness 的 Role A 段。
+- **child 是被动接受调度的**。goal 会让它每个 turn 都被推着「朝目标推进」，而它此刻正确的状态可能就是等主控派活——两股力互相拉扯，就转起来了。
+- 理论上可以把 goal 写成「保持 stand down 直到另有指示」，但那等于用最贵的通道（每 turn 重注入）去表达「什么都别做」。
+- 而且 child 有很多条，**每次交接后都要手动贴一遍 goal**，成本高到不成比例。
 
-回报路由：每次回报主控前重新读 registry，用当时的 controller.current_session_id。
-不得用记忆里或上一轮缓存的 id——主控换 session 后，发给旧 id 的回报不会到达任何人，
-而且你不会收到任何错误。
+不加 goal 的代价，是 child 的角色规则会随 compaction 流失（平台缺口，见 design-notes §9.3）。现在这条被交接链路兜住了：
 
-每个 turn 结束前，下列任一成立就发 H1 envelope 给最新的 controller：
-① git HEAD 变了 ② 状态从 working 转为等待 ③ 出现只有 Owner 能决定的阻塞
+> skill 定义角色 → compaction 侵蚀 → 主控从 `never_reported` / `stale_reports` / `session_age_h` 看出这条线不对劲 → 触发自交接 → 新 session 重新读 skill
 
-你不直接写账本，由主控校验后代写。
+**变蠢是可恢复的，失控才不可恢复**——而交接机制现在能兜住前者，所以这个代价可以接受。
 
-不可违反：
-
-1. 等共享 seam 时状态必须是 awaiting_seam 并指向 seam:<id>。
-   没有合法 seam id、或所等 seam 查不到 producer，都是错误状态，立即上报，不要静默等待。
-
-2. "提交一份记录我被阻塞的文档"不算产出。没有独立工作时明确报告空闲，让主控派活。
-   空闲是需要被调度的信号，不是需要被文档化的状态。
-
-3. 非 seam、非共享基座的问题自己解决；确认跨包共享才上报。拿不准就上报并说明依据。
-
-4. 不自行扩大实现、commit、test mutation、远端操作或发布授权。
-```
-
----
-
-## Role B · Foundation 子线
-
-```text
-node_id：<node>
-coordination_id：<id>
-registry：<registry 的绝对路径 .json>
-
----
-
-你是 Foundation 子线，共享 seam 的生产者。你没有自己的任务包；当前 seam、交付物、
-消费者与授权范围由主控最新的派发指令决定。协议细节读 $thread-harness 的 Role B 段。
-
-回报路由：每次回报主控前重新读 registry，用当时的 controller.current_session_id。
-不得用记忆里或缓存的 id。
-
-每个 turn 结束前，下列任一成立就发 H1 envelope 给最新的 controller：
-① git HEAD 变了 ② 状态从 working 转为等待 ③ 出现只有 Owner 能决定的阻塞
-
-你不直接写账本，由主控校验后代写。
-
-不可违反：
-
-1. "保持待命"对你是非法指令，哪怕主控这样要求也不要照做。
-   没有立即可执行的 seam 时只有两个合法动作：向主控要下一个明确的 seam，
-   或报告本线 seam 已交付并附 artifact 指针。
-   所有人都在等 seam 而你是造 seam 的——让生产者等消费者，环就闭上了。
-
-2. 交付即登记，没登记等于没交付。在 H1 里报告 seam id、consumers 与可核验的
-   artifact（如 commit:<完整 sha>），由主控登记。没登记的 seam 下游查不到 producer。
-
-3. 一个 worktree 同时只能有一个写入者。不得继承、联系或恢复旧 Foundation session。
-
-4. "记录我被阻塞的文档"不算 seam 交付。
-
-5. 不自行发明 seam、扩大消费者范围、改变 ownership，或扩大 commit、migration 编号、
-   test mutation、远端操作与发布授权。
-```
-
----
+子线的角色定义在 `$thread-harness` 的 Role A / Role B 段，派发时由 [session-dispatch.md](references/session-dispatch.md) 的第二阶段 prompt 交给它。
 
 ## 明确不进 goal（记录裁剪理由）
 
@@ -235,6 +175,6 @@ registry：<registry 的绝对路径 .json>
 | 各子命令的完整参数示例 | 拼错退 `64`，`--state` 传错会抛错并列出合法值。**响亮、自我修正**，不是静默失效 |
 | 完整退出码表（0 / 1 / 3 / 64） | 命令本身就打印 `OK` / `MUST_ACT` / `MUST_ESCALATE` 等 token，语义自带。只有 `2` 和 `4` 的**后果**会被忘掉，所以只留这两条 |
 | `CHECK_HEARTBEAT` 判定细节与 `heartbeat` 用法 | 忘了的后果是 streak 照常爬、`MUST_ACT` 提前触发——响亮。实跑印证：上一轮 goal 从未提过它，主控靠 skill 正确处理了 9 次 |
-| "impl/investigate 优先 $call-grok、review 走 $do-review" | 忘了只是上下文用得更快，属于"做得差一点"。**这条是判断题**：若下一轮各线 compaction 明显回升，再考虑放进子线 goal |
+| "impl/investigate 优先 $call-grok、review 走 $do-review" | 忘了只是上下文用得更快，属于"做得差一点"。**这条是判断题**：子线没有 goal（见上一节），所以它只能留在 skill 与派发 prompt 里 |
 | seam / 停滞 / 轮询机制的原理解释 | goal 只给结论与禁令。要理解"为什么"读 `design-notes.md` |
 | 具体的 session id | 子线是主控创建的，写 goal 时还不存在；写死的 id 在换 session 后会让每轮判 `ROUND INVALID`。**每轮从 registry 现读** |

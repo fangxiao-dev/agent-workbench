@@ -122,7 +122,7 @@ description: >
 
 ### 开跑前
 
-正式调用统一使用 `--registry <absolute-registry-json>`；runtime 由 registry sibling 与 `coordination_id` 推导。旧的 `--coordination-id` + 环境变量路径仅为兼容旧调用。跑 `ledger.py preflight --registry <absolute-registry-json>`，**`PREFLIGHT OK` 才能开始轮询**。它拦的是 worktree 写错、两个 node 共用 worktree/branch、registry 分支与实际不符这类**全程无声**的问题——不拦的话，`head` 会串号或静默进 `head_unavailable`，停滞判定从第一轮起就是失真的。冷启动的完整顺序（goal 是最后一步）见 [goal-and-delegation.md §四](references/goal-and-delegation.md)。
+正式调用统一使用 `--registry <absolute-registry-json>`；runtime 由 registry sibling 与 `coordination_id` 推导。旧的 `--coordination-id` + 环境变量路径仅为兼容旧调用。跑 `ledger.py preflight --registry <absolute-registry-json>`，**`PREFLIGHT OK` 才能开始轮询**。它拦的是 worktree 写错、两个 node 共用 worktree/branch、registry 分支与实际不符这类**全程无声**的问题——不拦的话，`head` 会串号或静默进 `head_unavailable`，停滞判定从第一轮起就是失真的。冷启动的完整顺序（goal 是最后一步）见 [run-procedure.md §四](references/run-procedure.md)。
 
 ### 每轮做什么
 
