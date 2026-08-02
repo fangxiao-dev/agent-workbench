@@ -1,8 +1,19 @@
 # Owner 要粘贴的全部文本
 
-**这一页是唯一的模板来源。** 冷启动第一条消息、create_thread 授权原文、主控 goal 都在这里，其他文件只指过来、不放第二份——[run-procedure.md](references/run-procedure.md) 曾经放过一份主控 goal，结果这一轮实跑用的就是那份旧的，它把 `MUST_ACT` 的选项 (b) 和 `MUST_ESCALATE` 的响应都写成了 `act --escalate`，直接促成 26 次重复上报。**同一件事有两份模板，迟早有一份是旧的。**
+**这一页是唯一的模板来源，其他文件只指过来、不放第二份。**
 
 每份模板开头都是**填空区**，用 `---` 与正文隔开——只有那几行要你替换，正文里没有埋占位符。
+
+## 两份东西，别混
+
+| | **启动 prompt** | **主控 goal** |
+| --- | --- | --- |
+| 形式 | 普通消息 | 贴进 Codex 的 goal 框 |
+| 时机 | 开主控 thread 后第一条 | bootstrap 五步全绿之后 |
+| 作用 | **一次性**把摊子铺开：建 registry、init、开子线、preflight、跑通首轮，然后**停下** | **循环期间每个 turn 重注入**的那几条规则 |
+| 里面是什么 | 这一轮要建哪些线（业务信息，只有你知道） | 每轮三步 + 8 条不可违反 + 目标与结束判据 |
+
+**两份都带 coordination_id / registry / 授权，这是刻意重复不是冗余**：goal 是全系统唯一免疫 compaction 的通道，启动 prompt 会被压缩掉，所以循环期间还要用到的锚点必须在 goal 里再写一遍。
 
 ## 什么该进 goal
 
@@ -22,9 +33,9 @@ goal 是全系统**唯一免疫 compaction 的通道**（每 turn 原样重注�
 
 | 时机 | 贴什么 | 本文件哪一节 |
 | --- | --- | --- |
-| 开主控 thread 后第一条消息 | 冷启动 bootstrap prompt（**普通消息，不是 goal**），里面嵌一份授权原文 | §冷启动第一条消息 + §create_thread 授权原文 |
-| bootstrap 五步全绿之后 | Role C goal（填空区里再嵌一份授权原文） | §Role C |
-| 每次主控换 session | Role C goal，**授权原文要重贴** | §Role C |
+| 开主控 thread 后第一条消息 | 启动 prompt，里面嵌一份授权原文 | §启动 prompt + §create_thread 授权原文 |
+| bootstrap 五步全绿之后 | 主控 goal（填空区里再嵌一份授权原文） | §主控 goal |
+| 每次主控换 session | 主控 goal，**授权原文要重贴** | §主控 goal |
 
 除此之外你只有三件反应式的事：**响应 `MUST_ESCALATE`**、**点掉 Desktop 的审批弹窗**、**盯首次 `MUST_ACT`**。
 
@@ -32,9 +43,9 @@ goal 是全系统**唯一免疫 compaction 的通道**（每 turn 原样重注�
 
 ---
 
-## 冷启动第一条消息
+## 启动 prompt（普通消息，不是 goal）
 
-新开主控 thread 后第一条就贴这个。**普通消息，不是 goal。** 它只做 bootstrap，不启动轮询循环。
+新开主控 thread 后第一条就贴这个。它只做 bootstrap，不启动轮询循环。
 
 ```text
 coordination_id：<YYMMDDHH>-<slug>
@@ -98,7 +109,7 @@ create_thread 授权（我，Owner，明确给出）：
 
 ---
 
-## Role C · 主控
+## 主控 goal（贴进 goal 框的就是这一段）
 
 ```text
 coordination_id：<id>
