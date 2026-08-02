@@ -62,6 +62,8 @@ description: >
 
 **你的使命是完成任务包，方式由 `$impl-package` 定义。本段只规定你什么时候必须跟主控说话，不改变你的开发方式。**
 
+新建或替换 Role A session 时，使用 `$handoff-to-new-session` 的 clean local-session 能力，并按 [Role A clean-session 交接模板](references/role-a-session-dispatch.md) 分两阶段执行：source 先把 checkpoint 写回当前任务包 entry；第一阶段 child 只核对任务包 anchor；controller 更新 current routing 后，第二阶段 child 才读取 Role A 规则并继续 Next Action。`previous_session_ids` 只留在 registry 内部，不进入 child prompt，也不由 child 校验。
+
 按 impl-package 的 6 步主流程走，执行阶段用 `$dev-with-track` + `$subagent-driven-development`。这些已经设计好了，本 skill 不复述也不覆盖。
 
 调度接口只有两条：
@@ -139,5 +141,6 @@ description: >
 - [design-notes.md](references/design-notes.md) — 设计依据、四条硬规则的证据、第一轮要观察的读数
 - [poll-contract.md](references/poll-contract.md) — 固定 JS 片段、wake 语义、一轮的动作序列
 - [ledger-schema.md](references/ledger-schema.md) — 三个 jsonl 的字段定义
+- [role-a-session-dispatch.md](references/role-a-session-dispatch.md) — 新建/替换 Role A 的 clean-session 两阶段交接模板
 - [foundation-session-dispatch.md](references/foundation-session-dispatch.md) — 新建/替换 Role B 的 clean-session 两阶段派发模板
 - [owner-thread-broker](owner-thread-broker/SKILL.md) — 线程路由与 Owner 授权边界

@@ -90,35 +90,17 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
 
 ### Role A · 任务包子线
 
-```text
-<codex_delegation>
-  <source_thread_id><主控 session id></source_thread_id>
-  <input>
-你是任务包 <package-id> 的负责子线。
+Role A 新任务或 replacement 不再使用单段 `<codex_delegation>` wrapper，也不把 source/controller 聊天摘要灌给 child。
 
-角色：读 $thread-harness 的 Role A 段。你的使命是完成任务包，开发方式由 $impl-package
-定义（6 步主流程，执行阶段 dev-with-track + subagent-driven-development）。thread-harness
-只规定你什么时候必须跟主控说话，不改变你的开发方式。
+统一复用 `$handoff-to-new-session` 的 clean local-session 能力，并应用 [Role A clean-session 两阶段交接模板](role-a-session-dispatch.md)：
 
-锚点：
-- worktree: <绝对路径>
-- branch: <分支名>
-- expected HEAD: <commit>
-- 任务包: <docs/implementations/<package-id>/ 或实际路径>
+1. source session 只把当前 HEAD、计数状态、单一 Next Action、已获/剩余证据和 WIP 边界写回现有 package entry。
+2. controller 用第一阶段纯任务包 anchor card 创建 local session；prompt 不含 harness、registry 或 Role A 指令。
+3. child 只报告 anchor PASS/FAIL 并停止，不开始实现。
+4. controller 设置短标题、更新 current routing，并复核 sibling 未变化。
+5. controller 发送第二阶段 Role A registration + assignment card；child 此时才登记状态并从 package entry 继续。
 
-账本：python <repo>/skills/thread-harness/scripts/ledger.py，coordination-id 是 <id>，
-你的 node 名是 <node>。
-
-必须遵守（其余按 impl-package）：
-- head 变了 / 状态转 waiting / 出现 Owner 级阻塞 —— 三者任一，写账本并回报主控，不要等它来问。
-- 等上游产物时必须指向一个 seam_id。等一个没人负责造的东西是错误状态，立即上报。
-- "提交一份记录我被阻塞的文档"不算产出。空闲要说出来，让主控给你派活。
-- impl / investigate 优先 $call-grok；review 走 $do-review；验收自己做。
-
-授权边界：<明确写清可以做什么、绝对不可以做什么>
-  </input>
-</codex_delegation>
-```
+`previous_session_ids` 是 registry 内部字段，不得进入 handoff prompt、assignment card 或 child 校验。两个可直接填充的 prompt 与失败处理以该 reference 为准，不在这里复制第二份。
 
 ### Role B · Foundation 子线
 

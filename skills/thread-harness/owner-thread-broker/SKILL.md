@@ -58,6 +58,8 @@ When a controller or child moves to a new session, or an existing session switch
 6. Preserve every sibling node and unknown field in that group file.
 7. Re-read the saved registry and confirm the intended node changed and no sibling node changed.
 
+Treat `previous_session_ids` as registry-internal routing history. Do not include it in a child handoff or registration prompt, and do not ask a child to read, print, or validate it. A replacement child verifies only its current session/worktree/branch projection after the controller updates the registry.
+
 Never invent a session ID. If the group path, current ID, or node identity is unavailable, ask for it. Do not create a parallel file for an existing group.
 
 If a group file is missing, recover only that group from the reference template and explicit handoff facts. If an existing group file is malformed or the node is ambiguous, stop and ask the Owner how to recover it; do not reconstruct it silently from stale chat history or inspect unrelated group files.
