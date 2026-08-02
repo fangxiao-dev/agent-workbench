@@ -52,6 +52,8 @@
 1. source child 在停下 owned process 后生成紧凑 prepare-only card，写入用户 Temp：`%TEMP%\codex-thread-harness\handoffs\`。
 2. card 写入 Temp，不写入 worktree、不提交 Git、不放 secrets，且只记录恢复所需事实：`version`、`registry` 绝对路径、`coordination_id`、`node`、`source_session_id`、worktree、branch、HEAD、恢复 authority、单一 next action、exact inputs、already earned、still required、authorization、exclusions 与 WIP boundary。
 3. source child 对 card 做 SHA-256，并只向 controller 发送“card path + hash + H1 envelope”；不发送新 session id，也不调用 `create_thread`。
+
+> **card 留在 `%TEMP%` 是刻意的，不是漏改。** 账本搬去了 `.progress-record/`，card 没有跟着搬，判据是**生命周期**：账本是整场 coordination 的唯一事实来源、要活十几小时并跨 session 接手，丢了没有恢复路径；card 是分钟级消耗品，写完立刻被 controller 读走校验，丢了只需重发一次。`%TEMP%` 被清空对前者是灾难，对后者是无事。**只有"丢了无法重建"的东西才需要持久盘。**
 4. controller 重新读取并校验 card path/hash、registry source session、worktree/branch/HEAD 与恢复 authority；校验通过后才实际 `create_thread`、回填 registry、发送第二阶段 registration + assignment card 并验收。
 
 最小 card 形状：
