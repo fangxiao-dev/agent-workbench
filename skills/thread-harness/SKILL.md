@@ -32,7 +32,7 @@ description: >
 
 - **H1 回报触发**：turn 结束前，若 ①`head` 变了 ②状态从 working 转为 waiting ③产生 Owner 级阻塞——三者任一成立，**必须**写账本并 `send_message_to_thread` 回主控。
 - **H2 账本**：状态变更即 append，字段见 [ledger-schema.md](references/ledger-schema.md)。**不要把进度只留在自己的上下文里**，它会被 compaction 清掉。
-- **H3 停滞二选一**（主控专属）：连续 5 轮所有 node 的 `head` 无变化 → 必须二选一：派发新工作，或向 Owner 报告并结束 loop。**没有第三个选项。** 从 `3/5` 起，若仍有 active / working node，每轮必须直接 `read_thread` 看最新进展；任一 thread 有具体、最新的工作心跳才可执行 `ledger.py heartbeat` 把 streak 归零。重复等待文案、旧进展或仅有 active 状态都不算心跳。全员 idle 时不重置，`idle_nodes` 仍是独立派活信号。账本里有 pending 决策时立即上报，不进入下一轮。
+- **H3 停滞二选一**（主控专属）：连续 5 轮所有 node 的 `head` 无变化 → 必须二选一：派发新工作，或向 Owner 报告并结束 loop。**没有第三个选项。** 从 `3/5` 起，若仍有 active / working node，每轮必须直接 `read_thread` 看最新进展；任一 thread 有具体、最新的工作心跳才可执行 `ledger.py heartbeat` 把 streak 归零。重复等待文案、旧进展或仅有 active 状态都不算心跳。全员 idle 时不重置，`idle_nodes` 仍是独立派活信号。账本里有尚未上报的 pending 决策时立即上报，不进入下一轮；已上报但仍 pending 的决策不再豁免停滞判定。
 - **H4 seam 归属**：任何"我在等某个上游产物"都要指向一个 `seam_id`，且该 seam 在账本里必须有 `producer`。**等一个没人负责造的东西，是错误状态，不是阻塞状态。**
 
 ## 公共约定（三个角色都适用）
@@ -117,8 +117,9 @@ description: >
 3. 跑 `ledger.py stall-check`，按退出码走：
    - `0` `OK` → 正常，按摘要决策
    - `0` `CHECK_HEARTBEAT` → 已到 `3/5` 或 `4/5`；直接读取 active / working thread。若确认具体、最新进展，执行 `ledger.py heartbeat --node <node> --evidence "<一句话>"`；否则不重置
-   - `2` `MUST_ACT` → **H3 二选一**，禁止输出"继续等待"
-   - `3` `MUST_ESCALATE` → 立即向 Owner 报告 pending 决策，本轮结束
+   - `2` `MUST_ACT` → **H3 二选一**，派发新工作用 `act --dispatch`，向 Owner 报告并结束 loop 用 `act --halt --reason`；禁止输出"继续等待"
+   - `3` `MUST_ESCALATE` → 立即向 Owner 报告尚未上报的 pending 决策，并用 `act --escalate --decision-id <d>` 留痕，本轮结束
+   - `4` `HALTED` → loop 已被终止，**不要继续轮询**；先向 Owner 确认再决定是否恢复
 
 摘要里 `idle_nodes` 非空 = 有线闲着 = 该派活。这跟 `unchanged` 是两回事。heartbeat 只写 `sync-state.json` 的运行时 reset marker，不修改四个 append-only JSONL，也不要求缓存每轮 thread 消息。
 

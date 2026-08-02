@@ -73,7 +73,7 @@
 | `raised_by` | string 或 null | 是 | registry node 名称 | `decide --raise` | 发起决策的 node。回答行可为 `null`。 |
 | `blocks` | array[string] | 是 | registry node 名称列表 | `decide --raise` | 被该决策阻塞的 node。 |
 | `question` | string 或 null | 是 | 自由短文本 | `decide --raise` | 需要 owner 回答的问题。 |
-| `status` | string | 是 | `pending` / `answered` | `decide` | `pending` 会让 `stall-check` 优先返回 `MUST_ESCALATE`。 |
+| `status` | string | 是 | `pending` / `answered` | `decide` | 尚未通过 `act --escalate` 上报的 `pending` 会让 `stall-check` 优先返回 `MUST_ESCALATE`。 |
 | `answer` | string 或 null | 是 | 自由短文本 | `decide --answer` | owner 或 broker 的回答。待决策时为 `null`。 |
 
 示例：
@@ -86,25 +86,30 @@
 
 ## acts.jsonl
 
-记录 `stall-check` 返回 `MUST_ACT` 后 broker 选择了哪类动作。它只让选择可观测，不验证派发语义是否充分。
+记录 broker 在 `MUST_ESCALATE` / `MUST_ACT` 后选择了哪类动作。它只让选择可观测，不验证派发语义是否充分。
 
 `act --dispatch` 成功时还会向 `seams.jsonl` 追加同一 `seam_id` 的 `status=assigned` 行，`consumers=[]`、`artifact=null`；如果该 seam 最新 producer 与本次不同，命令会提示 producer 变更并继续追加，最新行代表当前 ownership。
+
+halted 状态只由 `acts.jsonl` 判定：最后一行 `kind=="halt"` 表示 loop 已终止；追加任何 `dispatch` / `escalate` 行都会自动解除。`act --halt` 必须带 `--reason`，并记录 halt 当时全部 pending decision id 的快照。
 
 | 字段 | 类型 | 必填 | 枚举 / 格式 | 写入者 | 含义 |
 | --- | --- | --- | --- | --- | --- |
 | `ts` | string | 是 | 本地时区 ISO 8601，带偏移 | `act` | 本行写入时间。 |
 | `seq` | number | 是 | 单调递增整数 | `act` | action 追加序号，来自 `sync-state.json`。 |
-| `kind` | string | 是 | `dispatch` / `escalate` | `act` | `MUST_ACT` 后选择派活还是升级。 |
+| `kind` | string | 是 | `dispatch` / `escalate` / `halt` | `act` | `dispatch` 表示派活，`escalate` 表示 pending decision 已上报，`halt` 表示向 Owner 报告并结束 loop。 |
 | `seam_id` | string 或 null | dispatch 必填 | 不带 `seam:` 前缀 | `act --dispatch` | 本次派发要生产的 seam。 |
 | `producer` | string 或 null | dispatch 必填 | registry node 名称 | `act --dispatch` | seam 生产者；必须是 registry node。 |
 | `deliverable` | string 或 null | dispatch 必填 | 一句话 | `act --dispatch` | 本次派发要求交付的内容。 |
 | `decision_id` | string 或 null | escalate 必填 | 稳定 id | `act --escalate` | 本次升级关联的决策项。 |
+| `reason` | string 或 null | halt 必填 | 一句话 | `act --halt` | 结束整个 loop 的原因。 |
+| `pending_decision_ids` | array[string] | halt 必填 | decision id 列表 | `act --halt` | halt 当时全部 pending decision id 的快照。 |
 
 示例：
 
 ```jsonl
 {"ts":"2026-08-01T05:20:00+02:00","seq":1,"kind":"dispatch","seam_id":"order_core_writer","producer":"f6_order_core","deliverable":"Publish the writer seam contract and commit pointer.","decision_id":null}
 {"ts":"2026-08-01T05:25:00+02:00","seq":2,"kind":"escalate","seam_id":null,"producer":null,"deliverable":null,"decision_id":"freeze_order_core_ownership"}
+{"ts":"2026-08-01T05:30:00+02:00","seq":3,"kind":"halt","seam_id":null,"producer":null,"deliverable":null,"decision_id":null,"reason":"Owner report sent; loop intentionally stopped.","pending_decision_ids":["freeze_order_core_ownership"]}
 ```
 
 ## sync-state.json
@@ -126,7 +131,7 @@
 - `state=awaiting_seam` 但不写合法 `seam:<id>`。该命令会退出 `64`；摘要里的 `malformed_waiting_on` 用来暴露历史坏行。
 - 更新账本时重写旧 JSONL。四个 JSONL 账本只能追加新事实；状态变更通过新行表达。
 - 在 `seams.jsonl` 里只写消费者，不写 `producer`。第一轮脚本只报 `seams_unowned` 数量，后续阶段会把无 producer 的 seam 作为阻断。
-- 在 `decisions.jsonl` 留下 `pending` 后继续普通轮询。`stall-check` 会优先返回 `MUST_ESCALATE`，broker 应上报 owner。
+- 在 `decisions.jsonl` 留下尚未上报的 `pending` 后继续普通轮询。`stall-check` 会优先返回 `MUST_ESCALATE`，broker 应上报 owner 并写 `act --escalate`。已上报但仍 pending 的决策会继续显示为 `pending_escalated`，但不再屏蔽停滞判定。
 
 ## 实测记录
 
@@ -136,7 +141,7 @@
 python skills/thread-harness/scripts/selftest.py
 ```
 
-覆盖：`sync` 自检判据各自的失败路径（含 `text({pollCount:0})` 这种退化输出）、实际 ids 集合与 registry children 不一致的失败路径、投影 `n` 与实际 ids 数量不一致、`timedOut` 与 poll 字段完整性、陌生/重复 poll id、正常投影合并、`inactiveStatus` 归入 `idle_nodes` 且与 `unchanged` 分开、`polls[]` 缺 child 时仍为该 child 写 progress 并读取 head、`SYNC STALE` 错误信息含 path/bytes/mtime/scanned_lines、`report` 后 `state` / `waiting_on` 不被下一轮 `sync` 覆盖、陈旧 report 暴露为 `stale_reports` 且 stale waiting_on 不计入无主 seam、重复 `round` 时按追加顺序累计 `stall_streak`、默认 `5/5` 阈值与从 `3/5` 开始的 heartbeat reset、heartbeat 不修改 JSONL、多 commit 区间内 docs-only 与 code 推进区分、首次观测单 commit 推进分类、`act --dispatch` 留痕并同步形成 seam ownership、`status` 无 sync 时可读、真实 git fixture 下 turn 变化不重置 `stall_streak`、`stall-check` 的 0/2/3 优先级、`decide --raise/--answer`、多值参数空格分隔、`seam` producer/consumer registry 校验、用法错误退 64。
+覆盖：`sync` 自检判据各自的失败路径（含 `text({pollCount:0})` 这种退化输出）、实际 ids 集合与 registry children 不一致的失败路径、投影 `n` 与实际 ids 数量不一致、`timedOut` 与 poll 字段完整性、陌生/重复 poll id、正常投影合并、`inactiveStatus` 归入 `idle_nodes` 且与 `unchanged` 分开、`polls[]` 缺 child 时仍为该 child 写 progress 并读取 head、`SYNC STALE` 错误信息含 path/bytes/mtime/scanned_lines、`report` 后 `state` / `waiting_on` 不被下一轮 `sync` 覆盖、陈旧 report 暴露为 `stale_reports` 且 stale waiting_on 不计入无主 seam、重复 `round` 时按追加顺序累计 `stall_streak`、默认 `5/5` 阈值与从 `3/5` 开始的 heartbeat reset、heartbeat 不修改 JSONL、多 commit 区间内 docs-only 与 code 推进区分、首次观测单 commit 推进分类、`act --dispatch` 留痕并同步形成 seam ownership、`act --halt` 留痕、halted 状态暴露与自动解除、`status` 无 sync 时可读、真实 git fixture 下 turn 变化不重置 `stall_streak`、`stall-check` 的 0/2/3 优先级、已上报 pending 不屏蔽 `MUST_ACT`、同 id 重新 raise 需要重新上报、`decide --raise/--answer`、多值参数空格分隔、`seam` producer/consumer registry 校验、用法错误退 64。
 
 自检用 `THREAD_HARNESS_BROKER_ROOT` 与 `THREAD_HARNESS_SESSIONS_ROOT` 指向隔离目录，**不会碰生产运行时**。
 

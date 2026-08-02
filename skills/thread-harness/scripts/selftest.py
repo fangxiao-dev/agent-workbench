@@ -200,6 +200,59 @@ def ledger_rows(name):
     return rows
 
 
+def append_ledger_row(name, row):
+    path = BROKER / CID / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+
+def append_progress_round(seq):
+    for node, head in (("alpha", "a" * 40), ("beta", "b" * 40)):
+        append_ledger_row("progress.jsonl", {
+            "ts": f"2026-08-01T06:{seq:02d}:00+02:00",
+            "src": "poll",
+            "seq": seq,
+            "round": seq,
+            "node": node,
+            "head": head,
+            "turn": f"manual-{node}-{seq}",
+            "status": "notLoaded",
+            "turn_status": "completed",
+            "state": "working",
+            "note": "manual fixture",
+        })
+
+
+def append_progress_streak(streak):
+    for seq in range(1, streak + 2):
+        append_progress_round(seq)
+
+
+def append_decision(decision_id, ts, status="pending", *, by="alpha", answer=None):
+    append_ledger_row("decisions.jsonl", {
+        "ts": ts,
+        "decision_id": decision_id,
+        "raised_by": by if status == "pending" else None,
+        "blocks": ["alpha"] if status == "pending" else [],
+        "question": f"{decision_id}?" if status == "pending" else None,
+        "status": status,
+        "answer": answer,
+    })
+
+
+def append_escalate(decision_id, ts, seq=1):
+    append_ledger_row("acts.jsonl", {
+        "ts": ts,
+        "seq": seq,
+        "kind": "escalate",
+        "seam_id": None,
+        "producer": None,
+        "deliverable": None,
+        "decision_id": decision_id,
+    })
+
+
 def check(name, ok, detail=""):
     print(f"[{'PASS' if ok else 'FAIL'}] {name}")
     if detail:
@@ -411,6 +464,104 @@ rc, out = run("decide", "--coordination-id", CID, "--answer", "d1", "--text", "y
 fails += check("decide --answer 可清掉 pending decision", rc == 0, out.strip())
 rc, out = run("stall-check", "--coordination-id", CID, "--streak", "99")
 fails += check("decide --answer 后无 pending 且未达阈值时退出 0", rc == 0 and out.startswith("OK "), out.strip())
+
+print("-" * 78)
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+append_progress_streak(0)
+append_decision("pending-new", "2026-08-01T06:00:00+02:00")
+rc, out = run("stall-check", "--coordination-id", CID)
+fails += check("pending decision 尚未有对应 escalate 行时 stall-check 退出 3",
+               rc == 3 and "MUST_ESCALATE" in out and "pending-new" in out,
+               out.strip())
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+append_progress_streak(0)
+append_decision("pending-seen", "2026-08-01T06:00:00+02:00")
+append_escalate("pending-seen", "2026-08-01T06:00:05+02:00")
+rc, out = run("stall-check", "--coordination-id", CID)
+fails += check("pending decision 已上报且 streak 未达阈值时不再退出 3",
+               rc == 0 and ("OK " in out or "CHECK_HEARTBEAT" in out)
+               and "MUST_ESCALATE" not in out and "pending_escalated: pending-seen" in out,
+               out.strip())
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+append_progress_streak(5)
+append_decision("pending-seen-act", "2026-08-01T06:00:00+02:00")
+append_escalate("pending-seen-act", "2026-08-01T06:00:05+02:00")
+rc, out = run("stall-check", "--coordination-id", CID)
+fails += check("pending decision 已上报且 streak 达阈值时必须产出 MUST_ACT",
+               rc == 2 and "MUST_ACT" in out and "pending_escalated: pending-seen-act" in out,
+               out.strip())
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+append_progress_streak(0)
+append_decision("pending-reported", "2026-08-01T06:00:00+02:00")
+append_decision("pending-unreported", "2026-08-01T06:00:01+02:00")
+append_escalate("pending-reported", "2026-08-01T06:00:05+02:00")
+rc, out = run("stall-check", "--coordination-id", CID)
+first_line = out.strip().splitlines()[0] if out.strip() else ""
+fails += check("部分 pending 已上报时只升级未上报项并列 already_escalated",
+               rc == 3 and "pending-unreported" in first_line and "pending-reported" not in first_line
+               and "already_escalated: pending-reported" in out,
+               out.strip())
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+append_progress_streak(0)
+append_decision("pending-reraised", "2026-08-01T06:00:00+02:00")
+append_escalate("pending-reraised", "2026-08-01T06:00:05+02:00")
+append_decision("pending-reraised", "2026-08-01T06:00:10+02:00", status="answered", answer="yes")
+append_decision("pending-reraised", "2026-08-01T06:00:20+02:00")
+rc, out = run("stall-check", "--coordination-id", CID)
+fails += check("decision answered 后同 id 重新 raise 必须重新升级",
+               rc == 3 and "MUST_ESCALATE" in out and "pending-reraised" in out,
+               out.strip())
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+rc, out = run("act", "--coordination-id", CID, "--halt")
+fails += check("act --halt 缺 reason 必须退出 64",
+               rc == 64 and "act --halt requires --reason" in out,
+               f"rc={rc} {out.strip()}")
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+append_decision("halt-d1", "2026-08-01T06:00:00+02:00")
+append_decision("halt-d2", "2026-08-01T06:00:01+02:00")
+rc_halt, out_halt = run("act", "--coordination-id", CID, "--halt", "--reason", "owner stopped loop")
+halt_rows = ledger_rows("acts.jsonl")
+rc, out = run("stall-check", "--coordination-id", CID)
+fails += check("halt 后 stall-check 只输出 HALTED 且不输出业务动作标记",
+               rc_halt == 0 and halt_rows and halt_rows[-1].get("kind") == "halt"
+               and halt_rows[-1].get("reason") == "owner stopped loop"
+               and halt_rows[-1].get("pending_decision_ids") == ["halt-d1", "halt-d2"]
+               and rc == 4 and "HALTED" in out
+               and "MUST_ACT" not in out and "MUST_ESCALATE" not in out and "CHECK_HEARTBEAT" not in out,
+               f"act={out_halt.strip()} stall={out.strip()}")
+rc, out = run("status", "--coordination-id", CID)
+status_lines = out.splitlines()[:5]
+fails += check("halt 后 status 顶部暴露 halted、reason 与 pending ids",
+               rc == 0 and status_lines[:2] == ["STATUS", "halted: yes"]
+               and any("owner stopped loop" in line for line in status_lines)
+               and any("halt-d1" in line and "halt-d2" in line for line in status_lines),
+               out.strip())
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+append_progress_streak(5)
+run("act", "--coordination-id", CID, "--halt", "--reason", "temporary stop")
+rc_halted, out_halted = run("stall-check", "--coordination-id", CID)
+rc_dispatch, out_dispatch = run("act", "--coordination-id", CID, "--dispatch", "--seam-id", "resume-seam",
+                                "--producer", "alpha", "--deliverable", "resume concrete work")
+rc, out = run("stall-check", "--coordination-id", CID)
+fails += check("halt 后追加 dispatch 行会自动解除 halted 并恢复 MUST_ACT 判据",
+               rc_halted == 4 and "HALTED" in out_halted
+               and rc_dispatch == 0 and rc == 2 and "MUST_ACT" in out and "HALTED" not in out,
+               f"halted={out_halted.strip()} dispatch={out_dispatch.strip()} after={out.strip()}")
 
 print("-" * 78)
 write_fixture(CALL_OK, GOOD_PROJECTION, git_worktrees=True)

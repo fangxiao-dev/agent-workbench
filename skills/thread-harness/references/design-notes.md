@@ -20,7 +20,7 @@
 | --- | --- | --- |
 | H1 | **回报触发条件**：任一 thread 在 turn 结束前，若 ①`head` 变了 ②状态从 working 转为 waiting ③产生 owner 级阻塞——三者之一成立，必须写账本并 `send_message_to_thread` 回 broker | F3：7 条线里 5 条从不主动回报，F6 唯一能解环的 Owner 请求因此永远没送达 |
 | H2 | **账本字段与写入时机**：状态变更即 append，字段按 §5 schema | F9：全局进度只活在 context 里，末期每 12 分钟被 compaction 清洗一次 |
-| H3 | **停滞上限 + 二选一**：连续 5 轮所有 node 的 git HEAD 无变化，broker 必须二选一——(a) 派发新工作（含 create_thread 开新 Foundation 线），(b) 向 Owner 报告并结束 loop。**禁止第三种输出。** 从第 3 轮起若仍有 active / working node，每轮必须直接 `read_thread`；只有具体且最新的执行心跳可将 streak 归零。另：`decisions.jsonl` 有 `pending` 项时立即上报，不进入下一轮 | F1：Owner 是唯一解卡装置；F7：broker 把自己的待办归类成外部阻塞。上一轮它输出了 104 次"本轮 loop 检查完成" |
+| H3 | **停滞上限 + 二选一**：连续 5 轮所有 node 的 git HEAD 无变化，broker 必须二选一——(a) 派发新工作（含 create_thread 开新 Foundation 线），(b) 向 Owner 报告并结束 loop（即 `act --halt --reason`）。**禁止第三种输出。** 从第 3 轮起若仍有 active / working node，每轮必须直接 `read_thread`；只有具体且最新的执行心跳可将 streak 归零。另：`decisions.jsonl` 有尚未上报的 `pending` 项时立即上报，不进入下一轮；已上报但仍 pending 的决策不再豁免停滞判定 | F1：Owner 是唯一解卡装置；F7：broker 把自己的待办归类成外部阻塞。上一轮它输出了 104 次"本轮 loop 检查完成" |
 
 **H3 的 `MUST_ACT` 准确含义是「既没有 committed progress，也没有在阈值前确认到 fresh heartbeat」，不是「整体停止」。** 一条线可能正在活跃工作、只是还没 commit，所以：
 
@@ -28,6 +28,7 @@
 - 从 `3/5` 起每轮付一次语义读取成本：对 active / working node 直接 `read_thread`。具体的新测试、finding closure、patch 或正在执行的新命令算 heartbeat；重复等待文案、旧报告和单纯 active 状态不算。
 - fresh heartbeat 通过 `ledger.py heartbeat` 在 `sync-state.json` 写 reset marker，将 streak 归零；全员 idle 时不重置，按 `idle_nodes` 派活。
 - 到 `5/5` 后不再允许 heartbeat 绕过 `MUST_ACT`，仍执行二选一。
+- 已通过 `act --escalate` 上报且 `ts` 不早于最新 raise 的 pending decision 只作为 `pending_escalated` 显示，不再屏蔽 `MUST_ACT`。
 | H4 | **seam 必须登记生产者**：任何 `awaiting_seam` 都要指向一个 `seam_id`，该 seam 必须在 `seams.jsonl` 里有一条带 `producer` 的记录 | F2/F7：环的成因是"跨域上游契约"是个没有归属的名词 |
 
 H4 的分阶段：**第一轮只登记不校验**；阶段 2 打开校验（`waiting_on` 指向的 seam 查不到 producer → broker 必须立即指派，否则报错阻断）。schema 一次写全，不迁移。
@@ -205,7 +206,7 @@ role 段开头必须写明：*"你的使命是完成任务包，方式由 `/impl
 
 > 依据：上一轮 04:47:18 broker 自述"当前阻塞来自缺失的跨域上游契约……而不是未调度"，把自己的活归类成了外部阻塞（F7）。而 `create_thread` 派新 Foundation 线这条路全程可用且有效（17/17 成功，F5/F6 产出 63/56 个 commit），它只是被停用了——02:14 之后 5.5 小时一次没派。
 
-硬规则：H3（停滞二选一 + pending 决策立即上报）、H4 登记、不自己做审计。
+硬规则：H3（停滞二选一 + 尚未上报的 pending 决策立即上报）、H4 登记、不自己做审计。
 
 ## 5. 账本 schema
 
@@ -256,7 +257,7 @@ routing registry 仍是同级的 `%TEMP%\codex-thread-broker\<coordination_id>.j
 | `seam --coordination-id <id> --seam-id <s> --producer <p> [--consumers ...] [--deliver <artifact>]` | 登记/交付 seam |
 | `decide --coordination-id <id> --raise <decision-id> --by <node> --blocks ... --question ...` / `--answer <decision-id> --text ...` | owner 决策队列 |
 | `heartbeat --coordination-id <id> --node <n> --evidence <text>` | 仅在 `3/5` 或 `4/5` 且 controller 已直接读 thread 确认 fresh heartbeat 后使用；只写 `sync-state.json` reset marker，不写 JSONL |
-| `stall-check --coordination-id <id>` | 连续 N 轮（默认 5）所有 node 的 `head` 无变化 → 退出码 2 并打印 `MUST_ACT`；从 `3/5` 起、到 `5/5` 前 → 退出码 0 并打印 `CHECK_HEARTBEAT`；有 pending decision → 退出码 3 并打印 `MUST_ESCALATE`；否则 0 |
+| `stall-check --coordination-id <id>` | `acts.jsonl` 最后一行是 `halt` → 退出码 4 并打印 `HALTED`；连续 N 轮（默认 5）所有 node 的 `head` 无变化 → 退出码 2 并打印 `MUST_ACT`；从 `3/5` 起、到 `5/5` 前 → 退出码 0 并打印 `CHECK_HEARTBEAT`；有尚未上报的 pending decision → 退出码 3 并打印 `MUST_ESCALATE`；否则 0 |
 
 `sync` 的决策就绪摘要格式（给 broker 读的，必须紧凑）：
 
@@ -326,7 +327,7 @@ skills/thread-harness/
 
 完整解法需要定义：deliverable 与验收条件、producer 必须转 `working`、audit/sidecar 不得计入、下一轮验证 assignment 真的进入执行。这是一整套语义，属于阶段 2 的 I1（依赖必须有 owner）范畴。
 
-**本轮做最小版：留痕，不验证。** `MUST_ACT` 之后 broker 必须调 `ledger.py act`，`--dispatch` 要求填 `seam_id` + `producer` + `deliverable` 三个字段，缺一个就退 64。
+**本轮做最小版：留痕，不验证。** `MUST_ACT` 之后 broker 必须调 `ledger.py act`；`--dispatch` 要求填 `seam_id` + `producer` + `deliverable` 三个字段，缺一个就退 64；选 (b) 结束 loop 时用 `--halt --reason`，缺 `reason` 也退 64。
 
 它证明不了派发是真的，但**逼你说出派给谁、要造什么**——"已派 Foundation 做一次增量 readiness 检查"填不进这三个字段。`stall-check` 会报 `last_must_act_answered: yes|no`，只报告不阻断。
 

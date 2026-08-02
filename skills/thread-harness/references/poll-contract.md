@@ -98,14 +98,26 @@ python skills/thread-harness/scripts/ledger.py heartbeat --coordination-id <id> 
 
 该命令只更新 `sync-state.json` 的 reset marker；`--evidence` 只用于迫使 controller 当场说清具体进展，不落盘。它不修改任何 append-only JSONL，也不保存 thread 消息。
 
+`stall-check` 先看 `acts.jsonl` 的最后一行。若最后一行是 `kind=="halt"`，输出 `HALTED (ts=<...>, reason=<...>, pending=<...>)` 并返回 `4`；追加任何 `dispatch` / `escalate` 行都会自动解除 halted。
+
+`HALTED` 单独占一个退出码而不是复用 `0`，理由和 `64` 一样：`0` 已经同时承载 `OK` 与 `CHECK_HEARTBEAT`，而 goal 模板里写的是「`0 OK` → 按 sync 摘要正常决策」。若 `HALTED` 也退 `0`，一个只按退出码分支的接手主控会把「loop 已终止」读成「一切正常」，静默续跑一个已经停掉的 coordination——正是本 harness 要消灭的那类无声失效。
+
+`stall-check` 返回 `MUST_ESCALATE` 时，只列出尚未上报的 pending decision。上报后用 `act --escalate` 留下已上报事实；同一 id 在 `answered` 后重新 `raise` 时，必须重新上报，因为判断会比较 escalate 行 `ts` 是否不早于最新 raise 行 `ts`：
+
+```powershell
+python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --escalate --decision-id <d>
+```
+
+全部 pending decision 都已上报时，`stall-check` 不再返回 `3`，会继续进入 streak 判定；输出行会带 `pending_escalated: <id...>`，避免这些 pending 从主控视野消失。
+
 `stall-check` 返回 `MUST_ACT` 后，用 `act` 留下本轮选择：
 
 ```powershell
 python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --dispatch --seam-id <s> --producer <node> --deliverable "<一句话>"
-python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --escalate --decision-id <d>
+python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --halt --reason "<一句话>"
 ```
 
-`act --dispatch` 的 `--seam-id`、`--producer`、`--deliverable` 都必填，且 producer 必须是 registry node。`stall-check` 会输出 `last_must_act_answered: yes|no`，只报告上一次 `MUST_ACT` 后是否有新 `act` 行，不改变退出码。
+`act --dispatch` 的 `--seam-id`、`--producer`、`--deliverable` 都必填，且 producer 必须是 registry node。`act --halt` 的 `--reason` 必填，缺失时退出 `64`；halt 行会记录当时全部 pending decision id 的快照。`stall-check` 会输出 `last_must_act_answered: yes|no`，只报告上一次 `MUST_ACT` 后是否有新 `act` 行，不改变退出码。
 
 ## 退出码表（全部子命令通用）
 
@@ -114,7 +126,8 @@ python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --esca
 | `0` | `OK` 或 `CHECK_HEARTBEAT` | `OK` 按摘要处理；`CHECK_HEARTBEAT` 必须按上方流程直接读 thread，再决定是否 reset |
 | `1` | `sync` 自检失败（`ROUND INVALID`）或 rollout 未就绪（`SYNC STALE`） | 见下方「自检失败处理」。**本轮作废，不要当成"无变化"** |
 | `2` | `stall-check` 输出 `MUST_ACT` | 二选一：派发新工作，或向 Owner 报告并结束 loop |
-| `3` | `stall-check` 输出 `MUST_ESCALATE` | 立即上报 pending decision，不进入下一轮。**优先级高于 `2`** |
+| `3` | `stall-check` 输出 `MUST_ESCALATE` | 立即上报尚未上报的 pending decision，并写 `act --escalate`；本轮结束。已上报 pending 不再屏蔽 `2` |
+| `4` | `stall-check` 输出 `HALTED` | loop 已由最后一条 halt act 终止。**不要继续轮询**，先向 Owner 确认；恢复只能由追加 `dispatch` / `escalate` 行完成 |
 | `64` | 命令用法错误（参数拼错、缺必填项） | 修正命令重跑。**这不是业务信号** |
 
 `64` 是刻意选的，不用 argparse 默认的 `2`：如果用法错误也退 `2`，一次拼错的命令会被读成 `MUST_ACT`，或者反过来让真正的 `MUST_ACT` 被当成拼写问题忽略掉。**退出码在语义上必须唯一。**
@@ -129,7 +142,7 @@ python skills/thread-harness/scripts/ledger.py act --coordination-id <id> --esca
 python skills/thread-harness/scripts/selftest.py
 ```
 
-它用独立构造的 fixture 覆盖 `sync` 自检判据、`SYNC STALE` 的错误信息完整性、决策与停滞的退出码优先级、默认 `5/5` 阈值、从 `3/5` 开始的 `CHECK_HEARTBEAT`、heartbeat reset 不修改 JSONL、`decide --raise/--answer`、多值参数空格分隔、`report` 状态不被 poll 覆盖、陈旧 report、重复 `round`、docs-only/code 推进分类、`act` 留痕、`status` 接手路径、真实 git HEAD 停滞判断、用法错误退 64。**这份 fixture 刻意不复用 `ledger.py` 自身的解析逻辑**——用被测代码的假设去造测试数据，测不出假设本身是错的。（初版轮询契约就是这样漏掉了"rollout 只记录打印内容"这个事实。）
+它用独立构造的 fixture 覆盖 `sync` 自检判据、`SYNC STALE` 的错误信息完整性、决策与停滞的退出码优先级、已上报 pending 不屏蔽 `MUST_ACT`、同 id 重新 raise 需要重新上报、`act --halt` 与 halted 自动解除、默认 `5/5` 阈值、从 `3/5` 开始的 `CHECK_HEARTBEAT`、heartbeat reset 不修改 JSONL、`decide --raise/--answer`、多值参数空格分隔、`report` 状态不被 poll 覆盖、陈旧 report、重复 `round`、docs-only/code 推进分类、`act` 留痕、`status` 接手路径、真实 git HEAD 停滞判断、用法错误退 64。**这份 fixture 刻意不复用 `ledger.py` 自身的解析逻辑**——用被测代码的假设去造测试数据，测不出假设本身是错的。（初版轮询契约就是这样漏掉了"rollout 只记录打印内容"这个事实。）
 
 ## 自检失败处理
 

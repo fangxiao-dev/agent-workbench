@@ -44,7 +44,7 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
       python <repo>/skills/thread-harness/scripts/ledger.py heartbeat --coordination-id <coordination-id> --node <node> --evidence "<一句话具体进展>"
       重复等待文案、旧进展、笼统“仍在工作”或仅 active 状态不算；全员 idle 时不 reset，按 idle_nodes 派活。
    2 MUST_ACT → 见下方"不可违反"第 1 条
-   3 MUST_ESCALATE → 立即向我报告 pending 决策，本轮结束
+   3 MUST_ESCALATE → 有尚未上报的 pending 决策；立即向我报告列出的决策，执行 ledger.py act --coordination-id <id> --escalate --decision-id <d> 留痕，本轮结束
 
 ### 不可违反
 
@@ -53,7 +53,7 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
    (a) 派发新工作 —— 记：
        ledger.py act --coordination-id <id> --dispatch --seam-id <s> --producer <node> --deliverable "<一句话>"
    (b) 向我报告并结束 loop —— 记：
-       ledger.py act --coordination-id <id> --escalate --decision-id <d>
+       ledger.py act --coordination-id <id> --halt --reason "<一句话>"
 
    禁止"继续等待"、"本轮无变化"、"保持现状"这类第三选项。
 
@@ -61,6 +61,7 @@ text(JSON.stringify({v:1,timedOut:r.timedOut,n:ids.length,wake:r.wake||null,poll
    那说明你想做的其实不是派活，请选 (b)。
 
    MUST_ACT 的准确含义是"连续 5 轮没有 committed progress，且从 3/5 起未确认到 fresh heartbeat"，不是"全线都死了"。
+   退出码 3 的准确含义是"有尚未上报的决策"；已通过 act --escalate 上报的 pending 决策不会继续屏蔽 MUST_ACT。
    5/5 后不得再用 heartbeat 绕过二选一。
 2. wake.reason == "inactiveStatus" 表示有线程闲着，是"该派活"的信号，不是"没有变化"。
 3. seam 缺失是你的待办，不是外部阻塞。所有人都在等某个跨域契约时，正确的动作是派一条

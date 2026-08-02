@@ -74,6 +74,34 @@ def to_local_iso(value):
         return value
 
 
+def parse_iso_ts(value) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def ts_not_earlier(candidate, baseline) -> bool:
+    candidate_dt = parse_iso_ts(candidate)
+    baseline_dt = parse_iso_ts(baseline)
+    if candidate_dt and baseline_dt:
+        if candidate_dt.tzinfo and baseline_dt.tzinfo:
+            return candidate_dt.astimezone(timezone.utc) >= baseline_dt.astimezone(timezone.utc)
+        if not candidate_dt.tzinfo and not baseline_dt.tzinfo:
+            return candidate_dt >= baseline_dt
+        return False
+    if isinstance(candidate, str) and isinstance(baseline, str):
+        return candidate >= baseline
+    return False
+
+
 def runtime_dir(coordination_id: str) -> Path:
     return broker_dir() / coordination_id
 
@@ -735,9 +763,42 @@ def pending_decisions(coordination_id: str) -> list[dict]:
     return [row for row in status_by_id.values() if row.get("status") == "pending"]
 
 
+def decision_ids(rows: list[dict]) -> list[str]:
+    return [row.get("decision_id") for row in rows if row.get("decision_id")]
+
+
+def format_id_list(ids: list) -> str:
+    return ", ".join(str(item) for item in ids if item) or "-"
+
+
+def pending_escalation_groups(coordination_id: str) -> tuple[list[dict], list[dict]]:
+    acts = read_jsonl(jsonl_path(coordination_id, "acts.jsonl"))
+    unreported = []
+    already_escalated = []
+    for decision in pending_decisions(coordination_id):
+        decision_id = decision.get("decision_id")
+        raise_ts = decision.get("ts")
+        escalated = any(
+            row.get("kind") == "escalate"
+            and row.get("decision_id") == decision_id
+            and ts_not_earlier(row.get("ts"), raise_ts)
+            for row in acts
+        )
+        if escalated:
+            already_escalated.append(decision)
+        else:
+            unreported.append(decision)
+    return unreported, already_escalated
+
+
 def latest_act(coordination_id: str) -> dict | None:
     acts = read_jsonl(jsonl_path(coordination_id, "acts.jsonl"))
     return acts[-1] if acts else None
+
+
+def halted_act(coordination_id: str) -> dict | None:
+    act = latest_act(coordination_id)
+    return act if act and act.get("kind") == "halt" else None
 
 
 def last_must_act_answered(coordination_id: str) -> bool:
@@ -1151,8 +1212,23 @@ def cmd_act(args) -> int:
                 "decision_id": args.decision_id,
             }
         )
+    elif args.halt:
+        reason = (args.reason or "").strip()
+        if not reason:
+            raise UsageError("act --halt requires --reason")
+        row.update(
+            {
+                "kind": "halt",
+                "seam_id": None,
+                "producer": None,
+                "deliverable": None,
+                "decision_id": None,
+                "reason": reason,
+                "pending_decision_ids": decision_ids(pending_decisions(args.coordination_id)),
+            }
+        )
     else:
-        raise UsageError("act requires --dispatch or --escalate")
+        raise UsageError("act requires --dispatch, --escalate, or --halt")
     append_jsonl(jsonl_path(args.coordination_id, "acts.jsonl"), row)
     if args.dispatch:
         append_jsonl(
@@ -1177,6 +1253,7 @@ def format_status(coordination_id: str, registry: dict, streak_limit: int = DEFA
     pending = pending_decisions(coordination_id)
     unowned, malformed, stale_waiting_on = seams_waiting_counts(coordination_id)
     act = latest_act(coordination_id)
+    halt = halted_act(coordination_id)
     node_lines = []
     for name in sorted(set(registry_names) | set(latest)):
         row = latest.get(name, {})
@@ -1190,11 +1267,23 @@ def format_status(coordination_id: str, registry: dict, streak_limit: int = DEFA
         act_text = f"seq={act.get('seq')} kind={act.get('kind')}"
         if act.get("kind") == "dispatch":
             act_text += f" seam={act.get('seam_id')} producer={act.get('producer')}"
+        elif act.get("kind") == "halt":
+            act_text += f" reason={act.get('reason') or '-'}"
         elif act.get("decision_id"):
             act_text += f" decision={act.get('decision_id')}"
+    header_lines = ["STATUS"]
+    if halt:
+        header_lines.extend(
+            [
+                "halted: yes",
+                f"halt_ts: {halt.get('ts') or '-'}",
+                f"halt_reason: {halt.get('reason') or '-'}",
+                f"halt_pending_decisions: {format_id_list(halt.get('pending_decision_ids') or [])}",
+            ]
+        )
     return "\n".join(
-        [
-            "STATUS",
+        header_lines
+        + [
             "nodes:",
             *(node_lines or ["  -"]),
             f"pending_decisions: {pending_text}",
@@ -1254,27 +1343,42 @@ def cmd_heartbeat(args) -> int:
 
 def cmd_stall_check(args) -> int:
     ensure_runtime(args.coordination_id)
+    halt = halted_act(args.coordination_id)
+    if halt:
+        pending = format_id_list(halt.get("pending_decision_ids") or [])
+        print(f"HALTED (ts={halt.get('ts') or '-'}, reason={halt.get('reason') or '-'}, pending={pending})")
+        return 4
     state = load_state(args.coordination_id)
     dispatches = int(state.get("dispatches_since_progress") or 0)
     answered_line = f"last_must_act_answered: {'yes' if last_must_act_answered(args.coordination_id) else 'no'}"
-    pending = pending_decisions(args.coordination_id)
-    if pending:
-        items = ", ".join(f"{row.get('decision_id')} raised_by={row.get('raised_by')}" for row in pending)
-        print(f"MUST_ESCALATE pending_decisions: {items} dispatches_since_progress={dispatches}\n{answered_line}")
+    unreported, already_escalated = pending_escalation_groups(args.coordination_id)
+    if unreported:
+        items = format_id_list(decision_ids(unreported))
+        lines = [f"MUST_ESCALATE pending_decisions: {items} dispatches_since_progress={dispatches}"]
+        if already_escalated:
+            lines.append(f"already_escalated: {format_id_list(decision_ids(already_escalated))}")
+        lines.append(answered_line)
+        print("\n".join(lines))
         return 3
+    pending_suffix = ""
+    if already_escalated:
+        pending_suffix = f" pending_escalated: {format_id_list(decision_ids(already_escalated))}"
     streak = stall_streak(args.coordination_id)
     if streak >= args.streak:
         state["last_must_act_seq"] = int(state.get("next_act_seq") or 0)
         save_state(args.coordination_id, state)
-        print(f"MUST_ACT stall_streak={streak}/{args.streak} dispatches_since_progress={dispatches}\n{answered_line}")
+        print(
+            f"MUST_ACT stall_streak={streak}/{args.streak} "
+            f"dispatches_since_progress={dispatches}{pending_suffix}\n{answered_line}"
+        )
         return 2
     if streak >= max(1, args.streak - HEARTBEAT_LEAD_ROUNDS):
         print(
             f"CHECK_HEARTBEAT stall_streak={streak}/{args.streak} "
-            f"dispatches_since_progress={dispatches} read_thread_required=yes\n{answered_line}"
+            f"dispatches_since_progress={dispatches} read_thread_required=yes{pending_suffix}\n{answered_line}"
         )
         return 0
-    print(f"OK stall_streak={streak}/{args.streak} dispatches_since_progress={dispatches}\n{answered_line}")
+    print(f"OK stall_streak={streak}/{args.streak} dispatches_since_progress={dispatches}{pending_suffix}\n{answered_line}")
     return 0
 
 
@@ -1339,10 +1443,12 @@ def build_parser() -> argparse.ArgumentParser:
     mode = act.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dispatch", action="store_true")
     mode.add_argument("--escalate", action="store_true")
+    mode.add_argument("--halt", action="store_true")
     act.add_argument("--seam-id")
     act.add_argument("--producer")
     act.add_argument("--deliverable")
     act.add_argument("--decision-id")
+    act.add_argument("--reason")
     act.set_defaults(func=cmd_act)
 
     status = sub.add_parser("status")
