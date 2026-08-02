@@ -30,8 +30,8 @@
 | --- | --- | --- |
 | 起因 | 某条线太长 / 接近 compaction 上限 / 已经变笨 | 为新识别的 seam 开一条 Foundation 线，或首次建线 |
 | 谁发起 | **主控**——它看得到轮次与 compaction 迹象，子线自己往往不自知 | 主控 |
-| 谁调 `create_thread` | **controller**（source child 只准备交接卡） | **主控** |
-| 为什么 | 只有 source 知道自己的 WIP 边界、已获证据与单一 Next Action；它把这些机械写入 Temp card，controller 只校验并触发，不重新分析总结 | 没有 source session 可提示 |
+| 谁调 `create_thread` | **那条线自己**（Role A / Role C） | **主控** |
+| 为什么 | 只有它知道自己的 WIP 边界、已获证据与单一 Next Action。这些必须先写回恢复权威、再交接，才是原子的——主控代劳就得先把这些吸进自己的上下文，而它的上下文是最稀缺的 | 没有 source session 可提示 |
 | Role B 例外 | **也由主控建**。Foundation 没有自述状态，恢复权威是主控写的 assignment card，让它自交接没有意义 | 主控建 |
 | 前置 | source 停在原子 checkpoint、owned process 已停 | Owner 已授权 `create_thread`、seam assignment 明确 |
 
@@ -39,28 +39,16 @@
 
 ### 复用 `$handoff-to-new-session`，不要重造
 
-自交接的通用能力（clean local session、anchor check、不 fork、不建 worktree）已经在 `$handoff-to-new-session` 里。本页只做**override 与简化**，不重写它：
+自交接的通用能力全部在 `$handoff-to-new-session` 里：clean local session、anchor check、不 fork、不建 worktree，以及交接 prompt 的形状与长度约束（见它的 `references/handoff-prompt-template.md`）。**本页只写 harness 特有的 override，不复述它的流程，也不另造中间产物。**
 
-- **override**：交接完成后不是直接开工，而是停在第一阶段等主控更新 registry（见下方固定流程）。
-- **override**：`previous_session_ids` 由主控写进 registry，不进 child prompt。
-- **简化**：不产出通用 handoff 文档。source child 写一张 prepare-only card 到用户 Temp；Role A 的恢复权威仍是**已有的任务包 entry**，Role B 是 assignment card，Role C 是账本 + registry。
+注意它的一条原文：*"The handoff is a compact, complete initial prompt, **not a temporary handoff document**"*。交接材料就是 child 的首条 prompt 本身——**不要再往临时目录写一份中间卡片再让主控转手**，那既违反被引用 skill 的约定，也把一个原子动作拆成了可能失败的两步。
 
-### thread-harness replacement override
+两条 override：
 
-这是本 skill 对 `$handoff-to-new-session` 当前“source 自己 create/no doc”流程的明确 override，仅适用于 child replacement：
+- **停在第一阶段**：child 交接完成后不直接开工，而是只核对 anchor 就停，等主控更新 registry（见下方固定流程）。
+- **`previous_session_ids` 不进 child prompt**，由主控写进 registry。
 
-1. source child 在停下 owned process 后生成紧凑 prepare-only card，写入用户 Temp：`%TEMP%\codex-thread-harness\handoffs\`。
-2. card 写入 Temp，不写入 worktree、不提交 Git、不放 secrets，且只记录恢复所需事实：`version`、`registry` 绝对路径、`coordination_id`、`node`、`source_session_id`、worktree、branch、HEAD、恢复 authority、单一 next action、exact inputs、already earned、still required、authorization、exclusions 与 WIP boundary。
-3. source child 对 card 做 SHA-256，并只向 controller 发送“card path + hash + H1 envelope”；不发送新 session id，也不调用 `create_thread`。
-
-> **card 留在 `%TEMP%` 是刻意的，不是漏改。** 账本搬去了 `.progress-record/`，card 没有跟着搬，判据是**生命周期**：账本是整场 coordination 的唯一事实来源、要活十几小时并跨 session 接手，丢了没有恢复路径；card 是分钟级消耗品，写完立刻被 controller 读走校验，丢了只需重发一次。`%TEMP%` 被清空对前者是灾难，对后者是无事。**只有"丢了无法重建"的东西才需要持久盘。**
-4. controller 重新读取并校验 card path/hash、registry source session、worktree/branch/HEAD 与恢复 authority；校验通过后才实际 `create_thread`、回填 registry、发送第二阶段 registration + assignment card 并验收。
-
-最小 card 形状：
-
-```json
-{"version":1,"kind":"thread-harness-prepare-only","registry":"<absolute-registry-json>","coordination_id":"<id>","node":"<node>","source_session_id":"<current-session-id>","worktree":"<absolute-worktree>","branch":"<branch>","head":"<full-git-sha>","authority":"<package-entry-or-assignment-card>","next_action":"<one-concrete-action>","exact_inputs":["<absolute-path-or-artifact>"],"already_earned":"<material-proof-or-N/A>","still_required":"<remaining-proof>","authorization":"<allowed-actions>","exclusions":"<explicit-exclusions>","wip_boundary":"<short-boundary>"}
-```
+恢复权威按角色不同：Role A 是**已有的任务包 entry**，Role B 是主控写的 assignment card，Role C 是账本 + registry。
 
 ### Role A 要带上 `$impl-package`
 
@@ -69,7 +57,7 @@
 ### 固定流程
 
 1. 按上表确定谁执行第 2 步。若是 Role A 替换，source session 先把 checkpoint 写回任务包 entry 并停下 owned process；若是冷启动，controller 先完成 parent preflight。
-2. controller 读取并验证 prepare-only card；执行方用第一阶段 prompt 创建 clean local session；child 只报 anchor PASS/FAIL 然后停止。
+2. 执行方用第一阶段 prompt 创建 clean local session；child 只报 anchor PASS/FAIL 然后停止。
 3. controller 设置短标题，更新 registry 的 current routing，复核 sibling 未变化。
 4. controller 发送第二阶段 registration + assignment card。
 5. child 只校验 current controller 与本 node 的 current session/worktree/branch projection；匹配后登记状态并开工。
@@ -148,8 +136,8 @@ Assignment card（本轮唯一任务）：
 | **role-initial-state** | `working` 或 `awaiting_seam` | `working` | `working` |
 | **role-recovery-block** | `Package checkpoint：package / entry / checkpoint 指针` | 无——**不得**把 parent entry 当恢复入口，不读旧 plan/Task progress/历史 evidence | 见下方「Role C 特有顺序」 |
 | **交付登记义务** | 无 | H1 报告 seam artifact，由 controller 登记（`ledger.py seam --deliver commit:<sha>`）；没登记等于没交付 | 无 |
-| **替换时谁调 `create_thread`** | controller 读取 prepare-only card 后创建 | **controller** | 退休主控自己 |
-| **source 侧额外动作** | 先把 checkpoint 写回任务包 entry，再写 Temp prepare-only card：当前 HEAD、计数状态、单一 Next Action、已获/剩余证据、授权与 WIP 边界 | 写 Temp prepare-only card；assignment card 仍是恢复权威，不把 parent entry 当恢复入口 | 广播新 controller id 给全部 child |
+| **替换时谁调 `create_thread`** | 退休 session 自己 | **controller**（Foundation 无自述状态） | 退休主控自己 |
+| **source 侧额外动作** | 先把 checkpoint 写回任务包 entry：当前 HEAD、计数状态、单一 Next Action、已获/剩余证据、授权与 WIP 边界 | 无（assignment card 是恢复权威，不把 parent entry 当恢复入口） | 广播新 controller id 给全部 child |
 
 ### Role C 特有顺序（不能换）
 

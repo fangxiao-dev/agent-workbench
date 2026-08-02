@@ -111,7 +111,7 @@ registry：<绝对路径>
 发给旧 id 的回报不会到达任何人，而且你不会收到任何错误。
 
 H1 只发送结构化 JSON，不直接运行 ledger.py：
-`{"v":1,"registry":"<absolute-registry-json>","coordination_id":"<id>","node":"<node>","session_id":"<current-session-id>","event":"head_changed|state_changed|owner_blocked|seam_delivered|handoff_prepared","state":"working|awaiting_seam|awaiting_owner|done","head":"<full-git-sha>","waiting_on":[],"artifact":null,"details":null,"note":"<short-fact>"}`。`details` 仅按事件携带 seam 的 `seam_id/consumers`、Owner 阻塞的 `decision_id/blocks/question`，或 handoff 的 `card_path/card_sha256`。
+`{"v":1,"registry":"<absolute-registry-json>","coordination_id":"<id>","node":"<node>","session_id":"<current-session-id>","event":"head_changed|state_changed|owner_blocked|seam_delivered|handed_off","state":"working|awaiting_seam|awaiting_owner|done","head":"<full-git-sha>","waiting_on":[],"artifact":null,"details":null,"note":"<short-fact>"}`。`details` 仅按事件携带 seam 的 `seam_id/consumers`、Owner 阻塞的 `decision_id/blocks/question`，或自交接后 `handed_off` 的 `new_session_id`。
 controller 验证当前 session、ledger HEAD 与 worktree HEAD 的祖先关系后，才代写 ledger。
 
 ### 每个 turn 结束前必须检查

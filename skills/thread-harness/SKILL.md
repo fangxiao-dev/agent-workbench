@@ -61,10 +61,10 @@ description: >
 子线通过现有 `send_message_to_thread` 发送一段 JSON，不运行 `ledger.py report`、`seam` 或 `decide`。字段固定为：
 
 ```json
-{"v":1,"registry":"<absolute-registry-json>","coordination_id":"<id>","node":"<node>","session_id":"<current-session-id>","event":"head_changed|state_changed|owner_blocked|seam_delivered|handoff_prepared","state":"working|awaiting_seam|awaiting_owner|done","head":"<full-git-sha>","waiting_on":[],"artifact":null,"details":null,"note":"<short-fact>"}
+{"v":1,"registry":"<absolute-registry-json>","coordination_id":"<id>","node":"<node>","session_id":"<current-session-id>","event":"head_changed|state_changed|owner_blocked|seam_delivered|handed_off","state":"working|awaiting_seam|awaiting_owner|done","head":"<full-git-sha>","waiting_on":[],"artifact":null,"details":null,"note":"<short-fact>"}
 ```
 
-`awaiting_seam` 必须带 `waiting_on:["seam:<id>"]`；其他状态通常为空数组。`session_id` 必须是 child 当前 session，`artifact` 在无交付物时为 `null`。`details` 只承载事件所需的机械字段：seam 交付带 `seam_id/consumers`，Owner 阻塞带 `decision_id/blocks/question`，handoff 带 `card_path/card_sha256`；其他事件为 `null`。controller 重新读取 `registry`，确认 session 仍是该 node 的 current session，并确认 H1 的 HEAD 既是最新 ledger HEAD 的后代、又位于该 node 当前 worktree HEAD 的历史上，才可用现有 ledger 命令 append。seam 登记与 Owner decision 也只由 controller 写入。
+`awaiting_seam` 必须带 `waiting_on:["seam:<id>"]`；其他状态通常为空数组。`session_id` 必须是 child 当前 session，`artifact` 在无交付物时为 `null`。`details` 只承载事件所需的机械字段：seam 交付带 `seam_id/consumers`，Owner 阻塞带 `decision_id/blocks/question`，自交接带 `new_session_id`；其他事件为 `null`。controller 重新读取 `registry`，确认 session 仍是该 node 的 current session，并确认 H1 的 HEAD 既是最新 ledger HEAD 的后代、又位于该 node 当前 worktree HEAD 的历史上，才可用现有 ledger 命令 append。seam 登记与 Owner decision 也只由 controller 写入。
 
 ---
 

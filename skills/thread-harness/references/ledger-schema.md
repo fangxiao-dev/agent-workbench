@@ -53,7 +53,7 @@
 {"v":1,"registry":"D:\\ProgressRecord\\repo\\codex-thread-broker\\coordination.json","coordination_id":"26080200-example","node":"catalog","session_id":"session-current","event":"state_changed","state":"awaiting_seam","head":"0123456789012345678901234567890123456789","waiting_on":["seam:order_core_writer"],"artifact":null,"details":null,"note":"waiting for writer contract"}
 ```
 
-controller 读取 envelope 后必须重新读取 `registry`，确认 `session_id` 等于该 node 的 current session；若已有 ledger HEAD，H1 head 必须是其 git 后代，且必须位于该 node 当前 worktree HEAD 的历史上，才允许写入 progress。`event` 用于说明触发原因，`artifact` 无交付物时为 `null`。`details` 是事件特有的最小对象：`seam_delivered` 带 `seam_id/consumers`，`owner_blocked` 带 `decision_id/blocks/question`，`handoff_prepared` 带 `card_path/card_sha256`，其他事件为 `null`。seam ownership 与 Owner decision 同样由 controller 写入。
+controller 读取 envelope 后必须重新读取 `registry`，确认 `session_id` 等于该 node 的 current session；若已有 ledger HEAD，H1 head 必须是其 git 后代，且必须位于该 node 当前 worktree HEAD 的历史上，才允许写入 progress。`event` 用于说明触发原因，`artifact` 无交付物时为 `null`。`details` 是事件特有的最小对象：`seam_delivered` 带 `seam_id/consumers`，`owner_blocked` 带 `decision_id/blocks/question`，`handed_off` 带 `new_session_id`（child 自建继任者后上报，controller 据此回填 registry），其他事件为 `null`。seam ownership 与 Owner decision 同样由 controller 写入。
 
 ## seams.jsonl
 
