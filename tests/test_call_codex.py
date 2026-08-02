@@ -66,7 +66,15 @@ def test_run_returns_final_jsonl_text_and_usage(monkeypatch, tmp_path: Path) -> 
         "ok": True, "status": "completed", "text": "final answer",
         "usage": {"input_tokens": 7, "output_tokens": 3}, "exit_code": 0, "error": None,
     }
-    assert calls == [(["codex", "exec", "--json", "--cd", str(tmp_path.resolve()), "-"], "prompt", 5, tmp_path.resolve())]
+    assert calls == [(
+        [
+            "codex", "exec", "--json", "-m", "gpt-5.6-luna", "-c",
+            'model_reasoning_effort="max"', "--cd", str(tmp_path.resolve()), "-",
+        ],
+        "prompt",
+        5,
+        tmp_path.resolve(),
+    )]
 
 
 def test_parse_jsonl_accepts_codex_message_payload_shape() -> None:

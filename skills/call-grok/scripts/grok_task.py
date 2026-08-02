@@ -33,6 +33,7 @@ DEFAULT_STALL_TIMEOUT_SEC = 600
 DEFAULT_OVERALL_TIMEOUT_SEC = 600
 MAX_TIMEOUT_SEC = 1800
 DEFAULT_HEARTBEAT_SEC = 15
+DEFAULT_TOOLS = "read_file,search_replace,list_dir,grep,run_terminal_cmd,todo_write"
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -407,7 +408,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--model", help="Model id")
     p.add_argument("--effort", help="Reasoning effort")
-    p.add_argument("--tools", help="Pass through Grok --tools")
+    p.add_argument("--tools", default=DEFAULT_TOOLS, help="Pass through Grok --tools")
     p.add_argument("--allow", action="append", default=[], help="Repeatable Grok --allow rule")
     p.add_argument("--deny", action="append", default=[], help="Repeatable Grok --deny rule")
     p.add_argument("--always-approve", action="store_true", help="Pass through Grok --always-approve")

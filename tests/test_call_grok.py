@@ -34,7 +34,7 @@ def test_build_command_passes_only_explicit_caller_configuration(tmp_path: Path)
     )
 
     assert executor.build_cmd("grok", "caller-owned prompt", args) == [
-        "grok", "-p", "caller-owned prompt", "--max-turns", "120", "--output-format",
+        "grok", "-p", "caller-owned prompt", "--max-turns", "100", "--output-format",
         "streaming-json", "--cwd", str(tmp_path), "-m", "grok-test", "--effort", "high",
         "--worktree", "isolated", "--tools", "read_file,grep", "--allow", "Bash(git *)",
         "--allow", "Read(*)", "--deny", "Bash(git push*)", "--always-approve",
@@ -42,13 +42,14 @@ def test_build_command_passes_only_explicit_caller_configuration(tmp_path: Path)
     ]
 
 
-def test_default_command_has_no_injected_policy_or_prompt(tmp_path: Path) -> None:
+def test_default_command_uses_common_tools_without_prompt_policy(tmp_path: Path) -> None:
     executor = load_executor()
     args = executor.parse_args(["--cwd", str(tmp_path), "--prompt", "use exactly this prompt"])
 
     assert executor.build_cmd("grok", args.prompt, args) == [
-        "grok", "-p", "use exactly this prompt", "--max-turns", "120", "--output-format",
-        "streaming-json", "--cwd", str(tmp_path),
+        "grok", "-p", "use exactly this prompt", "--max-turns", "100", "--output-format",
+        "streaming-json", "--cwd", str(tmp_path), "--tools",
+        "read_file,search_replace,list_dir,grep,run_terminal_cmd,todo_write",
     ]
     help_text = executor.build_parser().format_help()
     for removed in ("--role", "--resume", "--plan-file", "--context-file"):

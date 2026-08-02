@@ -22,7 +22,7 @@ Provide exactly one of `--prompt` or `--prompt-file`.
 | `--max-run` | 100 | Maps to Grok `--max-turns` |
 | `--model` | CLI default | Model id |
 | `--effort` | CLI default | Reasoning effort |
-| `--tools` | unset | Grok tool list |
+| `--tools` | `read_file,search_replace,list_dir,grep,run_terminal_cmd,todo_write` | Grok CLI tool allowlist; explicit values replace the default |
 | `--allow` / `--deny` | unset | Repeatable Grok permission rules |
 | `--always-approve` | off | Pass through write approval |
 | `--no-subagents` | off | Disable Grok subagents |
@@ -34,9 +34,10 @@ Provide exactly one of `--prompt` or `--prompt-file`.
 | `--preflight` | off | Also require auth before model execution |
 | `--dry-run` | off | Return the redacted would-be command in `text` |
 
-No prompt envelope, tool policy, permission policy, or subagent policy is
-injected by default. Put task-specific instructions and context directly in the
-prompt or prompt file.
+No prompt envelope, permission policy, or subagent policy is injected by
+default. The default tool allowlist is the value shown above; pass an explicit
+`--tools` value when a task needs a narrower or different set. Put task-specific
+instructions and context directly in the prompt or prompt file.
 
 ## Output contract
 

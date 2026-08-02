@@ -7,9 +7,11 @@ description: Run one short-lived, non-interactive Grok CLI task for a caller tha
 
 Use `scripts/grok_task.py` when a skill needs one bounded Grok CLI invocation.
 
-The caller owns the task prompt, tool and permission policy, model configuration,
-and interpretation of the returned text. This skill provides no task presets,
-templates, or default tool policy.
+The caller owns the task prompt, tool and permission policy overrides, model
+configuration, and interpretation of the returned text. By default, the
+wrapper passes the Grok CLI tool allowlist
+`read_file,search_replace,list_dir,grep,run_terminal_cmd,todo_write`; callers
+can replace it with `--tools`. This skill provides no task presets or templates.
 
 **调用流程：**启动 `grok_task.py` 后让它后台运行，主 session 立即继续执行不冲突工作，不要同步等待其最终 JSON。
 只有在依赖 Grok 结果或到达验证控制点时才轮询/读取完成状态。
@@ -23,7 +25,7 @@ python "<repo>\skills\call-grok\scripts\grok_task.py" `
   --overall-timeout-sec 600 `
   --model "grok-4.5" `
   --effort high `
-  --tools "read_file,grep,list_dir" `
+  --tools "read_file,search_replace,list_dir,grep,run_terminal_cmd,todo_write" `
   --allow "Bash(git *)" `
   --deny "Bash(git push*)" `
   --no-subagents
@@ -39,6 +41,11 @@ resumes or shares a session.
 The example model is the current standard environment model, `grok-4.5`. If a
 caller needs to override it, first run `grok models` and pass an id listed as
 available by that CLI.
+
+The default tool IDs follow the installed Grok CLI's `--tools` allowlist:
+`read_file` reads files, `search_replace` writes/edits files, `list_dir` lists
+directories, `grep` searches text, `run_terminal_cmd` runs shell commands, and
+`todo_write` manages task lists. These are CLI tool IDs, not display names.
 
 The runner defaults to a 600-second (10-minute) stall and wall-clock timeout.
 For a larger task, callers may raise the relevant timeout explicitly, up to
