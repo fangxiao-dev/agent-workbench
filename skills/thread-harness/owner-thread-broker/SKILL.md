@@ -9,19 +9,15 @@ Act as the Owner's broker between one controller thread and its child threads. K
 
 ## Use one registry file per coordination group
 
-Use this runtime directory on Windows:
+Use the repository-local ignored runtime directory on Windows:
 
-`D:\ProgressRecord\<repo>\codex-thread-broker\` (override with `THREAD_HARNESS_BROKER_ROOT`)
+`<repo-root>\.progress-record\`
 
 每个 assignment card 与正式 ledger 命令都必须携带该 coordination 的**绝对 registry JSON 路径**。`ledger.py <command> --registry <absolute-json>` 以 registry sibling + `coordination_id` 推导 runtime；旧环境变量/`--coordination-id` 仅为兼容旧调用，不新增 `--broker-root`。
 
 Create one file for each independent controller/child group:
 
-`<broker-root>\<coordination_id>.json`, where `coordination_id` is `<YYMMDDHH>-<slug>`
-
-For the current user the directory normally resolves to:
-
-`D:\ProgressRecord\prj-supplyer-webapp\codex-thread-broker\`
+`<runtime-root>\<coordination_id>.json`, where `coordination_id` is `<YYMMDDHH>-<slug>`
 
 Do not combine multiple groups into one JSON file and do not create a shared mutable index. A handoff must carry the exact group file path or its `coordination_id`, plus the node's stable `node_id`.
 
@@ -50,7 +46,7 @@ Child lifecycle 只使用一个 `active` boolean：缺失视为 `true`。replace
 
 ## Register a new session or context worktree
 
-Updating only the current thread's own session routing entry is pre-authorized and does not require an Owner proposal.
+In a thread-harness coordination, the controller of the moment owns routing writes and performs them with `ledger.py route`. Routing updates do not require an Owner proposal.
 
 When a controller or child moves to a new session, or an existing session switches its actual task context to another worktree:
 

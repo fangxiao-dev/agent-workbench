@@ -33,7 +33,7 @@ description: >
 - **H1 回报触发**：turn 结束前，若 ①`head` 变了 ②状态从 working 转为 waiting ③产生 Owner 级阻塞——三者任一成立，**必须**向主控发送结构化 H1 envelope。子线不直接写 ledger。
 - **H2 账本**：controller 是 ledger 的唯一写入者；状态变更即由 controller append，字段见 [ledger-schema.md](references/ledger-schema.md)。**不要把进度只留在自己的上下文里**，它会被 compaction 清掉。
 - **H3 停滞二选一**（主控专属）：连续 5 轮所有 node 的 `head` 无变化 → 必须二选一：派发新工作，或向 Owner 报告并结束 loop。**没有第三个选项。** 从 `3/5` 起，若仍有 active / working node，每轮必须直接 `read_thread` 看最新进展；任一 thread 有具体、最新的工作心跳才可执行 `ledger.py heartbeat` 把 streak 归零。重复等待文案、旧进展或仅有 active 状态都不算心跳。全员 idle 时不重置，`idle_nodes` 仍是独立派活信号。账本里有尚未上报的 pending 决策时立即上报，不进入下一轮；已上报但仍 pending 的决策不再豁免停滞判定。
-- **H4 seam 归属**：任何"我在等某个上游产物"都要指向一个 `seam_id`，且该 seam 在账本里必须有 `producer`。**等一个没人负责造的东西，是错误状态，不是阻塞状态。**
+- **H4 seam 归属**：任何"我在等某个上游产物"都要指向一个 `seam_id`，且该 seam 在账本里要有 `producer`。查不到 producer 时**立即上报，不要继续等**——等一个没人负责造的东西不是阻塞状态。脚本只在 `sync` 摘要里报 `seams_unowned` 计数，**不阻断**，所以这条靠你自己守。
 
 ## 公共约定（三个角色都适用）
 
@@ -77,6 +77,7 @@ description: >
 调度接口只有两条：
 
 - **H1**：状态变化就发送 H1 envelope 回主控，不要等它来问。它拉取你的机制不可靠。
+- **换 session 的授权**：`create_thread` 需要 Owner 明确授权。你为自己建继任者的授权原文，由主控随[触发消息](references/session-dispatch.md)一并给你；没收到就先问，不要自行推定。
 - **H2**：不直接写账本；由主控验证 envelope 后 append。
 
 上报边界（什么该自己扛、什么该往上递）：

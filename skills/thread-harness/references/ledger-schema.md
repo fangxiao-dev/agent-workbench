@@ -2,7 +2,7 @@
 
 本页是账本文件的字段参考。正式调用显式传入 `<absolute-registry-json>`；运行时目录由 registry sibling 与其中的 `coordination_id` 推导，即 `<registry-parent>\<coordination_id>\`。旧的 `THREAD_HARNESS_BROKER_ROOT` + `--coordination-id` 仍兼容，routing registry 由 broker 维护，账本脚本不重写。
 
-`<broker-root>` 默认 `D:\ProgressRecord\codex-thread-broker`，按仓库归档时用 `THREAD_HARNESS_BROKER_ROOT` 指到 `D:\ProgressRecord\<repo>\codex-thread-broker`。`coordination_id` 用 `<YYMMDDHH>-<slug>`，时间戳取该 coordination 的起始小时。**不要放在 `%TEMP%`**——账本是接手与复盘唯一的事实来源。
+未显式传 registry 时，兼容路径默认使用 `ledger.py` 所在仓库中已忽略的 `.progress-record`；`THREAD_HARNESS_BROKER_ROOT` 仍可覆盖该兼容路径。`coordination_id` 用 `<YYMMDDHH>-<slug>`，时间戳取该 coordination 的起始小时。**不要放在 `%TEMP%`**——账本是接手与复盘唯一的事实来源。
 
 四个账本文件都是 JSON Lines，均为 append-only：只能追加新行，不重写旧行，不删除旧行。**controller 是唯一 ledger writer**；child 只发送 H1 envelope，controller 验证后使用现有命令追加。字段依据见 `design-notes.md` §5。
 
@@ -56,7 +56,7 @@
 子线只发送以下最小 JSON 给当前 controller；它不运行 `ledger.py report`、`seam` 或 `decide`：
 
 ```json
-{"v":1,"registry":"D:\\ProgressRecord\\repo\\codex-thread-broker\\coordination.json","coordination_id":"26080200-example","node":"catalog","session_id":"session-current","event":"state_changed","state":"awaiting_seam","head":"0123456789012345678901234567890123456789","waiting_on":["seam:order_core_writer"],"artifact":null,"details":null,"note":"waiting for writer contract"}
+{"v":1,"registry":"C:\\repo\\.progress-record\\coordination.json","coordination_id":"26080200-example","node":"catalog","session_id":"session-current","event":"state_changed","state":"awaiting_seam","head":"0123456789012345678901234567890123456789","waiting_on":["seam:order_core_writer"],"artifact":null,"details":null,"note":"waiting for writer contract"}
 ```
 
 controller 读取 envelope 后必须重新读取 `registry`，确认 `session_id` 等于该 node 的 current session；若已有 ledger HEAD，H1 head 必须是其 git 后代，且必须位于该 node 当前 worktree HEAD 的历史上，才允许写入 progress。`event` 用于说明触发原因，`artifact` 无交付物时为 `null`。`details` 是事件特有的最小对象：`seam_delivered` 带 `seam_id/consumers`，`owner_blocked` 带 `decision_id/blocks/question`，`handed_off` 带 `new_session_id`（child 自建继任者后上报，controller 据此回填 registry），其他事件为 `null`。seam ownership 与 Owner decision 同样由 controller 写入。

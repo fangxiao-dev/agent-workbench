@@ -31,7 +31,9 @@
 - 已通过 `act --escalate` 上报且 `ts` 不早于最新 raise 的 pending decision 只作为 `pending_escalated` 显示，不再屏蔽 `MUST_ACT`。
 | H4 | **seam 必须登记生产者**：任何 `awaiting_seam` 都要指向一个 `seam_id`，该 seam 必须由 controller 在 `seams.jsonl` 里登记一条带 `producer` 的记录 | F2/F7：环的成因是"跨域上游契约"是个没有归属的名词 |
 
-H4 的分阶段：**第一轮只登记不校验**；阶段 2 打开校验（`waiting_on` 指向的 seam 查不到 producer → broker 必须立即指派，否则报错阻断）。schema 一次写全，不迁移。
+H4 的分阶段：**当前只登记不校验**，脚本仅在 `sync` 摘要报 `seams_unowned` 计数。**H4 是给 agent 的行为规则，不是脚本里的门禁。**
+
+阶段 2（`waiting_on` 指向的 seam 查不到 producer → 报错阻断）**暂不开启**。依据：读数 5 当初的定义就是「决定 H4 校验值不值得开」，2026-08-02 那一轮回来是 **0**——7 个 seam 全部带 producer 交付。此时开阻断拦不到任何东西，却新增一类误伤（把合法轮次判死）。**读数 5 非零时再开。** schema 一次写全，不迁移。
 
 ### 2.1 贯穿性原则：地面真相优先于账本纪律
 
@@ -103,36 +105,15 @@ H4 的分阶段：**第一轮只登记不校验**；阶段 2 打开校验（`wai
 
 推论：payload 必须经由 `text()` 输出，才可能被 `ledger.py` 读到。省 context 的正确做法不是"不打印"，而是"**打印一个固定的、有界的投影**"。
 
-### 3.4 固定 JS 片段（模型每轮原样敲）
+### 3.4 固定 JS 片段
 
-```js
-const ids = [/* registry 中各 node 的 current_session_id，内联 */];
-const raw = await tools.codex_app__wait_threads({
-  targets: ids.map(threadId => ({ threadId })),
-  timeoutMs: 120000
-});
-const r = typeof raw === "string" ? JSON.parse(raw) : raw;
-text(JSON.stringify({
-  v: 1,
-  n: ids.length,
-  wake: r.wake || null,
-  polls: (r.polls || []).map(p => ({
-    id: p.thread?.id,
-    status: p.thread?.status?.type,
-    turn: p.latestTurn?.id,
-    turnStatus: p.latestTurn?.status,
-    txt: (p.latestAssistantMessage?.text || "").slice(0, 500)
-  }))
-}));
-```
+**片段正文与字段清单只存在于 [poll-contract.md](poll-contract.md)**，本页不复制第二份——它随自检判据一起演进，两处必然漂移。
 
-四条不可动摇：`timeoutMs` 固定为平台允许的 `120000`；`targets` 覆盖 registry 的**全部 active children，不含 controller 自己**（主控轮询自身没有意义）；输出是**这个投影**，字段一个不能少；`txt` 截断到 500 字符。
+四条不可动摇的性质：`timeoutMs` 固定为平台允许的 `120000`；`targets` 覆盖 registry 的全部 **active** children、不含 controller 自己；输出是那个固定投影，字段一个不能少；`txt` 截断到 500 字符。
 
-投影的确切字段以 [poll-contract.md](poll-contract.md) 为准——它随自检判据一起演进，本页只讲为什么。
+**语法都是实跑验证过的**（可选链 `?.`、`(x||[])`、`String.slice`），刻意不用 `??`（未见证据）。
 
-**所有语法都是实跑验证过的**：可选链 `?.`、`(x||[])`、`String.slice` 在上一轮主控 06:30 的真实片段里都出现过。刻意不用 `??`（未见证据）。
-
-**为什么是投影而不是全量**：全量 payload 里的 `latestAssistantMessage.text` 是不设上限的（子线回报常达 800–1500 字），7 条线一轮就能吃掉几 KB 到几十 KB，正是 F9 的燃料。投影把每轮成本压到约 3.5KB 上限且**可预测**。broker 需要某条线的全文时，用 `codex_app__read_thread` 单独取——**默认有界、按需全量**。
+**为什么是投影而不是全量**：全量 payload 里的 `latestAssistantMessage.text` 不设上限（子线回报常达 800–1500 字），7 条线一轮就能吃掉几 KB 到几十 KB，正是 F9 的燃料。投影把每轮成本压到约 3.5KB 上限且**可预测**。需要某条线全文时用 `codex_app__read_thread` 单独取——**默认有界、按需全量**。
 
 ### 3.5 自检：静默退化 → 响亮报错
 
@@ -375,7 +356,7 @@ skills/thread-harness/
 
 空的 `polls` 数组在"真的没有变化"时是合法返回，无法与"模型偷懒不打印"区分。**接受这个假阴性**——强行拒绝会在正常无变化的轮次里持续误报，反而训练 broker 忽略 `ROUND INVALID`。
 
-缓解：投影里加了 `timedOut` 字段，可以把"等满 180 秒确实没变化"与"被唤醒却没内容"分开，后者更可疑。复审提到工具声明暗示 timeout 返回时会带全部 target 的 compact progress，但这一点未经实测确认，所以不作为判据，只作为读数。
+缓解：投影里加了 `timedOut` 字段，可以把"等满 120 秒确实没变化"与"被唤醒却没内容"分开，后者更可疑。复审提到工具声明暗示 timeout 返回时会带全部 target 的 compact progress，但这一点未经实测确认，所以不作为判据，只作为读数。
 
 ### 9.5 `validate_call` 的 decoy 绕过 —— 结构上封不死
 

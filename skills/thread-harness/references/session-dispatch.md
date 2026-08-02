@@ -49,7 +49,12 @@
 5. 把新 session id 用 handed_off H1 报给我，然后停止，不再继续本线工作。
 
 registry：<registry 绝对路径 .json>
+
+Owner 的 create_thread 授权原文（转述自当前 goal，你据此为自己建继任者）：
+<粘贴 Owner 授权原文整段>
 ```
+
+**授权原文必须随触发消息一起给。** 它源自 Owner 写在主控 goal 里的那段——child 读不到主控的 goal，不带就等于让它在没有授权证据的情况下调 `create_thread`。
 
 **只在轮边界发起交接。** 轮中交接会让本轮 `sync` 判 `ROUND INVALID`（内联的 ids 与变更后的 registry 对不上）。宁可推迟一轮，**不要放宽 `sync` 校验**。
 
@@ -158,7 +163,7 @@ Assignment card（本轮唯一任务）：
 | **role-routing-extra** | 无 | `seam=<seam_id>；consumers=<consumer_nodes>` | 全部 child 的 node → session → worktree/branch/HEAD |
 | **role-initial-state** | `working` 或 `awaiting_seam` | `working` | `working` |
 | **role-recovery-block** | `Package checkpoint：package / entry / checkpoint 指针` | 无——**不得**把 parent entry 当恢复入口，不读旧 plan/Task progress/历史 evidence | 见下方「Role C 特有顺序」 |
-| **交付登记义务** | 无 | H1 报告 seam artifact，由 controller 登记（`ledger.py seam --deliver commit:<sha>`）；没登记等于没交付 | 无 |
+| **交付登记义务** | 无 | H1 报告 seam artifact，由 controller 用 `ledger.py seam --registry <path> --seam-id <s> --producer <node> [--consumers ...] --deliver commit:<sha>` 登记；没登记等于没交付 | 无 |
 | **替换时谁调 `create_thread`** | 退休 session 自己 | **controller**（Foundation 无自述状态） | 退休主控自己 |
 | **source 侧额外动作** | 先把 checkpoint 写回任务包 entry：当前 HEAD、计数状态、单一 Next Action、已获/剩余证据、授权与 WIP 边界 | 无（assignment card 是恢复权威，不把 parent entry 当恢复入口） | 先用 `route` 把 registry 指向继任者，再广播新 controller id |
 

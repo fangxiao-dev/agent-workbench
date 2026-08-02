@@ -175,7 +175,7 @@ python skills/thread-harness/scripts/selftest.py
 ROUND INVALID: poll snippet altered (<具体原因>)
 ```
 
-本轮 payload 不会合并进 `progress.jsonl`。broker 应立即停止普通轮询，恢复固定 JS 片段，确认 `timeoutMs == 120000` 且 `targets` 数量等于 registry 的 children 总数，然后重新发起下一轮。
+本轮 payload 不会合并进 `progress.jsonl`。broker 应立即停止普通轮询，恢复固定 JS 片段，确认 `timeoutMs == 120000` 且 `targets` 数量等于 registry 的 **active** children 数量，然后重新发起下一轮。
 
 当前 `sync` 自检只接受固定投影契约。五类失败文案如下：
 
