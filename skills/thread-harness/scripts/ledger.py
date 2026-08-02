@@ -40,23 +40,29 @@ PREFLIGHT_RUNTIME_FILES = ("progress.jsonl", "seams.jsonl", "decisions.jsonl", "
 IDLE_STATUS_VALUES = {"idle", "inactive", "notloaded", "not_loaded"}
 
 
-PROGRESS_ROOT = Path(r"D:\ProgressRecord")
+PROGRESS_ROOT = Path(__file__).resolve().parents[3] / ".progress-record"
 ACTIVE_REGISTRY_PATH: Path | None = None
 
 
 def broker_dir() -> Path:
-    """运行时根目录。
+    """运行时根目录（只在没有 --registry 时兜底）。
 
-    默认落在持久盘而不是 %TEMP%：账本是接手与复盘唯一的事实来源，
-    放在操作系统随时可以清空的目录里，等于把可靠层建在最不可靠的存储上。
+    默认是本仓库的 `.progress-record/`，从脚本自身位置推导，所以不需要任何配置，
+    也不含盘符或用户名。它被 .gitignore 掉——账本是运行时记录，不是源码。
 
-    按仓库归档时用 THREAD_HARNESS_BROKER_ROOT 指到
-    D:\\ProgressRecord\\<repo>\\codex-thread-broker，coordination 目录仍在其下按
-    <YYMMDDHH>-<slug> 分。测试也必须用这个变量指到临时目录——默认目录是生产
-    运行时，往里写会和在跑的 harness 抢同一棵目录树。
+    **不要放 %TEMP%**：账本是接手与复盘唯一的事实来源，放在操作系统随时可以
+    清空的目录里，等于把可靠层建在最不可靠的存储上。
+
+    真实 coordination 用 `--registry <绝对路径>` 显式指定，运行时目录跟着 registry
+    所在目录走，可以放在被调度仓库的主工作区下（如
+    `D:\\CodeSpace\\prj-supplyer-webapp\\.progress-record\\`）。
+    coordination_id 用 `<YYMMDDHH>-<slug>`。
+
+    THREAD_HARNESS_BROKER_ROOT 仍可覆盖默认根；测试必须用它指到临时目录——
+    默认目录是生产运行时，往里写会和在跑的 harness 抢同一棵目录树。
     """
     override = os.environ.get(BROKER_ROOT_ENV)
-    return Path(override) if override else PROGRESS_ROOT / "codex-thread-broker"
+    return Path(override) if override else PROGRESS_ROOT
 
 
 class LedgerError(Exception):
@@ -1159,9 +1165,11 @@ def halted_act(coordination_id: str) -> dict | None:
         return None
     halt_poll_seq = halt.get("halt_poll_seq")
     if not isinstance(halt_poll_seq, int):
-        # Legacy halt rows had no poll sequence and remain halted until a new
-        # valid sync establishes a sequence after the halt.
-        halt_poll_seq = halt.get("seq", 0)
+        # 旧 halt 行没有 poll 序号。**不要拿 act seq 去比 poll seq**——它们是两个
+        # 独立计数器（实测一次真实运行里 poll 已到 135 而 act 才 38），比较的结果
+        # 是任何旧 halt 行都立刻失效。退回旧语义：只有当它仍是最后一条 act 时才
+        # 算 halted，由后续 act 显式解除。
+        return halt if acts and acts[-1] is halt else None
     current_poll_seq = int(load_state(coordination_id).get("next_poll_seq") or 0)
     if current_poll_seq > halt_poll_seq:
         return None
