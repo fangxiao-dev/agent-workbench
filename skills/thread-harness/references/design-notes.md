@@ -72,7 +72,7 @@ H4 的分阶段：**第一轮只登记不校验**；阶段 2 打开校验（`wai
 - **`create_thread` 不是无条件的自授权动作。** 声明原文：*"Create a separate task only when the user explicitly asks for a new task."*
   推论很重要：**授权必须来自 Owner 本人在 goal 或对话里给出，controller 自己写一段"允许 create_thread"不构成自授权。** 主控 goal 模板里那句授权必须是你亲手放进去的，不能由上一任 controller 代写进接手 prompt。
 - **`create_thread` 无法给子线设置持久 goal。** 它的参数只有 prompt、target、可选 model/thinking；`create_goal` 只作用于当前 task，没有目标 thread 参数。所以 §7 那条"goal 免疫 compaction"的优势**只有主控享有**，子线的 H1/H2 会随 compaction 流失。
-  这是平台能力缺口，不是设计选择。缓解手段只能是主控用 `never_reported` / `stale_reports` 检测漏报，而不是相信子线记得。Owner 手动进 child 设 goal 是 UI 上做得到的，**但 2026-08-01 实测证明这条路走不通**：child 是被动接受调度的，goal 每轮推它「朝目标推进」，而它此刻正确的状态往往是等派活，两股力拉扯半小时后进入死循环，撤掉后影响不大。详见 `goal-prompt.md` §为什么没有子线 goal。
+  这是平台能力缺口，不是设计选择。缓解手段只能是主控用 `never_reported` / `stale_reports` 检测漏报，而不是相信子线记得。Owner 手动进 child 设 goal 是 UI 上做得到的，**但 2026-08-01 实测证明这条路走不通**：child 是被动接受调度的，goal 每轮推它「朝目标推进」，而它此刻正确的状态往往是等派活，两股力拉扯半小时后进入死循环，撤掉后影响不大。只有主控有 goal；子线角色规则随 compaction 流失这件事，改由交接链路兜底（主控从 `never_reported` / `stale_reports` / `session_age_h` 看出异常并触发自交接）。
 
 ### 3.1.1 rollout 写入行为（已探针验证，2026-08-01）
 

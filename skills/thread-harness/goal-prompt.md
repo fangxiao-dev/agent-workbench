@@ -23,7 +23,7 @@ goal 是全系统**唯一免疫 compaction 的通道**（每 turn 原样重注�
 
 > **忘了会让系统「安静地失效」的，进 goal；忘了只是「做得差一点」或者「会立刻报错」的，留在 skill。**
 
-所以这里的每一条都对应一次真实失效，机制说明、命令语法、完整退出码表全部留在 [poll-contract.md](references/poll-contract.md) 与 [design-notes.md](references/design-notes.md)。文末「明确不进 goal」记录了逐条裁剪理由。
+所以这里的每一条都对应一次真实失效，机制说明、命令语法、完整退出码表全部留在 [poll-contract.md](references/poll-contract.md) 与 [design-notes.md](references/design-notes.md)。
 
 ## 贴之前
 
@@ -155,37 +155,3 @@ push / PR / merge / deploy / Production 与共享远端 mutation 一律需要我
 
 8. 不自己做审计。
 ```
-
----
-
-## 为什么没有子线 goal
-
-**只有主控有 goal。Role A / Role B 不设 goal，这是实测结论，不是省事。**
-
-2026-08-01 试过给 child 加 goal，跑了半小时**进入死循环**，随后撤掉，撤掉后影响不大。原因是角色本身冲突：
-
-- **child 是被动接受调度的**。goal 会让它每个 turn 都被推着「朝目标推进」，而它此刻正确的状态可能就是等主控派活——两股力互相拉扯，就转起来了。
-- 理论上可以把 goal 写成「保持 stand down 直到另有指示」，但那等于用最贵的通道（每 turn 重注入）去表达「什么都别做」。
-- 而且 child 有很多条，**每次交接后都要手动贴一遍 goal**，成本高到不成比例。
-
-不加 goal 的代价，是 child 的角色规则会随 compaction 流失（平台缺口，见 design-notes §9.3）。现在这条被交接链路兜住了：
-
-> skill 定义角色 → compaction 侵蚀 → 主控从 `never_reported` / `stale_reports` / `session_age_h` 看出这条线不对劲 → 触发自交接 → 新 session 重新读 skill
-
-**变蠢是可恢复的，失控才不可恢复**——而交接机制现在能兜住前者，所以这个代价可以接受。
-
-子线的角色定义在 `$thread-harness` 的 Role A / Role B 段，派发时由 [session-dispatch.md](references/session-dispatch.md) 的第二阶段 prompt 交给它。
-
-## 明确不进 goal（记录裁剪理由）
-
-写下来是为了避免下一轮有人把它们重新加回去。
-
-| 被砍的内容 | 为什么不进 goal |
-| --- | --- |
-| `ledger.py` / `poll-contract.md` 的绝对路径 | 调用 `$thread-harness` 时平台会把 skill 路径一并给出，goal 里再写一遍是重复 |
-| 各子命令的完整参数示例 | 拼错退 `64`，`--state` 传错会抛错并列出合法值。**响亮、自我修正**，不是静默失效 |
-| 完整退出码表（0 / 1 / 3 / 64） | 命令本身就打印 `OK` / `MUST_ACT` / `MUST_ESCALATE` 等 token，语义自带。只有 `2` 和 `4` 的**后果**会被忘掉，所以只留这两条 |
-| `CHECK_HEARTBEAT` 判定细节与 `heartbeat` 用法 | 忘了的后果是 streak 照常爬、`MUST_ACT` 提前触发——响亮。实跑印证：上一轮 goal 从未提过它，主控靠 skill 正确处理了 9 次 |
-| "impl/investigate 优先 $call-grok、review 走 $do-review" | 忘了只是上下文用得更快，属于"做得差一点"。**这条是判断题**：子线没有 goal（见上一节），所以它只能留在 skill 与派发 prompt 里 |
-| seam / 停滞 / 轮询机制的原理解释 | goal 只给结论与禁令。要理解"为什么"读 `design-notes.md` |
-| 具体的 session id | 子线是主控创建的，写 goal 时还不存在；写死的 id 在换 session 后会让每轮判 `ROUND INVALID`。**每轮从 registry 现读** |
