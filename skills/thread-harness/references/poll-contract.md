@@ -7,7 +7,7 @@
 五条不可动摇的约束：
 
 1. `timeoutMs` 固定为 `120000`，与当前 `wait_threads` 平台上限一致。
-2. `targets` 必须等于脚本按账本机械推导出的 **runnable watch-set**：`working`、`never_reported`、report 已 stale、controller dispatch 后的 producer 或当前状态 unknown 的 active children；`awaiting_seam`、`awaiting_owner`、`done` 不进入阻塞 wait。inactive child 只保留历史，controller 自己也不进入 poll。
+2. `targets` 必须等于脚本按账本机械推导出的 wait 集合：优先为 **runnable watch-set**（`working`、`never_reported`、report 已 stale、controller dispatch 后的 producer 或当前状态 unknown 的 active children）；如果 runnable 集合为空，则回退为全部 active children，保留固定 120 秒 poll。`awaiting_seam`、`awaiting_owner`、`done` 不进入正常阻塞 wait；inactive child 只保留历史，controller 自己也不进入 poll。
 3. `text()` 输出**下面这个投影**，字段一个都不能少。`ledger.py sync` 从 controller rollout 里读这个投影——**你不打印的东西，任何地方都不存在**（rollout 记录的是 exec 打印的内容，不是工具原始返回）。
 4. `txt` 截断到 500 字符。需要某条线的全文时用 `codex_app__read_thread` 单独取，不要放宽这里。
 
@@ -33,13 +33,13 @@ text(JSON.stringify({
 }));
 ```
 
-不要"优化"它。这段的每个语法都是实跑验证过的（`?.`、`(x||[])`、`slice`），刻意不用 `??`。缩短它、少打印几个字段、或者只回一个计数——这些都会被 `sync` 的自检当场拦下并作废本轮。若 runnable watch-set 为空，controller 不执行虚假的 120 秒等待，应直接依据 pending seam/decision 选择派发或 halt。
+不要"优化"它。这段的每个语法都是实跑验证过的（`?.`、`(x||[])`、`slice`），刻意不用 `??`。缩短它、少打印几个字段、或者只回一个计数——这些都会被 `sync` 的自检当场拦下并作废本轮。若 runnable watch-set 为空，controller 回退到全部 active child，继续执行固定 120 秒 poll。
 
 ## 平台约束
 
 - `wait_threads` 单次最多接受 8 个 `targets`。本 harness 当前假设 active children <= 8；超过 8 的分片轮询方案本轮不做，属于已知限制。
 - 当前 Desktop bridge 可能把工具结果包装为 JSON 字符串；固定片段必须先做 object/string 双态解包，再输出规定投影。
-- 本轮采用 runnable watch-set 兜底：`afterCursor` 只保证已投递 final text 可被抑制，不能把状态级重复唤醒当作已证明消失；HEAD 仍采集全部 active child，阻塞 wait 只覆盖 runnable 集合。
+- 本轮采用 runnable watch-set 兜底：`afterCursor` 只保证已投递 final text 可被抑制，不能把状态级重复唤醒当作已证明消失；HEAD 仍采集全部 active child，阻塞 wait 优先覆盖 runnable 集合，集合为空时回退到全部 active child。
 - `create_thread` 不是无条件自授权动作，需要 Owner 在 goal 或对话中明确授权。主控 goal 模板里已包含该授权。
 - `create_thread` 无法给子线设置持久 goal，只有初始 prompt。因此子线的 H1 不像主控那样免疫 compaction；缓解手段是主控靠 `last_report_ts` 与 `never_reported` 检测漏报，而不是相信子线记得。子线不直接运行 `ledger.py report/seam/decide`。
 - timeout 契约固定为 `120000`。更小会退化为忙等，更大会被当前平台参数校验拒绝。
@@ -55,11 +55,11 @@ text(JSON.stringify({
 
 ## 一轮动作序列
 
-1. 根据上一轮 ledger 状态计算 runnable watch-set；若集合为空，跳过阻塞 wait，先执行 `stall-check` 或选择动作。
+1. 根据上一轮 ledger 状态计算 runnable watch-set；若集合为空，固定 poll 回退到全部 active child，不取消本轮 120 秒检查。
 2. 在 exec JS 中原样敲固定片段，只替换 `ids` 的内联 session id 列表。
 3. 执行 `python skills/thread-harness/scripts/ledger.py sync --registry <absolute-registry-json> --round <n>`。
 4. 读取 `sync` 的紧凑摘要：
-   - `poll_targets`：本轮固定 wait 实际允许的 runnable watch-set；它必须与脚本按 ledger 推导的集合完全相等。
+   - `poll_targets`：本轮固定 wait 实际目标；它必须与脚本按 ledger 推导的 runnable 集合完全相等，或在 runnable 为空时等于全部 active child。
    - `idle_nodes`：该派活；只有 active 且最新 ledger state 为 `working` 的 node 才进入。`idle`、`inactive`、`notLoaded`、`not_loaded` 都可作为 idle 信号；`awaiting_seam`、`awaiting_owner`、`done` 和 inactive registry child 排除。
    - `changed_nodes`：有新 head，需要读或推进。
    - `advance_kinds`：本轮 HEAD 推进类型，`docs` 不清零 dispatch 计数，`code` / `unknown` 会清零。
@@ -187,7 +187,7 @@ ROUND INVALID: poll snippet altered (<具体原因>)
 | --- | --- |
 | 调用 source（legacy `arguments` / modern `input`）里 `timeoutMs == 120000` | `timeoutMs <n> != 120000` |
 | 调用 arguments 里能解析出 `const ids = [...]` | `cannot parse ids array from call` |
-| 实际 ids 集合等于 ledger 推导的 runnable watch-set `current_session_id` 集合 | `targets mismatch (missing=<...>, unexpected=<...>)` |
+| 实际 ids 集合等于 ledger 推导的 wait 集合（runnable 非空时为 runnable，否则为全部 active child） | `targets mismatch (missing=<...>, unexpected=<...>)` |
 | 输出可解析为 JSON 且 `v == 1` | `projection missing or wrong version` |
 | 输出含 `n` 与 `polls` 两个键 | `projection shape altered (missing <key>)` |
 | `n` 等于实际 ids 数量 | `projection n=<a> != actual targets <b>` |

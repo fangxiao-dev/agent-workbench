@@ -1109,12 +1109,12 @@ rc_waiting_alpha, out_waiting_alpha = run(
 rc_waiting_beta, out_waiting_beta = run(
     "report", "--coordination-id", CID, "--node", "beta", "--state", "awaiting_owner"
 )
-append_wait(call_for([]), projection(n=0, polls=[]), call_id="all-waiting-no-block")
+append_wait(CALL_OK, GOOD_PROJECTION, call_id="all-waiting-full-poll")
 rc_all_waiting, out_all_waiting = run_registry("sync", "--round", "3")
 fails += check(
-    "全部 child 已在 awaiting 状态时 watch-set 为空且不虚假等待",
+    "全部 child 已在 awaiting 状态时回退到全 active poll",
     rc_waiting_alpha == 0 and rc_waiting_beta == 0 and rc_all_waiting == 0
-    and "poll_targets:    -" in out_all_waiting,
+    and "poll_targets:    alpha, beta" in out_all_waiting,
     f"alpha={out_waiting_alpha.strip()} beta={out_waiting_beta.strip()} sync={out_all_waiting.strip()}",
 )
 rc_dispatch_waiting, out_dispatch_waiting = run_registry(

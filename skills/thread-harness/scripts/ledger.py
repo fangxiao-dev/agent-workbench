@@ -1686,12 +1686,13 @@ def cmd_sync(args) -> int:
         dispatches = count_dispatch_calls(events)
         state["dispatches_since_progress"] = int(state.get("dispatches_since_progress") or 0) + dispatches
 
-        # HEAD 采集覆盖全部 active children；阻塞 wait 只覆盖 runnable watch-set。
+        # HEAD 采集覆盖全部 active children；阻塞 wait 优先覆盖 runnable
+        # watch-set，空集合时回退到原来的全 active poll。
         active_children = [
             node for node in nodes
             if node["role"] != "controller" and node.get("active", True)
         ]
-        poll_targets = runnable_watch_nodes(args.coordination_id, active_children)
+        poll_targets = runnable_watch_nodes(args.coordination_id, active_children) or active_children
         reason, actual_ids = validate_call(call["arguments"], [node["session_id"] for node in poll_targets])
         if reason:
             state["invalid_rounds"] = int(state.get("invalid_rounds") or 0) + 1
