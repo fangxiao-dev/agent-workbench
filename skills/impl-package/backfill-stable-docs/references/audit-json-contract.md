@@ -2,7 +2,7 @@
 
 `audit.json` 是可选的机器辅助记录，帮 agent 和脚本对账候选清单；`human-report.md` 才是给 owner 看的主产物。两者的候选计数必须一致，但 `audit.json` 本身不是 apply 的唯一合法输入——owner 批准的是 `human-report.md` 里的 item ID，不是这份 JSON 的哈希。
 
-`collect_sources.py` 的 source inventory 与本文件的 audit record 是不同合同，但都使用 `contractVersion: "3.2"`；每个 package row 以 `gateRecognition`（`indexed | mismatch | manual | null`）、可信 `gateResolution`、派生的 `gateAppliesToCurrentRevision`、`needsManualGateReview` 和 `reason` 报告 gate；`gateRecognition=null` 用于没有 `gate.md`，或只有空 ledger 模板且 runtime gate 尚无 allocation/entry 的 open/no-verdict package。旧 heading、旧 sidecar 和旧 audit schema 不属于当前输入。合法历史 indexed entry 的 `gateAppliesToCurrentRevision=false`、`gateResolution=null`，但不变成额外类别或 manual；`mismatch`/`manual` 的 `gateResolution` 必须为 `null`，且即使 package 已被 `_pending.md` 引用也不得从 manual review 清单隐藏。inventory 的 `gapCatchingStructuralCandidate(s)` 只表示 Gate/pending 结构条件满足且 Git reachability 尚未核验；audit record 的 `gapCatchingCandidates` 是 agent 完成 target-branch Git 复验后的真实候选，两者不能混用。
+`collect_sources.py` 的 source inventory 与本文件的 audit record 是不同合同，但都使用 `contractVersion: "3.2"`；每个 package row 先用 `contractStatus` 报告 `current | upgradeRequired | unsupportedFuture | invalid`，格式漂移只作为 advisory。Gate 字段使用 `gateRecognition`（`indexed | mismatch | manual | null`）、可信 `gateResolution`、派生的 `gateAppliesToCurrentRevision`、`needsManualGateReview` 和 `reason`；`gateRecognition=null` 用于没有 `gate.md`，或只有空 ledger 模板且 runtime gate 尚无 allocation/entry 的 open/no-verdict package。非 current package 若存在 Gate，inventory 将其降为 `manual`、`gateResolution=null`，并排除出 gap-catching/retirement；agent 仍审计其 pending-registry 内容。合法历史 indexed entry 的 `gateAppliesToCurrentRevision=false`、`gateResolution=null`，但不变成额外类别或 manual；current package 的 `mismatch`/`manual` 同样不提供 resolution，且即使 package 已被 `_pending.md` 引用也不得从 manual review 清单隐藏。inventory 的 `gapCatchingStructuralCandidate(s)` 只表示 Gate/pending 结构条件满足且 Git reachability 尚未核验；audit record 的 `gapCatchingCandidates` 是 agent 完成 target-branch Git 复验后的真实候选，两者不能混用。
 
 ## Minimum Shape
 
@@ -38,7 +38,7 @@
 
 ## Invariants
 
-- 旧 audit schema 不再被 verifier 兼容读取；发现 `3.1` 或更旧版本时先由独立可写升级动作将 package 和 audit 输入改成 `3.2`，再重新生成当前 `contractVersion: "3.2"` 记录。Git 负责历史 provenance，不在 audit JSON 内复制迁移日志。
+- 旧 audit output schema 不再被 verifier 兼容读取；发现 `3.1` 或更旧记录时重新生成当前 `contractVersion: "3.2"` audit record，不要求改写来源 package。Git 负责历史 provenance，不在 audit JSON 内复制迁移日志。
 - `items[].origin` 只用 `pending-registry`（来自 `_pending.md` 主渠道）或 `gap-catching`（gate 已 terminal 但没有对应登记，agent 重新发现）。`pending-registry` 的 item 必须带 `pendingRef`，指向来源 `_pending.md` 文件和其中的登记行标识。
 - `disposition` 只使用 `candidate`、`already-covered`、`conflict`、`no-delta`。
 - `items[].id` 由 `make_item_id.py` 从 source、destination 和规范化 statement 生成，用于报告内部引用，不作为 fail-closed 校验的密钥。

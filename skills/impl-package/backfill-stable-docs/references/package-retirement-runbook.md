@@ -11,22 +11,22 @@
 - 代码本身还没合并（例如 gate 明确写"ready on isolated branches, merge not executed"）——这种情况下还要核实一遍该分支相对当前主干是否已经过时（分支落后主干太多、且其独有内容已经通过别的路径独立落地时，应判定为 stale/superseded，而不是"仍待合并"；用 `git log <target>..<branch>` 看分支独有 commit，再逐个核实这些内容是否已经存在于当前主干）；
 - 实现根本还没开始（gate 明确写 planning-only、尚未动代码）。
 
-当前 package 永远只有一个 `gate.md`；initial/patch attempt 的 entry 都写入同一 append-only ledger，当前 attempt 与 D/S/P revision set 由 registry 和 canonical resolver 现场派生，不通过文件名或时间猜测。存量 `<slug>.patch-gate.md` 不属于当前输入；contract preflight 必须先阻断并由独立升级动作重塑为当前 package，再允许 retirement 判断。
+当前 package 永远只有一个 `gate.md`；initial/patch attempt 的 entry 都写入同一 append-only ledger，当前 attempt 与 D/S/P revision set 由 registry 和 canonical resolver 现场派生，不通过文件名或时间猜测。存量 `<slug>.patch-gate.md` 不属于可信 Gate 输入；contract preflight 将这类格式漂移报告为 advisory。agent 可以继续审计 durable delta，但非 current package 没有可信 terminal Gate，因此不能进入 retirement 候选，也不因 retirement 检查而自动升级 package。
 
-当前 `gate.md` 顶部状态由 `gate-status` machine-owned marker 投影，消费者不得手工编辑，也不得把 marker 外的人话摘要当判决来源。旧格式 package 在 marker 外遗留的"状态：xxx"不属于当前 evidence；contract preflight 先阻断，backfill/retirement 不以改写这行来修复状态。真正 verdict 来自 content-bound finalized entry；缺少 current runtime-state 的 package 不提供 Gate evidence。
+当前 `gate.md` 顶部状态由 `gate-status` machine-owned marker 投影，消费者不得手工编辑，也不得把 marker 外的人话摘要当判决来源。旧格式 package 在 marker 外遗留的"状态：xxx"不属于当前 Gate evidence；contract preflight 只报告 advisory，backfill/retirement 不以改写这行来修复状态。真正 verdict 来自 content-bound finalized entry；缺少 current runtime-state 的 package 不提供可信 Gate evidence，但 agent 仍可从其他材料审计 durable delta。
 
 ## 识别 GC 候选
 
 按以下条件识别候选，不自动清理：
 
-1. append-only gate ledger 已可信 terminal：`indexed` 必须同时满足 `gateAppliesToCurrentRevision=true` 且 resolution 为 pass/fail/defer；旧 heading、旧 sidecar 或旧 projection 不能作为 terminal evidence，必须先由 contract preflight 升级；fail 仍为 terminal。合法历史 indexed entry 不证明当前 D/S/P，不能列为结构候选；`mismatch`/`manual` 必须先由 agent 读证据并正常分类，不能由脚本列为结构候选。顶部 projection 或 checklist 只作导航，真正 Active（代码未合并或未开始）的 package 永不作为候选。
+1. package contract status 为 `current`，且 append-only gate ledger 已可信 terminal：`indexed` 必须同时满足 `gateAppliesToCurrentRevision=true` 且 resolution 为 pass/fail/defer；旧 heading、旧 sidecar、旧 projection 或非 current package 不能作为 terminal evidence，也不能列为结构候选，但不要求为了 audit 自动升级。fail 仍为 terminal。合法历史 indexed entry 不证明当前 D/S/P，不能列为结构候选；`mismatch`/`manual` 必须先由 agent 读证据并正常分类，不能由脚本列为结构候选。顶部 projection 或 checklist 只作导航，真正 Active（代码未合并或未开始）的 package 永不作为候选。
 2. Git 已证明 package 声称的实现实际进入解析后的 `targetBranch` commit；`targetBranch` 无法解析或实现 commit 不可确认时不得列为候选。
 3. 该 package 产生的所有登记在任何已发现的 `_pending.md` 里都已关闭（没有仍指向它的未决条目）。
 4. package 目录下 `decision.md`/`spec.md` 要么不存在，要么其内容已被判定为 already-covered（已被当前 stable docs 完整吸收），且没有其他文档的 inbound reference，不再提供任何仍需保留的信息。
 
 满足以上四条时列为"可清理候选"，附上 gate 终态、target branch Git 证据、closure 时间、吸收去向（具体 stable doc 路径）、inbound reference 检查和目录当前剩余内容清单。四条缺一即保留，不因为"看起来只有 evidence"就放宽判断——必须真的核对过目标分支、`_pending.md`、stable docs 和 gate ledger。
 
-脚本按 `indexed`、`mismatch`、`manual` 三类报告 gate。runtime-state 缺失或 contractVersion 过期时，contract preflight 先阻断；当前 runtime-state 缺 entry、entry/字段/content binding 不符、陈旧或损坏都按 `mismatch`，`gateResolution=null`，宁可人工判断也不信陈旧 JSON 或裸 heading。没有 `gate.md`，或只有空 ledger 且尚无 allocation/entry，是 open/no-verdict，不是额外类别。`mismatch`/`manual` package 必须当场读完并按上面标准正常分类，不能因为脚本没有给出可信 terminal resolution 就跳过或搁置。
+脚本按 `indexed`、`mismatch`、`manual` 三类报告 current contract 的 gate。runtime-state 缺失或 contractVersion 过期时，contract preflight 报告 advisory；若存在 Gate，inventory 将其降为 `manual`、`gateResolution=null`，并排除出 retirement。current runtime-state 缺 entry、entry/字段/content binding 不符、陈旧或损坏都按 `mismatch`，`gateResolution=null`，宁可人工判断也不信陈旧 JSON 或裸 heading。没有 `gate.md`，或只有空 ledger 且尚无 allocation/entry，是 open/no-verdict，不是额外类别。`mismatch`、`manual` 和 contract drift package 必须当场读完并按 stable-doc audit 标准正常分类，不能因为脚本没有给出可信 terminal resolution 就跳过 durable-delta 审计。
 
 ## 清理执行
 

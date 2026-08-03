@@ -203,7 +203,7 @@ class CollectorInventoryTest(unittest.TestCase):
 
 
 class ContractPreflightTest(unittest.TestCase):
-    """Backfill stops before audit when the canonical package contract is stale."""
+    """Contract drift lowers Gate trust without blocking source inventory."""
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -215,16 +215,24 @@ class ContractPreflightTest(unittest.TestCase):
         package = self.project / "docs/implementations/stale-pkg"
         package.mkdir(parents=True)
         (package / "spec.md").write_text("# stale-pkg\n", encoding="utf-8")
+        (package / "gate.md").write_text("## legacy-pass\n", encoding="utf-8")
         (self.project / ".stable-docs-backfill.json").write_text(
             json.dumps(base_config()), encoding="utf-8"
         )
         commit(self.project, "baseline")
 
-    def test_upgrade_required_blocks_read_only_inventory(self) -> None:
+    def test_upgrade_required_is_reported_and_excluded_from_gate_candidates(self) -> None:
         collector = load_module("collect_sources")
-        with self.assertRaises(collector.CollectorError) as raised:
-            collector.collect_inventory(project_root=self.project)
-        self.assertIn("upgrade", str(raised.exception).lower())
+        inventory = collector.collect_inventory(project_root=self.project)
+        row = inventory["packages"][0]
+        self.assertEqual(inventory["contractPreflight"]["status"], "advisory")
+        self.assertEqual(inventory["contractAdvisoryPackages"], ["stale-pkg"])
+        self.assertEqual(row["contractStatus"], "upgradeRequired")
+        self.assertEqual(row["gateRecognition"], "manual")
+        self.assertIsNone(row["gateResolution"])
+        self.assertTrue(row["needsManualGateReview"])
+        self.assertFalse(row["gapCatchingStructuralCandidate"])
+        self.assertFalse(row["retirementStructuralCandidate"])
 
 class GateRecognitionCurrentContractTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -467,9 +475,9 @@ class GateRecognitionCurrentContractTest(unittest.TestCase):
         commit(self.project, "markdown fixture")
         collector = load_module("collect_sources")
         markdown = collector._render_markdown(collector.collect_inventory(project_root=self.project, preflight=False))
-        self.assertIn("| 任务包 | Gate 识别 | Gate 判决 |", markdown)
+        self.assertIn("| 任务包 | Contract 状态 | Gate 识别 | Gate 判决 |", markdown)
         self.assertIn("Decision | Spec | Execution Findings", markdown)
-        self.assertIn("| indexed | indexed | pass |", markdown)
+        self.assertIn("| indexed | skipped | indexed | pass |", markdown)
         self.assertIn("需要人工 Gate 复核（mismatch/manual）", markdown)
 
 

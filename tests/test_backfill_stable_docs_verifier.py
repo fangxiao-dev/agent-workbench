@@ -122,7 +122,7 @@ class HealthyRepoTest(unittest.TestCase):
             self.assertIn("mismatch=0", inventory_check["detail"])
             self.assertIn("manual=0", inventory_check["detail"])
 
-    def test_stale_contract_blocks_verify_before_inventory_audit(self) -> None:
+    def test_stale_contract_is_advisory_and_verify_continues(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp) / "project"
             build_healthy_repo(project)
@@ -132,11 +132,14 @@ class HealthyRepoTest(unittest.TestCase):
                 payload["contractVersion"] = "3.1"
                 path.write_text(json.dumps(payload), encoding="utf-8")
             returncode, payload = run_verify(project)
-            self.assertEqual(returncode, 2)
-            self.assertFalse(payload["passed"])
+            self.assertEqual(returncode, 0)
+            self.assertTrue(payload["passed"])
             preflight = next(check for check in payload["checks"] if check["check"] == "contract-preflight")
-            self.assertEqual(preflight["result"], "failed")
-            self.assertIn("upgrade", preflight["detail"].lower())
+            self.assertEqual(preflight["result"], "passed")
+            self.assertIn("1 contract drift advisory", preflight["detail"])
+            inventory = next(check for check in payload["checks"] if check["check"] == "inventory-candidates")
+            self.assertEqual(inventory["result"], "passed")
+            self.assertIn("1 contract drift advisory", inventory["detail"])
 
 
 class PendingDiscoveryAmbiguityTest(unittest.TestCase):

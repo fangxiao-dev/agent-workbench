@@ -66,7 +66,7 @@ class ContractPreflightTest(unittest.TestCase):
             result = preflight.inspect_package(package, state_engine=state)
         self.assertEqual(result["status"], "invalid")
 
-    def test_require_current_blocks_upgrade_before_read_only_work(self) -> None:
+    def test_run_preflight_reports_upgrade_as_non_blocking_advisory(self) -> None:
         preflight = load_module("contract_preflight")
         config = {
             "implementations": ["docs/implementations"],
@@ -83,8 +83,10 @@ class ContractPreflightTest(unittest.TestCase):
                 "currentContractVersion": "3.2",
             }
             with mock.patch.object(preflight, "inspect_package", return_value=stale):
-                with self.assertRaises(preflight.ContractPreflightError):
-                    preflight.require_current(project, config)
+                result = preflight.run_preflight(project, config)
+        self.assertEqual(result["status"], "advisory")
+        self.assertEqual(result["advisoryPackageCount"], 1)
+        self.assertEqual(result["packages"], [stale])
 
 
 if __name__ == "__main__":

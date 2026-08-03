@@ -5,13 +5,13 @@ description: Use when auditing, applying approved durable knowledge deltas, reti
 
 # Backfill Stable Docs
 
-公共入口 `$backfill-stable-docs` 维护项目的常青 module-knowledge 快照。它只做意图路由：先执行独立 contract preflight，再默认执行 audit；apply、verify 和 package retirement 分别加载独立 runbook。不要把 runbook 名当成独立 Skill。
+公共入口 `$backfill-stable-docs` 维护项目的常青 module-knowledge 快照。它只做意图路由：先执行独立 contract preflight 记录格式漂移，再默认执行 audit；apply、verify 和 package retirement 分别加载独立 runbook。不要把 runbook 名当成独立 Skill。
 
 ## Agent-First 前提
 
 backfill 是 agent 的阅读、判断和写作任务，不是纯命令行工具。脚本只能提供清单、差异、校验和记录辅助（枚举 package、找 `_pending.md` 登记、搜索 touched files 和 commit range、生成 report skeleton、校验链接/done 去重/pending 覆盖），不能用一个状态字段代替 agent 对代码、Git commit、implementation package 与 stable docs 的实际阅读，也不强制要求 fingerprint、双锚点这类机械 state machine 作为唯一事实形态。
 
-Gate 机械识别只接受 canonical resolver 的 `indexed`、`mismatch`、`manual` 三类；没有 `gate.md`，或已有空 ledger 模板但 runtime gate 尚无 allocation/entry，均表示 open/no-verdict，不是第四类。旧 heading、旧 sidecar 或旧 audit JSON 不再作为 verdict 或 provenance 兼容输入；contract preflight 会先把缺失/过期包标为 `upgradeRequired`，升级并校验成功后才允许读取 Gate。`indexed` entry 只有在其 D/S/P revision set 与 package 当前 revision set 一致时才提供可信 `gateResolution`；新 attempt 尚未分配 Gate 时可返回最新合法历史 `indexed` evidence，但其 `gateAppliesToCurrentRevision=false`、`gateResolution=null`，不进入当前 gap-catching 或 retirement 结构候选。已有 current allocation/entry 却未 finalize 则按 `mismatch` fail safe。runtime-state 存在时任何缺 entry、字段/content binding 不符、陈旧或损坏 JSON 都按 `mismatch` fail closed。`mismatch`/`manual` 只是脚本的能力与信任边界，不是 agent 的阅读能力上限：agent 必须在同一轮里读完证据并给出正常分类（candidate / already-covered / conflict / no-delta，或 Package Retirement 候选），只有证据本身矛盾或缺失才升级为 owner 决策。
+Gate 机械识别只接受 canonical resolver 的 `indexed`、`mismatch`、`manual` 三类；没有 `gate.md`，或已有空 ledger 模板但 runtime gate 尚无 allocation/entry，均表示 open/no-verdict，不是第四类。旧 heading、旧 sidecar 或旧 audit JSON 不再作为可信 verdict 或 provenance 兼容输入；contract preflight 将缺失/过期包标为 `upgradeRequired`、`unsupportedFuture` 或 `invalid` advisory，但不阻断 audit，也不触发 package 升级。非 current package 的 Gate resolution 一律不可信，不进入 gap-catching 或 retirement 结构候选；agent 仍须读取 package、current code/tests 与 stable docs，正常分类 pending-registry candidate。`indexed` entry 只有在其 D/S/P revision set 与 package 当前 revision set 一致时才提供可信 `gateResolution`；新 attempt 尚未分配 Gate 时可返回最新合法历史 `indexed` evidence，但其 `gateAppliesToCurrentRevision=false`、`gateResolution=null`，不进入当前 gap-catching 或 retirement 结构候选。已有 current allocation/entry 却未 finalize 则按 `mismatch` fail safe。runtime-state 存在时任何缺 entry、字段/content binding 不符、陈旧或损坏 JSON 都按 `mismatch` fail closed。`mismatch`/`manual` 和 contract drift 只是脚本的能力与信任边界，不是 agent 的阅读能力上限：agent 必须在同一轮里读完证据并给出正常分类（candidate / already-covered / conflict / no-delta），只有证据本身矛盾、损坏或不足才升级为 owner 决策。
 
 ## 工作区基准
 
@@ -45,7 +45,7 @@ backfill 默认以 Git 主工作区为基准，不以当前分支名或某个特
 | 检查已完全吸收、可清理的历史 package | [package retirement runbook](references/package-retirement-runbook.md) | 只报告候选，不自动删除；清理执行仍属于破坏性操作 |
 | 检查 `_pending.md`、链接、覆盖率或残留 | [verify runbook](references/verify-runbook.md) | 不补写内容、不隐式 apply |
 
-如果意图含混，默认执行 contract preflight 后进入 audit。发现 `upgradeRequired`、`unsupportedFuture` 或 `invalid` 时先停止只读 audit；由 agent 读取 [`impl-package` contract revision history](../assets/contract-revision-history.md) 并直接把包改成当前 contract `"3.2"`，重新通过 preflight 后才可审计。升级不生成迁移记录或旧副本。apply 必须同时给出 report 路径和 owner 批准的精确 item ID；“全部处理”不是批准清单。verify 绝不因为发现问题而修复文档。
+如果意图含混，默认执行 contract preflight 后进入 audit。`upgradeRequired`、`unsupportedFuture` 或 `invalid` 只记录为 contract drift advisory：audit 不自动升级 package，不修改 Gate/runtime-state，也不因格式状态停止。对这类 package，pending-registry 仍按实际内容审计；机器 Gate 不提供可信 resolution，因此不得建立 gap-catching 或 retirement 候选。只有 package 与 current evidence 真正矛盾、损坏或不足时才形成 blocker/owner decision。apply 必须同时给出 report 路径和 owner 批准的精确 item ID；“全部处理”不是批准清单。verify 绝不因为发现问题而修复文档。
 
 ## 持久知识边界
 
@@ -55,6 +55,6 @@ backfill 默认以 Git 主工作区为基准，不以当前分支名或某个特
 
 面向 owner 汇报 audit/apply/verify/retirement 的阶段状态与整体 closure 时直接使用 `talk-to-boss`；先给总量、已处理量、剩余量、独立 pending、是否 closed 与待决策项，再附技术证据，不把 scan、apply、verify 或 merge 混称为完成。
 
-最终说明实际 runbook、Source HEAD、报告或 apply record 路径、candidate/covered/conflict/pending 计数、来自 `_pending.md` 登记与 gap-catching 各自的候选数、Package Retirement 候选（如有）与仍需 owner 决策的 item ID。只有用户明确要求 PR 时才读取 [PR Summary 模板](assets/pr-summary-template.md)。
+最终说明实际 runbook、Source HEAD、报告或 apply record 路径、contract drift advisory package 数量、candidate/covered/conflict/pending 计数、来自 `_pending.md` 登记与 gap-catching 各自的候选数、Package Retirement 候选（如有）与仍需 owner 决策的 item ID。只有用户明确要求 PR 时才读取 [PR Summary 模板](assets/pr-summary-template.md)。
 
 `human-report.md` 面向 owner 阅读；目标仓库存在语言规定时，按该规定编写。

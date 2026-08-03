@@ -24,8 +24,7 @@ from stable_docs_config import (
 )
 from contract_preflight import (
     CONTRACT_VERSION,
-    ContractPreflightError,
-    require_current,
+    run_preflight,
 )
 from gate_recognition import TERMINAL_GATE_VERDICTS, resolve_gate
 
@@ -113,16 +112,13 @@ def collect_inventory(
     except ConfigError as error:
         raise CollectorError(str(error)) from error
 
-    try:
-        contract_preflight = require_current(project, config) if preflight else {
-            "contractVersion": CONTRACT_VERSION,
-            "status": "skipped",
-            "packageCount": 0,
-            "blockedPackageCount": 0,
-            "packages": [],
-        }
-    except ContractPreflightError as error:
-        raise CollectorError(str(error)) from error
+    contract_preflight = run_preflight(project, config) if preflight else {
+        "contractVersion": CONTRACT_VERSION,
+        "status": "skipped",
+        "packageCount": 0,
+        "advisoryPackageCount": 0,
+        "packages": [],
+    }
     contract_by_path = {
         Path(row["package"]).resolve(): row for row in contract_preflight["packages"]
     }
@@ -180,7 +176,23 @@ def collect_inventory(
             if path_matches_ignore(relative_package_dir, config["ignore"]) is not None:
                 continue
             package_id = package_dir.relative_to(implementations_root).as_posix()
-            gate = resolve_gate(package_dir)
+            contract = contract_by_path.get(package_dir.resolve(), {})
+            contract_status = contract.get("status")
+            if preflight and contract_status != "current":
+                has_gate = (package_dir / "gate.md").is_file()
+                gate = {
+                    "hasGate": has_gate,
+                    "kind": "manual" if has_gate else None,
+                    "gateResolution": None,
+                    "appliesToCurrentRevision": None,
+                    "needsManualGateReview": has_gate,
+                    "reason": (
+                        f"contract status {contract_status or 'unknown'}; "
+                        "machine Gate evidence is untrusted"
+                    ),
+                }
+            else:
+                gate = resolve_gate(package_dir)
             has_gate = gate["hasGate"]
             verdict = gate["gateResolution"]
             applies_to_current_revision = gate.get("appliesToCurrentRevision")
@@ -199,8 +211,8 @@ def collect_inventory(
                 {
                     "packageId": package_id,
                     "path": relative_package_dir,
-                    "contractVersion": contract_by_path.get(package_dir.resolve(), {}).get("contractVersion"),
-                    "contractStatus": contract_by_path.get(package_dir.resolve(), {}).get("status"),
+                    "contractVersion": contract.get("contractVersion"),
+                    "contractStatus": contract_status,
                     "implementationsRoot": implementations_root.relative_to(project).as_posix(),
                     "hasDecision": (package_dir / "decision.md").is_file(),
                     "hasSpec": (package_dir / "spec.md").is_file(),
@@ -247,6 +259,9 @@ def collect_inventory(
         "manualGateReviewCandidates": [
             p["packageId"] for p in packages if p["needsManualGateReview"]
         ],
+        "contractAdvisoryPackages": [
+            p["packageId"] for p in packages if p["contractStatus"] not in {None, "current"}
+        ],
         "packages": packages,
     }
 
@@ -259,6 +274,7 @@ def _render_markdown(inventory: dict[str, Any]) -> str:
         f"- 仓库：`{project['repository']}`",
         f"- Impl-Package contract：`{inventory['contractVersion']}`",
         f"- Contract preflight：`{inventory['contractPreflight']['status']}`",
+        f"- Contract drift advisory：{len(inventory['contractAdvisoryPackages'])}",
         f"- 目标分支：`{project['targetBranch']}` -> `{project['targetBranchCommit'] or '未解析'}`",
         f"- 目标分支配置缺口：{'是' if inventory['targetBranchConfigGap'] else '否'}",
         f"- 任务包数量：{inventory['packageCount']}",
@@ -269,13 +285,14 @@ def _render_markdown(inventory: dict[str, Any]) -> str:
         f"- 任务包退役结构候选：{len(inventory['retirementStructuralCandidates'])}",
         f"- 需要人工 Gate 复核（mismatch/manual）：{len(inventory['manualGateReviewCandidates'])}",
         "",
-        "| 任务包 | Gate 识别 | Gate 判决 | 适用于当前修订 | Decision | Spec | Execution Findings | 存在未关闭 pending 引用 | Gap-catching 结构候选 | 退役候选 | 人工 Gate 复核 | 原因 |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| 任务包 | Contract 状态 | Gate 识别 | Gate 判决 | 适用于当前修订 | Decision | Spec | Execution Findings | 存在未关闭 pending 引用 | Gap-catching 结构候选 | 退役候选 | 人工 Gate 复核 | 原因 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in inventory["packages"]:
         lines.append(
-            "| {package_id} | {recognition} | {resolution} | {applies} | {decision} | {spec} | {execution_findings} | {referenced} | {gap} | {retire} | {manual} | {reason} |".format(
+            "| {package_id} | {contract_status} | {recognition} | {resolution} | {applies} | {decision} | {spec} | {execution_findings} | {referenced} | {gap} | {retire} | {manual} | {reason} |".format(
                 package_id=row["packageId"],
+                contract_status=row["contractStatus"] or "skipped",
                 recognition=row["gateRecognition"] or "none",
                 resolution=row["gateResolution"] or "none",
                 applies=(

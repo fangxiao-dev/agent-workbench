@@ -12,7 +12,7 @@ from typing import Any, Callable
 from urllib.parse import unquote
 
 from collect_sources import CollectorError, collect_inventory
-from contract_preflight import CONTRACT_VERSION, ContractPreflightError, require_current
+from contract_preflight import CONTRACT_VERSION, run_preflight
 from stable_docs_config import (
     ConfigError,
     discover_pending_paths,
@@ -32,11 +32,11 @@ class VerificationError(RuntimeError):
 
 
 def _check_contract_preflight(project: Path, config: dict[str, Any]) -> str:
-    try:
-        result = require_current(project, config)
-    except ContractPreflightError as error:
-        raise VerificationError(str(error)) from error
-    return f"contract {result['contractVersion']} current for {result['packageCount']} package(s)"
+    result = run_preflight(project, config)
+    return (
+        f"contract {result['contractVersion']} inspected for {result['packageCount']} package(s); "
+        f"{result['advisoryPackageCount']} contract drift advisory package(s)"
+    )
 
 
 def _slug(value: str) -> str:
@@ -183,7 +183,8 @@ def _check_inventory_candidates(project: Path, config_path: Path | None) -> str:
     return (
         f"{inventory['packageCount']} packages enumerated; "
         f"indexed={recognition_counts['indexed']}, mismatch={recognition_counts['mismatch']}, "
-        f"mismatch={recognition_counts['mismatch']}, manual={recognition_counts['manual']}; "
+        f"manual={recognition_counts['manual']}; "
+        f"{len(inventory['contractAdvisoryPackages'])} contract drift advisory package(s); "
         f"{len(inventory['gapCatchingStructuralCandidates'])} gap-catching structural candidates pending Git reachability review; "
         f"{len(inventory['retirementStructuralCandidates'])} Package Retirement structural candidates; "
         f"{len(inventory['manualGateReviewCandidates'])} need manual gate.md review (mismatch/manual)"

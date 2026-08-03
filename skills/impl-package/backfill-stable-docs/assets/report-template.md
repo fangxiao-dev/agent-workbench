@@ -6,12 +6,15 @@
 - Source HEAD / dirty 基线：
 - 目标分支 / 已解析 commit：
 - 配置来源 / digest：
+- Contract preflight：`current` / `advisory`
+- Contract drift advisory packages：
 - 已发现的 `_pending.md` root：
 - 配置缺口（`_pending.md` 歧义/缺失）：
 - System pending 冷启动 owner 决定：
 
 ## 执行结论
 
+- Contract drift advisory（不阻断 pending-registry audit）：
 - 来自 `_pending.md` 的候选（主渠道）：
 - 来自 gap-catching 的候选（兜底）：
 - 已覆盖：

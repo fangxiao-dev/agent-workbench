@@ -47,11 +47,13 @@ class RouterContractTest(unittest.TestCase):
         self.assertIn("不自动 fetch", text)
         self.assertIn("非阻塞 `cold-start` owner decision", text)
 
-    def test_current_contract_rejects_legacy_gate_and_audit_inputs(self) -> None:
+    def test_contract_drift_is_advisory_but_legacy_gate_is_untrusted(self) -> None:
         text = SKILL.read_text(encoding="utf-8")
         self.assertIn('contractVersion `"3.2"`', text)
-        self.assertIn("旧 heading、旧 sidecar 或旧 audit JSON 不再作为 verdict", text)
-        self.assertIn("升级不生成迁移记录或旧副本", text)
+        self.assertIn("旧 heading、旧 sidecar 或旧 audit JSON 不再作为可信 verdict", text)
+        self.assertIn("不阻断 audit", text)
+        self.assertIn("不触发 package 升级", text)
+        self.assertIn("不得建立 gap-catching 或 retirement 候选", text)
 
     def test_active_package_documents_and_investigation_provenance_boundary(self) -> None:
         text = SKILL.read_text(encoding="utf-8")

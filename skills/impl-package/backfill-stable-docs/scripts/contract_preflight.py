@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Run the Impl-Package contract preflight used by backfill.
+"""Report Impl-Package contract status for Stable Docs Backfill.
 
 Backfill deliberately does not understand package state or perform migration.
-The canonical Impl-Package state engine owns contract detection.  This module
-only invokes its ``contract-status`` command, reports the result, and blocks a
-read-only backfill when any package is not on the current contract.
+The canonical Impl-Package state engine owns contract detection. This module
+only invokes its ``contract-status`` command and reports advisory drift. A
+non-current package lowers trust in machine Gate evidence, but it does not
+block an agent from reading package evidence during audit.
 """
 
 from __future__ import annotations
@@ -29,14 +30,6 @@ STATUS_VALUES = frozenset({"current", "upgradeRequired", "unsupportedFuture", "i
 STATE_ENGINE = Path(__file__).resolve().parents[2] / "scripts" / "impl_package_state.py"
 
 
-class ContractPreflightError(RuntimeError):
-    """Raised when read-only backfill cannot trust package contract state."""
-
-    def __init__(self, message: str, statuses: list[dict[str, Any]] | None = None) -> None:
-        super().__init__(message)
-        self.statuses = statuses or []
-
-
 def _invalid_status(package: Path, reason: str) -> dict[str, Any]:
     return {
         "package": package.as_posix(),
@@ -50,9 +43,10 @@ def _invalid_status(package: Path, reason: str) -> dict[str, Any]:
 def inspect_package(package: Path, *, state_engine: Path = STATE_ENGINE) -> dict[str, Any]:
     """Ask the canonical state engine for one package's contract status.
 
-    The state engine may return a non-zero exit code for a blocked status.  A
-    valid JSON status is still consumed in that case; malformed or absent JSON
-    is converted to ``invalid`` so callers fail closed.
+    The state engine may return a non-zero exit code for a non-current status.
+    A valid JSON status is still consumed in that case; malformed or absent
+    JSON is converted to ``invalid`` so callers know machine Gate evidence is
+    untrusted and must inspect the package manually.
     """
 
     command = [
@@ -114,41 +108,18 @@ def package_paths(project_root: Path, config: dict[str, Any]) -> list[Path]:
 
 
 def run_preflight(project_root: Path | str, config: dict[str, Any]) -> dict[str, Any]:
-    """Inspect every configured package and return a machine-readable summary."""
+    """Inspect every configured package and return a non-blocking summary."""
 
     project = Path(project_root).resolve()
     statuses = [inspect_package(package) for package in package_paths(project, config)]
-    blocked = [row for row in statuses if row["status"] != "current"]
-    overall = "current" if not blocked else (
-        "upgradeRequired"
-        if any(row["status"] == "upgradeRequired" for row in blocked)
-        else "invalid"
-    )
+    advisories = [row for row in statuses if row["status"] != "current"]
     return {
         "contractVersion": CONTRACT_VERSION,
-        "status": overall,
+        "status": "current" if not advisories else "advisory",
         "packageCount": len(statuses),
-        "blockedPackageCount": len(blocked),
+        "advisoryPackageCount": len(advisories),
         "packages": statuses,
     }
-
-
-def require_current(project_root: Path | str, config: dict[str, Any]) -> dict[str, Any]:
-    """Return preflight data or stop before any read-only backfill work."""
-
-    result = run_preflight(project_root, config)
-    if result["status"] != "current":
-        blocked = [
-            f"{Path(row['package']).name}: {row.get('status')}"
-            for row in result["packages"]
-            if row.get("status") != "current"
-        ]
-        raise ContractPreflightError(
-            "contract preflight blocked backfill; upgrade and validate these packages first: "
-            + ", ".join(blocked),
-            result["packages"],
-        )
-    return result
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -164,11 +135,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         project = args.project_root.resolve()
         config, _ = load_repository_config(project, args.config)
         result = run_preflight(project, config)
-    except (ConfigError, OSError, ContractPreflightError) as error:
+    except (ConfigError, OSError) as error:
         print(json.dumps({"contractVersion": CONTRACT_VERSION, "status": "invalid", "error": str(error)}))
         return 2
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
-    return 0 if result["status"] == "current" else 2
+    return 0
 
 
 if __name__ == "__main__":
