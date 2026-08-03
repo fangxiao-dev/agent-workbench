@@ -938,6 +938,17 @@ fails += check("status 摘要必须暴露 corrupt_ledger_lines",
                and "ledger_integrity: FAILED" in out and "corrupt_ledger_lines: 1" in out,
                out.strip())
 
+invalid_ledger_seq = {"ts": "2026-08-01T06:00:00+02:00", "ledger_seq": "2", "src": "report",
+                      "round": 0, "node": "alpha", "head": None, "state": "working",
+                      "waiting_on": [], "last_report_ts": "2026-08-01T06:00:00+02:00", "note": "bad seq"}
+(BROKER / CID / "progress.jsonl").write_text(
+    json.dumps(invalid_ledger_seq, ensure_ascii=False) + "\n", encoding="utf-8"
+)
+rc, out = run("status", "--coordination-id", CID)
+fails += check("status 摘要必须拒绝非法 ledger_seq 类型",
+               rc == 6 and "LEDGER INTEGRITY FAILED: progress.jsonl:1 invalid_ledger_seq" in out,
+               out.strip())
+
 bad_waiting = {"ts": "2026-08-01T06:00:00+02:00", "src": "report", "round": 0,
                "node": "alpha", "head": None, "state": "awaiting_seam",
                "waiting_on": ["free text", "seam:"], "last_report_ts": "2026-08-01T06:00:00+02:00",
@@ -1116,6 +1127,56 @@ fails += check(
     "controller dispatch 后 producer 从 awaiting_seam 回到 runnable watch-set",
     rc_dispatch_waiting == 0 and rc_resume_sync == 0 and "poll_targets:    alpha" in out_resume_sync,
     f"dispatch={out_dispatch_waiting.strip()} sync={out_resume_sync.strip()}",
+)
+
+reset_fixture(git_worktrees=True)
+run_registry("init")
+same_second = "2026-08-03T19:00:00+02:00"
+append_ledger_row(
+    "progress.jsonl",
+    {
+        "ts": same_second,
+        "src": "report",
+        "ledger_seq": 2,
+        "round": 1,
+        "node": "alpha",
+        "head": git_head(BASE / "git" / "alpha"),
+        "head_source": "worktree",
+        "state": "awaiting_seam",
+        "waiting_on": ["seam:same-second-order"],
+        "last_report_ts": same_second,
+        "note": "reported after the dispatch in the same second",
+    },
+)
+append_ledger_row(
+    "acts.jsonl",
+    {
+        "ts": same_second,
+        "ledger_seq": 1,
+        "seq": 1,
+        "kind": "dispatch",
+        "seam_id": "same-second-order",
+        "producer": "alpha",
+        "deliverable": "same-second ordering fixture",
+        "decision_id": None,
+    },
+)
+append_wait(
+    call_for([NODES["beta"]]), one_projection("beta", "same-second-beta"),
+    call_id="same-second-reported-after-dispatch",
+)
+rc_same_second, out_same_second = run_registry("sync", "--round", "1")
+same_second_poll_line = next(
+    (line for line in out_same_second.splitlines() if line.startswith("poll_targets:")), ""
+)
+same_second_poll_rows = [
+    row for row in ledger_rows("progress.jsonl") if row.get("src") == "poll"
+]
+fails += check(
+    "同秒 dispatch 早于 report 时已重新 waiting 的 producer 不进入 watch-set",
+    rc_same_second == 0 and same_second_poll_line == "poll_targets:    beta"
+    and same_second_poll_rows and all(row.get("ledger_seq") == 3 for row in same_second_poll_rows),
+    out_same_second.strip(),
 )
 
 reset_fixture(git_worktrees=True)

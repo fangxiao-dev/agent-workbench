@@ -258,7 +258,7 @@ routing registry 由 `owner-thread-broker` 管，**本设计不改动其路由�
 | `preflight --registry <absolute-json>` | 开跑前只读校验 registry：worktree 存在且可读 HEAD、active child 无共享 worktree/branch、registry branch 与实际 checkout 一致、active `children <= 8`、active session id 不重复、controller rollout 可定位、运行时已 `init`。完整性失败退 `6`，其他阻断退 `5` |
 | `stall-check --registry <absolute-json>` | 最近 halt 的 `halt_poll_seq` 未被更大的有效 poll seq 超过 → 退出码 4 并打印 `HALTED`；连续 N 轮（默认 5）所有 node 的 `head` 无变化 → 退出码 2 并打印 `MUST_ACT`；从 `3/5` 起、到 `5/5` 前 → 退出码 0 并打印 `CHECK_HEARTBEAT`；有尚未上报的 pending decision → 退出码 3 并打印 `MUST_ESCALATE`；否则 0 |
 
-止血版运行时约束：四个 JSONL mutation 都在 coordination 级跨进程写锁内执行；每次 append 以完整 UTF-8 bytes 写入并 flush/fsync。扫描到任一坏行时先打印 `LEDGER INTEGRITY FAILED: <file>:<line> <reason>`，`sync`、`stall-check`、`report`、`seam`、`decide`、`act`、`heartbeat`、`preflight` 停止并返回 `6`；`status` 仍输出诊断但也返回 `6`，不把 partial rows 当作可信 current state。此锁不提供跨文件事务原子性。
+止血版运行时约束：四个 JSONL mutation 都在 coordination 级跨进程写锁内执行；每次 append 以完整 UTF-8 bytes 写入并 flush/fsync。每个新 mutation batch 在同一锁内从 `sync-state.json` 与现有 JSONL 的最大值中恢复并领取单调 `ledger_seq`，用来消除同秒 report/dispatch 的顺序歧义；legacy 行缺失该字段时才回退到时间戳判断，字段存在但类型非法会 fail-closed。扫描到任一坏行时先打印 `LEDGER INTEGRITY FAILED: <file>:<line> <reason>`，`sync`、`stall-check`、`report`、`seam`、`decide`、`act`、`heartbeat`、`preflight` 停止并返回 `6`；`status` 仍输出诊断但也返回 `6`，不把 partial rows 当作可信 current state。此锁不提供跨文件事务原子性。
 
 `sync` 的决策就绪摘要格式（给 broker 读的，必须紧凑）：
 

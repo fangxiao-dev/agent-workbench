@@ -89,6 +89,10 @@ class LedgerIntegrityError(LedgerError):
         super().__init__("ledger integrity failed")
 
 
+def valid_ledger_seq(value) -> bool:
+    return type(value) is int and value >= 1
+
+
 def now_local() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
@@ -245,6 +249,8 @@ def scan_jsonl(path: Path) -> tuple[list[dict], list[tuple[str, int, str]]]:
                 if not isinstance(value, dict):
                     issues.append((path.name, line_no, "row_not_object"))
                     continue
+                if "ledger_seq" in value and not valid_ledger_seq(value.get("ledger_seq")):
+                    issues.append((path.name, line_no, "invalid_ledger_seq"))
                 if raw.endswith(b"\n"):
                     rows.append(value)
     except OSError as exc:
@@ -306,6 +312,37 @@ def next_seq(state: dict, key: str) -> int:
     seq = int(state.get(key) or 0) + 1
     state[key] = seq
     return seq
+
+
+def next_ledger_seq(coordination_id: str, state: dict) -> int:
+    try:
+        persisted_seq = int(state.get("next_ledger_seq") or 0)
+    except (TypeError, ValueError):
+        persisted_seq = 0
+    observed_seq = max(
+        (
+            row.get("ledger_seq")
+            for name in LEDGER_FILES
+            for row in read_jsonl(jsonl_path(coordination_id, name))
+            if valid_ledger_seq(row.get("ledger_seq"))
+        ),
+        default=0,
+    )
+    seq = max(persisted_seq, observed_seq) + 1
+    state["next_ledger_seq"] = seq
+    return seq
+
+
+def ledger_event_after(candidate: dict, baseline: dict) -> bool:
+    """Compare new rows by coordination order, with a legacy timestamp fallback."""
+    candidate_seq = candidate.get("ledger_seq")
+    baseline_seq = baseline.get("ledger_seq")
+    if (
+        valid_ledger_seq(candidate_seq)
+        and valid_ledger_seq(baseline_seq)
+    ):
+        return candidate_seq > baseline_seq
+    return ts_not_earlier(candidate.get("ts"), baseline.get("ts"))
 
 
 def load_registry(coordination_id: str) -> dict:
@@ -1350,7 +1387,7 @@ def runnable_watch_nodes(coordination_id: str, active_children: list[dict]) -> l
         if act.get("kind") != "dispatch" or not producer:
             continue
         report = latest_report.get(producer)
-        if not report or ts_not_earlier(act.get("ts"), report.get("ts")):
+        if not report or ledger_event_after(act, report):
             dispatched_nodes.add(producer)
     runnable = []
     for node in active_children:
@@ -1683,6 +1720,9 @@ def cmd_sync(args) -> int:
         rows, classification = classify_and_rows(
             payload, active_children, args.round, poll_seq, latest_progress(args.coordination_id)
         )
+        ledger_seq = next_ledger_seq(args.coordination_id, state)
+        for row in rows:
+            row["ledger_seq"] = ledger_seq
         classification["watch_nodes"] = [node["name"] for node in poll_targets]
         classification["never_reported"] = sorted(
             node["name"] for node in active_children if node["name"] not in latest_report
@@ -1935,7 +1975,10 @@ def cmd_report(args) -> int:
         if args.source_session:
             row["source_session_id"] = args.source_session
             row["source_registry"] = str(registry_path(args.coordination_id).resolve())
+        state = load_state(args.coordination_id)
+        row["ledger_seq"] = next_ledger_seq(args.coordination_id, state)
         append_jsonl(jsonl_path(args.coordination_id, "progress.jsonl"), row)
+        save_state(args.coordination_id, state)
         suffix = ""
         if args.state in {"working", "done"} and waiting_on:
             suffix = " (note: waiting_on is ignored for working/done state summaries)"
@@ -1957,10 +2000,13 @@ def cmd_seam(args) -> int:
             if consumer not in known_nodes:
                 raise UsageError(f"unknown consumer node: {consumer}")
         status = "delivered" if args.deliver else "assigned"
+        state = load_state(args.coordination_id)
+        ledger_seq = next_ledger_seq(args.coordination_id, state)
         append_jsonl(
             jsonl_path(args.coordination_id, "seams.jsonl"),
             {
                 "ts": now_local(),
+                "ledger_seq": ledger_seq,
                 "seam_id": args.seam_id,
                 "producer": args.producer,
                 "consumers": args.consumers or [],
@@ -1968,6 +2014,7 @@ def cmd_seam(args) -> int:
                 "artifact": args.deliver,
             },
         )
+        save_state(args.coordination_id, state)
         print(f"seam {args.seam_id} status={status}")
         return 0
 
@@ -1978,10 +2025,13 @@ def cmd_decide(args) -> int:
         assert_ledger_integrity(args.coordination_id)
         if args.raise_id:
             decision_instance_id = str(uuid.uuid4())
+            state = load_state(args.coordination_id)
+            ledger_seq = next_ledger_seq(args.coordination_id, state)
             append_jsonl(
                 jsonl_path(args.coordination_id, "decisions.jsonl"),
                 {
                     "ts": now_local(),
+                    "ledger_seq": ledger_seq,
                     "decision_id": args.raise_id,
                     "decision_instance_id": decision_instance_id,
                     "raised_by": args.by,
@@ -1991,6 +2041,7 @@ def cmd_decide(args) -> int:
                     "answer": None,
                 },
             )
+            save_state(args.coordination_id, state)
             print(f"decision {args.raise_id} status=pending instance={decision_instance_id}")
             return 0
         if args.answer:
@@ -2002,8 +2053,11 @@ def cmd_decide(args) -> int:
             decision = pending.get(args.answer)
             if decision is None:
                 raise UsageError(f"decision is not pending: {args.answer}")
+            state = load_state(args.coordination_id)
+            ledger_seq = next_ledger_seq(args.coordination_id, state)
             row = {
                 "ts": now_local(),
+                "ledger_seq": ledger_seq,
                 "decision_id": args.answer,
                 "raised_by": None,
                 "blocks": [],
@@ -2015,6 +2069,7 @@ def cmd_decide(args) -> int:
             if isinstance(instance, str) and instance:
                 row["decision_instance_id"] = instance
             append_jsonl(jsonl_path(args.coordination_id, "decisions.jsonl"), row)
+            save_state(args.coordination_id, state)
             print(f"decision {args.answer} status=answered")
             return 0
         raise UsageError("decide requires --raise or --answer")
@@ -2026,7 +2081,8 @@ def cmd_act(args) -> int:
         assert_ledger_integrity(args.coordination_id)
         state = load_state(args.coordination_id)
         seq = next_seq(state, "next_act_seq")
-        row = {"ts": now_local(), "seq": seq}
+        ledger_seq = next_ledger_seq(args.coordination_id, state)
+        row = {"ts": now_local(), "seq": seq, "ledger_seq": ledger_seq}
         if args.dispatch:
             missing = [
                 name for name, value in (
@@ -2105,6 +2161,7 @@ def cmd_act(args) -> int:
                 jsonl_path(args.coordination_id, "seams.jsonl"),
                 {
                     "ts": now_local(),
+                    "ledger_seq": ledger_seq,
                     "seam_id": args.seam_id,
                     "producer": args.producer,
                     "consumers": [],

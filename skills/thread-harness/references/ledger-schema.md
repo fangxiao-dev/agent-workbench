@@ -30,6 +30,7 @@
 | `ts` | string | 是 | 本地时区 ISO 8601，带偏移 | `sync` / `report` | 本行写入账本的时间。 |
 | `src` | string | 是 | `poll` / `report` | `sync` / `report` | 本行事实来源；读取当前状态时按字段分源合成。 |
 | `seq` | number | poll 必填；report 不写 | 单调递增整数 | `sync` | poll 追加批次序号，来自 `sync-state.json`；停滞判断按它分组。 |
+| `ledger_seq` | number | 新 row 必填；legacy 可缺省 | coordination 内单调递增批次序号 | `sync` / `report` | 用于跨 `progress.jsonl` / `acts.jsonl` 判断 report 与 dispatch 的真实追加顺序；同一 sync 批次的 poll rows 可共享一个值。 |
 | `round` | number | 是 | 整数 | `sync` / `report` | broker 轮询轮次标签；手动 report 不知道轮次时可写 `0`。不参与计算。 |
 | `node` | string | 是 | registry node 名称 | `sync` / `report` | 进度所属 node。 |
 | `head` | string 或 null | poll 必填；report 可选 | 40 位 git SHA 或 `null` | `sync` / `report` | git HEAD。`sync` 取不到 worktree/git 仓库/git 命令时写 `null`，并在摘要 `head_unavailable` 列出。 |
@@ -46,9 +47,9 @@
 示例：
 
 ```jsonl
-{"ts":"2026-08-01T04:48:07+02:00","src":"report","round":412,"node":"catalog","head":"f69a8b73f69a8b73f69a8b73f69a8b73f69a8b73","state":"awaiting_seam","waiting_on":["seam:order_core_writer"],"last_report_ts":"2026-08-01T04:48:07+02:00","note":"T1/T2/T3/T5 BLOCKED"}
-{"ts":"2026-08-01T04:48:10+02:00","src":"poll","seq":41,"round":412,"node":"checkout","head":"71f19b7471f19b7471f19b7471f19b7471f19b74","turn":"turn-200","status":"notLoaded","turn_status":"completed","state":"working","note":"turnCompleted"}
-{"ts":"2026-08-01T04:50:10+02:00","src":"poll","seq":42,"round":413,"node":"foundation","head":null,"turn":"turn-201","status":"notLoaded","turn_status":"completed","state":"working","note":"inactiveStatus"}
+{"ts":"2026-08-01T04:48:07+02:00","src":"report","ledger_seq":40,"round":412,"node":"catalog","head":"f69a8b73f69a8b73f69a8b73f69a8b73f69a8b73","state":"awaiting_seam","waiting_on":["seam:order_core_writer"],"last_report_ts":"2026-08-01T04:48:07+02:00","note":"T1/T2/T3/T5 BLOCKED"}
+{"ts":"2026-08-01T04:48:10+02:00","src":"poll","ledger_seq":41,"seq":41,"round":412,"node":"checkout","head":"71f19b7471f19b7471f19b7471f19b7471f19b74","turn":"turn-200","status":"notLoaded","turn_status":"completed","state":"working","note":"turnCompleted"}
+{"ts":"2026-08-01T04:50:10+02:00","src":"poll","ledger_seq":43,"seq":42,"round":413,"node":"foundation","head":null,"turn":"turn-201","status":"notLoaded","turn_status":"completed","state":"working","note":"inactiveStatus"}
 ```
 
 ### H1 envelope（消息格式，不是新 API）
@@ -68,6 +69,7 @@ controller 读取 envelope 后必须重新读取 `registry`，确认 `session_id
 | 字段 | 类型 | 必填 | 枚举 / 格式 | 写入者 | 含义 |
 | --- | --- | --- | --- | --- | --- |
 | `ts` | string | 是 | 本地时区 ISO 8601，带偏移 | `seam` | 本行写入时间。 |
+| `ledger_seq` | number | 新 row 必填；legacy 可缺省 | coordination 内单调递增批次序号 | `seam` | 账本 mutation 的追加顺序标记。 |
 | `seam_id` | string | 是 | 不带 `seam:` 前缀的稳定 id | `seam` | seam 的唯一业务标识。 |
 | `producer` | string | 是 | registry node 名称 | `seam` | 负责产出该 seam 的 node。 |
 | `consumers` | array[string] | 是 | registry node 名称列表 | `seam` | 依赖该 seam 的 node。 |
@@ -77,9 +79,9 @@ controller 读取 envelope 后必须重新读取 `registry`，确认 `session_id
 示例：
 
 ```jsonl
-{"ts":"2026-08-01T04:45:00+02:00","seam_id":"order_core_writer","producer":"f6_order_core","consumers":["inventory","checkout"],"status":"assigned","artifact":null}
-{"ts":"2026-08-01T05:10:31+02:00","seam_id":"order_core_writer","producer":"f6_order_core","consumers":["inventory","checkout"],"status":"delivered","artifact":"commit:800521e8"}
-{"ts":"2026-08-01T05:12:02+02:00","seam_id":"customer_tax_contract","producer":"foundation_customer","consumers":["customer","checkout"],"status":"assigned","artifact":null}
+{"ts":"2026-08-01T04:45:00+02:00","ledger_seq":38,"seam_id":"order_core_writer","producer":"f6_order_core","consumers":["inventory","checkout"],"status":"assigned","artifact":null}
+{"ts":"2026-08-01T05:10:31+02:00","ledger_seq":46,"seam_id":"order_core_writer","producer":"f6_order_core","consumers":["inventory","checkout"],"status":"delivered","artifact":"commit:800521e8"}
+{"ts":"2026-08-01T05:12:02+02:00","ledger_seq":47,"seam_id":"customer_tax_contract","producer":"foundation_customer","consumers":["customer","checkout"],"status":"assigned","artifact":null}
 ```
 
 ## decisions.jsonl
@@ -89,6 +91,7 @@ controller 读取 envelope 后必须重新读取 `registry`，确认 `session_id
 | 字段 | 类型 | 必填 | 枚举 / 格式 | 写入者 | 含义 |
 | --- | --- | --- | --- | --- | --- |
 | `ts` | string | 是 | 本地时区 ISO 8601，带偏移 | `decide` | 本行写入时间。 |
+| `ledger_seq` | number | 新 row 必填；legacy 可缺省 | coordination 内单调递增批次序号 | `decide` | 账本 mutation 的追加顺序标记。 |
 | `decision_id` | string | 是 | 稳定 id | `decide` | 决策项唯一标识。后续回答使用同一 id。 |
 | `decision_instance_id` | string | 新 raise 必填；legacy 可缺省 | UUID | `decide` / `act --escalate` | 一次 `raise` 的不可复用实例；answer/escalate 必须绑定当前 pending instance。缺失时按 legacy timestamp fallback。 |
 | `raised_by` | string 或 null | 是 | registry node 名称 | `decide --raise` | 发起决策的 node。回答行可为 `null`。 |
@@ -100,9 +103,9 @@ controller 读取 envelope 后必须重新读取 `registry`，确认 `session_id
 示例：
 
 ```jsonl
-{"ts":"2026-08-01T04:49:02+02:00","decision_id":"freeze_order_core_ownership","decision_instance_id":"2e8f8c5d-8c6a-4c6b-bb13-7c3eabf7b4b1","raised_by":"f6_order_core","blocks":["inventory","checkout","f6_order_core"],"question":"Should order core ownership freeze before checkout consumes it?","status":"pending","answer":null}
-{"ts":"2026-08-01T04:55:18+02:00","decision_id":"freeze_order_core_ownership","decision_instance_id":"2e8f8c5d-8c6a-4c6b-bb13-7c3eabf7b4b1","raised_by":null,"blocks":[],"question":null,"status":"answered","answer":"Freeze ownership now; checkout consumes commit:800521e8."}
-{"ts":"2026-08-01T05:02:11+02:00","decision_id":"split_catalog_foundation","decision_instance_id":"b1f4f77d-43d2-4b31-a6af-6dd12ca77c9a","raised_by":"catalog","blocks":["catalog"],"question":"Create a separate Platform line for catalog pricing seam?","status":"pending","answer":null}
+{"ts":"2026-08-01T04:49:02+02:00","ledger_seq":42,"decision_id":"freeze_order_core_ownership","decision_instance_id":"2e8f8c5d-8c6a-4c6b-bb13-7c3eabf7b4b1","raised_by":"f6_order_core","blocks":["inventory","checkout","f6_order_core"],"question":"Should order core ownership freeze before checkout consumes it?","status":"pending","answer":null}
+{"ts":"2026-08-01T04:55:18+02:00","ledger_seq":44,"decision_id":"freeze_order_core_ownership","decision_instance_id":"2e8f8c5d-8c6a-4c6b-bb13-7c3eabf7b4b1","raised_by":null,"blocks":[],"question":null,"status":"answered","answer":"Freeze ownership now; checkout consumes commit:800521e8."}
+{"ts":"2026-08-01T05:02:11+02:00","ledger_seq":45,"decision_id":"split_catalog_foundation","decision_instance_id":"b1f4f77d-43d2-4b31-a6af-6dd12ca77c9a","raised_by":"catalog","blocks":["catalog"],"question":"Create a separate Platform line for catalog pricing seam?","status":"pending","answer":null}
 ```
 
 ## acts.jsonl
@@ -117,6 +120,7 @@ halted 状态由 `acts.jsonl` 的最近 halt 与其 `halt_poll_seq` 判定：没
 | --- | --- | --- | --- | --- | --- |
 | `ts` | string | 是 | 本地时区 ISO 8601，带偏移 | `act` | 本行写入时间。 |
 | `seq` | number | 是 | 单调递增整数 | `act` | action 追加序号，来自 `sync-state.json`。 |
+| `ledger_seq` | number | 新 row 必填；legacy 可缺省 | coordination 内单调递增批次序号 | `act` | 用于判断 dispatch 与 report 的真实追加顺序；同一 `act --dispatch` 写入的 ownership seam row 共享该值。 |
 | `kind` | string | 是 | `dispatch` / `escalate` / `halt` | `act` | `dispatch` 表示派活，`escalate` 表示 pending decision 已上报，`halt` 表示向 Owner 报告并结束 loop。 |
 | `seam_id` | string 或 null | dispatch 必填 | 不带 `seam:` 前缀 | `act --dispatch` | 本次派发要生产的 seam。 |
 | `producer` | string 或 null | dispatch 必填 | registry node 名称 | `act --dispatch` | seam 生产者；必须是 registry node。 |
@@ -130,14 +134,14 @@ halted 状态由 `acts.jsonl` 的最近 halt 与其 `halt_poll_seq` 判定：没
 示例：
 
 ```jsonl
-{"ts":"2026-08-01T05:20:00+02:00","seq":1,"kind":"dispatch","seam_id":"order_core_writer","producer":"f6_order_core","deliverable":"Publish the writer seam contract and commit pointer.","decision_id":null}
-{"ts":"2026-08-01T05:25:00+02:00","seq":2,"kind":"escalate","seam_id":null,"producer":null,"deliverable":null,"decision_id":"freeze_order_core_ownership"}
-{"ts":"2026-08-01T05:30:00+02:00","seq":3,"kind":"halt","seam_id":null,"producer":null,"deliverable":null,"decision_id":null,"reason":"Owner report sent; loop intentionally stopped.","pending_decision_ids":["freeze_order_core_ownership"]}
+{"ts":"2026-08-01T05:20:00+02:00","ledger_seq":48,"seq":1,"kind":"dispatch","seam_id":"order_core_writer","producer":"f6_order_core","deliverable":"Publish the writer seam contract and commit pointer.","decision_id":null}
+{"ts":"2026-08-01T05:25:00+02:00","ledger_seq":49,"seq":2,"kind":"escalate","seam_id":null,"producer":null,"deliverable":null,"decision_id":"freeze_order_core_ownership"}
+{"ts":"2026-08-01T05:30:00+02:00","ledger_seq":50,"seq":3,"kind":"halt","seam_id":null,"producer":null,"deliverable":null,"decision_id":null,"reason":"Owner report sent; loop intentionally stopped.","pending_decision_ids":["freeze_order_core_ownership"]}
 ```
 
 ## sync-state.json
 
-`sync-state.json` 不是 append-only 账本；它是本地运行状态。当前字段包括 rollout offset、`next_poll_seq`、`next_act_seq`、`dispatches_since_progress`、`docs_only_advances`、`last_must_act_seq`、invalid round 计数，以及 heartbeat reset 的 `stall_reset_seq`。本轮采用 runnable watch-set 兜底，不把未经证明的 cursor 当作状态级去重依据；HEAD 仍覆盖全部 active child。halt 行记录当时的 `halt_poll_seq`；`dispatch` / `escalate` 不会清除 halt。
+`sync-state.json` 不是 append-only 账本；它是本地运行状态。当前字段包括 rollout offset、`next_poll_seq`、`next_act_seq`、`next_ledger_seq`、`dispatches_since_progress`、`docs_only_advances`、`last_must_act_seq`、invalid round 计数，以及 heartbeat reset 的 `stall_reset_seq`。本轮采用 runnable watch-set 兜底，不把未经证明的 cursor 当作状态级去重依据；HEAD 仍覆盖全部 active child。`ledger_seq` 用于消除同秒 report/dispatch 的顺序歧义；legacy 行缺失该字段时回退到时间戳判断。halt 行记录当时的 `halt_poll_seq`；`dispatch` / `escalate` 不会清除 halt。
 
 `dispatches_since_progress` 只在 code 级 git HEAD 推进后清零；docs-only 推进只增加 `docs_only_advances`。推进分类按上一条已知 head 到当前 head 的 git 区间计算：区间内任一 commit 触及非 Markdown / `docs/` 路径即为 code，区间内全部 commit 都是文档才计 docs-only。首次观测没有旧 head 时退回单 commit 判断；区间不可判定时按 `unknown`，并保守视为 code 推进。
 
@@ -152,6 +156,7 @@ halted 状态由 `acts.jsonl` 的最近 halt 与其 `halt_poll_seq` 判定：没
 - 把 `inactiveStatus` 当成没有变化。它表示有 node 闲置，该 node 应进入 `idle_nodes`，语义是该派活。
 - 把 `round` 当成权威轮次。它只是模型自述标签，compaction 后可能重复；停滞判断以 `seq` 为准。
 - `state=awaiting_seam` 但不写合法 `seam:<id>`。该命令会退出 `64`；摘要里的 `malformed_waiting_on` 用来暴露历史坏行。
+- 新 ledger row 的 `ledger_seq` 缺失可以按 legacy 处理；字段存在但不是正整数必须按账本完整性错误处理，不能静默回退到时间戳。
 - 更新账本时重写旧 JSONL。四个 JSONL 账本只能追加新事实；状态变更通过新行表达。
 - 把坏行当成普通摘要尾项。任何坏行都必须先打印 `LEDGER INTEGRITY FAILED: <file>:<line> <reason>` 并返回 `6`；不能继续追加事实。
 - 在 `seams.jsonl` 里只写消费者，不写 `producer`。第一轮脚本只报 `seams_unowned` 数量，后续阶段会把无 producer 的 seam 作为阻断。
@@ -165,7 +170,7 @@ halted 状态由 `acts.jsonl` 的最近 halt 与其 `halt_poll_seq` 判定：没
 python skills/thread-harness/scripts/selftest.py
 ```
 
-覆盖：`sync` 自检判据各自的失败路径（含 `text({pollCount:0})` 这种退化输出）、实际 ids 集合与 runnable watch-set 不一致的失败路径、投影 `n` 与实际 ids 数量不一致、`timedOut` 与 poll 字段完整性、陌生/重复 poll id、正常投影合并、`inactiveStatus` 归入 `idle_nodes` 且与 `unchanged` 分开、`awaiting_seam` / `awaiting_owner` / `done` 排除出阻塞 watch-set、全员 waiting 时不虚假等待、`polls[]` 缺 child 时仍为该 child 写 progress 并读取 head、`SYNC STALE` 错误信息含 path/bytes/mtime/scanned_lines、坏行 rc=6 与 status 诊断、并发追加、`report` 后 `state` / `waiting_on` 不被下一轮 `sync` 覆盖、陈旧 report 暴露为 `stale_reports` 且 stale waiting_on 不计入无主 seam、重复 `round` 时按追加顺序累计 `stall_streak`、默认 `5/5` 阈值与从 `3/5` 开始的 heartbeat reset、heartbeat 不修改 JSONL、多 commit 区间内 docs-only 与 code 推进区分、首次观测单 commit 推进分类、`act --dispatch` 留痕并同步形成 seam ownership、`act --halt` 留痕、halted 状态暴露与自动解除、`status` 无 sync 时可读、真实 git fixture 下 turn 变化不重置 `stall_streak`、`stall-check` 的 0/2/3 优先级、已上报 pending 不屏蔽 `MUST_ACT`、同秒 decision instance 重开、`decide --raise/--answer`、多值参数空格分隔、`seam` producer/consumer registry 校验、用法错误退 64。
+覆盖：`sync` 自检判据各自的失败路径（含 `text({pollCount:0})` 这种退化输出）、实际 ids 集合与 runnable watch-set 不一致的失败路径、投影 `n` 与实际 ids 数量不一致、`timedOut` 与 poll 字段完整性、陌生/重复 poll id、正常投影合并、`inactiveStatus` 归入 `idle_nodes` 且与 `unchanged` 分开、`awaiting_seam` / `awaiting_owner` / `done` 排除出阻塞 watch-set、全员 waiting 时不虚假等待、`polls[]` 缺 child 时仍为该 child 写 progress 并读取 head、`SYNC STALE` 错误信息含 path/bytes/mtime/scanned_lines、坏行/非法 `ledger_seq` rc=6 与 status 诊断、并发追加、report/dispatch 同秒反向顺序仍按 `ledger_seq` 排除已重新 waiting 的 producer、`report` 后 `state` / `waiting_on` 不被下一轮 `sync` 覆盖、陈旧 report 暴露为 `stale_reports` 且 stale waiting_on 不计入无主 seam、重复 `round` 时按追加顺序累计 `stall_streak`、默认 `5/5` 阈值与从 `3/5` 开始的 heartbeat reset、heartbeat 不修改 JSONL、多 commit 区间内 docs-only 与 code 推进区分、首次观测单 commit 推进分类、`act --dispatch` 留痕并同步形成 seam ownership、`act --halt` 留痕、halted 状态暴露与自动解除、`status` 无 sync 时可读、真实 git fixture 下 turn 变化不重置 `stall_streak`、`stall-check` 的 0/2/3 优先级、已上报 pending 不屏蔽 `MUST_ACT`、同秒 decision instance 重开、`decide --raise/--answer`、多值参数空格分隔、`seam` producer/consumer registry 校验、用法错误退 64。
 
 自检用 `THREAD_HARNESS_BROKER_ROOT` 与 `THREAD_HARNESS_SESSIONS_ROOT` 指向隔离目录，**不会碰生产运行时**。
 
