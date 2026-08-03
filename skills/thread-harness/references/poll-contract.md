@@ -12,6 +12,7 @@
 4. `txt` 截断到 500 字符。需要某条线的全文时用 `codex_app__read_thread` 单独取，不要放宽这里。
 
 ```js
+// @exec: {"yield_time_ms": 125000}
 const ids = [/* runnable watch-set 中各 node 的 current_session_id，内联 */];
 const raw = await tools.codex_app__wait_threads({
   targets: ids.map(threadId => ({ threadId })),
