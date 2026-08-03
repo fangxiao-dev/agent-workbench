@@ -121,7 +121,7 @@ push / PR / merge / deploy / Production 与共享远端 mutation 一律需要我
 下面这几条是硬规则，其余按 skill 走。
 
 每轮：重读 registry 与 ledger，机械推导 runnable watch-set（不得用记忆里的 id），
-按 poll 契约原样轮询 → ledger.py sync → ledger.py stall-check → 按退出码行动；watch-set 为空时不执行虚假的阻塞 wait，直接选择派发或 halt。
+按 poll 契约原样轮询 → ledger.py sync → ledger.py stall-check → 按退出码行动；watch-set 为空时回退到全部 active child，继续固定 120 秒 poll。
 
 不可违反：
 

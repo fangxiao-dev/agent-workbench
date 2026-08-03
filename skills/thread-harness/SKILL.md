@@ -45,7 +45,7 @@ description: >
 
 ### 一轮循环长什么样
 
-主控每轮：按 ledger 推导 runnable watch-set → 敲固定 JS 片段 → `ledger.py sync` → 读摘要 → `ledger.py stall-check` → 按退出码决策；watch-set 为空时不执行虚假的阻塞 wait。
+主控每轮：按 ledger 推导 runnable watch-set → 敲固定 JS 片段 → `ledger.py sync` → 读摘要 → `ledger.py stall-check` → 按退出码决策；watch-set 为空时回退到全部 active child，继续执行固定 120 秒 poll。
 子线每轮：干活 → 若命中 H1 触发条件则发送 H1 envelope + 回报主控；controller 验证后代写 ledger。
 
 轮询的固定片段与 `wake.reason` 语义见 [poll-contract.md](references/poll-contract.md)。**那段 JS 要原样敲，不要"优化"它。** 它打印的那个投影就是 `ledger.py` 的全部输入——**rollout 只记录你打印的内容，不记录工具的原始返回**，所以少打印一个字段，主控就永久少一份判断依据。任何简化都会被 `sync` 的自检当场拦下并作废本轮。
@@ -125,7 +125,7 @@ description: >
 
 ### 每轮做什么
 
-1. 按 [poll-contract.md](references/poll-contract.md) 计算 runnable watch-set，再敲固定 JS 片段（`timeoutMs: 120000`，只覆盖 runnable node，只回一行短确认）；HEAD 仍由 `sync` 采集全部 active child
+1. 按 [poll-contract.md](references/poll-contract.md) 计算 runnable watch-set，再敲固定 JS 片段（`timeoutMs: 120000`；有 runnable node 时只覆盖 runnable node，watch-set 为空时覆盖全部 active child，只回一行短确认）；HEAD 仍由 `sync` 采集全部 active child
 2. 跑 `ledger.py sync`，读那段紧凑摘要；其中 `session_age_h` 是主控判断是否触发 session 交接的测量信号
 3. 跑 `ledger.py stall-check`，按退出码走：
    - `0` `OK` → 正常，按摘要决策

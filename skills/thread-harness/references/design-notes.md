@@ -109,7 +109,7 @@ H4 的分阶段：**当前只登记不校验**，脚本仅在 `sync` 摘要报 `
 
 **片段正文与字段清单只存在于 [poll-contract.md](poll-contract.md)**，本页不复制第二份——它随自检判据一起演进，两处必然漂移。
 
-五条不可动摇的性质：`timeoutMs` 固定为平台允许的 `120000`；`targets` 等于 ledger 机械推导出的 **runnable watch-set**，不含 controller 自己；HEAD 采集仍覆盖全部 active children；输出是那个固定投影，字段一个不能少；`txt` 截断到 500 字符。`awaiting_seam`、`awaiting_owner`、`done` 不进入阻塞 wait，controller dispatch 后的 producer 重新进入 watch-set；watch-set 为空时不执行虚假的 120 秒等待。
+五条不可动摇的性质：`timeoutMs` 固定为平台允许的 `120000`；`targets` 等于 ledger 机械推导出的 wait 集合：优先为 **runnable watch-set**，为空时回退为全部 active children，不含 controller 自己；HEAD 采集仍覆盖全部 active children；输出是那个固定投影，字段一个不能少；`txt` 截断到 500 字符。`awaiting_seam`、`awaiting_owner`、`done` 不进入正常阻塞 wait，controller dispatch 后的 producer 重新进入 watch-set；空集合只改变目标集合，不取消 120 秒 poll。
 
 **语法都是实跑验证过的**（可选链 `?.`、`(x||[])`、`String.slice`），刻意不用 `??`（未见证据）。
 
@@ -124,7 +124,7 @@ H4 的分阶段：**当前只登记不校验**，脚本仅在 `sync` 摘要报 `
 | 调用 source（legacy `arguments` / modern `input`）里 `timeoutMs == 120000` | `timeoutMs <n> != 120000` |
 | 输出可解析为 JSON 且 `v == 1` | `projection missing or wrong version` |
 | 输出含 `n` 与 `polls` 两个键 | `projection shape altered (missing <key>)` |
-| 实际 ids 集合等于 ledger 推导的 runnable watch-set | `targets mismatch (missing=<...>, unexpected=<...>)` |
+| 实际 ids 集合等于 ledger 推导的 wait 集合（runnable 非空时为 runnable，否则为全部 active child） | `targets mismatch (missing=<...>, unexpected=<...>)` |
 | `polls` 每个元素含 `id` / `status` / `turn` / `turnStatus` / `txt` 五个键 | `poll entry shape altered` |
 
 任一不符 → 打印 `ROUND INVALID: poll snippet altered (<原因>)`，拒绝本轮合并，`invalid_rounds` 计数 +1，退出码 1。
@@ -249,7 +249,7 @@ routing registry 由 `owner-thread-broker` 管，**本设计不改动其路由�
 | 子命令 | 行为 |
 | --- | --- |
 | `init --registry <absolute-json>` | 建 registry sibling/coordination_id 运行时目录与四个空 jsonl；已存在则幂等返回 |
-| `sync --registry <absolute-json> --round <n>` | 定位主控 rollout（按 registry 的 `controller.current_session_id`），**按 byte offset 增量读**，按 ledger 推导 runnable watch-set 校验固定 wait，同时为全部 active children 采集 HEAD；抽最近一次 `wait_threads` 的完整输出；跑 §3.5 自检；合并进 `progress.jsonl`；打印决策就绪摘要 |
+| `sync --registry <absolute-json> --round <n>` | 定位主控 rollout（按 registry 的 `controller.current_session_id`），**按 byte offset 增量读**，按 ledger 推导 wait 集合校验固定 wait（runnable 为空时回退到全部 active child），同时为全部 active children 采集 HEAD；抽最近一次 `wait_threads` 的完整输出；跑 §3.5 自检；合并进 `progress.jsonl`；打印决策就绪摘要 |
 | `route --registry <absolute-json> --node <n> --new-session <session> [--expect-current <session>]` | 只更新 registry 中一个 node 的 session 路由：旧 session 进入 `previous_session_ids`，刷新 `updated_at`；校验乐观锁与全 registry 当前 session 冲突；不写 JSONL 或 `sync-state.json` |
 | `report --registry <absolute-json> --node <n> --source-session <session> --state <s> [--head H] [--waiting-on ...] [--note ...]` | controller 验证 H1 source session 与 HEAD 后代后写 progress 行；旧 `--coordination-id` 调用兼容 |
 | `seam --registry <absolute-json> --seam-id <s> --producer <p> [--consumers ...] [--deliver <artifact>]` | controller 登记/交付 seam；未知 producer/consumer 是用法错误，退出 `64` |
