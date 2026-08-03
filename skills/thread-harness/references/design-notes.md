@@ -109,7 +109,7 @@ H4 的分阶段：**当前只登记不校验**，脚本仅在 `sync` 摘要报 `
 
 **片段正文与字段清单只存在于 [poll-contract.md](poll-contract.md)**，本页不复制第二份——它随自检判据一起演进，两处必然漂移。
 
-四条不可动摇的性质：`timeoutMs` 固定为平台允许的 `120000`；`targets` 覆盖 registry 的全部 **active** children、不含 controller 自己；输出是那个固定投影，字段一个不能少；`txt` 截断到 500 字符。
+五条不可动摇的性质：`timeoutMs` 固定为平台允许的 `120000`；`targets` 等于 ledger 机械推导出的 **runnable watch-set**，不含 controller 自己；HEAD 采集仍覆盖全部 active children；输出是那个固定投影，字段一个不能少；`txt` 截断到 500 字符。`awaiting_seam`、`awaiting_owner`、`done` 不进入阻塞 wait，controller dispatch 后的 producer 重新进入 watch-set；watch-set 为空时不执行虚假的 120 秒等待。
 
 **语法都是实跑验证过的**（可选链 `?.`、`(x||[])`、`String.slice`），刻意不用 `??`（未见证据）。
 
@@ -124,8 +124,8 @@ H4 的分阶段：**当前只登记不校验**，脚本仅在 `sync` 摘要报 `
 | 调用 source（legacy `arguments` / modern `input`）里 `timeoutMs == 120000` | `timeoutMs <n> != 120000` |
 | 输出可解析为 JSON 且 `v == 1` | `projection missing or wrong version` |
 | 输出含 `n` 与 `polls` 两个键 | `projection shape altered (missing <key>)` |
-| `n` == registry 中 **children** 数量 | `targets <n> != registry children <m>` |
-| `polls` 每个元素含 `id` / `status` / `turn` 四个键中至少 `id` 与 `status` | `poll entry shape altered` |
+| 实际 ids 集合等于 ledger 推导的 runnable watch-set | `targets mismatch (missing=<...>, unexpected=<...>)` |
+| `polls` 每个元素含 `id` / `status` / `turn` / `turnStatus` / `txt` 五个键 | `poll entry shape altered` |
 
 任一不符 → 打印 `ROUND INVALID: poll snippet altered (<原因>)`，拒绝本轮合并，`invalid_rounds` 计数 +1，退出码 1。
 
@@ -150,7 +150,7 @@ H4 的分阶段：**当前只登记不校验**，脚本仅在 `sync` 摘要报 `
 - `actionableStatus` = 需要动作。
 - 无 wake 且 `polls` 为空 = 真的没有变化。
 
-`ledger.py sync` 输出的摘要必须把 `inactiveStatus` 的 node 单独归入 `idle_nodes[]`，与 `no_change` 区分开。
+`ledger.py sync` 输出的摘要必须把 `inactiveStatus` 的 node 单独归入 `idle_nodes[]`，与 `no_change` 区分开；同时输出 `poll_targets`，让固定 wait 的目标集合可审计。
 
 ## 4. 三个角色
 
@@ -237,6 +237,7 @@ routing registry 由 `owner-thread-broker` 管，**本设计不改动其路由�
 
 ```json
 {"ts":"...","decision_id":"freeze_order_core_ownership",
+ "decision_instance_id":"<uuid>",
  "raised_by":"f6_order_core","blocks":["inventory","checkout","f6_order_core"],
  "question":"...","status":"pending","answer":null}
 ```
@@ -248,19 +249,22 @@ routing registry 由 `owner-thread-broker` 管，**本设计不改动其路由�
 | 子命令 | 行为 |
 | --- | --- |
 | `init --registry <absolute-json>` | 建 registry sibling/coordination_id 运行时目录与四个空 jsonl；已存在则幂等返回 |
-| `sync --registry <absolute-json> --round <n>` | 定位主控 rollout（按 registry 的 `controller.current_session_id`），**按 byte offset 增量读**，只轮询 active children，抽最近一次 `wait_threads` 的完整输出；跑 §3.5 自检；合并进 `progress.jsonl`；打印决策就绪摘要 |
+| `sync --registry <absolute-json> --round <n>` | 定位主控 rollout（按 registry 的 `controller.current_session_id`），**按 byte offset 增量读**，按 ledger 推导 runnable watch-set 校验固定 wait，同时为全部 active children 采集 HEAD；抽最近一次 `wait_threads` 的完整输出；跑 §3.5 自检；合并进 `progress.jsonl`；打印决策就绪摘要 |
 | `route --registry <absolute-json> --node <n> --new-session <session> [--expect-current <session>]` | 只更新 registry 中一个 node 的 session 路由：旧 session 进入 `previous_session_ids`，刷新 `updated_at`；校验乐观锁与全 registry 当前 session 冲突；不写 JSONL 或 `sync-state.json` |
 | `report --registry <absolute-json> --node <n> --source-session <session> --state <s> [--head H] [--waiting-on ...] [--note ...]` | controller 验证 H1 source session 与 HEAD 后代后写 progress 行；旧 `--coordination-id` 调用兼容 |
-| `seam --registry <absolute-json> --seam-id <s> --producer <p> [--consumers ...] [--deliver <artifact>]` | controller 登记/交付 seam |
-| `decide --registry <absolute-json> --raise <decision-id> --by <node> --blocks ... --question ...` / `--answer <decision-id> --text ...` | controller/Owner 决策队列 |
+| `seam --registry <absolute-json> --seam-id <s> --producer <p> [--consumers ...] [--deliver <artifact>]` | controller 登记/交付 seam；未知 producer/consumer 是用法错误，退出 `64` |
+| `decide --registry <absolute-json> --raise <decision-id> --by <node> --blocks ... --question ...` / `--answer <decision-id> --text ...` | controller/Owner 决策队列；每次 raise 生成 `decision_instance_id`，answer/escalate 绑定当前 instance |
 | `heartbeat --registry <absolute-json> --node <n> --evidence <text>` | 仅在 `3/5` 或 `4/5` 且 controller 已直接读 thread 确认 fresh heartbeat 后使用；只写 `sync-state.json` reset marker，不写 JSONL |
-| `preflight --registry <absolute-json>` | 开跑前只读校验 registry：worktree 存在且可读 HEAD、active child 无共享 worktree/branch、registry branch 与实际 checkout 一致、active `children <= 8`、active session id 不重复、controller rollout 可定位、运行时已 `init`。失败退 5 |
+| `preflight --registry <absolute-json>` | 开跑前只读校验 registry：worktree 存在且可读 HEAD、active child 无共享 worktree/branch、registry branch 与实际 checkout 一致、active `children <= 8`、active session id 不重复、controller rollout 可定位、运行时已 `init`。完整性失败退 `6`，其他阻断退 `5` |
 | `stall-check --registry <absolute-json>` | 最近 halt 的 `halt_poll_seq` 未被更大的有效 poll seq 超过 → 退出码 4 并打印 `HALTED`；连续 N 轮（默认 5）所有 node 的 `head` 无变化 → 退出码 2 并打印 `MUST_ACT`；从 `3/5` 起、到 `5/5` 前 → 退出码 0 并打印 `CHECK_HEARTBEAT`；有尚未上报的 pending decision → 退出码 3 并打印 `MUST_ESCALATE`；否则 0 |
+
+止血版运行时约束：四个 JSONL mutation 都在 coordination 级跨进程写锁内执行；每次 append 以完整 UTF-8 bytes 写入并 flush/fsync。每个新 mutation batch 在同一锁内从 `sync-state.json` 与现有 JSONL 的最大值中恢复并领取单调 `ledger_seq`，用来消除同秒 report/dispatch 的顺序歧义；legacy 行缺失该字段时才回退到时间戳判断，字段存在但类型非法会 fail-closed。扫描到任一坏行时先打印 `LEDGER INTEGRITY FAILED: <file>:<line> <reason>`，`sync`、`stall-check`、`report`、`seam`、`decide`、`act`、`heartbeat`、`preflight` 停止并返回 `6`；`status` 仍输出诊断但也返回 `6`，不把 partial rows 当作可信 current state。此锁不提供跨文件事务原子性。
 
 `sync` 的决策就绪摘要格式（给 broker 读的，必须紧凑）：
 
 ```
 ROUND 412  valid=yes  offset=51203941
+poll_targets:    f5_catalog, checkout, inventory, f6_order_core
 idle_nodes:      f5_catalog, foundation          <- inactiveStatus，该派活
 changed_nodes:   catalog(f69a8b73 <- 71f19b74)
 unchanged:       customer, checkout, inventory, f6_order_core

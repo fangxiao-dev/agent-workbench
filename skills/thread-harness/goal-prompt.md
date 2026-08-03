@@ -120,8 +120,8 @@ push / PR / merge / deploy / Production 与共享远端 mutation 一律需要我
 控制流读 $thread-harness 的 Role C 段，线程路由用 $owner-thread-broker。
 下面这几条是硬规则，其余按 skill 走。
 
-每轮：重读 registry 取全部 active children 的 current_session_id（不得用记忆里的 id），
-按 poll 契约原样轮询 → ledger.py sync → ledger.py stall-check → 按退出码行动。
+每轮：重读 registry 与 ledger，机械推导 runnable watch-set（不得用记忆里的 id），
+按 poll 契约原样轮询 → ledger.py sync → ledger.py stall-check → 按退出码行动；watch-set 为空时不执行虚假的阻塞 wait，直接选择派发或 halt。
 
 不可违反：
 
@@ -130,19 +130,21 @@ push / PR / merge / deploy / Production 与共享远端 mutation 一律需要我
    (b) 报告我并结束 loop → act --halt --reason "<一句话>"
    禁止"继续等待""本轮无变化""保持现状"。(a) 的三个字段填不出来就选 (b)。
 
-2. 同一条决策上报过一次就够。已上报的 pending 不再屏蔽 MUST_ACT；
-   决策没人应答而全线又没推进时，正确动作是 (b)，不是每轮重复上报同一条。
+2. 每次 `decide --raise` 都有新的 `decision_instance_id`；`act --escalate` 只绑定当前 pending instance。已上报的 pending 不再屏蔽 MUST_ACT；
+   决策没人应答而全线又没推进时，正确动作是 (b)，不是每轮重复上报同一 instance。
 
 3. 退出码 4 = HALTED：loop 已终止，停止轮询等我，不要自行恢复。
 
-4. wake.reason == "inactiveStatus" 是"有线闲着、该派活"，不是"没有变化"。
+4. 退出码 6 = LEDGER INTEGRITY FAILED：停止所有状态推进，保留坏账本供诊断，不截断、不重写、不猜测修复。
 
-5. seam 缺失是你的待办，不是外部阻塞。所有人都在等某个跨域契约时，
+5. wake.reason == "inactiveStatus" 是"有线闲着、该派活"，不是"没有变化"。
+
+6. seam 缺失是你的待办，不是外部阻塞。所有人都在等某个跨域契约时，
    正确动作是派一条 Platform 线去造它。
 
-6. 不要让 Platform 线"保持待命"——让生产者等消费者会闭成死锁。
+7. 不要让 Platform 线"保持待命"——让生产者等消费者会闭成死锁。
 
-7. 一个 node 一个 worktree 一个 branch。
+8. 一个 node 一个 worktree 一个 branch。
 
-8. 不自己做审计。
+9. 不自己做审计。
 ```

@@ -95,7 +95,7 @@
     .role-card.owner { border-top-color: var(--amber); }
     .role-card.controller { border-top-color: var(--cyan); }
     .role-card.package { border-top-color: var(--blue); }
-    .role-card.foundation { border-top-color: var(--violet); }
+    .role-card.platform { border-top-color: var(--violet); }
     .role-tag { color: var(--muted); font: 12px Consolas, monospace; }
     .role-card p { color: var(--muted); }
     .role-card ul { margin: 10px 0 0; padding-left: 18px; color: var(--muted); }
@@ -229,9 +229,9 @@
     <section id="map">
       <div class="wrap">
         <h2>先看全景：谁和谁发生什么关系？</h2>
-        <p class="section-intro">Owner 负责授权和 Owner 级决策；Controller 负责让整体推进；Package Child 完成明确任务包；Foundation Child 专门生产跨线共享的 seam。artifact 沿 seam 流向消费者，状态和异常沿回报通道回到 Controller。</p>
+        <p class="section-intro">Owner 负责授权和 Owner 级决策；Controller 负责让整体推进；Package Child 完成明确任务包；Platform Child 专门生产跨线共享的 seam。artifact 沿 seam 流向消费者，状态和异常沿回报通道回到 Controller。</p>
         <div class="panel relationship">
-          <svg viewBox="0 0 1100 470" role="img" aria-label="Owner、Controller、任务包子线、Foundation 子线和 seam artifact 的关系图">
+          <svg viewBox="0 0 1100 470" role="img" aria-label="Owner、Controller、任务包子线、Platform 子线和 seam artifact 的关系图">
             <defs>
               <marker id="arrow-cyan" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#5eead4" /></marker>
               <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#7dd3fc" /></marker>
@@ -268,7 +268,7 @@
             <text x="945" y="120" text-anchor="middle" class="diagram-label">Role A · Package Child</text>
             <text x="945" y="145" text-anchor="middle" class="diagram-sub">完成一个明确任务包</text>
             <rect x="825" y="295" width="240" height="90" rx="16" fill="#211a38" stroke="#c4b5fd" />
-            <text x="945" y="330" text-anchor="middle" class="diagram-label">Role B · Foundation Child</text>
+            <text x="945" y="330" text-anchor="middle" class="diagram-label">Role B · Platform Child</text>
             <text x="945" y="355" text-anchor="middle" class="diagram-sub">生产共享 seam / artifact</text>
             <text x="737" y="203" text-anchor="middle" class="diagram-sub" fill="#7dd3fc">dispatch / poll</text>
             <text x="741" y="275" text-anchor="middle" class="diagram-sub" fill="#c4b5fd">report / artifact</text>
@@ -305,9 +305,9 @@
             <h3>Controller · 主控</h3>
             <p>系统的推进责任人，不直接写业务代码。</p>
             <ul>
-              <li>维护路由，轮询全部 children</li>
+              <li>维护路由，轮询 runnable watch-set，并采集全部 active child HEAD</li>
               <li>读取账本，判断 idle / changed / stall</li>
-              <li>缺 seam 就派 Foundation 线</li>
+              <li>缺 seam 就派 Platform 线</li>
               <li>五轮无 committed progress 必须行动或升级</li>
             </ul>
             <span class="mini-pill" style="color:var(--cyan)">负责“整体有没有前进”</span>
@@ -324,9 +324,9 @@
             </ul>
             <span class="mini-pill">产出业务任务包</span>
           </article>
-          <article class="role-card foundation">
+          <article class="role-card platform">
             <div class="role-tag">ROLE B</div>
-            <h3>Foundation Child · 基座子线</h3>
+            <h3>Platform Child · 基座子线</h3>
             <p>没有自己的任务包，专门生产被多条线依赖的共享 seam。</p>
             <ul>
               <li>由主控指派 seam 和交付物</li>
@@ -337,10 +337,10 @@
             <span class="mini-pill" style="color:var(--violet)">生产共享契约 / artifact</span>
           </article>
         </div>
-        <div class="callout"><strong>最容易搞反的一点：</strong>“大家都在等跨域契约”不是外部阻塞，而是主控尚未安排生产者。Controller 手里有 <code>create_thread</code>，可以派一条 Foundation 线去造它——当然，前提是 Owner 已明确授权。</div>
+        <div class="callout"><strong>最容易搞反的一点：</strong>“大家都在等跨域契约”不是外部阻塞，而是主控尚未安排生产者。Controller 手里有 <code>create_thread</code>，可以派一条 Platform 线去造它——当然，前提是 Owner 已明确授权。</div>
         <div class="panel panel-pad" style="margin-top:14px">
           <h3 style="color:var(--cyan)">执行层辅助：<code>$call-grok</code> 在哪里参与？</h3>
-          <p style="color:var(--muted); margin-bottom:14px"><code>call-grok</code> 参与的是实现与调查过程，不是 Harness 的调度闭环。它通常由 Package Child 或 Foundation Child 调用，作为独立 CLI 进程只返回结论；子线仍然负责把结论落到自己的任务、commit、seam 登记和 H1/H2 回报上。</p>
+          <p style="color:var(--muted); margin-bottom:14px"><code>call-grok</code> 参与的是实现与调查过程，不是 Harness 的调度闭环。它通常由 Package Child 或 Platform Child 调用，作为独立 CLI 进程只返回结论；子线仍然负责把结论落到自己的任务、commit、seam 登记和 H1/H2 回报上。</p>
           <div class="signal-row">
             <div class="signal"><b><code>impl / investigate</code></b><span>优先用 call-grok，回收结论，减少主线被实现过程占满上下文。</span></div>
             <div class="signal"><b><code>review</code></b><span>不走 call-grok，走 <code>$do-review</code> 的既有 review tracks。</span></div>
@@ -365,7 +365,7 @@
             <div class="flow-step">
               <div class="step-no">02 · POLL</div>
               <h3>固定 wait</h3>
-              <p>对全部 children 调 <code>wait_threads</code>，至少等待 180 秒，并打印固定、有界的 projection。</p>
+              <p>对 runnable watch-set 调 <code>wait_threads</code>，固定等待 120 秒；已在等 seam/Owner 或已完成的线不进入阻塞集合，同时采集全部 active child HEAD。</p>
             </div>
             <div class="flow-step">
               <div class="step-no">03 · SYNC</div>
@@ -430,8 +430,8 @@
           <table class="channel-table">
             <thead><tr><th>渠道 / 载体</th><th>方向</th><th>用途</th><th>关键边界</th></tr></thead>
             <tbody>
-              <tr><td><code>create_thread</code></td><td>Controller → Child</td><td>创建任务包线或 Foundation 线，派出新的工作单元。</td><td>不是主控自授权动作；Owner 必须在 goal 或对话中明确授权。</td></tr>
-              <tr><td><code>wait_threads</code></td><td>Controller → 全部 children</td><td>按固定 poll contract 等待首个可行动变化，并拿回有限投影。</td><td>当前单次最多 8 个 target；不包含 Controller 自己。</td></tr>
+              <tr><td><code>create_thread</code></td><td>Controller → Child</td><td>创建任务包线或 Platform 线，派出新的工作单元。</td><td>不是主控自授权动作；Owner 必须在 goal 或对话中明确授权。</td></tr>
+              <tr><td><code>wait_threads</code></td><td>Controller → runnable watch-set</td><td>按固定 poll contract 等待首个可行动变化，并拿回有限投影。</td><td>当前单次最多 8 个 target；不包含 Controller 自己；HEAD 另采集全部 active child。</td></tr>
               <tr><td><code>send_message_to_thread</code></td><td>Child ↔ Controller</td><td>H1 触发时主动回报；主控也用它传达派活、决策和边界。</td><td>主动回报不能只依赖主控拉取，因为拉取机制不可靠。</td></tr>
               <tr><td><code>read_thread</code></td><td>Controller → 指定 child</td><td>当 500 字符摘要不够时，按需读取某条线全文。</td><td>默认 poll 有界，避免把所有长文本灌进主控上下文。</td></tr>
               <tr><td>Registry JSON</td><td>Controller / broker 维护</td><td>绑定稳定 <code>node_id</code>、当前 session、topic、worktree、branch。</td><td>它是路由元数据，不是审批账本、密钥仓库或实现证据仓库。</td></tr>
@@ -453,7 +453,7 @@
             <tbody>
               <tr><td><code>owner-thread-broker</code></td><td>维护 coordination group 的 registry；处理 session handoff、worktree/branch 路由和 Owner 授权边界。</td><td>先于消息发送定位当前 session；不把审批混进路由文件。</td></tr>
               <tr><td><code>ledger.py init --registry &lt;absolute-json&gt;</code></td><td>在 registry sibling/coordination_id 下创建运行时目录和空账本。</td><td>协调组启动时执行；旧 coordination-id 调用仍兼容。</td></tr>
-              <tr><td><code>$call-grok</code></td><td>作为独立 CLI 辅助实现或调查，只回收结论，不承接协调责任。</td><td>由 Package / Foundation Child 在执行层按需调用；不进入 registry、poll 或 ledger。</td></tr>
+              <tr><td><code>$call-grok</code></td><td>作为独立 CLI 辅助实现或调查，只回收结论，不承接协调责任。</td><td>由 Package / Platform Child 在执行层按需调用；不进入 registry、poll 或 ledger。</td></tr>
               <tr><td><code>ledger.py sync</code></td><td>读取 rollout projection，校验 poll 契约；读取 registry worktree 的 Git HEAD；合并 progress 并输出摘要。</td><td>每轮 poll 之后的事实同步层。</td></tr>
               <tr><td><code>H1 envelope + ledger.py report</code></td><td>子线发送含 <code>v/node/session_id/event/state/head/waiting_on/artifact/note</code> 的结构化 H1；controller 验证 registry current session 与 worktree HEAD 关系后写入 state、waiting_on、note。</td><td>H1/H2 的单写 ledger 回报入口。</td></tr>
               <tr><td><code>ledger.py seam</code></td><td>controller 登记 seam 的 producer、consumers、交付 artifact。</td><td>让“等待什么”与“谁生产”形成可追踪关系。</td></tr>
@@ -490,7 +490,7 @@
             <div class="failure-item"><span class="icon">!</span><p><strong>用 turn id 代替 Git HEAD</strong>，导致“只产生对话、不产生提交”也被算成进展。</p></div>
           </div>
           <div class="before-after">
-            <div class="state-box before"><span class="label">Before · 静默死锁</span><p>多条线等待一个没有 owner 的 seam → Foundation 线被要求待命 → 主控继续轮询 → 没有明确的停滞上限 → Owner 很久都收不到需要决策的消息。</p></div>
+            <div class="state-box before"><span class="label">Before · 静默死锁</span><p>多条线等待一个没有 owner 的 seam → Platform 线被要求待命 → 主控继续轮询 → 没有明确的停滞上限 → Owner 很久都收不到需要决策的消息。</p></div>
             <div class="state-box after"><span class="label">After · 显式控制回路</span><p>等待必须绑定 <code>seam:id</code> 和 producer；仅 active/working 线进入 <code>idle_nodes</code>；五轮没有 committed progress 就触发 <code>MUST_ACT</code>；pending decision 立即变成 <code>MUST_ESCALATE</code>。</p></div>
           </div>
         </div>
