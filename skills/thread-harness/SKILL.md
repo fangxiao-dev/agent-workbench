@@ -45,7 +45,7 @@ description: >
 
 ### 一轮循环长什么样
 
-主控每轮：敲固定 JS 片段 → `ledger.py sync` → 读摘要 → `ledger.py stall-check` → 按退出码决策。
+主控每轮：按 ledger 推导 runnable watch-set → 敲固定 JS 片段 → `ledger.py sync` → 读摘要 → `ledger.py stall-check` → 按退出码决策；watch-set 为空时不执行虚假的阻塞 wait。
 子线每轮：干活 → 若命中 H1 触发条件则发送 H1 envelope + 回报主控；controller 验证后代写 ledger。
 
 轮询的固定片段与 `wake.reason` 语义见 [poll-contract.md](references/poll-contract.md)。**那段 JS 要原样敲，不要"优化"它。** 它打印的那个投影就是 `ledger.py` 的全部输入——**rollout 只记录你打印的内容，不记录工具的原始返回**，所以少打印一个字段，主控就永久少一份判断依据。任何简化都会被 `sync` 的自检当场拦下并作废本轮。
@@ -125,16 +125,17 @@ description: >
 
 ### 每轮做什么
 
-1. 敲 [poll-contract.md](references/poll-contract.md) 里的固定 JS 片段（`timeoutMs: 120000`，覆盖全部 node，只回一行短确认）
+1. 按 [poll-contract.md](references/poll-contract.md) 计算 runnable watch-set，再敲固定 JS 片段（`timeoutMs: 120000`，只覆盖 runnable node，只回一行短确认）；HEAD 仍由 `sync` 采集全部 active child
 2. 跑 `ledger.py sync`，读那段紧凑摘要；其中 `session_age_h` 是主控判断是否触发 session 交接的测量信号
 3. 跑 `ledger.py stall-check`，按退出码走：
    - `0` `OK` → 正常，按摘要决策
    - `0` `CHECK_HEARTBEAT` → 已到 `3/5` 或 `4/5`；直接读取 active / working thread。若确认具体、最新进展，执行 `ledger.py heartbeat --node <node> --evidence "<一句话>"`；否则不重置
    - `2` `MUST_ACT` → **H3 二选一**，派发新工作用 `act --dispatch`，向 Owner 报告并结束 loop 用 `act --halt --reason`；禁止输出"继续等待"
-   - `3` `MUST_ESCALATE` → 立即向 Owner 报告尚未上报的 pending 决策，并用 `act --escalate --decision-id <d>` 留痕，本轮结束
-   - `4` `HALTED` → loop 已被终止，**不要继续轮询**；先向 Owner 确认再决定是否恢复
+    - `3` `MUST_ESCALATE` → 立即向 Owner 报告尚未上报的 pending 决策，并用 `act --escalate --decision-id <d>` 留痕，本轮结束
+    - `4` `HALTED` → loop 已被终止，**不要继续轮询**；先向 Owner 确认再决定是否恢复
+    - `6` `LEDGER INTEGRITY FAILED` → 停止所有状态推进；保留坏账本供诊断，不截断、不重写、不猜测修复
 
-摘要里 `idle_nodes` 非空 = 有线闲着 = 该派活。这跟 `unchanged` 是两回事。heartbeat 只写 `sync-state.json` 的运行时 reset marker，不修改四个 append-only JSONL，也不要求缓存每轮 thread 消息。
+摘要里 `poll_targets` 是脚本推导的 runnable watch-set；`idle_nodes` 非空 = 有线闲着 = 该派活。这跟 `unchanged` 是两回事。heartbeat 只写 `sync-state.json` 的运行时 reset marker，不修改四个 append-only JSONL，也不要求缓存每轮 thread 消息。每次 raise 都有独立 `decision_instance_id`，旧 instance 的 escalate 不会遮蔽新 raise。
 
 ### 你不做的事
 
@@ -144,7 +145,7 @@ description: >
 
 ### 什么时候该叫醒 Owner
 
-`decisions.jsonl` 里出现 `pending` 就叫，不要攒。判断"这是不是 Owner 级"的启发式：如果这个决定会改变谁拥有什么、或者会产生不可逆的外部影响，那就是 Owner 的。技术选型和执行顺序是你的。
+`decisions.jsonl` 里出现 `pending` 就叫，不要攒；`act --escalate` 必须绑定当前 `decision_instance_id`。判断"这是不是 Owner 级"的启发式：如果这个决定会改变谁拥有什么、或者会产生不可逆的外部影响，那就是 Owner 的。技术选型和执行顺序是你的。
 
 拿不准就报。**误报的成本远低于漏报。**
 
