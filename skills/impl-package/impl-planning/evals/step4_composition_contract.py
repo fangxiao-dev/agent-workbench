@@ -113,8 +113,8 @@ def main() -> None:
             "composition declaration",
         ),
         (template, "## 计划验证", "planned verification section"),
-        (template, "## 执行记录", "execution record section"),
-        (template, "### ER-<n>", "stable execution-record anchor"),
+        (template, "## 执行过程索引", "execution record index section"),
+        (template, "execution-records/index.md", "stable execution-record index"),
         (template, "## 计划修订历史", "revision history"),
         (patching, "plan 独立声明 P1 与 Composition", "patch-owned composition"),
         (
@@ -207,9 +207,8 @@ def main() -> None:
         (readiness_template, "### 必须", "manual readiness required fields"),
         (readiness_template, "### 可选项（Optional", "manual readiness optional fields"),
         (ticket_template, "Plan Revision", "ticket plan-revision field"),
-        (ticket_template, "**阶段（Phase）：**", "ticket recovery phase"),
-        (ticket_template, "**下一步（Next）：**", "ticket recovery next action"),
-        (ticket_template, "## Progress", "ticket-local recovery progress"),
+        (ticket_template, "Runtime Acceptance Status", "ticket acceptance projection"),
+        (ticket_template, "Ticket 不写 Phase、Next 或 Progress", "ticket recovery stays in package progress"),
         (
             dev_with_track,
             "已明确完成且仍新鲜的 investigation 不重做",
@@ -485,13 +484,11 @@ def main() -> None:
         assert_not_contains(content, needle, label)
 
     if not (
-        ticket_template.index("**阶段（Phase）：**")
-        < ticket_template.index("## 运行时验收状态（Runtime Acceptance Status）")
-        < ticket_template.index("**下一步（Next）：**")
+        ticket_template.index("## 运行时验收状态（Runtime Acceptance Status）")
         < ticket_template.index("## 建设内容")
-        < ticket_template.index("## Progress")
+        < ticket_template.index("Ticket 不写 Phase、Next 或 Progress")
     ):
-        raise AssertionError("Ticket recovery summary must stay near the top and Progress at the end")
+        raise AssertionError("Ticket acceptance projection must stay near the top and recovery must point to package progress")
     if ticket_template.count("<!-- impl-package:projection runtime-state begin -->") != 1:
         raise AssertionError("Ticket must keep exactly one runtime-state projection")
     if "checkpoint" in ticket_template.lower():

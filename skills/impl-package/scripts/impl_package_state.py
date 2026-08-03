@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import string
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -114,7 +115,7 @@ def _load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
     projections = config["projections"]
     if not isinstance(projections, dict) or set(projections) != {"markers", "revisionSet", "runtimeTask", "runtimeTicket", "gateStatus"}:
         raise RuntimeError("Impl-Package projection configuration has invalid shape")
-    if set(projections["markers"]) != {"revisionSet", "runtimeState", "gateStatus"} or set(projections["revisionSet"]) != {"decision", "spec", "plan"}:
+    if set(projections["markers"]) != {"revisionSet", "runtimeState", "gateStatus", "executionRecordIndex", "progress"} or set(projections["revisionSet"]) != {"decision", "spec", "plan"}:
         raise RuntimeError("Impl-Package marker or revision projection configuration is invalid")
     marker_values = list(projections["markers"].values())
     if len(marker_values) != len(set(marker_values)) or any(not isinstance(value, str) or not value or re.search(r"\s", value) for value in marker_values):
@@ -179,6 +180,17 @@ GATE_VERDICTS = frozenset(CONFIG["stateVocabulary"]["gateVerdict"])
 TERMINAL_GATE_VERDICTS = frozenset(CONFIG["stateVocabulary"]["terminalGateVerdict"])
 GATE_HEADING_PATTERN = CONFIG["gate"]["headingPattern"].format(verdicts="|".join(map(re.escape, GATE_VERDICTS)))
 GATE_BLOCK_RE = re.compile(rf"(?ms){GATE_HEADING_PATTERN}.*?(?=^##\s|\Z)")
+
+ER_DIRECTORY = Path("execution-records")
+ER_INDEX = ER_DIRECTORY / "index.md"
+PROGRESS_ARTIFACT = Path("progress.md")
+ER_PURPOSES = frozenset({"checkpoint", "judgment", "other"})
+ER_ID_PATTERN = re.compile(r"^(?P<attempt>[A-Za-z0-9][A-Za-z0-9._-]*)-ER-(?P<number>0*[1-9]\d*)$")
+ER_HEADING_PATTERN = re.compile(
+    r"(?ms)^## (?P<id>[^\s]+) · (?P<purpose>checkpoint|judgment|other)[ \t]*\n.*?(?=^##\s|\Z)"
+)
+ER_MARKER = CONFIG["projections"]["markers"]["executionRecordIndex"]
+PROGRESS_MARKER = CONFIG["projections"]["markers"]["progress"]
 
 
 class StateError(RuntimeError):
@@ -302,6 +314,256 @@ def _current_revision_set(package: Path) -> dict[str, str] | None:
         "spec": current.get("spec", {}).get("revision", "N/A"),
         "plan": current.get("attempt", {}).get("revision", "N/A"),
     }
+
+
+def _er_filename(attempt: str) -> str:
+    if not isinstance(attempt, str) or ER_ID_PATTERN.fullmatch(f"{attempt}-ER-1") is None:
+        raise StateError(f"invalid Attempt ID for Execution Record ledger: {attempt!r}")
+    return f"{attempt}.md"
+
+
+def _er_relative_path(attempt: str) -> str:
+    return (ER_DIRECTORY / _er_filename(attempt)).as_posix()
+
+
+def _er_payload(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise StateError("er-add input must be a JSON object")
+    allowed = {
+        "purpose", "subject", "title", "content", "nextAction", "whyOther",
+        "allowsDownstreamImplementation", "downstream",
+    }
+    unknown = sorted(set(payload) - allowed)
+    if unknown:
+        raise StateError(f"er-add has unsupported fields: {unknown[0]}")
+    purpose = payload.get("purpose")
+    if purpose not in ER_PURPOSES:
+        raise StateError(f"unsupported Execution Record purpose: {purpose!r}")
+    subject = payload.get("subject") or "attempt"
+    if not isinstance(subject, str) or not subject:
+        raise StateError("er-add subject must be a non-empty string")
+    title = payload.get("title")
+    if not isinstance(title, str) or not title.strip() or "\n" in title or "\r" in title:
+        raise StateError("er-add title must be a non-empty single-line string")
+    if "content" not in payload:
+        raise StateError("er-add content is required")
+    content = payload["content"]
+    if not isinstance(content, (str, dict, list)):
+        raise StateError("er-add content must be a string, object or array")
+    next_action = payload.get("nextAction", "")
+    if not isinstance(next_action, str) or "\n" in next_action or "\r" in next_action:
+        raise StateError("er-add nextAction must be a single-line string")
+    if purpose == "checkpoint" and not next_action.strip():
+        raise StateError("checkpoint requires nextAction")
+    why_other = payload.get("whyOther", "")
+    if not isinstance(why_other, str) or "\n" in why_other or "\r" in why_other:
+        raise StateError("whyOther must be a single-line string")
+    if purpose == "other" and not why_other.strip():
+        raise StateError("other requires whyOther")
+    allows = payload.get("allowsDownstreamImplementation", False)
+    if not isinstance(allows, bool):
+        raise StateError("allowsDownstreamImplementation must be boolean")
+    downstream = payload.get("downstream", [])
+    if not isinstance(downstream, list) or any(not isinstance(item, str) or not item for item in downstream):
+        raise StateError("downstream must be an array of non-empty strings")
+    normalized_downstream = sorted(set(downstream))
+    if purpose != "checkpoint" and (allows or normalized_downstream):
+        raise StateError("only checkpoint records may select downstream implementation")
+    if allows and not normalized_downstream:
+        raise StateError("reusable checkpoint requires at least one downstream selection")
+    if not allows and normalized_downstream:
+        raise StateError("downstream selection requires allowsDownstreamImplementation=true")
+    return {
+        "purpose": purpose,
+        "subject": subject,
+        "title": title.strip(),
+        "content": content,
+        "nextAction": next_action.strip(),
+        "whyOther": why_other.strip(),
+        "allowsDownstreamImplementation": allows,
+        "downstream": normalized_downstream,
+    }
+
+
+def _er_payload_hash(payload: dict[str, Any]) -> str:
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _er_content_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    return json.dumps(content, ensure_ascii=False, sort_keys=True, indent=2)
+
+
+def _er_field(block: str, name: str, *, required: bool = True) -> str | None:
+    match = re.search(rf"(?m)^- {re.escape(name)}[：:][ \t]*(.*?)[ \t]*$", block)
+    if not match:
+        if required:
+            raise StateError(f"Execution Record is missing field: {name}")
+        return None
+    return match.group(1)
+
+
+def _er_record_hash_input(block: str) -> str:
+    normalized = block.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = re.sub(r"(?m)^- Content SHA256[：:][ \t]*[0-9a-f]{64}[ \t]*$", "- Content SHA256: <sealed>", normalized)
+    return normalized.rstrip("\n") + "\n"
+
+
+def _er_records(text: str, expected_attempt: str | None = None) -> list[dict[str, Any]]:
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    records: list[dict[str, Any]] = []
+    for match in ER_HEADING_PATTERN.finditer(normalized):
+        block = match.group(0)
+        identifier = match.group("id")
+        identity = ER_ID_PATTERN.fullmatch(identifier)
+        if identity is None:
+            raise StateError(f"invalid Execution Record ID: {identifier}")
+        attempt = identity.group("attempt")
+        if expected_attempt is not None and attempt != expected_attempt:
+            raise StateError(f"Execution Record belongs to another Attempt: {identifier}")
+        purpose = match.group("purpose")
+        subject = _er_field(block, "Subject")
+        revision_set = _er_field(block, "Revision set")
+        revision_match = re.fullmatch(r"(D\d+|N/A)\s*/\s*(S\d+|N/A)\s*/\s*(P\d+|N/A)", revision_set or "")
+        if revision_match is None:
+            raise StateError(f"invalid Execution Record revision set: {identifier}")
+        downstream_value = _er_field(block, "Downstream") or "none"
+        downstream = [] if downstream_value.casefold() == "none" else [item.strip() for item in downstream_value.split(",") if item.strip()]
+        allows_value = (_er_field(block, "Allows downstream implementation") or "false").casefold()
+        if allows_value not in {"true", "false"}:
+            raise StateError(f"invalid downstream flag in Execution Record: {identifier}")
+        payload_hash = _er_field(block, "Payload SHA256")
+        content_hash = _er_field(block, "Content SHA256")
+        if not re.fullmatch(r"[0-9a-f]{64}", payload_hash or "") or not re.fullmatch(r"[0-9a-f]{64}", content_hash or ""):
+            raise StateError(f"invalid Execution Record hash: {identifier}")
+        expected_hash = hashlib.sha256(_er_record_hash_input(block).encode("utf-8")).hexdigest()
+        if content_hash != expected_hash:
+            raise StateError(f"Execution Record content hash mismatch: {identifier}")
+        supersedes_value = _er_field(block, "Supersedes") or "none"
+        supersedes = None if supersedes_value.casefold() == "none" else supersedes_value
+        title = _er_field(block, "Title")
+        next_action = _er_field(block, "Next action", required=False) or ""
+        why_other = _er_field(block, "Why other", required=False) or ""
+        records.append(
+            {
+                "id": identifier,
+                "attempt": attempt,
+                "number": int(identity.group("number")),
+                "purpose": purpose,
+                "subject": subject,
+                "title": title or "",
+                "nextAction": next_action,
+                "whyOther": why_other,
+                "revisionSet": {
+                    "decision": revision_match.group(1),
+                    "spec": revision_match.group(2),
+                    "plan": revision_match.group(3),
+                },
+                "allowsDownstreamImplementation": allows_value == "true",
+                "downstream": downstream,
+                "supersedes": supersedes,
+                "payloadHash": payload_hash,
+                "contentHash": content_hash,
+                "block": block,
+            }
+        )
+    return records
+
+
+def _er_ledger_header(attempt: str) -> str:
+    return f"# Execution Records · {attempt}\n\n> Sealed, append-only records for this Attempt.\n\n"
+
+
+def _er_ledger_text(package: Path, attempt: str, committed: bool = False) -> str | None:
+    relative = _er_relative_path(attempt)
+    if committed:
+        if not _artifact_exists(package, relative, True):
+            return None
+        return _artifact_text(package, relative, True)
+    path = package / relative
+    return path.read_text(encoding="utf-8") if path.is_file() else None
+
+
+def _er_subject_exists(state: dict[str, Any], attempt: str, subject: str) -> None:
+    if subject == "attempt":
+        return
+    match = re.fullmatch(r"(ticket|task):([^\s:]+)", subject)
+    if match is None:
+        raise StateError("ER subject must be attempt, ticket:<id> or task:<id>")
+    kind, identifier = match.groups()
+    key = "tickets" if kind == "ticket" else "tasks"
+    if not any(row.get("attempt") == attempt and row.get("id") == identifier for row in state.get(key, [])):
+        raise StateError(f"ER subject does not resolve to current {kind}: {identifier}")
+
+
+def _er_validate_downstream(state: dict[str, Any], attempt: str, downstream: list[str]) -> None:
+    for item in downstream:
+        match = re.fullmatch(r"(ticket|task):([^\s:]+)", item)
+        if match is None:
+            raise StateError("downstream selections must use ticket:<id> or task:<id>")
+        kind, identifier = match.groups()
+        key = "tickets" if kind == "ticket" else "tasks"
+        if not any(row.get("attempt") == attempt and row.get("id") == identifier for row in state.get(key, [])):
+            raise StateError(f"downstream selection does not resolve to current {kind}: {identifier}")
+
+
+def _ticket_dependencies(package: Path, attempt: str, ticket_id: str, *, committed: bool = False) -> list[tuple[str, str]]:
+    documents = _attempt_ticket_documents(package, attempt, committed)
+    selected = documents.get(ticket_id)
+    if selected is None:
+        return []
+    text = selected[1]
+    return re.findall(r"(?m)^-\s*(implementation|acceptance|release)[：:]\s*([^\s]+)", text)
+
+
+def _dependency_releases(state: dict[str, Any], attempt: str, kind: str, identifier: str) -> bool:
+    key = "tickets" if kind == "ticket" else "tasks"
+    row = next((item for item in state.get(key, []) if item.get("attempt") == attempt and item.get("id") == identifier), None)
+    return row is not None and row.get("state") in {"SATISFIED", "DONE", "WAIVED", "SUPERSEDED"}
+
+
+def _er_active_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    superseded = {row["supersedes"] for row in records if row.get("supersedes")}
+    return [row for row in records if row["id"] not in superseded]
+
+
+def _er_checkpoint_key(record: dict[str, Any]) -> tuple[Any, ...]:
+    downstream = tuple(record.get("downstream", [])) if record.get("allowsDownstreamImplementation") else ()
+    return record.get("subject"), bool(record.get("allowsDownstreamImplementation")), downstream
+
+
+def _er_render_record(
+    attempt: str,
+    record_id: str,
+    payload: dict[str, Any],
+    revision_set: dict[str, str],
+    supersedes: str | None,
+    recorded_at: str,
+    payload_hash: str,
+) -> str:
+    downstream = ", ".join(payload["downstream"]) if payload["downstream"] else "none"
+    content = _er_content_text(payload["content"])
+    body = (
+        f"## {record_id} · {payload['purpose']}\n\n"
+        f"- Title: {payload['title']}\n"
+        f"- Subject: {payload['subject']}\n"
+        f"- Recorded at: {recorded_at}\n"
+        f"- Revision set: {revision_set['decision']} / {revision_set['spec']} / {revision_set['plan']}\n"
+        f"- Allows downstream implementation: {str(payload['allowsDownstreamImplementation']).lower()}\n"
+        f"- Downstream: {downstream}\n"
+        f"- Supersedes: {supersedes or 'none'}\n"
+        f"- Payload SHA256: {payload_hash}\n"
+        "- Content SHA256: <sealed>\n"
+    )
+    if payload["nextAction"]:
+        body += f"- Next action: {payload['nextAction']}\n"
+    if payload["whyOther"]:
+        body += f"- Why other: {payload['whyOther']}\n"
+    body += f"\n### Content\n\n{content}\n\n"
+    digest = hashlib.sha256(_er_record_hash_input(body).encode("utf-8")).hexdigest()
+    return body.replace("- Content SHA256: <sealed>", f"- Content SHA256: {digest}")
 
 
 def _assert_revision_selection_keys(current: Any) -> None:
@@ -444,6 +706,8 @@ def _seed_earned_records(package: Path, state: dict[str, Any], revision_state: d
                 if value_match
                 else CONFIG["stateVocabulary"]["initialState"]["ticket"]
             )
+            if ticket_state in {"UNRECORDED", "IN_PROGRESS"}:
+                ticket_state = CONFIG["stateVocabulary"]["initialState"]["ticket"]
             if ticket_state not in TICKET_STATES:
                 raise StateError(f"unsupported ticket state for {ticket_id}: {ticket_state}")
             ticket_records.append(
@@ -537,6 +801,7 @@ def command_set_state(
     record["evidence"] = evidence
     _atomic_write_json(path, state)
     _refresh_runtime_projections(package, state, attempt)
+    _refresh_execution_projections(package, state, attempt)
     return state
 
 
@@ -925,6 +1190,291 @@ def _validate_revision_projections(package: Path, state: dict[str, Any], committ
             raise StateError(f"revision declaration outside machine-owned projection in {artifact}")
 
 
+def _er_is_stale(record: dict[str, Any], state: dict[str, Any], current_revision: dict[str, str]) -> bool:
+    if record.get("revisionSet") != current_revision:
+        return True
+    subject = record.get("subject", "")
+    match = re.fullmatch(r"(ticket|task):([^\s:]+)", subject)
+    if match:
+        key = "tickets" if match.group(1) == "ticket" else "tasks"
+        row = next((item for item in state.get(key, []) if item.get("attempt") == record.get("attempt") and item.get("id") == match.group(2)), None)
+        if row is None or row.get("state") in {"NEEDS-REVALIDATION", "SUPERSEDED"}:
+            return True
+    return False
+
+
+def _er_index_content(attempt: str, records: list[dict[str, Any]], state: dict[str, Any], revision_set: dict[str, str]) -> str:
+    superseded = {row["id"] for row in records if row.get("id") in {item.get("supersedes") for item in records if item.get("supersedes")}}
+    lines = [
+        f"# Execution Record Index · {attempt}",
+        "",
+        f"<!-- impl-package:projection {ER_MARKER} begin -->",
+        f"- Attempt: {attempt}",
+        f"- Revision set: {revision_set['decision']} / {revision_set['spec']} / {revision_set['plan']}",
+        f"- Ledger: [{_er_filename(attempt)}]({_er_filename(attempt)})",
+        f"<!-- impl-package:projection {ER_MARKER} end -->",
+        "",
+        "| ID | Purpose | Subject | Status | Supersedes |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for record in records:
+        status = "superseded" if record["id"] in superseded else ("stale" if _er_is_stale(record, state, revision_set) else "active")
+        lines.append(
+            f"| [{record['id']}]({_er_filename(attempt)}#{record['id'].lower()}) | {record['purpose']} | {record['subject']} | {status} | {record.get('supersedes') or 'none'} |"
+        )
+    if not records:
+        lines.append("| none | — | — | — | — |")
+    return "\n".join(lines) + "\n"
+
+
+def _progress_content(
+    package: Path,
+    attempt: str,
+    state: dict[str, Any],
+    records: list[dict[str, Any]],
+    *,
+    committed: bool = False,
+    revision_state: dict[str, Any] | None = None,
+) -> str:
+    if committed:
+        selection = (revision_state or {}).get("current", {}).get("attempt")
+        if not selection:
+            raise StateError("cannot build committed progress without a current Attempt")
+        plan_text = _artifact_text(package, selection["plan"], True)
+    else:
+        current = _current_attempt(package)
+        if current is None:
+            raise StateError("cannot build progress without a current Attempt")
+        plan_text = current[1].read_text(encoding="utf-8")
+    tickets_earned, dag_earned = _composition(plan_text)
+    if committed and revision_state is not None:
+        selected = revision_state.get("current", {})
+        revision_set = {
+            "decision": selected.get("decision", {}).get("revision", "N/A"),
+            "spec": selected.get("spec", {}).get("revision", "N/A"),
+            "plan": selected.get("attempt", {}).get("revision", "N/A"),
+        }
+    else:
+        revision_set = _current_revision_set(package) or {"decision": "N/A", "spec": "N/A", "plan": "N/A"}
+    terminal_entries = [row for row in state.get("gate", {}).get("entries", []) if row.get("attempt") == attempt and row.get("verdict") in TERMINAL_GATE_VERDICTS]
+    lifecycle = "frozen" if terminal_entries else "active"
+    latest_gate = max((row for row in state.get("gate", {}).get("entries", []) if row.get("attempt") == attempt), key=lambda row: row.get("number", 0), default=None)
+    gate_status = f"{latest_gate['id']} · {latest_gate['verdict']}" if latest_gate else "open / no verdict"
+    blockers = [
+        f"{kind}:{row['id']} ({row['evidence']})"
+        for kind, rows in (("ticket", state.get("tickets", [])), ("task", state.get("tasks", [])))
+        for row in rows if row.get("attempt") == attempt and row.get("state") == "BLOCKED"
+    ]
+    if tickets_earned:
+        for row in state.get("tickets", []):
+            if row.get("attempt") != attempt or row.get("state") != "PENDING":
+                continue
+            unresolved = [
+                f"{kind}:{identifier}"
+                for kind, identifier in _ticket_dependencies(package, attempt, row["id"], committed=committed)
+                if not _dependency_releases(state, attempt, "ticket", identifier)
+            ]
+            if unresolved:
+                blockers.append(f"ticket:{row['id']} (dependencies: {', '.join(unresolved)})")
+    active_records = _er_active_records(records)
+    checkpoints = [row for row in active_records if row.get("purpose") == "checkpoint"]
+    lines = [
+        f"# Attempt Progress · {attempt}",
+        "",
+        f"<!-- impl-package:projection {PROGRESS_MARKER} begin -->",
+        f"- Attempt: {attempt}",
+        f"- Revision set: {revision_set['decision']} / {revision_set['spec']} / {revision_set['plan']}",
+        f"- Composition: tickets={'true' if tickets_earned else 'false'}, dag={'true' if dag_earned else 'false'}",
+        f"- Lifecycle: {lifecycle}",
+        f"- Latest gate: {gate_status}",
+        "- Blockers: " + ("; ".join(blockers) if blockers else "none"),
+        f"<!-- impl-package:projection {PROGRESS_MARKER} end -->",
+        "",
+    ]
+    if tickets_earned:
+        lines.extend([
+            "## Ticket Acceptance",
+            "",
+            "| Ticket | State | Evidence |",
+            "| --- | --- | --- |",
+        ])
+        ticket_rows = [row for row in state.get("tickets", []) if row.get("attempt") == attempt]
+        lines.extend(f"| {row['id']} | {row['state']} | {row['evidence']} |" for row in ticket_rows)
+        if not ticket_rows:
+            lines.append("| none | — | — |")
+        lines.append("")
+    if dag_earned:
+        lines.extend([
+            "## Task Execution",
+            "",
+            "| Task | State | Evidence | Handoff |",
+            "| --- | --- | --- | --- |",
+        ])
+        task_rows = [row for row in state.get("tasks", []) if row.get("attempt") == attempt]
+        for row in task_rows:
+            handoff_path = f"tasks/{row['id']}-handoff.md"
+            handoff = handoff_path if (_artifact_exists(package, handoff_path, True) if committed else (package / handoff_path).is_file()) else "none"
+            lines.append(f"| {row['id']} | {row['state']} | {row['evidence']} | {handoff} |")
+        if not task_rows:
+            lines.append("| none | — | — | — |")
+        lines.append("")
+    lines.extend([
+        "## Active Checkpoints",
+        "",
+        "| Record | Subject | Downstream | Status | Next action |",
+        "| --- | --- | --- | --- | --- |",
+    ])
+    for record in checkpoints:
+        stale = _er_is_stale(record, state, revision_set)
+        checkpoint_status = "stale" if stale else ("frozen" if terminal_entries else "active")
+        lines.append(
+            f"| [{record['id']}](execution-records/{_er_filename(attempt)}#{record['id'].lower()}) | {record['subject']} | {', '.join(record['downstream']) if record['downstream'] else 'none'} | {checkpoint_status} | {record.get('nextAction') or 'see record'} |"
+        )
+    if not checkpoints:
+        lines.append("| none | — | — | — | — |")
+    lines.extend(["", "## Actionable Units", ""])
+    actionable = [row for row in state.get("tasks", []) if row.get("attempt") == attempt and row.get("state") in {"PENDING", "READY"}]
+    actionable.extend(
+        row for row in state.get("tickets", [])
+        if row.get("attempt") == attempt
+        and row.get("state") == "PENDING"
+        and all(_dependency_releases(state, attempt, "ticket", identifier) for _, identifier in _ticket_dependencies(package, attempt, row["id"], committed=committed))
+    )
+    if actionable:
+        for row in actionable:
+            kind = "Task" if row in state.get("tasks", []) else "Ticket acceptance"
+            lines.append(f"- {kind} {row['id']}: {row['state']} · {row['evidence']}")
+    else:
+        lines.append("- none")
+    return "\n".join(lines) + "\n"
+
+
+def _refresh_execution_projections(package: Path, state: dict[str, Any], attempt: str) -> list[str]:
+    changed: list[str] = []
+    ledger_path = package / _er_relative_path(attempt)
+    if ledger_path.is_file():
+        ledger_text = ledger_path.read_text(encoding="utf-8")
+    else:
+        ledger_text = _er_ledger_header(attempt)
+        _atomic_write_text(ledger_path, ledger_text)
+        changed.append(_er_relative_path(attempt))
+    records = _er_records(ledger_text, attempt)
+    revision_set = _current_revision_set(package) or {"decision": "N/A", "spec": "N/A", "plan": "N/A"}
+    index_path = package / ER_INDEX
+    index_text = _er_index_content(attempt, records, state, revision_set)
+    if not index_path.is_file() or index_path.read_text(encoding="utf-8") != index_text:
+        _atomic_write_text(index_path, index_text)
+        changed.append(ER_INDEX.as_posix())
+    progress_text = _progress_content(package, attempt, state, records)
+    progress_path = package / PROGRESS_ARTIFACT
+    if not progress_path.is_file() or progress_path.read_text(encoding="utf-8") != progress_text:
+        _atomic_write_text(progress_path, progress_text)
+        changed.append(PROGRESS_ARTIFACT.as_posix())
+    return changed
+
+
+def _validate_er_ledger_history(package: Path, attempt: str, candidate_text: str, committed: bool) -> None:
+    repo = _git_root(package)
+    relative = _er_relative_path(attempt)
+    try:
+        commits = _git(repo, "log", "--format=%H", "--reverse", "--", f"{package.resolve().relative_to(repo).as_posix()}/{relative}").splitlines()
+    except StateError:
+        commits = []
+    previous: str | None = None
+    for commit in commits:
+        try:
+            current = _git_text(repo, "show", f"{commit}:{package.resolve().relative_to(repo).as_posix()}/{relative}")
+        except StateError:
+            continue
+        if previous is not None and not current.startswith(previous):
+            raise StateError("Execution Record ledger append-only violation in Git history")
+        previous = current
+    if not committed and previous is not None and not candidate_text.startswith(previous):
+        raise StateError("Execution Record ledger append-only violation in working tree")
+
+
+def _validate_execution_records(package: Path, revision_state: dict[str, Any], state: dict[str, Any], committed: bool) -> None:
+    current = revision_state.get("current", {}).get("attempt")
+    if not current:
+        return
+    attempt = current.get("id")
+    ledger_text = _er_ledger_text(package, attempt, committed)
+    if ledger_text is None:
+        raise StateError(f"Execution Record ledger is missing for current Attempt: {attempt}")
+    records = _er_records(ledger_text, attempt)
+    ids: set[str] = set()
+    for record in records:
+        if record["id"] in ids:
+            raise StateError(f"duplicate Execution Record ID: {record['id']}")
+        ids.add(record["id"])
+        if record["purpose"] == "checkpoint" and record["allowsDownstreamImplementation"] and not record["downstream"]:
+            raise StateError(f"reusable checkpoint has no downstream selection: {record['id']}")
+        if record["supersedes"] and record["supersedes"] not in ids:
+            raise StateError(f"Execution Record supersedes a future or missing record: {record['id']}")
+    _validate_er_ledger_history(package, attempt, ledger_text, committed)
+    current_selection = revision_state.get("current", {})
+    expected_revision_set = {
+        "decision": current_selection.get("decision", {}).get("revision", "N/A"),
+        "spec": current_selection.get("spec", {}).get("revision", "N/A"),
+        "plan": current_selection.get("attempt", {}).get("revision", "N/A"),
+    }
+    expected_index = _er_index_content(attempt, records, state, expected_revision_set)
+    expected_progress = _progress_content(package, attempt, state, records, committed=committed, revision_state=revision_state)
+    index_text = _state_document(package, ER_INDEX.as_posix(), committed)
+    progress_text = _state_document(package, PROGRESS_ARTIFACT.as_posix(), committed)
+    if index_text != expected_index:
+        raise StateError("Execution Record index projection mismatch")
+    if progress_text != expected_progress:
+        raise StateError("Attempt progress projection mismatch")
+
+
+def command_er_add(package: Path, raw_payload: str) -> dict[str, Any]:
+    try:
+        payload = _er_payload(json.loads(raw_payload))
+    except json.JSONDecodeError as exc:
+        raise StateError(f"er-add input is not valid JSON: {exc}") from exc
+    _, state = _load_runtime_state(package)
+    current = _current_attempt(package)
+    if current is None:
+        raise StateError("er-add requires a registered current Attempt")
+    attempt = current[0]
+    if any(row.get("attempt") == attempt and row.get("verdict") in TERMINAL_GATE_VERDICTS for row in state.get("gate", {}).get("entries", [])):
+        raise StateError(f"Attempt is frozen by terminal gate: {attempt}")
+    _er_subject_exists(state, attempt, payload["subject"])
+    _er_validate_downstream(state, attempt, payload["downstream"])
+    ledger_path = package / _er_relative_path(attempt)
+    ledger_text = ledger_path.read_text(encoding="utf-8") if ledger_path.is_file() else _er_ledger_header(attempt)
+    records = _er_records(ledger_text, attempt)
+    payload_hash = _er_payload_hash(payload)
+    existing = next((record for record in records if record.get("payloadHash") == payload_hash), None)
+    if existing is not None:
+        return {"recordId": existing["id"], "path": _er_relative_path(attempt), "anchor": existing["id"], "idempotent": True}
+    supersedes = None
+    if payload["purpose"] == "checkpoint":
+        candidate_key = (payload["subject"], payload["allowsDownstreamImplementation"], tuple(payload["downstream"]) if payload["allowsDownstreamImplementation"] else ())
+        for record in reversed(_er_active_records(records)):
+            if record.get("purpose") == "checkpoint" and _er_checkpoint_key(record) == candidate_key:
+                supersedes = record["id"]
+                break
+    next_number = max((record["number"] for record in records), default=0) + 1
+    record_id = f"{attempt}-ER-{next_number:03d}"
+    revision_set = _current_revision_set(package) or {"decision": "N/A", "spec": "N/A", "plan": "N/A"}
+    rendered = _er_render_record(
+        attempt,
+        record_id,
+        payload,
+        revision_set,
+        supersedes,
+        datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        payload_hash,
+    )
+    if not ledger_text.endswith("\n"):
+        ledger_text += "\n"
+    _atomic_write_text(ledger_path, ledger_text + rendered)
+    _refresh_execution_projections(package, state, attempt)
+    return {"recordId": record_id, "path": _er_relative_path(attempt), "anchor": record_id, "idempotent": False}
+
+
 def command_refresh_projections(package: Path) -> dict[str, Any]:
     _, revision_state = _load_revision_state(package)
     targets = _revision_projection_targets(package, revision_state, committed=False)
@@ -963,6 +1513,7 @@ def command_refresh_projections(package: Path) -> dict[str, Any]:
             if updated != text:
                 _atomic_write_text(gate_path, updated)
                 changed_paths.append("gate.md")
+        changed_paths.extend(_refresh_execution_projections(package, runtime_state, current_attempt))
     return {"changed": changed_paths}
 
 
@@ -1052,6 +1603,9 @@ def command_finalize_gate_entry(package: Path, entry_id: str) -> dict[str, Any]:
     gate_status = CONFIG["projections"]["gateStatus"]["finalized"].format(id=entry_id, verdict=parsed["verdict"])
     text = _replace_projection(text, CONFIG["projections"]["markers"]["gateStatus"], gate_status)
     _atomic_write_text(gate_path, text)
+    current = _current_attempt(package)
+    if current and parsed["attempt"] == current[0]:
+        _refresh_execution_projections(package, state, parsed["attempt"])
     return record
 
 
@@ -1511,9 +2065,9 @@ def _execution_record(text: str) -> str:
 
 def _plan_contract(text: str) -> str:
     replaced, count = PLAN_ER_PATTERN.subn("## Execution Record\n<impl-package-er-marker>\n", text, count=1)
-    if count != 1:
-        raise StateError("plan has no unique Execution Record section")
-    return replaced
+    if count > 1:
+        raise StateError("plan has multiple Execution Record sections")
+    return replaced if count == 1 else text
 
 
 def _validate_er_history(
@@ -1534,6 +2088,11 @@ def _validate_er_history(
             raise StateError(f"plan baseline blob is not reachable from history: {baseline_blob}")
         return
     previous = _git_blob_text(package, baseline_blob)
+    legacy_plan_er = bool(PLAN_ER_PATTERN.search(previous) or PLAN_ER_PATTERN.search(candidate_text))
+    if not legacy_plan_er:
+        if _plan_contract(previous) != _plan_contract(candidate_text):
+            raise StateError("plan contract mismatch")
+        return
     for commit in commits[baseline_index + 1 :]:
         current = _git_text(repo, "show", f"{commit}:{relative}")
         if not _execution_record(current).startswith(_execution_record(previous)):
@@ -1781,6 +2340,12 @@ def command_register_revisions(
         for ticket_artifact, _ in _attempt_ticket_documents(package, attempt).values():
             ticket_path = _package_artifact(package, ticket_artifact)
             snapshot[ticket_path] = ticket_path.read_bytes()
+        for projection in (
+            package / PROGRESS_ARTIFACT,
+            package / ER_INDEX,
+            package / _er_relative_path(attempt),
+        ):
+            snapshot[projection] = projection.read_bytes() if projection.exists() else None
     gate_path = package / "gate.md"
     if gate_path.exists():
         snapshot[gate_path] = gate_path.read_bytes()
@@ -1926,7 +2491,10 @@ def command_validate(package: Path, committed: bool) -> dict[str, Any]:
     _validate_revision_projections(package, state, committed)
     if not _artifact_exists(package, RUNTIME_STATE.as_posix(), committed):
         raise StateError("runtime state is missing (contract upgrade required)")
+    runtime_path = _state_document(package, RUNTIME_STATE.as_posix(), committed)
+    runtime_state = json.loads(runtime_path)
     _validate_runtime_state(package, state, committed)
+    _validate_execution_records(package, state, runtime_state, committed)
     return {
         "ok": True,
         "context": "committed" if committed else "working-tree",
@@ -2107,6 +2675,7 @@ def build_parser() -> argparse.ArgumentParser:
     rebind_parser.add_argument("--evidence", required=True)
     rebind_parser.add_argument("--confirm-contract-impact-none", action="store_true")
     subparsers.add_parser("refresh-projections")
+    subparsers.add_parser("er-add")
     return parser
 
 
@@ -2210,6 +2779,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "refresh-projections":
             result = command_refresh_projections(package)
+        elif args.command == "er-add":
+            result = command_er_add(package, sys.stdin.read())
         else:
             raise StateError(f"unsupported command: {args.command}")
     except (OSError, json.JSONDecodeError, StateError) as exc:

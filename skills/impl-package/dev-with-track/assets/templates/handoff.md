@@ -2,10 +2,10 @@
 
 状态：[draft / ready / consumed]
 创建日期：[YYYY-MM-DD]
-进度：[Tn-progress.md](Tn-progress.md)
+[Attempt Progress](../progress.md)
 DAG：[../dag.md](../dag.md)
 
-本文只在 task 需要单独交接、跨 session 移交、或交给另一个 agent/worker 接手时创建。不要把普通进度复制到这里；普通状态留在 `Tn-progress.md`。
+本文只在 Task 实际 BLOCKED、需要重试、跨 session/owner 移交，或交给另一个 agent/worker 接手时创建。它是可更新的局部恢复材料，不是状态源、审计记录或 Ticket 验收摘要。公共判断与可复用 checkpoint 由主 session 通过 `er-add` 写入 Attempt ledger。
 
 ## 移交目标
 

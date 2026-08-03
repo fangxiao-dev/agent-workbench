@@ -15,11 +15,17 @@ SCRIPT = ROOT / "skills" / "impl-package" / "scripts" / "impl_package_state.py"
 CONFIG_PATH = ROOT / "skills" / "impl-package" / "assets" / "impl-package-state-config.json"
 
 
-def run_cli(package: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+def run_cli(
+    package: Path,
+    *args: str,
+    check: bool = True,
+    input_text: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(SCRIPT), "--package", str(package), *args],
         text=True,
         check=check,
+        input=input_text,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
@@ -652,7 +658,7 @@ class RuntimeStateTransitionTest(unittest.TestCase):
             state_path = package / ".impl-package" / "runtime-state.json"
             initial = json.loads(state_path.read_text(encoding="utf-8"))
             self.assertEqual(initial["tasks"], [{"attempt": "initial", "id": "T1", "state": "PENDING", "evidence": "dag.md#T1"}])
-            self.assertEqual(initial["tickets"][0]["state"], "UNRECORDED")
+            self.assertEqual(initial["tickets"][0]["state"], "PENDING")
 
             args = (
                 "set-state",
@@ -1394,6 +1400,125 @@ class RuntimeProjectionValidationTest(unittest.TestCase):
             failed = run_cli(package, "validate", "--committed", check=False)
             self.assertNotEqual(failed.returncode, 0)
             self.assertIn("runtime projection mismatch", failed.stderr)
+
+
+class ExecutionRecordLedgerTest(unittest.TestCase):
+    def _package(self, root: Path, composition: str = "tickets=false, dag=false") -> Path:
+        repo = root / "repo"
+        repo.mkdir()
+        init_repo(repo)
+        package = repo / "docs/implementations/260803-er"
+        package.mkdir(parents=True)
+        (package / "plan.md").write_text(
+            "# Plan\n\n"
+            "<!-- impl-package:projection revision-set begin -->\n"
+            "决策修订（Decision Revision）：N/A\n"
+            "规格修订（Spec Revision）：N/A\n"
+            "计划修订（Plan Revision）：P1\n"
+            "<!-- impl-package:projection revision-set end -->\n\n"
+            f"执行组合（Composition）：{composition}\n",
+            encoding="utf-8",
+        )
+        run_cli(package, "init", "--package-id", package.name)
+        run_cli(
+            package,
+            "register-revision",
+            "plan",
+            "P1",
+            "--attempt",
+            "initial",
+            "--artifact",
+            "plan.md",
+            "--evidence",
+            "plan.md#publication",
+        )
+        return package
+
+    def test_er_add_is_idempotent_and_rebuilds_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            package = self._package(Path(temp))
+            payload = json.dumps(
+                {
+                    "purpose": "checkpoint",
+                    "title": "ready seam",
+                    "content": "The shared boundary is available.",
+                    "nextAction": "run the downstream check",
+                }
+            )
+            first = json.loads(run_cli(package, "er-add", input_text=payload).stdout)
+            retry = json.loads(run_cli(package, "er-add", input_text=payload).stdout)
+            self.assertEqual(first["recordId"], "initial-ER-001")
+            self.assertTrue(retry["idempotent"])
+            self.assertEqual(retry["recordId"], first["recordId"])
+            self.assertIn("initial-ER-001", (package / "execution-records/index.md").read_text(encoding="utf-8"))
+            progress = (package / "progress.md").read_text(encoding="utf-8")
+            self.assertIn("Active Checkpoints", progress)
+            self.assertIn("run the downstream check", progress)
+            self.assertNotIn("## Execution Record", (package / "plan.md").read_text(encoding="utf-8"))
+            run_cli(package, "validate", "--working-tree")
+
+    def test_checkpoint_supersedes_by_subject_and_reusable_selection_is_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            package = self._package(Path(temp))
+            first = json.dumps(
+                {
+                    "purpose": "checkpoint",
+                    "subject": "attempt",
+                    "title": "recovery one",
+                    "content": "first",
+                    "nextAction": "continue",
+                }
+            )
+            second = json.dumps(
+                {
+                    "purpose": "checkpoint",
+                    "subject": "attempt",
+                    "title": "recovery two",
+                    "content": "second",
+                    "nextAction": "continue",
+                }
+            )
+            run_cli(package, "er-add", input_text=first)
+            run_cli(package, "er-add", input_text=second)
+            ledger = (package / "execution-records/initial.md").read_text(encoding="utf-8")
+            self.assertIn("- Supersedes: initial-ER-001", ledger)
+            invalid = run_cli(
+                package,
+                "er-add",
+                check=False,
+                input_text=json.dumps(
+                    {
+                        "purpose": "checkpoint",
+                        "title": "bad reusable",
+                        "content": "bad",
+                        "nextAction": "stop",
+                        "allowsDownstreamImplementation": True,
+                        "downstream": ["task:T9"],
+                    }
+                ),
+            )
+            self.assertNotEqual(invalid.returncode, 0)
+            self.assertIn("does not resolve", invalid.stderr)
+
+    def test_sealed_record_tampering_fails_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            package = self._package(Path(temp))
+            run_cli(
+                package,
+                "er-add",
+                input_text=json.dumps(
+                    {
+                        "purpose": "judgment",
+                        "title": "observed failure",
+                        "content": "provider returned a timeout",
+                    }
+                ),
+            )
+            ledger = package / "execution-records/initial.md"
+            ledger.write_text(ledger.read_text(encoding="utf-8").replace("provider returned", "provider silently returned"), encoding="utf-8")
+            failed = run_cli(package, "validate", "--working-tree", check=False)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("content hash mismatch", failed.stderr)
 
 
 if __name__ == "__main__":

@@ -17,13 +17,13 @@
     {
       "id": 2,
       "prompt": "当前 attempt plan 声明 Composition: tickets=false, dag=true，引用 S2 的 spec:AC-1 到 AC-3。请恢复并继续执行。",
-      "expected_output": "Uses the current attempt DAG as task state and keeps acceptance evidence in spec ACs, the plan Execution Record and gate entries without creating tickets.",
+      "expected_output": "Uses the current attempt DAG as task state and keeps acceptance evidence in spec ACs, the Attempt Execution Record and gate entries without creating tickets.",
       "files": [],
       "expectations": [
         "Reads Composition and P revision from the current plan",
         "Uses spec:AC-n targets",
         "Does not create progress without a Task-specific trigger",
-        "Appends actual verification to the current plan Execution Record",
+        "Appends actual verification to the current Attempt Execution Record through er-add",
         "Requires the current DAG to be part of the approved earned bundle before selecting a Task"
       ]
     },
@@ -66,7 +66,7 @@
     {
       "id": 6,
       "prompt": "一个 tickets=false, dag=true attempt 有跨模块 seam。说明 integration responsibility、证据位置和关闭限制。",
-      "expected_output": "Keeps seam contract and acceptance ownership in spec, Working Branch owner integration responsibility, and actual acceptance evidence in the plan Execution Record/gate.",
+      "expected_output": "Keeps seam contract and acceptance ownership in spec, Working Branch owner integration responsibility, and actual acceptance evidence in the Attempt Execution Record/gate.",
       "files": [],
       "expectations": [
         "Reads contract owner, acceptance owner and affected targets from spec",
@@ -137,7 +137,7 @@
     {
       "id": 12,
       "prompt": "execution-findings.md 中混有一个设计选择、一个规范性失败恢复规则、一条长期项目知识和一次测试命令结果。gate 前如何处理？",
-      "expected_output": "Routes decision choice to decision, normative behavior to spec, durable knowledge to gate/_pending, and test evidence to plan Execution Record while retaining only residual confirmed execution findings in execution-findings.md.",
+      "expected_output": "Routes decision choice to decision, normative behavior to spec, durable knowledge to gate/_pending, and test evidence to Attempt Execution Record while retaining only residual confirmed execution findings in execution-findings.md.",
       "files": [],
       "expectations": [
         "Does not leave a second contract SoT in execution-findings.md",
@@ -375,13 +375,13 @@
     },
     {
       "id": 33,
-      "prompt": "上游 Ticket 仍为 IN_PROGRESS、对应 Task 仍为 RUNNING，但下游依赖的 typed mutation-unknown/cache-clear 行为已提交、有局部测试证据且下游执行基线可用。上游只剩经实际 diff 与 open findings 确认不会改变该行为的真实 caller 并发测试；另一变体中上游仍可能修改 callback、deadline 或错误分类。主 session 能否提前派发下游 Ticket/Task？并行后依赖事实变化又如何处理？",
+      "prompt": "上游 Ticket 仍为 PENDING、对应 Task 仍为 RUNNING，但下游依赖的 typed mutation-unknown/cache-clear 行为已提交、有局部测试证据且下游执行基线可用。上游只剩经实际 diff 与 open findings 确认不会改变该行为的真实 caller 并发测试；另一变体中上游仍可能修改 callback、deadline 或错误分类。主 session 能否提前派发下游 Ticket/Task？并行后依赖事实变化又如何处理？",
       "expected_output": "Allows only the first variant's downstream Ticket/Task implementation to start from an ER-recorded reusable implementation checkpoint, rejects the seam-changing variant, keeps acceptance/release on their existing gates, and revalidates only affected downstream work if the dependency facts later change.",
       "files": [],
       "expectations": [
         "Uses the same checkpoint principle for Ticket and Task while preserving SATISFIED versus DONE",
         "Requires committed local evidence and a downstream execution baseline that can use the implementation",
-        "Lets the main session append the dispatch rationale to the existing Execution Record without a new state, artifact or checklist",
+        "Lets the main session append the dispatch rationale to the Attempt Execution Record through er-add without a new state, artifact or checklist",
         "Does not treat implementation dispatch as dependency release or acceptance evidence",
         "Stops using affected downstream work and evidence, marks the related Ticket/Task NEEDS-REVALIDATION, and performs scoped reconciliation when dependency facts change"
       ]
@@ -401,15 +401,15 @@
     },
     {
       "id": 35,
-      "prompt": "恢复一个 tickets=true、dag=false 的 approved attempt。Ticket 顶部写明 Phase=implementation、Status=IN_PROGRESS、Next=运行 loopback integration，末尾 Progress 已记录 investigation 和 unit implementation 完成并引用当前 ER；sidecar、ER 与实际 diff 一致。请继续执行。",
-      "expected_output": "Restores directly from the Ticket recovery summary, verifies it against canonical state and evidence, and runs the named next action without repeating the completed investigation.",
+      "prompt": "恢复一个 tickets=true、dag=false 的 approved attempt。package 根 progress.md 显示 Ticket acceptance 为 PENDING、最新 checkpoint 的下一动作是运行 loopback integration；sidecar、ER 与实际 diff 一致。请继续执行。",
+      "expected_output": "Restores directly from package progress.md, verifies it against canonical state and evidence, and runs the checkpoint's next action without repeating the completed investigation.",
       "files": [],
       "expectations": [
-        "Reads the Ticket Phase, runtime Status, Next and latest Progress before selecting work",
-        "Cross-checks the recovery summary against sidecar, ER and actual diff",
+        "Reads package progress.md, current runtime state, latest checkpoint and actionable units before selecting work",
+        "Cross-checks the projection against sidecar, ER and actual diff",
         "Does not repeat the completed investigation while its evidence remains fresh",
-        "Updates Ticket Progress only when phase, blocker, Next or handoff materially changes",
-        "Does not create a separate Ticket progress file, checkpoint ID or second acceptance state"
+        "Refreshes machine-owned progress.md through the state CLI and does not edit Ticket recovery text",
+        "Does not create a separate Ticket progress file or second acceptance state"
       ]
     }
   ]

@@ -5,8 +5,8 @@ updated: 2026-08-02
 ## 原则
 
 - 当前 attempt plan 是 Attempt ID、P revision 与 Composition 的事实源；spec 只提供当前 D/S contract 与 AC。
-- no-DAG attempt 不建立 task checklist 或独立 progress ledger；tickets=false 时恢复事实进入 Execution Record 或 handoff，tickets=true 时 Ticket 自身保存最小 Phase/Next/Progress 恢复摘要。
-- 实际 review/verification 证据 append 到 plan Execution Record；gate 只保存 newest-first append-only 判决摘要与 Durable Deltas。
+- no-DAG attempt 不建立 task checklist；所有 Composition 统一由根 `progress.md` 恢复，Task 交接才按条件写 `tasks/Tn-handoff.md`。
+- 实际 review/verification 判断由主 session 通过 `er-add` append 到 Attempt ER；gate 只保存 newest-first append-only 判决摘要与 Durable Deltas。
 - blocked→pass 通过新 G entry 与 Supersedes 表达，旧 entry 不修改；pass/fail/defer terminal 后冻结 plan。
 - gate evaluation 前分流 execution findings，禁止 decision/spec、长期知识与过程证据互相回流。
 - [待验证] 高风险执行前只检查既有 contract 到可执行验证与 ER owner 的语义可追踪性；能复用 AC anchor、场景名或测试名时不强制 invariant/case ID、固定矩阵或新 artifact。（证据: R5）
@@ -28,7 +28,7 @@ updated: 2026-08-02
 
 ### R4 · 2026-07-12（Artifact lifecycle 与 append-only gate）
 
-- dev-with-track 追加 plan Execution Record，但不拥有 plan 的策略或结构定义。
+- dev-with-track 主 session 追加 Attempt ER，但不拥有 plan 的策略或结构定义。
 - package 只保留一个 gate.md；每次 evaluation 顶部插入不可变 entry，完整验证不复制进 gate。
 - terminal entry 写入前完成 Stage 7；blocked capture gap 由后续 entry 补齐。
 - findings 成为 package 级 inbox，每条记录 Attempt ID，gate 前按 decision/spec/backfill/ER 分流。

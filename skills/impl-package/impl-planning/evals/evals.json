@@ -55,7 +55,7 @@
         "Reuses the current D/S revisions after drift reconciliation",
         "Records Planned Verification and Execution Record",
         "Contains no task checklist or patch DAG",
-        "Keeps recovery facts in the Execution Record or handoff without creating a progress ledger",
+        "Keeps recovery facts in the Attempt Execution Record or handoff while using machine-owned progress.md without creating a task checklist",
         "Requires fresh plan-review admission even though tickets and DAG are both false"
       ]
     },

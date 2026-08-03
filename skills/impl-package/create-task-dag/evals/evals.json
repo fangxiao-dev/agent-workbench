@@ -99,7 +99,7 @@
     {
       "id": 14,
       "prompt": "A post-gate patch plan declares Composition: tickets=false, dag=false. The owner asks create-task-dag to create a task checklist and dag.md.",
-      "expected_output": "Rejects DAG creation because tickets=false, dag=false and routes the simple patch through the plan Execution Record or handoff without a task checklist.",
+      "expected_output": "Rejects DAG creation because tickets=false, dag=false and routes the simple patch through the Attempt Execution Record or handoff without a task checklist.",
       "files": [],
       "expectations": [
         "Preserves tickets=false, dag=false",

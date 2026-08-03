@@ -3,10 +3,10 @@
   "stateVocabulary": {
     "task": ["PENDING", "READY", "RUNNING", "BLOCKED", "FAILED", "NEEDS-REVALIDATION", "DONE", "WAIVED", "SUPERSEDED"],
     "legacyTaskRead": ["NEEDS_SEAM"],
-    "ticket": ["UNRECORDED", "IN_PROGRESS", "BLOCKED", "NEEDS-REVALIDATION", "SATISFIED", "WAIVED", "SUPERSEDED"],
+    "ticket": ["PENDING", "BLOCKED", "NEEDS-REVALIDATION", "SATISFIED", "WAIVED", "SUPERSEDED"],
     "gateVerdict": ["pass", "fail", "blocked", "defer"],
     "terminalGateVerdict": ["pass", "fail", "defer"],
-    "initialState": {"task": "PENDING", "ticket": "UNRECORDED"}
+    "initialState": {"task": "PENDING", "ticket": "PENDING"}
   },
   "documents": {
     "compositionPattern": "Composition[^\\n]*tickets=(true|false),\\s*dag=(true|false)",
@@ -26,7 +26,9 @@
     "markers": {
       "revisionSet": "revision-set",
       "runtimeState": "runtime-state",
-      "gateStatus": "gate-status"
+      "gateStatus": "gate-status",
+      "executionRecordIndex": "execution-record-index",
+      "progress": "progress"
     },
     "revisionSet": {
       "decision": "决策修订（Decision Revision）：{decision}",

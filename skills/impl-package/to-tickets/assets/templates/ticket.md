@@ -1,16 +1,13 @@
 # <NN> — <Ticket 标题>
 
 **Ticket ID：** <ticket-id>
-**阶段（Phase）：** planning
 
 ## 运行时验收状态（Runtime Acceptance Status）
 
 <!-- impl-package:projection runtime-state begin -->
-- 值：[unrecorded]
-- 直接证据：[unrecorded]
+- 值：[pending]
+- 直接证据：[runtime-state.json#ticket:<ticket-id>]
 <!-- impl-package:projection runtime-state end -->
-
-**下一步（Next）：** <当前唯一下一动作>
 
 **发布状态（Publication Status）：** Draft
 **执行尝试 ID（Attempt ID）：** <attempt-id>
@@ -38,13 +35,4 @@
 
 不要添加 worker ownership、task 分配、文件级步骤或 runtime task status。
 
-## Progress
-
-> 由主 session 在 Ticket 创建、阶段/阻塞/Next 实质变化或跨 session handoff 时追加；不按命令或 bounded task 逐条记账。详细命令和完整证据留在 plan Execution Record，这里只写恢复执行所需的摘要与引用。
-
-### <YYYY-MM-DD · 阶段或交接点>
-
-- 已完成：<本 Ticket 已稳定完成的范围>
-- 证据：<ER、review 或直接证据引用>
-- 剩余：<仍未满足的边界或 blocker>
-- 下一步：<与顶部 Next 相同的唯一下一动作>
+Ticket 的 acceptance state 由 `.impl-package/runtime-state.json` 记录，并由本段 marker 投影；恢复入口是 package 根 `progress.md`，执行历史位于 `execution-records/index.md`。Ticket 不写 Phase、Next 或 Progress，也不承载 Task/worker 进度。

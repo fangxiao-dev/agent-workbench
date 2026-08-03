@@ -1,8 +1,31 @@
-# [Task ID] progress
+# Attempt Progress · [Attempt ID]
 
-> 仅当该 Task 实际 `BLOCKED`、跨 session handoff、需要重试，或主 session 分发并行 subagent 时创建：`docs/implementations/<package-id>/tasks/<task-id>-progress.md`。这是条件化 Task 运行记录，不是 Ticket 验收或第二套状态源。
+> machine-owned projection；由 `impl_package_state.py refresh-projections` 与 `er-add` 重建，agent 不直接编辑。
 
-- 当前 blocker / 原因：
-- 已做证据：
-- 下一可执行动作：
-- 影响 Ticket：
+<!-- impl-package:projection progress begin -->
+- Attempt: [initial | patch-id]
+- Revision set: D<n> / S<n> / P<n>
+- Composition: tickets=<true|false>, dag=<true|false>
+- Lifecycle: active | frozen
+- Latest gate: open / no verdict
+- Blockers: none
+<!-- impl-package:projection progress end -->
+
+## Ticket Acceptance
+
+| Ticket | State | Evidence |
+| --- | --- | --- |
+
+## Task Execution
+
+| Task | State | Evidence | Handoff |
+| --- | --- | --- | --- |
+
+## Active Checkpoints
+
+| Record | Subject | Downstream | Status | Next action |
+| --- | --- | --- | --- | --- |
+
+## Actionable Units
+
+- none

@@ -39,8 +39,8 @@
 Review 按当前 delta 的独立信号触发，不把 artifact 数量或历史 Composition 当风险代理：code-review 恒必选；diff 或本次 S/P delta 改变 interface、状态机、模块边界、跨模块行为或 seam 时 standards-review 与 spec-review 必须成对运行；safety-review 按效果与 authority 信号触发（见 Review 体系）。
 
 - **Decision 步骤恒定必过，正文按价值 earned**：调研 + 需求对齐 + readiness 门是 Stage 1 的必经步骤，与 composition 无关，不可跳过。新功能、明显体验变化或业务能力变化通常生成 `decision.md`，因为其中的 Focused PRD 与方案理由有持久价值；已有产品定义下的小型行为修正可走 spec 顶部的 lightweight Decision，`contract impact=none` 的实现修复不创建或扩写 decision。`execution-findings.md` 仍只在确有共享执行发现时 earned。
-- `tasks/Tn-progress.md` 只在实际 Task 因 blocker、handoff、重试或并行派发需要继续时创建，不随开关自动创建。
-- 跨 session 恢复本身不 earn dag：plan/tickets/dag 恢复拓扑，必要事实进入 Execution Record 或 handoff。若执行拓扑无法由 plan/tickets 清晰重建，则因“执行依赖需要显式化”earn dag，而不是因“跨 session”earn dag。
+- `tasks/Tn-handoff.md` 只在实际 Task 因 blocker、handoff、重试或并行派发需要继续时创建，不随开关自动创建。
+- 跨 session 恢复本身不 earn dag：根 `progress.md` 恢复当前 Attempt 与两条状态轴，`execution-records/index.md` 指向历史，必要事实进入 Attempt ER 或 Task handoff。若执行拓扑无法由 plan/tickets 清晰重建，则因“执行依赖需要显式化”earn dag，而不是因“跨 session”earn dag。
 - ceremony 守护：tickets 与 dag 都必须由 earn 条件挣得存在；报告/复盘发现某 package 的 artifact 空转（如只 1 个 ticket、dag 没有非平凡依赖或协调价值）时，视为 composition 判定错误回记 rubric。
 
 ## 六步主流程与 gate 后可选维护（定稿）
@@ -50,7 +50,7 @@ Review 按当前 delta 的独立信号触发，不把 artifact 数量或历史 C
 2 Spec        req-align 第二道门 → 当前 spec revision
 3 Attempt plan impl-planning → plan.md / patch plan（含本 attempt Composition）
 4 计划拆解    to-tickets draft →（按需）create-task-dag → 联合校验 → 一次 owner review/approval
-5 执行        dev-with-track：restore → subagent-driven-development（task 实现 + 局部验证）→ Working Branch owner 集成 / plan Execution Record → execution findings 分流 → gate entry
+5 执行        dev-with-track：restore → subagent-driven-development（task 实现 + 局部验证）→ Working Branch owner 集成 / er-add → execution findings 分流 → gate entry
 6 审查        code-review / standards-review + spec-review / safety-review（映射见下）
 收口条件      terminal pass 前完成 durable-delta capture + verification-before-completion evidence audit
 可选维护      gate 后提示 $backfill-stable-docs；先做 contract preflight，再 audit/apply/verify；可延期、非阻塞、需明确授权
@@ -63,12 +63,12 @@ Review 按当前 delta 的独立信号触发，不把 artifact 数量或历史 C
 - **跨模块 journey 护栏**：顶层 journey anchor 拥有端到端 outcome，各 module PRD 只拥有自身贡献，跨模块 rule/seam 由一个 primary module spec 拥有。package decision/spec 只记录本次 coordination 与 expected canonical delta，通过 anchor 引用长期事实，不创建第二份 journey 或 contract SoT。
 - **风险驱动的 Grill**：Spec Gate 不是 `grill-me-smartly` 的自动触发器。只有用户明确要求，或存在未解决的实质 contract ambiguity、跨模块/外部接口、迁移/兼容窗口、安全或数据 authority、destructive-external mutation、evidence-integrity false-PASS 风险时，才跑其 review phase；清晰局部 Spec delta 直接 Gate。运行后，`待用户裁决` 仍计入既有"blocking owner decisions 为零"标准，不新造阻断机制。Ledger 住 OS temp，不落 package；是否 apply 收敛结论必须等用户明确批准。Spec Gate 通过后可提示 `grilling` 作为可选深度对抗访谈。
 - **spec.md 模板护栏**：package-id 内的 `spec.md` 按 2026-07-09 设计的模块 spec 八节合同结构成型（活动变更的当前 SoT）：Scope/authority/non-goals、术语与数据合同、行为/状态机/工作流、模块边界与依赖、**Error Boundaries——失败模式与恢复语义**、约束型合同（禁止事项/信任边界/精度/provider 义务/负依赖）、Acceptance Semantics 与 Contract Coherence。Composition 不进入 spec。
-- **Stage 3/4 计划拆解**：attempt plan 就绪后进入一个 earn-gated decomposition stage；`tickets=true` 时由 to-tickets 先形成完整 Draft Ticket 集合，`dag=true` 时由 create-task-dag 基于 plan 与 Draft Tickets（或仅 plan）生成 DAG，随后联合校验覆盖、依赖、ownership、acceptance/evidence、gate 与 revision binding，并由 owner 一次 review/approval。plan 保存执行策略、具体 migration 操作、Planned Verification 与 append-only Execution Record，不复制 ticket/task 状态；未获 bundle approval 不进入执行或 preflight。
+- **Stage 3/4 计划拆解**：attempt plan 就绪后进入一个 earn-gated decomposition stage；`tickets=true` 时由 to-tickets 先形成完整 Draft Ticket 集合，`dag=true` 时由 create-task-dag 基于 plan 与 Draft Tickets（或仅 plan）生成 DAG，随后联合校验覆盖、依赖、ownership、acceptance/evidence、gate 与 revision binding，并由 owner 一次 review/approval。plan 保存执行策略、具体 migration 操作、Planned Verification 与到 `progress.md`/ER index 的链接，不复制 ticket/task/ER 正文；未获 bundle approval 不进入执行或 preflight。
 - **职责仍分层、治理合并**：ticket 列表（delivery slices + 带阻塞语义的静态 `blocked by` 依赖标注）归 to-tickets fork；task DAG（横向的 execution ownership、依赖和多对多 Ticket contribution）归 create-task-dag。两个工具保留独立 artifact ownership，但不再各自设置批准门；输入过宽路由回计划拆解的 to-tickets draft，不能从单个 ticket 猜测跨 ticket seam contract。
 - **Stage 5 无动态调度器、有 readiness resolution**：删除自动派工、worker leasing、并发锁等动态调度——它们服务的是多 worker 高并行、主 session 失去全局视野的调度，而实际执行大体串行。但每次选择下一执行单元前，必须对静态图做确定性的 readiness resolution，处理依赖终态、外部 gate、环、失败/豁免/替代传播及上游返工造成的下游失效；多个 actionable 单元按文档顺序稳定选择。单 package 维护完整 ticket 列表；ticket 状态按 composition 落到 canonical home（见下节）。patch plan / patch DAG 严格保留给 post-gate 生命周期补丁（与 impl-planning `patching.md` 互引），不做 per-ticket patch。
   - YAGNI 边界：若未来执行模式真变成多 worker 并行跑不同 ticket，再增加动态派工能力；readiness resolution 不是该调度器的降级版，而是串行执行与恢复正确性的基础规则。
 - **Stage 7**：对任意 terminal verdict，有 durable delta 时，写入 terminal gate entry 前必须完成 `_pending.md` 捕获登记（gate 的 Durable Deltas 表为唯一捕获面）、受影响 module spec 的 truth pointer、必要 stub 创建；无 durable delta 时显式记录判定与理由。捕获与路由下沉到 gate + `_pending.md`，不在 spec 维护常青 map。下游 backfill audit/apply/verify 不属于 Stage 7 terminal gate；gate 后只提示，可延期、非阻塞，并需明确授权。去重键 `<destination>|<delta-id>` 落在 `_pending.md`/report 侧。三源对账（`_pending` / gate 漏登 / 无主 commit）引用并同步约束 backfill 设计。
-- **Gate ledger**：package 只保留一个 `gate.md`，每次 evaluation 在顶部插入 `<attempt-id>-G<n>` 摘要。blocked→pass 通过新 entry 与 `Supersedes` 表达；旧块不改。完整验证过程放在对应 plan 的 append-only Execution Record，gate 只保存 revision/comparison point/evidence anchor/verdict 与 Durable Deltas。terminal verdict 先保留 G id 并完成 Stage 7，再一次性插入不可变 entry；不写临时 entry 后原地补字段。
+- **Gate ledger**：package 只保留一个 `gate.md`，每次 evaluation 在顶部插入 `<attempt-id>-G<n>` 摘要。blocked→pass 通过新 entry 与 `Supersedes` 表达；旧块不改。完整验证过程放在对应 Attempt 的 sealed Execution Record，gate 只保存 revision/comparison point/evidence anchor/verdict 与 Durable Deltas。terminal verdict 先保留 G id 并完成 Stage 7，再一次性插入不可变 entry；不写临时 entry 后原地补字段。
 - **Revision-blob binding**：D/S/P revision 号是人类好念的别名，机器校验身份保存在 package-local `.impl-package/revision-bindings.json` sidecar 的 artifact path + Git blob OID 中。artifact 不保存自身 hash，因此 sidecar 可与最终 artifact 在同一 commit 中稳定绑定；restore/gate evaluation 用 `git rev-parse HEAD:<path>` 机械复核。可证明零语义影响的 editorial correction 只更新同 alias binding evidence，任何语义不明或实质 contract 变化仍升级 revision 并走对应 Gate。sidecar 不进入 owner-facing 交付主线，Markdown 直接呈现 revision set 与校验结论。机制细节见 composition-contract §2。
 - **execution findings 分流阻断**：`execution-findings.md` 在 pass/fail/defer 前必须判断对 decision/spec/plan/Durable Deltas 的影响；分流后原始发现可继续保留为 package-local provenance。它不是第二份合同或临时待办。blocked entry 不受此约束。见 composition-contract §6。
 - **investigations earned-only**：`investigations/<topic>.md` 只承载原始 ideas、调查过程、候选假设、实验材料与参考笔记，默认无 authority，不创建空目录，不绑定 revision、不进入 runtime 或 projection；正式 decision/spec 必须自足，并仅在需要 provenance 时单向链接 investigation。
@@ -80,10 +80,12 @@ Review 按当前 delta 的独立信号触发，不把 artifact 数量或历史 C
 | --- | --- | --- | --- |
 | `decision.md` | req-align | revision history | 字段级行为合同、状态机、错误处理、逐条 AC、worker task、执行证据 |
 | `spec.md` | req-align | revision history | 调研流水、Composition、文件级步骤、验证命令、常青 backfill map |
-| `plan.md` / patch plan | impl-planning | Execution Record、P revision | 长期 contract、ticket/task runtime status、通用 checklist 副本 |
+| `plan.md` / patch plan | impl-planning | P revision；链接 progress/ER index | 长期 contract、ticket/task runtime status、ER 正文、通用 checklist 副本 |
 | Tickets | to-tickets（本地 fork） | dev-with-track（状态） | worker ownership、文件级实现步骤 |
 | `dag.md` / patch DAG | create-task-dag 方法 + dev-with-track 持久化 | — | spec/plan/ticket 正文 |
-| `tasks/Tn-progress.md` | dev-with-track | worker 汇报 | 迷你 spec、重复计划、package acceptance 结论 |
+| `progress.md` | dev-with-track/state CLI | machine projection | 手工状态、历史日志、Task/Ticket ownership |
+| `execution-records/<attempt>.md` + `index.md` | dev-with-track 主 session/state CLI | `er-add` append | Ticket/Task ownership、长期 contract、第二套 acceptance state |
+| `tasks/Tn-handoff.md` | Task worker/main session | 条件化局部交接 | 迷你 spec、重复计划、package acceptance 结论 |
 | `execution-findings.md` | dev-with-track（格式与分流） | **各阶段均可 append** | 第二份 decision/spec、临时待办、最终验证证据 |
 | `investigations/<topic>.md` | 产生调查材料的阶段 | 原始调查可继续补充 | authority、runtime state、revision binding、machine projection、正式文档 backlink |
 | `gate.md` | dev-with-track | 顶部新增不可变 evaluation entry | 完整 checklist、旧 entry 修改、长期 contract |
@@ -104,10 +106,10 @@ Artifact ownership 仍分别归 to-tickets 与 create-task-dag；计划拆解只
 
 | Composition | 执行状态 | ticket 验收状态 |
 | --- | --- | --- |
-| 无 tickets、无 dag | 无 task artifact；恢复事实进入 Execution Record 或 handoff | spec AC + plan Execution Record + gate entry |
-| 仅 tickets | 各 ticket 文件是自身状态的事实源 | 各 `tickets/<ticket>.md`，不得额外创建 `dag.md` |
-| 仅 dag | 当前 attempt DAG task 状态索引，详细恢复证据按需落 progress | spec AC + plan Execution Record + gate entry |
-| tickets + dag | `dag.md` 是运行状态索引，task 详细恢复证据按需落 progress | ticket 文件保存验收定义与最终结论；`dag.md` 中 ticket 状态只是投影，不得反向覆盖验收结论 |
+| 无 tickets、无 dag | 无 task artifact；根 `progress.md` 恢复 Attempt，历史进入 Attempt ER 或 handoff | spec AC + Attempt ER + gate entry |
+| 仅 tickets | runtime-state 是 Ticket 状态 SoT，ticket 文件为投影，根 `progress.md` 展示 acceptance | Ticket Runtime Acceptance projection + Attempt ER |
+| 仅 dag | current DAG/runtime state 索引 Task，根 `progress.md` 展示执行轴，handoff 按需创建 | spec AC + Attempt ER + gate entry |
+| tickets + dag | `dag.md` 与 ticket 文件各自投影 runtime state，根 `progress.md` 分轴展示 | Ticket Runtime Acceptance projection + Attempt ER |
 
 同一状态只有一个事实源。索引必须标明是投影；禁止在两个 artifact 中双向维护同一状态。
 
@@ -187,7 +189,7 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 | `create-task-dag` | 收缩到最小 execution decomposition：输入契约 = plan + 完整 Draft Tickets（有 tickets 时）或 plan（仅 dag 时）；记录 Task-to-Ticket contribution、已知依赖、primary ownership 与 known seam/risk；参与联合校验，由 Working Branch owner integration；不设置独立批准门 |
 | `subagent-driven-development` | 移入 Impl-Package；成为 task execution 与局部验证载体，按实际高风险 diff 追加必要 review，并将证据交回 dev-with-track |
 | `verification-before-completion` | 移入 Impl-Package；成为 terminal pass 与后续 completion/readiness 声明的 evidence gate，复用未失效证据并阻止无证据完成声明，不进入 DAG |
-| `dev-with-track` | 按当前 plan Composition 恢复 runtime state；append plan Execution Record；分流 execution findings；在单一 gate.md 顶部写不可变 evaluation entry；实现 AC 覆盖、返工失效传播和 Stage 7 |
+| `dev-with-track` | 按当前 plan Composition 恢复 runtime state/progress；通过 `er-add` append Attempt ER；分流 execution findings；在单一 gate.md 顶部写不可变 evaluation entry；实现 AC 覆盖、返工失效传播和 Stage 7 |
 | `standards-review` + `spec-review` | 两个独立 leaf reviewer，由 do-review 三轨拓扑调度：Standards 保留 standards 钩子与 codebase-design；Spec 保留 contract-drift；二者只按当前 diff 或 S/P contract delta 成对触发，tickets/DAG 本身不触发 |
 | `safety-review` | 新建（从 git 历史恢复精简）：五类范围 + 信号触发 + P0 fail-closed |
 | `orchestrator` | 退休至 `skills-deprecated/`；清理 registry、docs、evals 引用 |
@@ -216,13 +218,13 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 
 | 记录 | 维度 | 触发 |
 | --- | --- | --- |
-| `tasks/Tn-progress.md` | task（执行单元） | 仅 BLOCKED、跨 session handoff、重试或主 session 分发并行 subagent 时创建；只记录 blocker/原因、已有证据、下一动作和影响 Ticket |
+| `tasks/Tn-handoff.md` | task（执行单元） | 仅 BLOCKED、跨 session handoff、重试或主 session 分发并行 subagent 时创建；只记录 blocker/原因、已有证据、下一动作和影响 Ticket |
 | ticket 恢复摘要与验收状态 | ticket（验收单元） | canonical home 恒为 `tickets/<ticket>.md`；顶部保存 Phase、runtime Status 投影与唯一 Next，末尾只在实质变化或 handoff 时追加 Progress；**不新增 progress 文件** |
 
 要点：
 
 - ticket 验收 ≠ Task DONE 的相加，它有独立 acceptance criteria；因此 ticket 验收状态以 ticket 文件为事实源；有 dag 时其状态索引只是投影，不靠聚合 Task progress 得出。
-- 只有 Task progress 使用独立文件；Ticket 的 AC、evidence 和 Runtime Acceptance Status 仍是唯一长期验收事实，Phase/Next/Progress 只用于恢复，不参与 acceptance 或 dependency release。
+- 根 `progress.md` 是所有 Composition 的统一当前恢复视图；Ticket 的 AC、evidence 和 Runtime Acceptance Status 仍是长期验收事实，Task handoff 只保存局部交接，均不参与 acceptance 或 dependency release。
 - 落点：ticket 文件同时承载验收状态与最小恢复摘要；`create-task-dag` 的 `dag.md` 可承载明确标为投影的 ticket 状态索引，但不创建独立 ticket-level progress artifact。
 
 ## 已定开放决策

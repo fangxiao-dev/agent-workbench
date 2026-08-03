@@ -269,8 +269,8 @@
           </div></div>
           <div class="fstage"><div class="node">5</div><div class="card">
             <div class="h"><h3>执行</h3><span class="badge always">必经</span></div>
-            <div class="what">恢复现场 → 确定下一步 → 执行 → 证据写入 plan Execution Record → 重要执行发现按需进入 execution-findings.md 并完成分流 → gate ledger 新判决。</div>
-            <div class="who"><span class="skill">dev-with-track</span><span class="art">progress · Execution Record · execution-findings.md（按需）· gate.md</span></div>
+            <div class="what">恢复现场 → 读取 machine-owned progress.md → 确定下一步 → 执行 → 主 session 用 er-add 写入 Attempt ER → 重要执行发现按需进入 execution-findings.md 并完成分流 → gate ledger 新判决。</div>
+            <div class="who"><span class="skill">dev-with-track</span><span class="art">progress.md · execution-records/index.md · Attempt ER · execution-findings.md（按需）· gate.md</span></div>
             <div class="trig"><b>触发</b>上游就绪;跨 session 续上也走这里</div>
           </div></div>
           <div class="fstage"><div class="node">6</div><div class="card">

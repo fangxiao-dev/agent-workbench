@@ -38,11 +38,17 @@ Markdown 中由脚本维护的内容只是 JSON 的可读投影，不是第二�
 - transition 采用 CAS-lite：调用必须提供 `--attempt` 与 `--expect <previous-state|absent>`；current attempt 或 previous state 不符时拒绝。它用于 stale-transition 防护，不承诺 multi-writer concurrency safety。
 - JSON 不保存 transition log。Git 提供已提交 JSON snapshots 的 provenance；需要长期保留的执行判断与证据继续进入 ER/gate。
 
-task record 的 canonical shape 为 `{attempt,id,state,evidence}`，四个字段均为非空 string。新写入只允许 `PENDING | READY | RUNNING | BLOCKED | FAILED | NEEDS-REVALIDATION | DONE | WAIVED | SUPERSEDED`；`NEEDS_SEAM` 仅作为历史 package 的只读兼容值，不能由 `set-state` 新写入，执行期 seam 一律以 `BLOCKED` 加原因、建议动作和受影响 Ticket 记录。只有 current plan 的 `dag=true` 时才允许当前 attempt 的 task record；current attempt 的 records 与 DAG task 必须按 ID 构成 bijection，每个 earned task 恰有一个 record，初始化值为 `PENDING`。JSON state/evidence 是机器 SoT，DAG Runtime State 表是 marker 投影。`dag=false` 时当前 attempt 不得存在 task record，也不创建 attempt 或独立 Ticket progress ledger；earned Ticket 自身的最小 Phase/Next/Progress 不属于 runtime JSON schema。
+task record 的 canonical shape 为 `{attempt,id,state,evidence}`，四个字段均为非空 string。新写入只允许 `PENDING | READY | RUNNING | BLOCKED | FAILED | NEEDS-REVALIDATION | DONE | WAIVED | SUPERSEDED`；`NEEDS_SEAM` 仅作为历史 package 的只读兼容值，不能由 `set-state` 新写入，执行期 seam 一律以 `BLOCKED` 加原因、建议动作和受影响 Ticket 记录。只有 current plan 的 `dag=true` 时才允许当前 attempt 的 task record；current attempt 的 records 与 DAG task 必须按 ID 构成 bijection，每个 earned task 恰有一个 record，初始化值为 `PENDING`。JSON state/evidence 是机器 SoT，DAG Runtime State 表是 marker 投影。`dag=false` 时当前 attempt 不得存在 task record，也不创建 Task artifact；根 `progress.md` 仍由 CLI 投影。
 
-ticket record 的 canonical shape 同样为 `{attempt,id,state,evidence}`，四个字段均为非空 string。`state` 只能是 `UNRECORDED | IN_PROGRESS | BLOCKED | NEEDS-REVALIDATION | SATISFIED | WAIVED | SUPERSEDED`。只有 current plan 的 `tickets=true` 时才允许当前 attempt 的 ticket record；current attempt 的 records 与 earned ticket files 必须按 Ticket ID 构成 bijection，每个 earned ticket 恰有一个 record，初始化值从唯一 ticket Runtime Acceptance Status projection 机械导入（尚无判断时为 `UNRECORDED`）。JSON state/evidence 是机器 SoT，ticket Runtime Acceptance Status 与 DAG ticket table 是 marker 投影。Ticket 顶部的 Phase/Next 和末尾 Progress 是非结构化恢复索引，不进入 JSON、依赖释放或 acceptance 判定；ticket publication status 同样不进入 runtime JSON。
+ticket record 的 canonical shape 同样为 `{attempt,id,state,evidence}`，四个字段均为非空 string。`state` 只能是 `PENDING | BLOCKED | NEEDS-REVALIDATION | SATISFIED | WAIVED | SUPERSEDED`。只有 current plan 的 `tickets=true` 时才允许当前 attempt 的 ticket record；current attempt 的 records 与 earned ticket files 必须按 Ticket ID 构成 bijection，每个 earned ticket 恰有一个 record，初始化值从唯一 ticket Runtime Acceptance Status projection 机械导入（新发布默认 `PENDING`）。JSON state/evidence 是机器 SoT，ticket Runtime Acceptance Status 与 DAG ticket table 是 marker 投影。Ticket 不保存 Phase/Next/Progress、Task 状态或 checkpoint；package 根 `progress.md` 是统一恢复 projection，Attempt ER 保存执行历史。
 
 旧 attempt 的 record 可以保留但不可再由 `set-state` 修改；current attempt 已有 terminal gate 后也必须拒绝 transition。状态是否 dependency-releasing、ticket 是否真正满足 Acceptance Semantics 仍由共享 contract 和 review evidence 判断，脚本只校验 vocabulary、引用与 projection。
+
+### Attempt Execution Record ledger
+
+`execution-records/<attempt>.md` 是 package/Attempt 公共层的 sealed、append-only Markdown ledger；`execution-records/index.md` 与根 `progress.md` 是 machine-owned projection。ER 不属于 Ticket、Task、AC 或 seam。每条 record 使用 Attempt-local `<attempt>-ER-<n>` ID，purpose 只能是 `checkpoint`、`judgment` 或 `other`；routine state transition、普通 validation PASS、artifact/hash 注册等可从 canonical source 推导的事实不写入 ER。`checkpoint` 可按 subject 自动 supersede，只有显式 `allowsDownstreamImplementation=true` 且 downstream 候选通过 CLI 校验时才支持 implementation readiness，不能释放 acceptance/release。终结 gate 后 Attempt ledger 冻结。
+
+写入只走：`er-add` 从 stdin 接收结构化 JSON，CLI 推导 Attempt、路径、ID、关系、sealed content hash、index 和 progress；相同 payload 幂等返回已有 ID。agent 不手工编辑 ER、index 或 progress，也不负责查找旧 checkpoint。
 
 ### 3.2 Artifact chain
 
@@ -92,7 +98,7 @@ ticket record 的 canonical shape 同样为 `{attempt,id,state,evidence}`，四�
 <!-- impl-package:projection <name> end -->
 ```
 
-v1 marker name 至少包括 `revision-set`、`runtime-state` 与 `gate-status`。同一 artifact 内 name 唯一；缺 marker、重复、嵌套、顺序错误或 body 无法从 JSON 重建均为 validate failure。
+v1 marker name 至少包括 `revision-set`、`runtime-state`、`gate-status`、`execution-record-index` 与 `progress`。同一 artifact 内 name 唯一；缺 marker、重复、嵌套、顺序错误或 body 无法从 JSON 重建均为 validate failure。
 
 当前 D/S/P revision 的唯一 Markdown 声明位于 `revision-set` marker body；默认 body 使用中文 `决策修订（Decision Revision）`、`规格修订（Spec Revision）` 与 `计划修订（Plan Revision）` 标签。`validate` 必须拒绝 marker 外任何同义的 D/S/P revision declaration（包括 Markdown emphasis 或尾部注释），防止旧 header 与机器投影并存。
 
@@ -132,6 +138,7 @@ impl_package_state.py --package <path> register-revision <decision|spec|plan> <a
 impl_package_state.py --package <path> register-revisions [--decision <D<n>> --decision-evidence <pointer>] [--spec <S<n>> --spec-evidence <pointer>] [--plan <P<n>> --plan-artifact <path> --attempt <id> --plan-evidence <pointer>]
 impl_package_state.py --package <path> rebind <alias> --reason <projection|editorial> --evidence <pointer> [--confirm-contract-impact-none]
 impl_package_state.py --package <path> refresh-projections
+printf '<json payload>' | impl_package_state.py --package <path> er-add
 impl_package_state.py --package <path> set-state <task|ticket> <id> <state> --attempt <id> --expect <state|absent> --evidence <pointer>
 impl_package_state.py --package <path> record-artifact <id> <path> --kind <kind> --evidence <pointer>
 impl_package_state.py --package <path> supersede-artifact <old-id> <new-id> <path> --kind <kind> --evidence <pointer>
@@ -149,7 +156,7 @@ impl_package_apply.py sync-working-unit --package <path> --repo <owner/repositor
 
 `publish-plan` 只允许 fresh clearance、精确 owner authorization、无 unresolved blocker 且 `Composition.tickets=true` 的 planning-only bundle。它复用本 state engine，不手写 sidecar：Ticket publication、revision registration、projection refresh 与最终汇总验证属于一个带 transient journal 的本地事务；失败自动恢复并校验原始 bytes。成功只输出 `APPLIED`，失败只输出明确 `BLOCKER`。`sync-working-unit` 只从 working-tree/committed package state 生成确定性 PR/Issue Markdown 摘要，不执行 commit、push 或 GitHub 写入。
 
-命令可以增加纯输出选项，但不得静默推断 package root、current attempt、previous state、editorial judgment 或 verdict reason。
+`er-add` 是执行历史的唯一主写入入口：payload 只声明 purpose、可选 subject、title、content、checkpoint nextAction 与显式 downstream；脚本推导 current Attempt、ER ID、ledger、supersede、index 与 progress。命令可以增加纯输出选项，但不得静默推断 package root、previous state、editorial judgment 或 verdict reason。
 
 当同一 semantic revision 需要同时切换多个当前 artifact（例如 post-gate patch 的 D/S 与新 attempt P1）时，使用 `register-revisions` 做一次候选 state 校验与 revision sidecar 原子替换；它不改变 exact-blob、plan-contract-v1、append-only 或 projection 约束，也不接受手工 JSON。命令会在候选 revision state 上预置 earned runtime records 并随后刷新 projection，但 revision sidecar、runtime-state 与 Markdown 不宣称跨文件事务；中断或部分写入必须由 `contract-status` / `validate` 发现。单个 artifact 的正常首次登记仍可使用 `register-revision`。
 

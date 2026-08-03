@@ -1,7 +1,7 @@
 # Impl-Package Execution Record 与 Progress 模型优化提案
 
 - 日期：2026-08-03
-- 状态：设计已收敛，待 owner 评审后进入 implementation planning
+- 状态：owner 已批准，v1 implementation in progress
 - 范围：`skills/impl-package/` 的 Ticket/Task runtime、ER、Progress projection、CLI、validation 与 eval
 - 首版边界：只支持 fresh contract package；不迁移或兼容解析现有 package
 

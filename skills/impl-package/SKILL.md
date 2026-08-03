@@ -58,7 +58,7 @@ flowchart TD
 | 2 写规格 | `req-align`（Spec 门） | 当前 `spec.md` revision | Decision 门过后 |
 | 3 Attempt 计划 | `impl-planning` | `plan.md` / patch plan（含 Composition） | Spec 过、要落地 |
 | 4 计划拆解（按需） | `to-tickets` → `create-task-dag` → `impl-planning` 选择适用的 `plan-review` | 按 Composition earned 的 `tickets/` 与/或当前 attempt DAG；联合校验、fresh 独立审查与一次 owner approval | plan 判 `tickets=true` 或 `dag=true` |
-| 5 执行 | `dev-with-track` + `subagent-driven-development` | runtime state / Task 局部验证 evidence · plan Execution Record · append-only `gate.md` | 上游就绪 / 跨 session 续；有可委派 task 时由后者承载 |
+| 5 执行 | `dev-with-track` + `subagent-driven-development` | runtime state · machine-owned `progress.md` · Attempt ER · append-only `gate.md` | 上游就绪 / 跨 session 续；有可委派 task 时由后者承载 |
 | 6 审查 | agent 风险判断后按需交给 `do-review`；可选择 `code-review`、`standards-review`、`spec-review` 与 `safety-review` | review evidence 或简化理由（进入 plan ER） | 见下方路由 |
 | 6b Completion claim gate | `verification-before-completion` | claim-to-evidence audit | 写 terminal pass 或宣称 complete / closed / merge-ready / release-ready 前 |
 | 可选回刷 | `$backfill-stable-docs`（体系内维护阶段） | contract preflight、audit report / approved apply / independent verify；必要时更新 `_pending.md` | gate 关闭后提示；积累 durable delta 或周期维护时执行，不阻塞当前交付 |

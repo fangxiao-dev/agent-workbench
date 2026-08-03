@@ -7,9 +7,9 @@ updated: 2026-08-02
 
 - 每次 attempt 独立决定 Composition；不得从 spec、历史 plan 或原 package 的拓扑继承 tickets/dag。
 - decision 保存选择与 rationale，spec 保存长期 contract，plan 只保存本 attempt 的策略、具体 migration、验证选择与过程证据。
-- 简单 no-DAG attempt 不建立 task checklist 或独立 progress ledger；tickets=false 时恢复记录在 Execution Record 或 handoff，tickets=true 时由 Ticket 自身保存最小恢复摘要。
+- 简单 no-DAG attempt 不建立 task checklist；所有 Composition 统一从 machine-owned `progress.md` 恢复，详细判断进入 Attempt ER 或 handoff。
 - Planned Verification 只引用权威 policy 并选择本次检查；Execution Record append-only 记录实际命令、结果与证据。
-- gate 只保存 newest-first append-only 判决摘要与 Durable Deltas；完整验证过程留在 plan Execution Record。
+- gate 只保存 newest-first append-only 判决摘要与 Durable Deltas；完整验证过程与判断写入 Attempt Execution Record，plan 只链接其 index。
 - terminal gate 冻结对应 plan；后续工作创建新 patch attempt，不能回写旧 attempt 记录。
 
 ## 决策记录（滚动，最近 ≤5 轮）

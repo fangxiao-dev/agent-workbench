@@ -13,6 +13,7 @@
 决策：[decision.md](decision.md) | spec 中的轻量 Decision 记录
 规格：[spec.md](spec.md)
 门禁账本：首次 gate evaluation 由 `dev-with-track` 创建 `gate.md`；未创建表示当前 attempt 尚无 gate verdict。
+恢复入口：[progress.md](progress.md)；执行历史索引：[execution-records/index.md](execution-records/index.md)
 
 > decision/spec 是当前 contract SoT。本 plan 只记录本 attempt 的执行策略、验证计划和过程证据。terminal gate verdict 后冻结。
 
@@ -57,18 +58,10 @@
 <!-- material 高风险边界在本表内引用 spec/AC，覆盖能区分正确与错误实现的正常流和关键负向/竞态场景，并注明可执行测试层级或入口、可观察 oracle 与后续 ER owner。复用现有 anchor/名称即可；无歧义时不要另造 ID、矩阵或文档。 -->
 <!-- material seam 或昂贵系统验证在“选定检查/预期结果”中简短写明 system assumption、忠实边界/oracle、必要 checkpoint 与真实环境独有风险。多个忠实候选按总证据成本选择，成本接近才优先更早反馈；探索运行写候选假设、决定性 artifact 与结果分流。使用既有表列，不新增字段、ID、矩阵、artifact 或 gate。 -->
 
-## 执行记录
+## 执行过程索引
 
-<!-- 仅允许追加。旧 entry 不改；补证新增 ER-n。 -->
-
-### ER-<n>
-
-- 记录时间：
-- Decision / Spec / Plan 修订：
-- 检查或命令：
-- 结果：
-- 证据路径：
-- 剩余风险 / 后续动作：
+实际执行判断、checkpoint、验证结果和 failure learning 由 `dev-with-track` 主 session
+通过 state CLI 的 `er-add` 写入 `execution-records/<attempt>.md`；本 plan 不再承载 ER 正文。
 
 ## 执行尝试产物交接
 
@@ -80,7 +73,8 @@
 - Full-review clearance：仅当 Admission=`full review` 时在 runner handoff 中传递临时 ledger 绝对路径；不写入本 plan。owner approval、Ticket publish 与 plan registration 必须现场运行 `verify-clearance`，普通 reviewer 的 `cleared` 文本无效。
 - Ticket 集合：<paths | N/A>
 - DAG：<dag.md or patch-dag path | N/A>
-- 进度账本：<path | N/A until trigger>
+- 进度账本：[progress.md](progress.md)
+- 执行历史：[execution-records/index.md](execution-records/index.md)
 - 执行发现：<execution-findings.md | 尚未 earned>
 - 调查材料：<investigations/<topic>.md | 尚未 earned；仅按需链接>
 

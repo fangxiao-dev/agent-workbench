@@ -242,6 +242,8 @@ class PublishPlanApplyTest(unittest.TestCase):
                 {
                     "docs/implementations/2026-08-01-plan-apply/.impl-package/revision-bindings.json",
                     "docs/implementations/2026-08-01-plan-apply/.impl-package/runtime-state.json",
+                    "docs/implementations/2026-08-01-plan-apply/execution-records/",
+                    "docs/implementations/2026-08-01-plan-apply/progress.md",
                     "docs/implementations/2026-08-01-plan-apply/tickets/01-first.md",
                     "docs/implementations/2026-08-01-plan-apply/tickets/02-second.md",
                 },

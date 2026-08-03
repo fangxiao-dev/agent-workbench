@@ -42,9 +42,9 @@ Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。pl
 - 不把 interface、seam contract、compatibility、全局约束或 Acceptance Semantics 复制进 plan；这些属于 spec。选择 rationale 属于 decision。
 - 不把 plan 写成逐行实现脚本：不复制完整 production code、不要求 2–5 分钟微步骤，也不内嵌每一步 commit 指令。plan 应约束实施方向和可验证边界，同时允许执行者基于当前代码完成局部判断。
 - 不在 plan 保存 task checklist、task/ticket runtime status、worker ownership 或通用验证模板副本。
-- 实际验证过程可 append 到 Execution Record；terminal gate verdict 后 plan 冻结。
+- 实际验证过程由 `dev-with-track` 主 session 通过 `er-add` append 到 Attempt Execution Record；terminal gate verdict 后对应 ledger 冻结。
 - plan 不保存 `Status`。Draft/Active/Frozen 由内部 sidecar 的 current selection 与 gate ledger 派生。
-- tickets 由 to-tickets 拥有，DAG 由 create-task-dag 拥有；impl-planning 只拥有两者的拆解顺序、Composition 和联合就绪判断。progress/execution-findings/gate ledger 由 dev-with-track 拥有。
+- tickets 由 to-tickets 拥有，DAG 由 create-task-dag 拥有；impl-planning 只拥有两者的拆解顺序、Composition 和联合就绪判断。Attempt `progress.md`、Execution Record、execution-findings/gate ledger 由 dev-with-track 拥有。
 
 ## Routing
 
@@ -62,7 +62,7 @@ Composition 是当前 plan 的事实，不从 spec 或历史 attempt 继承。pl
 - `tickets=true`：默认采用；只有单一、局部且一次验收即可收口的变更才选 `tickets=false`。
 - `dag=true`：必须同时证明至少两项工作可安全独立启动，且删去 DAG 会丢失真实 blocker、跨 owner/跨 session handoff 或 primary ownership 边界的调度信息。自然实现顺序、多个文件或多个 Ticket 都不是 DAG 依据。
 - `tickets=true, dag=true`：Ticket/Task 接近一对一（例如 5 个 Ticket 对 6 个 Task）是反证信号；若 Task 只重复 Ticket 的实现顺序，保持 `tickets=true, dag=false`。
-- 两者都 false：不创建 task artifact；简单执行不通过 plan checklist 或 progress ledger 制造状态。跨 session 恢复、独立交接或外部 gate 的事实写入现有 Execution Record 或 handoff。
+- 两者都 false：不创建 task artifact；简单执行不通过 task checklist 制造状态。跨 session 恢复由根 `progress.md` 投影，独立交接或外部 gate 的事实写入 Attempt ER 或 handoff。
 
 用户可主动用 S/M/L/D 指定期望组合。把它记录为 Composition request 并展开成本 attempt 的 tickets/dag；一致时接受。若与 earn conditions 冲突，在增删任何 ticket/DAG 前向 owner 报告请求、实际信号、建议组合和 artifact 影响，并把选择列为 owner decision，不能静默修正。活动 attempt 只有 owner 接受后才升级 P revision 和迁移 artifact。
 
@@ -110,10 +110,10 @@ bundle 的派生汇报状态为 `drafting`、`ready-for-review`、`approved`。`
 
 ### Execution Record
 
-- 每次实际检查追加一个稳定 entry anchor，例如 ER-1、ER-2。
-- 记录 D/S/P revision、时间、命令或检查、结果、证据路径和残余风险。
-- 旧 entry 不回改；补证新增 entry。
-- 这不是 task runtime status，也不替代 ticket/DAG/progress。
+- plan 只保留到 `progress.md` 与 `execution-records/index.md` 的稳定链接，不再保存 ER 正文。
+- 实际检查、checkpoint、判断与 failure learning 由 `dev-with-track` 主 session 调用 `er-add` 写入当前 Attempt ledger。
+- ER ID、文件名、supersede 关系、sealed hash、index 与 progress projection 均由 state CLI 生成；agent 不手工查找或编辑。
+- 这不是 Task runtime status，也不替代 Ticket/DAG；ER 是 package/Attempt 公共历史层。
 
 ### Revision History
 
@@ -128,7 +128,7 @@ bundle 的派生汇报状态为 `drafting`、`ready-for-review`、`approved`。`
 5. 形成 candidate bundle：`tickets=true` 时调用 `to-tickets` draft 形成完整集合；`dag=true` 时在 Draft Ticket 集合与输入齐备后调用 `create-task-dag`，无 Tickets 时直接消费 plan 形成当前 attempt DAG。随后补齐 candidate projection，并联合校验覆盖、依赖、ownership/contribution、acceptance evidence、gate 边界和 revision binding。缺口由 owning skill 修正；候选缺 projection、证据、引用、分类或机械顺序问题不晋升为 owner decision。
 6. 对同一 candidate bundle 做一次适用的 `plan-review`：首次或范围已变化的 candidate，命中固有高风险 signal 时直接 full review，否则 fresh `$plan-review mode=bundle-admission`。正常 full review 的真实材料性选择必须先完成一次完整 closure sweep，再将全部已知 findings、owner decisions、影响链与证据合成有限 closure brief；若后续 candidate 只实现该 batch 且未扩大 D/S/P、authority 或 public-contract 边界，改由 fresh `$plan-review mode=focused-closure-verification` 逐项验证，不重新开放问题搜索。该模式 `closure-verified` 后仍须取得正常 ledger 的 `verify-clearance` 成功；`reopen-full-review` 将升级理由与既有 brief 合并为新的 closure batch 后回到 normal full review；`blocked` 补齐输入后重验。`revise` 回 owning skill，`unavailable` 重试、暂停或取消本次 checkpoint，不能降级为通过。
 7. review 收敛后请求**一次**完整 bundle approval。获批即自动执行 register/publish/preflight：新 package 先 `init --package-id`，`preflight-register` 只作只读校验，`register-revision` / `register-revisions` 原子选择 attempt、seed runtime records 并刷新 projection，随后 `validate --committed`；不再为 ledger、登记、Ticket/DAG 或下游路由单独请示。
-8. 进入 execution 后只 append Execution Record；runtime state 与 gate evaluation 交由 dev-with-track。
+8. 进入 execution 后只通过 `er-add` append Attempt Execution Record；runtime state、progress projection 与 gate evaluation 交由 dev-with-track。
 
 ## Review Checklist
 
@@ -139,7 +139,7 @@ bundle 的派生汇报状态为 `drafting`、`ready-for-review`、`approved`。`
 - plan 中的模块名、类型名、路径和术语与当前 spec 及仓库事实一致。
 - plan 未复制 decision/spec contract、ticket 正文、task 状态或通用 checklist。
 - 每个长期 seam/interface/constraint 都能在 spec 找到。
-- Planned Verification 引用权威 policy；Execution Record 使用稳定 anchor 且 append-only。
+- Planned Verification 引用权威 policy；Attempt Execution Record 使用稳定 anchor、sealed hash 且 append-only，plan 不再承载正文。
 - material 高风险边界已由 spec anchor 贯通到可执行场景、测试层级/入口、可观察 oracle 与 ER evidence owner；链路可语义定位即可，不要求统一 ID 或固定表格。
 - material seam 或昂贵系统验证已在既有 Planned Verification 中说明 system assumption、忠实边界/oracle、总证据成本判断、必要 checkpoint 与真实环境独有风险；探索 E2E 有明确诊断目的而非隐性 admission gate，低风险局部改动未被机械升级。
 - 已激活 conditional evidence-integrity contract 时，Planned Verification 为每个主断言选择了相关 false-PASS 反例和可观察 fail-closed 结果，没有把示例技术或不适用场景伪装成通用要求。
@@ -151,7 +151,7 @@ bundle 的派生汇报状态为 `drafting`、`ready-for-review`、`approved`。`
 - 初始 plan 不链接不存在的 gate.md；首次 gate evaluation 前缺 gate.md 只能表示 open/no-verdict，不是成功或异常 evidence。
 - 默认 `gate-before-merge` 已把 finalized current-attempt `pass` 设为 merge 前提；任何 pre-gate integration 都有 plan 中预先记录的 owner 决策证据。未授权先合入按 process violation 报告，不得事后补写授权。
 - 如果只交付 spec 的子切片，当前 attempt 的 AC/范围或 package 边界已经同步收窄；不存在“未实现 AC 与整体完成声明”并存的状态。
-- terminal gate 后 plan 已冻结。
+- terminal gate verdict 后 plan 冻结；对应 Attempt Execution Record 同步冻结。
 
 ## Output Contract
 
