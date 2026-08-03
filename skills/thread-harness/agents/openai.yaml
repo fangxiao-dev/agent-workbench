@@ -1,4 +1,4 @@
 interface:
   display_name: "Thread Harness"
   short_description: "Roles and control flow for a controller thread driving multiple child threads"
-  default_prompt: "Use $thread-harness to determine this thread's role (controller / package child / foundation child), its reporting obligations, and the polling and stall-detection contract."
+  default_prompt: "Use $thread-harness to determine this thread's role (controller / package child / platform child), its reporting obligations, and the polling and stall-detection contract."

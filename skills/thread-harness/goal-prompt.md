@@ -78,7 +78,7 @@ registry：<registry 的绝对路径 .json>
 create_thread 授权（我，Owner，明确给出）：
 
 - 允许你在下列情况调用 create_thread：
-  ① 某个 seam 在账本里查不到 producer，需要开一条新的 Foundation 线去造；
+  ① 某个 seam 在账本里查不到 producer，需要开一条新的 Platform 线去造；
   ② 某条线需要替换 session。
 - 允许各条子线为它自己创建继任者；不得为其他 node 创建任何 thread。
 - active children 上限 8，达到上限后要新开线必须先退休一条。
@@ -92,7 +92,7 @@ create_thread 授权（我，Owner，明确给出）：
 create_thread 授权（我，Owner，明确给出）：
 
 - bootstrap 阶段：允许你创建我列出的那些线，仅这些。
-- 之后：在我确认 first wave 结果之前，不得再创建任何新的 Foundation 线；
+- 之后：在我确认 first wave 结果之前，不得再创建任何新的 Platform 线；
   需要新线时向我报告并等待。
 - 替换 session 不受此限：任何时候都允许某条线为它自己创建继任者。
 - 不得为 review、审计或调研创建 thread。
@@ -112,7 +112,7 @@ registry：<registry 的绝对路径 .json>
 push / PR / merge / deploy / Production 与共享远端 mutation 一律需要我单独授权。
 
 目标：<这次 coordination 要达成什么>
-结束判据：<什么算 closed。局部实现、验证、Foundation 交付、子包 gate、代码合入都不算>
+结束判据：<什么算 closed。局部实现、验证、Platform 交付、子包 gate、代码合入都不算>
 
 ---
 
@@ -138,9 +138,9 @@ push / PR / merge / deploy / Production 与共享远端 mutation 一律需要我
 4. wake.reason == "inactiveStatus" 是"有线闲着、该派活"，不是"没有变化"。
 
 5. seam 缺失是你的待办，不是外部阻塞。所有人都在等某个跨域契约时，
-   正确动作是派一条 Foundation 线去造它。
+   正确动作是派一条 Platform 线去造它。
 
-6. 不要让 Foundation 线"保持待命"——让生产者等消费者会闭成死锁。
+6. 不要让 Platform 线"保持待命"——让生产者等消费者会闭成死锁。
 
 7. 一个 node 一个 worktree 一个 branch。
 

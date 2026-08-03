@@ -2,7 +2,7 @@
 name: thread-harness
 description: >
   多 thread 编排的角色定义与控制流。当一个主控 thread 需要长时间调度多条子 thread
-  推进同一个目标时使用：确定自己是主控 / 任务包子线 / Foundation 子线中的哪个角色、
+  推进同一个目标时使用：确定自己是主控 / 任务包子线 / Platform 子线中的哪个角色、
   什么时候必须向上回报、怎么轮询、怎么判断整体是否还在推进、卡住了怎么办。
   涉及 broker loop、wait_threads、派发任务、seam 缺失、停滞、Owner 决策上报时适用。
   线程路由（thread-id 与 topic 绑定）由本目录下的 owner-thread-broker 负责，本 skill 不重复。
@@ -19,7 +19,7 @@ description: >
 | 你的处境 | 你的角色 | 读哪一段 |
 | --- | --- | --- |
 | 你有一个明确的任务包要做完 | **任务包子线** | §Role A |
-| 你没有任务包，被指派去造某个共享的东西 | **Foundation 子线** | §Role B |
+| 你没有任务包，被指派去造某个共享的东西 | **Platform 子线** | §Role B |
 | 你负责调度别人、自己不写业务代码 | **主控** | §Role C |
 
 三个角色共用同一套账本与回报契约，所以先读 §公共约定。
@@ -82,7 +82,7 @@ description: >
 
 上报边界（什么该自己扛、什么该往上递）：
 
-> 非 seam / 共享基座类的问题，优先自己完成。确认是共享的东西，才上报给主控转给 Foundation。
+> 非 seam / 共享基座类的问题，优先自己完成。确认是共享的东西，才上报给主控转给 Platform。
 
 判断"是不是共享"的启发式：如果修好它只对你这个包有意义，那是你的活；如果别的包也在等同一个东西，那是 seam。拿不准就上报并说明判断依据——**误报的成本远低于漏报**。
 
@@ -94,7 +94,7 @@ description: >
 
 ---
 
-## Role B · Foundation 子线
+## Role B · Platform 子线
 
 **你是 seam 的生产者。**你没有自己的任务包，任务由主控指派。
 
@@ -115,7 +115,7 @@ description: >
 
 **你的使命是让整体推进。你不直接写业务代码——但 seam 缺失是你的待办，不是外部阻塞。**
 
-这是主控最容易犯的错，值得单独说清楚：当所有子线都报"我在等某个跨域上游契约"时，正确的读法不是"外部条件不具备"，而是"**我还没安排人去造它**"。你手上一直有 `create_thread` 这个动作，派一条新的 Foundation 线去造，这条路是通的。
+这是主控最容易犯的错，值得单独说清楚：当所有子线都报"我在等某个跨域上游契约"时，正确的读法不是"外部条件不具备"，而是"**我还没安排人去造它**"。你手上一直有 `create_thread` 这个动作，派一条新的 Platform 线去造，这条路是通的。
 
 新建或替换任何一条线的 session（含你自己交班）都走 [session-dispatch.md](references/session-dispatch.md) 的两阶段契约。**不要手写 `<codex_delegation>` wrapper，也不要 fork 主控历史。** 三个角色共用同一套骨架，差异见那页的 delta 表；你自己交班还多一条不能换的顺序（先改 registry 再 status，poll 必须在 sync 之前）。
 
@@ -139,7 +139,7 @@ description: >
 ### 你不做的事
 
 - **不做审计。** 需要 review 就走 `$do-review`，不要自己造 review agent。你的上下文是稀缺资源。
-- **不让 Foundation 线待命。**（见 Role B）
+- **不让 Platform 线待命。**（见 Role B）
 - **不自行批准 Owner 级决策。** 授权边界与提案格式用 `$owner-thread-broker`。
 
 ### 什么时候该叫醒 Owner

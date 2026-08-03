@@ -20,7 +20,7 @@
 | --- | --- | --- |
 | H1 | **回报触发条件**：任一 thread 在 turn 结束前，若 ①`head` 变了 ②状态从 working 转为 waiting ③产生 owner 级阻塞——三者之一成立，必须发送结构化 H1 envelope 回 broker；child 不直接写 ledger | F3：7 条线里 5 条从不主动回报，F6 唯一能解环的 Owner 请求因此永远没送达 |
 | H2 | **账本字段与写入时机**：controller 验证 H1 的 registry source session 与 HEAD 后代关系后，代 child append；字段按 §5 schema | F9：全局进度只活在 context 里，末期每 12 分钟被 compaction 清洗一次 |
-| H3 | **停滞上限 + 二选一**：连续 5 轮所有 node 的 git HEAD 无变化，broker 必须二选一——(a) 派发新工作（含 create_thread 开新 Foundation 线），(b) 向 Owner 报告并结束 loop（即 `act --halt --reason`）。**禁止第三种输出。** 从第 3 轮起若仍有 active / working node，每轮必须直接 `read_thread`；只有具体且最新的执行心跳可将 streak 归零。另：`decisions.jsonl` 有尚未上报的 `pending` 项时立即上报，不进入下一轮；已上报但仍 pending 的决策不再豁免停滞判定 | F1：Owner 是唯一解卡装置；F7：broker 把自己的待办归类成外部阻塞。上一轮它输出了 104 次"本轮 loop 检查完成" |
+| H3 | **停滞上限 + 二选一**：连续 5 轮所有 node 的 git HEAD 无变化，broker 必须二选一——(a) 派发新工作（含 create_thread 开新 Platform 线），(b) 向 Owner 报告并结束 loop（即 `act --halt --reason`）。**禁止第三种输出。** 从第 3 轮起若仍有 active / working node，每轮必须直接 `read_thread`；只有具体且最新的执行心跳可将 streak 归零。另：`decisions.jsonl` 有尚未上报的 `pending` 项时立即上报，不进入下一轮；已上报但仍 pending 的决策不再豁免停滞判定 | F1：Owner 是唯一解卡装置；F7：broker 把自己的待办归类成外部阻塞。上一轮它输出了 104 次"本轮 loop 检查完成" |
 
 **H3 的 `MUST_ACT` 准确含义是「既没有 committed progress，也没有在阈值前确认到 fresh heartbeat」，不是「整体停止」。** 一条线可能正在活跃工作、只是还没 commit，所以：
 
@@ -168,17 +168,17 @@ H4 的分阶段：**当前只登记不校验**，脚本仅在 `sync` 摘要报 `
 
 role 段开头必须写明：*"你的使命是完成任务包，方式由 `/impl-package` 定义。本段只规定你什么时候必须跟 broker 说话，不改变你的开发方式。"*
 
-上报边界（沿用上一轮 goal 原文，这条本来就是对的）：非 seam / 共享基座的问题优先自己完成；确认是共享的，才上报给 broker 转给 Foundation。
+上报边界（沿用上一轮 goal 原文，这条本来就是对的）：非 seam / 共享基座的问题优先自己完成；确认是共享的，才上报给 broker 转给 Platform。
 
 调度接口：H1、H2。
 
-### 4.3 Role B · Foundation 子 thread
+### 4.3 Role B · Platform 子 thread
 
 **使命**：产出 seam。没有自己的任务包，由 broker 指派。
 
 **硬规则**：**"保持待命"对本角色是非法指令。** 空闲时的合法动作只有两个——向 broker 要下一个 seam 任务，或报告"本线 seam 已交付 + artifact 指针"。
 
-> 依据：上一轮 02:48:43 broker 主动命令 F5 待命（"仅在出现可消费 Customer/Inventory/Checkout seam 时继续"），F5 此后 2 小时零产出。Foundation 是 seam 的生产者，让生产者等消费者就是把环闭上（F2）。
+> 依据：上一轮 02:48:43 broker 主动命令 F5 待命（"仅在出现可消费 Customer/Inventory/Checkout seam 时继续"），F5 此后 2 小时零产出。Platform 是 seam 的生产者，让生产者等消费者就是把环闭上（F2）。
 
 交付即在 `seams.jsonl` 登记 `seam_id` + `consumers` + `artifact`。
 
@@ -186,7 +186,7 @@ role 段开头必须写明：*"你的使命是完成任务包，方式由 `/impl
 
 **使命**：让整体推进。不直接写业务代码，但——**seam 缺失是它的待办，不是外部阻塞。**
 
-> 依据：上一轮 04:47:18 broker 自述"当前阻塞来自缺失的跨域上游契约……而不是未调度"，把自己的活归类成了外部阻塞（F7）。而 `create_thread` 派新 Foundation 线这条路全程可用且有效（17/17 成功，F5/F6 产出 63/56 个 commit），它只是被停用了——02:14 之后 5.5 小时一次没派。
+> 依据：上一轮 04:47:18 broker 自述"当前阻塞来自缺失的跨域上游契约……而不是未调度"，把自己的活归类成了外部阻塞（F7）。而 `create_thread` 派新 Platform 线这条路全程可用且有效（17/17 成功，F5/F6 产出 63/56 个 commit），它只是被停用了——02:14 之后 5.5 小时一次没派。
 
 硬规则：H3（停滞二选一 + 尚未上报的 pending 决策立即上报）、H4 登记、不自己做审计。
 
@@ -196,7 +196,7 @@ role 段开头必须写明：*"你的使命是完成任务包，方式由 `/impl
 
 拆成两阶段消除了这个窗口：第一阶段 child 只核对锚点然后停住，controller 在这个停顿里更新 registry，第二阶段才真正开工。
 
-**为什么替换由退休 session 自己发起 `create_thread`**（Role A / Role C）：只有它知道自己的 WIP 边界、已获证据与单一 Next Action，这些必须先写回恢复权威再交接才是原子的；主控代劳就得先把这些吸进自己的上下文，而它的上下文是最稀缺的。Role B 例外——Foundation 没有自述状态，恢复权威是主控写的 assignment card，自交接没有意义。
+**为什么替换由退休 session 自己发起 `create_thread`**（Role A / Role C）：只有它知道自己的 WIP 边界、已获证据与单一 Next Action，这些必须先写回恢复权威再交接才是原子的；主控代劳就得先把这些吸进自己的上下文，而它的上下文是最稀缺的。Role B 例外——Platform 没有自述状态，恢复权威是主控写的 assignment card，自交接没有意义。
 
 **为什么不另造中间态 handoff 卡片**：`$handoff-to-new-session` 原文即 *"a compact, complete initial prompt, **not a temporary handoff document**"*。交接材料就是 child 的首条 prompt 本身；再写一份临时卡片让主控转手，既违反被引用 skill 的约定，也把一个原子动作拆成两步。
 
@@ -322,13 +322,13 @@ skills/thread-harness/
 
 ### 9.1 H3 选项 (a) 的完整机读定义
 
-评审指出："派发新工作"没有可验证的 deliverable 要求，所以 broker 可以用「已派 Foundation 做一次增量 readiness 检查；若无新 artifact 则保持等待」蒙混过关——形式上像 (a)，实质是等待的包装版。**这个批评是对的**，上一轮确实反复出现过这种行为。
+评审指出："派发新工作"没有可验证的 deliverable 要求，所以 broker 可以用「已派 Platform 做一次增量 readiness 检查；若无新 artifact 则保持等待」蒙混过关——形式上像 (a)，实质是等待的包装版。**这个批评是对的**，上一轮确实反复出现过这种行为。
 
 完整解法需要定义：deliverable 与验收条件、producer 必须转 `working`、audit/sidecar 不得计入、下一轮验证 assignment 真的进入执行。这是一整套语义，属于阶段 2 的 I1（依赖必须有 owner）范畴。
 
 **本轮做最小版：留痕，不验证。** `MUST_ACT` 之后 broker 必须调 `ledger.py act`；`--dispatch` 要求填 `seam_id` + `producer` + `deliverable` 三个字段，缺一个就退 64；选 (b) 结束 loop 时用 `--halt --reason`，缺 `reason` 也退 64。
 
-它证明不了派发是真的，但**逼你说出派给谁、要造什么**——"已派 Foundation 做一次增量 readiness 检查"填不进这三个字段。`stall-check` 会报 `last_must_act_answered: yes|no`，只报告不阻断。
+它证明不了派发是真的，但**逼你说出派给谁、要造什么**——"已派 Platform 做一次增量 readiness 检查"填不进这三个字段。`stall-check` 会报 `last_must_act_answered: yes|no`，只报告不阻断。
 
 配套的测量：`dispatches_since_progress` 从 rollout 数派发次数，且**只被 code 级 HEAD 推进清零**（docs-only commit 不清零，见下）。这个数持续增长而 code 不动，就是"在派活但没派出成果"的直接证据。
 

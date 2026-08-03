@@ -25,10 +25,10 @@
 
 | | **替换：主控提示现有 session 自交接**（最常见） | **冷启动：节点还不存在** |
 | --- | --- | --- |
-| 起因 | 某条线太长 / 接近 compaction 上限 / 已经变笨 | 为新识别的 seam 开一条 Foundation 线，或首次建线 |
+| 起因 | 某条线太长 / 接近 compaction 上限 / 已经变笨 | 为新识别的 seam 开一条 Platform 线，或首次建线 |
 | 谁发起 | **主控**，依据是 `sync` 摘要里的 `session_age_h`（子线自己不自知，主控也看不到对方的 compaction 次数——平台没有这个数据，**session 年龄是唯一可用的代理信号**） | 主控 |
 | 谁调 `create_thread` | **那条线自己**（Role A / Role C） | **主控** |
-| Role B 例外 | **也由主控建**。Foundation 没有自述状态，恢复权威是主控写的 assignment card，让它自交接没有意义 | 主控建 |
+| Role B 例外 | **也由主控建**。Platform 没有自述状态，恢复权威是主控写的 assignment card，让它自交接没有意义 | 主控建 |
 | 前置 | source 停在原子 checkpoint、owned process 已停 | Owner 已授权 `create_thread`、seam assignment 明确 |
 
 ### 触发消息（发给要退休的那条 session）
@@ -78,7 +78,7 @@ Owner 的 create_thread 授权原文（转述自当前 goal，你据此为自己
 
 ### Role A 要带上 `$impl-package`
 
-带任务包的线（Role A）本身属于 `$impl-package` 框架——**本 harness 只是调度层，不定义它怎么干活**。所以给 Role A 的第二阶段 prompt 里把 `$impl-package` 作为 entry point 交过去就够了，不要复述它的 6 步主流程或执行阶段规矩。Foundation 没有任务包，不需要这一条。
+带任务包的线（Role A）本身属于 `$impl-package` 框架——**本 harness 只是调度层，不定义它怎么干活**。所以给 Role A 的第二阶段 prompt 里把 `$impl-package` 作为 entry point 交过去就够了，不要复述它的 6 步主流程或执行阶段规矩。Platform 没有任务包，不需要这一条。
 
 ### 固定流程
 
@@ -155,7 +155,7 @@ Assignment card（本轮唯一任务）：
 
 ## 角色 delta
 
-| | **Role A · 任务包子线** | **Role B · Foundation** | **Role C · 主控** |
+| | **Role A · 任务包子线** | **Role B · Platform** | **Role C · 主控** |
 | --- | --- | --- | --- |
 | **恢复权威** | 当前任务包 entry | assignment card（parent package 只做存在性锚点与 closure ownership 指针） | 账本 + registry |
 | **第一阶段额外锚点** | `package` / `entry point` | `parent package` / `entry point` | 父包 entry；controller 自己的 worktree / branch / HEAD |
@@ -164,7 +164,7 @@ Assignment card（本轮唯一任务）：
 | **role-initial-state** | `working` 或 `awaiting_seam` | `working` | `working` |
 | **role-recovery-block** | `Package checkpoint：package / entry / checkpoint 指针` | 无——**不得**把 parent entry 当恢复入口，不读旧 plan/Task progress/历史 evidence | 见下方「Role C 特有顺序」 |
 | **交付登记义务** | 无 | H1 报告 seam artifact，由 controller 用 `ledger.py seam --registry <path> --seam-id <s> --producer <node> [--consumers ...] --deliver commit:<sha>` 登记；没登记等于没交付 | 无 |
-| **替换时谁调 `create_thread`** | 退休 session 自己 | **controller**（Foundation 无自述状态） | 退休主控自己 |
+| **替换时谁调 `create_thread`** | 退休 session 自己 | **controller**（Platform 无自述状态） | 退休主控自己 |
 | **source 侧额外动作** | 先把 checkpoint 写回任务包 entry：当前 HEAD、计数状态、单一 Next Action、已获/剩余证据、授权与 WIP 边界 | 无（assignment card 是恢复权威，不把 parent entry 当恢复入口） | 先用 `route` 把 registry 指向继任者，再广播新 controller id |
 
 ### Role C 特有顺序（不能换）

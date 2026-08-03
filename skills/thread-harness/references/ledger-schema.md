@@ -63,7 +63,7 @@ controller 读取 envelope 后必须重新读取 `registry`，确认 `session_id
 
 ## seams.jsonl
 
-记录 seam 的生产者、消费者与交付状态。写入者是 controller；Foundation child 在 H1 中报告交付事实，controller 通过 `ledger.py seam` 登记；controller 使用 `ledger.py act --dispatch` 派活时，也会同步追加一条 `status=assigned` 的 ownership 行。
+记录 seam 的生产者、消费者与交付状态。写入者是 controller；Platform child 在 H1 中报告交付事实，controller 通过 `ledger.py seam` 登记；controller 使用 `ledger.py act --dispatch` 派活时，也会同步追加一条 `status=assigned` 的 ownership 行。
 
 | 字段 | 类型 | 必填 | 枚举 / 格式 | 写入者 | 含义 |
 | --- | --- | --- | --- | --- | --- |
@@ -101,7 +101,7 @@ controller 读取 envelope 后必须重新读取 `registry`，确认 `session_id
 ```jsonl
 {"ts":"2026-08-01T04:49:02+02:00","decision_id":"freeze_order_core_ownership","raised_by":"f6_order_core","blocks":["inventory","checkout","f6_order_core"],"question":"Should order core ownership freeze before checkout consumes it?","status":"pending","answer":null}
 {"ts":"2026-08-01T04:55:18+02:00","decision_id":"freeze_order_core_ownership","raised_by":null,"blocks":[],"question":null,"status":"answered","answer":"Freeze ownership now; checkout consumes commit:800521e8."}
-{"ts":"2026-08-01T05:02:11+02:00","decision_id":"split_catalog_foundation","raised_by":"catalog","blocks":["catalog"],"question":"Create a separate Foundation line for catalog pricing seam?","status":"pending","answer":null}
+{"ts":"2026-08-01T05:02:11+02:00","decision_id":"split_catalog_foundation","raised_by":"catalog","blocks":["catalog"],"question":"Create a separate Platform line for catalog pricing seam?","status":"pending","answer":null}
 ```
 
 ## acts.jsonl
