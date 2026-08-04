@@ -24,8 +24,8 @@
 
 | | **替换：主控提示现有 session 自交接**（最常见） | **冷启动：节点还不存在** |
 | --- | --- | --- |
-| 起因 | 某条线太长 / 接近 compaction 上限 / 已经变笨 | 为新识别的 seam 开一条 Platform 线，或首次建线 |
-| 谁发起 | **主控**，依据是 `sync` 摘要里的 `session_age_h`（子线自己不自知，主控也看不到对方的 compaction 次数——平台没有这个数据，**session 年龄是唯一可用的代理信号**） | 主控 |
+| 起因 | `sync` 已观测到 compaction 达到角色阈值，或主控直接确认该线已经明显退化 | 为新识别的 seam 开一条 Platform 线，或首次建线 |
+| 谁发起 | **主控**，依据是 `sync` 摘要里当前 child session 的 [`compaction_count`](poll-contract.md#compaction_count)，或主控直接确认的明显退化；存在时长不参与这项判断 | 主控 |
 | 谁调 `create_thread` | **那条线自己**（Role A / Role C） | **主控** |
 | Role B 例外 | **也由主控建**。Platform 没有持久恢复权威，replacement 由主控用一张新的完整 assignment card 重新派发 | 主控建 |
 | 前置 | source 停在原子 checkpoint、owned process 已停 | Owner 已授权 `create_thread`、seam assignment 明确 |
@@ -66,20 +66,14 @@ Owner 的 create_thread 授权原文（你据此为自己建继任者）：
 - **Role A / Role B 替换**：现任主控在收到 `handed_off` H1 后写。
 - **Role C 交接**：**退休主控在退出前把 registry 指向继任者**。新主控上任后只核对该字段是否已指向自己，没写成才补写。
 
-### 复用 `$handoff-to-new-session`，不要重造
-
-交接的通用流程、prompt 形状与长度约束全在 `$handoff-to-new-session`（见它的 `references/handoff-prompt-template.md`）。**本页只写 override，不复述它，也不另造中间产物**——交接材料就是 child 的首条 prompt 本身，不要往临时目录写中间卡片再让主控转手。
-
-两条 override：
+### Thread-harness overrides
 
 - **停在第一阶段**：child 交接完成后不直接开工，而是只核对 anchor 就停，等主控更新 registry（见下方固定流程）。
 - **`previous_session_ids` 不进 child prompt**，由主控写进 registry。
 
-恢复权威按角色不同：Role A 是**已有的任务包 entry**，Role C 是账本 + registry。Role B 没有持久恢复权威；每次冷启动、replacement 或 compaction 后都由主控发一张新的完整 assignment card。
-
 ### Role A 要带上 `$impl-package`
 
-带任务包的线（Role A）本身属于 `$impl-package` 框架——**本 harness 只是调度层，不定义它怎么干活**。所以给 Role A 的第二阶段 prompt 里把 `$impl-package` 作为 entry point 交过去就够了，不要复述它的 6 步主流程或执行阶段规矩。Platform 没有任务包，不需要这一条。
+Role A 的第二阶段 prompt 必须以 `$impl-package` 为 entry point，不复述其流程；Role B 不带这一项。
 
 ### 固定流程
 
@@ -199,7 +193,7 @@ catch-up（你刚发生过 compaction）：
 
 - **角色、开发框架、工作方式这三样必须重述**——compaction 后的 child 已经不知道自己该去读什么。
 - **硬上限 10 行。**
-- **计数规则**：同一 Role A session compact ≤3 次发 catch-up；>3 次改为按上面的触发消息转交接。
+- **计数规则（controller 执行）**：只读取本轮 [`ledger.py sync` 摘要的 `compaction_count: <node>=<n>`](poll-contract.md#compaction_count)。同一 Role A current session 的 `n` ≤3 时发送 catch-up；`n` >3 时改为按上面的触发消息转交接。Role A 不自行估算或查找次数；`?` 表示本机 rollout 不可用，controller 停止计数判定并直接核查，不得猜成 0。
 - **Role B 不用这个模板**：它没有持久恢复权威。compaction 后主控（controller）不读旧聊天、不恢复旧 card，而是在常设授权边界内发送一张新的完整 assignment card；缺任一关键事实或授权就停止并报告 Owner。
 - **Role C 不用这个模板**：主控 compaction 后走 `ledger.py status` 自己恢复（见 §Role C 特有顺序）。
 
@@ -258,5 +252,5 @@ Role C 的第二阶段 prompt 除了通用 routing 段，还要带上这份接�
 | child 把 controller id 当成"自己的 session" | 第二阶段 routing 段没写清哪个字段是自己、哪个是对方 | routing 段逐字写 `node=<n>；expected current session=<id>`，两个 id 不并列出现在同一行 |
 | 两条线 `head` 永远相同 | 共用 worktree | 一 node 一 worktree 一 branch；`preflight` 会拦 |
 | 交付了但下游查不到 | Role B 没登记 seam artifact | 交付即登记，见 delta 表 |
-| `ROUND INVALID` | 三种成因，实测占比依次为：① **poll 输出被 cell-yield 拆到后续执行 cell**（最常见，平台行为不是违纪）；② `timeoutMs` 被改成 0 或 60000，偏离固定 120000；③ 交接落在轮中，registry 变了而本轮内联的 ids 没变 | ① 重跑固定 poll，不要试图从旧 cell 拼结果；② 原样敲固定片段，`timeoutMs` 不许改；③ 只在轮边界发起交接。三种都是**本轮作废重来，不要放宽 `sync` 校验** |
+| `ROUND INVALID` | 本轮 poll 不符合固定契约 | 本轮作废；恢复固定 JS，确认 `timeoutMs=120000`、targets 等于当前 watch-set，且交接只发生在轮边界，然后重跑。不要拼旧输出或放宽 `sync` 校验。 |
 | 广播了新 controller id，子线却仍发给旧的 | 子线用了记忆里的 id | 广播只用于唤醒闲着的线；回报路由的权威是 registry，子线每次回报前必须现读 |

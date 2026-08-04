@@ -19,7 +19,7 @@ Owner 写在 goal 里的目标、结束判据、执行授权边界与排除项�
 ## 每轮做什么
 
 1. 按 [poll-contract.md](poll-contract.md) 计算 runnable watch-set，再敲固定 JS 片段（`timeoutMs: 120000`；有 runnable node 时只覆盖 runnable node，watch-set 为空时覆盖全部 active child，只回一行短确认）。**那段 JS 要原样敲，不要"优化"它**——任何简化都会被 `sync` 的自检当场拦下并作废本轮。HEAD 仍由 `sync` 采集全部 active child。
-2. 跑 `ledger.py sync`，读那段紧凑摘要；其中 `session_age_h` 是判断是否触发 session 交接的测量信号。
+2. 跑 `ledger.py sync`，读那段紧凑摘要；当前 child session 的 [`compaction_count`](poll-contract.md#compaction_count) 是 compaction 次数与 Role A 阈值判断的唯一机械事实源。明显退化可以作为人工直接触发交接的证据，但不能据此改写计数。
 3. 跑 `ledger.py stall-check`，按退出码走：
    - `0` `OK` → 正常，按摘要决策
    - `0` `CHECK_HEARTBEAT` → 已到 `3/5` 或 `4/5`；直接 `read_thread` 看 active / working 线。确认具体、最新的工作心跳才执行 `ledger.py heartbeat --node <node> --evidence "<一句话>"`；重复等待文案、旧进展或仅有 active 状态都不算心跳，不重置。全员 idle 时不重置，`idle_nodes` 仍是独立派活信号。

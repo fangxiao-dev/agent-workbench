@@ -152,12 +152,6 @@ child compaction 的处置按 session-dispatch.md 执行：Role A catch-up；Rol
 不写进 goal，也不依赖聊天记忆。
 ```
 
-### 三条准入判据（决定什么能进 goal）
+### 维护边界
 
-1. **只保留"规避对 agent 有好处"的规则**，其余交给 skill。留下的三条（退出码 2 的二选一、`inactiveStatus`、seam 缺失）共同点是遵守都要多干活、规避都更省事，所以要把原文顶在脸上；其余规则规避没有收益，`SKILL.md` 与各 reference 里写清楚就够。
-
-2. **动态进展一律不进。** goal 是长期设定，不是进展记录。当前谁在等谁、HEAD 到哪、哪个 seam 交付了——全部从 registry / ledger / 任务包读。
-
-3. **一条纠正如果下次 coordination 还需要，它属于 skill，不属于 goal。**
-   - *本次专有*（这次的目标、这次的授权、这次不许碰的 WIP）→ 进 goal。
-   - *跨 coordination 仍成立*（建线格式、investigate→implement、不许当传声筒、某个 runner 该用哪个 CLI）→ **改对应的 skill 或文档，goal 里一个字都不写**。
+本页只保留 Owner 直接粘贴的稳定文本；动态进展与跨 coordination 规则分别留在 registry / ledger / 任务包和对应 skill 中，详细取舍见 [design-notes.md](references/design-notes.md)。

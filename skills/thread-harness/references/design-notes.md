@@ -200,6 +200,10 @@ role 段开头必须写明：*"你的使命是完成任务包，方式由 `/impl
 
 **为什么不另造中间态 handoff 卡片**：`$handoff-to-new-session` 原文即 *"a compact, complete initial prompt, **not a temporary handoff document**"*。交接材料就是 child 的首条 prompt 本身；再写一份临时卡片让主控转手，既违反被引用 skill 的约定，也把一个原子动作拆成两步。
 
+### 4.6 goal 的准入判据
+
+goal 只保留规避后会让 agent 少做工作的硬规则，以及本 coordination 专有的目标、结束判据、授权和排除项。动态进展从 registry、ledger 与任务包读取；跨 coordination 仍成立的纠正写回对应 skill，不重复塞进 goal。
+
 **为什么只在轮边界交接**：固定 poll 的 ids 是在轮次开头内联进 JS 的，轮中交接会让 registry 变而本轮 ids 不变，`sync` 的集合比对判 `ROUND INVALID`，白白作废一轮并污染读数 1。不放宽 `sync` 校验——它是整个设计里最重要的单点。
 
 **为什么档位要显式指定**：实测 `create_thread` 时显式给 `model` / `thinking` 是生效的，不给会落到平台默认。但它只决定起点——session 跑过多轮后档位会被平台自动降到 terra，这是 Codex 的机制，本 harness 不对抗它。后果是长跑的主控逐渐变钝，而主控读不到自己的 `turn_context`，所以 `session_age_h` 是唯一可用的代理信号。
@@ -373,3 +377,9 @@ skills/thread-harness/
 部分缓解：`polls[].id` 必须属于 registry children 且不重复——这能抓住返回内容与目标集合对不上的情况。
 
 **记录它是为了：如果第一轮真的观察到 decoy 类行为，说明威胁模型判断错了，那时要换的是整个校验层的位置（比如让子线也各自记账、交叉对账），而不是继续加正则。**
+
+### 9.6 其余已知边界
+
+- 坏行不自动截断、重写或猜测修复；`status` 的 partial 摘要只用于诊断，返回码 `6` 才是可信信号。
+- seam producer 可被后续行改写，`artifact` 是自由文本；当前 H4 只检查 ownership 是否存在，不校验交付语义。
+- dispatch 计数只认存在配对 output 的 `send_message_to_thread` / `create_thread` 调用，不追踪工具调用后的业务结果。

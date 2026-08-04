@@ -18,6 +18,12 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
+from rollout_compaction import (
+    RolloutCompactionError,
+    observe_compactions,
+    rollout_path_for_thread,
+)
+
 
 STATE_VALUES = {"working", "awaiting_seam", "awaiting_owner", "done"}
 STALL_LIMIT = 5
@@ -535,21 +541,54 @@ def session_age_text(registry: dict) -> str:
 
 def find_rollout(session_id: str) -> Path:
     root = Path(os.environ.get(SESSIONS_ROOT_ENV) or (Path.home() / ".codex" / "sessions"))
-    if not root.exists():
-        raise LedgerError(f"sessions root not found: {root}")
-    matches = []
-    for current_root, dirs, files in os.walk(root):
-        dirs[:] = [name for name in dirs if name not in {".git", "__pycache__"}]
-        for filename in files:
-            if filename.startswith("rollout-") and filename.endswith(".jsonl") and session_id in filename:
-                matches.append(Path(current_root) / filename)
-    if not matches:
+    try:
+        return rollout_path_for_thread(session_id, root)
+    except RolloutCompactionError as exc:
         raise LedgerError(
             f"rollout not found for session id {session_id} under {root}; "
             "controller may be running in ephemeral mode, which does not persist rollout"
-        )
-    matches.sort(key=lambda path: str(path))
-    return matches[-1]
+        ) from exc
+
+
+def update_compaction_observers(state: dict, active_children: list[dict]) -> None:
+    """更新 current child session 的增量 compaction 观测状态；缺 rollout 时保留未知。"""
+    sessions_root = Path(
+        os.environ.get(SESSIONS_ROOT_ENV) or (Path.home() / ".codex" / "sessions")
+    )
+    observers = state.get("compaction_observers")
+    if not isinstance(observers, dict):
+        observers = {}
+    for node in active_children:
+        session_id = node["session_id"]
+        previous = observers.get(session_id)
+        try:
+            observers[session_id] = observe_compactions(
+                session_id,
+                previous if isinstance(previous, dict) else None,
+                sessions_root,
+            )
+        except (OSError, RolloutCompactionError):
+            continue
+    state["compaction_observers"] = observers
+
+
+def compaction_count_text(registry: dict, state: dict) -> str:
+    """按 active child 的 current session 输出自 observer 基线后的 compaction 次数。"""
+    observers = state.get("compaction_observers")
+    if not isinstance(observers, dict):
+        observers = {}
+    counts = []
+    for entry in route_registry_entries(registry):
+        if entry["role"] != "child" or not entry["active"]:
+            continue
+        session_id = node_session_id(entry["node"])
+        observer = observers.get(session_id) if session_id else None
+        count = observer.get("observed_count") if isinstance(observer, dict) else None
+        counts.append((entry["name"], count if type(count) is int and count >= 0 else None))
+    return ", ".join(
+        f"{name}={count}" if count is not None else f"{name}=?"
+        for name, count in counts
+    ) or "-"
 
 
 def normalized_worktree(worktree: str) -> str:
@@ -1635,6 +1674,7 @@ def format_summary(
             f"advance_kinds:   {', '.join(f'{name}={kind}' for name, kind in sorted((classification.get('advance_kinds') or {}).items())) or '-'}",
             f"unchanged:       {', '.join(classification['unchanged']) or '-'}",
             f"session_age_h:   {session_age_text(registry or {})}",
+            f"compaction_count: {compaction_count_text(registry or {}, state)}",
             f"timedOut:        {str(bool(classification.get('timed_out'))).lower()}"
             + (" (timeout, no change)" if classification.get("timed_out_no_change") else ""),
             f"head_unavailable: {', '.join(classification.get('head_unavailable') or []) or '-'}",
@@ -1723,6 +1763,7 @@ def cmd_sync(args) -> int:
                 print(f"ROUND INVALID: poll snippet altered ({reason})")
             return 1
 
+        update_compaction_observers(state, active_children)
         latest_poll, latest_report = latest_progress_parts(args.coordination_id)
         poll_seq = next_seq(state, "next_poll_seq")
         rows, classification = classify_and_rows(
@@ -2208,6 +2249,10 @@ def format_status(
     unowned, malformed, stale_waiting_on = seams_waiting_counts(coordination_id)
     act = latest_act(coordination_id)
     halt = halted_act(coordination_id)
+    state = load_state(coordination_id)
+    observers = state.get("compaction_observers")
+    if not isinstance(observers, dict):
+        observers = {}
     node_lines = []
     for name in sorted(set(registry_names) | set(latest)):
         row = latest.get(name, {})
@@ -2215,9 +2260,13 @@ def format_status(
         lifecycle = "active" if registry_node and registry_node.get("active", True) else "retired"
         if not registry_node:
             lifecycle = "unregistered"
+        observer = observers.get(registry_node.get("session_id")) if registry_node else None
+        compactions = observer.get("observed_count") if isinstance(observer, dict) else None
+        compactions_text = str(compactions) if type(compactions) is int and compactions >= 0 else "?"
         node_lines.append(
             f"  {name}: lifecycle={lifecycle} state={row.get('state') or '-'} head={row.get('head') or '-'} "
-            f"turn={row.get('turn') or '-'} last_report_ts={row.get('last_report_ts') or '-'}"
+            f"turn={row.get('turn') or '-'} last_report_ts={row.get('last_report_ts') or '-'} "
+            f"compaction_count={compactions_text}"
         )
     pending_text = ", ".join(row.get("decision_id") for row in pending if row.get("decision_id")) or "-"
     act_text = "-"

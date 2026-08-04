@@ -141,7 +141,9 @@ halted 状态由 `acts.jsonl` 的最近 halt 与其 `halt_poll_seq` 判定：没
 
 ## sync-state.json
 
-`sync-state.json` 不是 append-only 账本；它是本地运行状态。当前字段包括 rollout offset、`next_poll_seq`、`next_act_seq`、`next_ledger_seq`、`dispatches_since_progress`、`docs_only_advances`、`last_must_act_seq`、invalid round 计数，以及 heartbeat reset 的 `stall_reset_seq`。本轮采用 runnable watch-set 兜底，不把未经证明的 cursor 当作状态级去重依据；HEAD 仍覆盖全部 active child。`ledger_seq` 用于消除同秒 report/dispatch 的顺序歧义；legacy 行缺失该字段时回退到时间戳判断。halt 行记录当时的 `halt_poll_seq`；`dispatch` / `escalate` 不会清除 halt。
+`sync-state.json` 不是 append-only 账本；它是本地运行状态。当前字段包括 controller rollout offset、按 child session id 保存的 `compaction_observers`、`next_poll_seq`、`next_act_seq`、`next_ledger_seq`、`dispatches_since_progress`、`docs_only_advances`、`last_must_act_seq`、invalid round 计数，以及 heartbeat reset 的 `stall_reset_seq`。每个 compaction observer 只保存 rollout path、byte offset、`observed_count` 和最后一次 `window_number/window_id`；首次观测在 EOF 建基线，后续只读取新增完整行，不递归扫描全量 sessions，也不修改四个 append-only JSONL。`compaction_count` 因而是 observer 建立后的可靠观测下界，不是平台历史总数。
+
+本轮采用 runnable watch-set 兜底，不把未经证明的 cursor 当作状态级去重依据；HEAD 仍覆盖全部 active child。`ledger_seq` 用于消除同秒 report/dispatch 的顺序歧义；legacy 行缺失该字段时回退到时间戳判断。halt 行记录当时的 `halt_poll_seq`；`dispatch` / `escalate` 不会清除 halt。
 
 `dispatches_since_progress` 只在 code 级 git HEAD 推进后清零；docs-only 推进只增加 `docs_only_advances`。推进分类按上一条已知 head 到当前 head 的 git 区间计算：区间内任一 commit 触及非 Markdown / `docs/` 路径即为 code，区间内全部 commit 都是文档才计 docs-only。首次观测没有旧 head 时退回单 commit 判断；区间不可判定时按 `unknown`，并保守视为 code 推进。
 
@@ -161,17 +163,3 @@ halted 状态由 `acts.jsonl` 的最近 halt 与其 `halt_poll_seq` 判定：没
 - 把坏行当成普通摘要尾项。任何坏行都必须先打印 `LEDGER INTEGRITY FAILED: <file>:<line> <reason>` 并返回 `6`；不能继续追加事实。
 - 在 `seams.jsonl` 里只写消费者，不写 `producer`。第一轮脚本只报 `seams_unowned` 数量，后续阶段会把无 producer 的 seam 作为阻断。
 - 在 `decisions.jsonl` 留下尚未上报的 `pending` 后继续普通轮询。`stall-check` 会优先返回 `MUST_ESCALATE`，broker 应上报 owner 并写 `act --escalate`。已上报但仍 pending 的决策会继续显示为 `pending_escalated`，但不再屏蔽停滞判定。
-
-## 实测记录
-
-行为的权威记录是可重跑的回归自检，不是贴在文档里会过期的输出：
-
-```powershell
-python skills/thread-harness/scripts/selftest.py
-```
-
-覆盖：`sync` 自检判据各自的失败路径（含 `text({pollCount:0})` 这种退化输出）、实际 ids 集合与 runnable watch-set 不一致的失败路径、投影 `n` 与实际 ids 数量不一致、`timedOut` 与 poll 字段完整性、陌生/重复 poll id、正常投影合并、`inactiveStatus` 归入 `idle_nodes` 且与 `unchanged` 分开、`awaiting_seam` / `awaiting_owner` / `done` 排除出阻塞 watch-set、全员 waiting 时不虚假等待、`polls[]` 缺 child 时仍为该 child 写 progress 并读取 head、`SYNC STALE` 错误信息含 path/bytes/mtime/scanned_lines、坏行/非法 `ledger_seq` rc=6 与 status 诊断、并发追加、report/dispatch 同秒反向顺序仍按 `ledger_seq` 排除已重新 waiting 的 producer、`report` 后 `state` / `waiting_on` 不被下一轮 `sync` 覆盖、陈旧 report 暴露为 `stale_reports` 且 stale waiting_on 不计入无主 seam、重复 `round` 时按追加顺序累计 `stall_streak`、默认 `5/5` 阈值与从 `3/5` 开始的 heartbeat reset、heartbeat 不修改 JSONL、多 commit 区间内 docs-only 与 code 推进区分、首次观测单 commit 推进分类、`act --dispatch` 留痕并同步形成 seam ownership、`act --halt` 留痕、halted 状态暴露与自动解除、`status` 无 sync 时可读、真实 git fixture 下 turn 变化不重置 `stall_streak`、`stall-check` 的 0/2/3 优先级、已上报 pending 不屏蔽 `MUST_ACT`、同秒 decision instance 重开、`decide --raise/--answer`、多值参数空格分隔、`seam` producer/consumer registry 校验、用法错误退 64。
-
-自检用 `THREAD_HARNESS_BROKER_ROOT` 与 `THREAD_HARNESS_SESSIONS_ROOT` 指向隔离目录，**不会碰生产运行时**。
-
-fixture 刻意手写、不复用 `ledger.py` 的解析逻辑——用被测代码自己的假设去造测试数据，测不出假设本身是错的。

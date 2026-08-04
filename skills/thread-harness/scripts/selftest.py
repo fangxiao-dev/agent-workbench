@@ -155,6 +155,33 @@ def rollout_path():
     return SESSIONS / f"rollout-2026-08-01T06-00-00-{CTRL}.jsonl"
 
 
+def child_rollout_path(node):
+    return SESSIONS / f"rollout-2026-08-01T06-00-00-{NODES[node]}.jsonl"
+
+
+def append_child_compaction(node, window_number):
+    path = child_rollout_path(node)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {
+            "timestamp": "2026-08-01T06:00:00.000Z",
+            "type": "compacted",
+            "payload": {
+                "window_number": window_number,
+                "window_id": f"{node}-window-{window_number}",
+            },
+        },
+        {
+            "timestamp": "2026-08-01T06:00:01.000Z",
+            "type": "event_msg",
+            "payload": {"type": "context_compacted"},
+        },
+    ]
+    with path.open("a", encoding="utf-8") as stream:
+        for row in rows:
+            stream.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
 def rollout_lines(call_args, printed_text, call_id, *, source_field="arguments"):
     call_payload = {"type": "custom_tool_call", "call_id": call_id, "name": "exec",
                     source_field: call_args}
@@ -1276,6 +1303,42 @@ after_missing = {str(path.relative_to(BROKER)) for path in BROKER.rglob("*")}
 fails += check("status registry 不存在时只报清晰错误且不创建父目录",
                rc == 1 and "registry not found" in out and before_missing == after_missing,
                out.strip())
+
+print("-" * 78)
+# --- compaction_count：child rollout 首次只建基线，之后按顶层 compacted 增量计数 ---
+write_fixture(CALL_OK, GOOD_PROJECTION)
+for node in ("alpha", "beta"):
+    child_rollout_path(node).touch()
+run("init", "--coordination-id", CID)
+rc1, out1 = run("sync", "--coordination-id", CID, "--round", "1")
+append_child_compaction("alpha", 1)
+append_wait(CALL_OK, GOOD_PROJECTION, call_id="compaction-round-2")
+rc2, out2 = run("sync", "--coordination-id", CID, "--round", "2")
+compaction_line = next(
+    (line for line in out2.splitlines() if line.startswith("compaction_count:")),
+    "",
+)
+fails += check(
+    "sync 摘要按 current child session 输出增量 compaction_count",
+    rc1 == 0 and rc2 == 0 and "alpha=1" in compaction_line and "beta=0" in compaction_line,
+    f"round1={out1.strip()} round2={out2.strip()}",
+)
+state_after_compaction = json.loads(
+    (BROKER / CID / "sync-state.json").read_text(encoding="utf-8")
+)
+alpha_observer = state_after_compaction.get("compaction_observers", {}).get(NODES["alpha"], {})
+fails += check(
+    "sync-state 按 session id 持久化 compaction observer",
+    alpha_observer.get("observed_count") == 1
+    and alpha_observer.get("last_window_id") == "alpha-window-1",
+    json.dumps(alpha_observer, ensure_ascii=False),
+)
+rc_status, out_status = run("status", "--coordination-id", CID)
+fails += check(
+    "status 按 current session 暴露已持久化的 compaction_count",
+    rc_status == 0 and "alpha:" in out_status and "compaction_count=1" in out_status,
+    out_status.strip(),
+)
 
 print("-" * 78)
 # --- session_age_h：独立构造时间、active/inactive/controller fixture ---

@@ -65,7 +65,7 @@ text(JSON.stringify({
    - `changed_nodes`：有新 head，需要读或推进。
    - `advance_kinds`：本轮 HEAD 推进类型，`docs` 不清零 dispatch 计数，`code` / `unknown` 会清零。
    - `unchanged`：本轮没有变化。
-   - `session_age_h`：只测量 active child 的 registry `updated_at` 距当前时间的小时数，按从大到小排列；缺失或不可解析显示为 `?`，不含 controller 和 inactive child。它是主控判断是否触发 session 交接的信号，但不影响退出码、`stall_streak` 或 halt 判定。
+   - `compaction_count`：当前 active child session 的 compaction 机械事实源；读取与阈值规则见下方 [`compaction_count`](#compaction_count) 契约。
    - `timedOut`：`true (timeout, no change)` 表示 wait 超时且没有 poll 内容，区别于被唤醒但无文本。
    - `head_unavailable`：这些 node 的 worktree/git HEAD 取不到；不要把它当成"无变化"。
    - `never_reported`：这些 node 从未通过 controller 验证的 H1 写入 state；用来判断 H1 是否真实遵守。
@@ -80,6 +80,10 @@ text(JSON.stringify({
     - `corrupt_ledger_lines`：JSONL 中无法解析的坏行数量；大于 0 时状态摘要只能作诊断，不能视为可信 current state。
 5. 执行 `python skills/thread-harness/scripts/ledger.py stall-check --registry <absolute-registry-json>`。
 6. 按退出码和输出标记决策。`CHECK_HEARTBEAT` 的退出码也是 `0`，但不能当普通 `OK` 略过。
+
+### compaction_count
+
+controller 只从本轮 `ledger.py sync` 摘要的 `compaction_count: <node>=<n>` 读取 current child session 的次数。Role A 的 `n` ≤3 时发送 catch-up，`n` >3 时 replacement；Role A 不自行取数。`?` 时 controller 直接核查，不得猜成 0。
 
 ## Session 路由
 
@@ -162,16 +166,6 @@ python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry
 
 多值参数（`--blocks` / `--consumers` / `--waiting-on`）**空格分隔和重复传都支持**：`--blocks alpha beta` 与 `--blocks alpha --blocks beta` 等价。
 
-## 回归自检
-
-改动 `ledger.py` 后跑：
-
-```powershell
-python skills/thread-harness/scripts/selftest.py
-```
-
-它用独立构造的 fixture 覆盖 `sync` 自检判据、`SYNC STALE` 的错误信息完整性、决策与停滞的退出码优先级、已上报 pending 不屏蔽 `MUST_ACT`、同 id 重新 raise 需要重新上报、`act --halt` 直到新的有效 poll seq 才恢复、默认 `5/5` 阈值、从 `3/5` 开始的 `CHECK_HEARTBEAT`、heartbeat reset 不修改 JSONL、`decide --raise/--answer`、多值参数空格分隔、controller 验证 H1 source session 与 HEAD 后代、`report` 状态不被 poll 覆盖、陈旧 report、重复 `round`、docs-only/code 推进分类、active/inactive child 过滤、只读 `status`、`act` 留痕、真实 git HEAD 停滞判断、用法错误退 64。**这份 fixture 刻意不复用 `ledger.py` 自身的解析逻辑**——用被测代码的假设去造测试数据，测不出假设本身是错的。（初版轮询契约就是这样漏掉了"rollout 只记录打印内容"这个事实。）
-
 ## 自检失败处理
 
 如果 `ledger.py sync` 输出：
@@ -203,10 +197,3 @@ SYNC STALE: rollout not flushed (path=<absolute-path>, bytes=<size>, mtime=<mtim
 ```
 
 表示 rollout 中还没有本轮 `wait_threads` 输出，或输出 payload 暂不可解析。broker 不得静默复用旧数据；应等待下一轮或重新执行固定片段后再跑 `sync`。
-
-## 已知限制
-
-- BLK-4 decoy 绕过 `validate_call`：rollout 只记录 exec 打印的内容，结构上无法证明实际传给 `wait_threads` 的参数是什么。放一个未使用的正确 `const ids=[...]` 再实际传 `targets: []` 能通过全部校验。这一层封不死。部分缓解是 `polls[].id` 必须属于 registry children。威胁模型上，本 harness 防的是长跑压力下逐步简化，不是主动伪造；decoy 需要写更多代码而非更少，不在退化路径上。
-- 坏行不会被自动截断、重写或猜测修复；`status` 的 partial 摘要只用于诊断，返回码 `6` 才是可信信号。
-- seam producer 被后续行改写、`artifact` 只是自由文本：第一轮 H4 只登记不校验语义。
-- 失败的 dispatch 调用与真实成功与否：当前只统计有配对 output 的调用，并要求 `arguments` 中出现 `tools.codex_app__send_message_to_thread` / `tools.codex_app__create_thread`；不做调用结果追踪。

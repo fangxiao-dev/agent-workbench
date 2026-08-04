@@ -24,7 +24,7 @@ goal 是最后一步。先用普通消息引导 controller 完成：
 2. 执行 `ledger.py init --registry <absolute-registry-json>`。
 3. 按 [session-dispatch.md](session-dispatch.md) 建立 child，并把返回的 session id 回填 registry。
 4. 执行 `ledger.py preflight --registry <absolute-registry-json>`；只有 `PREFLIGHT OK` 才能继续。
-5. 按 [poll-contract.md](poll-contract.md) 跑首轮 poll，再执行 `ledger.py sync`；确认 `valid=yes` 且 `head_unavailable` 为空。
+5. 按 [poll-contract.md](poll-contract.md) 跑首轮 poll，再执行 `ledger.py sync`；确认 `valid=yes` 且 `head_unavailable` 为空。该轮同时在各 current child rollout 的 EOF 建立 compaction observer 基线；可用项应显示 `compaction_count=0`，`?` 表示本机 rollout 不可用，后续不得把它猜成 0。
 
 五步通过后，Owner 才把 [goal-prompt.md](../goal-prompt.md) 的 Role C goal 文本贴入 goal 框。goal 不内联 session id；controller 每轮从 registry 重新读取当前路由。
 
