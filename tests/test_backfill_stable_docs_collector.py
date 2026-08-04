@@ -106,12 +106,12 @@ class CollectorInventoryTest(unittest.TestCase):
             (path / ".impl-package").mkdir()
             digest = hashlib.sha256(gate_text.encode("utf-8")).hexdigest()
             (path / ".impl-package/revision-bindings.json").write_text(
-                json.dumps({"contractVersion": "3.2", "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}}, "bindings": []}),
+                json.dumps({"contractVersion": "3.3", "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}}, "bindings": []}),
                 encoding="utf-8",
             )
             (path / ".impl-package/runtime-state.json").write_text(
                 json.dumps({
-                    "contractVersion": "3.2",
+                    "contractVersion": "3.3",
                     "packageId": package,
                     "tasks": [],
                     "tickets": [],
@@ -255,7 +255,7 @@ class GateRecognitionCurrentContractTest(unittest.TestCase):
             sidecar.mkdir()
             (package / "plan.md").write_text("# Plan\n", encoding="utf-8")
             (sidecar / "revision-bindings.json").write_text(
-                json.dumps({"contractVersion": "3.2", "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}}, "bindings": []}),
+                json.dumps({"contractVersion": "3.3", "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}}, "bindings": []}),
                 encoding="utf-8",
             )
             if isinstance(runtime, str):
@@ -283,7 +283,7 @@ class GateRecognitionCurrentContractTest(unittest.TestCase):
     def _runtime(gate_text: str, *, entry_id: str = "initial-G1", verdict: str = "pass", digest: str | None = None) -> dict[str, object]:
         digest = digest or hashlib.sha256((gate_text.rstrip("\n") + "\n").encode("utf-8")).hexdigest()
         return {
-            "contractVersion": "3.2",
+            "contractVersion": "3.3",
             "packageId": "fixture",
             "gate": {
                 "allocations": [{"operationId": "op-1", "attempt": "initial", "number": 1, "entryId": "initial-G1"}],
@@ -328,7 +328,7 @@ class GateRecognitionCurrentContractTest(unittest.TestCase):
         empty_operation = self._runtime(valid)
         empty_operation["gate"]["allocations"][0]["operationId"] = ""  # type: ignore[index]
         cases: dict[str, object] = {
-            "missing-entry": {"contractVersion": "3.2", "gate": {"entries": []}},
+            "missing-entry": {"contractVersion": "3.3", "gate": {"entries": []}},
             "missing-hash": missing_hash,
             "missing-id": missing_id,
             "missing-verdict": missing_verdict,

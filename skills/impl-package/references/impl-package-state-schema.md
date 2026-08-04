@@ -46,9 +46,9 @@ ticket record 的 canonical shape 同样为 `{attempt,id,state,evidence}`，四�
 
 ### Attempt Execution Record ledger
 
-`execution-records/<attempt>.md` 是 package/Attempt 公共层的 sealed、append-only Markdown ledger；`execution-records/index.md` 与根 `progress.md` 是 machine-owned projection。ER 不属于 Ticket、Task、AC 或 seam。每条 record 使用 Attempt-local `<attempt>-ER-<n>` ID，purpose 只能是 `checkpoint`、`judgment` 或 `other`；routine state transition、普通 validation PASS、artifact/hash 注册等可从 canonical source 推导的事实不写入 ER。`checkpoint` 可按 subject 自动 supersede，只有显式 `allowsDownstreamImplementation=true` 且 downstream 候选通过 CLI 校验时才支持 implementation readiness，不能释放 acceptance/release。终结 gate 后 Attempt ledger 冻结。
+`execution-records/<attempt>.md` 是 package/Attempt 公共层的 sealed、append-only Markdown ledger；每个 Attempt 只有一个 ledger，不按 Ticket、Task、owning stage 分片，也不 rollover。`execution-records/index.md` 与根 `progress.md` 是 machine-owned projection。ER 不属于 Ticket、Task、AC 或 seam。每条 record 使用 Attempt-local `<attempt>-ER-<n>` ID，purpose 只能是 `checkpoint` 或 `judgment`；routine state transition、普通 validation PASS、artifact/hash 注册等可从 canonical source 推导的事实不写入 ER。`checkpoint` 只按 subject 自动 supersede；revision set 不再匹配，或 subject runtime state 明确为 `NEEDS-REVALIDATION | SUPERSEDED` 时标为 stale。ER 不推导 implementation readiness，也不释放 dependency。终结 gate 后 Attempt ledger 冻结。
 
-写入只走：`er-add` 从 stdin 接收结构化 JSON，CLI 推导 Attempt、路径、ID、关系、sealed content hash、index 和 progress；相同 payload 幂等返回已有 ID。agent 不手工编辑 ER、index 或 progress，也不负责查找旧 checkpoint。
+写入只走：`er-add` 从 stdin 接收结构化 JSON，CLI 推导 Attempt、路径、ID、subject freshness、sealed content hash、index 和 progress；相同 payload 幂等返回已有 ID。agent 不手工编辑 ER、index 或 progress，也不负责查找旧 checkpoint。
 
 ### 3.2 Artifact chain
 
@@ -118,7 +118,7 @@ ER 的 Revision set 表示该 ER 写入时的 current D/S/P set。plan header �
 
 没有 `gate.md` 时 `hasGate=false`、`gateRecognition=null`、`gateResolution=null`；已有空 ledger 模板、且 runtime gate 没有 allocation/entry 时 `hasGate=true` 但其余结果相同。两者都表示 attempt 尚无 verdict，不是额外的 recognition result，也不默认等于人工异常。若某个消费动作本身要求 terminal gate，应由该动作正常判定未满足前提。
 
-这三类是当前 contract 的消费结果，不是新的 package lifecycle。缺失或低于当前 `contractVersion="3.2"` 的 package 必须先走 contract preflight，不能由 gate resolver 读取旧 heading 或旧 schema 猜测；backfill、retirement 与 verify 可以投影结果，但不得把 `mismatch` 降级成成功，也不得把历史 indexed verdict 投影到新的 current revision set。inventory、audit 与 verify 输出统一携带 `contractVersion="3.2"`；旧字段不再作为内部判断依据。识别可信度与 `_pending.md` 引用资格正交，referenced package 的 mismatch/manual 不得被抑制。
+这三类是当前 contract 的消费结果，不是新的 package lifecycle。缺失或低于当前 `contractVersion="3.3"` 的 package 必须先走 contract preflight，不能由 gate resolver 读取旧 heading 或旧 schema 猜测；backfill、retirement 与 verify 可以投影结果，但不得把 `mismatch` 降级成成功，也不得把历史 indexed verdict 投影到新的 current revision set。Stable Docs Backfill 的 inventory/audit/verify 输出合同仍独立使用 `contractVersion="3.2"`；其中 package row 的 `currentContractVersion` 只转发 canonical engine 值，canonical 值不可用时为 `null`。旧 package 字段不再作为内部判断依据。识别可信度与 `_pending.md` 引用资格正交，referenced package 的 mismatch/manual 不得被抑制。
 
 ## 7. Current contract 与升级
 
@@ -126,7 +126,7 @@ package 的 canonical 版本位于 `.impl-package/runtime-state.json` 顶层 `co
 
 升级是 agent-owned 的直接重塑动作：只在 preflight 判定 `upgradeRequired` 时读取 [`../assets/contract-revision-history.md`](../assets/contract-revision-history.md)，结合最新模板和实际内容改写当前任务包；不生成 migration ledger、不保存旧 schema 副本、不提供运行时 `migrate` 命令。改写后必须重新执行 current contract validate，成功后才能进入 stage 或 backfill。
 
-## 8. Current CLI contract (contract 3.2)
+## 8. Current CLI contract (contract 3.3)
 
 单文件、Python 标准库、显式 package path：
 
@@ -156,13 +156,13 @@ impl_package_apply.py sync-working-unit --package <path> --repo <owner/repositor
 
 `publish-plan` 只允许 fresh clearance、精确 owner authorization、无 unresolved blocker 且 `Composition.tickets=true` 的 planning-only bundle。它复用本 state engine，不手写 sidecar：Ticket publication、revision registration、projection refresh 与最终汇总验证属于一个带 transient journal 的本地事务；失败自动恢复并校验原始 bytes。成功只输出 `APPLIED`，失败只输出明确 `BLOCKER`。`sync-working-unit` 只从 working-tree/committed package state 生成确定性 PR/Issue Markdown 摘要，不执行 commit、push 或 GitHub 写入。
 
-`er-add` 是执行历史的唯一主写入入口：payload 只声明 purpose、可选 subject、title、content、checkpoint nextAction 与显式 downstream；脚本推导 current Attempt、ER ID、ledger、supersede、index 与 progress。命令可以增加纯输出选项，但不得静默推断 package root、previous state、editorial judgment 或 verdict reason。
+`er-add` 是执行历史的唯一主写入入口：payload 只声明 `purpose=checkpoint|judgment`、可选 subject、title、content，以及 checkpoint 的 nextAction；脚本推导 current Attempt、ER ID、ledger、按 subject supersede、index 与 progress。命令可以增加纯输出选项，但不得静默推断 package root、previous state、readiness、editorial judgment 或 verdict reason。
 
 当同一 semantic revision 需要同时切换多个当前 artifact（例如 post-gate patch 的 D/S 与新 attempt P1）时，使用 `register-revisions` 做一次候选 state 校验与 revision sidecar 原子替换；它不改变 exact-blob、plan-contract-v1、append-only 或 projection 约束，也不接受手工 JSON。命令会在候选 revision state 上预置 earned runtime records 并随后刷新 projection，但 revision sidecar、runtime-state 与 Markdown 不宣称跨文件事务；中断或部分写入必须由 `contract-status` / `validate` 发现。单个 artifact 的正常首次登记仍可使用 `register-revision`。
 
 `register-revisions` 默认在写入后执行 working-tree validation；`publish-plan` 在自身已完成 Ticket/AC/DAG preflight 后以编排模式调用同一 API，暂缓这一次内部 validation，待 Ticket、sidecar 与 projection 全部写入后执行唯一一轮 final summary validation。普通 state CLI 调用保持默认验证行为。
 
-CLI 的数据策略来自 skill-owned [`../assets/impl-package-state-config.json`](../assets/impl-package-state-config.json)。配置只承载 vocabulary、artifact discovery、字段及 gate heading/revision-set grammar（含 `revisionSetFieldPattern`）、marker 名称与 projection format；脚本自动按自身 skill 位置加载，不接受调用方任意覆盖 canonical policy。配置和 package contract 都使用字符串 `contractVersion`，当前为 `"3.2"`；对 placeholder、capture group 与单行 heading 范围 fail closed。完整 gate entry span、append-only、identity/content binding、active backward chain、CAS、package-local path、HEAD/worktree context 与 earned-artifact bijection 保持为代码内不可配置不变量。
+CLI 的数据策略来自 skill-owned [`../assets/impl-package-state-config.json`](../assets/impl-package-state-config.json)。配置只承载 vocabulary、artifact discovery、字段及 gate heading/revision-set grammar（含 `revisionSetFieldPattern`）、marker 名称与 projection format；脚本自动按自身 skill 位置加载，不接受调用方任意覆盖 canonical policy。配置和 package contract 都使用字符串 `contractVersion`，当前为 `"3.3"`；对 placeholder、capture group 与单行 heading 范围 fail closed。完整 gate entry span、append-only、identity/content binding、active backward chain、CAS、package-local path、HEAD/worktree context 与 earned-artifact bijection 保持为代码内不可配置不变量。
 
 当前 artifact discovery 优先读取 `decision.md`；lightweight Decision 可由 `spec.md` 承载 D revision，但不得兼容读取 `design.md`。package 级共享发现只使用可选 `execution-findings.md`。`investigations/` 不属于 discovery、runtime state、revision binding 或 projection surface；目录不存在是正常状态，只有真实调查材料产生时才创建。
 
@@ -175,4 +175,4 @@ CLI 的数据策略来自 skill-owned [`../assets/impl-package-state-config.json
 - projection marker/allowlist 明确，marker 外 diff 不能自动 rebind。
 - gate index 绑定完整 entry，reserve/finalize 分离，mismatch 进入 manual。
 - revision/artifact/gate 历史 append-only；task/ticket 只存 current + last evidence，未复制 transition ledger。
-- fixtures 覆盖 current contract、upgradeRequired、unsupportedFuture、损坏/部分写入、projection drift、idempotence、stale expectation、含空格路径、CRLF/LF 和 gate 三类识别结果；并发写 fixture 只验证 atomic replace 不产生半截 JSON，不宣称 lost-update protection；DATEV 用作真实 3.2 演练。
+- fixtures 覆盖 current contract、3.2 `upgradeRequired`、unsupportedFuture、损坏/部分写入、projection drift、idempotence、stale expectation、含空格路径、CRLF/LF 和 gate 三类识别结果；并发写 fixture 只验证 atomic replace 不产生半截 JSON，不宣称 lost-update protection。

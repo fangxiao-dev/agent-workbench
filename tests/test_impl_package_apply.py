@@ -142,8 +142,8 @@ def ticket_text(ticket_id: str, dependencies: str) -> str:
         f"{dependencies}\n\n"
         "## 运行时验收状态（Runtime Acceptance Status）\n\n"
         "<!-- impl-package:projection runtime-state begin -->\n"
-        "- 值：[unrecorded]\n"
-        "- 直接证据：[unrecorded]\n"
+        "- 值：UNRECORDED\n"
+        "- 直接证据：none（Draft 尚无 runtime record）\n"
         "<!-- impl-package:projection runtime-state end -->\n"
     )
 
@@ -219,6 +219,10 @@ class PublishPlanApplyTest(unittest.TestCase):
             init_repo(repo)
             package = write_package(repo)
             ledger, authorization = prepare_authorized_review(repo, package, root / "review-runtime")
+            draft_runtime = json.loads((package / ".impl-package/runtime-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(draft_runtime["tickets"], [])
+            for path in sorted((package / "tickets").glob("*.md")):
+                self.assertIn("- 值：UNRECORDED", path.read_text(encoding="utf-8"))
 
             result = run_cli(APPLY_SCRIPT, *apply_args(package, ledger, authorization), check=False)
 
@@ -233,6 +237,7 @@ class PublishPlanApplyTest(unittest.TestCase):
             self.assertEqual(revisions["current"]["attempt"]["revision"], "P1")
             runtime = json.loads((package / ".impl-package/runtime-state.json").read_text(encoding="utf-8"))
             self.assertEqual({row["id"] for row in runtime["tickets"]}, {"TK-1", "TK-2"})
+            self.assertEqual({row["state"] for row in runtime["tickets"]}, {"PENDING"})
             self.assertEqual({row["id"] for row in runtime["tasks"]}, {"T1", "T2"})
             self.assertFalse((package / ".impl-package/publish-plan-transaction.json").exists())
             self.assertFalse((package / ".impl-package/registration-transaction.json").exists())

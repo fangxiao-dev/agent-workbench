@@ -1,6 +1,6 @@
 ---
 target: skills/impl-package
-updated: 2026-08-02
+updated: 2026-08-04
 ---
 
 ## 原则
@@ -15,14 +15,10 @@ updated: 2026-08-02
 - [待验证] exact-blob 只保护 contract 语义而非排版噪声：可证明零语义影响的 editorial correction 更新同 alias binding evidence；无法证明时保守升级 revision 与 Gate。（证据: R5）
 - [待验证] 优化优先增加可跨场景复用的判断约束，不以单一案例引入分类法、表格或新 artifact；只有现有语言无法表达真实高影响差异时才增加结构。（证据: R6）
 - [待验证] 除真正的权限、风险或 canonical 边界外，不用反复声明“本 skill 不做什么”充当正文；应直接说明 skill 的审查/路由意图、判断启发式和产出。（证据: R9）
-- [待验证] Ticket 的恢复上下文与 Ticket 本身共置：顶部只保留 Phase、既有 runtime Status 投影和唯一 Next，末尾只在阶段、阻塞或交接事实实质变化时追加 Progress；不新增 sidecar、checkpoint 编号、同步器或逐命令流水账。（证据: R10）
+- [待验证] Ticket 只承载验收合同与 machine-owned acceptance status；package `progress.md` 只投影可靠状态、显式 blocker、checkpoint 与 handoff/ER 指针，不推导 dispatch readiness。Task 只在真实交接条件下创建 `Tn-handoff.md`。（证据: R10、R11）
+- [待验证] ER 每 Attempt 一个 append-only ledger，不按 owning stage 分片或 rollover；purpose 收敛为 `checkpoint | judgment`，checkpoint 只支持恢复上下文，不承担 downstream machine authorization。（证据: R11）
 
 ## 决策记录（滚动，最近 ≤5 轮）
-
-### R6 · 2026-07-16
-
-- 否决「输入角色分类」— 用户原话：太复杂、太 specific；优化应面向通用的方法论和约束。
-- 采纳「交付路径与验证路径不得混同」— 在既有 Decision Gate 增加一条通用判断约束，避免为单一案例新增分类法、表格或 artifact。
 
 ### R7 · 2026-07-17
 
@@ -41,4 +37,10 @@ updated: 2026-08-02
 
 ### R10 · 2026-08-02
 
-- 采纳「Ticket 内最小恢复记录」— 用户确认 Phase、Status、Next 放在 Ticket 顶部，末尾追加 Progress；退一步审视后明确否决 YAML frontmatter、独立 checkpoint ID、重复 acceptance 计数、逐 bounded-task 记录和 Ticket↔sidecar 同步器，目标只是让新 session 直接知道做到哪里、剩什么和下一步，避免重复 investigation。
+- **Superseded（2026-08-04）：**Ticket 内最小恢复摘要已被 package 统一 projection 取代；保留“不新增同步器或逐命令流水账”的减法约束。
+
+### R11 · 2026-08-04
+
+- 采纳「状态与指针恢复」— Ticket 只保留验收合同/status，Task 仅在真实交接时写 handoff；`progress.md` 不承担自动 dispatch 推导。
+- 采纳「单 Attempt ER」— 每个 Attempt 一个 ledger，不做 stage segmentation 或 rollover；purpose 只保留 checkpoint/judgment，checkpoint 只支持恢复。
+- 采纳「agent-owned reshape」— 3.2 package 直接按 current contract 重塑并重建 projection，不新增 migration command、legacy parser 或迁移 ledger。

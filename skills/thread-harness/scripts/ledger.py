@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+from contextlib import contextmanager
 import json
 import os
 import re
@@ -12,13 +13,14 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
 
 STATE_VALUES = {"working", "awaiting_seam", "awaiting_owner", "done"}
-DEFAULT_STALL_LIMIT = 5
+STALL_LIMIT = 5
 HEARTBEAT_LEAD_ROUNDS = 2
 KNOWN_WORKING_STATUSES = {
     "idle",
@@ -40,6 +42,12 @@ BROKER_ROOT_ENV = "THREAD_HARNESS_BROKER_ROOT"
 PREFLIGHT_CHILD_LIMIT = 8
 PREFLIGHT_RUNTIME_FILES = ("progress.jsonl", "seams.jsonl", "decisions.jsonl", "acts.jsonl")
 IDLE_STATUS_VALUES = {"idle", "inactive", "notloaded", "not_loaded"}
+LEDGER_FILES = PREFLIGHT_RUNTIME_FILES
+LEDGER_INTEGRITY_FAILED = 6
+NON_RUNNABLE_STATES = {"awaiting_seam", "awaiting_owner", "done"}
+INTEGRITY_GUARDED_COMMANDS = {
+    "sync", "stall-check", "report", "seam", "decide", "act", "heartbeat", "status", "preflight"
+}
 
 
 PROGRESS_ROOT = Path(__file__).resolve().parents[3] / ".progress-record"
@@ -73,6 +81,16 @@ class LedgerError(Exception):
 
 class UsageError(Exception):
     pass
+
+
+class LedgerIntegrityError(LedgerError):
+    def __init__(self, issues: list[tuple[str, int, str]]):
+        self.issues = issues
+        super().__init__("ledger integrity failed")
+
+
+def valid_ledger_seq(value) -> bool:
+    return type(value) is int and value >= 1
 
 
 def now_local() -> str:
@@ -142,37 +160,128 @@ def jsonl_path(coordination_id: str, name: str) -> Path:
 def ensure_runtime(coordination_id: str) -> Path:
     root = runtime_dir(coordination_id)
     root.mkdir(parents=True, exist_ok=True)
-    for name in ("progress.jsonl", "seams.jsonl", "decisions.jsonl", "acts.jsonl"):
+    for name in LEDGER_FILES:
         jsonl_path(coordination_id, name).touch(exist_ok=True)
     return root
 
 
 def append_jsonl(path: Path, row: dict) -> None:
+    """Append one complete JSONL row and make it durable.
+
+    Coordination serialization is provided by ``coordination_write_lock``.  This
+    lower-level helper deliberately only owns the bytes/write/fsync contract so
+    multi-file commands can keep all appends inside one lock.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8", newline="\n") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+    data = (json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+    fd = os.open(str(path), os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o666)
+    try:
+        offset = 0
+        while offset < len(data):
+            written = os.write(fd, data[offset:])
+            if written <= 0:
+                raise LedgerError(f"partial ledger write: {path.name}")
+            offset += written
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+@contextmanager
+def coordination_write_lock(coordination_id: str):
+    """Serialize all ledger mutations for one coordination across processes."""
+    root = runtime_dir(coordination_id)
+    root.mkdir(parents=True, exist_ok=True)
+    lock_path = root / ".ledger.write.lock"
+    with lock_path.open("a+b") as lock_file:
+        if lock_file.seek(0, os.SEEK_END) == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        lock_file.seek(0)
+        if os.name == "nt":
+            import msvcrt
+
+            while True:
+                try:
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    time.sleep(0.01)
+                    lock_file.seek(0)
+            try:
+                yield
+            finally:
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def scan_jsonl(path: Path) -> tuple[list[dict], list[tuple[str, int, str]]]:
+    rows = []
+    issues = []
+    if not path.exists():
+        return rows, issues
+    try:
+        with path.open("rb") as fh:
+            for line_no, raw in enumerate(fh, 1):
+                if not raw.endswith(b"\n"):
+                    issues.append((path.name, line_no, "truncated_line"))
+                try:
+                    line = raw.decode("utf-8").strip()
+                except UnicodeDecodeError:
+                    issues.append((path.name, line_no, "invalid_utf8"))
+                    continue
+                if not line:
+                    issues.append((path.name, line_no, "empty_line"))
+                    continue
+                try:
+                    value = json.loads(line)
+                except json.JSONDecodeError:
+                    issues.append((path.name, line_no, "invalid_json"))
+                    continue
+                if not isinstance(value, dict):
+                    issues.append((path.name, line_no, "row_not_object"))
+                    continue
+                if "ledger_seq" in value and not valid_ledger_seq(value.get("ledger_seq")):
+                    issues.append((path.name, line_no, "invalid_ledger_seq"))
+                if raw.endswith(b"\n"):
+                    rows.append(value)
+    except OSError as exc:
+        issues.append((path.name, 0, f"unreadable:{exc.__class__.__name__}"))
+    return rows, issues
+
+
+def ledger_integrity_issues(coordination_id: str) -> list[tuple[str, int, str]]:
+    issues = []
+    for name in LEDGER_FILES:
+        _, file_issues = scan_jsonl(jsonl_path(coordination_id, name))
+        issues.extend(file_issues)
+    return issues
+
+
+def print_integrity_failure(issues: list[tuple[str, int, str]]) -> None:
+    for index, (name, line_no, reason) in enumerate(issues):
+        prefix = "LEDGER INTEGRITY FAILED" if index == 0 else "  also"
+        location = f"{name}:{line_no}" if line_no else name
+        print(f"{prefix}: {location} {reason}")
+
+
+def assert_ledger_integrity(coordination_id: str) -> None:
+    issues = ledger_integrity_issues(coordination_id)
+    if issues:
+        raise LedgerIntegrityError(issues)
 
 
 def read_jsonl_with_corrupt(path: Path) -> tuple[list[dict], int]:
-    rows = []
-    corrupt = 0
-    if not path.exists():
-        return rows, corrupt
-    with path.open("r", encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                value = json.loads(line)
-            except json.JSONDecodeError:
-                corrupt += 1
-                continue
-            if isinstance(value, dict):
-                rows.append(value)
-            else:
-                corrupt += 1
-    return rows, corrupt
+    rows, issues = scan_jsonl(path)
+    return rows, len(issues)
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -180,10 +289,7 @@ def read_jsonl(path: Path) -> list[dict]:
 
 
 def corrupt_ledger_lines(coordination_id: str) -> int:
-    return sum(
-        read_jsonl_with_corrupt(jsonl_path(coordination_id, name))[1]
-        for name in ("progress.jsonl", "seams.jsonl", "decisions.jsonl", "acts.jsonl")
-    )
+    return len(ledger_integrity_issues(coordination_id))
 
 
 def load_state(coordination_id: str) -> dict:
@@ -206,6 +312,37 @@ def next_seq(state: dict, key: str) -> int:
     seq = int(state.get(key) or 0) + 1
     state[key] = seq
     return seq
+
+
+def next_ledger_seq(coordination_id: str, state: dict) -> int:
+    try:
+        persisted_seq = int(state.get("next_ledger_seq") or 0)
+    except (TypeError, ValueError):
+        persisted_seq = 0
+    observed_seq = max(
+        (
+            row.get("ledger_seq")
+            for name in LEDGER_FILES
+            for row in read_jsonl(jsonl_path(coordination_id, name))
+            if valid_ledger_seq(row.get("ledger_seq"))
+        ),
+        default=0,
+    )
+    seq = max(persisted_seq, observed_seq) + 1
+    state["next_ledger_seq"] = seq
+    return seq
+
+
+def ledger_event_after(candidate: dict, baseline: dict) -> bool:
+    """Compare new rows by coordination order, with a legacy timestamp fallback."""
+    candidate_seq = candidate.get("ledger_seq")
+    baseline_seq = baseline.get("ledger_seq")
+    if (
+        valid_ledger_seq(candidate_seq)
+        and valid_ledger_seq(baseline_seq)
+    ):
+        return candidate_seq > baseline_seq
+    return ts_not_earlier(candidate.get("ts"), baseline.get("ts"))
 
 
 def load_registry(coordination_id: str) -> dict:
@@ -709,15 +846,34 @@ def stringify(value) -> str:
 
 
 def tool_call_source_text(payload: dict, item: dict) -> str:
-    """Read exec source from legacy `arguments` or modern `input` fields."""
+    """Read only the real shell command from legacy or modern tool payloads."""
+    def command_text(value) -> str:
+        if isinstance(value, dict):
+            command = value.get("command")
+            return command if isinstance(command, str) else ""
+        if not isinstance(value, str):
+            return stringify(value)
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return value
+        if isinstance(parsed, dict):
+            command = parsed.get("command")
+            return command if isinstance(command, str) else ""
+        return parsed if isinstance(parsed, str) else value
+
     for container in (payload, item):
         if not isinstance(container, dict):
             continue
-        if "arguments" in container:
-            return stringify(container.get("arguments"))
-        if "input" in container:
-            return stringify(container.get("input"))
+        for key in ("arguments", "input"):
+            if key not in container:
+                continue
+            return command_text(container.get(key))
     return ""
+
+
+def is_shell_exec_call(payload: dict, item: dict) -> bool:
+    return (payload.get("name") or item.get("name")) == "exec"
 
 
 def read_rollout_events(path: Path, offset: int) -> tuple[list[dict], int, int]:
@@ -757,6 +913,8 @@ def latest_wait_round(events: list[dict]) -> tuple[dict | None, dict | None]:
         if not call_id:
             continue
         if item_type == "custom_tool_call":
+            if not is_shell_exec_call(payload, item):
+                continue
             text = tool_call_source_text(payload, item)
             if "codex_app__wait_threads" in text:
                 calls[call_id] = {"call_id": call_id, "arguments": text}
@@ -784,6 +942,8 @@ def count_dispatch_calls(events: list[dict]) -> int:
         if not call_id:
             continue
         if item_type == "custom_tool_call":
+            if not is_shell_exec_call(payload, item):
+                continue
             text = tool_call_source_text(payload, item)
             if any(needle in text for needle in needles):
                 calls.append(call_id)
@@ -1210,6 +1370,39 @@ def latest_progress(coordination_id: str) -> dict:
     return latest
 
 
+def runnable_watch_nodes(coordination_id: str, active_children: list[dict]) -> list[dict]:
+    """Return the active children that still need a blocking wait.
+
+    A report-backed seam/owner wait or completed node is already waiting on an
+    explicit controller/Owner action.  It must remain in HEAD collection and
+    progress projection, but it must not keep waking a fixed blocking wait.
+    A dispatch recorded after the report makes that producer runnable again.
+    """
+    latest = latest_progress(coordination_id)
+    _, latest_report = latest_progress_parts(coordination_id)
+    stale_nodes = stale_report_nodes(coordination_id)
+    dispatched_nodes = set()
+    for act in read_jsonl(jsonl_path(coordination_id, "acts.jsonl")):
+        producer = act.get("producer")
+        if act.get("kind") != "dispatch" or not producer:
+            continue
+        report = latest_report.get(producer)
+        if not report or ledger_event_after(act, report):
+            dispatched_nodes.add(producer)
+    runnable = []
+    for node in active_children:
+        name = node["name"]
+        state = latest.get(name, {}).get("state")
+        if (
+            name not in latest_report
+            or name in stale_nodes
+            or name in dispatched_nodes
+            or state not in NON_RUNNABLE_STATES
+        ):
+            runnable.append(node)
+    return runnable
+
+
 def pending_decisions(coordination_id: str) -> list[dict]:
     status_by_id = {}
     for row in read_jsonl(jsonl_path(coordination_id, "decisions.jsonl")):
@@ -1233,13 +1426,26 @@ def pending_escalation_groups(coordination_id: str) -> tuple[list[dict], list[di
     already_escalated = []
     for decision in pending_decisions(coordination_id):
         decision_id = decision.get("decision_id")
-        raise_ts = decision.get("ts")
-        escalated = any(
-            row.get("kind") == "escalate"
-            and row.get("decision_id") == decision_id
-            and ts_not_earlier(row.get("ts"), raise_ts)
-            for row in acts
-        )
+        decision_instance_id = decision.get("decision_instance_id")
+        if isinstance(decision_instance_id, str) and decision_instance_id:
+            escalated = any(
+                row.get("kind") == "escalate"
+                and row.get("decision_id") == decision_id
+                and row.get("decision_instance_id") == decision_instance_id
+                for row in acts
+            )
+        else:
+            # Legacy rows have no instance id.  Keep the old timestamp fallback
+            # only for legacy raise/escalate rows; a newer instance must not
+            # accidentally mask a legacy pending record.
+            raise_ts = decision.get("ts")
+            escalated = any(
+                row.get("kind") == "escalate"
+                and row.get("decision_id") == decision_id
+                and not row.get("decision_instance_id")
+                and ts_not_earlier(row.get("ts"), raise_ts)
+                for row in acts
+            )
         if escalated:
             already_escalated.append(decision)
         else:
@@ -1280,6 +1486,14 @@ def last_must_act_answered(coordination_id: str) -> bool:
         if isinstance(seq, int) and seq > last_seq:
             return True
     return False
+
+
+def canonical_seam_id(value: str) -> str:
+    """Accept a bare ID or waiting_on-style seam:<id>, and return the bare ID."""
+    seam_id = value.removeprefix("seam:")
+    if not seam_id or seam_id.startswith("seam:"):
+        raise UsageError("seam ID must be <id> or seam:<id>")
+    return seam_id
 
 
 def seam_producers(coordination_id: str) -> dict:
@@ -1398,7 +1612,6 @@ def format_summary(
     offset: int,
     classification: dict,
     coordination_id: str,
-    streak_limit: int,
     registry: dict | None = None,
 ) -> str:
     changed = classification["changed_nodes"]
@@ -1416,6 +1629,7 @@ def format_summary(
     return "\n".join(
         [
             f"ROUND {round_no}  valid={'yes' if valid else 'no'}  offset={offset}",
+            f"poll_targets:    {', '.join(classification.get('watch_nodes') or []) or '-'}",
             f"idle_nodes:      {', '.join(classification['idle_nodes']) or '-'}",
             f"changed_nodes:   {changed_text}",
             f"advance_kinds:   {', '.join(f'{name}={kind}' for name, kind in sorted((classification.get('advance_kinds') or {}).items())) or '-'}",
@@ -1428,7 +1642,7 @@ def format_summary(
             f"stale_reports:   {', '.join(sorted(stale_report_nodes(coordination_id))) or '-'}",
             f"unknown_status:  {', '.join(classification.get('unknown_status') or []) or '-'}",
             f"pending_decisions: {pending_text}",
-            f"stall_streak:    {stall_streak(coordination_id)}/{streak_limit}",
+            f"stall_streak:    {stall_streak(coordination_id)}/{STALL_LIMIT}",
             f"seams_unowned:   {unowned}",
             f"stale_waiting_on: {stale_waiting_on}",
             f"malformed_waiting_on: {malformed}",
@@ -1451,89 +1665,100 @@ def cmd_sync(args) -> int:
     nodes = registry_nodes(registry)
     controller = next((node for node in nodes if node["role"] == "controller"), nodes[0])
     rollout = find_rollout(controller["session_id"])
-    state = load_state(args.coordination_id)
-    if state.get("rollout_path") != str(rollout):
-        state["rollout_path"] = str(rollout)
-        state["offset"] = 0
-    offset = int(state.get("offset") or 0)
+    with coordination_write_lock(args.coordination_id):
+        assert_ledger_integrity(args.coordination_id)
+        state = load_state(args.coordination_id)
+        if state.get("rollout_path") != str(rollout):
+            state["rollout_path"] = str(rollout)
+            state["offset"] = 0
+        offset = int(state.get("offset") or 0)
 
-    call = output = None
-    events = []
-    new_offset = offset
-    scanned_lines = 0
-    for attempt in range(20):
-        rollout.stat()
-        events, new_offset, scanned_lines = read_rollout_events(rollout, offset)
-        call, output = latest_wait_round(events)
-        if call and output:
-            break
-        if attempt < 19:
-            time.sleep(0.1)
+        call = output = None
+        events = []
+        new_offset = offset
+        scanned_lines = 0
+        for attempt in range(20):
+            rollout.stat()
+            events, new_offset, scanned_lines = read_rollout_events(rollout, offset)
+            call, output = latest_wait_round(events)
+            if call and output:
+                break
+            if attempt < 19:
+                time.sleep(0.1)
 
-    if not call or not output:
-        print(format_sync_stale(rollout, scanned_lines))
-        return 1
+        if not call or not output:
+            print(format_sync_stale(rollout, scanned_lines))
+            return 1
 
-    dispatches = count_dispatch_calls(events)
-    state["dispatches_since_progress"] = int(state.get("dispatches_since_progress") or 0) + dispatches
+        dispatches = count_dispatch_calls(events)
+        state["dispatches_since_progress"] = int(state.get("dispatches_since_progress") or 0) + dispatches
 
-    # 轮询目标是全部 active children，不含 controller 自己——主控轮询自身没有意义。
-    poll_targets = [
-        node for node in nodes
-        if node["role"] != "controller" and node.get("active", True)
-    ]
-    reason, actual_ids = validate_call(call["arguments"], [node["session_id"] for node in poll_targets])
-    if reason:
-        state["invalid_rounds"] = int(state.get("invalid_rounds") or 0) + 1
-        state["offset"] = new_offset
-        save_state(args.coordination_id, state)
-        print(f"ROUND INVALID: poll snippet altered ({reason})")
-        return 1
-
-    payload = extract_projection(output["output"])
-    expected_poll_ids = {node["session_id"] for node in poll_targets}
-    reason = validate_projection(payload, len(actual_ids), expected_poll_ids)
-    if reason:
-        state["invalid_rounds"] = int(state.get("invalid_rounds") or 0) + 1
-        state["offset"] = new_offset
-        save_state(args.coordination_id, state)
-        if reason.startswith("poll id not in registry"):
-            print(f"ROUND INVALID: {reason}")
-        elif reason.startswith("duplicate poll id"):
-            print(f"ROUND INVALID: {reason}")
-        else:
+        # HEAD 采集覆盖全部 active children；阻塞 wait 优先覆盖 runnable
+        # watch-set，空集合时回退到原来的全 active poll。
+        active_children = [
+            node for node in nodes
+            if node["role"] != "controller" and node.get("active", True)
+        ]
+        poll_targets = runnable_watch_nodes(args.coordination_id, active_children) or active_children
+        reason, actual_ids = validate_call(call["arguments"], [node["session_id"] for node in poll_targets])
+        if reason:
+            state["invalid_rounds"] = int(state.get("invalid_rounds") or 0) + 1
+            state["offset"] = new_offset
+            save_state(args.coordination_id, state)
             print(f"ROUND INVALID: poll snippet altered ({reason})")
-        return 1
+            return 1
 
-    latest_poll, latest_report = latest_progress_parts(args.coordination_id)
-    poll_seq = next_seq(state, "next_poll_seq")
-    rows, classification = classify_and_rows(payload, poll_targets, args.round, poll_seq, latest_progress(args.coordination_id))
-    classification["never_reported"] = sorted(node["name"] for node in poll_targets if node["name"] not in latest_report)
-    for row in rows:
-        append_jsonl(jsonl_path(args.coordination_id, "progress.jsonl"), row)
-    if classification["head_changed"]:
-        kinds = classification.get("advance_kinds") or {}
-        has_code = any(kind != "docs" for kind in kinds.values())
-        docs_count = sum(1 for kind in kinds.values() if kind == "docs")
-        if has_code:
-            state["dispatches_since_progress"] = 0
-            state["docs_only_advances"] = 0
-        elif docs_count:
-            state["docs_only_advances"] = int(state.get("docs_only_advances") or 0) + docs_count
-    state["offset"] = new_offset
-    save_state(args.coordination_id, state)
-    print(
-        format_summary(
-            args.round,
-            True,
-            new_offset,
-            classification,
-            args.coordination_id,
-            args.streak,
-            registry,
+        payload = extract_projection(output["output"])
+        expected_poll_ids = {node["session_id"] for node in poll_targets}
+        reason = validate_projection(payload, len(actual_ids), expected_poll_ids)
+        if reason:
+            state["invalid_rounds"] = int(state.get("invalid_rounds") or 0) + 1
+            state["offset"] = new_offset
+            save_state(args.coordination_id, state)
+            if reason.startswith("poll id not in registry"):
+                print(f"ROUND INVALID: {reason}")
+            elif reason.startswith("duplicate poll id"):
+                print(f"ROUND INVALID: {reason}")
+            else:
+                print(f"ROUND INVALID: poll snippet altered ({reason})")
+            return 1
+
+        latest_poll, latest_report = latest_progress_parts(args.coordination_id)
+        poll_seq = next_seq(state, "next_poll_seq")
+        rows, classification = classify_and_rows(
+            payload, active_children, args.round, poll_seq, latest_progress(args.coordination_id)
         )
-    )
-    return 0
+        ledger_seq = next_ledger_seq(args.coordination_id, state)
+        for row in rows:
+            row["ledger_seq"] = ledger_seq
+        classification["watch_nodes"] = [node["name"] for node in poll_targets]
+        classification["never_reported"] = sorted(
+            node["name"] for node in active_children if node["name"] not in latest_report
+        )
+        for row in rows:
+            append_jsonl(jsonl_path(args.coordination_id, "progress.jsonl"), row)
+        if classification["head_changed"]:
+            kinds = classification.get("advance_kinds") or {}
+            has_code = any(kind != "docs" for kind in kinds.values())
+            docs_count = sum(1 for kind in kinds.values() if kind == "docs")
+            if has_code:
+                state["dispatches_since_progress"] = 0
+                state["docs_only_advances"] = 0
+            elif docs_count:
+                state["docs_only_advances"] = int(state.get("docs_only_advances") or 0) + docs_count
+        state["offset"] = new_offset
+        save_state(args.coordination_id, state)
+        print(
+            format_summary(
+                args.round,
+                True,
+                new_offset,
+                classification,
+                args.coordination_id,
+                registry,
+            )
+        )
+        return 0
 
 
 def registry_node_by_name(registry: dict, node_name: str) -> dict | None:
@@ -1709,209 +1934,273 @@ def validate_report_source(coordination_id: str, node_name: str, source_session:
 
 def cmd_report(args) -> int:
     ensure_runtime(args.coordination_id)
-    if args.state not in STATE_VALUES:
-        raise LedgerError(f"invalid state {args.state}; expected one of {', '.join(sorted(STATE_VALUES))}")
-    waiting_on = args.waiting_on or []
-    if args.state == "awaiting_seam":
-        valid_seams = [
-            item for item in waiting_on
-            if isinstance(item, str) and item.startswith("seam:") and item.split(":", 1)[1]
-        ]
-        if not valid_seams:
-            raise UsageError("state awaiting_seam requires --waiting-on seam:<id>")
+    with coordination_write_lock(args.coordination_id):
+        assert_ledger_integrity(args.coordination_id)
+        if args.state not in STATE_VALUES:
+            raise UsageError(f"invalid state {args.state}; expected one of {', '.join(sorted(STATE_VALUES))}")
+        waiting_on = args.waiting_on or []
+        if args.state == "awaiting_seam":
+            valid_seams = [
+                item for item in waiting_on
+                if isinstance(item, str) and item.startswith("seam:") and item.split(":", 1)[1]
+            ]
+            if not valid_seams:
+                raise UsageError("state awaiting_seam requires --waiting-on seam:<id>")
 
-    registry = load_registry(args.coordination_id)
-    node = registry_node_by_name(registry, args.node)
-    if not node:
-        raise UsageError(f"unknown node: {args.node}")
-    if args.registry and node["role"] != "controller" and not args.source_session:
-        raise UsageError("explicit --registry report requires --source-session")
+        registry = load_registry(args.coordination_id)
+        node = registry_node_by_name(registry, args.node)
+        if not node:
+            raise UsageError(f"unknown node: {args.node}")
+        if args.registry and node["role"] != "controller" and not args.source_session:
+            raise UsageError("explicit --registry report requires --source-session")
 
-    # head 缺省时自己从 registry 的 worktree 读，不要依赖子线记得传 --head。
-    # 依据 design-notes §2.1：报告没带 head 会被判成 stale，其 waiting_on 就不计入
-    # seams_unowned——那样读数 5 会不管实际情况一律接近 0。head 是有客观来源的事实，
-    # 不该退回账本纪律。
-    head = args.head
-    head_source = "arg"
-    if not head:
-        head = git_head(node.get("worktree"))
-        head_source = "worktree" if head else "unavailable"
+        # head 缺省时自己从 registry 的 worktree 读，不要依赖子线记得传 --head。
+        # 依据 design-notes §2.1：报告没带 head 会被判成 stale，其 waiting_on 就不计入
+        # seams_unowned——那样读数 5 会不管实际情况一律接近 0。head 是有客观来源的事实，
+        # 不该退回账本纪律。
+        head = args.head
+        head_source = "arg"
+        if not head:
+            head = git_head(node.get("worktree"))
+            head_source = "worktree" if head else "unavailable"
 
-    if args.source_session:
-        node = validate_report_source(args.coordination_id, args.node, args.source_session, head, registry)
+        if args.source_session:
+            node = validate_report_source(args.coordination_id, args.node, args.source_session, head, registry)
 
-    row = {
-        "ts": now_local(),
-        "src": "report",
-        "round": args.round,
-        "node": args.node,
-        "head": head,
-        "head_source": head_source,
-        "state": args.state,
-        "waiting_on": waiting_on,
-        "last_report_ts": now_local(),
-        "note": args.note or "",
-    }
-    if args.source_session:
-        row["source_session_id"] = args.source_session
-        row["source_registry"] = str(registry_path(args.coordination_id).resolve())
-    append_jsonl(jsonl_path(args.coordination_id, "progress.jsonl"), row)
-    suffix = ""
-    if args.state in {"working", "done"} and waiting_on:
-        suffix = " (note: waiting_on is ignored for working/done state summaries)"
-    if head_source == "unavailable":
-        suffix += " (warning: head unavailable, report will be treated as stale once HEAD advances)"
-    print(f"reported {args.node} state={args.state} head={head or 'none'}({head_source}){suffix}")
-    return 0
+        row = {
+            "ts": now_local(),
+            "src": "report",
+            "round": args.round,
+            "node": args.node,
+            "head": head,
+            "head_source": head_source,
+            "state": args.state,
+            "waiting_on": waiting_on,
+            "last_report_ts": now_local(),
+            "note": args.note or "",
+        }
+        if args.source_session:
+            row["source_session_id"] = args.source_session
+            row["source_registry"] = str(registry_path(args.coordination_id).resolve())
+        state = load_state(args.coordination_id)
+        row["ledger_seq"] = next_ledger_seq(args.coordination_id, state)
+        append_jsonl(jsonl_path(args.coordination_id, "progress.jsonl"), row)
+        save_state(args.coordination_id, state)
+        suffix = ""
+        if args.state in {"working", "done"} and waiting_on:
+            suffix = " (note: waiting_on is ignored for working/done state summaries)"
+        if head_source == "unavailable":
+            suffix += " (warning: head unavailable, report will be treated as stale once HEAD advances)"
+        print(f"reported {args.node} state={args.state} head={head or 'none'}({head_source}){suffix}")
+        return 0
 
 
 def cmd_seam(args) -> int:
     ensure_runtime(args.coordination_id)
-    registry = load_registry(args.coordination_id)
-    known_nodes = {node["name"] for node in registry_nodes(registry)}
-    if args.producer not in known_nodes:
-        raise LedgerError(f"unknown producer node: {args.producer}")
-    for consumer in args.consumers or []:
-        if consumer not in known_nodes:
-            raise LedgerError(f"unknown consumer node: {consumer}")
-    status = "delivered" if args.deliver else "assigned"
-    append_jsonl(
-        jsonl_path(args.coordination_id, "seams.jsonl"),
-        {
-            "ts": now_local(),
-            "seam_id": args.seam_id,
-            "producer": args.producer,
-            "consumers": args.consumers or [],
-            "status": status,
-            "artifact": args.deliver,
-        },
-    )
-    print(f"seam {args.seam_id} status={status}")
-    return 0
+    seam_id = canonical_seam_id(args.seam_id)
+    with coordination_write_lock(args.coordination_id):
+        assert_ledger_integrity(args.coordination_id)
+        registry = load_registry(args.coordination_id)
+        known_nodes = {node["name"] for node in registry_nodes(registry)}
+        if args.producer not in known_nodes:
+            raise UsageError(f"unknown producer node: {args.producer}")
+        for consumer in args.consumers or []:
+            if consumer not in known_nodes:
+                raise UsageError(f"unknown consumer node: {consumer}")
+        status = "delivered" if args.deliver else "assigned"
+        state = load_state(args.coordination_id)
+        ledger_seq = next_ledger_seq(args.coordination_id, state)
+        append_jsonl(
+            jsonl_path(args.coordination_id, "seams.jsonl"),
+            {
+                "ts": now_local(),
+                "ledger_seq": ledger_seq,
+                "seam_id": seam_id,
+                "producer": args.producer,
+                "consumers": args.consumers or [],
+                "status": status,
+                "artifact": args.deliver,
+            },
+        )
+        save_state(args.coordination_id, state)
+        print(f"seam {seam_id} status={status}")
+        return 0
 
 
 def cmd_decide(args) -> int:
     ensure_runtime(args.coordination_id)
-    if args.raise_id:
-        append_jsonl(
-            jsonl_path(args.coordination_id, "decisions.jsonl"),
-            {
+    with coordination_write_lock(args.coordination_id):
+        assert_ledger_integrity(args.coordination_id)
+        if args.raise_id:
+            decision_instance_id = str(uuid.uuid4())
+            state = load_state(args.coordination_id)
+            ledger_seq = next_ledger_seq(args.coordination_id, state)
+            append_jsonl(
+                jsonl_path(args.coordination_id, "decisions.jsonl"),
+                {
+                    "ts": now_local(),
+                    "ledger_seq": ledger_seq,
+                    "decision_id": args.raise_id,
+                    "decision_instance_id": decision_instance_id,
+                    "raised_by": args.by,
+                    "blocks": args.blocks or [],
+                    "question": args.question,
+                    "status": "pending",
+                    "answer": None,
+                },
+            )
+            save_state(args.coordination_id, state)
+            print(f"decision {args.raise_id} status=pending instance={decision_instance_id}")
+            return 0
+        if args.answer:
+            pending = {
+                row.get("decision_id"): row
+                for row in pending_decisions(args.coordination_id)
+                if row.get("decision_id")
+            }
+            decision = pending.get(args.answer)
+            if decision is None:
+                raise UsageError(f"decision is not pending: {args.answer}")
+            state = load_state(args.coordination_id)
+            ledger_seq = next_ledger_seq(args.coordination_id, state)
+            row = {
                 "ts": now_local(),
-                "decision_id": args.raise_id,
-                "raised_by": args.by,
-                "blocks": args.blocks or [],
-                "question": args.question,
-                "status": "pending",
-                "answer": None,
-            },
-        )
-        print(f"decision {args.raise_id} status=pending")
-        return 0
-    if args.answer:
-        pending = {row.get("decision_id") for row in pending_decisions(args.coordination_id)}
-        if args.answer not in pending:
-            raise UsageError(f"decision is not pending: {args.answer}")
-        append_jsonl(
-            jsonl_path(args.coordination_id, "decisions.jsonl"),
-            {
-                "ts": now_local(),
+                "ledger_seq": ledger_seq,
                 "decision_id": args.answer,
                 "raised_by": None,
                 "blocks": [],
                 "question": None,
                 "status": "answered",
                 "answer": args.text,
-            },
-        )
-        print(f"decision {args.answer} status=answered")
-        return 0
-    raise LedgerError("decide requires --raise or --answer")
+            }
+            instance = decision.get("decision_instance_id")
+            if isinstance(instance, str) and instance:
+                row["decision_instance_id"] = instance
+            append_jsonl(jsonl_path(args.coordination_id, "decisions.jsonl"), row)
+            save_state(args.coordination_id, state)
+            print(f"decision {args.answer} status=answered")
+            return 0
+        raise UsageError("decide requires --raise or --answer")
 
 
 def cmd_act(args) -> int:
-    ensure_runtime(args.coordination_id)
-    state = load_state(args.coordination_id)
-    seq = next_seq(state, "next_act_seq")
-    row = {"ts": now_local(), "seq": seq}
-    if args.dispatch:
-        missing = [
-            name for name, value in (
-                ("--seam-id", args.seam_id),
-                ("--producer", args.producer),
-                ("--deliverable", args.deliverable),
-            )
-            if not value
-        ]
-        if missing:
-            raise UsageError(f"act --dispatch requires {', '.join(missing)}")
+    if args.halt:
         registry = load_registry(args.coordination_id)
-        known_nodes = {node["name"] for node in registry_nodes(registry)}
-        if args.producer not in known_nodes:
-            raise UsageError(f"unknown producer node: {args.producer}")
-        current_producer = seam_producers(args.coordination_id).get(args.seam_id)
-        if current_producer and current_producer != args.producer:
-            print(
-                f"producer changed for seam {args.seam_id}: "
-                f"{current_producer} -> {args.producer}; appending new assignment"
+        controller = registry.get("controller")
+        controller_session = (
+            controller.get("current_session_id")
+            if isinstance(controller, dict)
+            else None
+        )
+        if not args.source_session:
+            raise UsageError("act --halt requires --source-session")
+        if args.source_session != controller_session:
+            raise UsageError("act --halt source session must match controller current_session_id")
+    ensure_runtime(args.coordination_id)
+    with coordination_write_lock(args.coordination_id):
+        assert_ledger_integrity(args.coordination_id)
+        state = load_state(args.coordination_id)
+        seq = next_seq(state, "next_act_seq")
+        ledger_seq = next_ledger_seq(args.coordination_id, state)
+        row = {"ts": now_local(), "seq": seq, "ledger_seq": ledger_seq}
+        if args.dispatch:
+            seam_id = canonical_seam_id(args.seam_id) if args.seam_id else None
+            missing = [
+                name for name, value in (
+                    ("--seam-id", seam_id),
+                    ("--producer", args.producer),
+                    ("--deliverable", args.deliverable),
+                )
+                if not value
+            ]
+            if missing:
+                raise UsageError(f"act --dispatch requires {', '.join(missing)}")
+            registry = load_registry(args.coordination_id)
+            known_nodes = {node["name"] for node in registry_nodes(registry)}
+            if args.producer not in known_nodes:
+                raise UsageError(f"unknown producer node: {args.producer}")
+            current_producer = seam_producers(args.coordination_id).get(seam_id)
+            if current_producer and current_producer != args.producer:
+                print(
+                    f"producer changed for seam {seam_id}: "
+                    f"{current_producer} -> {args.producer}; appending new assignment"
+                )
+            row.update(
+                {
+                    "kind": "dispatch",
+                    "seam_id": seam_id,
+                    "producer": args.producer,
+                    "deliverable": args.deliverable,
+                    "decision_id": None,
+                }
             )
-        row.update(
-            {
-                "kind": "dispatch",
-                "seam_id": args.seam_id,
-                "producer": args.producer,
-                "deliverable": args.deliverable,
-                "decision_id": None,
-            }
-        )
-    elif args.escalate:
-        if not args.decision_id:
-            raise UsageError("act --escalate requires --decision-id")
-        row.update(
-            {
-                "kind": "escalate",
-                "seam_id": None,
-                "producer": None,
-                "deliverable": None,
-                "decision_id": args.decision_id,
-            }
-        )
-    elif args.halt:
-        reason = (args.reason or "").strip()
-        if not reason:
-            raise UsageError("act --halt requires --reason")
-        row.update(
-            {
-                "kind": "halt",
-                "seam_id": None,
-                "producer": None,
-                "deliverable": None,
-                "decision_id": None,
-                "reason": reason,
-                "pending_decision_ids": decision_ids(pending_decisions(args.coordination_id)),
-                "halt_poll_seq": int(state.get("next_poll_seq") or 0),
-            }
-        )
-    else:
-        raise UsageError("act requires --dispatch, --escalate, or --halt")
-    append_jsonl(jsonl_path(args.coordination_id, "acts.jsonl"), row)
-    if args.dispatch:
-        append_jsonl(
-            jsonl_path(args.coordination_id, "seams.jsonl"),
-            {
-                "ts": now_local(),
-                "seam_id": args.seam_id,
-                "producer": args.producer,
-                "consumers": [],
-                "status": "assigned",
-                "artifact": None,
-            },
-        )
-    save_state(args.coordination_id, state)
-    print(f"act {row['kind']} seq={seq}")
-    return 0
+        elif args.escalate:
+            if not args.decision_id:
+                raise UsageError("act --escalate requires --decision-id")
+            pending = next(
+                (
+                    decision for decision in pending_decisions(args.coordination_id)
+                    if decision.get("decision_id") == args.decision_id
+                ),
+                None,
+            )
+            if pending is None:
+                raise UsageError(f"decision is not pending: {args.decision_id}")
+            row.update(
+                {
+                    "kind": "escalate",
+                    "seam_id": None,
+                    "producer": None,
+                    "deliverable": None,
+                    "decision_id": args.decision_id,
+                }
+            )
+            instance = pending.get("decision_instance_id")
+            if isinstance(instance, str) and instance:
+                row["decision_instance_id"] = instance
+        elif args.halt:
+            reason = (args.reason or "").strip()
+            if not reason:
+                raise UsageError("act --halt requires --reason")
+            row.update(
+                {
+                    "kind": "halt",
+                    "seam_id": None,
+                    "producer": None,
+                    "deliverable": None,
+                    "decision_id": None,
+                    "reason": reason,
+                    "pending_decision_ids": decision_ids(pending_decisions(args.coordination_id)),
+                    "halt_poll_seq": int(state.get("next_poll_seq") or 0),
+                }
+            )
+        else:
+            raise UsageError("act requires --dispatch, --escalate, or --halt")
+        append_jsonl(jsonl_path(args.coordination_id, "acts.jsonl"), row)
+        if args.dispatch:
+            append_jsonl(
+                jsonl_path(args.coordination_id, "seams.jsonl"),
+                {
+                    "ts": now_local(),
+                    "ledger_seq": ledger_seq,
+                    "seam_id": row["seam_id"],
+                    "producer": args.producer,
+                    "consumers": [],
+                    "status": "assigned",
+                    "artifact": None,
+                },
+            )
+        save_state(args.coordination_id, state)
+        print(f"act {row['kind']} seq={seq}")
+        return 0
 
 
-def format_status(coordination_id: str, registry: dict, streak_limit: int = DEFAULT_STALL_LIMIT) -> str:
+def format_status(
+    coordination_id: str,
+    registry: dict,
+    *,
+    integrity_failed: bool = False,
+) -> str:
     latest = latest_progress(coordination_id)
     registry_by_name = {node["name"]: node for node in registry_nodes(registry)}
     registry_names = sorted(node["name"] for node in registry_by_name.values() if node["role"] != "controller")
@@ -1941,6 +2230,8 @@ def format_status(coordination_id: str, registry: dict, streak_limit: int = DEFA
         elif act.get("decision_id"):
             act_text += f" decision={act.get('decision_id')}"
     header_lines = ["STATUS"]
+    if integrity_failed:
+        header_lines.append("ledger_integrity: FAILED (partial rows are diagnostic only; current state is not authoritative)")
     if halt:
         header_lines.extend(
             [
@@ -1974,7 +2265,7 @@ def format_status(coordination_id: str, registry: dict, streak_limit: int = DEFA
             f"stale_waiting_on: {stale_waiting_on}",
             f"malformed_waiting_on: {malformed}",
             f"stale_reports:   {', '.join(sorted(stale_report_nodes(coordination_id))) or '-'}",
-            f"stall_streak:    {stall_streak(coordination_id)}/{streak_limit}",
+            f"stall_streak:    {stall_streak(coordination_id)}/{STALL_LIMIT}",
             f"dispatches_since_progress: {load_state(coordination_id).get('dispatches_since_progress', 0)}",
             f"docs_only_advances: {load_state(coordination_id).get('docs_only_advances', 0)}",
             f"last_act:        {act_text}",
@@ -1983,85 +2274,93 @@ def format_status(coordination_id: str, registry: dict, streak_limit: int = DEFA
     )
 
 
-def cmd_status(args) -> int:
+def cmd_status(args, integrity_issues: list[tuple[str, int, str]] | None = None) -> int:
     registry = load_registry(args.coordination_id)
-    print(format_status(args.coordination_id, registry))
-    return 0
+    if integrity_issues is None:
+        integrity_issues = ledger_integrity_issues(args.coordination_id)
+    if integrity_issues:
+        print_integrity_failure(integrity_issues)
+    print(format_status(args.coordination_id, registry, integrity_failed=bool(integrity_issues)))
+    return LEDGER_INTEGRITY_FAILED if integrity_issues else 0
 
 
 def cmd_heartbeat(args) -> int:
     """Controller 读取 thread 后，用 concrete progress 重置 HEAD 停滞计数。"""
     ensure_runtime(args.coordination_id)
-    registry = load_registry(args.coordination_id)
-    children = {
-        node["name"]
-        for node in registry_nodes(registry)
-        if node["role"] != "controller" and node.get("active", True)
-    }
-    if args.node not in children:
-        raise UsageError(f"unknown child node: {args.node}")
-    streak = stall_streak(args.coordination_id)
-    minimum = max(1, args.streak - HEARTBEAT_LEAD_ROUNDS)
-    if not minimum <= streak < args.streak:
-        raise UsageError(
-            f"heartbeat requires {minimum}/{args.streak} <= stall_streak < "
-            f"{args.streak}/{args.streak}; current={streak}/{args.streak}"
+    with coordination_write_lock(args.coordination_id):
+        assert_ledger_integrity(args.coordination_id)
+        registry = load_registry(args.coordination_id)
+        children = {
+            node["name"]
+            for node in registry_nodes(registry)
+            if node["role"] != "controller" and node.get("active", True)
+        }
+        if args.node not in children:
+            raise UsageError(f"unknown child node: {args.node}")
+        streak = stall_streak(args.coordination_id)
+        minimum = max(1, STALL_LIMIT - HEARTBEAT_LEAD_ROUNDS)
+        if not minimum <= streak < STALL_LIMIT:
+            raise UsageError(
+                f"heartbeat requires {minimum}/{STALL_LIMIT} <= stall_streak < "
+                f"{STALL_LIMIT}/{STALL_LIMIT}; current={streak}/{STALL_LIMIT}"
+            )
+        evidence = args.evidence.strip()
+        if not evidence:
+            raise UsageError("heartbeat requires non-empty --evidence")
+        state = load_state(args.coordination_id)
+        reset_seq = int(state.get("next_poll_seq") or 0)
+        if reset_seq < 1:
+            raise UsageError("heartbeat requires at least one valid sync")
+        state["stall_reset_seq"] = reset_seq
+        save_state(args.coordination_id, state)
+        print(
+            f"heartbeat reset node={args.node} stall_streak={streak}/{STALL_LIMIT} "
+            f"reset_seq={reset_seq}"
         )
-    evidence = args.evidence.strip()
-    if not evidence:
-        raise UsageError("heartbeat requires non-empty --evidence")
-    state = load_state(args.coordination_id)
-    reset_seq = int(state.get("next_poll_seq") or 0)
-    if reset_seq < 1:
-        raise UsageError("heartbeat requires at least one valid sync")
-    state["stall_reset_seq"] = reset_seq
-    save_state(args.coordination_id, state)
-    print(
-        f"heartbeat reset node={args.node} stall_streak={streak}/{args.streak} "
-        f"reset_seq={reset_seq}"
-    )
-    return 0
+        return 0
 
 
 def cmd_stall_check(args) -> int:
     ensure_runtime(args.coordination_id)
-    halt = halted_act(args.coordination_id)
-    if halt:
-        pending = format_id_list(halt.get("pending_decision_ids") or [])
-        print(f"HALTED (ts={halt.get('ts') or '-'}, reason={halt.get('reason') or '-'}, pending={pending})")
-        return 4
-    state = load_state(args.coordination_id)
-    dispatches = int(state.get("dispatches_since_progress") or 0)
-    answered_line = f"last_must_act_answered: {'yes' if last_must_act_answered(args.coordination_id) else 'no'}"
-    unreported, already_escalated = pending_escalation_groups(args.coordination_id)
-    if unreported:
-        items = format_id_list(decision_ids(unreported))
-        lines = [f"MUST_ESCALATE pending_decisions: {items} dispatches_since_progress={dispatches}"]
+    with coordination_write_lock(args.coordination_id):
+        assert_ledger_integrity(args.coordination_id)
+        halt = halted_act(args.coordination_id)
+        if halt:
+            pending = format_id_list(halt.get("pending_decision_ids") or [])
+            print(f"HALTED (ts={halt.get('ts') or '-'}, reason={halt.get('reason') or '-'}, pending={pending})")
+            return 4
+        state = load_state(args.coordination_id)
+        dispatches = int(state.get("dispatches_since_progress") or 0)
+        answered_line = f"last_must_act_answered: {'yes' if last_must_act_answered(args.coordination_id) else 'no'}"
+        unreported, already_escalated = pending_escalation_groups(args.coordination_id)
+        if unreported:
+            items = format_id_list(decision_ids(unreported))
+            lines = [f"MUST_ESCALATE pending_decisions: {items} dispatches_since_progress={dispatches}"]
+            if already_escalated:
+                lines.append(f"already_escalated: {format_id_list(decision_ids(already_escalated))}")
+            lines.append(answered_line)
+            print("\n".join(lines))
+            return 3
+        pending_suffix = ""
         if already_escalated:
-            lines.append(f"already_escalated: {format_id_list(decision_ids(already_escalated))}")
-        lines.append(answered_line)
-        print("\n".join(lines))
-        return 3
-    pending_suffix = ""
-    if already_escalated:
-        pending_suffix = f" pending_escalated: {format_id_list(decision_ids(already_escalated))}"
-    streak = stall_streak(args.coordination_id)
-    if streak >= args.streak:
-        state["last_must_act_seq"] = int(state.get("next_act_seq") or 0)
-        save_state(args.coordination_id, state)
-        print(
-            f"MUST_ACT stall_streak={streak}/{args.streak} "
-            f"dispatches_since_progress={dispatches}{pending_suffix}\n{answered_line}"
-        )
-        return 2
-    if streak >= max(1, args.streak - HEARTBEAT_LEAD_ROUNDS):
-        print(
-            f"CHECK_HEARTBEAT stall_streak={streak}/{args.streak} "
-            f"dispatches_since_progress={dispatches} read_thread_required=yes{pending_suffix}\n{answered_line}"
-        )
+            pending_suffix = f" pending_escalated: {format_id_list(decision_ids(already_escalated))}"
+        streak = stall_streak(args.coordination_id)
+        if streak >= STALL_LIMIT:
+            state["last_must_act_seq"] = int(state.get("next_act_seq") or 0)
+            save_state(args.coordination_id, state)
+            print(
+                f"MUST_ACT stall_streak={streak}/{STALL_LIMIT} "
+                f"dispatches_since_progress={dispatches}{pending_suffix}\n{answered_line}"
+            )
+            return 2
+        if streak >= max(1, STALL_LIMIT - HEARTBEAT_LEAD_ROUNDS):
+            print(
+                f"CHECK_HEARTBEAT stall_streak={streak}/{STALL_LIMIT} "
+                f"dispatches_since_progress={dispatches} read_thread_required=yes{pending_suffix}\n{answered_line}"
+            )
+            return 0
+        print(f"OK stall_streak={streak}/{STALL_LIMIT} dispatches_since_progress={dispatches}{pending_suffix}\n{answered_line}")
         return 0
-    print(f"OK stall_streak={streak}/{args.streak} dispatches_since_progress={dispatches}{pending_suffix}\n{answered_line}")
-    return 0
 
 
 class UsageErrorParser(argparse.ArgumentParser):
@@ -2094,7 +2393,6 @@ def build_parser() -> argparse.ArgumentParser:
     sync = sub.add_parser("sync")
     add_routing_args(sync)
     sync.add_argument("--round", required=True, type=int)
-    sync.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
     sync.set_defaults(func=cmd_sync)
 
     route = sub.add_parser("route")
@@ -2110,14 +2408,22 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--state", required=True)
     report.add_argument("--round", type=int, default=0)
     report.add_argument("--head")
-    report.add_argument("--source-session")
+    report.add_argument(
+        "--source-session",
+        help="Child H1 source session; omit for controller reports.",
+    )
     report.add_argument("--waiting-on", action="extend", nargs="+", default=[])
     report.add_argument("--note")
     report.set_defaults(func=cmd_report)
 
     seam = sub.add_parser("seam")
     add_routing_args(seam)
-    seam.add_argument("--seam-id", required=True)
+    # Ledger keys use the bare ID; waiting_on-style input is normalized at the CLI boundary.
+    seam.add_argument(
+        "--seam-id",
+        required=True,
+        help='seam ID as "<id>" or "seam:<id>"; stored canonically as "<id>"',
+    )
     seam.add_argument("--producer", required=True)
     seam.add_argument("--consumers", action="extend", nargs="+", default=[])
     seam.add_argument("--deliver")
@@ -2139,11 +2445,15 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--dispatch", action="store_true")
     mode.add_argument("--escalate", action="store_true")
     mode.add_argument("--halt", action="store_true")
-    act.add_argument("--seam-id")
+    act.add_argument(
+        "--seam-id",
+        help='seam ID as "<id>" or "seam:<id>"; stored canonically as "<id>"',
+    )
     act.add_argument("--producer")
     act.add_argument("--deliverable")
     act.add_argument("--decision-id")
     act.add_argument("--reason")
+    act.add_argument("--source-session")
     act.set_defaults(func=cmd_act)
 
     status = sub.add_parser("status")
@@ -2154,12 +2464,10 @@ def build_parser() -> argparse.ArgumentParser:
     add_routing_args(heartbeat)
     heartbeat.add_argument("--node", required=True)
     heartbeat.add_argument("--evidence", required=True)
-    heartbeat.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
     heartbeat.set_defaults(func=cmd_heartbeat)
 
     stall = sub.add_parser("stall-check")
     add_routing_args(stall)
-    stall.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
     stall.set_defaults(func=cmd_stall_check)
 
     preflight = sub.add_parser("preflight")
@@ -2172,7 +2480,17 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     try:
         configure_routing(args)
+        if args.command in INTEGRITY_GUARDED_COMMANDS:
+            issues = ledger_integrity_issues(args.coordination_id)
+            if issues:
+                if args.command == "status":
+                    return cmd_status(args, integrity_issues=issues)
+                print_integrity_failure(issues)
+                return LEDGER_INTEGRITY_FAILED
         return args.func(args)
+    except LedgerIntegrityError as exc:
+        print_integrity_failure(exc.issues)
+        return LEDGER_INTEGRITY_FAILED
     except UsageError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 64

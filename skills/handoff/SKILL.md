@@ -21,6 +21,8 @@ disable-model-invocation: true
 - 只保留下一位 agent 继续工作必须知道的状态、入口、边界和决策。
 - 如果用户明确说“聚焦本次任务”或类似要求，不要回顾完整聊天史。
 
+如果下一 session 要继续代码、测试、implementation package 或其他有工作树状态的执行任务，读取 `references/task-execution.md`。它补充 compact bootstrap、分层读取、live snapshot 和启动动作的要求；普通知识交接不需要读取。
+
 ## 引用优先
 
 不要复制已经存在于 PRD、plan、ADR、issue、commit、diff、测试日志或 artifact 里的内容。只写：
@@ -43,7 +45,6 @@ disable-model-invocation: true
 - 不能忘的 gate、授权要求、外部系统读写边界。
 - 已经完成且会影响下一步判断的验证摘要。
 - 用户还需要做的 residual decisions。
-- suggested skills。
 
 避免包含：
 
@@ -51,6 +52,8 @@ disable-model-invocation: true
 - 已在 gate.md 中列出的完整测试矩阵。
 - 长 diff、长日志、完整 API payload、完整业务数据。
 - 可从 commit 或 issue 直接读取的细节。
+
+对于执行型交接，输出 compact control map，而不是把主控文档、Ticket、证据或历史 ER 提前展开。必须给出下一 session 的首个可执行动作、不要重复/暂不读取的工作、当前授权边界，以及已开始但没有可用结果的操作。不要把“已实现”“已验证”“已验收”“package closed”混写成一个完成状态；用来源和计数区分它们。
 
 ## 推荐结构
 
@@ -63,6 +66,10 @@ disable-model-invocation: true
 
 ## 下一会话目标
 
+## 启动控制图
+
+## 下一会话首个动作
+
 ## 当前快照
 
 ## 权威产物
@@ -71,17 +78,17 @@ disable-model-invocation: true
 
 ## 必须记住 / 门禁
 
-## 建议使用的 Skills
-
 ## 待用户决定事项
 
 ## 备注
 ```
 
+执行型交接可以在该模板中增加 `已完成（阶段限定）`、`开放 seam / gate`、`不要重复 / 暂不读取` 和 `授权与外部边界`，但仍应引用权威 artifact，不复制其正文。
+
 ## 安全与脱敏
 
 Redact API keys、passwords、tokens、PII 和其他敏感信息。不要粘贴完整外部 API payload、完整客户/订单/商品敏感数据或可复现凭证；给摘要和 evidence 路径即可。
 
-## 建议使用的 Skills
+## 启动入口
 
-交接文档必须包含 `建议使用的 Skills` 章节。只推荐下一会话确实可能需要调用的 skill，并用一句短说明解释原因。
+执行型 handoff 只写下一 session 首轮立即需要的唯一 entry point；没有则省略。不要枚举后续可能使用的 skills，也不要把延后 skill 名称写入待粘贴的新 session prompt，因为显式名称可能触发立即读取并挤占启动上下文。后续 skill 由实际执行 seam 按需触发。

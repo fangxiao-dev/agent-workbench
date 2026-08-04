@@ -1,4 +1,6 @@
-# Impl-Package 可复用实现检查点的提前派发规则设计
+# Impl-Package 可复用实现检查点的提前派发规则设计（已废弃）
+
+> 状态：历史设计，已由 Impl-Package contract 3.3 取代。当前 checkpoint 只保存恢复上下文，不授权提前派发；dispatch 只按 canonical Ticket/DAG dependency 与 runtime state 判断。本文仅保留决策历史，不得作为执行规则读取。
 
 - 日期：2026-07-28
 - 适用范围：`dev-with-track` 的 Ticket/Task dependency readiness 与主 session 并行派发

@@ -42,6 +42,8 @@ def call_for(ids, timeout=120000):
 
 
 CALL_OK = call_for([NODES["alpha"], NODES["beta"]])
+CALL_ALPHA = call_for([NODES["alpha"]])
+CALL_BETA = call_for([NODES["beta"]])
 CALL_BAD_TIMEOUT = call_for([NODES["alpha"], NODES["beta"]], timeout=1000)
 CALL_HIGH_TIMEOUT = call_for([NODES["alpha"], NODES["beta"]], timeout=180000)
 
@@ -60,6 +62,21 @@ def projection(n=2, alpha_turn="t-100", beta_turn="t-200", wake=None, polls=None
 GOOD_PROJECTION = projection(
     wake={"reason": "inactiveStatus", "threadId": NODES["beta"], "hostId": "local"}
 )
+
+
+def one_projection(node, turn, *, status="notLoaded", turn_status="completed", text=None):
+    return projection(
+        n=1,
+        polls=[
+            {
+                "id": NODES[node],
+                "status": status,
+                "turn": turn,
+                "turnStatus": turn_status,
+                "txt": text or node,
+            }
+        ],
+    )
 
 
 def run_process(argv, *, cwd=None, env=None):
@@ -374,8 +391,8 @@ def append_progress_streak(streak):
         append_progress_round(seq)
 
 
-def append_decision(decision_id, ts, status="pending", *, by="alpha", answer=None):
-    append_ledger_row("decisions.jsonl", {
+def append_decision(decision_id, ts, status="pending", *, by="alpha", answer=None, instance=None):
+    row = {
         "ts": ts,
         "decision_id": decision_id,
         "raised_by": by if status == "pending" else None,
@@ -383,11 +400,14 @@ def append_decision(decision_id, ts, status="pending", *, by="alpha", answer=Non
         "question": f"{decision_id}?" if status == "pending" else None,
         "status": status,
         "answer": answer,
-    })
+    }
+    if instance:
+        row["decision_instance_id"] = instance
+    append_ledger_row("decisions.jsonl", row)
 
 
-def append_escalate(decision_id, ts, seq=1):
-    append_ledger_row("acts.jsonl", {
+def append_escalate(decision_id, ts, seq=1, instance=None):
+    row = {
         "ts": ts,
         "seq": seq,
         "kind": "escalate",
@@ -395,7 +415,10 @@ def append_escalate(decision_id, ts, seq=1):
         "producer": None,
         "deliverable": None,
         "decision_id": decision_id,
-    })
+    }
+    if instance:
+        row["decision_instance_id"] = instance
+    append_ledger_row("acts.jsonl", row)
 
 
 def check(name, ok, detail=""):
@@ -495,22 +518,30 @@ fails += check("polls[] 缺 child 时仍写 progress 行并读取 head",
 rc, out = run("report", "--coordination-id", CID, "--node", "alpha", "--state", "awaiting_seam",
               "--waiting-on", "seam:x", "seam:y", "--head", git_head(BASE / "git" / "alpha"))
 fails += check("report 支持 --waiting-on 空格分隔并写 src=report", rc == 0, out.strip())
-append_wait(CALL_OK, projection(alpha_turn="t-101", beta_turn="t-201"), call_id="c2")
+append_wait(CALL_BETA, one_projection("beta", "t-201"), call_id="c2")
 rc, out = run("sync", "--coordination-id", CID, "--round", "2")
 fails += check("report 的 state/waiting_on 不被后续 sync 覆盖",
-               rc == 0 and "seams_unowned:   2" in out and "never_reported:  beta" in out,
+               rc == 0 and "poll_targets:    beta" in out and "seams_unowned:   2" in out
+               and "never_reported:  beta" in out,
                out.strip())
 
 rc, out = run("seam", "--coordination-id", CID, "--seam-id", "x", "--producer", "alpha",
               "--consumers", "beta", "controller")
 fails += check("seam 支持 --consumers 空格分隔且允许 registry 中的 controller",
-               rc == 0, out.strip())
+                rc == 0, out.strip())
+rc, out = run("seam", "--coordination-id", CID, "--seam-id", "seam:prefixed-x",
+              "--producer", "alpha", "--consumers", "beta")
+prefixed_seam_rows = ledger_rows("seams.jsonl")
+fails += check("seam 接受 seam:<id> 并以裸 ID 写入账本",
+               rc == 0 and "seam prefixed-x status=assigned" in out
+               and prefixed_seam_rows[-1].get("seam_id") == "prefixed-x",
+               out.strip())
 rc, out = run("seam", "--coordination-id", CID, "--seam-id", "bad", "--producer", "typo",
               "--consumers", "beta")
-fails += check("seam producer 拼错必须失败", rc == 1 and "unknown producer node: typo" in out, out.strip())
+fails += check("seam producer 拼错必须退出 64", rc == 64 and "unknown producer node: typo" in out, out.strip())
 rc, out = run("seam", "--coordination-id", CID, "--seam-id", "bad", "--producer", "alpha",
               "--consumers", "typo")
-fails += check("seam consumer 拼错必须失败", rc == 1 and "unknown consumer node: typo" in out, out.strip())
+fails += check("seam consumer 拼错必须退出 64", rc == 64 and "unknown consumer node: typo" in out, out.strip())
 
 print("-" * 78)
 write_fixture(CALL_OK, projection(alpha_turn="t-1", beta_turn="t-1"), git_worktrees=True)
@@ -608,7 +639,13 @@ fails += check("pending decision 优先于停滞并退出 3", rc == 3 and "MUST_
 rc, out = run("decide", "--coordination-id", CID, "--answer", "d1", "--text", "yes")
 fails += check("decide --answer 可清掉 pending decision", rc == 0, out.strip())
 rc, out = run("stall-check", "--coordination-id", CID, "--streak", "99")
-fails += check("decide --answer 后无 pending 且未达阈值时退出 0", rc == 0 and out.startswith("OK "), out.strip())
+fails += check("stall-check 不再接受调用方覆盖阈值",
+               rc == 64 and "unrecognized arguments: --streak 99" in out,
+               out.strip())
+rc, out = run("stall-check", "--coordination-id", CID)
+fails += check("移除 --streak 后停滞阈值固定为 5",
+               rc == 2 and "MUST_ACT stall_streak=5/5" in out,
+               out.strip())
 
 print("-" * 78)
 reset_fixture(git_worktrees=True)
@@ -666,18 +703,68 @@ fails += check("decision answered 后同 id 重新 raise 必须重新升级",
                rc == 3 and "MUST_ESCALATE" in out and "pending-reraised" in out,
                out.strip())
 
+# --- decision instance：同秒 raise -> answer -> raise 不能被旧 escalate 遮蔽 ---
 reset_fixture(git_worktrees=True)
 run("init", "--coordination-id", CID)
-rc, out = run("act", "--coordination-id", CID, "--halt")
+rc_raise1, out_raise1 = run("decide", "--coordination-id", CID, "--raise", "same-second", "--by", "alpha")
+first_decision = ledger_rows("decisions.jsonl")[-1]
+first_instance = first_decision.get("decision_instance_id")
+rc_escalate1, out_escalate1 = run(
+    "act", "--coordination-id", CID, "--escalate", "--decision-id", "same-second"
+)
+rc_answer, out_answer = run(
+    "decide", "--coordination-id", CID, "--answer", "same-second", "--text", "yes"
+)
+rc_raise2, out_raise2 = run("decide", "--coordination-id", CID, "--raise", "same-second", "--by", "alpha")
+decision_rows = ledger_rows("decisions.jsonl")
+second_decision = decision_rows[-1]
+second_instance = second_decision.get("decision_instance_id")
+rc_instance_stall, out_instance_stall = run("stall-check", "--coordination-id", CID)
+rc_escalate2, out_escalate2 = run(
+    "act", "--coordination-id", CID, "--escalate", "--decision-id", "same-second"
+)
+act_rows = ledger_rows("acts.jsonl")
+fails += check(
+    "decision instance 精确区分同秒重开并只升级新 instance",
+    rc_raise1 == 0 and rc_escalate1 == 0 and rc_answer == 0 and rc_raise2 == 0
+    and rc_instance_stall == 3 and "MUST_ESCALATE" in out_instance_stall
+    and rc_escalate2 == 0 and first_instance and second_instance and first_instance != second_instance
+    and decision_rows[1].get("decision_instance_id") == first_instance
+    and act_rows[-1].get("decision_instance_id") == second_instance,
+    f"raise1={out_raise1.strip()} answer={out_answer.strip()} stall={out_instance_stall.strip()} "
+    f"raise2={out_raise2.strip()} escalate2={out_escalate2.strip()}",
+)
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+halt_before = route_runtime_snapshot()
+rc, out = run("act", "--coordination-id", CID, "--halt", "--reason", "missing caller identity")
+fails += check("act --halt 缺 source-session 必须退出 64 且不写账本",
+               rc == 64 and "act --halt requires --source-session" in out
+               and route_runtime_snapshot() == halt_before,
+               f"rc={rc} {out.strip()}")
+rc, out = run("act", "--coordination-id", CID, "--halt", "--source-session", NODES["controller"])
 fails += check("act --halt 缺 reason 必须退出 64",
-               rc == 64 and "act --halt requires --reason" in out,
+               rc == 64 and "act --halt requires --reason" in out
+               and route_runtime_snapshot() == halt_before,
+               f"rc={rc} {out.strip()}")
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+halt_before = route_runtime_snapshot()
+rc, out = run("act", "--coordination-id", CID, "--halt", "--source-session", NODES["alpha"],
+              "--reason", "child must not stop coordination")
+fails += check("非 controller 调用 act --halt 必须拒绝且不新增账本行",
+               rc == 64 and "source session must match controller current_session_id" in out
+               and route_runtime_snapshot() == halt_before,
                f"rc={rc} {out.strip()}")
 
 reset_fixture(git_worktrees=True)
 run("init", "--coordination-id", CID)
 append_decision("halt-d1", "2026-08-01T06:00:00+02:00")
 append_decision("halt-d2", "2026-08-01T06:00:01+02:00")
-rc_halt, out_halt = run("act", "--coordination-id", CID, "--halt", "--reason", "owner stopped loop")
+rc_halt, out_halt = run("act", "--coordination-id", CID, "--halt",
+                        "--source-session", NODES["controller"], "--reason", "owner stopped loop")
 halt_rows = ledger_rows("acts.jsonl")
 rc, out = run("stall-check", "--coordination-id", CID)
 fails += check("halt 后 stall-check 只输出 HALTED 且不输出业务动作标记",
@@ -698,7 +785,8 @@ fails += check("halt 后 status 顶部暴露 halted、reason 与 pending ids",
 reset_fixture(git_worktrees=True)
 run("init", "--coordination-id", CID)
 append_progress_streak(5)
-run("act", "--coordination-id", CID, "--halt", "--reason", "temporary stop")
+run("act", "--coordination-id", CID, "--halt", "--source-session", NODES["controller"],
+    "--reason", "temporary stop")
 rc_halted, out_halted = run("stall-check", "--coordination-id", CID)
 rc_dispatch, out_dispatch = run("act", "--coordination-id", CID, "--dispatch", "--seam-id", "resume-seam",
                                 "--producer", "alpha", "--deliverable", "resume concrete work")
@@ -720,6 +808,10 @@ rc, out = run("stall-check", "--coordination-id", CID)
 fails += check("stall-check 无停滞时退出 0", rc == 0 and out.startswith("OK "), out.strip())
 rc, out = run("sync", "--coordination-id", CID, "--round", "1", "--no-such-arg")
 fails += check("usage error 退出码 64", rc == 64, f"rc={rc} {out.strip()}")
+rc, out = run("report", "--coordination-id", CID, "--node", "alpha", "--state", "not-a-state")
+fails += check("非法 report state 退出码 64", rc == 64 and "invalid state" in out, out.strip())
+rc, out = run("decide", "--coordination-id", CID)
+fails += check("decide 缺 raise/answer 退出码 64", rc == 64 and "decide requires" in out, out.strip())
 
 print("-" * 78)
 reset_fixture(git_worktrees=True)
@@ -748,10 +840,10 @@ old_head = git_head(alpha_repo)
 rc, out = run("report", "--coordination-id", CID, "--node", "alpha", "--state", "awaiting_seam",
               "--waiting-on", "seam:x", "--head", old_head)
 commit_file(alpha_repo, "work.py", "print('stale')\n", "code after report")
-append_wait(CALL_OK, projection(alpha_turn="stale-a", beta_turn="stale-b"), call_id="stale")
+append_wait(CALL_BETA, one_projection("beta", "stale-b"), call_id="stale")
 rc, out = run("sync", "--coordination-id", CID, "--round", "8")
 fails += check("report 之后 HEAD 变化必须暴露 stale_reports",
-               rc == 0 and "stale_reports:" in out and "alpha" in out,
+               rc == 0 and "poll_targets:    beta" in out and "stale_reports:" in out and "alpha" in out,
                out.strip())
 
 print("-" * 78)
@@ -823,11 +915,11 @@ run("init", "--coordination-id", CID)
 rc, out = run("report", "--coordination-id", CID, "--node", "beta", "--state", "awaiting_seam",
               "--waiting-on", "seam:s9")
 rc_before, out_before = run("status", "--coordination-id", CID)
-rc_act, out_act = run("act", "--coordination-id", CID, "--dispatch", "--seam-id", "s9",
+rc_act, out_act = run("act", "--coordination-id", CID, "--dispatch", "--seam-id", "seam:s9",
                       "--producer", "alpha", "--deliverable", "x")
 rc_after, out_after = run("status", "--coordination-id", CID)
 seam_rows = ledger_rows("seams.jsonl")
-fails += check("act --dispatch 同步形成 seam ownership，s9 不再无主",
+fails += check("act --dispatch 接受 seam:<id>、裸 ID 入账并形成 ownership",
                rc == 0 and rc_before == 0 and "seams_unowned:   1" in out_before
                and rc_act == 0 and rc_after == 0 and "seams_unowned:   0" in out_after
                and any(row.get("seam_id") == "s9" and row.get("producer") == "alpha"
@@ -841,7 +933,7 @@ alpha_head = git_head(BASE / "git" / "alpha")
 rc, out = run("report", "--coordination-id", CID, "--node", "alpha", "--state", "awaiting_seam",
               "--waiting-on", "seam:stale", "--head", alpha_head)
 commit_file(BASE / "git" / "alpha", "work.py", "print('fresh')\n", "fresh code")
-append_wait(CALL_OK, projection(alpha_turn="r2b-a", beta_turn="r2b-b"), call_id="r2b")
+append_wait(CALL_BETA, one_projection("beta", "r2b-b"), call_id="r2b")
 rc, out = run("sync", "--coordination-id", CID, "--round", "1")
 fails += check("stale awaiting_seam 的 waiting_on 不计入 seams_unowned 并计入 stale_waiting_on",
                rc == 0 and "stale_reports:" in out and "alpha" in out
@@ -874,7 +966,19 @@ fails += check("status 在从未 sync 的新账本上也能输出",
 (BROKER / CID / "progress.jsonl").write_text("{bad json\n", encoding="utf-8")
 rc, out = run("status", "--coordination-id", CID)
 fails += check("status 摘要必须暴露 corrupt_ledger_lines",
-               rc == 0 and "corrupt_ledger_lines: 1" in out,
+               rc == 6 and out.startswith("LEDGER INTEGRITY FAILED: progress.jsonl:1 invalid_json")
+               and "ledger_integrity: FAILED" in out and "corrupt_ledger_lines: 1" in out,
+               out.strip())
+
+invalid_ledger_seq = {"ts": "2026-08-01T06:00:00+02:00", "ledger_seq": "2", "src": "report",
+                      "round": 0, "node": "alpha", "head": None, "state": "working",
+                      "waiting_on": [], "last_report_ts": "2026-08-01T06:00:00+02:00", "note": "bad seq"}
+(BROKER / CID / "progress.jsonl").write_text(
+    json.dumps(invalid_ledger_seq, ensure_ascii=False) + "\n", encoding="utf-8"
+)
+rc, out = run("status", "--coordination-id", CID)
+fails += check("status 摘要必须拒绝非法 ledger_seq 类型",
+               rc == 6 and "LEDGER INTEGRITY FAILED: progress.jsonl:1 invalid_ledger_seq" in out,
                out.strip())
 
 bad_waiting = {"ts": "2026-08-01T06:00:00+02:00", "src": "report", "round": 0,
@@ -887,6 +991,52 @@ rc, out = run("status", "--coordination-id", CID)
 fails += check("status 摘要必须暴露 malformed_waiting_on",
                rc == 0 and "malformed_waiting_on: 2" in out,
                out.strip())
+
+# --- ledger integrity：任何会推进状态的命令遇到坏行都 fail-closed 且不写新事实 ---
+write_fixture(CALL_OK, GOOD_PROJECTION, git_worktrees=True)
+run("init", "--coordination-id", CID)
+(BROKER / CID / "decisions.jsonl").write_text("{truncated\n", encoding="utf-8")
+integrity_before = route_runtime_snapshot()
+integrity_commands = [
+    ("sync", "--coordination-id", CID, "--round", "1"),
+    ("stall-check", "--coordination-id", CID),
+    ("report", "--coordination-id", CID, "--node", "alpha", "--state", "working"),
+    ("seam", "--coordination-id", CID, "--seam-id", "integrity", "--producer", "alpha"),
+    ("decide", "--coordination-id", CID, "--raise", "integrity"),
+    ("act", "--coordination-id", CID, "--halt", "--source-session", NODES["controller"],
+     "--reason", "integrity"),
+    ("heartbeat", "--coordination-id", CID, "--node", "alpha", "--evidence", "integrity"),
+    ("preflight", "--coordination-id", CID),
+]
+integrity_results = []
+for command in integrity_commands:
+    rc, out = run(*command)
+    integrity_results.append(rc == 6 and "LEDGER INTEGRITY FAILED: decisions.jsonl:1 invalid_json" in out)
+fails += check("所有状态推进命令遇坏行统一 rc=6 且不追加事实",
+               all(integrity_results) and route_runtime_snapshot() == integrity_before,
+               str(integrity_results))
+
+# --- coordination 写锁：并发 report 追加不能丢行、交错或留下非法 JSON ---
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+concurrent = []
+for index in range(24):
+    concurrent.append(subprocess.Popen(
+        [sys.executable, "-B", str(LEDGER), "report", "--coordination-id", CID,
+         "--node", "alpha", "--state", "working", "--note", f"concurrent-{index}"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", env=env(),
+    ))
+concurrent_results = [process.wait() for process in concurrent]
+concurrent_rows = ledger_rows("progress.jsonl")
+try:
+    parsed_concurrent = [json.loads(line) for line in
+                         (BROKER / CID / "progress.jsonl").read_text(encoding="utf-8").splitlines()]
+except (OSError, json.JSONDecodeError):
+    parsed_concurrent = []
+fails += check("多进程并发追加行数精确且每行 JSON 可解析",
+               all(rc == 0 for rc in concurrent_results) and len(concurrent_rows) == 24
+               and len(parsed_concurrent) == 24,
+               f"rcs={concurrent_results} rows={len(concurrent_rows)} parsed={len(parsed_concurrent)}")
 
 timed_out_projection = json.dumps({"v": 1, "n": 2, "wake": None, "polls": [], "timedOut": True},
                                   ensure_ascii=False)
@@ -934,6 +1084,7 @@ rc, out = run("report", "--coordination-id", CID, "--node", "alpha", "--state", 
               "--waiting-on", "seam:auto-head")
 fails += check("report 省略 --head 时应自行从 worktree 读到 head",
                rc == 0 and "(worktree)" in out, out.strip())
+append_wait(CALL_BETA, one_projection("beta", "auto-head-beta"), call_id="auto-head-sync")
 _, sync_out = run("sync", "--coordination-id", CID, "--round", "1")
 _fields = {k.strip(): v.strip() for k, _, v in
            (line.partition(":") for line in sync_out.splitlines() if ":" in line)}
@@ -975,13 +1126,91 @@ rc_done, out_done = run_registry(
     "report", "--node", "beta", "--source-session", NODES["beta"],
     "--state", "done", "--head", beta_head,
 )
-append_wait(CALL_OK, GOOD_PROJECTION, call_id="done-not-idle")
+append_wait(CALL_ALPHA, one_projection("alpha", "t-100"), call_id="done-not-idle")
 rc_done_sync, out_done_sync = run_registry("sync", "--round", "2")
 fails += check("done child 保留在 registry 但不得进入 idle_nodes",
-               rc_done == 0 and rc_done_sync == 0 and "idle_nodes:      alpha" in out_done_sync
+               rc_done == 0 and rc_done_sync == 0 and "poll_targets:    alpha" in out_done_sync
+               and "idle_nodes:      alpha" in out_done_sync
                and "idle_nodes:      beta" not in out_done_sync
                and "historical" not in out_done_sync,
                f"report={out_done.strip()} sync={out_done_sync.strip()}")
+
+rc_waiting_alpha, out_waiting_alpha = run(
+    "report", "--coordination-id", CID, "--node", "alpha",
+    "--state", "awaiting_seam", "--waiting-on", "seam:all-waiting"
+)
+rc_waiting_beta, out_waiting_beta = run(
+    "report", "--coordination-id", CID, "--node", "beta", "--state", "awaiting_owner"
+)
+append_wait(CALL_OK, GOOD_PROJECTION, call_id="all-waiting-full-poll")
+rc_all_waiting, out_all_waiting = run_registry("sync", "--round", "3")
+fails += check(
+    "全部 child 已在 awaiting 状态时回退到全 active poll",
+    rc_waiting_alpha == 0 and rc_waiting_beta == 0 and rc_all_waiting == 0
+    and "poll_targets:    alpha, beta" in out_all_waiting,
+    f"alpha={out_waiting_alpha.strip()} beta={out_waiting_beta.strip()} sync={out_all_waiting.strip()}",
+)
+rc_dispatch_waiting, out_dispatch_waiting = run_registry(
+    "act", "--dispatch", "--seam-id", "all-waiting", "--producer", "alpha",
+    "--deliverable", "resume alpha",
+)
+append_wait(CALL_ALPHA, one_projection("alpha", "resume-alpha"), call_id="resume-awaiting")
+rc_resume_sync, out_resume_sync = run_registry("sync", "--round", "4")
+fails += check(
+    "controller dispatch 后 producer 从 awaiting_seam 回到 runnable watch-set",
+    rc_dispatch_waiting == 0 and rc_resume_sync == 0 and "poll_targets:    alpha" in out_resume_sync,
+    f"dispatch={out_dispatch_waiting.strip()} sync={out_resume_sync.strip()}",
+)
+
+reset_fixture(git_worktrees=True)
+run_registry("init")
+same_second = "2026-08-03T19:00:00+02:00"
+append_ledger_row(
+    "progress.jsonl",
+    {
+        "ts": same_second,
+        "src": "report",
+        "ledger_seq": 2,
+        "round": 1,
+        "node": "alpha",
+        "head": git_head(BASE / "git" / "alpha"),
+        "head_source": "worktree",
+        "state": "awaiting_seam",
+        "waiting_on": ["seam:same-second-order"],
+        "last_report_ts": same_second,
+        "note": "reported after the dispatch in the same second",
+    },
+)
+append_ledger_row(
+    "acts.jsonl",
+    {
+        "ts": same_second,
+        "ledger_seq": 1,
+        "seq": 1,
+        "kind": "dispatch",
+        "seam_id": "same-second-order",
+        "producer": "alpha",
+        "deliverable": "same-second ordering fixture",
+        "decision_id": None,
+    },
+)
+append_wait(
+    call_for([NODES["beta"]]), one_projection("beta", "same-second-beta"),
+    call_id="same-second-reported-after-dispatch",
+)
+rc_same_second, out_same_second = run_registry("sync", "--round", "1")
+same_second_poll_line = next(
+    (line for line in out_same_second.splitlines() if line.startswith("poll_targets:")), ""
+)
+same_second_poll_rows = [
+    row for row in ledger_rows("progress.jsonl") if row.get("src") == "poll"
+]
+fails += check(
+    "同秒 dispatch 早于 report 时已重新 waiting 的 producer 不进入 watch-set",
+    rc_same_second == 0 and same_second_poll_line == "poll_targets:    beta"
+    and same_second_poll_rows and all(row.get("ledger_seq") == 3 for row in same_second_poll_rows),
+    out_same_second.strip(),
+)
 
 reset_fixture(git_worktrees=True)
 run_registry("init")

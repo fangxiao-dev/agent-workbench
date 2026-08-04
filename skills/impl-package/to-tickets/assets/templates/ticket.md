@@ -5,8 +5,8 @@
 ## 运行时验收状态（Runtime Acceptance Status）
 
 <!-- impl-package:projection runtime-state begin -->
-- 值：[pending]
-- 直接证据：[runtime-state.json#ticket:<ticket-id>]
+- 值：UNRECORDED
+- 直接证据：none（Draft 尚无 runtime record）
 <!-- impl-package:projection runtime-state end -->
 
 **发布状态（Publication Status）：** Draft

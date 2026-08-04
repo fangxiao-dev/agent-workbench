@@ -1,18 +1,19 @@
 # Thread Harness Poll Contract
 
-本页是 broker 每轮可直接照抄的轮询操作页。契约依据见 `design-notes.md` §3；本页只保留操作事实。
+本页是 broker 每轮可直接照抄的轮询操作页，只保留当前操作契约。
 
 ## 固定 JS 片段
 
-四条不可动摇的约束：
+五条不可动摇的约束：
 
 1. `timeoutMs` 固定为 `120000`，与当前 `wait_threads` 平台上限一致。
-2. `targets` 必须覆盖 registry 中**全部 active children，不含 controller 自己**。inactive child 只保留历史，不进入 poll；主控轮询自身没有意义，且会让 `n` 多算一个而每轮判 `ROUND INVALID`。
+2. `targets` 必须等于脚本按账本机械推导出的 wait 集合：优先为 **runnable watch-set**（`working`、`never_reported`、report 已 stale、controller dispatch 后的 producer 或当前状态 unknown 的 active children）；如果 runnable 集合为空，则回退为全部 active children，保留固定 120 秒 poll。`awaiting_seam`、`awaiting_owner`、`done` 不进入正常阻塞 wait；inactive child 只保留历史，controller 自己也不进入 poll。
 3. `text()` 输出**下面这个投影**，字段一个都不能少。`ledger.py sync` 从 controller rollout 里读这个投影——**你不打印的东西，任何地方都不存在**（rollout 记录的是 exec 打印的内容，不是工具原始返回）。
 4. `txt` 截断到 500 字符。需要某条线的全文时用 `codex_app__read_thread` 单独取，不要放宽这里。
 
 ```js
-const ids = [/* registry 中各 node 的 current_session_id，内联 */];
+// @exec: {"yield_time_ms": 125000}
+const ids = [/* runnable watch-set 中各 node 的 current_session_id，内联 */];
 const raw = await tools.codex_app__wait_threads({
   targets: ids.map(threadId => ({ threadId })),
   timeoutMs: 120000
@@ -33,12 +34,13 @@ text(JSON.stringify({
 }));
 ```
 
-不要"优化"它。这段的每个语法都是实跑验证过的（`?.`、`(x||[])`、`slice`），刻意不用 `??`。缩短它、少打印几个字段、或者只回一个计数——这些都会被 `sync` 的自检当场拦下并作废本轮。
+不要"优化"它。这段的每个语法都是实跑验证过的（`?.`、`(x||[])`、`slice`），刻意不用 `??`。缩短它、少打印几个字段、或者只回一个计数——这些都会被 `sync` 的自检当场拦下并作废本轮。若 runnable watch-set 为空，controller 回退到全部 active child，继续执行固定 120 秒 poll。
 
 ## 平台约束
 
 - `wait_threads` 单次最多接受 8 个 `targets`。本 harness 当前假设 active children <= 8；超过 8 的分片轮询方案本轮不做，属于已知限制。
 - 当前 Desktop bridge 可能把工具结果包装为 JSON 字符串；固定片段必须先做 object/string 双态解包，再输出规定投影。
+- 本轮采用 runnable watch-set 兜底：`afterCursor` 只保证已投递 final text 可被抑制，不能把状态级重复唤醒当作已证明消失；HEAD 仍采集全部 active child，阻塞 wait 优先覆盖 runnable 集合，集合为空时回退到全部 active child。
 - `create_thread` 不是无条件自授权动作，需要 Owner 在 goal 或对话中明确授权。主控 goal 模板里已包含该授权。
 - `create_thread` 无法给子线设置持久 goal，只有初始 prompt。因此子线的 H1 不像主控那样免疫 compaction；缓解手段是主控靠 `last_report_ts` 与 `never_reported` 检测漏报，而不是相信子线记得。子线不直接运行 `ledger.py report/seam/decide`。
 - timeout 契约固定为 `120000`。更小会退化为忙等，更大会被当前平台参数校验拒绝。
@@ -54,9 +56,11 @@ text(JSON.stringify({
 
 ## 一轮动作序列
 
-1. 在 exec JS 中原样敲固定片段，只替换 `ids` 的内联 session id 列表。
-2. 执行 `python skills/thread-harness/scripts/ledger.py sync --registry <absolute-registry-json> --round <n>`。
-3. 读取 `sync` 的紧凑摘要：
+1. 根据上一轮 ledger 状态计算 runnable watch-set；若集合为空，固定 poll 回退到全部 active child，不取消本轮 120 秒检查。
+2. 在 exec JS 中原样敲固定片段，只替换 `ids` 的内联 session id 列表。
+3. 执行 `python skills/thread-harness/scripts/ledger.py sync --registry <absolute-registry-json> --round <n>`。
+4. 读取 `sync` 的紧凑摘要：
+   - `poll_targets`：本轮固定 wait 实际目标；它必须与脚本按 ledger 推导的 runnable 集合完全相等，或在 runnable 为空时等于全部 active child。
    - `idle_nodes`：该派活；只有 active 且最新 ledger state 为 `working` 的 node 才进入。`idle`、`inactive`、`notLoaded`、`not_loaded` 都可作为 idle 信号；`awaiting_seam`、`awaiting_owner`、`done` 和 inactive registry child 排除。
    - `changed_nodes`：有新 head，需要读或推进。
    - `advance_kinds`：本轮 HEAD 推进类型，`docs` 不清零 dispatch 计数，`code` / `unknown` 会清零。
@@ -73,9 +77,9 @@ text(JSON.stringify({
    - `malformed_waiting_on`：历史 report 中不合法的 `waiting_on` 项数量。
    - `dispatches_since_progress`：自最近一次 code 级 git head 推进以来，rollout 中有配对 output 的 `tools.codex_app__send_message_to_thread` 与 `tools.codex_app__create_thread` 调用次数。它只测量，不阻断。
    - `docs_only_advances`：自最近一次 code 级推进以来的 docs-only HEAD 推进次数。
-   - `corrupt_ledger_lines`：JSONL 中无法解析的坏行数量。
-4. 执行 `python skills/thread-harness/scripts/ledger.py stall-check --registry <absolute-registry-json>`。
-5. 按退出码和输出标记决策。`CHECK_HEARTBEAT` 的退出码也是 `0`，但不能当普通 `OK` 略过。
+    - `corrupt_ledger_lines`：JSONL 中无法解析的坏行数量；大于 0 时状态摘要只能作诊断，不能视为可信 current state。
+5. 执行 `python skills/thread-harness/scripts/ledger.py stall-check --registry <absolute-registry-json>`。
+6. 按退出码和输出标记决策。`CHECK_HEARTBEAT` 的退出码也是 `0`，但不能当普通 `OK` 略过。
 
 ## Session 路由
 
@@ -93,7 +97,7 @@ python skills/thread-harness/scripts/ledger.py route --registry <absolute-regist
 python skills/thread-harness/scripts/ledger.py preflight --registry <absolute-registry-json>
 ```
 
-只读，不写任何 JSONL。`PREFLIGHT OK`（退出码 `0`）才能开始轮询；`PREFLIGHT FAILED`（退出码 `5`）时先修。
+只读，不写任何 JSONL。`PREFLIGHT OK`（退出码 `0`）才能开始轮询；`PREFLIGHT FAILED`（退出码 `5`）时先修。若发现 JSONL 坏行，先打印 `LEDGER INTEGRITY FAILED: <file>:<line> <reason>` 并返回 `6`。
 
 它拦的全是**会静默扭曲读数**的问题：worktree 路径写错、两个 active node 共用 worktree 或 branch、registry 的 branch 与该 worktree 实际 checkout 的分支不一致、active `children > 8`、active `current_session_id` 重复、controller 的 session id 找不到 rollout、运行时目录未 `init`。inactive child 保留历史，不参与这些 active-child 检查。
 
@@ -106,7 +110,7 @@ python skills/thread-harness/scripts/ledger.py preflight --registry <absolute-re
 python skills/thread-harness/scripts/ledger.py status --registry <absolute-registry-json>
 ```
 
-`status` 先读 registry，再只读账本，不读 rollout，也不要求新 session 已经跑过首轮 poll；registry 或 runtime 缺失时报告 `runtime_uninitialized` 或清晰错误，不创建目录、空 JSONL 或 `sync-state.json`。它用于恢复各 node 最新 state/head/turn/最后 H1 时间、pending decisions、未交付 seams、`stall_streak` 和最近一次 `act`。
+`status` 先读 registry，再只读账本，不读 rollout，也不要求新 session 已经跑过首轮 poll；registry 或 runtime 缺失时报告 `runtime_uninitialized` 或清晰错误，不创建目录、空 JSONL 或 `sync-state.json`。它用于恢复各 node 最新 state/head/turn/最后 H1 时间、pending decisions、未交付 seams、`stall_streak` 和最近一次 `act`。若账本有坏行，仍输出诊断摘要但返回 `6`，并明确 partial rows 不是可信 current state。
 
 `stall-check` 从 `3/5` 起、到 `5/5` 前输出 `CHECK_HEARTBEAT` 时：
 
@@ -124,7 +128,7 @@ python skills/thread-harness/scripts/ledger.py heartbeat --registry <absolute-re
 
 `stall-check` 看最近一次 halt 及其记录的 `halt_poll_seq`。若还没有更大的有效 poll seq，输出 `HALTED (ts=<...>, reason=<...>, pending=<...>)` 并返回 `4`；`dispatch` / `escalate` 不会隐式 resume。Owner 在 controller 对话明确恢复后，controller 运行新的有效 poll + sync，新 poll seq 自动使旧 halt 失效；halt 历史保留。
 
-`stall-check` 返回 `MUST_ESCALATE` 时，只列出尚未上报的 pending decision。上报后用 `act --escalate` 留下已上报事实；同一 id 在 `answered` 后重新 `raise` 时，必须重新上报，因为判断会比较 escalate 行 `ts` 是否不早于最新 raise 行 `ts`：
+`stall-check` 返回 `MUST_ESCALATE` 时，只列出尚未上报的 pending decision。每次 `decide --raise` 都生成新的 `decision_instance_id`；`act --escalate` 绑定当前 pending instance，旧 instance 的上报不能遮蔽同一 `decision_id` 的新一轮 raise：
 
 ```powershell
 python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry-json> --escalate --decision-id <d>
@@ -136,10 +140,10 @@ python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry
 
 ```powershell
 python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry-json> --dispatch --seam-id <s> --producer <node> --deliverable "<一句话>"
-python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry-json> --halt --reason "<一句话>"
+python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry-json> --halt --source-session <fresh-controller-current-session-id> --reason "<一句话>"
 ```
 
-`act --dispatch` 的 `--seam-id`、`--producer`、`--deliverable` 都必填，且 producer 必须是 registry node。`act --halt` 的 `--reason` 必填，缺失时退出 `64`；halt 行会记录当时全部 pending decision id 的快照。`stall-check` 会输出 `last_must_act_answered: yes|no`，只报告上一次 `MUST_ACT` 后是否有新 `act` 行，不改变退出码。
+`act --dispatch` 的 `--seam-id`、`--producer`、`--deliverable` 都必填，且 producer 必须是 registry node。执行 halt 前必须重新读取 registry：`--source-session` 填当前 `controller.current_session_id`，`--reason` 填一句话原因，任一缺失都退出 `64`。`--source-session` 只拦截误用和陈旧来源，不是可信调用者鉴权；halt 行会记录当时全部 pending decision id 的快照。`stall-check` 会输出 `last_must_act_answered: yes|no`，只报告上一次 `MUST_ACT` 后是否有新 `act` 行，不改变退出码。
 
 ## 退出码表（全部子命令通用）
 
@@ -151,9 +155,10 @@ python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry
 | `3` | `stall-check` 输出 `MUST_ESCALATE` | 立即上报尚未上报的 pending decision，并写 `act --escalate`；本轮结束。已上报 pending 不再屏蔽 `2` |
 | `4` | `stall-check` 输出 `HALTED` | loop 已由最近一次 halt 终止。**不要继续轮询**，先向 Owner 确认；恢复只能由 Owner 明确恢复后产生新的有效 poll/sync seq 完成 |
 | `5` | `preflight` 输出 `PREFLIGHT FAILED` | 修掉列出的每一条再开跑。**不要带着失败开始轮询** |
+| `6` | JSONL ledger integrity failed | 立即停止状态推进；保留原账本供诊断，不自动截断、重写或猜测修复 |
 | `64` | 命令用法错误（参数拼错、缺必填项） | 修正命令重跑。**这不是业务信号** |
 
-**退出码在语义上必须唯一**——不要复用，理由见 [design-notes.md](design-notes.md) §6。
+**退出码在语义上必须唯一**——不要复用。
 
 多值参数（`--blocks` / `--consumers` / `--waiting-on`）**空格分隔和重复传都支持**：`--blocks alpha beta` 与 `--blocks alpha --blocks beta` 等价。
 
@@ -175,7 +180,7 @@ python skills/thread-harness/scripts/selftest.py
 ROUND INVALID: poll snippet altered (<具体原因>)
 ```
 
-本轮 payload 不会合并进 `progress.jsonl`。broker 应立即停止普通轮询，恢复固定 JS 片段，确认 `timeoutMs == 120000` 且 `targets` 数量等于 registry 的 **active** children 数量，然后重新发起下一轮。
+本轮 payload 不会合并进 `progress.jsonl`。broker 应立即停止普通轮询，恢复固定 JS 片段，确认 `timeoutMs == 120000` 且 `targets` 恰好等于 ledger 推导出的 **runnable watch-set**，然后重新发起下一轮。
 
 当前 `sync` 自检只接受固定投影契约。五类失败文案如下：
 
@@ -183,7 +188,7 @@ ROUND INVALID: poll snippet altered (<具体原因>)
 | --- | --- |
 | 调用 source（legacy `arguments` / modern `input`）里 `timeoutMs == 120000` | `timeoutMs <n> != 120000` |
 | 调用 arguments 里能解析出 `const ids = [...]` | `cannot parse ids array from call` |
-| 实际 ids 集合等于 registry 中全部 active children 的 `current_session_id` 集合 | `targets mismatch (missing=<...>, unexpected=<...>)` |
+| 实际 ids 集合等于 ledger 推导的 wait 集合（runnable 非空时为 runnable，否则为全部 active child） | `targets mismatch (missing=<...>, unexpected=<...>)` |
 | 输出可解析为 JSON 且 `v == 1` | `projection missing or wrong version` |
 | 输出含 `n` 与 `polls` 两个键 | `projection shape altered (missing <key>)` |
 | `n` 等于实际 ids 数量 | `projection n=<a> != actual targets <b>` |
@@ -202,5 +207,6 @@ SYNC STALE: rollout not flushed (path=<absolute-path>, bytes=<size>, mtime=<mtim
 ## 已知限制
 
 - BLK-4 decoy 绕过 `validate_call`：rollout 只记录 exec 打印的内容，结构上无法证明实际传给 `wait_threads` 的参数是什么。放一个未使用的正确 `const ids=[...]` 再实际传 `targets: []` 能通过全部校验。这一层封不死。部分缓解是 `polls[].id` 必须属于 registry children。威胁模型上，本 harness 防的是长跑压力下逐步简化，不是主动伪造；decoy 需要写更多代码而非更少，不在退化路径上。
+- 坏行不会被自动截断、重写或猜测修复；`status` 的 partial 摘要只用于诊断，返回码 `6` 才是可信信号。
 - seam producer 被后续行改写、`artifact` 只是自由文本：第一轮 H4 只登记不校验语义。
 - 失败的 dispatch 调用与真实成功与否：当前只统计有配对 output 的调用，并要求 `arguments` 中出现 `tools.codex_app__send_message_to_thread` / `tools.codex_app__create_thread`；不做调用结果追踪。

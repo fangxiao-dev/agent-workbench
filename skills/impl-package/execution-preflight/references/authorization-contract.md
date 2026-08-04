@@ -1,6 +1,6 @@
 # Authorization Bundle Contract
 
-只在 `SKILL.md` 判定需要 execution preflight 后读取本文件。它承载完整扫描表、协作模式、输出模板和低频失败边界；主路径与完成条件以 `SKILL.md` 为准。
+只在 `SKILL.md` 将 execution preflight 分类为 `new/update` authorization bundle 后读取本文件；`restore` 与仅需核查冲突 control slice 的 anchor mismatch 不读取。它承载完整扫描表、输出模板和低频失败边界；主路径与完成条件以 `SKILL.md` 为准。
 
 ## 生命周期扫描表
 
@@ -20,6 +20,8 @@
 
 只对当前即将开始的高风险单元、或 plan 明确标为启动前必须存在的资源检查；不因通用清单或后续验证步骤引入相邻系统。记录实际检查或精确 blocker，不创建独立状态表：
 
+若当前请求仅为全锚点匹配 handoff 的 anchor/preflight 后暂停，启动前置只包含 worktree、HEAD、package、binding、sidecar digest、runtime/gate machine state、contract-status 与授权 envelope；未来 implementation/test wave 的 package manager、DB、`.env`、browser/provider identity 不在本轮检查。
+
 - **环境与配置：** 必需环境变量存在；连接/endpoint 的 host、port、database-name、environment tag 与 plan allow-list 一致；日志只写存在性和安全分类，不写 secret 或完整 URL。
 - **本地可变资源：** 已有 loopback test DB/container/service 是否存在、可启动、端口可达；fixture namespace、temporary storage 和 cleanup owner 是否明确。仅在当前授权覆盖时才启动既有资源，绝不自行创建数据库、云资源或共享环境。
 - **执行工具：** package manager、generator、test runner、browser/desktop/native tool 是否可启动；版本或安装缺口是否需要额外 mutation/owner input。
@@ -30,25 +32,7 @@
 
 ## Subagent 模式
 
-### `default-long`：主 session 仅治理与收口（默认/长任务）
-
-适用于 handoff、implementation package、DAG、多阶段验证、长任务，或普通执行会明显挤占主 session 上下文的工作。主 session **只保留**调度、authorization record、owner decision、跨 Task seaming、共享验证、Ticket acceptance、completion-claim audit、gate 和最终集成。Subagent 应充分承担目标可声明、写入可隔离、结果可复核、失败可回收且 primary ownership 不重叠的调研、实现、验证、review 准备和记录切片。
-
-- 跨 Task seam、未决决策和共享验证由主 session 处理；其余可隔离工作保持委派给对应 subagent。
-- 已授权对象、环境、数据和副作用可随明确 Task 派发传递，不逐 subagent 重复申请，也不允许 subagent 扩大 ownership。
-- 独立且写入不冲突的切片按 wave 并行；真实依赖、shared migration/codegen、同文件核心写入和单实例外部资源必须串行。
-- 主 session 通过 diff、测试、证据和必要抽查履行共享验证与最终集成职责；返工由相应 subagent 完成。
-- 默认模型（除非 task、owner 或 host 另有指定）：implementation 用途从 `gpt-5.6-terra` / `medium` 与 `gpt-5.6-terra` / `high` 两档中选择；调度 agent 按切片风险、复杂度和验证负担决定。review 用途维持 `gpt-5.6-sol` / `medium`。
-
-### `ordinary`：主 session 治理并可直接执行（普通）
-
-仅用于小型、短时、低耦合工作，或 owner 明确选择时。主 session 保留上述治理和最终收口职责，也可直接处理小型、紧耦合的执行工作。Subagent 仍可负责明确、bounded 的调研、实现、验证或 review；按任务收益选择派发粒度。
-
-### 无 delegation capability / owner local-execution choice
-
-host 没有 delegation capability 或 owner 明确选择本地执行时采用；记录这与 `default-long` 的偏离，以及由主 session 承担的工作范围。
-
-handoff / package execution 默认采用 `default-long`；owner 明确选择 `ordinary` 时采用普通模式。两种可委派模式均可直接启动 subagent；host 无 delegation capability 或 owner 选择本地执行时记录例外。
+模式定义、主 session 保留职责与串行化规则以 `SKILL.md` 的 `Subagent modes` 为准，本 reference 不重复。授权 bundle 只记录当前选择、owner/host 例外、可传递的 task-scoped 权限和实际共享资源顺序；具体模型只在 owner 或任务显式指定时记录。
 
 ## 一次性授权包模板
 

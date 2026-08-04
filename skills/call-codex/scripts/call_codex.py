@@ -224,7 +224,25 @@ def parse_codex_jsonl(output: str) -> tuple[str, dict[str, Any] | None]:
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    if args.timeout_s <= 0:
+        return {
+            "ok": False,
+            "status": "invalid_argument",
+            "text": None,
+            "usage": None,
+            "exit_code": None,
+            "error": {"code": "INVALID_ARGUMENT", "message": "--timeout-s must be greater than zero"},
+        }
     cwd = Path(args.cwd).resolve()
+    if not cwd.is_dir():
+        return {
+            "ok": False,
+            "status": "input_error",
+            "text": None,
+            "usage": None,
+            "exit_code": None,
+            "error": {"code": "INPUT_ERROR", "message": f"--cwd is not a directory: {cwd}"},
+        }
     try:
         prompt = read_prompt(args)
         executable = resolve_codex_executable(args.executable)
@@ -254,8 +272,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    print(json.dumps(run(args), ensure_ascii=False))
-    return 0
+    envelope = run(args)
+    print(json.dumps(envelope, ensure_ascii=False))
+    return 0 if envelope["ok"] else 1
 
 
 if __name__ == "__main__":

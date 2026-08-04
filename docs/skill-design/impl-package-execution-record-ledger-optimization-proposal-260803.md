@@ -52,7 +52,7 @@ Attempt 是 package 内的一次完整执行周期，不是 agent session 或命
 
 Ticket 是可独立验收的纵向交付切片。它只拥有 delivery boundary、AC、typed acceptance/release dependency、publication status、Runtime Acceptance Status 投影和 acceptance evidence pointer。
 
-fresh contract Ticket 删除 `Phase / Next / Progress`，不创建 `ticket-progress.md`，也不承载 worker、Task、implementation phase 或 reusable checkpoint。
+fresh contract Ticket 删除 `Phase / Next / Progress`，不创建 `ticket-progress.md`，也不承载 worker、Task、implementation phase 或 machine dispatch checkpoint。
 
 Ticket runtime acceptance state 的唯一事实源是 `.impl-package/runtime-state.json`：
 
@@ -65,7 +65,7 @@ WAIVED
 SUPERSEDED
 ```
 
-Draft Ticket 不建立 runtime record；Approved 发布时创建 `PENDING`。删除 `UNRECORDED` 与 `IN_PROGRESS`，避免用 Ticket 状态表达实施进度。
+Draft Ticket 不建立 runtime record；其文档 marker 使用非 runtime 的 `UNRECORDED` sentinel。Approved 发布时原子创建唯一 `PENDING` runtime record 并刷新 projection。删除 runtime `IN_PROGRESS`，避免用 Ticket 状态表达实施进度。
 
 ### 3.3 Task 与 Task Handoff
 
@@ -73,7 +73,7 @@ Task 是 `dag=true` 时存在的可分派执行单元；current state 继续由 
 
 现有 `tasks/Tn-progress.md` 改为 `tasks/Tn-handoff.md`。它只在 Task 实际 BLOCKED、retry、跨 session/owner handoff 或并行委派时创建，内容限于 blocker、已做 evidence、下一动作、影响 Ticket 与接手边界。
 
-Task Handoff 是可更新的局部恢复材料，不是状态或审计记录。具有长期价值的判断、failure learning 或 reusable checkpoint 由主 session 提炼进 ER；worker 不直接写 ER。
+Task Handoff 是可更新的局部恢复材料，不是状态或审计记录。具有长期价值的判断、failure learning 或 checkpoint 由主 session 提炼进 ER；worker 不直接写 ER。
 
 ### 3.4 Execution Record
 
@@ -115,9 +115,9 @@ ER 是 human-readable、machine-validated 的公共叙事账本，不是内部 s
 3. Ticket acceptance table（仅 `tickets=true`）；
 4. Task execution table 与 Handoff 链接（仅 `dag=true`）；
 5. 当前有效 checkpoint；
-6. 从 state/dependency 推导的 actionable units，以及最新 checkpoint 的 next action。
+6. 最新有效 checkpoint 的 next action 与相关 pointer。
 
-Ticket acceptance 与 Task execution 永远分轴展示，不互相聚合，也不计算完成百分比。checkpoint next action 与 derived actionable units 冲突时显示 stale/mismatch，不静默选择。
+Ticket acceptance 与 Task execution 永远分轴展示，不互相聚合，也不计算完成百分比。`progress.md` 只展示 canonical 状态、显式 blocker 和指针，不推导或授权 dispatch readiness。
 
 四种 Composition 使用同一个 projection：
 
@@ -142,19 +142,18 @@ patch-a-ER-001
 
 每个 Attempt 从 `ER-001` 开始；package index 使用完整 ID。首版不使用 package-global ordinal、global/stage hash chain 或 segment ownership。
 
-### 6.2 Purpose：2+1
+### 6.2 Purpose：2
 
 只保留：
 
 - `checkpoint`：可恢复执行边界，也是唯一进入 progress Active Checkpoints 的 purpose。
 - `judgment`：统一承载 execution-time decision、finding disposition、failure learning 与 external evidence interpretation。
-- `other`：低频逃生口，必须解释前两者为何不适用；没有 readiness、acceptance 或 gate effect。
 
 `judgment` 不能绕过上游 authority：若内容实质改变 D/S/P contract、Acceptance Semantics、Composition、计划策略、安全边界或外部 mutation authority，必须路由对应 owning stage，而不是写成 ER。
 
 routine state transition、普通 validation PASS、artifact/hash/revision 注册、无信息增量重跑，以及能从其他 canonical source 推导的事实不得进入 ER。
 
-默认 checkpoint 只支持恢复。只有显式声明 `allowsDownstreamImplementation=true` 时，才可支持合法 downstream 提前启动 implementation；它仍不释放 acceptance/release dependency。
+checkpoint 只支持恢复上下文，不推导 implementation readiness，也不释放 dependency。
 
 ### 6.3 Subject 与关系派生
 
@@ -166,19 +165,18 @@ ticket:<id>
 task:<id>
 ```
 
-agent 不维护任意 `refs[]`。脚本从 subject 自动派生 current Attempt、Task contribution/dependency、Ticket typed dependency、D/S/P、runtime state 与 active checkpoint。
+agent 不维护任意 `refs[]`。脚本只校验 subject 属于 current Attempt，并读取 current D/S/P 与 subject runtime state 以判断 checkpoint 是否明确失效。
 
-AC 继续通过 Ticket evidence pointer 表达；seam 写在 checkpoint 的 stable boundary 中。只有 reusable checkpoint 实际允许哪些 downstream 提前启动需要主 session 显式选择，CLI 必须先验证它属于合法候选。
+AC 继续通过 Ticket evidence pointer 表达；seam 写在 checkpoint 的 stable boundary 中。dependency、contribution 与 dispatch 仍由各自 canonical contract 和主 session 判断，不进入 checkpoint schema。
 
 ### 6.4 Supersede 与 freshness
 
 正常 checkpoint 更新不要求 agent 查找旧 ER：
 
 - recovery checkpoint 按 `subject` 自动 supersede；
-- reusable checkpoint 按 `subject + downstream set` 自动 supersede；
-- judgment/other 默认追加，低频 correction 才显式引用旧 record。
+- judgment 默认追加，低频 correction 才显式引用旧 record。
 
-D/S/P 不匹配、subject `NEEDS-REVALIDATION`/`SUPERSEDED`、dependency/contribution 改变或 evidence 失效时，相关 reusable checkpoint 在 progress 中显示 stale，不能继续支持提前派发。
+D/S/P 不匹配，或 subject 明确进入 `NEEDS-REVALIDATION`/`SUPERSEDED` 时，相关 checkpoint 在 progress 中显示 stale。v1 不承诺推导 dependency、contribution 或 evidence drift。
 
 ## 7. 单命令写入
 
@@ -188,10 +186,10 @@ D/S/P 不匹配、subject `NEEDS-REVALIDATION`/`SUPERSEDED`、dependency/contrib
 er-add
 ```
 
-agent 通过 stdin 提交 purpose、可选 subject、title、purpose-specific 内容，以及 reusable checkpoint 的明确 downstream 选择。脚本一次性：
+agent 通过 stdin 提交 `purpose=checkpoint|judgment`、可选 subject、title、content，以及 checkpoint 的 `nextAction`。脚本一次性：
 
 1. 推导唯一 Active Attempt；
-2. 校验 subject 并派生关系；
+2. 校验 subject 与 freshness inputs；
 3. 分配 ER ID；
 4. 校验 admission 与必填内容；
 5. 渲染完整 Markdown record并计算 content hash；
@@ -201,14 +199,14 @@ agent 通过 stdin 提交 purpose、可选 subject、title、purpose-specific �
 
 agent 不查找或编辑 Attempt、ER ID、旧 checkpoint、文件名、ledger、index 或 progress。
 
-不实现 reserve/write/seal、reservation、token、open slot、abort/recover 或专用 ER 状态机。相同 payload 重试返回同一 ER。ledger 更新前失败等于无写入；projection 刷新失败时由现有 `refresh-projections` 从 canonical sources 重建。
+不实现 reserve/write/seal、reservation、token、open slot、abort/recover 或专用 ER 状态机。相同 payload 重试返回同一 ER，但幂等命中仍重建并校验 index/progress，使 ledger 已写而 projection 刷新中断的状态可恢复。写入前执行 committed 与 working-tree validation；成功写入并重建 projection 后再次执行 working-tree validation。
 
 ## 8. Restore 与 ownership
 
 正常恢复：
 
 1. 运行 committed validation。
-2. 打开 `progress.md` 确认 current Attempt、两条状态轴、blockers、checkpoint 与 actionable units。
+2. 打开 `progress.md` 确认 current Attempt、两条状态轴、显式 blockers、checkpoint 与 handoff/ER 指针。
 3. 只沿 progress pointer 读取相关 Ticket、Task、Handoff、ER、review 或 evidence。
 4. 用 current revision 与实际 diff 校准，发现 stale 时只 reconcile 受影响 scope。
 
@@ -229,7 +227,7 @@ agent 不查找或编辑 Attempt、ER ID、旧 checkpoint、文件名、ledger�
 
 首版只做：
 
-1. 新 contract revision 与 fresh layout。
+1. 3.3 contract revision 与 fresh layout；3.2 package 只返回 `upgradeRequired`，不提供 migration command。
 2. Ticket state vocabulary 与模板收敛。
 3. Task Progress 改为 Task Handoff。
 4. Attempt-local 单文件 ER、package index 与 `er-add`。
@@ -243,8 +241,8 @@ agent 不查找或编辑 Attempt、ER ID、旧 checkpoint、文件名、ledger�
 - Task `DONE` 不自动改变 Ticket state。
 - routine validation 不能创建 ER。
 - checkpoint 自动派生 subject 关系并按 key supersede。
-- reusable checkpoint 只接受合法 downstream，且不释放 acceptance/release。
-- revision/dependency/evidence drift 使相关 checkpoint stale。
+- checkpoint payload 不接受 downstream/readiness 字段，也不释放 dependency。
+- revision 或 subject state 明确失效时 checkpoint stale；不承诺 dependency/evidence drift 推导。
 - 相同 payload 重试幂等；projection 可重建；sealed ER 被修改时 validate fail closed。
 - terminal Attempt 冻结，新 Attempt 从自己的 `ER-001` 开始。
 - agent 无需查找 ID、路径、旧 checkpoint 或编辑 machine-owned 文件。
@@ -267,7 +265,6 @@ agent 不查找或编辑 Attempt、ER ID、旧 checkpoint、文件名、ledger�
 - 新 session 能否从 progress 快速恢复；
 - owner 能否直接找到 Ticket acceptance state；
 - Task Handoff 与 ER 是否出现重复；
-- `other` 是否频繁承载同一类事件；
 - 单 Attempt ER 体量是否真的需要分段；
 - progress 是否包含无法可靠派生的字段；
 - checkpoint supersede/freshness 是否符合实际执行。

@@ -11,6 +11,7 @@
 `agent-workbench` 的目标是把可复用的 agent 能力集中维护，然后以非破坏方式暴露给不同宿主：
 
 - `skills/` 保存所有正式 skill，包括自建 skill、审查过的第三方 skill、以及本地工作流知识库
+- `skills/` 也包含可显式 `$` 调用的共享委派入口：`investigate-before-implement`、`reviewer`
 - `agents/` 保存可安装到宿主的 subagent 定义，目前正式 subagent 是 `audit-agent-setup`
 - `commands/` 保存宿主 command 提示文件；是否能用 `/...` 唤出取决于具体宿主
 - `install.sh` / `install.ps1` 把这些能力安装到 `~/.claude`、`~/.codex`、`~/.gemini`
@@ -333,5 +334,4 @@ powershell -ExecutionPolicy Bypass -File tests/install.ps1
 ```powershell
 powershell -ExecutionPolicy Bypass -File skills/import-third-party-skill/scripts/test-import-third-party-skill.ps1
 ```
-
 

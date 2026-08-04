@@ -40,7 +40,7 @@ Plan Revision 前进时先读取 P delta，而不是重建完整票集。只有 
 
 The edge type states what is blocked. Do not collapse implementation, acceptance, and release dependencies into an untyped `Blocked by` list.
 
-Tickets MUST NOT contain worker ownership, worker/task assignment, file-level steps, implementation snippets, automatic dispatch instructions, or runtime **task** status. The template's top `Runtime Acceptance Status` is a machine-owned projection of the package runtime-state ticket record and is updated only through `dev-with-track`; Draft publication initializes it to `PENDING`, not an acceptance judgment. Ticket recovery lives in package `progress.md`; Ticket documents do not contain Phase, Next or Progress. Task decomposition and Task-to-Ticket many-to-many contribution belong to `create-task-dag`; Task completion never updates ticket acceptance automatically. Execution evidence and reusable checkpoints live in the public Attempt ER ledger, not in Ticket files.
+Tickets MUST NOT contain worker ownership, worker/task assignment, file-level steps, implementation snippets, automatic dispatch instructions, or runtime **task** status. The template's top `Runtime Acceptance Status` is machine-owned: Draft uses the non-runtime `UNRECORDED` sentinel, and Approved publication creates the ticket's sole runtime record as `PENDING` through `dev-with-track`. Ticket recovery lives in package `progress.md`; Ticket documents do not contain Phase, Next or Progress. Task decomposition and Task-to-Ticket many-to-many contribution belong to `create-task-dag`; Task completion never updates ticket acceptance automatically. Execution evidence and checkpoints live in the public Attempt ER ledger, not in Ticket files.
 
 ## Draft Mode
 
@@ -51,7 +51,7 @@ Draft is local and non-publishing:
 3. Propose the complete slice set and typed edges for owner review.
 4. For every AC, identify the planned observable evidence source at delivery-slice level and perform an evidence-feasibility precheck against the plan and proposed typed edges. Reject an obvious acceptance-evidence cycle; when the later task producer is not yet known, hand the unresolved producer obligation to `create-task-dag` instead of inventing task ownership in the ticket.
 5. When earned, write one `Publication Status: Draft` file per slice, include the current Attempt ID, and use [assets/templates/ticket.md](./assets/templates/ticket.md) under the project-configured package root at `tickets/<NN>-<ticket-slug>.md`. Do not add Phase, Next or Progress sections.
-6. Leave each `Runtime Acceptance Status` marker at the machine-owned `PENDING` projection; Draft mode owns publication status and ticket definition, but no runtime acceptance judgment.
+6. Leave each `Runtime Acceptance Status` marker at the machine-owned `UNRECORDED` sentinel; Draft mode owns publication status and ticket definition but creates no runtime acceptance record.
 7. Number files in a deterministic dependency-compatible order; for independent slices, preserve the proposed document order. File numbers and ticket IDs are package-wide unique: continue after historical attempts and never overwrite an older attempt's ticket.
 8. Return the package path, draft ticket paths, typed-edge summary, unresolved evidence-producer obligations, and acceptance evidence gaps. When `dag=true`, hand the complete Draft set to `create-task-dag`; do not publish externally or mark tickets Approved while the DAG and joint review are still pending.
 
@@ -83,7 +83,7 @@ After bundle approval, a change to an acceptance boundary, typed dependency, Tas
 
 Fail publish without partial publication-status updates if any validation fails. Publish owns only the `Draft` to `Approved` publication transition. It must preserve the runtime-state marker body. Runtime readiness and all later ticket acceptance status belong to `dev-with-track` through the shared structured-state contract.
 
-完整 ticket set 的 planning-only publish 统一交给 [Fast planning apply](#fast-planning-apply)：它通过共享 state engine 在同一事务中注册 current attempt、seed earned ticket/task records 并刷新 projections；不再在 publish 后手工重复运行 `init` 或 `refresh-projections`。每个 earned ticket 必须恰有一个 `PENDING` 或既有 current record；同步失败视为 publish 尚未完成收口，不得让 ticket file 与 JSON 成为两个可写状态源。
+完整 ticket set 的 planning-only publish 统一交给 [Fast planning apply](#fast-planning-apply)：它通过共享 state engine 在同一事务中注册 current attempt、把 Draft `UNRECORDED` seed 为唯一 `PENDING` ticket record，并刷新 projections；不再在 publish 后手工重复运行 `init` 或 `refresh-projections`。每个 earned ticket 必须恰有一个 `PENDING` 或既有 current record；同步失败视为 publish 尚未完成收口，不得让 ticket file 与 JSON 成为两个可写状态源。
 
 ### Fast planning apply
 

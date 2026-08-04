@@ -23,9 +23,5 @@
 
 ## Active Checkpoints
 
-| Record | Subject | Downstream | Status | Next action |
-| --- | --- | --- | --- | --- |
-
-## Actionable Units
-
-- none
+| Record | Subject | Status | Next action |
+| --- | --- | --- | --- |

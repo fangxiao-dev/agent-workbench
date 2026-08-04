@@ -20,3 +20,10 @@
 - package 级共享发现改为 `execution-findings.md`，继续保存执行期确认的重要发现、风险、方法经验与跨 task provenance；它不是第二份行为合同或临时待办。
 - 新增 earned-only 的可选 `investigations/`：原始调查材料默认无 authority，不进入 runtime state、revision binding 或 machine projection，正式 `decision.md`/`spec.md` 必须保持自足。
 - 触及时升级直接按当前模板改名、更新链接与 binding path，并把 `contractVersion` 设为 `"3.2"`；纯机械改名不升级 D/S/P，包内不保留 legacy alias、兼容 reader 或迁移记录。
+
+## 3.3
+
+- Ticket 恢复面收敛为 acceptance contract 与 machine-owned Runtime Acceptance Status；Draft 使用非 runtime 的 `UNRECORDED` sentinel，publish 时才创建唯一 `PENDING` runtime record。旧 `IN_PROGRESS` 或 Draft runtime record 必须按实际 publication/acceptance 事实重塑，不可机械猜测。
+- 删除 Ticket 本地恢复摘要、`Tn-progress.md` 与 progress 的自动 actionable/downstream readiness；真实 Task 交接按需改为 `Tn-handoff.md`，package `progress.md` 只投影状态、blocker、gate、handoff/ER 指针和当前 checkpoint。
+- ER 每 Attempt 使用一个 append-only ledger，purpose 只保留 `checkpoint | judgment`；移除 `other`、downstream 选择、stage segmentation 与 rollover。checkpoint 只按 subject supersede，并仅在 revision 或 subject 状态明确失效时标为 stale。
+- 3.2 package 升级由 agent 结合 current template、schema 和包内事实直接 reshape，最后重建 projections 并执行 3.3 validate。体系不提供 migration command、兼容 reader 或逐包迁移 ledger。

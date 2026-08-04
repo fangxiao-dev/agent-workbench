@@ -56,3 +56,30 @@ On CLI, authentication, timeout, permission, or output failures, `ok` is
 false and `error` contains a stable `code` and diagnostic `message`. stderr is
 reserved for child diagnostics. The caller owns any business-schema validation
 or retry policy.
+
+## Background launch guardrail
+
+When launching the wrapper with PowerShell `Start-Process`, the wrapper script
+must be the first item in `-ArgumentList`. Do not pass wrapper flags directly to
+`python`; that starts Python itself and produces errors such as `unknown option
+--prompt` without invoking this skill.
+
+```powershell
+$pythonExe = (Get-Command python -ErrorAction Stop).Source
+$wrapper = Join-Path $repo 'skills\call-claude\scripts\call_claude.py'
+if (-not (Test-Path -LiteralPath $wrapper -PathType Leaf)) { throw "Missing wrapper: $wrapper" }
+
+$wrapperArgs = @(
+  $wrapper,
+  '--cwd', $targetRepo,
+  '--prompt-file', $promptFile,
+  '--timeout-s', '300'
+)
+if ($wrapperArgs[0] -ne $wrapper) { throw 'Wrapper path must be the first Python argument' }
+
+Start-Process -FilePath $pythonExe -ArgumentList $wrapperArgs -WindowStyle Hidden -PassThru
+```
+
+Prefer `--prompt-file` for background calls so PowerShell quoting and multiline
+prompt content cannot change the argument vector. Check the returned envelope
+and process exit code before treating the task as dispatched or completed.

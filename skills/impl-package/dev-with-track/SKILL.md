@@ -29,13 +29,13 @@ description: >
 
 ## Restore and dispatch
 
-1. 先按 delta-first restore 运行 committed validation，再打开 package 根 `progress.md`；从其中读取 current Attempt、两条状态轴、blockers、active checkpoint、最新 gate 与 actionable units。只沿 progress/index pointer 读取相关 Ticket、Task、handoff、ER、review 或 evidence；已明确完成且仍新鲜的 investigation 不重做。
-2. 确认唯一 Active attempt、approved Composition、ticket/DAG bindings 和第一个 actionable unit。高风险 unit 必须已有 spec/AC、可执行入口、oracle 和 ER owner；缺口按 authority 回流。
+1. 先按 delta-first restore 运行 committed validation，再打开 package 根 `progress.md`；从其中读取 current Attempt、两条状态轴、显式 blockers、active checkpoint、最新 gate 与 handoff/ER 指针。只沿 pointer 读取当前动作所需的 Ticket、Task、handoff、ER、review 或 evidence；已明确完成且仍新鲜的 investigation 不重做。
+2. 确认唯一 Active attempt、approved Composition 与 ticket/DAG bindings。根据 canonical dependency、当前状态和 active checkpoint 判断本轮动作；`progress.md` 不推导或授权 dispatch。高风险 unit 必须已有 spec/AC、可执行入口、oracle 和 ER owner；缺口按 authority 回流。
 3. evidence 胜过 stale state；P revision 变化只重验受影响 subset。状态只能通过 `impl_package_state.py set-state --expect --evidence` 变更。
-4. 默认等待上游 Ticket `SATISFIED` 或 Task `DONE`；若主 session 判断上游已形成可复用实现检查点，可按 runtime protocol 提前派发仅依赖该检查点的下游 Ticket/Task implementation。该例外只影响 implementation readiness，不释放 acceptance 或 release dependency。
+4. 依赖是否释放只由 Ticket typed dependency、DAG dependency 与对应 canonical 状态判断；checkpoint 提供恢复上下文，不能授权下游提前派发或释放 acceptance/release dependency。
 5. 派发 worker 时给出 primary ownership、禁改范围、已知依赖、贡献 Ticket、局部验证和 `BLOCKED` 返回格式。Task `DONE` 不等于 Ticket acceptance。
 
-Ticket 只保留 acceptance boundary、AC、typed dependency、publication 与 Runtime Acceptance Status；不再写 `Phase / Next / Progress`。Task 只有实际 BLOCKED、retry、跨 session/owner handoff 或并行委派时创建 `tasks/Tn-handoff.md`。主 session 将可复用 checkpoint、判断与 failure learning 通过单一 `er-add` 写入公共 Attempt ledger；worker 不直接写 ER，也不编辑 machine-owned `progress.md`。
+Ticket 只保留 acceptance boundary、AC、typed dependency、publication 与 Runtime Acceptance Status。Task 只有实际 BLOCKED、retry、跨 session/owner handoff 或并行委派时创建 `tasks/Tn-handoff.md`。主 session 将 checkpoint、判断与 failure learning 通过单一 `er-add` 写入公共 Attempt ledger；worker 不直接写 ER，也不编辑 machine-owned `progress.md`。
 
 ## ER 写入入口
 
@@ -46,13 +46,13 @@ Get-Content .\er-payload.json -Raw |
   python skills/impl-package/scripts/impl_package_state.py --package <package> er-add
 ```
 
-payload 最小形状为 `purpose`、`title`、`content`；`purpose` 只能是 `checkpoint`、`judgment`、`other`，`other` 另需 `whyOther`。checkpoint 另需 `nextAction`；只有明确允许下游提前启动时才设置 `allowsDownstreamImplementation: true` 并提供 `downstream: ["ticket:<id>"|"task:<id>"]`。subject 默认是 `attempt`，也可写 `ticket:<id>` 或 `task:<id>`。CLI 自动分配 Attempt-local ID、选择 ledger、校验关系、sealed hash、supersede、index 和 `progress.md`；重复 payload 幂等返回原 ID。
+payload 最小形状为 `purpose`、`title`、`content`；`purpose` 只能是 `checkpoint` 或 `judgment`，checkpoint 另需 `nextAction`。subject 默认是 `attempt`，也可写 `ticket:<id>` 或 `task:<id>`。CLI 自动分配 Attempt-local ID、选择 ledger、校验 subject、sealed hash、按 subject supersede、index 和 `progress.md`；重复 payload 幂等返回原 ID。
 
 需要详细 restore/readiness、渐进式系统证据、runtime state、ER、review、finding 分流、claim audit、gate 或 Stage 7 时，读取 [`references/runtime-protocol.md`](references/runtime-protocol.md) 的相应章节；跨阶段判断同时引用 [`../references/progressive-system-evidence.md`](../references/progressive-system-evidence.md)，不在本入口复制方法论正文。
 
 ## Review and gate entry
 
-基于实际 diff、contract impact 和已有定向证据选择 review：局部可逆且无共享 contract/状态/外部副作用的改动可简化；普通实现的正式 review 默认 `code-review`（`code-review` 是普通实现的默认选择）；涉及 interface、状态机、模块边界、跨模块行为或 seam 时，`standards-review` / `spec-review` 是强信号；auth、permission、payment、webhook、migration、外部 mutation、数据完整性、并发安全必须 safety review（同时关注 data integrity 与 evidence authority）。需要正式 review 时，主 session 将明确的 reviewer selection 交给 `do-review`；它是范围固定、leaf 调度、ledger 与 finding 分类的唯一编排器。P1/P2 必须修复并 closure verify。Review/revise 期间，若存在被当前上游阻塞的下游，且新证据表明其依赖 seam 已稳定，主 session 可按 runtime protocol 重新判断可复用实现检查点；满足时无需等待 review closure 即可并行派发下游 implementation。
+基于实际 diff、contract impact 和已有定向证据选择 review：局部可逆且无共享 contract/状态/外部副作用的改动可简化；普通实现的正式 review 默认 `code-review`（`code-review` 是普通实现的默认选择）；涉及 interface、状态机、模块边界、跨模块行为或 seam 时，`standards-review` / `spec-review` 是强信号；auth、permission、payment、webhook、migration、外部 mutation、数据完整性、并发安全必须 safety review（同时关注 data integrity 与 evidence authority）。需要正式 review 时，主 session 将明确的 reviewer selection 交给 `do-review`；它是范围固定、leaf 调度、ledger 与 finding 分类的唯一编排器。P1/P2 必须修复并 closure verify。Review/revise 期间仍按 canonical dependency 与 runtime state 判断并行；checkpoint 只提供恢复上下文。
 
 GO 后自动完成适用验证、ER、review、finding 分流、claim audit 和 gate verdict；不得将 gate 或验证变成二次 owner approval。Push、merge、生产/共享可变操作和会改变业务结果的方案仍须明确授权。
 

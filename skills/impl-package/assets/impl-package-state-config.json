@@ -1,5 +1,5 @@
 {
-  "contractVersion": "3.2",
+  "contractVersion": "3.3",
   "stateVocabulary": {
     "task": ["PENDING", "READY", "RUNNING", "BLOCKED", "FAILED", "NEEDS-REVALIDATION", "DONE", "WAIVED", "SUPERSEDED"],
     "legacyTaskRead": ["NEEDS_SEAM"],

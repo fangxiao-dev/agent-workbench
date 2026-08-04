@@ -58,6 +58,9 @@ def main() -> None:
     gate_template = read(
         IMPL_ROOT / "dev-with-track" / "assets" / "templates" / "gate.md"
     )
+    progress_template = read(
+        IMPL_ROOT / "dev-with-track" / "assets" / "templates" / "progress.md"
+    )
     binding_template = read(
         IMPL_ROOT / "assets" / "templates" / "revision-bindings.json"
     )
@@ -208,7 +211,9 @@ def main() -> None:
         (readiness_template, "### 可选项（Optional", "manual readiness optional fields"),
         (ticket_template, "Plan Revision", "ticket plan-revision field"),
         (ticket_template, "Runtime Acceptance Status", "ticket acceptance projection"),
+        (ticket_template, "- 值：UNRECORDED", "draft ticket non-runtime sentinel"),
         (ticket_template, "Ticket 不写 Phase、Next 或 Progress", "ticket recovery stays in package progress"),
+        (binding_template, '"contractVersion": "3.3"', "current state contract version"),
         (
             dev_with_track,
             "已明确完成且仍新鲜的 investigation 不重做",
@@ -479,6 +484,8 @@ def main() -> None:
             "机器审计元数据：",
             "redundant gate machine metadata",
         ),
+        (progress_template, "Actionable Units", "derived actionable-unit projection"),
+        (progress_template, "Downstream", "downstream readiness projection"),
     )
     for content, needle, label in forbidden:
         assert_not_contains(content, needle, label)

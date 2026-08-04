@@ -13,6 +13,7 @@ description: 当准备从 handoff、plan、review、audit、Issue 或 execution 
 - 只检查当前即将开始的高风险单元、或 plan 明确要求启动前存在的环境变量、工具、临时资源或 cleanup 前置；后续验证步骤的资源仍由 Planned Verification 按需处理，不要求预先登记。
 - 将结果分为 `已授权`、`本次请求授权`、`明确禁止/不适用`。每项说明对象、环境、数据边界和最大副作用，使 owner 能以“全部批准 + 例外”一次作答。
 - 启动前置只记录实际检查或精确 blocker，不展示 secret、token 或完整连接串；不创建通用 `ready`/`repairable`/`blocked` 状态表。
+- Execution handoff 只承载 task-scoped preflight facts、control map 与授权边界，不替代长期 Decision/Spec/Plan/Ticket。只有 package/worktree/HEAD、current D/S/P binding、两个 sidecar digest、runtime/gate anchor、只读 canonical `contract-status` verdict 与 authorization envelope 全部精确匹配时，才可直接复用这些 facts。
 - host 允许且 owner 未禁止时，默认采用下述“默认/长任务模式”；普通模式只用于确实短小、低耦合的工作，或 owner 明确选择时。
 - 一次性授权只属于当前任务。它可按明确 Task 边界传递给 subagent，但不扩展到新系统、更高环境、真实数据或 materially broader/destructive scope。
 
@@ -37,11 +38,17 @@ description: 当准备从 handoff、plan、review、audit、Issue 或 execution 
 
 ### 2. 提取完整授权边界
 
-先收集当前 session 对本任务已经明确允许或禁止的事项，再读来源中的 permission/HITL、执行、验证、清理、发布和外部依赖部分。若 preflight 需要继续，在输出 bundle 前完整读取 [authorization-contract.md](references/authorization-contract.md)，按其中的生命周期扫描和当前启动前置规则检查遗漏。
+先用 handoff、compact anchor、runtime/binding sidecar 和只读 canonical `contract-status` compact verdict 分类。Anchor/preflight restore 阶段不运行 `validate --working-tree` / `validate --committed`；它们延后到首次依赖 binding 的正式执行单元前运行。
 
-若当前 plan earns Tickets/DAG，同时验证同一 Attempt/P revision 的完整 earned artifact set 已联合批准；缺失、错版或只批准部分 bundle 都阻止开工。不要从一般代码库知识推测来源未提及的外部系统。
+- `restore`：handoff 已记录 preflight 完成，且 package/worktree/HEAD、D/S/P binding、sidecar digests、runtime/gate anchor、contract-status 与 allowed/blocked authorization envelope 全部精确匹配。验证后直接返回，不读取 authorization contract、不扫描主控全文、不重新检查 earned bundle，也不生成第二份 bundle。
+- `new/update`：authorization envelope 缺失或 materially changed，或出现新的权限/HITL decision。仅此分支执行完整授权扫描。
+- `anchor mismatch`：先只读取不匹配锚点对应的 control slice；若只是事实 freshness 变化，更新 task-scoped facts 后继续。只有由此证明 authorization envelope 缺失或 materially changed，才升级为 `new/update`。
 
-完成标准：每项 source-stated/current-session authorization 与 HITL 只记录一次；当前单元的明确启动前置已识别，没有引入相邻系统。
+`new/update` 先收集当前 session 已明确允许或禁止的事项，再读来源中的 permission/HITL、执行、验证、清理、发布和外部依赖部分；输出前完整读取 [authorization-contract.md](references/authorization-contract.md)，按其中的生命周期扫描和当前启动前置规则检查遗漏。若 plan earns Tickets/DAG，同时验证同一 Attempt/P revision 的完整 earned artifact set 已联合批准；缺失、错版或只批准部分 bundle 都阻止开工。不要从一般代码库知识推测来源未提及的外部系统。
+
+正式执行时按 current control slice 与 active Ticket 增量读取 canonical artifacts。handoff freshness 检查只决定能否复用 task-scoped facts，不能将 handoff 提升为长期事实源。
+
+完成标准：`restore` 已满足全锚点并返回，或冲突 control slice 已核查；只有确需 `new/update` 时，source-stated/current-session authorization 与 HITL 才各记录一次。当前单元的明确启动前置已识别，没有引入相邻系统。
 
 ### 3. 检查当前启动前置
 
@@ -51,6 +58,8 @@ description: 当准备从 handoff、plan、review、audit、Issue 或 execution 
 - 现有 local container/service/port、工具可执行性、browser/native tool/runner 的可启动性；
 - 已批准的测试 identity、temporary storage、fixture namespace 与 cleanup owner 是否可确定；
 - 已计划 external provider 的 endpoint/credential presence，但不发送业务 payload、不调用生产或共享系统。
+
+若 owner 要求“锚定/preflight 后暂停”，当前单元不包含 implementation/test wave：除非 owner 或 plan 明确要求暂停前检查，否则不读取或探测 Node/package manager、DB/container/port、`.env`、browser/provider identity。它们在正式开始后的对应执行 wave 前检查。Git dirty state 首轮只输出计数与 digest；仅在 anchor 不匹配、write-set 冲突或需要定位文件时展开路径。
 
 不得运行 migration、写 fixture、触发 provider/browser business flow、执行正式测试或创建新外部资源。若唯一修复是已授权且低副作用的本地动作（例如启动既有 loopback test container、载入未提交的本机 test env），可在本步骤执行并复核；其余缺口进入下一步一次性请求。未解决的前置只阻止依赖它的当前单元；后续、可隔离的验证资源不在此处制造 blocker。
 

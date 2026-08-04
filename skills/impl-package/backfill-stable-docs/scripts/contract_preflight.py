@@ -35,7 +35,7 @@ def _invalid_status(package: Path, reason: str) -> dict[str, Any]:
         "package": package.as_posix(),
         "status": "invalid",
         "contractVersion": None,
-        "currentContractVersion": CONTRACT_VERSION,
+        "currentContractVersion": None,
         "reason": reason,
     }
 
@@ -78,7 +78,7 @@ def inspect_package(package: Path, *, state_engine: Path = STATE_ENGINE) -> dict
         "package": package.as_posix(),
         "status": status,
         "contractVersion": payload.get("contractVersion"),
-        "currentContractVersion": payload.get("currentContractVersion", CONTRACT_VERSION),
+        "currentContractVersion": payload.get("currentContractVersion"),
     }
     if isinstance(payload.get("components"), dict):
         result["components"] = payload["components"]

@@ -20,4 +20,4 @@ Working Branch owner 在并行 Task 返回、发现 BLOCKED、以及 Ticket 最�
 
 最终 package review 前，Working Branch owner 全局扫描所有 Task：每个 Task 必须 DONE，或有明确、已批准且带理由的 WAIVED/SUPERSEDED；不得遗留 BLOCKED。之后按既有 `dev-with-track` 路由运行正式 Ticket/Spec review，并确认所有 Ticket AC 都有实际 evidence、active Spec 全覆盖。最终 review 以 Ticket/Spec 为中心，不以 Task 状态或数量为中心。
 
-验证和 review evidence 进入既有 Execution Record/gate；Task progress 只在其条件满足时补充局部 blocker、evidence 和下一动作。不要建立独立 Ticket progress artifact；主 session 只在阶段、阻塞、Next 或 handoff 实质变化时更新 Ticket 自身的最小恢复摘要，且不能让 Task review 产物自动成为 Ticket acceptance status。
+验证和 review evidence 进入既有 Execution Record/gate；只有 Task 实际 BLOCKED、retry、跨 session/owner handoff 或并行委派时，才在 `tasks/Tn-handoff.md` 补充局部 blocker、evidence 和下一动作。Ticket 不建立本地恢复摘要；其 machine-owned acceptance status 与 package `progress.md` 指针是唯一恢复面，Task review 产物不能自动成为 Ticket acceptance status。

@@ -29,3 +29,30 @@ python "<repo>\skills\call-codex\scripts\call_codex.py" `
 Pass exactly one of `--prompt` or `--prompt-file`. Repeat `--config` for multiple Codex `-c` settings. `--executable` (or `CODEX_EXECUTABLE` in the repository-local `.env` or process environment) pins a specific CLI; otherwise the wrapper ignores the non-executable WindowsApps package resource and discovers a normal PATH CLI or the newest per-user Desktop CLI. The wrapper emits exactly one JSON envelope on stdout; diagnostics go to stderr. Each invocation launches a new Codex process and never resumes or shares a session.
 
 The envelope contains `ok`, `status`, `text`, `usage`, `exit_code`, and `error`. `text` is the final Codex response; callers validate it against any business schema themselves.
+
+## Background launch guardrail
+
+When launching the wrapper with PowerShell `Start-Process`, the wrapper script
+must be the first item in `-ArgumentList`. Do not pass wrapper flags directly to
+`python`; that starts Python itself and produces errors such as `unknown option
+--prompt` without invoking this skill.
+
+```powershell
+$pythonExe = (Get-Command python -ErrorAction Stop).Source
+$wrapper = Join-Path $repo 'skills\call-codex\scripts\call_codex.py'
+if (-not (Test-Path -LiteralPath $wrapper -PathType Leaf)) { throw "Missing wrapper: $wrapper" }
+
+$wrapperArgs = @(
+  $wrapper,
+  '--cwd', $targetRepo,
+  '--prompt-file', $promptFile,
+  '--timeout-s', '900'
+)
+if ($wrapperArgs[0] -ne $wrapper) { throw 'Wrapper path must be the first Python argument' }
+
+Start-Process -FilePath $pythonExe -ArgumentList $wrapperArgs -WindowStyle Hidden -PassThru
+```
+
+Prefer `--prompt-file` for background calls so PowerShell quoting and multiline
+prompt content cannot change the argument vector. Check the returned envelope
+and process exit code before treating the task as dispatched or completed.

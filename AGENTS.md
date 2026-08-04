@@ -27,6 +27,11 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `gemi
   - register it in `registry/third-party-skills.md`
 - Use `verify-registry-state` after plugin registry changes.
 
+## Delegation Workflow
+
+- Use `$investigate-before-implement` from `skills/investigate-before-implement/` for bounded investigation or implementation, and `$reviewer` from `skills/reviewer/` for independent read-only review.
+- The caller supplies the task-specific objective, scope, worktree, write-set, acceptance, authorization, verification, and output contract; workflow and role definitions do not supply business prompts.
+
 ## Implementation Expectations
 
 - When adding a host, update both installers:

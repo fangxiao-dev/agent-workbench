@@ -69,7 +69,7 @@ class DataDrivenConfigTest(unittest.TestCase):
             finally:
                 module.CONFIG = original_config
 
-            configured["contractVersion"] = "3.3"
+            configured["contractVersion"] = "3.4"
             path.write_text(json.dumps(configured), encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "unsupported.*contractVersion"):
                 module._load_config(path)
@@ -121,7 +121,7 @@ class InitStateTest(unittest.TestCase):
             self.assertEqual(
                 state,
                 {
-                    "contractVersion": "3.2",
+                    "contractVersion": "3.3",
                     "purpose": "internal-machine-sidecar",
                     "ownerFacing": False,
                     "packageId": package.name,
@@ -134,7 +134,7 @@ class InitStateTest(unittest.TestCase):
             self.assertEqual(
                 revisions,
                 {
-                    "contractVersion": "3.2",
+                    "contractVersion": "3.3",
                     "purpose": "internal-machine-sidecar",
                     "ownerFacing": False,
                     "current": {},
@@ -228,23 +228,23 @@ class ContractStatusTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             package = Path(temp) / "2026-07-17-example"
             package.mkdir()
-            current = {"contractVersion": "3.2"}
+            current = {"contractVersion": "3.3"}
             self._write_components(package, current, current)
             result = run_cli(package, "contract-status")
             self.assertEqual(result.returncode, 0)
             payload = json.loads(result.stdout)
             self.assertEqual(payload["status"], "current")
-            self.assertEqual(payload["contractVersion"], "3.2")
-            self.assertEqual(payload["currentContractVersion"], "3.2")
+            self.assertEqual(payload["contractVersion"], "3.3")
+            self.assertEqual(payload["currentContractVersion"], "3.3")
 
     def test_contract_status_classifies_old_future_and_invalid_versions(self) -> None:
         cases = (
-            ({"contractVersion": "3.1"}, {"contractVersion": "3.2"}, "upgradeRequired", 3),
-            ({"contractVersion": "3.1", "current": {"design": {"artifact": "design.md"}}}, {"contractVersion": "3.2"}, "upgradeRequired", 3),
-            ({"contractVersion": "3.3"}, {"contractVersion": "3.2"}, "unsupportedFuture", 4),
-            ({"contractVersion": 3.2}, {"contractVersion": "3.2"}, "invalid", 2),
-            ({"contractVersion": "3.2", "schemaVersion": 2}, {"contractVersion": "3.2"}, "invalid", 2),
-            ({"contractVersion": "3.2", "current": {"design": {"artifact": "design.md"}}}, {"contractVersion": "3.2"}, "invalid", 2),
+            ({"contractVersion": "3.2"}, {"contractVersion": "3.3"}, "upgradeRequired", 3),
+            ({"contractVersion": "3.2", "current": {"design": {"artifact": "design.md"}}}, {"contractVersion": "3.3"}, "upgradeRequired", 3),
+            ({"contractVersion": "3.4"}, {"contractVersion": "3.3"}, "unsupportedFuture", 4),
+            ({"contractVersion": 3.3}, {"contractVersion": "3.3"}, "invalid", 2),
+            ({"contractVersion": "3.3", "schemaVersion": 2}, {"contractVersion": "3.3"}, "invalid", 2),
+            ({"contractVersion": "3.3", "current": {"design": {"artifact": "design.md"}}}, {"contractVersion": "3.3"}, "invalid", 2),
         )
         for revision, runtime, expected_status, expected_exit in cases:
             with self.subTest(expected_status=expected_status), tempfile.TemporaryDirectory() as temp:
@@ -287,7 +287,7 @@ class DecisionArtifactContractTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.2",
+                        "contractVersion": "3.3",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {"design": {"artifact": "design.md", "revision": "D1"}},
@@ -330,7 +330,7 @@ class DecisionArtifactContractTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.2",
+                        "contractVersion": "3.3",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {"decision": {"artifact": "decision.md", "revision": "D1"}},
@@ -379,7 +379,7 @@ class DecisionArtifactContractTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.2",
+                        "contractVersion": "3.3",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {"spec": {"artifact": "investigations/spec.md", "revision": "S1"}},
@@ -465,7 +465,7 @@ class RevisionRegistrationTest(unittest.TestCase):
                 sidecar.write_text(
                     json.dumps(
                         {
-                            "contractVersion": "3.2",
+                            "contractVersion": "3.3",
                             "purpose": "internal-machine-sidecar",
                             "ownerFacing": False,
                             "current": {"spec": {"artifact": "spec.md", "revision": "S1"}},
@@ -507,7 +507,7 @@ class RevisionRegistrationTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.2",
+                        "contractVersion": "3.3",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {},
@@ -563,7 +563,7 @@ class PlanContractValidationTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.2",
+                        "contractVersion": "3.3",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {},
@@ -635,14 +635,14 @@ class RuntimeStateTransitionTest(unittest.TestCase):
             (tickets / "01-alpha.md").write_text(
                 "# Alpha\n\n**Ticket ID：** alpha\n**执行尝试 ID（Attempt ID）：** initial\n\n## 运行时验收状态（Runtime Acceptance Status）\n\n"
                 "<!-- impl-package:projection runtime-state begin -->\n"
-                "- 值：[unrecorded]\n- 直接证据：[unrecorded]\n"
+                "- 值：UNRECORDED\n- 直接证据：none（Draft 尚无 runtime record）\n"
                 "<!-- impl-package:projection runtime-state end -->\n",
                 encoding="utf-8",
             )
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.2",
+                        "contractVersion": "3.3",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {
@@ -677,6 +677,7 @@ class RuntimeStateTransitionTest(unittest.TestCase):
             updated = json.loads(state_path.read_text(encoding="utf-8"))
             self.assertEqual(updated["tasks"][0]["state"], "DONE")
             self.assertEqual(updated["tasks"][0]["evidence"], "plan.md#ER-2")
+            self.assertEqual(updated["tickets"][0]["state"], "PENDING")
             self.assertIn("| T1 | DONE | plan.md#ER-2 |", (package / "dag.md").read_text(encoding="utf-8"))
 
             stale = run_cli(
@@ -696,6 +697,44 @@ class RuntimeStateTransitionTest(unittest.TestCase):
             self.assertNotEqual(stale.returncode, 0)
             self.assertIn("expected state", stale.stderr)
 
+    def test_current_contract_does_not_parse_legacy_in_progress_ticket_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            package = Path(temp) / "2026-08-04-no-legacy-ticket-parser"
+            sidecar = package / ".impl-package" / "revision-bindings.json"
+            sidecar.parent.mkdir(parents=True)
+            (package / "plan.md").write_text(
+                "执行组合（Composition）：tickets=true, dag=false\n", encoding="utf-8"
+            )
+            tickets = package / "tickets"
+            tickets.mkdir()
+            (tickets / "01-legacy.md").write_text(
+                "# Legacy\n\n**Ticket ID：** legacy\n**执行尝试 ID（Attempt ID）：** initial\n\n"
+                "## 运行时验收状态（Runtime Acceptance Status）\n\n"
+                "<!-- impl-package:projection runtime-state begin -->\n"
+                "- 值：IN_PROGRESS\n- 直接证据：legacy\n"
+                "<!-- impl-package:projection runtime-state end -->\n",
+                encoding="utf-8",
+            )
+            sidecar.write_text(
+                json.dumps(
+                    {
+                        "contractVersion": "3.3",
+                        "purpose": "internal-machine-sidecar",
+                        "ownerFacing": False,
+                        "current": {
+                            "attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}
+                        },
+                        "bindings": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            rejected = run_cli(package, "init", "--package-id", package.name, check=False)
+
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("unsupported ticket state", rejected.stderr)
+
     def test_init_selects_earned_artifacts_by_current_attempt(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             package = Path(temp) / "2026-07-17-example"
@@ -707,7 +746,7 @@ class RuntimeStateTransitionTest(unittest.TestCase):
             tickets.mkdir()
             (tickets / "01-old.md").write_text("# Old\n\n**Ticket ID：** old\n**执行尝试 ID（Attempt ID）：** initial\n", encoding="utf-8")
             revision = {
-                "contractVersion": "3.2", "purpose": "internal-machine-sidecar", "ownerFacing": False,
+                "contractVersion": "3.3", "purpose": "internal-machine-sidecar", "ownerFacing": False,
                 "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}}, "bindings": [],
             }
             sidecar.write_text(json.dumps(revision), encoding="utf-8")
@@ -751,7 +790,7 @@ class RuntimeStateTransitionTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.2",
+                        "contractVersion": "3.3",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}},
@@ -956,7 +995,7 @@ class GateIndexTest(unittest.TestCase):
             (sidecar / "revision-bindings.json").write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.2",
+                        "contractVersion": "3.3",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {
@@ -981,7 +1020,7 @@ class GateIndexTest(unittest.TestCase):
             (sidecar / "runtime-state.json").write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.2",
+                        "contractVersion": "3.3",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "packageId": package.name,
@@ -1067,7 +1106,7 @@ class GateIndexTest(unittest.TestCase):
             revision_path.parent.mkdir()
             revision_path.write_text(
                 json.dumps({
-                    "contractVersion": "3.2",
+                    "contractVersion": "3.3",
                     "purpose": "internal-machine-sidecar",
                     "ownerFacing": False,
                     "current": {"attempt": {"id": "initial", "plan": "plan.md", "revision": "P1"}},
@@ -1172,7 +1211,7 @@ class ProjectionRebindTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.2",
+                        "contractVersion": "3.3",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {},
@@ -1264,7 +1303,7 @@ class ProjectionRebindTest(unittest.TestCase):
             )
             (package / "plan.md").write_text("# Initial\n\n" + plan_body, encoding="utf-8")
             sidecar.write_text(json.dumps({
-                "contractVersion": "3.2", "purpose": "internal-machine-sidecar", "ownerFacing": False,
+                "contractVersion": "3.3", "purpose": "internal-machine-sidecar", "ownerFacing": False,
                 "current": {}, "bindings": [],
             }), encoding="utf-8")
             run_cli(package, "init", "--package-id", package.name)
@@ -1295,6 +1334,73 @@ class ProjectionRebindTest(unittest.TestCase):
 
 
 class RuntimeProjectionValidationTest(unittest.TestCase):
+    def _ticket_gate_package(self, root: Path, *, labels: str, state: str, include_spec: bool = True, include_plan: bool = True) -> tuple[object, Path]:
+        spec = importlib.util.spec_from_file_location(f"impl_package_state_ticket_gate_{labels}_{state}", SCRIPT)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        package = root / "package"
+        sidecar = package / ".impl-package"
+        tickets = package / "tickets"
+        tickets.mkdir(parents=True)
+        sidecar.mkdir()
+        (package / "plan.md").write_text("执行组合（Composition）：tickets=true, dag=false\n", encoding="utf-8")
+        if labels == "zh":
+            fields = (
+                ("**规格修订（Spec Revision）：** S1\n" if include_spec else "")
+                + ("**计划修订（Plan Revision）：** P1\n" if include_plan else "")
+            )
+        else:
+            fields = (
+                ("**Spec Revision:** S1\n" if include_spec else "")
+                + ("**Plan Revision:** P1\n" if include_plan else "")
+            )
+        (tickets / "01-old.md").write_text(
+            "# Old\n\n**Ticket ID：** TK-OLD\n**执行尝试 ID（Attempt ID）：** initial\n" + fields,
+            encoding="utf-8",
+        )
+        (sidecar / "revision-bindings.json").write_text(json.dumps({
+            "contractVersion": "3.3", "purpose": "internal-machine-sidecar", "ownerFacing": False,
+            "current": {"spec": {"revision": "S2"}, "attempt": {"id": "initial", "plan": "plan.md", "revision": "P2"}},
+            "bindings": [],
+        }), encoding="utf-8")
+        (sidecar / "runtime-state.json").write_text(json.dumps({
+            "contractVersion": "3.3", "purpose": "internal-machine-sidecar", "ownerFacing": False,
+            "packageId": "package", "tasks": [],
+            "tickets": [{"attempt": "initial", "id": "TK-OLD", "state": state, "evidence": "ticket-evidence"}],
+            "artifacts": [], "gate": {"allocations": [], "entries": []},
+        }), encoding="utf-8")
+        return module, package
+
+    def test_terminal_gate_allows_parseable_historical_ticket_only_when_terminal(self) -> None:
+        for labels in ("zh", "en"):
+            for state in ("SATISFIED", "WAIVED", "SUPERSEDED"):
+                with self.subTest(labels=labels, state=state), tempfile.TemporaryDirectory() as temp:
+                    module, package = self._ticket_gate_package(Path(temp), labels=labels, state=state)
+                    module._assert_attempt_decomposition_revision_bindings(
+                        package, "initial", {"decision": "N/A", "spec": "S2", "plan": "P2"}
+                    )
+
+        for state in ("PENDING", "BLOCKED", "NEEDS-REVALIDATION"):
+            with self.subTest(state=state), tempfile.TemporaryDirectory() as temp:
+                module, package = self._ticket_gate_package(Path(temp), labels="zh", state=state)
+                with self.assertRaisesRegex(module.StateError, "ticket TK-OLD revision binding"):
+                    module._assert_attempt_decomposition_revision_bindings(
+                        package, "initial", {"decision": "N/A", "spec": "S2", "plan": "P2"}
+                    )
+
+    def test_terminal_gate_rejects_historical_ticket_with_missing_revision_field(self) -> None:
+        for missing in ("spec", "plan"):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temp:
+                module, package = self._ticket_gate_package(
+                    Path(temp), labels="en", state="SATISFIED",
+                    include_spec=missing != "spec", include_plan=missing != "plan",
+                )
+                with self.assertRaisesRegex(module.StateError, "ticket TK-OLD revision binding"):
+                    module._assert_attempt_decomposition_revision_bindings(
+                        package, "initial", {"decision": "N/A", "spec": "S2", "plan": "P2"}
+                    )
+
     def test_terminal_gate_rejects_stale_dag_revision_binding(self) -> None:
         spec = importlib.util.spec_from_file_location("impl_package_state_gate_binding_test", SCRIPT)
         assert spec is not None and spec.loader is not None
@@ -1312,7 +1418,7 @@ class RuntimeProjectionValidationTest(unittest.TestCase):
                 "- 修订集合（Revision set）：D1 / S1 / P1\n", encoding="utf-8"
             )
             (sidecar / "revision-bindings.json").write_text(json.dumps({
-                "contractVersion": "3.2", "purpose": "internal-machine-sidecar", "ownerFacing": False,
+                "contractVersion": "3.3", "purpose": "internal-machine-sidecar", "ownerFacing": False,
                 "current": {"decision": {"revision": "D1"}, "spec": {"revision": "S2"},
                             "attempt": {"id": "initial", "plan": "plan.md", "revision": "P2"}},
                 "bindings": [],
@@ -1349,7 +1455,7 @@ class RuntimeProjectionValidationTest(unittest.TestCase):
             sidecar.write_text(
                 json.dumps(
                     {
-                        "contractVersion": "3.2",
+                        "contractVersion": "3.3",
                         "purpose": "internal-machine-sidecar",
                         "ownerFacing": False,
                         "current": {},
@@ -1432,6 +1538,8 @@ class ExecutionRecordLedgerTest(unittest.TestCase):
             "--evidence",
             "plan.md#publication",
         )
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "publish ER baseline")
         return package
 
     def test_er_add_is_idempotent_and_rebuilds_progress(self) -> None:
@@ -1454,10 +1562,12 @@ class ExecutionRecordLedgerTest(unittest.TestCase):
             progress = (package / "progress.md").read_text(encoding="utf-8")
             self.assertIn("Active Checkpoints", progress)
             self.assertIn("run the downstream check", progress)
+            self.assertNotIn("Actionable Units", progress)
+            self.assertNotIn("Downstream", progress)
             self.assertNotIn("## Execution Record", (package / "plan.md").read_text(encoding="utf-8"))
             run_cli(package, "validate", "--working-tree")
 
-    def test_checkpoint_supersedes_by_subject_and_reusable_selection_is_validated(self) -> None:
+    def test_checkpoint_supersedes_by_subject_and_removed_fields_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             package = self._package(Path(temp))
             first = json.dumps(
@@ -1482,23 +1592,72 @@ class ExecutionRecordLedgerTest(unittest.TestCase):
             run_cli(package, "er-add", input_text=second)
             ledger = (package / "execution-records/initial.md").read_text(encoding="utf-8")
             self.assertIn("- Supersedes: initial-ER-001", ledger)
-            invalid = run_cli(
+            for removed_field, value in (
+                ("whyOther", "legacy"),
+                ("allowsDownstreamImplementation", True),
+                ("downstream", ["task:T9"]),
+            ):
+                invalid = run_cli(
+                    package,
+                    "er-add",
+                    check=False,
+                    input_text=json.dumps(
+                        {
+                            "purpose": "checkpoint",
+                            "title": "removed field",
+                            "content": "bad",
+                            "nextAction": "stop",
+                            removed_field: value,
+                        }
+                    ),
+                )
+                self.assertNotEqual(invalid.returncode, 0)
+                self.assertIn("unsupported fields", invalid.stderr)
+            other = run_cli(
+                package,
+                "er-add",
+                check=False,
+                input_text=json.dumps({"purpose": "other", "title": "legacy", "content": "bad"}),
+            )
+            self.assertNotEqual(other.returncode, 0)
+            self.assertIn("unsupported Execution Record purpose", other.stderr)
+
+    def test_idempotent_retry_repairs_missing_projections(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            package = self._package(Path(temp))
+            payload = json.dumps(
+                {
+                    "purpose": "checkpoint",
+                    "title": "recover projections",
+                    "content": "ledger append survived",
+                    "nextAction": "continue",
+                }
+            )
+            first = json.loads(run_cli(package, "er-add", input_text=payload).stdout)
+            (package / "execution-records/index.md").unlink()
+            (package / "progress.md").write_text("stale projection\n", encoding="utf-8")
+
+            retry = json.loads(run_cli(package, "er-add", input_text=payload).stdout)
+
+            self.assertEqual(retry["recordId"], first["recordId"])
+            self.assertTrue(retry["idempotent"])
+            run_cli(package, "validate", "--working-tree")
+
+    def test_new_append_rejects_uncommitted_projection_tamper(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            package = self._package(Path(temp))
+            (package / "progress.md").write_text("tampered\n", encoding="utf-8")
+            rejected = run_cli(
                 package,
                 "er-add",
                 check=False,
                 input_text=json.dumps(
-                    {
-                        "purpose": "checkpoint",
-                        "title": "bad reusable",
-                        "content": "bad",
-                        "nextAction": "stop",
-                        "allowsDownstreamImplementation": True,
-                        "downstream": ["task:T9"],
-                    }
+                    {"purpose": "judgment", "title": "must not append", "content": "new record"}
                 ),
             )
-            self.assertNotEqual(invalid.returncode, 0)
-            self.assertIn("does not resolve", invalid.stderr)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("progress projection mismatch", rejected.stderr)
+            self.assertNotIn("must not append", (package / "execution-records/initial.md").read_text(encoding="utf-8"))
 
     def test_sealed_record_tampering_fails_validation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1515,7 +1674,12 @@ class ExecutionRecordLedgerTest(unittest.TestCase):
                 ),
             )
             ledger = package / "execution-records/initial.md"
-            ledger.write_text(ledger.read_text(encoding="utf-8").replace("provider returned", "provider silently returned"), encoding="utf-8")
+            original = ledger.read_text(encoding="utf-8")
+            ledger.write_text(original.replace(" · judgment", " · other"), encoding="utf-8")
+            unsupported = run_cli(package, "validate", "--working-tree", check=False)
+            self.assertNotEqual(unsupported.returncode, 0)
+            self.assertIn("unsupported Execution Record purpose", unsupported.stderr)
+            ledger.write_text(original.replace("provider returned", "provider silently returned"), encoding="utf-8")
             failed = run_cli(package, "validate", "--working-tree", check=False)
             self.assertNotEqual(failed.returncode, 0)
             self.assertIn("content hash mismatch", failed.stderr)

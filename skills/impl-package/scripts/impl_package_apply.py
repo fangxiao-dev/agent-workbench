@@ -362,6 +362,30 @@ def _infer_artifact(package: Path, current: dict[str, Any], kind: str, explicit:
     return candidates[0]
 
 
+def _registration_is_needed(
+    package: Path,
+    state: dict[str, Any],
+    registration: dict[str, Any],
+) -> bool:
+    binding, _ = STATE._registration_binding(
+        package,
+        state,
+        registration["kind"],
+        registration["alias"],
+        registration["artifact"],
+        registration.get("attempt"),
+        registration["evidence"],
+    )
+    existing = next(
+        (row for row in state.get("bindings", []) if row.get("id") == binding["id"]),
+        None,
+    )
+    if existing is None:
+        return True
+    identity_fields = ("id", "artifact", "revision", "mode", "blob", "attempt")
+    return any(existing.get(field) != binding.get(field) for field in identity_fields)
+
+
 def _build_context(
     package: Path,
     aliases: dict[str, str],
@@ -379,15 +403,15 @@ def _build_context(
     registrations = []
     for kind in ("decision", "spec", "plan"):
         artifact = _infer_artifact(package, current, kind, artifacts.get(kind))
-        registrations.append(
-            {
-                "kind": kind,
-                "alias": aliases[kind],
-                "artifact": artifact,
-                "attempt": attempt if kind == "plan" else None,
-                "evidence": f"impl-package-apply:publish-plan/{aliases[kind]}",
-            }
-        )
+        registration = {
+            "kind": kind,
+            "alias": aliases[kind],
+            "artifact": artifact,
+            "attempt": attempt if kind == "plan" else None,
+            "evidence": f"impl-package-apply:publish-plan/{aliases[kind]}",
+        }
+        if _registration_is_needed(package, current_state, registration):
+            registrations.append(registration)
     _, _, candidate, runtime_candidate = STATE._build_registration_candidate(package, registrations)
     selection = candidate.get("current", {}).get("attempt")
     if not selection or selection.get("id") != attempt:

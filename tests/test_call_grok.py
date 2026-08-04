@@ -49,11 +49,24 @@ def test_default_command_uses_common_tools_without_prompt_policy(tmp_path: Path)
     assert executor.build_cmd("grok", args.prompt, args) == [
         "grok", "-p", "use exactly this prompt", "--max-turns", "100", "--output-format",
         "streaming-json", "--cwd", str(tmp_path), "--tools",
-        "read_file,search_replace,list_dir,grep,run_terminal_cmd,todo_write",
+        "grep,list_dir,run_terminal_cmd,read_file,search_replace", "--always-approve",
     ]
     help_text = executor.build_parser().format_help()
     for removed in ("--role", "--resume", "--plan-file", "--context-file"):
         assert removed not in help_text
+
+
+def test_always_approve_is_default_and_can_be_disabled(tmp_path: Path) -> None:
+    executor = load_executor()
+    default_args = executor.parse_args(["--cwd", str(tmp_path), "--prompt", "task"])
+    disabled_args = executor.parse_args(
+        ["--cwd", str(tmp_path), "--prompt", "task", "--no-always-approve"]
+    )
+
+    assert default_args.always_approve is True
+    assert "--always-approve" in executor.build_cmd("grok", "task", default_args)
+    assert disabled_args.always_approve is False
+    assert "--always-approve" not in executor.build_cmd("grok", "task", disabled_args)
 
 
 def test_grok_executable_prefers_explicit_then_new_and_legacy_environment(monkeypatch) -> None:

@@ -17,24 +17,16 @@
 
 若 decomposition/readiness defect 不改变业务结果，只涉及 typed edge、Task 顺序、contribution 或 artifact 引用，调用 owning skill 机械修正并做受影响 subset 验证即可。若改变 Ticket acceptance boundary、planned evidence、ownership、执行顺序或 gate，bundle approval 失效，必须回 planning/review；只有改变业务结果、Acceptance Semantics、安全/外部 authority、Composition earned artifact，或存在多个不同业务结果的方案时才请求 owner。
 
-低频情况下，上游 Ticket 仍为 `PENDING` 或 Task 仍为 `RUNNING`，但已形成可复用实现检查点时，主 session 可提前派发仅依赖该检查点的下游 Ticket/Task implementation。主 session 按实际 seam、diff、证据与 open findings 判断，不新增状态、artifact、checklist 或自动算法。提前派发必须同时满足：
-
-- 下游实际依赖的接口或行为已经提交并有局部测试证据，且下游执行基线能够使用该实现。
-- 主 session 确认实际剩余工作与 open findings 不会改变下游依赖的合同或可观察行为；不能仅按测试覆盖、review closure、观测性等类别认定安全。
-- 派发前，主 session 根据当前 diff 与证据通过 `er-add` 写入一次 `checkpoint`，说明共享 seam、工作边界与回退条件；不要求上游预先写好专用检查点记录。
-- 只提前启动 implementation；acceptance 和 release dependency 均不因该例外释放，继续按各自既有 gate 与语义判断。下游 implementation 启动也不表示原 dependency edge 已正式释放，不能支持任何 acceptance 结论。
-- 上游若改变下游依赖的合同、行为、错误语义、时序、兼容性或其他关键事实，主 session 停止沿用受影响的下游工作与旧证据，将相关 Ticket/Task 置为 `NEEDS-REVALIDATION`，完成 scoped reconciliation 后再继续。
-
 ## Runtime state and evidence
 
 - dag=true 时，runtime-state 是 task SoT，Ticket acceptance 同样由 ticket record 投影；状态只能经 `set-state --expect --evidence` 变更。
 - 只在 BLOCKED、handoff、retry 或并行派发时写 `tasks/Tn-handoff.md`；它不复制 Ticket AC 或第二套状态。
-- Ticket 不再承载 Phase/Next/Progress；两条状态轴、blocker、checkpoint 和 actionable units 统一从根 `progress.md` 恢复，ER 只由主 session 通过 `er-add` 写入。
+- Ticket 只承载验收合同与 machine-owned acceptance status；两条状态轴、显式 blocker、checkpoint 及 handoff/ER 指针统一从根 `progress.md` 恢复。`progress.md` 不推导 dispatch readiness，ER 只由主 session 通过 `er-add` 写入。
 - 返工上游输出时将依赖标为 `NEEDS-REVALIDATION`；DONE 只有在 Done-when 证据存在时释放依赖，WAIVED/SUPERSEDED 必须有替代证据和 impact note。
 - 每次实际检查前先通过 committed validate；需要保留的判断、checkpoint、failure learning 或 external evidence interpretation 由主 session 将结构化 payload 交给 `er-add`，写入当前 Attempt 的 sealed ledger。外部 artifact hash 用 artifact CLI 维护。
 - 手工验收前，按 `assets/templates/manual-acceptance-readiness.md` 将必要 readiness packet 追加到最新 ER 或 canonical handoff；只填写适用 optional 项，不输出 N/A；它不替代验收证据。
 
-ER 不复制通用 checklist 或完整 hash 清单，只记录本次 delta；旧 ER 不得修改。ER 的 purpose 只有 `checkpoint`、`judgment`、`other`；routine state transition、普通 validation PASS、artifact/hash 注册和可从 canonical source 推导的事实不写 ER。`progress.md` 与 ER index 是 CLI projection，不可手改。可把真实调查材料写入 `investigations/<topic>.md`，但它不拥有 authority、不绑定 revision、不维护 adoption/backlink，Decision/Spec 必须脱离它仍自足。
+ER 不复制通用 checklist 或完整 hash 清单，只记录本次 delta；旧 ER 不得修改。ER 的 purpose 只有 `checkpoint` 与 `judgment`；routine state transition、普通 validation PASS、artifact/hash 注册和可从 canonical source 推导的事实不写 ER。`progress.md` 与 ER index 是 CLI projection，不可手改。可把真实调查材料写入 `investigations/<topic>.md`，但它不拥有 authority、不绑定 revision、不维护 adoption/backlink，Decision/Spec 必须脱离它仍自足。
 
 ## Progressive system evidence
 
@@ -54,7 +46,7 @@ completion claim 仍由 `verification-before-completion` 审计。复用 evidenc
 
 Task `DONE` 不是 Ticket acceptance。主 session 负责跨 Task 集成和 acceptance，但不自行代替 task worker 或 leaf reviewer。Ticket 候选前先检查所有 contributes-to 的 BLOCKED task；固定 comparison point，按实际 diff、contract impact 和定向证据做风险判断。
 
-Review/revise 期间，只有“存在受阻下游”和“新证据表明其依赖 seam 已稳定”同时成立时，主 session 才进入可复用实现检查点分支。相关未完成 review 或 open finding 仍可能改变该 seam 时继续等待；否则复用上面的既有条件记录 ER 并派发，下游 implementation 与上游 review/closure 可并行。`do-review` 与 leaf reviewer 不作调度判断；这不是新的 stage、状态或 checklist，也不改变 acceptance/release gate。
+Review/revise 期间继续按 canonical Ticket/DAG dependency 与 runtime state 判断 dispatch；未释放的 dependency 继续等待。checkpoint 只保存恢复上下文，不形成提前派发例外，也不改变 acceptance/release gate。
 
 - 局部、可逆、无共享 contract/状态/外部副作用的 diff 可直接记录理由与证据后进入 claim audit。
 - 普通实现需要正式 review 时默认选择 `code-review`；interface、状态机、模块 seam 倾向 `standards-review` / `spec-review`；数据完整性、证据 authority、auth、外部 mutation、并发等必须 `safety-review`。

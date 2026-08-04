@@ -376,26 +376,24 @@
     {
       "id": 33,
       "prompt": "上游 Ticket 仍为 PENDING、对应 Task 仍为 RUNNING，但下游依赖的 typed mutation-unknown/cache-clear 行为已提交、有局部测试证据且下游执行基线可用。上游只剩经实际 diff 与 open findings 确认不会改变该行为的真实 caller 并发测试；另一变体中上游仍可能修改 callback、deadline 或错误分类。主 session 能否提前派发下游 Ticket/Task？并行后依赖事实变化又如何处理？",
-      "expected_output": "Allows only the first variant's downstream Ticket/Task implementation to start from an ER-recorded reusable implementation checkpoint, rejects the seam-changing variant, keeps acceptance/release on their existing gates, and revalidates only affected downstream work if the dependency facts later change.",
+      "expected_output": "Keeps both variants blocked until the canonical Ticket or Task dependency releases; it may preserve the stable seam evidence as a recovery checkpoint, but that checkpoint does not authorize downstream implementation.",
       "files": [],
       "expectations": [
-        "Uses the same checkpoint principle for Ticket and Task while preserving SATISFIED versus DONE",
-        "Requires committed local evidence and a downstream execution baseline that can use the implementation",
-        "Lets the main session append the dispatch rationale to the Attempt Execution Record through er-add without a new state, artifact or checklist",
-        "Does not treat implementation dispatch as dependency release or acceptance evidence",
-        "Stops using affected downstream work and evidence, marks the related Ticket/Task NEEDS-REVALIDATION, and performs scoped reconciliation when dependency facts change"
+        "Preserves SATISFIED versus DONE as the canonical Ticket and Task release conditions",
+        "Allows stable seam evidence to be recorded as recovery context without a machine downstream grant",
+        "Does not treat a checkpoint or local evidence as dependency release, dispatch authority or acceptance evidence",
+        "Keeps the seam-changing variant blocked without inventing a new state, artifact or checklist"
       ]
     },
     {
       "id": 34,
       "prompt": "上游 Ticket 已进入 review/revise 循环。code/standards/spec review 只发现一个 docstring P2，修复已提交并有局部证据。变体 A 的 safety review 仍未完成且其范围可能改变 callback、deadline 或并发行为；变体 B 的相关 review 已完成，剩余 closure 只验证不会改变下游依赖 seam 的文档与证据。主 session 在启动下一轮 closure review 前应如何处理下游 implementation？",
-      "expected_output": "Notices the checkpoint opportunity only because a downstream is blocked and new review evidence suggests its seam may be stable; keeps variant A blocked, but records and dispatches variant B alongside continuing upstream closure without claiming acceptance or dependency release.",
+      "expected_output": "Keeps both variants' downstream implementation blocked until the canonical dependency releases; variant B's stable review evidence may be recorded as recovery context while upstream closure continues.",
       "files": [],
       "expectations": [
-        "Checks checkpoint readiness only when a downstream is actually blocked and new review/revise evidence suggests its seam is stable",
-        "Keeps checkpoint and dispatch judgment with the main session rather than do-review or a leaf reviewer",
-        "Treats an incomplete or timed-out relevant review as unresolved seam uncertainty without making unrelated review gaps a blanket blocker",
-        "Allows upstream review/closure and downstream implementation to continue in parallel only when the existing checkpoint conditions hold",
+        "Uses canonical Ticket/DAG dependency state rather than a checkpoint to decide dispatch",
+        "Keeps variant A blocked because the relevant review may still change the seam",
+        "Allows variant B's stable evidence to be recorded by the main session without granting early dispatch",
         "Does not add a new stage, state or checklist and does not release acceptance or release dependencies"
       ]
     },
@@ -405,7 +403,7 @@
       "expected_output": "Restores directly from package progress.md, verifies it against canonical state and evidence, and runs the checkpoint's next action without repeating the completed investigation.",
       "files": [],
       "expectations": [
-        "Reads package progress.md, current runtime state, latest checkpoint and actionable units before selecting work",
+        "Reads package progress.md, current runtime state and latest checkpoint before selecting work under the existing control contract",
         "Cross-checks the projection against sidecar, ER and actual diff",
         "Does not repeat the completed investigation while its evidence remains fresh",
         "Refreshes machine-owned progress.md through the state CLI and does not edit Ticket recovery text",

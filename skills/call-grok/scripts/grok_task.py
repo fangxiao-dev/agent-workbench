@@ -33,7 +33,7 @@ DEFAULT_STALL_TIMEOUT_SEC = 600
 DEFAULT_OVERALL_TIMEOUT_SEC = 600
 MAX_TIMEOUT_SEC = 1800
 DEFAULT_HEARTBEAT_SEC = 15
-DEFAULT_TOOLS = "read_file,search_replace,list_dir,grep,run_terminal_cmd,todo_write"
+DEFAULT_TOOLS = "grep,list_dir,run_terminal_cmd,read_file,search_replace"
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -411,7 +411,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--tools", default=DEFAULT_TOOLS, help="Pass through Grok --tools")
     p.add_argument("--allow", action="append", default=[], help="Repeatable Grok --allow rule")
     p.add_argument("--deny", action="append", default=[], help="Repeatable Grok --deny rule")
-    p.add_argument("--always-approve", action="store_true", help="Pass through Grok --always-approve")
+    p.add_argument(
+        "--always-approve",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Pass through Grok --always-approve (default: on; use --no-always-approve to disable)",
+    )
     p.add_argument("--no-subagents", action="store_true", help="Pass through Grok --no-subagents")
     p.add_argument("--rules", help="Pass through Grok --rules")
     p.add_argument(
