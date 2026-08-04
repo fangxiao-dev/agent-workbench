@@ -15,9 +15,9 @@
 | 形式 | 普通消息 | 贴进 Codex 的 goal 框 |
 | 时机 | 开主控 thread 后第一条 | bootstrap 五步全绿之后 |
 | 作用 | **一次性**把摊子铺开：建 registry、init、开子线、preflight、跑通首轮，然后**停下** | **循环期间每个 turn 重注入**的那几条规则 |
-| 里面是什么 | 这一轮要建哪些线（业务信息，只有你知道） | 坐标 + 授权 + 目标与结束判据 + 每轮动作 |
+| 里面是什么 | 这一轮要建哪些线（业务信息，只有你知道） | registry + 授权 + 目标与结束判据 + 每轮动作 |
 
-两份都带 `coordination_id` / registry / 授权，**这是刻意重复，不要删**。
+两份都带 registry 与授权；启动 prompt 还用 `coordination_id` 完成初始化，主控 goal 从 registry 读取它。
 
 ## 贴之前
 
@@ -88,7 +88,7 @@ create_thread 授权（我，Owner，明确给出）：
   ② 某条线需要替换 session。
 - session 替换时：Role A / Role C 由退休 session 创建自己的继任者；Role B 由 controller 创建继任者。除这个 Role B 例外，任何 session 都不得跨 node 代建 replacement。
 - active children 上限 8，达到上限后要新开线必须先退休一条。
-- 不得为 review、审计或调研创建 thread——那些走 $do-review 与 $call-grok。
+- review、审计或调研使用 subagent。
 - 除以上情形外不得创建 thread。
 ```
 
@@ -109,44 +109,33 @@ create_thread 授权（我，Owner，明确给出）：
 ## 主控 goal（贴进 goal 框的就是这一段）
 
 ```text
-coordination_id：<id>
 registry：<registry 的绝对路径 .json>
 父包 entry：<绝对路径>
 
-授权：
+create_thread 授权：
 <贴本文件「create_thread 授权原文」整段>
-执行授权边界：<本 coordination 允许的本地 / 文件 / Git / 网络动作>
-明确排除项：<本 coordination 不允许的动作>
-push / PR / merge / deploy / Production 与共享远端 mutation 一律需要我单独授权。
+standing execution authority：<允许的本地 / 文件 / Git / 网络动作与 coordination 内调度>
+远端 mutation：<允许的环境、对象和用途；没有则 N/A>
+Production、真实客户数据或 credential、真实 provider 写入以及 push / PR / merge / deploy 均需 Owner 单独授权。
 
 目标：<这次 coordination 要达成什么>
 结束判据：<什么算 closed。局部实现、验证、Platform 交付、子包 gate、代码合入都不算>
 
 ---
 
-你是 Role C 主控，不直接写业务代码。遇到问题你是我的 broker，代替我先做判断，不要只当传声筒。
-收到我的消息后，先回一句「已吸收 + 下一步是什么」，再去执行；不要沉默着直接干活。
-控制流读 $thread-harness 的 Role C 段，线程路由用 $owner-thread-broker。
+你是 Role C。控制流按 $thread-harness Role C，路由按 $owner-thread-broker。
+收到 Owner 消息时先回复「已吸收 + 下一步」。
 
-上述目标、结束判据、执行授权边界与排除项构成本 coordination 的常设授权（standing authority）。
-范围内可直接给当前 child 发 registration、assignment card 与 H3 dispatch，不逐次向我申请；
-seam producer 的 coordination 内调度属于执行路由。扩 scope / 权限、改变长期 ownership 或新增不可逆外部影响才向我提案。
+上述目标、结束判据和授权构成 standing authority：范围内直接派发与调度；
+扩 scope、扩权限、改变长期 ownership 或新增不可逆外部影响才向 Owner 提案。
 
-每轮：重读 registry 与 ledger，机械推导 runnable watch-set（不得用记忆里的 id），
-按 poll 契约原样轮询 → ledger.py sync → ledger.py stall-check → 按退出码行动。
-
-stall-check 退出码 0 / 3 / 4 / 6 的处置按 $thread-harness Role C 段执行。
+每轮重读 registry 与 ledger，按 poll contract 执行 poll → ledger.py sync → ledger.py stall-check。
 
 退出码 2 = MUST_ACT：只有两个选项，且必须记进账本——
 (a) act --dispatch，说出派给谁、造哪个 seam、交付什么；
 (b) 重新读取 registry 后，ledger.py act --registry <absolute-registry-json> --halt --source-session <fresh-controller-current-session-id> --reason "<一句话>" 并结束 loop。
-禁止"继续等待""本轮无变化""已有在途 dispatch"；也不得调整阈值参数来消除它。
 
-wake.reason == "inactiveStatus" 是"有线闲着、该派活"，不是"没有变化"。
-
-seam 缺失是你的待办，不是外部阻塞——所有人都在等某个跨域契约时，派一条 Platform 线去造它。
-
-child compaction 的处置按 session-dispatch.md 执行：Role A catch-up；Role B 不恢复旧 card，直接重派一张新的完整 card；Role C 从 registry / ledger 恢复。
+Child thread 发生 context compaction 时按 session-dispatch.md 处理。
 
 动态进展、session、HEAD、WIP、seam 与 decision 只从 registry / ledger / 任务包读取，
 不写进 goal，也不依赖聊天记忆。

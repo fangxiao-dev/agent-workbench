@@ -4,7 +4,7 @@
 
 未显式传 registry 时，兼容路径默认使用 `ledger.py` 所在仓库中已忽略的 `.progress-record`；`THREAD_HARNESS_BROKER_ROOT` 仍可覆盖该兼容路径。`coordination_id` 用 `<YYMMDDHH>-<slug>`，时间戳取该 coordination 的起始小时。**不要放在 `%TEMP%`**——账本是接手与复盘唯一的事实来源。
 
-四个账本文件都是 JSON Lines，均为 append-only：只能追加新行，不重写旧行，不删除旧行。**controller 是指定 ledger writer**；child 只发送 H1 envelope，controller 验证后使用现有命令追加。CLI 不提供可信调用者鉴权；`act --halt --source-session` 只用于防误操作与来源一致性校验。所有 mutation 在 coordination 级跨进程写锁内完成；追加使用完整 UTF-8 bytes、flush 与 fsync。坏行会 fail-closed，不能自动修复。
+四个账本文件都是 JSON Lines，均为 append-only：只能追加新行，不重写旧行，不删除旧行。**controller 是指定 ledger writer**；child 只发送 H1 JSON payload，controller 验证后使用现有命令追加。CLI 不提供可信调用者鉴权；`act --halt --source-session` 只用于防误操作与来源一致性校验。所有 mutation 在 coordination 级跨进程写锁内完成；追加使用完整 UTF-8 bytes、flush 与 fsync。坏行会 fail-closed，不能自动修复。
 
 ## route：registry 路由回填
 
@@ -37,12 +37,12 @@
 | `turn` | string 或 null | poll 必填 | Desktop `latestTurn.id` | `sync` | 最近一次 poll 看到的 turn id；不参与 `stall_streak`。 |
 | `status` | string 或 null | poll 必填 | Desktop thread status | `sync` | 最近一次 poll 看到的 thread status。 |
 | `turn_status` | string 或 null | poll 必填 | Desktop `latestTurn.status` | `sync` | 最近一次 poll 看到的 turn status。 |
-| `state` | string | 是 | report 只允许 `working` / `awaiting_seam` / `awaiting_owner` / `done`；poll 可推导为 `unknown` | `sync` / `report` | node 当前状态；有非陈旧 report 时以最近 report 为准。陈旧 report 在合成状态中显示为 `<state>(stale)`。 |
+| `state` | string | 是 | report 允许 `working` / `awaiting_seam` / `awaiting_owner` / `ready_for_assignment`；历史 `done` 仅兼容读取；poll 可推导为 `unknown` | `sync` / `report` | node 当前 assignment 状态；有非陈旧 report 时以最近 report 为准。`ready_for_assignment` 只结束当前 assignment，不代表 package/node terminal。陈旧 report 在合成状态中显示为 `<state>(stale)`。 |
 | `waiting_on` | array[string] | report 必填；poll 不写 | seam 引用必须写成 `seam:<id>` | `report` | 当前阻塞依赖。poll 行不得伪造空数组来覆盖自报依赖。 |
 | `last_report_ts` | string | report 必填；poll 不写 | 本地时区 ISO 8601，带偏移 | `report` | node 最近一次主动上报时间。 |
 | `note` | string | 是 | 自由短文本 | `sync` / `report` | 面向 broker 的简短状态说明。 |
-| `source_session_id` | string | H1 report 必填；legacy report 可缺省 | registry 当前 child session id | controller | controller 验证 H1 来源仍是 registry 当前 session。 |
-| `source_registry` | string | H1 report 必填；legacy report 可缺省 | absolute registry JSON path | controller | 记录 controller 实际验证的 registry。 |
+| `source_session_id` | string | controller 接受 H1 后的 report 必填；legacy report 可缺省 | registry 当前 child session id | controller | controller 从消息来源绑定并验证。 |
+| `source_registry` | string | controller 接受 H1 后的 report 必填；legacy report 可缺省 | absolute registry JSON path | controller | 记录 controller 实际使用并验证的 registry。 |
 
 示例：
 
@@ -52,15 +52,17 @@
 {"ts":"2026-08-01T04:50:10+02:00","src":"poll","ledger_seq":43,"seq":42,"round":413,"node":"foundation","head":null,"turn":"turn-201","status":"notLoaded","turn_status":"completed","state":"working","note":"inactiveStatus"}
 ```
 
-### H1 envelope（消息格式，不是新 API）
+### H1 JSON payload（消息格式，不是新 API）
 
 子线只发送以下最小 JSON 给当前 controller；它不运行 `ledger.py report`、`seam` 或 `decide`：
 
 ```json
-{"v":1,"registry":"C:\\repo\\.progress-record\\coordination.json","coordination_id":"26080200-example","node":"catalog","session_id":"session-current","event":"state_changed","state":"awaiting_seam","head":"0123456789012345678901234567890123456789","waiting_on":["seam:order_core_writer"],"artifact":null,"details":null,"note":"waiting for writer contract"}
+{"v":1,"event":"state_changed","state":"awaiting_seam","head":"0123456789012345678901234567890123456789","waiting_on":["seam:order_core_writer"],"artifact":null,"details":null,"note":"waiting for writer contract"}
 ```
 
-controller 读取 envelope 后必须重新读取 `registry`，确认 `session_id` 等于该 node 的 current session；若已有 ledger HEAD，H1 head 必须是其 git 后代，且必须位于该 node 当前 worktree HEAD 的历史上，才允许写入 progress。`event` 用于说明触发原因，`artifact` 无交付物时为 `null`。`details` 是事件特有的最小对象：`seam_delivered` 带 `seam_id/consumers`，`owner_blocked` 带 `decision_id/blocks/question`，`handed_off` 带 `new_session_id`（child 自建继任者后上报，controller 据此回填 registry），其他事件为 `null`。seam ownership 与 Owner decision 同样由 controller 写入。
+controller 必须从消息来源唯一绑定 node 与 source session，再重新读取自己持有的 registry，确认来源等于该 node 的 current session；无法唯一绑定就停止，不猜测。若已有 ledger HEAD，H1 head 必须是其 git 后代，且必须位于该 node 当前 worktree HEAD 的历史上，才允许写入 progress。`event` 用于说明触发原因，`artifact` 无交付物时为 `null`。`details` 是事件特有的最小对象：`seam_delivered` 带 `seam_id/consumers`，`owner_blocked` 带 `decision_id/blocks/question`，`handed_off` 带 `new_session_id`（child 自建继任者后上报，controller 据此回填 registry），其他事件为 `null`。seam ownership 与 Owner decision 同样由 controller 写入。
+
+bounded assignment 结束时 child 报 `ready_for_assignment`。`sync` 对仍为 active 的该状态输出 `reassignment_required`；controller 只有在核验 terminal acceptance 后才把 registry `active=false`。历史 `done` 行继续可读，但按 `ready_for_assignment` 的动作语义处理，不能静默解释为 package terminal。
 
 ## seams.jsonl
 
@@ -141,7 +143,7 @@ halted 状态由 `acts.jsonl` 的最近 halt 与其 `halt_poll_seq` 判定：没
 
 ## sync-state.json
 
-`sync-state.json` 不是 append-only 账本；它是本地运行状态。当前字段包括 controller rollout offset、按 child session id 保存的 `compaction_observers`、`next_poll_seq`、`next_act_seq`、`next_ledger_seq`、`dispatches_since_progress`、`docs_only_advances`、`last_must_act_seq`、invalid round 计数，以及 heartbeat reset 的 `stall_reset_seq`。每个 compaction observer 只保存 rollout path、byte offset、`observed_count` 和最后一次 `window_number/window_id`；首次观测在 EOF 建基线，后续只读取新增完整行，不递归扫描全量 sessions，也不修改四个 append-only JSONL。`compaction_count` 因而是 observer 建立后的可靠观测下界，不是平台历史总数。
+`sync-state.json` 不是 append-only 账本；它是本地运行状态。当前字段包括 controller rollout offset、按 controller 与 active child session id 保存的 `compaction_observers`、`next_poll_seq`、`next_act_seq`、`next_ledger_seq`、`dispatches_since_progress`、`docs_only_advances`、`last_must_act_seq`、invalid round 计数，以及 heartbeat reset 的 `stall_reset_seq`。每个 compaction observer 只保存 rollout path、byte offset、`observed_count` 和最后一次 `window_number/window_id`；首次观测在 EOF 建基线，后续只读取新增完整行，不递归扫描全量 sessions，也不修改四个 append-only JSONL。`compaction_count` 因而是 observer 建立后的可靠观测下界，不是平台历史总数。
 
 本轮采用 runnable watch-set 兜底，不把未经证明的 cursor 当作状态级去重依据；HEAD 仍覆盖全部 active child。`ledger_seq` 用于消除同秒 report/dispatch 的顺序歧义；legacy 行缺失该字段时回退到时间戳判断。halt 行记录当时的 `halt_poll_seq`；`dispatch` / `escalate` 不会清除 halt。
 
@@ -154,7 +156,8 @@ halted 状态由 `acts.jsonl` 的最近 halt 与其 `halt_poll_seq` 判定：没
 ## 常见错误
 
 - `waiting_on` 写成 `"order core writer"` 这类自由文本。跨线 seam 依赖必须写成 `seam:<id>`，例如 `seam:order_core_writer`。
-- `state` 使用枚举外的值，例如 `idle`、`blocked`、`waiting`。必须映射到 `working`、`awaiting_seam`、`awaiting_owner`、`done`。
+- `state` 使用枚举外的值，例如 `idle`、`blocked`、`waiting`。必须映射到 `working`、`awaiting_seam`、`awaiting_owner`、`ready_for_assignment`。不要新写 `done`；它只为历史 ledger 兼容保留。
+- 把 bounded assignment 的 `ready_for_assignment` 当成 package 或 node terminal。active node 必须进入 `reassignment_required`，只有 registry `active=false` 才表示该 node 已退出 coordination。
 - 把 `inactiveStatus` 当成没有变化。它表示有 node 闲置，该 node 应进入 `idle_nodes`，语义是该派活。
 - 把 `round` 当成权威轮次。它只是模型自述标签，compaction 后可能重复；停滞判断以 `seq` 为准。
 - `state=awaiting_seam` 但不写合法 `seam:<id>`。该命令会退出 `64`；摘要里的 `malformed_waiting_on` 用来暴露历史坏行。

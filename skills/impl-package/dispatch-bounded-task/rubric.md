@@ -1,17 +1,12 @@
 ---
-target: skills/impl-package/subagent-driven-development
-updated: 2026-07-26
+target: skills/impl-package/dispatch-bounded-task
+updated: 2026-08-04
 ---
 ## 原则
 
-- [待验证] 复审机制应从可泛化的风险与契约覆盖方法出发，避免把单一事故或技术形态固化成所有 task 的必经步骤。（证据: R1）
-- [待验证] 本 skill 保持通用 executor：消费调用方给出的目标、边界与局部验证要求，但不治理 plan-specific Verification/case ID 或判断计划合同是否完备。（证据: R4）
+- [待验证] Task 已由 plan、Ticket 或 DAG 设计完成时，派发 skill 保持单文件、自足的最小 dispatch / return 契约，不重复教授开发、验收或 gate 方法。（证据: R5, R6）
 
 ## 决策记录（滚动，最近 ≤5 轮）
-
-### R1 · 2026-07-17
-
-- 采纳「以 review basis、风险信号和 closure review 组织 task review」— 用户原话：改，但不要用这一个 case-specific 而是从方法论上优化。
 
 ### R2 · 2026-07-18（最小 Task 执行）
 
@@ -25,3 +20,11 @@ updated: 2026-07-26
 ### R4 · 2026-07-26（保持通用 executor）
 
 - 否决让 executor 携带并治理 plan-specific Verification/case ID 完备性的方案 — 用户原话：这个 skill 更像是 executor 而不是调度者，应该偏通用。
+
+### R5 · 2026-08-04（改名并打薄）
+
+- 采纳将 `subagent-driven-development` 改名为 `dispatch-bounded-task`，并把运行正文压缩为最小派发与返回契约 — 用户原话：名字“太 general”；Ticket 和 Task 已设计好，“没必要专门再教 agent 怎么开发”。
+
+### R6 · 2026-08-04（删除单消费者 reference）
+
+- 采纳把 implementer 模板内联并删除 `references/prompts.md` — 用户判断：单消费者 reference 可以删除；目标是让该 skill 保持 80 行内且运行契约自足。

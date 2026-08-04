@@ -1149,17 +1149,30 @@ fails += check("poll targets 只包含 active children，inactive 历史 child �
                out.strip())
 
 beta_head = git_head(BASE / "git" / "beta")
+rc_ready, out_ready = run_registry(
+    "report", "--node", "beta", "--source-session", NODES["beta"],
+    "--state", "ready_for_assignment", "--head", beta_head,
+)
+append_wait(CALL_ALPHA, one_projection("alpha", "t-100"), call_id="ready-needs-reassignment")
+rc_ready_sync, out_ready_sync = run_registry("sync", "--round", "2")
+fails += check("active assignment 完成进入 reassignment_required 而不是静默终态",
+               rc_ready == 0 and rc_ready_sync == 0 and "poll_targets:    alpha" in out_ready_sync
+               and "reassignment_required: beta" in out_ready_sync
+               and "idle_nodes:      alpha" in out_ready_sync
+               and "idle_nodes:      beta" not in out_ready_sync
+               and "historical" not in out_ready_sync,
+               f"report={out_ready.strip()} sync={out_ready_sync.strip()}")
+
 rc_done, out_done = run_registry(
     "report", "--node", "beta", "--source-session", NODES["beta"],
     "--state", "done", "--head", beta_head,
 )
-append_wait(CALL_ALPHA, one_projection("alpha", "t-100"), call_id="done-not-idle")
+append_wait(CALL_ALPHA, one_projection("alpha", "t-101"), call_id="legacy-done-needs-reassignment")
 rc_done_sync, out_done_sync = run_registry("sync", "--round", "2")
-fails += check("done child 保留在 registry 但不得进入 idle_nodes",
+fails += check("legacy done 对 active node 兼容映射为 reassignment signal",
                rc_done == 0 and rc_done_sync == 0 and "poll_targets:    alpha" in out_done_sync
-               and "idle_nodes:      alpha" in out_done_sync
-               and "idle_nodes:      beta" not in out_done_sync
-               and "historical" not in out_done_sync,
+               and "reassignment_required: beta" in out_done_sync
+               and "idle_nodes:      beta" not in out_done_sync,
                f"report={out_done.strip()} sync={out_done_sync.strip()}")
 
 rc_waiting_alpha, out_waiting_alpha = run(
@@ -1305,12 +1318,14 @@ fails += check("status registry 不存在时只报清晰错误且不创建父目
                out.strip())
 
 print("-" * 78)
-# --- compaction_count：child rollout 首次只建基线，之后按顶层 compacted 增量计数 ---
+# --- compaction_count：controller/child rollout 首次只建基线，之后按顶层 compacted 增量计数 ---
 write_fixture(CALL_OK, GOOD_PROJECTION)
+append_child_compaction("controller", 1)
 for node in ("alpha", "beta"):
     child_rollout_path(node).touch()
 run("init", "--coordination-id", CID)
 rc1, out1 = run("sync", "--coordination-id", CID, "--round", "1")
+append_child_compaction("controller", 2)
 append_child_compaction("alpha", 1)
 append_wait(CALL_OK, GOOD_PROJECTION, call_id="compaction-round-2")
 rc2, out2 = run("sync", "--coordination-id", CID, "--round", "2")
@@ -1319,8 +1334,9 @@ compaction_line = next(
     "",
 )
 fails += check(
-    "sync 摘要按 current child session 输出增量 compaction_count",
-    rc1 == 0 and rc2 == 0 and "alpha=1" in compaction_line and "beta=0" in compaction_line,
+    "sync 摘要同时输出 controller 与 current child 增量 compaction_count",
+    rc1 == 0 and rc2 == 0 and "controller=1" in compaction_line
+    and "alpha=1" in compaction_line and "beta=0" in compaction_line,
     f"round1={out1.strip()} round2={out2.strip()}",
 )
 state_after_compaction = json.loads(
@@ -1335,8 +1351,9 @@ fails += check(
 )
 rc_status, out_status = run("status", "--coordination-id", CID)
 fails += check(
-    "status 按 current session 暴露已持久化的 compaction_count",
-    rc_status == 0 and "alpha:" in out_status and "compaction_count=1" in out_status,
+    "status 暴露 controller 与 current child 已持久化的 compaction_count",
+    rc_status == 0 and "controller_compaction_count: 1" in out_status
+    and "alpha:" in out_status and "compaction_count=1" in out_status,
     out_status.strip(),
 )
 

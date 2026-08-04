@@ -1,6 +1,6 @@
 ---
 name: execution-preflight
-description: 当准备从 handoff、plan、review、audit、Issue 或 execution artifact 开始任务时使用；在执行前一次性收齐 permission、owner authorization、HITL decision、必要的当前启动前置与 subagent mode。默认/长任务模式将主 session 限定为治理与收口，并充分使用 subagent 执行其余可隔离工作以控制上下文压力；普通模式允许主 session 直接执行局部工作。
+description: 当准备从 handoff、plan、review、audit、Issue 或 execution artifact 开始任务时使用；在执行前一次性收齐 permission、owner authorization、HITL decision、必要的当前启动前置，并记录由 subagent-driven-development 选定的调度模式。
 ---
 
 # Execution Preflight
@@ -14,17 +14,12 @@ description: 当准备从 handoff、plan、review、audit、Issue 或 execution 
 - 将结果分为 `已授权`、`本次请求授权`、`明确禁止/不适用`。每项说明对象、环境、数据边界和最大副作用，使 owner 能以“全部批准 + 例外”一次作答。
 - 启动前置只记录实际检查或精确 blocker，不展示 secret、token 或完整连接串；不创建通用 `ready`/`repairable`/`blocked` 状态表。
 - Execution handoff 只承载 task-scoped preflight facts、control map 与授权边界，不替代长期 Decision/Spec/Plan/Ticket。只有 package/worktree/HEAD、current D/S/P binding、两个 sidecar digest、runtime/gate anchor、只读 canonical `contract-status` verdict 与 authorization envelope 全部精确匹配时，才可直接复用这些 facts。
-- host 允许且 owner 未禁止时，默认采用下述“默认/长任务模式”；普通模式只用于确实短小、低耦合的工作，或 owner 明确选择时。
+- 调度模式由 `$subagent-driven-development` 选择；本 skill 只把当前选择、授权传递和共享资源顺序写入 authorization bundle。
 - 一次性授权只属于当前任务。它可按明确 Task 边界传递给 subagent，但不扩展到新系统、更高环境、真实数据或 materially broader/destructive scope。
 
-### Subagent modes
+### Subagent mode
 
-| 模式 | 何时选择 | 主 session | Subagent |
-| --- | --- | --- | --- |
-| `default-long`（默认/长任务） | handoff、implementation package、DAG、多阶段验证、长时间运行，或预计普通执行会明显挤占主 session 上下文 | **只保留**调度、授权记录、owner decision、跨 Task seaming、共享验证、Ticket acceptance、completion-claim audit、gate 与最终集成。 | 应充分用于所有可隔离、可复核且不重叠的调研、实现、测试、review 准备、证据/记录整理与 bounded Task work，以降低主 session 上下文压力。 |
-| `ordinary`（普通） | 小型、短时、低耦合工作，或 owner 明确选择 | 负责治理、集成与上述收口职责，也可直接处理小型、紧耦合的执行工作。 | 可负责明确、bounded 的调研、实现、验证或 review；按任务收益选择派发粒度。 |
-
-选择模式时记录名称与理由。除非 owner 明确指定 `ordinary`，handoff / package execution 一律选择 `default-long`。两种模式都不改变授权边界、主 session 的最终 acceptance/gate ownership，或 subagent 的非重叠 primary ownership。
+读取 `$subagent-driven-development` 取得当前模式；不要在本页重述 `default-long` / `ordinary` 的选择条件或职责划分。preflight 只验证该模式下的授权能否传递，以及共享资源是否已经串行化。
 
 ## Workflow
 
@@ -69,13 +64,13 @@ description: 当准备从 handoff、plan、review、audit、Issue 或 execution 
 
 使用 reference 中的授权包模板，一次列出所有缺失权限；不要按执行顺序连续提问。已经回答的类别只重述，不再申请。计划明确禁止的事项只记录边界，除非 owner 主动要求跨越，否则不要求其反向确认。
 
-默认选择 `default-long`。owner 明确禁止 delegation、host 不支持，或 owner 明确选择 `ordinary` 时，记录例外及其影响；在 `default-long` 中，普通执行切片优先由 subagent 承担。
+按 `$subagent-driven-development` 选择模式，并记录选择及一句理由。host 不支持 delegation 时记录能力限制，不自行发明第三种模式。
 
 请求同时列出未授权操作与不可由当前授权修复的当前启动前置。owner 可以用“全部批准”加可选例外，给出覆盖当前任务完整可预见生命周期的有界授权与必要环境动作。
 
 ### 5. 记录并继续
 
-用 reference 中的执行授权模板记录：subagent mode、完整 allowed scope、实际启动前置检查或 blocker、仍被禁止的边界及 HITL 结论。`default-long` 必须记录主 session 保留职责（调度、授权记录、决策、跨 Task seaming、共享验证、Ticket acceptance、completion-claim audit、gate、最终集成）以及 subagent 可充分承担的调研、实现、验证、review 准备和记录工作；`ordinary` 记录主 session 可直接处理小型/紧耦合执行工作的例外。两种模式都记录授权传递方式和必须串行化的共享资源。
+用 reference 中的执行授权模板记录：subagent mode、完整 allowed scope、实际启动前置检查或 blocker、仍被禁止的边界及 HITL 结论。模式语义引用 `$subagent-driven-development`，这里只记录授权传递方式和必须串行化的共享资源。
 
 授权只在当前任务内有效。记录完成后直接进入既定执行入口，不为已授权的验证、清理、同边界命令或将执行工作委派给明确 subagent 再次询问。
 

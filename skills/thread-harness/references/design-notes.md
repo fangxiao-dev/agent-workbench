@@ -18,7 +18,7 @@
 
 | # | 硬规则 | 对应 finding |
 | --- | --- | --- |
-| H1 | **回报触发条件**：任一 thread 在 turn 结束前，若 ①`head` 变了 ②状态从 working 转为 waiting ③产生 owner 级阻塞——三者之一成立，必须发送结构化 H1 envelope 回 broker；child 不直接写 ledger | F3：7 条线里 5 条从不主动回报，F6 唯一能解环的 Owner 请求因此永远没送达 |
+| H1 | **回报触发条件**：任一 thread 在 turn 结束前，若 ①`head` 变了 ②状态从 working 转为 waiting ③产生 owner 级阻塞——三者之一成立，必须发送结构化 H1 JSON payload 回 broker；child 不直接写 ledger | F3：7 条线里 5 条从不主动回报，F6 唯一能解环的 Owner 请求因此永远没送达 |
 | H2 | **账本字段与写入时机**：controller 验证 H1 的 registry source session 与 HEAD 后代关系后，代 child append；字段按 §5 schema | F9：全局进度只活在 context 里，末期每 12 分钟被 compaction 清洗一次 |
 | H3 | **停滞上限 + 二选一**：连续 5 轮所有 node 的 git HEAD 无变化，broker 必须二选一——(a) 派发新工作（含 create_thread 开新 Platform 线），(b) 向 Owner 报告并结束 loop（即 `act --halt --reason`）。**禁止第三种输出。** 从第 3 轮起若仍有 active / working node，每轮必须直接 `read_thread`；只有具体且最新的执行心跳可将 streak 归零。另：`decisions.jsonl` 有尚未上报的 `pending` 项时立即上报，不进入下一轮；已上报但仍 pending 的决策不再豁免停滞判定 | F1：Owner 是唯一解卡装置；F7：broker 把自己的待办归类成外部阻塞。上一轮它输出了 104 次"本轮 loop 检查完成" |
 
@@ -49,7 +49,7 @@ H4 的分阶段：**当前只登记不校验**，脚本仅在 `sync` 摘要报 `
 | 无 commit 时是否仍有真实执行心跳 | 每轮缓存消息或只看 active 状态 | 从 `3/5` 起直接 `read_thread`；具体新进展才 reset |
 | broker 有没有真的派活 | 让 broker 自己记 dispatch 行 | `sync` 读 rollout 时数 `send_message_to_thread` / `create_thread` 调用 |
 | 轮询是否覆盖了全部子线 | 信任投影里模型打印的 `n` | 从调用 arguments 解析实际 ids，与 registry children 做**集合**比对 |
-| 子线上报的 `head` 是不是真的 | 子线自己跑 `report --head`，没有任何东西能证伪 | 子线只发 H1 envelope，controller 用 `validate_report_source` 校验：source session 必须等于 registry 里该 node 的 current session、head 必须是完整 40 位 SHA、必须是上一条账本 head 的后代、且必须在该 worktree 的当前历史上 |
+| 子线上报的 `head` 是不是真的 | 子线自己跑 `report --head`，没有任何东西能证伪 | 子线只发 H1 JSON payload，controller 用 `validate_report_source` 校验：source session 必须等于 registry 里该 node 的 current session、head 必须是完整 40 位 SHA、必须是上一条账本 head 的后代、且必须在该 worktree 的当前历史上 |
 
 判断规则：**一个事实如果模型有动机漏报或美化，就必须找到不经模型的来源；找不到的，才退回账本纪律并接受它可能失效。**
 
@@ -164,7 +164,7 @@ H4 的分阶段：**当前只登记不校验**，脚本仅在 `sync` 摘要报 `
 
 ### 4.2 Role A · 任务包子 thread
 
-**使命与方法完全不变**：`/impl-package` 6 步主流程，执行阶段 `dev-with-track` + `subagent-driven-development`。
+**使命与方法完全不变**：`/impl-package` 6 步主流程，执行阶段 `dev-with-track` + `dispatch-bounded-task`。
 
 role 段开头必须写明：*"你的使命是完成任务包，方式由 `/impl-package` 定义。本段只规定你什么时候必须跟 broker 说话，不改变你的开发方式。"*
 
@@ -213,7 +213,7 @@ goal 只保留规避后会让 agent 少做工作的硬规则，以及本 coordin
 正式运行时目录：由 `--registry <absolute-registry-json>` 的 registry sibling 与其中 `coordination_id` 推导；旧的 `THREAD_HARNESS_BROKER_ROOT` + `--coordination-id` 兼容路径仍可用。
 routing registry 由 `owner-thread-broker` 管，**本设计不改动其路由职责**（它 13.75 小时零串线，是上一轮唯一完全没出问题的部件）。
 
-四个 append-only JSONL。字段一次写全，第一轮不迁移；controller 是唯一写入者，child 只发送 H1 envelope。
+四个 append-only JSONL。字段一次写全，第一轮不迁移；controller 是唯一写入者，child 只发送 H1 JSON payload。
 
 ### progress.jsonl
 

@@ -17,8 +17,12 @@
 
 ## Compaction 后直接重派
 
-Role B 没有持久恢复权威。发生 compaction 后不走 catch-up，也不从 thread 历史重建旧 card；主控（controller）在本 coordination 的常设授权边界内直接发一张**新的完整 assignment card**。新 card 是新的当前任务权威，不继承旧 card。关键输入或授权无法验证时停止并报告 Owner，不猜测。
+Role B 没有持久恢复权威。发生 compaction 后不走 catch-up，也不从 thread 历史重建旧 card；主控（controller）直接发一张**新的最小 assignment card**。新 card 是新的当前任务权威，不继承旧 card。关键输入无法验证时停止并询问 controller，不猜测。
+
+当前动作需要新增权限时，停止该动作并询问 controller；controller 可在 standing authority 内给予明确的一次性授权，超出边界时由 controller 向 Owner 提案。
 
 ## 其余与 Role A 相同
 
 按 `$impl-package` 干活；`$investigate-before-implement` / `$do-review` / `$verification-before-completion` 的分工一致；H1 / H2 / H4 同样适用。
+
+子线调度模式：按 `$subagent-driven-development`，默认使用 `default-long`。

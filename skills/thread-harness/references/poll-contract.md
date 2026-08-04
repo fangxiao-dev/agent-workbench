@@ -7,7 +7,7 @@
 五条不可动摇的约束：
 
 1. `timeoutMs` 固定为 `120000`，与当前 `wait_threads` 平台上限一致。
-2. `targets` 必须等于脚本按账本机械推导出的 wait 集合：优先为 **runnable watch-set**（`working`、`never_reported`、report 已 stale、controller dispatch 后的 producer 或当前状态 unknown 的 active children）；如果 runnable 集合为空，则回退为全部 active children，保留固定 120 秒 poll。`awaiting_seam`、`awaiting_owner`、`done` 不进入正常阻塞 wait；inactive child 只保留历史，controller 自己也不进入 poll。
+2. `targets` 必须等于脚本按账本机械推导出的 wait 集合：优先为 **runnable watch-set**（`working`、`never_reported`、report 已 stale、controller dispatch 后的 producer 或当前状态 unknown 的 active children）；如果 runnable 集合为空，则回退为全部 active children，保留固定 120 秒 poll。`awaiting_seam`、`awaiting_owner`、`ready_for_assignment` 与历史 `done` 不进入正常阻塞 wait；inactive child 只保留历史，controller 自己也不进入 poll。
 3. `text()` 输出**下面这个投影**，字段一个都不能少。`ledger.py sync` 从 controller rollout 里读这个投影——**你不打印的东西，任何地方都不存在**（rollout 记录的是 exec 打印的内容，不是工具原始返回）。
 4. `txt` 截断到 500 字符。需要某条线的全文时用 `codex_app__read_thread` 单独取，不要放宽这里。
 
@@ -61,11 +61,12 @@ text(JSON.stringify({
 3. 执行 `python skills/thread-harness/scripts/ledger.py sync --registry <absolute-registry-json> --round <n>`。
 4. 读取 `sync` 的紧凑摘要：
    - `poll_targets`：本轮固定 wait 实际目标；它必须与脚本按 ledger 推导的 runnable 集合完全相等，或在 runnable 为空时等于全部 active child。
-   - `idle_nodes`：该派活；只有 active 且最新 ledger state 为 `working` 的 node 才进入。`idle`、`inactive`、`notLoaded`、`not_loaded` 都可作为 idle 信号；`awaiting_seam`、`awaiting_owner`、`done` 和 inactive registry child 排除。
+   - `reassignment_required`：active child 的 bounded assignment 已结束；controller 在下一轮 poll 前必须派下一张卡、核验 terminal 后退休 node，或转为有 producer 的 `awaiting_seam`。历史 `done` 同样进入这里。
+   - `idle_nodes`：该派活；只有 active 且最新 ledger state 为 `working` 的 node 才进入。`idle`、`inactive`、`notLoaded`、`not_loaded` 都可作为 idle 信号；`awaiting_seam`、`awaiting_owner`、`ready_for_assignment`、历史 `done` 和 inactive registry child 排除。assignment 完成态由相邻的 `reassignment_required` 单独暴露。
    - `changed_nodes`：有新 head，需要读或推进。
    - `advance_kinds`：本轮 HEAD 推进类型，`docs` 不清零 dispatch 计数，`code` / `unknown` 会清零。
    - `unchanged`：本轮没有变化。
-   - `compaction_count`：当前 active child session 的 compaction 机械事实源；读取与阈值规则见下方 [`compaction_count`](#compaction_count) 契约。
+   - `compaction_count`：controller 与当前 active child session 的 compaction 机械事实源；读取与阈值规则见下方 [`compaction_count`](#compaction_count) 契约。
    - `timedOut`：`true (timeout, no change)` 表示 wait 超时且没有 poll 内容，区别于被唤醒但无文本。
    - `head_unavailable`：这些 node 的 worktree/git HEAD 取不到；不要把它当成"无变化"。
    - `never_reported`：这些 node 从未通过 controller 验证的 H1 写入 state；用来判断 H1 是否真实遵守。
@@ -78,12 +79,12 @@ text(JSON.stringify({
    - `dispatches_since_progress`：自最近一次 code 级 git head 推进以来，rollout 中有配对 output 的 `tools.codex_app__send_message_to_thread` 与 `tools.codex_app__create_thread` 调用次数。它只测量，不阻断。
    - `docs_only_advances`：自最近一次 code 级推进以来的 docs-only HEAD 推进次数。
     - `corrupt_ledger_lines`：JSONL 中无法解析的坏行数量；大于 0 时状态摘要只能作诊断，不能视为可信 current state。
-5. 执行 `python skills/thread-harness/scripts/ledger.py stall-check --registry <absolute-registry-json>`。
+5. 先处理所有 `reassignment_required`；不得带着 active assignment 完成态进入下一轮。然后执行 `python skills/thread-harness/scripts/ledger.py stall-check --registry <absolute-registry-json>`。
 6. 按退出码和输出标记决策。`CHECK_HEARTBEAT` 的退出码也是 `0`，但不能当普通 `OK` 略过。
 
 ### compaction_count
 
-controller 只从本轮 `ledger.py sync` 摘要的 `compaction_count: <node>=<n>` 读取 current child session 的次数。Role A 的 `n` ≤3 时发送 catch-up，`n` >3 时 replacement；Role A 不自行取数。`?` 时 controller 直接核查，不得猜成 0。
+controller 只从本轮 `ledger.py sync` 摘要的 `compaction_count: <node>=<n>` 读取自身与 current child session 的次数。每个 current session 首次被有效 sync 观测时以 `0` 建立当前基线，之后按新增 compaction 递增，不回填此前历史。Role A 的 `n` ≤3 时发送 catch-up，`n` >3 时 replacement；Role A 不自行取数。`?` 时 controller 直接核查，不得猜成 0。
 
 ## Session 路由
 

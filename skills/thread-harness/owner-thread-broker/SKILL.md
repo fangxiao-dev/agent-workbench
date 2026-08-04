@@ -17,7 +17,7 @@ Windows 下使用仓库内已忽略的运行时目录：
 
 `<repo-root>\.progress-record\`
 
-每个 assignment card 与正式 ledger 命令都必须携带该 coordination 的**绝对 registry JSON 路径**。`ledger.py <command> --registry <absolute-json>` 以 registry 同级目录和 `coordination_id` 推导运行时目录；旧环境变量与 `--coordination-id` 只为兼容旧调用，不新增 `--broker-root`。
+controller 持有该 coordination 的绝对 registry JSON 路径，正式 ledger 命令统一使用 `--registry <absolute-json>`。runtime 由 registry 同级目录和 `coordination_id` 推导；旧环境变量与 `--coordination-id` 只为兼容旧调用，不新增 `--broker-root`。
 
 每个相互独立的主控/子线组创建一份文件：
 
@@ -43,10 +43,10 @@ Owner 建立新的主控/子线组时：
 2. 从 `references/thread-group-template.json` 创建新的 `<coordination_id>.json`，直接放在运行时目录下，并记录其绝对路径。
 3. 填写组上下文中的 `topic` 和 Git 仓库名。
 4. 用稳定的 `node_id` 登记 controller 与已知 child。每个 node 必须包含 `topic`、`current_session_id`、当前上下文的绝对 `worktree`、对应 `branch` 和 `updated_at`。child 缺省 `active` 时视为 `true`；只有保留已退出历史时才设为 `false`。
-5. 报告组文件绝对路径。后续 assignment card 与 handoff 都要携带该 registry 路径和参与者的 `node_id`。
+5. 把组文件绝对路径交给 controller；child dispatch 只给出当前 controller session id 作为回报目标。
 6. 不得复用其他组的文件，也不得把新组追加到现有组文件中。
 
-child 生命周期只使用一个 `active` 布尔值，缺失时视为 `true`。replacement 只替换同一 node 的当前 session，不代表 node 退休；只有 controller 已验收该 node 不再参与本 coordination 的 poll、派活或交付后，才显式设为 `false`。已退休 child 保留原路由历史，不移入 archive，也不根据 ledger 的 `state=done` 自动推导。
+child 生命周期只使用一个 `active` 布尔值，缺失时视为 `true`。replacement 只替换同一 node 的当前 session，不代表 node 退休；只有 controller 已验收该 node 不再参与本 coordination 的 poll、派活或交付后，才显式设为 `false`。已退休 child 保留原路由历史，不移入 archive，也不根据 ledger 的 `ready_for_assignment` 或历史 `done` 自动推导；active assignment 完成态仍需主控派卡、核验退休或转成有 producer 的 seam wait。
 
 ## 登记新 session 或上下文 worktree
 

@@ -24,7 +24,7 @@ goal 是最后一步。先用普通消息引导 controller 完成：
 2. 执行 `ledger.py init --registry <absolute-registry-json>`。
 3. 按 [session-dispatch.md](session-dispatch.md) 建立 child，并把返回的 session id 回填 registry。
 4. 执行 `ledger.py preflight --registry <absolute-registry-json>`；只有 `PREFLIGHT OK` 才能继续。
-5. 按 [poll-contract.md](poll-contract.md) 跑首轮 poll，再执行 `ledger.py sync`；确认 `valid=yes` 且 `head_unavailable` 为空。该轮同时在各 current child rollout 的 EOF 建立 compaction observer 基线；可用项应显示 `compaction_count=0`，`?` 表示本机 rollout 不可用，后续不得把它猜成 0。
+5. 按 [poll-contract.md](poll-contract.md) 跑首轮 poll，再执行 `ledger.py sync`；确认 `valid=yes` 且 `head_unavailable` 为空。该轮同时在 controller 与各 current child rollout 的 EOF 建立 compaction observer 基线；可用项应显示 `compaction_count=0`，`?` 表示本机 rollout 不可用，后续不得把它猜成 0。
 
 五步通过后，Owner 才把 [goal-prompt.md](../goal-prompt.md) 的 Role C goal 文本贴入 goal 框。goal 不内联 session id；controller 每轮从 registry 重新读取当前路由。
 
@@ -56,4 +56,4 @@ goal 设置后，controller 每轮按以下顺序执行：
 4. 执行 `ledger.py stall-check`，按 [role-c.md](role-c.md) 的退出码契约行动。
 5. 需要变更 child 当前任务时，使用 [session-dispatch.md](session-dispatch.md) 的完整文本，不从聊天记忆重建旧模板。
 
-Role A compaction 使用以 package entry 为恢复权威的短 catch-up；Role B 不恢复旧 card，由 controller 派发新的完整 card；Role C 从 registry、ledger 与 `status` 恢复。
+Role A compaction 使用以 package entry 为恢复权威的短 catch-up；Role B 不恢复旧 card，由 controller 派发新的最小 card；Role C 从 registry、ledger 与 `status` 恢复。

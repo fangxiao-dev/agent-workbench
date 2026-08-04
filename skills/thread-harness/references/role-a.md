@@ -4,6 +4,8 @@
 
 按 impl-package 的主流程走，请自行定位你的行为所处的阶段（比如需求对齐走 req-align，开发则用 dev-with-track等等），本页不复述也不覆盖。
 
+子线调度模式：按 `$subagent-driven-development`，默认使用 `default-long`。
+
 新建或替换本线 session 走 [session-dispatch.md](session-dispatch.md)。**你的恢复权威是当前任务包 entry**，交接前必须先把 checkpoint 写回 entry。
 
 ## 调度接口只有两条

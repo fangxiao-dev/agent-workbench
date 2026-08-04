@@ -16,7 +16,7 @@
 
 不要在 handoff 中枚举后续可能使用的 skills。只写首轮必须立即进入的唯一 entry point；延后 skill 由实际执行 seam 触发，避免新 session 因显式名称提前加载多个 skill。
 
-需要记录 delegation 时，只记录当前 bounded task 的单一入口：investigate / implement 使用 `$investigate-before-implement`，独立 review 使用 `$reviewer`；路由、模型与推理强度采用全局 skills 定义，不在 handoff 中重复。
+需要记录 delegation 时，只记录当前 bounded task 的单一入口：调度模式使用 `$subagent-driven-development`；investigate / implement 行为使用 `$investigate-before-implement`，独立 review 使用 `$reviewer`。不在 handoff 中重复这些 skill 的规则。
 
 ## 分层读取
 

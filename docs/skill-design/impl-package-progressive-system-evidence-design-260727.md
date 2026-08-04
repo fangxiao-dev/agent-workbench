@@ -71,7 +71,7 @@
 
 - `impl-planning` 的 Planned Verification 已要求把 Acceptance Semantics 映射到检查、预期结果和 evidence owner；对 material 高风险边界，还要求场景、测试层级或入口及 observable oracle。
 - `dev-with-track` 已拥有实施执行、Working Branch 集成、共享验证、Execution Record 和 execution findings 分流。
-- `subagent-driven-development` 已明确 Task 局部证据不等于 Ticket acceptance，Working Branch owner 负责跨 Task seam 和共享验证。
+- `dispatch-bounded-task` 已明确 Task 局部证据不等于 Ticket acceptance，Working Branch owner 负责跨 Task seam 和共享验证。
 - `verification-before-completion` 已采用 claim-to-evidence contract，并允许复用同 revision、同 environment 的新鲜证据，只补跑受影响检查。
 - `execution-preflight` 已区分启动前置与正式验证，不需要扩展成 E2E admission gate。
 
@@ -81,7 +81,7 @@
 共享指导性 reference
   ├─ impl-planning：选择风险、证据边界、E2E 独有责任与 checkpoint
   ├─ dev-with-track：渐进式执行、失败学习、有限 seam sweep 与重跑决策
-  ├─ subagent-driven-development：Task 局部证据与跨 Task seam 的责任边界
+  ├─ dispatch-bounded-task：Task 局部证据与跨 Task seam 的责任边界
   └─ verification-before-completion：审计当前 claim 相关证据，不重新设计验证体系
 ```
 
@@ -626,7 +626,7 @@ Phase 2 写入 SKILL 时，每个“默认 + 例外”规则至少配一组最�
 
 `execution-findings.md` 可以保存已确认的方法性发现或跨 Task seam 发现，但规范性行为仍按现有分流回 spec，实际证据仍进入 ER。
 
-### 14.4 `subagent-driven-development/SKILL.md`
+### 14.4 `dispatch-bounded-task/SKILL.md`
 
 在 integration step 中补充责任边界：
 

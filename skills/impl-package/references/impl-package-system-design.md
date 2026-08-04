@@ -50,7 +50,7 @@ Review 按当前 delta 的独立信号触发，不把 artifact 数量或历史 C
 2 Spec        req-align 第二道门 → 当前 spec revision
 3 Attempt plan impl-planning → plan.md / patch plan（含本 attempt Composition）
 4 计划拆解    to-tickets draft →（按需）create-task-dag → 联合校验 → 一次 owner review/approval
-5 执行        dev-with-track：restore → subagent-driven-development（task 实现 + 局部验证）→ Working Branch owner 集成 / er-add → execution findings 分流 → gate entry
+5 执行        dev-with-track：restore → dispatch-bounded-task（有界 Task 派发 + 局部验证）→ Working Branch owner 集成 / er-add → execution findings 分流 → gate entry
 6 审查        code-review / standards-review + spec-review / safety-review（映射见下）
 收口条件      terminal pass 前完成 durable-delta capture + verification-before-completion evidence audit
 可选维护      gate 后提示 $backfill-stable-docs；先做 contract preflight，再 audit/apply/verify；可延期、非阻塞、需明确授权
@@ -169,11 +169,11 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 
 | 层 | 载体 | 内容 |
 | --- | --- | --- |
-| Task 局部执行 | subagent-driven-development | 有界实现、局部验证与 blocker 回报；仅高风险实际 diff 按风险追加 review |
+| Task 局部执行 | dispatch-bounded-task | 有界实现、局部验证与 blocker 回报；仅高风险实际 diff 按风险追加 review |
 | Implementation 级 | 四个 leaf review skill | code-review（必选）、standards-review + spec-review（当前 diff/契约 delta 触发）、safety-review（安全效果/authority 信号触发） |
 | Completion claim | verification-before-completion | terminal pass 与 complete/closed/merge-ready/release-ready 声明前核对 revision、环境和 evidence freshness；不进入 DAG |
 
-- `subagent-driven-development` 是 task 执行与局部验证载体；`create-task-dag` 只提供最小 ownership、依赖和 contribution mapping，并参与计划拆解联合校验，不再拥有独立批准门或 worker review 流程。
+- `dispatch-bounded-task` 是有界 Task 派发与局部验证载体；`create-task-dag` 只提供最小 ownership、依赖和 contribution mapping，并参与计划拆解联合校验，不再拥有独立批准门或 worker review 流程。
 - ticket 达到验收候选时，`dev-with-track` 将 `code-review` 与按下列规则成对补齐的 `standards-review` + `spec-review` 和适用的 `safety-review` 作为明确 reviewer selection 交给 `do-review`；不等待 owner 显式点名。只有 `do-review` 固定范围、调度 leaf reviewer、汇总 ledger 并作最终分类。
 - `standards-review` 与 `spec-review` 是由 `do-review` 调度的独立 leaf reviewer：二者接收同一完整 diff 与 comparison point，不共享同轮结论；主会话只准备共享上下文、汇总和最终分类。Standards 保留 repository standards 与 codebase-design 基线；Spec 保留 contract fidelity（包括 interface/seam、兼容窗口、状态机与跨 slice seam）。当前 diff 或 S/P delta 涉及 interface、状态机、模块边界、跨模块行为或 seam 时成对必选；tickets/DAG 本身不是触发信号。
 - safety-review 范围五类（data integrity / security boundary / concurrency / external side effects / change map + P0–P2）。触发用可观察信号：diff 触碰 auth/payment/webhook/migration/外部 mutation 路径，或 spec trust/provider contract、plan Planned Verification / `dag.md` Verification Gates 声明外部写入 → 自动运行。P0 fail-closed：外部 mutation 无幂等/补偿语义；auth/permission 边界绕过；可致数据丢失的 migration 无回滚。信号复用 spec/plan/DAG 既有字段，不新增登记面。
@@ -187,7 +187,7 @@ durable delta 的 canonical 捕获面是 **gate 最新 evaluation entry 的 Dura
 | `to-spec` | 保留 vendored 只读，不进主流程；其方法已被 req-align 吸收 |
 | `impl-planning` | 每次 attempt plan 独立声明 Composition；保存执行策略、Planned Verification 与 append-only Execution Record；不保存 task checklist或长期 contract；patch 仅 post-gate |
 | `create-task-dag` | 收缩到最小 execution decomposition：输入契约 = plan + 完整 Draft Tickets（有 tickets 时）或 plan（仅 dag 时）；记录 Task-to-Ticket contribution、已知依赖、primary ownership 与 known seam/risk；参与联合校验，由 Working Branch owner integration；不设置独立批准门 |
-| `subagent-driven-development` | 移入 Impl-Package；成为 task execution 与局部验证载体，按实际高风险 diff 追加必要 review，并将证据交回 dev-with-track |
+| `dispatch-bounded-task` | 位于 Impl-Package；成为有界 Task 派发与局部验证载体，并将证据交回 dev-with-track |
 | `verification-before-completion` | 移入 Impl-Package；成为 terminal pass 与后续 completion/readiness 声明的 evidence gate，复用未失效证据并阻止无证据完成声明，不进入 DAG |
 | `dev-with-track` | 按当前 plan Composition 恢复 runtime state/progress；通过 `er-add` append Attempt ER；分流 execution findings；在单一 gate.md 顶部写不可变 evaluation entry；实现 AC 覆盖、返工失效传播和 Stage 7 |
 | `standards-review` + `spec-review` | 两个独立 leaf reviewer，由 do-review 三轨拓扑调度：Standards 保留 standards 钩子与 codebase-design；Spec 保留 contract-drift；二者只按当前 diff 或 S/P contract delta 成对触发，tickets/DAG 本身不触发 |

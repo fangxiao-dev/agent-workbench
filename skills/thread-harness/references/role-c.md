@@ -10,6 +10,8 @@ Owner 写在 goal 里的目标、结束判据、执行授权边界与排除项�
 
 同理，子线报 `awaiting_owner` 而账本里没有绑定它的 pending decision 时，那不是 Owner 级阻塞——**先自己判断并回复它**，你是 broker 不是传声筒。Owner 的决策和授权是最后手段，不是第一反应。
 
+**bounded assignment 完成也不是线路终态。** active child 报 `ready_for_assignment`（或历史 `done`）时，`sync` 会把它列入 `reassignment_required`。进入下一轮 poll 前必须三选一：给它下一张 assignment card；核验当前 revision 的 terminal acceptance 后把 registry `active=false`；或确认只剩跨域依赖后转成 `awaiting_seam`，并立即落实 producer。不得把 active/open package 留在完成态等待。child 的 note 写了 package open 时尤其不能省略这一步。
+
 ## 开跑前
 
 正式调用统一使用 `--registry <absolute-registry-json>`；runtime 由 registry sibling 与 `coordination_id` 推导。旧的 `--coordination-id` + 环境变量路径仅为兼容旧调用。
@@ -19,7 +21,7 @@ Owner 写在 goal 里的目标、结束判据、执行授权边界与排除项�
 ## 每轮做什么
 
 1. 按 [poll-contract.md](poll-contract.md) 计算 runnable watch-set，再敲固定 JS 片段（`timeoutMs: 120000`；有 runnable node 时只覆盖 runnable node，watch-set 为空时覆盖全部 active child，只回一行短确认）。**那段 JS 要原样敲，不要"优化"它**——任何简化都会被 `sync` 的自检当场拦下并作废本轮。HEAD 仍由 `sync` 采集全部 active child。
-2. 跑 `ledger.py sync`，读那段紧凑摘要；当前 child session 的 [`compaction_count`](poll-contract.md#compaction_count) 是 compaction 次数与 Role A 阈值判断的唯一机械事实源。明显退化可以作为人工直接触发交接的证据，但不能据此改写计数。
+2. 跑 `ledger.py sync`，读那段紧凑摘要；先处理全部 `reassignment_required`，再处理其他摘要项。controller 与当前 child session 的 [`compaction_count`](poll-contract.md#compaction_count) 是 compaction 次数的机械事实源，其中 Role A 计数用于交接阈值判断。明显退化可以作为人工直接触发交接的证据，但不能据此改写计数。
 3. 跑 `ledger.py stall-check`，按退出码走：
    - `0` `OK` → 正常，按摘要决策
    - `0` `CHECK_HEARTBEAT` → 已到 `3/5` 或 `4/5`；直接 `read_thread` 看 active / working 线。确认具体、最新的工作心跳才执行 `ledger.py heartbeat --node <node> --evidence "<一句话>"`；重复等待文案、旧进展或仅有 active 状态都不算心跳，不重置。全员 idle 时不重置，`idle_nodes` 仍是独立派活信号。
@@ -30,7 +32,7 @@ Owner 写在 goal 里的目标、结束判据、执行授权边界与排除项�
 
 账本里有尚未上报的 pending 决策时立即上报，不进入下一轮；已上报但仍 pending 的决策不再豁免停滞判定。
 
-摘要里 `poll_targets` 是脚本推导的 runnable watch-set；`idle_nodes` 非空 = 有线闲着 = 该派活，这跟 `unchanged` 是两回事。`wait_threads` 返回的 `wake.reason == "inactiveStatus"` 意思是**有线程闲着**，不是"没有变化"——前者要派活，后者才是等。
+摘要里 `poll_targets` 是脚本推导的 runnable watch-set；`reassignment_required` 非空 = active node 的上一张 assignment 已结束，必须在下一轮前完成派卡、退休或 seam 转移；`idle_nodes` 非空 = 原本 `working` 的线闲着 = 该派活。这两者都不是 `unchanged`。`wait_threads` 返回的 `wake.reason == "inactiveStatus"` 意思是**有线程闲着**，不是"没有变化"——前者要派活，后者才是等。
 
 heartbeat 只写 `sync-state.json` 的运行时 reset marker，不修改四个 append-only JSONL，也不要求缓存每轮 thread 消息。每次 raise 都有独立 `decision_instance_id`，旧 instance 的 escalate 不会遮蔽新 raise。
 

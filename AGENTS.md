@@ -29,7 +29,7 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `gemi
 
 ## Delegation Workflow
 
-- Use `$investigate-before-implement` from `skills/investigate-before-implement/` for bounded investigation or implementation, and `$reviewer` from `skills/reviewer/` for independent read-only review.
+- Use `$subagent-driven-development` from `skills/subagent-driven-development/` for main-session/subagent scheduling. Investigate or implement behavior routes to `$investigate-before-implement` from `skills/investigate-before-implement/`; independent read-only review routes to `$reviewer` from `skills/reviewer/`.
 - The caller supplies the task-specific objective, scope, worktree, write-set, acceptance, authorization, verification, and output contract; workflow and role definitions do not supply business prompts.
 
 ## Implementation Expectations

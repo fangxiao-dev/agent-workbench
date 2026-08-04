@@ -32,7 +32,7 @@
 
 ## Subagent 模式
 
-模式定义、主 session 保留职责与串行化规则以 `SKILL.md` 的 `Subagent modes` 为准，本 reference 不重复。授权 bundle 只记录当前选择、owner/host 例外、可传递的 task-scoped 权限和实际共享资源顺序；具体模型只在 owner 或任务显式指定时记录。
+模式定义与主 session / subagent 职责以 `$subagent-driven-development` 为准，本 reference 不重复。授权 bundle 只记录当前选择、host 限制、可传递的 task-scoped 权限和实际共享资源顺序。
 
 ## 一次性授权包模板
 
@@ -45,7 +45,7 @@
   3. <Git、Issue 或 PR 收口；精确边界>
 - 明确禁止/不适用：<来源排除的系统、环境或数据>
 - HITL / owner decisions：<开放决策，或“无”>
-- Subagents：`default-long`（默认） / `ordinary` / 无 delegation capability；`default-long` 下主 session 仅保留调度、授权记录、决策、跨 Task seaming、共享验证、Ticket acceptance、claim audit、gate 和最终集成，subagent 充分承担其余可隔离执行；`ordinary` 下主 session 可直接处理小型/紧耦合工作；已授权权限可随明确 Task 传递
+- Subagents：<按 `$subagent-driven-development` 选择的模式与一句理由>；<可传递的 task-scoped 权限与必须串行化的共享资源>
 - 当前启动前置：<只记录当前单元的实际检查、已授权低副作用修复或精确 blocker；均不得含 secret>
 
 可以回复“全部批准”，或只列出不批准/需要缩小的例外；未列例外即按上述精确边界授权当前任务，不再逐项追问。
@@ -71,7 +71,7 @@ Execution authorization for this task:
 - 不把 read-only/staging 权限扩大成 mutation，也不复用无关任务的旧权限。
 - 不把计划已禁止事项变成反向确认问题。
 - 不按实现顺序逐项申请权限，或遗漏 migration、provider、browser/GUI、cleanup、Git/Issue、acceptance tool 后中途停顿。
-- `default-long` 中保持普通执行切片由 subagent 承担，并将授权随明确 Task 边界传递。
+- 模式行为由 `$subagent-driven-development` 决定；本 contract 只约束授权随明确 Task 边界传递。
 - 跨 Task seam、未决决策和共享验证由主 session 收口；其余可隔离部分由对应 subagent 交付，主 session 以 diff、测试与证据完成验收。
 - 充分利用不等于无边界并发；不得忽略依赖、共享写入和单实例外部资源。
 - 新权限 blocker 若仍在已授权对象/环境/数据/副作用范围内，直接继续；只有跨出该 envelope 才重新申请。

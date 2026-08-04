@@ -9,7 +9,7 @@
 
 ## 执行与 Ticket 验收
 
-1. 只选择已知依赖满足且 primary ownership 不冲突的 Task；可委派时使用 `subagent-driven-development` 的最小派发模板。
+1. 只选择已知依赖满足且 primary ownership 不冲突的 Task；可委派时使用 `dispatch-bounded-task` 的最小派发模板。
 2. Task `DONE` 后由 Working Branch owner 集成产出、处理实际 seam/冲突并运行共享验证；`DONE` 不改变 Ticket acceptance status。
 3. Task `BLOCKED` 记录原因、建议动作和影响 Ticket。Ticket 最终验收前只扫描贡献该 Ticket 的 BLOCKED Task；若其影响 AC、行为或风险边界，则先解除阻塞。实际影响扩大时先更新 contribution mapping。
 4. 固定 comparison point 后，按当前 diff 与 contract impact 运行 Ticket 正式 review；Task 局部验证或提前风险检查不能替代正式 review/acceptance。实际判断通过 `er-add` 追加到 Attempt ledger。

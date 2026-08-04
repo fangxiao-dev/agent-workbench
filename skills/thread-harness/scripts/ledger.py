@@ -25,7 +25,7 @@ from rollout_compaction import (
 )
 
 
-STATE_VALUES = {"working", "awaiting_seam", "awaiting_owner", "done"}
+STATE_VALUES = {"working", "awaiting_seam", "awaiting_owner", "ready_for_assignment", "done"}
 STALL_LIMIT = 5
 HEARTBEAT_LEAD_ROUNDS = 2
 KNOWN_WORKING_STATUSES = {
@@ -50,7 +50,8 @@ PREFLIGHT_RUNTIME_FILES = ("progress.jsonl", "seams.jsonl", "decisions.jsonl", "
 IDLE_STATUS_VALUES = {"idle", "inactive", "notloaded", "not_loaded"}
 LEDGER_FILES = PREFLIGHT_RUNTIME_FILES
 LEDGER_INTEGRITY_FAILED = 6
-NON_RUNNABLE_STATES = {"awaiting_seam", "awaiting_owner", "done"}
+NON_RUNNABLE_STATES = {"awaiting_seam", "awaiting_owner", "ready_for_assignment", "done"}
+REASSIGNMENT_STATES = {"ready_for_assignment", "done"}
 INTEGRITY_GUARDED_COMMANDS = {
     "sync", "stall-check", "report", "seam", "decide", "act", "heartbeat", "status", "preflight"
 }
@@ -550,15 +551,17 @@ def find_rollout(session_id: str) -> Path:
         ) from exc
 
 
-def update_compaction_observers(state: dict, active_children: list[dict]) -> None:
-    """更新 current child session 的增量 compaction 观测状态；缺 rollout 时保留未知。"""
+def update_compaction_observers(state: dict, nodes: list[dict]) -> None:
+    """更新 controller 与 active child current session 的增量 compaction 观测状态。"""
     sessions_root = Path(
         os.environ.get(SESSIONS_ROOT_ENV) or (Path.home() / ".codex" / "sessions")
     )
     observers = state.get("compaction_observers")
     if not isinstance(observers, dict):
         observers = {}
-    for node in active_children:
+    for node in nodes:
+        if node["role"] != "controller" and not node.get("active", True):
+            continue
         session_id = node["session_id"]
         previous = observers.get(session_id)
         try:
@@ -573,13 +576,13 @@ def update_compaction_observers(state: dict, active_children: list[dict]) -> Non
 
 
 def compaction_count_text(registry: dict, state: dict) -> str:
-    """按 active child 的 current session 输出自 observer 基线后的 compaction 次数。"""
+    """按 controller 与 active child current session 输出基线后的 compaction 次数。"""
     observers = state.get("compaction_observers")
     if not isinstance(observers, dict):
         observers = {}
     counts = []
     for entry in route_registry_entries(registry):
-        if entry["role"] != "child" or not entry["active"]:
+        if entry["role"] == "child" and not entry["active"]:
             continue
         session_id = node_session_id(entry["node"])
         observer = observers.get(session_id) if session_id else None
@@ -1112,7 +1115,7 @@ def normalize_state(raw, waiting_on=None) -> str:
     if text in STATE_VALUES:
         return text
     if text in {"completed", "complete", "closed"}:
-        return "done"
+        return "ready_for_assignment"
     if "owner" in text:
         return "awaiting_owner"
     if "seam" in text or waiting_on:
@@ -1288,6 +1291,12 @@ def classify_and_rows(payload: dict, nodes: list[dict], round_no: int, seq: int,
     def may_be_idle(name: str) -> bool:
         return latest_state(name) == "working"
 
+    reassignment_required = sorted(
+        node["name"]
+        for node in nodes
+        if node.get("active", True) and latest_state(node["name"]) in REASSIGNMENT_STATES
+    )
+
     idle_sessions = wake_thread_ids(wake) if wake_reason == "inactiveStatus" else set()
     idle_nodes = {
         by_session[sid]["name"]
@@ -1330,6 +1339,7 @@ def classify_and_rows(payload: dict, nodes: list[dict], round_no: int, seq: int,
 
     return list(rows_by_name.values()), {
         "wake_reason": wake_reason,
+        "reassignment_required": reassignment_required,
         "idle_nodes": sorted(idle_nodes),
         "changed_nodes": changed_nodes,
         "advance_kinds": advance_kinds,
@@ -1669,6 +1679,7 @@ def format_summary(
         [
             f"ROUND {round_no}  valid={'yes' if valid else 'no'}  offset={offset}",
             f"poll_targets:    {', '.join(classification.get('watch_nodes') or []) or '-'}",
+            f"reassignment_required: {', '.join(classification.get('reassignment_required') or []) or '-'}",
             f"idle_nodes:      {', '.join(classification['idle_nodes']) or '-'}",
             f"changed_nodes:   {changed_text}",
             f"advance_kinds:   {', '.join(f'{name}={kind}' for name, kind in sorted((classification.get('advance_kinds') or {}).items())) or '-'}",
@@ -1763,7 +1774,7 @@ def cmd_sync(args) -> int:
                 print(f"ROUND INVALID: poll snippet altered ({reason})")
             return 1
 
-        update_compaction_observers(state, active_children)
+        update_compaction_observers(state, nodes)
         latest_poll, latest_report = latest_progress_parts(args.coordination_id)
         poll_seq = next_seq(state, "next_poll_seq")
         rows, classification = classify_and_rows(
@@ -2028,8 +2039,8 @@ def cmd_report(args) -> int:
         append_jsonl(jsonl_path(args.coordination_id, "progress.jsonl"), row)
         save_state(args.coordination_id, state)
         suffix = ""
-        if args.state in {"working", "done"} and waiting_on:
-            suffix = " (note: waiting_on is ignored for working/done state summaries)"
+        if args.state in {"working", "ready_for_assignment", "done"} and waiting_on:
+            suffix = " (note: waiting_on is ignored for working/ready_for_assignment/done state summaries)"
         if head_source == "unavailable":
             suffix += " (warning: head unavailable, report will be treated as stale once HEAD advances)"
         print(f"reported {args.node} state={args.state} head={head or 'none'}({head_source}){suffix}")
@@ -2253,6 +2264,19 @@ def format_status(
     observers = state.get("compaction_observers")
     if not isinstance(observers, dict):
         observers = {}
+    controller_node = next(
+        (node for node in registry_by_name.values() if node["role"] == "controller"),
+        None,
+    )
+    controller_observer = observers.get(controller_node.get("session_id")) if controller_node else None
+    controller_compactions = (
+        controller_observer.get("observed_count") if isinstance(controller_observer, dict) else None
+    )
+    controller_compactions_text = (
+        str(controller_compactions)
+        if type(controller_compactions) is int and controller_compactions >= 0
+        else "?"
+    )
     node_lines = []
     for name in sorted(set(registry_names) | set(latest)):
         row = latest.get(name, {})
@@ -2307,6 +2331,7 @@ def format_status(
         + [
             f"registry: {registry_path(coordination_id)}",
             runtime_line,
+            f"controller_compaction_count: {controller_compactions_text}",
             "nodes:",
             *(node_lines or ["  -"]),
             f"pending_decisions: {pending_text}",

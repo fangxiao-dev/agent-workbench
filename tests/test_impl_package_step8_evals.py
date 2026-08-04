@@ -47,6 +47,22 @@ def is_eval_workspace(path: Path) -> bool:
 
 
 class ImplPackageStep8EvalContractTest(unittest.TestCase):
+    def test_bounded_task_dispatch_skill_contract(self) -> None:
+        skill_path = IMPL_ROOT / "dispatch-bounded-task" / "SKILL.md"
+        skill = read(skill_path)
+
+        self.assertFalse((IMPL_ROOT / "subagent-driven-development").exists())
+        self.assertFalse((IMPL_ROOT / "dispatch-bounded-task" / "references" / "prompts.md").exists())
+        self.assertLessEqual(len(skill.splitlines()), 80)
+        for marker in (
+            "不在执行期重新设计 Task",
+            "默认使用 `default-long`",
+            "### Implementer 模板",
+            "`DONE` 只表示局部产出与证据已返回",
+            "`BLOCKED` 必须包含最小原因",
+        ):
+            assert_contains(skill, marker, "Bounded Task dispatch contract")
+
     def test_impact_scoped_simplification_contract(self) -> None:
         composition = read(IMPL_ROOT / "references" / "impl-package-composition-contract.md")
         for signal in (
@@ -67,7 +83,7 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
             IMPL_ROOT / "create-task-dag" / "SKILL.md": "未受影响节点可以批量确认",
             IMPL_ROOT / "dev-with-track" / "SKILL.md": "bundle approval",
             IMPL_ROOT / "execution-preflight" / "SKILL.md": "plan-decomposition bundle is `approved`",
-            IMPL_ROOT / "subagent-driven-development" / "SKILL.md": "委派成本高于收益",
+            IMPL_ROOT / "dispatch-bounded-task" / "SKILL.md": "不在执行期重新设计 Task",
             REVIEW_ROOT / "code-review" / "SKILL.md": "Docs/evidence/config-metadata-only changes use a focused profile",
             REVIEW_ROOT / "standards-review" / "SKILL.md": "Fowler code-smell baseline",
             REVIEW_ROOT / "spec-review" / "SKILL.md": "scope creep",
@@ -374,7 +390,7 @@ class ImplPackageStep8EvalContractTest(unittest.TestCase):
         )
         self.assertEqual(10, len(impl_skill_files))
         non_reporting_skills = {
-            Path("skills/impl-package/subagent-driven-development/SKILL.md"),
+            Path("skills/impl-package/dispatch-bounded-task/SKILL.md"),
             Path("skills/impl-package/verification-before-completion/SKILL.md"),
         }
         for skill_file in impl_skill_files:

@@ -3,6 +3,8 @@
 新建或替换任何一条线的 session 时用本页。三个角色共用同一套骨架，差异只有 §角色 delta 那张表。
 
 **不要手写一段带 `<codex_delegation>` 的委派 prompt。** 统一复用 `$handoff-to-new-session` 的 clean local-session 能力；下方 thread-harness replacement override 优先于该通用 skill 的“source 自己 create/no doc”说法。
+本禁令仅针对调用者把<codex_delegation>标签手写进 create_thread /
+send_message_to_thread 的 prompt 字符串。
 
 **第一阶段 child 只核对锚点然后停住，controller 在这个停顿里更新 registry，第二阶段才开工。** child 不直接写 ledger。
 
@@ -81,7 +83,7 @@ Role A 的第二阶段 prompt 必须以 `$impl-package` 为 entry point，不复
 2. 执行方用第一阶段 prompt 创建 clean local session；child 只报 anchor PASS/FAIL 然后停止。
 3. controller 设置短标题，更新 registry 的 current routing，复核 sibling 未变化。
 4. controller 发送第二阶段 registration + assignment card。
-5. child 只校验 current controller 与本 node 的 current session/worktree/branch projection；匹配后登记状态并开工。
+5. child 向第二阶段给出的 current controller 发送最小 H1；controller 从消息来源绑定 node/session，并用 registry 验证后登记状态。
 6. 做一次 `wait_threads(..., timeoutMs:0)` 快照。registry race 修正后**复用同一 clean session**，不再创建新 session。
 
 ### 第一阶段 prompt
@@ -102,8 +104,6 @@ Role A 的第二阶段 prompt 必须以 `$impl-package` 为 entry point，不复
 - <role-anchor-1>
 - <role-anchor-2>
 
-<role-identity-line>
-
 首轮只用 Test-Path / git rev-parse 核对上述锚点。
 任一不符：只报 `source worktree setup mismatch` 与实际值，停止，不 repair。
 全部匹配：只报 `<role> anchor PASS` 与锚点值，停住，不要做额外动作。
@@ -114,92 +114,79 @@ Role A 的第二阶段 prompt 必须以 `$impl-package` 为 entry point，不复
 ### 第二阶段 prompt
 
 > **读者**：已经 anchor PASS、知道自己站在哪，但还不知道要干什么。
-> **恢复权威**：持久记录——Role A 是任务包 entry，Role C 是账本 + registry；Role B 无持久恢复权威，下方 card 只定义当前 assignment。
-> **准入判据**：**这是可恢复的持久事实，还是 Role B 当前 assignment 的必需字段？** 前者只写持久指针；后者完整写入下方新 card；两者都不是就不进 prompt。
+> **恢复权威**：Role A 是任务包 entry；Role B 无持久恢复权威，下方 card 只定义当前 assignment。Role C 不是 child，按后文特有顺序读取 registry + ledger。
+> **准入判据**：**这行能否让 child 完成准入，或立即开始当前 assignment？** 不能就不进 prompt。
+
+Role A / B 的完整第二阶段消息（registration + assignment）以对应模板为准，**不得超过 20 个非空逻辑行**。child routing 只有 current controller session id。
+
+#### Role A prompt
 
 ```text
-第二阶段 registration 已就绪。读取 $thread-harness 并按 <Role X> 工作。
-
-Routing：
-- coordination_id=<id>；registry=<absolute_registry_path>；ledger repo=<absolute_ledger_repo>
-- node=<node_id>；expected current session=<new_thread_id>
-- <role-routing-extra>
-
-恢复权威：<Role A=任务包 entry 指针｜Role B=无；下方新 card 是当前 assignment 的任务权威｜Role C=账本+registry 指针>
-
-解析 registry 后只输出 current controller 与本 node 的 current session / worktree / branch projection；
-精确匹配才向 current controller 发 H1 envelope，否则报 `harness mismatch` 并停止。
-
-<assignment card，见下节>
-
-账本只由主控写。你的任何状态变更（含被阻塞、需要中止本 lane）都用 H1 回报，
-不要调用 ledger.py——`act --halt` 会终止整场 coordination，那不是你的 lane 开关。
-
-工作方式：按 $investigate-before-implement 执行；review 走 $do-review，可按需选择所需的
-track 和聚焦/全量模式；验收由当前 session 完成。
-依赖识别不等于阻塞：先把不依赖它的工作前移，保持 working。
-只读 nearest AGENTS、必需 skill 与 card 里的 exact inputs，不做 broad package/doc scan。
+第二阶段 registration 已就绪。读取 $thread-harness 与 $impl-package，并按 Role A 工作。
+回报对象：controller=<current_controller_session_id>
+恢复权威：<package entry / checkpoint pointer>
+向 controller 发送 state=working 的 H1，再从恢复权威读取并继续其中的 current Next Action。
+状态变化只通过 H1 回报；不要调用 ledger.py。缺少可执行 Next Action 时询问 controller，不从聊天重建。
 ```
 
-「工作方式」那两行是**共享块**，catch-up 模板原样引用同一段文字，**不要在两处各维护一份**。
+#### Role B prompt
+
+```text
+第二阶段 registration 已就绪。读取 $thread-harness 并按 Role B 工作。
+回报对象：controller=<current_controller_session_id>
+恢复权威：无；本卡仅定义当前 assignment。
+<slug>：<一句话任务名>
+- seam / 任务：<seam_id → consumers｜bounded task>
+- next action：<一个可立即执行的动作>
+- inputs：<最小充分的精确路径或 artifact 指针>
+- done when：<当前 assignment 的结束判据>
+状态变化只通过 H1 回报；不要调用 ledger.py。
+需要新增权限时停止相关动作并询问 controller，获得明确的一次性授权后继续。
+只读 nearest AGENTS、必需 skill 与 inputs，不做 broad scan。
+```
 
 ### Assignment card（派发用，约束型）
 
 > **读者**：一条已经在岗的线。
 > **任务权威**：Role A 的持久恢复权威是任务包 entry；Role B 无持久恢复权威，这张卡只定义当前 assignment。
-> **准入判据**：**每个字段都必须能被下游当作验收依据。** 填不出具体值就写 `N/A` 让缺失可见。
+> **准入判据**：**这是不是 child 开始当前动作所需的最小切入点？** 不是就不进卡。
 
-这是**约束**不是成品：字段与判据固定，措辞由 controller 当时决定。任务内容天天变，硬套成品必然被填成空话。
+Role A 从 package entry 恢复并继续。Role B card 使用第二阶段模板里的四个字段：`seam / 任务`、`next action`、`inputs`、`done when`。
 
-```text
-<slug>：<一句话任务名，你自己填>
-
-- registry：<absolute_registry_path>（必填；不得只写 coordination_id 或 broker root）
-- seam：<seam_id> → <consumers 节点名>　｜　非 seam（bounded 任务）
-- next action：<one_concrete_action>
-- exact inputs：<≤6 条精确路径或 artifact 指针；已验证可复用的共享资源必须点名>
-- already earned：<one_material_proof 或 N/A>
-- still required：<remaining_closure_proof>
-- authorization：<明确的权限姿态：sandbox / 网络 / Git / 审批边界>
-- exclusions：<explicit_exclusions>
-```
-
-- **`seam` 一行必须写出 consumers**，否则分不清"跨域契约"和"这条线自己的待办"；不是 seam 就明写"非 seam"。
-- **`exact inputs` 必须点名可复用的共享资源**，而不是让 child 自己去登录 / link project / 探测 API。上限 6 条是刻意的——填不下说明这一轮任务还没切够细。
-- **`authorization` 不得写"按需授权"这类空话**，要写明 sandbox / 网络 / Git / 审批的实际边界。
-- **Role B 的卡额外一条**：card 必须自足，`already earned` / `still required` **不得引用父包**。发生 compaction 后不恢复本卡，由 controller 重新验证事实并派发一张新卡。
-- **不给 `still required` 加强制校验或证据格式约束。**
+- **`seam / 任务`**：seam 必须写出 consumers；非 seam 就明写 bounded task。
+- **`inputs`**：只列执行 `next action` 前必须读取的代码、当前契约或 artifact。当前 worktree 内用相对路径，跨 worktree 用绝对路径；历史 plan、execution record 或 evidence 只有精确 section / artifact 会改变当前动作时才可进入。必须复用的既有证据只给一个 artifact 指针，不复述摘要。
+- **`done when`**：只写当前 assignment 的结束判据，不扩成 package 或 coordination 的完成声明。
+- Role B 发生 compaction 后不恢复本卡，由 controller 重新验证最小切入点并派发一张新卡。
 
 **fan-out（同一张卡发给多个 node）**：判据是「这张卡是不是每条线都要**立刻改变行为**？」否则不 fan-out，主控自己记住就行。fan-out 不承载任务内容，任务内容一律走单发的 card。
 
 ### Role A catch-up（compaction 后，约束型）
 
 > **读者**：刚发生过 compaction、仍在岗的 Role A session。
-> **恢复权威**：当前任务包 entry；registry 只提供 routing。
+> **恢复权威**：当前任务包 entry；controller 消息只提供回报目标。
 > **准入判据**：**只补它读不回来的东西**；能自己读回来的一律只给指针。
 
 ```text
 catch-up（你刚发生过 compaction）：
-- 你的角色：<node> = Role A 任务包子线，按 $thread-harness Role A 执行
+- 你的角色：Role A 任务包子线，按 $thread-harness Role A 执行
 - 开发框架：$impl-package
+- 回报对象：controller=<current_controller_session_id>
 - 当前 assignment：<slug>
 - 恢复权威：<绝对路径>
 - 下一个动作：<one_concrete_action>
 
-<原样插入第二阶段 prompt 的「工作方式」段>
-
 其余状态自己从上面的恢复权威读回。
 ```
 
-- **角色、开发框架、工作方式这三样必须重述**——compaction 后的 child 已经不知道自己该去读什么。
+- **角色与开发框架必须重述**——compaction 后的 child 已经不知道自己该去读什么。
 - **硬上限 10 行。**
 - **计数规则（controller 执行）**：只读取本轮 [`ledger.py sync` 摘要的 `compaction_count: <node>=<n>`](poll-contract.md#compaction_count)。同一 Role A current session 的 `n` ≤3 时发送 catch-up；`n` >3 时改为按上面的触发消息转交接。Role A 不自行估算或查找次数；`?` 表示本机 rollout 不可用，controller 停止计数判定并直接核查，不得猜成 0。
-- **Role B 不用这个模板**：它没有持久恢复权威。compaction 后主控（controller）不读旧聊天、不恢复旧 card，而是在常设授权边界内发送一张新的完整 assignment card；缺任一关键事实或授权就停止并报告 Owner。
+- **Role B 不用这个模板**：它没有持久恢复权威。compaction 后主控（controller）不读旧聊天、不恢复旧 card，而是发送一张新的最小 assignment card；缺关键输入时停止并询问 controller，新增权限按 Role B 权限规则处理。
 - **Role C 不用这个模板**：主控 compaction 后走 `ledger.py status` 自己恢复（见 §Role C 特有顺序）。
 
 ### 停止条件
 
-- anchor、title、local environment、current routing 或 exact inputs 不符：停止，不 repair。
+- anchor、title、local environment、current routing 或 inputs 不符：停止，不 repair。
 - 返回 `clientThreadId`：报 incomplete delivery，**不伪造 session id**。
 - source writer / owned process 未停止，或 checkpoint 不足以恢复：先回报 controller，不扩大读取范围。
 
@@ -207,10 +194,8 @@ catch-up（你刚发生过 compaction）：
 
 | | **Role A · 任务包子线** | **Role B · Platform** | **Role C · 主控** |
 | --- | --- | --- | --- |
-| **恢复权威** | 当前任务包 entry | 无持久恢复权威；新 card 只定义当前 assignment | 账本 + registry |
+| **恢复权威** | 当前任务包 entry；第二阶段不发 card | 无持久恢复权威；新 card 只定义当前 assignment | 账本 + registry |
 | **第一阶段额外锚点** | `package` / `entry point` | `parent package` / `entry point` | 父包 entry；controller 自己的 worktree / branch / HEAD |
-| **role-identity-line** | 无 | `任务身份：node=<n>；seam=<s>；consumers=<c>` | `你接手 coordination <id> 的主控` |
-| **role-routing-extra** | 无 | `seam=<seam_id>；consumers=<consumer_nodes>` | 全部 child 的 node → session → worktree/branch/HEAD |
 | **role-initial-state** | `working` 或 `awaiting_seam` | `working` | `working` |
 | **role-recovery-block** | `Package checkpoint：package / entry / checkpoint 指针` | 无——**不得**把 parent entry 当恢复入口，不读旧 plan/Task progress/历史 evidence | 见下方「Role C 特有顺序」 |
 | **交付登记义务** | 无 | H1 报告 seam artifact，由 controller 用 `ledger.py seam --registry <path> --seam-id <s> --producer <node> [--consumers ...] --deliver commit:<sha>` 登记；没登记等于没交付 | 无 |
@@ -221,26 +206,17 @@ catch-up（你刚发生过 compaction）：
 
 主控交接比 A/B 多一层：**它自己就是读账本的那个人，顺序错了会读到上一任的 rollout。**
 
-1. **先**核对 registry 里 controller 的 `current_session_id` 已经是你自己（正常情况下退休主控在退出前已用 `route` 写好）。**没写成才由你补写**。`sync` 靠这个字段定位读哪个 rollout，指向上一任就会去读它的 rollout。
-2. 跑 `ledger.py status --registry <absolute_registry_path>` 恢复认知。它只读账本不碰 rollout，是接手时唯一能用的命令；runtime 缺失时也不得由 status 初始化。**不要从对话历史重建全局状态。**
-3. 设置 goal 文本（模板见 [goal-prompt.md](../goal-prompt.md)）。内联的 ids 要与 registry 当前 children 逐一核对——`sync` 会做集合比对，对不上每轮判 `ROUND INVALID`。
-4. 跑第一轮固定 poll。
-5. **再**跑 `sync`。新 session 的 rollout 在第 4 步之前是空的，此时跑 `sync` 必然得到 `SYNC STALE`。**4 必须在 5 之前。**
-
-Role C 的第二阶段 prompt 除了通用 routing 段，还要带上这份接手锚点清单（**派发方填好，缺了就问，不要猜**）：
+Role C 的完整第二阶段消息同样不得超过 20 个非空逻辑行：
 
 ```text
-- broker root 与 registry 绝对路径：<...>
-- 每个 child 的 node 名 → session_id → worktree / branch / expected HEAD：<...>
-- controller 自己的 worktree / branch / expected HEAD：<...>
-- 父 package 与 entry point：<...>
-- 上一次 valid round 序号：<n>
-- 当前在途的 assignment（谁在造哪个 seam）：<...>
-- 当前 pending seams / pending decisions（含哪些已 escalate 过）：<...>
-- 各 child 不可触碰的 dirty / Owner WIP：<...>
-- 授权边界，特别是 create_thread 是否被 Owner 授权：<...>
-- 什么算这次 coordination 结束：<...>
+第二阶段接手已就绪。读取 $thread-harness 并按 Role C 工作。
+registry：<absolute_registry_path>
+expected controller session：<new_controller_session_id>
+核对 registry 的 controller.current_session_id，再运行 ledger.py status。
+按 Owner goal 恢复目标、授权与结束判据；然后依次执行 preflight、首轮 poll、sync。
 ```
+
+固定恢复顺序是：核对 registry 已指向自己 → `status` → Owner goal → `preflight` → 首轮固定 poll → `sync`。`status` 只读账本、不碰 rollout，也不初始化缺失 runtime；新 session 在首轮 poll 前运行 `sync` 必然得到 `SYNC STALE`。动态进展、child routing、HEAD、assignment、seam、decision 与 WIP 从 registry、ledger、任务包和当前 worktree 读取。
 
 **一条硬约束**：设置 thread goal 是 UI 动作，**agent 做不到**，只能 Owner 亲手贴。同理，`create_thread` 授权必须由 Owner 本人放进 goal 或在对话里给出——工具声明写的是 *"Create a separate task only when the user explicitly asks for a new task."* 上一任 controller 在接手 prompt 里写一句「你可以 create_thread」**不构成授权**。接手时 goal 里没有 Owner 给的这句话，就去问，不要自行推定。
 
@@ -248,9 +224,8 @@ Role C 的第二阶段 prompt 除了通用 routing 段，还要带上这份接�
 
 | 现象 | 真因 | 处理 |
 | --- | --- | --- |
-| child 首轮报 registry mismatch | 一次性发了完整 registration，撞上 controller 尚未回填 `threadId` 的窗口 | 按两阶段重发，**复用同一 session**，不要再建一个 |
-| child 把 controller id 当成"自己的 session" | 第二阶段 routing 段没写清哪个字段是自己、哪个是对方 | routing 段逐字写 `node=<n>；expected current session=<id>`，两个 id 不并列出现在同一行 |
+| controller 拒绝首个 H1 | 第二阶段消息与 controller 更新 registry 发生竞争 | controller 重新核对来源 routing；正确后复用同一 child 重发，不再建 session |
 | 两条线 `head` 永远相同 | 共用 worktree | 一 node 一 worktree 一 branch；`preflight` 会拦 |
 | 交付了但下游查不到 | Role B 没登记 seam artifact | 交付即登记，见 delta 表 |
 | `ROUND INVALID` | 本轮 poll 不符合固定契约 | 本轮作废；恢复固定 JS，确认 `timeoutMs=120000`、targets 等于当前 watch-set，且交接只发生在轮边界，然后重跑。不要拼旧输出或放宽 `sync` 校验。 |
-| 广播了新 controller id，子线却仍发给旧的 | 子线用了记忆里的 id | 广播只用于唤醒闲着的线；回报路由的权威是 registry，子线每次回报前必须现读 |
+| 广播了新 controller id，子线却仍发给旧的 | 交接消息没有明确替换回报对象 | 新主控广播逐字给出 `controller=<new_session_id>`；child 用它替换当前回报目标 |

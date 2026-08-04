@@ -41,7 +41,7 @@ def test_global_entry_and_handoff_route_to_current_delegation_skills() -> None:
         encoding="utf-8"
     )
 
-    for name in ("investigate-before-implement", "reviewer"):
+    for name in ("subagent-driven-development", "investigate-before-implement", "reviewer"):
         assert f"skills/{name}/" in global_instructions
         assert f"`${name}`" in global_instructions
         assert f"`${name}`" in handoff
@@ -52,4 +52,3 @@ def test_global_entry_and_handoff_route_to_current_delegation_skills() -> None:
         assert not (ROOT / "skills" / removed / "SKILL.md").exists()
     assert "workflow and role definitions do not supply business prompts" in global_instructions
     assert "不在 handoff 中重复" in handoff
-    assert "全局 skills 定义" in handoff

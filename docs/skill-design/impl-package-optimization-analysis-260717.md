@@ -69,12 +69,12 @@ spec §6 的 tenant/授权约束条目在历轮 remediation 中被逐次追加�
 
 ### 3.2 review 反复的两个层面：task 级已有 in-flight 修复，正式 review 级还没有
 
-你说 subagent-driven-development 对 spec review 的规则不完善导致反复 review。实例证据分两层：
+你说当时的 Task 派发层对 spec review 的规则不完善导致反复 review。实例证据分两层：
 
 - **Task 级**：T1 四轮 spec-compliance + 两轮 quality（拒绝码 → decimal 递归 → treatment evidence → controlled label），每轮 reviewer 只审"上轮 finding 修没修 + 顺手再发现一个"，没有首轮完整覆盖承诺。工作区未提交的 review basis + closure review + coverage gap 改动直接命中这个问题（basis 先行、closure 只复查受影响行、基线外新发现必须补基线后完整重审），方向正确，且 prompts.md 已把覆盖对照表写进三个模板。**这层不需要再提案，建议按现状落地并用下一个实例验证。**
 - **正式 review 级（缺口仍在）**：do-review/safety-review 的 fixed-range 循环没有 basis 概念——ER-25 到 ER-36 每轮都是全量三轨重审，发现 1–2 个 P1，修完换 fixed head 再全量来一轮，六轮才收敛，且 subagent quota 正是被这个循环烧穿的。**候选 G（中高优先级）**：把同一方法论推广到正式 review 层——首轮建立风险行基线；后续轮只复查受修复影响的行加相邻边界；出现基线外新发现才升级为全量重审。
 
-- **配套缺口**：quota 耗尽后 agent 临场发明了 "main-session read-only fallback review"，并以它作为 T1/T2 的最终释放依据。记录得诚实，但这是未定义行为且独立性弱化是真实风险。**候选 H（中优先级）**：subagent-driven-development 定义降级规则——允许的 fallback 形式、必须的标注方式、是否需要后续补独立复核。
+- **配套缺口**：quota 耗尽后 agent 临场发明了 "main-session read-only fallback review"，并以它作为 T1/T2 的最终释放依据。记录得诚实，但这是未定义行为且独立性弱化是真实风险。**候选 H（中优先级）**：Task 派发层定义降级规则——允许的 fallback 形式、必须的标注方式、是否需要后续补独立复核。
 
 ### 3.3 执行期 S 升级没有端到端 owner
 
@@ -119,7 +119,7 @@ R7「结构化状态层」方向确认后，原 10 项候选的格局从并列�
 
 排序（2026-07-17 外部评审后确认）：F 作为载体完成后的第一个小改动（对应六轮机制级返工，收益/改动比最高）；G/H 等 task 级 review basis 在下一个实例验证后再决定推广与降级方式，不与载体同批；E/I 维持低优先级。
 
-已在工作区、无需重复提案：subagent-driven-development 的 review basis / closure review / coverage gap 改动（覆盖 task 级反复 review 问题），建议落地后用下一个实例验证效果。
+已在工作区、无需重复提案：Task 派发层的 review basis / closure review / coverage gap 改动（覆盖 task 级反复 review 问题），建议落地后用下一个实例验证效果。
 
 另：1.1 的三层重复表述收敛，随载体实施时的契约 procedure 段改写一并做（升级 alias、校验、投影等 prose 流程被脚本调用点替代，正是收敛时机），不再单独排期。
 
