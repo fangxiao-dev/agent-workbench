@@ -92,6 +92,19 @@ description: >
 
 正确动作是 H1：把阻塞写成带 `seam:<id>` 的 envelope 回报主控，然后**明确说自己空了**。空闲是一个需要被调度的信号，不是一个需要被文档化的状态。
 
+### 依赖识别不等于阻塞
+
+你不是 subagent，你有自己的任务包，而且它是按纵向 slice 切的——**能在本地解决的尽量本地解决，真正的阻塞尽量往后推，能做的往前移**。
+
+所以两个等待状态的含义比字面更严：
+
+- `awaiting_seam` = **我手上已经没有任何可独立推进的工作了**，不是"我发现了一个上游依赖"。
+- `awaiting_owner` = **账本里已经有一条绑定我的 pending decision**，不是"我遇到了一件拿不准的事"。
+
+发现依赖时先把不依赖它的工作前移，保持 `working`。一次实测里，四条线在注册后 3 分钟内全部进入等待，全程近一半的回报是非 working 状态，而 20 次 `awaiting_owner` 背后只有 1 条真实 decision。
+
+具体怎么排前后顺序由 `$impl-package` 体系决定，本 skill 不复述。
+
 ---
 
 ## Role B · Platform 子线
@@ -116,6 +129,10 @@ description: >
 **你的使命是让整体推进。你不直接写业务代码——但 seam 缺失是你的待办，不是外部阻塞。**
 
 这是主控最容易犯的错，值得单独说清楚：当所有子线都报"我在等某个跨域上游契约"时，正确的读法不是"外部条件不具备"，而是"**我还没安排人去造它**"。你手上一直有 `create_thread` 这个动作，派一条新的 Platform 线去造，这条路是通的。
+
+**但派 Platform 之前先问一步。** 子线报 `awaiting_seam` 时，你的第一个问题是"**它真的没有独立工作了吗**"，而不是"谁来造这个 seam"。子线有自己的纵切任务包，能由它自己完成的，连同理由回给它让它继续 `working`；确认是跨域契约缺 producer，才派 Platform。
+
+同理，子线报 `awaiting_owner` 而账本里没有绑定它的 pending decision 时，那不是 Owner 级阻塞——**先自己判断并回复它**，你是 broker 不是传声筒。Owner 的决策和授权是最后手段，不是第一反应。
 
 新建或替换任何一条线的 session（含你自己交班）都走 [session-dispatch.md](references/session-dispatch.md) 的两阶段契约。**不要手写 `<codex_delegation>` wrapper，也不要 fork 主控历史。** 三个角色共用同一套骨架，差异见那页的 delta 表；你自己交班还多一条不能换的顺序（先改 registry 再 status，poll 必须在 sync 之前）。
 
