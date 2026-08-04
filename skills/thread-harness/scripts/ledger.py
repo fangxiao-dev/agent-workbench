@@ -20,7 +20,7 @@ from pathlib import Path
 
 
 STATE_VALUES = {"working", "awaiting_seam", "awaiting_owner", "done"}
-DEFAULT_STALL_LIMIT = 5
+STALL_LIMIT = 5
 HEARTBEAT_LEAD_ROUNDS = 2
 KNOWN_WORKING_STATUSES = {
     "idle",
@@ -1612,7 +1612,6 @@ def format_summary(
     offset: int,
     classification: dict,
     coordination_id: str,
-    streak_limit: int,
     registry: dict | None = None,
 ) -> str:
     changed = classification["changed_nodes"]
@@ -1643,7 +1642,7 @@ def format_summary(
             f"stale_reports:   {', '.join(sorted(stale_report_nodes(coordination_id))) or '-'}",
             f"unknown_status:  {', '.join(classification.get('unknown_status') or []) or '-'}",
             f"pending_decisions: {pending_text}",
-            f"stall_streak:    {stall_streak(coordination_id)}/{streak_limit}",
+            f"stall_streak:    {stall_streak(coordination_id)}/{STALL_LIMIT}",
             f"seams_unowned:   {unowned}",
             f"stale_waiting_on: {stale_waiting_on}",
             f"malformed_waiting_on: {malformed}",
@@ -1756,7 +1755,6 @@ def cmd_sync(args) -> int:
                 new_offset,
                 classification,
                 args.coordination_id,
-                args.streak,
                 registry,
             )
         )
@@ -2086,6 +2084,18 @@ def cmd_decide(args) -> int:
 
 
 def cmd_act(args) -> int:
+    if args.halt:
+        registry = load_registry(args.coordination_id)
+        controller = registry.get("controller")
+        controller_session = (
+            controller.get("current_session_id")
+            if isinstance(controller, dict)
+            else None
+        )
+        if not args.source_session:
+            raise UsageError("act --halt requires --source-session")
+        if args.source_session != controller_session:
+            raise UsageError("act --halt source session must match controller current_session_id")
     ensure_runtime(args.coordination_id)
     with coordination_write_lock(args.coordination_id):
         assert_ledger_integrity(args.coordination_id)
@@ -2188,7 +2198,6 @@ def cmd_act(args) -> int:
 def format_status(
     coordination_id: str,
     registry: dict,
-    streak_limit: int = DEFAULT_STALL_LIMIT,
     *,
     integrity_failed: bool = False,
 ) -> str:
@@ -2256,7 +2265,7 @@ def format_status(
             f"stale_waiting_on: {stale_waiting_on}",
             f"malformed_waiting_on: {malformed}",
             f"stale_reports:   {', '.join(sorted(stale_report_nodes(coordination_id))) or '-'}",
-            f"stall_streak:    {stall_streak(coordination_id)}/{streak_limit}",
+            f"stall_streak:    {stall_streak(coordination_id)}/{STALL_LIMIT}",
             f"dispatches_since_progress: {load_state(coordination_id).get('dispatches_since_progress', 0)}",
             f"docs_only_advances: {load_state(coordination_id).get('docs_only_advances', 0)}",
             f"last_act:        {act_text}",
@@ -2289,11 +2298,11 @@ def cmd_heartbeat(args) -> int:
         if args.node not in children:
             raise UsageError(f"unknown child node: {args.node}")
         streak = stall_streak(args.coordination_id)
-        minimum = max(1, args.streak - HEARTBEAT_LEAD_ROUNDS)
-        if not minimum <= streak < args.streak:
+        minimum = max(1, STALL_LIMIT - HEARTBEAT_LEAD_ROUNDS)
+        if not minimum <= streak < STALL_LIMIT:
             raise UsageError(
-                f"heartbeat requires {minimum}/{args.streak} <= stall_streak < "
-                f"{args.streak}/{args.streak}; current={streak}/{args.streak}"
+                f"heartbeat requires {minimum}/{STALL_LIMIT} <= stall_streak < "
+                f"{STALL_LIMIT}/{STALL_LIMIT}; current={streak}/{STALL_LIMIT}"
             )
         evidence = args.evidence.strip()
         if not evidence:
@@ -2305,7 +2314,7 @@ def cmd_heartbeat(args) -> int:
         state["stall_reset_seq"] = reset_seq
         save_state(args.coordination_id, state)
         print(
-            f"heartbeat reset node={args.node} stall_streak={streak}/{args.streak} "
+            f"heartbeat reset node={args.node} stall_streak={streak}/{STALL_LIMIT} "
             f"reset_seq={reset_seq}"
         )
         return 0
@@ -2336,21 +2345,21 @@ def cmd_stall_check(args) -> int:
         if already_escalated:
             pending_suffix = f" pending_escalated: {format_id_list(decision_ids(already_escalated))}"
         streak = stall_streak(args.coordination_id)
-        if streak >= args.streak:
+        if streak >= STALL_LIMIT:
             state["last_must_act_seq"] = int(state.get("next_act_seq") or 0)
             save_state(args.coordination_id, state)
             print(
-                f"MUST_ACT stall_streak={streak}/{args.streak} "
+                f"MUST_ACT stall_streak={streak}/{STALL_LIMIT} "
                 f"dispatches_since_progress={dispatches}{pending_suffix}\n{answered_line}"
             )
             return 2
-        if streak >= max(1, args.streak - HEARTBEAT_LEAD_ROUNDS):
+        if streak >= max(1, STALL_LIMIT - HEARTBEAT_LEAD_ROUNDS):
             print(
-                f"CHECK_HEARTBEAT stall_streak={streak}/{args.streak} "
+                f"CHECK_HEARTBEAT stall_streak={streak}/{STALL_LIMIT} "
                 f"dispatches_since_progress={dispatches} read_thread_required=yes{pending_suffix}\n{answered_line}"
             )
             return 0
-        print(f"OK stall_streak={streak}/{args.streak} dispatches_since_progress={dispatches}{pending_suffix}\n{answered_line}")
+        print(f"OK stall_streak={streak}/{STALL_LIMIT} dispatches_since_progress={dispatches}{pending_suffix}\n{answered_line}")
         return 0
 
 
@@ -2384,7 +2393,6 @@ def build_parser() -> argparse.ArgumentParser:
     sync = sub.add_parser("sync")
     add_routing_args(sync)
     sync.add_argument("--round", required=True, type=int)
-    sync.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
     sync.set_defaults(func=cmd_sync)
 
     route = sub.add_parser("route")
@@ -2445,6 +2453,7 @@ def build_parser() -> argparse.ArgumentParser:
     act.add_argument("--deliverable")
     act.add_argument("--decision-id")
     act.add_argument("--reason")
+    act.add_argument("--source-session")
     act.set_defaults(func=cmd_act)
 
     status = sub.add_parser("status")
@@ -2455,12 +2464,10 @@ def build_parser() -> argparse.ArgumentParser:
     add_routing_args(heartbeat)
     heartbeat.add_argument("--node", required=True)
     heartbeat.add_argument("--evidence", required=True)
-    heartbeat.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
     heartbeat.set_defaults(func=cmd_heartbeat)
 
     stall = sub.add_parser("stall-check")
     add_routing_args(stall)
-    stall.add_argument("--streak", type=int, default=DEFAULT_STALL_LIMIT)
     stall.set_defaults(func=cmd_stall_check)
 
     preflight = sub.add_parser("preflight")

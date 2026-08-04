@@ -639,7 +639,13 @@ fails += check("pending decision 优先于停滞并退出 3", rc == 3 and "MUST_
 rc, out = run("decide", "--coordination-id", CID, "--answer", "d1", "--text", "yes")
 fails += check("decide --answer 可清掉 pending decision", rc == 0, out.strip())
 rc, out = run("stall-check", "--coordination-id", CID, "--streak", "99")
-fails += check("decide --answer 后无 pending 且未达阈值时退出 0", rc == 0 and out.startswith("OK "), out.strip())
+fails += check("stall-check 不再接受调用方覆盖阈值",
+               rc == 64 and "unrecognized arguments: --streak 99" in out,
+               out.strip())
+rc, out = run("stall-check", "--coordination-id", CID)
+fails += check("移除 --streak 后停滞阈值固定为 5",
+               rc == 2 and "MUST_ACT stall_streak=5/5" in out,
+               out.strip())
 
 print("-" * 78)
 reset_fixture(git_worktrees=True)
@@ -731,16 +737,34 @@ fails += check(
 
 reset_fixture(git_worktrees=True)
 run("init", "--coordination-id", CID)
-rc, out = run("act", "--coordination-id", CID, "--halt")
+halt_before = route_runtime_snapshot()
+rc, out = run("act", "--coordination-id", CID, "--halt", "--reason", "missing caller identity")
+fails += check("act --halt 缺 source-session 必须退出 64 且不写账本",
+               rc == 64 and "act --halt requires --source-session" in out
+               and route_runtime_snapshot() == halt_before,
+               f"rc={rc} {out.strip()}")
+rc, out = run("act", "--coordination-id", CID, "--halt", "--source-session", NODES["controller"])
 fails += check("act --halt 缺 reason 必须退出 64",
-               rc == 64 and "act --halt requires --reason" in out,
+               rc == 64 and "act --halt requires --reason" in out
+               and route_runtime_snapshot() == halt_before,
+               f"rc={rc} {out.strip()}")
+
+reset_fixture(git_worktrees=True)
+run("init", "--coordination-id", CID)
+halt_before = route_runtime_snapshot()
+rc, out = run("act", "--coordination-id", CID, "--halt", "--source-session", NODES["alpha"],
+              "--reason", "child must not stop coordination")
+fails += check("非 controller 调用 act --halt 必须拒绝且不新增账本行",
+               rc == 64 and "source session must match controller current_session_id" in out
+               and route_runtime_snapshot() == halt_before,
                f"rc={rc} {out.strip()}")
 
 reset_fixture(git_worktrees=True)
 run("init", "--coordination-id", CID)
 append_decision("halt-d1", "2026-08-01T06:00:00+02:00")
 append_decision("halt-d2", "2026-08-01T06:00:01+02:00")
-rc_halt, out_halt = run("act", "--coordination-id", CID, "--halt", "--reason", "owner stopped loop")
+rc_halt, out_halt = run("act", "--coordination-id", CID, "--halt",
+                        "--source-session", NODES["controller"], "--reason", "owner stopped loop")
 halt_rows = ledger_rows("acts.jsonl")
 rc, out = run("stall-check", "--coordination-id", CID)
 fails += check("halt 后 stall-check 只输出 HALTED 且不输出业务动作标记",
@@ -761,7 +785,8 @@ fails += check("halt 后 status 顶部暴露 halted、reason 与 pending ids",
 reset_fixture(git_worktrees=True)
 run("init", "--coordination-id", CID)
 append_progress_streak(5)
-run("act", "--coordination-id", CID, "--halt", "--reason", "temporary stop")
+run("act", "--coordination-id", CID, "--halt", "--source-session", NODES["controller"],
+    "--reason", "temporary stop")
 rc_halted, out_halted = run("stall-check", "--coordination-id", CID)
 rc_dispatch, out_dispatch = run("act", "--coordination-id", CID, "--dispatch", "--seam-id", "resume-seam",
                                 "--producer", "alpha", "--deliverable", "resume concrete work")
@@ -978,7 +1003,8 @@ integrity_commands = [
     ("report", "--coordination-id", CID, "--node", "alpha", "--state", "working"),
     ("seam", "--coordination-id", CID, "--seam-id", "integrity", "--producer", "alpha"),
     ("decide", "--coordination-id", CID, "--raise", "integrity"),
-    ("act", "--coordination-id", CID, "--halt", "--reason", "integrity"),
+    ("act", "--coordination-id", CID, "--halt", "--source-session", NODES["controller"],
+     "--reason", "integrity"),
     ("heartbeat", "--coordination-id", CID, "--node", "alpha", "--evidence", "integrity"),
     ("preflight", "--coordination-id", CID),
 ]
