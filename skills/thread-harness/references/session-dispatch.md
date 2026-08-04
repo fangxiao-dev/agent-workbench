@@ -41,7 +41,8 @@ send_message_to_thread 的 prompt 字符串。
 主控发给 child 时用它；Owner 让主控自己交接时也用它。
 
 ```text
-你该做 session 自交接了。按 $handoff-to-new-session 执行，override 以
+你该做 session 自交接了。先尽快完成手头任务，写好可恢复 checkpoint
+并停止 owned process；不要领取新的工作。然后按 $handoff-to-new-session 执行，override 以
 <repo>\skills\thread-harness\references\session-dispatch.md 为准。
 
 registry：<registry 绝对路径 .json>

@@ -244,6 +244,8 @@ def test_compaction_observer_is_imported_and_runtime_docs_use_it() -> None:
     assert "poll-contract.md#compaction_count" in role_c
     assert "poll-contract.md#compaction_count" in dispatch
     assert "Role A 不自行估算或查找次数" in dispatch
+    assert "先尽快完成手头任务，写好可恢复 checkpoint" in dispatch
+    assert "不要领取新的工作" in dispatch
 
     runtime_root = ROOT / "skills/thread-harness"
     runtime_docs = tuple(
