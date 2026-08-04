@@ -1,6 +1,10 @@
 # Owner 要粘贴的全部文本
 
-**这一页是唯一的模板来源，其他文件只指过来、不放第二份。**
+**这一页装的是「Owner 亲手贴」的模板**：启动 prompt、主控 goal、create_thread 授权原文。
+**主控发出去**的那些（交接三件套、assignment card、catch-up）在
+[session-dispatch.md](references/session-dispatch.md)，本页不放第二份。
+
+切分线是「谁把这段文字贴出去」——Owner 贴的必须是成品，主控发的按场景分成品与约束。
 
 每份模板开头都是**填空区**，用 `---` 与正文隔开——只有那几行要你替换，正文里没有埋占位符。
 
@@ -28,8 +32,15 @@
 | 要让某条 session 退休 | 触发消息 | [session-dispatch.md](references/session-dispatch.md) §触发消息 |
 | 每次主控换 session | 主控 goal，**授权原文要重贴** | §主控 goal |
 
-除此之外，*用户*只有三件需要反应的事：**响应 `MUST_ESCALATE`**、**点掉 Desktop 的审批弹窗**、**盯首次 `MUST_ACT`**。
-其余的动作理论上都应该可以由*主控*thread作为broker来完成。
+除此之外，Owner 的介入分两类，**只有第一类是缺陷**：
+
+- **机械交互**——交接纠偏、goal 维护、权限姿态、session 命名、催主控回话。**目标是趋近 0**，出现一次就说明某份模板缺了东西。这是模板的 KPI。
+- **业务判断**——架构取舍、验收边界、策略授权、冻结既成事实。**本来就该 Owner 做，不设上限，也不算缺陷**；主控作为 broker 应当先给出建议而不是空手上报，但拍板权在 Owner。
+
+实测一次 4 小时的实跑里，Owner 直接介入 32 次，其中约 17 次属于第一类（模板缺陷），11 次属于第二类。
+**不要把第二类也算进"该消灭"的范围**——那会让指标不可能达成，于是没人再拿它衡量。
+
+机械交互里唯一无法消除的是 **点掉 Desktop 的审批弹窗**，那是平台 UI 动作，agent 做不到。
 
 
 ---
@@ -116,35 +127,44 @@ push / PR / merge / deploy / Production 与共享远端 mutation 一律需要我
 
 ---
 
-你是 Role C 主控，不直接写业务代码。
+你是 Role C 主控，不直接写业务代码。遇到问题你是我的 broker，代替我先做判断，不要只当传声筒。
+收到我的消息后，先回一句「已吸收 + 下一步是什么」，再去执行；不要沉默着直接干活。
 控制流读 $thread-harness 的 Role C 段，线程路由用 $owner-thread-broker。
-下面这几条是硬规则，其余按 skill 走。
 
 每轮：重读 registry 与 ledger，机械推导 runnable watch-set（不得用记忆里的 id），
-按 poll 契约原样轮询 → ledger.py sync → ledger.py stall-check → 按退出码行动；watch-set 为空时回退到全部 active child，继续固定 120 秒 poll。
+按 poll 契约原样轮询 → ledger.py sync → ledger.py stall-check → 按退出码行动。
 
-不可违反：
+stall-check 退出码 0 / 3 / 4 / 6 的处置按 $thread-harness Role C 段执行。
 
-1. stall-check 返回 2 时只有两个选项，且必须记进账本：
-   (a) 派发新工作 → act --dispatch，要说出派给谁、造哪个 seam、交付什么
-   (b) 报告我并结束 loop → act --halt --reason "<一句话>"
-   禁止"继续等待""本轮无变化""保持现状"。(a) 的三个字段填不出来就选 (b)。
+退出码 2 = MUST_ACT：只有两个选项，且必须记进账本——
+(a) act --dispatch，说出派给谁、造哪个 seam、交付什么；
+(b) act --halt --reason "<一句话>" 并结束 loop。
+禁止"继续等待""本轮无变化""已有在途 dispatch"；也不得调整阈值参数来消除它。
 
-2. 每次 `decide --raise` 都有新的 `decision_instance_id`；`act --escalate` 只绑定当前 pending instance。已上报的 pending 不再屏蔽 MUST_ACT；
-   决策没人应答而全线又没推进时，正确动作是 (b)，不是每轮重复上报同一 instance。
+wake.reason == "inactiveStatus" 是"有线闲着、该派活"，不是"没有变化"。
 
-3. 退出码 4 = HALTED：loop 已终止，停止轮询等我，不要自行恢复。
+seam 缺失是你的待办，不是外部阻塞——所有人都在等某个跨域契约时，派一条 Platform 线去造它。
 
-4. 退出码 6 = LEDGER INTEGRITY FAILED：停止所有状态推进，保留坏账本供诊断，不截断、不重写、不猜测修复。
+child compaction 的处置（catch-up 与转交接阈值）按 session-dispatch.md 的 catch-up 模板执行。
 
-5. wake.reason == "inactiveStatus" 是"有线闲着、该派活"，不是"没有变化"。
-
-6. seam 缺失是你的待办，不是外部阻塞。所有人都在等某个跨域契约时，
-   正确动作是派一条 Platform 线去造它。
-
-7. 不要让 Platform 线"保持待命"——让生产者等消费者会闭成死锁。
-
-8. 一个 node 一个 worktree 一个 branch。
-
-9. 不自己做审计。
+动态进展、session、HEAD、WIP、seam 与 decision 只从 registry / ledger / 任务包读取，
+不写进 goal，也不依赖聊天记忆。
 ```
+
+### 这份 goal 里为什么只剩这几条
+
+判据是：**只保留"规避对 agent 有好处"的规则，其余一律交给 skill。**
+
+留下的三条——退出码 2 的二选一、`inactiveStatus`、seam 缺失——共同点是**遵守都要多干活、规避都更省事**。实测中退出码 2 的五次里有两次被规避（一次靠调高阈值让警报消失，一次以"已有在途 dispatch"为由继续等待），所以它必须把原文顶在脸上，光列一个码值不够。
+
+删掉的那些（退出码 4/6 的解释、一 node 一 worktree、`decision_instance_id` 规则、最终验收清单、具体环境的 EACCES 处置）**规避没有收益，甚至遵守更省事**——它们在 `SKILL.md` 与各 reference 里已经写清楚，goal 再列一遍只会制造第二个互相竞争的硬规则权威。`SKILL.md` 已经声明「只有四条是硬的，其余全是引导」。
+
+### 两条准入判据（决定什么能进 goal）
+
+1. **动态进展一律不进。** goal 是长期设定，不是进展记录。当前谁在等谁、HEAD 到哪、哪个 seam 交付了——全部从 registry / ledger / 任务包读。
+
+2. **一条纠正如果下次 coordination 还需要，它属于 skill，不属于 goal。**
+   - *本次专有*（这次的目标、这次的授权、这次不许碰的 WIP）→ 进 goal。
+   - *跨 coordination 仍成立*（建线格式、investigate→implement、不许当传声筒、某个 runner 该用哪个 CLI）→ **改对应的 skill 或文档，goal 里一个字都不写**。
+
+   第二条是 goal 膨胀的解药。曾经有一次实跑，goal 在两小时里被手改 7 次、硬规则从 9 条涨到 23 条——因为 goal 是当时唯一能把运行期纠正"钉住"的地方，于是什么都往里塞。**改文件慢、塞 goal 快，但塞进去的东西活不过这次 coordination。**
