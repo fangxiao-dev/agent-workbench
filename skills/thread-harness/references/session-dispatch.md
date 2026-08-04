@@ -2,18 +2,17 @@
 
 新建或替换任何一条线的 session 时用本页。三个角色共用同一套骨架，差异只有 §角色 delta 那张表。
 
-**不要手写一段带 `<codex_delegation>` 的委派 prompt。** 那种写法把路由 envelope 当成了 prompt 内容，还会让 child 首轮的 registry 检查与 controller 回填 `threadId` 竞速。统一复用 `$handoff-to-new-session` 的 clean local-session 能力；下方 thread-harness replacement override 优先于该通用 skill 的“source 自己 create/no doc”说法。
+**不要手写一段带 `<codex_delegation>` 的委派 prompt。** 统一复用 `$handoff-to-new-session` 的 clean local-session 能力；下方 thread-harness replacement override 优先于该通用 skill 的“source 自己 create/no doc”说法。
 
-**第一阶段 child 只核对锚点然后停住，controller 在这个停顿里更新 registry，第二阶段才开工。** child 不直接写 ledger。依据见 [design-notes.md](design-notes.md) §4.5。
+**第一阶段 child 只核对锚点然后停住，controller 在这个停顿里更新 registry，第二阶段才开工。** child 不直接写 ledger。
 
 ## 固定骨架
 
 ### 固定约束
 
 - 用 `create_thread` + `target.environment={type:"local"}`。禁 fork、禁 worktree/snapshot/`startingState`。
-- **档位在 `create_thread` 时显式指定，别靠默认。** 子线默认 `model=gpt-5.6-luna`、`thinking=max`；**主控交接时显式指定 `model=gpt-5.6-sol`、`thinking=xhigh`**——实测这样指定是生效的，而不指定就会落到平台默认。
-  > 注意这只决定**起点**：session 跑过多轮后档位会被平台自动降到 terra，这是 Codex 的机制，本 harness 不对抗它。它的后果是长跑的主控会逐渐变钝——**这正是 `session_age_h` 要提示你换人的原因之一**。主控读不到自己的 `turn_context`，所以跑久了值得人工看一眼当前档位。
-- **一个 node 一个 worktree 一个 branch。** 复用 worktree 前必须确认旧 writer 与 owned process 已停止。两个 node 共用一个 worktree 会让 `head` 串号——它们的 `git rev-parse HEAD` 读出同一个值，停滞判定分不开这两条线，还会产生假的 `stale_reports`。`preflight` 会拦这个。
+- **档位在 `create_thread` 时显式指定，别靠默认。** 子线用 `model=gpt-5.6-luna`、`thinking=max`；**主控交接时用 `model=gpt-5.6-sol`、`thinking=xhigh`**。这只决定起点，平台会随 session 变长自动降档，主控读不到自己的 `turn_context`，跑久了值得人工看一眼。
+- **一个 node 一个 worktree 一个 branch。** 复用 worktree 前必须确认旧 writer 与 owned process 已停止。`preflight` 会拦这个。
 - 第一阶段 prompt **不含** harness、coordination、registry、ledger 或角色规则。只有锚点。
 - prompt 里不放旧聊天摘要、project ID、dirty fingerprint 或 secret。
 - `previous_session_ids` 是 registry 内部路由历史。**不进任何 child prompt，也不要求 child 读取、打印或校验它。**
@@ -54,11 +53,11 @@ Owner 的 create_thread 授权原文（你据此为自己建继任者）：
 
 **不要复述交接步骤**——写 checkpoint、停 owned process、建 clean session、`route`、报 `handed_off` H1，这些全是 `$handoff-to-new-session` 与本页其余各节的职责。触发消息只负责"该交班了"这一件事。
 
-**授权原文必须随触发消息一起给。** 它源自 Owner 写在主控 goal 里的那段——child 读不到主控的 goal，不带就等于让它在没有授权证据的情况下调 `create_thread`。
+**授权原文必须随触发消息一起给。** child 读不到主控的 goal，不带就等于让它在没有授权证据的情况下调 `create_thread`。
 
-**最后那条"不再是权威"针对一次真实失效**：某次交接后，退休的主控在 30 分钟内向继任者发了 6 条指令，其中一条直接推翻了 Owner 一分钟前给出的授权，7 分钟后它自己又发文撤回。退休线看不到 Owner 之后说了什么，所以它的授权/边界类"纠正"必然建立在残缺信息上。**被禁的只是替 Owner 裁决，不是说话**——发现继任者真的要出事时仍然要吭声，先 `read_thread` 核实，或回给 Owner。
+**"不再是权威"禁的是替 Owner 裁决授权与边界，不是说话。** 退休线看不到 Owner 之后说了什么。发现继任者真的要出事时仍然要吭声：先 `read_thread` 核实，或回给 Owner。
 
-**只在轮边界发起交接。** 轮中交接会让本轮 `sync` 判 `ROUND INVALID`（内联的 ids 与变更后的 registry 对不上）。宁可推迟一轮，**不要放宽 `sync` 校验**。
+**只在轮边界发起交接。** 轮中交接会让本轮 `sync` 判 `ROUND INVALID`。宁可推迟一轮，**不要放宽 `sync` 校验**。
 
 ### registry 由谁写：当时的主控，永远
 
@@ -97,8 +96,6 @@ Owner 的 create_thread 授权原文（你据此为自己建继任者）：
 > **恢复权威**：worktree / branch / HEAD——都能用一条只读命令当场验真。
 > **准入判据**：**这一行能不能被 child 用一条只读命令当场验真？** 不能就不进。
 
-这条判据自带减法：旧路由、旧 seam 完成史、project id、dirty 指纹、上一任的 compact checkpoint——全部自动出局，因为 child 验不了它们。**不需要再维护一份"不许放什么"的清单。**
-
 锚点字段沿用 `$handoff-to-new-session` 的模板，唯一改动是结尾：**报 PASS 后停住**。维护时只同步锚点字段。
 
 ```text
@@ -126,8 +123,6 @@ Owner 的 create_thread 授权原文（你据此为自己建继任者）：
 > **恢复权威**：持久记录——Role A 是任务包 entry，Role B 是下面那张 card，Role C 是账本 + registry。
 > **准入判据**：**这段内容在持久记录里有没有落点？** 有 → 只写指针；没有 → **先去把它写进持久记录**，不要塞进 prompt。
 
-那条判据是本页最重要的一句。曾经有一份 4470 字符的第二阶段 prompt，内容是手搓的 compact checkpoint（旧路由、旧 seam 完成史、"只用本消息里的 checkpoint，不要读旧 ledger"）——它把恢复权威从**持久记录**换成了**一段临时摘要**，交接一次就失真一次。
-
 ```text
 第二阶段 registration 已就绪。读取 $thread-harness 并按 <Role X> 工作。
 
@@ -152,9 +147,7 @@ track 和聚焦/全量模式；验收由当前 session 完成。
 只读 nearest AGENTS、必需 skill 与 card 里的 exact inputs，不做 broad package/doc scan。
 ```
 
-「工作方式」那两行是**共享块**，catch-up 模板原样引用同一段文字。**不要在两处各维护一份**——两个权威源正是本页要消灭的东西。investigate → implement 与 subagent 那套的正文住在 `$investigate-before-implement`，这里只留指针。
-
-那句"账本只由主控写"针对一次真实事故：某条 Role A 子线在自己的 probe 失败后直接调用了 controller-only 的 `act --halt`，整场 coordination 当场终止，主控一分钟后才发现。子线当时的处境确实该停，它只是抓错了开关。
+「工作方式」那两行是**共享块**，catch-up 模板原样引用同一段文字，**不要在两处各维护一份**。
 
 ### Assignment card（派发用，约束型）
 
@@ -177,14 +170,11 @@ track 和聚焦/全量模式；验收由当前 session 完成。
 - exclusions：<explicit_exclusions>
 ```
 
-几条约束的来历，都对应真实失效：
-
-- **`<slug>`**：child 拿到卡第一眼就知道这是干嘛的，而不是先怼一脸 routing 字段。
-- **`seam` 一行**：不写出 consumers，就分不清"跨域契约"和"我自己的待办"。曾出现过 producer 与 consumer 是同一个 node 的自环占全部 seam 行 13.9%，账本 schema 也不检查这个关系。这一行同时区分了"这是 seam"和"这只是 bounded 任务"。
+- **`seam` 一行必须写出 consumers**，否则分不清"跨域契约"和"这条线自己的待办"；不是 seam 就明写"非 seam"。
 - **`exact inputs` 必须点名可复用的共享资源**，而不是让 child 自己去登录 / link project / 探测 API。上限 6 条是刻意的——填不下说明这一轮任务还没切够细。
-- **`authorization` 不得写"按需授权"这类空话**。曾因该字段是空话，Owner 不得不亲自下场说"你有 full access，不要找我要权限了"。
-- **Role B 版本额外一条**：card 是 Platform 的**唯一**恢复权威，所以它的 `already earned` / `still required` 必须自足，**不得引用父包**。
-- **不要给 `still required` 加强制校验或证据格式约束**。实测四条子线全部诚实：报告成功的都对应真实 HEAD / commit / 测试输出，失败被如实回报，边界是子线自己写出来的。在这里加校验是打不存在的靶子。
+- **`authorization` 不得写"按需授权"这类空话**，要写明 sandbox / 网络 / Git / 审批的实际边界。
+- **Role B 的卡额外一条**：card 是 Platform 的**唯一**恢复权威，所以 `already earned` / `still required` 必须自足，**不得引用父包**。
+- **不给 `still required` 加强制校验或证据格式约束。**
 
 **fan-out（同一张卡发给多个 node）**：判据是「这张卡是不是每条线都要**立刻改变行为**？」否则不 fan-out，主控自己记住就行。fan-out 不承载任务内容，任务内容一律走单发的 card。
 
@@ -207,8 +197,8 @@ catch-up（你刚发生过 compaction）：
 其余状态自己从上面的恢复权威读回。
 ```
 
-- **必须重述角色、开发框架、工作方式这三样。** compaction 打掉的恰恰是"我是谁、按什么框架干活、怎么干活"——child 不是"能读却懒得读"，而是**已经不知道自己该去读什么**。这三行是准入判据的直接推论，不是例外。
-- **硬上限 10 行。** 它的价值就在于短，多写一行就多占一分它刚清出来的上下文。
+- **角色、开发框架、工作方式这三样必须重述**——compaction 后的 child 已经不知道自己该去读什么。
+- **硬上限 10 行。**
 - **计数规则**：同一 session compact ≤3 次发 catch-up；>3 次改为按上面的触发消息转交接。
 - **Role C 不用这个模板**：主控 compaction 后走 `ledger.py status` 自己恢复（见 §Role C 特有顺序）。
 

@@ -21,7 +21,7 @@ description: Use when about to write code, change shared state, or run a migrati
 ## 怎么调研
 
 1. 先写下你要回答的具体问题，不要开放式"看看代码"。
-2. 优先 `$call-grok`——独立进程，只回收结论，不吃你的上下文预算；失败再退到 subagent。
+2. 按需外派 subagent；能用 `$call-grok` 代替 subagent 就优先用它，调用失败则 fallback 回默认的 subagent 行为。
 3. 可独立并行的调研按 `$dispatching-parallel-agents` 派发。
 4. 结论只留能改变决定的那几条，其余不进正文。
 
