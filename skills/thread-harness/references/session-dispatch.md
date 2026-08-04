@@ -139,7 +139,7 @@ Assignment card（本轮唯一任务）：
 
 上下文纪律：
 - 只读 nearest AGENTS、必需 skill 与 exact inputs；禁止 broad package/doc scan。
-- impl / investigate 优先 $call-grok；review 走 $do-review；验收由当前 session 完成。
+- 先 investigate 再 implement，不要直接开干；impl / investigate 优先 $call-grok，失败再退到 subagent；review 走 $do-review；验收由当前 session 完成。
 - 不向聊天打印完整文件、测试日志、registry 或 ledger；只输出短 projection/摘要。
 
 直接推进 next action，不写 blocker-only proposal。H1/H2/H4 严格执行，只回报 current controller。
