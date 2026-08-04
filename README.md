@@ -91,6 +91,23 @@ Codex 写入项目内 `.codex/config.toml` 的 `mcp_servers.discussLedger`；Cla
 
 ## 日常使用
 
+### Codex Session Prune
+
+`codex_session_prune.py` 通过 Codex App Server 枚举 session，并按 project、archive state 和更新时间生成安全的删除计划。默认只做 inventory；候选计划也是 dry-run，不会读取或直接删除 rollout JSONL。需要磁盘占用时加 `--disk-size`，工具只枚举 `sessions/` 和 `archived_sessions/` 下的 rollout 文件并读取文件大小元数据，不解析文件内容。
+
+```powershell
+python scripts/codex_session_prune.py
+
+python scripts/codex_session_prune.py `
+  --project D:\CodeSpace\agent-workbench `
+  --archive-state archived `
+  --take 20 `
+  --max-affected 100 `
+  --disk-size
+```
+
+审阅输出中的 `plan_id` 后，只有显式同时传入 `--apply --expect-plan <plan_id>` 才会调用 App Server 的 `thread/delete`。apply 会重新枚举并校验计划；Owner 未单独批准具体 plan ID 时不要执行 apply。
+
 ### 修改和同步
 
 在 Windows 安装态下，宿主 `skills/` 整体指向本仓库；在 Bash/Unix 安装态下，`skills/` 的每个顶层目录单独链接过去，bundle 内的 skill 随 bundle 一起暴露。`agents/` 也是链接安装。`commands/` 使用复制，command 内容变更后需要重跑安装器同步。
