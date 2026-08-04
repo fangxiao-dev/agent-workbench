@@ -1488,6 +1488,14 @@ def last_must_act_answered(coordination_id: str) -> bool:
     return False
 
 
+def canonical_seam_id(value: str) -> str:
+    """Accept a bare ID or waiting_on-style seam:<id>, and return the bare ID."""
+    seam_id = value.removeprefix("seam:")
+    if not seam_id or seam_id.startswith("seam:"):
+        raise UsageError("seam ID must be <id> or seam:<id>")
+    return seam_id
+
+
 def seam_producers(coordination_id: str) -> dict:
     producers = {}
     for row in read_jsonl(jsonl_path(coordination_id, "seams.jsonl")):
@@ -1991,6 +1999,7 @@ def cmd_report(args) -> int:
 
 def cmd_seam(args) -> int:
     ensure_runtime(args.coordination_id)
+    seam_id = canonical_seam_id(args.seam_id)
     with coordination_write_lock(args.coordination_id):
         assert_ledger_integrity(args.coordination_id)
         registry = load_registry(args.coordination_id)
@@ -2008,7 +2017,7 @@ def cmd_seam(args) -> int:
             {
                 "ts": now_local(),
                 "ledger_seq": ledger_seq,
-                "seam_id": args.seam_id,
+                "seam_id": seam_id,
                 "producer": args.producer,
                 "consumers": args.consumers or [],
                 "status": status,
@@ -2016,7 +2025,7 @@ def cmd_seam(args) -> int:
             },
         )
         save_state(args.coordination_id, state)
-        print(f"seam {args.seam_id} status={status}")
+        print(f"seam {seam_id} status={status}")
         return 0
 
 
@@ -2085,9 +2094,10 @@ def cmd_act(args) -> int:
         ledger_seq = next_ledger_seq(args.coordination_id, state)
         row = {"ts": now_local(), "seq": seq, "ledger_seq": ledger_seq}
         if args.dispatch:
+            seam_id = canonical_seam_id(args.seam_id) if args.seam_id else None
             missing = [
                 name for name, value in (
-                    ("--seam-id", args.seam_id),
+                    ("--seam-id", seam_id),
                     ("--producer", args.producer),
                     ("--deliverable", args.deliverable),
                 )
@@ -2099,16 +2109,16 @@ def cmd_act(args) -> int:
             known_nodes = {node["name"] for node in registry_nodes(registry)}
             if args.producer not in known_nodes:
                 raise UsageError(f"unknown producer node: {args.producer}")
-            current_producer = seam_producers(args.coordination_id).get(args.seam_id)
+            current_producer = seam_producers(args.coordination_id).get(seam_id)
             if current_producer and current_producer != args.producer:
                 print(
-                    f"producer changed for seam {args.seam_id}: "
+                    f"producer changed for seam {seam_id}: "
                     f"{current_producer} -> {args.producer}; appending new assignment"
                 )
             row.update(
                 {
                     "kind": "dispatch",
-                    "seam_id": args.seam_id,
+                    "seam_id": seam_id,
                     "producer": args.producer,
                     "deliverable": args.deliverable,
                     "decision_id": None,
@@ -2163,7 +2173,7 @@ def cmd_act(args) -> int:
                 {
                     "ts": now_local(),
                     "ledger_seq": ledger_seq,
-                    "seam_id": args.seam_id,
+                    "seam_id": row["seam_id"],
                     "producer": args.producer,
                     "consumers": [],
                     "status": "assigned",
@@ -2390,14 +2400,22 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--state", required=True)
     report.add_argument("--round", type=int, default=0)
     report.add_argument("--head")
-    report.add_argument("--source-session")
+    report.add_argument(
+        "--source-session",
+        help="Child H1 source session; omit for controller reports.",
+    )
     report.add_argument("--waiting-on", action="extend", nargs="+", default=[])
     report.add_argument("--note")
     report.set_defaults(func=cmd_report)
 
     seam = sub.add_parser("seam")
     add_routing_args(seam)
-    seam.add_argument("--seam-id", required=True)
+    # Ledger keys use the bare ID; waiting_on-style input is normalized at the CLI boundary.
+    seam.add_argument(
+        "--seam-id",
+        required=True,
+        help='seam ID as "<id>" or "seam:<id>"; stored canonically as "<id>"',
+    )
     seam.add_argument("--producer", required=True)
     seam.add_argument("--consumers", action="extend", nargs="+", default=[])
     seam.add_argument("--deliver")
@@ -2419,7 +2437,10 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--dispatch", action="store_true")
     mode.add_argument("--escalate", action="store_true")
     mode.add_argument("--halt", action="store_true")
-    act.add_argument("--seam-id")
+    act.add_argument(
+        "--seam-id",
+        help='seam ID as "<id>" or "seam:<id>"; stored canonically as "<id>"',
+    )
     act.add_argument("--producer")
     act.add_argument("--deliverable")
     act.add_argument("--decision-id")

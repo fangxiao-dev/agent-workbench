@@ -529,6 +529,13 @@ rc, out = run("seam", "--coordination-id", CID, "--seam-id", "x", "--producer", 
               "--consumers", "beta", "controller")
 fails += check("seam 支持 --consumers 空格分隔且允许 registry 中的 controller",
                 rc == 0, out.strip())
+rc, out = run("seam", "--coordination-id", CID, "--seam-id", "seam:prefixed-x",
+              "--producer", "alpha", "--consumers", "beta")
+prefixed_seam_rows = ledger_rows("seams.jsonl")
+fails += check("seam 接受 seam:<id> 并以裸 ID 写入账本",
+               rc == 0 and "seam prefixed-x status=assigned" in out
+               and prefixed_seam_rows[-1].get("seam_id") == "prefixed-x",
+               out.strip())
 rc, out = run("seam", "--coordination-id", CID, "--seam-id", "bad", "--producer", "typo",
               "--consumers", "beta")
 fails += check("seam producer 拼错必须退出 64", rc == 64 and "unknown producer node: typo" in out, out.strip())
@@ -883,11 +890,11 @@ run("init", "--coordination-id", CID)
 rc, out = run("report", "--coordination-id", CID, "--node", "beta", "--state", "awaiting_seam",
               "--waiting-on", "seam:s9")
 rc_before, out_before = run("status", "--coordination-id", CID)
-rc_act, out_act = run("act", "--coordination-id", CID, "--dispatch", "--seam-id", "s9",
+rc_act, out_act = run("act", "--coordination-id", CID, "--dispatch", "--seam-id", "seam:s9",
                       "--producer", "alpha", "--deliverable", "x")
 rc_after, out_after = run("status", "--coordination-id", CID)
 seam_rows = ledger_rows("seams.jsonl")
-fails += check("act --dispatch 同步形成 seam ownership，s9 不再无主",
+fails += check("act --dispatch 接受 seam:<id>、裸 ID 入账并形成 ownership",
                rc == 0 and rc_before == 0 and "seams_unowned:   1" in out_before
                and rc_act == 0 and rc_after == 0 and "seams_unowned:   0" in out_after
                and any(row.get("seam_id") == "s9" and row.get("producer") == "alpha"
