@@ -21,6 +21,7 @@ docs/exchange/discuss/
 .acr-context/
 skills/*-workspace/
 skills/**/*-workspace/
+skills-local/
 
 # thread-harness runtime ledger (coordination state, not source)
 .progress-record/
