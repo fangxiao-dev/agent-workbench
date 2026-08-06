@@ -6,18 +6,19 @@ description: Use this Azure router when a task mentions Azure CLI, ACR, Containe
 # Using Azure
 
 Use this as the Azure entry map. Route detailed work to focused Azure skills, and prefer current Azure state over memorized commands.
+The focused skills below are internal sub-skills; read the matching relative `SUB-SKILL.md` before applying a route.
 
 ## Azure Skill Map
 
-- Use `azure-container-registry` for ACR remote builds, minimal Docker build contexts, `az acr build`, and cross-platform context helper usage.
-- Use `azure-container-apps` for general Azure Container Apps deployment shape, ports, replicas, health checks, multi-app rollouts, secrets/env review, and persistent files.
-- Use `azure-service-bus-provisioning` for namespace/queue creation, Germany West Central region checks, Standard SKU, duplicate detection, TTL, lock duration, max delivery 10, and CLI verification.
-- Use `azure-service-bus-auth` for queue-level SAS, connection strings, Managed Identity, RBAC roles, API sender permissions, worker receiver permissions, and secret handling.
-- Use `azure-service-bus-runtime` for JS SDK usage, queue vs topic decisions, peek-lock, settlement, explicit lock renewal, scheduled retry, duplicate detection, message IDs, and sessions.
-- Use `azure-service-bus-dlq` for dead-letter queue inspection, `MaxDeliveryCountExceeded`, malformed messages, final failures, DB reconciliation, and safe settlement.
-- Use `azure-service-bus-container-apps` for Service Bus-specific Container Apps wiring: API/worker queue env, secrets, KEDA `azure-servicebus` scaling, worker replica limits, and queue smoke verification.
-- Use `azure-service-bus-observability` for Azure Monitor metrics/logs, diagnostic settings, DLQ/backlog alerts, network restrictions, private endpoints, and Premium tier triggers.
-- Use `azure-service-bus-troubleshooting` for smoke failures, Basic tier limitations, duplicate detection mistakes, queue name or `EntityPath` mismatches, auth errors, region drift, lock timeouts, and DLQ growth.
+- Read `../sub-skills/azure-container-registry/SUB-SKILL.md` for ACR remote builds, minimal Docker build contexts, `az acr build`, and cross-platform context helper usage.
+- Read `../sub-skills/azure-container-apps/SUB-SKILL.md` for general Azure Container Apps deployment shape, ports, replicas, health checks, multi-app rollouts, secrets/env review, and persistent files.
+- Read `../sub-skills/azure-service-bus-provisioning/SUB-SKILL.md` for namespace/queue creation, Germany West Central region checks, Standard SKU, duplicate detection, TTL, lock duration, max delivery 10, and CLI verification.
+- Read `../sub-skills/azure-service-bus-auth/SUB-SKILL.md` for queue-level SAS, connection strings, Managed Identity, RBAC roles, API sender permissions, worker receiver permissions, and secret handling.
+- Read `../sub-skills/azure-service-bus-runtime/SUB-SKILL.md` for JS SDK usage, queue vs topic decisions, peek-lock, settlement, explicit lock renewal, scheduled retry, duplicate detection, message IDs, and sessions.
+- Read `../sub-skills/azure-service-bus-dlq/SUB-SKILL.md` for dead-letter queue inspection, `MaxDeliveryCountExceeded`, malformed messages, final failures, DB reconciliation, and safe settlement.
+- Read `../sub-skills/azure-service-bus-container-apps/SUB-SKILL.md` for Service Bus-specific Container Apps wiring: API/worker queue env, secrets, KEDA `azure-servicebus` scaling, worker replica limits, and queue smoke verification.
+- Read `../sub-skills/azure-service-bus-observability/SUB-SKILL.md` for Azure Monitor metrics/logs, diagnostic settings, DLQ/backlog alerts, network restrictions, private endpoints, and Premium tier triggers.
+- Read `../sub-skills/azure-service-bus-troubleshooting/SUB-SKILL.md` for smoke failures, Basic tier limitations, duplicate detection mistakes, queue name or `EntityPath` mismatches, auth errors, region drift, lock timeouts, and DLQ growth.
 
 ## Azure CLI On Local Workstation
 
