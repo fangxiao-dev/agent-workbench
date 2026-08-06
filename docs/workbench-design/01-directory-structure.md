@@ -18,7 +18,7 @@ agent-workbench/
 
 ## 核心目录
 
-- `skills/` 是 skill 的唯一仓库内正式来源。自建 skill 和第三方 skill 通常直接落在这里；相关能力也可以按 bundle 分组为 `skills/<bundle>/<skill>/SKILL.md`，例如 `feishu-skills/`、`lark-skills/` 和 `impl-package/`。`backfill-stable-docs` 是 Impl-Package 的维护阶段：一个保留公共入口名的 skill 配合 runbooks、模板和确定性脚本，不使用独立 Plugin。
+- `skills/` 是 skill 的唯一仓库内正式来源。自建 skill 和第三方 skill 通常直接落在这里；相关能力也可以按 bundle 分组为 `skills/<bundle>/<skill>/SKILL.md`，例如 `feishu-skills/`、`lark-skills/` 和 `impl-package/`。Bundle 内部如需隐藏不可独立发现的子能力，可放在 `sub-skills/<name>/SUB-SKILL.md`，由公开入口 Skill 按相对路径读取。`backfill-stable-docs` 是 Impl-Package 的维护阶段：一个保留公共入口名的 skill 配合 runbooks、模板和确定性脚本，不使用独立 Plugin。
 - `agents/` 存放 subagent 定义。安装器把每个 agent 目录链接到已选宿主的 `agents/`。
 - `commands/` 存放宿主 command 提示文件。安装器把 command 文件复制到已选宿主的 `commands/`。是否可用 `/...` 唤出取决于具体宿主。
 - `templates/` 存放可复用模板。当前 `CLAUDE.md.tpl` 由 `init-project-context` 按需使用，安装器不自动生成 `CLAUDE.md`。

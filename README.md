@@ -75,7 +75,7 @@ Codex 写入项目内 `.codex/config.toml` 的 `mcp_servers.discussLedger`；Cla
 | `agents/*/` | 每个 agent 目录 junction 到 `<host>/agents/<name>` | 每个 agent 目录 symlink 到 `<host>/agents/<name>` |
 | `commands/*` | 复制到 `<host>/commands/<name>` | 复制到 `<host>/commands/<name>` |
 
-`skills/` 支持 bundle 结构，例如 `skills/feishu-skills/feishu-base/SKILL.md`、`skills/lark-skills/lark-intl-base/SKILL.md`、`skills/azure-skills/using-azure/SKILL.md` 和 `skills/gstack/office-hours/SKILL.md`。没有 `SKILL.md` 的 bundle 根目录只是分组，不是一个 skill。
+`skills/` 支持 bundle 结构，例如 `skills/feishu-skills/feishu-base/SKILL.md`、`skills/lark-skills/using-lark/SKILL.md`、`skills/azure-skills/using-azure/SKILL.md` 和 `skills/gstack/office-hours/SKILL.md`。Bundle 的 `sub-skills/*/SUB-SKILL.md` 是入口 Skill 使用的内部参考，不作为独立 skill 发现；没有 `SKILL.md` 的 bundle 根目录只是分组，不是一个 skill。
 
 宿主根目录：
 
@@ -168,21 +168,20 @@ python D:\CodeSpace\agent-workbench\skills\discuss-ledger\scripts\discuss_orches
 
 ### 回刷常青文档
 
-`$backfill-stable-docs` 是 Impl-Package 内维护阶段的公共入口，不需要 Plugin。它先执行独立 contract preflight：旧任务包由 agent 按当前 contract 直接改造并校验，升级失败不进入后续动作；全部通过后再按意图加载只读 audit、approved apply 或 verify runbook。audit 只读扫描并生成带 item ID 的报告；apply 只处理 owner 对某报告明确批准的 item ID；verify 独立检查 authority、链接、覆盖率、pending、水位线和残留，且不补写内容。三个阶段必须分别汇报，audit 完成不表示 apply 或 verify 完成。
+`$backfill-stable-docs` 是 Impl-Package 内维护阶段的公共入口，不需要 Plugin。它按仓库内配置的显式相对路径收集 package、pending 和 stable docs。audit 只读生成带可读 item ID 的报告；apply 只处理 owner 对某报告明确批准的 item ID；verify 独立检查路径、目标 Git commit、链接、audit 结构和 inventory，且不补写内容。三个阶段必须分别汇报，audit 完成不表示 apply 或 verify 完成。
 
-### Implementation Package 规划发布快速路径
+### Implementation Package 规划发布
 
-当 fresh review clearance、owner approval 和无 blocker 已具备，且 apply 只涉及 Draft Ticket → Approved、D/S/P binding 与 projection 时，使用 `impl_package_apply.py publish-plan`。它在一个有 journal 的本地事务中完成授权校验、Ticket 原子发布、revision 注册、AC/DAG/package-state 汇总验证和自动回滚；成功只返回 `APPLIED`，失败返回明确 `BLOCKER`。它不创建手工 backup/staging，不执行实现、数据库、应用运行时 mutation、commit、push 或 GitHub 写入；`.impl-package` 机器状态与 projection 更新属于本地 apply 范围。
+当 plan、earned Ticket/DAG bundle 已 review 且 owner 批准后，直接写入批准内容并初始化最小 current state：
 
 ```powershell
-python skills/impl-package/scripts/impl_package_apply.py publish-plan `
-  --package <package> --decision D6 --spec S7 --plan P3 `
-  --ledger <ledger> --authorization <owner-authorization.json>
+python skills/impl-package/scripts/impl_package_state.py --package <package> init --attempt <attempt-id> --plan <repo-relative-plan>
+python skills/impl-package/scripts/impl_package_state.py --package <package> validate
 ```
 
-之后可用 `sync-working-unit` 从 package state 生成 PR/Issue 摘要；Git commit/push 与远程更新保持独立。apply 超过五分钟时停止重试并报告具体 blocker。
+D/S/P 只作为可读别名；跨 session 比较使用批准内容所在的 Git commit。所有持久化文件和 evidence 引用使用仓库相对路径。Git commit/push 与远程更新保持独立。
 
-不同仓库或 monorepo context 通过 `configs/stable-docs-backfill/*.json` 或项目根 `.stable-docs-backfill.json` 声明 canonical docs、pending、危险内容规则和 Implementation Package 路径。一份配置对应一个 context；repo-wide 与 nested domain 分次运行，不能混用 state 或 watermark。方法锚点从同一 `agent-workbench` Git commit 自动推导，和 `impl-package` 原子升级。
+不同仓库通过项目根 `.stable-docs-backfill.json` 或显式的仓库内配置文件声明 canonical docs、pending 和 Implementation Package 根目录。配置只接受显式仓库相对路径；目标基准使用本地可解析的 Git commit。
 
 ### 多任务 / worktree 工作流
 
@@ -242,7 +241,7 @@ agent-workbench/
 │   ├── grill-me-smartly/       ← 中文 Grill Ledger + Questioner/Answerer 设计审查
 │   ├── handoff-new-session/    ← 会话上下文落盘和新会话接续提示词
 │   ├── feishu-skills/          ← 国内飞书 skills bundle（feishu-*）
-│   ├── lark-skills/            ← Lark International skills bundle（lark-intl-*）
+│   ├── lark-skills/            ← Lark International bundle（using-lark 入口 + 内部 sub-skills）
 │   ├── wt-pm/                  ← WT-PM 工作流知识库
 │   │   ├── SKILL.md            ← 全流程编排入口 skill
 │   │   ├── references/         ← 工作流参考文档
