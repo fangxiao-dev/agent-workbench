@@ -57,7 +57,7 @@ registry：<registry 的绝对路径 .json>
 
 ---
 
-使用 $thread-harness 和 $owner-thread-broker。你是 Role C 主控。
+使用 $thread-harness 和 `sub-skills/owner-thread-broker/SUB-SKILL.md`。你是 Role C 主控。
 
 本轮只做 bootstrap 与 readiness：不要开始轮询循环，不要设置 goal，做完停下等我。
 
@@ -123,7 +123,7 @@ Production、真实客户数据或 credential、真实 provider 写入以及 pus
 
 ---
 
-你是 Role C。控制流按 $thread-harness Role C，路由按 $owner-thread-broker。
+你是 Role C。控制流按 $thread-harness Role C，路由按 `sub-skills/owner-thread-broker/SUB-SKILL.md`。
 收到 Owner 消息时先回复「已吸收 + 下一步」。
 
 上述目标、结束判据和授权构成 standing authority：范围内直接派发与调度；

@@ -20,7 +20,7 @@ Owner goal 中的目标、结束判据、执行授权边界与排除项构成本
 
 goal 是最后一步。先用普通消息引导 controller 完成：
 
-1. 按 `$owner-thread-broker` 建 registry，填好各 node 的 `worktree`、`branch` 与 topic。
+1. 按 `../sub-skills/owner-thread-broker/SUB-SKILL.md` 建 registry，填好各 node 的 `worktree`、`branch` 与 topic。
 2. 执行 `ledger.py init --registry <absolute-registry-json>`。
 3. 按 [session-dispatch.md](session-dispatch.md) 建立 child，并把返回的 session id 回填 registry。
 4. 执行 `ledger.py preflight --registry <absolute-registry-json>`；只有 `PREFLIGHT OK` 才能继续。

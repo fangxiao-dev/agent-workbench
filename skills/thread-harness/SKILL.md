@@ -5,7 +5,7 @@ description: >
   推进同一个目标时使用：确定自己是主控 / 任务包子线 / Platform 子线中的哪个角色、
   什么时候必须向上回报、怎么轮询、怎么判断整体是否还在推进、卡住了怎么办。
   涉及 broker loop、wait_threads、派发任务、seam 缺失、停滞、Owner 决策上报时适用。
-  线程路由（thread-id 与 topic 绑定）由本目录下的 owner-thread-broker 负责，本 skill 不重复。
+  线程路由（thread-id 与 topic 绑定）由本目录下的 `sub-skills/owner-thread-broker/SUB-SKILL.md` 负责，本 skill 不重复。
 ---
 
 # Thread Harness
@@ -22,7 +22,7 @@ description: >
 
 **读完本页，再只读你自己那一页。** 其他角色页不用看。
 
-线程路由（谁是谁、session id 绑定）用 `$owner-thread-broker`，本 skill 不重复。
+线程路由（谁是谁、session id 绑定）读取 `sub-skills/owner-thread-broker/SUB-SKILL.md`，本 skill 不重复。
 
 ## 五条硬规则
 
@@ -58,4 +58,4 @@ controller 根据消息来源和自己持有的 registry 唯一绑定 routing；
 - [session-dispatch.md](references/session-dispatch.md) — 建线与交接的两阶段契约、派发模板
 - [poll-contract.md](references/poll-contract.md) — 固定 JS 片段、wake 语义（主控用）
 - [ledger-schema.md](references/ledger-schema.md) — 四个 JSONL 的字段定义
-- [owner-thread-broker](owner-thread-broker/SKILL.md) — 线程路由与 Owner 授权边界
+- [owner-thread-broker](sub-skills/owner-thread-broker/SUB-SKILL.md) — 线程路由与 Owner 授权边界

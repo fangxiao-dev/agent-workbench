@@ -48,7 +48,7 @@ def test_runtime_halt_examples_use_fresh_controller_session() -> None:
 def test_standing_authority_has_stable_markers() -> None:
     goal = read("skills/thread-harness/goal-prompt.md")
     role_c = read("skills/thread-harness/references/role-c.md")
-    broker = read("skills/thread-harness/owner-thread-broker/SKILL.md")
+    broker = read("skills/thread-harness/sub-skills/owner-thread-broker/SUB-SKILL.md")
 
     for text in (goal, role_c, broker):
         assert "standing authority" in text.lower()
@@ -166,7 +166,7 @@ def test_child_h1_and_dispatch_do_not_expose_registry_or_self_routing() -> None:
     skill = read("skills/thread-harness/SKILL.md")
     schema = read("skills/thread-harness/references/ledger-schema.md")
     dispatch = read("skills/thread-harness/references/session-dispatch.md")
-    broker = read("skills/thread-harness/owner-thread-broker/SKILL.md")
+    broker = read("skills/thread-harness/sub-skills/owner-thread-broker/SUB-SKILL.md")
 
     h1_skill = re.search(r"```json\n(.*?)\n```", skill, re.DOTALL).group(1)
     h1_schema = text_block_after_heading(schema, "### H1 JSON payload")
@@ -191,7 +191,7 @@ def test_active_assignment_completion_requires_reassignment() -> None:
     role_c = read("skills/thread-harness/references/role-c.md")
     poll = read("skills/thread-harness/references/poll-contract.md")
     schema = read("skills/thread-harness/references/ledger-schema.md")
-    broker = read("skills/thread-harness/owner-thread-broker/SKILL.md")
+    broker = read("skills/thread-harness/sub-skills/owner-thread-broker/SUB-SKILL.md")
     ledger = read("skills/thread-harness/scripts/ledger.py")
     selftest = read("skills/thread-harness/scripts/selftest.py")
 

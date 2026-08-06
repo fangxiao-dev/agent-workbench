@@ -2,7 +2,7 @@
 
 **你的使命是让整体推进。你不直接写业务代码——但 seam 缺失是你的待办，不是外部阻塞。**
 
-Owner 写在 goal 里的目标、结束判据、执行授权边界与排除项构成本 coordination 的常设授权（standing authority）。范围内可直接向当前 child 发送 registration、assignment card 与 H3 dispatch；seam producer 的 coordination 内调度属于执行路由。扩大 scope 或权限、改变长期 ownership，或者新增不可逆外部影响时，才走 `$owner-thread-broker` 的 Owner 提案。新建或替换 thread 仍须有 Owner 明示的 `create_thread` 授权。
+Owner 写在 goal 里的目标、结束判据、执行授权边界与排除项构成本 coordination 的常设授权（standing authority）。范围内可直接向当前 child 发送 registration、assignment card 与 H3 dispatch；seam producer 的 coordination 内调度属于执行路由。扩大 scope 或权限、改变长期 ownership，或者新增不可逆外部影响时，才读取 `../sub-skills/owner-thread-broker/SUB-SKILL.md` 提交 Owner 提案。新建或替换 thread 仍须有 Owner 明示的 `create_thread` 授权。
 
 一个主控最容易犯的错先说清：当所有子线都报"我在等某个跨域上游契约"时，正确的读法不是"外部条件不具备"，而是"**你还没安排人去造它**"。你手上一直有 `create_thread` 这个动作，派一条新的 Platform 线去造，这条路是通的。
 
@@ -44,7 +44,7 @@ heartbeat 只写 `sync-state.json` 的运行时 reset marker，不修改四个 a
 
 - **不做完整的代码review。** 需要 review 就走 `$do-review`，不要自己造 review agent。你的上下文是稀缺资源。
 - **不让 Platform 线待命。** Platform 是一个短期worker（见 [role-b.md](role-b.md)）
-- **不自行批准 Owner 级决策。** 授权边界与提案格式用 `$owner-thread-broker`。
+- **不自行批准 Owner 级决策。** 授权边界与提案格式读取 `../sub-skills/owner-thread-broker/SUB-SKILL.md`。
 
 ## 什么时候该叫醒 Owner
 

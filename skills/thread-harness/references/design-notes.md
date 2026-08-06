@@ -292,7 +292,8 @@ seams_unowned:   0        # 阶段1 仅报数，阶段2 阻断
 ```
 skills/thread-harness/
   SKILL.md                       # 入口地图 + 三个 role 段 + 公共提示
-  owner-thread-broker/           # 从 skills/ 整体搬入，职责与 skill name 均不变
+  sub-skills/
+    owner-thread-broker/         # 内部子能力，职责与 skill name 均不变
   references/
     design-notes.md              # 本文件
     poll-contract.md             # §3 的可复制版本，供 broker 直接引用
@@ -302,7 +303,7 @@ skills/thread-harness/
   agents/openai.yaml
 ```
 
-搬迁安全性依据：`impl-package` 已确立此惯例——"所有阶段执行器都递归聚合在本目录下……物理位于本目录下但保留公共 skill name；调用方按名称路由，不依赖旧的根目录路径"。因此 `$owner-thread-broker` 引用不会断。
+搬迁安全性依据：`impl-package` 已确立此惯例——"所有阶段执行器都递归聚合在本目录下……物理位于本目录下但保留公共 skill name；调用方按名称路由，不依赖旧的根目录路径"。本 bundle 进一步把 broker 固定为入口 Skill 的内部 `SUB-SKILL.md`，调用方通过相对路径读取，不依赖独立 Skill 发现。
 
 **与 `skills/codex-harness` 的关系**：那是纯脚本 runner 路线的 POC（`disable-model-invocation: true`），与本 harness 是两条路线。本轮不合并、不改动它。是否最终吸收，等第一轮跑完再定。
 
