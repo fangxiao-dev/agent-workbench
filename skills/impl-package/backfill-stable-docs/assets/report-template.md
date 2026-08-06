@@ -5,7 +5,7 @@
 - 项目：
 - Source HEAD / dirty 基线：
 - 目标分支 / 已解析 commit：
-- 配置来源 / digest：
+- 配置路径：
 - Contract preflight：`current` / `advisory`
 - Contract drift advisory packages：
 - 已发现的 `_pending.md` root：
@@ -48,7 +48,7 @@
 
 ## 任务包退役候选
 
-| 任务包 ID | Gate ledger 终态 | 目标分支 Git 证据 | Pending 关闭情况 | 吸收去向 | 入站引用 | 剩余目录内容 | 备注 |
+| 任务包 ID | Gate 终态 | 目标分支 Git 证据 | Pending 关闭情况 | 吸收去向 | 入站引用 | 剩余目录内容 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 
 只报告候选，不在 audit 里清理；执行见 [package retirement runbook](../references/package-retirement-runbook.md)。

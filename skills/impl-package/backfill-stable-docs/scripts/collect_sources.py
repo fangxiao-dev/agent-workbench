@@ -1,359 +1,148 @@
 #!/usr/bin/env python3
-"""Enumerate Stable Docs backfill inventory: packages, pending registrations, and
-gap-catching / retirement candidates. This is a read-only enumeration helper —
-it never decides disposition; the agent reads the listed evidence and judges."""
+"""Collect explicit Stable Docs sources without deciding their disposition."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
-from stable_docs_config import (
-    ConfigError,
-    discover_pending_paths,
-    expand_roots,
-    load_repository_config,
-    path_matches_ignore,
-    resolve_project_path,
-    resolve_target_branch,
-)
-from contract_preflight import (
-    CONTRACT_VERSION,
-    run_preflight,
-)
+from contract_preflight import package_paths, run_preflight
 from gate_recognition import TERMINAL_GATE_VERDICTS, resolve_gate
+from stable_docs_config import ConfigError, discover_pending_paths, load_repository_config, resolve_project_path, resolve_target_branch
 
 
 class CollectorError(RuntimeError):
-    """Raised when source inventory cannot be collected safely."""
+    pass
 
 
-TABLE_ROW_RE = re.compile(r"^\|(.+)\|\s*$")
-TABLE_SEP_RE = re.compile(r"^\|[\s:|-]+\|\s*$")
-
-
-def _require_git_repository(path: Path | str) -> Path:
-    root = Path(path).resolve()
-    if not root.is_dir():
-        raise CollectorError(f"project root is not a directory: {root}")
-    completed = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        cwd=root,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    if completed.returncode != 0:
-        raise CollectorError(f"project root is not a Git repository: {root}")
-    top_level = Path(completed.stdout.strip()).resolve()
-    if top_level != root:
-        raise CollectorError(f"project root must be the Git top level: {root}")
+def _git_root(value: Path | str) -> Path:
+    root = Path(value).resolve()
+    result = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=root, capture_output=True, text=True, check=False)
+    if result.returncode or Path(result.stdout.strip()).resolve() != root:
+        raise CollectorError("project root must be the Git top level")
     return root
 
 
-def extract_markdown_tables(path: Path) -> list[dict[str, Any]]:
-    """Extract every Markdown table in a file as {"header", "rows", "line"} blocks."""
-    if not path.is_file():
-        return []
-    lines = path.read_text(encoding="utf-8").splitlines()
-    tables: list[dict[str, Any]] = []
-    index = 0
-    while index < len(lines):
-        header_match = TABLE_ROW_RE.match(lines[index].strip())
-        if header_match and index + 1 < len(lines) and TABLE_SEP_RE.match(lines[index + 1].strip()):
-            header = [cell.strip() for cell in header_match.group(1).split("|")]
-            start_line = index + 1
-            row_index = index + 2
-            rows: list[list[str]] = []
-            while row_index < len(lines):
-                row_match = TABLE_ROW_RE.match(lines[row_index].strip())
-                if not row_match:
-                    break
-                rows.append([cell.strip() for cell in row_match.group(1).split("|")])
-                row_index += 1
-            tables.append({"header": header, "rows": rows, "line": start_line})
-            index = row_index
-        else:
-            index += 1
-    return tables
+def _git(project: Path, *args: str, ok: bool = True) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(["git", *args], cwd=project, capture_output=True, text=True, check=False)
+    if ok and result.returncode:
+        raise CollectorError(result.stderr.strip() or result.stdout.strip() or "git command failed")
+    return result
 
 
-def _load_done_record(path: Path) -> dict[str, Any]:
-    if not path.is_file():
-        return {"items": [], "retiredPackages": []}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise CollectorError(f"done record must be readable JSON: {path}") from error
-    if not isinstance(payload, dict):
-        raise CollectorError(f"done record must contain a JSON object: {path}")
+def _main_worktree(project: Path) -> Path:
+    output = _git(project, "worktree", "list", "--porcelain").stdout.splitlines()
+    first = next((line.removeprefix("worktree ") for line in output if line.startswith("worktree ")), None)
+    if first is None:
+        raise CollectorError("cannot resolve the main Git worktree")
+    return Path(first).resolve()
+
+
+def _worktree_context(project: Path) -> dict[str, Any]:
+    branch = _git(project, "symbolic-ref", "--quiet", "--short", "HEAD", ok=False)
     return {
-        "items": payload.get("items", []) if isinstance(payload.get("items"), list) else [],
-        "retiredPackages": (
-            payload.get("retiredPackages", []) if isinstance(payload.get("retiredPackages"), list) else []
-        ),
+        "path": str(project),
+        "branch": branch.stdout.strip() if branch.returncode == 0 else None,
+        "head": _git(project, "rev-parse", "HEAD").stdout.strip(),
+        "dirty": bool(_git(project, "status", "--porcelain").stdout.strip()),
     }
 
 
-def collect_inventory(
-    *,
-    project_root: Path | str,
-    config_path: Path | str | None = None,
-    preflight: bool = True,
-) -> dict[str, Any]:
-    project = _require_git_repository(project_root)
-    try:
-        config, config_metadata = load_repository_config(project, config_path)
-    except ConfigError as error:
-        raise CollectorError(str(error)) from error
-
-    contract_preflight = run_preflight(project, config) if preflight else {
-        "contractVersion": CONTRACT_VERSION,
-        "status": "skipped",
-        "packageCount": 0,
-        "advisoryPackageCount": 0,
-        "packages": [],
-    }
-    contract_by_path = {
-        Path(row["package"]).resolve(): row for row in contract_preflight["packages"]
-    }
-
-    try:
-        target_branch_commit = resolve_target_branch(project, config["targetBranch"])
-        target_branch_gap = None
-    except ConfigError as error:
-        target_branch_commit = None
-        target_branch_gap = str(error)
-
-    pending_discovery = discover_pending_paths(project, config)
-    config_gaps = [
-        entry for entry in pending_discovery if entry["status"] in {"missing", "ambiguous"}
-    ]
-    pending_cold_starts = [
-        entry for entry in pending_discovery if entry["status"] == "cold-start"
-    ]
-
-    pending_registrations: list[dict[str, Any]] = []
-    pending_owners: dict[str, dict[str, set[str]]] = {}
-    for entry in pending_discovery:
-        if entry["status"] != "ok":
-            continue
-        owner = pending_owners.setdefault(
-            entry["pendingPath"], {"layers": set(), "roots": set()}
-        )
-        owner["layers"].add(entry["stableDocsLayer"])
-        owner["roots"].update(entry["stableDocsRoots"])
-    for pending_relative, owner in sorted(pending_owners.items()):
-        pending_path = resolve_project_path(project, pending_relative)
-        for table in extract_markdown_tables(pending_path):
-            for row in table["rows"]:
-                pending_registrations.append(
-                    {
-                        "pendingFile": pending_relative,
-                        "stableDocsLayers": sorted(owner["layers"]),
-                        "stableDocsRoots": sorted(owner["roots"]),
-                        "header": table["header"],
-                        "row": row,
-                    }
-                )
-
-    done_record = _load_done_record(resolve_project_path(project, config["records"]["done"]))
-    resolved_package_ids = {
-        item.get("sourcePackage")
-        for item in done_record["items"]
-        if isinstance(item, dict) and isinstance(item.get("sourcePackage"), str)
-    }
-
-    packages: list[dict[str, Any]] = []
-    for implementations_root in expand_roots(project, config["implementations"]):
-        for package_dir in sorted(p for p in implementations_root.iterdir() if p.is_dir()):
-            relative_package_dir = package_dir.relative_to(project).as_posix()
-            if path_matches_ignore(relative_package_dir, config["ignore"]) is not None:
-                continue
-            package_id = package_dir.relative_to(implementations_root).as_posix()
-            contract = contract_by_path.get(package_dir.resolve(), {})
-            contract_status = contract.get("status")
-            if preflight and contract_status != "current":
-                has_gate = (package_dir / "gate.md").is_file()
-                gate = {
-                    "hasGate": has_gate,
-                    "kind": "manual" if has_gate else None,
-                    "gateResolution": None,
-                    "appliesToCurrentRevision": None,
-                    "needsManualGateReview": has_gate,
-                    "reason": (
-                        f"contract status {contract_status or 'unknown'}; "
-                        "machine Gate evidence is untrusted"
-                    ),
-                }
-            else:
-                gate = resolve_gate(package_dir)
-            has_gate = gate["hasGate"]
-            verdict = gate["gateResolution"]
-            applies_to_current_revision = gate.get("appliesToCurrentRevision")
-            referenced = any(
-                package_id in cell or relative_package_dir in cell
-                for registration in pending_registrations
-                for cell in registration["row"]
-            )
-            is_terminal = (
-                (
-                    gate["kind"] == "indexed" and applies_to_current_revision is True
-                )
-                and verdict in TERMINAL_GATE_VERDICTS
-            )
-            packages.append(
-                {
-                    "packageId": package_id,
-                    "path": relative_package_dir,
-                    "contractVersion": contract.get("contractVersion"),
-                    "contractStatus": contract_status,
-                    "implementationsRoot": implementations_root.relative_to(project).as_posix(),
-                    "hasDecision": (package_dir / "decision.md").is_file(),
-                    "hasSpec": (package_dir / "spec.md").is_file(),
-                    "hasExecutionFindings": (package_dir / "execution-findings.md").is_file(),
-                    "hasGate": has_gate,
-                    "gateRecognition": gate["kind"],
-                    "gateResolution": verdict,
-                    "gateAppliesToCurrentRevision": applies_to_current_revision,
-                    "needsManualGateReview": gate["needsManualGateReview"],
-                    "reason": gate["reason"],
-                    "referencedInOpenPending": referenced,
-                    "resolvedInDoneRecord": package_id in resolved_package_ids,
-                    "gapCatchingStructuralCandidate": (
-                        is_terminal and not referenced and package_id not in resolved_package_ids
-                    ),
-                    "retirementStructuralCandidate": (
-                        is_terminal and not referenced and package_id in resolved_package_ids
-                    ),
-                }
-            )
-
-    return {
-        "contractVersion": CONTRACT_VERSION,
-        "contractPreflight": contract_preflight,
-        "project": {
-            "repository": config["repository"],
-            "targetBranch": config["targetBranch"],
-            "targetBranchCommit": target_branch_commit,
-        },
-        "config": {"source": config_metadata["source"], "sha256": config_metadata["sha256"]},
-        "targetBranchConfigGap": target_branch_gap,
-        "pendingDiscovery": pending_discovery,
-        "pendingConfigGaps": config_gaps,
-        "pendingColdStarts": pending_cold_starts,
-        "pendingRegistrationCount": len(pending_registrations),
-        "pendingRegistrations": pending_registrations,
-        "packageCount": len(packages),
-        "gapCatchingStructuralCandidates": [
-            p["packageId"] for p in packages if p["gapCatchingStructuralCandidate"]
-        ],
-        "retirementStructuralCandidates": [
-            p["packageId"] for p in packages if p["retirementStructuralCandidate"]
-        ],
-        "manualGateReviewCandidates": [
-            p["packageId"] for p in packages if p["needsManualGateReview"]
-        ],
-        "contractAdvisoryPackages": [
-            p["packageId"] for p in packages if p["contractStatus"] not in {None, "current"}
-        ],
-        "packages": packages,
-    }
-
-
-def _render_markdown(inventory: dict[str, Any]) -> str:
-    project = inventory["project"]
-    lines = [
-        "# 常青文档回刷来源清单",
-        "",
-        f"- 仓库：`{project['repository']}`",
-        f"- Impl-Package contract：`{inventory['contractVersion']}`",
-        f"- Contract preflight：`{inventory['contractPreflight']['status']}`",
-        f"- Contract drift advisory：{len(inventory['contractAdvisoryPackages'])}",
-        f"- 目标分支：`{project['targetBranch']}` -> `{project['targetBranchCommit'] or '未解析'}`",
-        f"- 目标分支配置缺口：{'是' if inventory['targetBranchConfigGap'] else '否'}",
-        f"- 任务包数量：{inventory['packageCount']}",
-        f"- 未关闭 pending 登记：{inventory['pendingRegistrationCount']}",
-        f"- 配置缺口（`_pending.md` 歧义/缺失）：{len(inventory['pendingConfigGaps'])}",
-        f"- Pending 冷启动（需 owner 决定，非阻断）：{len(inventory['pendingColdStarts'])}",
-        f"- Gap-catching 结构候选（尚未核验 Git reachability）：{len(inventory['gapCatchingStructuralCandidates'])}",
-        f"- 任务包退役结构候选：{len(inventory['retirementStructuralCandidates'])}",
-        f"- 需要人工 Gate 复核（mismatch/manual）：{len(inventory['manualGateReviewCandidates'])}",
-        "",
-        "| 任务包 | Contract 状态 | Gate 识别 | Gate 判决 | 适用于当前修订 | Decision | Spec | Execution Findings | 存在未关闭 pending 引用 | Gap-catching 结构候选 | 退役候选 | 人工 Gate 复核 | 原因 |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-    ]
-    for row in inventory["packages"]:
-        lines.append(
-            "| {package_id} | {contract_status} | {recognition} | {resolution} | {applies} | {decision} | {spec} | {execution_findings} | {referenced} | {gap} | {retire} | {manual} | {reason} |".format(
-                package_id=row["packageId"],
-                contract_status=row["contractStatus"] or "skipped",
-                recognition=row["gateRecognition"] or "none",
-                resolution=row["gateResolution"] or "none",
-                applies=(
-                    "是"
-                    if row["gateAppliesToCurrentRevision"] is True
-                    else "否"
-                    if row["gateAppliesToCurrentRevision"] is False
-                    else "未知"
-                ),
-                decision="是" if row["hasDecision"] else "否",
-                spec="是" if row["hasSpec"] else "否",
-                execution_findings="是" if row["hasExecutionFindings"] else "否",
-                referenced="是" if row["referencedInOpenPending"] else "否",
-                gap="是" if row["gapCatchingStructuralCandidate"] else "否",
-                retire="是" if row["retirementStructuralCandidate"] else "否",
-                manual="是" if row["needsManualGateReview"] else "否",
-                reason=(row["reason"] or "").replace("|", "\\|"),
-            )
-        )
-    return "\n".join(lines) + "\n"
-
-
-def _path_under(root: Path, candidate: Path) -> bool:
-    try:
-        candidate.resolve().relative_to(root.resolve())
+def _target_contains(project: Path, commit: str | None, target_commit: str) -> bool | None:
+    if commit is None:
+        return None
+    result = _git(project, "merge-base", "--is-ancestor", commit, target_commit, ok=False)
+    if result.returncode == 0:
         return True
-    except ValueError:
+    if result.returncode == 1:
         return False
+    raise CollectorError(result.stderr.strip() or "cannot evaluate target branch reachability")
 
 
-def build_parser() -> argparse.ArgumentParser:
+def _pending_mentions(project: Path, pending: list[dict[str, Any]], package_id: str, package_path: str) -> bool:
+    for row in pending:
+        if row["status"] != "ok":
+            continue
+        text = resolve_project_path(project, row["pendingPath"]).read_text(encoding="utf-8-sig")
+        if package_id in text or package_path in text:
+            return True
+    return False
+
+
+def collect_inventory(project_root: Path | str, config_path: Path | str | None = None) -> dict[str, Any]:
+    invoked = _git_root(project_root)
+    project = _git_root(_main_worktree(invoked))
+    config, metadata = load_repository_config(project, config_path)
+    target_commit = resolve_target_branch(project, config["targetBranch"])
+    preflight = run_preflight(project, config)
+    pending = discover_pending_paths(project, config)
+    packages = []
+    for package in package_paths(project, config):
+        relative = package.relative_to(project).as_posix()
+        gate = resolve_gate(package)
+        terminal = gate["recognition"] == "current" and gate["verdict"] in TERMINAL_GATE_VERDICTS
+        target_reachable = _target_contains(project, gate["comparisonCommit"], target_commit) if terminal else None
+        pending_registered = _pending_mentions(project, pending, package.name, relative)
+        gap_catching = terminal and target_reachable is True and not pending_registered
+        packages.append({
+            "packageId": package.name,
+            "path": relative,
+            "gateRecognition": gate["recognition"],
+            "gateVerdict": gate["verdict"],
+            "comparisonCommit": gate["comparisonCommit"],
+            "targetReachable": target_reachable,
+            "pendingRegistered": pending_registered,
+            "origin": "pending-registry" if pending_registered else ("gap-catching" if gap_catching else None),
+            "gapCatchingCandidate": gap_catching,
+            "durableDeltaCandidate": pending_registered or gap_catching,
+            "reason": gate["reason"],
+        })
+    return {
+        "project": {"repository": config["repository"], "targetBranch": config["targetBranch"], "targetBranchCommit": target_commit},
+        "sourceWorktree": _worktree_context(project),
+        "invokedWorktree": str(invoked),
+        "config": metadata,
+        "preflight": preflight,
+        "pending": pending,
+        "ignored": config["ignore"],
+        "packages": packages,
+        "packageCount": len(packages),
+        "manualGateReviewCandidates": [row["packageId"] for row in packages if row["gateRecognition"] == "invalid"],
+        "durableDeltaCandidates": [row["packageId"] for row in packages if row["durableDeltaCandidate"]],
+        "pendingRegistryCandidates": [row["packageId"] for row in packages if row["origin"] == "pending-registry"],
+        "gapCatchingCandidates": [row["packageId"] for row in packages if row["origin"] == "gap-catching"],
+        "targetUnreachablePackages": [row["packageId"] for row in packages if row["targetReachable"] is False],
+    }
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--config", type=Path)
-    parser.add_argument("--format", choices=("json", "markdown"), default="json")
     parser.add_argument("--output", type=Path)
-    return parser
-
-
-def main(argv: Iterable[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    args = parser.parse_args()
     try:
-        inventory = collect_inventory(project_root=args.project_root, config_path=args.config)
-        rendered = (
-            json.dumps(inventory, indent=2, sort_keys=True) + "\n"
-            if args.format == "json"
-            else _render_markdown(inventory)
-        )
-        if args.output is None:
-            sys.stdout.write(rendered)
-        else:
+        payload = collect_inventory(args.project_root, args.config)
+        text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        if args.output:
             project = Path(args.project_root).resolve()
-            output = args.output.resolve()
-            if not _path_under(project, output):
-                raise CollectorError("output path must remain under project root")
+            output = args.output if args.output.is_absolute() else project / args.output
+            try:
+                output.resolve().relative_to(project)
+            except ValueError as error:
+                raise CollectorError("output must be inside the repository") from error
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(rendered, encoding="utf-8", newline="\n")
-        return 0
-    except (CollectorError, ConfigError) as error:
-        print(f"error: {error}", file=sys.stderr)
+            output.write_text(text, encoding="utf-8", newline="\n")
+        else:
+            sys.stdout.write(text)
+    except (CollectorError, ConfigError, OSError, json.JSONDecodeError) as error:
+        print(json.dumps({"error": str(error)}, ensure_ascii=False), file=sys.stderr)
         return 2
+    return 0
 
 
 if __name__ == "__main__":

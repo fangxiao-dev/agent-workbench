@@ -32,7 +32,7 @@
 1. 当前 canonical intent/behavior docs、项目语言与 architecture 边界；
 2. confirmed gate、批准 design 和 owner 决策；
 3. 当前接口、状态模型、guard、tests 与 verification；
-4. watermark 后 commits 与无法归属的 diff；
+4. 上次审计所用 Git commit 之后、无法归属的 diff；
 5. 外部 provider 合同时，使用当前官方来源确认 versioned 数值。
 
 代码能证明 current behavior，不能单独证明 product intent。旧设计能发现遗漏，不能在没有 current evidence 时自动复活。发生冲突时报告 owner decision，不猜。

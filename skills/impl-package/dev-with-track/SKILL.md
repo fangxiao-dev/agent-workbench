@@ -1,61 +1,59 @@
 ---
 name: dev-with-track
-description: >
-  当已批准 implementation attempt 需要恢复执行、选择下一 actionable unit、记录 verification
-  evidence、处理返工失效、分流 execution findings 或评估 append-only gate ledger 时使用；不拥有
-  decision/spec/plan/ticket/DAG 定义。
+description: 当已批准 implementation attempt 需要恢复执行、选择下一 actionable unit、记录证据、处理返工失效、分流 findings 或写 Gate 时使用；不重新定义 Decision/Spec/Plan/Ticket/DAG。
 ---
 
 # Dev With Track
 
-执行 approved implementation package 的 current attempt。共享 lifecycle、Composition、readiness 和 gate 语义只引用 `../references/impl-package-composition-contract.md`；结构化字段与 CLI 只引用 `../references/impl-package-state-schema.md`。
+先读 `../references/impl-package-composition-contract.md` 和 `../references/impl-package-current-state.md`。本 skill 维护 current state、Progress、Attempt Execution Record、条件式 Task Handoff、execution findings 和 current Gate；各上游 artifact 仍由 owning skill 维护。
 
-## Ownership
+## Restore
 
-- `req-align` owns current Decision/Spec and D/S gate；`impl-planning` owns plan, P revision, Composition and planned verification；`to-tickets` / `create-task-dag` own published ticket/DAG contracts.
-- 本 skill 维护 earned runtime state、Attempt progress、sealed ER、execution findings 和 gate ledger；不重写长期 contract、不能从历史 Composition 推断 current attempt，也不修改旧 gate entry。
-- 主 session owns 调度、授权记录、decision、cross-task seaming、shared verification、Ticket acceptance 和最终集成；它不自行代替 task worker 或 leaf reviewer。worker 可做调研、实现、局部验证和记录，但不替代跨层判断或选择方案。
+1. 运行 `validate`；跨 session 或授权绑定比较点时附 `--commit <Git commit>`。
+2. 打开根 `progress.md`，读取 current Attempt、D/S/P、Composition、Ticket/Task 两条状态轴、blocker、active checkpoint、next action、Gate 及 Handoff/Execution Record 指针。
+3. 只沿当前动作读取必要 Ticket、Task、Handoff、Execution Record judgment、review 或 evidence；不要重读全部历史。
+4. 根据批准 commit 与实际 diff 判断 authority/contract 是否仍成立。implementation-only 继续；行为、acceptance、数据/安全或 mutation authority 变化回 owning stage。
 
 ## 主 session 控制循环
 
-仅当存在跨模块业务链、`material seam`、昂贵验证或已发生系统性 failure 时，对 E2E、integration 或共享 seam 的失败按此顺序；低风险局部改动保留轻量路径：
+1. **Investigate**：确认首个真实违约边界、输入、持久状态、权威来源和已通过边界。
+2. **Decide & seam**：现有 Decision/Spec 能唯一裁决时作为 implementation defect；存在多个合理业务结果才请求 owner。
+3. **Implement**：只修复已证实、当前可归责的范围；派发时给 primary ownership、禁区、成功条件、反例和局部验证。
+4. **Evaluate**：使用最便宜且忠实的证据。昂贵 runtime/E2E 重跑必须有新修复、环境变化或决定性观察目标。
 
-1. **Investigate**：确认失败点、真实输入、持久化状态、权威来源和已通过边界；不能只根据错误码或单个 worker 结论修改。
-2. **Decide & seam**：主 session 对照 Decision、Spec 和 plan 判断共享能力漏接、adapter/mapper 断层、runner/fixture 问题或 owner decision。现有 contract 能唯一裁决时按 implementation defect 修复；存在多个合理业务结果才路由 owner。优先复用正式 shared contract；不得用 fixture 或 domain 特判绕过通用规则。
-3. **Implement**：修复已证实 seam 的实现任务才派发。为收集 checkpoint、补足可观测性或进行受控探索而做的调研/验证可在 seam 尚未确认时派发，但必须说明候选假设、非变更边界与决定性观察；worker 不重新选择方案。实现 prompt 必须给出调用链、可复用 contract、禁改范围、成功条件、关键反例和局部验证。
-4. **Evaluate**：按渐进式系统证据先选择忠实边界。已知确定性内部前置缺证据时默认先补便宜证据；真实环境独有、探索诊断或边界未知时可带明确目的运行 runtime/E2E。重复昂贵运行必须有新假设、环境/修复 delta 或决定性观察目标。失败回到 Investigate；不连续补丁、猜测后续问题或无证据重跑。
+依赖是否释放只由 DAG、typed Ticket dependency 与 canonical state 判断。Progress/checkpoint 不授权 dispatch，也不释放 acceptance/release dependency。
 
-每次实现动作只修复已证实、当前可归责的首个违约边界；failure 分类可随新 evidence 修订并可多因。共享复用不等于把当前 domain 常量、fixture 或 oracle 写成通用业务规则。只有存在多个会改变业务结果的合理方案时才请求 owner 决定。
+## State、ER 与 Handoff
 
-## Restore and dispatch
-
-1. 先按 delta-first restore 运行 committed validation，再打开 package 根 `progress.md`；从其中读取 current Attempt、两条状态轴、显式 blockers、active checkpoint、最新 gate 与 handoff/ER 指针。只沿 pointer 读取当前动作所需的 Ticket、Task、handoff、ER、review 或 evidence；已明确完成且仍新鲜的 investigation 不重做。
-2. 确认唯一 Active attempt、approved Composition 与 ticket/DAG bindings。根据 canonical dependency、当前状态和 active checkpoint 判断本轮动作；`progress.md` 不推导或授权 dispatch。高风险 unit 必须已有 spec/AC、可执行入口、oracle 和 ER owner；缺口按 authority 回流。
-3. evidence 胜过 stale state；P revision 变化只重验受影响 subset。状态只能通过 `impl_package_state.py set-state --expect --evidence` 变更。
-4. 依赖是否释放只由 Ticket typed dependency、DAG dependency 与对应 canonical 状态判断；checkpoint 提供恢复上下文，不能授权下游提前派发或释放 acceptance/release dependency。
-5. 派发 worker 时给出 primary ownership、禁改范围、已知依赖、贡献 Ticket、局部验证和 `BLOCKED` 返回格式。Task `DONE` 不等于 Ticket acceptance。
-
-Ticket 只保留 acceptance boundary、AC、typed dependency、publication 与 Runtime Acceptance Status。Task 只有实际 BLOCKED、retry、跨 session/owner handoff 或并行委派时创建 `tasks/Tn-handoff.md`。主 session 将 checkpoint、判断与 failure learning 通过单一 `er-add` 写入公共 Attempt ledger；worker 不直接写 ER，也不编辑 machine-owned `progress.md`。
-
-## ER 写入入口
-
-主 session 不查找 ER 文件或编号，直接把 JSON payload 通过 stdin 交给 state CLI：
+- 状态变化只使用 `set-state ... --expect ... --evidence ...`；stale transition 必须重新读取当前状态。
+- `READY/RUNNING` 不得越过未释放 Task dependency；Task `DONE` 不等于 Ticket `SATISFIED`。
+- 主 session 通过 `er-add` 写 checkpoint/judgment；worker 默认不直接写 Execution Record。
+- `checkpoint` 是 attempt-level 恢复快捷入口，并更新 `state.resume`。
+- 仅在 BLOCKED、retry、跨 session/owner 或并行委派时创建 `execution/<attempt>/task-handoffs/<task-id>-handoff.md`。
+- P revision 变化只把受影响 Task/Ticket 设为 `NEEDS-REVALIDATION`；未受影响 evidence 保留。
 
 ```powershell
 Get-Content .\er-payload.json -Raw |
   python skills/impl-package/scripts/impl_package_state.py --package <package> er-add
 ```
 
-payload 最小形状为 `purpose`、`title`、`content`；`purpose` 只能是 `checkpoint` 或 `judgment`，checkpoint 另需 `nextAction`。subject 默认是 `attempt`，也可写 `ticket:<id>` 或 `task:<id>`。CLI 自动分配 Attempt-local ID、选择 ledger、校验 subject、sealed hash、按 subject supersede、index 和 `progress.md`；重复 payload 幂等返回原 ID。
+payload 使用 `purpose=checkpoint|judgment`、`subject=attempt|ticket:<id>|task:<id>`、`title`、`content`、checkpoint 的 `nextAction` 和可选 evidence。
 
-需要详细 restore/readiness、渐进式系统证据、runtime state、ER、review、finding 分流、claim audit、gate 或 Stage 7 时，读取 [`references/runtime-protocol.md`](references/runtime-protocol.md) 的相应章节；跨阶段判断同时引用 [`../references/progressive-system-evidence.md`](../references/progressive-system-evidence.md)，不在本入口复制方法论正文。
+## Review、Findings 与人工验收
 
-## Review and gate entry
+- 根据实际 diff 路由 review：普通实现使用 code review；interface、状态机、跨模块 seam 或合同忠实度使用相应 standards/spec review；安全、数据完整性、外部 mutation、并发、migration 必须 safety review。
+- P1/P2 finding 必须修复并 closure verify；editorial suggestion 不阻断 Gate。
+- package 级 `execution-findings.md` 在 terminal Gate 前必须完成分流：Decision rationale→Decision，规范行为→Spec，执行判断→Execution Record，长期知识→Durable Delta/`_pending.md`。
+- Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 把入口、oracle、环境、失败反馈和 teardown owner 写入 judgment 或 canonical handoff，并取得结果 evidence。
 
-基于实际 diff、contract impact 和已有定向证据选择 review：局部可逆且无共享 contract/状态/外部副作用的改动可简化；普通实现的正式 review 默认 `code-review`（`code-review` 是普通实现的默认选择）；涉及 interface、状态机、模块边界、跨模块行为或 seam 时，`standards-review` / `spec-review` 是强信号；auth、permission、payment、webhook、migration、外部 mutation、数据完整性、并发安全必须 safety review（同时关注 data integrity 与 evidence authority）。需要正式 review 时，主 session 将明确的 reviewer selection 交给 `do-review`；它是范围固定、leaf 调度、ledger 与 finding 分类的唯一编排器。P1/P2 必须修复并 closure verify。Review/revise 期间仍按 canonical dependency 与 runtime state 判断并行；checkpoint 只提供恢复上下文。
+## Verify and Gate
 
-GO 后自动完成适用验证、ER、review、finding 分流、claim audit 和 gate verdict；不得将 gate 或验证变成二次 owner approval。Push、merge、生产/共享可变操作和会改变业务结果的方案仍须明确授权。
+completion claim 先交给 `verification-before-completion`。Gate 只判断 current Attempt：
 
-## Output
+- `blocked`：保持 active，记录 gap 和 next action。
+- `pass`：所有 earned Task/Ticket、适用验证、review、manual acceptance 和 findings closure 均满足。
+- `fail | defer`：如实终结；后续实现进入 patch Attempt。
 
-向 owner 使用 `talk-to-boss`：首段说明范围、实施/验证/gate 状态、剩余 blocker 数量、是否 closed 与所需 decision。随后给 canonical handoff：package/attempt、D/S/P、binding/lifecycle、Composition、evidence、manual readiness（如适用）、findings、最新 gate/Supersedes、Stage 7 和 claim audit。不要要求 owner 打开 JSON。
+terminal Gate 必须完成 Stage 7：记录 Durable Delta 及 `_pending.md`/truth pointer，或通过 `--no-durable-delta-reason` 明确无增量原因。terminal 后 state、resume、Execution Record 冻结。
+
+输出使用 `talk-to-boss`，分别说明实施、验证、Gate、backfill/合入状态，给出 Task/Ticket 总数、剩余数、blocker、是否 closed 和唯一下一动作。

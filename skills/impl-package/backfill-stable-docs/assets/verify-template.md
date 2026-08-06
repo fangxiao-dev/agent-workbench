@@ -2,7 +2,7 @@
 
 - 阶段：`verify`
 - 项目：
-- 配置来源 / digest：
+- 配置路径：
 - 引用的 audit/apply 证据：
 
 ## 结果

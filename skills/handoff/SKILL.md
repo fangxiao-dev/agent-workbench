@@ -41,7 +41,7 @@ disable-model-invocation: true
 
 - 当前 worktree / repo / branch / dirty state。
 - 最新相关 commits 或尚未提交的变更状态。
-- 下一步真正的入口，例如要读的 plan、gate、issue、task ledger。
+- 下一步真正的入口，例如要读的 plan、gate、issue 或 `.impl-package/state.json`。
 - 不能忘的 gate、授权要求、外部系统读写边界。
 - 已经完成且会影响下一步判断的验证摘要。
 - 用户还需要做的 residual decisions。

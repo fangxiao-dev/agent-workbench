@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import os
 from pathlib import Path
 
 
@@ -15,7 +16,10 @@ def is_eval_workspace(path: Path) -> bool:
 def main() -> None:
     members = sorted(
         path
-        for path in IMPL_ROOT.rglob("SKILL.md")
+        for current, _, files in os.walk(IMPL_ROOT)
+        for name in files
+        if name == "SKILL.md"
+        for path in [Path(current) / name]
         if path.parent != IMPL_ROOT and not is_eval_workspace(path)
     )
     if len(members) < 8:

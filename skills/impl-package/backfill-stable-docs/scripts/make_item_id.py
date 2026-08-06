@@ -1,39 +1,28 @@
 #!/usr/bin/env python3
-"""Create a stable audit item ID from its durable identity fields."""
+"""Create a readable Stable Docs item ID from source path and local delta ID."""
 
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
-import re
+from pathlib import PurePosixPath
 
 
-def normalize_text(value: str) -> str:
-    return re.sub(r"\s+", " ", value.strip())
-
-
-def make_item_id(source: str, destination: str | None, statement: str) -> str:
-    payload = json.dumps(
-        {
-            "source": source.replace("\\", "/").strip(),
-            "destination": (destination or "none").replace("\\", "/").strip(),
-            "statement": normalize_text(statement),
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-    return "SDB-" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+def make_item_id(source: str, delta_id: str) -> str:
+    path = PurePosixPath(source.replace("\\", "/").strip())
+    if path.is_absolute() or ".." in path.parts or str(path) in {"", "."}:
+        raise ValueError("source must be repository-relative")
+    clean = delta_id.strip()
+    if not clean or any(character.isspace() for character in clean):
+        raise ValueError("delta-id must be non-empty and contain no whitespace")
+    return f"{path.as_posix()}::{clean}"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", required=True)
-    parser.add_argument("--destination")
-    parser.add_argument("--statement", required=True)
+    parser.add_argument("--delta-id", required=True)
     args = parser.parse_args()
-    print(make_item_id(args.source, args.destination, args.statement))
+    print(make_item_id(args.source, args.delta_id))
     return 0
 
 

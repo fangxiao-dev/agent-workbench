@@ -1,142 +1,50 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-workbench.local/stable-docs-backfill/repository-config.schema.json",
-  "title": "Stable Docs Backfill repository configuration",
+  "title": "Stable Docs Backfill Repository Configuration",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "contractVersion",
-    "repository",
-    "targetBranch",
-    "implementations",
-    "stableDocs",
-    "records"
-  ],
+  "required": ["repository", "targetBranch", "implementations", "stableDocs", "records"],
   "properties": {
-    "contractVersion": {
-      "const": "3.2"
-    },
-    "repository": {
-      "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
-    },
-    "targetBranch": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^(?!-)(?!.*\\s).+$"
-    },
-    "implementations": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "$ref": "#/$defs/relativePathOrGlob"
-      },
-      "uniqueItems": true
-    },
+    "repository": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "targetBranch": {"type": "string", "minLength": 1},
+    "implementations": {"$ref": "#/$defs/paths"},
     "stableDocs": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "systemKnowledge",
-        "moduleKnowledge"
-      ],
+      "required": ["systemKnowledge", "moduleKnowledge"],
       "properties": {
-        "systemKnowledge": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "$ref": "#/$defs/relativePathOrGlob"
-          },
-          "uniqueItems": true
-        },
-        "contextKnowledge": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "$ref": "#/$defs/relativePathOrGlob"
-          },
-          "uniqueItems": true
-        },
-        "moduleKnowledge": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "$ref": "#/$defs/relativePathOrGlob"
-          },
-          "uniqueItems": true
-        }
+        "systemKnowledge": {"$ref": "#/$defs/paths"},
+        "contextKnowledge": {"$ref": "#/$defs/paths"},
+        "moduleKnowledge": {"$ref": "#/$defs/paths"}
       }
     },
     "ignore": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "paths",
-          "owner",
-          "reason"
-        ],
-        "properties": {
-          "paths": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "$ref": "#/$defs/relativePathOrGlob"
-            },
-            "uniqueItems": true
-          },
-          "owner": {
-            "type": "string",
-            "minLength": 1
-          },
-          "reason": {
-            "type": "string",
-            "minLength": 1
-          }
-        }
-      }
+      "items": {"$ref": "#/$defs/ignoreEntry"}
     },
     "records": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "pending",
-        "done",
-        "reports"
-      ],
+      "required": ["pending", "done", "reports"],
       "properties": {
-        "pending": {
-          "const": "auto"
-        },
-        "pendingOverrides": {
-          "type": "object",
-          "propertyNames": {
-            "$ref": "#/$defs/relativePath"
-          },
-          "additionalProperties": {
-            "$ref": "#/$defs/relativePath"
-          }
-        },
-        "done": {
-          "$ref": "#/$defs/relativePath"
-        },
-        "reports": {
-          "$ref": "#/$defs/relativePath"
-        }
+        "pending": {"$ref": "#/$defs/paths"},
+        "done": {"$ref": "#/$defs/path"},
+        "reports": {"$ref": "#/$defs/path"}
       }
     }
   },
   "$defs": {
-    "relativePath": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
-    },
-    "relativePathOrGlob": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+    "path": {"type": "string", "minLength": 1, "not": {"pattern": "(^/|^[A-Za-z]:|(^|/)\\.\\.(/|$)|[*?\\[])"}},
+    "paths": {"type": "array", "items": {"$ref": "#/$defs/path"}, "uniqueItems": true},
+    "ignoreEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "owner", "reason"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "owner": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1}
+      }
     }
   }
 }

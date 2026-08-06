@@ -9,11 +9,11 @@ Run Decision, then Spec, for every contract-impacting change. The gates are equa
 
 ## Routes and ownership
 
-This skill owns the package's current `decision.md`, `spec.md`, and their internal revision bindings under the configured implementations root (default `docs/implementations/`). It does not create a tracker spec, a second behavior contract, or a plan. `impl-planning` consumes the gated `spec.md`.
+This skill owns the package's current `decision.md`, `spec.md`, and readable D/S aliases under the configured implementations root (default `docs/implementations/`). It does not create a tracker spec, a second behavior contract, or a plan. `impl-planning` consumes the gated `spec.md`.
 
-- **No-contract fast path:** When business result, Acceptance Semantics, security/data constraints, and mutation authority are unchanged, reuse current D/S and route directly to the owning skill. Do not run brainstorming, either Gate, or Grill; do not create or expand D/S, revision bindings, or other package machine state. Report why the existing contract still holds. If deletion changes a promise or acceptance boundary, it is contract-impacting.
+- **No-contract fast path:** When business result, Acceptance Semantics, security/data constraints, and mutation authority are unchanged, reuse current D/S and route directly to the owning skill. Do not run brainstorming, either Gate, or Grill; do not create or expand D/S or other package state. Report why the existing contract still holds. If deletion changes a promise or acceptance boundary, it is contract-impacting.
 - **Initial or follow-up:** Before Focused PRD work, classify the request and read [references/requirement-inputs.md](references/requirement-inputs.md). An initial request may begin with confirmed oral conversation, screenshots, documents, or repository facts. A follow-up starts from current D/S and treats the incoming request as a delta unless the owner explicitly declares full replacement.
-- **Package lifecycle:** For a new package, a revision, sidecar registration, or package closure, read [references/package-lifecycle.md](references/package-lifecycle.md) before acting.
+- **Package lifecycle:** For a new package, a revision, or package closure, read [references/package-lifecycle.md](references/package-lifecycle.md) before acting.
 
 Use [assets/templates/decision.md](assets/templates/decision.md) and [assets/templates/spec.md](assets/templates/spec.md). Use the proposal template only when a contract-impacting change enters Decision.
 
@@ -33,9 +33,11 @@ Lightweight corrections under an existing product definition may omit standalone
 4. Prepare the [Alignment Proposal template](assets/templates/alignment-proposal.md). It is working output, not a new durable artifact. Ask one focused question only when discovery and permitted investigation cannot resolve an intent, scope, trade-off, or owner decision.
 5. Reconcile initial product promises or the follow-up delta, then run Decision research and Gate. Persist an earned or blocked `decision.md`; do not manufacture a duplicate PRD for the lightweight path.
 6. After Decision passes, create or revise `spec.md`, evaluate the conditional evidence-integrity contract and risk-driven Grill only when their signals apply, then run Spec Gate.
-7. Register D/S revisions, refresh projections, and validate bindings through the lifecycle reference. Do not hand-edit machine state or rely on a plan to close Decision/Spec ambiguity.
+7. Keep D/S aliases consistent in the current package, record the Git commit used for module-knowledge/code comparison, and complete the Decision/Spec gates. Do not create runtime state before an implementation attempt is approved.
 8. When reporting any Decision or Spec result, including `BLOCKED`, read [references/handoff.md](references/handoff.md) and report the most specific status derived from recorded gate and downstream evidence.
 
 ## Output contract
 
-For a contract-impacting request, state the focused requirement, selected direction, gate results, blockers/owner decisions, and next valid step in business language. After artifact writes, report canonical package identity, D/S revision set, binding validation, evidence locations, and changed `execution-findings.md` only when it was appended. Do not make owners inspect sidecars or paste full artifacts.
+For a contract-impacting request, state the focused requirement, selected direction, gate results, blockers/owner decisions, and next valid step in business language. After artifact writes, report canonical package identity, D/S aliases, evidence locations, and changed `execution-findings.md` only when it was appended. Do not paste full artifacts.
+
+Package ID 一经创建不得改名。后续 requirement delta 先按 implementation-only / behavior-contract / decision-direction 分类，再只使受影响下游范围失效。

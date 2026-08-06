@@ -1,66 +1,17 @@
-from __future__ import annotations
-
-import unittest
 from pathlib import Path
 
 
-SKILL = Path(__file__).resolve().parents[1] / "skills" / "impl-package" / "backfill-stable-docs" / "SKILL.md"
+ROOT = Path(__file__).resolve().parents[1]
+TEXT = (ROOT / "skills/impl-package/backfill-stable-docs/SKILL.md").read_text(encoding="utf-8")
 
 
-class RouterContractTest(unittest.TestCase):
-    def test_default_audit_is_read_only(self) -> None:
-        text = SKILL.read_text(encoding="utf-8")
-        self.assertIn("默认执行 audit", text)
-        self.assertIn("只允许配置 `records.reports` 目录下的新报告", text)
-        self.assertIn("contract preflight", text)
-
-    def test_apply_requires_report_and_item_ids(self) -> None:
-        text = SKILL.read_text(encoding="utf-8")
-        self.assertIn("apply 必须同时给出 report 路径和 owner 批准的精确 item ID", text)
-        self.assertIn("“全部处理”不是批准清单", text)
-
-    def test_verify_cannot_implicitly_apply(self) -> None:
-        text = SKILL.read_text(encoding="utf-8")
-        self.assertIn("不补写内容、不隐式 apply", text)
-
-    def test_pending_registry_is_primary_source(self) -> None:
-        text = SKILL.read_text(encoding="utf-8")
-        self.assertIn("`_pending.md` 登记队列，不是重新发现", text)
-        self.assertIn("gap-catching", text)
-
-    def test_package_retirement_is_routed_and_destructive(self) -> None:
-        text = SKILL.read_text(encoding="utf-8")
-        self.assertIn("package-retirement-runbook.md", text)
-        self.assertIn("Package Retirement", text)
-        self.assertIn("destructive-apply", text)
-
-    def test_three_layer_contract_keeps_context_optional(self) -> None:
-        text = SKILL.read_text(encoding="utf-8")
-        self.assertIn("`stableDocs.systemKnowledge`", text)
-        self.assertIn("`stableDocs.contextKnowledge` 可选", text)
-        self.assertIn("`stableDocs.moduleKnowledge`", text)
-        self.assertIn("保留 `module-knowledge/`", text)
-
-    def test_target_branch_and_cold_start_have_distinct_contracts(self) -> None:
-        text = SKILL.read_text(encoding="utf-8")
-        self.assertIn("`targetBranch` 与主工作区基准承担不同职责", text)
-        self.assertIn("不自动 fetch", text)
-        self.assertIn("非阻塞 `cold-start` owner decision", text)
-
-    def test_contract_drift_is_advisory_but_legacy_gate_is_untrusted(self) -> None:
-        text = SKILL.read_text(encoding="utf-8")
-        self.assertIn('contractVersion `"3.2"`', text)
-        self.assertIn("旧 heading、旧 sidecar 或旧 audit JSON 不再作为可信 verdict", text)
-        self.assertIn("不阻断 audit", text)
-        self.assertIn("不触发 package 升级", text)
-        self.assertIn("不得建立 gap-catching 或 retirement 候选", text)
-
-    def test_active_package_documents_and_investigation_provenance_boundary(self) -> None:
-        text = SKILL.read_text(encoding="utf-8")
-        self.assertIn("`decision.md`/`spec.md`/`plan.md`/`execution-findings.md`", text)
-        self.assertIn("`investigations/` 不属于 backfill runtime/state", text)
-        self.assertIn("不能把它当权威来源", text)
+def test_audit_apply_verify_boundaries_are_explicit() -> None:
+    assert "只读 audit" in TEXT
+    assert "精确 item ID" in TEXT
+    assert "失败只报告，不自动修复" in TEXT
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_paths_and_versions_use_the_lightweight_contract() -> None:
+    assert "仓库相对路径" in TEXT
+    assert "target Git commit" in TEXT
+    assert "package-retirement" not in TEXT

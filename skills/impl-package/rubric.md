@@ -1,46 +1,25 @@
 ---
 target: skills/impl-package
-updated: 2026-08-04
+updated: 2026-08-06
 ---
 
-## 原则
+## 已确认原则
 
-- [已确认] Manual acceptance handoff 保持轻量：只固定真正必须的信息，把环境、身份、mock 边界和 teardown 等列为 optional，由 agent 按场景选择，不为低复杂度验收新增重型 artifact。
-- [已确认] 优先用少量明确护栏消除高影响误判，不为内部依赖修正增加新阶段、artifact 或审批步骤。
-- [待验证] 通用护栏以风险语义触发，项目技术名称只能作为例子；不得把某一项目的 provider、schema、archive、CLI 或存储结构固化为体系前提。（证据: R3）
-- [待验证] JSON 与跨环节 contract 只承载追踪真正需要的最小事实；容易从单一权威输入可靠推理、且错误推理不会造成高影响 false PASS 的内容，不要求重复投影、严格 binding 或额外审批。（证据: R4, R7）
-- [待验证] 机器可校验的过程状态（revision/binding/current、runtime state、交付物 hash 清单、gate 索引）归 `.impl-package/` 结构化文件，由轻量脚本原子维护并可 validate；Markdown 只保留判断、证据叙述与由脚本刷新或校验的投影，不用 prose 纪律维护结构化状态。JSON 字段准入测试：脚本能否在不理解业务语义的情况下写入和校验。（证据: R7）
-- [待验证] 结构化状态引擎的数据策略应收敛到 skill-owned 版本化配置，便于后续解耦调整；append-only、CAS、active chain、package-local path、完整 content binding、HEAD/worktree 两相校验与 earned-artifact bijection 保持不可配置，避免策略调整弱化证据完整性。（证据: R8）
-- [待验证] 变更失效范围必须与实际影响面一致：调整方向、证据修正和能力减法只复验直接受影响的 contract/artifact；只有业务结果、Acceptance Semantics、执行策略、Composition、安全约束或 mutation authority 发生实质变化时才重新规划或扩大复验。（证据: R4）
-- [待验证] exact-blob 只保护 contract 语义而非排版噪声：可证明零语义影响的 editorial correction 更新同 alias binding evidence；无法证明时保守升级 revision 与 Gate。（证据: R5）
-- [待验证] 优化优先增加可跨场景复用的判断约束，不以单一案例引入分类法、表格或新 artifact；只有现有语言无法表达真实高影响差异时才增加结构。（证据: R6）
-- [待验证] 除真正的权限、风险或 canonical 边界外，不用反复声明“本 skill 不做什么”充当正文；应直接说明 skill 的审查/路由意图、判断启发式和产出。（证据: R9）
-- [待验证] Ticket 只承载验收合同与 machine-owned acceptance status；package `progress.md` 只投影可靠状态、显式 blocker、checkpoint 与 handoff/ER 指针，不推导 dispatch readiness。Task 只在真实交接条件下创建 `Tn-handoff.md`。（证据: R10、R11）
-- [待验证] ER 每 Attempt 一个 append-only ledger，不按 owning stage 分片或 rollover；purpose 收敛为 `checkpoint | judgment`，checkpoint 只支持恢复上下文，不承担 downstream machine authorization。（证据: R11）
+- 只持久化会改变下一动作、阻止高影响 false PASS 或约束危险 mutation 的 current facts。
+- D/S/P 保留为人类可读别名，但不绑定文件内容；Git commit ID 是唯一版本锚点。
+- 文件和 evidence 只保存仓库相对路径；已知 artifact 使用固定目录或显式路径。
+- Git 承担历史与回滚，不为审计完整性建立第二套状态。
+- 小团队/个人改动按实际复杂度选择 Composition，不为完整感创建 Ticket 或 DAG；所有 active Attempt 仍有统一 Progress/Execution Record 层。
+- 计划变化只复验实际受影响的 contract/artifact；只有行为、验收、Composition、安全或 mutation authority 实质变化时才扩大复验。
+- Task 与 Ticket 保持两条状态轴；Task 完成不自动通过 Ticket。
+- Gate 保存当前可读判决，旧判决由 Git 历史保留。
 
-## 决策记录（滚动，最近 ≤5 轮）
+## 当前决策
 
-### R7 · 2026-07-17
+### R12 · 2026-08-06
 
-- 采纳「结构化状态层」方向 — 用户确认：机器可校验的过程状态进结构化文件并由轻量脚本登记/更新/校验，Markdown 只保留人要看懂的判断与索引投影；依据是 DATEV 实例中失守的全是 prose 纪律维护的状态簿记（S8/S9 binding 漏登记、plan header 过期、plan-contract-v1 比较从未执行、hash 链 prose 重述），判断性内容均维护良好。本轮只沉淀偏好，SKILL 与契约暂不修改。
-- 同轮印证「轻量 JSON contract」原则 — 方案守界以最小事实为红线，语义与判断内容禁止入 JSON。
-- 详细设计评估与采纳路径见 `docs/skill-design/impl-package-optimization-analysis-260717.md`。
-
-### R8 · 2026-07-17
-
-- 采纳「数据驱动状态引擎」— 用户要求脚本优化为数据驱动、配置收进 Impl-Package skill，方便后续解耦调整。状态 vocabulary、artifact discovery、字段/heading grammar、marker 与 projection format 进入单一版本化 JSON；CLI interface 不变，backfill 直接复用 canonical resolver。
-- 校准「配置不越过安全内核」— 完整 gate entry span/content hash、append-only、CAS、active chain、package-local path、HEAD/worktree 两相校验与 earned-artifact bijection 不开放配置，配置 loader 对 schema、placeholder、capture group 与 heading 单行范围 fail closed。
-
-### R9 · 2026-07-22
-
-- 记录反例「非必要免责声明」— 用户指出 `impl-package` 中的“本 skill 不承担汇总、去重或最终分类”一类写法，如果不是实际的安全、权限或 canonical 边界，只是无意义的免责声明，会反噬正文；应以正向意图、启发式和产出指导替代。
-
-### R10 · 2026-08-02
-
-- **Superseded（2026-08-04）：**Ticket 内最小恢复摘要已被 package 统一 projection 取代；保留“不新增同步器或逐命令流水账”的减法约束。
-
-### R11 · 2026-08-04
-
-- 采纳「状态与指针恢复」— Ticket 只保留验收合同/status，Task 仅在真实交接时写 handoff；`progress.md` 不承担自动 dispatch 推导。
-- 采纳「单 Attempt ER」— 每个 Attempt 一个 ledger，不做 stage segmentation 或 rollover；purpose 只保留 checkpoint/judgment，checkpoint 只支持恢复。
-- 采纳「agent-owned reshape」— 3.2 package 直接按 current contract 重塑并重建 projection，不新增 migration command、legacy parser 或迁移 ledger。
+- 以“必要 current facts”为状态准入标准，删除只服务审计对账的状态与流程。
+- 跨 session 比较使用批准/验证所在的 Git commit 和实际 diff。
+- 活动 attempt 统一使用 `.impl-package/state.json` 的 `formatVersion: "3.4"`、attempt、tasks、tickets、resume 五个顶层字段。
+- 根 `progress.md` 是完整恢复投影；Execution Record 与 Task Handoff 按 Attempt 分区但保持不同生命周期，不抽象成通用记录。
+- 外围 review、handoff、preflight 和 stable-doc backfill 复用相同原则。

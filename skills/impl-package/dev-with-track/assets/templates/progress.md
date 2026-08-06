@@ -1,15 +1,13 @@
-# Attempt Progress · [Attempt ID]
+# Attempt Progress · <attempt-id>
 
-> machine-owned projection；由 `impl_package_state.py refresh-projections` 与 `er-add` 重建，agent 不直接编辑。
+> machine-owned projection；使用 `refresh-progress` 重建，不直接编辑。
 
-<!-- impl-package:projection progress begin -->
-- Attempt: [initial | patch-id]
-- Revision set: D<n> / S<n> / P<n>
+- Attempt: <attempt-id>
+- Revision aliases: D<n> / S<n> / P<n>
 - Composition: tickets=<true|false>, dag=<true|false>
-- Lifecycle: active | frozen
-- Latest gate: open / no verdict
-- Blockers: none
-<!-- impl-package:projection progress end -->
+- Lifecycle: <active|frozen>
+- Latest gate: <open|blocked|pass|fail|defer>
+- Blockers: <none|items>
 
 ## Ticket Acceptance
 
@@ -23,5 +21,16 @@
 
 ## Active Checkpoints
 
-| Record | Subject | Status | Next action |
+| Record | Subject | Status | Next action | Evidence |
+| --- | --- | --- | --- | --- |
+
+## Resume
+
+- Blocker: none
+- Next action: none
+- Evidence: none
+
+## Attempt History
+
+| Attempt | Lifecycle | Gate | Execution Record |
 | --- | --- | --- | --- |

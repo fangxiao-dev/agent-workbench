@@ -2,10 +2,8 @@
 
 状态（Status）：Draft | Spec Gate Passed | Spec Gate Blocked
 创建时间（Created）：
-<!-- impl-package:projection revision-set begin -->
 决策修订（Decision Revision）：D<n>
 规格修订（Spec Revision）：S<n>
-<!-- impl-package:projection revision-set end -->
 需求来源（Requirement source）：
 主题 slug（Topic slug）：
 任务包 ID（Package ID）：
@@ -89,7 +87,7 @@
 
 ## 修订记录
 
-<!-- 每次写入新行后仅保留最近 3 条；不要在本文写入自身 hash。 -->
+<!-- 每次写入新行后仅保留最近 3 条。 -->
 
 | 前一修订 | 新修订 | 合同变化 | 原因 / 权威来源 | 日期 | 被取代说明 |
 | --- | --- | --- | --- | --- | --- |

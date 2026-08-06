@@ -22,9 +22,9 @@ Task 是横向 execution unit；Ticket 是独立纵向 acceptance unit。`Contri
 
 ## 状态与 progress
 
-最小状态为 `PENDING`、`RUNNING`、`DONE`、`BLOCKED`。`DONE` 指局部产出和 evidence 可交给 Working Branch owner；不等于 Ticket accepted。`BLOCKED` 必须记录原因、建议下一动作及受影响 Ticket（如有）。不要产生 `NEEDS_SEAM`：实际 seam 以 blocker 原因记录，或通过调整/新增普通 Task 解决。
+状态词汇为 `PENDING | READY | RUNNING | BLOCKED | FAILED | NEEDS-REVALIDATION | DONE | WAIVED | SUPERSEDED`。`DONE` 指局部产出和 evidence 可交给 Working Branch owner；不等于 Ticket accepted。`BLOCKED/FAILED` 必须记录原因、建议下一动作及受影响 Ticket（如有）。不要产生 `NEEDS_SEAM`：实际 seam 以 blocker 原因记录，或通过调整/新增普通 Task 解决。
 
-Task 的默认运行事实在 DAG/runtime state。仅 BLOCKED、跨 session handoff、重试或主 session 并行派发时才写 `tasks/Tn-handoff.md`，仅包含 blocker/原因、已做 evidence、下一可执行动作、影响 Ticket；不复制 Ticket AC。Ticket 不维护 Phase/Next/Progress；两条状态轴由 package `progress.md` 投影，公共判断与 checkpoint 由主 session 通过 `er-add` 写入 Attempt ledger。
+Task 定义在 DAG，运行事实保存在 `.impl-package/state.json`。仅 BLOCKED、跨 session handoff、重试或主 session 并行派发时才写 `execution/<attempt>/task-handoffs/<task-id>-handoff.md`，只包含 blocker/原因、已有 evidence、下一动作和影响 Ticket；不复制 Ticket AC。公共恢复点使用根 `progress.md`。
 
 ## 拆分与集成
 

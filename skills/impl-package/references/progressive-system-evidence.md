@@ -1,6 +1,6 @@
 # 渐进式系统证据
 
-本 reference 为 Impl-Package 的 planning、execution、integration 与 completion claim 提供共同的系统测试方法论。它是指导性判断，不创建 stage、gate、sidecar 字段、case ID、证据矩阵或第二份行为合同。
+本 reference 为 Impl-Package 的 planning、execution、integration 与 completion claim 提供共同的系统测试方法论。它是指导性判断，不创建 stage、gate 字段、case ID、证据矩阵或第二份行为合同。
 
 ## 何时读取
 
@@ -83,7 +83,7 @@ completion audit 只审计当前 claim，不重新设计验证策略，也不追
 
 ## 抽象与停止护栏
 
-用反事实检查区分事实：如果替换字段名、ID、hash、时间或样本为语义等价值，预期行为仍相同，它通常是 fixture 常量或实现细节，不能进入 production 特判或通用规则。领域事实和跨模块/版本/状态仍必须成立的系统不变量属于 Decision/Spec；可随重构改变的实现细节留在局部实现与测试。
+用反事实检查区分事实：如果替换字段名、内部 ID、时间或样本为语义等价值，预期行为仍相同，它通常是 fixture 常量或实现细节，不能进入 production 特判或通用规则。领域事实和跨模块/版本/状态仍必须成立的系统不变量属于 Decision/Spec；可随重构改变的实现细节留在局部实现与测试。
 
 优先复用已有 runner/probe/inspector；其次补窄 seam 能力；信息 ownership 不清时先修合同/边界；只有多个独立业务流反复共享同一稳定语义、且抽取能删除当前重复并降低复杂度时才平台化。
 

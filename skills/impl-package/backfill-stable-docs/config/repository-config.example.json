@@ -1,38 +1,22 @@
 {
-  "contractVersion": "3.2",
-  "repository": "fangxiao-dev/KaiSpan",
-  "targetBranch": "origin/develop",
-  "implementations": [
-    "docs/implementations",
-    "docs/platform/*/implementations",
-    "docs/domains/*/implementations"
-  ],
+  "repository": "owner/repository",
+  "targetBranch": "main",
+  "implementations": ["docs/implementations"],
   "stableDocs": {
-    "systemKnowledge": [
-      "CONTEXT-MAP.md",
-      "docs/README.md",
-      "docs/system-knowledge"
-    ],
-    "contextKnowledge": [
-      "docs/platform/*/context",
-      "docs/domains/*/context"
-    ],
-    "moduleKnowledge": [
-      "docs/platform/*/module-knowledge",
-      "docs/domains/*/module-knowledge"
-    ]
+    "systemKnowledge": ["docs/system-knowledge"],
+    "contextKnowledge": [],
+    "moduleKnowledge": ["docs/module-knowledge"]
   },
   "ignore": [
     {
-      "paths": ["docs/epic-plans", "docs/**/hands-on-knowledge", "docs/ideas"],
+      "path": "docs/implementations/example",
       "owner": "repo-wide",
-      "reason": "not implementation source or stable destination; excluded regardless of context"
+      "reason": "Example package is not delivery evidence"
     }
   ],
   "records": {
-    "pending": "auto",
-    "pendingOverrides": {},
-    "done": "docs/_backfill/done.json",
-    "reports": "docs/_backfill/reports"
+    "pending": ["docs/_pending.md"],
+    "done": "docs/_done.json",
+    "reports": "docs/backfill-reports"
   }
 }

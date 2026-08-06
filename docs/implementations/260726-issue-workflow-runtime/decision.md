@@ -2,9 +2,7 @@
 
 状态（Status）：Decision Gate Passed
 创建时间（Created）：2026-07-26
-<!-- impl-package:projection revision-set begin -->
 决策修订（Decision Revision）：D2
-<!-- impl-package:projection revision-set end -->
 需求来源（Requirement source）：2026-07-23 至 2026-07-26 owner 确认的 issue-driven development 设计与 [运行时设计](../../../skills/issue-workflow/assets/design/issue-workflow-implementation-design.md)
 主题 slug（Topic slug）：issue-workflow-runtime
 任务包 ID（Package ID）：260726-issue-workflow-runtime

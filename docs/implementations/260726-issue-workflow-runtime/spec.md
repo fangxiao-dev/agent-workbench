@@ -2,10 +2,8 @@
 
 状态（Status）：Spec Gate Passed
 创建时间（Created）：2026-07-26
-<!-- impl-package:projection revision-set begin -->
 决策修订（Decision Revision）：D2
 规格修订（Spec Revision）：S2
-<!-- impl-package:projection revision-set end -->
 需求来源（Requirement source）：[decision.md](decision.md) 与已批准运行时设计
 主题 slug（Topic slug）：issue-workflow-runtime
 任务包 ID（Package ID）：260726-issue-workflow-runtime

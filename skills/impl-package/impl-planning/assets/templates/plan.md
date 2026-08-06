@@ -2,95 +2,72 @@
 
 创建时间（Created）：
 执行尝试 ID（Attempt ID）：<initial | YYYYMMDD-HHMM-patch-topic>
-<!-- impl-package:projection revision-set begin -->
 决策修订（Decision Revision）：D<n>
 规格修订（Spec Revision）：S<n>
 计划修订（Plan Revision）：P<n>
-<!-- impl-package:projection revision-set end -->
 执行组合（Composition）：tickets=<true|false>, dag=<true|false>
-任务包 ID（Package ID）：
-发布时绑定校验（Binding Validation at Publication）：Pending | Passed
-决策：[decision.md](decision.md) | spec 中的轻量 Decision 记录
-规格：[spec.md](spec.md)
-门禁账本：首次 gate evaluation 由 `dev-with-track` 创建 `gate.md`；未创建表示当前 attempt 尚无 gate verdict。
-恢复入口：[progress.md](progress.md)；执行历史索引：[execution-records/index.md](execution-records/index.md)
 
-> decision/spec 是当前 contract SoT。本 plan 只记录本 attempt 的执行策略、验证计划和过程证据。terminal gate verdict 后冻结。
+> D/S/P 是便于沟通的别名，不绑定文件内容。Git commit ID 是唯一允许持久化的版本锚点。
 
 ## 摘要
 
-## 输入与权威来源
+## 输入
 
+- 决策：decision.md 或 spec.md 内的轻量 Decision
+- 规格：spec.md
 - 需求 / patch 来源：
-- 已检查的当前 module knowledge：
-- 聚焦代码 / 测试事实：
-- D/S gate 证据：
-- 上一个 terminal gate entry（仅 patch）：
-- Module Knowledge Watermark（本 attempt 打开时，decision/spec 引用的每份 module-knowledge 文件的 `git log -1` commit SHA；下次 attempt 打开时用来对账是否已被别的改动推进）：
+- 已检查的当前代码、测试和稳定文档：
 
 ## 执行组合决策
 
-- 是否 earned tickets：yes | no
-- Tickets 理由：
-- 是否 earned DAG：yes | no
-- DAG 理由：
-- 执行状态来源：
-- 验收状态来源：
+- Tickets：yes | no
+- 理由：
+- DAG：yes | no
+- 理由：
 
 ## 执行策略
 
-- 有序实施方式：
-- 具体迁移 / 集成操作：
-- Rollout / rollback 操作：
+- 实施顺序：
+- 预计修改范围：
 - 依赖与前置条件：
+- rollout / rollback：
 - 目标分支：
 - 集成顺序：gate-before-merge | owner-approved pre-gate integration
-- Gate 前集成的 owner 决策证据：<仅在 owner-approved pre-gate integration 时填写；否则 N/A>
+- pre-gate integration 授权：<不适用时填 N/A>
 
-<!-- 稳定 interface、seam contract、compatibility、global constraints 和 Acceptance Semantics 不写在这里；缺失时先修订 spec。 -->
+## Coverage & Change Map
+
+| Decision/Spec 约束 | 实现范围 | Ticket/Task | 风险或 seam |
+| --- | --- | --- | --- |
+
+只列实际受影响范围；后续 P revision 依据本表决定局部重新验证，不机械清空整个 Attempt。
 
 ## 计划验证
 
-| Policy / 场景来源 | 选定检查 | 预期结果 | 证据 owner |
+| 场景 / 约束 | 检查 | 预期结果 | 证据 owner |
 | --- | --- | --- | --- |
 
-<!-- 引用权威 policy；不要复制通用 Data Safety、UI Evidence、Real Route Safety checklist。 -->
-<!-- material 高风险边界在本表内引用 spec/AC，覆盖能区分正确与错误实现的正常流和关键负向/竞态场景，并注明可执行测试层级或入口、可观察 oracle 与后续 ER owner。复用现有 anchor/名称即可；无歧义时不要另造 ID、矩阵或文档。 -->
-<!-- material seam 或昂贵系统验证在“选定检查/预期结果”中简短写明 system assumption、忠实边界/oracle、必要 checkpoint 与真实环境独有风险。多个忠实候选按总证据成本选择，成本接近才优先更早反馈；探索运行写候选假设、决定性 artifact 与结果分流。使用既有表列，不新增字段、ID、矩阵、artifact 或 gate。 -->
+## 交接
 
-## 执行过程索引
-
-实际执行判断、checkpoint、验证结果和 failure learning 由 `dev-with-track` 主 session
-通过 state CLI 的 `er-add` 写入 `execution-records/<attempt>.md`；本 plan 不再承载 ER 正文。
-
-## 执行尝试产物交接
-
-- Admission handoff：仅在 earned bundle 联合校验后由 fresh `plan-review mode=bundle-admission` 填写；未执行 admission 时不要以 `Pending`、hash 或 receipt 伪造状态。
-- Admission 配置 / trigger scan：<Mode、fresh reviewer、额外 Outside Voice/ledger、signals 与路由；非阻塞信息也必须报告>
-- Admission verdict：
-- 简短理由 / material signal：
+- Ticket 集合：<tickets/ | N/A>
+- DAG：<dag.md 或 patch-dag 路径 | N/A>
 - 下一动作：
-- Full-review clearance：仅当 Admission=`full review` 时在 runner handoff 中传递临时 ledger 绝对路径；不写入本 plan。owner approval、Ticket publish 与 plan registration 必须现场运行 `verify-clearance`，普通 reviewer 的 `cleared` 文本无效。
-- Ticket 集合：<paths | N/A>
-- DAG：<dag.md or patch-dag path | N/A>
-- 进度账本：[progress.md](progress.md)
-- 执行历史：[execution-records/index.md](execution-records/index.md)
-- 执行发现：<execution-findings.md | 尚未 earned>
-- 调查材料：<investigations/<topic>.md | 尚未 earned；仅按需链接>
+- 剩余 owner 决策：<none | 具体事项>
 
-## 计划修订历史
+## Bundle Review & Approval
 
-<!-- 当前和历史 P 内容绑定保存在内部 `.impl-package/revision-bindings.json` sidecar 中，不得要求 owner 阅读它。仍引用已被取代 P<n> 的 earned ticket/DAG 在完成对账前均为 NEEDS-REVALIDATION。 -->
-
-| 前一修订 | 新修订 | 策略 / Composition / 验证变化 | 原因 | 产物迁移 | 日期 |
-| --- | --- | --- | --- | --- | --- |
+- Plan freeze：<pending | frozen>
+- Joint validation：<Ticket coverage / typed dependency / DAG ownership / evidence feasibility / integration order>
+- Review result：<cleared | revise | owner-decision | N/A>
+- Owner approval：<same-session statement | Git commit ID | pending>
+- Progress：progress.md（`init` 后生成）
 
 ## Patch 增量
 
-<!-- 初始 attempt 删除本节。 -->
+<!-- initial attempt 删除本节。 -->
 
-- 上一个 terminal gate entry：
-- Drift 分类：implementation-only | behavior contract | decision direction
-- 复用或更新的 D/S 修订：
+- 上一个 terminal gate：
+- 变化分类：implementation-only | behavior-contract | decision-direction
+- 复用或更新的 D/S：
 - 相对已验收行为的增量：
 - 回归范围：

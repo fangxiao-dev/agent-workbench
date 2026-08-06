@@ -2,9 +2,7 @@
 
 状态（Status）：Decision Gate Passed
 创建时间（Created）：2026-07-24
-<!-- impl-package:projection revision-set begin -->
 决策修订（Decision Revision）：D1
-<!-- impl-package:projection revision-set end -->
 需求来源（Requirement source）：用户确认的 Blind Opening、Discuss Ledger 与通用 executor 设计
 主题 slug（Topic slug）：discussion-router-executors
 任务包 ID（Package ID）：260724-discussion-router-executors

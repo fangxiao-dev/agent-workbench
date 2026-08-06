@@ -1,60 +1,42 @@
 ---
 name: backfill-stable-docs
-description: Use when auditing, applying approved durable knowledge deltas, retiring fully-absorbed implementation packages, or independently verifying an evergreen module-knowledge layer.
+description: 当需要审计 durable knowledge delta、把 owner 批准的子集写入 stable docs、验证结果或退休已完全吸收的 implementation package 时使用。
 ---
 
 # Backfill Stable Docs
 
-公共入口 `$backfill-stable-docs` 维护项目的常青 module-knowledge 快照。它只做意图路由：先执行独立 contract preflight 记录格式漂移，再默认执行 audit；apply、verify 和 package retirement 分别加载独立 runbook。不要把 runbook 名当成独立 Skill。
+把 implementation package 中仍有长期价值的事实回刷到稳定文档。流程分为只读 audit、显式批准后的 apply、只读 verify；三阶段不可混写。
 
-## Agent-First 前提
+## 配置
 
-backfill 是 agent 的阅读、判断和写作任务，不是纯命令行工具。脚本只能提供清单、差异、校验和记录辅助（枚举 package、找 `_pending.md` 登记、搜索 touched files 和 commit range、生成 report skeleton、校验链接/done 去重/pending 覆盖），不能用一个状态字段代替 agent 对代码、Git commit、implementation package 与 stable docs 的实际阅读，也不强制要求 fingerprint、双锚点这类机械 state machine 作为唯一事实形态。
-
-Gate 机械识别只接受 canonical resolver 的 `indexed`、`mismatch`、`manual` 三类；没有 `gate.md`，或已有空 ledger 模板但 runtime gate 尚无 allocation/entry，均表示 open/no-verdict，不是第四类。旧 heading、旧 sidecar 或旧 audit JSON 不再作为可信 verdict 或 provenance 兼容输入；contract preflight 将缺失/过期包标为 `upgradeRequired`、`unsupportedFuture` 或 `invalid` advisory，但不阻断 audit，也不触发 package 升级。非 current package 的 Gate resolution 一律不可信，不进入 gap-catching 或 retirement 结构候选；agent 仍须读取 package、current code/tests 与 stable docs，正常分类 pending-registry candidate。`indexed` entry 只有在其 D/S/P revision set 与 package 当前 revision set 一致时才提供可信 `gateResolution`；新 attempt 尚未分配 Gate 时可返回最新合法历史 `indexed` evidence，但其 `gateAppliesToCurrentRevision=false`、`gateResolution=null`，不进入当前 gap-catching 或 retirement 结构候选。已有 current allocation/entry 却未 finalize 则按 `mismatch` fail safe。runtime-state 存在时任何缺 entry、字段/content binding 不符、陈旧或损坏 JSON 都按 `mismatch` fail closed。`mismatch`/`manual` 和 contract drift 只是脚本的能力与信任边界，不是 agent 的阅读能力上限：agent 必须在同一轮里读完证据并给出正常分类（candidate / already-covered / conflict / no-delta），只有证据本身矛盾、损坏或不足才升级为 owner 决策。
+仓库根 `.stable-docs-backfill.json` 或显式的仓库内配置文件必须列出：repository、targetBranch、implementation 根目录、stable-doc 文件/目录、ignore 条目、pending 文件、done record 和 reports 目录。所有路径都是仓库相对路径；ignore 每项必须有 `path`、`owner`、`reason`；不接受 wildcard 或仓库外配置。
 
 ## 工作区基准
 
-backfill 默认以 Git 主工作区为基准，不以当前分支名或某个特定分支为基准。主工作区指 `git worktree list --porcelain` 输出中的第一条 `worktree` 记录；它可以检出任意分支，例如 `dev-fang` 或 `develop`，不能把主工作区与 `main` 分支混同。
+默认使用 `git worktree list --porcelain` 的第一条主工作区，记录其路径、branch、HEAD 和 dirty 状态。调用发生在 linked worktree 时也不把未合入内容混入当前事实。Source HEAD 定义本轮读取快照；`targetBranch` 独立用于判断 Gate comparison commit 是否已进入目标分支。
 
-如果 backfill 从其他 linked worktree 启动，必须先解析并记录主工作区路径、当前分支、HEAD 和 dirty 状态，再默认基于主工作区执行 audit、apply、verify 和 package retirement。报告和 apply record 应明确写出实际使用的主工作区路径与 Source HEAD。
+## Audit
 
-其他 branch/worktree 可以按需作为调研输入，但必须显式记录其 worktree 路径、分支和 HEAD。未合入其他 worktree 的内容不能默认当作仓库当前事实，也不能与主工作区证据混合后形成 backfill 结论。
+1. 运行 `validate_config.py`、`contract_preflight.py` 和 `collect_sources.py`。
+2. 先消费 configured pending（`pending-registry`），再检查 terminal Gate 已进入 targetBranch 但未登记的 `gap-catching`；脚本只列 inventory，不决定 disposition。
+3. 对每项给出 `candidate | already-covered | conflict | no-delta`，并引用 current code/tests/stable docs 的直接证据。
+4. item ID 使用 `<source-relative-path>::<delta-id>`，由来源自己提供稳定且可读的 delta ID。
+5. 输出 report 和 audit JSON；不修改 stable docs、pending 或 package。
 
-如果主工作区存在未提交修改，audit 可以继续读取并报告 dirty 状态；apply 必须保留无关修改并避开冲突路径。目标文件与现有修改冲突时应停止并报告，不得自动切换分支、reset、覆盖或清理主工作区内容。
+Gate 不存在表示没有 Gate 证据；字段不完整、comparison commit 不可用或尚未进入 targetBranch 时不得形成 gap-catching/retirement 候选，但 pending-registry 仍可人工审计。
 
-配置 `targetBranch` 与主工作区基准承担不同职责：主工作区路径与 Source HEAD 定义本轮读取 current docs/code 的快照；`targetBranch` 定义 package completion 的 Git 合入目标。脚本只执行 `git rev-parse <targetBranch>` 解析本地已有 ref，不自动 fetch，也不区分远程跟踪分支和本地分支；ref 无法解析时报告 config gap。gate 文本或 checklist 不能代替“相关实现 commit 已进入 targetBranch”的 Git 证据。
+`contract_preflight.py` 委托当前 Impl-Package 状态引擎校验活动 package，因此会间接执行 `state.json` 的 `formatVersion: "3.4"` 检查；backfill 不复制或另行维护格式版本。
 
-## 共享输入合同
+## Apply
 
-- 目标项目必须是 Git top-level；配置取显式 `--config <path>`，否则取项目根 `.stable-docs-backfill.json`（contractVersion `"3.2"`）。`targetBranch`、`stableDocs.systemKnowledge`、`stableDocs.moduleKnowledge` 必填，`stableDocs.contextKnowledge` 可选；省略 context 层时按 system + module 两层运行。
-- 每个 repo 只保留一个配置文件；monorepo 的差异由配置里的 glob 和 stable doc destinations 承载，不引入多份独立配置或 `contexts[]`。
-- source inventory 和 verify/audit JSON 输出 contractVersion `"3.2"`；package row 使用 `gateRecognition`、`gateResolution`、`gateAppliesToCurrentRevision`、`needsManualGateReview`、`reason`，不输出旧 heading 解析或旧 schema provenance 字段。collector 只产出 `gapCatchingStructuralCandidate(s)`：它表示 Gate/pending 结构条件满足但尚未验证 Git reachability，不是 audit 的真实候选。
-- backfill 的主要输入是 `dev-with-track` Stage 7 已经在维护的 `_pending.md` 登记队列，不是重新发现。`_pending.md` 的位置按配置 `records.pending` 的发现规则覆盖 system、可选 context 和 module 三层并按 pending 路径去重；context/module root 缺失或歧义时报告 config gap，system 级 `docs/_pending.md` 首次不存在时报告非阻塞 `cold-start` owner decision，不自动创建。只有 Gate 对当前 revision set 有可信 terminal resolution、实现已进入 `targetBranch`、却找不到对应登记的遗留 package，才成为真实 gap-catching 候选并需要重新读 `decision.md`/`spec.md`/`plan.md`/`execution-findings.md`/代码；Git reachability 未核验前只能称结构候选。`investigations/` 不属于 backfill runtime/state；只有正式文档明确链接时，agent 才可将其作为 provenance 补充阅读，不能把它当权威来源。
-- `ignore` 按 owner 分组，每组自带 `owner`（domain/platform 名，或 `"repo-wide"`）和 `reason`；新增排除项必须带这两个字段，不能只加路径。
-- 破坏性操作（移动/删除/重命名 stable doc 内容、Package Retirement 清理 package 目录）需要独立于普通 apply item 的显式 destructive-apply 授权，精确到路径或 package id 清单，不接受“全部处理”这类笼统批准。
+只有 owner 明确批准 report 中的精确 item ID 才 apply。仅修改批准 item 的 destination、对应 pending 项和 done record；不顺手处理同文件其他候选。移动、重命名、删除 stable docs 或 retirement 需要额外 destructive-apply 授权，精确到路径/package ID。保持改动最小，随后运行 verify。
 
-完整的 Config Model、Audit/Apply Workflow、Package Retirement 规则见 [来源选择与 pending 消费](references/source-selection-and-pending-consumption.md)。
+## Verify
 
-## 路由
+运行 `verify_stable_docs.py`，检查显式路径、target Git commit、stable-doc 本地链接、audit shape 和 inventory。失败只报告，不自动修复。
 
-| 用户意图 | 读取 | 写入边界 |
-| --- | --- | --- |
-| 未指定阶段、盘点、扫描、报告 | [audit runbook](references/audit-runbook.md) | 只允许配置 `records.reports` 目录下的新报告（默认 `docs/_backfill/reports/`）；不改 canonical docs、`_pending.md`、done state 或链接 |
-| 应用某报告的批准 item ID | [apply runbook](references/apply-runbook.md) | 只写 owner 明确批准的 item；来自 `_pending.md` 的 item 写入后必须关闭对应登记行；破坏性操作需要独立授权 |
-| 检查已完全吸收、可清理的历史 package | [package retirement runbook](references/package-retirement-runbook.md) | 只报告候选，不自动删除；清理执行仍属于破坏性操作 |
-| 检查 `_pending.md`、链接、覆盖率或残留 | [verify runbook](references/verify-runbook.md) | 不补写内容、不隐式 apply |
+## Retirement
 
-如果意图含混，默认执行 contract preflight 后进入 audit。`upgradeRequired`、`unsupportedFuture` 或 `invalid` 只记录为 contract drift advisory：audit 不自动升级 package，不修改 Gate/runtime-state，也不因格式状态停止。对这类 package，pending-registry 仍按实际内容审计；机器 Gate 不提供可信 resolution，因此不得建立 gap-catching 或 retirement 候选。只有 package 与 current evidence 真正矛盾、损坏或不足时才形成 blocker/owner decision。apply 必须同时给出 report 路径和 owner 批准的精确 item ID；“全部处理”不是批准清单。verify 绝不因为发现问题而修复文档。
+仅当 package Gate terminal、实现已到达 target branch、所有 durable delta 已吸收/关闭、且没有 inbound reference 或剩余活动材料时，才列为删除候选。删除仍需要 owner 明确授权。
 
-## 持久知识边界
-
-`CONTEXT.md`/`CONTEXT-MAP.md` 与配置 `stableDocs.systemKnowledge`、可选的 `stableDocs.contextKnowledge`、`stableDocs.moduleKnowledge` 指向的目录只承载当前产品语言、意图、架构与行为。物理目录名由仓库配置决定；本次 contract 保留 `module-knowledge/`，不引入 `modules/`。退役能力的 provenance 留在 Git 历史、implementation package 或 audit/apply record；只有 owner 已批准的 future 能作为明确标记的 TODO 留下。历史输入与当前权威冲突时按 Source 顺序（见 [约束提取与分流](references/constraint-extraction-and-routing.md)）和 owner conflict gate 裁决，不通过把历史说明留在常青层回避裁决。已完全吸收且 gate 已终态的空壳 implementation package 不在常规 audit/apply 里清理，走 [package retirement runbook](references/package-retirement-runbook.md)。
-
-## 输出
-
-面向 owner 汇报 audit/apply/verify/retirement 的阶段状态与整体 closure 时直接使用 `talk-to-boss`；先给总量、已处理量、剩余量、独立 pending、是否 closed 与待决策项，再附技术证据，不把 scan、apply、verify 或 merge 混称为完成。
-
-最终说明实际 runbook、Source HEAD、报告或 apply record 路径、contract drift advisory package 数量、candidate/covered/conflict/pending 计数、来自 `_pending.md` 登记与 gap-catching 各自的候选数、Package Retirement 候选（如有）与仍需 owner 决策的 item ID。只有用户明确要求 PR 时才读取 [PR Summary 模板](assets/pr-summary-template.md)。
-
-`human-report.md` 面向 owner 阅读；目标仓库存在语言规定时，按该规定编写。
+汇报时使用 `talk-to-boss`，区分 audit/apply/verify/retirement 各阶段和计数。

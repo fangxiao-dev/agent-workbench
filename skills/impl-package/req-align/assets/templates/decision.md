@@ -2,9 +2,7 @@
 
 状态（Status）：Draft | Decision Gate Passed | Decision Gate Blocked
 创建时间（Created）：
-<!-- impl-package:projection revision-set begin -->
 决策修订（Decision Revision）：D<n>
-<!-- impl-package:projection revision-set end -->
 需求来源（Requirement source）：
 主题 slug（Topic slug）：
 任务包 ID（Package ID）：
@@ -90,7 +88,7 @@
 
 ## 修订历史
 
-<!-- 每次写入新行后仅保留最近 3 条；不要在本文写入自身 hash。 -->
+<!-- 每次写入新行后仅保留最近 3 条。 -->
 
 | 前一修订 | 新修订 | 变化摘要 | 权威来源 | 日期 | 被取代说明 |
 | --- | --- | --- | --- | --- | --- |
