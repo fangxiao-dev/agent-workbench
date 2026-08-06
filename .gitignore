@@ -12,9 +12,9 @@ skills-deprecated/
 skills/feishu-skills/feishu-base/.env
 skills/feishu-skills/feishu-minutes/.env
 skills/feishu-skills/feishu-mail/.env
-skills/lark-skills/lark-intl-base/.env
-skills/lark-skills/lark-intl-minutes/.env
-skills/lark-skills/lark-intl-mail/.env
+skills/lark-skills/sub-skills/lark-intl-base/.env
+skills/lark-skills/sub-skills/lark-intl-minutes/.env
+skills/lark-skills/sub-skills/lark-intl-mail/.env
 skills/azure-skills/using-azure/.env
 docs/exchange/discuss/
 .worktrees/

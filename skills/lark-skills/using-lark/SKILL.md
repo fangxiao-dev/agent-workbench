@@ -26,8 +26,8 @@ Use `lark-cli` skills when the task is operator/admin/data work outside producti
 
 When using CLI skills:
 
-1. Read `../lark-intl-shared/SKILL.md` first for auth, identity, scopes, and International domain rules.
-2. Read the specific `../lark-intl-*/SKILL.md` for the target capability.
+1. Read `../sub-skills/lark-intl-shared/SUB-SKILL.md` first for auth, identity, scopes, and International domain rules.
+2. Read the specific `../sub-skills/lark-intl-*/SUB-SKILL.md` for the target capability.
 3. Before executing a command, read that skill's referenced command guide when it tells you to.
 4. Prefer `lark-cli ... +shortcut` commands where the child skill requires them.
 
@@ -42,7 +42,7 @@ Use `lark-intl-sdk` when the task changes, reviews, migrates, or debugs applicat
 
 When using SDK:
 
-1. Read `../lark-intl-sdk/SKILL.md`.
+1. Read `../sub-skills/lark-intl-sdk/SUB-SKILL.md`.
 2. Reuse project helpers before adding SDK calls:
    - `web/lib/lark/client.ts`
    - `web/lib/lark/base-write.ts`
@@ -107,7 +107,7 @@ When using SDK:
 
 Use fallback only after checking the relevant child skill and local project helpers.
 
-1. **Child skill references**: Read the relevant `../lark-intl-*/SKILL.md` and its local `references/` files.
+1. **Child skill references**: Read the relevant `../sub-skills/lark-intl-*/SUB-SKILL.md` and its local `references/` files.
 2. **Installed CLI/SDK truth**:
    - CLI: run `lark-cli <domain> --help` or the exact child-skill shortcut help.
    - SDK: inspect installed `@larksuiteoapi/node-sdk` types and existing project tests/helpers.
