@@ -128,7 +128,7 @@ Tool preference:
 
 Select the test seam before implementation. A correct seam exercises the real bug pattern as it occurs at the call site; a shallow test that bypasses the triggering chain creates false confidence.
 
-If a correct automated seam exists, invoke `test-driven-development` as the fix executor. Pass it:
+If a correct automated seam exists, invoke [`bug-fix-tdd`](sub-skills/bug-fix-tdd/SUB-SKILL.md) as the fix executor. Pass it:
 
 - the confirmed root cause and supporting evidence;
 - the minimised reproduction and expected behavior;
@@ -136,7 +136,7 @@ If a correct automated seam exists, invoke `test-driven-development` as the fix 
 - the original Phase 1 feedback loop;
 - the repository's applicable test policy.
 
-`test-driven-development` owns the local RED–GREEN–REFACTOR cycle and returns its evidence. It does not reopen diagnosis or choose a different behavior contract.
+`bug-fix-tdd` owns the local RED–GREEN–REFACTOR cycle and returns its evidence. It does not reopen diagnosis or choose a different behavior contract.
 
 If no correct automated seam exists, record the testability gap explicitly. Do not write a token test that cannot reproduce the real chain. Implement the smallest root-cause fix using the Phase 1 feedback loop as the acceptance signal, then flag the missing seam for architectural follow-up.
 

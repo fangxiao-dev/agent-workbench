@@ -1,9 +1,9 @@
 ---
-name: test-driven-development
+name: bug-fix-tdd
 description: Use after diagnosing-bugs has confirmed the root cause, minimised the reproduction, and identified a correct automated test seam for implementing the fix.
 ---
 
-# Test-Driven Development
+# Bug-Fix TDD
 
 本 skill 是 `diagnosing-bugs` 的修复执行器。它不负责猜根因、选择测试层或决定产品行为；它消费已经确认的诊断结论，用 RED–GREEN–REFACTOR 把修复锁在正确 seam 上。
 
