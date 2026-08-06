@@ -8,6 +8,7 @@ description: >
   table, i.e. when an image_gen or image_edit call is being considered or about
   to be made. Tool-usage-driven, not triggered by a user merely mentioning
   images.
+disable-model-invocation: true
 metadata:
   short-description: "Prompting and workflow guidance for Imagine image tools"
 ---

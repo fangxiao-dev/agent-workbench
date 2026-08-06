@@ -5,6 +5,7 @@ description: >
   setup, configuration, MCP servers, authentication, skills, slash commands,
   keyboard shortcuts, or any Grok feature. Also use proactively when you
   detect a user is having trouble with setup or onboarding.
+disable-model-invocation: true
 metadata:
   short-description: "Grok docs — config, MCP, auth, skills, commands"
 ---

@@ -1,6 +1,7 @@
 ---
 name: project-knowledge-curator
 description: Use this when the user asks to scan sessions/threads/conversations over a time range for durable hands-on knowledge candidates with reusable pattern, trap, recovery, or reverse-lookup value, before updating project knowledge docs.
+disable-model-invocation: true
 ---
 
 # Project Knowledge Curator
