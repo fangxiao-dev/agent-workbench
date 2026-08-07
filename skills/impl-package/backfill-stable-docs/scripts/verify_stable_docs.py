@@ -44,7 +44,13 @@ def _slug(value: str) -> str:
 
 
 def _check_paths(project: Path, config: dict[str, Any]) -> str:
-    values = [*config["implementations"], *config["stableDocs"]["systemKnowledge"], *config["stableDocs"]["contextKnowledge"], *config["stableDocs"]["moduleKnowledge"], *config["records"]["pending"]]
+    # Pending is optional and may be empty; done is a disposition ledger that may not exist yet.
+    values = [
+        *config["implementations"],
+        *config["stableDocs"]["systemKnowledge"],
+        *config["stableDocs"]["contextKnowledge"],
+        *config["stableDocs"]["moduleKnowledge"],
+    ]
     missing = [value for value in values if not resolve_project_path(project, value).exists()]
     if missing:
         raise VerificationError("configured paths are missing: " + ", ".join(missing))

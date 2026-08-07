@@ -1,5 +1,4 @@
 {
-  "repository": "owner/repository",
   "targetBranch": "main",
   "implementations": ["docs/implementations"],
   "stableDocs": {
@@ -15,8 +14,7 @@
     }
   ],
   "records": {
-    "pending": ["docs/_pending.md"],
-    "done": "docs/_done.json",
-    "reports": "docs/backfill-reports"
+    "pending": [],
+    "done": "docs/_done.json"
   }
 }

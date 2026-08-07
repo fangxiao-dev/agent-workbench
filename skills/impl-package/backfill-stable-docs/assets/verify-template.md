@@ -17,22 +17,22 @@
 | 检查 | 结果 | 证据 / 失败原因 |
 | --- | --- | --- |
 
-`configured-paths`、`pending-discovery`、`canonical-links`、`audit-contract`（如提供 `--audit-json`）、`inventory-candidates` 各占一行。
+`configured-paths`、`target-branch`、`canonical-links`、`audit`（如提供 `--audit-json`）、`inventory` 各占一行。
 
 ## 语义检查
 
 | 条目 / 边界 | 结果 | 证据 / owner 决定 |
 | --- | --- | --- |
 
-## `_pending.md` 对账
+## Done / Pending 对账
 
-- 各处 `_pending.md` 是否仍能唯一定位（无歧义/缺失）：
-- 未关闭登记数：
+- `records.done` 是否覆盖本轮已批准 item（含 comparisonCommit）：
+- 可选 pending 是否仍有未关闭人工队列项：
 - 未解决 owner decision 或 evidence gap：
 
 ## 已识别的任务包退役候选
 
-| 任务包 ID | 结构性条件（Gate 终态 + 无未关闭登记 + 已在 done record）是否满足 | 仍需 agent 核实的第三条 |
+| 任务包 ID | 结构性条件（Gate 终态 + durable delta 已进 done + 目标分支可达）是否满足 | 仍需 agent 核实的第三条 |
 | --- | --- | --- |
 
 ## 剩余阻断项

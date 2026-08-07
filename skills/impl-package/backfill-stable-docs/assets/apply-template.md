@@ -3,21 +3,21 @@
 - 阶段：`apply`
 - 应用时间：
 - 项目：
-- 来源审计报告：
+- 来源审计报告 / CLI 输出：
 - Apply 时的 Source HEAD：
-- Owner 批准：`<audit/report path>` + 精确 item ID
+- Owner 批准：`<audit/report path 或 CLI 输出>` + 精确 item ID
 
 ## 已应用条目
 
-| 条目 ID | 来源 | 结果 | 长期归属位置 | `_pending.md` 关闭情况 |
-| --- | --- | --- | --- | --- |
+| 条目 ID | 来源 | 结果 | 长期归属位置 | `records.done` 写入 | pending 关闭（如有） |
+| --- | --- | --- | --- | --- | --- |
 
-`Origin` 是 `pending-registry` 或 `gap-catching`；`pending-registry` item 必须同时关闭来源 `_pending.md` 里对应的登记行，`gap-catching` item 必须先补一条登记再关闭——两者在这张表的最后一列都要写明关闭结果，不能只写自己的 `done.json` 而不动 `_pending.md`。
+`Origin` 是 `pending-registry` 或 `gap-catching`。所有已处置 item 必须写入 `records.done`（含 `id` / `packagePath` / `deltaId` / `comparisonCommit`）。`pending-registry` item 若来自 `_pending.md` 还需关闭对应行；`gap-catching` item **不要**伪造 pending 再关闭。
 
 ## 延期 / 冲突 / 拒绝
 
-| 条目 ID | 处置 | 原因 | `_pending.md` 状态 |
-| --- | --- | --- | --- |
+| 条目 ID | 处置 | 原因 | `records.done` | pending 状态 |
+| --- | --- | --- | --- | --- |
 
 ## 破坏性 Apply（如适用）
 

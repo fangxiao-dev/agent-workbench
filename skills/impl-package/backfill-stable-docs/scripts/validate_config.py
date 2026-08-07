@@ -17,7 +17,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         config, metadata = load_repository_config(args.project_root, args.config)
-        payload = {"valid": True, "config": metadata, "repository": config["repository"]}
+        payload = {"valid": True, "config": metadata}
     except ConfigError as error:
         payload = {"valid": False, "error": str(error)}
     print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))

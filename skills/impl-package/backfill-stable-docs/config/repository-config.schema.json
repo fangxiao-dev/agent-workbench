@@ -3,9 +3,8 @@
   "title": "Stable Docs Backfill Repository Configuration",
   "type": "object",
   "additionalProperties": false,
-  "required": ["repository", "targetBranch", "implementations", "stableDocs", "records"],
+  "required": ["targetBranch", "implementations", "stableDocs", "records"],
   "properties": {
-    "repository": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"},
     "targetBranch": {"type": "string", "minLength": 1},
     "implementations": {"$ref": "#/$defs/paths"},
     "stableDocs": {
@@ -25,11 +24,15 @@
     "records": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pending", "done", "reports"],
+      "required": ["done"],
       "properties": {
-        "pending": {"$ref": "#/$defs/paths"},
-        "done": {"$ref": "#/$defs/path"},
-        "reports": {"$ref": "#/$defs/path"}
+        "pending": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/path"},
+          "uniqueItems": true,
+          "default": []
+        },
+        "done": {"$ref": "#/$defs/path"}
       }
     }
   },

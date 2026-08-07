@@ -17,18 +17,31 @@ def git(repo: Path, *args: str) -> None:
 
 
 class VerifierTests(unittest.TestCase):
-    def fixture(self) -> tuple[tempfile.TemporaryDirectory[str], Path]:
+    def fixture(self, *, with_pending: bool = False) -> tuple[tempfile.TemporaryDirectory[str], Path]:
         temp = tempfile.TemporaryDirectory()
         repo = Path(temp.name)
         git(repo, "init")
         git(repo, "config", "user.email", "test@example.com")
         git(repo, "config", "user.name", "Test")
-        for value in ("docs/implementations/example", "docs/system", "docs/modules", "docs/reports"):
+        for value in ("docs/implementations/example", "docs/system", "docs/modules"):
             (repo / value).mkdir(parents=True, exist_ok=True)
         (repo / "docs/system/index.md").write_text("# System\n", encoding="utf-8")
         (repo / "docs/modules/example.md").write_text("# Module\n", encoding="utf-8")
-        (repo / "docs/_pending.md").write_text("# Pending\n", encoding="utf-8")
-        config = {"repository":"example/project","targetBranch":"HEAD","implementations":["docs/implementations"],"stableDocs":{"systemKnowledge":["docs/system"],"contextKnowledge":[],"moduleKnowledge":["docs/modules"]},"ignore":[],"records":{"pending":["docs/_pending.md"],"done":"docs/done.json","reports":"docs/reports"}}
+        records: dict = {"pending": [], "done": "docs/done.json"}
+        if with_pending:
+            (repo / "docs/_pending.md").write_text("# Pending\n", encoding="utf-8")
+            records["pending"] = ["docs/_pending.md"]
+        config = {
+            "targetBranch": "HEAD",
+            "implementations": ["docs/implementations"],
+            "stableDocs": {
+                "systemKnowledge": ["docs/system"],
+                "contextKnowledge": [],
+                "moduleKnowledge": ["docs/modules"],
+            },
+            "ignore": [],
+            "records": records,
+        }
         (repo / ".stable-docs-backfill.json").write_text(json.dumps(config), encoding="utf-8")
         git(repo, "add", ".")
         git(repo, "commit", "-m", "fixture")
@@ -44,10 +57,17 @@ class VerifierTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(json.loads(result.stdout)["passed"])
 
-    def test_missing_explicit_path_fails(self) -> None:
+    def test_missing_done_and_empty_pending_still_pass(self) -> None:
         temp, repo = self.fixture()
         self.addCleanup(temp.cleanup)
-        (repo / "docs/_pending.md").unlink()
+        result = self.run_verify(repo)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_missing_explicit_stable_path_fails(self) -> None:
+        temp, repo = self.fixture()
+        self.addCleanup(temp.cleanup)
+        (repo / "docs/system/index.md").unlink()
+        (repo / "docs/system").rmdir()
         result = self.run_verify(repo)
         self.assertEqual(result.returncode, 2)
         self.assertFalse(json.loads(result.stdout)["passed"])

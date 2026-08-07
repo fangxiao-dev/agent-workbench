@@ -1,12 +1,13 @@
 # Apply Runbook
 
-Apply 只接受 owner 明确批准的 report item ID；禁止把"将报告全部处理"解释为批准。每个 apply item 必须明确来源 package、目标 stable doc、durable delta 类型（system PRD / system architecture or ADR / context PRD / context architecture or contract / context language / module PRD / module spec）、代码或 commit 证据，以及与现有 stable docs 的关系（新增、修正、替换、删除废弃说法或 no-op）。仓库没有配置 `contextKnowledge` 时不得发明 context destination。
+Apply 只接受 owner 明确批准的 report/CLI item ID；禁止把"将报告全部处理"解释为批准。每个 apply item 必须明确来源 package、目标 stable doc、durable delta 类型（system PRD / system architecture or ADR / context PRD / context architecture or contract / context language / module PRD / module spec）、代码或 commit 证据，以及与现有 stable docs 的关系（新增、修正、替换、删除废弃说法或 no-op）。仓库没有配置 `contextKnowledge` 时不得发明 context destination。
 
-写入 stable docs 后，把对应 item 记录为 `done`（`records.done`，默认 `docs/_backfill/done.json`）：
+写入 stable docs 后，把对应 item 记录为 `done`（`records.done`）：
 
-- 若该 item 来自 `_pending.md` 的既有登记（`origin: pending-registry`），必须同时在该 `_pending.md` 中把对应行标记为已处置（划掉或删除，按项目既有约定），不能只写 `done.json` 而留 `_pending.md` 条目继续挂着——否则下一轮 audit 会把它当新候选重新报一遍。
-- 若该 item 来自 gap-catching 发现（`origin: gap-catching`），除了写入 stable docs，还要先补一条 `_pending.md` 登记再标记为已处置，保持"未决登记只活在 `_pending.md`"这条不变式。
-- 若 owner 决定不回刷，也以 `done` 记录 decision 和原因，并同样关闭对应 `_pending.md` 条目。
+- 每条 done 记录至少包含 `id`（`<package-path>::<delta-id>`）、`packagePath`、`deltaId`、`comparisonCommit`，以及 disposition/decision 说明。这是 gap-catching 去重的唯一机器依据。
+- 若该 item 来自 `_pending.md` 的既有登记（`origin: pending-registry`），同时在该 pending 文件中关闭对应行（划掉或删除，按项目既有约定），避免人工队列继续挂着。
+- 若该 item 来自 gap-catching（`origin: gap-catching`），**只写 `records.done`**，不要为了“关闭”去伪造一条 pending 再立刻关掉。
+- 若 owner 决定不回刷，也以 `done` 记录 decision 和原因；若存在对应 pending 行则一并关闭。
 
 每个批准 item 只写入唯一 canonical owner；跨 module 只写指针。首次创建 module PRD 必须满足 [module PRD 惰性创建门](constraint-extraction-and-routing.md#module-prd-惰性创建门)。
 
