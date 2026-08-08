@@ -162,7 +162,7 @@ def resolve_installed_skill_path(skill_name: str) -> Path | None:
         REPO_ROOT / "skills" / skill_name,
         home / ".codex" / "skills" / skill_name,
         home / ".claude" / "skills" / skill_name,
-        home / ".gemini" / "skills" / skill_name,
+        home / ".grok" / "skills" / skill_name,
         home / ".agents" / "skills" / skill_name,
         REPO_ROOT / ".claude" / "skills" / skill_name,
     ]

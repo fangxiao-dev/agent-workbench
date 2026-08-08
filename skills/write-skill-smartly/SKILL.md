@@ -1,6 +1,6 @@
 ---
 name: write-skill-smartly
-description: Create or revise skills with a creator loop that uses writing-great-skills as the quality bar.
+description: Create or revise skills with a creator loop that uses writing-for-agents as the quality bar.
 disable-model-invocation: true
 ---
 
@@ -19,7 +19,7 @@ This is a creator skill. Its loop is:
 4. try realistic usage prompts
 5. improve the draft until it is usable
 
-Use `writing-great-skills` as the quality bar inside that loop. Its concepts
+Use `writing-for-agents` as the quality bar inside that loop. Its concepts
 shape what you write; they are not the deliverable.
 
 ## Source Policy
@@ -104,11 +104,12 @@ skill in its own voice.
 Completion criterion: the requested skill exists or is revised on disk, and a
 future agent can use it without inventing the main workflow.
 
-### 4. Shape With `writing-great-skills`
+### 4. Shape With `writing-for-agents`
 
-If `writing-great-skills` is available and not already loaded in the current
-turn, read its `SKILL.md` before this editing pass. Read its glossary only when
-you need the precise meaning of a term to make a writing decision.
+If `writing-for-agents` is available and not already loaded in the current
+turn, read its `SKILL.md` before this editing pass. Read
+`SKILL-MECHANICS.md` only when you need skill-specific packaging (frontmatter,
+invocation, routers).
 
 While drafting, apply these writing decisions:
 
@@ -127,11 +128,11 @@ While drafting, apply these writing decisions:
   duplication, sediment, sprawl, or no-ops.
 
 When revising an existing skill whose main body has accumulated branch-only
-detail or repeated exceptions, apply `writing-great-skills`'s **Progressive load
-shedding** section: rewrite the entry workflow and disclose branch-only protocol
-behind explicit pointers. Before editing, make a semantic coverage audit of the
-old behavior-changing constraints; do not use line-count reduction as evidence
-that the revision is safe.
+detail or repeated exceptions, apply `writing-for-agents`' **Progressive
+disclosure** / information-hierarchy guidance: rewrite the entry workflow and
+disclose branch-only protocol behind explicit pointers. Before editing, make a
+semantic coverage audit of the old behavior-changing constraints; do not use
+line-count reduction as evidence that the revision is safe.
 
 This is an editing pass on the artifact, not a separate report unless the user
 asked for a critique.

@@ -1,11 +1,12 @@
 ---
 name: dev-with-track
-description: 当已批准 implementation attempt 需要恢复执行、选择下一 actionable unit、记录证据、处理返工失效、分流 findings 或写 Gate 时使用；不重新定义 Decision/Spec/Plan/Ticket/DAG。
+description: 当批准 implementation plan 或者 D/S/P bundle 正式开始或者恢复执行、选择下一 actionable unit、记录证据、处理返工失效、分流 findings 或写 Gate 时使用；不重新定义 Decision/Spec/Plan/Ticket/DAG。
 ---
 
 # Dev With Track
 
 先读 `../references/impl-package-composition-contract.md` 和 `../references/impl-package-current-state.md`。本 skill 维护 current state、Progress、Attempt Execution Record、条件式 Task Handoff、execution findings 和 current Gate；各上游 artifact 仍由 owning skill 维护。
+默认允许 subagent，且模式为 default-long
 
 ## Restore
 
@@ -21,6 +22,7 @@ description: 当已批准 implementation attempt 需要恢复执行、选择下�
 3. **Implement**：只修复已证实、当前可归责的范围；派发时给 primary ownership、禁区、成功条件、反例和局部验证。
 4. **Evaluate**：使用最便宜且忠实的证据。昂贵 runtime/E2E 重跑必须有新修复、环境变化或决定性观察目标。
 
+其中步骤 1 & 3 由 `$investigate-before-implement` 指导，步骤2 和 4 由主session把控。
 依赖是否释放只由 DAG、typed Ticket dependency 与 canonical state 判断。Progress/checkpoint 不授权 dispatch，也不释放 acceptance/release dependency。
 
 ## State、ER 与 Handoff

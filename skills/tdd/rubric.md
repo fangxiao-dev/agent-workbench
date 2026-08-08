@@ -1,10 +1,10 @@
 ---
 target: skills/tdd
-updated: 2026-07-15
+updated: 2026-08-07
 ---
 ## 原则
 
-- [待验证] 当前 approved contract 已明确接口与验收行为时，TDD 直接进入 tracer bullet；只有新歧义或实质语义变化才再次要求用户批准。（证据: R1）
+- [已确认] 当前 approved contract 已明确接口与验收行为时，TDD 直接进入 tracer bullet；只有新歧义或实质语义变化才再次要求用户批准。（证据: R1）
 
 ## 决策记录（滚动，最近 ≤5 轮）
 
