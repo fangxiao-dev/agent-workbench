@@ -50,9 +50,18 @@ def workbench(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     (skills / "call-grok").mkdir()
     (skills / "call-grok" / "SKILL.md").write_text("# call-grok\n", encoding="utf-8")
     (skills / "alpha").mkdir()
+    (skills / "alpha" / "SKILL.md").write_text("# alpha\n", encoding="utf-8")
     (skills / "beta").mkdir()
+    (skills / "beta" / "SKILL.md").write_text("# beta\n", encoding="utf-8")
     (skills / "bundle").mkdir()
     (skills / "bundle" / "nested").mkdir()
+    # Bundle root has no SKILL.md; nested skill counts as valid target.
+    (skills / "bundle" / "nested" / "SKILL.md").write_text("# nested\n", encoding="utf-8")
+    # Empty shell: must not be a valid link target.
+    (skills / "empty-shell").mkdir()
+    (skills / "empty-shell" / "scripts").mkdir()
+    (skills / "empty-shell" / "scripts" / "__pycache__").mkdir()
+    (skills / "empty-shell" / "scripts" / "__pycache__" / "x.pyc").write_bytes(b"\0")
 
     monkeypatch.setattr(mod, "WORKBENCH_ROOT", wb)
     monkeypatch.setattr(mod, "SKILLS_ROOT", skills)
@@ -83,10 +92,20 @@ def test_platform_constants(workbench) -> None:
 def test_resolve_skill_and_missing(workbench) -> None:
     mod, _wb, skills = workbench
     assert mod.resolve_skill_source("call-grok") == (skills / "call-grok").resolve()
+    assert mod.resolve_skill_source("bundle") == (skills / "bundle").resolve()
     with pytest.raises(FileNotFoundError):
         mod.resolve_skill_source("nope")
     with pytest.raises(ValueError):
         mod.resolve_skill_source("../outside")
+    with pytest.raises(ValueError, match="no SKILL.md"):
+        mod.resolve_skill_source("empty-shell")
+
+
+def test_has_skill_md_nested_and_empty(workbench) -> None:
+    mod, _wb, skills = workbench
+    assert mod.has_skill_md(skills / "call-grok") is True
+    assert mod.has_skill_md(skills / "bundle") is True
+    assert mod.has_skill_md(skills / "empty-shell") is False
 
 
 def test_link_then_skip(workbench, tmp_path: Path) -> None:
@@ -166,9 +185,24 @@ def test_all_links_top_level(workbench, tmp_path: Path) -> None:
     assert code == 0
     names = {p.name for p in host_skills.iterdir()}
     assert names == {"call-grok", "alpha", "beta", "bundle"}
+    assert "empty-shell" not in names
     assert (host_skills / "bundle" / "nested").is_dir()
+    assert (host_skills / "bundle" / "nested" / "SKILL.md").is_file()
     for name in names:
         assert_is_platform_link(mod, host_skills / name)
+
+
+def test_link_one_skips_empty_shell(workbench, tmp_path: Path) -> None:
+    mod, _wb, skills = workbench
+    host_skills = tmp_path / "skills-out"
+    host_skills.mkdir()
+    root, items = mod.link_skills_to_root(
+        [skills / "empty-shell"], host_skills, workbench_skills=skills
+    )
+    assert root["action"] in {"ok", "created"}
+    assert items[0]["action"] == "skipped"
+    assert "SKILL.md" in (items[0].get("message") or "")
+    assert not (host_skills / "empty-shell").exists()
 
 
 def test_multi_host_with_home(workbench, tmp_path: Path) -> None:

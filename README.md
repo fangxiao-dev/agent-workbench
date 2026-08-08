@@ -49,6 +49,7 @@ python3 /path/to/agent-workbench/scripts/link_skill.py verify-registry-state --u
 默认行为：
 
 - 非破坏：冲突则跳过并报告，不覆盖
+- 仅链接**有效 skill 目标**：目录树内递归存在 `SKILL.md`（可在子目录）；无 `SKILL.md` 的空壳不链接
 - 若宿主 `skills` 仍是「整树指向本 workbench `skills/`」的旧 junction/symlink，会先拆掉并建成真实目录，再写 per-skill link
 - 支持宿主：`claude`、`codex`、`grok`
 - 不安装 `agents/` / `commands/`；不改项目 `.gitignore`

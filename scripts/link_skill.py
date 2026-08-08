@@ -155,6 +155,29 @@ def create_dir_link(source: Path, destination: Path) -> None:
     os.symlink(str(source), str(destination), target_is_directory=True)
 
 
+def has_skill_md(directory: Path) -> bool:
+    """True if *directory* contains a SKILL.md at the root or in any subdirectory.
+
+    Walk does not follow directory symlinks/junctions. Only the exact filename
+    ``SKILL.md`` counts (Agent Skills convention).
+    """
+    root = Path(directory)
+    try:
+        if not root.is_dir():
+            return False
+        for dirpath, _dirnames, filenames in os.walk(root, followlinks=False):
+            if "SKILL.md" in filenames:
+                skill_path = Path(dirpath) / "SKILL.md"
+                try:
+                    if skill_path.is_file():
+                        return True
+                except OSError:
+                    continue
+    except OSError:
+        return False
+    return False
+
+
 def resolve_skill_source(skill: str) -> Path:
     raw = skill.strip().replace("\\", "/").lstrip("/")
     if not raw or ".." in Path(raw).parts:
@@ -167,10 +190,19 @@ def resolve_skill_source(skill: str) -> Path:
         raise ValueError(f"skill escapes skills root: {skill}") from exc
     if not source.is_dir():
         raise FileNotFoundError(f"skill directory not found: {source}")
+    if not has_skill_md(source):
+        raise ValueError(
+            f"not a valid skill target (no SKILL.md under tree): {source}"
+        )
     return source
 
 
 def list_all_skill_sources() -> List[Path]:
+    """Top-level entries under skills/ that are valid link targets.
+
+    A directory is valid when some ``SKILL.md`` exists under it recursively
+    (bundle roots with only nested skills qualify).
+    """
     if not SKILLS_ROOT.is_dir():
         return []
     entries: List[Path] = []
@@ -179,8 +211,11 @@ def list_all_skill_sources() -> List[Path]:
             continue
         # Follow into real dirs; skip if entry itself is a stray file.
         try:
-            if p.is_dir():
-                entries.append(p.resolve() if not is_link(p) else abspath_nofollow(p))
+            if not p.is_dir():
+                continue
+            candidate = p.resolve() if not is_link(p) else abspath_nofollow(p)
+            if has_skill_md(candidate):
+                entries.append(candidate)
         except OSError:
             continue
     return sorted(entries, key=lambda p: p.name.lower())
@@ -240,6 +275,10 @@ def link_one(source: Path, destination: Path) -> Dict[str, Any]:
         "message": None,
         "link_kind": "junction" if IS_WINDOWS else "symlink",
     }
+    if not has_skill_md(source):
+        item["action"] = "skipped"
+        item["message"] = "no SKILL.md under source tree; not a valid skill target"
+        return item
     if is_link(destination):
         target = link_target(destination)
         if target is not None and same_path(target, source):

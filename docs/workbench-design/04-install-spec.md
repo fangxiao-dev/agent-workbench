@@ -44,8 +44,9 @@ stdout 末行是 JSON summary（含 `platform`、`link_kind`、各 host 的 `lin
 | 来源 | 目标 | 机制 |
 |------|------|------|
 | `skills/<name>/` 或顶层 bundle 目录 | `<host>/skills/<name>` | Win junction / Unix symlink |
-| `--all` | 每个顶层 `skills/*` 目录一项 | 同上 |
+| `--all` | 每个**有效**顶层 `skills/*` 目录一项 | 同上 |
 
+- **有效目标**：目录树内递归存在至少一个 `SKILL.md`（可在子目录；根目录可以没有）。无 `SKILL.md` 的空壳目录不链接、`--all` 会跳过。
 - Bundle（如 `skills/lark-skills/`）按**顶层目录**链一次，内部子 skill 随目录暴露。
 - **不**再把整个 `skills/` 挂成一个 junction。
 - v1 **不**安装 `agents/`、`commands/`，不改项目 `.gitignore`。
