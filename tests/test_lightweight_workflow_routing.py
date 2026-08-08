@@ -13,9 +13,9 @@ def read(relative_path: str) -> str:
 def test_tdd_reuses_approved_contract_before_tracer_bullet() -> None:
     text = read("skills/tdd/SKILL.md")
 
-    assert "Reuse the interface and prioritized behaviors from a current approved spec" in text
-    assert "do not ask for a second approval before the first tracer bullet" in text
-    assert "materially changed test contract" in text
+    assert "current approved" in text
+    assert "enter the first tracer bullet without re-asking" in text
+    assert "material semantic change" in text
 
 
 def test_discuss_ledger_skips_single_pass_reviews_and_handoffs() -> None:

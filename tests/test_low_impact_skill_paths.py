@@ -9,7 +9,7 @@ def read_skill(*parts: str) -> str:
 
 
 def test_brainstorming_fast_path_skips_design_artifacts_for_bounded_work() -> None:
-    skill = read_skill("skills", "superpowers", "brainstorming", "SKILL.md")
+    skill = read_skill("skills", "brainstorming", "SKILL.md")
     assert "Trivial / Local / Reversible Fast Path" in skill
     assert "no public-contract, security, data-migration, cross-host, or irreversible effect" in skill
     assert "Do not require alternatives, a design document, a planning artifact, or design approval." in skill

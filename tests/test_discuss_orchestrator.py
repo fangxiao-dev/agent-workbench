@@ -92,7 +92,7 @@ def test_orchestrator_passes_legacy_codex_and_claude_configuration_to_executors(
     assert "read-only" in codex_args and "--ephemeral" in codex_args
     assert "--output-schema" in codex_args
     assert "--no-session-persistence" in claude_args and "--disable-slash-commands" in claude_args
-    assert "--tools" in claude_args and "" in claude_args
+    assert "--tools" in claude_args and "Read,Glob,Grep" in claude_args
     assert "--json-schema" in claude_args
     assert claude_args[claude_args.index("--effort") + 1] == "medium"
 
