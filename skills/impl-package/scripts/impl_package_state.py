@@ -39,14 +39,14 @@ TERMINAL_VERDICTS = {"pass", "fail", "defer"}
 VERDICTS = TERMINAL_VERDICTS | {"blocked"}
 
 ATTEMPT_RE = re.compile(
-    r"(?m)^(?:\*\*)?(?:执行尝试 ID（Attempt ID）|Attempt ID)(?:\*\*)?\s*[：:](?:\*\*)?\s*([^\s*]+)"
+    r"(?m)^(?:\*\*)?(?:Attempt ID|执行尝试 ID（Attempt ID）)(?:\*\*)?\s*[：:](?:\*\*)?\s*([^\s*]+)"
 )
 COMPOSITION_RE = re.compile(r"Composition[^\n]*tickets=(true|false),\s*dag=(true|false)", re.I)
-DECISION_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:决策修订（Decision Revision）|Decision Revision)(?:\*\*)?\s*[：:](?:\*\*)?\s*(D\d+)\b")
-SPEC_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:规格修订（Spec Revision）|Spec Revision)(?:\*\*)?\s*[：:](?:\*\*)?\s*(S\d+)\b")
-PLAN_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:计划修订（Plan Revision）|Plan Revision)(?:\*\*)?\s*[：:](?:\*\*)?\s*(P\d+)\b")
+DECISION_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Decision Revision|决策修订（Decision Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(D\d+)\b")
+SPEC_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Spec Revision|规格修订（Spec Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(S\d+)\b")
+PLAN_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Plan Revision|计划修订（Plan Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(P\d+)\b")
 TICKET_ID_RE = re.compile(r"(?m)^\s*\*\*Ticket ID[：:]\*\*\s*([^\s]+)")
-PUBLICATION_RE = re.compile(r"(?m)^(\*\*发布状态（Publication Status）[：:]\*\*\s*)(Draft|Approved)\s*$")
+PUBLICATION_RE = re.compile(r"(?m)^(\*\*(?:Publication Status|发布状态（Publication Status）)[：:]\*\*\s*)(Draft|Approved)\s*$")
 COMMIT_RE = re.compile(r"[0-9a-fA-F]{7,64}")
 PACKAGE_ID_RE = re.compile(r"^(?:\d{6}|\d{8}|\d{4}-\d{2}-\d{2})[-_][A-Za-z0-9].+")
 ATTEMPT_ID_RE = re.compile(r"(?:initial|[A-Za-z0-9][A-Za-z0-9_-]{0,79})")
@@ -350,7 +350,7 @@ def _ticket_projection(row: dict[str, Any]) -> str:
 
 def _publish_ticket(document: dict[str, Any], row: dict[str, Any]) -> None:
     text = document["text"]
-    text = PUBLICATION_RE.sub(r"\1Approved", text, count=1)
+    text = PUBLICATION_RE.sub("**Publication Status：** Approved", text, count=1)
     text = _replace_projection(text, "runtime-acceptance", "Runtime Acceptance", _ticket_projection(row))
     _write_text(document["path"], text)
     document.update({"text": text, "publication": "Approved"})

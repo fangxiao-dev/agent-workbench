@@ -1,11 +1,11 @@
 # [执行尝试名称] 实施计划
 
 创建时间（Created）：
-执行尝试 ID（Attempt ID）：<initial | YYYYMMDD-HHMM-patch-topic>
-决策修订（Decision Revision）：D<n>
-规格修订（Spec Revision）：S<n>
-计划修订（Plan Revision）：P<n>
-执行组合（Composition）：tickets=<true|false>, dag=<true|false>
+Attempt ID：<initial | YYYYMMDD-HHMM-patch-topic>
+Decision Revision：D<n>
+Spec Revision：S<n>
+Plan Revision：P<n>
+Composition：tickets=<true|false>, dag=<true|false>
 
 > D/S/P 是便于沟通的别名，不绑定文件内容。Git commit ID 是唯一允许持久化的版本锚点。
 

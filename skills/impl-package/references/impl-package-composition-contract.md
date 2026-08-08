@@ -16,7 +16,7 @@ D/S/P 是人类可读别名，只要求当前 package 内相互一致，不绑�
 Plan 必须声明：
 
 ```text
-执行组合（Composition）：tickets=<true|false>, dag=<true|false>
+Composition：tickets=<true|false>, dag=<true|false>
 ```
 
 四种组合都合法：

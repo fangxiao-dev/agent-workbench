@@ -2,7 +2,7 @@
 
 状态（Status）：Draft | Decision Gate Passed | Decision Gate Blocked
 创建时间（Created）：
-决策修订（Decision Revision）：D<n>
+Decision Revision：D<n>
 需求来源（Requirement source）：
 主题 slug（Topic slug）：
 任务包 ID（Package ID）：

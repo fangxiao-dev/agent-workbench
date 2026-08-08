@@ -37,16 +37,16 @@ def main() -> int:
         git(root, "config", "user.email", "fixture@example.test")
         git(root, "config", "user.name", "Fixture")
         package = root / "docs" / "implementations" / "fixture"
-        write(package / "decision.md", "# Decision\n\n<!-- impl-package:projection revision-set begin -->\n决策修订（Decision Revision）：D1\n<!-- impl-package:projection revision-set end -->\n")
-        write(package / "spec.md", "# Spec\n\n<!-- impl-package:projection revision-set begin -->\n决策修订（Decision Revision）：D1\n规格修订（Spec Revision）：S1\n<!-- impl-package:projection revision-set end -->\n")
-        write(package / "plan.md", "# Plan\n\n执行尝试 ID（Attempt ID）：initial\n<!-- impl-package:projection revision-set begin -->\n决策修订（Decision Revision）：D1\n规格修订（Spec Revision）：S1\n计划修订（Plan Revision）：P1\n<!-- impl-package:projection revision-set end -->\n执行组合（Composition）：tickets=false, dag=true\n\n## Execution Record\n\n")
+        write(package / "decision.md", "# Decision\n\n<!-- impl-package:projection revision-set begin -->\nDecision Revision：D1\n<!-- impl-package:projection revision-set end -->\n")
+        write(package / "spec.md", "# Spec\n\n<!-- impl-package:projection revision-set begin -->\nDecision Revision：D1\nSpec Revision：S1\n<!-- impl-package:projection revision-set end -->\n")
+        write(package / "plan.md", "# Plan\n\nAttempt ID：initial\n<!-- impl-package:projection revision-set begin -->\nDecision Revision：D1\nSpec Revision：S1\nPlan Revision：P1\n<!-- impl-package:projection revision-set end -->\nComposition：tickets=false, dag=true\n\n## Execution Record\n\n")
         write(package / "tickets" / "one.md", "# One\n\n**Ticket ID：** FIXTURE-01\n")
         write(package / "tickets" / "two.md", "# Two\n\n**Ticket ID：** FIXTURE-02\n")
         write(
             package / "dag.md",
             """# Fixture DAG
 
-执行尝试 ID（Attempt ID）：initial
+Attempt ID：initial
 
 <!-- impl-package:projection runtime-state begin -->
 <!-- impl-package:projection runtime-state end -->

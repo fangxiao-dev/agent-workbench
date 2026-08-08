@@ -2,8 +2,8 @@
 
 状态（Status）：Draft | Spec Gate Passed | Spec Gate Blocked
 创建时间（Created）：
-决策修订（Decision Revision）：D<n>
-规格修订（Spec Revision）：S<n>
+Decision Revision：D<n>
+Spec Revision：S<n>
 需求来源（Requirement source）：
 主题 slug（Topic slug）：
 任务包 ID（Package ID）：

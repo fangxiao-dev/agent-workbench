@@ -44,11 +44,11 @@ class ImplPackageStateTests(unittest.TestCase):
         git(repo, "config", "user.name", "Test")
         package = repo / "docs" / "implementations" / "260806-example"
         package.mkdir(parents=True)
-        (package / "decision.md").write_text("# Decision\n\n决策修订（Decision Revision）：D1\n", encoding="utf-8")
-        (package / "spec.md").write_text("# Spec\n\n决策修订（Decision Revision）：D1\n规格修订（Spec Revision）：S1\n", encoding="utf-8")
+        (package / "decision.md").write_text("# Decision\n\nDecision Revision：D1\n", encoding="utf-8")
+        (package / "spec.md").write_text("# Spec\n\nDecision Revision：D1\nSpec Revision：S1\n", encoding="utf-8")
         (package / "plan.md").write_text(
-            "# Plan\n\n执行尝试 ID（Attempt ID）：initial\n决策修订（Decision Revision）：D1\n规格修订（Spec Revision）：S1\n计划修订（Plan Revision）：P1\n"
-            f"执行组合（Composition）：tickets={str(tickets).lower()}, dag={str(dag).lower()}\n",
+            "# Plan\n\nAttempt ID：initial\nDecision Revision：D1\nSpec Revision：S1\nPlan Revision：P1\n"
+            f"Composition：tickets={str(tickets).lower()}, dag={str(dag).lower()}\n",
             encoding="utf-8",
         )
         if tickets:
@@ -60,7 +60,7 @@ class ImplPackageStateTests(unittest.TestCase):
             if second_task:
                 rows.append("| T2 | api | T1 | TKT-01 | seam |")
             (package / "dag.md").write_text(
-                "# DAG\n\n执行尝试 ID（Attempt ID）：initial\n规格修订（Spec Revision）：S1\n计划修订（Plan Revision）：P1\n\n"
+                "# DAG\n\nAttempt ID：initial\nSpec Revision：S1\nPlan Revision：P1\n\n"
                 "## Task graph\n\n| Task | Primary ownership | Known depends on | Contributes to tickets | Known seam / risk |\n"
                 "| --- | --- | --- | --- | --- |\n" + "\n".join(rows) + "\n",
                 encoding="utf-8",
@@ -81,10 +81,10 @@ class ImplPackageStateTests(unittest.TestCase):
     ) -> None:
         path.write_text(
             f"# Ticket\n\n**Ticket ID：** {identifier}\n"
-            "**发布状态（Publication Status）：** Draft\n"
-            f"**执行尝试 ID（Attempt ID）：** {attempt}\n"
-            "**规格修订（Spec Revision）：** S1\n"
-            f"**计划修订（Plan Revision）：** {plan}\n\n"
+            "**Publication Status：** Draft\n"
+            f"**Attempt ID：** {attempt}\n"
+            "**Spec Revision：** S1\n"
+            f"**Plan Revision：** {plan}\n\n"
             "## 验收标准\n\n- AC-1: works\n\n"
             f"## 阻塞依赖\n\n- {dependency}\n",
             encoding="utf-8",
@@ -166,9 +166,38 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(set(self.state(package)["tickets"]), {"TKT-01"})
         current = (package / "tickets/01.md").read_text(encoding="utf-8")
         old = (package / "tickets/old.md").read_text(encoding="utf-8")
-        self.assertIn("Publication Status）：** Approved", current)
+        self.assertIn("**Publication Status：** Approved", current)
+        self.assertNotIn("发布状态（Publication Status）", current)
         self.assertIn("Runtime Acceptance Status: PENDING", current)
-        self.assertIn("Publication Status）：** Draft", old)
+        self.assertIn("**Publication Status：** Draft", old)
+
+    def test_legacy_bilingual_labels_remain_readable(self) -> None:
+        temp, repo, package = self.make_repo(tickets=True)
+        self.addCleanup(temp.cleanup)
+        replacements = {
+            "Attempt ID": "执行尝试 ID（Attempt ID）",
+            "Decision Revision": "决策修订（Decision Revision）",
+            "Spec Revision": "规格修订（Spec Revision）",
+            "Plan Revision": "计划修订（Plan Revision）",
+            "Composition": "执行组合（Composition）",
+            "Publication Status": "发布状态（Publication Status）",
+        }
+        for path in (
+            package / "decision.md",
+            package / "spec.md",
+            package / "plan.md",
+            package / "tickets/01.md",
+        ):
+            text = path.read_text(encoding="utf-8")
+            for current, legacy in replacements.items():
+                text = text.replace(current, legacy)
+            path.write_text(text, encoding="utf-8")
+
+        result = self.init(repo, package)
+        self.assertEqual(result["tickets"], 1)
+        current = (package / "tickets/01.md").read_text(encoding="utf-8")
+        self.assertIn("**Publication Status：** Approved", current)
+        self.assertNotIn("发布状态（Publication Status）", current)
 
     def test_aliases_are_checked_without_binding_state(self) -> None:
         temp, repo, package = self.make_repo()
@@ -318,7 +347,7 @@ class ImplPackageStateTests(unittest.TestCase):
         head = git(repo, "rev-parse", "HEAD")
         self.cli(repo, package, "gate", "fail", "--comparison-commit", head, "--reason", "needs patch", "--no-durable-delta-reason", "implementation defect only")
         (package / "patch-a.patch-plan.md").write_text(
-            "# Patch Plan\n\n执行尝试 ID（Attempt ID）：patch-a\n决策修订（Decision Revision）：D1\n规格修订（Spec Revision）：S1\n计划修订（Plan Revision）：P2\n执行组合（Composition）：tickets=false, dag=false\n",
+            "# Patch Plan\n\nAttempt ID：patch-a\nDecision Revision：D1\nSpec Revision：S1\nPlan Revision：P2\nComposition：tickets=false, dag=false\n",
             encoding="utf-8",
         )
         result = self.init(repo, package, attempt="patch-a", plan="patch-a.patch-plan.md")
