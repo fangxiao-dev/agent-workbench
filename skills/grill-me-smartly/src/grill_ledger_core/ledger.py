@@ -43,6 +43,14 @@ class LedgerStatus:
 
 
 def ledger_path(root: Path | str, slug: str, directory: str = DEFAULT_DIR) -> Path:
+    return Path(root) / directory / f"grill-{slug}.ledger.md"
+
+
+def review_path(root: Path | str, slug: str, directory: str = DEFAULT_DIR) -> Path:
+    return Path(root) / directory / f"grill-{slug}.review.md"
+
+
+def _legacy_ledger_path(root: Path | str, slug: str, directory: str = DEFAULT_DIR) -> Path:
     return Path(root) / directory / f"grill-{slug}.md"
 
 
@@ -79,8 +87,14 @@ def _load_state(path: Path) -> dict:
     return json.loads(text[start:end].strip())
 
 
-def _write_state(root: Path | str, slug: str, state: dict, directory: str = DEFAULT_DIR) -> Path:
-    path = ledger_path(root, slug, directory)
+def _write_state(
+    root: Path | str,
+    slug: str,
+    state: dict,
+    directory: str = DEFAULT_DIR,
+    path: Path | None = None,
+) -> Path:
+    path = path or ledger_path(root, slug, directory)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_render(state), encoding="utf-8")
     return path
@@ -89,7 +103,10 @@ def _write_state(root: Path | str, slug: str, state: dict, directory: str = DEFA
 def _load(root: Path | str, slug: str, directory: str = DEFAULT_DIR) -> tuple[Path, dict]:
     path = ledger_path(root, slug, directory)
     if not path.exists():
-        raise FileNotFoundError(f"ledger not found: {path}")
+        legacy_path = _legacy_ledger_path(root, slug, directory)
+        if not legacy_path.exists():
+            raise FileNotFoundError(f"ledger not found: {path}")
+        path = legacy_path
     return path, _load_state(path)
 
 
@@ -153,8 +170,9 @@ def init_ledger(
     if not _slug_is_safe(slug):
         raise ValueError("slug may contain only letters, numbers, dot, underscore, and dash")
     path = ledger_path(root, slug, directory)
-    if path.exists() and not force:
-        raise FileExistsError(f"ledger already exists: {path}; use status or pass force=True")
+    existing_path = path if path.exists() else _legacy_ledger_path(root, slug, directory)
+    if existing_path.exists() and not force:
+        raise FileExistsError(f"ledger already exists: {existing_path}; use status or pass force=True")
     state = _initial_state(topic, slug, initiator)
     path = _write_state(root, slug, state, directory)
     return CommandResult(f"initialized Q ledger at {path}")
@@ -171,7 +189,7 @@ def add_question(
     recommended_default: str,
     directory: str = DEFAULT_DIR,
 ) -> QuestionResult:
-    _, state = _load(root, slug, directory)
+    path, state = _load(root, slug, directory)
     _add_participant(state, author)
     question_id = _next_question_id(state)
     state["questions"].append(
@@ -196,7 +214,7 @@ def add_question(
     state["events"].append(f"{author} 提出 {question_id}: {question}")
     state["frontmatter"]["status"] = STATUS_OPEN
     state["frontmatter"]["next"] = "answerer"
-    path = _write_state(root, slug, state, directory)
+    path = _write_state(root, slug, state, directory, path=path)
     return QuestionResult(f"added {question_id} at {path}", question_id=question_id)
 
 
@@ -212,7 +230,7 @@ def record_answer(
     needs_user: bool,
     directory: str = DEFAULT_DIR,
 ) -> CommandResult:
-    _, state = _load(root, slug, directory)
+    path, state = _load(root, slug, directory)
     _add_participant(state, author)
     item = _require_question(state, question)
     item["answer_author"] = author
@@ -223,7 +241,7 @@ def record_answer(
     item["status"] = Q_STATUS_ANSWERED
     state["events"].append(f"{author} 回答 {question}: {answer}")
     _recompute_status(state)
-    _write_state(root, slug, state, directory)
+    _write_state(root, slug, state, directory, path=path)
     return CommandResult(f"recorded answer for {question}")
 
 
@@ -237,7 +255,7 @@ def converge_question(
     impact: str,
     directory: str = DEFAULT_DIR,
 ) -> CommandResult:
-    _, state = _load(root, slug, directory)
+    path, state = _load(root, slug, directory)
     item = _require_question(state, question)
     item["status"] = Q_STATUS_CONVERGED
     item["decision"] = line
@@ -256,7 +274,7 @@ def converge_question(
     state["needs_user"] = [n for n in state["needs_user"] if n["question"] != question]
     state["events"].append(f"{question} 收敛: {line}")
     _recompute_status(state)
-    _write_state(root, slug, state, directory)
+    _write_state(root, slug, state, directory, path=path)
     return CommandResult(f"converged {question}")
 
 
@@ -268,23 +286,23 @@ def need_user(
     line: str,
     directory: str = DEFAULT_DIR,
 ) -> CommandResult:
-    _, state = _load(root, slug, directory)
+    path, state = _load(root, slug, directory)
     item = _require_question(state, question)
     item["status"] = Q_STATUS_NEEDS_USER
     state["needs_user"] = [n for n in state["needs_user"] if n["question"] != question]
     state["needs_user"].append({"question": question, "line": line, "branch": item["branch"]})
     state["events"].append(f"{question} 需要用户裁决: {line}")
     _recompute_status(state)
-    _write_state(root, slug, state, directory)
+    _write_state(root, slug, state, directory, path=path)
     return CommandResult(f"marked {question} as needing user")
 
 
 def end_turn(*, root: Path | str, slug: str, directory: str = DEFAULT_DIR) -> CommandResult:
-    _, state = _load(root, slug, directory)
+    path, state = _load(root, slug, directory)
     status = _recompute_status(state)
     if status == STATUS_OPEN:
         state["frontmatter"]["round"] += 1
-    _write_state(root, slug, state, directory)
+    _write_state(root, slug, state, directory, path=path)
     return CommandResult(f"ended turn; status = {status}")
 
 
@@ -295,10 +313,12 @@ def stop_review(
     proof: str,
     directory: str = DEFAULT_DIR,
 ) -> CommandResult:
-    _, state = _load(root, slug, directory)
+    path, state = _load(root, slug, directory)
     status = _mark_stopped(state, proof)
-    _write_state(root, slug, state, directory)
-    return CommandResult(f"stopped review; status = {status}")
+    _write_state(root, slug, state, directory, path=path)
+    final_review_path = review_path(root, slug, directory)
+    final_review_path.write_text(_render_review(state, path), encoding="utf-8")
+    return CommandResult(f"stopped review; status = {status}; review = {final_review_path}")
 
 
 def get_status(*, root: Path | str, slug: str, directory: str = DEFAULT_DIR) -> LedgerStatus:
@@ -312,7 +332,12 @@ def get_status(*, root: Path | str, slug: str, directory: str = DEFAULT_DIR) -> 
 
 
 def read_markdown(*, root: Path | str, slug: str, directory: str = DEFAULT_DIR) -> str:
-    return ledger_path(root, slug, directory).read_text(encoding="utf-8")
+    path, _ = _load(root, slug, directory)
+    return path.read_text(encoding="utf-8")
+
+
+def read_review(*, root: Path | str, slug: str, directory: str = DEFAULT_DIR) -> str:
+    return review_path(root, slug, directory).read_text(encoding="utf-8")
 
 
 def _render_frontmatter(fm: dict) -> str:
@@ -452,6 +477,52 @@ def _render(state: dict) -> str:
         "",
     ]
     return "\n".join(chunks)
+
+
+def _render_review(state: dict, source_ledger: Path) -> str:
+    frontmatter = state["frontmatter"]
+    converged_count = len(state["convergences"])
+    pending_count = len(state["needs_user"])
+    lines = [
+        "---",
+        f"status: {json.dumps(frontmatter['status'], ensure_ascii=False)}",
+        f"topic: {json.dumps(frontmatter['topic'], ensure_ascii=False)}",
+        f"slug: {json.dumps(frontmatter['slug'], ensure_ascii=False)}",
+        f"source_ledger: {json.dumps(source_ledger.name, ensure_ascii=False)}",
+        "---",
+        "",
+        f"# Grill Review：{frontmatter['topic']}",
+        "",
+        f"- 状态：{frontmatter['status']}",
+        f"- 已收敛决策：{converged_count}",
+        f"- 待用户裁决：{pending_count}",
+        f"- 审计记录：`{source_ledger.name}`",
+        "",
+        "## 最终结论",
+        "",
+    ]
+    if not state["convergences"]:
+        lines.append("- 尚无已收敛决策。")
+    else:
+        for item in state["convergences"]:
+            lines.extend(
+                [
+                    f"### {item['question']} · {item['line']}",
+                    "",
+                    f"- 理由：{item['rationale']}",
+                    f"- 影响：{item['impact']}",
+                    f"- 证据：{item['evidence'] or '未记录'}",
+                    "",
+                ]
+            )
+    lines.extend(["## 待用户裁决", ""])
+    if not state["needs_user"]:
+        lines.append("- 暂无。")
+    else:
+        for item in state["needs_user"]:
+            lines.append(f"- **{item['question']} / {item['branch']}**：{item['line']}")
+    lines.extend(["", "## 停止依据", "", state["stop_proof"], ""])
+    return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:

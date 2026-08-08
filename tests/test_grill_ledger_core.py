@@ -132,6 +132,7 @@ def test_grill_ledger_end_turn_statuses(tmp_path: Path) -> None:
     final_result = ledger.end_turn(root=tmp_path, slug="status")
     assert "status = 进行中" in final_result.message
     assert ledger.get_status(root=tmp_path, slug="status").frontmatter["status"] == ledger.STATUS_OPEN
+    assert not ledger.review_path(tmp_path, "status").exists()
 
     stop_result = ledger.stop_review(
         root=tmp_path,
@@ -140,6 +141,92 @@ def test_grill_ledger_end_turn_statuses(tmp_path: Path) -> None:
     )
     assert "status = 已收敛" in stop_result.message
     assert ledger.get_status(root=tmp_path, slug="status").frontmatter["status"] == ledger.STATUS_CONVERGED
+
+    review = ledger.read_review(root=tmp_path, slug="status")
+    assert "# Grill Review：Plan" in review
+    assert "## 最终结论" in review
+    assert "新增 pytest 覆盖 ledger 行为。" in review
+    assert "和现有 discuss-ledger core 测试保持一致。" in review
+    assert "仓库已有 pytest 测试风格。" in review
+    assert "## 停止依据" in review
+    assert "Questioner 确认所有 material branches 已覆盖" in review
+    assert "## 完整记录" not in review
+    assert "## 问题与回答总览" not in review
+    assert "<!-- grill-ledger-state" not in review
+    assert "是否需要新增测试?" not in review
+
+
+def test_stop_with_user_decision_writes_review_without_process_log(tmp_path: Path) -> None:
+    from grill_ledger_core import ledger
+
+    ledger.init_ledger(root=tmp_path, topic="Plan", slug="pending", initiator="Codex")
+    ledger.add_question(
+        root=tmp_path,
+        slug="pending",
+        author="Questioner",
+        branch="风险偏好",
+        question="是否接受破坏兼容?",
+        why_now="这决定迁移策略。",
+        recommended_default="默认不破坏兼容。",
+    )
+    ledger.record_answer(
+        root=tmp_path,
+        slug="pending",
+        question="Q1",
+        author="Answerer",
+        answer="需要用户裁决。",
+        evidence="本地没有风险偏好记录。",
+        uncertainty="用户意图未知。",
+        needs_user=True,
+    )
+    ledger.need_user(
+        root=tmp_path,
+        slug="pending",
+        question="Q1",
+        line="请裁决是否接受破坏兼容。",
+    )
+
+    ledger.stop_review(
+        root=tmp_path,
+        slug="pending",
+        proof="剩余问题仅依赖真实用户裁决。",
+    )
+
+    review = ledger.read_review(root=tmp_path, slug="pending")
+    assert "status: \"待用户裁决\"" in review
+    assert "## 待用户裁决" in review
+    assert "请裁决是否接受破坏兼容。" in review
+    assert "为什么现在问" not in review
+    assert "需要用户裁决。" not in review
+
+
+def test_existing_legacy_ledger_remains_readable_and_writable(tmp_path: Path) -> None:
+    from grill_ledger_core import ledger
+
+    ledger.init_ledger(root=tmp_path, topic="Legacy", slug="legacy", initiator="Codex")
+    new_path = ledger.ledger_path(tmp_path, "legacy")
+    legacy_path = tmp_path / ledger.DEFAULT_DIR / "grill-legacy.md"
+    new_path.rename(legacy_path)
+
+    ledger.add_question(
+        root=tmp_path,
+        slug="legacy",
+        author="Questioner",
+        branch="兼容",
+        question="旧 ledger 能否继续?",
+        why_now="避免中断现有审阅。",
+        recommended_default="继续读取旧文件。",
+    )
+
+    assert "旧 ledger 能否继续?" in legacy_path.read_text(encoding="utf-8")
+    assert not new_path.exists()
+
+    try:
+        ledger.init_ledger(root=tmp_path, topic="Replacement", slug="legacy", initiator="Codex")
+    except FileExistsError as exc:
+        assert str(legacy_path) in str(exc)
+    else:
+        raise AssertionError("init_ledger should not overwrite an existing legacy ledger")
 
 
 def test_grill_ledger_init_refuses_to_overwrite_existing_ledger(tmp_path: Path) -> None:

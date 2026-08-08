@@ -12,10 +12,7 @@ description: >
 
 Use this skill to stress-test a plan through a ledger-driven review loop.
 
-The ledger is the source of truth. It records every question, every answer, all
-converged decisions, unresolved user-intent questions, and the stop proof. The
-top of the ledger is written in Chinese so the user can quickly see what the
-agents decided, why, and what still needs their judgment.
+Ledger 是过程 source of truth，记录所有问题、回答、已收敛决策、待用户裁决项和停止证明。只有审阅合法停止时才生成独立的中文 Grill Review；它是面向人的审阅交付物，只呈现最终状态，不混入过程日志。
 
 ## User Invocation
 
@@ -34,15 +31,10 @@ the internal role split, ledger mechanics, or subagent choreography.
 
 This skill has two separate phases:
 
-1. **Review phase**: produce the full Chinese alignment document in the Grill
-   Ledger. Do not edit the reviewed plan, spec, PRD, or source document during
-   this phase.
-2. **Apply phase**: update the reviewed document only after the user has read
-   the alignment document and explicitly asks to apply it.
+1. **Review phase**：在 Grill Ledger 中维护完整过程，并在审阅合法停止时生成中文 Grill Review。本阶段不修改被审阅的 plan、spec、PRD 或源文档。
+2. **Apply phase**：只有用户读过 Grill Review 并明确要求 apply 后，才更新被审阅文档。
 
-The Grill Ledger is the review deliverable. It should be complete enough for the
-user to quickly understand all proposed choices, all questions asked and
-answered, and all remaining user decisions before any target document changes.
+Grill Review 是面向人的审阅交付物，必须让用户无需阅读 Grill Ledger 就能理解最终选择、证据、影响、待裁决项和停止依据。Grill Ledger 继续作为 audit trail 保留。
 
 ## Roles
 
@@ -66,7 +58,8 @@ Ledgers live under the user's OS temporary directory, not the current
 workspace:
 
 ```text
-<os-temp>/codex-grill/grill-<slug>.md
+<os-temp>/codex-grill/grill-<slug>.ledger.md
+<os-temp>/codex-grill/grill-<slug>.review.md
 ```
 
 The script defaults to that temp location. Do not create repo-local
@@ -77,8 +70,7 @@ Use a slug from the reviewed document basename when possible. If the review is
 not anchored to a file and no obvious slug exists, ask the user for a short
 slug.
 
-`init` refuses to overwrite an existing ledger. If a ledger exists, use
-`status` and continue from it.
+`init` 拒绝覆盖已有 ledger；如果文件已存在，使用 `status` 并从中继续。为兼容既有记录，仍可读取旧的 `grill-<slug>.md`。只有合法执行 `stop` 时才创建或刷新 review 文件。
 
 ## Ledger Commands
 
@@ -108,8 +100,7 @@ Use PowerShell quoting rules when values contain spaces.
 2. **Initialize or load the ledger.**
    - If no ledger exists, run `init`.
    - If one exists, run `status` and read the Markdown file before continuing.
-   - Treat the Chinese sections at the top as the current human-readable state,
-     but use the script for all updates.
+   - 顶部中文区是实时过程摘要，所有更新仍通过脚本完成；它不是最终的人类审阅交付物。
 
 3. **Start or reuse the standing Questioner.**
    - Give it the plan snapshot and the current ledger summary.
@@ -166,7 +157,8 @@ Use PowerShell quoting rules when values contain spaces.
    - Use `stop --proof` only after the Questioner or critic has provided the
      stop proof. Individual converged questions do not automatically end the
      whole review.
-   - The final response must name the temp ledger path and summarize:
+   - `stop` 必须根据 ledger 最终状态生成 `grill-<slug>.review.md`。Review 包含最终决策、理由、影响、证据、待用户裁决项和停止依据，不包含问题流水和机器状态。
+   - 最终回复必须给出两个临时文件路径，并总结：
      - decisions already made
      - questions asked and answered
      - what still needs the user
@@ -175,15 +167,14 @@ Use PowerShell quoting rules when values contain spaces.
      want the reviewed document changed.
 
 10. **Apply only after user approval.**
-    - When the user explicitly asks to apply the alignment, read the latest
-      ledger and the target document.
+    - 用户明确要求 apply 时，读取最新 Grill Review、它引用的源 ledger 和目标文档。
     - Apply only the converged decisions and user-approved裁决.
     - Preserve unresolved items in the ledger or ask the user before changing
       the target document.
 
 ## Chinese Summary Requirements
 
-The ledger's top sections are the user's fast-read surface:
+Ledger 顶部各区构成实时过程摘要：
 
 - `已收敛决策摘要`: every choice the agents made on the user's behalf, with
   reason, impact, and evidence.
@@ -193,7 +184,7 @@ The ledger's top sections are the user's fast-read surface:
   review.
 - `停止证明`: why the automatic review may stop or why it must continue.
 
-Keep these sections understandable without reading the full log.
+这些区块必须在不读完整日志时也能理解。合法停止时，脚本把最终决策状态写入独立的 Grill Review；该文件是用户的 approval surface。
 
 ## Question Quality Bar
 
@@ -220,7 +211,5 @@ Bad questions:
 - Letting subagents write Markdown directly. The script owns ledger structure.
 - Treating the first answer as the whole review. Continue until the stop proof
   is valid.
-- Recording only the final decision. The tool must preserve all questions and
-  answers for user auditability.
-- Editing the reviewed document during the review phase. First produce the full
-  alignment document, then wait for explicit user approval before applying it.
+- 只记录最终决策。问题与回答保留在 ledger 中，停止时再发布独立的最终 Grill Review。
+- 在 review phase 修改被审阅文档。先生成 Grill Review，再等待用户明确批准 apply。
