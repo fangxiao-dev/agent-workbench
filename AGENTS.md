@@ -1,19 +1,20 @@
 # AGENTS.md
 
-This repository is a multi-host agent-workbench for `codex`, `claude`, and `gemini`.
+This repository is a multi-host agent-workbench for `codex`, `claude`, and `grok`.
 
 ## Source Of Truth
 
 - Use this file as the single instruction source.
-- If host-specific entry files are required (`CLAUDE.md`, `GEMINI.md`), make them aliases to this file when possible.
+- If host-specific entry files are required (`CLAUDE.md`), make them aliases to this file when possible.
 
 ## Working Rules
 
 - Keep changes host-neutral unless a host-specific behavior is required.
 - Unless the user explicitly specifies a remote branch, branch references mean local branches; for example, "merge into `develop`" means the local `develop` branch.
-- Do not mutate user-level host state (`~/.claude`, `~/.codex`, `~/.gemini`) unless the task explicitly asks for it.
-- Prefer updating installer logic and docs together so behavior and guidance stay aligned.
-- Preserve non-destructive installation behavior: skip conflicts and report clearly.
+- Do not mutate user-level host state (`~/.claude`, `~/.codex`, `~/.grok`) unless the task explicitly asks for it.
+- Prefer updating skill-link installer logic and docs together so behavior and guidance stay aligned.
+- Preserve non-destructive skill linking: skip conflicts and report clearly.
+- To expose a skill on a host, use `scripts/link_skill.py` (Windows junction / Unix symlink), not whole-tree `skills/` takeover.
 
 ## Skill-Driven Workflow
 
@@ -34,18 +35,17 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `gemi
 
 ## Implementation Expectations
 
-- When adding a host, update both installers:
-  - `install.sh`
-  - `install.ps1`
-- Keep tests in sync with installer behavior:
-  - `tests/install.ps1`
+- When adding a host for skill linking, update:
+  - `scripts/link_skill.py` (`HOST_NAMES` / path mapping)
+  - `tests/test_link_skill.py`
 - Keep user docs in sync:
   - `README.md`
-  - relevant files under `docs/workbench-design/`
+  - `docs/workbench-design/04-install-spec.md`
 
 ## Validation
 
-- Run installer tests after installer changes:
-  - `powershell -ExecutionPolicy Bypass -File tests/install.ps1`
+- Run skill-link tests after installer changes:
+  - `python -m pytest tests/test_link_skill.py -q`
+  - or `powershell -ExecutionPolicy Bypass -File tests/install.ps1` (wrapper)
 - If third-party registry logic changed, also run:
   - `powershell -ExecutionPolicy Bypass -File skills/import-third-party-skill/scripts/test-import-third-party-skill.ps1`

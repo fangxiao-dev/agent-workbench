@@ -2,7 +2,7 @@
 param(
     [string]$ClaudeSkillsRoot,
     [string]$CodexSkillsRoot,
-    [string]$GeminiSkillsRoot,
+    [string]$GrokSkillsRoot,
     [string]$CodexSuperpowersRoot,
     [string]$AgentsSkillsRoot,
     [ValidateSet("Text", "Json")]
@@ -17,8 +17,12 @@ if (-not $ClaudeSkillsRoot) {
 if (-not $CodexSkillsRoot) {
     $CodexSkillsRoot = Join-Path $env:USERPROFILE ".codex\skills"
 }
-if (-not $GeminiSkillsRoot) {
-    $GeminiSkillsRoot = Join-Path $env:USERPROFILE ".gemini\skills"
+if (-not $GrokSkillsRoot) {
+    if ($env:GROK_HOME) {
+        $GrokSkillsRoot = Join-Path $env:GROK_HOME "skills"
+    } else {
+        $GrokSkillsRoot = Join-Path $env:USERPROFILE ".grok\skills"
+    }
 }
 if (-not $CodexSuperpowersRoot) {
     $CodexSuperpowersRoot = Join-Path $env:USERPROFILE ".codex\superpowers\skills"
@@ -163,14 +167,14 @@ $codexReport = Get-VisibleHostSkills -HostName "Codex" -SourceSpecs @(
     @{ Label = "personal/global"; Path = $AgentsSkillsRoot }
 )
 
-$geminiReport = Get-VisibleHostSkills -HostName "Gemini" -SourceSpecs @(
-    @{ Label = "installed by workbench"; Path = $GeminiSkillsRoot }
+$grokReport = Get-VisibleHostSkills -HostName "Grok" -SourceSpecs @(
+    @{ Label = "installed by workbench"; Path = $GrokSkillsRoot }
     @{ Label = "personal/global"; Path = $AgentsSkillsRoot }
 )
 
 $report = [PSCustomObject]@{
     GeneratedAt = (Get-Date).ToString("s")
-    Hosts = @($claudeReport, $codexReport, $geminiReport)
+    Hosts = @($claudeReport, $codexReport, $grokReport)
 }
 
 if ($Format -eq "Json") {

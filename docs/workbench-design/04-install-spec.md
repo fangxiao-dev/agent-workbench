@@ -1,75 +1,76 @@
 # 安装器规范
 
-`install.sh` 和 `install.ps1` 负责把 workbench 能力暴露给已选 agent 宿主。当前支持宿主：
+主安装入口是 **`scripts/link_skill.py`**：把 workbench 里**单个（或全部顶层）skill 目录** link 到宿主的 `skills/<name>`。
 
-- `claude`
-- `codex`
-- `gemini`
+| 平台 | 链接类型 |
+|------|----------|
+| Windows | 目录 **junction**（`mklink /J`） |
+| Linux / macOS / 其它 Unix | 目录 **symlink** |
+
+支持宿主：
+
+- `claude` → `~/.claude/skills`
+- `codex` → `~/.codex/skills`
+- `grok` → `~/.grok/skills`（可用 `GROK_HOME` 覆盖 grok 根）
 
 ## 调用方式
 
-默认安装到当前目录，并自动发现本机存在的已知宿主：
-
 ```bash
-bash /path/to/agent-workbench/install.sh
+# 单个 skill → 一个或多个宿主
+python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --host claude
+python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --host claude codex grok
+
+# 全部顶层 skills/*
+python3 /path/to/agent-workbench/scripts/link_skill.py --all --host claude
+
+# 自定义目标 skills 目录
+python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --to /path/to/skills
+
+# 只拆整树 link、建真实目录，不装 skill
+python3 /path/to/agent-workbench/scripts/link_skill.py --migrate-only --host claude
+
+# 卸载宿主侧 link（不删除 workbench skills/ 源头）
+python3 /path/to/agent-workbench/scripts/link_skill.py verify-registry-state --unlink --host claude
+python3 /path/to/agent-workbench/scripts/link_skill.py verify-registry-state --uninstall --host claude grok
 ```
 
-```powershell
-powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\install.ps1
-```
+stdout 末行是 JSON summary（含 `platform`、`link_kind`、各 host 的 `linked|skipped|conflict`）。
+`--json` 时只打印该对象（仍不混入其它噪音）。
 
-也可以显式指定目标项目和宿主：
+退出码：`0` 成功/仅 skip；`2` 有 conflict；`1` 参数错误或拒绝操作。
 
-```bash
-bash /path/to/agent-workbench/install.sh /path/to/project claude codex gemini
-```
-
-```powershell
-powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\install.ps1 D:\path\to\project claude codex gemini
-```
-
-## 安装内容
+## 安装粒度
 
 | 来源 | 目标 | 机制 |
 |------|------|------|
-| `skills/` | `<host-root>/skills/` | Windows junction；Bash/Unix symlink |
-| `agents/*/` | `<host-root>/agents/<name>/` | Windows junction；Bash/Unix symlink |
-| `commands/*` | `<host-root>/commands/<name>` | 复制文件 |
+| `skills/<name>/` 或顶层 bundle 目录 | `<host>/skills/<name>` | Win junction / Unix symlink |
+| `--all` | 每个顶层 `skills/*` 目录一项 | 同上 |
 
-`skills/` 可以包含直接 skill（`skills/<name>/SKILL.md`）和 bundle skill（`skills/<bundle>/<name>/SKILL.md`）。安装器保持非破坏策略：Windows 暴露整个 `skills/`，Bash/Unix 链接顶层目录，因此 bundle 作为一个顶层目录暴露，内部 skill 通过递归发现或宿主扫描读取。
+- Bundle（如 `skills/lark-skills/`）按**顶层目录**链一次，内部子 skill 随目录暴露。
+- **不**再把整个 `skills/` 挂成一个 junction。
+- v1 **不**安装 `agents/`、`commands/`，不改项目 `.gitignore`。
 
-`backfill-stable-docs` 随 `skills/impl-package/` 暴露给宿主，公共调用名仍为 `$backfill-stable-docs`。安装器不注册 marketplace、不调用 Codex Plugin CLI，也不清理用户的 Plugin 状态；安装验证必须覆盖嵌套目录下的 SKILL.md 发现。
+## 整树迁移
 
-宿主根目录：
+若 `<host>/skills` 本身是指向**本 workbench `skills/` 根**的 junction/symlink：
 
-- `claude` -> `~/.claude`
-- `codex` -> `~/.codex`
-- `gemini` -> `~/.gemini`
+1. 删除该 reparse/symlink 节点（不删 workbench 内容）
+2. 创建真实目录
+3. 再写入 per-skill link
+
+若 link 指向**其它**路径：拒绝修改并报错。
 
 ## 冲突策略
 
-安装器是非破坏性的：
+非破坏：
 
-- 目标不存在：创建链接或复制文件。
-- 目标已经指向当前 workbench：跳过并报告 `already linked` 或 `already copied`。
-- 目标存在但内容或目标不同：跳过并报告 `conflict`。
-- 不删除、不覆盖已有目录、文件或其他链接。
-
-`commands/` 使用复制，因此 command 内容变更后需要重跑安装器同步。
-
-## `.gitignore` 处理
-
-安装器会确保目标项目 `.gitignore` 包含：
-
-```gitignore
-.claude/settings.local.json
-```
-
-该文件是 Claude 的本机权限状态，不应提交到项目仓库。
+- 目标不存在：创建 link
+- 目标已是指向同一源的 link：`skipped`
+- 目标存在且不同：`conflict`，不覆盖（无 `--force`）
 
 ## 独立 MCP 注册脚本
 
-主安装器只安装 skills、agents、commands，不自动注册项目级 MCP server。需要启用 `discuss-ledger` MCP 时，使用独立脚本：
+`discuss-ledger` MCP 仍用独立脚本，与 `link_skill.py` 无关：
 
 ```bash
 bash /path/to/agent-workbench/scripts/install-discuss-ledger-mcp.sh /path/to/project codex claude
@@ -79,23 +80,11 @@ bash /path/to/agent-workbench/scripts/install-discuss-ledger-mcp.sh /path/to/pro
 powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\scripts\install-discuss-ledger-mcp.ps1 D:\path\to\project codex claude
 ```
 
-约束：
-
-- host 参数仅支持 `codex` / `claude`
-- Codex 只写目标项目内 `.codex/config.toml` 的 `[mcp_servers.discussLedger]`
-- 注册命令使用 `uv run python <mcp_server.py> --root <target-project>`，`cwd` 为 workbench 根目录
-- 如果 Codex 已存在不同的 `discussLedger` 配置，跳过并报告冲突，不覆盖
-- Claude 优先执行 `claude mcp add --scope project discuss-ledger -- uv run python <mcp_server.py> --root <target-project>`
-- 如果 `claude` CLI 不存在，打印 `.mcp.json` 片段并成功退出
-- MCP server 不向 agent 暴露 `set_next`；下一位发言者由用户或编排器通过 CLI/core 指定
-
 ## 维护要求
 
-新增宿主时必须同步更新：
+新增宿主时同步更新：
 
-- `install.sh`
-- `install.ps1`
-- `tests/install.ps1`
+- `scripts/link_skill.py` 的 `HOST_NAMES` / `host_skills_dir`
+- `tests/test_link_skill.py`
 - `README.md`
-
-安装器行为变化时，同步更新本文档。
+- 本文件

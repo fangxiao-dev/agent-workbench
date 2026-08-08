@@ -7,7 +7,7 @@ else
   ROOTS=(
     "$HOME/.claude/skills"
     "$HOME/.codex/skills"
-    "$HOME/.gemini/skills"
+    "${GROK_HOME:-$HOME/.grok}/skills"
     "$HOME/.agents/skills"
   )
 fi

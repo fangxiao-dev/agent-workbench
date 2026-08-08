@@ -163,7 +163,7 @@ new role presets, loop-mode changes, and changes to the normal Ledger design.
 
 ## Registration
 
-MCP registration is independent from the main `install.sh` / `install.ps1` host installer. Use:
+MCP registration is independent from the main `scripts/link_skill.py` skill linker. Use:
 
 ```bash
 bash /path/to/agent-workbench/scripts/install-discuss-ledger-mcp.sh /path/to/project codex claude

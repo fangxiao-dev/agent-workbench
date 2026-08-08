@@ -4,7 +4,7 @@
 
 ```text
 agent-workbench/
-├── install.sh / install.ps1      # 多宿主安装入口
+├── scripts/link_skill.py         # 多宿主 per-skill 安装入口
 ├── README.md
 ├── AGENTS.md                     # 仓库级 agent instructions
 ├── skills/                       # 所有正式 skills：自建和第三方都在这里
@@ -30,7 +30,7 @@ agent-workbench/
 
 - `.agents/`
 - 仓库根 `.claude/`
-- 仓库根 `.codex/`、`.gemini/`（若存在）
+- 仓库根 `.codex/`（若存在）
 - 根目录 `skills-lock.json`
 - `skills/.system/`
 
@@ -38,7 +38,7 @@ agent-workbench/
 
 ## 安装目标
 
-安装器支持 `claude`、`codex`、`gemini` 三类宿主：
+安装器支持 `claude`、`codex`、`grok` 三类宿主：
 
 - `skills/` 暴露到宿主的 `skills/`
 - `agents/*/` 暴露到宿主的 `agents/`

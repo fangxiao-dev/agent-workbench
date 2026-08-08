@@ -9,7 +9,7 @@
 
 ## 设计目标
 
-- 覆盖 Codex、Claude、Gemini 等多宿主环境，但不在普通开发任务中默认调用。
+- 覆盖 Codex、Claude、Grok 等多宿主环境，但不在普通开发任务中默认调用。
 - 默认只审用户指定文件或根 instruction files；`--full` 才审项目级 setup，`--include-global [host ...]` 才审指定的用户级宿主状态。
 - 输出可执行的改进建议，而不是只检查文件是否存在或直接修改配置。
 
@@ -44,14 +44,14 @@ skills/audit-agent-setup/
 
 默认（targeted）：
 
-- 用户指定的文件；未指定时仅根目录已有的 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md`
+- 用户指定的文件；未指定时仅根目录已有的 `AGENTS.md`、`CLAUDE.md`
 
 `--full` 项目级扩展：
 
 - 嵌套 instruction files
 - `.claude/agents|skills|commands`
 - `.codex/agents|skills|commands`
-- `.gemini/agents|skills|commands`
+- `.grok/skills`（及同级相关 agent 配置，若存在）
 - 其他明显的项目级 agent 宿主目录或 instruction 入口
 
 当 `--include-global` 指定 host 时，只审相同 host 的项目级专属目录和指令文件，同时保留共享 `AGENTS.md`。

@@ -9,7 +9,7 @@
 ### 场景 A：接手裸仓库
 
 ```
-1. bash install.sh /path/to/project   → 生成 CLAUDE.md 草稿 + .gitignore 补丁
+1. python3 scripts/link_skill.py <skill> --host claude  → 把 skill link 到宿主 skills/
 2. 说 "init-project-context"          → 梳理项目目标、交付物、技术边界
 3. /audit [path]                      → 定点审查已有 agent setup，获得改进建议
 ```
@@ -39,8 +39,8 @@ worktree 终端：
 
 ```
 git clone <agent-workbench-repo>
-bash agent-workbench/install.sh
-# 所有 skills、agents、commands 恢复
+python agent-workbench/scripts/link_skill.py --all --host claude codex grok
+# 顶层 skills 以 junction/symlink 恢复到各宿主
 ```
 
 ---
@@ -55,9 +55,9 @@ bash agent-workbench/install.sh
 | `audit-agent-setup` | subagent | 按范围执行只读 setup 审计 |
 | `audit` | command | `/audit [path]` 触发入口 |
 
-**能力**：默认审查指定文件；未指定时只审根 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md`。它判断已有 setup 的可执行性、安全边界和跨宿主冲突，并输出带证据的改进方向。`--full` 才审项目级 setup，`--include-global [host ...]` 才审指定的用户级宿主状态，并同步收窄项目级专属宿主目录。
+**能力**：默认审查指定文件；未指定时只审根 `AGENTS.md`、`CLAUDE.md`。它判断已有 setup 的可执行性、安全边界和跨宿主冲突，并输出带证据的改进方向。`--full` 才审项目级 setup，`--include-global [host ...]` 才审指定的用户级宿主状态，并同步收窄项目级专属宿主目录。
 
-**触发**：`/audit [path]`、`/audit --full`，或明确要求审查已有 agent setup、AGENTS/CLAUDE/GEMINI 指令或跨宿主配置。
+**触发**：`/audit [path]`、`/audit --full`，或明确要求审查已有 agent setup、AGENTS/CLAUDE 指令或跨宿主配置。
 
 ---
 

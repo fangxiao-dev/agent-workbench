@@ -1,6 +1,6 @@
 ﻿# agent-workbench
 
-个人 Agentic Coding 基础设施工具库。这个仓库是 `claude`、`codex`、`gemini` 多宿主共享的 skills、agents、commands、安装器和治理文档的 source of truth。
+个人 Agentic Coding 基础设施工具库。这个仓库是 `claude`、`codex`、`grok` 多宿主共享的 skills、agents、commands、安装器和治理文档的 source of truth。
 
 **安装后能做什么？** → [docs/capabilities.md](docs/capabilities.md)
 
@@ -14,7 +14,7 @@
 - `skills/` 也包含可显式 `$` 调用的共享委派入口：`investigate-before-implement`、`reviewer`
 - `agents/` 保存可安装到宿主的 subagent 定义，目前正式 subagent 是 `audit-agent-setup`
 - `commands/` 保存宿主 command 提示文件；是否能用 `/...` 唤出取决于具体宿主
-- `install.sh` / `install.ps1` 把这些能力安装到 `~/.claude`、`~/.codex`、`~/.gemini`
+- `scripts/link_skill.py` 把单个（或全部顶层）skill **link** 到 `~/.claude` / `~/.codex` / `~/.grok` 的 `skills/`（Windows junction，Unix/macOS symlink）
 - `registry/` 只记录第三方资产来源和重装方式，不记录宿主本机状态
 - `docs/workbench-design/` 保存当前实现规范，README 只做入口说明
 - `tests/` 保存安装器和核心脚本测试
@@ -23,29 +23,43 @@
 
 ---
 
-## 安装
+## 安装（skill link）
+
+薄安装器：`scripts/link_skill.py`。Agent 日常只需 **skill 名 + host**。
 
 ```bash
-# 在任意目标项目目录下执行
-bash /path/to/agent-workbench/install.sh
+# 单个 skill
+python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --host claude
 
-# 显式只安装到指定宿主
-bash /path/to/agent-workbench/install.sh /path/to/project claude codex gemini
+# 多个宿主
+python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --host claude codex grok
+
+# 全部顶层 skills/*
+python3 /path/to/agent-workbench/scripts/link_skill.py --all --host claude
+
+# 卸载宿主 link（不删 workbench 源头）
+python3 /path/to/agent-workbench/scripts/link_skill.py verify-registry-state --unlink --host claude codex grok
 ```
 
-```powershell
-# 在任意目标项目目录下执行
-powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\install.ps1
+| 平台 | 机制 |
+|------|------|
+| Windows | 每个 skill 目录 **junction**（通常无需开发者模式） |
+| Linux / macOS / Unix | 每个 skill 目录 **symlink** |
 
-# 显式只安装到指定宿主
-powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\install.ps1 D:\path\to\project claude codex gemini
-```
+默认行为：
 
-Windows 使用 junction，通常不需要开发者模式；Bash/Unix 侧使用符号链接。
+- 非破坏：冲突则跳过并报告，不覆盖
+- 若宿主 `skills` 仍是「整树指向本 workbench `skills/`」的旧 junction/symlink，会先拆掉并建成真实目录，再写 per-skill link
+- 支持宿主：`claude`、`codex`、`grok`
+- 不安装 `agents/` / `commands/`；不改项目 `.gitignore`
+
+`skills/` 支持 bundle（如 `skills/lark-skills/`）：按**顶层目录**链一次，内部子 skill 随目录暴露。
+
+> **约定**：workbench 路径尽量固定——link 使用绝对路径。
 
 ### Discuss Ledger MCP 注册
 
-`discuss-ledger` 的 MCP server 不由主安装器自动注册。需要在目标项目里启用 Codex/Claude MCP 时，单独运行：
+`discuss-ledger` MCP **不**由 `link_skill.py` 注册，需单独运行：
 
 ```bash
 bash /path/to/agent-workbench/scripts/install-discuss-ledger-mcp.sh /path/to/project codex claude
@@ -55,37 +69,7 @@ bash /path/to/agent-workbench/scripts/install-discuss-ledger-mcp.sh /path/to/pro
 powershell -ExecutionPolicy Bypass -File D:\path\to\agent-workbench\scripts\install-discuss-ledger-mcp.ps1 D:\path\to\project codex claude
 ```
 
-Codex 写入项目内 `.codex/config.toml` 的 `mcp_servers.discussLedger`；Claude 优先调用 `claude mcp add --scope project`。如果本机没有 `claude` CLI，脚本只打印可手动放入 `.mcp.json` 的片段，不会失败。注册后的 server 通过 workbench 根目录的 `uv run python` 启动，以使用仓库内声明的 `mcp[cli]` 依赖。
-
-该 MCP 面向参与讨论的 agent 暴露 ledger 读写工具，但不暴露 `set_next`；下一位发言者仍由用户或编排器显式指定。
-
-默认行为：
-
-- 自动发现已知宿主目录并安装到这些宿主
-- 当前内置宿主：`claude`、`codex`、`gemini`
-- 也可以在命令后显式追加宿主名，只安装到指定宿主
-- 遇到同名目标时不会删除或覆盖，而是跳过并报告冲突
-- 确保目标项目 `.gitignore` 包含 `.claude/settings.local.json`
-
-安装后的位置：
-
-| 来源 | Windows `install.ps1` | Bash/Unix `install.sh` |
-|------|------------------------|-------------------------|
-| `skills/` | 整个目录 junction 到 `<host>/skills` | 每个 `skills/*/` 顶层目录单独 symlink 到 `<host>/skills/<name>` |
-| `agents/*/` | 每个 agent 目录 junction 到 `<host>/agents/<name>` | 每个 agent 目录 symlink 到 `<host>/agents/<name>` |
-| `commands/*` | 复制到 `<host>/commands/<name>` | 复制到 `<host>/commands/<name>` |
-
-`skills/` 支持 bundle 结构，例如 `skills/feishu-skills/feishu-base/SKILL.md`、`skills/lark-skills/using-lark/SKILL.md`、`skills/azure-skills/using-azure/SKILL.md` 和 `skills/gstack/office-hours/SKILL.md`。Bundle 的 `sub-skills/*/SUB-SKILL.md` 是入口 Skill 使用的内部参考，不作为独立 skill 发现；没有 `SKILL.md` 的 bundle 根目录只是分组，不是一个 skill。
-
-宿主根目录：
-
-| 宿主 | 根目录 |
-|------|--------|
-| `claude` | `~/.claude` |
-| `codex` | `~/.codex` |
-| `gemini` | `~/.gemini` |
-
-> **约定**：把 agent-workbench 放在固定路径（如 `~/dev/agent-workbench`），不要随意移动——junction 依赖绝对路径。
+Codex 写入项目内 `.codex/config.toml`；Claude 优先 `claude mcp add --scope project`。无 `claude` CLI 时只打印 `.mcp.json` 片段。
 
 ---
 
@@ -110,12 +94,15 @@ python scripts/codex_session_prune.py `
 
 ### 修改和同步
 
-在 Windows 安装态下，宿主 `skills/` 整体指向本仓库；在 Bash/Unix 安装态下，`skills/` 的每个顶层目录单独链接过去，bundle 内的 skill 随 bundle 一起暴露。`agents/` 也是链接安装。`commands/` 使用复制，command 内容变更后需要重跑安装器同步。
+宿主 `skills/<name>` 是指向 workbench 的 **per-skill** junction（Win）或 symlink（Unix）。新增顶层 `skills/<name>/` 后执行：
 
-新增 skill 后：
+```bash
+python3 scripts/link_skill.py <name> --host claude
+# 或
+python3 scripts/link_skill.py --all --host claude
+```
 
-- Windows：如果宿主 `skills/` 是 workbench 整目录 junction，通常立即可见
-- Bash/Unix：新增顶层 `skills/<name>/` 或 `skills/<bundle>/` 后需要重跑安装器；仅新增 bundle 内的 `skills/<bundle>/<name>/` 通常随已有 bundle 链接可见
+仅新增 bundle **内部**子目录时，若顶层 bundle 已 link，通常立即可见。
 
 ### 核对宿主最终可见 skills
 
@@ -142,7 +129,7 @@ powershell -ExecutionPolicy Bypass -File scripts/list-visible-skills.ps1
 /audit --full --include-global [host ...]
 ```
 
-默认只审指定文件；未指定时只审根 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md`。`--full` 才扩展到项目级 agent setup，`--include-global [host ...]` 才读取指定的用户级宿主状态，并同步收窄项目级专属宿主目录。审计只输出带证据的改进建议，不修改文件。
+默认只审指定文件；未指定时只审根 `AGENTS.md`、`CLAUDE.md`。`--full` 才扩展到项目级 agent setup，`--include-global [host ...]` 才读取指定的用户级宿主状态，并同步收窄项目级专属宿主目录。审计只输出带证据的改进建议，不修改文件。
 
 ### 自动讨论目标文档
 
@@ -235,7 +222,7 @@ docs/exchange/handoffs/handoff-<slug>-current.md
 ```
 agent-workbench/
 ├── AGENTS.md                   ← 仓库级 agent instructions，单一指令源
-├── install.sh / install.ps1    ← 多宿主安装入口
+├── scripts/link_skill.py       ← 多宿主 per-skill 安装入口
 ├── skills/                     ← 正式 skills：自建、第三方、工作流知识库
 │   ├── audit-agent-setup/      ← agent setup 审查知识库（rules + examples）
 │   ├── grill-me-smartly/       ← 中文 Grill Ledger + Questioner/Answerer 设计审查
@@ -275,7 +262,7 @@ agent-workbench/
 1. 在 `skills/` 下创建目录并添加 `SKILL.md`；成组能力可放在 `skills/<bundle>/<name>/SKILL.md`（frontmatter 格式见 [docs/workbench-design/02-skills-spec.md](docs/workbench-design/02-skills-spec.md)）
 2. skill 专属脚本放进该 skill 自己的 `scripts/` 目录，不要默认提取到仓库顶层
 
-Windows 整目录 junction 安装态下，新 skill 通常立即对宿主可见；Bash/Unix 逐 skill symlink 安装态下，新增 skill 后需要重跑安装器。
+新增顶层 skill 后需要再跑 `link_skill.py`（或 `--all`）才会出现在宿主 `skills/`。
 
 第三方 skill 通过 `npx skills add <pkg> -g -y` 安装，默认落入本仓库 `skills/<name>/`；同一上游的成组能力可归入 `skills/<bundle>/<name>/`。是否需要重跑安装器取决于上面的平台安装态，安装后在 `registry/third-party-skills.md` 补登记实际路径。
 
@@ -318,16 +305,15 @@ cat ~/.claude/skills/audit-agent-setup/SKILL.md   # 确认内容可读
 ls -la ~/.codex/skills/
 ls -la ~/.codex/agents/
 
-ls -la ~/.gemini/skills/
-ls -la ~/.gemini/agents/
+ls -la ~/.grok/skills/
 ```
 
 如果某个宿主识别不到 skill，优先用上面命令确认目录链接是否指向正确路径，以及 `commands/` 文件是否已复制。
 
 ## 冲突策略
 
-- 目录目标不存在：创建 junction 或链接
-- 目录目标已是指向当前 workbench 的 junction/链接：跳过并提示 `already linked, skipped`
+- skill 目标不存在：创建 per-skill junction（Win）或 symlink（Unix）
+- 目标已是指向同一 skill 源的 link：跳过（`skipped`）
 - 文件目标不存在：复制
 - 文件目标内容相同：跳过并提示 `already copied, skipped`
 - 目标已存在但不匹配：跳过并提示 `conflict, skipped`
@@ -335,14 +321,14 @@ ls -la ~/.gemini/agents/
 
 ## 扩展新宿主
 
-- 在 `install.sh` 和 `install.ps1` 的宿主映射表里增加新宿主名和根目录
-- 同步更新 `tests/install.ps1`、`README.md` 和相关 `docs/workbench-design/` 规范
+- 在 `scripts/link_skill.py` 的宿主映射里增加新宿主名和根目录
+- 同步更新 `tests/test_link_skill.py`、`README.md` 和 `docs/workbench-design/04-install-spec.md`
 - 其余安装流程复用现有 `skills/agents/commands` 逻辑，无需重写主流程
 
 安装器变更后运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tests/install.ps1
+python -m pytest tests/test_link_skill.py -q
 ```
 
 第三方 registry 逻辑变更后额外运行：
@@ -350,4 +336,3 @@ powershell -ExecutionPolicy Bypass -File tests/install.ps1
 ```powershell
 powershell -ExecutionPolicy Bypass -File skills/import-third-party-skill/scripts/test-import-third-party-skill.ps1
 ```
-
