@@ -11,26 +11,29 @@ python "D:\CodeSpace\agent-workbench\skills\call-grok\scripts\grok_task.py" `
   --prompt-file "<unique-temp-prompt-file>"
 ```
 
-Provide exactly one of `--prompt-file` or `--prompt`. The default caller flow
-creates one invocation-unique UTF-8 temporary file and passes it with
-`--prompt-file`. Do not reuse that file across concurrent calls; remove it only
-after the task has finished and its JSON result has been read.
+Provide exactly one of `--prompt-file` or `--prompt`. Prefer an
+invocation-unique UTF-8 temporary `--prompt-file` for background launches.
+Do not reuse that file across concurrent calls; remove it only after the task
+has finished and its JSON result has been read.
 
-`--prompt` remains supported for a direct foreground invocation with a short,
-single-line prompt when the caller can reliably preserve quoting. Do not pass a
-multiline `--prompt` through Windows `Start-Process -ArgumentList`: PowerShell
-may split it into extra process arguments before `grok_task.py` can parse it.
+The wrapper passes `--prompt-file` through to Grok CLI (no full prompt on the
+child argv). `--prompt` remains for short foreground prompts; values longer
+than the inline limit are spilled to a temp file and sent via `--prompt-file`.
+
+Do not pass a multiline `--prompt` through Windows `Start-Process -ArgumentList`:
+PowerShell may split it into extra process arguments before `grok_task.py` can
+parse it.
 
 ## Public flags
 
 | Flag | Default | Meaning |
 |---|---:|---|
 | `--cwd` | process cwd | Working directory for Grok |
-| `--prompt-file` / `--prompt` | required | Caller-owned task text; unique temporary `--prompt-file` is the default transport |
+| `--prompt-file` / `--prompt` | required | Caller-owned task text; unique temporary `--prompt-file` is the preferred transport |
 | `--max-run` | 100 | Maps to Grok `--max-turns` |
 | `--model` | CLI default | Model id |
 | `--effort` | CLI default | Reasoning effort |
-| `--tools` | `grep,list_dir,run_terminal_cmd,read_file,search_replace` | Grok CLI tool allowlist; explicit values replace the default. `todo_write` remains opt-in. |
+| `--tools` | unset (not passed) | Grok CLI tool allowlist; omit for CLI-native defaults. Example coding set: `grep,list_dir,run_terminal_cmd,read_file,search_replace` |
 | `--allow` / `--deny` | unset | Repeatable Grok permission rules |
 | `--always-approve` / `--no-always-approve` | on | Pass through Grok `--always-approve` by default; use `--no-always-approve` to disable |
 | `--no-subagents` | off | Disable Grok subagents |
@@ -42,18 +45,40 @@ may split it into extra process arguments before `grok_task.py` can parse it.
 | `--preflight` | off | Also require auth before model execution |
 | `--dry-run` | off | Return the redacted would-be command in `text` |
 
-No prompt envelope, permission policy, or subagent policy is injected by
-default. The default tool allowlist is the value shown above; pass an explicit
-`--tools` value when a task needs a narrower or different set. Put task-specific
-instructions and context directly in the prompt or prompt file.
+No prompt envelope, role, or task template is injected. The sole intentional
+runtime permission default is `--always-approve` (headless). Tool policy is
+caller-owned: omit `--tools` unless you need a specific allowlist.
 
-## Source-reading and response discipline
+## Windows PowerShell background launch
 
-For repository tasks, prefer `grep` to locate symbols and
-`run_terminal_cmd` with bounded line ranges to inspect source. Avoid returning
-complete large files, raw command output, or raw logs. The caller prompt should
-ask for a concise summary of changes, tests and results, blockers, and evidence
-paths so that only the useful result is returned to the caller context.
+Build one argument list with the wrapper path first. Prefer `--prompt-file`.
+Keep prompt/stdout/stderr files under `$env:TEMP` or a confirmed-writable
+worktree directory. Do not hard-code `C:\tmp`.
+
+```powershell
+$pythonExe = (Get-Command python -ErrorAction Stop).Source
+$wrapper = Join-Path $repo 'skills\call-grok\scripts\grok_task.py'
+$promptPath = Join-Path $env:TEMP 'grok-<unique-invocation>.prompt.txt'
+$resultPath = Join-Path $env:TEMP 'grok-<unique-invocation>.result.json'
+$errorPath = Join-Path $env:TEMP 'grok-<unique-invocation>.stderr.log'
+
+$wrapperArgs = @(
+  $wrapper,
+  '--cwd', $targetRepo,
+  '--prompt-file', $promptPath,
+  '--max-run', '100',
+  '--overall-timeout-sec', '600',
+  '--model', 'grok-4.5',
+  '--effort', 'high',
+  '--no-subagents'
+)
+if ($wrapperArgs[0] -ne $wrapper) { throw 'Wrapper path must be the first Python argument' }
+
+Start-Process -FilePath $pythonExe -ArgumentList $wrapperArgs `
+  -RedirectStandardOutput $resultPath `
+  -RedirectStandardError $errorPath `
+  -WindowStyle Hidden -PassThru
+```
 
 ## Output contract
 
@@ -73,7 +98,7 @@ stdout is exactly one JSON object:
 `error`, when present, has stable `code` and diagnostic `message`. Statuses are
 `completed`, `dry_run`, `max_turns`, `stalled`, `timeout`, `cancelled`,
 `preflight_failed`, or `error`. stderr is reserved for `[heartbeat]`,
-`[liveness]`, and child diagnostics.
+`[liveness]`, `[grok-stderr]`, `[grok-stdout-raw]`, and related diagnostics.
 
 Each call starts a fresh Grok process. The wrapper does not resume sessions;
 callers that need previous context must include it in a new prompt.
