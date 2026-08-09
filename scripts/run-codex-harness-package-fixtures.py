@@ -22,7 +22,7 @@ def write(path: Path, content: str) -> None:
 
 
 def state_cli(root: Path, package: Path, *args: str) -> None:
-    script = Path(__file__).resolve().parents[1] / "skills" / "impl-package" / "scripts" / "impl_package_state.py"
+    script = Path(__file__).resolve().parents[1] / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "impl_package_state.py"
     subprocess.run([sys.executable, str(script), "--package", str(package), *args], check=True, capture_output=True, text=True)
 
 
@@ -71,7 +71,7 @@ parent_role = "implementer"
 objective = "Implement the fixture contract."
 depends_on = []
 allowed_paths = ["src"]
-skills = ["impl-package"]
+skills = ["impl-package:impl-package"]
 verification_commands = []
 sandbox = "workspace_write"
 sensitive_originals = "forbidden"
@@ -84,7 +84,7 @@ parent_role = "reviewer"
 objective = "Review the fixture contract."
 depends_on = ["T1"]
 allowed_paths = ["src"]
-skills = ["impl-package/dev-with-track"]
+skills = ["impl-package:dev-with-track"]
 verification_commands = []
 sandbox = "read_only"
 sensitive_originals = "on_demand"

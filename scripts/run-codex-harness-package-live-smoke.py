@@ -25,7 +25,7 @@ def write(path: Path, content: str) -> None:
 
 
 def state_cli(package: Path, *args: str) -> None:
-    script = WORKBENCH_ROOT / "skills" / "impl-package" / "scripts" / "impl_package_state.py"
+    script = WORKBENCH_ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "impl_package_state.py"
     completed = subprocess.run([sys.executable, str(script), "--package", str(package), *args], capture_output=True, text=True)
     if completed.returncode:
         raise RuntimeError(completed.stderr.strip() or completed.stdout.strip())
@@ -77,7 +77,7 @@ parent_role = "read_only_smoke"
 objective = "Read the pinned package and confirm its four core package documents are available. Do not modify files."
 depends_on = []
 allowed_paths = ["src"]
-skills = ["impl-package"]
+skills = ["impl-package:impl-package"]
 verification_commands = ["python -c \\\"print('external verifier passed')\\\""]
 sandbox = "read_only"
 sensitive_originals = "forbidden"

@@ -17,7 +17,7 @@ from typing import Any
 
 @lru_cache(maxsize=1)
 def _canonical_state_module() -> ModuleType:
-    script = Path(__file__).resolve().parents[1] / "skills" / "impl-package" / "scripts" / "impl_package_state.py"
+    script = Path(__file__).resolve().parents[1] / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "impl_package_state.py"
     spec = importlib.util.spec_from_file_location("codex_harness_canonical_impl_package_state", script)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load canonical Impl-Package state engine: {script}")

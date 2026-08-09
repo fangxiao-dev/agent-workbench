@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-IMPL = ROOT / "skills/impl-package"
+IMPL = ROOT / "plugin-marketplace/plugins/impl-package"
 
 
 def files_under(root: Path):
@@ -18,12 +18,12 @@ def files_under(root: Path):
 
 def test_stage_evals_are_valid_and_nonempty() -> None:
     paths = [
-        IMPL / "req-align/evals/evals.json",
-        IMPL / "impl-planning/evals/evals.json",
-        IMPL / "to-tickets/evals/evals.json",
-        IMPL / "create-task-dag/evals/evals.json",
-        IMPL / "dev-with-track/evals/evals.json",
-        IMPL / "verification-before-completion/evals/evals.json",
+        IMPL / "skills/req-align/evals/evals.json",
+        IMPL / "skills/impl-planning/evals/evals.json",
+        IMPL / "skills/to-tickets/evals/evals.json",
+        IMPL / "skills/create-task-dag/evals/evals.json",
+        IMPL / "skills/dev-with-track/evals/evals.json",
+        IMPL / "skills/verification-before-completion/evals/evals.json",
     ]
     for path in paths:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -51,9 +51,9 @@ def test_active_package_files_have_no_retired_state_mechanisms() -> None:
 
 
 def test_core_templates_expose_only_current_contract() -> None:
-    plan = (IMPL / "impl-planning/assets/templates/plan.md").read_text(encoding="utf-8")
+    plan = (IMPL / "skills/impl-planning/assets/templates/plan.md").read_text(encoding="utf-8")
     state = (IMPL / "references/impl-package-current-state.md").read_text(encoding="utf-8")
-    gate = (IMPL / "dev-with-track/assets/templates/gate.md").read_text(encoding="utf-8")
+    gate = (IMPL / "skills/dev-with-track/assets/templates/gate.md").read_text(encoding="utf-8")
     assert "tickets=<true|false>, dag=<true|false>" in plan
     assert '"formatVersion": "3.4"' in state
     assert all(field in state for field in ('"attempt"', '"tasks"', '"tickets"', '"resume"'))
@@ -64,9 +64,9 @@ def test_core_templates_expose_only_current_contract() -> None:
 
 
 def test_complete_progress_and_workflow_surfaces_are_present() -> None:
-    progress = (IMPL / "dev-with-track/assets/templates/progress.md").read_text(encoding="utf-8")
-    planning = (IMPL / "impl-planning/assets/templates/plan.md").read_text(encoding="utf-8")
-    review = (ROOT / "skills/plan-review/SKILL.md").read_text(encoding="utf-8")
+    progress = (IMPL / "skills/dev-with-track/assets/templates/progress.md").read_text(encoding="utf-8")
+    planning = (IMPL / "skills/impl-planning/assets/templates/plan.md").read_text(encoding="utf-8")
+    review = (IMPL / "skills/plan-review/SKILL.md").read_text(encoding="utf-8")
     assert all(section in progress for section in ("Ticket Acceptance", "Task Execution", "Active Checkpoints", "Attempt History"))
     assert all(section in planning for section in ("Coverage & Change Map", "计划验证", "Bundle Review & Approval"))
     assert "fresh independent reviewer" in review
@@ -74,7 +74,7 @@ def test_complete_progress_and_workflow_surfaces_are_present() -> None:
         "assets/impl-package-intro.html",
         "references/evergreen-module-spec-and-backfill-design.md",
         "references/plan-apply-runbook.md",
-        "dev-with-track/assets/templates/manual-acceptance-readiness.md",
+        "skills/dev-with-track/assets/templates/manual-acceptance-readiness.md",
     ):
         assert (IMPL / relative).is_file()
 

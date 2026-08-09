@@ -202,7 +202,7 @@ def _source_blob(manifest: Manifest, relative_path: str) -> str:
 
 
 def _canonical_state_cli() -> Path:
-    return Path(__file__).resolve().parents[1] / "skills" / "impl-package" / "scripts" / "impl_package_state.py"
+    return Path(__file__).resolve().parents[1] / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "impl_package_state.py"
 
 
 def _canonical_source_validation(manifest: Manifest, source_commit: str) -> dict[str, Any]:

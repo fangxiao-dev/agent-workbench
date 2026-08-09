@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 def _state_cli(root: Path) -> Path:
-    return root / "skills" / "impl-package" / "scripts" / "impl_package_state.py"
+    return root / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "impl_package_state.py"
 
 
 def _run_state(root: Path, package: Path, *arguments: str) -> tuple[bool, dict | None, str]:

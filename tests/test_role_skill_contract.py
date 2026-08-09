@@ -41,10 +41,14 @@ def test_global_entry_and_handoff_route_to_current_delegation_skills() -> None:
         encoding="utf-8"
     )
 
-    for name in ("subagent-driven-development", "investigate-before-implement", "reviewer"):
-        assert f"skills/{name}/" in global_instructions
-        assert f"`${name}`" in global_instructions
-        assert f"`${name}`" in handoff
+    for name in ("subagent-driven-development", "investigate-before-implement"):
+        assert f"impl-package:{name}" in global_instructions
+        assert f"impl-package:{name}" in handoff
+        assert (ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "skills" / name / "SKILL.md").is_file()
+    assert "dispatch a separate subagent" in global_instructions
+    assert "if `reviewer` is available" in global_instructions
+    assert "单独只读 subagent" in handoff
+    assert "存在 `reviewer`" in handoff
     for removed in ("investigator", "implementer"):
         assert f"skills/{removed}/" not in global_instructions
         assert f"`${removed}`" not in global_instructions

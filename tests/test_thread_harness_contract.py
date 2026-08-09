@@ -111,7 +111,7 @@ def test_role_a_and_b_carry_default_long_into_handoff() -> None:
     role_b = read("skills/thread-harness/references/role-b.md")
     dispatch = read("skills/thread-harness/references/session-dispatch.md")
 
-    marker = "子线调度模式：按 `$subagent-driven-development`，默认使用 `default-long`。"
+    marker = "子线调度模式：按 `/impl-package:subagent-driven-development`，默认使用 `default-long`。"
     assert marker in role_a
     assert marker in role_b
     assert marker not in dispatch
@@ -147,10 +147,10 @@ def test_second_stage_dispatch_is_role_specific_and_minimal() -> None:
         assert field not in role_a + role_b
 
     repeated_workflow = (
-        "$investigate-before-implement",
-        "$do-review",
-        "$subagent-driven-development",
-        "$verification-before-completion",
+        "impl-package:investigate-before-implement",
+        "impl-package:do-review",
+        "impl-package:subagent-driven-development",
+        "impl-package:verification-before-completion",
     )
     for marker in repeated_workflow:
         assert marker not in dispatch

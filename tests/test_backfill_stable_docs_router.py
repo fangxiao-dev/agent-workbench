@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TEXT = (ROOT / "skills/impl-package/backfill-stable-docs/SKILL.md").read_text(encoding="utf-8")
+TEXT = (ROOT / "plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/SKILL.md").read_text(encoding="utf-8")
 
 
 def test_audit_apply_verify_boundaries_are_explicit() -> None:

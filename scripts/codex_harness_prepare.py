@@ -24,7 +24,16 @@ class PrepareError(RuntimeError):
 
 
 IMPL_PACKAGE_CONTRACT_VERSION = "3.2"
-REVIEWER_REGISTRY_PATH = Path(__file__).resolve().parents[1] / "skills" / "do-review" / "references" / "reviewer-registry.json"
+REVIEWER_REGISTRY_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "plugin-marketplace"
+    / "plugins"
+    / "impl-package"
+    / "skills"
+    / "do-review"
+    / "references"
+    / "reviewer-registry.json"
+)
 
 
 @dataclass(frozen=True)
@@ -59,7 +68,7 @@ def _source_blob(repository_root: Path, source_ref: str, package_path: str, path
 
 
 def _canonical_source_validation(repository_root: Path, source_commit: str, package_path: str) -> dict[str, Any]:
-    state_cli = Path(__file__).resolve().parents[1] / "skills" / "impl-package" / "scripts" / "impl_package_state.py"
+    state_cli = Path(__file__).resolve().parents[1] / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "impl_package_state.py"
     worktree_root = Path(tempfile.mkdtemp(prefix="codex-harness-prepare-source-"))
     try:
         add = subprocess.run(["git", "-C", str(repository_root), "worktree", "add", "--detach", str(worktree_root), source_commit], capture_output=True, text=True)
@@ -230,7 +239,10 @@ def _reviewer_skill_paths(*names: str) -> tuple[str, ...]:
         path = Path(canonical_path)
         if path.parts[:1] != ("skills",) or path.name != "SKILL.md" or ".." in path.parts:
             raise PrepareError(f"canonical reviewer path for {name!r} is unsafe: {canonical_path!r}")
-        manifest_skill = path.relative_to("skills").parent.as_posix()
+        local_skill = path.relative_to("skills").parent.as_posix()
+        if "/" in local_skill:
+            raise PrepareError(f"canonical reviewer path is not flat: {canonical_path!r}")
+        manifest_skill = f"impl-package:{local_skill}"
         if manifest_skill in paths:
             raise PrepareError(f"canonical reviewer registry repeats manifest skill path: {manifest_skill!r}")
         paths.append(manifest_skill)
@@ -252,7 +264,7 @@ def _default_reviewer_skill_paths() -> tuple[str, ...]:
 
 
 def _skills(title: str) -> tuple[str, ...]:
-    base = ["impl-package", "impl-package/dev-with-track"]
+    base = ["impl-package:impl-package", "impl-package:dev-with-track"]
     if "集成" in title or re.search(r"\breview\b", title, re.IGNORECASE):
         base.extend(_default_reviewer_skill_paths())
         base.extend(_reviewer_skill_paths("safety-review"))

@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "skills" / "impl-package" / "backfill-stable-docs" / "scripts"
+SCRIPTS = ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "skills" / "backfill-stable-docs" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import contract_preflight  # noqa: E402
 

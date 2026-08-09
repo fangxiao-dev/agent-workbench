@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "skills" / "impl-package" / "backfill-stable-docs" / "scripts"
+SCRIPTS = ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "skills" / "backfill-stable-docs" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import collect_sources  # noqa: E402
 import make_item_id  # noqa: E402

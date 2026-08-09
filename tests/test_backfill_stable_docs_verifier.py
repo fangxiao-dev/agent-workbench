@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERIFIER = ROOT / "skills/impl-package/backfill-stable-docs/scripts/verify_stable_docs.py"
+VERIFIER = ROOT / "plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/scripts/verify_stable_docs.py"
 
 
 def git(repo: Path, *args: str) -> None:
