@@ -2,7 +2,7 @@ __pycache__/
 *.pyc
 .env
 .codex/harness-runs/
-.agents/
+/.agents/
 .claude/skills/
 .claude/settings.local.json
 skills-lock.json
@@ -21,6 +21,7 @@ docs/exchange/discuss/
 .acr-context/
 skills/*-workspace/
 skills/**/*-workspace/
+plugin-marketplace/.workspaces/
 skills-local/
 
 # thread-harness runtime ledger (coordination state, not source)

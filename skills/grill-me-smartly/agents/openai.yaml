@@ -1,4 +1,0 @@
-interface:
-  display_name: "Grill Me Smartly"
-  short_description: "Run a Chinese Grill Ledger with questioner and answerer agents"
-  default_prompt: "用 $grill-me-smartly 审这个计划。"

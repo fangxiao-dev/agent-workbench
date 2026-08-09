@@ -1,7 +1,0 @@
-interface:
-  display_name: "Plan Review"
-  short_description: "仅供用户或编排显式调用的工程计划审查"
-  default_prompt: "Use $plan-review to review this implementation plan before applying changes."
-
-policy:
-  allow_implicit_invocation: false
