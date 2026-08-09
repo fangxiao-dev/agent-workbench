@@ -1,0 +1,33 @@
+{
+  "skill_name": "plan-review",
+  "evals": [
+    {
+      "prompt": "用 /impl-package:plan-review 审查这个 tickets=false, dag=false 的小型实现计划。",
+      "expected_output": "Reviews scope, feasibility and verification without demanding extra artifacts; returns a clear verdict and only material findings.",
+      "expectations": [
+        "Accepts the minimal Composition when justified.",
+        "Uses a fresh independent reviewer for full-review.",
+        "Does not introduce an audit-only artifact.",
+        "Uses repository-relative paths in any persisted output."
+      ]
+    },
+    {
+      "prompt": "用 /impl-package:plan-review mode=bundle-admission 检查这个含外部生产 mutation 的 bundle。",
+      "expected_output": "Routes the candidate to full review and identifies the mutation authorization and rollback evidence that must be checked.",
+      "expectations": [
+        "Does not return admitted.",
+        "Reports the material risk and next action.",
+        "Does not ask for an unrelated extra approval."
+      ]
+    },
+    {
+      "prompt": "上一轮四个 finding 已按 owner 决策修改。用 /impl-package:plan-review mode=focused-closure-verification 复核。",
+      "expected_output": "Checks the four affected chains and returns closure-verified, revise, or reopen-full-review based on evidence.",
+      "expectations": [
+        "Does not reopen unrelated discovery unless scope expanded.",
+        "Checks actual candidate changes.",
+        "Uses a Git commit only when cross-session reuse requires it."
+      ]
+    }
+  ]
+}

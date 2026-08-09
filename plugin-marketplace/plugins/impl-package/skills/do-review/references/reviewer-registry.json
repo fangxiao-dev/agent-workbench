@@ -1,0 +1,30 @@
+{
+  "default_tracks": [
+    {
+      "label": "Track A",
+      "skill": "code-review"
+    },
+    {
+      "label": "Track B",
+      "skill": "standards-review"
+    },
+    {
+      "label": "Track C",
+      "skill": "spec-review"
+    }
+  ],
+  "reviewers": {
+    "code-review": {
+      "canonical_skill_path": "skills/code-review/SKILL.md"
+    },
+    "standards-review": {
+      "canonical_skill_path": "skills/standards-review/SKILL.md"
+    },
+    "spec-review": {
+      "canonical_skill_path": "skills/spec-review/SKILL.md"
+    },
+    "safety-review": {
+      "canonical_skill_path": "skills/safety-review/SKILL.md"
+    }
+  }
+}
