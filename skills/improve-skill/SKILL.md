@@ -56,7 +56,7 @@ rubric 用中文书写，包含原则区和滚动证据区：
 
 ```markdown
 ---
-target: skills/impl-package/dev-with-track
+target: plugin-marketplace/plugins/impl-package/skills/dev-with-track
 updated: 2026-07-08
 ---
 ## 原则

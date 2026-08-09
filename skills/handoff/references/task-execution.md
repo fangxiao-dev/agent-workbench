@@ -18,7 +18,7 @@ python <handoff-skill>/scripts/compact_anchor.py --worktree <absolute-local-work
 4. 只打开 next action 需要的 plan、Ticket、DAG、Execution Record、Task Handoff 和 evidence。
 5. 产品语义冲突、目标环境不明、shared/production mutation 或超授权时停止并请求 owner。
 
-执行编排继续遵循仓库通用入口：主 session/子 agent 调度使用 `$subagent-driven-development`（`skills/subagent-driven-development/`）；写入前调查使用 `$investigate-before-implement`（`skills/investigate-before-implement/`）；独立只读审查使用 `$reviewer`（`skills/reviewer/`）。这些 workflow 和 role 定义不在 handoff 中重复；handoff 只保存当前选择和任务特定输入。
+执行编排继续遵循 Impl-Package 入口：主 session/子 agent 调度使用 `/impl-package:subagent-driven-development`；写入前调查使用 `/impl-package:investigate-before-implement`。独立 review 派发单独只读 subagent；如果 active skill catalog 中存在 `reviewer`，优先使用其路由。这些 workflow 和 role 定义不在 handoff 中重复；handoff 只保存当前选择和任务特定输入。
 
 ## Handoff 内容
 

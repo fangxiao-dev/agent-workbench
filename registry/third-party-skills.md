@@ -1,4 +1,4 @@
-﻿# Third-party Skills
+# Third-party Skills
 
 | Skill | 来源 | 获取方式 | 备注 |
 |-------|------|----------|------|
@@ -21,14 +21,14 @@
 | setup-matt-pocock-skills | `mattpocock/skills` | `npx skills add mattpocock/skills@setup-matt-pocock-skills -g -y` | 已放入 `skills/setup-matt-pocock-skills/`；已同步上游 |
 | tdd | `mattpocock/skills` | `npx skills add mattpocock/skills@tdd -g -y` | 已放入 `skills/tdd/`；已同步上游（reference-only red→green / seam） |
 | to-spec | `mattpocock/skills` | 人工迁移上游 `skills/engineering/to-spec` | Vendored 只读参考（上游 `391a270`），不进入 Impl-Package 主链；repo facts、testing seam 与 user-semantics synthesis 方法已吸收进 `req-align` |
-| to-tickets | `mattpocock/skills` | 基于上游 `skills/engineering/to-tickets` 本地分叉 | Impl-Package 本地 fork，位于 `skills/impl-package/to-tickets/`（上游基线 `391a270`）；上游更新只做人工 diff/选择性合并，不直接覆盖 |
+| to-tickets | `mattpocock/skills` | 基于上游 `skills/engineering/to-tickets` 本地分叉 | Impl-Package 本地 fork，位于 `plugin-marketplace/plugins/impl-package/skills/to-tickets/`（上游基线 `391a270`）；上游更新只做人工 diff/选择性合并，不直接覆盖 |
 | domain-modeling | `mattpocock/skills` | `npx skills add mattpocock/skills@domain-modeling -g -y` | 已放入 `skills/domain-modeling/` |
 | codebase-design | `mattpocock/skills` | `npx skills add mattpocock/skills@codebase-design -g -y` | 已放入 `skills/codebase-design/` |
-| standards-review | `mattpocock/skills` | 人工迁移上游 `skills/engineering/code-review` | 基于 `391a270` 的原 module-review Standards 轴拆分并中文化后放入 `skills/reviews/standards-review/` |
-| spec-review | `mattpocock/skills` | 人工迁移上游 `skills/engineering/code-review` | 基于 `391a270` 的原 module-review Spec 轴拆分并中文化后放入 `skills/reviews/spec-review/` |
+| standards-review | `mattpocock/skills` | 人工迁移上游 `skills/engineering/code-review` | 基于 `391a270` 的原 module-review Standards 轴拆分并中文化后放入 `plugin-marketplace/plugins/impl-package/skills/standards-review/` |
+| spec-review | `mattpocock/skills` | 人工迁移上游 `skills/engineering/code-review` | 基于 `391a270` 的原 module-review Spec 轴拆分并中文化后放入 `plugin-marketplace/plugins/impl-package/skills/spec-review/` |
 | module-review (deprecated) | `mattpocock/skills` | 历史本地归档 | 原双轴 reviewer 已移至 `skills-deprecated/module-review/`，不在 active registry、preflight 或默认 topology 中 |
 | improve-codebase-architecture | `mattpocock/skills` | `npx skills add mattpocock/skills@improve-codebase-architecture -g -y` | 已放入 `skills/improve-codebase-architecture/`；已同步上游（YAGNI 范围 + harness-neutral subagent） |
-| grilling | `mattpocock/skills` | `npx skills add mattpocock/skills@grilling -g -y` | 已放入 `skills/grilling/`；上游 frontier-rounds 基线 + 本地吸收原 `grilling-waves` 的文档主体/upper-level context/延后 writeback |
+| grilling | `mattpocock/skills` | `npx skills add mattpocock/skills@grilling -g -y` | 已放入 `plugin-marketplace/plugins/impl-package/skills/grilling/`；上游 frontier-rounds 基线 + 本地吸收原 `grilling-waves` 的文档主体/upper-level context/延后 writeback |
 | handoff | `mattpocock/skills` | `npx skills add mattpocock/skills@handoff -g -y` | 已放入 `skills/handoff/` |
 | teach | `mattpocock/skills` | `npx skills add mattpocock/skills@teach -g -y` | 已放入 `skills/teach/`；`agents/openai.yaml` 禁止隐式调用 |
 | writing-for-agents | `mattpocock/skills` | `npx skills add mattpocock/skills@writing-for-agents -g -y` | 上游自 `writing-great-skills` 重命名；已放入 `skills/writing-for-agents/`；`write-skill-smartly` 已改引用 |
@@ -39,7 +39,7 @@
 | powershell-windows | `davila7/claude-code-templates` | `npx skills add davila7/claude-code-templates@powershell-windows -g -y` | 已放入 `skills/powershell-windows/` |
 | continuous-learning | `affaan-m/everything-claude-code` | 人工迁移 | 已退役，保留在 `skills-deprecated/continuous-learning/` |
 | api-integration-builder | `daffy0208/ai-dev-standards` | `npx skills add daffy0208/ai-dev-standards@api-integration-builder -g -y` | 已放入 `skills/api-integration-builder/` |
-| code-review | `supercent-io/skills-template` | `npx skills add supercent-io/skills-template@code-review -g -y` | 已放入 `skills/reviews/code-review/` |
+| code-review | `supercent-io/skills-template` | `npx skills add supercent-io/skills-template@code-review -g -y` | 已放入 `plugin-marketplace/plugins/impl-package/skills/code-review/` |
 | git-workflow | `supercent-io/skills-template`（历史来源） | 历史命令：`npx skills add supercent-io/skills-template@git-workflow -g -y` | 本地维护分叉位于 `skills/git-workflow/`；上游在 2026-07-22 不可解析，后续不直接覆盖本地版本。 |
 | documentation-generator | `jorgealves/agent_skills` | `npx skills add jorgealves/agent_skills@documentation-generator -g -y` | 已放入 `skills/documentation-generator/` |
 | prompt-optimizer | `daymade/claude-code-skills` | `npx skills add daymade/claude-code-skills@prompt-optimizer -g -y` | 已放入 `skills/prompt-optimizer/` |
@@ -49,5 +49,5 @@
 ## 说明
 
 - 只登记第三方 skills，不登记本仓库自建 skills。
-- 第三方 skills 的正式内容直接放在 `skills/<name>/`；成组资产也可以放在 `skills/<bundle>/<name>/`。
+- 独立第三方 skill 放在 `skills/<name>/`；plugin-owned skill 放在 `plugin-marketplace/plugins/<plugin>/skills/<name>/`。
 - 如需修改第三方 skill，直接修改正式副本；更新上游时先拉到临时位置，再人工对比合并。

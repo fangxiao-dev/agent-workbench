@@ -1,6 +1,20 @@
 # 安装器规范
 
-主安装入口是 **`scripts/link_skill.py`**：把 workbench 里**单个（或全部顶层）skill 目录** link 到宿主的 `skills/<name>`。
+独立 skill 的主安装入口是 **`scripts/link_skill.py`**：把 workbench 里**单个（或全部顶层）skill 目录** link 到宿主的 `skills/<name>`。`plugin-marketplace/` 下的多-skill 套件使用宿主原生 marketplace/plugin 流程，不进入该脚本。
+
+## Plugin 安装
+
+独立发布根位于 `plugin-marketplace/`。其中 Codex marketplace 位于 `.agents/plugins/marketplace.json`，Claude marketplace 位于 `.claude-plugin/marketplace.json`；两者均以 `agent-workbench` 为 marketplace 名，并从 `./plugins/<plugin>` 读取同一份插件 payload。
+
+```powershell
+codex plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
+codex plugin add impl-package@agent-workbench
+
+claude plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
+claude plugin install impl-package@agent-workbench --scope project
+```
+
+插件目录就是安装产物，不执行 build。安装和更新会进入宿主缓存；manifest/marketplace 版本必须同步，更新后开启新会话。Workbench 不包装这些命令，也不在验证时修改用户级宿主状态。
 
 | 平台 | 链接类型 |
 |------|----------|
@@ -48,6 +62,7 @@ stdout 末行是 JSON summary（含 `platform`、`link_kind`、各 host 的 `lin
 
 - **有效目标**：目录树内递归存在至少一个 `SKILL.md`（可在子目录；根目录可以没有）。无 `SKILL.md` 的空壳目录不链接、`--all` 会跳过。
 - Bundle（如 `skills/lark-skills/`）按**顶层目录**链一次，内部子 skill 随目录暴露。
+- 多公开 skill 套件应迁入 `plugin-marketplace/plugins/`；`impl-package` 不通过本表的 junction/symlink 暴露。
 - **不**再把整个 `skills/` 挂成一个 junction。
 - v1 **不**安装 `agents/`、`commands/`，不改项目 `.gitignore`。
 

@@ -36,10 +36,10 @@ description: >
 
 ## 任务怎么分工
 
-- main session / subagent 调度 → `$subagent-driven-development`
-- impl / investigate → `$investigate-before-implement`
-- review → `$do-review`
-- 验收 → `$verification-before-completion`，不外包
+- main session / subagent 调度 → `/impl-package:subagent-driven-development`
+- impl / investigate → `/impl-package:investigate-before-implement`
+- review → `/impl-package:do-review`
+- 验收 → `/impl-package:verification-before-completion`，不外包
 
 ## H1 JSON payload
 

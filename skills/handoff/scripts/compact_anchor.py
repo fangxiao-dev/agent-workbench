@@ -50,7 +50,14 @@ def package_status(worktree: Path, package_value: str) -> dict[str, Any]:
         raise ValueError("package path escapes worktree") from exc
     if not package.is_dir():
         raise ValueError(f"package does not exist: {package_relative}")
-    validator = Path(__file__).resolve().parents[2] / "impl-package" / "scripts" / "impl_package_state.py"
+    validator = (
+        Path(__file__).resolve().parents[3]
+        / "plugin-marketplace"
+        / "plugins"
+        / "impl-package"
+        / "scripts"
+        / "impl_package_state.py"
+    )
     result = run([sys.executable, str(validator), "--package", str(package), "status"], worktree)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "package validation failed")

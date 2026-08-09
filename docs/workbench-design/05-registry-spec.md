@@ -19,7 +19,7 @@
 规则：
 
 - 只登记第三方 skill，不登记本仓库自建 skill。
-- 第三方 skill 的正式内容直接放在 `skills/<name>/`；成组资产也可以放在 `skills/<bundle>/<name>/`。
+- 独立第三方 skill 放在 `skills/<name>/`；plugin-owned skill 放在 `plugin-marketplace/plugins/<plugin>/skills/<name>/`。
 - `获取方式` 写 `npx skills add ...`、来源说明或人工迁移说明，保证未来能重新获取。
 - 不登记本地路径、宿主、安装状态、更新时间或机器可读 JSON。
 - 根目录 `skills-lock.json` 如果由 `npx skills` 生成，属于工具状态，继续保持 ignored。
@@ -28,7 +28,7 @@
 
 `registry/plugins.md` 保留为插件和 MCP 类资产清单。插件按安装单位登记，不展开插件内部附带的每个 skill、agent 或 command。
 
-插件清单可以包含状态列，因为插件是否启用通常取决于宿主配置，不等同于 `skills/` 下的正式内容。
+插件清单可以包含状态列，因为插件是否启用通常取决于宿主配置，不等同于仓库内 skill payload 的正式内容。
 
 ## 不再使用
 

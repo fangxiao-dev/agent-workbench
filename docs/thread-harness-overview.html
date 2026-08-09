@@ -339,11 +339,11 @@
         </div>
         <div class="callout"><strong>最容易搞反的一点：</strong>“大家都在等跨域契约”不是外部阻塞，而是主控尚未安排生产者。Controller 手里有 <code>create_thread</code>，可以派一条 Platform 线去造它——当然，前提是 Owner 已明确授权。</div>
         <div class="panel panel-pad" style="margin-top:14px">
-          <h3 style="color:var(--cyan)">执行层辅助：<code>$call-grok</code> 在哪里参与？</h3>
-          <p style="color:var(--muted); margin-bottom:14px"><code>call-grok</code> 参与的是实现与调查过程，不是 Harness 的调度闭环。它通常由 Package Child 或 Platform Child 调用，作为独立 CLI 进程只返回结论；子线仍然负责把结论落到自己的任务、commit、seam 登记和 H1/H2 回报上。</p>
+          <h3 style="color:var(--cyan)">执行层辅助：可选的 <code>call-grok</code> 在哪里参与？</h3>
+          <p style="color:var(--muted); margin-bottom:14px">如果 active skill catalog 中存在 <code>call-grok</code>，可以优先用它辅助实现与调查；不存在时直接使用普通 subagent 或当前 session，不构成阻塞。它不是 Harness 的调度闭环；子线仍然负责把结论落到自己的任务、commit、seam 登记和 H1/H2 回报上。</p>
           <div class="signal-row">
-            <div class="signal"><b><code>impl / investigate</code></b><span>优先用 call-grok，回收结论，减少主线被实现过程占满上下文。</span></div>
-            <div class="signal"><b><code>review</code></b><span>不走 call-grok，走 <code>$do-review</code> 的既有 review tracks。</span></div>
+            <div class="signal"><b><code>impl / investigate</code></b><span>call-grok 可用时优先调用；否则使用普通 subagent 或当前 session。</span></div>
+            <div class="signal"><b><code>review</code></b><span>走 <code>/impl-package:do-review</code> 的既有 review tracks。</span></div>
             <div class="signal"><b><code>acceptance</code></b><span>不外包，由当前 session 自己验收，避免判断失真。</span></div>
           </div>
           <div class="callout" style="margin-bottom:0"><strong>边界：</strong>call-grok 不是 registry child，不参与 <code>wait_threads</code> 轮询，也不负责账本、停滞判断或 Owner 决策；它只缩短“做实现/调查”这段过程。</div>
@@ -453,7 +453,7 @@
             <tbody>
               <tr><td><code>owner-thread-broker</code></td><td>维护 coordination group 的 registry；处理 session handoff、worktree/branch 路由和 Owner 授权边界。</td><td>先于消息发送定位当前 session；不把审批混进路由文件。</td></tr>
               <tr><td><code>ledger.py init --registry &lt;absolute-json&gt;</code></td><td>在 registry sibling/coordination_id 下创建运行时目录和空账本。</td><td>协调组启动时执行；旧 coordination-id 调用仍兼容。</td></tr>
-              <tr><td><code>$call-grok</code></td><td>作为独立 CLI 辅助实现或调查，只回收结论，不承接协调责任。</td><td>由 Package / Platform Child 在执行层按需调用；不进入 registry、poll 或 ledger。</td></tr>
+              <tr><td><code>call-grok</code>（可选）</td><td>存在时作为独立 CLI 辅助实现或调查，只回收结论，不承接协调责任。</td><td>由 Package / Platform Child 在执行层按需调用；缺失不阻塞，也不进入 registry、poll 或 ledger。</td></tr>
               <tr><td><code>ledger.py sync</code></td><td>读取 rollout projection，校验 poll 契约；读取 registry worktree 的 Git HEAD；合并 progress 并输出摘要。</td><td>每轮 poll 之后的事实同步层。</td></tr>
               <tr><td><code>H1 envelope + ledger.py report</code></td><td>子线发送含 <code>v/node/session_id/event/state/head/waiting_on/artifact/note</code> 的结构化 H1；controller 验证 registry current session 与 worktree HEAD 关系后写入 state、waiting_on、note。</td><td>H1/H2 的单写 ledger 回报入口。</td></tr>
               <tr><td><code>ledger.py seam</code></td><td>controller 登记 seam 的 producer、consumers、交付 artifact。</td><td>让“等待什么”与“谁生产”形成可追踪关系。</td></tr>

@@ -319,7 +319,7 @@ Backfill 的目标是 stable design knowledge：
 
 如果一个 delta 同时包含 why 和 how，apply 前拆分成 PRD delta 和 spec delta。不能把同一句话原样复制到两个 stable home。
 
-新建 module `prd.md` 沿用现有惰性创建门（见 `skills/impl-package/backfill-stable-docs/references/constraint-extraction-and-routing.md#module-prd-惰性创建门`）：必须同时具备 Purpose、用户或 journey、Outcomes、Scope/Non-goals，且能上链到 owning context 的 PRD（跨 context 时再上链到 system PRD）、下链到 module spec，intent authority 来自 system/context PRD、批准 design、owner 决策或 confirmed gate。材料不足时留在 `_pending.md`，不创建只有标题和一句 slogan 的空文件。这条门槛这次重设计不降级，agent-first 不等于降低首建 module PRD 的证据门槛。
+新建 module `prd.md` 沿用现有惰性创建门（见 `plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/references/constraint-extraction-and-routing.md#module-prd-惰性创建门`）：必须同时具备 Purpose、用户或 journey、Outcomes、Scope/Non-goals，且能上链到 owning context 的 PRD（跨 context 时再上链到 system PRD）、下链到 module spec，intent authority 来自 system/context PRD、批准 design、owner 决策或 confirmed gate。材料不足时留在 `_pending.md`，不创建只有标题和一句 slogan 的空文件。这条门槛这次重设计不降级，agent-first 不等于降低首建 module PRD 的证据门槛。
 
 ## Agent Responsibilities
 

@@ -74,9 +74,9 @@ Owner 的 create_thread 授权原文（你据此为自己建继任者）：
 - **停在第一阶段**：child 交接完成后不直接开工，而是只核对 anchor 就停，等主控更新 registry（见下方固定流程）。
 - **`previous_session_ids` 不进 child prompt**，由主控写进 registry。
 
-### Role A 要带上 `$impl-package`
+### Role A 要带上 `/impl-package:impl-package`
 
-Role A 的第二阶段 prompt 必须以 `$impl-package` 为 entry point，不复述其流程；Role B 不带这一项。
+Role A 的第二阶段 prompt 必须以 `/impl-package:impl-package` 为 entry point，不复述其流程；Role B 不带这一项。
 
 ### 固定流程
 
@@ -123,7 +123,7 @@ Role A / B 的完整第二阶段消息（registration + assignment）以对应�
 #### Role A prompt
 
 ```text
-第二阶段 registration 已就绪。读取 $thread-harness 与 $impl-package，并按 Role A 工作。
+第二阶段 registration 已就绪。读取 thread-harness 与 /impl-package:impl-package，并按 Role A 工作。
 回报对象：controller=<current_controller_session_id>
 恢复权威：<package entry / checkpoint pointer>
 向 controller 发送 state=working 的 H1，再从恢复权威读取并继续其中的 current Next Action。
@@ -170,7 +170,7 @@ Role A 从 package entry 恢复并继续。Role B card 使用第二阶段模板�
 ```text
 catch-up（你刚发生过 compaction）：
 - 你的角色：Role A 任务包子线，按 $thread-harness Role A 执行
-- 开发框架：$impl-package
+- 开发框架：/impl-package:impl-package
 - 回报对象：controller=<current_controller_session_id>
 - 当前 assignment：<slug>
 - 恢复权威：<绝对路径>

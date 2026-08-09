@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "帮我看看 skills/impl-package/dev-with-track 还有哪些优化点。注意沿用我之前对这个 skill 的偏好。",
+      "prompt": "帮我看看 plugin-marketplace/plugins/impl-package/skills/dev-with-track 还有哪些优化点。注意沿用我之前对这个 skill 的偏好。",
       "expected_output": "Reads global and per-skill rubric before proposing improvements, filters confirmed conflicts, and labels candidates by preference fit.",
       "files": [],
       "expectations": [

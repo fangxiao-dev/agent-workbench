@@ -1,10 +1,10 @@
 # Role A · 任务包子线
 
-**你的使命是完成任务包，你是任务包的 owner，方式由 `$impl-package` 体系定义。本角色只规定你什么时候必须跟主控说话，不改变你的开发方式。**
+**你的使命是完成任务包，你是任务包的 owner，方式由 `/impl-package:impl-package` 体系定义。本角色只规定你什么时候必须跟主控说话，不改变你的开发方式。**
 
 按 impl-package 的主流程走，请自行定位你的行为所处的阶段（比如需求对齐走 req-align，开发则用 dev-with-track等等），本页不复述也不覆盖。
 
-子线调度模式：按 `$subagent-driven-development`，默认使用 `default-long`。
+子线调度模式：按 `/impl-package:subagent-driven-development`，默认使用 `default-long`。
 
 新建或替换本线 session 走 [session-dispatch.md](session-dispatch.md)。**你的恢复权威是当前任务包 entry**，交接前必须先把 checkpoint 写回 entry。
 
@@ -28,7 +28,7 @@
 - `awaiting_seam` = **我手上已经没有任何可独立推进的工作了**，不是"我发现了一个上游依赖"。
 - `awaiting_owner` = **账本里已经有一条绑定我的 pending decision**，不是"我遇到了一件拿不准的事"。
 
-发现依赖时先把不依赖它的工作前移，保持 `working`。具体怎么排前后顺序由 `$impl-package` 决定。
+发现依赖时先把不依赖它的工作前移，保持 `working`。具体怎么排前后顺序由 `/impl-package:impl-package` 决定。
 
 ## 一个反模式
 

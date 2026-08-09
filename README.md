@@ -1,6 +1,6 @@
-﻿# agent-workbench
+# agent-workbench
 
-个人 Agentic Coding 基础设施工具库。这个仓库是 `claude`、`codex`、`grok` 多宿主共享的 skills、agents、commands、安装器和治理文档的 source of truth。
+个人 Agentic Coding 基础设施工具库。这个仓库是 `claude`、`codex`、`grok` 多宿主共享的 skills、plugins、agents、commands、安装器和治理文档的 source of truth。
 
 **安装后能做什么？** → [docs/capabilities.md](docs/capabilities.md)
 
@@ -10,8 +10,9 @@
 
 `agent-workbench` 的目标是把可复用的 agent 能力集中维护，然后以非破坏方式暴露给不同宿主：
 
-- `skills/` 保存所有正式 skill，包括自建 skill、审查过的第三方 skill、以及本地工作流知识库
-- `skills/` 也包含可显式 `$` 调用的共享委派入口：`investigate-before-implement`、`reviewer`
+- `skills/` 保存独立安装的正式 skill，包括自建 skill、审查过的第三方 skill、以及本地工作流知识库
+- `plugin-marketplace/` 是独立的插件发布根；其中 `plugins/` 保存多 skill 套件，并分别提供 Codex 与 Claude manifest
+- `plugin-marketplace/plugins/impl-package/` 包含共享调查与委派入口；`skills/` 仍保留可选的通用 `reviewer`
 - `agents/` 保存可安装到宿主的 subagent 定义，目前正式 subagent 是 `audit-agent-setup`
 - `commands/` 保存宿主 command 提示文件；是否能用 `/...` 唤出取决于具体宿主
 - `scripts/link_skill.py` 把单个（或全部顶层）skill **link** 到 `~/.claude` / `~/.codex` / `~/.grok` 的 `skills/`（Windows junction，Unix/macOS symlink）
@@ -19,7 +20,7 @@
 - `docs/workbench-design/` 保存当前实现规范，README 只做入口说明
 - `tests/` 保存安装器和核心脚本测试
 
-仓库根目录下的 `.agents/`、`.claude/`、`.pytest_cache/`、`skills-lock.json` 等属于本机运行态、工具状态或缓存，不作为规范源。
+仓库根目录下的 `.agents/`、`.claude/`、`.pytest_cache/`、`skills-lock.json` 等属于本机运行态、工具状态或缓存，不作为规范源。正式插件索引位于 `plugin-marketplace/` 发布根内部。
 
 ---
 
@@ -56,7 +57,25 @@ python3 /path/to/agent-workbench/scripts/link_skill.py verify-registry-state --u
 
 `skills/` 支持 bundle（如 `skills/lark-skills/`）：按**顶层目录**链一次，内部子 skill 随目录暴露。
 
+多公开 skill 套件不走 junction/symlink 递归发现；它们放在 `plugin-marketplace/plugins/` 并使用宿主原生 plugin 安装。
+
 > **约定**：workbench 路径尽量固定——link 使用绝对路径。
+
+## 安装（plugin marketplace）
+
+`impl-package` 是 Codex/Claude 共用插件。插件目录本身就是安装产物，不需要 build；marketplace 只负责告诉宿主插件名称、版本和来源位置。
+
+```powershell
+# Codex
+codex plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
+codex plugin add impl-package@agent-workbench
+
+# Claude（项目级启用）
+claude plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
+claude plugin install impl-package@agent-workbench --scope project
+```
+
+安装或升级后开启新会话，使宿主从插件缓存重新加载 skills。面向用户和 agent 的文档统一使用 `/impl-package:dev-with-track` 形式显式调用；宿主内部 registry/discovery 仍可显示不带 `/` 的 skill key。`link_skill.py --all` 不处理 `plugin-marketplace/`。
 
 ### Discuss Ledger MCP 注册
 
@@ -156,15 +175,15 @@ python D:\CodeSpace\agent-workbench\skills\discuss-ledger\scripts\discuss_orches
 
 ### 回刷常青文档
 
-`$backfill-stable-docs` 是 Impl-Package 内维护阶段的公共入口，不需要 Plugin。它按仓库内配置的显式相对路径收集 package、pending 和 stable docs。audit 只读生成带可读 item ID 的报告；apply 只处理 owner 对某报告明确批准的 item ID；verify 独立检查路径、目标 Git commit、链接、audit 结构和 inventory，且不补写内容。三个阶段必须分别汇报，audit 完成不表示 apply 或 verify 完成。
+`backfill-stable-docs` 是 `impl-package` 插件内维护阶段的公共入口，显式调用为 `/impl-package:backfill-stable-docs`。它按仓库内配置的显式相对路径收集 package、pending 和 stable docs。audit 只读生成带可读 item ID 的报告；apply 只处理 owner 对某报告明确批准的 item ID；verify 独立检查路径、目标 Git commit、链接、audit 结构和 inventory，且不补写内容。三个阶段必须分别汇报，audit 完成不表示 apply 或 verify 完成。
 
 ### Implementation Package 规划发布
 
 当 plan、earned Ticket/DAG bundle 已 review 且 owner 批准后，直接写入批准内容并初始化最小 current state：
 
 ```powershell
-python skills/impl-package/scripts/impl_package_state.py --package <package> init --attempt <attempt-id> --plan <repo-relative-plan>
-python skills/impl-package/scripts/impl_package_state.py --package <package> validate
+python plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py --package <package> init --attempt <attempt-id> --plan <repo-relative-plan>
+python plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py --package <package> validate
 ```
 
 D/S/P 只作为可读别名；跨 session 比较使用批准内容所在的 Git commit。所有持久化文件和 evidence 引用使用仓库相对路径。Git commit/push 与远程更新保持独立。
@@ -185,12 +204,12 @@ WT-PM 工作流拆成三个 skill：
 
 ### 用 Grill Me Smartly 审设计
 
-当你想审一个方案，但希望 agent 一边追问、一边代你调研代码事实，并把自动判断过程整理成中文记录时，使用 `grill-me-smartly`。
+当你想审一个方案，但希望 agent 一边追问、一边代你调研代码事实，并把自动判断过程整理成中文记录时，使用 `/impl-package:grill-me-smartly`。
 
 推荐说法：
 
 ```text
-用 grill-me-smartly 审 docs/plans/user-auth-migration.md。
+用 /impl-package:grill-me-smartly 审 docs/plans/user-auth-migration.md。
 ```
 
 实际流程：
@@ -198,7 +217,7 @@ WT-PM 工作流拆成三个 skill：
 - 主 session 是书记、裁判和用户意图网关，只通过脚本写入 ledger
 - 常驻 Questioner subagent 负责沿设计树提出下一个关键问题
 - Answerer subagent 只回答可通过本地文件、代码库、git 历史或工具确认的问题
-- ledger 写在 `docs/exchange/grill/grill-<slug>.md`，顶部用中文汇总已收敛决策、待用户裁决、问题与回答总览、停止证明
+- ledger 和最终 review 写在 OS 临时目录的 `codex-grill/` 下，仓库不保存过程状态
 - review 阶段只输出完整意见对齐文档，不直接改被审计划
 - 你检查 ledger 后明确要求应用时，才把已收敛意见更新回原文档
 
@@ -226,7 +245,6 @@ agent-workbench/
 ├── scripts/link_skill.py       ← 多宿主 per-skill 安装入口
 ├── skills/                     ← 正式 skills：自建、第三方、工作流知识库
 │   ├── audit-agent-setup/      ← agent setup 审查知识库（rules + examples）
-│   ├── grill-me-smartly/       ← 中文 Grill Ledger + Questioner/Answerer 设计审查
 │   ├── handoff-new-session/    ← 会话上下文落盘和新会话接续提示词
 │   ├── feishu-skills/          ← 国内飞书 skills bundle（feishu-*）
 │   ├── lark-skills/            ← Lark International bundle（using-lark 入口 + 内部 sub-skills）
@@ -240,6 +258,10 @@ agent-workbench/
 │   ├── wt-dev/                 ← worktree 开发阶段 skill
 │   ├── planning-with-files/
 │   └── ...
+├── plugin-marketplace/         ← 独立插件发布根
+│   ├── .agents/plugins/        ← Codex marketplace
+│   ├── .claude-plugin/         ← Claude marketplace
+│   └── plugins/impl-package/   ← 双 manifest、20 个扁平 skills 与公共资源
 ├── agents/                     ← subagents，安装到已选宿主的 agents/
 │   └── audit-agent-setup/
 │       └── agent.md
@@ -260,12 +282,12 @@ agent-workbench/
 
 ## 添加新 Skill
 
-1. 在 `skills/` 下创建目录并添加 `SKILL.md`；成组能力可放在 `skills/<bundle>/<name>/SKILL.md`（frontmatter 格式见 [docs/workbench-design/02-skills-spec.md](docs/workbench-design/02-skills-spec.md)）
+1. 独立能力在 `skills/<name>/` 下创建 `SKILL.md`；需要多个公开 skill 和共享资源的套件放在 `plugin-marketplace/plugins/<plugin>/skills/<name>/SKILL.md`（frontmatter 格式见 [docs/workbench-design/02-skills-spec.md](docs/workbench-design/02-skills-spec.md)）
 2. skill 专属脚本放进该 skill 自己的 `scripts/` 目录，不要默认提取到仓库顶层
 
 新增顶层 skill 后需要再跑 `link_skill.py`（或 `--all`）才会出现在宿主 `skills/`。
 
-第三方 skill 通过 `npx skills add <pkg> -g -y` 安装，默认落入本仓库 `skills/<name>/`；同一上游的成组能力可归入 `skills/<bundle>/<name>/`。是否需要重跑安装器取决于上面的平台安装态，安装后在 `registry/third-party-skills.md` 补登记实际路径。
+第三方 skill 通过 `npx skills add <pkg> -g -y` 安装，独立能力默认落入本仓库 `skills/<name>/`；插件内能力落入 `plugin-marketplace/plugins/<plugin>/skills/<name>/`。是否需要重跑安装器取决于上面的平台安装态，安装后在 `registry/third-party-skills.md` 补登记实际路径。
 
 ---
 

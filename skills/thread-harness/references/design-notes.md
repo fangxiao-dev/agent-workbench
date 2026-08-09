@@ -156,17 +156,17 @@ H4 的分阶段：**当前只登记不校验**，脚本仅在 `sync` 摘要报 `
 
 ### 4.1 公共段（三角色共享）
 
-**任务分工**：impl / investigate 优先 `/call-grok`；review 走 `do-review` 路由到 `skills/reviews/` 的四条 track（`code-review` / `standards-review` / `spec-review` / `safety-review`）；验收由 session 自己做（`verification-before-completion`）。
+**任务分工**：impl / investigate 在 `call-grok` 可用时可优先使用，否则走普通 subagent；review 走 `/impl-package:do-review`，路由到插件内四条 track（`code-review` / `standards-review` / `spec-review` / `safety-review`）；验收由 session 自己做（`/impl-package:verification-before-completion`）。
 
-**为什么这条是硬提示**：上一轮 compaction 次数为 主控 32 / checkout 30 / inventory 22 / customer 18 / catalog 18，impl 与 investigate 的过程占了这些 context 的绝大部分。`/call-grok` 是独立 CLI 进程，只回收结论——**这是对 F9 最省事的对冲**。review 不外包是因为它需要吃本 session 的上下文才能判断；验收同理。
+**为什么这条是硬提示**：上一轮 compaction 次数为 主控 32 / checkout 30 / inventory 22 / customer 18 / catalog 18，impl 与 investigate 的过程占了这些 context 的绝大部分。`call-grok` 可用时作为独立 CLI 进程只回收结论——**这是对 F9 最省事的对冲**。review 由当前 session 保留 comparison point、完整 diff 与收敛判断，但 reviewer leaf 按 `/impl-package:do-review` 合同派发为独立只读 subagent；最终验收仍由当前 session 自己完成。
 
-**反面证据**：上一轮 broker 开头 1.5 小时自己 `spawn_agent` 开了 `review_code` / `review_standards` / `review_spec` / `review_safety` / `closure_*`——这些是 `skills/reviews/` 四条 track 的克隆。broker 不该自己造审计。
+**反面证据**：上一轮 broker 开头 1.5 小时绕过 `/impl-package:do-review`，自行复制了 `review_code` / `review_standards` / `review_spec` / `review_safety` / `closure_*` 的 topology 与收敛逻辑。问题不是派发 reviewer subagent，而是另造一套 review 编排；broker 应调用 canonical `do-review` 合同。
 
 ### 4.2 Role A · 任务包子 thread
 
-**使命与方法完全不变**：`/impl-package` 6 步主流程，执行阶段 `dev-with-track` + `dispatch-bounded-task`。
+**使命与方法完全不变**：`/impl-package:impl-package` 主流程，执行阶段使用 `/impl-package:dev-with-track` + `/impl-package:dispatch-bounded-task`。
 
-role 段开头必须写明：*"你的使命是完成任务包，方式由 `/impl-package` 定义。本段只规定你什么时候必须跟 broker 说话，不改变你的开发方式。"*
+role 段开头必须写明：*"你的使命是完成任务包，方式由 `/impl-package:impl-package` 定义。本段只规定你什么时候必须跟 broker 说话，不改变你的开发方式。"*
 
 上报边界（沿用上一轮 goal 原文，这条本来就是对的）：非 seam / 共享基座的问题优先自己完成；确认是共享的，才上报给 broker 转给 Platform。
 

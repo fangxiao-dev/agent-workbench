@@ -14,7 +14,8 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `grok
 - Do not mutate user-level host state (`~/.claude`, `~/.codex`, `~/.grok`) unless the task explicitly asks for it.
 - Prefer updating skill-link installer logic and docs together so behavior and guidance stay aligned.
 - Preserve non-destructive skill linking: skip conflicts and report clearly.
-- To expose a skill on a host, use `scripts/link_skill.py` (Windows junction / Unix symlink), not whole-tree `skills/` takeover.
+- To expose a standalone skill on a host, use `scripts/link_skill.py` (Windows junction / Unix symlink), not whole-tree `skills/` takeover.
+- Keep multi-skill suites in `plugin-marketplace/plugins/<name>/`; install them through each host's native marketplace/plugin commands.
 
 ## Skill-Driven Workflow
 
@@ -24,13 +25,13 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `grok
 - When writing PowerShell scripts, use [$powershell-windows](D:\CodeSpace\agent-workbench\skills\powershell-windows\SKILL.md).
 - Use `import-third-party-skill` for third-party skill governance:
   - review upstream first
-  - install or copy the approved skill into `skills/<name>/` or `skills/<bundle>/<name>/`
+  - install or copy a standalone approved skill into `skills/<name>/` or a plugin-owned skill into `plugin-marketplace/plugins/<plugin>/skills/<name>/`
   - register it in `registry/third-party-skills.md`
 - Use `verify-registry-state` after plugin registry changes.
 
 ## Delegation Workflow
 
-- Use `$subagent-driven-development` from `skills/subagent-driven-development/` for main-session/subagent scheduling. Investigate or implement behavior routes to `$investigate-before-implement` from `skills/investigate-before-implement/`; independent read-only review routes to `$reviewer` from `skills/reviewer/`.
+- Use `/impl-package:subagent-driven-development` for main-session/subagent scheduling. Investigate or implement behavior routes to `/impl-package:investigate-before-implement`. For independent read-only review, dispatch a separate subagent; if `reviewer` is available in the active skill catalog, prefer its routing contract.
 - The caller supplies the task-specific objective, scope, worktree, write-set, acceptance, authorization, verification, and output contract; workflow and role definitions do not supply business prompts.
 
 ## Implementation Expectations
@@ -49,3 +50,4 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `grok
   - or `powershell -ExecutionPolicy Bypass -File tests/install.ps1` (wrapper)
 - If third-party registry logic changed, also run:
   - `powershell -ExecutionPolicy Bypass -File skills/import-third-party-skill/scripts/test-import-third-party-skill.ps1`
+- After plugin manifest or marketplace changes, validate both host manifests without installing into user-level host state.

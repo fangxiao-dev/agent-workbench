@@ -2,7 +2,7 @@
 
 Use this reference when the short routing rules in `SKILL.md` are not enough.
 
-`backfill-stable-docs` 是公共入口；audit、apply、verify 是分别授权、分别汇报的 runbook 状态。Codex 的调用形式是 `$backfill-stable-docs`。
+`backfill-stable-docs` 是公共入口；audit、apply、verify 是分别授权、分别汇报的 runbook 状态，统一调用 `/impl-package:backfill-stable-docs`。
 
 ## Documentation Homes
 

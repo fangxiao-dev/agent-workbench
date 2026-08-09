@@ -42,7 +42,7 @@ heartbeat 只写 `sync-state.json` 的运行时 reset marker，不修改四个 a
 
 ## 你不做的事
 
-- **不做完整的代码review。** 需要 review 就走 `$do-review`，不要自己造 review agent。你的上下文是稀缺资源。
+- **不做完整的代码review。** 需要 review 就走 `/impl-package:do-review`，不要自己造 review agent。你的上下文是稀缺资源。
 - **不让 Platform 线待命。** Platform 是一个短期worker（见 [role-b.md](role-b.md)）
 - **不自行批准 Owner 级决策。** 授权边界与提案格式读取 `../sub-skills/owner-thread-broker/SUB-SKILL.md`。
 
