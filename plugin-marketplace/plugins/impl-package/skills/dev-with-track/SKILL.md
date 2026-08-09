@@ -5,7 +5,7 @@ description: 当批准 implementation plan 或者 D/S/P bundle 正式开始或�
 
 # Dev With Track
 
-先读 `../references/impl-package-composition-contract.md` 和 `../references/impl-package-current-state.md`。本 skill 维护 current state、Progress、Attempt Execution Record、条件式 Task Handoff、execution findings 和 current Gate；各上游 artifact 仍由 owning skill 维护。
+先读 `../../references/impl-package-composition-contract.md` 和 `../../references/impl-package-current-state.md`。本 skill 维护 current state、Progress、Attempt Execution Record、条件式 Task Handoff、execution findings 和 current Gate；各上游 artifact 仍由 owning skill 维护。
 默认允许 subagent，且模式为 default-long
 
 ## Restore
@@ -22,7 +22,7 @@ description: 当批准 implementation plan 或者 D/S/P bundle 正式开始或�
 3. **Implement**：只修复已证实、当前可归责的范围；派发时给 primary ownership、禁区、成功条件、反例和局部验证。
 4. **Evaluate**：使用最便宜且忠实的证据。昂贵 runtime/E2E 重跑必须有新修复、环境变化或决定性观察目标。
 
-其中步骤 1 & 3 由 `$investigate-before-implement` 指导，步骤2 和 4 由主session把控。
+其中步骤 1 & 3 由 `/impl-package:investigate-before-implement` 指导，步骤 2 和 4 由主 session 把控。
 依赖是否释放只由 DAG、typed Ticket dependency 与 canonical state 判断。Progress/checkpoint 不授权 dispatch，也不释放 acceptance/release dependency。
 
 ## State、ER 与 Handoff
@@ -36,21 +36,23 @@ description: 当批准 implementation plan 或者 D/S/P bundle 正式开始或�
 
 ```powershell
 Get-Content .\er-payload.json -Raw |
-  python skills/impl-package/scripts/impl_package_state.py --package <package> er-add
+  python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> er-add
 ```
+
+`<impl-package-plugin-root>` 指当前已加载 skill 所属的插件根目录；不要假设 workbench 仓库路径或宿主缓存路径。
 
 payload 使用 `purpose=checkpoint|judgment`、`subject=attempt|ticket:<id>|task:<id>`、`title`、`content`、checkpoint 的 `nextAction` 和可选 evidence。
 
 ## Review、Findings 与人工验收
 
-- 根据实际 diff 路由 review：普通实现使用 code review；interface、状态机、跨模块 seam 或合同忠实度使用相应 standards/spec review；安全、数据完整性、外部 mutation、并发、migration 必须 safety review。
+- 根据实际 diff 选择 reviewer，并通过 `/impl-package:do-review` 派发：普通实现使用 `code-review`；interface、状态机、跨模块 seam 或合同忠实度增加相应 `standards-review` / `spec-review`；安全、数据完整性、外部 mutation、并发、migration 必须增加 `safety-review`。
 - P1/P2 finding 必须修复并 closure verify；editorial suggestion 不阻断 Gate。
 - package 级 `execution-findings.md` 在 terminal Gate 前必须完成分流：Decision rationale→Decision，规范行为→Spec，执行判断→Execution Record，长期知识→Durable Delta/`_pending.md`。
 - Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 把入口、oracle、环境、失败反馈和 teardown owner 写入 judgment 或 canonical handoff，并取得结果 evidence。
 
 ## Verify and Gate
 
-completion claim 先交给 `verification-before-completion`。Gate 只判断 current Attempt：
+completion claim 先交给 `/impl-package:verification-before-completion`。Gate 只判断 current Attempt：
 
 - `blocked`：保持 active，记录 gap 和 next action。
 - `pass`：所有 earned Task/Ticket、适用验证、review、manual acceptance 和 findings closure 均满足。
@@ -58,4 +60,4 @@ completion claim 先交给 `verification-before-completion`。Gate 只判断 cur
 
 terminal Gate 必须完成 Stage 7：记录 Durable Delta 及 `_pending.md`/truth pointer，或通过 `--no-durable-delta-reason` 明确无增量原因。terminal 后 state、resume、Execution Record 冻结。
 
-输出使用 `talk-to-boss`，分别说明实施、验证、Gate、backfill/合入状态，给出 Task/Ticket 总数、剩余数、blocker、是否 closed 和唯一下一动作。
+若 active skill catalog 中存在 `talk-to-boss`，优先按其汇报合同输出；否则直接分别说明实施、验证、Gate、backfill/合入状态，给出 Task/Ticket 总数、剩余数、blocker、是否 closed 和唯一下一动作。可选 skill 缺失不阻塞收口。

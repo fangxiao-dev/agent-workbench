@@ -1,6 +1,6 @@
 # DAG 与 Ownership
 
-本 reference 只描述 Task 的最小执行分解。Composition、Ticket/Spec 验收、状态 schema 和最终 gate 以 `skills/impl-package/references/impl-package-composition-contract.md` 为准。
+本 reference 只描述 Task 的最小执行分解。Composition、Ticket/Spec 验收、状态 schema 和最终 gate 以 `../../../references/impl-package-composition-contract.md` 为准。
 
 ## 最小 Task 记录
 

@@ -1,5 +1,5 @@
 ---
-target: skills/impl-package/req-align
+target: plugin-marketplace/plugins/impl-package/skills/req-align
 updated: 2026-07-23
 ---
 ## 原则

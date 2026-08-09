@@ -20,7 +20,7 @@ def main() -> None:
         for name in files
         if name == "SKILL.md"
         for path in [Path(current) / name]
-        if path.parent != IMPL_ROOT and not is_eval_workspace(path)
+        if path.parent != IMPL_ROOT / "skills" / "impl-package" and not is_eval_workspace(path)
     )
     if len(members) < 8:
         raise AssertionError(
@@ -49,7 +49,7 @@ def main() -> None:
                 f"retaining useful English tokens: {member}"
             )
 
-    router = (IMPL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    router = (IMPL_ROOT / "skills" / "impl-package" / "SKILL.md").read_text(encoding="utf-8")
     if "Impl-Package 体系的入口地图与路由" not in router:
         raise AssertionError(
             "The impl-package router may retain the suite name because routing the "

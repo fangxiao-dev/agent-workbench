@@ -1,5 +1,5 @@
 ---
-target: skills/impl-package
+target: plugin-marketplace/plugins/impl-package/skills/impl-package
 updated: 2026-08-06
 ---
 

@@ -74,15 +74,17 @@ Progress 不复制历史正文、不计算百分比，也不推导或授权 read
 
 ## 5. CLI
 
+`<impl-package-plugin-root>` 是当前已加载插件的根目录，由 skill 所在路径解析；不得假设 workbench 源路径或宿主缓存路径。
+
 ```text
-python skills/impl-package/scripts/impl_package_state.py --package <package> init --attempt <id> --plan <repo-relative-plan>
-python skills/impl-package/scripts/impl_package_state.py --package <package> status [--commit <git-commit>]
-python skills/impl-package/scripts/impl_package_state.py --package <package> validate [--commit <git-commit>]
-python skills/impl-package/scripts/impl_package_state.py --package <package> refresh-progress
-python skills/impl-package/scripts/impl_package_state.py --package <package> set-state <task|ticket> <id> <state> --expect <state> [--evidence <path>]
-printf '<json>' | python skills/impl-package/scripts/impl_package_state.py --package <package> er-add
-python skills/impl-package/scripts/impl_package_state.py --package <package> checkpoint --next <text> [--blocker <text>] [--evidence <path>]
-python skills/impl-package/scripts/impl_package_state.py --package <package> gate <verdict> --comparison-commit <git-commit> --reason <text> [--evidence <path>] [--durable-delta <text> | --no-durable-delta-reason <text>]
+python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> init --attempt <id> --plan <repo-relative-plan>
+python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> status [--commit <git-commit>]
+python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> validate [--commit <git-commit>]
+python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> refresh-progress
+python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> set-state <task|ticket> <id> <state> --expect <state> [--evidence <path>]
+printf '<json>' | python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> er-add
+python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> checkpoint --next <text> [--blocker <text>] [--evidence <path>]
+python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> gate <verdict> --comparison-commit <git-commit> --reason <text> [--evidence <path>] [--durable-delta <text> | --no-durable-delta-reason <text>]
 ```
 
 `init` 先验证 Plan/Ticket/DAG bundle，只导入当前 Attempt 的 Ticket/Task，发布 Draft Ticket，并创建 state、Execution Record 和全部投影。`refresh-progress` 修复 Ticket/DAG/Progress 投影，不改变业务状态。

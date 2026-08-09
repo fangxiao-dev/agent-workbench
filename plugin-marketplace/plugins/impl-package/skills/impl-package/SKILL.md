@@ -16,21 +16,33 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec → Plan
 - 已知 artifact 使用固定目录或显式路径，不保存扫描结果副本。
 - Git 负责历史审计；现役格式不维护 contract/schema 版本、迁移账本或兼容层。
 
-正式规则见 [Composition Contract](references/impl-package-composition-contract.md)，状态格式和 CLI 见 [Current State](references/impl-package-current-state.md)。
+正式规则见 [Composition Contract](../../references/impl-package-composition-contract.md)，状态格式和 CLI 见 [Current State](../../references/impl-package-current-state.md)。
 
 ## 路由
 
+面向用户和 agent 的路由统一使用 `/plugin:skill` 调用形式；宿主内部 registry/discovery 显示的无 `/` skill key 不是第二种文档写法。
+
 | 当前需要 | 使用 |
 | --- | --- |
-| 对齐需求、Decision、Spec | `req-align` |
-| 创建 initial/patch plan、决定 Composition | `impl-planning` |
-| 创建独立验收切片 | `to-tickets` |
-| 创建横向执行依赖图 | `create-task-dag` |
-| 执行前确认授权与工作区 | `execution-preflight` |
-| 恢复执行、推进 Task/Ticket、写 Gate | `dev-with-track` |
-| 派发边界明确的局部 Task | `dispatch-bounded-task` |
-| 声称 complete/merge-ready 前审计证据 | `verification-before-completion` |
-| 回刷稳定知识或退休 package | `backfill-stable-docs` |
+| 对齐需求、Decision、Spec | `/impl-package:req-align` |
+| 在高风险 Spec gate 做 ledger 驱动审问 | `/impl-package:grill-me-smartly` |
+| 对计划、Decision 或 Spec 做交互式深入质询 | `/impl-package:grilling` |
+| 创建 initial/patch plan、决定 Composition | `/impl-package:impl-planning` |
+| 审查 plan 或完整 Plan/Ticket/DAG bundle | `/impl-package:plan-review` |
+| 创建独立验收切片 | `/impl-package:to-tickets` |
+| 创建横向执行依赖图 | `/impl-package:create-task-dag` |
+| 执行前确认授权与工作区 | `/impl-package:execution-preflight` |
+| 调查原因、影响面或既有实现后再写入 | `/impl-package:investigate-before-implement` |
+| 安排主 session 与 subagent 的通用调度 | `/impl-package:subagent-driven-development` |
+| 恢复执行、推进 Task/Ticket、写 Gate | `/impl-package:dev-with-track` |
+| 派发边界明确的局部 Task | `/impl-package:dispatch-bounded-task` |
+| 编排多 reviewer、聚合 findings 并判断收敛 | `/impl-package:do-review` |
+| 审查实现正确性和可维护性 | `/impl-package:code-review` |
+| 审查仓库规范和模块 interface/depth/locality | `/impl-package:standards-review` |
+| 审查需求、Spec、Plan 与实现忠实度 | `/impl-package:spec-review` |
+| 审查安全、数据完整性、并发和外部副作用 | `/impl-package:safety-review` |
+| 声称 complete/merge-ready 前审计证据 | `/impl-package:verification-before-completion` |
+| 回刷稳定知识或退休 package | `/impl-package:backfill-stable-docs` |
 
 当用户只是询问体系时停在本页；当用户已明确阶段和动作，直接进入对应 skill。
 

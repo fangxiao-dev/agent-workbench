@@ -9,7 +9,7 @@ Run Decision, then Spec, for every contract-impacting change. The gates are equa
 
 ## Routes and ownership
 
-This skill owns the package's current `decision.md`, `spec.md`, and readable D/S aliases under the configured implementations root (default `docs/implementations/`). It does not create a tracker spec, a second behavior contract, or a plan. `impl-planning` consumes the gated `spec.md`.
+This skill owns the package's current `decision.md`, `spec.md`, and readable D/S aliases under the configured implementations root (default `docs/implementations/`). It does not create a tracker spec, a second behavior contract, or a plan. `/impl-package:impl-planning` consumes the gated `spec.md`.
 
 - **No-contract fast path:** When business result, Acceptance Semantics, security/data constraints, and mutation authority are unchanged, reuse current D/S and route directly to the owning skill. Do not run brainstorming, either Gate, or Grill; do not create or expand D/S or other package state. Report why the existing contract still holds. If deletion changes a promise or acceptance boundary, it is contract-impacting.
 - **Initial or follow-up:** Before Focused PRD work, classify the request and read [references/requirement-inputs.md](references/requirement-inputs.md). An initial request may begin with confirmed oral conversation, screenshots, documents, or repository facts. A follow-up starts from current D/S and treats the incoming request as a delta unless the owner explicitly declares full replacement.
@@ -21,7 +21,7 @@ Use [assets/templates/decision.md](assets/templates/decision.md) and [assets/tem
 
 1. **Decision first.** Before drafting an earned Focused PRD or evaluating the Decision Gate, read [references/decision-gate.md](references/decision-gate.md) and [references/focused-prd.md](references/focused-prd.md). Decision is `BLOCKED` when destination, repository fit, material choices, source-input reconciliation, Core/Capability boundary, or blocking uncertainty is unresolved. Do not create `spec.md` while blocked.
 2. **Spec second.** Only after Decision `PASSED`, read [references/spec-gate.md](references/spec-gate.md), synthesize the behavior contract, and evaluate Spec. Do not hand off to planning while Spec is blocked.
-3. **Plan last.** After both gates pass and lifecycle registration validates, hand the same `spec.md` to `impl-planning`.
+3. **Plan last.** After both gates pass and lifecycle registration validates, hand the same `spec.md` to `/impl-package:impl-planning`.
 
 Lightweight corrections under an existing product definition may omit standalone `decision.md` only after Decision passes; their minimum evidence lives in `spec.md`'s Decision Gate Record. A new feature, material experience change, or business capability change normally earns `decision.md`.
 

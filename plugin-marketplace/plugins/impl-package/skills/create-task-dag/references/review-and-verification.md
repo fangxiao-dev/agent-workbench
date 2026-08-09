@@ -1,6 +1,6 @@
 # Review 与验证
 
-Task 局部验证用于让 Working Branch owner 判断其产出是否可集成；它不是 Task-level formal acceptance，也不能替代 Ticket review。共享 acceptance、状态和最终 package gate 以 `skills/impl-package/references/impl-package-composition-contract.md` 与 `dev-with-track` 为准。
+Task 局部验证用于让 Working Branch owner 判断其产出是否可集成；它不是 Task-level formal acceptance，也不能替代 Ticket review。共享 acceptance、状态和最终 package gate 以 `../../../references/impl-package-composition-contract.md` 与 `/impl-package:dev-with-track` 为准。
 
 ## 集成与 Ticket 验收
 

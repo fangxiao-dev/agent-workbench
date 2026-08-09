@@ -1,5 +1,5 @@
 ---
-target: skills/impl-package/create-task-dag
+target: plugin-marketplace/plugins/impl-package/skills/create-task-dag
 updated: 2026-07-19
 ---
 ## 原则

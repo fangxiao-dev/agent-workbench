@@ -44,4 +44,4 @@ blocker/owner decision: <none | item>
 
 `READY` 只授权列出的下一动作，不自动授权 commit/push/merge/发布或外部 mutation。
 
-需要 main-session/subagent 调度时使用 `$subagent-driven-development`；preflight 只提供任务特定的 scope、write-set、authorization、verification 和输出合同。
+需要 main-session/subagent 调度时使用 `/impl-package:subagent-driven-development`；preflight 只提供任务特定的 scope、write-set、authorization、verification 和输出合同。

@@ -1,6 +1,6 @@
 # Runtime Protocol
 
-运行状态唯一来源是 `.impl-package/state.json`；格式和命令见 `../../references/impl-package-current-state.md`。`progress.md` 是完整恢复投影，Execution Record 是公共执行判断，Handoff 是条件式局部接手材料。
+运行状态唯一来源是 `.impl-package/state.json`；格式和命令见 `../../../references/impl-package-current-state.md`。`progress.md` 是完整恢复投影，Execution Record 是公共执行判断，Handoff 是条件式局部接手材料。
 
 ## 恢复顺序
 

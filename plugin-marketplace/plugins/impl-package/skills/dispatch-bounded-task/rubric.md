@@ -1,5 +1,5 @@
 ---
-target: skills/impl-package/dispatch-bounded-task
+target: plugin-marketplace/plugins/impl-package/skills/dispatch-bounded-task
 updated: 2026-08-04
 ---
 ## 原则

@@ -6,11 +6,13 @@ from __future__ import annotations
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[2]
+SKILLS_ROOT = Path(__file__).resolve().parents[2]
+PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 
 
 def read(relative: str) -> str:
-    return (ROOT / relative).read_text(encoding="utf-8")
+    root = PLUGIN_ROOT if relative.startswith("references/") else SKILLS_ROOT
+    return (root / relative).read_text(encoding="utf-8")
 
 
 def main() -> None:

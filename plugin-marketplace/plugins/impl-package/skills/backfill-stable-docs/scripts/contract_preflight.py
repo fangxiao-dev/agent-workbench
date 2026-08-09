@@ -13,7 +13,7 @@ from typing import Any
 from stable_docs_config import ConfigError, expand_roots, load_repository_config, path_matches_ignore
 
 
-STATE_ENGINE = Path(__file__).resolve().parents[2] / "scripts" / "impl_package_state.py"
+STATE_ENGINE = Path(__file__).resolve().parents[3] / "scripts" / "impl_package_state.py"
 
 
 def package_paths(project: Path, config: dict[str, Any]) -> list[Path]:

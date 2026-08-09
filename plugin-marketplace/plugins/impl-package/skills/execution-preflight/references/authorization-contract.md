@@ -12,4 +12,4 @@ Owner authorization 至少明确：目标、范围/write-set、允许的 mutatio
 
 本合同不建立第二套内容身份或 approval 状态。Git commit 和实际 diff 已足以承担版本边界。
 
-委派执行仍由 `$subagent-driven-development` 编排；本合同只传递任务特定授权，不定义 worker 角色或业务 prompt。
+委派执行仍由 `/impl-package:subagent-driven-development` 编排；本合同只传递任务特定授权，不定义 worker 角色或业务 prompt。

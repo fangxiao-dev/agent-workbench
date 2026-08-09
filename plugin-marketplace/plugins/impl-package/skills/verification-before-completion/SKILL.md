@@ -7,7 +7,7 @@ description: 在宣称工作 complete、closed、fixed、passing、merge-ready �
 
 Completion claim 不能宽于 evidence。Verification 是 claim-to-evidence contract，不要求在当前消息里机械重跑所有可能的检查。
 
-当 claim 涉及 material seam、昂贵 E2E 或 failure learning 时，读取 [`../references/progressive-system-evidence.md`](../references/progressive-system-evidence.md)。本 skill 只审计当前 claim 是否被正确证据支持，不重新选择 Planned Verification。
+当 claim 涉及 material seam、昂贵 E2E 或 failure learning 时，读取 [`../../references/progressive-system-evidence.md`](../../references/progressive-system-evidence.md)。本 skill 只审计当前 claim 是否被正确证据支持，不重新选择 Planned Verification。
 
 ## Impl-Package orchestration
 
@@ -15,13 +15,13 @@ Completion claim 不能宽于 evidence。Verification 是 claim-to-evidence cont
 
 局部进度、单个文件已修改、某个定向 validator 通过或“完成了第 N 步”属于 scoped status，不是 terminal completion claim。此类陈述只需引用对应直接 evidence，不运行完整 Impl-Package terminal audit、Stage 7 或全量 gate 对账。只有准备写 terminal pass，或声称整个约定范围 complete/closed/fixed/merge-ready/release-ready 时才进入本节完整 orchestration。
 
-- `dev-with-track` 在适用 implementation review、package 级 execution findings closure 和拟 pass 的 Stage 7 artifact 准备完成后、写入 terminal `pass` Gate 前调用本 skill。
+- `/impl-package:dev-with-track` 在适用 implementation review、package 级 execution findings closure 和拟 pass 的 Stage 7 artifact 准备完成后、写入 terminal `pass` Gate 前调用本 skill。
 - terminal metadata commit、目标分支合入或相关 environment 变化后，在宣称 `complete`、`closed`、`merge-ready` 或 `release-ready` 前再次调用。复用未受影响的 evidence，只验证 delta 与 claim-specific gate。
 - 已合入目标分支但尚无 terminal gate 时，真实状态是 `Integrated, gate open`；只能报告 integration 阶段，不能把 merge 当成 closed evidence。
 - 默认 `gate-before-merge` 下，current attempt 的 finalized `pass` 是 merge 前提；`blocked`、`fail`、`defer`、没有 gate.md 都不能支持 merge-ready claim。若已经 pre-gate integration，必须从 plan 核对该 integration 前已记录的 owner authorization。没有该证据时报告 process violation；不得事后把授权或 terminal pass 倒灌到已发生的 merge。
 - 若当前 diff 只实现了 spec 的一部分 AC，completion claim 只能覆盖该明确边界的子切片。除非 Decision/Spec/Plan 已同步将 attempt 收窄或分拆，否则不得把局部 merge、测试或 schema rollout 说成完整 package / issue closure。
 - proof 缺失或 stale 时，阻止的是 completion claim，不一定否定 implementation。应报告 `implemented, not verified` 或具体 pending gate，不能写入或重复 pass claim。
-- 本 skill 审计 evidence，不替代 `code-review`、`standards-review`、`spec-review`、`safety-review`、planned test、smoke 或项目特定 acceptance。
+- 本 skill 审计 evidence，不替代 `/impl-package:code-review`、`/impl-package:standards-review`、`/impl-package:spec-review`、`/impl-package:safety-review`、planned test、smoke 或项目特定 acceptance。
 
 ## 定义 claim
 

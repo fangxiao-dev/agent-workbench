@@ -5,7 +5,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
 
 # Impl Planning
 
-为一个 implementation attempt 创建简洁、可执行的 plan。先读 `../references/impl-package-composition-contract.md`；需要为 material seam 选择验证层级时再读 `../references/progressive-system-evidence.md`。
+为一个 implementation attempt 创建简洁、可执行的 plan。先读 `../../references/impl-package-composition-contract.md`；需要为 material seam 选择验证层级时再读 `../../references/progressive-system-evidence.md`。
 
 ## 输出与规则
 
@@ -22,16 +22,18 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
 2. 判断是 initial 还是 patch；patch 只描述相对上次 terminal gate 的实际 delta。
 3. 选择四种 Composition 之一，并用一句话解释每个 `true`。
 4. 将每个 Decision/Spec 约束映射到实现范围及 Ticket/Task，写执行顺序、修改边界、依赖、集成/回滚方式和足以区分正确/错误实现的验证；每个验证项明确 evidence owner。
-5. `tickets=true` 时调用 `to-tickets`；`dag=true` 时调用 `create-task-dag`。
-6. 冻结 plan candidate；对完整 bundle 做 admission 或 full review，处理 material findings，并联合校验 coverage、typed dependency、ownership、证据可行性、Gate 边界与集成顺序，然后请求一次完整 bundle approval。
+5. `tickets=true` 时调用 `/impl-package:to-tickets`；`dag=true` 时调用 `/impl-package:create-task-dag`。
+6. 冻结 plan candidate；调用 `/impl-package:plan-review` 的 `bundle-admission`。返回 `full-review` 时继续同一 skill 的完整审查；处理 material findings，并联合校验 coverage、typed dependency、ownership、证据可行性、Gate 边界与集成顺序，然后请求一次完整 bundle approval。
 7. 获批后运行：
 
 ```text
-python skills/impl-package/scripts/impl_package_state.py --package <package> init --attempt <id> --plan <repo-relative-plan>
-python skills/impl-package/scripts/impl_package_state.py --package <package> validate
+python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> init --attempt <id> --plan <repo-relative-plan>
+python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> validate
 ```
 
-8. 进入 `execution-preflight`，再交给 `dev-with-track`。
+`<impl-package-plugin-root>` 指当前已加载 skill 所属的插件根目录；不要假设 workbench 仓库路径或宿主缓存路径。
+
+8. 进入 `/impl-package:execution-preflight`，再交给 `/impl-package:dev-with-track`。
 
 跨 session approval 需要明确当时批准内容所在的 Git commit；同 session 且 candidate 未变化时无需额外 receipt。
 

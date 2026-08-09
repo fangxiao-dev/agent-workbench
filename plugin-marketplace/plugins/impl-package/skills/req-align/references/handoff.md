@@ -1,6 +1,6 @@
 # Handoff Status and Owner Output
 
-Read this reference when reporting a Decision/Spec result or handing an aligned package forward. Use `talk-to-boss`: lead with scope, completed phase, remaining owner decisions, whether the package is closed, and whether implementation planning can start. Do not open with paths or revisions.
+Read this reference when reporting a Decision/Spec result or handing an aligned package forward. If `talk-to-boss` exists in the active skill catalog, prefer its reporting contract; otherwise lead directly with scope, completed phase, remaining owner decisions, whether the package is closed, and whether implementation planning can start. Optional skill absence does not block the handoff. Do not open with paths or revisions.
 
 Derive one exact status from recorded Markdown gate facts and downstream closure evidence:
 

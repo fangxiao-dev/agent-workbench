@@ -16,6 +16,6 @@ When signaled, use the existing eight sections to define relevant authoritative 
 
 ## Risk-driven Grill
 
-Run `grill-me-smartly` review only when the user asks, or when high-risk signals exist: unresolved material ambiguity, cross-module/external interface, migration/compatibility, security/data authority, destructive external mutation, or evidence-integrity false-PASS risk. It never silently applies clarifications.
+Run `/impl-package:grill-me-smartly` only when the user asks, or when high-risk signals exist: unresolved material ambiguity, cross-module/external interface, migration/compatibility, security/data authority, destructive external mutation, or evidence-integrity false-PASS risk. It never silently applies clarifications.
 
-The ledger lives in OS temp, not the package. Summarize converged decisions and owner decisions to the user. Any user decision remains a normal blocking owner decision until cleared. Only after user approval may converged clarifications revise Spec through the ordinary S-revision path. After Spec passes, offer `grilling` only as an optional deeper review.
+The ledger lives in OS temp, not the package. Summarize converged decisions and owner decisions to the user. Any user decision remains a normal blocking owner decision until cleared. Only after user approval may converged clarifications revise Spec through the ordinary S-revision path. After Spec passes, offer `/impl-package:grilling` only as an optional deeper review.
