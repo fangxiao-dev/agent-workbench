@@ -2,6 +2,7 @@
 
 | Skill | 来源 | 获取方式 | 备注 |
 |-------|------|----------|------|
+| research | `mattpocock/skills` | `npx skills add mattpocock/skills@research -g -y` | 已放入 `skills/research/` |
 | cso | `garrytan/gstack` | `npx skills add garrytan/gstack --skill cso --full-depth -y --copy` | 已放入 `skills/gstack/cso/` |
 | office-hours | `garrytan/gstack` | `npx skills add garrytan/gstack --skill office-hours --full-depth -y --copy` | 已放入 `skills/gstack/office-hours/` |
 | plan-ceo-review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill plan-ceo-review --full-depth -y --copy` | 已放入 `skills/gstack/plan-ceo-review/` |
