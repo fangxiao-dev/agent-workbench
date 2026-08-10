@@ -10,7 +10,7 @@
 | qa-only | `garrytan/gstack` | `npx skills add garrytan/gstack --skill qa-only --full-depth -y --copy` | 已放入 `skills/gstack/qa-only/` |
 | review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill review --full-depth -y --copy` | 已放入 `skills/gstack/review/` |
 | frontend-design | `anthropics/skills` | `npx skills add anthropics/skills@frontend-design -g -y` | 已放入 `skills/frontend-design/` |
-| skill-creator | `anthropics/skills` | 人工迁移 | 已放入 `skills/skill-creator/` |
+| skill-creator | `anthropics/skills` | 人工迁移 | 本地副本作为 `write-skill-smartly` 的内部方法论保留在 `skills/write-skill-smartly/sub-skills/skill-creator/`，不单独暴露给宿主；Codex `.system` 版本不受影响 |
 | ask-matt | `mattpocock/skills` | `npx skills add mattpocock/skills@ask-matt -g -y` | 已放入 `skills/ask-matt/`；已同步上游（phase boundaries / wayfinder 路由） |
 | diagnosing-bugs | `mattpocock/skills` | `npx skills add mattpocock/skills@diagnosing-bugs -g -y` | 本地维护副本位于 `skills/diagnosing-bugs/`；已 cherry-pick 上游 Redact + Phase 1 脱敏展示 |
 | bug-fix-tdd | `obra/superpowers` | 人工迁移并打薄 | 上游 skill 名为 `test-driven-development`；本地作为 `diagnosing-bugs` 的修复执行器，位于 `skills/diagnosing-bugs/sub-skills/bug-fix-tdd/SUB-SKILL.md`；原版保存在 deprecated Superpowers 归档 |

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Write Skill Smartly"
+  short_description: "按需创建或改进 Skill"
+  default_prompt: "使用 $write-skill-smartly 创建或修改 Skill；默认用中文，并按任务风险选择轻量验证或内部 creator 方法。"
+policy:
+  allow_implicit_invocation: true

@@ -7,6 +7,11 @@ description: Create new skills, modify and improve existing skills, and measure 
 
 A skill for creating new skills and iteratively improving them.
 
+This is internal methodology for `write-skill-smartly`. Read it only when the
+parent routes a heavy branch here. The parent owns creator mode and validation
+scope: enter only the phase needed for the current risk, and do not upgrade a
+light route to a full benchmark loop.
+
 Start by choosing the validation scope described below; do not start the full evaluation loop for a focused validation change.
 
 At a high level, the full process for a new, behavioral, or otherwise high-impact skill change goes like this:
