@@ -29,7 +29,7 @@
 | spec-review | `mattpocock/skills` | 人工迁移上游 `skills/engineering/code-review` | 基于 `391a270` 的原 module-review Spec 轴拆分并中文化后放入 `plugin-marketplace/plugins/impl-package/skills/spec-review/` |
 | module-review (deprecated) | `mattpocock/skills` | 历史本地归档 | 原双轴 reviewer 已移至 `skills-deprecated/module-review/`，不在 active registry、preflight 或默认 topology 中 |
 | improve-codebase-architecture | `mattpocock/skills` | `npx skills add mattpocock/skills@improve-codebase-architecture -g -y` | 已放入 `skills/improve-codebase-architecture/`；已同步上游（YAGNI 范围 + harness-neutral subagent） |
-| grilling | `mattpocock/skills` | `npx skills add mattpocock/skills@grilling -g -y` | 已放入 `plugin-marketplace/plugins/impl-package/skills/grilling/`；上游 frontier-rounds 基线 + 本地吸收原 `grilling-waves` 的文档主体/upper-level context/延后 writeback |
+| grilling | `mattpocock/skills` | `npx skills add mattpocock/skills@grilling -g -y` | 已放入 `plugin-marketplace/plugins/impl-package/skills/grilling/`；上游 frontier-rounds 基线 + 本地成熟度自适应聚焦、穷尽式分批、Decision 内容深度与延后 writeback；历史 `grilling-waves` 已完全吸收，不保留 active entry |
 | handoff | `mattpocock/skills` | `npx skills add mattpocock/skills@handoff -g -y` | 已放入 `skills/handoff/` |
 | teach | `mattpocock/skills` | `npx skills add mattpocock/skills@teach -g -y` | 已放入 `skills/teach/`；`agents/openai.yaml` 禁止隐式调用 |
 | writing-for-agents | `mattpocock/skills` | `npx skills add mattpocock/skills@writing-for-agents -g -y` | 上游自 `writing-great-skills` 重命名；已放入 `skills/writing-for-agents/`；`write-skill-smartly` 已改引用 |
