@@ -1,6 +1,6 @@
 ---
 name: handoff-to-new-session
-description: Create a clean normal Codex Desktop thread for a task or ticket whose authoritative records are already complete, using create_thread and a compact continuation prompt that runs the child’s work in an existing implementation worktree, then verifies its HEAD and package anchors. Use whenever the user asks to hand off a finished checkpoint to a fresh new session, especially when the implementation worktree, HEAD, and task/package state must survive the switch. Do not use for a partial-work summary, a rolling handoff, an automatic multi-hop relay, or any request to fork conversation history.
+description: 当用户要把已有权威 checkpoint 交接到全新 Codex task，并继续使用既有 implementation worktree 时使用；负责创建 clean local task、核验恢复锚点并分两阶段续接。
 compatibility: Requires Codex Desktop thread tools (create_thread, set_thread_title, wait_threads, and send_message_to_thread) plus local Git access.
 ---
 

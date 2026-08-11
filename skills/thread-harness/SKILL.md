@@ -1,11 +1,6 @@
 ---
 name: thread-harness
-description: >
-  多 thread 编排的角色定义与控制流。当一个主控 thread 需要长时间调度多条子 thread
-  推进同一个目标时使用：确定自己是主控 / 任务包子线 / Platform 子线中的哪个角色、
-  什么时候必须向上回报、怎么轮询、怎么判断整体是否还在推进、卡住了怎么办。
-  涉及 broker loop、wait_threads、派发任务、seam 缺失、停滞、Owner 决策上报时适用。
-  线程路由（thread-id 与 topic 绑定）由本目录下的 `sub-skills/owner-thread-broker/SUB-SKILL.md` 负责，本 skill 不重复。
+description: 当一个主控 thread 需要长期协调多条子 thread 推进同一目标时使用；负责角色边界、状态回报、轮询、路由切换、停滞以及 seam / Owner 阻塞处理。
 ---
 
 # Thread Harness
