@@ -4,11 +4,11 @@
     {
       "id": 1,
       "prompt": "Dry-run only: the completed invoice-import ticket is recorded in D:\\Repos\\finance\\.worktrees\\invoice-import. Its current Codex thread cwd is exactly that path, HEAD is 0123456789abcdef0123456789abcdef01234567, and docs\\tickets\\invoice-import\\progress.md plus plan.md are authoritative. Prepare the exact clean-new-thread handoff without calling create_thread. The child must continue the documented reconciliation task after setup validation.",
-      "expected_output": "Produces a complete prompt using the three anchors, preserves uncommitted work without a fingerprint, imposes child setup validation, and directs continuation to the documented next action.",
+      "expected_output": "Produces a first-stage anchor prompt and a separate continuation prompt, preserves uncommitted work without a fingerprint, and does not begin the documented next action before anchor PASS.",
       "expectations": [
         "Uses create_thread rather than fork_thread as the eventual delivery mechanism, while honoring the dry-run request not to invoke it.",
         "Uses only the worktree path, full HEAD, and authoritative entry records as recovery anchors; it does not add a project ID, branch, or dirty-state fingerprint to the child prompt.",
-        "Requires the child to stop without repair when HEAD, entries, or validation fail and to continue the named next action when they pass."
+        "Requires the child to stop after either mismatch or anchor PASS; only the separate continuation prompt directs the named next action."
       ]
     },
     {
@@ -24,9 +24,9 @@
     {
       "id": 3,
       "prompt": "Dry-run a fresh-session handoff for a completed OCR export checkpoint. The implementation worktree and full HEAD have been verified; the authoritative package directory contains progress.md, plan.md, and a package validation command that calls a provider, so it cannot run in the child's read-only first turn. A controlled PDF, profile root, and oracle remain outside the repository. The parent may run local tests, but provider calls, database writes, object storage, commits, pushes, and PRs still require separate authorization. The main session orchestrates and integrates; bounded slices go to subagents. The next action is to run stub acceptance only after the controlled inputs are authorized and supplied.",
-      "expected_output": "Produces a complete authorization-preserving child prompt that references controlled inputs without exposing them and stops only on the named input/authorization blocker.",
+      "expected_output": "Produces an anchor-only first stage plus an authorization-preserving continuation that references controlled inputs without exposing them and stops only on the named input/authorization blocker.",
       "expectations": [
-        "Carries the main-session/subagent ownership boundary and the explicit authorization matrix into the child prompt.",
+        "Carries the main-session/subagent ownership boundary and the explicit authorization matrix in the second-stage continuation, not the anchor prompt.",
         "Prohibits putting controlled inputs, credentials, or oracle data in Git, chat bodies, or repository temporary files.",
         "Keeps the provider-calling validation out of the read-only first turn and makes the child continue to stub acceptance after authorized inputs arrive, otherwise stopping only for that explicit blocker."
       ]
@@ -34,9 +34,9 @@
     {
       "id": 4,
       "prompt": "Dry-run a clean-session handoff for a completed local checkpoint. The parent thread configuration is unavailable. The implementation worktree, full HEAD, package directory, and next action are all verified. Prepare the delivery request but do not call create_thread.",
-      "expected_output": "Produces a normal create_thread request that explicitly carries model gpt-5.6-terra and thinking xhigh, while keeping the source worktree in the child prompt rather than a creation snapshot.",
+      "expected_output": "Produces a normal create_thread request that explicitly carries model gpt-5.6-sol and thinking high, while keeping the source worktree in the child prompt rather than a creation snapshot.",
       "expectations": [
-        "Uses the fixed gpt-5.6-terra/xhigh configuration explicitly unless the owner supplied a supported override.",
+        "Uses the default gpt-5.6-sol/high configuration explicitly unless the owner supplied a supported override.",
         "Does not require the parent configuration to be readable; stops with session configuration unavailable only when the selected pair is unsupported.",
         "Does not use fork_thread, a working-tree snapshot, or the source worktree as creation-state input."
       ]
@@ -49,6 +49,16 @@
         "Requires first-turn and later commands to use the exact target worktree as workdir.",
         "Checks HEAD and package anchors inside that worktree.",
         "Reports source worktree setup mismatch only if the workdir cannot be used or its in-worktree anchors fail."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Dry-run the delivery state handling for a verified clean-session handoff. Cover two independent results: (a) create_thread returns a threadId, but set_thread_title fails; (b) create_thread returns only clientThreadId. Do not call any thread tool.",
+      "expected_output": "Treats both results as incomplete delivery and does not send the second-stage continuation or claim a successful named handoff.",
+      "expectations": [
+        "When set_thread_title fails, it does not send continuation or emit a successful threadId delivery directive.",
+        "When only clientThreadId is returned, it does not poll, claim naming success, or send continuation.",
+        "Explains that successful delivery requires local creation, naming, anchor PASS, and continuation delivery."
       ]
     }
   ]

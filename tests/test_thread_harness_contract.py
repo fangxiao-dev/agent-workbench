@@ -162,6 +162,20 @@ def test_second_stage_dispatch_is_role_specific_and_minimal() -> None:
     assert "各 child 不可触碰的 dirty / Owner WIP" not in dispatch
 
 
+def test_dispatch_reuses_generic_handoff_and_keeps_only_harness_deltas() -> None:
+    dispatch = read("skills/thread-harness/references/session-dispatch.md")
+
+    assert "clean local-session、两阶段 anchor/continuation、配置与命名流程" in dispatch
+    assert "optional read-only validation anchors" in dispatch
+    assert "确认通用命名步骤成功" in dispatch
+    assert "### 第一阶段 prompt" not in dispatch
+    assert "Thread-harness overrides" not in dispatch
+    assert "gpt-5.6-" not in dispatch
+    assert "thinking=" not in dispatch
+    assert "target.environment" not in dispatch
+    assert "clientThreadId" not in dispatch
+
+
 def test_child_h1_and_dispatch_do_not_expose_registry_or_self_routing() -> None:
     skill = read("skills/thread-harness/SKILL.md")
     schema = read("skills/thread-harness/references/ledger-schema.md")

@@ -1,18 +1,15 @@
 ---
 target: skills/thread-harness
-updated: 2026-08-04
+updated: 2026-08-11
 ---
 ## 原则
 
-- [已确认] 停滞检测平时只用 Git HEAD 作为廉价信号；默认阈值为 5 轮，从 `3/5` 起每轮直接读取 active / working thread 的最新内容（证据: R1, R2）。
-- [已确认] 不为 heartbeat 增加每轮消息缓存或修改 append-only JSONL ledger schema；fresh、具体的工作心跳可重置 streak，重复内容、旧进展或仅 active 状态不可重置（证据: R1）。
+- [已确认] 停滞检测平时只用 Git HEAD 作为廉价信号；默认阈值为 5 轮，从 `3/5` 起每轮直接读取 active / working thread 的最新内容。
+- [已确认] 不为 heartbeat 增加每轮消息缓存或修改 append-only JSONL ledger schema；fresh、具体的工作心跳可重置 streak，重复内容、旧进展或仅 active 状态不可重置。
 - [已确认] active node 的 bounded assignment 结束必须立即暴露为 `ready_for_assignment` / `reassignment_required`；只有 registry `active=false` 才表示该 node 已退出 coordination，不能用 `done` 把 open package 静默移出派活视野。
+- [已确认] 共享稳定机制归上游通用 Skill；thread-harness 只保留角色、routing、时序和 assignment 等真实编排 delta，不复制通用 prompt、配置或命名流程。
 
 ## 决策记录（滚动，最近 ≤5 轮）
-
-### R1 · 2026-08-01
-
-- 采纳「平时看 HEAD；接近 `5/5` 时直接 read_thread；无需修改 ledger schema，也无需每轮缓存消息；确认仍有具体心跳则计数归零」— 用户明确确认并要求执行。
 
 ### R2 · 2026-08-01
 
@@ -34,3 +31,7 @@ updated: 2026-08-04
 ### R5 · 2026-08-04
 
 - 采纳「active node 的 assignment 完成必须立即暴露为 `reassignment_required`；只有 `active=false` 才表示退出 coordination」— 用户明确确认并要求执行。原来的 `done` 同时承载 assignment 与 node 终态，且被 poll/idle 分类静默排除，导致 open package 线路未继续派活。
+
+### R6 · 2026-08-11
+
+- 采纳「共享稳定机制归上游通用 Skill，thread-harness 只保留真实编排 delta」— 用户明确要求把两阶段交接、模型默认和标题策略收回 `$handoff-to-new-session`，并删除 harness 的重复定义与模型限制。

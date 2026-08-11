@@ -2,23 +2,19 @@
 
 新建或替换任何一条线的 session 时用本页。三个角色共用同一套骨架，差异只有 §角色 delta 那张表。
 
-**不要手写一段带 `<codex_delegation>` 的委派 prompt。** 统一复用 `$handoff-to-new-session` 的 clean local-session 能力；下方 thread-harness replacement override 优先于该通用 skill 的“source 自己 create/no doc”说法。
+**不要手写一段带 `<codex_delegation>` 的委派 prompt。** 统一复用 `$handoff-to-new-session` 的 clean local-session、两阶段 anchor/continuation、配置与命名流程；本页只定义 thread-harness 的角色、routing 与 continuation delta。
 本禁令仅针对调用者把<codex_delegation>标签手写进 create_thread /
 send_message_to_thread 的 prompt 字符串。
 
-**第一阶段 child 只核对锚点然后停住，controller 在这个停顿里更新 registry，第二阶段才开工。** child 不直接写 ledger。
+在通用流程的 anchor PASS 停顿中，controller 先更新 registry，再发送本页的角色化 continuation。child 不直接写 ledger。
 
 ## 固定骨架
 
 ### 固定约束
 
-- 用 `create_thread` + `target.environment={type:"local"}`。禁 fork、禁 worktree/snapshot/`startingState`。
-- **档位在 `create_thread` 时显式指定，别靠默认。** 子线用 `model=gpt-5.6-luna`、`thinking=max`；**主控交接时用 `model=gpt-5.6-sol`、`thinking=xhigh`**。这只决定起点，平台会随 session 变长自动降档，主控读不到自己的 `turn_context`，跑久了值得人工看一眼。
 - **一个 node 一个 worktree 一个 branch。** 复用 worktree 前必须确认旧 writer 与 owned process 已停止。`preflight` 会拦这个。
-- 第一阶段 prompt **不含** harness、coordination、registry、ledger 或角色规则。只有锚点。
-- prompt 里不放旧聊天摘要、project ID、dirty fingerprint 或 secret。
+- 将 branch 与角色锚点填入 `$handoff-to-new-session` 第一阶段模板的 optional read-only validation anchors；不复制该模板。
 - `previous_session_ids` 是 registry 内部路由历史。**不进任何 child prompt，也不要求 child 读取、打印或校验它。**
-- 现有未提交内容只保护，不 reset / checkout / clean / 覆盖 / 重建。
 
 ### 两种触发，第 1–2 步不同
 
@@ -42,7 +38,7 @@ send_message_to_thread 的 prompt 字符串。
 
 ```text
 你该做 session 自交接了。先尽快完成手头任务，写好可恢复 checkpoint
-并停止 owned process；不要领取新的工作。然后按 $handoff-to-new-session 执行，override 以
+并停止 owned process；不要领取新的工作。然后按 $handoff-to-new-session 执行，thread-harness delta 以
 <repo>\skills\thread-harness\references\session-dispatch.md 为准。
 
 registry：<registry 绝对路径 .json>
@@ -69,10 +65,7 @@ Owner 的 create_thread 授权原文（你据此为自己建继任者）：
 - **Role A / Role B 替换**：现任主控在收到 `handed_off` H1 后写。
 - **Role C 交接**：**退休主控在退出前把 registry 指向继任者**。新主控上任后只核对该字段是否已指向自己，没写成才补写。
 
-### Thread-harness overrides
-
-- **停在第一阶段**：child 交接完成后不直接开工，而是只核对 anchor 就停，等主控更新 registry（见下方固定流程）。
-- **`previous_session_ids` 不进 child prompt**，由主控写进 registry。
+`previous_session_ids` 不进 child prompt，由主控写进 registry。
 
 ### Role A 要带上 `/impl-package:impl-package`
 
@@ -81,36 +74,11 @@ Role A 的第二阶段 prompt 必须以 `/impl-package:impl-package` 为 entry p
 ### 固定流程
 
 1. 按上表确定谁执行第 2 步。若是 Role A 替换，source session 先把 checkpoint 写回任务包 entry 并停下 owned process；若是冷启动，controller 先完成 parent preflight。
-2. 执行方用第一阶段 prompt 创建 clean local session；child 只报 anchor PASS/FAIL 然后停止。
-3. controller 设置短标题，更新 registry 的 current routing，复核 sibling 未变化。
+2. 执行方按 `$handoff-to-new-session` 创建 clean local session，并完成其命名与 anchor PASS/FAIL 流程。
+3. anchor PASS 后，controller 确认通用命名步骤成功，更新 registry 的 current routing，复核 sibling 未变化。
 4. controller 发送第二阶段 registration + assignment card。
 5. child 向第二阶段给出的 current controller 发送最小 H1；controller 从消息来源绑定 node/session，并用 registry 验证后登记状态。
 6. 做一次 `wait_threads(..., timeoutMs:0)` 快照。registry race 修正后**复用同一 clean session**，不再创建新 session。
-
-### 第一阶段 prompt
-
-> **读者**：一个全新的 session，此刻什么都不知道。
-> **恢复权威**：worktree / branch / HEAD——都能用一条只读命令当场验真。
-> **准入判据**：**这一行能不能被 child 用一条只读命令当场验真？** 不能就不进。
-
-锚点字段沿用 `$handoff-to-new-session` 的模板，唯一改动是结尾：**报 PASS 后停住**。维护时只同步锚点字段。
-
-```text
-<角色与任务一句话>。这是全新、独立的 local session，不继承任何旧 session 的聊天历史。
-
-执行锚点（首轮及后续命令均使用此 workdir）：
-- worktree：<absolute_worktree>
-- branch：<branch>
-- expected HEAD：<full_head>
-- <role-anchor-1>
-- <role-anchor-2>
-
-首轮只用 Test-Path / git rev-parse 核对上述锚点。
-任一不符：只报 `source worktree setup mismatch` 与实际值，停止，不 repair。
-全部匹配：只报 `<role> anchor PASS` 与锚点值，停住，不要做额外动作。
-```
-
-结尾那句"停住，不要做额外动作"已经蕴含了"不读 registry/ledger、不开始实现或协调"，所以不再单列禁令。
 
 ### 第二阶段 prompt
 
@@ -187,8 +155,7 @@ catch-up（你刚发生过 compaction）：
 
 ### 停止条件
 
-- anchor、title、local environment、current routing 或 inputs 不符：停止，不 repair。
-- 返回 `clientThreadId`：报 incomplete delivery，**不伪造 session id**。
+- current routing 或 inputs 不符：停止，不 repair。
 - source writer / owned process 未停止，或 checkpoint 不足以恢复：先回报 controller，不扩大读取范围。
 
 ## 角色 delta
@@ -196,7 +163,7 @@ catch-up（你刚发生过 compaction）：
 | | **Role A · 任务包子线** | **Role B · Platform** | **Role C · 主控** |
 | --- | --- | --- | --- |
 | **恢复权威** | 当前任务包 entry；第二阶段不发 card | 无持久恢复权威；新 card 只定义当前 assignment | 账本 + registry |
-| **第一阶段额外锚点** | `package` / `entry point` | `parent package` / `entry point` | 父包 entry；controller 自己的 worktree / branch / HEAD |
+| **第一阶段额外锚点** | `branch` | `branch`；以 `parent package` / `entry point` 替代通用恢复入口，仅作验证锚点 | `branch`；父包 entry |
 | **role-initial-state** | `working` 或 `awaiting_seam` | `working` | `working` |
 | **role-recovery-block** | `Package checkpoint：package / entry / checkpoint 指针` | 无——**不得**把 parent entry 当恢复入口，不读旧 plan/Task progress/历史 evidence | 见下方「Role C 特有顺序」 |
 | **交付登记义务** | 无 | H1 报告 seam artifact，由 controller 用 `ledger.py seam --registry <path> --seam-id <s> --producer <node> [--consumers ...] --deliver commit:<sha>` 登记；没登记等于没交付 | 无 |
