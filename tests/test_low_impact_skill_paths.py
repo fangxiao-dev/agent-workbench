@@ -16,7 +16,13 @@ def test_brainstorming_fast_path_skips_design_artifacts_for_bounded_work() -> No
 
 
 def test_skill_creator_defaults_local_nonsemantic_edits_to_focused_validation() -> None:
-    skill = read_skill("skills", "skill-creator", "SKILL.md")
+    skill = read_skill(
+        "skills",
+        "write-skill-smartly",
+        "sub-skills",
+        "skill-creator",
+        "SUB-SKILL.md",
+    )
     assert "## Validation Scope" in skill
     assert "Default to focused validation for wording edits, rule clarifications, reference fixes, and local non-semantic corrections." in skill
     assert "changing a workflow or output contract" in skill
