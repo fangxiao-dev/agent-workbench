@@ -9,7 +9,7 @@ description: Use when about to write code, change shared state, or run a migrati
 
 ## Worker capability
 
-如果 active skill catalog 中存在 `call-grok`，implement / investigate 可以优先使用它作为普通 subagent 的替代 worker；不可用或调用失败时使用当前 host 的 subagent。host 不支持 subagent 时由主 session 继续，能力缺失本身不构成 blocker，也不得伪装成已委派。
+如果存在 `@luna-worker`，implement 可以优先使用它；不可用或调用失败时使用当前 host 的 subagent。
 
 ## Investigate
 调研的产出是判断依据，不是文档——**写不出判断依据就等于没调研**。
