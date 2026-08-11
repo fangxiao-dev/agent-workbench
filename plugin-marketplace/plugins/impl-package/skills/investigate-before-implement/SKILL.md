@@ -1,40 +1,35 @@
 ---
 name: investigate-before-implement
-description: Use when about to write code, change shared state, or run a migration for a task whose cause, blast radius, or existing solution has not been established yet.
+description: 当实施前仍不清楚失败原因、影响面、既有方案或必要前置事实时使用；只建立实施判断依据，不承担 Task 设计、授权或调度。
 ---
 
 # Investigate Before Implement
 
-按 investigate → implement 的顺序，先做调研再执行，不要直接开干；按需外派任务，以提高并行度并且降低 context 压缩损耗。
+本 skill 只回答一个问题：现有证据是否足以确定真实实施边界。调研产出是会改变下一步决定的事实，不是过程记录。
 
-## Worker capability
+## 何时调查
 
-如果存在 `@luna-worker`，implement 可以优先使用它；不可用或调用失败时使用当前 host 的 subagent。
+- 还说不出失败或违约发生在哪个边界；
+- 不知道改动会影响哪些直接调用方或状态；
+- 不确定现有实现是否已经提供等价方案；
+- 共享状态、外部服务或迁移所需的前置事实尚未建立。
 
-## Investigate
-调研的产出是判断依据，不是文档——**写不出判断依据就等于没调研**。
-Investigate 按需外派；worker 选择服从当前 host 的可用能力和调用者给出的任务边界，不在本 skill 固定模型或推理档位。
+改动位置、影响面和验证方式均已明确，且可以低成本试错并回滚时，直接使用既有实施流程。
 
-### 什么时候必须先调研
+## 建立依据
 
-- 你还说不出改动会波及哪些调用方；
-- 你不确定现有实现里是不是已经有等价方案；
-- 失败症状可能由多个原因产生，你还没排除掉其中任何一个；
-- 改动要碰共享状态、外部服务或迁移。
+1. 写出一个能被证据回答的具体问题。
+2. 核对原因、影响面、既有方案和必要前置事实；只沿当前问题的直接边界调查。
+3. 保留会改变实施范围或下一动作的事实，省略过程日志和无决策价值的发现。
+4. 按下方合同返回证据判断。
 
-反过来：改动只有一处、影响面已知、且有现成验证能立刻判对错时，直接做。
+```text
+Investigation: EVIDENCE_SUFFICIENT | EVIDENCE_GAP
+cause: <已证实原因或缺口>
+blast radius: <直接受影响边界>
+existing solution: <可复用方案或 none>
+boundary facts: <实施必须保留的事实>
+unresolved facts: <none 或下一项最小取证动作>
+```
 
-### 怎么调研
-
-1. 先写下你要回答的具体问题，不要开放式"看看代码"。
-2. 单个问题可以直接调查；存在两个或更多候选工作项时，先按 [Parallel Work Admission](references/parallel-work-admission.md) 判断并行、串行或阻塞。
-3. 只派发已通过并行准入的 batch；每个 worker 都接收独立目标、scope、资源边界和返回合同。
-4. 结论只留能改变决定的那几条，其余不进正文。
-
-## 不适用
-
-- 已经调研过、结论还没过期，只是想再确认一遍；
-- 探索本身就是任务目标——此时调研就是实现；
-- 问题小到调研成本高于直接试错并回滚。
-
-调研的结论是作为调用者的输入和参考，并不是直接的结论；判断、具体的下一步 implement 计划起草与验收仍然由你自己完成。
+`EVIDENCE_SUFFICIENT` 只表示事实足以交给调用者决定下一步，不表示授权、实施、验证或验收已经完成。Plan/Ticket/DAG、执行授权和运行状态继续由各自 owning stage 维护。

@@ -1,24 +1,21 @@
 ---
 name: dispatch-bounded-task
-description: 当批准的 plan、Ticket 或 DAG 已给出边界明确、依赖已释放且可委派的实现或只读验证 Task 时使用；负责派发和收回局部产出或压缩验证证据，不设计 Task 或验收 Ticket。
+description: 当批准的 Plan、Ticket 或 DAG 已提供已释放的实现/只读验证单元、授权边界和 scheduling contract 时使用；选择具体 worker、派发并回收局部证据。
 ---
 
 # Dispatch Bounded Task
 
-本 skill 是有界 Task 的派发接口。Task 的目标、依赖、primary ownership、贡献 Ticket 与局部验证必须已经由批准的计划或 DAG 给出；缺失时退回 owning stage，不在执行期重新设计 Task。
+本 skill 把一个已释放 bounded unit 适配为具体派发。单元设计、调度和正式验收仍由各自 owner 负责。
 
 ## 派发
 
-1. 只选择已知依赖满足、且不与活跃 Task 的 primary ownership 重叠的 Task。
-2. 调度模式按 `/impl-package:subagent-driven-development` 执行；未另行选择时默认使用 `default-long`。
-3. 派发前读取 [Task 模板](references/task-templates.md)，按 Task 是否产生实现变更选择 Implementer 或 Verifier；只填当前 Task 真正需要的字段。
-4. 集成性 Task 只需额外写明冻结接口、允许修改的连接层、不得修改的核心实现及必须证明的正反向行为。
-5. worker 不扩大 scope 或 primary ownership；遇到未决 contract、共享 seam、越权动作、重叠写入或无法可靠继续时返回 `BLOCKED`。
+1. 确认调用者给出批准来源、已释放单元、授权边界和完整 scheduling contract。
+2. 产生实现变更时选择 Implementer；只执行既定检查并返回证据时选择 Verifier。
+3. Implementer 在 `luna-worker` 可用且符合 bounded contract 时默认使用；fallback 到其他 subagent 时记录不可用或不适配原因。Verifier 使用调用者指定或当前宿主适配的验证 worker。
+4. 读取 [Bounded Task 模板](references/task-templates.md)，填入当前单元，并原样传递 scheduling contract 后派发。
 
-## 回收
+## 返回合同
 
-- Implementer 的 `DONE` 表示局部产出与证据已返回；Verifier 的 `DONE` 表示既定命令已执行并返回 red/green 证据。两者都不表示 Ticket accepted。
-- `BLOCKED` 必须包含最小原因、建议动作和受影响 Ticket。
-- Working Branch owner 负责集成产出、处理实际 seam / 冲突，拥有共享验证的范围、资源顺序与证据采信，并由 `/impl-package:dev-with-track` 完成正式 review、Ticket acceptance 与 package 收口。
-
-本 skill 不拥有 Task/Ticket 设计、plan revision、runtime state、Attempt ER、gate、Git 或发布流程。
+- Implementer `DONE` 返回变更、文件和局部验证；Verifier `DONE` 返回既定动作的 red/green 证据。两者都不表示 Ticket accepted。
+- 输入缺失或 worker 遇到未决 contract、共享 seam、越权、ownership 重叠或无法可靠继续时返回 `BLOCKED`，包含 source unit、原因、建议动作和可选 Ticket ID。
+- Working Branch owner 集成产出、处理 seam/冲突并采信共享验证；`/impl-package:dev-with-track` 负责正式 review、Ticket acceptance 与 package 收口。

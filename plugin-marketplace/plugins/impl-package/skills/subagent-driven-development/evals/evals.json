@@ -3,34 +3,68 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "接手一个包含调研、实现、测试和最终集成的长任务。请说明主 session 与 subagent 怎么分工，并开始安排工作。",
-      "expected_output": "选择 default-long；主 session 保留调度、授权决策、共享验证和最终集成，将有界且不重叠的执行工作交给 subagent；investigate/implement 行为引用 investigate-before-implement。",
+      "prompt": "一个失败症状可能来自三个模块，目前还不知道真实原因、直接影响面或仓库里是否已有等价方案。请决定下一步进入哪个 Skill，以及现在是否应该选择 worker 或并行 batch。",
+      "expected_output": "只使用 investigate-before-implement 建立 EVIDENCE_SUFFICIENT/EVIDENCE_GAP 所需事实；当前不进入 SDD，不选择 worker、不决定并行 batch，也不进入 dispatch-bounded-task。",
       "files": [],
       "expectations": [
-        "明确选择 default-long",
-        "主 session 保留共享验证、最终集成和结果判断",
-        "subagent 工作有界且 primary ownership 不重叠"
+        "只使用 investigate-before-implement",
+        "不进入 subagent-driven-development",
+        "要求建立原因、影响面、既有方案和前置事实",
+        "不选择 worker、不决定并行、不进入 bounded dispatch"
       ]
     },
     {
       "id": 2,
-      "prompt": "只改一个已定位的文档错字并跑一个现成检查。判断是否需要 subagent，并说明采用哪种调度方式。",
-      "expected_output": "agent 可判断任务较聚焦而选择 ordinary，用一句具体理由说明；不创建机械的聚焦判据，也不强制委派。",
+      "prompt": "只改一个已定位的文档错字并跑一个现成检查。判断是否需要 subagent，并输出 scheduling contract。",
+      "expected_output": "输出 Scheduling: LOCAL · mode=ordinary · route=direct，用一句任务事实说明理由；没有共享资源时不输出 resources。",
       "files": [],
       "expectations": [
-        "明确选择 ordinary",
-        "明确判断不需要 subagent",
-        "用任务事实给出一句聚焦理由而不创建机械判据"
+        "Scheduling 为 LOCAL、mode 为 ordinary、route 为 direct",
+        "没有共享资源时不输出 resources",
+        "不进入 dispatch-bounded-task"
       ]
     },
     {
       "id": 3,
-      "prompt": "请安排一个独立只读 reviewer 审查当前 skill 改动，主 session 最后汇总结论。",
-      "expected_output": "采用适当调度模式并派发独立只读 subagent；如果 reviewer skill 可用则优先使用其路由，否则由 caller 提供 review contract；不复制可选 reviewer 的模型或审阅规则。",
+      "prompt": "一个长任务已有 owner 批准的 Plan，其中直接给出了一个依赖已释放、ownership 和局部验证明确的实现单元，但没有 Ticket 和 DAG Task artifact。请安排 subagent 执行。",
+      "expected_output": "SDD 输出 SERIAL/default-long/dispatch-bounded-task 的最小 scheduling decision；dispatch 接受 Plan 来源并为适配且可用的 Implementer 默认选择 luna-worker。",
       "files": [],
       "expectations": [
-        "reviewer 保持独立只读且不修改文件",
-        "reviewer 使用 P0/P1/P2 的严重级别返回 findings",
+        "不因缺少 Ticket 或 DAG Task artifact 阻塞",
+        "形成 SERIAL/default-long/dispatch-bounded-task 的最小 scheduling decision",
+        "路由到 dispatch-bounded-task，并为 Implementer 默认选择适配且可用的 luna-worker"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "批准的 Ticket 已释放一个只读验证单元，授权、局部命令和 SERIAL scheduling contract 都已给出。请选择派发角色和 worker 策略。",
+      "expected_output": "进入 dispatch-bounded-task，选择 Verifier，把 scheduling contract 作为整体原样传递；Verifier 不强制使用 luna-worker。",
+      "files": [],
+      "expectations": [
+        "选择 Verifier 并进入 dispatch-bounded-task",
+        "不拆解 scheduling contract，作为整体原样传递",
+        "不把 luna-worker 设为 Verifier 的强制默认"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "需要把两个相互独立的只读诊断交给 subagent，但它们必须共享同一个已登录 browser session，不能隔离。请输出 scheduling contract。",
+      "expected_output": "输出 SERIAL/ordinary/direct；因为存在共享 browser，额外输出 resources，记录唯一顺序和 cleanup owner；不进入 package dispatch。",
+      "files": [],
+      "expectations": [
+        "Scheduling 为 SERIAL、mode 为 ordinary、route 为 direct",
+        "仅因存在共享 browser 而额外输出 resources、顺序和 cleanup owner",
+        "route 为 direct，不进入 dispatch-bounded-task"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "请安排一个独立只读 reviewer 审查当前 Skill 改动，主 session 最后汇总结论。",
+      "expected_output": "采用适当 scheduling contract 并路由独立只读 reviewer；如果 reviewer skill 可用则读取其路由，否则由 caller 提供 review contract；主 session 保留证据复核和最终结论。",
+      "files": [],
+      "expectations": [
+        "reviewer 保持独立只读",
+        "可用时使用 reviewer 路由，否则由 caller 提供合同",
         "主 session 保留证据复核和最终结论"
       ]
     }

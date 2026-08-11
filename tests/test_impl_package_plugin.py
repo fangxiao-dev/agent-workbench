@@ -43,7 +43,7 @@ def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
     claude_marketplace = load_json(MARKETPLACE / ".claude-plugin" / "marketplace.json")
 
     assert codex["name"] == claude["name"] == "impl-package"
-    assert codex["version"] == claude["version"] == "0.2.3"
+    assert codex["version"] == claude["version"] == "0.2.4"
     assert codex["skills"] == claude["skills"] == "./skills/"
     assert codex_marketplace["name"] == claude_marketplace["name"] == "agent-workbench"
     assert codex_marketplace["plugins"][0]["source"]["path"] == "./plugins/impl-package"
@@ -103,16 +103,71 @@ def test_old_impl_package_source_is_absent() -> None:
     assert not (ROOT / "skills" / "dispatching-parallel-agents" / "SKILL.md").exists()
 
 
-def test_parallel_admission_and_optional_capabilities_are_internalized() -> None:
+def test_delegation_layers_are_orthogonal_and_resources_are_internalized() -> None:
     investigate = (PLUGIN / "skills" / "investigate-before-implement" / "SKILL.md").read_text(
         encoding="utf-8"
     )
     subagent = (PLUGIN / "skills" / "subagent-driven-development" / "SKILL.md").read_text(
         encoding="utf-8"
     )
+    dispatch = (PLUGIN / "skills" / "dispatch-bounded-task" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    task_templates = (
+        PLUGIN / "skills" / "dispatch-bounded-task" / "references" / "task-templates.md"
+    ).read_text(encoding="utf-8")
 
-    assert "references/parallel-work-admission.md" in investigate
+    assert "references/parallel-work-admission.md" not in investigate
+    assert "luna-worker" not in investigate
+    assert "dispatch-bounded-task" not in investigate
+    assert "EVIDENCE_SUFFICIENT | EVIDENCE_GAP" in investigate
+    assert "references/parallel-work-admission.md" in subagent
+    assert "Plan、Ticket 或 DAG" in subagent
+    assert "不要求 DAG Task artifact" in subagent
+    assert "实施依据不足 →" not in subagent
+    assert "原因、影响面与必要前置事实已经建立" in subagent
+    assert "investigate-before-implement" not in subagent
+    assert "Scheduling: <LOCAL | SERIAL | PARALLEL | BLOCKED>" in subagent
+    assert "batches/order:" not in subagent
+    assert "resource keys:" not in subagent
+    assert "task-templates.md" not in subagent
+    assert "luna-worker" not in subagent
+    assert "luna-worker" in dispatch
+    assert "references/task-templates.md" in dispatch
+    assert "/impl-package:subagent-driven-development" not in dispatch
+    assert "batch/order" not in dispatch
+    assert "resource keys" not in dispatch
+    assert "cleanup owner" not in dispatch
+    assert "batch/order" not in task_templates
+    assert "resource/cleanup" not in task_templates
+    assert "mode=<" not in task_templates
+    assert "DONE" not in task_templates
+    assert "BLOCKED" not in task_templates
     assert "$dispatching-parallel-agents" not in investigate
     assert "$call-grok" not in investigate
     assert "$reviewer" not in subagent
-    assert (PLUGIN / "skills" / "investigate-before-implement" / "references" / "parallel-work-admission.md").is_file()
+    assert not (
+        PLUGIN
+        / "skills"
+        / "investigate-before-implement"
+        / "references"
+        / "parallel-work-admission.md"
+    ).exists()
+    assert (
+        PLUGIN
+        / "skills"
+        / "subagent-driven-development"
+        / "references"
+        / "parallel-work-admission.md"
+    ).is_file()
+
+    routing_consumers = (
+        ROOT / "AGENTS.md",
+        PLUGIN / "skills" / "dev-with-track" / "SKILL.md",
+        ROOT / "skills" / "thread-harness" / "SKILL.md",
+        ROOT / "skills" / "handoff" / "references" / "task-execution.md",
+    )
+    for consumer in routing_consumers:
+        text = consumer.read_text(encoding="utf-8")
+        assert "/impl-package:dispatch-bounded-task" not in text
+        assert "Plan、Ticket 或 DAG" not in text

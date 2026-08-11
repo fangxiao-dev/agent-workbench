@@ -32,7 +32,6 @@ description: 当一个主控 thread 需要长期协调多条子 thread 推进同
 ## 任务怎么分工
 
 - main session / subagent 调度 → `/impl-package:subagent-driven-development`
-- impl / investigate → `/impl-package:investigate-before-implement`
 - review → `/impl-package:do-review`
 - 验收 → `/impl-package:verification-before-completion`，不外包
 

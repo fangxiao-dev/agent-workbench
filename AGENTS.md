@@ -31,7 +31,7 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `grok
 
 ## Delegation Workflow
 
-- Use `/impl-package:subagent-driven-development` for main-session/subagent scheduling. Investigate or implement behavior routes to `/impl-package:investigate-before-implement`. For independent read-only review, dispatch a separate subagent; if `reviewer` is available in the active skill catalog, prefer its routing contract.
+- Use `/impl-package:subagent-driven-development` for main-session/subagent scheduling and downstream delegation routing. For independent read-only review, dispatch a separate subagent; if `reviewer` is available in the active skill catalog, prefer its routing contract.
 - The caller supplies the task-specific objective, scope, worktree, write-set, acceptance, authorization, verification, and output contract; workflow and role definitions do not supply business prompts.
 
 ## Implementation Expectations
