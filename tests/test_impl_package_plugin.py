@@ -43,7 +43,7 @@ def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
     claude_marketplace = load_json(MARKETPLACE / ".claude-plugin" / "marketplace.json")
 
     assert codex["name"] == claude["name"] == "impl-package"
-    assert codex["version"] == claude["version"] == "0.2.1"
+    assert codex["version"] == claude["version"] == "0.2.3"
     assert codex["skills"] == claude["skills"] == "./skills/"
     assert codex_marketplace["name"] == claude_marketplace["name"] == "agent-workbench"
     assert codex_marketplace["plugins"][0]["source"]["path"] == "./plugins/impl-package"
@@ -70,11 +70,13 @@ def test_plugin_exposes_twenty_flat_namespaced_skills() -> None:
 
 def test_skill_resource_paths_stay_inside_plugin() -> None:
     relative_resource = re.compile(
-        r"(?<![\w/])((?:\.\./)*(?:references|assets|scripts|evals)/[A-Za-z0-9_.\-/]+)"
+        r"(?<![\w/])((?:\.\./)*(?:references|assets|scripts|evals|sub-skills)/[A-Za-z0-9_.\-/]+)"
     )
     plugin_root = PLUGIN.resolve()
 
-    for skill_file in (PLUGIN / "skills").glob("*/SKILL.md"):
+    skill_files = list((PLUGIN / "skills").glob("*/SKILL.md"))
+    skill_files.extend((PLUGIN / "skills").glob("*/sub-skills/*/SUB-SKILL.md"))
+    for skill_file in skill_files:
         for match in relative_resource.finditer(skill_file.read_text(encoding="utf-8")):
             target = (skill_file.parent / match.group(1)).resolve()
             assert target.is_relative_to(plugin_root), f"path escapes plugin: {skill_file}: {match.group(1)}"

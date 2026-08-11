@@ -1,21 +1,39 @@
 # Spec Gate: Contract Completeness and Conditional Scrutiny
 
-Read this reference only after Decision has passed.
+只在 Decision PASSED 后读取。Spec 阶段先完成 Spec Design Preflight 与 contract design，Gate 最后验证已经声明的范围；不要把 Gate 变成首次决定是否需要 DTO、persistence boundary 或 CAS 的设计会议。
 
-## Spec Gate
+## Gate inputs
 
-Synthesize the point-in-time contract from repository facts, selected user-facing semantics, seam/interface decisions, and Decision outcomes. Use the eight-section Spec template. Spec passes only when all eight sections are substantive; behavior, state/workflow, boundaries, and recovery are internally consistent; Acceptance Semantics maps each promise/constraint to observable evidence and names manual owners; and blocking owner decisions or contract ambiguity are zero.
+Gate 读取当前 `spec.md`、其“Spec 设计范围”、存在时的 `contract-design.md`、Decision outcomes、repository facts 与 Acceptance Semantics。`contract-design.md` 与 `spec.md` 共用 S revision、Status、approval 和 Gate，不形成第二套 behavior contract。
 
-The Spec must stand without the plan. It must not contain stable-doc backfill maps, durable-delta queues, Composition, worker steps, verification command logs, or tracker publication metadata. If the gate blocks, record the exact missing contract or decision and do not hand off to planning.
+## Pass criteria
+
+Spec 只有同时满足以下条件才可 PASSED：
+
+- 设计范围列出当前全部具体 API operations、persistence models、cross-module seams 与 public read models，并为每项指向唯一规范 owner；
+- 每个 declared surface 满足 [Contract Surface Design](contract-surface-design.md) 的适用下限；
+- 八个 behavior-contract 章节 substantive，behavior、state/workflow、permission/boundary、error/recovery 与 canonical model 内部一致；
+- 每个 promise/constraint 映射到 observable evidence，并为 manual evidence 指定 owner；
+- blocking owner decision、contract ambiguity 与 artifact authority conflict 为零；
+- 两个独立实施者可以选择不同内部实现，但不会产生不同 API、data identity、permission、concurrency、recovery 或 public shape。
+- artifact 已使用真实 S revision，所需 owner approval 已记录，Status、Gate result 与 handoff readiness 一致；proposal 的内容通过判断不能冒充正式阶段迁移。
+
+Gate 可以发现设计范围与正文之间的明显漏项；发现后返回 Preflight 修正范围与设计。若 Plan 仍需决定可观察语义或 canonical contract，记录 exact missing contract 并 `BLOCKED`，不交给 planning。
+
+`spec.md`/`contract-design.md` 不得包含 stable-doc backfill maps、durable-delta queues、Composition、worker steps、verification command logs 或 tracker publication metadata。
+
+## Blocked persistence
+
+能在当前对话中关闭的 Preflight blocker 只留在 working output，关闭后再写 formal Spec。只有阻断使本轮必须暂停、跨 session 或等待 owner/外部条件时，才持久化简短的 `Spec Gate Blocked` 与恢复入口；不为当场可回答的问题制造 blocked revision。
 
 ## Conditional evidence-integrity contract
 
-Evaluate this only when acceptance depends on evidence whose authority, comparison, publication, compatibility, or consumption can create false PASS: for example external-provider proof, durable current pointers, atomic publish/archive, external mutation, projected schema, or state-varying public payload.
+仅当 acceptance 依赖可能造成 false PASS 的 evidence authority、comparison、publication、compatibility 或 consumption 时评估，例如 external-provider proof、durable current pointer、atomic publish/archive、external mutation、projected schema 或 state-varying public payload。
 
-When signaled, use the existing eight sections to define relevant authoritative sources, comparison units/normalization, trusted inputs and revalidation at commit points, post-side-effect failure and compensation/invalidation, complete compatibility admission, safe observable failure surfaces, and stable public shapes. The gate passes only when false-PASS counterexamples are testable. Do not add a ninth section or impose this ceremony on ordinary changes.
+信号出现时，在现有 contract owner 中定义 authoritative sources、comparison units/normalization、trusted inputs 与 commit-point revalidation、post-side-effect failure 与 compensation/invalidation、完整 compatibility admission、safe observable failure surface 与 stable public shape。false-PASS counterexamples 必须可测试；不要增加第九个 behavior section，也不要把该流程施加到普通变化。
 
 ## Risk-driven Grill
 
-Run `/impl-package:grill-me-smartly` only when the user asks, or when high-risk signals exist: unresolved material ambiguity, cross-module/external interface, migration/compatibility, security/data authority, destructive external mutation, or evidence-integrity false-PASS risk. It never silently applies clarifications.
+只有用户明确要求，或存在 unresolved material ambiguity、cross-module/external interface、migration/compatibility、security/data authority、destructive external mutation、evidence-integrity false-PASS risk 等高风险信号时，运行 `/impl-package:grill-me-smartly`。它不能静默应用 clarification。
 
-The ledger lives in OS temp, not the package. Summarize converged decisions and owner decisions to the user. Any user decision remains a normal blocking owner decision until cleared. Only after user approval may converged clarifications revise Spec through the ordinary S-revision path. After Spec passes, offer `/impl-package:grilling` only as an optional deeper review.
+Ledger 位于 OS temp，不进入 package。向用户汇总 converged decisions 与 owner decisions；owner decision 未关闭前仍阻塞。只有 owner 批准后，clarification 才能通过普通 S-revision path 修改 Spec。Spec PASSED 后仅可把 `/impl-package:grilling` 作为可选 deeper review。

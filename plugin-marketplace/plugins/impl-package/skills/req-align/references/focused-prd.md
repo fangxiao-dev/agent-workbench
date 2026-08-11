@@ -6,7 +6,7 @@ Read this reference when an earned `decision.md` needs a Focused PRD, when revis
 
 A Focused PRD explains why one concrete change is worth making, who benefits in which situation, how the user or business will perceive the change, what is and is not promised, and how the product result will be recognized. “Focused” means focused on this change; it does not mean short, abstract, or a summary of system capabilities.
 
-It is not a field contract, state machine, error-code catalog, implementation design, test procedure, or task breakdown. Put those in `spec.md` or `plan.md` according to the existing Decision Boundary. Do not decide the layer by asking whether a field is mentioned; decide it by the question being answered.
+It is not a field contract, state machine, error-code catalog, implementation design, test procedure, or task breakdown. Put normative behavior and cross-module data/API contracts in the Spec-stage artifact ensemble (`spec.md` plus an earned `contract-design.md`), and implementation choices in `plan.md`. Do not decide the layer by asking whether a field is mentioned; decide it by the question being answered.
 
 ## Six stable questions
 

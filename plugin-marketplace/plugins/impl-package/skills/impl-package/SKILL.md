@@ -5,7 +5,7 @@ description: Impl-Package 体系的入口地图与路由；当需要判断从需
 
 # Impl-Package
 
-Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec → Plan → 可选 Tickets/DAG → execution state → verification → Gate → stable-doc backfill。
+Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract ensemble → Plan → 可选 Tickets/DAG → execution state → verification → Gate → stable-doc backfill。
 
 ## 核心原则
 
@@ -52,6 +52,7 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec → Plan
 <package>/
   decision.md            # 可选；轻量 Decision 也可在 spec.md
   spec.md
+  contract-design.md     # 可选；从属 spec.md，共用同一 S revision/Status/Gate
   plan.md
   tickets/               # Composition earned 时
   dag.md                  # Composition earned 时
@@ -65,3 +66,5 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec → Plan
 ```
 
 小型个人/团队改动可以 `tickets=false, dag=false`；不要为审计完整感增加 artifact。
+
+`contract-design.md` 只有在精确结构会遮蔽 `spec.md` 的行为/验收主线，或同一 canonical model 被多个 operation/module 消费时才 earned。它没有独立 alias、revision、状态、审批或生命周期。

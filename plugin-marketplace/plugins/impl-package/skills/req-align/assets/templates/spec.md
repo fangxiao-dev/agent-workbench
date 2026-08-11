@@ -23,10 +23,22 @@ Spec Revision：S<n>
 - 证据位置：decision.md | 本记录
 - 评估人 / 日期：
 
+## Spec 设计范围
+
+<!-- 每次创建或更新本 Spec 时首先整体重建本节。这里只保存当前完整合同对象与唯一承载位置，不记录本轮 delta 或历史判断。对象必须写具体名称，不能只写 api=true / persistence=true。没有某类 surface 时写“无”。只冻结会改变可观察行为或正确性的维度，不为不适用项补空合同。 -->
+
+- API operations：
+- Persistence models：
+- Cross-module seams：
+- Public read models：
+- 详细合同承载：本文件 §<n> | [contract-design.md](contract-design.md)（写明 earned 原因） | 未 earned
+
 ## Spec 门记录（Spec Gate Record）
 
 - 结果（Result）：PASSED | BLOCKED
-- 八个章节完整：
+- 当前设计范围已完整兑现：
+- 详细合同 authority 无重复或冲突：
+- 八个行为合同章节完整：
 - 验收证据已映射：
 - 阻塞决策 / 歧义：
 - 批准人 / 日期：
@@ -42,7 +54,8 @@ Spec Revision：S<n>
 
 - 领域术语：
 - 输入、输出、身份与不变量：
-- Schema、归一化、精度与 ownership 语义：
+- 数据结构、归一化、精度与 ownership 语义：
+- 精确合同引用：本节 | [contract-design.md](contract-design.md) 的稳定章节 | 不适用
 - 条件化 evidence-integrity 合同（仅当验收结论依赖权威证据、发布/消费状态、兼容投影、外部副作用或随状态变化的公共输出时填写）：主要断言与比较单元；来源权威与私有字段排除；实际范围与声明范围；完整 frozen-format admission；发布不完整后 reader 可相信的权威状态；预期 operational failure 表面与稳定公共 shape。
 
 ## 3. 行为 / 状态机 / 工作流

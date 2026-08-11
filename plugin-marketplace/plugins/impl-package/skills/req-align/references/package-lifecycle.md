@@ -11,6 +11,8 @@
 
 D/S/P 只是可读别名；当前 package 内保持一致即可。Git commit 是跨 session 比较和历史审计的唯一版本锚点。
 
+`contract-design.md` 是当前 `spec.md` 按复杂度 earned 的从属 artifact：与 `spec.md` 共用同一个 S revision、Status、审批与 Spec Gate，没有独立 alias、revision、状态或生命周期。它存在时属于同一个 Spec contract ensemble；移除时先把仍有效的合同吸收回同一 S revision 的 `spec.md`，Git 负责保存历史。
+
 ## 影响路由
 
 - implementation-only：D/S 不变，进入当前 plan 或 terminal 后的新 patch plan。

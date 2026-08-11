@@ -2,7 +2,7 @@
 
 ## 1. 权威边界
 
-- Decision/Spec 定义要交付的行为与验收语义。
+- Decision 与 Spec contract ensemble 定义要交付的行为、跨模块数据/API 合同与验收语义。Spec ensemble 至少包含 `spec.md`，并可包含其“Spec 设计范围”声明为 earned 的 `contract-design.md`。
 - Plan 定义一个 attempt 的执行策略、验证和 Composition。
 - Ticket 定义纵向验收切片；DAG 定义横向执行依赖。
 - `.impl-package/state.json` 只保存当前执行状态与恢复入口。
@@ -10,6 +10,8 @@
 - `gate.md` 保存当前 gate 判决；历史由 Git 保存。
 
 D/S/P 是人类可读别名，只要求当前 package 内相互一致，不绑定文件内容。需要固定比较点时只使用 Git commit ID。
+
+`contract-design.md` 从属 `spec.md` 并共用同一 S revision、Status、审批和 Spec Gate；它没有独立 alias、revision、状态或生命周期。Plan 可以引用其中稳定章节，但不得复制或补设计另一套 DTO/schema。
 
 ## 2. Composition
 
@@ -47,7 +49,7 @@ Composition：tickets=<true|false>, dag=<true|false>
 
 ## 4. 生命周期
 
-1. req-align 产出并批准 Decision/Spec。
+1. req-align 产出并批准 Decision/Spec contract ensemble。
 2. impl-planning 创建 plan 并选择 Composition。
 3. Plan 冻结后按 Composition 创建 Draft Ticket/DAG；联合检查 coverage、typed dependency、ownership、证据可行性与集成顺序后取得一次 bundle approval。
 4. `init` 发布当前 Attempt 的 Ticket、初始化 state 和完整 Progress 层，进入执行。

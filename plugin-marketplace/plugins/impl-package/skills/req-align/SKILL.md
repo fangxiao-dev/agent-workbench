@@ -1,43 +1,47 @@
 ---
 name: req-align
-description: 当新增或变更 requirement 需要在 feature decision、specification 或 implementation planning 前完成对齐时使用；拥有必过的 Decision/Spec gates 及其 decision.md/spec.md artifact。
+description: 当新增或变更 requirement 需要在 implementation planning 前完成完整或仅 Decision/Spec 对齐时使用；路由 contract-impact fast path、Decision/Spec gates 及其 decision.md/spec.md artifacts。
 ---
 
 # Requirement Alignment
 
-Run Decision, then Spec, for every contract-impacting change. The gates are equal requirements: a missing standalone `decision.md` never means a skipped Decision. `contract impact=none` exits through the fast path before either gate; it reuses an already valid contract rather than skipping validation.
+把一次 contract-impacting change 路由为 Decision、Spec 或两者，并保持 package、artifact、revision 与下游 handoff 只有一个 owner。本 Skill 是公共入口；Decision 与 Spec 的内容工作由内部 SUB-SKILL 执行。
 
-## Routes and ownership
+## 路由
 
-This skill owns the package's current `decision.md`, `spec.md`, and readable D/S aliases under the configured implementations root (default `docs/implementations/`). It does not create a tracker spec, a second behavior contract, or a plan. `/impl-package:impl-planning` consumes the gated `spec.md`.
+| 用户意图 | 路由 |
+| --- | --- |
+| 未显式限定阶段 | full：Decision PASSED 后进入 Spec |
+| 明确“仅 Decision” | decision-only：Decision 得出 PASSED/BLOCKED 后停止 |
+| 明确“仅 Spec / 只做 Spec 设计” | spec-only：验证现有 Decision 前置后直接进入 Spec |
 
-- **No-contract fast path:** When business result, Acceptance Semantics, security/data constraints, and mutation authority are unchanged, reuse current D/S and route directly to the owning skill. Do not run brainstorming, either Gate, or Grill; do not create or expand D/S or other package state. Report why the existing contract still holds. If deletion changes a promise or acceptance boundary, it is contract-impacting.
-- **Initial or follow-up:** Before Focused PRD work, classify the request and read [references/requirement-inputs.md](references/requirement-inputs.md). An initial request may begin with confirmed oral conversation, screenshots, documents, or repository facts. A follow-up starts from current D/S and treats the incoming request as a delta unless the owner explicitly declares full replacement.
-- **Package lifecycle:** For a new package, a revision, or package closure, read [references/package-lifecycle.md](references/package-lifecycle.md) before acting.
+spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed Decision Gate Record，或同 session 已确认且满足 lightweight Decision Gate 的完整方向。它只跳过 Decision 的产出过程，不跳过前置验证；前置缺失或已被 delta 失效时返回阻断，不静默改跑 full。
 
-Use [assets/templates/decision.md](assets/templates/decision.md) and [assets/templates/spec.md](assets/templates/spec.md). Use the proposal template only when a contract-impacting change enters Decision.
+## Ownership 与 fast path
 
-## Gate sequence
+本 Skill 拥有 configured implementations root（默认 `docs/implementations/`）下 package 的 current `decision.md`、`spec.md`、earned `contract-design.md` 与可读 D/S aliases。它不创建 tracker spec、第二套 behavior contract、plan 或 runtime state。
 
-1. **Decision first.** Before drafting an earned Focused PRD or evaluating the Decision Gate, read [references/decision-gate.md](references/decision-gate.md) and [references/focused-prd.md](references/focused-prd.md). Decision is `BLOCKED` when destination, repository fit, material choices, source-input reconciliation, Core/Capability boundary, or blocking uncertainty is unresolved. Do not create `spec.md` while blocked.
-2. **Spec second.** Only after Decision `PASSED`, read [references/spec-gate.md](references/spec-gate.md), synthesize the behavior contract, and evaluate Spec. Do not hand off to planning while Spec is blocked.
-3. **Plan last.** After both gates pass and lifecycle registration validates, hand the same `spec.md` to `/impl-package:impl-planning`.
+当 business result、Acceptance Semantics、security/data constraints 与 mutation authority 均未变化时，走 no-contract fast path：复用仍有效的 D/S，说明现有合同为何继续成立，并直接路由 owning skill。删除只要改变 promise 或 acceptance boundary，就仍是 contract-impacting。
 
-Lightweight corrections under an existing product definition may omit standalone `decision.md` only after Decision passes; their minimum evidence lives in `spec.md`'s Decision Gate Record. A new feature, material experience change, or business capability change normally earns `decision.md`.
+## 主路径
 
-## Common workflow
+1. 分类 contract impact；需要 D/S 时识别 initial、follow-up 或 package closure，并读取 [Package Lifecycle](references/package-lifecycle.md)。
+2. 解析 canonical package 与 current D/S。follow-up 默认把输入视为 current D/S 的 delta；只有 owner 明确声明 full replacement 才整体替换。
+3. full 或 decision-only 读取并执行 [Decision SUB-SKILL](sub-skills/decision/SUB-SKILL.md)。Decision `BLOCKED` 时停止，不创建 Spec。
+4. full 在 Decision `PASSED` 后、或 spec-only 前置验证通过后，读取并执行 [Spec SUB-SKILL](sub-skills/spec/SUB-SKILL.md)。Spec `BLOCKED` 时不进入 planning。
+5. 两个 Gate 均通过且 lifecycle registration 有效时，把同一 Spec contract ensemble 交给 `/impl-package:impl-planning`。
+6. 保持 package 内 D/S aliases 一致，记录用于 module-knowledge/code 比较的 Git commit；implementation attempt 获批前不创建 runtime state。
+7. 汇报任何 Gate 结果前读取 [Handoff](references/handoff.md)，输出最具体的可恢复状态。
 
-1. Classify contract impact. Take the fast path when eligible; otherwise identify new versus follow-up package work and read the applicable lifecycle rules.
-2. Discover repository instructions, project context, authority sources, relevant code/tests, and expected knowledge that is absent. For follow-up work, read current D/S before interpreting the new request. If durable project knowledge should change, propose the change against a discovered authoritative source and wait for owner approval; never invent a long-lived destination.
-3. Triage unknowns under the Decision reference. Perform permitted read-only investigation; record a `BLOCKED` Decision when a required investigation needs owner authorization, side effects, cost, or scope expansion.
-4. Prepare the [Alignment Proposal template](assets/templates/alignment-proposal.md). It is working output, not a new durable artifact. Ask one focused question only when discovery and permitted investigation cannot resolve an intent, scope, trade-off, or owner decision.
-5. Reconcile initial product promises or the follow-up delta, then run Decision research and Gate. Persist an earned or blocked `decision.md`; do not manufacture a duplicate PRD for the lightweight path.
-6. After Decision passes, create or revise `spec.md`, evaluate the conditional evidence-integrity contract and risk-driven Grill only when their signals apply, then run Spec Gate.
-7. Keep D/S aliases consistent in the current package, record the Git commit used for module-knowledge/code comparison, and complete the Decision/Spec gates. Do not create runtime state before an implementation attempt is approved.
-8. When reporting any Decision or Spec result, including `BLOCKED`, read [references/handoff.md](references/handoff.md) and report the most specific status derived from recorded gate and downstream evidence.
+Package ID 创建后不得改名。后续 requirement delta 先按 implementation-only / behavior-contract / decision-direction 分类，只使真正受影响的下游范围失效。
 
-## Output contract
+## 完成条件
 
-For a contract-impacting request, state the focused requirement, selected direction, gate results, blockers/owner decisions, and next valid step in business language. After artifact writes, report canonical package identity, D/S aliases, evidence locations, and changed `execution-findings.md` only when it was appended. Do not paste full artifacts.
+- fast path 已证明现行合同继续成立，或请求已完成所选 route 的全部 Gate；
+- Decision、Spec 与 optional detailed contract 没有平行 authority；
+- blocked 状态说明 exact missing decision/contract 与下一有效动作；
+- ready 状态只在 planning 不再需要发明行为或数据合同后成立。
 
-Package ID 一经创建不得改名。后续 requirement delta 先按 implementation-only / behavior-contract / decision-direction 分类，再只使受影响下游范围失效。
+## 输出
+
+用业务语言说明 focused requirement、selected direction、route、Gate results、blockers/owner decisions 与下一有效步骤。发生 artifact 写入时，报告 canonical package、D/S aliases、Decision/Spec evidence，以及存在时的 `contract-design.md`；不要粘贴完整 artifact。
