@@ -33,11 +33,11 @@
     },
     {
       "id": 4,
-      "prompt": "Dry-run a clean-session handoff for a completed local checkpoint. The parent thread configuration is unavailable. The implementation worktree, full HEAD, package directory, and next action are all verified. Prepare the delivery request but do not call create_thread.",
-      "expected_output": "Produces a normal create_thread request that explicitly carries model gpt-5.6-sol and thinking high, while keeping the source worktree in the child prompt rather than a creation snapshot.",
+      "prompt": "Dry-run a clean-session handoff for a completed local checkpoint. The current task's x-codex-turn-metadata reports model gpt-5.6-terra and reasoning_effort xhigh. The implementation worktree, full HEAD, package directory, and next action are all verified. Prepare the delivery request but do not call create_thread.",
+      "expected_output": "Produces a normal create_thread request that explicitly carries model gpt-5.6-terra and thinking xhigh, while keeping the source worktree in the child prompt rather than a creation snapshot.",
       "expectations": [
-        "Uses the default gpt-5.6-sol/high configuration explicitly unless the owner supplied a supported override.",
-        "Does not require the parent configuration to be readable; stops with session configuration unavailable only when the selected pair is unsupported.",
+        "Uses the verified current-task model and reasoning effort explicitly unless the owner supplied a supported override.",
+        "Passes the first-stage and continuation prompts as plain text without a Codex delegation tag or label.",
         "Does not use fork_thread, a working-tree snapshot, or the source worktree as creation-state input."
       ]
     },
@@ -59,6 +59,16 @@
         "When set_thread_title fails, it does not send continuation or emit a successful threadId delivery directive.",
         "When only clientThreadId is returned, it does not poll, claim naming success, or send continuation.",
         "Explains that successful delivery requires local creation, naming, anchor PASS, and continuation delivery."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Dry-run a clean-session handoff whose worktree, HEAD, package and next action are verified, but the current task's request metadata exposes no model or reasoning_effort. Do not call create_thread.",
+      "expected_output": "Stops before task creation with session configuration unavailable instead of guessing or falling back to a hard-coded model and reasoning effort.",
+      "expectations": [
+        "Does not infer the current task configuration from the system prompt or supported-model catalog.",
+        "Does not substitute a configured default, gpt-5.6-sol/high, or any other guessed pair.",
+        "Does not call create_thread when either current-task configuration field is unavailable."
       ]
     }
   ]

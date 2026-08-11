@@ -10,10 +10,16 @@ def read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
-def test_handoff_owns_two_stage_delivery_and_default_configuration() -> None:
+def test_handoff_owns_two_stage_delivery_and_current_task_configuration() -> None:
     skill = read("skills/handoff-to-new-session/SKILL.md")
 
-    assert "`model=gpt-5.6-sol` and `thinking=high`" in skill
+    assert "x-codex-turn-metadata" in skill
+    assert 'nodeRepl.requestMeta["x-codex-turn-metadata"]' in skill
+    assert "pass its `model` unchanged as `model`" in skill
+    assert "its `reasoning_effort` unchanged as `thinking`" in skill
+    assert "session configuration unavailable" in skill
+    assert "plain prompt text" in skill
+    assert "do not wrap either one in `<codex_delegation>`" in skill
     assert "reports anchor PASS and stops" in skill
     assert "`anchor FAIL: source worktree setup mismatch`" in skill
     assert "Only after both the title and anchor PASS are confirmed" in skill

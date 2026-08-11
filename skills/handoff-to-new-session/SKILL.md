@@ -1,7 +1,7 @@
 ---
 name: handoff-to-new-session
 description: 当用户要把已有权威 checkpoint 交接到全新 Codex task，并继续使用既有 implementation worktree 时使用；负责创建 clean local task、核验恢复锚点并分两阶段续接。
-compatibility: Requires Codex Desktop thread tools (create_thread, set_thread_title, wait_threads, and send_message_to_thread) plus local Git access.
+compatibility: Requires Codex Desktop thread tools (create_thread, set_thread_title, wait_threads, and send_message_to_thread), access to the current turn's request metadata, and local Git access.
 ---
 
 # Handoff To New Session
@@ -58,8 +58,9 @@ Perform these read-only checks before drafting or creating the child:
 1. Resolve the user-supplied existing implementation worktree. It does not need to equal the parent thread `cwd`; the child will use it as the execution `workdir`.
 2. In that worktree, read the full HEAD with `git rev-parse HEAD`.
 3. Confirm the stated package directory and Impl-Package entry point exist. For a downstream protocol extension, confirm its stated context anchors instead. Read records needed to fill the applicable continuation from its authority, not from chat memory.
+4. Read the current task's `model` and `reasoning_effort` from `x-codex-turn-metadata` in the request metadata exposed to tool calls. When `node_repl` is available, inspect `nodeRepl.requestMeta["x-codex-turn-metadata"]`; do not infer either value from the system prompt, tool catalog, or a hard-coded default.
 
-If step 1, 2, or 3 cannot be confirmed, stop before `create_thread`. Report `anchor FAIL: source worktree setup mismatch` with the expected worktree and failed anchor. Do not create a child, copy files, cherry-pick, reset, checkout, rebuild changes, or choose another worktree automatically.
+If step 1, 2, or 3 cannot be confirmed, stop before `create_thread`. Report `anchor FAIL: source worktree setup mismatch` with the expected worktree and failed anchor. If step 4 cannot be confirmed, stop before `create_thread` and report `session configuration unavailable`. Do not create a child, copy files, cherry-pick, reset, checkout, rebuild changes, choose another worktree, or substitute a guessed session configuration automatically.
 
 ## Fill The Two Prompts
 
@@ -83,9 +84,9 @@ A downstream protocol that supplies its own continuation must keep the same titl
 
 ## Create And Deliver
 
-1. Create every child with the default configuration `model=gpt-5.6-sol` and `thinking=high`. This clean-session contract is explicit rather than inherited: do not attempt to inspect or infer the parent thread's configuration. An owner may override the pair only by naming a supported replacement configuration.
-2. Confirm that the destination supports the selected pair. If the default pair, or an owner-specified replacement, is unsupported, stop and report `session configuration unavailable`; do not silently fall back to another model or reasoning effort.
-3. Call `create_thread`; never call `fork_thread`. Pass `model=gpt-5.6-sol` and `thinking=high` explicitly, or the supported owner override, together with the filled first-stage prompt unchanged as `prompt`. Normalize the tool result before branching: the desktop wrapper may return the creation payload as serialized JSON text rather than an object, so parse that text and extract `threadId` / `hostId` or `clientThreadId`; never infer a queued result from the wrapper shape alone.
+1. Default the child configuration to the current task's verified pair: pass its `model` unchanged as `model` and its `reasoning_effort` unchanged as `thinking`. An owner may override the inherited pair only by naming a supported replacement configuration.
+2. Confirm that the destination supports the selected pair. If the inherited pair, or an owner-specified replacement, is unsupported, stop and report `session configuration unavailable`; do not silently fall back to another model or reasoning effort.
+3. Call `create_thread`; never call `fork_thread`. Pass the selected `model` and `thinking` explicitly together with the filled first-stage prompt unchanged as `prompt`. Pass both prompts as plain prompt text: do not wrap either one in `<codex_delegation>` or add any Codex delegation tag or label. Normalize the tool result before branching: the desktop wrapper may return the creation payload as serialized JSON text rather than an object, so parse that text and extract `threadId` / `hostId` or `clientThreadId`; never infer a queued result from the wrapper shape alone.
 4. Create a normal session with `target.environment = { type: "local" }`, without `startingState: { type: "working-tree" }`, a worktree snapshot option, a branch, or the source worktree as a creation-state target. Let the prompt bind the child to the verified existing implementation worktree.
 5. Obtain the original session title from the thread manager before creation. Derive the title by adding `01` if it has no numeric suffix, or incrementing the existing suffix (`01` → `02`). `create_thread` has no title parameter, so after an immediate result with `threadId`, call `set_thread_title` with that exact derived title. Do not claim the naming step succeeded until that call succeeds.
    If `set_thread_title` fails, stop before waiting for anchors or sending continuation and report incomplete delivery.
@@ -109,7 +110,8 @@ If the source worktree cannot be used as `workdir` or any in-worktree check fail
 Before reporting delivery, verify that:
 
 - The stated implementation worktree, HEAD and authority records were verified before creation.
-- The child explicitly uses `gpt-5.6-sol` with `high` reasoning effort, unless the owner supplied a supported explicit override.
+- The child explicitly uses the verified current-task model and reasoning effort, unless the owner supplied a supported explicit override.
+- The first-stage and continuation prompts were sent as plain text without a Codex delegation tag or label.
 - The `create_thread` target explicitly used `environment: { type: "local" }`; no result or UI reports a newly created worktree.
 - The child title was derived from the source title and confirmed through `set_thread_title`, or delivery was reported incomplete.
 - The first-stage prompt contains the applicable recovery or downstream context anchors, target-`workdir` execution rule, mismatch rule and PASS-then-stop rule; the second-stage prompt follows the applicable generic or downstream continuation contract.
