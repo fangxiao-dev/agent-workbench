@@ -45,7 +45,7 @@ payload 使用 `purpose=checkpoint|judgment`、`subject=attempt|ticket:<id>|task
 
 ## Review、Findings 与人工验收
 
-- 根据实际 diff 选择 reviewer，并通过 `/impl-package:do-review` 派发：普通实现使用 `code-review`；interface、状态机、跨模块 seam 或合同忠实度增加相应 `standards-review` / `spec-review`；安全、数据完整性、外部 mutation、并发、migration 必须增加 `safety-review`。
+- 根据实际 diff 选择 reviewer，并通过 `/impl-package:do-review` 派发：普通实现使用 `review-code`；interface、状态机、跨模块 seam 或合同忠实度增加相应 `review-code-by-standards` / `review-code-by-spec`；安全、数据完整性、外部 mutation、并发、migration 必须增加 `safety-review`。
 - P1/P2 finding 必须修复并 closure verify；editorial suggestion 不阻断 Gate。
 - package 级 `execution-findings.md` 在 terminal Gate 前必须完成分流：Decision rationale→Decision，规范行为→Spec，执行判断→Execution Record，长期知识→Durable Delta/`_pending.md`。
 - Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 把入口、oracle、环境、失败反馈和 teardown owner 写入 judgment 或 canonical handoff，并取得结果 evidence。

@@ -1,14 +1,14 @@
 ---
-name: code-review
-description: Conduct thorough, constructive code reviews for quality and security. Use when reviewing pull requests, checking code quality, identifying bugs, or auditing security. Handles best practices, SOLID principles, security vulnerabilities, performance analysis, and testing coverage.
+name: review-code
+description: 当需要审查 pull request、固定 comparison point 的代码 diff 或相关实现变更时使用；重点检查运行行为、错误处理、安全、性能、资源、并发/原子性、测试风险与一般代码质量。
 allowed-tools: Read Grep Glob
 metadata:
-  tags: code-review, code-quality, security, best-practices, PR-review
+  tags: review-code, code-review, code-quality, security, best-practices, PR-review
   platforms: Codex, Claude, ChatGPT, Gemini
 ---
 
 
-# Code Review
+# Review Code
 
 ## 审查偏重
 

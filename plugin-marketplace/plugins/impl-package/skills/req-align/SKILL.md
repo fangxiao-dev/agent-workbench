@@ -1,6 +1,6 @@
 ---
 name: req-align
-description: 当新增或变更 requirement 需要在 implementation planning 前完成完整或仅 Decision/Spec 对齐时使用；路由 contract-impact fast path、Decision/Spec gates 及其 decision.md/spec.md artifacts。
+description: 当新增或变更 requirement 需要判断 contract impact，或需要创建、审查、修订、更新 Decision/Spec 时使用；在 implementation planning 前路由 no-contract fast path、Decision/Spec gates 及其 decision.md/spec.md artifacts。
 ---
 
 # Requirement Alignment

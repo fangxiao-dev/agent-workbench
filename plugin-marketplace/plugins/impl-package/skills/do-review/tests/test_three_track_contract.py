@@ -30,19 +30,21 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertEqual(
             registry["default_tracks"],
             [
-                {"label": "Track A", "skill": "code-review"},
-                {"label": "Track B", "skill": "standards-review"},
-                {"label": "Track C", "skill": "spec-review"},
+                {"label": "Track A", "skill": "review-code"},
+                {"label": "Track B", "skill": "review-code-by-standards"},
+                {"label": "Track C", "skill": "review-code-by-spec"},
             ],
         )
         self.assertEqual(
-            registry["reviewers"]["standards-review"]["canonical_skill_path"],
-            "skills/standards-review/SKILL.md",
+            registry["reviewers"]["review-code-by-standards"]["canonical_skill_path"],
+            "skills/review-code-by-standards/SKILL.md",
         )
         self.assertEqual(
-            registry["reviewers"]["spec-review"]["canonical_skill_path"],
-            "skills/spec-review/SKILL.md",
+            registry["reviewers"]["review-code-by-spec"]["canonical_skill_path"],
+            "skills/review-code-by-spec/SKILL.md",
         )
+        for removed_name in ("code-review", "standards-review", "spec-review"):
+            self.assertNotIn(removed_name, registry["reviewers"])
         self.assertNotIn("module-review", registry["reviewers"])
 
     def test_preflight_defaults_are_read_from_registry(self) -> None:
@@ -50,9 +52,12 @@ class ThreeTrackContractTests(unittest.TestCase):
         registry = module.load_registry()
         self.assertEqual(
             module.registry_default_skill_names(registry),
-            ["code-review", "standards-review", "spec-review"],
+            ["review-code", "review-code-by-standards", "review-code-by-spec"],
         )
-        self.assertNotIn('"code-review", "standards-review", "spec-review"', SCRIPT_PATH.read_text(encoding="utf-8"))
+        self.assertNotIn(
+            '"review-code", "review-code-by-standards", "review-code-by-spec"',
+            SCRIPT_PATH.read_text(encoding="utf-8"),
+        )
 
     def test_preflight_rejects_custom_paths_outside_plugin(self) -> None:
         module = load_preflight_module()
@@ -86,8 +91,8 @@ class ThreeTrackContractTests(unittest.TestCase):
     def test_leaf_roles_use_primary_intent_and_parent_handoff(self) -> None:
         skill = SKILL_PATH.read_text(encoding="utf-8")
         briefs = BRIEFS_PATH.read_text(encoding="utf-8")
-        standards = (ROOT / "skills" / "standards-review" / "SKILL.md").read_text(encoding="utf-8")
-        code = (ROOT / "skills" / "code-review" / "SKILL.md").read_text(encoding="utf-8")
+        standards = (ROOT / "skills" / "review-code-by-standards" / "SKILL.md").read_text(encoding="utf-8")
+        code = (ROOT / "skills" / "review-code" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("primary review intent", skill)
         self.assertIn("cross-domain candidate", skill)
         self.assertIn("not an exclusive capability boundary", briefs)
@@ -106,15 +111,15 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertIn("user-provided paths", skill)
         self.assertIn("matching PRD/spec material in `docs/`, `specs/`, or `.scratch/`", skill)
         self.assertIn("Spec source discovery record (searched sources and results):", skill)
-        self.assertIn("still dispatch the default `spec-review` leaf", skill)
+        self.assertIn("still dispatch the default `review-code-by-spec` leaf", skill)
 
     def test_skill_has_fail_closed_default_three_track_verdicts(self) -> None:
         skill = SKILL_PATH.read_text(encoding="utf-8")
         templates = TEMPLATES_PATH.read_text(encoding="utf-8")
         for label in (
-            "Track A (code-review)",
-            "Track B (standards-review)",
-            "Track C (spec-review)",
+            "Track A (review-code)",
+            "Track B (review-code-by-standards)",
+            "Track C (review-code-by-spec)",
         ):
             self.assertIn(label, skill)
             self.assertIn(label, templates)

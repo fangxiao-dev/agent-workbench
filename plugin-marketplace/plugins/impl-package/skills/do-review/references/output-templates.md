@@ -21,9 +21,9 @@ Use the smallest template that matches the run. Keep source attribution and per-
 
 | Track | Verdict | Coverage / note |
 | --- | --- | --- |
-| Track A (code-review) | PASS / FAIL / UNCERTAIN |  |
-| Track B (standards-review) | PASS / FAIL / UNCERTAIN |  |
-| Track C (spec-review) | PASS / FAIL / UNCERTAIN |  |
+| Track A (review-code) | PASS / FAIL / UNCERTAIN |  |
+| Track B (review-code-by-standards) | PASS / FAIL / UNCERTAIN |  |
+| Track C (review-code-by-spec) | PASS / FAIL / UNCERTAIN |  |
 
 ## Findings
 
@@ -46,9 +46,9 @@ Use the smallest template that matches the run. Keep source attribution and per-
 
 | Source | Count | Notes |
 | --- | --- | --- |
-| Track A (code-review) |  |  |
-| Track B (standards-review) |  |  |
-| Track C (spec-review) |  |  |
+| Track A (review-code) |  |  |
+| Track B (review-code-by-standards) |  |  |
+| Track C (review-code-by-spec) |  |  |
 | fused |  |  |
 | main-session |  |  |
 

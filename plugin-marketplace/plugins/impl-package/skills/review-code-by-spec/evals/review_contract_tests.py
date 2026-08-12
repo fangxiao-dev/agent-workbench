@@ -12,17 +12,17 @@ EVALS = EVALS_DIR / "evals.json"
 
 def require_text(text: str, needle: str) -> None:
     if needle not in text:
-        raise AssertionError(f"Expected spec-review contract text: {needle}")
+        raise AssertionError(f"Expected review-code-by-spec contract text: {needle}")
 
 
 def main() -> None:
     for path in (SKILL, RUBRIC, EVALS):
         if not path.exists():
-            raise AssertionError(f"Expected spec-review artifact to exist: {path}")
+            raise AssertionError(f"Expected review-code-by-spec artifact to exist: {path}")
 
     body = SKILL.read_text(encoding="utf-8")
     for needle in (
-        "name: spec-review",
+        "name: review-code-by-spec",
         "完整 diff",
         "comparison point",
         "调用者必须提供",
@@ -48,20 +48,20 @@ def main() -> None:
         "Track A",
         "Track B",
         "Track C",
-        "standards-review",
+        "review-code-by-standards",
         "safety-review",
         "ledger",
         "reviewer topology",
         "subagent",
     ):
         if forbidden in body:
-            raise AssertionError(f"spec-review must not retain orchestrator workflow: {forbidden}")
+            raise AssertionError(f"review-code-by-spec must not retain orchestrator workflow: {forbidden}")
 
     parsed = json.loads(EVALS.read_text(encoding="utf-8"))
-    if parsed.get("skill_name") != "spec-review" or len(parsed.get("evals", [])) < 3:
-        raise AssertionError("spec-review evals must identify the skill and cover Spec behavior.")
+    if parsed.get("skill_name") != "review-code-by-spec" or len(parsed.get("evals", [])) < 3:
+        raise AssertionError("review-code-by-spec evals must identify the skill and cover Spec behavior.")
 
-    print("spec-review generic contract checks passed")
+    print("review-code-by-spec generic contract checks passed")
 
 
 if __name__ == "__main__":

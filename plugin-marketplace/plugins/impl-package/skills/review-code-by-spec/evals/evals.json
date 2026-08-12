@@ -1,9 +1,9 @@
 {
-  "skill_name": "spec-review",
+  "skill_name": "review-code-by-spec",
   "evals": [
     {
       "id": 1,
-      "name": "spec-review-uses-supplied-contract-and-immutable-range",
+      "name": "review-code-by-spec-uses-supplied-contract-and-immutable-range",
       "prompt": "Review the supplied complete diff, immutable base/head SHA, commit list, and Decision, Spec, Plan, and DAG evidence.",
       "expected_output": "A Spec-only evidence report that consumes the supplied range and contract without selecting a comparison point or coordinating reviewers.",
       "files": [],

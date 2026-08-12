@@ -1,11 +1,11 @@
 ---
-name: standards-review
+name: review-code-by-standards
 description: >
-  当调用者已提供固定 comparison point、完整 diff 与仓库规范上下文时，审查 repository conventions、
+  当需要依据仓库规范和可维护性基线审查固定 comparison point 的完整代码 diff 时使用；检查 repository conventions、
   Fowler code-smell baseline，以及 module interface、depth、leverage、locality 和代码组织。
 ---
 
-# Standards Review
+# Review Code by Standards
 
 审查调用者已固定的完整 diff 是否符合仓库已有的编码规范与 Standards 设计基线，并返回可验证的 Standards evidence。
 

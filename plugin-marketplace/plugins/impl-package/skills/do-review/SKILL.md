@@ -16,7 +16,7 @@ The canonical ledger is a Markdown artifact owned and updated by the main sessio
 
 Every dispatched reviewer is a leaf reviewer. A leaf reviewer performs its assigned skill's review role: it must not invoke the parent `do-review` skill, run its subagent gate, dispatch subagents, re-resolve reviewer topology, re-plan capacity, read another track's same-round findings, classify cross-track results, or decide the overall verdict. Reviewer roles state primary review intent and handoff direction, not exclusive capability boundaries; a leaf may surface an evidence-backed cross-domain candidate for the parent to attribute, deduplicate, and classify.
 
-The default topology comes only from [reviewer-registry.json](references/reviewer-registry.json): Track A `code-review`, Track B `standards-review`, and Track C `spec-review`. `safety-review` remains an opt-in reviewer, not a default track. Do not infer internal reviewer topology from a reviewer skill; every resolved reviewer is already one leaf.
+The default topology comes only from [reviewer-registry.json](references/reviewer-registry.json): Track A `review-code`, Track B `review-code-by-standards`, and Track C `review-code-by-spec`. `safety-review` remains an opt-in reviewer, not a default track. Do not infer internal reviewer topology from a reviewer skill; every resolved reviewer is already one leaf.
 
 When the dispatcher can select a model, each review leaf uses one of two default profiles: `gpt-5.6-terra` with `reasoning_effort=high`, or `gpt-5.6-sol` with `reasoning_effort=high`. The orchestrating agent selects the suitable profile for each leaf from the review scope and risk; task, owner, host, or explicit capacity constraints override this default. Keep that selection independent of the reviewer topology: choosing a profile must not omit, merge, or weaken a selected review track.
 
@@ -50,7 +50,7 @@ Determine the target, mode, reviewer selection, complete change unit, immutable 
 
 Before preparing context or reserving capacity, fail fast on the fixed range: resolve both references with `git rev-parse <base>^{commit}` and `git rev-parse <head>^{commit}`, pin the resulting SHAs, then inspect `git diff <base-sha>...<head-sha>` and the included commit list. An invalid reference or empty diff stops the review before any leaf dispatch; do not turn either condition into a reviewer evidence gap.
 
-`do-review` owns Spec evidence discovery. Resolve and record sources in this order: (1) issue/PR references in the included commit messages and their complete tracker content under repository rules; (2) user-provided paths; (3) matching PRD/spec material in `docs/`, `specs/`, or `.scratch/` for the branch or feature; (4) relevant Impl-Package Decision, Spec, Plan, and DAG material. Record each searched source and its result, including explicit empty results. If no usable contract evidence is found, ask the user when a source can reasonably be supplied; if review must continue, record the evidence gap and still dispatch the default `spec-review` leaf. Only an explicit reviewer selection or a user-approved named degraded topology may omit Track C.
+`do-review` owns Spec evidence discovery. Resolve and record sources in this order: (1) issue/PR references in the included commit messages and their complete tracker content under repository rules; (2) user-provided paths; (3) matching PRD/spec material in `docs/`, `specs/`, or `.scratch/` for the branch or feature; (4) relevant Impl-Package Decision, Spec, Plan, and DAG material. Record each searched source and its result, including explicit empty results. If no usable contract evidence is found, ask the user when a source can reasonably be supplied; if review must continue, record the evidence gap and still dispatch the default `review-code-by-spec` leaf. Only an explicit reviewer selection or a user-approved named degraded topology may omit Track C.
 
 Prepare one immutable shared context for every selected reviewer:
 
@@ -95,7 +95,7 @@ Choose exactly one mode:
 
 In closure verification, do not hunt unrelated problems.
 
-With no explicit reviewer names, read `default_tracks` from the registry in its configured order. Its current entries are Track A (`code-review`), Track B (`standards-review`), and Track C (`spec-review`). With explicit reviewer names, run exactly those names once in the user's stated order: do not duplicate one selection, auto-fill omitted defaults, or infer missing reviewers. Assign labels sequentially (`Track A`, `Track B`, `Track C`, then later letters only if the user explicitly provides more reviewers).
+With no explicit reviewer names, read `default_tracks` from the registry in its configured order. Its current entries are Track A (`review-code`), Track B (`review-code-by-standards`), and Track C (`review-code-by-spec`). With explicit reviewer names, run exactly those names once in the user's stated order: do not duplicate one selection, auto-fill omitted defaults, or infer missing reviewers. Assign labels sequentially (`Track A`, `Track B`, `Track C`, then later letters only if the user explicitly provides more reviewers).
 
 Completion criterion: the mode and every selected track label/name/path are fixed before dispatch.
 
@@ -162,7 +162,7 @@ Related issue/PR:
 Main-session decision:
 ```
 
-Use these default source labels exactly: `Track A (code-review)`, `Track B (standards-review)`, and `Track C (spec-review)`. Deduplicate by the broken invariant or observable failure, not by path or reviewer. For one shared issue use `Source: fused` and retain every contributor in `Contributing sources`. `main-session` is a decision source, never a fourth reviewer.
+Use these default source labels exactly: `Track A (review-code)`, `Track B (review-code-by-standards)`, and `Track C (review-code-by-spec)`. Deduplicate by the broken invariant or observable failure, not by path or reviewer. For one shared issue use `Source: fused` and retain every contributor in `Contributing sources`. `main-session` is a decision source, never a fourth reviewer.
 
 Before reporting a P1, P2, or blocker, read its cited target-revision evidence, confirm the citation supports the claim and is in fixed scope, then apply the user's policy or the default classification. For each candidate, establish whether the changed diff directly contains it, the changed behavior directly triggers it, or it is a pre-existing/baseline concern. Also establish the concrete failure mode and the relevant contract, acceptance criterion, or repository rule when one exists. Mark insufficient evidence as `disputed`, `downgraded`, `out of scope`, or `UNCERTAIN`; do not present it as a verified blocker.
 

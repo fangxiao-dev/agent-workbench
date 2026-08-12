@@ -1,5 +1,5 @@
 ---
-target: plugin-marketplace/plugins/impl-package/skills/standards-review
+target: plugin-marketplace/plugins/impl-package/skills/review-code-by-standards
 updated: 2026-07-20
 ---
 

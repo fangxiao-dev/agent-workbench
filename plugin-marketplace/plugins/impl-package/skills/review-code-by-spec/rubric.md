@@ -1,5 +1,5 @@
 ---
-target: plugin-marketplace/plugins/impl-package/skills/spec-review
+target: plugin-marketplace/plugins/impl-package/skills/review-code-by-spec
 updated: 2026-07-20
 ---
 

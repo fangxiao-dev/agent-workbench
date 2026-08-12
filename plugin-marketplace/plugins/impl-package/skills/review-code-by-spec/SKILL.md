@@ -1,11 +1,11 @@
 ---
-name: spec-review
+name: review-code-by-spec
 description: >
-  当调用者已提供固定 comparison point、完整 diff 与 issue、Decision、Spec、Plan 或 DAG 合同上下文时，
-  审查需求忠实度、遗漏需求、scope creep、兼容性、状态机和跨模块 seam。
+  当需要依据 issue、Decision、Spec、Plan 或 DAG 审查固定 comparison point 的完整代码 diff 时使用；
+  检查实现忠实度、遗漏需求、scope creep、兼容性、状态机和跨模块 seam。
 ---
 
-# Spec Review
+# Review Code by Spec
 
 审查调用者已固定的完整 diff 是否忠实实现其提供的 issue、Decision、Spec、Plan、DAG 与其他适用合同，并返回可验证的 Spec evidence。
 

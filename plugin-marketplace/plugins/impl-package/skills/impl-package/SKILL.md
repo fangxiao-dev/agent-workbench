@@ -37,9 +37,9 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 | 恢复执行、推进 Task/Ticket、写 Gate | `/impl-package:dev-with-track` |
 | 派发批准来源中的已释放实现或只读验证单元 | `/impl-package:dispatch-bounded-task` |
 | 编排多 reviewer、聚合 findings 并判断收敛 | `/impl-package:do-review` |
-| 审查实现正确性和可维护性 | `/impl-package:code-review` |
-| 审查仓库规范和模块 interface/depth/locality | `/impl-package:standards-review` |
-| 审查需求、Spec、Plan 与实现忠实度 | `/impl-package:spec-review` |
+| 审查实现正确性和可维护性 | `/impl-package:review-code` |
+| 按仓库规范和模块 interface/depth/locality 审查代码 | `/impl-package:review-code-by-standards` |
+| 按需求、Spec、Plan 审查代码实现忠实度 | `/impl-package:review-code-by-spec` |
 | 审查安全、数据完整性、并发和外部副作用 | `/impl-package:safety-review` |
 | 声称 complete/merge-ready 前审计证据 | `/impl-package:verification-before-completion` |
 | 回刷稳定知识或退休 package | `/impl-package:backfill-stable-docs` |

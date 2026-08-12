@@ -5,9 +5,9 @@ updated: 2026-07-22
 
 ## 原则
 
-- [已确认] `do-review` 是唯一 orchestrator；默认三个并列 leaf track 为 code、standards 与 spec。
+- [已确认] `do-review` 是唯一 orchestrator；默认三个并列 leaf track 为 `review-code`、`review-code-by-standards` 与 `review-code-by-spec`。
 - [已确认] 同一完整 diff 与 fixed comparison point 只由主会话确定一次；三轨同轮独立，第二轮起只接收 canonical ledger。
-- [已确认] 本轮只调整 Ownership 与拓扑；不重写 `code-review` 或三个 reviewer 的内部审查设计。
+- [已确认] 本轮只调整 Ownership 与拓扑；不重写 `review-code` 或三个 reviewer 的内部审查设计。
 - [已确认] 涉及计划包时，审查范围覆盖整个计划包的 commits，不只审查最后一个实现 commit。
 - [待验证] 审阅编排使用最小必要的自然语言状态来保证轮次、证据和收敛可信，不以刚性 schema 或过度 canonical 字段限制 leaf reviewer 的主动探索。（证据: R2）
 - [待验证] reviewer role 用首要审查意图与交接方向引导，不用排他的能力禁令；跨域风险仍可作为 candidate 交给父会话的 canonical ledger 归属与去重。（证据: R3）
@@ -17,7 +17,7 @@ updated: 2026-07-22
 ## 决策记录（滚动，最近 ≤5 轮）
 
 ### R1 · 2026-07-20
-- 采纳「默认 A/B/C 三轨」：`code-review`、`standards-review`、`spec-review`。
+- 采纳「默认 A/B/C 三轨」：`review-code`、`review-code-by-standards`、`review-code-by-spec`。
 - 采纳「所有 dispatched reviewer 均为 leaf」：禁止调用 `do-review`、调度 subagent 或重新推导 topology/capacity。
 - 采纳「默认 topology 与 canonical path 由 registry 驱动」：Python 不维护另一份默认 reviewer 名单。
 

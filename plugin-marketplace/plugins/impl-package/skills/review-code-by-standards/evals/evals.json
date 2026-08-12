@@ -1,9 +1,9 @@
 {
-  "skill_name": "standards-review",
+  "skill_name": "review-code-by-standards",
   "evals": [
     {
       "id": 1,
-      "name": "standards-review-uses-supplied-immutable-range",
+      "name": "review-code-by-standards-uses-supplied-immutable-range",
       "prompt": "Review the supplied complete diff, immutable base/head SHA, commit list, and repository standards for a change that adds a pass-through adapter.",
       "expected_output": "A Standards-only evidence report that consumes the supplied range without selecting a comparison point or coordinating reviewers.",
       "files": [],
@@ -27,7 +27,7 @@
     },
     {
       "id": 4,
-      "name": "standards-review-can-deepen-on-structural-signals",
+      "name": "review-code-by-standards-can-deepen-on-structural-signals",
       "prompt": "Review a supplied full diff where a shared path gains feature-specific flags across modules and a thin wrapper hides a loosely typed boundary.",
       "expected_output": "The reviewer may use strict maintainability heuristics to describe the added complexity, maintenance risk, and a viable simplifying direction.",
       "files": [],
@@ -35,7 +35,7 @@
     },
     {
       "id": 5,
-      "name": "standards-review-keeps-structural-focus-with-mixed-risk-evidence",
+      "name": "review-code-by-standards-keeps-structural-focus-with-mixed-risk-evidence",
       "prompt": "Review a supplied diff with a module-boundary concern that also suggests an authorization failure path.",
       "expected_output": "The reviewer returns Standards evidence for the module-boundary concern and describes any additional evidence without changing its structural focus.",
       "files": [],

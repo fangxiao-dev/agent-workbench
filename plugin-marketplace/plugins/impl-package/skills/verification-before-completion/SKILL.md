@@ -21,7 +21,7 @@ Completion claim 不能宽于 evidence。Verification 是 claim-to-evidence cont
 - 默认 `gate-before-merge` 下，current attempt 的 finalized `pass` 是 merge 前提；`blocked`、`fail`、`defer`、没有 gate.md 都不能支持 merge-ready claim。若已经 pre-gate integration，必须从 plan 核对该 integration 前已记录的 owner authorization。没有该证据时报告 process violation；不得事后把授权或 terminal pass 倒灌到已发生的 merge。
 - 若当前 diff 只实现了 spec 的一部分 AC，completion claim 只能覆盖该明确边界的子切片。除非 Decision/Spec/Plan 已同步将 attempt 收窄或分拆，否则不得把局部 merge、测试或 schema rollout 说成完整 package / issue closure。
 - proof 缺失或 stale 时，阻止的是 completion claim，不一定否定 implementation。应报告 `implemented, not verified` 或具体 pending gate，不能写入或重复 pass claim。
-- 本 skill 审计 evidence，不替代 `/impl-package:code-review`、`/impl-package:standards-review`、`/impl-package:spec-review`、`/impl-package:safety-review`、planned test、smoke 或项目特定 acceptance。
+- 本 skill 审计 evidence，不替代 `/impl-package:review-code`、`/impl-package:review-code-by-standards`、`/impl-package:review-code-by-spec`、`/impl-package:safety-review`、planned test、smoke 或项目特定 acceptance。
 
 ## 定义 claim
 
