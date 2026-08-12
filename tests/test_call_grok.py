@@ -46,8 +46,8 @@ def test_default_command_omits_tools_keeps_always_approve(tmp_path: Path) -> Non
     executor = load_executor()
     args = executor.parse_args(["--cwd", str(tmp_path), "--prompt", "use exactly this prompt"])
 
-    assert args.stall_timeout_sec == 900
-    assert args.overall_timeout_sec == 900
+    assert args.stall_timeout_sec == 1200
+    assert args.overall_timeout_sec is None
     assert args.no_subagents is False
     cmd = executor.build_cmd("grok", args, prompt=args.prompt)
     assert cmd == [
@@ -214,6 +214,41 @@ def test_liveness_terminal_status_is_not_overwritten_by_late_events() -> None:
     )
     assert status2 == "timeout"
     assert last2 == "end"
+
+
+def test_optional_overall_timeout_and_heartbeats_do_not_extend_stall(monkeypatch, capsys) -> None:
+    executor = load_executor()
+
+    class HangingPopen:
+        pid = 1
+
+        def __init__(self, _command, **_kwargs):
+            self.stdout = io.StringIO("")
+            self.stderr = io.StringIO("")
+            self.returncode = None
+
+        def wait(self):
+            while self.returncode is None:
+                executor.time.sleep(0.01)
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+    def fake_kill(proc):
+        proc.returncode = -9
+
+    monkeypatch.setattr(executor.subprocess, "Popen", HangingPopen)
+    monkeypatch.setattr(executor, "kill_process_tree", fake_kill)
+
+    stalled = executor.run_with_liveness(["grok"], 0.75, None, 0.01)
+    assert stalled["status"] == "stalled"
+    assert stalled["liveness"]["overall_timeout_sec"] is None
+    assert "[heartbeat]" in capsys.readouterr().err
+
+    timed_out = executor.run_with_liveness(["grok"], 10, 0.05, 0)
+    assert timed_out["status"] == "timeout"
+    assert timed_out["liveness"]["overall_timeout_sec"] == 0.05
 
 
 def test_main_writes_canonical_envelopes(monkeypatch, capsys, tmp_path: Path) -> None:

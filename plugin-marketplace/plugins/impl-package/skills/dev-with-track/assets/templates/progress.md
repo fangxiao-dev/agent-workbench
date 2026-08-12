@@ -3,7 +3,7 @@
 > machine-owned projection；使用 `refresh-progress` 重建，不直接编辑。
 
 - Attempt: <attempt-id>
-- Revision aliases: D<n> / S<n> / P<n>
+- Contract aliases: optional; Git commit is the history anchor
 - Composition: tickets=<true|false>, dag=<true|false>
 - Lifecycle: <active|frozen>
 - Latest gate: <open|blocked|pass|fail|defer>

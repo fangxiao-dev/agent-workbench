@@ -123,11 +123,16 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertIn("omitted applicable Safety risk", safety)
 
     def test_finding_closure_is_incremental_but_terminal_final_rechecks_final_head(self) -> None:
+        skill = SKILL_PATH.read_text(encoding="utf-8")
         topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
         phases = markdown_section(topology, "Review phase")
         self.assertRegex(phases, r"(?s)`finding-closure`.*source track.*materially affected")
         self.assertRegex(phases, r"(?s)`terminal-final`.*final implementation `HEAD`.*complete applicable topology")
         self.assertIn("cannot stand in for the terminal-final review", phases)
+        self.assertRegex(skill, r"(?s)`finding-closure` uses fresh `call-grok`.*`grok-4\.5/high`")
+        self.assertIn("call-grok --no-subagents", skill)
+        self.assertIn("one fresh fallback to the applicable current default reviewer", skill)
+        self.assertRegex(skill, r"other phases use the current `gpt-5\.6-terra/high` or `gpt-5\.6-sol/high`")
 
     def test_loop_lifecycle_requires_two_clean_rounds_and_preserves_reactivation(self) -> None:
         topology = TOPOLOGY_PATH.read_text(encoding="utf-8")

@@ -40,6 +40,6 @@ Before passing the Decision Gate, check that:
 - every current promise affected by a follow-up delta is carried forward, modified, explicitly removed, or blocked;
 - an omitted statement was not treated as an implicit removal;
 - product surfaces and actor actions were not weakened into generic system capabilities;
-- changed decision direction follows the existing D revision and Decision Gate rules, while behavior-only changes follow the existing S revision and Spec Gate rules.
+- changed decision direction follows the existing Decision Gate rules, while behavior-only changes follow the existing Spec Gate rules.
 
 Keep only the resulting current requirement and decision in the formal artifacts. Do not paste working notes or an input-by-input ledger into the Focused PRD.

@@ -2,7 +2,7 @@
 
 - Verdict: <pass|fail|blocked|defer>
 - Attempt: <attempt-id>
-- Revision aliases: D<n> / S<n> / P<n>
+- Contract aliases: optional; Git commit is the history anchor
 - Comparison commit: <Git commit ID>
 - Reason: <直接说明判决理由>
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Current execution state and readable projections for Impl-Package.
 
-Git commit IDs are the only persisted version anchors. D/S/P aliases remain
-human-readable labels. The helper deliberately has no content identity,
+Git commit IDs are the only persisted version anchors. D/S/P aliases are
+optional human-readable labels for legacy packages. The helper deliberately has no content identity,
 artifact ledger, migration chain, or legacy reader.
 """
 
@@ -177,6 +177,8 @@ def _plan_info(package: Path, repo: Path, plan_value: str) -> dict[str, Any]:
         plan_path.resolve().relative_to(package.resolve())
     except ValueError as exc:
         raise StateError("current plan must be inside the package") from exc
+    if not (package / "spec.md").is_file():
+        raise StateError("spec.md is required for an active Attempt")
     text = _read(plan_path)
     composition = COMPOSITION_RE.search(text)
     if composition is None:
@@ -187,29 +189,15 @@ def _plan_info(package: Path, repo: Path, plan_value: str) -> dict[str, Any]:
     return {
         "path": plan_rel,
         "attempt": attempt,
-        "decision": _field(DECISION_RE, text, "Decision Revision"),
-        "spec": _field(SPEC_RE, text, "Spec Revision"),
-        "plan": _field(PLAN_RE, text, "Plan Revision"),
+        "decision": _field(DECISION_RE, text, "Decision Revision", optional=True),
+        "spec": _field(SPEC_RE, text, "Spec Revision", optional=True),
+        "plan": _field(PLAN_RE, text, "Plan Revision", optional=True),
         "tickets": composition.group(1).lower() == "true",
         "dag": composition.group(2).lower() == "true",
     }
 
 
-def _validate_aliases(package: Path, info: dict[str, Any]) -> None:
-    spec_path = package / "spec.md"
-    if not spec_path.is_file():
-        raise StateError("spec.md is required for an active Attempt")
-    spec_text = _read(spec_path)
-    if _field(SPEC_RE, spec_text, "Spec Revision in spec.md") != info["spec"]:
-        raise StateError("plan Spec Revision does not match spec.md")
-    if _field(DECISION_RE, spec_text, "Decision Revision in spec.md") != info["decision"]:
-        raise StateError("plan Decision Revision does not match spec.md")
-    decision_path = package / "decision.md"
-    if decision_path.is_file() and _field(DECISION_RE, _read(decision_path), "Decision Revision in decision.md") != info["decision"]:
-        raise StateError("plan Decision Revision does not match decision.md")
-
-
-def _ticket_documents(package: Path, attempt: str, info: dict[str, Any]) -> list[dict[str, Any]]:
+def _ticket_documents(package: Path, attempt: str) -> list[dict[str, Any]]:
     directory = package / "tickets"
     if not directory.is_dir():
         raise StateError("Composition earns tickets but tickets/ is missing")
@@ -224,10 +212,6 @@ def _ticket_documents(package: Path, attempt: str, info: dict[str, Any]) -> list
             continue
         if any(row["id"] == identifier for row in result):
             raise StateError(f"duplicate Ticket ID for Attempt {attempt}: {identifier}")
-        if _field(SPEC_RE, text, f"Spec Revision in {child.name}") != info["spec"]:
-            raise StateError(f"Ticket {identifier} Spec Revision does not match the plan")
-        if _field(PLAN_RE, text, f"Plan Revision in {child.name}") != info["plan"]:
-            raise StateError(f"Ticket {identifier} Plan Revision does not match the plan")
         publication_match = PUBLICATION_RE.search(text)
         if publication_match is None:
             raise StateError(f"missing Publication Status in {child.name}")
@@ -623,9 +607,7 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
     if info["attempt"] != attempt["id"]:
         raise StateError("state Attempt ID does not match the current plan")
     lifecycle = AttemptLifecycle.derive(attempt["id"], _gate_info(package, repo))
-    if lifecycle.active:
-        _validate_aliases(package, info)
-    documents = _ticket_documents(package, attempt["id"], info) if info["tickets"] else []
+    documents = _ticket_documents(package, attempt["id"]) if info["tickets"] else []
     graph = _dag_contract(package, attempt["id"]) if info["dag"] else {}
     tasks = _validate_records(
         repo,
@@ -687,6 +669,11 @@ def _escape_table(value: Any) -> str:
     return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ")
 
 
+def _format_aliases(revisions: dict[str, str | None]) -> str:
+    values = [value for value in (revisions["decision"], revisions["spec"], revisions["plan"]) if value]
+    return " / ".join(values) if values else "none (Git commit is the history anchor)"
+
+
 def _attempt_history(package: Path, lifecycle: AttemptLifecycle) -> list[dict[str, str]]:
     root = package / EXECUTION_PATH
     if not root.is_dir():
@@ -728,7 +715,7 @@ def _render_progress(package: Path, state: dict[str, Any], summary: dict[str, An
         f"# Attempt Progress · {attempt}", "",
         "> machine-owned projection；使用 `refresh-progress` 重建，不直接编辑。", "",
         f"- Attempt: {attempt}",
-        f"- Revision aliases: {revisions['decision']} / {revisions['spec']} / {revisions['plan']}",
+        f"- Contract aliases: {_format_aliases(revisions)}",
         f"- Composition: tickets={str(composition['tickets']).lower()}, dag={str(composition['dag']).lower()}",
         f"- Lifecycle: {lifecycle.value}",
         f"- Latest gate: {current_gate}",
@@ -858,8 +845,7 @@ def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
         previous_lifecycle = previous["_lifecycle"]
         if not previous_lifecycle.frozen:
             raise StateError("current Attempt is not terminal; refusing to replace state")
-    _validate_aliases(package, info)
-    documents = _ticket_documents(package, attempt, info) if info["tickets"] else []
+    documents = _ticket_documents(package, attempt) if info["tickets"] else []
     graph = _dag_contract(package, attempt) if info["dag"] else {}
     _ticket_dependencies(documents)
     if previous_lifecycle is not None:
@@ -1052,7 +1038,7 @@ def command_gate(
         "# Gate\n",
         f"- Verdict: {verdict}\n",
         f"- Attempt: {summary['attempt']}\n",
-        f"- Revision aliases: {revisions['decision']} / {revisions['spec']} / {revisions['plan']}\n",
+        f"- Contract aliases: {_format_aliases(revisions)}\n",
         f"- Comparison commit: {resolved_commit}\n",
         f"- Reason: {reason.strip()}\n",
         "\n## Evidence\n",

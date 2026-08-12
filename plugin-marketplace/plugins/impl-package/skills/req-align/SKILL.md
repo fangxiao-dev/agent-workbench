@@ -5,7 +5,7 @@ description: 当新增或变更 requirement 需要判断 contract impact，或�
 
 # Requirement Alignment
 
-把一次 contract-impacting change 路由为 Decision、Spec 或两者，并保持 package、artifact、revision 与下游 handoff 只有一个 owner。本 Skill 是公共入口；Decision 与 Spec 的内容工作由内部 SUB-SKILL 执行。
+把一次 contract-impacting change 路由为 Decision、Spec 或两者，并保持 package、artifact 与下游 handoff 只有一个 owner。本 Skill 是公共入口；Decision 与 Spec 的内容工作由内部 SUB-SKILL 执行。
 
 ## 路由
 
@@ -26,11 +26,11 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed 
 ## 主路径
 
 1. 分类 contract impact；需要 D/S 时识别 initial、follow-up 或 package closure，并读取 [Package Lifecycle](references/package-lifecycle.md)。
-2. 解析 canonical package 与 current D/S。follow-up 默认把输入视为 current D/S 的 delta；只有 owner 明确声明 full replacement 才整体替换。
+2. 解析 canonical package 与当前 Decision/Spec。follow-up 默认把输入视为当前文档的 delta；只有 owner 明确声明 full replacement 才整体替换。
 3. full 或 decision-only 读取并执行 [Decision SUB-SKILL](sub-skills/decision/SUB-SKILL.md)。Decision `BLOCKED` 时停止，不创建 Spec。
 4. full 在 Decision `PASSED` 后、或 spec-only 前置验证通过后，读取并执行 [Spec SUB-SKILL](sub-skills/spec/SUB-SKILL.md)。Spec `BLOCKED` 时不进入 planning。
 5. 两个 Gate 均通过且 lifecycle registration 有效时，把同一 Spec contract ensemble 交给 `/impl-package:impl-planning`。
-6. 保持 package 内 D/S aliases 一致，记录用于 module-knowledge/code 比较的 Git commit；implementation attempt 获批前不创建 runtime state。
+6. 直接引用当前 Decision/Spec 路径，记录用于 module-knowledge/code 比较的 Git commit；implementation attempt 获批前不创建 runtime state。
 7. 汇报任何 Gate 结果前读取 [Handoff](references/handoff.md)，输出最具体的可恢复状态。
 
 Package ID 创建后不得改名。后续 requirement delta 先按 implementation-only / behavior-contract / decision-direction 分类，只使真正受影响的下游范围失效。
@@ -44,4 +44,4 @@ Package ID 创建后不得改名。后续 requirement delta 先按 implementatio
 
 ## 输出
 
-用业务语言说明 focused requirement、selected direction、route、Gate results、blockers/owner decisions 与下一有效步骤。发生 artifact 写入时，报告 canonical package、D/S aliases、Decision/Spec evidence，以及存在时的 `contract-design.md`；不要粘贴完整 artifact。
+用业务语言说明 focused requirement、selected direction、route、Gate results、blockers/owner decisions 与下一有效步骤。发生 artifact 写入时，报告 canonical package、Decision/Spec evidence，以及存在时的 `contract-design.md`；不要粘贴完整 artifact。

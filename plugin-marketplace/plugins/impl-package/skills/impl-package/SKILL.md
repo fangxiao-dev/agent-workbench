@@ -10,7 +10,7 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 ## 核心原则
 
 - 只保存会改变下一动作、阻止 false PASS 或约束危险 mutation 的状态。
-- D/S/P 是人类可读别名，不绑定文件内容。
+- D/S/P 只作为可选的人类可读别名，不是新 package 的必填字段，也不绑定文件内容。
 - 只有 Git commit ID 可作为版本/比较点。
 - 外部文件和 evidence 一律使用仓库相对 POSIX 路径；拒绝绝对路径和 `..`。
 - 已知 artifact 使用固定目录或显式路径，不保存扫描结果副本。
@@ -52,7 +52,7 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 <package>/
   decision.md            # 可选；轻量 Decision 也可在 spec.md
   spec.md
-  contract-design.md     # 可选；从属 spec.md，共用同一 S revision/Status/Gate
+  contract-design.md     # 可选；从属 spec.md，共用 Status/Gate
   plan.md
   tickets/               # Composition earned 时
   dag.md                  # Composition earned 时

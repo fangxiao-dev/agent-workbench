@@ -1,6 +1,6 @@
 ---
 name: dev-with-track
-description: 当批准 implementation plan 或者 D/S/P bundle 正式开始或者恢复执行、选择下一 actionable unit、记录证据、处理返工失效、分流 findings 或写 Gate 时使用；不重新定义 Decision/Spec/Plan/Ticket/DAG。
+description: 当批准 implementation plan 正式开始或者恢复执行、选择下一 actionable unit、记录证据、处理返工失效、分流 findings 或写 Gate 时使用；不重新定义 Decision/Spec/Plan/Ticket/DAG。
 ---
 
 # Dev With Track
@@ -11,7 +11,7 @@ description: 当批准 implementation plan 或者 D/S/P bundle 正式开始或�
 ## Restore
 
 1. 运行 `validate`；跨 session 或授权绑定比较点时附 `--commit <Git commit>`。
-2. 打开根 `progress.md`，读取 current Attempt、D/S/P、Composition、Ticket/Task 两条状态轴、blocker、active checkpoint、next action、Gate 及 Handoff/Execution Record 指针。
+2. 打开根 `progress.md`，读取 current Attempt、可选合同别名、Composition、Ticket/Task 两条状态轴、blocker、active checkpoint、next action、Gate 及 Handoff/Execution Record 指针。
 3. 只沿当前动作读取必要 Ticket、Task、Handoff、Execution Record judgment、review 或 evidence；不要重读全部历史。
 4. 根据批准 commit 与实际 diff 判断 authority/contract 是否仍成立。implementation-only 继续；行为、acceptance、数据/安全或 mutation authority 变化回 owning stage。
 
@@ -33,7 +33,7 @@ description: 当批准 implementation plan 或者 D/S/P bundle 正式开始或�
 - `checkpoint` 是 attempt-level 恢复快捷入口，并更新 `state.resume`。
 - 仅在 BLOCKED、retry、跨 session/owner 或并行委派时创建 `execution/<attempt>/task-handoffs/<task-id>-handoff.md`。
 - 上述恢复条件发生但当前 attempt 没有 DAG Task 时，改用 Attempt-level ER checkpoint 记录 dispatch 返回的恢复事实和唯一下一动作。
-- P revision 变化只把受影响 Task/Ticket 设为 `NEEDS-REVALIDATION`；未受影响 evidence 保留。
+- 合同或计划实际变化只把受影响 Task/Ticket 设为 `NEEDS-REVALIDATION`；未受影响 evidence 保留。
 
 ```powershell
 Get-Content .\er-payload.json -Raw |

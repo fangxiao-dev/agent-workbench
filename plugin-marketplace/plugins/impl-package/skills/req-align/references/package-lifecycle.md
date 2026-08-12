@@ -9,16 +9,16 @@
 
 生命周期从当前 artifact 和状态派生，不保存独立 Status/version registry。`blocked` 是可恢复状态，不是 terminal。terminal 后继续实现必须创建 patch attempt。
 
-D/S/P 只是可读别名；当前 package 内保持一致即可。Git commit 是跨 session 比较和历史审计的唯一版本锚点。
+D/S/P 只是可选的可读别名；普通编辑不要求升级。Git commit 是跨 session 比较和历史审计的唯一版本锚点。
 
-`contract-design.md` 是当前 `spec.md` 按复杂度 earned 的从属 artifact：与 `spec.md` 共用同一个 S revision、Status、审批与 Spec Gate，没有独立 alias、revision、状态或生命周期。它存在时属于同一个 Spec contract ensemble；移除时先把仍有效的合同吸收回同一 S revision 的 `spec.md`，Git 负责保存历史。
+`contract-design.md` 是当前 `spec.md` 按复杂度 earned 的从属 artifact：与 `spec.md` 共用 Status、审批与 Spec Gate，没有独立 alias、revision、状态或生命周期。它存在时属于同一个 Spec contract ensemble；移除时先把仍有效的合同吸收回 `spec.md`，Git 负责保存历史。
 
 ## 影响路由
 
-- implementation-only：D/S 不变，进入当前 plan 或 terminal 后的新 patch plan。
-- behavior-contract：升级 S，重跑受影响 Spec Gate；D 不机械升级。
-- decision-direction：先升级 D 并通过 Decision Gate，再升级 S。
-- editorial/projection-only：别名不变，验证实际 diff 未改变行为、authority 或 acceptance。
+- implementation-only：沿用当前文档，进入当前 plan 或 terminal 后的新 patch plan。
+- behavior-contract：更新当前 Spec，重跑受影响 Spec Gate；不维护手工 revision。
+- decision-direction：先更新当前 Decision 并通过 Decision Gate，再更新当前 Spec 并通过 Spec Gate。
+- editorial/projection-only：验证实际 diff 未改变行为、authority 或 acceptance。
 
 只有实际受影响的 Plan/Ticket/Task/验证结果失效。未受影响范围保留；不得以“版本变化”为由机械清空全部执行状态。
 

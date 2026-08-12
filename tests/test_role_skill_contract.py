@@ -21,7 +21,10 @@ def test_role_skills_have_model_visible_frontmatter() -> None:
 def test_reviewer_defaults_depend_on_target_class() -> None:
     reviewer = read_skill("reviewer")
 
-    assert "Use a subagent directly" in reviewer
+    assert "`finding-closure`" in reviewer
+    assert "`call-grok`" in reviewer
+    assert "`--no-subagents`" in reviewer
+    assert "one fresh fallback" in reviewer
     assert "model `gpt-5.6-sol`, reasoning effort `high`" in reviewer
     assert "model `gpt-5.6-terra`, reasoning effort `high`" in reviewer
     assert "skill definitions, agent protocol or setup, workflow docs" in reviewer

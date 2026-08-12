@@ -10,10 +10,10 @@ description: req-align 内部的 Spec 阶段；先做 Spec Design Preflight，�
 ## 前置输入
 
 - current Passed Decision evidence 与 selected direction；
-- canonical package、current Spec/optional detailed contract、S revision policy；
+- canonical package、current Spec/optional detailed contract；
 - current requirement delta、repository authority、相关 code/tests 与安全边界。
 
-spec-only 必须重新验证 Decision evidence 对当前 delta 仍适用。delta 若改变 business outcome、selected direction、critical authority、delivery path 或 Acceptance Semantics，返回 Decision revision；不得在 Spec 内补作新的方向选择。
+spec-only 必须重新验证 Decision evidence 对当前 delta 仍适用。delta 若改变 business outcome、selected direction、critical authority、delivery path 或 Acceptance Semantics，返回 Decision 阶段；不得在 Spec 内补作新的方向选择。
 
 ## Spec Design Preflight
 
@@ -32,10 +32,10 @@ spec-only 必须重新验证 Decision evidence 对当前 delta 仍适用。delta
 2. 任一 contract surface 非空时读取 [Contract Surface Design](../../references/contract-surface-design.md)，把适用的 implementation-ready 下限冻结在唯一 owner 中。
 3. earned detailed contract 使用 [Contract Design Template](../../assets/templates/contract-design.md)。`spec.md` 拥有行为、状态、权限、不变量、恢复与 Acceptance Semantics；`contract-design.md` 只拥有精确 API/DTO、canonical persistence、seam payload 与 read-model shape，另一侧只引用不复制。
 4. 设计中发现新 surface 时立即返回 Preflight，先更新设计范围与承载判断，再继续；不等最终 Gate 才补分类。
-5. detailed contract 不再 earned 时，在同一 S revision 把仍有效的精确合同吸收回 `spec.md`，更新引用后删除 current `contract-design.md`；Git 保存历史。
+5. detailed contract 不再 earned 时，把仍有效的精确合同吸收回 `spec.md`，更新引用后删除 current `contract-design.md`；Git 保存历史。
 6. 仅当信号适用时评估 evidence-integrity contract 与 risk-driven Grill；它们不成为普通变化的固定流程。
 
-Formal artifact 的 revision、Status 与 Gate result 必须反映当前已记录事实。若输出仍是待 owner 接受的 proposal，或真实 S revision 尚未从 package 确定，只报告 candidate assessment 与待办，不得提前写成实际 `Spec Gate Passed` 或 `ready for implementation planning`；不为此引入第三种 Gate 状态。
+Formal artifact 的内容、Status 与 Gate result 必须反映当前已记录事实。若输出仍是待 owner 接受的 proposal，只报告 candidate assessment 与待办，不得提前写成实际 `Spec Gate Passed` 或 `ready for implementation planning`；不为此引入第三种 Gate 状态。
 
 ## Spec Gate
 
@@ -45,4 +45,4 @@ Gate 只验证前置承诺是否完整兑现：设计范围中的每个对象都
 
 ## 返回 router
 
-返回 Spec Gate result、current S revision、`spec.md`、存在时的 `contract-design.md`、exact blockers/owner decisions、Acceptance evidence 与 planning readiness。PASSED 只表示 contract ensemble 可进入 planning，不表示 implementation、verification、merge 或 release 完成。
+返回 Spec Gate result、`spec.md`、存在时的 `contract-design.md`、exact blockers/owner decisions、Acceptance evidence 与 planning readiness。PASSED 只表示 contract ensemble 可进入 planning，不表示 implementation、verification、merge 或 release 完成。

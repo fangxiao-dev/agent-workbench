@@ -3,10 +3,8 @@
 **Ticket ID：** <ticket-id>
 **Publication Status：** Draft
 **Attempt ID：** <attempt-id>
-**Spec Revision：** S<n>
-**Plan Revision：** P<n>
 
-> Ticket 定义验收边界；运行时验收状态保存在 `.impl-package/state.json`。D/S/P 仅为可读别名。
+> Ticket 定义验收边界；运行时验收状态保存在 `.impl-package/state.json`。Ticket 直接属于当前 Attempt，不需要手工 revision。
 
 ## Runtime Acceptance
 

@@ -2,13 +2,12 @@
 
 状态（Status）：Draft | Decision Gate Passed | Decision Gate Blocked
 创建时间（Created）：
-Decision Revision：D<n>
 需求来源（Requirement source）：
 主题 slug（Topic slug）：
 任务包 ID（Package ID）：
 规范任务包路径（Canonical package）：`docs/implementations/<package-id>/`
 
-本文是任务包活动期间“聚焦需求定义 + 当前方案决策与理由”的事实源：回答为什么做、要达到什么结果、为什么选择该方向。系统必须如何表现、字段与状态合同、错误处理和 Acceptance Semantics 属于 Spec 阶段，由 `spec.md` 与其按需使用的 `contract-design.md` 共同承载；如何拆解、实现和验证只属于 `plan.md`。当前正文只保留最新需求与选择，修订历史只记录最近变更。Decision 被阻塞时使用本文件，不创建 `spec.md`。`Status: Decision Gate Passed` 必须对应 `Result: PASSED`；`Status: Decision Gate Blocked` 必须对应 `Result: BLOCKED`。若引用 `investigations/<topic>.md`，本文件仍必须自足说明当前需求与决定；investigation 默认无 authority，且不维护 backlink 或采用状态。
+本文是任务包活动期间“聚焦需求定义 + 当前方案决策与理由”的事实源：回答为什么做、要达到什么结果、为什么选择该方向。系统必须如何表现、字段与状态合同、错误处理和 Acceptance Semantics 属于 Spec 阶段，由 `spec.md` 与其按需使用的 `contract-design.md` 共同承载；如何拆解、实现和验证只属于 `plan.md`。当前正文只保留最新需求与选择，历史由 Git 保存。Decision 被阻塞时使用本文件，不创建 `spec.md`。`Status: Decision Gate Passed` 必须对应 `Result: PASSED`；`Status: Decision Gate Blocked` 必须对应 `Result: BLOCKED`。若引用 `investigations/<topic>.md`，本文件仍必须自足说明当前需求与决定；investigation 默认无 authority，且不维护 backlink 或采用状态。
 
 ## 1. 需求定义（Focused PRD）
 
@@ -86,9 +85,6 @@ Decision Revision：D<n>
 | 可能的目标位置 | 候选洞见 | 可能长期有效的原因 |
 | --- | --- | --- |
 
-## 修订历史
+## 变更说明
 
-<!-- 每次写入新行后仅保留最近 3 条。 -->
-
-| 前一修订 | 新修订 | 变化摘要 | 权威来源 | 日期 | 被取代说明 |
-| --- | --- | --- | --- | --- | --- |
+<!-- 当前文档只保留事实源；历史由 Git 保存。只有影响 Gate 或下游范围的变化才在正文中说明。 -->

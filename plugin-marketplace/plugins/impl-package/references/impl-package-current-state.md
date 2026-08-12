@@ -36,7 +36,7 @@ Ticket/Task 只是 Execution Record 的 subject；不创建 Ticket 专属 ER。�
 }
 ```
 
-所有持久化路径必须是仓库相对 POSIX 路径，可带 `#anchor`；拒绝绝对路径、`..`、不存在的 evidence 和 wildcard。package 使用不可变的日期前缀目录名。D/S/P 仅在 Markdown 中作为可读 alias，并做同一 package 内的一致性校验。
+所有持久化路径必须是仓库相对 POSIX 路径，可带 `#anchor`；拒绝绝对路径、`..`、不存在的 evidence 和 wildcard。package 使用不可变的日期前缀目录名。D/S/P 仅在 Markdown 中作为可选别名；不因别名变化阻断当前 package，Git commit 负责历史比较。
 
 ### 状态词汇
 
@@ -64,7 +64,7 @@ Task Handoff 位于 `execution/<attempt>/task-handoffs/<task-id>-handoff.md`，�
 
 `progress.md` 是 current Attempt 的统一恢复入口，由 `refresh-progress` 重建，包含：
 
-1. Attempt、D/S/P、Composition、lifecycle 和 current Gate；
+1. Attempt、可选别名、Composition、lifecycle 和 current Gate；
 2. blockers 与 resume next action；
 3. Ticket Acceptance 与 Task Execution 两条独立状态轴；
 4. active Attempt 的 checkpoint 与 Handoff/evidence 指针；terminal Gate 后历史 checkpoint 只保留在 Execution Record，不再显示为 active；
@@ -95,4 +95,4 @@ python <impl-package-plugin-root>/scripts/impl_package_state.py --package <packa
 
 Gate 只适用于 current Attempt：`blocked` 保持 active；`pass | fail | defer` 终结并冻结。首次写入 terminal Gate 时，comparison commit 必须等于命令执行时的 Git `HEAD`；同 verdict/commit 的幂等重试可在后续 HEAD 上修复旧的 terminal resume/投影，但不能改写判决或重新开放 Attempt。terminal Gate 清空 resume，`pass` 要求所有 earned Task/Ticket 已进入可接受终态。terminal Gate 必须记录 Durable Delta，或显式给出无 delta 原因；存在 `execution-findings.md` 时必须在 evidence 中完成分流引用。
 
-新工作在 terminal 后创建 patch Attempt。冻结 Attempt 继续按其 Plan/Ticket/DAG bundle 自洽校验，不再要求匹配后来升级的 current `decision.md`/`spec.md` aliases；新 Attempt 初始化时仍必须严格匹配 current aliases。初始化新 Attempt 时，旧 Attempt 的 Execution Record 固化 lifecycle/Gate 摘要，根 `progress.md` 切换到新 Attempt并保留轻量历史链接。
+新工作在 terminal 后创建 patch Attempt。冻结 Attempt 继续按其 Plan/Ticket/DAG bundle 自洽校验，不因后来修改的 current `decision.md`/`spec.md` aliases 失效；新 Attempt 也只把这些 aliases 作为可选展示信息。初始化新 Attempt 时，旧 Attempt 的 Execution Record 固化 lifecycle/Gate 摘要，根 `progress.md` 切换到新 Attempt并保留轻量历史链接。

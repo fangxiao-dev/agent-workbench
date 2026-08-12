@@ -71,9 +71,9 @@ checkpoint 应使当前 failure 能定位最后成立和首个失效的业务假
 
 当前 failure 已有稳定证据、语义相邻边界没有同类未覆盖风险、发现开始偏离当前动作，或继续需要新产品决策/公共平台时停止 sweep。
 
-### 运行期诊断与 P revision
+### 运行期诊断与计划重新确认
 
-已批准风险、claim 与验证策略内的候选假设、控制变量、checkpoint、重跑理由与结果分流，只追加到 ER，由 `dev-with-track` 决定；它们不自动升级 P。只有 completion claim、验证策略、required evidence、覆盖范围或外部 mutation authority 改变时，才回 `impl-planning` 判断 P revision。ER 和 `execution-findings.md` 不形成第二份 Planned Verification 合同。
+已批准风险、claim 与验证策略内的候选假设、控制变量、checkpoint、重跑理由与结果分流，只追加到 ER，由 `dev-with-track` 决定；它们不要求手工升级计划编号。只有 completion claim、验证策略、required evidence、覆盖范围或外部 mutation authority 改变时，才回 `impl-planning` 重新确认当前 Plan。ER 和 `execution-findings.md` 不形成第二份 Planned Verification 合同。
 
 ## Completion claim 的证据边界
 

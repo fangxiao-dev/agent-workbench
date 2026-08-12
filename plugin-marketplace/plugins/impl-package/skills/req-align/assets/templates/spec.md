@@ -2,8 +2,6 @@
 
 状态（Status）：Draft | Spec Gate Passed | Spec Gate Blocked
 创建时间（Created）：
-Decision Revision：D<n>
-Spec Revision：S<n>
 需求来源（Requirement source）：
 主题 slug（Topic slug）：
 任务包 ID（Package ID）：
@@ -98,9 +96,6 @@ Spec Revision：S<n>
 - 验收覆盖：
 - 剩余非阻塞假设：
 
-## 修订记录
+## 变更说明
 
-<!-- 每次写入新行后仅保留最近 3 条。 -->
-
-| 前一修订 | 新修订 | 合同变化 | 原因 / 权威来源 | 日期 | 被取代说明 |
-| --- | --- | --- | --- | --- | --- |
+<!-- 当前文档只保留事实源；历史由 Git 保存。只有影响 Gate 或下游范围的变化才在正文中说明。 -->

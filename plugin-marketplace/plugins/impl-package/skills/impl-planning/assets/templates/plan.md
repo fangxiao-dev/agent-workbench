@@ -2,12 +2,9 @@
 
 创建时间（Created）：
 Attempt ID：<initial | YYYYMMDD-HHMM-patch-topic>
-Decision Revision：D<n>
-Spec Revision：S<n>
-Plan Revision：P<n>
 Composition：tickets=<true|false>, dag=<true|false>
 
-> D/S/P 是便于沟通的别名，不绑定文件内容。Git commit ID 是唯一允许持久化的版本锚点。
+> 直接引用当前 decision.md / spec.md。D/S/P 为可选旧别名，不因普通编辑升级；Git commit ID 是唯一允许持久化的历史锚点。
 
 ## 摘要
 
@@ -40,7 +37,7 @@ Composition：tickets=<true|false>, dag=<true|false>
 | Decision/Spec 约束 | 实现范围 | Ticket/Task | 风险或 seam |
 | --- | --- | --- | --- |
 
-只列实际受影响范围；后续 P revision 依据本表决定局部重新验证，不机械清空整个 Attempt。
+只列实际受影响范围；后续按实际影响范围决定局部重新验证，不机械清空整个 Attempt。
 
 ## 计划验证
 

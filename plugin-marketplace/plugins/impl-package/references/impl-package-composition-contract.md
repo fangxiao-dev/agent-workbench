@@ -9,9 +9,9 @@
 - `progress.md` 是 current Attempt 的统一恢复投影；Execution Record 保存公共执行判断，Task Handoff 只保存局部接手上下文。
 - `gate.md` 保存当前 gate 判决；历史由 Git 保存。
 
-D/S/P 是人类可读别名，只要求当前 package 内相互一致，不绑定文件内容。需要固定比较点时只使用 Git commit ID。
+D/S/P 仅是可选的人类可读别名，不是新 artifact 的必填字段，也不绑定文件内容。不要为了小改动升级别名；需要固定比较点时只使用 Git commit ID。
 
-`contract-design.md` 从属 `spec.md` 并共用同一 S revision、Status、审批和 Spec Gate；它没有独立 alias、revision、状态或生命周期。Plan 可以引用其中稳定章节，但不得复制或补设计另一套 DTO/schema。
+`contract-design.md` 从属 `spec.md` 并共用 Status、审批和 Spec Gate；它没有独立 alias、revision、状态或生命周期。Plan 可以引用其中稳定章节，但不得复制或补设计另一套 DTO/schema。
 
 ## 2. Composition
 

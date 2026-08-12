@@ -5,19 +5,19 @@ description: req-align 内部的 Decision 阶段；对齐 requirement inputs、F
 
 # Decision Alignment
 
-只在 `req-align` 路由到 full 或 decision-only 时执行。本 SUB-SKILL 拥有 Decision 内容与 Gate，不拥有 package 路径、revision policy、Spec 或 Plan。
+只在 `req-align` 路由到 full 或 decision-only 时执行。本 SUB-SKILL 拥有 Decision 内容与 Gate，不拥有 package 路径、Spec 或 Plan。
 
 ## 输入
 
 - 用户确认的 requirement 与当前 route；
-- canonical package、current D/S 与 initial/follow-up 分类；
+- canonical package、当前 Decision/Spec 与 initial/follow-up 分类；
 - repository instructions、authority sources、相关 code/tests 与允许的只读调查结果。
 
 ## 流程
 
 1. 读取 [Requirement Inputs](../../references/requirement-inputs.md)、[Decision Gate](../../references/decision-gate.md)；earned Focused PRD 再读取 [Focused PRD](../../references/focused-prd.md)。
 2. 发现 repository instructions、product/architecture authority、相关 code/tests 与预期但缺失的知识。durable project knowledge 需要变化时，针对已发现的 authoritative source 提案并等待 owner 批准，不发明长期落点。
-3. initial 从已确认的对话、截图、文档和 repository facts 捕获全部 material promises；follow-up 先读 current D/S，再把 delta 分类为 carry forward、add、modify、explicit remove 或 blocker。未重复提及等于 carry forward。
+3. initial 从已确认的对话、截图、文档和 repository facts 捕获全部 material promises；follow-up 先读当前 Decision/Spec，再把 delta 分类为 carry forward、add、modify、explicit remove 或 blocker。未重复提及等于 carry forward。
 4. 对 Core/Capability、repository fit、delivery path、material choices 与每个 unknown 做 blocking-decision triage。普通 task-scoped read-only investigation 直接执行；需要新权限、副作用、实质成本、code spike、环境变化或 scope expansion 时持久化 `Decision Gate: BLOCKED`。
 5. 用 [Alignment Proposal](../../assets/templates/alignment-proposal.md) 形成 working output。只有 discovery 与允许调查都无法关闭 intent、scope、trade-off 或 owner decision 时才问一个 focused question；proposal 不是 durable artifact。
 6. earned Decision 使用 [Decision Template](../../assets/templates/decision.md)；lightweight correction 在 Decision PASSED 后把最小 evidence 交给 Spec 的 Decision Gate Record。Decision BLOCKED 一律使用 `decision.md`，且不创建 Spec。
@@ -32,4 +32,4 @@ description: req-align 内部的 Decision 阶段；对齐 requirement inputs、F
 
 ## 返回 router
 
-返回 Decision Gate result、standalone `decision.md` 或 lightweight record candidate、current D revision、剩余 owner decisions、Spec 可消费的 boundary，以及 comparison evidence。decision-only 到此停止；full 只有 PASSED 才能进入 Spec。
+返回 Decision Gate result、standalone `decision.md` 或 lightweight record candidate、剩余 owner decisions、Spec 可消费的 boundary，以及 comparison evidence。decision-only 到此停止；full 只有 PASSED 才能进入 Spec。

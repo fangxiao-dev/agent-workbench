@@ -1,9 +1,8 @@
 # [实施名称] 详细合同设计
 
-Spec Revision：S<n>
 Owning Spec：[spec.md](spec.md)
 
-本文是当前 S revision 的从属 artifact，只承载 `spec.md` 的“Spec 设计范围”明确委托的精确合同。它没有独立 Status、revision、approval 或 Gate；行为、状态、权限、不变量、恢复与 Acceptance Semantics 仍由 `spec.md` 拥有。
+本文是当前 `spec.md` 的从属 artifact，只承载 `spec.md` 的“Spec 设计范围”明确委托的精确合同。它没有独立 Status、revision、approval 或 Gate；行为、状态、权限、不变量、恢复与 Acceptance Semantics 仍由 `spec.md` 拥有。
 
 <!-- 只保留 earned 的章节。未出现的 contract surface 删除对应空章节，不制造 N/A 矩阵。 -->
 

@@ -7,15 +7,15 @@ Patch 只属于 package 已有 terminal gate 之后的生命周期，并继续�
 1. 读取 gate.md，确认它属于前一 attempt 且为 pass、fail 或 defer。
 2. 将 package decision/spec 与当前 module knowledge 和代码对账。
 3. 分类 drift：
-   - implementation-only：复用 D/S revision；
-   - behavior contract：升级 S revision并重跑 Spec Gate；
-   - decision direction：升级 D revision并重跑 Decision Gate，再升级 S revision并重跑 Spec Gate。
+   - implementation-only：沿用当前 Decision/Spec；
+   - behavior contract：更新当前 Spec 并重跑 Spec Gate；
+   - decision direction：更新当前 Decision、重跑 Decision Gate，再更新当前 Spec、重跑 Spec Gate。
 4. 所需 gate 未通过时停止，不创建 patch plan。
 
 ## Patch plan
 
 - 文件名为 YYYYMMDD-HHMM-<patch-topic>.patch-plan.md，Attempt ID 与文件名前缀一致。
-- plan 独立声明 P1 与 Composition，不继承历史 plan 的 tickets/dag。
+- plan 以新的 Attempt ID 独立声明 Composition，不继承历史 plan 的 tickets/dag。
 - 不覆盖 plan.md，不向历史 DAG/ticket/task 追加本 attempt 状态。
 - 简单 no-DAG patch 不建立 executable task checklist；需要恢复时使用 `state.json.resume`。
 - Planned Verification 引用权威 policy；实际证据写入 `execution/<attempt>/execution-record.md`。
@@ -28,4 +28,4 @@ Patch 只属于 package 已有 terminal gate 之后的生命周期，并继续�
 
 ## Freeze
 
-pass、fail、defer Gate 使对应 patch plan terminal/frozen。后续变化创建新的 patch attempt；blocked 不冻结 Attempt，补证通过新的 P revision、Execution Record 与后续 Gate 表达。
+pass、fail、defer Gate 使对应 patch plan terminal/frozen。后续变化创建新的 patch attempt；blocked 不冻结 Attempt，补证通过当前 Plan、Execution Record 与后续 Gate 表达。

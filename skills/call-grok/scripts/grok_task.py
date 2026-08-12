@@ -30,8 +30,8 @@ from executor_env import load_executor_env
 load_executor_env(SCRIPT_ROOT.parent)
 
 DEFAULT_MAX_RUN = 100
-DEFAULT_STALL_TIMEOUT_SEC = 900
-DEFAULT_OVERALL_TIMEOUT_SEC = 900
+DEFAULT_STALL_TIMEOUT_SEC = 1200
+DEFAULT_OVERALL_TIMEOUT_SEC: Optional[float] = None
 MAX_TIMEOUT_SEC = 1800
 DEFAULT_HEARTBEAT_SEC = 15
 # Above this, --prompt is spilled to a temp file and passed via --prompt-file.
@@ -331,7 +331,7 @@ def apply_stream_event(
 def run_with_liveness(
     cmd: List[str],
     stall_timeout_sec: float,
-    overall_timeout_sec: float,
+    overall_timeout_sec: Optional[float],
     heartbeat_sec: float,
 ) -> Dict[str, Any]:
     started = time.time()
@@ -424,7 +424,7 @@ def run_with_liveness(
                 age = now - last_event_at
                 et = last_event_type
             wall = now - started
-            if wall >= overall_timeout_sec:
+            if overall_timeout_sec is not None and wall >= overall_timeout_sec:
                 with terminal_lock:
                     if status not in LIVENESS_TERMINAL:
                         status = "timeout"
@@ -570,7 +570,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--overall-timeout-sec",
         type=float,
         default=DEFAULT_OVERALL_TIMEOUT_SEC,
-        help=f"Hard wall-clock timeout (default {DEFAULT_OVERALL_TIMEOUT_SEC}, max {MAX_TIMEOUT_SEC})",
+        help=f"Optional hard wall-clock timeout (default disabled, max {MAX_TIMEOUT_SEC})",
     )
     p.add_argument(
         "--heartbeat-sec",
@@ -632,10 +632,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.max_run < 1:
         eprint("--max-run must be >= 1")
         return EXIT_ERROR
-    for option, value in (
-        ("--stall-timeout-sec", args.stall_timeout_sec),
-        ("--overall-timeout-sec", args.overall_timeout_sec),
-    ):
+    timeout_values = [("--stall-timeout-sec", args.stall_timeout_sec)]
+    if args.overall_timeout_sec is not None:
+        timeout_values.append(("--overall-timeout-sec", args.overall_timeout_sec))
+    for option, value in timeout_values:
         if not math.isfinite(value) or value <= 0:
             eprint(f"{option} must be a positive finite number")
             return EXIT_ERROR
@@ -702,7 +702,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         eprint(
             f"[call-grok] max_run={args.max_run} "
-            f"stall={args.stall_timeout_sec}s overall={args.overall_timeout_sec}s"
+            f"stall={args.stall_timeout_sec}s "
+            f"overall={args.overall_timeout_sec if args.overall_timeout_sec is not None else 'disabled'}"
         )
         run = run_with_liveness(
             cmd=cmd,

@@ -40,7 +40,7 @@ def test_spec_template_has_current_design_scope_and_optional_detail_contract() -
             "Public read models",
         )
     )
-    assert "Spec Revision：S<n>" in detail
+    assert "Spec Revision：S<n>" not in detail
     assert "没有独立 Status、revision、approval 或 Gate" in detail
     assert "状态（Status）：" not in detail
 

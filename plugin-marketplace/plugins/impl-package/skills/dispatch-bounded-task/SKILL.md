@@ -17,11 +17,11 @@ description: 当批准的 Plan、Ticket 或 DAG 已提供已释放的实现、re
 
 | 角色 | 普通首选 | executor fallback | 复杂任务 |
 |---|---|---|---|
-| Implementer | `luna-worker` | default subagent | default subagent |
+| Implementer | `call-grok`：`grok-4.5`、`effort=high` | `luna-worker` | default subagent |
 | Fixer | `call-grok`：`grok-4.5`、`effort=high` | `luna-worker` | default subagent |
 | Verifier | 调用者指定或当前宿主适配的验证 worker | 无额外默认；失败时 `BLOCKED` | 同普通策略 |
 
-6. 在派发边界把任一 worker 的原生结果统一映射为 `Outcome: DONE | BLOCKED | INCOMPLETE`。普通 Fixer 读取 `call-grok` 并提供完整 Fixer prompt，但不改变其 JSON 接口。`INCOMPLETE` 时读取 [Worker Failure Recovery](references/worker-failure-recovery.md)；只有进程已清理且 residue 可归因时，才允许表格中的一次 fresh fallback。无 fallback、cleanup 或 residue 不确定，或 fallback 再次未完成时，统一返回 `BLOCKED`。
+6. 在派发边界把任一 worker 的原生结果统一映射为 `Outcome: DONE | BLOCKED | INCOMPLETE`。普通 Implementer 或 Fixer 读取 `call-grok` 并提供完整角色 prompt，但不改变其 JSON 接口。`INCOMPLETE` 时读取 [Worker Failure Recovery](references/worker-failure-recovery.md)；只有进程已清理且 residue 可归因时，才允许表格中的一次 fresh fallback。无 fallback、cleanup 或 residue 不确定，或 fallback 再次未完成时，统一返回 `BLOCKED`。
 7. 读取 [Bounded Task 模板](references/task-templates.md)，填入当前单元，并原样传递 scheduling contract 后派发。Fixer 不得用未证实的替代解释撤销已确认 finding 或既有修复；新证据与输入合同冲突时返回 `BLOCKED` 交给 owner 裁决。
 
 ## 返回合同

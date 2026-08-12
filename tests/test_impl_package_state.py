@@ -44,10 +44,10 @@ class ImplPackageStateTests(unittest.TestCase):
         git(repo, "config", "user.name", "Test")
         package = repo / "docs" / "implementations" / "260806-example"
         package.mkdir(parents=True)
-        (package / "decision.md").write_text("# Decision\n\nDecision Revision：D1\n", encoding="utf-8")
-        (package / "spec.md").write_text("# Spec\n\nDecision Revision：D1\nSpec Revision：S1\n", encoding="utf-8")
+        (package / "decision.md").write_text("# Decision\n", encoding="utf-8")
+        (package / "spec.md").write_text("# Spec\n", encoding="utf-8")
         (package / "plan.md").write_text(
-            "# Plan\n\nAttempt ID：initial\nDecision Revision：D1\nSpec Revision：S1\nPlan Revision：P1\n"
+            "# Plan\n\nAttempt ID：initial\n"
             f"Composition：tickets={str(tickets).lower()}, dag={str(dag).lower()}\n",
             encoding="utf-8",
         )
@@ -60,7 +60,7 @@ class ImplPackageStateTests(unittest.TestCase):
             if second_task:
                 rows.append("| T2 | api | T1 | TKT-01 | seam |")
             (package / "dag.md").write_text(
-                "# DAG\n\nAttempt ID：initial\nSpec Revision：S1\nPlan Revision：P1\n\n"
+                "# DAG\n\nAttempt ID：initial\n\n"
                 "## Task graph\n\n| Task | Primary ownership | Known depends on | Contributes to tickets | Known seam / risk |\n"
                 "| --- | --- | --- | --- | --- |\n" + "\n".join(rows) + "\n",
                 encoding="utf-8",
@@ -77,14 +77,12 @@ class ImplPackageStateTests(unittest.TestCase):
         *,
         attempt: str = "initial",
         dependency: str = "None",
-        plan: str = "P1",
     ) -> None:
         path.write_text(
             f"# Ticket\n\n**Ticket ID：** {identifier}\n"
             "**Publication Status：** Draft\n"
             f"**Attempt ID：** {attempt}\n"
-            "**Spec Revision：** S1\n"
-            f"**Plan Revision：** {plan}\n\n"
+            "\n"
             "## 验收标准\n\n- AC-1: works\n\n"
             f"## 阻塞依赖\n\n- {dependency}\n",
             encoding="utf-8",
@@ -176,9 +174,6 @@ class ImplPackageStateTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         replacements = {
             "Attempt ID": "执行尝试 ID（Attempt ID）",
-            "Decision Revision": "决策修订（Decision Revision）",
-            "Spec Revision": "规格修订（Spec Revision）",
-            "Plan Revision": "计划修订（Plan Revision）",
             "Composition": "执行组合（Composition）",
             "Publication Status": "发布状态（Publication Status）",
         }
@@ -199,15 +194,38 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("**Publication Status：** Approved", current)
         self.assertNotIn("发布状态（Publication Status）", current)
 
-    def test_aliases_are_checked_without_binding_state(self) -> None:
+    def test_revision_aliases_are_optional_and_nonbinding(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
-        self.assertNotIn("revisions", self.state(package))
+        status = json.loads(self.cli(repo, package, "validate").stdout)
+        self.assertEqual(status["revisions"], {"decision": None, "spec": None, "plan": None})
         plan = package / "plan.md"
-        plan.write_text(plan.read_text(encoding="utf-8").replace("S1", "S2"), encoding="utf-8")
-        failed = self.cli(repo, package, "validate", ok=False)
-        self.assertIn("does not match spec.md", failed.stderr)
+        plan.write_text(plan.read_text(encoding="utf-8") + "\nclarification\n", encoding="utf-8")
+        result = json.loads(self.cli(repo, package, "validate").stdout)
+        self.assertEqual(result["revisions"], {"decision": None, "spec": None, "plan": None})
+        (package / "decision.md").write_text("# Decision\n\nDecision Revision：D9\n", encoding="utf-8")
+        (package / "spec.md").write_text("# Spec\n\nDecision Revision：D8\nSpec Revision：S7\n", encoding="utf-8")
+        plan.write_text(plan.read_text(encoding="utf-8") + "\nDecision Revision：D1\nSpec Revision：S1\nPlan Revision：P1\n", encoding="utf-8")
+        self.cli(repo, package, "refresh-progress")
+        result = json.loads(self.cli(repo, package, "validate").stdout)
+        self.assertEqual(result["revisions"], {"decision": "D1", "spec": "S1", "plan": "P1"})
+
+    def test_active_attempt_still_requires_spec_document(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        (package / "spec.md").unlink()
+        failed = self.cli(
+            repo,
+            package,
+            "init",
+            "--attempt",
+            "initial",
+            "--plan",
+            (package / "plan.md").relative_to(repo).as_posix(),
+            ok=False,
+        )
+        self.assertIn("spec.md is required", failed.stderr)
 
     def test_rejects_unsupported_format_and_non_date_package(self) -> None:
         temp, repo, package = self.make_repo()
@@ -439,8 +457,8 @@ class ImplPackageStateTests(unittest.TestCase):
         state_path.write_text(json.dumps(legacy_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         decision = package / "decision.md"
         spec = package / "spec.md"
-        decision.write_text(decision.read_text(encoding="utf-8").replace("D1", "D2"), encoding="utf-8")
-        spec.write_text(spec.read_text(encoding="utf-8").replace("D1", "D2").replace("S1", "S2"), encoding="utf-8")
+        decision.write_text(decision.read_text(encoding="utf-8") + "\nupdated direction\n", encoding="utf-8")
+        spec.write_text(spec.read_text(encoding="utf-8") + "\nupdated contract\n", encoding="utf-8")
         frozen_retry = self.init(repo, package)
         self.assertEqual(frozen_retry["attempt"], "initial")
         self.assertEqual(frozen_retry["gate"]["verdict"], "fail")
@@ -448,18 +466,17 @@ class ImplPackageStateTests(unittest.TestCase):
         legacy_state["resume"] = {"blocker": "legacy", "next": "start patch", "evidence": "retired-evidence.md"}
         state_path.write_text(json.dumps(legacy_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         (package / "patch-a.patch-plan.md").write_text(
-            "# Patch Plan\n\nAttempt ID：patch-a\nDecision Revision：D2\nSpec Revision：S2\nPlan Revision：P2\nComposition：tickets=false, dag=false\n",
+            "# Patch Plan\n\nAttempt ID：patch-a\nComposition：tickets=false, dag=false\n",
             encoding="utf-8",
         )
 
         result = self.init(repo, package, attempt="patch-a", plan="patch-a.patch-plan.md")
         self.assertEqual(result["attempt"], "patch-a")
-        self.assertEqual(result["revisions"], {"decision": "D2", "spec": "S2", "plan": "P2"})
+        self.assertEqual(result["revisions"], {"decision": None, "spec": None, "plan": None})
         self.assertIn("- Lifecycle: frozen", (package / "execution/initial/execution-record.md").read_text(encoding="utf-8"))
 
-        spec.write_text(spec.read_text(encoding="utf-8").replace("S2", "S3"), encoding="utf-8")
-        failed = self.cli(repo, package, "validate", ok=False)
-        self.assertIn("does not match spec.md", failed.stderr)
+        spec.write_text(spec.read_text(encoding="utf-8") + "\nfollow-up clarification\n", encoding="utf-8")
+        self.cli(repo, package, "validate")
 
     def test_existing_execution_findings_must_be_routed_before_terminal_gate(self) -> None:
         temp, repo, package = self.make_repo()

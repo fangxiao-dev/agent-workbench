@@ -39,8 +39,8 @@ parse it.
 | `--no-subagents` | off | Disable Grok subagents |
 | `--worktree [NAME]` | unset | Pass through Grok worktree option |
 | `--rules` | unset | Pass through Grok rules |
-| `--stall-timeout-sec` | 900 (max 1800) | No stream event before declaring a stall |
-| `--overall-timeout-sec` | 900 (max 1800) | Hard wall-clock timeout |
+| `--stall-timeout-sec` | 1200 (max 1800) | No child stdout activity before declaring a stall |
+| `--overall-timeout-sec` | unset (max 1800) | Optional hard wall-clock timeout |
 | `--heartbeat-sec` | 15 | Stderr heartbeat interval |
 | `--preflight` | off | Also require auth before model execution |
 | `--dry-run` | off | Return the redacted would-be command in `text` |
@@ -101,12 +101,14 @@ stdout is exactly one JSON object:
 Each call starts a fresh Grok process. The wrapper does not resume sessions;
 callers that need previous context must include it in a new prompt.
 
-Timeouts default to 900 seconds (15 minutes). Grok subagents are enabled unless
-the caller passes `--no-subagents`. Callers may increase either
-timeout for a larger task, but the runner rejects values above 1800 seconds (30
-minutes). `--max-run` is a Grok turn limit, not a seconds-based timeout.
+The no-stream stall window defaults to 1200 seconds (20 minutes); no hard
+overall timeout is applied unless the caller supplies one. Grok subagents are
+enabled unless the caller passes `--no-subagents`. The runner rejects explicit
+timeouts above 1800 seconds (30 minutes). `--max-run` is a Grok turn limit, not
+a seconds-based timeout.
 
 Run the wrapper in the background and use stderr heartbeat/liveness to observe
-progress instead of blocking the main session. A timeout, stall, cancellation,
+progress instead of blocking the main session. Wrapper heartbeats do not reset
+the stall window; only child stdout activity does. A timeout, stall, cancellation,
 max-turns result, non-zero process exit, or malformed envelope is incomplete;
 partial `text` must not be interpreted as successful task completion.

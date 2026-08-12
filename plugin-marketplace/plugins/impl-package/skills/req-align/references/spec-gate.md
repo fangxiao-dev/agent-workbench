@@ -4,7 +4,7 @@
 
 ## Gate inputs
 
-Gate 读取当前 `spec.md`、其“Spec 设计范围”、存在时的 `contract-design.md`、Decision outcomes、repository facts 与 Acceptance Semantics。`contract-design.md` 与 `spec.md` 共用 S revision、Status、approval 和 Gate，不形成第二套 behavior contract。
+Gate 读取当前 `spec.md`、其“Spec 设计范围”、存在时的 `contract-design.md`、Decision outcomes、repository facts 与 Acceptance Semantics。`contract-design.md` 与 `spec.md` 共用 Status、approval 和 Gate，不形成第二套 behavior contract。
 
 ## Pass criteria
 
@@ -16,7 +16,7 @@ Spec 只有同时满足以下条件才可 PASSED：
 - 每个 promise/constraint 映射到 observable evidence，并为 manual evidence 指定 owner；
 - blocking owner decision、contract ambiguity 与 artifact authority conflict 为零；
 - 两个独立实施者可以选择不同内部实现，但不会产生不同 API、data identity、permission、concurrency、recovery 或 public shape。
-- artifact 已使用真实 S revision，所需 owner approval 已记录，Status、Gate result 与 handoff readiness 一致；proposal 的内容通过判断不能冒充正式阶段迁移。
+- artifact 已记录当前合同，所需 owner approval 已记录，Status、Gate result 与 handoff readiness 一致；proposal 的内容通过判断不能冒充正式阶段迁移。
 
 Gate 可以发现设计范围与正文之间的明显漏项；发现后返回 Preflight 修正范围与设计。若 Plan 仍需决定可观察语义或 canonical contract，记录 exact missing contract 并 `BLOCKED`，不交给 planning。
 
@@ -24,7 +24,7 @@ Gate 可以发现设计范围与正文之间的明显漏项；发现后返回 Pr
 
 ## Blocked persistence
 
-能在当前对话中关闭的 Preflight blocker 只留在 working output，关闭后再写 formal Spec。只有阻断使本轮必须暂停、跨 session 或等待 owner/外部条件时，才持久化简短的 `Spec Gate Blocked` 与恢复入口；不为当场可回答的问题制造 blocked revision。
+能在当前对话中关闭的 Preflight blocker 只留在 working output，关闭后再写 formal Spec。只有阻断使本轮必须暂停、跨 session 或等待 owner/外部条件时，才持久化简短的 `Spec Gate Blocked` 与恢复入口；不为当场可回答的问题制造额外状态。
 
 ## Conditional evidence-integrity contract
 
@@ -36,4 +36,4 @@ Gate 可以发现设计范围与正文之间的明显漏项；发现后返回 Pr
 
 只有用户明确要求，或存在 unresolved material ambiguity、cross-module/external interface、migration/compatibility、security/data authority、destructive external mutation、evidence-integrity false-PASS risk 等高风险信号时，运行 `/impl-package:grill-me-smartly`。它不能静默应用 clarification。
 
-Ledger 位于 OS temp，不进入 package。向用户汇总 converged decisions 与 owner decisions；owner decision 未关闭前仍阻塞。只有 owner 批准后，clarification 才能通过普通 S-revision path 修改 Spec。Spec PASSED 后仅可把 `/impl-package:grilling` 作为可选 deeper review。
+Ledger 位于 OS temp，不进入 package。向用户汇总 converged decisions 与 owner decisions；owner decision 未关闭前仍阻塞。只有 owner 批准后，clarification 才能修改 Spec。Spec PASSED 后仅可把 `/impl-package:grilling` 作为可选 deeper review。

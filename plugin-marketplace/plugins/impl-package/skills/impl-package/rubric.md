@@ -6,7 +6,7 @@ updated: 2026-08-06
 ## 已确认原则
 
 - 只持久化会改变下一动作、阻止高影响 false PASS 或约束危险 mutation 的 current facts。
-- D/S/P 保留为人类可读别名，但不绑定文件内容；Git commit ID 是唯一版本锚点。
+- D/S/P 只作为可选的人类可读别名，不要求因普通编辑升级；Git commit ID 是唯一版本锚点。
 - 文件和 evidence 只保存仓库相对路径；已知 artifact 使用固定目录或显式路径。
 - Git 承担历史与回滚，不为审计完整性建立第二套状态。
 - 小团队/个人改动按实际复杂度选择 Composition，不为完整感创建 Ticket 或 DAG；所有 active Attempt 仍有统一 Progress/Execution Record 层。

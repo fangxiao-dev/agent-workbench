@@ -1,8 +1,6 @@
 # Task DAG
 
 Attempt ID：<attempt-id>
-Spec Revision：S<n>
-Plan Revision：P<n>
 
 > 本文件只定义 Task 边界和依赖。运行状态保存在 `.impl-package/state.json`；Task `DONE` 不等于 Ticket accepted。
 
