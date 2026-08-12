@@ -11,9 +11,10 @@ description: 当原因、影响面与必要前置事实已经建立，并且需�
 
 1. 可委派的单个或有序 bounded unit 选择 `SERIAL`。存在两个以上并发候选时，读取 [Parallel Work Admission](references/parallel-work-admission.md) 决定 `SERIAL`、`PARALLEL` 或 `BLOCKED`。
 2. `LOCAL` 只用于原子操作、与主 session 紧耦合的集成，或无法隔离的共享资源操作，并记录具体理由。
-3. 每个委派的 bounded unit 使用 fresh subagent。只有同一 source unit 尚在连续执行且依赖不可转移的 live resource/process state，或下游 skill 明确声明 standing role 时，才沿用既有 subagent 并记录连续性理由。已发生 context compaction 时，从 canonical input 启动 fresh subagent。角色相同、agent 空闲或共享 worktree 不构成复用理由。
-4. 仅在实际共享数据库、browser/provider、生成目录、端口、测试数据或其他单写资源时，记录隔离方式或唯一顺序和 cleanup owner。
-5. 选择下游路由，并只输出当前决定真正需要的内容；省略 `reuse` 表示使用 fresh subagent：
+3. 预计长时间运行或高回显的既定只读测试作为单个 `SERIAL` verification unit 路由 `/impl-package:dispatch-bounded-task`，由其选择 Verifier；单条、快速且输出有界的原子检查满足上一条条件时可留在主 session。实现动作或有写副作用的命令不属于 Verifier。
+4. 每个委派的 bounded unit 使用 fresh subagent。只有同一 source unit 尚在连续执行且依赖不可转移的 live resource/process state，或下游 skill 明确声明 standing role 时，才沿用既有 subagent 并记录连续性理由。已发生 context compaction 时，从 canonical input 启动 fresh subagent。角色相同、agent 空闲或共享 worktree 不构成复用理由。
+5. 仅在实际共享数据库、browser/provider、生成目录、端口、测试数据或其他单写资源时，记录隔离方式或唯一顺序和 cleanup owner。
+6. 选择下游路由，并只输出当前决定真正需要的内容；省略 `reuse` 表示使用 fresh subagent：
 
 ```text
 Scheduling: <LOCAL | SERIAL | PARALLEL | BLOCKED> · route=<route>

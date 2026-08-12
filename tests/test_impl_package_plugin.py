@@ -43,7 +43,7 @@ def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
     claude_marketplace = load_json(MARKETPLACE / ".claude-plugin" / "marketplace.json")
 
     assert codex["name"] == claude["name"] == "impl-package"
-    assert codex["version"] == claude["version"] == "0.2.7"
+    assert codex["version"] == claude["version"] == "0.2.8"
     assert codex["skills"] == claude["skills"] == "./skills/"
     assert codex_marketplace["name"] == claude_marketplace["name"] == "agent-workbench"
     assert codex_marketplace["plugins"][0]["source"]["path"] == "./plugins/impl-package"
@@ -185,7 +185,7 @@ def test_dispatch_bounded_task_defines_fixer_profiles_and_template() -> None:
         PLUGIN / "skills" / "dispatch-bounded-task" / "references" / "worker-failure-recovery.md"
     ).read_text(encoding="utf-8")
 
-    assert "| Implementer | `call-grok`：`grok-4.5`、`effort=high` | `luna-worker` | default subagent |" in dispatch
+    assert "| Implementer | `call-grok`：`grok-4.5`、`effort=high` | `luna-worker` | `gpt-5.6-terra`、`reasoning_effort=xhigh` |" in dispatch
     assert "| Fixer | `call-grok`：`grok-4.5`、`effort=high` | `luna-worker` | default subagent |" in dispatch
     assert "--no-subagents" not in dispatch
     assert "| Verifier | 调用者指定或当前宿主适配的验证 worker" in dispatch
@@ -209,6 +209,20 @@ def test_dispatch_bounded_task_defines_fixer_profiles_and_template() -> None:
     assert "不重新裁决 finding、不扩大范围、不宣称 closure" in task_templates
     assert "不以未证实的替代解释撤销既有修复" in task_templates
     assert task_templates.count("Outcome: DONE | BLOCKED | INCOMPLETE") == 1
+    assert "quiet 选项" in task_templates
+    assert "invocation-unique 临时日志" in task_templates
+    assert "完整 stdout 留在 worker 或临时日志，不写入最终回复" in task_templates
+    for evidence_field in (
+        "command/procedure",
+        "exit status",
+        "pass/skip/failure count",
+        "首个 actionable failure",
+        "cleanup/residue",
+        "artifact pointer",
+    ):
+        assert evidence_field in task_templates
+    assert "成功日志无需沉淀" in task_templates
+    assert "失败日志仅在其临时路径会改变下一步时" in task_templates
 
 
 def test_terminal_pass_requires_applicable_safety_and_final_topology() -> None:

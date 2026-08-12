@@ -34,10 +34,10 @@
     {
       "id": 4,
       "prompt": "比较两个 Implementer 单元：A 为局部普通实现，B 跨接口并触及数据完整性。均无 override。",
-      "expected_output": "A 首选 call-grok 的 grok-4.5/high，executor INCOMPLETE 且完成清理后可 fallback 一次 fresh Luna；B 直接使用 default subagent。两者的原生结果都在 dispatch 边界映射到三态 Outcome。",
+      "expected_output": "A 首选 call-grok 的 grok-4.5/high，executor INCOMPLETE 且完成清理后可 fallback 一次 fresh Luna；B 直接使用 gpt-5.6-terra/xhigh。两者的原生结果都在 dispatch 边界映射到三态 Outcome。",
       "files": [],
       "expectations": [
-        "普通 Implementer 使用 Grok、fallback Luna，复杂 Implementer 使用 default",
+        "普通 Implementer 使用 Grok、fallback Luna，复杂 Implementer 使用 gpt-5.6-terra/xhigh",
         "统一映射 DONE、BLOCKED 或 INCOMPLETE"
       ]
     },
@@ -69,6 +69,16 @@
       "expectations": [
         "不把 INCOMPLETE 当 DONE",
         "不确定 residue 或二次未完成统一 BLOCKED"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "调用者已释放一个只读 Verifier 单元：运行完整 pytest，预计输出很大。请给出执行和回报方式。",
+      "expected_output": "优先使用 quiet 选项，否则把 stdout/stderr 写入 invocation-unique 临时日志；最终回复不包含完整 stdout，只返回 command/procedure、exit、pass/skip/failure count、首个 actionable failure、cleanup/residue 和必要的 artifact pointer。",
+      "files": [],
+      "expectations": [
+        "高回显 stdout 留在 worker 或临时日志",
+        "Verifier 只返回压缩的决定性证据"
       ]
     }
   ]

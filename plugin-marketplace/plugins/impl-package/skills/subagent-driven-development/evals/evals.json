@@ -70,6 +70,36 @@
         "reuse 仅限同 source unit 的不可转移 live state",
         "compaction 后使用 fresh worker"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "批准的 Plan 要运行完整 pytest 和前端 build；命令只读，但预计耗时长且会产生大量 stdout。请决定 scheduling 和下游角色。",
+      "expected_output": "输出 SERIAL、route=/impl-package:dispatch-bounded-task，把它作为 read-only verification unit 交由 Verifier；主 session 只接收压缩证据并保留采信权。",
+      "files": [],
+      "expectations": [
+        "长时间或高回显只读测试使用 SERIAL Verifier",
+        "主 session 不接收完整 stdout"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "只需在主 session 运行一条快速、输出有界且无副作用的定向检查。请决定 scheduling。",
+      "expected_output": "可以选择 LOCAL，并以原子且输出有界为 reason；无需额外派发 Verifier。",
+      "files": [],
+      "expectations": [
+        "小型有界原子检查可以 LOCAL",
+        "不产生额外派发"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "命令会重写 snapshots 并修改生成文件，同时输出很多内容。能否因为高回显把它作为只读 Verifier 外派？",
+      "expected_output": "不能把有写副作用的动作声明为只读 Verifier；应按真实实现/集成 ownership 重新决定 LOCAL 或 Implementer 调度。",
+      "files": [],
+      "expectations": [
+        "写副作用命令不伪装成 Verifier",
+        "按真实 ownership 和动作类型调度"
+      ]
     }
   ]
 }

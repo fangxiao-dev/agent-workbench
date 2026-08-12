@@ -33,7 +33,9 @@
 目标/来源：<bounded claim；批准的 Plan/Ticket/DAG pointer 与 source unit>
 边界：workdir=<绝对路径>；actions=<顺序命令/检查>；禁改=<范围>
 调度：<scheduling contract>
-证据：<结果/exit、关键计数、首个失败、cleanup/residue、artifact pointer>
+执行：高回显命令优先使用 quiet 选项，否则把 stdout/stderr 写入 invocation-unique 临时日志；只读取决定性片段，完整 stdout 留在 worker 或临时日志，不写入最终回复。
+证据：<command/procedure、exit status、pass/skip/failure count、首个 actionable failure、cleanup/residue、必要时的 artifact pointer>
+日志：成功日志无需沉淀；失败日志仅在其临时路径会改变下一步时作为 artifact pointer 返回。
 ```
 
 三类 worker 都按父 Skill 的统一结果合同回报：`Outcome: DONE | BLOCKED | INCOMPLETE`，并附该 outcome 所需的直接证据或恢复事实；过程细节留在自己的执行上下文。

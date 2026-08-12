@@ -58,3 +58,15 @@ def test_explicit_standing_role_refreshes_after_context_compaction() -> None:
     assert "Standing Questioner 是显式 lifecycle 例外" in grill
     assert "发生 context compaction 后" in grill
     assert "启动 fresh Questioner" in grill
+
+
+def test_verbose_read_only_verification_is_delegated_without_overrouting_small_checks() -> None:
+    skill = read("plugin-marketplace/plugins/impl-package/skills/subagent-driven-development/SKILL.md")
+
+    assert "预计长时间运行或高回显的既定只读测试" in skill
+    assert "`SERIAL` verification unit" in skill
+    assert "`/impl-package:dispatch-bounded-task`" in skill
+    assert "由其选择 Verifier" in skill
+    assert "单条、快速且输出有界的原子检查" in skill
+    assert "可留在主 session" in skill
+    assert "实现动作或有写副作用的命令不属于 Verifier" in skill
