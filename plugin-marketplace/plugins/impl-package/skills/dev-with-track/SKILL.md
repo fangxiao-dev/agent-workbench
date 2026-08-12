@@ -5,8 +5,8 @@ description: 当批准 implementation plan 或者 D/S/P bundle 正式开始或�
 
 # Dev With Track
 
-先读 `../../references/impl-package-composition-contract.md` 和 `../../references/impl-package-current-state.md`。本 skill 维护 current state、Progress、Attempt Execution Record、条件式 Task Handoff、execution findings 和 current Gate；各上游 artifact 仍由 owning skill 维护。
-默认允许 subagent，且模式为 default-long
+先读 `../../references/impl-package-composition-contract.md` 和 `../../references/impl-package-current-state.md`。当前 attempt 涉及 material seam、browser/provider/native-tool 或昂贵系统验证时，再读 [`../../references/progressive-system-evidence.md`](../../references/progressive-system-evidence.md)。本 skill 维护 current state、Progress、Attempt Execution Record、条件式 Task Handoff、execution findings 和 current Gate；各上游 artifact 仍由 owning skill 维护。
+需要委派或决定本地执行时，通过 `/impl-package:subagent-driven-development` 取得 scheduling contract；本 skill 只消费调度结果。
 
 ## Restore
 
@@ -32,6 +32,7 @@ description: 当批准 implementation plan 或者 D/S/P bundle 正式开始或�
 - 主 session 通过 `er-add` 写 checkpoint/judgment；worker 默认不直接写 Execution Record。
 - `checkpoint` 是 attempt-level 恢复快捷入口，并更新 `state.resume`。
 - 仅在 BLOCKED、retry、跨 session/owner 或并行委派时创建 `execution/<attempt>/task-handoffs/<task-id>-handoff.md`。
+- 上述恢复条件发生但当前 attempt 没有 DAG Task 时，改用 Attempt-level ER checkpoint 记录 dispatch 返回的恢复事实和唯一下一动作。
 - P revision 变化只把受影响 Task/Ticket 设为 `NEEDS-REVALIDATION`；未受影响 evidence 保留。
 
 ```powershell
@@ -45,7 +46,7 @@ payload 使用 `purpose=checkpoint|judgment`、`subject=attempt|ticket:<id>|task
 
 ## Review、Findings 与人工验收
 
-- 根据实际 diff 选择 reviewer，并通过 `/impl-package:do-review` 派发：普通实现使用 `review-code`；interface、状态机、跨模块 seam 或合同忠实度增加相应 `review-code-by-standards` / `review-code-by-spec`；安全、数据完整性、外部 mutation、并发、migration 必须增加 `safety-review`。
+- 通过 `/impl-package:do-review` 运行 initial、finding-closure 和 terminal-final review；review topology、适用范围和 coverage 由该 skill 拥有。本 skill 消费报告，terminal pass 要求 terminal-final coverage 完整且所有阻断 finding 已关闭。
 - P1/P2 finding 必须修复并 closure verify；editorial suggestion 不阻断 Gate。
 - package 级 `execution-findings.md` 在 terminal Gate 前必须完成分流：Decision rationale→Decision，规范行为→Spec，执行判断→Execution Record，长期知识→Durable Delta/`_pending.md`。
 - Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 把入口、oracle、环境、失败反馈和 teardown owner 写入 judgment 或 canonical handoff，并取得结果 evidence。
@@ -59,5 +60,7 @@ completion claim 先交给 `/impl-package:verification-before-completion`。Gate
 - `fail | defer`：如实终结；后续实现进入 patch Attempt。
 
 terminal Gate 必须完成 Stage 7：记录 Durable Delta 及 `_pending.md`/truth pointer，或通过 `--no-durable-delta-reason` 明确无增量原因。terminal 后 state、resume、Execution Record 冻结。
+
+Gate CLI 拥有 comparison commit 与 lifecycle 校验。长任务先完成 state/ER/Gate 等 durable 写入，再输出最终叙述；transport disconnect 后从这些幂等事实恢复，不创建第二个完成结论。
 
 若 active skill catalog 中存在 `talk-to-boss`，优先按其汇报合同输出；否则直接分别说明实施、验证、Gate、backfill/合入状态，给出 Task/Ticket 总数、剩余数、blocker、是否 closed 和唯一下一动作。可选 skill 缺失不阻塞收口。

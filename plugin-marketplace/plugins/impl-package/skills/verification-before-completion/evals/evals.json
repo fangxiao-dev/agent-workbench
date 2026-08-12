@@ -79,6 +79,39 @@
         "Does not turn an environment incident into fake green code evidence",
         "Keeps the audit scoped to the current claim"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "同一个 API verification 在同一 revision 的两个摘要里分别写了 95 passed/17 skipped 和 96 passed/17 skipped，没有原始 artifact 解释选择集或新增测试。可以据此写 pass 吗？",
+      "expected_output": "Marks the verification claim UNCERTAIN until a current direct artifact explains the count transition or a fresh affected run establishes one count; does not invent an evidence registry.",
+      "files": [],
+      "expectations": [
+        "Treats unexplained count drift as UNCERTAIN",
+        "Requires direct artifact or fresh affected evidence",
+        "Does not guess or create an evidence registry"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "pass Gate 后只提交了 gate.md、progress.md 和 Execution Record metadata，行为代码没有变化。最终 completion audit 是否能复用行为测试？",
+      "expected_output": "Reuses provenance-complete behavior evidence, verifies the metadata delta and final HEAD, and does not mechanically rerun behavior tests.",
+      "files": [],
+      "expectations": [
+        "Recognizes metadata-only delta",
+        "Reuses unaffected behavior evidence",
+        "Audits final HEAD and metadata"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "pass Gate 后又修改了会影响行为的实现代码，但没有新 Attempt。现在可以继续声称 closed 吗？",
+      "expected_output": "Rejects the closed claim because the terminal Gate no longer covers current behavior, requires a patch Attempt, and reruns affected verification/review.",
+      "files": [],
+      "expectations": [
+        "Rejects the old Gate for changed behavior",
+        "Requires a patch Attempt",
+        "Requires affected verification and review"
+      ]
     }
   ]
 }

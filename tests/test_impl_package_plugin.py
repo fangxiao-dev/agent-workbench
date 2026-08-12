@@ -43,7 +43,7 @@ def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
     claude_marketplace = load_json(MARKETPLACE / ".claude-plugin" / "marketplace.json")
 
     assert codex["name"] == claude["name"] == "impl-package"
-    assert codex["version"] == claude["version"] == "0.2.4"
+    assert codex["version"] == claude["version"] == "0.2.7"
     assert codex["skills"] == claude["skills"] == "./skills/"
     assert codex_marketplace["name"] == claude_marketplace["name"] == "agent-workbench"
     assert codex_marketplace["plugins"][0]["source"]["path"] == "./plugins/impl-package"
@@ -127,7 +127,9 @@ def test_delegation_layers_are_orthogonal_and_resources_are_internalized() -> No
     assert "实施依据不足 →" not in subagent
     assert "原因、影响面与必要前置事实已经建立" in subagent
     assert "investigate-before-implement" not in subagent
-    assert "Scheduling: <LOCAL | SERIAL | PARALLEL | BLOCKED>" in subagent
+    scheduling_contract = subagent.split("```text", 1)[1].split("```", 1)[0]
+    assert "Scheduling: <LOCAL | SERIAL | PARALLEL | BLOCKED> · route=<route>" in scheduling_contract
+    assert "mode=" not in scheduling_contract
     assert "batches/order:" not in subagent
     assert "resource keys:" not in subagent
     assert "task-templates.md" not in subagent
@@ -141,8 +143,7 @@ def test_delegation_layers_are_orthogonal_and_resources_are_internalized() -> No
     assert "batch/order" not in task_templates
     assert "resource/cleanup" not in task_templates
     assert "mode=<" not in task_templates
-    assert "DONE" not in task_templates
-    assert "BLOCKED" not in task_templates
+    assert task_templates.count("Outcome: DONE | BLOCKED | INCOMPLETE") == 1
     assert "$dispatching-parallel-agents" not in investigate
     assert "$call-grok" not in investigate
     assert "$reviewer" not in subagent
@@ -171,3 +172,70 @@ def test_delegation_layers_are_orthogonal_and_resources_are_internalized() -> No
         text = consumer.read_text(encoding="utf-8")
         assert "/impl-package:dispatch-bounded-task" not in text
         assert "Plan、Ticket 或 DAG" not in text
+
+
+def test_dispatch_bounded_task_defines_fixer_profiles_and_template() -> None:
+    dispatch = (
+        PLUGIN / "skills" / "dispatch-bounded-task" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    task_templates = (
+        PLUGIN / "skills" / "dispatch-bounded-task" / "references" / "task-templates.md"
+    ).read_text(encoding="utf-8")
+    failure_recovery = (
+        PLUGIN / "skills" / "dispatch-bounded-task" / "references" / "worker-failure-recovery.md"
+    ).read_text(encoding="utf-8")
+
+    assert "| Implementer | `luna-worker` | default subagent | default subagent |" in dispatch
+    assert "| Fixer | `call-grok`：`grok-4.5`、`effort=high` | `luna-worker` | default subagent |" in dispatch
+    assert "--no-subagents" not in dispatch
+    assert "| Verifier | 调用者指定或当前宿主适配的验证 worker" in dispatch
+    assert "存在 `reuse:` 时只沿用其中指定的同一 source unit 和 agent，不启动 `call-grok`" in dispatch
+    assert "references/worker-failure-recovery.md" in dispatch
+    assert dispatch.count("Outcome: DONE | BLOCKED | INCOMPLETE") == 1
+    for native_status in ("timeout", "disconnect", "PARTIAL", "status != completed"):
+        assert native_status not in dispatch
+    assert "最多一次" in failure_recovery
+    assert "进程已退出或被清理" in failure_recovery
+    assert "实际 worktree diff" in failure_recovery
+    assert "Outcome: INCOMPLETE" in failure_recovery
+    assert "正常 `DONE` 与业务 `BLOCKED` 不进入本分支" in failure_recovery
+    assert "不得换模型绕过" in failure_recovery
+
+    assert "## Fixer" in task_templates
+    assert "finding ID/ledger/reviewer" in task_templates
+    assert "review target revision/comparison point" in task_templates
+    assert "broken invariant/failure evidence" in task_templates
+    assert "finding disposition/owner acceptance" in task_templates
+    assert "不重新裁决 finding、不扩大范围、不宣称 closure" in task_templates
+    assert "不以未证实的替代解释撤销既有修复" in task_templates
+    assert task_templates.count("Outcome: DONE | BLOCKED | INCOMPLETE") == 1
+
+
+def test_terminal_pass_requires_applicable_safety_and_final_topology() -> None:
+    dev = (PLUGIN / "skills" / "dev-with-track" / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "/impl-package:do-review" in dev
+    assert "terminal-final coverage 完整" in dev
+    for duplicated_owner in ("review-code-by-standards", "review-code-by-spec", "safety-review"):
+        assert duplicated_owner not in dev
+
+
+def test_hot_path_skills_stay_within_instruction_budget() -> None:
+    paths = (
+        PLUGIN / "skills" / "dev-with-track" / "SKILL.md",
+        PLUGIN / "skills" / "dispatch-bounded-task" / "SKILL.md",
+        PLUGIN / "skills" / "do-review" / "SKILL.md",
+        PLUGIN / "skills" / "review-code" / "SKILL.md",
+        PLUGIN / "skills" / "subagent-driven-development" / "SKILL.md",
+    )
+    counts = {path.parent.name: len(path.read_text(encoding="utf-8").splitlines()) for path in paths}
+
+    assert sum(counts.values()) <= 350, counts
+    assert counts["do-review"] <= 120
+    assert counts["review-code"] <= 120
+    checklist = PLUGIN / "skills" / "review-code" / "references" / "review-checklist.md"
+    assert checklist.is_file()
+    assert "references/review-checklist.md" in paths[3].read_text(encoding="utf-8")
+    assert {"## Security review", "## Performance review", "## Testing review"} <= {
+        line for line in checklist.read_text(encoding="utf-8").splitlines()
+    }

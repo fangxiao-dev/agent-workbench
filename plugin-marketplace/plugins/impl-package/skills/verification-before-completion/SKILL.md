@@ -17,6 +17,7 @@ Completion claim 不能宽于 evidence。Verification 是 claim-to-evidence cont
 
 - `/impl-package:dev-with-track` 在适用 implementation review、package 级 execution findings closure 和拟 pass 的 Stage 7 artifact 准备完成后、写入 terminal `pass` Gate 前调用本 skill。
 - terminal metadata commit、目标分支合入或相关 environment 变化后，在宣称 `complete`、`closed`、`merge-ready` 或 `release-ready` 前再次调用。复用未受影响的 evidence，只验证 delta 与 claim-specific gate。
+- terminal Gate 后只有 runtime metadata 变化时，可以复用 provenance 完整的行为 evidence 并验证 metadata delta；出现行为代码、合同或影响 behavior 的配置变化时，旧 Gate 不能支持 completion claim，必须进入 patch Attempt 并重新验证受影响范围。
 - 已合入目标分支但尚无 terminal gate 时，真实状态是 `Integrated, gate open`；只能报告 integration 阶段，不能把 merge 当成 closed evidence。
 - 默认 `gate-before-merge` 下，current attempt 的 finalized `pass` 是 merge 前提；`blocked`、`fail`、`defer`、没有 gate.md 都不能支持 merge-ready claim。若已经 pre-gate integration，必须从 plan 核对该 integration 前已记录的 owner authorization。没有该证据时报告 process violation；不得事后把授权或 terminal pass 倒灌到已发生的 merge。
 - 若当前 diff 只实现了 spec 的一部分 AC，completion claim 只能覆盖该明确边界的子切片。除非 Decision/Spec/Plan 已同步将 attempt 收窄或分拆，否则不得把局部 merge、测试或 schema rollout 说成完整 package / issue closure。
@@ -45,6 +46,8 @@ Evidence 同时满足以下条件时才可使用：
 - 覆盖 repository 对该 claim 要求的 gate。
 
 不要用相邻 evidence 替代：lint 不能证明 build，unit test 不能证明 integration，passing regression test 本身也不能证明原始 symptom 已解决。当前 claim 要求的真实 browser/provider/native-tool/E2E evidence 也不能由 mock、unit 或 seam regression 冒充。
+
+同名 verification 的 command、pass/skip/failure count 与前次证据不一致时，必须说明测试选择集、测试增量或环境差异。无法由当前 revision 的直接 artifact 解释的计数漂移（例如 95 变为 96）使该 claim 为 `UNCERTAIN`；不要靠摘要猜测补齐，也不要为此建立 evidence registry。
 
 除 revision/environment 外，按当前 claim 检查关键因果输入是否仍成立，例如外部协议版本、feature flag、schema、部署配置、共享数据前置和认证策略。与当前风险相关的变化只使依赖它的 evidence stale；无关变化不触发机械重跑或 freshness registry。
 

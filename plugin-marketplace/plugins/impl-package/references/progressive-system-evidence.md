@@ -35,6 +35,8 @@
 
 对真实 E2E、provider、browser 或 native tool，在现有 Planned Verification 行中简短说明：正在证明的系统假设、独有剩余风险、必要 checkpoint/readiness，以及失败时如何初步区分内部 seam、真实环境、外部波动与观察缺口。
 
+昂贵运行开始前核对 Planned Verification 已声明的 readiness，不通过时先修复前置或记录环境 gap。browser 至少确认目标 route、session/auth、API base、实际加载 bundle、端口 ownership 与测试数据 ownership；这些事实只服务当前运行，不建立全局 readiness registry。runner 暴露 heartbeat/liveness 时在后台观察，不同步空等到总体超时。
+
 已知确定性内部前置缺证据时，默认先建立更便宜且忠实的证据，不反复消耗昂贵运行。这不是 E2E admission gate：当前风险依赖真实环境、需要探索诊断、边界尚未知，或真实运行能产生决定性 artifact 时，可以带明确目的进行有界探索。
 
 每次探索运行写清：

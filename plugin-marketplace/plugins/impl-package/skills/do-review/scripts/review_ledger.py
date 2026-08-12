@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 from datetime import datetime
@@ -13,6 +16,10 @@ from pathlib import Path
 
 
 LEDGER_NAME = re.compile(r"^\d{10}-[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{7}\.md$")
+
+
+class ReviewRunError(ValueError):
+    """The requested immutable review run cannot be created safely."""
 
 
 def ledger_directory() -> Path:
@@ -34,30 +41,149 @@ def validate_ledger_path(value: str) -> Path:
     return path
 
 
+def run_git(repo: Path, *args: str, text: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        capture_output=True,
+        text=text,
+        encoding="utf-8" if text else None,
+        errors="replace" if text else None,
+        check=False,
+    )
+
+
+def git_output(repo: Path, *args: str) -> str:
+    result = run_git(repo, *args)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "git command failed"
+        raise ReviewRunError(detail)
+    return result.stdout.strip()
+
+
+def resolve_repo_root(value: Path) -> Path:
+    candidate = value.resolve()
+    if not candidate.is_dir():
+        raise ReviewRunError(f"repository path is not a directory: {candidate}")
+    return Path(git_output(candidate, "rev-parse", "--show-toplevel")).resolve()
+
+
+def resolve_commit(repo: Path, ref: str) -> str:
+    return git_output(repo, "rev-parse", "--verify", f"{ref}^{{commit}}")
+
+
+def require_non_empty_diff(repo: Path, diff_range: str) -> None:
+    result = run_git(repo, "diff", "--quiet", diff_range, "--")
+    if result.returncode == 0:
+        raise ReviewRunError(f"empty diff: {diff_range}")
+    if result.returncode != 1:
+        detail = result.stderr.strip() or result.stdout.strip() or "git diff failed"
+        raise ReviewRunError(detail)
+
+
+def normalize_source_path(repo: Path, value: str) -> str:
+    candidate = Path(value)
+    if candidate.is_absolute():
+        absolute = candidate.resolve()
+    else:
+        absolute = Path(os.path.abspath(repo / candidate))
+    try:
+        relative = absolute.relative_to(repo)
+    except ValueError as error:
+        raise ReviewRunError(f"contract source escapes repository: {value}") from error
+    git_path = relative.as_posix()
+    if not git_path or git_path == ".":
+        raise ReviewRunError(f"contract source does not map to a Git path: {value}")
+    return git_path
+
+
+def source_record(repo: Path, resolved_head: str, value: str) -> dict[str, str]:
+    git_path = normalize_source_path(repo, value)
+    tree = run_git(
+        repo,
+        "ls-tree",
+        "-z",
+        "--full-tree",
+        resolved_head,
+        "--",
+        f":(literal){git_path}",
+        text=False,
+    )
+    if tree.returncode != 0:
+        detail = tree.stderr.decode("utf-8", errors="replace").strip() or "git ls-tree failed"
+        raise ReviewRunError(detail)
+    records = [record for record in tree.stdout.split(b"\0") if record]
+    if len(records) != 1:
+        raise ReviewRunError(f"contract source is not a Git blob in resolved head: {value}")
+    metadata, separator, returned_path = records[0].partition(b"\t")
+    if not separator:
+        raise ReviewRunError(f"cannot resolve contract source in resolved head: {value}")
+    fields = metadata.decode("ascii", errors="strict").split()
+    if len(fields) != 3 or fields[1] != "blob" or returned_path.decode("utf-8", errors="strict") != git_path:
+        raise ReviewRunError(f"contract source is not a Git blob in resolved head: {value}")
+    object_id = fields[2]
+    blob = run_git(repo, "cat-file", "blob", object_id, text=False)
+    if blob.returncode != 0:
+        detail = blob.stderr.decode("utf-8", errors="replace").strip() or "git cat-file failed"
+        raise ReviewRunError(detail)
+    try:
+        blob.stdout.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as error:
+        raise ReviewRunError(f"contract source is not valid UTF-8 in resolved head: {value}") from error
+    return {
+        "path": git_path,
+        "git_object_id": object_id,
+        "sha256": hashlib.sha256(blob.stdout).hexdigest(),
+    }
+
+
+def prepare_review_run(args: argparse.Namespace) -> dict[str, object]:
+    repo = resolve_repo_root(args.repo_root)
+    resolved_base = resolve_commit(repo, args.base)
+    resolved_head = resolve_commit(repo, args.head)
+    diff_range = f"{resolved_base}...{resolved_head}"
+    require_non_empty_diff(repo, diff_range)
+    sources = [source_record(repo, resolved_head, value) for value in args.source]
+    return {
+        "resolved_base_sha": resolved_base,
+        "resolved_head_sha": resolved_head,
+        "diff_range": diff_range,
+        "contract_sources": sources,
+    }
+
+
 def create(args: argparse.Namespace) -> int:
-    directory = ledger_directory()
-    directory.mkdir(parents=True, exist_ok=True)
+    review_run = prepare_review_run(args)
     slug = slugify(args.slug)
-    short_sha = args.head_sha.lower()[:7]
-    if not re.fullmatch(r"[0-9a-f]{7}", short_sha):
-        raise ValueError("head-sha must start with at least seven hexadecimal characters")
+    resolved_head = str(review_run["resolved_head_sha"])
+    short_sha = resolved_head[:7]
     timestamp = args.timestamp or datetime.now().strftime("%y%m%d%H%M")
     if not re.fullmatch(r"\d{10}", timestamp):
         raise ValueError("timestamp must use YYMMDDHHMM")
+    directory = ledger_directory()
     path = directory / f"{timestamp}-{slug}-{short_sha}.md"
     if path.exists():
         raise FileExistsError(f"refusing to overwrite existing ledger: {path}")
+    contract_sources = json.dumps(review_run["contract_sources"], ensure_ascii=False, indent=2)
     content = f"""# do-review canonical ledger
 
 - Ledger path: `{path}`
 - Review slug: `{slug}`
 - Created at (local): `{datetime.now().astimezone().isoformat(timespec='seconds')}`
-- Resolved base SHA: `{args.base_sha}`
-- Resolved head SHA: `{args.head_sha}`
+- Resolved base SHA: `{review_run['resolved_base_sha']}`
+- Resolved head SHA: `{resolved_head}`
+- Diff range: `{review_run['diff_range']}`
 - Mode: `{args.mode}`
 - Round cap: `{args.round_cap}`
+- Review phase: `pending`
+- Safety applicability / evidence / coverage: `pending`
 - Owner: `main-session`
 - Status: `in-progress`
+
+## Immutable contract sources
+
+```json
+{contract_sources}
+```
 
 ## Track lifecycle
 
@@ -80,8 +206,18 @@ def create(args: argparse.Namespace) -> int:
 
 - Stop reason: `pending`
 """
-    path.write_text(content, encoding="utf-8", newline="\n")
-    print(path)
+    directory.mkdir(parents=True, exist_ok=True)
+    created = False
+    try:
+        with path.open("x", encoding="utf-8", newline="\n") as ledger:
+            created = True
+            ledger.write(content)
+    except OSError:
+        if created:
+            path.unlink(missing_ok=True)
+        raise
+    output = {"ledger_path": str(path), **review_run}
+    print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 
 
@@ -108,9 +244,16 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     create_parser = subparsers.add_parser("create", help="create a new canonical ledger")
+    create_parser.add_argument("--repo-root", type=Path, required=True)
+    create_parser.add_argument("--base", required=True)
+    create_parser.add_argument("--head", required=True)
+    create_parser.add_argument(
+        "--source",
+        action="append",
+        default=[],
+        help="Contract source at resolved head, absolute or repository-relative; repeat as needed.",
+    )
     create_parser.add_argument("--slug", required=True)
-    create_parser.add_argument("--base-sha", required=True)
-    create_parser.add_argument("--head-sha", required=True)
     create_parser.add_argument("--mode", required=True)
     create_parser.add_argument("--round-cap", required=True)
     create_parser.add_argument("--timestamp", help="YYMMDDHHMM; intended for deterministic tests")

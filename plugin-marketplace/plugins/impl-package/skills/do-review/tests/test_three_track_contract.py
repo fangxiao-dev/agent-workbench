@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -13,6 +14,8 @@ REGISTRY_PATH = DO_REVIEW_DIR / "references" / "reviewer-registry.json"
 SKILL_PATH = DO_REVIEW_DIR / "SKILL.md"
 BRIEFS_PATH = DO_REVIEW_DIR / "references" / "subagent-briefs.md"
 TEMPLATES_PATH = DO_REVIEW_DIR / "references" / "output-templates.md"
+TOPOLOGY_PATH = DO_REVIEW_DIR / "references" / "review-topology.md"
+RUBRIC_PATH = DO_REVIEW_DIR / "rubric.md"
 SCRIPT_PATH = DO_REVIEW_DIR / "scripts" / "verify-reviewer-skills.py"
 
 
@@ -24,8 +27,15 @@ def load_preflight_module():
     return module
 
 
+def markdown_section(text: str, heading: str) -> str:
+    match = re.search(rf"(?ms)^## {re.escape(heading)}\s*$\n(.*?)(?=^## |\Z)", text)
+    if not match:
+        raise AssertionError(f"missing Markdown section: {heading}")
+    return match.group(1)
+
+
 class ThreeTrackContractTests(unittest.TestCase):
-    def test_registry_defines_the_default_three_leaf_tracks(self) -> None:
+    def test_registry_defines_default_three_tracks_and_conditional_safety(self) -> None:
         registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
         self.assertEqual(
             registry["default_tracks"],
@@ -36,104 +46,117 @@ class ThreeTrackContractTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            registry["reviewers"]["review-code-by-standards"]["canonical_skill_path"],
-            "skills/review-code-by-standards/SKILL.md",
+            set(registry["reviewers"]),
+            {"review-code", "review-code-by-standards", "review-code-by-spec", "safety-review"},
         )
-        self.assertEqual(
-            registry["reviewers"]["review-code-by-spec"]["canonical_skill_path"],
-            "skills/review-code-by-spec/SKILL.md",
-        )
-        for removed_name in ("code-review", "standards-review", "spec-review"):
-            self.assertNotIn(removed_name, registry["reviewers"])
-        self.assertNotIn("module-review", registry["reviewers"])
+        for name, record in registry["reviewers"].items():
+            self.assertEqual(record["canonical_skill_path"], f"skills/{name}/SKILL.md")
+        self.assertNotIn("safety-review", [track["skill"] for track in registry["default_tracks"]])
 
-    def test_preflight_defaults_are_read_from_registry(self) -> None:
+    def test_reviewer_verifier_uses_registry_defaults_and_rejects_escaping_custom_path(self) -> None:
         module = load_preflight_module()
         registry = module.load_registry()
         self.assertEqual(
             module.registry_default_skill_names(registry),
-            ["review-code", "review-code-by-standards", "review-code-by-spec"],
+            [track["skill"] for track in registry["default_tracks"]],
         )
-        self.assertNotIn(
-            '"review-code", "review-code-by-standards", "review-code-by-spec"',
-            SCRIPT_PATH.read_text(encoding="utf-8"),
+        self.assertEqual(
+            module.selected_registry_names(
+                registry, None, ["custom-review=skills/custom-review/SKILL.md"]
+            ),
+            [],
         )
-
-    def test_preflight_rejects_custom_paths_outside_plugin(self) -> None:
-        module = load_preflight_module()
         with TemporaryDirectory() as temp_dir:
             outside_skill = Path(temp_dir) / "SKILL.md"
             outside_skill.write_text("---\nname: outside-review\n---\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "escapes plugin root"):
                 module.verify_custom_skill(ROOT, f"outside-review={outside_skill}")
 
-    def test_custom_only_preflight_does_not_select_default_tracks(self) -> None:
-        module = load_preflight_module()
+    def test_main_skill_is_a_compact_path_with_existing_conditional_references(self) -> None:
+        skill = SKILL_PATH.read_text(encoding="utf-8")
+        self.assertLessEqual(len(skill.splitlines()), 120)
+        references = set(re.findall(r"\]\((references/[^)]+)\)", skill))
         self.assertEqual(
-            [],
-            module.selected_registry_names(
-                module.load_registry(), None, ["custom-review=skills/custom-review/SKILL.md"]
-            ),
+            references,
+            {
+                "references/reviewer-registry.json",
+                "references/review-topology.md",
+                "references/subagent-briefs.md",
+                "references/output-templates.md",
+            },
         )
+        for reference in references:
+            self.assertTrue((DO_REVIEW_DIR / reference).is_file())
+        self.assertNotIn("review_scope_preflight.py", skill)
+        self.assertRegex(skill, r"review_ledger\.py create .*--repo-root .*--base .*--head")
 
-    def test_leaf_prompt_contract_preserves_same_round_isolation(self) -> None:
-        skill = SKILL_PATH.read_text(encoding="utf-8")
+    def test_leaf_brief_enforces_same_round_isolation_and_immutable_contract_reads(self) -> None:
         briefs = BRIEFS_PATH.read_text(encoding="utf-8")
-        for text in (skill, briefs):
-            normalized = text.lower()
-            self.assertIn("do not invoke do-review", normalized)
-            self.assertIn("do not dispatch subagents", normalized)
-            self.assertIn("do not re-evaluate reviewer topology or capacity", normalized)
-            self.assertIn("other tracks in the current round", normalized)
-        self.assertIn("prior round's canonical review context", skill)
-        self.assertIn("phases", skill)
-
-    def test_leaf_roles_use_primary_intent_and_parent_handoff(self) -> None:
-        skill = SKILL_PATH.read_text(encoding="utf-8")
-        briefs = BRIEFS_PATH.read_text(encoding="utf-8")
-        standards = (ROOT / "skills" / "review-code-by-standards" / "SKILL.md").read_text(encoding="utf-8")
-        code = (ROOT / "skills" / "review-code" / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("primary review intent", skill)
-        self.assertIn("cross-domain candidate", skill)
-        self.assertIn("not an exclusive capability boundary", briefs)
-        self.assertIn("首要深挖方向", standards)
-        self.assertIn("审查偏重", code)
-
-    def test_scope_contract_fails_fast_and_records_spec_discovery(self) -> None:
-        skill = SKILL_PATH.read_text(encoding="utf-8")
-        self.assertIn("python <do-review-skill-dir>/scripts/review_ledger.py create", skill)
-        self.assertNotIn("python scripts/review_ledger.py create", skill)
-        self.assertIn("git rev-parse <base>^{commit}", skill)
-        self.assertIn("git rev-parse <head>^{commit}", skill)
-        self.assertIn("empty diff stops the review before any leaf dispatch", skill)
-        self.assertIn("Spec evidence discovery", skill)
-        self.assertIn("issue/PR references in the included commit messages", skill)
-        self.assertIn("user-provided paths", skill)
-        self.assertIn("matching PRD/spec material in `docs/`, `specs/`, or `.scratch/`", skill)
-        self.assertIn("Spec source discovery record (searched sources and results):", skill)
-        self.assertIn("still dispatch the default `review-code-by-spec` leaf", skill)
-
-    def test_skill_has_fail_closed_default_three_track_verdicts(self) -> None:
-        skill = SKILL_PATH.read_text(encoding="utf-8")
-        templates = TEMPLATES_PATH.read_text(encoding="utf-8")
-        for label in (
-            "Track A (review-code)",
-            "Track B (review-code-by-standards)",
-            "Track C (review-code-by-spec)",
+        leaf = markdown_section(briefs, "Generic Leaf Reviewer Brief").lower()
+        for prohibited in (
+            "do not invoke do-review",
+            "do not dispatch subagents",
+            "do not re-evaluate reviewer topology or capacity",
+            "other tracks in the current round",
         ):
-            self.assertIn(label, skill)
-            self.assertIn(label, templates)
-        self.assertIn("Aggregate fail-closed", skill)
-        self.assertIn("any required `FAIL` makes Overall `FAIL`", skill)
+            self.assertIn(prohibited, leaf)
+        self.assertIn("git show <resolved-head>:<path>", leaf)
+        self.assertIn("working tree", leaf)
+        self.assertIn("do not recompute its hash", leaf)
+        self.assertIn("fresh leaf-worker session", leaf)
+        self.assertIn("later round", leaf)
 
-    def test_owner_report_keeps_ledger_internal_without_hiding_track_verdicts(self) -> None:
-        skill = SKILL_PATH.read_text(encoding="utf-8")
+    def test_safety_topology_is_conditional_and_explicit_selection_stays_exact(self) -> None:
+        topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
+        safety = markdown_section(topology, "Safety admission")
+        for boundary in (
+            "authentication",
+            "authorization",
+            "data integrity",
+            "concurrency",
+            "migration",
+            "external side effects",
+        ):
+            self.assertIn(boundary, safety)
+        self.assertRegex(safety, r"(?s)no explicit reviewer list.*append `safety-review`")
+        self.assertRegex(safety, r"(?s)explicit reviewer list.*exactly that list")
+        self.assertIn("omitted applicable Safety risk", safety)
+
+    def test_finding_closure_is_incremental_but_terminal_final_rechecks_final_head(self) -> None:
+        topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
+        phases = markdown_section(topology, "Review phase")
+        self.assertRegex(phases, r"(?s)`finding-closure`.*source track.*materially affected")
+        self.assertRegex(phases, r"(?s)`terminal-final`.*final implementation `HEAD`.*complete applicable topology")
+        self.assertIn("cannot stand in for the terminal-final review", phases)
+
+    def test_loop_lifecycle_requires_two_clean_rounds_and_preserves_reactivation(self) -> None:
+        topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
+        lifecycle = markdown_section(topology, "Loop track lifecycle")
+        self.assertIn("first clean round", lifecycle)
+        self.assertIn("second consecutive clean round", lifecycle)
+        self.assertIn("reactivates a dormant track", lifecycle)
+        self.assertRegex(lifecycle, r"(?s)Convergence requires.*no distinct new accepted blocker/follow-up.*every selected track dormant")
+
+    def test_output_structure_preserves_per_track_fail_closed_and_terminal_coverage(self) -> None:
         templates = TEMPLATES_PATH.read_text(encoding="utf-8")
-        self.assertIn("Ledger paths remain internal unless requested", skill)
-        self.assertIn("Do not create, request, or infer owner approval", skill)
-        self.assertIn("| Audit record | retained internally |", templates)
-        self.assertNotIn("Canonical ledger artifact | `<absolute", templates)
-        self.assertIn("## Track Verdicts", templates)
+        report = templates.split("## Normal Review Report", 1)[1].split(
+            "## Closure Verification Report", 1
+        )[0]
+        self.assertIn("## Track Verdicts", report)
+        self.assertIn("| Track | Verdict | Coverage / note |", report)
+        self.assertRegex(
+            report,
+            r"(?s)custom selection.*selected Track label/skill pairs.*one verdict row per selected reviewer",
+        )
+        self.assertIn("| Audit record | retained internally |", report)
+        self.assertNotIn("Canonical ledger artifact", report)
+        self.assertIn("INCOMPLETE", templates)
+
+    def test_rubric_records_atomic_review_run_without_stale_round_scope(self) -> None:
+        rubric = RUBRIC_PATH.read_text(encoding="utf-8")
+        self.assertIn("ReviewRun", rubric)
+        self.assertIn("Git blob", rubric)
+        self.assertNotIn("本轮只调整 Ownership 与拓扑", rubric)
 
 
 if __name__ == "__main__":

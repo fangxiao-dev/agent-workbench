@@ -25,4 +25,4 @@ Role B 没有持久恢复权威。发生 compaction 后不走 catch-up，也不�
 
 按 `/impl-package:impl-package` 干活；`/impl-package:investigate-before-implement`、`/impl-package:do-review`、`/impl-package:verification-before-completion` 的分工一致；H1 / H2 / H4 同样适用。
 
-子线调度模式：按 `/impl-package:subagent-driven-development`，默认使用 `default-long`。
+子线调度由 `/impl-package:subagent-driven-development` 决定；本角色不另设 mode。

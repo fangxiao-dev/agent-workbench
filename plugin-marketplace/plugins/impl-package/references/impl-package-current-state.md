@@ -67,7 +67,7 @@ Task Handoff 位于 `execution/<attempt>/task-handoffs/<task-id>-handoff.md`，�
 1. Attempt、D/S/P、Composition、lifecycle 和 current Gate；
 2. blockers 与 resume next action；
 3. Ticket Acceptance 与 Task Execution 两条独立状态轴；
-4. active checkpoint 与 Handoff/evidence 指针；
+4. active Attempt 的 checkpoint 与 Handoff/evidence 指针；terminal Gate 后历史 checkpoint 只保留在 Execution Record，不再显示为 active；
 5. 只含 Attempt、Lifecycle、Gate、Execution Record 链接的轻量历史表。
 
 Progress 不复制历史正文、不计算百分比，也不推导或授权 readiness。
@@ -93,6 +93,6 @@ python <impl-package-plugin-root>/scripts/impl_package_state.py --package <packa
 
 ## 6. Gate
 
-Gate 只适用于 current Attempt：`blocked` 保持 active；`pass | fail | defer` 终结并冻结。`pass` 要求所有 earned Task/Ticket 已进入可接受终态。terminal Gate 必须记录 Durable Delta，或显式给出无 delta 原因；存在 `execution-findings.md` 时必须在 evidence 中完成分流引用。
+Gate 只适用于 current Attempt：`blocked` 保持 active；`pass | fail | defer` 终结并冻结。首次写入 terminal Gate 时，comparison commit 必须等于命令执行时的 Git `HEAD`；同 verdict/commit 的幂等重试可在后续 HEAD 上修复旧的 terminal resume/投影，但不能改写判决或重新开放 Attempt。terminal Gate 清空 resume，`pass` 要求所有 earned Task/Ticket 已进入可接受终态。terminal Gate 必须记录 Durable Delta，或显式给出无 delta 原因；存在 `execution-findings.md` 时必须在 evidence 中完成分流引用。
 
-新工作在 terminal 后创建 patch Attempt。初始化新 Attempt 时，旧 Attempt 的 Execution Record 固化 lifecycle/Gate 摘要，根 `progress.md` 切换到新 Attempt并保留轻量历史链接。
+新工作在 terminal 后创建 patch Attempt。冻结 Attempt 继续按其 Plan/Ticket/DAG bundle 自洽校验，不再要求匹配后来升级的 current `decision.md`/`spec.md` aliases；新 Attempt 初始化时仍必须严格匹配 current aliases。初始化新 Attempt 时，旧 Attempt 的 Execution Record 固化 lifecycle/Gate 摘要，根 `progress.md` 切换到新 Attempt并保留轻量历史链接。

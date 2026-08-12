@@ -1,0 +1,75 @@
+{
+  "skill_name": "dispatch-bounded-task",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "批准的 patch Plan 已释放一个普通 review fix：finding、comparison point、单文件 ownership、失败证据和局部测试都已冻结。选择角色和 worker。",
+      "expected_output": "选择 Fixer，首选 call-grok 的 grok-4.5/high；局部成功映射为 Outcome: DONE，但不表示 finding closure。",
+      "files": [],
+      "expectations": [
+        "普通 Fixer 首选 call-grok grok-4.5/high",
+        "DONE 不等于 closure"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "已确认 finding 同时修改认证接口、跨模块状态机和并发写保护；Plan 已冻结范围。选择角色和 worker。",
+      "expected_output": "选择复杂 Fixer，直接使用 default subagent，不先调用 Grok。",
+      "files": [],
+      "expectations": [
+        "使用共享复杂度判据",
+        "复杂 Fixer 直接走 default subagent"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Reviewer 只提出可能问题，原因、破坏合同、范围和 disposition 尚未确认。请派发 Fixer。",
+      "expected_output": "返回 Outcome: BLOCKED，不派 worker，也不靠 fallback 绕过未决 authority。",
+      "files": [],
+      "expectations": [
+        "合同或 scope 未决映射 BLOCKED",
+        "BLOCKED 不 fallback"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "比较两个 Implementer 单元：A 为局部普通实现，B 跨接口并触及数据完整性。均无 override。",
+      "expected_output": "A 首选 luna-worker；B 直接使用 default subagent。两者的原生结果都在 dispatch 边界映射到三态 Outcome。",
+      "files": [],
+      "expectations": [
+        "普通 Implementer 使用 Luna，复杂 Implementer 使用 default",
+        "统一映射 DONE、BLOCKED 或 INCOMPLETE"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Fixer scheduling contract 显式 reuse 指定持有不可转移 live state 的 agent；另一个 Verifier 由调用者指定 worker。",
+      "expected_output": "Fixer 沿用指定 agent 且不启动 call-grok；Verifier 保持调用者指定策略。",
+      "files": [],
+      "expectations": [
+        "显式 reuse 优先",
+        "Verifier 不被强制改成 Implementer worker"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "同一普通 Fixer 的两种结果：甲成功执行但报告 acceptance 未决；乙 executor 未完成，进程已清理且 diff residue 可归因。分别处理。",
+      "expected_output": "甲映射 BLOCKED 并原样上交，不 fallback；乙映射 INCOMPLETE，检查 cleanup/residue 后可按角色表进行一次 fresh fallback。",
+      "files": [],
+      "expectations": [
+        "业务 BLOCKED 与 executor INCOMPLETE 分离",
+        "只有安全的 INCOMPLETE 可一次 fresh fallback"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "worker 未完成且进程状态未知，留下无法归因的越界修改；另一个 fallback worker 也未完成。给出最终 Outcome。",
+      "expected_output": "两种情况都归一为 BLOCKED；未知 cleanup/residue 时不启动 fallback，fallback 未完成时不再重试。",
+      "files": [],
+      "expectations": [
+        "不把 INCOMPLETE 当 DONE",
+        "不确定 residue 或二次未完成统一 BLOCKED"
+      ]
+    }
+  ]
+}

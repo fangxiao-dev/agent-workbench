@@ -33,7 +33,7 @@ Continuation 已就绪。通过 package 与 entry point 从 [CHECKPOINT] 恢复�
 
 边界：
 - 未提交内容只保护：不得 reset、checkout、clean、覆盖或重建。
-- 调度模式：[default-long / ordinary]；[MODE_SPECIFIC_MAIN_SESSION_AND_SUBAGENT_RULE]
+- 调度：[SCHEDULING_DECISION_OR_N/A]；[MAIN_SESSION_AND_SUBAGENT_BOUNDARY]
 - 收口：[GO_SCOPE_AUTOMATIC_VERIFICATION_REVIEW_CLAIM_AUDIT_GATE_RULE_OR_N/A]
 - [ONE_LINE_AUTHORIZATION_OR_N/A]；[NAMED_BLOCKER_OR_STOP_CONDITION_OR_N/A]
 - 不得把凭证、真实客户数据、PDF/CSV/provider payload、oracle artifact 或秘密写入 Git、聊天或临时文件。

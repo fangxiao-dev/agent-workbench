@@ -15,6 +15,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -55,6 +56,39 @@ ER_ENTRY_RE = re.compile(r"(?m)^## ([^\s]+-ER-(\d{3})) · (checkpoint|judgment)\
 
 class StateError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class AttemptLifecycle:
+    ACTIVE = "active"
+    FROZEN = "frozen"
+
+    attempt: str
+    gate: dict[str, Any] | None
+    value: str
+
+    @classmethod
+    def derive(cls, attempt: str, observed_gate: dict[str, Any] | None) -> AttemptLifecycle:
+        gate = observed_gate if observed_gate and observed_gate["attempt"] == attempt else None
+        value = cls.FROZEN if gate and gate["verdict"] in TERMINAL_VERDICTS else cls.ACTIVE
+        return cls(attempt=attempt, gate=gate, value=value)
+
+    @property
+    def active(self) -> bool:
+        return self.value == self.ACTIVE
+
+    @property
+    def frozen(self) -> bool:
+        return self.value == self.FROZEN
+
+    @property
+    def gate_verdict(self) -> str:
+        return self.gate["verdict"] if self.gate else "open"
+
+    def project_resume(self, resume: dict[str, Any]) -> dict[str, Any]:
+        if self.active:
+            return resume
+        return {"blocker": None, "next": None, "evidence": None}
 
 
 def _run_git(repo: Path, *args: str) -> str:
@@ -305,7 +339,14 @@ def _validate_commit(repo: Path, commit: str) -> str:
     return _run_git(repo, "rev-parse", "--verify", f"{commit}^{{commit}}")
 
 
-def _validate_records(repo: Path, records: Any, states: set[str], label: str) -> dict[str, Any]:
+def _validate_records(
+    repo: Path,
+    records: Any,
+    states: set[str],
+    label: str,
+    *,
+    live_evidence: bool,
+) -> dict[str, Any]:
     if not isinstance(records, dict):
         raise StateError(f"{label} must be an object keyed by ID")
     for identifier, row in records.items():
@@ -315,7 +356,12 @@ def _validate_records(repo: Path, records: Any, states: set[str], label: str) ->
             raise StateError(f"invalid {label} state for {identifier}: {row['state']!r}")
         evidence = row["evidence"]
         if evidence is not None:
-            row["evidence"] = _repo_relative(repo, evidence, f"{label} {identifier} evidence")
+            row["evidence"] = _repo_relative(
+                repo,
+                evidence,
+                f"{label} {identifier} evidence",
+                must_exist=live_evidence,
+            )
         elif row["state"] != "PENDING":
             raise StateError(f"{label} {identifier} state {row['state']} requires evidence")
     return records
@@ -457,7 +503,13 @@ def _set_execution_record_status(package: Path, attempt: str, lifecycle: str, ga
     _write_text(path, text)
 
 
-def _normalize_payload(repo: Path, state: dict[str, Any], payload: Any) -> dict[str, Any]:
+def _normalize_payload(
+    repo: Path,
+    state: dict[str, Any],
+    payload: Any,
+    *,
+    live_evidence: bool = True,
+) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise StateError("er-add input must be a JSON object")
     allowed = {"purpose", "subject", "title", "content", "nextAction", "evidence"}
@@ -491,7 +543,10 @@ def _normalize_payload(repo: Path, state: dict[str, Any], payload: Any) -> dict[
         raw_evidence = [raw_evidence]
     if not isinstance(raw_evidence, list) or any(not isinstance(item, str) for item in raw_evidence):
         raise StateError("Execution Record evidence must be a path or list of paths")
-    evidence = [_repo_relative(repo, item, "Execution Record evidence") for item in raw_evidence]
+    evidence = [
+        _repo_relative(repo, item, "Execution Record evidence", must_exist=live_evidence)
+        for item in raw_evidence
+    ]
     return {
         "purpose": purpose,
         "subject": str(subject),
@@ -527,12 +582,11 @@ def _active_checkpoints(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return list(active.values())
 
 
-def _assert_mutable(package: Path, state: dict[str, Any]) -> None:
-    repo = _repo_root(package)
-    gate = _gate_info(package, repo)
-    attempt = state["attempt"]["id"]
-    if gate and gate["attempt"] == attempt and gate["verdict"] in TERMINAL_VERDICTS:
-        raise StateError(f"Attempt {attempt} is frozen by terminal Gate {gate['verdict']}")
+def _assert_mutable(lifecycle: AttemptLifecycle) -> None:
+    if lifecycle.frozen:
+        raise StateError(
+            f"Attempt {lifecycle.attempt} is frozen by terminal Gate {lifecycle.gate_verdict}"
+        )
 
 
 def _ready_tasks(graph: dict[str, list[str]], tasks: dict[str, Any]) -> list[str]:
@@ -568,11 +622,25 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
     info = _plan_info(package, repo, attempt["plan"])
     if info["attempt"] != attempt["id"]:
         raise StateError("state Attempt ID does not match the current plan")
-    _validate_aliases(package, info)
+    lifecycle = AttemptLifecycle.derive(attempt["id"], _gate_info(package, repo))
+    if lifecycle.active:
+        _validate_aliases(package, info)
     documents = _ticket_documents(package, attempt["id"], info) if info["tickets"] else []
     graph = _dag_contract(package, attempt["id"]) if info["dag"] else {}
-    tasks = _validate_records(repo, state["tasks"], TASK_STATES, "task")
-    tickets = _validate_records(repo, state["tickets"], TICKET_STATES, "ticket")
+    tasks = _validate_records(
+        repo,
+        state["tasks"],
+        TASK_STATES,
+        "task",
+        live_evidence=lifecycle.active,
+    )
+    tickets = _validate_records(
+        repo,
+        state["tickets"],
+        TICKET_STATES,
+        "ticket",
+        live_evidence=lifecycle.active,
+    )
     if set(tasks) != set(graph):
         raise StateError("task state does not match the earned DAG")
     if set(tickets) != {row["id"] for row in documents}:
@@ -588,9 +656,12 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
         if resume[key] is not None and (not isinstance(resume[key], str) or not resume[key].strip()):
             raise StateError(f"resume {key} must be null or non-empty text")
     if resume["evidence"] is not None:
-        resume["evidence"] = _repo_relative(repo, resume["evidence"], "resume evidence")
-    observed_gate = _gate_info(package, repo)
-    gate = observed_gate if observed_gate and observed_gate["attempt"] == attempt["id"] else None
+        resume["evidence"] = _repo_relative(
+            repo,
+            resume["evidence"],
+            "resume evidence",
+            must_exist=lifecycle.active,
+        )
     summary = {
         "formatVersion": FORMAT_VERSION,
         "attempt": attempt["id"],
@@ -600,7 +671,8 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
         "tickets": len(tickets),
         "readyTasks": _ready_tasks(graph, tasks),
         "readyTickets": _ready_tickets(dependencies, tickets),
-        "gate": gate,
+        "gate": lifecycle.gate,
+        "_lifecycle": lifecycle,
         "_info": info,
         "_documents": documents,
         "_graph": graph,
@@ -615,7 +687,7 @@ def _escape_table(value: Any) -> str:
     return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ")
 
 
-def _attempt_history(package: Path, current_attempt: str, current_gate: str) -> list[dict[str, str]]:
+def _attempt_history(package: Path, lifecycle: AttemptLifecycle) -> list[dict[str, str]]:
     root = package / EXECUTION_PATH
     if not root.is_dir():
         return []
@@ -627,8 +699,12 @@ def _attempt_history(package: Path, current_attempt: str, current_gate: str) -> 
         if not path.is_file():
             continue
         metadata, _ = _parse_execution_record(path, child.name)
-        if child.name == current_attempt:
-            metadata = {"attempt": current_attempt, "lifecycle": "frozen" if current_gate in TERMINAL_VERDICTS else "active", "gate": current_gate}
+        if child.name == lifecycle.attempt:
+            metadata = {
+                "attempt": lifecycle.attempt,
+                "lifecycle": lifecycle.value,
+                "gate": lifecycle.gate_verdict,
+            }
         metadata["path"] = _package_relative(package, path)
         result.append(metadata)
     return result
@@ -636,14 +712,14 @@ def _attempt_history(package: Path, current_attempt: str, current_gate: str) -> 
 
 def _render_progress(package: Path, state: dict[str, Any], summary: dict[str, Any]) -> str:
     attempt = summary["attempt"]
-    gate = summary["gate"]
-    current_gate = gate["verdict"] if gate and gate["attempt"] == attempt else "open"
-    lifecycle = "frozen" if current_gate in TERMINAL_VERDICTS else "active"
+    lifecycle = summary["_lifecycle"]
+    current_gate = lifecycle.gate_verdict
+    resume = lifecycle.project_resume(state["resume"])
     revisions = summary["revisions"]
     composition = summary["composition"]
     blockers: list[str] = []
-    if state["resume"]["blocker"]:
-        blockers.append(state["resume"]["blocker"])
+    if resume["blocker"]:
+        blockers.append(resume["blocker"])
     blockers.extend(f"task:{identifier}" for identifier, row in state["tasks"].items() if row["state"] == "BLOCKED")
     blockers.extend(f"ticket:{identifier}" for identifier, row in state["tickets"].items() if row["state"] == "BLOCKED")
     er_path = _ensure_execution_record(package, attempt)
@@ -654,7 +730,7 @@ def _render_progress(package: Path, state: dict[str, Any], summary: dict[str, An
         f"- Attempt: {attempt}",
         f"- Revision aliases: {revisions['decision']} / {revisions['spec']} / {revisions['plan']}",
         f"- Composition: tickets={str(composition['tickets']).lower()}, dag={str(composition['dag']).lower()}",
-        f"- Lifecycle: {lifecycle}",
+        f"- Lifecycle: {lifecycle.value}",
         f"- Latest gate: {current_gate}",
         f"- Blockers: {', '.join(_escape_table(item) for item in blockers) if blockers else 'none'}", "",
     ]
@@ -673,7 +749,7 @@ def _render_progress(package: Path, state: dict[str, Any], summary: dict[str, An
             lines.append(f"| {identifier} | {row['state']} | {_escape_table(row['evidence'] or 'none')} | {handoff} |")
         lines.append("")
     lines.extend(["## Active Checkpoints", "", "| Record | Subject | Status | Next action | Evidence |", "| --- | --- | --- | --- | --- |"])
-    active = _active_checkpoints(entries)
+    active = _active_checkpoints(entries) if lifecycle.active else []
     if active:
         for entry in active:
             status = "active"
@@ -686,8 +762,8 @@ def _render_progress(package: Path, state: dict[str, Any], summary: dict[str, An
             lines.append(f"| {entry['id']} | {entry['subject']} | {status} | {_escape_table(entry['nextAction'])} | {_escape_table(evidence)} |")
     else:
         lines.append("| none | attempt | none | none | none |")
-    lines.extend(["", "## Resume", "", f"- Blocker: {state['resume']['blocker'] or 'none'}", f"- Next action: {state['resume']['next'] or 'none'}", f"- Evidence: {state['resume']['evidence'] or 'none'}", "", "## Attempt History", "", "| Attempt | Lifecycle | Gate | Execution Record |", "| --- | --- | --- | --- |"])
-    for row in _attempt_history(package, attempt, current_gate):
+    lines.extend(["", "## Resume", "", f"- Blocker: {resume['blocker'] or 'none'}", f"- Next action: {resume['next'] or 'none'}", f"- Evidence: {resume['evidence'] or 'none'}", "", "## Attempt History", "", "| Attempt | Lifecycle | Gate | Execution Record |", "| --- | --- | --- | --- |"])
+    for row in _attempt_history(package, lifecycle):
         lines.append(f"| {row['attempt']} | {row['lifecycle']} | {row['gate']} | {row['path']} |")
     return "\n".join(lines) + "\n"
 
@@ -720,10 +796,23 @@ def _validate_projections(package: Path, state: dict[str, Any], summary: dict[st
     er_path = _execution_record_path(package, summary["attempt"])
     if not er_path.is_file():
         raise StateError("current Attempt Execution Record is missing")
-    _, entries = _parse_execution_record(er_path, summary["attempt"])
+    metadata, entries = _parse_execution_record(er_path, summary["attempt"])
+    lifecycle = summary["_lifecycle"]
+    expected_metadata = {
+        "attempt": lifecycle.attempt,
+        "lifecycle": lifecycle.value,
+        "gate": lifecycle.gate_verdict,
+    }
+    if metadata != expected_metadata:
+        raise StateError("current Attempt Execution Record lifecycle projection mismatch")
     repo = _repo_root(package)
     for entry in entries:
-        _normalize_payload(repo, state, {key: entry[key] for key in ("purpose", "subject", "title", "content", "nextAction", "evidence") if entry[key] is not None})
+        _normalize_payload(
+            repo,
+            state,
+            {key: entry[key] for key in ("purpose", "subject", "title", "content", "nextAction", "evidence") if entry[key] is not None},
+            live_evidence=lifecycle.active,
+        )
     expected_progress = _render_progress(package, state, summary)
     progress_path = package / PROGRESS_PATH
     if not progress_path.is_file() or _read(progress_path) != expected_progress:
@@ -741,22 +830,45 @@ def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
     info = _plan_info(package, repo, plan)
     if info["attempt"] != attempt:
         raise StateError("--attempt does not match the plan Attempt ID")
-    _validate_aliases(package, info)
-    documents = _ticket_documents(package, attempt, info) if info["tickets"] else []
-    graph = _dag_contract(package, attempt) if info["dag"] else {}
-    _ticket_dependencies(documents)
     path = package / STATE_PATH
+    previous_lifecycle: AttemptLifecycle | None = None
     if path.exists():
         current = _load_json(path)
         current_attempt = current.get("attempt", {}).get("id")
         if current_attempt == attempt:
+            if current.get("attempt", {}).get("plan") != info["path"]:
+                raise StateError("current Attempt is already bound to a different plan")
+            current_summary = _validate_state(package, current, projections=False)
+            current_lifecycle = current_summary["_lifecycle"]
+            if current_lifecycle.frozen:
+                current["resume"] = {"blocker": None, "next": None, "evidence": None}
+                _write_json(path, current)
+                _set_execution_record_status(
+                    package,
+                    current_attempt,
+                    current_lifecycle.value,
+                    current_lifecycle.gate_verdict,
+                )
             _refresh_projections(package, current)
             return _public_summary(_validate_state(package, current))
-        previous = _validate_state(package, current)
-        gate = previous["gate"]
-        if not gate or gate["attempt"] != current_attempt or gate["verdict"] not in TERMINAL_VERDICTS:
+        # A previous terminal Attempt is frozen history. Validate its bound
+        # contracts and runtime state, but do not require legacy projections to
+        # match before a new strict Attempt replaces the active projection.
+        previous = _validate_state(package, current, projections=False)
+        previous_lifecycle = previous["_lifecycle"]
+        if not previous_lifecycle.frozen:
             raise StateError("current Attempt is not terminal; refusing to replace state")
-        _set_execution_record_status(package, current_attempt, "frozen", gate["verdict"])
+    _validate_aliases(package, info)
+    documents = _ticket_documents(package, attempt, info) if info["tickets"] else []
+    graph = _dag_contract(package, attempt) if info["dag"] else {}
+    _ticket_dependencies(documents)
+    if previous_lifecycle is not None:
+        _set_execution_record_status(
+            package,
+            previous_lifecycle.attempt,
+            previous_lifecycle.value,
+            previous_lifecycle.gate_verdict,
+        )
     state = {
         "formatVersion": FORMAT_VERSION,
         "attempt": {"id": attempt, "plan": info["path"]},
@@ -794,7 +906,7 @@ def command_set_state(package: Path, kind: str, identifier: str, target: str, ex
     path = package / STATE_PATH
     state = _load_json(path)
     summary = _validate_state(package, state)
-    _assert_mutable(package, state)
+    _assert_mutable(summary["_lifecycle"])
     key = "tasks" if kind == "task" else "tickets"
     allowed = TASK_STATES if kind == "task" else TICKET_STATES
     if target not in allowed:
@@ -829,8 +941,8 @@ def command_set_state(package: Path, kind: str, identifier: str, target: str, ex
 def _add_execution_record(package: Path, payload: Any, *, resume_blocker: str | None | object = ...) -> dict[str, Any]:
     path = package / STATE_PATH
     state = _load_json(path)
-    _validate_state(package, state)
-    _assert_mutable(package, state)
+    summary = _validate_state(package, state)
+    _assert_mutable(summary["_lifecycle"])
     repo = _repo_root(package)
     normalized = _normalize_payload(repo, state, payload)
     attempt = state["attempt"]["id"]
@@ -894,17 +1006,35 @@ def command_gate(
     no_durable_reason: str | None,
 ) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
-    summary = _validate_state(package, state)
+    summary = _validate_state(package, state, projections=False)
     repo = _repo_root(package)
     resolved_commit = _validate_commit(repo, commit)
-    existing = summary["gate"]
-    if existing and existing["attempt"] == summary["attempt"] and existing["verdict"] in TERMINAL_VERDICTS:
+    current_lifecycle = summary["_lifecycle"]
+    existing = current_lifecycle.gate
+    if current_lifecycle.frozen:
+        assert existing is not None
         if existing["verdict"] == verdict and existing["commit"] == resolved_commit:
-            _set_execution_record_status(package, summary["attempt"], "frozen", verdict)
+            state["resume"] = {"blocker": None, "next": None, "evidence": None}
+            _write_json(package / STATE_PATH, state)
+            _set_execution_record_status(
+                package,
+                summary["attempt"],
+                current_lifecycle.value,
+                current_lifecycle.gate_verdict,
+            )
             _refresh_projections(package, state)
             return {"formatVersion": FORMAT_VERSION, "verdict": verdict, "attempt": summary["attempt"], "commit": resolved_commit, "idempotent": True}
         raise StateError(f"Attempt {summary['attempt']} is already frozen by terminal Gate {existing['verdict']}")
-    if verdict in TERMINAL_VERDICTS and not durable and not (no_durable_reason and no_durable_reason.strip()):
+    _validate_projections(package, state, summary)
+    next_lifecycle = AttemptLifecycle.derive(
+        summary["attempt"],
+        {"attempt": summary["attempt"], "verdict": verdict, "commit": resolved_commit},
+    )
+    if next_lifecycle.frozen:
+        head = _run_git(repo, "rev-parse", "--verify", "HEAD^{commit}")
+        if resolved_commit != head:
+            raise StateError(f"terminal Gate comparison commit must equal current HEAD {head}")
+    if next_lifecycle.frozen and not durable and not (no_durable_reason and no_durable_reason.strip()):
         raise StateError("terminal Gate requires --durable-delta or --no-durable-delta-reason")
     if verdict == "pass":
         unfinished_tasks = [identifier for identifier, row in state["tasks"].items() if row["state"] not in TASK_DEPENDENCY_RELEASING]
@@ -913,7 +1043,7 @@ def command_gate(
             raise StateError(f"pass Gate has unfinished Tasks/Tickets: {', '.join(unfinished_tasks + unfinished_tickets)}")
     evidence_paths = [_repo_relative(repo, item, "gate evidence") for item in evidence]
     findings = package / "execution-findings.md"
-    if verdict in TERMINAL_VERDICTS and findings.is_file():
+    if next_lifecycle.frozen and findings.is_file():
         findings_rel = _repo_relative(repo, _package_relative(repo, findings), "execution findings")
         if not any(item.split("#", 1)[0] == findings_rel for item in evidence_paths):
             raise StateError("terminal Gate must route existing execution-findings.md through --evidence")
@@ -935,8 +1065,15 @@ def command_gate(
     if not durable:
         lines.extend(["- none\n", f"- Reason: {no_durable_reason.strip() if no_durable_reason else 'not evaluated for blocked Gate'}\n"])
     _write_text(package / GATE_PATH, "".join(lines))
-    lifecycle = "frozen" if verdict in TERMINAL_VERDICTS else "active"
-    _set_execution_record_status(package, summary["attempt"], lifecycle, verdict)
+    if next_lifecycle.frozen:
+        state["resume"] = {"blocker": None, "next": None, "evidence": None}
+        _write_json(package / STATE_PATH, state)
+    _set_execution_record_status(
+        package,
+        summary["attempt"],
+        next_lifecycle.value,
+        next_lifecycle.gate_verdict,
+    )
     _refresh_projections(package, state)
     return {"formatVersion": FORMAT_VERSION, "verdict": verdict, "attempt": summary["attempt"], "commit": resolved_commit, "idempotent": False}
 

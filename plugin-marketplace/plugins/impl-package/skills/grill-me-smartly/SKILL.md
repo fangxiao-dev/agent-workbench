@@ -103,6 +103,7 @@ Use PowerShell quoting rules when values contain spaces.
    - 顶部中文区是实时过程摘要，所有更新仍通过脚本完成；它不是最终的人类审阅交付物。
 
 3. **Start or reuse the standing Questioner.**
+   - Standing Questioner 是显式 lifecycle 例外：仅在其上下文仍未压缩时复用；发生 context compaction 后，使用 plan snapshot 与 current ledger summary 启动 fresh Questioner。
    - Give it the plan snapshot and the current ledger summary.
    - Tell it to ask exactly one question at a time.
    - Tell it not to answer its own question.

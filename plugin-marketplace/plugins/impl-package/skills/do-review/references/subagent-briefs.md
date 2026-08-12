@@ -15,15 +15,18 @@ Review target:
 - Included commits:
 - Scope source / package roots:
 - Mode:
+- Review phase: initial / finding-closure / terminal-final
 - Round:
 - Track label:
 - Assigned reviewer skill:
 - Assigned reviewer skill path:
 - Repository standards sources:
-- Issue/Decision/Spec/Plan/DAG sources:
+- Immutable contract sources: <repo-relative path, Git object ID, SHA-256 from ReviewRun>
+- Spec discovery record / tracker-only evidence / evidence gap:
 - Out of scope:
 - User policy:
 - User review-depth preference:
+- Safety applicability / evidence / coverage:
 - Canonical ledger artifact (read-only):
 
 Known findings ledger:
@@ -45,9 +48,13 @@ You are a leaf reviewer in a topology already resolved by the parent do-review r
 
 Review exactly the supplied complete diff and fixed comparison point. Do not inspect, request, or use findings produced by other tracks in the current round. This restriction remains in effect when the parent runs reviewers in phases.
 
+Read every repository contract source only from the immutable resolved head with `git show <resolved-head>:<path>`, using the exact repo-relative path in the ReviewRun record. Never read a contract source from the working tree, and do not recompute its hash or create a second capture; the ReviewRun's Git object ID and SHA-256 are the fixed provenance record. Tracker-only evidence is supplied directly in the discovery record.
+
 Return natural-language candidates with enough location, evidence, impact, and suggested handoff for the parent to record and verify. You may surface an evidence-backed cross-domain candidate, but the parent owns cross-track attribution, deduplication, classification, loop convergence, and the overall verdict.
 
 The canonical ledger artifact is owned by the main session. Read it only; never create, edit, replace, classify, or append to the file. Do not treat a copied prompt excerpt as a second source of truth.
+
+Start each review round with a fresh leaf-worker session. Resume only to finish the same interrupted round; never carry raw worker session state into a later round. A cancelled, timed-out, stalled, max-turns, or explicitly `PARTIAL` worker is incomplete, not PASS.
 
 For each finding:
 - cite evidence;

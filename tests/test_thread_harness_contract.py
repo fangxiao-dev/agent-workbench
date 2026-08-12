@@ -106,15 +106,16 @@ def test_role_b_compaction_is_new_assignment_not_recovery() -> None:
         assert promise not in runtime
 
 
-def test_role_a_and_b_carry_default_long_into_handoff() -> None:
+def test_role_a_and_b_delegate_scheduling_without_copying_a_mode() -> None:
     role_a = read("skills/thread-harness/references/role-a.md")
     role_b = read("skills/thread-harness/references/role-b.md")
     dispatch = read("skills/thread-harness/references/session-dispatch.md")
 
-    marker = "子线调度模式：按 `/impl-package:subagent-driven-development`，默认使用 `default-long`。"
+    marker = "子线调度由 `/impl-package:subagent-driven-development` 决定；本角色不另设 mode。"
     assert marker in role_a
     assert marker in role_b
     assert marker not in dispatch
+    assert "default-long" not in role_a + role_b
 
 
 def test_second_stage_dispatch_is_role_specific_and_minimal() -> None:

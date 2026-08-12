@@ -339,6 +339,76 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("- Lifecycle: frozen", (package / "execution/initial/execution-record.md").read_text(encoding="utf-8"))
         frozen = self.cli(repo, package, "checkpoint", "--next", "must fail", ok=False)
         self.assertIn("frozen", frozen.stderr)
+        payload = json.dumps({"purpose": "judgment", "title": "Must fail", "content": "Frozen attempt."})
+        self.assertIn("frozen", self.cli(repo, package, "er-add", input_text=payload, ok=False).stderr)
+        self.assertIn("frozen", self.set_state(repo, package, "task", "T1", "WAIVED", "DONE", ok=False).stderr)
+        (repo / "evidence.md").unlink()
+        frozen_status = json.loads(self.cli(repo, package, "validate").stdout)
+        self.assertEqual(frozen_status["gate"]["verdict"], "pass")
+
+    def test_terminal_gate_clears_resume_and_hides_historical_checkpoint(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.cli(repo, package, "checkpoint", "--next", "resume implementation", "--blocker", "waiting")
+        head = git(repo, "rev-parse", "HEAD")
+
+        self.cli(repo, package, "gate", "fail", "--comparison-commit", head, "--reason", "needs patch", "--no-durable-delta-reason", "implementation defect only")
+
+        self.assertEqual(self.state(package)["resume"], {"blocker": None, "next": None, "evidence": None})
+        record = (package / "execution/initial/execution-record.md").read_text(encoding="utf-8")
+        self.assertIn("- Lifecycle: frozen", record)
+        self.assertIn("initial-ER-001", record)
+        progress = (package / "progress.md").read_text(encoding="utf-8")
+        self.assertNotIn("initial-ER-001", progress)
+        self.assertIn("| none | attempt | none | none | none |", progress)
+        self.assertIn("- Next action: none", progress)
+
+    def test_idempotent_terminal_gate_repairs_legacy_resume_after_head_advances(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.cli(repo, package, "checkpoint", "--next", "resume implementation", "--blocker", "waiting")
+        comparison = git(repo, "rev-parse", "HEAD")
+        self.cli(repo, package, "gate", "fail", "--comparison-commit", comparison, "--reason", "needs patch", "--no-durable-delta-reason", "implementation defect only")
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "record terminal runtime metadata")
+        self.assertNotEqual(git(repo, "rev-parse", "HEAD"), comparison)
+
+        state_path = package / ".impl-package/state.json"
+        state = self.state(package)
+        state["resume"] = {"blocker": "legacy blocker", "next": "legacy next", "evidence": "retired-evidence.md"}
+        state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        progress_path = package / "progress.md"
+        progress = progress_path.read_text(encoding="utf-8")
+        progress = progress.replace("| none | attempt | none | none | none |", "| initial-ER-001 | attempt | active | resume implementation | none |")
+        progress = progress.replace("- Blocker: none", "- Blocker: legacy blocker").replace("- Next action: none", "- Next action: legacy next")
+        progress_path.write_text(progress, encoding="utf-8")
+
+        result = json.loads(self.cli(repo, package, "gate", "fail", "--comparison-commit", comparison, "--reason", "retry", "--no-durable-delta-reason", "retry").stdout)
+        self.assertTrue(result["idempotent"])
+        self.assertEqual(self.state(package)["resume"], {"blocker": None, "next": None, "evidence": None})
+        progress = (package / "progress.md").read_text(encoding="utf-8")
+        self.assertIn("- Lifecycle: frozen", progress)
+        self.assertIn("- Next action: none", progress)
+        self.assertIn("| none | attempt | none | none | none |", progress)
+
+    def test_terminal_gate_requires_current_head_but_blocked_accepts_older_commit(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        old_head = git(repo, "rev-parse", "HEAD")
+        (repo / "later.md").write_text("later\n", encoding="utf-8")
+        git(repo, "add", "later.md")
+        git(repo, "commit", "-m", "advance head")
+        current_head = git(repo, "rev-parse", "HEAD")
+
+        rejected = self.cli(repo, package, "gate", "fail", "--comparison-commit", old_head, "--reason", "stale comparison", "--no-durable-delta-reason", "none", ok=False)
+        self.assertIn("must equal current HEAD", rejected.stderr)
+        blocked = json.loads(self.cli(repo, package, "gate", "blocked", "--comparison-commit", old_head, "--reason", "waiting").stdout)
+        self.assertEqual(blocked["commit"], old_head)
+        terminal = json.loads(self.cli(repo, package, "gate", "fail", "--comparison-commit", current_head, "--reason", "needs patch", "--no-durable-delta-reason", "none").stdout)
+        self.assertEqual(terminal["commit"], current_head)
 
     def test_patch_attempt_keeps_light_attempt_history_in_progress(self) -> None:
         temp, repo, package = self.make_repo()
@@ -356,6 +426,40 @@ class ImplPackageStateTests(unittest.TestCase):
         progress = (package / "progress.md").read_text(encoding="utf-8")
         self.assertIn("| initial | frozen | fail | execution/initial/execution-record.md |", progress)
         self.assertIn("| patch-a | active | open | execution/patch-a/execution-record.md |", progress)
+
+    def test_patch_attempt_rollover_uses_frozen_plan_then_enforces_current_aliases(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        head = git(repo, "rev-parse", "HEAD")
+        self.cli(repo, package, "gate", "fail", "--comparison-commit", head, "--reason", "requirements changed", "--no-durable-delta-reason", "superseded by patch")
+        state_path = package / ".impl-package/state.json"
+        legacy_state = self.state(package)
+        legacy_state["resume"] = {"blocker": "legacy", "next": "start patch", "evidence": "retired-evidence.md"}
+        state_path.write_text(json.dumps(legacy_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        decision = package / "decision.md"
+        spec = package / "spec.md"
+        decision.write_text(decision.read_text(encoding="utf-8").replace("D1", "D2"), encoding="utf-8")
+        spec.write_text(spec.read_text(encoding="utf-8").replace("D1", "D2").replace("S1", "S2"), encoding="utf-8")
+        frozen_retry = self.init(repo, package)
+        self.assertEqual(frozen_retry["attempt"], "initial")
+        self.assertEqual(frozen_retry["gate"]["verdict"], "fail")
+        legacy_state = self.state(package)
+        legacy_state["resume"] = {"blocker": "legacy", "next": "start patch", "evidence": "retired-evidence.md"}
+        state_path.write_text(json.dumps(legacy_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        (package / "patch-a.patch-plan.md").write_text(
+            "# Patch Plan\n\nAttempt ID：patch-a\nDecision Revision：D2\nSpec Revision：S2\nPlan Revision：P2\nComposition：tickets=false, dag=false\n",
+            encoding="utf-8",
+        )
+
+        result = self.init(repo, package, attempt="patch-a", plan="patch-a.patch-plan.md")
+        self.assertEqual(result["attempt"], "patch-a")
+        self.assertEqual(result["revisions"], {"decision": "D2", "spec": "S2", "plan": "P2"})
+        self.assertIn("- Lifecycle: frozen", (package / "execution/initial/execution-record.md").read_text(encoding="utf-8"))
+
+        spec.write_text(spec.read_text(encoding="utf-8").replace("S2", "S3"), encoding="utf-8")
+        failed = self.cli(repo, package, "validate", ok=False)
+        self.assertIn("does not match spec.md", failed.stderr)
 
     def test_existing_execution_findings_must_be_routed_before_terminal_gate(self) -> None:
         temp, repo, package = self.make_repo()

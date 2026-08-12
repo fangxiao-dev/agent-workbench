@@ -9,12 +9,12 @@ Use `scripts/grok_task.py` when a skill needs one bounded Grok CLI invocation.
 
 The caller owns the task prompt, tool policy, model configuration, and
 interpretation of the returned text. This skill provides no task presets,
-roles, or prompt templates. The only intentional runtime default is
-`--always-approve` (on) so headless calls do not block on permission prompts;
-pass `--no-always-approve` to disable.
+roles, or prompt templates. Runtime defaults are 15-minute stall and overall
+timeouts, Grok subagents enabled, and `--always-approve` on so headless calls
+do not block on permission prompts. Pass `--no-subagents` or
+`--no-always-approve` only when the caller needs those restrictions.
 
-**调用流程：**启动 `grok_task.py` 后让它后台运行，主 session 立即继续执行不冲突工作，不要同步等待其最终 JSON。
-只有在依赖 Grok 结果或到达验证控制点时才轮询/读取完成状态。
+**调用流程：**启动 `grok_task.py` 后让它后台运行，主 session 立即继续执行不冲突工作，不要同步等待其最终 JSON。轮询时读取 stderr heartbeat/liveness；只有在依赖 Grok 结果或到达验证控制点时才读取完成状态。timeout/stall 后必须采信 terminal envelope 与 process exit，不能把 partial text 当作成功。
 
 ## Invoke
 
@@ -24,11 +24,9 @@ python "<repo>\skills\call-grok\scripts\grok_task.py" `
   --executable "<grok-executable>" `
   --prompt-file "<prompt-file>" `
   --max-run 100 `
-  --overall-timeout-sec 600 `
   --model "grok-4.5" `
   --effort high `
-  --tools "grep,list_dir,run_terminal_cmd,read_file,search_replace" `
-  --no-subagents
+  --tools "grep,list_dir,run_terminal_cmd,read_file,search_replace"
 ```
 
 Provide exactly one of `--prompt-file` (preferred, especially background) or
