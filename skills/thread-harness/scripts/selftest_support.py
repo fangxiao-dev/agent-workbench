@@ -17,7 +17,8 @@ LEDGER = Path(__file__).with_name("ledger.py")
 sys.path.insert(0, str(LEDGER.parent))
 from package_adapter import read_package_facts  # noqa: E402
 CID = "harness-selftest"
-BASE = Path(tempfile.gettempdir()) / "thread-harness-selftest"
+# PID 后缀避免并发 selftest 运行互相清理对方的 fixture（曾造成假失败）。
+BASE = Path(tempfile.gettempdir()) / f"thread-harness-selftest-{os.getpid()}"
 BROKER = BASE / "codex-thread-broker"
 FAKE_SESSIONS = BASE / "sessions"
 SESSIONS = FAKE_SESSIONS / "2026" / "08" / "01"

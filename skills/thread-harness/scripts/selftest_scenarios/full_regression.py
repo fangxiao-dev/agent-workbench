@@ -1,6 +1,7 @@
 """Full regression selftest scenario using shared fixtures and assertions."""
 
 import sys
+import threading
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -199,7 +200,10 @@ def run(*args) -> ScenarioResult | int:
     # --- 回归：head 取不到时必须 fail-closed，继续累计停滞 ---
     # 曾经的 bug：任一 head 为 None 就把 streak 清零，导致一条线的 worktree 路径写错
     # 就永久关掉整组的停滞检测，而且完全无声。无法确认有推进 = 没有推进。
-    shutil.rmtree(BASE / "git" / "alpha", ignore_errors=True)
+    missing_alpha_worktree = BASE / "git" / "alpha-does-not-exist"
+    missing_registry = json.loads((BROKER / f"{CID}.json").read_text(encoding="utf-8"))
+    missing_registry["children"]["alpha"]["worktree"] = str(missing_alpha_worktree)
+    write_preflight_registry(missing_registry)
     sync_out = ""
     for round_no in range(10, 15):
         append_wait(CALL_OK, projection(alpha_turn=f"t-{round_no}", beta_turn=f"t-{round_no}"),
@@ -719,14 +723,31 @@ def run(*args) -> ScenarioResult | int:
                    and "historical" not in out_ready_sync,
                    f"report={out_ready.strip()} sync={out_ready_sync.strip()}")
 
+    done_rows_before = ledger_rows("progress.jsonl")
     rc_done, out_done = run_registry(
         "report", "--node", "beta", "--source-session", NODES["beta"],
         "--state", "done", "--head", beta_head,
     )
+    done_rows_after = ledger_rows("progress.jsonl")
+    # ``done`` is a historical read-only state.  Seed a legacy row directly so
+    # this regression still exercises the compatibility mapping in sync.
+    append_ledger_row("progress.jsonl", {
+        "ts": "2026-08-01T06:00:00+02:00",
+        "src": "report",
+        "round": 2,
+        "node": "beta",
+        "head": beta_head,
+        "state": "done",
+        "waiting_on": [],
+        "last_report_ts": "2026-08-01T06:00:00+02:00",
+        "note": "legacy fixture",
+    })
     append_wait(CALL_ALPHA, one_projection("alpha", "t-101"), call_id="legacy-done-needs-reassignment")
     rc_done_sync, out_done_sync = run_registry("sync", "--round", "2")
     fails += check("legacy done 对 active node 兼容映射为 reassignment signal",
-                   rc_done == 0 and rc_done_sync == 0 and "poll_targets:    alpha" in out_done_sync
+                   rc_done == 64 and len(done_rows_after) == len(done_rows_before)
+                   and "historical read-only" in out_done
+                   and rc_done_sync == 0 and "poll_targets:    alpha" in out_done_sync
                    and "reassignment_required: beta" in out_done_sync
                    and "idle_nodes:      beta" not in out_done_sync,
                    f"report={out_done.strip()} sync={out_done_sync.strip()}")
@@ -735,16 +756,22 @@ def run(*args) -> ScenarioResult | int:
         "report", "--coordination-id", CID, "--node", "alpha",
         "--state", "awaiting_seam", "--waiting-on", "seam:all-waiting"
     )
+    rc_decision_beta, out_decision_beta = run(
+        "decide", "--coordination-id", CID, "--raise", "all-waiting-owner",
+        "--by", "beta", "--blocks", "beta", "--question", "owner input"
+    )
     rc_waiting_beta, out_waiting_beta = run(
-        "report", "--coordination-id", CID, "--node", "beta", "--state", "awaiting_owner"
+        "report", "--coordination-id", CID, "--node", "beta", "--state", "awaiting_owner",
+        "--decision-id", "all-waiting-owner",
     )
     append_wait(CALL_OK, GOOD_PROJECTION, call_id="all-waiting-full-poll")
     rc_all_waiting, out_all_waiting = run_registry("sync", "--round", "3")
     fails += check(
         "全部 child 已在 awaiting 状态时回退到全 active poll",
-        rc_waiting_alpha == 0 and rc_waiting_beta == 0 and rc_all_waiting == 0
+        rc_waiting_alpha == 0 and rc_decision_beta == 0 and rc_waiting_beta == 0 and rc_all_waiting == 0
         and "poll_targets:    alpha, beta" in out_all_waiting,
-        f"alpha={out_waiting_alpha.strip()} beta={out_waiting_beta.strip()} sync={out_all_waiting.strip()}",
+        f"alpha={out_waiting_alpha.strip()} decision={out_decision_beta.strip()} "
+        f"beta={out_waiting_beta.strip()} sync={out_all_waiting.strip()}",
     )
     rc_dispatch_waiting, out_dispatch_waiting = run_registry(
         "act", "--dispatch", "--seam-id", "all-waiting", "--producer", "alpha",
@@ -1025,6 +1052,83 @@ def run(*args) -> ScenarioResult | int:
         str(route_runtime_snapshot()),
     )
 
+    # Two independent route subprocesses start behind one barrier against the
+    # same temporary registry.  Without the coordination lock covering the
+    # complete registry RMW interval, one writer can lose the sibling update.
+    concurrent_route_path = make_route_fixture()
+    concurrent_before = json.loads(concurrent_route_path.read_text(encoding="utf-8"))
+    concurrent_old = {
+        node: concurrent_before["children"][node]["current_session_id"]
+        for node in ("alpha", "beta")
+    }
+    concurrent_new = {
+        "alpha": "alpha-concurrent-session",
+        "beta": "beta-concurrent-session",
+    }
+    start_barrier = threading.Barrier(2)
+    route_results = [None, None]
+
+    def run_concurrent_route(index: int, node: str) -> None:
+        try:
+            start_barrier.wait(timeout=30)
+            command = [
+                sys.executable,
+                "-B",
+                str(LEDGER),
+                "route",
+                "--registry",
+                str(concurrent_route_path),
+                "--node",
+                node,
+                "--new-session",
+                concurrent_new[node],
+                "--expect-current",
+                concurrent_old[node],
+            ]
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                env=env(),
+                timeout=60,
+            )
+            route_results[index] = (
+                completed.returncode,
+                (completed.stdout or "") + (completed.stderr or ""),
+            )
+        except Exception as exc:
+            route_results[index] = (None, f"{exc.__class__.__name__}: {exc}")
+
+    route_threads = [
+        threading.Thread(target=run_concurrent_route, args=(0, "alpha")),
+        threading.Thread(target=run_concurrent_route, args=(1, "beta")),
+    ]
+    for thread in route_threads:
+        thread.start()
+    for thread in route_threads:
+        thread.join(timeout=90)
+
+    concurrent_after = json.loads(concurrent_route_path.read_text(encoding="utf-8"))
+    concurrent_nodes = {
+        node: concurrent_after["children"][node]
+        for node in ("alpha", "beta")
+    }
+    concurrent_route_ok = (
+        all(not thread.is_alive() for thread in route_threads)
+        and all(result is not None and result[0] == 0 for result in route_results)
+        and all(
+            concurrent_nodes[node].get("current_session_id") == concurrent_new[node]
+            and concurrent_old[node] in concurrent_nodes[node].get("previous_session_ids", [])
+            for node in ("alpha", "beta")
+        )
+    )
+    fails += check(
+        "两个并发 route 均保留 alpha/beta current 与 previous session 更新",
+        concurrent_route_ok,
+        f"results={route_results} nodes={concurrent_nodes}",
+    )
+
     print("-" * 78)
     # --- Stage D-1：profile fail-closed、solo routing、token budget 与 package adapter ---
     reset_fixture(git_worktrees=True)
@@ -1092,6 +1196,45 @@ def run(*args) -> ScenarioResult | int:
         out.strip(),
     )
 
+    # Solo is a single-task profile.  Keep the cardinality guard dynamic in the
+    # regression rather than relying only on the happy-path fixture.
+    registry["children"]["beta"] = {
+        "active": True,
+        "current_session_id": NODES["beta"],
+        "node_type": "task",
+        "package_entry": str(package_entry.resolve()),
+        "worktree": str((BASE / "git" / "beta").resolve()),
+        "branch": "b",
+    }
+    write_preflight_registry(registry)
+    rc, out = run_registry("preflight")
+    fails += check(
+        "solo active child>1 必须 fail-closed",
+        rc == 5 and "solo_child_count" in out,
+        out.strip(),
+    )
+    registry["children"].pop("beta")
+    write_preflight_registry(registry)
+
+    progress_before_solo_rejections = ledger_rows("progress.jsonl")
+    rc, out = run_registry(
+        "report", "--node", "alpha", "--state", "awaiting_seam", "--waiting-on", "seam:solo"
+    )
+    fails += check(
+        "solo awaiting_seam report 必须 fail-closed",
+        rc == 64 and "solo profile does not support awaiting_seam" in out
+        and ledger_rows("progress.jsonl") == progress_before_solo_rejections,
+        out.strip(),
+    )
+    rc, out = run_registry(
+        "seam", "--seam-id", "solo-seam", "--producer", "alpha", "--consumers", "alpha"
+    )
+    fails += check(
+        "solo seam 必须 fail-closed",
+        rc == 64 and "solo profile does not support seams" in out,
+        out.strip(),
+    )
+
     package_before = {
         path: path.read_bytes()
         for path in (package_entry, package_state, package_record)
@@ -1104,6 +1247,17 @@ def run(*args) -> ScenarioResult | int:
         and "handoff_required: -" in out_sync and "reassignment_required: -" in out_sync,
         out_sync.strip(),
     )
+
+    for round_no in range(2, 7):
+        append_wait(CALL_ALPHA, one_projection("alpha", f"solo-stall-{round_no}"), call_id=f"solo-stall-{round_no}")
+        run_registry("sync", "--round", str(round_no))
+    rc, out = run_registry("stall-check")
+    fails += check(
+        "solo 单 child stall 仍可达 MUST_ACT",
+        rc == 2 and "MUST_ACT stall_streak=5/5" in out,
+        out.strip(),
+    )
+
     rc, out = run_registry(
         "act", "--dispatch", "--seam-id", "solo-dispatch", "--producer", "alpha",
         "--deliverable", "must be rejected",
@@ -1123,6 +1277,36 @@ def run(*args) -> ScenarioResult | int:
         and "handoff_required: alpha" in out,
         out.strip(),
     )
+
+    # --- sync-state durability：崩溃写入不得静默回退 sticky handoff_due ---
+    sync_state_path = BROKER / CID / "sync-state.json"
+    persisted_budget = json.loads(
+        sync_state_path.read_text(encoding="utf-8")
+    ).get("budget_states", {})
+    fails += check(
+        "sticky handoff_due 已持久化到 sync-state",
+        persisted_budget.get(NODES["alpha"], {}).get("stage") == "handoff_due",
+        json.dumps(persisted_budget, ensure_ascii=False),
+    )
+
+    intact_state = sync_state_path.read_text(encoding="utf-8")
+    sync_state_path.write_text(intact_state[: len(intact_state) // 2], encoding="utf-8")
+    rc_trunc, out_trunc = run_registry("sync", "--round", "3")
+    fails += check(
+        "sync-state 截断后必须明确失败，不得静默重置为默认值",
+        rc_trunc != 0 and "sync-state invalid" in out_trunc,
+        f"rc={rc_trunc} out={out_trunc.strip()}",
+    )
+
+    sync_state_path.write_text(intact_state, encoding="utf-8")
+    append_wait(CALL_ALPHA, one_projection("alpha", "solo-3"), call_id="solo-3")
+    rc_kept, out_kept = run_registry("sync", "--round", "3")
+    fails += check(
+        "恢复 sync-state 后 sticky handoff_due 未回退为 tracking",
+        rc_kept == 0 and "alpha=handoff_due" in out_kept,
+        out_kept.strip(),
+    )
+
     handoff_args = (
         "act", "--handoff", "--node", "alpha", "--source-session", NODES["controller"],
         "--reason", "token budget reached",
@@ -1168,6 +1352,30 @@ def run(*args) -> ScenarioResult | int:
         and facts["next_action"] == "bounded action"
         and {path: path.read_bytes() for path in (package_entry, package_state, package_record)} == package_before,
         json.dumps(facts, ensure_ascii=False),
+    )
+
+    terminal_head = git_head(BASE / "git" / "alpha")
+    rc_ready, out_ready = run_registry(
+        "report", "--node", "alpha", "--source-session", new_session,
+        "--state", "ready_for_assignment", "--head", terminal_head,
+    )
+    registry_path = (BROKER / f"{CID}.json").resolve()
+    rc_retire, out_retire = run(
+        "retire", "--registry", str(registry_path), "--node", "alpha",
+        "--expect-current", new_session,
+    )
+    retired_registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    append_wait(call_for([]), projection(n=0, polls=[]), call_id="solo-close")
+    rc_close, out_close = run_registry("sync", "--round", "4")
+    rc_closed, out_closed = run_registry("stall-check")
+    fails += check(
+        "solo terminal child 退休后空 poll 正常收尾且不触发 H3",
+        rc_ready == 0 and rc_retire == 0 and retired_registry["children"]["alpha"].get("active") is False
+        and rc_close == 0 and "poll_targets:    -" in out_close
+        and "reassignment_required: -" in out_close
+        and rc_closed == 0 and "coordination_closed" in out_closed,
+        f"ready={out_ready.strip()} retire={out_retire.strip()} "
+        f"sync={out_close.strip()} stall={out_closed.strip()}",
     )
 
     shutil.rmtree(BASE, ignore_errors=True)

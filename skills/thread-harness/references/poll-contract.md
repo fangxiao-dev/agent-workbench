@@ -11,7 +11,7 @@
 五条不可动摇的约束：
 
 1. `timeoutMs` 固定为 `120000`，与当前 `wait_threads` 平台上限一致。
-2. `targets` 必须等于脚本按账本机械推导出的 wait 集合：优先为 **runnable watch-set**（`working`、`never_reported`、report 已 stale、controller dispatch 后的 producer 或当前状态 unknown 的 active children）；如果 runnable 集合为空，则回退为全部 active children，保留固定 120 秒 poll。`awaiting_seam`、`awaiting_owner`、`ready_for_assignment` 与历史 `done` 不进入正常阻塞 wait；inactive child 只保留历史，controller 自己也不进入 poll。
+2. `targets` 必须等于脚本按账本机械推导出的 wait 集合：优先为 **runnable watch-set**（`working`、`never_reported`、report 已 stale、controller dispatch 后的 producer、decision 已解决/缺失绑定的 `awaiting_owner`，或当前状态 unknown 的 active children）；如果 runnable 集合为空，则回退为全部 active children，保留固定 120 秒 poll。绑定当前 pending decision 的 `awaiting_owner`、`awaiting_seam`、`ready_for_assignment` 与历史 `done` 不进入正常阻塞 wait；inactive child 只保留历史，controller 自己也不进入 poll。terminal node 退休后 active 集合为空，solo 可用空 targets 收尾。
 3. `text()` 输出**下面这个投影**，字段一个都不能少。`ledger.py sync` 从 controller rollout 里读这个投影——**你不打印的东西，任何地方都不存在**（rollout 记录的是 exec 打印的内容，不是工具原始返回）。
 4. `txt` 截断到 500 字符。需要某条线的全文时用 `codex_app__read_thread` 单独取，不要放宽这里。
 

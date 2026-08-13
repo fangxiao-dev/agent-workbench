@@ -9,7 +9,7 @@
 | 角色 | 运行职责 |
 | --- | --- |
 | Owner | 写清目标、结束判据、执行授权边界与排除项；亲自给出 `create_thread` 授权；确认 effort；处理 Owner 级决策。 |
-| controller | 建 registry 与 ledger；按授权建线和派发；维护 session 路由；执行 preflight、poll、sync、stall-check 与 H3 动作。 |
+| controller | 建 registry 与 ledger；按授权建线和派发；维护 session 路由；执行 preflight、poll、sync、stall-check、H3 动作与 terminal node 退休。 |
 | child | 按当前任务包或 assignment card 推进；命中 H1 条件时向 controller 发送结构化报告；不直接写 ledger。 |
 
 Owner goal 中的目标、结束判据、执行授权边界与排除项构成本 coordination 的常设授权（standing authority）。主控（controller）可在该边界内直接向当前 child 发送 registration、assignment card 与 H3 dispatch。coordination 内的 seam producer 调度属于执行路由；扩大 scope 或权限、改变长期 ownership，或者新增不可逆外部影响时，仍须向 Owner 提案。
@@ -54,6 +54,7 @@ goal 设置后，controller 每轮按以下顺序执行：
 2. 按 [poll-contract.md](poll-contract.md) 原样执行固定 poll。
 3. 执行 `ledger.py sync`，检查摘要与自检结果。
 4. 执行 `ledger.py stall-check`，按 [role-c.md](role-c.md) 的退出码契约行动。
-5. `handoff_required` 非空时只追加一次 `act --handoff`，完成当前 bounded action 后复用 [session-dispatch.md](session-dispatch.md) 的交接文本；需要变更 child 当前任务时同样使用完整文本，不从聊天记忆重建旧模板。
+5. `reassignment_required` 中的 node 若已核验 terminal，执行 `retire --registry <absolute-registry-json> --node <node> --expect-current <current-session>`；solo 最后一个 child 退休后跑一次空 active 集合的 `sync`，再由 `stall-check` 确认 `coordination_closed`。
+6. `handoff_required` 非空时只追加一次 `act --handoff`，完成当前 bounded action 后复用 [session-dispatch.md](session-dispatch.md) 的交接文本；需要变更 child 当前任务时同样使用完整文本，不从聊天记忆重建旧模板。
 
 Role A compaction 使用以 package entry 为恢复权威的短 catch-up；Role B 不恢复旧 card，由 controller 派发新的最小 card；Role C 从 registry、ledger 与 `status` 恢复。

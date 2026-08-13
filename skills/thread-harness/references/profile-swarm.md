@@ -16,5 +16,6 @@
 ## 调度
 
 - 保留多 node routing、worktree/branch 隔离、seam、Platform 与 H3 dispatch。
-- `ready_for_assignment` 或历史 `done` 进入 `reassignment_required`；controller 在下一轮 poll 前派卡、核验 terminal 后退休，或转成带 producer 的 `awaiting_seam`。
+- `ready_for_assignment` 或历史 `done` 进入 `reassignment_required`；controller 在下一轮 poll 前派卡、核验 terminal 后用 `retire --registry ... --node ... --expect-current ...` 退休，或转成带 producer 的 `awaiting_seam`。退休必须在写锁内完成 CAS。
+- `awaiting_owner` 只有在 report 绑定当前 pending `decision_id` 时才退出 runnable watch-set；decision 被回答或绑定缺失时，下一轮 sync 将该 node 放回 runnable 集合。
 - seam 登记与 Owner decision 只由 controller 写入；child 只发送 H1。

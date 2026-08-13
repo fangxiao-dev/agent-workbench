@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import shutil
+import time
 from importlib import import_module
 
-from selftest_support import ScenarioResult
+from selftest_support import BASE, ScenarioResult
 
 
 SCENARIOS = {
@@ -45,11 +47,32 @@ def run_scenario(name: str) -> ScenarioResult:
     return ScenarioResult(name, int(result))
 
 
+def _cleanup_base(attempts: int = 10, delay_s: float = 0.5) -> None:
+    # BASE is PID-scoped (see selftest_support.py); safe to remove
+    # unconditionally, even under concurrent selftest runs. Windows can keep
+    # a short-lived handle open on files under .git after a git subprocess
+    # returns, so retry briefly instead of leaving litter on the first
+    # PermissionError.
+    for attempt in range(attempts):
+        try:
+            shutil.rmtree(BASE)
+            return
+        except FileNotFoundError:
+            return
+        except OSError:
+            if attempt == attempts - 1:
+                return
+            time.sleep(delay_s)
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     if args.list:
         return list_scenarios()
-    return run_scenario(args.scenario).returncode
+    try:
+        return run_scenario(args.scenario).returncode
+    finally:
+        _cleanup_base()
 
 
 if __name__ == "__main__":

@@ -8,9 +8,9 @@ Owner 写在 goal 里的目标、结束判据、执行授权边界与排除项�
 
 **但派 Platform 之前先问一步。** 子线报 `awaiting_seam` 时，你的第一个问题是"**它真的没有独立工作了吗**"，而不是"谁来造这个 seam"。子线有自己的纵切任务包，能由它自己完成的，连同理由回给它让它继续 `working`；确认是跨域契约缺 producer，才派 Platform。
 
-同理，子线报 `awaiting_owner` 而账本里没有绑定它的 pending decision 时，那不是 Owner 级阻塞——**先自己判断并回复它**，你是 broker 不是传声筒。Owner 的决策和授权是最后手段，不是第一反应。
+同理，子线报 `awaiting_owner` 时，H1 必须带 `decision_id`，且账本里必须有一条 `blocks` 包含该 node 的 pending decision；否则这不是 Owner 级阻塞，先让 child 继续工作或由 controller 先 `decide --raise`，你是 broker 不是传声筒。decision 已回答后，下一轮 sync 会把 node 放回 runnable watch-set。
 
-**bounded assignment 完成也不是线路终态。** active child 报 `ready_for_assignment`（或历史 `done`）时，`sync` 会把它列入 `reassignment_required`。进入下一轮 poll 前必须三选一：给它下一张 assignment card；核验当前 revision 的 terminal acceptance 后把 registry `active=false`；或确认只剩跨域依赖后转成 `awaiting_seam`，并立即落实 producer。不得把 active/open package 留在完成态等待。child 的 note 写了 package open 时尤其不能省略这一步。
+**bounded assignment 完成也不是线路终态。** active child 报 `ready_for_assignment`（或历史 `done`）时，`sync` 会把它列入 `reassignment_required`。进入下一轮 poll 前必须三选一：给它下一张 assignment card；核验当前 revision 的 terminal acceptance 后执行 `retire --registry <absolute-registry-json> --node <node> --expect-current <current-session>`，把 registry `active=false`；或确认只剩跨域依赖后转成 `awaiting_seam`，并立即落实 producer。不得把 active/open package 留在完成态等待。child 的 note 写了 package open 时尤其不能省略这一步。
 
 ## 开跑前
 
@@ -27,7 +27,7 @@ Owner 写在 goal 里的目标、结束判据、执行授权边界与排除项�
 3. 跑 `ledger.py stall-check`，按退出码走：
    - `0` `OK` → 正常，按摘要决策
    - `0` `CHECK_HEARTBEAT` → 已到 `3/5` 或 `4/5`；直接 `read_thread` 看 active / working 线。确认具体、最新的工作心跳才执行 `ledger.py heartbeat --node <node> --evidence "<一句话>"`；重复等待文案、旧进展或仅有 active 状态都不算心跳，不重置。全员 idle 时不重置，`idle_nodes` 仍是独立派活信号。
-   - `2` `MUST_ACT` → **H3 二选一**：`swarm` 可 `act --dispatch` 派发新工作（说出派给谁、造哪个 seam、交付什么），或重新读取 registry 后执行 `python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry-json> --halt --source-session <fresh-controller-current-session-id> --reason "<一句话>"`；`solo` 禁止 `act --dispatch`，只能 halt 或向 Owner escalation。预算交接使用单独的 `act --handoff`，不替代 H3。
+   - `2` `MUST_ACT` → **H3 二选一**：`swarm` 可 `act --dispatch` 派发新工作（说出派给谁、造哪个 seam、交付什么），或重新读取 registry 后执行 `python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry-json> --halt --source-session <fresh-controller-current-session-id> --reason "<一句话>"`；`solo` 禁止 `act --dispatch`，只能 halt 或向 Owner escalation。若 terminal node 已全部 `retire`，`stall-check` 会输出 `coordination_closed`，不再触发 H3。预算交接使用单独的 `act --handoff`，不替代 H3。
    - `3` `MUST_ESCALATE` → 立即向 Owner 报告尚未上报的 pending 决策，并用 `act --escalate --decision-id <d>` 留痕，本轮结束
    - `4` `HALTED` → loop 已被终止，**不要继续轮询**；先向 Owner 确认再决定是否恢复
    - `6` `LEDGER INTEGRITY FAILED` → 停止所有状态推进；保留坏账本供诊断，不截断、不重写、不猜测修复

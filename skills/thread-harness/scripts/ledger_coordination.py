@@ -315,10 +315,12 @@ def latest_progress(coordination_id: str) -> dict:
             if name in stale_nodes:
                 row["state"] = f"{row['state']}(stale)"
             row["waiting_on"] = report.get("waiting_on") if isinstance(report.get("waiting_on"), list) else []
+            row["decision_id"] = report.get("decision_id")
             row["last_report_ts"] = report.get("last_report_ts") or report.get("ts")
         else:
             row["state"] = poll.get("state") if poll.get("state") in STATE_VALUES else "working"
             row["waiting_on"] = []
+            row["decision_id"] = None
             row["last_report_ts"] = None
         if poll:
             row["head"] = poll.get("head")
@@ -339,6 +341,11 @@ def runnable_watch_nodes(coordination_id: str, active_children: list[dict]) -> l
     latest = latest_progress(coordination_id)
     _, latest_report = latest_progress_parts(coordination_id)
     stale_nodes = stale_report_nodes(coordination_id)
+    pending_decision_ids = {
+        row.get("decision_id")
+        for row in pending_decisions(coordination_id)
+        if isinstance(row.get("decision_id"), str)
+    }
     dispatched_nodes = set()
     for act in read_jsonl(jsonl_path(coordination_id, "acts.jsonl")):
         producer = act.get("producer")
@@ -351,11 +358,17 @@ def runnable_watch_nodes(coordination_id: str, active_children: list[dict]) -> l
     for node in active_children:
         name = node["name"]
         state = latest.get(name, {}).get("state")
+        decision_id = latest.get(name, {}).get("decision_id")
+        owner_wait_released = (
+            state == "awaiting_owner"
+            and (not isinstance(decision_id, str) or decision_id not in pending_decision_ids)
+        )
         if (
             name not in latest_report
             or name in stale_nodes
             or name in dispatched_nodes
             or state not in NON_RUNNABLE_STATES
+            or owner_wait_released
         ):
             runnable.append(node)
     return runnable

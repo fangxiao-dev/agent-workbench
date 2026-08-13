@@ -26,7 +26,7 @@
 两个等待状态的含义比字面更严：
 
 - `awaiting_seam` = **我手上已经没有任何可独立推进的工作了**，不是"我发现了一个上游依赖"。
-- `awaiting_owner` = **账本里已经有一条绑定我的 pending decision**，不是"我遇到了一件拿不准的事"。
+- `awaiting_owner` = **H1 携带的 decision_id 已由 controller 绑定到账本中一条 blocks 包含我的 pending decision**，不是"我遇到了一件拿不准的事"；没有该绑定时继续工作或先请求 controller 登记 decision。
 
 发现依赖时先把不依赖它的工作前移，保持 `working`。具体怎么排前后顺序由 `/impl-package:impl-package` 决定。
 

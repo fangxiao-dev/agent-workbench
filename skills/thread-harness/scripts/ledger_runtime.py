@@ -8,10 +8,18 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import tempfile
 import time
 
 
-STATE_VALUES = {"working", "awaiting_seam", "awaiting_owner", "ready_for_assignment", "done"}
+# ``done`` is retained in the readable set for legacy rows, but is no longer a
+# writable state for ``report``.  Keep the compatibility alias because the
+# projection readers (and older callers importing ``STATE_VALUES``) still need
+# to understand historical rows.
+REPORT_STATE_VALUES = {"working", "awaiting_seam", "awaiting_owner", "ready_for_assignment"}
+HISTORICAL_STATE_VALUES = {"done"}
+READABLE_STATE_VALUES = REPORT_STATE_VALUES | HISTORICAL_STATE_VALUES
+STATE_VALUES = READABLE_STATE_VALUES
 STALL_LIMIT = 5
 HEARTBEAT_LEAD_ROUNDS = 2
 KNOWN_WORKING_STATUSES = {
@@ -39,7 +47,31 @@ LEDGER_INTEGRITY_FAILED = 6
 NON_RUNNABLE_STATES = {"awaiting_seam", "awaiting_owner", "ready_for_assignment", "done"}
 REASSIGNMENT_STATES = {"ready_for_assignment", "done"}
 INTEGRITY_GUARDED_COMMANDS = {
-    "sync", "stall-check", "report", "seam", "decide", "act", "heartbeat", "status", "preflight"
+    "sync", "stall-check", "report", "seam", "decide", "act", "retire", "heartbeat", "status", "preflight"
+}
+
+SYNC_STATE_COUNTER_FIELDS = (
+    "offset",
+    "next_poll_seq",
+    "next_act_seq",
+    "next_ledger_seq",
+    "dispatches_since_progress",
+    "docs_only_advances",
+    "invalid_rounds",
+)
+SYNC_STATE_REQUIRED_FIELDS = {
+    "rollout_path",
+    "offset",
+    "compaction_observers",
+    "budget_states",
+    "next_poll_seq",
+    "next_act_seq",
+    "next_ledger_seq",
+    "dispatches_since_progress",
+    "docs_only_advances",
+    "last_must_act_seq",
+    "invalid_rounds",
+    "stall_reset_seq",
 }
 
 PROGRESS_ROOT = Path(__file__).resolve().parents[3] / ".progress-record"
@@ -251,19 +283,109 @@ def read_jsonl(path: Path) -> list[dict]:
 def corrupt_ledger_lines(coordination_id: str) -> int:
     return len(ledger_integrity_issues(coordination_id))
 
+def _new_state() -> dict:
+    return {
+        "rollout_path": None,
+        "offset": 0,
+        "compaction_observers": {},
+        "budget_states": {},
+        "next_poll_seq": 0,
+        "next_act_seq": 0,
+        "next_ledger_seq": 0,
+        "dispatches_since_progress": 0,
+        "docs_only_advances": 0,
+        "last_must_act_seq": None,
+        "invalid_rounds": 0,
+        "stall_reset_seq": None,
+    }
+
+def _invalid_state(path: Path, detail: str):
+    raise LedgerError(
+        f"sync-state invalid: {path}: {detail}; "
+        "restore a valid sync-state.json before rerunning the broker"
+    )
+
+def _validate_state(state, path: Path) -> dict:
+    if not isinstance(state, dict):
+        _invalid_state(path, "root must be an object")
+    missing = sorted(SYNC_STATE_REQUIRED_FIELDS - set(state))
+    if missing:
+        _invalid_state(path, f"missing required fields: {', '.join(missing)}")
+    for field_name in SYNC_STATE_COUNTER_FIELDS:
+        value = state.get(field_name)
+        if type(value) is not int or value < 0:
+            _invalid_state(path, f"{field_name} must be a non-negative integer")
+    if state.get("rollout_path") is not None and not isinstance(state.get("rollout_path"), str):
+        _invalid_state(path, "rollout_path must be a string or null")
+    if not isinstance(state.get("compaction_observers"), dict):
+        _invalid_state(path, "compaction_observers must be an object")
+    budget_states = state.get("budget_states")
+    if not isinstance(budget_states, dict):
+        _invalid_state(path, "budget_states must be an object")
+    for session_id, budget in budget_states.items():
+        if not isinstance(budget, dict) or budget.get("stage") not in {"tracking", "handoff_due"}:
+            _invalid_state(path, f"budget_states[{session_id!r}].stage is invalid")
+    for field_name in ("last_must_act_seq", "stall_reset_seq"):
+        value = state.get(field_name)
+        if value is not None and (type(value) is not int or value < 0):
+            _invalid_state(path, f"{field_name} must be a non-negative integer or null")
+    return state
+
 def load_state(coordination_id: str) -> dict:
     path = runtime_dir(coordination_id) / "sync-state.json"
     if not path.exists():
-        return {"invalid_rounds": 0}
+        return _new_state()
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {"invalid_rounds": 0}
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        _invalid_state(path, f"invalid JSON ({exc.msg} at line {exc.lineno} column {exc.colno})")
+    except (OSError, UnicodeError) as exc:
+        _invalid_state(path, f"unreadable ({exc})")
+    return _validate_state(state, path)
 
 def save_state(coordination_id: str, state: dict) -> None:
     path = runtime_dir(coordination_id) / "sync-state.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _validate_state(state, path)
+    try:
+        data = json.dumps(state, ensure_ascii=False, indent=2) + "\n"
+    except (TypeError, ValueError) as exc:
+        raise LedgerError(f"unable to serialize sync-state {path}: {exc}") from exc
+
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="\n",
+            dir=str(path.parent),
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(str(temporary), str(path))
+        temporary = None
+        if os.name != "nt":
+            try:
+                directory_fd = os.open(str(path.parent), os.O_RDONLY)
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+            except OSError:
+                pass
+    except OSError as exc:
+        raise LedgerError(f"unable to durably save sync-state {path}: {exc}") from exc
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
 
 def next_seq(state: dict, key: str) -> int:
     seq = int(state.get(key) or 0) + 1

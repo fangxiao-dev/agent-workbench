@@ -350,3 +350,25 @@ def test_stage_d_budget_observer_covers_controller_and_task_only() -> None:
     assert "controller 与 task session" in solo
     assert "Platform session" in swarm
     assert "不进入 task budget handoff" in swarm
+
+
+def test_terminal_retirement_and_owner_decision_contracts_are_explicit() -> None:
+    cli = read("skills/thread-harness/scripts/ledger_cli.py")
+    runtime = read("skills/thread-harness/scripts/ledger_runtime.py")
+    commands = read("skills/thread-harness/scripts/ledger_commands.py")
+    coordination = read("skills/thread-harness/scripts/ledger_coordination.py")
+    schema = read("skills/thread-harness/references/ledger-schema.md")
+    solo = read("skills/thread-harness/references/profile-solo.md")
+    role_c = read("skills/thread-harness/references/role-c.md")
+    procedure = read("skills/thread-harness/references/run-procedure.md")
+
+    assert 'sub.add_parser("retire"' in cli
+    assert 'retire.add_argument("--expect-current", required=True)' in cli
+    assert '"retire"' in runtime
+    assert "def cmd_retire" in commands and "with coordination_write_lock" in commands
+    assert "ready_for_assignment" in commands and "active\"] = False" in commands
+    assert "owner_wait_released" in coordination
+    assert "--decision-id" in commands
+    assert "retire --registry" in schema + solo + role_c + procedure
+    assert "coordination_closed" in schema + role_c
+    assert "decision_id" in schema and "decision is not pending" in commands

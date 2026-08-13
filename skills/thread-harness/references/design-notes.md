@@ -253,7 +253,8 @@ routing registry 由 `owner-thread-broker` 管，**本设计不改动其路由�
 | `init --registry <absolute-json>` | 建 registry sibling/coordination_id 运行时目录与四个空 jsonl；已存在则幂等返回 |
 | `sync --registry <absolute-json> --round <n>` | 定位主控 rollout（按 registry 的 `controller.current_session_id`），**按 byte offset 增量读**，按 ledger 推导 wait 集合校验固定 wait（runnable 为空时回退到全部 active child），同时为全部 active children 采集 HEAD；抽最近一次 `wait_threads` 的完整输出；跑 §3.5 自检；合并进 `progress.jsonl`；打印决策就绪摘要 |
 | `route --registry <absolute-json> --node <n> --new-session <session> [--expect-current <session>]` | 只更新 registry 中一个 node 的 session 路由：旧 session 进入 `previous_session_ids`，刷新 `updated_at`；校验乐观锁与全 registry 当前 session 冲突；不写 JSONL 或 `sync-state.json` |
-| `report --registry <absolute-json> --node <n> --source-session <session> --state <s> [--head H] [--waiting-on ...] [--note ...]` | controller 验证 H1 source session 与 HEAD 后代后写 progress 行；旧 `--coordination-id` 调用兼容 |
+| `retire --registry <absolute-json> --node <n> --expect-current <session>` | controller 在写锁内 CAS 退休已到 `ready_for_assignment`/历史 `done` 的 child，写 `active=false`；不写 JSONL 或 `sync-state.json` |
+| `report --registry <absolute-json> --node <n> --source-session <session> --state <s> [--head H] [--waiting-on ...] [--decision-id <d>] [--note ...]` | controller 验证 H1 source session 与 HEAD 后代后写 progress 行；`awaiting_owner` 必须绑定 pending decision；旧 `--coordination-id` 调用兼容 |
 | `seam --registry <absolute-json> --seam-id <s> --producer <p> [--consumers ...] [--deliver <artifact>]` | controller 登记/交付 seam；未知 producer/consumer 是用法错误，退出 `64` |
 | `decide --registry <absolute-json> --raise <decision-id> --by <node> --blocks ... --question ...` / `--answer <decision-id> --text ...` | controller/Owner 决策队列；每次 raise 生成 `decision_instance_id`，answer/escalate 绑定当前 instance |
 | `heartbeat --registry <absolute-json> --node <n> --evidence <text>` | 仅在 `3/5` 或 `4/5` 且 controller 已直接读 thread 确认 fresh heartbeat 后使用；只写 `sync-state.json` reset marker，不写 JSONL |

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -217,3 +220,185 @@ def test_package_adapter_schema_warnings_are_non_blocking_and_clear_unknown_fact
     facts, warnings = adapter.read_package_observation(str(progress), current_session_id="task-session")
     assert facts["active_checkpoint"] is None and facts["next_action"] is None
     assert any(tag == "package_schema_warning" for tag, _detail in warnings)
+
+
+def sync_state_fixture() -> dict:
+    return {
+        "rollout_path": "controller-rollout.jsonl",
+        "offset": 91,
+        "compaction_observers": {},
+        "budget_states": {
+            "task-session": {"stage": "handoff_due", "source": "token"},
+        },
+        "next_poll_seq": 17,
+        "next_act_seq": 9,
+        "next_ledger_seq": 26,
+        "dispatches_since_progress": 2,
+        "docs_only_advances": 1,
+        "last_must_act_seq": 8,
+        "invalid_rounds": 3,
+        "stall_reset_seq": 12,
+    }
+
+
+def test_sync_state_crash_is_fail_closed_and_preserves_sticky_state(tmp_path: Path, monkeypatch) -> None:
+    runtime = load_module("ledger_runtime_state_under_test", SCRIPTS / "ledger_runtime.py")
+    runtime.ACTIVE_REGISTRY_PATH = tmp_path / "coordination.json"
+    coordination_id = "state-crash"
+    state_path = runtime.runtime_dir(coordination_id) / "sync-state.json"
+    state = sync_state_fixture()
+    runtime.save_state(coordination_id, state)
+    original_bytes = state_path.read_bytes()
+
+    real_replace = runtime.os.replace
+
+    def fail_replace(source, target):
+        assert Path(source).read_bytes().startswith(b"{")
+        raise OSError("simulated crash before replace")
+
+    monkeypatch.setattr(runtime.os, "replace", fail_replace)
+    with pytest.raises(runtime.LedgerError, match="unable to durably save sync-state"):
+        runtime.save_state(coordination_id, {**state, "next_poll_seq": 18})
+    assert state_path.read_bytes() == original_bytes
+    monkeypatch.setattr(runtime.os, "replace", real_replace)
+    assert runtime.load_state(coordination_id)["budget_states"]["task-session"]["stage"] == "handoff_due"
+    assert runtime.load_state(coordination_id)["next_poll_seq"] == 17
+    assert runtime.load_state(coordination_id)["next_act_seq"] == 9
+
+    for corrupted in (b'{"next_poll_seq": 18\n', b'{"next_poll_seq": 18,'):
+        state_path.write_bytes(corrupted)
+        with pytest.raises(runtime.LedgerError, match="sync-state invalid"):
+            runtime.load_state(coordination_id)
+        state_path.write_bytes(original_bytes)
+
+    staged = state_path.parent / ".sync-state.json.crash.tmp"
+    staged.write_bytes(b'{"next_poll_seq": 18,')
+    loaded = runtime.load_state(coordination_id)
+    assert loaded["next_poll_seq"] == 17
+    assert loaded["next_act_seq"] == 9
+    assert loaded["budget_states"]["task-session"]["stage"] == "handoff_due"
+
+
+def make_ledger_registry(tmp_path: Path) -> tuple[Path, str]:
+    broker = tmp_path / "broker"
+    broker.mkdir()
+    coordination_id = "decision-retire"
+    registry_path = broker / f"{coordination_id}.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "coordination_id": coordination_id,
+                "broker": {
+                    "profile": "swarm",
+                    "budget": {
+                        "smart_zone_tokens": 150000,
+                        "tail_requests": 20,
+                        "tail_p75_increment_tokens": 1720,
+                    },
+                },
+                "controller": {"current_session_id": "controller-session"},
+                "children": {
+                    "child": {"current_session_id": "child-session", "active": True},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return registry_path, coordination_id
+
+
+def run_ledger(env: dict, *args: str) -> tuple[int, str]:
+    result = subprocess.run(
+        [sys.executable, "-B", str(SCRIPTS / "ledger.py"), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        check=False,
+    )
+    return result.returncode, (result.stdout or "") + (result.stderr or "")
+
+
+def test_owner_decision_binding_and_terminal_retirement(tmp_path: Path, monkeypatch) -> None:
+    registry_path, coordination_id = make_ledger_registry(tmp_path)
+    env = dict(os.environ)
+    env["THREAD_HARNESS_BROKER_ROOT"] = str(registry_path.parent)
+    run_ledger(env, "init", "--coordination-id", coordination_id)
+    progress_path = registry_path.parent / coordination_id / "progress.jsonl"
+
+    rc, output = run_ledger(
+        env, "report", "--coordination-id", coordination_id,
+        "--node", "child", "--state", "awaiting_owner",
+    )
+    assert rc == 64 and "requires --decision-id" in output
+    assert not progress_path.read_text(encoding="utf-8").strip()
+
+    rc, output = run_ledger(
+        env, "report", "--coordination-id", coordination_id,
+        "--node", "child", "--state", "awaiting_owner", "--decision-id", "missing",
+    )
+    assert rc == 64 and "decision is not pending: missing" in output
+    assert not progress_path.read_text(encoding="utf-8").strip()
+
+    rc, _ = run_ledger(
+        env, "decide", "--coordination-id", coordination_id,
+        "--raise", "owner-choice", "--by", "child", "--blocks", "child",
+        "--question", "choose",
+    )
+    assert rc == 0
+    rc, output = run_ledger(
+        env, "report", "--coordination-id", coordination_id,
+        "--node", "child", "--state", "awaiting_owner", "--decision-id", "owner-choice",
+    )
+    assert rc == 0 and "state=awaiting_owner" in output
+
+    if str(SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SCRIPTS))
+    import ledger_coordination
+    import ledger_registry
+    import ledger_runtime
+
+    monkeypatch.setattr(ledger_runtime, "ACTIVE_REGISTRY_PATH", registry_path)
+    registry = ledger_registry.load_registry(coordination_id)
+    active_children = [
+        node for node in ledger_registry.registry_nodes(registry)
+        if node["role"] == "child" and node.get("active", True)
+    ]
+    assert ledger_coordination.runnable_watch_nodes(coordination_id, active_children) == []
+
+    rc, _ = run_ledger(
+        env, "decide", "--coordination-id", coordination_id,
+        "--answer", "owner-choice", "--text", "done",
+    )
+    assert rc == 0
+    assert [
+        node["name"]
+        for node in ledger_coordination.runnable_watch_nodes(coordination_id, active_children)
+    ] == ["child"]
+
+    before_retire = registry_path.read_bytes()
+    rc, output = run_ledger(
+        env, "retire", "--registry", str(registry_path),
+        "--node", "child", "--expect-current", "child-session",
+    )
+    assert rc == 64 and "not terminal" in output
+    assert registry_path.read_bytes() == before_retire
+
+    rc, _ = run_ledger(
+        env, "report", "--coordination-id", coordination_id,
+        "--node", "child", "--state", "ready_for_assignment",
+    )
+    assert rc == 0
+    rc, output = run_ledger(
+        env, "retire", "--registry", str(registry_path),
+        "--node", "child", "--expect-current", "stale-session",
+    )
+    assert rc == 64 and "current session mismatch" in output
+
+    rc, output = run_ledger(
+        env, "retire", "--registry", str(registry_path),
+        "--node", "child", "--expect-current", "child-session",
+    )
+    assert rc == 0 and "RETIRED child" in output
+    retired = json.loads(registry_path.read_text(encoding="utf-8"))
+    assert retired["children"]["child"]["active"] is False

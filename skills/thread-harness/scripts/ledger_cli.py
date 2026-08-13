@@ -23,6 +23,7 @@ from ledger_commands import (
     cmd_init,
     cmd_preflight,
     cmd_report,
+    cmd_retire,
     cmd_route,
     cmd_seam,
     cmd_stall_check,
@@ -68,6 +69,12 @@ def build_parser() -> argparse.ArgumentParser:
     route.add_argument("--expect-current")
     route.set_defaults(func=cmd_route)
 
+    retire = sub.add_parser("retire", help="retire a terminal child node")
+    retire.add_argument("--registry", required=True)
+    retire.add_argument("--node", required=True)
+    retire.add_argument("--expect-current", required=True)
+    retire.set_defaults(func=cmd_retire)
+
     report = sub.add_parser("report", help="append a controller or task report")
     add_routing_args(report)
     report.add_argument("--node", required=True)
@@ -78,6 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--source-session",
         help="Child H1 source session; omit for controller reports.",
     )
+    report.add_argument("--decision-id")
     report.add_argument("--waiting-on", action="extend", nargs="+", default=[])
     report.add_argument("--note")
     report.set_defaults(func=cmd_report)

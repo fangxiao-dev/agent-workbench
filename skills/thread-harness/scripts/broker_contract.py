@@ -11,7 +11,7 @@ BUDGET_FIELDS = (
     "tail_p75_increment_tokens",
 )
 BUDGET_STAGES = {"tracking", "handoff_due"}
-COMPACTION_HANDOFF_LIMIT = 3
+COMPACTION_HANDOFF_LIMIT = 1
 
 
 def node_kind(value: dict) -> str:

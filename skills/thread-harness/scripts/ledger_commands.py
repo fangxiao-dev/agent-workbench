@@ -233,7 +233,7 @@ def cmd_sync(args) -> int:
         )
         return 0
 
-def cmd_route(args) -> int:
+def _cmd_route_unlocked(args) -> int:
     path = registry_path(args.coordination_id)
     try:
         original_bytes = path.read_bytes()
@@ -300,6 +300,90 @@ def cmd_route(args) -> int:
     print(f"ROUTED {args.node} {old_session} -> {new_session}")
     return 0
 
+
+def cmd_route(args) -> int:
+    # Keep the registry read-modify-write-verify/restore interval under the
+    # coordination lock.  The lock path is derived from the explicit registry
+    # sibling and its coordination_id by configure_routing().
+    with coordination_write_lock(args.coordination_id):
+        return _cmd_route_unlocked(args)
+
+
+def _cmd_retire_unlocked(args) -> int:
+    path = registry_path(args.coordination_id)
+    try:
+        original_bytes = path.read_bytes()
+        registry = json.loads(original_bytes.decode("utf-8"))
+    except FileNotFoundError as exc:
+        raise LedgerError(f"registry not found: {path}") from exc
+    except (OSError, UnicodeError) as exc:
+        raise LedgerError(f"registry unreadable: {path} ({exc})") from exc
+    except json.JSONDecodeError as exc:
+        raise LedgerError(f"registry is not valid JSON: {path} ({exc})") from exc
+    if not isinstance(registry, dict):
+        raise LedgerError(f"registry root must be an object: {path}")
+    require_broker_config(registry)
+
+    target = route_entry_by_name(registry, args.node)
+    if target["role"] != "child":
+        raise UsageError("retire only supports child nodes")
+    node = target["node"]
+    if node.get("active", True) is False:
+        raise UsageError(f"node {target['name']} is already retired")
+    current_session = node.get("current_session_id")
+    if not isinstance(current_session, str) or not current_session:
+        raise UsageError(f"node {target['name']} has no current_session_id")
+    if args.expect_current != current_session:
+        raise UsageError(
+            f"current session mismatch for {target['name']}: "
+            f"registry={current_session} expected={args.expect_current}"
+        )
+
+    current_state = latest_progress(args.coordination_id).get(target["name"], {}).get("state")
+    if current_state not in REASSIGNMENT_STATES:
+        raise UsageError(
+            f"node {target['name']} is not terminal: state={current_state or 'unknown'}; "
+            "expected ready_for_assignment"
+        )
+
+    masked_before = route_masked_serialization(registry, target)
+    node["active"] = False
+    try:
+        replace_file_bytes(path, route_registry_bytes(registry, original_bytes))
+        reread_bytes = path.read_bytes()
+        reread = json.loads(reread_bytes.decode("utf-8"))
+        if not isinstance(reread, dict):
+            raise ValueError("registry root is no longer an object")
+        reread_target = route_entry_by_label(reread, target["label"])
+        if (
+            not reread_target
+            or reread_target["node"].get("current_session_id") != current_session
+            or reread_target["node"].get("active", True) is not False
+        ):
+            raise ValueError("retirement verification failed")
+        if route_masked_serialization(reread, reread_target) != masked_before:
+            raise ValueError("non-target registry content changed")
+    except Exception as exc:
+        try:
+            replace_file_bytes(path, original_bytes)
+        except OSError as restore_exc:
+            raise LedgerError(
+                f"retire verification failed: {exc}; registry restore failed: {restore_exc}"
+            ) from exc
+        raise LedgerError(f"retire verification failed: {exc}") from exc
+
+    print(f"RETIRED {target['name']} session={current_session}")
+    return 0
+
+
+def cmd_retire(args) -> int:
+    # Retirement is a registry lifecycle mutation, so keep its terminal-state
+    # check and CAS-protected registry write under the same coordination lock as
+    # every other ledger mutation.
+    with coordination_write_lock(args.coordination_id):
+        assert_ledger_integrity(args.coordination_id)
+        return _cmd_retire_unlocked(args)
+
 def validate_report_source(coordination_id: str, node_name: str, source_session: str, head: str, registry: dict) -> dict:
     node = registry_node_by_name(registry, node_name)
     if not node:
@@ -333,11 +417,15 @@ def validate_report_source(coordination_id: str, node_name: str, source_session:
     return node
 
 def cmd_report(args) -> int:
+    if args.state not in REPORT_STATE_VALUES:
+        if args.state in HISTORICAL_STATE_VALUES:
+            raise UsageError("state done is historical read-only; report cannot write done")
+        raise UsageError(
+            f"invalid state {args.state}; expected one of {', '.join(sorted(REPORT_STATE_VALUES))}"
+        )
     ensure_runtime(args.coordination_id)
     with coordination_write_lock(args.coordination_id):
         assert_ledger_integrity(args.coordination_id)
-        if args.state not in STATE_VALUES:
-            raise UsageError(f"invalid state {args.state}; expected one of {', '.join(sorted(STATE_VALUES))}")
         waiting_on = args.waiting_on or []
         if args.state == "awaiting_seam":
             valid_seams = [
@@ -356,6 +444,27 @@ def cmd_report(args) -> int:
             raise UsageError(f"unknown node: {args.node}")
         if args.registry and node["role"] != "controller" and not args.source_session:
             raise UsageError("explicit --registry report requires --source-session")
+
+        decision_id = (args.decision_id or "").strip()
+        if args.state == "awaiting_owner":
+            if not decision_id:
+                raise UsageError("state awaiting_owner requires --decision-id")
+            decision = next(
+                (
+                    item for item in pending_decisions(args.coordination_id)
+                    if item.get("decision_id") == decision_id
+                ),
+                None,
+            )
+            if decision is None:
+                raise UsageError(f"decision is not pending: {decision_id}")
+            blocks = decision.get("blocks")
+            if isinstance(blocks, list) and blocks and args.node not in blocks:
+                raise UsageError(
+                    f"decision {decision_id} does not block node: {args.node}"
+                )
+        elif decision_id:
+            raise UsageError("--decision-id is only valid with state awaiting_owner")
 
         # head 缺省时自己从 registry 的 worktree 读，不要依赖子线记得传 --head。
         # 依据 design-notes §2.1：报告没带 head 会被判成 stale，其 waiting_on 就不计入
@@ -382,6 +491,8 @@ def cmd_report(args) -> int:
             "last_report_ts": now_local(),
             "note": args.note or "",
         }
+        if args.state == "awaiting_owner":
+            row["decision_id"] = decision_id
         if args.source_session:
             row["source_session_id"] = args.source_session
             row["source_registry"] = str(registry_path(args.coordination_id).resolve())
@@ -832,7 +943,8 @@ def cmd_stall_check(args) -> int:
     ensure_runtime(args.coordination_id)
     with coordination_write_lock(args.coordination_id):
         assert_ledger_integrity(args.coordination_id)
-        require_broker_config(load_registry(args.coordination_id))
+        registry = load_registry(args.coordination_id)
+        require_broker_config(registry)
         halt = halted_act(args.coordination_id)
         if halt:
             pending = format_id_list(halt.get("pending_decision_ids") or [])
@@ -853,6 +965,16 @@ def cmd_stall_check(args) -> int:
         pending_suffix = ""
         if already_escalated:
             pending_suffix = f" pending_escalated: {format_id_list(decision_ids(already_escalated))}"
+        active_children = [
+            node for node in registry_nodes(registry)
+            if node["role"] == "child" and node.get("active", True)
+        ]
+        if not active_children:
+            print(
+                f"OK coordination_closed: no active child nodes{pending_suffix}\n"
+                f"{answered_line}"
+            )
+            return 0
         streak = stall_streak(args.coordination_id)
         if streak >= STALL_LIMIT:
             state["last_must_act_seq"] = int(state.get("next_act_seq") or 0)
