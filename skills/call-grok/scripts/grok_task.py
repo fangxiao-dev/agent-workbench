@@ -30,6 +30,8 @@ from executor_env import load_executor_env
 load_executor_env(SCRIPT_ROOT.parent)
 
 DEFAULT_MAX_RUN = 100
+DEFAULT_MODEL = "grok-4.6"
+DEFAULT_EFFORT = "high"
 DEFAULT_STALL_TIMEOUT_SEC = 1200
 DEFAULT_OVERALL_TIMEOUT_SEC: Optional[float] = None
 MAX_TIMEOUT_SEC = 1800
@@ -536,8 +538,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_MAX_RUN,
         help=f"Maps to grok --max-turns (default {DEFAULT_MAX_RUN})",
     )
-    p.add_argument("--model", help="Model id")
-    p.add_argument("--effort", help="Reasoning effort")
+    p.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help=f"Model id (default {DEFAULT_MODEL})",
+    )
+    p.add_argument(
+        "--effort",
+        default=DEFAULT_EFFORT,
+        help=f"Reasoning effort (default {DEFAULT_EFFORT})",
+    )
     p.add_argument(
         "--tools",
         default=None,

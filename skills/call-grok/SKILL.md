@@ -7,10 +7,11 @@ description: Run one short-lived, non-interactive Grok CLI task for a caller tha
 
 Use `scripts/grok_task.py` when a skill needs one bounded Grok CLI invocation.
 
-The caller owns the task prompt, tool policy, model configuration, and
-interpretation of the returned text. This skill provides no task presets,
-roles, or prompt templates. Runtime defaults are a 20-minute no-stream stall
-window with no hard overall timeout, Grok subagents enabled, and
+The caller owns the task prompt, tool policy, model configuration overrides, and
+interpretation of the returned text. When the caller does not override them, the
+wrapper uses `grok-4.6` with `effort=high`. This skill provides no task presets,
+roles, or prompt templates. Runtime defaults are `grok-4.6`/`high`, a 20-minute
+no-stream stall window with no hard overall timeout, Grok subagents enabled, and
 `--always-approve` on so headless calls do not block on permission prompts. Pass `--no-subagents` or
 `--no-always-approve` only when the caller needs those restrictions.
 
@@ -24,16 +25,17 @@ python "<repo>\skills\call-grok\scripts\grok_task.py" `
   --executable "<grok-executable>" `
   --prompt-file "<prompt-file>" `
   --max-run 100 `
-  --model "grok-4.5" `
+  --model "grok-4.6" `
   --effort high `
   --tools "grep,list_dir,run_terminal_cmd,read_file,search_replace"
 ```
 
 Provide exactly one of `--prompt-file` (preferred, especially background) or
 `--prompt` (short foreground exception). `--executable` (or `GROK_EXECUTABLE` /
-legacy `GROK_BIN`) pins a CLI. All model, tool, worktree, and rule flags are
-optional and are forwarded only when supplied. Each invocation starts a new
-Grok process and never resumes a session.
+legacy `GROK_BIN`) pins a CLI. `--model` and `--effort` default to `grok-4.6`
+and `high`; other tool, worktree, and rule flags are optional and are forwarded
+only when supplied. Each invocation starts a new Grok process and never resumes
+a session.
 
 Wrapper `--prompt-file` is passed through to Grok as `--prompt-file` (no full
 prompt on argv). Long `--prompt` values are spilled to a temp file automatically.

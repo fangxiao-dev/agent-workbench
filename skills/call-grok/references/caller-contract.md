@@ -31,8 +31,8 @@ parse it.
 | `--cwd` | process cwd | Working directory for Grok |
 | `--prompt-file` / `--prompt` | required | Caller-owned task text; unique temporary `--prompt-file` is the preferred transport |
 | `--max-run` | 100 | Maps to Grok `--max-turns` |
-| `--model` | CLI default | Model id |
-| `--effort` | CLI default | Reasoning effort |
+| `--model` | `grok-4.6` | Model id |
+| `--effort` | `high` | Reasoning effort |
 | `--tools` | unset (not passed) | Grok CLI tool allowlist; omit for CLI-native defaults. Example coding set: `grep,list_dir,run_terminal_cmd,read_file,search_replace` |
 | `--allow` / `--deny` | unset | Repeatable Grok permission rules |
 | `--always-approve` / `--no-always-approve` | on | Pass through Grok `--always-approve` by default; use `--no-always-approve` to disable |
@@ -67,7 +67,7 @@ $wrapperArgs = @(
   '--cwd', $targetRepo,
   '--prompt-file', $promptPath,
   '--max-run', '100',
-  '--model', 'grok-4.5',
+  '--model', 'grok-4.6',
   '--effort', 'high'
 )
 if ($wrapperArgs[0] -ne $wrapper) { throw 'Wrapper path must be the first Python argument' }

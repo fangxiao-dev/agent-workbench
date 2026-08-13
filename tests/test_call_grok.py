@@ -49,10 +49,13 @@ def test_default_command_omits_tools_keeps_always_approve(tmp_path: Path) -> Non
     assert args.stall_timeout_sec == 1200
     assert args.overall_timeout_sec is None
     assert args.no_subagents is False
+    assert args.model == "grok-4.6"
+    assert args.effort == "high"
     cmd = executor.build_cmd("grok", args, prompt=args.prompt)
     assert cmd == [
         "grok", "-p", "use exactly this prompt", "--max-turns", "100", "--output-format",
-        "streaming-json", "--cwd", str(tmp_path), "--always-approve",
+        "streaming-json", "--cwd", str(tmp_path), "-m", "grok-4.6", "--effort", "high",
+        "--always-approve",
     ]
     assert "--tools" not in cmd
     assert "--no-subagents" not in cmd
