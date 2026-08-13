@@ -17,11 +17,14 @@ def test_unified_skill_owns_strategy_and_worker_lifecycle() -> None:
     )
 
     assert len(skill.splitlines()) <= 180
-    for field in ("mode:", "worker:", "schedule:", "review:"):
+    for field in ("mode:", "worker:", "review:"):
         assert field in skill
+    strategy = skill.split("```yaml", 1)[1].split("```", 1)[0]
+    assert "schedule:" not in strategy
     assert "route" not in skill.lower()
     assert "默认是 `$grok-worker`" in skill
     assert "同一逻辑 worker" in skill
+    assert "review_scope: none | checkpoint | closure" in skill
     assert "fresh invocation" in skill
     assert "context compaction" in skill
     assert "Outcome: DONE | BLOCKED | INCOMPLETE" in skill
@@ -32,15 +35,16 @@ def test_unified_skill_owns_strategy_and_worker_lifecycle() -> None:
     assert "不传 model/effort" in resolver
 
 
-def test_mode_contracts_cover_investigate_implement_fix_and_verify() -> None:
+def test_mode_contracts_cover_investigate_implement_fix_and_review() -> None:
     modes = read(
         "plugin-marketplace/plugins/impl-package/skills/subagent-driven-development/references/mode-contracts.md"
     )
-    for heading in ("## investigate", "## implement", "## fix", "## verify"):
+    for heading in ("## investigate", "## implement", "## fix", "## review"):
         assert heading in modes
     assert "EVIDENCE_SUFFICIENT | EVIDENCE_GAP" in modes
     assert "finding closure" in modes
     assert "无写副作用" in modes
+    assert "reviewer" in modes
 
 
 def test_scheduling_consumers_reference_only_the_unified_entry() -> None:

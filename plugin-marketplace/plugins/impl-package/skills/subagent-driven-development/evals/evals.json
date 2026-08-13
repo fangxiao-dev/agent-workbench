@@ -4,28 +4,28 @@
     {
       "id": 1,
       "prompt": "一个失败症状可能来自三个模块，目前还不知道真实原因、影响面或仓库里是否已有等价方案。请决定下一步并形成策略。",
-      "expected_output": "mode=investigate、worker=$grok-worker、schedule=serial、review=none；返回 EVIDENCE_GAP，不使用 route。",
+      "expected_output": "mode=investigate、worker=$grok-worker、review=none；返回 EVIDENCE_GAP，不使用 route。",
       "files": [],
       "expectations": ["选择 investigate mode", "worker 显式为 $grok-worker", "没有 route"]
     },
     {
       "id": 2,
       "prompt": "只在主 session 改一个已定位的文档错字并跑一个现成检查。输出策略。",
-      "expected_output": "mode=implement 或 verify、worker=main-session、schedule=local，并给出原子操作 reason。",
+      "expected_output": "mode=implement 或 review、worker=main-session，并给出原子操作 reason。",
       "files": [],
       "expectations": ["local 只使用 main-session", "reason 具体"]
     },
     {
       "id": 3,
       "prompt": "批准的 Plan 给出一个依赖已释放、ownership 和局部验证明确的实现单元，但没有 Ticket 或 DAG Task。安排执行。",
-      "expected_output": "mode=implement、worker=$grok-worker、schedule=serial、review=none；不因没有 Ticket/DAG 阻塞。",
+      "expected_output": "mode=implement、worker=$grok-worker、review=none；不因没有 Ticket/DAG 阻塞。",
       "files": [],
       "expectations": ["单个委派选择 serial", "具体 worker 与 mode 同时出现"]
     },
     {
       "id": 4,
       "prompt": "两个只读诊断目标彼此独立，但必须共享同一个不能隔离的已登录 browser session。输出策略。",
-      "expected_output": "选择 serial，resources 记录唯一顺序和 cleanup owner；不选择 parallel。",
+      "expected_output": "选择 SERIAL，resources 记录唯一顺序和 cleanup owner；不选择 PARALLEL。",
       "files": [],
       "expectations": ["共享可变资源导致 serial", "只记录真实 resources"]
     },
@@ -39,7 +39,7 @@
     {
       "id": 6,
       "prompt": "同一工作流先调查再实现再修复，角色相同但每个 source unit 独立。是否复用 worker？",
-      "expected_output": "继承同一逻辑 worker $grok-worker，但每个独立 source unit 都 fresh；不输出 reuse。",
+      "expected_output": "调查和实现可以继承同一逻辑 worker $grok-worker；每个独立 source unit 都 fresh，已确认 finding 必须交给 fresh fixer；不输出 reuse。",
       "files": [],
       "expectations": ["策略继承 worker reference", "独立单元 fresh"]
     },
@@ -53,21 +53,21 @@
     {
       "id": 8,
       "prompt": "批准的 Plan 要运行完整 pytest 和前端 build；命令只读，但预计耗时长且会产生大量 stdout。请决定策略。",
-      "expected_output": "mode=verify、worker=$grok-worker、schedule=serial；只返回压缩证据，不把有写副作用命令伪装成 verify。",
+      "expected_output": "mode=review、worker=$grok-worker；只返回压缩证据，不把有写副作用命令伪装成 review。",
       "files": [],
-      "expectations": ["长时间高回显检查使用 worker", "verify 有明确只读边界"]
+      "expectations": ["长时间高回显检查使用 worker", "review 有明确只读边界"]
     },
     {
       "id": 9,
       "prompt": "只需在主 session 运行一条快速、输出有界且无副作用的定向检查。请决定策略。",
-      "expected_output": "可以 mode=verify、worker=main-session、schedule=local，并以原子且输出有界为 reason。",
+      "expected_output": "可以 mode=review、worker=main-session，并以原子且输出有界为 reason。",
       "files": [],
       "expectations": ["小型检查可 local", "不额外派发"]
     },
     {
       "id": 10,
       "prompt": "实现触及 shared seam 和数据完整性，但 caller 指定主 worker 为 $grok-worker。请决定是否更换 worker。",
-      "expected_output": "仍使用 $grok-worker；review=required，复杂度只追加独立 reviewer，不切换 Implementer。",
+      "expected_output": "实现仍使用 $grok-worker；review=required，使用独立 reviewer 做 closure（复杂切片可另设 checkpoint），不复用实现进程。",
       "files": [],
       "expectations": ["复杂度不换 worker", "review required"]
     },
@@ -81,9 +81,23 @@
     {
       "id": 12,
       "prompt": "实现返回 DONE 且策略 review=required。reviewer 尚未运行；reviewer 返回 finding 后需要继续修复。请给出状态。",
-      "expected_output": "先是 review_state=PENDING_REVIEW，不能收口；finding 使用同一 worker 的 mode=fix，closure review PASS 后才 PASSED。",
+      "expected_output": "先是 review_state=PENDING_REVIEW，不能收口；finding 使用 fresh mode=fix（新的 @luna-worker 或 $grok-worker），再由 reviewer 按同一 scope 重审并 PASS 后才 PASSED。",
       "files": [],
-      "expectations": ["PENDING_REVIEW fail-closed", "finding 回到同一 worker fix"]
+      "expectations": ["PENDING_REVIEW fail-closed", "finding 启动 fresh fixer"]
+    },
+    {
+      "id": 13,
+      "prompt": "一个复杂实现被拆成三个 bounded slices。每个 slice 完成后需要一个窄检查，全部完成后还要做完整收口。请安排 reviewer。",
+      "expected_output": "每个声明的 slice 后使用 fresh reviewer、review_scope=checkpoint；最后使用 review_scope=closure。checkpoint PASS 只释放下一 slice，closure PASS 才能关闭 source unit。",
+      "files": [],
+      "expectations": ["checkpoint 与 closure scope 分开", "checkpoint PASS 不等于完成", "closure reviewer 独立 fresh"]
+    },
+    {
+      "id": 14,
+      "prompt": "implementer 已返回 DONE，但主 session 在集成前发现一个有明确 comparison point 的缺陷，尚未运行 reviewer。请决定下一步。",
+      "expected_output": "主 session 记录 finding 后直接启动 fresh fixer，不必先经过 reviewer；fixer 完成后由 reviewer 按对应 scope 重审。",
+      "files": [],
+      "expectations": ["main-session finding 可直达 fixer", "fixer 使用 fresh invocation", "fix 后仍需 reviewer closure"]
     }
   ]
 }

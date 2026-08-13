@@ -1,6 +1,6 @@
 ---
 name: subagent-driven-development
-description: 当调查、实现、修复或验证需要主 session 与 worker 协作时使用；在启动前形成 mode、具体 worker、schedule 和 review 策略，并消费统一结果。
+description: 当调查、实现、修复或验证需要主 session 与 worker 协作时使用；在启动前形成 mode、具体 worker 和 review 策略，并消费统一结果。
 ---
 
 # Subagent-Driven Development
@@ -12,26 +12,27 @@ description: 当调查、实现、修复或验证需要主 session 与 worker �
 每个非本地 bounded unit 启动前都必须输出：
 
 ```yaml
-mode: investigate | implement | fix | verify
+mode: investigate | implement | fix | review
 worker: main-session | "$grok-worker" | "@luna-worker" | "<model>/<effort>" | "prompt:<slug>"
-schedule: local | serial | parallel
 review: none | required
+review_scope: none | checkpoint | closure
 reason: <仅在 local、blocked、显式 override 或 review 判断不显然时填写>
 resources: <只记录真实共享资源、顺序和 cleanup owner>
 reuse: <只在同一 source unit 需要不可转移 live state 时填写>
 ```
 
 - `worker` 必须显式存在；默认是 `$grok-worker`。`main-session` 只用于原子本地动作，且必须说明 reason。
-- `schedule=serial` 用于单个委派或有序 batch；只有两个以上彼此隔离的 bounded unit 才能 `parallel`。共享可变资源时按 [Parallel Work Admission](references/parallel-work-admission.md) 判定。
+- `review=none` 时 `review_scope=none`；`review=required` 时明确选择 `checkpoint` 或 `closure`，不能留给 reviewer 临场猜测。
+- 多个 bounded unit 的派发顺序由 main session 根据依赖、ownership 和 resources 临时决定；存在并发候选时读取 [Parallel Work Admission](references/parallel-work-admission.md) 判定。
 - 未填写 `reuse` 时使用 fresh invocation；context compaction 后从 canonical input 重新启动。角色相同、空闲或共享 worktree 都不是复用理由。
-- `investigate`、`implement`、`fix` 默认继承同一逻辑 worker；复杂度只改变 `review`，不更换 Implementer/Fixer。
+- `investigate`、`implement` 可以沿用调用者选择的同一逻辑 worker；已确认 finding 必须交给 fresh `fix` invocation，不能通过旧 implementer 继续修复。复杂度通过 `review_scope=checkpoint|closure` 增加 reviewer gate，不自动切换 implementer。
 
 ## Mode selection
 
 - `investigate`：事实不足时建立 cause、blast radius、existing solution 和 boundary facts；返回 `EVIDENCE_SUFFICIENT` 或 `EVIDENCE_GAP`，不代替授权或实施。
 - `implement`：消费已释放的 Plan/Ticket bounded unit；旧 package 才可消费既有 DAG unit，返回变更、局部验证和残余风险。
-- `fix`：只消费已确认且已边界化的 finding；局部 `DONE` 不等于 finding closure，closure 由 reviewer 完成。
-- `verify`：只运行既定、无写副作用的检查；长时间或高回显检查交给 worker，快速有界检查可留在主 session。
+- `fix`：只消费已确认且已边界化的 finding；fixer 不重新裁决 finding、不扩大范围，且必须使用 fresh invocation。局部 `DONE` 不等于 finding closure，closure 由 reviewer 完成。
+- `review`：只运行既定、无写副作用的检查；reviewer 同时承担窄的 checkpoint review 和完整的 closure review。长时间或高回显检查交给 worker，快速有界检查可留在主 session。
 
 各 mode 的输入、模板和直接输出见 [Mode Contracts](references/mode-contracts.md)。
 
@@ -47,6 +48,6 @@ reuse: <只在同一 source unit 需要不可转移 live state 时填写>
 
 执行结果统一为 `Outcome: DONE | BLOCKED | INCOMPLETE`，并附 `mode`、`worker`、`source_unit`、`evidence`、`artifacts`、`blocker`、`fallback_from` 和 `session_id`。默认 `$grok-worker` 只有在进程已清理、diff/residue 可归因且可安全重放时，才允许一次 fresh `@luna-worker` fallback；业务 `BLOCKED` 不 fallback，第二次 `INCOMPLETE` 归一为 `BLOCKED`。详见 [Worker Resolver](references/worker-resolver.md)。
 
-`review=required` 时，worker 的 `DONE` 先标记 `review_state: PENDING_REVIEW`；reviewer PASS 后标记 `review_state: PASSED`，finding 进入同一 worker 的 `fix`，UNCERTAIN/BLOCKED 原样上交。`review=none` 的 DONE 使用 `review_state: NOT_REQUIRED`。复杂度与 reviewer 门槛见 [Review Gate](references/review-gate.md)。
+`review=required` 时，worker 的 `DONE` 先标记 `review_state: PENDING_REVIEW`，并使用 `review_scope=checkpoint` 或 `closure`；独立 reviewer PASS 后标记 `review_state: PASSED`，finding 由 main session 交给 fresh fixer，再由 reviewer 按同一 scope 重审。主 session 自己发现的 finding 也可直接进入 fresh fixer，不必先经过 reviewer。`UNCERTAIN/BLOCKED` 原样上交。`review=none` 的 DONE 使用 `review_state: NOT_REQUIRED`。复杂度与 reviewer 门槛见 [Review Gate](references/review-gate.md)。
 
 主 session 始终负责最终集成、证据采信、Ticket acceptance 和 Gate 判断；worker 的局部 DONE、review PASS 或测试通过都不单独代表 package 完成。

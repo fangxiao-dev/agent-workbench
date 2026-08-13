@@ -5,7 +5,7 @@ updated: 2026-08-13
 ## 原则
 
 - [待验证] 委派热路径只保留一个 activation boundary；调查与执行可以作为 mode 保持逻辑正交，但 scheduling、role 与 worker selection 必须在同一入口内完成，不能只输出 route 后依赖第二个方法论 skill。（证据: R6）
-- [待验证] 统一编排合同直接使用 `mode`、`worker` 与 conditional review strategy，不输出 downstream `route`；调查、实现和修复使用同一 worker，复杂度只决定是否进入独立 reviewer gate。（证据: R7）
+- [已确认] 统一编排合同直接使用 `mode`、`worker` 与 conditional review strategy，不输出 downstream `route`；调查和实现可以沿用逻辑 worker，但每个已确认 finding 都启动 fresh fixer，复杂任务用独立 reviewer 的 checkpoint/closure gate 收口。（证据: R7, R11）
 - [待验证] `worker` 字段是多态逻辑引用，可取 `$skill`、`@agent`、直接 model/profile 或 prompt-backed worker；SDD 不解释实现机制，只要求 resolver 满足统一输入、结果与生命周期合同。（证据: R8）
 - [待验证] scheduling contract 使用条件化最小输出；共享资源字段只在实际存在时出现，不为所有调度建立固定七字段协议。（证据: R2）
 - [待验证] 默认 worker 为 `$grok-worker`，安全 executor fallback 为一次 fresh `@luna-worker`；不回退到 main session，业务 `BLOCKED` 不触发 fallback。（证据: R9）
@@ -31,8 +31,8 @@ updated: 2026-08-13
 
 ### R7 · 2026-08-13（统一 worker 与 reviewer gate）
 
-- 修正按复杂度切换 Implementer worker 的方向；调查、实现和修复统一使用调用者策略指定的同一 worker。
-- 复杂度只决定实现后是否进入独立 `reviewer` gate；编排合同直接携带 `mode`、`worker` 和 review strategy，删除 `route`。
+- 修正按复杂度切换 Implementer worker 的方向；调查和实现可以沿用调用者策略指定的逻辑 worker，但已确认 finding 必须启动 fresh fixer。
+- 复杂度只决定实现后是否进入独立 `reviewer` gate；复杂任务可增加 checkpoint，最终使用 closure；编排合同直接携带 `mode`、`worker` 和 review strategy，删除 `route`。
 
 ### R8 · 2026-08-13（多态 worker 引用）
 
@@ -49,3 +49,8 @@ updated: 2026-08-13
 
 - 根据独立审阅补齐 `$grok-worker` 与 `@luna-worker` 的解析落点、显式 fail-closed 条件和一次 fallback 状态机；不增加运行时 registry。
 - 将 `PENDING_REVIEW` 定义为 `review_state`，保留 `WorkerOutcome` 三态，确保复杂 worker DONE 在 reviewer PASS 前不可收口。
+
+### R11 · 2026-08-13（reviewer 路由与 fresh fixer）
+
+- 采纳用常用的 `reviewer` 统一命名独立审查与验证角色；复杂任务可在 implementer 切片后使用 `checkpoint`，最终使用 `closure`。
+- 采纳 main session 或 reviewer 发现 finding 都可直接路由到 fresh fixer；fixer 不复用旧 invocation，优先使用新的 `@luna-worker` 或 `$grok-worker`。

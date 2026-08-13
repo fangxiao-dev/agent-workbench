@@ -12,13 +12,13 @@
 | `prompt:<slug>` | 当前宿主可读取的 prompt profile | profile 不存在或不唯一则 BLOCKED |
 | `main-session` | 当前主 session | 仅 local，必须给出 reason |
 
-解析步骤：验证引用格式 → 验证唯一实体和宿主能力 → 组装 canonical brief → 记录实际 worker → 启动 fresh invocation。任何一步不能确定都返回 `Outcome: BLOCKED`。
+解析步骤：验证引用格式 → 验证唯一实体和宿主能力 → 组装 canonical brief → 记录实际 worker → 启动 fresh invocation。Reviewer 是使用 `mode=review` 的独立角色，不是额外的 worker 引用。任何一步不能确定都返回 `Outcome: BLOCKED`。
 
 ## 统一 envelope
 
 ```yaml
 status: DONE | BLOCKED | INCOMPLETE
-mode: investigate | implement | fix | verify
+mode: investigate | implement | fix | review
 worker: <resolved logical reference>
 source_unit: <stable bounded-unit id>
 summary: <short result>
@@ -27,10 +27,15 @@ artifacts: []
 blocker: null | <reason>
 fallback_from: null | <logical reference>
 session_id: null | <executor session id>
+review_scope: none | checkpoint | closure
+finding_id: null | <confirmed finding id>
+finding_origin: null | main-session | reviewer
 review_state: NOT_REQUIRED | PENDING_REVIEW | PASSED | FINDING | BLOCKED
 ```
 
 `status` 只描述 worker 执行；`review_state` 描述结果能否交给主 session。`PENDING_REVIEW` 必须保留上述 envelope、comparison point 和待审 reviewer brief，写入当前 Attempt ER；只有旧 3.4 Task package 才可追加到 legacy Task Handoff。恢复时不得把它解释为 DONE。
+
+新 finding 无论来源于 main session 还是 reviewer，都使用同一 canonical brief 启动 fresh fixer；旧 invocation 的空闲、相同角色、共享 worktree 或已存在的 `reuse` 都不能把 finding 改成 resume。`reuse` 只服务于同一 source unit 尚未结束且仍持有不可转移 live state 的连续工作。
 
 ## 一次 fallback
 
