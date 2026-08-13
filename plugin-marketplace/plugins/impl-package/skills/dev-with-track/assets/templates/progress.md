@@ -4,7 +4,7 @@
 
 - Attempt: <attempt-id>
 - Contract aliases: optional; Git commit is the history anchor
-- Composition: tickets=<true|false>, dag=<true|false>
+- Composition: tickets=<true|false>, dag=false（阶段 A 兼容占位）
 - Lifecycle: <active|frozen>
 - Latest gate: <open|blocked|pass|fail|defer>
 - Blockers: <none|items>
@@ -14,7 +14,7 @@
 | Ticket | State | Evidence |
 | --- | --- | --- |
 
-## Task Execution
+## Legacy Task Execution（仅旧 package）
 
 | Task | State | Evidence | Handoff |
 | --- | --- | --- | --- |

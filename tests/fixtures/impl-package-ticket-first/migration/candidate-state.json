@@ -1,0 +1,14 @@
+{
+  "format": "ticket-first-candidate",
+  "composition": {"tickets": true, "dag": false},
+  "tasks": {},
+  "tickets": {
+    "TKT-01": {"state": "PENDING", "evidence": null},
+    "TKT-02": {"state": "PENDING", "evidence": null},
+    "TKT-03": {"state": "PENDING", "evidence": null},
+    "TKT-04": {"state": "PENDING", "evidence": null}
+  },
+  "activeCheckpoint": "execution/initial/execution-record.md",
+  "evidenceIndex": "evidence/index.json",
+  "legacyArchive": "migration/archive/task-handoffs/T1-handoff.md"
+}

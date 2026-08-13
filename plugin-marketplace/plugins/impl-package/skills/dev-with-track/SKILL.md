@@ -1,17 +1,17 @@
 ---
 name: dev-with-track
-description: 当批准 implementation plan 正式开始或者恢复执行、选择下一 actionable unit、记录证据、处理返工失效、分流 findings 或写 Gate 时使用；不重新定义 Decision/Spec/Plan/Ticket/DAG。
+description: 当批准 implementation plan 正式开始或者恢复执行、选择下一 actionable unit、记录证据、处理返工失效、分流 findings 或写 Gate 时使用；新 package 以 Ticket 为执行轴，不重新定义 Decision/Spec/Plan/Ticket。
 ---
 
 # Dev With Track
 
-先读 `../../references/impl-package-composition-contract.md` 和 `../../references/impl-package-current-state.md`。当前 attempt 涉及 material seam、browser/provider/native-tool 或昂贵系统验证时，再读 [`../../references/progressive-system-evidence.md`](../../references/progressive-system-evidence.md)。本 skill 维护 current state、Progress、Attempt Execution Record、条件式 Task Handoff、execution findings 和 current Gate；各上游 artifact 仍由 owning skill 维护。
+先读 `../../references/impl-package-composition-contract.md` 和 `../../references/impl-package-current-state.md`。当前 attempt 涉及 material seam、browser/provider/native-tool 或昂贵系统验证时，再读 [`../../references/progressive-system-evidence.md`](../../references/progressive-system-evidence.md)。本 skill 维护 current state、Progress、Attempt Execution Record、active checkpoint、execution findings 和 current Gate；旧 package 的 Task Handoff 仅作兼容恢复材料，各上游 artifact 仍由 owning skill 维护。
 需要委派或决定本地执行时，通过 `/impl-package:subagent-driven-development` 取得 scheduling contract；本 skill 只消费调度结果。
 
 ## Restore
 
 1. 运行 `validate`；跨 session 或授权绑定比较点时附 `--commit <Git commit>`。
-2. 打开根 `progress.md`，读取 current Attempt、可选合同别名、Composition、Ticket/Task 两条状态轴、blocker、active checkpoint、next action、Gate 及 Handoff/Execution Record 指针。
+2. 打开根 `progress.md`，读取 current Attempt、可选合同别名、Composition、Ticket 状态、blocker、active checkpoint、next action、Gate 及 Execution Record 指针；只有旧 package 才读取 Task/DAG/Handoff 轴。
 3. 只沿当前动作读取必要 Ticket、Task、Handoff、Execution Record judgment、review 或 evidence；不要重读全部历史。
 4. 根据批准 commit 与实际 diff 判断 authority/contract 是否仍成立。implementation-only 继续；行为、acceptance、数据/安全或 mutation authority 变化回 owning stage。
 
@@ -23,17 +23,17 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 4. **Evaluate**：使用最便宜且忠实的证据。昂贵 runtime/E2E 重跑必须有新修复、环境变化或决定性观察目标。
 
 步骤 1、3 的事实调查、实现、修复和验证策略由 `/impl-package:subagent-driven-development` 统一形成；本 skill 只消费其 `mode / worker / schedule / review` 与结果合同。步骤 2 和 4 由主 session 把控。
-依赖是否释放只由 DAG、typed Ticket dependency 与 canonical state 判断。Progress/checkpoint 不授权 dispatch，也不释放 acceptance/release dependency。
+依赖是否释放由新 package 的 typed Ticket dependency 与 canonical state 判断；旧 package 才额外读取 DAG。Progress/checkpoint 不授权 dispatch，也不释放 acceptance/release dependency。
 
 ## State、ER 与 Handoff
 
 - 状态变化只使用 `set-state ... --expect ... --evidence ...`；stale transition 必须重新读取当前状态。
-- `READY/RUNNING` 不得越过未释放 Task dependency；Task `DONE` 不等于 Ticket `SATISFIED`。
+- 新 package 不产生 `READY/RUNNING/DONE` Task 状态；旧 package 的 Task `DONE` 不等于 Ticket `SATISFIED`。
 - 主 session 通过 `er-add` 写 checkpoint/judgment；worker 默认不直接写 Execution Record。
 - `checkpoint` 是 attempt-level 恢复快捷入口，并更新 `state.resume`。
-- 仅在 BLOCKED、retry、跨 session/owner 或并行委派时创建 `execution/<attempt>/task-handoffs/<task-id>-handoff.md`。
-- 上述恢复条件发生但当前 attempt 没有 DAG Task 时，改用 Attempt-level ER checkpoint 记录 dispatch 返回的恢复事实和唯一下一动作。
-- 合同或计划实际变化只把受影响 Task/Ticket 设为 `NEEDS-REVALIDATION`；未受影响 evidence 保留。
+- 新 package 在 BLOCKED、retry、跨 session/owner 或需要交接时写 Attempt-level active checkpoint（当前由 ER + `resume` 承载）；不创建 Task Handoff。旧 package 才沿用 `execution/<attempt>/task-handoffs/<task-id>-handoff.md`。
+- checkpoint 只记录下一动作与恢复证据，不授权派发；长期判断写 ER judgment。compact 只作异常兜底，不是正常交接权威。
+- 合同或计划实际变化只把受影响 Ticket（旧 package 另含受影响 Task）设为 `NEEDS-REVALIDATION`；未受影响 evidence 保留。
 
 ```powershell
 Get-Content .\er-payload.json -Raw |
@@ -42,7 +42,7 @@ Get-Content .\er-payload.json -Raw |
 
 `<impl-package-plugin-root>` 指当前已加载 skill 所属的插件根目录；不要假设 workbench 仓库路径或宿主缓存路径。
 
-payload 使用 `purpose=checkpoint|judgment`、`subject=attempt|ticket:<id>|task:<id>`、`title`、`content`、checkpoint 的 `nextAction` 和可选 evidence。
+payload 使用 `purpose=checkpoint|judgment`、`subject=attempt|ticket:<id>`（旧 package 可用 `task:<id>`）、`title`、`content`、checkpoint 的 `nextAction` 和可选 evidence。
 
 ## Review、Findings 与人工验收
 

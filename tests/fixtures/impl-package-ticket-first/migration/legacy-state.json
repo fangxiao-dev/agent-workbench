@@ -1,0 +1,7 @@
+{
+  "formatVersion": "3.4",
+  "attempt": {"id": "initial", "plan": "docs/implementations/260806-example/plan.md"},
+  "tasks": {"T1": {"state": "DONE", "evidence": "evidence/source-output.md"}},
+  "tickets": {"TKT-01": {"state": "PENDING", "evidence": null}},
+  "resume": {"blocker": null, "next": "map evidence", "evidence": "execution/initial/task-handoffs/T1-handoff.md"}
+}

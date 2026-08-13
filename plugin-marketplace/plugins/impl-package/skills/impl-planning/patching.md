@@ -15,15 +15,15 @@ Patch 只属于 package 已有 terminal gate 之后的生命周期，并继续�
 ## Patch plan
 
 - 文件名为 YYYYMMDD-HHMM-<patch-topic>.patch-plan.md，Attempt ID 与文件名前缀一致。
-- plan 以新的 Attempt ID 独立声明 Composition，不继承历史 plan 的 tickets/dag。
+- plan 以新的 Attempt ID 独立声明 Ticket-only 或 Plan-direct Composition，不继承历史 plan 的 Task/DAG 运行轴。
 - 不覆盖 plan.md，不向历史 DAG/ticket/task 追加本 attempt 状态。
-- 简单 no-DAG patch 不建立 executable task checklist；需要恢复时使用 `state.json.resume`。
+- 新 patch 使用 `tickets=true, dag=false` 或 `tickets=false, dag=false`；需要恢复时使用文档化 active checkpoint 与 `state.json.resume`。
 - Planned Verification 引用权威 policy；实际证据写入 `execution/<attempt>/execution-record.md`。
 
 ## Patch artifacts
 
 - tickets=true 时创建属于本 Attempt ID 的新 ticket files；ticket id 在 package 内保持唯一。
-- dag=true 时创建 YYYYMMDD-HHMM-<patch-topic>.patch-dag.md；旧 dag.md / patch DAG 保留历史。
+- 旧 package 若必须恢复 `dag=true`，只读其既有 YYYYMMDD-HHMM-<patch-topic>.patch-dag.md；新 patch 不创建 patch DAG。
 - package 永远只有一个 current `gate.md`，不创建 patch-gate 文件；旧判决由 Git 和旧 Attempt Execution Record 的 Gate 摘要保留。
 
 ## Freeze

@@ -30,7 +30,7 @@ session_id: null | <executor session id>
 review_state: NOT_REQUIRED | PENDING_REVIEW | PASSED | FINDING | BLOCKED
 ```
 
-`status` 只描述 worker 执行；`review_state` 描述结果能否交给主 session。`PENDING_REVIEW` 必须保留上述 envelope、comparison point 和待审 reviewer brief，写入当前 Attempt ER 或 Task Handoff，恢复时不得把它解释为 DONE。
+`status` 只描述 worker 执行；`review_state` 描述结果能否交给主 session。`PENDING_REVIEW` 必须保留上述 envelope、comparison point 和待审 reviewer brief，写入当前 Attempt ER；只有旧 3.4 Task package 才可追加到 legacy Task Handoff。恢复时不得把它解释为 DONE。
 
 ## 一次 fallback
 

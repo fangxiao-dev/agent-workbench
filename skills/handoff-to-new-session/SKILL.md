@@ -6,7 +6,7 @@ compatibility: Requires Codex Desktop thread tools (create_thread, set_thread_ti
 
 # Handoff To New Session
 
-Create a fresh normal Codex thread that explicitly uses a verified existing implementation worktree. The handoff uses compact anchor and continuation prompts plus one bounded understanding audit; neither prompt is a temporary handoff document or a compressed conversation summary.
+Create a fresh normal Codex thread that explicitly uses a verified existing implementation worktree. A Ticket may span multiple sessions by default. The normal authority is a documented active checkpoint plus the package records; the handoff uses compact anchor and continuation prompts plus one bounded understanding audit. Neither prompt is a temporary handoff document or a compressed conversation summary, and context compaction is only an emergency fallback rather than the normal handoff mechanism.
 
 ## Scope
 
@@ -17,7 +17,7 @@ Use this skill only when all of these are true:
 - The user identifies the existing implementation worktree in which the new session must run its commands.
 - The next action is known, even when it is blocked on named input or authorization.
 
-Do not use this skill for a half-finished task that needs a rolling handoff, a general session summary, a fork, or a workflow that has no authoritative entry record yet. Route those requests to the appropriate handoff or planning workflow instead.
+Do not use this skill for a half-finished task that needs a rolling handoff, a general session summary, a fork, or a workflow that has no authoritative entry record yet. For a Ticket rolling handoff, write the active checkpoint first and let the next session recover through the Ticket/package entry point. Route those requests to the appropriate handoff or planning workflow instead.
 
 ## Safety Model
 

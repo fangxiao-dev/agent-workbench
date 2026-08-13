@@ -1,0 +1,25 @@
+{
+  "revision": "fixture-revision",
+  "environment": "ticket-first-contract-fixture",
+  "records": [
+    {"ticket": "TKT-01", "claim": "AC-1", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-01", "conclusion": "supporting"},
+    {"ticket": "TKT-01", "claim": "AC-2", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "remaining-completion", "artifact": "evidence/fixture-artifacts.md#tkt-01", "conclusion": "supporting"},
+    {"ticket": "TKT-01", "claim": "INV-tenant-isolation", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-01", "conclusion": "supporting"},
+    {"ticket": "TKT-01", "claim": "INV-rbac-privacy", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-01", "conclusion": "supporting"},
+    {"ticket": "TKT-01", "claim": "INV-idempotency-integrity", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-01", "conclusion": "supporting"},
+    {"ticket": "TKT-02", "claim": "AC-1", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-02", "conclusion": "supporting"},
+    {"ticket": "TKT-02", "claim": "AC-2", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "remaining-completion", "artifact": "evidence/fixture-artifacts.md#tkt-02", "conclusion": "supporting"},
+    {"ticket": "TKT-02", "claim": "INV-tenant-isolation", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-02", "conclusion": "supporting"},
+    {"ticket": "TKT-02", "claim": "INV-rbac-privacy", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-02", "conclusion": "supporting"},
+    {"ticket": "TKT-02", "claim": "INV-idempotency-integrity", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-02", "conclusion": "supporting"},
+    {"ticket": "TKT-03", "claim": "AC-1", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-03", "conclusion": "supporting"},
+    {"ticket": "TKT-03", "claim": "AC-2", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "remaining-completion", "artifact": "evidence/fixture-artifacts.md#tkt-03", "conclusion": "supporting"},
+    {"ticket": "TKT-03", "claim": "INV-tenant-isolation", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-03", "conclusion": "supporting"},
+    {"ticket": "TKT-03", "claim": "INV-rbac-privacy", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-03", "conclusion": "supporting"},
+    {"ticket": "TKT-03", "claim": "INV-idempotency-integrity", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-03", "conclusion": "supporting"},
+    {"ticket": "TKT-04", "claim": "AC-1", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "remaining-completion", "artifact": "evidence/fixture-artifacts.md#tkt-04", "conclusion": "supporting"},
+    {"ticket": "TKT-04", "claim": "INV-tenant-isolation", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-04", "conclusion": "supporting"},
+    {"ticket": "TKT-04", "claim": "INV-rbac-privacy", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-04", "conclusion": "supporting"},
+    {"ticket": "TKT-04", "claim": "INV-idempotency-integrity", "revision": "fixture-revision", "environment": "ticket-first-contract-fixture", "timing": "early-falsification", "artifact": "evidence/fixture-artifacts.md#tkt-04", "conclusion": "supporting"}
+  ]
+}

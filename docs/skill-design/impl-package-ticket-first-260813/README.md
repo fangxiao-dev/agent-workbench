@@ -1,7 +1,7 @@
 # Impl-Package Ticket-first 重构
 
 - 日期：2026-08-13
-- 状态：方案与独立文档审阅已收敛；尚未实施
+- 状态：阶段 A 合同与 fixture 已实施；阶段 B runtime/迁移尚未实施；阶段 D-1 broker 合同已锁定、尚未实施
 - 性质：**本目录是后续优化的权威设计文档。**实施与再讨论以本页为准；旧设计只作背景材料
 - 适用范围：Impl-Package 的 Composition、Ticket、执行调度、状态、Execution Record 与会话交接
 
@@ -10,7 +10,7 @@
 | Checkpoint | 含义 |
 | --- | --- |
 | Git commit `9870d77` | 反方审阅与讨论修正前的原始方案、证据和复现脚本 |
-| 当前工作树 | 收敛后的实施候选方案；独立 reviewer 首轮发现已修订，finding closure 为 5/5 PASS |
+| 当前工作树 | 阶段 A 收敛后的实施方案；独立 reviewer 复核无 P0/P1，剩余 schema/legacy archive 细节已纳入 fixture |
 
 需要查看原始归因、旧顺序或 116k 的旧表述时，直接比较 `9870d77`，不在现行方案里保留两套竞争规则。
 
@@ -19,6 +19,7 @@
 | 文件 | 内容 |
 | --- | --- |
 | 本页 | 目标模型、落地顺序、状态归属、迁移与验收 |
+| [阶段 A fixture](../../../tests/fixtures/impl-package-ticket-first/) | Ticket-only、三型边与迁移回退合同 fixture |
 | [evidence/measurements.md](evidence/measurements.md) | 实测数字与口径 |
 | [evidence/codex-session-analysis.md](evidence/codex-session-analysis.md) | 5 个 rollout 的会话分析 |
 | [evidence/mattpocock-philosophy.md](evidence/mattpocock-philosophy.md) | Matt Pocock 公开理念调研，区分原话与推断 |
@@ -55,7 +56,7 @@ Ticket-first 的目标是减少重复执行对象、让证据直接归属验收�
 - 定义 Task 字段的吸收去向、唯一 writer 和新 `state.json` schema。
 - 建立旧格式→新格式迁移 fixture 与失败回退路径。
 
-阶段 A 的重点是证明新模型完整，不是提前获得并行收益。
+阶段 A 的重点是证明新模型完整，不是提前获得并行收益。本轮已完成合同/路由/fixture；3.4 runtime 仍作为兼容桥，尚未进入阶段 B。
 
 ### 阶段 B：实现状态/恢复并迁移旧包
 
@@ -72,7 +73,7 @@ Ticket-first 的目标是减少重复执行对象、让证据直接归属验收�
 
 ### 阶段 D：外层 broker/controller
 
-后续单独建设 user-facing broker/controller，负责监控 task session、在授权 envelope 内调度、维护协调 ledger，并统一实现上下文 warning 与交接。它不是本轮 Ticket-first 首发的阻塞项。
+后续单独建设 user-facing broker/controller，负责监控 task session、在授权 envelope 内调度、维护协调 ledger，并统一实现上下文 warning 与交接。它不是本轮 Ticket-first 首发的阻塞项。阶段 D 的初版合同已锁定为 [阶段 D-1：外层 broker/controller 初版合同](stage-d-initial-broker-contract.md)，其中多任务包 profile 统一称为 `swarm`。
 
 ## 3. 运行合同
 
@@ -181,7 +182,7 @@ active checkpoint 覆盖写是有意丢弃已过时的恢复指令。Git **只�
 | known seam / risk | 合同部分进 Ticket AC/Spec；执行判断进 ER judgment |
 | primary ownership / 单写资源 | Plan 的执行策略表 |
 
-Task Handoff 的默认路径随 Task 删除。跨 session checkpoint/handoff 继续保留，两者目的不同。
+Task Handoff 的默认路径随 Task 删除。跨 session 的 active checkpoint 继续保留；Task Handoff 只作为旧 3.4 package 的迁移材料，不是新 package 的交接方式。
 
 ### 3.7 旧包迁移
 

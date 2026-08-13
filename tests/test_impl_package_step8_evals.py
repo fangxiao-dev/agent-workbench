@@ -54,7 +54,7 @@ def test_core_templates_expose_only_current_contract() -> None:
     plan = (IMPL / "skills/impl-planning/assets/templates/plan.md").read_text(encoding="utf-8")
     state = (IMPL / "references/impl-package-current-state.md").read_text(encoding="utf-8")
     gate = (IMPL / "skills/dev-with-track/assets/templates/gate.md").read_text(encoding="utf-8")
-    assert "tickets=<true|false>, dag=<true|false>" in plan
+    assert "tickets=<true|false>, dag=false" in plan
     assert '"formatVersion": "3.4"' in state
     assert all(field in state for field in ('"attempt"', '"tasks"', '"tickets"', '"resume"'))
     assert "execution/<attempt>/execution-record.md" in state
@@ -67,7 +67,7 @@ def test_complete_progress_and_workflow_surfaces_are_present() -> None:
     progress = (IMPL / "skills/dev-with-track/assets/templates/progress.md").read_text(encoding="utf-8")
     planning = (IMPL / "skills/impl-planning/assets/templates/plan.md").read_text(encoding="utf-8")
     review = (IMPL / "skills/plan-review/SKILL.md").read_text(encoding="utf-8")
-    assert all(section in progress for section in ("Ticket Acceptance", "Task Execution", "Active Checkpoints", "Attempt History"))
+    assert all(section in progress for section in ("Ticket Acceptance", "Legacy Task Execution", "Active Checkpoints", "Attempt History"))
     assert all(section in planning for section in ("Coverage & Change Map", "计划验证", "Bundle Review & Approval"))
     assert "fresh independent reviewer" in review
     for relative in (

@@ -2,7 +2,7 @@
 
 创建时间（Created）：
 Attempt ID：<initial | YYYYMMDD-HHMM-patch-topic>
-Composition：tickets=<true|false>, dag=<true|false>
+Composition：tickets=<true|false>, dag=false
 
 > 直接引用当前 decision.md / spec.md。D/S/P 为可选旧别名，不因普通编辑升级；Git commit ID 是唯一允许持久化的历史锚点。
 
@@ -19,8 +19,8 @@ Composition：tickets=<true|false>, dag=<true|false>
 
 - Tickets：yes | no
 - 理由：
-- DAG：yes | no
-- 理由：
+- DAG：阶段 A 新 package 固定 no；`dag=false` 仅为 3.4 兼容占位
+- 旧 package 迁移/恢复例外：<N/A | legacy package path + owner authorization>
 
 ## 执行策略
 
@@ -34,7 +34,7 @@ Composition：tickets=<true|false>, dag=<true|false>
 
 ## Coverage & Change Map
 
-| Decision/Spec 约束 | 实现范围 | Ticket/Task | 风险或 seam |
+| Decision/Spec 约束 | 实现范围 | Ticket / legacy Task | 风险或 seam |
 | --- | --- | --- | --- |
 
 只列实际受影响范围；后续按实际影响范围决定局部重新验证，不机械清空整个 Attempt。
@@ -47,14 +47,14 @@ Composition：tickets=<true|false>, dag=<true|false>
 ## 交接
 
 - Ticket 集合：<tickets/ | N/A>
-- DAG：<dag.md 或 patch-dag 路径 | N/A>
+- DAG：N/A（新 package）；旧 package 仅引用 existing DAG
 - 下一动作：
 - 剩余 owner 决策：<none | 具体事项>
 
 ## Bundle Review & Approval
 
 - Plan freeze：<pending | frozen>
-- Joint validation：<Ticket coverage / typed dependency / DAG ownership / evidence feasibility / integration order>
+- Joint validation：<Ticket coverage / typed dependency / shared-resource validation / evidence feasibility / integration order>
 - Review result：<cleared | revise | owner-decision | N/A>
 - Owner approval：<same-session statement | Git commit ID | pending>
 - Progress：progress.md（`init` 后生成）

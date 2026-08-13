@@ -4,7 +4,7 @@
 **Publication Status：** Draft
 **Attempt ID：** <attempt-id>
 
-> Ticket 定义验收边界；运行时验收状态保存在 `.impl-package/state.json`。Ticket 直接属于当前 Attempt，不需要手工 revision。
+> Ticket 定义验收边界；运行时验收状态保存在 `.impl-package/state.json`。Ticket 直接属于当前 Attempt，不需要手工 revision。阶段 A 的 `dag=false` 只是 3.4 兼容占位，不创建 Task。
 
 ## Runtime Acceptance
 
@@ -26,7 +26,20 @@
 ## 验收标准
 
 - **AC-1：** <可观察结果或约束>
+  - Stable claim ID：`AC-1`
+  - 证据时机：`early-falsification` | `remaining-completion`
   - 证据：<计划证据或人工验证 owner>
+
+## 安全不变量
+
+- tenant：<第一条可执行路径必须满足的租户边界>
+  - Stable claim ID：`INV-tenant-isolation`
+- RBAC / privacy：<授权与隐私约束；早期路径不得关闭或弱化>
+  - Stable claim ID：`INV-rbac-privacy`
+- 幂等 / 数据完整性：<第一条可执行路径必须保持的属性>
+  - Stable claim ID：`INV-idempotency-integrity`
+
+早期路径可以缩小格式、入口或已授权主体范围，但只能做到“纵切窄、属性不薄”。Ticket 只有在全部 required claims 的当前 revision/environment evidence 齐全后才进入最终 acceptance。
 
 ## 阻塞依赖
 

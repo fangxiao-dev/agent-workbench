@@ -1,6 +1,6 @@
 # Handoff Prompt Template
 
-Fill these two compact cards from verified package records. They are not a summary of the old conversation or a duplicate of the implementation package. Keep them together within 16 bullets / roughly 900 Chinese characters unless a named authorization or blocker genuinely needs more context. Never add commands, test lists, design detail, task decomposition, file boundaries, secrets, controlled inputs, or historical evidence already available from the authority entry point.
+Fill these two compact cards from verified package records. A Ticket may span sessions; the package active checkpoint is the normal recovery authority. These cards are not a summary of the old conversation or a duplicate of the implementation package. Keep them together within 16 bullets / roughly 900 Chinese characters unless a named authorization or blocker genuinely needs more context. Never add commands, test lists, design detail, task decomposition, file boundaries, secrets, controlled inputs, or historical evidence already available from the authority entry point.
 
 ## First-stage anchor prompt
 
@@ -22,7 +22,7 @@ Send this only after the title and first-stage `anchor PASS` are confirmed.
 For a downstream protocol extension, replace the task-specific lines with that protocol's complete continuation contract, but retain the final understanding-receipt lines. Do not combine the two task contracts.
 
 ```text
-Continuation 已就绪。通过 package 与 entry point 从 [CHECKPOINT] 恢复；不回溯重做已登记工作。
+Continuation 已就绪。通过 package 与 entry point 从文档化 active checkpoint [CHECKPOINT] 恢复；不回溯重做已登记工作。Context compact 只作异常兜底，不取代 checkpoint。
 
 极简快照：
 - current attempt / binding：[ATTEMPT_AND_BINDING]

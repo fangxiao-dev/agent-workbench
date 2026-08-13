@@ -5,7 +5,7 @@ description: Impl-Package 体系的入口地图与路由；当需要判断从需
 
 # Impl-Package
 
-Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract ensemble → Plan → 可选 Tickets/DAG → execution state → verification → Gate → stable-doc backfill。
+Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract ensemble → Plan → 可选 Ticket → execution state → verification → Gate → stable-doc backfill。DAG/Task 只为旧 package 的恢复与迁移保留。
 
 ## 核心原则
 
@@ -30,7 +30,7 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 | 创建 initial/patch plan、决定 Composition | `/impl-package:impl-planning` |
 | 审查 plan 或完整 Plan/Ticket/DAG bundle | `/impl-package:plan-review` |
 | 创建独立验收切片 | `/impl-package:to-tickets` |
-| 创建横向执行依赖图 | `/impl-package:create-task-dag` |
+| 审计或迁移旧 Task/DAG package | `/impl-package:create-task-dag`（legacy read-only） |
 | 执行前确认授权与工作区 | `/impl-package:execution-preflight` |
 | 调查、实现、修复、验证及主 session/worker 分工、mode、batch 和资源顺序 | `/impl-package:subagent-driven-development` |
 | 恢复执行、推进 Task/Ticket、写 Gate | `/impl-package:dev-with-track` |
@@ -52,17 +52,16 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
   spec.md
   contract-design.md     # 可选；从属 spec.md，共用 Status/Gate
   plan.md
-  tickets/               # Composition earned 时
-  dag.md                  # Composition earned 时
+  tickets/               # Ticket-only Composition earned 时
   progress.md             # active Attempt 的 machine-owned 恢复投影
   execution/
     <attempt>/
       execution-record.md
-      task-handoffs/      # 仅实际发生 handoff 时创建
+      task-handoffs/      # 仅旧 Task package 实际发生 handoff 时创建
   .impl-package/state.json
   gate.md                 # 首次 gate evaluation 时创建
 ```
 
-小型个人/团队改动可以 `tickets=false, dag=false`；不要为审计完整感增加 artifact。
+新 package 只使用 `tickets=true, dag=false`（需要独立验收切片）或 `tickets=false, dag=false`（小而线性的 Plan-direct）。阶段 A 的 `dag=false` 是 3.4 兼容占位，不表示创建 Task/DAG；`dag=true` 只读旧 package。不要为审计完整感增加 artifact。
 
 `contract-design.md` 只有在精确结构会遮蔽 `spec.md` 的行为/验收主线，或同一 canonical model 被多个 operation/module 消费时才 earned。它没有独立 alias、revision、状态、审批或生命周期。

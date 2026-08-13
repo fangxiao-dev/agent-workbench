@@ -29,7 +29,7 @@ reuse: <只在同一 source unit 需要不可转移 live state 时填写>
 ## Mode selection
 
 - `investigate`：事实不足时建立 cause、blast radius、existing solution 和 boundary facts；返回 `EVIDENCE_SUFFICIENT` 或 `EVIDENCE_GAP`，不代替授权或实施。
-- `implement`：消费已释放的 Plan/Ticket/DAG bounded unit，返回变更、局部验证和残余风险。
+- `implement`：消费已释放的 Plan/Ticket bounded unit；旧 package 才可消费既有 DAG unit，返回变更、局部验证和残余风险。
 - `fix`：只消费已确认且已边界化的 finding；局部 `DONE` 不等于 finding closure，closure 由 reviewer 完成。
 - `verify`：只运行既定、无写副作用的检查；长时间或高回显检查交给 worker，快速有界检查可留在主 session。
 

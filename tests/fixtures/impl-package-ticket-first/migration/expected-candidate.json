@@ -1,0 +1,17 @@
+{
+  "composition": {"tickets": true, "dag": false},
+  "taskArtifacts": [],
+  "legacyArchive": "migration/archive/task-handoffs/T1-handoff.md",
+  "evidenceSources": ["evidence/source-output.md"],
+  "rejectedEvidence": ["execution/initial/task-handoffs/T1-handoff.md"],
+  "retiredExamples": [
+    {"state": "RETIRED", "disposition": "waived", "scopeEvidence": "decision/scope-change.md"},
+    {"state": "RETIRED", "disposition": "superseded", "successor": "TKT-02", "inboundEdges": "rewired-or-owner-released"}
+  ],
+  "interruptions": [
+    {"point": "candidate-before-validation", "authority": "pre-migration-anchor"},
+    {"point": "candidate-during-validation", "authority": "pre-migration-anchor"},
+    {"point": "candidate-after-validation-before-switch", "authority": "pre-migration-anchor"},
+    {"point": "after-switch", "authority": "single-migration-commit"}
+  ]
+}
