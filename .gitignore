@@ -26,3 +26,4 @@ skills-local/
 
 # thread-harness runtime ledger (coordination state, not source)
 .progress-record/
+.test-tmp/
