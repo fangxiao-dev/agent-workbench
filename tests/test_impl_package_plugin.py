@@ -185,7 +185,7 @@ def test_dispatch_bounded_task_defines_fixer_profiles_and_template() -> None:
         PLUGIN / "skills" / "dispatch-bounded-task" / "references" / "worker-failure-recovery.md"
     ).read_text(encoding="utf-8")
 
-    assert "| Implementer | `call-grok`：`grok-4.5`、`effort=high` | `luna-worker` | `gpt-5.6-terra`、`reasoning_effort=xhigh` |" in dispatch
+    assert "| Implementer | `call-grok`：`grok-4.5`、`effort=high` | `luna-worker` | [@luna-worker](subagent://luna-worker) (gpt-5.6-luna/max) |" in dispatch
     assert "| Fixer | `call-grok`：`grok-4.5`、`effort=high` | `luna-worker` | default subagent |" in dispatch
     assert "--no-subagents" not in dispatch
     assert "| Verifier | 调用者指定或当前宿主适配的验证 worker" in dispatch

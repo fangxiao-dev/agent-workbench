@@ -17,7 +17,7 @@ description: 当批准的 Plan、Ticket 或 DAG 已提供已释放的实现、re
 
 | 角色 | 普通首选 | executor fallback | 复杂任务 |
 |---|---|---|---|
-| Implementer | `call-grok`：`grok-4.5`、`effort=high` | `luna-worker` | `gpt-5.6-terra`、`reasoning_effort=xhigh` |
+| Implementer | `call-grok`：`grok-4.5`、`effort=high` | `luna-worker` | [@luna-worker](subagent://luna-worker) (gpt-5.6-luna/max) |
 | Fixer | `call-grok`：`grok-4.5`、`effort=high` | `luna-worker` | default subagent |
 | Verifier | 调用者指定或当前宿主适配的验证 worker | 无额外默认；失败时 `BLOCKED` | 同普通策略 |
 

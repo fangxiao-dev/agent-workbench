@@ -34,10 +34,10 @@
     {
       "id": 4,
       "prompt": "比较两个 Implementer 单元：A 为局部普通实现，B 跨接口并触及数据完整性。均无 override。",
-      "expected_output": "A 首选 call-grok 的 grok-4.5/high，executor INCOMPLETE 且完成清理后可 fallback 一次 fresh Luna；B 直接使用 gpt-5.6-terra/xhigh。两者的原生结果都在 dispatch 边界映射到三态 Outcome。",
+      "expected_output": "A 首选 call-grok 的 grok-4.5/high，executor INCOMPLETE 且完成清理后可 fallback 一次 fresh Luna；B 直接使用 [@luna-worker](subagent://luna-worker) (gpt-5.6-luna/max)。两者的原生结果都在 dispatch 边界映射到三态 Outcome。",
       "files": [],
       "expectations": [
-        "普通 Implementer 使用 Grok、fallback Luna，复杂 Implementer 使用 gpt-5.6-terra/xhigh",
+        "普通 Implementer 使用 Grok、fallback Luna，复杂 Implementer 使用 [@luna-worker](subagent://luna-worker) (gpt-5.6-luna/max)",
         "统一映射 DONE、BLOCKED 或 INCOMPLETE"
       ]
     },
