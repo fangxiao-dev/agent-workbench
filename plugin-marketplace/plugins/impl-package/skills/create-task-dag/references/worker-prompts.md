@@ -20,6 +20,9 @@ Known depends on：
 Contributes to tickets：
 - <Ticket ID 列表，或 spec:AC-n>
 
+Contract refs：
+- <repo-relative-path#major-section-anchor；只列本 Task 所需章节>
+
 局部验证：
 - <相关测试、检查或 evidence 要求>
 

@@ -13,6 +13,8 @@ D/S/P 仅是可选的人类可读别名，不是新 artifact 的必填字段，�
 
 `contract-design.md` 从属 `spec.md` 并共用 Status、审批和 Spec Gate；它没有独立 alias、revision、状态或生命周期。Plan 可以引用其中稳定章节，但不得复制或补设计另一套 DTO/schema。
 
+Ticket 与 Task 引用 Decision/Spec/contract-design/Plan 中的合同或验收语义时，必须使用仓库相对路径并定位到具体一级或二级大章节（Markdown heading/anchor 或 `§章节名`）；不得只裸指整份文档，也不使用易漂移的行号。恢复、派发和验收默认读取这些章节及其直接引用，而不是把整份合同文档作为无差别上下文。
+
 ## 2. Composition
 
 Plan 必须声明：

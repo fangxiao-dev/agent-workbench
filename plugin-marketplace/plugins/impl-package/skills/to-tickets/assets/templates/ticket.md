@@ -17,6 +17,12 @@
 
 <一个范围窄、边界完整、用户可见的交付与验收切片。>
 
+## Contract references
+
+- `<repo-relative-path>#<major-section-anchor>` — `<该章节约束本 Ticket 的内容>`
+
+引用必须定位到一级或二级大章节；不得只写整个文档路径或使用行号。
+
 ## 验收标准
 
 - **AC-1：** <可观察结果或约束>

@@ -9,14 +9,14 @@
 
 Integration responsibility: Working Branch owner
 
-| Task | Primary ownership | Known depends on | Contributes to tickets | Known seam / risk |
-| --- | --- | --- | --- | --- |
-| T1 | packages/db test support | none | TST-01 | downstream tests consume runner |
+| Task | Primary ownership | Known depends on | Contributes to tickets | Contract refs | Known seam / risk |
+| --- | --- | --- | --- | --- | --- |
+| T1 | packages/db test support | none | TST-01 | `spec.md#persistence-contract` | downstream tests consume runner |
 ```
 
 Task 是横向 execution unit；Ticket 是独立纵向 acceptance unit。`Contributes to tickets` 是多对多 contribution：一个 Task 可贡献多个 Ticket，一个 Ticket 可由多个 Task 支撑，Task 完成不自动改变 Ticket acceptance status。无 Ticket 的 DAG 使用 `spec:AC-n`，但仍只表达贡献，不伪造 Ticket 或 acceptance 映射。
 
-只记录已知确定依赖。Primary ownership 按模块、目录或共享 seam 划分，派发时它是正常写入范围；未列出的范围默认禁改。发现需要共享范围时返回 BLOCKED，而非越界编辑。不要用 ownership lanes、完整文件清单、全量 input/output contract、consumer 清单、cohort 或 seam execution owner 作为普通 Task 的必填项。
+只记录已知确定依赖。Primary ownership 按模块、目录或共享 seam 划分，派发时它是正常写入范围；未列出的范围默认禁改。Contract refs 使用仓库相对路径并定位到一级或二级大章节，只列 Task 实际需要的章节；不得裸指整份文档、使用行号或复制合同正文。发现需要共享范围时返回 BLOCKED，而非越界编辑。不要用 ownership lanes、完整文件清单、全量 input/output contract、consumer 清单、cohort 或 seam execution owner 作为普通 Task 的必填项。
 
 只有实际共享 seam、跨 session handoff 或高风险边界需要时，在受影响 Task 行下补充最小必要范围、接口或验证细节。Task 编号沿 package 中最高 `T<n>` 续编；retired DAG 的新 attempt 使用 patch DAG，不改写历史 DAG。
 
