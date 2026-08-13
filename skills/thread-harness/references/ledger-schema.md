@@ -6,6 +6,33 @@
 
 四个账本文件都是 JSON Lines，均为 append-only：只能追加新行，不重写旧行，不删除旧行。**controller 是指定 ledger writer**；child 只发送 H1 JSON payload，controller 验证后使用现有命令追加。CLI 不提供可信调用者鉴权；`act --halt --source-session` 只用于防误操作与来源一致性校验。所有 mutation 在 coordination 级跨进程写锁内完成；追加使用完整 UTF-8 bytes、flush 与 fsync。坏行会 fail-closed，不能自动修复。
 
+## registry broker contract
+
+registry 根部必须包含：
+
+```json
+{
+  "broker": {
+    "profile": "solo",
+    "budget": {
+      "smart_zone_tokens": 150000,
+      "tail_requests": 20,
+      "tail_p75_increment_tokens": 1720
+    }
+  }
+}
+```
+
+`profile` 只能是 `solo` 或 `swarm`；三项 budget 必须是正整数，并且脚本机械计算出正的 `handoff_at`。缺失或非法配置由 `preflight` fail-closed，不自动迁移旧 registry。计算规则为 `tail_reserve_tokens = tail_requests × tail_p75_increment_tokens`、`handoff_at = smart_zone_tokens − tail_reserve_tokens`，默认结果为 `115600`。
+
+child 可声明绝对 `package_entry`，指向任务包 `progress.md`。`solo` 需要唯一 active task child 且 entry 有效；`swarm` 对声明 entry 的 task child 做 adapter 校验，Platform child 可省略 entry。adapter 优先读取 3.5 的 `attempt.id`、`activeCheckpoints.attempt.next`、`attemptHistory.executionRecord` 与 Git revision；package schema 缺失或不一致只进入 `package_schema_warning`，无法确认的 checkpoint/next action 置空，不阻断 preflight。adapter 不读取或写入 Ticket、Task、evidence、acceptance 或 package state writer。
+
+## budget observer
+
+`sync-state.json` 的 `compaction_observers` 按 current session id 保存 rollout 增量 offset、compaction count、最近 `last_token_usage.input_tokens`、`model_context_window` 与可用性。首次观察从 rollout EOF 建 baseline；部分 JSONL 行不推进 offset；新 session 使用新 id 建 baseline。预算只覆盖 controller 与 active task session，Platform 不进入 task handoff budget。
+
+`budget_states` 按 current session id 保存 `tracking` 或 sticky `handoff_due`。token observer 优先使用最近 `last_token_usage.input_tokens`，不使用累计 `total_token_usage`；token observer 不可用时只保留已有 compaction-count fallback，不把缺失值猜成 0。`handoff_due` 后 controller 通过 `act --handoff` 只追加一次 handoff action；route 到新 session 后下一轮 sync 建立新 baseline。
+
 ## route：registry 路由回填
 
 `route --registry <absolute-json> --node <node> --new-session <session-id> [--expect-current <session-id>]` 只修改 registry，不写任何账本 JSONL，也不创建或修改 `sync-state.json`。它要求 `--expect-current`（若提供）匹配目标 node 当前的 `current_session_id`，并拒绝与任一 node 当前 session id 重复的新值；这两类校验失败都退出 `64` 且 registry 一字不改。
@@ -112,7 +139,7 @@ bounded assignment 结束时 child 报 `ready_for_assignment`。`sync` 对仍为
 
 ## acts.jsonl
 
-记录 broker 在 `MUST_ESCALATE` / `MUST_ACT` 后选择了哪类动作。它只让选择可观测，不验证派发语义是否充分。
+记录 broker 在 `MUST_ESCALATE` / `MUST_ACT` 或预算交接后选择了哪类动作。它只让选择可观测，不验证派发语义是否充分。
 
 `act --dispatch` 成功时还会向 `seams.jsonl` 追加同一 `seam_id` 的 `status=assigned` 行，`consumers=[]`、`artifact=null`；如果该 seam 最新 producer 与本次不同，命令会提示 producer 变更并继续追加，最新行代表当前 ownership。
 
@@ -123,7 +150,7 @@ halted 状态由 `acts.jsonl` 的最近 halt 与其 `halt_poll_seq` 判定：没
 | `ts` | string | 是 | 本地时区 ISO 8601，带偏移 | `act` | 本行写入时间。 |
 | `seq` | number | 是 | 单调递增整数 | `act` | action 追加序号，来自 `sync-state.json`。 |
 | `ledger_seq` | number | 新 row 必填；legacy 可缺省 | coordination 内单调递增批次序号 | `act` | 用于判断 dispatch 与 report 的真实追加顺序；同一 `act --dispatch` 写入的 ownership seam row 共享该值。 |
-| `kind` | string | 是 | `dispatch` / `escalate` / `halt` | `act` | `dispatch` 表示派活，`escalate` 表示 pending decision 已上报，`halt` 表示向 Owner 报告并结束 loop。 |
+| `kind` | string | 是 | `dispatch` / `escalate` / `halt` / `handoff` | `act` | `dispatch` 表示 swarm 派活，`escalate` 表示 pending decision 已上报，`halt` 表示向 Owner 报告并结束 loop，`handoff` 表示 current session 已达到 sticky `handoff_due`。 |
 | `seam_id` | string 或 null | dispatch 必填 | 不带 `seam:` 前缀 | `act --dispatch` | 本次派发要生产的 seam。 |
 | `producer` | string 或 null | dispatch 必填 | registry node 名称 | `act --dispatch` | seam 生产者；必须是 registry node。 |
 | `deliverable` | string 或 null | dispatch 必填 | 一句话 | `act --dispatch` | 本次派发要求交付的内容。 |
@@ -132,6 +159,11 @@ halted 状态由 `acts.jsonl` 的最近 halt 与其 `halt_poll_seq` 判定：没
 | `reason` | string 或 null | halt 必填 | 一句话 | `act --halt` | 结束整个 loop 的原因。 |
 | `pending_decision_ids` | array[string] | halt 必填 | decision id 列表 | `act --halt` | halt 当时全部 pending decision id 的快照。 |
 | `halt_poll_seq` | number | halt 必填 | 当前有效 poll seq | `act --halt` | 只有 Owner 明确恢复后产生更大的有效 poll seq，旧 halt 才失效。 |
+| `node` | string | handoff 必填 | active registry node 名称 | `act --handoff` | 需要交接的 current node。 |
+| `node_session_id` | string | handoff 必填 | node 当前 session id | `act --handoff` | 交接 action 的 session 身份；route 后新 session 不复用旧 action。 |
+| `source_session` | string | handoff 必填 | 当前 controller session id | `act --handoff` | 来源一致性护栏，不是可信鉴权。 |
+| `budget_stage` | string | handoff 必填 | `handoff_due` | `act --handoff` | ledger 重新确认的预算阶段。 |
+| `handoff_requested` | boolean | handoff 必填 | `true` | `act --handoff` | 幂等 action 标记；同 node/current session 重复调用不追加新行。 |
 
 示例：
 
@@ -143,9 +175,9 @@ halted 状态由 `acts.jsonl` 的最近 halt 与其 `halt_poll_seq` 判定：没
 
 ## sync-state.json
 
-`sync-state.json` 不是 append-only 账本；它是本地运行状态。当前字段包括 controller rollout offset、按 controller 与 active child session id 保存的 `compaction_observers`、`next_poll_seq`、`next_act_seq`、`next_ledger_seq`、`dispatches_since_progress`、`docs_only_advances`、`last_must_act_seq`、invalid round 计数，以及 heartbeat reset 的 `stall_reset_seq`。每个 compaction observer 只保存 rollout path、byte offset、`observed_count` 和最后一次 `window_number/window_id`；首次观测在 EOF 建基线，后续只读取新增完整行，不递归扫描全量 sessions，也不修改四个 append-only JSONL。`compaction_count` 因而是 observer 建立后的可靠观测下界，不是平台历史总数。
+`sync-state.json` 不是 append-only 账本；它是本地运行状态。当前字段包括 controller rollout offset、按 controller 与 active task session id 保存的 `compaction_observers`、按 current session 保存的 `budget_states`、`next_poll_seq`、`next_act_seq`、`next_ledger_seq`、`dispatches_since_progress`、`docs_only_advances`、`last_must_act_seq`、invalid round 计数，以及 heartbeat reset 的 `stall_reset_seq`。每个 observer 保存 rollout path、byte offset、`observed_count`、最后一次 `window_number/window_id`、最近 `last_token_usage.input_tokens`、`model_context_window` 与 token 可用性；首次观测在 EOF 建基线，后续只读取新增完整行，不递归扫描全量 sessions，也不修改四个 append-only JSONL。`compaction_count` 因而是 observer 建立后的可靠观测下界，不是平台历史总数。
 
-本轮采用 runnable watch-set 兜底，不把未经证明的 cursor 当作状态级去重依据；HEAD 仍覆盖全部 active child。`ledger_seq` 用于消除同秒 report/dispatch 的顺序歧义；legacy 行缺失该字段时回退到时间戳判断。halt 行记录当时的 `halt_poll_seq`；`dispatch` / `escalate` 不会清除 halt。
+本轮采用 runnable watch-set 兜底，不把未经证明的 cursor 当作状态级去重依据；HEAD 仍覆盖全部 active child。`ledger_seq` 用于消除同秒 report/dispatch 的顺序歧义；legacy 行缺失该字段时回退到时间戳判断。halt 行记录当时的 `halt_poll_seq`；`dispatch` / `escalate` 不会清除 halt。`handoff` action 由 controller 对当前 active node 幂等追加，重复调用不追加新行。
 
 `dispatches_since_progress` 只在 code 级 git HEAD 推进后清零；docs-only 推进只增加 `docs_only_advances`。推进分类按上一条已知 head 到当前 head 的 git 区间计算：区间内任一 commit 触及非 Markdown / `docs/` 路径即为 code，区间内全部 commit 都是文档才计 docs-only。首次观测没有旧 head 时退回单 commit 判断；区间不可判定时按 `unknown`，并保守视为 code 推进。
 

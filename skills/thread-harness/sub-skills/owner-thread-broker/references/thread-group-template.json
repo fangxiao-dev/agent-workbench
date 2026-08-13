@@ -1,6 +1,14 @@
 {
   "schema_version": 1,
   "coordination_id": "replace-with-stable-coordination-id",
+  "broker": {
+    "profile": "swarm",
+    "budget": {
+      "smart_zone_tokens": 150000,
+      "tail_requests": 20,
+      "tail_p75_increment_tokens": 1720
+    }
+  },
   "context": {
     "topic": "Required coordination goal or topic",
     "repository": "required-git-repository-name"
@@ -17,6 +25,8 @@
   "children": {
     "replace-with-stable-node-id": {
       "active": true,
+      "node_type": "task",
+      "package_entry": "required-absolute-task-package-progress.md",
       "topic": "Required current session goal or topic",
       "current_session_id": "replace-with-current-session-id",
       "previous_session_ids": [],

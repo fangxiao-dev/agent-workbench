@@ -2,6 +2,10 @@
 
 本页是 broker 每轮可直接照抄的轮询操作页，只保留当前操作契约。
 
+## Profile 路由
+
+先从 registry 的 `broker.profile` 读取 profile：`solo` 走 [profile-solo.md](profile-solo.md)，`swarm` 走 [profile-swarm.md](profile-swarm.md)。profile 缺失或非法时 `preflight` 阻断；controller 不按 child 数量推断。每轮只消费当前 role/package entry/checkpoint 与本页的 sync action summary。
+
 ## 固定 JS 片段
 
 五条不可动摇的约束：
@@ -67,6 +71,9 @@ text(JSON.stringify({
    - `advance_kinds`：本轮 HEAD 推进类型，`docs` 不清零 dispatch 计数，`code` / `unknown` 会清零。
    - `unchanged`：本轮没有变化。
    - `compaction_count`：controller 与当前 active child session 的 compaction 机械事实源；读取与阈值规则见下方 [`compaction_count`](#compaction_count) 契约。
+   - `budget_stage`：controller 与 active task session 的 `tracking` / `handoff_due` 阶段；阈值由 registry budget 机械计算。
+   - `handoff_required`：当前需要 controller 追加一次 `act --handoff` 的 node；`-` 表示没有。
+   - `compaction_count: <node>=<n>`：token observer 不可用时的兼容 fallback 事实；`?` 保持未知。
    - `timedOut`：`true (timeout, no change)` 表示 wait 超时且没有 poll 内容，区别于被唤醒但无文本。
    - `head_unavailable`：这些 node 的 worktree/git HEAD 取不到；不要把它当成"无变化"。
    - `never_reported`：这些 node 从未通过 controller 验证的 H1 写入 state；用来判断 H1 是否真实遵守。
@@ -82,9 +89,26 @@ text(JSON.stringify({
 5. 先处理所有 `reassignment_required`；不得带着 active assignment 完成态进入下一轮。然后执行 `python skills/thread-harness/scripts/ledger.py stall-check --registry <absolute-registry-json>`。
 6. 按退出码和输出标记决策。`CHECK_HEARTBEAT` 的退出码也是 `0`，但不能当普通 `OK` 略过。
 
-### compaction_count
+### budget_stage 与 compaction fallback
 
-controller 只从本轮 `ledger.py sync` 摘要的 `compaction_count: <node>=<n>` 读取自身与 current child session 的次数。每个 current session 首次被有效 sync 观测时以 `0` 建立当前基线，之后按新增 compaction 递增，不回填此前历史。Role A 的 `n` ≤3 时发送 catch-up，`n` >3 时 replacement；Role A 不自行取数。`?` 时 controller 直接核查，不得猜成 0。
+controller 只从本轮 `ledger.py sync` 摘要的 `budget_stage` 与 `handoff_required` 读取预算动作。registry 的机械计算为：
+
+```text
+tail_reserve_tokens = tail_requests × tail_p75_increment_tokens
+handoff_at = smart_zone_tokens − tail_reserve_tokens
+```
+
+当前 policy 的 `handoff_at` 是 `115600`；agent 不参与计算。controller/task session 的 rollout observer 只读增量 JSONL，使用最近一次 `last_token_usage.input_tokens` 与事件中的 `model_context_window`，不使用累计 `total_token_usage`。首次观察从 EOF 建 baseline，部分行不推进 offset，新 session 以新的 session id 建立 baseline。
+
+有效 token 达到 `handoff_at` 后 stage 变为 sticky `handoff_due`。controller 只追加一次：
+
+```powershell
+python skills/thread-harness/scripts/ledger.py act --registry <absolute-registry.json> --handoff --node <node> --source-session <current-controller-session> --reason "token budget reached"
+```
+
+该 action 只对当前 active node 生效；重复调用不追加。controller 随后发送现有 `$handoff-to-new-session` 触发，task 完成当前 bounded action、写 active checkpoint，再按 [session-dispatch.md](session-dispatch.md) 交接。收到 `handed_off` H1 后执行 `route`，下一轮 sync 建立新 baseline。
+
+token observer 不可用时保留 `compaction_count` 兼容 fallback；`?` 或缺失 token usage 不是 0。fallback 仍只读取每个 current session 首次有效 sync 后的增量 compaction count，超过既有兼容阈值才进入 `handoff_due`。Role A 不自行取数。
 
 ## Session 路由
 

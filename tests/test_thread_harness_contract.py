@@ -207,8 +207,8 @@ def test_active_assignment_completion_requires_reassignment() -> None:
     poll = read("skills/thread-harness/references/poll-contract.md")
     schema = read("skills/thread-harness/references/ledger-schema.md")
     broker = read("skills/thread-harness/sub-skills/owner-thread-broker/SUB-SKILL.md")
-    ledger = read("skills/thread-harness/scripts/ledger.py")
-    selftest = read("skills/thread-harness/scripts/selftest.py")
+    ledger = read("skills/thread-harness/scripts/ledger_runtime.py")
+    selftest = read("skills/thread-harness/scripts/selftest_scenarios/full_regression.py")
 
     assert "H5 active node 无静默终态" in skill
     assert "只有 `active=false` 表示 node 已退出 coordination" in skill
@@ -218,6 +218,18 @@ def test_active_assignment_completion_requires_reassignment() -> None:
     assert "ready_for_assignment` 或历史 `done`" in broker
     assert 'REASSIGNMENT_STATES = {"ready_for_assignment", "done"}' in ledger
     assert "legacy done 对 active node 兼容映射为 reassignment signal" in selftest
+
+
+def test_ledger_and_selftest_keep_thin_compatibility_entries() -> None:
+    ledger = read("skills/thread-harness/scripts/ledger.py")
+    cli = read("skills/thread-harness/scripts/ledger_cli.py")
+    selftest = read("skills/thread-harness/scripts/selftest.py")
+
+    assert len(ledger.splitlines()) <= 20
+    assert "from ledger_cli import build_parser, main" in ledger
+    assert "def build_parser" in cli and "def main" in cli
+    assert "--list" in selftest and "--scenario" in selftest
+    assert '"broker"' in selftest and '"full"' in selftest
 
 
 def test_run_procedure_uses_split_template_sources() -> None:
@@ -240,24 +252,28 @@ def test_create_thread_authorization_covers_role_b_replacement() -> None:
 
 def test_compaction_observer_is_imported_and_runtime_docs_use_it() -> None:
     utility = read("skills/thread-harness/scripts/rollout_compaction.py")
-    ledger = read("skills/thread-harness/scripts/ledger.py")
+    ledger = read("skills/thread-harness/scripts/ledger_coordination.py")
+    poll_impl = read("skills/thread-harness/scripts/ledger_poll.py")
     role_c = read("skills/thread-harness/references/role-c.md")
     dispatch = read("skills/thread-harness/references/session-dispatch.md")
     poll = read("skills/thread-harness/references/poll-contract.md")
     schema = read("skills/thread-harness/references/ledger-schema.md")
 
     assert "from rollout_compaction import" in ledger
+    assert "rollout_path_for_thread" in poll_impl
     assert "os.walk" not in utility
     assert ".rglob(" not in utility
     assert "compaction_count" in role_c
     assert "compaction_count" in dispatch
     assert "compaction_count: <node>=<n>" in poll
-    assert "observer" not in poll
-    assert "rollout EOF" not in poll
+    assert "budget_stage" in poll
+    assert "handoff_required" in poll
+    assert "last_token_usage.input_tokens" in poll
+    assert "EOF" in poll
     assert "context_compacted" not in poll
     assert "compaction_observers" in schema
-    assert "poll-contract.md#compaction_count" in role_c
-    assert "poll-contract.md#compaction_count" in dispatch
+    assert "poll-contract.md#budget_stage-与-compaction-fallback" in role_c
+    assert "poll-contract.md#budget_stage-与-compaction-fallback" in dispatch
     assert "Role A 不自行估算或查找次数" in dispatch
     assert "先尽快完成手头任务，写好可恢复 checkpoint" in dispatch
     assert "不要领取新的工作" in dispatch
@@ -296,3 +312,41 @@ def test_runtime_docs_exclude_design_and_test_process_without_losing_stall_rules
     assert "### 维护边界" in goal
     assert "### 4.6 goal 的准入判据" in design_notes
     assert "动态进展从 registry、ledger 与任务包读取" in design_notes
+
+
+def test_stage_d_profile_router_budget_and_package_boundaries() -> None:
+    runtime_root = ROOT / "skills/thread-harness"
+    runtime_docs = tuple(path for path in runtime_root.rglob("*.md") if path.name != "design-notes.md")
+    skill = read("skills/thread-harness/SKILL.md")
+    poll = read("skills/thread-harness/references/poll-contract.md")
+    ledger = read("skills/thread-harness/scripts/ledger_commands.py")
+    registry = read("skills/thread-harness/scripts/ledger_registry.py")
+    schema = read("skills/thread-harness/references/ledger-schema.md")
+    coordination = read("skills/thread-harness/scripts/ledger_coordination.py")
+    budget = read("skills/thread-harness/scripts/broker_contract.py")
+    adapter = read("skills/thread-harness/scripts/package_adapter.py")
+    template = read("skills/thread-harness/sub-skills/owner-thread-broker/references/thread-group-template.json")
+
+    assert "profile-solo.md" in skill and "profile-swarm.md" in skill
+    assert 'profile"' in template and '"profile": "swarm"' in template
+    assert "solo" in skill and "swarm" in skill
+    assert all("mesh" not in path.read_text(encoding="utf-8").lower() for path in runtime_docs)
+    assert "broker.profile" in skill and "preflight" in skill
+    assert "handoff_at" in budget and "tail_reserve_tokens" in budget
+    assert "last_token_usage" in poll and "total_token_usage" in poll
+    assert "handoff_due" in ledger and "--handoff" in read("skills/thread-harness/scripts/ledger_cli.py")
+    assert "read_package_facts" in registry and "state.json" in adapter
+    assert "read_package_observation" in registry and "package_schema_warning" in adapter
+    assert "activeCheckpoints.attempt.next" in schema and "resume.next" not in schema
+    assert "Ticket" not in adapter and "acceptance" not in adapter
+
+
+def test_stage_d_budget_observer_covers_controller_and_task_only() -> None:
+    ledger = read("skills/thread-harness/scripts/ledger_coordination.py")
+    solo = read("skills/thread-harness/references/profile-solo.md")
+    swarm = read("skills/thread-harness/references/profile-swarm.md")
+
+    assert 'node.get("node_type") != "task"' in ledger
+    assert "controller 与 task session" in solo
+    assert "Platform session" in swarm
+    assert "不进入 task budget handoff" in swarm

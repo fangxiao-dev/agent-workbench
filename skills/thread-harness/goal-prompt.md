@@ -48,6 +48,8 @@
 coordination_id：<YYMMDDHH>-<slug>
 registry：<registry 的绝对路径 .json>
 父包 entry：<绝对路径>
+broker.profile：<solo 或 swarm>
+broker.budget：150000 / 20 / 1720（写入 registry，不在 prompt 中计算）
 
 要建的线（node 名 → 任务包或 seam → worktree → branch，一个 node 一套，不得共用）：
 <列出来>
@@ -62,7 +64,7 @@ registry：<registry 的绝对路径 .json>
 本轮只做 bootstrap 与 readiness：不要开始轮询循环，不要设置 goal，做完停下等我。
 
 按顺序做：
-1. 建 registry，按上面的清单填好每个 node 的 node 名 / worktree / branch。
+1. 建 registry，填好 `broker.profile`、三项 budget，以及每个 node 的 node 名 / node_type / package_entry（task）/ worktree / branch。
 2. ledger.py init
 3. 按 references/session-dispatch.md 的两阶段契约建子线，把返回的 session id 回填 registry。
 4. ledger.py preflight，必须 PREFLIGHT OK。
@@ -129,13 +131,13 @@ Production、真实客户数据或 credential、真实 provider 写入以及 pus
 上述目标、结束判据和授权构成 standing authority：范围内直接派发与调度；
 扩 scope、扩权限、改变长期 ownership 或新增不可逆外部影响才向 Owner 提案。
 
-每轮重读 registry 与 ledger，按 poll contract 执行 poll → ledger.py sync → ledger.py stall-check。
+每轮只读取 registry 的 profile、当前 role/package entry/checkpoint 与 ledger action summary，按对应 profile 文档和 poll contract 执行 poll → ledger.py sync → ledger.py stall-check。预算阈值由脚本计算；看到 `handoff_required` 后只追加一次 `act --handoff`，再发送现有 `$handoff-to-new-session` 触发。
 
 退出码 2 = MUST_ACT：只有两个选项，且必须记进账本——
 (a) act --dispatch，说出派给谁、造哪个 seam、交付什么；
 (b) 重新读取 registry 后，ledger.py act --registry <absolute-registry-json> --halt --source-session <fresh-controller-current-session-id> --reason "<一句话>" 并结束 loop。
 
-Child thread 发生 context compaction 时按 session-dispatch.md 处理。
+Child thread 发生 context compaction 时按 session-dispatch.md 处理；命中 `handoff_due` 后按同一交接契约完成收尾；新 session 由下一轮 sync 建立 budget baseline。
 
 动态进展、session、HEAD、WIP、seam 与 decision 只从 registry / ledger / 任务包读取，
 不写进 goal，也不依赖聊天记忆。

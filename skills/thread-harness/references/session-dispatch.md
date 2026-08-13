@@ -22,8 +22,8 @@ send_message_to_thread 的 prompt 字符串。
 
 | | **替换：主控提示现有 session 自交接**（最常见） | **冷启动：节点还不存在** |
 | --- | --- | --- |
-| 起因 | `sync` 已观测到 compaction 达到角色阈值，或主控直接确认该线已经明显退化 | 为新识别的 seam 开一条 Platform 线，或首次建线 |
-| 谁发起 | **主控**，依据是 `sync` 摘要里当前 child session 的 [`compaction_count`](poll-contract.md#compaction_count)，或主控直接确认的明显退化；存在时长不参与这项判断 | 主控 |
+| 起因 | `sync` 已观测到 current controller/task session 的 `handoff_due`，或主控直接确认该线已经明显退化 | 为新识别的 seam 开一条 Platform 线，或首次建线 |
+| 谁发起 | **主控**，依据是 `sync` 摘要里的 `handoff_required` 与幂等 `act --handoff`，或主控直接确认的明显退化；存在时长不参与这项判断 | 主控 |
 | 谁调 `create_thread` | **那条线自己**（Role A / Role C） | **主控** |
 | Role B 例外 | **也由主控建**。Platform 没有持久恢复权威，replacement 由主控用一张新的完整 assignment card 重新派发 | 主控建 |
 | 前置 | source 停在原子 checkpoint、owned process 已停 | Owner 已授权 `create_thread`、seam assignment 明确 |
@@ -56,7 +56,7 @@ Owner 的 create_thread 授权原文（你据此为自己建继任者）：
 
 **"不再是权威"禁的是替 Owner 裁决授权与边界，不是说话。** 退休线看不到 Owner 之后说了什么。发现继任者真的要出事时仍然要吭声：先 `read_thread` 核实，或回给 Owner。
 
-**只在轮边界发起交接。** 轮中交接会让本轮 `sync` 判 `ROUND INVALID`。宁可推迟一轮，**不要放宽 `sync` 校验**。
+**只在轮边界发起交接。** `handoff_due` 只产生一次 action，触发消息安排在当前 bounded action 收尾处；轮中交接会让本轮 `sync` 判 `ROUND INVALID`。宁可推迟一轮，**不要放宽 `sync` 校验**。
 
 ### registry 由谁写：当时的主控，永远
 
@@ -149,7 +149,7 @@ catch-up（你刚发生过 compaction）：
 
 - **角色与开发框架必须重述**——compaction 后的 child 已经不知道自己该去读什么。
 - **硬上限 10 行。**
-- **计数规则（controller 执行）**：只读取本轮 [`ledger.py sync` 摘要的 `compaction_count: <node>=<n>`](poll-contract.md#compaction_count)。同一 Role A current session 的 `n` ≤3 时发送 catch-up；`n` >3 时改为按上面的触发消息转交接。Role A 不自行估算或查找次数；`?` 表示本机 rollout 不可用，controller 停止计数判定并直接核查，不得猜成 0。
+- **预算规则（controller 执行）**：优先读取本轮 `ledger.py sync` 摘要的 `budget_stage` 与 `handoff_required`。threshold 由 registry budget 机械计算，Role A 不自行估算或查找次数。token observer 不可用时才读取 [`compaction_count` fallback](poll-contract.md#budget_stage-与-compaction-fallback)；`?` 不是 0。`handoff_due` 后完成当前 bounded action、写 checkpoint，再按上方触发消息交接。
 - **Role B 不用这个模板**：它没有持久恢复权威。compaction 后主控（controller）不读旧聊天、不恢复旧 card，而是发送一张新的最小 assignment card；缺关键输入时停止并询问 controller，新增权限按 Role B 权限规则处理。
 - **Role C 不用这个模板**：主控 compaction 后走 `ledger.py status` 自己恢复（见 §Role C 特有顺序）。
 

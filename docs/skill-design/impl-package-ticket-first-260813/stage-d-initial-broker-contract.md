@@ -1,7 +1,7 @@
 # 阶段 D-1：外层 broker/controller 初版合同
 
 - 父文档：[README.md](README.md)「阶段 D：外层 broker/controller」
-- 状态：锁定设计，尚未实施
+- 状态：锁定设计；D-1 broker MVP 已实施并通过 thread-harness 验证
 - 适用范围：thread-harness 作为 impl-package 外层消费者
 
 本页细化父文档的阶段 D 初版合同。它不改变 impl-package 的 Ticket、evidence、acceptance、dependency 或 package `state.json` 语义；与父文档冲突时，以父文档为准。
@@ -19,15 +19,15 @@ broker 不代写 package `state.json`，不判断 Ticket acceptance，也不把 
 
 ## 2. Package consumer contract
 
-broker 通过一个薄的 package adapter 消费 impl-package。adapter 可以读取当前格式的 package 记录，未来再切换到 Ticket-first `state.json`；broker 本身不绑定 package 内部 schema。
+broker 通过一个薄的 package adapter 消费 impl-package 的 3.5 projection。adapter 不承担迁移或业务 schema 完整性校验；package state 缺失、旧格式或字段不完整时只输出 schema warning，并将无法确认的 package facts 置空，不阻断 broker preflight。broker 本身不写入 package state。
 
 adapter 对 broker 暴露以下最小只读事实：
 
 | 字段 | 含义 |
 | --- | --- |
 | `package_entry` | 当前任务包的恢复入口绝对路径 |
-| `active_checkpoint` | 当前 session 可恢复的 checkpoint 指针 |
-| `next_action` | checkpoint 中唯一的下一动作；缺失时 broker 不从聊天历史重建 |
+| `active_checkpoint` | 当前 session 可恢复的 checkpoint 指针；无法确认时为 `null` |
+| `next_action` | checkpoint 中唯一的下一动作；无法确认时为 `null`，broker 不从聊天历史重建 |
 | `worktree` / `branch` / `head` | 当前 task session 实际使用的实现上下文 |
 | `current_session_id` | registry 中该 package node 的当前 session |
 | `revision` | adapter 读取结果对应的 package/repository revision |
@@ -43,6 +43,7 @@ profile 写入 coordination registry，由 router 读取；agent 不根据 child
 ### `solo`
 
 - 一个 controller、一个 task package session、一个实现 worktree；
+- 普通单任务包直接使用 impl-package 时不加载 thread-harness；`solo` 只表示该单 task 已进入 broker coordination；
 - package entry/checkpoint 是恢复权威；
 - 不启用跨包 seam、Platform worker、assignment requeue 或 swarm claim；
 - broker 只负责监控、Owner blocker、上下文预算和 handoff。
@@ -115,4 +116,4 @@ broker ledger 是协调事实源，不是 package acceptance state；package sta
 1. `solo` 能在现有 package adapter 下完成监控、预算阈值触发和 session handoff，且 broker 没有写 package state。
 2. `swarm` 保留现有多 node routing、worktree 隔离、seam/claim 和 Owner boundary。
 3. token fixture 能证明阈值由脚本计算、只触发一次、compact 不会清除 `handoff_due`，新 session 会建立新的预算基线。
-4. package consumer contract 只依赖 entry、checkpoint、next action 和上下文锚点，不依赖 Ticket-first 尚未实施的内部字段。
+4. package consumer contract 只依赖 entry、checkpoint、next action 和上下文锚点；package schema warning 不会变成 registry 阻断，也不会让 broker 代写 package state。
