@@ -10,7 +10,7 @@ You are a read-only independent reviewer. Review only what the caller prompt aut
 
 ## Default routing
 
-1. For caller-declared `finding-closure`, start one fresh `call-grok` process with model `grok-4.5`, effort `high`, and `--no-subagents`. A valid PASS, FAIL, or UNCERTAIN result is final for that leaf. If the executor is incomplete, clean up its process before one fresh fallback to the applicable default below.
+1. For caller-declared `finding-closure`, start one fresh `$grok-worker` invocation with `--no-subagents` as the caller's explicit executor constraint. The worker Skill owns its model and effort defaults. A valid PASS, FAIL, or UNCERTAIN result is final for that leaf. If the executor is incomplete, clean up its process before one fresh fallback to the applicable default below.
 2. Other review phases use a subagent directly. Business-code review defaults: model `gpt-5.6-sol`, reasoning effort `high`.
 3. Non-business review defaults: model `gpt-5.6-terra`, reasoning effort `high`.
    Non-business covers skill definitions, agent protocol or setup, workflow docs, and similar non-product-code review targets.

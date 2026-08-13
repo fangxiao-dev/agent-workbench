@@ -25,7 +25,10 @@ def test_handoff_owns_staged_delivery_and_current_task_configuration() -> None:
     assert "Only after both the title and anchor PASS are confirmed" in skill
     assert "send the filled second-stage continuation prompt" in skill
     assert "A timeout is not PASS" in skill
-    assert "target.environment = { type: \"local\" }" in skill
+    assert '"type": "project"' in skill
+    assert '"projectId": "<verified project id from list_projects>"' in skill
+    assert '"environment": { "type": "local" }' in skill
+    assert 'do not use `target.type = "worktree"`' in skill
     assert "make one `wait_threads` call" in skill
     assert "timeout no greater than 60 seconds" in skill
     assert "at most one corrective message with no acknowledgment wait or re-audit" in skill
@@ -51,6 +54,18 @@ def test_anchor_and_continuation_cards_keep_separate_responsibilities() -> None:
     assert "应完成后汇报、因具名 blocker 停止，还是按记录移交" in continuation
     assert "不是执行预演" in continuation
     assert "不等待批准。发出后立即" in continuation
+    assert "mode=[MODE] / worker=[WORKER] / schedule=[SCHEDULE] / review=[REVIEW]" in continuation
+    assert "SCHEDULING_DECISION_OR_N/A" not in continuation
+
+
+def test_continuation_carries_current_worker_strategy_not_legacy_mode_only() -> None:
+    skill = read("skills/handoff-to-new-session/SKILL.md")
+    assert "recorded strategy" in skill
+    assert "mode / worker / schedule / review" in skill
+    assert "recorded subagent mode in one line" not in skill
+    assert "investigate-before-implement" not in skill
+    assert "dispatch-bounded-task" not in skill
+    assert "route=" not in skill
 
 
 def test_incomplete_creation_or_naming_never_reaches_continuation() -> None:

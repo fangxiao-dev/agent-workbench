@@ -23,6 +23,6 @@ Role B 没有持久恢复权威。发生 compaction 后不走 catch-up，也不�
 
 ## 其余与 Role A 相同
 
-按 `/impl-package:impl-package` 干活；`/impl-package:investigate-before-implement`、`/impl-package:do-review`、`/impl-package:verification-before-completion` 的分工一致；H1 / H2 / H4 同样适用。
+按 `/impl-package:impl-package` 干活；调查、实现、修复和验证由 `/impl-package:subagent-driven-development` 形成策略，`/impl-package:do-review` 与 `/impl-package:verification-before-completion` 仍按各自合同执行；H1 / H2 / H4 同样适用。
 
 子线调度由 `/impl-package:subagent-driven-development` 决定；本角色不另设 mode。

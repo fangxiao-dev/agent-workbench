@@ -164,7 +164,7 @@ H4 的分阶段：**当前只登记不校验**，脚本仅在 `sync` 摘要报 `
 
 ### 4.2 Role A · 任务包子 thread
 
-**使命与方法完全不变**：`/impl-package:impl-package` 主流程，执行阶段使用 `/impl-package:dev-with-track` + `/impl-package:dispatch-bounded-task`。
+**使命与方法完全不变**：`/impl-package:impl-package` 主流程，执行阶段由 `/impl-package:dev-with-track` 消费 `/impl-package:subagent-driven-development` 形成的 `mode / worker / schedule / review` 策略。
 
 role 段开头必须写明：*"你的使命是完成任务包，方式由 `/impl-package:impl-package` 定义。本段只规定你什么时候必须跟 broker 说话，不改变你的开发方式。"*
 

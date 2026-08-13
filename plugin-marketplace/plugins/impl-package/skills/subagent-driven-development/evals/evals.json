@@ -3,103 +3,87 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "一个失败症状可能来自三个模块，目前还不知道真实原因、影响面或仓库里是否已有等价方案。请决定下一步。",
-      "expected_output": "先进入 investigate-before-implement 建立必要事实；当前不选择 scheduling、worker 或 bounded dispatch。",
+      "prompt": "一个失败症状可能来自三个模块，目前还不知道真实原因、影响面或仓库里是否已有等价方案。请决定下一步并形成策略。",
+      "expected_output": "mode=investigate、worker=$grok-worker、schedule=serial、review=none；返回 EVIDENCE_GAP，不使用 route。",
       "files": [],
-      "expectations": [
-        "路由 investigate-before-implement",
-        "事实不足时不进入调度或派发"
-      ]
+      "expectations": ["选择 investigate mode", "worker 显式为 $grok-worker", "没有 route"]
     },
     {
       "id": 2,
-      "prompt": "只在主 session 改一个已定位的文档错字并跑一个现成检查。输出 scheduling contract。",
-      "expected_output": "Scheduling 为 LOCAL、route 为 direct，reason 说明原子操作；没有共享资源时省略 resources。",
+      "prompt": "只在主 session 改一个已定位的文档错字并跑一个现成检查。输出策略。",
+      "expected_output": "mode=implement 或 verify、worker=main-session、schedule=local，并给出原子操作 reason。",
       "files": [],
-      "expectations": [
-        "选择 LOCAL 并给出 reason",
-        "不输出 mode 或无关 resources"
-      ]
+      "expectations": ["local 只使用 main-session", "reason 具体"]
     },
     {
       "id": 3,
-      "prompt": "批准的 Plan 给出一个依赖已释放、ownership 和局部验证明确的实现单元，但没有 Ticket 或 DAG Task。安排 subagent 执行。",
-      "expected_output": "输出 SERIAL、route=dispatch-bounded-task；不因没有 Ticket/DAG 阻塞，具体 worker 由 bounded dispatch 选择。",
+      "prompt": "批准的 Plan 给出一个依赖已释放、ownership 和局部验证明确的实现单元，但没有 Ticket 或 DAG Task。安排执行。",
+      "expected_output": "mode=implement、worker=$grok-worker、schedule=serial、review=none；不因没有 Ticket/DAG 阻塞。",
       "files": [],
-      "expectations": [
-        "单个可委派单元选择 SERIAL",
-        "路由 dispatch-bounded-task 且不要求 DAG artifact"
-      ]
+      "expectations": ["单个委派选择 serial", "具体 worker 与 mode 同时出现"]
     },
     {
       "id": 4,
-      "prompt": "两个只读诊断目标彼此独立，但必须共享同一个不能隔离的已登录 browser session。输出 scheduling contract。",
-      "expected_output": "选择 SERIAL，并用 resources 记录唯一顺序和 cleanup owner；不把不可隔离资源误判成 PARALLEL。",
+      "prompt": "两个只读诊断目标彼此独立，但必须共享同一个不能隔离的已登录 browser session。输出策略。",
+      "expected_output": "选择 serial，resources 记录唯一顺序和 cleanup owner；不选择 parallel。",
       "files": [],
-      "expectations": [
-        "共享可变资源导致 SERIAL",
-        "resources 只记录真实共享资源与 cleanup"
-      ]
+      "expectations": ["共享可变资源导致 serial", "只记录真实 resources"]
     },
     {
       "id": 5,
-      "prompt": "两个 ownership、输出目录和验证资源互不重叠的 bounded units 都已释放。输出 scheduling contract。",
-      "expected_output": "读取 parallel admission 后选择 PARALLEL，明确隔离边界；主 session 保留集成和最终判断。",
+      "prompt": "两个 ownership、输出目录和验证资源互不重叠的 bounded units 都已释放。输出策略。",
+      "expected_output": "读取 parallel admission 后选择 parallel，明确隔离边界，worker 引用具体且主 session 保留集成。",
       "files": [],
-      "expectations": [
-        "只有满足隔离准入才选择 PARALLEL",
-        "主 session 保留集成与最终判断"
-      ]
+      "expectations": ["只有满足隔离准入才 parallel", "保留最终集成权"]
     },
     {
       "id": 6,
-      "prompt": "批准的 Plan 有两个必须按顺序执行、source unit 各自独立的 Implementer 单元，角色相同且共用 worktree。是否复用 worker？",
-      "expected_output": "选择 SERIAL；两个 bounded units 各用 fresh subagent，不因角色或 worktree 相同复用，也不输出 reuse。",
+      "prompt": "同一工作流先调查再实现再修复，角色相同但每个 source unit 独立。是否复用 worker？",
+      "expected_output": "继承同一逻辑 worker $grok-worker，但每个独立 source unit 都 fresh；不输出 reuse。",
       "files": [],
-      "expectations": [
-        "独立 source units 使用 fresh workers",
-        "SERIAL 不延长 worker identity"
-      ]
+      "expectations": ["策略继承 worker reference", "独立单元 fresh"]
     },
     {
       "id": 7,
-      "prompt": "同一 source unit 尚未结束，既有 subagent 持有不可转移的 live provider session；之后发生了 context compaction。分别说明复用决定。",
-      "expected_output": "连续 live state 可显式 reuse，并记录 source unit、agent 与理由；compaction 后改从 canonical input 启动 fresh subagent。",
+      "prompt": "同一 source unit 尚未结束，既有 worker 持有不可转移的 live provider session；之后发生 context compaction。分别说明复用决定。",
+      "expected_output": "连续 live state 可显式 reuse；compaction 后改从 canonical input 启动 fresh worker。",
       "files": [],
-      "expectations": [
-        "reuse 仅限同 source unit 的不可转移 live state",
-        "compaction 后使用 fresh worker"
-      ]
+      "expectations": ["reuse 有 source unit/agent/reason", "compaction 后 fresh"]
     },
     {
       "id": 8,
-      "prompt": "批准的 Plan 要运行完整 pytest 和前端 build；命令只读，但预计耗时长且会产生大量 stdout。请决定 scheduling 和下游角色。",
-      "expected_output": "输出 SERIAL、route=/impl-package:dispatch-bounded-task，把它作为 read-only verification unit 交由 Verifier；主 session 只接收压缩证据并保留采信权。",
+      "prompt": "批准的 Plan 要运行完整 pytest 和前端 build；命令只读，但预计耗时长且会产生大量 stdout。请决定策略。",
+      "expected_output": "mode=verify、worker=$grok-worker、schedule=serial；只返回压缩证据，不把有写副作用命令伪装成 verify。",
       "files": [],
-      "expectations": [
-        "长时间或高回显只读测试使用 SERIAL Verifier",
-        "主 session 不接收完整 stdout"
-      ]
+      "expectations": ["长时间高回显检查使用 worker", "verify 有明确只读边界"]
     },
     {
       "id": 9,
-      "prompt": "只需在主 session 运行一条快速、输出有界且无副作用的定向检查。请决定 scheduling。",
-      "expected_output": "可以选择 LOCAL，并以原子且输出有界为 reason；无需额外派发 Verifier。",
+      "prompt": "只需在主 session 运行一条快速、输出有界且无副作用的定向检查。请决定策略。",
+      "expected_output": "可以 mode=verify、worker=main-session、schedule=local，并以原子且输出有界为 reason。",
       "files": [],
-      "expectations": [
-        "小型有界原子检查可以 LOCAL",
-        "不产生额外派发"
-      ]
+      "expectations": ["小型检查可 local", "不额外派发"]
     },
     {
       "id": 10,
-      "prompt": "命令会重写 snapshots 并修改生成文件，同时输出很多内容。能否因为高回显把它作为只读 Verifier 外派？",
-      "expected_output": "不能把有写副作用的动作声明为只读 Verifier；应按真实实现/集成 ownership 重新决定 LOCAL 或 Implementer 调度。",
+      "prompt": "实现触及 shared seam 和数据完整性，但 caller 指定主 worker 为 $grok-worker。请决定是否更换 worker。",
+      "expected_output": "仍使用 $grok-worker；review=required，复杂度只追加独立 reviewer，不切换 Implementer。",
       "files": [],
-      "expectations": [
-        "写副作用命令不伪装成 Verifier",
-        "按真实 ownership 和动作类型调度"
-      ]
+      "expectations": ["复杂度不换 worker", "review required"]
+    },
+    {
+      "id": 11,
+      "prompt": "默认 Grok executor 返回 INCOMPLETE，进程已清理且 diff residue 可归因。另一个例子是业务 BLOCKED。分别处理。",
+      "expected_output": "前者只允许一次 fresh @luna-worker fallback；后者原样 BLOCKED，不 retry、不回退主 session。",
+      "files": [],
+      "expectations": ["fallback 目标是 @luna-worker", "业务 BLOCKED 不 fallback"]
+    },
+    {
+      "id": 12,
+      "prompt": "实现返回 DONE 且策略 review=required。reviewer 尚未运行；reviewer 返回 finding 后需要继续修复。请给出状态。",
+      "expected_output": "先是 review_state=PENDING_REVIEW，不能收口；finding 使用同一 worker 的 mode=fix，closure review PASS 后才 PASSED。",
+      "files": [],
+      "expectations": ["PENDING_REVIEW fail-closed", "finding 回到同一 worker fix"]
     }
   ]
 }

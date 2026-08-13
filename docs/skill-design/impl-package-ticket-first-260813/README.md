@@ -1,320 +1,294 @@
 # Impl-Package Ticket-first 重构
 
 - 日期：2026-08-13
-- 状态：证据复核完成，方向已定，未实施
-- 性质：**本目录是后续优化的权威文档。**实施与再讨论以本页为准；原始设计文档降为背景材料
-- 适用范围：Impl-Package 的 Composition、Ticket、执行调度、状态机、Execution Record、会话交接
+- 状态：方案与独立文档审阅已收敛；尚未实施
+- 性质：**本目录是后续优化的权威设计文档。**实施与再讨论以本页为准；旧设计只作背景材料
+- 适用范围：Impl-Package 的 Composition、Ticket、执行调度、状态、Execution Record 与会话交接
+
+## 修订 checkpoint
+
+| Checkpoint | 含义 |
+| --- | --- |
+| Git commit `9870d77` | 反方审阅与讨论修正前的原始方案、证据和复现脚本 |
+| 当前工作树 | 收敛后的实施候选方案；独立 reviewer 首轮发现已修订，finding closure 为 5/5 PASS |
+
+需要查看原始归因、旧顺序或 116k 的旧表述时，直接比较 `9870d77`，不在现行方案里保留两套竞争规则。
 
 ## 本目录
 
 | 文件 | 内容 |
 | --- | --- |
-| 本页 | 结论、归因、必做项、改动清单、验收指标 |
-| [evidence/measurements.md](evidence/measurements.md) | 全部实测数字与口径 |
-| [evidence/codex-session-analysis.md](evidence/codex-session-analysis.md) | Codex 对 5 个 rollout 的 Q1–Q8 分析与「与设计假设的对照」 |
-| [evidence/mattpocock-philosophy.md](evidence/mattpocock-philosophy.md) | Matt Pocock 公开理念调研，逐条附出处，区分「他说过的」与「推断的」 |
-| [scripts/](scripts/) | 复现全部测量的脚本 |
+| 本页 | 目标模型、落地顺序、状态归属、迁移与验收 |
+| [evidence/measurements.md](evidence/measurements.md) | 实测数字与口径 |
+| [evidence/codex-session-analysis.md](evidence/codex-session-analysis.md) | 5 个 rollout 的会话分析 |
+| [evidence/mattpocock-philosophy.md](evidence/mattpocock-philosophy.md) | Matt Pocock 公开理念调研，区分原话与推断 |
+| [scripts/](scripts/) | 复现测量的脚本；本轮修订不重跑测量 |
 
-背景材料：[原始设计文档](../impl-package-ticket-first-execution-design-260813.md)（问题陈述与初版方案，其中三处归因由本页修正）。
+背景材料：[原始设计文档](../impl-package-ticket-first-execution-design-260813.md)（不是现行方案）。
 
-相邻方案：`docs/skill-design/unified-subagent-worker-strategy-refactor-plan-260813.md`（worker 与调度合同，与本页不冲突，但「source unit」的定义需按本页的 Ticket-first 重新对齐）。
+相邻方案：`docs/skill-design/unified-subagent-worker-strategy-refactor-plan-260813.md`（其 source unit 需要按本文的 Ticket-first 模型重新对齐）。
 
-## 1. 结论与必做项
+## 1. 目标模型
 
-Ticket-first 方向成立。Matt Pocock 的 `to-tickets` 独立到达同一位置（纵切、边写在票上、work the frontier、无第二层执行对象），收敛证据可信。
+Impl-Package 收敛为以下结构：
 
-原始设计文档有三处归因错位：把「Ticket 退化」归给 Ticket 定位、把「核心旅程晚」归给 plan 排序、把「后半段串行」归给静态 DAG。实测显示三者的真实位置是 Ticket×Task 稠密二部图、Ticket AC 的完整性要求、以及一条被自己废弃的边释放规则。
+1. **Ticket 是唯一持久实施与验收单元。**不再创建 Task 或 `dag.md`；Ticket 上的 typed dependencies 是唯一包内依赖图。
+2. **跨 session 续接只认文档化 checkpoint。**Ticket 跨 session 沿用现有默认；交接前写清下一步与恢复证据，compact 只作意外耗尽后的兜底，不是正常交接方式。
+3. **Ticket 只有最终 acceptance state。**早期证据、active checkpoint、session claim 都不能变成 Ticket 的中间状态。
+4. **首发保持严格 barrier。**现行 `readyTickets` 语义继续生效；seam 提前派发是后续可选调度优化，不是 Ticket-first 的前置条件。
+5. **package state 与协调 state 分层单写。**package task session 主线程单写该包 `state.json`；未来 broker/controller 单写跨 task session 的协调 ledger；worker 只返回结构化证据。
+6. **ER 保留 judgment 与历史。**active checkpoint 和 evidence index 进入 `state.json`，但只有在 index、validation 和恢复路径同步改造后，才能减少恢复时对 ER 的解析。
+7. **旧包显式迁移。**现存包数量少，不为 3.4/Task 格式维护长期双读运行时；提供一次性迁移 prompt/runbook，逐包验证后切换。
 
-**必做三项，顺序不能换：**
+Ticket-first 的目标是减少重复执行对象、让证据直接归属验收单元，并降低过程文档与恢复成本；它不承诺消除所有串行和返工。
 
-1. **AC 分期**——每张 Ticket 有一条不依赖后续层的 core AC。唯一能让核心旅程早出现的改动。
-2. **边的分级释放**——恢复「上游 seam 稳定即可提前派发下游实施」，并保留三型边而非退回二元硬依赖。后半段串行的解法。
-3. **删 Task 层**——前两项在横切 Task 存在时会被重新覆盖。它是使前两项生效的条件，不是独立收益。
+## 2. 实施顺序
 
-**工作量比预期小。**`tickets=true, dag=false` 不是要新造的配置：AccountingScope 包已用它跑完两个 attempt、gate `pass`、`tasks: {}` 全空。Ticket-first 的主体是**把这个已验证分支设为默认并删掉另外三种 Composition**，删除多于新建。
+### 阶段 A：锁定 Ticket-only 严格模式
 
-## 2. 证据摘要
+先完成合同与 fixture，不迁移活动包：
 
-完整数字见 [evidence/measurements.md](evidence/measurements.md)。
+- Composition 收敛为 Ticket-only / Plan-direct。
+- 删除新建 Task、Task DAG 和 Task Handoff 的默认路径。
+- 保留三型 Ticket 边与严格 `readyTickets`。
+- 按 §3.2 定义 early evidence、remaining evidence 与不可延后安全属性。
+- 定义 Task 字段的吸收去向、唯一 writer 和新 `state.json` schema。
+- 建立旧格式→新格式迁移 fixture 与失败回退路径。
 
-- DATEV 包终点：**Task 7/9 `DONE`，Ticket 0/5 `SATISFIED`**，44 小时内没有一次端到端证据。
-- 读文档 : 实现动作 = **3.2–3.5 : 1**（两套独立分类法收敛）。
-- **36–48% 的模型请求发生在 150k 上下文以上**；自动压缩在约 226k（87%）才触发。
-- 产出量与占用峰值不相关：5 个 patch 达 213k，68 个 patch 达 234k。
-- 完成包中 **ER 是最大单项产物**（16,575 tokens > spec.md 14,611）。
+阶段 A 的重点是证明新模型完整，不是提前获得并行收益。
 
-## 3. 三处归因错位
+### 阶段 B：实现状态/恢复并迁移旧包
 
-### 3.1 不是「Ticket 退化为末端 label」，是两个正交切法叠加
+- 实现 Ticket evidence index、active checkpoint 和投影收敛。
+- 同步修改 attempt index、ER validation 与恢复调用点。
+- 使用迁移 prompt 处理活动 3.4/Task package；验证通过后才让新插件只读新格式。
+- 冻结包保持只读；恢复执行前再迁移。
 
-Ticket 本身是合格纵切。但 Task 按 ownership 横切之后，每条纵切被打散到整条横向链：
+阶段 A/B 完成后即可长期使用 Ticket-only + 严格 barrier，不需要等待 §3.3。
 
-| Ticket | 贡献 Task | 最深 Task 链深 |
-| --- | --- | ---: |
-| DMI-01 确定性 source admission | T1, T2, T3, **T7** | 4 |
-| DMI-02 版本化 gap form 与批准 | T1, T3, T4, T5 | 2 |
-| DMI-03 verified canonical publication | T3, T5, T6 | 3 |
-| DMI-04 安全 onboarding API/Web | T4, T6, T7, **T8** | 5 |
-| DMI-05 完整旅程与回归 | T1–T9 | 6 |
+### 阶段 C：可选 seam admission
 
-编号最靠前的核心 Ticket 排在第三位才可能验收——Task 图把 Ticket 顺序倒了过来。
+只有当最小持久事实、revoke、revalidation 和恢复 fixture 都通过后，才允许调度 Agent 提前派发依赖已稳定 seam 的下游实施。用 strict barrier 做对照，收益不足或返工增加就不启用。
 
-同一现象在 ER 上也可见：DATEV 的 25 条记录里 `subject: ticket:*` **一条都没有**（13 条 `attempt` + 12 条 `task:*`）。执行判断天然挂在正在做的那个单元上，而那个单元一直是 Task。
+### 阶段 D：外层 broker/controller
 
-### 3.2 核心旅程晚不在 plan 排序，在 AC 写法
+后续单独建设 user-facing broker/controller，负责监控 task session、在授权 envelope 内调度、维护协调 ledger，并统一实现上下文 warning 与交接。它不是本轮 Ticket-first 首发的阻塞项。
 
-DMI-01 无阻塞依赖、是 Ticket #1，正是设计文档说「没有被提升为核心旅程」的那条。把它拖到链深 4 的是它自己的 AC-3：要求 opaque `uploadToken` 的 create→PUT→confirm producer/consumer 闭环与 real PostgreSQL RBAC zero-read proof——那是 T7 的 ownership。
+## 3. 运行合同
 
-它是**纵切，但不是最小纵切**：六条 AC 含 token 传播、privacy sentinel、CAS 竞态、hash 冻结、RBAC 证明。
+### 3.1 Ticket、session 与 acceptance
 
-所以在 `impl-planning` 加 core-first 五问修不好——核心旅程早就被识别成 Ticket #1 了，识别不是瓶颈，AC 的完整性要求才是。
+- Ticket 状态词汇收敛为 `PENDING | BLOCKED | NEEDS-REVALIDATION | SATISFIED | RETIRED`；不增加 `READY`、`RUNNING` 或 per-AC 状态。
+- 跨 session 前必须写 active checkpoint；需要长期保留的判断同时写入 ER judgment。下一 session 从文档状态恢复，不把 compact 摘要当权威输入。
+- 当前单 task session 不需要持久 claim。未来多个 task session 并存时，assignment/claim 进入 broker ledger，不进入 Ticket 或 package acceptance state。
+- Ticket 完成证据必须指向测试、commit、DB diff、运行日志等真实产物，不能指回流程 handoff 本身。
 
-### 3.3 后半段串行来自返工与一条被废弃的规则
+最小失效与恢复语义为：
 
-DAG 前半段是真并行：T1/T2/T3 依赖全为 `none`，实测三路重叠。后半段串行有两个来源，都不是「静态 DAG 按设计生效」：
+1. 合同或实现变化只使**已有证据实际受影响**的 Ticket 进入 `NEEDS-REVALIDATION`，同时在受影响 evidence record 上记录 `invalidatedBy`；未受影响证据保留。
+2. `NEEDS-REVALIDATION` 与 `BLOCKED` 都不释放依赖，也不进入 `readyTickets`。完成 impact triage 并写出 revalidation plan 后，仍需执行的 Ticket 以 CAS 回到 `PENDING`；解除 blocker 的 Ticket 同样回到 `PENDING`。
+3. Ticket 只有在当前 revision/environment 下重新覆盖全部 required claims 后才能回到 `SATISFIED`。
+4. `RETIRED` 合并原 `WAIVED` / `SUPERSEDED`，是 terminal、dependency-releasing 状态，但必须由 owner 决定并写 `disposition: waived | superseded`。`waived` 必须引用批准后的 scope 变更；`superseded` 必须指向 successor Ticket/attempt，且所有入边已改指 successor 或由 owner 明确解除。普通合同变化不得自动把 Ticket 设为 `RETIRED`。
 
-**其一，返工。**`dag.md` 记录 `P5 recovery 顺序固定为 T3→T4→T6→T7→T8→T9`——Spec S5→S6 改动 publication 语义后 affected-scope 重开，六个横切 Task 依序返工。若单元是纵切 Ticket，同一改动只失效 DMI-03。
+这些是 Ticket 级状态转换，不是 per-AC 状态机。
 
-**其二，边的释放规则被自己删掉了。**`docs/skill-design/impl-package-reusable-implementation-checkpoint-design-260728.md` 已标记废弃：
+上游 `to-tickets` 的“一张票在一个 fresh context 内做完”继续作为 planning sizing 启发式，但不是本地运行不变量。需要续接时统一执行 active checkpoint 合同；这是既有运行方式，不作为 Ticket-first 的新增主张。
 
-> 已由 Impl-Package contract 3.3 取代。当前 checkpoint 只保存恢复上下文，不授权提前派发。
+### 3.2 AC：证据时机 × 安全不变量
 
-该规则原本允许上游仍 `RUNNING` 时提前派发只依赖已提交 seam 的下游 implementation。删除后边只剩「上游整体 `DONE`」一种释放方式，即完整节点 barrier。
+不再把 AC 划为 `core` 与 `hardening`，也不改成三个顺序组。使用两个正交维度：
 
-实测支持：T6→T7 的真实依赖只是 public projection / application seam，T6 的事务与私有表不是 T7 的输入。
+1. **证据时机**：early falsification evidence 与 remaining completion evidence。
+2. **不可延后属性**：tenant、RBAC、privacy、幂等、数据完整性等 safety invariants 从第一条可执行路径起必须成立。
 
-## 4. 已验证有效、不得移除
+早期路径可以缩小业务范围，例如只覆盖一种受支持格式、单条入口或单个已授权主体；不得通过关闭授权、弱化租户隔离或跳过一致性约束得到“早绿”。原则是**纵切可以窄，不能薄**。
 
-| 机制 | 实测价值 |
+早期证据只进入 evidence index。Ticket 仍需全部 acceptance 满足才进入最终状态，不新增 per-AC 状态机。
+
+对 DMI-01 的 fixture，应先取得“受支持 M1/M2 输入确定性生成 snapshot 并可读回”的证据，同时保持该窄范围内所需的 uploadToken、权限和数据读取安全属性。具体早期行为由 Spec/Plan 明示，不从固定“加固项”清单推断。
+
+### 3.3 Ticket 边与可选 seam admission
+
+保留三型 Ticket 边：
+
+- `implementation`：阻挡下游正常实施；
+- `acceptance`：允许实施，但阻挡最终验收；
+- `release`：允许实施与验收，但阻挡发布。
+
+首发阶段严格按这些边计算 `readyTickets`。
+
+后续启用 seam admission 时，调度 Agent 根据当前代码、测试、接口稳定度、共享资源和返工风险启发式判断。系统只提供“允许并记录这个判断”的机制，不维护稳定度评分或穷举规则表。
+
+`state.json` 只保存已作出的最小 admission 事实：上游、下游、允许使用的 seam scope、admit/revoke 结果与证据引用。硬边界是：
+
+- checkpoint 自身不授权派发；
+- admission 不改变上游 Ticket，也不释放下游 acceptance/release；
+- 上游 seam 改变时必须 revoke，并把受影响证据送入 revalidation；
+- `readyTickets` 继续表示严格 ready，提前派发不能伪装成 canonical ready；
+- ER 可以解释判断，但不得与 `state.json` 维护竞争事实。
+
+共享 migration、generated client、授权表、DB runner 或测试数据可能使窄接口也不可并行。这类约束写成真实 Ticket 边或 Plan 的单写资源约束，由 Agent 纳入判断。
+
+### 3.4 状态权威与双层单写
+
+Package 层：
+
+- 每个 package 的 task session 主线程是 `state.json` 唯一写入者；
+- `state.json` 保存 Ticket acceptance、evidence index、active checkpoint，以及阶段 C 启用后的包内 seam admission；
+- `progress.md` 是恢复视图，ticket 文档是稳定合同，不再内嵌 runtime acceptance；
+- worker/subagent 只返回结构化证据，不直接更新 package state。
+
+未来 broker 层：
+
+- broker/controller 面向用户负责监控、路由、有限授权和跨 task session 协调；
+- broker 单写协调 ledger，记录用户决定、task session claim、跨包 seam、阻塞和交接；
+- broker 不直接代写各包 `state.json`。需要改变包内事实时，向相应 task session 发结构化事件，由包的唯一 writer 落盘；
+- broker 的部分授权不得超出 owner 预先给定的 envelope。
+
+这与 `thread-harness` 的结构相同，但只复用“双层单写、结构化事件、自交接”三个概念，不照搬其完整 registry/seam 机器。
+
+### 3.5 Evidence index、checkpoint 与 ER
+
+`state.json` 增加两个紧凑索引，不引入 per-AC 状态：
+
+- **evidence index**：按 Ticket 与 stable claim ID 指向真实产物、revision、验证环境与结论；
+- **active checkpoint**：按 attempt/Ticket 保存当前 `next` 与恢复证据，覆盖写当前值。
+
+claim ID 来自 Ticket 合同中显式编号的 AC 和安全断言，例如 `AC-1`、`INV-tenant-isolation`，不能由运行期 Agent 临时改名。每条 evidence record 至少包含 `artifact`、`revision`、`environment`、`conclusion`，可选 `invalidatedBy`。它表达证据映射与有效性，不保存 claim 的 `PENDING/DONE` 状态。
+
+`SATISFIED` validator 必须机械检查：Ticket 声明的全部 required claim ID 均至少有一条适用于当前 revision/environment 的 supporting evidence；不存在未处置的 contradictory evidence；所有 implementation/acceptance dependency 已释放。缺 claim、只有失效证据或只有自由文本总括，都拒绝进入 `SATISFIED`。
+
+active checkpoint 覆盖写是有意丢弃已过时的恢复指令。Git **只保留已经提交的版本**，不能假定每次覆盖都有历史；任何需要长期保留的决策、失败学习或审计事实必须先写入 ER judgment/evidence index。ER 不再承担 active checkpoint，但继续保存判断、attempt history 与审计上下文。
+
+不能只把 checkpoint 移进 `state.json` 就声称 ER 退出恢复路径。当前 `_parse_execution_record` 仍被 `_ensure_execution_record`、`_attempt_history`、`_validate_projections`、ER 渲染与追加路径调用。实施时必须同时：
+
+1. 固定 state/evidence index 与 ER judgment 的事实边界。
+2. 修改 attempt history/index，避免恢复时为每个 attempt 重扫完整 ER。
+3. 修改 projection validation，使其验证索引与 ER 的关系。
+4. 用同一 fixture 覆盖 active checkpoint、未完成 Ticket、历史 attempt 与 projection mismatch。
+
+这些改动验证前，ER 仍在恢复/validation 路径。
+
+### 3.6 Task 内容的吸收去向
+
+| 原 Task 内容 | 新位置 |
 | --- | --- |
-| ready 集门禁 | S2 `readyTasks [T1,T2,T3]`、S3 `[T6]`、S4 `[T7]`、S5 `[T8]`，挡住过早启动 |
-| 局部证据 ≠ 完成 | T6 有 9 files/64 tests 绿证据仍判 `INCOMPLETE`；T7 因缺 idempotency/read projection 被 `BLOCKED` |
-| Ticket 轴独立 | 7/9 `DONE` 对应 0/5 `SATISFIED`，如实暴露「局部完成 ≠ 旅程验收」 |
-| ER 跨 session 锚点 | S2→ER-003、S3→ER-011、S4→ER-015、S5→ER-019，四次续接均未越过阻塞 |
-| **三型 Ticket 边** | 见 §5.2，AccountingScope 完成包提供直接证据 |
+| execution boundary | Ticket 的建设内容 |
+| contributes-to tickets | 删除；迁移时转为 evidence 映射 |
+| `READY` / `RUNNING` | 不进 Ticket；未来 assignment 进 broker ledger |
+| `DONE` evidence | Ticket evidence index，指向真实产物 |
+| section-level contract references | 一次派发 brief |
+| known seam / risk | 合同部分进 Ticket AC/Spec；执行判断进 ER judgment |
+| primary ownership / 单写资源 | Plan 的执行策略表 |
 
-重构后这五项必须逐项确认仍然成立，不能默认继承。
+Task Handoff 的默认路径随 Task 删除。跨 session checkpoint/handoff 继续保留，两者目的不同。
 
-## 5. 改动清单
+### 3.7 旧包迁移
 
-### 5.0 排序依据
+不维护长期旧格式双读器。发布新格式前提供一次性迁移 prompt/runbook，由活动 package 的 task session 在 owner 授权下执行。迁移在独占的临时 worktree/branch 上运行，暂停该 package 的其他 writer，并记录 pre-migration Git anchor：
 
-两个目标排出不同顺序，分开看才不会互相掩盖：
+1. 读取旧 `state.json`、Ticket、Task、ER 和 active checkpoint。
+2. 从 Task handoff/ER **提取并验证其指向的真实产物**，再映射到 Ticket claim；`task-handoffs/*` 本身不得成为 acceptance proof。只有 handoff 而没有可验证产物时，迁移停止并请求人工 evidence mapping。多 Ticket 贡献不得静默丢失。
+3. 保留原 ER 与 attempt history，不把迁移写成新的业务事实。
+4. 在临时 worktree 生成完整 Ticket-only candidate，验证 claim coverage、ready 集、恢复入口、未完成 acceptance、历史 attempt 与 projection；不得逐文件激活半成品。
+5. 全部验证通过后生成单一 migration commit，作为格式切换点。新插件和新 controller 只从该 commit 启动；切换前失败直接放弃临时 worktree，原 package 仍以 pre-migration anchor 为权威。
 
-| 改动 | 解决「核心旅程看不见、后半段串行」 | 纸面与读取的直接节省 |
+fixture 必须模拟 candidate 生成前、生成中、validation 时和切换后的中断，并断言新 evidence index 不把 `task-handoffs/` 当直接证据。活动 DATEV package 先作为迁移 fixture；冻结 package 只在恢复执行前迁移。
+
+### 3.8 会话交接与 116k
+
+当前算术示例为：
+
+```
+150,000 − 20 × 1,720 = 115,600 ≈ 116k
+```
+
+116k 只记录为当前模型/harness 的初始 warning estimate：150k 是启发式 policy anchor，20 次收尾请求没有观测分布，p75 单请求增量也不是累计预算上界。不得称其为推导出的安全上限、按窗口百分比推广或声称自动适配模型。
+
+当前主 task session 没有可靠可见的自动 token 监控，本轮只要求 checkpoint/handoff 路径可用。后续 broker 再按 model+harness 和 closure-phase 分布校准 warning，并把“停止新探索、减少大读取、准备交接”作为 Agent 默认启发式，不做硬禁令。
+
+`skills/handoff-to-new-session/SKILL.md` 的 anchor/continuation 与“只指不抄”可复用；通过 downstream protocol extension 支持同 Ticket 的滚动交接。
+
+### 3.9 变更形状与 wide refactor
+
+返工范围由**变更形状 × Ticket 边界**共同决定。纵切 Ticket 可以收敛同形的纵向变更，不能消除横切合同修订。
+
+S5→S6 同时改变 uploadToken producer/consumer、idempotency、PublicationAttempt authority/CAS 与 API walkthrough，是横切五张 Ticket 的合同修订；新模型也必须让受影响 Ticket revalidation。S4→S5 的 SKR/currency/accountLength 更接近 source-identity 形状，适合作为“边界可能收敛影响面”的 fixture。
+
+改列名、共享符号换类型、给既有表增加租户维度等 wide refactor 走 expand–contract：先 expand，再按 blast radius 分批迁移，最后 contract，不强行包装成单张纵切 Ticket。
+
+## 4. 五项既有机制如何保留
+
+| 机制 | Ticket-first 合同 | 验证方式 |
 | --- | --- | --- |
-| AC 分期 | 直接命中 | 几乎为零 |
-| 边的分级释放 | 直接命中 | 间接（少一次 session 恢复） |
-| 删 Task 层 | 保证前两项不被覆盖 | 小，但改动量最大 |
-| 砍 Task Handoff | 无关 | 最大且可测 |
-| 会话交接阈值 | 无关 | 避免在退化区工作 |
-| ER 重构 | 无关 | 主要收益是把 ER 移出恢复路径 |
+| ready 集门禁 | 首发严格 `readyTickets`；可选 admission 不改 canonical ready | blocker fixture |
+| 局部证据 ≠ 完成 | evidence index 只索引证据，Ticket 仍需最终 acceptance | 局部证据不得触发 acceptance/release |
+| Ticket 轴独立 | claim、checkpoint、acceptance 分属协调、恢复、验收 | 跨 session 状态 fixture |
+| ER 跨 session judgment | ER 保留判断/历史；checkpoint 迁移与 validation 同步 | 多次恢复与历史 attempt fixture |
+| 三型 Ticket 边 | implementation、acceptance、release 均保留 | 每种边的 ready/acceptance/release fixture |
 
-本节按第一个目标排序。删 Task 层排第三不是因为不重要，而是它的收益要靠前两项才兑现——AC 仍是整块生产合同时第一张票照样等整条链；边仍要求上游整体 `DONE` 时照样串行。
+完成的无 Task package 与 DATEV 只作为 evidence 中的分析案例，不进入规范性方法论，也不用于承诺速度收益。
 
-### 5.1 AC 分期
+## 5. 设计依据与证据边界
 
-每张 Ticket 至少一条 **core AC**，其取证不依赖后续层；加固类 AC（并发、privacy sentinel、幂等、RBAC 证明、跨版本兼容）单独成组，允许后补。Ticket 仍需全部 AC 满足才 `SATISFIED`，但 core AC 的证据必须能在链深 1 取得。
+完整数字和口径见 [evidence/measurements.md](evidence/measurements.md)。现有材料用于选择设计，不替代实施 fixture。
 
-对 DMI-01：core AC = 受支持 M1/M2 确定性生成 snapshot 并可读回；AC-3 的 uploadToken 公共传播与 zero-read proof 归入加固组。
+| 观察 | 对设计的意义 | 不能推出 |
+| --- | --- | --- |
+| DATEV 为 Task 7/9 `DONE`、Ticket 0/5 `SATISFIED`，Ticket×Task 为多对多 | 去掉重复执行轴并让证据直接索引 Ticket 值得验证 | Task 是唯一原因；Ticket 已在运行时证明为合格纵切 |
+| DMI-01 无 Ticket blocker，但宽 AC 的贡献链到 T7 | 需要区分 early evidence 与 remaining evidence | 安全 AC 可后移；AC 分期必然让第一 session 完成 Ticket |
+| P5 存在 T3→T4→T6→T7→T8→T9 返工链；T6→T7 依赖窄 seam | seam admission 值得作为后续对照实验 | 后半段串行全由 barrier 导致；提前派发一定减少总耗时 |
+| S5→S6 是横切 API 合同修订，影响五张 Ticket | affected scope 必须按 change shape 计算 | Ticket-first 总能把返工收敛为一张票 |
+| 完成的 ticket-only 案例通过 gate | 现行实现已有可复用分支 | 它与 DATEV 构成性能或因果对照 |
+| 36–48% 请求超过 150k，压缩约在 226k | 需要在退化前主动 checkpoint/handoff | 150k 是本地测得的质量边界；116k 是通用阈值 |
 
-不新增 Ticket 状态，只在 AC 列表内分组。
+## 6. 验收标准
 
-### 5.2 边的分级释放
+### 阶段 A/B：首发正确性
 
-恢复 `impl-package-reusable-implementation-checkpoint-design-260728.md` 的语义：上游 Ticket 仍在执行但下游依赖的 seam 已提交且有局部证据时，主 session 可提前派发下游 implementation，不改上游状态、不释放 acceptance/release、上游改合同则下游转 `NEEDS-REVALIDATION`。
+1. Ticket-only fixture 在严格 barrier 下生成正确 `readyTickets`，未释放 blocker 不会被绕过。
+2. stable claim ID 能覆盖全部 AC/安全断言；只有当前 revision/environment 的 supporting evidence 完整、无未处置 contradiction 时才允许 `SATISFIED`。
+3. 早期窄路径维持声明的 tenant、RBAC、privacy、幂等和数据完整性不变量。
+4. S4→S5 与 S5→S6 两种 change shape 产生与实际 affected scope 一致的 revalidation，不硬编码“一次只失效一票”。
+5. §4 五项机制逐项通过 fixture，不以案例类比替代验证。
+6. 活动 3.4/Task package 在临时 worktree 中显式迁移后，ER/attempt history、active checkpoint、未完成 Ticket 与真实 evidence 均可恢复；各中断点不改变 pre-migration authority，handoff 不被直接当作 acceptance proof。
+7. `NEEDS-REVALIDATION → PENDING → SATISFIED` 只重验 affected claims，且全程保持依赖不释放；`BLOCKED` 不被隐式改写，`RETIRED` 必须有 owner evidence、合法 disposition，并在 `superseded` 时指向 successor。
+8. `_parse_execution_record` 是否退出恢复路径由调用点与恢复测试证明，不能从 schema 设计推断。
+9. package state、broker ledger 与 worker 回报遵守唯一 writer 边界。
 
-当时废弃它的理由（checkpoint 不应授权派发）在新语义下依然成立：授权来自主 session 判断并记入 ER，不来自 checkpoint 本身。Ticket-first 下单元更少且纵向，这个判断比在 9 个横切 Task 之间做容易得多。
+### 阶段 C：调度收益
 
-**同时：不要把边收敛为二元的「只保存硬依赖」。**AccountingScope 完成包给出直接反例：
+10. seam admission 由 package state 唯一记录；ER 不产生竞争事实。
+11. revoke 只触发 affected evidence revalidation，不改变无关 Ticket。
+12. 与 strict barrier 对照，提前派发的等待收益大于新增返工；否则保持关闭。
 
-| Ticket | Typed dependencies |
-| --- | --- |
-| ASP-01 | None |
-| ASP-02 | `implementation: ASP-01` |
-| ASP-03 | `implementation: ASP-01` · `acceptance: ASP-02` |
-| ASP-04 | `implementation: ASP-03` · `acceptance: ASP-02` |
-| ASP-05 | `implementation: ASP-01/03` · `acceptance: ASP-02/04` |
-| ASP-06/07/08 | None |
+### 诊断指标
 
-**ASP-02 被引用三次，全部是 `acceptance` 型，无一次 `implementation` 型。**三张票的实施都不需要等 ASP-02 验收，只有它们自己的验收要等。二元收敛只有两条出路：变成完整 barrier（过度串行化三张票），或消失（丢掉验收约束）——两个都错。
+13. 继续记录读文档 : 实现动作、首次真实 dispatch 调用数、150k 以上请求占比和 package 纸面量，但只比较同 fixture 前后。
+14. ER `subject: ticket:*` 只作 logging/ownership 诊断，不是 Ticket-first 成功的充分条件。
+15. 116k 只作为未来 broker 的初始 policy estimate；有 model+harness 与 closure-phase 数据后再定 warning。
 
-判断题应从「这条边要不要」改为「这条边挡的是实施、验收、还是发布」。B2B 场景另需注意：共享同一张授权表或同一次迁移的两张票，frontier 上看似可并行、数据完整性上不可并行；这类应表达为真实边而非仅靠运行期发现。
-
-### 5.3 Ticket-first：删 Task 层
-
-前两项在当前结构下会被重新覆盖，这是删 Task 的真实理由：
-
-- Ticket 的三型边只作用于 Ticket；Task 边一律二值。执行跑在 Task 层，纵切上的精细边被横切的粗边盖住。
-- Ticket 由横切 Task 贡献（§3.1），任何一张票的验收都要等横向链走到足够深，AC 分期收益被吃掉。
-- 合同变更沿层链扇出：一次 publication 语义变更导致六个 Task 返工；纵切只会失效一张票。
-
-Ticket DAG 不是新文件——阻塞边已在 ticket 模板的「阻塞依赖 / Typed dependencies」字段里，那就是全部的图，`dag.md` 不再创建。
-
-### 5.4 Task 承载物的吸收去向
-
-| Task 承载的 | 去处 |
-| --- | --- |
-| execution boundary | Ticket 的「建设内容」，已有，重复 |
-| contributes-to tickets | 删除（病根本身） |
-| `READY` / `RUNNING` | 会话层 claim（见 §5.7），不进 Ticket 状态 |
-| `DONE` evidence | 指向真实产物（测试报告、commit、DB diff），不指向流程文档 |
-| section-level contract references | 派发 brief（运行时）。Task 的引用比 Ticket 更窄，这个「更窄」有价值但属于一次派发 |
-| known seam / risk | 拆两半：属于合同的进 Ticket AC / spec；属于本次执行判断的进 ER judgment |
-| **primary ownership（单写资源部分）** | **进 Plan，见下** |
-
-ownership 有一半必须持久化。DATEV 的 DAG 里「单一 migration owner」「单一 authority-code owner」「独占 OpenAPI/generated client」「独占 real-PG runner」不是某次派发的局部决定，而是**跨单元的排他性约束**。两张票都要改 migration 时，先后必须有人裁决，让运行期 Agent 每次重新发现既贵又易漏。
-
-分界线是**单写资源**：migration、生成产物、真实 DB runner、端口、共享测试数据。这个概念已存在于 `subagent-driven-development/references/parallel-work-admission.md`。
-
-**建议：单写资源清单进 Plan，不进 Ticket，不做新对象。**Plan 本来就拥有执行策略，这些资源在 planning 时基本已知；运行期 Agent 读这张小表决定串并行。
-
-### 5.5 随之而来：砍 Task Handoff
-
-合同写明 handoff 是条件式产物，实测 7 个完成 Task 全部创建，且每个 Task 的 `DONE` evidence 指针就是它自己的 handoff——证据要求把条件产物静默升级成了必需产物。
-
-Task 消失后大部分 handoff 自然消失。剩余场景把 evidence 指针改为指向真实产物。
-
-注意与 §5.7 的区别：被砍的是**每 Task 的记账产物**，保留的是**跨 session 的续接产物**，两者目的不同，不可合并。
-
-### 5.6 补 `to-tickets` 缺失的两条上游规则
-
-本地 fork 相对上游 `mattpocock/skills` 缺失两条，且都正对本次问题：
-
-**尺寸判据。**上游：`Each slice is sized to fit in a single fresh context window`。注意上游的可执行版本（总 token ÷ 150k = 票数）是**规划时估算**，实测不可靠（§2：产出量与占用峰值不相关），应改为运行时观测，见 §5.7。但「一张票应能在一个 fresh context 内从开始走到 core AC 证据」这条尺寸意图要保留。
-
-**wide refactor 例外。**blast radius 横扫全仓的机械变更（改列名、给共享符号换类型、给既有表加租户维度）不能硬塞成纵切，走 expand–contract：先 expand，再按 blast radius 分批迁移（每批一票，blocked by expand），最后 contract（blocked by 全部批次）。B2B 的租户化改表与 schema 迁移属于此类；没有这条例外，「foundation 默认不 earn Ticket」要么被违反，要么被迫做成巨型 Ticket。
-
-### 5.7 会话交接：观测而非预测
-
-单元大于一个 session 无法在规划时预测（§2），但可以在运行时观测。触发形状应为：
-
-```
-警告线 = 智能区上限 − 收尾预算
-```
-
-- 智能区上限：frontier 约 150k；便宜档位更低（此项自动适配模型档位）
-- 收尾预算 = 典型收尾请求数 × 每请求增量 ≈ 20 × 1,720 ≈ 34k
-
-代入得约 **116k**（在 258k 窗口上约 45%）。
-
-**不要用窗口百分比表达。**智能区不随窗口放大：60% 在 258k 窗口上是 155k（勉强），在 1M 窗口上是 600k（深度退化区）。规则会在换模型当天静默失效。
-
-「不打断未完成任务」不是独立约束，而是 headroom 这一项的来源：正因为必须收尾完当前单元才能交接，警告线才要预留空间。实测 60% 的警告线只要收尾还需 10 次请求就已越过 150k；70% 更甚。
-
-**配套：警告同时进入低消耗收尾模式。**p90 增量 4,379、p95 7,441——一次大文档读取或一个 worker 的大量回显就能吃掉三分之一 headroom。警告后不再读新的大文档、不再派新 worker、不开新探索，否则 p75 估算不成立，会在收尾途中撞上自动压缩。
-
-现有 `skills/handoff-to-new-session/SKILL.md` 已具备所需能力：两阶段 anchor/continuation、clean local session、一次性理解审计，且**两个 prompt 合计约 900 汉字上限并禁止复述 plan/DAG/AC/历史**——「只指不抄」已是硬约束。需要处理的是其 Scope 明确排除 rolling handoff，与同 Ticket 内多次交接的用法冲突；应通过它已有的 downstream protocol extension 分支接入，而非放宽 Scope。
-
-`skills/thread-harness/` 是早期大调度实验，**不作为本次权威**。可借用的只有三个概念，不含其 ledger/registry/seam 机器：controller 不写业务代码、只在轮边界交接、自交接是一等事件（主控提示、退休线自己建继任者）。
-
-### 5.8 状态机与 Execution Record 重构
-
-**现状澄清：**`state.json` 已经是唯一可写事实源，`progress.md` / ticket 内嵌 Runtime Acceptance / `dag.md` 内嵌 Runtime State 都是只读投影，三处都还在运行。`command_set_state` 没有转换表，只有五道守卫（词汇表、CAS `--expect`、非 `PENDING` 必须带 evidence、两条依赖守卫）。**不建议改成真正的转换表**——转换表会逼你穷举合法性，而实际约束只有「依赖释放了没」和「有没有证据」。
-
-**投影收到一处。**`_refresh_projections` 每次重写全部 ticket 文档 + `dag.md` + `progress.md`，DATEV 为一次 `set-state` 写 7 个文件，`projection mismatch` 面同样是 7 个。
-
-- `dag.md` 投影随 Task 消失
-- **删掉 ticket 内嵌的 runtime-acceptance 段**：ticket 是合同文档应当稳定，把运行状态嵌进去意味着每次状态变化都在改合同文件，git diff 全是噪音；而这份信息 `progress.md` 里本来就有，且 `progress.md` 是恢复入口本来就要读
-
-写放大降到 1:2。
-
-**checkpoint 收进 `state.json`，ER 只留 judgment。**
-
-```json
-{
-  "checkpoints": {
-    "attempt":       {"next": "...", "evidence": "..."},
-    "ticket:DMI-01": {"next": "...", "evidence": "..."}
-  }
-}
-```
-
-每 subject 一条、覆盖写，`Supersedes` 概念消失；`progress.md` 的 Active Checkpoints 直接从 `state.json` 渲染，恢复路径不再解析 ER。
-
-**收益不是省体积**（checkpoint 仅占 ER 的 29%，波动 9%–52%），而是：恢复路径从三个文件降到两个、ER 增长与恢复成本脱钩、`_parse_execution_record` 撤出恢复路径。judgment 那部分（71%，约 15k）是包的真实记忆，不该砍。
-
-被取代的历史 checkpoint 不再留在文件里，代价接近零：它们是「曾经的下一步」，一旦被取代既无恢复价值也无决策价值（决策价值全在 judgment），且 Git 保着历史；`impl-package-current-state.md` 本就声明这套不使用 seal、内容身份、receipt 或审计链。
-
-**Ticket 没有「正在做」状态是有意的。**Task 的 `READY`/`RUNNING` 不要迁移到 Ticket——那会把 Ticket 从验收单元污染成执行单元。单 session 用 `resume.next` 表达；controller + 多 session 时用会话层 claim（Matt 的 claim = assignment 模型）。认领是调度事实，不是验收事实，两者改变的是不同的下一动作，不该挤进同一字段。
-
-**`WAIVED` / `SUPERSEDED` 保留。**这两个包都没用到，但删除后 owner 决定不做某张票、或 patch attempt 取代旧票时需要在 gate 里写特例；保留成本是词汇表两个词。
-
-**交接时应额外写 judgment。**同一张 Ticket 多次换 session 时每次覆盖同一条 checkpoint，中间过程不留痕。checkpoint 回答「下一步做什么」，judgment 回答「你需要知道什么」——交接场景下这不是一回事。
-
-### 5.9 两个已知洞
-
-**跨 package acceptance 边没有一等表示。**DATEV 五张票中三张有「外部验收前置」散文段落（ASP-07/ASP-08），票内自注「这不是本包运行状态中的本地 Ticket 依赖键」。真实存在的跨包验收依赖 `validate` 检查不到、`progress.md` 投影不出来。
-
-**跨 attempt 的交付全貌不可见。**`state.json` 只保存当前 attempt 的 Ticket。AccountingScope 完成后其 state 只有 ASP-06/07/08，`progress.md` 只显示 3 张票，看不到 ASP-01~05。「这个包最终交付了什么」要去翻上一个 attempt 的 ER 或 git 历史。Ticket-first 之后 Ticket 是唯一单元，这个洞会更明显。
-
-### 5.10 Spec 完整性 gate 的分期
-
-`req-align` 要求「ready 状态只在 planning 不再需要发明行为或数据合同后成立」，`impl-planning` 的 admission backstop 会因任何未决 permission/concurrency/recovery/public shape 打回。DATEV 的 spec + contract-design 因此达到 33k tokens 且必须先于 planning 完整。
-
-Spec 完整 → plan 按完整合同组织 → 第一条可见路径是完整生产闭包。建议允许核心纵切所需合同先行封闭、加固类合同以 delta 跟进。
-
-此项独立于必做三项，可后续单独评估。
-
-## 6. 做完之后会怎样
-
-把同一个 DATEV 包按 §5.1–5.3 重放：
-
-**包的形状。**5 张 Ticket（切法不变，原来切得对），无 Task、无 `dag.md`、无 `task-handoffs/`。阻塞边在各自 Ticket 的字段里。纸面从 76k 降到约 57k，去掉的全部是流程产物而非合同。
-
-**第一个 session 的结局改变。**DMI-01 的 core AC 不依赖 API 层，链深 1 可取证。核心假设在第一个 session 成立或被证伪，而不是 44 小时后仍然未知。
-
-**后半段不再是单通道。**DMI-02 的边是 `implementation: DMI-01`，DMI-01 的 parser 接口一旦提交并有局部证据即可开始。原 T6→T7→T8→T9 四级链在 Ticket 层只剩 DMI-03→DMI-04 一级，且该边可按 seam 提前释放。
-
-**合同变更的爆炸半径收敛。**S5→S6 的 publication 语义变更只使 DMI-03 进入 `NEEDS-REVALIDATION`，DMI-01/02 已取得的证据保留。原为六个横切 Task 依序返工。
-
-**主要风险。**单元从 14 个（9 Task + 5 Ticket）降到 5 个，单元变大。若不同时执行 §5.7 的交接机制，一张 Ticket 会跨多个 session，把节点 barrier 换成 context barrier。**§5.7 不是可选项，是 §5.3 的配套条件。**
-
-## 7. 不从 Matt Pocock 取用的部分
-
-| 他的主张 | 本项目的处置 |
-| --- | --- |
-| 第一枪必须含最小可 demo UI | 不适用。B2B 高风险工作停在权限、租户边界、账本、审计、后台 job。核心旅程横切「规则层 + 数据层 + 测试」即可，不为 demo 加皮。原设计已正确。 |
-| 实现默认 AFK / `ready-for-agent` | 收紧。多租户隔离、授权、财务一致性、删除导出应默认 `ready-for-human`。 |
-| 票上禁止路径与行号 | 只适用于**代码**路径。section-level **合同**引用服务于限定 context 载入量，是有意的优化而非 staleness 负债，保留。 |
-| 缝越少越好、理想为一 | 不适用。租户、授权、审计是真实独立的缝。`progressive-system-evidence.md` 的处理优于扁平规则。 |
-| tracker 是唯一状态源 | 他没有公开论证过这一点，且明确允许本地 markdown 与自建 tracker。他反对的是**第三套过程所有权**。`state.json` 不违背其理念。 |
-| 人可以不读 spec | 失效。合规审查需要可追责的决策记录。 |
-| 规划时按 token 估算切票数 | 失效。实测产出量与占用峰值不相关，估算不可靠；改为运行时观测（§5.7）。 |
-
-可低成本借用的：wayfinder 的 HITL/AFK 单元分型（一个词写在 Ticket 上，告诉执行者能否无人值守）。另注：本地 `skills/ask-matt/SKILL.md` 仍路由到 `/wayfinder`，而该 skill 未安装，是条断链。
-
-## 8. 验收指标
-
-不以「删掉 Task 对象」为验收标准。
-
-**行为判据（决定重构是否成功）**
-
-1. 核心纵切的首份端到端证据出现在第一个执行 session，而非全程缺席。
-2. 只改动某一纵切语义的合同变更，只使该 Ticket 进入 `NEEDS-REVALIDATION`，不沿层链扩散。
-3. 后半段存在可并行或可提前释放的边，不再是单通道。
-4. §4 五项机制逐项确认仍然成立。
-5. ER 中出现 `subject: ticket:*` 记录。AccountingScope 无 Task 时该 subject 占 13/21，DATEV 有 Task 时为 0；若重构后 judgment 仍全部写在 `attempt` 上，说明 Ticket 没有真正成为执行单元，Ticket-first 只做了一半。
-
-**成本判据（辅助，基线见 [evidence/measurements.md](evidence/measurements.md)）**
-
-6. 读文档 : 实现动作从 3.2–3.5 : 1 下降。
-7. 每 session 到首次真实 dispatch 的调用数低于 16–31 区间。
-8. 150k 以上的请求占比从 36–48% 下降。
-9. 任务包纸面低于 76k，且下降部分来自流程产物而非合同。
-
-## 9. 影响面
+## 7. 影响面
 
 | Surface | 变化 |
 | --- | --- |
-| `references/impl-package-composition-contract.md` | 四种 Composition 收敛为 Ticket-only / Plan-direct；Ticket 边保留三型 |
-| `references/impl-package-current-state.md` | 删 Task 状态词汇与依赖守卫；`state.json` 增 `checkpoints`；投影收到 `progress.md` 一处 |
-| `skills/to-tickets/` | 加 AC 分期、尺寸意图、wide refactor 例外；删 `dag=true` 分支 |
-| `skills/impl-planning/` | 删 Composition 四选一；加单写资源表；不再调用 `create-task-dag` |
-| `skills/create-task-dag/` | 退役 |
-| `skills/dev-with-track/` | 以 Ticket 为恢复与推进单位；删 Task state / Task Handoff 主路径；加边的提前释放与交接触发 |
-| `skills/handoff-to-new-session/` | 通过 downstream protocol extension 接入同 Ticket 内的滚动交接 |
-| `scripts/impl_package_state.py` | 删 Task 轴；checkpoint 进 state；投影收敛；ER 撤出恢复路径 |
-| templates / evals / tests | 删 Task/DAG 生成要求；新增 core AC、三型边、交接触发、单写资源场景 |
+| `references/impl-package-composition-contract.md` | Composition 收敛为 Ticket-only / Plan-direct；三型边保留；严格 barrier 为默认 |
+| `references/impl-package-current-state.md` | 删除 Task 轴；定义 evidence index、active checkpoint 与唯一 writer |
+| `skills/to-tickets/` | 增加证据时机/安全不变量提示与 wide-refactor 例外；fresh-context 仅作 sizing heuristic |
+| `skills/impl-planning/` | 删除 Task DAG 组合；增加单写资源表；保留安全 backstop |
+| `skills/create-task-dag/` | 从新包默认流程退役；旧包迁移前只读 |
+| `skills/dev-with-track/` | 以 Ticket 为恢复/推进单位；首发严格 barrier；seam admission 为后续可选能力 |
+| `skills/handoff-to-new-session/` | 支持同 Ticket 多次滚动交接 |
+| `skills/thread-harness/` 或后续 broker | 复用双层单写、结构化事件与自交接，不照搬完整机器 |
+| `scripts/impl_package_state.py` | 删除 Task 轴；增加 evidence/checkpoint 索引；同步修改 attempt index、validation 和恢复调用点 |
+| migration prompt / fixture | 在临时 worktree 逐包迁移 3.4/Task package；以单一 migration commit 激活，覆盖中断回退、真实 evidence 提取与历史保留 |
+| templates / evals / tests | 覆盖严格 ready、两维 AC、三型边、change shape、恢复与可选 seam admission |
 
-删除多于新建：`create-task-dag` 整体退役，Task 轴、`dag.md` 模板、Task Handoff 层、两处投影均为删除。
+## 8. 暂不在本轮解决
+
+- **跨 package acceptance 边。**当前仍以散文表达，`validate` 与 `progress.md` 无法检查；未来 broker ledger 可能承载路由，但 package contract 如何引用尚未设计。
+- **跨 attempt 交付全貌。**当前 `state.json` 只显示 active attempt；evidence index 是否跨 attempt 聚合仍需单独决定，迁移不得擅自抹平历史。
+- **自动上下文 warning。**留给 broker/controller 阶段，不伪装成当前主 task session 已具备的能力。
+- **Spec 完整性 gate 分期。**可另行研究，但任何首条可执行路径所需的 permission、tenant boundary、privacy、concurrency、recovery 与数据完整性合同仍须先闭合。
+
+这次重构的主要风险不是对象删除本身，而是迁移正确性、跨 session 恢复、唯一 writer 与安全不变量。实施必须按 A/B/C/D 分阶段验收，不能把上游阶段通过写成整个重构完成。

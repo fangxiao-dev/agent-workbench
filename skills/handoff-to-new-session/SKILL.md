@@ -25,13 +25,19 @@ Do not create a worktree child or snapshot any checkout. The new session starts 
 
 ### Create-thread environment override
 
-For this skill, the existing implementation worktree is an execution anchor **inside the child prompt**, not a thread-creation target. When `create_thread` is called for a Git project, explicitly set:
+For this skill, the existing implementation worktree is an execution anchor **inside the child prompt**, not a thread-creation target. When `create_thread` is called for a Git project, pass the local project target in this exact shape:
 
-```text
-target.environment = { type: "local" }
+```json
+{
+  "target": {
+    "type": "project",
+    "projectId": "<verified project id from list_projects>",
+    "environment": { "type": "local" }
+  }
+}
 ```
 
-This rule overrides the generic `create_thread` advice to default Git projects to a new worktree. Never pass `target.environment.type = "worktree"`, `startingState`, a branch, or a source-worktree snapshot for this handoff. A UI/result that says `Worktree created` is a delivery failure: stop, report it, and do not treat the child as a valid clean-session handoff.
+`projectId` and `type` belong inside `target`; do not lift them to the top level, and do not use `target.type = "worktree"`. This rule overrides the generic `create_thread` advice to default Git projects to a new worktree. Never pass `target.environment.type = "worktree"`, `startingState`, a branch, or a source-worktree snapshot for this handoff. A UI/result that says `Worktree created` is a delivery failure: stop, report it, and do not treat the child as a valid clean-session handoff.
 
 ## Execution location before anchor verification
 
@@ -75,7 +81,7 @@ The first-stage anchor prompt must:
 For an ordinary checkpoint handoff, the second-stage continuation prompt must:
 
 - State only the current attempt/status, the single next action, the one material proof already earned, and the remaining proof that prevents closure. Let the entry point recover all detail.
-- Carry the recorded subagent mode in one line and point to `/impl-package:subagent-driven-development` for its meaning; do not reproduce the mode contract. Preserve any recorded GO rule that lets the main session complete verification, review, claim audit and gate evaluation without a second confirmation; do not reproduce the entire prior authorization contract.
+- Carry the recorded strategy in one line — `mode / worker / schedule / review` — and point to `/impl-package:subagent-driven-development` for its meaning; do not reproduce the strategy contract. Preserve any recorded GO rule that lets the main session complete verification, review, claim audit and gate evaluation without a second confirmation; do not reproduce the entire prior authorization contract.
 - Tell the child to recover through the package directory and Impl-Package entry point, then execute the recorded next action without another confirmation, stopping only for an explicitly named input, authorization, or other blocker.
 - Append the template's non-blocking understanding receipt; it is the sole child-facing contract for this audit.
 - Keep controlled inputs, credentials, customer data, and oracle artifacts out of Git, chat bodies, and repository temporary files.
@@ -87,9 +93,9 @@ A downstream protocol that supplies its own continuation must keep the same titl
 
 1. Default the child configuration to the current task's verified pair: pass its `model` unchanged as `model` and its `reasoning_effort` unchanged as `thinking`. An owner may override the inherited pair only by naming a supported replacement configuration.
 2. Confirm that the destination supports the selected pair. If the inherited pair, or an owner-specified replacement, is unsupported, stop and report `session configuration unavailable`; do not silently fall back to another model or reasoning effort.
-3. Call `create_thread`; never call `fork_thread`. Pass the selected `model` and `thinking` explicitly together with the filled first-stage prompt unchanged as `prompt`. Pass both prompts as plain prompt text: do not wrap either one in `<codex_delegation>` or add any Codex delegation tag or label. Normalize the tool result before branching: the desktop wrapper may return the creation payload as serialized JSON text rather than an object, so parse that text and extract `threadId` / `hostId` or `clientThreadId`; never infer a queued result from the wrapper shape alone.
-4. Create a normal session with `target.environment = { type: "local" }`, without `startingState: { type: "working-tree" }`, a worktree snapshot option, a branch, or the source worktree as a creation-state target. Let the prompt bind the child to the verified existing implementation worktree.
-5. Obtain the original session title from the thread manager before creation. Derive the title by adding `01` if it has no numeric suffix, or incrementing the existing suffix (`01` → `02`). `create_thread` has no title parameter, so after an immediate result with `threadId`, call `set_thread_title` with that exact derived title. Do not claim the naming step succeeded until that call succeeds.
+3. Call `create_thread`; never call `fork_thread`. Use the exact local-project `target` shape in **Create-thread environment override**, and pass the selected `model` and `thinking` explicitly together with the filled first-stage prompt unchanged as `prompt`. Pass both prompts as plain prompt text: do not wrap either one in `<codex_delegation>` or add any Codex delegation tag or label. Normalize the tool result before branching: the desktop wrapper may return the creation payload as serialized JSON text rather than an object, so parse that text and extract `threadId` / `hostId` or `clientThreadId`; never infer a queued result from the wrapper shape alone.
+4. Create a normal session with the same local-project target shape: `target.type = "project"`, `target.projectId = <verified project id>`, and `target.environment = { type: "local" }`; omit `startingState`, a worktree snapshot option, a branch, and the source worktree as a creation-state target. Let the prompt bind the child to the verified existing implementation worktree.
+5. Obtain the original session title from the thread manager before creation. Derive the title by adding `01` if it has no numeric suffix, or incrementing the existing suffix (`01` → `02`). After an immediate result with `threadId`, call `set_thread_title` with that exact derived title; do not rely on any optional title field in `create_thread` as a substitute. Do not claim the naming step succeeded until that call succeeds.
    If `set_thread_title` fails, stop before waiting for anchors or sending continuation and report incomplete delivery.
 6. If the tool returns a `threadId` and `hostId`, set the title first, then use `wait_threads` with that exact pair until the child reports anchor PASS/FAIL or needs attention. A timeout is not PASS. On FAIL, stop without sending the continuation prompt or attempting repair.
 7. Only after both the title and anchor PASS are confirmed, send the filled second-stage continuation prompt to that exact `threadId`.
@@ -115,7 +121,7 @@ Before reporting delivery, verify that:
 - The stated implementation worktree, HEAD and authority records were verified before creation.
 - The child explicitly uses the verified current-task model and reasoning effort, unless the owner supplied a supported explicit override.
 - The first-stage and continuation prompts were sent as plain text without a Codex delegation tag or label.
-- The `create_thread` target explicitly used `environment: { type: "local" }`; no result or UI reports a newly created worktree.
+- The `create_thread` target used `type: "project"`, placed `projectId` inside `target`, and explicitly used `environment: { type: "local" }`; no result or UI reports a newly created worktree.
 - The child title was derived from the source title and confirmed through `set_thread_title`, or delivery was reported incomplete.
 - The first-stage prompt contains the applicable recovery or downstream context anchors, target-`workdir` execution rule, mismatch rule and PASS-then-stop rule; the second-stage prompt follows the applicable generic or downstream continuation contract.
 - The two prompts contain no duplicated plan/DAG/Ticket/history/test detail and stay within the template's compact limit unless a named authorization or blocker required the exception.

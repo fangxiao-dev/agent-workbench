@@ -16,6 +16,26 @@ claude plugin install impl-package@agent-workbench --scope project
 
 插件目录就是安装产物，不执行 build。安装和更新会进入宿主缓存；manifest/marketplace 版本必须同步，更新后开启新会话。Workbench 不包装这些命令，也不在验证时修改用户级宿主状态。
 
+## 插件生命周期 Skill
+
+跨宿主刷新缓存、重装或升级时使用显式调用的 `skills/plugin-lifecycle/`。Agent 填写外部 JSON 配置，脚本统一生成 Codex、Claude、Grok 命令并返回 JSON envelope；默认 dry-run，只有 `--apply` 才执行用户级安装状态变更。版本只校验，不由脚本改写 manifest。
+
+```powershell
+python D:\CodeSpace\agent-workbench\skills\plugin-lifecycle\scripts\plugin_lifecycle.py `
+  --config D:\path\to\plugin-lifecycle.json `
+  --action validate
+
+python D:\CodeSpace\agent-workbench\skills\plugin-lifecycle\scripts\plugin_lifecycle.py `
+  --config D:\path\to\plugin-lifecycle.json `
+  --action reinstall --host codex claude grok --apply
+```
+
+安装该独立 Skill：
+
+```powershell
+python D:\CodeSpace\agent-workbench\scripts\link_skill.py plugin-lifecycle --host claude codex grok
+```
+
 | 平台 | 链接类型 |
 |------|----------|
 | Windows | 目录 **junction**（`mklink /J`） |

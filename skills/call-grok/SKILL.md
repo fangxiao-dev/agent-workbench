@@ -5,6 +5,11 @@ description: Run one short-lived, non-interactive Grok CLI task for a caller tha
 
 # call-grok
 
+When referenced by Impl-Package as `$grok-worker`, this skill is the logical
+worker adapter: the caller supplies the bounded brief and omits model and
+effort overrides. Direct `call-grok` users may still use the adapter's
+documented options.
+
 Use `scripts/grok_task.py` when a skill needs one bounded Grok CLI invocation.
 
 The caller owns the task prompt, tool policy, model configuration overrides, and
@@ -34,8 +39,9 @@ Provide exactly one of `--prompt-file` (preferred, especially background) or
 `--prompt` (short foreground exception). `--executable` (or `GROK_EXECUTABLE` /
 legacy `GROK_BIN`) pins a CLI. `--model` and `--effort` default to `grok-4.6`
 and `high`; other tool, worktree, and rule flags are optional and are forwarded
-only when supplied. Each invocation starts a new Grok process and never resumes
-a session.
+only when supplied. Each invocation starts a new Grok process. The default is a
+fresh session; pass `--resume <session-id>` to continue a previous chat. Store
+`session_id` from the envelope — the wrapper does not remember the last id.
 
 Wrapper `--prompt-file` is passed through to Grok as `--prompt-file` (no full
 prompt on argv). Long `--prompt` values are spilled to a temp file automatically.
@@ -43,8 +49,10 @@ prompt on argv). Long `--prompt` values are spilled to a temp file automatically
 ## Output contract
 
 stdout is exactly one JSON envelope with `ok`, `status`, `text`, `usage`,
-`exit_code`, and `error`. Diagnostics and heartbeats go to stderr. Callers
-validate business schema and choose retry policy themselves.
+`exit_code`, `session_id`, and `error`. `session_id` is the Grok session UUID
+when the child reported one, otherwise `null` (including preflight and dry-run).
+Diagnostics and heartbeats go to stderr. Callers validate business schema and
+choose retry policy themselves.
 
 ## Background launch
 

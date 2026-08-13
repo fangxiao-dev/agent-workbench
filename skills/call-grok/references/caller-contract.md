@@ -3,6 +3,10 @@
 `call-grok` is a thin, short-lived Grok CLI executor. The caller supplies the
 complete task prompt and any desired Grok configuration.
 
+When the caller uses the logical `$grok-worker` reference, omit `--model` and
+`--effort`; the defaults in this skill remain the single model source for that
+worker. Direct adapter callers may provide those options explicitly.
+
 ## Minimal invocation
 
 ```powershell
@@ -30,6 +34,7 @@ parse it.
 |---|---:|---|
 | `--cwd` | process cwd | Working directory for Grok |
 | `--prompt-file` / `--prompt` | required | Caller-owned task text; unique temporary `--prompt-file` is the preferred transport |
+| `--resume` | unset (not passed) | Resume an existing Grok session by id; omit for a fresh session |
 | `--max-run` | 100 | Maps to Grok `--max-turns` |
 | `--model` | `grok-4.6` | Model id |
 | `--effort` | `high` | Reasoning effort |
@@ -89,6 +94,7 @@ stdout is exactly one JSON object:
   "text": "Grok's final response",
   "usage": {},
   "exit_code": 0,
+  "session_id": "0193aaaaaaaaaaaaaaaaaaaaaaaaaa",
   "error": null
 }
 ```
@@ -98,8 +104,10 @@ stdout is exactly one JSON object:
 `preflight_failed`, or `error`. stderr is reserved for `[heartbeat]`,
 `[liveness]`, `[grok-stderr]`, `[grok-stdout-raw]`, and related diagnostics.
 
-Each call starts a fresh Grok process. The wrapper does not resume sessions;
-callers that need previous context must include it in a new prompt.
+Each call starts a fresh Grok process. The default is a new session. To continue
+a previous chat, store `session_id` from the envelope and pass it back as
+`--resume <session-id>`. The wrapper does not remember the last id. `session_id`
+is also returned on incomplete statuses when the child reported one.
 
 The no-stream stall window defaults to 1200 seconds (20 minutes); no hard
 overall timeout is applied unless the caller supplies one. Grok subagents are

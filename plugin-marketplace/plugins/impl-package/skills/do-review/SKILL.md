@@ -14,7 +14,7 @@ allowed-tools:
 
 Every dispatched reviewer is one leaf. It must not invoke `do-review`, dispatch subagents, re-evaluate topology/capacity, inspect other tracks' same-round output, classify cross-track results, or decide the overall verdict. A reviewer skill defines primary review intent, not an exclusive capability boundary; evidence-backed cross-domain candidates return to the parent for attribution and classification.
 
-The default topology comes only from [reviewer-registry.json](references/reviewer-registry.json): Track A `review-code`, Track B `review-code-by-standards`, and Track C `review-code-by-spec`. `safety-review` is conditional, not a registry default. Worker choice is independent of topology: `finding-closure` uses fresh `call-grok` processes with `grok-4.5/high`; other phases use the current `gpt-5.6-terra/high` or `gpt-5.6-sol/high` subagent defaults, subject to explicit constraints.
+The default topology comes only from [reviewer-registry.json](references/reviewer-registry.json): Track A `review-code`, Track B `review-code-by-standards`, and Track C `review-code-by-spec`. `safety-review` is conditional, not a registry default. Worker choice is independent of topology: `finding-closure` uses fresh `$grok-worker` processes; the worker Skill owns its model and effort defaults. Other phases use the current host defaults for the caller-supplied target class, subject to explicit constraints.
 
 ## 0. Gate
 
@@ -57,7 +57,7 @@ Reject ambiguous, unreadable, escaping, or frontmatter-mismatched paths. Reserve
 
 Read [subagent-briefs.md](references/subagent-briefs.md) before composing prompts. Use its common block and generic leaf brief, plus its closure brief only for Closure verification and its anti-duplicate addendum only after round 1. Include the verified absolute reviewer `SKILL.md` path and canonical ledger path.
 
-Same-round tracks remain isolated even when phased. Round 1 has no prior findings; later rounds receive only the parent-verified prior round's canonical context, never raw reviewer output. Start every round with fresh leaf workers; resume only an interrupted leaf from that same round. For `finding-closure`, run each leaf through `call-grok --no-subagents` in the background with its assigned reviewer skill and complete leaf brief; a valid PASS, FAIL, or UNCERTAIN result is final for that leaf. After an incomplete Grok executor result, confirm process cleanup before one fresh fallback to the applicable current default reviewer. Timeout, cancellation, `PARTIAL`, or missing evidence is incomplete, not PASS.
+Same-round tracks remain isolated even when phased. Round 1 has no prior findings; later rounds receive only the parent-verified prior round's canonical context, never raw reviewer output. Start every round with fresh leaf workers; resume only an interrupted leaf from that same round. For `finding-closure`, run each leaf through `$grok-worker --no-subagents` in the background with its assigned reviewer skill and complete leaf brief; a valid PASS, FAIL, or UNCERTAIN result is final for that leaf. After an incomplete Grok executor result, confirm process cleanup before one fresh fallback to the applicable current default reviewer. Timeout, cancellation, `PARTIAL`, or missing evidence is incomplete, not PASS.
 
 Wait for all required active tracks. A recorded dormant Loop track is not missing; any other incomplete leaf blocks the round unless the user authorized that exact degraded topology.
 

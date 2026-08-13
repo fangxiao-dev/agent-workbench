@@ -10,63 +10,61 @@ def read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
-def test_generic_skill_owns_single_axis_scheduling_and_worker_lifecycle() -> None:
+def test_unified_skill_owns_strategy_and_worker_lifecycle() -> None:
     skill = read("plugin-marketplace/plugins/impl-package/skills/subagent-driven-development/SKILL.md")
-
-    contract = skill.split("```text", 1)[1].split("```", 1)[0]
-    assert "Scheduling: <LOCAL | SERIAL | PARALLEL | BLOCKED> · route=<route>" in contract
-    assert "mode=" not in contract
-    assert "default-long" not in skill
-    assert "ordinary" not in skill
-    assert "reason/blocker:" in contract
-    assert "LOCAL 或 BLOCKED" in contract
-    assert "resources:" in contract
-    assert "reuse:" in contract
-    assert "每个委派的 bounded unit 使用 fresh subagent" in skill
-    assert "已发生 context compaction 时，从 canonical input 启动 fresh subagent" in skill
-    assert "省略 `reuse` 表示使用 fresh subagent" in skill
-    assert "Impl-Package 基于批准的 Plan、Ticket 或 DAG" in skill
-    assert "独立 review → `reviewer`" in skill
-    assert "$reviewer" not in skill
-    assert "gpt-" not in skill.lower()
-    assert "reasoning" not in skill.lower()
-
-
-def test_scheduling_consumers_reference_the_owner_without_a_cycle() -> None:
-    investigate = read("plugin-marketplace/plugins/impl-package/skills/investigate-before-implement/SKILL.md")
-    preflight = read("plugin-marketplace/plugins/impl-package/skills/execution-preflight/SKILL.md")
-    authorization = read(
-        "plugin-marketplace/plugins/impl-package/skills/execution-preflight/references/authorization-contract.md"
+    resolver = read(
+        "plugin-marketplace/plugins/impl-package/skills/subagent-driven-development/references/worker-resolver.md"
     )
-    handoff = read("skills/handoff-to-new-session/SKILL.md")
-    bounded_task = read("plugin-marketplace/plugins/impl-package/skills/dispatch-bounded-task/SKILL.md")
 
-    for text in (preflight, authorization, handoff):
+    assert len(skill.splitlines()) <= 180
+    for field in ("mode:", "worker:", "schedule:", "review:"):
+        assert field in skill
+    assert "route" not in skill.lower()
+    assert "默认是 `$grok-worker`" in skill
+    assert "同一逻辑 worker" in skill
+    assert "fresh invocation" in skill
+    assert "context compaction" in skill
+    assert "Outcome: DONE | BLOCKED | INCOMPLETE" in skill
+    assert "review_state: PENDING_REVIEW" in skill
+    assert "一次 fresh `@luna-worker` fallback" in skill
+    assert "业务 `BLOCKED` 不 fallback" in skill
+    assert "skills/call-grok/SKILL.md" in resolver
+    assert "不传 model/effort" in resolver
+
+
+def test_mode_contracts_cover_investigate_implement_fix_and_verify() -> None:
+    modes = read(
+        "plugin-marketplace/plugins/impl-package/skills/subagent-driven-development/references/mode-contracts.md"
+    )
+    for heading in ("## investigate", "## implement", "## fix", "## verify"):
+        assert heading in modes
+    assert "EVIDENCE_SUFFICIENT | EVIDENCE_GAP" in modes
+    assert "finding closure" in modes
+    assert "无写副作用" in modes
+
+
+def test_scheduling_consumers_reference_only_the_unified_entry() -> None:
+    callers = (
+        read("AGENTS.md"),
+        read("plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md"),
+        read("plugin-marketplace/plugins/impl-package/skills/dev-with-track/SKILL.md"),
+        read("plugin-marketplace/plugins/impl-package/skills/execution-preflight/SKILL.md"),
+        read("plugin-marketplace/plugins/impl-package/skills/execution-preflight/references/authorization-contract.md"),
+        read("skills/handoff/references/task-execution.md"),
+        read("skills/handoff-to-new-session/SKILL.md"),
+    )
+    for text in callers:
         assert "impl-package:subagent-driven-development" in text
-
-    assert "impl-package:subagent-driven-development" not in investigate
-    assert "impl-package:subagent-driven-development" not in bounded_task
-    assert "references/parallel-work-admission.md" not in investigate
-    assert "$dispatching-parallel-agents" not in investigate
-    assert "### Subagent modes" not in preflight
-    assert "未输出 `reuse:` 时新建 subagent" in bounded_task
+        assert "impl-package:investigate-before-implement" not in text
+        assert "impl-package:dispatch-bounded-task" not in text
 
 
-def test_explicit_standing_role_refreshes_after_context_compaction() -> None:
-    grill = read("plugin-marketplace/plugins/impl-package/skills/grill-me-smartly/SKILL.md")
-
-    assert "Standing Questioner 是显式 lifecycle 例外" in grill
-    assert "发生 context compaction 后" in grill
-    assert "启动 fresh Questioner" in grill
-
-
-def test_verbose_read_only_verification_is_delegated_without_overrouting_small_checks() -> None:
+def test_parallel_admission_remains_a_conditional_reference() -> None:
     skill = read("plugin-marketplace/plugins/impl-package/skills/subagent-driven-development/SKILL.md")
-
-    assert "预计长时间运行或高回显的既定只读测试" in skill
-    assert "`SERIAL` verification unit" in skill
-    assert "`/impl-package:dispatch-bounded-task`" in skill
-    assert "由其选择 Verifier" in skill
-    assert "单条、快速且输出有界的原子检查" in skill
-    assert "可留在主 session" in skill
-    assert "实现动作或有写副作用的命令不属于 Verifier" in skill
+    admission = read(
+        "plugin-marketplace/plugins/impl-package/skills/subagent-driven-development/references/parallel-work-admission.md"
+    )
+    assert "Parallel Work Admission" in skill
+    assert "ownership" in admission
+    assert "共享可变运行资源" in admission
+    assert "worker" not in admission.lower() or "不选择 worker" in admission

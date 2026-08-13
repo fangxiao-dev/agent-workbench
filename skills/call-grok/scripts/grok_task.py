@@ -170,6 +170,8 @@ def build_cmd(
 
     if args.cwd:
         cmd.extend(["--cwd", args.cwd])
+    if args.resume:
+        cmd.extend(["--resume", args.resume])
     if args.model:
         cmd.extend(["-m", args.model])
     if args.effort:
@@ -531,6 +533,10 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--prompt-file", help="Path to prompt file")
 
     p.add_argument("--cwd", help="Working directory for grok")
+    p.add_argument(
+        "--resume",
+        help="Resume an existing Grok session by id; omit for a fresh session",
+    )
     p.add_argument("--executable", help="Grok executable path or command; otherwise use discovery")
     p.add_argument(
         "--max-run",
@@ -625,6 +631,7 @@ def envelope(
     text: Optional[str] = None,
     usage: Any = None,
     exit_code: int,
+    session_id: Optional[str] = None,
     message: Optional[str] = None,
 ) -> Dict[str, Any]:
     return {
@@ -633,6 +640,7 @@ def envelope(
         "text": text,
         "usage": usage,
         "exit_code": exit_code,
+        "session_id": session_id,
         "error": error_for_status(status, message),
     }
 
@@ -728,6 +736,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             text=run.get("text") or None,
             usage=run.get("usage"),
             exit_code=exit_code,
+            session_id=run.get("sessionId"),
             message=run.get("error_message"),
         ), ensure_ascii=False))
         return exit_code

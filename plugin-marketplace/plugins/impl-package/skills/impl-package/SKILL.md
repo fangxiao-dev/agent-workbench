@@ -32,10 +32,8 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 | 创建独立验收切片 | `/impl-package:to-tickets` |
 | 创建横向执行依赖图 | `/impl-package:create-task-dag` |
 | 执行前确认授权与工作区 | `/impl-package:execution-preflight` |
-| 建立原因、影响面、既有方案和前置事实 | `/impl-package:investigate-before-implement` |
-| 决定主 session/subagent 分工、mode、batch 和资源顺序 | `/impl-package:subagent-driven-development` |
+| 调查、实现、修复、验证及主 session/worker 分工、mode、batch 和资源顺序 | `/impl-package:subagent-driven-development` |
 | 恢复执行、推进 Task/Ticket、写 Gate | `/impl-package:dev-with-track` |
-| 派发批准来源中的已释放实现或只读验证单元 | `/impl-package:dispatch-bounded-task` |
 | 编排多 reviewer、聚合 findings 并判断收敛 | `/impl-package:do-review` |
 | 审查实现正确性和可维护性 | `/impl-package:review-code` |
 | 按仓库规范和模块 interface/depth/locality 审查代码 | `/impl-package:review-code-by-standards` |

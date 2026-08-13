@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "call-grok" / "scripts" / "grok_task.py"
 SKILL = ROOT / "skills" / "call-grok" / "SKILL.md"
 CONTRACT = ROOT / "skills" / "call-grok" / "references" / "caller-contract.md"
+ENVELOPE_KEYS = {"ok", "status", "text", "usage", "exit_code", "session_id", "error"}
 
 
 def load_executor():
@@ -30,15 +31,17 @@ def test_build_command_passes_only_explicit_caller_configuration(tmp_path: Path)
             "--effort", "high", "--tools", "read_file,grep", "--allow", "Bash(git *)",
             "--allow", "Read(*)", "--deny", "Bash(git push*)", "--always-approve",
             "--no-subagents", "--worktree", "isolated", "--rules", "stay scoped",
+            "--resume", "0193aaaaaaaaaaaaaaaaaaaaaaaaaa",
         ]
     )
 
     assert executor.build_cmd("grok", args, prompt="caller-owned prompt") == [
         "grok", "-p", "caller-owned prompt", "--max-turns", "100", "--output-format",
-        "streaming-json", "--cwd", str(tmp_path), "-m", "grok-test", "--effort", "high",
-        "--worktree", "isolated", "--tools", "read_file,grep", "--allow", "Bash(git *)",
-        "--allow", "Read(*)", "--deny", "Bash(git push*)", "--always-approve",
-        "--no-subagents", "--rules", "stay scoped",
+        "streaming-json", "--cwd", str(tmp_path), "--resume", "0193aaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "-m", "grok-test", "--effort", "high", "--worktree", "isolated",
+        "--tools", "read_file,grep", "--allow", "Bash(git *)", "--allow", "Read(*)",
+        "--deny", "Bash(git push*)", "--always-approve", "--no-subagents",
+        "--rules", "stay scoped",
     ]
 
 
@@ -59,9 +62,11 @@ def test_default_command_omits_tools_keeps_always_approve(tmp_path: Path) -> Non
     ]
     assert "--tools" not in cmd
     assert "--no-subagents" not in cmd
+    assert "--resume" not in cmd
     help_text = executor.build_parser().format_help()
-    for removed in ("--role", "--resume", "--plan-file", "--context-file"):
+    for removed in ("--role", "--plan-file", "--context-file"):
         assert removed not in help_text
+    assert "--resume" in help_text
 
 
 def test_tools_empty_string_is_passed_through(tmp_path: Path) -> None:
@@ -126,7 +131,11 @@ def test_run_with_liveness_parses_stream_and_nonzero_exit(monkeypatch) -> None:
             self.stdout = io.StringIO(
                 "\n".join([
                     json.dumps({"type": "text", "data": "final answer"}),
-                    json.dumps({"type": "end", "usage": {"input_tokens": 3}}),
+                    json.dumps({
+                        "type": "end",
+                        "sessionId": "0193aaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "usage": {"input_tokens": 3},
+                    }),
                 ])
             )
             self.stderr = io.StringIO("")
@@ -144,6 +153,7 @@ def test_run_with_liveness_parses_stream_and_nonzero_exit(monkeypatch) -> None:
     assert success["status"] == "completed"
     assert success["text"] == "final answer"
     assert success["usage"] == {"input_tokens": 3}
+    assert success["sessionId"] == "0193aaaaaaaaaaaaaaaaaaaaaaaaaa"
 
     class FailingPopen(FakePopen):
         def __init__(self, command, **kwargs):
@@ -261,7 +271,13 @@ def test_main_writes_canonical_envelopes(monkeypatch, capsys, tmp_path: Path) ->
     monkeypatch.setattr(
         executor,
         "run_with_liveness",
-        lambda **_kwargs: {"status": "max_turns", "text": "partial", "usage": {}, "error_message": None},
+        lambda **_kwargs: {
+            "status": "max_turns",
+            "text": "partial",
+            "usage": {},
+            "sessionId": "0193aaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "error_message": None,
+        },
     )
 
     assert executor.main(["--cwd", str(tmp_path), "--prompt", "task"]) == 2
@@ -271,6 +287,7 @@ def test_main_writes_canonical_envelopes(monkeypatch, capsys, tmp_path: Path) ->
         "text": "partial",
         "usage": {},
         "exit_code": 2,
+        "session_id": "0193aaaaaaaaaaaaaaaaaaaaaaaaaa",
         "error": {"code": "MAX_TURNS", "message": "max turns"},
     }
 
@@ -279,7 +296,8 @@ def test_main_writes_canonical_envelopes(monkeypatch, capsys, tmp_path: Path) ->
     preflight = json.loads(capsys.readouterr().out)
     assert preflight["status"] == "preflight_failed"
     assert preflight["error"]["code"] == "PREFLIGHT_FAILED"
-    assert set(preflight) == {"ok", "status", "text", "usage", "exit_code", "error"}
+    assert preflight["session_id"] is None
+    assert set(preflight) == ENVELOPE_KEYS
 
 
 def test_main_prompt_file_builds_without_inline_prompt(monkeypatch, capsys, tmp_path: Path) -> None:
@@ -336,14 +354,16 @@ def test_partial_and_liveness_statuses_have_stable_error_codes() -> None:
         result = executor.envelope(status, text="partial", usage=None, exit_code=1)
         assert result["ok"] is False
         assert result["error"] == {"code": code, "message": status.replace("_", " ")}
-        assert set(result) == {"ok", "status", "text", "usage", "exit_code", "error"}
+        assert result["session_id"] is None
+        assert set(result) == ENVELOPE_KEYS
 
 
 def test_docs_and_help_do_not_expose_presets() -> None:
     executor = load_executor()
     text = "\n".join([SKILL.read_text(encoding="utf-8"), CONTRACT.read_text(encoding="utf-8")]).lower()
 
-    for removed in ("--role", "reviewer", "explore", "implement", "--resume", "--plan-file"):
+    for removed in ("--role", "reviewer", "explore", "implement", "--plan-file"):
         assert removed not in text
     assert "--role" not in executor.build_parser().format_help()
+    assert "--resume" in executor.build_parser().format_help()
     assert "unset (not passed)" in CONTRACT.read_text(encoding="utf-8")

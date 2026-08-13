@@ -77,6 +77,22 @@ claude plugin install impl-package@agent-workbench --scope project
 
 安装或升级后开启新会话，使宿主从插件缓存重新加载 skills。面向用户和 agent 的文档统一使用 `/impl-package:dev-with-track` 形式显式调用；宿主内部 registry/discovery 仍可显示不带 `/` 的 skill key。`link_skill.py --all` 不处理 `plugin-marketplace/`。
 
+### 插件生命周期（Codex / Claude / Grok）
+
+需要刷新缓存、重装或升级本地插件时，显式调用 `plugin-lifecycle`。Agent 只填写外部 JSON；脚本负责生成宿主命令并返回统一 JSON 结果。默认是 dry-run，执行安装/卸载/升级必须显式加 `--apply`：
+
+```powershell
+python D:\CodeSpace\agent-workbench\skills\plugin-lifecycle\scripts\plugin_lifecycle.py `
+  --config D:\path\to\plugin-lifecycle.json `
+  --action validate
+
+python D:\CodeSpace\agent-workbench\skills\plugin-lifecycle\scripts\plugin_lifecycle.py `
+  --config D:\path\to\plugin-lifecycle.json `
+  --action upgrade --apply
+```
+
+配置样例见 [config.example.json](skills/plugin-lifecycle/references/config.example.json)。Grok 使用本地 plugin source；版本只校验，不由脚本修改。
+
 ### Discuss Ledger MCP 注册
 
 `discuss-ledger` MCP **不**由 `link_skill.py` 注册，需单独运行：
