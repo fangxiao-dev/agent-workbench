@@ -4,7 +4,7 @@
 **Publication Status：** Draft
 **Attempt ID：** <attempt-id>
 
-> Ticket 定义验收边界；运行时验收状态保存在 `.impl-package/state.json`。Ticket 直接属于当前 Attempt，不需要手工 revision。阶段 A 的 `dag=false` 只是 3.4 兼容占位，不创建 Task。
+> Ticket 定义验收边界；运行时验收状态保存在 `.impl-package/state.json`。Ticket 直接属于当前 Attempt，不需要手工 revision。3.5 的 `dag=false` 是 Ticket-only 合同，不创建 Task。
 
 ## Runtime Acceptance
 

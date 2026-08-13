@@ -20,19 +20,18 @@ Ticket 与 Task 引用 Decision/Spec/contract-design/Plan 中的合同或验收�
 新 package 的 Plan 必须声明 Ticket-only Composition：
 
 ```text
-Composition：tickets=<true|false>, dag=<true|false>
+Composition：tickets=true, dag=false
 ```
 
-阶段 A 保留 `dag=false` 作为当前 3.4 state engine 的兼容占位；它不表示创建 Task、DAG 或 Task Handoff。新 package 只允许以下两种组合：
+阶段 A 保留 `dag=false` 作为当前 3.4 state engine 的兼容占位；它不表示创建 Task、DAG 或 Task Handoff。新 package 只有 Ticket-only 组合：
 
 | tickets | dag | 用途 |
 | --- | --- | --- |
-| false | false | 小而线性的 Plan-direct 改动，不创建 Ticket 或 Task |
 | true | false | 需要独立验收切片的 Ticket-only package，依赖只写在 Ticket 上 |
 
 `dag=true` 仅用于已有 3.4/Task package 的恢复、迁移或只读审计；新 planning 路径不得选择它。阶段 A 期间旧 state engine 可能仍写出空的 `tasks` 对象，但新 package 不产生 Task 行或 Task runtime projection；阶段 B 删除该兼容字段。
 
-只有独立 acceptance 结论能减少验收歧义时才创建 Ticket；不要为了完整感创建 Task、DAG 或 Task Handoff。
+新 package 始终创建 Ticket；不要为了完整感创建 Task、DAG 或 Task Handoff。
 
 ## 3. 固定位置
 
@@ -75,11 +74,11 @@ Plan、Ticket 或 DAG 的语义变化只使受影响范围的 approval/validatio
 
 ## 6. Ticket-only 运行边界
 
-- 新 package 严格使用 Ticket barrier：未释放 `implementation` 边的 Ticket 不进入 `readyTickets`；`acceptance` 边阻止最终 acceptance，`release` 边只在发布/Gate 前复核。
+- 新 package 严格使用 Ticket barrier：未释放 `implementation` 边的 Ticket 不进入 `readyTickets`；`acceptance` 边允许实施但阻止最终 `SATISFIED`；`release` 边只在发布/Gate 前复核。
 - early evidence 只能索引真实产物，不能把 Ticket 推进到中间 acceptance 状态。Ticket 仍需覆盖全部 required claims 才能最终满足。
 - Ticket AC 必须显式编号 stable claim ID；early falsification evidence 与 remaining completion evidence 分开描述。
 - 第一条可执行路径必须保持 tenant、RBAC、privacy、幂等和数据完整性不变量；早期路径可以窄，但不能薄。
 - 跨 session 续接沿用既有默认：交接前写 active checkpoint，长期判断写 ER judgment；compact 只作异常兜底，不是正常恢复权威。
 - package task session 主线程是 `state.json` 唯一 writer；worker 只返回结构化 evidence。未来 broker 的协调 ledger 不属于本阶段。
 
-`RETIRED` 是新合同中原 `WAIVED`/`SUPERSEDED` 的统一 terminal 状态，必须带 `disposition: waived | superseded`。3.4 runtime 在阶段 B 前仍按旧状态读取；不得在阶段 A 声称 runtime 已支持新状态。
+`RETIRED` 是新合同中原 `WAIVED`/`SUPERSEDED` 的统一 terminal 状态，必须带 `disposition: waived | superseded`。3.4 runtime 只作为一次性迁移输入；3.5 runtime 只接受 Ticket/evidence/checkpoint 状态。

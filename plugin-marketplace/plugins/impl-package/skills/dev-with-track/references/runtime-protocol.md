@@ -1,6 +1,6 @@
 # Runtime Protocol
 
-运行状态唯一来源是 `.impl-package/state.json`；格式和命令见 `../../../references/impl-package-current-state.md`。先按 Plan 的 Composition 分支：新 package 是 Ticket-only/Plan-direct；只有旧 3.4 package 才读取 Task/DAG/Handoff。
+运行状态唯一来源是 `.impl-package/state.json`；格式和命令见 `../../../references/impl-package-current-state.md`。3.5 新 package 只读取 Ticket/evidence/checkpoint；3.4 Task/DAG/Handoff 只能由一次性迁移 prompt/validator 读取。
 
 ## 恢复顺序
 
@@ -14,13 +14,13 @@
 
 Evidence 必须是存在的仓库相对路径，可带 anchor，并足以解释状态变化。不要保存额外完整性证明。
 
-- checkpoint：恢复边界；同 subject 的最后一条为 active。新合同的 `RETIRED` 对应旧 3.4 的 `WAIVED/SUPERSEDED`，状态进入 `NEEDS-REVALIDATION` 时 Progress 标为 stale。
+- checkpoint：恢复边界；`activeCheckpoints[subject]` 是唯一 active 值并覆盖写。新合同的 `RETIRED` 对应旧 3.4 的 `WAIVED/SUPERSEDED`，状态进入 `NEEDS-REVALIDATION` 时 Progress 标为 stale。
 - judgment：执行期 decision、finding disposition、failure learning、外部证据解释。
 - routine state change、普通 PASS 和可从 Git/state 推导的事实不重复写入 Execution Record。
 
 ## Readiness 与返工
 
-- 新 package：Ticket implementation dependency 阻止实施；acceptance dependency 阻止 SATISFIED；release dependency 在 Gate/release 前复核。
+- 新 package：Ticket implementation dependency 阻止进入 `readyTickets`；acceptance dependency 允许实施但阻止 SATISFIED；release dependency 在 Gate/release 前复核。
 - 旧 package：Task dependency 未释放时不得进入 READY/RUNNING；Task DONE 后由 Working Branch owner 集成、运行共享验证并映射 Ticket AC。
 - plan/contract 变化只使实际 affected subset 进入 NEEDS-REVALIDATION，并重新审查相应 coverage/verification。
 

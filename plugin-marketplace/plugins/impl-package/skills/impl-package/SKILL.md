@@ -62,6 +62,6 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
   gate.md                 # 首次 gate evaluation 时创建
 ```
 
-新 package 只使用 `tickets=true, dag=false`（需要独立验收切片）或 `tickets=false, dag=false`（小而线性的 Plan-direct）。阶段 A 的 `dag=false` 是 3.4 兼容占位，不表示创建 Task/DAG；`dag=true` 只读旧 package。不要为审计完整感增加 artifact。
+新 package 统一使用 `tickets=true, dag=false` Ticket-only 合同；阶段 A 的 `dag=false` 是 3.4 兼容占位，不表示创建 Task/DAG；`dag=true` 只读旧 package。不要为审计完整感增加 artifact。
 
 `contract-design.md` 只有在精确结构会遮蔽 `spec.md` 的行为/验收主线，或同一 canonical model 被多个 operation/module 消费时才 earned。它没有独立 alias、revision、状态、审批或生命周期。

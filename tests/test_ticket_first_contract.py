@@ -15,8 +15,8 @@ FIXTURE = ROOT / "tests" / "fixtures" / "impl-package-ticket-first"
 CLI = ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "impl_package_state.py"
 
 
-def run(command: list[str], cwd: Path, *, ok: bool = True) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
+def run(command: list[str], cwd: Path, *, ok: bool = True, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(command, cwd=cwd, input=input_text, capture_output=True, text=True, check=False)
     if ok and result.returncode:
         raise AssertionError(result.stderr or result.stdout)
     return result
@@ -120,6 +120,17 @@ class TicketFirstContractTests(unittest.TestCase):
         self.assertIn("## Ticket Acceptance", progress)
         self.assertNotIn("## Task Execution", progress)
 
+        evidence_index = json.loads((FIXTURE / "evidence" / "index.json").read_text(encoding="utf-8"))
+        fixture_revision = git(repo, "rev-parse", "HEAD")
+        for source in evidence_index["records"]:
+            record = dict(source)
+            record.update({"artifact": "evidence.md", "revision": fixture_revision, "environment": "ticket-first-contract-fixture"})
+            run(
+                [sys.executable, str(CLI), "--package", str(package), "evidence-add"],
+                repo,
+                input_text=json.dumps(record),
+            )
+
         blocked = run(
             [
                 sys.executable,
@@ -132,8 +143,10 @@ class TicketFirstContractTests(unittest.TestCase):
                 "SATISFIED",
                 "--expect",
                 "PENDING",
-                "--evidence",
-                "evidence.md",
+                "--revision",
+                fixture_revision,
+                "--environment",
+                "ticket-first-contract-fixture",
             ],
             repo,
             ok=False,
@@ -152,8 +165,10 @@ class TicketFirstContractTests(unittest.TestCase):
                 "SATISFIED",
                 "--expect",
                 "PENDING",
-                "--evidence",
-                "evidence.md",
+                "--revision",
+                fixture_revision,
+                "--environment",
+                "ticket-first-contract-fixture",
             ],
             repo,
         )

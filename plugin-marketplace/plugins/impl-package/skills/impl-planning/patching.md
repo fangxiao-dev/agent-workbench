@@ -17,7 +17,7 @@ Patch 只属于 package 已有 terminal gate 之后的生命周期，并继续�
 - 文件名为 YYYYMMDD-HHMM-<patch-topic>.patch-plan.md，Attempt ID 与文件名前缀一致。
 - plan 以新的 Attempt ID 独立声明 Ticket-only 或 Plan-direct Composition，不继承历史 plan 的 Task/DAG 运行轴。
 - 不覆盖 plan.md，不向历史 DAG/ticket/task 追加本 attempt 状态。
-- 新 patch 使用 `tickets=true, dag=false` 或 `tickets=false, dag=false`；需要恢复时使用文档化 active checkpoint 与 `state.json.resume`。
+- 新 patch 使用 `tickets=true, dag=false`；需要恢复时只使用文档化 `state.json.activeCheckpoints`，compact 仅作意外耗尽兜底。
 - Planned Verification 引用权威 policy；实际证据写入 `execution/<attempt>/execution-record.md`。
 
 ## Patch artifacts

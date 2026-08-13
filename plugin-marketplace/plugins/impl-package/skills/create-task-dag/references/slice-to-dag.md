@@ -11,7 +11,7 @@
 | 缺 gated spec / AC 或当前合同不一致 | req-align | 不伪造 contract 或 acceptance target |
 | 旧 package 的 tickets=true, dag=true plan 的 tickets 全为 Draft | 只读已有 DAG；联合校验结果交 owner | 不创建或更新 DAG，不把 Draft 自行标为 Approved |
 | 旧 package 为 tickets=false, dag=true，且 spec:AC-n 齐备 | 读取 existing attempt DAG | 不创建新的 Task |
-| 新 package 为 tickets=true, dag=false 或 tickets=false, dag=false | 不创建 DAG | no-DAG attempt 不制造 Task 状态 |
+| 新 package 为 tickets=true, dag=false | 不创建 DAG | no-DAG attempt 不制造 Task 状态 |
 | 当前 plan Composition 与同 Attempt ID artifacts 不一致 | impl-planning | 通过当前 Attempt 修正 Composition/artifact relocation |
 | 单一 ticket 被要求推断跨 ticket seam | 请求当前 plan + 相关同 Attempt Draft/Approved ticket 子集 | seam contract 只从 spec 读取 |
 

@@ -2,7 +2,7 @@
   "skill_name": "plan-review",
   "evals": [
     {
-      "prompt": "用 /impl-package:plan-review 审查这个 tickets=false, dag=false 的小型实现计划。",
+      "prompt": "用 /impl-package:plan-review 审查这个 tickets=true, dag=false 的小型实现计划。",
       "expected_output": "Reviews scope, feasibility and verification without demanding extra artifacts; returns a clear verdict and only material findings.",
       "expectations": [
         "Accepts the minimal Composition when justified.",

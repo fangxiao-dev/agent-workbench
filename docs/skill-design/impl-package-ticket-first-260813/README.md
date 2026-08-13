@@ -1,7 +1,7 @@
 # Impl-Package Ticket-first 重构
 
 - 日期：2026-08-13
-- 状态：阶段 A 合同与 fixture 已实施；阶段 B runtime/迁移尚未实施；阶段 D-1 broker 合同已锁定、尚未实施
+- 状态：阶段 A 合同/fixture 与阶段 B 3.5 runtime/迁移 validator 已实施；实际活动 package 迁移仍按 owner 授权逐包执行；阶段 D-1 broker MVP 已实施并通过 thread-harness 验证
 - 性质：**本目录是后续优化的权威设计文档。**实施与再讨论以本页为准；旧设计只作背景材料
 - 适用范围：Impl-Package 的 Composition、Ticket、执行调度、状态、Execution Record 与会话交接
 
@@ -38,7 +38,7 @@ Impl-Package 收敛为以下结构：
 3. **Ticket 只有最终 acceptance state。**早期证据、active checkpoint、session claim 都不能变成 Ticket 的中间状态。
 4. **首发保持严格 barrier。**现行 `readyTickets` 语义继续生效；seam 提前派发是后续可选调度优化，不是 Ticket-first 的前置条件。
 5. **package state 与协调 state 分层单写。**package task session 主线程单写该包 `state.json`；未来 broker/controller 单写跨 task session 的协调 ledger；worker 只返回结构化证据。
-6. **ER 保留 judgment 与历史。**active checkpoint 和 evidence index 进入 `state.json`，但只有在 index、validation 和恢复路径同步改造后，才能减少恢复时对 ER 的解析。
+6. **ER 保留 judgment 与历史。**active checkpoint 和 evidence index 进入 `state.json`；3.5 runtime 的 active recovery 只读 state index，ER 只保留 judgment、失败学习与审计上下文。
 7. **旧包显式迁移。**现存包数量少，不为 3.4/Task 格式维护长期双读运行时；提供一次性迁移 prompt/runbook，逐包验证后切换。
 
 Ticket-first 的目标是减少重复执行对象、让证据直接归属验收单元，并降低过程文档与恢复成本；它不承诺消除所有串行和返工。
@@ -56,16 +56,16 @@ Ticket-first 的目标是减少重复执行对象、让证据直接归属验收�
 - 定义 Task 字段的吸收去向、唯一 writer 和新 `state.json` schema。
 - 建立旧格式→新格式迁移 fixture 与失败回退路径。
 
-阶段 A 的重点是证明新模型完整，不是提前获得并行收益。本轮已完成合同/路由/fixture；3.4 runtime 仍作为兼容桥，尚未进入阶段 B。
+阶段 A 的重点是证明新模型完整，不是提前获得并行收益。阶段 A 合同/路由/fixture 已完成；阶段 B runtime 已切换到 3.5，旧 3.4 只由一次性迁移 validator 读取。
 
 ### 阶段 B：实现状态/恢复并迁移旧包
 
 - 实现 Ticket evidence index、active checkpoint 和投影收敛。
 - 同步修改 attempt index、ER validation 与恢复调用点。
-- 使用迁移 prompt 处理活动 3.4/Task package；验证通过后才让新插件只读新格式。
+- 使用迁移 prompt/runbook + validator 处理活动 3.4/Task package；验证通过后才让新插件只读新格式。
 - 冻结包保持只读；恢复执行前再迁移。
 
-阶段 A/B 完成后即可长期使用 Ticket-only + 严格 barrier，不需要等待 §3.3。
+阶段 A/B 的代码合同已落地；实际活动 package 仍需逐包完成迁移并由 owner 验证恢复后，才能长期使用 Ticket-only + 严格 barrier，不需要等待 §3.3。
 
 ### 阶段 C：可选 seam admission
 
@@ -161,14 +161,14 @@ claim ID 来自 Ticket 合同中显式编号的 AC 和安全断言，例如 `AC-
 
 active checkpoint 覆盖写是有意丢弃已过时的恢复指令。Git **只保留已经提交的版本**，不能假定每次覆盖都有历史；任何需要长期保留的决策、失败学习或审计事实必须先写入 ER judgment/evidence index。ER 不再承担 active checkpoint，但继续保存判断、attempt history 与审计上下文。
 
-不能只把 checkpoint 移进 `state.json` 就声称 ER 退出恢复路径。当前 `_parse_execution_record` 仍被 `_ensure_execution_record`、`_attempt_history`、`_validate_projections`、ER 渲染与追加路径调用。实施时必须同时：
+不能只把 checkpoint 移进 `state.json` 就声称 ER 退出恢复路径。3.5 runtime 对 `_parse_execution_record` 的调用点必须各自收敛职责：
 
 1. 固定 state/evidence index 与 ER judgment 的事实边界。
-2. 修改 attempt history/index，避免恢复时为每个 attempt 重扫完整 ER。
-3. 修改 projection validation，使其验证索引与 ER 的关系。
+2. `attemptHistory` 直接读 state 轻量元数据；active checkpoint 不从 ER 推导。
+3. `_ensure_execution_record`/projection validation 只校验 ER header 与投影；ER 追加路径才为写 judgment 读取 entries。
 4. 用同一 fixture 覆盖 active checkpoint、未完成 Ticket、历史 attempt 与 projection mismatch。
 
-这些改动验证前，ER 仍在恢复/validation 路径。
+旧 ER checkpoint 正文可以作为历史保留，但不再是恢复事实源；这些边界由 3.5 runtime 与迁移 validator 的回归测试锁定。
 
 ### 3.6 Task 内容的吸收去向
 
@@ -254,7 +254,7 @@ S5→S6 同时改变 uploadToken producer/consumer、idempotency、PublicationAt
 5. §4 五项机制逐项通过 fixture，不以案例类比替代验证。
 6. 活动 3.4/Task package 在临时 worktree 中显式迁移后，ER/attempt history、active checkpoint、未完成 Ticket 与真实 evidence 均可恢复；各中断点不改变 pre-migration authority，handoff 不被直接当作 acceptance proof。
 7. `NEEDS-REVALIDATION → PENDING → SATISFIED` 只重验 affected claims，且全程保持依赖不释放；`BLOCKED` 不被隐式改写，`RETIRED` 必须有 owner evidence、合法 disposition，并在 `superseded` 时指向 successor。
-8. `_parse_execution_record` 是否退出恢复路径由调用点与恢复测试证明，不能从 schema 设计推断。
+8. `_parse_execution_record` 在 3.5 中不再提供 active checkpoint 或 attempt history；恢复测试证明其只承担 ER header/judgment 写入与 projection 校验。
 9. package state、broker ledger 与 worker 回报遵守唯一 writer 边界。
 
 ### 阶段 C：调度收益

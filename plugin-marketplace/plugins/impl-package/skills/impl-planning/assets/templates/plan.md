@@ -2,7 +2,7 @@
 
 创建时间（Created）：
 Attempt ID：<initial | YYYYMMDD-HHMM-patch-topic>
-Composition：tickets=<true|false>, dag=false
+Composition：tickets=true, dag=false
 
 > 直接引用当前 decision.md / spec.md。D/S/P 为可选旧别名，不因普通编辑升级；Git commit ID 是唯一允许持久化的历史锚点。
 
@@ -17,9 +17,9 @@ Composition：tickets=<true|false>, dag=false
 
 ## 执行组合决策
 
-- Tickets：yes | no
+- Tickets：yes（新 package 固定 Ticket-only）
 - 理由：
-- DAG：阶段 A 新 package 固定 no；`dag=false` 仅为 3.4 兼容占位
+- DAG：新 package 固定 no；`dag=false` 是 3.5 Composition 合同字段，旧 3.4 package 迁移前只读
 - 旧 package 迁移/恢复例外：<N/A | legacy package path + owner authorization>
 
 ## 执行策略

@@ -24,14 +24,15 @@ def main() -> None:
 
     for field in ("Attempt ID", "Composition"):
         assert field in plan, f"plan missing {field}"
-    assert "tickets=<true|false>, dag=false" in plan
+    assert "tickets=true, dag=false" in plan
     assert "DAG" in plan and "旧 package" in plan
     assert ".impl-package/state.json" in ticket
     assert ".impl-package/state.json" in dag
     for field in ("Verdict", "Attempt", "Comparison commit", "Evidence", "Durable Deltas"):
         assert field in gate, f"gate missing {field}"
-    for field in ('"attempt"', '"tasks"', '"tickets"', '"resume"'):
+    for field in ('"attempt"', '"attemptHistory"', '"tickets"', '"evidenceIndex"', '"activeCheckpoints"'):
         assert field in state, f"current state reference missing {field}"
+    assert '"tasks"' not in state and '"resume"' not in state
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ description: 当需要审计 durable knowledge delta、把 owner 批准的子集
 
 Gate 不存在表示没有 Gate 证据；字段不完整、comparison commit 不可用或尚未进入 targetBranch 时不得形成 gap-catching/retirement 候选，但 pending-registry 仍可人工审计。Gate Durable Deltas 为 `none` 时不产生候选。
 
-`contract_preflight.py` 委托当前 Impl-Package 状态引擎校验活动 package，因此会间接执行 `state.json` 的 `formatVersion: "3.4"` 检查；backfill 不复制或另行维护格式版本。
+`contract_preflight.py` 委托当前 Impl-Package 状态引擎校验活动 package，因此会间接执行 `state.json` 的 `formatVersion: "3.5"` 检查；3.4 package 必须先完成一次性迁移，backfill 不复制或另行维护格式版本。
 
 ## Apply
 

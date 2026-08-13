@@ -27,11 +27,11 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 
 ## State、ER 与 Handoff
 
-- 状态变化只使用 `set-state ... --expect ... --evidence ...`；stale transition 必须重新读取当前状态。
+- 状态变化只使用 Ticket `set-state ... --expect ...`；SATISFIED 必须带当前 `--revision`/`--environment`，BLOCKED/RETIRED 使用直接 evidence；stale transition 必须重新读取当前状态。
 - 新 package 不产生 `READY/RUNNING/DONE` Task 状态；旧 package 的 Task `DONE` 不等于 Ticket `SATISFIED`。
-- 主 session 通过 `er-add` 写 checkpoint/judgment；worker 默认不直接写 Execution Record。
-- `checkpoint` 是 attempt-level 恢复快捷入口，并更新 `state.resume`。
-- 新 package 在 BLOCKED、retry、跨 session/owner 或需要交接时写 Attempt-level active checkpoint（当前由 ER + `resume` 承载）；不创建 Task Handoff。旧 package 才沿用 `execution/<attempt>/task-handoffs/<task-id>-handoff.md`。
+- 主 session 通过 `checkpoint` 写 active checkpoint、通过 `er-add` 写 judgment；worker 默认不直接写 package state 或 Execution Record。
+- `checkpoint` 是 active checkpoint 写入快捷入口，更新 `state.activeCheckpoints[subject]`。
+- 新 package 在 BLOCKED、retry、跨 session/owner 或需要交接时写文档化 active checkpoint；checkpoint 不授权派发、不释放依赖，也不创建 Task Handoff。旧 package 的 handoff 仅作迁移材料。
 - checkpoint 只记录下一动作与恢复证据，不授权派发；长期判断写 ER judgment。compact 只作异常兜底，不是正常交接权威。
 - 合同或计划实际变化只把受影响 Ticket（旧 package 另含受影响 Task）设为 `NEEDS-REVALIDATION`；未受影响 evidence 保留。
 
@@ -42,7 +42,7 @@ Get-Content .\er-payload.json -Raw |
 
 `<impl-package-plugin-root>` 指当前已加载 skill 所属的插件根目录；不要假设 workbench 仓库路径或宿主缓存路径。
 
-payload 使用 `purpose=checkpoint|judgment`、`subject=attempt|ticket:<id>`（旧 package 可用 `task:<id>`）、`title`、`content`、checkpoint 的 `nextAction` 和可选 evidence。
+3.5 的 `er-add` payload 只使用 `purpose=judgment`、`subject=attempt|ticket:<id>`、`title`、`content` 和可选 evidence；checkpoint 使用显式 `checkpoint --subject ... --next ...`，旧 package 的 Task Handoff 只在迁移时读取。
 
 ## Review、Findings 与人工验收
 
@@ -59,7 +59,7 @@ completion claim 先交给 `/impl-package:verification-before-completion`。Gate
 - `pass`：所有 earned Task/Ticket、适用验证、review、manual acceptance 和 findings closure 均满足。
 - `fail | defer`：如实终结；后续实现进入 patch Attempt。
 
-terminal Gate 必须完成 Stage 7：记录 Durable Delta 及 `_pending.md`/truth pointer，或通过 `--no-durable-delta-reason` 明确无增量原因。terminal 后 state、resume、Execution Record 冻结。
+terminal Gate 必须完成 Stage 7：记录 Durable Delta 及 `_pending.md`/truth pointer，或通过 `--no-durable-delta-reason` 明确无增量原因。terminal 后 state、active checkpoint 和 Execution Record 冻结。
 
 Gate CLI 拥有 comparison commit 与 lifecycle 校验。长任务先完成 state/ER/Gate 等 durable 写入，再输出最终叙述；transport disconnect 后从这些幂等事实恢复，不创建第二个完成结论。
 
