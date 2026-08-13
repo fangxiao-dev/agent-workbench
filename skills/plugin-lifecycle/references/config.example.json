@@ -4,7 +4,7 @@
     "root": "D:/CodeSpace/agent-workbench/plugin-marketplace/plugins/impl-package",
     "marketplace": "agent-workbench",
     "marketplace_root": "D:/CodeSpace/agent-workbench/plugin-marketplace",
-    "expected_version": "0.2.9"
+    "expected_version": "0.3.0"
   },
   "hosts": {
     "codex": {

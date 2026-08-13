@@ -22,7 +22,7 @@ def load_module():
     return module
 
 
-def make_config(tmp_path: Path, *, expected_version: str = "0.2.9") -> tuple[Path, dict]:
+def make_config(tmp_path: Path, *, expected_version: str = "0.3.0") -> tuple[Path, dict]:
     plugin_root = tmp_path / "plugins" / "impl-package"
     (plugin_root / ".codex-plugin").mkdir(parents=True)
     (plugin_root / ".claude-plugin").mkdir()
@@ -72,7 +72,7 @@ def test_validate_expands_paths_and_checks_manifests(tmp_path: Path, monkeypatch
     config = load_config(module, config_path)
 
     assert config["root"] == (tmp_path / "plugins" / "impl-package").resolve()
-    assert config["expected_version"] == "0.2.9"
+    assert config["expected_version"] == "0.3.0"
     assert set(config["hosts"]) == {"codex", "claude", "grok"}
 
 
@@ -80,7 +80,7 @@ def test_version_mismatch_is_a_config_error(tmp_path: Path, monkeypatch: pytest.
     module = load_module()
     config_path, payload = make_config(tmp_path, expected_version="0.2.8")
     monkeypatch.setenv("PLUGIN_ROOT", str(tmp_path / "plugins" / "impl-package"))
-    payload["plugin"]["expected_version"] = "0.2.9"
+    payload["plugin"]["expected_version"] = "0.3.0"
     config_path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(module.ConfigError, match="versions"):
