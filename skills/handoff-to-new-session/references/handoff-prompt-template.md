@@ -19,7 +19,7 @@ Fill these two compact cards from verified package records. They are not a summa
 ## Second-stage continuation prompt
 
 Send this only after the title and first-stage `anchor PASS` are confirmed.
-For a downstream protocol extension, replace this card with that protocol's complete continuation contract; do not combine the two.
+For a downstream protocol extension, replace the task-specific lines with that protocol's complete continuation contract, but retain the final understanding-receipt lines. Do not combine the two task contracts.
 
 ```text
 Continuation 已就绪。通过 package 与 entry point 从 [CHECKPOINT] 恢复；不回溯重做已登记工作。
@@ -39,5 +39,6 @@ Continuation 已就绪。通过 package 与 entry point 从 [CHECKPOINT] 恢复�
 - 不得把凭证、真实客户数据、PDF/CSV/provider payload、oracle artifact 或秘密写入 Git、聊天或临时文件。
 - 仍需单独授权：[ACTIONS_REQUIRING_SEPARATE_AUTHORIZATION]
 
-现在从 entry point 恢复最小记录并执行已登记 Next Action；无需再次确认，仅在上述具名输入、授权或 blocker 缺失时停止。
+收到后先用一条简洁 commentary 回报本 session 的目标与 next actions、所用 skill/方法及用途，以及本 session 应完成后汇报、因具名 blocker 停止，还是按记录移交。
+这是理解回报，不是执行预演；覆盖影响执行与收口的约束、授权和 blocker，不展开执行步骤或实现细节，也不等待批准。发出后立即从 entry point 恢复最小记录并执行 Next Action，仅在上述具名输入、授权或 blocker 缺失时停止。
 ```

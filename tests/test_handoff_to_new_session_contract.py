@@ -10,7 +10,7 @@ def read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
-def test_handoff_owns_two_stage_delivery_and_current_task_configuration() -> None:
+def test_handoff_owns_staged_delivery_and_current_task_configuration() -> None:
     skill = read("skills/handoff-to-new-session/SKILL.md")
 
     assert "x-codex-turn-metadata" in skill
@@ -26,6 +26,10 @@ def test_handoff_owns_two_stage_delivery_and_current_task_configuration() -> Non
     assert "send the filled second-stage continuation prompt" in skill
     assert "A timeout is not PASS" in skill
     assert "target.environment = { type: \"local\" }" in skill
+    assert "make one `wait_threads` call" in skill
+    assert "timeout no greater than 60 seconds" in skill
+    assert "at most one corrective message with no acknowledgment wait or re-audit" in skill
+    assert "a missing receipt gets one correction and makes delivery incomplete" in skill
 
 
 def test_anchor_and_continuation_cards_keep_separate_responsibilities() -> None:
@@ -42,6 +46,11 @@ def test_anchor_and_continuation_cards_keep_separate_responsibilities() -> None:
     assert "current attempt / binding" in continuation
     assert "next action" in continuation
     assert "Send this only after the title and first-stage `anchor PASS` are confirmed" in continuation
+    assert "目标与 next actions" in continuation
+    assert "skill/方法及用途" in continuation
+    assert "应完成后汇报、因具名 blocker 停止，还是按记录移交" in continuation
+    assert "不是执行预演" in continuation
+    assert "不等待批准。发出后立即" in continuation
 
 
 def test_incomplete_creation_or_naming_never_reaches_continuation() -> None:
@@ -49,7 +58,7 @@ def test_incomplete_creation_or_naming_never_reaches_continuation() -> None:
 
     assert "If a `clientThreadId` is returned, do not poll it" in skill
     assert "Only after both the title and anchor PASS are confirmed" in skill
-    assert "local creation, renaming, anchor PASS, and continuation delivery all succeed" in skill
+    assert "understanding audit has passed or issued its single correction" in skill
 
 
 def test_downstream_protocol_can_supply_stateless_continuation_authority() -> None:
@@ -59,5 +68,6 @@ def test_downstream_protocol_can_supply_stateless_continuation_authority() -> No
     assert "stateless child that has no package recovery authority" in skill
     assert "no context entry is treated as recovery authority" in skill
     assert "generic continuation card is replaced by the downstream continuation" in skill
+    assert "The template's understanding receipt still applies" in skill
     assert "Role B 无持久恢复权威" in dispatch
     assert "仅作验证锚点" in dispatch

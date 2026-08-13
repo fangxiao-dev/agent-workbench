@@ -1,12 +1,12 @@
 ---
 name: handoff-to-new-session
-description: 当用户要把已有权威 checkpoint 交接到全新 Codex task，并继续使用既有 implementation worktree 时使用；负责创建 clean local task、核验恢复锚点并分两阶段续接。
+description: 当用户要把已有权威 checkpoint 交接到全新 Codex task，并继续使用既有 implementation worktree 时使用；负责创建 clean local task、核验恢复锚点并分阶段续接。
 compatibility: Requires Codex Desktop thread tools (create_thread, set_thread_title, wait_threads, and send_message_to_thread), access to the current turn's request metadata, and local Git access.
 ---
 
 # Handoff To New Session
 
-Create a fresh normal Codex thread that explicitly uses a verified existing implementation worktree. The handoff uses a compact anchor prompt followed by a compact continuation prompt; neither is a temporary handoff document or a compressed conversation summary.
+Create a fresh normal Codex thread that explicitly uses a verified existing implementation worktree. The handoff uses compact anchor and continuation prompts plus one bounded understanding audit; neither prompt is a temporary handoff document or a compressed conversation summary.
 
 ## Scope
 
@@ -77,10 +77,11 @@ For an ordinary checkpoint handoff, the second-stage continuation prompt must:
 - State only the current attempt/status, the single next action, the one material proof already earned, and the remaining proof that prevents closure. Let the entry point recover all detail.
 - Carry the recorded subagent mode in one line and point to `/impl-package:subagent-driven-development` for its meaning; do not reproduce the mode contract. Preserve any recorded GO rule that lets the main session complete verification, review, claim audit and gate evaluation without a second confirmation; do not reproduce the entire prior authorization contract.
 - Tell the child to recover through the package directory and Impl-Package entry point, then execute the recorded next action without another confirmation, stopping only for an explicitly named input, authorization, or other blocker.
+- Append the template's non-blocking understanding receipt; it is the sole child-facing contract for this audit.
 - Keep controlled inputs, credentials, customer data, and oracle artifacts out of Git, chat bodies, and repository temporary files.
 - Do not copy concrete commands or parameters, design details, Task steps, file ownership/boundaries, test commands, or implementation instructions into the prompt. Use literal `N/A` only for a truly inapplicable field.
 
-A downstream protocol that supplies its own continuation must keep the same title-plus-anchor-PASS send gate, but its continuation authority, fields and start behavior come from that protocol rather than the generic continuation card.
+A downstream protocol that supplies its own continuation must keep the same title-plus-anchor-PASS send gate, but its continuation authority, fields and start behavior come from that protocol rather than the generic continuation card. The template's understanding receipt still applies: the downstream protocol owns task content and this skill owns its one-time audit.
 
 ## Create And Deliver
 
@@ -91,9 +92,11 @@ A downstream protocol that supplies its own continuation must keep the same titl
 5. Obtain the original session title from the thread manager before creation. Derive the title by adding `01` if it has no numeric suffix, or incrementing the existing suffix (`01` → `02`). `create_thread` has no title parameter, so after an immediate result with `threadId`, call `set_thread_title` with that exact derived title. Do not claim the naming step succeeded until that call succeeds.
    If `set_thread_title` fails, stop before waiting for anchors or sending continuation and report incomplete delivery.
 6. If the tool returns a `threadId` and `hostId`, set the title first, then use `wait_threads` with that exact pair until the child reports anchor PASS/FAIL or needs attention. A timeout is not PASS. On FAIL, stop without sending the continuation prompt or attempting repair.
-7. Only after both the title and anchor PASS are confirmed, send the filled second-stage continuation prompt to that exact `threadId`. The child may then recover through the authority entry and start the recorded next action without another confirmation.
-8. A correct `local` creation should normally return `threadId`. If a `clientThreadId` is returned, do not poll it or claim naming succeeded; report the queued creation as incomplete delivery because no thread ID is available for `set_thread_title`.
-9. In the final response, state whether delivery succeeded or stopped at an environment, title, anchor, or continuation mismatch. Emit `::created-thread{threadId="..."}` only after local creation, renaming, anchor PASS, and continuation delivery all succeed. For an incomplete queued result, emit `::created-thread{clientThreadId="..."}` and explicitly state that the requested handoff has not yet met its no-worktree/naming contract. Do not write another handoff file.
+7. Only after both the title and anchor PASS are confirmed, send the filled second-stage continuation prompt to that exact `threadId`.
+8. After delivery, make one `wait_threads` call with a timeout no greater than 60 seconds. Compare the latest commentary with the complete continuation for goal and next actions, method and purpose, material constraints, authorization and blockers, and whether this session must finish, stop or hand off. Ignore wording, granularity and equivalent implementation choices.
+9. Handle the audit once: an aligned receipt gets no reply; a material mismatch gets at most one corrective message with no acknowledgment wait or re-audit; a missing receipt gets one correction and makes delivery incomplete. After a correction, report it and stop monitoring without claiming re-confirmation. A missing receipt never receives a successful `::created-thread{threadId="..."}` directive.
+10. A correct `local` creation should normally return `threadId`. If a `clientThreadId` is returned, do not poll it or claim naming succeeded; report the queued creation as incomplete delivery because no thread ID is available for `set_thread_title`.
+11. In the final response, state whether delivery succeeded, was corrected once, or stopped at an environment, title, anchor, continuation or understanding-receipt mismatch. Emit `::created-thread{threadId="..."}` only after local creation, renaming, anchor PASS, continuation delivery and the understanding audit has passed or issued its single correction. For an incomplete queued result, emit `::created-thread{clientThreadId="..."}` and explicitly state that the requested handoff has not yet met its no-worktree/naming contract. Do not write another handoff file.
 
 ## Child First-Turn Contract
 
@@ -118,4 +121,5 @@ Before reporting delivery, verify that:
 - The two prompts contain no duplicated plan/DAG/Ticket/history/test detail and stay within the template's compact limit unless a named authorization or blocker required the exception.
 - No project ID, dirty-state fingerprint, secret, or controlled input was copied into either prompt; any downstream validation anchor is read-only, necessary and minimal.
 - The title and anchor PASS were confirmed before the continuation prompt was sent.
+- The child posted the template-defined understanding receipt; the parent audited it once and either stayed silent, corrected once without rechecking, or marked a missing receipt incomplete.
 - The child was created as a normal session with `create_thread`, never as a worktree snapshot, or the process stopped before creation for a documented source mismatch.
