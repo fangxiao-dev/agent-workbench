@@ -8,6 +8,16 @@
 
 Plan 只拥有实现位置、代码组织、library/provider、migration SQL、普通性能索引、执行顺序与验证策略。正确性依赖的 uniqueness、atomicity、compatibility、backfill/reject/read-only behavior 仍属于 Spec。
 
+## Contract coherence
+
+Contract surface 非空时，在现有 Spec contract ensemble 中完成以下一致性检查；使用 table、schema、typed pseudocode 或 prose 均可，不要求新增 artifact 或固定矩阵。
+
+- **Interaction closure：**调用方提交的每个 required input 都必须来自前序 response、调用方可访问的 read model、调用方天然拥有的稳定输入，或范围内明确存在的外部 authority。来源不可取得、只存在于 server/private state 或依赖未声明旁路时，交互不闭合。
+- **Operation semantics：**operation 存在副作用、并发或重试风险时，逐项定义适用的 operation identity、CAS/idempotency boundary、exact retry、同 identity 不同 payload、stale request、成功后响应丢失与恢复结果。机制按 operation 风险选择；统一声明所有 mutation 使用某机制，不能替代逐项语义。
+- **Authority and realizability：**每个影响可观察行为的 request、response、event 与 public projection 字段都有唯一 authority、实际 producer 和消费目的。多个来源表达同一事实时必须确定优先级或消除重复；无法从已声明 state/seam 产生的输出不是 implementation-ready contract。
+
+任一项不成立时返回设计阶段关闭缺口；需要 owner 或外部输入才能选择时，Spec Gate `BLOCKED`。
+
 ## API operation
 
 每个 operation 按适用性冻结：

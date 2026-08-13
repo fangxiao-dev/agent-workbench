@@ -21,10 +21,11 @@ spec-only 必须重新验证 Decision evidence 对当前 delta 仍适用。delta
 
 1. 读取 current `spec.md`、存在时的 `contract-design.md`、repository facts 与 [Spec Gate](../../references/spec-gate.md)。
 2. 重建当前完整的 Spec 设计范围，逐项列出 API operations、persistence models、cross-module seams 与 public read models；结果是 current truth，不是本轮 delta 日志。
-3. 关闭会影响 authority、identity、permission、delivery、nullability、CAS、recovery 或 public shape 的选择。能在当前对话解决的 blocker 只保留在 working output；必须暂停、跨 session 或等待外部条件时才持久化简短的 `Spec Gate Blocked`。
-4. 判断精确合同是否继续留在 `spec.md`。当结构会遮蔽行为/验收主线，或同一 canonical model 被多个 operation/module 消费时，earned `contract-design.md`；否则保持单文档。
+3. 对非空 contract surfaces 执行 contract coherence check：调用方能取得每个 required input；有副作用、并发或重试语义的 operation 已逐项关闭 identity、重复/stale 结果与恢复；每个可观察字段都有唯一 authority 与实际 producer。使用现有 `spec.md` 或 earned `contract-design.md` 表达，不新增固定 artifact 或矩阵。
+4. 关闭会影响 authority、identity、permission、delivery、nullability、CAS、recovery 或 public shape 的选择。能在当前对话解决的 blocker 只保留在 working output；必须暂停、跨 session 或等待外部条件时才持久化简短的 `Spec Gate Blocked`。
+5. 判断精确合同是否继续留在 `spec.md`。当结构会遮蔽行为/验收主线，或同一 canonical model 被多个 operation/module 消费时，earned `contract-design.md`；否则保持单文档。
 
-完成标准：正式写入前，每个 current contract surface、所需规范设计与唯一承载位置都已确定。
+完成标准：正式写入前，每个 current contract surface、所需规范设计与唯一承载位置都已确定，交互输入、operation 语义与字段 authority/producer 已闭合。
 
 ## 设计与写入
 
@@ -39,7 +40,7 @@ Formal artifact 的内容、Status 与 Gate result 必须反映当前已记录�
 
 ## Spec Gate
 
-Gate 只验证前置承诺是否完整兑现：设计范围中的每个对象都有规范合同；两个 artifact authority 无重复/冲突；八个行为合同章节内部一致；每个 promise/constraint 映射到 observable evidence；blocking owner decision 与 ambiguity 为零。
+Gate 只验证前置承诺是否完整兑现：设计范围中的每个对象都有规范合同；contract coherence 已闭合；两个 artifact authority 无重复/冲突；八个行为合同章节内部一致；每个 promise/constraint 映射到 observable evidence；blocking owner decision 与 ambiguity 为零。
 
 若两个独立实施者仍可能因 Spec 留白而产生不同 API、data identity、permission、concurrency、recovery 或 public shape，Gate 必须 `BLOCKED`。Gate 可以发现明显漏分类，但不在此首次设计 DTO、CAS 或 persistence boundary。
 
