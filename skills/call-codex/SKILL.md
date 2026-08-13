@@ -1,6 +1,6 @@
 ---
 name: call-codex
-description: Run one short-lived, non-interactive Codex CLI task for a caller that supplies its own prompt and model configuration.
+description: Run one bounded, non-interactive Codex CLI task for a caller that supplies its own prompt and model configuration; by default dispatch it with the recommended 900-second timeout as one uninterrupted execution window.
 ---
 
 # call-codex
