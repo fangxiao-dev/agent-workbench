@@ -1,6 +1,6 @@
 # Attempt Progress · <attempt-id>
 
-> machine-owned projection；使用 `refresh-progress` 重建，不直接编辑。
+> machine-owned projection；使用 `package refresh-progress` 重建，不直接编辑。
 
 - Attempt: <attempt-id>
 - Contract aliases: optional; Git commit is the history anchor

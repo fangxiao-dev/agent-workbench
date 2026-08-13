@@ -147,26 +147,91 @@ class ImplPackageStateTests(unittest.TestCase):
         good = self.cli(repo, package, "er-add", input_text=json.dumps({"purpose": "judgment", "subject": "attempt", "title": "Decision", "content": "Keep the narrow path."}))
         self.assertIn("recordId", json.loads(good.stdout))
 
-    def test_retired_requires_disposition_and_successor_for_superseded(self) -> None:
+    def test_superseded_requires_successor_and_no_inbound_edges(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
         bad = self.cli(repo, package, "set-state", "ticket", "TKT-01", "RETIRED", "--expect", "PENDING", "--disposition", "superseded", "--evidence", "evidence.md", ok=False)
         self.assertIn("successor", bad.stderr)
-        self.cli(repo, package, "set-state", "ticket", "TKT-01", "RETIRED", "--expect", "PENDING", "--disposition", "superseded", "--successor", "TKT-02", "--evidence", "evidence.md")
-        self.assertEqual(self.state(package)["tickets"]["TKT-01"]["disposition"], "superseded")
-        status = json.loads(self.cli(repo, package, "validate").stdout)
-        self.assertNotIn("TKT-02", status["readyTickets"])
-        self.assertIn("TKT-03", status["readyTickets"])
+        failed = self.cli(repo, package, "set-state", "ticket", "TKT-01", "RETIRED", "--expect", "PENDING", "--disposition", "superseded", "--successor", "TKT-02", "--evidence", "evidence.md", ok=False)
+        self.assertIn("inbound edges", failed.stderr)
+        self.assertEqual(self.state(package)["tickets"]["TKT-01"], {"state": "PENDING"})
 
     def test_superseded_ticket_releases_only_after_successor_is_released(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
+        for name in ("02-transform.md", "03-verify.md", "04-publish.md"):
+            ticket = package / "tickets" / name
+            text = ticket.read_text(encoding="utf-8")
+            text = text.replace("implementation: TKT-01", "implementation: TKT-02")
+            text = text.replace("acceptance: TKT-01", "acceptance: TKT-02")
+            text = text.replace("release: TKT-01", "release: TKT-02")
+            if name == "02-transform.md":
+                text = text.replace("- implementation: TKT-02", "- None")
+            ticket.write_text(text, encoding="utf-8")
         self.init(repo, package)
         self.cli(repo, package, "set-state", "ticket", "TKT-01", "RETIRED", "--expect", "PENDING", "--disposition", "superseded", "--successor", "TKT-02", "--evidence", "evidence.md")
         self.add_evidence(repo, package)
         blocked = self.cli(repo, package, "set-state", "ticket", "TKT-03", "SATISFIED", "--expect", "PENDING", "--revision", git(repo, "rev-parse", "HEAD"), "--environment", "test", ok=False)
         self.assertIn("dependencies are not released", blocked.stderr)
+        self.satisfy(repo, package, "TKT-02")
+        self.satisfy(repo, package, "TKT-03")
+
+    def test_retired_is_terminal_and_identical_retry_is_idempotent(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        retired = self.cli(repo, package, "ticket", "retire", "TKT-01", "--expect", "PENDING", "--disposition", "waived", "--evidence", "evidence.md")
+        self.assertFalse(json.loads(retired.stdout)["idempotent"])
+        repeated = self.cli(repo, package, "ticket", "retire", "TKT-01", "--expect", "RETIRED", "--disposition", "waived", "--evidence", "evidence.md")
+        self.assertTrue(json.loads(repeated.stdout)["idempotent"])
+        before = self.state(package)["tickets"]["TKT-01"]
+        for target in ("PENDING", "BLOCKED"):
+            args = ["set-state", "ticket", "TKT-01", target, "--expect", "RETIRED"]
+            if target == "BLOCKED":
+                args += ["--evidence", "evidence.md"]
+            failed = self.cli(repo, package, *args, ok=False)
+            self.assertIn("terminal", failed.stderr)
+            self.assertEqual(self.state(package)["tickets"]["TKT-01"], before)
+
+    def test_needs_revalidation_invalidates_selected_claims_only(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.add_evidence(repo, package)
+        self.satisfy(repo, package, "TKT-01")
+        transition = self.cli(
+            repo, package, "ticket", "needs-revalidation", "TKT-01", "--expect", "SATISFIED",
+            "--claim", "AC-1", "--invalidated-by", "spec-change",
+        )
+        result = json.loads(transition.stdout)
+        self.assertEqual(result["claims"], ["AC-1"])
+        self.assertGreater(result["invalidatedEvidence"], 0)
+        evidence = self.state(package)["evidenceIndex"]["TKT-01"]
+        self.assertTrue(all(row.get("invalidatedBy") == "spec-change" for row in evidence["AC-1"]))
+        self.assertTrue(all(row.get("invalidatedBy") is None for row in evidence["AC-2"]))
+        self.cli(repo, package, "ticket", "pending", "TKT-01", "--expect", "NEEDS-REVALIDATION", "--revalidation-plan", "docs/implementations/20260813-example/plan.md")
+        old_only = self.cli(repo, package, "ticket", "satisfy", "TKT-01", "--expect", "PENDING", "--revision", git(repo, "rev-parse", "HEAD"), "--environment", "test", ok=False)
+        self.assertIn("missing claims", old_only.stderr)
+        self.add_evidence(repo, package)
+        self.satisfy(repo, package, "TKT-01")
+
+    def test_ticket_bytes_are_stable_after_runtime_updates(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        before = {path.name: path.read_bytes() for path in (package / "tickets").glob("*.md")}
+        self.add_evidence(repo, package)
+        self.satisfy(repo, package, "TKT-01")
+        self.cli(repo, package, "checkpoint", "--subject", "ticket:TKT-01", "--next", "run verification", "--evidence", "evidence.md")
+        self.cli(repo, package, "refresh-progress")
+        self.satisfy(repo, package, "TKT-02")
+        self.satisfy(repo, package, "TKT-03")
+        self.satisfy(repo, package, "TKT-04")
+        head = git(repo, "rev-parse", "HEAD")
+        self.cli(repo, package, "gate", "pass", "--comparison-commit", head, "--reason", "stable ticket fixture", "--no-durable-delta-reason", "fixture", "--environment", "test")
+        for path in (package / "tickets").glob("*.md"):
+            self.assertEqual(path.read_bytes(), before[path.name])
 
     def test_blocked_retains_direct_evidence_and_does_not_enter_ready(self) -> None:
         temp, repo, package = self.make_repo()

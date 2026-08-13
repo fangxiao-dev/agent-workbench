@@ -21,6 +21,15 @@ TICKET_STATES = {"PENDING", "BLOCKED", "NEEDS-REVALIDATION", "SATISFIED", "RETIR
 DISPOSITIONS = {"waived", "superseded"}
 COMMIT_RE = re.compile(r"[0-9a-fA-F]{7,64}")
 EDGE_RE = re.compile(r"-\s*(implementation|acceptance|release)\s*:\s*([^\s]+)")
+ATTEMPT_ID_RE = re.compile(r"(?:initial|[A-Za-z0-9][A-Za-z0-9_-]{0,79})")
+ATTEMPT_RE = re.compile(r"(?m)^(?:\*\*)?(?:Attempt ID|执行尝试 ID（Attempt ID）)(?:\*\*)?\s*[：:](?:\*\*)?\s*([^\s*]+)")
+PUBLICATION_RE = re.compile(r"(?m)^\*\*(?:Publication Status|发布状态（Publication Status）)[：:]\*\*\s*(Draft|Approved)\s*$")
+ER_ENTRY_RE = re.compile(r"(?m)^## ([^\s]+-ER-(\d{3})) · (checkpoint|judgment)\s*$")
+TICKET_ID_RE = re.compile(r"(?m)^\s*\*\*Ticket ID[：:]\*\*\s*([^\s]+)")
+DECISION_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Decision Revision|决策修订（Decision Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(D\d+)\b")
+SPEC_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Spec Revision|规格修订（Spec Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(S\d+)\b")
+PLAN_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Plan Revision|计划修订（Plan Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(P\d+)\b")
+RUNTIME_ACCEPTANCE_MARKER = "impl-package:projection runtime-acceptance"
 
 
 class MigrationError(RuntimeError):
@@ -82,20 +91,121 @@ def _commit(repo: Path, value: str, field: str) -> str:
     return result.stdout.strip()
 
 
+def _entry_field(block: str, name: str, *, optional: bool = False) -> str | None:
+    match = re.search(rf"(?m)^- {re.escape(name)}:[ \t]*(.*?)[ \t]*$", block)
+    if match:
+        return match.group(1)
+    if optional:
+        return None
+    raise MigrationError(f"Execution Record entry is missing {name}")
+
+
+def _parse_execution_record_text(text: str, path: str, expected_attempt: str | None = None) -> tuple[dict[str, str], list[dict]]:
+    """Parse the machine-readable ER shape emitted by the 3.5 runtime.
+
+    This intentionally checks only facts that can be proved from the candidate
+    itself.  Source-baseline parsing uses the same parser and turns failures
+    into warnings rather than making migration depend on an old ER format.
+    """
+    heading = re.search(r"(?m)^# Execution Record · ([^\s]+)\s*$", text)
+    attempt = re.search(r"(?m)^- Attempt:\s*([^\s]+)\s*$", text)
+    lifecycle = re.search(r"(?m)^- Lifecycle:\s*(active|frozen)\s*$", text)
+    gate = re.search(r"(?m)^- Gate:\s*(open|pass|fail|blocked|defer)\s*$", text)
+    if not heading or not attempt or not lifecycle or not gate:
+        raise MigrationError(f"invalid Execution Record header: {path}")
+    if heading.group(1) != attempt.group(1) or (expected_attempt and attempt.group(1) != expected_attempt):
+        raise MigrationError(f"Execution Record Attempt mismatch: {path}")
+
+    matches = list(ER_ENTRY_RE.finditer(text))
+    entries: list[dict] = []
+    previous = 0
+    seen: set[str] = set()
+    for index, match in enumerate(matches):
+        record_id, number, purpose = match.group(1), int(match.group(2)), match.group(3)
+        if not record_id.startswith(attempt.group(1) + "-ER-") or record_id in seen or number != previous + 1:
+            raise MigrationError(f"invalid Execution Record ID sequence: {record_id}")
+        seen.add(record_id)
+        previous = number
+        block = text[match.end(): matches[index + 1].start() if index + 1 < len(matches) else len(text)]
+        sections = re.search(r"(?ms)^### Evidence\s*$\n(.*?)^### Content\s*$\n(.*)\Z", block.strip())
+        if sections is None:
+            raise MigrationError(f"Execution Record {record_id} is missing Evidence or Content")
+        subject = _entry_field(block, "Subject")
+        title = _entry_field(block, "Title")
+        if not subject or not subject.strip():
+            raise MigrationError(f"Execution Record {record_id} has an empty Subject")
+        if not title or not title.strip() or "\n" in title:
+            raise MigrationError(f"Execution Record {record_id} has an empty or multi-line Title")
+
+        evidence_block = sections.group(1).strip()
+        if not evidence_block:
+            raise MigrationError(f"Execution Record {record_id} has an empty Evidence section")
+        evidence_lines = evidence_block.splitlines()
+        if evidence_lines == ["- none"]:
+            evidence: list[str] = []
+        else:
+            evidence = []
+            for line in evidence_lines:
+                if not line.startswith("- ") or not line[2:].strip():
+                    raise MigrationError(f"Execution Record {record_id} has invalid Evidence")
+                evidence.append(line[2:].strip())
+        content = sections.group(2).strip()
+        if purpose == "judgment" and not content:
+            raise MigrationError(f"Execution Record {record_id} judgment Content must be non-empty")
+        entries.append(
+            {
+                "id": record_id,
+                "number": number,
+                "purpose": purpose,
+                "subject": subject.strip(),
+                "title": title.strip(),
+                "evidence": evidence,
+                "content": content,
+            }
+        )
+    return {"attempt": attempt.group(1), "lifecycle": lifecycle.group(1), "gate": gate.group(1)}, entries
+
+
+def _parse_execution_record(path: Path, expected_attempt: str | None = None) -> tuple[dict[str, str], list[dict]]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise MigrationError(f"cannot read Execution Record: {path}: {exc}") from exc
+    return _parse_execution_record_text(str(text), str(path), expected_attempt)
+
+
+def _normalize_er_value(value: object) -> object:
+    """Normalize line endings and insignificant edge whitespace for comparison."""
+    if isinstance(value, list):
+        return tuple(_normalize_er_value(item) for item in value)
+    return "\n".join(line.rstrip() for line in str(value).replace("\r\n", "\n").replace("\r", "\n").splitlines()).strip()
+
+
 def _history(repo: Path, package: Path, value: object, attempt: dict) -> list[dict]:
     if not isinstance(value, list) or not value:
         raise MigrationError("candidate must retain lightweight attempt history")
     result: list[dict] = []
+    seen_ids: set[str] = set()
     for row in value:
         required = {"id", "plan", "lifecycle", "gate", "executionRecord"}
         if not isinstance(row, dict) or set(row) != required:
             raise MigrationError("attemptHistory rows must contain id, plan, lifecycle, gate, executionRecord")
-        if not isinstance(row["id"], str) or not row["id"].strip():
-            raise MigrationError("attemptHistory id must be non-empty")
+        if not isinstance(row["id"], str) or ATTEMPT_ID_RE.fullmatch(row["id"]) is None:
+            raise MigrationError("attemptHistory id must be a valid Attempt ID")
+        if row["id"] in seen_ids:
+            raise MigrationError(f"attemptHistory contains duplicate Attempt ID: {row['id']}")
+        seen_ids.add(row["id"])
         if row["lifecycle"] not in {"active", "frozen"}:
             raise MigrationError(f"invalid attemptHistory lifecycle: {row['lifecycle']!r}")
         plan = _artifact(repo, row["plan"], "attemptHistory plan")
+        if isinstance(row["executionRecord"], str) and "#" in row["executionRecord"]:
+            raise MigrationError("attemptHistory executionRecord may not contain a text anchor")
         execution_record = _artifact(package, row["executionRecord"], "attemptHistory executionRecord")
+        expected_execution_record = f"execution/{row['id']}/execution-record.md"
+        if "#" in execution_record or execution_record != expected_execution_record:
+            raise MigrationError(
+                f"attemptHistory executionRecord must bind {expected_execution_record}"
+            )
         gate = row["gate"]
         if gate is not None:
             if not isinstance(gate, dict) or set(gate) - {"verdict", "commit", "environment"} or not {"verdict", "commit"} <= set(gate):
@@ -110,6 +220,216 @@ def _history(repo: Path, package: Path, value: object, attempt: dict) -> list[di
     if result[-1]["id"] != attempt.get("id") or result[-1]["plan"] != attempt.get("plan"):
         raise MigrationError("attemptHistory must end with the current Attempt")
     return result
+
+
+def _progress_escape(value: object) -> str:
+    return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+
+
+def _progress_aliases(plan_text: str) -> str:
+    revisions = [pattern.search(plan_text) for pattern in (DECISION_RE, SPEC_RE, PLAN_RE)]
+    values = [match.group(1) for match in revisions if match]
+    return " / ".join(values) if values else "none (Git commit is the history anchor)"
+
+
+def _progress_projection(plan_text: str, state: dict, history: list[dict], attempt: str) -> str:
+    """Render the machine-owned progress projection used by runtime 3.5.
+
+    This is deliberately kept as a small mechanical equivalent of the runtime
+    renderer rather than importing a mutating CLI module during migration.
+    """
+    current = history[-1]
+    lifecycle = current["lifecycle"]
+    gate = current["gate"].get("verdict", "open") if isinstance(current["gate"], dict) else "open"
+    blockers = [f"ticket:{key}" for key, row in state["tickets"].items() if row["state"] == "BLOCKED"]
+    lines = [
+        f"# Attempt Progress · {attempt}",
+        "",
+        "> machine-owned projection；使用 `refresh-progress` 重建，不直接编辑。",
+        "",
+        f"- Attempt: {attempt}",
+        f"- Contract aliases: {_progress_aliases(plan_text)}",
+        "- Composition: tickets=true, dag=false",
+        f"- Lifecycle: {lifecycle}",
+        f"- Latest gate: {gate}",
+        f"- Blockers: {', '.join(blockers) if blockers else 'none'}",
+        "",
+        "## Ticket Acceptance",
+        "",
+        "| Ticket | State | Evidence |",
+        "| --- | --- | --- |",
+    ]
+    for identifier, row in state["tickets"].items():
+        claims = ", ".join(sorted(state["evidenceIndex"].get(identifier, {}))) or "none"
+        lines.append(f"| {identifier} | {row['state']} | {_progress_escape(claims)} |")
+    lines.extend([
+        "",
+        "## Active Checkpoints",
+        "",
+        "| Subject | Status | Next action | Evidence |",
+        "| --- | --- | --- | --- |",
+    ])
+    checkpoints = state["activeCheckpoints"] if lifecycle != "frozen" else {}
+    if checkpoints:
+        for subject, row in checkpoints.items():
+            lines.append(
+                f"| {subject} | active | {_progress_escape(row['next'])} | "
+                f"{_progress_escape(', '.join(row['evidence']) or 'none')} |"
+            )
+    else:
+        lines.append("| none | none | none | none |")
+    lines.extend([
+        "",
+        "## Attempt History",
+        "",
+        "| Attempt | Lifecycle | Gate | Execution Record |",
+        "| --- | --- | --- | --- |",
+    ])
+    for row in history:
+        row_gate = row["gate"].get("verdict", "open") if isinstance(row["gate"], dict) else "open"
+        lines.append(f"| {row['id']} | {row['lifecycle']} | {row_gate} | {row['executionRecord']} |")
+    return "\n".join(lines) + "\n"
+
+
+def _validate_progress(package: Path, plan_text: str, state: dict, history: list[dict], attempt: str) -> None:
+    path = package / "progress.md"
+    if not path.is_file():
+        raise MigrationError("candidate progress.md is required")
+    try:
+        actual = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise MigrationError(f"cannot read candidate progress.md: {exc}") from exc
+    expected = _progress_projection(plan_text, state, history, attempt)
+    if actual != expected:
+        raise MigrationError("candidate progress.md projection mismatch; run refresh-progress")
+
+
+def _runtime_validate(package: Path) -> None:
+    """Run the exact 3.5 runtime validator without invoking any writer path."""
+    scripts_dir = str(Path(__file__).resolve().parent)
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    try:
+        from impl_package_runtime import engine
+    except (ImportError, OSError) as exc:
+        raise MigrationError(f"cannot load 3.5 runtime validator: {exc}") from exc
+    try:
+        engine.command_validate(package, None)
+    except engine.StateError as exc:
+        raise MigrationError(f"3.5 runtime validate rejected candidate: {exc}") from exc
+    except OSError as exc:
+        raise MigrationError(f"3.5 runtime validate could not read candidate: {exc}") from exc
+
+
+def _warning(code: str, message: str, *, attempt: str, path: str, **details: object) -> dict:
+    return {"code": code, "message": message, "attempt": attempt, "path": path, **details}
+
+
+def _execution_records(repo: Path, package: Path, history: list[dict], pre_anchor: str | None) -> list[dict]:
+    """Validate candidate ERs and optionally compare them with the anchor tree.
+
+    Candidate errors are admission failures.  A source ER that is absent or in
+    an older/unreadable format is retained as a structured warning because a
+    migration must not pretend it can prove historical content it cannot read.
+    """
+    parsed: dict[str, tuple[dict[str, str], list[dict]]] = {}
+    warnings: list[dict] = []
+    for row in history:
+        path = package / Path(*row["executionRecord"].split("/"))
+        metadata, entries = _parse_execution_record(path, row["id"])
+        expected_gate = "open" if row["gate"] is None else row["gate"]["verdict"]
+        expected = {"attempt": row["id"], "lifecycle": row["lifecycle"], "gate": expected_gate}
+        if metadata != expected:
+            raise MigrationError(
+                f"Execution Record header does not match attemptHistory row {row['id']}"
+            )
+        parsed[row["id"]] = (metadata, entries)
+
+    if pre_anchor is None:
+        return warnings
+
+    for row in history:
+        candidate_path = package / Path(*row["executionRecord"].split("/"))
+        try:
+            source_path = candidate_path.resolve().relative_to(repo.resolve()).as_posix()
+        except ValueError:
+            # _history already proves this cannot happen; keep the warning
+            # contract defensive if path handling changes in the future.
+            warnings.append(_warning(
+                "source-execution-record-unavailable",
+                "pre-anchor Execution Record is outside the repository",
+                attempt=row["id"],
+                path=row["executionRecord"],
+            ))
+            continue
+        source = subprocess.run(
+            ["git", "-C", str(repo), "show", f"{pre_anchor}:{source_path}"],
+            capture_output=True,
+            text=False,
+            check=False,
+        )
+        if source.returncode:
+            warnings.append(_warning(
+                "source-execution-record-unavailable",
+                "pre-anchor Execution Record could not be read",
+                attempt=row["id"],
+                path=row["executionRecord"],
+                sourceRevision=pre_anchor,
+            ))
+            continue
+        try:
+            source_text = source.stdout.decode("utf-8")
+            source_metadata, source_entries = _parse_execution_record_text(
+                source_text, f"{pre_anchor}:{source_path}", row["id"]
+            )
+        except (MigrationError, OSError, UnicodeDecodeError) as exc:
+            warnings.append(_warning(
+                "source-execution-record-unparseable",
+                "pre-anchor Execution Record uses an unreadable or legacy format",
+                attempt=row["id"],
+                path=row["executionRecord"],
+                sourceRevision=pre_anchor,
+                detail=str(exc),
+            ))
+            continue
+
+        candidate_metadata, candidate_entries = parsed[row["id"]]
+        if source_metadata != candidate_metadata:
+            warnings.append(_warning(
+                "source-execution-record-header-diff",
+                "candidate Execution Record header differs from the pre-anchor header",
+                attempt=row["id"],
+                path=row["executionRecord"],
+                sourceRevision=pre_anchor,
+            ))
+        source_judgments = {
+            entry["id"]: entry for entry in source_entries if entry["purpose"] == "judgment"
+        }
+        candidate_judgments = {
+            entry["id"]: entry for entry in candidate_entries if entry["purpose"] == "judgment"
+        }
+        missing_ids = sorted(set(source_judgments) - set(candidate_judgments))
+        extra_ids = sorted(set(candidate_judgments) - set(source_judgments))
+        if missing_ids or extra_ids:
+            raise MigrationError(
+                f"candidate judgment IDs differ from pre-anchor for {row['id']}: "
+                f"missing={missing_ids or []}, extra={extra_ids or []}"
+            )
+        comparable = ("purpose", "subject", "title", "evidence", "content")
+        for record_id, source_entry in source_judgments.items():
+            candidate_entry = candidate_judgments[record_id]
+            changed = [
+                field
+                for field in comparable
+                if _normalize_er_value(source_entry.get(field))
+                != _normalize_er_value(candidate_entry.get(field))
+            ]
+            if changed:
+                raise MigrationError(
+                    f"candidate judgment {record_id} content differs from pre-anchor "
+                    f"for {row['id']}: fields={changed}"
+                )
+    return warnings
 
 
 def _repo_root(package: Path) -> Path:
@@ -134,10 +454,22 @@ def _ticket_claims(package: Path, attempt: str) -> dict[str, set[str]]:
     paths = sorted((child for child in ticket_dir.iterdir() if child.is_file() and child.suffix.lower() == ".md"), key=lambda child: child.name) if ticket_dir.is_dir() else []
     for path in paths:
         text = path.read_text(encoding="utf-8")
-        identifier = re.search(r"\*\*Ticket ID[：:]\*\*\s*([^\s]+)", text)
-        ticket_attempt = re.search(r"(?:\*\*)?(?:Attempt ID|执行尝试 ID（Attempt ID）)(?:\*\*)?\s*[：:]\s*(?:\*\*)?\s*([^\s*]+)", text)
+        identifier = TICKET_ID_RE.search(text)
+        ticket_attempt = ATTEMPT_RE.search(text)
         if identifier and ticket_attempt and ticket_attempt.group(1) == attempt:
-            claims[identifier.group(1)] = set(re.findall(r"Stable claim ID：\s*`([^`]+)`", text))
+            if RUNTIME_ACCEPTANCE_MARKER in text:
+                raise MigrationError(f"Ticket {identifier.group(1)} contains retired Runtime Acceptance projection")
+            publication = PUBLICATION_RE.search(text)
+            if publication is None:
+                raise MigrationError(f"missing Publication Status in {path.name}")
+            if publication.group(1) != "Approved":
+                raise MigrationError(f"Ticket {identifier.group(1)} must be Approved")
+            if identifier.group(1) in claims:
+                raise MigrationError(f"duplicate Ticket ID for Attempt {attempt}: {identifier.group(1)}")
+            claim_ids = set(re.findall(r"Stable claim ID：\s*`([^`]+)`", text))
+            if not claim_ids:
+                raise MigrationError(f"Ticket {identifier.group(1)} has no stable claim IDs")
+            claims[identifier.group(1)] = claim_ids
     return claims
 
 
@@ -147,8 +479,8 @@ def _ticket_claim_timings(package: Path, attempt: str) -> dict[str, dict[str, st
     paths = sorted((child for child in ticket_dir.iterdir() if child.is_file() and child.suffix.lower() == ".md"), key=lambda child: child.name) if ticket_dir.is_dir() else []
     for path in paths:
         text = path.read_text(encoding="utf-8")
-        identifier = re.search(r"\*\*Ticket ID[：:]\*\*\s*([^\s]+)", text)
-        ticket_attempt = re.search(r"(?:\*\*)?(?:Attempt ID|执行尝试 ID（Attempt ID）)(?:\*\*)?\s*[：:]\s*(?:\*\*)?\s*([^\s*]+)", text)
+        identifier = TICKET_ID_RE.search(text)
+        ticket_attempt = ATTEMPT_RE.search(text)
         if not identifier or not ticket_attempt or ticket_attempt.group(1) != attempt:
             continue
         matches = list(re.finditer(r"Stable claim ID：\s*`([^`]+)`", text))
@@ -183,7 +515,7 @@ def _ticket_dependencies(package: Path, attempt: str, ticket_ids: set[str]) -> d
     paths = sorted((child for child in ticket_dir.iterdir() if child.is_file() and child.suffix.lower() == ".md"), key=lambda child: child.name) if ticket_dir.is_dir() else []
     for path in paths:
         text = path.read_text(encoding="utf-8")
-        identifier = re.search(r"\*\*Ticket ID[：:]\*\*\s*([^\s]+)", text)
+        identifier = TICKET_ID_RE.search(text)
         ticket_attempt = re.search(r"(?:\*\*)?(?:Attempt ID|执行尝试 ID（Attempt ID）)(?:\*\*)?\s*[：:]\s*(?:\*\*)?\s*([^\s*]+)", text)
         if not identifier or not ticket_attempt or ticket_attempt.group(1) != attempt:
             continue
@@ -237,6 +569,8 @@ def _ticket_released(tickets: dict[str, dict], identifier: str, visiting: set[st
 def validate_migration(package: Path, *, pre_anchor: str | None = None) -> dict:
     state_path = package / ".impl-package" / "state.json"
     repo = _repo_root(package)
+    if not (package / "spec.md").is_file():
+        raise MigrationError("spec.md is required for an active Attempt")
     legacy = _json(package / "migration" / "legacy-state.json") if (package / "migration" / "legacy-state.json").is_file() else None
     candidate = _json(state_path)
     if legacy is not None and legacy.get("formatVersion") != "3.4":
@@ -247,7 +581,13 @@ def validate_migration(package: Path, *, pre_anchor: str | None = None) -> dict:
     if set(candidate) != expected:
         raise MigrationError("candidate has unexpected state fields; tasks/resume are not allowed")
     attempt = candidate.get("attempt")
-    if not isinstance(attempt, dict) or set(attempt) != {"id", "plan"} or not isinstance(attempt["id"], str) or not isinstance(attempt["plan"], str):
+    if (
+        not isinstance(attempt, dict)
+        or set(attempt) != {"id", "plan"}
+        or not isinstance(attempt["id"], str)
+        or ATTEMPT_ID_RE.fullmatch(attempt["id"]) is None
+        or not isinstance(attempt["plan"], str)
+    ):
         raise MigrationError("candidate attempt must contain id and plan")
     plan_rel = _artifact(repo, attempt["plan"], "candidate plan")
     plan = repo / Path(*plan_rel.split("#", 1)[0].split("/"))
@@ -255,8 +595,12 @@ def validate_migration(package: Path, *, pre_anchor: str | None = None) -> dict:
         plan.resolve().relative_to(package.resolve())
     except ValueError as exc:
         raise MigrationError("candidate plan must be inside the package") from exc
-    if not re.search(r"Composition[^\n]*tickets=true,\s*dag=false", plan.read_text(encoding="utf-8"), re.I):
+    plan_text = plan.read_text(encoding="utf-8")
+    if not re.search(r"Composition[^\n]*tickets=true,\s*dag=false", plan_text, re.I):
         raise MigrationError("candidate plan must declare tickets=true, dag=false")
+    plan_attempt = ATTEMPT_RE.search(plan_text)
+    if plan_attempt is None or plan_attempt.group(1) != attempt["id"]:
+        raise MigrationError("candidate Attempt ID does not match the current plan")
     if not isinstance(candidate["tickets"], dict) or not candidate["tickets"]:
         raise MigrationError("candidate must retain Ticket records")
     ticket_claims = _ticket_claims(package, attempt["id"])
@@ -285,14 +629,17 @@ def validate_migration(package: Path, *, pre_anchor: str | None = None) -> dict:
             if "evidence" in row:
                 _artifact(repo, row["evidence"], f"revalidation {ticket} evidence")
         elif state == "RETIRED":
-            if set(row) - {"state", "disposition", "evidence", "successor"} or not {"state", "disposition", "evidence"} <= set(row):
+            allowed_retired = {"state", "disposition", "evidence"} | ({"successor"} if row.get("disposition") == "superseded" else set())
+            if set(row) != allowed_retired:
                 raise MigrationError(f"RETIRED Ticket {ticket} requires disposition and evidence")
             if row["disposition"] not in DISPOSITIONS:
                 raise MigrationError(f"invalid RETIRED disposition for {ticket}")
             _artifact(repo, row["evidence"], f"RETIRED {ticket} evidence")
             if row["disposition"] == "superseded" and (not isinstance(row.get("successor"), str) or row["successor"] not in candidate["tickets"] or row["successor"] == ticket):
                 raise MigrationError(f"RETIRED superseded Ticket {ticket} requires a valid successor")
+    normalized_anchor = _commit(repo, pre_anchor, "pre-migration anchor") if pre_anchor is not None else None
     history = _history(repo, package, candidate["attemptHistory"], attempt)
+    warnings = _execution_records(repo, package, history, normalized_anchor)
     if any(row["id"] == attempt["id"] and row["lifecycle"] != "active" for row in history[:-1]):
         raise MigrationError("current Attempt may not appear as a frozen historical row")
     dependencies = _ticket_dependencies(package, attempt["id"], set(candidate["tickets"]))
@@ -369,8 +716,9 @@ def validate_migration(package: Path, *, pre_anchor: str | None = None) -> dict:
             _artifact(repo, item, f"checkpoint {subject} evidence")
     if not archive.is_dir():
         raise MigrationError("legacy Task Handoffs must be archived")
-    normalized_anchor = _commit(repo, pre_anchor, "pre-migration anchor") if pre_anchor is not None else None
-    return {"valid": True, "formatVersion": "3.5", "attempt": attempt["id"], "tickets": len(candidate["tickets"]), "evidenceRecords": len(records), "preMigrationAnchor": normalized_anchor}
+    _validate_progress(package, plan_text, candidate, history, attempt["id"])
+    _runtime_validate(package)
+    return {"valid": True, "formatVersion": "3.5", "attempt": attempt["id"], "tickets": len(candidate["tickets"]), "evidenceRecords": len(records), "preMigrationAnchor": normalized_anchor, "warnings": warnings}
 
 
 def main(argv: list[str] | None = None) -> int:

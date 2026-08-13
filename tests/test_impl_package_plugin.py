@@ -41,7 +41,7 @@ def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
     claude_marketplace = load_json(MARKETPLACE / ".claude-plugin" / "marketplace.json")
 
     assert codex["name"] == claude["name"] == "impl-package"
-    assert codex["version"] == claude["version"] == "0.2.9"
+    assert codex["version"] == claude["version"] == "0.3.0"
     assert codex["skills"] == claude["skills"] == "./skills/"
     assert agents_marketplace["plugins"][0]["source"]["path"] == "./plugins/impl-package"
     assert claude_marketplace["plugins"][0]["source"] == "./plugins/impl-package"
@@ -88,7 +88,9 @@ def test_unified_entry_owns_strategy_resolver_and_review_state() -> None:
     modes = (skill_dir / "references" / "mode-contracts.md").read_text(encoding="utf-8")
 
     assert len(skill.splitlines()) <= 180
-    assert "mode:" in skill and "worker:" in skill and "schedule:" in skill and "review:" in skill
+    assert "mode:" in skill and "worker:" in skill and "review:" in skill
+    strategy = skill.split("```yaml", 1)[1].split("```", 1)[0]
+    assert "schedule:" not in strategy
     assert "route" not in skill.lower()
     assert '"$grok-worker"' in skill and '"@luna-worker"' in skill
     assert "skills/call-grok/SKILL.md" in resolver
@@ -99,7 +101,7 @@ def test_unified_entry_owns_strategy_resolver_and_review_state() -> None:
     assert "review_state: NOT_REQUIRED | PENDING_REVIEW | PASSED | FINDING | BLOCKED" in resolver
     assert "PENDING_REVIEW" in review
     assert "complexity" in review or "复杂度" in review
-    assert all(marker in modes for marker in ("## investigate", "## implement", "## fix", "## verify"))
+    assert all(marker in modes for marker in ("## investigate", "## implement", "## fix", "## review"))
 
 
 def test_active_callers_use_only_the_unified_entry() -> None:

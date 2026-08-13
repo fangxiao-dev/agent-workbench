@@ -4,14 +4,7 @@
 **Publication Status：** Draft
 **Attempt ID：** <attempt-id>
 
-> Ticket 定义验收边界；运行时验收状态保存在 `.impl-package/state.json`。Ticket 直接属于当前 Attempt，不需要手工 revision。3.5 的 `dag=false` 是 Ticket-only 合同，不创建 Task。
-
-## Runtime Acceptance
-
-<!-- impl-package:projection runtime-acceptance begin -->
-- Runtime Acceptance Status: UNRECORDED
-- Acceptance evidence: none
-<!-- impl-package:projection runtime-acceptance end -->
+> Ticket 定义稳定验收边界；运行时验收状态保存在 `.impl-package/state.json`，不会回写 Ticket。Ticket 直接属于当前 Attempt，不需要手工 revision。3.5 的 `dag=false` 是 Ticket-only 合同，不创建 Task。
 
 ## 建设内容
 

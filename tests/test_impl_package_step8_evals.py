@@ -60,7 +60,8 @@ def test_core_templates_expose_only_current_contract() -> None:
     assert '"tasks"' not in state and '"resume"' not in state
     assert "execution/<attempt>/execution-record.md" in state
     assert "migration/archive/task-handoffs" in state
-    assert "set-state ticket <id> <state> --expect <state>" in state
+    assert "ticket satisfy <id> --expect <state>" in state
+    assert "recovery checkpoint" in state
     assert "Comparison commit" in gate
 
 

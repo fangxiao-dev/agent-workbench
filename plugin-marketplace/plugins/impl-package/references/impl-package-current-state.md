@@ -13,7 +13,7 @@
 └─ migration/archive/task-handoffs/   # 迁移后旧 handoff 归档
 ```
 
-`state.json` 是 package 唯一可写 current-state。主 session 是唯一 writer；worker 只返回结构化证据。`progress.md`、Ticket runtime projection 和 Execution Record header 是 machine-owned projection。ER 只保存 judgment/history，不产生 active checkpoint。
+`state.json` 是 package 唯一可写 current-state。主 session 是唯一 writer；worker 只返回结构化证据。`progress.md` 和 Execution Record header 是 machine-owned projection；Ticket 是发布后稳定的 Approved 合同，运行时验收状态不回写 Ticket。ER 只保存 judgment/history，不产生 active checkpoint。
 
 路径口径固定：`attempt.plan`、evidence 与 checkpoint evidence 是 repository-relative；`attemptHistory.executionRecord` 是 package-relative 的 `execution/<attempt>/execution-record.md`。
 
@@ -52,18 +52,24 @@ Ticket 状态为 `PENDING | BLOCKED | NEEDS-REVALIDATION | SATISFIED | RETIRED`�
 
 每个 Ticket 的 AC 和安全不变量必须有稳定 claim ID。AC claim 显式标记 evidence timing；安全不变量默认属于 `early-falsification`，不能被推迟到“加固组”。每条 evidence record 必须含 `timing`、`artifact`、`revision`、`environment`、`conclusion`；`invalidatedBy` 可选。`SATISFIED` 必须显式提供当前 revision/environment，并把该 pair 写入 Ticket 的 `acceptance`，覆盖全部 required claims、无未处置 contradictory/inconclusive evidence，且 implementation/acceptance 入边已释放。revision 必须是当前 Git 可解析的 commit；Gate pass 要求 acceptance revision 等于 comparison commit。release 边只在 Gate pass 前复核。`RETIRED/waived` 可释放边；`RETIRED/superseded` 只有 successor 已满足相应释放条件时才释放。
 
-命令入口：
+命令入口：新调用按职责选择一个命令组；根 router 只暴露 `package`、`ticket`、`evidence`、`recovery`、`gate` 五组。
 
 ```text
-python <plugin>/scripts/impl_package_state.py --package <package> init --attempt <id> --plan <repo-relative-plan>
-python <plugin>/scripts/impl_package_state.py --package <package> validate
-python <plugin>/scripts/impl_package_state.py --package <package> refresh-progress
-printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <package> evidence-add
-python <plugin>/scripts/impl_package_state.py --package <package> evidence-invalidate --ticket <id> --claim <id> --artifact <path> --invalidated-by <reason>
-python <plugin>/scripts/impl_package_state.py --package <package> set-state ticket <id> <state> --expect <state> [--revision <commit> --environment <id>] [--revalidation-plan <path>]
-python <plugin>/scripts/impl_package_state.py --package <package> checkpoint --subject attempt|ticket:<id> --next <text> [--blocker <text>] [--evidence <path>]
-printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <package> er-add  # judgment only
+python <plugin>/scripts/impl_package_state.py --package <package> package init --attempt <id> --plan <repo-relative-plan>
+python <plugin>/scripts/impl_package_state.py --package <package> package validate
+python <plugin>/scripts/impl_package_state.py --package <package> package refresh-progress
+printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <package> evidence add
+python <plugin>/scripts/impl_package_state.py --package <package> evidence invalidate --ticket <id> --claim <id> --artifact <path> --invalidated-by <reason>
+python <plugin>/scripts/impl_package_state.py --package <package> ticket satisfy <id> --expect <state> --revision <commit> --environment <id>
+python <plugin>/scripts/impl_package_state.py --package <package> ticket block <id> --expect <state> --evidence <path>
+python <plugin>/scripts/impl_package_state.py --package <package> ticket needs-revalidation <id> --expect <state> --claim <claim-id> [--claim <claim-id> ...] --invalidated-by <reason> [--evidence <path>]
+python <plugin>/scripts/impl_package_state.py --package <package> ticket pending <id> --expect <state> [--revalidation-plan <path>]
+python <plugin>/scripts/impl_package_state.py --package <package> ticket retire <id> --expect <state> --disposition waived|superseded --evidence <path> [--successor <id>]
+python <plugin>/scripts/impl_package_state.py --package <package> recovery checkpoint --subject attempt|ticket:<id> --next <text> [--blocker <text>] [--evidence <path>]
+printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <package> recovery judgment
 python <plugin>/scripts/impl_package_state.py --package <package> gate <verdict> --comparison-commit <commit> --reason <text>
 ```
+
+旧平铺拼法 `init`、`validate`、`set-state`、`evidence-add`、`checkpoint`、`er-add` 等保留为兼容别名；新文档和新 package 统一使用分组拼法。`ticket transition` 是旧 `set-state` 的组内兼容入口，优先使用上面的语义命令。
 
 `NEEDS-REVALIDATION`、`BLOCKED` 不释放依赖。ER 中旧 checkpoint 正文可作为历史保留，但 runtime 不从 ER 推导 active checkpoint；迁移后恢复只认 `activeCheckpoints`。

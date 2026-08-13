@@ -198,8 +198,8 @@ python D:\CodeSpace\agent-workbench\skills\discuss-ledger\scripts\discuss_orches
 当 plan、earned Ticket/DAG bundle 已 review 且 owner 批准后，直接写入批准内容并初始化最小 current state：
 
 ```powershell
-python plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py --package <package> init --attempt <attempt-id> --plan <repo-relative-plan>
-python plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py --package <package> validate
+python plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py --package <package> package init --attempt <attempt-id> --plan <repo-relative-plan>
+python plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py --package <package> package validate
 ```
 
 D/S/P 只作为可读别名；跨 session 比较使用批准内容所在的 Git commit。所有持久化文件和 evidence 引用使用仓库相对路径。Git commit/push 与远程更新保持独立。

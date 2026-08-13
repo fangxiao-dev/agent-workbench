@@ -4,11 +4,11 @@
 
 ## 恢复顺序
 
-1. validate 当前 package；projection drift 时先运行 `refresh-progress`。
+1. 运行 `package validate`；projection drift 时先运行 `package refresh-progress`。
 2. 打开 `progress.md`，确认 current Attempt、lifecycle、Gate、blocker、active checkpoint 和 next action；新 package 只确认 Ticket Acceptance，旧 package 才确认两条状态轴。
 3. 新 package 依据 Ticket typed dependency 与 Ticket state 判断 readiness；旧 package 才依据 DAG/Task 和 Ticket dependency。Progress 不授权 readiness。
 4. 新 package 只打开当前动作需要的 plan/Ticket/Execution Record/evidence；旧 package 才按需读取 DAG/Handoff。
-5. 推进后使用 `set-state --expect`，再写 checkpoint 或必要 judgment。
+5. 推进后使用语义 `ticket` 命令的 `--expect`，再写 `recovery checkpoint` 或必要 `recovery judgment`。
 
 ## Evidence 与 Execution Record
 

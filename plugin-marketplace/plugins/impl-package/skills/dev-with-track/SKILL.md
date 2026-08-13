@@ -10,7 +10,7 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 
 ## Restore
 
-1. 运行 `validate`；跨 session 或授权绑定比较点时附 `--commit <Git commit>`。
+1. 运行 `package validate`；跨 session 或授权绑定比较点时附 `--commit <Git commit>`。
 2. 打开根 `progress.md`，读取 current Attempt、可选合同别名、Composition、Ticket 状态、blocker、active checkpoint、next action、Gate 及 Execution Record 指针；只有旧 package 才读取 Task/DAG/Handoff 轴。
 3. 只沿当前动作读取必要 Ticket、Task、Handoff、Execution Record judgment、review 或 evidence；不要重读全部历史。
 4. 根据批准 commit 与实际 diff 判断 authority/contract 是否仍成立。implementation-only 继续；行为、acceptance、数据/安全或 mutation authority 变化回 owning stage。
@@ -27,22 +27,22 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 
 ## State、ER 与 Handoff
 
-- 状态变化只使用 Ticket `set-state ... --expect ...`；SATISFIED 必须带当前 `--revision`/`--environment`，BLOCKED/RETIRED 使用直接 evidence；stale transition 必须重新读取当前状态。
+- 状态变化优先使用语义 Ticket 命令 `ticket satisfy|block|needs-revalidation|pending|retire ... --expect ...`；SATISFIED 必须带当前 `--revision`/`--environment`，BLOCKED/RETIRED 使用直接 evidence；stale transition 必须重新读取当前状态。旧 `set-state ticket ...` 仅作兼容别名。
 - 新 package 不产生 `READY/RUNNING/DONE` Task 状态；旧 package 的 Task `DONE` 不等于 Ticket `SATISFIED`。
-- 主 session 通过 `checkpoint` 写 active checkpoint、通过 `er-add` 写 judgment；worker 默认不直接写 package state 或 Execution Record。
-- `checkpoint` 是 active checkpoint 写入快捷入口，更新 `state.activeCheckpoints[subject]`。
+- 主 session 通过 `recovery checkpoint` 写 active checkpoint、通过 `recovery judgment` 写 judgment；worker 默认不直接写 package state 或 Execution Record。
+- `recovery checkpoint` 是 active checkpoint 写入快捷入口，更新 `state.activeCheckpoints[subject]`。
 - 新 package 在 BLOCKED、retry、跨 session/owner 或需要交接时写文档化 active checkpoint；checkpoint 不授权派发、不释放依赖，也不创建 Task Handoff。旧 package 的 handoff 仅作迁移材料。
 - checkpoint 只记录下一动作与恢复证据，不授权派发；长期判断写 ER judgment。compact 只作异常兜底，不是正常交接权威。
 - 合同或计划实际变化只把受影响 Ticket（旧 package 另含受影响 Task）设为 `NEEDS-REVALIDATION`；未受影响 evidence 保留。
 
 ```powershell
 Get-Content .\er-payload.json -Raw |
-  python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> er-add
+  python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> recovery judgment
 ```
 
 `<impl-package-plugin-root>` 指当前已加载 skill 所属的插件根目录；不要假设 workbench 仓库路径或宿主缓存路径。
 
-3.5 的 `er-add` payload 只使用 `purpose=judgment`、`subject=attempt|ticket:<id>`、`title`、`content` 和可选 evidence；checkpoint 使用显式 `checkpoint --subject ... --next ...`，旧 package 的 Task Handoff 只在迁移时读取。
+3.5 的 `recovery judgment` payload 只使用 `purpose=judgment`、`subject=attempt|ticket:<id>`、`title`、`content` 和可选 evidence；checkpoint 使用显式 `recovery checkpoint --subject ... --next ...`，旧 package 的 Task Handoff 只在迁移时读取。
 
 ## Review、Findings 与人工验收
 

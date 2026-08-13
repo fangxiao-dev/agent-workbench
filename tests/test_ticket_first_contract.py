@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import re
 import shutil
 import subprocess
@@ -27,6 +28,118 @@ def git(repo: Path, *args: str) -> str:
 
 
 class TicketFirstContractTests(unittest.TestCase):
+    def test_grouped_router_help_and_legacy_alias_surface(self) -> None:
+        runtime = ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "impl_package_runtime"
+        self.assertTrue((runtime / "command_groups.py").is_file())
+        for adapter in ("package_commands.py", "ticket_commands.py", "evidence_commands.py", "recovery_commands.py", "gate_commands.py", "cli_support.py"):
+            self.assertFalse((runtime / adapter).exists(), adapter)
+
+        root_help = run([sys.executable, str(CLI), "--package", "fixture", "--help"], ROOT).stdout
+        for group in ("package", "ticket", "evidence", "recovery", "gate"):
+            self.assertIn(group, root_help)
+        for legacy in ("set-state", "evidence-add", "checkpoint", "er-add"):
+            self.assertNotIn(legacy, root_help)
+
+        ticket_help = run([sys.executable, str(CLI), "--package", "fixture", "ticket", "satisfy", "--help"], ROOT).stdout
+        self.assertIn("--revision", ticket_help)
+        self.assertIn("--environment", ticket_help)
+        self.assertNotIn("--successor", ticket_help)
+
+        package_help = run([sys.executable, str(CLI), "--package", "fixture", "package", "--help"], ROOT).stdout
+        self.assertIn("init", package_help)
+        self.assertIn("refresh-progress", package_help)
+        evidence_help = run([sys.executable, str(CLI), "--package", "fixture", "evidence", "--help"], ROOT).stdout
+        self.assertIn("add", evidence_help)
+        self.assertIn("invalidate", evidence_help)
+        recovery_help = run([sys.executable, str(CLI), "--package", "fixture", "recovery", "--help"], ROOT).stdout
+        self.assertIn("checkpoint", recovery_help)
+        self.assertIn("judgment", recovery_help)
+        gate_help = run([sys.executable, str(CLI), "--package", "fixture", "gate", "--help"], ROOT).stdout
+        self.assertIn("pass", gate_help)
+        gate_pass_help = run([sys.executable, str(CLI), "--package", "fixture", "gate", "pass", "--help"], ROOT).stdout
+        self.assertIn("--comparison-commit", gate_pass_help)
+        legacy_gate_help = run(
+            [sys.executable, str(CLI), "--package", "fixture", "gate", "--comparison-commit", "abc", "--reason", "r", "pass", "--help"],
+            ROOT,
+        )
+        self.assertEqual(legacy_gate_help.returncode, 0)
+        self.assertIn("--comparison-commit", legacy_gate_help.stdout)
+        abbreviated_gate_help = run(
+            [
+                sys.executable,
+                str(CLI),
+                "--package",
+                "fixture",
+                "gate",
+                "--reas",
+                "r",
+                "--comparison-commit",
+                "abc",
+                "pass",
+                "--help",
+            ],
+            ROOT,
+        )
+        self.assertEqual(abbreviated_gate_help.returncode, 0)
+        self.assertIn("--comparison-commit", abbreviated_gate_help.stdout)
+
+        spec = importlib.util.spec_from_file_location("ticket_first_cli", CLI)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertIn("compositionPattern", module.CONFIG["documents"])
+
+    def test_grouped_package_init_and_ticket_satisfy_match_legacy_engine(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        repo = Path(temp.name)
+        git(repo, "init")
+        git(repo, "config", "user.email", "test@example.com")
+        git(repo, "config", "user.name", "Ticket-first grouped fixture")
+        package = repo / "docs" / "implementations" / "260813-grouped"
+        (package / "tickets").mkdir(parents=True)
+        shutil.copy2(FIXTURE / "ticket-only-plan.md", package / "plan.md")
+        (package / "decision.md").write_text("# Decision\n", encoding="utf-8")
+        (package / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        for source in (FIXTURE / "tickets").glob("*.md"):
+            shutil.copy2(source, package / "tickets" / source.name)
+        (repo / "evidence.md").write_text("grouped fixture evidence\n", encoding="utf-8")
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "grouped fixture")
+        relative_plan = (package / "plan.md").relative_to(repo).as_posix()
+
+        initialized = json.loads(
+            run(
+                [sys.executable, str(CLI), "--package", str(package), "package", "init", "--attempt", "initial", "--plan", relative_plan],
+                repo,
+            ).stdout
+        )
+        self.assertEqual(initialized["formatVersion"], "3.5")
+        revision = git(repo, "rev-parse", "HEAD")
+        index = json.loads((FIXTURE / "evidence" / "index.json").read_text(encoding="utf-8"))
+        for source in index["records"]:
+            record = dict(source)
+            record.update({"artifact": "evidence.md", "revision": revision, "environment": "grouped"})
+            run([sys.executable, str(CLI), "--package", str(package), "evidence", "add"], repo, input_text=json.dumps(record))
+
+        grouped = json.loads(
+            run(
+                [sys.executable, str(CLI), "--package", str(package), "ticket", "satisfy", "TKT-01", "--expect", "PENDING", "--revision", revision, "--environment", "grouped"],
+                repo,
+            ).stdout
+        )
+        legacy = json.loads(
+            run(
+                [sys.executable, str(CLI), "--package", str(package), "set-state", "ticket", "TKT-02", "SATISFIED", "--expect", "PENDING", "--revision", revision, "--environment", "grouped"],
+                repo,
+            ).stdout
+        )
+        self.assertEqual(grouped["state"], legacy["state"])
+        state = json.loads((package / ".impl-package" / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["tickets"]["TKT-01"]["state"], "SATISFIED")
+        self.assertEqual(state["tickets"]["TKT-02"]["state"], "SATISFIED")
+
     def test_fixture_declares_ticket_only_edges_claim_timing_and_safety(self) -> None:
         plan = (FIXTURE / "ticket-only-plan.md").read_text(encoding="utf-8")
         self.assertIn("Composition：tickets=true, dag=false", plan)

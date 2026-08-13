@@ -28,8 +28,8 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
 8. 获批后运行：
 
 ```text
-python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> init --attempt <id> --plan <repo-relative-plan>
-python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> validate
+python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> package init --attempt <id> --plan <repo-relative-plan>
+python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> package validate
 ```
 
 `<impl-package-plugin-root>` 指当前已加载 skill 所属的插件根目录；不要假设 workbench 仓库路径或宿主缓存路径。
