@@ -98,9 +98,9 @@ python agent-workbench/scripts/link_skill.py --all --host claude codex grok
 
 ### 模块五：Workbench 自管理
 
-**`agent-workbench-manager`** skill
+**安装器规范**
 
-自然语言完成 workbench 的安装说明、新项目初始化步骤查询、软链接验证等管理操作。
+Agent 按 [`docs/workbench-design/04-install-spec.md`](workbench-design/04-install-spec.md) 直接执行宿主原生 CLI，处理插件安装、升级、重装、缓存刷新与 standalone Skill 链接验证；仓库不维护额外的管理 Skill 或 lifecycle 包装器。
 
 ---
 

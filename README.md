@@ -79,19 +79,7 @@ claude plugin install impl-package@agent-workbench --scope project
 
 ### 插件生命周期（Codex / Claude / Grok）
 
-需要刷新缓存、重装或升级本地插件时，显式调用 `plugin-lifecycle`。Agent 只填写外部 JSON；脚本负责生成宿主命令并返回统一 JSON 结果。默认是 dry-run，执行安装/卸载/升级必须显式加 `--apply`：
-
-```powershell
-python D:\CodeSpace\agent-workbench\skills\plugin-lifecycle\scripts\plugin_lifecycle.py `
-  --config D:\path\to\plugin-lifecycle.json `
-  --action validate
-
-python D:\CodeSpace\agent-workbench\skills\plugin-lifecycle\scripts\plugin_lifecycle.py `
-  --config D:\path\to\plugin-lifecycle.json `
-  --action upgrade --apply
-```
-
-配置样例见 [config.example.json](skills/plugin-lifecycle/references/config.example.json)。Grok 使用本地 plugin source；版本只校验，不由脚本修改。
+刷新缓存、重装或升级插件时，Agent 按 [安装器规范](docs/workbench-design/04-install-spec.md#plugin-生命周期agent-直接执行) 直接执行 Codex、Claude 或 Grok 的原生 CLI。仓库不维护 lifecycle Skill、包装脚本或机器专属配置；修改用户级宿主状态仍需用户明确要求，执行后必须核对安装版本与缓存。
 
 ### Discuss Ledger MCP 注册
 

@@ -16,25 +16,60 @@ claude plugin install impl-package@agent-workbench --scope project
 
 插件目录就是安装产物，不执行 build。安装和更新会进入宿主缓存；manifest/marketplace 版本必须同步，更新后开启新会话。Workbench 不包装这些命令，也不在验证时修改用户级宿主状态。
 
-## 插件生命周期 Skill
+## Plugin 生命周期：Agent 直接执行
 
-跨宿主刷新缓存、重装或升级时使用显式调用的 `skills/plugin-lifecycle/`。Agent 填写外部 JSON 配置，脚本统一生成 Codex、Claude、Grok 命令并返回 JSON envelope；默认 dry-run，只有 `--apply` 才执行用户级安装状态变更。版本只校验，不由脚本改写 manifest。
+安装、升级、重装或刷新缓存时，Agent 直接调用目标宿主的原生 CLI。仓库不提供 lifecycle Skill、包装脚本或机器专属配置。
 
-```powershell
-python D:\CodeSpace\agent-workbench\skills\plugin-lifecycle\scripts\plugin_lifecycle.py `
-  --config D:\path\to\plugin-lifecycle.json `
-  --action validate
-
-python D:\CodeSpace\agent-workbench\skills\plugin-lifecycle\scripts\plugin_lifecycle.py `
-  --config D:\path\to\plugin-lifecycle.json `
-  --action reinstall --host codex claude grok --apply
-```
-
-安装该独立 Skill：
+执行前先读取插件的 Codex/Claude manifest 与 marketplace entry，确认名称、source 和版本一致；再用宿主的 `plugin list` 查看当前安装状态。读取状态和 `--help` 是只读操作；只有用户明确要求安装、升级、重装或刷新时才修改用户级宿主状态。
 
 ```powershell
-python D:\CodeSpace\agent-workbench\scripts\link_skill.py plugin-lifecycle --host claude codex grok
+codex plugin list
+claude plugin list
+grok plugin list
 ```
+
+### Codex
+
+```powershell
+# 首次登记 marketplace（已登记时跳过）
+codex plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
+
+# 安装、升级或刷新本地 cache
+codex plugin add impl-package@agent-workbench
+
+# 重装
+codex plugin remove impl-package@agent-workbench
+codex plugin add impl-package@agent-workbench
+```
+
+### Claude
+
+沿用当前安装 scope（`user`、`project` 或 `local`），不要默认为另一个 scope。
+
+```powershell
+# 升级或刷新
+claude plugin marketplace update agent-workbench
+claude plugin update impl-package@agent-workbench --scope <scope>
+
+# 重装
+claude plugin uninstall impl-package@agent-workbench --scope <scope> --yes
+claude plugin install impl-package@agent-workbench --scope <scope>
+```
+
+### Grok
+
+Grok 直接使用本地 plugin 目录，不经 marketplace。
+
+```powershell
+# 升级或刷新
+grok plugin update impl-package
+
+# 重装
+grok plugin uninstall impl-package --confirm
+grok plugin install D:\path\to\agent-workbench\plugin-marketplace\plugins\impl-package --trust
+```
+
+一个宿主的命令失败后停止该宿主的后续步骤，并准确报告已发生的状态；不要把卸载成功、安装失败写成重装成功。执行后用对应的 `plugin list` 核对 enabled/version，检查宿主报告的 cache 或 installed root 是否包含目标版本；必要时比较 manifest 和关键 Skill 的哈希。最后开启新会话，让宿主重新加载插件内容。
 
 | 平台 | 链接类型 |
 |------|----------|

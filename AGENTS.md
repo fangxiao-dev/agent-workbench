@@ -20,7 +20,7 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `grok
 ## Skill-Driven Workflow
 
 - Use `audit-agent-setup` when reviewing instruction files or cross-host setup quality.
-- Use `agent-workbench-manager` for install/reinstall/link-validation tasks.
+- For install, upgrade, reinstall, cache refresh, or link validation, read `docs/workbench-design/04-install-spec.md` and execute the host-native CLI directly; do not add a lifecycle wrapper.
 - Use `find-skills` before introducing external skills.
 - When writing PowerShell scripts, use [$powershell-windows](D:\CodeSpace\agent-workbench\skills\powershell-windows\SKILL.md).
 - Use `import-third-party-skill` for third-party skill governance:

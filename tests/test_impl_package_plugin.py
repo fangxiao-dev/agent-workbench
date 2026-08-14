@@ -41,7 +41,7 @@ def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
     claude_marketplace = load_json(MARKETPLACE / ".claude-plugin" / "marketplace.json")
 
     assert codex["name"] == claude["name"] == "impl-package"
-    assert codex["version"] == claude["version"] == "0.3.0"
+    assert codex["version"] == claude["version"] == "0.3.1"
     assert codex["skills"] == claude["skills"] == "./skills/"
     assert agents_marketplace["plugins"][0]["source"]["path"] == "./plugins/impl-package"
     assert claude_marketplace["plugins"][0]["source"] == "./plugins/impl-package"

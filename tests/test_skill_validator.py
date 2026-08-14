@@ -33,10 +33,10 @@ def write_skill(root: Path, invocation_value: str) -> Path:
     return skill
 
 
-def test_disable_model_invocation_boolean_is_valid() -> None:
+def test_disable_model_invocation_boolean_is_valid(tmp_path: Path) -> None:
     validator = load_validator()
 
-    assert validator.validate_skill(ROOT / "skills" / "plugin-lifecycle") == (True, "Skill is valid!")
+    assert validator.validate_skill(write_skill(tmp_path, "true")) == (True, "Skill is valid!")
 
 
 def test_disable_model_invocation_false_is_also_valid(tmp_path: Path) -> None:
