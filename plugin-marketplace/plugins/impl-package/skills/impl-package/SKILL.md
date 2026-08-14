@@ -50,7 +50,7 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 <package>/
   decision.md            # 可选；轻量 Decision 也可在 spec.md
   spec.md
-  contract-design.md     # 可选；从属 spec.md，共用 Status/Gate
+  contract-design.md     # 从属 spec.md；detailed | not-required
   plan.md
   tickets/               # Ticket-only Composition earned 时
   progress.md             # active Attempt 的 machine-owned 恢复投影
@@ -64,4 +64,4 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 
 新 package 统一使用 `tickets=true, dag=false` Ticket-only 合同；阶段 A 的 `dag=false` 是 3.4 兼容占位，不表示创建 Task/DAG；`dag=true` 只读旧 package。不要为审计完整感增加 artifact。
 
-`contract-design.md` 只有在精确结构会遮蔽 `spec.md` 的行为/验收主线，或同一 canonical model 被多个 operation/module 消费时才 earned。它没有独立 alias、revision、状态、审批或生命周期。
+每个新建或被修订的 Spec 都有从属 `contract-design.md`。默认 `Disposition: detailed`；精确语义已由 `spec.md` 完整承担时使用 `Disposition: not-required` 并写明理由。未触及的 legacy Spec 到下次 req-align 再补齐；该文件没有独立 alias、revision、状态、审批或生命周期。

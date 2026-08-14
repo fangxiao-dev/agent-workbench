@@ -22,7 +22,7 @@ Send this only after the title and first-stage `anchor PASS` are confirmed.
 For a downstream protocol extension, replace the task-specific lines with that protocol's complete continuation contract, but retain the final understanding-receipt lines. Do not combine the two task contracts.
 
 ```text
-Continuation 已就绪。通过 package 与 entry point 从文档化 active checkpoint [CHECKPOINT] 恢复；不回溯重做已登记工作。Context compact 只作异常兜底，不取代 checkpoint。
+Continuation 已就绪。通过 package 与 entry point 从文档化 active checkpoint [CHECKPOINT] 恢复；不回溯重做已登记工作。
 
 极简快照：
 - current attempt / binding：[ATTEMPT_AND_BINDING]

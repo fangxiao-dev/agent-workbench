@@ -7,6 +7,8 @@ description: Review an implementation plan or complete plan/Ticket/DAG bundle fo
 
 Review the actual candidate and return decisions, not audit machinery. The review is read-only unless the owner separately asks to apply edits.
 
+初始 Decision/Spec/Plan bundle 的 review 产出最终 owner approval；同一 package 的后续 patch、closure 或记录更新均沿用该 approval。
+
 ## Modes
 
 - `full-review`: inspect the whole candidate and discover material findings.
@@ -24,7 +26,7 @@ If mode is omitted, use `full-review`.
 - target branch/worktree and current Git commit;
 - optional prior closure brief or owner decisions.
 
-Paths persisted in review artifacts must be repository-relative. D/S/P aliases are readable labels only. Cross-session approval or clearance must identify the Git commit containing the reviewed candidate; same-session unchanged material needs no extra record.
+Paths persisted in review artifacts must be repository-relative. D/S/P aliases are readable labels only. 初始 bundle 的 approval 记录其 Git commit；同一 package 的后续 review 直接沿用该 approval。
 
 Review outcome 可由 current Attempt 的 Execution Record judgment 引用。不要创建 review ledger、manifest、preimage receipt 或内容绑定。
 
@@ -35,7 +37,7 @@ Review outcome 可由 current Attempt 的 Execution Record judgment 引用。不
 3. Check Coverage & Change Map、scope、sequencing、architecture/seams、Planned Verification、rollback、ownership/dependencies、Ticket AC 和 integration authorization。
 4. Separate material findings from editorial improvements. A material finding changes behavior, safety, feasibility, acceptance, authority or execution order.
 5. For each material item give evidence, impact, recommendation and the exact owner decision only when multiple valid product choices remain.
-6. 使用有限 decision waves 收敛：形成一个完整 material batch，取得 owner decision，应用一个 closure batch，只重审 affected scope；只有 contract/scope 扩大才重新 full review。
+6. 初始 bundle 使用有限 decision waves 收敛：形成一个完整 material batch，取得 owner decision，应用一个 closure batch，只重审 affected scope。初始 approval 后的更新可直接应用；review 只报告 affected scope 和 findings，并沿用该 approval。
 
 Useful checklists live in `references/scope-review.md`, `architecture-review.md`, `test-review.md`, `performance-review.md`, and `code-quality-review.md`.
 
@@ -52,7 +54,7 @@ Useful checklists live in `references/scope-review.md`, `architecture-review.md`
 
 ## Apply boundary
 
-When the owner says to apply accepted review edits, edit the explicit repository-relative files directly, validate the resulting bundle, and report the changed paths. Do not create a parallel audit artifact; Git supplies history and rollback.
+初始 bundle approval 前，按 owner 要求应用 review edits；approval 后，同一 package 的 review edits 可直接写入显式 repository-relative 文件，随后验证并报告 changed paths。Git supplies history and rollback; review outcome 继续写入现有记录。
 
 ## Output
 

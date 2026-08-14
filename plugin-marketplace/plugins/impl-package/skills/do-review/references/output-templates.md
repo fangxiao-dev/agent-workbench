@@ -1,6 +1,6 @@
 # Do Review Output Templates
 
-Use the smallest template that matches the run. Keep source attribution and per-track verdicts visible; default review output reports conclusions, findings and next actions without turning those details into an owner approval gate.
+Use the smallest template that matches the run. Keep source attribution and per-selected-reviewer verdicts visible; default review output reports conclusions, findings and next actions without turning those details into an owner approval gate.
 
 ## Canonical ledger and classification
 
@@ -72,7 +72,7 @@ The ledger's canonical context may be concise free-form Markdown, but it must pr
 3.
 ```
 
-For a custom selection, replace the rows with exactly the selected Track label/skill pairs; retain one verdict row per selected reviewer and the same fail-closed aggregation rule. When conditional Safety is selected, append its assigned track row. When applicable Safety is omitted by an explicit list, keep the list exact and record the omitted boundary in the summary; a `terminal-final` report marks coverage `INCOMPLETE`.
+For a custom full-review selection, replace the rows with exactly the selected Track label/skill pairs; retain one verdict row per selected reviewer and the same fail-closed aggregation rule. For `finding-closure`, use one `Independent closure reviewer` row covering all named findings; report any relevant Safety implication as scoped closure coverage, not as a separate track. When conditional Safety is selected for a full review, append its assigned track row. When applicable Safety is omitted from an explicit full-review list, keep the list exact and record the omitted boundary in the summary; a `terminal-final` report marks coverage `INCOMPLETE`.
 
 当 `Mode` 为 `Loop` 时，在 `Track Verdicts` 后补充 track lifecycle，明确哪些 track 仍在 `active` / `probation`、哪些已因连续两轮 clean 而 `dormant`，以及是否曾因新 finding 重新激活：
 
@@ -90,14 +90,12 @@ For a custom selection, replace the rows with exactly the selected Track label/s
 
 | Field | Value |
 | --- | --- |
-| Review phase | finding-closure / terminal-final |
+| Review phase | finding-closure |
 | Safety applicability / coverage | not applicable / selected / omitted applicable risk |
 
-| Track | Verdict | Coverage / note |
+| Reviewer | Verdict | Coverage / note |
 | --- | --- | --- |
-| Track A (<skill>) | PASS / FAIL / UNCERTAIN |  |
-| Track B (<skill>) | PASS / FAIL / UNCERTAIN |  |
-| Track C (<skill>) | PASS / FAIL / UNCERTAIN |  |
+| Independent closure reviewer | PASS / FAIL / UNCERTAIN |  |
 
 | Issue | Verdict | Reason | Evidence |
 | --- | --- | --- | --- |
@@ -133,6 +131,7 @@ Evidence:
 Impact:
 Suggested handoff:
 Recommended action:
+Design-source recheck: not applicable / current sources sufficient / req-align required / owner decision required
 Main-session decision:
 ```
 

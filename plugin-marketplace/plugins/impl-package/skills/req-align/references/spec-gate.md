@@ -1,10 +1,10 @@
 # Spec Gate: Contract Completeness and Conditional Scrutiny
 
-只在 Decision PASSED 后读取。Spec 阶段先完成 Spec Design Preflight 与 contract design，Gate 最后验证已经声明的范围；不要把 Gate 变成首次决定是否需要 DTO、persistence boundary 或 CAS 的设计会议。
+只在 initial Decision PASSED 后读取。Spec 阶段先完成 Spec Design Preflight 与 contract design，Gate 最后验证已经声明的范围；同一 package 的 follow-up 更新直接使用 initial approval。Gate 聚焦已声明范围的完整性；DTO、persistence boundary 与 CAS 由 Spec Design Preflight 形成。
 
 ## Gate inputs
 
-Gate 读取当前 `spec.md`、其“Spec 设计范围”、存在时的 `contract-design.md`、Decision outcomes、repository facts 与 Acceptance Semantics。`contract-design.md` 与 `spec.md` 共用 Status、approval 和 Gate，不形成第二套 behavior contract。
+Gate 读取当前 `spec.md`、其“Spec 设计范围”、从属 `contract-design.md`、Decision outcomes、repository facts 与 Acceptance Semantics。`contract-design.md` 与 `spec.md` 共用 Status、approval 和 Gate，不形成第二套 behavior contract；`not-required` 必须说明 `spec.md` 如何完整承担精确语义。未触及的 legacy Spec 只在下次 req-align 时补齐。
 
 ## Pass criteria
 
@@ -17,7 +17,7 @@ Spec 只有同时满足以下条件才可 PASSED：
 - 每个 promise/constraint 映射到 observable evidence，并为 manual evidence 指定 owner；
 - blocking owner decision、contract ambiguity 与 artifact authority conflict 为零；
 - 两个独立实施者可以选择不同内部实现，但不会产生不同 API、data identity、permission、concurrency、recovery 或 public shape。
-- artifact 已记录当前合同，所需 owner approval 已记录，Status、Gate result 与 handoff readiness 一致；proposal 的内容通过判断不能冒充正式阶段迁移。
+- initial artifact 已记录当前合同，所需 owner approval 已记录，Status、Gate result 与 handoff readiness 一致；正式阶段迁移以该 bundle 记录为依据。
 
 Gate 可以发现设计范围与正文之间的明显漏项；发现后返回 Preflight 修正范围与设计。若 Plan 仍需决定可观察语义或 canonical contract，记录 exact missing contract 并 `BLOCKED`，不交给 planning。
 
@@ -39,4 +39,4 @@ Gate 可以发现设计范围与正文之间的明显漏项；发现后返回 Pr
 
 只有用户明确要求，或存在 unresolved material ambiguity、cross-module/external interface、migration/compatibility、security/data authority、destructive external mutation、evidence-integrity false-PASS risk 等高风险信号时，运行 `/impl-package:grill-me-smartly`。它不能静默应用 clarification。
 
-Ledger 位于 OS temp，不进入 package。向用户汇总 converged decisions 与 owner decisions；owner decision 未关闭前仍阻塞。只有 owner 批准后，clarification 才能修改 Spec。Spec PASSED 后仅可把 `/impl-package:grilling` 作为可选 deeper review。
+Ledger 位于 OS temp，不进入 package。向用户汇总 converged decisions 与 owner decisions；initial bundle 的 owner decision 是规划入口的必要输入。initial bundle 完成 owner approval；Spec PASSED 后的同一 package clarification 可直接更新 current Spec，`/impl-package:grilling` 仍只是可选 deeper review。

@@ -45,6 +45,10 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `grok
 
 ## Validation
 
+- For standalone Skill additions or changes, stop after two verification layers unless the Owner explicitly requests broader coverage or the results expose a cross-module risk:
+  - **L0:** the changed Skill's focused tests, syntax/static checks, and Skill validator.
+  - **L1:** tests for directly referenced Skills and adjacent routing/contracts.
+- Do not run an undifferentiated full-repository test command after L0 and L1 pass. Keep broader required gates for installer, registry, manifest, or other cross-module changes.
 - Run skill-link tests after installer changes:
   - `python -m pytest tests/test_link_skill.py -q`
   - or `powershell -ExecutionPolicy Bypass -File tests/install.ps1` (wrapper)

@@ -11,7 +11,7 @@ Composition：tickets=true, dag=false
 ## 输入
 
 - 决策：decision.md 或 spec.md 内的轻量 Decision
-- 规格：spec.md + Spec 设计范围声明为 earned 的 contract-design.md（若存在）
+- 规格：spec.md + contract-design.md disposition（未触及的 legacy Spec 可暂缺）
 - 需求 / patch 来源：
 - 已检查的当前代码、测试和稳定文档：
 

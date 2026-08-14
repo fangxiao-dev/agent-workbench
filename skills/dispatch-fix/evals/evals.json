@@ -1,0 +1,23 @@
+{
+  "skill_name": "dispatch-fix",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "只读模拟：review 后确认 3 个业务代码 findings，当前 worktree 有一处已有 dirty diff。调用 dispatch-fix 后说明路由、worker 数量、worktree ownership、记录与完成条件。禁止执行修改。",
+      "expected_output": "进入 simple；一个 fresh luna worker 原地处理；保护已有 dirty diff；当前 task 让出写 ownership；不创建 ledger、branch 或额外 worktree。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "只读模拟：有 6 个 findings，F1/F2 topic 相同，F3/F4 会改同一 schema，F5/F6 topic 和写范围各自独立。说明 groups、并行边界、worktrees、bookkeeping 与集成方法。禁止执行修改。",
+      "expected_output": "进入 grouped；F1/F2 同组，F3/F4 同组，F5 与 F6 各自成组；每组独立 worktree；仅独立组并行；当前 task 验收后 cherry-pick 并更新 groups.json。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "只读模拟：有 5 个 findings，它们 topic 相同但预计路径不重叠。说明是否仍分组到 worktree、产生几个 group，以及冲突或 focused acceptance 失败时如何处理。禁止执行修改。",
+      "expected_output": "数量触发 grouped，topic 连接使五个 findings 成为一个 group 和一个独立 worktree；冲突或验收失败时停止集成并用 clean repair worktree 的 fresh worker 修复。",
+      "files": []
+    }
+  ]
+}

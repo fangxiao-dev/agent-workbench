@@ -22,13 +22,15 @@ Evidence 必须是存在的仓库相对路径，可带 anchor，并足以解释�
 
 - 新 package：Ticket implementation dependency 阻止进入 `readyTickets`；acceptance dependency 允许实施但阻止 SATISFIED；release dependency 在 Gate/release 前复核。
 - 旧 package：Task dependency 未释放时不得进入 READY/RUNNING；Task DONE 后由 Working Branch owner 集成、运行共享验证并映射 Ticket AC。
-- plan/contract 变化只使实际 affected subset 进入 NEEDS-REVALIDATION，并重新审查相应 coverage/verification。
+- plan/contract 变化在同一 package 直接更新；按需记录 affected subset 的 revalidation/coverage/verification，并沿用 initial bundle approval。
 
 ## Findings 与 Gate
 
-- implementation defect：当前 Attempt 修复并重验。
-- behavior contract gap：回 req-align/impl-planning；affected state 失效。
-- 多个合理业务结果：owner decision。
+- accepted Track C / Spec fidelity finding：先消费 `do-review` 在同一 ReviewRun 内完成的一次性独立 source recheck；该动作不改变 Ticket/Attempt 状态。
+- current sources uniquely decide：按引用的 Decision/Spec/contract 作为 implementation 或 evidence defect，在当前 Attempt 修复并重验。
+- source missing/ambiguous/conflicting：先回 req-align 更新当前 Spec contract ensemble，再进入实现。
+- 多个合理业务结果：请求 owner decision；没有结论前不派发修复。
+- 其他 accepted finding：沿用现有 implementation、安全、证据或知识分流，不触发 source recheck。
 - durable knowledge：Stage 7 登记 `_pending.md` 与 truth pointer，后续交 backfill。
 
 Gate 每次重写 current `gate.md`；Git 与旧 Attempt Execution Record 的 lifecycle/Gate 摘要提供历史。terminal Gate 后全部 runtime mutation fail closed。

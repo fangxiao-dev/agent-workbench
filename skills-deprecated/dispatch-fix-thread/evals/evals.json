@@ -1,0 +1,23 @@
+{
+  "skill_name": "dispatch-fix-thread-deprecated",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "只读模拟：parent review 后有 5 个已确认业务代码 bugs，parent worktree 还有与 reviewed_head 不同的未提交改动。用户显式调用 dispatch-fix-thread。说明你会选择的 role/action、只加载哪些 Skill 文件、建立哪些交付锚点，以及何时才能说 dispatch 完成。禁止创建 task、branch、worktree 或文件。",
+      "expected_output": "选择 parent dispatch；只加载根与 parent-dispatch；保护 dirty parent；从 reviewed_head 建立 fixer；request 含 finding 内容；anchor receipt 后才交付正文；列出六项完成凭据。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "只读模拟：你是新的 fixer task，收到 role=fixer action=resume 和 records 路径。state 里两个 groups，其中 G1 已有 commits 但 worker 没给完整交付说明，G2 只有原 worktree 的未提交 residue。说明你读取什么、如何恢复、哪些结果可集成、如何返工，以及何时写 ready/blocked。禁止修改 Git 或 records。",
+      "expected_output": "只加载根与 fixer；以 request/state/Git anchors 恢复；G1 fresh clean recheck，G2 保留 residue 并新建 clean worktree；不完整交付不集成；所有 finding/group/验证与 clean anchors 满足后才 ready。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "只读模拟：parent 收到 ready 消息并显式 action=integrate。projection 覆盖全部 findings，fixer clean，但 parent 在 reviewed_head 后修改了一个与 fixer diff 重叠的路径。说明你只读取哪些文件、机械核对什么、哪些测试要跑、冲突或 dirty parent 时如何处理。禁止 merge 或运行测试。",
+      "expected_output": "选择 parent integrate；只加载根与 parent-integrate；机械核对 coverage/commit 对应/anchors/scope/clean；运行 remaining verification 并只重跑受重叠影响的 focused checks；dirty/conflict 停止且不 stash/猜测。",
+      "files": []
+    }
+  ]
+}

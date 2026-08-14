@@ -1,6 +1,6 @@
 # Decision Gate: Boundary, Uncertainty, and Pass Criteria
 
-Read this reference before Focused PRD research or a Decision Gate judgment.
+Read this reference before the initial bundle's Focused PRD research or Decision Gate judgment. Follow-up updates use the initial approval as their governing decision.
 
 ## Core / Capability boundary
 
@@ -20,7 +20,7 @@ Classify every unknown. It is **blocking** when a negative, unavailable, or disp
 
 Perform ordinary read-only task-scoped investigation directly. If it needs new permission, side effects, material cost, code spike, environment change, or scope expansion, record `Decision Gate: BLOCKED` and the owner decision instead. Put detailed investigation material in an earned investigation file; keep formal documents self-contained. A deferred non-blocking question needs explicit owner, consequence, defer boundary, and proof it cannot affect the contract.
 
-## Decision Gate
+## Decision Gate（仅初始 bundle）
 
 Decision passes only when all are true:
 

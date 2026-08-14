@@ -119,20 +119,48 @@ class ThreeTrackContractTests(unittest.TestCase):
         ):
             self.assertIn(boundary, safety)
         self.assertRegex(safety, r"(?s)no explicit reviewer list.*append `safety-review`")
-        self.assertRegex(safety, r"(?s)explicit reviewer list.*exactly that list")
+        self.assertRegex(safety, r"(?s)explicit selections for full reviews.*exactly as stated")
         self.assertIn("omitted applicable Safety risk", safety)
 
     def test_finding_closure_is_incremental_but_terminal_final_rechecks_final_head(self) -> None:
         skill = SKILL_PATH.read_text(encoding="utf-8")
         topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
         phases = markdown_section(topology, "Review phase")
-        self.assertRegex(phases, r"(?s)`finding-closure`.*source track.*materially affected")
+        self.assertRegex(phases, r"(?s)`finding-closure`.*one fresh independent `reviewer` leaf.*named findings")
         self.assertRegex(phases, r"(?s)`terminal-final`.*final implementation `HEAD`.*complete applicable topology")
         self.assertIn("cannot stand in for the terminal-final review", phases)
-        self.assertRegex(skill, r"(?s)`finding-closure` uses fresh `\$grok-worker`.*worker Skill owns its model")
+        self.assertRegex(skill, r"(?s)`finding-closure` has one fresh independent `reviewer` invocation.*worker Skill owns its model")
         self.assertIn("$grok-worker --no-subagents", skill)
         self.assertIn("one fresh fallback to the applicable current default reviewer", skill)
         self.assertIn("current host defaults for the caller-supplied target class", skill)
+
+    def test_finding_closure_uses_one_independent_reviewer_without_track_split(self) -> None:
+        skill = SKILL_PATH.read_text(encoding="utf-8")
+        topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
+        briefs = BRIEFS_PATH.read_text(encoding="utf-8")
+        closure = markdown_section(topology, "Review phase")
+        self.assertIn("one fresh independent `reviewer` leaf", closure)
+        self.assertIn("do not split the closure into source, standards, spec, or Safety tracks", closure)
+        self.assertIn("one fresh independent reviewer for the whole named-finding set", briefs)
+        self.assertIn("finding-closure` has one fresh independent `reviewer` invocation", skill)
+
+    def test_accepted_track_c_finding_gets_one_scoped_source_recheck(self) -> None:
+        skill = SKILL_PATH.read_text(encoding="utf-8")
+        topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
+        briefs = BRIEFS_PATH.read_text(encoding="utf-8")
+        templates = TEMPLATES_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("accepts and classifies a finding as Track C / Spec fidelity", skill)
+        self.assertIn("regardless of which leaf first surfaced it", skill)
+        self.assertIn("blocks the implementation handoff", skill)
+        self.assertIn("do not dispatch a second recheck", skill)
+        self.assertIn("untouched legacy package is not by itself a contract gap", skill)
+        self.assertIn("not a new review phase or lifecycle state", skill)
+        self.assertIn("Accepted Track C Source Recheck Brief", briefs)
+        self.assertIn("do not inspect the implementation broadly", briefs.lower())
+        self.assertIn("absence alone is not a gap", briefs)
+        self.assertIn("Design-source recheck:", templates)
+        self.assertNotIn("source recheck", markdown_section(topology, "Review phase").lower())
 
     def test_loop_lifecycle_requires_two_clean_rounds_and_preserves_reactivation(self) -> None:
         topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
@@ -151,10 +179,11 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertIn("| Track | Verdict | Coverage / note |", report)
         self.assertRegex(
             report,
-            r"(?s)custom selection.*selected Track label/skill pairs.*one verdict row per selected reviewer",
+            r"(?s)custom full-review selection.*selected Track label/skill pairs.*one verdict row per selected reviewer",
         )
         self.assertIn("| Audit record | retained internally |", report)
         self.assertNotIn("Canonical ledger artifact", report)
+        self.assertIn("Independent closure reviewer", templates)
         self.assertIn("INCOMPLETE", templates)
 
     def test_rubric_records_atomic_review_run_without_stale_round_scope(self) -> None:

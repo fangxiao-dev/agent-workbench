@@ -145,6 +145,11 @@ def test_terminal_review_contract_remains_owned_by_do_review() -> None:
     dev = (PLUGIN / "skills" / "dev-with-track" / "SKILL.md").read_text(encoding="utf-8")
     assert "/impl-package:do-review" in dev
     assert "terminal-final coverage 完整" in dev
+    assert "已接受并归类 Track C / Spec fidelity finding" in dev
+    assert "references/runtime-protocol.md" in dev
+    assert "不创建 Ticket/Attempt 状态" in dev
+    assert "不重复调度 reviewer" in dev
+    assert "dispatch-fix" not in dev
     for duplicated_owner in ("review-code-by-standards", "review-code-by-spec", "safety-review"):
         assert duplicated_owner not in dev
 

@@ -17,7 +17,7 @@ Review target:
 - Mode:
 - Review phase: initial / finding-closure / terminal-final
 - Round:
-- Track label:
+- Track label / reviewer role:
 - Assigned reviewer skill:
 - Assigned reviewer skill path:
 - Repository standards sources:
@@ -44,9 +44,9 @@ Return format:
 ```text
 Read and use exactly the assigned reviewer skill path. Do not resolve a similarly named skill yourself.
 
-You are a leaf reviewer in a topology already resolved by the parent do-review run. Do not invoke do-review, do not run its subagent gate, do not dispatch subagents, and do not re-evaluate reviewer topology or capacity. Follow the assigned skill's primary review intent and handoff guidance; it is not an exclusive capability boundary.
+You are a leaf reviewer in a topology already resolved by the parent do-review run. Do not invoke do-review, do not run its subagent gate, do not dispatch subagents, and do not re-evaluate reviewer topology or capacity. For `finding-closure`, you are the single reviewer for the complete named-finding set; there are no peer tracks. Follow the assigned skill's primary review intent and handoff guidance; it is not an exclusive capability boundary.
 
-Review exactly the supplied complete diff and fixed comparison point. Do not inspect, request, or use findings produced by other tracks in the current round. This restriction remains in effect when the parent runs reviewers in phases.
+Review exactly the supplied complete diff and fixed comparison point. Do not inspect, request, or use findings produced by other tracks in the current round. For `finding-closure`, no other track is dispatched; review the supplied named findings together in this one invocation.
 
 Read every repository contract source only from the immutable resolved head with `git show <resolved-head>:<path>`, using the exact repo-relative path in the ReviewRun record. Never read a contract source from the working tree, and do not recompute its hash or create a second capture; the ReviewRun's Git object ID and SHA-256 are the fixed provenance record. Tracker-only evidence is supplied directly in the discovery record.
 
@@ -67,7 +67,7 @@ For each finding:
 ## Closure Verification Brief
 
 ```text
-Use the assigned skill, but run closure verification only.
+Use the assigned reviewer skill, but run closure verification only. The parent dispatches one fresh independent reviewer for the whole named-finding set; do not split findings by source track or add a separate Safety reviewer.
 
 For each assigned issue/finding:
 1. Read the issue body and acceptance criteria.
@@ -82,6 +82,22 @@ For FAIL:
 
 For UNCERTAIN:
 - state exactly what evidence is missing.
+```
+
+## Accepted Track C Source Recheck Brief
+
+Use this brief only after the parent has accepted and classified a finding as Track C / Spec fidelity. This is one fresh independent, finding-scoped source check inside the existing ReviewRun; it is not `finding-closure` and does not search for unrelated implementation findings.
+
+```text
+Review only the supplied accepted finding and immutable design sources. Read the current Decision, Spec, subordinate contract-design.md when present at the fixed head, and any directly referenced Ticket or cross-module authority from the resolved ReviewRun head. An untouched legacy package may legitimately lack contract-design.md; absence alone is not a gap, so judge whether the available Spec contract uniquely decides the finding.
+
+Answer one question: do those sources uniquely determine the expected behavior for this finding?
+
+- If yes, cite the exact source sections and state that implementation/evidence may be corrected without changing the contract.
+- If a source is missing, ambiguous, or conflicting, cite the exact gap and route the finding to req-align before implementation.
+- If multiple product outcomes remain valid, state the owner decision required.
+
+Do not inspect the implementation broadly, discover unrelated findings, propose a new review phase, or decide package/Ticket state. Return a concise conclusion with source citations.
 ```
 
 ## Round-N Anti-Duplicate Addendum

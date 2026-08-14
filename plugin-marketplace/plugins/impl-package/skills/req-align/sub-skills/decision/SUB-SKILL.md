@@ -5,7 +5,7 @@ description: req-align 内部的 Decision 阶段；对齐 requirement inputs、F
 
 # Decision Alignment
 
-只在 `req-align` 路由到 full 或 decision-only 时执行。本 SUB-SKILL 拥有 Decision 内容与 Gate，不拥有 package 路径、Spec 或 Plan。
+只在 `req-align` 路由到 full 或 decision-only 时执行。本 SUB-SKILL 拥有 Decision 内容与 initial bundle Gate；package 路径、Spec 与 Plan 由各自 owning skill 管理；同一 package 的 follow-up 只更新 current Decision。
 
 ## 输入
 
@@ -21,15 +21,15 @@ description: req-align 内部的 Decision 阶段；对齐 requirement inputs、F
 4. 对 Core/Capability、repository fit、delivery path、material choices 与每个 unknown 做 blocking-decision triage。普通 task-scoped read-only investigation 直接执行；需要新权限、副作用、实质成本、code spike、环境变化或 scope expansion 时持久化 `Decision Gate: BLOCKED`。
 5. 用 [Alignment Proposal](../../assets/templates/alignment-proposal.md) 形成 working output。只有 discovery 与允许调查都无法关闭 intent、scope、trade-off 或 owner decision 时才问一个 focused question；proposal 不是 durable artifact。
 6. earned Decision 使用 [Decision Template](../../assets/templates/decision.md)；lightweight correction 在 Decision PASSED 后把最小 evidence 交给 Spec 的 Decision Gate Record。Decision BLOCKED 一律使用 `decision.md`，且不创建 Spec。
-7. 运行 Decision Gate。目标落点、Focused PRD（适用时）、input reconciliation、Core/Capability、repository fit、material choices 与所有 blocking uncertainty 全部闭合后才可 PASSED。
+7. 仅 initial bundle 运行 Decision Gate。目标落点、Focused PRD（适用时）、input reconciliation、Core/Capability、repository fit、material choices 与所有 blocking uncertainty 全部闭合后才可 PASSED；follow-up 更新直接沿用 initial approval。
 
 ## 完成条件
 
 - 每个 material confirmed promise 都有当前 home、明确变更/排除或 blocker；
 - 没有把 implementation candidate 提升为 product promise，也没有把 Spec/Plan 细节写入 Decision；
-- PASSED 输出给出 selected direction、Spec contract boundary 与 evidence；
+- initial PASSED 输出给出 selected direction、Spec contract boundary 与 evidence；
 - BLOCKED 输出给出 exact investigation/owner decision 与恢复入口。
 
 ## 返回 router
 
-返回 Decision Gate result、standalone `decision.md` 或 lightweight record candidate、剩余 owner decisions、Spec 可消费的 boundary，以及 comparison evidence。decision-only 到此停止；full 只有 PASSED 才能进入 Spec。
+返回 initial Decision Gate result，或 follow-up 更新后的 standalone `decision.md` / lightweight record、Spec 可消费的 boundary，以及 comparison evidence。initial 的 decision-only 到此停止；initial full 只有 PASSED 才能进入 Spec。

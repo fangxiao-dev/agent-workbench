@@ -1,6 +1,6 @@
 ---
 target: plugin-marketplace/plugins/impl-package/skills/do-review
-updated: 2026-08-12
+updated: 2026-08-14
 ---
 
 ## 原则
@@ -16,6 +16,7 @@ updated: 2026-08-12
 - [已确认] 中间 finding closure 采用保守增量复核；terminal final 必须在最终实现 `HEAD` 运行完整适用 topology。（证据: R5）
 - [已确认] ReviewRun 原子创建固定 base/head、拒绝空 three-dot diff，并从 resolved head 解析 UTF-8 Git blob 合同来源；失败不产生 ledger。（证据: R6）
 - [已确认] reviewer 只通过 `git show <resolved-head>:<path>` 读取合同，ReviewRun 的 object ID 与 SHA-256 是唯一 provenance，不再读取工作树或二次 hash。（证据: R6）
+- [已确认] accepted Track C / Spec fidelity finding 在交给 fix 前做一次 finding-scoped 独立 source recheck；按 parent 语义归类触发，不依赖最先报告它的 leaf，也不新增 review phase 或 runtime state。（证据: R7）
 
 ## 决策记录（滚动，最近 ≤5 轮）
 
@@ -36,3 +37,7 @@ updated: 2026-08-12
 ### R6 · 2026-08-12
 - 采纳「一个命令创建原子 ReviewRun」：commit 解析、空 diff 拒绝、resolved-head Git blob/UTF-8 校验、object ID/hash 记录先于 ledger 写入。
 - 采纳「合同只从固定 revision 读取」：reviewer 使用 `git show <resolved-head>:<path>`，不依赖可变工作树，也不建立第二套 hash/capture 协议。
+
+### R7 · 2026-08-14
+- 采纳「accepted Track C 后的一次性源头复审」：用户确认只在 Spec review finding 被 parent 接受并归类后触发；不把普通 finding、candidate 或初始 Spec Gate 扩成额外 review。
+- 采纳「少状态」：source recheck 留在当前 ReviewRun 的 finding 记录，不新增 phase、Ticket/Attempt 状态或 closure 替代物。

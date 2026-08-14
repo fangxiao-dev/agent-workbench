@@ -10,11 +10,11 @@ allowed-tools:
 
 # Do Review
 
-`do-review` is the sole orchestrator. It fixes one immutable ReviewRun, resolves topology and capacity, dispatches independent leaf reviewers, owns the cross-track ledger, verifies and classifies candidates, controls convergence, and reports the result. The main session is not another reviewer.
+`do-review` is the sole orchestrator. It fixes one immutable ReviewRun, resolves topology and capacity, dispatches independent leaf reviewers, owns the review ledger, verifies and classifies candidates, controls convergence, and reports the result. The main session is not another reviewer.
 
 Every dispatched reviewer is one leaf. It must not invoke `do-review`, dispatch subagents, re-evaluate topology/capacity, inspect other tracks' same-round output, classify cross-track results, or decide the overall verdict. A reviewer skill defines primary review intent, not an exclusive capability boundary; evidence-backed cross-domain candidates return to the parent for attribution and classification.
 
-The default topology comes only from [reviewer-registry.json](references/reviewer-registry.json): Track A `review-code`, Track B `review-code-by-standards`, and Track C `review-code-by-spec`. `safety-review` is conditional, not a registry default. Worker choice is independent of topology: `finding-closure` uses fresh `$grok-worker` processes; the worker Skill owns its model and effort defaults. Other phases use the current host defaults for the caller-supplied target class, subject to explicit constraints.
+The default topology for `initial` and `terminal-final` comes only from [reviewer-registry.json](references/reviewer-registry.json): Track A `review-code`, Track B `review-code-by-standards`, and Track C `review-code-by-spec`. `safety-review` is conditional for those full reviews, not a registry default. `finding-closure` has one fresh independent `reviewer` invocation for all named findings; it does not split by registry track or launch a separate Safety leaf. The reviewer checks safety implications only when they belong to the named findings. Worker choice is independent of topology; the worker Skill owns its model and effort defaults. Other phases use the current host defaults for the caller-supplied target class, subject to explicit constraints.
 
 ## 0. Gate
 
@@ -42,7 +42,7 @@ Prepare the common context defined in [subagent-briefs.md](references/subagent-b
 
 Choose one mode: `N rounds` (default one), `Loop` (default cap ten), or `Closure verification` for named findings only. Then read [review-topology.md](references/review-topology.md): it is required for Safety admission, `initial`/`finding-closure`/`terminal-final` routing, final-HEAD rules, and Loop lifecycle.
 
-Without explicit reviewers, use registry defaults in order and conditionally append `safety-review`. With explicit reviewers, run exactly the stated list in order; if applicable Safety is omitted, record `omitted applicable Safety risk`. Labels are sequential.
+Without explicit reviewers, use registry defaults in order and conditionally append `safety-review` for `initial` and `terminal-final`; use one `reviewer` leaf for `finding-closure`. An explicit reviewer selection for `finding-closure` must still resolve to exactly one leaf; explicit selections for other phases run exactly the stated list in order. Labels are sequential.
 
 Resolve names through the registry or active catalog and verify canonical paths before dispatch:
 
@@ -55,9 +55,9 @@ Reject ambiguous, unreadable, escaping, or frontmatter-mismatched paths. Reserve
 
 ## 3. Dispatch Independent Rounds
 
-Read [subagent-briefs.md](references/subagent-briefs.md) before composing prompts. Use its common block and generic leaf brief, plus its closure brief only for Closure verification and its anti-duplicate addendum only after round 1. Include the verified absolute reviewer `SKILL.md` path and canonical ledger path.
+Read [subagent-briefs.md](references/subagent-briefs.md) before composing prompts. Use its common block and generic leaf brief, plus its closure brief only for Closure verification and its anti-duplicate addendum only after round 1. Closure uses that brief once for the single independent reviewer; it does not compose one brief per review track. Include the verified absolute reviewer `SKILL.md` path and canonical ledger path.
 
-Same-round tracks remain isolated even when phased. Round 1 has no prior findings; later rounds receive only the parent-verified prior round's canonical context, never raw reviewer output. Start every round with fresh leaf workers; resume only an interrupted leaf from that same round. For `finding-closure`, run each leaf through `$grok-worker --no-subagents` in the background with its assigned reviewer skill and complete leaf brief; a valid PASS, FAIL, or UNCERTAIN result is final for that leaf. After an incomplete Grok executor result, confirm process cleanup before one fresh fallback to the applicable current default reviewer. Timeout, cancellation, `PARTIAL`, or missing evidence is incomplete, not PASS.
+Round 1 has no prior findings; later rounds receive only the parent-verified prior round's canonical context, never raw reviewer output. Start every round with fresh leaf workers; resume only an interrupted leaf from that same round. For `finding-closure`, run exactly one fresh reviewer leaf through `$grok-worker --no-subagents` in the background with the assigned reviewer skill and complete closure brief; the leaf returns PASS, FAIL, or UNCERTAIN for each named issue. After an incomplete Grok executor result, confirm process cleanup before one fresh fallback to the applicable current default reviewer. Timeout, cancellation, `PARTIAL`, or missing evidence is incomplete, not PASS.
 
 Wait for all required active tracks. A recorded dormant Loop track is not missing; any other incomplete leaf blocks the round unless the user authorized that exact degraded topology.
 
@@ -65,7 +65,9 @@ Wait for all required active tracks. A recorded dormant Loop track is not missin
 
 After all leaves return, read [output-templates.md](references/output-templates.md) for the required ledger fields, evidence verification, deduplication key, finding classification, convergence, and atomic update rules. Leaf output is candidate evidence until the parent records its decision in the one canonical temp ledger; do not create per-round ledgers.
 
-For Loop, apply [review-topology.md](references/review-topology.md) after classification. Convergence requires no new accepted blocker/follow-up in the latest round and every selected track dormant. For `finding-closure`, verify only named findings with the conservative affected topology. A terminal result requires `terminal-final` on the final implementation `HEAD` with the complete applicable topology.
+When the parent accepts and classifies a finding as Track C / Spec fidelity, regardless of which leaf first surfaced it, run the one-shot source recheck from [subagent-briefs.md](references/subagent-briefs.md) before handing the finding to implementation. Use one fresh independent `reviewer` leaf and limit it to the accepted finding plus the immutable Decision, Spec, subordinate `contract-design.md` when present at the fixed head, and directly referenced Ticket or cross-module authority. Record its result once on the accepted finding; downstream skills consume that record and do not dispatch a second recheck. A missing `contract-design.md` in an untouched legacy package is not by itself a contract gap. Record whether the current sources uniquely decide the behavior, require a contract revision, or leave an owner decision. An unavailable or incomplete reviewer blocks the implementation handoff instead of silently skipping the check. This is a post-classification check inside the current ReviewRun, not a new review phase or lifecycle state. Other accepted findings and unaccepted candidates do not trigger it.
+
+For Loop, apply [review-topology.md](references/review-topology.md) after classification. Convergence requires no new accepted blocker/follow-up in the latest round and every selected track dormant. For `finding-closure`, the single reviewer verifies only named findings; it cannot stand in for `terminal-final`. A terminal result requires `terminal-final` on the final implementation `HEAD` with the complete applicable topology.
 
 ## 5. Report
 

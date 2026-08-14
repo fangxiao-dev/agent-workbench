@@ -2,7 +2,7 @@
 
 ## 1. 权威边界
 
-- Decision 与 Spec contract ensemble 定义要交付的行为、跨模块数据/API 合同与验收语义。Spec ensemble 至少包含 `spec.md`，并可包含其“Spec 设计范围”声明为 earned 的 `contract-design.md`。
+- Decision 与 Spec contract ensemble 定义要交付的行为、跨模块数据/API 合同与验收语义。每个新建或被修订的 Spec ensemble 同时包含 `spec.md` 与从属 `contract-design.md`；未触及的 legacy Spec 可在下次 req-align 时补齐。
 - Plan 定义一个 attempt 的执行策略、验证和 Composition。
 - Ticket 定义纵向验收切片，是新 package 唯一持久实施与验收单元；DAG/Task 只作为旧 package 的迁移与恢复输入。
 - `.impl-package/state.json` 只保存当前执行状态与恢复入口。
@@ -11,7 +11,7 @@
 
 D/S/P 仅是可选的人类可读别名，不是新 artifact 的必填字段，也不绑定文件内容。不要为了小改动升级别名；需要固定比较点时只使用 Git commit ID。
 
-`contract-design.md` 从属 `spec.md` 并共用 Status、审批和 Spec Gate；它没有独立 alias、revision、状态或生命周期。Plan 可以引用其中稳定章节，但不得复制或补设计另一套 DTO/schema。
+`contract-design.md` 从属 `spec.md` 并共用 Status、审批和 Spec Gate；它没有独立 alias、revision、状态或生命周期。默认 `Disposition: detailed`；只有精确语义已由 `spec.md` 完整承担时才使用 `Disposition: not-required`，并写明理由。Plan 可以引用其中稳定章节，但不得复制或补设计另一套 DTO/schema。
 
 Ticket 与 Task 引用 Decision/Spec/contract-design/Plan 中的合同或验收语义时，必须使用仓库相对路径并定位到具体一级或二级大章节（Markdown heading/anchor 或 `§章节名`）；不得只裸指整份文档，也不使用易漂移的行号。恢复、派发和验收默认读取这些章节及其直接引用，而不是把整份合同文档作为无差别上下文。
 

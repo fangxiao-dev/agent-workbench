@@ -1,16 +1,16 @@
 # Patch 与 Follow-Up 规则
 
-Patch 只属于 package 已有 terminal gate 之后的生命周期，并继续复用 owning package-id。尚未 terminal 的工作只修订当前 attempt，不创建 patch plan。
+Patch 归属于 package 已有 terminal gate 之后的生命周期，并继续复用 owning package-id；terminal 前的工作沿用当前 attempt。initial Decision/Spec/Plan bundle approval 是同一 package 唯一的 owner approval gate。
 
 ## 进入 patch 前
 
 1. 读取 gate.md，确认它属于前一 attempt 且为 pass、fail 或 defer。
 2. 将 package decision/spec 与当前 module knowledge 和代码对账。
-3. 分类 drift：
+3. 分类 drift 并直接更新 current artifact：
    - implementation-only：沿用当前 Decision/Spec；
-   - behavior contract：更新当前 Spec 并重跑 Spec Gate；
-   - decision direction：更新当前 Decision、重跑 Decision Gate，再更新当前 Spec、重跑 Spec Gate。
-4. 所需 gate 未通过时停止，不创建 patch plan。
+   - behavior contract：更新当前 Spec，记录受影响范围并沿用 initial bundle approval；
+   - decision direction：更新当前 Decision 与 Spec，记录受影响范围并沿用 initial bundle approval。
+4. 后续 update 直接沿用 initial bundle approval。
 
 ## Patch plan
 
@@ -28,4 +28,4 @@ Patch 只属于 package 已有 terminal gate 之后的生命周期，并继续�
 
 ## Freeze
 
-pass、fail、defer Gate 使对应 patch plan terminal/frozen。后续变化创建新的 patch attempt；blocked 不冻结 Attempt，补证通过当前 Plan、Execution Record 与后续 Gate 表达。
+pass、fail、defer Gate 使对应 patch plan terminal/frozen。后续变化可创建新的 patch attempt，并沿用 initial bundle approval；blocked 保持 Attempt active，补证通过当前 Plan、Execution Record 与后续 Gate 表达。

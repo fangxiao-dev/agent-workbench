@@ -26,7 +26,7 @@ def test_req_align_is_public_router_with_internal_decision_and_spec_subskills() 
     assert "Spec Design Preflight" in spec.read_text(encoding="utf-8")
 
 
-def test_spec_template_has_current_design_scope_and_optional_detail_contract() -> None:
+def test_spec_template_has_current_design_scope_and_required_subordinate_contract() -> None:
     spec = read("skills/req-align/assets/templates/spec.md")
     detail = read("skills/req-align/assets/templates/contract-design.md")
 
@@ -43,6 +43,9 @@ def test_spec_template_has_current_design_scope_and_optional_detail_contract() -
     assert "Spec Revision：S<n>" not in detail
     assert "没有独立 Status、revision、approval 或 Gate" in detail
     assert "状态（Status）：" not in detail
+    assert "Disposition: detailed | not-required" in detail
+    assert "not-required" in spec
+    assert "Reason:" in detail
 
 
 def test_spec_gate_and_planning_backstop_enforce_contract_completion() -> None:
@@ -51,7 +54,7 @@ def test_spec_gate_and_planning_backstop_enforce_contract_completion() -> None:
 
     assert "Spec Design Preflight" in gate
     assert "两个独立实施者" in gate
-    assert "proposal 的内容通过判断不能冒充正式阶段迁移" in gate
+    assert "正式阶段迁移以该 bundle 记录为依据" in gate
     assert all(
         dimension in planning
         for dimension in (
@@ -74,3 +77,16 @@ def test_contract_design_is_subordinate_to_one_spec_lifecycle() -> None:
     for text in (lifecycle, composition):
         assert "contract-design.md" in text
         assert "没有独立 alias、revision、状态" in text
+        assert "Disposition: detailed" in text
+        assert "Disposition: not-required" in text
+
+
+def test_touched_spec_requires_contract_design_but_untouched_legacy_is_not_migrated() -> None:
+    router = read("skills/req-align/SKILL.md")
+    lifecycle = read("skills/req-align/references/package-lifecycle.md")
+    subskill = read("skills/req-align/sub-skills/spec/SUB-SKILL.md")
+
+    for text in (router, lifecycle, subskill):
+        assert "未触及的 legacy Spec" in text
+    assert "每个新建或被修订的 Spec" in router
+    assert "本次创建或修订 Spec 时补齐从属文件" in subskill

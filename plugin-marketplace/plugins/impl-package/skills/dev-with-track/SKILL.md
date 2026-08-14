@@ -13,7 +13,7 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 1. 运行 `package validate`；跨 session 或授权绑定比较点时附 `--commit <Git commit>`。
 2. 打开根 `progress.md`，读取 current Attempt、可选合同别名、Composition、Ticket 状态、blocker、active checkpoint、next action、Gate 及 Execution Record 指针；只有旧 package 才读取 Task/DAG/Handoff 轴。
 3. 只沿当前动作读取必要 Ticket、Task、Handoff、Execution Record judgment、review 或 evidence；不要重读全部历史。
-4. 根据批准 commit 与实际 diff 判断 authority/contract 是否仍成立。implementation-only 继续；行为、acceptance、数据/安全或 mutation authority 变化回 owning stage。
+4. 根据初始 bundle approval 和实际 diff确认仍在同一 package。implementation、behavior、acceptance、data/security 与 package record 更新均沿用该 approval；新 package 从 owning stage 取得新的初始 bundle approval。
 
 ## 主 session 控制循环
 
@@ -33,7 +33,7 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 - `recovery checkpoint` 是 active checkpoint 写入快捷入口，更新 `state.activeCheckpoints[subject]`。
 - 新 package 在 BLOCKED、retry、跨 session/owner 或需要交接时写文档化 active checkpoint；checkpoint 不授权派发、不释放依赖，也不创建 Task Handoff。旧 package 的 handoff 仅作迁移材料。
 - checkpoint 只记录下一动作与恢复证据，不授权派发；长期判断写 ER judgment。compact 只作异常兜底，不是正常交接权威。
-- 合同或计划实际变化只把受影响 Ticket（旧 package 另含受影响 Task）设为 `NEEDS-REVALIDATION`；未受影响 evidence 保留。
+- 合同或计划实际变化直接记录受影响 Ticket（旧 package 另含受影响 Task）并保留未受影响 evidence；同一 package 持续沿用 initial bundle approval。
 
 ```powershell
 Get-Content .\er-payload.json -Raw |
@@ -47,6 +47,7 @@ Get-Content .\er-payload.json -Raw |
 ## Review、Findings 与人工验收
 
 - 通过 `/impl-package:do-review` 运行 initial、finding-closure 和 terminal-final review；review topology、适用范围和 coverage 由该 skill 拥有。本 skill 消费报告，terminal pass 要求 terminal-final coverage 完整且所有阻断 finding 已关闭。
+- 当 `do-review` parent 已接受并归类 Track C / Spec fidelity finding 时，修复派发前读取 [Runtime Protocol](references/runtime-protocol.md) 的 Findings 路由并消费同一 ReviewRun 已记录的一次性独立 source recheck；本 skill 不重复调度 reviewer，记录缺失或 incomplete 时交回 `do-review`。其他 finding 和未接受 candidate 不触发。该检查不创建 Ticket/Attempt 状态，也不替代 finding-closure 或 terminal-final。
 - P1/P2 finding 必须修复并 closure verify；editorial suggestion 不阻断 Gate。
 - package 级 `execution-findings.md` 在 terminal Gate 前必须完成分流：Decision rationale→Decision，规范行为→Spec，执行判断→Execution Record，长期知识→Durable Delta/`_pending.md`。
 - Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 把入口、oracle、环境、失败反馈和 teardown owner 写入 judgment 或 canonical handoff，并取得结果 evidence。

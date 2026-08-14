@@ -29,7 +29,7 @@
 - Persistence models：
 - Cross-module seams：
 - Public read models：
-- 详细合同承载：本文件 §<n> | [contract-design.md](contract-design.md)（写明 earned 原因） | 未 earned
+- 详细合同承载：[contract-design.md](contract-design.md)（Disposition: detailed | not-required；not-required 时写明本文件如何完整承担精确语义）
 
 ## Spec 门记录（Spec Gate Record）
 
