@@ -19,7 +19,9 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed 
 
 ## Ownership 与 fast path
 
-本 Skill 拥有 configured implementations root（默认 `docs/implementations/`）下 package 的 current `decision.md`、`spec.md`、从属 `contract-design.md` 与可读 D/S aliases。每个新建或被修订的 Spec 都生成该从属文件；未触及的 legacy Spec 到下次 req-align 再补齐。它不创建 tracker spec、第二套 behavior contract、plan 或 runtime state。
+本 Skill 拥有 configured implementations root（默认 `docs/implementations/`）下 package 的 Decision、Spec、从属 `contract-design.md` 与可读 D/S aliases 的语义和内容。每个新建或被修订的 Spec 都生成该从属文件；未触及的 legacy Spec 到下次 req-align 再补齐。当前 package artifact 的物理写入和 focused validation 由绑定的 `/impl-package:standing-bookkeeper` 执行；本 Skill 不创建 tracker spec、第二套 behavior contract、plan 或 runtime state。
+
+当需要创建或更新 Decision/Spec contract ensemble 时，主 thread 先把已确认的结论、必要依据和依赖性发送给 bound bookkeeper；bookkeeper 按本 Skill 与对应 sub-skill 定位并写入 canonical artifact。主 thread 保留 contract 语义、Gate 和最终采信权。
 
 当 business result、Acceptance Semantics、security/data constraints 与 mutation authority 均未变化时，走 no-contract fast path：复用仍有效的 D/S，说明现有合同为何继续成立，并直接路由 owning skill。删除只要改变 promise 或 acceptance boundary，就仍是 contract-impacting。
 
@@ -30,7 +32,7 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed 
 3. initial 的 full 或 decision-only 读取并执行 [Decision SUB-SKILL](sub-skills/decision/SUB-SKILL.md)。同一 package 的 follow-up 直接更新当前 Decision 并沿用初始 approval。
 4. initial 的 full 在 Decision `PASSED` 后、或 spec-only 前置验证通过后，读取并执行 [Spec SUB-SKILL](sub-skills/spec/SUB-SKILL.md)。同一 package 的 follow-up 直接更新当前 Spec 并沿用初始 approval。
 5. initial bundle 的两个 Gate 均通过且 lifecycle registration 有效时，把同一 Spec contract ensemble 交给 `/impl-package:impl-planning`；follow-up 沿用该 bundle approval 进入后续工作。
-6. 直接引用当前 Decision/Spec 路径，记录用于 module-knowledge/code 比较的 Git commit；implementation attempt 获批前不创建 runtime state。
+6. 直接引用当前 Decision/Spec 路径，记录用于 module-knowledge/code 比较的 Git commit；implementation attempt 获批前不创建 runtime state。formal artifact 的物理写入交给 bound bookkeeper。
 7. 汇报任何 Gate 结果前读取 [Handoff](references/handoff.md)，输出最具体的可恢复状态。
 
 Package ID 创建后不得改名。后续 requirement delta 先按 implementation-only / behavior-contract / decision-direction 分类，只使真正受影响的下游范围失效。
@@ -45,4 +47,4 @@ Package ID 创建后不得改名。后续 requirement delta 先按 implementatio
 
 ## 输出
 
-用业务语言说明 focused requirement、selected direction、route、Gate results、blockers/owner decisions 与下一有效步骤。发生 Spec artifact 写入时，报告 canonical package、Decision/Spec evidence 与 `contract-design.md` disposition；不要粘贴完整 artifact。
+用业务语言说明 focused requirement、selected direction、route、Gate results、blockers/owner decisions 与下一有效步骤。发生 Spec artifact 写入时，由 bookkeeper 返回 canonical package、Decision/Spec evidence 与 `contract-design.md` disposition，主 thread 复核后汇报；不要粘贴完整 artifact。

@@ -29,6 +29,8 @@ initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一
 
 ## 设计与写入
 
+本 sub-skill 拥有 Spec contract ensemble 的语义、Status 与 Gate 条件；主 thread 将已确认的内容和批准交给 bound `/impl-package:standing-bookkeeper`，由 bookkeeper 写入 canonical artifact 并运行 focused validation。
+
 1. 使用 [Spec Template](../../assets/templates/spec.md)，首先写回完整的“Spec 设计范围”，再更新其他章节。
 2. 任一 contract surface 非空时读取 [Contract Surface Design](../../references/contract-surface-design.md)，把适用的 implementation-ready 下限冻结在唯一 owner 中。
 3. 使用 [Contract Design Template](../../assets/templates/contract-design.md)。`detailed` 时，`spec.md` 拥有行为、状态、权限、不变量、恢复与 Acceptance Semantics，`contract-design.md` 只拥有精确 API/DTO、canonical persistence、seam payload 与 read-model shape；`not-required` 时只保留从属关系、disposition 与理由，不制造空合同章节。
@@ -36,7 +38,7 @@ initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一
 5. detailed contract 不再需要时，把仍有效的精确合同吸收回 `spec.md`，更新引用并把 disposition 改为 `not-required`；保留从属文件，Git 保存历史。
 6. 仅当信号适用时评估 evidence-integrity contract 与 risk-driven Grill；它们不成为普通变化的固定流程。
 
-Formal artifact 的内容、Status 与 Gate result 必须反映当前已记录事实。initial bundle 完成 owner approval；follow-up 直接写入 current truth 并沿用该 approval。
+Formal artifact 的内容、Status 与 Gate result 必须反映当前已记录事实。initial bundle 完成 owner approval；follow-up 将 current truth 交给 bookkeeper 写入并沿用该 approval。主 thread 不直接编辑当前 package artifact。
 
 ## Spec Gate（仅初始 bundle）
 
@@ -46,4 +48,4 @@ Gate 只在 initial bundle 验证前置承诺是否完整兑现：设计范围�
 
 ## 返回 router
 
-返回 initial Spec Gate result，或 follow-up 更新后的 `spec.md`、`contract-design.md` disposition、Acceptance evidence 与 planning readiness。initial PASSED 授权 contract ensemble 进入 planning；implementation、verification、merge 与 release 由后续阶段处理。
+返回 initial Spec Gate result，或 follow-up 更新后的 `spec.md`、`contract-design.md` disposition、Acceptance evidence 与 planning readiness。bookkeeper 回报物理写入与 focused validation；主 thread 采信后再进入 planning。initial PASSED 授权 contract ensemble 进入 planning；implementation、verification、merge 与 release 由后续阶段处理。

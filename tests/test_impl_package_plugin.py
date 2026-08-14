@@ -14,6 +14,7 @@ EXPECTED_SKILLS = {
     "create-task-dag",
     "dev-with-track",
     "execution-preflight",
+    "standing-bookkeeper",
     "impl-planning",
     "subagent-driven-development",
     "grill-me-smartly",

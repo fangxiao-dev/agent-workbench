@@ -5,7 +5,7 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 
 # Dev With Track
 
-先读 `../../references/impl-package-composition-contract.md` 和 `../../references/impl-package-current-state.md`。当前 attempt 涉及 material seam、browser/provider/native-tool 或昂贵系统验证时，再读 [`../../references/progressive-system-evidence.md`](../../references/progressive-system-evidence.md)。本 skill 维护 current state、Progress、Attempt Execution Record、active checkpoint、execution findings 和 current Gate；旧 package 的 Task Handoff 仅作兼容恢复材料，各上游 artifact 仍由 owning skill 维护。
+先读 `../../references/impl-package-composition-contract.md` 和 `../../references/impl-package-current-state.md`。当前 attempt 涉及 material seam、browser/provider/native-tool 或昂贵系统验证时，再读 [`../../references/progressive-system-evidence.md`](../../references/progressive-system-evidence.md)。本 skill 拥有执行控制、finding 分流、验证和 Gate 的语义判断；current state、Progress、Attempt Execution Record、active checkpoint、execution findings 和 current Gate 的物理写入由绑定的 `/impl-package:standing-bookkeeper` 执行。旧 package 的 Task Handoff 仅作兼容恢复材料，各上游 artifact 仍由 owning skill 维护。
 需要委派或决定本地执行时，通过 `/impl-package:subagent-driven-development` 取得 scheduling contract；本 skill 只消费调度结果。
 
 ## Restore
@@ -22,14 +22,14 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 3. **Implement**：只修复已证实、当前可归责的范围；派发时给 primary ownership、禁区、成功条件、反例和局部验证。
 4. **Evaluate**：使用最便宜且忠实的证据。昂贵 runtime/E2E 重跑必须有新修复、环境变化或决定性观察目标。
 
-步骤 1、3 的事实调查、实现、修复和验证策略由 `/impl-package:subagent-driven-development` 统一形成；本 skill 只消费其 `mode / worker / schedule / review` 与结果合同。步骤 2 和 4 由主 session 把控。
+步骤 1、3 的事实调查、实现、修复和验证策略由 `/impl-package:subagent-driven-development` 统一形成；本 skill 只消费其 `mode / worker / schedule / review` 与结果合同。步骤 2 和 4 由主 session 把控，package 记录通过 bookkeeper 落盘。
 依赖是否释放由新 package 的 typed Ticket dependency 与 canonical state 判断；旧 package 才额外读取 DAG。Progress/checkpoint 不授权 dispatch，也不释放 acceptance/release dependency。
 
 ## State、ER 与 Handoff
 
 - 状态变化优先使用语义 Ticket 命令 `ticket satisfy|block|needs-revalidation|pending|retire ... --expect ...`；SATISFIED 必须带当前 `--revision`/`--environment`，BLOCKED/RETIRED 使用直接 evidence；stale transition 必须重新读取当前状态。旧 `set-state ticket ...` 仅作兼容别名。
 - 新 package 不产生 `READY/RUNNING/DONE` Task 状态；旧 package 的 Task `DONE` 不等于 Ticket `SATISFIED`。
-- 主 session 通过 `recovery checkpoint` 写 active checkpoint、通过 `recovery judgment` 写 judgment；worker 默认不直接写 package state 或 Execution Record。
+- 主 session 将 checkpoint、judgment 和其他已确定执行事实交给 bookkeeper；由 bookkeeper 通过 `recovery checkpoint`、`recovery judgment` 等现有入口写入。worker 默认不直接写 package state 或 Execution Record。
 - `recovery checkpoint` 是 active checkpoint 写入快捷入口，更新 `state.activeCheckpoints[subject]`。
 - 新 package 在 BLOCKED、retry、跨 session/owner 或需要交接时写文档化 active checkpoint；checkpoint 不授权派发、不释放依赖，也不创建 Task Handoff。旧 package 的 handoff 仅作迁移材料。
 - checkpoint 只记录下一动作与恢复证据，不授权派发；长期判断写 ER judgment。compact 只作异常兜底，不是正常交接权威。
@@ -62,6 +62,6 @@ completion claim 先交给 `/impl-package:verification-before-completion`。Gate
 
 terminal Gate 必须完成 Stage 7：记录 Durable Delta 及 `_pending.md`/truth pointer，或通过 `--no-durable-delta-reason` 明确无增量原因。terminal 后 state、active checkpoint 和 Execution Record 冻结。
 
-Gate CLI 拥有 comparison commit 与 lifecycle 校验。长任务先完成 state/ER/Gate 等 durable 写入，再输出最终叙述；transport disconnect 后从这些幂等事实恢复，不创建第二个完成结论。
+Gate CLI 拥有 comparison commit 与 lifecycle 校验。长任务先让 bookkeeper 完成 state/ER/Gate 等 durable 写入，再输出最终叙述；transport disconnect 后从这些幂等事实恢复，不创建第二个完成结论。
 
 若 active skill catalog 中存在 `talk-to-boss`，优先按其汇报合同输出；否则直接分别说明实施、验证、Gate、backfill/合入状态，给出 Task/Ticket 总数、剩余数、blocker、是否 closed 和唯一下一动作。可选 skill 缺失不阻塞收口。

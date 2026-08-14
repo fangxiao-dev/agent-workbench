@@ -5,7 +5,7 @@ description: Review an implementation plan or complete plan/Ticket/DAG bundle fo
 
 # Plan Review
 
-Review the actual candidate and return decisions, not audit machinery. The review is read-only unless the owner separately asks to apply edits.
+Review the actual candidate and return decisions, not audit machinery. The review is read-only unless the owner separately asks to apply edits; approved package edits are physically applied by the bound `/impl-package:standing-bookkeeper`.
 
 初始 Decision/Spec/Plan bundle 的 review 产出最终 owner approval；同一 package 的后续 patch、closure 或记录更新均沿用该 approval。
 
@@ -54,7 +54,7 @@ Useful checklists live in `references/scope-review.md`, `architecture-review.md`
 
 ## Apply boundary
 
-初始 bundle approval 前，按 owner 要求应用 review edits；approval 后，同一 package 的 review edits 可直接写入显式 repository-relative 文件，随后验证并报告 changed paths。Git supplies history and rollback; review outcome 继续写入现有记录。
+初始 bundle approval 前，按 owner 要求形成 review edits，由 bound bookkeeper 写入显式 repository-relative 文件并验证；approval 后，同一 package 的 review edits 仍沿用该 bookkeeper。Git supplies history and rollback；review outcome 继续写入现有记录。
 
 ## Output
 

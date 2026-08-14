@@ -32,6 +32,7 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 | 创建独立验收切片 | `/impl-package:to-tickets` |
 | 审计或迁移旧 Task/DAG package | `/impl-package:create-task-dag`（legacy read-only） |
 | 执行前确认授权与工作区 | `/impl-package:execution-preflight` |
+| 绑定/恢复 package standing bookkeeper、发送 package 更新、消费写入回执 | `/impl-package:standing-bookkeeper` |
 | 调查、实现、修复、验证及主 session/worker 分工、mode、batch 和资源顺序 | `/impl-package:subagent-driven-development` |
 | 恢复执行、推进 Task/Ticket、写 Gate | `/impl-package:dev-with-track` |
 | 编排多 reviewer、聚合 findings 并判断收敛 | `/impl-package:do-review` |

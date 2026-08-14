@@ -1,0 +1,101 @@
+{
+  "skill_name": "standing-bookkeeper",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "package thread 已确认一个 implementation finding 已关闭，主 thread 需要把结论和 evidence 写入当前 Attempt 的 Execution Record，并且下一动作依赖写入结果。请说明主 thread 如何通知 standing bookkeeper，以及 bookkeeper 回执应包含什么。",
+      "expected_output": "Uses a natural-language update with conclusion/fact, evidence, and dependency=yes; waits for a receipt; keeps semantic closure with the main thread and physical write/validation with the bookkeeper.",
+      "files": [],
+      "expectations": [
+        "Uses the natural-language update with conclusion/fact, evidence, and dependency=yes.",
+        "Waits for the bookkeeper receipt before releasing the dependent next action.",
+        "Keeps semantic closure with the main thread and physical write plus focused validation with the bookkeeper.",
+        "Requires the receipt to identify understanding, write, validation, and blocker status."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "当前 package 需要把已批准的 Spec follow-up 写回 spec.md 与 contract-design.md。请判断 standing bookkeeper 和主 thread 各自负责什么，并说明如何处理写入失败。",
+      "expected_output": "Routes the physical artifact write and focused validation to the package-bound bookkeeper, preserves req-align/main-thread semantic ownership, and reports the exact failure without claiming success.",
+      "files": [],
+      "expectations": [
+        "Routes both physical artifact writes and focused validation to the package-bound bookkeeper.",
+        "Preserves req-align and the main thread as owners of the Spec semantics and approval.",
+        "Reports the exact failed location and any partial write instead of claiming success.",
+        "Does not create a second contract or move semantic ownership to the bookkeeper."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "bookkeeper 收到一个更新，但信息不足以判断目标 package 或 owning artifact。请说明它下一步能做什么，以及哪些动作不能自行补出来。",
+      "expected_output": "Asks the main thread for the missing context and does not invent requirement, acceptance, Gate verdict, a second state machine, or a cross-package coordinator.",
+      "files": [],
+      "expectations": [
+        "Asks the main thread for the missing package identity, target scope, or owning artifact.",
+        "Does not invent a requirement, acceptance decision, finding disposition, or Gate verdict.",
+        "Does not create a second state machine, message protocol, or cross-package coordinator.",
+        "Keeps the update incomplete until the missing context is supplied."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "主 thread 已确认一个不影响下一动作的 Progress 事实，发送：‘更新：结论/事实：T2 已完成 focused validation；依据：pytest 结果；依赖：否’。请说明 bookkeeper 如何处理，以及主 thread 是否需要等待。",
+      "expected_output": "Writes the fact to the owning package artifact, runs focused validation, returns a receipt, and allows the main thread to continue without waiting for the receipt to release a dependent action.",
+      "files": [],
+      "expectations": [
+        "Uses dependency=no to allow the main thread to continue its independent work.",
+        "Locates the owning Progress or execution artifact and performs the physical write there.",
+        "Runs applicable focused validation and returns a receipt with the write and validation result.",
+        "Does not treat dependency=no as permission to skip validation or to omit the receipt."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "主 thread 发现上一次回执遗漏了一条 evidence，发送 correction event；当前 artifact 已经包含原结论。请说明 bookkeeper 如何处理，尤其是如何避免盲目追加或形成第二份状态。",
+      "expected_output": "Re-reads the current artifact and package state, applies the approved correction to the unique owning artifact, validates the result, and does not invent a request-id or claim protocol-level idempotency.",
+      "files": [],
+      "expectations": [
+        "Re-reads the current artifact and package state before applying the correction.",
+        "Updates the unique owning artifact instead of blindly appending a duplicate fact or creating a second ledger.",
+        "Returns the actual correction write and focused validation result rather than relying on the old receipt.",
+        "Does not introduce request IDs, a new deduplication protocol, CAS, or a protocol-level idempotency guarantee."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "standing bookkeeper session 在写入前中断，恢复后主 thread 只提供 package 标识和最近一次有效 artifact。请说明 bookkeeper 如何恢复上下文，以及如何避免漏读之前已经落盘的事实。",
+      "expected_output": "Rebuilds context from canonical package state, current stage rules, and the latest valid artifact, then asks for any still-missing conclusion instead of relying on stale chat memory or silently skipping prior state.",
+      "files": [],
+      "expectations": [
+        "Reads canonical package state, current stage rules, and the latest valid artifact during recovery.",
+        "Treats already persisted facts as the recovery source instead of stale subagent conversation memory.",
+        "Requests the main thread to supply any missing semantic conclusion or target scope.",
+        "Does not recreate a package state or silently claim that an unwitnessed write succeeded."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "一次更新同时要求记录 runtime state 的 Ticket 状态和 Progress 中的可读进度。请说明哪些动作必须通过现有 state CLI，哪些内容由 bookkeeper 物理写入，以及如何避免双写 runtime state。",
+      "expected_output": "Uses the existing impl_package_state.py semantic command for runtime state, writes the readable Progress artifact within package scope, and does not create or manually maintain a second runtime-state ledger.",
+      "files": [],
+      "expectations": [
+        "Uses the existing impl_package_state.py semantic command for the runtime state transition.",
+        "Writes the readable Progress projection through the package-bound bookkeeper.",
+        "Keeps one authoritative runtime-state writer and does not manually duplicate state in another ledger.",
+        "Validates that the state update and readable artifact remain consistent without changing the Gate or acceptance rules."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "bookkeeper 已定位正确的 Execution Record，但物理写入完成后 focused validation 失败；本次更新标记为‘依赖：是’。请说明回执、主 thread 的状态和后续恢复动作。",
+      "expected_output": "Reports the exact validation failure and any completed partial write, does not claim the update succeeded, keeps the dependent action blocked, and names the correction or recovery needed.",
+      "files": [],
+      "expectations": [
+        "Reports the first concrete validation failure and identifies any write that already occurred.",
+        "Does not return a successful receipt or let the main thread consume the update as complete.",
+        "Keeps the dependency=yes next action blocked until correction and validation succeed.",
+        "Names a concrete recovery or correction action without inventing a new coordination system."
+      ]
+    }
+  ]
+}
