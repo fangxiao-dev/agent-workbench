@@ -154,6 +154,23 @@ class TicketFirstMigrationTests(unittest.TestCase):
         self.assertEqual(result["preMigrationAnchor"], pre_anchor)
         self.assertEqual(result["warnings"], [])
 
+    def test_validator_is_an_explicit_read_only_script(self) -> None:
+        temp, package = self.make_candidate()
+        self.addCleanup(temp.cleanup)
+        state_path = package / ".impl-package/state.json"
+        before = state_path.read_bytes()
+        pre_anchor = git(package, "rev-parse", "HEAD")
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT_ROOT / "validate_ticket_first_migration.py"), "--package", str(package), "--pre-anchor", pre_anchor],
+            cwd=package,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+        self.assertTrue(json.loads(result.stdout)["valid"])
+        self.assertEqual(state_path.read_bytes(), before)
+
     def test_validator_rejects_missing_spec_and_publication_admission(self) -> None:
         for kwargs in ({"include_spec": False}, {"publication": None}, {"publication": "Draft"}):
             temp, package = self.make_candidate(**kwargs)

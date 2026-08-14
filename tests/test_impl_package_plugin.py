@@ -65,6 +65,36 @@ def test_plugin_exposes_the_migrated_flat_skill_set() -> None:
         assert f"`/impl-package:{name}`" in router
 
 
+def test_migration_validator_is_standalone_and_not_a_runtime_entrypoint() -> None:
+    migration_validator = PLUGIN / "scripts" / "validate_ticket_first_migration.py"
+    assert migration_validator.is_file()
+    assert not (PLUGIN / "skills" / "validate_ticket_first_migration").exists()
+
+    for manifest_path in (PLUGIN / ".codex-plugin" / "plugin.json", PLUGIN / ".claude-plugin" / "plugin.json"):
+        manifest = load_json(manifest_path)
+        assert manifest["skills"] == "./skills/"
+        assert "validate_ticket_first_migration.py" not in json.dumps(manifest)
+
+    runtime_sources = (
+        PLUGIN / "scripts" / "impl_package_state.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "command_groups.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "engine.py",
+    )
+    for source in runtime_sources:
+        text = source.read_text(encoding="utf-8")
+        assert "validate_ticket_first_migration" not in text
+        assert "validate_migration(" not in text
+
+    preflight = (PLUGIN / "skills" / "execution-preflight" / "SKILL.md").read_text(encoding="utf-8")
+    assert "validate_ticket_first_migration" not in preflight
+    linker = (ROOT / "scripts" / "link_skill.py").read_text(encoding="utf-8")
+    assert "validate_ticket_first_migration" not in linker
+
+    runbook = (PLUGIN / "references" / "ticket-first-migration-runbook.md").read_text(encoding="utf-8")
+    assert "scripts/validate_ticket_first_migration.py" in runbook
+    assert "普通 3.5 runtime 不会主动调用它" in runbook
+
+
 def test_skill_resource_paths_stay_inside_plugin() -> None:
     relative_resource = re.compile(
         r"(?<![\w/])((?:\.\./)*(?:references|assets|scripts|evals|sub-skills)/[A-Za-z0-9_.\-/]+)"

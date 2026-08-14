@@ -2,6 +2,8 @@
 
 3.5 是 Ticket-first 的唯一运行格式。新 runtime 不双读 3.4；3.4/Task package 只能先按 [迁移 Runbook](ticket-first-migration-runbook.md) 生成并验证 candidate。Git commit ID 是历史锚点。
 
+`scripts/validate_ticket_first_migration.py` 是一次性、只读、显式调用的迁移脚本，不是 3.5 runtime、`package validate` 或普通 preflight 的后备入口。它位于 plugin 的 `scripts/` 而非 `skills/`，不得被 host skill link 或普通 runtime 调用。
+
 ## 文件与事实源
 
 ```text

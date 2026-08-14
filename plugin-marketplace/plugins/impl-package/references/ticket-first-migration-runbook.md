@@ -1,6 +1,6 @@
 # Ticket-first 3.4 → 3.5 迁移 Runbook
 
-这是一次性、由 package 主 session 执行的迁移流程，不是 runtime 双读器，也不是通用迁移 CLI。执行前必须有 owner 授权并暂停同一 package 的其他 writer。
+这是一次性、由 package 主 session 执行的迁移流程，不是 runtime 双读器，也不是通用迁移 CLI。`validate_ticket_first_migration.py` 仅作为本流程中的显式、只读 admission check 使用；普通 3.5 runtime 不会主动调用它。执行前必须有 owner 授权并暂停同一 package 的其他 writer。
 
 ## 流程
 

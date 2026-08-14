@@ -1,8 +1,10 @@
-"""Read-only validator for a one-time 3.4 -> 3.5 package migration.
+"""Read-only, opt-in validator for a one-time 3.4 -> 3.5 package migration.
 
 The validator deliberately does not copy, move, commit, or edit a package.
 The package session owns staging and the single switch commit; this tool only
-decides whether the staged candidate satisfies the migration contract.
+decides whether the staged candidate satisfies the migration contract.  It is
+intentionally a standalone migration entry point: the 3.5 runtime and normal
+package preflight must not import or invoke it.
 """
 
 from __future__ import annotations
