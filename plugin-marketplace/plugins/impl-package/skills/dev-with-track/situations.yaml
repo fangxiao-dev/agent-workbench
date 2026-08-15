@@ -1,0 +1,926 @@
+version: 1
+stage: dev-with-track
+
+objects: [package, attempt, ticket, finding]
+phases: [record, readiness, investigate, route, implement, fix, verify, review, accept, rework, disposition, gate]
+
+allowed:
+  package: [record]
+  attempt: [record, readiness, verify, review, accept, rework, disposition, gate]
+  ticket: [record, readiness, investigate, route, implement, verify, review, accept, rework, disposition]
+  finding: [record, fix, review, disposition]
+
+priority:
+  # P0：fail-closed 与记录完整性；本组顺序严格有效。
+  - [attempt.gate.terminal-frozen, package.record.state-missing, package.record.projection-drift, attempt.record.anchor-mismatch, attempt.record.handoff-recovery-needed, attempt.record.handoff-target-corrected, attempt.record.session-resumed, attempt.record.checkpoint-missing, attempt.record.checkpoint-refresh, attempt.record.handoff-in-flight, ticket.record.evidence-unfiled, ticket.record.judgment-unfiled]
+  # P1-P5 是无序集合；下面的书写顺序不是层内位次。
+  # P1：attempt admission 与验证载体准入
+  - [attempt.readiness.worker-still-running, attempt.readiness.all-edges-held, attempt.readiness.multiple-ready-tickets, ticket.readiness.blocker-maybe-resolved, attempt.readiness.integration-carrier-unavailable]
+  # P2：消费 worker/reviewer 返回与当前 subject 的未完成动作
+  - [finding.fix.worker-envelope-invalid, ticket.implement.worker-incomplete-first, ticket.implement.worker-incomplete-second, ticket.implement.worker-blocked, ticket.investigate.no-carrier, ticket.investigate.evidence-gap, finding.fix.reviewer-returned, finding.review.closure-awaiting, attempt.review.reviewer-unavailable, ticket.review.awaiting-reviewer, ticket.review.required-trigger, finding.fix.main-session-discovered, finding.review.source-recheck-pending]
+  # P3：事实/合同/返工裁决与验证缺口
+  - [ticket.verify.contradictory-unresolved, ticket.verify.safety-invariant-unfalsified, attempt.review.comparison-head-unfixed, attempt.verify.integration-evidence-unavailable, ticket.rework.evidence-conflict, ticket.rework.revision-diverged, ticket.rework.revalidation-pending, ticket.disposition.retire-undecided, ticket.route.multiple-business-outcomes, ticket.route.sources-conflicting, ticket.route.sources-uniquely-decide, attempt.rework.contract-changed]
+  # P4：acceptance 与全局收口
+  - [ticket.accept.acceptance-edge-held, ticket.accept.release-edge-unchecked, ticket.accept.satisfiable, attempt.verify.manual-result-missing, attempt.accept.completion-claim-unaudited, attempt.review.terminal-coverage-incomplete, finding.disposition.grading-undecided, attempt.disposition.findings-triage-pending, attempt.accept.all-tickets-terminal, attempt.gate.durable-delta-missing, attempt.gate.missing, attempt.gate.verdict-undecided, attempt.gate.comparison-mismatch]
+  # P5：记录层卫生
+  - [package.record.intake-backlog]
+
+situations:
+  - slug: package.record.state-missing
+    basis: cli
+    when:
+      package.state_invalid: true
+    judgment: false
+    actions:
+      - id: package-validate
+        default: true
+        by: main-session
+        do: "impl_package_state.py --package <package> package validate"
+        effect: "校验现有 state"
+      - id: package-init
+        by: main-session
+        do: "impl_package_state.py --package <package> package init --attempt <attempt-id> --plan <repo-relative-plan>"
+        effect: "初始化缺失 state"
+    escape: true
+
+  - slug: package.record.projection-drift
+    basis: cli
+    when:
+      package.validate.projection_drift: true
+    judgment: false
+    actions:
+      - id: refresh-progress
+        default: true
+        by: main-session
+        do: "impl_package_state.py --package <package> package refresh-progress"
+        effect: "使 progress 与 state 对齐"
+    escape: true
+
+  - slug: attempt.record.session-resumed
+    basis: prose
+    when:
+      attempt.active_checkpoint_present: true
+      trail.actions_since_checkpoint: 0
+    judgment: false
+    actions:
+      - id: restore-checkpoint
+        default: true
+        by: main-session
+        do: "/impl-package:dev-with-track restore from active checkpoint"
+        effect: "不读取完整历史"
+    escape: true
+
+  - slug: attempt.gate.terminal-frozen
+    basis: cli
+    when:
+      gate.terminal: true
+    judgment: false
+    actions:
+      - id: fail-closed
+        default: true
+        by: main-session
+        do: "/impl-package:impl-planning create patch attempt after terminal gate"
+        effect: "不再推进当前 terminal attempt"
+    escape: true
+
+  - slug: attempt.readiness.multiple-ready-tickets
+    basis: prose
+    when:
+      attempt.ready_ticket_count: ">1"
+      attempt.in_flight: false
+    judgment: true
+    ask: "本轮应选择哪一个 ready Ticket"
+    actions:
+      - id: select-ready-ticket
+        by: main-session
+        do: "/impl-package:subagent-driven-development mode=implement worker=<selected-ticket>"
+        effect: "依据依赖、集成顺序与共享资源"
+    escape: true
+
+  - slug: attempt.readiness.all-edges-held
+    basis: cli
+    when:
+      attempt.ready_ticket_count: 0
+      attempt.has_pending_ticket: true
+      attempt.implementation_edges_held: true
+    judgment: false
+    actions:
+      - id: inspect-blocker
+        default: true
+        by: main-session
+        do: "impl_package_state.py --package <package> package validate; impl_package_state.py --package <package> ticket block <id> --expect PENDING --evidence <blocker-evidence>"
+        effect: "不得硬上 implementation 边"
+    escape: true
+
+  - slug: attempt.accept.all-tickets-terminal
+    basis: prose
+    when:
+      attempt.all_tickets_terminal: true
+    judgment: false
+    actions:
+      - id: audit-completion-claim
+        default: true
+        by: main-session
+        do: "/impl-package:verification-before-completion audit current Attempt"
+        effect: "全部 Ticket 为 SATISFIED 或 RETIRED 后开始全局收口"
+    escape: true
+
+  - slug: ticket.readiness.blocker-maybe-resolved
+    basis: prose
+    when:
+      ticket.state: BLOCKED
+      ticket.blocker_maybe_resolved: true
+    judgment: false
+    actions:
+      - id: reassess-blocker
+        default: true
+        by: main-session
+        do: "impl_package_state.py --package <package> ticket pending <id> --expect BLOCKED --revalidation-plan <plan>"
+        effect: "BLOCKED 不释放依赖"
+    escape: true
+
+  - slug: ticket.investigate.no-carrier
+    basis: prose
+    when:
+      ticket.state: PENDING
+      ticket.investigation_carrier_present: false
+      ticket.investigation_context_clear: true
+      evidence.count: 0
+    judgment: true
+    ask: "违约边界是否已经确认"
+    actions:
+      - id: dispatch-investigate
+        default: true
+        by: dispatch
+        do: "/impl-package:subagent-driven-development mode=investigate"
+        effect: "返回 EVIDENCE_SUFFICIENT 或 EVIDENCE_GAP"
+      - id: implement-direct
+        by: dispatch
+        do: "/impl-package:subagent-driven-development mode=implement"
+        requires_reason: true
+    escape: true
+
+  - slug: ticket.investigate.evidence-gap
+    basis: prose
+    when:
+      trail.last_outcome: EVIDENCE_GAP
+    judgment: false
+    actions:
+      - id: dispatch-followup-investigate
+        default: true
+        by: dispatch
+        do: "/impl-package:subagent-driven-development mode=investigate"
+        effect: "补取证，不进实现"
+    escape: true
+
+  - slug: ticket.route.multiple-business-outcomes
+    basis: prose
+    when: manual
+    manual_reason: "多个合理业务结果是语义判断，列出的机械输入没有能够裁决业务结果的来源"
+    judgment: true
+    ask: "多个合理业务结果应采用哪一个"
+    actions:
+      - id: request-owner-decision
+        by: main-session
+        do: "/impl-package:req-align request owner decision for competing outcomes"
+        effect: "没有结论前不派修复"
+    escape: true
+
+  - slug: ticket.route.sources-uniquely-decide
+    basis: prose
+    when:
+      evidence.sources_uniquely_decide: true
+    judgment: false
+    actions:
+      - id: implement-and-reverify
+        default: true
+        by: dispatch
+        do: "/impl-package:subagent-driven-development mode=implement"
+        effect: "按 implementation defect 修复并重验"
+    escape: true
+
+  - slug: ticket.route.sources-conflicting
+    basis: prose
+    when: manual
+    manual_reason: "来源是否缺失、含糊或冲突的边界不能由列出的来源机械裁决"
+    judgment: true
+    ask: "来源是否足以进入实现"
+    actions:
+      - id: return-to-req-align
+        by: main-session
+        do: "/impl-package:req-align update Spec ensemble for conflicting sources"
+        effect: "更新后再进入实现"
+    escape: true
+
+  - slug: ticket.review.awaiting-reviewer
+    basis: prose
+    when:
+      trail.last_outcome: DONE
+      ticket.review_required: true
+    judgment: false
+    actions:
+      - id: dispatch-reviewer
+        default: true
+        by: dispatch
+        do: "/impl-package:do-review scope=<checkpoint|closure>"
+        effect: "scope 必须显式为 checkpoint 或 closure"
+    escape: true
+
+  - slug: ticket.review.required-trigger
+    basis: prose
+    when:
+      ticket.review_trigger: true
+    judgment: false
+    actions:
+      - id: require-review
+        default: true
+        by: main-session
+        do: "/impl-package:subagent-driven-development mode=review review=required review_scope=<checkpoint|closure>"
+        effect: "scope 显式为 checkpoint 或 closure；非显然地选 none 时记 reason"
+    escape: true
+
+  - slug: ticket.record.evidence-unfiled
+    basis: prose
+    when:
+      trail.direct_evidence_returned: true
+      evidence.indexed: false
+    judgment: false
+    actions:
+      - id: file-evidence
+        default: true
+        by: main-session
+        do: "impl_package_state.py --package <package> evidence add <evidence-payload.json>"
+        effect: "必须带 timing"
+    escape: true
+
+  - slug: ticket.verify.safety-invariant-unfalsified
+    basis: prose
+    when:
+      ticket.safety_invariant_unfalsified: true
+    judgment: false
+    actions:
+      - id: verify-safety-invariant
+        default: true
+        by: dispatch
+        do: "/impl-package:subagent-driven-development mode=verify"
+        effect: "不得推迟到加固组"
+    escape: true
+
+  - slug: ticket.implement.worker-incomplete-first
+    basis: prose
+    when:
+      trail.last_outcome: INCOMPLETE
+      trail.incomplete_count: 1
+      trail.last_worker_mode: implement
+    judgment: false
+    actions:
+      - id: fresh-fallback
+        default: true
+        by: dispatch
+        do: "/impl-package:subagent-driven-development mode=implement fresh invocation (fallback=implement)"
+        effect: "允许一次 fresh fallback"
+    escape: true
+
+  - slug: ticket.implement.worker-incomplete-second
+    basis: prose
+    when:
+      trail.last_outcome: INCOMPLETE
+      trail.incomplete_count: 2
+      trail.last_worker_mode: implement
+    judgment: false
+    actions:
+      - id: normalize-blocked
+        default: true
+        by: main-session
+        do: "impl_package_state.py --package <package> ticket block <id> --expect PENDING --evidence <incomplete-evidence>"
+        effect: "停止第二次 INCOMPLETE 的 fallback"
+    escape: true
+
+  - slug: ticket.implement.worker-blocked
+    basis: prose
+    when:
+      trail.last_outcome: BLOCKED
+      trail.last_worker_mode: implement
+    judgment: false
+    actions:
+      - id: block-ticket
+        default: true
+        by: main-session
+        do: "impl_package_state.py --package <package> ticket block <id> --expect PENDING --evidence <blocker-evidence>"
+        effect: "不 fallback"
+      - id: escalate-owner
+        by: main-session
+        do: "/impl-package:dev-with-track escalate blocked Ticket to owner"
+        requires_reason: true
+    escape: true
+
+  - slug: ticket.accept.acceptance-edge-held
+    basis: cli
+    when:
+      evidence.count: ">0"
+      ticket.acceptance_edge_released: false
+    judgment: false
+    actions:
+      - id: continue-implementation
+        default: true
+        by: dispatch
+        do: "/impl-package:subagent-driven-development mode=implement"
+        effect: "可继续实施，不可 SATISFIED"
+    escape: true
+
+  - slug: ticket.verify.contradictory-unresolved
+    basis: cli
+    when:
+      evidence.contradictory_unresolved: true
+    judgment: true
+    ask: "矛盾证据应如何处置"
+    actions:
+      - id: resolve-contradiction
+        by: main-session
+        do: "impl_package_state.py --package <package> evidence invalidate --ticket <id> --claim <claim-id> --artifact <path> --invalidated-by <reason>"
+        effect: "处置后方可 satisfy"
+    escape: true
+
+  - slug: ticket.accept.satisfiable
+    basis: cli
+    when:
+      evidence.all_required_claims_supported: true
+      evidence.contradictory_unresolved: false
+      ticket.acceptance_edge_released: true
+      ticket.acceptance_revision_parseable: true
+    judgment: false
+    actions:
+      - id: ticket-satisfy
+        default: true
+        by: main-session
+        do: "impl_package_state.py --package <package> ticket satisfy <id> --expect PENDING --revision <commit> --environment <env>"
+        effect: "Ticket 进入 SATISFIED 并释放依赖"
+    escape: true
+
+  - slug: ticket.rework.evidence-conflict
+    basis: prose
+    when:
+      ticket.state: SATISFIED
+      evidence.new_claim_conflict: true
+    judgment: true
+    ask: "这条证据是证伪了原 claim，还是提出了新要求"
+    actions:
+      - id: invalidate-evidence
+        by: main-session
+        do: "impl_package_state.py --package <package> evidence invalidate --ticket <id> --claim <id> --artifact <path> --invalidated-by <reason>"
+        effect: "claim 失去支撑，不自动改 Ticket 状态"
+        requires_reason: true
+      - id: request-revalidation
+        by: main-session
+        do: "impl_package_state.py --package <package> ticket needs-revalidation <id> --expect SATISFIED --claim <id> --invalidated-by <reason>"
+        effect: "不释放依赖；下游 acceptance 边被卡；Progress 标 stale"
+        requires_reason: true
+      - id: record-new-finding
+        by: main-session
+        do: "Get-Content <finding-payload.json> -Raw | impl_package_state.py --package <package> recovery judgment"
+        effect: "不动本 Ticket"
+        requires_reason: true
+      - id: retire-superseded
+        by: main-session
+        do: "impl_package_state.py --package <package> ticket retire <id> --expect SATISFIED --disposition superseded --successor <successor-id> --evidence <path>"
+        effect: "successor 满足前不释放边"
+        requires_reason: true
+    escape: true
+
+  - slug: ticket.rework.revision-diverged
+    basis: cli
+    when:
+      git.acceptance_revision_diverged: true
+      git.head_advanced_since_last_trail: true
+    judgment: true
+    ask: "revision 分叉后应重新取证，还是确认原结论仍成立"
+    actions:
+      - id: re-investigate
+        by: dispatch
+        do: "/impl-package:subagent-driven-development mode=investigate"
+        effect: "重新取证"
+        requires_reason: true
+      - id: confirm-original-conclusion
+        by: main-session
+        do: "/impl-package:verification-before-completion recheck acceptance revision"
+        effect: "保留原结论"
+        requires_reason: true
+    escape: true
+
+  - slug: ticket.rework.revalidation-pending
+    basis: cli
+    when:
+      ticket.state: NEEDS-REVALIDATION
+    judgment: false
+    actions:
+      - id: run-revalidation
+        default: true
+        by: dispatch
+        do: "/impl-package:subagent-driven-development mode=verify"
+        effect: "走重验计划，ticket pending 后重新 satisfy"
+    escape: true
+
+  - slug: attempt.rework.contract-changed
+    basis: prose
+    when:
+      git.contract_changed_since_last_trail: true
+    judgment: false
+    actions:
+      - id: record-affected-subset
+        default: true
+        by: main-session
+        do: "Get-Content <er-payload.json> -Raw | impl_package_state.py --package <package> recovery judgment"
+        effect: "沿用 initial bundle approval，保留未受影响 evidence"
+    escape: true
+
+  - slug: ticket.disposition.retire-undecided
+    basis: cli
+    when:
+      ticket.no_longer_needed: true
+    judgment: true
+    ask: "不再需要完成的 Ticket 应 waived 还是 superseded"
+    actions:
+      - id: retire-waived
+        by: main-session
+        do: "impl_package_state.py --package <package> ticket retire <id> --expect <state> --disposition waived --evidence <path>"
+        effect: "Ticket 归档为 waived"
+        requires_reason: true
+      - id: retire-superseded-ticket
+        by: main-session
+        do: "impl_package_state.py --package <package> ticket retire <id> --expect <state> --disposition superseded --successor <successor-id> --evidence <path>"
+        effect: "必须有 successor，successor 满足前不释放边"
+        requires_reason: true
+    escape: true
+
+  - slug: finding.fix.reviewer-returned
+    basis: prose
+    when:
+      trail.last_outcome: FINDING
+      trail.finding_source: reviewer
+    judgment: false
+    actions:
+      - id: dispatch-fresh-fixer
+        default: true
+        by: dispatch
+        do: "/impl-package:subagent-driven-development mode=fix fresh invocation"
+        effect: "不得复用发现它的进程；修复后由同 scope reviewer 重审"
+    escape: true
+
+  - slug: finding.review.source-recheck-pending
+    basis: prose
+    when:
+      finding.review_track: C
+      finding.source_recheck_pending: true
+    judgment: false
+    actions:
+      - id: dispatch-source-recheck
+        default: true
+        by: dispatch
+        do: "/impl-package:do-review source-recheck same ReviewRun"
+        effect: "先消费同一 ReviewRun 内的一次性独立 source recheck"
+    escape: true
+
+  - slug: finding.fix.main-session-discovered
+    basis: prose
+    when:
+      trail.finding_source: main-session
+    judgment: false
+    actions:
+      - id: dispatch-direct-fixer
+        default: true
+        by: dispatch
+        do: "/impl-package:subagent-driven-development mode=fix fresh invocation"
+        effect: "可直接进 fresh fixer，不必先过 reviewer"
+    escape: true
+
+  - slug: finding.disposition.grading-undecided
+    basis: prose
+    when:
+      finding.grading_pending: true
+    judgment: true
+    ask: "finding 应定为 P1/P2 还是 editorial"
+    actions:
+      - id: grade-blocking
+        by: main-session
+        do: "/impl-package:dev-with-track grade finding as P1/P2"
+        effect: "阻断 Gate，并需 closure verify"
+        requires_reason: true
+      - id: grade-editorial
+        by: main-session
+        do: "/impl-package:dev-with-track grade finding as editorial"
+        effect: "不阻断 Gate"
+        requires_reason: true
+    escape: true
+
+  - slug: attempt.disposition.findings-triage-pending
+    basis: prose
+    when:
+      findings.triage_pending: true
+      attempt.near_terminal_gate: true
+    judgment: true
+    ask: "finding 应分流到 Decision、Spec、Execution Record 还是 Durable Delta"
+    actions:
+      - id: route-to-decision
+        by: main-session
+        do: "/impl-package:req-align record Decision rationale in Decision"
+        requires_reason: true
+      - id: route-to-spec
+        by: main-session
+        do: "/impl-package:req-align record normative behavior in Spec"
+        requires_reason: true
+      - id: route-to-execution-record
+        by: main-session
+        do: "Get-Content <er-payload.json> -Raw | impl_package_state.py --package <package> recovery judgment"
+        requires_reason: true
+      - id: route-to-durable-delta
+        by: main-session
+        do: "/impl-package:backfill-stable-docs record Durable Delta and _pending.md pointer"
+        requires_reason: true
+    escape: true
+
+  - slug: attempt.verify.manual-result-missing
+    basis: prose
+    when:
+      attempt.manual_verification_owner: true
+      attempt.manual_verification_result_present: false
+    judgment: false
+    actions:
+      - id: obtain-manual-result
+        default: true
+        by: main-session
+        do: "/impl-package:dev-with-track use manual-acceptance-readiness template and record result"
+        effect: "取得结果 evidence"
+    escape: true
+
+  - slug: attempt.accept.completion-claim-unaudited
+    basis: prose
+    when:
+      attempt.completion_claim_pending: true
+    judgment: false
+    actions:
+      - id: audit-before-completion
+        default: true
+        by: main-session
+        do: "/impl-package:verification-before-completion audit current Attempt"
+        effect: "完成声明前先审计证据"
+    escape: true
+
+  - slug: attempt.review.terminal-coverage-incomplete
+    basis: prose
+    when:
+      attempt.terminal_coverage_complete: false
+    judgment: false
+    actions:
+      - id: dispatch-terminal-review
+        default: true
+        by: dispatch
+        do: "/impl-package:do-review scope=closure terminal-final"
+        effect: "补齐 terminal-final coverage"
+    escape: true
+
+  - slug: ticket.accept.release-edge-unchecked
+    basis: prose
+    when:
+      ticket.acceptance_conditions_satisfied: true
+      ticket.release_edge_present: true
+      ticket.release_edge_rechecked: false
+    judgment: false
+    actions:
+      - id: recheck-release-edge
+        default: true
+        by: main-session
+        do: "/impl-package:dev-with-track recheck Ticket release edge before Gate"
+        effect: "确认 release 边已复核"
+    escape: true
+
+  - slug: attempt.gate.durable-delta-missing
+    basis: cli
+    when:
+      gate.stage7_complete: false
+      attempt.terminal_gate_pending: true
+    judgment: false
+    actions:
+      - id: record-durable-delta
+        default: true
+        by: main-session
+        do: "impl_package_state.py --package <package> gate pass --comparison-commit <commit> --reason <reason> --durable-delta <path>"
+        effect: "完成 Gate 前 Stage 7"
+    escape: true
+
+  - slug: attempt.gate.missing
+    basis: prose
+    when:
+      gate.present: false
+      attempt.terminal_gate_pending: true
+    judgment: true
+    ask: "所有 Ticket 已收口但 Gate 尚未写入，应判 pass、blocked、fail 还是 defer"
+    actions:
+      - id: write-gate-pass
+        by: main-session
+        do: "impl_package_state.py --package <package> gate pass --comparison-commit <commit> --reason <reason>"
+        requires_reason: true
+      - id: write-gate-blocked
+        by: main-session
+        do: "impl_package_state.py --package <package> gate blocked --comparison-commit <commit> --reason <reason>"
+        requires_reason: true
+      - id: write-gate-fail
+        by: main-session
+        do: "impl_package_state.py --package <package> gate fail --comparison-commit <commit> --reason <reason>"
+        requires_reason: true
+      - id: write-gate-defer
+        by: main-session
+        do: "impl_package_state.py --package <package> gate defer --comparison-commit <commit> --reason <pending-reason>"
+        requires_reason: true
+    escape: true
+
+  - slug: attempt.gate.verdict-undecided
+    basis: prose
+    when:
+      gate.present: true
+      gate.verdict: undecided
+    judgment: true
+    ask: "Gate verdict 应为 pass、blocked、fail 还是 defer"
+    actions:
+      - id: gate-pass
+        by: main-session
+        do: "impl_package_state.py --package <package> gate pass --comparison-commit <commit> --reason <reason>"
+        requires_reason: true
+      - id: gate-blocked
+        by: main-session
+        do: "impl_package_state.py --package <package> gate blocked --comparison-commit <commit> --reason <reason>"
+        requires_reason: true
+      - id: gate-fail
+        by: main-session
+        do: "impl_package_state.py --package <package> gate fail --comparison-commit <commit> --reason <reason>"
+        requires_reason: true
+      - id: gate-defer
+        by: main-session
+        do: "impl_package_state.py --package <package> gate defer --comparison-commit <commit> --reason <pending-reason>"
+        requires_reason: true
+    escape: true
+
+  - slug: attempt.gate.comparison-mismatch
+    basis: cli
+    when:
+      attempt.completion_claim_pending: true
+      gate.present: false
+      git.comparison_revision_matches_acceptance: false
+    judgment: false
+    actions:
+      - id: align-comparison-commit
+        default: true
+        by: main-session
+        do: "impl_package_state.py --package <package> gate pass --comparison-commit <acceptance-revision> --reason <reason>"
+        effect: "comparison commit 必须等于 acceptance revision"
+    escape: true
+
+  - slug: attempt.record.checkpoint-missing
+    basis: prose
+    when:
+      attempt.handoff_or_long_task: true
+      attempt.active_checkpoint_present: false
+    judgment: false
+    actions:
+      - id: write-checkpoint
+        default: true
+        by: main-session
+        do: "impl_package_state.py --package <package> recovery checkpoint --subject attempt --next <next-action>"
+        effect: "durable 写入先落盘再输出叙述"
+    escape: true
+
+  - slug: package.record.intake-backlog
+    basis: prose
+    when:
+      intake.has_backlog: true
+    judgment: false
+    actions:
+      - id: drain-intake
+        default: true
+        by: main-session
+        do: "/impl-package:standing-bookkeeper drain intake queue"
+        effect: "清空待落账队列"
+    escape: true
+
+  - slug: attempt.record.handoff-in-flight
+    basis: prose
+    when:
+      trail.handoff_in_flight: true
+    judgment: false
+    actions:
+      - id: continue-handoff
+        default: true
+        by: main-session
+        do: "$handoff-to-new-session; recovery checkpoint --subject attempt --next <next-action>"
+        effect: "校验 handoff 上下文后发送 continuation"
+      - id: keep-handoff-pending
+        by: main-session
+        do: "recovery checkpoint --subject attempt --next <next-action> --blocker handoff-pending"
+        requires_reason: true
+    escape: true
+
+  - slug: attempt.record.anchor-mismatch
+    basis: prose
+    when:
+      trail.anchor_mismatch: true
+    judgment: false
+    actions:
+      - id: retry-anchor-check
+        default: true
+        by: main-session
+        do: "$handoff-to-new-session (rerun anchor verification with normalized path and HEAD)"
+        effect: "anchor 通过后才允许 continuation"
+      - id: stop-handoff-on-anchor-fail
+        by: main-session
+        do: "recovery checkpoint --subject attempt --next rebuild handoff anchor"
+        requires_reason: true
+    escape: true
+
+  - slug: attempt.record.handoff-recovery-needed
+    basis: prose
+    when:
+      trail.handoff_recovery_needed: true
+    judgment: false
+    actions:
+      - id: retry-handoff-bootstrap
+        default: true
+        by: main-session
+        do: "$handoff-to-new-session (one controlled bootstrap retry)"
+        effect: "停止重复创建并保留失败上下文"
+      - id: escalate-handoff-bootstrap
+        by: main-session
+        do: "recovery checkpoint --subject attempt --next owner handoff decision"
+        requires_reason: true
+    escape: true
+
+  - slug: attempt.record.handoff-target-corrected
+    basis: prose
+    when:
+      trail.handoff_target_corrected: true
+    judgment: false
+    actions:
+      - id: resend-corrected-handoff
+        default: true
+        by: main-session
+        do: "$handoff-to-new-session (use corrected target and order)"
+        effect: "以 corrected target/order 重新发送 continuation"
+      - id: cancel-corrected-handoff
+        by: main-session
+        do: "recovery checkpoint --subject attempt --next wait for owner-selected handoff target"
+        requires_reason: true
+    escape: true
+
+  - slug: attempt.record.checkpoint-refresh
+    basis: prose
+    when:
+      attempt.active_checkpoint_present: true
+      trail.checkpoint_refresh_needed: true
+    judgment: false
+    actions:
+      - id: refresh-checkpoint
+        default: true
+        by: main-session
+        do: "impl_package_state.py --package <package> recovery checkpoint --subject attempt --next <next-action>"
+        effect: "刷新 active checkpoint 的下一动作与证据"
+      - id: record-checkpoint-race
+        by: main-session
+        do: "Get-Content <er-payload.json> -Raw | impl_package_state.py --package <package> recovery judgment"
+        requires_reason: true
+    escape: true
+
+  - slug: ticket.record.judgment-unfiled
+    basis: prose
+    when:
+      trail.judgment_unfiled: true
+    judgment: false
+    actions:
+      - id: file-judgment
+        default: true
+        by: main-session
+        do: "Get-Content <er-payload.json> -Raw | impl_package_state.py --package <package> recovery judgment"
+        effect: "把 judgment、subject、claim 边界和结果落入 Execution Record"
+      - id: mark-judgment-pending
+        by: main-session
+        do: "Get-Content <er-payload.json> -Raw | impl_package_state.py --package <package> recovery judgment"
+        requires_reason: true
+    escape: true
+
+  - slug: finding.review.closure-awaiting
+    basis: prose
+    when:
+      finding.closure_review_pending: true
+    judgment: false
+    actions:
+      - id: dispatch-closure-review
+        default: true
+        by: dispatch
+        do: "/impl-package:do-review scope=closure subject=<finding-id>"
+        effect: "由同 scope closure reviewer 关闭 finding"
+      - id: direct-fix-then-review
+        by: main-session
+        do: "/impl-package:subagent-driven-development mode=fix fresh invocation; /impl-package:do-review scope=closure"
+        requires_reason: true
+    escape: true
+
+  - slug: finding.fix.worker-envelope-invalid
+    basis: prose
+    when:
+      trail.last_worker_mode: fix
+      trail.envelope_valid: false
+    judgment: false
+    actions:
+      - id: fresh-fix-invalid-envelope
+        default: true
+        by: dispatch
+        do: "/impl-package:subagent-driven-development mode=fix fresh invocation"
+        effect: "不采信无效 envelope，检查 diff 后重新派发"
+      - id: direct-verify-invalid-envelope
+        by: main-session
+        do: "/impl-package:verification-before-completion audit fixer diff; /impl-package:do-review scope=closure"
+        requires_reason: true
+    escape: true
+
+  - slug: attempt.review.reviewer-unavailable
+    basis: prose
+    when:
+      trail.reviewer_unavailable: true
+    judgment: false
+    actions:
+      - id: reopen-fresh-review
+        default: true
+        by: dispatch
+        do: "/impl-package:do-review close invalid ReviewRun; /impl-package:do-review fresh review"
+        effect: "关闭不可采信的 ReviewRun 并重开 fresh review"
+      - id: hold-review-uncertain
+        by: main-session
+        do: "recovery checkpoint --subject attempt --next await fresh reviewer"
+        requires_reason: true
+    escape: true
+
+  - slug: attempt.verify.integration-evidence-unavailable
+    basis: prose
+    when:
+      attempt.integration_evidence_available: false
+    judgment: false
+    actions:
+      - id: request-approved-evidence-carrier
+        default: true
+        by: main-session
+        do: "先查本仓库是否有预置的环境启动能力（例如名为 `start-env` 一类的 skill 或脚本）并调用它；环境配置在主工作区执行，不在 worktree 内；禁止修改配置文件或连接远程库。"
+        effect: "保留 lower-layer evidence，acceptance 保持 held"
+      - id: defer-integration-acceptance
+        by: main-session
+        do: "impl_package_state.py --package <package> gate defer --comparison-commit <commit> --reason integration-evidence-unavailable"
+        requires_reason: true
+    escape: true
+
+  - slug: attempt.readiness.integration-carrier-unavailable
+    basis: prose
+    when:
+      attempt.integration_carrier_available: false
+    judgment: false
+    actions:
+      - id: switch-approved-local-carrier
+        default: true
+        by: main-session
+        do: "先查本仓库是否有预置的环境启动能力（例如名为 `start-env` 一类的 skill 或脚本）并调用它；环境配置在主工作区执行，不在 worktree 内；禁止修改配置文件或连接远程库。"
+        effect: "禁止修改配置文件或连接远程库"
+      - id: keep-carrier-blocked
+        by: main-session
+        do: "recovery checkpoint --subject attempt --next provide approved local carrier"
+        requires_reason: true
+    escape: true
+
+  - slug: attempt.review.comparison-head-unfixed
+    basis: prose
+    when:
+      git.comparison_head_fixed: false
+    judgment: false
+    actions:
+      - id: reopen-review-at-immutable-head
+        default: true
+        by: dispatch
+        do: "/impl-package:do-review reopen with immutable comparison head=<commit>"
+        effect: "隔离 protected docs 后以新 head 重开 review"
+      - id: defer-unfixed-comparison-head
+        by: main-session
+        do: "impl_package_state.py --package <package> gate defer --comparison-commit <commit> --reason comparison-head-not-fixed"
+        requires_reason: true
+    escape: true
+
+  - slug: attempt.readiness.worker-still-running
+    basis: prose
+    when:
+      trail.decision_without_result: true
+    judgment: false
+    actions:
+      - id: wait-for-worker-result
+        default: true
+        by: main-session
+        do: "wait_threads <worker-session> until matching result"
+        effect: "等待 worker 返回，不另起动作"
+      - id: interrupt-worker-with-reason
+        by: main-session
+        do: "/impl-package:subagent-driven-development interrupt worker reason=<reason>"
+        requires_reason: true
+        effect: "仅在写明 reason 后允许打断"
+    escape: true
