@@ -1,0 +1,85 @@
+{
+  "skill_name": "plain-language",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "请用说人话的方式解释：为什么单元测试通过了，功能仍然可能不能发布？这是第一次回答，不要先讲你的工作流程。",
+      "expected_output": "直接给出一次可读懂的回答，先说结论，再用具体条件说明单元测试与发布验证的边界。",
+      "files": [],
+      "expectations": [
+        "直接回答问题，不输出术语扫描表或 skill 工作流。",
+        "说明单元测试只能证明其覆盖范围内的行为，不能代替集成、真实环境或发布门禁。",
+        "保留必要技术词，并用上下文解释其作用。",
+        "当前上下文首次加载 skill 时读取 plain-language-examples；已加载则复用；会话类不读取 document-workflow。"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "上一段回答是：‘当前 implementation phase 已完成，但 production readiness 仍受外部 smoke gate 约束；因此只能声明 locally verified，不能声明 release-ready。’我没看懂，请说人话重述。不要增加新的事实。",
+      "expected_output": "用更直接的中文重述同一判断，保留‘本地验证已通过、真实环境检查未通过前不能发布’的条件和不确定边界。",
+      "files": [],
+      "expectations": [
+        "保留原回答的结论、条件和语义强度。",
+        "不增加新的测试、系统或发布事实。",
+        "不把重述变成术语候选表。",
+        "复用已加载的 plain-language-examples，不重复读取；会话类不读取 document-workflow 文档修改指导。"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "请把输入文档改得更容易理解。这是首次提出修改，请先按文档流程分析并给出当前确认批次。",
+      "expected_output": "说明目标读者和原意，给出最多 20 项的确认批次，然后暂停；输入文件保持不变。",
+      "files": [
+        "evals/files/rewrite-target.md"
+      ],
+      "expectations": [
+        "识别 session exchange、Gate Ledger、environment identity 和同一 snapshot 的不同处理边界。",
+        "保留 session、identity 等必要 token，并改写周围主体和动作。",
+        "把同一 snapshot 识别为可能改变关闭条件的决定项。",
+        "在用户确认前不修改输入文件。"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "上一轮已经确认以下改写：把 session exchange 改成‘从 session 解析并重验当前身份’，把 Gate Ledger 改成‘验收状态记录’，把 environment identity 改成‘环境 identity 与实际测试资源绑定’；保留‘四项必须在同一 snapshot 验证’，因为 Owner 已确认这是关闭条件。请把输入复制到输出目录后 apply，并报告验证结果。",
+      "expected_output": "在输出副本中应用已确认表达，保留同一 snapshot 的合同条件，并报告残留、链接和 diff 范围验证。",
+      "files": [
+        "evals/files/rewrite-target.md"
+      ],
+      "expectations": [
+        "只修改已确认的三个普通语言项。",
+        "保留 session、identity、snapshot token 及同一 snapshot 的关闭条件。",
+        "不修改原始 fixture，只在指定输出目录产生改写副本。",
+        "报告当前批次的 apply 数量和验证结果。"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "扫描输入文档中的难懂表达并提出白话化方向，但不要修改文件，也不要替业务 Owner 选择产品行为。",
+      "expected_output": "识别文字背后的验收合同，给出确认批次但不修改文件，也不把合同变化伪装成普通文案修改。",
+      "files": [
+        "evals/files/contract-hidden-in-wording.md"
+      ],
+      "expectations": [
+        "把同一 snapshot 识别为涉及验收或收口合同的决定项。",
+        "说明删除或弱化同一会改变四项汇合验收和关闭条件。",
+        "不默认建议改成各自独立验收，也不替业务 Owner 作出该决定。",
+        "将 environment identity 归入保留 token 并说明。"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "只检查输入文档的正文、标题和文件名，找出自创表达、中文硬译和中英混杂表达；输出问题清单，不修改文件。",
+      "expected_output": "给出覆盖正文、标题和文件名的确认批次，并说明文件改名需要同步更新链接；输入文件保持不变。",
+      "files": [
+        "evals/files/chinese-calque-package.md"
+      ],
+      "expectations": [
+        "识别参考接入、证据接缝、权威清理等中文硬译或自创表达。",
+        "识别 reference-adoption-design-input.md 文件名，并指出若改名需同步更新 README 链接。",
+        "不把已定义的 Actor Context 当成必须直接替换的问题。",
+        "总数不超过 20 个，且不修改输入文件。"
+      ]
+    }
+  ]
+}

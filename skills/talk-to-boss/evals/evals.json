@@ -3,68 +3,74 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "把这个任务进度写给老板看：P1 service guard fixed，service/action/integration tests pass，i18n pass，Chrome UI verification 和 Lark smoke pending，final review pending。不要写工程流水账。",
-      "expected_output": "A Chinese stakeholder status grouped by functional slices, with an overall judgment, spec-style bullets, and pending acceptance gates.",
+      "prompt": "把这些已确认事实组织成可转发状态：实现和本地测试已通过；真实 Chrome 验收、Test Env 写入 smoke、final review 尚未执行；owning workflow 给出的准确状态是 implemented, not closed。不要重新判断状态。",
+      "expected_output": "首段直接复述 implemented, not closed，再按必要主题组织已确认事实与剩余动作，不重新裁决 closure。",
       "files": [],
       "expectations": [
-        "The output starts with or includes an overall judgment explaining that local code/tests are done but the requirement is not closed.",
-        "The top-level progress sections are functional slices, not service/action/i18n/test/review buckets.",
-        "Each completed behavior bullet includes an actor or system, a condition or scope, an action, and an observable result or impact.",
-        "Chrome UI verification, Lark smoke, and final review are listed as remaining acceptance gates with a reason when they were planned but not run.",
-        "The output does not include unrelated boilerplate checks such as Lexware or email when they are not part of the prompt.",
-        "Raw commands, file paths, and agent chronology are omitted unless needed as evidence."
+        "第一段可以独立阅读，并直接说明 implemented, not closed。",
+        "保持 owning workflow 给出的状态，不升级为 closed，也不降级为未实现。",
+        "已确认事实与剩余动作分层清楚，技术证据位于结论之后。",
+        "不添加输入中没有出现的外部系统、检查或风险。"
       ]
     },
     {
       "id": 2,
-      "prompt": "这个状态太技术了，重写：改了 Inventory Item service.ts，补了 service test，action test，integration test；现在 linked Product Components 时不能改 packaging/measurement，只改 threshold 可以；Product SKU 不 fallback supplier code；Derived Products 从 Product Components 读；浏览器和 Lark 还没验。",
-      "expected_output": "A boss-readable Chinese update organized by Inventory Item threshold, packaging/measurement protection, Product SKU explicit rule, and Derived Products visibility.",
+      "prompt": "结构化解释给产品经理：feature flag 不是权限系统。关键事实：flag 决定功能是否暴露；权限决定用户是否有权操作；两者可能同时生效。请先回答，再解释区别和实际影响。",
+      "expected_output": "先直接说明 feature flag 不能代替权限，再解释两个概念及共同生效时的影响。",
       "files": [],
       "expectations": [
-        "The answer uses functional slice headings such as threshold management, packaging/measurement protection, Product SKU explicit rule, and linked products visibility.",
-        "The packaging/measurement protection slice states that an Admin cannot change those definitions when the Inventory Item is referenced by active Product Components, and explains the protective result.",
-        "The threshold slice states that threshold-only updates remain allowed even when the item is referenced.",
-        "The Product SKU slice states that missing explicit SKU no longer falls back to Supplier Product Code.",
-        "The answer separates implemented/local-tested behavior from browser and Lark validation still missing, and gives the reason those planned validations are not yet complete."
+        "第一段直接回答 feature flag 不能代替权限系统。",
+        "分别解释功能暴露与操作授权，不把两个概念混在一起。",
+        "说明两者可以同时生效及其实际影响。",
+        "内容按结论、概念、影响组织，而不是写成技术流水账。"
       ]
     },
     {
       "id": 3,
-      "prompt": "按功能 slice 汇报，不要按 T1/T2/T3。背景：订单审批退回规则已经实现，本地集成测试过了；当财务退回时采购员可以重新提交；当订单已同步 ERP 后不能直接改价格；邮件通知还没真实发信 smoke；最终 reviewer 没看。",
-      "expected_output": "A concise Chinese functional-slice report using approval resubmission, ERP-synced price protection, and notification acceptance as product slices.",
+      "prompt": "帮我比较三个已经确定的部署选项：A 最快但无回滚；B 需要十分钟但可一键回滚；C 需要停机窗口且可回滚。只比较速度、回滚和停机要求，不替我选。",
+      "expected_output": "使用紧凑表格逐项比较三个选项，只覆盖给定维度，并明确不替用户作选择。",
       "files": [],
       "expectations": [
-        "The output does not use T1/T2/T3 or implementation layer headings.",
-        "The approval slice states who can resubmit under the finance-rejected condition and what result follows.",
-        "The ERP price protection slice states who cannot change price after ERP sync and why.",
-        "The notification slice or remaining gates clearly says real email smoke is still pending and why.",
-        "The final review gap is included as a closure blocker rather than hidden in a generic risk note."
+        "使用表格或同等紧凑结构逐项比较 A、B、C。",
+        "只比较速度、回滚和停机要求。",
+        "不添加成本、安全或其他未提供维度。",
+        "不替用户选择方案。"
       ]
     },
     {
       "id": 4,
-      "prompt": "给我一个很短的老板版进度：代码都写完了，测试也过了，但生产不能碰，Test Env 的 Lark 写入还没跑，Chrome 页面验收被中断。需求到底算不算完成？",
-      "expected_output": "A short Chinese answer that directly says the requirement is not closed, then summarizes completed behavior and remaining acceptance gates.",
+      "prompt": "一句话回答：我们今天能发布吗？已确定结论：不能，因为生产证书尚未签发。",
+      "expected_output": "用一句话直接回答不能发布，并给出唯一原因，不增加标题或模板。",
       "files": [],
       "expectations": [
-        "The answer directly states that the requirement should not be called complete or closed yet.",
-        "It distinguishes code/test completion from real-environment acceptance.",
-        "It names Chrome UI verification and Test Environment Lark write/read smoke as remaining gates with the concrete reason they are still open.",
-        "It respects the production boundary by not suggesting production mutation.",
-        "It stays concise and boss-readable.",
-        "It omits Test-case gap judgment if no abnormal test-case gap is stated."
+        "答案只有一句话或等价的极短表达。",
+        "直接说明今天不能发布。",
+        "只使用生产证书尚未签发这一原因。",
+        "不添加标题、列表或下一步模板。"
       ]
     },
     {
       "id": 5,
-      "prompt": "写一个最终进度，任务只涉及纯前端表格列宽调整：实现了，Chrome 看过了，单测不涉及。不要给我套 Not run 模板，也不要提 Lark/Lexware/email。",
-      "expected_output": "A concise stakeholder status that reports the front-end UI slice as complete and omits irrelevant not-run and test-case gap sections.",
+      "prompt": "这段话太散，重组但不要改事实：我们改了三个文件；用户现在可以批量导出；导出最多 500 条；超过 500 条会提示缩小范围；本地集成测试通过；真实浏览器还没验。用户最关心能不能用和有什么限制。",
+      "expected_output": "先回答批量导出已经实现及其 500 条限制，再给验证边界；文件数量不作为主结构。",
       "files": [],
       "expectations": [
-        "The answer does not mention Lark, Lexware, email, public deployment, or other unrelated external checks.",
-        "The answer does not include a separate Not run or Why not template section.",
-        "The answer does not include Test-case gap judgment when no abnormal gap is present.",
-        "The answer still states the relevant functional UI behavior and Chrome validation in boss-readable language."
+        "首段先说明用户可以批量导出，以及最多 500 条的限制。",
+        "说明超过 500 条时系统会提示缩小范围。",
+        "区分本地集成测试通过与真实浏览器尚未验证。",
+        "不按三个文件或实现流水账组织答案。"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "给我一个确定建议：缓存应该设 5 分钟还是 30 分钟？现有信息只有两个候选时长，没有流量、数据新鲜度要求或失效成本。请结构化回答，不要猜。",
+      "expected_output": "直接说明目前不能确定，列出阻止判断的关键信息，并给出最小下一步，不擅自选择时长。",
+      "files": [],
+      "expectations": [
+        "第一段直接说明现有信息不足以确定 5 分钟或 30 分钟。",
+        "指出流量、数据新鲜度和失效成本是缺失事实。",
+        "不擅自选择任一时长，也不编造数据。",
+        "给出收集缺失事实这一最小下一步。"
       ]
     }
   ]

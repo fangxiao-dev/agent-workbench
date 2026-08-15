@@ -1,159 +1,43 @@
 ---
 name: talk-to-boss
-description: Use when reporting task status, completion, audit/backfill/apply progress, remaining work, merge readiness, final delivery, or multi-worktree sequencing to a decision-maker or stakeholder; also when a user says a status is too technical, incomplete, or misleading.
+description: 当用户要求结构化回答、先给结论、老板版、决策摘要、可转发版本，或指出回答太技术、太散、重点不清楚时使用。只组织已经确定的事实和结论，不替业务流程判断状态、验收、closure 或下一项专业决策。
 ---
 
-# Talk To Boss
+# 结构化答案
 
-Turn implementation progress into a boss-readable functional status. The deliverable is not a work log. It is a clear statement of what product behavior is now supported, what remains unproven, and whether the requirement can be called done.
+把已经确定的事实和结论组织成读者能够快速理解、判断和行动的答案。这个 skill 只负责信息顺序与呈现结构；内容真值由提供事实的用户、业务 skill 或权威材料负责。
 
-Use Chinese by default when the user writes Chinese. Keep product vocabulary such as `Inventory Item`, `Product SKU`, `threshold`, `Lark`, `smoke`, and `review` when those are the domain terms.
+## 输入边界
 
-## 决策者首段合同
+- 先识别用户真正要回答的问题，以及上下文中已经确定的结论、关键概念、证据和下一动作。
+- 状态、验收或 closure 由 owning workflow 给出；使用它的准确结论，不升级、不降级，也不从缺失证据自行补造状态。
+- 关键事实不足时，直接说明缺少什么，以及缺口为什么阻止确定回答。结构化不能替代事实判断。
 
-决策者首先需要判断整体状态，而不是重建执行过程。回复的第一段必须可以脱离后文独立阅读，并明确回答：
+## 主路径
 
-- 总范围是什么。
-- 哪个阶段已经完成。
-- 还剩什么以及数量。
-- 整体现在能否称为 completed / closed。
-- 当前需要 owner 做什么决定；没有待决策时也要明确说明。
+1. **直接回答**：第一段独立回答用户的问题。读者只看这一段，也能知道当前结论及其最重要的限制。
+2. **解释关键概念**：只解释理解或判断该结论所必需的概念、边界或区别；概念服务于当前决定，不写成背景百科。
+3. **补充必要细节**：把证据、影响、选项和下一动作放在对应结论之后。技术材料用于支撑结论，不取代结论。
+4. **选择最小结构**：
+   - 一句话或一小段能够说清时，直接短答。
+   - 存在多个独立主题时，使用自解释的小标题或列表。
+   - 三项以上需要逐项比较、映射或追踪时，使用紧凑表格。
+   - 只有真实存在后续动作时，才增加“下一步”。
+5. **删除空壳**：省略空章节、重复总结、内部编号、执行流水账和与问题无关的模板字段。
 
-当任务有可计数对象时，在首段对齐总量、已处理量、待处理量和独立 pending 数量。技术实现、测试、文件、agent、worktree 和命令不得出现在这个结论之前。
+## 结构原则
 
-推荐句式：`总范围为 X；Y 阶段已完成；还剩 Z；完成 Z 后整体才算 closed；当前需要 owner 决定 Q。`
+- 按读者要理解或决定的主题组织，不按文件、代码层、测试类型、agent 或工具组织。
+- 每个段落只承担一个作用：结论、解释、证据、影响或行动。
+- 先写主张，再给支持它的证据；先写用户影响，再给实现细节。
+- 用户指定格式、长度或受众时，以用户要求为准，不强制套用固定标题。
 
-## 阶段词不能混称
+## 完成条件
 
-所有“完成”都必须带对象和阶段。区分 `audit / scan`、`extract`、`apply / implementation`、`verify`、`merge`、`release`；上游阶段完成不能被表述为整个任务完成。
+交付前检查：
 
-例如：
-
-- 错误：`backfill 已完成，报告里还有 22 条候选。`
-- 正确：`63 篇历史计划已全部审计；提炼出的 22 条候选尚未 apply，因此本轮 backfill 尚未完成。完成这 22 条后才算真正补完。`
-
-关键状态词容易让决策者误解时，紧接首段增加“准确含义”，解释阶段边界；之后才展开必要细节。
-
-## Workflow
-
-1. 先确定整体 closure。
-   - 写出总范围、已完成阶段、剩余工作、整体是否 closed 与 owner decision。
-   - 如果只能说某个局部阶段完成，主动写明为什么整体仍未完成。
-   - Completion criterion：只读首段也不会误判任务状态。
-
-2. Extract the functional contract from the available context.
-   - Identify user-visible capabilities, rules, and protected behaviors.
-   - Treat files, tests, agents, commits, and tools as evidence, not as the main story.
-   - Completion criterion: every major engineering item is mapped to a product behavior or marked as internal evidence only.
-
-3. Group by functional slice.
-   - A functional slice is a product capability or rule a stakeholder can understand.
-   - Do not group by DAG node, code layer, test type, file, or agent.
-   - Completion criterion: each top-level slice could be used as a section title in a product spec.
-
-4. Write each completed behavior as a spec sentence.
-   - Use this shape: `[Actor/System] 在 [condition] 下 可以/不能 [action]，导致 [observable result or business impact]。`
-   - Prefer capability and consequence over implementation detail.
-   - Completion criterion: each bullet answers who can or cannot do what, under what condition, and what result follows.
-
-5. Separate implementation completion from requirement closure.
-   - Say `已实现，待验收` when code and local tests pass but real UI/data-source acceptance is missing.
-   - Say `不能宣称 closed` when a required smoke, browser check, external data check, or final review is still pending.
-   - Completion criterion: the reader can tell what is done, what is only locally proven, and what still blocks closure.
-
-6. Fold missing planned checks into the relevant slice.
-   - Only mention a not-run check when it was actually designed, required, or expected for this task and was not run.
-   - Fuse `Not run` and `Why not` into one natural bullet under `还缺`, for example: `Lark Test Environment 写入/读回 smoke 还没跑，因为本轮还没完成 Test Env mutation 验收。`
-   - Do not list unrelated external systems. If the task does not involve Lark, Lexware, email, public deployment, or another integration, omit them entirely.
-   - Do not add a separate `Not run` / `Why not` template section unless the user explicitly asks for an audit template.
-   - Completion criterion: every missing planned check has a concrete reason, and no irrelevant boilerplate checks appear.
-
-7. Report test-case gaps only when abnormal.
-   - If existing tests or smoke paths cover the task adequately, do not write a `Test-case gap judgment` section.
-   - If there is a real gap, state it inside `风险/备注` or `剩余收口`, with the missing scenario and why it matters.
-   - Completion criterion: test-case gap language appears only when it changes the follow-up work.
-
-8. Translate evidence into confidence.
-   - Convert service/action/integration tests, i18n checks, type checks, browser verification, Lark smoke, and reviews into stakeholder meaning.
-   - Mention raw commands only when the user asks for audit detail.
-   - Completion criterion: technical evidence explains confidence instead of becoming a tool chronology.
-
-9. Produce a concise forwardable update.
-   - Start with `整体判断`.
-   - Then use `功能 Slice 进度`.
-   - End with `剩余收口` when there are open gates.
-   - Completion criterion: a non-implementer can understand whether the requirement is done and what remains.
-
-## 工作安排类解释
-
-当问题是「为什么这样安排 / 为什么需要 X」而答案涉及多条并行工作线、时序或合入门时，本 skill 同样适用：
-
-- 第一句先给功能层全景：一共几条线、各自在做什么、各自到哪收口；机制推理（分支原子性、合入顺序论证、操作成本比较）只能出现在全景之后，作为理由而不是开场。
-- 不用「不是…而是…」式反驳开场；先立地图，再讲为什么。
-- 多线并行时使用下方的并行工作线形态。
-
-## Output Shape
-
-Use this shape unless the user asks for another format:
-
-```markdown
-**整体判断**
-[One or two standalone sentences: total scope, completed stage, remaining work, whether the whole task is closed, and the owner decision needed.]
-
-**准确含义**
-[Only when stage terms may be confused: explain why audit/extract/apply/verify/merge/release do or do not constitute overall completion.]
-
-**功能 Slice 进度**
-
-**1. [Functional slice name]**
-目标：[User-visible capability or rule.]
-
-已完成/已实现，待验收：
-- [Actor/System] 在 [condition] 下 可以/不能 [action]，导致 [observable result or impact].
-
-还缺：
-- [Planned or required acceptance evidence not run yet, fused with the reason. Omit unrelated checks.]
-
-风险/备注：
-- [Only include real residual risk or abnormal test-case gap.]
-
-**剩余收口**
-- [Short list of final gates.]
-```
-
-Skip empty sections. For a short answer, keep only `整体判断`, `功能 Slice 进度`, and `剩余收口`.
-
-### 并行工作线形态
-
-当状态或解释涉及多条并行工作线（多分支、多 worktree、多阶段）时，改用对照表，每行一条线：
-
-```markdown
-| 线 | 在哪 | 干什么 | 合入门/依赖 |
-| --- | --- | --- | --- |
-| [自解释名词，如「修正线」] | [worktree/分支/环境] | [功能层描述] | [什么条件下收口] |
-```
-
-表后用一两句话写清线间依赖链。行名必须是自解释名词；内部编号（Deliverable n、Tn、Cohort X 之类）不得裸用，首次出现必须伴随展开或改写为功能名词。
-
-## Quality Gate
-
-Before answering, rewrite if any check fails:
-
-- 第一句是功能层结论（几条线、在做什么、到哪收口），不是机制推理，也不是「不是…而是…」式反驳开场。
-- 首段单独回答总范围、已完成阶段、剩余工作、整体是否 closed 和待 owner 决策；不看后文也不会误判。
-- 所有“完成”都带对象和阶段；audit、extract、apply、verify、merge、release 没有被混称。
-- 有可计数对象时，总量、已处理量、待处理量和独立 pending 数量能够互相对账。
-- 技术实现、测试、文件、agent、worktree 和命令没有出现在决策结论之前。
-- 内部编号不裸用；每个编号伴随自解释名词或首次展开。
-- Top-level sections are functional product slices, not status slices.
-- Every completed bullet has actor/condition/action/result.
-- Unverified work is not described as done.
-- Missing planned checks are named with their reason, without a separate template section.
-- Unrelated not-run checks are omitted.
-- Test-case gaps are reported only when abnormal.
-- Technical evidence is translated into product confidence.
-- The answer can be forwarded without explaining the codebase.
-
-## Reference
-
-Read `references/patterns.md` when you need examples of good functional slices, bad status slices, evidence translation, or sample output.
+- 第一段已经直接回答问题，不依赖后文才能成立。
+- 结论、关键概念和证据的层级清楚，没有把证据写成结论。
+- 没有新增、改变或掩盖输入中的事实、状态、条件与不确定性。
+- 使用的是当前内容所需的最小结构，没有空章节和无关细节。
+- 读者能够回答三个问题：结论是什么、为什么、现在需要做什么；没有下一动作时，第三项可以省略。
