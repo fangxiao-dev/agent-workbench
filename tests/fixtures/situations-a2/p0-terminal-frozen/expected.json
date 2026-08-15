@@ -1,0 +1,20 @@
+{
+  "source": "D:/CodeSpace/kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership",
+  "scenario": "真实 legacy package 已有 pass Gate，但仍收到继续推进的请求。",
+  "expected_primary": ["attempt.gate.terminal-frozen"],
+  "expected_layer": "P0",
+  "must_not_hit": [
+    "package.record.state-missing",
+    "package.record.projection-drift",
+    "attempt.record.session-resumed",
+    "attempt.record.checkpoint-missing"
+  ],
+  "basis_quote": "terminal Gate 已写，仍有推进请求",
+  "contract_refs": [
+    "situation-inputs.md §2.1 gate.terminal",
+    "situation-inputs.md §4.1 state.json",
+    "situation-inputs.md §4.5 gate.md"
+  ],
+  "confidence": "high",
+  "note": "按合同重建为 3.5 state；Gate 的 pass 是故意保留的终态冻结信号。"
+}

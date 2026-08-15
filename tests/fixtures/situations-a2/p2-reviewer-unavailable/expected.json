@@ -1,0 +1,19 @@
+{
+  "source": "D:/CodeSpace/kaispan-dev/docs/implementations/2026-07-04-reliability-attribution-review",
+  "scenario": "真实 reliability review package 的 reviewer timeout 或旧 ReviewRun 已不可采信，需要 fresh review。",
+  "expected_primary": ["attempt.review.reviewer-unavailable"],
+  "expected_layer": "P2",
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.record.handoff-in-flight",
+    "attempt.gate.terminal-frozen"
+  ],
+  "basis_quote": "reviewer timeout、无效 envelope 或旧 ReviewRun 不可采信",
+  "contract_refs": [
+    "situation-inputs.md §2.1 trail.reviewer_unavailable",
+    "situation-inputs.md §3.1 封闭 fact key 集合与 scope",
+    "situation-inputs.md §4.3 trail.jsonl"
+  ],
+  "confidence": "high",
+  "note": "只声明 reviewer availability，不把 envelope validity 或 handoff liveness 混入同一个 trail。"
+}

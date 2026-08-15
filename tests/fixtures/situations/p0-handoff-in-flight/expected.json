@@ -1,0 +1,14 @@
+{
+  "source": "kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-16-datev-accounting-rules — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy package 的跨 session/外部阻塞交接尚未完成；trail 为按真实 handoff pending 时间线补写。",
+  "expected_primary": [
+    "attempt.record.handoff-in-flight"
+  ],
+  "expected_layer": "P0",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}
+

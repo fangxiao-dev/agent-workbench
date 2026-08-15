@@ -1,0 +1,13 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/inventory-manufacture-issues-153-158 — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy 验证已覆盖普通 acceptance，但安全不变量没有被证据反驳/确认，需单独 verify；trail 为按真实验证时间线补写。",
+  "expected_primary": [
+    "ticket.verify.safety-invariant-unfalsified"
+  ],
+  "expected_layer": "P3",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

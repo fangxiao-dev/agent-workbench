@@ -1,0 +1,13 @@
+{
+  "source": "kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-12-finance-office-tax-advisor — marker had no state.json; translated as original legacy package with missing Gate verdict",
+  "scenario": "fixture 没有 Gate，且 state 中没有 Ticket；缺 Gate 不合成 undecided，all-terminal 前提也不成立，因此没有可见 situation。",
+  "expected_primary": [],
+  "expected_layer": null,
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen",
+    "attempt.gate.missing",
+    "attempt.gate.verdict-undecided"
+  ]
+}

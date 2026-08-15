@@ -1,0 +1,15 @@
+{
+  "source": "kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4",
+  "scenario": "legacy Ticket 的 required claims 已有同 revision supporting evidence，acceptance/release 边均已复核，达到 satisfiable。",
+  "expected_primary": [
+    "ticket.accept.satisfiable"
+  ],
+  "expected_layer": "P4",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen",
+    "ticket.accept.release-edge-unchecked",
+    "ticket.accept.acceptance-edge-held"
+  ]
+}

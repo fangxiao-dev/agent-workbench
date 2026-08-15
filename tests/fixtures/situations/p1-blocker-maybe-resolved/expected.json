@@ -1,0 +1,14 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy Gate 从 blocked 进入后续 pass 前，原 Ticket blocker 已出现可能解除信号；trail 为按该 recheck 窗口补写。",
+  "expected_primary": [
+    "ticket.readiness.blocker-maybe-resolved"
+  ],
+  "expected_layer": "P1",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}
+

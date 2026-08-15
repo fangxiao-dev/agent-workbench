@@ -1,0 +1,13 @@
+{
+  "source": "kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-22-kassel-pdf-to-extf-poc — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy 调查无法取得足够外部/手工证据，返回 EVIDENCE_GAP；trail 为按真实调查时间线补写。",
+  "expected_primary": [
+    "ticket.investigate.evidence-gap"
+  ],
+  "expected_layer": "P2",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

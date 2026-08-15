@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\order-create-release-consistency",
+  "scenario": "这个 legacy 包曾同时维护 state 与 Ticket projection；一次收口后 Ticket 文档已是 SATISFIED，而 current state 仍是 PENDING，形成 projection drift。",
+  "expected_primary": ["package.record.projection-drift"],
+  "expected_layer": "P0",
+  "must_not_hit": ["package.record.state-missing", "attempt.gate.terminal-frozen"],
+  "basis_quote": "package validate 报告 projection drift",
+  "confidence": "medium",
+  "note": "README 未允许单独的 progress projection 输入；这里用 state 与 Ticket 内嵌 projection 不一致表达 drift，具体 validate 判据仍有歧义。"
+}

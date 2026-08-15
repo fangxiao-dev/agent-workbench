@@ -1,0 +1,1 @@
+{"timestamp":"2026-08-15T10:20:00Z","subject":"ticket:TKT-01","kind":"dispatch","situation":"attempt.readiness.worker-still-running","chosen":"wait_threads","outcome":"RUNNING","worker":"worker-01","returned":false}

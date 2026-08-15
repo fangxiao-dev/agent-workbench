@@ -1,0 +1,14 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy Ticket 已有部分 evidence，但 acceptance dependency 仍被 blocker 持有，不能进入 satisfied；正文已脱敏。",
+  "expected_primary": [
+    "ticket.accept.acceptance-edge-held"
+  ],
+  "expected_layer": "P4",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen",
+    "ticket.accept.satisfiable"
+  ]
+}

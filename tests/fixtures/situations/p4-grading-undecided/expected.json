@@ -1,0 +1,14 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/inventory-manufacture-issues-153-158 — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy finding 已有候选 route，但仍未决定 P1/P2 还是 editorial grade；正文已脱敏。",
+  "expected_primary": [
+    "finding.disposition.grading-undecided"
+  ],
+  "expected_layer": "P4",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen",
+    "attempt.disposition.findings-triage-pending"
+  ]
+}

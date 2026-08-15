@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\260719-rechnung-email-216",
+  "scenario": "legacy notification package 的 review run 已 timeout，旧 reviewer envelope 也不可采信；closure 不能沿用旧 run，需重开 fresh review。trail 为按真实流程补写。",
+  "expected_primary": ["attempt.review.reviewer-unavailable"],
+  "expected_layer": "P2",
+  "must_not_hit": ["finding.review.closure-awaiting", "ticket.review.awaiting-reviewer", "attempt.review.comparison-head-unfixed"],
+  "basis_quote": "reviewer timeout、无效 envelope 或旧 ReviewRun 不可采信",
+  "confidence": "high",
+  "note": "timeout、invalid envelope 和旧 run 三个信号均在同一 trail 行明确给出。"
+}

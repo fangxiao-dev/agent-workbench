@@ -1,0 +1,13 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy Gate 虽为 pass，但 comparison commit 与 satisfied Ticket 的 acceptance revision 不一致；现行 F7 只在 Gate 写入前检查，因此已有 pass Gate 时只保留 P0 terminal-frozen。",
+  "expected_primary": [
+    "attempt.gate.terminal-frozen"
+  ],
+  "expected_layer": "P0",
+  "expected_secondary": [],
+  "expected_suppressed": [],
+  "must_not_hit": [
+    "package.record.state-missing"
+  ]
+}

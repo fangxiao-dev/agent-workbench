@@ -1,0 +1,16 @@
+{
+  "source": "kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4",
+  "scenario": "legacy patch attempt 的 finding 已修复但仍等待 closure review；正文已脱敏。",
+  "expected_primary": [
+    "finding.review.closure-awaiting"
+  ],
+  "expected_layer": "P2",
+  "expected_secondary": [
+    "finding.disposition.grading-undecided",
+    "attempt.disposition.findings-triage-pending"
+  ],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "source": "kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4",
+  "scenario": "legacy 3.4 attempt 的 authoritative state 与 progress 投影在 review-closure 期间短暂漂移；trail 为按该真实修订时间线补写的 projection-drift 事实。",
+  "expected_primary": [
+    "package.record.projection-drift"
+  ],
+  "expected_layer": "P0",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}
+

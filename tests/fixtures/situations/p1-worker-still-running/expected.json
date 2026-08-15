@@ -1,0 +1,14 @@
+{
+  "source": "kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-16-datev-accounting-rules — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy T9 仍处于 RUNNING/外部 blocker；trail 为按 worker 已派发但尚无 result 补写。",
+  "expected_primary": [
+    "attempt.readiness.worker-still-running"
+  ],
+  "expected_layer": "P1",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}
+

@@ -1,0 +1,24 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/order-create-release-consistency",
+  "scenario": "真实 order create/release package 的 acceptance 条件已满足，但 Gate 前 release edge 尚未复核。",
+  "expected_primary": [
+    "ticket.accept.release-edge-unchecked",
+    "ticket.accept.satisfiable"
+  ],
+  "expected_layer": "P4",
+  "must_not_hit": [
+    "ticket.accept.acceptance-edge-held",
+    "attempt.gate.terminal-frozen",
+    "attempt.gate.verdict-undecided",
+    "package.record.state-missing"
+  ],
+  "basis_quote": "其余条件满足，release 边未复核",
+  "contract_refs": [
+    "situation-inputs.md §2.2 ticket.release_edge_rechecked 与 ticket.acceptance_conditions_satisfied",
+    "situation-inputs.md §3.1 fact key 集合",
+    "situation-inputs.md §4.1 evidenceIndex",
+    "situation-inputs.md §4.2 release dependency"
+  ],
+  "confidence": "medium",
+  "note": "release_edge_rechecked=false 与 supporting evidence 的字段依据明确；合同未逐行说明该 row 与 satisfiable 的层内并列，因此 expected_primary 保留两者。"
+}

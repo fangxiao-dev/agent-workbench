@@ -1,0 +1,13 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/order-document-completion-workflow — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy attempt 已接近完成声明，但 completion claim 还没有经过 verification audit；trail 为按真实收口前状态补写。",
+  "expected_primary": [
+    "attempt.accept.completion-claim-unaudited"
+  ],
+  "expected_layer": "P4",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

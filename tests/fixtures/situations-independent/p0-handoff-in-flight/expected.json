@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\260719-rechnung-email-216",
+  "scenario": "legacy handoff 已写明下一 session 的目标和恢复材料；当前 relay 仍在发送或等待 continuation，不能另起一条推进线。trail 为按真实流程补写。",
+  "expected_primary": ["attempt.record.handoff-in-flight"],
+  "expected_layer": "P0",
+  "must_not_hit": ["attempt.record.handoff-recovery-needed", "attempt.record.anchor-mismatch", "attempt.readiness.worker-still-running"],
+  "basis_quote": "handoff/relay 正在发送或等待 continuation",
+  "confidence": "medium",
+  "note": "in-flight 是明确状态，但没有规定其载体；checkpoint 与 trail 都保留了同一语义。"
+}

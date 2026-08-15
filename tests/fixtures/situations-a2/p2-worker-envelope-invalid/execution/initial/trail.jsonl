@@ -1,0 +1,2 @@
+{"v":1,"seq":1,"ts":"2026-08-15T09:12:00Z","subject":"finding:FND-001","kind":"worker-return","outcome":"FINDING","worker":"masked-fixer","worker_mode":"fix"}
+{"v":1,"seq":2,"ts":"2026-08-15T09:12:01Z","subject":"finding:FND-001","kind":"fact","key":"trail.envelope_valid","value":false}

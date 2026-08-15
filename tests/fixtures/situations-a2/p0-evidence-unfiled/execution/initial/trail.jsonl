@@ -1,0 +1,1 @@
+{"v":1,"seq":1,"ts":"2026-08-15T09:09:00Z","subject":"ticket:TKT-01","kind":"worker-return","outcome":"EVIDENCE_SUFFICIENT","worker":"masked-worker","evidence":{"artifact":"evidence/returned.md#result","claim":"AC-1","revision":"02e2804bd20dbe6a6feea52a0f236c3dbb4fa360","environment":"fixture"}}

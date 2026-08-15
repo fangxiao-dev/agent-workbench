@@ -1,0 +1,14 @@
+{
+  "source": "kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-16-datev-accounting-rules — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy Ticket 依赖外部 acceptance/实现前置且 blocker 未释放；翻译为 pending child 的 implementation edge 全部 held。",
+  "expected_primary": [
+    "attempt.readiness.all-edges-held"
+  ],
+  "expected_layer": "P1",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}
+

@@ -1,0 +1,14 @@
+{
+  "source": "kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4",
+  "scenario": "legacy execution record 的 Resume checkpoint 下一动作随 review/fix 反复刷新；trail 为按真实 next-action 改写补写。",
+  "expected_primary": [
+    "attempt.record.checkpoint-refresh"
+  ],
+  "expected_layer": "P0",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}
+

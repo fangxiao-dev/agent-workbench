@@ -1,0 +1,21 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/260719-rechnung-email-216",
+  "scenario": "真实 notification/recovery package 有 supporting evidence，但前置 Ticket 尚未释放 acceptance edge。",
+  "expected_primary": ["ticket.accept.acceptance-edge-held"],
+  "expected_layer": "P4",
+  "must_not_hit": [
+    "ticket.accept.satisfiable",
+    "attempt.readiness.all-edges-held",
+    "attempt.readiness.multiple-ready-tickets",
+    "package.record.state-missing"
+  ],
+  "basis_quote": "有 evidence 但 acceptance 边未释放",
+  "contract_refs": [
+    "situation-inputs.md §2.2 ticket.acceptance_edge_released",
+    "situation-inputs.md §4.1 Ticket state 与 evidenceIndex",
+    "situation-inputs.md §4.2 typed dependency 与 Ticket",
+    "impl-package-composition-contract.md §6 Ticket-only 运行边界"
+  ],
+  "confidence": "high",
+  "note": "前置 Ticket 使用 BLOCKED，避免额外的 P1 multiple-ready 命中；child 只有 acceptance dependency，故可实施但不能 satisfy。"
+}

@@ -1,0 +1,13 @@
+{
+  "source": "kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-22-kassel-pdf-to-extf-poc — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy 多来源调查最终只剩一个可裁决来源，允许进入 implementation/reverify；trail 为按真实取证时间线补写。",
+  "expected_primary": [
+    "ticket.route.sources-uniquely-decide"
+  ],
+  "expected_layer": "P3",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

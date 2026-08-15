@@ -1,0 +1,20 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/order-create-release-consistency",
+  "scenario": "真实 order create/release package 已返回受保护的直接证据，但该证据尚未进入 evidenceIndex。",
+  "expected_primary": ["ticket.record.evidence-unfiled"],
+  "expected_layer": "P0",
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen",
+    "ticket.investigate.no-carrier"
+  ],
+  "basis_quote": "worker 已返回直接证据，但 `evidenceIndex` 无行",
+  "contract_refs": [
+    "situation-inputs.md §2.2 trail.direct_evidence_returned 与 evidence.indexed",
+    "situation-inputs.md §3.1 direct evidence tuple",
+    "situation-inputs.md §4.1 evidenceIndex",
+    "situation-inputs.md §4.3 trail.jsonl"
+  ],
+  "confidence": "medium",
+  "note": "worker-return 使用完整 artifact/claim/revision/environment tuple，但 deliberately 不写 evidenceIndex；row 的两个 when key 组合来自处境描述，合同没有逐行列出 AND 关系。"
+}

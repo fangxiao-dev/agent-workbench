@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\kaispan-dev\\docs\\implementations\\2026-08-10-accounting-scope-policy-ownership",
+  "scenario": "这个 legacy 包已经写入 terminal pass Gate；随后仍出现了继续推进同一 attempt 的请求。",
+  "expected_primary": ["attempt.gate.terminal-frozen"],
+  "expected_layer": "P0",
+  "must_not_hit": ["package.record.state-missing", "package.record.projection-drift", "attempt.record.checkpoint-missing"],
+  "basis_quote": "terminal Gate 已写，仍有推进请求",
+  "confidence": "high",
+  "note": "Gate 与 terminal lifecycle 同时存在，处境边界明确。"
+}

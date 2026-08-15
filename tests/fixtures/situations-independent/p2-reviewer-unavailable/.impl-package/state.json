@@ -1,0 +1,30 @@
+{
+  "formatVersion": "3.5",
+  "attempt": {
+    "id": "initial",
+    "plan": "plan.md",
+    "lifecycle": "active"
+  },
+  "attemptHistory": [
+    {
+      "id": "initial",
+      "plan": "plan.md",
+      "lifecycle": "active",
+      "gate": null,
+      "executionRecord": "execution/initial/execution-record.md"
+    }
+  ],
+  "tickets": {
+    "TKT-01": {
+      "state": "PENDING"
+    }
+  },
+  "evidenceIndex": {},
+  "activeCheckpoints": {
+    "attempt": {
+      "next": "close the old review run and reopen a fresh review",
+      "blocker": "reviewer unavailable",
+      "evidence": ["execution/initial/trail.jsonl#review"]
+    }
+  }
+}

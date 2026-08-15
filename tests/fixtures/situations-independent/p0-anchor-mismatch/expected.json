@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\260719-rechnung-email-216",
+  "scenario": "legacy handoff 给出了 develop 的恢复锚点和独立 worktree 建议；接手时 active checkpoint 保存的锚点与该 handoff 表示不一致，校验失败。trail 为按真实流程补写。",
+  "expected_primary": ["attempt.record.anchor-mismatch"],
+  "expected_layer": "P0",
+  "must_not_hit": ["attempt.record.handoff-recovery-needed", "attempt.record.session-resumed", "attempt.record.handoff-in-flight"],
+  "basis_quote": "anchor 存在但表示不一致导致校验失败",
+  "confidence": "low",
+  "note": "人读表没有给 active checkpoint 的 anchor 字段形状；这里只保留 blocker 与 trail 中的 expected/actual anchor，需独立运行确认映射。"
+}

@@ -1,0 +1,28 @@
+{
+  "formatVersion": "3.5",
+  "attempt": {
+    "id": "initial",
+    "plan": "plan.md"
+  },
+  "attemptHistory": [
+    {
+      "id": "initial",
+      "plan": "plan.md",
+      "lifecycle": "active",
+      "gate": {
+        "verdict": "blocked",
+        "commit": "02e2804bd20dbe6a6feea52a0f236c3dbb4fa360"
+      },
+      "executionRecord": "execution/initial/execution-record.md"
+    }
+  ],
+  "tickets": {
+    "TKT-01": {
+      "state": "RETIRED",
+      "disposition": "waived",
+      "evidence": "evidence/waived.md"
+    }
+  },
+  "evidenceIndex": {},
+  "activeCheckpoints": {}
+}

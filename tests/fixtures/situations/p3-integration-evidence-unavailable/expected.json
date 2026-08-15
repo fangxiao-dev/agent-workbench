@@ -1,0 +1,13 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/release-external-readiness-audit — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy acceptance 依赖外部/生产载体，但当前没有可采信的 integration evidence；trail 为按真实审计阻塞时间线补写。",
+  "expected_primary": [
+    "attempt.verify.integration-evidence-unavailable"
+  ],
+  "expected_layer": "P3",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

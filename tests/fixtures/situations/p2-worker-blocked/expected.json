@@ -1,0 +1,13 @@
+{
+  "source": "kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-16-datev-accounting-rules — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy implementation ticket 因外部依赖不可用而保持 blocked；为避免把同一事实误判成 attempt-level carrier 缺失，fixture 只保留 Ticket-level blocker；trail 为按真实阻塞时间线补写。",
+  "expected_primary": [
+    "ticket.implement.worker-blocked"
+  ],
+  "expected_layer": "P2",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

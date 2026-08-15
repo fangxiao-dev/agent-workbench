@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\kaispan-dev\\docs\\implementations\\2026-08-04-ocr-ai-worker-lane-split",
+  "scenario": "legacy worker-lane 包已经形成了关于 lane 拆分和实现路线的结论，但这个判断没有写入 current record；trail 为按真实流程补写。",
+  "expected_primary": ["ticket.record.judgment-unfiled"],
+  "expected_layer": "P0",
+  "must_not_hit": ["ticket.route.sources-uniquely-decide", "ticket.record.evidence-unfiled", "attempt.record.checkpoint-missing"],
+  "basis_quote": "judgment/conclusion 已形成但未进入记录",
+  "confidence": "medium",
+  "note": "trail 能证明结论已经形成，但人读表没有规定 judgment 的固定字段或记录目标；这里刻意不添加 execution-record 内容。"
+}

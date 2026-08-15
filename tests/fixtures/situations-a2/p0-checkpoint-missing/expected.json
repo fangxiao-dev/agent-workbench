@@ -1,0 +1,20 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/partial-failure-residue-hardening",
+  "scenario": "真实 partial-failure package 需要跨 session 收口，但尚未写 active checkpoint。",
+  "expected_primary": ["attempt.record.checkpoint-missing"],
+  "expected_layer": "P0",
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.record.session-resumed",
+    "attempt.record.checkpoint-refresh",
+    "attempt.record.handoff-in-flight"
+  ],
+  "basis_quote": "需要跨 session 交接或长任务收口",
+  "contract_refs": [
+    "situation-inputs.md §2.1 attempt.handoff_or_long_task 与 attempt.active_checkpoint_present",
+    "situation-inputs.md §3.1 fact 通道与 scope",
+    "situation-inputs.md §4.1 active checkpoint"
+  ],
+  "confidence": "medium",
+  "note": "合同分别定义了 long-task fact 与 checkpoint presence，但没有把该 row 的 AND 组合逐字列出；本 fixture 按处境描述构造为 fact=true 且 activeCheckpoints 缺失。"
+}

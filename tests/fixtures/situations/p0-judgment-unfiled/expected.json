@@ -1,0 +1,13 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy Execution Record 已有判断结果，但 judgment 没有归档；trail 为按真实记录缺口补写。",
+  "expected_primary": [
+    "ticket.record.judgment-unfiled"
+  ],
+  "expected_layer": "P0",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

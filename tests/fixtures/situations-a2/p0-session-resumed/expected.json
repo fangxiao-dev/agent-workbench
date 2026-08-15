@@ -1,0 +1,20 @@
+{
+  "source": "D:/CodeSpace/kaispan-dev/docs/implementations/2026-07-18-test-case-governance",
+  "scenario": "真实测试治理 package 跨 session 接手，active checkpoint 提供下一动作。",
+  "expected_primary": ["attempt.record.session-resumed"],
+  "expected_layer": "P0",
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.record.checkpoint-missing",
+    "attempt.record.checkpoint-refresh",
+    "attempt.gate.terminal-frozen"
+  ],
+  "basis_quote": "跨 session 刚接手，本 session 尚无动作",
+  "contract_refs": [
+    "situation-inputs.md §2.1 attempt.session_resumed",
+    "situation-inputs.md §3.1 fact 通道与 scope",
+    "situation-inputs.md §4.1 active checkpoint"
+  ],
+  "confidence": "high",
+  "note": "显式 session_resumed fact 优先；checkpoint 同时使用 §4.1 的三字段最小形状。"
+}

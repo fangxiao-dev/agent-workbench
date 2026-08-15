@@ -1,0 +1,14 @@
+{
+  "source": "kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-16-datev-accounting-rules — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy 外部验证首次未完成，仍允许一次 fresh fallback；trail 为按真实一次 INCOMPLETE 返回补写。",
+  "expected_primary": [
+    "ticket.implement.worker-incomplete-first"
+  ],
+  "expected_layer": "P2",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}
+

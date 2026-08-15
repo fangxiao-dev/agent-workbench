@@ -1,0 +1,16 @@
+{
+  "source": "kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4",
+  "scenario": "legacy Track C finding 的来源需要同一 ReviewRun 复核，当前状态仍 pending。",
+  "expected_primary": [
+    "finding.review.source-recheck-pending"
+  ],
+  "expected_layer": "P2",
+  "expected_secondary": [
+    "finding.disposition.grading-undecided",
+    "attempt.disposition.findings-triage-pending"
+  ],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "source": "kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4",
+  "scenario": "legacy review-closure 的下一动作随修订范围被改写；trail 为按真实 handoff target/order 修正过程补写。",
+  "expected_primary": [
+    "attempt.record.handoff-target-corrected"
+  ],
+  "expected_layer": "P0",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}
+

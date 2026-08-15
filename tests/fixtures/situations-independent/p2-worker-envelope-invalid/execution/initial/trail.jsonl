@@ -1,0 +1,1 @@
+{"timestamp":"2026-08-15T09:30:00Z","subject":"finding:F-001","kind":"fix-return","situation":"finding.fix.worker-envelope-invalid","chosen":"fresh-fix-invocation","outcome":"INVALID_ENVELOPE","mode":"fix","envelope":{"status":"invalid","missing":["evidence","revision"]}}

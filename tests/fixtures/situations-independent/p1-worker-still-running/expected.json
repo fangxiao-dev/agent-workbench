@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\kaispan-dev\\docs\\implementations\\2026-08-04-ocr-ai-worker-lane-split",
+  "scenario": "legacy worker-lane 包已经派出一个实现 worker，但结果尚未返回；主控此时准备另起动作，正确处境是等待 worker。trail 为按真实流程补写。",
+  "expected_primary": ["attempt.readiness.worker-still-running"],
+  "expected_layer": "P1",
+  "must_not_hit": ["ticket.implement.worker-incomplete-first", "ticket.implement.worker-blocked", "attempt.record.handoff-in-flight"],
+  "basis_quote": "已派出的 worker 尚未返回，主控准备另起动作或打断",
+  "confidence": "high",
+  "note": "trail 同时给出 dispatch、RUNNING、returned=false 和 wait_threads。"
+}

@@ -1,0 +1,19 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/260720-persistent-operation-recovery",
+  "scenario": "真实 persistent recovery package 的既有结论进入 NEEDS-REVALIDATION，尚未重新满足。",
+  "expected_primary": ["ticket.rework.revalidation-pending"],
+  "expected_layer": "P3",
+  "must_not_hit": [
+    "ticket.rework.revision-diverged",
+    "ticket.accept.satisfiable",
+    "package.record.state-missing"
+  ],
+  "basis_quote": "Ticket 处于 NEEDS-REVALIDATION",
+  "contract_refs": [
+    "situation-inputs.md §2.2 ticket.state",
+    "situation-inputs.md §4.1 Ticket 状态形状",
+    "impl-package-current-state.md §Ticket 与 evidence"
+  ],
+  "confidence": "high",
+  "note": "目标状态是合同封闭枚举；不额外制造 evidence 或 acceptance，保持最小。"
+}

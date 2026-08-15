@@ -1,0 +1,20 @@
+{
+  "source": "D:/CodeSpace/kaispan-dev/docs/implementations/2026-08-04-ocr-ai-worker-lane-split",
+  "scenario": "真实 worker-lane package 的下一动作发生变化，已有 checkpoint 需要刷新。",
+  "expected_primary": ["attempt.record.checkpoint-refresh"],
+  "expected_layer": "P0",
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.record.checkpoint-missing",
+    "attempt.record.handoff-in-flight",
+    "attempt.gate.terminal-frozen"
+  ],
+  "basis_quote": "active checkpoint 已有但下一动作发生变化",
+  "contract_refs": [
+    "situation-inputs.md §2.1 trail.checkpoint_refresh_needed",
+    "situation-inputs.md §3.1 fact 通道与 scope",
+    "situation-inputs.md §4.1 active checkpoint"
+  ],
+  "confidence": "medium",
+  "note": "已有 checkpoint 与 refresh fact 的字段依据明确；row 是否还要求额外 action-count 条件，合同没有单独列出。"
+}

@@ -1,0 +1,20 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/260720-persistent-operation-recovery",
+  "scenario": "真实 recovery package 发生跨记录锚点不一致，恢复校验必须停在 fail-closed 边界。",
+  "expected_primary": ["attempt.record.anchor-mismatch"],
+  "expected_layer": "P0",
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.record.handoff-in-flight",
+    "attempt.record.checkpoint-missing",
+    "attempt.gate.terminal-frozen"
+  ],
+  "basis_quote": "anchor 存在但表示不一致导致校验失败",
+  "contract_refs": [
+    "situation-inputs.md §2.1 trail.anchor_mismatch",
+    "situation-inputs.md §3.1 封闭 fact key 集合与 scope",
+    "situation-inputs.md §4.3 trail.jsonl"
+  ],
+  "confidence": "high",
+  "note": "事实完全由 canonical fact 提供，避免把 recovery 文本当作判据。"
+}

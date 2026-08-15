@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\kaispan-dev\\docs\\domains\\finance-assistant\\implementations\\2026-07-22-kassel-pdf-to-extf-poc",
+  "scenario": "这个 legacy POC 从 initial 切到 aligned-local-poc，并经历多次 Gate 重试；handoff 的 target/order 已被纠正后准备重发。trail 为按真实流程补写。",
+  "expected_primary": ["attempt.record.handoff-target-corrected"],
+  "expected_layer": "P0",
+  "must_not_hit": ["attempt.record.handoff-recovery-needed", "attempt.record.anchor-mismatch", "attempt.record.handoff-in-flight"],
+  "basis_quote": "handoff target/order 已被纠正",
+  "confidence": "medium",
+  "note": "legacy 确实有 attempt 切换和多次 Gate，但 target/order correction 的独立状态载体未在允许材料中规定，因此用 checkpoint 与 trail 对齐表达。"
+}

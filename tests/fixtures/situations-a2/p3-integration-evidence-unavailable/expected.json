@@ -1,0 +1,19 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/order-create-release-consistency",
+  "scenario": "真实 order create/release package 的外部 protected evidence 载体暂不可取得，不能冒充 integration 通过。",
+  "expected_primary": ["attempt.verify.integration-evidence-unavailable"],
+  "expected_layer": "P3",
+  "must_not_hit": [
+    "attempt.readiness.integration-carrier-unavailable",
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ],
+  "basis_quote": "所需 integration evidence 载体不可取得",
+  "contract_refs": [
+    "situation-inputs.md §2.1 attempt.integration_evidence_available",
+    "situation-inputs.md §3.1 封闭 fact key 集合与 scope",
+    "situation-inputs.md §4.3 trail.jsonl"
+  ],
+  "confidence": "high",
+  "note": "使用 evidence 不可用 fact=false；carrier 事实不写入，确保两个 availability key 不混淆。"
+}

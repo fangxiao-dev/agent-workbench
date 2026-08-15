@@ -1,0 +1,16 @@
+{
+  "source": "kaispan-dev/docs/domains/finance-assistant/historical-unverifiable/260731-1332-kontierung-rule-engine — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy satisfied 绑定的 acceptance revision 已落后于当前 HEAD，且 trail 也证明 HEAD 已前进；trail 为按真实返工时间线补写。",
+  "expected_primary": [
+    "ticket.rework.revision-diverged"
+  ],
+  "expected_layer": "P3",
+  "expected_secondary": [
+    "attempt.accept.all-tickets-terminal",
+    "attempt.gate.durable-delta-missing"
+  ],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

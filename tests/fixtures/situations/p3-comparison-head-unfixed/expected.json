@@ -1,0 +1,13 @@
+{
+  "source": "kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4",
+  "scenario": "legacy review 的 comparison head 没有固定在 immutable revision；trail 为按真实 review 重开前状态补写。",
+  "expected_primary": [
+    "attempt.review.comparison-head-unfixed"
+  ],
+  "expected_layer": "P3",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

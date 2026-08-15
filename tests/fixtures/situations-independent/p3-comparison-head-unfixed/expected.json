@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\kaispan-dev\\docs\\domains\\finance-assistant\\implementations\\2026-07-14-datev-format-validator-spike",
+  "scenario": "legacy validator 包的 review 只记录了 working-tree/浮动 HEAD，未固定可信的 immutable comparison head；应以固定 head 重开 review。trail 为按真实流程补写。",
+  "expected_primary": ["attempt.review.comparison-head-unfixed"],
+  "expected_layer": "P3",
+  "must_not_hit": ["attempt.gate.comparison-mismatch", "attempt.review.reviewer-unavailable", "attempt.gate.verdict-undecided"],
+  "basis_quote": "review 没有可信 immutable comparison head",
+  "confidence": "high",
+  "note": "trail 明确给出 comparisonHead=HEAD 且 immutable=false，没有 Gate pass 或 acceptance mismatch。"
+}

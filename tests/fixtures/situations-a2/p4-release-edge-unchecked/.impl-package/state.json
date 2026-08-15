@@ -1,0 +1,43 @@
+{
+  "formatVersion": "3.5",
+  "attempt": {
+    "id": "initial",
+    "plan": "plan.md"
+  },
+  "attemptHistory": [
+    {
+      "id": "initial",
+      "plan": "plan.md",
+      "lifecycle": "active",
+      "gate": {
+        "verdict": "blocked",
+        "commit": "02e2804bd20dbe6a6feea52a0f236c3dbb4fa360"
+      },
+      "executionRecord": "execution/initial/execution-record.md"
+    }
+  ],
+  "tickets": {
+    "TKT-BASE": {
+      "state": "BLOCKED",
+      "evidence": "evidence/base-blocker.md"
+    },
+    "TKT-01": {
+      "state": "PENDING"
+    }
+  },
+  "evidenceIndex": {
+    "TKT-01": {
+      "AC-1": [
+        {
+          "timing": "remaining-completion",
+          "artifact": "evidence/tkt-01.md#claim",
+          "revision": "02e2804bd20dbe6a6feea52a0f236c3dbb4fa360",
+          "environment": "fixture",
+          "conclusion": "supporting",
+          "invalidatedBy": null
+        }
+      ]
+    }
+  },
+  "activeCheckpoints": {}
+}

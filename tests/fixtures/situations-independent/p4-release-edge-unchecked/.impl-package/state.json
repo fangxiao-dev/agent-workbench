@@ -1,0 +1,50 @@
+{
+  "formatVersion": "3.5",
+  "attempt": {
+    "id": "initial",
+    "plan": "plan.md",
+    "lifecycle": "active"
+  },
+  "attemptHistory": [
+    {
+      "id": "initial",
+      "plan": "plan.md",
+      "lifecycle": "active",
+      "gate": null,
+      "executionRecord": "execution/initial/execution-record.md"
+    }
+  ],
+  "tickets": {
+    "TKT-01": {
+      "state": "SATISFIED",
+      "acceptance": {
+        "revision": "7777777777777777777777777777777777777777",
+        "environment": "fixture"
+      }
+    },
+    "TKT-RELEASE": {
+      "state": "PENDING"
+    }
+  },
+  "evidenceIndex": {
+    "TKT-01": {
+      "AC-1": [
+        {
+          "timing": "completion",
+          "artifact": "evidence/tkt-01.md#ac-1",
+          "revision": "7777777777777777777777777777777777777777",
+          "environment": "fixture",
+          "conclusion": "supporting",
+          "invalidatedBy": null
+        }
+      ]
+    }
+  },
+  "activeCheckpoints": {
+    "attempt": {
+      "next": "recheck the release edge before Gate",
+      "blocker": "release edge unchecked",
+      "evidence": ["evidence/tkt-01.md#ac-1"]
+    }
+  }
+}

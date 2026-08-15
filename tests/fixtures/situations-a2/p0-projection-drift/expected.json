@@ -1,0 +1,19 @@
+{
+  "source": "D:/CodeSpace/kaispan-dev/docs/implementations/2026-08-04-ocr-ai-worker-lane-split",
+  "scenario": "legacy worker-lane package 的 authoritative state 与 projection 需要重新生成。",
+  "expected_primary": ["package.record.projection-drift"],
+  "expected_layer": "P0",
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen",
+    "attempt.record.session-resumed"
+  ],
+  "basis_quote": "`package validate` 报告 projection drift",
+  "contract_refs": [
+    "situation-inputs.md §2.1 package.validate.projection_drift",
+    "situation-inputs.md §3.1 projection validation result 与 fact 通道",
+    "situation-inputs.md §4.3 trail.jsonl"
+  ],
+  "confidence": "high",
+  "note": "没有传入外部 validation-result；按合同允许的回退路径，在 attempt scope 写 canonical kind=fact。"
+}

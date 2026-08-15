@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\260719-rechnung-email-216",
+  "scenario": "legacy notification package 的修复已经落地，但 finding 仍等待同一 scope 的 closure reviewer；不能把 fixer 完成当作 finding closure。trail 为按真实流程补写。",
+  "expected_primary": ["finding.review.closure-awaiting"],
+  "expected_layer": "P2",
+  "must_not_hit": ["finding.fix.reviewer-returned", "finding.fix.worker-envelope-invalid", "attempt.review.reviewer-unavailable"],
+  "basis_quote": "fix 已完成但等待同 scope finding-closure reviewer",
+  "confidence": "high",
+  "note": "finding 状态、review scope 和等待结果均明确指向 closure-awaiting。"
+}

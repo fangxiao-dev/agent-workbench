@@ -1,0 +1,19 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/order-snapshot-reuse",
+  "scenario": "真实 snapshot package 的 SATISFIED acceptance revision 停留在旧提交，而当前 HEAD 已推进。",
+  "expected_primary": ["ticket.rework.revision-diverged"],
+  "expected_layer": "P3",
+  "must_not_hit": [
+    "attempt.gate.terminal-frozen",
+    "attempt.rework.contract-changed",
+    "package.record.state-missing"
+  ],
+  "basis_quote": "acceptance revision 与当前 HEAD 已分叉",
+  "contract_refs": [
+    "situation-inputs.md §2.1 git.acceptance_revision_diverged 与 git.head_advanced_since_last_trail",
+    "situation-inputs.md §4.1 SATISFIED Ticket acceptance",
+    "situation-inputs.md §4.3 trail head"
+  ],
+  "confidence": "medium",
+  "note": "acceptance.revision 与 trail.head 都使用已验证可解析的 HEAD~1；当前 HEAD 与其差异是 Git 事实，未运行 situation.py。"
+}

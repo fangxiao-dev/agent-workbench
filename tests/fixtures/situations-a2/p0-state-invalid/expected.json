@@ -1,0 +1,14 @@
+{
+  "source": "D:/CodeSpace/kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership",
+  "scenario": "legacy package 仍携带 3.4 state，无法作为当前 3.5 package admission。",
+  "expected_primary": ["package.record.state-missing"],
+  "expected_layer": "P0",
+  "must_not_hit": [],
+  "basis_quote": "state 缺失或 `package validate` 失败",
+  "contract_refs": [
+    "situation-inputs.md §2.1 package.state_invalid",
+    "situation-inputs.md §4.1 state.json"
+  ],
+  "confidence": "high",
+  "note": "目标行本身要求 state invalid；因此 state.json 故意使用合同明确拒绝的 formatVersion 3.4，这个 fixture 不是完整合法的 3.5 state。"
+}

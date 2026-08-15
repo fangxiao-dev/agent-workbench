@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\order-create-release-consistency",
+  "scenario": "legacy order/release 包的 Ticket acceptance 已满足，但在 Gate 前没有重新核对 release typed edge；当前 release check 仍是 PENDING。",
+  "expected_primary": ["ticket.accept.release-edge-unchecked"],
+  "expected_layer": "P4",
+  "must_not_hit": ["ticket.accept.acceptance-edge-held", "ticket.accept.satisfiable", "attempt.accept.all-tickets-terminal"],
+  "basis_quote": "其余条件满足，release 边未复核",
+  "confidence": "medium",
+  "note": "表把 release edge 复核放在 Gate 前，但没有规定用什么 state 字段表达未复核；这里用 release dependency PENDING 与 checkpoint blocker 表达。"
+}

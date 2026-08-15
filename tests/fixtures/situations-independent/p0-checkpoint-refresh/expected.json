@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\kaispan-dev\\docs\\domains\\finance-assistant\\implementations\\260803-1332-category-sachkonto-bwa-coverage",
+  "scenario": "legacy package 的执行顺序从 CSB-01/02 推进到后续 Ticket；已有 checkpoint 的下一动作已改变，恢复记录应覆盖刷新。trail 为按真实流程补写。",
+  "expected_primary": ["attempt.record.checkpoint-refresh"],
+  "expected_layer": "P0",
+  "must_not_hit": ["attempt.record.checkpoint-missing", "attempt.record.session-resumed", "attempt.record.handoff-in-flight"],
+  "basis_quote": "active checkpoint 已有但下一动作发生变化",
+  "confidence": "medium",
+  "note": "旧/新 next 已在 checkpoint 与 trail 中成对给出；表没有规定比较字段名，独立运行需确认是否按 next 变化识别。"
+}

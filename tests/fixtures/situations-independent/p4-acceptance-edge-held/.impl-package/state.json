@@ -1,0 +1,46 @@
+{
+  "formatVersion": "3.5",
+  "attempt": {
+    "id": "initial",
+    "plan": "plan.md",
+    "lifecycle": "active"
+  },
+  "attemptHistory": [
+    {
+      "id": "initial",
+      "plan": "plan.md",
+      "lifecycle": "active",
+      "gate": null,
+      "executionRecord": "execution/initial/execution-record.md"
+    }
+  ],
+  "tickets": {
+    "TKT-01": {
+      "state": "PENDING"
+    },
+    "TKT-REVIEW": {
+      "state": "PENDING"
+    }
+  },
+  "evidenceIndex": {
+    "TKT-01": {
+      "AC-1": [
+        {
+          "timing": "completion",
+          "artifact": "evidence/tkt-01.md#claim",
+          "revision": "3333333333333333333333333333333333333333",
+          "environment": "fixture",
+          "conclusion": "supporting",
+          "invalidatedBy": null
+        }
+      ]
+    }
+  },
+  "activeCheckpoints": {
+    "attempt": {
+      "next": "resolve the acceptance edge before satisfying TKT-01",
+      "blocker": null,
+      "evidence": ["evidence/tkt-01.md#claim"]
+    }
+  }
+}

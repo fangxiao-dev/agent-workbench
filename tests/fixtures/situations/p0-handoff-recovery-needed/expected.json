@@ -1,0 +1,14 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy package 在跨 session 修订 handoff 后仍需重建 continuation；trail 为按真实 recovery retry 时间线补写。",
+  "expected_primary": [
+    "attempt.record.handoff-recovery-needed"
+  ],
+  "expected_layer": "P0",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}
+

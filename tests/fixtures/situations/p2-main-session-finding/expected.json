@@ -1,0 +1,16 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/inventory-manufacture-issues-153-158 — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy 主控在验证/审阅中直接发现 finding，需要直接进入 fresh fix；正文已脱敏，trail 为按真实主控发现补写。",
+  "expected_primary": [
+    "finding.fix.main-session-discovered"
+  ],
+  "expected_layer": "P2",
+  "expected_secondary": [
+    "finding.disposition.grading-undecided",
+    "attempt.disposition.findings-triage-pending"
+  ],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

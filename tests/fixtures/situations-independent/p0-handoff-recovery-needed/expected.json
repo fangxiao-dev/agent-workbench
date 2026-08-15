@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\260720-persistent-operation-recovery",
+  "scenario": "这个 legacy 包本来就在处理提交恢复；一次跨 session handoff 的 bootstrap/创建步骤失败，只能保留一次受控 retry。trail 为按真实流程补写。",
+  "expected_primary": ["attempt.record.handoff-recovery-needed"],
+  "expected_layer": "P0",
+  "must_not_hit": ["attempt.record.anchor-mismatch", "attempt.record.handoff-in-flight", "attempt.record.handoff-target-corrected"],
+  "basis_quote": "handoff bootstrap、重命名或创建失败",
+  "confidence": "medium",
+  "note": "失败原因和 recovery retry 有明确语义，但表没有规定应由 state 还是 trail 承载 handoff failure；两处都保留了最小文本。"
+}

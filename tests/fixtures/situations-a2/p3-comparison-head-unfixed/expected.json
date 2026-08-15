@@ -1,0 +1,19 @@
+{
+  "source": "D:/CodeSpace/kaispan-dev/docs/implementations/2026-07-18-test-case-governance",
+  "scenario": "真实测试治理 review 尚未固定可信 immutable comparison head。",
+  "expected_primary": ["attempt.review.comparison-head-unfixed"],
+  "expected_layer": "P3",
+  "must_not_hit": [
+    "attempt.gate.terminal-frozen",
+    "attempt.review.terminal-coverage-incomplete",
+    "package.record.state-missing"
+  ],
+  "basis_quote": "review 没有可信 immutable comparison head",
+  "contract_refs": [
+    "situation-inputs.md §2.1 git.comparison_head_fixed",
+    "situation-inputs.md §3.1 封闭 fact key 集合与 scope",
+    "situation-inputs.md §4.3 trail.jsonl"
+  ],
+  "confidence": "high",
+  "note": "comparison head 只用 canonical fact=false；不创建 terminal Gate，以免 P0 terminal-frozen 抢先。"
+}

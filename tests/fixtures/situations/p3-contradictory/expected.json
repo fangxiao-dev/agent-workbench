@@ -1,0 +1,17 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy 已 satisfied 的 Ticket 后续出现同 acceptance pair 的 contradictory evidence，需先裁决冲突；因此 satisfiable 不成立，正文已脱敏。",
+  "expected_primary": [
+    "ticket.verify.contradictory-unresolved",
+    "ticket.rework.evidence-conflict"
+  ],
+  "expected_layer": "P3",
+  "expected_secondary": [
+    "attempt.accept.all-tickets-terminal",
+    "attempt.gate.durable-delta-missing"
+  ],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

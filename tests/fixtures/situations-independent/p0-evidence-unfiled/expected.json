@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\order-create-release-consistency",
+  "scenario": "legacy checkout/release 包的 worker 已返回可直接使用的 evidence，但旧 runtime 只记了平铺 evidence 引用，current evidenceIndex 仍没有对应 claim 行。trail 为按真实流程补写。",
+  "expected_primary": ["ticket.record.evidence-unfiled"],
+  "expected_layer": "P0",
+  "must_not_hit": ["ticket.investigate.evidence-gap", "ticket.verify.contradictory-unresolved", "package.record.state-missing"],
+  "basis_quote": "worker 已返回直接证据，但 `evidenceIndex` 无行",
+  "confidence": "high",
+  "note": "trail 明确给出 EVIDENCE_SUFFICIENT 与 evidence artifact，state 对应 claim 没有索引行。"
+}

@@ -1,0 +1,20 @@
+{
+  "formatVersion": "3.5",
+  "attempt": {
+    "id": "fixture-attempt",
+    "plan": "plan.md"
+  },
+  "attemptHistory": [],
+  "tickets": {
+    "TKT-01": {
+      "state": "SATISFIED",
+      "acceptance": {
+        "revision": "5f299f345d14389d1520d68e84eec52342d16564",
+        "environment": "fixture-local"
+      }
+    }
+  },
+  "evidenceIndex": {},
+  "activeCheckpoints": {}
+}
+

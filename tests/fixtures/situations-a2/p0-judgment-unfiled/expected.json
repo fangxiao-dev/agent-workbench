@@ -1,0 +1,19 @@
+{
+  "source": "D:/CodeSpace/kaispan-dev/docs/implementations/2026-07-17-testing-system",
+  "scenario": "真实 testing-system package 已形成执行判断，但判断尚未写入 recovery judgment 记录。",
+  "expected_primary": ["ticket.record.judgment-unfiled"],
+  "expected_layer": "P0",
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.record.checkpoint-missing",
+    "attempt.gate.terminal-frozen"
+  ],
+  "basis_quote": "judgment/conclusion 已形成但未进入记录",
+  "contract_refs": [
+    "situation-inputs.md §2.2 trail.judgment_unfiled",
+    "situation-inputs.md §3.1 fact scope（ticket:<id>）",
+    "situation-inputs.md §4.3 trail.jsonl"
+  ],
+  "confidence": "high",
+  "note": "使用 canonical trail.judgment_unfiled；没有使用历史兼容 alias 或自由文本 marker。"
+}

@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\260720-persistent-operation-recovery",
+  "scenario": "legacy recovery package 在新 session 刚接手时已有 active checkpoint，但当前 session 尚没有任何动作记录；应先按 checkpoint 恢复。",
+  "expected_primary": ["attempt.record.session-resumed"],
+  "expected_layer": "P0",
+  "must_not_hit": ["attempt.record.checkpoint-missing", "attempt.record.handoff-in-flight", "attempt.gate.terminal-frozen"],
+  "basis_quote": "跨 session 刚接手，本 session 尚无动作",
+  "confidence": "high",
+  "note": "active checkpoint 存在且没有 trail，正好隔离 session-resumed 与 checkpoint-missing。"
+}

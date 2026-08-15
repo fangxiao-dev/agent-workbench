@@ -1,0 +1,23 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/legacy-impl-plans-retirement",
+  "scenario": "真实 legacy-plan retirement package 已没有待执行 Ticket，但 terminal Gate 前缺少 Durable Delta 记录。",
+  "expected_primary": [
+    "attempt.gate.durable-delta-missing",
+    "attempt.accept.all-tickets-terminal"
+  ],
+  "expected_layer": "P4",
+  "must_not_hit": [
+    "attempt.gate.verdict-undecided",
+    "attempt.gate.terminal-frozen",
+    "package.record.state-missing"
+  ],
+  "basis_quote": "terminal Gate 前 Stage 7 未完成",
+  "contract_refs": [
+    "situation-inputs.md §2.1 attempt.all_tickets_terminal 与 attempt.terminal_gate_pending",
+    "situation-inputs.md §2.2 gate.stage7_complete",
+    "situation-inputs.md §4.1 RETIRED Ticket",
+    "situation-inputs.md §4.5 gate.md"
+  ],
+  "confidence": "medium",
+  "note": "blocked Gate 避免 verdict-undecided；P4 层无序，因此 all-tickets-terminal 与 durable-delta-missing 按合同应并列保留。"
+}

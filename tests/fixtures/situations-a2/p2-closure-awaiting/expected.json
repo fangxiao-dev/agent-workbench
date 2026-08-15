@@ -1,0 +1,19 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/order-document-completion-workflow",
+  "scenario": "真实 document completion package 的 finding fix 已完成，仍等待同 scope closure reviewer。",
+  "expected_primary": ["finding.review.closure-awaiting"],
+  "expected_layer": "P2",
+  "must_not_hit": [
+    "finding.disposition.grading-undecided",
+    "attempt.disposition.findings-triage-pending",
+    "package.record.state-missing"
+  ],
+  "basis_quote": "fix 已完成但等待同 scope finding-closure reviewer",
+  "contract_refs": [
+    "situation-inputs.md §2.2 finding.closure_review_pending",
+    "situation-inputs.md §3.1 finding fact scope",
+    "situation-inputs.md §4.4 execution-findings.md"
+  ],
+  "confidence": "medium",
+  "note": "finding block 与显式 fact 都提供 closure-awaiting 语义；合同说明了两条输入通道，但没有写明两者冲突时的测试优先级以外的 row 组合。"
+}

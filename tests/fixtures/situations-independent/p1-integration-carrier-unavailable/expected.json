@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\kaispan-dev\\docs\\domains\\finance-assistant\\implementations\\2026-07-22-kassel-pdf-to-extf-poc",
+  "scenario": "legacy POC 曾反复等待 provider/DB 外部环境的 readiness；本次恢复没有可用的预置 integration carrier，因而要先寻找并启动环境能力。trail 为按真实流程补写。",
+  "expected_primary": ["attempt.readiness.integration-carrier-unavailable"],
+  "expected_layer": "P1",
+  "must_not_hit": ["attempt.verify.integration-evidence-unavailable", "attempt.readiness.worker-still-running", "attempt.gate.verdict-undecided"],
+  "basis_quote": "integration carrier 不可用",
+  "confidence": "medium",
+  "note": "legacy 材料能证明外部环境阻塞，但 carrier 与 evidence 的边界是本轮按处境表拆开的，需独立结果验证。"
+}

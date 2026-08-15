@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\260719-rechnung-email-216",
+  "scenario": "legacy notification 包对同一 claim 留下了支持证据和相互矛盾的后续证据；矛盾未处置前不能 satisfy。",
+  "expected_primary": ["ticket.verify.contradictory-unresolved"],
+  "expected_layer": "P3",
+  "must_not_hit": ["ticket.accept.satisfiable", "ticket.accept.acceptance-edge-held", "ticket.verify.safety-invariant-unfalsified"],
+  "basis_quote": "required claim 带矛盾或不确定证据",
+  "confidence": "high",
+  "note": "同一 TKT-01/AC-1 下同时存在 supporting 与 contradictory conclusion，且 contradictory 未 invalidated。"
+}

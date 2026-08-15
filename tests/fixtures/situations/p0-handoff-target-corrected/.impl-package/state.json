@@ -1,0 +1,12 @@
+{
+  "formatVersion": "3.5",
+  "attempt": {
+    "id": "fixture-attempt",
+    "plan": "plan.md"
+  },
+  "attemptHistory": [],
+  "tickets": {},
+  "evidenceIndex": {},
+  "activeCheckpoints": {}
+}
+

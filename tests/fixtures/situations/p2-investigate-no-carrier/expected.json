@@ -1,0 +1,13 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/release-external-readiness-audit — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy investigation 需要外部 carrier/production 访问，但记录显示没有获批 carrier；trail 为按真实调查时间线补写。",
+  "expected_primary": [
+    "ticket.investigate.no-carrier"
+  ],
+  "expected_layer": "P2",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "source": "D:/CodeSpace/kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership",
+  "scenario": "真实 accounting policy package 的全部 required claim 已有 supporting evidence、入边已释放且 revision 可解析。",
+  "expected_primary": ["ticket.accept.satisfiable"],
+  "expected_layer": "P4",
+  "must_not_hit": [
+    "ticket.accept.acceptance-edge-held",
+    "ticket.accept.release-edge-unchecked",
+    "attempt.gate.verdict-undecided",
+    "package.record.state-missing"
+  ],
+  "basis_quote": "全 claim 有支撑、入边已释放、revision 可解析",
+  "contract_refs": [
+    "situation-inputs.md §2.1 ticket.acceptance_edge_released",
+    "situation-inputs.md §2.2 evidence.all_required_claims_supported 与 ticket.acceptance_revision_parseable",
+    "situation-inputs.md §4.1 evidenceIndex",
+    "situation-inputs.md §4.2 Ticket 与 evidence"
+  ],
+  "confidence": "high",
+  "note": "形状直接沿用合同 §5.3 的 P4 satisfiable 端到端示例；Gate 用 blocked 避免缺 Gate 产生 verdict-undecided。"
+}

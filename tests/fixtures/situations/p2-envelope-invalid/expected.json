@@ -1,0 +1,15 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/inventory-manufacture-issues-153-158 — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy review-fix package 有审查 finding 与修复返回边界；trail 为按真实 fixer 返回 envelope 不可采信补写。",
+  "expected_primary": [
+    "finding.fix.worker-envelope-invalid"
+  ],
+  "expected_layer": "P2",
+  "expected_secondary": [
+    "attempt.disposition.findings-triage-pending"
+  ],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

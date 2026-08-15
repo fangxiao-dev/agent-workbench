@@ -1,0 +1,14 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy acceptance evidence 已支持 claim，但当前 fixture 没有真实 typed release dependency；因此 release-edge-unchecked 不成立，只保留 satisfiable。",
+  "expected_primary": [
+    "ticket.accept.satisfiable"
+  ],
+  "expected_layer": "P4",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen",
+    "ticket.accept.acceptance-edge-held"
+  ]
+}

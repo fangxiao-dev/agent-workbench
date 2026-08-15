@@ -1,0 +1,12 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy package 已有 terminal pass Gate；翻译为全部 Ticket 已满足且当前 attempt 被 terminal Gate 冻结。",
+  "expected_primary": [
+    "attempt.gate.terminal-frozen"
+  ],
+  "expected_layer": "P0",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing"
+  ]
+}

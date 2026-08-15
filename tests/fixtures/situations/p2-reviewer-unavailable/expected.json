@@ -1,0 +1,13 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/order-document-completion-workflow — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy review loop 因 reviewer/ReviewRun 不可用而中断；trail 为按真实超时记录补写。",
+  "expected_primary": [
+    "attempt.review.reviewer-unavailable"
+  ],
+  "expected_layer": "P2",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

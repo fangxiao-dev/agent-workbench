@@ -1,0 +1,20 @@
+{
+  "formatVersion": "3.5",
+  "attempt": {
+    "id": "fixture-attempt",
+    "plan": "plan.md"
+  },
+  "attemptHistory": [],
+  "tickets": {},
+  "evidenceIndex": {},
+  "activeCheckpoints": {
+    "attempt": {
+      "next": "continue from checkpoint",
+      "blocker": null,
+      "evidence": [
+        "tickets/01.md"
+      ]
+    }
+  }
+}
+

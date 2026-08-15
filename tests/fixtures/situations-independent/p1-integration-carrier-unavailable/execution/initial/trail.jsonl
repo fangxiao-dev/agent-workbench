@@ -1,0 +1,1 @@
+{"timestamp":"2026-08-15T10:00:00Z","subject":"attempt","kind":"integration","situation":"attempt.readiness.integration-carrier-unavailable","chosen":"start-env","outcome":"CARRIER_UNAVAILABLE","carrier":"integration","reason":"no preconfigured carrier is available"}

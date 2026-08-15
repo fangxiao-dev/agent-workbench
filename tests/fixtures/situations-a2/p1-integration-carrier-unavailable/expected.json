@@ -1,0 +1,19 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/lark-write-risk-orchestration-163",
+  "scenario": "真实 Lark write orchestration package 的外部 integration carrier 暂不可用。",
+  "expected_primary": ["attempt.readiness.integration-carrier-unavailable"],
+  "expected_layer": "P1",
+  "must_not_hit": [
+    "attempt.verify.integration-evidence-unavailable",
+    "attempt.readiness.worker-still-running",
+    "package.record.state-missing"
+  ],
+  "basis_quote": "integration carrier 不可用",
+  "contract_refs": [
+    "situation-inputs.md §2.1 attempt.integration_carrier_available",
+    "situation-inputs.md §3.1 封闭 fact key 集合与 scope",
+    "situation-inputs.md §4.3 trail.jsonl"
+  ],
+  "confidence": "high",
+  "note": "carrier 与 evidence 是两个独立 canonical fact；本 fixture 只声明 carrier=false。"
+}

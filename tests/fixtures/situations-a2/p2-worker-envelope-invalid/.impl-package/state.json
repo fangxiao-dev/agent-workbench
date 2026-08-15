@@ -1,0 +1,19 @@
+{
+  "formatVersion": "3.5",
+  "attempt": {
+    "id": "initial",
+    "plan": "plan.md"
+  },
+  "attemptHistory": [
+    {
+      "id": "initial",
+      "plan": "plan.md",
+      "lifecycle": "active",
+      "gate": null,
+      "executionRecord": "execution/initial/execution-record.md"
+    }
+  ],
+  "tickets": {},
+  "evidenceIndex": {},
+  "activeCheckpoints": {}
+}

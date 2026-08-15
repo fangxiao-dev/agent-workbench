@@ -1,0 +1,13 @@
+{
+  "source": "kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-12-finance-office-tax-advisor — original marker had no state.json/runtime-state.json",
+  "scenario": "原包只有标志目录而没有可用 runtime state；state-missing 用缺失 state 还原，故本 fixture 是唯一不放 3.5 state.json 的例外。",
+  "expected_primary": [
+    "package.record.state-missing"
+  ],
+  "expected_layer": "P0",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "attempt.gate.terminal-frozen"
+  ]
+}
+

@@ -1,0 +1,14 @@
+{
+  "source": "kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4",
+  "scenario": "legacy attempt 的 Ticket 已全部 terminal，但 Gate 前要求的 durable delta 尚未记录；这两个 P4 条件在状态上并列。",
+  "expected_primary": [
+    "attempt.accept.all-tickets-terminal",
+    "attempt.gate.durable-delta-missing"
+  ],
+  "expected_layer": "P4",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

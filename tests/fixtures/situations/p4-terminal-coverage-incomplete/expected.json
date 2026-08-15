@@ -1,0 +1,13 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/inventory-manufacture-issues-153-158 — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy verification 尚未覆盖所有 terminal/final 证据边，不能完成 terminal review；trail 为按真实收口检查补写。",
+  "expected_primary": [
+    "attempt.review.terminal-coverage-incomplete"
+  ],
+  "expected_layer": "P4",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

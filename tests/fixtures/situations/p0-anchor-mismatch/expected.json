@@ -1,0 +1,14 @@
+{
+  "source": "kaispan-dev/docs/domains/finance-assistant/historical-unverifiable/260731-1332-kontierung-rule-engine — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy package 的 revision binding/anchor 无法回读；trail 为按真实恢复失败时间线补写的 anchor-mismatch 事实。",
+  "expected_primary": [
+    "attempt.record.anchor-mismatch"
+  ],
+  "expected_layer": "P0",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}
+

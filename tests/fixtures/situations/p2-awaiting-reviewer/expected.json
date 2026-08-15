@@ -1,0 +1,15 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/order-snapshot-reuse — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy Ticket 实现结果已返回，但显式要求的 reviewer 尚未运行；当前 Ticket 没有真实 release dependency，因此不产生 release-edge-unchecked。",
+  "expected_primary": [
+    "ticket.review.awaiting-reviewer"
+  ],
+  "expected_layer": "P2",
+  "expected_secondary": [
+    "ticket.accept.satisfiable"
+  ],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

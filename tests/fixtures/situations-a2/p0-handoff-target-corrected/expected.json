@@ -1,0 +1,20 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/260718-customer-lexware-precheck-resolution",
+  "scenario": "真实 precheck/resolution package 的 handoff target 或 order 已被修正，需要按修正值重发。",
+  "expected_primary": ["attempt.record.handoff-target-corrected"],
+  "expected_layer": "P0",
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.record.handoff-in-flight",
+    "attempt.record.handoff-recovery-needed",
+    "attempt.record.checkpoint-missing"
+  ],
+  "basis_quote": "handoff target/order 已被纠正",
+  "contract_refs": [
+    "situation-inputs.md §2.1 trail.handoff_target_corrected",
+    "situation-inputs.md §3.1 封闭 fact key 集合与 scope",
+    "situation-inputs.md §4.3 trail.jsonl"
+  ],
+  "confidence": "high",
+  "note": "target correction 只通过 canonical fact 表达；checkpoint value 不承载 target/order。"
+}

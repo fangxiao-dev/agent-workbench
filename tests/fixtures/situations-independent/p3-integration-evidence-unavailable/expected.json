@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\order-create-release-consistency",
+  "scenario": "legacy order/release 包的本地证据已完成，但 Gate 所需的真实 integration read-back 载体不可取得，因此外部证据保持 blocked。trail 为按真实流程补写。",
+  "expected_primary": ["attempt.verify.integration-evidence-unavailable"],
+  "expected_layer": "P3",
+  "must_not_hit": ["attempt.readiness.integration-carrier-unavailable", "attempt.gate.verdict-undecided", "attempt.review.reviewer-unavailable"],
+  "basis_quote": "所需 integration evidence 载体不可取得",
+  "confidence": "medium",
+  "note": "legacy Gate 明确区分本地通过与外部 integration evidence 未完成；这里把缺口落在 evidence 载体而不是 carrier。"
+}

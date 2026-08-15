@@ -1,0 +1,1 @@
+{"timestamp":"2026-08-15T08:20:00Z","subject":"attempt","kind":"handoff","situation":"attempt.record.handoff-recovery-needed","chosen":"controlled-retry","outcome":"BOOTSTRAP_FAILED","reason":"handoff bootstrap/create failed"}

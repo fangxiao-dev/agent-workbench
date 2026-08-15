@@ -1,0 +1,20 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/lark-write-hardening-batch",
+  "scenario": "真实 external-write hardening package 的 fixer 返回 envelope 不完整，结果不能直接采信。",
+  "expected_primary": ["finding.fix.worker-envelope-invalid"],
+  "expected_layer": "P2",
+  "must_not_hit": [
+    "finding.fix.reviewer-returned",
+    "finding.fix.main-session-discovered",
+    "package.record.state-missing"
+  ],
+  "basis_quote": "finding fixer 的 envelope 不完整或不可采信",
+  "contract_refs": [
+    "situation-inputs.md §2.2 trail.envelope_valid 与 trail.last_worker_mode",
+    "situation-inputs.md §3.1 fact key 集合",
+    "situation-inputs.md §4.3 result-like/worker-return",
+    "situation-inputs.md §4.4 finding ID"
+  ],
+  "confidence": "medium",
+  "note": "envelope_valid 使用 canonical fact；fix mode 只能按 §2.2/§4.3 的 worker-return worker_mode 字段提供，因为合同的封闭 fact key 表没有 trail.last_worker_mode。"
+}

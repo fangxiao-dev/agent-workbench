@@ -1,0 +1,38 @@
+{
+  "formatVersion": "3.5",
+  "attempt": {
+    "id": "fixture-attempt",
+    "plan": "plan.md"
+  },
+  "attemptHistory": [],
+  "tickets": {
+    "TKT-01": {
+      "state": "SATISFIED",
+      "acceptance": {
+        "revision": "5f299f3",
+        "environment": "sanitized-env"
+      }
+    }
+  },
+  "evidenceIndex": {
+    "TKT-01": {
+      "AC-1": [
+        {
+          "timing": "remaining-completion",
+          "artifact": "evidence/sanitized-supporting",
+          "revision": "5f299f3",
+          "environment": "sanitized-env",
+          "conclusion": "supporting"
+        },
+        {
+          "timing": "remaining-completion",
+          "artifact": "evidence/sanitized-contradictory",
+          "revision": "5f299f3",
+          "environment": "sanitized-env",
+          "conclusion": "contradictory"
+        }
+      ]
+    }
+  },
+  "activeCheckpoints": {}
+}

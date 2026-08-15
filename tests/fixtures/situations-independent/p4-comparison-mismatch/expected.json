@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\order-create-release-consistency",
+  "scenario": "legacy order/release 包的 acceptance evidence 绑定在一个 revision，但 Gate pass 记录引用了另一个 comparison commit；不能把该 Gate 当作一致的 pass。",
+  "expected_primary": ["attempt.gate.comparison-mismatch"],
+  "expected_layer": "P4",
+  "must_not_hit": ["attempt.review.comparison-head-unfixed", "attempt.gate.terminal-frozen", "ticket.accept.satisfiable"],
+  "basis_quote": "判了 pass",
+  "confidence": "high",
+  "note": "Gate comparison commit 与 SATISFIED Ticket acceptance revision 明确不同，且 comparison 两端都是固定值。"
+}

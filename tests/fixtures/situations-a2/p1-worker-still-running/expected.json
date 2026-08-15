@@ -1,0 +1,19 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/260712-module-knowledge-bidirectional-backfill",
+  "scenario": "真实知识回填 package 已派出 worker，但当前 attempt 还没有收到返回。",
+  "expected_primary": ["attempt.readiness.worker-still-running"],
+  "expected_layer": "P1",
+  "must_not_hit": [
+    "attempt.readiness.multiple-ready-tickets",
+    "attempt.readiness.integration-carrier-unavailable",
+    "package.record.state-missing"
+  ],
+  "basis_quote": "已派出的 worker 尚未返回，主控准备另起动作或打断",
+  "contract_refs": [
+    "situation-inputs.md §2.1 trail.decision_without_result",
+    "situation-inputs.md §3.1 dispatch event schema",
+    "situation-inputs.md §4.3 trail.jsonl"
+  ],
+  "confidence": "high",
+  "note": "采用合同推荐的 dispatch/RUNNING/returned=false 形状；只保留一个 ready Ticket，避免 multiple-ready-tickets 干扰。"
+}

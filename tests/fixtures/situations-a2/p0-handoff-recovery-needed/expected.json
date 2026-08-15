@@ -1,0 +1,20 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/260712-order-detail-lifecycle-retirement",
+  "scenario": "真实生命周期 package 的 session handoff bootstrap 失败，需要一次受控恢复。",
+  "expected_primary": ["attempt.record.handoff-recovery-needed"],
+  "expected_layer": "P0",
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.record.handoff-in-flight",
+    "attempt.record.handoff-target-corrected",
+    "attempt.record.checkpoint-missing"
+  ],
+  "basis_quote": "handoff bootstrap、重命名或创建失败",
+  "contract_refs": [
+    "situation-inputs.md §2.1 trail.handoff_recovery_needed",
+    "situation-inputs.md §3.1 封闭 fact key 集合与 scope",
+    "situation-inputs.md §4.3 trail.jsonl"
+  ],
+  "confidence": "high",
+  "note": "只声明 recovery-needed，不混入 handoff target 或 checkpoint 事实。"
+}

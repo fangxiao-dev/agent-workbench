@@ -1,0 +1,20 @@
+{
+  "source": "D:/CodeSpace/prj-supplyer-webapp/docs/implementations/260720-persistent-operation-recovery",
+  "scenario": "真实 persistent recovery package 正在等待 handoff/continuation 返回。",
+  "expected_primary": ["attempt.record.handoff-in-flight"],
+  "expected_layer": "P0",
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.record.handoff-recovery-needed",
+    "attempt.record.handoff-target-corrected",
+    "attempt.record.checkpoint-missing"
+  ],
+  "basis_quote": "handoff/relay 正在发送或等待 continuation",
+  "contract_refs": [
+    "situation-inputs.md §2.1 trail.handoff_in_flight",
+    "situation-inputs.md §3.1 封闭 fact key 集合与 scope",
+    "situation-inputs.md §4.3 trail.jsonl"
+  ],
+  "confidence": "high",
+  "note": "handoff liveness 使用 canonical fact，不用自由文本或 checkpoint next 推断。"
+}

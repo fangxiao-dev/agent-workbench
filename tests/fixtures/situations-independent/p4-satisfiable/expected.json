@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\kaispan-dev\\docs\\domains\\finance-assistant\\implementations\\260803-1332-category-sachkonto-bwa-coverage",
+  "scenario": "legacy category package 的一个 Ticket 已覆盖全部 required claims，revision/environment 明确，入边已释放且没有 contradictory evidence。",
+  "expected_primary": ["ticket.accept.satisfiable"],
+  "expected_layer": "P4",
+  "must_not_hit": ["ticket.accept.acceptance-edge-held", "ticket.verify.contradictory-unresolved", "attempt.accept.all-tickets-terminal"],
+  "basis_quote": "全 claim 有支撑、入边已释放、revision 可解析",
+  "confidence": "high",
+  "note": "Ticket 两个 claim 均有 supporting evidence，acceptance pair 与 evidence revision/environment 一致。"
+}

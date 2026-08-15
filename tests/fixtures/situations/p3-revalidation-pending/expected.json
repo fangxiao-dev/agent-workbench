@@ -1,0 +1,13 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy evidence/contract 变化后 Ticket 被置为 NEEDS-REVALIDATION，重验尚未完成。",
+  "expected_primary": [
+    "ticket.rework.revalidation-pending"
+  ],
+  "expected_layer": "P3",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

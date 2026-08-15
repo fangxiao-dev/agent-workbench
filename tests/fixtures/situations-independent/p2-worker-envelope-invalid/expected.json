@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\kaispan-dev\\docs\\implementations\\2026-08-04-ocr-ai-worker-lane-split",
+  "scenario": "legacy worker-lane 包的 finding fixer 返回了不完整 envelope，缺少可采信的 evidence/revision；应使用 fresh fix invocation。trail 为按真实流程补写。",
+  "expected_primary": ["finding.fix.worker-envelope-invalid"],
+  "expected_layer": "P2",
+  "must_not_hit": ["finding.fix.reviewer-returned", "finding.review.closure-awaiting", "ticket.implement.worker-blocked"],
+  "basis_quote": "finding fixer 的 envelope 不完整或不可采信",
+  "confidence": "high",
+  "note": "trail 明确标记 mode=fix、INVALID_ENVELOPE 以及缺失字段。"
+}

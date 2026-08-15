@@ -1,0 +1,13 @@
+{
+  "source": "kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-22-kassel-pdf-to-extf-poc — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy manual acceptance 已指定 owner，但结果未回填到 Execution Record；trail 为按真实手工验收阻塞补写。",
+  "expected_primary": [
+    "attempt.verify.manual-result-missing"
+  ],
+  "expected_layer": "P4",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

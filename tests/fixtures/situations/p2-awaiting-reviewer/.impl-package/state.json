@@ -1,0 +1,28 @@
+{
+  "formatVersion": "3.5",
+  "attempt": {
+    "id": "fixture-attempt",
+    "plan": "plan.md"
+  },
+  "attemptHistory": [],
+  "tickets": {
+    "TKT-01": {
+      "state": "PENDING"
+    }
+  },
+  "evidenceIndex": {
+    "TKT-01": {
+      "AC-1": [
+        {
+          "artifact": "evidence/sanitized",
+          "claim": "AC-1",
+          "revision": "5f299f3",
+          "environment": "sanitized-env",
+          "timing": "remaining-completion",
+          "conclusion": "supporting"
+        }
+      ]
+    }
+  },
+  "activeCheckpoints": {}
+}

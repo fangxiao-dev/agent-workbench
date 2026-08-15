@@ -1,0 +1,13 @@
+{
+  "source": "kaispan-dev/docs/implementations/legacy-impl-plans-retirement — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy retirement/standing-bookkeeper 队列仍有待落账 item；业务内容已替换为占位。",
+  "expected_primary": [
+    "package.record.intake-backlog"
+  ],
+  "expected_layer": "P5",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

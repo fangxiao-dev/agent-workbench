@@ -1,0 +1,14 @@
+{
+  "source": "prj-supplyer-webapp/docs/implementations/release-external-readiness-audit — original .impl-package/runtime-state.json contractVersion 3.2",
+  "scenario": "legacy release/cutover package 明确把 production/provider mutation 延后，当前没有获批 integration carrier；trail 为按真实 deferred gate 补写。",
+  "expected_primary": [
+    "attempt.readiness.integration-carrier-unavailable"
+  ],
+  "expected_layer": "P1",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}
+

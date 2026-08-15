@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\inventory-lock-renewal",
+  "scenario": "legacy plan 有连续的锁续期、查找收窄和收尾步骤，工作尚未收口却没有 active checkpoint；跨 session 或长任务交接缺少恢复入口。",
+  "expected_primary": ["attempt.record.checkpoint-missing"],
+  "expected_layer": "P0",
+  "must_not_hit": ["attempt.record.session-resumed", "attempt.record.checkpoint-refresh", "attempt.gate.terminal-frozen"],
+  "basis_quote": "需要跨 session 交接或长任务收口",
+  "confidence": "medium",
+  "note": "表述说明了需要 checkpoint 的时机，但没有给出机械信号；这里用 active attempt + PENDING Ticket + 缺失 activeCheckpoints 表达。"
+}

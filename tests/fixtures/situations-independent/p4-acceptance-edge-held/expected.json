@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\order-create-release-consistency",
+  "scenario": "legacy order/release 包已经有支持 Ticket claim 的 evidence，但 acceptance typed dependency 仍被 PENDING reviewer Ticket 挡住；可以继续实施，不能 SATISFIED。",
+  "expected_primary": ["ticket.accept.acceptance-edge-held"],
+  "expected_layer": "P4",
+  "must_not_hit": ["ticket.accept.satisfiable", "ticket.verify.contradictory-unresolved", "ticket.readiness.blocker-maybe-resolved"],
+  "basis_quote": "有 evidence 但 acceptance 边未释放",
+  "confidence": "high",
+  "note": "supporting evidence 和 acceptance dependency 分别给出，清楚隔离 acceptance edge 与 implementation readiness。"
+}

@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\prj-supplyer-webapp\\docs\\implementations\\260712-order-detail-lifecycle-retirement",
+  "scenario": "这个旧 package 只有 legacy runtime sidecar，没有迁移后的 current state；恢复时找不到 state.json。",
+  "expected_primary": ["package.record.state-missing"],
+  "expected_layer": "P0",
+  "must_not_hit": ["package.record.projection-drift", "attempt.gate.terminal-frozen"],
+  "basis_quote": "state 缺失或 `package validate` 失败",
+  "confidence": "high",
+  "note": "故意不创建 .impl-package/state.json；这是该处境成立所需的最小输入。"
+}

@@ -1,0 +1,10 @@
+{
+  "source": "D:\\CodeSpace\\kaispan-dev\\docs\\domains\\finance-assistant\\implementations\\260803-1332-category-sachkonto-bwa-coverage",
+  "scenario": "legacy category package 的后续 Ticket 依赖前置实现，但前置仍 PENDING；当前没有任何 readyTicket，只能先查阻塞源。",
+  "expected_primary": ["attempt.readiness.all-edges-held"],
+  "expected_layer": "P1",
+  "must_not_hit": ["attempt.readiness.multiple-ready-tickets", "ticket.readiness.blocker-maybe-resolved", "attempt.readiness.integration-carrier-unavailable"],
+  "basis_quote": "无 readyTicket，但有 PENDING",
+  "confidence": "high",
+  "note": "两个 Ticket 与 implementation typed dependency 足以形成无 readyTicket 的最小图。"
+}
