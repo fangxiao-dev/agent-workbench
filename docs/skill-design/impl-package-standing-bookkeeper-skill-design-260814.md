@@ -4,6 +4,7 @@
 
 - 日期：2026-08-14。
 - 状态：顶层方向与简化边界已由 Owner 确认；Blind Opening 和 Owner review 已完成，具体写入内容、依赖判定和消息格式留待试运行收敛。
+- 2026-08-15 修订：standing 表示 package 的持续记账责任，不要求 bookkeeper 进程或 session 常驻；本节 19 的 bounded invocation 与主 thread 路由合同优先于本文早期对持久 session 的假设。
 - 目标：把 Implementation Package 的文档与运行状态写入移出主 thread 的开发关键路径。
 - 设计对象：新的 package-bound standing bookkeeper 能力；本文不授权实施。
 
@@ -193,6 +194,23 @@ package、Attempt、目标文件、模板和命令由已经绑定该 package 的
 - bookkeeper 是否能稳定找到正确 artifact 和写入方式；
 - bookkeeper 的回复是否足够让主 thread 快速复核；
 - 自然对话中的澄清和修正是否足以处理日常偏差。
+- 主 thread 填写 §19.4 的 `artifact / section / operation` 实际花费多少工夫，以及有多少次填错或需要澄清。
+- `依赖：是` 实际发生多少次、每次阻塞主 thread 多久，其中有多少次事后看并不需要等待。
+
+后两项与 [impl-package-situation-table-260815](impl-package-situation-table-260815/README.md) 的处境表方案相关：该方案若成立，写入目标的定位将由处境表给出，`依赖：是` 将被前沿写入与追溯写入的划分取代。本文档在试运行产出实测数据前保持现状，不提前重写。
+
+### 15.1 试运行前的唯一准备：回执落盘
+
+当前形态跑起来收不到上面后两项的读数——回执留在对话里，跑完只剩印象，而印象正是本轮要替换掉的证据类型。因此试运行前补一件事，**不改任何设计，只加落盘**：
+
+> 把 bookkeeper 的每次回执追加成一行，落到一个文件里。
+
+回执本就有 §19.5 的字段，其中 `状态` 已区分 `DONE` / `BLOCKED` / `NEEDS_SPLIT`。落盘之后：
+
+- `BLOCKED` 与 `NEEDS_SPLIT` 的出现次数，就是主 thread 填不对 `artifact / section / operation` 的直接读数，不需要额外记录任何东西；
+- 行内带上 `依赖` 标记与请求到回执的时间差，第二项观察也有了读数。
+
+这件事同时是决策轨迹机制的第一次小规模试用：成本是一次回执追加一行，却能顺便量出显式写行的漏记率——即 [处境表方案 10.2](impl-package-situation-table-260815/README.md#102-首版不改动-impl_package_statepy) 首版最需要的那个数。处境表真要落地时，这条纪律在真实使用中守不守得住已经有答案。
 
 试运行结束后，再根据实际事件整理轻量模板和依赖判断经验。没有发生的问题不进入 Skill 合同。
 
@@ -233,3 +251,100 @@ Blind Opening 认可语义裁决与物理写入分离，也提出了更复杂的
 5. 日常异常先通过自然对话、现有 package state 和现有 CLI 处理；只有真实反复出现的失败才进入后续设计。
 
 Blind Opening 到此结束；Owner 处置优先于 reviewer 提出的候选机制，本文没有开始 implementation。
+
+## 19. 试运行后修订：bounded package bookkeeper（2026-08-15）
+
+### 19.1 触发案例与结论
+
+- 触发案例：`01a00156-2f48-7241-a471-44dfce868cb0`。
+- 试运行暴露的主要问题不是主 thread 没有遵守角色边界，而是 `standing-bookkeeper` 只有角色声明，没有把“主 thread 必须路由记账”和“bookkeeper 每次只做一个 bounded write unit”写成可执行合同。
+- 当前目标不再要求常驻 agent。主 thread 必须知道 package 物理写入要交给 bookkeeper；bookkeeper 可以由 fresh worker 承载，但每次 invocation 都必须加载本角色并独立完成一个 bounded write unit。
+- 本修订不引入新的常驻 `@bookkeeper` profile，也不要求持久 binding、session 复用或用户级 host 配置。`@luna-worker` 可以作为底层执行 profile，但不能替代 bookkeeper role contract。
+
+### 19.2 修订后的核心模型
+
+```text
+package thread
+  └─ package write route
+       └─ bookkeeper role invocation（fresh allowed）
+            ├─ 读取 canonical state 与 owning-stage 规则
+            ├─ 写入一个 bounded target
+            ├─ 运行 focused validation
+            └─ 返回可复核 receipt
+```
+
+“1 package = 1 主 thread = 1 standing bookkeeper”在本修订中解释为“一条 package 记账责任线”，而不是“一条永不更换的 live session”。同一 package 的所有物理记账请求都必须走该角色；具体 invocation 可以由新的 worker 承载，并从 canonical state 恢复，而不是依赖上一次聊天上下文。
+
+### 19.3 主 thread 路由门
+
+凡涉及当前 package 的 Decision、Spec、`contract-design.md`、Plan、Ticket、Progress、Execution Record、active checkpoint、execution finding、Gate 或 runtime state 的物理写入，主 thread 必须调用 `standing-bookkeeper` role。主 thread 继续拥有语义判断、验收和最终采信权，但不直接编辑当前 package artifact。
+
+主 thread 负责把自然语言更新整理成 bounded brief；Owner 不需要手写独立消息协议。没有明确 package、唯一目标 artifact、目标 section 或 operation 时，先补齐上下文；bookkeeper 不得通过猜测扩大写集。
+
+### 19.4 Bounded write unit
+
+每次 bookkeeper invocation 只处理一个 package artifact 的一个 section 和一个 operation：
+
+```text
+package: <package identity>
+artifact: <唯一 repo-relative path>
+section: <唯一 heading>
+operation: append | replace
+更新：<已确定的事实或结论>
+依据：<必要证据>
+依赖：是 | 否
+```
+
+合同规则：
+
+1. artifact、section 或 operation 不明确时返回 `BLOCKED`，不自行推断语义目标。
+2. 一个请求包含多个 artifact 时返回 `NEEDS_SPLIT`；由主 thread 拆成多个有顺序的 invocation。
+3. bookkeeper 只写指定 artifact 和 section，不修改业务代码、其他 package 或未授权路径。
+4. bookkeeper 不创建 requirement、architecture、acceptance、finding disposition 或 Gate verdict；它只执行主 thread 已经作出的结论。
+5. fresh invocation 合法，但必须从 canonical package state、当前 owning-stage 规则和目标 artifact 恢复上下文。
+
+如果现有 state CLI 会在一次命令中同时更新 state 与 machine-owned projection，调用合同必须明确这些 derived paths 是否属于该 logical write unit；不得把未声明的物理路径静默归入“正常副作用”。
+
+### 19.5 Receipt 与越界验证
+
+bookkeeper 的最小回执改为：
+
+```text
+状态：DONE | BLOCKED | NEEDS_SPLIT | VALIDATION_FAILED
+理解：<本次记录的事实或结论>
+实际写入路径：[<路径>]
+实际修改 section：<section>
+focused validation：<检查及结果>
+unexpected paths：[]
+阻塞：<无，或具体原因>
+```
+
+`unexpected paths` 非空、focused validation 失败或实际修改 section 与请求不一致时，不得返回 `DONE`。即使已经发生部分写入，也必须报告准确路径和首个失败点；`依赖：是` 的下一动作在成功回执前保持阻塞，`依赖：否` 只允许主 thread 继续不相关工作，不免除回执和验证。
+
+### 19.6 与 `@luna-worker` 的关系
+
+`@luna-worker` 继续表示宿主提供的执行 profile，不承担 package 记账语义。bookkeeper invocation 可以使用该 profile，但启动 brief 必须显式包含 package identity、bounded write set、禁止越界范围和 receipt contract。不要仅通过新增一个 `@bookkeeper` 名称来模拟 standing；如果底层仍是 unconstrained fresh worker，名称变化不能产生新的行为保证。
+
+本修订不扩展 `subagent-driven-development` 的 investigate/implement/fix/review mode，也不建立第二套 worker registry。bookkeeper 是独立的 package write role；worker resolver 只负责承载它的实际执行者。
+
+### 19.7 Eval 修订方向
+
+现有 eval 保留语义 owner、依赖等待、correction、恢复和 state CLI 边界，但需要替换或补充以下行为：
+
+- package 写入请求是否被主 thread 路由给 bookkeeper，而不是主 thread 直接编辑；
+- fresh invocation 是否能从 canonical state 恢复并继续 bounded bookkeeping；
+- 缺少唯一 artifact/section/operation 是否返回 `BLOCKED`；
+- 多 artifact 请求是否返回 `NEEDS_SPLIT`；
+- unexpected path 或 validation 失败是否拒绝成功回执；
+- receipt 是否包含实际路径、section、focused validation、unexpected paths 和 blocker。
+
+现有“同一次更新写入 `spec.md` 与 `contract-design.md`”的 eval 必须改为 `NEEDS_SPLIT`，或拆成两个明确、有顺序的更新；它不能继续作为一次 invocation 同时写两个 artifact 的正向样例。
+
+### 19.8 明确不在本轮范围内
+
+- 不实现 package state 的持久 bookkeeper binding 字段。
+- 不实现 `ensure-bound`、`resume-bound` 或 host-level session lifecycle。
+- 不创建新的用户级 `@bookkeeper` profile，不修改 `@luna-worker` 的宿主配置。
+- 不把本设计修订视为 `SKILL.md`、缓存副本或 runtime CLI 已完成实现。
+
+后续若试运行证明 fresh invocation 仍不足以满足性能、并发或恢复要求，再单独提出 host binding/profile 设计；该设计必须建立在 bounded role contract 已稳定的基础上。

@@ -30,6 +30,16 @@
 
    这只是便于主 thread 复核的最小回执，不是新的消息协议。
 
+6. 把本次回执追加为一行 JSON 到 `<package>/execution/<attempt>/bookkeeper-receipts.jsonl`：
+
+   ```json
+   {"v":1,"ts":"<ISO8601>","dep":true,"status":"done|blocked",
+    "paths":["<本次实际写入路径或 CLI 动作>"],"validation":"<检查结果>",
+    "blocker":null,"note":"<本次记录事实的一句话>"}
+   ```
+
+   只追加，不重写既有行。写不成时在回执的「阻塞」里说明，不要因此丢弃本次写入结果。该文件是试运行读数来源，不改变本角色的任何写入边界或语义。
+
 ## 依赖、修正与失败
 
 - 主 thread 标记 `依赖：是` 时，在写入和验证成功前不要释放下一动作；标记 `依赖：否` 时照常完成并回执，但不要求主 thread 停止实现工作。

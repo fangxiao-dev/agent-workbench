@@ -29,6 +29,7 @@ description: 当一个 Implementation Package thread 需要初始化或恢复与
    不需要为 bookkeeper 建立独立消息协议；package、Attempt、目标 artifact 和命令由绑定角色结合当前状态定位。
 3. `依赖：是` 时，下一动作需要本次写入结果，等待 bookkeeper 回执；`依赖：否` 时，主 thread 可以继续推进，稍后消费回执。不要把这两个选项扩展成预先固定的依赖判定表。
 4. 检查回执中的理解、实际写入和 focused validation。内容不对时继续发送 correction event，仍由 bookkeeper 修正；主 thread 不直接编辑当前 package artifact。
+5. 每次回执由 bookkeeper 同时追加一行到 `<package>/execution/<attempt>/bookkeeper-receipts.jsonl`。主 thread 需要回顾本 package 的记账历史时读该文件，不依赖聊天记录。
 
 ## 物理写入边界
 
