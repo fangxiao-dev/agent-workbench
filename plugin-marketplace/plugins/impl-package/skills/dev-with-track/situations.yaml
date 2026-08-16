@@ -344,6 +344,7 @@ situations:
   - slug: ticket.accept.satisfiable
     basis: cli
     when:
+      ticket.state: PENDING
       evidence.all_required_claims_supported: true
       evidence.contradictory_unresolved: false
       ticket.acceptance_edge_released: true
