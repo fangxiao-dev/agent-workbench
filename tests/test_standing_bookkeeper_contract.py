@@ -25,16 +25,19 @@ def test_standing_bookkeeper_entry_and_role_are_complete() -> None:
     assert "references/role.md" in entry.read_text(encoding="utf-8")
 
     role_text = role.read_text(encoding="utf-8")
+    # 降级为异常 slow path 后的不变量：只在异常场景触发、不写 state.json、
+    # 返回结构化修复输入由主 thread 执行。依据见
+    # docs/skill-design/impl-package-situation-table-260815/bookkeeper-practicality.md
     for marker in (
-        "一个 package 绑定一个主 thread 和一个 standing bookkeeper",
+        "slow path",
         "impl-package-composition-contract.md",
         "impl-package-current-state.md",
-        "req-align",
-        "impl-planning",
-        "plan-review",
-        "to-tickets",
-        "dev-with-track",
-        "依赖：是",
+        "证据矛盾",
+        "部分写入补齐",
+        "跨 stage 对账",
+        "结构化修复",
+        "state.json",
+        "回执",
         "focused validation",
     ):
         assert marker in entry.read_text(encoding="utf-8") + role_text
@@ -76,4 +79,8 @@ def test_package_writers_delegate_physical_mutation_without_moving_semantic_owne
     assert "主 thread 不直接编辑当前 package 的 Plan 或 runtime state" in callers["impl-planning"]
     assert "Ticket 文件的物理写入与运行时 state 更新" in callers["to-tickets"]
     assert "approved package edits are physically applied" in callers["plan-review"]
-    assert "package 记录通过 bookkeeper 落盘" in callers["dev-with-track"]
+    # bookkeeper 已降级为异常 slow path：日常结构化写入由主 session 直接调 CLI，
+    # bookkeeper 不再写 state.json。依据见
+    # docs/skill-design/impl-package-situation-table-260815/bookkeeper-practicality.md
+    assert "slow path" in callers["dev-with-track"]
+    assert "不成为第二个 state writer" in callers["dev-with-track"]
