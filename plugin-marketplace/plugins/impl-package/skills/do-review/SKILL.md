@@ -23,6 +23,9 @@ Every selected review track is dispatched to its matching leaf agent:
 
 The leaf agent definition owns its declared skill and leaf brief; the parent passes the common ReviewRun context and any phase-specific addendum. A dispatched leaf must not invoke `do-review`, dispatch agents or subagents, re-evaluate topology/capacity, inspect other tracks' same-round output, classify cross-track results, or decide the overall verdict. A reviewer skill defines primary review intent, not an exclusive capability boundary; evidence-backed cross-domain candidates return to the parent for attribution and classification.
 
+带到达路径的 claim，reviewer 要检查证据是否真的走过该路径：有没有连真实依赖、有没有过 composition root。
+只审单层文件不能替代这项路径证据检查。
+
 The default topology for `initial` and `terminal-final` comes only from [reviewer-registry.json](references/reviewer-registry.json): Track A `review-code`, Track B `review-code-by-standards`, and Track C `review-code-by-spec`. `safety-review` is conditional for those full reviews, not a registry default. `finding-closure` has one fresh independent `reviewer` invocation for all named findings; it does not split by registry track or launch a separate Safety leaf. The reviewer checks safety implications only when they belong to the named findings. Worker choice is independent of topology; the worker Skill owns its model and effort defaults. Other phases use the current host defaults for the caller-supplied target class, subject to explicit constraints.
 
 ## 0. Gate

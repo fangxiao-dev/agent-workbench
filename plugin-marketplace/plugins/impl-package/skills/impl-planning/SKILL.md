@@ -21,10 +21,11 @@ Plan 的语义、Coverage、执行策略和 Planned Verification 仍由本 Skill
 ## 流程
 
 1. initial 读取已批准 Decision、`spec.md`、从属 `contract-design.md` disposition，以及当前代码/测试事实，确认 D/S gate 已通过；未触及的 legacy Spec 可暂缺该文件，同一 package 的 patch/update 沿用 initial bundle approval。
-2. 在让 bookkeeper 创建或更新 Plan/state 前执行 admission backstop：若下一步仍需决定可观察行为、data identity、permission、concurrency、recovery 或 public shape，停止 planning，明确缺失合同并路由 `/impl-package:req-align` 重新确认当前 Spec。不得创建或更新 Plan/state，也不得在 Plan 中补第二套 DTO/schema。
+2. 在让 bookkeeper 创建或更新 Plan/state 前执行 admission backstop：若下一步仍需决定可观察行为、data identity、permission、concurrency、recovery 或 public shape，或 contract surface 命中幂等键 / CAS / 版本号、多个来源写同一个目标字段、替换 / 撤回 / 恢复语义、跨存储提交（两个 store 各自提交）或声明值 vs 检测值但 Spec 只有规则、没有结果矩阵，停止 planning，明确缺失合同并路由 `/impl-package:req-align` 重新确认当前 Spec。不得创建或更新 Plan/state，也不得在 Plan 中补第二套 DTO/schema。
 3. 判断是 initial 还是 patch；patch 只描述相对上次 terminal gate 的实际 delta。
 4. 新 package 固定选择 `tickets=true, dag=false`；`dag=true` 只允许在旧 package 迁移/恢复计划中出现。
 5. 将每个 Decision/Spec 约束映射到实现范围及 Ticket，写执行顺序、修改边界、依赖、集成/回滚方式和足以区分正确/错误实现的验证；每个验证项明确 evidence owner。Coverage Map 可以引用 `spec.md` 或其从属 `contract-design.md` 的稳定章节。把 early falsification evidence、remaining completion evidence 和不可延后安全不变量分开写。
+   - 纵向切片装不下一个 worker 时，回去把该 seam 冻得更细，不要改成横向切分。
 6. `tickets=true` 时调用 `/impl-package:to-tickets`；新 package 不调用 `create-task-dag`。
 7. 初始 bundle 冻结 plan candidate；调用 `/impl-package:plan-review` 的 `bundle-admission`。返回 `full-review` 时继续同一 skill 的完整审查；处理 material findings，并联合校验 coverage、typed dependency、ownership、证据可行性、Gate 边界与集成顺序，然后请求一次完整 bundle approval。后续 patch/update 直接沿用该 approval。
 8. 获批后，主 thread 将 Attempt ID、canonical Plan 路径、bundle approval 和下一动作交给 bound bookkeeper；由 bookkeeper 运行：
