@@ -1,54 +1,24 @@
-# 试运行读数说明
+# Slow-path 试运行读数说明
 
-本页规定 bookkeeper 试运行要算哪几个数、怎么算、以及各自指向什么结论。**阈值在试运行开始前写定**，事后不调整——否则读数会退化为对既有倾向的事后合理化。
+本页替代原来为“常驻 bookkeeper 负责日常记账”设计的 R1–R4。原读数及其阈值现在作废：日常 evidence、checkpoint、state transition 和 Gate 已由主 session 直接调用 CLI，正常写入不会产生 bookkeeper receipt；继续用旧分母会把 fast path 混入 slow path，既测不出异常处理质量，也无法比较真实的关键路径成本。
 
-数据来源：`<package>/execution/<attempt>/bookkeeper-receipts.jsonl`，由 bookkeeper 每次回执追加一行，格式见 `skills/standing-bookkeeper/references/role.md` 更新循环第 6 步。
+当前数据源仍是 `<package>/execution/<attempt>/bookkeeper-receipts.jsonl`，但只记录 slow-path 调用；由 bookkeeper 每次异常回执追加一行，格式见 [`role.md`](../../../plugin-marketplace/plugins/impl-package/skills/standing-bookkeeper/references/role.md) 更新循环第 6 步。需要计算耗时和派发成本时，再对照 `execution/<attempt>/trail.jsonl` 中的 dispatch/result 事件、主 session 执行的 CLI 结果和同一 revision 的 `package validate`。未来 session 不需要依赖聊天记录或 session id。
 
-未来 session 消费这批数据只需读该文件与本设计目录，不需要聊天记录或 session id。
+## 旧 R1–R4 的处置
 
-## 重要前提：跑的是 §19 之前的形态
+旧 R1（定位错误率）、R2（握手频率/阻塞时长）、R3（越界写入次数）和 R4（落盘漏记率）都不再作为 slow path 的正式读数。它们假设每次 package 写入都会经过一个能独占物理写入的常驻 agent；这一假设已被本次 practicality 复盘否定。旧 rollout 中没有可用的 receipt 配对，且其 93.3% 的结构化目标本应走 CLI，因此旧读数最多保留为历史背景，不能迁移成新形态的样本或阈值。
 
-`impl-package-standing-bookkeeper-skill-design-260814.md` 第 19 节的 bounded write unit（主 thread 填 `artifact / section / operation`、`NEEDS_SPLIT`、`unexpected paths` 回执）**尚未实施**。现役 skill 仍是更早的形态：
-
-- 主 thread 给自然语言更新（结论 / 依据 / 依赖）；
-- **bookkeeper 自己按 owning stage 规则定位写入位置**；
-- 回执为「理解 / 写入 / 验证 / 阻塞」四行。
-
-因此试运行不是在检验 §19.4，而是在产出**决定要不要实施 §19.4** 的数据。这与 [README 第 12 节](README.md#12-与-standing-bookkeeper-设计的关系)的判断方向一致：定位是路由问题，交给被委派的一侧更省；现役形态恰好已经是这样。
-
-## 四个读数
+## Slow path 的四个新读数
 
 | # | 读数 | 怎么算 | 指向什么 |
 | --- | --- | --- | --- |
-| R1 | **定位错误率** | 需要 correction event 的次数 ÷ 总回执数。回执 `paths` 与主 thread 复核后认定的目标不符即计入 | bookkeeper 自主定位是否可靠 |
-| R2 | **握手频率与阻塞时长** | `dep=true` 的占比；每条从主 thread 发起到回执的时间差之和 | `依赖：是` 是不是无谓的同步点 |
-| R3 | **越界写入次数** | `paths` 超出本次更新应触及范围的次数 | 现有边界够不够，是否需要 §19.5 的 `unexpected paths` 校验 |
-| R4 | **落盘漏记率** | 见下 | 显式写行这条纪律在真实使用中守不守得住 |
+| R1 | **触发准确率** | slow-path 调用中确实属于证据矛盾、恢复、部分写入补齐、跨 stage 对账或异常排查的次数 ÷ slow-path 总调用数；把 routine fast-path 误路由计为 false positive | 触发边界是否清楚，是否又把日常记账塞回 agent |
+| R2 | **异常闭环率** | slow path 返回结构化对账/修复输入后，主 session 能在一次调用内接受、直接执行 CLI 并通过 focused validation 的次数 ÷ slow-path 总调用数；重复派发、二次解释或仍需人工裁决的单独计数 | slow path 是否真的减少异常处理往返，而不是制造新的握手 |
+| R3 | **边界违例次数** | 记录 bookkeeper 直接修改 `state.json`、越出本次异常范围，或主 session 依据其建议写入不属于 package 的路径的次数；按实际路径和 diff 交叉校验 | single-writer、package scope 和修复建议边界是否守得住；任一 confirmed violation 都是阻断信号 |
+| R4 | **异常处理成本** | 对每次 slow path 记录 dispatch 到 result 的 wall time、`dep=true` 的关键路径阻塞、spawn/wait/retry 次数，并与同批直接 CLI 的调用数和验证成本对照；报告中位数和 p95 | slow path 的知识收益是否值得其冷启动、等待和同步成本 |
 
-### R4 的交叉校验
+R1–R3 以 receipt、trail、state diff 和 validation 交叉确认，不把“聊天里说过”当作事实。R4 不把 `dep=false` 的后台处理算成主线阻塞，但要保留总耗时，避免把异步成本完全隐藏。
 
-漏记率没有自述来源——bookkeeper 漏写一行时不会有人报告。用地面真相取下界：
+## 样本量与阈值
 
-```text
-git log 中该 package 目录的改动次数（排除主 thread 自己的提交）
-  对比
-bookkeeper-receipts.jsonl 的行数
-```
-
-package 文件动了但 jsonl 没有对应行，即漏记。这与 thread-harness 的 `dispatches_since_progress` 是同一手法：证明不了每条记录为真，但能让"记了却没发生"和"发生了却没记"变成可见信号。
-
-## 阈值与结论映射
-
-| 读数 | 阈值 | 结论 |
-| --- | --- | --- |
-| R1 | **> 20%** | bookkeeper 自主定位不可靠，§19.4 把定位推回主 thread 有理由实施 |
-| R1 | **< 10%** | 自主定位可靠，明确不实施 §19.4，[README §12](README.md#12-与-standing-bookkeeper-设计的关系) 的吸收判断成立 |
-| R2 | `dep=true` **> 50%** 且事后判断多数不必等 | 握手确实是无谓同步点，按前沿写入 / 追溯写入划分替换 |
-| R3 | **> 0** | 补 `unexpected paths` 校验；具体形态按实际越界样态定 |
-| R4 | **> 30%** | 显式写行撑不住，处境表首版需重新考虑 [README §10.2](README.md#102-首版不改动-impl_package_statepy) 的"不改 state.py" |
-
-R1 落在 10% 与 20% 之间时不下结论，继续跑或扩大样本。
-
-## 样本量
-
-回执数少于 20 条时任何结论都不成立，只能作为形态可用性的定性反馈。这一条同样在开跑前写定。
+旧的 `R1 > 20%`、`R1 < 10%`、`R2 dep=true > 50%` 和 `R4 > 30%` 阈值全部退休，不适用于按需 slow path。新试运行至少收集 20 次 slow-path 调用后再下正式结论；不足 20 次只报告计数、具体异常和定性反馈。R3 的边界违例保持零容忍；R1、R2、R4 的业务阈值须在下一轮试运行开始前单独批准，不能根据既有结果事后倒推。
