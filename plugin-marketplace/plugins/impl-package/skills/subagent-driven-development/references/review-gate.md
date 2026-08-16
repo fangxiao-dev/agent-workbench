@@ -15,9 +15,8 @@ implementer(last slice)
      -> PASS: review_state=PASSED
      -> finding: fresh fixer -> reviewer(closure)
 
-main-session finding
-  -> fresh fixer
-  -> reviewer(对应 scope)
 ```
+
+主 session finding 的 fresh fixer 与对应 scope reviewer 由处境表投递。
 
 Implementer 或 fixer 的 `DONE` 在 reviewer 运行前都标记为 `review_state: PENDING_REVIEW`。Reviewer 必须是独立 fresh invocation，默认逻辑 worker 为 `$grok-worker`；fixer 使用新的 `@luna-worker` 或 `$grok-worker` invocation，不能复用发现 finding 的旧进程。Reviewer 只读、不修复、不替 main session 做 Ticket acceptance。`UNCERTAIN/BLOCKED` 原样上交。只有 `review_state=NOT_REQUIRED` 或 `PASSED` 的结果可以被主 session 消费；`PENDING_REVIEW`、`FINDING`、`BLOCKED` 都不能支持完成声明。

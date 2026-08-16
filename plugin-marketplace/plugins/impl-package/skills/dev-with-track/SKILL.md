@@ -10,12 +10,32 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 
 ## Restore
 
+在第 1 步 `package validate` 返回后，把当前处境渲染作为恢复起点，再进入第 2 步的 progress/checkpoint 读取。主 session 控制循环在每一轮真正推进动作前，用同一调用刷新处境与可选动作。两处都按下面顺序把 validator 结果接到 renderer；`--json` 让主控可以读取 `digest`、`selected`、`parallel_matches`、`undetermined` 和 `unmatched`：
+
+```powershell
+python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> package validate
+$validationResult = if ($LASTEXITCODE -eq 0) {
+  '{"projection_drift":false,"source":"package validate"}'
+} else {
+  '{"projection_drift":true,"source":"package validate"}'
+}
+$renderArgs = @('--package', '<package>', '--validation-result', $validationResult, '--json')
+if ($previousDigest) { $renderArgs += @('--since', $previousDigest) }
+python <impl-package-plugin-root>/scripts/situation.py render @renderArgs
+```
+
+这里的布尔值是对 `package validate` 退出结果的结构化适配：成功传 `false`，非零结果保守传 `true`；不解析 stdout/stderr。若非零同时意味着 `package.state_invalid`，renderer 自己推导的 P0 `package.record.state-missing` 仍按表的顺序优先显示。渲染结果是参考，不是 gate；主控可以按实际判断偏离建议，但要在轨迹中写一行理由。
+
+首次调用不设置 `$previousDigest`；每次从结果读取当前 `digest` 保存到 `$previousDigest`，下一轮追加 `--since $previousDigest`。digest 命中时只返回一行“处境未变”，否则返回完整内容并带上新的 digest。需要 human 输出中的无法判定处境名单时，显式追加 `--explain-undetermined`；默认 human 输出只保留计数。
+
 1. 运行 `package validate`；跨 session 或授权绑定比较点时附 `--commit <Git commit>`。
 2. 打开根 `progress.md`，读取 current Attempt、可选合同别名、Composition、Ticket 状态、blocker、active checkpoint、next action、Gate 及 Execution Record 指针；只有旧 package 才读取 Task/DAG/Handoff 轴。
 3. 只沿当前动作读取必要 Ticket、Task、Handoff、Execution Record judgment、review 或 evidence；不要重读全部历史。
 4. 根据初始 bundle approval 和实际 diff确认仍在同一 package。implementation、behavior、acceptance、data/security 与 package record 更新均沿用该 approval；新 package 从 owning stage 取得新的初始 bundle approval。
 
 ## 主 session 控制循环
+
+每轮在 Investigate、Decide、Implement 或 Evaluate 任何一步落地前，先按 Restore 上面的 `package validate` → 结构化 `--validation-result` → `situation.py render --json` 顺序查看当前处境与可选动作；这只是导航参考，不是推进 gate。
 
 1. **Investigate**：确认首个真实违约边界、输入、持久状态、权威来源和已通过边界。
 2. **Decide & seam**：现有 Decision/Spec 能唯一裁决时作为 implementation defect；存在多个合理业务结果才请求 owner。
@@ -44,17 +64,21 @@ Get-Content .\er-payload.json -Raw |
 
 3.5 的 `recovery judgment` payload 只使用 `purpose=judgment`、`subject=attempt|ticket:<id>`、`title`、`content` 和可选 evidence；checkpoint 使用显式 `recovery checkpoint --subject ... --next ...`，旧 package 的 Task Handoff 只在迁移时读取。
 
+## 处境投递与轨迹
+
+处境表漏掉某个当前处境时，按判断行动并走 escape 出口是合法路径，不是违规；若主控偏离渲染建议，也只需记录理由，不把 renderer 当成阻断器。没有其它载体的动作要显式写一行轨迹：派发的发起与返回、escape、Ticket 选择、finding 定级与分流、来源路由判断，以及需要声明的 fact。轨迹位置与格式遵循 `references/situation-inputs.md`（运行时不需要打开，仅在维护处境表或写 per-package 覆盖时查阅）和 `docs/skill-design/impl-package-situation-table-260815/trail-schema.md`（运行时不需要打开，仅在维护轨迹格式或写 per-package 覆盖时查阅）：`execution/<attempt>/trail.jsonl` 中每个非空行是 JSON object，事件使用 `dispatch`、`result`/`worker-return` 或 `kind=fact`，带正确的 `subject`，fact 带 `key`、`value`、`ts`，需要 Git 对账时带 `head`。首版全部显式写行，不要求改 `impl_package_state.py`。
+
 ## Review、Findings 与人工验收
 
+Finding 的 source recheck、定级/closure 和 terminal Gate 前分流动作由处境表按当前处境投递。
+
 - 通过 `/impl-package:do-review` 运行 initial、finding-closure 和 terminal-final review；review topology、适用范围和 coverage 由该 skill 拥有。本 skill 消费报告，terminal pass 要求 terminal-final coverage 完整且所有阻断 finding 已关闭。
-- 当 `do-review` parent 已接受并归类 Track C / Spec fidelity finding 时，修复派发前读取 [Runtime Protocol](references/runtime-protocol.md) 的 Findings 路由并消费同一 ReviewRun 已记录的一次性独立 source recheck；本 skill 不重复调度 reviewer，记录缺失或 incomplete 时交回 `do-review`。其他 finding 和未接受 candidate 不触发。该检查不创建 Ticket/Attempt 状态，也不替代 finding-closure 或 terminal-final。
-- P1/P2 finding 必须修复并 closure verify；editorial suggestion 不阻断 Gate。
-- package 级 `execution-findings.md` 在 terminal Gate 前必须完成分流：Decision rationale→Decision，规范行为→Spec，执行判断→Execution Record，长期知识→Durable Delta/`_pending.md`。
+- 本 skill 不重复调度 reviewer，记录缺失或 incomplete 时交回 `do-review`。该检查不创建 Ticket/Attempt 状态，也不替代 finding-closure 或 terminal-final。
 - Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 把入口、oracle、环境、失败反馈和 teardown owner 写入 judgment 或 canonical handoff，并取得结果 evidence。
 
 ## Verify and Gate
 
-completion claim 先交给 `/impl-package:verification-before-completion`。Gate 只判断 current Attempt：
+完成声明的审计动作由处境表按当前处境投递；Gate 只判断 current Attempt：
 
 - `blocked`：保持 active，记录 gap 和 next action。
 - `pass`：所有 earned Task/Ticket、适用验证、review、manual acceptance 和 findings closure 均满足。
