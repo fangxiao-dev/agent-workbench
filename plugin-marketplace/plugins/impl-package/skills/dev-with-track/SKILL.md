@@ -67,11 +67,11 @@ Get-Content .\er-payload.json -Raw |
 
 ## 处境投递与轨迹
 
-处境表漏掉某个当前处境时，按判断行动并走 escape 出口是合法路径，不是违规；若主控偏离渲染建议，也只需记录理由，不把 renderer 当成阻断器。没有其它载体的动作要显式写一行轨迹：派发的发起与返回、escape、Ticket 选择、finding 定级与分流、来源路由判断，以及需要声明的 fact。轨迹位置与格式遵循 `references/situation-inputs.md`（运行时不需要打开，仅在维护处境表或写 per-package 覆盖时查阅）和 `docs/skill-design/impl-package-situation-table-260815/trail-schema.md`（运行时不需要打开，仅在维护轨迹格式或写 per-package 覆盖时查阅）：`execution/<attempt>/trail.jsonl` 中每个非空行是 JSON object，事件使用 `dispatch`、`result`/`worker-return` 或 `kind=fact`，带正确的 `subject`，fact 带 `key`、`value`、`ts`，需要 Git 对账时带 `head`。首版全部显式写行，不要求改 `impl_package_state.py`。
+处境表漏掉某个当前处境时，按判断行动并走 escape 出口是合法路径，不是违规；若主控偏离渲染建议，也只需记录理由，不把 renderer 当成阻断器。没有其它载体的动作要显式写一行轨迹：派发的发起与返回、escape、Ticket 选择、finding 定级与分流、来源路由判断，以及需要声明的 fact。轨迹位置与格式遵循 `../../references/situation-inputs.md`（运行时不需要打开，仅在维护处境表或写 per-package 覆盖时查阅）和 `docs/skill-design/impl-package-situation-table-260815/trail-schema.md`（运行时不需要打开，仅在维护轨迹格式或写 per-package 覆盖时查阅）：`execution/<attempt>/trail.jsonl` 中每个非空行是 JSON object，事件使用 `dispatch`、`result`/`worker-return` 或 `kind=fact`，带正确的 `subject`，fact 带 `key`、`value`、`ts`，需要 Git 对账时带 `head`。首版全部显式写行，不要求改 `impl_package_state.py`。
 
 ## Review、Findings 与人工验收
 
-Finding 的 source recheck、定级/closure 和 terminal Gate 前分流动作由处境表按当前处境投递。
+当 `do-review` parent 已接受并归类 Track C / Spec fidelity finding 时，修复派发前读取 [Runtime Protocol](references/runtime-protocol.md) 的 Findings 路由并消费同一 ReviewRun 已记录的一次性独立 source recheck。其余 finding 的定级/closure 和 terminal Gate 前分流动作由处境表按当前处境投递。
 
 - 通过 `/impl-package:do-review` 运行 initial、finding-closure 和 terminal-final review；review topology、适用范围和 coverage 由该 skill 拥有。本 skill 消费报告，terminal pass 要求 terminal-final coverage 完整且所有阻断 finding 已关闭。
 - 本 skill 不重复调度 reviewer，记录缺失或 incomplete 时交回 `do-review`。该检查不创建 Ticket/Attempt 状态，也不替代 finding-closure 或 terminal-final。
