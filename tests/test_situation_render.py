@@ -72,6 +72,14 @@ def test_situation_render(package: Path) -> None:
         f"actual={rendered.get('highest_match_layer')}; scenario={expected['scenario']}"
     )
 
+    # `unmatched` 只表示“一行都没命中”。它曾经按“有没有 P0”来填，导致每个
+    # P1–P5 渲染都自称未匹配，而主控恰好只读 --json。
+    if primary:
+        assert rendered.get("unmatched") is None, (
+            f"{package.name}: unmatched was populated while {primary} matched at "
+            f"{rendered.get('highest_match_layer')}; scenario={expected['scenario']}"
+        )
+
     secondary = [item["slug"] for item in rendered.get("other_matches", [])]
     assert secondary == expected.get("expected_secondary", []), (
         f"{package.name}: secondary mismatch; expected={expected.get('expected_secondary', [])} "
@@ -91,6 +99,14 @@ def test_situation_render(package: Path) -> None:
         f"{package.name}: must_not_hit appeared in active render: {sorted(forbidden)}; "
         f"source={expected['source']}; scenario={expected['scenario']}"
     )
+
+    expected_undetermined_count = expected.get("expected_undetermined_count")
+    if expected_undetermined_count is not None:
+        assert len(rendered.get("undetermined", [])) == expected_undetermined_count, (
+            f"{package.name}: undetermined count mismatch; "
+            f"expected={expected_undetermined_count} "
+            f"actual={len(rendered.get('undetermined', []))}; scenario={expected['scenario']}"
+        )
 
 
 def test_human_render_collapses_undetermined_and_supports_since() -> None:

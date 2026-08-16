@@ -1044,6 +1044,8 @@ class FactContext:
     def _missing_fact(self, key: str) -> Fact:
         if not self.snapshot.trail.present or self.snapshot.trail.error:
             return self.unknown("trail.jsonl 不存在或无法读取")
+        if self._trail_is_empty():
+            return self.unknown("trail.jsonl 没有事件")
         if key in FACT_DEFAULTS:
             value = FACT_DEFAULTS[key]
             return _fact_value(value, reason=f"{key} 未声明，采用 fail-closed 缺省值 {value}")
@@ -1100,6 +1102,16 @@ class FactContext:
         if all_attempt_rows:
             return rows
         return [row for row in rows if row.get("subject") in {None, "", "attempt"}]
+
+    def _trail_is_empty(self) -> bool:
+        trail = self.snapshot.trail
+        return trail.error is None and (not trail.present or not trail.rows)
+
+    def _observation_rows(self, *, all_attempt_rows: bool = False) -> list[dict[str, Any]] | None:
+        rows = self._subject_rows(all_attempt_rows=all_attempt_rows)
+        if rows is None and self._trail_is_empty():
+            return []
+        return rows
 
     def _fact_subject_matches(self, subject: str | None) -> bool:
         if self.kind == "ticket":
@@ -1269,7 +1281,7 @@ class FactContext:
         return None
 
     def last_outcome(self) -> Fact:
-        rows = self._subject_rows()
+        rows = self._observation_rows()
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
         for row in reversed(rows):
@@ -1290,7 +1302,7 @@ class FactContext:
 
     def _actions_since_checkpoint(self) -> Fact:
         rows = self._subject_rows()
-        if rows is None:
+        if rows is None or self._trail_is_empty():
             return self.unknown("trail.jsonl 不存在或无法读取")
         checkpoint = self.active_checkpoint_present()
         if checkpoint.known and not checkpoint.value:
@@ -1323,7 +1335,7 @@ class FactContext:
 
     def _open_dispatch(self) -> bool | None:
         rows = self._subject_rows()
-        if rows is None:
+        if rows is None or self._trail_is_empty():
             return None
         decisions = [row for row in rows if _event_kind(row) == "decision"]
         results = {
@@ -1362,7 +1374,7 @@ class FactContext:
         if explicit is not None:
             value = str(explicit.value).lower()
             return _fact_value(value) if value in {"investigate", "implement", "fix", "verify", "review"} else explicit
-        rows = self._subject_rows()
+        rows = self._observation_rows()
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
         for row in reversed(rows):
@@ -1403,7 +1415,7 @@ class FactContext:
         return self.unknown("trail.envelope_valid 没有列出的机械输入")
 
     def _decision_without_result(self) -> Fact:
-        rows = self._subject_rows(all_attempt_rows=self.kind == "attempt")
+        rows = self._observation_rows(all_attempt_rows=self.kind == "attempt")
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
 
@@ -1440,7 +1452,7 @@ class FactContext:
         fallback metadata so an artifact payload can still pair with its
         claim, revision, and environment.
         """
-        rows = self._subject_rows()
+        rows = self._observation_rows()
         if rows is None:
             return self.unknown(self.snapshot.trail.error or "trail.jsonl 不存在或无法读取")
         keys = ("ref", "evidence", "artifact", "evidence_ref", "direct_evidence")
@@ -1465,7 +1477,7 @@ class FactContext:
         return _fact_value(payloads)
 
     def _incomplete_count(self) -> Fact:
-        rows = self._subject_rows()
+        rows = self._observation_rows()
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
         count = 0
@@ -1479,7 +1491,7 @@ class FactContext:
         return _fact_value(count)
 
     def _has_investigate(self) -> Fact:
-        rows = self._subject_rows(all_attempt_rows=self.kind == "attempt")
+        rows = self._observation_rows(all_attempt_rows=self.kind == "attempt")
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
         for row in rows:
@@ -1492,7 +1504,7 @@ class FactContext:
 
     def _has_investigate_dispatch(self) -> Fact:
         rows = self._subject_rows()
-        if rows is None:
+        if rows is None or self._trail_is_empty():
             return self.unknown("trail.jsonl 不存在或无法读取")
         for row in rows:
             kind = _event_kind(row)
@@ -1536,7 +1548,7 @@ class FactContext:
         return _fact_value(False)
 
     def _investigation_context_clear(self) -> Fact:
-        if not self.snapshot.trail.present or self.snapshot.trail.error:
+        if self._trail_is_empty() or self.snapshot.trail.error:
             return self.unknown("trail.jsonl 不存在或无法读取")
         if self.kind != "ticket":
             return _fact_value(True)
@@ -1553,7 +1565,7 @@ class FactContext:
         return _fact_value(any(kind == "release" for kind, _ in self.ticket.dependencies))
 
     def _finding_source(self) -> Fact:
-        rows = self._subject_rows()
+        rows = self._observation_rows()
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
         for row in reversed(rows):
@@ -1802,7 +1814,7 @@ def _when_ticket_review_required(context: FactContext) -> Fact:
     if explicit is not None:
         return explicit
     rows = context._subject_rows()
-    if rows is None:
+    if rows is None or context._trail_is_empty():
         return context.unknown("trail.jsonl 不存在或无法读取")
     if any(str(row.get("review_state", "")).upper() == "PENDING_REVIEW" for row in rows):
         return _fact_value(True)
@@ -2701,7 +2713,7 @@ def _derive(table: TableModel, snapshot: Snapshot) -> dict[str, Any]:
         ]
         suppressed_matches = []
 
-    if selected is None:
+    if selected is None and not parallel_matches:
         unmatched_object = "attempt" if "attempt" in {str(row["slug"]).split(".", 1)[0] for row in table.rows} else "package"
         unmatched = f"{unmatched_object}.record.unmatched"
     else:

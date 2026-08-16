@@ -1,0 +1,16 @@
+{
+  "source": "p4-satisfiable 3.5 fixture with execution/ removed",
+  "scenario": "完整 3.5 package 没有 execution/ 目录，轨迹输入为空；state 中 required claim 已有 supporting evidence，acceptance/release 边满足 satisfiable。",
+  "expected_primary": [
+    "ticket.accept.satisfiable"
+  ],
+  "expected_layer": "P4",
+  "expected_secondary": [],
+  "expected_undetermined_count": 33,
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen",
+    "ticket.accept.release-edge-unchecked",
+    "ticket.accept.acceptance-edge-held"
+  ]
+}
