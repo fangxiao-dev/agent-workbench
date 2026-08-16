@@ -1053,3 +1053,17 @@ P0 内部顺序就是 YAML 的顺序。P0 有多个 active match 时，renderer 
   P1 carrier row 不会因 carrier fact 缺失而命中。可预测。
 - `p4-acceptance-edge-held`：evidence count 大于 0 且 acceptance edge 未释放使目标命中；
   Ticket 尚未 terminal，所以缺 Gate 不产生 `attempt.gate.missing`，只有目标 row 可见。可预测。
+
+### 10.4 缺失或零行 trail 的降级补充
+
+`execution/<attempt-id>/trail.jsonl` 缺失，或文件可读但没有非空 JSON 行，统一视为
+“没有事件”；坏 JSON、读取错误仍按 U 处理。对直接查询“轨迹中是否记录过某类事件”的
+key，空集有确定值，不把整行推入 `undetermined`：`evidence.indexed=false`、
+`trail.decision_without_result=false`、`trail.direct_evidence_returned=false`、
+`trail.finding_source=None`、`trail.incomplete_count=0`、`trail.last_outcome=None`、
+`trail.last_worker_mode=None`。
+
+其余依赖轨迹缺席来判断 worker、调查、复核、handoff、checkpoint、envelope、可用性、
+业务声明或 Git trail head 的 key，缺失或零行仍返回 U；特别是不能把老 package 未写入
+新版 trail 的动作当成“没有做过”。`ticket.release_edge_rechecked` 的既有缺省值只在
+trail 可读且含事件时适用，缺失或零行仍为 U。

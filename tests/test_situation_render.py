@@ -24,6 +24,21 @@ def _primary_slugs(result: dict) -> list[str]:
     return [item["slug"] for item in result.get("parallel_matches", [])]
 
 
+def _render_text(package: Path, *arguments: str) -> str:
+    completed = subprocess.run(
+        [sys.executable, str(CLI), "render", "--package", str(package), *arguments],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert completed.returncode == 0, (
+        f"render failed\nstdout={completed.stdout}\nstderr={completed.stderr}"
+    )
+    return completed.stdout.rstrip("\r\n")
+
+
 @pytest.mark.parametrize("package", _fixture_dirs(), ids=lambda path: path.name)
 def test_situation_render(package: Path) -> None:
     expected = json.loads((package / "expected.json").read_text(encoding="utf-8"))
@@ -57,6 +72,14 @@ def test_situation_render(package: Path) -> None:
         f"actual={rendered.get('highest_match_layer')}; scenario={expected['scenario']}"
     )
 
+    # `unmatched` 只表示“一行都没命中”。它曾经按“有没有 P0”来填，导致每个
+    # P1–P5 渲染都自称未匹配，而主控恰好只读 --json。
+    if primary:
+        assert rendered.get("unmatched") is None, (
+            f"{package.name}: unmatched was populated while {primary} matched at "
+            f"{rendered.get('highest_match_layer')}; scenario={expected['scenario']}"
+        )
+
     secondary = [item["slug"] for item in rendered.get("other_matches", [])]
     assert secondary == expected.get("expected_secondary", []), (
         f"{package.name}: secondary mismatch; expected={expected.get('expected_secondary', [])} "
@@ -76,3 +99,43 @@ def test_situation_render(package: Path) -> None:
         f"{package.name}: must_not_hit appeared in active render: {sorted(forbidden)}; "
         f"source={expected['source']}; scenario={expected['scenario']}"
     )
+
+    expected_undetermined_count = expected.get("expected_undetermined_count")
+    if expected_undetermined_count is not None:
+        assert len(rendered.get("undetermined", [])) == expected_undetermined_count, (
+            f"{package.name}: undetermined count mismatch; "
+            f"expected={expected_undetermined_count} "
+            f"actual={len(rendered.get('undetermined', []))}; scenario={expected['scenario']}"
+        )
+
+
+def test_human_render_collapses_undetermined_and_supports_since() -> None:
+    package = ROOT / "tests/fixtures/situations-a2/p0-evidence-unfiled"
+
+    full = _render_text(package)
+    assert "无法判定 30 行\n" in full
+    assert "无法判定 30 行:" not in full
+    assert "package.record.projection-drift" not in full
+    digest_line = full.rsplit("\n", 1)[-1]
+    assert digest_line.startswith("digest: ")
+    digest = digest_line.removeprefix("digest: ")
+    assert len(digest) == 12
+
+    explained = _render_text(package, "--explain-undetermined")
+    assert "无法判定 30 行: package.record.projection-drift (package)" in explained
+
+    unchanged = _render_text(package, "--since", digest)
+    assert unchanged == f"处境未变 (digest: {digest})"
+
+
+def test_json_render_exposes_digest_and_short_circuits_since() -> None:
+    package = ROOT / "tests/fixtures/situations-a2/p0-evidence-unfiled"
+    rendered = json.loads(_render_text(package, "--json"))
+    assert rendered["unchanged"] is False
+    assert len(rendered["digest"]) == 12
+
+    unchanged = json.loads(_render_text(package, "--json", "--since", rendered["digest"]))
+    assert unchanged == {
+        "digest": rendered["digest"],
+        "unchanged": True,
+    }

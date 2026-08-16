@@ -1,6 +1,6 @@
-# Do Review Subagent Briefs
+# Do Review Parent Briefs
 
-Copy the common block and exactly one applicable review brief. Add the anti-duplicate block only after round 1. Do not append another track's output or same-round summary.
+The four `review-track-*` agent definitions carry their own leaf-review brief. The parent supplies the common block and exactly one applicable phase brief. Add the anti-duplicate block only after round 1; do not append another track's output or same-round summary.
 
 ## Common Context Block
 
@@ -28,12 +28,13 @@ Review target:
 - User review-depth preference:
 - Safety applicability / evidence / coverage:
 - Canonical ledger artifact (read-only):
+- Review report artifact (parent-owned detail file):
 
 Known findings ledger:
 <read the previous round's canonical ledger from the artifact; write "none yet" for round 1>
 
 Return format:
-- Normal review: natural-language candidates with enough location, evidence, impact, and suggested handoff for the parent to record and verify.
+- Track leaf: compact `slug | repo-relative-file:line | severity | one-sentence summary` entries only; full evidence, impact, and suggested handoff belong in the parent-supplied review report artifact.
 - Closure verification: PASS/FAIL/UNCERTAIN per issue.
 - Every finding needs evidence.
 - Do not mutate files, issues, git state, data, or external systems.
@@ -41,28 +42,15 @@ Return format:
 
 ## Generic Leaf Reviewer Brief
 
-```text
-Read and use exactly the assigned reviewer skill path. Do not resolve a similarly named skill yourself.
+The four track agent definitions already carry this contract; do not append another copy to their prompts:
 
-You are a leaf reviewer in a topology already resolved by the parent do-review run. Do not invoke do-review, do not run its subagent gate, do not dispatch subagents, and do not re-evaluate reviewer topology or capacity. For `finding-closure`, you are the single reviewer for the complete named-finding set; there are no peer tracks. Follow the assigned skill's primary review intent and handoff guidance; it is not an exclusive capability boundary.
-
-Review exactly the supplied complete diff and fixed comparison point. Do not inspect, request, or use findings produced by other tracks in the current round. For `finding-closure`, no other track is dispatched; review the supplied named findings together in this one invocation.
-
-Read every repository contract source only from the immutable resolved head with `git show <resolved-head>:<path>`, using the exact repo-relative path in the ReviewRun record. Never read a contract source from the working tree, and do not recompute its hash or create a second capture; the ReviewRun's Git object ID and SHA-256 are the fixed provenance record. Tracker-only evidence is supplied directly in the discovery record.
-
-Return natural-language candidates with enough location, evidence, impact, and suggested handoff for the parent to record and verify. You may surface an evidence-backed cross-domain candidate, but the parent owns cross-track attribution, deduplication, classification, loop convergence, and the overall verdict.
-
-The canonical ledger artifact is owned by the main session. Read it only; never create, edit, replace, classify, or append to the file. Do not treat a copied prompt excerpt as a second source of truth.
-
-Start each review round with a fresh leaf-worker session. Resume only to finish the same interrupted round; never carry raw worker session state into a later round. A cancelled, timed-out, stalled, max-turns, or explicitly `PARTIAL` worker is incomplete, not PASS.
-
-For each finding:
-- cite evidence;
-- prefer file:line evidence when reviewing code;
-- explain the concrete failure mode or broken invariant;
-- state the risk urgency described by the assigned skill without making final classification;
-- avoid known duplicates unless you add materially new evidence or impact.
-```
+- Read and use exactly the declared skill; do not resolve a similarly named skill yourself.
+- Do not invoke do-review. Do not dispatch subagents. Do not re-evaluate reviewer topology or capacity.
+- Review exactly the supplied complete diff and fixed comparison point; do not inspect other tracks in the current round.
+- Read immutable contract sources with `git show <resolved-head>:<path>` only; never use the working tree; do not recompute its hash.
+- The canonical ledger is main-session-owned and read-only. Start each round with a fresh leaf-worker session; incomplete is not PASS, and never carry raw worker state into a later round.
+- Surface evidence-backed cross-domain candidates, but leave attribution, deduplication, classification, convergence, and overall verdict to the parent.
+- Return only the compact finding index. Put full evidence, impact, risk urgency, and handoff details in the review report artifact; do not return a complete narrative or large quotations.
 
 ## Closure Verification Brief
 

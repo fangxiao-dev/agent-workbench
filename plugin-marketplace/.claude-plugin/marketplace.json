@@ -9,7 +9,7 @@
       "name": "impl-package",
       "source": "./plugins/impl-package",
       "description": "A staged implementation and review suite for requirements, planning, execution, verification, and stable-document backfill.",
-      "version": "0.3.1"
+      "version": "0.4.0"
     }
   ]
 }

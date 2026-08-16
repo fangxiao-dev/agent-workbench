@@ -6,7 +6,7 @@
 
 1. 运行 `package validate`；projection drift 时先运行 `package refresh-progress`。
 2. 打开 `progress.md`，确认 current Attempt、lifecycle、Gate、blocker、active checkpoint 和 next action；新 package 只确认 Ticket Acceptance，旧 package 才确认两条状态轴。
-3. 新 package 依据 Ticket typed dependency 与 Ticket state 判断 readiness；旧 package 才依据 DAG/Task 和 Ticket dependency。Progress 不授权 readiness。
+3. readiness 与 dependency 的具体处境和动作由处境表投递。Progress 不授权 readiness。
 4. 新 package 只打开当前动作需要的 plan/Ticket/Execution Record/evidence；旧 package 才按需读取 DAG/Handoff。
 5. 推进后使用语义 `ticket` 命令的 `--expect`，再写 `recovery checkpoint` 或必要 `recovery judgment`。
 
@@ -20,7 +20,6 @@ Evidence 必须是存在的仓库相对路径，可带 anchor，并足以解释�
 
 ## Readiness 与返工
 
-- 新 package：Ticket implementation dependency 阻止进入 `readyTickets`；acceptance dependency 允许实施但阻止 SATISFIED；release dependency 在 Gate/release 前复核。
 - 旧 package：Task dependency 未释放时不得进入 READY/RUNNING；Task DONE 后由 Working Branch owner 集成、运行共享验证并映射 Ticket AC。
 - plan/contract 变化在同一 package 直接更新；按需记录 affected subset 的 revalidation/coverage/verification，并沿用 initial bundle approval。
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import re
 import subprocess
@@ -29,6 +30,7 @@ except ImportError:  # pragma: no cover - exercised only in incomplete installs
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 TABLE_PATH = PLUGIN_ROOT / "skills" / "dev-with-track" / "situations.yaml"
 STAGE = "dev-with-track"
+DIGEST_LENGTH = 12
 STATE_REL = ".impl-package/state.json"
 GATE_REL = "gate.md"
 FINDINGS_REL = "execution-findings.md"
@@ -1042,6 +1044,8 @@ class FactContext:
     def _missing_fact(self, key: str) -> Fact:
         if not self.snapshot.trail.present or self.snapshot.trail.error:
             return self.unknown("trail.jsonl 不存在或无法读取")
+        if self._trail_is_empty():
+            return self.unknown("trail.jsonl 没有事件")
         if key in FACT_DEFAULTS:
             value = FACT_DEFAULTS[key]
             return _fact_value(value, reason=f"{key} 未声明，采用 fail-closed 缺省值 {value}")
@@ -1098,6 +1102,16 @@ class FactContext:
         if all_attempt_rows:
             return rows
         return [row for row in rows if row.get("subject") in {None, "", "attempt"}]
+
+    def _trail_is_empty(self) -> bool:
+        trail = self.snapshot.trail
+        return trail.error is None and (not trail.present or not trail.rows)
+
+    def _observation_rows(self, *, all_attempt_rows: bool = False) -> list[dict[str, Any]] | None:
+        rows = self._subject_rows(all_attempt_rows=all_attempt_rows)
+        if rows is None and self._trail_is_empty():
+            return []
+        return rows
 
     def _fact_subject_matches(self, subject: str | None) -> bool:
         if self.kind == "ticket":
@@ -1267,7 +1281,7 @@ class FactContext:
         return None
 
     def last_outcome(self) -> Fact:
-        rows = self._subject_rows()
+        rows = self._observation_rows()
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
         for row in reversed(rows):
@@ -1288,7 +1302,7 @@ class FactContext:
 
     def _actions_since_checkpoint(self) -> Fact:
         rows = self._subject_rows()
-        if rows is None:
+        if rows is None or self._trail_is_empty():
             return self.unknown("trail.jsonl 不存在或无法读取")
         checkpoint = self.active_checkpoint_present()
         if checkpoint.known and not checkpoint.value:
@@ -1321,7 +1335,7 @@ class FactContext:
 
     def _open_dispatch(self) -> bool | None:
         rows = self._subject_rows()
-        if rows is None:
+        if rows is None or self._trail_is_empty():
             return None
         decisions = [row for row in rows if _event_kind(row) == "decision"]
         results = {
@@ -1360,7 +1374,7 @@ class FactContext:
         if explicit is not None:
             value = str(explicit.value).lower()
             return _fact_value(value) if value in {"investigate", "implement", "fix", "verify", "review"} else explicit
-        rows = self._subject_rows()
+        rows = self._observation_rows()
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
         for row in reversed(rows):
@@ -1401,7 +1415,7 @@ class FactContext:
         return self.unknown("trail.envelope_valid 没有列出的机械输入")
 
     def _decision_without_result(self) -> Fact:
-        rows = self._subject_rows(all_attempt_rows=self.kind == "attempt")
+        rows = self._observation_rows(all_attempt_rows=self.kind == "attempt")
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
 
@@ -1438,7 +1452,7 @@ class FactContext:
         fallback metadata so an artifact payload can still pair with its
         claim, revision, and environment.
         """
-        rows = self._subject_rows()
+        rows = self._observation_rows()
         if rows is None:
             return self.unknown(self.snapshot.trail.error or "trail.jsonl 不存在或无法读取")
         keys = ("ref", "evidence", "artifact", "evidence_ref", "direct_evidence")
@@ -1463,7 +1477,7 @@ class FactContext:
         return _fact_value(payloads)
 
     def _incomplete_count(self) -> Fact:
-        rows = self._subject_rows()
+        rows = self._observation_rows()
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
         count = 0
@@ -1477,7 +1491,7 @@ class FactContext:
         return _fact_value(count)
 
     def _has_investigate(self) -> Fact:
-        rows = self._subject_rows(all_attempt_rows=self.kind == "attempt")
+        rows = self._observation_rows(all_attempt_rows=self.kind == "attempt")
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
         for row in rows:
@@ -1490,7 +1504,7 @@ class FactContext:
 
     def _has_investigate_dispatch(self) -> Fact:
         rows = self._subject_rows()
-        if rows is None:
+        if rows is None or self._trail_is_empty():
             return self.unknown("trail.jsonl 不存在或无法读取")
         for row in rows:
             kind = _event_kind(row)
@@ -1534,7 +1548,7 @@ class FactContext:
         return _fact_value(False)
 
     def _investigation_context_clear(self) -> Fact:
-        if not self.snapshot.trail.present or self.snapshot.trail.error:
+        if self._trail_is_empty() or self.snapshot.trail.error:
             return self.unknown("trail.jsonl 不存在或无法读取")
         if self.kind != "ticket":
             return _fact_value(True)
@@ -1551,7 +1565,7 @@ class FactContext:
         return _fact_value(any(kind == "release" for kind, _ in self.ticket.dependencies))
 
     def _finding_source(self) -> Fact:
-        rows = self._subject_rows()
+        rows = self._observation_rows()
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
         for row in reversed(rows):
@@ -1800,7 +1814,7 @@ def _when_ticket_review_required(context: FactContext) -> Fact:
     if explicit is not None:
         return explicit
     rows = context._subject_rows()
-    if rows is None:
+    if rows is None or context._trail_is_empty():
         return context.unknown("trail.jsonl 不存在或无法读取")
     if any(str(row.get("review_state", "")).upper() == "PENDING_REVIEW" for row in rows):
         return _fact_value(True)
@@ -2699,7 +2713,7 @@ def _derive(table: TableModel, snapshot: Snapshot) -> dict[str, Any]:
         ]
         suppressed_matches = []
 
-    if selected is None:
+    if selected is None and not parallel_matches:
         unmatched_object = "attempt" if "attempt" in {str(row["slug"]).split(".", 1)[0] for row in table.rows} else "package"
         unmatched = f"{unmatched_object}.record.unmatched"
     else:
@@ -2729,7 +2743,50 @@ def _subject_label(subject: str) -> str:
     return subject
 
 
-def _render_human(result: dict[str, Any], snapshot: Snapshot) -> str:
+def _digest_candidate(
+    item: dict[str, Any] | None,
+    layer_by_slug: dict[str, int],
+) -> dict[str, Any] | None:
+    if item is None:
+        return None
+    slug = str(item["slug"])
+    return {
+        "slug": slug,
+        "subject": item.get("subject"),
+        "layer": layer_by_slug[slug],
+        "action_ids": list(item.get("action_ids", [])),
+    }
+
+
+def _situation_digest(table: TableModel, result: dict[str, Any]) -> str:
+    layer_by_slug = _priority_layer_by_slug(table)
+    groups = {
+        name: [
+            _digest_candidate(item, layer_by_slug)
+            for item in result.get(name, [])
+        ]
+        for name in ("parallel_matches", "other_matches", "suppressed_matches")
+    }
+    groups["selected"] = _digest_candidate(result.get("selected"), layer_by_slug)
+    payload = {
+        "match_groups": groups,
+        "highest_match_layer": result.get("highest_match_layer"),
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:DIGEST_LENGTH]
+
+
+def _render_human(
+    result: dict[str, Any],
+    snapshot: Snapshot,
+    *,
+    explain_undetermined: bool = False,
+) -> str:
     selected = result.get("selected")
     lines: list[str] = []
     if selected:
@@ -2771,18 +2828,31 @@ def _render_human(result: dict[str, Any], snapshot: Snapshot) -> str:
         lines.append(f"需要主控自行判断是否进入: {slugs}")
     undetermined = result.get("undetermined", [])
     if undetermined:
-        preview = ", ".join(f"{item['slug']} ({_subject_label(item['subject'])})" for item in undetermined[:4])
-        suffix = " …" if len(undetermined) > 4 else ""
-        lines.append(f"无法判定 {len(undetermined)} 行: {preview}{suffix}")
+        if explain_undetermined:
+            preview = ", ".join(
+                f"{item['slug']} ({_subject_label(item['subject'])})"
+                for item in undetermined[:4]
+            )
+            suffix = " …" if len(undetermined) > 4 else ""
+            lines.append(f"无法判定 {len(undetermined)} 行: {preview}{suffix}")
+        else:
+            lines.append(f"无法判定 {len(undetermined)} 行")
     if snapshot.warnings:
         lines.append(f"读取提示: {len(snapshot.warnings)} 条（JSON 模式含详情）")
     return "\n".join(lines)
 
 
-def _json_result(table: TableModel, snapshot: Snapshot, derived: dict[str, Any]) -> dict[str, Any]:
+def _json_result(
+    table: TableModel,
+    snapshot: Snapshot,
+    derived: dict[str, Any],
+    digest: str,
+) -> dict[str, Any]:
     return {
         "stage": STAGE,
         "package": str(snapshot.package),
+        "digest": digest,
+        "unchanged": False,
         "at": snapshot.reader.at_label,
         "head": snapshot.head,
         "selected": derived["selected"],
@@ -2898,6 +2968,16 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="JSON_OR_FILE",
         help="read-only JSON object {\"projection_drift\": boolean}, inline or from a file",
     )
+    render.add_argument(
+        "--since",
+        metavar="DIGEST",
+        help="emit only a one-line unchanged marker when the digest matches",
+    )
+    render.add_argument(
+        "--explain-undetermined",
+        action="store_true",
+        help="include the first undetermined situation slugs in human output",
+    )
     render.add_argument("--json", action="store_true", help="emit structured JSON")
     table = subparsers.add_parser("print-table", help="print the formal YAML table")
     table.add_argument("--stage", default=STAGE, choices=[STAGE])
@@ -2911,10 +2991,37 @@ def _run_render(args: argparse.Namespace) -> int:
     validation_result = _load_validation_result(args.validation_result)
     snapshot = _build_snapshot(reader, validation_result)
     derived = _derive(table, snapshot)
+    digest = _situation_digest(table, derived)
+    if args.since == digest:
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "digest": digest,
+                        "unchanged": True,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+        else:
+            print(f"处境未变 (digest: {digest})")
+        return 0
     if args.json:
-        print(json.dumps(_json_result(table, snapshot, derived), ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                _json_result(table, snapshot, derived, digest),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
     else:
-        print(_render_human(derived, snapshot))
+        body = _render_human(
+            derived,
+            snapshot,
+            explain_undetermined=args.explain_undetermined,
+        )
+        print(f"{body}\ndigest: {digest}")
     return 0
 
 
