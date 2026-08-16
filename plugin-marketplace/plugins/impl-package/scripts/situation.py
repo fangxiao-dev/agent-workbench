@@ -40,10 +40,10 @@ VALID_BASIS = {"cli", "prose", "observed"}
 SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$")
 COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
 TICKET_ID_RE = re.compile(
-    r"(?im)^\s*\*\*(?:Ticket ID|Ticket ID（Ticket ID）)[：:]\*\*\s*([^\s]+)"
+    r"(?im)^\s*(?:\*\*)?(?:Ticket ID|Ticket ID（Ticket ID）)\s*[：:](?:\*\*)?\s*([^\s*]+)"
 )
 ATTEMPT_ID_RE = re.compile(
-    r"(?im)^\s*\*\*(?:Attempt ID|执行尝试 ID（Attempt ID）)[：:]\*\*\s*([^\s]+)"
+    r"(?im)^\s*(?:\*\*)?(?:Attempt ID|执行尝试 ID（Attempt ID）)\s*[：:](?:\*\*)?\s*([^\s*]+)"
 )
 CLAIM_RE = re.compile(r"Stable claim ID：\s*`([^`]+)`")
 ASCII_CLAIM_RE = re.compile(r"Stable claim ID\s*:\s*`([^`]+)`", re.I)
@@ -660,8 +660,6 @@ def _parse_ticket(identifier: str, relative: str | None, text: str, expected_att
     if not text:
         return TicketInfo(identifier, relative, text, False, error="Ticket 文件为空")
     id_match = TICKET_ID_RE.search(text)
-    if not id_match:
-        id_match = re.search(r"(?im)^\s*\*\*Ticket ID\s*[:：]\*\*\s*([^\s]+)", text)
     parsed_identifier = id_match.group(1) if id_match else identifier
     if parsed_identifier != identifier:
         return TicketInfo(identifier, relative, text, False, error="Ticket ID 与文件/state 不一致")
@@ -904,7 +902,7 @@ def _build_snapshot(
             continue
         if view.text is None:
             continue
-        id_match = TICKET_ID_RE.search(view.text) or re.search(r"(?im)^\s*\*\*Ticket ID\s*[:：]\*\*\s*([^\s]+)", view.text)
+        id_match = TICKET_ID_RE.search(view.text)
         if id_match:
             ticket_files[id_match.group(1)] = (relative, view.text)
 

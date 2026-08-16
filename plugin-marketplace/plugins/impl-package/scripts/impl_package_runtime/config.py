@@ -9,7 +9,7 @@ CONFIG = {
     "documents": {
         "compositionPattern": r"Composition[^\n]*tickets=(true|false),\s*dag=(true|false)",
         "attemptPattern": r"(?m)(?:(?:\*\*)?执行尝试 ID（Attempt ID）(?:\*\*)?|(?:\*\*)?Attempt ID(?:\*\*)?)[：:](?:\*\*)?\s*([^\s]+)",
-        "ticketIdPattern": r"\*\*Ticket ID[：:]\*\*\s*([^\s]+)",
+        "ticketIdPattern": r"(?m)^\s*(?:\*\*)?Ticket ID\s*[：:](?:\*\*)?\s*([^\s*]+)",
         "taskHeadingPattern": r"(?m)^###\s+(T\d+)\s*[:：]",
         "taskBlockPattern": r"(?ms)^###\s+{task_id}\s*[:：].*?(?=^###\s+T\d+\s*[:：]|^##\s|\Z)",
         "taskStatePattern": r"(?m)^-\s*状态[：:]\s*([A-Z_-]+)",

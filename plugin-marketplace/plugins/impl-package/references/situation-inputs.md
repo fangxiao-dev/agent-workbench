@@ -408,9 +408,9 @@ state 合法但某个依赖它的 key 无法计算，则那些 key 返回 U。
 ```markdown
 # TKT-01 — 最小 Ticket
 
-**Ticket ID：** TKT-01
-**Publication Status：** Approved
-**Attempt ID：** initial
+Ticket ID：TKT-01
+Publication Status：Approved
+Attempt ID：initial
 
 ## 验收标准
 
@@ -431,9 +431,9 @@ state 合法但某个依赖它的 key 无法计算，则那些 key 返回 U。
 
 推导器实际解析的部分是：
 
-1. `**Ticket ID：** TKT-01` 或 ASCII 冒号版本；它必须等于 state 的 key。缺失、与文件
+1. `Ticket ID：TKT-01` 或 ASCII 冒号版本；它必须等于 state 的 key。缺失、与文件
    state 不一致或同 Attempt 下找不到对应文件，会使 Ticket 无法参与 state 合法性。
-2. `**Attempt ID：** initial`（也接受英文/中文长字段名的 regex 变体）；它必须等于
+2. `Attempt ID：initial`（也接受英文/中文长字段名的 regex 变体）；它必须等于
    `S.attempt.id`。有 active attempt 而 Ticket 不写该行，Ticket 会被标成 invalid。
 3. claim 只认形如 `Stable claim ID：` 加反引号包裹 ID，或 ASCII 冒号版本。反例是只写
    `- **AC-1：** ...`：人能看懂，但 situation parser 的 `claims` 仍为空。claim 内容可以

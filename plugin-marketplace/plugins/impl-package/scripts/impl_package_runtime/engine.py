@@ -34,8 +34,8 @@ COMPOSITION_RE = re.compile(r"Composition[^\n]*tickets=(true|false),\s*dag=(true
 DECISION_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Decision Revision|决策修订（Decision Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(D\d+)\b")
 SPEC_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Spec Revision|规格修订（Spec Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(S\d+)\b")
 PLAN_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Plan Revision|计划修订（Plan Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(P\d+)\b")
-TICKET_ID_RE = re.compile(r"(?m)^\s*\*\*Ticket ID[：:]\*\*\s*([^\s]+)")
-PUBLICATION_RE = re.compile(r"(?m)^(\*\*(?:Publication Status|发布状态（Publication Status）)[：:]\*\*\s*)(Draft|Approved)\s*$")
+TICKET_ID_RE = re.compile(r"(?m)^\s*(?:\*\*)?Ticket ID\s*[：:](?:\*\*)?\s*([^\s*]+)")
+PUBLICATION_RE = re.compile(r"(?m)^(\s*(?:\*\*)?(?:Publication Status|发布状态（Publication Status）)\s*[：:](?:\*\*)?\s*)(Draft|Approved)\s*$")
 CLAIM_RE = re.compile(r"Stable claim ID：\s*`([^`]+)`")
 TIMING_RE = re.compile(r"证据时机：\s*`([^`]+)`")
 ER_ENTRY_RE = re.compile(r"(?m)^## ([^\s]+-ER-(\d{3})) · (checkpoint|judgment)\s*$")
@@ -285,7 +285,7 @@ def _approve_ticket(document: dict[str, Any]) -> None:
     """Publish a Draft Ticket once; runtime state never projects into it."""
     if document["publication"] == "Approved":
         return
-    text = PUBLICATION_RE.sub("**Publication Status：** Approved", document["text"], count=1)
+    text = PUBLICATION_RE.sub(lambda match: f"{match.group(1)}Approved", document["text"], count=1)
     _write_text(document["path"], text)
     document.update({"text": text, "publication": "Approved"})
 
