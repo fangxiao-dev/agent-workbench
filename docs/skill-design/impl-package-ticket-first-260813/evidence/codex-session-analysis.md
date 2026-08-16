@@ -297,7 +297,7 @@ T6 的局部证据没有被当成整体完成：
 
 | Session | 前 30 事件中的工具调用 | 前 30 事件读到的主要文件/记录 | 首次真实 Task dispatch | 从开始到该 dispatch 的调用数 |
 |---|---:|---|---|---:|
-| S1 | 4 | `datev-tax-accounting/SKILL.md`、talk-to-boss、用户给出的 idea 路径检查 | 研究/审查 bounded work；随后才定位主 workspace 的 idea 文档 | 1（若把首个 research spawn 算作 dispatch，则为 2） |
+| S1 | 4 | `datev-tax-accounting/SKILL.md`、structured-answer（当时为状态汇报 Skill）、用户给出的 idea 路径检查 | 研究/审查 bounded work；随后才定位主 workspace 的 idea 文档 | 1（若把首个 research spawn 算作 dispatch，则为 2） |
 | S2 | 1 | `initial-ER-003`/anchor、current-state、progress、composition-contract、plan、DAG、T1/T2/T3/Ticket 文档、investigate/dispatch/Task template；也搜索了错误的旧 skill 路径 | T1/T2/T3 investigation | 16 |
 | S3 | 1 | `initial-ER-011`、current-state/progress、T6/T7/T8/T9、T6 handoff、composition/dispatch/template、authority 规范/代码、测试治理 | T6 implementer | 25 |
 | S4 | 1 | `initial-ER-015`、T6 handoff、T7 contract/spec/plan/DAG、progressive evidence、repo QA/authority/T7 module | T7 readiness/implementer | 31 |

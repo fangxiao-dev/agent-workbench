@@ -89,4 +89,4 @@ terminal Gate 必须完成 Stage 7：记录 Durable Delta 及 `_pending.md`/trut
 
 Gate CLI 拥有 comparison commit 与 lifecycle 校验。长任务由主 session 直接完成 state/ER/Gate 等 durable 写入，再输出最终叙述；transport disconnect 后从这些幂等事实恢复，不创建第二个完成结论。只有写入异常需要对账时才调用 slow path。
 
-若 active skill catalog 中存在 `talk-to-boss`，优先按其汇报合同输出；否则直接分别说明实施、验证、Gate、backfill/合入状态，给出 Task/Ticket 总数、剩余数、blocker、是否 closed 和唯一下一动作。可选 skill 缺失不阻塞收口。
+先由本 skill 根据 canonical state、Gate 和 evidence 确定实施、验证、Gate、backfill/合入状态，以及 Ticket 总数、剩余数、blocker、是否 closed 和唯一下一动作。若 active skill catalog 中存在 `talk-to-boss`，再用它组织这些已经确定的事实；它不参与状态判断。可选 skill 缺失不阻塞收口。

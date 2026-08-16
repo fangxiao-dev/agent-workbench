@@ -40,7 +40,7 @@ ER-24/26/30/38/39 每条重述 4–8 个 SHA-256 并宣布上一批全部 supers
 
 ### 2.1 分层设计意图正确，但 owner 视角的"当前状态"仍散落
 
-talk-to-boss 先行、canonical handoff 后置、gate.md 顶部一行可变状态——这些设计是对的。实例中真正好用的人读界面是 **DAG 的 Runtime State 表**（每个 task 一行：状态 + 一句话证据 + 指针），owner 关心的"到哪了、还差什么"在这张表里最完整。相比之下 plan 对人不可读：同样的信息要从第 40 条 ER 的残余风险段落里挖。这不需要新 artifact——体系已经有正确答案（Runtime State 表 + gate.md 状态行），问题只在 no-DAG 的 attempt 没有等价物，以及 handoff 模板没有明确把"当前状态一览"放在最前。观察项，暂不提案。
+structured-answer 先行、canonical handoff 后置、gate.md 顶部一行可变状态——这些设计是对的。实例中真正好用的人读界面是 **DAG 的 Runtime State 表**（每个 task 一行：状态 + 一句话证据 + 指针），owner 关心的"到哪了、还差什么"在这张表里最完整。相比之下 plan 对人不可读：同样的信息要从第 40 条 ER 的残余风险段落里挖。这不需要新 artifact——体系已经有正确答案（Runtime State 表 + gate.md 状态行），问题只在 no-DAG 的 attempt 没有等价物，以及 handoff 模板没有明确把"当前状态一览"放在最前。观察项，暂不提案。
 
 ### 2.2 约束条目吸收 review finding 后膨胀成不可读长句
 

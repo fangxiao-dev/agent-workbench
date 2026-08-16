@@ -39,4 +39,4 @@ Gate 不存在表示没有 Gate 证据；字段不完整、comparison commit 不
 
 仅当 package Gate terminal、实现已到达 target branch、所有 durable delta 已吸收/关闭、且没有 inbound reference 或剩余活动材料时，才列为删除候选。删除仍需要 owner 明确授权。
 
-若 active skill catalog 中存在 `talk-to-boss`，优先按其汇报合同输出；否则直接区分 audit/apply/verify/retirement 各阶段和计数。可选 skill 缺失不阻塞流程。
+先由本 skill 根据权威结果确定 audit/apply/verify/retirement 各阶段、计数、剩余项和是否收口。若 active skill catalog 中存在 `talk-to-boss`，再用它组织这些已经确定的结论；它不参与状态判断。可选 skill 缺失不阻塞流程。
