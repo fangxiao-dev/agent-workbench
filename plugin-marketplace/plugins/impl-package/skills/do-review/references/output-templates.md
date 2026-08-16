@@ -1,18 +1,32 @@
 # Do Review Output Templates
 
-Use the smallest template that matches the run. Keep source attribution and per-selected-reviewer verdicts visible; default review output reports conclusions, findings and next actions without turning those details into an owner approval gate.
+Use the smallest template that matches the run. Keep source attribution and per-selected-reviewer verdicts visible; the parent report is not an owner-approval gate.
+
+## Leaf Return Contract
+
+The four `review-track-*` agents return a compact index. Full evidence, impact, handoff, and quotations stay in the parent-supplied review report artifact; do not ask a leaf to repeat them in its response.
+
+```text
+verdict: PASS | FAIL | UNCERTAIN
+coverage: <one compact line or report pointer>
+findings:
+- <slug> | <repo-relative-file>:<line> | <severity> | <one sentence>
+report: <review report artifact path>
+```
+
+Use `findings: none` when no candidate exists. Each finding line must contain the slug, file and line, severity, and one sentence; leaf output is candidate evidence, not a ledger decision.
 
 ## Canonical ledger and classification
 
-The parent owns one Markdown ledger for the whole ReviewRun. Leaf results are candidates, not accepted findings. After every round, wait for every required track, then deduplicate, verify, classify, and atomically rewrite that same temp ledger with track verdicts, finding status, evidence, lifecycle transitions, and the convergence decision. Never create a later-round ledger. A leaf result is not authoritative before this update.
+The parent owns one Markdown ledger for the whole ReviewRun. Leaf results are candidates, not accepted findings. After every round, wait for every required track, then deduplicate, verify, classify, and atomically rewrite that same ledger with verdicts, evidence, lifecycle transitions, and convergence. Never create a later-round ledger; a leaf result is not authoritative before this update.
 
-Use the default source labels `Track A (review-code)`, `Track B (review-code-by-standards)`, and `Track C (review-code-by-spec)`. Additional selected reviewers use their assigned sequential labels. `main-session` is a decision source, never another reviewer. Deduplicate by broken invariant or observable failure, not by path or reviewer; for a shared issue use `fused` and retain every contributor.
+Use source labels `Track A (review-code)`, `Track B (review-code-by-standards)`, `Track C (review-code-by-spec)`, additional selected labels, `fused`, and `main-session` as applicable. Deduplicate by broken invariant or observable failure, not path or reviewer; retain every contributor for a shared issue.
 
-Before reporting a P1, P2, or blocker, read its cited target-revision evidence, confirm the citation supports the claim and belongs to the fixed ReviewRun, and record the verification. Decide whether the diff directly contains the failure, changed behavior triggers it, or it is pre-existing/baseline. Insufficient evidence becomes disputed, downgraded, out of scope, or `UNCERTAIN`, never a verified blocker.
+Before reporting a P1, P2, or blocker, verify cited target-revision evidence against the fixed ReviewRun and record whether the failure is in the diff, triggered by changed behavior, or pre-existing/baseline. Insufficient evidence becomes disputed, downgraded, out of scope, or `UNCERTAIN`, never a verified blocker.
 
-Default classification: blocker risks business data, money, inventory, order/customer state, security, or runtime-visible product data; follow-up is real but non-blocking under stated release constraints; backlog is non-urgent cleanup or optional hardening; no issue is duplicate, fixed, out of scope, or unsupported. Preserve disputed and out-of-scope candidates separately so closure work can revisit them without treating them as merge gates.
+Default classification: blocker risks business data, money, inventory, order/customer state, security, or runtime-visible product data; follow-up is real but non-blocking; backlog is non-urgent cleanup or optional hardening; no issue is duplicate, fixed, out of scope, or unsupported. Preserve disputed and out-of-scope candidates for closure without treating them as merge gates.
 
-The ledger's canonical context may be concise free-form Markdown, but it must preserve the broken invariant/failure mode, best evidence, parent decision/status, and covered/open boundary. Topic labels alone are insufficient. Large context may live in a readable artifact without changing the canonical ledger owner.
+The ledger context must preserve the broken invariant/failure mode, best evidence, parent decision/status, and covered/open boundary. Large detail may live in a readable artifact without changing the canonical ledger owner.
 
 ## Normal Review Report
 
@@ -41,20 +55,9 @@ The ledger's canonical context may be concise free-form Markdown, but it must pr
 
 ## Findings
 
-### Blockers
-
-| ID | Title | Source | Evidence | Decision |
-| --- | --- | --- | --- | --- |
-
-### Follow-ups
-
-| ID | Title | Source | Evidence | Decision |
-| --- | --- | --- | --- | --- |
-
-### Backlog / Not Blocking
-
-| ID | Title | Source | Evidence | Decision |
-| --- | --- | --- | --- | --- |
+| Classification | ID | Title | Source | Evidence | Decision |
+| --- | --- | --- | --- | --- | --- |
+| blocker / follow-up / backlog |  |  |  |  |  |
 
 ## Source Coverage
 
@@ -97,23 +100,9 @@ For a custom full-review selection, replace the rows with exactly the selected T
 | --- | --- | --- |
 | Independent closure reviewer | PASS / FAIL / UNCERTAIN |  |
 
-| Issue | Verdict | Reason | Evidence |
-| --- | --- | --- | --- |
-
-## Should Reopen / Retrack
-
-| Issue | Failed acceptance | Evidence | Suggested action |
-| --- | --- | --- | --- |
-
-## Safe To Stay Closed
-
-| Issue | Why it passes | Evidence |
-| --- | --- | --- |
-
-## Still Open / Out Of Scope
-
-| Issue | Reason |
-| --- | --- |
+| Issue | Verdict | Disposition | Reason / evidence | Suggested action |
+| --- | --- | --- | --- | --- |
+|  | PASS / FAIL / UNCERTAIN | reopen / stay closed / open / out of scope |  |  |
 ```
 
 ## Finding Record

@@ -1,6 +1,6 @@
 ---
 name: do-review
-description: Orchestrate independent leaf reviewer skills for PR/code review, N-round review, loop/until-converged review, custom reviewer selection, and closure verification. Uses Grok for finding closure and subagents for other phases.
+description: Orchestrate independent leaf reviewer agents for PR/code review, N-round review, loop/until-converged review, custom reviewer selection, and closure verification. Uses Grok for finding closure and the selected leaf agents for review tracks.
 allowed-tools:
   - Read
   - Grep
@@ -10,15 +10,24 @@ allowed-tools:
 
 # Do Review
 
-`do-review` is the sole orchestrator. It fixes one immutable ReviewRun, resolves topology and capacity, dispatches independent leaf reviewers, owns the review ledger, verifies and classifies candidates, controls convergence, and reports the result. The main session is not another reviewer.
+`do-review` is the sole orchestrator. It fixes one immutable ReviewRun, resolves topology and capacity, dispatches independent leaf agents, owns the review ledger, verifies and classifies candidates, controls convergence, and reports the result. The main session is not another reviewer.
 
-Every dispatched reviewer is one leaf. It must not invoke `do-review`, dispatch subagents, re-evaluate topology/capacity, inspect other tracks' same-round output, classify cross-track results, or decide the overall verdict. A reviewer skill defines primary review intent, not an exclusive capability boundary; evidence-backed cross-domain candidates return to the parent for attribution and classification.
+Every selected review track is dispatched to its matching leaf agent:
+
+| Track | Leaf agent | Declared skill |
+| --- | --- | --- |
+| Track A | `review-track-code` | `review-code` |
+| Track B | `review-track-standards` | `review-code-by-standards` |
+| Track C | `review-track-spec` | `review-code-by-spec` |
+| Conditional Safety | `review-track-safety` | `safety-review` |
+
+The leaf agent definition owns its declared skill and leaf brief; the parent passes the common ReviewRun context and any phase-specific addendum. A dispatched leaf must not invoke `do-review`, dispatch agents or subagents, re-evaluate topology/capacity, inspect other tracks' same-round output, classify cross-track results, or decide the overall verdict. A reviewer skill defines primary review intent, not an exclusive capability boundary; evidence-backed cross-domain candidates return to the parent for attribution and classification.
 
 The default topology for `initial` and `terminal-final` comes only from [reviewer-registry.json](references/reviewer-registry.json): Track A `review-code`, Track B `review-code-by-standards`, and Track C `review-code-by-spec`. `safety-review` is conditional for those full reviews, not a registry default. `finding-closure` has one fresh independent `reviewer` invocation for all named findings; it does not split by registry track or launch a separate Safety leaf. The reviewer checks safety implications only when they belong to the named findings. Worker choice is independent of topology; the worker Skill owns its model and effort defaults. Other phases use the current host defaults for the caller-supplied target class, subject to explicit constraints.
 
 ## 0. Gate
 
-This skill requires one independent worker for every selected leaf. If the required Grok process or subagent is unavailable or unauthorized, stop before ReviewRun creation and ask whether to stop or authorize an exact named degraded single-session reviewer list. Never infer degradation.
+This skill requires one independent invocation of the matching leaf agent for every selected leaf. If the required leaf agent or its execution worker is unavailable or unauthorized, stop before ReviewRun creation and ask whether to stop or authorize an exact named degraded single-session reviewer list. Never infer degradation.
 
 Load the registry. Do not reserve capacity until scope, phase, and topology are fixed.
 
@@ -44,18 +53,18 @@ Choose one mode: `N rounds` (default one), `Loop` (default cap ten), or `Closure
 
 Without explicit reviewers, use registry defaults in order and conditionally append `safety-review` for `initial` and `terminal-final`; use one `reviewer` leaf for `finding-closure`. An explicit reviewer selection for `finding-closure` must still resolve to exactly one leaf; explicit selections for other phases run exactly the stated list in order. Labels are sequential.
 
-Resolve names through the registry or active catalog and verify canonical paths before dispatch:
+Resolve selected track names through the registry and the matching leaf-agent map above. Verify the canonical skill paths before dispatch:
 
 ```text
 python <do-review-skill-dir>/scripts/verify-reviewer-skills.py --plugin-root <impl-package-plugin-root> --skills <registry-skills...>
 python <do-review-skill-dir>/scripts/verify-reviewer-skills.py --plugin-root <impl-package-plugin-root> --skill-path <custom-name>=<absolute-skill-path>
 ```
 
-Reject ambiguous, unreadable, escaping, or frontmatter-mismatched paths. Reserve one slot per selected leaf; prefer concurrency, or use safe phases with unchanged context. Capacity never removes a reviewer.
+Reject ambiguous, unreadable, escaping, or frontmatter-mismatched paths. Do not load the selected track skill into the main session; the matching leaf agent's `skills` field loads it in the agent context. Reserve one slot per selected leaf; prefer concurrency, or use safe phases with unchanged context. Capacity never removes a reviewer.
 
 ## 3. Dispatch Independent Rounds
 
-Read [subagent-briefs.md](references/subagent-briefs.md) before composing prompts. Use its common block and generic leaf brief, plus its closure brief only for Closure verification and its anti-duplicate addendum only after round 1. Closure uses that brief once for the single independent reviewer; it does not compose one brief per review track. Include the verified absolute reviewer `SKILL.md` path and canonical ledger path.
+Read [subagent-briefs.md](references/subagent-briefs.md) before composing parent context. Use its common block, plus its closure brief only for Closure verification and its anti-duplicate addendum only after round 1. Dispatch the matching leaf agent instead of composing a track brief or asking a generic subagent to load a skill; the agent definition already carries that track's skill, isolation rules, and compact return contract. Closure uses its brief once for the single independent reviewer; it does not compose one brief per review track. Include the verified absolute reviewer `SKILL.md` path, canonical ledger path, and parent-owned review report artifact path in the supplied context.
 
 Round 1 has no prior findings; later rounds receive only the parent-verified prior round's canonical context, never raw reviewer output. Start every round with fresh leaf workers; resume only an interrupted leaf from that same round. For `finding-closure`, run exactly one fresh reviewer leaf through `$grok-worker --no-subagents` in the background with the assigned reviewer skill and complete closure brief; the leaf returns PASS, FAIL, or UNCERTAIN for each named issue. After an incomplete Grok executor result, confirm process cleanup before one fresh fallback to the applicable current default reviewer. Timeout, cancellation, `PARTIAL`, or missing evidence is incomplete, not PASS.
 
