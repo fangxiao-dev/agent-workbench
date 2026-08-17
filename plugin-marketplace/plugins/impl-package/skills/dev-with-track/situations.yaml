@@ -829,7 +829,7 @@ situations:
       - id: rotate-trail-at-ticket-boundary
         default: true
         by: main-session
-        do: "交接时按 trail-schema 将 execution/<attempt>/trail.jsonl 原样移为下一个 trail.NNN.jsonl，并创建新的 trail.jsonl"
+        do: "使用 recovery checkpoint --handoff 按 trail-schema 将 execution/<attempt>/trail.jsonl 原样移为下一个 trail.NNN.jsonl，并创建新的 trail.jsonl"
         effect: "让下一个 Ticket 从干净的活动轨迹开始；归档仍由 dispatch_audit.py 审计"
     escape: true
 

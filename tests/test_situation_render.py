@@ -13,6 +13,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "plugin-marketplace/plugins/impl-package/scripts/situation.py"
 FIXTURES = ROOT / "tests/fixtures/situations"
+sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
+import situation  # noqa: E402
 
 
 def _fixture_dirs() -> list[Path]:
@@ -149,6 +151,32 @@ def test_cli_written_trail_rows_are_renderable() -> None:
             "attempt.record.trail-rotation-due",
         }
         assert rendered["highest_match_layer"] == "P1"
+
+
+def test_escape_event_and_legacy_escape_decision_are_read() -> None:
+    new_escape = {
+        "subject": "attempt",
+        "kind": "escape",
+        "deviation": "attempt.record.unmatched -> manual recovery",
+        "reason": "当前处境表没有覆盖该恢复窗口",
+        "of": "dispatch-01",
+    }
+    legacy_escape = {
+        "subject": "attempt",
+        "kind": "decision",
+        "seq": 2,
+        "chosen": "escape: 先按人工判断恢复",
+    }
+    parsed = situation._parse_trail(
+        situation.FileView(
+            "execution/initial/trail.jsonl",
+            "\n".join(json.dumps(row) for row in (new_escape, legacy_escape)) + "\n",
+        )
+    )
+
+    assert parsed.error is None
+    assert parsed.unknown_fact_keys == ()
+    assert parsed.rows == [new_escape, legacy_escape]
 
 
 def test_human_render_collapses_undetermined_and_supports_since() -> None:

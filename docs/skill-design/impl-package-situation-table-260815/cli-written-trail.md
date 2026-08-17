@@ -1,6 +1,7 @@
 # CLI-written trail
 
-状态：阶段 1 已落盘并实测成立；阶段 2 尚未开始。
+状态：阶段 1、阶段 2 已落盘并实测成立；阶段 3 的显式 `recovery checkpoint --handoff`
+入口已落盘，最终回归见 `escape-shape-and-rotation-hook.md`。
 
 ## 阶段 1：CLI 追加轨迹行
 
@@ -21,9 +22,9 @@
 
    `satisfy/retire` 的 `--expect` 保护和已有终态重试逻辑保持不变；没有新的 state transition 就不追加。checkpoint 继续保持原有 stdout `idempotent=false` 语义，但活动 trail 内对相同 `subject/kind/事件字段/head` 做语义去重；同样的 checkpoint 重复调用不会制造重复边界行。不同 next、不同 head 或中间已有其它事件时仍可形成新的边界行。
 
-4. **轮换位置**
+4. **轮换位置（历史阶段 1 结论）**
 
-   阶段 1 不在 `recovery checkpoint` 中轮换。checkpoint 也用于 BLOCKED、retry 和普通恢复记录，不等于 handoff；每次 checkpoint 都轮换会过于频繁，并反复要求重新声明仍成立的 fact。轮换应由显式 handoff/边界触发单独承担，阶段 2 将把 Ticket 终态后的 pending-Ticket 窗口作为可机械识别的交接机会；pressure-driven `attempt.record.handoff-due` 仍独立存在。
+   阶段 1 不在普通 `recovery checkpoint` 中轮换。checkpoint 也用于 BLOCKED、retry 和普通恢复记录，不等于 handoff；每次普通 checkpoint 都轮换会过于频繁，并反复要求重新声明仍成立的 fact。轮换由显式 `recovery checkpoint --handoff` / 边界调用承担；pressure-driven `attempt.record.handoff-due` 仍独立存在。
 
 ### fixture 实测
 
@@ -66,3 +67,11 @@ P1 新增两条相互独立的处境行：
 - `python -m pytest tests/test_situation_render.py -q`：57 passed，未修改任何既有 fixture 的 expected.json。
 
 最终指定回归仍需在阶段 2 closure 运行；整个任务在此之前不宣称 closed。
+
+## 阶段 3：显式交接 checkpoint 入口
+
+`recovery checkpoint --handoff` 是普通 checkpoint 的显式交接变体。state 写入和已有
+checkpoint trail 记录完成后，CLI 将活动 `trail.jsonl` 原样归档为下一个 `trail.NNN.jsonl`，
+创建新的活动文件，并写一条 `kind=handoff`、`subject`、`checkpoint:true` 和当前 checkpoint
+payload 的记录。普通 checkpoint 不轮换。轮换或 handoff 记录失败只写 warning；state 不回滚，
+命令 stdout JSON、退出码和既有 `--expect` 语义不变。

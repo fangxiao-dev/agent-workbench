@@ -20,7 +20,8 @@ no-stream stall window with no hard overall timeout, Grok subagents enabled, and
 `--always-approve` on so headless calls do not block on permission prompts. Pass `--no-subagents` or
 `--no-always-approve` only when the caller needs those restrictions.
 
-**调用流程：**启动 `grok_task.py` 后让它后台运行，主 session 立即继续执行不冲突工作，不要同步等待其最终 JSON。轮询时读取 stderr heartbeat/liveness；heartbeat 只报告状态，只有 Grok child stdout activity 重置 stall window。只有在依赖 Grok 结果或到达验证控制点时才读取完成状态。timeout/stall 后必须采信 terminal envelope 与 process exit，不能把 partial text 当作成功。
+**调用流程：**启动 `grok_task.py` 后让它后台运行，主 session 立即继续执行不冲突工作，不要同步等待其最终 JSON。派一个只读 monitor subagent 每 60 秒轮询 stderr heartbeat/liveness 与 result envelope，主 session 不轮询 heartbeat/liveness；派发时交代 PID 或 envelope 路径、完成/失败判据和 stall 时长。monitor 只在终止时回报最终结果（完成 / 失败），不改文件、不跑测试、不替主 session 解读结果或做业务判断。heartbeat 只报告状态，只有 Grok child stdout activity 重置 stall window。
+主 session 只有在依赖 Grok 结果或到达验证控制点时才读取完成状态。timeout/stall 后必须采信 terminal envelope 与 process exit，不能把 partial text 当作成功。
 
 ## Invoke
 

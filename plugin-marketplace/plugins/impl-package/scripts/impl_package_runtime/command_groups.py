@@ -100,6 +100,7 @@ def _parser(group: str) -> argparse.ArgumentParser:
         checkpoint.add_argument("--next", required=True)
         checkpoint.add_argument("--blocker")
         checkpoint.add_argument("--evidence", action="append", default=[])
+        checkpoint.add_argument("--handoff", action="store_true")
         commands.add_parser("judgment", help="append a judgment JSON payload from stdin")
     elif group == "gate":
         for verdict in sorted(engine.VERDICTS):
@@ -152,7 +153,7 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
         return (engine.command_evidence_add(package, sys.stdin.read()) if args.command == "add" else
                 engine.command_evidence_invalidate(package, args.ticket, args.claim, args.artifact, args.invalidated_by))
     if group == "recovery":
-        return (engine.command_checkpoint(package, args.subject, args.next, args.blocker, args.evidence) if args.command == "checkpoint" else
+        return (engine.command_checkpoint(package, args.subject, args.next, args.blocker, args.evidence, args.handoff) if args.command == "checkpoint" else
                 engine.command_er_add(package, sys.stdin.read()))
     return engine.command_gate(package, args.verdict, args.comparison_commit, args.reason, args.evidence,
                                args.durable_delta, args.no_durable_delta_reason, args.environment)

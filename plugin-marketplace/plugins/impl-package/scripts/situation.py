@@ -772,6 +772,10 @@ def _parse_trail(view: FileView) -> TrailView:
         if isinstance(value, dict):
             rows.append(value)
             kind = str(value.get("kind", "")).lower()
+            if kind == "escape":
+                # Escape is a structured event, not a fact. Keep the row
+                # available to event consumers without requiring its fields.
+                continue
             legacy_ts = value.get("ts", value.get("timestamp"))
             legacy_facts = value.get("facts")
             if legacy_facts is not None:

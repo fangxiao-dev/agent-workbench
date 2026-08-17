@@ -6,7 +6,7 @@
 
 ## 轨迹轮换
 
-交接时若活动文件已满，把 `trail.jsonl` 原样移为下一个归档序号并新建活动文件：
+显式交接 checkpoint（`recovery checkpoint --handoff`）把活动文件原样移为下一个归档序号并新建活动文件；普通 checkpoint 不触发轮换：
 
 ```text
 execution/<attempt>/trail.jsonl
@@ -43,7 +43,9 @@ join。
 | `kind` | 正式形状 | renderer 语义 |
 | --- | --- | --- |
 | `decision` | `subject`、`seq/id/decision_id/decisionId` 至少一个、`chosen` | 旧 decision 发起事件；由 result-like event 的 `of/decision/...` 关闭 |
-| `dispatch` | `subject`、`outcome: "RUNNING"`、`returned: false/true`、`worker`；建议带 `seq` 或 `id`；可选 `situation_digest` | `returned:false` 本身就是 worker 未返回；有 id 时可由后续 return 关闭；`situation_digest` 是本次派发所依据的 renderer 12 位 digest，缺失只产生审计信号 |
+| `dispatch` | `subject`、`outcome: "RUNNING"`、`returned: false/true`、`worker`；建议带 `seq` 或 `id`；常规字段为 `situation_digest` | `returned:false` 本身就是 worker 未返回；有 id 时可由后续 return 关闭；`situation_digest` 是本次派发所依据的 renderer 12 位 digest；老轨迹和手写轨迹缺失时只产生审计信号 |
+| `escape` | `subject`、`deviation`、`reason`；可带 `of` 关联 dispatch/decision | 记录偏离 renderer 建议或处境表未覆盖的决定；它是事件，不是 fact |
+| `handoff` | `subject`、`checkpoint: true`、checkpoint 的 `next/blocker/evidence` | `recovery checkpoint --handoff` 轮换后由 CLI 写入新活动 trail，作为交接边界记录 |
 | `result` | `subject`、`outcome`；可带 `of`；direct evidence 放在 row 或 payload alias | 旧结果事件；与 `worker-return` 归一 |
 | `worker-return` | `subject`、`outcome`、可选 `of`、worker 返回 payload | 新 worker 返回事件；`EVIDENCE_SUFFICIENT` + `evidence` 建立 direct evidence |
 | `fact` | `subject`、`key`、`value`、`ts`，可选 `seq` | 只声明不能从 package artifact 推导的事实；在当前活动 trail 内同 subject/key 取最新 |
@@ -58,6 +60,7 @@ join。
 {"v":1,"seq":10,"ts":"2026-08-15T12:00:00Z","subject":"attempt","kind":"fact","key":"attempt.integration_carrier_available","value":false}
 {"v":1,"seq":11,"ts":"2026-08-15T12:01:00Z","subject":"ticket:TKT-01","kind":"worker-return","outcome":"EVIDENCE_SUFFICIENT","evidence":{"artifact":"evidence/returned.md#result","claim":"AC-1","revision":"5f299f3","environment":"fixture"}}
 {"v":1,"seq":12,"ts":"2026-08-15T12:02:00Z","subject":"attempt","kind":"dispatch","outcome":"RUNNING","worker":"worker-01","returned":false,"situation_digest":"a1b2c3d4e5f6"}
+{"v":1,"seq":13,"ts":"2026-08-15T12:03:00Z","subject":"attempt","kind":"escape","deviation":"attempt.record.unmatched -> manual recovery","reason":"当前处境表没有覆盖该恢复窗口","of":"dispatch-01"}
 ```
 
 ### result-like 归一

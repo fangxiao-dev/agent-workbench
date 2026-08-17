@@ -152,6 +152,64 @@ class ImplPackageStateTests(unittest.TestCase):
         good = self.cli(repo, package, "er-add", input_text=json.dumps({"purpose": "judgment", "subject": "attempt", "title": "Decision", "content": "Keep the narrow path."}))
         self.assertIn("recordId", json.loads(good.stdout))
 
+    def test_handoff_checkpoint_rotates_only_with_flag_and_records_handoff(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+
+        ordinary = self.cli(
+            repo,
+            package,
+            "recovery",
+            "checkpoint",
+            "--subject",
+            "attempt",
+            "--next",
+            "ordinary recovery",
+            "--evidence",
+            "evidence.md",
+        )
+        self.assertEqual(set(json.loads(ordinary.stdout)), {"subject", "checkpoint", "idempotent"})
+        trail_dir = package / "execution" / "initial"
+        self.assertFalse((trail_dir / "trail.001.jsonl").exists())
+
+        handoff = self.cli(
+            repo,
+            package,
+            "recovery",
+            "checkpoint",
+            "--subject",
+            "attempt",
+            "--next",
+            "handoff recovery",
+            "--evidence",
+            "evidence.md",
+            "--handoff",
+        )
+        self.assertEqual(set(json.loads(handoff.stdout)), {"subject", "checkpoint", "idempotent"})
+        archive = trail_dir / "trail.001.jsonl"
+        current = trail_dir / "trail.jsonl"
+        archived_rows = [json.loads(line) for line in archive.read_text(encoding="utf-8").splitlines()]
+        current_rows = [json.loads(line) for line in current.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(archived_rows[-1]["kind"], "checkpoint")
+        self.assertEqual(current_rows[0]["kind"], "handoff")
+        self.assertTrue(current_rows[0]["checkpoint"])
+        self.assertEqual(current_rows[0]["next"], "handoff recovery")
+        self.assertEqual(self.state(package)["activeCheckpoints"]["attempt"]["next"], "handoff recovery")
+
+    def test_handoff_rotation_failure_does_not_fail_checkpoint(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        stderr = StringIO()
+
+        with patch.object(engine, "_rotate_trail", side_effect=OSError("disk full")), redirect_stderr(stderr):
+            result = engine.command_checkpoint(package, "attempt", "continue after handoff", None, [], True)
+
+        self.assertEqual(set(result), {"subject", "checkpoint", "idempotent"})
+        self.assertEqual(self.state(package)["activeCheckpoints"]["attempt"]["next"], "continue after handoff")
+        self.assertIn("trail rotation failed", stderr.getvalue())
+
     def test_cli_mutations_append_trail_rows_and_dedupe_repeated_checkpoint(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)

@@ -67,7 +67,7 @@ python <plugin>/scripts/impl_package_state.py --package <package> ticket block <
 python <plugin>/scripts/impl_package_state.py --package <package> ticket needs-revalidation <id> --expect <state> --claim <claim-id> [--claim <claim-id> ...] --invalidated-by <reason> [--evidence <path>]
 python <plugin>/scripts/impl_package_state.py --package <package> ticket pending <id> --expect <state> [--revalidation-plan <path>]
 python <plugin>/scripts/impl_package_state.py --package <package> ticket retire <id> --expect <state> --disposition waived|superseded --evidence <path> [--successor <id>]
-python <plugin>/scripts/impl_package_state.py --package <package> recovery checkpoint --subject attempt|ticket:<id> --next <text> [--blocker <text>] [--evidence <path>]
+python <plugin>/scripts/impl_package_state.py --package <package> recovery checkpoint --subject attempt|ticket:<id> --next <text> [--blocker <text>] [--evidence <path>] [--handoff]
 printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <package> recovery judgment
 python <plugin>/scripts/impl_package_state.py --package <package> gate <verdict> --comparison-commit <commit> --reason <text>
 ```

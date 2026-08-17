@@ -23,6 +23,7 @@ STATE_PATH = Path(".impl-package/state.json")
 PROGRESS_PATH = Path("progress.md")
 EXECUTION_PATH = Path("execution")
 ACTIVE_TRAIL_NAME = "trail.jsonl"
+TRAIL_ARCHIVE_RE = re.compile(r"^trail\.(\d{3})\.jsonl$")
 GATE_PATH = Path("gate.md")
 FORMAT_VERSION = "3.5"
 
@@ -152,18 +153,26 @@ def _trail_append_lock(path: Path):
 
 
 def _trail_next_seq(path: Path) -> int:
-    if not path.exists():
-        return 1
     maximum = 0
-    for line in path.read_text(encoding="utf-8-sig").splitlines():
-        if not line.strip():
+    sources = [path]
+    if path.parent.is_dir():
+        sources.extend(
+            candidate
+            for candidate in path.parent.iterdir()
+            if candidate.is_file() and TRAIL_ARCHIVE_RE.fullmatch(candidate.name)
+        )
+    for source in sources:
+        if not source.exists():
             continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(row, dict) and isinstance(row.get("seq"), int) and not isinstance(row.get("seq"), bool):
-            maximum = max(maximum, row["seq"])
+        for line in source.read_text(encoding="utf-8-sig").splitlines():
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict) and isinstance(row.get("seq"), int) and not isinstance(row.get("seq"), bool):
+                maximum = max(maximum, row["seq"])
     return maximum + 1
 
 
@@ -202,6 +211,44 @@ def _best_effort_trail(package: Path, attempt: str, event: dict[str, Any]) -> No
     except Exception as exc:  # trail is observational; state remains authoritative
         print(
             f"warning: state mutation committed but trail append failed ({event.get('kind', 'event')}): {exc}",
+            file=sys.stderr,
+        )
+
+
+def _next_trail_archive(path: Path) -> Path:
+    maximum = 0
+    if path.parent.is_dir():
+        for candidate in path.parent.iterdir():
+            match = TRAIL_ARCHIVE_RE.fullmatch(candidate.name)
+            if match and candidate.is_file():
+                maximum = max(maximum, int(match.group(1)))
+    if maximum >= 999:
+        raise StateError("trail archive sequence exhausted at trail.999.jsonl")
+    return path.with_name(f"trail.{maximum + 1:03d}.jsonl")
+
+
+def _rotate_trail(package: Path, attempt: str) -> Path | None:
+    path = _trail_path(package, attempt)
+    with _trail_append_lock(path):
+        if not path.exists():
+            _write_text(path, "")
+            return None
+        if not path.is_file():
+            raise StateError(f"active trail is not a file: {path}")
+        archive = _next_trail_archive(path)
+        if archive.exists():
+            raise StateError(f"trail archive already exists: {archive}")
+        path.replace(archive)
+        _write_text(path, "")
+        return archive
+
+
+def _best_effort_trail_rotation(package: Path, attempt: str) -> None:
+    try:
+        _rotate_trail(package, attempt)
+    except Exception as exc:  # state is authoritative; rotation is observational
+        print(
+            f"warning: state mutation committed but trail rotation failed: {exc}",
             file=sys.stderr,
         )
 
@@ -1017,7 +1064,14 @@ def command_er_add(package: Path, input_text: str) -> dict[str, Any]:
     return _add_judgment(package, payload)
 
 
-def command_checkpoint(package: Path, subject: str, next_action: str, blocker: str | None, evidence: list[str]) -> dict[str, Any]:
+def command_checkpoint(
+    package: Path,
+    subject: str,
+    next_action: str,
+    blocker: str | None,
+    evidence: list[str],
+    handoff: bool = False,
+) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
     _assert_mutable(summary)
@@ -1038,6 +1092,18 @@ def command_checkpoint(package: Path, subject: str, next_action: str, blocker: s
             **state["activeCheckpoints"][subject],
         },
     )
+    if handoff:
+        _best_effort_trail_rotation(package, summary["attempt"])
+        _best_effort_trail(
+            package,
+            summary["attempt"],
+            {
+                "subject": subject,
+                "kind": "handoff",
+                "checkpoint": True,
+                **state["activeCheckpoints"][subject],
+            },
+        )
     return {"subject": subject, "checkpoint": state["activeCheckpoints"][subject], "idempotent": False}
 
 
