@@ -15,7 +15,7 @@ priority:
   - [attempt.gate.terminal-frozen, package.record.state-missing, package.record.projection-drift, attempt.record.anchor-mismatch, attempt.record.handoff-recovery-needed, attempt.record.handoff-target-corrected, attempt.record.session-resumed, attempt.record.checkpoint-missing, attempt.record.checkpoint-refresh, attempt.record.handoff-in-flight, ticket.record.evidence-unfiled, ticket.record.judgment-unfiled]
   # P1-P5 是无序集合；下面的书写顺序不是层内位次。
   # P1：attempt admission 与验证载体准入
-  - [attempt.readiness.worker-still-running, attempt.readiness.all-edges-held, attempt.readiness.multiple-ready-tickets, ticket.readiness.blocker-maybe-resolved, attempt.readiness.integration-carrier-unavailable]
+  - [attempt.record.handoff-due, attempt.readiness.worker-still-running, attempt.readiness.all-edges-held, attempt.readiness.multiple-ready-tickets, ticket.readiness.blocker-maybe-resolved, attempt.readiness.integration-carrier-unavailable]
   # P2：消费 worker/reviewer 返回与当前 subject 的未完成动作
   - [finding.fix.worker-envelope-invalid, ticket.implement.worker-incomplete-first, ticket.implement.worker-incomplete-second, ticket.implement.worker-blocked, ticket.investigate.no-carrier, ticket.investigate.evidence-gap, finding.fix.reviewer-returned, finding.review.closure-awaiting, attempt.review.reviewer-unavailable, ticket.review.awaiting-reviewer, ticket.review.required-trigger, finding.fix.main-session-discovered, finding.review.source-recheck-pending]
   # P3：事实/合同/返工裁决与验证缺口
@@ -301,13 +301,17 @@ situations:
     when:
       trail.last_outcome: BLOCKED
       trail.last_worker_mode: implement
-    judgment: false
+    judgment: true
+    ask: "这个 blocker 是业务/外部的，还是本 attempt 内部的共享依赖（环境、fixture、测试载体）"
     actions:
+      - id: converge-shared-dependency
+        by: main-session
+        do: "/impl-package:subagent-driven-development mode=implement worker=<shared-dependency> 串行修复"
+        effect: "共享依赖：Ticket 保持 PENDING；跑通前不再派依赖它的单元"
       - id: block-ticket
-        default: true
         by: main-session
         do: "impl_package_state.py --package <package> ticket block <id> --expect PENDING --evidence <blocker-evidence>"
-        effect: "不 fallback"
+        effect: "业务/外部 blocker：不 fallback"
       - id: escalate-owner
         by: main-session
         do: "/impl-package:dev-with-track escalate blocked Ticket to owner"
@@ -786,6 +790,19 @@ situations:
         by: main-session
         do: "Get-Content <er-payload.json> -Raw | impl_package_state.py --package <package> recovery judgment"
         requires_reason: true
+    escape: true
+
+  - slug: attempt.record.handoff-due
+    basis: prose
+    when:
+      attempt.compaction_pressure_high: true
+    judgment: false
+    actions:
+      - id: handoff-at-next-checkpoint
+        default: true
+        by: main-session
+        do: "impl_package_state.py --package <package> recovery checkpoint --subject attempt --next <next-action> 后交接给新 session"
+        effect: "不中断当前单元；checkpoint 位置由主控判断"
     escape: true
 
   - slug: ticket.record.judgment-unfiled

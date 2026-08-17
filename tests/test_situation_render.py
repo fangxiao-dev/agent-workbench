@@ -113,7 +113,7 @@ def test_human_render_collapses_undetermined_and_supports_since() -> None:
     package = ROOT / "tests/fixtures/situations-a2/p0-evidence-unfiled"
 
     full = _render_text(package)
-    assert "无法判定 30 行\n" in full
+    assert "无法判定 31 行\n" in full
     assert "无法判定 30 行:" not in full
     assert "package.record.projection-drift" not in full
     digest_line = full.rsplit("\n", 1)[-1]
@@ -122,10 +122,45 @@ def test_human_render_collapses_undetermined_and_supports_since() -> None:
     assert len(digest) == 12
 
     explained = _render_text(package, "--explain-undetermined")
-    assert "无法判定 30 行: package.record.projection-drift (package)" in explained
+    assert "无法判定 31 行: package.record.projection-drift (package)" in explained
 
     unchanged = _render_text(package, "--since", digest)
     assert unchanged == f"处境未变 (digest: {digest})"
+
+
+def test_compaction_pressure_is_high_low_or_unknown_without_fact_channel() -> None:
+    package = ROOT / "tests/fixtures/situations/p4-satisfiable-no-trail"
+    pressure = json.dumps(
+        {
+            "compactions": 5,
+            "last_interval_min": 12,
+            "shrinking": True,
+            "high": True,
+            "explanation": "fixture",
+        },
+        separators=(",", ":"),
+    )
+
+    missing = json.loads(_render_text(package, "--json"))
+    missing_value = missing["when_values"]["attempt.compaction_pressure_high"][0]
+    assert missing_value["status"] == "unknown"
+    assert any(
+        item["slug"] == "attempt.record.handoff-due"
+        for item in missing["undetermined"]
+    )
+
+    high = json.loads(_render_text(package, "--compaction-pressure", pressure, "--json"))
+    assert _primary_slugs(high) == ["attempt.record.handoff-due"]
+    high_value = high["when_values"]["attempt.compaction_pressure_high"][0]
+    assert high_value["status"] == "known"
+    assert high_value["value"] is True
+
+    low_pressure = pressure.replace('"high":true', '"high":false')
+    low = json.loads(_render_text(package, "--compaction-pressure", low_pressure, "--json"))
+    assert _primary_slugs(low) == ["ticket.accept.satisfiable"]
+    low_value = low["when_values"]["attempt.compaction_pressure_high"][0]
+    assert low_value["status"] == "known"
+    assert low_value["value"] is False
 
 
 def test_json_render_exposes_digest_and_short_circuits_since() -> None:

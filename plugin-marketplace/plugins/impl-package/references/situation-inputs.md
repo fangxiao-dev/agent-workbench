@@ -5,8 +5,8 @@
 `plugin-marketplace/plugins/impl-package/scripts/situation.py` 当前真正读取和判定的
 package 形状，目的是让不阅读推导器实现的人也能构造 fixture、per-package 覆盖和审计输入。
 
-截至 2026-08-15，正式表有 56 个 situation row、66 个唯一的非 `manual` `when` key。
-本文逐一覆盖这 66 个 key。`manual` row 不需要输入字段；它们始终出现在 `manual` 输出中，
+截至 2026-08-15，正式表有 57 个 situation row、67 个唯一的非 `manual` `when` key。
+本文逐一覆盖这 67 个 key。`manual` row 不需要输入字段；它们始终出现在 `manual` 输出中，
 由主控做语义判断。
 
 > 重要边界：本文的“能被推导器识别”首先指 `situation.py render` 的输入合同。完整的
@@ -31,6 +31,7 @@ package 形状，目的是让不阅读推导器实现的人也能构造 fixture�
 | F | `execution-findings.md` | 按二级至六级 heading 分块，再解析 finding block |
 | I | intake 候选路径 | 见下文 `intake.has_backlog` 行的顺序 |
 | P | 调用 `render` 时传入的只读结构化 validation result；见 3.1 | 只有 `package.validate.projection_drift` 使用；不执行另一个 CLI，也不解析错误文本；缺失时可退回 R 中同 key 的 fact |
+| CP | 调用 `render` 时传入的只读结构化 compaction pressure；由宿主脚本计算，不由 renderer 读取 sessions root | 只有 `attempt.compaction_pressure_high` 使用；只消费 `high`，缺失时返回 U |
 | Git | 当前 package 所在 Git 仓库的 HEAD、commit resolve 和 diff | `trail` 中的 `head` 是比较基线；不会从普通 prose 推断 commit |
 
 subject 不是自由标签。`attempt` scope 默认只看 trail 行的 `subject` 为 `attempt`、空值或
@@ -68,7 +69,7 @@ false；只有没有 U 且所有比较都相等时才是 true。
 `=>1`、`<>1`、`=1`、`between 1 and 2`、`truthy`、`not false` 和带单位的字符串都不支持；
 不匹配数值语法时会退回普通相等比较，通常得到已知 false，而不是 U。
 
-## 2. 66 个 `when` key 合同
+## 2. 67 个 `when` key 合同
 
 表中的“缺失/错误”列同时说明文件不存在、字段不存在、字段形状不对和没有匹配 marker
 时的行为；`HF：无`表示该 key 本身不会因该输入缺失直接让 CLI 失败。
@@ -83,6 +84,7 @@ false；只有没有 U 且所有比较都相等时才是 true。
 | `attempt.all_tickets_terminal` | S：`tickets` 是否非空且每个 row 的 `state` 都是 `SATISFIED` 或 `RETIRED` | 布尔 | state 无效 = U；合法但 tickets 为空 = F；有任一 `PENDING/BLOCKED/NEEDS-REVALIDATION` = F；HF：无 | `attempt.accept.all-tickets-terminal` |
 | `attempt.completion_claim_pending` | R：attempt scope 的最新 fact；兼容读取旧 `facts/when/derived` 容器 | 布尔；只推荐规范 JSON boolean | 没有 fact = U；显式非布尔 = U；未知 fact key = HF | `attempt.accept.completion-claim-unaudited` |
 | `attempt.handoff_or_long_task` | R：attempt scope 的最新 `kind=fact` 同 key；兼容读取旧 `facts` 容器；没有从 checkpoint 的 `next/blocker` 或 trail prose 自动推导 | 布尔 | 没有 fact = U；显式非布尔 = U；未知 fact key = HF | `attempt.record.checkpoint-missing` |
+| `attempt.compaction_pressure_high` | CP：`--compaction-pressure` 传入的 JSON object 的 `high`；宿主脚本以第一段间隔为 baseline，最近三段间隔的中位数至少缩短 20% 且至少有三段间隔时才给 `high=true`；renderer 不重算 | 布尔 | 缺少参数 = U（不是 false）；合法 `high=false` = F；JSON 非 object、缺 `high`、类型/未知字段错误 = HF | `attempt.record.handoff-due` |
 | `attempt.has_pending_ticket` | S：`tickets[*].state` 是否至少有一个 `PENDING` | 布尔 | state 无效 = U；合法无 Ticket 或全非 PENDING = F；HF：无 | `attempt.readiness.all-edges-held` |
 | `attempt.implementation_edges_held` | S + T：先计算 `ready_ticket_ids`，再判断“存在 PENDING Ticket 且 ready 数量为 0”；implementation dependency 的释放规则见 `ticket.acceptance_edge_released` | 布尔 | state、Ticket 文件或 dependency 不可判定 = U；无 pending = F；有 pending 且至少一个 ready = F；HF：无 | `attempt.readiness.all-edges-held` |
 | `attempt.in_flight` | R：先找 fact；否则同时识别旧 `kind=decision` + `chosen` dispatch/sdd 未配 result，以及 `kind=dispatch` + `outcome=RUNNING` + `returned=false` | 布尔；dispatch 可无 id；有 id 时 result-like 的 `of/dispatch_id/decision...` 可关闭 | 无 trail = U；trail 存在但没有 open dispatch = F；显式非布尔 = U；HF：无 | `attempt.readiness.multiple-ready-tickets` |
@@ -171,7 +173,7 @@ false；只有没有 U 且所有比较都相等时才是 true。
 | `kind` | 正式形状 | renderer 消费 |
 | --- | --- | --- |
 | `decision` | `subject`、`seq/id/decision_id/decisionId` 至少一个、`chosen` | 与 result 的 `of/decision/...` 配对；未配对 dispatch 属于 in-flight |
-| `dispatch` | `subject`、`outcome:"RUNNING"`、`returned:false/true`、`worker`；建议带 `seq` 或 `id` | `returned:false` 直接表示 worker 尚未返回；有匹配 `of` 的 return 才关闭带 id 的 dispatch |
+| `dispatch` | `subject`、`outcome:"RUNNING"`、`returned:false/true`、`worker`；建议带 `seq` 或 `id`；可选 `situation_digest` | `returned:false` 直接表示 worker 尚未返回；有匹配 `of` 的 return 才关闭带 id 的 dispatch；`situation_digest` 是本次派发所依据的 renderer 12 位 digest，缺失由审计识别，不使 renderer 失败 |
 | `result` | `subject`、`outcome`；返回 decision 时带 `of`；direct evidence 放在 `ref/evidence/artifact/evidence_ref/direct_evidence` | outcome、incomplete、旧 direct-evidence 写法和 decision 关闭 |
 | `worker-return` | `subject`、`outcome`、可选 `of`、worker 返回的 direct-evidence payload | 与 `result` 归一；`EVIDENCE_SUFFICIENT` + `evidence` 是规范 direct-evidence 返回 |
 | `fact` | `subject`、`kind:"fact"`、`key`、`value`、`ts`，可选 `seq` | 读取同一 key 的最新事实；`ts` 会在 JSON `when_values` 中暴露，不添加过期规则 |
@@ -470,7 +472,7 @@ HF。规范 kind 的字段如下：
 | --- | --- | --- |
 | `fact` | `subject`、`key`、`value`、`ts`；key 必须属于 3.1 的闭合集合 | 同 key 按 `ts/seq/文件顺序` 取最新；旧 `facts` object 只作为兼容输入 |
 | `decision` | `subject`、`seq/id/decision_id/decisionId` 至少一个；`chosen` 在 `attempt.in_flight` 中应含 `dispatch` 或 `sdd` | 旧 decision/result 配对继续识别 |
-| `dispatch` | `subject`、`outcome=RUNNING`、`returned=false`、`worker`；建议带 id/seq | `returned=false` 直接建立 `trail.decision_without_result=true` |
+| `dispatch` | `subject`、`outcome=RUNNING`、`returned=false`、`worker`；建议带 id/seq；可选 `situation_digest` | `returned=false` 直接建立 `trail.decision_without_result=true`；`situation_digest` 是本次派发所依据的 renderer 12 位 digest，缺失由审计识别，不使 renderer 失败 |
 | `result` | `subject`、`outcome`；关闭 decision 可带 `of`/decision ID | 与 `worker-return` 统一为 result-like event |
 | `worker-return` | `subject`、`outcome=EVIDENCE_SUFFICIENT`、`evidence` payload；payload 需有 artifact/claim/revision/environment 才能判 indexed | 建立 direct evidence；旧 `kind=result` 写法保持有效 |
 | direct evidence | 在 result-like row 或 `ref/evidence/artifact/evidence_ref/direct_evidence` payload 中提供 artifact、claim、revision、environment | tuple 完整才能继续判 `evidence.indexed` |
@@ -899,6 +901,7 @@ P0 内部顺序就是 YAML 的顺序。P0 有多个 active match 时，renderer 
 
 | slug | 完整命中条件（全部 AND） | U key | 命中所需的实现前置条件与常见漏项 |
 | --- | --- | --- | --- |
+| `attempt.record.handoff-due` | `attempt.compaction_pressure_high = true` | `attempt.compaction_pressure_high` | 需要调用方传入 `--compaction-pressure` 的合法 JSON 且 `high=true`；缺参数是 U，不命中该行；它位于 P1，因此 P0 完整性行仍先显示。默认动作是在主控选定的下一个 recovery checkpoint 后交接，不中断当前单元。 |
 | `attempt.readiness.worker-still-running` | `trail.decision_without_result = true` | `trail.decision_without_result` | trail 必须可读，并且存在未配 result 的 decision，或 `kind=dispatch`、`outcome=RUNNING`、`returned=false` 的 open dispatch。带 id 的 dispatch 只有匹配 result 才关闭；无 id 的 running dispatch 始终保持 open。 |
 | `attempt.readiness.all-edges-held` | `attempt.ready_ticket_count = 0` AND `attempt.has_pending_ticket = true` AND `attempt.implementation_edges_held = true` | `attempt.ready_ticket_count`、`attempt.has_pending_ticket`、`attempt.implementation_edges_held` | 需要合法 state、每个 Ticket 文件都能解析、implementation dependency 的目标状态都能判定，并且至少有一个 `PENDING` Ticket；不能只在“看起来没有 ready Ticket”时手写期望。后两个条件在当前实现中有推导重叠，但 row 仍会逐项比较。 |
 | `attempt.readiness.multiple-ready-tickets` | `attempt.ready_ticket_count > 1` AND `attempt.in_flight = false` | `attempt.ready_ticket_count`、`attempt.in_flight` | 需要完整 Ticket/dependency 图，且 open dispatch 已被明确排除。没有 trail 或无法证明没有 in-flight 时第二个 key 是 U，不是 false；“有两个 pending Ticket”也不等于有两个 ready Ticket。 |

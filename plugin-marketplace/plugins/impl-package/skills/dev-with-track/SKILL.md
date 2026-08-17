@@ -10,7 +10,7 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 
 ## Restore
 
-在第 1 步 `package validate` 返回后，把当前处境渲染作为恢复起点，再进入第 2 步的 progress/checkpoint 读取。主 session 控制循环在每一轮真正推进动作前，用同一调用刷新处境与可选动作。两处都按下面顺序把 validator 结果接到 renderer；`--json` 让主控可以读取 `digest`、`selected`、`parallel_matches`、`undetermined` 和 `unmatched`：
+在第 1 步 `package validate` 返回后，把当前处境渲染作为恢复起点，再进入第 2 步的 progress/checkpoint 读取。主 session 控制循环在每一轮真正推进动作前，用同一调用刷新处境与可选动作。两处都按下面顺序把 validator 结果和宿主 compaction pressure 接到 renderer；`--json` 让主控可以读取 `digest`、`selected`、`parallel_matches`、`undetermined` 和 `unmatched`：
 
 ```powershell
 python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> package validate
@@ -19,12 +19,13 @@ $validationResult = if ($LASTEXITCODE -eq 0) {
 } else {
   '{"projection_drift":true,"source":"package validate"}'
 }
-$renderArgs = @('--package', '<package>', '--validation-result', $validationResult, '--json')
+$compactionPressure = python <host-tools-root>/scripts/compaction_pressure.py
+$renderArgs = @('--package', '<package>', '--validation-result', $validationResult, '--compaction-pressure', $compactionPressure, '--json')
 if ($previousDigest) { $renderArgs += @('--since', $previousDigest) }
 python <impl-package-plugin-root>/scripts/situation.py render @renderArgs
 ```
 
-这里的布尔值是对 `package validate` 退出结果的结构化适配：成功传 `false`，非零结果保守传 `true`；不解析 stdout/stderr。若非零同时意味着 `package.state_invalid`，renderer 自己推导的 P0 `package.record.state-missing` 仍按表的顺序优先显示。渲染结果是参考，不是 gate；主控可以按实际判断偏离建议，但要在轨迹中写一行理由。
+这里的布尔值是对 `package validate` 退出结果的结构化适配：成功传 `false`，非零结果保守传 `true`；不解析 stdout/stderr。`$compactionPressure` 是宿主侧测量的单行 JSON，至少含 `high` 布尔；如何测量由宿主决定（`<host-tools-root>` 指提供该测量工具的仓库，不是插件根），插件不假设宿主具备这个能力。测不到时省略该参数，`attempt.compaction_pressure_high` 保持无法判定而非 false。若非零同时意味着 `package.state_invalid`，renderer 自己推导的 P0 `package.record.state-missing` 仍按表的顺序优先显示。渲染结果是参考，不是 gate；主控可以按实际判断偏离建议，但要在轨迹中写一行理由。
 
 首次调用不设置 `$previousDigest`；每次从结果读取当前 `digest` 保存到 `$previousDigest`，下一轮追加 `--since $previousDigest`。digest 命中时只返回一行“处境未变”，否则返回完整内容并带上新的 digest。需要 human 输出中的无法判定处境名单时，显式追加 `--explain-undetermined`；默认 human 输出只保留计数。
 
@@ -67,7 +68,7 @@ Get-Content .\er-payload.json -Raw |
 
 ## 处境投递与轨迹
 
-处境表漏掉某个当前处境时，按判断行动并走 escape 出口是合法路径，不是违规；若主控偏离渲染建议，也只需记录理由，不把 renderer 当成阻断器。没有其它载体的动作要显式写一行轨迹：派发的发起与返回、escape、Ticket 选择、finding 定级与分流、来源路由判断，以及需要声明的 fact。轨迹位置与格式遵循 `../../references/situation-inputs.md`（运行时不需要打开，仅在维护处境表或写 per-package 覆盖时查阅）和 `docs/skill-design/impl-package-situation-table-260815/trail-schema.md`（运行时不需要打开，仅在维护轨迹格式或写 per-package 覆盖时查阅）：`execution/<attempt>/trail.jsonl` 中每个非空行是 JSON object，事件使用 `dispatch`、`result`/`worker-return` 或 `kind=fact`，带正确的 `subject`，fact 带 `key`、`value`、`ts`，需要 Git 对账时带 `head`。首版全部显式写行，不要求改 `impl_package_state.py`。
+处境表漏掉某个当前处境时，按判断行动并走 escape 出口是合法路径，不是违规；若主控偏离渲染建议，也只需记录理由，不把 renderer 当成阻断器。没有其它载体的动作要显式写一行轨迹：派发的发起与返回、escape、Ticket 选择、finding 定级与分流、来源路由判断，以及需要声明的 fact。轨迹位置与格式遵循 `../../references/situation-inputs.md`（运行时不需要打开，仅在维护处境表或写 per-package 覆盖时查阅）和 `docs/skill-design/impl-package-situation-table-260815/trail-schema.md`（运行时不需要打开，仅在维护轨迹格式或写 per-package 覆盖时查阅）：`execution/<attempt>/trail.jsonl` 中每个非空行是 JSON object，事件使用 `dispatch`、`result`/`worker-return` 或 `kind=fact`，带正确的 `subject`，fact 带 `key`、`value`、`ts`，需要 Git 对账时带 `head`；`dispatch` 可带本次派发所依据的 renderer 12 位 `situation_digest`，缺失由只读审计报告，不阻断渲染。轨迹只追加、不改写已有行；发现某行写错时追加一条正确的 fact（同 key 取最新）或补一行说明，改写历史会让回放失去意义。首版全部显式写行，不要求改 `impl_package_state.py`。
 
 ## Review、Findings 与人工验收
 

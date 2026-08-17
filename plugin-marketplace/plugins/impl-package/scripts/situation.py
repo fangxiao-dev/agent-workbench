@@ -228,6 +228,16 @@ class ValidationResult:
     source: str
 
 
+@dataclass(frozen=True)
+class CompactionPressureResult:
+    data: dict[str, Any]
+    source: str
+
+    @property
+    def high(self) -> bool:
+        return bool(self.data["high"])
+
+
 @dataclass
 class Snapshot:
     package: Path
@@ -239,6 +249,7 @@ class Snapshot:
     findings: FindingsView
     intake: IntakeView
     validation_result: ValidationResult | None
+    compaction_pressure: CompactionPressureResult | None
     head: str | None
     warnings: list[str] = field(default_factory=list)
 
@@ -891,6 +902,7 @@ def _parse_intake(reader: PackageReader) -> IntakeView:
 def _build_snapshot(
     reader: PackageReader,
     validation_result: ValidationResult | None = None,
+    compaction_pressure: CompactionPressureResult | None = None,
 ) -> Snapshot:
     warnings = list(reader.warnings)
     state = _parse_state(reader.read(STATE_REL))
@@ -956,6 +968,7 @@ def _build_snapshot(
         findings=findings,
         intake=intake,
         validation_result=validation_result,
+        compaction_pressure=compaction_pressure,
         head=reader.head(),
         warnings=warnings,
     )
@@ -1641,6 +1654,53 @@ def _load_validation_result(spec: str | None) -> ValidationResult | None:
     return ValidationResult(projection_drift=value["projection_drift"], source=source)
 
 
+def _load_compaction_pressure(spec: str | None) -> CompactionPressureResult | None:
+    if spec is None:
+        return None
+    raw_spec = spec.strip()
+    source = "inline"
+    if raw_spec.startswith("{"):
+        raw_text = raw_spec
+    else:
+        path = Path(spec)
+        if not path.is_file():
+            raise SituationError(f"compaction pressure 文件不存在：{path}")
+        try:
+            raw_text = path.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeError) as exc:
+            raise SituationError(f"无法读取 compaction pressure：{path}: {exc}") from exc
+        source = str(path.resolve())
+    try:
+        value = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise SituationError(f"compaction pressure 不是合法 JSON：{exc}") from exc
+    if not isinstance(value, dict):
+        raise SituationError("compaction pressure 顶层必须是 object")
+    allowed = {"compactions", "last_interval_min", "shrinking", "high", "explanation"}
+    extra = sorted(set(value) - allowed)
+    if extra:
+        raise SituationError("compaction pressure 含未知字段：" + ", ".join(extra))
+    if not isinstance(value.get("high"), bool):
+        raise SituationError("compaction pressure.high 必须是 boolean")
+    compactions = value.get("compactions")
+    if compactions is not None and (
+        isinstance(compactions, bool) or not isinstance(compactions, int) or compactions < 0
+    ):
+        raise SituationError("compaction pressure.compactions 必须是非负整数")
+    interval = value.get("last_interval_min")
+    if interval is not None and (
+        isinstance(interval, bool) or not isinstance(interval, (int, float)) or interval < 0
+    ):
+        raise SituationError("compaction pressure.last_interval_min 必须是非负数字或 null")
+    shrinking = value.get("shrinking")
+    if shrinking is not None and not isinstance(shrinking, bool):
+        raise SituationError("compaction pressure.shrinking 必须是 boolean")
+    explanation = value.get("explanation")
+    if explanation is not None and (not isinstance(explanation, str) or not explanation.strip()):
+        raise SituationError("compaction pressure.explanation 必须是非空字符串")
+    return CompactionPressureResult(data=value, source=source)
+
+
 def _when_package_validate_projection_drift(context: FactContext) -> Fact:
     validation = context.snapshot.validation_result
     if validation is not None:
@@ -1663,6 +1723,13 @@ def _when_attempt_session_resumed(context: FactContext) -> Fact:
     if not actions.known:
         return actions
     return _fact_value(actions.value == 0)
+
+
+def _when_attempt_compaction_pressure_high(context: FactContext) -> Fact:
+    pressure = context.snapshot.compaction_pressure
+    if pressure is None:
+        return context.unknown("缺少结构化 compaction pressure")
+    return _fact_value(pressure.high)
 
 
 def _when_attempt_active_checkpoint_present(context: FactContext) -> Fact:
@@ -2236,6 +2303,7 @@ WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "package.state_invalid": _when_package_state_invalid,
     "package.validate.projection_drift": _when_package_validate_projection_drift,
     "attempt.session_resumed": _when_attempt_session_resumed,
+    "attempt.compaction_pressure_high": _when_attempt_compaction_pressure_high,
     "attempt.active_checkpoint_present": _when_attempt_active_checkpoint_present,
     "trail.actions_since_checkpoint": _when_trail_actions_since_checkpoint,
     "gate.terminal": _when_gate_terminal,
@@ -2878,6 +2946,14 @@ def _json_result(
                 if snapshot.validation_result is not None
                 else None
             ),
+            "compaction_pressure": (
+                {
+                    **snapshot.compaction_pressure.data,
+                    "source": snapshot.compaction_pressure.source,
+                }
+                if snapshot.compaction_pressure is not None
+                else None
+            ),
         },
         "warnings": [*table.warnings, *snapshot.warnings],
     }
@@ -2967,6 +3043,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="read-only JSON object {\"projection_drift\": boolean}, inline or from a file",
     )
     render.add_argument(
+        "--compaction-pressure",
+        metavar="JSON_OR_FILE",
+        help="read-only JSON object with boolean high, inline or from a file",
+    )
+    render.add_argument(
         "--since",
         metavar="DIGEST",
         help="emit only a one-line unchanged marker when the digest matches",
@@ -2987,7 +3068,8 @@ def _run_render(args: argparse.Namespace) -> int:
     reader = PackageReader(args.package, args.at)
     table = _load_table_for_package(reader)
     validation_result = _load_validation_result(args.validation_result)
-    snapshot = _build_snapshot(reader, validation_result)
+    compaction_pressure = _load_compaction_pressure(args.compaction_pressure)
+    snapshot = _build_snapshot(reader, validation_result, compaction_pressure)
     derived = _derive(table, snapshot)
     digest = _situation_digest(table, derived)
     if args.since == digest:
