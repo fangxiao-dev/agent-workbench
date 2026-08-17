@@ -18,6 +18,7 @@ import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from difflib import get_close_matches
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
 
@@ -88,6 +89,19 @@ FACT_KEYS = frozenset(
     }
 )
 FACT_KEY_ALIASES = {"ticket.judgment_unfiled": "trail.judgment_unfiled"}
+
+
+def _unknown_fact_key_notice(keys: tuple[str, ...]) -> str:
+    """Name the ignored keys and, for near misses, the key that was probably meant."""
+    parts = []
+    for key in keys:
+        close = get_close_matches(str(key), FACT_KEYS, n=1, cutoff=0.6)
+        parts.append(f"{key} → 也许是 {close[0]}" if close else str(key))
+    return (
+        "trail.jsonl 含未知 fact key，已忽略这些行："
+        + "；".join(parts)
+        + "。表只消费封闭清单内的 key；其它事实写 evidenceIndex 或 ER judgment"
+    )
 
 # Only defaults that preserve the fail-closed direction belong here.  A key
 # absent from this mapping remains unknown when its fact channel is readable.
@@ -173,6 +187,7 @@ class TrailView:
     rows: list[dict[str, Any]]
     error: str | None = None
     facts: list["TrailFact"] = field(default_factory=list)
+    unknown_fact_keys: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -773,10 +788,16 @@ def _parse_trail(view: FileView) -> TrailView:
                 errors.append(f"trail.jsonl 第 {number} 行 kind=fact 不得同时使用 facts 与 key/value/ts")
         else:
             errors.append(f"trail.jsonl 第 {number} 行不是 object")
-    if unknown_fact_keys:
-        names = ", ".join(sorted(unknown_fact_keys))
-        raise SituationError(f"trail.jsonl 包含未知 fact key：{names}")
-    return TrailView(True, rows, "; ".join(errors) if errors else None, facts=facts)
+    # An unknown key is ignored and reported, never fatal: the trail is append-only, so
+    # refusing to render would leave the package permanently unnavigable over one row
+    # that cannot be taken back.
+    return TrailView(
+        True,
+        rows,
+        "; ".join(errors) if errors else None,
+        facts=facts,
+        unknown_fact_keys=tuple(sorted(unknown_fact_keys)),
+    )
 
 
 def _parse_gate(view: FileView) -> GateView:
@@ -949,6 +970,8 @@ def _build_snapshot(
         trail = _parse_trail(reader.read(f"execution/{attempt_id}/trail.jsonl"))
         if trail.error:
             warnings.append(trail.error)
+        if trail.unknown_fact_keys:
+            warnings.append(_unknown_fact_key_notice(trail.unknown_fact_keys))
     gate = _parse_gate(reader.read(GATE_REL))
     if gate.error:
         warnings.append(gate.error)
