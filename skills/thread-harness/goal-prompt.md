@@ -66,7 +66,7 @@ broker.budget：150000 / 20 / 1720（写入 registry，不在 prompt 中计算�
 按顺序做：
 1. 建 registry，填好 `broker.profile`、三项 budget，以及每个 node 的 node 名 / node_type / package_entry（task）/ worktree / branch。
 2. ledger.py init
-3. 按 references/session-dispatch.md 的两阶段契约建子线，把返回的 session id 回填 registry。
+3. 按 references/session-dispatch.md 的角色路由与 assignment delta 建子线；通用 session 创建与交接由 `$handoff-to-new-session` 负责，把返回的 session id 回填 registry。
 4. ledger.py preflight，必须 PREFLIGHT OK。
 5. 跑一轮固定 poll，然后 ledger.py sync，确认 valid=yes 且 head_unavailable 为空。
 

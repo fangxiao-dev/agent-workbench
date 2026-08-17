@@ -1,6 +1,6 @@
 ---
 name: architecture-review
-description: Use when reviewing architecture, platform foundations, production readiness, large foundational PRs, or claimed capabilities such as tenant isolation, authorization, RBAC, file security, audit logging, async jobs, idempotency, external side effects, extensibility, or SaaS boundaries.
+description: Use when reviewing a project's architecture, including its module boundaries, dependency structure, runtime composition, or foundational design decisions.
 metadata:
   tags: architecture-review, platform-foundation, saas, tenant-isolation, audit, PR-review, production-readiness
   platforms: Claude, Codex, Gemini

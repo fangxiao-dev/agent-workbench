@@ -85,4 +85,4 @@ def test_downstream_protocol_can_supply_stateless_continuation_authority() -> No
     assert "generic continuation card is replaced by the downstream continuation" in skill
     assert "The template's understanding receipt still applies" in skill
     assert "Role B 无持久恢复权威" in dispatch
-    assert "仅作验证锚点" in dispatch
+    assert "额外只读验证锚点" in dispatch

@@ -1,32 +1,23 @@
 # Session dispatch 契约（三个角色统一）
 
-新建或替换任何一条线的 session 时用本页。三个角色共用同一套骨架，差异只有 §角色 delta 那张表。
-
-**不要手写一段带 `<codex_delegation>` 的委派 prompt。** 统一复用 `$handoff-to-new-session` 的 clean local-session、两阶段 anchor/continuation、配置与命名流程；本页只定义 thread-harness 的角色、routing 与 continuation delta。
-本禁令仅针对调用者把<codex_delegation>标签手写进 create_thread /
-send_message_to_thread 的 prompt 字符串。
-
-在通用流程的 anchor PASS 停顿中，controller 先更新 registry，再发送本页的角色化 continuation。child 不直接写 ledger。
+新建或替换任何一条线的 session 时用本页。`$handoff-to-new-session` 负责通用的 session 创建、恢复锚点、命名、配置与交付检查；本页只定义 thread-harness 的角色、路由、授权和 assignment delta。child 不直接写 ledger。
 
 ## 固定骨架
 
 ### 固定约束
 
 - **一个 node 一个 worktree 一个 branch。** 复用 worktree 前必须确认旧 writer 与 owned process 已停止。`preflight` 会拦这个。
-- 将 branch 与角色锚点填入 `$handoff-to-new-session` 第一阶段模板的 optional read-only validation anchors；不复制该模板。
+- 需要 admission 校验时，把 branch、package entry 或 parent context 作为 `$handoff-to-new-session` 的最小只读 validation anchors；不复制其 prompt 或创建流程。
 - `previous_session_ids` 是 registry 内部路由历史。**不进任何 child prompt，也不要求 child 读取、打印或校验它。**
 
-### 两种触发，第 1–2 步不同
+### 触发与 `create_thread` 归属
 
-**先分清你在哪个场景**，这决定谁去调 `create_thread`：
-
-| | **替换：主控提示现有 session 自交接**（最常见） | **冷启动：节点还不存在** |
+| 场景 | 触发 | `create_thread` 发起者 |
 | --- | --- | --- |
-| 起因 | `sync` 已观测到 current controller/task session 的 `handoff_due`，或主控直接确认该线已经明显退化 | 为新识别的 seam 开一条 Platform 线，或首次建线 |
-| 谁发起 | **主控**，依据是 `sync` 摘要里的 `handoff_required` 与幂等 `act --handoff`，或主控直接确认的明显退化；存在时长不参与这项判断 | 主控 |
-| 谁调 `create_thread` | **那条线自己**（Role A / Role C） | **主控** |
-| Role B 例外 | **也由主控建**。Platform 没有持久恢复权威，replacement 由主控用一张新的完整 assignment card 重新派发 | 主控建 |
-| 前置 | source 停在原子 checkpoint、owned process 已停 | Owner 已授权 `create_thread`、seam assignment 明确 |
+| session replacement | `sync` 产生 `handoff_required`，或 controller 确认当前 session 已退化 | Role A / Role C 的退休 session 自建继任者；Role B 由 controller 建 |
+| cold start / 新 Platform 线 | 首次建线或发现无 producer 的 seam | controller |
+
+所有 `create_thread` 都必须有 Owner 明确授权；Role A replacement 先写 checkpoint，Role C replacement 先更新 registry，Role B replacement 由 controller 重新核验事实并发新 assignment。
 
 ### 触发消息（发给要退休的那条 session）
 
@@ -34,11 +25,10 @@ send_message_to_thread 的 prompt 字符串。
 > **恢复权威**：无——它不需要恢复，它需要交出去。
 > **准入判据**：**这句话是不是只有我知道？** 是就写，否则指过去。
 
-主控发给 child 时用它；Owner 让主控自己交接时也用它。
+主控发给要退休的 child 时用它；Owner 让主控自己交接时也用它。
 
 ```text
-你该做 session 自交接了。先尽快完成手头任务，写好可恢复 checkpoint
-并停止 owned process；不要领取新的工作。然后按 $handoff-to-new-session 执行，thread-harness delta 以
+你该做 session handoff 了。先完成当前 bounded action；Role A 写回 checkpoint，所有角色停止 owned process，再按 `$handoff-to-new-session` 交接；thread-harness 的角色 delta 以
 <repo>\skills\thread-harness\references\session-dispatch.md 为准。
 
 registry：<registry 绝对路径 .json>
@@ -50,58 +40,41 @@ Owner 的 create_thread 授权原文（你据此为自己建继任者）：
 确实自己走偏了才能纠正，不得纠正继任者后续的 prompt。
 ```
 
-**不要复述交接步骤**——写 checkpoint、停 owned process、建 clean session、`route`、报 `handed_off` H1，这些全是 `$handoff-to-new-session` 与本页其余各节的职责。触发消息只负责"该交班了"这一件事。
+触发消息只负责说明“现在该交接”；checkpoint、owned process、session 创建和交付检查由 `$handoff-to-new-session` 及对应角色规则处理。
 
 **授权原文必须随触发消息一起给。** child 读不到主控的 goal，不带就等于让它在没有授权证据的情况下调 `create_thread`。
 
 **"不再是权威"禁的是替 Owner 裁决授权与边界，不是说话。** 退休线看不到 Owner 之后说了什么。发现继任者真的要出事时仍然要吭声：先 `read_thread` 核实，或回给 Owner。
 
-**只在轮边界发起交接。** `handoff_due` 只产生一次 action，触发消息安排在当前 bounded action 收尾处；轮中交接会让本轮 `sync` 判 `ROUND INVALID`。宁可推迟一轮，**不要放宽 `sync` 校验**。
+**只在轮边界发起交接。** `handoff_due` 只产生一次 action，触发消息安排在当前 bounded action 收尾处；轮中交接会让本轮 `sync` 判 `ROUND INVALID`。
 
-### registry 由谁写：当时的主控，永远
+### registry 路由由当时的 controller 维护
 
-`previous_session_ids` 与 `current_session_id` 的写入**只由那一刻的 controller 执行**（用 `ledger.py route`，见 poll-contract）。这条对三个角色一致：
+`previous_session_ids` 与 `current_session_id` 的写入**只由那一刻的 controller 执行**（用 `ledger.py route`，见 poll-contract）：
 
 - **Role A / Role B 替换**：现任主控在收到 `handed_off` H1 后写。
 - **Role C 交接**：**退休主控在退出前把 registry 指向继任者**。新主控上任后只核对该字段是否已指向自己，没写成才补写。
 
 `previous_session_ids` 不进 child prompt，由主控写进 registry。
 
-### Role A 要带上 `/impl-package:impl-package`
+### 角色 continuation
 
-Role A 的第二阶段 prompt 必须以 `/impl-package:impl-package` 为 entry point，不复述其流程；Role B 不带这一项。
+通用 handoff 交付成功后，controller 发送下面的最小角色 continuation。它只补充 thread-harness 的回报目标、恢复权威和当前 assignment；不得复制通用 handoff 流程。每条消息不得超过 20 个非空逻辑行，child routing 只有 current controller session id。
 
-### 固定流程
-
-1. 按上表确定谁执行第 2 步。若是 Role A 替换，source session 先把 checkpoint 写回任务包 entry 并停下 owned process；若是冷启动，controller 先完成 parent preflight。
-2. 执行方按 `$handoff-to-new-session` 创建 clean local session，并完成其命名与 anchor PASS/FAIL 流程。
-3. anchor PASS 后，controller 确认通用命名步骤成功，更新 registry 的 current routing，复核 sibling 未变化。
-4. controller 发送第二阶段 registration + assignment card。
-5. child 向第二阶段给出的 current controller 发送最小 H1；controller 从消息来源绑定 node/session，并用 registry 验证后登记状态。
-6. 做一次 `wait_threads(..., timeoutMs:0)` 快照。registry race 修正后**复用同一 clean session**，不再创建新 session。
-
-### 第二阶段 prompt
-
-> **读者**：已经 anchor PASS、知道自己站在哪，但还不知道要干什么。
-> **恢复权威**：Role A 是任务包 entry；Role B 无持久恢复权威，下方 card 只定义当前 assignment。Role C 不是 child，按后文特有顺序读取 registry + ledger。
-> **准入判据**：**这行能否让 child 完成准入，或立即开始当前 assignment？** 不能就不进 prompt。
-
-Role A / B 的完整第二阶段消息（registration + assignment）以对应模板为准，**不得超过 20 个非空逻辑行**。child routing 只有 current controller session id。
-
-#### Role A prompt
+#### Role A continuation
 
 ```text
-第二阶段 registration 已就绪。读取 thread-harness 与 /impl-package:impl-package，并按 Role A 工作。
+registration 已就绪。读取 thread-harness 与 /impl-package:impl-package，并按 Role A 工作。
 回报对象：controller=<current_controller_session_id>
 恢复权威：<package entry / checkpoint pointer>
 向 controller 发送 state=working 的 H1，再从恢复权威读取并继续其中的 current Next Action。
 状态变化只通过 H1 回报；不要调用 ledger.py。缺少可执行 Next Action 时询问 controller，不从聊天重建。
 ```
 
-#### Role B prompt
+#### Role B assignment
 
 ```text
-第二阶段 registration 已就绪。读取 $thread-harness 并按 Role B 工作。
+读取 $thread-harness 并按 Role B 工作。
 回报对象：controller=<current_controller_session_id>
 恢复权威：无；本卡仅定义当前 assignment。
 <slug>：<一句话任务名>
@@ -120,7 +93,7 @@ Role A / B 的完整第二阶段消息（registration + assignment）以对应�
 > **任务权威**：Role A 的持久恢复权威是任务包 entry；Role B 无持久恢复权威，这张卡只定义当前 assignment。
 > **准入判据**：**这是不是 child 开始当前动作所需的最小切入点？** 不是就不进卡。
 
-Role A 从 package entry 恢复并继续。Role B card 使用第二阶段模板里的四个字段：`seam / 任务`、`next action`、`inputs`、`done when`。
+Role A 从 package entry 恢复并继续。Role B assignment 使用 Role B continuation 中的四个字段：`seam / 任务`、`next action`、`inputs`、`done when`。
 
 - **`seam / 任务`**：seam 必须写出 consumers；非 seam 就明写 bounded task。
 - **`inputs`**：只列执行 `next action` 前必须读取的代码、当前契约或 artifact。当前 worktree 内用相对路径，跨 worktree 用绝对路径；历史 plan、execution record 或 evidence 只有精确 section / artifact 会改变当前动作时才可进入。必须复用的既有证据只给一个 artifact 指针，不复述摘要。
@@ -151,7 +124,7 @@ catch-up（你刚发生过 compaction）：
 - **硬上限 10 行。**
 - **预算规则（controller 执行）**：优先读取本轮 `ledger.py sync` 摘要的 `budget_stage` 与 `handoff_required`。threshold 由 registry budget 机械计算，Role A 不自行估算或查找次数。token observer 不可用时才读取 [`compaction_count` fallback](poll-contract.md#budget_stage-与-compaction-fallback)；`?` 不是 0。`handoff_due` 后完成当前 bounded action、写 checkpoint，再按上方触发消息交接。
 - **Role B 不用这个模板**：它没有持久恢复权威。compaction 后主控（controller）不读旧聊天、不恢复旧 card，而是发送一张新的最小 assignment card；缺关键输入时停止并询问 controller，新增权限按 Role B 权限规则处理。
-- **Role C 不用这个模板**：主控 compaction 后走 `ledger.py status` 自己恢复（见 §Role C 特有顺序）。
+- **Role C 不用这个模板**：主控 compaction 后走 `ledger.py status` 自己恢复（见 §Role C 接手顺序）。
 
 ### 停止条件
 
@@ -162,22 +135,22 @@ catch-up（你刚发生过 compaction）：
 
 | | **Role A · 任务包子线** | **Role B · Platform** | **Role C · 主控** |
 | --- | --- | --- | --- |
-| **恢复权威** | 当前任务包 entry；第二阶段不发 card | 无持久恢复权威；新 card 只定义当前 assignment | 账本 + registry |
-| **第一阶段额外锚点** | `branch` | `branch`；以 `parent package` / `entry point` 替代通用恢复入口，仅作验证锚点 | `branch`；父包 entry |
+| **恢复权威** | 当前任务包 entry；不另发 assignment card | 无持久恢复权威；新 card 只定义当前 assignment | 账本 + registry |
+| **额外只读验证锚点** | `branch` | `branch`；以 `parent package` / `entry point` 验证当前 assignment | `branch`；父包 entry |
 | **role-initial-state** | `working` 或 `awaiting_seam` | `working` | `working` |
-| **role-recovery-block** | `Package checkpoint：package / entry / checkpoint 指针` | 无——**不得**把 parent entry 当恢复入口，不读旧 plan/Task progress/历史 evidence | 见下方「Role C 特有顺序」 |
+| **role-recovery-block** | `Package checkpoint：package / entry / checkpoint 指针` | 无——**不得**把 parent entry 当恢复入口，不读旧 plan/Task progress/历史 evidence | 见下方「Role C 接手顺序」 |
 | **交付登记义务** | 无 | H1 报告 seam artifact，由 controller 用 `ledger.py seam --registry <path> --seam-id <s> --producer <node> [--consumers ...] --deliver commit:<sha>` 登记；没登记等于没交付 | 无 |
 | **替换时谁调 `create_thread`** | 退休 session 自己 | **controller**（Platform 无自述状态） | 退休主控自己 |
 | **source 侧额外动作** | 先把 checkpoint 写回任务包 entry：当前 HEAD、计数状态、单一 Next Action、已获/剩余证据、授权与 WIP 边界 | 无 checkpoint；controller 重新验证事实后发新 card，不把 parent entry 或旧聊天当恢复入口 | 先用 `route` 把 registry 指向继任者，再广播新 controller id |
 
-### Role C 特有顺序（不能换）
+### Role C 接手顺序（不能换）
 
 主控交接比 A/B 多一层：**它自己就是读账本的那个人，顺序错了会读到上一任的 rollout。**
 
-Role C 的完整第二阶段消息同样不得超过 20 个非空逻辑行：
+Role C 的接手 continuation 同样不得超过 20 个非空逻辑行：
 
 ```text
-第二阶段接手已就绪。读取 $thread-harness 并按 Role C 工作。
+接手已就绪。读取 $thread-harness 并按 Role C 工作。
 registry：<absolute_registry_path>
 expected controller session：<new_controller_session_id>
 核对 registry 的 controller.current_session_id，再运行 ledger.py status。
@@ -192,7 +165,7 @@ expected controller session：<new_controller_session_id>
 
 | 现象 | 真因 | 处理 |
 | --- | --- | --- |
-| controller 拒绝首个 H1 | 第二阶段消息与 controller 更新 registry 发生竞争 | controller 重新核对来源 routing；正确后复用同一 child 重发，不再建 session |
+| controller 拒绝首个 H1 | 角色 continuation 与 registry 路由发生竞争 | controller 重新核对来源 routing；正确后复用同一 child 重发，不再建 session |
 | 两条线 `head` 永远相同 | 共用 worktree | 一 node 一 worktree 一 branch；`preflight` 会拦 |
 | 交付了但下游查不到 | Role B 没登记 seam artifact | 交付即登记，见 delta 表 |
 | `ROUND INVALID` | 本轮 poll 不符合固定契约 | 本轮作废；恢复固定 JS，确认 `timeoutMs=120000`、targets 等于当前 watch-set，且交接只发生在轮边界，然后重跑。不要拼旧输出或放宽 `sync` 校验。 |

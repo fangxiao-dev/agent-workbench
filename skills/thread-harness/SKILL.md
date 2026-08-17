@@ -40,7 +40,7 @@ child 通过现有 `send_message_to_thread` 发送 JSON，不运行 `ledger.py r
 
 - [profile-solo.md](references/profile-solo.md) — 单 controller、单 task、单 worktree 的监控与交接
 - [profile-swarm.md](references/profile-swarm.md) — 多 task / Platform 的 routing、seam 与 H3 调度
-- [session-dispatch.md](references/session-dispatch.md) — 建线与交接的两阶段契约
+- [session-dispatch.md](references/session-dispatch.md) — session 路由与角色化 continuation/assignment delta
 - [poll-contract.md](references/poll-contract.md) — 固定 poll、budget summary 与 wake 语义
 - [ledger-schema.md](references/ledger-schema.md) — 四个 JSONL 与 sync-state 字段
 - [role-a.md](references/role-a.md) / [role-b.md](references/role-b.md) / [role-c.md](references/role-c.md) — 当前角色页

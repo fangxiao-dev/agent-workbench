@@ -118,11 +118,11 @@ def test_role_a_and_b_delegate_scheduling_without_copying_a_mode() -> None:
     assert "default-long" not in role_a + role_b
 
 
-def test_second_stage_dispatch_is_role_specific_and_minimal() -> None:
+def test_role_continuation_is_role_specific_and_minimal() -> None:
     dispatch = read("skills/thread-harness/references/session-dispatch.md")
-    role_a = text_block_after_heading(dispatch, "#### Role A prompt")
-    role_b = text_block_after_heading(dispatch, "#### Role B prompt")
-    role_c = text_block_after_heading(dispatch, "### Role C 特有顺序")
+    role_a = text_block_after_heading(dispatch, "#### Role A continuation")
+    role_b = text_block_after_heading(dispatch, "#### Role B assignment")
+    role_c = text_block_after_heading(dispatch, "### Role C 接手顺序")
 
     assert len([line for line in role_a.splitlines() if line.strip()]) <= 20
     assert len([line for line in role_b.splitlines() if line.strip()]) <= 20
@@ -166,10 +166,13 @@ def test_second_stage_dispatch_is_role_specific_and_minimal() -> None:
 def test_dispatch_reuses_generic_handoff_and_keeps_only_harness_deltas() -> None:
     dispatch = read("skills/thread-harness/references/session-dispatch.md")
 
-    assert "clean local-session、两阶段 anchor/continuation、配置与命名流程" in dispatch
-    assert "optional read-only validation anchors" in dispatch
-    assert "确认通用命名步骤成功" in dispatch
+    assert "$handoff-to-new-session" in dispatch
+    assert "validation anchors" in dispatch
+    assert "通用的 session 创建、恢复锚点、命名、配置与交付检查" in dispatch
+    assert "两阶段" not in dispatch
     assert "### 第一阶段 prompt" not in dispatch
+    assert "第二阶段" not in dispatch
+    assert "确认通用命名步骤成功" not in dispatch
     assert "Thread-harness overrides" not in dispatch
     assert "gpt-5.6-" not in dispatch
     assert "thinking=" not in dispatch
@@ -189,8 +192,8 @@ def test_child_h1_and_dispatch_do_not_expose_registry_or_self_routing() -> None:
         for routing_field in ('"registry"', '"coordination_id"', '"node"', '"session_id"'):
             assert routing_field not in payload
 
-    role_a = text_block_after_heading(dispatch, "#### Role A prompt")
-    role_b = text_block_after_heading(dispatch, "#### Role B prompt")
+    role_a = text_block_after_heading(dispatch, "#### Role A continuation")
+    role_b = text_block_after_heading(dispatch, "#### Role B assignment")
     for prompt in (role_a, role_b):
         assert "controller=<current_controller_session_id>" in prompt
         assert "registry=" not in prompt
@@ -275,8 +278,9 @@ def test_compaction_observer_is_imported_and_runtime_docs_use_it() -> None:
     assert "poll-contract.md#budget_stage-与-compaction-fallback" in role_c
     assert "poll-contract.md#budget_stage-与-compaction-fallback" in dispatch
     assert "Role A 不自行估算或查找次数" in dispatch
-    assert "先尽快完成手头任务，写好可恢复 checkpoint" in dispatch
-    assert "不要领取新的工作" in dispatch
+    assert "先完成当前 bounded action" in dispatch
+    assert "Role A 写回 checkpoint" in dispatch
+    assert "所有角色停止 owned process" in dispatch
 
     runtime_root = ROOT / "skills/thread-harness"
     runtime_docs = tuple(

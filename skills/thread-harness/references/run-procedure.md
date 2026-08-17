@@ -40,7 +40,7 @@ controller 在进入 loop 前确认：
 
 - registry 的 `current_session_id`、`worktree`、`branch` 与实际状态一致；
 - ledger 已初始化；
-- child 已按两阶段契约注册，session id 已回填；
+- child 已按角色化 continuation 注册，session id 已回填；
 - preflight 输出 `PREFLIGHT OK`；
 - 首轮 sync 输出 `valid=yes`，且 `head_unavailable` 为空。
 
