@@ -42,6 +42,6 @@ next action: <one action>
 blocker/owner decision: <none | item>
 ```
 
-`READY` 授权列出的下一动作及同一 package 的正常记录收口；commit/push/merge/发布和外部 mutation 使用独立授权。
+`READY` 授权列出的下一动作及同一 package 的正常记录收口；push/merge/发布和外部 mutation 使用独立授权。
 
 需要 main-session/subagent 调度时使用 `/impl-package:subagent-driven-development`；preflight 只提供任务特定的 scope、write-set、authorization、verification 和输出合同。
