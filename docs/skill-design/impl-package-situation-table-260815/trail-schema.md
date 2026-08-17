@@ -17,7 +17,8 @@
 | `kind` | 事件语义 | 规范值见下表；旧 kind 仍可承载兼容字段 |
 | `head` | 事件时的 Git SHA | 用于 trail/Git rework 对账 |
 
-`situation`、`chosen`、`alt`、`reason`、`worker`、`outcome`、`review_state`、`of`、`ref`
+`situation`、`chosen`、`alt`、`reason`、`worker`、`outcome`、`review_state`、`of`、`ref`、
+`situation_digest`
 是按事件出现的条件字段。`basis` 不进轨迹；它是 situation table 的属性，事后按 `situation`
 join。
 
@@ -26,7 +27,7 @@ join。
 | `kind` | 正式形状 | renderer 语义 |
 | --- | --- | --- |
 | `decision` | `subject`、`seq/id/decision_id/decisionId` 至少一个、`chosen` | 旧 decision 发起事件；由 result-like event 的 `of/decision/...` 关闭 |
-| `dispatch` | `subject`、`outcome: "RUNNING"`、`returned: false/true`、`worker`；建议带 `seq` 或 `id` | `returned:false` 本身就是 worker 未返回；有 id 时可由后续 return 关闭 |
+| `dispatch` | `subject`、`outcome: "RUNNING"`、`returned: false/true`、`worker`；建议带 `seq` 或 `id`；可选 `situation_digest` | `returned:false` 本身就是 worker 未返回；有 id 时可由后续 return 关闭；`situation_digest` 是本次派发所依据的 renderer 12 位 digest，缺失只产生审计信号 |
 | `result` | `subject`、`outcome`；可带 `of`；direct evidence 放在 row 或 payload alias | 旧结果事件；与 `worker-return` 归一 |
 | `worker-return` | `subject`、`outcome`、可选 `of`、worker 返回 payload | 新 worker 返回事件；`EVIDENCE_SUFFICIENT` + `evidence` 建立 direct evidence |
 | `fact` | `subject`、`key`、`value`、`ts`，可选 `seq` | 只声明不能从 package artifact 推导的事实；同 key 取最新 |
@@ -40,7 +41,7 @@ join。
 ```jsonl
 {"v":1,"seq":10,"ts":"2026-08-15T12:00:00Z","subject":"attempt","kind":"fact","key":"attempt.integration_carrier_available","value":false}
 {"v":1,"seq":11,"ts":"2026-08-15T12:01:00Z","subject":"ticket:TKT-01","kind":"worker-return","outcome":"EVIDENCE_SUFFICIENT","evidence":{"artifact":"evidence/returned.md#result","claim":"AC-1","revision":"5f299f3","environment":"fixture"}}
-{"v":1,"seq":12,"ts":"2026-08-15T12:02:00Z","subject":"attempt","kind":"dispatch","outcome":"RUNNING","worker":"worker-01","returned":false}
+{"v":1,"seq":12,"ts":"2026-08-15T12:02:00Z","subject":"attempt","kind":"dispatch","outcome":"RUNNING","worker":"worker-01","returned":false,"situation_digest":"a1b2c3d4e5f6"}
 ```
 
 ### result-like 归一
