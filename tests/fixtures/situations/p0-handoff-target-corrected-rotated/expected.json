@@ -1,0 +1,10 @@
+{
+  "source": "synthetic rotation fixture",
+  "scenario": "归档 trail 中的 corrected fact 没有在当前 trail 重新声明，当前处境不应继续投递旧 P0。",
+  "expected_primary": [],
+  "expected_layer": null,
+  "expected_secondary": [],
+  "must_not_hit": [
+    "attempt.record.handoff-target-corrected"
+  ]
+}

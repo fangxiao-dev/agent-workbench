@@ -35,6 +35,7 @@ DIGEST_LENGTH = 12
 STATE_REL = ".impl-package/state.json"
 GATE_REL = "gate.md"
 FINDINGS_REL = "execution-findings.md"
+ACTIVE_TRAIL_NAME = "trail.jsonl"
 TICKET_STATES = {"PENDING", "BLOCKED", "NEEDS-REVALIDATION", "SATISFIED", "RETIRED"}
 TERMINAL_GATE_VERDICTS = {"pass", "fail", "defer"}
 VALID_BASIS = {"cli", "prose", "observed"}
@@ -484,6 +485,11 @@ class PackageReader:
         if code != 0:
             return None
         return [line.replace("\\", "/") for line in output.splitlines() if line.strip()]
+
+
+def _active_trail_relative_path(attempt_id: str) -> str:
+    """The renderer's input stays on the unnumbered, active trail path."""
+    return f"execution/{attempt_id}/{ACTIVE_TRAIL_NAME}"
 
 
 def _parse_bool(value: Any) -> bool | None:
@@ -967,7 +973,7 @@ def _build_snapshot(
     attempt_id = state.attempt_id
     trail = TrailView(False, [])
     if attempt_id:
-        trail = _parse_trail(reader.read(f"execution/{attempt_id}/trail.jsonl"))
+        trail = _parse_trail(reader.read(_active_trail_relative_path(attempt_id)))
         if trail.error:
             warnings.append(trail.error)
         if trail.unknown_fact_keys:
@@ -2957,7 +2963,7 @@ def _json_result(
         "contexts": derived["contexts"],
         "sources": {
             "state": {"path": STATE_REL, "present": snapshot.state.raw is not None, "valid": snapshot.state.valid, "reason": snapshot.state.error},
-            "trail": {"path": f"execution/{snapshot.state.attempt_id}/trail.jsonl" if snapshot.state.attempt_id else None, "present": snapshot.trail.present, "error": snapshot.trail.error},
+            "trail": {"path": _active_trail_relative_path(snapshot.state.attempt_id) if snapshot.state.attempt_id else None, "present": snapshot.trail.present, "error": snapshot.trail.error},
             "gate": {"path": GATE_REL, "present": snapshot.gate.present, "verdict": snapshot.gate.verdict, "error": snapshot.gate.error},
             "findings": {"path": FINDINGS_REL, "present": snapshot.findings.present, "count": len(snapshot.findings.findings), "error": snapshot.findings.error},
             "intake": {"path": snapshot.intake.relative_path, "present": snapshot.intake.present, "error": snapshot.intake.error},

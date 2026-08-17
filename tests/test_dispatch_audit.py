@@ -61,6 +61,21 @@ def test_old_trail_without_digest_is_reported_as_no_digest(audit_tmp_path: Path)
     assert "no-digest: 2/2 (100.0%)" in dispatch_audit._format_report(report)
 
 
+def test_audit_reads_numbered_archives_before_current_trail(audit_tmp_path: Path) -> None:
+    package = _package(audit_tmp_path, [_dispatch(id="dispatch-current")])
+    archive = package / "execution" / "initial" / "trail.001.jsonl"
+    archive.write_text(json.dumps(_dispatch(id="dispatch-archived")) + "\n", encoding="utf-8")
+
+    report = dispatch_audit.audit_package(package)
+
+    assert report["dispatches"] == 2
+    assert report["trails"] == [
+        str(archive),
+        str(package / "execution" / "initial" / "trail.jsonl"),
+    ]
+    assert report["trail"] == str(package / "execution" / "initial" / "trail.jsonl")
+
+
 def test_normal_digest_is_checked_against_replayed_action(audit_tmp_path: Path, monkeypatch) -> None:
     digest = "a1b2c3d4e5f6"
     head = "0123456789abcdef0123456789abcdef01234567"

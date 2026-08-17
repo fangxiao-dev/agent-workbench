@@ -4,6 +4,22 @@
 本文件与 `plugin-marketplace/plugins/impl-package/references/situation-inputs.md` 的 3.1、4.3
 共同定义 situation renderer 消费的 trail 形状。
 
+## 轨迹轮换
+
+交接时若活动文件已满，把 `trail.jsonl` 原样移为下一个归档序号并新建活动文件：
+
+```text
+execution/<attempt>/trail.jsonl
+execution/<attempt>/trail.001.jsonl
+execution/<attempt>/trail.002.jsonl
+```
+
+归档序号是三位十进制，从该 attempt 目录已有最大序号递增；归档文件内容不得改写。renderer
+只读取未编号的当前 `trail.jsonl`，所以当前 situation 的 fact 和扫描型输入都在交接时重新
+基线化；仍成立的 fact 必须在新文件重新声明。`dispatch_audit.py` 是例外：它发现并按序
+读取所有 `trail.NNN.jsonl`，最后读取当前 `trail.jsonl`，用于完整历史审计和回放；归档缺失
+时按只有一份活动 trail 处理。
+
 ## 公共字段
 
 每个非空行都是一个 JSON object。规范公共字段如下：
@@ -30,7 +46,7 @@ join。
 | `dispatch` | `subject`、`outcome: "RUNNING"`、`returned: false/true`、`worker`；建议带 `seq` 或 `id`；可选 `situation_digest` | `returned:false` 本身就是 worker 未返回；有 id 时可由后续 return 关闭；`situation_digest` 是本次派发所依据的 renderer 12 位 digest，缺失只产生审计信号 |
 | `result` | `subject`、`outcome`；可带 `of`；direct evidence 放在 row 或 payload alias | 旧结果事件；与 `worker-return` 归一 |
 | `worker-return` | `subject`、`outcome`、可选 `of`、worker 返回 payload | 新 worker 返回事件；`EVIDENCE_SUFFICIENT` + `evidence` 建立 direct evidence |
-| `fact` | `subject`、`key`、`value`、`ts`，可选 `seq` | 只声明不能从 package artifact 推导的事实；同 key 取最新 |
+| `fact` | `subject`、`key`、`value`、`ts`，可选 `seq` | 只声明不能从 package artifact 推导的事实；在当前活动 trail 内同 subject/key 取最新 |
 
 `checkpoint`、`handoff`、`judgment`、`integration`、`review` 等历史 kind 仍可存在，尤其是
 已有 fixture；它们不再通过 prose/negative marker 产生 typed fact。需要声明事实时写
@@ -81,14 +97,14 @@ result-like 行可以在自身或 `ref`、`evidence`、`artifact`、`evidence_re
 {"v":1,"seq":12,"ts":"2026-08-15T12:00:00Z","subject":"attempt","kind":"fact","key":"attempt.handoff_or_long_task","value":true}
 ```
 
-新 fact 必须使用单个顶层 `key`、`value`、`ts`。同一 subject、同一 key 的多个 fact 按以下
+新 fact 必须使用单个顶层 `key`、`value`、`ts`。同一活动 trail 中同一 subject、同一 key 的多个 fact 按以下
 顺序取最新：
 
 1. `ts` 较新者优先；
 2. `ts` 相同则 `seq` 较大者优先；
 3. 仍相同则 trail 文件中较后者优先。
 
-这是可见时效，不是过期规则：renderer 不会因为 fact 陈旧而自动否定它，返回 JSON 的
+这是当前文件内的可见顺序，不是过期规则：renderer 不会因为 fact 陈旧而自动否定它，返回 JSON 的
 `when_values` 会暴露所选 fact 的 `ts`（以及有值时的 `seq`）。
 
 ### 封闭 key 集合与缺省语义

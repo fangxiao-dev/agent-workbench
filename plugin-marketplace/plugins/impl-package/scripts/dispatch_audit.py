@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover
 SITUATION = Path(__file__).with_name("situation.py")
 STALE_DIGEST_THRESHOLD = 3
 DIGEST_RE = re.compile(r"^[0-9a-f]{12}$", re.I)
+TRAIL_ARCHIVE_RE = re.compile(r"^trail\.(\d{3})\.jsonl$")
 
 
 def _text(value):
@@ -34,6 +35,23 @@ def _digest(row):
     return ("valid", value) if isinstance(value, str) and DIGEST_RE.fullmatch(value) else ("invalid", None)
 
 
+def _trail_paths(attempt_dir):
+    attempt_dir = Path(attempt_dir)
+    if not attempt_dir.is_dir():
+        return []
+    archives = []
+    for path in attempt_dir.iterdir():
+        match = TRAIL_ARCHIVE_RE.fullmatch(path.name)
+        if match and path.is_file():
+            archives.append((int(match.group(1)), path))
+    archives.sort(key=lambda item: item[0])
+    current = attempt_dir / "trail.jsonl"
+    paths = [path for _, path in archives]
+    if current.is_file():
+        paths.append(current)
+    return paths
+
+
 def _trail_for(package):
     package = Path(package).expanduser().resolve()
     if not package.is_dir():
@@ -44,47 +62,55 @@ def _trail_for(package):
         attempt = _text(state.get("attempt", {}).get("id")) if isinstance(state, dict) and isinstance(state.get("attempt"), dict) else None
     except (OSError, json.JSONDecodeError):
         pass
-    if attempt and (trail := package / "execution" / attempt / "trail.jsonl").is_file():
-        return package, attempt, trail
-    candidates = sorted((package / "execution").glob("*/trail.jsonl")) if (package / "execution").is_dir() else []
+    if attempt and (trails := _trail_paths(package / "execution" / attempt)):
+        return package, attempt, trails
+    candidates = []
+    if (package / "execution").is_dir():
+        for child in package.joinpath("execution").iterdir():
+            trails = _trail_paths(child)
+            if trails:
+                candidates.append((child.name, trails))
     if len(candidates) == 1:
-        return package, candidates[0].parent.name, candidates[0]
-    raise ValueError("no unique execution/<attempt>/trail.jsonl found")
+        return package, candidates[0][0], candidates[0][1]
+    raise ValueError("no unique execution/<attempt>/trail.jsonl or trail.NNN.jsonl found")
 
 
-def _read_rows(path):
+def _read_rows(paths):
     rows, violations = [], []
-    for number, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
-        if not line.strip():
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError as exc:
-            violations.append({"line": number, "issues": [f"invalid-json:{exc.msg}"]})
-            continue
-        if not isinstance(row, dict):
-            violations.append({"line": number, "issues": ["row-is-not-object"]})
-            continue
-        issues = []
-        if _kind(row) == "fact":
-            key, subject = _text(row.get("key")), row.get("subject")
-            if key is None:
-                issues.append("missing-key")
-            elif key not in FACT_KEYS:
-                issues.append(f"unknown-fact-key:{key}")
-            if isinstance(subject, str) and subject in FACT_KEYS:
-                issues.append("subject-is-fact-key")
-            if "value" not in row:
-                issues.append("missing-value")
-            if _text(row.get("ts")) is None:
-                issues.append("missing-ts")
-        if _kind(row) == "dispatch" and "situation_digest" in row:
-            value = row.get("situation_digest")
-            if value is not None and (not isinstance(value, str) or not DIGEST_RE.fullmatch(value)):
-                issues.append("invalid-situation-digest")
-        rows.append((number, row))
-        if issues:
-            violations.append({"line": number, "issues": issues})
+    number = 0
+    for path in paths:
+        for line in path.read_text(encoding="utf-8-sig").splitlines():
+            if not line.strip():
+                continue
+            number += 1
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as exc:
+                violations.append({"line": number, "issues": [f"invalid-json:{exc.msg}"]})
+                continue
+            if not isinstance(row, dict):
+                violations.append({"line": number, "issues": ["row-is-not-object"]})
+                continue
+            issues = []
+            if _kind(row) == "fact":
+                key, subject = _text(row.get("key")), row.get("subject")
+                if key is None:
+                    issues.append("missing-key")
+                elif key not in FACT_KEYS:
+                    issues.append(f"unknown-fact-key:{key}")
+                if isinstance(subject, str) and subject in FACT_KEYS:
+                    issues.append("subject-is-fact-key")
+                if "value" not in row:
+                    issues.append("missing-value")
+                if _text(row.get("ts")) is None:
+                    issues.append("missing-ts")
+            if _kind(row) == "dispatch" and "situation_digest" in row:
+                value = row.get("situation_digest")
+                if value is not None and (not isinstance(value, str) or not DIGEST_RE.fullmatch(value)):
+                    issues.append("invalid-situation-digest")
+            rows.append((number, row))
+            if issues:
+                violations.append({"line": number, "issues": issues})
     return rows, violations
 
 
@@ -153,8 +179,8 @@ def _action_ids(rendered, subject):
 
 
 def audit_package(package):
-    package, attempt, trail = _trail_for(package)
-    rows, violations = _read_rows(trail)
+    package, attempt, trails = _trail_for(package)
+    rows, violations = _read_rows(trails)
     dispatches = [(n, r) for n, r in rows if _kind(r) == "dispatch"]
     no_digest = [n for n, r in dispatches if _digest(r)[0] == "missing"]
     deviations, uncheckable, cache, replayed = [], [], {}, 0
@@ -192,13 +218,16 @@ def audit_package(package):
         replayed += 1
         if chosen not in _action_ids(rendered, subject) and not _related_reason(row, rows):
             deviations.append({"line": number, "chosen": chosen, "reason": "chosen action is absent from replayed situation actions"})
-    return {"package": str(package), "attempt": attempt, "trail": str(trail), "dispatches": len(dispatches), "no_digest": no_digest, "stale": _stale(dispatches), "deviations": deviations, "uncheckable": uncheckable, "replayed": replayed, "schema_violations": violations}
+    return {"package": str(package), "attempt": attempt, "trail": str(trails[-1]), "trails": [str(path) for path in trails], "dispatches": len(dispatches), "no_digest": no_digest, "stale": _stale(dispatches), "deviations": deviations, "uncheckable": uncheckable, "replayed": replayed, "schema_violations": violations}
 
 
 def _format_report(report):
     total, missing = report["dispatches"], len(report["no_digest"])
     percent = "n/a" if not total else f"{missing / total * 100:.1f}%"
     lines = ["dispatch-audit", f"package: {report['package']}", f"attempt: {report['attempt']}", f"trail: {report['trail']}", f"dispatches: {total}", f"no-digest: {missing}/{total} ({percent})", f"stale-digest: {len(report['stale'])} (threshold: {STALE_DIGEST_THRESHOLD} consecutive dispatches)", f"deviation: {len(report['deviations'])} (replayed: {report['replayed']}, uncheckable: {len(report['uncheckable'])})", f"schema-violations: {len(report['schema_violations'])}"]
+    trail_files = report.get("trails", [report["trail"]])
+    if len(trail_files) > 1:
+        lines.insert(4, f"trail-files: {len(trail_files)}")
     lines += [f"  stale digest {x['digest']} on lines {','.join(map(str, x['lines']))}" for x in report["stale"]]
     lines += [f"  deviation line {x['line']}: {x['reason']}" for x in report["deviations"]]
     lines += [f"  schema line {x['line']}: {', '.join(x['issues'])}" for x in report["schema_violations"]]

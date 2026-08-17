@@ -26,7 +26,7 @@ package 形状，目的是让不阅读推导器实现的人也能构造 fixture�
 | --- | --- | --- |
 | S | `.impl-package/state.json` | 严格 JSON object；先做 state schema，再做 Ticket/evidence/checkpoint 交叉校验 |
 | T | `tickets/*.md` 的直接子文件 | 按正文里的 Ticket ID 建索引；文件名本身不参与 ID 解析 |
-| R | `execution/<attempt-id>/trail.jsonl` | `<attempt-id>` 来自 `S.attempt.id`；每个非空行必须能解析成 JSON object |
+| R | `execution/<attempt-id>/trail.jsonl` | `<attempt-id>` 来自 `S.attempt.id`；renderer 只读取当前未编号文件，每个非空行必须能解析成 JSON object；同目录的 `trail.NNN.jsonl` 是按序归档，仅由 `dispatch_audit.py` 做历史审计/回放 |
 | G | `gate.md` | 按固定 Markdown 行解析 Verdict 和可选 Comparison commit |
 | F | `execution-findings.md` | 按二级至六级 heading 分块，再解析 finding block |
 | I | intake 候选路径 | 见下文 `intake.has_backlog` 行的顺序 |
@@ -136,10 +136,10 @@ false；只有没有 U 且所有比较都相等时才是 true。
 | `gate.terminal` | G 的 `Verdict`；`pass/fail/defer` 属于 terminal | 布尔 | G 缺失 = 已知 F；有文件但 Verdict 缺失/格式错 = U；`blocked/undecided` = F；`pass/fail/defer` = true；HF：无 | `attempt.gate.terminal-frozen` |
 | `gate.verdict` | G：`- Verdict: pass / fail / blocked / defer / undecided` 或中文 `判定` 行；只读取已存在 Gate 的显式 verdict | 枚举 `pass`、`fail`、`blocked`、`defer`、`undecided`，解析后转小写 | 缺 G = U（由 `gate.present=false` 单独表达）；有 G 但 Verdict 缺失/格式错 = U；HF：无 | `attempt.gate.verdict-undecided` |
 | `intake.has_backlog` | I：按顺序找第一个存在的文件：`.impl-package/intake.jsonl`、`.impl-package/intake-queue.jsonl`、`.impl-package/intake.json`、`execution/intake.jsonl`、`execution/intake-queue.jsonl`、`execution/intake.json`、`intake.jsonl`、`intake.json`；其次找目录 `.impl-package/intake`、`.impl-package/intake-queue`、`execution/intake`、`execution/intake-queue`、`intake`、`intake-queue` | 布尔；JSON list 非空、dict 的 `items/queue` list 非空、非 JSON 但有非空行、目录有 entry = true | 所有候选不存在 = U；存在但空文本/空 list/空目录 = F；读取错误或 dict 无 list 时按非空文本 fallback；HF：无 | `package.record.intake-backlog` |
-| `trail.actions_since_checkpoint` | R：在适用 subject rows 中找最后一个 `kind=checkpoint`、`chosen/situation` 含 checkpoint 或 `checkpoint=true` 的 marker，返回 marker 后的行数；无 marker 时忽略兼容性的 `attempt.session_resumed` 声明并计其它 rows | 非负整数；表只比较 `0` | 无/坏 trail = U；state 无效导致 checkpoint 不可判定 = U；无 active checkpoint = 0；有 marker 且 marker 后无行 = 0；无 marker 且没有其它 typed fact/action = 0；HF：无 | `attempt.record.session-resumed` |
+| `trail.actions_since_checkpoint` | R（当前活动 `trail.jsonl`）：在适用 subject rows 中找最后一个 `kind=checkpoint`、`chosen/situation` 含 checkpoint 或 `checkpoint=true` 的 marker，返回 marker 后的行数；无 marker 时忽略兼容性的 `attempt.session_resumed` 声明并计其它 rows；轮换后不读取 `trail.NNN.jsonl` | 非负整数；表只比较 `0` | 无/坏 trail = U；state 无效导致 checkpoint 不可判定 = U；无 active checkpoint = 0；有 marker 且 marker 后无行 = 0；无 marker 且没有其它 typed fact/action = 0；HF：无 | `attempt.record.session-resumed` |
 | `trail.anchor_mismatch` | R：attempt scope 的最新 fact；不再扫描 JSON 文本 marker | 布尔 | 无/坏 trail或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.record.anchor-mismatch` |
 | `trail.checkpoint_refresh_needed` | R：attempt scope 的最新 fact；不再扫描 JSON 文本 marker | 布尔 | 无/坏 trail或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.record.checkpoint-refresh` |
-| `trail.decision_without_result` | R：旧 decision/result 配对差集非空，或存在 `kind=dispatch`、`outcome=RUNNING`、`returned=false` 且未被 result-like `of/dispatch_id/...` 关闭 | 布尔；dispatch 不要求 identifier；decision 旧写法要求 `seq/id/decision_id/decisionId` | 无/坏 trail = U；没有未配对 decision/dispatch = F；HF：无 | `attempt.readiness.worker-still-running` |
+| `trail.decision_without_result` | R（当前活动 `trail.jsonl`）：旧 decision/result 配对差集非空，或存在 `kind=dispatch`、`outcome=RUNNING`、`returned=false` 且未被 result-like `of/dispatch_id/...` 关闭；轮换后不读取归档 open dispatch | 布尔；dispatch 不要求 identifier；decision 旧写法要求 `seq/id/decision_id/decisionId` | 无/坏 trail = U；没有未配对 decision/dispatch = F；HF：无 | `attempt.readiness.worker-still-running` |
 | `trail.direct_evidence_returned` | R：扫描 `kind=result` 与 `kind=worker-return`；其 payload key 是 `ref/evidence/artifact/evidence_ref/direct_evidence`，非空 scalar/list item 即算 direct payload | 布尔；payload 可以 object、string 或其他 truthy 值，但要继续判 `evidence.indexed` 时必须有 artifact/claim/revision/environment | 无/坏 trail = U；trail 有但没有 result-like payload = F；HF：无 | `ticket.record.evidence-unfiled` |
 | `trail.envelope_valid` | R：显式 fact `trail.envelope_valid` 优先；否则读取 result-like row 或 `envelope/result` 容器中的结构化 `envelope_valid/envelopeValid` | 布尔；建议 JSON bool `true/false` | 无/坏 trail = U；有 trail 但没有结构化字段/fact = U；显式非布尔 = U；不再识别 envelope 文本 marker；HF：未知 fact key | `finding.fix.worker-envelope-invalid` |
 | `trail.finding_source` | R：当前 subject rows 的顶层 `finding_source` 或 `findingSource` 字符串，取最后一个 | 字符串；表使用 `reviewer`、`main-session` | 无/坏 trail = U；trail 正常但没有字段 = 已知值 None（与任何字符串不等）；HF：无 | `finding.fix.reviewer-returned`、`finding.fix.main-session-discovered` |
@@ -147,17 +147,17 @@ false；只有没有 U 且所有比较都相等时才是 true。
 | `trail.handoff_recovery_needed` | R：attempt scope 的最新 fact；不再扫描 bootstrap/retry/rename/create-thread 文本 marker | 布尔 | 无/坏 trail 或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.record.handoff-recovery-needed` |
 | `trail.handoff_target_corrected` | R：attempt scope 的最新 fact；不再扫描 corrected target/order 文本 marker | 布尔 | 无/坏 trail 或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.record.handoff-target-corrected` |
 | `trail.has_investigate` | R：attempt context 扫全部 rows；ticket/finding context 扫各自 subject rows；`situation` 以 `ticket.investigate.` 开头，或 chosen 含 `investigate`，或 outcome 为 `EVIDENCE_GAP/EVIDENCE_SUFFICIENT` 即 true | 布尔 | 无/坏 trail = U；有 trail 无 signal = F；HF：无 | 兼容 parser key；正式 `ticket.investigate.no-carrier` 使用 `ticket.investigation_carrier_present` |
-| `trail.incomplete_count` | R：从适用 rows 末尾往前扫描 `kind=result` 或 `kind=worker-return`；连续 `outcome=INCOMPLETE` 计数，遇到另一个 result-like event 即停止 | 非负整数；表精确比较 1 或 2 | 无/坏 trail = U；没有 result-like event 或最后一个不是 INCOMPLETE = 0；HF：无 | `ticket.implement.worker-incomplete-first`、`ticket.implement.worker-incomplete-second` |
+| `trail.incomplete_count` | R（当前活动 `trail.jsonl`）：从适用 rows 末尾往前扫描 `kind=result` 或 `kind=worker-return`；连续 `outcome=INCOMPLETE` 计数，遇到另一个 result-like event 即停止；轮换是连续计数边界 | 非负整数；表精确比较 1 或 2 | 无/坏 trail = U；没有 result-like event 或最后一个不是 INCOMPLETE = 0；HF：无 | `ticket.implement.worker-incomplete-first`、`ticket.implement.worker-incomplete-second` |
 | `trail.judgment_unfiled` | R：当前 subject 的最新 fact；兼容旧 alias `ticket.judgment_unfiled`，不再扫描自由文本 marker | 布尔 | 无/坏 trail或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `ticket.record.judgment-unfiled` |
-| `trail.last_outcome` | R：适用 rows 末尾优先找 result-like（`kind=result` 或 `kind=worker-return`）且 outcome 为字符串；找不到时退回任何 row 的字符串 outcome | 字符串枚举由表约定：`EVIDENCE_GAP`、`DONE`、`INCOMPLETE`、`BLOCKED`、`FINDING` 等；比较大小写敏感 | 无/坏 trail = U；正常空 trail/无 outcome = 已知 None；HF：无 | `ticket.investigate.evidence-gap`、`ticket.review.awaiting-reviewer`、`ticket.implement.worker-incomplete-first`、`ticket.implement.worker-incomplete-second`、`ticket.implement.worker-blocked`、`finding.fix.reviewer-returned` |
-| `trail.last_worker_mode` | R：显式 `trail.last_worker_mode` 优先；否则从 row、`facts/when/derived/worker/envelope/result` 读取 `worker_mode/workerMode/mode`，或从 chosen 匹配 `worker-mode` 或 `mode: <value>` | 枚举 `investigate`、`implement`、`fix`、`verify`、`review`；解析后小写 | 无/坏 trail = U；正常 trail 无 mode = 已知 None；显式非允许值返回已知原值，因而与合法枚举不等；HF：无 | `ticket.implement.worker-incomplete-first`、`ticket.implement.worker-incomplete-second`、`ticket.implement.worker-blocked`、`finding.fix.worker-envelope-invalid` |
+| `trail.last_outcome` | R（当前活动 `trail.jsonl`）：适用 rows 末尾优先找 result-like（`kind=result` 或 `kind=worker-return`）且 outcome 为字符串；找不到时退回任何 row 的字符串 outcome；轮换后不读取归档 outcome | 字符串枚举由表约定：`EVIDENCE_GAP`、`DONE`、`INCOMPLETE`、`BLOCKED`、`FINDING` 等；比较大小写敏感 | 无/坏 trail = U；正常空 trail/无 outcome = 已知 None；HF：无 | `ticket.investigate.evidence-gap`、`ticket.review.awaiting-reviewer`、`ticket.implement.worker-incomplete-first`、`ticket.implement.worker-incomplete-second`、`ticket.implement.worker-blocked`、`finding.fix.reviewer-returned` |
+| `trail.last_worker_mode` | R（当前活动 `trail.jsonl`）：显式 `trail.last_worker_mode` 优先；否则从 row、`facts/when/derived/worker/envelope/result` 读取 `worker_mode/workerMode/mode`，或从 chosen 匹配 `worker-mode` 或 `mode: <value>`；轮换后不读取归档 mode | 枚举 `investigate`、`implement`、`fix`、`verify`、`review`；解析后小写 | 无/坏 trail = U；正常 trail 无 mode = 已知 None；显式非允许值返回已知原值，因而与合法枚举不等；HF：无 | `ticket.implement.worker-incomplete-first`、`ticket.implement.worker-incomplete-second`、`ticket.implement.worker-blocked`、`finding.fix.worker-envelope-invalid` |
 | `trail.reviewer_unavailable` | R：attempt scope 的最新 fact；不再扫描 timeout/unavailable 文本 marker | 布尔 | 无/坏 trail或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.review.reviewer-unavailable` |
 
 ## 3. 比较、subject 和 per-package override 的实用规则
 
 ### 3.1 trail event schema、fact 通道和 validation result
 
-`trail.jsonl` 的每个非空行必须是 JSON object。正式事件使用同一组公共字段：
+renderer 的当前输入是 `execution/<attempt-id>/trail.jsonl`，其每个非空行必须是 JSON object；轮换归档 `trail.NNN.jsonl` 不进入 renderer，只由 `dispatch_audit.py` 按序读作历史审计/回放输入。正式事件使用同一组公共字段：
 
 | 字段 | 作用 | 要求 |
 | --- | --- | --- |
@@ -176,7 +176,7 @@ false；只有没有 U 且所有比较都相等时才是 true。
 | `dispatch` | `subject`、`outcome:"RUNNING"`、`returned:false/true`、`worker`；建议带 `seq` 或 `id`；可选 `situation_digest` | `returned:false` 直接表示 worker 尚未返回；有匹配 `of` 的 return 才关闭带 id 的 dispatch；`situation_digest` 是本次派发所依据的 renderer 12 位 digest，缺失由审计识别，不使 renderer 失败 |
 | `result` | `subject`、`outcome`；返回 decision 时带 `of`；direct evidence 放在 `ref/evidence/artifact/evidence_ref/direct_evidence` | outcome、incomplete、旧 direct-evidence 写法和 decision 关闭 |
 | `worker-return` | `subject`、`outcome`、可选 `of`、worker 返回的 direct-evidence payload | 与 `result` 归一；`EVIDENCE_SUFFICIENT` + `evidence` 是规范 direct-evidence 返回 |
-| `fact` | `subject`、`kind:"fact"`、`key`、`value`、`ts`，可选 `seq` | 读取同一 key 的最新事实；`ts` 会在 JSON `when_values` 中暴露，不添加过期规则 |
+| `fact` | `subject`、`kind:"fact"`、`key`、`value`、`ts`，可选 `seq` | renderer 在当前活动 `trail.jsonl` 内读取同一 key 的最新事实；`trail.NNN.jsonl` 只供 `dispatch_audit.py` 历史审计/回放；`ts` 会在 JSON `when_values` 中暴露，不添加过期规则 |
 
 `checkpoint`、`handoff`、`judgment`、`integration`、`review` 等旧 kind 仍可作为普通事件，
 但它们不再通过自由文本 marker 产生本节列出的业务事实。迁移期允许任意旧 kind 携带旧
@@ -186,8 +186,9 @@ false；只有没有 U 且所有比较都相等时才是 true。
 {"v":1,"seq":12,"ts":"2026-08-15T12:00:00Z","subject":"attempt","kind":"fact","key":"attempt.handoff_or_long_task","value":true}
 ```
 
-同一 subject、同一 key 有多条 fact 时，按 `ts` 新者优先，`ts` 相同按 `seq` 新者优先，
-再以 trail 文件顺序作稳定兜底。陈旧 fact 不会自动失效，最新 fact 的 `ts` 始终可见。
+同一活动 trail 中同一 subject、同一 key 有多条 fact 时，按 `ts` 新者优先，`ts` 相同按 `seq`
+新者优先，再以当前文件顺序作稳定兜底。轮换后归档 fact 不进入 renderer；陈旧 fact 在当前
+文件内不会自动失效，最新 fact 的 `ts` 始终可见。
 `value` 的类型由消费 key 校验；需要布尔的 key 只接受布尔/既有布尔兼容表示。
 
 #### 封闭的 fact key 集合与缺省语义

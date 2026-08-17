@@ -109,6 +109,16 @@ def test_situation_render(package: Path) -> None:
         )
 
 
+def test_rotated_trail_uses_current_file_only() -> None:
+    package = ROOT / "tests/fixtures/situations/p0-handoff-target-corrected-rotated"
+
+    rendered = json.loads(_render_text(package, "--json"))
+
+    assert rendered["selected"] is None
+    assert rendered["sources"]["trail"]["path"] == "execution/fixture-attempt/trail.jsonl"
+    assert "attempt.record.handoff-target-corrected" not in _primary_slugs(rendered)
+
+
 def test_human_render_collapses_undetermined_and_supports_since() -> None:
     package = ROOT / "tests/fixtures/situations-a2/p0-evidence-unfiled"
 
