@@ -11,14 +11,18 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
+from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 STATE_PATH = Path(".impl-package/state.json")
 PROGRESS_PATH = Path("progress.md")
 EXECUTION_PATH = Path("execution")
+ACTIVE_TRAIL_NAME = "trail.jsonl"
 GATE_PATH = Path("gate.md")
 FORMAT_VERSION = "3.5"
 
@@ -106,6 +110,100 @@ def _write_text(path: Path, payload: str) -> None:
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:
     _write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+
+
+def _trail_path(package: Path, attempt: str) -> Path:
+    return package / EXECUTION_PATH / attempt / ACTIVE_TRAIL_NAME
+
+
+def _trail_identity(row: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in row.items() if key not in {"seq", "ts"}}
+
+
+@contextmanager
+def _trail_append_lock(path: Path):
+    lock_path = path.with_name(path.name + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as lock:
+        lock.seek(0, os.SEEK_END)
+        if lock.tell() == 0:
+            lock.write(b"0")
+            lock.flush()
+        lock.seek(0)
+        locked = False
+        if os.name == "nt":
+            import msvcrt
+
+            msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
+            locked = True
+        else:
+            import fcntl
+
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            locked = True
+        try:
+            yield
+        finally:
+            if locked:
+                if os.name == "nt":
+                    msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+def _trail_next_seq(path: Path) -> int:
+    if not path.exists():
+        return 1
+    maximum = 0
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict) and isinstance(row.get("seq"), int) and not isinstance(row.get("seq"), bool):
+            maximum = max(maximum, row["seq"])
+    return maximum + 1
+
+
+def _append_trail(package: Path, attempt: str, event: dict[str, Any]) -> bool:
+    path = _trail_path(package, attempt)
+    with _trail_append_lock(path):
+        repo = _repo_root(package)
+        head = _run_git(repo, "rev-parse", "HEAD")
+        row = {
+            "v": 1,
+            "seq": _trail_next_seq(path),
+            "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            **event,
+            "head": head,
+        }
+        if path.exists():
+            for line in path.read_text(encoding="utf-8-sig").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    previous = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(previous, dict) and _trail_identity(previous) == _trail_identity(row):
+                    return False
+        with path.open("a", encoding="utf-8", newline="\n") as stream:
+            stream.write(json.dumps(row, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        return True
+
+
+def _best_effort_trail(package: Path, attempt: str, event: dict[str, Any]) -> None:
+    try:
+        _append_trail(package, attempt, event)
+    except Exception as exc:  # trail is observational; state remains authoritative
+        print(
+            f"warning: state mutation committed but trail append failed ({event.get('kind', 'event')}): {exc}",
+            file=sys.stderr,
+        )
 
 
 def _field(pattern: re.Pattern[str], text: str, label: str, *, optional: bool = False) -> str | None:
@@ -860,6 +958,19 @@ def command_set_state(
     result = {"kind": "ticket", "id": identifier, "state": target, "idempotent": False}
     if target == "NEEDS-REVALIDATION":
         result.update({"claims": selected_claims, "invalidatedEvidence": invalidated_count})
+    if target in {"SATISFIED", "RETIRED"}:
+        _best_effort_trail(
+            package,
+            summary["attempt"],
+            {
+                "subject": f"ticket:{identifier}",
+                "kind": "result",
+                "transition": "ticket-state",
+                "from": current,
+                "to": target,
+                "outcome": target,
+            },
+        )
     return result
 
 
@@ -917,6 +1028,16 @@ def command_checkpoint(package: Path, subject: str, next_action: str, blocker: s
     _validate_state(package, state, projections=False)
     _write_json(package / STATE_PATH, state)
     _refresh_projections(package, state)
+    _best_effort_trail(
+        package,
+        summary["attempt"],
+        {
+            "subject": subject,
+            "kind": "checkpoint",
+            "checkpoint": True,
+            **state["activeCheckpoints"][subject],
+        },
+    )
     return {"subject": subject, "checkpoint": state["activeCheckpoints"][subject], "idempotent": False}
 
 

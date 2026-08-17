@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -117,6 +119,36 @@ def test_rotated_trail_uses_current_file_only() -> None:
     assert rendered["selected"] is None
     assert rendered["sources"]["trail"]["path"] == "execution/fixture-attempt/trail.jsonl"
     assert "attempt.record.handoff-target-corrected" not in _primary_slugs(rendered)
+
+
+def test_cli_written_trail_rows_are_renderable() -> None:
+    source = FIXTURES / "p4-satisfiable-no-trail"
+    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+        package = Path(temporary) / source.name
+        shutil.copytree(source, package)
+        trail = package / "execution/fixture-attempt/trail.jsonl"
+        trail.parent.mkdir(parents=True)
+        trail.write_text(
+            "\n".join(
+                json.dumps(row, separators=(",", ":"))
+                for row in (
+                    {"v": 1, "seq": 1, "subject": "attempt", "kind": "checkpoint", "checkpoint": True},
+                    {"v": 1, "seq": 2, "subject": "ticket:TKT-01", "kind": "result", "transition": "ticket-state", "from": "PENDING", "to": "SATISFIED", "outcome": "SATISFIED"},
+                )
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        rendered = json.loads(_render_text(package, "--json"))
+
+        assert rendered["sources"]["trail"]["path"] == "execution/fixture-attempt/trail.jsonl"
+        assert "error" not in rendered
+        assert set(_primary_slugs(rendered)) == {
+            "attempt.record.ticket-boundary-handoff",
+            "attempt.record.trail-rotation-due",
+        }
+        assert rendered["highest_match_layer"] == "P1"
 
 
 def test_human_render_collapses_undetermined_and_supports_since() -> None:

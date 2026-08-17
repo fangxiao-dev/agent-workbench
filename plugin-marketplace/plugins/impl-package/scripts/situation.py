@@ -1373,6 +1373,28 @@ class FactContext:
             return _fact_value(sum(1 for row in rows if not is_session_declaration(row)))
         return _fact_value(0)
 
+    def _last_ticket_terminal_transition(self) -> Fact:
+        rows = self._subject_rows(all_attempt_rows=self.kind == "attempt")
+        if rows is None:
+            if self._trail_is_empty():
+                return _fact_value(False)
+            return self.unknown("trail.jsonl 不存在或无法读取")
+        if self._trail_is_empty():
+            return _fact_value(False)
+        transitions = [
+            row
+            for row in rows
+            if _event_kind(row) == "result"
+            and row.get("transition") == "ticket-state"
+            and isinstance(row.get("subject"), str)
+            and row["subject"].startswith("ticket:")
+        ]
+        if not transitions:
+            return _fact_value(False)
+        last = transitions[-1]
+        target = last.get("to", last.get("outcome"))
+        return _fact_value(isinstance(target, str) and target.upper() in {"SATISFIED", "RETIRED"})
+
     def _open_dispatch(self) -> bool | None:
         rows = self._subject_rows()
         if rows is None or self._trail_is_empty():
@@ -1767,6 +1789,10 @@ def _when_attempt_active_checkpoint_present(context: FactContext) -> Fact:
 
 def _when_trail_actions_since_checkpoint(context: FactContext) -> Fact:
     return context._actions_since_checkpoint()
+
+
+def _when_trail_last_ticket_terminal_transition(context: FactContext) -> Fact:
+    return context._last_ticket_terminal_transition()
 
 
 def _when_gate_terminal(context: FactContext) -> Fact:
@@ -2335,6 +2361,7 @@ WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "attempt.compaction_pressure_high": _when_attempt_compaction_pressure_high,
     "attempt.active_checkpoint_present": _when_attempt_active_checkpoint_present,
     "trail.actions_since_checkpoint": _when_trail_actions_since_checkpoint,
+    "trail.last_ticket_terminal_transition": _when_trail_last_ticket_terminal_transition,
     "gate.terminal": _when_gate_terminal,
     "attempt.ready_ticket_count": _when_attempt_ready_ticket_count,
     "attempt.in_flight": _when_attempt_in_flight,

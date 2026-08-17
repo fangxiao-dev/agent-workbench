@@ -6,12 +6,17 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py"
 FIXTURE = ROOT / "tests/fixtures/impl-package-ticket-first"
+sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
+from impl_package_runtime import engine  # noqa: E402
 
 
 def git(repo: Path, *args: str) -> str:
@@ -146,6 +151,94 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("judgment only", bad.stderr)
         good = self.cli(repo, package, "er-add", input_text=json.dumps({"purpose": "judgment", "subject": "attempt", "title": "Decision", "content": "Keep the narrow path."}))
         self.assertIn("recordId", json.loads(good.stdout))
+
+    def test_cli_mutations_append_trail_rows_and_dedupe_repeated_checkpoint(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+
+        checkpoint = self.cli(repo, package, "recovery", "checkpoint", "--subject", "attempt", "--next", "run source test", "--evidence", "evidence.md")
+        repeated_checkpoint = self.cli(repo, package, "recovery", "checkpoint", "--subject", "attempt", "--next", "run source test", "--evidence", "evidence.md")
+        self.assertEqual(checkpoint.returncode, 0)
+        self.assertEqual(repeated_checkpoint.returncode, 0)
+        self.assertEqual(set(json.loads(checkpoint.stdout)), {"subject", "checkpoint", "idempotent"})
+        self.add_evidence(repo, package)
+        satisfied = self.cli(
+            repo,
+            package,
+            "ticket",
+            "satisfy",
+            "TKT-01",
+            "--expect",
+            "PENDING",
+            "--revision",
+            git(repo, "rev-parse", "HEAD"),
+            "--environment",
+            "test",
+        )
+        retired = self.cli(
+            repo,
+            package,
+            "ticket",
+            "retire",
+            "TKT-02",
+            "--expect",
+            "PENDING",
+            "--disposition",
+            "waived",
+            "--evidence",
+            "evidence.md",
+        )
+        self.assertFalse(json.loads(satisfied.stdout)["idempotent"])
+        self.assertEqual(satisfied.returncode, 0)
+        self.assertEqual(set(json.loads(satisfied.stdout)), {"kind", "id", "state", "idempotent"})
+        self.assertEqual(retired.returncode, 0)
+        self.assertEqual(set(json.loads(retired.stdout)), {"kind", "id", "state", "idempotent"})
+
+        rows = [json.loads(line) for line in (package / "execution/initial/trail.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]["kind"], "checkpoint")
+        self.assertEqual(rows[0]["subject"], "attempt")
+        self.assertTrue(rows[0]["checkpoint"])
+        self.assertEqual(rows[0]["next"], "run source test")
+        self.assertEqual(rows[1]["kind"], "result")
+        self.assertEqual(rows[1]["subject"], "ticket:TKT-01")
+        self.assertEqual(rows[1]["transition"], "ticket-state")
+        self.assertEqual(rows[1]["from"], "PENDING")
+        self.assertEqual(rows[1]["to"], "SATISFIED")
+        self.assertEqual(rows[1]["outcome"], "SATISFIED")
+        self.assertEqual(rows[2]["subject"], "ticket:TKT-02")
+        self.assertEqual(rows[2]["outcome"], "RETIRED")
+        self.assertEqual(rows[2]["to"], "RETIRED")
+        self.assertEqual([row["seq"] for row in rows], [1, 2, 3])
+
+    def test_trail_append_failure_does_not_fail_ticket_mutation(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.add_evidence(repo, package)
+        revision = git(repo, "rev-parse", "HEAD")
+        stderr = StringIO()
+
+        with patch.object(engine, "_append_trail", side_effect=OSError("disk full")), redirect_stderr(stderr):
+            result = engine.command_set_state(
+                package,
+                "TKT-01",
+                "SATISFIED",
+                "PENDING",
+                revision,
+                "test",
+                None,
+                None,
+                None,
+                None,
+                [],
+                None,
+            )
+
+        self.assertFalse(result["idempotent"])
+        self.assertEqual(self.state(package)["tickets"]["TKT-01"]["state"], "SATISFIED")
+        self.assertIn("trail append failed", stderr.getvalue())
 
     def test_superseded_requires_successor_and_no_inbound_edges(self) -> None:
         temp, repo, package = self.make_repo()

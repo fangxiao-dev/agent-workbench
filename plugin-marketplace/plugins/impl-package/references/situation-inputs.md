@@ -5,8 +5,8 @@
 `plugin-marketplace/plugins/impl-package/scripts/situation.py` 当前真正读取和判定的
 package 形状，目的是让不阅读推导器实现的人也能构造 fixture、per-package 覆盖和审计输入。
 
-截至 2026-08-15，正式表有 57 个 situation row、67 个唯一的非 `manual` `when` key。
-本文逐一覆盖这 67 个 key。`manual` row 不需要输入字段；它们始终出现在 `manual` 输出中，
+截至 2026-08-17，正式表有 59 个 situation row、68 个唯一的非 `manual` `when` key。
+本文逐一覆盖这 68 个 key。`manual` row 不需要输入字段；它们始终出现在 `manual` 输出中，
 由主控做语义判断。
 
 > 重要边界：本文的“能被推导器识别”首先指 `situation.py render` 的输入合同。完整的
@@ -69,7 +69,7 @@ false；只有没有 U 且所有比较都相等时才是 true。
 `=>1`、`<>1`、`=1`、`between 1 and 2`、`truthy`、`not false` 和带单位的字符串都不支持；
 不匹配数值语法时会退回普通相等比较，通常得到已知 false，而不是 U。
 
-## 2. 67 个 `when` key 合同
+## 2. 68 个 `when` key 合同
 
 表中的“缺失/错误”列同时说明文件不存在、字段不存在、字段形状不对和没有匹配 marker
 时的行为；`HF：无`表示该 key 本身不会因该输入缺失直接让 CLI 失败。
@@ -137,6 +137,7 @@ false；只有没有 U 且所有比较都相等时才是 true。
 | `gate.verdict` | G：`- Verdict: pass / fail / blocked / defer / undecided` 或中文 `判定` 行；只读取已存在 Gate 的显式 verdict | 枚举 `pass`、`fail`、`blocked`、`defer`、`undecided`，解析后转小写 | 缺 G = U（由 `gate.present=false` 单独表达）；有 G 但 Verdict 缺失/格式错 = U；HF：无 | `attempt.gate.verdict-undecided` |
 | `intake.has_backlog` | I：按顺序找第一个存在的文件：`.impl-package/intake.jsonl`、`.impl-package/intake-queue.jsonl`、`.impl-package/intake.json`、`execution/intake.jsonl`、`execution/intake-queue.jsonl`、`execution/intake.json`、`intake.jsonl`、`intake.json`；其次找目录 `.impl-package/intake`、`.impl-package/intake-queue`、`execution/intake`、`execution/intake-queue`、`intake`、`intake-queue` | 布尔；JSON list 非空、dict 的 `items/queue` list 非空、非 JSON 但有非空行、目录有 entry = true | 所有候选不存在 = U；存在但空文本/空 list/空目录 = F；读取错误或 dict 无 list 时按非空文本 fallback；HF：无 | `package.record.intake-backlog` |
 | `trail.actions_since_checkpoint` | R（当前活动 `trail.jsonl`）：在适用 subject rows 中找最后一个 `kind=checkpoint`、`chosen/situation` 含 checkpoint 或 `checkpoint=true` 的 marker，返回 marker 后的行数；无 marker 时忽略兼容性的 `attempt.session_resumed` 声明并计其它 rows；轮换后不读取 `trail.NNN.jsonl` | 非负整数；表只比较 `0` | 无/坏 trail = U；state 无效导致 checkpoint 不可判定 = U；无 active checkpoint = 0；有 marker 且 marker 后无行 = 0；无 marker 且没有其它 typed fact/action = 0；HF：无 | `attempt.record.session-resumed` |
+| `trail.last_ticket_terminal_transition` | R（当前活动 `trail.jsonl`）：attempt scope 扫描全部 rows，Ticket scope 只扫描当前 Ticket；取最后一个 `kind=result`、`transition=ticket-state` 且 `subject` 为 `ticket:<id>` 的状态转换行，检查其 `to`（兼容 `outcome`）是否为 `SATISFIED` 或 `RETIRED`；轮换后不读取归档 | 布尔；最后一个 Ticket 状态转换进入 `SATISFIED/RETIRED` = true | trail 缺失或可读但为空 = F；坏 trail = U；没有状态转换 = F；最后状态转换不是终态 = F；普通 worker result 没有 `transition=ticket-state`，不参与；HF：无 | `attempt.record.ticket-boundary-handoff`、`attempt.record.trail-rotation-due` |
 | `trail.anchor_mismatch` | R：attempt scope 的最新 fact；不再扫描 JSON 文本 marker | 布尔 | 无/坏 trail或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.record.anchor-mismatch` |
 | `trail.checkpoint_refresh_needed` | R：attempt scope 的最新 fact；不再扫描 JSON 文本 marker | 布尔 | 无/坏 trail或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.record.checkpoint-refresh` |
 | `trail.decision_without_result` | R（当前活动 `trail.jsonl`）：旧 decision/result 配对差集非空，或存在 `kind=dispatch`、`outcome=RUNNING`、`returned=false` 且未被 result-like `of/dispatch_id/...` 关闭；轮换后不读取归档 open dispatch | 布尔；dispatch 不要求 identifier；decision 旧写法要求 `seq/id/decision_id/decisionId` | 无/坏 trail = U；没有未配对 decision/dispatch = F；HF：无 | `attempt.readiness.worker-still-running` |
@@ -174,7 +175,7 @@ renderer 的当前输入是 `execution/<attempt-id>/trail.jsonl`，其每个非�
 | --- | --- | --- |
 | `decision` | `subject`、`seq/id/decision_id/decisionId` 至少一个、`chosen` | 与 result 的 `of/decision/...` 配对；未配对 dispatch 属于 in-flight |
 | `dispatch` | `subject`、`outcome:"RUNNING"`、`returned:false/true`、`worker`；建议带 `seq` 或 `id`；可选 `situation_digest` | `returned:false` 直接表示 worker 尚未返回；有匹配 `of` 的 return 才关闭带 id 的 dispatch；`situation_digest` 是本次派发所依据的 renderer 12 位 digest，缺失由审计识别，不使 renderer 失败 |
-| `result` | `subject`、`outcome`；返回 decision 时带 `of`；direct evidence 放在 `ref/evidence/artifact/evidence_ref/direct_evidence` | outcome、incomplete、旧 direct-evidence 写法和 decision 关闭 |
+| `result` | `subject`、`outcome`；返回 decision 时带 `of`；direct evidence 放在 `ref/evidence/artifact/evidence_ref/direct_evidence`；CLI Ticket 终态转换可带 `transition=ticket-state`、`from`、`to` | outcome、incomplete、旧 direct-evidence 写法和 decision 关闭；`transition=ticket-state` 供 Ticket 边界 when-key 读取 |
 | `worker-return` | `subject`、`outcome`、可选 `of`、worker 返回的 direct-evidence payload | 与 `result` 归一；`EVIDENCE_SUFFICIENT` + `evidence` 是规范 direct-evidence 返回 |
 | `fact` | `subject`、`kind:"fact"`、`key`、`value`、`ts`，可选 `seq` | renderer 在当前活动 `trail.jsonl` 内读取同一 key 的最新事实；`trail.NNN.jsonl` 只供 `dispatch_audit.py` 历史审计/回放；`ts` 会在 JSON `when_values` 中暴露，不添加过期规则 |
 
@@ -903,6 +904,8 @@ P0 内部顺序就是 YAML 的顺序。P0 有多个 active match 时，renderer 
 | slug | 完整命中条件（全部 AND） | U key | 命中所需的实现前置条件与常见漏项 |
 | --- | --- | --- | --- |
 | `attempt.record.handoff-due` | `attempt.compaction_pressure_high = true` | `attempt.compaction_pressure_high` | 需要调用方传入 `--compaction-pressure` 的合法 JSON 且 `high=true`；缺参数是 U，不命中该行；它位于 P1，因此 P0 完整性行仍先显示。默认动作是在主控选定的下一个 recovery checkpoint 后交接，不中断当前单元。 |
+| `attempt.record.ticket-boundary-handoff` | `trail.last_ticket_terminal_transition = true` AND `attempt.has_pending_ticket = true` | `trail.last_ticket_terminal_transition`、`attempt.has_pending_ticket` | 当前活动 trail 的最后一个 CLI Ticket 状态转换必须进入 `SATISFIED` 或 `RETIRED`，且 state 中仍有 `PENDING` Ticket；这是交接机会，不阻断当前单元。它与 pressure-driven `attempt.record.handoff-due` 独立，不要求 compaction pressure。 |
+| `attempt.record.trail-rotation-due` | `trail.last_ticket_terminal_transition = true` AND `attempt.has_pending_ticket = true` | `trail.last_ticket_terminal_transition`、`attempt.has_pending_ticket` | 与 Ticket 边界交接同一机械窗口，但语义是交接时必须执行活动 trail 轮换；不把普通 checkpoint 当作轮换触发，也不读取 pressure key。轮换后 renderer 只看新的 `trail.jsonl`，归档由 audit 读取。 |
 | `attempt.readiness.worker-still-running` | `trail.decision_without_result = true` | `trail.decision_without_result` | trail 必须可读，并且存在未配 result 的 decision，或 `kind=dispatch`、`outcome=RUNNING`、`returned=false` 的 open dispatch。带 id 的 dispatch 只有匹配 result 才关闭；无 id 的 running dispatch 始终保持 open。 |
 | `attempt.readiness.all-edges-held` | `attempt.ready_ticket_count = 0` AND `attempt.has_pending_ticket = true` AND `attempt.implementation_edges_held = true` | `attempt.ready_ticket_count`、`attempt.has_pending_ticket`、`attempt.implementation_edges_held` | 需要合法 state、每个 Ticket 文件都能解析、implementation dependency 的目标状态都能判定，并且至少有一个 `PENDING` Ticket；不能只在“看起来没有 ready Ticket”时手写期望。后两个条件在当前实现中有推导重叠，但 row 仍会逐项比较。 |
 | `attempt.readiness.multiple-ready-tickets` | `attempt.ready_ticket_count > 1` AND `attempt.in_flight = false` | `attempt.ready_ticket_count`、`attempt.in_flight` | 需要完整 Ticket/dependency 图，且 open dispatch 已被明确排除。没有 trail 或无法证明没有 in-flight 时第二个 key 是 U，不是 false；“有两个 pending Ticket”也不等于有两个 ready Ticket。 |
