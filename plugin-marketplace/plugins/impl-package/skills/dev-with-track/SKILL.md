@@ -68,7 +68,7 @@ Get-Content .\er-payload.json -Raw |
 
 ## 处境投递与轨迹
 
-处境表漏掉某个当前处境时，按判断行动并走 escape 出口是合法路径，不是违规；若主控偏离渲染建议，也只需记录理由，不把 renderer 当成阻断器。没有其它载体的动作要显式写一行轨迹：派发的发起与返回、escape、Ticket 选择、finding 定级与分流、来源路由判断，以及需要声明的 fact。轨迹位置与格式遵循 `../../references/situation-inputs.md`（运行时不需要打开，仅在维护处境表或写 per-package 覆盖时查阅）和 `docs/skill-design/impl-package-situation-table-260815/trail-schema.md`（运行时不需要打开，仅在维护轨迹格式或写 per-package 覆盖时查阅）：`execution/<attempt>/trail.jsonl` 中每个非空行是 JSON object，事件使用 `dispatch`、`result`/`worker-return` 或 `kind=fact`，带正确的 `subject`，fact 带 `key`、`value`、`ts`，需要 Git 对账时带 `head`；`dispatch` 可带本次派发所依据的 renderer 12 位 `situation_digest`，缺失由只读审计报告，不阻断渲染。轨迹只追加、不改写已有行；发现某行写错时追加一条正确的 fact（同 key 取最新）或补一行说明，改写历史会让回放失去意义。首版全部显式写行，不要求改 `impl_package_state.py`。
+处境表漏掉某个当前处境时，按判断行动并走 escape 出口是合法路径，不是违规；若主控偏离渲染建议，也只需记录理由，不把 renderer 当成阻断器。**每一次 escape 必须写一行轨迹**，包括偏离渲染建议和处境表没覆盖当前处境两种；escape 是唯一既不产生产物、也无法从其它行推导的事件，处境表只能靠这些行发现自己的缺陷。派发的发起与返回、finding 定级与分流、来源路由判断和需要声明的 fact 照常写行，但它们本身就伴随一次调用或状态转换；Ticket 选择由随后 dispatch 的 `subject` 表明，不必单独写行。轨迹位置与格式遵循 `../../references/situation-inputs.md`（运行时不需要打开，仅在维护处境表或写 per-package 覆盖时查阅）和 `docs/skill-design/impl-package-situation-table-260815/trail-schema.md`（运行时不需要打开，仅在维护轨迹格式或写 per-package 覆盖时查阅）：`execution/<attempt>/trail.jsonl` 中每个非空行是 JSON object，事件使用 `dispatch`、`result`/`worker-return` 或 `kind=fact`，带正确的 `subject`，fact 带 `key`、`value`、`ts`，需要 Git 对账时带 `head`；`dispatch` 可带本次派发所依据的 renderer 12 位 `situation_digest`，缺失由只读审计报告，不阻断渲染。轨迹只追加、不改写已有行；发现某行写错时追加一条正确的 fact（同 key 取最新）或补一行说明，改写历史会让回放失去意义。首版全部显式写行，不要求改 `impl_package_state.py`。
 
 ## Review、Findings 与人工验收
 
