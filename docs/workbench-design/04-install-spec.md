@@ -4,7 +4,7 @@
 
 ## Plugin 安装
 
-独立发布根位于 `plugin-marketplace/`。其中 Codex marketplace 位于 `.agents/plugins/marketplace.json`，Claude marketplace 位于 `.claude-plugin/marketplace.json`；两者均以 `agent-workbench` 为 marketplace 名，并从 `./plugins/<plugin>` 读取同一份插件 payload。
+独立发布根位于 `plugin-marketplace/`。其中 Codex marketplace 位于 `.agents/plugins/marketplace.json`，Claude marketplace 位于 `.claude-plugin/marketplace.json`；两者均以 `agent-workbench` 为 marketplace 名，并从 `./plugins/<plugin>` 读取同一份插件 payload。manifest 使用宿主各自支持的字段，但版本字段必须保持一致；Codex marketplace entry 本身不复制 plugin version。
 
 ```powershell
 codex plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
@@ -14,7 +14,7 @@ claude plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
 claude plugin install impl-package@agent-workbench --scope project
 ```
 
-插件目录就是安装产物，不执行 build。安装和更新会进入宿主缓存；manifest/marketplace 版本必须同步，更新后开启新会话。Workbench 不包装这些命令，也不在验证时修改用户级宿主状态。
+插件目录就是安装产物，不执行 build。安装和更新会进入宿主缓存；manifest/marketplace 的版本元数据必须同步，更新后开启新会话。Workbench 不包装插件生命周期命令，也不在未授权时修改用户级宿主状态。
 
 ## Plugin 生命周期：Agent 直接执行
 
@@ -70,6 +70,18 @@ grok plugin install D:\path\to\agent-workbench\plugin-marketplace\plugins\impl-p
 ```
 
 一个宿主的命令失败后停止该宿主的后续步骤，并准确报告已发生的状态；不要把卸载成功、安装失败写成重装成功。执行后用对应的 `plugin list` 核对 enabled/version，检查宿主报告的 cache 或 installed root 是否包含目标版本；必要时比较 manifest 和关键 Skill 的哈希。最后开启新会话，让宿主重新加载插件内容。
+
+## Impl-Package agent profiles
+
+Claude 插件根目录的 `agents/` 由 Claude 原生扫描；`impl-package/.claude-plugin/plugin.json` 显式声明四个 Markdown agent 文件。安装后可在 `/agents` 中确认四个 `review-track-*` profile。
+
+Codex 当前插件 manifest 不支持 `agents` 字段，不能把它加入 `.codex-plugin/plugin.json`；否则不能保证插件通过宿主校验。Codex 角色使用全局 `$CODEX_HOME/agents`（未设置时 `~/.codex/agents`），由插件内的显式投影脚本安装：
+
+```powershell
+python plugin-marketplace/plugins/impl-package/scripts/install_codex_agents.py --global
+```
+
+脚本只生成 `review-track-code.toml`、`review-track-standards.toml`、`review-track-spec.toml` 和 `review-track-safety.toml` 四个已知文件；默认拒绝覆盖不同内容，`--force` 只更新带有本包管理标记（或本包旧格式）的这些目标，并拒绝符号链接或 Windows reparse point。四个 Codex role 与 `do-review` 的 leaf-agent 名称一致，插件升级后需重新运行脚本；项目级 `.codex/agents` 不属于本安装目标。
 
 | 平台 | 链接类型 |
 |------|----------|

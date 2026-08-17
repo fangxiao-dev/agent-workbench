@@ -23,7 +23,7 @@ agent-workbench/
 ## 核心目录
 
 - `skills/` 是独立 skill 的仓库内正式来源。单公开入口的 router/bundle 仍可保留内部 `sub-skills/<name>/SUB-SKILL.md`，由公开入口按相对路径读取。
-- `plugin-marketplace/` 是插件发布根。`plugins/impl-package/` 以扁平 `skills/<name>/SKILL.md` 暴露 20 个入口，并在插件根或各 skill 内共享 references、assets、scripts、src 和 evals；Codex 与 Claude 只分 manifest，不复制 payload。
+- `plugin-marketplace/` 是插件发布根。`plugins/impl-package/` 以扁平 `skills/<name>/SKILL.md` 暴露入口，并在插件根或各 skill 内共享 references、assets、scripts、src 和 evals；插件根 `agents/*.md` 是 Claude 原生 agent 定义，Codex 通过 `scripts/install_codex_agents.py` 将同一来源投影到全局 `.toml` roles；Codex 与 Claude 只分 manifest，不复制 skills payload。
 - `plugin-marketplace/.agents/plugins/marketplace.json` 与 `plugin-marketplace/.claude-plugin/marketplace.json` 分别是 Codex、Claude 的插件索引；仓库根 `.agents/` 仍是缓存/运行态。
 - `agents/` 存放 subagent 定义。安装器把每个 agent 目录链接到已选宿主的 `agents/`。
 - `commands/` 存放宿主 command 提示文件。安装器把 command 文件复制到已选宿主的 `commands/`。是否可用 `/...` 唤出取决于具体宿主。

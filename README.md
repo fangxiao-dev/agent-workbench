@@ -12,7 +12,7 @@
 
 - `skills/` 保存独立安装的正式 skill，包括自建 skill、审查过的第三方 skill、以及本地工作流知识库
 - `plugin-marketplace/` 是独立的插件发布根；其中 `plugins/` 保存多 skill 套件，并分别提供 Codex 与 Claude manifest
-- `plugin-marketplace/plugins/impl-package/` 包含共享调查与委派入口；`skills/` 仍保留可选的通用 `reviewer`
+- `plugin-marketplace/plugins/impl-package/` 包含共享调查与委派入口、Claude review agents，以及投影到 Codex 全局 role 的安装脚本；`skills/` 仍保留可选的通用 `reviewer`
 - `agents/` 保存可安装到宿主的 subagent 定义，目前正式 subagent 是 `audit-agent-setup`
 - `commands/` 保存宿主 command 提示文件；是否能用 `/...` 唤出取决于具体宿主
 - `scripts/link_skill.py` 把单个（或全部顶层）skill **link** 到 `~/.claude` / `~/.codex` / `~/.grok` 的 `skills/`（Windows junction，Unix/macOS symlink）
@@ -73,9 +73,18 @@ codex plugin add impl-package@agent-workbench
 # Claude（项目级启用）
 claude plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
 claude plugin install impl-package@agent-workbench --scope project
+
+# Codex 全局 review-track agent profiles（按需刷新）
+python plugin-marketplace/plugins/impl-package/scripts/install_codex_agents.py --global
 ```
 
-安装或升级后开启新会话，使宿主从插件缓存重新加载 skills。面向用户和 agent 的文档统一使用 `/impl-package:dev-with-track` 形式显式调用；宿主内部 registry/discovery 仍可显示不带 `/` 的 skill key。`link_skill.py --all` 不处理 `plugin-marketplace/`。
+安装或升级后开启新会话，使宿主从插件缓存重新加载 skills；Codex 的全局 review roles 需要在插件升级后重新运行上面的投影脚本。面向用户和 agent 的文档统一使用 `/impl-package:dev-with-track` 形式显式调用；宿主内部 registry/discovery 仍可显示不带 `/` 的 skill key。`link_skill.py --all` 不处理 `plugin-marketplace/`。
+
+### Impl-Package review agents
+
+`plugin-marketplace/plugins/impl-package/agents/*.md` 是 Claude 插件的原生 agent 定义，安装后可在 `/agents` 中看到 `review-track-code`、`review-track-standards`、`review-track-spec` 和 `review-track-safety`。Claude manifest 显式声明了这四个 Markdown 文件。
+
+Codex 当前插件 manifest 不支持 `agents` 字段，因此不能通过 `codex plugin add` 自动安装这些 role。`install_codex_agents.py --global` 会从同一组 Markdown 定义生成 Codex `.toml` role，并写入全局 `$CODEX_HOME/agents`（未设置时为 `~/.codex/agents`）。四个 role 使用与 `do-review` 相同的稳定名称，供 parent 的 leaf dispatch 解析；脚本默认拒绝覆盖非同内容文件，只有明确传入 `--force` 才更新带有本包管理标记（或本包旧格式）的已知文件，并拒绝写入符号链接或 Windows reparse point。
 
 ### 插件生命周期（Codex / Claude / Grok）
 
@@ -265,7 +274,7 @@ agent-workbench/
 ├── plugin-marketplace/         ← 独立插件发布根
 │   ├── .agents/plugins/        ← Codex marketplace
 │   ├── .claude-plugin/         ← Claude marketplace
-│   └── plugins/impl-package/   ← 双 manifest、20 个扁平 skills 与公共资源
+│   └── plugins/impl-package/   ← 双 manifest、skills、Claude agents 与 Codex role 投影脚本
 ├── agents/                     ← subagents，安装到已选宿主的 agents/
 │   └── audit-agent-setup/
 │       └── agent.md
@@ -331,6 +340,8 @@ cat ~/.claude/skills/audit-agent-setup/SKILL.md   # 确认内容可读
 
 ls -la ~/.codex/skills/
 ls -la ~/.codex/agents/
+# Windows PowerShell：确认四个全局 review roles
+Get-ChildItem "$env:USERPROFILE\.codex\agents\review-track-*.toml"
 
 ls -la ~/.grok/skills/
 ```
