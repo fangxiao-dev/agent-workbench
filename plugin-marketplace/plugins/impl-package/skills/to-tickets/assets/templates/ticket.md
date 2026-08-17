@@ -36,7 +36,7 @@ Attempt ID：<attempt-id>
   - Stable claim ID：`INV-idempotency-integrity`
   - 到达路径：<跨模块 claim 必填；entry → ... → arrival>
 
-到达路径规则：claim 文字里出现两个以上模块/边界的名字时必填；三条安全不变量均按跨模块 claim 填写。到达路径上任意一段被 mock / fake / in-memory 替身替换时，该 claim 的证据不成立。
+到达路径规则：claim 文字里出现两个以上模块/边界的名字时必填；三条安全不变量均按跨模块 claim 填写。到达路径上任意一段被 mock / fake / in-memory 替身替换时，该 claim 的证据不成立。一条路径写不完这个 claim 时写两条，不要压成一条——claim 有两个独立入口（例如既有直接调用又有 HTTP 请求）时就是这种情况，压成一条会逼出一次伪造。
 
 早期路径可以缩小格式、入口或已授权主体范围，但只能做到“纵切窄、属性不薄”。Ticket 只有在全部 required claims 的当前 revision/environment evidence 齐全后才进入最终 acceptance。
 
