@@ -16,6 +16,13 @@ def files_under(root: Path):
             yield Path(current) / name
 
 
+def state_runtime_files(root: Path):
+    entrypoint = root / "scripts" / "impl_package_state.py"
+    if entrypoint.is_file():
+        yield entrypoint
+    yield from files_under(root / "scripts" / "impl_package_runtime")
+
+
 def test_stage_evals_are_valid_and_nonempty() -> None:
     paths = [
         IMPL / "skills/req-align/evals/evals.json",
@@ -32,21 +39,32 @@ def test_stage_evals_are_valid_and_nonempty() -> None:
 
 
 def test_active_package_files_have_no_retired_state_mechanisms() -> None:
-    retired = (
+    retired_state = (
         "revision-bindings.json",
         "runtime-state.json",
         "contractVersion",
         "hash-object",
         "contentSha256",
-        ".glob(",
-        ".rglob(",
-        "fnmatch",
     )
     for path in files_under(IMPL):
         if path.suffix.lower() not in {".md", ".py", ".json"}:
             continue
         text = path.read_text(encoding="utf-8")
-        for token in retired:
+        for token in retired_state:
+            assert token not in text, f"{path.relative_to(ROOT)} contains {token}"
+
+    # These tokens guarded the old state engine's wildcard package discovery.
+    # Profile installation is a separate surface and may enumerate its own inputs.
+    retired_state_discovery = (
+        ".glob(",
+        ".rglob(",
+        "fnmatch",
+    )
+    for path in state_runtime_files(IMPL):
+        if path.suffix.lower() not in {".md", ".py", ".json"}:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for token in retired_state_discovery:
             assert token not in text, f"{path.relative_to(ROOT)} contains {token}"
 
 
