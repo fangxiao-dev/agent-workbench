@@ -92,17 +92,21 @@ FACT_KEYS = frozenset(
 FACT_KEY_ALIASES = {"ticket.judgment_unfiled": "trail.judgment_unfiled"}
 
 
-def _unknown_fact_key_notice(keys: tuple[str, ...]) -> str:
-    """Name the ignored keys and, for near misses, the key that was probably meant."""
+def describe_unknown_fact_keys(keys: tuple[str, ...]) -> str:
+    """Name the keys and, for near misses, the key that was probably meant."""
     parts = []
     for key in keys:
         close = get_close_matches(str(key), FACT_KEYS, n=1, cutoff=0.6)
         parts.append(f"{key} → 也许是 {close[0]}" if close else str(key))
     return (
-        "trail.jsonl 含未知 fact key，已忽略这些行："
-        + "；".join(parts)
+        "；".join(parts)
         + "。表只消费封闭清单内的 key；其它事实写 evidenceIndex 或 ER judgment"
     )
+
+
+def _unknown_fact_key_notice(keys: tuple[str, ...]) -> str:
+    """The renderer ignores these rows rather than refusing to render."""
+    return "trail.jsonl 含未知 fact key，已忽略这些行：" + describe_unknown_fact_keys(keys)
 
 # Only defaults that preserve the fail-closed direction belong here.  A key
 # absent from this mapping remains unknown when its fact channel is readable.

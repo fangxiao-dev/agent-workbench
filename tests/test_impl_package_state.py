@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py"
 FIXTURE = ROOT / "tests/fixtures/impl-package-ticket-first"
 sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
-from impl_package_runtime import engine  # noqa: E402
+from impl_package_runtime import command_groups, engine  # noqa: E402
 
 
 def git(repo: Path, *args: str) -> str:
@@ -269,6 +269,78 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(rows[2]["outcome"], "RETIRED")
         self.assertEqual(rows[2]["to"], "RETIRED")
         self.assertEqual([row["seq"] for row in rows], [1, 2, 3])
+
+    def test_trail_append_assigns_sequence_and_common_fields(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+
+        fact = self.cli(
+            repo,
+            package,
+            "trail",
+            "append",
+            input_text=json.dumps({"kind": "fact", "subject": "attempt", "key": "attempt.in_flight", "value": True}),
+        )
+        dispatch = self.cli(
+            repo,
+            package,
+            "trail",
+            "append",
+            input_text=json.dumps({"kind": "dispatch", "subject": "attempt", "outcome": "RUNNING", "worker": "worker-01", "returned": False}),
+        )
+        self.assertEqual(json.loads(fact.stdout)["appended"], True)
+        self.assertEqual(json.loads(dispatch.stdout)["appended"], True)
+        rows = [json.loads(line) for line in (package / "execution/initial/trail.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([row["seq"] for row in rows], [1, 2])
+        for row in rows:
+            self.assertEqual(row["v"], 1)
+            self.assertTrue(row["ts"].endswith("Z"))
+            self.assertEqual(row["head"], git(repo, "rev-parse", "HEAD"))
+        self.assertNotIn("situation_digest", rows[1])
+
+    def test_trail_append_rejects_unknown_fact_key_with_nearest_key(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        result = self.cli(
+            repo,
+            package,
+            "trail",
+            "append",
+            input_text=json.dumps({"kind": "fact", "subject": "attempt", "key": "attempt.in_fligh", "value": True}),
+            ok=False,
+        )
+        self.assertIn("attempt.in_flight", result.stderr)
+        self.assertFalse((package / "execution/initial/trail.jsonl").exists())
+
+    def test_trail_append_rejects_unsupported_kind(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        result = self.cli(
+            repo,
+            package,
+            "trail",
+            "append",
+            input_text=json.dumps({"kind": "checkpoint", "subject": "attempt"}),
+            ok=False,
+        )
+        self.assertIn("invalid trail kind", result.stderr)
+        self.assertIn("worker-return", result.stderr)
+
+    def test_trail_append_failure_returns_nonzero(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        stderr = StringIO()
+        stdout = StringIO()
+        payload = json.dumps({"kind": "escape", "subject": "attempt", "deviation": "manual", "reason": "fixture"})
+        with patch.object(engine, "_append_trail", side_effect=OSError("disk full")), patch.object(command_groups.sys, "stdin", StringIO(payload)), redirect_stderr(stderr), redirect_stdout(stdout):
+            result = command_groups.main(package, "trail", ["append"])
+        self.assertEqual(result, 1)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("disk full", stderr.getvalue())
 
     def test_trail_append_failure_does_not_fail_ticket_mutation(self) -> None:
         temp, repo, package = self.make_repo()

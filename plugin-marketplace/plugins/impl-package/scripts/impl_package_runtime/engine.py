@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from situation import FACT_KEYS, describe_unknown_fact_keys
+
 STATE_PATH = Path(".impl-package/state.json")
 PROGRESS_PATH = Path("progress.md")
 EXECUTION_PATH = Path("execution")
@@ -33,6 +35,9 @@ VERDICTS = TERMINAL_VERDICTS | {"blocked"}
 TIMINGS = {"early-falsification", "remaining-completion"}
 CONCLUSIONS = {"supporting", "contradictory", "inconclusive"}
 DISPOSITIONS = {"waived", "superseded"}
+TRAIL_APPEND_KINDS = frozenset({"dispatch", "escape", "fact", "worker-return"})
+TRAIL_COMMON_FIELDS = frozenset({"v", "seq", "ts", "head"})
+TRAIL_DIGEST_RE = re.compile(r"^[0-9a-fA-F]{12}$")
 
 ATTEMPT_RE = re.compile(r"(?m)^(?:\*\*)?(?:Attempt ID|执行尝试 ID（Attempt ID）)(?:\*\*)?\s*[：:](?:\*\*)?\s*([^\s*]+)")
 COMPOSITION_RE = re.compile(r"Composition[^\n]*tickets=(true|false),\s*dag=(true|false)", re.I)
@@ -1062,6 +1067,67 @@ def command_er_add(package: Path, input_text: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise StateError("er-add input must be an object")
     return _add_judgment(package, payload)
+
+
+def _trail_text_field(event: dict[str, Any], field: str, kind: str) -> None:
+    value = event.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise StateError(f"trail {kind} requires a non-empty {field}")
+
+
+def _validate_trail_event(event: dict[str, Any]) -> dict[str, Any]:
+    supplied_common = sorted(TRAIL_COMMON_FIELDS & event.keys())
+    if supplied_common:
+        fields = ", ".join(supplied_common)
+        raise StateError(f"trail append fills {fields}; omit them from stdin JSON")
+    kind = event.get("kind")
+    if not isinstance(kind, str) or kind not in TRAIL_APPEND_KINDS:
+        supported = ", ".join(sorted(TRAIL_APPEND_KINDS))
+        raise StateError(f"invalid trail kind {kind!r}; trail append supports: {supported}")
+    _trail_text_field(event, "subject", kind)
+    if kind == "fact":
+        key = event.get("key")
+        if not isinstance(key, str) or not key.strip():
+            raise StateError("trail fact requires a non-empty key")
+        if key not in FACT_KEYS:
+            raise StateError(f"trail append rejected fact key {key!r}：{describe_unknown_fact_keys((key,))}")
+        if "value" not in event:
+            raise StateError("trail fact requires value")
+    elif kind == "escape":
+        _trail_text_field(event, "deviation", kind)
+        _trail_text_field(event, "reason", kind)
+    elif kind == "dispatch":
+        _trail_text_field(event, "worker", kind)
+        if event.get("outcome") != "RUNNING" or event.get("returned") is not False:
+            raise StateError("trail dispatch requires outcome=RUNNING and returned=false")
+        if "situation_digest" in event and (
+            not isinstance(event["situation_digest"], str)
+            or TRAIL_DIGEST_RE.fullmatch(event["situation_digest"]) is None
+        ):
+            raise StateError("trail dispatch situation_digest must be a 12-character hex digest")
+    else:
+        _trail_text_field(event, "outcome", kind)
+    return event
+
+
+def command_trail_append(package: Path, input_text: str) -> dict[str, Any]:
+    try:
+        event = json.loads(input_text)
+    except json.JSONDecodeError as exc:
+        raise StateError(f"trail append input is invalid JSON: {exc}") from exc
+    if not isinstance(event, dict):
+        raise StateError("trail append input must be an object")
+    event = _validate_trail_event(event)
+    state = _load_json(package / STATE_PATH)
+    summary = _validate_state(package, state)
+    _assert_mutable(summary)
+    appended = _append_trail(package, summary["attempt"], event)
+    return {
+        "attempt": summary["attempt"],
+        "kind": event["kind"],
+        "path": f"execution/{summary['attempt']}/{ACTIVE_TRAIL_NAME}",
+        "appended": appended,
+    }
 
 
 def command_checkpoint(

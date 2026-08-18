@@ -19,6 +19,7 @@ GROUPS = {
     "ticket",
     "evidence",
     "recovery",
+    "trail",
     "gate",
 }
 
