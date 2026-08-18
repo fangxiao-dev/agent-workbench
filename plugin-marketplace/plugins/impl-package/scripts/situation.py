@@ -1,9 +1,9 @@
-"""Read-only situation derivation for the Impl-Package dev-with-track stage.
+"""Situation derivation for the Impl-Package dev-with-track stage.
 
 The situation table is deliberately kept outside this module.  This file only
 loads it, reads the package facts named by the table contract, and renders a
-deterministic projection.  It never writes package files and never changes the
-working tree.
+deterministic projection.  Render also best-effort writes a digest credential;
+failure to write that credential does not fail the render.
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ STATE_REL = ".impl-package/state.json"
 GATE_REL = "gate.md"
 FINDINGS_REL = "execution-findings.md"
 ACTIVE_TRAIL_NAME = "trail.jsonl"
+SITUATION_DIGEST_NAME = "situation-digest.json"
 TICKET_STATES = {"PENDING", "BLOCKED", "NEEDS-REVALIDATION", "SATISFIED", "RETIRED"}
 TERMINAL_GATE_VERDICTS = {"pass", "fail", "defer"}
 VALID_BASIS = {"cli", "prose", "observed"}
@@ -2952,6 +2953,26 @@ def _situation_digest(table: TableModel, result: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:DIGEST_LENGTH]
 
 
+def _write_situation_digest(reader: PackageReader, state: StateView, digest: str) -> None:
+    try:
+        if not state.attempt_id:
+            raise OSError("current attempt is unavailable")
+        state_path = reader.package / STATE_REL
+        state_sha256 = hashlib.sha256(state_path.read_bytes()).hexdigest()
+        credential_path = reader.package / "execution" / state.attempt_id / SITUATION_DIGEST_NAME
+        credential_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "digest": digest,
+            "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "state_sha256": state_sha256,
+        }
+        with credential_path.open("w", encoding="utf-8", newline="\n") as stream:
+            json.dump(payload, stream, ensure_ascii=False, separators=(",", ":"))
+            stream.write("\n")
+    except OSError as exc:
+        print(f"warning: could not write {SITUATION_DIGEST_NAME}: {exc}", file=sys.stderr)
+
+
 def _render_human(
     result: dict[str, Any],
     snapshot: Snapshot,
@@ -3177,6 +3198,7 @@ def _run_render(args: argparse.Namespace) -> int:
     snapshot = _build_snapshot(reader, validation_result, compaction_pressure)
     derived = _derive(table, snapshot)
     digest = _situation_digest(table, derived)
+    _write_situation_digest(reader, snapshot.state, digest)
     if args.since == digest:
         if args.json:
             print(

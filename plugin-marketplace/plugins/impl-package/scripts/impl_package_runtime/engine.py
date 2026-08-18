@@ -7,6 +7,7 @@ the legacy state shape.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -38,6 +39,8 @@ DISPOSITIONS = {"waived", "superseded"}
 TRAIL_APPEND_KINDS = frozenset({"dispatch", "escape", "fact", "worker-return"})
 TRAIL_COMMON_FIELDS = frozenset({"v", "seq", "ts", "head"})
 TRAIL_DIGEST_RE = re.compile(r"^[0-9a-fA-F]{12}$")
+SITUATION_DIGEST_NAME = "situation-digest.json"
+DISPATCH_DIGEST_GUIDANCE = "dispatch 需要当前处境的 digest：先运行 situation.py render 取 digest，再重写这条 dispatch"
 
 ATTEMPT_RE = re.compile(r"(?m)^(?:\*\*)?(?:Attempt ID|执行尝试 ID（Attempt ID）)(?:\*\*)?\s*[：:](?:\*\*)?\s*([^\s*]+)")
 COMPOSITION_RE = re.compile(r"Composition[^\n]*tickets=(true|false),\s*dag=(true|false)", re.I)
@@ -1075,6 +1078,26 @@ def _trail_text_field(event: dict[str, Any], field: str, kind: str) -> None:
         raise StateError(f"trail {kind} requires a non-empty {field}")
 
 
+def _validate_dispatch_situation_digest(package: Path, attempt: str, event: dict[str, Any]) -> None:
+    credential_path = package / EXECUTION_PATH / attempt / SITUATION_DIGEST_NAME
+    if not credential_path.is_file():
+        raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；未找到 {SITUATION_DIGEST_NAME} 凭据文件")
+    try:
+        credential = _load_json(credential_path)
+    except StateError as exc:
+        raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；未找到 {SITUATION_DIGEST_NAME} 凭据文件") from exc
+    if credential.get("digest") != event["situation_digest"]:
+        raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；digest 不匹配，凭据是 {credential.get('digest')}")
+    try:
+        state_sha256 = hashlib.sha256((package / STATE_PATH).read_bytes()).hexdigest()
+    except OSError as exc:
+        raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；无法读取当前 state.json：{exc}") from exc
+    if credential.get("state_sha256") != state_sha256:
+        raise StateError(
+            f"{DISPATCH_DIGEST_GUIDANCE}；处境已变，凭据渲染于 {credential.get('ts')} 之后 state.json 已更新"
+        )
+
+
 def _validate_trail_event(event: dict[str, Any]) -> dict[str, Any]:
     supplied_common = sorted(TRAIL_COMMON_FIELDS & event.keys())
     if supplied_common:
@@ -1100,7 +1123,9 @@ def _validate_trail_event(event: dict[str, Any]) -> dict[str, Any]:
         _trail_text_field(event, "worker", kind)
         if event.get("outcome") != "RUNNING" or event.get("returned") is not False:
             raise StateError("trail dispatch requires outcome=RUNNING and returned=false")
-        if "situation_digest" in event and (
+        if "situation_digest" not in event:
+            raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；事件缺少 situation_digest")
+        if (
             not isinstance(event["situation_digest"], str)
             or TRAIL_DIGEST_RE.fullmatch(event["situation_digest"]) is None
         ):
@@ -1121,6 +1146,8 @@ def command_trail_append(package: Path, input_text: str) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
     _assert_mutable(summary)
+    if event["kind"] == "dispatch":
+        _validate_dispatch_situation_digest(package, summary["attempt"], event)
     appended = _append_trail(package, summary["attempt"], event)
     return {
         "attempt": summary["attempt"],

@@ -30,8 +30,8 @@ def _primary_slugs(result: dict) -> list[str]:
     return [item["slug"] for item in result.get("parallel_matches", [])]
 
 
-def _render_text(package: Path, *arguments: str) -> str:
-    completed = subprocess.run(
+def _invoke_render(package: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         [sys.executable, str(CLI), "render", "--package", str(package), *arguments],
         cwd=ROOT,
         capture_output=True,
@@ -39,6 +39,49 @@ def _render_text(package: Path, *arguments: str) -> str:
         encoding="utf-8",
         check=False,
     )
+
+
+def _run_render(package: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    state_path = package / ".impl-package" / "state.json"
+    credential_path: Path | None = None
+    credential_before: bytes | None = None
+    credential_parent_existed = False
+    credential_parent_empty_before = False
+    if state_path.is_file():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            attempt_id = state.get("attempt", {}).get("id")
+            if isinstance(attempt_id, str):
+                credential_path = package / "execution" / attempt_id / "situation-digest.json"
+                credential_parent_existed = credential_path.parent.is_dir()
+                credential_parent_empty_before = credential_parent_existed and not any(
+                    credential_path.parent.iterdir()
+                )
+                if credential_path.is_file():
+                    credential_before = credential_path.read_bytes()
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            pass
+    try:
+        return _invoke_render(package, *arguments)
+    finally:
+        if credential_path is not None:
+            if credential_before is None:
+                if credential_path.is_file():
+                    credential_path.unlink()
+            else:
+                credential_path.write_bytes(credential_before)
+            if (
+                (not credential_parent_existed or credential_parent_empty_before)
+                and credential_path.parent.is_dir()
+            ):
+                try:
+                    credential_path.parent.rmdir()
+                except OSError:
+                    pass
+
+
+def _render_text(package: Path, *arguments: str) -> str:
+    completed = _run_render(package, *arguments)
     assert completed.returncode == 0, (
         f"render failed\nstdout={completed.stdout}\nstderr={completed.stderr}"
     )
@@ -48,14 +91,7 @@ def _render_text(package: Path, *arguments: str) -> str:
 @pytest.mark.parametrize("package", _fixture_dirs(), ids=lambda path: path.name)
 def test_situation_render(package: Path) -> None:
     expected = json.loads((package / "expected.json").read_text(encoding="utf-8"))
-    completed = subprocess.run(
-        [sys.executable, str(CLI), "render", "--package", str(package), "--json"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-    )
+    completed = _run_render(package, "--json")
     assert completed.returncode == 0, (
         f"{package.name}: render failed\nstdout={completed.stdout}\nstderr={completed.stderr}\n"
         f"source={expected['source']}\nscenario={expected['scenario']}"
@@ -198,6 +234,57 @@ def test_human_render_collapses_undetermined_and_supports_since() -> None:
 
     unchanged = _render_text(package, "--since", digest)
     assert unchanged == f"处境未变 (digest: {digest})"
+
+
+def test_render_writes_situation_digest_credential() -> None:
+    source = FIXTURES / "p0-evidence-unfiled"
+    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+        package = Path(temporary) / source.name
+        shutil.copytree(source, package)
+        completed = _invoke_render(package, "--json")
+        assert completed.returncode == 0, completed.stderr
+
+        state_path = package / ".impl-package/state.json"
+        attempt = json.loads(state_path.read_text(encoding="utf-8"))["attempt"]["id"]
+        credential_path = package / "execution" / attempt / "situation-digest.json"
+        credential_bytes = credential_path.read_bytes()
+        credential = json.loads(credential_bytes.decode("utf-8"))
+        rendered = json.loads(completed.stdout)
+        assert set(credential) == {"digest", "ts", "state_sha256"}
+        assert credential["digest"] == rendered["digest"]
+        assert len(credential["ts"]) > 10
+        assert credential["state_sha256"] == hashlib.sha256(state_path.read_bytes()).hexdigest()
+        assert not credential_bytes.startswith(b"\xef\xbb\xbf")
+
+
+def test_render_since_writes_situation_digest_credential() -> None:
+    source = FIXTURES / "p0-evidence-unfiled"
+    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+        package = Path(temporary) / source.name
+        shutil.copytree(source, package)
+        first = json.loads(_invoke_render(package, "--json").stdout)
+        second_run = _invoke_render(package, "--json", "--since", first["digest"])
+        assert second_run.returncode == 0, second_run.stderr
+        assert json.loads(second_run.stdout) == {"digest": first["digest"], "unchanged": True}
+
+        state = json.loads((package / ".impl-package/state.json").read_text(encoding="utf-8"))
+        credential_path = package / "execution" / state["attempt"]["id"] / "situation-digest.json"
+        credential = json.loads(credential_path.read_text(encoding="utf-8"))
+        assert credential["digest"] == first["digest"]
+
+
+def test_render_succeeds_when_situation_digest_credential_cannot_be_written() -> None:
+    source = FIXTURES / "p0-evidence-unfiled"
+    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+        package = Path(temporary) / source.name
+        shutil.copytree(source, package)
+        state = json.loads((package / ".impl-package/state.json").read_text(encoding="utf-8"))
+        credential_path = package / "execution" / state["attempt"]["id"] / "situation-digest.json"
+        credential_path.mkdir(parents=True)
+
+        completed = _invoke_render(package, "--json")
+        assert completed.returncode == 0
+        assert "warning: could not write situation-digest.json:" in completed.stderr
 
 
 def test_compaction_pressure_is_high_low_or_unknown_without_fact_channel() -> None:
