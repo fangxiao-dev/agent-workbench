@@ -26,6 +26,9 @@ reuse: <只在同一 source unit 需要不可转移 live state 时填写>
 - 上游 Owner/`readyTickets` 已明确存在并行候选时，读取 [Parallel Work Admission](references/parallel-work-admission.md)；该 reference 不负责发现候选。
 - 未填写 `reuse` 时使用 fresh invocation；context compaction 后从 canonical input 重新启动。角色相同、空闲或共享 worktree 都不是复用理由。
 - `investigate`、`implement` 可以沿用调用者选择的同一逻辑 worker；已确认 finding 只能交给 fresh `fix` invocation。复杂度只增加 reviewer gate，不自动切换 implementer。
+- investigate 默认低推理，只返回固定 6 行（Investigation / cause / blast radius / existing solution / boundary facts / unresolved facts）；禁止输出 READY|BLOCKED。
+- implement brief 只含 source_unit、成功条件、禁改路径、要改的文件列表、一条验证命令；禁止粘贴整张 Ticket / 全量 AC 到达路径。
+- reviewer 只收 caller 列出的 diff 路径 + 对应 AC ID；报告上限：verdict、P0/P1 findings、residual_gaps。禁止再读 plan/spec/contract-design 整章。
 
 ## Mode selection
 

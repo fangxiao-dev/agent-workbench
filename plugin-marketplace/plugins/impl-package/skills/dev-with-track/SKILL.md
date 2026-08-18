@@ -30,9 +30,13 @@ python <impl-package-plugin-root>/scripts/situation.py render @renderArgs
 首次调用不设置 `$previousDigest`；每次从结果读取当前 `digest` 保存到 `$previousDigest`，下一轮追加 `--since $previousDigest`。digest 命中时只返回一行“处境未变”，否则返回完整内容并带上新的 digest。需要 human 输出中的无法判定处境名单时，显式追加 `--explain-undetermined`；默认 human 输出只保留计数。
 
 1. 运行 `package validate`；跨 session 或授权绑定比较点时附 `--commit <Git commit>`。
-2. 打开根 `progress.md`，读取 current Attempt、可选合同别名、Composition、Ticket 状态、blocker、active checkpoint、next action、Gate 及 Execution Record 指针；只有旧 package 才读取 Task/DAG/Handoff 轴。
-3. 只沿当前动作读取必要 Ticket、Task、Handoff、Execution Record judgment、review 或 evidence；不要重读全部历史。
+2. 打开根 `progress.md`，读取 current Attempt、Ticket 状态、blocker、active checkpoint、next action、Gate；不要读 `state.json` 全文或 `situation.py --json` 全量。
+3. 只沿当前动作读取必要 Ticket 切片；不要重读全部历史或已 SATISFIED Ticket 的 evidenceIndex。
 4. 根据初始 bundle approval 和实际 diff确认仍在同一 package。implementation、behavior、acceptance、data/security 与 package record 更新均沿用该 approval；新 package 从 owning stage 取得新的初始 bundle approval。
+
+## Ticket 激活 preflight
+
+选择一个 PENDING Ticket 做首次 dispatch 时，若 Planned Verification 为它声明了 `Evidence Lane Contract`，主 session 调用 `/impl-package:execution-preflight` 核 URL 身份、端口 owner、库分离、cleanup owner，只输出 `READY | BLOCKED`。每个 Ticket 首次激活只执行一次，不放进每轮控制循环。子代理不得判 lane 生死。昂贵 runtime/E2E 真正运行前再核 health / session / S3。
 
 ## 主 session 控制循环
 
