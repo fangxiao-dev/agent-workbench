@@ -49,7 +49,7 @@ def test_default_command_omits_tools_keeps_always_approve(tmp_path: Path) -> Non
     executor = load_executor()
     args = executor.parse_args(["--cwd", str(tmp_path), "--prompt", "use exactly this prompt"])
 
-    assert args.stall_timeout_sec == 1200
+    assert args.stall_timeout_sec == 1800
     assert args.overall_timeout_sec is None
     assert args.no_subagents is False
     assert args.model == "grok-4.6"

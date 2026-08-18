@@ -38,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     prompt = parser.add_mutually_exclusive_group(required=True)
     prompt.add_argument("--prompt", help="task prompt")
     prompt.add_argument("--prompt-file", type=Path, help="UTF-8 task prompt file")
-    parser.add_argument("--timeout-s", type=int, default=900, help="process timeout in seconds")
+    parser.add_argument("--timeout-s", type=int, default=1800, help="process timeout in seconds")
     parser.add_argument("--executable", help="Codex executable path or command; otherwise use discovery")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Codex model")
     parser.add_argument("--config", action="append", default=[], help="repeatable Codex -c configuration")

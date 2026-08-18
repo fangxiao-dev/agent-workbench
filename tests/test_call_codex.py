@@ -40,6 +40,13 @@ def test_build_command_transparently_maps_explicit_caller_configuration(tmp_path
     assert "--role" not in executor.build_parser().format_help()
 
 
+def test_default_timeout_is_30_minutes(tmp_path: Path) -> None:
+    executor = load_executor()
+    args = executor.build_parser().parse_args(["--cwd", str(tmp_path), "--prompt", "prompt"])
+
+    assert args.timeout_s == 1800
+
+
 def test_run_returns_final_jsonl_text_and_usage(monkeypatch, tmp_path: Path) -> None:
     executor = load_executor()
     calls = []

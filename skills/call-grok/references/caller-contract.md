@@ -44,7 +44,7 @@ parse it.
 | `--no-subagents` | off | Disable Grok subagents |
 | `--worktree [NAME]` | unset | Pass through Grok worktree option |
 | `--rules` | unset | Pass through Grok rules |
-| `--stall-timeout-sec` | 1200 (max 1800) | No child stdout activity before declaring a stall |
+| `--stall-timeout-sec` | 1800 (max 1800) | No child stdout activity before declaring a stall |
 | `--overall-timeout-sec` | unset (max 1800) | Optional hard wall-clock timeout |
 | `--heartbeat-sec` | 15 | Stderr heartbeat interval |
 | `--preflight` | off | Also require auth before model execution |
@@ -109,7 +109,7 @@ a previous chat, store `session_id` from the envelope and pass it back as
 `--resume <session-id>`. The wrapper does not remember the last id. `session_id`
 is also returned on incomplete statuses when the child reported one.
 
-The no-stream stall window defaults to 1200 seconds (20 minutes); no hard
+The no-stream stall window defaults to 1800 seconds (30 minutes); no hard
 overall timeout is applied unless the caller supplies one. Grok subagents are
 enabled unless the caller passes `--no-subagents`. The runner rejects explicit
 timeouts above 1800 seconds (30 minutes). `--max-run` is a Grok turn limit, not

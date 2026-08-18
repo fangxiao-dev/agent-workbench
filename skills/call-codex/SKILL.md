@@ -1,6 +1,6 @@
 ---
 name: call-codex
-description: Run one bounded, non-interactive Codex CLI task for a caller that supplies its own prompt and model configuration; by default dispatch it with the recommended 900-second timeout as one uninterrupted execution window.
+description: Run one bounded, non-interactive Codex CLI task for a caller that supplies its own prompt and model configuration; by default dispatch it with the recommended 30-minute (1800-second) timeout as one uninterrupted execution window.
 ---
 
 # call-codex
@@ -17,7 +17,7 @@ python "<repo>\skills\call-codex\scripts\call_codex.py" `
   --cwd "<target-repo>" `
   --executable "C:\Users\<user>\AppData\Local\OpenAI\Codex\bin\codex.exe" `
   --prompt-file "<prompt-file>" `
-  --timeout-s 900 `
+  --timeout-s 1800 `
   --model "gpt-5.6-luna" `
   --config 'model_reasoning_effort="max"' `
   --config 'service_tier="fast"' `
@@ -46,7 +46,7 @@ $wrapperArgs = @(
   $wrapper,
   '--cwd', $targetRepo,
   '--prompt-file', $promptFile,
-  '--timeout-s', '900'
+  '--timeout-s', '1800'
 )
 if ($wrapperArgs[0] -ne $wrapper) { throw 'Wrapper path must be the first Python argument' }
 

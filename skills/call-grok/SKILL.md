@@ -15,7 +15,7 @@ Use `scripts/grok_task.py` when a skill needs one bounded Grok CLI invocation.
 The caller owns the task prompt, tool policy, model configuration overrides, and
 interpretation of the returned text. When the caller does not override them, the
 wrapper uses `grok-4.6` with `effort=high`. This skill provides no task presets,
-roles, or prompt templates. Runtime defaults are `grok-4.6`/`high`, a 20-minute
+roles, or prompt templates. Runtime defaults are `grok-4.6`/`high`, a 30-minute
 no-stream stall window with no hard overall timeout, Grok subagents enabled, and
 `--always-approve` on so headless calls do not block on permission prompts. Pass `--no-subagents` or
 `--no-always-approve` only when the caller needs those restrictions.
