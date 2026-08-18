@@ -190,7 +190,7 @@ recovery checkpoint / judgment
 gate <verdict>
 ```
 
-**没有其它载体的声明动作写 `kind=fact` 或对应事件：**
+**没有其它载体的声明动作，主入口是 `trail append`：** 将 `dispatch`、`escape`、`fact` 或 `worker-return` 的事件 JSON 从 stdin 交给 `python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> trail append`；CLI 自动补全 `v`、`seq`、`ts`、`head`，调用方不要传入这些字段，并校验 `kind` 与 fact key。老 package 或异常补写仍可按本 schema 手写 `kind=fact` 或对应事件；checkpoint、handoff、judgment 和 Ticket 状态转换仍由各自 CLI 追加：
 
 ```text
 dispatch 的发起与返回

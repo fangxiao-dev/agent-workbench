@@ -457,6 +457,8 @@ Attempt ID：initial
 
 ### 4.3 trail.jsonl：按统一 event schema 写入
 
+新增 `dispatch`、`escape`、`fact` 和 `worker-return` 的主入口是 `trail append`：将事件 JSON 从 stdin 交给 `python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> trail append`；CLI 自动补全 `v`、`seq`、`ts`、`head`，调用方不要传入这些字段，并校验 `kind` 与 fact key。checkpoint、handoff、judgment 和 Ticket 状态转换仍由各自 CLI 追加；老 package 或异常补写仍可按本节 schema 手写轨迹。
+
 #### 最小完整 trail 示例
 
 以下三行分别建立规范 fact、可消费的 result outcome 和一个仍在运行的 dispatch：
