@@ -59,6 +59,11 @@ def pressure_report(compactions: list[str]) -> dict[str, object]:
         }
 
     if not intervals:
+        if count > 1:
+            return {
+                **_empty_report("matched rollout has invalid compaction timestamps"),
+                "compactions": count,
+            }
         return {
             **_empty_report("matched rollout has only one compaction; no interval can be measured"),
             "compactions": count,

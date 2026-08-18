@@ -40,16 +40,43 @@ def resolve(target: str, sessions_root: Path) -> Path:
     return matches[-1]
 
 
-def minutes_between(a: str, b: str) -> float:
-    fmt = "%H:%M:%S"
-    return (datetime.strptime(b, fmt) - datetime.strptime(a, fmt)).total_seconds() / 60
+def _parse_timestamp(value: str) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    if value.endswith("Z"):
+        value = f"{value[:-1]}+00:00"
+    try:
+        return datetime.fromisoformat(value)
+    except (OverflowError, TypeError, ValueError):
+        return None
+
+
+def minutes_between(a: str, b: str) -> float | None:
+    start = _parse_timestamp(a)
+    end = _parse_timestamp(b)
+    if start is None or end is None:
+        return None
+    try:
+        return (end - start).total_seconds() / 60
+    except (OverflowError, TypeError, ValueError):
+        return None
 
 
 def compaction_intervals(compactions: list[str]) -> list[float]:
-    return [
-        minutes_between(compactions[index - 1], compactions[index])
-        for index in range(1, len(compactions))
-    ]
+    intervals: list[float] = []
+    for index in range(1, len(compactions)):
+        interval = minutes_between(compactions[index - 1], compactions[index])
+        if interval is None:
+            return []
+        intervals.append(interval)
+    return intervals
+
+
+def _display_clock(timestamp: str) -> str:
+    return timestamp[11:19] if len(timestamp) >= 19 else timestamp
 
 
 def _session_meta(record: dict[str, object]) -> dict[str, object]:
@@ -105,12 +132,12 @@ def read_rollout(path: Path) -> RolloutData:
             payload = record.get("payload") or {}
             if not isinstance(payload, dict):
                 payload = {}
-            clock = str(record.get("timestamp", ""))[11:19]
+            timestamp = str(record.get("timestamp", ""))
 
             if kind == "session_meta" and not meta:
                 meta = _session_meta(record)
             elif kind == "compacted":
-                compactions.append(clock)
+                compactions.append(timestamp)
             elif kind == "event_msg" and payload.get("type") == "token_count":
                 info = payload.get("info") or {}
                 if not isinstance(info, dict):
@@ -118,7 +145,7 @@ def read_rollout(path: Path) -> RolloutData:
                 window = info.get("model_context_window") or window
                 totals = info.get("total_token_usage") or {}
                 if isinstance(totals, dict) and totals.get("input_tokens"):
-                    usage.append((clock, totals["input_tokens"], totals.get("output_tokens") or 0))
+                    usage.append((timestamp, totals["input_tokens"], totals.get("output_tokens") or 0))
             elif kind == "response_item":
                 if payload.get("type") == "function_call":
                     calls[str(payload.get("name"))] += 1
@@ -131,7 +158,7 @@ def read_rollout(path: Path) -> RolloutData:
                         if isinstance(part, dict)
                     ).strip()
                     if text:
-                        assistant.append((clock, text))
+                        assistant.append((timestamp, text))
 
     return RolloutData(path, meta, compactions, usage, calls, assistant, window)
 
@@ -157,7 +184,8 @@ def main() -> None:
 
     if rollout.compactions:
         gaps = [f"{gap:.0f}m" for gap in compaction_intervals(rollout.compactions)]
-        print(f"compact   {len(rollout.compactions)} 次  at {' '.join(rollout.compactions)}")
+        clocks = [_display_clock(timestamp) for timestamp in rollout.compactions]
+        print(f"compact   {len(rollout.compactions)} 次  at {' '.join(clocks)}")
         if gaps:
             print(f"          间隔 {' → '.join(gaps)}   （缩短 = 工作集在长大）")
     else:
@@ -165,20 +193,20 @@ def main() -> None:
 
     if rollout.usage:
         first, last = rollout.usage[0], rollout.usage[-1]
-        span = minutes_between(first[0], last[0]) or 1
-        print(
-            f"tokens    累计输入 {last[1]/1e6:.1f}M  输出 {last[2]/1e3:.0f}K"
-            f"  ≈{(last[1]-first[1])/span/1e3:.0f}K 输入/分钟"
-        )
+        span = minutes_between(first[0], last[0])
+        tokens = f"tokens    累计输入 {last[1]/1e6:.1f}M  输出 {last[2]/1e3:.0f}K"
+        if span:
+            tokens += f"  ≈{(last[1]-first[1])/span/1e3:.0f}K 输入/分钟"
+        print(tokens)
 
     if rollout.calls:
         mix = "  ".join(f"{name}×{count}" for name, count in rollout.calls.most_common(8))
         print(f"calls     {sum(rollout.calls.values())} 次   {mix}")
 
     print(f"turns     assistant {len(rollout.assistant)} 次")
-    for clock, text in rollout.assistant[-max(0, args.tail) :]:
+    for timestamp, text in rollout.assistant[-max(0, args.tail) :]:
         body = " ".join(text.split())
-        print(f"\n[{clock}] {body[: args.chars]}")
+        print(f"\n[{_display_clock(timestamp)}] {body[: args.chars]}")
 
 
 if __name__ == "__main__":
