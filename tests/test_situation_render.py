@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -231,6 +233,73 @@ def test_compaction_pressure_is_high_low_or_unknown_without_fact_channel() -> No
     low_value = low["when_values"]["attempt.compaction_pressure_high"][0]
     assert low_value["status"] == "known"
     assert low_value["value"] is False
+
+
+def _seam_context(
+    diff_names: list[str] | None,
+    *,
+    resolved_revision: str | None = "resolved-acceptance",
+) -> situation.FactContext:
+    reader = SimpleNamespace(
+        package_rel=None,
+        resolve_commit=lambda revision: resolved_revision,
+        diff_names=lambda base: diff_names,
+    )
+    state = situation.StateView(
+        raw={
+            "tickets": {
+                "TKT-01": {
+                    "state": "SATISFIED",
+                    "acceptance": {"revision": "accepted"},
+                }
+            }
+        },
+        valid=True,
+        error=None,
+        attempt_id="fixture-attempt",
+        ticket_ids=["TKT-01"],
+    )
+    snapshot = situation.Snapshot(
+        package=Path("."),
+        reader=reader,
+        state=state,
+        tickets={},
+        trail=situation.TrailView(True, []),
+        gate=situation.GateView(False, None, None),
+        findings=situation.FindingsView(False, "", []),
+        intake=situation.IntakeView(False, None),
+        validation_result=None,
+        compaction_pressure=None,
+        head="current-head",
+    )
+    return situation.FactContext(snapshot, "ticket", "TKT-01")
+
+
+def test_git_accepted_seam_changed_is_false_for_docs_only_diff() -> None:
+    context = _seam_context(["docs/usage.txt", "notes.md"])
+
+    fact = situation._when_git_accepted_seam_changed(context)
+
+    assert fact.known is True
+    assert fact.value is False
+
+
+def test_git_accepted_seam_changed_is_true_for_source_diff() -> None:
+    context = _seam_context(["docs/usage.txt", "src/engine.py"])
+
+    fact = situation._when_git_accepted_seam_changed(context)
+
+    assert fact.known is True
+    assert fact.value is True
+
+
+def test_git_accepted_seam_changed_is_unknown_when_acceptance_revision_cannot_resolve() -> None:
+    context = _seam_context(["src/engine.py"], resolved_revision=None)
+
+    fact = situation._when_git_accepted_seam_changed(context)
+
+    assert fact.known is False
+    assert "acceptance revision" in (fact.reason or "")
 
 
 def test_json_render_exposes_digest_and_short_circuits_since() -> None:

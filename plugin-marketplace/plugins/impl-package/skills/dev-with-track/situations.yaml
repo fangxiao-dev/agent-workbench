@@ -397,6 +397,7 @@ situations:
     when:
       git.acceptance_revision_diverged: true
       git.head_advanced_since_last_trail: true
+      git.accepted_seam_changed: true
     judgment: true
     ask: "revision 分叉后应重新取证，还是确认原结论仍成立"
     actions:

@@ -76,6 +76,7 @@ FACT_KEYS = frozenset(
         "ticket.post_fix_regression_pending",
         "evidence.sources_uniquely_decide",
         "git.comparison_head_fixed",
+        "git.accepted_seam_changed",
         "trail.anchor_mismatch",
         "trail.bookkeeper_partial_write",
         "trail.checkpoint_projection_race",
@@ -2100,21 +2101,60 @@ def _when_evidence_new_claim_conflict(context: FactContext) -> Fact:
     return _when_evidence_contradictory_unresolved(context)
 
 
-def _when_git_acceptance_revision_diverged(context: FactContext) -> Fact:
+def _resolved_satisfied_acceptance_revision(context: FactContext) -> Fact:
     if context.kind != "ticket":
         return context.unknown("该 key 需要 ticket subject")
     row = context.state_ticket()
     if not isinstance(row, dict) or row.get("state") != "SATISFIED":
-        return _fact_value(False)
+        return _fact_value(None)
     acceptance = row.get("acceptance")
     if not isinstance(acceptance, dict) or not isinstance(acceptance.get("revision"), str):
         return context.unknown("SATISFIED Ticket 缺少 acceptance revision")
-    if context.snapshot.head is None:
-        return context.unknown("Git HEAD 无法读取")
     resolved = context.snapshot.reader.resolve_commit(acceptance["revision"])
     if resolved is None:
         return context.unknown("acceptance revision 不是当前 Git 可解析 commit")
-    return _fact_value(resolved != context.snapshot.head)
+    return _fact_value(resolved)
+
+
+def _when_git_acceptance_revision_diverged(context: FactContext) -> Fact:
+    if context.snapshot.head is None:
+        return context.unknown("Git HEAD 无法读取")
+    acceptance_revision = _resolved_satisfied_acceptance_revision(context)
+    if not acceptance_revision.known:
+        return acceptance_revision
+    if acceptance_revision.value is None:
+        return _fact_value(False)
+    return _fact_value(acceptance_revision.value != context.snapshot.head)
+
+
+def _when_git_accepted_seam_changed(context: FactContext) -> Fact:
+    explicit = context._explicit_bool("git.accepted_seam_changed")
+    if explicit is not None:
+        return explicit
+    if context.snapshot.head is None:
+        return context.unknown("Git HEAD 无法读取")
+    acceptance_revision = _resolved_satisfied_acceptance_revision(context)
+    if not acceptance_revision.known:
+        return acceptance_revision
+    if acceptance_revision.value is None:
+        return _fact_value(False)
+    names = context.snapshot.reader.diff_names(acceptance_revision.value)
+    if names is None:
+        return context.unknown("无法读取 acceptance revision 到当前 HEAD 的 Git diff")
+    if not names:
+        return context.unknown("acceptance revision 到当前 HEAD 的 Git diff 为空，无法判定验收 seam 是否变化")
+    package_prefix = context.snapshot.reader.package_rel.as_posix() if context.snapshot.reader.package_rel else ""
+    for name in names:
+        relative = name.replace("\\", "/")
+        if package_prefix and relative.startswith(package_prefix + "/"):
+            relative = relative[len(package_prefix) + 1 :]
+        path = PurePosixPath(relative)
+        if relative == "docs" or relative.startswith("docs/"):
+            continue
+        if path.suffix.lower() == ".md":
+            continue
+        return _fact_value(True)
+    return _fact_value(False)
 
 
 def _when_git_head_advanced_since_last_trail(context: FactContext) -> Fact:
@@ -2431,6 +2471,7 @@ WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "gate.present": _when_gate_present,
     "gate.verdict": _when_gate_verdict,
     "git.comparison_revision_matches_acceptance": _when_git_comparison_revision_matches_acceptance,
+    "git.accepted_seam_changed": _when_git_accepted_seam_changed,
     "git.comparison_head_fixed": _when_git_comparison_head_fixed,
     "git.contract_changed_since_last_trail": _when_git_contract_changed_since_last_trail,
     "attempt.handoff_or_long_task": _when_attempt_handoff_or_long_task,
