@@ -88,7 +88,10 @@ class ThreeTrackContractTests(unittest.TestCase):
         for reference in references:
             self.assertTrue((DO_REVIEW_DIR / reference).is_file())
         self.assertNotIn("review_scope_preflight.py", skill)
-        self.assertRegex(skill, r"review_ledger\.py create .*--repo-root .*--base .*--head")
+        # ReviewRun creation is a mechanism pointer (command details live in the
+        # orchestrator / review_ledger.py), not inline text anymore.
+        self.assertIn("review_ledger.py", skill)
+        self.assertTrue((DO_REVIEW_DIR / "scripts" / "review_ledger.py").is_file())
 
     def test_leaf_brief_enforces_same_round_isolation_and_immutable_contract_reads(self) -> None:
         briefs = BRIEFS_PATH.read_text(encoding="utf-8")
@@ -129,10 +132,12 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertRegex(phases, r"(?s)`finding-closure`.*one fresh independent `reviewer` leaf.*named findings")
         self.assertRegex(phases, r"(?s)`terminal-final`.*final implementation `HEAD`.*complete applicable topology")
         self.assertIn("cannot stand in for the terminal-final review", phases)
-        self.assertRegex(skill, r"(?s)`finding-closure` has one fresh independent `reviewer` invocation.*worker Skill owns its model")
-        self.assertIn("$grok-worker --no-subagents", skill)
-        self.assertIn("one fresh fallback to the applicable current default reviewer", skill)
-        self.assertIn("current host defaults for the caller-supplied target class", skill)
+        # Slim skill keeps the closure≠terminal judgment; host-specific worker
+        # names ($grok-worker) moved to providers/presets.
+        self.assertIn("Closure ≠ terminal", skill)
+        self.assertIn("finding-closure", skill)
+        self.assertIn("terminal-final", skill)
+        self.assertNotIn("$grok-worker", skill)
 
     def test_finding_closure_uses_one_independent_reviewer_without_track_split(self) -> None:
         skill = SKILL_PATH.read_text(encoding="utf-8")
@@ -142,7 +147,10 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertIn("one fresh independent `reviewer` leaf", closure)
         self.assertIn("do not split the closure into source, standards, spec, or Safety tracks", closure)
         self.assertIn("one fresh independent reviewer for the whole named-finding set", briefs)
-        self.assertIn("finding-closure` has one fresh independent `reviewer` invocation", skill)
+        # Slim skill keeps the single-reviewer closure judgment.
+        self.assertIn("finding-closure", skill)
+        self.assertIn("fresh independent reviewer", skill)
+        self.assertIn("named findings", skill)
 
     def test_accepted_track_c_finding_gets_one_scoped_source_recheck(self) -> None:
         skill = SKILL_PATH.read_text(encoding="utf-8")
@@ -150,12 +158,14 @@ class ThreeTrackContractTests(unittest.TestCase):
         briefs = BRIEFS_PATH.read_text(encoding="utf-8")
         templates = TEMPLATES_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("accepts and classifies a finding as Track C / Spec fidelity", skill)
-        self.assertIn("regardless of which leaf first surfaced it", skill)
-        self.assertIn("blocks the implementation handoff", skill)
-        self.assertIn("do not dispatch a second recheck", skill)
-        self.assertIn("untouched legacy package is not by itself a contract gap", skill)
-        self.assertIn("not a new review phase or lifecycle state", skill)
+        # Slim skill keeps the Track C recheck judgment (wording compressed).
+        self.assertIn("Track C source recheck", skill)
+        self.assertIn("accepted", skill)
+        self.assertIn("Spec fidelity", skill)
+        self.assertIn("fresh independent reviewer", skill)
+        self.assertIn("blocks the handoff", skill)
+        self.assertIn("never dispatch a second check", skill)
+        self.assertIn("not by itself a gap", skill)
         self.assertIn("Accepted Track C Source Recheck Brief", briefs)
         self.assertIn("do not inspect the implementation broadly", briefs.lower())
         self.assertIn("absence alone is not a gap", briefs)

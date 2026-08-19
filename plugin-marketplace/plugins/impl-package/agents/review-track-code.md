@@ -9,6 +9,8 @@ tools:
   - Grep
   - Glob
   - Bash
+permission_mode: plan
+agents_md: true
 skills:
   - review-code
 ---

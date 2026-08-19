@@ -17,20 +17,26 @@ def test_unified_skill_owns_strategy_and_worker_lifecycle() -> None:
     )
 
     assert len(skill.splitlines()) <= 180
-    for field in ("mode:", "worker:", "review:"):
-        assert field in skill
-    strategy = skill.split("```yaml", 1)[1].split("```", 1)[0]
-    assert "schedule:" not in strategy
-    assert "route" not in skill.lower()
-    assert "默认是 `$grok-worker`" in skill
-    assert "同一逻辑 worker" in skill
-    assert "review_scope: none | checkpoint | closure" in skill
-    assert "fresh invocation" in skill
-    assert "context compaction" in skill
-    assert "Outcome: DONE | BLOCKED | INCOMPLETE" in skill
-    assert "review_state: PENDING_REVIEW" in skill
-    assert "一次 fresh `@luna-worker` fallback" in skill
-    assert "业务 `BLOCKED` 不 fallback" in skill
+    # Slim form keeps the mode/review/failure judgment heuristics (no strategy
+    # yaml, no host-specific worker names — those moved to providers/presets).
+    for marker in (
+        "investigate",
+        "EVIDENCE_SUFFICIENT",
+        "implement",
+        "fix",
+        "review",
+        "fresh invocation",
+        "不重新裁决",
+        "checkpoint|closure",
+        "共享可变运行资源",
+        "BLOCKED",
+        "fallback",
+        "主 session 始终负责",
+    ):
+        assert marker in skill
+    assert "$grok-worker" not in skill
+    assert "@luna-worker" not in skill
+    assert "```yaml" not in skill
     assert "skills/call-grok/SKILL.md" in resolver
     assert "不传 model/effort" in resolver
 
@@ -52,13 +58,12 @@ def test_scheduling_consumers_reference_only_the_unified_entry() -> None:
         read("AGENTS.md"),
         read("plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md"),
         read("plugin-marketplace/plugins/impl-package/skills/dev-with-track/SKILL.md"),
-        read("plugin-marketplace/plugins/impl-package/skills/execution-preflight/SKILL.md"),
-        read("plugin-marketplace/plugins/impl-package/skills/execution-preflight/references/authorization-contract.md"),
         read("skills/handoff/references/task-execution.md"),
         read("skills/handoff-to-new-session/SKILL.md"),
     )
     for text in callers:
-        assert "impl-package:subagent-driven-development" in text
+        # Cross-host routing form or the DSH native command form.
+        assert "impl-package:subagent-driven-development" in text or "impl-subagent-driven-development" in text
         assert "impl-package:investigate-before-implement" not in text
         assert "impl-package:dispatch-bounded-task" not in text
 
@@ -68,7 +73,9 @@ def test_parallel_admission_remains_a_conditional_reference() -> None:
     admission = read(
         "plugin-marketplace/plugins/impl-package/skills/subagent-driven-development/references/parallel-work-admission.md"
     )
-    assert "Parallel Work Admission" in skill
+    # The parallel-work judgment core stays in the slim skill; the file remains
+    # as the conditional reference for multiple-ready candidates.
+    assert "共享可变运行资源" in skill
     assert "ownership" in admission
     assert "共享可变运行资源" in admission
     assert "worker" not in admission.lower() or "不选择 worker" in admission

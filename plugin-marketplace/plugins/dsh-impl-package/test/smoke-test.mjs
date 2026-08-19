@@ -10,6 +10,8 @@ const require = createRequire(import.meta.url)
 import { resolvePackageDir, resolveImplScripts, composeSituationMessage, countOf, buildSituationMessage, loadProtocols, resolveProtocol } from '../presets/impl-package/situation-hook.mjs'
 import { buildTicketArgv } from '../presets/impl-package/impl-tools.mjs'
 import { COMMANDS, buildRouteMessage, apply as applyCommands } from '../presets/impl-package/commands.mjs'
+import { readLines } from '../presets/review-code/reviewer-fs.mjs'
+import { aggregateVerdicts, resolveTopology, buildBrief } from '../presets/impl-package/do-review-orchestrator.mjs'
 import { validateAgentCordis, syncPresetTrees, resolveDshHome } from '../lib/index.mjs'
 
 import { existsSync, mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs'
@@ -128,6 +130,7 @@ try {
   mkdirSync(target, { recursive: true })
   const result = syncPresetTrees(join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/presets'), target)
   check('preset sync copied impl-package', result.synced.includes('impl-package'))
+  check('preset sync copied 4 reviewer leaves', ['review-code', 'review-code-by-standards', 'review-code-by-spec', 'safety-review'].every((id) => result.synced.includes(id)))
   check('synced agent.cordis.yml exists', existsSync(join(target, 'impl-package/agent.cordis.yml')))
   check('synced hook exists', existsSync(join(target, 'impl-package/situation-hook.mjs')))
   check('synced tools exist', existsSync(join(target, 'impl-package/impl-tools.mjs')))
@@ -137,6 +140,49 @@ try {
   rmSync(tmp, { recursive: true, force: true })
 }
 check('resolveDshHome default', resolveDshHome({}, 'C:/Users/test').endsWith('.dsh'))
+
+console.log('== reviewer presets ==')
+const reviewerIds = ['review-code', 'review-code-by-standards', 'review-code-by-spec', 'safety-review']
+for (const id of reviewerIds) {
+  const dir = join(workbench, `plugin-marketplace/plugins/dsh-impl-package/presets/${id}`)
+  const doc = readFileSync(join(dir, 'agent.cordis.yml'), 'utf-8')
+  check(`${id}: agent.cordis.yml valid`, validateAgentCordis(doc).length === 0, validateAgentCordis(doc).join('; '))
+  check(`${id}: read-only tools (reviewer-fs/git-readonly/fs-search/skill, no write/bash/subagent)`,
+    doc.includes('./reviewer-fs.mjs') && doc.includes('./git-readonly.mjs')
+    && !/\bwrite\b/.test(doc.replace(/#.*$/gm, '').replace(/--.*$/gm, ''))
+    && !doc.includes('tool-bash') && !doc.includes('tool-pwsh') && !doc.includes('tool-subagent'))
+  check(`${id}: has preset.yml`, existsSync(join(dir, 'preset.yml')))
+  check(`${id}: has reviewer-fs.mjs`, existsSync(join(dir, 'reviewer-fs.mjs')))
+  check(`${id}: has git-readonly.mjs`, existsSync(join(dir, 'git-readonly.mjs')))
+}
+const lines = await readLines(join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/test/smoke-test.mjs'), 1, 3)
+check('reviewer-fs readLines renders line numbers', lines.lines.length === 3 && lines.lines[0].startsWith('1: '))
+const paged = await readLines(join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/test/smoke-test.mjs'), 2, 1)
+check('reviewer-fs readLines offset/limit', paged.lines.length === 1 && paged.lines[0].startsWith('2: '))
+
+console.log('== orchestrator ==')
+const passTracks = [
+  { label: 'Track A', verdict: 'PASS', required: true },
+  { label: 'Track B', verdict: 'PASS', required: true },
+  { label: 'Track C', verdict: 'PASS', required: true },
+]
+check('aggregate: all PASS → PASS', aggregateVerdicts({ tracks: passTracks }).overall === 'PASS')
+check('aggregate: any FAIL → FAIL', aggregateVerdicts({ tracks: [{ label: 'A', verdict: 'FAIL', required: true }, { label: 'B', verdict: 'PASS', required: true }] }).overall === 'FAIL')
+check('aggregate: any UNCERTAIN → UNCERTAIN', aggregateVerdicts({ tracks: [{ label: 'A', verdict: 'UNCERTAIN', required: true }, { label: 'B', verdict: 'PASS', required: true }] }).overall === 'UNCERTAIN')
+check('aggregate: missing verdict → INCOMPLETE', aggregateVerdicts({ tracks: [{ label: 'A', verdict: 'PASS' }, { label: 'B', verdict: undefined }] }).overall === 'INCOMPLETE')
+check('aggregate: terminal Safety omitted → INCOMPLETE', aggregateVerdicts({ tracks: passTracks, safety: { applicable: true, selected: false }, phase: 'terminal-final' }).overall === 'INCOMPLETE')
+check('aggregate: non-terminal Safety omitted → PASS', aggregateVerdicts({ tracks: passTracks, safety: { applicable: true, selected: false }, phase: 'initial' }).overall === 'PASS')
+const registry = JSON.parse(readFileSync(join(workbench, 'plugin-marketplace/plugins/impl-package/skills/do-review/references/reviewer-registry.json'), 'utf-8'))
+const defaultTopology = resolveTopology(registry, { phase: 'initial', safety: { applicable: false } })
+check('topology: initial default = 3 tracks', defaultTopology.length === 3 && defaultTopology.map((t) => t.skill).join(',') === 'review-code,review-code-by-standards,review-code-by-spec')
+const safetyTopology = resolveTopology(registry, { phase: 'terminal-final', safety: { applicable: true } })
+check('topology: safety appended on terminal-final', safetyTopology.length === 4 && safetyTopology[3].skill === 'safety-review')
+const closureTopology = resolveTopology(registry, { phase: 'finding-closure' })
+check('topology: closure = single reviewer', closureTopology.length === 1)
+const brief = buildBrief({ reviewRun: { target: 'x', baseSha: 'a', headSha: 'b', mode: 'N rounds', phase: 'initial', round: 1 }, phase: 'initial', round: 1 })
+check('brief: common block assembled', brief.includes('Review target:') && brief.includes('Resolved base SHA: a'))
+const closureBrief = buildBrief({ reviewRun: { phase: 'finding-closure' }, phase: 'finding-closure', round: 1 })
+check('brief: closure brief appended', closureBrief.includes('closure verification only'))
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURES`)
 process.exit(failures === 0 ? 0 : 1)

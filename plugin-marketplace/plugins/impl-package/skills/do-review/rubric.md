@@ -1,6 +1,6 @@
 ---
 target: plugin-marketplace/plugins/impl-package/skills/do-review
-updated: 2026-08-14
+updated: 2026-08-19
 ---
 
 ## 原则
@@ -15,6 +15,8 @@ updated: 2026-08-14
 - [已确认] 高风险条件自动追加 Safety；显式 reviewer list 保持精确，但必须记录遗漏的适用 Safety 风险。（证据: R5）
 - [已确认] 中间 finding closure 采用保守增量复核；terminal final 必须在最终实现 `HEAD` 运行完整适用 topology。（证据: R5）
 - [已确认] ReviewRun 原子创建固定 base/head、拒绝空 three-dot diff，并从 resolved head 解析 UTF-8 Git blob 合同来源；失败不产生 ledger。（证据: R6）
+- [已确认] 创建 ReviewRun 前必须先把审查单元本地 commit，使 `HEAD` 成为 comparison head；这是 `do-review` 的前置步骤，不把该规则写进通用 `git-commit` skill。（证据: R8）
+- [已确认] 每个 selected track 必须使用 matching leaf subagent；主会话审查或 generic subagent 不是替代。（证据: R8）
 - [已确认] reviewer 只通过 `git show <resolved-head>:<path>` 读取合同，ReviewRun 的 object ID 与 SHA-256 是唯一 provenance，不再读取工作树或二次 hash。（证据: R6）
 - [已确认] accepted Track C / Spec fidelity finding 在交给 fix 前做一次 finding-scoped 独立 source recheck；按 parent 语义归类触发，不依赖最先报告它的 leaf，也不新增 review phase 或 runtime state。（证据: R7）
 
@@ -41,3 +43,7 @@ updated: 2026-08-14
 ### R7 · 2026-08-14
 - 采纳「accepted Track C 后的一次性源头复审」：用户确认只在 Spec review finding 被 parent 接受并归类后触发；不把普通 finding、candidate 或初始 Spec Gate 扩成额外 review。
 - 采纳「少状态」：source recheck 留在当前 ReviewRun 的 finding 记录，不新增 phase、Ticket/Attempt 状态或 closure 替代物。
+
+### R8 · 2026-08-19
+- 采纳「commit 是 do-review 前置步骤」：用户确认把 pin `HEAD` 的本地 commit 收进 `do-review` Gate，不写进通用 `git-commit` skill，也不把该 skill 收进 `do-review`。
+- 采纳「必须使用 leaf subagent」：每个 selected track 派 matching leaf agent；不可用时停在 ReviewRun 创建前询问，不得自行降级。

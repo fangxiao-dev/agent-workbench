@@ -20,6 +20,7 @@
   "attempt.readiness.all-edges-held": "依赖边仍被持有：不能 dispatch；先确认 Ticket dependency 是否释放（release 边只在 Gate pass 前复核）。",
   "attempt.readiness.multiple-ready-tickets": "多个 ready Ticket：默认串行；确为并行候选时按 parallel-work-admission 决定，不擅自放宽。",
   "ticket.readiness.blocker-maybe-resolved": "blocker 可能已解除：先验证解除事实，再决定是否需要 revalidation。",
+  "ticket.readiness.evidence-lane-preflight": "首次派发声明 Evidence Lane Contract 的 Ticket：主 session 核四项 lane（target 唯一、端口 owner、库分离、cleanup owner）只输出 READY|BLOCKED，每 Ticket 首次激活一次；子代理不得判 lane 生死；昂贵 runtime/E2E 前再核 health/session/S3。",
   "attempt.readiness.integration-carrier-unavailable": "integration carrier 不可用：不 claim 集成完成；记录 gap，不伪造证据。",
   "finding.fix.worker-envelope-invalid": "worker envelope 无效：不采信；按 INCOMPLETE 处理；仅默认 worker 允许一次 fresh fallback（进程已清理、diff 可归因）。",
   "ticket.implement.worker-incomplete-first": "worker 首次 INCOMPLETE：确认进程清理与 diff 可归因后，用同一 canonical brief 做一次 fresh 重试。",

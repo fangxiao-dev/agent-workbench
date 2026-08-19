@@ -1,0 +1,3 @@
+name: review-code-by-standards leaf（Track B）
+description: do-review 的 Track B 只读 reviewer leaf：加载 review-code-by-standards skill（仓库规范 + Fowler baseline + codebase-design 维度），返回 verdict/coverage/findings 紧凑结构化索引；无写工具、无派发工具。
+order: 7

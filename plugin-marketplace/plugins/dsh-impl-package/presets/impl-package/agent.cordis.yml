@@ -73,6 +73,15 @@
 - id: impl-commands
   name: ./commands.mjs
 
+# ── impl-package: do-review mechanical core ─────────────────────────────────
+
+# Registers `impl_review_aggregate` (fail-closed aggregation) and provides
+# buildBrief/aggregateVerdicts/renderReport/resolveTopology pure functions for
+# the review orchestrator. Judgment (Safety admission, finding classification)
+# stays with the main session.
+- id: do-review-orchestrator
+  name: ./do-review-orchestrator.mjs
+
 # ── shell ───────────────────────────────────────────────────────────────────
 
 - id: tool-bash
@@ -100,8 +109,18 @@
 
 # ── skills ──────────────────────────────────────────────────────────────────
 
+# The skill REGISTRY lives in the host composition and is layered per scope:
+# these rows register into THIS preset's layer of it, so they need no realm.
+# `skill-filesystem` contributes local-root discovery for agents on this preset.
+# customSkillDirs registers the Impl-Package plugin skills (19 `<name>/SKILL.md`
+# bundles) into the catalog so `tool-skill` loads them on demand — the slim
+# SKILLs are only read when a stage is actually entered. Path is
+# machine-specific; adjust if the workbench moves.
 - id: skill-filesystem
   name: '@deepseek-ai/dsh-skill-filesystem'
+  config:
+    customSkillDirs:
+      - 'D:/CodeSpace/agent-workbench/plugin-marketplace/plugins/impl-package/skills'
 
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'

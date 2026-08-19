@@ -6,18 +6,43 @@
 - 本插件只做三件事：**处境注入（agent/pre-step hook）**、**typed CLI 工具**、**原生 subagent 派发（Codex / Grok-ACP）**；
 - DSH session 只记执行轨迹，不成为 package 事实源（不双写）。
 
+## SKILL 降载（2026-08 完成）
+
+19 个 SKILL 主文件（~860 行）已压缩为 **14 个判断启发式文件（231 行，-73%）**，references（~1,840 行）从"默认读"改"按需读"。逐文件行数见 [baseline-skill-sizes.md](baseline-skill-sizes.md)。降载判据：**流程题（可确定执行）→ 机制；判断题（需要模型判断）→ SKILL 启发式**。
+
+| 降载去向 | 承接 |
+| --- | --- |
+| 每轮 validate→render→digest | pre-step 处境注入（protocols.json 60 slug，含协议片段） |
+| CLI 拼装 / JSON payload | 9 个 typed tools（impl_*） |
+| 阶段路由表 | 18 个原生命令（impl-*，0 token） |
+| worker 派发 / 宿主名 | 原生 subagent（subagent_codex / subagent_grok） |
+| review topology / brief / 聚合 | do-review-orchestrator（resolveTopology / buildBrief / aggregateVerdicts / renderReport）+ `impl_review_aggregate` 工具 |
+| reviewer leaf 只读 | 4 个只读 reviewer presets（review-code / by-standards / by-spec / safety-review） |
+
+跨宿主：压缩版 SKILL 保持宿主无关（指针写"语义 CLI / 处境注入"），Codex/Claude/Grok 同样受益；机械细节在 DSH 由工具/机制承接，其他宿主按需读 references。压缩判定与逐段对照表见 `review-checklist.md` 与各 commit。
+
 ## 组件
 
 ```
 plugin-marketplace/plugins/dsh-impl-package/
 ├─ package.json               # dsh.bundle.patch 声明，profile bundle
-├─ cordis.patch.yml           # 把 host half 插入 profile roster
+├─ cordis.patch.yml           # 把 host half + subagent providers 插入 profile roster
 ├─ lib/index.mjs              # host half：启动时把 presets/ 同步到 ~/.dsh/.agent-presets/
-├─ presets/impl-package/      # 「Impl-Package 主控」agent preset（自包含）
-│  ├─ preset.yml
-│  ├─ agent.cordis.yml        # standard 基座 + 下述两行 + subagent 工具行
-│  ├─ situation-hook.mjs      # agent/pre-step：validate → situation render → 注入
-│  └─ impl-tools.mjs          # 9 个 typed 工具，直接调用 impl_package_state.py CLI
+├─ presets/
+│  ├─ impl-package/           # 「Impl-Package 主控」agent preset（自包含）
+│  │  ├─ preset.yml
+│  │  ├─ agent.cordis.yml     # standard 基座 + hook/tools/commands/orchestrator + subagent 工具行
+│  │  ├─ situation-hook.mjs   # agent/pre-step：validate → situation render → 注入处境+协议
+│  │  ├─ protocols.json       # 60 个 slug → 协议片段（判断/规则层）
+│  │  ├─ impl-tools.mjs       # 9 个 typed 工具，直接调用 impl_package_state.py CLI
+│  │  ├─ commands.mjs         # 18 个 0-token 阶段路由命令
+│  │  └─ do-review-orchestrator.mjs  # review 机械核心（topology/brief/聚合/报告）
+│  ├─ review-code/            # Track A 只读 reviewer leaf（read/git_show/glob/grep）
+│  ├─ review-code-by-standards/  # Track B
+│  ├─ review-code-by-spec/    # Track C
+│  └─ safety-review/          # Conditional Safety（各自含 reviewer-fs.mjs / git-readonly.mjs）
+├─ baseline-skill-sizes.md    # SKILL 降载前后行数基线
+├─ review-checklist.md        # Phase 2 审校清单（21 项语义正确性）
 └─ test/smoke-test.mjs        # 纯逻辑冒烟测试（node 直接跑，无需 DSH）
 ```
 

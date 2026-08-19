@@ -1,53 +1,28 @@
 ---
 name: impl-planning
-description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan、决定 Ticket-only Composition、执行策略或验证计划时使用；不维护长期行为合同或运行状态。
+description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan、决定 Composition 或验证计划时使用；当已批准 plan 判定需要至少两个独立跟踪 acceptance 结论的交付切片时也使用（合并原 to-tickets）；不维护长期行为合同或运行状态。
 ---
 
-# Impl Planning
+# Impl Planning（含 Ticket 拆分）
 
-为一个 implementation attempt 创建简洁、可执行的 plan。先读 `../../references/impl-package-composition-contract.md`；需要为 material seam 选择验证层级时再读 `../../references/progressive-system-evidence.md`。
+为一个 implementation attempt 创建 plan 并把验收拆成可独立验收的 Ticket 合同；语义由本 Skill 与主 thread 拥有，物理写入与 state 初始化由 bound bookkeeper 执行。D/S gate 已通过才继续；未触及的 legacy Spec 可暂缺。
 
-## 输出与规则
+## 前置判定（admission backstop）
 
-- initial：`plan.md`；patch：`<attempt-id>.patch-plan.md`。
-- 必填 Attempt ID、阶段 A 兼容写法 `Composition: tickets=true, dag=false`、Coverage & Change Map、执行策略、Planned Verification、集成顺序和下一动作。
-- Plan 直接引用当前 `decision.md` / `spec.md` 路径；D/S/P 仅为可选旧别名，不要求因普通编辑升级。
-- 所有文件/evidence 引用使用仓库相对路径。
-- plan 不复制 Decision/Spec contract ensemble、Ticket 状态或通用 checklist；新 plan 不建立 Task 状态轴。
-- 只有 Ticket 能减少验收歧义时才 earned；DAG/Task 只在旧 package 迁移/恢复计划中作为只读输入。
+若下一步仍需决定可观察行为、data identity、permission、concurrency、recovery 或 public shape，或 contract surface 命中幂等键/CAS/版本号、多来源写同一目标字段、替换/撤回/恢复语义、跨存储提交、声明值 vs 检测值而 Spec 只有规则没有结果矩阵：停止 planning，明确缺失合同并路由 /impl-package:req-align；不创建/更新 Plan/state，不在 Plan 中补第二套 DTO/schema。
 
-Plan 的语义、Coverage、执行策略和 Planned Verification 仍由本 Skill 与主 thread 拥有；Plan artifact 的物理写入、state 初始化和 Progress 投影由绑定的 `/impl-package:standing-bookkeeper` 执行。主 thread 不直接编辑当前 package 的 Plan 或 runtime state。
+## 计划与切片判定
 
-## 流程
+- initial 写 plan.md，patch 写 <attempt-id>.patch-plan.md 且只描述相对上次 terminal gate 的实际 delta；新 package 固定 tickets=true, dag=false（dag=true 仅限旧 package 迁移/恢复，只读）；D/S/P 仅可选旧别名。
 
-1. initial 读取已批准 Decision、`spec.md`、从属 `contract-design.md` disposition，以及当前代码/测试事实，确认 D/S gate 已通过；未触及的 legacy Spec 可暂缺该文件，同一 package 的 patch/update 沿用 initial bundle approval。
-2. 在让 bookkeeper 创建或更新 Plan/state 前执行 admission backstop：若下一步仍需决定可观察行为、data identity、permission、concurrency、recovery 或 public shape，或 contract surface 命中幂等键 / CAS / 版本号、多个来源写同一个目标字段、替换 / 撤回 / 恢复语义、跨存储提交（两个 store 各自提交）或声明值 vs 检测值但 Spec 只有规则、没有结果矩阵，停止 planning，明确缺失合同并路由 `/impl-package:req-align` 重新确认当前 Spec。不得创建或更新 Plan/state，也不得在 Plan 中补第二套 DTO/schema。
-3. 判断是 initial 还是 patch；patch 只描述相对上次 terminal gate 的实际 delta。
-4. 新 package 固定选择 `tickets=true, dag=false`；`dag=true` 只允许在旧 package 迁移/恢复计划中出现。
-5. 将每个 Decision/Spec 约束映射到实现范围及 Ticket，写执行顺序、修改边界、依赖、集成/回滚方式和足以区分正确/错误实现的验证；每个验证项明确 evidence owner。Coverage Map 可以引用 `spec.md` 或其从属 `contract-design.md` 的稳定章节。把 early falsification evidence、remaining completion evidence 和不可延后安全不变量分开写。
-   - 纵向切片装不下一个 worker 时，回去把该 seam 冻得更细，不要改成横向切分。
-6. `tickets=true` 时调用 `/impl-package:to-tickets`；新 package 不调用 `create-task-dag`。
-7. 初始 bundle 冻结 plan candidate；调用 `/impl-package:plan-review` 的 `bundle-admission`。返回 `full-review` 时继续同一 skill 的完整审查；处理 material findings，并联合校验 coverage、typed dependency、ownership、证据可行性、Gate 边界与集成顺序，然后请求一次完整 bundle approval。后续 patch/update 直接沿用该 approval。
-8. 获批后，主 thread 将 Attempt ID、canonical Plan 路径、bundle approval 和下一动作交给 bound bookkeeper；由 bookkeeper 运行：
+- 每个 Decision/Spec 约束映射到实现范围与 Ticket：写执行顺序、修改边界、依赖、集成/回滚方式与足以区分正确/错误实现的验证，每项验证明确 evidence owner；early falsification、remaining completion 与不可延后安全不变量分开写。纵向切片装不下一个 worker 时把 seam 冻得更细，不改成横向切分。
 
-```text
-python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> package init --attempt <id> --plan <repo-relative-plan>
-python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> package validate
-```
+- Ticket 按可独立验收的纵向交付切片拆，不按文件、层或 worker 拆；AC 必须可观察、用稳定 claim ID，early falsification 与 remaining completion 证据分开描述；contract references 用仓库相对路径定位到具体章节，不裸指整份文档或行号；与当前 plan/spec 联合检查 coverage、重叠、依赖与 AC feasibility 后由 bookkeeper 发布并原子推进状态。
 
-`<impl-package-plugin-root>` 指当前已加载 skill 所属的插件根目录；不要假设 workbench 仓库路径或宿主缓存路径。
+- 初始 bundle 冻结 plan candidate 后调用 /impl-package:plan-review 的 bundle-admission；full-review 时处理 material findings，联合校验 coverage、typed dependency、ownership、证据可行性、Gate 边界与集成顺序，再请求一次完整 bundle approval；后续 patch/update 直接沿用。
 
-9. 进入 `/impl-package:execution-preflight`，再交给 `/impl-package:dev-with-track`。
+## 机制
 
-bookkeeper 完成写入、state 初始化和 `package validate` 后返回 receipt；主 thread 复核 receipt。初始 bundle approval 在同一 package 内跨 session、patch 和普通更新持续有效，作为唯一 approval receipt。
+- 机械操作一律走现有语义 CLI；Plan/Ticket 必填字段、Composition 写法与固定文件位置由 composition contract 与模板承接；运行时验收状态只写 .impl-package/state.json，不回写 Ticket 正文。
 
-## 完成条件
-
-- plan 与 Decision/Spec 语义一致，无 `TBD` blocker；
-- Coverage & Change Map 覆盖全部 active 约束，Planned Verification 可执行且有 owner；
-- 新 package 的 Ticket 必须存在并与当前 Attempt 一致；旧 package 迁移计划如需读取 DAG，必须标记为 legacy-only；
-- 初始 bundle review/approval 已完成；后续 patch 直接沿用该 approval；
-- `state.json` 已初始化并通过 validate；
-- owner 能从汇报直接判断能否进入执行。
-
-初始 approval 后，同一 package 的 plan、contract、state、evidence 和 execution 更新直接继续；review 结果写入现有记录并沿用该 approval。
+- 获批后进入 /impl-package:execution-preflight，再交给 /impl-package:dev-with-track。完成条件：plan 与 D/S 语义一致且无 TBD；Coverage 覆盖全部 active 约束、验证可执行且有 owner；新 package Ticket 与当前 Attempt 一致；state.json 已初始化并通过 validate。

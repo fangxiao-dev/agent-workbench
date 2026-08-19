@@ -11,14 +11,10 @@ PLUGIN = MARKETPLACE / "plugins" / "impl-package"
 EXPECTED_SKILLS = {
     "impl-package",
     "backfill-stable-docs",
-    "create-task-dag",
     "dev-with-track",
-    "execution-preflight",
-    "standing-bookkeeper",
     "impl-planning",
     "subagent-driven-development",
     "grill-me-smartly",
-    "grilling",
     "plan-review",
     "do-review",
     "review-code",
@@ -26,8 +22,17 @@ EXPECTED_SKILLS = {
     "review-code-by-spec",
     "safety-review",
     "req-align",
+    "execution-boundaries",
+}
+
+# Merged/renamed skills (slim refactor): the flat skill set above replaced these.
+LEGACY_SKILL_DIRS = {
     "to-tickets",
+    "execution-preflight",
+    "standing-bookkeeper",
     "verification-before-completion",
+    "grilling",
+    "create-task-dag",
 }
 
 
@@ -56,7 +61,30 @@ def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
     assert claude_marketplace["plugins"][0]["version"] == claude["version"]
 
 
-def test_plugin_exposes_the_migrated_flat_skill_set() -> None:
+def test_do_review_owns_the_judgment_heuristics() -> None:
+    review = (PLUGIN / "skills" / "do-review" / "SKILL.md").read_text(encoding="utf-8")
+
+    # Judgment heuristics stay in the slim do-review (mechanics moved to the
+    # orchestrator / reviewer presets).
+    for marker in (
+        "Safety admission",
+        "Closure ≠ terminal",
+        "terminal-final",
+        "finding-closure",
+        "Loop clean & convergence",
+        "Track C source recheck",
+        "reviewer-registry.json",
+        "review_ledger.py",
+        "native subagents",
+        "owner approval",
+    ):
+        assert marker in review
+    # Host-specific leaf mapping is gone from the skill (moved to presets).
+    assert "review-track-code" not in review
+    assert "spawn_subagent" not in review
+
+
+def test_plugin_exposes_the_slimmed_flat_skill_set() -> None:
     skill_files = sorted((PLUGIN / "skills").glob("*/SKILL.md"))
     names = {
         re.search(r"^name:\s*([^\s]+)\s*$", path.read_text(encoding="utf-8"), re.MULTILINE).group(1)
@@ -65,12 +93,16 @@ def test_plugin_exposes_the_migrated_flat_skill_set() -> None:
 
     assert names == EXPECTED_SKILLS
     assert len(skill_files) == len(EXPECTED_SKILLS)
+    for legacy in LEGACY_SKILL_DIRS:
+        assert not (PLUGIN / "skills" / legacy / "SKILL.md").exists(), f"{legacy} should be merged away"
     assert not (PLUGIN / "skills" / "investigate-before-implement").exists()
     assert not (PLUGIN / "skills" / "dispatch-bounded-task").exists()
 
     router = (PLUGIN / "skills" / "impl-package" / "SKILL.md").read_text(encoding="utf-8")
-    for name in EXPECTED_SKILLS - {"impl-package"}:
-        assert f"`/impl-package:{name}`" in router
+    # The routing table is now a native-command index (`impl-<stage>`).
+    for name in EXPECTED_SKILLS - {"impl-package", "execution-boundaries"}:
+        assert f"impl-{name}" in router
+    assert "/plugin:skill" in router
 
 
 def test_migration_validator_is_standalone_and_not_a_runtime_entrypoint() -> None:
@@ -93,7 +125,7 @@ def test_migration_validator_is_standalone_and_not_a_runtime_entrypoint() -> Non
         assert "validate_ticket_first_migration" not in text
         assert "validate_migration(" not in text
 
-    preflight = (PLUGIN / "skills" / "execution-preflight" / "SKILL.md").read_text(encoding="utf-8")
+    preflight = (PLUGIN / "skills" / "execution-boundaries" / "SKILL.md").read_text(encoding="utf-8")
     assert "validate_ticket_first_migration" not in preflight
     linker = (ROOT / "scripts" / "link_skill.py").read_text(encoding="utf-8")
     assert "validate_ticket_first_migration" not in linker
@@ -118,7 +150,7 @@ def test_skill_resource_paths_stay_inside_plugin() -> None:
             assert target.exists(), f"missing resource: {skill_file}: {match.group(1)}"
 
 
-def test_unified_entry_owns_strategy_resolver_and_review_state() -> None:
+def test_unified_entry_owns_strategy_and_review_judgment() -> None:
     skill_dir = PLUGIN / "skills" / "subagent-driven-development"
     skill = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     resolver = (skill_dir / "references" / "worker-resolver.md").read_text(encoding="utf-8")
@@ -126,11 +158,20 @@ def test_unified_entry_owns_strategy_resolver_and_review_state() -> None:
     modes = (skill_dir / "references" / "mode-contracts.md").read_text(encoding="utf-8")
 
     assert len(skill.splitlines()) <= 180
-    assert "mode:" in skill and "worker:" in skill and "review:" in skill
-    strategy = skill.split("```yaml", 1)[1].split("```", 1)[0]
-    assert "schedule:" not in strategy
-    assert "route" not in skill.lower()
-    assert '"$grok-worker"' in skill and '"@luna-worker"' in skill
+    # Slim form keeps the judgment heuristics, not the strategy yaml/host names.
+    for marker in (
+        "investigate",
+        "EVIDENCE_SUFFICIENT",
+        "fresh invocation",
+        "不重新裁决",
+        "checkpoint|closure",
+        "BLOCKED",
+        "fallback",
+        "主 session 始终负责",
+    ):
+        assert marker in skill
+    assert "$grok-worker" not in skill
+    assert "```yaml" not in skill
     assert "skills/call-grok/SKILL.md" in resolver
     assert "@luna-worker" in resolver
     assert "不传 model/effort" in resolver
@@ -142,7 +183,7 @@ def test_unified_entry_owns_strategy_resolver_and_review_state() -> None:
     assert all(marker in modes for marker in ("## investigate", "## implement", "## fix", "## review"))
 
 
-def test_active_callers_use_only_the_unified_entry() -> None:
+def test_active_callers_reference_the_unified_entry() -> None:
     callers = (
         ROOT / "AGENTS.md",
         PLUGIN / "skills" / "impl-package" / "SKILL.md",
@@ -152,7 +193,9 @@ def test_active_callers_use_only_the_unified_entry() -> None:
     )
     for caller in callers:
         text = caller.read_text(encoding="utf-8")
-        assert "impl-package:subagent-driven-development" in text
+        # Cross-host routing form (`/impl-package:subagent-driven-development`) or the
+        # DSH native command form (`impl-subagent-driven-development`).
+        assert "impl-package:subagent-driven-development" in text or "impl-subagent-driven-development" in text
         assert "impl-package:investigate-before-implement" not in text
         assert "impl-package:dispatch-bounded-task" not in text
 
@@ -181,12 +224,17 @@ def test_active_workflow_tree_has_no_legacy_entry_reference() -> None:
 
 def test_terminal_review_contract_remains_owned_by_do_review() -> None:
     dev = (PLUGIN / "skills" / "dev-with-track" / "SKILL.md").read_text(encoding="utf-8")
-    assert "/impl-package:do-review" in dev
-    assert "terminal-final coverage 完整" in dev
-    assert "已接受并归类 Track C / Spec fidelity finding" in dev
-    assert "references/runtime-protocol.md" in dev
-    assert "不创建 Ticket/Attempt 状态" in dev
-    assert "不重复调度 reviewer" in dev
+    review = (PLUGIN / "skills" / "do-review" / "SKILL.md").read_text(encoding="utf-8")
+    # do-review owns the review topology/fail-closed contract (slim form keeps the judgment).
+    assert "terminal-final" in review
+    assert "Closure ≠ terminal" in review
+    assert "finding-closure" in review
+    assert "INCOMPLETE" in review
+    # dev-with-track keeps the execution/Gate judgment; review dispatch is injected via
+    # the situation protocol, not repeated here.
+    assert "Escape" in dev or "escape" in dev
+    assert "terminal Gate" in dev
+    assert "Stage 7" in dev
     assert "dispatch-fix" not in dev
     for duplicated_owner in ("review-code-by-standards", "review-code-by-spec", "safety-review"):
         assert duplicated_owner not in dev

@@ -1,0 +1,40 @@
+# safety-review leaf (Conditional Safety) — read-only reviewer leaf preset.
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: >-
+      你是 safety-review leaf（Conditional Safety），只读 safety reviewer。工作目录 {{cwd}}。
+
+      只读合同：只审查传入的完整 diff 与固定 comparison point（base/head 已解析为不可变 SHA）；
+      绝不写/改文件、issue、git state、数据或外部系统；绝不派发 subagent、调用 do-review、
+      重新评估 topology/capacity，或检查其他 track 的本轮输出。不可变 contract source 只能用
+      git_show（resolved head）读取，绝不用工作树。不实施修复、不创建新的风险登记面。
+
+      加载你的声明 skill（safety-review）并遵循。先判收缩型 focused path 再决定审查深度；
+      P0 必须最前且明确写 `BLOCKED`；P0/P1/P2 fail-closed 定级见 skill。返回紧凑结构化索引：
+      `verdict: PASS|FAIL|UNCERTAIN`、`coverage: <一行>`、`findings: <slug> | file:line | severity | 一句`
+      （无则 `findings: none`）；canonical evidence（Trigger evidence / Change map / Findings /
+      Coverage gaps + 一行 gate 建议）写入 parent 提供的报告 artifact。
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
+# ── read-only filesystem: only `read` ──
+- id: tool-fs
+  name: ./reviewer-fs.mjs
+
+# ── read-only git ──
+- id: tool-git-readonly
+  name: ./git-readonly.mjs
+
+# ── search: glob/grep (both read-only) ──
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+# ── skills: load the declared skill ──
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'

@@ -1,68 +1,32 @@
 ---
 name: impl-package
-description: Impl-Package 体系的入口地图与路由；当需要判断从需求对齐、计划、Ticket/DAG、执行、验证或稳定文档回刷的哪个阶段进入时使用。只导航，不代替阶段 skill 执行。
+description: Impl-Package 体系的入口地图与路由：判断从需求对齐、计划、Ticket/DAG、执行、验证或稳定文档回刷的哪个阶段进入；并承载交互质询（grilling）与旧 DAG 只读审计的入口判断。只导航，不代替阶段 skill 执行。
 ---
 
 # Impl-Package
 
-Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract ensemble → Plan → 可选 Ticket → execution state → verification → Gate → stable-doc backfill。DAG/Task 只为旧 package 的恢复与迁移保留。
+链路：Decision/Spec contract ensemble → Plan → 可选 Ticket → execution state → verification → Gate → stable-doc backfill；DAG/Task 只为旧 package 恢复与迁移保留。核心原则：只保存会改变下一动作/阻止 false PASS/约束危险 mutation 的状态；只有 Git commit ID 可作为版本点；路径一律仓库相对 POSIX，拒绝绝对路径与 `..`；正式规则见 [Composition Contract](../../references/impl-package-composition-contract.md) 与 [Current State](../../references/impl-package-current-state.md)。路由统一使用 `/plugin:skill` 调用形式；仅询问体系时停在本页，已明确阶段则直达对应 skill。
 
-## 核心原则
+## 入口：阶段命令
 
-- 只保存会改变下一动作、阻止 false PASS 或约束危险 mutation 的状态。
-- D/S/P 只作为可选的人类可读别名，不是新 package 的必填字段，也不绑定文件内容。
-- 只有 Git commit ID 可作为版本/比较点。
-- 外部文件和 evidence 一律使用仓库相对 POSIX 路径；拒绝绝对路径和 `..`。
-- 已知 artifact 使用固定目录或显式路径，不保存扫描结果副本。
-- Git 负责历史审计；现役格式不维护 contract/schema 版本、迁移账本或兼容层。
+| 命令 | 用途 | 命令 | 用途 |
+| --- | --- | --- | --- |
+| impl-req-align | 需求/Decision/Spec 对齐 | impl-grill-me-smartly | 高风险 Spec gate ledger 审问 |
+| impl-grilling | 交互式深入质询 | impl-impl-planning | 建 initial/patch plan、定 Composition |
+| impl-plan-review | 审查 plan 或 bundle | impl-to-tickets | 创建独立验收切片 |
+| impl-create-task-dag | 旧 Task/DAG 只读审计/迁移 | impl-execution-preflight | 执行前确认授权与工作区 |
+| impl-standing-bookkeeper | 绑定/恢复、更新与回执 | impl-subagent-driven-development | 调查/实现/修复/验证与分工 |
+| impl-dev-with-track | 恢复执行、推进、写 Gate | impl-do-review | 多 reviewer 编排与收敛 |
+| impl-review-code | 实现正确性与可维护性 | impl-review-code-by-standards | 按规范/interface/depth/locality 审查 |
+| impl-review-code-by-spec | 按需求/Spec/Plan 审查忠实度 | impl-safety-review | 安全/数据完整性/并发/副作用 |
+| impl-verification-before-completion | complete/merge-ready 前审计证据 | impl-backfill-stable-docs | 回刷稳定知识/退休 package |
 
-正式规则见 [Composition Contract](../../references/impl-package-composition-contract.md)，状态格式和 CLI 见 [Current State](../../references/impl-package-current-state.md)。
+最小 package（人类参考）：`spec.md`（可选 `decision.md`）、从属 `contract-design.md`（默认 detailed；spec 完整承担语义时 not-required 并写明理由）、`plan.md`、`tickets/`（Ticket-only 合同时）、`progress.md`、`execution/<attempt>/execution-record.md`、`.impl-package/state.json`、`gate.md`（首次 gate 时创建）。新 package 统一 `tickets=true, dag=false`；`dag=true` 只读旧 package，不为审计完整感增加 artifact。
 
-## 路由
+## 交互质询（grilling）
 
-面向用户和 agent 的路由统一使用 `/plugin:skill` 调用形式；宿主内部 registry/discovery 显示的无 `/` skill key 不是第二种文档写法。
+设计树 rounds 质询：每轮先列完整 frontier（可读则一批，过大则连续分批且保留全部 material decisions、稳定 ID 不遗漏），逐题编号并给推荐答案，等用户整批回复；聚焦随材料成熟度变化，真实缺口或用户请求可重开选项空间。事实自己查（可派 subagent，不阻塞其余 frontier），决策留给用户。frontier 空即收敛：呈现汇总，确认后才写回目标文档；写回后简报改动文档/吸收的决策组/未决与延期项/未运行的阶段。记录边界：无 ledger，已确认项/非目标/延期/开放项留在工作记忆或用户既有 notes 面，mid-grill 不编辑目标文档。细节按需读 `../grilling/rubric.md`。
 
-| 当前需要 | 使用 |
-| --- | --- |
-| 对齐需求、Decision、Spec | `/impl-package:req-align` |
-| 在高风险 Spec gate 做 ledger 驱动审问 | `/impl-package:grill-me-smartly` |
-| 对计划、Decision 或 Spec 做交互式深入质询 | `/impl-package:grilling` |
-| 创建 initial/patch plan、决定 Composition | `/impl-package:impl-planning` |
-| 审查 plan 或完整 Plan/Ticket/DAG bundle | `/impl-package:plan-review` |
-| 创建独立验收切片 | `/impl-package:to-tickets` |
-| 审计或迁移旧 Task/DAG package | `/impl-package:create-task-dag`（legacy read-only） |
-| 执行前确认授权与工作区 | `/impl-package:execution-preflight` |
-| 绑定/恢复 package standing bookkeeper、发送 package 更新、消费写入回执 | `/impl-package:standing-bookkeeper` |
-| 调查、实现、修复、验证及主 session/worker 分工、mode、batch 和资源顺序 | `/impl-package:subagent-driven-development` |
-| 恢复执行、推进 Task/Ticket、写 Gate | `/impl-package:dev-with-track` |
-| 编排多 reviewer、聚合 findings 并判断收敛 | `/impl-package:do-review` |
-| 审查实现正确性和可维护性 | `/impl-package:review-code` |
-| 按仓库规范和模块 interface/depth/locality 审查代码 | `/impl-package:review-code-by-standards` |
-| 按需求、Spec、Plan 审查代码实现忠实度 | `/impl-package:review-code-by-spec` |
-| 审查安全、数据完整性、并发和外部副作用 | `/impl-package:safety-review` |
-| 声称 complete/merge-ready 前审计证据 | `/impl-package:verification-before-completion` |
-| 回刷稳定知识或退休 package | `/impl-package:backfill-stable-docs` |
+## Legacy（create-task-dag，只读）
 
-当用户只是询问体系时停在本页；当用户已明确阶段和动作，直接进入对应 skill。
-
-## 最小 package
-
-```text
-<package>/
-  decision.md            # 可选；轻量 Decision 也可在 spec.md
-  spec.md
-  contract-design.md     # 从属 spec.md；detailed | not-required
-  plan.md
-  tickets/               # Ticket-only Composition earned 时
-  progress.md             # active Attempt 的 machine-owned 恢复投影
-  execution/
-    <attempt>/
-      execution-record.md
-      task-handoffs/      # 仅旧 Task package 实际发生 handoff 时创建
-  .impl-package/state.json
-  gate.md                 # 首次 gate evaluation 时创建
-```
-
-新 package 统一使用 `tickets=true, dag=false` Ticket-only 合同；阶段 A 的 `dag=false` 是 3.4 兼容占位，不表示创建 Task/DAG；`dag=true` 只读旧 package。不要为审计完整感增加 artifact。
-
-每个新建或被修订的 Spec 都有从属 `contract-design.md`。默认 `Disposition: detailed`；精确语义已由 `spec.md` 完整承担时使用 `Disposition: not-required` 并写明理由。未触及的 legacy Spec 到下次 req-align 再补齐；该文件没有独立 alias、revision、状态、审批或生命周期。
+新 package 一律不创建 Task DAG；仅在 owner 明确授权恢复/迁移已有 3.4 package 且 artifact 已存在时读取 `dag.md`/`<attempt-id>.patch-dag.md`。只审计 primary ownership、确定依赖、贡献 Ticket、seam/risk 与 section-level contract refs；迁移时把 Task 真实产物映射回 Ticket claim，不把 Task handoff 或 `DONE` 当 acceptance proof；Task 状态只存 `.impl-package/state.json`；发现新 DAG 需求回 `impl-planning`。细节按需读 `../create-task-dag/references/`（dag-and-ownership、worker-prompts、review-and-verification、slice-to-dag）。
