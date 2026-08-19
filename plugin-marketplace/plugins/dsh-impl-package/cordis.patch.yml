@@ -1,0 +1,35 @@
+# dsh-impl-package bundle patch: inserts the host plugin row and the optional
+# subagent provider rows into the profile roster. Applied as a profile bundle
+# layer (the `dsh.bundle.patch` manifest field). The node half
+# (`lib/index.mjs`) runs in the host process and syncs the bundled agent
+# presets into ~/.dsh/.agent-presets on startup.
+#
+# Subagent providers (host-plane singletons, mounted once per profile):
+# - `subagent-codex`: official @deepseek-ai/dsh-subagent-codex provider.
+#   One-shot ephemeral Codex thread; reuses the native codex login
+#   (CODEX_HOME). `permissionMode: never` keeps the thread unattended.
+# - `subagent-acp`: official @deepseek-ai/dsh-subagent-acp provider driving
+#   the Grok CLI in ACP mode (`grok agent --always-approve stdio`).
+#   `command` resolves the installed grok executable.
+# Both npm packages must be installed into the profile (they are profile
+# dependencies); loading the rows starts no process until a bound tool calls
+# them. The `impl-package` agent preset enables the matching
+# `subagent_codex` / `subagent_grok` tool rows (they auto-register on
+# `subagent/provider-added`).
+- insert:
+    - id: dsh-impl-package
+      name: 'dsh-impl-package'
+
+    - id: subagent-codex
+      name: '@deepseek-ai/dsh-subagent-codex'
+      config:
+        providerName: codex
+        permissionMode: never
+
+    - id: subagent-grok
+      name: '@deepseek-ai/dsh-subagent-acp'
+      config:
+        providerName: acp
+        command: 'C:/Users/Xiao/.grok/bin/grok.exe'
+        args: ['agent', '--always-approve', 'stdio']
+        permission: reject

@@ -1,0 +1,3 @@
+name: Impl-Package 主控
+description: Impl-Package 的 DSH 原生主控预设：每步自动注入处境与合法动作（agent/pre-step），typed CLI 工具直接读写 package state，原生 subagent（Codex / Grok-ACP）派发 worker。Python core 与 state.json 保持权威。
+order: 5
