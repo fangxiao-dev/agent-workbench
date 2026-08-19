@@ -20,7 +20,14 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from situation import FACT_KEYS, describe_unknown_fact_keys
+from situation import (
+    FACT_KEYS,
+    REVIEW_PHASES,
+    REVIEW_PHASE_VALUES,
+    REVIEW_TRACKS,
+    REVIEW_TRACK_VALUES,
+    describe_unknown_fact_keys,
+)
 
 STATE_PATH = Path(".impl-package/state.json")
 PROGRESS_PATH = Path("progress.md")
@@ -1098,6 +1105,27 @@ def _validate_dispatch_situation_digest(package: Path, attempt: str, event: dict
         )
 
 
+def _validate_review_dispatch_fields(event: dict[str, Any]) -> None:
+    has_phase = "review_phase" in event
+    has_track = "review_track" in event
+    phase_values = " | ".join(REVIEW_PHASE_VALUES)
+    track_values = " | ".join(REVIEW_TRACK_VALUES)
+    if has_phase != has_track:
+        raise StateError(
+            "review_phase 与 review_track 必须同时出现；"
+            f"review_phase 合法值：{phase_values}；review_track 合法值：{track_values}"
+        )
+    if has_phase:
+        phase = event["review_phase"]
+        if not isinstance(phase, str) or phase not in REVIEW_PHASES:
+            raise StateError(f"review_phase 合法值：{phase_values}；收到 {phase!r}")
+        track = event["review_track"]
+        if not isinstance(track, str) or track not in REVIEW_TRACKS:
+            raise StateError(f"review_track 合法值：{track_values}；收到 {track!r}")
+    if "review_recheck" in event and type(event["review_recheck"]) is not bool:
+        raise StateError("review_recheck 必须是 boolean")
+
+
 def _validate_trail_event(event: dict[str, Any]) -> dict[str, Any]:
     supplied_common = sorted(TRAIL_COMMON_FIELDS & event.keys())
     if supplied_common:
@@ -1123,6 +1151,7 @@ def _validate_trail_event(event: dict[str, Any]) -> dict[str, Any]:
         _trail_text_field(event, "worker", kind)
         if event.get("outcome") != "RUNNING" or event.get("returned") is not False:
             raise StateError("trail dispatch requires outcome=RUNNING and returned=false")
+        _validate_review_dispatch_fields(event)
         if "situation_digest" not in event:
             raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；事件缺少 situation_digest")
         if (

@@ -389,6 +389,126 @@ def test_git_accepted_seam_changed_is_unknown_when_acceptance_revision_cannot_re
     assert "acceptance revision" in (fact.reason or "")
 
 
+def _coverage_context(
+    rows: list[dict],
+    *,
+    head: str | None = "current-head",
+    ticket_state: str = "SATISFIED",
+    diff_names: dict[str, list[str] | None] | None = None,
+    state_valid: bool = True,
+    gate_verdict: str | None = None,
+) -> situation.FactContext:
+    diff_names = diff_names or {}
+    reader = SimpleNamespace(
+        package_rel=None,
+        diff_names=lambda base: diff_names.get(base),
+    )
+    state = situation.StateView(
+        raw={"tickets": {"TKT-01": {"state": ticket_state}}} if state_valid else None,
+        valid=state_valid,
+        error=None if state_valid else "state.json 无法判定",
+        attempt_id="fixture-attempt",
+        ticket_ids=["TKT-01"],
+    )
+    snapshot = situation.Snapshot(
+        package=Path("."),
+        reader=reader,
+        state=state,
+        tickets={},
+        trail=situation.TrailView(True, rows),
+        gate=situation.GateView(gate_verdict is not None, gate_verdict, None),
+        findings=situation.FindingsView(False, "", []),
+        intake=situation.IntakeView(False, None),
+        validation_result=None,
+        compaction_pressure=None,
+        head=head,
+    )
+    return situation.FactContext(snapshot, "attempt", "fixture-attempt")
+
+
+def _terminal_dispatch(track: str, *, head: str = "current-head", recheck: bool = False) -> dict:
+    return {
+        "subject": "attempt",
+        "kind": "dispatch",
+        "review_phase": "terminal-final",
+        "review_track": track,
+        "review_recheck": recheck,
+        "head": head,
+    }
+
+
+def test_terminal_coverage_is_unknown_before_near_terminal_gate() -> None:
+    context = _coverage_context([], state_valid=False)
+
+    fact = situation._when_attempt_terminal_coverage_complete(context)
+
+    assert fact.known is False
+
+
+def test_terminal_coverage_is_false_when_terminal_phase_lacks_four_tracks() -> None:
+    rows = [_terminal_dispatch(track) for track in ("Track A", "Track B", "Track C")]
+    context = _coverage_context(rows)
+
+    fact = situation._when_attempt_terminal_coverage_complete(context)
+
+    assert fact.known is True
+    assert fact.value is False
+
+
+def test_terminal_coverage_is_true_for_four_current_head_tracks() -> None:
+    rows = [_terminal_dispatch(track) for track in situation.REVIEW_TRACK_VALUES]
+    context = _coverage_context(rows)
+
+    fact = situation._when_attempt_terminal_coverage_complete(context)
+
+    assert fact.known is True
+    assert fact.value is True
+
+
+def test_terminal_coverage_is_false_after_source_commit() -> None:
+    rows = [_terminal_dispatch(track, head="review-head") for track in situation.REVIEW_TRACK_VALUES]
+    context = _coverage_context(rows, diff_names={"review-head": ["src/engine.py"]})
+
+    fact = situation._when_attempt_terminal_coverage_complete(context)
+
+    assert fact.known is True
+    assert fact.value is False
+
+
+def test_terminal_coverage_stays_true_after_docs_only_commit() -> None:
+    rows = [_terminal_dispatch(track, head="review-head") for track in situation.REVIEW_TRACK_VALUES]
+    context = _coverage_context(rows, diff_names={"review-head": ["docs/review.txt", "notes.md"]})
+
+    fact = situation._when_attempt_terminal_coverage_complete(context)
+
+    assert fact.known is True
+    assert fact.value is True
+
+
+def test_terminal_coverage_ignores_legacy_track_value_without_render_error() -> None:
+    rows = [_terminal_dispatch(track) for track in ("Track A", "Track B", "Track D")]
+    rows.append(_terminal_dispatch("Track C source recheck"))
+    parsed = situation._parse_trail(
+        situation.FileView("execution/fixture-attempt/trail.jsonl", "\n".join(json.dumps(row) for row in rows))
+    )
+    context = _coverage_context(parsed.rows)
+
+    assert parsed.error is None
+    fact = situation._when_attempt_terminal_coverage_complete(context)
+    assert fact.value is False
+
+
+def test_terminal_coverage_excludes_source_recheck_dispatch() -> None:
+    rows = [_terminal_dispatch(track) for track in ("Track A", "Track B", "Track D")]
+    rows.append(_terminal_dispatch("Track C", recheck=True))
+    context = _coverage_context(rows)
+
+    fact = situation._when_attempt_terminal_coverage_complete(context)
+
+    assert fact.known is True
+    assert fact.value is False
+
+
 def test_json_render_exposes_digest_and_short_circuits_since() -> None:
     package = ROOT / "tests/fixtures/situations-a2/p0-evidence-unfiled"
     rendered = json.loads(_render_text(package, "--json"))

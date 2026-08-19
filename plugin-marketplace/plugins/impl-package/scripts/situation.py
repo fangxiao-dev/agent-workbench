@@ -39,6 +39,10 @@ ACTIVE_TRAIL_NAME = "trail.jsonl"
 SITUATION_DIGEST_NAME = "situation-digest.json"
 TICKET_STATES = {"PENDING", "BLOCKED", "NEEDS-REVALIDATION", "SATISFIED", "RETIRED"}
 TERMINAL_GATE_VERDICTS = {"pass", "fail", "defer"}
+REVIEW_PHASE_VALUES = ("initial", "finding-closure", "terminal-final")
+REVIEW_TRACK_VALUES = ("Track A", "Track B", "Track C", "Track D")
+REVIEW_PHASES = frozenset(REVIEW_PHASE_VALUES)
+REVIEW_TRACKS = frozenset(REVIEW_TRACK_VALUES)
 VALID_BASIS = {"cli", "prose", "observed"}
 SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$")
 COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
@@ -2128,22 +2132,12 @@ def _when_git_acceptance_revision_diverged(context: FactContext) -> Fact:
     return _fact_value(acceptance_revision.value != context.snapshot.head)
 
 
-def _when_git_accepted_seam_changed(context: FactContext) -> Fact:
-    explicit = context._explicit_bool("git.accepted_seam_changed")
-    if explicit is not None:
-        return explicit
-    if context.snapshot.head is None:
-        return context.unknown("Git HEAD 无法读取")
-    acceptance_revision = _resolved_satisfied_acceptance_revision(context)
-    if not acceptance_revision.known:
-        return acceptance_revision
-    if acceptance_revision.value is None:
-        return _fact_value(False)
-    names = context.snapshot.reader.diff_names(acceptance_revision.value)
+def _diff_has_source_changes(context: FactContext, base: str, *, label: str) -> Fact:
+    names = context.snapshot.reader.diff_names(base)
     if names is None:
-        return context.unknown("无法读取 acceptance revision 到当前 HEAD 的 Git diff")
+        return context.unknown(f"无法读取 {label} 到当前 HEAD 的 Git diff")
     if not names:
-        return context.unknown("acceptance revision 到当前 HEAD 的 Git diff 为空，无法判定验收 seam 是否变化")
+        return context.unknown(f"{label} 到当前 HEAD 的 Git diff 为空，无法判定是否有源码变化")
     package_prefix = context.snapshot.reader.package_rel.as_posix() if context.snapshot.reader.package_rel else ""
     for name in names:
         relative = name.replace("\\", "/")
@@ -2156,6 +2150,20 @@ def _when_git_accepted_seam_changed(context: FactContext) -> Fact:
             continue
         return _fact_value(True)
     return _fact_value(False)
+
+
+def _when_git_accepted_seam_changed(context: FactContext) -> Fact:
+    explicit = context._explicit_bool("git.accepted_seam_changed")
+    if explicit is not None:
+        return explicit
+    if context.snapshot.head is None:
+        return context.unknown("Git HEAD 无法读取")
+    acceptance_revision = _resolved_satisfied_acceptance_revision(context)
+    if not acceptance_revision.known:
+        return acceptance_revision
+    if acceptance_revision.value is None:
+        return _fact_value(False)
+    return _diff_has_source_changes(context, acceptance_revision.value, label="acceptance revision")
 
 
 def _when_git_head_advanced_since_last_trail(context: FactContext) -> Fact:
@@ -2269,7 +2277,46 @@ def _when_attempt_terminal_coverage_complete(context: FactContext) -> Fact:
         return explicit
     if context.snapshot.gate.verdict in TERMINAL_GATE_VERDICTS:
         return _fact_value(True)
-    return context.unknown("terminal-final coverage 没有列出的机械输入")
+    near_terminal = _when_attempt_all_tickets_terminal(context)
+    if not near_terminal.known:
+        return near_terminal
+    if near_terminal.value is not True:
+        return context.unknown("尚未进入终审阶段，terminal-final coverage 暂不适用")
+
+    rows = context._subject_rows()
+    if rows is None:
+        return _fact_value(False)
+    review_rows: list[dict[str, Any]] = []
+    tracks: set[str] = set()
+    for row in rows:
+        if _event_kind(row) != "dispatch" or row.get("review_phase") != "terminal-final":
+            continue
+        if row.get("review_recheck") is True:
+            continue
+        track = row.get("review_track")
+        if not isinstance(track, str) or track not in REVIEW_TRACKS:
+            continue
+        tracks.add(track)
+        review_rows.append(row)
+    if not REVIEW_TRACKS <= tracks:
+        return _fact_value(False)
+    current_head = context.snapshot.head
+    if not isinstance(current_head, str) or not current_head:
+        return _fact_value(False)
+    for row in review_rows:
+        review_head = row.get("head")
+        if not isinstance(review_head, str) or not review_head:
+            return _fact_value(False)
+        if review_head == current_head:
+            continue
+        source_changed = _diff_has_source_changes(
+            context,
+            review_head,
+            label="terminal-final review head",
+        )
+        if not source_changed.known or source_changed.value:
+            return _fact_value(False)
+    return _fact_value(True)
 
 
 def _when_ticket_acceptance_conditions_satisfied(context: FactContext) -> Fact:

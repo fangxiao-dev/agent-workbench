@@ -8,6 +8,7 @@
   "expected_layer": "P3",
   "expected_secondary": [
     "attempt.accept.all-tickets-terminal",
+    "attempt.review.terminal-coverage-incomplete",
     "attempt.gate.durable-delta-missing"
   ],
   "must_not_hit": [

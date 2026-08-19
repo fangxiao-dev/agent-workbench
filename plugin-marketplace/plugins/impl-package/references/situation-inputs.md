@@ -95,7 +95,7 @@ false；只有没有 U 且所有比较都相等时才是 true。
 | `attempt.near_terminal_gate` | S + G：`all_tickets_terminal` 为 true，或 `gate.md` 存在且 Verdict 可解析 | 布尔 | state 无效 = U；state 合法且无 terminal Ticket、无可解析 Gate = F；malformed Gate 不满足该辅助条件；HF：无 | `attempt.disposition.findings-triage-pending` |
 | `attempt.ready_ticket_count` | S + T：收集所有 `PENDING` Ticket，只有 implementation dependencies 全部由 `SATISFIED`、`RETIRED/waived` 或已释放 successor 释放时才进入 ready list；返回 list 长度 | 非负整数；用于表的比较是 `">1"` 或 `0` | state/Ticket/dependency 不可判定 = U；合法空图返回 0；HF：无 | `attempt.readiness.multiple-ready-tickets`、`attempt.readiness.all-edges-held` |
 | `attempt.session_resumed` | S + R：不读取声明；`activeCheckpoints.attempt` 存在，且 checkpoint 后没有动作行时为 true | 布尔 | trail error 或 state/checkpoint 不可判定 = U；无 active checkpoint = F；有显式 checkpoint marker 时只计 marker 后的行；没有 marker 时忽略兼容性的 `attempt.session_resumed` 声明，但其它 typed fact/action 会使结果为 false；HF：无 | `attempt.record.session-resumed`（兼容 parser key） |
-| `attempt.terminal_coverage_complete` | R + G：最新 fact 优先；没有 fact 时，G 的 verdict 是 `pass/fail/defer` 之一则 true | 布尔 | 有 terminal gate = true；没有 fact 且 gate 缺失、`blocked` 或 `undecided` = U；fact 非布尔 = U；HF：未知 fact key | `attempt.review.terminal-coverage-incomplete` |
+| `attempt.terminal_coverage_complete` | R + G：最新 fact 优先；没有 fact 且 terminal Gate verdict 已终结则 true；否则先要求 `attempt.all_tickets_terminal` 已知为 true，再从当前活动 trail 的 `terminal-final` review dispatch 收集四条封闭 Track（排除 `review_recheck=true`），并校验记录的 `head` 到当前 HEAD 之间只有 `docs/` 或 `.md` 改动 | 布尔 | 显式 fact 非布尔 = U；`attempt.all_tickets_terminal` 未知时传播该未知，已知 false 时给 U（终审阶段未到，不适用）；到终审阶段但缺 Track、缺 head、HEAD 间存在源码改动或 Git diff 无法证明 docs-only = 已知 false；HF：未知 fact key | `attempt.review.terminal-coverage-incomplete` |
 | `attempt.terminal_gate_pending` | S + G：先要求所有 Ticket terminal；再取 `gate.terminal`，返回其否定 | 布尔 | state 或 gate verdict 不可判定 = U；尚有非 terminal Ticket = F；全 terminal 且 gate 缺失/非 terminal = true；pass/fail/defer = F；HF：无 | `attempt.gate.durable-delta-missing` |
 | `git.acceptance_revision_diverged` | S + Git（ticket subject）：Ticket row 必须是 `SATISFIED`，读取 `acceptance.revision`，确认该 revision 可 resolve，再与当前 Git HEAD 比较 | 布尔；可 resolve 且不等于当前 HEAD = true，等于 = false | 非 ticket subject = U；state 无效时当前实现把无 row 当作“非 SATISFIED”，返回 F；缺 acceptance、HEAD、或 revision 无法 resolve = U；HF：无 | `ticket.rework.revision-diverged` |
 | `git.comparison_head_fixed` | R：attempt scope 的最新 fact `git.comparison_head_fixed`；不再从自由文本 marker 推导 | 布尔 | 无 trail/无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.review.comparison-head-unfixed` |
@@ -174,7 +174,7 @@ renderer 的当前输入是 `execution/<attempt-id>/trail.jsonl`，其每个非�
 | `kind` | 正式形状 | renderer 消费 |
 | --- | --- | --- |
 | `decision` | `subject`、`seq/id/decision_id/decisionId` 至少一个、`chosen` | 与 result 的 `of/decision/...` 配对；未配对 dispatch 属于 in-flight |
-| `dispatch` | `subject`、`outcome:"RUNNING"`、`returned:false/true`、`worker`；建议带 `seq` 或 `id`；常规字段为 `situation_digest` | `returned:false` 直接表示 worker 尚未返回；有匹配 `of` 的 return 才关闭带 id 的 dispatch；`situation_digest` 是本次派发所依据的 renderer 12 位 digest；老轨迹和手写轨迹缺失时由审计识别，不使 renderer 失败 |
+| `dispatch` | `subject`、`outcome:"RUNNING"`、`returned:false/true`、`worker`；建议带 `seq` 或 `id`；常规字段为 `situation_digest`；review dispatch 可带成对的 `review_phase`、`review_track`，以及可选布尔 `review_recheck` | `returned:false` 直接表示 worker 尚未返回；review dispatch 的 `review_phase` ∈ `initial | finding-closure | terminal-final`，`review_track` ∈ `Track A | Track B | Track C | Track D`，两者要么都没有、要么同时出现且合法；`review_recheck=true` 标记 source recheck；有匹配 `of` 的 return 才关闭带 id 的 dispatch；`situation_digest` 是本次派发所依据的 renderer 12 位 digest；老轨迹和手写轨迹缺失时由审计识别，不使 renderer 失败 |
 | `escape` | `subject`、`deviation`、`reason`；可带 `of` 关联 dispatch/decision | 记录偏离 renderer 建议或处境表未覆盖的决定；作为事件读取，不进入 fact 通道 |
 | `result` | `subject`、`outcome`；返回 decision 时带 `of`；direct evidence 放在 `ref/evidence/artifact/evidence_ref/direct_evidence`；CLI Ticket 终态转换可带 `transition=ticket-state`、`from`、`to` | outcome、incomplete、旧 direct-evidence 写法和 decision 关闭；`transition=ticket-state` 供 Ticket 边界 when-key 读取 |
 | `worker-return` | `subject`、`outcome`、可选 `of`、worker 返回的 direct-evidence payload | 与 `result` 归一；`EVIDENCE_SUFFICIENT` + `evidence` 是规范 direct-evidence 返回 |
@@ -211,7 +211,7 @@ trail schema 硬失败。显式 fact 优先；trail 可读取但 key 未声明�
 | `attempt.manual_verification_owner` | `unknown` | 没有 owner 声明不能证明不需要人工复核，默认 false 会少提醒人工验证。 |
 | `attempt.manual_verification_result_present` | `unknown` | 没有结果声明不能证明结果不存在，默认 false 会把未登记结果误报为缺失。 |
 | `attempt.completion_claim_pending` | `unknown` | 没有 pending 声明不能证明完成声明已审计，默认 false 会少提醒完成前检查。 |
-| `attempt.terminal_coverage_complete` | `unknown` | 没有 coverage 声明不能证明覆盖不完整，默认 false 会把不适用的场景误报成 blocker。 |
+| `attempt.terminal_coverage_complete` | 按 `attempt.all_tickets_terminal` 闸门后的机械输入判定；终审阶段缺证据是 `false` | 全部 Ticket 尚未终态时为 U，不投递；到终审阶段没有四条有效 terminal-final Track、head 无法证明有效或存在源码改动时必须是 false，不能用 unknown 掩盖漏报。 |
 | `ticket.blocker_maybe_resolved` | `unknown` | 没有变化声明不能判断 blocker 是否已解除，默认 false 会少提醒重新评估。 |
 | `ticket.no_longer_needed` | `unknown` | 没有处置声明不能授权退休 Ticket，默认 false 会少提醒需要的处置判断。 |
 | `ticket.release_edge_rechecked` | `false` | 未声明时默认就是“尚未复核”，保留 release-edge 提醒属于 fail-closed。 |
@@ -994,7 +994,7 @@ P0 内部顺序就是 YAML 的顺序。P0 有多个 active match 时，renderer 
 13. **acceptance-edge-held 需要真实 acceptance edge。** 没有 acceptance dependency 时 `all([])=true`，不能把“无依赖”当作 held。
 14. **revision-diverged 需要两套比较都成立。** acceptance revision 必须可 resolve 且相对 HEAD 已分叉，同时 trail 旧 head 也必须存在且已前进。
 15. **findings triage 的 near-terminal 条件不接受 malformed Gate。** 所有 Ticket terminal，或 Gate 文件存在且 Verdict 可解析，才算接近 terminal。
-16. **terminal-coverage-incomplete 需要显式 false。** 没有 coverage fact 不等于 incomplete；缺 Gate 通常给 U。
+16. **terminal-coverage-incomplete 在终审阶段由 trail 机械推导。** 显式 coverage fact 仍优先；全部 Ticket 尚未终态时不适用（U）；进入终审阶段后，四条有效 terminal-final Track 缺任一条、`review_recheck=true` 行、词表外 Track、缺 head 或源码改动都会给已知 false，四条 Track 且 HEAD 有效才给 true。terminal Gate 仍优先推为 true。
 17. **release-edge-unchecked 需要显式 `release_edge_rechecked=false`。** 缺声明不会自动变成 false。
 18. **durable-delta-missing 需要一个存在且可解析的非 terminal Gate。** 缺 Gate 会让 `gate.stage7_complete` 为 U，而不是 false。
 19. **comparison-mismatch 在 pass 前检查。** 只有 completion claim pending、尚无 Gate 且当前 HEAD 与 SATISFIED acceptance revision 不一致时命中；pass 后不再产生该 row。

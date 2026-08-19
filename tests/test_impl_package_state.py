@@ -319,6 +319,46 @@ class ImplPackageStateTests(unittest.TestCase):
             self.assertEqual(row["head"], git(repo, "rev-parse", "HEAD"))
         self.assertEqual(rows[1]["situation_digest"], "a1b2c3d4e5f6")
 
+    def test_review_dispatch_fields_use_closed_vocabulary_and_pairing(self) -> None:
+        base = {
+            "kind": "dispatch",
+            "subject": "attempt",
+            "outcome": "RUNNING",
+            "worker": "worker-01",
+            "returned": False,
+            "situation_digest": "a1b2c3d4e5f6",
+        }
+
+        valid = engine._validate_trail_event(
+            {**base, "review_phase": "terminal-final", "review_track": "Track D", "review_recheck": True}
+        )
+        self.assertEqual(valid["review_phase"], "terminal-final")
+        self.assertEqual(valid["review_track"], "Track D")
+
+        for invalid_phase in ("terminal", "final", 1):
+            with self.assertRaisesRegex(engine.StateError, "initial.*finding-closure.*terminal-final"):
+                engine._validate_trail_event(
+                    {**base, "review_phase": invalid_phase, "review_track": "Track A"}
+                )
+        for invalid_track in ("Track C source recheck", "Track E", 1):
+            with self.assertRaisesRegex(engine.StateError, "Track A.*Track B.*Track C.*Track D"):
+                engine._validate_trail_event(
+                    {**base, "review_phase": "initial", "review_track": invalid_track}
+                )
+
+        for partial in (
+            {**base, "review_phase": "initial"},
+            {**base, "review_track": "Track A"},
+        ):
+            with self.assertRaisesRegex(engine.StateError, "review_phase.*review_track"):
+                engine._validate_trail_event(partial)
+
+        self.assertEqual(engine._validate_trail_event(base), base)
+        with self.assertRaisesRegex(engine.StateError, "review_recheck.*boolean"):
+            engine._validate_trail_event(
+                {**base, "review_phase": "initial", "review_track": "Track A", "review_recheck": "true"}
+            )
+
     def test_trail_append_dispatch_requires_situation_digest(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
