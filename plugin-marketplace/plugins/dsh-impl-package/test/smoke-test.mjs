@@ -19,6 +19,7 @@ import {
 import { COMMANDS, buildRouteMessage, apply as applyCommands } from '../presets/impl-package/commands.mjs'
 import { readLines } from '../presets/review-code/reviewer-fs.mjs'
 import { aggregateVerdicts, resolveTopology, buildBrief } from '../presets/impl-package/do-review-orchestrator.mjs'
+import { extractAnchor, referencesAnchor, filterAnchorTools, decidePromotion, newState, scanEvents, resetToControlled } from '../presets/impl-package/impl-anchor.mjs'
 import { validateAgentCordis, syncPresetTrees, resolveDshHome } from '../lib/index.mjs'
 
 import { existsSync, mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs'
@@ -276,6 +277,46 @@ const brief = buildBrief({ reviewRun: { target: 'x', baseSha: 'a', headSha: 'b',
 check('brief: common block assembled', brief.includes('Review target:') && brief.includes('Resolved base SHA: a'))
 const closureBrief = buildBrief({ reviewRun: { phase: 'finding-closure' }, phase: 'finding-closure', round: 1 })
 check('brief: closure brief appended', closureBrief.includes('closure verification only'))
+
+console.log('== anchor ==')
+const situationMessage = {
+  source: { kind: 'impl-package-situation', digest: 'a1c00c2605f7' },
+  content: [{ type: 'text', text: '[impl-package 处境] digest=a1c00c2605f7\n选中: attempt.record.session-resumed · basis=prose\n动作:\n  - restore-checkpoint（默认）\n验证: package validate 通过' }],
+}
+const anchor = extractAnchor(situationMessage)
+check('extractAnchor: digest + slug', anchor.digest === 'a1c00c2605f7' && anchor.slug === 'attempt.record.session-resumed')
+check('referencesAnchor: digest hit', referencesAnchor('当前处境 digest=a1c00c2605f7，继续执行', anchor) === true)
+check('referencesAnchor: slug hit', referencesAnchor('按 attempt.record.session-resumed 处理', anchor) === true)
+check('referencesAnchor: miss', referencesAnchor('随便说点别的', anchor) === false)
+const fullTools = [
+  { name: 'read' }, { name: 'write' }, { name: 'edit' }, { name: 'grep' }, { name: 'glob' },
+  { name: 'impl_package_validate' }, { name: 'impl_ticket_transition' }, { name: 'impl_gate_commit' },
+  { name: 'bash' }, { name: 'subagent' },
+]
+const narrowed = filterAnchorTools(fullTools, ['read', 'grep', 'glob', 'skill', 'impl_package_validate', 'impl_situation_render', 'subagent', 'subagent_fork', 'ask_user_question'])
+check('filterAnchorTools: write/execute tools hidden', narrowed.length === 5 && !narrowed.some((t) => ['write', 'edit', 'impl_ticket_transition', 'impl_gate_commit', 'bash'].includes(t.name)))
+check('decidePromotion: transparent when no situation', decidePromotion({ hasSituation: false, anchored: false, steps: 0 }, { maxAnchorSteps: 3 }) === true)
+check('decidePromotion: gated without anchor', decidePromotion({ hasSituation: true, anchored: false, steps: 0 }, { maxAnchorSteps: 3 }) === false)
+check('decidePromotion: anchored promotes', decidePromotion({ hasSituation: true, anchored: true, steps: 0 }, { maxAnchorSteps: 3 }) === true)
+check('decidePromotion: maxAnchorSteps fallback', decidePromotion({ hasSituation: true, anchored: false, steps: 3 }, { maxAnchorSteps: 3 }) === true)
+const s0 = newState()
+scanEvents(s0, [
+  { type: 'user/message', data: { message: situationMessage } },
+  { type: 'step/start' },
+  { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '处境确认 a1c00c2605f7，先 validate' }] } } },
+])
+check('scanEvents: anchor captured + anchored on reference', s0.hasSituation === true && s0.anchorDigest === 'a1c00c2605f7' && s0.anchored === true)
+check('scanEvents: promoted after anchored', (() => { if (!s0.promoted) { s0.promoted = decidePromotion(s0, { maxAnchorSteps: 3 }) } return s0.promoted === true })())
+const s1 = newState()
+scanEvents(s1, [
+  { type: 'user/message', data: { message: situationMessage } },
+  { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '开始动手' }] } } },
+  { type: 'compaction/end' },
+  { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: 'a1c00c2605f7' }] } } },
+])
+check('compaction resets anchor state (old events do not re-promote)', s1.hasCompacted === true && s1.promoted === false && s1.anchored === false && s1.steps === 0)
+resetToControlled(s1)
+check('resetToControlled idempotent', s1.hasCompacted === true && s1.promoted === false)
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURES`)
 process.exit(failures === 0 ? 0 : 1)

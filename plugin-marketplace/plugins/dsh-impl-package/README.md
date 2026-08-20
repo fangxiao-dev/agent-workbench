@@ -103,6 +103,7 @@ pnpm add "@openai/codex@0.147.0"   # codex provider 的固定平台 payload（�
 
 - **digest 未变不注入**：DSH 的 pre-step 每步触发，重复注入会污染上下文；只在 digest 变化（或 session 冷启动/压缩后）注入完整处境。内存按 session 缓存，重启后首步自动重新注入。
 - **处境驱动协议注入**：`plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/protocols.json` 是跨宿主唯一协议表，为 situation slug 提供 2-4 行协议片段（判断/处理规则，来源 dev-with-track / do-review / worker-resolver 合同）；Python render 把命中的片段放进 `selected.protocol`，hook 只消费这个字段。模型每步只见「当前处境 + 当前动作的规则」，不再读整套 SKILL/references。`default` 兜底未覆盖 slug。
+- **恢复锚定（impl-anchor）**：两阶段门控——Phase 1 工具收敛为只读白名单（read/grep/glob/skill/validate/situation_render/subagent/ask_user_question），写工具（ticket/evidence/recovery/gate/trail/write/edit/bash/pwsh）隐藏；模型首轮引用注入的 digest/slug（或 maxAnchorSteps=3 兜底）后晋升，全量工具放开。压缩后回落 Phase 1 重新锚定。**透明性**：无处境注入的会话（非 Impl-Package 任务）立即放开，绝不锁死。与梁神取向不同：梁神锁通用工具锚定推理轨迹，impl-anchor 锁状态写入锚定 package 心智模型。
 - **注入是导航，不是 gate**：模型仍可偏离，按 `dev-with-track` 合同写 `kind=escape` 轨迹行（`impl_trail_escape`）。
 - **compaction pressure 未接**：renderer 缺省时 `attempt.compaction_pressure_high` 保持不可判定；后续可读 DSH 原生压缩观测接入。
 - **脚本定位**：`situation.py` / `impl_package_state.py` 通过最近祖先树的 `plugin-marketplace/plugins/impl-package/scripts` 解析，或 preset 配置 `implScriptsRoot` 显式指定；package 目录解析优先级：`packagePath` 配置 → cwd 向上最近含 state.json → git root 下 `docs/implementations/<topic>/`。

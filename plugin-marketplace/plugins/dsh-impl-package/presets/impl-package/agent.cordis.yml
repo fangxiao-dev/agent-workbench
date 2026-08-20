@@ -65,6 +65,27 @@
   config:
     # implScriptsRoot / python: same defaults as the situation hook
 
+# ── impl-package: recovery anchoring (two-phase gate) ────────────────────────
+
+# Phase 1 narrows tools to a read-only whitelist until the model references the
+# injected situation digest/slug (cold start / resume re-anchor); write tools
+# unlock after promotion. Transparent: sessions with no situation injection
+# are never locked. `maxAnchorSteps` is the fail-safe fallback.
+- id: impl-anchor
+  name: ./impl-anchor.mjs
+  config:
+    anchorTools:
+      - read
+      - grep
+      - glob
+      - skill
+      - impl_package_validate
+      - impl_situation_render
+      - subagent
+      - subagent_fork
+      - ask_user_question
+    maxAnchorSteps: 3
+
 # ── impl-package: native stage commands ──────────────────────────────────────
 
 # `/impl-req-align` … `/impl-backfill-stable-docs`: user-typed slash commands
