@@ -106,7 +106,7 @@ Impl-Package 是一套跨宿主的开发工作流插件（Ticket 状态机、处
 
 **do-review**（70 → 24 行）
 - 删除 → 承接：
-  - leaf 映射表 → **4 个只读 reviewer presets**（DSH 侧；跨宿主仍用 agents/review-track-*.md）
+  - leaf 映射表 → **派发组装**（`impl_review_run` start request：只读 persona + `toolFilter` 白名单 + 从主 preset skill catalog 加载声明 skill；跨宿主仍用 agents/review-track-*.md）
   - registry 默认 tracks / phase→topology 确定性路由 → **do-review-orchestrator** `resolveTopology`（读 reviewer-registry.json；closure 单选；显式名单 exact-in-order）
   - brief 组装 / anti-duplicate 模板 → orchestrator `buildBrief`（模板从 subagent-briefs.md 提取为常量）
   - ReviewRun 创建 → `review_ledger.py`（指针保留）
@@ -163,7 +163,7 @@ Impl-Package 是一套跨宿主的开发工作流插件（Ticket 状态机、处
 | 阶段路由表 | 18 个原生命令（impl-req-align … impl-backfill-stable-docs，0 token） | ✅ |
 | worker 派发 / 宿主名 | 原生 subagent（subagent_codex / subagent_grok） | ✅ |
 | review topology / brief / 聚合 / 报告 | do-review-orchestrator.mjs（resolveTopology / buildBrief / aggregateVerdicts / renderReport）+ `impl_review_aggregate` 工具 | ✅ 纯函数完成；并行派发接线待续 |
-| reviewer 只读边界 | 4 个只读 reviewer presets（read/git_show/glob/grep，无写/派发） | ✅ |
+| reviewer 只读边界 | 派发组装：`toolFilter: { allow: [read, grep, glob, skill, git_show] }` + 只读 persona（非独立 preset；选择器只显示主控） | ✅ |
 | 审查清单（safety 五类等） | references 按需读（five-categories.md 等） | ✅ |
 | skill on-demand 加载 | skill catalog 注册（customSkillDirs → plugin skills） | ✅ |
 

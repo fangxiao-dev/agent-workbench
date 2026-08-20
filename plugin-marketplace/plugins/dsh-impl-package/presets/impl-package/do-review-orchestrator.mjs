@@ -11,10 +11,11 @@
  */
 
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 export const name = 'do-review-orchestrator'
-export const inject = ['tools']
+export const inject = ['tools', 'subagents', 'subprocess']
 
 /* ── Pure: brief assembly (templates extracted from subagent-briefs.md) ──── */
 
@@ -191,21 +192,184 @@ export async function loadReviewerRegistry(pluginRoot) {
   return JSON.parse(raw)
 }
 
-/* ── Orchestration outline ─────────────────────────────────────────────────
- * 1. loadReviewerRegistry → resolveTopology
- * 2. Safety admission ← main session judgement (orchestrator only receives it)
- * 3. createReviewRun via review_ledger.py create (atomic; stop before dispatch on error)
- * 4. buildBrief × track → parallel fresh independent leaf dispatch (native subagents)
- * 5. wait all; unavailable leaf → stop and ask, never silently degrade
- * 6. aggregateVerdicts; main session classifies/dedupes → renderReport
- * The dispatch/ledger plumbing is wired in a later iteration; the pure core
- * above is complete and tested.
+/* ── Orchestration: ReviewRun creation + parallel leaf dispatch ──────────── */
+
+/** Tools a reviewer leaf may use (read-only; the leaf inherits the preset
+ *  composition, so the whitelist hides write/edit/bash/impl_* mutation tools). */
+export const READONLY_TOOLS = ['read', 'grep', 'glob', 'skill', 'git_show']
+
+/** Compact read-only persona for one review leaf (Track A/B/C/Safety). */
+export function leafPersona(track) {
+  const skill = track.skill ?? 'reviewer'
+  return [
+    `You are a read-only reviewer leaf (${track.label}) for an Impl-Package ReviewRun.`,
+    `Load and follow your declared skill (${skill}). Review only the supplied complete diff and the fixed comparison point; never re-derive the range.`,
+    'Read-only contract: never write/edit files, issues, git state, data, or external systems; never dispatch subagents; never call do-review; never re-evaluate topology/capacity; never inspect other tracks in this round. Immutable contract sources must be read with git_show (<resolved-head>:<path>) only, never the working tree.',
+    'Return a compact structured index:',
+    '  verdict: PASS | FAIL | UNCERTAIN',
+    '  coverage: <one compact line>',
+    '  findings: <slug> | <repo-relative-file>:<line> | <severity> | <one sentence>   (or "findings: none")',
+    'Every finding needs evidence; incomplete is not PASS.',
+  ].join('\n')
+}
+
+/** Parse the leaf compact index out of its final text. */
+export function parseLeafOutput(text) {
+  const value = typeof text === 'string' ? text : ''
+  const verdictMatch = /verdict:\s*(PASS|FAIL|UNCERTAIN)/i.exec(value)
+  const coverageMatch = /coverage:\s*([^\n]+)/i.exec(value)
+  const findings = []
+  const findingRe = /^\s*[-*]\s*([^\n|]+)\s*\|\s*([^\n|]+):(\d+)\s*\|\s*([^\n|]+)\s*\|\s*(.+)$/gm
+  for (const match of value.matchAll(findingRe)) {
+    findings.push({ slug: match[1].trim(), file: match[2].trim(), line: Number(match[3]), severity: match[4].trim(), summary: match[5].trim() })
+  }
+  return {
+    verdict: verdictMatch?.[1]?.toUpperCase(),
+    coverage: coverageMatch?.[1]?.trim(),
+    findings,
+  }
+}
+
+/** Pure: build the review_ledger.py create argv. Exported for tests. */
+export function buildReviewRunArgv(pluginRoot, { repoRoot, base, head, slug, mode, roundCap, sources = [] }) {
+  const argv = [
+    join(pluginRoot, 'skills/do-review/scripts/review_ledger.py'), 'create',
+    '--repo-root', repoRoot,
+    '--base', base,
+    '--head', head,
+    '--slug', slug,
+    '--mode', mode,
+    '--round-cap', String(roundCap),
+  ]
+  for (const source of sources) argv.push('--source', source)
+  return argv
+}
+
+/** Resolve the impl-package plugin root from a repo cwd (or explicit config). */
+export function resolvePluginRoot(cwd, explicitRoot) {
+  if (typeof explicitRoot === 'string' && explicitRoot !== '') return explicitRoot
+  let cur = cwd
+  for (let i = 0; i < 16 && cur; i += 1) {
+    const scripts = join(cur, 'plugin-marketplace', 'plugins', 'impl-package', 'scripts')
+    if (existsSync(join(scripts, 'impl_package_state.py'))) return dirname(scripts)
+    const parent = dirname(cur)
+    if (parent === cur) break
+    cur = parent
+  }
+  return undefined
+}
+
+/** Run review_ledger.py create; resolves the canonical ReviewRun (ledger path + JSON). */
+export async function createReviewRun(ctx, { pluginRoot, python, repoRoot, base, head, slug, mode, roundCap, sources }) {
+  if (pluginRoot === undefined) throw new Error('impl_review_run: cannot resolve impl-package plugin root (set pluginRoot in preset config)')
+  const argv = buildReviewRunArgv(pluginRoot, { repoRoot, base, head, slug, mode, roundCap, sources })
+  const handle = ctx.subprocess.spawn({
+    argv: [python ?? 'python', ...argv],
+    cwd: repoRoot,
+    stdio: { stdin: 'ignore', stdout: { maxBytes: 1 << 20 }, stderr: { maxBytes: 1 << 20 } },
+    graceMs: 3000,
+  })
+  const outcome = await handle.done
+  let stdout = ''
+  let stderr = ''
+  try {
+    stdout = handle.collected.stdout.readFrom(0).text
+    stderr = handle.collected.stderr.readFrom(0).text
+  } catch {
+    // collected readers may be unavailable on some backends
+  }
+  if (outcome.exitCode !== 0) {
+    throw new Error(`review_ledger create failed (${outcome.exitCode}): ${stderr || stdout || 'no output'}`)
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(stdout)
+  } catch {
+    throw new Error(`review_ledger create produced invalid JSON: ${stdout.slice(0, 400)}`)
+  }
+  return {
+    ...parsed,
+    ledgerPath: parsed?.ledger_path ?? parsed?.ledgerPath,
+    baseSha: parsed?.base_sha ?? parsed?.baseSha ?? base,
+    headSha: parsed?.head_sha ?? parsed?.headSha ?? head,
+  }
+}
+
+/** Coerce a subagent result output (string or content blocks) to text. */
+function resultText(output) {
+  if (typeof output === 'string') return output
+  if (Array.isArray(output)) {
+    return output
+      .filter((block) => block?.type === 'text' && typeof block.text === 'string')
+      .map((block) => block.text)
+      .join('\n')
+  }
+  return ''
+}
+
+/** Dispatch one fresh independent leaf via the native subagent seam. */
+export async function dispatchLeaf(ctx, { track, brief, signal }) {
+  if (ctx.subagents === undefined) throw new Error('impl_review_run: subagents service unavailable')
+  const run = await ctx.subagents.start('spawn', {
+    label: `do-review-${track.label}`,
+    prompt: [{ type: 'text', text: brief }],
+    persona: leafPersona(track),
+    toolFilter: { allow: READONLY_TOOLS },
+    maxDepth: 1,
+    ...(signal !== undefined ? { signal } : {}),
+  })
+  const result = await run.result
+  const text = resultText(result?.output)
+  return { ...parseLeafOutput(text), raw: text }
+}
+
+/**
+ * Full orchestration: topology → ReviewRun → briefs → parallel dispatch →
+ * fail-closed aggregation → report. Judgment inputs (safetyAdmission,
+ * acceptedFindings) come from the main session; leaf failures surface as
+ * missing verdicts so the aggregation stays fail-closed.
  */
+export async function orchestrate(ctx, input) {
+  const pluginRoot = resolvePluginRoot(input.repoRoot ?? process.cwd(), input.pluginRoot)
+  const registry = await loadReviewerRegistry(pluginRoot)
+  const topology = resolveTopology(registry, {
+    phase: input.phase,
+    explicitReviewers: input.explicitReviewers,
+    safety: input.safetyAdmission ?? { applicable: false },
+  })
+  const reviewRun = await createReviewRun(ctx, { pluginRoot, python: input.python ?? 'python', repoRoot: input.repoRoot, base: input.base, head: input.head, slug: input.slug, mode: input.mode, roundCap: input.roundCap ?? 1, sources: input.sources ?? [] })
+  const dispatches = topology.map((track) => ({
+    track,
+    brief: buildBrief({
+      reviewRun: {
+        ...reviewRun,
+        target: input.target ?? input.slug,
+        mode: input.mode,
+        phase: input.phase,
+        round: input.round ?? 1,
+        trackLabel: track.label,
+        skill: track.skill,
+        safety: input.safetyText ?? '',
+        reportPath: input.reportPath,
+      },
+      phase: input.phase,
+      round: input.round ?? 1,
+      priorLedger: input.priorLedger,
+    }),
+  }))
+  const tracks = await Promise.all(dispatches.map(({ track, brief }) =>
+    dispatchLeaf(ctx, { track, brief, signal: input.signal }).then(
+      (leaf) => ({ ...track, ...leaf }),
+      (error) => ({ ...track, error: error instanceof Error ? error.message : String(error) }),
+    ),
+  ))
+  const aggregate = aggregateVerdicts({ tracks, safety: input.safetyAdmission ?? { applicable: false }, phase: input.phase })
+  const report = renderReport({ reviewRun, tracks, aggregate, findings: input.acceptedFindings ?? [] })
+  return { report, tracks, aggregate, ledgerPath: reviewRun.ledgerPath }
+}
 
 export function apply(ctx, config) {
-  const pluginRoot = typeof config?.pluginRoot === 'string' && config.pluginRoot !== ''
-    ? config.pluginRoot
-    : undefined
+  const cfg = config ?? {}
   ctx.tools.register({
     name: 'impl_review_aggregate',
     description: 'Mechanically apply the do-review fail-closed aggregation: any required FAIL → FAIL; else any required UNCERTAIN → UNCERTAIN; all required PASS → PASS; Safety applicable but omitted from an explicit terminal-final list → INCOMPLETE. Pass tracks as JSON [{label, verdict, required}], safety as {applicable, selected}, phase as initial|finding-closure|terminal-final.',
@@ -248,6 +412,52 @@ export function apply(ctx, config) {
       const phase = args.phase ?? 'terminal-final'
       const result = aggregateVerdicts({ tracks, safety, phase })
       return { text: `Overall: ${result.overall} — ${result.reason}` }
+    },
+  })
+
+  ctx.tools.register({
+    name: 'impl_review_run',
+    description: 'Run one complete do-review pass: create the immutable ReviewRun (review_ledger.py create), resolve topology (registry default tracks + conditional Safety, or an explicit exact list), dispatch fresh independent read-only leaf reviewers in parallel, aggregate fail-closed (any required FAIL → FAIL; UNCERTAIN → UNCERTAIN; all PASS → PASS; Safety applicable but omitted from terminal-final → INCOMPLETE), and render the report. Judgment inputs are yours: safetyApplicable/safetySelected must reflect your Safety admission; the report returns leaf verdicts + your findings table for classification.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        base: { type: 'string', description: 'Base ref (resolved to a commit SHA by the ledger).' },
+        head: { type: 'string', description: 'Head ref (resolved to a commit SHA by the ledger); the review comparison point.' },
+        slug: { type: 'string', description: 'ReviewRun slug (e.g. the PR/package identifier).' },
+        mode: { type: 'string', enum: ['N rounds', 'Loop', 'Closure verification'], description: 'Review mode.' },
+        phase: { type: 'string', enum: ['initial', 'finding-closure', 'terminal-final'], description: 'Review phase.' },
+        roundCap: { type: 'integer', minimum: 1, description: 'Round cap (default 1).' },
+        sources: { type: 'array', items: { type: 'string' }, description: 'Path-based contract sources (repeatable).' },
+        safetyApplicable: { type: 'boolean', description: 'Your Safety admission: does the diff touch safety boundaries?' },
+        safetySelected: { type: 'boolean', description: 'Was Safety selected for this pass?' },
+        explicitReviewers: { type: 'array', items: { type: 'string' }, description: 'Optional exact reviewer list (runs in order; finding-closure requires exactly one).' },
+        repoRoot: { type: 'string', description: 'Repo root; default: session cwd.' },
+      },
+      required: ['base', 'head', 'slug', 'mode', 'phase'],
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: false, properties: { text: { type: 'string' } }, required: ['text'] },
+      render: (_args, value) => [{ type: 'text', text: value.text }],
+    },
+    async execute(args, exec) {
+      const cwd = typeof exec?.agent?.session?.header?.cwd === 'string' ? exec.agent.session.header.cwd : process.cwd()
+      const result = await orchestrate(ctx, {
+        pluginRoot: cfg.pluginRoot,
+        python: cfg.python,
+        repoRoot: args.repoRoot ?? cwd,
+        base: args.base,
+        head: args.head,
+        slug: args.slug,
+        mode: args.mode,
+        phase: args.phase,
+        roundCap: args.roundCap ?? 1,
+        sources: args.sources ?? [],
+        safetyAdmission: { applicable: args.safetyApplicable === true, selected: args.safetySelected === true },
+        explicitReviewers: args.explicitReviewers,
+        signal: exec?.signal,
+      })
+      return { text: result.report }
     },
   })
 }

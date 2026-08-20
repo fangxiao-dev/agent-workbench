@@ -16,8 +16,8 @@
 | CLI 拼装 / JSON payload | 12 个 typed tools（impl_*） |
 | 阶段路由表 | 18 个原生命令（impl-*，0 token） |
 | worker 派发 / 宿主名 | 原生 subagent（subagent_codex / subagent_grok） |
-| review topology / brief / 聚合 | do-review-orchestrator（resolveTopology / buildBrief / aggregateVerdicts / renderReport）+ `impl_review_aggregate` 工具 |
-| reviewer leaf 只读 | 4 个只读 reviewer presets（review-code / by-standards / by-spec / safety-review） |
+| review topology / brief / 聚合 | do-review-orchestrator（resolveTopology / buildBrief / aggregateVerdicts / renderReport / orchestrate）+ `impl_review_run` 工具 |
+| reviewer leaf 只读 | 派发组装：persona + `toolFilter: { allow: [read, grep, glob, skill, git_show] }`（非独立 preset） |
 
 跨宿主：压缩版 SKILL 保持宿主无关（指针写"语义 CLI / 处境注入"），Codex/Claude/Grok 同样受益；机械细节在 DSH 由工具/机制承接，其他宿主按需读 references。压缩判定与逐段对照表见 `review-checklist.md` 与各 commit。
 
@@ -29,21 +29,21 @@ plugin-marketplace/plugins/dsh-impl-package/
 ├─ cordis.patch.yml           # 把 host half + subagent providers 插入 profile roster
 ├─ lib/index.mjs              # host half：启动时把 presets/ 同步到 ~/.dsh/.agent-presets/
 ├─ presets/
-│  ├─ impl-package/           # 「Impl-Package 主控」agent preset（自包含）
-│  │  ├─ preset.yml
-│  │  ├─ agent.cordis.yml     # standard 基座 + hook/tools/commands/orchestrator + subagent 工具行
-│  │  ├─ situation-hook.mjs   # agent/pre-step：validate → situation render → 注入处境+协议
-│  │  ├─ impl-tools.mjs       # 12 个 typed 工具，直接调用 impl_package_state.py CLI
-│  │  ├─ commands.mjs         # 18 个 0-token 阶段路由命令
-│  │  └─ do-review-orchestrator.mjs  # review 机械核心（topology/brief/聚合/报告）
-│  ├─ review-code/            # Track A 只读 reviewer leaf（read/git_show/glob/grep）
-│  ├─ review-code-by-standards/  # Track B
-│  ├─ review-code-by-spec/    # Track C
-│  └─ safety-review/          # Conditional Safety（各自含 reviewer-fs.mjs / git-readonly.mjs）
+│  └─ impl-package/           # 「Impl-Package 主控」agent preset（自包含；唯一预设）
+│     ├─ preset.yml
+│     ├─ agent.cordis.yml     # standard 基座 + anchor/hook/tools/commands/orchestrator + subagent 工具行
+│     ├─ situation-hook.mjs   # agent/pre-step：validate → situation render → 注入处境+协议
+│     ├─ impl-anchor.mjs      # 两阶段恢复锚定（锁写工具，确认处境后放开）
+│     ├─ impl-tools.mjs       # 12 个 typed 工具，直接调用 impl_package_state.py CLI
+│     ├─ commands.mjs         # 18 个 0-token 阶段路由命令
+│     ├─ do-review-orchestrator.mjs  # review 编排（topology/brief/并行派发/聚合/报告 + impl_review_run）
+│     └─ git-readonly.mjs     # git_show（leaf 继承，读不可变 contract source）
 ├─ baseline-skill-sizes.md    # SKILL 降载前后行数基线
 ├─ review-checklist.md        # Phase 2 审校清单（21 项语义正确性）
 └─ test/smoke-test.mjs        # 纯逻辑冒烟测试（node 直接跑，无需 DSH）
 ```
+
+> **reviewer leaf 不是预设**：4 个 leaf（Track A/B/C/Safety）由 `impl_review_run` 派发时组装——start request 带只读 persona + `toolFilter: { allow: [read, grep, glob, skill, git_show] }`（真只读）+ 从主 preset skill catalog 加载声明 skill。不创建独立 preset 目录，预设选择器只显示「Impl-Package 主控」。派发的子代理继承主 composition，故 `situation-hook` 对 `delegationDepth > 0` 的子代理跳过处境注入（leaf 上下文保持 scoped）。
 
 ## 安装
 
@@ -126,6 +126,22 @@ pnpm add "@openai/codex@0.147.0"   # codex provider 的固定平台 payload（�
 - **外部 subagent 只读边界**：Codex/Grok 是一发式 out-of-process，宿主无法 toolFilter/persona；reviewer 若用它们需独立 worktree/只读 sandbox。进程内 `spawn`/`fork` 子代理才支持 `toolFilter`/`persona`/`outputSchema`。
 - **暂缓**：只读 reviewer preset、do-review 固定 orchestrator、commands 注册（`/impl-package:*` 原生命令）、progress/gate 的 Web UI 投影、pre-step 读 DSH 原生压缩压力。
 - DSH 仍为 Developer Preview：薄适配，破坏性变更影响面小；本插件全部文件可随时 `dsh plugin --profile desktop remove dsh-impl-package` 撤销。
+
+## 压缩与 handoff 决策（防误接）
+
+**背景**：跨宿主处境表里有 6 个 handoff 处境（`handoff-due` / `handoff-in-flight` / `handoff-recovery-needed` / `handoff-target-corrected` / `ticket-boundary-handoff` / `trail-rotation-due`）及对应协议片段。其中 `attempt.record.handoff-due` 由 `attempt.compaction_pressure_high` 驱动（renderer 需要宿主传 `--compaction-pressure`）。
+
+**决策（2026-08）**：
+
+1. **DSH 不传 compaction-pressure 给 renderer**（situation-hook 有意省略，代码注释在 `refreshSituation`）。`compaction_pressure_high` 因此保持"无法判定"而非 false——处境表永远不会在 DSH 上选中 `handoff-due`。理由：handoff 是为 Codex 式"上下文耗尽→开新 thread→需显式交接"服务的；DSH 会话压缩后**原地继续**（同 session 恢复 + `impl-anchor` 压缩回落重新锚定），handoff 建议在 DSH 是错误指导。
+2. **DSH 若未来需要压缩感知，归 `impl-anchor` 的回落逻辑**（压缩后重注入刷新处境），**绝不**通过接通 pressure 激活 `handoff-due`。
+3. **其余 handoff 处境在 DSH 保持存活且正确**：`handoff-in-flight` / `handoff-recovery-needed` / `handoff-target-corrected`（显式交接协议与异常对账）、`ticket-boundary-handoff`（Ticket 终态交接机会）、`trail-rotation-due`（轨迹轮换）——这些不依赖 pressure，DSH 里照常触发且语义成立。
+4. **跨宿主零改动**：situations.yaml / protocols.json（Python 侧）保留全部 handoff 行——对 Codex/Claude 仍有效（若用），对 DSH 只是不触发，无副作用。不做 DSH 专属标注污染跨宿主文件。
+
+**检查清单（未来改动时）**：
+- [ ] 不要给 situation-hook 的 render 调用加 `--compaction-pressure`
+- [ ] 压缩感知需求 → 改 `impl-anchor.mjs`（回落重锚定），不是接通 handoff-due
+- [ ] 若 DSH 处境注入需要过滤某类 slug → 在 DSH 侧（hook/anchor）过滤，不动跨宿主处境表
 
 ## 测试
 

@@ -1,3 +1,0 @@
-name: safety-review leaf（Conditional Safety）
-description: do-review 的条件 Safety 只读 reviewer leaf：加载 safety-review skill（触发信号判定、收缩型 focused path、P0/P1/P2 fail-closed 定级），返回 verdict/coverage/findings 紧凑结构化索引；无写工具、无派发工具。
-order: 9

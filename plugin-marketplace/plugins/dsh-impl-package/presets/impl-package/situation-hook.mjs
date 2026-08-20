@@ -189,6 +189,18 @@ export async function refreshSituation(ctx, { packageDir, scriptsRoot, python, s
   if (validate === undefined) return undefined
   const drift = validate.code !== 0
   const validationArg = JSON.stringify({ projection_drift: drift, source: 'package validate' })
+  // NOTE — compaction pressure is deliberately NOT passed to the renderer.
+  // `attempt.compaction_pressure_high` (fed by `--compaction-pressure`) drives
+  // the Codex-oriented `attempt.record.handoff-due` situation: handoff exists
+  // because Codex sessions die on context exhaustion and need an explicit
+  // checkpoint handoff to a fresh thread. DSH sessions survive compaction in
+  // place (the same session resumes; `impl-anchor` re-anchors after
+  // compaction/end), so the handoff recommendation would be WRONG advice
+  // here. Do not wire dsh-compaction pressure into this call — if DSH ever
+  // needs compaction awareness, it belongs to impl-anchor's fallback logic
+  // (re-inject the refreshed situation), not to handoff-due. Omitting the
+  // parameter keeps `compaction_pressure_high` undetermined (never false),
+  // so the situation table simply never selects the handoff rows on DSH.
   const rendered = await runCli(
     ctx,
     python,
@@ -239,6 +251,10 @@ export function apply(ctx, config) {
       if (agent === undefined || decision?.kind !== 'enter') return decision
       const session = agent.session
       if (session === undefined) return decision
+      // Review leaves and other delegated agents inherit this preset's
+      // composition; skip situation injection for them (delegationDepth >= 1)
+      // so their context stays scoped to the dispatched brief.
+      if (session?.header?.delegationDepth !== undefined && session.header.delegationDepth > 0) return decision
       const cwd = session?.header?.cwd
       if (typeof cwd !== 'string' || cwd.length === 0) return decision
 

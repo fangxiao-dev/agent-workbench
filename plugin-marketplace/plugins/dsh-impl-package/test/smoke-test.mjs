@@ -17,8 +17,7 @@ import {
   apply as applyImplTools,
 } from '../presets/impl-package/impl-tools.mjs'
 import { COMMANDS, buildRouteMessage, apply as applyCommands } from '../presets/impl-package/commands.mjs'
-import { readLines } from '../presets/review-code/reviewer-fs.mjs'
-import { aggregateVerdicts, resolveTopology, buildBrief } from '../presets/impl-package/do-review-orchestrator.mjs'
+import { aggregateVerdicts, resolveTopology, buildBrief, parseLeafOutput, buildReviewRunArgv, leafPersona, resolvePluginRoot, READONLY_TOOLS } from '../presets/impl-package/do-review-orchestrator.mjs'
 import { extractAnchor, referencesAnchor, filterAnchorTools, decidePromotion, newState, scanEvents, resetToControlled } from '../presets/impl-package/impl-anchor.mjs'
 import { validateAgentCordis, syncPresetTrees, resolveDshHome } from '../lib/index.mjs'
 
@@ -224,7 +223,9 @@ try {
   mkdirSync(target, { recursive: true })
   const result = syncPresetTrees(join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/presets'), target)
   check('preset sync copied impl-package', result.synced.includes('impl-package'))
-  check('preset sync copied 4 reviewer leaves', ['review-code', 'review-code-by-standards', 'review-code-by-spec', 'safety-review'].every((id) => result.synced.includes(id)))
+  // Reviewer leaves are assembled by impl_review_run dispatch (persona + toolFilter),
+  // not standalone presets — the picker must only show the main preset.
+  check('no standalone reviewer leaf presets', !result.synced.some((id) => id.startsWith('review-')))
   check('synced agent.cordis.yml exists', existsSync(join(target, 'impl-package/agent.cordis.yml')))
   check('synced hook exists', existsSync(join(target, 'impl-package/situation-hook.mjs')))
   check('synced tools exist', existsSync(join(target, 'impl-package/impl-tools.mjs')))
@@ -235,24 +236,13 @@ try {
 }
 check('resolveDshHome default', resolveDshHome({}, 'C:/Users/test').endsWith('.dsh'))
 
-console.log('== reviewer presets ==')
-const reviewerIds = ['review-code', 'review-code-by-standards', 'review-code-by-spec', 'safety-review']
-for (const id of reviewerIds) {
-  const dir = join(workbench, `plugin-marketplace/plugins/dsh-impl-package/presets/${id}`)
-  const doc = readFileSync(join(dir, 'agent.cordis.yml'), 'utf-8')
-  check(`${id}: agent.cordis.yml valid`, validateAgentCordis(doc).length === 0, validateAgentCordis(doc).join('; '))
-  check(`${id}: read-only tools (reviewer-fs/git-readonly/fs-search/skill, no write/bash/subagent)`,
-    doc.includes('./reviewer-fs.mjs') && doc.includes('./git-readonly.mjs')
-    && !/\bwrite\b/.test(doc.replace(/#.*$/gm, '').replace(/--.*$/gm, ''))
-    && !doc.includes('tool-bash') && !doc.includes('tool-pwsh') && !doc.includes('tool-subagent'))
-  check(`${id}: has preset.yml`, existsSync(join(dir, 'preset.yml')))
-  check(`${id}: has reviewer-fs.mjs`, existsSync(join(dir, 'reviewer-fs.mjs')))
-  check(`${id}: has git-readonly.mjs`, existsSync(join(dir, 'git-readonly.mjs')))
-}
-const lines = await readLines(join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/test/smoke-test.mjs'), 1, 3)
-check('reviewer-fs readLines renders line numbers', lines.lines.length === 3 && lines.lines[0].startsWith('1: '))
-const paged = await readLines(join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/test/smoke-test.mjs'), 2, 1)
-check('reviewer-fs readLines offset/limit', paged.lines.length === 1 && paged.lines[0].startsWith('2: '))
+console.log('== leaf assembly (orchestrator, no standalone presets) ==')
+check('no review-* preset dirs remain', !existsSync(join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/presets/review-code'))
+  && !existsSync(join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/presets/safety-review')))
+check('READONLY_TOOLS excludes write/execute', !READONLY_TOOLS.some((t) => ['write', 'edit', 'bash', 'pwsh', 'impl_ticket_transition', 'impl_gate_commit'].includes(t)))
+check('main preset mounts git-readonly for leaf inheritance', presetDoc.includes('./git-readonly.mjs') && existsSync(join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/presets/impl-package/git-readonly.mjs')))
+const hookSource = readFileSync(join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/presets/impl-package/situation-hook.mjs'), 'utf-8')
+check('situation-hook skips delegated agents', hookSource.includes('delegationDepth') && hookSource.includes('> 0'))
 
 console.log('== orchestrator ==')
 const passTracks = [
@@ -277,6 +267,18 @@ const brief = buildBrief({ reviewRun: { target: 'x', baseSha: 'a', headSha: 'b',
 check('brief: common block assembled', brief.includes('Review target:') && brief.includes('Resolved base SHA: a'))
 const closureBrief = buildBrief({ reviewRun: { phase: 'finding-closure' }, phase: 'finding-closure', round: 1 })
 check('brief: closure brief appended', closureBrief.includes('closure verification only'))
+
+console.log('== orchestrator dispatch ==')
+const parsedLeaf = parseLeafOutput('verdict: FAIL\ncoverage: main entry + error paths\nfindings:\n- F-01 | src/app.ts:42 | P1 | unhandled error path\n- F-02 | src/db.ts:17 | P2 | missing rollback')
+check('parseLeafOutput: verdict + findings', parsedLeaf.verdict === 'FAIL' && parsedLeaf.findings.length === 2 && parsedLeaf.findings[0].file === 'src/app.ts' && parsedLeaf.findings[0].line === 42)
+check('parseLeafOutput: no findings', parseLeafOutput('verdict: PASS\ncoverage: all modules\nfindings: none').findings.length === 0)
+const runArgv = buildReviewRunArgv('P', { repoRoot: 'R', base: 'a', head: 'b', slug: 's', mode: 'N rounds', roundCap: 3, sources: ['docs/spec.md', 'docs/decision.md'] })
+check('buildReviewRunArgv: full argv', runArgv.includes('--repo-root') && runArgv.includes('--round-cap') && runArgv.filter((a) => a === '--source').length === 2 && runArgv[runArgv.length - 1] === 'docs/decision.md')
+const persona = leafPersona({ label: 'Track A', skill: 'review-code' })
+check('leafPersona: read-only contract + declared skill', persona.includes('review-code') && persona.includes('never write/edit') && persona.includes('git_show'))
+const resolvedRoot = resolvePluginRoot('D:/CodeSpace/agent-workbench')
+check('resolvePluginRoot: finds workbench plugin', typeof resolvedRoot === 'string' && /impl-package$/.test(resolvedRoot.replace(/[\\/]+$/, '')))
+check('resolvePluginRoot: undefined outside', resolvePluginRoot('C:/Windows') === undefined)
 
 console.log('== anchor ==')
 const situationMessage = {

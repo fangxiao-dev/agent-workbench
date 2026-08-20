@@ -1,3 +1,0 @@
-name: review-code-by-spec leaf（Track C）
-description: do-review 的 Track C 只读 reviewer leaf：加载 review-code-by-spec skill（合同忠实度/遗漏需求/scope creep/兼容/状态机/跨模块 seam），返回 verdict/coverage/findings 紧凑结构化索引；无写工具、无派发工具。
-order: 8

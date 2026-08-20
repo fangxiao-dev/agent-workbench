@@ -103,6 +103,13 @@
 - id: do-review-orchestrator
   name: ./do-review-orchestrator.mjs
 
+# ── read-only git (git_show) ────────────────────────────────────────────────
+# Also mounted here so review leaves dispatched by impl_review_run inherit
+# git_show for immutable contract-source reads (their toolFilter whitelist
+# allows read/grep/glob/skill/git_show only).
+- id: tool-git-readonly
+  name: ./git-readonly.mjs
+
 # ── shell ───────────────────────────────────────────────────────────────────
 
 - id: tool-bash
