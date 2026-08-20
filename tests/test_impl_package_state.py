@@ -330,6 +330,142 @@ class ImplPackageStateTests(unittest.TestCase):
             self.assertEqual(row["head"], git(repo, "rev-parse", "HEAD"))
         self.assertEqual(rows[1]["situation_digest"], "a1b2c3d4e5f6")
 
+    def test_trail_append_named_flags_merge_into_event(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.write_situation_digest(package)
+
+        result = self.cli(
+            repo,
+            package,
+            "trail",
+            "append",
+            "--situation-digest",
+            "a1b2c3d4e5f6",
+            "--review-phase",
+            "initial",
+            "--review-track",
+            "Track A",
+            "--review-recheck",
+            input_text=json.dumps(
+                {
+                    "kind": "dispatch",
+                    "subject": "attempt",
+                    "outcome": "RUNNING",
+                    "worker": "worker-01",
+                    "returned": False,
+                }
+            ),
+        )
+
+        self.assertTrue(json.loads(result.stdout)["appended"])
+        row = json.loads((package / "execution/initial/trail.jsonl").read_text(encoding="utf-8"))
+        self.assertEqual(row["situation_digest"], "a1b2c3d4e5f6")
+        self.assertEqual(row["review_phase"], "initial")
+        self.assertEqual(row["review_track"], "Track A")
+        self.assertTrue(row["review_recheck"])
+
+    def test_trail_append_named_flags_reject_invalid_values(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        payload = json.dumps({"kind": "fact", "subject": "attempt", "key": "attempt.in_flight", "value": True})
+
+        invalid = (
+            (("--situation-digest", "not-a-digest"), "12-character hex"),
+            (("--review-phase", "terminal"), "invalid choice"),
+            (("--review-track", "Track E"), "invalid choice"),
+        )
+        for (option, value), message in invalid:
+            result = self.cli(repo, package, "trail", "append", option, value, input_text=payload, ok=False)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(message, result.stderr)
+
+    def test_trail_append_named_flags_reject_conflicting_stdin_values(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        base = {
+            "kind": "dispatch",
+            "subject": "attempt",
+            "outcome": "RUNNING",
+            "worker": "worker-01",
+            "returned": False,
+        }
+        conflicts = (
+            (("--situation-digest", "a1b2c3d4e5f6"), {"situation_digest": "deadbeefdead"}, "situation_digest"),
+            (("--review-phase", "finding-closure"), {"review_phase": "initial", "review_track": "Track A"}, "review_phase"),
+            (("--review-track", "Track B"), {"review_phase": "initial", "review_track": "Track A"}, "review_track"),
+            (("--review-recheck", None), {"review_recheck": False}, "review_recheck"),
+        )
+        for (option, value), fields, field in conflicts:
+            argv = ["trail", "append", option]
+            if value is not None:
+                argv.append(value)
+            result = self.cli(repo, package, *argv, input_text=json.dumps({**base, **fields}), ok=False)
+            self.assertIn("conflicts", result.stderr)
+            self.assertIn(field, result.stderr)
+
+    def test_trail_append_named_flags_accept_matching_stdin_values(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.write_situation_digest(package)
+        payload = {
+            "kind": "dispatch",
+            "subject": "attempt",
+            "outcome": "RUNNING",
+            "worker": "worker-01",
+            "returned": False,
+            "situation_digest": "a1b2c3d4e5f6",
+            "review_phase": "initial",
+            "review_track": "Track A",
+            "review_recheck": True,
+        }
+
+        result = self.cli(
+            repo,
+            package,
+            "trail",
+            "append",
+            "--situation-digest",
+            "a1b2c3d4e5f6",
+            "--review-phase",
+            "initial",
+            "--review-track",
+            "Track A",
+            "--review-recheck",
+            input_text=json.dumps(payload),
+        )
+        self.assertTrue(json.loads(result.stdout)["appended"])
+
+    def test_trail_append_stdin_named_fields_remain_compatible(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.write_situation_digest(package)
+        result = self.cli(
+            repo,
+            package,
+            "trail",
+            "append",
+            input_text=json.dumps(
+                {
+                    "kind": "dispatch",
+                    "subject": "attempt",
+                    "outcome": "RUNNING",
+                    "worker": "worker-01",
+                    "returned": False,
+                    "situation_digest": "a1b2c3d4e5f6",
+                    "review_phase": "initial",
+                    "review_track": "Track A",
+                    "review_recheck": False,
+                }
+            ),
+        )
+        self.assertTrue(json.loads(result.stdout)["appended"])
+
     def test_review_dispatch_fields_use_closed_vocabulary_and_pairing(self) -> None:
         base = {
             "kind": "dispatch",

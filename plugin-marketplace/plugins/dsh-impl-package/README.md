@@ -13,7 +13,7 @@
 | 降载去向 | 承接 |
 | --- | --- |
 | 每轮 validate→render→digest | pre-step 处境注入（消费 Python render 的 `protocol` 字段） |
-| CLI 拼装 / JSON payload | 9 个 typed tools（impl_*） |
+| CLI 拼装 / JSON payload | 12 个 typed tools（impl_*） |
 | 阶段路由表 | 18 个原生命令（impl-*，0 token） |
 | worker 派发 / 宿主名 | 原生 subagent（subagent_codex / subagent_grok） |
 | review topology / brief / 聚合 | do-review-orchestrator（resolveTopology / buildBrief / aggregateVerdicts / renderReport）+ `impl_review_aggregate` 工具 |
@@ -33,7 +33,7 @@ plugin-marketplace/plugins/dsh-impl-package/
 │  │  ├─ preset.yml
 │  │  ├─ agent.cordis.yml     # standard 基座 + hook/tools/commands/orchestrator + subagent 工具行
 │  │  ├─ situation-hook.mjs   # agent/pre-step：validate → situation render → 注入处境+协议
-│  │  ├─ impl-tools.mjs       # 9 个 typed 工具，直接调用 impl_package_state.py CLI
+│  │  ├─ impl-tools.mjs       # 12 个 typed 工具，直接调用 impl_package_state.py CLI
 │  │  ├─ commands.mjs         # 18 个 0-token 阶段路由命令
 │  │  └─ do-review-orchestrator.mjs  # review 机械核心（topology/brief/聚合/报告）
 │  ├─ review-code/            # Track A 只读 reviewer leaf（read/git_show/glob/grep）
@@ -90,7 +90,10 @@ pnpm add "@openai/codex@0.147.0"   # codex provider 的固定平台 payload（�
 | `impl_evidence_add` / `impl_evidence_invalidate` | `evidence add/invalidate`（stdin JSON） |
 | `impl_recovery_checkpoint` / `impl_recovery_judgment` | `recovery checkpoint/judgment` |
 | `impl_gate_commit` | `gate <verdict> --comparison-commit --reason …` |
-| `impl_trail_append` | `trail append`（escape/fact/dispatch/worker-return，CLI 校验 schema 与 digest） |
+| `impl_trail_dispatch` | `trail append`（dispatch；digest/review 字段走具名 flag，CLI 校验 schema 与 digest） |
+| `impl_trail_escape` | `trail append`（escape；subject/deviation/reason） |
+| `impl_trail_fact` | `trail append`（fact；subject/key/value） |
+| `impl_trail_worker_return` | `trail append`（worker-return；subject/outcome） |
 
 5. Worker 派发：`subagent_codex`（官方 Codex provider，ephemeral thread，复用本机登录）/ `subagent_grok`（ACP 驱动
    `grok agent --always-approve stdio`）。两者均为 one-shot：收最终答案文本，不回传子进程内部轨迹；envelope 与
@@ -100,7 +103,7 @@ pnpm add "@openai/codex@0.147.0"   # codex provider 的固定平台 payload（�
 
 - **digest 未变不注入**：DSH 的 pre-step 每步触发，重复注入会污染上下文；只在 digest 变化（或 session 冷启动/压缩后）注入完整处境。内存按 session 缓存，重启后首步自动重新注入。
 - **处境驱动协议注入**：`plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/protocols.json` 是跨宿主唯一协议表，为 situation slug 提供 2-4 行协议片段（判断/处理规则，来源 dev-with-track / do-review / worker-resolver 合同）；Python render 把命中的片段放进 `selected.protocol`，hook 只消费这个字段。模型每步只见「当前处境 + 当前动作的规则」，不再读整套 SKILL/references。`default` 兜底未覆盖 slug。
-- **注入是导航，不是 gate**：模型仍可偏离，按 `dev-with-track` 合同写 `kind=escape` 轨迹行（`impl_trail_append`）。
+- **注入是导航，不是 gate**：模型仍可偏离，按 `dev-with-track` 合同写 `kind=escape` 轨迹行（`impl_trail_escape`）。
 - **compaction pressure 未接**：renderer 缺省时 `attempt.compaction_pressure_high` 保持不可判定；后续可读 DSH 原生压缩观测接入。
 - **脚本定位**：`situation.py` / `impl_package_state.py` 通过最近祖先树的 `plugin-marketplace/plugins/impl-package/scripts` 解析，或 preset 配置 `implScriptsRoot` 显式指定；package 目录解析优先级：`packagePath` 配置 → cwd 向上最近含 state.json → git root 下 `docs/implementations/<topic>/`。
 

@@ -103,6 +103,12 @@ def _expect(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--expect", required=True)
 
 
+def _trail_digest(value: str) -> str:
+    if engine.TRAIL_DIGEST_RE.fullmatch(value) is None:
+        raise argparse.ArgumentTypeError("must be a 12-character hex digest")
+    return value
+
+
 def _ticket_transition(package: Path, args: argparse.Namespace, target: str) -> dict[str, Any]:
     return engine.command_set_state(
         package, args.id, target, args.expect,
@@ -180,7 +186,15 @@ def _parser(group: str) -> argparse.ArgumentParser:
         checkpoint.add_argument("--handoff", action="store_true")
         commands.add_parser("judgment", help="append a judgment JSON payload from stdin")
     elif group == "trail":
-        commands.add_parser("append", help="append a validated manual trail event from stdin")
+        append = commands.add_parser("append", help="append a validated manual trail event from stdin")
+        append.add_argument(
+            "--situation-digest",
+            type=_trail_digest,
+            help="12-character hex digest previously emitted by situation.py render",
+        )
+        append.add_argument("--review-phase", choices=situation.REVIEW_PHASE_VALUES)
+        append.add_argument("--review-track", choices=situation.REVIEW_TRACK_VALUES)
+        append.add_argument("--review-recheck", action="store_true", default=None)
     elif group == "gate":
         for verdict in sorted(engine.VERDICTS):
             child = commands.add_parser(verdict, help=f"write a {verdict} Gate")
@@ -235,7 +249,16 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
         return (engine.command_checkpoint(package, args.subject, args.next, args.blocker, args.evidence, args.handoff) if args.command == "checkpoint" else
                 engine.command_er_add(package, sys.stdin.read()))
     if group == "trail":
-        return engine.command_trail_append(package, sys.stdin.read())
+        return engine.command_trail_append(
+            package,
+            sys.stdin.read(),
+            {
+                "situation_digest": args.situation_digest,
+                "review_phase": args.review_phase,
+                "review_track": args.review_track,
+                "review_recheck": args.review_recheck,
+            },
+        )
     return engine.command_gate(package, args.verdict, args.comparison_commit, args.reason, args.evidence,
                                args.durable_delta, args.no_durable_delta_reason, args.environment)
 

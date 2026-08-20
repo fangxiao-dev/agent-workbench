@@ -153,7 +153,7 @@ function copyDir(source, target) {
 export const IMPL_PACKAGE_GUIDANCE =
   '本机已安装 dsh-impl-package 插件（Impl-Package 原生适配）：主控预设会通过 agent/pre-step 自动注入「当前处境 + 合法动作 + digest」' +
   '（package validate → situation.py render），并提供 typed 工具（impl_package_validate / impl_situation_render / impl_ticket_transition / ' +
-  'impl_evidence_add / impl_recovery_checkpoint / impl_recovery_judgment / impl_gate_commit / impl_trail_append）直接调用现有语义 CLI。' +
+  'impl_evidence_add / impl_recovery_checkpoint / impl_recovery_judgment / impl_gate_commit / impl_trail_dispatch / impl_trail_escape / impl_trail_fact / impl_trail_worker_return）直接调用现有语义 CLI。' +
   'state.json 与 Git 仍是唯一权威；本插件只做执行轨迹与处境注入，不另建事实源。' +
   '原生 subagent（subagent_codex / subagent_grok）已替代 call-codex / call-grok 的进程外派发；envelope 与 fallback 规则沿用 worker-resolver 合同。'
 

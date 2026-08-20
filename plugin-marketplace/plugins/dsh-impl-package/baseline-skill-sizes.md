@@ -151,7 +151,7 @@ Impl-Package 是一套跨宿主的开发工作流插件（Ticket 状态机、处
 | 机械负担（原来在 SKILL 里） | 承接机制 | 状态 |
 | --- | --- | --- |
 | 每轮 validate → render → digest | pre-step 处境注入 + Python render 的 protocol 字段 | ✅ |
-| CLI 命令 / JSON payload 拼装 | 9 个 typed 工具（impl_package_validate / impl_situation_render / impl_ticket_transition / impl_evidence_add / impl_evidence_invalidate / impl_recovery_checkpoint / impl_recovery_judgment / impl_gate_commit / impl_trail_append） | ✅ |
+| CLI 命令 / JSON payload 拼装 | 12 个 typed 工具（impl_package_validate / impl_situation_render / impl_ticket_transition / impl_evidence_add / impl_evidence_invalidate / impl_recovery_checkpoint / impl_recovery_judgment / impl_gate_commit / impl_trail_dispatch / impl_trail_escape / impl_trail_fact / impl_trail_worker_return） | ✅ |
 | 阶段路由表 | 18 个原生命令（impl-req-align … impl-backfill-stable-docs，0 token） | ✅ |
 | worker 派发 / 宿主名 | 原生 subagent（subagent_codex / subagent_grok） | ✅ |
 | review topology / brief / 聚合 / 报告 | do-review-orchestrator.mjs（resolveTopology / buildBrief / aggregateVerdicts / renderReport）+ `impl_review_aggregate` 工具 | ✅ 纯函数完成；并行派发接线待续 |

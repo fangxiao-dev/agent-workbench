@@ -143,6 +143,88 @@ export function buildTicketArgv(scriptsRoot, packageDir, args) {
   return argv
 }
 
+const TRAIL_DISPATCH_OUTCOMES = ['RUNNING']
+const TRAIL_REVIEW_PHASE_VALUES = ['initial', 'finding-closure', 'terminal-final']
+const TRAIL_REVIEW_TRACK_VALUES = ['Track A', 'Track B', 'Track C', 'Track D']
+
+function trailAppendArgv(scriptsRoot, packageDir) {
+  return [join(scriptsRoot, 'impl_package_state.py'), '--package', packageDir, 'trail', 'append']
+}
+
+function requiredBool(value, field) {
+  if (typeof value !== 'boolean') throw new Error(`impl-tools: ${field} must be a boolean`)
+  return value
+}
+
+function optionalTrailFlag(value, field) {
+  if (value === undefined || value === '') return undefined
+  return str(value, field)
+}
+
+/** Pure: build the dispatch trail CLI argv and stdin payload. Exported for tests. */
+export function buildTrailDispatchInvocation(scriptsRoot, packageDir, args) {
+  const payload = {
+    kind: 'dispatch',
+    subject: str(args.subject, 'subject'),
+    worker: str(args.worker, 'worker'),
+    outcome: str(args.outcome, 'outcome'),
+    returned: requiredBool(args.returned, 'returned'),
+  }
+  const argv = trailAppendArgv(scriptsRoot, packageDir)
+  argv.push('--situation-digest', str(args.situationDigest, 'situationDigest'))
+  const reviewPhase = optionalTrailFlag(args.reviewPhase, 'reviewPhase')
+  if (reviewPhase !== undefined) argv.push('--review-phase', reviewPhase)
+  const reviewTrack = optionalTrailFlag(args.reviewTrack, 'reviewTrack')
+  if (reviewTrack !== undefined) argv.push('--review-track', reviewTrack)
+  if (args.reviewRecheck !== undefined) {
+    const reviewRecheck = requiredBool(args.reviewRecheck, 'reviewRecheck')
+    if (reviewRecheck) argv.push('--review-recheck')
+    else payload.review_recheck = false
+  }
+  return { argv, stdinData: JSON.stringify(payload) }
+}
+
+/** Pure: build the escape trail CLI argv and stdin payload. Exported for tests. */
+export function buildTrailEscapeInvocation(scriptsRoot, packageDir, args) {
+  return {
+    argv: trailAppendArgv(scriptsRoot, packageDir),
+    stdinData: JSON.stringify({
+      kind: 'escape',
+      subject: str(args.subject, 'subject'),
+      deviation: str(args.deviation, 'deviation'),
+      reason: str(args.reason, 'reason'),
+    }),
+  }
+}
+
+/** Pure: build the fact trail CLI argv and stdin payload. Exported for tests. */
+export function buildTrailFactInvocation(scriptsRoot, packageDir, args) {
+  if (!Object.prototype.hasOwnProperty.call(args, 'value') || args.value === undefined) {
+    throw new Error('impl-tools: value is required')
+  }
+  return {
+    argv: trailAppendArgv(scriptsRoot, packageDir),
+    stdinData: JSON.stringify({
+      kind: 'fact',
+      subject: str(args.subject, 'subject'),
+      key: str(args.key, 'key'),
+      value: args.value,
+    }),
+  }
+}
+
+/** Pure: build the worker-return trail CLI argv and stdin payload. Exported for tests. */
+export function buildTrailWorkerReturnInvocation(scriptsRoot, packageDir, args) {
+  return {
+    argv: trailAppendArgv(scriptsRoot, packageDir),
+    stdinData: JSON.stringify({
+      kind: 'worker-return',
+      subject: str(args.subject, 'subject'),
+      outcome: str(args.outcome, 'outcome'),
+    }),
+  }
+}
+
 export function apply(ctx, config) {
   const cfg = { ...config ?? {} }
   const stateFileName = String(cfg.stateFileName || '.impl-package/state.json')
@@ -376,31 +458,86 @@ export function apply(ctx, config) {
   })
 
   registerTool(ctx, cfg, stateFileName, {
-    name: 'impl_trail_append',
-    description: 'Append one manual trail event (append-only). payload is a JSON object WITHOUT v/seq/ts/head (the CLI fills them). Kinds: escape {subject, deviation, reason}; fact {subject, key (must be a known fact key), value}; dispatch {subject, worker, outcome:"RUNNING", returned:false, situation_digest (12-hex, from impl_situation_render), review fields}; worker-return {subject, outcome}.',
+    name: 'impl_trail_dispatch',
+    description: 'Append a dispatch trail event. situationDigest is required and must be the 12-character digest emitted by impl_situation_render; outcome is RUNNING and returned is false for a valid dispatch. reviewPhase and reviewTrack must be supplied together when used.',
     parameters: {
       type: 'object',
       properties: {
         package: { type: 'string', description: 'Package directory; default: resolved from the session cwd.' },
-        kind: { type: 'string', enum: ['escape', 'fact', 'dispatch', 'worker-return'] },
-        payload: { type: 'string', description: 'JSON object string with the event fields (no common fields).' },
+        subject: { type: 'string' },
+        worker: { type: 'string' },
+        outcome: { type: 'string', enum: TRAIL_DISPATCH_OUTCOMES },
+        returned: { type: 'boolean' },
+        situationDigest: { type: 'string', description: 'Required 12-character digest from impl_situation_render.' },
+        reviewPhase: { type: 'string', enum: TRAIL_REVIEW_PHASE_VALUES },
+        reviewTrack: { type: 'string', enum: TRAIL_REVIEW_TRACK_VALUES },
+        reviewRecheck: { type: 'boolean' },
       },
-      required: ['kind', 'payload'],
+      required: ['subject', 'worker', 'outcome', 'returned', 'situationDigest'],
       additionalProperties: false,
     },
     async execute(args, _exec, { packageDir, scriptsRoot, python }) {
-      let event
-      try {
-        event = JSON.parse(str(args.payload, 'payload'))
-      } catch (error) {
-        throw new Error(`impl-tools: trail payload is invalid JSON: ${error instanceof Error ? error.message : String(error)}`)
-      }
-      if (typeof event !== 'object' || event === null || Array.isArray(event)) {
-        throw new Error('impl-tools: trail payload must be a JSON object')
-      }
-      event.kind = str(args.kind, 'kind')
-      const argv = [join(scriptsRoot, 'impl_package_state.py'), '--package', packageDir, 'trail', 'append']
-      return runCli(ctx, python, argv, packageDir, undefined, JSON.stringify(event))
+      const { argv, stdinData } = buildTrailDispatchInvocation(scriptsRoot, packageDir, args)
+      return runCli(ctx, python, argv, packageDir, undefined, stdinData)
+    },
+  })
+
+  registerTool(ctx, cfg, stateFileName, {
+    name: 'impl_trail_escape',
+    description: 'Append an escape trail event recording a deviation and its reason.',
+    parameters: {
+      type: 'object',
+      properties: {
+        package: { type: 'string', description: 'Package directory; default: resolved from the session cwd.' },
+        subject: { type: 'string' },
+        deviation: { type: 'string' },
+        reason: { type: 'string' },
+      },
+      required: ['subject', 'deviation', 'reason'],
+      additionalProperties: false,
+    },
+    async execute(args, _exec, { packageDir, scriptsRoot, python }) {
+      const { argv, stdinData } = buildTrailEscapeInvocation(scriptsRoot, packageDir, args)
+      return runCli(ctx, python, argv, packageDir, undefined, stdinData)
+    },
+  })
+
+  registerTool(ctx, cfg, stateFileName, {
+    name: 'impl_trail_fact',
+    description: 'Append a fact trail event. key must be a known Impl-Package fact key; value is the JSON fact value.',
+    parameters: {
+      type: 'object',
+      properties: {
+        package: { type: 'string', description: 'Package directory; default: resolved from the session cwd.' },
+        subject: { type: 'string' },
+        key: { type: 'string', description: 'Known Impl-Package fact key; Python validates the closed key set.' },
+        value: { description: 'JSON fact value; the field is required.' },
+      },
+      required: ['subject', 'key', 'value'],
+      additionalProperties: false,
+    },
+    async execute(args, _exec, { packageDir, scriptsRoot, python }) {
+      const { argv, stdinData } = buildTrailFactInvocation(scriptsRoot, packageDir, args)
+      return runCli(ctx, python, argv, packageDir, undefined, stdinData)
+    },
+  })
+
+  registerTool(ctx, cfg, stateFileName, {
+    name: 'impl_trail_worker_return',
+    description: 'Append a worker-return trail event with the worker outcome.',
+    parameters: {
+      type: 'object',
+      properties: {
+        package: { type: 'string', description: 'Package directory; default: resolved from the session cwd.' },
+        subject: { type: 'string' },
+        outcome: { type: 'string' },
+      },
+      required: ['subject', 'outcome'],
+      additionalProperties: false,
+    },
+    async execute(args, _exec, { packageDir, scriptsRoot, python }) {
+      const { argv, stdinData } = buildTrailWorkerReturnInvocation(scriptsRoot, packageDir, args)
+      return runCli(ctx, python, argv, packageDir, undefined, stdinData)
     },
   })
 }

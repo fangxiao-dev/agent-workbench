@@ -1126,6 +1126,20 @@ def _validate_review_dispatch_fields(event: dict[str, Any]) -> None:
         raise StateError("review_recheck 必须是 boolean")
 
 
+def _merge_trail_named_fields(event: dict[str, Any], named_fields: dict[str, Any]) -> dict[str, Any]:
+    for field, value in named_fields.items():
+        if value is None:
+            continue
+        if field in event:
+            same = type(event[field]) is type(value) and event[field] == value
+            if not same:
+                option = f"--{field.replace('_', '-')}"
+                raise StateError(f"trail append {option} conflicts with stdin {field}")
+        else:
+            event[field] = value
+    return event
+
+
 def _validate_trail_event(event: dict[str, Any]) -> dict[str, Any]:
     supplied_common = sorted(TRAIL_COMMON_FIELDS & event.keys())
     if supplied_common:
@@ -1164,13 +1178,19 @@ def _validate_trail_event(event: dict[str, Any]) -> dict[str, Any]:
     return event
 
 
-def command_trail_append(package: Path, input_text: str) -> dict[str, Any]:
+def command_trail_append(
+    package: Path,
+    input_text: str,
+    named_fields: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     try:
         event = json.loads(input_text)
     except json.JSONDecodeError as exc:
         raise StateError(f"trail append input is invalid JSON: {exc}") from exc
     if not isinstance(event, dict):
         raise StateError("trail append input must be an object")
+    if named_fields:
+        event = _merge_trail_named_fields(event, named_fields)
     event = _validate_trail_event(event)
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)

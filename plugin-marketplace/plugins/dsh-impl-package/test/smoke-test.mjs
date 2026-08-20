@@ -8,7 +8,14 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 
 import { resolvePackageDir, resolveImplScripts, composeSituationMessage, countOf, buildSituationMessage } from '../presets/impl-package/situation-hook.mjs'
-import { buildTicketArgv } from '../presets/impl-package/impl-tools.mjs'
+import {
+  buildTicketArgv,
+  buildTrailDispatchInvocation,
+  buildTrailEscapeInvocation,
+  buildTrailFactInvocation,
+  buildTrailWorkerReturnInvocation,
+  apply as applyImplTools,
+} from '../presets/impl-package/impl-tools.mjs'
 import { COMMANDS, buildRouteMessage, apply as applyCommands } from '../presets/impl-package/commands.mjs'
 import { readLines } from '../presets/review-code/reviewer-fs.mjs'
 import { aggregateVerdicts, resolveTopology, buildBrief } from '../presets/impl-package/do-review-orchestrator.mjs'
@@ -82,6 +89,94 @@ check('needs-revalidation rejects missing claims', threw)
 threw = false
 try { buildTicketArgv('S', 'P', { action: 'satisfy', ticket: 'T', expect: 'PENDING' }) } catch { threw = true }
 check('satisfy rejects missing revision', threw)
+
+console.log('== trail tools ==')
+const dispatchInvocation = buildTrailDispatchInvocation('S', 'P', {
+  subject: 'attempt',
+  worker: 'worker-01',
+  outcome: 'RUNNING',
+  returned: false,
+  situationDigest: 'a1b2c3d4e5f6',
+  reviewPhase: 'initial',
+  reviewTrack: 'Track A',
+  reviewRecheck: true,
+})
+const dispatchPayload = JSON.parse(dispatchInvocation.stdinData)
+check(
+  'dispatch constructor builds flat payload and named flags',
+  dispatchInvocation.argv.includes('trail') && dispatchInvocation.argv.includes('append')
+  && dispatchInvocation.argv.includes('--situation-digest') && dispatchInvocation.argv.includes('a1b2c3d4e5f6')
+  && dispatchInvocation.argv.includes('--review-phase') && dispatchInvocation.argv.includes('initial')
+  && dispatchInvocation.argv.includes('--review-track') && dispatchInvocation.argv.includes('Track A')
+  && dispatchInvocation.argv.includes('--review-recheck')
+  && dispatchPayload.kind === 'dispatch' && dispatchPayload.subject === 'attempt'
+  && dispatchPayload.outcome === 'RUNNING' && dispatchPayload.returned === false
+  && dispatchPayload.situation_digest === undefined
+  && dispatchPayload.review_phase === undefined && dispatchPayload.review_track === undefined,
+)
+
+const escapeInvocation = buildTrailEscapeInvocation('S', 'P', {
+  subject: 'attempt', deviation: 'manual', reason: 'fixture',
+})
+check(
+  'escape constructor builds required payload',
+  escapeInvocation.argv.includes('trail') && escapeInvocation.argv.includes('append')
+  && JSON.stringify(JSON.parse(escapeInvocation.stdinData)) === JSON.stringify({
+    kind: 'escape', subject: 'attempt', deviation: 'manual', reason: 'fixture',
+  }),
+)
+
+const factInvocation = buildTrailFactInvocation('S', 'P', {
+  subject: 'attempt', key: 'attempt.in_flight', value: { enabled: true },
+})
+const factPayload = JSON.parse(factInvocation.stdinData)
+check(
+  'fact constructor preserves arbitrary JSON value',
+  factInvocation.argv.includes('trail') && factPayload.kind === 'fact'
+  && factPayload.subject === 'attempt' && factPayload.key === 'attempt.in_flight'
+  && factPayload.value?.enabled === true,
+)
+
+const workerReturnInvocation = buildTrailWorkerReturnInvocation('S', 'P', {
+  subject: 'attempt', outcome: 'EVIDENCE_GAP',
+})
+check(
+  'worker-return constructor builds required payload',
+  workerReturnInvocation.argv.includes('trail')
+  && JSON.stringify(JSON.parse(workerReturnInvocation.stdinData)) === JSON.stringify({
+    kind: 'worker-return', subject: 'attempt', outcome: 'EVIDENCE_GAP',
+  }),
+)
+
+const registeredImplTools = []
+applyImplTools({ tools: { register(definition) { registeredImplTools.push(definition) } } }, {})
+const trailToolNames = ['impl_trail_dispatch', 'impl_trail_escape', 'impl_trail_fact', 'impl_trail_worker_return']
+check('four typed trail tools are registered', trailToolNames.every((name) => registeredImplTools.some((tool) => tool.name === name)))
+check('generic impl_trail_append is removed', !registeredImplTools.some((tool) => tool.name === 'impl_trail_append'))
+
+const pythonSituation = readFileSync(join(workbench, 'plugin-marketplace/plugins/impl-package/scripts/situation.py'), 'utf-8')
+const pythonEngine = readFileSync(join(workbench, 'plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/engine.py'), 'utf-8')
+function parsePythonTuple(source, name) {
+  const match = source.match(new RegExp(`^${name}\\s*=\\s*\\(([^)]*)\\)`, 'm'))
+  return match === null ? [] : [...match[1].matchAll(/["']([^"']+)["']/g)].map((item) => item[1])
+}
+const dispatchTool = registeredImplTools.find((tool) => tool.name === 'impl_trail_dispatch')
+const dispatchProperties = dispatchTool?.parameters?.properties ?? {}
+const pythonDispatchOutcome = pythonEngine.match(/event\.get\("outcome"\) != "([^"]+)"/)
+const pythonDispatchOutcomes = pythonDispatchOutcome === null ? [] : [pythonDispatchOutcome[1]]
+check(
+  'dispatch outcome enum parity with Python validator',
+  JSON.stringify(dispatchProperties.outcome?.enum) === JSON.stringify(pythonDispatchOutcomes),
+  `JS=${JSON.stringify(dispatchProperties.outcome?.enum)} Python=${JSON.stringify(pythonDispatchOutcomes)}`,
+)
+check(
+  'review phase enum parity with situation.py',
+  JSON.stringify(dispatchProperties.reviewPhase?.enum) === JSON.stringify(parsePythonTuple(pythonSituation, 'REVIEW_PHASE_VALUES')),
+)
+check(
+  'review track enum parity with situation.py',
+  JSON.stringify(dispatchProperties.reviewTrack?.enum) === JSON.stringify(parsePythonTuple(pythonSituation, 'REVIEW_TRACK_VALUES')),
+)
 
 console.log('== protocols ==')
 const protocolsPath = join(workbench, 'plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/protocols.json')
