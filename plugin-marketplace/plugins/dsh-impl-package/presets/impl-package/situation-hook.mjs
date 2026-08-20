@@ -185,7 +185,7 @@ async function runCli(ctx, python, argv, cwd, signal, timeoutMs) {
 export async function refreshSituation(ctx, { packageDir, scriptsRoot, python, signal, maxRenderSeconds }) {
   const stateScript = join(scriptsRoot, 'impl_package_state.py')
   const situationScript = join(scriptsRoot, 'situation.py')
-  const validate = await runCli(ctx, python, [stateScript, '--package', packageDir, 'package', 'validate'], packageDir, signal, maxRenderSeconds * 1000)
+  const validate = await runCli(ctx, python, [stateScript, '--no-situation', '--package', packageDir, 'package', 'validate'], packageDir, signal, maxRenderSeconds * 1000)
   if (validate === undefined) return undefined
   const drift = validate.code !== 0
   const validationArg = JSON.stringify({ projection_drift: drift, source: 'package validate' })

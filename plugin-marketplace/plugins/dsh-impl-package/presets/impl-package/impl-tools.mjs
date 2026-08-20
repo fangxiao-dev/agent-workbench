@@ -183,7 +183,7 @@ export function apply(ctx, config) {
         const validate = await runCli(
           ctx,
           python,
-          [join(scriptsRoot, 'impl_package_state.py'), '--package', packageDir, 'package', 'validate'],
+          [join(scriptsRoot, 'impl_package_state.py'), '--no-situation', '--package', packageDir, 'package', 'validate'],
           packageDir,
         ).then(() => ({ code: 0 }), (error) => ({ code: 1, message: error.message }))
         validationResult = JSON.stringify({ projection_drift: validate.code !== 0, source: 'package validate' })
