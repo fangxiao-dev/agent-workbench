@@ -11,17 +11,15 @@ description: 当调查、实现、修复或验证需要主 session 与 worker �
 
 每个非本地 bounded unit 启动前都显式输出：
 
-```yaml
-mode: investigate | implement | fix | review
-worker: main-session | "$grok-worker" | "@luna-worker" | "<model>/<effort>" | "prompt:<slug>"
-review: none | required
-review_scope: none | checkpoint | closure
-reason: <仅在 local、blocked、显式 override 或 review 判断不显然时填写>
-resources: <只记录真实共享资源、顺序和 cleanup owner>
-reuse: <只在同一 source unit 需要不可转移 live state 时填写>
-```
+- `mode: investigate | implement | fix | review`
+- `worker: main-session | <默认 worker> | "<model>/<effort>" | "prompt:<slug>"`
+- `review: none | required`
+- `review_scope: none | checkpoint | closure`
+- `reason: <仅在 local、blocked、显式 override 或 review 判断不显然时填写>`
+- `resources: <只记录真实共享资源、顺序和 cleanup owner>`
+- `reuse: <只在同一 source unit 需要不可转移 live state 时填写>`
 
-- `worker` 必须显式存在，默认 `$grok-worker`；`main-session` 仅用于原子本地动作且必须说明 reason。`review=none` 必须配 `review_scope=none`，`review=required` 必须明确 `checkpoint` 或 `closure`，不能留给 reviewer 临场猜。
+- `worker` 必须显式存在，默认 worker 由宿主 registry 决定（见 Worker Resolver）；`main-session` 仅用于原子本地动作且必须说明 reason。`review=none` 必须配 `review_scope=none`，`review=required` 必须明确 `checkpoint` 或 `closure`，不能留给 reviewer 临场猜。
 - 上游 Owner/`readyTickets` 已明确并行候选时读取 [Parallel Work Admission](references/parallel-work-admission.md)，但该 reference 不负责发现候选；未填 `reuse` 用 fresh invocation，compaction 后从 canonical input 重启，角色相同、空闲或共享 worktree 都不是复用理由。
 - `investigate`、`implement` 可沿用调用者选择的同一逻辑 worker；已确认 finding 只能给 fresh `fix` invocation。复杂度只增加 reviewer gate，不自动换 implementer。
 - investigate 默认低推理，只返回固定 6 行（Investigation / cause / blast radius / existing solution / boundary facts / unresolved facts），禁止 `READY|BLOCKED`；implement brief 只含 source_unit、成功条件、禁改路径、文件列表和一条验证命令，禁止粘整张 Ticket/全量 AC；reviewer 只收 caller 指定的 diff 路径与 AC ID，报告限 verdict、P0/P1 findings、residual_gaps，禁止再读 plan/spec/contract-design 整章。
@@ -41,7 +39,7 @@ reuse: <只在同一 source unit 需要不可转移 live state 时填写>
 
 shared seam、安全、数据完整性、并发、migration、不可逆外部副作用或 policy 要求时必须 `review=required` 并显式选 `checkpoint|closure`；非显然时选 `none` 并写 reason，不为每个文件或小动作增加 checkpoint。reviewer 独立 fresh，finding 交 fresh fixer 按同一 scope 重审。
 
-共享可变运行资源必须隔离；不能隔离就串行并记录顺序、owner、cleanup，全部返回后由主 session 做集成验证。解析失败、授权不匹配或 brief 不完整时启动前 `BLOCKED`；仅默认 worker 的 `INCOMPLETE` 在进程已清理、diff/residue 可归因且可安全重放时允许一次 fresh `@luna-worker` fallback，业务 `BLOCKED` 不 fallback，第二次 `INCOMPLETE` 归一为 `BLOCKED`。
+共享可变运行资源必须隔离；不能隔离就串行并记录顺序、owner、cleanup，全部返回后由主 session 做集成验证。解析失败、授权不匹配或 brief 不完整时启动前 `BLOCKED`；仅默认 worker 的 `INCOMPLETE` 在进程已清理、diff/residue 可归因且可安全重放时允许一次 fresh 默认 worker fallback，业务 `BLOCKED` 不 fallback，第二次 `INCOMPLETE` 归一为 `BLOCKED`。
 
 ## 生命周期与结果
 

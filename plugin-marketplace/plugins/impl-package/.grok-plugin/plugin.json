@@ -1,6 +1,6 @@
 {
   "name": "impl-package",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "A staged implementation and review suite for requirements, planning, execution, verification, and stable-document backfill.",
   "skills": "./skills/",
   "agents": "./agents/"

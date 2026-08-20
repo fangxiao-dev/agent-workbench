@@ -80,9 +80,9 @@ Grilling 是通过设计树 rounds 对 plan、Decision 或 idea 做深入质询�
 
 ## Legacy（旧 Task/DAG，只读）
 
-新 package 不调用 `create-task-dag`，不创建新的 Task DAG；仅在 owner 明确授权恢复或迁移已有 3.4 package、且 artifact 已存在时读取 `dag.md` 或 `<attempt-id>.patch-dag.md`。先读取 current plan；有 Tickets 时同时读取 `tickets/` 的直接 Markdown 子文件。
+新 package 一律不创建 Task DAG，不调用 `create-task-dag`；仅在 owner 明确授权恢复/迁移已有 3.4 package、且 artifact 已存在时读取 `dag.md` 或 `<attempt-id>.patch-dag.md`。先读取 current plan；有 Tickets 时同时读取 `tickets/` 的直接 Markdown 子文件。
 
 - 只审计已有 Task 的 primary ownership、确定依赖、贡献 Ticket、已知 seam/risk 和 section-level contract references；与 plan/Ticket 做只读联合检查：coverage、typed dependency、cycle、ownership、contribution mapping、section-level refs、evidence feasibility、integration order 和 Gate 边界。
-- 迁移时把 Task 的真实产物映射回 Ticket claim，不把 Task handoff 或 Task `DONE` 当 acceptance proof；Contract reference 使用仓库相对路径定位到 Decision/Spec/contract-design/Plan 的具体一级或二级章节，不裸指整份文档或使用行号，只保留 Task 执行所需章节，不复制合同正文。
+- 迁移时把 Task 的真实产物映射回 Ticket claim，不把 Task handoff 或 `DONE` 当 acceptance proof；Contract reference 使用仓库相对路径定位到 Decision/Spec/contract-design/Plan 的具体一级或二级章节，不裸指整份文档或使用行号，只保留 Task 执行所需章节，不复制合同正文。
 - 不预列所有文件、consumer、失败模式或 Phase/epic/子任务层；发现新 DAG 需求时回到 `impl-planning`，不在本入口创建。Task 状态只保存在 `.impl-package/state.json`；Task `DONE` 表示局部产出可集成，不表示 Ticket `SATISFIED`。P 变化时只把实际受影响 Task 设为 `NEEDS-REVALIDATION`。
 - 初始化后 DAG Runtime State 表由 `refresh-progress` 维护；只有 dependency 已释放的 Task 才能进入 `READY/RUNNING`，未知 dependency 和 cycle 必须在发布前阻断。旧 package 的细节按需读 `../create-task-dag/references/` 下的 `dag-and-ownership`、`worker-prompts`、`review-and-verification`、`slice-to-dag`。

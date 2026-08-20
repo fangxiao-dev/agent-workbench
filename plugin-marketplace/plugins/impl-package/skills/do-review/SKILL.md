@@ -12,7 +12,7 @@ allowed-tools:
 
 `do-review` 是唯一 orchestrator：固定一个 immutable ReviewRun，解析 topology/capacity，派发独立 leaf，拥有 canonical ledger，验证并分类候选，控制收敛并 fail-closed 报告；main session 不是另一名 reviewer。
 
-每个选中的 track 都派发对应 leaf：Track A=`review-track-code`/`review-code`，Track B=`review-track-standards`/`review-code-by-standards`，Track C=`review-track-spec`/`review-code-by-spec`，Conditional Safety=`review-track-safety`/`safety-review`。leaf 定义拥有 skill 和 leaf brief；parent 传 common ReviewRun 与 phase addendum。leaf 不得调用 `do-review`、再派 agent/subagent、重算 topology/capacity、查看同轮其它 track 输出、分类跨 track 结果或决定总 verdict；review skill 的 primary intent 不是排他能力边界，证据充分的跨域候选回 parent 归因分类。
+每个选中的 track 恰好派发一次对应的独立 leaf，映射见 [reviewer-registry.json](references/reviewer-registry.json)；leaf 定义拥有 skill 和 leaf brief，parent 传 common ReviewRun 与 phase addendum，派发经 native subagents。leaf 不得调用 `do-review`、再派 agent/subagent、重算 topology/capacity、查看同轮其它 track 输出、分类跨 track 结果或决定总 verdict；review skill 的 primary intent 不是排他能力边界，证据充分的跨域候选回 parent 归因分类。
 
 带到达路径的 claim，reviewer 必须检查证据是否真的走过该路径：连上真实依赖并经过 composition root；只审单层文件不能替代路径证据。
 
