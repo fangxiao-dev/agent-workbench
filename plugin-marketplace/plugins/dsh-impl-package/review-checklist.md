@@ -38,6 +38,6 @@
 ## 跨文件一致性
 
 - [ ] do-review 压缩版引用的 reviewer skill 名与 4 个 leaf frontmatter name 一致
-- [ ] dev-with-track 压缩版的处境指针与 protocols.json slug 一致
+- [ ] dev-with-track 压缩版的处境指针与 Python 侧协议表 slug 一致
 - [ ] 合并组内无重复段落（D 组三节、G 组三节各自独立）
 - [ ] 原 SKILL 引用的 references 路径在压缩版中仍有效（按需读的保留路径）

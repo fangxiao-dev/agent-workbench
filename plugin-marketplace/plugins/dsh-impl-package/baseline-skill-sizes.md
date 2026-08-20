@@ -86,15 +86,15 @@ Impl-Package 是一套跨宿主的开发工作流插件（Ticket 状态机、处
 
 **dev-with-track**（67 → 9 行）
 - 删除 → 承接：
-  - §Restore 手动 validate→render→digest 循环 → **处境注入**（每步自动；protocols.json 覆盖 60 slug，含协议片段）
+  - §Restore 手动 validate→render→digest 循环 → **处境注入**（每步自动；Python 侧协议表随 render 输出）
   - CLI 命令/ER payload 拼装 → typed 工具 + `impl_package_state.py` 校验（SATISFIED 需 revision/environment、escape 三字段、轨迹只追加由 CLI 强制）
-  - trail/handoff/checkpoint 协议细节 → protocols.json（`attempt.record.handoff-*`、`attempt.record.checkpoint-*`、`attempt.record.trail-rotation-due` 等）
+  - trail/handoff/checkpoint 协议细节 → Python 侧协议表（`attempt.record.handoff-*`、`attempt.record.checkpoint-*`、`attempt.record.trail-rotation-due` 等）
   - manual acceptance 模板 → assets 按需；talk-to-boss → 删
-  - references/control-flow.md、runtime-protocol.md → 内容已由处境表 + protocols.json 逐处境承接（文件保留按需）
+  - references/control-flow.md、runtime-protocol.md → 内容已由处境表 + Python 侧协议表逐处境承接（文件保留按需）
 - 保留（判断）：Investigate/Decide/Implement/Evaluate 四步；checkpoint 时机（BLOCKED/retry/跨 session/交接）；escape 规则（偏离即写 kind=escape）；Gate 三态 + Stage 7；恢复指针（读 progress.md 不读 state.json 全文）；preflight 指针（四项 lane 首次激活一次）
 
 **subagent-driven-development**（37 → 9 行）
-- 删除 → 承接：worker resolver 解析表（`$grok-worker`/`@luna-worker` → 逻辑角色 → provider 映射）、envelope 字段清单（→ 结构化输出/工具描述）、fallback 细节（→ 一句话规则 + protocols.json `ticket.implement.worker-*` slug）、策略 YAML 格式（→ preset/orchestrator）
+- 删除 → 承接：worker resolver 解析表（`$grok-worker`/`@luna-worker` → 逻辑角色 → provider 映射）、envelope 字段清单（→ 结构化输出/工具描述）、fallback 细节（→ 一句话规则 + Python 侧协议表 `ticket.implement.worker-*` slug）、策略 YAML 格式（→ preset/orchestrator）
 - 保留（判断）：mode 选择（investigate 禁 READY|BLOCKED/固定 6 行、fix 不重新裁决/fresh、review 只读无副作用）；review_scope（checkpoint|closure）；并行与失败（共享资源隔离、BLOCKED 不猜近似、一次 fallback、主 session 最终集成权）
 
 ### 5.2 B 组：review 编排轴
@@ -150,7 +150,7 @@ Impl-Package 是一套跨宿主的开发工作流插件（Ticket 状态机、处
 
 | 机械负担（原来在 SKILL 里） | 承接机制 | 状态 |
 | --- | --- | --- |
-| 每轮 validate → render → digest | pre-step 处境注入 + protocols.json 60 slug（含协议片段） | ✅ |
+| 每轮 validate → render → digest | pre-step 处境注入 + Python render 的 protocol 字段 | ✅ |
 | CLI 命令 / JSON payload 拼装 | 9 个 typed 工具（impl_package_validate / impl_situation_render / impl_ticket_transition / impl_evidence_add / impl_evidence_invalidate / impl_recovery_checkpoint / impl_recovery_judgment / impl_gate_commit / impl_trail_append） | ✅ |
 | 阶段路由表 | 18 个原生命令（impl-req-align … impl-backfill-stable-docs，0 token） | ✅ |
 | worker 派发 / 宿主名 | 原生 subagent（subagent_codex / subagent_grok） | ✅ |

@@ -22,9 +22,8 @@
  * uses only node: builtins plus the injected subprocess service.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 export const name = 'impl-situation-hook'
 export const inject = ['subprocess']
@@ -37,30 +36,6 @@ export const DEFAULT_CONFIG = {
   maxRenderSeconds: 20,
   throttleMs: 2000,
   humanLabel: '[impl-package 处境]',
-  protocolsFile: 'protocols.json',
-}
-
-/** Load the situation→protocol map (slug → compact rule fragment). */
-export function loadProtocols(protocolsFile) {
-  try {
-    const raw = JSON.parse(readFileSync(protocolsFile, 'utf-8'))
-    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { default: '' }
-    const clean = {}
-    for (const [key, value] of Object.entries(raw)) {
-      if (typeof value === 'string') clean[key] = value
-    }
-    return clean
-  } catch (error) {
-    return { default: '' }
-  }
-}
-
-/** Resolve the protocol fragment for a situation slug (falls back to `default`). */
-export function resolveProtocol(protocols, slug) {
-  if (protocols !== undefined && typeof slug === 'string' && slug !== '' && protocols[slug] !== undefined) {
-    return protocols[slug]
-  }
-  return protocols?.default
 }
 
 const MAX_OUTPUT_BYTES = 1 << 20 // 1 MiB
@@ -252,8 +227,6 @@ export function apply(ctx, config) {
   const throttleMs = Number.isFinite(cfg.throttleMs) && cfg.throttleMs > 0 ? cfg.throttleMs : DEFAULT_CONFIG.throttleMs
   const maxRenderSeconds = Number.isFinite(cfg.maxRenderSeconds) && cfg.maxRenderSeconds > 0 ? cfg.maxRenderSeconds : DEFAULT_CONFIG.maxRenderSeconds
   const python = String(cfg.python || DEFAULT_CONFIG.python)
-  const protocolsFile = String(cfg.protocolsFile || DEFAULT_CONFIG.protocolsFile)
-  const protocols = loadProtocols(resolve(dirname(fileURLToPath(import.meta.url)), protocolsFile))
 
   /** Per-session { lastDigest, lastRenderAt }; memory resets on restart →
    *  the first step after a resume re-injects the full situation. */
@@ -284,7 +257,7 @@ export function apply(ctx, config) {
       const digest = String(fresh.render?.digest ?? '')
       if (digest !== '' && digest === state.lastDigest) return decision // unchanged → no noise
 
-      const protocol = resolveProtocol(protocols, fresh.render?.selected?.slug)
+      const protocol = fresh.render?.selected?.protocol
       const text = composeSituationMessage(fresh.render, fresh.drift, cfg.humanLabel, protocol)
       perSession.set(session, { ...state, lastDigest: digest, lastRenderAt: now })
       const message = buildSituationMessage(text, digest)

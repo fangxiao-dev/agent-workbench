@@ -7,7 +7,7 @@
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 
-import { resolvePackageDir, resolveImplScripts, composeSituationMessage, countOf, buildSituationMessage, loadProtocols, resolveProtocol } from '../presets/impl-package/situation-hook.mjs'
+import { resolvePackageDir, resolveImplScripts, composeSituationMessage, countOf, buildSituationMessage } from '../presets/impl-package/situation-hook.mjs'
 import { buildTicketArgv } from '../presets/impl-package/impl-tools.mjs'
 import { COMMANDS, buildRouteMessage, apply as applyCommands } from '../presets/impl-package/commands.mjs'
 import { readLines } from '../presets/review-code/reviewer-fs.mjs'
@@ -57,7 +57,7 @@ let render
 try { render = JSON.parse(renderOut.stdout) } catch { render = undefined }
 check('render output parses', render !== undefined)
 if (render !== undefined) {
-  const text = composeSituationMessage(render, false, '[impl-package 处境]')
+  const text = composeSituationMessage(render, false, '[impl-package 处境]', render.selected?.protocol)
   console.log('--- composed message ---')
   console.log(text)
   console.log('------------------------')
@@ -84,20 +84,18 @@ try { buildTicketArgv('S', 'P', { action: 'satisfy', ticket: 'T', expect: 'PENDI
 check('satisfy rejects missing revision', threw)
 
 console.log('== protocols ==')
-const protocolsPath = join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/presets/impl-package/protocols.json')
-const protocols = loadProtocols(protocolsPath)
-check('protocols.json loads', Object.keys(protocols).length > 10)
-check('resolveProtocol hits slug', resolveProtocol(protocols, 'attempt.gate.terminal-frozen') === protocols['attempt.gate.terminal-frozen'])
-check('resolveProtocol falls back to default', typeof resolveProtocol(protocols, 'no.such.slug') === 'string' && resolveProtocol(protocols, 'no.such.slug') === protocols.default)
-check('loadProtocols tolerates missing file', Object.keys(loadProtocols(join(tmpdir(), 'no-protocols.json'))).length >= 0)
+const protocolsPath = join(workbench, 'plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/protocols.json')
+const protocols = JSON.parse(readFileSync(protocolsPath, 'utf-8'))
+check('Python-side protocols.json loads', Object.keys(protocols).length > 10 && typeof protocols.default === 'string')
+check('render exposes selected protocol', typeof render?.selected?.protocol === 'string' && render.selected.protocol.trim() !== '')
 // coverage: every slug in situations.yaml should have an explicit protocol or the default
 const situationsText = readFileSync(join(workbench, 'plugin-marketplace/plugins/impl-package/skills/dev-with-track/situations.yaml'), 'utf-8')
 const slugs = [...situationsText.matchAll(/^\s*- slug:\s*([^\s]+)\s*$/gm)].map((m) => m[1])
 const uncovered = slugs.filter((slug) => protocols[slug] === undefined)
 check('protocol coverage (default covers rest)', uncovered.length === 0, `${uncovered.length} uncovered: ${uncovered.slice(0, 8).join(', ')}${uncovered.length > 8 ? '…' : ''}`)
 if (render !== undefined) {
-  const withProtocol = composeSituationMessage(render, false, '[impl-package 处境]', protocols.default)
-  check('composeSituationMessage appends protocol', withProtocol.includes('协议:') && withProtocol.includes(protocols.default.slice(0, 12)))
+  const withProtocol = composeSituationMessage(render, false, '[impl-package 处境]', render.selected?.protocol)
+  check('composeSituationMessage appends render protocol', withProtocol.includes('协议:') && withProtocol.includes(render.selected.protocol.slice(0, 12)))
 }
 
 console.log('== commands ==')

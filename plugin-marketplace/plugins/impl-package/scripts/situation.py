@@ -46,6 +46,20 @@ REVIEW_TRACKS = frozenset(REVIEW_TRACK_VALUES)
 VALID_BASIS = {"cli", "prose", "observed"}
 SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$")
 COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
+PROTOCOLS_PATH = Path(__file__).resolve().parent / "impl_package_runtime" / "protocols.json"
+_PROTOCOL_PLACEHOLDERS = {
+    "{review_phase_values}": " | ".join(REVIEW_PHASE_VALUES),
+    "{review_track_values}": " | ".join(REVIEW_TRACK_VALUES),
+}
+_PROTOCOL_REQUIRED_PLACEHOLDERS = {
+    "ticket.review.required-trigger": tuple(_PROTOCOL_PLACEHOLDERS),
+    "attempt.review.terminal-coverage-incomplete": tuple(_PROTOCOL_PLACEHOLDERS),
+}
+assert set(_PROTOCOL_PLACEHOLDERS) == {
+    placeholder
+    for placeholders in _PROTOCOL_REQUIRED_PLACEHOLDERS.values()
+    for placeholder in placeholders
+}
 TICKET_ID_RE = re.compile(
     r"(?im)^\s*(?:\*\*)?(?:Ticket ID|Ticket ID（Ticket ID）)\s*[：:](?:\*\*)?\s*([^\s*]+)"
 )
@@ -288,6 +302,42 @@ class TableModel:
     warnings: list[str]
 
 
+def _load_protocols() -> dict[str, str]:
+    fallback = {"default": ""}
+    try:
+        raw = json.loads(PROTOCOLS_PATH.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return fallback
+    try:
+        assert isinstance(raw, dict)
+        assert all(isinstance(key, str) and isinstance(value, str) for key, value in raw.items())
+        assert isinstance(raw.get("default"), str)
+        for slug, placeholders in _PROTOCOL_REQUIRED_PLACEHOLDERS.items():
+            assert slug in raw
+            assert all(placeholder in raw[slug] for placeholder in placeholders)
+        protocols = {
+            key: _expand_protocol(value)
+            for key, value in raw.items()
+        }
+        assert all(
+            placeholder not in value
+            for value in protocols.values()
+            for placeholder in _PROTOCOL_PLACEHOLDERS
+        )
+        return protocols
+    except AssertionError:
+        return fallback
+
+
+def _expand_protocol(value: str) -> str:
+    for placeholder, replacement in _PROTOCOL_PLACEHOLDERS.items():
+        value = value.replace(placeholder, replacement)
+    return value
+
+
+_PROTOCOLS = _load_protocols()
+
+
 @dataclass
 class Candidate:
     row: dict[str, Any]
@@ -307,6 +357,7 @@ class Candidate:
         actions = list(self.row.get("actions", []))
         return {
             "slug": self.slug,
+            "protocol": _PROTOCOLS.get(self.slug, _PROTOCOLS["default"]),
             "subject": self.subject,
             "basis": self.row.get("basis"),
             "judgment": self.row.get("judgment"),
