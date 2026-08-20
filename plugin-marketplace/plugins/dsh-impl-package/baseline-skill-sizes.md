@@ -1,7 +1,8 @@
 # Impl-Package SKILL 全量降载说明
 
-> 状态：**2026-08 完成**。19 个 SKILL 主文件（~860 行）压缩为 **14 个判断启发式文件（231 行，-73%）**；references（~1,840 行）从"默认读"改"按需读"。跨宿主（Codex/Claude/Grok/DSH）通用，机制指针保持宿主无关。
-> 行数口径：`Measure-Object -Line` 实测 md 主文件；evals/scripts/assets/tests 不计。
+> 状态：**2026-08 完成；0.4.2 已对齐**。19 个 SKILL 主文件（~860 行）压缩为 **14 个判断启发式文件（234 行，-73%）**；references（~1,840 行）从"默认读"改"按需读"。跨宿主（Codex/Claude/Grok/DSH）通用，机制指针保持宿主无关。
+> 行数口径：`Measure-Object -Line` 实测 md 主文件；evals/scripts/assets/tests 不计。234 行含 0.4.2 的 C 类内容回补（+3 行，见 §5.4）。
+> 协议表位置：**`scripts/impl_package_runtime/protocols.json`（Python 侧，render 输出 `selected.protocol`）**——0.4.2 从 DSH preset 迁入，跨宿主同源，DSH hook 读 render 输出（不再本地加载）。
 
 ---
 
@@ -10,7 +11,7 @@
 Impl-Package 是一套跨宿主的开发工作流插件（Ticket 状态机、处境路由、review 编排、Gate）。它的问题：**SKILL 主文件同时承载流程、协议与判断**——主 session 每次进入阶段都要把整套方法论读进上下文，token 消耗大（此前审计：dev-with-track 族 + subagent 族 + 插件级 references 合计 ~34k token 常驻）。
 
 降载目标：
-- 主文件 ~860 → ~230 行（实际 231，-73%）；
+- 主文件 ~860 → ~230 行（实际 234，-73%）；
 - references 默认不再读，只按需读；
 - 判断启发式留在 SKILL，机械/流程/协议下沉到机制；
 - 不新增方法论（只删机械、压缩判断）；跨宿主行为不变坏。
@@ -25,9 +26,13 @@ Impl-Package 是一套跨宿主的开发工作流插件（Ticket 状态机、处
 | **J 判断启发式** | 怎么判断质量、边界、可信度、是否偏离、如何定级 | 保留并压缩成短句（1 行/条） |
 | **O 编排** | subagent 角色分工、调度、收敛状态机 | 删 → preset / orchestrator / provider |
 
-**判断/流程分界示例**（逐文件按此归类）：Safety admission、finding 接受/分类、Loop clean 判定、Gate 三态、fast path、P0/P1/P2 定级、READY/BLOCKED、claim-evidence 契约、停止证明是**判断**；registry 读取、phase→topology 映射、brief 组装、并行派发、fail-closed 聚合、报告模板、trail schema 是**机械**。
+**判断/流程分界示例**（逐文件按此归类）：Safety admission、finding 接受/分类、Loop clean 判定、Gate 三态、fast path、P0/P1/P2 定级、READY/BLOCKED、claim-evidence 契约、停止证明、**fail-closed 聚合规则**是**判断**；registry 读取、phase→topology 映射、brief 组装、并行派发、报告模板、trail schema 是**机械**。
+
+> **0.4.2 修正（a0d0e7a）**：fail-closed 聚合规则一度被误判为 O 类下沉到 DSH orchestrator，导致非 DSH 宿主无规则可依——已回流到 do-review SKILL（判断规则留 SKILL，DSH orchestrator 只作执行设施；两者六分支逐条对应）。
 
 **指针宿主无关原则**：压缩稿里指向机制的句子不写 DSH 专属词（"pre-step hook"/"typed tools"），写"处境注入"/"语义 CLI"等通用表述；跨宿主路由保留 `/impl-package:xxx` 形式。DSH 下这些指针由具体机制兑现，其他宿主按需读 references。
+
+> **0.4.2 教训（ef45e3b）**：压缩时必须做**跨宿主断指针检查**——被删段如果只被 DSH 机制承接、而引用它的路径（如 SUB-SKILL 显式路径）对无原生路由的宿主是断链，需要回补显式路径。C 类回补 5 处见 §5.4。
 
 ## 3. 全量扫描基线（改造前）
 
@@ -120,11 +125,14 @@ Impl-Package 是一套跨宿主的开发工作流插件（Ticket 状态机、处
 
 ### 5.4 C 组：需求→计划轴
 
-**req-align**（34 → 13 行）：保留路由判定（full/decision-only/spec-only）、contract impact 分类、no-contract fast path 判定；删除主路径步骤（→ SUB-SKILL 按需 + bookkeeper 承接）、Package ID/影响路由细节（→ package-lifecycle.md 按需）。sub-skills（decision 25/spec 34）保留按需。
+**req-align**（34 → 14 行）：保留路由判定（full/decision-only/spec-only）、contract impact 分类、no-contract fast path 判定；删除主路径步骤（→ SUB-SKILL + bookkeeper 承接）、Package ID/影响路由细节（→ package-lifecycle.md 按需）。
+> **0.4.2 回补（ef45e3b，C 类）**：恢复 [Decision SUB-SKILL](sub-skills/decision/SUB-SKILL.md) 与 [Spec SUB-SKILL](sub-skills/spec/SUB-SKILL.md) 的**显式路径**（对无原生路由的宿主是断指针）；恢复主 thread 的 contract 语义/Gate/最终采信权；bookkeeper 指针改 `/impl-package:execution-boundaries`（合并后入口）；恢复"新建/修订才补 contract-design、未触及 legacy 不迁移"入口路由判断。
 
-**impl-planning + to-tickets**（39+15 → 16 行）：保留 admission backstop 判定（缺合同即停→req-align）、纵向切片/seam 冻结判断、验证分级与 evidence owner、Ticket AC 可观察性；删除必填字段/Composition 写法/文件位置（→ composition contract + 模板）、bookkeeper 命令（→ CLI）。
+**impl-planning + to-tickets**（39+15 → 17 行）：保留 admission backstop 判定（缺合同即停→req-align）、纵向切片/seam 冻结判断、验证分级与 evidence owner、Ticket AC 可观察性；删除必填字段/Composition 写法/文件位置（→ composition contract + 模板）、bookkeeper 命令（→ CLI）。
+> **0.4.2 回补（ef45e3b，C 类）**：恢复 fail-closed 的"不得创建/更新 Plan/state"canonical wording；恢复 Ticket writer 的物理写入/语义 ownership 边界；恢复"新 package 不调用 create-task-dag"legacy 边界。
 
 **plan-review**（40 → 13 行）：保留 material finding 判定、verdict 判定（cleared/revise/owner-decision/blocked）、bundle-admission 判定、decision waves 收敛；checklists → references 按需；输出 → final-report.md 模板。
+> **0.4.2 回补（ef45e3b，C 类）**：恢复 bound writer 的物理应用语义（approved edits 由 bookkeeper 写入）。
 
 ### 5.5 D 组：边界与收口（三合一）
 
@@ -174,7 +182,8 @@ Gate 三态与 Stage 7 · SATISFIED 前提（revision/environment/claims 覆盖�
 | do-review 内部契约（test_three_track_contract.py 等） | 12 passed（断言更新为压缩稿语义） |
 | grill src（grill_ledger_core） | passed |
 | DSH smoke（resolution/protocols/commands/orchestrator/reviewer presets/readLines） | ALL PASS |
-| 行数 | 231 行（-73%） |
+| **0.4.2 全量**（ef45e3b 清理后） | **380 passed, 0 failed** |
+| 行数 | 234 行（-73%） |
 
 被合并的旧 SKILL.md 已删除（to-tickets / execution-preflight / standing-bookkeeper / verification-before-completion / grilling / create-task-dag）；references/rubric/evals 保留按需，无残留引用。
 
@@ -184,3 +193,4 @@ Gate 三态与 Stage 7 · SATISFIED 前提（revision/environment/claims 覆盖�
 - **grill ledger 目录名**：脚本默认路径含 `codex-grill`（宿主专属），压缩稿已用"OS 临时目录"规避；脚本层改名待办。
 - **跨宿主**：压缩版 SKILL 机械细节从"默认读"变"按需读"；Codex/Claude 的执行效率依赖各自 adapter 成熟度，如遇回归可单文件 git revert（每文件独立 commit）。
 - **evals 宿主名断言**：subagent-driven-development 的 evals.json 仍含 `$grok-worker` 等旧断言，随 DSH provider 化后需迁移（登记，未执行）。
+- **0.4.2 已闭环**：协议表迁回 Python 侧（跨宿主同源）、状态尾注（写入即刷新处境）、trail 具名参数（4 个扁平工具）、fail-closed 规则回流 SKILL、C 类内容回补 5 处、版本 bump 0.4.2（宿主缓存刷新）。DSH 侧无残留旧协议引用；preset 同步用 `node plugin-marketplace/plugins/dsh-impl-package/test/sync-now.mjs`（preset 是独立包，不 sync 会静默跑旧协议）。

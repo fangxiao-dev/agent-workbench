@@ -38,6 +38,11 @@
 ## 跨文件一致性
 
 - [ ] do-review 压缩版引用的 reviewer skill 名与 4 个 leaf frontmatter name 一致
-- [ ] dev-with-track 压缩版的处境指针与 Python 侧协议表 slug 一致
+- [ ] dev-with-track 压缩版的处境指针与 Python 侧协议表 slug 一致（协议表在 `scripts/impl_package_runtime/protocols.json`，render 输出 `selected.protocol`，DSH 不本地加载）
 - [ ] 合并组内无重复段落（D 组三节、G 组三节各自独立）
 - [ ] 原 SKILL 引用的 references 路径在压缩版中仍有效（按需读的保留路径）
+
+## 0.4.2 补录（ef45e3b / a0d0e7a 教训）
+
+- [ ] **跨宿主断指针检查**：被删段若只被 DSH 机制承接，而它的引用路径（SUB-SKILL 显式路径、writer/ownership 边界、legacy 边界、fail-closed canonical wording）对无原生路由的宿主是断链——压缩版必须保留显式路径或回补。
+- [ ] **判断规则不误下沉**：fail-closed 聚合规则这类"规则本身是判断、执行是机械"的半判断项，规则文本必须留在 SKILL（DSH orchestrator 只作执行设施，两者分支逐条对应）。
