@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -51,6 +53,15 @@ class ImplPackageStateTests(unittest.TestCase):
         if ok and result.returncode:
             raise AssertionError(result.stderr or result.stdout)
         return result
+
+    def cli_with_situation(self, repo: Path, package: Path, *args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+        with patch.dict(os.environ, {"IMPL_PACKAGE_NO_SITUATION": "0"}):
+            return self.cli(repo, package, *args, input_text=input_text)
+
+    def assert_situation_footer(self, result: subprocess.CompletedProcess[str]) -> None:
+        self.assertEqual(result.returncode, 0)
+        self.assertRegex(result.stdout, r"\[处境\] digest=[0-9a-f]{12}")
+        self.assertIn("协议:", result.stdout)
 
     def init(self, repo: Path, package: Path) -> dict:
         return json.loads(self.cli(repo, package, "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md").stdout)
@@ -617,6 +628,134 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)["verdict"], "pass")
         self.assertEqual(self.state(package)["activeCheckpoints"], {})
         self.assertEqual(self.state(package)["attemptHistory"][-1]["lifecycle"], "frozen")
+
+    def test_situation_footer_covers_each_trigger_class(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        revision = git(repo, "rev-parse", "HEAD")
+
+        ticket = self.cli_with_situation(
+            repo, package, "ticket", "block", "TKT-01", "--expect", "PENDING", "--evidence", "evidence.md"
+        )
+        evidence = self.cli_with_situation(
+            repo,
+            package,
+            "evidence",
+            "add",
+            input_text=json.dumps(
+                {
+                    "ticket": "TKT-01",
+                    "claim": "AC-1",
+                    "timing": "early-falsification",
+                    "artifact": "evidence.md",
+                    "revision": revision,
+                    "environment": "test",
+                    "conclusion": "supporting",
+                }
+            ),
+        )
+        recovery = self.cli_with_situation(
+            repo, package, "recovery", "checkpoint", "--next", "continue with fixture", "--evidence", "evidence.md"
+        )
+        gate = self.cli_with_situation(
+            repo, package, "gate", "blocked", "--comparison-commit", revision, "--reason", "footer fixture"
+        )
+        trail = self.cli_with_situation(
+            repo,
+            package,
+            "trail",
+            "append",
+            input_text=json.dumps({"kind": "escape", "subject": "attempt", "deviation": "fixture", "reason": "footer"}),
+        )
+        validate = self.cli_with_situation(repo, package, "package", "validate")
+
+        for result in (ticket, evidence, recovery, gate, trail, validate):
+            self.assert_situation_footer(result)
+
+    def test_situation_credential_hashes_state_after_mutation(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+
+        result = self.cli_with_situation(
+            repo, package, "recovery", "checkpoint", "--next", "verify after mutation", "--evidence", "evidence.md"
+        )
+        self.assert_situation_footer(result)
+        credential = json.loads((package / "execution/initial/situation-digest.json").read_text(encoding="utf-8"))
+        state_sha256 = hashlib.sha256((package / ".impl-package/state.json").read_bytes()).hexdigest()
+        self.assertEqual(credential["state_sha256"], state_sha256)
+
+    def test_render_failure_does_not_change_success_or_stdout(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with patch.dict(os.environ, {"IMPL_PACKAGE_NO_SITUATION": "0"}), patch.object(
+            command_groups.situation, "main", side_effect=RuntimeError("render boom")
+        ), redirect_stdout(stdout), redirect_stderr(stderr):
+            code = command_groups.main(
+                package,
+                "recovery",
+                ["checkpoint", "--next", "render failure path", "--evidence", "evidence.md"],
+            )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr.getvalue(), "")
+        self.assertNotIn("[处境]", stdout.getvalue())
+        self.assertEqual(json.loads(stdout.getvalue())["subject"], "attempt")
+
+    def test_package_validate_appends_footer_on_nonzero_exit(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with patch.dict(os.environ, {"IMPL_PACKAGE_NO_SITUATION": "0"}), patch.object(
+            engine, "command_validate", side_effect=engine.StateError("validate fixture failure")
+        ), redirect_stdout(stdout), redirect_stderr(stderr):
+            code = command_groups.main(package, "package", ["validate"])
+
+        self.assertEqual(code, 1)
+        self.assertIn("validate fixture failure", stderr.getvalue())
+        self.assertRegex(stdout.getvalue(), r"\[处境\] digest=[0-9a-f]{12}")
+
+    def test_no_situation_flag_and_environment_switch_each_disable_footer(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+
+        with patch.dict(os.environ, {"IMPL_PACKAGE_NO_SITUATION": "0"}):
+            flag = self.cli(
+                repo,
+                package,
+                "--no-situation",
+                "recovery",
+                "checkpoint",
+                "--next",
+                "flag disabled",
+                "--evidence",
+                "evidence.md",
+            )
+        with patch.dict(os.environ, {"IMPL_PACKAGE_NO_SITUATION": "1"}):
+            env = self.cli(
+                repo,
+                package,
+                "recovery",
+                "checkpoint",
+                "--next",
+                "environment disabled",
+                "--evidence",
+                "evidence.md",
+            )
+
+        for result in (flag, env):
+            self.assertEqual(result.returncode, 0)
+            self.assertNotIn("[处境]", result.stdout)
+            self.assertIsInstance(json.loads(result.stdout), dict)
 
 
 if __name__ == "__main__":

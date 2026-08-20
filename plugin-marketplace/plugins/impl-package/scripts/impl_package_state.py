@@ -42,6 +42,7 @@ def _root_parser() -> argparse.ArgumentParser:
         epilog="Flat 3.5 command spellings remain accepted as compatibility aliases.",
     )
     parser.add_argument("--package", type=Path, required=True)
+    parser.add_argument("--no-situation", action="store_true", help="do not append the current situation")
     parser.add_argument("group", choices=sorted(GROUPS))
     return parser
 
@@ -81,11 +82,13 @@ def _command_token(argv: list[str]) -> str | None:
 
 def main(argv: list[str] | None = None) -> int:
     values = list(sys.argv[1:] if argv is None else argv)
+    no_situation = "--no-situation" in values
+    values = [value for value in values if value != "--no-situation"]
     if not values or _command_token(values) is None:
         _root_parser().print_help()
         return 0
     package, group, remainder = _route(values)
-    return _command_groups().main(package, group, remainder)
+    return _command_groups().main(package, group, remainder, no_situation=no_situation)
 
 
 if __name__ == "__main__":

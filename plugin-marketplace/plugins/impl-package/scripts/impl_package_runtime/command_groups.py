@@ -4,22 +4,99 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Callable
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
 from typing import Any
+
+import situation
 
 from . import engine
 
 
-def _emit(action: Callable[[], dict[str, Any]]) -> int:
+def _text(value: Any, missing: str = "?") -> str:
+    if value is None:
+        return missing
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
+
+
+def _count(value: Any) -> int:
+    if isinstance(value, list):
+        return len(value)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return 1 if value else 0
+
+
+def _situation_footer(package: Path) -> str | None:
+    stdout = StringIO()
+    stderr = StringIO()
+    try:
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            code = situation.main(["render", "--package", str(package), "--json"])
+        if code != 0:
+            return None
+        rendered = json.loads(stdout.getvalue())
+        if not isinstance(rendered, dict):
+            return None
+        selected = rendered.get("selected")
+        if not isinstance(selected, dict):
+            selected = {}
+        slug = selected.get("slug") or rendered.get("unmatched") or "（无）"
+        lines = [
+            f"[处境] digest={_text(rendered.get('digest'))} · {_text(slug, '（无）')} · "
+            f"basis={_text(selected.get('basis'))} · judgment={_text(selected.get('judgment'))}",
+        ]
+        actions = selected.get("actions")
+        if isinstance(actions, list) and actions:
+            lines.append("动作:")
+            for action in actions:
+                if not isinstance(action, dict):
+                    continue
+                marker = "（默认）" if action.get("default") else ""
+                lines.append(
+                    f"  - {_text(action.get('id'), '')}{marker}: "
+                    f"{_text(action.get('do'), '')} — {_text(action.get('effect'), '')}"
+                )
+        lines.append(
+            f"并列匹配: {_count(rendered.get('parallel_matches'))} | "
+            f"未判定: {_count(rendered.get('undetermined'))} | "
+            f"未匹配: {_count(rendered.get('unmatched'))}"
+        )
+        lines.append(f"协议: {_text(selected.get('protocol'), '')}")
+        return "\n".join(lines)
+    except Exception:
+        return None
+
+
+def _emit(
+    action: Callable[[], dict[str, Any]],
+    *,
+    package: Path,
+    append_situation: bool = False,
+    append_situation_on_error: bool = False,
+) -> int:
+    should_append_situation = False
     try:
         result = action()
     except (engine.StateError, OSError) as exc:
         print(str(exc), file=sys.stderr)
-        return 1
-    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
-    return 0
+        should_append_situation = append_situation_on_error
+        code = 1
+    else:
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        should_append_situation = append_situation
+        code = 0
+    if should_append_situation:
+        footer = _situation_footer(package)
+        if footer:
+            print(footer)
+    return code
 
 
 def _expect(parser: argparse.ArgumentParser) -> None:
@@ -163,6 +240,15 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
                                args.durable_delta, args.no_durable_delta_reason, args.environment)
 
 
-def main(package: Path, group: str, argv: list[str]) -> int:
+def main(package: Path, group: str, argv: list[str], *, no_situation: bool = False) -> int:
+    no_situation = no_situation or "--no-situation" in argv or os.environ.get("IMPL_PACKAGE_NO_SITUATION") == "1"
+    argv = [value for value in argv if value != "--no-situation"]
     args = _parser(group).parse_args(_normalize_gate_argv(argv) if group == "gate" else argv)
-    return _emit(lambda: _run(package.resolve(), group, args))
+    trigger = group in {"ticket", "evidence", "recovery", "gate", "trail"}
+    validate = group == "package" and args.command == "validate"
+    return _emit(
+        lambda: _run(package.resolve(), group, args),
+        package=package.resolve(),
+        append_situation=(trigger or validate) and not no_situation,
+        append_situation_on_error=validate and not no_situation,
+    )

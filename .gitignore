@@ -30,3 +30,6 @@ skills-local/
 # thread-harness runtime ledger (coordination state, not source)
 .progress-record/
 .test-tmp/
+
+# situation render credentials produced by fixture tests
+/tests/fixtures/situations/**/situation-digest.json
