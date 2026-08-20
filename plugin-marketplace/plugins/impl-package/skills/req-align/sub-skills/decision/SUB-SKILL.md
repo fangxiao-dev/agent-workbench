@@ -20,7 +20,7 @@ description: req-align 内部的 Decision 阶段；对齐 requirement inputs、F
 3. initial 从已确认的对话、截图、文档和 repository facts 捕获全部 material promises；follow-up 先读当前 Decision/Spec，再把 delta 分类为 carry forward、add、modify、explicit remove 或 blocker。未重复提及等于 carry forward。
 4. 对 Core/Capability、repository fit、delivery path、material choices 与每个 unknown 做 blocking-decision triage。普通 task-scoped read-only investigation 直接执行；需要新权限、副作用、实质成本、code spike、环境变化或 scope expansion 时持久化 `Decision Gate: BLOCKED`。
 5. 用 [Alignment Proposal](../../assets/templates/alignment-proposal.md) 形成 working output。只有 discovery 与允许调查都无法关闭 intent、scope、trade-off 或 owner decision 时才问一个 focused question；proposal 不是 durable artifact。
-6. earned Decision 使用 [Decision Template](../../assets/templates/decision.md)；主 thread 把已确定的内容交给 bound `/impl-package:standing-bookkeeper` 写入并验证 `decision.md`。lightweight correction 在 Decision PASSED 后把最小 evidence 交给 Spec 的 Decision Gate Record。Decision BLOCKED 一律使用 `decision.md`，且不创建 Spec。
+6. earned Decision 使用 [Decision Template](../../assets/templates/decision.md)；主 thread 把已确定的内容交给 bound `/impl-package:execution-boundaries` 写入并验证 `decision.md`。lightweight correction 在 Decision PASSED 后把最小 evidence 交给 Spec 的 Decision Gate Record。Decision BLOCKED 一律使用 `decision.md`，且不创建 Spec。
 7. 仅 initial bundle 运行 Decision Gate。目标落点、Focused PRD（适用时）、input reconciliation、Core/Capability、repository fit、material choices 与所有 blocking uncertainty 全部闭合后才可 PASSED；follow-up 更新直接沿用 initial approval。
 
 ## 完成条件
@@ -32,4 +32,4 @@ description: req-align 内部的 Decision 阶段；对齐 requirement inputs、F
 
 ## 返回 router
 
-返回 initial Decision Gate result，或 follow-up 更新后的 standalone `decision.md` / lightweight record、Spec 可消费的 boundary，以及 comparison evidence。artifact 的物理写入和 focused validation 由 bound `/impl-package:standing-bookkeeper` 完成；主 thread 负责采信结果。initial 的 decision-only 到此停止；initial full 只有 PASSED 才能进入 Spec。
+返回 initial Decision Gate result，或 follow-up 更新后的 standalone `decision.md` / lightweight record、Spec 可消费的 boundary，以及 comparison evidence。artifact 的物理写入和 focused validation 由 bound `/impl-package:execution-boundaries` 完成；主 thread 负责采信结果。initial 的 decision-only 到此停止；initial full 只有 PASSED 才能进入 Spec。

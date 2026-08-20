@@ -30,7 +30,7 @@ initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一
 
 ## 设计与写入
 
-本 sub-skill 拥有 Spec contract ensemble 的语义、Status 与 Gate 条件；主 thread 将已确认的内容和批准交给 bound `/impl-package:standing-bookkeeper`，由 bookkeeper 写入 canonical artifact 并运行 focused validation。
+本 sub-skill 拥有 Spec contract ensemble 的语义、Status 与 Gate 条件；主 thread 将已确认的内容和批准交给 bound `/impl-package:execution-boundaries`，由 bookkeeper 写入 canonical artifact 并运行 focused validation。
 
 1. 使用 [Spec Template](../../assets/templates/spec.md)，首先写回完整的“Spec 设计范围”，再更新其他章节。
 2. 任一 contract surface 非空时读取 [Contract Surface Design](../../references/contract-surface-design.md)，把适用的 implementation-ready 下限冻结在唯一 owner 中。

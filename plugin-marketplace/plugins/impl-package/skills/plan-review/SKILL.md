@@ -5,7 +5,7 @@ description: Review an implementation plan or complete plan/Ticket/DAG bundle fo
 
 # Plan Review
 
-审查实际 candidate 并返回判决，不做审计机械；review 只读，approved edits 由 bound bookkeeper 写入。初始 bundle 的 review 产出最终 owner approval，同 package 后续沿用。
+审查实际 candidate 并返回判决，不做审计机械；review 只读，approved package edits are physically applied by the bound `/impl-package:execution-boundaries`；初始 bundle 的 review 产出最终 owner approval，同 package 后续沿用。
 
 ## 判定
 - mode 省略时 full-review；bundle-admission 仅当 bundle 完整、低风险、无跨模块 material seam、无安全/数据/外部 mutation 信号且 Planned Verification 足以裁决时返回 admitted，否则路由 full-review，不得以 admission 降强度。

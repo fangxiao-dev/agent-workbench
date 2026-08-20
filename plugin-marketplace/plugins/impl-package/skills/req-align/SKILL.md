@@ -5,7 +5,7 @@ description: 当新增或变更 requirement 需要判断 contract impact，或�
 
 # Requirement Alignment
 
-把 contract-impacting change 路由为 Decision、Spec 或两者，保持 package 与 artifact 单一 owner。内容工作由内部 SUB-SKILL 执行，按需读取，不进主 session 默认上下文。
+把 contract-impacting change 路由为 Decision、Spec 或两者，保持 package 与 artifact 单一 owner。内容工作由 [Decision SUB-SKILL](sub-skills/decision/SUB-SKILL.md) 与 [Spec SUB-SKILL](sub-skills/spec/SUB-SKILL.md) 执行，按需读取，不进主 session 默认上下文。
 
 ## 路由判定
 
@@ -15,8 +15,10 @@ description: 当新增或变更 requirement 需要判断 contract impact，或�
 
 ## 机制与边界
 
-- 机械操作一律走现有语义 CLI；formal artifact 的物理写入与 focused validation 由 bound bookkeeper 执行，本 Skill 不直接写 package artifact，不创建 tracker spec、plan 或 runtime state。
+- 机械操作一律走现有语义 CLI；formal artifact 的物理写入与 focused validation 由 bound `/impl-package:execution-boundaries` 执行，本 Skill 不直接写 package artifact，不创建 tracker spec、plan 或 runtime state。主 thread 保留 contract 语义、Gate 和最终采信权。
 
 - 生命周期、影响路由细节与 module-knowledge baseline 按需读 references/package-lifecycle.md；初始 bundle 的 Gate 判据按需读 decision-gate.md / spec-gate.md；汇报前读 references/handoff.md 输出最具体的可恢复状态。
+
+- 每个新建或被修订的 Spec 都生成从属 contract-design.md；未触及的 legacy Spec 到下次 req-align 再补齐。
 
 - 完成条件：fast path 已证明现行合同继续成立，或所选 route 的全部 Gate 已通过；Decision、Spec 与从属 contract-design 无平行 authority；blocked 状态说明 exact missing contract 与下一有效动作；ready 只在 planning 不再需要发明行为或数据合同后成立。
