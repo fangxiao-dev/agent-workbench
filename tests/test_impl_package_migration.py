@@ -51,7 +51,7 @@ class TicketFirstMigrationTests(unittest.TestCase):
             encoding="utf-8",
         )
         (package / "plan.md").write_text(
-            "# Plan\n\nAttempt ID：initial\nComposition：tickets=true, dag=false\n",
+            "# Plan\n\nAttempt ID：initial\nComposition：tickets=true, dag=false\n\n## 输入\n\n- 前置包（Predecessors）：None\n",
             encoding="utf-8",
         )
         (package / "evidence/source-output.md").write_text("verified source\n", encoding="utf-8")
@@ -94,6 +94,7 @@ class TicketFirstMigrationTests(unittest.TestCase):
                 "gate": None,
                 "executionRecord": "execution/initial/execution-record.md",
             }],
+            "predecessors": None,
             "tickets": {"TKT-01": {"state": "PENDING"}},
             "evidenceIndex": {
                 "TKT-01": {

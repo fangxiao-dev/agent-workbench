@@ -105,11 +105,103 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(result["formatVersion"], "3.5")
         self.assertEqual(result["tasks"], 0)
         self.assertEqual(result["readyTickets"], ["TKT-01", "TKT-03", "TKT-04"])
-        self.assertEqual(set(self.state(package)), {"formatVersion", "attempt", "attemptHistory", "tickets", "evidenceIndex", "activeCheckpoints"})
+        self.assertIsNone(self.state(package)["predecessors"])
+        self.assertEqual(set(self.state(package)), {"formatVersion", "attempt", "attemptHistory", "predecessors", "tickets", "evidenceIndex", "activeCheckpoints"})
         self.assertNotIn("tasks", self.state(package))
         self.assertNotIn("resume", self.state(package))
         self.assertFalse((package / "dag.md").exists())
         self.assertFalse((package / "execution/initial/task-handoffs").exists())
+
+    def test_plan_must_explicitly_declare_predecessors(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        plan = package / "plan.md"
+        plan.write_text(plan.read_text(encoding="utf-8").replace("- 前置包（Predecessors）：None\n", ""), encoding="utf-8")
+
+        failed = self.cli(
+            repo,
+            package,
+            "package",
+            "init",
+            "--attempt",
+            "initial",
+            "--plan",
+            "docs/implementations/20260813-example/plan.md",
+            ok=False,
+        )
+
+        self.assertIn("declare 前置包", failed.stderr)
+
+    def test_predecessor_paths_are_recorded_and_searched_first(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        predecessor = repo / "docs/implementations/20260801-base"
+        predecessor.mkdir(parents=True)
+        second_predecessor = repo / "docs/implementations/20260802-policy"
+        second_predecessor.mkdir(parents=True)
+        (predecessor / "output.py").write_text(
+            "def DatevPolicyWorkbenchDto():\n    pass\n",
+            encoding="utf-8",
+        )
+        plan = package / "plan.md"
+        plan.write_text(
+            plan.read_text(encoding="utf-8").replace(
+                "- 前置包（Predecessors）：None",
+                "- 前置包（Predecessors）：docs/implementations/20260801-base, docs/implementations/20260802-policy",
+            ),
+            encoding="utf-8",
+        )
+        ticket = package / "tickets" / "01-source.md"
+        text = ticket.read_text(encoding="utf-8")
+        ticket.write_text(
+            text.replace(
+                "\n## 安全不变量\n",
+                "\n- 到达路径：entry → EXISTS: DatevPolicyWorkbenchDto → arrival\n\n## 安全不变量\n",
+            ),
+            encoding="utf-8",
+        )
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "add predecessor output")
+
+        self.init(repo, package)
+        state = self.state(package)
+        self.assertEqual(state["predecessors"], ["docs/implementations/20260801-base", "docs/implementations/20260802-policy"])
+        payload = json.loads(self.cli(repo, package, "package", "validate").stdout)
+
+        self.assertEqual(payload["findings"], [])
+
+    def test_state_requires_predecessors_field(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        state_path = package / ".impl-package" / "state.json"
+        state = self.state(package)
+        del state["predecessors"]
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+
+        failed = self.cli(repo, package, "package", "validate", ok=False)
+
+        self.assertIn("predecessors", failed.stderr)
+
+    def test_state_predecessors_must_match_plan(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        predecessor = repo / "docs/implementations/20260801-base"
+        predecessor.mkdir(parents=True)
+        plan = package / "plan.md"
+        plan.write_text(
+            plan.read_text(encoding="utf-8").replace(
+                "- 前置包（Predecessors）：None",
+                "- 前置包（Predecessors）：docs/implementations/20260801-base",
+            ),
+            encoding="utf-8",
+        )
+        self.init(repo, package)
+        plan.write_text(plan.read_text(encoding="utf-8").replace("docs/implementations/20260801-base", "None"), encoding="utf-8")
+
+        failed = self.cli(repo, package, "package", "validate", ok=False)
+
+        self.assertIn("state predecessors do not match", failed.stderr)
 
     def test_satisfied_requires_all_claims_current_context_and_dependencies(self) -> None:
         temp, repo, package = self.make_repo()
@@ -164,6 +256,78 @@ class ImplPackageStateTests(unittest.TestCase):
         ticket.write_text(text, encoding="utf-8")
         failed = self.cli(repo, package, "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md", ok=False)
         self.assertIn("no evidence timing", failed.stderr)
+
+    def test_arrival_path_requires_exists_or_new_markers(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        ticket = package / "tickets" / "01-source.md"
+        ticket.write_text(
+            ticket.read_text(encoding="utf-8")
+            + "\n- 到达路径：entry → TaxOfficeDelegatedAccessAdapter → arrival\n",
+            encoding="utf-8",
+        )
+
+        failed = self.cli(
+            repo,
+            package,
+            "package",
+            "init",
+            "--attempt",
+            "initial",
+            "--plan",
+            "docs/implementations/20260813-example/plan.md",
+            ok=False,
+        )
+
+        self.assertIn("unmarked segment", failed.stderr)
+
+    def test_package_validate_reports_missing_exists_symbols_without_blocking(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        symbols = (
+            "TaxOfficeDelegatedAccessAdapter",
+            "DatevMandantPolicySnapshotMapper",
+            "DatevPrivateSourceConfirmParticipant",
+            "CreateDatevPolicyCandidateResponse",
+        )
+        route = "entry → " + " → ".join(f"EXISTS: {symbol}" for symbol in symbols) + " → arrival"
+        ticket = package / "tickets" / "01-source.md"
+        text = ticket.read_text(encoding="utf-8")
+        ticket.write_text(text.replace("\n## 安全不变量\n", f"\n- 到达路径：{route}\n\n## 安全不变量\n"), encoding="utf-8")
+        self.init(repo, package)
+
+        result = self.cli(repo, package, "package", "validate")
+        payload = json.loads(result.stdout)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(payload["comparisonCommit"], git(repo, "rev-parse", "HEAD"))
+        self.assertEqual({item["symbol"] for item in payload["findings"]}, set(symbols))
+        self.assertTrue(all(item["code"] == "arrival-exists-symbol-not-found" for item in payload["findings"]))
+
+    def test_package_validate_checks_exists_at_comparison_commit_and_skips_new(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        ticket = package / "tickets" / "01-source.md"
+        text = ticket.read_text(encoding="utf-8")
+        ticket.write_text(
+            text.replace(
+                "\n## 安全不变量\n",
+                "\n- 到达路径：entry → EXISTS: withTaxOfficeDelegatedFinanceScopeLease → NEW: CreateDatevPolicyCandidateResponse → arrival\n\n## 安全不变量\n",
+            ),
+            encoding="utf-8",
+        )
+        (repo / "src").mkdir()
+        (repo / "src" / "finance.py").write_text(
+            "def withTaxOfficeDelegatedFinanceScopeLease():\n    pass\n",
+            encoding="utf-8",
+        )
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "add existing arrival symbol")
+        self.init(repo, package)
+
+        payload = json.loads(self.cli(repo, package, "package", "validate").stdout)
+
+        self.assertEqual(payload["findings"], [])
 
     def test_checkpoint_overwrites_state_and_er_accepts_judgment_only(self) -> None:
         temp, repo, package = self.make_repo()

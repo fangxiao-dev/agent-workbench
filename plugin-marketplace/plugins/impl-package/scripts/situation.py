@@ -72,6 +72,10 @@ DEPENDENCY_HEADING_RE = re.compile(r"(?ms)^##\s+(?:阻塞依赖|Blocking Depende
 FINDING_ID_RE = re.compile(r"\b(?:FINDING|FND|FIND|F)-[A-Za-z0-9][A-Za-z0-9._-]*\b", re.I)
 BOOL_RE = re.compile(r"^(true|false|yes|no|1|0|是|否)$", re.I)
 NUMERIC_COMPARISON_RE = re.compile(r"^(>=|<=|==|!=|>|<)\s*(-?(?:\d+(?:\.\d*)?|\.\d+))$")
+LIVE_PACKAGE_REFERENCE_RE = re.compile(
+    r"(?<![A-Za-z0-9_])docs/implementations/([A-Za-z0-9][A-Za-z0-9._-]*)/"
+)
+RETIRED_PACKAGES_REL = "docs/implementations/retired.json"
 
 # Facts are intentionally a closed namespace.  The aliases below are only for
 # already-published legacy trail rows; new rows must use the canonical key.
@@ -548,6 +552,121 @@ class PackageReader:
         return [line.replace("\\", "/") for line in output.splitlines() if line.strip()]
 
 
+def _read_repo_relative(reader: PackageReader, relative: str) -> FileView:
+    """Read a repository-relative file from the worktree or --at commit."""
+    if reader.repo is None:
+        return FileView(relative, error="package 不在 Git 仓库内，无法读取 repository-relative 文件")
+    if reader.commit is None:
+        try:
+            path = _safe_relative_path(reader.repo, relative)
+            if not path.is_file():
+                return FileView(relative, error=f"{relative} 不存在")
+            return FileView(relative, path.read_text(encoding="utf-8-sig"))
+        except (OSError, UnicodeError, SituationError) as exc:
+            return FileView(relative, error=f"cannot read {relative}: {exc}")
+    code, output, error = _git_result(reader.repo, "show", f"{reader.commit}:{relative}")
+    if code != 0:
+        return FileView(relative, error=f"cannot read {relative} at {reader.commit}: {error or output}")
+    return FileView(relative, output)
+
+
+def _live_reference_document_paths(reader: PackageReader) -> list[str]:
+    paths = ["decision.md", "spec.md", "plan.md"]
+    if reader.commit is not None:
+        assert reader.repo is not None and reader.package_rel is not None
+        prefix = (reader.package_rel / "tickets").as_posix().rstrip("/") + "/"
+        code, output, error = _git_result(
+            reader.repo,
+            "ls-tree",
+            "-r",
+            "--name-only",
+            reader.commit,
+            "--",
+            prefix,
+        )
+        if code != 0:
+            raise SituationError(f"cannot list {prefix} at {reader.commit}: {error or output}")
+        for line in output.splitlines():
+            path = PurePosixPath(line.strip())
+            if path.as_posix().startswith(prefix) and path.suffix.lower() == ".md":
+                paths.append(path.relative_to(reader.package_rel).as_posix())
+        return paths
+
+    directory = reader.package / "tickets"
+    if not directory.is_dir():
+        return paths
+    try:
+        for child in directory.rglob("*.md"):
+            if child.is_file():
+                paths.append(child.relative_to(reader.package).as_posix())
+    except OSError as exc:
+        raise SituationError(f"cannot list {directory}: {exc}") from exc
+    return sorted(set(paths))
+
+
+def _retired_package_ids(reader: PackageReader) -> tuple[set[str] | None, str | None]:
+    view = _read_repo_relative(reader, RETIRED_PACKAGES_REL)
+    if view.error or view.text is None:
+        return None, view.error or f"{RETIRED_PACKAGES_REL} 为空"
+    try:
+        value = json.loads(view.text)
+    except json.JSONDecodeError as exc:
+        return None, f"{RETIRED_PACKAGES_REL} 不是合法 JSON：{exc}"
+    if not isinstance(value, dict) or not isinstance(value.get("packages"), list):
+        return None, f"{RETIRED_PACKAGES_REL} 缺少 packages list"
+    package_ids: set[str] = set()
+    for index, item in enumerate(value["packages"]):
+        if not isinstance(item, dict) or not isinstance(item.get("package_id"), str) or not item["package_id"].strip():
+            return None, f"{RETIRED_PACKAGES_REL} packages[{index}].package_id 无效"
+        package_ids.add(item["package_id"])
+    return package_ids, None
+
+
+def _live_package_reference_fact(reader: PackageReader) -> Fact:
+    try:
+        document_paths = _live_reference_document_paths(reader)
+        references: list[tuple[str, str, str]] = []
+        current_package_id = reader.package.name
+        for relative in document_paths:
+            view = reader.read(relative)
+            if view.error:
+                return Fact.unknown(view.error)
+            if view.text is None:
+                continue
+            for match in LIVE_PACKAGE_REFERENCE_RE.finditer(view.text):
+                package_id = match.group(1)
+                if package_id == current_package_id:
+                    continue
+                references.append((relative, match.group(0), package_id))
+
+        retired_ids, error = _retired_package_ids(reader)
+        if retired_ids is None:
+            return Fact.unknown(error or f"无法读取 {RETIRED_PACKAGES_REL}")
+
+        live_references = [
+            (relative, path, package_id)
+            for relative, path, package_id in references
+            if package_id not in retired_ids
+        ]
+        if not live_references:
+            return _fact_value(False)
+        details = "; ".join(
+            f"{relative}: {path}"
+            for relative, path, _ in dict.fromkeys(live_references)
+        )
+        return _fact_value(True, reason=f"发现活体 package 引用：{details}")
+    except (OSError, UnicodeError, SituationError) as exc:
+        return Fact.unknown(f"无法扫描活体 package 引用：{exc}")
+
+
+def live_package_reference_fact(package: Path) -> Fact:
+    """Return the computed live-package reference fact for a worktree package."""
+    try:
+        return _live_package_reference_fact(PackageReader(package, None))
+    except (OSError, UnicodeError, SituationError) as exc:
+        return Fact.unknown(f"无法扫描活体 package 引用：{exc}")
+
+
 def _active_trail_relative_path(attempt_id: str) -> str:
     """The renderer's input stays on the unnumbered, active trail path."""
     return f"execution/{attempt_id}/{ACTIVE_TRAIL_NAME}"
@@ -621,7 +740,7 @@ def _parse_state(view: FileView) -> StateView:
         ticket_ids = sorted(str(identifier) for identifier in tickets)
 
     errors: list[str] = []
-    expected = {"formatVersion", "attempt", "attemptHistory", "tickets", "evidenceIndex", "activeCheckpoints"}
+    expected = {"formatVersion", "attempt", "attemptHistory", "predecessors", "tickets", "evidenceIndex", "activeCheckpoints"}
     if set(raw) != expected:
         errors.append("顶层字段不符合 3.5 schema")
     if raw.get("formatVersion") != "3.5":
@@ -632,6 +751,13 @@ def _parse_state(view: FileView) -> StateView:
         errors.append("attempt 必须只含 id 与 plan")
     if not isinstance(raw.get("attemptHistory"), list):
         errors.append("attemptHistory 不是 list")
+    predecessors = raw.get("predecessors")
+    if predecessors is not None and (
+        not isinstance(predecessors, list)
+        or not predecessors
+        or any(not isinstance(item, str) or not item.strip() for item in predecessors)
+    ):
+        errors.append("predecessors 必须是 null 或非空路径 list")
     if not isinstance(tickets, dict):
         errors.append("tickets 不是 object")
     else:
@@ -1735,6 +1861,10 @@ def _when_package_state_invalid(context: FactContext) -> Fact:
     return _fact_value(not context.snapshot.state.valid, context.snapshot.state.error)
 
 
+def _when_package_references_live_package(context: FactContext) -> Fact:
+    return _live_package_reference_fact(context.snapshot.reader)
+
+
 def _load_validation_result(spec: str | None) -> ValidationResult | None:
     if spec is None:
         return None
@@ -2503,6 +2633,7 @@ def _when_ticket_post_fix_regression_pending(context: FactContext) -> Fact:
 
 WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "package.state_invalid": _when_package_state_invalid,
+    "package.references.live_package": _when_package_references_live_package,
     "package.validate.projection_drift": _when_package_validate_projection_drift,
     "attempt.session_resumed": _when_attempt_session_resumed,
     "attempt.compaction_pressure_high": _when_attempt_compaction_pressure_high,

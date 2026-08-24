@@ -31,6 +31,7 @@ TICKET_ID_RE = re.compile(r"(?m)^\s*(?:\*\*)?Ticket ID\s*[：:](?:\*\*)?\s*([^\s
 DECISION_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Decision Revision|决策修订（Decision Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(D\d+)\b")
 SPEC_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Spec Revision|规格修订（Spec Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(S\d+)\b")
 PLAN_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Plan Revision|计划修订（Plan Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(P\d+)\b")
+PREDECESSORS_RE = re.compile(r"(?m)^\s*-\s*前置包\s*(?:（Predecessors）|\(Predecessors\))\s*[：:]\s*(.*?)\s*$")
 RUNTIME_ACCEPTANCE_MARKER = "impl-package:projection runtime-acceptance"
 
 
@@ -77,6 +78,38 @@ def _artifact(repo: Path, value: str, field: str) -> str:
         if anchor.lower() not in resolved.read_text(encoding="utf-8").lower():
             raise MigrationError(f"{field} anchor is not present: {value}")
     return path
+
+
+def _predecessors(repo: Path, package: Path, plan_text: str) -> list[str] | None:
+    matches = list(PREDECESSORS_RE.finditer(plan_text))
+    if len(matches) != 1:
+        raise MigrationError("candidate plan must declare 前置包（Predecessors） exactly once")
+    raw = matches[0].group(1).strip()
+    if raw.casefold() == "none":
+        return None
+    if not raw:
+        raise MigrationError("前置包（Predecessors） must be None or a repository-relative directory list")
+    result: list[str] = []
+    for item in raw.split(","):
+        value = item.strip().replace("\\", "/")
+        if not value or value.casefold() == "none":
+            raise MigrationError("前置包（Predecessors） cannot mix None with paths or contain an empty path")
+        if "#" in value:
+            raise MigrationError("predecessor must not contain a text anchor")
+        normalized = _relative_artifact(value)
+        path = (repo / Path(*normalized.split("/"))).resolve()
+        try:
+            path.relative_to(repo.resolve())
+        except ValueError as exc:
+            raise MigrationError(f"predecessor escapes repository: {value}") from exc
+        if not path.is_dir():
+            raise MigrationError(f"predecessor must be a directory: {normalized}")
+        if path == package.resolve():
+            raise MigrationError("a package cannot declare itself as a predecessor")
+        if normalized in result:
+            raise MigrationError(f"duplicate predecessor: {normalized}")
+        result.append(normalized)
+    return result
 
 
 def _commit(repo: Path, value: str, field: str) -> str:
@@ -579,7 +612,7 @@ def validate_migration(package: Path, *, pre_anchor: str | None = None) -> dict:
         raise MigrationError("legacy input must be formatVersion 3.4")
     if candidate.get("formatVersion") != "3.5":
         raise MigrationError("candidate must be formatVersion 3.5")
-    expected = {"formatVersion", "attempt", "attemptHistory", "tickets", "evidenceIndex", "activeCheckpoints"}
+    expected = {"formatVersion", "attempt", "attemptHistory", "predecessors", "tickets", "evidenceIndex", "activeCheckpoints"}
     if set(candidate) != expected:
         raise MigrationError("candidate has unexpected state fields; tasks/resume are not allowed")
     attempt = candidate.get("attempt")
@@ -603,6 +636,9 @@ def validate_migration(package: Path, *, pre_anchor: str | None = None) -> dict:
     plan_attempt = ATTEMPT_RE.search(plan_text)
     if plan_attempt is None or plan_attempt.group(1) != attempt["id"]:
         raise MigrationError("candidate Attempt ID does not match the current plan")
+    predecessors = _predecessors(repo, package, plan_text)
+    if candidate.get("predecessors") != predecessors:
+        raise MigrationError("candidate predecessors do not match the current plan")
     if not isinstance(candidate["tickets"], dict) or not candidate["tickets"]:
         raise MigrationError("candidate must retain Ticket records")
     ticket_claims = _ticket_claims(package, attempt["id"])

@@ -238,7 +238,7 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
         if args.command == "init":
             return engine.command_init(package, args.attempt, args.plan)
         if args.command in {"status", "validate"}:
-            return engine.command_validate(package, args.commit)
+            return engine.command_validate(package, args.commit, check_arrival_paths=args.command == "validate")
         return engine.command_refresh_progress(package)
     if group == "ticket":
         return _ticket_transition(package, args, args.state if args.command == "transition" else args.target)

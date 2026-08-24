@@ -30,7 +30,7 @@ def main() -> None:
     assert ".impl-package/state.json" in dag
     for field in ("Verdict", "Attempt", "Comparison commit", "Evidence", "Durable Deltas"):
         assert field in gate, f"gate missing {field}"
-    for field in ('"attempt"', '"attemptHistory"', '"tickets"', '"evidenceIndex"', '"activeCheckpoints"'):
+    for field in ('"attempt"', '"attemptHistory"', '"predecessors"', '"tickets"', '"evidenceIndex"', '"activeCheckpoints"'):
         assert field in state, f"current state reference missing {field}"
     assert '"tasks"' not in state and '"resume"' not in state
 

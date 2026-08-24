@@ -27,6 +27,7 @@ from situation import (
     REVIEW_TRACKS,
     REVIEW_TRACK_VALUES,
     describe_unknown_fact_keys,
+    live_package_reference_fact,
 )
 
 STATE_PATH = Path(".impl-package/state.json")
@@ -54,10 +55,13 @@ COMPOSITION_RE = re.compile(r"Composition[^\n]*tickets=(true|false),\s*dag=(true
 DECISION_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Decision Revision|决策修订（Decision Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(D\d+)\b")
 SPEC_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Spec Revision|规格修订（Spec Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(S\d+)\b")
 PLAN_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Plan Revision|计划修订（Plan Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(P\d+)\b")
+PREDECESSORS_RE = re.compile(r"(?m)^\s*-\s*前置包\s*(?:（Predecessors）|\(Predecessors\))\s*[：:]\s*(.*?)\s*$")
 TICKET_ID_RE = re.compile(r"(?m)^\s*(?:\*\*)?Ticket ID\s*[：:](?:\*\*)?\s*([^\s*]+)")
 PUBLICATION_RE = re.compile(r"(?m)^(\s*(?:\*\*)?(?:Publication Status|发布状态（Publication Status）)\s*[：:](?:\*\*)?\s*)(Draft|Approved)\s*$")
 CLAIM_RE = re.compile(r"Stable claim ID：\s*`([^`]+)`")
 TIMING_RE = re.compile(r"证据时机：\s*`([^`]+)`")
+ARRIVAL_PATH_RE = re.compile(r"(?m)^\s*-\s*到达路径\s*[：:]\s*(.*?)\s*$")
+ARRIVAL_SEGMENT_RE = re.compile(r"^(EXISTS|NEW)\s*:\s*(.+?)\s*$")
 ER_ENTRY_RE = re.compile(r"(?m)^## ([^\s]+-ER-(\d{3})) · (checkpoint|judgment)\s*$")
 COMMIT_RE = re.compile(r"[0-9a-fA-F]{7,64}")
 PACKAGE_ID_RE = re.compile(r"^(?:\d{6}|\d{8}|\d{4}-\d{2}-\d{2})[-_][A-Za-z0-9].+")
@@ -295,6 +299,54 @@ def _repo_relative(repo: Path, value: str, field: str, *, must_exist: bool = Tru
     return path.as_posix() + anchor
 
 
+def _predecessors_from_plan(package: Path, repo: Path, text: str) -> list[str] | None:
+    matches = list(PREDECESSORS_RE.finditer(text))
+    if len(matches) != 1:
+        raise StateError("plan must declare 前置包（Predecessors） exactly once")
+    raw = matches[0].group(1).strip()
+    if raw.casefold() == "none":
+        return None
+    if not raw:
+        raise StateError("前置包（Predecessors） must be None or a repository-relative directory list")
+    values = [item.strip() for item in raw.split(",")]
+    if any(not item or item.casefold() == "none" for item in values):
+        raise StateError("前置包（Predecessors） cannot mix None with paths or contain an empty path")
+    result: list[str] = []
+    for value in values:
+        normalized = _repo_relative(repo, value, "predecessor")
+        if "#" in normalized:
+            raise StateError("predecessor must not contain a text anchor")
+        path = repo / Path(*normalized.split("/"))
+        if not path.is_dir():
+            raise StateError(f"predecessor must be a directory: {normalized}")
+        if path.resolve() == package.resolve():
+            raise StateError("a package cannot declare itself as a predecessor")
+        if normalized in result:
+            raise StateError(f"duplicate predecessor: {normalized}")
+        result.append(normalized)
+    return result
+
+
+def _normalize_state_predecessors(package: Path, repo: Path, value: Any) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list) or not value:
+        raise StateError("state predecessors must be null or a non-empty list")
+    result: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            raise StateError("state predecessors must contain repository-relative paths")
+        normalized = _repo_relative(repo, item, "state predecessor")
+        if "#" in normalized or not (repo / Path(*normalized.split("/"))).is_dir():
+            raise StateError(f"state predecessor must be an existing directory: {normalized}")
+        if normalized in result:
+            raise StateError(f"duplicate state predecessor: {normalized}")
+        if (repo / Path(*normalized.split("/"))).resolve() == package.resolve():
+            raise StateError("state cannot declare the current package as a predecessor")
+        result.append(normalized)
+    return result
+
+
 def _package_relative(package: Path, path: Path) -> str:
     return path.resolve().relative_to(package.resolve()).as_posix()
 
@@ -319,7 +371,31 @@ def _plan_info(package: Path, repo: Path, plan_value: str) -> dict[str, Any]:
     attempt = _field(ATTEMPT_RE, text, "Attempt ID")
     if not isinstance(attempt, str) or ATTEMPT_ID_RE.fullmatch(attempt) is None:
         raise StateError(f"invalid Attempt ID: {attempt!r}")
-    return {"path": plan_rel, "attempt": attempt, "decision": _field(DECISION_RE, text, "Decision Revision", optional=True), "spec": _field(SPEC_RE, text, "Spec Revision", optional=True), "plan": _field(PLAN_RE, text, "Plan Revision", optional=True), "tickets": tickets, "dag": False}
+    return {"path": plan_rel, "attempt": attempt, "decision": _field(DECISION_RE, text, "Decision Revision", optional=True), "spec": _field(SPEC_RE, text, "Spec Revision", optional=True), "plan": _field(PLAN_RE, text, "Plan Revision", optional=True), "predecessors": _predecessors_from_plan(package, repo, text), "tickets": tickets, "dag": False}
+
+
+def _arrival_paths(text: str, ticket_id: str, path: Path) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for match in ARRIVAL_PATH_RE.finditer(text):
+        line = text.count("\n", 0, match.start()) + 1
+        segments = re.split(r"\s*(?:→|->)\s*", match.group(1).strip())
+        if len(segments) < 2 or segments[0].casefold() != "entry" or segments[-1].casefold() != "arrival":
+            raise StateError(f"Ticket {ticket_id} arrival path in {path.name}:{line} must use entry → ... → arrival")
+        nodes: list[dict[str, str]] = []
+        for segment in segments[1:-1]:
+            marked = ARRIVAL_SEGMENT_RE.fullmatch(segment.strip())
+            if marked is None:
+                raise StateError(
+                    f"Ticket {ticket_id} arrival path in {path.name}:{line} has an unmarked segment: {segment!r}; use EXISTS: or NEW:"
+                )
+            symbol = marked.group(2).strip()
+            if symbol.startswith("`") and symbol.endswith("`"):
+                symbol = symbol[1:-1].strip()
+            if not symbol:
+                raise StateError(f"Ticket {ticket_id} arrival path in {path.name}:{line} has an empty symbol")
+            nodes.append({"kind": marked.group(1), "symbol": symbol})
+        result.append({"line": line, "nodes": nodes})
+    return result
 
 
 def _ticket_documents(package: Path, attempt: str) -> list[dict[str, Any]]:
@@ -342,6 +418,7 @@ def _ticket_documents(package: Path, attempt: str) -> list[dict[str, Any]]:
             raise StateError(f"missing Publication Status in {child.name}")
         if "impl-package:projection runtime-acceptance" in text:
             raise StateError(f"Ticket {identifier} contains retired Runtime Acceptance projection")
+        arrival_paths = _arrival_paths(text, str(identifier), child)
         matches = list(CLAIM_RE.finditer(text))
         claims = list(dict.fromkeys(match.group(1) for match in matches))
         if not claims:
@@ -368,7 +445,7 @@ def _ticket_documents(package: Path, attempt: str) -> list[dict[str, Any]]:
             if claim in claim_timings and claim_timings[claim] != timing_value:
                 raise StateError(f"Ticket {identifier} claim {claim} has conflicting evidence timing")
             claim_timings[claim] = timing_value
-        result.append({"id": str(identifier), "path": child, "text": text, "publication": "Approved" if PUBLICATION_RE.search(text).group(2) == "Approved" else "Draft", "claims": claims, "claimTimings": claim_timings, "timings": sorted(set(claim_timings.values()))})
+        result.append({"id": str(identifier), "path": child, "text": text, "publication": "Approved" if PUBLICATION_RE.search(text).group(2) == "Approved" else "Draft", "claims": claims, "claimTimings": claim_timings, "timings": sorted(set(claim_timings.values())), "arrivalPaths": arrival_paths})
     if not result and directory.exists():
         raise StateError(f"Composition earns tickets but no Ticket belongs to Attempt {attempt}")
     return result
@@ -650,9 +727,9 @@ def _ticket_released(tickets: dict[str, Any], identifier: str, visiting: set[str
 
 
 def _validate_state(package: Path, state: dict[str, Any], *, projections: bool = True) -> dict[str, Any]:
-    expected = {"formatVersion", "attempt", "attemptHistory", "tickets", "evidenceIndex", "activeCheckpoints"}
+    expected = {"formatVersion", "attempt", "attemptHistory", "predecessors", "tickets", "evidenceIndex", "activeCheckpoints"}
     if set(state) != expected:
-        raise StateError("state.json must use formatVersion 3.5 and contain attempt, attemptHistory, tickets, evidenceIndex, activeCheckpoints")
+        raise StateError("state.json must use formatVersion 3.5 and contain attempt, attemptHistory, predecessors, tickets, evidenceIndex, activeCheckpoints")
     if state["formatVersion"] != FORMAT_VERSION:
         raise StateError(f"unsupported state formatVersion {state['formatVersion']!r}; expected {FORMAT_VERSION!r}")
     repo = _repo_root(package)
@@ -662,6 +739,9 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
     info = _plan_info(package, repo, attempt["plan"])
     if info["attempt"] != attempt["id"]:
         raise StateError("state Attempt ID does not match current plan")
+    predecessors = _normalize_state_predecessors(package, repo, state["predecessors"])
+    if predecessors != info["predecessors"]:
+        raise StateError("state predecessors do not match the current plan")
     if not info["tickets"]:
         raise StateError("format 3.5 requires tickets=true")
     lifecycle = _lifecycle(package, attempt["id"], repo)
@@ -724,7 +804,7 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
     history = _attempt_history(state, package)
     if not history or history[-1]["id"] != attempt["id"]:
         raise StateError("attemptHistory must end with current Attempt")
-    summary = {"formatVersion": FORMAT_VERSION, "attempt": attempt["id"], "revisions": {"decision": info["decision"], "spec": info["spec"], "plan": info["plan"]}, "composition": {"tickets": True, "dag": False}, "tasks": 0, "tickets": len(tickets), "readyTickets": _ready_tickets(dependencies, tickets), "gate": lifecycle.gate, "_lifecycle": lifecycle, "_info": info, "_documents": documents, "_ticketDependencies": dependencies, "_claims": claims, "_claimTimings": claim_timings, "_evidence": evidence, "_checkpoints": checkpoints, "_history": history}
+    summary = {"formatVersion": FORMAT_VERSION, "attempt": attempt["id"], "revisions": {"decision": info["decision"], "spec": info["spec"], "plan": info["plan"]}, "predecessors": predecessors, "composition": {"tickets": True, "dag": False}, "tasks": 0, "tickets": len(tickets), "readyTickets": _ready_tickets(dependencies, tickets), "gate": lifecycle.gate, "_lifecycle": lifecycle, "_info": info, "_documents": documents, "_ticketDependencies": dependencies, "_claims": claims, "_claimTimings": claim_timings, "_evidence": evidence, "_checkpoints": checkpoints, "_history": history}
     if projections:
         _validate_projections(package, state, summary)
     return summary
@@ -786,6 +866,47 @@ def _public(summary: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in summary.items() if not key.startswith("_")}
 
 
+def _git_grep_symbol(repo: Path, commit: str, symbol: str, paths: list[str], excluded: list[str]) -> list[str]:
+    command = ["git", "-C", str(repo), "grep", "-I", "-F", "-l", "-e", symbol, commit, "--"]
+    command.extend(paths or ["."])
+    command.extend(f":!(exclude){path}" for path in excluded)
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode == 1:
+        return []
+    if result.returncode != 0:
+        raise StateError(result.stderr.strip() or f"cannot search comparison commit {commit}")
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def _arrival_findings(repo: Path, package: Path, summary: dict[str, Any], comparison_commit: str) -> list[dict[str, Any]]:
+    package_rel = package.resolve().relative_to(repo.resolve()).as_posix()
+    excluded = [package_rel, f"{package_rel}/**", "**/*.md"]
+    predecessors = summary.get("predecessors") or []
+    findings: list[dict[str, Any]] = []
+    for document in summary["_documents"]:
+        document_rel = _package_relative(package, document["path"])
+        for route in document.get("arrivalPaths", []):
+            for node in route["nodes"]:
+                if node["kind"] != "EXISTS":
+                    continue
+                symbol = node["symbol"]
+                if predecessors and _git_grep_symbol(repo, comparison_commit, symbol, predecessors, excluded):
+                    continue
+                if _git_grep_symbol(repo, comparison_commit, symbol, [], excluded):
+                    continue
+                findings.append(
+                    {
+                        "code": "arrival-exists-symbol-not-found",
+                        "ticket": document["id"],
+                        "path": document_rel,
+                        "line": route["line"],
+                        "symbol": symbol,
+                        "comparisonCommit": comparison_commit,
+                    }
+                )
+    return findings
+
+
 def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
     if PACKAGE_ID_RE.fullmatch(package.name) is None:
         raise StateError("package directory must use an immutable date-prefixed ID")
@@ -812,7 +933,7 @@ def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
     del dependencies
     history = list(previous)
     history.append({"id": attempt, "plan": info["path"], "lifecycle": "active", "gate": None, "executionRecord": f"execution/{attempt}/execution-record.md"})
-    state: dict[str, Any] = {"formatVersion": FORMAT_VERSION, "attempt": {"id": attempt, "plan": info["path"]}, "attemptHistory": history, "tickets": {document["id"]: {"state": "PENDING"} for document in documents}, "evidenceIndex": {}, "activeCheckpoints": {}}
+    state: dict[str, Any] = {"formatVersion": FORMAT_VERSION, "attempt": {"id": attempt, "plan": info["path"]}, "attemptHistory": history, "predecessors": info["predecessors"], "tickets": {document["id"]: {"state": "PENDING"} for document in documents}, "evidenceIndex": {}, "activeCheckpoints": {}}
     execution_record = _execution_record_path(package, attempt)
     created_execution_record = not execution_record.exists()
     if created_execution_record:
@@ -830,13 +951,21 @@ def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
     return _public(_validate_state(package, state))
 
 
-def command_validate(package: Path, commit: str | None) -> dict[str, Any]:
+def command_validate(package: Path, commit: str | None, *, check_arrival_paths: bool = True) -> dict[str, Any]:
     repo = _repo_root(package)
     resolved = _validate_commit(repo, commit) if commit else None
     path = package / STATE_PATH
     if not path.exists():
-        return {"active": False, "reason": "no-active-attempt", "commit": resolved}
-    result = _public(_validate_state(package, _load_json(path)))
+        result = {"active": False, "reason": "no-active-attempt", "commit": resolved}
+        if check_arrival_paths:
+            result["findings"] = []
+        return result
+    summary = _validate_state(package, _load_json(path))
+    result = _public(summary)
+    if check_arrival_paths:
+        comparison_commit = resolved or _run_git(repo, "rev-parse", "HEAD")
+        result["findings"] = _arrival_findings(repo, package, summary, comparison_commit)
+        result["comparisonCommit"] = comparison_commit
     result.update({"active": True, "commit": resolved})
     return result
 
@@ -1286,6 +1415,14 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
             missing, conflicts = _evidence_coverage(summary, ticket, acceptance_revision, acceptance["environment"])
             if missing or conflicts or acceptance_revision != resolved:
                 raise StateError(f"pass Gate evidence is not current for {ticket}")
+        live_references = live_package_reference_fact(package)
+        if live_references.known and live_references.value is True:
+            raise StateError(
+                "pass Gate rejected: "
+                + (live_references.reason or "package 引用了活体 package")
+                + "；先将每条引用通过 /impl-package:backfill-stable-docs 吸收进 stable docs，"
+                "再把当前 package 改为引用 stable docs"
+            )
     normalized_evidence = [_repo_relative(repo, item, "gate evidence") for item in evidence]
     if verdict in TERMINAL_VERDICTS:
         state["activeCheckpoints"] = {}

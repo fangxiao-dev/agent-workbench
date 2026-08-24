@@ -74,7 +74,7 @@ def test_core_templates_expose_only_current_contract() -> None:
     gate = (IMPL / "skills/dev-with-track/assets/templates/gate.md").read_text(encoding="utf-8")
     assert "tickets=true, dag=false" in plan
     assert '"formatVersion": "3.5"' in state
-    assert all(field in state for field in ('"attempt"', '"attemptHistory"', '"tickets"', '"evidenceIndex"', '"activeCheckpoints"'))
+    assert all(field in state for field in ('"attempt"', '"attemptHistory"', '"predecessors"', '"tickets"', '"evidenceIndex"', '"activeCheckpoints"'))
     assert '"tasks"' not in state and '"resume"' not in state
     assert "execution/<attempt>/execution-record.md" in state
     assert "migration/archive/task-handoffs" in state
