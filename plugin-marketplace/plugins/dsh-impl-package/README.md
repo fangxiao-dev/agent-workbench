@@ -120,6 +120,25 @@ pnpm add "@openai/codex@0.147.0"   # codex provider 的固定平台 payload（�
 不进模型历史（0 token）。`recordInput: false`——steered 消息就是权威领域记录，避免 command/run 重复记录。
 原 `/impl-package:*` 路由表（impl-package/SKILL.md）从主 session 上下文里消失。
 
+## 状态取样 tick（status-tick.ps1）
+
+长驻 worker（`subagent_codex` 等一发式派发）无中途输出；需要周期可见性时，主 session 用
+`scripts/status-tick.ps1` 做**一次性状态取样**，配合有界 job 链实现每 N 分钟播报：
+
+```text
+tick job（sleep N → 运行 status-tick.ps1 → 退出）
+  → 宿主 job 结束通知主 session
+  → 主 session 转播输出行，并以新 job 重新武装下一 tick
+```
+
+- 取样内容：env（API live/ready 三态 + web/tax，KaiSpan local-dev 契约端点）、git
+  （`commits=+N`/head/worktree `diff --shortstat`）、每个 `<package>/.impl-package/progress/<unit>.md`
+  尾部行、以及 `-PathHints` 的脏路径→阶段标签推导。
+- 设计取向：只观察、无心跳/看门狗/自动 kill，与 subagent-driven-development 的
+  progress-file 模板一致；kill 判断仍按该模板「先读进展文件」的规则。
+- 播报链（定时唤醒模型）是宿主能力边界，不由插件承担；插件只负责取样与稳定输出格式。
+- 参数与示例见脚本头部注释。typed 工具包装（`impl_status_tick`）为后续可选增量。
+
 ## 边界与暂缓（对应 GPT 收敛方案）
 
 - **不做双重 runtime**：不重写 Python core；不用 DSH Goal 替代 Ticket；不用 session event 替代 trail。
