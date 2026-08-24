@@ -31,6 +31,16 @@ description: 当调查、实现、修复或验证需要主 session 与 worker �
 - `fix`：只消费已确认且已边界化的 finding；不重新裁决、不扩大范围、不宣称 closure，且必须 fresh invocation。
 - `review`：只运行既定、无写副作用的检查；`review_scope` 区分 checkpoint 与 closure。输入、模板和直接输出见 [Mode Contracts](references/mode-contracts.md)。
 
+## 小步切片（slicing）
+
+一发式 worker（subagent_codex 等）无法中途干预；把整个 Ticket 一次性预支给单个 worker 会形成新瓶颈且问题发现晚。调研、实现、审阅都以 bounded slice 为单元小步推进：
+
+- 每个 implement unit 是一个可独立验证的 slice：`source_unit` + 一条验证命令 + 明确成功条件 + 禁改路径；slice 之间按依赖与共享资源排顺序。
+- 共享 worktree/DB/端口/测试数据等可变资源未隔离时串行推进；可隔离的独立 slice 才并行（见 [Parallel Work Admission](references/parallel-work-admission.md)）。
+- material-risk slice（shared seam、migration、CAS、权限、数据完整性、外部副作用）必须挂 checkpoint review；低风险 slice 可 `review=none` 但写明 reason。
+- 每个 worker 带 [Progress-File 模板](assets/templates/progress-file.md)：每阶段向 `<package>/.impl-package/progress/<unit>.md` 追加一行，结束时返回该路径；主 session 在 slice 边界读取进展并决定下一派发。
+- 主 session 在每次 worker 返回后重新评估剩余 slice 顺序，不把 Ticket 剩余工作一次性预支；同一 Ticket 的连续 slice 使用 fresh invocation（不因角色相同而复用旧 worker）。
+
 ## Worker resolver
 
 启动前读取 [Worker Resolver](references/worker-resolver.md)；解析不到唯一实体、宿主不支持 invocation、授权不匹配或 brief 不完整时返回 `BLOCKED`，不猜近似 worker。

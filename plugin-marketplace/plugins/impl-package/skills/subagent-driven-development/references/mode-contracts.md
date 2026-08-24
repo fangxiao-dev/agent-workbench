@@ -15,7 +15,7 @@ unresolved facts: <none 或最小下一项取证动作>
 
 ## implement
 
-输入只含 source_unit、bounded outcome、ownership、禁改路径、要改的文件列表、一条验证命令和 `strategy`。禁止粘贴整张 Ticket 或全量 AC 到达路径。输出包括变更文件、直接证据、residue/cleanup 和 residual risk；`DONE` 只代表局部单元完成。
+输入只含 source_unit、bounded outcome、ownership、禁改路径、要改的文件列表、一条验证命令和 `strategy`。禁止粘贴整张 Ticket 或全量 AC 到达路径。输出包括变更文件、直接证据、residue/cleanup 和 residual risk；`DONE` 只代表局部单元完成。以 bounded slice 为单位小步派发（见 SKILL「小步切片」），同一 Ticket 不整包交给单个 worker；每 slice 结束后向 progress 文件追加一行进展。
 
 ## fix
 
