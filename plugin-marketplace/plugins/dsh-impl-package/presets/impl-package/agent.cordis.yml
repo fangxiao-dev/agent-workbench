@@ -150,6 +150,7 @@
   config:
     customSkillDirs:
       - 'D:/CodeSpace/agent-workbench/plugin-marketplace/plugins/impl-package/skills'
+      - 'D:/CodeSpace/agent-workbench/skills'
 
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'

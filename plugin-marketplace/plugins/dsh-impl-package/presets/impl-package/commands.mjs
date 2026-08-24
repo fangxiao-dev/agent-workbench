@@ -38,6 +38,7 @@ export const COMMANDS = [
   { name: 'impl-safety-review', stage: 'safety-review', description: '审查安全、数据完整性、并发和外部副作用。' },
   { name: 'impl-verification-before-completion', stage: 'verification-before-completion', description: '声称 complete/merge-ready 前审计证据。' },
   { name: 'impl-backfill-stable-docs', stage: 'backfill-stable-docs', description: '回刷稳定知识或退休 package。' },
+  { name: 'call-codex', stage: 'call-codex', description: 'Codex CLI 协作模式（resume 续接/流式隔离/及时调整 prompt/小步纪律/降级探针/review 回投修复）。', text: '按 call-codex 协作模式处理当前 Codex 协作任务（resume 续接、流式隔离、发现不对及时改 prompt、小步纪律、降级探针、review 回投原 implementer 会话修复）。加载 skill：call-codex（agent-workbench/skills/call-codex/SKILL.md），按其中模式执行；wrapper 仅用于需要程序化 envelope 的一次性调用。' },
 ]
 
 /** Build the user-role steering message (mirrors createUserMessage shape). */
@@ -61,11 +62,13 @@ export function apply(ctx) {
         const supplement = typeof rawInput === 'string' && rawInput.trim() !== ''
           ? `补充输入：${rawInput.trim()}`
           : ''
-        const text = [
-          `以 ${def.stage} 阶段处理当前 Impl-Package 任务。`,
-          supplement,
-          '处境与合法动作由 pre-step 自动注入；机械写入走 impl_* 工具。',
-        ].filter(Boolean).join('\n')
+        const text = def.text !== undefined
+          ? [def.text, supplement].filter(Boolean).join('\n')
+          : [
+              `以 ${def.stage} 阶段处理当前 Impl-Package 任务。`,
+              supplement,
+              '处境与合法动作由 pre-step 自动注入；机械写入走 impl_* 工具。',
+            ].filter(Boolean).join('\n')
         agent.steer(buildRouteMessage(text, def.name))
         return { kind: 'success', text: `已路由至 ${def.stage}` }
       },

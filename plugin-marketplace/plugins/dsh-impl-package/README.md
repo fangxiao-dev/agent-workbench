@@ -8,7 +8,7 @@
 
 ## SKILL 降载（2026-08 完成）
 
-19 个 SKILL 主文件（~860 行）已压缩为 **14 个判断启发式文件（231 行，-73%）**，references（~1,840 行）从"默认读"改"按需读"。逐文件行数见 [baseline-skill-sizes.md](baseline-skill-sizes.md)。降载判据：**流程题（可确定执行）→ 机制；判断题（需要模型判断）→ SKILL 启发式**。
+19 个 SKILL 主文件（~860 行）经压缩后恢复 standalone `grilling` 入口，现为 **15 个判断启发式文件**；references（~1,840 行）从"默认读"改"按需读"。逐文件行数见 [baseline-skill-sizes.md](baseline-skill-sizes.md)。降载判据：**流程题（可确定执行）→ 机制；判断题（需要模型判断）→ SKILL 启发式**。
 
 | 降载去向 | 承接 |
 | --- | --- |
@@ -114,7 +114,7 @@ pnpm add "@openai/codex@0.147.0"   # codex provider 的固定平台 payload（�
 `/impl-to-tickets`、`/impl-create-task-dag`、`/impl-execution-preflight`、`/impl-standing-bookkeeper`、
 `/impl-subagent-driven-development`、`/impl-dev-with-track`、`/impl-do-review`、`/impl-review-code`、
 `/impl-review-code-by-standards`、`/impl-review-code-by-spec`、`/impl-safety-review`、
-`/impl-verification-before-completion`、`/impl-backfill-stable-docs`。
+`/impl-verification-before-completion`、`/impl-backfill-stable-docs`、`/call-codex`（Codex CLI 协作模式：resume 续接/流式隔离/及时调整 prompt/小步纪律/降级探针/review 回投修复）。
 
 用户输入斜杠命令 → 命令向 agent steer 一条路由指令（`source.kind='impl-package-command'`），命令本身
 不进模型历史（0 token）。`recordInput: false`——steered 消息就是权威领域记录，避免 command/run 重复记录。
