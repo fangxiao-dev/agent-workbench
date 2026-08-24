@@ -51,7 +51,7 @@
   name: ./situation-hook.mjs
   config:
     stateFileName: .impl-package/state.json
-    # implScriptsRoot: D:/CodeSpace/agent-workbench/plugin-marketplace/plugins/impl-package/scripts
+    implScriptsRoot: D:/CodeSpace/agent-workbench/plugin-marketplace/plugins/impl-package/scripts
     # packagePath: docs/implementations/<topic>   (explicit override)
     # python: python
 
@@ -63,7 +63,8 @@
 - id: impl-tools
   name: ./impl-tools.mjs
   config:
-    # implScriptsRoot / python: same defaults as the situation hook
+    implScriptsRoot: D:/CodeSpace/agent-workbench/plugin-marketplace/plugins/impl-package/scripts
+    # python: same default as the situation hook
 
 # ── impl-package: recovery anchoring (two-phase gate) ────────────────────────
 
