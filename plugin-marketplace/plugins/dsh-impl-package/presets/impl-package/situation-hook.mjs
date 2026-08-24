@@ -3,8 +3,9 @@
  *
  * Before every agent step it:
  *   1. resolves the active package (nearest ancestor-or-self containing
- *      `.impl-package/state.json`; fallback: `docs/implementations/<topic>/`
- *      under the git root; explicit `packagePath` config override wins);
+ *      `.impl-package/state.json`; fallback: unambiguous single candidate
+ *      under `docs/implementations/` or `docs/domains/<domain>/implementations/`;
+ *      explicit `packagePath` config override wins);
  *   2. resolves the impl-package scripts root (explicit `implScriptsRoot`
  *      config, else the nearest ancestor tree carrying
  *      `plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py`);
@@ -60,8 +61,12 @@ export function findGitRoot(cwd, maxDepth = 16) {
 /**
  * Resolve the active package directory.
  * Order: explicit `packagePath` (absolute or cwd-relative) → nearest
- * ancestor-or-self holding the state file → `docs/implementations/<topic>/`
- * under the git root.
+ * ancestor-or-self holding the state file → unambiguous fallback scan:
+ * every `docs/implementations/<topic>/` and `docs/domains/<domain>/implementations/`
+ * directory under the git root that holds the state file. The fallback only
+ * resolves when exactly ONE candidate exists; with multiple candidates it
+ * returns undefined (never guesses) so a session outside any package stays
+ * uninjected instead of silently attaching to the wrong package.
  */
 export function resolvePackageDir(cwd, stateFileName, packagePath = '') {
   if (packagePath !== '') {
@@ -77,14 +82,25 @@ export function resolvePackageDir(cwd, stateFileName, packagePath = '') {
   }
   const repoRoot = findGitRoot(cwd)
   if (repoRoot !== undefined) {
-    const implDir = join(repoRoot, 'docs', 'implementations')
-    if (existsSync(implDir)) {
+    const candidates = []
+    const scan = (implDir) => {
+      if (!existsSync(implDir)) return
       for (const entry of readdirSync(implDir, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue
         const candidate = join(implDir, entry.name)
-        if (hasState(candidate, stateFileName)) return candidate
+        if (hasState(candidate, stateFileName)) candidates.push(candidate)
       }
     }
+    scan(join(repoRoot, 'docs', 'implementations'))
+    const domainsDir = join(repoRoot, 'docs', 'domains')
+    if (existsSync(domainsDir)) {
+      for (const domain of readdirSync(domainsDir, { withFileTypes: true })) {
+        if (!domain.isDirectory()) continue
+        scan(join(domainsDir, domain.name, 'implementations'))
+      }
+    }
+    if (candidates.length === 1) return candidates[0]
+    if (candidates.length > 1) return undefined
   }
   return undefined
 }
