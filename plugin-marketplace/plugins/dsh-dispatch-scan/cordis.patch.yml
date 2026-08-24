@@ -1,0 +1,9 @@
+# dsh-dispatch-scan bundle patch: inserts the host plugin row into the
+# profile roster. The node half (`lib/index.mjs`) runs in the host process
+# and idempotently patches the bundled agent presets in ~/.dsh/.agent-presets
+# (copies `scan-hook.mjs` next to the preset and appends the hook row), so the
+# per-step dispatch-scan checklist follows the chosen preset without needing
+# a new preset selection.
+- insert:
+    - id: dsh-dispatch-scan
+      name: 'dsh-dispatch-scan'
