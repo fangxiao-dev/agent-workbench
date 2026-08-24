@@ -312,6 +312,7 @@ version/stage/object/phase/priority/when parser 校验。未知字段、错误 e
       "executionRecord": "execution/initial/execution-record.md"
     }
   ],
+  "predecessors": null,
   "tickets": {
     "TKT-01": {
       "state": "PENDING"
@@ -323,7 +324,7 @@ version/stage/object/phase/priority/when parser 校验。未知字段、错误 e
 ```
 
 `situation.py` 的硬 schema 要求是：顶层 key **恰好**为
-`formatVersion`、`attempt`、`attemptHistory`、`tickets`、`evidenceIndex`、
+`formatVersion`、`attempt`、`attemptHistory`、`predecessors`、`tickets`、`evidenceIndex`、
 `activeCheckpoints`；`formatVersion` 必须是字符串 `"3.5"`；`attempt` 必须恰好只有
 `id`、`plan`，两者都是非空字符串。生命周期只能放在 `attemptHistory[*].lifecycle`（完整
 runtime 还要求该 row 的其他字段和 history 末项与 current attempt 对齐）。
@@ -335,6 +336,7 @@ runtime 还要求该 row 的其他字段和 history 末项与 current attempt �
 | `formatVersion` | `"3.5"` | `3.5`、`"3.4"` | state invalid |
 | `attempt` | `{ "id": "initial", "plan": "plan.md" }` | 额外增加 `lifecycle` 或缺 `id/plan` | state invalid；lifecycle 应在 history |
 | `attemptHistory` | list；完整 runtime 的 row 为 `id/plan/lifecycle/gate/executionRecord` | `{}`、`null`；runtime 中缺字段或 history 不以 current attempt 结尾 | situation/parser 或 runtime invalid |
+| `predecessors` | `null` 或非空 repository-relative package path list | 缺字段、空 list、非 path string、`None` 与路径混用 | state invalid |
 | `tickets` | object，key 为 Ticket ID，value 使用下表状态形状 | `[]`、任意 value 缺 `state` 或含额外字段 | state invalid |
 | `evidenceIndex` | object，按 `Ticket ID → claim ID → evidence list` 嵌套 | `[]`、未知 Ticket/claim、record 缺必需 evidence 字段 | state invalid |
 | `activeCheckpoints` | object，key 为 `attempt` 或合法 `ticket:<id>`，value 使用下方三字段 | `[]`、未知 subject、value 缺 `next/blocker/evidence` 或含额外字段 | state invalid |
@@ -593,6 +595,7 @@ p0-anchor-mismatch/
   "formatVersion": "3.5",
   "attempt": {"id": "initial", "plan": "plan.md"},
   "attemptHistory": [{"id": "initial", "plan": "plan.md", "lifecycle": "active", "gate": null, "executionRecord": "execution/initial/execution-record.md"}],
+  "predecessors": null,
   "tickets": {"TKT-01": {"state": "PENDING"}},
   "evidenceIndex": {},
   "activeCheckpoints": {}
@@ -647,6 +650,7 @@ p2-worker-envelope-invalid/
   "formatVersion": "3.5",
   "attempt": {"id": "initial", "plan": "plan.md"},
   "attemptHistory": [{"id": "initial", "plan": "plan.md", "lifecycle": "active", "gate": null, "executionRecord": "execution/initial/execution-record.md"}],
+  "predecessors": null,
   "tickets": {},
   "evidenceIndex": {},
   "activeCheckpoints": {}
@@ -696,6 +700,7 @@ p4-satisfiable/
   "formatVersion": "3.5",
   "attempt": {"id": "initial", "plan": "plan.md"},
   "attemptHistory": [{"id": "initial", "plan": "plan.md", "lifecycle": "active", "gate": {"verdict": "blocked", "commit": "5f299f345d14389d1520d68e84eec52342d16564"}, "executionRecord": "execution/initial/execution-record.md"}],
+  "predecessors": null,
   "tickets": {
     "TKT-01": {
       "state": "PENDING"

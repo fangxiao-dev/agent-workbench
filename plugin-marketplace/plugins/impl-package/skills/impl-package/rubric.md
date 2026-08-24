@@ -20,6 +20,6 @@ updated: 2026-08-06
 
 - 以“必要 current facts”为状态准入标准，删除只服务审计对账的状态与流程。
 - 跨 session 比较使用批准/验证所在的 Git commit 和实际 diff。
-- 活动 attempt 统一使用 `.impl-package/state.json` 的 `formatVersion: "3.5"`、attempt、attemptHistory、tickets、evidenceIndex、activeCheckpoints 六个顶层字段。
+- 活动 attempt 统一使用 `.impl-package/state.json` 的 `formatVersion: "3.5"`、attempt、attemptHistory、predecessors、tickets、evidenceIndex、activeCheckpoints 七个顶层字段。
 - 根 `progress.md` 是完整恢复投影；active checkpoint 是跨 session 正常恢复入口；旧 package 的 Execution Record 与 Task Handoff 按 Attempt 分区但保持不同生命周期，不抽象成通用记录。
 - 外围 review、handoff、preflight 和 stable-doc backfill 复用相同原则。

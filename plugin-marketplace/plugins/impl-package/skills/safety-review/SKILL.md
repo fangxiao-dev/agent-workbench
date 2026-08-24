@@ -24,7 +24,15 @@ P0 — block/fail-closed：外部 mutation 无 idempotency/可行 compensation�
 
 ## 五类审查（完整审查按需加载）
 
-完整审查逐项覆盖 **Data integrity、Security boundary、Concurrency、External side effects、Change map**；前四类检查实现与测试证据，Change map 列出受影响入口、写入点、存储、外部 adapter、异步消费者、迁移和验证证据并标出未审计/无法确认路径。详细专项 checklist 见 [five-categories.md](references/five-categories.md)，收缩型 focused path 不加载；change map 是本次报告的一部分，不是新 artifact。
+完整审查逐项覆盖 **Data integrity、Security boundary、Concurrency、External side effects、Change map**，并按以下顺序执行；前四类检查实现与测试证据，Change map 列出受影响入口、写入点、存储、外部 adapter、异步消费者、迁移和验证证据并标出未审计/无法确认路径。
+
+1. **Data integrity**：检查数据写入、schema/data migration、事务边界、校验、重试与 rollback。报告可能重复写、部分写、丢失、损坏或无法恢复的路径，以及证据是否覆盖失败恢复；否则数据错误可能在审查只看成功写入时被漏掉。
+2. **Security boundary**：检查认证、authorization/permission、tenant 或数据隔离、secret 处理、输入信任边界和 webhook 签名验证。重点是调用是否能绕过应有的 auth 或 permission 检查；否则安全边界会被当成普通实现细节。
+3. **Concurrency**：检查竞态、重复投递、at-least-once handler、锁/版本控制、幂等键和重试交互。不要因“目前串行执行”而忽略外部回调、队列或用户并发；否则重复执行和竞态只会在真实并发下暴露。
+4. **External side effects**：检查 payment、webhook、邮件、供应商 API、数据库外写入和其他 external mutation。每项写入应有可核实的 idempotency、去重或 compensation/rollback 语义；报告其失败和重试路径，否则不可逆副作用可能无法恢复。
+5. **Change map**：列出受影响的入口、写入点、数据存储、外部 adapter、异步消费者、迁移及验证证据，并标出未审计或无法确认的路径。change map 是本次报告的一部分，不是新 artifact；没有它就无法判断前四类是否覆盖完整变更。
+
+详细专项 checklist 见 [five-categories.md](references/five-categories.md)，收缩型 focused path 不加载。
 
 ## 工作流与输出（leaf 结构化输出）
 

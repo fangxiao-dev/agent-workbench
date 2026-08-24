@@ -17,7 +17,7 @@
 
 `state.json` 是 package 唯一可写 current-state。主 session 是唯一 writer；worker 只返回结构化证据。`progress.md` 和 Execution Record header 是 machine-owned projection；Ticket 是发布后稳定的 Approved 合同，运行时验收状态不回写 Ticket。ER 只保存 judgment/history，不产生 active checkpoint。
 
-路径口径固定：`attempt.plan`、evidence 与 checkpoint evidence 是 repository-relative；`attemptHistory.executionRecord` 是 package-relative 的 `execution/<attempt>/execution-record.md`。
+路径口径固定：`attempt.plan`、`predecessors`、evidence 与 checkpoint evidence 是 repository-relative；`attemptHistory.executionRecord` 是 package-relative 的 `execution/<attempt>/execution-record.md`。
 
 ## State schema
 
@@ -30,6 +30,7 @@
     "lifecycle": "active", "gate": null,
     "executionRecord": "execution/initial/execution-record.md"
   }],
+  "predecessors": null,
   "tickets": {"TKT-01": {"state": "PENDING"}},
   "evidenceIndex": {"TKT-01": {"AC-1": [{
     "timing": "early-falsification",

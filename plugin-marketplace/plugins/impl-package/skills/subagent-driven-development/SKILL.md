@@ -37,12 +37,16 @@ description: 当调查、实现、修复或验证需要主 session 与 worker �
 
 ## Review、并行与失败
 
-shared seam、安全、数据完整性、并发、migration、不可逆外部副作用或 policy 要求时必须 `review=required` 并显式选 `checkpoint|closure`；非显然时选 `none` 并写 reason，不为每个文件或小动作增加 checkpoint。reviewer 独立 fresh，finding 交 fresh fixer 按同一 scope 重审。
+1. shared seam、安全、数据完整性、并发、migration、不可逆外部副作用或 policy 要求时必须 `review=required` 并显式选 `checkpoint|closure`；非显然时选 `none` 并写 reason，不为每个文件或小动作增加 checkpoint。先把 review gate 绑定到 material risk，避免每个小动作都增加 checkpoint 或让高风险单元无 gate。
+2. reviewer 独立 fresh，finding 交 fresh fixer 按同一 scope 重审。fresh reviewer/fixer 保持证据与修复范围可区分，避免原 reviewer 既判定又替自己关闭 finding。
 
-共享可变运行资源必须隔离；不能隔离就串行并记录顺序、owner、cleanup，全部返回后由主 session 做集成验证。解析失败、授权不匹配或 brief 不完整时启动前 `BLOCKED`；仅默认 worker 的 `INCOMPLETE` 在进程已清理、diff/residue 可归因且可安全重放时允许一次 fresh 默认 worker fallback，业务 `BLOCKED` 不 fallback，第二次 `INCOMPLETE` 归一为 `BLOCKED`。
+3. 共享可变运行资源必须隔离；不能隔离就串行并记录顺序、owner、cleanup，全部返回后由主 session 做集成验证。这样不会把共享资源污染误归因给某个 worker，集成也不会在部分结果返回时提前发生。
+4. 解析失败、授权不匹配或 brief 不完整时启动前 `BLOCKED`；仅默认 worker 的 `INCOMPLETE` 在进程已清理、diff/residue 可归因且可安全重放时允许一次 fresh 默认 worker fallback，业务 `BLOCKED` 不 fallback，第二次 `INCOMPLETE` 归一为 `BLOCKED`。只有可安全重放的进程失败才能 fallback，业务阻断和重复不完整必须保持 fail-closed。
 
 ## 生命周期与结果
 
-统一结果为 `Outcome: DONE | BLOCKED | INCOMPLETE`，附 `mode`、`worker`、`source_unit`、`evidence`、`artifacts`、`blocker`、`fallback_from`、`session_id`；resolver 负责 fallback 与失败归一。`review=required` 的 DONE 先为 `review_state: PENDING_REVIEW`，独立 reviewer PASS 后才是 `PASSED`；finding 交 fresh fixer 按同一 scope 重审，主 session 发现的 finding 可直接进入 fresh fixer；`UNCERTAIN|BLOCKED` 原样上交。`review=none` 的 DONE 为 `NOT_REQUIRED`，reviewer 门槛见 [Review Gate](references/review-gate.md)。
+1. 统一结果为 `Outcome: DONE | BLOCKED | INCOMPLETE`，附 `mode`、`worker`、`source_unit`、`evidence`、`artifacts`、`blocker`、`fallback_from`、`session_id`；resolver 负责 fallback 与失败归一。统一 envelope 让主 session 能区分局部完成、阻断和不完整，而不是只看一条成功消息。
+2. `review=required` 的 DONE 先为 `review_state: PENDING_REVIEW`，独立 reviewer PASS 后才是 `PASSED`；finding 交 fresh fixer 按同一 scope 重审，主 session 发现的 finding 可直接进入 fresh fixer。先 pending 再 passed，避免 worker 的局部 DONE 被误当成 package 完成。
+3. `UNCERTAIN|BLOCKED` 原样上交；`review=none` 的 DONE 为 `NOT_REQUIRED`，reviewer 门槛见 [Review Gate](references/review-gate.md)。不确定结果不能在编排层被压成 PASS，确实不需要 review 的单元也不应虚构 gate。
 
 主 session 始终负责最终集成、证据采信、Ticket acceptance 和 Gate 判断；worker 的局部 DONE、review PASS 或测试通过都不单独代表 package 完成。

@@ -3,7 +3,7 @@
 ## 1. 权威边界
 
 - Decision 与 Spec contract ensemble 定义要交付的行为、跨模块数据/API 合同与验收语义。每个新建或被修订的 Spec ensemble 同时包含 `spec.md` 与从属 `contract-design.md`；未触及的 legacy Spec 可在下次 req-align 时补齐。
-- Plan 定义一个 attempt 的执行策略、验证和 Composition。
+- Plan 定义一个 attempt 的执行策略、验证、Composition 和显式 Predecessors 声明。
 - Ticket 定义纵向验收切片，是新 package 唯一持久实施与验收单元；DAG/Task 只作为旧 package 的迁移与恢复输入。
 - `.impl-package/state.json` 只保存当前执行状态与恢复入口。
 - `progress.md` 是 current Attempt 的统一恢复投影；Execution Record 保存公共执行判断，active checkpoint 是跨 session 的正常恢复入口。Task Handoff 只为旧 package 保留，不能成为新 package 的默认执行轴。

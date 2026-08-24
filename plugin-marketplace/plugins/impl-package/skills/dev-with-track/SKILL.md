@@ -11,7 +11,14 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 
 `package validate` 返回后，把 validator 结果和宿主 compaction pressure 通过现有 `situation.py render --json` 注入；处境与可选动作是恢复起点，主 session 在每轮真正推进前用同一入口刷新。结构化输出供主控读取 `digest`、`selected`、`parallel_matches`、`undetermined` 和 `unmatched`；成功/非零 validator 结果分别映射为 `projection_drift=false/true`，不解析 stdout/stderr。compaction pressure 由宿主测量，至少含 `high` 布尔；插件不假设宿主具备该测量能力，测不到时省略，`attempt.compaction_pressure_high` 保持未知而不是 false；若同时存在 `package.state_invalid`，renderer 的 P0 顺序优先。渲染是导航参考，不是 Gate；主控偏离建议必须记理由并走 escape。
 
-首次调用不带 `$previousDigest`；后续保存返回的 `digest` 并用 `--since`，命中时只显示“处境未变”，需要人读无法判定名单时显式加 `--explain-undetermined`，默认只显示计数。恢复顺序是：运行 `package validate`（跨 session 或授权绑定比较点附 Git commit）→读取根 `progress.md` 的 current Attempt、Ticket 状态、blocker、active checkpoint、next action、Gate（不读 `state.json` 全文或 situation JSON 全量）→只沿当前动作读必要 Ticket 切片，不重读全部历史或已 `SATISFIED` Ticket 的 evidenceIndex→用初始 bundle approval 与实际 diff 确认仍在同一 package；implementation、behavior、acceptance、data/security 和 package record 更新沿用该 approval，新 package 从 owning stage 取得新的初始 bundle approval。
+首次调用不带 `$previousDigest`；后续保存返回的 `digest` 并用 `--since`，命中时只显示“处境未变”，需要人读无法判定名单时显式加 `--explain-undetermined`，默认只显示计数。
+
+恢复顺序如下：
+
+1. 运行 `package validate`（跨 session 或授权绑定比较点附 Git commit）。成功/非零 validator 结果分别映射为 `projection_drift=false/true`，不解析 stdout/stderr；这样 renderer 消费的是结构化事实，而不是对命令文本的猜测。
+2. 读取根 `progress.md` 的 current Attempt、Ticket 状态、blocker、active checkpoint、next action、Gate（不读 `state.json` 全文或 situation JSON 全量）。恢复只需要当前投影与合法动作，避免把全量 state 或 situation JSON 当成推进依据。
+3. 只沿当前动作读必要 Ticket 切片，不重读全部历史或已 `SATISFIED` Ticket 的 evidenceIndex。当前动作不需要重播已完成历史，狭读也保留恢复边界。
+4. 用初始 bundle approval 与实际 diff 确认仍在同一 package；implementation、behavior、acceptance、data/security 和 package record 更新沿用该 approval，新 package 从 owning stage 取得新的初始 bundle approval。这样同一 package 不会在恢复时悄然换合同，新 package 才重新取得 approval。
 
 ## Ticket 激活 preflight
 

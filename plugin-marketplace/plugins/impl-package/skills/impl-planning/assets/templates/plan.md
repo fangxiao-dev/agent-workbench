@@ -14,6 +14,9 @@ Composition：tickets=true, dag=false
 - 规格：spec.md + contract-design.md disposition（未触及的 legacy Spec 可暂缺）
 - 需求 / patch 来源：
 - 已检查的当前代码、测试和稳定文档：
+- 前置包（Predecessors）：None | <repo-relative-package-path>[, <repo-relative-package-path> ...]
+
+前置包必须显式填写 `None` 或一个/多个已存在的仓库相对 package 目录；不要留空或省略。`package init` 会把它写入 `.impl-package/state.json`，到达路径中的 `EXISTS` 先在这些前置包的 tracked 非 Markdown 产出范围查找。
 
 ## 执行组合决策
 

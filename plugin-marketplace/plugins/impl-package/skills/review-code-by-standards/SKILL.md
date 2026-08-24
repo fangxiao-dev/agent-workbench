@@ -14,7 +14,10 @@ description: >
 - **仓库规范优先**：收集并应用调用者提供的所有仓库规则（如 AGENTS.md/CODING_STANDARDS.md/CONTRIBUTING.md）；仓库认可的写法覆盖通用 baseline，与仓库规范冲突的 smell 不作 finding；工具已可靠执行的规则不重复报告。
 - **Fowler code-smell baseline**（启发式与 judgement call，不是仓库未声明的硬规则）：Mysterious Name（名称无法说明职责/内容→重命名，无法诚实命名则指出设计含糊）、Duplicated Code（多个 hunk/file 出现相同逻辑形状→抽取共享形状）、Feature Envy（访问其他对象的数据多于自身数据→把行为移到数据侧）、Data Clumps（相同字段/参数组合反复同行→提炼类型）、Primitive Obsession（primitive/string 代替值得命名的领域概念→小型领域类型）、Repeated Switches（同一类型的 switch/条件链重复→多态/共享映射）、Shotgun Surgery（一个逻辑变化迫使许多文件分散修改→共同 module）、Divergent Change（一个文件因多个无关原因被修改→按变化原因拆分）、Speculative Generality（加入未被需求要求的抽象/参数/hook→删除并收回真实需求）、Message Chains（调用者依赖很长导航链→在起点隐藏导航）、Middle Man（class/function 主要只转发→移除中间层）、Refused Bequest（子类/实现者忽略或覆盖大部分继承合同→放弃继承改用组合）；每条建议落到具体 hunk。
 - **codebase-design vocabulary**：active skill catalog 有 `codebase-design` 则优先读其 deep module vocabulary，否则用内置基线——module interface 以小表面承载足够行为（depth/leverage）；知识/验证留在合适 seam 维持 locality；新增 adapter 有真实可变性依据；interface 含调用方必须知道的 invariant、错误模式和顺序约束，不缩窄为类型签名。这些判断仍是 judgement baseline，不伪装成仓库未声明的硬规则；可选 skill 缺失不阻塞 Standards review。
-- **深度选择**：先完成规范、smell 与 design 基线；普通局部 diff 不默认进行重构式“code judo”搜索；用户明确要求深度/严格可维护性审查时开启深挖，reviewer 也可根据完整 diff、共享上下文和仓库规范自行选择深度。
+  - **深度选择**：
+    1. 先完成规范、smell 与 design 基线；普通局部 diff 不默认进行重构式“code judo”搜索。先完成可验证基线，避免 reviewer 被重构偏好带走而漏掉直接的 Standards evidence。
+    2. 用户明确要求深度/严格可维护性审查时开启深挖。只有明确的深度信号才扩大检查面，避免把局部 diff 的普通形状误报为 finding。
+    3. reviewer 也可根据完整 diff、共享上下文和仓库规范自行选择深度。深度由实际证据决定，不由固定行数或个人偏好决定。
 - shared path 出现 feature-specific 分支、同一概念的条件/flag/mode 跨 hunk 或 module 增长、adapter/wrapper/loosely shaped type boundary 增加、知识离开 canonical layer、模块明显膨胀，或存在可删除整层间接的机会时，可按需读取 [strict-maintainability.md](references/strict-maintainability.md)；这些是非穷尽启发式，约 1000 行只提示结构复核，不自动成为 finding 或 blocker。
 
 结构性可维护性是本 skill 的首要深挖方向，但不是排他能力边界；发现其他风险时仍可如实给出证据、风险和建议。涉及状态/轨迹机制时，以语义 CLI 的 `--help`、`choices`、校验/错误输出和处境注入尾注作为机械证据，不把工具已执行的规则重复写成 smell。

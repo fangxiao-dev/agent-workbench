@@ -23,7 +23,17 @@ mode 省略时使用 `full-review`。`bundle-admission` 只有在 bundle 完整�
 
 1. **锚定 candidate**：Fix the candidate Git commit，或在 same-session unchanged working-tree candidate 上明确保持不变；`full-review` 至少派发一个 fresh independent reviewer，只给 candidate 与 source contracts，不喂先前结论。
 2. **确认前置完整性**：确认 candidate 对其声明的 Composition 完整，并与 Decision/Spec 一致。
-3. **审查维度**：Coverage & Change Map、scope、sequencing、architecture/seams、Planned Verification、rollback、ownership/dependencies、Ticket AC、integration authorization。
+   - 对每个声明的前置包，检查本包的 `NEW` 声明是否覆盖该前置包已经建好的能力。
+3. **审查维度**：按以下顺序逐项检查：
+   1. **完整性**：Coverage & Change Map，确认 candidate 对其声明的 Composition 完整；否则可能只实现 happy path，留下无法验收的半套接线。
+   2. **范围**：scope，检查真实消费者、跨平台镜像、旧布局/旧 contract 入口以及 `NOT in scope`；否则遗漏或静默扩大的范围会在实施时才暴露。
+   3. **顺序**：sequencing，检查前置依赖、迁移窗口、integration point 和 release gate 的先后；否则依赖未释放或迁移窗口错位会让计划不可执行。
+   4. **结构**：architecture/seams，检查组件责任、依赖方向、数据流、失败隔离和跨边界耦合；否则 ownership 与真实生产失败场景会被推迟到实施阶段才发现。
+   5. **验证**：Planned Verification，确认每个 material behavior 有入口、测试层级、可观察 oracle 和 evidence owner；否则“增加测试”不能区分正确实现与常见错误实现。
+   6. **回退**：rollback，检查兼容、迁移、拒绝、归档或 compensation 语义；否则破坏性变化会把恢复方案留给实施者猜测。
+   7. **归属**：ownership/dependencies，确认 owner、handoff、依赖释放和真实消费者边界；否则没有明确责任人承接失败、迁移或发布协调。
+   8. **验收**：Ticket AC，检查验收条件是否能落到可验证行为与 evidence；否则实现完成也无法判断 acceptance 是否满足。
+   9. **授权**：integration authorization，确认 bundle approval、owner decision 和 integration gate；否则执行可能先于授权改变方案结果或产生不可逆影响。
 4. **区分问题类型**：material finding 会改变 behavior、safety、feasibility、acceptance、authority 或 execution order；editorial improvement 单独归类。
 5. **形成可执行结论**：每个 material item 给 evidence、impact、recommendation；仅当证据支持两个以上 material 不同有效结果时才请求 exact owner decision。
 6. **有限 decision waves**：初始 bundle 形成完整 material batch，取得 owner decision，应用一个 closure batch，只重审 affected scope；初始 approval 后的更新可直接应用，review 只报告 affected scope/findings 并沿用既有 approval。
