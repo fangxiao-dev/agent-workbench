@@ -45,6 +45,26 @@ description: Recommend effective Codex CLI collaboration — resume continuation
 - subagent/会话卡顿 → `codex exec` 直连（本会话实测：probe 秒级响应）；
 - 连接探针：极简 prompt（如 "Reply with exactly: PROBE_OK <cwd>"）验证模型后端连通，区分「连接问题」与「worker 会话问题」。
 
+### 6. review 结果回投原 implementer 会话修复
+
+独立 reviewer（read-only）产出 findings 后，把可归因的修复**回投给原 implementer 的 codex 会话**（它有完整实现上下文，resume 续接比重开 fresh worker 更省）：
+
+```text
+reviewer(fresh, read-only) → findings
+  → 主 session 分流（哪些 finding 属于该 implementer 的原任务边界）
+  → 找原 implementer 的 session id（job 输出 / rollout 文件名）
+  → codex exec resume <implementer-session-id> "<findings 摘要 + 修复要求 + 验证命令 + 禁区 + 返回格式>"
+```
+
+**适用条件**：
+- fix 范围在 implementer 原任务边界内、上下文有显著价值；
+- 主 session 已分流并明确每个 finding 的修复目标，implementer 不重新裁决 finding 归属。
+
+**边界（与独立审查纪律共存）**：
+- 回投对象是 **implementer**（≠ reviewer）——不违反「reviewer 不替自己关闭 finding」；
+- 需要全新视角或原实现方向有根本问题的 finding，仍走 fresh fixer；
+- 修复后仍由独立 reviewer 重审（同一 scope），implementer 不得自判 closure。
+
 ## 参数事实表（已实测，codex 0.149.0）
 
 | 用法 | 结果 |
