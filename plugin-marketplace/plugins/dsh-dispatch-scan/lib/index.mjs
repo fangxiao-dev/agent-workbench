@@ -55,28 +55,52 @@ export function hasHookRow(cordisText, hookId) {
   return new RegExp(`^\\s*-\\s+id:\\s*${hookId}\\s*$`, 'm').test(String(cordisText ?? ''))
 }
 
+/** Sidecar stamp file written by other plugins' preset sync (e.g.
+ *  dsh-impl-package) into a synced preset tree. */
+const STAMP_FILE = '.dsh-sync-stamp'
+
 /**
  * Patch one agent preset: ensure scan-hook.mjs is present next to
- * `agent.cordis.yml` and the hook row exists in it. Returns
- * { presetDir, hookFile, patched: 'added' | 'present' | 'missing' }.
+ * `agent.cordis.yml` and the hook row exists in it, then preserve the preset
+ * sync stamp written by the preset-owning plugin — otherwise that plugin's
+ * next sync sees a changed tree and wipes the patch. Returns
+ * { presetDir, hookFile, patched: 'added' | 'present' | 'missing', stampPreserved }.
  */
 export function patchPreset(presetDir, hookFile, hookId = DEFAULT_CONFIG.hookId) {
   if (!existsSync(presetDir)) {
-    return { presetDir, hookFile, patched: 'missing' }
+    return { presetDir, hookFile, patched: 'missing', stampPreserved: false }
   }
   const cordisPath = join(presetDir, 'agent.cordis.yml')
   if (!existsSync(cordisPath)) {
-    return { presetDir, hookFile, patched: 'missing' }
+    return { presetDir, hookFile, patched: 'missing', stampPreserved: false }
   }
+  // Inherit the owning plugin's sync stamp BEFORE touching the tree: the
+  // stamp encodes the pristine source tree, and after our patch the tree
+  // intentionally differs from it — restoring the same stamp makes the next
+  // sync compare equal and skip the destructive re-copy. If the owning
+  // plugin upgrades, its source stamp changes, the re-copy wipes the patch,
+  // and the next launch of this plugin re-applies it.
+  const stampPath = join(presetDir, STAMP_FILE)
+  let stamp = undefined
+  try {
+    stamp = readFileSync(stampPath, 'utf-8')
+  } catch {
+    stamp = undefined
+  }
+
   mkdirSync(presetDir, { recursive: true })
   writeFileSync(join(presetDir, 'scan-hook.mjs'), readFileSync(hookFile))
 
   const current = readFileSync(cordisPath, 'utf8')
-  if (hasHookRow(current, hookId)) {
-    return { presetDir, hookFile, patched: 'present' }
+  let patched = 'present'
+  if (!hasHookRow(current, hookId)) {
+    writeFileSync(cordisPath, `${current.replace(/\s+$/, '')}${HOOK_ROW_BLOCK(hookId)}`)
+    patched = 'added'
   }
-  writeFileSync(cordisPath, `${current.replace(/\s+$/, '')}${HOOK_ROW_BLOCK(hookId)}`)
-  return { presetDir, hookFile, patched: 'added' }
+  if (stamp !== undefined) {
+    writeFileSync(stampPath, stamp)
+  }
+  return { presetDir, hookFile, patched, stampPreserved: stamp !== undefined }
 }
 
 /**
@@ -95,14 +119,8 @@ export function apply(ctx, config = {}) {
   const results = applyPatches(config)
   for (const result of results) {
     ctx.logger?.info?.(
-      `dsh-dispatch-scan: preset "${result.presetName}" patch=${result.patched} (${result.presetDir})`
+      `dsh-dispatch-scan: preset "${result.presetName}" patch=${result.patched} stampPreserved=${result.stampPreserved} (${result.presetDir})`
     )
-  }
-  if (results.some((result) => result.patched === 'added')) {
-    ctx.on('bundle-ready', () => {
-      // No-op marker: patch already applied at startup; kept for future
-      // re-patch-on-sync hooks.
-    })
   }
 }
 
