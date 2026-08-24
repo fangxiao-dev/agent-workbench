@@ -24,16 +24,24 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed 
 当需要创建或更新 Decision/Spec contract ensemble 时，主 thread 先把已确认的结论、必要依据和依赖性发送给 bound execution-boundaries；由其按本 Skill 与对应 sub-skill 定位并写入 canonical artifact，主 thread 保留 contract 语义、Gate 和最终采信权。机械操作一律走现有 typed tools/语义 CLI；状态变更命令的当前处境与协议尾注由 `situation.py` 按 `situations.yaml` 注入。
 
 当 business result、Acceptance Semantics、security/data constraints 与 mutation authority 均未变化时，走 no-contract fast path：复用仍有效的 D/S，说明现有合同为何继续成立，并直接路由 owning skill；删除只要改变 promise 或 acceptance boundary，就仍是 contract-impacting。
+   - 常见误判：只因为改动看起来像删除或普通实现变化就跳过合同判断，会把已经改变的 promise 或 acceptance boundary 隐藏在 fast path 后面。
 
 ## 主路径
 
 1. 分类 contract impact；需要 D/S 时识别 initial、follow-up 或 package closure，并读取 [Package Lifecycle](references/package-lifecycle.md)。
+   - 常见误判：把 behavior-contract 或 decision-direction 变化当成 implementation-only，会让下游继续消费已经失效的 D/S。
 2. 解析 canonical package 与当前 Decision/Spec；follow-up 默认把输入视为当前文档的 delta，只有 owner 明确声明 full replacement 才整体替换。
+   - 常见误判：把普通 delta 当 full replacement，会静默丢掉未重复提及但仍需 carry forward 的 promise。
 3. initial 的 full 或 decision-only 读取并执行 [Decision SUB-SKILL](sub-skills/decision/SUB-SKILL.md)；同一 package 的 follow-up 直接更新当前 Decision 并沿用初始 approval。
+   - 常见误判：没有先经过 Decision 就让 Spec 或 Plan 决定方向，会把 implementation candidate 提升成 product promise。
 4. initial 的 full 在 Decision `PASSED` 后、或 spec-only 前置验证通过后，读取并执行 [Spec SUB-SKILL](sub-skills/spec/SUB-SKILL.md)；同一 package 的 follow-up 直接更新当前 Spec 并沿用初始 approval。
+   - 常见误判：Decision 尚未 PASSED 就进入 Spec，会让行为合同建立在未闭合的方向和 blocking uncertainty 上。
 5. initial bundle 的两个 Gate 均通过且 lifecycle registration 有效时，把同一 Spec contract ensemble 交给 `/impl-package:impl-planning`；follow-up 沿用该 bundle approval 进入后续工作。
+   - 常见误判：只看到一个 Gate 通过就开始 planning，会把未完成的 contract surface 留给 Plan 临时发明。
 6. 直接引用当前 Decision/Spec 路径，记录用于 module-knowledge/code 比较的 Git commit；implementation attempt 获批前不创建 runtime state，formal artifact 的物理写入交给 bound execution-boundaries。
+   - 常见误判：在 attempt 获批前先创建 runtime state，会留下没有 approval provenance 的孤儿状态，也让 artifact 出现第二个写入 owner。
 7. 汇报任何 Gate 结果前读取 [Handoff](references/handoff.md)，输出最具体的可恢复状态。
+   - 常见误判：只报 PASSED/BLOCKED 而不带恢复入口，下一 session 无法判断缺口、owner decision 和下一动作。
 
 Package ID 创建后不得改名；后续 requirement delta 先按 implementation-only / behavior-contract / decision-direction 分类，只使真正受影响的下游范围失效。
 

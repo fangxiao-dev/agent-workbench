@@ -1,0 +1,13 @@
+{
+  "source": "synthetic fixture for live package reference enforcement",
+  "scenario": "contract documents reference a non-retired package path, so the P0 situation directs stable-doc backfill before continuation.",
+  "expected_primary": [
+    "package.record.live-package-reference"
+  ],
+  "expected_layer": "P0",
+  "expected_secondary": [],
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

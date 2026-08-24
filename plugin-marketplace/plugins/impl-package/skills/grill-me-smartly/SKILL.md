@@ -24,9 +24,11 @@ Use this skill to stress-test a plan through a ledger-driven review loop. Ledger
 
 ## Review Then Apply
 
-Review 阶段在 ledger 维护完整过程并生成 Grill Review，不修改被审阅的 plan、spec、PRD 或源文档。Grill Review 必须让用户无需阅读过程 ledger 就能理解最终选择、证据、影响、待裁决项和停止依据；ledger 作为 audit trail 保留。
+1. **Review phase**：在 ledger 维护完整过程并生成 Grill Review，不修改被审阅的 plan、spec、PRD 或源文档。Grill Review 必须让用户无需阅读过程 ledger 就能理解最终选择、证据、影响、待裁决项和停止依据；ledger 作为 audit trail 保留。
+   - 常见误判：不先隔离 review，临时判断会被误写进目标文档，未决项也会看起来像已批准。
 
-Apply 阶段只有在用户读过 Grill Review 并明确要求 apply 后才开始，只应用已收敛决策与用户批准的裁决，未决项保留在 ledger 或先向用户询问。
+2. **Apply phase**：只有在用户读过 Grill Review 并明确要求 apply 后才开始，只应用已收敛决策与用户批准的裁决，未决项保留在 ledger 或先向用户询问。
+   - 常见误判：不经过这道门，模型会把自己的收敛误当成用户对 durable 文档的批准。
 
 ## Roles
 
@@ -66,15 +68,25 @@ python <skill>/scripts/grill_ledger.py stop --slug <slug> --proof <stop-proof>
 ## Loop
 
 1. **确认目标**：识别正在审阅的 plan、spec、PRD 或当前对话，读到足以理解设计树；review 期间不编辑目标文档。
+   - 常见误判：没读够设计树就开始提问，后面的 frontier 会建立在错误前提上。
 2. **初始化/恢复 ledger**：无记录运行 `init`，有记录先 `status` 并读 Markdown；顶部中文摘要是实时过程摘要，更新仍必须经脚本完成，不是最终交付物。
+   - 常见误判：跳过恢复会丢掉已问问题和停止依据，重复提问会被误当成新发现。
 3. **启动 Questioner**：上下文未压缩时可复用 standing Questioner；发生 compaction 后用 plan snapshot 和 current ledger summary 启动 fresh Questioner。给它材料快照与摘要，要求一次只提一个问题、不自答，并返回 branch name、exact question、why-now、证据足够时的 recommended default、是否 locally answerable。
+   - 常见误判：压缩后复用旧上下文会让已失效的分支重新成为前提。
 4. **记录问题**：用 `add-question`，不把无关问题合并到一个 Q item。
+   - 常见误判：合并后无法知道哪一个决定已回答，frontier 也会错误收敛。
 5. **本地回答**：问题可由本地事实解决时交 Answerer，并用 `record-answer` 记录简洁答案、文件/命令证据、不确定性和是否需要用户意图；否则由 main session 用 `need-user` 问真实用户一个具体问题。
+   - 常见误判：把可查事实交给用户，会把事实缺口伪装成偏好决策；把偏好交给 Answerer，则会替用户做决定。
 6. **收敛**：本地证据足以决定时用 `converge`，中文收敛行写明选择、理由和影响；每个问题解决不等于整个 review 结束。
+   - 常见误判：一个问题的 converge 只释放后续分支，不能证明整棵树已经走完。
 7. **继续回合**：每轮完成后 `end-turn`；状态仍为进行中就把更新后的 ledger 摘要交给 Questioner，重新计算 frontier。不要因为一个问题已回答就停止。
+   - 常见误判：在首个回答后停止会把尚未展开的 material branch 静默丢掉。
 8. **Critic pass**：每五个回答、停止前或 review 显得过窄时运行 critic；把接受的缺口作为新问题记录，不把批评直接写成结论。
+   - 常见误判：只让原 Questioner 自检，容易把过早收敛误认为完整性。
 9. **停止证明**：只有所有 material branch 已收敛、剩余问题明确需要真实用户，或继续提问会重复已解决决策时，才用 `stop --proof`。proof 必须来自 Questioner 或 critic；单个 converge 不足以停止。`stop` 生成包含最终决策、理由、影响、证据、待用户裁决和停止依据的 `grill-<slug>.review.md`，不包含问题流水和机器状态。
+   - 常见误判：没有外部 stop proof 就停止，最终 Review 只是一份自信摘要，不是可审计的收口依据。
 10. **最终交付**：给出两个临时文件路径，并总结已做决策、已问已答和仍待用户；review 阶段不更新目标文档，要求用户检查后明确批准 apply。
+   - 常见误判：把过程 ledger 当最终交付，用户就无法只看 Review 判断选择、证据和待裁决项。
 
 ## Chinese Summary Requirements
 

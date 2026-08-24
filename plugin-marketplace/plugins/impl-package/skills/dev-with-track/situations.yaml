@@ -12,7 +12,7 @@ allowed:
 
 priority:
   # P0：fail-closed 与记录完整性；本组顺序严格有效。
-  - [attempt.gate.terminal-frozen, package.record.state-missing, package.record.projection-drift, attempt.record.anchor-mismatch, attempt.record.handoff-recovery-needed, attempt.record.handoff-target-corrected, attempt.record.session-resumed, attempt.record.checkpoint-missing, attempt.record.checkpoint-refresh, attempt.record.handoff-in-flight, ticket.record.evidence-unfiled, ticket.record.judgment-unfiled]
+  - [attempt.gate.terminal-frozen, package.record.state-missing, package.record.projection-drift, package.record.live-package-reference, attempt.record.anchor-mismatch, attempt.record.handoff-recovery-needed, attempt.record.handoff-target-corrected, attempt.record.session-resumed, attempt.record.checkpoint-missing, attempt.record.checkpoint-refresh, attempt.record.handoff-in-flight, ticket.record.evidence-unfiled, ticket.record.judgment-unfiled]
   # P1-P5 是无序集合；下面的书写顺序不是层内位次。
   # P1：attempt admission 与验证载体准入
   - [attempt.record.handoff-due, attempt.record.ticket-boundary-handoff, attempt.record.trail-rotation-due, attempt.readiness.worker-still-running, attempt.readiness.all-edges-held, attempt.readiness.multiple-ready-tickets, ticket.readiness.blocker-maybe-resolved, attempt.readiness.integration-carrier-unavailable]
@@ -54,6 +54,19 @@ situations:
         by: main-session
         do: "impl_package_state.py --package <package> package refresh-progress"
         effect: "使 progress 与 state 对齐"
+    escape: true
+
+  - slug: package.record.live-package-reference
+    basis: cli
+    when:
+      package.references.live_package: true
+    judgment: false
+    actions:
+      - id: backfill-live-reference
+        default: true
+        by: main-session
+        do: "/impl-package:backfill-stable-docs"
+        effect: "先把被引用条目吸收进 stable docs，再把当前 package 改为引用 stable docs"
     escape: true
 
   - slug: attempt.record.session-resumed

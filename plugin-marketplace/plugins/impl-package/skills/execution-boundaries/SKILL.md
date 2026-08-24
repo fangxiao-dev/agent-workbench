@@ -11,22 +11,29 @@ description: 覆盖执行前授权确认（preflight）、执行期异常 slow p
 
 执行前确认初始 Decision/Spec/Plan bundle 的最终批准，以及会改变权限或安全边界的事实；同一 package 的后续 plan、state、progress、Execution Record、evidence、review 和 Gate 更新沿用该批准。push、merge、发布、生产/shared mutation、数据迁移、删除等外部副作用仍需独立授权。
 
-### 渐进读取
+### 渐进读取（步骤 1–3）
 
 1. **Wave 1 — anchor**：确认 worktree、branch、HEAD、package、current Attempt 和 `progress.md`，先判断是否仍是同一任务与授权范围。
+   - 常见误判：跳过锚点就开始读材料，会把 package 或 authority 已漂移的工作区误当成同一任务。
 2. **Wave 2 — control map**：读取 current plan、Composition、授权/write-set、Ticket/DAG 状态、blocker、Gate 和外部 mutation 边界。
+   - 常见误判：没有先建立 control map，下一动作可能越过 write-set，或漏掉已经存在的 blocker/Gate 边界。
 3. **Wave 3 — active unit**：只展开下一动作需要的 Ticket、Task、Handoff、Execution Record checkpoint、evidence 与目标代码。
+   - 常见误判：把全量材料读取当成恢复证明，会增加选择性漏读；只读 active unit 才能让当前动作的证据边界保持可辨。
 
 Wave 1 已暴露 package/authority drift 时停止，不通过全量读取制造“看起来已恢复”的假象；恢复只读 `progress.md` 与当前 Ticket，不读 `state.json` 全文或 `situation.py --json` 全量。状态、处境和校验的机械读取分别由 `../../scripts/impl_package_state.py` 与 `../../scripts/situation.py` 承接，不在本 skill 复制 schema。
 
-### Ticket 首次激活
+### Ticket 首次激活（步骤 4–7）
 
 当 `/impl-package:dev-with-track` 首次派发一个新 Ticket，且 Planned Verification 声明了 `Evidence Lane Contract` 时，主 session 自己核四项并只输出 `READY | BLOCKED`：
 
 1. target 唯一（实际 URL/库身份）；
+   - 常见误判：只确认名称、不确认实际身份，会把别的环境的结果误记到当前 Ticket。
 2. 端口 owner；
+   - 常见误判：没有唯一 owner，多个 lane 可能抢占端口，失败后也没人负责释放。
 3. 应用库与 integration 库不串；
+   - 常见误判：把 integration 库当应用库检查，局部路径可能通过，但 lane 的真实边界已经被破坏。
 4. cleanup owner。
+   - 常见误判：没有 cleanup owner，测试留下的进程或资源会污染后续验证，失败原因也无法归属。
 
 子代理只回收路径、符号和缺口，不得输出 READY/BLOCKED 或判 lane 生死；不要派环境探路 agent 当闸门。admission 失败时主 session 做有界 investigate，在现有授权内安全修复后重查；只有缺授权、下一步不安全/破坏性或安全路径耗尽才 `BLOCKED`。每个 Ticket 首次激活只执行一次，不放进每轮控制循环，也不产生 receipt、profile artifact、持久 readiness 状态或新的 Ticket/Attempt 状态；昂贵验证真正运行前再核 health/session/S3，结果不回溯否定已经开始的纯代码 dispatch。
 
@@ -70,8 +77,11 @@ blocker/owner decision: <none | item>
 ### 主 thread 流程
 
 1. 无异常时主 thread 读取当前 state 并直接调用适用 CLI，不启动或等待 bookkeeper。
+   - 常见误判：把 bookkeeper 变成日常等待环节，会制造第二个 state writer 和不必要的协调延迟。
 2. 发现异常时按需启动/恢复 slow path，提供 package、Attempt、相关 artifact/state、已知事实、矛盾或缺口、期望收口条件；宿主无法维持可继续对话的 subagent 时报告 blocker，不扩展成新的协调系统。
+   - 常见误判：只给“有问题”而不给 canonical 上下文，slow path 只能猜缺口；把宿主能力缺失扩展成新协调系统也会越过本入口边界。
 3. slow path 返回结构化对账结果、修复建议和 focused validation；主 thread 复核后直接执行接受的 CLI/文档写入。最小输入可沿用：
+   - 常见误判：把 bookkeeper 的建议直接当作语义决定，会让异常辅助角色取得 requirement、judgment 或物理写入 ownership。
 
    ```text
    更新：
@@ -81,8 +91,11 @@ blocker/owner decision: <none | item>
    ```
 
 4. `依赖：是` 只表示下一动作确实需要 slow-path 结果，主 thread 才等待回执；`依赖：否` 时可以继续推进，稍后消费回执，日常 CLI 写入不因依赖语义停顿。
+   - 常见误判：把所有回执都当成依赖，会让正常 CLI 停摆；把真正的依赖当成非依赖，则会在缺少对账结果时继续收口。
 5. 主 thread 检查回执中的理解、对账结果、修复建议和 focused validation；不正确时发送 correction event，仍由 slow path 修正，最终物理写入由主 thread 执行。
+   - 常见误判：主 thread 直接修正错误回执而跳过 correction event，会丢掉异常处理的可恢复链路。
 6. 每次 slow-path 回执只追加一行到 `<package>/execution/<attempt>/bookkeeper-receipts.jsonl`；正常 CLI 写入不追加该文件。回执格式、恢复读取顺序与失败边界按需读 `references/role.md`，不依赖聊天记录。
+   - 常见误判：把正常 CLI trail 和异常回执混在一起，会无法区分日常状态变更与需要恢复的 slow-path 事实。
 
 ### 物理写入与完成条件
 

@@ -4,6 +4,7 @@
   "attempt.gate.terminal-frozen": "Gate 已终结：state、active checkpoint、Execution Record 冻结；不修改，如实汇报或转入 patch Attempt。",
   "package.record.state-missing": "state.json 缺失/无效：先 package init（--attempt --plan）再推进；init 前不派发任何动作。",
   "package.record.projection-drift": "projection drift：package refresh-progress 对齐；drift 本身不授权派发。",
+  "package.record.live-package-reference": "不能引用活体 package：后续 patch attempt 可能改动其 Spec，引用方不会收到通知；先 backfill 到 stable docs 再改引用。",
   "attempt.record.anchor-mismatch": "trail 锚点不匹配：以 state.json 为权威按恢复流程对账；轨迹只追加，不重写历史行。",
   "attempt.record.handoff-recovery-needed": "交接恢复：先完成 state checkpoint，再按 trail schema 轮换活动文件；新轨迹保留仍成立的 fact 并记录 handoff。",
   "attempt.record.handoff-target-corrected": "handoff 目标被纠正：以纠正后的目标为准重新走交接协议（checkpoint → 轮换 → 记录）。",

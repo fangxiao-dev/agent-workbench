@@ -59,30 +59,61 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 
 ## 交互质询（grilling）
 
-Grilling 是通过设计树 rounds 对 plan、Decision 或 idea 做深入质询；只导航与组织，不代替用户作产品决策。材料薄时广泛探索替代方向、隐藏假设、具体例子和下游后果；材料成熟后聚焦已选方向、内部一致性、未决选择和 material risk；证据暴露真实缺口或用户要求时才重开选项空间。
+1. **按材料成熟度定焦**：Grilling 是通过设计树 rounds 对 plan、Decision 或 idea 做深入质询；只导航与组织，不代替用户作产品决策。材料薄时广泛探索替代方向、隐藏假设、具体例子和下游后果；材料成熟后聚焦已选方向、内部一致性、未决选择和 material risk；证据暴露真实缺口或用户要求时才重开选项空间。
+   - 常见误判：把成熟材料继续当成空白创意会无止境重开方向，把薄材料过早收窄又会把隐藏假设带进后续决策。
 
-- 每轮先列完整 frontier：前置条件已 settled、当前无需猜答案的所有问题；frontier 无硬或默认大小，可读则一批提出，过大则连续分批，说明总 frontier、当前 batch 覆盖范围，并以稳定 ID 保留所有 material decision。每题编号、给 recommended answer，等用户整批回复后再继续；每批回复后重新校验剩余 frontier，仍 material 的项目继续携带，新解锁分支进入后续 round。frontier 是完整性边界，不是问题配额，不得为控制长度遗漏、合并或静默延期 material 分支。
-- 每题应给足当前决策所需的 why-now、具体场景/边界/失败例、真正不同的选项、推荐及依据，以及对成本、风险、恢复、下游行为或兼容性的影响；不制造没有真实差异的选项。题面可采用：
+2. **建立完整 frontier**：每轮先列前置条件已 settled、当前无需猜答案的所有问题；frontier 无硬或默认大小，可读则一批提出，过大则连续分批，说明总 frontier、当前 batch 覆盖范围，并以稳定 ID 保留所有 material decision。每批回复后重新校验剩余 frontier，仍 material 的项目继续携带，新解锁分支进入后续 round。frontier 是完整性边界，不是问题配额，不得为控制长度遗漏、合并或静默延期 material 分支。
+   - 常见误判：把 frontier 当问题配额会为了控制回复长度静默漏掉、合并或延期 material branch。
+
+3. **让每个问题可被决定**：每题编号、给 recommended answer，等用户整批回复后再继续；并给足当前决策所需的 why-now、具体场景/边界/失败例、真正不同的选项、推荐及依据，以及对成本、风险、恢复、下游行为或兼容性的影响；不制造没有真实差异的选项。题面可采用：
 
   ```text
   ❓ Q1 - <question title>: <question body>
   ➡️ <your recommended answer>
   ```
 
-- 环境、文件、工具可解决的事实由 agent 自己查，可派 subagent 且不阻塞其余 frontier；决策属于用户。每轮末给回复合同，例如“全部采纳”“除 Q3 外全部采纳”“Q2 选 B；Q4 按推荐”“展开 Q1”。新回答若与已确认方向冲突或暴露原则缺口，说明具体 trade-off 后让用户决定是否重开。
-- 当 frontier 为空，所有 material branch 已访问且没有静默假设时才停止；未达共同理解前不执行设计树结论。细节与 rubric 按需读 `../grilling/rubric.md`；实际 ledger、Questioner/Answerer/Apply 生命周期由 `/impl-package:grill-me-smartly` 承接。
+   - 常见误判：只给选项而不给失败边界或推荐依据，用户会在没有共同语境的情况下被迫猜测 trade-off。
+
+4. **分离事实查找与决策**：环境、文件、工具可解决的事实由 agent 自己查，可派 subagent 且不阻塞其余 frontier；决策属于用户。
+   - 常见误判：把本地可查事实问回用户，或让 agent 替用户选择，会把事实缺口和产品偏好混成同一种输入。
+
+5. **按回合收敛**：每轮末给回复合同，例如“全部采纳”“除 Q3 外全部采纳”“Q2 选 B；Q4 按推荐”“展开 Q1”；每轮回答后继续推进仍 material 的 frontier。
+   - 常见误判：没有回复合同或把一次回答当成终点，用户无法稳定引用问题，后续分支也会被漏掉。
+
+6. **处理冲突再决定是否重开**：新回答若与已确认方向冲突或暴露原则缺口，说明具体 trade-off 后让用户决定是否重开。
+   - 常见误判：冲突出现时静默覆盖旧方向，或把任何小差异都当成必须重开，会同时破坏已确认选择和收敛速度。
+
+7. **只在 frontier 清空后停止**：当 frontier 为空、所有 material branch 已访问且没有静默假设时才停止；未达共同理解前不执行设计树结论。细节与 rubric 按需读 `../grilling/rubric.md`；实际 ledger、Questioner/Answerer/Apply 生命周期由 `/impl-package:grill-me-smartly` 承接。
+   - 常见误判：看到一个局部方向已收敛就执行结论，会把未访问分支变成不可见的产品承诺。
 
 ### Durable document 约束
 
-对 PRD、plan、Decision、Spec 或 MVP slice：以文档成熟度为重心，必要时从现有证据起草最小缺失上下文并标明假设；review 中不编辑目标文档，先在工作记忆或用户已有 notes 记录 accepted choices、non-goals、deferrals、open items，并用稳定 ID。收敛后给 consolidated decision summary；只有调用已授权或用户明确确认才写回，并把被替代的意义分类为保留、迁移到命名承接者、被已接受决策替代或用户弃用，不能因为新文更短而静默丢掉 product commitment。
-
-写回后简报改动文档、吸收的 decision groups、未决/延期项和有意未运行的阶段（gate、release、implementation 等）。
+1. **以成熟度组织 durable review**：对 PRD、plan、Decision、Spec 或 MVP slice，以文档成熟度为重心，必要时从现有证据起草最小缺失上下文并标明假设。
+   - 常见误判：没有上下文就让用户从空白重写，或把假设写成已确认事实，都会遮住真正需要决定的缺口。
+2. **review 中保持目标文档不变**：不编辑目标文档，先在工作记忆或用户已有 notes 记录 accepted choices、non-goals、deferrals、open items，并用稳定 ID。
+   - 常见误判：中途写回会让未收敛的 working choice 看起来已经是 durable contract。
+3. **收敛后按授权写回**：收敛后给 consolidated decision summary；只有调用已授权或用户明确确认才写回，并把被替代的意义分类为保留、迁移到命名承接者、被已接受决策替代或用户弃用，不能因为新文更短而静默丢掉 product commitment。
+   - 常见误判：只保留新文短版本会静默丢失 product commitment，或把被迁移的意义误报为删除。
+4. **写回后报告边界**：写回后简报改动文档、吸收的 decision groups、未决/延期项和有意未运行的阶段（gate、release、implementation 等）。
+   - 常见误判：不报告未运行阶段，用户会把文档写回误解成 gate、实现或 release 已完成。
 
 ## Legacy（旧 Task/DAG，只读）
 
 新 package 一律不创建 Task DAG，不调用 `create-task-dag`；仅在 owner 明确授权恢复/迁移已有 3.4 package、且 artifact 已存在时读取 `dag.md` 或 `<attempt-id>.patch-dag.md`。先读取 current plan；有 Tickets 时同时读取 `tickets/` 的直接 Markdown 子文件。
 
-- 只审计已有 Task 的 primary ownership、确定依赖、贡献 Ticket、已知 seam/risk 和 section-level contract references；与 plan/Ticket 做只读联合检查：coverage、typed dependency、cycle、ownership、contribution mapping、section-level refs、evidence feasibility、integration order 和 Gate 边界。
-- 迁移时把 Task 的真实产物映射回 Ticket claim，不把 Task handoff 或 `DONE` 当 acceptance proof；Contract reference 使用仓库相对路径定位到 Decision/Spec/contract-design/Plan 的具体一级或二级章节，不裸指整份文档或使用行号，只保留 Task 执行所需章节，不复制合同正文。
-- 不预列所有文件、consumer、失败模式或 Phase/epic/子任务层；发现新 DAG 需求时回到 `impl-planning`，不在本入口创建。Task 状态只保存在 `.impl-package/state.json`；Task `DONE` 表示局部产出可集成，不表示 Ticket `SATISFIED`。P 变化时只把实际受影响 Task 设为 `NEEDS-REVALIDATION`。
-- 初始化后 DAG Runtime State 表由 `refresh-progress` 维护；只有 dependency 已释放的 Task 才能进入 `READY/RUNNING`，未知 dependency 和 cycle 必须在发布前阻断。旧 package 的细节按需读 `../create-task-dag/references/` 下的 `dag-and-ownership`、`worker-prompts`、`review-and-verification`、`slice-to-dag`。
+1. **先读当前 package 事实**：先读取 current plan；有 Tickets 时同时读取 `tickets/` 的直接 Markdown 子文件。
+   - 常见误判：跳过 current plan 直接看旧 DAG，会把已经被新 Composition 替代的依赖当成现行要求。
+2. **审计 Task 的核心关系**：只审计已有 Task 的 primary ownership、确定依赖、贡献 Ticket、已知 seam/risk 和 section-level contract references。
+   - 常见误判：把 Task 数量或 handoff 数量当成完整性证明，会漏掉真正的 ownership、依赖和 seam 风险。
+3. **把真实产物映射回 Ticket**：迁移时把 Task 的真实产物映射回 Ticket claim，不把 Task handoff 或 `DONE` 当 acceptance proof。
+   - 常见误判：把局部 Task `DONE` 当 Ticket 已满足，会把可集成产物误报成 acceptance proof。
+4. **限定 contract reference**：Contract reference 使用仓库相对路径定位到 Decision/Spec/contract-design/Plan 的具体一级或二级章节，不裸指整份文档或使用行号，只保留 Task 执行所需章节，不复制合同正文。
+   - 常见误判：裸指整份合同或复制正文会让迁移后的引用失去可定位的 authority 边界。
+5. **拒绝预列和新 DAG 扩张**：不预列所有文件、consumer、失败模式或 Phase/epic/子任务层；发现新 DAG 需求时回到 `impl-planning`，不在本入口创建。
+   - 常见误判：为了“审计完整”预建一棵新 DAG，会把只读恢复入口变成新的任务系统。
+6. **联合检查 Gate 可行性**：与 plan/Ticket 做只读联合检查：coverage、typed dependency、cycle、ownership、contribution mapping、section-level refs、evidence feasibility、integration order 和 Gate 边界。
+   - 常见误判：只核单个 Task 会错过跨 Ticket 的 cycle、证据不可行或 integration order 问题。
+7. **保留现行状态语义**：Task 状态只保存在 `.impl-package/state.json`；Task `DONE` 表示局部产出可集成，不表示 Ticket `SATISFIED`。P 变化时只把实际受影响 Task 设为 `NEEDS-REVALIDATION`。
+   - 常见误判：另建状态轴或把所有 Task 重验，会破坏 state.json 的唯一状态 authority 和受影响范围。
+8. **按旧 package 规则恢复运行时投影**：初始化后 DAG Runtime State 表由 `refresh-progress` 维护；只有 dependency 已释放的 Task 才能进入 `READY/RUNNING`，未知 dependency 和 cycle 必须在发布前阻断。旧 package 的细节按需读 `../create-task-dag/references/` 下的 `dag-and-ownership`、`worker-prompts`、`review-and-verification`、`slice-to-dag`。
+   - 常见误判：在 dependency 未释放或 cycle 未阻断时发布，会让恢复后的 READY/RUNNING 状态失去可解释性。
