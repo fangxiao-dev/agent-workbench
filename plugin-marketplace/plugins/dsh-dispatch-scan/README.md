@@ -21,6 +21,22 @@
 
 清单来源：KEX-01A 执行中反复被用户点出的「还有没有可以提前派发的」——沉淀为固定检查项。纪律条目来自该任务的实证教训（recheck 与 fix 并行时的文件冲突、codex 后台挂起需要 kill 规则、无效派发无人消费）。
 
+## 例子库（来自 KEX-01A 实证）
+
+**例 1：等验证时派 recheck（清单第 1 项）**
+Checkpoint A 冒烟卡在登录/搜索 409 时，B2A/B2B 的 findings fix 其实早已提交未 review——被用户提醒后才补派 recheck，提前暴露 2 个 P1（range_only 判定、payload 合并语义），省掉一整轮串行。正确做法：fix 提交后立即派 recheck，与后续验证并行。
+
+**例 2：等 recheck 时派回归（清单第 2 项）**
+第三轮 recheck 排队时，并行跑了 Checkpoint A 冒烟重跑（最终 HEAD）、后端集成回归、web billing 全量组件测试——总耗时从串行 sum 变成 max。验证类任务之间天然无依赖，随时可并行。
+
+**例 3：等待窗口派只读预研（清单第 4 项）**
+等 API 重启（tsx watch 每次 1-2 分钟）时，可以派后续 ticket 的 investigations（只读、不写代码），或预热测试库迁移。等待窗口是零成本并行额度。
+
+**反例：并行纪律（纪律行）**
+- B2B session 曾误删 B2A 的文件 → 写任务共享工作区禁止并行，只读（review）与写（fix）必须分离。
+- codex 后台 recheck 四连挂起（fast tier + 后台组合）→ 每个后台任务要有 liveness 检查点（进程 CPU / session 文件写入）与 kill 规则，挂起即清理重派。
+- 派发前确认结果消费者：没人消费结果的派发是纯浪费（如无后续步骤的预研）。
+
 ## 安装与生效
 
 1. 把本插件放入 plugin-marketplace（`plugins/dsh-dispatch-scan`），DSH 启动时 cordis patch 挂载 host 插件。

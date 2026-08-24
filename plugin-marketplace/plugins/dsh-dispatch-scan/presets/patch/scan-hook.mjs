@@ -30,10 +30,10 @@ export const DEFAULT_CONFIG = {
 }
 
 const CHECKLIST = [
-  '1. 已提交未 review 的 fix → 派只读 recheck',
-  '2. 改动域回归（兄弟 spec / 集成层 / 与组件测试互补的 UI 冒烟）',
-  '3. 零依赖落盘：progress / evidence / 文档',
-  '4. 只读预研（后续 ticket investigations）或环境预热',
+  '1. 已提交未 review 的 fix → 派只读 recheck（fix 一落地就排，别等下一轮才想起）',
+  '2. 改动域回归：兄弟 spec / 集成层 / 与组件测试互补的 UI 冒烟（等 recheck 时并行跑）',
+  '3. 零依赖落盘：progress / evidence / 文档（不必等验证完才写）',
+  '4. 只读预研或环境预热（等 API 重启时可派后续 ticket investigations、预热测试库）',
   '纪律：只读与写分离；后台任务带 liveness + kill 规则；派发前确认结果消费者',
 ]
 
