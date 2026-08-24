@@ -1,5 +1,6 @@
 {
   "formatVersion": "3.5",
+  "predecessors": null,
   "attempt": {
     "id": "fixture-attempt",
     "plan": "plan.md"
