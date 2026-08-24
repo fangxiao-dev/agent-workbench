@@ -107,9 +107,12 @@ export function apply(ctx, config = {}) {
 }
 
 // Bare-import entry (e.g. `node lib/index.mjs --apply` for manual runs).
-if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, '/')}`) {
-  const results = applyPatches()
-  for (const result of results) {
-    console.log(`preset=${result.presetName} patch=${result.patched} dir=${result.presetDir}`)
+if (process.argv[1] !== undefined) {
+  const entry = `file:///${process.argv[1].replace(/\\/g, '/')}`
+  if (import.meta.url === entry) {
+    const results = applyPatches()
+    for (const result of results) {
+      console.log(`preset=${result.presetName} patch=${result.patched} dir=${result.presetDir}`)
+    }
   }
 }
