@@ -26,8 +26,8 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 | `impl-plan-review` | `/impl-package:plan-review` | 审查 plan 或完整 Plan/Ticket/DAG bundle |
 | `impl-to-tickets` | `/impl-package:impl-planning` 的 Ticket-split | 创建独立验收切片 |
 | `impl-execution-boundaries` | `/impl-package:execution-boundaries` | 执行前授权、异常 slow path、完成前 evidence gate |
-| `impl-subagent-driven-development` | `/impl-package:subagent-driven-development` | 调查、实现、修复、验证及分工、mode、batch、资源顺序 |
-| `impl-dev-with-track` | `/impl-package:dev-with-track` | 恢复执行、推进 Task/Ticket、写 Gate |
+| `impl-subagent-driven-development` | `/impl-package:subagent-driven-development` | 下游 bounded worker 的 Topic、dependency、mode、lane、lifecycle 与 review requirement |
+| `impl-dev-with-track` | `/impl-package:dev-with-track` | 恢复执行、选择业务动作、消费 Dispatcher/SDD 结果、推进 Ticket 与写 Gate |
 | `impl-do-review` | `/impl-package:do-review` | 多 reviewer 编排、fail-closed 聚合 findings 并判断收敛 |
 | `impl-review-code` | `/impl-package:review-code` | 审查实现正确性与可维护性 |
 | `impl-review-code-by-standards` | `/impl-package:review-code-by-standards` | 按规范、interface、depth、locality 审查 |

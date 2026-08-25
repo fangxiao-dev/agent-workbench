@@ -31,8 +31,9 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `grok
 
 ## Delegation Workflow
 
-- Use `/impl-package:subagent-driven-development` as the single entry for investigate/implement/fix/verify scheduling. Before any bounded unit starts, form explicit `mode`, `worker`, `schedule`, and `review`; for independent read-only review, use the thin `reviewer` contract.
-- The caller supplies the task-specific objective, scope, worktree, write-set, acceptance, authorization, verification, and output contract; workflow and role definitions do not supply business prompts.
+- Use `$dispatcher` for upstream controller scheduling: dynamic queue, dependency release, dispatch receipt, worker return, Topic retirement, and idle.
+- Use `/impl-package:subagent-driven-development` for the downstream bounded worker method: Topic, dependency class, investigate/implement/fix/verify mode, work/review/test lane, lifecycle, and review requirement. Dispatcher and SDD are peer guidance for upstream scheduling and downstream work.
+- For independent read-only review, use the thin `reviewer` contract; `do-review` owns review topology and finding closure.
 
 ## Implementation Expectations
 

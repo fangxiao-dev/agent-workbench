@@ -115,7 +115,11 @@ def test_previous_skill_is_deprecated_and_has_no_active_entry() -> None:
 def test_simple_mode_uses_one_worker_and_no_extra_coordination_artifacts() -> None:
     simple = (SKILL_ROOT / "references" / "simple.md").read_text(encoding="utf-8")
 
-    assert "一个 fresh `@luna-worker`" in simple
+    assert "一个 Topic" in simple
+    assert "$dispatcher" in simple
+    assert "subagent-driven-development" in simple
+    assert "work lane" in simple
+    assert "@luna-worker" not in simple
     assert "让出整个 worktree 的写 ownership" in simple
     assert "不创建 ledger、branch 或额外 worktree" in simple
     assert "启动前已经存在的 dirty paths" in simple
@@ -130,6 +134,9 @@ def test_grouped_mode_uses_connected_grouping_and_independent_worktrees() -> Non
     assert "共享可变资源" in grouped
     assert "每个 connected component 是一个 group" in grouped
     assert "每个 group 从 `fix_base` 创建唯一 branch/worktree" in grouped
+    assert "每个 group 是独立 Topic" in grouped
+    assert "$dispatcher" in grouped
+    assert "work lane" in grouped
     assert "当前 worktree clean" in grouped
     assert "cherry-pick 回当前分支" in grouped
     assert "%TEMP%\\dispatch-fix\\<fix-id>\\groups.json" in grouped

@@ -1,6 +1,6 @@
 # Simple repair
 
-适用于 1–3 个已确认 findings。一个 fresh `@luna-worker` 在当前 worktree 打包处理全部问题；当前 task 不创建 ledger、branch 或额外 worktree。
+适用于 1–3 个已确认 findings。全部问题组成当前 worktree 中的一个 Topic；当前 task 不创建 ledger、branch 或额外 worktree。
 
 ## 保护当前工作树
 
@@ -10,7 +10,7 @@ worker 工作期间，当前 task 让出整个 worktree 的写 ownership。直�
 
 ## Worker brief
 
-通过 `/impl-package:subagent-driven-development` 派发一个 bounded unit，使用 `mode=fix`、`worker=@luna-worker` 和 fresh invocation。brief 至少包含：
+由 `$dispatcher` 派发这个 Topic；下游 bounded worker 使用 `/impl-package:subagent-driven-development` 的 `fix` mode 与 work lane。brief 至少包含：
 
 - 全部 finding ID、摘要和 acceptance points；
 - 当前 worktree、branch 与启动 HEAD；
@@ -24,7 +24,7 @@ worker 可以按当前仓库规则提交 scoped commits，也可以留下可归�
 
 worker 返回后，当前 task 对比启动前后的 Git 状态，确认受保护 diff 未受损、所有新增修改都在允许范围内，并逐项核对 acceptance points。运行覆盖全部 findings 的 focused acceptance。
 
-交付说明不完整、修改无法归因或任一 acceptance point 未通过时，本次尚未接受。保留当前可诊断状态，用 fresh invocation 和新的 bounded brief 继续返工；不依赖旧 worker 的私有上下文。
+交付说明不完整、修改无法归因或任一 acceptance point 未通过时，本次尚未接受。上下文与 ownership 仍可信时继续同 Topic work lane；失效时由 Dispatcher 退役并重新派发，不把 worker 空闲或角色名当成复用依据。
 
 ## 完成条件
 

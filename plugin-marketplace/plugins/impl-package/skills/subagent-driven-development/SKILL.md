@@ -1,62 +1,72 @@
 ---
 name: subagent-driven-development
-description: 当调查、实现、修复或验证需要主 session 与 worker 协作时使用；在启动前形成 mode、具体 worker 和 review 策略，并消费统一结果。
+description: 当一个已派发的 bounded Topic 需要指导下游 worker 如何调查、实现、修复或验证时使用；按 dependency、worktree isolation、execution lane、lifecycle 与 review requirement 定义完整 subagent 方法。
 ---
 
 # Subagent-Driven Development
 
-这是 Impl-Package 的唯一 worker 编排入口：不重写业务需求、Task/Ticket、授权或验收，只把已确定的 bounded unit 变成可执行策略，并在主 session 集成前收口 worker 结果。逻辑角色（investigate/implement/fix/review）到 provider 的映射和策略格式由 preset/orchestrator 承接，本 skill 只保留判断。
+本 Skill 是下游 bounded worker 的完整方法定义。它与 `$dispatcher` 平级：Dispatcher 与 SDD 分别直接指导上游主控调度和已派发 Topic 内的工作方法，共享 dependency、资源与生命周期原则。
 
-## 先形成策略
+业务需求、Ticket/State/Evidence/Gate 仍由调用方及其 owning skill 决定；executor、model、provider 或 agent profile 由 Owner 选择或宿主原生能力解析。
 
-每个非本地 bounded unit 启动前都显式输出：
+每个 bounded Topic 可以使用当前 worktree，也可以使用新隔离 worktree；caller 根据 write ownership 与资源交叉决定选择、创建和生命周期。文件 ownership 能通过新隔离 worktree 分开时继续派发；DB、端口、测试数据和外部记录分别验证隔离，独立 worktree 只解决文件写入边界。
 
-- `mode: investigate | implement | fix | review`
-- `worker: main-session | <默认 worker> | "<model>/<effort>" | "prompt:<slug>"`
-- `review: none | required`
-- `review_scope: none | checkpoint | closure`
-- `reason: <仅在 local、blocked、显式 override 或 review 判断不显然时填写>`
-- `resources: <只记录真实共享资源、顺序和 cleanup owner>`
-- `reuse: <只在同一 source unit 需要不可转移 live state 时填写>`
+## Step 1 · 定义 Topic
 
-- `worker` 必须显式存在，默认 worker 由宿主 registry 决定（见 Worker Resolver）；`main-session` 仅用于原子本地动作且必须说明 reason。`review=none` 必须配 `review_scope=none`，`review=required` 必须明确 `checkpoint` 或 `closure`，不能留给 reviewer 临场猜。
-- 上游 Owner/`readyTickets` 已明确并行候选时读取 [Parallel Work Admission](references/parallel-work-admission.md)，但该 reference 不负责发现候选；未填 `reuse` 用 fresh invocation，compaction 后从 canonical input 重启，角色相同、空闲或共享 worktree 都不是复用理由。
-- `investigate`、`implement` 可沿用调用者选择的同一逻辑 worker；已确认 finding 只能给 fresh `fix` invocation。复杂度只增加 reviewer gate，不自动换 implementer。
-- investigate 默认低推理，只返回固定 6 行（Investigation / cause / blast radius / existing solution / boundary facts / unresolved facts），禁止 `READY|BLOCKED`；implement brief 只含 source_unit、成功条件、禁改路径、文件列表和一条验证命令，禁止粘整张 Ticket/全量 AC；reviewer 只收 caller 指定的 diff 路径与 AC ID，报告限 verdict、P0/P1 findings、residual_gaps，禁止再读 plan/spec/contract-design 整章。
+固定 bounded outcome、ownership、禁改范围、comparison point 和 Topic closure。选择本次 worker mode：
 
-## Mode selection
+| mode | 适用工作 | 必须保留的边界 |
+| --- | --- | --- |
+| `investigate` | 证据不足，需要确认 cause、boundary 与最小下一项取证 | 结果归一为 `EVIDENCE_SUFFICIENT` 或 `EVIDENCE_GAP`；不释放授权、acceptance 或 Gate |
+| `implement` | 已有唯一业务裁决，需要产生实现或可验证产物 | 只承担当前 Topic 的 ownership 与局部验证 |
+| `fix` | finding 已确认且已边界化 | 不重新裁决 finding、不扩大范围、不宣称 closure |
+| `verify` | 执行既定、无写副作用的检查 | 会重写 snapshot/generated file 的动作转入 `implement` 或 `fix` |
 
-- `investigate`：事实不足时建立 cause、blast radius、existing solution 和 boundary facts；返回 `EVIDENCE_SUFFICIENT|EVIDENCE_GAP`，只释放实施判断，不释放授权、验收或 Gate，也不输出 `READY|BLOCKED`。
-- `implement`：消费已释放的 Plan/Ticket bounded unit；旧 package 才可消费既有 DAG unit。
-- `fix`：只消费已确认且已边界化的 finding；不重新裁决、不扩大范围、不宣称 closure，且必须 fresh invocation。
-- `review`：只运行既定、无写副作用的检查；`review_scope` 区分 checkpoint 与 closure。输入、模板和直接输出见 [Mode Contracts](references/mode-contracts.md)。
+完成标准：主控和 worker 都能判断后续动作是否仍属于同一 Topic，以及什么事实表示 Topic closure。
 
-## 小步切片（slicing）
+## Step 2 · 分类 dependency
 
-一发式 worker（subagent_codex 等）无法中途干预；把整个 Ticket 一次性预支给单个 worker 会形成新瓶颈且问题发现晚。调研、实现、审阅都以 bounded slice 为单元小步推进：
+| dependency | 阻止的动作 | 仍可提前进行 |
+| --- | --- | --- |
+| foundation dependency | 会绑定未稳定语义、数据形状或材料 seam 的下游实现 | 与结果无关且资源隔离的准备 |
+| acceptance dependency | 正式验收、evidence 采信和状态宣称 | 环境、fixture、权限、身份、数据与 test carrier 准备 |
+| resource dependency | 对同一可变资源的同时执行 | 可隔离副本上的工作 |
+| authorization dependency | 未获授权的 mutation 或外部副作用 | 只读调查和不越权准备 |
 
-- 每个 implement unit 是一个可独立验证的 slice：`source_unit` + 一条验证命令 + 明确成功条件 + 禁改路径；slice 之间按依赖与共享资源排顺序。
-- 共享 worktree/DB/端口/测试数据等可变资源未隔离时串行推进；可隔离的独立 slice 才并行（见 [Parallel Work Admission](references/parallel-work-admission.md)）。
-- material-risk slice（shared seam、migration、CAS、权限、数据完整性、外部副作用）必须挂 checkpoint review；低风险 slice 可 `review=none` 但写明 reason。
-- 每个 worker 带 [Progress-File 模板](assets/templates/progress-file.md)：每阶段向 `<package>/.impl-package/progress/<unit>.md` 追加一行，结束时返回该路径；主 session 在 slice 边界读取进展并决定下一派发。
-- 主 session 在每次 worker 返回后重新评估剩余 slice 顺序，不把 Ticket 剩余工作一次性预支；同一 Ticket 的连续 slice 使用 fresh invocation（不因角色相同而复用旧 worker）。
+Acceptance 是结论点，不天然是 dispatch blocker。等待 worker 或 Gate 时做一次 `look-ahead`，只提前加入不绑定未稳定业务语义、结果可回收且有 cleanup owner 的一步准备。
 
-## Worker resolver
+完成标准：当前不可开始、只不可验收和可提前准备的工作已经分开。
 
-启动前读取 [Worker Resolver](references/worker-resolver.md)；解析不到唯一实体、宿主不支持 invocation、授权不匹配或 brief 不完整时返回 `BLOCKED`，不猜近似 worker。
+## Step 3 · 形成当前批次
 
-## Review、并行与失败
+优先稳定 foundation；把安全的一步前瞻准备加入当前批次。存在多个候选、文件 ownership 交叉、共享 DB/端口/测试数据或外部记录时，完整读取 [Dependency and Resource Admission](references/parallel-work-admission.md)。
 
-1. shared seam、安全、数据完整性、并发、migration、不可逆外部副作用或 policy 要求时必须 `review=required` 并显式选 `checkpoint|closure`；非显然时选 `none` 并写 reason，不为每个文件或小动作增加 checkpoint。先把 review gate 绑定到 material risk，避免每个小动作都增加 checkpoint 或让高风险单元无 gate。
-2. reviewer 独立 fresh，finding 交 fresh fixer 按同一 scope 重审。fresh reviewer/fixer 保持证据与修复范围可区分，避免原 reviewer 既判定又替自己关闭 finding。
+完成标准：任何两个并行 worker 都没有同一可变资源的 ownership；不能隔离的资源已有串行顺序和 cleanup owner。
 
-3. 共享可变运行资源必须隔离；不能隔离就串行并记录顺序、owner、cleanup，全部返回后由主 session 做集成验证。这样不会把共享资源污染误归因给某个 worker，集成也不会在部分结果返回时提前发生。
-4. 解析失败、授权不匹配或 brief 不完整时启动前 `BLOCKED`；仅默认 worker 的 `INCOMPLETE` 在进程已清理、diff/residue 可归因且可安全重放时允许一次 fresh 默认 worker fallback，业务 `BLOCKED` 不 fallback，第二次 `INCOMPLETE` 归一为 `BLOCKED`。只有可安全重放的进程失败才能 fallback，业务阻断和重复不完整必须保持 fail-closed。
+## Step 4 · 选择 lane 与 lifecycle
 
-## 生命周期与结果
+| lane | 同一 Topic 内的连续范围 | 独立性 | 退役或换 worker 的条件 |
+| --- | --- | --- | --- |
+| work lane | investigate → implement → fix | 拥有该 Topic 的实现上下文与 write ownership | Topic closure、scope/ownership 实质变化、上下文不可采信或持续卡住 |
+| review lane | initial review → finding recheck | 始终独立于 work lane；同 Topic reviewer 可以复用 | Topic closure、review scope 实质变化或独立性失效 |
+| test lane | 同一有界 test campaign 的运行、重跑与异常收集 | 不承担业务裁决或修复 | campaign 结束、环境/comparison point 变化或结果已交付 |
 
-1. 统一结果为 `Outcome: DONE | BLOCKED | INCOMPLETE`，附 `mode`、`worker`、`source_unit`、`evidence`、`artifacts`、`blocker`、`fallback_from`、`session_id`；resolver 负责 fallback 与失败归一。统一 envelope 让主 session 能区分局部完成、阻断和不完整，而不是只看一条成功消息。
-2. `review=required` 的 DONE 先为 `review_state: PENDING_REVIEW`，独立 reviewer PASS 后才是 `PASSED`；finding 交 fresh fixer 按同一 scope 重审，主 session 发现的 finding 可直接进入 fresh fixer。先 pending 再 passed，避免 worker 的局部 DONE 被误当成 package 完成。
-3. `UNCERTAIN|BLOCKED` 原样上交；`review=none` 的 DONE 为 `NOT_REQUIRED`，reviewer 门槛见 [Review Gate](references/review-gate.md)。不确定结果不能在编排层被压成 PASS，确实不需要 review 的单元也不应虚构 gate。
+新 Topic 使用 fresh worker；同一 Topic/lane 连续且上下文可信时复用。
 
-主 session 始终负责最终集成、证据采信、Ticket acceptance 和 Gate 判断；worker 的局部 DONE、review PASS 或测试通过都不单独代表 package 完成。
+material-risk Topic（shared seam、安全、数据完整性、并发、migration、权限或不可逆外部副作用）读取 [Material Review Gate](references/review-gate.md)。
+
+完成标准：每个 active worker 都能对应唯一 Topic/lane，且 review lane 与 work lane 保持独立。
+
+## Step 5 · 消费结果并重排
+
+主 session 核对可归因 diff、evidence、residue、cleanup 和 review requirement，再决定集成。只归一化真正有消费者的事实：
+
+- worker outcome：`DONE | BLOCKED | INCOMPLETE`；
+- investigation：`EVIDENCE_SUFFICIENT | EVIDENCE_GAP`；
+- required review：`PENDING_REVIEW | PASSED`，具体 topology 与 finding closure 由 `/impl-package:do-review` 拥有。
+
+主 session 将局部 `DONE`、checkpoint `PASSED` 和测试结果作为 Topic-local facts，依据 canonical evidence、Ticket acceptance 与 Gate 作业务完成判断，并始终拥有最终集成与证据采信。
+
+完成集成后重新扫描 foundation 与一步前瞻准备，再由上游 Dispatcher 决定下一轮 queue/dispatch/idle。
+
+完成标准：当前结果有可归因的 Topic-local 结论，业务完成判断来自 canonical facts，并已执行一次 `look-ahead`。

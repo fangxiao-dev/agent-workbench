@@ -59,5 +59,7 @@ def test_global_entry_and_handoff_route_to_unified_delegation_skill() -> None:
     assert not (
         ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "skills" / "dispatch-bounded-task" / "SKILL.md"
     ).exists()
-    assert "workflow and role definitions do not supply business prompts" in global_instructions
+    assert "Dispatcher and SDD are peer guidance" in global_instructions
+    assert "`do-review` owns review topology and finding closure" in global_instructions
+    assert "The caller supplies the task-specific" not in global_instructions
     assert "不在 handoff 中重复" in handoff

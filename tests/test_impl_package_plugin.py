@@ -150,37 +150,34 @@ def test_skill_resource_paths_stay_inside_plugin() -> None:
             assert target.exists(), f"missing resource: {skill_file}: {match.group(1)}"
 
 
-def test_unified_entry_owns_strategy_and_review_judgment() -> None:
+def test_unified_entry_owns_method_and_review_requirement_judgment() -> None:
     skill_dir = PLUGIN / "skills" / "subagent-driven-development"
     skill = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-    resolver = (skill_dir / "references" / "worker-resolver.md").read_text(encoding="utf-8")
     review = (skill_dir / "references" / "review-gate.md").read_text(encoding="utf-8")
-    modes = (skill_dir / "references" / "mode-contracts.md").read_text(encoding="utf-8")
 
-    assert len(skill.splitlines()) <= 180
-    # Slim form keeps the judgment heuristics, not the strategy yaml/host names.
+    assert len(skill.splitlines()) <= 140
     for marker in (
+        "Topic",
+        "foundation dependency",
+        "acceptance dependency",
+        "work lane",
+        "review lane",
+        "test lane",
         "investigate",
         "EVIDENCE_SUFFICIENT",
-        "fresh invocation",
+        "verify",
         "不重新裁决",
-        "checkpoint|closure",
         "BLOCKED",
-        "fallback",
-        "主 session 始终负责",
+        "始终拥有最终集成",
     ):
         assert marker in skill
     assert "$grok-worker" not in skill
+    assert "@luna-worker" not in skill
     assert "```yaml" not in skill
-    assert "skills/call-grok/SKILL.md" in resolver
-    assert "@luna-worker" in resolver
-    assert "不传 model/effort" in resolver
-    assert "Outcome: BLOCKED" in resolver
-    assert "fallback_from" in resolver
-    assert "review_state: NOT_REQUIRED | PENDING_REVIEW | PASSED | FINDING | BLOCKED" in resolver
     assert "PENDING_REVIEW" in review
-    assert "complexity" in review or "复杂度" in review
-    assert all(marker in modes for marker in ("## investigate", "## implement", "## fix", "## review"))
+    assert "do-review" in review
+    assert not (skill_dir / "references" / "worker-resolver.md").exists()
+    assert not (skill_dir / "references" / "mode-contracts.md").exists()
 
 
 def test_active_callers_reference_the_unified_entry() -> None:

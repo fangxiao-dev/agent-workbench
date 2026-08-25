@@ -17,7 +17,7 @@ description: 当一批已确认的业务代码 findings 适合委派修复时使
 ## 共同合同
 
 - 当前 task 始终拥有分组、验收和最终集成判断。
-- 每个 bounded unit 使用 `/impl-package:subagent-driven-development` 形成当前策略，固定 `mode=fix`、`worker=@luna-worker` 和 fresh invocation；其他策略字段服从该 Skill 的当前合同。
+- 每个 group 是一个 Topic：由 `$dispatcher` 管理上游派发/返回，下游 bounded worker 使用 `/impl-package:subagent-driven-development` 的 `fix` mode 与 work lane；具体 executor 由 Owner 或宿主选择。
 - 使用 `$git-workflow` 约束 dirty state、branch ownership、integration base 和冲突处理。
 - finding 是验收点；worker 的局部 DONE、commit 或测试通过都不单独代表 finding 已关闭。
 - 授权只覆盖明确范围内的本地修改和验证。push、PR、deployment 与外部系统副作用需要另行授权。

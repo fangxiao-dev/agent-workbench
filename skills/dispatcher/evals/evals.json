@@ -1,0 +1,38 @@
+{
+  "skill_name": "dispatcher",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "只读模拟：单 package 的 task-queue.json 中 T001=in-progress，T002/T003 都是 planned 且 depOn=[T001]。T001 worker 返回并由主控判定完成。说明队列命令、派发顺序、状态更新和本轮停止条件；禁止实际修改文件或派发 worker。",
+      "expected_output": "先 delete T001 原子释放两个依赖，再 get-next-tasks；派发返回的全部 T002/T003，分别在确认成功后标 in-progress，并重扫到 [] 后 idle；不把空扫描或空队列称为 package closed。",
+      "files": [],
+      "expectations": [
+        "先 delete T001，并明确该动作同时从 T002 与 T003 的 depOn 释放 T001，然后才运行 get-next-tasks。",
+        "派发 get-next-tasks 返回的全部 T002 与 T003；每项只在宿主确认成功后标为 in-progress，并再次扫描到 []。",
+        "最终进入 idle，但不把空扫描或空队列解释为 implementation package closed。"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "只读模拟：T010=in-progress 的实现返回后仍有一个已边界化缺口，属于同一 Topic；依赖它的 T011 仍 planned。说明 Dispatcher 应如何处理任务、worker context 和下游派发；禁止实际修改。",
+      "expected_output": "保留 T010，不 delete；按需要 update-summary/status/deps 或继续同 Topic，并允许复用 live worker context；T011 依赖未释放，不派发；新 Topic 才 fresh。",
+      "files": [],
+      "expectations": [
+        "保留 T010 且不执行 delete，使用 update-summary、update-status、update-deps 或继续同一 Topic 表达剩余工作。",
+        "允许同一 Topic 复用 live worker context，并说明 Topic 闭合后退役、新 Topic 使用 fresh worker。",
+        "T011 的 dependency 尚未释放，因此本轮不派发 T011。"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "只读模拟：get-next-tasks 返回 []，但仍有一个 running worker，Ticket evidence 不完整且 Gate=open。当前共享测试数据库还要求两个测试 campaign 串行。说明 idle、dependency 和 closure 判断；禁止实际修改。",
+      "expected_output": "当前轮进入 idle 等 worker 返回，但不得声明 package closed；running worker、Ticket evidence 和 Gate 由外部权威处理；共享数据库串行要求应编码为 depOn，test wrapper 只在各自有界 campaign 内复用。",
+      "files": [],
+      "expectations": [
+        "get-next-tasks 返回 [] 时进入 idle 等待 worker，而不是宣称 package closed。",
+        "running worker、Ticket evidence 与 Gate 继续由队列外部权威检查。",
+        "两个 campaign 的共享数据库串行要求编码为 depOn；test wrapper 只在各自有界 campaign 内复用并随后退役。"
+      ]
+    }
+  ]
+}

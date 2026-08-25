@@ -1,9 +1,61 @@
-{"skill_name":"dev-with-track","evals":[
-  {"id":1,"prompt":"从旧 tickets=true, dag=true 的 active attempt 恢复执行。state 中 T1 DONE、T2 PENDING，Ticket 仍 PENDING。","expected_output":"Validates the legacy state, opens progress.md, selects the next released unit, and does not accept a Ticket from Task completion alone.","files":[],"expectations":["Uses Progress active checkpoint and canonical dependencies","Keeps legacy Task and Ticket axes separate","Uses CAS state updates and repository-relative evidence"]},
-  {"id":2,"prompt":"验证完成，准备写 pass Gate；comparison point 是当前 Git commit。","expected_output":"Closes review/manual acceptance/findings, performs Stage 7, audits the completion claim, and writes the current readable Gate only when evidence supports pass.","files":[],"expectations":["Requires comparison commit to equal current Git HEAD","Requires durable delta or an explicit no-durable-delta reason","Clears active checkpoints and freezes the current Attempt after terminal Gate"]},
-  {"id":3,"prompt":"一个没有 DAG 的 long-running attempt 收到 dispatch 的 Outcome: INCOMPLETE；主 session 需要恢复。","expected_output":"Consumes the dispatch recovery facts and writes an active checkpoint before any fresh continuation.","files":[],"expectations":["Does not reinterpret INCOMPLETE as DONE","Uses state.activeCheckpoints because no DAG Task exists","Records the returned recovery facts and next action"]},
-  {"id":4,"prompt":"finding closure 已有中间证据，但 do-review 的 terminal-final report 表明 coverage incomplete。可以写 terminal pass 吗？","expected_output":"Consumes the owning review report and blocks terminal pass until terminal-final coverage is complete and blocking findings are closed.","files":[],"expectations":["Does not reconstruct reviewer topology","Requires complete terminal-final coverage","Requires blocking findings closed"]},
-  {"id":5,"prompt":"terminal-final 中一个跨轨 candidate 被 parent 接受并归类为 Track C finding；现有 Spec/contract 已唯一规定 expected behavior。现在准备派发修复。","expected_output":"Consumes one fresh independent source recheck from the same ReviewRun, cites the current design sources, and then treats the finding as an implementation or evidence defect.","files":[],"expectations":["Triggers only after parent acceptance and Track C classification","Requires one finding-scoped independent source recheck before fix dispatch","Does not create a Ticket/Attempt state or replace closure/terminal review"]},
-  {"id":6,"prompt":"Track A 报告一个实现错误，parent 已接受；没有把它归类为 Track C。","expected_output":"Routes the accepted implementation finding normally without starting a design-source recheck.","files":[],"expectations":["Does not trigger the source recheck","Does not infer Track C from generic review wording","Keeps normal implementation and closure routing"]},
-  {"id":7,"prompt":"parent 接受并归类 Track C finding；独立 source recheck 发现 Decision、Spec 与 contract-design 对恢复行为互相冲突。","expected_output":"Stops fix dispatch and routes the exact source conflict to req-align; if multiple product outcomes remain, requests the owner decision.","files":[],"expectations":["Does not patch implementation against conflicting sources","Routes contract revision to req-align","Does not add a review phase or runtime state"]}
-]}
+{
+  "skill_name": "dev-with-track",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "从旧 tickets=true, dag=true 的 active attempt 恢复。Task T1 DONE、T2 PENDING，Ticket 仍 PENDING。",
+      "expected_output": "验证 state、读取 Progress/checkpoint，保持旧 Task 与 Ticket 轴分离；Task DONE 不接受 Ticket。",
+      "files": [],
+      "expectations": ["canonical restore", "legacy Task is not Ticket acceptance", "CAS state and repository-relative evidence"]
+    },
+    {
+      "id": 2,
+      "prompt": "验证完成，准备在当前 Git comparison point 写 pass Gate。",
+      "expected_output": "先闭合 review/manual/findings 与 Stage 7；evidence 支持时才写 Gate，并冻结 current Attempt。",
+      "files": [],
+      "expectations": ["comparison commit matches current HEAD", "durable delta or reason", "terminal freeze"]
+    },
+    {
+      "id": 3,
+      "prompt": "无 DAG 的 long-running attempt 收到 worker INCOMPLETE；diff 可归因且 Topic context 可信。",
+      "expected_output": "dev-with-track 记录 checkpoint/判断；Dispatcher 保留同 Topic lane 并重新调度；不套固定 fresh fallback，也不把 INCOMPLETE 当 DONE。",
+      "files": [],
+      "expectations": ["active checkpoint", "Dispatcher owns rescheduling", "SDD lane lifecycle", "no fixed fallback"]
+    },
+    {
+      "id": 4,
+      "prompt": "finding closure 有中间证据，但 do-review terminal-final coverage incomplete。可以写 terminal pass 吗？",
+      "expected_output": "消费 do-review 权威报告并阻止 terminal pass，直到 coverage 完整且阻断 findings 闭合。",
+      "files": [],
+      "expectations": ["do-review owns topology", "complete terminal coverage", "blocking findings closed"]
+    },
+    {
+      "id": 5,
+      "prompt": "Track C finding 已接受；独立 source recheck 发现现行 sources 唯一规定 expected behavior。现在准备修复。",
+      "expected_output": "把 finding 作为业务 defect 交 Dispatcher 的同 Topic work lane；bounded worker 使用 SDD fix；closure 仍归 do-review。",
+      "files": [],
+      "expectations": ["Dispatcher upstream scheduling", "SDD downstream fix method", "do-review closure"]
+    },
+    {
+      "id": 6,
+      "prompt": "当前 Ticket 的 acceptance edge 未释放，但下一步 fixture、权限和 test carrier 可隔离准备。",
+      "expected_output": "Ticket 不能 SATISFIED；dev 允许安全 prep 成为业务候选，Dispatcher 调度，worker 使用 SDD；准备不成为 acceptance evidence。",
+      "files": [],
+      "expectations": ["business readiness remains canonical", "peer Dispatcher and SDD guidance", "no early evidence claim"]
+    },
+    {
+      "id": 7,
+      "prompt": "Dispatcher get-next-tasks 返回 []，仍有 running worker、Ticket evidence 缺失且 Gate open。整体完成了吗？",
+      "expected_output": "Dispatcher 仅进入 queue idle；dev-with-track 根据 canonical state/evidence/Gate 判断 package 未 closed。",
+      "files": [],
+      "expectations": ["queue idle is not package closure", "dev owns business completion"]
+    },
+    {
+      "id": 8,
+      "prompt": "从 active Attempt 恢复后发现两个可能的业务动作，其中一个已有唯一 Spec 裁决，另一个仍有多个合理结果。说明主控首先做什么，以及何时调用 Dispatcher。",
+      "expected_output": "dev-with-track 先刷新 canonical facts、选择动作并裁决语义；把唯一可执行结果形成 bounded Topic 后才交 Dispatcher 做机械 queue/dispatch。",
+      "files": [],
+      "expectations": ["business control loop first", "semantic decision before dispatch", "Dispatcher owns mechanical scheduling"]
+    }
+  ]
+}

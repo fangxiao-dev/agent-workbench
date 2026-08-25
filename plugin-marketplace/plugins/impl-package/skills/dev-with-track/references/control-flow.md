@@ -1,17 +1,25 @@
 # Control Flow
 
 ```text
-validate → progress restore → resolve readiness → implement/investigate → verify
-                                      ↑                                ↓
-                          affected-scope revalidation ← CAS state + ER checkpoint
-                                                                       ↓
-                         review/manual acceptance → findings routing → claim audit
-                                                                       ↓
-                                                            Stage 7 / current Gate：处境表投递
+validate → progress restore → choose business action
+                                  ↓
+                    $dispatcher queue / dispatch / return
+                                  ↓
+          bounded worker follows subagent-driven-development
+                                  ↓
+               dev-with-track consumes result and writes
+               State / Evidence / Checkpoint / Trail
+                                  ↓
+              review / manual acceptance / claim audit
+                                  ↓
+                        Stage 7 / current Gate
 ```
 
-- blocker 或 evidence 缺失：停在当前 unit，记录 checkpoint。
-- contract/plan 变化：留在同一 package 记录 affected scope 并沿用 initial bundle approval；新 package 从 owning stage 取得初始 bundle approval。
-- completion claim 与 release edge 的具体动作由处境表投递。
-- 旧 package 的 Task 完成后交 Working Branch owner 集成，不自动接受 Ticket；旧 Task/Ticket 终态共同进入 completion claim audit。
-- terminal Gate 后禁止继续当前 Attempt；新工作由 impl-planning 创建 patch Attempt。
+Dispatcher 与 SDD 平级：前者指导上游主控调度，后者指导下游 bounded worker 方法；dev-with-track/main session 写入 package State、Evidence、Checkpoint 与 Gate。
+
+- blocker 或 evidence 缺失：保留当前业务结论，写 checkpoint；Dispatcher 只据 queue 进入 idle。
+- contract/plan 变化：记录 affected scope 并沿用 current package 的 initial bundle approval；新 package 才取得新 approval。
+- 旧 package 的 Task 完成后由 Working Branch owner 集成，不自动接受 Ticket。
+- terminal Gate 后冻结当前 Attempt；新工作由 impl-planning 创建 patch Attempt。
+
+完成条件：任何节点都能明确是业务 owner、上游调度、下游方法还是 package state write，不存在第二个 owner。

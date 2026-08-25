@@ -1,22 +1,9 @@
-# Review Gate
+# Material Review Gate
 
-复杂度只增加 reviewer gate，不自动更换 implementer。`review_scope` 表示 reviewer 的边界：`checkpoint` 验收一个已声明的 bounded slice，`closure` 验收整个 source unit。不要为每个文件或每个小动作都增加 checkpoint。
+shared seam、安全、数据完整性、并发、migration、权限、不可逆外部副作用或 Plan/policy 明确要求时，当前 Topic 需要独立 review。SDD 只确定 requirement 与局部边界：中间 material seam 使用 `checkpoint`，Topic 收口使用 `closure`；review topology、comparison point、finding closure 和 terminal review 由 `/impl-package:do-review` 拥有。
 
-以下任一条件要求 `review=required`：shared seam、安全、数据完整性、并发、migration、不可逆外部副作用，或 Plan/safety policy 明确要求独立审查。复杂任务在切片边界设置 `checkpoint`；最终仍需 `closure`。单纯跨文件、跨模块或接口变化不自动升级；非显然地选择 `review=none` 时记录 reason。
+work lane 的 `DONE` 在 required review 完成前保持 `PENDING_REVIEW`；独立 review lane PASS 后才成为 `PASSED`。checkpoint PASS 只释放当前 Topic 的下一步，不支持 Ticket/package 完成声明。
 
-```text
-implementer(slice)
-  -> reviewer(checkpoint)
-     -> PASS: 继续下一个 slice
-     -> finding: fresh fixer -> reviewer(checkpoint)
+review lane 始终独立于 work lane。同一 Topic 的 reviewer 可以承担 finding recheck；review scope 实质变化、独立性失效或 Topic 已闭合时退役并重新选择 reviewer。finding 默认回到同 Topic work lane 修复；只有 scope/ownership 实质变化、上下文不可采信或需要全新视角时更换 worker。
 
-implementer(last slice)
-  -> reviewer(closure)
-     -> PASS: review_state=PASSED
-     -> finding: fresh fixer -> reviewer(closure)
-
-```
-
-主 session finding 的 fresh fixer 与对应 scope reviewer 由处境表投递。
-
-Implementer 或 fixer 的 `DONE` 在 reviewer 运行前都标记为 `review_state: PENDING_REVIEW`。Reviewer 必须是独立 fresh invocation，默认逻辑 worker 为 `$grok-worker`；fixer 使用新的 `@luna-worker` 或 `$grok-worker` invocation，不能复用发现 finding 的旧进程。Reviewer 只读、不修复、不替 main session 做 Ticket acceptance。`UNCERTAIN/BLOCKED` 原样上交。只有 `review_state=NOT_REQUIRED` 或 `PASSED` 的结果可以被主 session 消费；`PENDING_REVIEW`、`FINDING`、`BLOCKED` 都不能支持完成声明。
+完成标准：material risk 有明确 `checkpoint|closure` 边界，`PENDING_REVIEW` 未被压成 PASS，reviewer 与 implementer 保持独立。

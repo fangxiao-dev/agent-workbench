@@ -1,6 +1,6 @@
 # Grouped repair
 
-适用于四个及以上已确认 findings。当前 task 是集成控制器；每个 group 获得自己的 branch/worktree 和一个 fresh `@luna-worker`。
+适用于四个及以上已确认 findings。当前 task 是集成控制器；每个 group 是独立 Topic，并获得自己的 branch/worktree。
 
 ## Fix base
 
@@ -26,7 +26,7 @@
 
 ## Worker brief
 
-每个 group 通过 `/impl-package:subagent-driven-development` 派发一个 bounded unit，使用 `mode=fix`、`worker=@luna-worker` 和 fresh invocation。brief 至少包含：
+每个 group 由 `$dispatcher` 作为独立 Topic 派发；下游 bounded worker 使用 `/impl-package:subagent-driven-development` 的 `fix` mode 与 work lane。brief 至少包含：
 
 - group id、topic 和全部 finding acceptance points；
 - exact branch/worktree 与 `fix_base`；
@@ -34,7 +34,7 @@
 - focused verification；
 - 完整交付说明：source commits、修改范围、验证结果、逐 finding 结论和残余风险。
 
-交付不完整或只有未提交 residue 时不集成。保留原 worktree 作为证据，从可验证 base 建立 clean repair worktree，交给 fresh worker 重做或复核。
+交付不完整或只有未提交 residue 时不集成。保留原 worktree 作为证据；context/ownership 可信时继续同 Topic work lane，失效时从可验证 base 建 clean repair worktree 并重新派发。
 
 ## 验收与集成
 
@@ -42,7 +42,7 @@
 
 按可解释顺序把 accepted source commits cherry-pick 回当前分支，随后运行该 group 的 focused acceptance，并分别记录 source 与 integrated commits。集成期间当前 worktree 保持 clean，当前 task 不并行编辑。
 
-cherry-pick 冲突时 abort，停止继续集成其他 groups。把实际重叠重新纳入共写边界，从当前分支建立 clean repair worktree，由 fresh worker 产生纠正 commits。集成后 focused acceptance 失败时采用同一 repair 边界。
+cherry-pick 冲突时 abort，停止继续集成其他 groups。把实际重叠重新纳入共写边界，从当前分支建立 clean repair worktree，由该 Topic work lane 产生纠正 commits。集成后 focused acceptance 失败时采用同一 repair 边界。
 
 ## 完成条件
 

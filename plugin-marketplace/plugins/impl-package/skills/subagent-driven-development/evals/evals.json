@@ -3,101 +3,73 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "一个失败症状可能来自三个模块，目前还不知道真实原因、影响面或仓库里是否已有等价方案。请决定下一步并形成策略。",
-      "expected_output": "mode=investigate、worker=$grok-worker、review=none；返回 EVIDENCE_GAP，不使用 route。",
+      "prompt": "只读模拟：业务 schema foundation 尚未稳定，但下一步 browser fixture 与环境可以隔离准备。说明 dependency 分类、当前批次和禁止宣称的状态。",
+      "expected_output": "下游语义实现因 foundation 等待；隔离 fixture/environment 作为一步 look-ahead 准备并行；准备结果不成为 acceptance evidence。",
       "files": [],
-      "expectations": ["选择 investigate mode", "worker 显式为 $grok-worker", "没有 route"]
+      "expectations": ["foundation-first", "safe look-ahead prep", "no early acceptance claim"]
     },
     {
       "id": 2,
-      "prompt": "只在主 session 改一个已定位的文档错字并跑一个现成检查。输出策略。",
-      "expected_output": "mode=implement 或 review、worker=main-session，并给出原子操作 reason。",
+      "prompt": "只读模拟：acceptance edge 尚未释放，但实现已稳定，后续 test carrier、权限和数据准备不依赖未决业务语义。说明现在能做什么。",
+      "expected_output": "正式验收、evidence 采信和 SATISFIED 等待；隔离且可回收的一步前瞻准备可以开始，并有 cleanup owner。",
       "files": [],
-      "expectations": ["local 只使用 main-session", "reason 具体"]
+      "expectations": ["acceptance is conclusion point", "prep may proceed", "cleanup ownership"]
     },
     {
       "id": 3,
-      "prompt": "批准的 Plan 给出一个依赖已释放、ownership 和局部验证明确的实现单元，但没有 Ticket 或 DAG Task。安排执行。",
-      "expected_output": "mode=implement、worker=$grok-worker、review=none；不因没有 Ticket/DAG 阻塞。",
+      "prompt": "只读模拟：同一 Topic 的 implementer 返回一个已确认 finding，write ownership 未变且上下文可信。说明 mode、lane 和 worker lifecycle。",
+      "expected_output": "finding 使用 mode=fix 回到同一 work lane并复用现有 Topic context；不重新裁决；Topic closure 后退役。",
       "files": [],
-      "expectations": ["单个委派选择 serial", "具体 worker 与 mode 同时出现"]
+      "expectations": ["same Topic work lane reuse", "fix does not re-decide", "retire at closure"]
     },
     {
       "id": 4,
-      "prompt": "两个只读诊断目标彼此独立，但必须共享同一个不能隔离的已登录 browser session。输出策略。",
-      "expected_output": "选择 SERIAL，resources 记录唯一顺序和 cleanup owner；不选择 PARALLEL。",
+      "prompt": "只读模拟：独立 reviewer 已完成 initial review，finding 修复后 comparison point 未改变 review scope。说明 recheck 与独立性。",
+      "expected_output": "同一 Topic review lane 可以复用 reviewer 做 recheck，但始终独立于 work lane；scope 或独立性变化才换 reviewer。",
       "files": [],
-      "expectations": ["共享可变资源导致 serial", "只记录真实 resources"]
+      "expectations": ["review lane reuse", "independent from work lane", "lifecycle boundary"]
     },
     {
       "id": 5,
-      "prompt": "两个 ownership、输出目录和验证资源互不重叠的 bounded units 都已释放。输出策略。",
-      "expected_output": "读取 parallel admission 后选择 parallel，明确隔离边界，worker 引用具体且主 session 保留集成。",
+      "prompt": "只读模拟：上一 Topic 已闭合，出现新的、不共享 ownership 的业务问题。旧 worker 当前空闲。说明是否复用。",
+      "expected_output": "旧 Topic worker 退役；新 Topic 使用 fresh worker，空闲或角色相同不构成复用理由。",
       "files": [],
-      "expectations": ["只有满足隔离准入才 parallel", "保留最终集成权"]
+      "expectations": ["new Topic fresh", "old Topic retired"]
     },
     {
       "id": 6,
-      "prompt": "同一工作流先调查再实现再修复，角色相同但每个 source unit 独立。是否复用 worker？",
-      "expected_output": "调查和实现可以继承同一逻辑 worker $grok-worker；每个独立 source unit 都 fresh，已确认 finding 必须交给 fresh fixer；不输出 reuse。",
+      "prompt": "只读模拟：同一 test campaign 的长脚本失败后需要重跑并收集日志；campaign 完成后还有另一个 comparison point 的测试。说明 test lane。",
+      "expected_output": "当前 campaign 内有限复用 test wrapper；结束后退役；新 comparison point 重新选择 worker。",
       "files": [],
-      "expectations": ["策略继承 worker reference", "独立单元 fresh"]
+      "expectations": ["bounded test-lane reuse", "retire after campaign"]
     },
     {
       "id": 7,
-      "prompt": "同一 source unit 尚未结束，既有 worker 持有不可转移的 live provider session；之后发生 context compaction。分别说明复用决定。",
-      "expected_output": "连续 live state 可显式 reuse；compaction 后改从 canonical input 启动 fresh worker。",
+      "prompt": "只读模拟：两个 bounded units 会写同一 DB 和端口；另一个方案能提供独立 worktree 与 run-owned DB。分别说明 admission。",
+      "expected_output": "共享 DB/端口无法隔离时 SERIAL；caller 选择独立 worktree、run-owned DB 与独立端口并明确 cleanup 后 PARALLEL。",
       "files": [],
-      "expectations": ["reuse 有 source unit/agent/reason", "compaction 后 fresh"]
+      "expectations": ["serialize shared mutable resources", "caller-selected isolated worktree", "parallel isolated runtime resources"]
     },
     {
       "id": 8,
-      "prompt": "批准的 Plan 要运行完整 pytest 和前端 build；命令只读，但预计耗时长且会产生大量 stdout。请决定策略。",
-      "expected_output": "mode=review、worker=$grok-worker；只返回压缩证据，不把有写副作用命令伪装成 review。",
+      "prompt": "只读模拟：worker 返回 DONE，material-risk checkpoint reviewer PASS，但 Ticket evidence 仍不完整且 terminal review 未运行。说明结果能支持什么。",
+      "expected_output": "局部 outcome 与 checkpoint 可释放 Topic 下一步；不能提升为 Ticket/package 完成；required review 保留 PENDING_REVIEW/PASSED 边界。",
       "files": [],
-      "expectations": ["长时间高回显检查使用 worker", "review 有明确只读边界"]
+      "expectations": ["local DONE is not package completion", "checkpoint is local", "stable outcome/review states"]
     },
     {
       "id": 9,
-      "prompt": "只需在主 session 运行一条快速、输出有界且无副作用的定向检查。请决定策略。",
-      "expected_output": "可以 mode=review、worker=main-session，并以原子且输出有界为 reason。",
+      "prompt": "只读模拟：两个可独立验收的 Topic 只在当前 worktree 中有文件 ownership 交叉，caller 可以创建两个隔离 worktree。是否应因交叉而停止派发？",
+      "expected_output": "caller 为两个 Topic 选择新隔离 worktree 后继续派发；文件 ownership 已分开，worktree 选择和生命周期由 caller 管理。",
       "files": [],
-      "expectations": ["小型检查可 local", "不额外派发"]
+      "expectations": ["new worktree is allowed", "file overlap does not force blocked", "caller owns worktree choice"]
     },
     {
       "id": 10,
-      "prompt": "实现触及 shared seam 和数据完整性，但 caller 指定主 worker 为 $grok-worker。请决定是否更换 worker。",
-      "expected_output": "实现仍使用 $grok-worker；review=required，使用独立 reviewer 做 closure（复杂切片可另设 checkpoint），不复用实现进程。",
+      "prompt": "只读模拟：两个 Topic 已使用不同 worktree，但仍共享同一可变 DB 和端口，且暂时不能复制或分配独立实例。说明 admission。",
+      "expected_output": "独立 worktree 只隔离文件写入；共享 DB/端口仍构成 resource dependency，因此按唯一顺序 SERIAL 并指定 cleanup owner。",
       "files": [],
-      "expectations": ["复杂度不换 worker", "review required"]
-    },
-    {
-      "id": 11,
-      "prompt": "默认 Grok executor 返回 INCOMPLETE，进程已清理且 diff residue 可归因。另一个例子是业务 BLOCKED。分别处理。",
-      "expected_output": "前者只允许一次 fresh @luna-worker fallback；后者原样 BLOCKED，不 retry、不回退主 session。",
-      "files": [],
-      "expectations": ["fallback 目标是 @luna-worker", "业务 BLOCKED 不 fallback"]
-    },
-    {
-      "id": 12,
-      "prompt": "实现返回 DONE 且策略 review=required。reviewer 尚未运行；reviewer 返回 finding 后需要继续修复。请给出状态。",
-      "expected_output": "先是 review_state=PENDING_REVIEW，不能收口；finding 使用 fresh mode=fix（新的 @luna-worker 或 $grok-worker），再由 reviewer 按同一 scope 重审并 PASS 后才 PASSED。",
-      "files": [],
-      "expectations": ["PENDING_REVIEW fail-closed", "finding 启动 fresh fixer"]
-    },
-    {
-      "id": 13,
-      "prompt": "一个复杂实现被拆成三个 bounded slices。每个 slice 完成后需要一个窄检查，全部完成后还要做完整收口。请安排 reviewer。",
-      "expected_output": "每个声明的 slice 后使用 fresh reviewer、review_scope=checkpoint；最后使用 review_scope=closure。checkpoint PASS 只释放下一 slice，closure PASS 才能关闭 source unit。",
-      "files": [],
-      "expectations": ["checkpoint 与 closure scope 分开", "checkpoint PASS 不等于完成", "closure reviewer 独立 fresh"]
-    },
-    {
-      "id": 14,
-      "prompt": "implementer 已返回 DONE，但主 session 在集成前发现一个有明确 comparison point 的缺陷，尚未运行 reviewer。请决定下一步。",
-      "expected_output": "主 session 记录 finding 后直接启动 fresh fixer，不必先经过 reviewer；fixer 完成后由 reviewer 按对应 scope 重审。",
-      "files": [],
-      "expectations": ["main-session finding 可直达 fixer", "fixer 使用 fresh invocation", "fix 后仍需 reviewer closure"]
+      "expectations": ["worktree isolation is file-scoped", "runtime resources assessed separately", "serialize unisolated DB and port"]
     }
   ]
 }
