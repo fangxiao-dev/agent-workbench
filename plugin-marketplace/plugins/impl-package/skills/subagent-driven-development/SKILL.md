@@ -65,7 +65,7 @@ material-risk Topic（shared seam、安全、数据完整性、并发、migratio
 - investigation：`EVIDENCE_SUFFICIENT | EVIDENCE_GAP`；
 - required review：`PENDING_REVIEW | PASSED`，具体 topology 与 finding closure 由 `/impl-package:do-review` 拥有。
 
-主 session 将局部 `DONE`、checkpoint `PASSED` 和测试结果作为 Topic-local facts，依据 canonical evidence、Ticket acceptance 与 Gate 作业务完成判断，并始终拥有最终集成与证据采信。
+主 session 将局部 `DONE`、review `PASSED` 和测试结果作为 Topic-local facts，依据 canonical evidence、Ticket acceptance 与 Gate 作业务完成判断，并始终拥有最终集成与证据采信。
 
 完成集成后重新扫描 foundation 与一步前瞻准备，再由上游 Dispatcher 决定下一轮 queue/dispatch/idle。
 

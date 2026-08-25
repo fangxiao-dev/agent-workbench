@@ -35,10 +35,17 @@ def markdown_section(text: str, heading: str) -> str:
 
 
 class ThreeTrackContractTests(unittest.TestCase):
-    def test_registry_defines_default_three_tracks_and_conditional_safety(self) -> None:
+    def test_registry_defines_lean_initial_default_and_full_terminal_tracks(self) -> None:
         registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
         self.assertEqual(
             registry["default_tracks"],
+            [
+                {"label": "Track A", "skill": "review-code"},
+                {"label": "Track C", "skill": "review-code-by-spec"},
+            ],
+        )
+        self.assertEqual(
+            registry["terminal_tracks"],
             [
                 {"label": "Track A", "skill": "review-code"},
                 {"label": "Track B", "skill": "review-code-by-standards"},
@@ -52,6 +59,23 @@ class ThreeTrackContractTests(unittest.TestCase):
         for name, record in registry["reviewers"].items():
             self.assertEqual(record["canonical_skill_path"], f"skills/{name}/SKILL.md")
         self.assertNotIn("safety-review", [track["skill"] for track in registry["default_tracks"]])
+        self.assertNotIn("safety-review", [track["skill"] for track in registry["terminal_tracks"]])
+
+    def test_track_b_admission_is_explicit_and_terminal_final_does_not_inherit_initial_selection(self) -> None:
+        topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
+        track_b = markdown_section(topology, "Track B admission")
+        self.assertIn("module boundary", track_b)
+        self.assertIn("terminal-final", track_b)
+        self.assertIn("terminal_tracks", track_b)
+
+        safety = markdown_section(topology, "Safety admission")
+        self.assertRegex(safety, r"(?s)`initial`.*default_tracks.*Track A/C")
+        self.assertRegex(safety, r"(?s)`terminal-final`.*terminal_tracks.*Track A/B/C")
+        self.assertIn("independent of which tracks `initial`", safety)
+
+        phases = markdown_section(topology, "Review phase")
+        self.assertIn("terminal_tracks", phases)
+        self.assertNotIn("reactivate every applicable selected track", phases)
 
     def test_reviewer_verifier_uses_registry_defaults_and_rejects_escaping_custom_path(self) -> None:
         module = load_preflight_module()

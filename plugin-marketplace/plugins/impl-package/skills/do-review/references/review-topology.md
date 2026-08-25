@@ -15,9 +15,15 @@ Evaluate the complete diff and the verified contract facts semantically. Safety 
 
 Keywords are discovery cues, not sufficient evidence by themselves. Record the matched boundary and the diff or contract fact that makes it applicable.
 
-For `initial` and `terminal-final`, with no explicit reviewer list, start from the registry's three default tracks and append `safety-review` as the next track when Safety is applicable. For `finding-closure`, select exactly one fresh independent `reviewer` leaf for all named findings; do not split by source track or launch a separate Safety leaf. The single reviewer must include any Safety implication that is part of the named findings. An explicit reviewer selection for closure must still resolve to one leaf; explicit selections for full reviews run exactly as stated. If Safety is applicable but an explicit full-review list omits `safety-review`, record `omitted applicable Safety risk`; for closure, record Safety applicability and the single reviewer's scoped coverage instead. Do not represent the single closure reviewer as a full Safety review.
+For `initial`, with no explicit reviewer list, start from the registry's lean `default_tracks` (Track A/C) and append `review-code-by-standards` when Track B admission applies (see below), then append `safety-review` as the next track when Safety is applicable. For `terminal-final`, with no explicit reviewer list, always start from the registry's full `terminal_tracks` (Track A/B/C) — independent of which tracks `initial` or any earlier phase in this ReviewRun actually selected — and append `safety-review` when Safety is applicable. For `finding-closure`, select exactly one fresh independent `reviewer` leaf for all named findings; do not split by source track or launch a separate Safety leaf. The single reviewer must include any Safety implication that is part of the named findings. An explicit reviewer selection for closure must still resolve to one leaf; explicit selections for full reviews run exactly as stated. If Safety is applicable but an explicit full-review list omits `safety-review`, record `omitted applicable Safety risk`; for closure, record Safety applicability and the single reviewer's scoped coverage instead. Do not represent the single closure reviewer as a full Safety review.
 
 Completion criterion: the ledger states whether Safety is applicable, the evidence for that decision, and whether it is selected, scoped within closure, or explicitly omitted.
+
+## Track B admission
+
+Track B (`review-code-by-standards`) is applicable to `initial` when the diff introduces or moves a module boundary, adds a new public interface/abstraction, or restructures existing module/directory layout across more than an isolated single-file change. Keywords are discovery cues, not sufficient evidence by themselves; record the matched criterion and the diff fact that makes it applicable. `terminal-final` always includes Track B from `terminal_tracks` regardless of this admission check — a Ticket-level `initial` omitting it is not a gap at the package level, since `terminal-final` re-covers it once before completion.
+
+Completion criterion: the ledger states whether Track B is applicable to `initial`, the evidence for that decision, and whether it is selected or explicitly omitted.
 
 ## Review phase
 
@@ -25,7 +31,7 @@ Record one phase separately from the review mode:
 
 - `initial`: run the complete applicable topology selected above.
 - `finding-closure`: dispatch one fresh independent `reviewer` leaf for all named findings. Use the closure brief and verify only named findings; do not split the closure into source, standards, spec, or Safety tracks.
-- `terminal-final`: pin the final implementation `HEAD`, reactivate every applicable selected track, and run the complete applicable topology again, even if intermediate finding closure was clean or a Loop track was dormant.
+- `terminal-final`: pin the final implementation `HEAD`, resolve topology from `terminal_tracks` (not from whatever `initial` or any earlier phase in this ReviewRun selected), and run the complete applicable topology on that HEAD, even if intermediate finding closure was clean or a Loop track was dormant.
 
 A finding-closure result closes only its named findings. It cannot stand in for the terminal-final review. If a closure fix changes the diff or contract facts, refresh the single closure review brief before dispatch. The terminal verdict uses the terminal-final result from the same final implementation `HEAD`.
 

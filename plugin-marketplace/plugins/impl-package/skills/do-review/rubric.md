@@ -5,7 +5,7 @@ updated: 2026-08-19
 
 ## 原则
 
-- [已确认] `do-review` 是唯一 orchestrator；默认三个并列 leaf track 为 `review-code`、`review-code-by-standards` 与 `review-code-by-spec`，命中高风险边界时条件追加 `safety-review`。
+- [已确认] `do-review` 是唯一 orchestrator；`initial` 默认两个并列 leaf track 为 `review-code`、`review-code-by-spec`，Track B admission 或高风险边界命中时分别条件追加 `review-code-by-standards`、`safety-review`；`terminal-final` 无显式 reviewer 时始终使用完整三轨 `terminal_tracks`，不受 `initial` 实际选中子集影响。（证据: R9）
 - [已确认] 同一完整 diff 与 fixed comparison point 只由主会话确定一次；三轨同轮独立，第二轮起只接收 canonical ledger。
 - [已确认] 涉及计划包时，审查范围覆盖整个计划包的 commits，不只审查最后一个实现 commit。
 - [待验证] 审阅编排使用最小必要的自然语言状态来保证轮次、证据和收敛可信，不以刚性 schema 或过度 canonical 字段限制 leaf reviewer 的主动探索。（证据: R2）
@@ -33,7 +33,7 @@ updated: 2026-08-19
 - 采纳「leaf skill 不描述其他 skill/track 的互动」— 用户原话：每个 skill 专注自己的事，调度层互动属于 `do-review`。
 
 ### R5 · 2026-08-12
-- 采纳「高风险条件自动追加 Safety」：默认三轨保持不变；显式 reviewer list 不自动扩展，但记录遗漏的适用 Safety 风险。
+- 采纳「高风险条件自动追加 Safety」：默认轨保持不变；显式 reviewer list 不自动扩展，但记录遗漏的适用 Safety 风险。（默认轨组成本身在 R9 收窄为 `initial` 两轨 / `terminal-final` 三轨，Safety 追加规则不受影响）
 - 采纳「中间 closure 保守增量、terminal final 完整复核」：finding closure 只跑来源、受影响与适用 Safety track；最终实现 `HEAD` 重新运行完整适用 topology。
 
 ### R6 · 2026-08-12
@@ -47,3 +47,7 @@ updated: 2026-08-19
 ### R8 · 2026-08-19
 - 采纳「commit 是 do-review 前置步骤」：用户确认把 pin `HEAD` 的本地 commit 收进 `do-review` Gate，不写进通用 `git-commit` skill，也不把该 skill 收进 `do-review`。
 - 采纳「必须使用 leaf subagent」：每个 selected track 派 matching leaf agent；不可用时停在 ReviewRun 创建前询问，不得自行降级。
+
+### R9 · 2026-08-25
+- 采纳「`initial` 默认精简为 Track A/C，`terminal-final` 恒定完整三轨」：用户原话确认"只有 terminal 需要 A/B/C+D，其余都可以 A/C+B/D"——Ticket 级 `initial` 由 SDD material-risk 判定触发，频率高、单次 diff 小，Track A(行为正确性)/C(spec fidelity) 与触发条件直接相关，Track B(可维护性) 按 diff 是否触及 module boundary/新增抽象/结构重构再追加；`terminal-final` 是整个 Attempt 收尾前唯一一次的完整 diff 复核，且 review-topology.md 已有"即使中途干净也不能跳过 track"的既有原则，专门用来抓跨 Ticket 聚合风险，因此必须始终完整三轨，不能继承 `initial` 或任何更早阶段实际选中的子集。
+- 采纳「retire SDD 侧 `checkpoint` review 概念」：SDD 不再拥有 review 调度或 topology，只判断并上报某 Topic 所属 Ticket 是否 material-risk；一个 Topic 若大到需要中途止损，应回到 Topic 边界定义收窄，不新开一次 review 事件。Ticket 级 review 触发与派发完全交给 `dev-with-track` 既有的 `trail.last_outcome=DONE` 触发点与本 skill 的 `initial` phase，不再有 SDD 自己的 `mode=review`/`checkpoint`/`closure` 调用路径。

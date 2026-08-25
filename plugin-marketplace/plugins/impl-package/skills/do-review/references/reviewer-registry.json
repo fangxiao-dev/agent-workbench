@@ -5,6 +5,16 @@
       "skill": "review-code"
     },
     {
+      "label": "Track C",
+      "skill": "review-code-by-spec"
+    }
+  ],
+  "terminal_tracks": [
+    {
+      "label": "Track A",
+      "skill": "review-code"
+    },
+    {
       "label": "Track B",
       "skill": "review-code-by-standards"
     },

@@ -52,10 +52,10 @@
     },
     {
       "id": 8,
-      "prompt": "只读模拟：worker 返回 DONE，material-risk checkpoint reviewer PASS，但 Ticket evidence 仍不完整且 terminal review 未运行。说明结果能支持什么。",
-      "expected_output": "局部 outcome 与 checkpoint 可释放 Topic 下一步；不能提升为 Ticket/package 完成；required review 保留 PENDING_REVIEW/PASSED 边界。",
+      "prompt": "只读模拟：worker 返回 DONE，该 Topic 所属 Ticket 的 required review 已 PASSED，但 Ticket evidence 仍不完整且 terminal-final review 未运行。说明结果能支持什么。",
+      "expected_output": "局部 outcome 与 review PASSED 只是 Topic-local fact，可释放当前 Topic 下一步；不能提升为 Ticket/package 完成；Ticket acceptance 仍需 canonical evidence，package 完成仍需 terminal-final。",
       "files": [],
-      "expectations": ["local DONE is not package completion", "checkpoint is local", "stable outcome/review states"]
+      "expectations": ["local DONE is not package completion", "review PASSED is a local fact", "terminal-final still required for package completion"]
     },
     {
       "id": 9,

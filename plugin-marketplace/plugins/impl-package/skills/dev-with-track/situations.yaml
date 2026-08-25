@@ -106,7 +106,7 @@ situations:
     actions:
       - id: select-ready-ticket
         by: main-session
-        do: "/impl-package:subagent-driven-development mode=implement worker=<selected-ticket>"
+        do: "/impl-package:subagent-driven-development mode=implement，以选中的 ready Ticket 作为当前 Topic"
         effect: "依据依赖、集成顺序与共享资源"
     escape: true
 
@@ -235,8 +235,8 @@ situations:
       - id: dispatch-reviewer
         default: true
         by: dispatch
-        do: "/impl-package:do-review scope=<checkpoint|closure>"
-        effect: "scope 必须显式为 checkpoint 或 closure"
+        do: "/impl-package:do-review phase=initial"
+        effect: "scope 为该 Ticket 的 diff；topology 用 registry 精简默认（Track A/C），按 Track B/Safety admission 按需追加"
     escape: true
 
   - slug: ticket.review.required-trigger
@@ -245,11 +245,11 @@ situations:
       ticket.review_trigger: true
     judgment: false
     actions:
-      - id: require-review
+      - id: mark-review-required
         default: true
         by: main-session
-        do: "/impl-package:subagent-driven-development mode=review review=required review_scope=<checkpoint|closure>"
-        effect: "scope 显式为 checkpoint 或 closure；非显然地选 none 时记 reason"
+        do: "记录该 Ticket 现在满足 review_required（shared seam/安全/数据完整性/并发/migration/权限/不可逆外部副作用或 Plan/policy 明确要求）"
+        effect: "不立即派发；trail.last_outcome=DONE 后由 ticket.review.awaiting-reviewer 触发 /impl-package:do-review"
     escape: true
 
   - slug: ticket.record.evidence-unfiled
@@ -290,8 +290,8 @@ situations:
       - id: fresh-fallback
         default: true
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=implement fresh invocation (fallback=implement)"
-        effect: "允许一次 fresh fallback"
+        do: "/impl-package:subagent-driven-development mode=implement (fallback=implement)"
+        effect: "INCOMPLETE 视为上下文污染/持续卡住，work lane 按退役条件换 fresh worker，允许一次 fallback"
     escape: true
 
   - slug: ticket.implement.worker-incomplete-second
@@ -319,7 +319,7 @@ situations:
     actions:
       - id: converge-shared-dependency
         by: main-session
-        do: "/impl-package:subagent-driven-development mode=implement worker=<shared-dependency> 串行修复"
+        do: "/impl-package:subagent-driven-development mode=implement，以共享依赖为当前 Topic 串行修复"
         effect: "共享依赖：Ticket 保持 PENDING；跑通前不再派依赖它的单元"
       - id: block-ticket
         by: main-session
@@ -478,11 +478,11 @@ situations:
       trail.finding_source: reviewer
     judgment: false
     actions:
-      - id: dispatch-fresh-fixer
+      - id: dispatch-work-lane-fixer
         default: true
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=fix fresh invocation"
-        effect: "不得复用发现它的进程；修复后由同 scope reviewer 重审"
+        do: "/impl-package:subagent-driven-development mode=fix"
+        effect: "finding 回到同 Topic work lane 修复（不得复用发现它的 reviewer 进程）；修复后由同 scope reviewer 重审"
     escape: true
 
   - slug: finding.review.source-recheck-pending
@@ -508,8 +508,8 @@ situations:
       - id: dispatch-direct-fixer
         default: true
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=fix fresh invocation"
-        effect: "可直接进 fresh fixer，不必先过 reviewer"
+        do: "/impl-package:subagent-driven-development mode=fix"
+        effect: "回到同 Topic work lane 直接修复，不必先过 reviewer"
     escape: true
 
   - slug: finding.disposition.grading-undecided
@@ -593,8 +593,8 @@ situations:
       - id: dispatch-terminal-review
         default: true
         by: dispatch
-        do: "/impl-package:do-review scope=closure terminal-final"
-        effect: "补齐 terminal-final coverage"
+        do: "/impl-package:do-review phase=terminal-final"
+        effect: "补齐 terminal-final coverage（完整 terminal_tracks，不继承此前任何 initial 选中的子集）"
     escape: true
 
   - slug: ticket.accept.release-edge-unchecked
@@ -873,11 +873,11 @@ situations:
       - id: dispatch-closure-review
         default: true
         by: dispatch
-        do: "/impl-package:do-review scope=closure subject=<finding-id>"
-        effect: "由同 scope closure reviewer 关闭 finding"
+        do: "/impl-package:do-review phase=finding-closure subject=<finding-id>"
+        effect: "由一个 fresh independent reviewer 收口该 finding"
       - id: direct-fix-then-review
         by: main-session
-        do: "/impl-package:subagent-driven-development mode=fix fresh invocation; /impl-package:do-review scope=closure"
+        do: "/impl-package:subagent-driven-development mode=fix; /impl-package:do-review phase=finding-closure"
         requires_reason: true
     escape: true
 
@@ -891,11 +891,11 @@ situations:
       - id: fresh-fix-invalid-envelope
         default: true
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=fix fresh invocation"
-        effect: "不采信无效 envelope，检查 diff 后重新派发"
+        do: "/impl-package:subagent-driven-development mode=fix"
+        effect: "无效 envelope 视为上下文不可采信，work lane 按退役条件换 fresh worker；检查 diff 后重新派发"
       - id: direct-verify-invalid-envelope
         by: main-session
-        do: "/impl-package:verification-before-completion audit fixer diff; /impl-package:do-review scope=closure"
+        do: "/impl-package:verification-before-completion audit fixer diff; /impl-package:do-review phase=finding-closure"
         requires_reason: true
     escape: true
 
