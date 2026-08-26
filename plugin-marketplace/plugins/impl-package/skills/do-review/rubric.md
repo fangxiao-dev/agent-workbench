@@ -6,6 +6,7 @@ updated: 2026-08-19
 ## 原则
 
 - [已确认] `do-review` 是唯一 orchestrator；`initial` 默认两个并列 leaf track 为 `review-code`、`review-code-by-spec`，Track B admission 或高风险边界命中时分别条件追加 `review-code-by-standards`、`safety-review`；`terminal-final` 无显式 reviewer 时始终使用完整三轨 `terminal_tracks`，不受 `initial` 实际选中子集影响。（证据: R9）
+- [已确认] `finding-closure` 使用一个独立于 work lane 的 reviewer；同 Topic reviewer 复用遵循 SDD review lane lifecycle，executor 由宿主或 Owner 选择。（证据: R10）
 - [已确认] 同一完整 diff 与 fixed comparison point 只由主会话确定一次；三轨同轮独立，第二轮起只接收 canonical ledger。
 - [已确认] 涉及计划包时，审查范围覆盖整个计划包的 commits，不只审查最后一个实现 commit。
 - [待验证] 审阅编排使用最小必要的自然语言状态来保证轮次、证据和收敛可信，不以刚性 schema 或过度 canonical 字段限制 leaf reviewer 的主动探索。（证据: R2）
@@ -51,3 +52,7 @@ updated: 2026-08-19
 ### R9 · 2026-08-25
 - 采纳「`initial` 默认精简为 Track A/C，`terminal-final` 恒定完整三轨」：用户原话确认"只有 terminal 需要 A/B/C+D，其余都可以 A/C+B/D"——Ticket 级 `initial` 由 SDD material-risk 判定触发，频率高、单次 diff 小，Track A(行为正确性)/C(spec fidelity) 与触发条件直接相关，Track B(可维护性) 按 diff 是否触及 module boundary/新增抽象/结构重构再追加；`terminal-final` 是整个 Attempt 收尾前唯一一次的完整 diff 复核，且 review-topology.md 已有"即使中途干净也不能跳过 track"的既有原则，专门用来抓跨 Ticket 聚合风险，因此必须始终完整三轨，不能继承 `initial` 或任何更早阶段实际选中的子集。
 - 采纳「retire SDD 侧 `checkpoint` review 概念」：SDD 不再拥有 review 调度或 topology，只判断并上报某 Topic 所属 Ticket 是否 material-risk；一个 Topic 若大到需要中途止损，应回到 Topic 边界定义收窄，不新开一次 review 事件。Ticket 级 review 触发与派发完全交给 `dev-with-track` 既有的 `trail.last_outcome=DONE` 触发点与本 skill 的 `initial` phase，不再有 SDD 自己的 `mode=review`/`checkpoint`/`closure` 调用路径。
+
+### R10 · 2026-08-26
+
+- 采纳 provider-neutral closure：`finding-closure` 只决定一个 independent reviewer 的审查策略；同 Topic/scope 的复用遵循 SDD review lane lifecycle，不固定 Grok 或每轮 fresh。

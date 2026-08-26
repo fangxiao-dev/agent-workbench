@@ -1,6 +1,6 @@
 ---
 name: do-review
-description: Orchestrate independent leaf reviewer agents for PR/code review, N-round review, loop/until-converged review, custom reviewer selection, and closure verification. Pins a committed comparison HEAD first; must use a leaf subagent for every selected track. Uses Grok for finding closure and the selected leaf agents for review tracks.
+description: Orchestrate independent leaf reviewer agents for PR/code review, N-round review, loop/until-converged review, custom reviewer selection, and closure verification. Pins a committed comparison HEAD first and resolves the review strategy for every phase.
 allowed-tools:
   - Read
   - Grep
@@ -46,7 +46,7 @@ allowed-tools:
 ## 2. Resolve Mode, Phase, Topology And Capacity
 
 1. 选择 `N rounds`（默认一轮）、`Loop`（默认上限十轮）或只针对命名 findings 的 `Closure verification`，再读 [review-topology.md](references/review-topology.md) 处理 Safety admission、`initial`/`finding-closure`/`terminal-final`、final-HEAD 和 Loop lifecycle。先确定 phase 和 lifecycle，避免把 closure 当成 terminal 或把 Loop 的规则临时改写。
-2. 无显式 reviewer 时，`initial` 从 registry `default_tracks`（Track A/C）起步，按 Track B admission、Safety admission 条件分别追加 `review-code-by-standards`、`safety-review`；`terminal-final` 无显式 reviewer 时始终从 registry `terminal_tracks`（Track A/B/C）起步——不受本次 ReviewRun 中 `initial` 或任何更早阶段实际选中子集的影响——按 Safety admission 条件追加 Safety；`finding-closure` 只用一个 fresh independent `reviewer`，不按 registry 拆 track，也不另起 Safety leaf，reviewer 只检查 named findings 内的 safety implications。显式 closure selection 仍必须解析成恰好一个 leaf，其它 phase 按声明顺序运行并顺序编号 label。这样 closure scope 不会被扩成一次新的全量发现。
+2. 无显式 reviewer 时，`initial` 从 registry `default_tracks`（Track A/C）起步，按 Track B admission、Safety admission 条件分别追加 `review-code-by-standards`、`safety-review`；`terminal-final` 无显式 reviewer 时始终从 registry `terminal_tracks`（Track A/B/C）起步——不受本次 ReviewRun 中 `initial` 或任何更早阶段实际选中子集的影响——按 Safety admission 条件追加 Safety；`finding-closure` 只用一个 independent `reviewer`，不按 registry 拆 track，也不另起 Safety leaf，reviewer 只检查 named findings 内的 safety implications；复用遵循 `/impl-package:subagent-driven-development` 的同 Topic review lane lifecycle。显式 closure selection 仍必须解析成恰好一个 leaf，其它 phase 按声明顺序运行并顺序编号 label。这样 closure scope 不会被扩成一次新的全量发现。
 3. reviewer 的 worker 选择独立于 topology，由 worker skill 负责 model/effort defaults，其它 phase 使用当前 host 对 caller target class 的 defaults（受显式约束）。worker 选择不应反向改变 required topology。
 
 4. 通过 [reviewer-registry.json](references/reviewer-registry.json) 与 matching leaf-agent map 解析 track，并在 dispatch 前用 `verify-reviewer-skills.py` 校验 canonical skill path；ambiguous、unreadable、escaping 或 frontmatter mismatch 一律拒绝。主 session 不加载 selected track skill，由 leaf agent 的 `skills` 字段加载；每个 selected leaf 预留一个 slot，能并发则并发，显式 reviewer selection 按声明的完整列表运行，capacity 不能删除 reviewer。路径校验失败或 capacity 不足时不能用近似 leaf 填空。
@@ -55,7 +55,7 @@ allowed-tools:
 
 1. 先读 [subagent-briefs.md](references/subagent-briefs.md)：common block 每轮使用，closure brief 只给 Closure verification，anti-duplicate addendum 只在 round 1 后使用。派发 matching leaf，不让 generic subagent 自己拼 track brief；传入 verified reviewer `SKILL.md` path、canonical ledger path 和 parent-owned report artifact path。brief 由 parent 固定，避免 generic worker 临场改变 track 合同。
 
-2. Round 1 不传 prior findings；后续只传 parent 已验证的上一轮 canonical context，不传 raw reviewer output。每轮 fresh leaf，只有同轮中断 leaf 才恢复；`finding-closure` 恰好一个 fresh reviewer leaf 在后台经 `$grok-worker --no-subagents` 执行，带 assigned skill 和完整 closure brief，逐项返回 PASS/FAIL/UNCERTAIN；Grok incomplete 后确认进程清理，再允许一次 fallback 到当前 default reviewer。隔离轮次和 canonical context，才能避免 raw output 污染后续判断；fallback 也必须建立在进程已清理的事实上。
+2. Round 1 不传 prior findings；后续只传 parent 已验证的上一轮 canonical context，不传 raw reviewer output。按已解析 topology 与 matching leaf 执行本轮审查，逐项返回 PASS/FAIL/UNCERTAIN；canonical context 保持轮次之间的证据边界。
 3. timeout、cancellation、`PARTIAL` 或缺 evidence 都是 incomplete，不是 PASS。等待所有 required active tracks；Loop 中已记录 dormant 的 track 不算 missing，其他 incomplete 会阻断，除非用户授权了该精确 degraded topology。否则“没有返回”会被错误收敛为通过。
 
 ## 4. Canonicalize The Round

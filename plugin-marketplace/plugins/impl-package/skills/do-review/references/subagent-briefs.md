@@ -48,14 +48,14 @@ The four track agent definitions already carry this contract; do not append anot
 - Do not invoke do-review. Do not dispatch subagents. Do not re-evaluate reviewer topology or capacity.
 - Review exactly the supplied complete diff and fixed comparison point; do not inspect other tracks in the current round.
 - Read immutable contract sources with `git show <resolved-head>:<path>` only; never use the working tree; do not recompute its hash.
-- The canonical ledger is main-session-owned and read-only. Start each round with a fresh leaf-worker session; incomplete is not PASS, and never carry raw worker state into a later round.
+- The canonical ledger is main-session-owned and read-only. Each round receives only parent-verified canonical context; incomplete is not PASS, and raw worker state does not become later round input.
 - Surface evidence-backed cross-domain candidates, but leave attribution, deduplication, classification, convergence, and overall verdict to the parent.
 - Return only the compact finding index. Put full evidence, impact, risk urgency, and handoff details in the review report artifact; do not return a complete narrative or large quotations.
 
 ## Closure Verification Brief
 
 ```text
-Use the assigned reviewer skill, but run closure verification only. The parent dispatches one fresh independent reviewer for the whole named-finding set; do not split findings by source track or add a separate Safety reviewer.
+Use the assigned reviewer skill, but run closure verification only. The parent dispatches one independent reviewer for the whole named-finding set; do not split findings by source track or add a separate Safety reviewer.
 
 For each assigned issue/finding:
 1. Read the issue body and acceptance criteria.

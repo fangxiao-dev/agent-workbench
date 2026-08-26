@@ -159,8 +159,8 @@ export function renderReport({ reviewRun, tracks, aggregate, findings = [], life
 
 /**
  * Resolve the reviewer topology from reviewer-registry.json.
- * - `initial` / `terminal-final`: default tracks, Safety appended when applicable.
- * - `finding-closure`: exactly one fresh independent reviewer.
+ * - `initial`: lean default tracks; `terminal-final`: full terminal tracks.
+ * - `finding-closure`: exactly one independent reviewer.
  * - explicitReviewers: run exactly the stated list in order.
  * Exported for tests; pure given the registry content.
  */
@@ -174,7 +174,8 @@ export function resolveTopology(registry, { phase, explicitReviewers, safety = {
   if (phase === 'finding-closure') {
     return [{ label: 'Independent closure reviewer', skill: 'reviewer', required: true, order: 0 }]
   }
-  const tracks = (registry.default_tracks ?? []).map((track, index) => ({
+  const trackKey = phase === 'terminal-final' ? 'terminal_tracks' : 'default_tracks'
+  const tracks = (registry[trackKey] ?? []).map((track, index) => ({
     label: track.label,
     skill: track.skill,
     required: true,

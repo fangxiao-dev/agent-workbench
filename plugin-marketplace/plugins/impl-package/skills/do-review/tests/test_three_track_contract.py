@@ -130,7 +130,7 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertIn("git show <resolved-head>:<path>", leaf)
         self.assertIn("working tree", leaf)
         self.assertIn("do not recompute its hash", leaf)
-        self.assertIn("fresh leaf-worker session", leaf)
+        self.assertIn("parent-verified canonical context", leaf)
         self.assertIn("later round", leaf)
 
     def test_safety_topology_is_conditional_and_explicit_selection_stays_exact(self) -> None:
@@ -153,7 +153,7 @@ class ThreeTrackContractTests(unittest.TestCase):
         skill = SKILL_PATH.read_text(encoding="utf-8")
         topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
         phases = markdown_section(topology, "Review phase")
-        self.assertRegex(phases, r"(?s)`finding-closure`.*one fresh independent `reviewer` leaf.*named findings")
+        self.assertRegex(phases, r"(?s)`finding-closure`.*one independent `reviewer` leaf.*named findings")
         self.assertRegex(phases, r"(?s)`terminal-final`.*final implementation `HEAD`.*complete applicable topology")
         self.assertIn("cannot stand in for the terminal-final review", phases)
         # Slim skill keeps the closure≠terminal judgment; host-specific worker
@@ -168,13 +168,16 @@ class ThreeTrackContractTests(unittest.TestCase):
         topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
         briefs = BRIEFS_PATH.read_text(encoding="utf-8")
         closure = markdown_section(topology, "Review phase")
-        self.assertIn("one fresh independent `reviewer` leaf", closure)
+        self.assertIn("one independent `reviewer` leaf", closure)
         self.assertIn("do not split the closure into source, standards, spec, or Safety tracks", closure)
-        self.assertIn("one fresh independent reviewer for the whole named-finding set", briefs)
+        self.assertIn("one independent reviewer for the whole named-finding set", briefs)
         # Slim skill keeps the single-reviewer closure judgment.
         self.assertIn("finding-closure", skill)
-        self.assertIn("fresh independent reviewer", skill)
+        self.assertIn("review lane lifecycle", skill)
+        self.assertIn("subagent-driven-development", skill)
         self.assertIn("named findings", skill)
+        self.assertNotIn("$grok-worker", skill)
+        self.assertNotIn("Uses Grok", skill)
 
     def test_accepted_track_c_finding_gets_one_scoped_source_recheck(self) -> None:
         skill = SKILL_PATH.read_text(encoding="utf-8")
@@ -187,9 +190,9 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertIn("accepted", skill)
         self.assertIn("Spec fidelity", skill)
         self.assertIn("fresh independent reviewer", skill)
-        self.assertIn("blocks the handoff", skill)
-        self.assertIn("never dispatch a second check", skill)
-        self.assertIn("not by itself a gap", skill)
+        self.assertRegex(skill, r"source recheck 不可用或 incomplete.*阻断 handoff")
+        self.assertIn("不能再派第二次", skill)
+        self.assertIn("本身不是 gap", skill)
         self.assertIn("Accepted Track C Source Recheck Brief", briefs)
         self.assertIn("do not inspect the implementation broadly", briefs.lower())
         self.assertIn("absence alone is not a gap", briefs)
