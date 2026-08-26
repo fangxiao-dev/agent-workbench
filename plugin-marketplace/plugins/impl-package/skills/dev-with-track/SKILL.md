@@ -12,7 +12,7 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 1. **刷新事实**：执行 Restore，取得 current Attempt、Ticket 状态、blocker、合法 action 与 situation digest。
 2. **选择动作**：根据 Ticket typed dependency 与 canonical state 选择 Investigate、Decide、Implement 或 Evaluate。implementation edge 阻止绑定未稳定语义的下游实现；acceptance edge 只阻止正式验收与状态宣称；release edge 在 Gate 前复核。
 3. **裁决语义**：Decision/Spec 能唯一裁决时作为 implementation defect；存在多个合理业务结果时才请求 Owner。finding 的定级、disposition 与 acceptance point 也由本 Skill 判断。
-4. **形成 Topic**：把当前业务动作切成 bounded outcome、ownership、禁改范围、comparison point、成功条件与局部验证；需要 mutation 的 PENDING Ticket 先完成对应 preflight。
+4. **形成 Topic**：把当前业务动作切成一个或多个 bounded outcome、ownership、禁改范围、comparison point、成功条件与局部验证；需要 mutation 的 PENDING Ticket 先完成对应 preflight。
 5. **交给 Dispatcher**：使用显式 `<package>/task-queue.json`；把 Topic 加入 `$dispatcher`，由其维护 `depOn`、ready scan、派发确认、worker return、Topic 退役和 idle。Progress/checkpoint 不授权 dispatch，也不释放依赖。
 6. **执行 bounded worker**：对每个已派发 Topic，caller 按 `/impl-package:subagent-driven-development` 分类 dependency、决定当前或隔离 worktree，并形成 mode、lane、lifecycle 与 review requirement。
 7. **消费结果**：核对可归因 diff、evidence、residue、cleanup 和 review 状态；局部 DONE 或 checkpoint PASS 只释放对应 Topic 下一步。随后用 package CLI 写 state/evidence/checkpoint/judgment/trail，再由 Dispatcher 重扫队列；queue idle 后依据 canonical state、evidence、review 与 Gate 判断继续、blocked 或 closure。

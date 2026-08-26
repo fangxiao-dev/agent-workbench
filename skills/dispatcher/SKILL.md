@@ -14,6 +14,7 @@ Dispatcher 是一个面向上游主控、专门轻量定义“如何调度”的
 
 - **单写**：主控是 `task-queue.json` 的唯一 writer；worker 只返回结果。
 - **小投影**：队列只保存未完成实施工作。`[]` 表示当前没有队列工作，不表示 package closed；running worker、Ticket evidence、外部 blocker 和 Gate 仍由各自权威判断。
+- **任务粒度**：一个队列项对应一个有界 Topic 工作单元，不把整张 Ticket 一次性包给单个 worker。SDD 已用“一个动作只有唯一答案、完成二元且依赖前置”作派发前尺寸判据，粒度失守会让该机制失效。具体 write-set、worker 复用和 worktree 选择归 SDD 与主控，不进 JSON。
 - **机械依赖**：`depOn` 只表达实现地基、材料 seam 和共享可变资源的串行要求。Acceptance Gate 与 Checkpoint 是结论点；环境、fixture、权限、身份与数据准备只要不会使结果失真，就可以提前并行。
 - **确认后推进**：派发成功由宿主 receipt 确认后，才把任务标为 `in-progress`。迟到、重复、来源不明或结果不确定的 receipt 先由主控消除歧义。
 - **Topic 生命周期**：同一 Topic 的 work lane 可以复用 live worker；review lane 保持独立但可在同 Topic 内承担 recheck；Topic 闭合后退役，新 Topic 使用 fresh worker。test wrapper 只在一轮有界 campaign 内复用。

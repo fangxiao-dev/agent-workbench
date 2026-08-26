@@ -5,24 +5,26 @@ description: 当一个已派发的 bounded Topic 需要指导下游 worker 如�
 
 # Subagent-Driven Development
 
-本 Skill 是下游 bounded worker 的完整方法定义。它与 `$dispatcher` 平级：Dispatcher 与 SDD 分别直接指导上游主控调度和已派发 Topic 内的工作方法，共享 dependency、资源与生命周期原则。
+Topic 标识一组共享上下文的连续动作，用来判断能不能复用同一个 worker；它不是派发单元。本 Skill 是下游 bounded worker 的完整方法定义。它与 `$dispatcher` 平级：Dispatcher 与 SDD 分别直接指导上游主控调度和已派发 Topic 内的工作方法，共享 dependency、资源与生命周期原则。
 
-业务需求、Ticket/State/Evidence/Gate 仍由调用方及其 owning skill 决定；executor、model、provider 或 agent profile 由 Owner 选择或宿主原生能力解析。
+业务需求、Ticket/State/Evidence/Gate 仍由调用方及其 owning skill 决定；executor、model、provider 或 agent profile 由 Owner 选择或宿主原生能力解析。worker 的验收目标是一个动作的答案，不是需求的 AC，也不是 Ticket 的终态；AC 与 Ticket 粒度归 impl-planning，运行状态与验收判断归 dev-with-track。同一个动作可以服务任何 Ticket，也可以不服务任何 Ticket。
 
 每个 bounded Topic 可以使用当前 worktree，也可以使用新隔离 worktree；caller 根据 write ownership 与资源交叉决定选择、创建和生命周期。文件 ownership 能通过新隔离 worktree 分开时继续派发；DB、端口、测试数据和外部记录分别验证隔离，独立 worktree 只解决文件写入边界。
 
 ## Step 1 · 定义 Topic
 
-固定 bounded outcome、ownership、禁改范围、comparison point 和 Topic closure。选择本次 worker mode：
+一次派发是一个动作，它有唯一答案；答案形态由 mode 决定。尺寸判据是二元完成：worker 回来的东西要么答上了要么没答上，主 session 不需要评估完成度；答案不唯一，或需要判断「做到几成」，说明还没切到动作粒度。动作依赖的事实、合同或前一个动作的返回，必须在派发前已有答案；worker 撞到未决依赖时返回而不猜，是正确行为。固定 bounded outcome、ownership、禁改范围和成功条件；comparison point 归 review lane，由 do-review 固定；caller 在消费结果时判断是否需要下一动作。选择本次 worker mode：
+
+常见误判：把一个交付切片或验收目标整包派给一个 worker，会得到没有单一答案的运行，主 session 只能等和猜。
 
 | mode | 适用工作 | 必须保留的边界 |
 | --- | --- | --- |
-| `investigate` | 证据不足，需要确认 cause、boundary 与最小下一项取证 | 结果归一为 `EVIDENCE_SUFFICIENT` 或 `EVIDENCE_GAP`；不释放授权、acceptance 或 Gate |
-| `implement` | 已有唯一业务裁决，需要产生实现或可验证产物 | 只承担当前 Topic 的 ownership 与局部验证 |
-| `fix` | finding 已确认且已边界化 | 不重新裁决 finding、不扩大范围、不宣称 closure |
-| `verify` | 执行既定、无写副作用的检查 | 会重写 snapshot/generated file 的动作转入 `implement` 或 `fix` |
+| `investigate` | 证据不足，需要确认 cause、boundary 与最小下一项取证 | 答案为 `EVIDENCE_SUFFICIENT` 或 `EVIDENCE_GAP`；不释放授权、acceptance 或 Gate |
+| `implement` | 已有唯一业务裁决，需要产生实现或可验证产物 | 答案为 `diff`；只承担当前 Topic 的 ownership 与局部验证 |
+| `fix` | finding 已确认且已边界化 | 答案为 `diff`；不重新裁决 finding、不扩大范围、不宣称 closure |
+| `verify` | 执行既定、无写副作用的检查 | 答案为判定；会重写 snapshot/generated file 的动作转入 `implement` 或 `fix` |
 
-完成标准：主控和 worker 都能判断后续动作是否仍属于同一 Topic，以及什么事实表示 Topic closure。
+完成标准：当前派发已有唯一动作、答案形态与已回答的前置依赖；caller 消费结果时判断是否需要下一动作。
 
 ## Step 2 · 分类 dependency
 
@@ -45,7 +47,7 @@ Acceptance 是结论点，不天然是 dispatch blocker。等待 worker 或 Gate
 
 ## Step 4 · 选择 lane 与 lifecycle
 
-| lane | 同一 Topic 内的连续范围 | 独立性 | 退役或换 worker 的条件 |
+| lane | lane 上依次出现的动作 | 独立性 | 退役或换 worker 的条件 |
 | --- | --- | --- | --- |
 | work lane | investigate → implement → fix | 拥有该 Topic 的实现上下文与 write ownership | Topic closure、scope/ownership 实质变化、上下文不可采信或持续卡住 |
 | review lane | initial review → finding recheck | 始终独立于 work lane；同 Topic reviewer 可以复用 | Topic closure、review scope 实质变化或独立性失效 |
