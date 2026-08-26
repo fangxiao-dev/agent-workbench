@@ -61,11 +61,12 @@ material-risk Topic（shared seam、安全、数据完整性、并发、migratio
 
 ## Step 5 · 消费结果并重排
 
-主 session 核对可归因 diff、evidence、residue、cleanup 和 review requirement，再决定集成。只归一化真正有消费者的事实：
+主 session 核对可归因 diff、evidence、residue 和 cleanup；worker 自证（focused tests、lint、diff check）通过即默认继续进入同 Topic 下一步，review 只在到达 review 点后安排。
+独立 review 的判断点是 shared seam、完整 source unit 或集成边界，由主 session 判断是否已到达；review requirement 只在到达该点后产生。只归一化真正有消费者的事实：
 
 - worker outcome：`DONE | BLOCKED | INCOMPLETE`；
 - investigation：`EVIDENCE_SUFFICIENT | EVIDENCE_GAP`；
-- required review：`PENDING_REVIEW | PASSED`，具体 topology 与 finding closure 由 `/impl-package:do-review` 拥有。
+- required review（已到达 review 点）：`PENDING_REVIEW | PASSED`，具体 topology 与 finding closure 由 `/impl-package:do-review` 拥有。
 
 主 session 将局部 `DONE`、review `PASSED` 和测试结果作为 Topic-local facts，依据 canonical evidence、Ticket acceptance 与 Gate 作业务完成判断，并始终拥有最终集成与证据采信。
 
