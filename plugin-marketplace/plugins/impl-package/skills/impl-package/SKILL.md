@@ -22,6 +22,7 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 | --- | --- | --- |
 | `impl-req-align` | `/impl-package:req-align` | 需求/Decision/Spec 对齐 |
 | `impl-grill-me-smartly` | `/impl-package:grill-me-smartly` | 高风险 Spec gate 的 ledger 审问 |
+| `impl-grilling` | `/impl-package:grilling` | 对 plan、Decision 或 idea 做交互式深入质询 |
 | `impl-impl-planning` | `/impl-package:impl-planning` | 创建 initial/patch plan、决定 Composition |
 | `impl-plan-review` | `/impl-package:plan-review` | 审查 plan 或完整 Plan/Ticket/DAG bundle |
 | `impl-to-tickets` | `/impl-package:impl-planning` 的 Ticket-split | 创建独立验收切片 |

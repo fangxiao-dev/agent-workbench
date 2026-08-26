@@ -15,6 +15,7 @@ EXPECTED_SKILLS = {
     "impl-planning",
     "subagent-driven-development",
     "grill-me-smartly",
+    "grilling",
     "plan-review",
     "do-review",
     "review-code",
@@ -25,13 +26,13 @@ EXPECTED_SKILLS = {
     "execution-boundaries",
 }
 
-# Merged/renamed skills (slim refactor): the flat skill set above replaced these.
+# Merged/renamed skill directories (slim refactor): the flat skill set above
+# replaced these, except for the restored standalone grilling entry.
 LEGACY_SKILL_DIRS = {
     "to-tickets",
     "execution-preflight",
     "standing-bookkeeper",
     "verification-before-completion",
-    "grilling",
     "create-task-dag",
 }
 

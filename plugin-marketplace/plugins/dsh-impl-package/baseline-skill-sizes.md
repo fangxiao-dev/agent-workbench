@@ -1,7 +1,7 @@
 # Impl-Package SKILL 全量降载说明
 
-> 状态：**2026-08 完成；0.4.2 已对齐**。19 个 SKILL 主文件（~860 行）压缩为 **14 个判断启发式文件（234 行，-73%）**；references（~1,840 行）从"默认读"改"按需读"。跨宿主（Codex/Claude/Grok/DSH）通用，机制指针保持宿主无关。
-> 行数口径：`Measure-Object -Line` 实测 md 主文件；evals/scripts/assets/tests 不计。234 行含 0.4.2 的 C 类内容回补（+3 行，见 §5.4）。
+> 状态：**2026-08 完成；0.4.2 已对齐**。原压缩快照为 14 个判断启发式文件；恢复 standalone `grilling` 入口后，当前为 **15 个**。references（~1,840 行）从"默认读"改"按需读"。跨宿主（Codex/Claude/Grok/DSH）通用，机制指针保持宿主无关。
+> 原压缩快照的行数口径：`Measure-Object -Line` 实测 md 主文件；evals/scripts/assets/tests 不计。234 行含 0.4.2 的 C 类内容回补（+3 行，见 §5.4）；standalone `grilling` 恢复后不沿用该历史总量。
 > 协议表位置：**`scripts/impl_package_runtime/protocols.json`（Python 侧，render 输出 `selected.protocol`）**——0.4.2 从 DSH preset 迁入，跨宿主同源，DSH hook 读 render 输出（不再本地加载）。
 
 ---
@@ -185,7 +185,7 @@ Gate 三态与 Stage 7 · SATISFIED 前提（revision/environment/claims 覆盖�
 | **0.4.2 全量**（ef45e3b 清理后） | **380 passed, 0 failed** |
 | 行数 | 234 行（-73%） |
 
-被合并的旧 SKILL.md 已删除（to-tickets / execution-preflight / standing-bookkeeper / verification-before-completion / grilling / create-task-dag）；references/rubric/evals 保留按需，无残留引用。
+被合并的旧 SKILL.md 已删除（to-tickets / execution-preflight / standing-bookkeeper / verification-before-completion / create-task-dag）；`grilling/SKILL.md` 恢复为 standalone 入口，references/rubric/evals 按需保留。
 
 ## 9. 遗留与后续
 
