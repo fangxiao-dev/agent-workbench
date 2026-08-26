@@ -11,6 +11,7 @@ Patch 归属于 package 已有 terminal gate 之后的生命周期，并继续�
    - behavior contract：更新当前 Spec，记录受影响范围并沿用 initial bundle approval；
    - decision direction：更新当前 Decision 与 Spec，记录受影响范围并沿用 initial bundle approval。
 4. 后续 update 直接沿用 initial bundle approval。
+5. Spec 章节发生变化时，找出引用该章节的全部 Ticket 并标为受影响，按完整集合更新 follow-up 范围。
 
 ## Patch plan
 

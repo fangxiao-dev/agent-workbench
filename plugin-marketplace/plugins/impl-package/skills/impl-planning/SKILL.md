@@ -42,7 +42,8 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
 
 本 Skill 拥有 Ticket 的纵向切片、AC、contract references 和 typed dependency 语义；Ticket 文件的物理写入与运行时 state 更新由 bound `/impl-package:execution-boundaries` 执行，主 thread 不直接编辑当前 package 的 Ticket 或 `.impl-package/state.json`。
 
-1. **切分纵向交付**：按可独立验收的纵向交付切片拆分，不按文件、层或 worker 拆分。
+1. **切分纵向交付**：按可独立验收的纵向交付切片拆分，不按文件、层或 worker 拆分；一个 Ticket 交付恰好一个可验收的用户终态。终态分为权威转换（用户动作成功后产生新的权威记录，下游从此读取）和可验收的展示或编辑终态（用户到达稳定、可当场判定的界面状态，不产生新的权威记录）。
+   - 计数判据：建设内容中终态为 0 个时作为层并入其他 Ticket，1 个为正确，2 个及以上拆分；读模型接线、后端算法、UI 只读化、加字段、补测试本身并入其服务的终态。
    - 常见误判：按文件或层切分会得到无法独立验收的半条路径，Ticket 数量看似增加但 acceptance 没有变清楚。
 2. **登记 Ticket 合同**：每个 Ticket 写 Ticket ID、Attempt、S/P 别名、`Draft`、建设内容、可观察 AC、evidence owner 和 typed dependency，运行时验收状态只写入 `.impl-package/state.json`。
    - 常见误判：缺少稳定 ID、owner 或 typed dependency，后续 evidence 无法归属，状态也会漂移到文档正文之外。
@@ -50,9 +51,9 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
    - 常见误判：不区分 `EXISTS`/`NEW`，reviewer 会把待建设入口当成已存在，或把已有依赖重复纳入本 Ticket。
 4. **单独赚取 UI 形状验收**：当交付面包含实质 UI，且“形状对不对”本身构成独立验收结论时，把“UI 落进目标 app”单独 earn 一个 Ticket，排在接线 Ticket 之前，以 fixture 在真实 app shell 内验收且不依赖后端；这看似与“不按文件、层或 worker 拆分”冲突，但仍符合“只有 Ticket 能减少验收歧义时才 earned”，因为由人观察真实渲染状态而非靠 mock 通过，是独立的纵向验收切片。AC 写可观察的渲染状态与组件复用事实而非“UI 已实现”：目标组件/样式系统在真实 app shell 内渲染，恰好一个 surface 组件同时被 fixture 入口与将来的真实入口引用，状态模型作为目标模块内独立模块并有 focused test，fixture 覆盖正常/缺失/冲突/失败/部分成功且逐状态可达可截图、无后端副作用，Owner 逐状态走查 receipt。
    - 常见误判：只让后端接线 Ticket 通过，会把 UI 形状错误或组件复用错误隐藏在“UI 已实现”的笼统声明里。
-5. **限定合同引用**：每个 Ticket 的 contract references 使用仓库相对路径并定位到 Decision/Spec/contract-design/Plan 的具体一级或二级大章节，不得裸指整份文档或使用行号；Ticket 只引用其建设内容与 AC 实际依赖的章节。
+5. **限定合同引用**：每个 Ticket 的 contract references 使用仓库相对路径并定位到 Decision/Spec/contract-design/Plan 的具体一级或二级大章节，不得裸指整份文档或使用行号；Ticket 只引用其建设内容与 AC 实际依赖的章节。Ticket AC 只写执行所需的 scenario 与 oracle；算法分档、tie-break、状态规则等已有可观察语义从 Decision/Spec 对应章节引用。
    - 常见误判：引用整份文档会让 Ticket 看似有依据，却无法判断实际依赖哪条 authority。
-6. **绑定 evidence 与覆盖检查**：evidence 说明验证入口或 owner，不复制通用 checklist；与当前 plan/spec 检查 coverage、重叠、依赖、section-level contract references 和 AC feasibility。
+6. **绑定 evidence 与覆盖检查**：evidence 说明验证入口或 owner，不复制通用 checklist；与当前 plan/spec 检查 coverage、重叠、依赖、section-level contract references 和 AC feasibility。Spec 章节发生变化时，扫描引用该章节的全部 Ticket 并标为受影响，覆盖检查以完整集合为准。
    - 常见误判：只写“有测试”而不写入口、owner 和 coverage，会把不可执行或重叠的 AC 留到执行末端才暴露。
 7. **发布 Ticket-only Composition**：新 package 使用 `tickets=true, dag=false` Ticket-only 合同，不创建 DAG，也不建立 Ticket/Task 双层 bundle；由 execution-boundaries 发布当前 Attempt 的 Ticket，并通过现有 state CLI 原子推进为 Approved/PENDING。旧 package 的 `dag=true` 只读，不由本 Skill 创建或更新。
    - 常见误判：发布时又创建 Task/DAG 或手写状态，会产生第二个运行时 authority，Ticket 的 Approved/PENDING 也无法回放。
