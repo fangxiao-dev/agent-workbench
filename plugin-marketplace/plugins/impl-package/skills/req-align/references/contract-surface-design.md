@@ -14,7 +14,7 @@ Contract surface 非空时，在现有 Spec contract ensemble 中完成以下一
 
 - **Interaction closure：**调用方提交的每个 required input 都必须来自前序 response、调用方可访问的 read model、调用方天然拥有的稳定输入，或范围内明确存在的外部 authority。来源不可取得、只存在于 server/private state 或依赖未声明旁路时，交互不闭合。
 - **Operation semantics：**operation 存在副作用、并发或重试风险时，逐项定义适用的 operation identity、CAS/idempotency boundary、exact retry、同 identity 不同 payload、stale request、成功后响应丢失与恢复结果。机制按 operation 风险选择；统一声明所有 mutation 使用某机制，不能替代逐项语义。
-- **Authority and realizability：**每个影响可观察行为的 request、response、event 与 public projection 字段都有唯一 authority、实际 producer 和消费目的。多个来源表达同一事实时必须确定优先级或消除重复；无法从已声明 state/seam 产生的输出不是 implementation-ready contract。
+- **Authority and realizability：**每个影响可观察行为的 request、response、event 与 public projection 字段，以及行为/状态机/工作流表与错误边界表中每一个用户可见结果，都有唯一 authority、承载它的 read-model 字段、实际 producer 和消费目的。多个来源表达同一事实时必须确定优先级或消除重复；无法从已声明 state/seam 产生的输出不是 implementation-ready contract。
 
 任一项不成立时返回设计阶段关闭缺口；需要 owner 或外部输入才能选择时，Spec Gate `BLOCKED`。
 
@@ -40,7 +40,7 @@ Controller/service 名称、framework decorator、mapper 组织与文件布局�
 - relationship、cardinality、lineage、组合约束与跨 owner 引用边界；
 - lifecycle、mutable/immutable boundary、revision/CAS 与状态转换；
 - correctness 所需的 atomic boundary、delete/retention、legacy compatibility、backfill/reject/read-only semantics；
-- hash 的用途、canonical input coverage 与 version；algorithm 只有在 interoperability/security contract 需要时才冻结。
+- hash 的用途、canonical input coverage 与 version，以及重建该 hash 的 consumer 与其必须原样保留的字段；algorithm 只有在 interoperability/security contract 需要时才冻结。
 
 Prisma/model code、table/column physical naming、migration SQL、repository class 与非语义性能索引属于 Plan。
 

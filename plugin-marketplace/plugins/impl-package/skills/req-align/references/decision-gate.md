@@ -29,5 +29,6 @@ Decision passes only when all are true:
 - initial inputs capture every material confirmed promise, and follow-up inputs have reconciled current D/S with the delta without silent omission;
 - Core/Capability, repository fit, material choices, and durable owner decisions are evidenced;
 - all blocking uncertainty is closed; remaining questions are proven non-blocking for Spec.
+- Decision 正文只承载方向与产品控制；Ticket 分解、验证与浏览器策略、证据分配，以及字段与算法级的可观察行为分别由 Spec 和 Plan 承载。
 
 If any condition fails, persist or update `decision.md` as `BLOCKED` with evidence and required owner decision, then stop. `decision.md` owns why the change exists, its user/business result, selected direction, and product control. Field/data contracts, state machines, errors, recovery, and Acceptance Criteria belong to Spec; decomposition and verification commands belong to Plan.

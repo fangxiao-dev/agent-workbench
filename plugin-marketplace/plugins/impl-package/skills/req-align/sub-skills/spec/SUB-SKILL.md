@@ -22,9 +22,9 @@ initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一
    - 常见误判：只读本轮 delta 或漏读从属文件，会把旧的 current truth 当成完整 Spec。
 2. 重建当前完整的 Spec 设计范围，逐项列出 API operations、persistence models、cross-module seams 与 public read models；结果是 current truth，不是本轮 delta 日志。
    - 常见误判：把 delta 日志当设计范围，会让未变化但仍被实现消费的 surface 从 Gate 覆盖中消失。
-3. 对非空 contract surfaces 执行 contract coherence check：调用方能取得每个 required input；有副作用、并发或重试语义的 operation 已逐项关闭 identity、重复/stale 结果与恢复；每个可观察字段都有唯一 authority 与实际 producer。使用现有 `spec.md` 或 disposition 为 `detailed` 的 `contract-design.md` 表达；命中幂等键 / CAS / 版本号、多个来源写同一个目标字段、替换 / 撤回 / 恢复语义、跨存储提交（两个 store 各自提交）、声明值 vs 检测值任一触发时，该 contract surface 必须用结果矩阵，均不命中时维持散文，避免固定 artifact 或矩阵膨胀。
+3. 对非空 contract surfaces 执行 contract coherence check：调用方能取得每个 required input；有副作用、并发或重试语义的 operation 已逐项关闭 identity、重复/stale 结果与恢复；每个可观察字段，以及行为/状态机/工作流表与错误边界表中每一个用户可见结果，都有唯一 authority，并能指到承载它的 read-model 字段与实际 producer。使用现有 `spec.md` 或 disposition 为 `detailed` 的 `contract-design.md` 表达；命中幂等键 / CAS / 版本号、多个来源写同一个目标字段、替换 / 撤回 / 恢复语义、terminal/finalized 状态被再次进入、materialize 或 replay、跨存储提交（两个 store 各自提交）、final authority 与 editable projection 共用同一 identity、声明值 vs 检测值任一触发时，该 contract surface 必须用结果矩阵，均不命中时维持散文，避免固定 artifact 或矩阵膨胀。
    - 矩阵必须有“禁止残留”一列，逐个失败点列出禁止留下的 source、draft、lineage、audit 或 pending object。
-   - 常见误判：只写 happy-path 规则而不关闭 identity、stale/retry 或残留对象，两个实施者就能得到不同的恢复结果。
+   - 常见误判：coherence 只覆盖字段或 happy-path 规则，会遗漏行为/状态机/工作流表与错误边界表中的用户可见结果，以及 identity、stale/retry 或残留对象，两个实施者就能得到不同的恢复结果。
 4. 关闭会影响 authority、identity、permission、delivery、nullability、CAS、recovery 或 public shape 的选择；能在当前对话解决的 blocker 只保留在 working output，必须暂停、跨 session 或等待外部条件时才持久化简短的 `Spec Gate Blocked`。
    - 常见误判：把可在当前对话解决的 blocker 持久化，或把必须等待外部条件的 blocker 留在 working output，会分别污染 durable artifact 或让下一个 session 看不到真实阻塞。
 5. 选择 `contract-design.md` disposition：默认 `detailed`；只有所有精确语义都已由 `spec.md` 完整承担时才使用 `not-required` 并写明理由；结构会遮蔽行为/验收主线，或同一 canonical model 被多个 operation/module 消费时保持 `detailed`。
