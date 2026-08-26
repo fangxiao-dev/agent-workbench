@@ -426,6 +426,151 @@ class TicketFirstContractTests(unittest.TestCase):
         self.assertIn("context compaction is only an emergency fallback", handoff)
         self.assertIn("新 package 不调用 `create-task-dag`", planning)
 
+    def make_validate_package(
+        self,
+        *,
+        decision: str = "# Decision\n",
+        spec: str = "# Spec\n",
+        contract: str = "# Contract design\n",
+        plan_suffix: str = "",
+        ticket_edits: dict[str, list[tuple[str, str]]] | None = None,
+    ) -> tuple[tempfile.TemporaryDirectory[str], Path, Path]:
+        temp = tempfile.TemporaryDirectory()
+        repo = Path(temp.name)
+        git(repo, "init")
+        git(repo, "config", "user.email", "test@example.com")
+        git(repo, "config", "user.name", "Validate findings fixture")
+        package = repo / "docs" / "implementations" / "260813-validate-findings"
+        (package / "tickets").mkdir(parents=True)
+        plan = (FIXTURE / "ticket-only-plan.md").read_text(encoding="utf-8") + plan_suffix
+        (package / "plan.md").write_text(plan, encoding="utf-8")
+        (package / "decision.md").write_text(decision, encoding="utf-8")
+        (package / "spec.md").write_text(spec, encoding="utf-8")
+        (package / "contract-design.md").write_text(contract, encoding="utf-8")
+        for source in (FIXTURE / "tickets").glob("*.md"):
+            text = source.read_text(encoding="utf-8")
+            for old, new in (ticket_edits or {}).get(source.name, []):
+                text = text.replace(old, new)
+            (package / "tickets" / source.name).write_text(text, encoding="utf-8")
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "validate findings fixture")
+        relative_plan = (package / "plan.md").relative_to(repo).as_posix()
+        run(
+            [
+                sys.executable,
+                str(CLI),
+                "--package",
+                str(package),
+                "package",
+                "init",
+                "--attempt",
+                "initial",
+                "--plan",
+                relative_plan,
+            ],
+            repo,
+        )
+        return temp, repo, package
+
+    def validate_findings(self, repo: Path, package: Path) -> list[dict]:
+        result = run([sys.executable, str(CLI), "--package", str(package), "package", "validate"], repo)
+        return json.loads(result.stdout)["findings"]
+
+    def test_validate_reports_ticket_names_in_contract_documents(self) -> None:
+        temp, repo, package = self.make_validate_package(
+            decision="# Decision\nTKT-01 TKT-02 TKT-01\n",
+            spec="# Spec\nTKT-03\n",
+            contract="# Contract\nTKT-04 TKT-04\n",
+        )
+        self.addCleanup(temp.cleanup)
+
+        findings = [item for item in self.validate_findings(repo, package) if item["code"] == "contract-doc-names-ticket"]
+
+        self.assertEqual({item["path"] for item in findings}, {"decision.md", "spec.md", "contract-design.md"})
+        by_path = {item["path"]: item for item in findings}
+        self.assertEqual((by_path["decision.md"]["hitCount"], by_path["decision.md"]["ticketIds"]), (3, ["TKT-01", "TKT-02"]))
+        self.assertEqual((by_path["spec.md"]["hitCount"], by_path["spec.md"]["ticketIds"]), (1, ["TKT-03"]))
+        self.assertEqual((by_path["contract-design.md"]["hitCount"], by_path["contract-design.md"]["ticketIds"]), (2, ["TKT-04"]))
+
+    def test_validate_omits_ticket_names_finding_without_published_ids(self) -> None:
+        temp, repo, package = self.make_validate_package()
+        self.addCleanup(temp.cleanup)
+
+        findings = self.validate_findings(repo, package)
+
+        self.assertNotIn("contract-doc-names-ticket", {item["code"] for item in findings})
+
+    def test_validate_reports_uniform_ticket_claim_timing(self) -> None:
+        timing = "  - 证据时机：`remaining-completion`\n"
+        edits = {
+            "04-publish.md": [
+                ("  - Stable claim ID：`INV-tenant-isolation`\n", "  - Stable claim ID：`INV-tenant-isolation`\n" + timing),
+                ("  - Stable claim ID：`INV-rbac-privacy`\n", "  - Stable claim ID：`INV-rbac-privacy`\n" + timing),
+                ("  - Stable claim ID：`INV-idempotency-integrity`\n", "  - Stable claim ID：`INV-idempotency-integrity`\n" + timing),
+            ]
+        }
+        temp, repo, package = self.make_validate_package(ticket_edits=edits)
+        self.addCleanup(temp.cleanup)
+
+        findings = [item for item in self.validate_findings(repo, package) if item["code"] == "ticket-evidence-timing-uniform"]
+        by_ticket = {item["ticket"]: item for item in findings}
+
+        self.assertEqual(by_ticket["TKT-04"]["timing"], "remaining-completion")
+        self.assertEqual(by_ticket["TKT-04"]["claimCount"], 4)
+
+    def test_validate_omits_uniform_timing_finding_for_mixed_claims(self) -> None:
+        temp, repo, package = self.make_validate_package()
+        self.addCleanup(temp.cleanup)
+
+        findings = [item for item in self.validate_findings(repo, package) if item["code"] == "ticket-evidence-timing-uniform"]
+
+        self.assertNotIn("TKT-01", {item["ticket"] for item in findings})
+
+    def test_validate_reports_prose_gate_only_for_acceptance_inbound_edges(self) -> None:
+        temp, repo, package = self.make_validate_package(
+            plan_suffix="\nB失败时不进入 TKT-04。\nA失败时不派发 TKT-01。\n",
+            ticket_edits={"03-verify.md": [("- acceptance: TKT-01", "- acceptance: TKT-04")]},
+        )
+        self.addCleanup(temp.cleanup)
+
+        findings = [item for item in self.validate_findings(repo, package) if item["code"] == "plan-prose-gates-acceptance-edge"]
+        by_ticket = {item["ticket"]: item for item in findings}
+
+        self.assertEqual(by_ticket["TKT-04"]["inboundTypes"], ["acceptance"])
+        self.assertIn("不进入 TKT-04", by_ticket["TKT-04"]["detail"])
+        self.assertNotIn("TKT-01", by_ticket)
+
+    def test_validate_omits_prose_gate_finding_without_gate_wording(self) -> None:
+        temp, repo, package = self.make_validate_package(
+            plan_suffix="\nCheckpoint B 记录 TKT-04 的结果。\n",
+            ticket_edits={"03-verify.md": [("- acceptance: TKT-01", "- acceptance: TKT-04")]},
+        )
+        self.addCleanup(temp.cleanup)
+
+        findings = [item for item in self.validate_findings(repo, package) if item["code"] == "plan-prose-gates-acceptance-edge"]
+
+        self.assertEqual(findings, [])
+
+    def test_validate_reports_ticket_without_any_arrival_path(self) -> None:
+        temp, repo, package = self.make_validate_package()
+        self.addCleanup(temp.cleanup)
+
+        findings = [item for item in self.validate_findings(repo, package) if item["code"] == "ticket-arrival-path-absent"]
+
+        self.assertEqual({item["ticket"] for item in findings}, {"TKT-01", "TKT-02", "TKT-03", "TKT-04"})
+        self.assertTrue(all(item["path"].startswith("tickets/") for item in findings))
+
+    def test_validate_omits_arrival_finding_when_a_path_is_declared(self) -> None:
+        temp, repo, package = self.make_validate_package(
+            ticket_edits={"01-source.md": [("\n## 安全不变量\n", "\n- 到达路径：entry → NEW: FixtureEntry → arrival\n\n## 安全不变量\n")]},
+        )
+        self.addCleanup(temp.cleanup)
+
+        findings = [item for item in self.validate_findings(repo, package) if item["code"] == "ticket-arrival-path-absent"]
+
+        self.assertNotIn("TKT-01", {item["ticket"] for item in findings})
+        self.assertEqual(len(findings), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

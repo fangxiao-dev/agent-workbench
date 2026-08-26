@@ -878,6 +878,109 @@ def _git_grep_symbol(repo: Path, commit: str, symbol: str, paths: list[str], exc
     return [line for line in result.stdout.splitlines() if line.strip()]
 
 
+PLAN_GATE_RE = re.compile(r"(?:不派发|不进入|必须先[^。；;\n]*?PASS|失败时不[^。；;\n]*)", re.I)
+CONTRACT_DOC_NAMES = ("decision.md", "spec.md", "contract-design.md")
+
+
+def _contains_ticket_id(text: str, ticket: str) -> bool:
+    return re.search(rf"(?<![A-Za-z0-9_-]){re.escape(ticket)}(?![A-Za-z0-9_-])", text) is not None
+
+
+def _contract_doc_name_findings(package: Path, summary: dict[str, Any]) -> list[dict[str, Any]]:
+    ticket_ids = sorted(
+        document["id"] for document in summary["_documents"] if document["publication"] == "Approved"
+    )
+    findings: list[dict[str, Any]] = []
+    for name in CONTRACT_DOC_NAMES:
+        path = package / name
+        if not path.is_file():
+            continue
+        try:
+            text = _read(path)
+        except StateError:
+            continue
+        hits = {
+            ticket: len(re.findall(rf"(?<![A-Za-z0-9_-]){re.escape(ticket)}(?![A-Za-z0-9_-])", text))
+            for ticket in ticket_ids
+        }
+        matched = {ticket: count for ticket, count in hits.items() if count}
+        if matched:
+            findings.append(
+                {
+                    "code": "contract-doc-names-ticket",
+                    "path": _package_relative(package, path),
+                    "hitCount": sum(matched.values()),
+                    "ticketIds": sorted(matched),
+                }
+            )
+    return findings
+
+
+def _uniform_ticket_timing_findings(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    claims = _ticket_claims(summary["_documents"])
+    claim_timings = _ticket_claim_timings(summary["_documents"])
+    findings: list[dict[str, Any]] = []
+    for ticket in sorted(claims):
+        values = {claim_timings[ticket][claim] for claim in claims[ticket]}
+        if len(values) == 1:
+            findings.append(
+                {
+                    "code": "ticket-evidence-timing-uniform",
+                    "ticket": ticket,
+                    "timing": next(iter(values)),
+                    "claimCount": len(claims[ticket]),
+                }
+            )
+    return findings
+
+
+def _plan_prose_gate_findings(repo: Path, package: Path, summary: dict[str, Any]) -> list[dict[str, Any]]:
+    plan_path = repo / Path(*summary["_info"]["path"].split("#", 1)[0].split("/"))
+    try:
+        plan_text = _read(plan_path)
+    except StateError:
+        return []
+    inbound: dict[str, list[tuple[str, str]]] = {ticket: [] for ticket in summary["_ticketDependencies"]}
+    for source, edges in summary["_ticketDependencies"].items():
+        for kind, target in edges:
+            inbound.setdefault(target, []).append((kind, source))
+    plan_relative = _package_relative(package, plan_path)
+    findings: list[dict[str, Any]] = []
+    for line_number, line in enumerate(plan_text.splitlines(), start=1):
+        for match in PLAN_GATE_RE.finditer(line):
+            phrase = match.group(0)
+            tickets = [ticket for ticket in inbound if _contains_ticket_id(phrase, ticket)]
+            if not tickets:
+                tickets = [ticket for ticket in inbound if _contains_ticket_id(line, ticket)]
+            for ticket in tickets:
+                inbound_types = sorted({kind for kind, _source in inbound[ticket]})
+                if inbound_types != ["acceptance"]:
+                    continue
+                findings.append(
+                    {
+                        "code": "plan-prose-gates-acceptance-edge",
+                        "ticket": ticket,
+                        "path": plan_relative,
+                        "line": line_number,
+                        "detail": phrase,
+                        "inboundTypes": inbound_types,
+                    }
+                )
+    return findings
+
+
+def _arrival_path_absent_findings(package: Path, summary: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "code": "ticket-arrival-path-absent",
+            "ticket": document["id"],
+            "path": _package_relative(package, document["path"]),
+        }
+        for document in summary["_documents"]
+        if not document["arrivalPaths"]
+    ]
+
+
 def _arrival_findings(repo: Path, package: Path, summary: dict[str, Any], comparison_commit: str) -> list[dict[str, Any]]:
     package_rel = package.resolve().relative_to(repo.resolve()).as_posix()
     excluded = [package_rel, f"{package_rel}/**", "**/*.md"]
@@ -964,7 +1067,13 @@ def command_validate(package: Path, commit: str | None, *, check_arrival_paths: 
     result = _public(summary)
     if check_arrival_paths:
         comparison_commit = resolved or _run_git(repo, "rev-parse", "HEAD")
-        result["findings"] = _arrival_findings(repo, package, summary, comparison_commit)
+        result["findings"] = (
+            _contract_doc_name_findings(package, summary)
+            + _uniform_ticket_timing_findings(summary)
+            + _plan_prose_gate_findings(repo, package, summary)
+            + _arrival_path_absent_findings(package, summary)
+            + _arrival_findings(repo, package, summary, comparison_commit)
+        )
         result["comparisonCommit"] = comparison_commit
     result.update({"active": True, "commit": resolved})
     return result

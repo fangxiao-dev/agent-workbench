@@ -168,7 +168,10 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(state["predecessors"], ["docs/implementations/20260801-base", "docs/implementations/20260802-policy"])
         payload = json.loads(self.cli(repo, package, "package", "validate").stdout)
 
-        self.assertEqual(payload["findings"], [])
+        self.assertEqual(
+            [item for item in payload["findings"] if item["code"] == "arrival-exists-symbol-not-found"],
+            [],
+        )
 
     def test_state_requires_predecessors_field(self) -> None:
         temp, repo, package = self.make_repo()
@@ -301,8 +304,9 @@ class ImplPackageStateTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertEqual(payload["comparisonCommit"], git(repo, "rev-parse", "HEAD"))
-        self.assertEqual({item["symbol"] for item in payload["findings"]}, set(symbols))
-        self.assertTrue(all(item["code"] == "arrival-exists-symbol-not-found" for item in payload["findings"]))
+        arrival_findings = [item for item in payload["findings"] if item["code"] == "arrival-exists-symbol-not-found"]
+        self.assertEqual({item["symbol"] for item in arrival_findings}, set(symbols))
+        self.assertTrue(all(item["code"] == "arrival-exists-symbol-not-found" for item in arrival_findings))
 
     def test_package_validate_checks_exists_at_comparison_commit_and_skips_new(self) -> None:
         temp, repo, package = self.make_repo()
@@ -327,7 +331,10 @@ class ImplPackageStateTests(unittest.TestCase):
 
         payload = json.loads(self.cli(repo, package, "package", "validate").stdout)
 
-        self.assertEqual(payload["findings"], [])
+        self.assertEqual(
+            [item for item in payload["findings"] if item["code"] == "arrival-exists-symbol-not-found"],
+            [],
+        )
 
     def test_checkpoint_overwrites_state_and_er_accepts_judgment_only(self) -> None:
         temp, repo, package = self.make_repo()
