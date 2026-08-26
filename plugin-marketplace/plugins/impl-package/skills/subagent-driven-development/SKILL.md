@@ -13,9 +13,9 @@ Topic 标识一组共享上下文的连续动作，用来判断能不能复用�
 
 ## Step 1 · 定义 Topic
 
-一次派发是一个动作，它有唯一答案；答案形态由 mode 决定。尺寸判据是二元完成：worker 回来的东西要么答上了要么没答上，主 session 不需要评估完成度；答案不唯一，或需要判断「做到几成」，说明还没切到动作粒度。动作依赖的事实、合同或前一个动作的返回，必须在派发前已有答案；worker 撞到未决依赖时返回而不猜，是正确行为。固定 bounded outcome、ownership、禁改范围和成功条件；comparison point 归 review lane，由 do-review 固定；caller 在消费结果时判断是否需要下一动作。选择本次 worker mode：
+一次派发是一个动作，它有唯一答案；答案形态由 mode 决定。按 baby step 推进：每一步做到可独立测试和提交，回来后同 Topic 复用原 worker 接着下一步；Topic 界定 ownership，交付范围按可独立完成的小动作展开。尺寸判据是二元完成：worker 回来的东西要么答上了要么没答上，主 session 不需要评估完成度；答案不唯一，或需要判断「做到几成」，说明还没切到动作粒度。动作依赖的事实、合同或前一个动作的返回，必须在派发前已有答案。固定 bounded outcome、ownership、禁改范围和成功条件；comparison point 归 review lane，由 do-review 固定；caller 在消费结果时判断是否需要下一动作。选择本次 worker mode：
 
-常见误判：把一个交付切片或验收目标整包派给一个 worker，会得到没有单一答案的运行，主 session 只能等和猜。
+常见误判：把一个交付切片或验收目标整包派给一个 worker，会得到没有单一答案的运行，主 session 只能等和猜；派发前未答清动作依赖，会让 worker 停下来返回，这是 worker 的正确行为，问题在派发方。
 
 | mode | 适用工作 | 必须保留的边界 |
 | --- | --- | --- |
