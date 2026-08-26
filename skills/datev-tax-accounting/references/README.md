@@ -7,6 +7,9 @@
 - [datev-glossary.md](datev-glossary.md)：DATEV、税务和 EXTF 术语。
 - [source-policy.md](source-policy.md)：来源等级、适用范围、hash 和隐私边界。
 - [supported-knowledge-map.md](supported-knowledge-map.md)：公开规则与当前 Finance 实现能力的对应关系。
+- [account-function-and-tax-key-boundaries.md](account-function-and-tax-key-boundaries.md)：Automatikkonto、Kontenfunktion与普通 Vorsteuer Steuerschlüssel的组合边界。
+- [tax-treatment-and-period-gates.md](tax-treatment-and-period-gates.md)：税率、0%、特殊税务情形和跨期间判断所需的最低证据。
+- [extf-and-pruefprogramm-boundaries.md](extf-and-pruefprogramm-boundaries.md)：EXTF 技术校验、导入与专业会计正确性的证据分层。
 - [sources/2026-official/README.md](sources/2026-official/README.md)：已复制的公开 2026 原始资料和 SHA-256。
 
 ## 资料边界

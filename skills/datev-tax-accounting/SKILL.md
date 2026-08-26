@@ -6,7 +6,13 @@ compatibility: Requires access to the KaiSpan Finance current-knowledge routes w
 
 # DATEV Tax and Accounting Knowledge
 
-Use this skill as the navigation and reasoning protocol for the invoice-to-DATEV chain. The skill is not a free-form tax adviser and it is not the runtime accounting policy. It tells the agent which knowledge to load, how to classify evidence, and how to report an answer that a reviewer can audit.
+## 定位
+
+本 Skill 是面向德国税务师与 DATEV 工作域的客观专业知识库及查询协议。它的知识上限来自版本化的官方/专业来源、适用法域与年度，以及经批准的 Mandant Profile/Policy；用于回答规则是什么、需要哪些事实、适用边界在哪里，并形成可审计的专业推理，而不是描述某个软件当前已经实现了什么。
+
+KaiSpan 的 Spec、capability registry、代码和测试只在问题明确询问“当前系统能力或行为”时作为实施证据读取。它们不能反向定义、缩减或改写 DATEV/税务知识；当客观专业规则超出当前实现时，分别报告专业结论与实现缺口。
+
+本 Skill 不提供无边界的税务法律意见，也不替代 Mandant 的 runtime accounting policy。具体 Mandant 的最终 `Sachkonto`、`Kreditor`、`BU/Steuerschlüssel` 或导出结论仍须由适用且经批准的 Profile/Policy 唯一确定。
 
 ## KaiSpan routing (conditional)
 
@@ -24,6 +30,9 @@ For general terminology or the public 2026 baseline, use the bundled references:
 
 - `references/datev-glossary.md` for terms and field meanings.
 - `references/source-policy.md` for authority classes, effective dates, and provenance.
+- `references/account-function-and-tax-key-boundaries.md` for Automatikkonto, Kontenfunktion, BU/Steuerschlüssel, or automatic-versus-explicit tax behavior.
+- `references/tax-treatment-and-period-gates.md` for 0%, § 13b, EU acquisition, exemption, or cross-period/cross-year questions.
+- `references/extf-and-pruefprogramm-boundaries.md` for EXTF validation, Prüfprogramm, import, or evidence-scope questions.
 - `references/sources/2026-official/` for the copied public SKR03/SKR04 and DATEV annual tables.
 - `references/supported-knowledge-map.md` for the boundary between public references and KaiSpan owner documents; it is not a capability ledger.
 
