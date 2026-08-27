@@ -57,7 +57,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
    - 常见误判：只写“有测试”而不写入口、owner 和 coverage，会把不可执行或重叠的 AC 留到执行末端才暴露。
 7. **发布 Ticket-only Composition**：新 package 使用 `tickets=true, dag=false` Ticket-only 合同，不创建 DAG，也不建立 Ticket/Task 双层 bundle；由 execution-boundaries 发布当前 Attempt 的 Ticket，并通过现有 state CLI 原子推进为 Approved/PENDING。旧 package 的 `dag=true` 只读，不由本 Skill 创建或更新。
    - 常见误判：发布时又创建 Task/DAG 或手写状态，会产生第二个运行时 authority，Ticket 的 Approved/PENDING 也无法回放。
-8. **保留 Ticket acceptance 不变量**：Ticket acceptance state 保存在 `.impl-package/state.json`；Ticket AC 使用稳定 claim ID，把 early falsification evidence 与 remaining completion evidence 分开描述；第一条可执行路径必须保持 tenant、RBAC、privacy、幂等和数据完整性不变量；旧 Task `DONE` 不自动通过 Ticket；P 变化时只将实际受影响 Ticket 设为 `NEEDS-REVALIDATION`。
+8. **保留 Ticket acceptance 不变量**：Ticket acceptance state 保存在 `.impl-package/state.json`；Ticket AC 使用稳定 claim ID，把 early falsification evidence 与 remaining completion evidence 分开描述，其中只有真实 UI/provider/native tool 才能证伪的可观察结果（如真实入口是否呈现目标状态）标为 `early-falsification`，完整旅程验收仍标为 `remaining-completion`；第一条可执行路径必须保持 tenant、RBAC、privacy、幂等和数据完整性不变量；旧 Task `DONE` 不自动通过 Ticket；P 变化时只将实际受影响 Ticket 设为 `NEEDS-REVALIDATION`。
    - 常见误判：把旧 Task `DONE` 或一次 early falsification 当成 Ticket 满足，会漏掉 remaining evidence 和第一条路径上的安全不变量。
 9. **限制发布后的投影**：Ticket 发布后不承载 Phase、Next、worker、implementation progress 或 Runtime Acceptance projection；语义变化使受影响 Ticket 回到 Draft/重验流程；`package refresh-progress` 只重建 `progress.md` 与必要的 Execution Record header。新合同使用 `RETIRED` 统一表示 waived/superseded，并要求记录对应 disposition；3.4 runtime 旧状态只作为迁移输入。
    - 常见误判：把进度或 runtime projection 写回 Ticket，会让接受状态、执行状态和恢复投影形成多个可写来源。
