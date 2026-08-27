@@ -29,7 +29,7 @@ Evidence 使用存在的仓库相对路径，可带 anchor，并足以解释状�
 ## Findings、Review 与 Gate
 
 - accepted Track C finding：先消费 `do-review` 在同一 ReviewRun 内完成的一次独立 source recheck；该动作不改变 Ticket/Attempt 状态。
-- current sources uniquely decide：作为 implementation/evidence defect，交 Dispatcher 的同 Topic work lane；worker 使用 SDD `fix` 方法。
+- current sources uniquely decide：作为 implementation/evidence defect，交 Dispatcher 的同 Topic work lane；worker 使用 SDD `fix` 方法。派发前若同一 Topic 已经过两次以上修复方向仍未收敛、同一 finding 或同一机制在后续 round 重新出现，或 review 结论跨多个 writer、多个入口或共享 authority/lock seam，先按 `/diagnosing-bugs` 做定位再决定修复动作；其余直接 bounded fix。diagnosing-bugs 只返回定位结论，Ticket/Attempt 状态与 dependency release 继续由本流程处理，finding closure 继续由 `/impl-package:do-review` 拥有。
 - source missing/ambiguous/conflicting：先回 req-align；多个合理业务结果请求 Owner，结论前不派发 mutation。
 - 其他 accepted finding：沿用 implementation、安全、证据或知识分流；review topology 与 closure 始终由 `do-review` 拥有。
 - durable knowledge：Stage 7 登记 `_pending.md` 与 truth pointer，后续交 backfill。
