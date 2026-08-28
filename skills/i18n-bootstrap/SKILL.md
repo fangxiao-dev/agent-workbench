@@ -164,7 +164,7 @@ ISO input、wire date、filename、ID、status code、payload decimal、hash 等
 - `[de-DE:...]` placeholder 与 CJK 分别计数；placeholder 非零时明确标记为不可演示中间态，不能用 `0 CJK` 宣称德语已就绪。
 - 德语措辞暂时拿不准时，先给德语草案或明确标记，不把中文留在德语 catalog；翻译质量复核不属于 bootstrap。
 
-Finance/DATEV surface 存在时，读取仓库当前的 `docs/ideas/2026-08-28-de-localization/preserve-list.md` 与 `extraction-inventory.md`。不要把其中的候选数量、行号、Mandant 数据或完整术语表复制进本 skill。
+Finance/DATEV surface 存在时，读取仓库当前的 `docs/implementations/2026-08-28-de-localization/preserve-list.md` 与 `extraction-inventory.md`。不要把其中的候选数量、行号、Mandant 数据或完整术语表复制进本 skill。
 
 执行已记录的 owner 裁定：
 
