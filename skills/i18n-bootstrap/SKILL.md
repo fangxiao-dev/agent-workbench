@@ -63,7 +63,7 @@ description: 把零 i18n 应用自举到有明确 ownership 的 messages catalog
 
 ### 4. Dedup
 
-在 key 命名和 catalog 建立之前独立做 semantic dedup。只有同一 surface 上指向同一概念的跨语言 literal 才合并。exact duplicate 只是线索；启发式概念组必须逐 referent 复核。
+在 key 命名和 catalog 建立之前独立做 semantic dedup。只有同一 surface 上指向同一概念的跨语言 literal 才合并。建立 catalog 前，为 authored copy 使用稳定 semantic key，不生成由行号或文件位置派生的 position key。exact duplicate 只是线索，先按 referent 审核，确认相同后才共用 deliberate key；字面相同但 referent 不同不合并。启发式概念组必须逐 referent 复核。key rename 必须同步所有调用点及术语、证据引用。
 
 在 key 结构仍可调整时登记 ICU plural、插值、词序和句子碎片风险；business data 不参与 dedup。
 
@@ -98,7 +98,7 @@ request config 与 test provider 显式固定产品 `timeZone`，避免 server r
 
 若 exact comparison 失败，先检查 fragment、插值两侧空格、标点和条件分支；不得更新 baseline 来掩盖迁移漂移。
 
-完成条件：选定 fixture 的 exact comparison 通过；focused specs 报告真实结果；每个迁移值可追溯到迁移前 literal。
+完成条件：选定 fixture 的 exact comparison 通过；focused specs 报告真实结果；每个迁移值可追溯到迁移前 literal；迁移验收检查 `(?:^|\\.)l\\d+_\\d+$` position key 为 0。
 
 ### 7. Locale-format
 
