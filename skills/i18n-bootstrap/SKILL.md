@@ -1,6 +1,6 @@
 ---
 name: i18n-bootstrap
-description: 把零 i18n 应用自举到有明确 ownership 的 messages catalog；覆盖 Inspect、Decide、Classify、Dedup、Scaffold、值不变 Migrate 与 Locale-format。用于项目首次引入 i18n、next-intl 或 messages 目录时；审计、gate 与 browser 验收交给 i18n-advisor，翻译质量交给后续本地化流程。
+description: 把零 i18n 应用自举到有明确 ownership 的 messages catalog，并在首个代表 surface 验证后按 gate 放开规模化抽取/迁移；覆盖 Inspect、Decide、Classify、Dedup、Scaffold、值不变 Migrate 与 Locale-format。用于首次引入 i18n、next-intl、messages 目录，或已有 bootstrap seam 后向更多 app/surface 铺开；审计、browser 验收和翻译质量交给后续流程。
 ---
 
 # i18n Bootstrap
@@ -108,6 +108,44 @@ ISO input、wire date、filename、ID、status code、payload decimal、hash 等
 
 完成条件：已知用户可见硬编码 locale 都有 active-locale 来源，并在至少两个 locale 下做 targeted verification；wire/identity value 未被误改。
 
+## 规模化铺开快路径
+
+一个代表性 app 或完整 surface 已跑通七步并关闭机械风险后，停止重复 tracer batch。后续把 **抽取/规范化** 与 **翻译校准** 分成两条 lane：前者在 gate 稳定后全量放开，后者先用一个完整 catalog 标定质量，再决定放开程度。
+
+### 抽取/规范化放行
+
+同时满足以下条件时，后续 owner scope 可按 namespace 全量抽取，不再逐个小页面试跑：
+
+- shared namespace 的唯一 owner 和所有 consumer loader 已跑通；seam correctness 与已迁移 authored-copy coverage 分别计数；
+- 抽取器直接产出 deliberate semantic key，position key 为 0；exact duplicate 已按 referent 复核，preserve 的 carrier 排除、Class 1 token 保护和 dynamic/business-data 旁路均生效；
+- exact comparison、source-adjacent focused specs、shared consumer specs 和受影响 app production build 已通过；
+- 至少一次实跑已记录 candidate inventory 与 actual leaf 的偏差，并用实际密度重估剩余范围。
+
+大范围执行时按 owner/namespace 划互斥 scope。并行 worker 产出 mapping、调用点修改和局部证据，不同时写同一正式 catalog；主控统一集成一次。每次集成先跑便宜的 catalog gate，完整 typecheck/lint/build 以 owner batch 为单位运行，不在每个机械 shard 重复。
+
+以下任一项失败就收回机械放行，修规则后从失败 scope 重跑：position key 回归、未登记 duplicate、Class 0/runtime identity 进入 `t()`、ICU 参数漂移、shared messages 出现第二 owner、exact comparison 漂移。
+
+### 翻译校准交接
+
+翻译不属于 bootstrap，但 bootstrap 必须给后续本地化流程提供可判定的输入：
+
+1. 在翻译前完成 P0 术语表，按 referent 记录推荐词、禁用词和 occurrence 边界；
+2. 选择一个已 100% 抽取并规范化的完整 catalog 做最后一次校准，不再用零散小样本；
+3. 术语约束覆盖率只以“应受术语约束的 leaf”为分母；独立复核修正率以本轮新译 leaf 为分母；
+4. 默认以修正率 `<5%` 作为可全量放开的强信号，`5%–20%` 由错误类型和 owner 裁定，`>=20%` 先补术语表或翻译规则；项目可设置更严格阈值；
+5. 后续翻译 shard 只写互斥 draft/overlay，独立语义复核后由单一 owner 合并正式 catalog。
+
+### 独立 gate 与常见弯路
+
+- **candidate 不是承诺数**：AST dry-run 容易漏 config arrays、helper maps 和 fallback copy；排期只在首个真实 surface 后重估。
+- **semantic key 前置**：先去重和命名，再翻译。翻译后再清理 position key 会同时重做 catalog、调用点、术语引用和 review 证据。
+- **占位符与错语言分开**：`CJK = 0` 只证明目标 catalog 没有源语言泄漏；同时报告 placeholder count。默认 locale 仍有 placeholder 时可以是 bootstrap 中间态，但不是 demo-ready。
+- **seam 不等于 coverage**：consumer 能从唯一 owner 加载少量 shared messages，只证明 ownership；必须另报 shared surface 已迁移 leaf/候选总量。
+- **机械 gate 不证明语义质量**：key parity、snapshot 和 build 全绿不能替代 occurrence、德语自然度和术语复核。
+- **语言选择器先看 layout ownership**：加入 switcher 前列出 root layout、auth/status route 和业务 shell 的预留位置；每个渲染页面只保留一个交互式 switcher。复用同一行为组件的 inline/floating variant，选项显示 endonym，accessible label 本地化；不能同时保留全局挂载和 shell 假标签。
+
+完成条件：抽取 lane 有明确放行/收回条件，翻译 lane 有完整 catalog 校准和阈值，remaining forecast 使用 actual density；没有把 bootstrap runtime、demo readiness、翻译质量或 browser acceptance 混成一个结论。
+
 ## KaiSpan Next.js 固定合同
 
 当仓库是 KaiSpan 或任务明确给出本 profile 时，执行以下已定决策：
@@ -123,6 +161,7 @@ ISO input、wire date、filename、ID、status code、payload decimal、hash 等
 - KaiSpan request config 与测试 provider 显式使用 `Europe/Berlin`，保证 server render 确定性。
 - app 自有 messages 留在 `apps/*/messages/`。共享 accounting workbench namespace 只留在 `apps/web/messages/`；tax-web 沿现有跨 app seam 加载，不复制。
 - `de-DE.json` authored catalog value 出现任何 CJK 字符即失败；该 gate 不扫描 runtime business data。
+- `[de-DE:...]` placeholder 与 CJK 分别计数；placeholder 非零时明确标记为不可演示中间态，不能用 `0 CJK` 宣称德语已就绪。
 - 德语措辞暂时拿不准时，先给德语草案或明确标记，不把中文留在德语 catalog；翻译质量复核不属于 bootstrap。
 
 Finance/DATEV surface 存在时，读取仓库当前的 `docs/ideas/2026-08-28-de-localization/preserve-list.md` 与 `extraction-inventory.md`。不要把其中的候选数量、行号、Mandant 数据或完整术语表复制进本 skill。
@@ -146,6 +185,7 @@ Finance/DATEV surface 存在时，读取仓库当前的 `docs/ideas/2026-08-28-d
 - 本轮拥有的 changed paths；
 - exact comparison 与 focused-test 结果；
 - locale-format、missing-key 检查；
+- placeholder count、默认 locale 的 demo readiness，以及 shared seam correctness / migrated coverage 两个独立结论；
 - 未运行项与未证明边界；
 - 只在真实实跑中发现的事项；
 - plan/preserve 已知约束；
