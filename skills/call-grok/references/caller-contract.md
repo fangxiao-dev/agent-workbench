@@ -1,7 +1,8 @@
 # Caller contract
 
-`call-grok` is a thin, short-lived Grok CLI executor. The caller supplies the
-complete task prompt and any desired Grok configuration.
+`call-grok` is a bounded, short-lived Grok CLI executor. The caller supplies the
+task objective, scope, permissions, acceptance, and desired Grok configuration.
+The wrapper composes that task with the Skill's built-in execution workflow.
 
 When the caller uses the logical `$grok-worker` reference, omit `--model` and
 `--effort`; the defaults in this skill remain the single model source for that
@@ -20,9 +21,9 @@ invocation-unique UTF-8 temporary `--prompt-file` for background launches.
 Do not reuse that file across concurrent calls; remove it only after the task
 has finished and its JSON result has been read.
 
-The wrapper passes `--prompt-file` through to Grok CLI (no full prompt on the
-child argv). `--prompt` remains for short foreground prompts; values longer
-than the inline limit are spilled to a temp file and sent via `--prompt-file`.
+The wrapper reads either input, prepends its protocol, writes an
+invocation-private temporary prompt file, and passes only that path to Grok. It
+never edits the caller's file or places the composed prompt on the child argv.
 
 Do not pass a multiline `--prompt` through Windows `Start-Process -ArgumentList`:
 PowerShell may split it into extra process arguments before `grok_task.py` can
@@ -33,7 +34,7 @@ parse it.
 | Flag | Default | Meaning |
 |---|---:|---|
 | `--cwd` | process cwd | Working directory for Grok |
-| `--prompt-file` / `--prompt` | required | Caller-owned task text; unique temporary `--prompt-file` is the preferred transport |
+| `--prompt-file` / `--prompt` | required | Caller-owned task text; wrapper composes it in a private temporary prompt file |
 | `--resume` | unset (not passed) | Resume an existing Grok session by id; omit for a fresh session |
 | `--max-run` | 100 | Maps to Grok `--max-turns` |
 | `--model` | `grok-4.6` | Model id |
@@ -50,9 +51,8 @@ parse it.
 | `--preflight` | off | Also require auth before model execution |
 | `--dry-run` | off | Return the redacted would-be command in `text` |
 
-No prompt envelope, role, or task template is injected. The sole intentional
-runtime permission default is `--always-approve` (headless). Tool policy is
-caller-owned: omit `--tools` unless you need a specific allowlist.
+The intentional runtime permission default is `--always-approve` (headless).
+Tool policy remains caller-owned: omit `--tools` unless needed.
 
 ## Windows PowerShell background launch
 

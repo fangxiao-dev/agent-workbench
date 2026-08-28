@@ -36,8 +36,26 @@ DEFAULT_STALL_TIMEOUT_SEC = 1800
 DEFAULT_OVERALL_TIMEOUT_SEC: Optional[float] = None
 MAX_TIMEOUT_SEC = 1800
 DEFAULT_HEARTBEAT_SEC = 15
-# Above this, --prompt is spilled to a temp file and passed via --prompt-file.
-MAX_INLINE_PROMPT_CHARS = 16_000
+
+EXECUTION_PROTOCOL_TEMPLATE = """# call-grok execution protocol
+
+Treat the caller prompt below as the authority for objective, scope, permissions,
+and output.
+
+1. THINK: inspect the prompt and repository facts first. Establish the root cause
+   or task model, existing solution, bounded write-set, and verification method
+   before editing. Investigate until evidence is sufficient; avoid patch-first work.
+2. IMPLEMENT: perform only the bounded requested work, reuse repository patterns,
+   and preserve every stated boundary. For a read-only task, execute the requested
+   analysis or artifact production without writes.
+3. VERIFY: run task-appropriate checks and inspect the resulting diff or output.
+   {subagent_instruction} Incorporate findings and verify again in this invocation.
+   Return BLOCKED or INCOMPLETE with decisive evidence when verification cannot be
+   established.
+
+In the final response, report the THINK conclusion, actual work, verification
+commands and results, subagents used, and residual risks.
+"""
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -140,6 +158,29 @@ def resolve_prompt_file(path: str | Path) -> Path:
     if not prompt_path.is_file():
         raise FileNotFoundError(f"prompt file not found: {prompt_path}")
     return prompt_path
+
+
+def compose_prompt(caller_prompt: str, *, subagents_enabled: bool = True) -> str:
+    subagent_instruction = (
+        "Use your own independent subagents when they materially improve investigation or closure."
+        if subagents_enabled
+        else "Complete verification directly."
+    )
+    protocol = EXECUTION_PROTOCOL_TEMPLATE.format(
+        subagent_instruction=subagent_instruction,
+    )
+    return f"{protocol.rstrip()}\n\n# caller prompt\n\n{caller_prompt.rstrip()}\n"
+
+
+def write_composed_prompt(caller_prompt: str, *, subagents_enabled: bool) -> Path:
+    fd, name = tempfile.mkstemp(prefix="call-grok-", suffix=".prompt.txt")
+    os.close(fd)
+    path = Path(name)
+    path.write_text(
+        compose_prompt(caller_prompt, subagents_enabled=subagents_enabled),
+        encoding="utf-8",
+    )
+    return path
 
 
 def build_cmd(
@@ -683,33 +724,26 @@ def main(argv: Optional[List[str]] = None) -> int:
         ), ensure_ascii=False))
         return EXIT_ERROR
 
-    spilled_path: Optional[Path] = None
+    composed_path: Optional[Path] = None
     prompt_chars: Optional[int] = None
     try:
         if args.prompt_file:
             try:
-                prompt_path = resolve_prompt_file(args.prompt_file)
-            except (OSError, FileNotFoundError) as exc:
+                caller_prompt = resolve_prompt_file(args.prompt_file).read_text(encoding="utf-8")
+            except (OSError, UnicodeError, FileNotFoundError) as exc:
                 print(json.dumps(envelope(
                     "preflight_failed", text=None, exit_code=EXIT_ERROR, message=str(exc),
                 ), ensure_ascii=False))
                 return EXIT_ERROR
-            try:
-                prompt_chars = prompt_path.stat().st_size
-            except OSError:
-                prompt_chars = None
-            cmd = build_cmd(grok_bin, args, prompt_file=prompt_path)
         else:
-            prompt = args.prompt if args.prompt is not None else ""
-            prompt_chars = len(prompt)
-            if prompt_chars > MAX_INLINE_PROMPT_CHARS:
-                fd, spill_name = tempfile.mkstemp(prefix="call-grok-", suffix=".prompt.txt")
-                os.close(fd)
-                spilled_path = Path(spill_name)
-                spilled_path.write_text(prompt, encoding="utf-8")
-                cmd = build_cmd(grok_bin, args, prompt_file=spilled_path.resolve())
-            else:
-                cmd = build_cmd(grok_bin, args, prompt=prompt)
+            caller_prompt = args.prompt if args.prompt is not None else ""
+
+        composed_path = write_composed_prompt(
+            caller_prompt,
+            subagents_enabled=not args.no_subagents,
+        )
+        prompt_chars = composed_path.stat().st_size
+        cmd = build_cmd(grok_bin, args, prompt_file=composed_path.resolve())
 
         if args.dry_run:
             display_cmd = redact_cmd_for_display(cmd, prompt_chars=prompt_chars)
@@ -741,9 +775,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         ), ensure_ascii=False))
         return exit_code
     finally:
-        if spilled_path is not None:
+        if composed_path is not None:
             try:
-                spilled_path.unlink(missing_ok=True)
+                composed_path.unlink(missing_ok=True)
             except OSError:
                 pass
 

@@ -121,6 +121,17 @@ def test_prompt_file_passes_through_to_grok(tmp_path: Path) -> None:
     assert "from caller file" not in cmd
 
 
+def test_composed_prompt_enforces_one_three_phase_workflow() -> None:
+    executor = load_executor()
+    prompt = executor.compose_prompt("fix the bounded bug")
+
+    assert prompt.index("1. THINK") < prompt.index("2. IMPLEMENT") < prompt.index("3. VERIFY")
+    assert "independent subagents" in prompt
+    assert "fix the bounded bug" in prompt
+    assert "4. " not in prompt
+    assert "Create a commit only" not in prompt
+
+
 def test_run_with_liveness_parses_stream_and_nonzero_exit(monkeypatch) -> None:
     executor = load_executor()
 
@@ -308,6 +319,9 @@ def test_main_prompt_file_builds_without_inline_prompt(monkeypatch, capsys, tmp_
 
     def fake_run(**kwargs):
         captured["cmd"] = kwargs["cmd"]
+        prompt_path = Path(kwargs["cmd"][kwargs["cmd"].index("--prompt-file") + 1])
+        captured["prompt_path"] = prompt_path
+        captured["prompt"] = prompt_path.read_text(encoding="utf-8")
         return {"status": "completed", "text": "ok", "usage": {}, "error_message": None}
 
     monkeypatch.setattr(executor, "resolve_grok_bin", lambda _explicit=None: "grok")
@@ -319,26 +333,35 @@ def test_main_prompt_file_builds_without_inline_prompt(monkeypatch, capsys, tmp_
     assert "--prompt-file" in cmd
     assert "-p" not in cmd
     assert "file body" not in cmd
+    assert "# call-grok execution protocol" in captured["prompt"]
+    assert captured["prompt"].endswith("# caller prompt\n\nfile body\n")
+    assert not captured["prompt_path"].exists()
 
 
-def test_main_spills_long_prompt_to_temp_file(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_main_inline_prompt_uses_composed_temp_file(monkeypatch, capsys, tmp_path: Path) -> None:
     executor = load_executor()
-    long_prompt = "x" * (executor.MAX_INLINE_PROMPT_CHARS + 1)
+    caller_prompt = "bounded inline task"
     captured: dict = {}
 
     def fake_run(**kwargs):
         captured["cmd"] = kwargs["cmd"]
+        prompt_path = Path(kwargs["cmd"][kwargs["cmd"].index("--prompt-file") + 1])
+        captured["prompt_path"] = prompt_path
+        captured["prompt"] = prompt_path.read_text(encoding="utf-8")
         return {"status": "completed", "text": "ok", "usage": {}, "error_message": None}
 
     monkeypatch.setattr(executor, "resolve_grok_bin", lambda _explicit=None: "grok")
     monkeypatch.setattr(executor, "preflight", lambda *_a, **_k: (True, "ok", {}))
     monkeypatch.setattr(executor, "run_with_liveness", fake_run)
 
-    assert executor.main(["--prompt", long_prompt, "--cwd", str(tmp_path)]) == 0
+    assert executor.main(["--prompt", caller_prompt, "--cwd", str(tmp_path)]) == 0
     cmd = captured["cmd"]
     assert "--prompt-file" in cmd
     assert "-p" not in cmd
-    assert long_prompt not in cmd
+    assert caller_prompt not in cmd
+    assert "# call-grok execution protocol" in captured["prompt"]
+    assert captured["prompt"].endswith(f"# caller prompt\n\n{caller_prompt}\n")
+    assert not captured["prompt_path"].exists()
 
 
 def test_partial_and_liveness_statuses_have_stable_error_codes() -> None:
@@ -358,12 +381,18 @@ def test_partial_and_liveness_statuses_have_stable_error_codes() -> None:
         assert set(result) == ENVELOPE_KEYS
 
 
-def test_docs_and_help_do_not_expose_presets() -> None:
+def test_docs_and_help_describe_builtin_workflow_without_legacy_presets() -> None:
     executor = load_executor()
-    text = "\n".join([SKILL.read_text(encoding="utf-8"), CONTRACT.read_text(encoding="utf-8")]).lower()
+    skill_text = SKILL.read_text(encoding="utf-8").lower()
+    contract_text = CONTRACT.read_text(encoding="utf-8").lower()
+    text = "\n".join([skill_text, contract_text])
 
-    for removed in ("--role", "reviewer", "explore", "implement", "--plan-file"):
+    for removed in ("--role", "explore", "--plan-file"):
         assert removed not in text
+    assert skill_text.count("think → implement → verify") == 1
+    assert "## built-in workflow" not in text
+    assert "invocation-private temporary prompt file" in contract_text
+    assert "commit only" not in text
     assert "--role" not in executor.build_parser().format_help()
     assert "--resume" in executor.build_parser().format_help()
     assert "unset (not passed)" in CONTRACT.read_text(encoding="utf-8")
