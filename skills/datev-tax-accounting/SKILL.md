@@ -33,6 +33,7 @@ For general terminology or the public 2026 baseline, use the bundled references:
 - `references/account-function-and-tax-key-boundaries.md` for Automatikkonto, Kontenfunktion, BU/Steuerschlüssel, or automatic-versus-explicit tax behavior.
 - `references/tax-treatment-and-period-gates.md` for 0%, § 13b, EU acquisition, exemption, or cross-period/cross-year questions.
 - `references/extf-and-pruefprogramm-boundaries.md` for EXTF validation, Prüfprogramm, import, or evidence-scope questions.
+- `references/datev-export-materials-and-evidence.md` when inventorying DATEV exports or deciding what Kontenplan, Kreditorenstamm, Buchungsstapel, Kontenblätter, SuSa, Auswertung/BWA, Wertenachweis, Jahresübersicht, UStVA, or invoice samples can and cannot prove for a Mandant Profile/Policy.
 - `references/sources/2026-official/` for the copied public SKR03/SKR04 and DATEV annual tables.
 - `references/supported-knowledge-map.md` for the boundary between public references and KaiSpan owner documents; it is not a capability ledger.
 
