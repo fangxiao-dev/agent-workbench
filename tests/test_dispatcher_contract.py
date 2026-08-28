@@ -59,10 +59,12 @@ def test_dep_on_admission_is_restricted_to_other_queue_items() -> None:
     assert "Acceptance Gate" in skill
 
 
-def test_queue_item_granularity_is_one_bounded_topic() -> None:
+def test_queue_item_granularity_is_one_baby_step_inside_topic() -> None:
     skill = SKILL.read_text(encoding="utf-8")
 
-    assert "一个队列项对应一个有界 Topic 工作单元" in skill
+    assert "一个队列项只对应 Topic 内一个合格 baby step" in skill
+    assert "结果可二元判定、前置依赖已回答且能独立验证" in skill
+    assert "worker 返回后先消费结果，再决定下一步" in skill
 
 
 def test_evals_are_wellformed_read_only_scenarios() -> None:

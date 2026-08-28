@@ -1,6 +1,6 @@
 ---
 name: subagent-driven-development
-description: 当一个已派发的 bounded Topic 需要指导下游 worker 如何调查、实现、修复或验证时使用；按 dependency、worktree isolation、execution lane、lifecycle 与 review requirement 定义完整 subagent 方法。
+description: 当 bounded Topic 内当前一个 baby step 需要指导下游 worker 调查、实现、修复或验证时使用；以二元完成作为派发门槛，并定义 dependency、lane 与 lifecycle。
 ---
 
 # Subagent-Driven Development
@@ -11,9 +11,15 @@ Topic 标识一组共享上下文的连续动作，用来判断能不能复用�
 
 每个 bounded Topic 可以使用当前 worktree，也可以使用新隔离 worktree；caller 根据 write ownership 与资源交叉决定选择、创建和生命周期。文件 ownership 能通过新隔离 worktree 分开时继续派发；DB、端口、测试数据和外部记录分别验证隔离，独立 worktree 只解决文件写入边界。
 
+## Baby step first
+
+**Topic 是上下文与 lifecycle 容器，不是派发单元。** caller 每次只派发 Topic 内当前一个 baby step；worker 返回后由 caller 消费结果，再决定是否沿同一 work lane 释放下一步。后续步骤不能因为属于同一 Topic 就被一次性预授权。
+
+动作只有在结果可二元判定、前置依赖与 ownership 已明确且能 focused verify 时才可派发；否则继续切分，只派第一个已解锁动作。
+
 ## Step 1 · 定义 Topic
 
-一次派发是一个动作，它有唯一答案；答案形态由 mode 决定。按 baby step 推进：每一步做到可独立测试和提交，回来后同 Topic 复用原 worker 接着下一步；Topic 界定 ownership，交付范围按可独立完成的小动作展开。尺寸判据是二元完成：worker 回来的东西要么答上了要么没答上，主 session 不需要评估完成度；答案不唯一，或需要判断「做到几成」，说明还没切到动作粒度。动作依赖的事实、合同或前一个动作的返回，必须在派发前已有答案。固定 bounded outcome、ownership、禁改范围和成功条件；comparison point 归 review lane，由 do-review 固定；caller 在消费结果时判断是否需要下一动作。选择本次 worker mode：
+先定义 Topic 的共享上下文、ownership 与生命周期，再从中切出当前唯一 baby step。固定该动作的 bounded outcome、write-set、禁改范围、前置证据、成功条件与答案形态；comparison point 归 review lane，由 do-review 固定。只有通过上方 Baby step first 门槛后，才选择本次 worker mode 并派发。
 
 常见误判：把一个交付切片或验收目标整包派给一个 worker，会得到没有单一答案的运行，主 session 只能等和猜；派发前未答清动作依赖，会让 worker 停下来返回，这是 worker 的正确行为，问题在派发方。
 
@@ -24,7 +30,7 @@ Topic 标识一组共享上下文的连续动作，用来判断能不能复用�
 | `fix` | finding 已确认且已边界化 | 答案为 `diff`；不重新裁决 finding、不扩大范围、不宣称 closure |
 | `verify` | 执行既定、无写副作用的检查 | 答案为判定；会重写 snapshot/generated file 的动作转入 `implement` 或 `fix` |
 
-完成标准：当前派发已有唯一动作、答案形态与已回答的前置依赖；caller 消费结果时判断是否需要下一动作。
+完成标准：当前派发只有一个已解锁动作，答案形态、write-set、局部验证与前置依赖均明确；未把同一 Topic 的后续动作预先塞入本次授权。
 
 ## Step 2 · 分类 dependency
 
@@ -41,7 +47,7 @@ Acceptance 是结论点，不天然是 dispatch blocker。等待 worker 或 Gate
 
 ## Step 3 · 形成当前批次
 
-优先稳定 foundation；把安全的一步前瞻准备加入当前批次。存在多个候选、文件 ownership 交叉、共享 DB/端口/测试数据或外部记录时，完整读取 [Dependency and Resource Admission](references/parallel-work-admission.md)。
+优先稳定 foundation；当前批次只收纳分别通过 Baby step first 门槛的动作。安全的一步前瞻准备也必须是独立 baby step，不能借“准备”名义预派下游实现。存在多个候选、文件 ownership 交叉、共享 DB/端口/测试数据或外部记录时，完整读取 [Dependency and Resource Admission](references/parallel-work-admission.md)。
 
 完成标准：任何两个并行 worker 都没有同一可变资源的 ownership；不能隔离的资源已有串行顺序和 cleanup owner。
 
@@ -61,7 +67,7 @@ material-risk Topic（shared seam、安全、数据完整性、并发、migratio
 
 ## Step 5 · 消费结果并重排
 
-主 session 核对可归因 diff、evidence、residue 和 cleanup；worker 自证（focused tests、lint、diff check）通过即默认继续进入同 Topic 下一步，review 只在到达 review 点后安排。
+主 session 核对可归因 diff、evidence、residue 和 cleanup；worker 自证（focused tests、lint、diff check）通过后，先把当前 baby step 判定为 DONE/BLOCKED/INCOMPLETE，再决定是否通过 follow-up 复用原 worker 执行同一 Topic 的下一个 baby step。当前返回不会自动授权下一步；review 只在到达 review 点后安排。
 独立 review 的判断点是 shared seam、完整 source unit 或集成边界，由主 session 判断是否已到达；review requirement 只在到达该点后产生。只归一化真正有消费者的事实：
 
 - worker outcome：`DONE | BLOCKED | INCOMPLETE`；
