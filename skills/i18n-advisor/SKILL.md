@@ -1,9 +1,9 @@
 ---
-name: i8n-advisor
+name: i18n-advisor
 description: Diagnose and improve internationalization/localization/i18n quality in any software project. Use this whenever the user asks to audit translations, find wrong-language leaks, design an i18n gate, review locale fallback behavior, check dictionary coverage, validate browser-rendered locale output, or prevent false-positive i18n checks. Works as a general advisor across projects and frameworks; discover the project's own i18n stack before recommending fixes.
 ---
 
-# i8n Advisor
+# i18n Advisor
 
 Act as a practical internationalization diagnostic specialist. Your job is to find real localization risks, separate them from non-defects, and propose a gate that catches regressions without blocking on business data or project-specific intentional literals.
 
@@ -41,11 +41,11 @@ Use local search and project docs first. If commands are unknown, inspect packag
 
 Classify every suspicious value by referent, not spelling:
 
-- **Class 0: machine/technical identifier**  
-  Enum keys, permission codes, module IDs, database field IDs, API constants. These are not translations. If users see them unintentionally, fix the UI label layer; if the product intentionally exposes them, document the exception.
+- **Class 0: internal machine identity without user-facing domain meaning**
+  Enum keys, permission codes, module IDs, database field IDs, API constants, and wire values. These are not translations. If users see them unintentionally, fix the UI label layer instead of translating the identifier.
 
-- **Class 1: identity-preserving proper noun**  
-  Brand names, product names, legal document names, external-system object names, official field names, or terms where translation breaks lookup or business identity. These may stay identical across locales, but should be registered or documented.
+- **Class 1: user-visible identity that must remain stable, even when it looks like code**
+  Brand names, product names, legal document names, external-system object names, official field names, or terms where translation breaks lookup or business identity. Register the stable spelling or locale-specific canonical value. `SKR03` can be Class 1 while an adjacent `domestic_vat` enum remains Class 0; classify by referent, never by spelling or source-file proximity.
 
 - **Class 2: domain term users expect in their language**  
   Concepts like status, owner, supplier, inventory, permission, mirror status, sync status. Even if the internal domain language is English, UI copy should be localized.
@@ -54,6 +54,14 @@ Classify every suspicious value by referent, not spelling:
   Buttons, descriptions, headings, errors, helper text, confirmations. These should be authored in each locale.
 
 This model prevents two common mistakes: treating English internal terminology as a proper noun, and translating official names that must remain stable.
+
+Keep three orthogonal decisions outside Class 0–3:
+
+- **dynamic/business data** — customer names, imported account labels, supplier data, and other runtime values are not authored copy and do not enter message catalogs;
+- **locale-sensitive value** — dates, numbers, currency, and units use the active locale but are not translation classes;
+- **needs_context** — an unresolved state that must be investigated before assigning Class 0–3, not a fifth class.
+
+For mixed-language literals, classify each referent or token. Preserve only confirmed Class 1 tokens, translate Class 2/3 copy, keep dynamic data outside catalogs, and leave uncertain values in `needs_context`. Never preserve every Latin token merely because a string is mixed.
 
 ## Objective Audit
 
@@ -69,6 +77,8 @@ When the project has dictionary/catalog files, design or run checks for:
 - fallback paths that hide missing translations.
 
 Prefer structured parsing over regex when the project format supports it. If you must use heuristics, label them as heuristics and keep the false-positive boundary explicit.
+
+When a project declares German as the default and forbids Chinese fallback, treat any CJK character in `de-DE` authored catalog values as an objective failure. Scope this gate to message catalogs: dynamic/business data rendered at runtime is a separate concern. Missing German keys must not silently spread or fall back from a Chinese catalog; use the project's explicit development error and runtime marker behavior.
 
 ## Semantic Review
 
