@@ -28,6 +28,8 @@ description: 把零 i18n 应用自举到有明确 ownership 的 messages catalog
 
 静态数字只能称为 **candidate inventory**，不能称最终 key 数；同时记录 under-count 与 over-count 边界。AST 已知属性清单容易漏掉 UI config arrays、label maps、fallback helpers 和 transport error 映射，必须补一次按 surface 的人工扫尾。扩大 extraction glob 前，先区分 UI copy、API error、wire value、fixture、generated source、冻结 contract 和运行时 business data。
 
+按真实 render tree 盘点 shell，不只扫 shell 文件本身。Account menu、organization/store switcher、status notice 等共享子组件都必须有 owner；否则 shell catalog 可以全绿，真实页面仍会从复用子组件泄漏源语言。
+
 完成条件：Inspect 记录明确 candidate scope、排除项、message owner、测试入口、locale-sensitive display、运行前 dirty paths 与未决 `needs_context`。
 
 ### 2. Decide
@@ -77,6 +79,8 @@ description: 把零 i18n 应用自举到有明确 ownership 的 messages catalog
 
 request config 与 test provider 显式固定产品 `timeZone`，避免 server render 因宿主机时区不同而漂移。测试 wrapper 必须接入实际的 `renderToStaticMarkup` call sites；仅创建一个未被调用的 helper 不算完成。
 
+测试直接 import locale JSON 并注入 provider，只证明组件 seam，不证明生产 loader。每个新 fragment 同时登记到真实 request loader，并让 loader spec 枚举顶层 namespace；loader 漏片在 runtime/checkpoint 前是 blocker，不能被 component smoke 的绿色掩盖。共享 consumer 仍只加载自己拥有的 fragment 子集。
+
 基础设施包必须保持 client/server import graph 分离。依赖 `next/headers`、`next-intl/server` 的 request config 只从 server-only 子路径导出；client provider 只能导入 locale、format 和 fallback 等 client-safe 模块。TypeScript 和 Vitest 不足以证明这条边界，至少跑一次受影响 app 的 production build。
 
 完成条件：每个 app 都能从既定 request boundary 解析 supported locale；shared messages 只有一个 owner；所有受影响的 render 入口实际使用 provider；production build 没有 client/server import 错误；没有时区告警，也没有引入无关路由或 runtime 层。
@@ -92,11 +96,24 @@ request config 与 test provider 显式固定产品 `timeZone`，避免 server r
 - count 和可变词序使用完整 ICU message；禁止把一句话拆成前后 fragment key，因为插值边界的空格和标点很容易漂移；
 - 现有测试要求同步 render 时，组件保持同步。
 
+把 mixed JSX 合并成完整 ICU 前先检查原 DOM。独立 `span`、间距、字体或图标承载真实样式时，迁移必须保留 markup；稳定 Class 1 token 与 dynamic value 在两种语言顺序相同时可以继续留在 JSX，只抽取需要翻译的 copy。不能为了 catalog 完整度丢掉现有结构或视觉语义。
+
 改 lookup 前先保存 exact render output。迁移后用同一 fixture 和显式 test locale 做 exact comparison，再跑 focused render specs；仅有 substring assertion 全绿不能证明完整输出相同。
 
 完成值不变证据后再做 Locale-format 或新增语言切换器，因为这些改动会合法改变输出，需要独立证据。
 
 若 exact comparison 失败，先检查 fragment、插值两侧空格、标点和条件分支；不得更新 baseline 来掩盖迁移漂移。
+
+React state 只保存 authored message key、ICU args 或明确的 raw dynamic text，不保存 `t(...)` 的结果。`router.refresh()` 可能保留 client state；已翻译字符串写入 `useState` 会在切换 locale 后继续显示旧语言。每次 render 用当前 `t` 解析 authored state，API/provider `Error.message` 保持 raw，业务分支与副作用不变。
+
+当 UI 同期重构、完整 DOM 合同尚未稳定时，使用轻量测试分层：
+
+- 保留既有业务逻辑、状态、路由、权限和 callback 测试；旧测试只补最小 provider wrapper；
+- 保留 catalog parity、ICU、placeholder/CJK 与生产 loader gate；
+- 每个新 namespace 至少一条真实 zh/de render seam，证明 provider、namespace/key 和实际 ICU 参数可用；
+- 值不变先用 zh source catalog 的 exact authored value 证明；完整 DOM 稳定前不新增长文案矩阵、整页 HTML snapshot、class/布局/按钮顺序断言或大型 fixture/harness。
+
+轻量分层不能删除所有 render seam；否则 missing provider、错误 namespace 和 ICU 缺参会拖到最终 UI 才暴露。UI 稳定后再决定哪些完整 DOM/视觉合同值得补回。
 
 完成条件：选定 fixture 的 exact comparison 通过；focused specs 报告真实结果；每个迁移值可追溯到迁移前 literal；迁移验收检查 `(?:^|\\.)l\\d+_\\d+$` position key 为 0。
 
@@ -123,6 +140,8 @@ ISO input、wire date、filename、ID、status code、payload decimal、hash 等
 
 大范围执行时按 owner/namespace 划互斥 scope。并行 worker 产出 mapping、调用点修改和局部证据，不同时写同一正式 catalog；主控统一集成一次。每次集成先跑便宜的 catalog gate，完整 typecheck/lint/build 以 owner batch 为单位运行，不在每个机械 shard 重复。
 
+多 worktree fan-out 固定同一 base：每个 lane 只写互斥 production 文件和自有 fragment，测试/build 使用自己的 `.next`；共享 loader 与聚合 spec 由主控串行修改。单个巨型物理文件始终单写，即使其中逻辑上包含多个 tab。UI 环境只在 checkpoint revision 形成后启动；若另有 UI branch 同期修改，优先在首个 checkpoint 做一次小范围集成并重跑 focused tests/typecheck/build，避免两条 diff 长期分叉。
+
 以下任一项失败就收回机械放行，修规则后从失败 scope 重跑：position key 回归、未登记 duplicate、Class 0/runtime identity 进入 `t()`、ICU 参数漂移、shared messages 出现第二 owner、exact comparison 漂移。
 
 ### 翻译校准交接
@@ -143,6 +162,7 @@ ISO input、wire date、filename、ID、status code、payload decimal、hash 等
 - **seam 不等于 coverage**：consumer 能从唯一 owner 加载少量 shared messages，只证明 ownership；必须另报 shared surface 已迁移 leaf/候选总量。
 - **机械 gate 不证明语义质量**：key parity、snapshot 和 build 全绿不能替代 occurrence、德语自然度和术语复核。
 - **语言选择器先看 layout ownership**：加入 switcher 前列出 root layout、auth/status route 和业务 shell 的预留位置；每个渲染页面只保留一个交互式 switcher。复用同一行为组件的 inline/floating variant，选项显示 endonym，accessible label 本地化；不能同时保留全局挂载和 shell 假标签。
+- **source spelling 不决定 referent**：source 写“租户”而运行时字段是 `organizationName` 时，semantic key 与德语按 organization 处理，不能机械写成 `tenant` / `Mandant`。key、译词和 dedup 都跟随实际 contract。
 
 完成条件：抽取 lane 有明确放行/收回条件，翻译 lane 有完整 catalog 校准和阈值，remaining forecast 使用 actual density；没有把 bootstrap runtime、demo readiness、翻译质量或 browser acceptance 混成一个结论。
 
