@@ -33,6 +33,94 @@
         "running worker、Ticket evidence 与 Gate 继续由队列外部权威检查。",
         "两个 campaign 的共享数据库串行要求编码为 depOn；test wrapper 只在各自有界 campaign 内复用并随后退役。"
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "只读模拟：T020 的实现已经完成且互不影响的 T021 也可以独立实现，但 T020 的 Ticket acceptance edge 尚未释放、Gate 仍 open。有人提议把 acceptance 写成 T021 的 depOn。说明是否应该这样编码；禁止实际修改文件或派发 worker。",
+      "expected_output": "不把 acceptance 编码为 depOn；acceptance 是结论点，只阻止正式验收与状态宣称，不阻止 T021 的实现派发；T021 保持可派发。",
+      "files": [],
+      "expectations": [
+        "拒绝把 acceptance edge 或 Gate 写成 depOn，只有另一个队列项的产出才有资格成为 depOn。",
+        "说明 acceptance 阻止的是正式验收、evidence 采信与状态宣称，不是 dispatch。",
+        "T021 仍然作为 planned 且 depOn=[] 出现在 get-next-tasks 结果中并可派发。"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "只读模拟：T030 与 T031 当初都是 planned 且 depOn=[]。派发前主控发现 T031 会绑定 T030 尚未稳定的数据形状。说明本轮扫描前应做什么；禁止实际修改文件或派发 worker。",
+      "expected_output": "在派发前补 depOn：update-deps --id T031 --add T030；本轮只派 T030；依赖是活的，地基稳定后再删除依赖释放 T031。",
+      "files": [],
+      "expectations": [
+        "派发前重新核对现存 depOn，并对新发现的实现地基执行 update-deps --id T031 --add T030。",
+        "本轮 get-next-tasks 只应派发 T030，不派发 T031。",
+        "说明依赖是活的：地基解除后删依赖，而不是一次写死。"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "只读模拟：T040 的 worker 返回一个仍属同一 Topic 的已边界化缺口；另有全新的、不共享 ownership 的 T041 等待开始，旧 worker 当前空闲。说明两者分别用什么 worker；禁止实际修改文件或派发 worker。",
+      "expected_output": "T040 的后续工作复用同一 Topic 的 live work lane worker；T041 是新 Topic，使用 fresh worker；空闲或角色相同都不构成复用理由。",
+      "files": [],
+      "expectations": [
+        "同一 Topic 的后续工作复用 live worker context。",
+        "新 Topic T041 使用 fresh worker，旧 Topic worker 在闭合后退役。",
+        "明确 worker 空闲或角色相同不是复用理由，复用理由必须来自 Topic 连续性。"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "只读模拟：T050=in-progress 的 worker 已返回并交付了局部结果，但该 Topic 尚未闭合，仍有已知剩余工作。有人提议直接 delete T050 让下游 T051 开始。说明是否应删除；禁止实际修改文件或派发 worker。",
+      "expected_output": "不 delete；只有主控已记录 fully completed、cancelled 或 superseded 且确认没有剩余工作时才 retire。此处应用 update-summary/update-status 表达剩余工作，T051 依赖未释放。",
+      "files": [],
+      "expectations": [
+        "拒绝 delete T050，因为该 Topic 仍有剩余工作，尚未满足 retire 条件。",
+        "用 update-summary 或 update-status 表达同一 Topic 的剩余工作，不制造 done 状态。",
+        "T051 的 depOn 未释放，本轮不派发。"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "只读模拟：T060 的 worker 返回 BLOCKED，原因是它需要的测试载体尚未跑通，而该载体本轮内部就能解决；同批 T061、T062 也依赖同一载体。说明分流与队列动作；禁止实际修改文件或派发 worker。",
+      "expected_output": "识别为本轮内部共享依赖：新建 blocker 队列项，将 T060/T061/T062 设为 planned 并 depOn blocker；跑通前不派发，blocker 删除释放依赖后由下一轮自然捡起。",
+      "files": [],
+      "expectations": [
+        "先分流阻塞来源，不把 BLOCKED 直接等同于 delete。",
+        "为共享依赖新建队列项，并把 T060、T061、T062 设为 planned + depOn=[blocker]。",
+        "共享依赖跑通前不派发；blocker 删除后原任务能重新进入 get-next-tasks。"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "只读模拟：T070 的 worker 返回 BLOCKED，原因是需要 Owner 决定一个业务结果，队列内没有任何任务能解除它。有人提议把 T070 改回 planned 以免被遗忘。说明应如何表示；禁止实际修改文件或派发 worker。",
+      "expected_output": "T070 保持 in-progress 表示占用，原因记在队列外；不退回 planned，否则 get-next-tasks 会把它当 ready 返回；Owner 决策落地后再 update-status 转 planned。",
+      "files": [],
+      "expectations": [
+        "T070 保持 in-progress，不退回 planned。",
+        "理由是 in-progress 只表示已占用、不应再次派发，不承诺 worker 仍在运行；退回 planned 会让 get-next-tasks 返回一个并不 ready 的任务。",
+        "阻塞解除后用 update-status --status planned 让下一轮扫描捡起；阻塞原因记录在队列外。"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "只读模拟：主控准备把一整张含五个可独立验证切片的 Ticket 作为单个队列项交给一个 worker。说明这样做的问题和正确粒度；禁止实际修改文件或派发 worker。",
+      "expected_output": "拒绝整张 Ticket 一个队列项；一个队列项对应一个有界 Topic 工作单元，按切片拆成多项并按真实依赖排序；write-set、worker 复用与 worktree 选择归 SDD 与主控，不进 JSON。",
+      "files": [],
+      "expectations": [
+        "拒绝把整张 Ticket 包成单个队列项，按有界 Topic 工作单元拆分。",
+        "说明粒度失守会让 SDD“Topic 大到需要中途止损就切小”的机制失效。",
+        "write-set、worker 复用和 worktree 选择留在 SDD 与主控，不写进 task-queue.json。"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "只读模拟：T080 没有任何下游任务依赖它，但自身仍有已知剩余工作。有人认为它既然不阻断下游就可以 delete。说明正确动作；禁止实际修改文件或派发 worker。",
+      "expected_output": "不 delete；是否有下游不是 retire 条件。T080 只有在主控记录 fully completed、cancelled 或 superseded 并确认没有剩余工作后，才能从未完成投影删除。",
+      "files": [],
+      "expectations": [
+        "明确没有下游依赖不等于可以 delete。",
+        "retire 要求 fully completed、cancelled 或 superseded，并且没有剩余工作。",
+        "当前继续用 update-summary/update-status 表达 T080 的剩余工作。"
+      ]
     }
   ]
 }
