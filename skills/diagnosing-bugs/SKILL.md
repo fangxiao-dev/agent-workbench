@@ -130,6 +130,8 @@ Tool preference:
 
 **Perf branch.** For performance regressions, logs are usually wrong. Instead: establish a baseline measurement (timing harness, `performance.now()`, profiler, query plan), then bisect. Measure first, fix second.
 
+根因确认后，按 [`diagnosis-report`](../diagnosis-report/SKILL.md) 汇报已确认的根因、最小修复方向和用户影响；未确认时只说明缺失证据，不改变后续诊断、修复、验证或发布职责。
+
 ## Phase 5 — Fix + regression test
 
 Select the test seam before implementation. A correct seam exercises the real bug pattern as it occurs at the call site; a shallow test that bypasses the triggering chain creates false confidence.
