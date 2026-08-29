@@ -13,9 +13,11 @@ Topic 标识一组共享上下文的连续动作，用来判断能不能复用�
 
 ## Baby step first
 
-**Topic 是上下文与 lifecycle 容器，不是派发单元。** caller 每次只派发 Topic 内当前一个 baby step；worker 返回后由 caller 消费结果，再决定是否沿同一 work lane 释放下一步。后续步骤不能因为属于同一 Topic 就被一次性预授权。
+**Baby step 是 scope 与授权边界，不是 timebox。** Topic 是共享上下文与 lifecycle 容器，不是派发单元；caller 每次只授权其中一个具有单一 bounded outcome 的 baby step，明确 ownership、write-set、禁改范围、前置依赖、成功条件和 focused verification。
 
-动作只有在结果可二元判定、前置依赖与 ownership 已明确且能 focused verify 时才可派发；否则继续切分，只派第一个已解锁动作。
+一个 baby step 可以包含为同一结果服务的必要调查、RED→GREEN、实现和局部验证；判断标准是最终是否只有一个可二元验收的结果，不是内部执行了多少操作，也不是花了多长时间。worker 尚未返回时，caller 可以询问进度或继续不依赖结果的 look-ahead，但不能仅因等待时间较长就中断、重复实现或重新派发。
+
+worker 返回后，caller 消费已有 evidence、diff 和验证结果，再决定是否沿同一 work lane 释放下一个 baby step。后续步骤不会因为属于同一 Topic 而自动获得授权。
 
 ## Step 1 · 定义 Topic
 
