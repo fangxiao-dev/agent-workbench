@@ -1,6 +1,6 @@
 ---
 name: subagent-driven-development
-description: 当 bounded Topic 内当前一个 baby step 需要指导下游 worker 调查、实现、修复或验证时使用；以二元完成作为派发门槛，并定义 dependency、lane 与 lifecycle。
+description: 当用户要求使用 subagent、异步或并行方式调研、实现、修复或验证，或已派发的 bounded Topic 需要指导下游 worker 时使用；以单一可二元验收结果作为派发边界，并定义 dependency、lane 与 lifecycle。
 ---
 
 # Subagent-Driven Development
