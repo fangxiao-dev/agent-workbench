@@ -16,9 +16,9 @@ Dispatcher 是一个面向上游主控、专门轻量定义“如何调度”的
 
 ## Baby step 派发门槛
 
-**先切 baby step，再讨论队列、并行或 worker。** Topic 只是连续动作共享上下文的容器，不是一次派发的尺寸；一次派发只对应 Topic 内当前一个动作。
+**先切 baby step，再讨论队列、并行或 worker。** Topic 只是连续动作共享上下文的容器，不是一次派发的尺寸；一次派发只对应一个 Topic 内当前一个动作。这个门槛逐 Topic 生效，不把整个批次降为单线程。
 
-动作只有在结果可二元判定、前置依赖已回答且能独立验证时才可派发；否则先继续切分，只派第一个已解锁动作。worker 返回后先消费结果，再决定下一步；并行也只用于互不依赖的合格 baby steps。
+动作只有在结果可二元判定、前置依赖已回答且能独立验证时才可派发；否则先继续切分，同一依赖链只派第一个已解锁动作。每轮扫描全部候选，把互不依赖的合格 baby steps fan out；文件 ownership 交叉时先交给 SDD 判断能否用隔离 worktree 分开，只有无法隔离的共享可变资源才串行。worker 返回后先消费结果，再决定该 Topic 的下一步。
 
 ## 原则
 
@@ -40,7 +40,7 @@ Dispatcher 是一个面向上游主控、专门轻量定义“如何调度”的
 | 当前描述 | 主控判断 | 推荐动作 |
 | --- | --- | --- |
 | package 还没有动态队列 | 初始化空队列，保留已有路径 | `init` |
-| 发现新的未完成工作 | 先切出第一个已解锁 baby step；写清唯一结果与成功条件，只加入已确定依赖 | `add --id <id> --summary <text> [--dep-on <id>]...` |
+| 发现新的未完成工作 | 逐个候选切出其当前已解锁 baby step；写清唯一结果与成功条件，只加入已确定依赖；合格候选全部进入本轮投影 | `add --id <id> --summary <text> [--dep-on <id>]...` |
 | 任务内容或确定依赖变化 | 只更新发生变化的字段 | `update-summary`、`update-status` 或 `update-deps --add\|--remove` |
 | worker 返回，主控已判定该队列项 fully completed，或 cancelled/superseded 且下游已改依赖或退役 | 该项已经没有剩余工作，机械释放不会误派下游，可以从未完成投影 retire | `delete --id <id>`，机械释放所有下游 `depOn` |
 | worker 返回，同一 Topic 仍需工作 | 先消费当前结果，再切下一 baby step；work lane 可复用 live worker，review lane 保持独立 | `update-*`，或 retire 当前项后登记下一动作；不制造 `done` 状态 |

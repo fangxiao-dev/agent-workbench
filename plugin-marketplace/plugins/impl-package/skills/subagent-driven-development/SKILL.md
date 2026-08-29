@@ -9,11 +9,11 @@ Topic 标识一组共享上下文的连续动作，用来判断能不能复用�
 
 业务需求、Ticket/State/Evidence/Gate 仍由调用方及其 owning skill 决定；executor、model、provider 或 agent profile 由 Owner 选择或宿主原生能力解析。worker 的验收目标是一个动作的答案，不是需求的 AC，也不是 Ticket 的终态；AC 与 Ticket 粒度归 impl-planning，运行状态与验收判断归 dev-with-track。同一个动作可以服务任何 Ticket，也可以不服务任何 Ticket。
 
-每个 bounded Topic 可以使用当前 worktree，也可以使用新隔离 worktree；caller 根据 write ownership 与资源交叉决定选择、创建和生命周期。文件 ownership 能通过新隔离 worktree 分开时继续派发；DB、端口、测试数据和外部记录分别验证隔离，独立 worktree 只解决文件写入边界。
+每个 bounded Topic 可以使用当前 worktree，也可以使用新隔离 worktree；caller 根据 write ownership 与资源交叉决定选择、创建和生命周期。文件 ownership 不冲突时可以共用当前 worktree；存在交叉但能通过新隔离 worktree 分开时继续 fan out。DB、端口、测试数据和外部记录分别验证隔离，独立 worktree 只解决文件写入边界；无法隔离的共享可变资源才要求串行。
 
 ## Baby step first
 
-**Baby step 是 scope 与授权边界，不是 timebox。** Topic 是共享上下文与 lifecycle 容器，不是派发单元；caller 每次只授权其中一个具有单一 bounded outcome 的 baby step，明确 ownership、write-set、禁改范围、前置依赖、成功条件和 focused verification。
+**Baby step 是 scope 与授权边界，不是 timebox。** Topic 是共享上下文与 lifecycle 容器，不是派发单元；caller 每次只授权该 Topic 当前一个具有单一 bounded outcome 的 baby step，明确 ownership、write-set、禁改范围、前置依赖、成功条件和 focused verification。这个限制逐 Topic 生效；同一批次可以并行释放多个不同 Topic 的已解锁 baby steps。
 
 一个 baby step 可以包含为同一结果服务的必要调查、RED→GREEN、实现和局部验证；判断标准是最终是否只有一个可二元验收的结果，不是内部执行了多少操作，也不是花了多长时间。worker 尚未返回时，caller 可以询问进度或继续不依赖结果的 look-ahead，但不能仅因等待时间较长就中断、重复实现或重新派发。
 
@@ -49,9 +49,9 @@ Acceptance 是结论点，不天然是 dispatch blocker。等待 worker 或 Gate
 
 ## Step 3 · 形成当前批次
 
-优先稳定 foundation；当前批次只收纳分别通过 Baby step first 门槛的动作。安全的一步前瞻准备也必须是独立 baby step，不能借“准备”名义预派下游实现。存在多个候选、文件 ownership 交叉、共享 DB/端口/测试数据或外部记录时，完整读取 [Dependency and Resource Admission](references/parallel-work-admission.md)。
+优先稳定 foundation；扫描全部当前候选，把分别通过 Baby step first 门槛且互不依赖的动作组成当前批次并 fan out。安全的一步前瞻准备也必须是独立 baby step，不能借“准备”名义预派下游实现。存在多个候选、文件 ownership 交叉、共享 DB/端口/测试数据或外部记录时，完整读取 [Dependency and Resource Admission](references/parallel-work-admission.md)。
 
-完成标准：任何两个并行 worker 都没有同一可变资源的 ownership；不能隔离的资源已有串行顺序和 cleanup owner。
+完成标准：所有已解锁的合格动作都已进入当前批次，或有明确 dependency/资源理由保持串行；任何两个并行 worker 都没有同一可变资源的 ownership，不能隔离的资源已有串行顺序和 cleanup owner。
 
 ## Step 4 · 选择 lane 与 lifecycle
 
