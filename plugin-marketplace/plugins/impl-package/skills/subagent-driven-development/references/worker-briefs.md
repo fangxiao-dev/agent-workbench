@@ -1,0 +1,27 @@
+# Worker Briefs
+
+本页只规定 `investigate`、`implement`、`fix` 三种 mode 的派发 prompt 放什么内容：不建立跨 host 抽象，不发明引用语法，不规定固定 envelope，不规定强制换人条件。mode 的答案形态见 [SKILL.md](../SKILL.md) 的 Step 1 表，换人条件见 [SKILL.md](../SKILL.md) 的 Step 4/5；executor、model、provider 的选择见仓库根 `AGENTS.md`。
+
+## 一、统一原则
+
+派发前，caller 必须先用一句话说清这次要什么——包括“目标就是完全不知道在哪、需要盲搜”这种情况本身也算一种明确目标，不是例外。在此基础上，caller 要把自己上下文里与这次目标**强相关、且仅强相关**的信息给 worker：不甩全部背景材料让 worker 自己筛（会让它重新做已经做完的定位/分析工作，或带着无关信息误判范围），也不能藏关键信息让 worker 从头查一遍已经查清楚的东西。
+
+## 二、调研类（investigate）
+
+- 一次派发只对应一个可独立回答的子问题，不把“把整个方案/系统调研清楚”当作一个大目标。
+- 如果拼出完整图景需要 N 个知识来源，就拆成 N 次派发；每次目标单一，彼此不依赖。
+- 目标够窄时，允许给较宽的材料范围支撑这一个子目标的检索，例如把整个代码库作为搜索范围；检索范围宽不等于目标宽，不违反强相关原则。
+
+## 三、实现类（implement / fix）
+
+### implementer
+
+- 给 plan 里已经裁决要做的具体片段，例如一份 10 步的 plan 只说清“做步骤 1 到 5”，不要把整份 plan 都丢过去。
+- 配上这一片段的 bounded outcome、write-set、禁改路径和验证入口。
+
+### fixer
+
+- 把 bug 的定位、reviewer 的原始意见，以及 caller 自己对该意见的初步分析结论一起给它。
+- 不能只给“有个 bug”这个现象，逼 fixer 把 reviewer 已经做完的定位工作重新做一遍。
+
+reviewer 的 input 设计不在本页范围，见 `do-review`。

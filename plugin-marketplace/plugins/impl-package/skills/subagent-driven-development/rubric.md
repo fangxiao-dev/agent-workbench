@@ -13,6 +13,7 @@ updated: 2026-08-25
 - [已确认] work lane 可复用同 Topic implementer/fixer；review lane 必须独立于 work lane但可复用同 Topic reviewer；test lane 只在有界 campaign 内复用。（证据: R12）
 - [已确认] 真实消费者使用 `DONE|BLOCKED|INCOMPLETE`、`EVIDENCE_SUFFICIENT|EVIDENCE_GAP` 和 `PENDING_REVIEW|PASSED`，主 session 将其作为 Topic-local facts 消费。（证据: R12）
 - [已确认] foundation、acceptance、resource、authorization dependency 分开判断；共享可变资源能隔离才并行，否则串行并指定 cleanup owner。（证据: R12）
+- [已确认] `investigate`、`implement`、`fix` 的派发 prompt 由 caller 按单一目标和强相关上下文裁剪；executor、model、provider 选择不属于本 Skill。（证据: R14）
 
 ## 决策记录
 
@@ -26,3 +27,10 @@ updated: 2026-08-25
 ### R13 · 2026-08-25（worktree isolation）
 
 - caller 可为 bounded Topic 选择当前或新隔离 worktree；可隔离的文件 ownership 交叉继续派发，运行资源逐项判断。
+
+### R14 · 2026-08-29（worker brief、dependency 去重与 material-risk 校准）
+
+- 新增 `references/worker-briefs.md`，填补 mode 到 prompt 内容的空白；只规定 caller 提供单一目标和强相关上下文，不包含 executor 选择内容。
+- `references/parallel-work-admission.md` 去重 foundation、acceptance、authorization 的重复定义，回指 Step 2 表作为唯一权威，同时保留 resource 的增量细节。
+- `SKILL.md` 增加 worker-briefs pointer，并补充直接对应 eval id=3 的 worked example。
+- `references/review-gate.md` 为七类 material-risk 补充可对照的判断启发式。

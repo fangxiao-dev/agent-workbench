@@ -7,7 +7,7 @@ description: 当用户要求使用 subagent、异步或并行方式调研、实�
 
 Topic 标识一组共享上下文的连续动作，用来判断能不能复用同一个 worker；它不是派发单元。本 Skill 是下游 bounded worker 的完整方法定义。它与 `$dispatcher` 平级：Dispatcher 与 SDD 分别直接指导上游主控调度和已派发 Topic 内的工作方法，共享 dependency、资源与生命周期原则。
 
-业务需求、Ticket/State/Evidence/Gate 仍由调用方及其 owning skill 决定；executor、model、provider 或 agent profile 由 Owner 选择或宿主原生能力解析。worker 的验收目标是一个动作的答案，不是需求的 AC，也不是 Ticket 的终态；AC 与 Ticket 粒度归 impl-planning，运行状态与验收判断归 dev-with-track。同一个动作可以服务任何 Ticket，也可以不服务任何 Ticket。
+业务需求、Ticket/State/Evidence/Gate 仍由调用方及其 owning skill 决定；executor、model、provider 或 agent profile 由 Owner 选择或宿主原生能力解析。起草 `investigate`/`implement`/`fix` 的派发 prompt 时读取 [worker-briefs.md](references/worker-briefs.md)。worker 的验收目标是一个动作的答案，不是需求的 AC，也不是 Ticket 的终态；AC 与 Ticket 粒度归 impl-planning，运行状态与验收判断归 dev-with-track。同一个动作可以服务任何 Ticket，也可以不服务任何 Ticket。
 
 每个 bounded Topic 可以使用当前 worktree，也可以使用新隔离 worktree；caller 根据 write ownership 与资源交叉决定选择、创建和生命周期。文件 ownership 不冲突时可以共用当前 worktree；存在交叉但能通过新隔离 worktree 分开时继续 fan out。DB、端口、测试数据和外部记录分别验证隔离，独立 worktree 只解决文件写入边界；无法隔离的共享可变资源才要求串行。
 
@@ -81,3 +81,12 @@ material-risk Topic（shared seam、安全、数据完整性、并发、migratio
 完成集成后重新扫描 foundation 与一步前瞻准备，再由上游 Dispatcher 决定下一轮 queue/dispatch/idle。
 
 完成标准：当前结果有可归因的 Topic-local 结论，业务完成判断来自 canonical facts，并已执行一次 `look-ahead`。
+
+## 示例
+
+同一 Topic 的 implementer 返回一个已确认 finding，且 write ownership 未变、上下文可信。
+caller 将修复该 finding 定为下一个 baby step，并选择 `mode=fix`。
+caller 沿同一 work lane 派发 fixer，复用现有 Topic context。
+派发内容只带该 finding 及其已定边界，fixer 不重新裁决 finding。
+回收 diff、evidence 和 focused verification 后，主 session 把结果作为 Topic-local fact 消费。
+Topic closure 前继续逐步授权；Topic closure 后退役该 worker。
