@@ -1,0 +1,6 @@
+interface:
+  display_name: "Screenshot to UI"
+  short_description: "将参考截图迭代为真实前端界面"
+  default_prompt: "Use $screenshot-to-ui to compare this screenshot with the real page and implement the approved UI direction."
+policy:
+  allow_implicit_invocation: false
