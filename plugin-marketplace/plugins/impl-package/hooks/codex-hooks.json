@@ -1,0 +1,34 @@
+{
+  "description": "Codex-only Impl-Package state protection and session resume context.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^apply_patch$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/hooks/impl_package_hooks.py\" pre-tool-use",
+            "commandWindows": "python -c \"import os,runpy; runpy.run_path(os.path.join(os.environ['PLUGIN_ROOT'],'hooks','impl_package_hooks.py'),run_name='__main__')\" pre-tool-use",
+            "timeout": 5,
+            "statusMessage": "Protecting Impl-Package state"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume|compact)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/hooks/impl_package_hooks.py\" session-start",
+            "commandWindows": "python -c \"import os,runpy; runpy.run_path(os.path.join(os.environ['PLUGIN_ROOT'],'hooks','impl_package_hooks.py'),run_name='__main__')\" session-start",
+            "timeout": 10,
+            "statusMessage": "Restoring Impl-Package context",
+            "additionalContextLimit": 1200
+          }
+        ]
+      }
+    ]
+  }
+}

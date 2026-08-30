@@ -10,66 +10,45 @@ SKILL = DISPATCHER / "SKILL.md"
 EVALS = DISPATCHER / "evals" / "evals.json"
 
 
-def test_queue_keeps_two_states_and_gains_no_task_manager_vocabulary() -> None:
+def test_dispatcher_is_a_lightweight_upstream_scheduler() -> None:
     skill = SKILL.read_text(encoding="utf-8")
 
-    assert "`status` 只有 `planned` 与 `in-progress`" in skill
-    for retired_status in ("status=waiting", "status=parked", "status=cancelled", "status=completed"):
-        assert retired_status not in skill
-
-
-def test_in_progress_means_occupied_not_running() -> None:
-    skill = SKILL.read_text(encoding="utf-8")
-
-    assert "不承诺 worker 此刻仍在运行" in skill
-    # An externally blocked task parks in in-progress rather than lying to get-next-tasks.
-    assert "不退回 `planned`" in skill
-
-
-def test_phase_table_routes_a_blocked_worker_return() -> None:
-    skill = SKILL.read_text(encoding="utf-8")
-    table = skill.split("## 阶段查询表", 1)[1].split("## CLI 用法", 1)[0]
-
-    assert "BLOCKED" in table
-    for branch in ("update-deps --add", "in-progress", "共享依赖"):
-        assert branch in table
-
-
-def test_internal_blocker_returns_original_task_to_planned_with_dependency() -> None:
-    skill = SKILL.read_text(encoding="utf-8")
-    table = skill.split("## 阶段查询表", 1)[1].split("## CLI 用法", 1)[0]
-
-    assert "planned + depOn" in table
-    assert "外部/Owner" in table and "保持 `in-progress`" in table
-
-
-def test_delete_retires_only_items_with_no_remaining_work() -> None:
-    skill = SKILL.read_text(encoding="utf-8")
-
-    for marker in ("fully completed", "cancelled", "superseded", "retire", "没有剩余工作"):
+    for marker in (
+        "面向上游主控",
+        "Baby step 派发门槛",
+        "独立可返回性",
+        "当前批次",
+        "fan out",
+        "receipt",
+        "worker return",
+        "Topic 生命周期",
+        "idle",
+    ):
         assert marker in skill
-    assert "下游已改依赖或退役" in skill
-    assert "唯一前置就是这条判断" not in skill
+    for queue_marker in (
+        "task-queue.json",
+        "depOn",
+        "get-next-tasks",
+        "阶段查询表",
+        "CLI 用法",
+        "`planned`",
+        "`in-progress`",
+    ):
+        assert queue_marker not in skill
 
 
-def test_dep_on_admission_is_restricted_to_other_queue_items() -> None:
+def test_dispatcher_confirms_receipt_before_consuming_worker_return() -> None:
     skill = SKILL.read_text(encoding="utf-8")
 
-    assert "另一个队列项的产出" in skill
-    assert "Acceptance Gate" in skill
-
-
-def test_queue_item_granularity_is_one_baby_step_inside_topic() -> None:
-    skill = SKILL.read_text(encoding="utf-8")
-
-    assert "一个队列项只对应 Topic 内一个合格 baby step" in skill
-    assert "结果可二元判定、前置依赖已回答且能独立验证" in skill
-    assert "worker 返回后先消费结果，再决定该 Topic 的下一步" in skill
+    assert "宿主 receipt" in skill
+    assert "先消费" in skill and "worker return" in skill
+    assert "同一 Topic" in skill and "新 Topic" in skill
+    assert "fresh worker" in skill
 
 
 def test_breadth_gate_splits_independently_returnable_work_surfaces() -> None:
     skill = SKILL.read_text(encoding="utf-8")
-    gate = skill.split("## Baby step 派发门槛", 1)[1].split("## 原则", 1)[0]
+    gate = skill.split("## Baby step 派发门槛", 1)[1].split("## 调度循环", 1)[0]
 
     for marker in (
         "独立可返回性",
@@ -86,7 +65,7 @@ def test_breadth_gate_splits_independently_returnable_work_surfaces() -> None:
 
 def test_breadth_gate_does_not_use_search_scope_or_file_count_as_a_limit() -> None:
     skill = SKILL.read_text(encoding="utf-8")
-    gate = skill.split("## Baby step 派发门槛", 1)[1].split("## 原则", 1)[0]
+    gate = skill.split("## Baby step 派发门槛", 1)[1].split("## 调度循环", 1)[0]
 
     assert "检索范围宽" in gate
     assert "多个紧密相关文件" in gate and "跨文件" in gate
@@ -94,26 +73,26 @@ def test_breadth_gate_does_not_use_search_scope_or_file_count_as_a_limit() -> No
     assert "没有任何一部分能先形成独立可消费的结果" in gate
 
 
-def test_breadth_gate_evals_cover_the_luna_regression_and_two_controls() -> None:
+def test_dispatcher_evals_cover_admission_batch_receipt_return_and_idle() -> None:
     evals = json.loads(EVALS.read_text(encoding="utf-8"))["evals"]
 
+    assert [case["id"] for case in evals] == [1, 2, 3, 4, 5]
     luna = next(case for case in evals if "manifest、全部 Skills、scripts、protocols 和 tests" in case["prompt"])
     broad_search = next(case for case in evals if "整个仓库搜索" in case["prompt"])
     multi_file = next(case for case in evals if "多个紧密相关文件" in case["prompt"])
+    batch = next(case for case in evals if "两个互不依赖" in case["prompt"])
+    lifecycle = next(case for case in evals if "同一 Topic" in case["prompt"] and "新 Topic" in case["prompt"])
 
     assert "拆成可独立返回" in luna["expected_output"]
-    assert "主控综合" in luna["expected_output"]
     assert "允许派发" in broad_search["expected_output"]
-    assert "检索范围宽不等于目标宽" in broad_search["expected_output"]
     assert "允许派发" in multi_file["expected_output"]
-    assert "文件数量不是" in multi_file["expected_output"]
+    assert "receipt" in batch["expected_output"] and "idle" in batch["expected_output"]
+    assert "复用" in lifecycle["expected_output"] and "fresh" in lifecycle["expected_output"]
 
 
 def test_evals_are_wellformed_read_only_scenarios() -> None:
     evals = json.loads(EVALS.read_text(encoding="utf-8"))["evals"]
 
-    assert len(evals) >= 9
-    assert [case["id"] for case in evals] == list(range(1, len(evals) + 1))
     for case in evals:
         assert case["expectations"]
         assert "只读模拟" in case["prompt"]

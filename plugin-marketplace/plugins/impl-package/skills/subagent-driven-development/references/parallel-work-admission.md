@@ -6,6 +6,6 @@
 
 每个并行单元必须有互斥 ownership、隔离资源和 cleanup owner。环境、fixture、权限、身份、数据或 test carrier 只有在不绑定未稳定业务语义、结果可回收且不提前充当 acceptance evidence 时，才能作为一步前瞻准备。
 
-返回当前批次的 `PARALLEL | SERIAL | BLOCKED` 结论，附实际 dependency、worktree 选择、资源顺序和 cleanup。上游 `$dispatcher` 负责把已确定的任务写入动态队列并执行派发循环。
+返回当前批次的 `PARALLEL | SERIAL | BLOCKED` 结论，附实际 dependency、worktree 选择、资源顺序和 cleanup。上游 `$dispatcher` 消费这些结论并执行派发循环。
 
 完成标准：并行单元不存在共享可变 ownership；串行单元有唯一顺序；阻断项明确缺失的 foundation、授权或隔离条件。

@@ -9,21 +9,21 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 
 ## 业务控制循环
 
-1. **刷新事实**：执行 Restore，取得 current Attempt、Ticket 状态、blocker、合法 action 与 situation digest。
+1. **刷新事实**：优先消费匹配当前 session/package 的 `Impl-Package Resume Capsule v1`；不存在或已失配时执行 Restore，取得 current Attempt、blocker、合法 action 与 situation digest。
 2. **选择动作**：根据 Ticket typed dependency 与 canonical state 选择 Investigate、Decide、Implement 或 Evaluate。implementation edge 阻止绑定未稳定语义的下游实现；acceptance edge 只阻止正式验收与状态宣称；release edge 在 Gate 前复核。
 3. **裁决语义**：Decision/Spec 能唯一裁决时作为 implementation defect；存在多个合理业务结果时才请求 Owner。finding 的定级、disposition 与 acceptance point 也由本 Skill 判断。
 4. **形成 Topic**：把当前业务动作切成一个或多个 bounded outcome、ownership、禁改范围、comparison point、成功条件与局部验证；需要 mutation 的 PENDING Ticket 先完成对应 preflight。
-5. **交给 Dispatcher**：使用显式 `<package>/task-queue.json`；把 Topic 加入 `$dispatcher`，由其维护 `depOn`、ready scan、派发确认、worker return、Topic 退役和 idle。Progress/checkpoint 不授权 dispatch，也不释放依赖。
+5. **交给 Dispatcher**：对候选动作执行 baby-step admission，形成当前批次并 fan out；宿主 receipt 明确后确认派发，worker return 后先消费结果再重扫候选。Progress/checkpoint 不授权 dispatch。
 6. **执行 bounded worker**：对每个已派发 Topic，caller 按 `/impl-package:subagent-driven-development` 分类 dependency、决定当前或隔离 worktree，并形成 mode、lane、lifecycle 与 review requirement。
-7. **消费结果**：核对可归因 diff、evidence、residue、cleanup 和 review 状态；局部 DONE 或 checkpoint PASS 只释放对应 Topic 下一步。随后用 package CLI 写 state/evidence/checkpoint/judgment/trail，再由 Dispatcher 重扫队列；queue idle 后依据 canonical state、evidence、review 与 Gate 判断继续、blocked 或 closure。
+7. **消费结果**：核对可归因 diff、evidence、residue、cleanup 和 review 状态；局部 DONE 或 checkpoint PASS 只释放对应 Topic 下一步。随后用 package CLI 写 state/evidence/checkpoint/judgment/trail，再由 Dispatcher 重扫候选；调度 idle 后依据 canonical state、evidence、review 与 Gate 判断继续、blocked 或 closure。
 
-完成标准：每轮都有唯一业务下一动作；调度循环 idle 只表示当前无 queue work，Ticket/package closure 仍由本 Skill 根据 canonical facts 判断。
+完成标准：每轮都有唯一业务下一动作；调度循环 idle 只表示当前没有已解锁且合格的动作，Ticket/package closure 仍由本 Skill 根据 canonical facts 判断。
 
 ## Owner 边界
 
 本 Skill 选择业务动作并拥有 Ticket readiness、语义裁决、State、Evidence、Execution Record、Checkpoint 与 Gate。两个平级 Skill 承担执行方法：
 
-- `$dispatcher` 面向上游主控，拥有动态 queue、dependency release、派发、worker return 和 idle 循环；
+- `$dispatcher` 面向上游主控，拥有 baby-step admission、当前批次、派发 receipt、worker return、Topic lifecycle 和 idle；
 - `/impl-package:subagent-driven-development` 面向下游 bounded worker，拥有 Topic、dependency class、mode、lane、lifecycle 与 review requirement。
 
 主 session 是 package State、Evidence、Execution Record、Checkpoint 与 Gate 的唯一 writer。调用方为每个 Topic 提供 objective、scope、write-set、acceptance、authorization、verification 和输出合同，并按 SDD 选择当前或隔离 worktree；provider/executor 由 Owner 或宿主选择。
@@ -34,15 +34,11 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 
 ## Restore
 
-每轮真正推进前刷新当前处境与合法动作：
+首次确认 package anchor 后，Codex 从当前已加载 Skill 解析 plugin root，并调用 `python <plugin-root>/hooks/impl_package_hooks.py activate --package <package>` 绑定当前 session；其它宿主跳过。若有匹配 Capsule，只消费其中的恢复事实并复核 package、HEAD 与 initial approval，不把 Capsule 当作 acceptance 或 Gate evidence。
 
-1. 运行 `package validate`；成功/非零分别映射为 `projection_drift=false/true`，不解析命令文本。跨 session 或授权绑定比较点时附 Git commit。
-2. 读取 `progress.md` 的 current Attempt、Ticket 状态、blocker、active checkpoint、next action 与 Gate；不读 `state.json` 或 situation JSON 全量。
-3. 只沿当前动作读取必要 Ticket 切片，不重播已 `SATISFIED` 历史。
-4. 用 initial bundle approval 与实际 diff 确认仍在同一 package；新 package 才重新取得 approval。
-5. 把 validator 结果与宿主 compaction pressure 注入 `situation.py render --json`；首次不带 previous digest，后续使用 `--since`。偏离建议或表外行动使用 `escape` 记录理由。
+Capsule 缺失、失配、Hook 未信任/禁用，或本轮发生 state mutation 时，读取 [Runtime Protocol](references/runtime-protocol.md) 的完整恢复顺序。真正 dispatch 前仍运行普通 `situation.py render` 生成 credential；偏离建议或表外行动使用 `escape` 记录理由。
 
-Restore 是导航，不推进 Gate。完成标准：当前 Attempt、唯一业务下一动作、blocker 与合法 action 已可直接读取。
+显式离开 package 工作时，Codex 调用同一脚本的 `deactivate`；同 session 未解绑就切换到普通 SDD 时，后续 resume/compact 仍会注入 Capsule。Restore 只是导航，不推进 Gate。
 
 ## Ticket 激活 preflight
 
@@ -51,7 +47,7 @@ PENDING Ticket 首次激活且 Planned Verification 声明 `Evidence Lane Contra
 ## State、ER 与 Trail
 
 - Ticket 状态使用 `ticket satisfy|block|needs-revalidation|pending|retire ... --expect ...`；`SATISFIED` 携带当前 revision/environment，`BLOCKED`/`RETIRED` 携带直接 evidence。stale transition 先重读。
-- 主 session 是 package state 唯一 writer。worker 只返回结构化事实；证据矛盾或部分写入时经 slow path 对账后仍由主 session 执行 CLI。
+- worker 只返回结构化事实；所有 state mutation 走语义 CLI，证据矛盾或部分写入时经 slow path 对账后仍由主 session 执行最终写入。
 - `recovery checkpoint` 只保存下一动作与恢复 evidence；长期判断写 `recovery judgment`。checkpoint 不授权派发、不释放 dependency、不创建新 Task 状态。
 - `dispatch`、`worker-return`、`fact`、`escape` 使用 `trail append`；轨迹只追加，写错时追加更正。显式 handoff 先写 checkpoint，再轮换 trail。
 - 新 package 不产生 `READY/RUNNING/DONE` Task 状态；旧 Task `DONE` 也不等于 Ticket `SATISFIED`。

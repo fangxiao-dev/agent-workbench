@@ -138,7 +138,9 @@ def test_dispatcher_and_sdd_are_peer_guidance_for_upstream_and_downstream() -> N
     sdd = (SDD / "SKILL.md").read_text(encoding="utf-8")
     dev = (PLUGIN / "skills" / "dev-with-track" / "SKILL.md").read_text(encoding="utf-8")
 
-    assert "面向上游主控" in dispatcher and "queue/dispatch/return/idle" in dispatcher
+    assert "面向上游主控" in dispatcher
+    for marker in ("baby step", "dispatch", "worker return", "idle"):
+        assert marker in dispatcher
     assert "下游" in sdd and "bounded worker" in sdd
     assert "$dispatcher" in dev
     assert "/impl-package:subagent-driven-development" in dev
@@ -151,8 +153,32 @@ def test_dispatcher_and_sdd_are_peer_guidance_for_upstream_and_downstream() -> N
     assert "references/control-flow.md" in dev
     assert "references/runtime-protocol.md" in dev
     assert "$dispatcher" in control_flow and "subagent-driven-development" in control_flow
-    assert "task-queue.json" in runtime and "state.json" in runtime
+    assert "state.json" in runtime
     assert "固定 fallback" in runtime
+
+
+def test_impl_package_active_tree_has_no_task_queue_semantics() -> None:
+    active_paths = (
+        PLUGIN / "skills" / "dev-with-track" / "SKILL.md",
+        PLUGIN / "skills" / "dev-with-track" / "references" / "control-flow.md",
+        PLUGIN / "skills" / "dev-with-track" / "references" / "runtime-protocol.md",
+        PLUGIN / "skills" / "dev-with-track" / "rubric.md",
+        PLUGIN / "skills" / "dev-with-track" / "evals" / "evals.json",
+        SDD / "SKILL.md",
+        SDD / "references" / "parallel-work-admission.md",
+    )
+    text = "\n".join(path.read_text(encoding="utf-8") for path in active_paths)
+
+    for retired in (
+        "task-queue.json",
+        "get-next-tasks",
+        "depOn",
+        "queue idle",
+        "dynamic queue",
+        "动态 queue",
+        "queue/dispatch/return/idle",
+    ):
+        assert retired not in text
 
 
 def test_retired_provider_and_fixed_output_references_are_removed() -> None:

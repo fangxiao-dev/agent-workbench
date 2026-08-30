@@ -2,8 +2,9 @@
 
 The situation table is deliberately kept outside this module.  This file only
 loads it, reads the package facts named by the table contract, and renders a
-deterministic projection.  Render also best-effort writes a digest credential;
-failure to write that credential does not fail the render.
+deterministic projection. Render best-effort writes a digest credential unless
+the caller explicitly requests a read-only projection; credential write failure
+does not fail the render.
 """
 
 from __future__ import annotations
@@ -3272,6 +3273,7 @@ def _json_result(
     return {
         "stage": STAGE,
         "package": str(snapshot.package),
+        "attempt": snapshot.state.attempt_id,
         "digest": digest,
         "unchanged": False,
         "at": snapshot.reader.at_label,
@@ -3412,6 +3414,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="include the first undetermined situation slugs in human output",
     )
+    render.add_argument(
+        "--no-write-credential",
+        action="store_true",
+        help=f"derive without writing execution/<attempt>/{SITUATION_DIGEST_NAME}",
+    )
     render.add_argument("--json", action="store_true", help="emit structured JSON")
     table = subparsers.add_parser("print-table", help="print the formal YAML table")
     table.add_argument("--stage", default=STAGE, choices=[STAGE])
@@ -3427,7 +3434,8 @@ def _run_render(args: argparse.Namespace) -> int:
     snapshot = _build_snapshot(reader, validation_result, compaction_pressure)
     derived = _derive(table, snapshot)
     digest = _situation_digest(table, derived)
-    _write_situation_digest(reader, snapshot.state, digest)
+    if not args.no_write_credential:
+        _write_situation_digest(reader, snapshot.state, digest)
     if args.since == digest:
         if args.json:
             print(

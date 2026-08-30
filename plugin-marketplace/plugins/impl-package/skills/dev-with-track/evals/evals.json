@@ -45,15 +45,15 @@
     },
     {
       "id": 7,
-      "prompt": "Dispatcher get-next-tasks 返回 []，仍有 running worker、Ticket evidence 缺失且 Gate open。整体完成了吗？",
-      "expected_output": "Dispatcher 仅进入 queue idle；dev-with-track 根据 canonical state/evidence/Gate 判断 package 未 closed。",
+      "prompt": "Dispatcher 当前扫描没有已解锁且合格的动作，但仍有 running worker、Ticket evidence 缺失且 Gate open。整体完成了吗？",
+      "expected_output": "Dispatcher 仅进入调度 idle；dev-with-track 根据 canonical state/evidence/Gate 判断 package 未 closed。",
       "files": [],
-      "expectations": ["queue idle is not package closure", "dev owns business completion"]
+      "expectations": ["dispatcher idle is not package closure", "dev owns business completion"]
     },
     {
       "id": 8,
       "prompt": "从 active Attempt 恢复后发现两个可能的业务动作，其中一个已有唯一 Spec 裁决，另一个仍有多个合理结果。说明主控首先做什么，以及何时调用 Dispatcher。",
-      "expected_output": "dev-with-track 先刷新 canonical facts、选择动作并裁决语义；把唯一可执行结果形成 bounded Topic 后才交 Dispatcher 做机械 queue/dispatch。",
+      "expected_output": "dev-with-track 先刷新 canonical facts、选择动作并裁决语义；把唯一可执行结果形成 bounded Topic 后才交 Dispatcher 做 baby-step admission 与 dispatch。",
       "files": [],
       "expectations": ["business control loop first", "semantic decision before dispatch", "Dispatcher owns mechanical scheduling"]
     }

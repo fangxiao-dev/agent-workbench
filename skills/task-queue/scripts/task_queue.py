@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validated single-writer task queue for the Dispatcher skill."""
+"""Validated single-writer task queue for the Task Queue skill."""
 
 from __future__ import annotations
 

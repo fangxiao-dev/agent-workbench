@@ -5,7 +5,7 @@ description: 覆盖执行前授权确认（preflight）、执行期异常 slow p
 
 # 执行边界与收口
 
-本入口覆盖三个独立边界，各自独立生效，互不串读：执行前确认授权，异常时恢复与对账，完成前审计 claim 是否有足够 evidence。日常状态变更走现有语义 CLI；恢复先消费宿主提供的处境注入，或按需读取 `../../scripts/situation.py render` 的当前 digest、动作和 protocol，再展开本次动作所需材料。
+本入口覆盖三个独立边界，各自独立生效，互不串读：执行前确认授权，异常时恢复与对账，完成前审计 claim 是否有足够 evidence。日常状态变更走现有语义 CLI；恢复优先消费匹配的 `Impl-Package Resume Capsule v1`，缺失或失配时按自身 Wave/fallback 读取当前 digest、动作和 protocol，再展开本次动作所需材料。
 
 ## 执行前（preflight）
 

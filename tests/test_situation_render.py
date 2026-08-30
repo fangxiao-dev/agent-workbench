@@ -251,10 +251,42 @@ def test_render_writes_situation_digest_credential() -> None:
         credential = json.loads(credential_bytes.decode("utf-8"))
         rendered = json.loads(completed.stdout)
         assert set(credential) == {"digest", "ts", "state_sha256"}
+        assert rendered["attempt"] == attempt
         assert credential["digest"] == rendered["digest"]
         assert len(credential["ts"]) > 10
         assert credential["state_sha256"] == hashlib.sha256(state_path.read_bytes()).hexdigest()
         assert not credential_bytes.startswith(b"\xef\xbb\xbf")
+
+
+def test_render_can_skip_creating_situation_digest_credential() -> None:
+    source = FIXTURES / "p0-evidence-unfiled"
+    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+        package = Path(temporary) / source.name
+        shutil.copytree(source, package)
+        completed = _invoke_render(package, "--no-write-credential", "--json")
+        assert completed.returncode == 0, completed.stderr
+
+        state = json.loads((package / ".impl-package/state.json").read_text(encoding="utf-8"))
+        credential_path = package / "execution" / state["attempt"]["id"] / "situation-digest.json"
+        rendered = json.loads(completed.stdout)
+        assert rendered["attempt"] == state["attempt"]["id"]
+        assert not credential_path.exists()
+
+
+def test_render_can_skip_updating_existing_situation_digest_credential() -> None:
+    source = FIXTURES / "p0-evidence-unfiled"
+    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+        package = Path(temporary) / source.name
+        shutil.copytree(source, package)
+        first = _invoke_render(package, "--json")
+        assert first.returncode == 0, first.stderr
+
+        state = json.loads((package / ".impl-package/state.json").read_text(encoding="utf-8"))
+        credential_path = package / "execution" / state["attempt"]["id"] / "situation-digest.json"
+        before = credential_path.read_bytes()
+        second = _invoke_render(package, "--no-write-credential", "--json")
+        assert second.returncode == 0, second.stderr
+        assert credential_path.read_bytes() == before
 
 
 def test_render_since_writes_situation_digest_credential() -> None:

@@ -1,15 +1,21 @@
 # Runtime Protocol
 
-运行状态唯一来源是 `.impl-package/state.json`；格式和命令见 `../../../references/impl-package-current-state.md`。`task-queue.json` 是 Dispatcher 的动态调度投影，不替代 Ticket readiness、checkpoint、evidence 或 Gate。
+运行状态唯一来源是 `.impl-package/state.json`；格式和命令见 `../../../references/impl-package-current-state.md`。
+
+## Codex Resume Capsule
+
+Codex Hook 已显式激活当前 package 时，`SessionStart` 可注入 `Impl-Package Resume Capsule v1`。Capsule 只提供 session/package、Attempt、HEAD、state/Gate 读取状态、situation/action 与 preview digest；它不拥有业务裁决，也不充当 Evidence、Acceptance、Gate、closure 或 dispatch credential。
+
+Capsule 与当前 package/HEAD/approval 匹配时，可作为本次恢复入口；缺失、失配、Hook 未信任/禁用、读取 warning 或任何 state mutation 之后，执行下方完整恢复顺序。普通 SDD 不激活 package，因此不产生 Capsule。
 
 ## 恢复顺序
 
 1. 运行 `package validate`；projection drift 时先运行 `package refresh-progress`。
 2. 打开 `progress.md`，确认 current Attempt、lifecycle、Gate、blocker、active checkpoint 和 next action。
 3. 根据 typed Ticket dependency 选择业务动作；Progress/checkpoint 不授权 dispatch。
-4. 按需读取 `<package>/task-queue.json`，由 `$dispatcher` 恢复 queue/worker-return/idle；队列为空不等于 package closed。
+4. 对当前业务候选应用 `$dispatcher` 的 baby-step admission，形成当前批次并消费 worker return；idle 不等于 package closed。
 5. 只打开当前动作需要的 Plan/Ticket/Execution Record/evidence；旧 package 才按需读取 DAG/Handoff。
-6. 消费结果后使用语义 Ticket/evidence/recovery/trail 命令写权威事实。
+6. 消费结果后使用语义 Ticket/evidence/recovery/trail 命令写权威事实；真正 dispatch 前用普通 `situation.py render` 生成当前 credential。
 
 ## Evidence 与 Execution Record
 
@@ -21,7 +27,7 @@ Evidence 使用存在的仓库相对路径，可带 anchor，并足以解释状�
 
 ## Readiness、返工与调度
 
-- 新 package：Ticket typed dependency 决定业务 readiness；Dispatcher 的 `depOn` 只表达动态实施地基和共享资源顺序。
+- 新 package：Ticket typed dependency 决定业务 readiness；Dispatcher 只调度已解锁且合格的动作。
 - 旧 package：Task dependency 未释放时不得进入 READY/RUNNING；Task DONE 后仍需集成、共享验证与 Ticket AC 映射。
 - plan/contract 变化只使 affected subset 进入 revalidation，并沿用同一 initial bundle approval。
 - worker 返回不可归因或 `INCOMPLETE` 时，不套固定 fallback 次数。先核进程、diff、residue 与 Topic context；上下文可信则同 lane 继续，失效则由 Dispatcher 退役并重新派发。业务 `BLOCKED` 原样保留。

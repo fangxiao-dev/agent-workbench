@@ -50,6 +50,10 @@ def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
     assert codex["name"] == claude["name"] == "impl-package"
     assert codex["version"] == claude["version"] == "0.4.2"
     assert codex["skills"] == claude["skills"] == "./skills/"
+    assert codex["hooks"] == "./hooks/codex-hooks.json"
+    assert "hooks" not in claude
+    assert (PLUGIN / "hooks" / "codex-hooks.json").is_file()
+    assert (PLUGIN / "hooks" / "impl_package_hooks.py").is_file()
     assert "agents" not in codex
     assert claude["agents"] == [
         "./agents/review-track-code.md",
@@ -253,3 +257,26 @@ def test_hot_path_skills_stay_within_instruction_budget() -> None:
     checklist = PLUGIN / "skills" / "review-code" / "references" / "review-checklist.md"
     assert checklist.is_file()
     assert "references/review-checklist.md" in paths[2].read_text(encoding="utf-8")
+
+
+def test_resume_capsule_supplies_facts_while_runtime_reference_keeps_the_fallback() -> None:
+    dev = (PLUGIN / "skills" / "dev-with-track" / "SKILL.md").read_text(encoding="utf-8")
+    runtime = (PLUGIN / "skills" / "dev-with-track" / "references" / "runtime-protocol.md").read_text(
+        encoding="utf-8"
+    )
+    boundaries = (PLUGIN / "skills" / "execution-boundaries" / "SKILL.md").read_text(encoding="utf-8")
+
+    restore = dev.split("## Restore", 1)[1].split("## Ticket 激活 preflight", 1)[0]
+    assert "Impl-Package Resume Capsule v1" in dev
+    assert "references/runtime-protocol.md" in restore
+    assert "activate --package <package>" in restore
+    assert "deactivate" in restore
+    assert "progress.md" not in restore
+    assert dev.count("唯一 writer") == 1
+
+    assert "## Codex Resume Capsule" in runtime
+    assert "## 恢复顺序" in runtime
+    for marker in ("package validate", "progress.md", "situation.py render"):
+        assert marker in runtime
+    assert "task-queue.json" not in runtime
+    assert "Impl-Package Resume Capsule v1" in boundaries

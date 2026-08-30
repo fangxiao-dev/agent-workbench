@@ -10,6 +10,7 @@
   "repository": "https://github.com/fangxiao-dev/agent-workbench",
   "keywords": ["implementation", "planning", "verification", "workflow"],
   "skills": "./skills/",
+  "hooks": "./hooks/codex-hooks.json",
   "interface": {
     "displayName": "Impl Package",
     "shortDescription": "Route and execute staged implementation work.",

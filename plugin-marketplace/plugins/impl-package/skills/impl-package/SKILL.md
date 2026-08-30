@@ -13,6 +13,7 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 - 只有 Git commit ID 可作为版本/比较点；外部文件和 evidence 一律使用仓库相对 POSIX 路径，拒绝绝对路径和 `..`；已知 artifact 使用固定目录或显式路径，不保存扫描结果副本。
 - Git 负责历史审计；现役格式不维护 contract/schema 版本、迁移账本或兼容层。正式规则见 [Composition Contract](../../references/impl-package-composition-contract.md) 与 [Current State](../../references/impl-package-current-state.md)。
 - 机械操作一律走现有语义 CLI：状态、Ticket、evidence、Gate 和 trail 的写入由 `../../scripts/impl_package_state.py` 及其 runtime command groups 校验；关键 trail 字段使用具名参数和 `--help` 可见的 `choices`。状态变更后 CLI 可追加当前处境 footer，处境协议由 `../../scripts/situation.py`/宿主注入提供导航，不复制成第二套持久规则。
+- Codex-only 的 state guard、session activation 与 Resume Capsule 见 [Codex Hooks](../../references/codex-hooks.md)；Hook 只提供事实和防绕过，不拥有业务状态或 Gate。
 
 ## 入口：阶段命令
 
