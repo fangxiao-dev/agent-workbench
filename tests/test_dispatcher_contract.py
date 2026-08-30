@@ -67,6 +67,48 @@ def test_queue_item_granularity_is_one_baby_step_inside_topic() -> None:
     assert "worker 返回后先消费结果，再决定该 Topic 的下一步" in skill
 
 
+def test_breadth_gate_splits_independently_returnable_work_surfaces() -> None:
+    skill = SKILL.read_text(encoding="utf-8")
+    gate = skill.split("## Baby step 派发门槛", 1)[1].split("## 原则", 1)[0]
+
+    for marker in (
+        "独立可返回性",
+        "材料面",
+        "判断项",
+        "交付部分",
+        "独立返回",
+        "独立验证",
+        "单独消费",
+    ):
+        assert marker in gate
+    assert "继续切分" in gate
+
+
+def test_breadth_gate_does_not_use_search_scope_or_file_count_as_a_limit() -> None:
+    skill = SKILL.read_text(encoding="utf-8")
+    gate = skill.split("## Baby step 派发门槛", 1)[1].split("## 原则", 1)[0]
+
+    assert "检索范围宽" in gate
+    assert "多个紧密相关文件" in gate and "跨文件" in gate
+    assert "文件数量" in gate
+    assert "没有任何一部分能先形成独立可消费的结果" in gate
+
+
+def test_breadth_gate_evals_cover_the_luna_regression_and_two_controls() -> None:
+    evals = json.loads(EVALS.read_text(encoding="utf-8"))["evals"]
+
+    luna = next(case for case in evals if "manifest、全部 Skills、scripts、protocols 和 tests" in case["prompt"])
+    broad_search = next(case for case in evals if "整个仓库搜索" in case["prompt"])
+    multi_file = next(case for case in evals if "多个紧密相关文件" in case["prompt"])
+
+    assert "拆成可独立返回" in luna["expected_output"]
+    assert "主控综合" in luna["expected_output"]
+    assert "允许派发" in broad_search["expected_output"]
+    assert "检索范围宽不等于目标宽" in broad_search["expected_output"]
+    assert "允许派发" in multi_file["expected_output"]
+    assert "文件数量不是" in multi_file["expected_output"]
+
+
 def test_evals_are_wellformed_read_only_scenarios() -> None:
     evals = json.loads(EVALS.read_text(encoding="utf-8"))["evals"]
 

@@ -121,6 +121,39 @@
         "retire 要求 fully completed、cancelled 或 superseded，并且没有剩余工作。",
         "当前继续用 update-summary/update-status 表达 T080 的剩余工作。"
       ]
+    },
+    {
+      "id": 12,
+      "prompt": "只读模拟：主控准备派一个 investigate worker，一次盘点 manifest、全部 Skills、scripts、protocols 和 tests，明确排除 dsh-*，最后交付完整候选表。每类材料都能独立形成证据结论。判断是否已满足 baby step 门槛；禁止实际修改文件或派发 worker。",
+      "expected_output": "拒绝把名义上的单一候选表当作一个 baby step；manifest/Skills、scripts/protocols、tests 等能独立取证和消费的材料面应拆成可独立返回的动作，依赖已释放且资源隔离的动作可以 fan out，主控综合局部证据形成候选表。",
+      "files": [],
+      "expectations": [
+        "识别单一最终表格掩盖了多个可独立返回、独立验证并被主控单独消费的材料面。",
+        "继续切分这些材料面；互不依赖且资源隔离的合格动作可以进入同一批次 fan out。",
+        "完整候选表由主控综合局部结果，不把跨材料取证与综合重新塞给一个 worker。"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "只读模拟：一个 investigate 动作只回答某个符号是否存在唯一写入入口。位置未知，因此可能需要在整个仓库搜索，但最终只有一个事实结论和一组直接证据。判断是否必须继续拆分；禁止实际修改文件或派发 worker。",
+      "expected_output": "允许派发；这是一个可独立回答和验证的窄问题，检索范围宽不等于目标宽，不因搜索整个仓库而机械拆分。",
+      "files": [],
+      "expectations": [
+        "允许派发这个单一事实调查。",
+        "区分材料检索范围与结果 breadth：搜索范围宽不自动产生多个 baby steps。",
+        "保持一个事实结论及其直接证据，不额外扩展为系统盘点。"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "只读模拟：一个 implement 动作要完成同一个 validated queue write outcome，必须同步修改多个紧密相关文件并运行一个 focused test；其中任何单个文件的改动都不能独立交付。判断是否必须按文件拆分；禁止实际修改文件或派发 worker。",
+      "expected_output": "允许派发；文件数量不是 breadth gate，多个紧密相关文件共同实现一个不可分割、可独立验证的 coherent outcome 时仍是一个 baby step。",
+      "files": [],
+      "expectations": [
+        "允许派发这个 coherent implementation outcome。",
+        "说明文件数量不是 baby-step 数量，不能独立交付的文件修改不应机械拆开。",
+        "保留单一 focused verification，并继续遵守 write-set 与资源隔离。"
+      ]
     }
   ]
 }
