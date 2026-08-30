@@ -2969,10 +2969,10 @@ def _evaluate_row(row: dict[str, Any], context: FactContext) -> tuple[str, dict[
             unknown_reasons.append(f"{key}: {reason}")
         elif not matched:
             false_found = True
-    if unknown_reasons:
-        return "unknown", values, unknown_reasons
     if false_found:
         return "false", values, []
+    if unknown_reasons:
+        return "unknown", values, unknown_reasons
     return "true", values, []
 
 

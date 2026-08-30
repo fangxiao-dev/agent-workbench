@@ -6,7 +6,7 @@
   ],
   "expected_layer": "P4",
   "expected_secondary": [],
-  "expected_undetermined_count": 34,
+  "expected_undetermined_count": 24,
   "must_not_hit": [
     "package.record.state-missing",
     "attempt.gate.terminal-frozen",

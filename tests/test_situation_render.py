@@ -221,8 +221,8 @@ def test_human_render_collapses_undetermined_and_supports_since() -> None:
     package = ROOT / "tests/fixtures/situations-a2/p0-evidence-unfiled"
 
     full = _render_text(package)
-    assert "无法判定 31 行\n" in full
-    assert "无法判定 30 行:" not in full
+    assert "无法判定 24 行\n" in full
+    assert "无法判定 23 行:" not in full
     assert "package.record.projection-drift" not in full
     digest_line = full.rsplit("\n", 1)[-1]
     assert digest_line.startswith("digest: ")
@@ -230,7 +230,7 @@ def test_human_render_collapses_undetermined_and_supports_since() -> None:
     assert len(digest) == 12
 
     explained = _render_text(package, "--explain-undetermined")
-    assert "无法判定 31 行: package.record.projection-drift (package)" in explained
+    assert "无法判定 24 行: package.record.projection-drift (package)" in explained
 
     unchanged = _render_text(package, "--since", digest)
     assert unchanged == f"处境未变 (digest: {digest})"
@@ -352,6 +352,34 @@ def test_compaction_pressure_is_high_low_or_unknown_without_fact_channel() -> No
     low_value = low["when_values"]["attempt.compaction_pressure_high"][0]
     assert low_value["status"] == "known"
     assert low_value["value"] is False
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "expected_status"),
+    [
+        (situation.Fact(False), situation.Fact.unknown("missing"), "false"),
+        (situation.Fact.unknown("missing"), situation.Fact(False), "false"),
+        (situation.Fact(True), situation.Fact.unknown("missing"), "unknown"),
+        (situation.Fact(True), situation.Fact(True), "true"),
+    ],
+)
+def test_evaluate_row_uses_false_dominance_for_and_conditions(
+    monkeypatch: pytest.MonkeyPatch,
+    first: situation.Fact,
+    second: situation.Fact,
+    expected_status: str,
+) -> None:
+    monkeypatch.setitem(situation.WHEN_PARSERS, "test.first", lambda _context: first)
+    monkeypatch.setitem(situation.WHEN_PARSERS, "test.second", lambda _context: second)
+
+    status, values, reasons = situation._evaluate_row(
+        {"when": {"test.first": True, "test.second": True}},
+        SimpleNamespace(),
+    )
+
+    assert status == expected_status
+    assert list(values) == ["test.first", "test.second"]
+    assert bool(reasons) is (expected_status == "unknown")
 
 
 def _seam_context(
