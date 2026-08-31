@@ -16,7 +16,7 @@ def test_dispatcher_is_a_lightweight_upstream_scheduler() -> None:
     for marker in (
         "面向上游主控",
         "Baby step 派发门槛",
-        "独立可返回性",
+        "不可约分检查",
         "当前批次",
         "fan out",
         "receipt",
@@ -46,18 +46,17 @@ def test_dispatcher_confirms_receipt_before_consuming_worker_return() -> None:
     assert "fresh worker" in skill
 
 
-def test_breadth_gate_splits_independently_returnable_work_surfaces() -> None:
+def test_breadth_gate_splits_reducible_work_surfaces() -> None:
     skill = SKILL.read_text(encoding="utf-8")
     gate = skill.split("## Baby step 派发门槛", 1)[1].split("## 调度循环", 1)[0]
 
     for marker in (
-        "独立可返回性",
-        "材料面",
-        "判断项",
-        "交付部分",
-        "独立返回",
-        "独立验证",
-        "单独消费",
+        "不可约分检查",
+        "可观察子结果",
+        "独立改变",
+        "停止",
+        "重新排序",
+        "独立可消费结果",
     ):
         assert marker in gate
     assert "继续切分" in gate
@@ -70,7 +69,7 @@ def test_breadth_gate_does_not_use_search_scope_or_file_count_as_a_limit() -> No
     assert "检索范围宽" in gate
     assert "多个紧密相关文件" in gate and "跨文件" in gate
     assert "文件数量" in gate
-    assert "没有任何一部分能先形成独立可消费的结果" in gate
+    assert "没有任何一部分能先独立改变、停止或重新排序后续调度" in gate
 
 
 def test_dispatcher_evals_cover_admission_batch_receipt_return_and_idle() -> None:

@@ -15,7 +15,9 @@ Topic 标识一组共享上下文的连续动作，用来判断能不能复用�
 
 **Baby step 是 scope 与授权边界，不是 timebox。** Topic 是共享上下文与 lifecycle 容器，不是派发单元；caller 每次只授权该 Topic 当前一个具有单一 bounded outcome 的 baby step，明确 ownership、write-set、禁改范围、前置依赖、成功条件和 focused verification。这个限制逐 Topic 生效；同一批次可以并行释放多个不同 Topic 的已解锁 baby steps。
 
-一个 baby step 可以包含为同一结果服务的必要调查、RED→GREEN、实现和局部验证；判断标准是最终是否只有一个可二元验收的结果，不是内部执行了多少操作，也不是花了多长时间。worker 尚未返回时，caller 可以询问进度或继续不依赖结果的 look-ahead，但不能仅因等待时间较长就中断、重复实现或重新派发。
+一个 baby step 可以包含辅助调查、RED→GREEN、实现和局部验证，但前提是这些动作都不能形成独立可消费结果。如果调查结果会决定实现方向、write-set、授权、资源占用或是否继续，先单独派发 `investigate`；只用于定位符号、确认现有调用方式或支撑既定实现的局部查找，才可以留在 `implement` 内。直接证明当前 mutation 的 focused test 跟随实现；拥有独立环境、资源、授权或 acceptance 判决的验证单独派发。
+
+worker 尚未返回时，caller 可以询问进度或继续不依赖结果的 look-ahead，但不能仅因等待时间较长就中断、重复实现或重新派发。
 
 worker 返回后，caller 消费已有 evidence、diff 和验证结果，再决定是否沿同一 work lane 释放下一个 baby step。后续步骤不会因为属于同一 Topic 而自动获得授权。
 
