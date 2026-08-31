@@ -28,9 +28,9 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed 
 
 ## 主路径
 
-1. 分类 contract impact；需要 D/S 时识别 initial、follow-up 或 package closure，并读取 [Package Lifecycle](references/package-lifecycle.md)。
-   - 常见误判：把 behavior-contract 或 decision-direction 变化当成 implementation-only，会让下游继续消费已经失效的 D/S。
-2. 解析 canonical package 与当前 Decision/Spec；follow-up 默认把输入视为当前文档的 delta，只有 owner 明确声明 full replacement 才整体替换。
+1. 分类 contract impact；需要 D/S 时先查找相关 package。没有相关 package，或相关 package 不适合 patch 时，按 initial 新建 package；存在可 patch 的相关 package 时，必须先询问 Owner 是否进入 patch 模式，获得显式确认前保持旧 package 只读，不得把本次输入当作 follow-up 或修改其 artifact。确认路由后识别 initial、follow-up 或 package closure，并读取 [Package Lifecycle](references/package-lifecycle.md)。
+   - 常见误判：把 behavior-contract 或 decision-direction 变化当成 implementation-only，或仅因找到相关 package 就静默进入 follow-up，会分别让下游消费失效 D/S，或改写尚未获准 patch 的旧 package。
+2. 解析 canonical package 与当前 Decision/Spec；已确认 patch 的 follow-up 默认把输入视为当前文档的 delta，只有 owner 明确声明 full replacement 才整体替换。
    - 常见误判：把普通 delta 当 full replacement，会静默丢掉未重复提及但仍需 carry forward 的 promise。
 3. initial 的 full 或 decision-only 读取并执行 [Decision SUB-SKILL](sub-skills/decision/SUB-SKILL.md)；同一 package 的 follow-up 直接更新当前 Decision 并沿用初始 approval。
    - 常见误判：没有先经过 Decision 就让 Spec 或 Plan 决定方向，会把 implementation candidate 提升成 product promise。
