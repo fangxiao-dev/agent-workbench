@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Codex 进度台</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Codex 进度台首页">
+          <span class="brand-mark">C</span>
+          <span><strong>Codex</strong><small>实时进度台</small></span>
+        </a>
+
+        <div class="task-controls">
+          <label for="task-select">当前任务</label>
+          <select id="task-select" aria-label="切换 Codex 任务"></select>
+          <label class="package-label" for="package-select">实施包</label>
+          <select id="package-select" aria-label="选择关联实施包"></select>
+        </div>
+
+        <div class="connection" id="connection" role="status" aria-live="polite">
+          <span class="connection-dot"></span>
+          <span id="connection-label">正在连接</span>
+        </div>
+      </header>
+
+      <section class="hero" aria-labelledby="task-title">
+        <div>
+          <p class="eyebrow">当前全局判断</p>
+          <h1 id="task-title">正在读取任务…</h1>
+          <p class="hero-summary" id="actual-summary">正在恢复主会话的最新明确进展。</p>
+        </div>
+        <dl class="metrics">
+          <div>
+            <dt>主会话</dt>
+            <dd id="task-status">读取中</dd>
+          </div>
+          <div>
+            <dt>正式验收</dt>
+            <dd id="formal-summary">尚未关联</dd>
+          </div>
+          <div>
+            <dt>最终门禁</dt>
+            <dd id="gate-label">尚未关联</dd>
+          </div>
+        </dl>
+      </section>
+
+      <div class="content-grid">
+        <section class="panel activity-panel" aria-labelledby="activity-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">主会话实际进展</p>
+              <h2 id="activity-title">最近发生了什么</h2>
+            </div>
+            <span class="freshness" id="freshness">等待首个快照</span>
+          </div>
+          <ol class="activity-list" id="activity-list" aria-live="polite"></ol>
+        </section>
+
+        <aside class="side-stack">
+          <section class="panel next-panel" aria-labelledby="next-title">
+            <p class="eyebrow">唯一下一动作</p>
+            <h2 id="next-title">接下来做什么</h2>
+            <p id="next-action">关联实施包后显示正式登记的下一动作。</p>
+            <div class="blocker" id="blocker" hidden></div>
+          </section>
+
+          <section class="panel divergence-panel" id="divergence-panel" hidden aria-labelledby="divergence-title">
+            <p class="eyebrow">口径差异</p>
+            <h2 id="divergence-title">实际进展领先于正式登记</h2>
+            <p id="divergence"></p>
+          </section>
+        </aside>
+      </div>
+
+      <section class="panel tickets-panel" aria-labelledby="tickets-title">
+        <div class="panel-heading tickets-heading">
+          <div>
+            <p class="eyebrow">正式事项状态</p>
+            <h2 id="tickets-title">验收工作项</h2>
+          </div>
+          <div class="ticket-legend" aria-label="状态说明">
+            <span><i class="legend-dot done"></i>已验收</span>
+            <span><i class="legend-dot active"></i>需复核</span>
+            <span><i class="legend-dot waiting"></i>待推进</span>
+          </div>
+        </div>
+        <div class="ticket-list" id="ticket-list"></div>
+        <p class="empty-state" id="ticket-empty">选择一个实施包后显示正式验收状态。</p>
+      </section>
+
+      <details class="audit panel">
+        <summary>技术核对信息</summary>
+        <dl id="audit-list"></dl>
+      </details>
+    </main>
+  </body>
+</html>
