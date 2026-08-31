@@ -150,6 +150,8 @@ def test_codex_manifest_and_hook_config_expose_only_the_two_approved_events() ->
     assert pre_command["type"] == "command"
     assert "impl_package_hooks.py" in pre_command["command"]
     assert pre_command["command"].endswith('" pre-tool-use')
+    assert "os.environ['PLUGIN_ROOT']" in pre_command["commandWindows"]
+    assert pre_command["commandWindows"].endswith(' pre-tool-use')
     assert pre_command["timeout"] == 5
 
     session = config["hooks"]["SessionStart"][0]
@@ -157,6 +159,8 @@ def test_codex_manifest_and_hook_config_expose_only_the_two_approved_events() ->
     session_command = session["hooks"][0]
     assert "impl_package_hooks.py" in session_command["command"]
     assert session_command["command"].endswith('" session-start')
+    assert "os.environ['PLUGIN_ROOT']" in session_command["commandWindows"]
+    assert session_command["commandWindows"].endswith(' session-start')
     assert session_command["timeout"] == 10
     assert session_command["additionalContextLimit"] == 1200
 
