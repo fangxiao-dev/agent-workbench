@@ -25,7 +25,7 @@ mode 省略时使用 `full-review`。`bundle-admission` 只有在 bundle 完整�
 2. **确认前置完整性**：确认 candidate 对其声明的 Composition 完整，并与 Decision/Spec 一致。
    - 对每个声明的前置包，检查本包的 `NEW` 声明是否覆盖该前置包已经建好的能力。
 3. **审查维度**：按以下顺序逐项检查：
-   1. **完整性**：Coverage & Change Map，确认 candidate 对其声明的 Composition 完整；否则可能只实现 happy path，留下无法验收的半套接线。
+   1. **完整性**：对照 Decision/Spec 结构与全部 Ticket 的 Contract references 与 AC，确认 candidate 对其声明的 Composition 完整；Plan 不再维护独立 Coverage & Change Map 表格，完整性核对直接读 Ticket 集合。否则可能只实现 happy path，留下无法验收的半套接线。
    2. **范围**：scope，检查真实消费者、跨平台镜像、旧布局/旧 contract 入口以及 `NOT in scope`；否则遗漏或静默扩大的范围会在实施时才暴露。
    3. **顺序**：sequencing，检查前置依赖、迁移窗口、integration point 和 release gate 的先后；否则依赖未释放或迁移窗口错位会让计划不可执行。
    4. **结构**：architecture/seams，检查组件责任、依赖方向、数据流、失败隔离和跨边界耦合；否则 ownership 与真实生产失败场景会被推迟到实施阶段才发现。

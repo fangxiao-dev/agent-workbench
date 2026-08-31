@@ -8,6 +8,8 @@ Reason:
 
 <!-- 默认使用 detailed。只有全部精确语义已由 spec.md 完整承担时才使用 not-required，并在 Reason 说明依据；not-required 删除下方全部详细合同章节，不制造 N/A 矩阵。 -->
 
+下游（Ticket/Plan）按 entry point 引用本文件、不整节加载；因此每个 Operation、Aggregate、Seam、Projection 必须有稳定、可搜索的名称（表格首列或小节标题内命名），供 `path#section-anchor · <entry point 名>` 格式引用。
+
 ## Detailed contracts
 
 ## API operations 与 DTO

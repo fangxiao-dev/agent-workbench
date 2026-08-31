@@ -89,7 +89,7 @@ def test_complete_progress_and_workflow_surfaces_are_present() -> None:
     review = (IMPL / "skills/plan-review/SKILL.md").read_text(encoding="utf-8")
     assert all(section in progress for section in ("Ticket Acceptance", "Active Checkpoints", "Attempt History"))
     assert "Legacy Task Execution" not in progress and "## Resume" not in progress
-    assert all(section in planning for section in ("Coverage & Change Map", "计划验证", "Bundle Review & Approval"))
+    assert all(section in planning for section in ("全局调度", "计划验证", "Final Gate", "Bundle Review & Approval"))
     assert "fresh independent reviewer" in review
     for relative in (
         "assets/impl-package-intro.html",

@@ -13,8 +13,9 @@ Attempt ID：<attempt-id>
 ## Contract references
 
 - `<repo-relative-path>#<major-section-anchor>` — `<该章节约束本 Ticket 的内容>`
+- 引用 `contract-design.md` 时追加 entry point：`<repo-relative-path>#<major-section-anchor> · <Operation/Aggregate/Seam/Projection 名或函数/类名>` — `<该 entry point 约束本 Ticket 的内容>`
 
-引用必须定位到一级或二级大章节；不得只写整个文档路径或使用行号。
+引用必须定位到一级或二级大章节；不得只写整个文档路径或使用行号。引用 `contract-design.md` 时不得只停在章节级，必须命名具体 entry point。
 
 ## 验收标准
 

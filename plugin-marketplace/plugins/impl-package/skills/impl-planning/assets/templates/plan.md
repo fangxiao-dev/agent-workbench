@@ -4,7 +4,7 @@
 Attempt ID：<initial | YYYYMMDD-HHMM-patch-topic>
 Composition：tickets=true, dag=false
 
-> 直接引用当前 decision.md / spec.md。D/S/P 为可选旧别名，不因普通编辑升级；Git commit ID 是唯一允许持久化的历史锚点。
+> 直接引用当前 decision.md / spec.md。D/S/P 为可选旧别名，不因普通编辑升级；Git commit ID 是唯一允许持久化的历史锚点。Plan 只承载主 session 的全局调度（Composition、Ticket 顺序/依赖、共享资源串行规则、全局执行边界、Final Gate 判据）；Ticket 各自的建设内容、AC 和 contract references 属于 Ticket，不在此重复。
 
 ## 摘要
 
@@ -25,27 +25,31 @@ Composition：tickets=true, dag=false
 - DAG：新 package 固定 no；`dag=false` 是 3.5 Composition 合同字段，旧 3.4 package 迁移前只读
 - 旧 package 迁移/恢复例外：<N/A | legacy package path + owner authorization>
 
-## 执行策略
+## 全局调度
 
-- 实施顺序：
-- 预计修改范围：
-- 依赖与前置条件：
+| Ticket | 顺序 | Typed dependency | 共享资源（需串行） |
+| --- | --- | --- | --- |
+
+只登记跨 Ticket 的调度信息；单个 Ticket 的建设内容、AC 与 contract references 详见该 Ticket 文件，不在此重复。约束到 Ticket 的映射由 Ticket 自身的 Contract references 承载，本表不重复该映射；跨 Ticket 覆盖完整性由 `plan-review` 在 bundle-admission/full-review 时对照 Decision/Spec 与全部 Ticket 直接核对。
+
+## 全局执行边界
+
 - rollout / rollback：
 - 目标分支：
 - 集成顺序：gate-before-merge | owner-approved pre-gate integration
 - pre-gate integration 授权：<不适用时填 N/A>
 
-## Coverage & Change Map
-
-| Decision/Spec 约束 | 实现范围 | Ticket / legacy Task | 风险或 seam |
-| --- | --- | --- | --- |
-
-只列实际受影响范围；后续按实际影响范围决定局部重新验证，不机械清空整个 Attempt。
-
-## 计划验证
+## 计划验证（跨 Ticket / 全局）
 
 | 场景 / 约束 | 检查 | 预期结果 | 证据 owner |
 | --- | --- | --- | --- |
+
+只登记跨 Ticket 的共享验证（如集成套件、契约生成、跨系统一致性检查）；单个 Ticket 内部场景的验证写在该 Ticket 的 AC，不在此重复。
+
+## Final Gate
+
+- 判据：默认沿用 dev-with-track 标准（全部 Required Ticket SATISFIED + review closed + durable delta 已登记或已说明无增量）；如本 Attempt 有额外判据在此列出。
+- 记录位置：`gate.md`（本节只声明判据，不复制 Gate 记录本身）。
 
 ## 交接
 
