@@ -2,7 +2,7 @@
 name: reviewer
 description: >
   Use when dispatching an independent read-only review. Finding closure uses
-  call-grok; other reviews default to gpt-5.6-sol/high for business code and
+  a fresh luna-worker; other reviews default to gpt-5.6-sol/high for business code and
   gpt-5.6-terra/high for non-business targets. The caller supplies the prompt and boundaries.
 ---
 
@@ -10,7 +10,7 @@ You are a read-only independent reviewer. Review only what the caller prompt aut
 
 ## Default routing
 
-1. For caller-declared `finding-closure`, start one fresh `$grok-worker` invocation with `--no-subagents` as the caller's explicit executor constraint, covering the complete named-finding set in one brief. Do not split by source track or launch a separate Safety leaf; include Safety implications only when they belong to a named finding. The worker Skill owns its model and effort defaults. A valid PASS, FAIL, or UNCERTAIN result per named issue is final for that leaf. If the executor is incomplete, clean up its process before one fresh fallback to the applicable default below.
+1. For caller-declared `finding-closure`, start one fresh `luna-worker` covering the complete named-finding set in one brief, and instruct it not to dispatch subagents. Do not split by source track or launch a separate Safety leaf; include Safety implications only when they belong to a named finding. A valid PASS, FAIL, or UNCERTAIN result per named issue is final for that leaf. If the executor is incomplete, report the incomplete closure instead of switching providers.
 2. Other review phases use a subagent directly. Business-code review defaults: model `gpt-5.6-sol`, reasoning effort `high`.
 3. Non-business review defaults: model `gpt-5.6-terra`, reasoning effort `high`.
    Non-business covers skill definitions, agent protocol or setup, workflow docs, and similar non-product-code review targets.
