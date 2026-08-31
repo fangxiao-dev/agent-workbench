@@ -1,12 +1,22 @@
 ---
 name: research
-description: Investigate a question against high-trust primary sources and capture the findings as a Markdown file in the repo. Use when the user wants a topic researched, docs or API facts gathered, or reading legwork delegated to a background agent.
+description: Investigate a bounded question against high-trust primary sources and return source-backed findings for synthesis. Use when the user wants a topic researched, official facts gathered, or a dispatcher routes a research lane; persist a Markdown note only when durable capture is requested.
 ---
 
-Spin up a **background agent** to do the research, so you keep working while it reads.
+# Research
 
-Its job:
+The main controller owns the research boundary, execution routing, synthesis, and any durable repository artifact.
 
-1. Investigate the question against **primary sources** — official docs, source code, specs, first-party APIs — not a secondary write-up of them. Follow every claim back to the source that owns it.
-2. Write the findings to a single Markdown file, citing each claim's source.
-3. Save it where the repo already keeps such notes; match the existing convention, and if there is none, put it somewhere sensible and say where.
+Durable capture applies when:
+
+- the user asks to save, record, or produce a research document;
+- the owning workflow requires a persistent artifact.
+
+1. Frame the research question, its boundaries, and whether the result needs durable capture.
+2. Read [`../dispatcher/SKILL.md`](../dispatcher/SKILL.md); the main controller decides how to route the research.
+3. Investigate against **primary sources** — official docs, source code, specs, and first-party APIs. Follow each material claim back to the source that owns it, and record unresolved or conflicting evidence explicitly.
+4. Return the findings, their sources, and remaining uncertainties to the main controller.
+5. The main controller consumes every return, resolves cross-lane conflicts or gaps, and produces the final synthesis.
+6. When durable capture was requested, the main controller writes the synthesis to one Markdown file, cites each material claim, follows the repository's existing note convention, and reports the saved path. Otherwise, return the synthesis in the conversation.
+
+The research is complete when every in-scope question is answered or explicitly unresolved, every material claim is traceable to a primary source, and the main controller has consumed the findings into one synthesis.
