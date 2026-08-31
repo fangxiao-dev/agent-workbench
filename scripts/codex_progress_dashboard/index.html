@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="dark">
+    <meta name="color-scheme" content="light">
     <title>Codex 进度台</title>
     <link rel="stylesheet" href="/style.css">
     <script src="/app.js" defer></script>
@@ -32,13 +32,13 @@
         </div>
       </header>
 
-      <section class="hero" aria-labelledby="task-title">
-        <div>
+      <section class="overview-strip" aria-labelledby="task-title">
+        <div class="overview-title">
           <p class="eyebrow">当前全局判断</p>
           <h1 id="task-title">正在读取任务…</h1>
-          <p class="hero-summary" id="actual-summary">正在恢复主会话的最新明确进展。</p>
+          <p class="sr-only" id="actual-summary">正在恢复主会话的最新明确进展。</p>
         </div>
-        <dl class="metrics">
+        <dl class="overview-metrics">
           <div>
             <dt>主会话</dt>
             <dd id="task-status">读取中</dd>
@@ -54,7 +54,7 @@
         </dl>
       </section>
 
-      <div class="content-grid">
+      <div class="dashboard-grid">
         <section class="panel activity-panel" aria-labelledby="activity-title">
           <div class="panel-heading">
             <div>
@@ -63,40 +63,57 @@
             </div>
             <span class="freshness" id="freshness">等待首个快照</span>
           </div>
-          <ol class="activity-list" id="activity-list" aria-live="polite"></ol>
-        </section>
-
-        <aside class="side-stack">
-          <section class="panel next-panel" aria-labelledby="next-title">
+          <section class="next-inline" aria-labelledby="next-title">
             <p class="eyebrow">唯一下一动作</p>
-            <h2 id="next-title">接下来做什么</h2>
+            <div class="next-heading-row">
+              <h3 id="next-title">接下来做什么</h3>
+              <span class="divergence-status" id="divergence-panel" hidden>
+                <button class="divergence-badge" type="button" aria-describedby="divergence-tooltip">登记滞后</button>
+                <span class="divergence-tooltip" id="divergence-tooltip" role="tooltip">
+                  <span id="divergence"></span>
+                </span>
+              </span>
+            </div>
             <p id="next-action">关联实施包后显示正式登记的下一动作。</p>
             <div class="blocker" id="blocker" hidden></div>
           </section>
+          <ol class="activity-list" id="activity-list" aria-live="polite"></ol>
+        </section>
 
-          <section class="panel divergence-panel" id="divergence-panel" hidden aria-labelledby="divergence-title">
-            <p class="eyebrow">口径差异</p>
-            <h2 id="divergence-title">实际进展领先于正式登记</h2>
-            <p id="divergence"></p>
-          </section>
-        </aside>
+        <section class="panel tickets-panel" aria-labelledby="tickets-title">
+          <div class="panel-heading tickets-heading">
+            <div>
+              <p class="eyebrow">正式事项状态</p>
+              <h2 id="tickets-title">Tickets验收路径</h2>
+            </div>
+            <div class="ticket-legend" aria-label="状态说明">
+              <span><i class="legend-dot done"></i>已验收</span>
+              <span><i class="legend-dot active"></i>需复核</span>
+              <span><i class="legend-dot waiting"></i>待推进</span>
+            </div>
+          </div>
+          <div class="flow-layout" id="flow-layout" hidden>
+            <div class="flow-scroll" id="flow-scroll" aria-label="事项依赖关系图">
+              <div class="flow-canvas" id="flow-canvas">
+                <svg class="dependency-lines" id="dependency-lines" aria-hidden="true"></svg>
+                <div class="flow-stages" id="flow-stages"></div>
+              </div>
+            </div>
+          </div>
+          <p class="empty-state" id="ticket-empty">选择一个实施包后显示正式验收状态。</p>
+          <div class="ticket-tooltip" id="ticket-tooltip" role="tooltip" hidden>
+            <div class="tooltip-heading">
+              <div>
+                <span class="tooltip-code" id="tooltip-code"></span>
+                <h3 id="tooltip-name"></h3>
+              </div>
+              <span class="state-badge" id="tooltip-state"></span>
+            </div>
+            <p class="tooltip-dependencies" id="tooltip-dependencies"></p>
+            <ul class="tooltip-hints" id="tooltip-hints"></ul>
+          </div>
+        </section>
       </div>
-
-      <section class="panel tickets-panel" aria-labelledby="tickets-title">
-        <div class="panel-heading tickets-heading">
-          <div>
-            <p class="eyebrow">正式事项状态</p>
-            <h2 id="tickets-title">验收工作项</h2>
-          </div>
-          <div class="ticket-legend" aria-label="状态说明">
-            <span><i class="legend-dot done"></i>已验收</span>
-            <span><i class="legend-dot active"></i>需复核</span>
-            <span><i class="legend-dot waiting"></i>待推进</span>
-          </div>
-        </div>
-        <div class="ticket-list" id="ticket-list"></div>
-        <p class="empty-state" id="ticket-empty">选择一个实施包后显示正式验收状态。</p>
-      </section>
 
       <details class="audit panel">
         <summary>技术核对信息</summary>

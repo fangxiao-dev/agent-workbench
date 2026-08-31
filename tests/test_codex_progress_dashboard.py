@@ -119,20 +119,24 @@ Ticket ID：TKT-01
 
 - **AC-1：** 页面展示 fixture 数据。
 - **AC-2：** 不读取后端数据。
+
+## 阻塞依赖
+
+- implementation: TKT-00
 """,
         encoding="utf-8",
     )
     return package
 
 
-def test_task_list_uses_safe_name_and_never_falls_back_to_prompt_title(tmp_path: Path) -> None:
+def test_task_list_excludes_unnamed_tasks_instead_of_exposing_prompt_title(tmp_path: Path) -> None:
     module = load_module()
     db_path, _, rollout, _ = make_fixture(tmp_path, task_name=None)
     write_jsonl(rollout, [])
 
     tasks = module.list_tasks(db_path)
 
-    assert tasks[0]["name"].startswith("未命名任务")
+    assert tasks == []
     assert "password" not in json.dumps(tasks)
 
 
@@ -168,6 +172,28 @@ def test_rollout_reader_waits_for_complete_jsonl_line(tmp_path: Path) -> None:
 
     complete = reader.read(rollout)
     assert [item["text"] for item in complete["activities"]] == ["第二条进展", "第一条进展"]
+
+
+def test_rollout_reader_keeps_only_the_latest_five_progress_items(tmp_path: Path) -> None:
+    module = load_module()
+    _, _, rollout, _ = make_fixture(tmp_path)
+    write_jsonl(
+        rollout,
+        [
+            record(
+                "message",
+                role="assistant",
+                phase="commentary",
+                text=f"进展 {index}",
+                timestamp=f"2026-08-31T20:00:{index:02d}Z",
+            )
+            for index in range(7)
+        ],
+    )
+
+    activities = module.RolloutReader().read(rollout)["activities"]
+
+    assert [item["text"] for item in activities] == ["进展 6", "进展 5", "进展 4", "进展 3", "进展 2"]
 
 
 def test_task_lifecycle_projects_running_waiting_and_complete(tmp_path: Path) -> None:
@@ -231,6 +257,7 @@ def test_snapshot_separates_observed_work_from_formal_acceptance(tmp_path: Path)
     assert snapshot["package"]["formalSummary"] == "0/1 已正式验收"
     assert snapshot["package"]["gateLabel"] == "尚未关闭"
     assert "正式验收状态仍未关闭" in snapshot["package"]["discrepancy"]
+    assert snapshot["package"]["tickets"][0]["dependencies"] == ["TKT-00"]
 
 
 def test_sensitive_and_internal_rollout_payloads_never_reach_snapshot(tmp_path: Path) -> None:

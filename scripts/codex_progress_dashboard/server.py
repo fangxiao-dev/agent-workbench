@@ -23,14 +23,19 @@ APP_DIR = Path(__file__).resolve().parent
 CODEX_HOME = Path.home() / ".codex"
 DEFAULT_DB = CODEX_HOME / "state_5.sqlite"
 THREAD_ID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
-TICKET_ID_RE = re.compile(r"\bTKT-\d+\b", re.I)
+TICKET_ID_PATTERN = r"TKT-\d+(?:-[A-Za-z0-9]+)*"
+TICKET_ID_RE = re.compile(rf"\b{TICKET_ID_PATTERN}\b", re.I)
+TYPED_DEPENDENCY_RE = re.compile(
+    rf"\b(implementation|acceptance|release)\s*:\s*({TICKET_ID_PATTERN})\b",
+    re.I,
+)
 WINDOWS_PATH_RE = re.compile(r"(?:\\\\\?\\)?[A-Za-z]:\\[^\s`\"']+")
 SECRET_RE = re.compile(
     r"(?i)\b(api[_-]?key|access[_-]?token|token|password|secret)\b\s*[:=]\s*[^\s,;]+"
 )
 IBAN_RE = re.compile(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b")
 COMMIT_RE = re.compile(r"\b[0-9a-f]{40}\b", re.I)
-MAX_ACTIVITY = 10
+MAX_ACTIVITY = 5
 MAX_ACTIVITY_CHARS = 1200
 
 
@@ -80,7 +85,10 @@ def list_tasks(db_path: Path = DEFAULT_DB, limit: int = 200) -> list[dict[str, A
             """
             SELECT id, name, updated_at, cwd, rollout_path
             FROM threads
-            WHERE archived = 0 AND rollout_path IS NOT NULL
+            WHERE archived = 0
+              AND rollout_path IS NOT NULL
+              AND name IS NOT NULL
+              AND TRIM(name) <> ''
             ORDER BY COALESCE(recency_at_ms, updated_at_ms, updated_at * 1000) DESC
             LIMIT ?
             """,
@@ -284,7 +292,48 @@ def _package_root(cwd: Path, relative: str | None) -> Path | None:
     return candidate
 
 
-def _ticket_metadata(package_root: Path) -> dict[str, dict[str, Any]]:
+def _resolve_ticket_id(token: str, ticket_ids: list[str]) -> str:
+    lowered = token.casefold()
+    exact = next((ticket_id for ticket_id in ticket_ids if ticket_id.casefold() == lowered), None)
+    if exact:
+        return exact
+    prefix_matches = [ticket_id for ticket_id in ticket_ids if ticket_id.casefold().startswith(f"{lowered}-")]
+    return prefix_matches[0] if len(prefix_matches) == 1 else token.upper()
+
+
+def _typed_dependencies(text: str, ticket_ids: list[str]) -> dict[str, list[str]]:
+    result = {"implementation": [], "acceptance": [], "release": []}
+    for match in TYPED_DEPENDENCY_RE.finditer(text):
+        dependency_type = match.group(1).lower()
+        ticket_id = _resolve_ticket_id(match.group(2), ticket_ids)
+        if ticket_id not in result[dependency_type]:
+            result[dependency_type].append(ticket_id)
+    return result
+
+
+def _plan_dependencies(package_root: Path, ticket_ids: list[str]) -> dict[str, dict[str, list[str]]]:
+    plan = package_root / "plan.md"
+    if not plan.is_file():
+        return {}
+    try:
+        text = plan.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}
+    result: dict[str, dict[str, list[str]]] = {}
+    for line in text.splitlines():
+        ticket_match = TICKET_ID_RE.search(line)
+        if not ticket_match:
+            continue
+        ticket_id = _resolve_ticket_id(ticket_match.group(0), ticket_ids)
+        if ticket_id not in ticket_ids:
+            continue
+        typed = _typed_dependencies(line, ticket_ids)
+        if any(typed.values()):
+            result[ticket_id] = typed
+    return result
+
+
+def _ticket_metadata(package_root: Path, ticket_ids: list[str]) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
     ticket_dir = package_root / "tickets"
     if not ticket_dir.is_dir():
@@ -294,17 +343,29 @@ def _ticket_metadata(package_root: Path) -> dict[str, dict[str, Any]]:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        match = re.search(r"Ticket ID\s*[：:]\s*(TKT-\d+)", text, re.I)
+        match = re.search(rf"Ticket ID\s*[：:]\s*({TICKET_ID_PATTERN})", text, re.I)
         if not match:
             continue
-        ticket_id = match.group(1).upper()
+        ticket_id = _resolve_ticket_id(match.group(1), ticket_ids)
         heading = next((line[2:].strip() for line in text.splitlines() if line.startswith("# ")), ticket_id)
         heading = re.sub(r"^\d+\s*[—–-]\s*", "", heading).strip()
         hints = []
         for hint in re.findall(r"^-\s+\*\*(AC-\d+)[：:]\*\*\s*(.+)$", text, re.M):
             clean = re.sub(r"[`*_]", "", hint[1]).strip()
             hints.append(f"{hint[0]}：{clean[:180]}")
-        result[ticket_id] = {"name": heading[:120], "completionHints": hints[:3]}
+        dependency_section = re.search(r"## 阻塞依赖\s*(.*?)(?=\n## |\Z)", text, re.S)
+        dependency_types = _typed_dependencies(dependency_section.group(1), ticket_ids) if dependency_section else {}
+        dependencies = [
+            dependency
+            for dependency_type in ("implementation", "acceptance", "release")
+            for dependency in dependency_types.get(dependency_type, [])
+        ]
+        result[ticket_id] = {
+            "name": heading[:120],
+            "completionHints": hints[:3],
+            "dependencies": list(dict.fromkeys(dependencies)),
+            "dependencyTypes": dependency_types,
+        }
     return result
 
 
@@ -326,17 +387,32 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
     state_path = package_root / ".impl-package" / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
     ticket_states = state.get("tickets") if isinstance(state.get("tickets"), dict) else {}
-    metadata = _ticket_metadata(package_root)
+    ticket_ids = [str(ticket_id) for ticket_id in ticket_states]
+    metadata = _ticket_metadata(package_root, ticket_ids)
+    plan_dependencies = _plan_dependencies(package_root, ticket_ids)
     tickets = []
     for ticket_id, value in ticket_states.items():
         formal_state = str(value.get("state", "UNKNOWN")) if isinstance(value, dict) else "UNKNOWN"
         meta = metadata.get(str(ticket_id).upper(), {})
+        dependency_types = {"implementation": [], "acceptance": [], "release": []}
+        for source in (meta.get("dependencyTypes", {}), plan_dependencies.get(str(ticket_id), {})):
+            for dependency_type in dependency_types:
+                for dependency in source.get(dependency_type, []):
+                    if dependency not in dependency_types[dependency_type]:
+                        dependency_types[dependency_type].append(dependency)
+        dependencies = [
+            dependency
+            for dependency_type in ("implementation", "acceptance", "release")
+            for dependency in dependency_types[dependency_type]
+        ]
         tickets.append(
             {
                 "id": str(ticket_id),
                 "name": meta.get("name", str(ticket_id)),
                 "state": formal_state,
                 "completionHints": meta.get("completionHints", []),
+                "dependencies": list(dict.fromkeys(dependencies)),
+                "dependencyTypes": dependency_types,
             }
         )
     counts = Counter(ticket["state"] for ticket in tickets)
@@ -346,15 +422,38 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
     blocker = checkpoint.get("blocker") if isinstance(checkpoint, dict) else None
     gate_label, gate_value = _gate_label(state)
     mentioned = {
-        match.group(0).upper()
+        _resolve_ticket_id(match.group(0), ticket_ids)
         for activity in activities
         for match in TICKET_ID_RE.finditer(activity.get("text", ""))
     }
     pending_mentions = [
         ticket["id"]
         for ticket in tickets
-        if ticket["state"] in {"PENDING", "NEEDS-REVALIDATION"} and ticket["id"].upper() in mentioned
+        if ticket["state"] in {"PENDING", "NEEDS-REVALIDATION"} and ticket["id"] in mentioned
     ]
+    current_ticket_id = next(
+        (
+            resolved
+            for activity in activities
+            for match in TICKET_ID_RE.finditer(activity.get("text", ""))
+            if (resolved := _resolve_ticket_id(match.group(0), ticket_ids)) in ticket_ids
+        ),
+        None,
+    )
+    if current_ticket_id is None and isinstance(next_action, str):
+        current_ticket_id = next(
+            (
+                resolved
+                for match in TICKET_ID_RE.finditer(next_action)
+                if (resolved := _resolve_ticket_id(match.group(0), ticket_ids)) in ticket_ids
+            ),
+            None,
+        )
+    if current_ticket_id is None:
+        current_ticket_id = next(
+            (ticket["id"] for ticket in tickets if ticket["state"] not in {"SATISFIED", "RETIRED"}),
+            tickets[0]["id"] if tickets else None,
+        )
     discrepancy = None
     if pending_mentions:
         discrepancy = (
@@ -370,6 +469,7 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
         "nextAction": next_action or "当前 package 没有登记下一动作。",
         "blocker": blocker,
         "discrepancy": discrepancy,
+        "currentTicketId": current_ticket_id,
         "tickets": tickets,
         "counts": dict(counts),
         "audit": {
