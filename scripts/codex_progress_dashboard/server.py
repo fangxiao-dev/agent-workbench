@@ -25,6 +25,7 @@ DEFAULT_DB = CODEX_HOME / "state_5.sqlite"
 THREAD_ID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
 TICKET_ID_PATTERN = r"TKT-\d+(?:-[A-Za-z0-9]+)*"
 TICKET_ID_RE = re.compile(rf"\b{TICKET_ID_PATTERN}\b", re.I)
+TICKET_REFERENCE_RE = re.compile(r"\bTKT-?\d+(?:-[A-Za-z0-9]+)*\b", re.I)
 TYPED_DEPENDENCY_RE = re.compile(
     rf"\b(implementation|acceptance|release)\s*:\s*({TICKET_ID_PATTERN})\b",
     re.I,
@@ -297,7 +298,14 @@ def _resolve_ticket_id(token: str, ticket_ids: list[str]) -> str:
     exact = next((ticket_id for ticket_id in ticket_ids if ticket_id.casefold() == lowered), None)
     if exact:
         return exact
-    prefix_matches = [ticket_id for ticket_id in ticket_ids if ticket_id.casefold().startswith(f"{lowered}-")]
+    token_number = re.match(r"TKT-?(\d+)", token, re.I)
+    prefix_matches = [
+        ticket_id
+        for ticket_id in ticket_ids
+        if token_number
+        and (candidate_number := re.match(r"TKT-?(\d+)", ticket_id, re.I))
+        and int(candidate_number.group(1)) == int(token_number.group(1))
+    ]
     return prefix_matches[0] if len(prefix_matches) == 1 else token.upper()
 
 
@@ -424,27 +432,29 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
     mentioned = {
         _resolve_ticket_id(match.group(0), ticket_ids)
         for activity in activities
-        for match in TICKET_ID_RE.finditer(activity.get("text", ""))
+        for match in TICKET_REFERENCE_RE.finditer(activity.get("text", ""))
     }
     pending_mentions = [
         ticket["id"]
         for ticket in tickets
         if ticket["state"] in {"PENDING", "NEEDS-REVALIDATION"} and ticket["id"] in mentioned
     ]
-    current_ticket_id = next(
-        (
-            resolved
-            for activity in activities
-            for match in TICKET_ID_RE.finditer(activity.get("text", ""))
-            if (resolved := _resolve_ticket_id(match.group(0), ticket_ids)) in ticket_ids
-        ),
-        None,
-    )
-    if current_ticket_id is None and isinstance(next_action, str):
+    current_ticket_id = None
+    if isinstance(next_action, str):
         current_ticket_id = next(
             (
                 resolved
-                for match in TICKET_ID_RE.finditer(next_action)
+                for match in TICKET_REFERENCE_RE.finditer(next_action)
+                if (resolved := _resolve_ticket_id(match.group(0), ticket_ids)) in ticket_ids
+            ),
+            None,
+        )
+    if current_ticket_id is None:
+        current_ticket_id = next(
+            (
+                resolved
+                for activity in activities
+                for match in TICKET_REFERENCE_RE.finditer(activity.get("text", ""))
                 if (resolved := _resolve_ticket_id(match.group(0), ticket_ids)) in ticket_ids
             ),
             None,
