@@ -43,6 +43,19 @@ def write_jsonl(path: Path, records: list[dict]) -> None:
     path.write_text("".join(json.dumps(item) + "\n" for item in records), encoding="utf-8")
 
 
+def package_binding_record(package: Path, workspace: Path, timestamp: str) -> dict:
+    relative = package.relative_to(workspace).as_posix()
+    return {
+        "type": "response_item",
+        "timestamp": timestamp,
+        "payload": {
+            "type": "custom_tool_call",
+            "name": "exec",
+            "input": f"python impl_package_state.py --package {relative} package validate",
+        },
+    }
+
+
 def make_fixture(tmp_path: Path, *, task_name: str | None = "银行流水对账") -> tuple[Path, Path, Path, Path]:
     codex_home = tmp_path / ".codex"
     sessions = codex_home / "sessions" / "2026" / "08" / "31"
@@ -227,7 +240,7 @@ def test_package_discovery_prefers_paths_referenced_by_the_task(tmp_path: Path) 
     (other / ".impl-package" / "state.json").write_text("{}", encoding="utf-8")
     write_jsonl(
         rollout,
-        [record("message", role="assistant", phase="commentary", text=package.relative_to(workspace).as_posix(), timestamp="2026-08-31T20:00:01Z")],
+        [package_binding_record(package, workspace, "2026-08-31T20:00:01Z")],
     )
 
     packages = module.find_packages(workspace, rollout)
@@ -309,8 +322,15 @@ def test_snapshot_reflects_package_state_changes_without_restart(tmp_path: Path)
 
 def test_http_endpoints_serve_tasks_snapshot_and_strict_csp(tmp_path: Path) -> None:
     module = load_module()
-    db_path, _, rollout, _ = make_fixture(tmp_path)
-    write_jsonl(rollout, [record("task_started", timestamp="2026-08-31T20:00:00Z")])
+    db_path, workspace, rollout, _ = make_fixture(tmp_path)
+    package = make_package(workspace)
+    write_jsonl(
+        rollout,
+        [
+            record("task_started", timestamp="2026-08-31T20:00:00Z"),
+            package_binding_record(package, workspace, "2026-08-31T20:00:01Z"),
+        ],
+    )
     module.ROLLOUT_READER = module.RolloutReader()
     server = module.create_server(db_path, 0)
     worker = threading.Thread(target=server.serve_forever, daemon=True)

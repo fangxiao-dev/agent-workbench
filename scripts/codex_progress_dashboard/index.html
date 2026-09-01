@@ -20,10 +20,10 @@
         </a>
 
         <div class="task-controls">
-          <label for="task-select">当前任务</label>
-          <select id="task-select" aria-label="切换 Codex 任务"></select>
-          <label class="package-label" for="package-select">实施包</label>
-          <select id="package-select" aria-label="选择关联实施包"></select>
+          <label for="task-select">当前项目</label>
+          <select id="task-select" aria-label="切换项目"></select>
+          <label class="package-label" for="package-select">任务包</label>
+          <select id="package-select" aria-label="选择关联任务包"></select>
         </div>
 
         <div class="connection" id="connection" role="status" aria-live="polite">
@@ -74,7 +74,7 @@
                 </span>
               </span>
             </div>
-            <p id="next-action">关联实施包后显示正式登记的下一动作。</p>
+            <p id="next-action">关联任务包后显示正式登记的下一动作。</p>
             <div class="blocker" id="blocker" hidden></div>
           </section>
           <ol class="activity-list" id="activity-list" aria-live="polite"></ol>
@@ -100,7 +100,7 @@
               </div>
             </div>
           </div>
-          <p class="empty-state" id="ticket-empty">选择一个实施包后显示正式验收状态。</p>
+          <p class="empty-state" id="ticket-empty">选择一个任务包后显示正式验收状态。</p>
           <div class="ticket-tooltip" id="ticket-tooltip" role="tooltip" hidden>
             <div class="tooltip-heading">
               <div>

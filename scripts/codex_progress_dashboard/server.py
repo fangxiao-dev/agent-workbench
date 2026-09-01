@@ -95,15 +95,31 @@ def list_tasks(db_path: Path = DEFAULT_DB, limit: int = 200) -> list[dict[str, A
             """,
             (limit,),
         ).fetchall()
-    return [
-        {
-            "id": row["id"],
-            "name": _safe_name(row["name"], row["updated_at"]),
-            "updatedAt": _iso_timestamp(row["updated_at"]),
-        }
-        for row in rows
-        if isinstance(row["id"], str) and THREAD_ID_RE.fullmatch(row["id"])
-    ]
+    roots_by_workspace: dict[Path, list[Path]] = {}
+    tasks = []
+    for row in rows:
+        if not isinstance(row["id"], str) or not THREAD_ID_RE.fullmatch(row["id"]):
+            continue
+        try:
+            cwd, rollout = _task_paths(row, db_path)
+        except (FileNotFoundError, ValueError):
+            continue
+        roots = roots_by_workspace.get(cwd)
+        if roots is None:
+            roots = _package_roots(cwd)
+            roots_by_workspace[cwd] = roots
+        current_package = next((item for item in find_packages(cwd, rollout, roots) if item["current"]), None)
+        if current_package is None:
+            continue
+        tasks.append(
+            {
+                "id": row["id"],
+                "name": _safe_name(row["name"], row["updated_at"]),
+                "updatedAt": _iso_timestamp(row["updated_at"]),
+                "currentPackage": current_package,
+            }
+        )
+    return tasks
 
 
 def _task_row(thread_id: str, db_path: Path) -> sqlite3.Row:
@@ -260,27 +276,59 @@ def _plan_name(package_root: Path) -> str:
     return package_root.name.replace("-", " ")
 
 
-def find_packages(cwd: Path, rollout: Path) -> list[dict[str, Any]]:
+def _package_roots(cwd: Path) -> list[Path]:
     docs = cwd / "docs"
     if not docs.is_dir():
         return []
-    roots = sorted({path.parent.parent for path in docs.rglob(".impl-package/state.json")})
+    return sorted({path.parent.parent for path in docs.rglob(".impl-package/state.json")})
+
+
+def _package_binding_text(rollout: Path, limit: int = 1_000_000) -> str:
     try:
-        rollout_text = rollout.read_text(encoding="utf-8", errors="ignore")
+        with rollout.open("rb") as stream:
+            stream.seek(max(0, rollout.stat().st_size - limit))
+            tail = stream.read().decode("utf-8", errors="ignore")
     except OSError:
-        rollout_text = ""
+        return ""
+    commands = []
+    for line in tail.splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        payload = record.get("payload")
+        if not isinstance(payload, dict) or payload.get("type") != "custom_tool_call":
+            continue
+        tool_input = payload.get("input")
+        if (
+            payload.get("name") == "exec"
+            and isinstance(tool_input, str)
+            and "impl_package_state.py" in tool_input
+            and "--package" in tool_input
+        ):
+            commands.append(tool_input)
+    return "\n".join(commands)
+
+
+def find_packages(cwd: Path, rollout: Path, roots: list[Path] | None = None) -> list[dict[str, Any]]:
+    roots = _package_roots(cwd) if roots is None else roots
+    rollout_text = _package_binding_text(rollout)
     packages = []
     for root in roots:
         relative = root.relative_to(cwd).as_posix()
-        referenced = relative in rollout_text or relative.replace("/", "\\\\") in rollout_text
+        last_reference = max(rollout_text.rfind(relative), rollout_text.rfind(relative.replace("/", "\\\\")))
         packages.append(
             {
                 "path": relative,
                 "name": _plan_name(root),
-                "referenced": referenced,
+                "referenced": last_reference >= 0,
+                "lastReference": last_reference,
+                "current": False,
             }
         )
-    packages.sort(key=lambda item: (not item["referenced"], item["name"].casefold()))
+    packages.sort(key=lambda item: (-item["lastReference"], item["name"].casefold()))
+    if packages and packages[0]["referenced"]:
+        packages[0]["current"] = True
     return packages
 
 

@@ -319,7 +319,7 @@ function render(snapshot) {
   const pkg = snapshot.package;
   formalSummary.textContent = pkg ? pkg.formalSummary : "尚未关联";
   gateLabel.textContent = pkg ? pkg.gateLabel : "尚未关联";
-  nextAction.textContent = pkg ? pkg.nextAction : "关联实施包后显示正式登记的下一动作。";
+  nextAction.textContent = pkg ? pkg.nextAction : "关联任务包后显示正式登记的下一动作。";
   blocker.hidden = !pkg?.blocker;
   blocker.textContent = pkg?.blocker ? `当前阻塞：${pkg.blocker}` : "";
   divergencePanel.hidden = !pkg?.discrepancy;
@@ -332,7 +332,7 @@ function render(snapshot) {
   appendAudit("本地分支", snapshot.audit.branch);
   appendAudit("版本锚点", snapshot.audit.revision);
   appendAudit("已读取记录位置", snapshot.audit.rolloutOffset);
-  appendAudit("实施包格式", pkg?.audit?.formatVersion);
+  appendAudit("任务包格式", pkg?.audit?.formatVersion);
   appendAudit("当前尝试", pkg?.audit?.attempt);
   appendAudit("正式状态更新时间", pkg?.audit?.stateModifiedAt);
 }
@@ -344,28 +344,23 @@ async function getJson(url) {
   return payload;
 }
 
-function packageStorageKey(taskId) {
-  return `codex-progress-package:${taskId}`;
-}
-
 async function loadPackages(taskId) {
   packageSelect.disabled = true;
   clear(packageSelect);
-  packageSelect.append(option("", "正在查找实施包…"));
+  packageSelect.append(option("", "正在查找任务包…"));
   const { packages } = await getJson(`/api/tasks/${encodeURIComponent(taskId)}/packages`);
-  clear(packageSelect);
-  packageSelect.append(option("", packages.length ? "不关联实施包" : "没有发现实施包"));
-  packages.forEach((item) => packageSelect.append(option(item.path, item.name)));
-
   const requested = new URLSearchParams(window.location.search).get("package");
-  const saved = localStorage.getItem(packageStorageKey(taskId));
-  const referenced = packages.filter((item) => item.referenced);
-  const candidate = packages.find((item) => item.path === requested)
-    || packages.find((item) => item.path === saved)
-    || (referenced.length === 1 ? referenced[0] : null)
-    || (packages.length === 1 ? packages[0] : null);
+  const requestedPackage = packages.find((item) => item.path === requested);
+  const currentPackages = packages.filter((item) => item.current);
+  const visiblePackages = requestedPackage && !currentPackages.includes(requestedPackage)
+    ? [requestedPackage, ...currentPackages]
+    : currentPackages;
+  clear(packageSelect);
+  if (!visiblePackages.length) packageSelect.append(option("", "未匹配到任务包"));
+  visiblePackages.forEach((item) => packageSelect.append(option(item.path, item.name)));
+  const candidate = requestedPackage || currentPackages[0] || null;
   packageSelect.value = candidate?.path || "";
-  packageSelect.disabled = packages.length === 0;
+  packageSelect.disabled = visiblePackages.length === 0;
 }
 
 function openEvents() {
@@ -393,7 +388,6 @@ taskSelect.addEventListener("change", () => {
 });
 
 packageSelect.addEventListener("change", () => {
-  localStorage.setItem(packageStorageKey(selectedTask), packageSelect.value);
   openEvents();
 });
 
@@ -405,7 +399,7 @@ function showError(error) {
 async function boot() {
   const { tasks } = await getJson("/api/tasks");
   clear(taskSelect);
-  if (!tasks.length) throw new Error("没有可读取的本地 Codex 任务。");
+  if (!tasks.length) throw new Error("没有匹配到含当前任务包的项目。");
   tasks.forEach((task) => taskSelect.append(option(task.id, task.name)));
   const requested = new URLSearchParams(window.location.search).get("task");
   const saved = localStorage.getItem("codex-progress-task");
