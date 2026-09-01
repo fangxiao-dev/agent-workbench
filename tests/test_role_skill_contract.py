@@ -18,13 +18,13 @@ def test_role_skills_have_model_visible_frontmatter() -> None:
     assert "disable-model-invocation" not in skill.split("---", 2)[1]
 
 
-def test_reviewer_uses_worker_skill_defaults_without_model_pin() -> None:
+def test_reviewer_uses_luna_worker_for_finding_closure() -> None:
     reviewer = read_skill("reviewer")
 
     assert "`finding-closure`" in reviewer
-    assert "$grok-worker" in reviewer
-    assert "--no-subagents" in reviewer
-    assert "worker Skill owns its model and effort defaults" in reviewer
+    assert "`luna-worker`" in reviewer
+    assert "instruct it not to dispatch subagents" in reviewer
+    assert "instead of switching providers" in reviewer
     assert "model `grok-4.5`" not in reviewer
     assert "model `gpt-5.6-sol`, reasoning effort `high`" in reviewer
     assert "model `gpt-5.6-terra`, reasoning effort `high`" in reviewer
