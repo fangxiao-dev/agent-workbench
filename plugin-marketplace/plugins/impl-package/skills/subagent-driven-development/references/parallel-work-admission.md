@@ -6,6 +6,8 @@
 
 每个并行单元必须有互斥 ownership、隔离资源和 cleanup owner。环境、fixture、权限、身份、数据或 test carrier 只有在不绑定未稳定业务语义、结果可回收且不提前充当 acceptance evidence 时，才能作为一步前瞻准备。
 
+新隔离 worktree 承担 format/lint/typecheck 等 mechanical 载体前，先确认它能解析到所需本地 binary/shim（如 Prettier、DOM shim、node_modules）；无法确认时先归位到当前 worktree 或派一步最小验证，不假定新 worktree 与主 workspace 工具链等价。mechanical step 的完成声明要有可观察证据（diff、文件 mtime、命令输出）支撑，不能只采信 worker 的文本自述——载体本身失败、结果不达标是两回事，前者需要先确认再决定是否重派。
+
 返回当前批次的 `PARALLEL | SERIAL | BLOCKED` 结论，附实际 dependency、worktree 选择、资源顺序和 cleanup。上游 `$dispatcher` 消费这些结论并执行派发循环。
 
 完成标准：并行单元不存在共享可变 ownership；串行单元有唯一顺序；阻断项明确缺失的 foundation、授权或隔离条件。

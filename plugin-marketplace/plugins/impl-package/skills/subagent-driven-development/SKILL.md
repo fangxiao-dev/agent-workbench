@@ -19,7 +19,7 @@ Topic 是共享 foundation、ownership 与 closure point 的连续交付 lane，
 
 错误 cwd、缺少本地依赖、format 或普通测试载体故障在原边界仍可信时属于当前动作 recovery，沿同一 worker 续接，不创建新业务 step。只有边界无法完成或上述决策发生变化时才返回 `INCOMPLETE` 给主控重排。
 
-worker 尚未返回时，caller 可以询问进度或继续不依赖结果的 look-ahead，但不能仅因等待时间较长就中断、重复实现或重新派发。
+worker 尚未返回时，caller 可以询问进度或继续不依赖结果的 look-ahead，但不能仅因等待时间较长就中断、重复实现或重新派发；判断是否异常只看有没有可观察的活跃信号——运行中的进程/命令、正在产生的工具调用、有输出变化，持续没有任何这类信号时才用可用的状态查询确认并考虑 interrupt。
 
 worker 返回后，caller 消费已有 evidence、diff 和验证结果，再决定是否沿同一 work lane 释放下一个 baby step。后续步骤不会因为属于同一 Topic 而自动获得授权。
 
