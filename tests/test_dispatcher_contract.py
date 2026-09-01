@@ -15,8 +15,8 @@ def test_dispatcher_is_a_lightweight_upstream_scheduler() -> None:
 
     for marker in (
         "面向上游主控",
-        "Baby step 派发门槛",
-        "不可约分检查",
+        "Topic-first 派发门槛",
+        "最大 coherent step",
         "当前批次",
         "fan out",
         "receipt",
@@ -46,17 +46,16 @@ def test_dispatcher_confirms_receipt_before_consuming_worker_return() -> None:
     assert "fresh worker" in skill
 
 
-def test_breadth_gate_splits_reducible_work_surfaces() -> None:
+def test_topic_first_gate_splits_only_decision_changing_results() -> None:
     skill = SKILL.read_text(encoding="utf-8")
-    gate = skill.split("## Baby step 派发门槛", 1)[1].split("## 调度循环", 1)[0]
+    gate = skill.split("## Topic-first 派发门槛", 1)[1].split("## 调度循环", 1)[0]
 
     for marker in (
-        "不可约分检查",
-        "可观察子结果",
-        "独立改变",
-        "停止",
-        "重新排序",
-        "独立可消费结果",
+        "实现方向",
+        "write ownership",
+        "authorization",
+        "资源 admission",
+        "释放另一条可并行 Topic",
     ):
         assert marker in gate
     assert "继续切分" in gate
@@ -64,29 +63,40 @@ def test_breadth_gate_splits_reducible_work_surfaces() -> None:
 
 def test_breadth_gate_does_not_use_search_scope_or_file_count_as_a_limit() -> None:
     skill = SKILL.read_text(encoding="utf-8")
-    gate = skill.split("## Baby step 派发门槛", 1)[1].split("## 调度循环", 1)[0]
+    gate = skill.split("## Topic-first 派发门槛", 1)[1].split("## 调度循环", 1)[0]
 
-    assert "检索范围宽" in gate
-    assert "多个紧密相关文件" in gate and "跨文件" in gate
+    assert "检索整个仓库" in gate
+    assert "多个紧密相关文件" in gate and "coherent outcome" in gate
     assert "文件数量" in gate
-    assert "没有任何一部分能先独立改变、停止或重新排序后续调度" in gate
+    assert "知识来源能分别阅读或返回，不等于必须分别派发" in gate
+
+
+def test_dispatcher_drains_batch_and_stops_thrashing() -> None:
+    skill = SKILL.read_text(encoding="utf-8")
+
+    assert "当前批次的 receipt 与 return 全部确认或消除歧义后" in skill
+    assert "连续两次 `INCOMPLETE`" in skill
+    assert "broad check 新发现一类 caller/producer" in skill
+    assert "foundation investigation" in skill
 
 
 def test_dispatcher_evals_cover_admission_batch_receipt_return_and_idle() -> None:
     evals = json.loads(EVALS.read_text(encoding="utf-8"))["evals"]
 
-    assert [case["id"] for case in evals] == [1, 2, 3, 4, 5]
-    luna = next(case for case in evals if "manifest、全部 Skills、scripts、protocols 和 tests" in case["prompt"])
+    assert [case["id"] for case in evals] == [1, 2, 3, 4, 5, 6]
+    source_inventory = next(case for case in evals if "shared runtime seam" in case["prompt"])
     broad_search = next(case for case in evals if "整个仓库搜索" in case["prompt"])
     multi_file = next(case for case in evals if "多个紧密相关文件" in case["prompt"])
     batch = next(case for case in evals if "两个互不依赖" in case["prompt"])
     lifecycle = next(case for case in evals if "同一 Topic" in case["prompt"] and "新 Topic" in case["prompt"])
+    anti_thrash = next(case for case in evals if "连续两次返回 INCOMPLETE" in case["prompt"])
 
-    assert "拆成可独立返回" in luna["expected_output"]
+    assert "保持一个 Topic" in source_inventory["expected_output"]
     assert "允许派发" in broad_search["expected_output"]
-    assert "允许派发" in multi_file["expected_output"]
+    assert "保持一个 coherent step" in multi_file["expected_output"]
     assert "receipt" in batch["expected_output"] and "idle" in batch["expected_output"]
     assert "复用" in lifecycle["expected_output"] and "fresh" in lifecycle["expected_output"]
+    assert "foundation investigation" in anti_thrash["expected_output"]
 
 
 def test_evals_are_wellformed_read_only_scenarios() -> None:

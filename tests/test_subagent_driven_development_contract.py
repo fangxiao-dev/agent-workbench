@@ -133,13 +133,25 @@ def test_focused_control_loop_and_worktree_scenarios_are_recorded() -> None:
     assert "serialize unisolated DB and port" in runtime_isolation["expectations"]
 
 
+def test_sdd_evals_keep_coherent_work_together_and_replan_thrashing() -> None:
+    sdd_evals = json.loads((SDD / "evals" / "evals.json").read_text(encoding="utf-8"))["evals"]
+
+    coherent = next(case for case in sdd_evals if case["id"] == 11)
+    recovery = next(case for case in sdd_evals if case["id"] == 12)
+    thrash = next(case for case in sdd_evals if case["id"] == 13)
+
+    assert "mechanical cleanup stays in step" in coherent["expectations"]
+    assert "same worker continues" in recovery["expectations"]
+    assert "foundation investigation first" in thrash["expectations"]
+
+
 def test_dispatcher_and_sdd_are_peer_guidance_for_upstream_and_downstream() -> None:
     dispatcher = read("skills/dispatcher/SKILL.md")
     sdd = (SDD / "SKILL.md").read_text(encoding="utf-8")
     dev = (PLUGIN / "skills" / "dev-with-track" / "SKILL.md").read_text(encoding="utf-8")
 
     assert "面向上游主控" in dispatcher
-    for marker in ("baby step", "dispatch", "worker return", "idle"):
+    for marker in ("Topic-first", "coherent step", "dispatch", "worker return", "idle"):
         assert marker in dispatcher
     assert "下游" in sdd and "bounded worker" in sdd
     assert "$dispatcher" in dev

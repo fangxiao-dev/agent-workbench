@@ -53,7 +53,7 @@
     {
       "id": 8,
       "prompt": "从 active Attempt 恢复后发现两个可能的业务动作，其中一个已有唯一 Spec 裁决，另一个仍有多个合理结果。说明主控首先做什么，以及何时调用 Dispatcher。",
-      "expected_output": "dev-with-track 先刷新 canonical facts、选择动作并裁决语义；把唯一可执行结果形成 bounded Topic 后才交 Dispatcher 做 baby-step admission 与 dispatch。",
+      "expected_output": "dev-with-track 先刷新 canonical facts、选择动作并裁决语义；按 foundation、ownership 与 closure point 形成 Topic 后，才交 Dispatcher 做 Topic-first admission、选择 coherent step 与 dispatch。",
       "files": [],
       "expectations": ["business control loop first", "semantic decision before dispatch", "Dispatcher owns mechanical scheduling"]
     }

@@ -70,6 +70,27 @@
       "expected_output": "独立 worktree 只隔离文件写入；共享 DB/端口仍构成 resource dependency，因此按唯一顺序 SERIAL 并指定 cleanup owner。",
       "files": [],
       "expectations": ["worktree isolation is file-scoped", "runtime resources assessed separately", "serialize unisolated DB and port"]
+    },
+    {
+      "id": 11,
+      "prompt": "只读模拟：同一 Topic 的实现方向、write-set 和依赖均已稳定；实现后还需要 focused test、lint/format、普通重跑和清理本动作产生的临时目录。说明是否拆成多个 baby steps。",
+      "expected_output": "保持一个 coherent step；实现、自证和边界内机械 cleanup 沿同一 work lane 完成，不为每个工具动作创建新业务派发。",
+      "files": [],
+      "expectations": ["maximal coherent step", "verification follows implementation", "mechanical cleanup stays in step"]
+    },
+    {
+      "id": 12,
+      "prompt": "只读模拟：implementer 进入错误 cwd，随后确认原 Topic、write-set、authorization 和实现方向都未变化，只需切到正确 worktree 重跑。说明 outcome 与 lifecycle。",
+      "expected_output": "这是当前动作 recovery；沿同一 worker 续接，不创建新 Topic 或业务 step。只有边界无法完成或决策变化时才返回 INCOMPLETE 给主控重排。",
+      "files": [],
+      "expectations": ["carrier recovery stays in current step", "same worker continues", "INCOMPLETE only for boundary change"]
+    },
+    {
+      "id": 13,
+      "prompt": "只读模拟：同一 Topic 连续第二次 INCOMPLETE，broad check 同时暴露一整类未盘点 producer，原 write-set 已不再可信。说明下一步。",
+      "expected_output": "把结果作为 Topic 边界失配交回 Dispatcher；先做 foundation investigation，重新确定 Topic、producer inventory 和 ownership，不继续拆更小的 fix。",
+      "files": [],
+      "expectations": ["topic-boundary mismatch", "foundation investigation first", "stop micro-fix loop"]
     }
   ]
 }

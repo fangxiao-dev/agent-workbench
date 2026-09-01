@@ -31,9 +31,9 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `grok
 
 ## Delegation Workflow
 
-- Use `$dispatcher` for upstream controller scheduling: baby-step admission, current batch, dispatch receipt, worker return, Topic lifecycle, and idle.
+- Use `$dispatcher` for upstream controller scheduling: Topic-first admission, coherent current steps, current batch, dispatch receipt, worker return, Topic lifecycle, and idle.
 - Use `$task-queue` only for explicit `task-queue.json`, `depOn`, `get-next-tasks`, or queue CLI requests; it persists Dispatcher-admitted baby steps.
-- Use `/impl-package:subagent-driven-development` for the downstream bounded worker method: Topic, dependency class, investigate/implement/fix/verify mode, work/review/test lane, lifecycle, and review requirement. Dispatcher and SDD are peer guidance for upstream scheduling and downstream work.
+- Use `/impl-package:subagent-driven-development` for the downstream bounded worker method: Topic, dependency class, investigate/implement/fix/verify mode, work/review/test execution lane, lifecycle, and review requirement. Dispatcher and SDD are peer guidance for upstream scheduling and downstream work.
 - For independent read-only review, use the thin `reviewer` contract; `do-review` owns review topology and finding closure.
 
 ## Implementation Expectations

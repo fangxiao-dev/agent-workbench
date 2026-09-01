@@ -1,6 +1,6 @@
 ---
 target: plugin-marketplace/plugins/impl-package/skills/subagent-driven-development
-updated: 2026-08-25
+updated: 2026-09-01
 ---
 
 ## 原则
@@ -14,6 +14,8 @@ updated: 2026-08-25
 - [已确认] 真实消费者使用 `DONE|BLOCKED|INCOMPLETE`、`EVIDENCE_SUFFICIENT|EVIDENCE_GAP` 和 `PENDING_REVIEW|PASSED`，主 session 将其作为 Topic-local facts 消费。（证据: R12）
 - [已确认] foundation、acceptance、resource、authorization dependency 分开判断；共享可变资源能隔离才并行，否则串行并指定 cleanup owner。（证据: R12）
 - [已确认] `investigate`、`implement`、`fix` 的派发 prompt 由 caller 按单一目标和强相关上下文裁剪；executor、model、provider 选择不属于本 Skill。（证据: R14）
+- [已确认] Topic 是顶层连续交付 lane；baby step 是授权边界而不是拆分目标，同一方向和 write-set 内的实现、focused verification、format、普通重跑与机械 cleanup 保持一个 coherent step。（证据: R15）
+- [已确认] carrier/tooling recovery 在边界可信时沿同一 worker 续接；连续第二个 `INCOMPLETE`、新 caller/producer 家族或 write-set 外溢交回 Dispatcher 做 foundation investigation。（证据: R15）
 
 ## 决策记录
 
@@ -34,3 +36,10 @@ updated: 2026-08-25
 - `references/parallel-work-admission.md` 去重 foundation、acceptance、authorization 的重复定义，回指 Step 2 表作为唯一权威，同时保留 resource 的增量细节。
 - `SKILL.md` 增加 worker-briefs pointer，并补充直接对应 eval id=3 的 worked example。
 - `references/review-gate.md` 为七类 material-risk 补充可对照的判断启发式。
+
+### R15 · 2026-09-01（Topic-first 与 coherent step）
+
+- 采纳直接提升现有 Topic 为顶层 lane，不新增 Delivery Lane 实体、模板或持久状态。
+- 采纳最大 coherent step：局部调查、实现、自证、format、普通重跑和机械 cleanup 在边界稳定时跟随同一动作。
+- 采纳单一反抖动规则：连续 `INCOMPLETE`、新 caller/producer 家族或 write-set 外溢时回到 foundation investigation，不继续微型 fix。
+- 用户明确要求只保留性价比最高的改动，不增加主控负担。

@@ -3,10 +3,10 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "只读模拟：主控准备派一个 investigate worker，一次盘点 manifest、全部 Skills、scripts、protocols 和 tests，明确排除 dsh-*，最后交付完整候选表。每类材料都能独立形成证据结论。判断是否已满足 baby step 门槛；禁止实际修改文件或派发 worker。",
-      "expected_output": "拒绝把名义上的单一候选表当作一个 baby step；能独立取证和消费的材料面应拆成可独立返回的动作，互不依赖且资源隔离的动作可以 fan out，主控综合局部证据。",
+      "prompt": "只读模拟：主控要判断一个 shared runtime seam 是否存在，必须一起盘点 manifest、Skills、scripts、protocols 和 tests。各材料可以分别阅读，但任何单项都不能在综合前改变实现方向、ownership、dependency 或是否继续。判断是否应按材料拆分；禁止实际修改文件或派发 worker。",
+      "expected_output": "保持一个 Topic 的 investigate coherent step；知识来源可以分别阅读不等于分别派发，只有综合结论会改变 Topic 决策。",
       "files": [],
-      "expectations": ["识别多个独立材料面。", "继续切分并形成当前批次。", "主控综合局部结果。"]
+      "expectations": ["Topic-first admission。", "知识来源不触发机械拆分。", "围绕一个窄决策综合。"]
     },
     {
       "id": 2,
@@ -17,15 +17,15 @@
     },
     {
       "id": 3,
-      "prompt": "只读模拟：一个 implement 动作要完成同一个 validated configuration update outcome，必须同步修改多个紧密相关文件并运行一个 focused test；其中任何单个文件的改动都不能独立交付。判断是否必须按文件拆分；禁止实际修改文件或派发 worker。",
-      "expected_output": "允许派发；文件数量不是 breadth gate，多个紧密相关文件共同实现一个不可分割、可独立验证的 coherent outcome 时仍是一个 baby step。",
+      "prompt": "只读模拟：一个 implement 动作要完成同一个 validated configuration update outcome，必须同步修改多个紧密相关文件、运行 focused test、修复当前 diff 的 format 并普通重跑一次；其中任何单项都不能独立改变方向或交付。判断是否继续拆分；禁止实际修改文件或派发 worker。",
+      "expected_output": "保持一个 coherent step；多文件实现、focused test、format 和普通重跑共同交付同一 outcome，不创建新的业务 dispatch。",
       "files": [],
       "expectations": ["允许派发 coherent outcome。", "不按文件机械拆分。", "保留 focused verification。"]
     },
     {
       "id": 4,
       "prompt": "只读模拟：当前有两个互不依赖、资源隔离且已通过门槛的 baby steps。一次派发 receipt 明确成功，另一次 receipt 来源不明；成功的 worker 随后返回。说明当前批次、结果消费与 idle 条件；禁止实际修改文件或派发 worker。",
-      "expected_output": "两个动作进入当前批次 fan out；只确认 receipt 明确成功的派发，来源不明的 receipt 先消除歧义；先消费 worker return，再重新扫描，确认无已解锁动作后才进入 idle。",
+      "expected_output": "两个动作进入当前批次 fan out；只确认 receipt 明确成功的派发，来源不明的 receipt 先消除歧义；当前批次的 receipt/return 全部确认或消除歧义后才全局重扫并判断 idle。",
       "files": [],
       "expectations": ["形成完整当前批次。", "receipt 歧义解决前不推进。", "消费 return 后再判断 idle。"]
     },
@@ -35,6 +35,13 @@
       "expected_output": "同一 Topic 在上下文可信时复用原 work lane worker；新 Topic 使用 fresh worker；先消费当前 return，再分别判断是否进入下一批次。",
       "files": [],
       "expectations": ["同 Topic 复用可信上下文。", "新 Topic 使用 fresh worker。", "空闲不是复用依据。"]
+    },
+    {
+      "id": 6,
+      "prompt": "只读模拟：同一 Topic 已连续两次返回 INCOMPLETE，最近一次 broad check 又发现此前未盘点的一整类 caller。主控准备继续拆一个更小的 fix。说明正确调度；禁止实际修改文件或派发 worker。",
+      "expected_output": "停止继续切小 fix，先释放一个 foundation investigation，重新确认 Topic 边界、caller inventory 和 ownership，再形成下一批。",
+      "files": [],
+      "expectations": ["识别反抖动信号。", "回到 foundation investigation。", "不继续微型 fix。"]
     }
   ]
 }
