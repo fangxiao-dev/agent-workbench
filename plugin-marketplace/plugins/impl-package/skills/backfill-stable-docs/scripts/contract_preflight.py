@@ -26,7 +26,7 @@ def package_paths(project: Path, config: dict[str, Any]) -> list[Path]:
 
 
 def inspect_package(package: Path) -> dict[str, Any]:
-    completed = subprocess.run([sys.executable, str(STATE_ENGINE), "--package", str(package), "validate"], cwd=package, capture_output=True, text=True, check=False)
+    completed = subprocess.run([sys.executable, str(STATE_ENGINE), "--package", str(package), "--no-situation", "validate"], cwd=package, capture_output=True, text=True, check=False)
     if completed.returncode:
         return {"package": package.as_posix(), "status": "invalid", "reason": completed.stderr.strip()}
     return {"package": package.as_posix(), "status": "valid", "state": json.loads(completed.stdout)}

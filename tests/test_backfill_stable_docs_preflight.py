@@ -15,6 +15,18 @@ import contract_preflight  # noqa: E402
 
 
 class PreflightTests(unittest.TestCase):
+    def test_reads_valid_engine_json_without_situation_footer(self) -> None:
+        with tempfile.TemporaryDirectory() as value:
+            repo = Path(value)
+            subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+            package = repo / "docs/implementations/example"
+            package.mkdir(parents=True)
+
+            result = contract_preflight.inspect_package(package)
+
+            self.assertEqual(result["status"], "valid")
+            self.assertFalse(result["state"]["active"])
+
     def test_reports_invalid_current_state_as_advisory(self) -> None:
         with tempfile.TemporaryDirectory() as value:
             repo = Path(value)
