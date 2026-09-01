@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <title>Codex 进度台</title>
-    <link rel="stylesheet" href="/style.css">
-    <script src="/app.js" defer></script>
+    <link rel="stylesheet" href="/style.css?v=8">
+    <script src="/app.js?v=8" defer></script>
   </head>
   <body>
     <div class="ambient ambient-one" aria-hidden="true"></div>
@@ -55,31 +55,6 @@
       </section>
 
       <div class="dashboard-grid">
-        <section class="panel activity-panel" aria-labelledby="activity-title">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">主会话实际进展</p>
-              <h2 id="activity-title">最近发生了什么</h2>
-            </div>
-            <span class="freshness" id="freshness">等待首个快照</span>
-          </div>
-          <section class="next-inline" aria-labelledby="next-title">
-            <p class="eyebrow">唯一下一动作</p>
-            <div class="next-heading-row">
-              <h3 id="next-title">接下来做什么</h3>
-              <span class="divergence-status" id="divergence-panel" hidden>
-                <button class="divergence-badge" type="button" aria-describedby="divergence-tooltip">登记滞后</button>
-                <span class="divergence-tooltip" id="divergence-tooltip" role="tooltip">
-                  <span id="divergence"></span>
-                </span>
-              </span>
-            </div>
-            <p id="next-action">关联任务包后显示正式登记的下一动作。</p>
-            <div class="blocker" id="blocker" hidden></div>
-          </section>
-          <ol class="activity-list" id="activity-list" aria-live="polite"></ol>
-        </section>
-
         <section class="panel tickets-panel" aria-labelledby="tickets-title">
           <div class="panel-heading tickets-heading">
             <div>
@@ -113,6 +88,43 @@
             <ul class="tooltip-hints" id="tooltip-hints"></ul>
           </div>
         </section>
+
+        <aside class="side-stack" aria-label="实时进展与监控">
+          <section class="panel monitor-panel" id="monitor-panel" data-level="loading" aria-labelledby="monitor-title" aria-live="polite">
+            <div class="monitor-heading">
+              <p class="eyebrow" id="monitor-title">调度监控</p>
+              <time class="monitor-time" id="monitor-time">正在读取</time>
+            </div>
+            <span class="monitor-level loading" id="monitor-level">正在读取</span>
+            <p class="monitor-summary" id="monitor-summary">正在读取最新监控记录。</p>
+            <p class="monitor-thread" id="monitor-thread" hidden></p>
+          </section>
+
+          <section class="panel activity-panel" aria-labelledby="activity-title">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">主会话实际进展</p>
+                <h2 id="activity-title">最近发生了什么</h2>
+              </div>
+              <span class="freshness" id="freshness">等待首个快照</span>
+            </div>
+            <section class="next-inline" aria-labelledby="next-title">
+              <p class="eyebrow">唯一下一动作</p>
+              <div class="next-heading-row">
+                <h3 id="next-title">接下来做什么</h3>
+                <span class="divergence-status" id="divergence-panel" hidden>
+                  <button class="divergence-badge" type="button" aria-describedby="divergence-tooltip">登记滞后</button>
+                  <span class="divergence-tooltip" id="divergence-tooltip" role="tooltip">
+                    <span id="divergence"></span>
+                  </span>
+                </span>
+              </div>
+              <p id="next-action">关联任务包后显示正式登记的下一动作。</p>
+              <div class="blocker" id="blocker" hidden></div>
+            </section>
+            <ol class="activity-list" id="activity-list" aria-live="polite"></ol>
+          </section>
+        </aside>
       </div>
 
       <details class="audit panel">

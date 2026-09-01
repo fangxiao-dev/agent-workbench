@@ -30,14 +30,17 @@ TYPED_DEPENDENCY_RE = re.compile(
     rf"\b(implementation|acceptance|release)\s*:\s*({TICKET_ID_PATTERN})\b",
     re.I,
 )
-WINDOWS_PATH_RE = re.compile(r"(?:\\\\\?\\)?[A-Za-z]:\\[^\s`\"']+")
+WINDOWS_PATH_RE = re.compile(r"(?:\\\\\?\\)?[A-Za-z]:[\\/][^\s`\"'<>\])]+")
 SECRET_RE = re.compile(
     r"(?i)\b(api[_-]?key|access[_-]?token|token|password|secret)\b\s*[:=]\s*[^\s,;]+"
 )
 IBAN_RE = re.compile(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b")
+EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
 COMMIT_RE = re.compile(r"\b[0-9a-f]{40}\b", re.I)
 MAX_ACTIVITY = 5
 MAX_ACTIVITY_CHARS = 1200
+MONITOR_DIR = Path(".progress-record") / "codex-progress-dashboard" / "monitors"
+MONITOR_LEVELS = {"normal", "attention", "abnormal"}
 
 
 def _iso_timestamp(value: Any) -> str | None:
@@ -153,11 +156,52 @@ def _task_paths(row: sqlite3.Row, db_path: Path) -> tuple[Path, Path]:
 def sanitise_activity(text: str) -> str:
     text = SECRET_RE.sub(lambda match: f"{match.group(1)}=[已隐藏]", text)
     text = IBAN_RE.sub("[IBAN 已隐藏]", text)
+    text = EMAIL_RE.sub("[邮箱已隐藏]", text)
     text = WINDOWS_PATH_RE.sub("[本地路径]", text)
     text = COMMIT_RE.sub("[版本]", text)
     text = re.sub(r"```[\s\S]*?```", "[代码块已省略]", text)
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
     return text[:MAX_ACTIVITY_CHARS]
+
+
+def monitor_snapshot(workspace: Path, package_root: Path | None) -> dict[str, str] | None:
+    if package_root is None:
+        return None
+    directory = workspace / MONITOR_DIR
+    if not directory.is_dir():
+        return None
+
+    newest: tuple[float, dict[str, str]] | None = None
+    for path in directory.glob("*.json"):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+            observed_at = str(record["observedAt"])
+            observed_timestamp = datetime.fromisoformat(observed_at.replace("Z", "+00:00")).timestamp()
+            monitor_thread_id = str(record["monitorThreadId"])
+            target_thread_id = str(record["targetThreadId"])
+            level = str(record["level"])
+            summary = sanitise_activity(str(record["summary"]))
+            package_path = _normalise_path(record["packagePath"])
+        except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if (
+            record.get("version") != 1
+            or not THREAD_ID_RE.fullmatch(monitor_thread_id)
+            or not THREAD_ID_RE.fullmatch(target_thread_id)
+            or level not in MONITOR_LEVELS
+            or package_path != package_root
+            or not summary
+        ):
+            continue
+        candidate = {
+            "observedAt": observed_at,
+            "level": level,
+            "summary": summary,
+            "monitorThreadId": monitor_thread_id,
+        }
+        if newest is None or observed_timestamp > newest[0]:
+            newest = (observed_timestamp, candidate)
+    return newest[1] if newest else None
 
 
 def _message_text(payload: dict[str, Any]) -> str:
@@ -416,7 +460,7 @@ def _ticket_metadata(package_root: Path, ticket_ids: list[str]) -> dict[str, dic
             for dependency_type in ("implementation", "acceptance", "release")
             for dependency in dependency_types.get(dependency_type, [])
         ]
-        result[ticket_id] = {
+        result[ticket_id.upper()] = {
             "name": heading[:120],
             "completionHints": hints[:3],
             "dependencies": list(dict.fromkeys(dependencies)),
@@ -437,6 +481,87 @@ def _gate_label(state: dict[str, Any]) -> tuple[str, str]:
         verdict = str(gate)
     labels = {"pass": "最终门禁已通过", "blocked": "最终门禁受阻", "fail": "最终门禁未通过"}
     return labels.get(verdict.lower(), verdict), verdict
+
+
+def _ticket_released(ticket_id: str, ticket_states: dict[str, Any], visiting: set[str] | None = None) -> bool:
+    row = ticket_states.get(ticket_id)
+    if not isinstance(row, dict):
+        return False
+    state = row.get("state")
+    if state == "SATISFIED":
+        return True
+    if state != "RETIRED":
+        return False
+    if row.get("disposition") == "waived":
+        return True
+    successor = row.get("successor")
+    if not isinstance(successor, str):
+        return False
+    visiting = set() if visiting is None else visiting
+    if ticket_id in visiting:
+        return False
+    visiting.add(ticket_id)
+    return _ticket_released(successor, ticket_states, visiting)
+
+
+def _trail_rows(path: Path) -> list[dict[str, Any]] | None:
+    if not path.is_file():
+        return []
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    lines = data.splitlines(keepends=True)
+    if lines and not lines[-1].endswith((b"\n", b"\r")):
+        lines.pop()
+    rows = []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        if not isinstance(row, dict):
+            return None
+        rows.append(row)
+    return rows
+
+
+def _trail_identifier(row: dict[str, Any]) -> str | None:
+    for name in ("seq", "id", "dispatch_id", "dispatchId", "decision_id", "decisionId"):
+        if row.get(name) is not None:
+            return str(row[name])
+    return None
+
+
+def _running_ticket_ids(package_root: Path, attempt_id: Any, ticket_ids: set[str]) -> list[str]:
+    if not isinstance(attempt_id, str) or not attempt_id:
+        return []
+    rows = _trail_rows(package_root / "execution" / attempt_id / "trail.jsonl")
+    if rows is None:
+        return []
+    result_ids = {
+        str(row[name])
+        for row in rows
+        if row.get("kind") in {"result", "worker-return"}
+        for name in ("of", "decision", "dispatch_id", "dispatchId", "decision_id", "decisionId")
+        if row.get(name) is not None
+    }
+    running = []
+    for row in rows:
+        if row.get("kind") != "dispatch" or str(row.get("outcome", "")).upper() != "RUNNING" or row.get("returned") is not False:
+            continue
+        identifier = _trail_identifier(row)
+        subject = row.get("subject")
+        if identifier is not None and identifier in result_ids:
+            continue
+        if not isinstance(subject, str) or not subject.startswith("ticket:"):
+            continue
+        ticket_id = subject.removeprefix("ticket:")
+        if ticket_id in ticket_ids and ticket_id not in running:
+            running.append(ticket_id)
+    return running
 
 
 def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> dict[str, Any]:
@@ -471,6 +596,34 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
                 "dependencyTypes": dependency_types,
             }
         )
+    ticket_state_rows = {str(ticket_id): value for ticket_id, value in ticket_states.items()}
+    ready_ticket_ids = [
+        ticket["id"]
+        for ticket in tickets
+        if ticket["state"] == "PENDING"
+        and ticket["id"].upper() in metadata
+        and all(
+            _ticket_released(dependency, ticket_state_rows)
+            for dependency in ticket["dependencyTypes"]["implementation"]
+        )
+    ]
+    attempt = state.get("attempt") if isinstance(state.get("attempt"), dict) else {}
+    terminal_ticket_ids = {
+        ticket["id"] for ticket in tickets if ticket["state"] in {"SATISFIED", "RETIRED"}
+    }
+    running_ticket_ids = [
+        ticket_id
+        for ticket_id in _running_ticket_ids(package_root, attempt.get("id"), set(ticket_ids))
+        if ticket_id not in terminal_ticket_ids
+    ]
+    for ticket in tickets:
+        ticket["runtimeState"] = (
+            "RUNNING"
+            if ticket["id"] in running_ticket_ids
+            else "READY"
+            if ticket["id"] in ready_ticket_ids
+            else None
+        )
     counts = Counter(ticket["state"] for ticket in tickets)
     checkpoints = state.get("activeCheckpoints")
     checkpoint = checkpoints.get("attempt", {}) if isinstance(checkpoints, dict) else {}
@@ -487,31 +640,13 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
         for ticket in tickets
         if ticket["state"] in {"PENDING", "NEEDS-REVALIDATION"} and ticket["id"] in mentioned
     ]
-    current_ticket_id = None
-    if isinstance(next_action, str):
-        current_ticket_id = next(
-            (
-                resolved
-                for match in TICKET_REFERENCE_RE.finditer(next_action)
-                if (resolved := _resolve_ticket_id(match.group(0), ticket_ids)) in ticket_ids
-            ),
-            None,
-        )
-    if current_ticket_id is None:
-        current_ticket_id = next(
-            (
-                resolved
-                for activity in activities
-                for match in TICKET_REFERENCE_RE.finditer(activity.get("text", ""))
-                if (resolved := _resolve_ticket_id(match.group(0), ticket_ids)) in ticket_ids
-            ),
-            None,
-        )
-    if current_ticket_id is None:
-        current_ticket_id = next(
+    current_ticket_id = next(
+        iter(running_ticket_ids or ready_ticket_ids),
+        next(
             (ticket["id"] for ticket in tickets if ticket["state"] not in {"SATISFIED", "RETIRED"}),
             tickets[0]["id"] if tickets else None,
-        )
+        ),
+    )
     discrepancy = None
     if pending_mentions:
         discrepancy = (
@@ -528,11 +663,13 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
         "blocker": blocker,
         "discrepancy": discrepancy,
         "currentTicketId": current_ticket_id,
+        "readyTicketIds": ready_ticket_ids,
+        "runningTicketIds": running_ticket_ids,
         "tickets": tickets,
         "counts": dict(counts),
         "audit": {
             "relativePath": package_root.name,
-            "attempt": (state.get("attempt") or {}).get("id") if isinstance(state.get("attempt"), dict) else None,
+            "attempt": attempt.get("id"),
             "formatVersion": state.get("formatVersion"),
             "stateModifiedAt": datetime.fromtimestamp(state_path.stat().st_mtime).astimezone().isoformat(timespec="seconds"),
         },
@@ -557,6 +694,7 @@ def build_snapshot(thread_id: str, package: str | None, db_path: Path = DEFAULT_
             "activities": projection["activities"],
         },
         "package": package_data,
+        "monitor": monitor_snapshot(cwd, package_root),
         "audit": {
             "taskId": row["id"],
             "workspace": str(cwd),

@@ -117,9 +117,9 @@ select:disabled { color: var(--dim); cursor: not-allowed; }
 .overview-strip {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) auto;
-  gap: 32px;
+  gap: 24px;
   align-items: center;
-  padding: 24px 2px 20px;
+  padding: 16px 2px 14px;
 }
 
 .eyebrow { margin: 0 0 11px; color: var(--acid); font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
@@ -128,21 +128,44 @@ h1 {
   max-width: 860px;
   margin: 0;
   font-family: "Palatino Linotype", "Yu Mincho", Georgia, serif;
-  font-size: clamp(30px, 3vw, 44px);
+  font-size: clamp(28px, 2.7vw, 40px);
   font-weight: 500;
   line-height: 1.05;
   letter-spacing: -.035em;
 }
-.overview-metrics { display: grid; grid-template-columns: repeat(3, minmax(130px, auto)); margin: 0; border-left: 1px solid var(--line-strong); }
-.overview-metrics div { padding: 5px 24px; border-right: 1px solid var(--line); }
-.overview-metrics dt { color: var(--muted); font-size: 12px; }
-.overview-metrics dd { margin: 6px 0 0; font-family: "Palatino Linotype", serif; font-size: 20px; white-space: nowrap; }
-.dashboard-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; align-items: start; }
+.overview-metrics { display: grid; grid-template-columns: repeat(3, minmax(120px, auto)); margin: 0; border-left: 1px solid var(--line-strong); }
+.overview-metrics div { padding: 3px 18px; border-right: 1px solid var(--line); }
+.overview-metrics dt { color: var(--muted); font-size: 11px; letter-spacing: .04em; }
+.overview-metrics dd { margin: 4px 0 0; font-family: "Palatino Linotype", serif; font-size: 17px; white-space: nowrap; }
+.dashboard-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr); gap: 16px; align-items: start; }
+.side-stack { display: grid; min-width: 0; gap: 16px; }
 .panel { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); }
 .activity-panel, .tickets-panel { padding: 24px; }
 .panel-heading { display: flex; gap: 20px; align-items: end; justify-content: space-between; margin-bottom: 20px; }
 h2 { margin: 0; font-family: "Palatino Linotype", "Yu Mincho", serif; font-size: clamp(24px, 2.3vw, 34px); font-weight: 500; letter-spacing: -.025em; }
 .freshness { color: var(--dim); font-size: 15px; white-space: nowrap; }
+
+.monitor-panel {
+  padding: 17px 20px 18px;
+  border-top: 3px solid var(--line-strong);
+  background: linear-gradient(145deg, rgba(252, 249, 239, .98), rgba(246, 242, 228, .94));
+  transition: border-color .18s ease;
+}
+.monitor-panel[data-level="normal"] { border-top-color: var(--acid); }
+.monitor-panel[data-level="attention"] { border-top-color: var(--amber); }
+.monitor-panel[data-level="abnormal"] { border-top-color: var(--rose); }
+.monitor-heading { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+.monitor-heading .eyebrow { margin: 0; }
+.monitor-time { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
+.monitor-level { display: inline-flex; min-height: 30px; margin-top: 14px; align-items: center; gap: 8px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; font-weight: 700; }
+.monitor-level::before { width: 7px; height: 7px; border-radius: 50%; background: currentColor; content: ""; }
+.monitor-level.normal { color: #526716; border-color: rgba(95, 117, 23, .28); background: rgba(95, 117, 23, .08); }
+.monitor-level.attention { color: #815312; border-color: rgba(148, 95, 21, .3); background: rgba(148, 95, 21, .08); }
+.monitor-level.abnormal { color: #943c36; border-color: rgba(168, 65, 59, .28); background: rgba(168, 65, 59, .08); }
+.monitor-level.loading { color: var(--cyan); background: rgba(57, 120, 111, .06); }
+.monitor-level.waiting { color: var(--muted); background: rgba(32, 36, 31, .04); }
+.monitor-summary { margin: 11px 0 0; color: #353a33; font-size: 16px; line-height: 1.58; }
+.monitor-thread { margin: 12px 0 0; color: var(--dim); font-family: Consolas, monospace; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
 
 .activity-list { margin: 0; padding: 0; list-style: none; }
 .activity-item { display: grid; grid-template-columns: 112px 1fr; gap: 18px; padding: 16px 0; border-top: 1px solid var(--line); }
@@ -200,7 +223,7 @@ h2 { margin: 0; font-family: "Palatino Linotype", "Yu Mincho", serif; font-size:
 }
 .flow-node:hover { border-color: rgba(139, 165, 39, .65); background: #fffdf6; transform: translateY(-1px); }
 .flow-node:focus-visible { outline: 2px solid var(--acid); outline-offset: 3px; }
-.flow-node[aria-pressed="true"] { border-color: var(--acid); background: rgba(139, 165, 39, .1); box-shadow: 0 0 0 3px rgba(139, 165, 39, .08); }
+.flow-node[aria-pressed="true"], .flow-node.is-running { border-color: var(--acid); background: rgba(139, 165, 39, .1); box-shadow: 0 0 0 3px rgba(139, 165, 39, .08); }
 .flow-node.is-dimmed { opacity: .45; }
 .flow-node.satisfied {
   position: relative;
@@ -225,6 +248,8 @@ h2 { margin: 0; font-family: "Palatino Linotype", "Yu Mincho", serif; font-size:
   font-weight: 600;
 }
 .flow-node.satisfied.is-dimmed { opacity: 1; }
+.flow-node.is-ready.is-dimmed, .flow-node.is-running.is-dimmed,
+.flow-node.blocked.is-dimmed, .flow-node.needs-revalidation.is-dimmed { opacity: 1; }
 .flow-node.blocked, .flow-node.needs-revalidation { border-left: 3px solid var(--amber); }
 .flow-node-code { color: var(--cyan); font-family: Consolas, monospace; font-size: 14px; letter-spacing: .06em; }
 .flow-node-title { align-self: end; margin-top: 8px; font-size: 16px; line-height: 1.42; }
@@ -286,8 +311,9 @@ h2 { margin: 0; font-family: "Palatino Linotype", "Yu Mincho", serif; font-size:
 @media (max-width: 420px) {
   .brand small { display: none; }
   .connection-label { max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
-  h1 { font-size: 36px; }
+  h1 { font-size: 32px; }
   .activity-panel, .tickets-panel { padding: 19px 16px; }
+  .monitor-panel { padding: 16px; }
   .ticket-legend { display: none; }
   .ticket-tooltip { font-size: 14px; }
 }

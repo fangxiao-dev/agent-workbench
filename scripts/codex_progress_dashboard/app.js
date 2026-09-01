@@ -26,11 +26,17 @@ const tooltipState = document.querySelector("#tooltip-state");
 const tooltipDependencies = document.querySelector("#tooltip-dependencies");
 const tooltipHints = document.querySelector("#tooltip-hints");
 const ticketEmpty = document.querySelector("#ticket-empty");
+const monitorPanel = document.querySelector("#monitor-panel");
+const monitorTime = document.querySelector("#monitor-time");
+const monitorLevel = document.querySelector("#monitor-level");
+const monitorSummary = document.querySelector("#monitor-summary");
+const monitorThread = document.querySelector("#monitor-thread");
 const auditList = document.querySelector("#audit-list");
 
 let events = null;
 let selectedTask = null;
 let selectedTicketId = null;
+let previewTicketId = null;
 let currentTickets = [];
 let ticketSignature = "";
 
@@ -64,7 +70,21 @@ function formatTime(value) {
   }).format(date);
 }
 
-function stateLabel(value) {
+function formatCompactTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "时间未知";
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function stateLabel(value, runtimeState = null) {
+  if (runtimeState === "RUNNING") return "正在进行";
+  if (runtimeState === "READY") return "可启动";
   return {
     SATISFIED: "已正式验收",
     PENDING: "等待推进",
@@ -141,6 +161,11 @@ function drawDependencyLines() {
   definitions.append(marker);
   dependencyLines.append(definitions);
 
+  const highlightedTicketIds = new Set(
+    previewTicketId
+      ? [previewTicketId]
+      : currentTickets.filter((ticket) => ticket.runtimeState === "RUNNING").map((ticket) => ticket.id),
+  );
   currentTickets.forEach((ticket) => {
     const target = flowStages.querySelector(`[data-ticket-id="${ticket.id}"]`);
     if (!target) return;
@@ -158,7 +183,7 @@ function drawDependencyLines() {
       path.setAttribute("d", `M ${x1} ${y1} C ${x1} ${y1 + bend}, ${x2} ${y2 - bend}, ${x2} ${y2}`);
       path.setAttribute("marker-end", "url(#flow-arrow)");
       path.classList.add("dependency-edge");
-      if (ticket.id === selectedTicketId || dependencyId === selectedTicketId) {
+      if (highlightedTicketIds.has(ticket.id) || highlightedTicketIds.has(dependencyId)) {
         path.classList.add("is-related");
       }
       dependencyLines.append(path);
@@ -166,19 +191,55 @@ function drawDependencyLines() {
   });
 }
 
+function directRelations(ticketId) {
+  const ticket = currentTickets.find((item) => item.id === ticketId);
+  if (!ticket) return new Set();
+  const dependents = currentTickets.filter((item) => item.dependencies.includes(ticketId));
+  return new Set([...ticket.dependencies, ...dependents.map((item) => item.id), ticketId]);
+}
+
+function updateTicketHighlights() {
+  const highlighted = new Set();
+  const focusTicketIds = previewTicketId
+    ? [previewTicketId]
+    : currentTickets.filter((ticket) => ticket.runtimeState === "RUNNING").map((ticket) => ticket.id);
+  focusTicketIds.forEach((ticketId) => directRelations(ticketId).forEach((relatedId) => highlighted.add(relatedId)));
+  const visible = new Set(highlighted);
+  currentTickets
+    .filter((ticket) => ticket.runtimeState === "READY" || ticket.runtimeState === "RUNNING")
+    .forEach((ticket) => visible.add(ticket.id));
+  flowStages.querySelectorAll(".flow-node").forEach((node) => {
+    const ticketId = node.dataset.ticketId;
+    const ticket = currentTickets.find((item) => item.id === ticketId);
+    node.setAttribute(
+      "aria-pressed",
+      String(ticketId === selectedTicketId && ticket?.runtimeState === "RUNNING"),
+    );
+    node.classList.toggle("is-preview", ticketId === previewTicketId);
+    node.classList.toggle(
+      "is-linked-preview",
+      Boolean(previewTicketId && ticketId !== previewTicketId && highlighted.has(ticketId)),
+    );
+    node.classList.toggle("is-dimmed", !visible.has(ticketId));
+  });
+  requestAnimationFrame(drawDependencyLines);
+}
+
 function selectTicket(ticketId) {
   selectedTicketId = ticketId;
-  const selected = currentTickets.find((ticket) => ticket.id === ticketId);
-  if (!selected) return;
-  const dependents = currentTickets.filter((ticket) => ticket.dependencies.includes(ticketId));
-  const related = new Set([...selected.dependencies, ...dependents.map((ticket) => ticket.id), ticketId]);
-  flowStages.querySelectorAll(".flow-node").forEach((node) => {
-    const active = node.dataset.ticketId === ticketId;
-    node.setAttribute("aria-pressed", String(active));
-    node.classList.toggle("is-dimmed", !related.has(node.dataset.ticketId));
-  });
+  previewTicketId = null;
+  updateTicketHighlights();
+}
 
-  requestAnimationFrame(drawDependencyLines);
+function previewTicket(ticketId) {
+  previewTicketId = ticketId;
+  updateTicketHighlights();
+}
+
+function clearTicketPreview() {
+  if (!previewTicketId) return;
+  previewTicketId = null;
+  updateTicketHighlights();
 }
 
 function ticketRelationship(ticket) {
@@ -194,8 +255,8 @@ function ticketRelationship(ticket) {
 function showTicketTooltip(ticket, anchor) {
   tooltipCode.textContent = ticket.id;
   tooltipName.textContent = ticket.name;
-  tooltipState.className = `state-badge ${ticket.state.toLowerCase()}`;
-  tooltipState.textContent = stateLabel(ticket.state);
+  tooltipState.className = `state-badge ${(ticket.runtimeState || ticket.state).toLowerCase()}`;
+  tooltipState.textContent = stateLabel(ticket.state, ticket.runtimeState);
   tooltipDependencies.textContent = ticketRelationship(ticket);
   clear(tooltipHints);
   const hints = ticket.completionHints.length
@@ -230,15 +291,21 @@ function hideTicketTooltip() {
 }
 
 function activateTicket(ticket, node) {
+  previewTicket(ticket.id);
   showTicketTooltip(ticket, node);
+}
+
+function deactivateTicket() {
+  clearTicketPreview();
+  hideTicketTooltip();
 }
 
 function populateTooltipEvents(ticket, node) {
   node.setAttribute("aria-describedby", "ticket-tooltip");
   node.addEventListener("mouseenter", () => activateTicket(ticket, node));
-  node.addEventListener("mouseleave", hideTicketTooltip);
+  node.addEventListener("mouseleave", deactivateTicket);
   node.addEventListener("focus", () => activateTicket(ticket, node));
-  node.addEventListener("blur", hideTicketTooltip);
+  node.addEventListener("blur", deactivateTicket);
   node.addEventListener("click", () => activateTicket(ticket, node));
 }
 
@@ -253,6 +320,7 @@ function renderTickets(tickets, currentTicketId) {
   flowLayout.hidden = tickets.length === 0;
   if (!tickets.length) {
     selectedTicketId = null;
+    previewTicketId = null;
     hideTicketTooltip();
     return;
   }
@@ -277,10 +345,11 @@ function renderTickets(tickets, currentTicketId) {
     stageTickets.forEach((ticket) => {
       const node = document.createElement("button");
       node.type = "button";
-      node.className = `flow-node ${ticket.state.toLowerCase()}`;
+      const runtimeClass = ticket.runtimeState ? ` is-${ticket.runtimeState.toLowerCase()}` : "";
+      node.className = `flow-node ${ticket.state.toLowerCase()}${runtimeClass}`;
       node.dataset.ticketId = ticket.id;
       node.setAttribute("aria-pressed", "false");
-      node.setAttribute("aria-label", `${ticket.name}，${stateLabel(ticket.state)}`);
+      node.setAttribute("aria-label", `${ticket.name}，${stateLabel(ticket.state, ticket.runtimeState)}`);
       const code = document.createElement("span");
       code.className = "flow-node-code";
       code.textContent = ticket.id;
@@ -309,6 +378,33 @@ function appendAudit(label, value) {
   auditList.append(term, description);
 }
 
+function renderMonitor(monitor) {
+  if (!monitor) {
+    monitorPanel.dataset.level = "waiting";
+    monitorTime.removeAttribute("datetime");
+    monitorTime.textContent = "尚无记录";
+    monitorLevel.className = "monitor-level waiting";
+    monitorLevel.textContent = "暂无匹配监控";
+    monitorSummary.textContent = "当前项目和任务包暂无匹配监控记录。";
+    monitorThread.hidden = true;
+    monitorThread.textContent = "";
+    return;
+  }
+  const labels = {
+    normal: "运行正常",
+    attention: "值得关注",
+    abnormal: "明显异常",
+  };
+  monitorPanel.dataset.level = monitor.level;
+  monitorTime.dateTime = monitor.observedAt;
+  monitorTime.textContent = formatCompactTime(monitor.observedAt);
+  monitorLevel.className = `monitor-level ${monitor.level}`;
+  monitorLevel.textContent = labels[monitor.level];
+  monitorSummary.textContent = monitor.summary;
+  monitorThread.hidden = false;
+  monitorThread.textContent = monitor.monitorThreadId;
+}
+
 function render(snapshot) {
   taskTitle.textContent = snapshot.task.name;
   taskStatus.textContent = snapshot.task.status;
@@ -325,6 +421,7 @@ function render(snapshot) {
   divergencePanel.hidden = !pkg?.discrepancy;
   divergence.textContent = pkg?.discrepancy || "";
   renderTickets(pkg?.tickets || [], pkg?.currentTicketId || null);
+  renderMonitor(snapshot.monitor);
 
   clear(auditList);
   appendAudit("任务标识", snapshot.audit.taskId);
@@ -367,8 +464,9 @@ function openEvents() {
   if (events) events.close();
   const packagePath = packageSelect.value;
   const query = packagePath ? `?package=${encodeURIComponent(packagePath)}` : "";
+  const separator = query ? "&" : "?";
   setConnection("loading", "正在连接");
-  events = new EventSource(`/api/tasks/${encodeURIComponent(selectedTask)}/events${query}`);
+  events = new EventSource(`/api/tasks/${encodeURIComponent(selectedTask)}/events${query}${separator}stream=${Date.now()}`);
   events.addEventListener("snapshot", (event) => {
     render(JSON.parse(event.data));
     setConnection("live", "实时连接");
@@ -397,26 +495,43 @@ function showError(error) {
 }
 
 async function boot() {
+  const requested = new URLSearchParams(window.location.search).get("task");
+  if (requested) {
+    clear(taskSelect);
+    taskSelect.append(option(requested, "正在读取当前项目…"));
+    taskSelect.value = requested;
+    await selectTask(requested);
+  }
+
   const { tasks } = await getJson("/api/tasks");
   clear(taskSelect);
   if (!tasks.length) throw new Error("没有匹配到含当前任务包的项目。");
+  if (requested && !tasks.some((task) => task.id === requested)) {
+    tasks.unshift({ id: requested, name: taskTitle.textContent });
+  }
   tasks.forEach((task) => taskSelect.append(option(task.id, task.name)));
-  const requested = new URLSearchParams(window.location.search).get("task");
   const saved = localStorage.getItem("codex-progress-task");
   const initial = tasks.find((task) => task.id === requested)
     || tasks.find((task) => task.id === saved)
     || tasks[0];
   taskSelect.value = initial.id;
-  await selectTask(initial.id);
+  if (!requested) await selectTask(initial.id);
 }
 
 boot().catch(showError);
 
 window.addEventListener("resize", () => {
+  clearTicketPreview();
   hideTicketTooltip();
   requestAnimationFrame(drawDependencyLines);
 });
-window.addEventListener("scroll", hideTicketTooltip, true);
+window.addEventListener("scroll", () => {
+  clearTicketPreview();
+  hideTicketTooltip();
+}, true);
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") hideTicketTooltip();
+  if (event.key === "Escape") {
+    clearTicketPreview();
+    hideTicketTooltip();
+  }
 });

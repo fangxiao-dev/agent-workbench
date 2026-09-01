@@ -287,7 +287,7 @@ def test_sensitive_and_internal_rollout_payloads_never_reach_snapshot(tmp_path: 
             "message",
             role="assistant",
             phase="commentary",
-            text=r"token=raw-value at C:\Customers\private.pdf and DE89370400440532013000",
+            text=r"token=raw-value at C:\Customers\private.pdf, D:/Customers/other.pdf, user@example.com and DE89370400440532013000",
             timestamp="2026-08-31T20:00:02Z",
         ),
     ]
@@ -299,6 +299,8 @@ def test_sensitive_and_internal_rollout_payloads_never_reach_snapshot(tmp_path: 
     assert "raw-value" not in encoded
     assert "provider payload" not in encoded
     assert "private.pdf" not in encoded
+    assert "other.pdf" not in encoded
+    assert "user@example.com" not in encoded
     assert "DE89370400440532013000" not in encoded
     assert "已隐藏" in encoded
 
@@ -318,6 +320,108 @@ def test_snapshot_reflects_package_state_changes_without_restart(tmp_path: Path)
     state_path.write_text(json.dumps(state), encoding="utf-8")
 
     assert module.build_snapshot(THREAD_ID, relative, db_path)["package"]["formalSummary"] == "1/1 已正式验收"
+
+
+def test_snapshot_follows_latest_monitor_record_across_task_handoff(tmp_path: Path) -> None:
+    module = load_module()
+    db_path, workspace, rollout, _ = make_fixture(tmp_path)
+    package = make_package(workspace)
+    relative = package.relative_to(workspace).as_posix()
+    write_jsonl(rollout, [])
+    monitor_dir = workspace / ".progress-record" / "codex-progress-dashboard" / "monitors"
+    monitor_dir.mkdir(parents=True)
+    base = {
+        "version": 1,
+        "automationId": "monitor-test",
+        "monitorThreadId": "01a05c65-2eac-7d22-aba9-c2671b2cd03d",
+        "targetThreadId": THREAD_ID,
+        "packagePath": str(package),
+        "level": "normal",
+    }
+    (monitor_dir / "older.json").write_text(
+        json.dumps({**base, "observedAt": "2026-08-31T20:00:00Z", "summary": "旧结论"}),
+        encoding="utf-8",
+    )
+    (monitor_dir / "latest.json").write_text(
+        json.dumps({**base, "targetThreadId": "01a05dd3-4dd7-7032-939a-9e702ab93095", "observedAt": "2026-08-31T20:01:00Z", "summary": r"正常，路径 C:\private\file.txt 已隐藏"}),
+        encoding="utf-8",
+    )
+    (monitor_dir / "other-task.json").write_text(
+        json.dumps({**base, "targetThreadId": "01a05973-673e-7102-bcb3-c40c1e3fc424", "packagePath": str(workspace / "other"), "observedAt": "2026-08-31T20:02:00Z", "summary": "错误任务包"}),
+        encoding="utf-8",
+    )
+
+    monitor = module.build_snapshot(THREAD_ID, relative, db_path)["monitor"]
+
+    assert set(monitor) == {"observedAt", "level", "summary", "monitorThreadId"}
+    assert monitor["observedAt"] == "2026-08-31T20:01:00Z"
+    assert "private" not in monitor["summary"]
+    assert "[本地路径]" in monitor["summary"]
+
+
+def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_path: Path) -> None:
+    module = load_module()
+    db_path, workspace, rollout, _ = make_fixture(tmp_path)
+    package = make_package(
+        workspace,
+        {"TKT-01": "SATISFIED", "TKT-03": "PENDING", "TKT-05": "PENDING"},
+    )
+    ticket_dir = package / "tickets"
+    for ticket_id in ("TKT-03", "TKT-05"):
+        (ticket_dir / f"{ticket_id}.md").write_text(
+            f"# {ticket_id}\n\nTicket ID：{ticket_id}\n\n## 阻塞依赖\n\n- implementation: TKT-01\n",
+            encoding="utf-8",
+        )
+    trail = package / "execution" / "initial" / "trail.jsonl"
+    dispatch = {
+        "seq": 309,
+        "kind": "dispatch",
+        "subject": "ticket:TKT-03",
+        "outcome": "RUNNING",
+        "returned": False,
+        "worker": "/root/tkt03-foundation",
+    }
+    write_jsonl(trail, [dispatch])
+    write_jsonl(rollout, [])
+    relative = package.relative_to(workspace).as_posix()
+
+    package_snapshot = module.build_snapshot(THREAD_ID, relative, db_path)["package"]
+    tickets = {ticket["id"]: ticket for ticket in package_snapshot["tickets"]}
+
+    assert package_snapshot["readyTicketIds"] == ["TKT-03", "TKT-05"]
+    assert package_snapshot["runningTicketIds"] == ["TKT-03"]
+    assert package_snapshot["currentTicketId"] == "TKT-03"
+    assert tickets["TKT-03"]["runtimeState"] == "RUNNING"
+    assert tickets["TKT-05"]["runtimeState"] == "READY"
+
+    write_jsonl(
+        trail,
+        [dispatch, {"kind": "worker-return", "subject": "ticket:TKT-03", "of": 309, "outcome": "DONE"}],
+    )
+    after_return = module.build_snapshot(THREAD_ID, relative, db_path)["package"]
+
+    assert after_return["runningTicketIds"] == []
+    assert after_return["currentTicketId"] == "TKT-03"
+
+
+def test_snapshot_matches_slug_ticket_ids_case_insensitively(tmp_path: Path) -> None:
+    module = load_module()
+    db_path, workspace, rollout, _ = make_fixture(tmp_path)
+    ticket_id = "TKT-04-canonical-runtime-real-ui"
+    package = make_package(workspace, {ticket_id: "PENDING"})
+    (package / "tickets" / "01-preview.md").write_text(
+        f"# Canonical runtime real UI\n\nTicket ID: {ticket_id}\n",
+        encoding="utf-8",
+    )
+    write_jsonl(rollout, [])
+    relative = package.relative_to(workspace).as_posix()
+
+    package_snapshot = module.build_snapshot(THREAD_ID, relative, db_path)["package"]
+    ticket = package_snapshot["tickets"][0]
+
+    assert package_snapshot["readyTicketIds"] == [ticket_id]
+    assert ticket["runtimeState"] == "READY"
+    assert ticket["name"] == "Canonical runtime real UI"
 
 
 def test_http_endpoints_serve_tasks_snapshot_and_strict_csp(tmp_path: Path) -> None:
