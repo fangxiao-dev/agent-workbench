@@ -1,6 +1,6 @@
 ---
 target: skills/dispatcher
-updated: 2026-09-01
+updated: 2026-09-02
 ---
 
 ## 原则
@@ -17,3 +17,11 @@ updated: 2026-09-01
 - 采纳 Topic-first、最大 coherent step、batch drain 与单一反抖动规则。
 - 否决独立 Delivery Lane 实体、lane 模板、数字 dispatch budget、多级 stabilization checkpoint 和持久化 lane 状态。
 - 用户原话：只想保留性价比最高的，不要再增加主控负担。
+
+### R2 · 2026-09-02
+
+- 采纳固定 Topic closure point、step 级 resource key 与完整 effect footprint；共享 key 只阻塞实际依赖它的步骤。
+- 采纳共享操作的合并只是一种优化；不得因此延迟已解锁的独立动作。
+- 采纳 worker 复用取决于 ownership、failure model 与动作边界仍可准确复述，不按会话时长或固定轮数机械切换。
+- 继续否决 Delivery Lane 对象、资源矩阵模板、数字预算和持久调度状态。
+- 用户原话：GO，按最小。
