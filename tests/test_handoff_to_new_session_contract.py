@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 
@@ -10,79 +11,108 @@ def read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
-def test_handoff_owns_staged_delivery_and_current_task_configuration() -> None:
+def test_handoff_owns_local_creation_and_two_stage_delivery() -> None:
     skill = read("skills/handoff-to-new-session/SKILL.md")
 
-    assert "x-codex-turn-metadata" in skill
     assert 'nodeRepl.requestMeta["x-codex-turn-metadata"]' in skill
-    assert "pass its `model` unchanged as `model`" in skill
-    assert "its `reasoning_effort` unchanged as `thinking`" in skill
     assert "session configuration unavailable" in skill
-    assert "plain prompt text" in skill
-    assert "do not wrap either one in `<codex_delegation>`" in skill
-    assert "reports anchor PASS and stops" in skill
-    assert "`anchor FAIL: source worktree setup mismatch`" in skill
-    assert "Only after both the title and anchor PASS are confirmed" in skill
-    assert "send the filled second-stage continuation prompt" in skill
-    assert "A timeout is not PASS" in skill
-    assert '"type": "project"' in skill
-    assert '"projectId": "<verified project id from list_projects>"' in skill
-    assert '"environment": { "type": "local" }' in skill
-    assert 'do not use `target.type = "worktree"`' in skill
-    assert "make one `wait_threads` call" in skill
-    assert "timeout no greater than 60 seconds" in skill
-    assert "at most one corrective message with no acknowledgment wait or re-audit" in skill
-    assert "a missing receipt gets one correction and makes delivery incomplete" in skill
+    assert "thinking=reasoning_effort" in skill
+    assert '{ type: "project", projectId, environment: { type: "local" } }' in skill
+    assert "fork_thread" in skill
+    assert "clientThreadId" in skill
+    assert "只有标题已确认且 child 明确 anchor PASS" in skill
+    assert "timeout 不是 PASS" in skill
+    assert "每次" in skill and "wait_threads" in skill and "不超过 60 秒" in skill
+    assert '::created-thread{threadId="' in skill
 
 
-def test_anchor_and_continuation_cards_keep_separate_responsibilities() -> None:
+def test_prompt_cards_separate_anchor_from_continuation() -> None:
     template = read("skills/handoff-to-new-session/references/handoff-prompt-template.md")
     anchor, continuation = template.split("## Second-stage continuation prompt", maxsplit=1)
 
-    assert "AUTHORITY_ANCHOR_BLOCK" in anchor
-    assert "OPTIONAL_READ_ONLY_VALIDATION_ANCHORS_OR_N/A" in anchor
-    assert "只报告 `anchor PASS`" in anchor
+    assert "ABSOLUTE_WORKTREE_PATH" in anchor
+    assert "FULL_GIT_HEAD" in anchor
+    assert "AUTHORITY_AND_ENTRY_POINT" in anchor
+    assert "只报告" in anchor and "anchor PASS" in anchor
     assert "不要读取恢复记录或开始工作" in anchor
-    assert "current attempt / binding" not in anchor
-    assert "next action" not in anchor
+    assert "ready work" not in anchor
 
-    assert "current attempt / binding" in continuation
-    assert "next action" in continuation
-    assert "Send this only after the title and first-stage `anchor PASS` are confirmed" in continuation
-    assert "目标与 next actions" in continuation
-    assert "skill/方法及用途" in continuation
-    assert "应完成后汇报、因具名 blocker 停止，还是按记录移交" in continuation
-    assert "不是执行预演" in continuation
-    assert "不等待批准。发出后立即" in continuation
-    assert "mode=[MODE] / worker=[WORKER] / schedule=[SCHEDULE] / review=[REVIEW]" in continuation
-    assert "SCHEDULING_DECISION_OR_N/A" not in continuation
+    assert "ACTIVE_CHECKPOINT" in continuation
+    assert "CURRENT_STATUS_AND_CANONICAL_READY_TICKETS_OR_RECORDED_ACTION" in continuation
+    assert "AUTHORIZATION_AND_NAMED_BLOCKERS" in continuation
+    assert "/impl-package:dev-with-track" in continuation
+    assert "$dispatcher" in continuation
+    assert "/impl-package:subagent-driven-development" in continuation
+    assert "这是理解回报，不是执行预演" in continuation
+    assert "不等待批准" in continuation
 
 
-def test_continuation_carries_current_worker_strategy_not_legacy_mode_only() -> None:
+def test_execution_semantics_are_delegated_not_reimplemented() -> None:
     skill = read("skills/handoff-to-new-session/SKILL.md")
-    assert "recorded strategy" in skill
-    assert "mode / worker / schedule / review" in skill
-    assert "recorded subagent mode in one line" not in skill
-    assert "investigate-before-implement" not in skill
-    assert "dispatch-bounded-task" not in skill
-    assert "route=" not in skill
+    template = read("skills/handoff-to-new-session/references/handoff-prompt-template.md")
+
+    for pointer in (
+        "/impl-package:dev-with-track",
+        "$dispatcher",
+        "/impl-package:subagent-driven-development",
+    ):
+        assert pointer in skill
+        assert pointer in template
+
+    duplicated_execution_terms = (
+        "run foundation admission for every ready Ticket",
+        "resource-safe current batch",
+        "After each Ticket state mutation",
+        "Ticket satisfaction is not a session boundary",
+        "schema、service/job、generated contracts、PostgreSQL",
+    )
+    for term in duplicated_execution_terms:
+        assert term not in skill
+        assert term not in template
 
 
-def test_incomplete_creation_or_naming_never_reaches_continuation() -> None:
+def test_ready_tickets_are_complete_but_checkpoint_does_not_own_scheduling() -> None:
+    skill = read("skills/handoff-to-new-session/SKILL.md")
+    template = read("skills/handoff-to-new-session/references/handoff-prompt-template.md")
+
+    assert "完整" in skill and "readyTickets" in skill
+    assert "checkpoint 文案不能收窄" in skill
+    assert "handoff 只传递 canonical" in skill
+    assert "不复述这些流程" in skill
+    assert "持续执行 owning workflow" in template
+    assert "TKT-03" not in skill
+    assert "TKT-05" not in skill
+    assert "TKT-03" not in template
+    assert "TKT-05" not in template
+
+
+def test_recoverable_delivery_variance_keeps_progressing_without_masking_real_mismatch() -> None:
     skill = read("skills/handoff-to-new-session/SKILL.md")
 
-    assert "If a `clientThreadId` is returned, do not poll it" in skill
-    assert "Only after both the title and anchor PASS are confirmed" in skill
-    assert "understanding audit has passed or issued its single correction" in skill
+    assert "自动修正 prompt path、Windows 路径格式" in skill
+    assert "每轮必须使用新证据并产生进展" in skill
+    assert "不重复相同失败动作" in skill
+    assert "真实 worktree/HEAD/authority/config/authorization 不匹配" in skill
+    assert "重新发送 anchor-only prompt" in skill
 
 
-def test_downstream_protocol_can_supply_stateless_continuation_authority() -> None:
+def test_multi_ticket_evals_expect_routing_instead_of_copied_execution_rules() -> None:
+    payload = json.loads(read("skills/handoff-to-new-session/evals/evals.json"))
+    evals = {item["id"]: item for item in payload["evals"]}
+
+    assert "readyTickets=[TKT-03,TKT-05]" in evals[10]["prompt"]
+    assert "routes execution to the owning skills" in evals[10]["expected_output"]
+    assert "does not restate" in evals[10]["expectations"][1]
+    assert "one ready Ticket" in evals[11]["prompt"]
+    assert "routes all execution decisions" in evals[11]["expected_output"]
+    assert "terminal package" in evals[11]["prompt"]
+
+
+def test_downstream_protocol_supplies_only_its_delta() -> None:
     skill = read("skills/handoff-to-new-session/SKILL.md")
     dispatch = read("skills/thread-harness/references/session-dispatch.md")
 
-    assert "stateless child that has no package recovery authority" in skill
-    assert "no context entry is treated as recovery authority" in skill
-    assert "generic continuation card is replaced by the downstream continuation" in skill
-    assert "The template's understanding receipt still applies" in skill
+    assert "downstream protocol 可以提供自己的 validation anchors 与 continuation" in skill
+    assert "本 Skill 仍只负责通用创建和交付 gate" in skill
     assert "Role B 无持久恢复权威" in dispatch
     assert "额外只读验证锚点" in dispatch

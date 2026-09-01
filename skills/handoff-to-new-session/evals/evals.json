@@ -54,9 +54,9 @@
     {
       "id": 6,
       "prompt": "Dry-run the delivery state handling for a verified clean-session handoff. Cover two independent results: (a) create_thread returns a threadId, but set_thread_title fails; (b) create_thread returns only clientThreadId. Do not call any thread tool.",
-      "expected_output": "Treats both results as incomplete delivery and does not send the second-stage continuation or claim a successful named handoff.",
+      "expected_output": "Routes a recoverable title failure through automatic correction and readback, while treating a clientThreadId-only result as incomplete delivery; neither path sends continuation before naming and anchor PASS are confirmed.",
       "expectations": [
-        "When set_thread_title fails, it does not send continuation or emit a successful threadId delivery directive.",
+        "When set_thread_title fails, it uses authoritative title readback and automatic correction while progress remains possible, without sending continuation early.",
         "When only clientThreadId is returned, it does not poll, claim naming success, or send continuation.",
         "Explains that successful delivery requires local creation, naming, anchor PASS, and continuation delivery."
       ]
@@ -69,6 +69,46 @@
         "Does not infer the current task configuration from the system prompt or supported-model catalog.",
         "Does not substitute a configured default, gpt-5.6-sol/high, or any other guessed pair.",
         "Does not call create_thread when either current-task configuration field is unavailable."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Dry-run an already-created clean-session handoff. The child reported anchor FAIL only because the parent prompt named .impl-package/state.json relative to the repository root instead of the verified package directory. A fresh parent read proves the exact worktree, HEAD, package, entry point, model/thinking, and authorization boundary all still match. Explain the next delivery action without calling thread tools.",
+      "expected_output": "Classifies the failure as a recoverable prompt-path deviation, sends a corrected anchor-only prompt to the same child, and proceeds to continuation only after anchor PASS without imposing a fixed retry count.",
+      "expectations": [
+        "Re-verifies authoritative anchors before correcting the prompt-only path error.",
+        "Continues the same delivery flow after corrected anchor PASS instead of abandoning the child or creating another task.",
+        "Uses progress and no-repeat conditions rather than a fixed one-retry limit."
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Dry-run an already-created clean-session handoff. The child reports that the target worktree HEAD differs from the expected full HEAD, and the parent independently confirms the mismatch. Explain the next delivery action without calling thread tools.",
+      "expected_output": "Stops before continuation because the mismatch is real source state, and does not relabel it as a recoverable prompt deviation or mutate the checkout.",
+      "expectations": [
+        "Distinguishes a confirmed HEAD mismatch from repairable delivery-layer variance.",
+        "Does not reset, checkout, clean, overwrite, or alter the expected HEAD to force a pass.",
+        "Does not send continuation until a future owner-authorized handoff starts from verified matching authority."
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Dry-run a Ticket-package handoff. The active checkpoint prose names only TKT-03, but canonical runtime reports readyTickets=[TKT-03,TKT-05]. Both require separate foundation admission. Their isolated files may run in parallel, while schema, service/job, generated contracts and PostgreSQL are shared serial resources. TKT-05 unlocks TKT-06; later dependency releases include TKT-04, TKT-07 and TKT-08. Prepare the two-stage prompts without calling thread tools.",
+      "expected_output": "The continuation carries both canonical ready Tickets and routes execution to the owning skills, which keep the same session running until their workflow yields a real stop condition.",
+      "expectations": [
+        "Uses the canonical readyTickets set rather than narrowing it to the checkpoint's single Ticket.",
+        "Points to dev-with-track, Dispatcher and SDD; it does not restate foundation admission, parallel/serial resource rules or DAG mechanics.",
+        "Leaves TKT-06 and later dependency continuation to the owning workflow instead of ending the handoff at TKT-03."
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Dry-run continuation behavior for four Ticket-package states: one ready Ticket; two ready Tickets where one has a semantic ambiguity but can still undergo foundation investigation; no eligible ready action because every lane has a named blocker; and a terminal package. Do not call thread tools.",
+      "expected_output": "Passes the current ready state and blockers, then routes all execution decisions and stop conditions to the owning workflow without duplicating its Ticket logic.",
+      "expectations": [
+        "Preserves the complete canonical ready set for both single- and multi-Ticket cases.",
+        "Passes scoped blockers without deciding admission or dependency behavior inside the handoff Skill.",
+        "Uses the owning workflow's terminal, blocker, idle/checkpoint or session-rotation result as the handoff stop signal."
       ]
     }
   ]
