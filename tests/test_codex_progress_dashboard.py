@@ -328,28 +328,28 @@ def test_snapshot_follows_latest_monitor_record_across_task_handoff(tmp_path: Pa
     package = make_package(workspace)
     relative = package.relative_to(workspace).as_posix()
     write_jsonl(rollout, [])
-    monitor_dir = workspace / ".progress-record" / "codex-progress-dashboard" / "monitors"
-    monitor_dir.mkdir(parents=True)
-    base = {
-        "version": 1,
-        "automationId": "monitor-test",
-        "monitorThreadId": "01a05c65-2eac-7d22-aba9-c2671b2cd03d",
-        "targetThreadId": THREAD_ID,
-        "packagePath": str(package),
-        "level": "normal",
-    }
-    (monitor_dir / "older.json").write_text(
-        json.dumps({**base, "observedAt": "2026-08-31T20:00:00Z", "summary": "旧结论"}),
-        encoding="utf-8",
-    )
-    (monitor_dir / "latest.json").write_text(
-        json.dumps({**base, "targetThreadId": "01a05dd3-4dd7-7032-939a-9e702ab93095", "observedAt": "2026-08-31T20:01:00Z", "summary": r"正常，路径 C:\private\file.txt 已隐藏"}),
-        encoding="utf-8",
-    )
-    (monitor_dir / "other-task.json").write_text(
-        json.dumps({**base, "targetThreadId": "01a05973-673e-7102-bcb3-c40c1e3fc424", "packagePath": str(workspace / "other"), "observedAt": "2026-08-31T20:02:00Z", "summary": "错误任务包"}),
-        encoding="utf-8",
-    )
+    successor = "01a05dd3-4dd7-7032-939a-9e702ab93095"
+    monitor_id = "01a05c65-2eac-7d22-aba9-c2671b2cd03d"
+    other_package = workspace / "other"
+    other_package.mkdir()
+    for automation_id, target, bound_package, observed_at, summary in (
+        ("older", THREAD_ID, package, "2026-08-31T20:00:00Z", "旧结论"),
+        ("latest", successor, package, "2026-08-31T20:01:00Z", r"正常，路径 C:\private\file.txt 已隐藏"),
+        ("other-task", "01a05973-673e-7102-bcb3-c40c1e3fc424", other_package, "2026-08-31T20:02:00Z", "错误任务包"),
+    ):
+        module.monitor_progress.init_instance(workspace, automation_id, monitor_id, target, bound_package)
+        module.monitor_progress.write_evaluation(
+            workspace,
+            automation_id,
+            {
+                "targetThreadId": target,
+                "observedAt": observed_at,
+                "latestAssistantAt": None,
+                "level": "normal",
+                "summary": summary,
+                "evaluation": None,
+            },
+        )
 
     monitor = module.build_snapshot(THREAD_ID, relative, db_path)["monitor"]
 
@@ -367,51 +367,78 @@ def test_snapshot_projects_monitor_evaluation_and_latest_confirmed_observations(
     relative = package.relative_to(workspace).as_posix()
     write_jsonl(rollout, [])
     automation_id = "monitor-test"
-    monitor_dir = workspace / ".progress-record" / "codex-progress-dashboard" / "monitors"
-    observation_dir = workspace / ".progress-record" / "codex-progress-dashboard" / "observations"
-    monitor_dir.mkdir(parents=True)
-    observation_dir.mkdir(parents=True)
-    (monitor_dir / f"{automation_id}.json").write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "automationId": automation_id,
-                "monitorThreadId": "01a05c65-2eac-7d22-aba9-c2671b2cd03d",
-                "targetThreadId": THREAD_ID,
-                "packagePath": str(package),
-                "observedAt": "2026-09-02T20:10:00Z",
-                "level": "attention",
-                "summary": "旧摘要",
-                "evaluation": {
-                    "progress": r"正在核验 C:\private\review.md",
-                    "improvements": ["先消费独立结果", "再进入真实验收"],
-                    "next": "等待审查返回。",
-                    "owner": "暂无",
-                },
-            }
-        ),
-        encoding="utf-8",
+    module.monitor_progress.init_instance(
+        workspace,
+        automation_id,
+        "01a05c65-2eac-7d22-aba9-c2671b2cd03d",
+        THREAD_ID,
+        package,
     )
-    observations = [
+    module.monitor_progress.write_evaluation(
+        workspace,
+        automation_id,
         {
-            "confirmation": "confirmed",
-            "status": "active",
-            "confirmedAt": f"2026-09-02T20:0{index}:00Z",
-            "statement": f"纠偏 {index}",
-        }
-        for index in range(1, 7)
-    ]
-    observations.extend(
-        [
-            {"confirmation": "candidate", "status": "active", "confirmedAt": "2026-09-02T20:09:00Z", "statement": "候选"},
-            {"confirmation": "confirmed", "status": "superseded", "confirmedAt": "2026-09-02T20:08:00Z", "statement": "已替代"},
-            {"confirmation": "confirmed", "status": "active", "confirmedAt": "不是时间", "statement": "坏时间"},
-            {"confirmation": "confirmed", "status": "active", "confirmedAt": "2026-09-02T20:07:00Z", "statement": r"联系 user@example.com，读取 C:\private\note.md"},
-        ]
+            "targetThreadId": THREAD_ID,
+            "observedAt": "2026-09-02T20:10:00Z",
+            "latestAssistantAt": None,
+            "level": "attention",
+            "summary": "旧摘要",
+            "evaluation": {
+                "progress": r"正在核验 C:\private\review.md",
+                "improvements": ["先消费独立结果", "再进入真实验收"],
+                "next": "等待审查返回。",
+                "owner": None,
+            },
+        },
     )
-    (observation_dir / f"{automation_id}.json").write_text(
-        json.dumps({"version": 1, "automationId": automation_id, "observations": observations}),
-        encoding="utf-8",
+    for index in range(1, 7):
+        module.monitor_progress.put_observation(
+            workspace,
+            automation_id,
+            {
+                "id": None,
+                "topic": f"纠偏事项 {index}",
+                "content": f"纠偏 {index}",
+                "scope": "task",
+                "state": "confirmed",
+                "sourceThreadId": THREAD_ID,
+                "sourceMessageId": f"msg-{index}",
+                "confirmedAt": f"2026-09-02T20:0{index}:00Z",
+                "response": "accepted",
+                "baselineConflict": False,
+            },
+        )
+    module.monitor_progress.put_observation(
+        workspace,
+        automation_id,
+        {
+            "id": None,
+            "topic": "待确认事项",
+            "content": "候选",
+            "scope": "task",
+            "state": "candidate",
+            "sourceThreadId": THREAD_ID,
+            "sourceMessageId": "candidate",
+            "confirmedAt": None,
+            "response": "pending",
+            "baselineConflict": False,
+        },
+    )
+    module.monitor_progress.put_observation(
+        workspace,
+        automation_id,
+        {
+            "id": None,
+            "topic": "敏感内容",
+            "content": r"联系 user@example.com，读取 C:\private\note.md",
+            "scope": "task",
+            "state": "confirmed",
+            "sourceThreadId": THREAD_ID,
+            "sourceMessageId": "sensitive",
+            "confirmedAt": "2026-09-02T20:07:00Z",
+            "response": "accepted",
+            "baselineConflict": False,
+        },
     )
 
     monitor = module.build_snapshot(THREAD_ID, relative, db_path)["monitor"]
@@ -420,7 +447,7 @@ def test_snapshot_projects_monitor_evaluation_and_latest_confirmed_observations(
         "progress": "正在核验 [本地路径]",
         "improvements": ["先消费独立结果", "再进入真实验收"],
         "next": "等待审查返回。",
-        "owner": "暂无",
+        "owner": None,
     }
     assert len(monitor["observations"]) == 5
     assert [item["observedAt"] for item in monitor["observations"]] == [
@@ -430,6 +457,8 @@ def test_snapshot_projects_monitor_evaluation_and_latest_confirmed_observations(
         "2026-09-02T20:04:00Z",
         "2026-09-02T20:03:00Z",
     ]
+    assert monitor["observations"][0]["id"] == "O008"
+    assert monitor["observations"][0]["topic"] == "敏感内容"
     assert monitor["observations"][0]["content"] == "联系 [邮箱已隐藏]，读取 [本地路径]"
 
 
@@ -515,6 +544,8 @@ def test_http_endpoints_serve_tasks_snapshot_and_strict_csp(tmp_path: Path) -> N
     worker.start()
     base = f"http://127.0.0.1:{server.server_address[1]}"
     try:
+        with urlopen(f"{base}/api/health") as response:
+            assert json.load(response) == {"rendererVersion": 2, "monitorProgressProtocol": 2}
         with urlopen(f"{base}/api/tasks") as response:
             assert json.load(response)["tasks"][0]["id"] == THREAD_ID
         with urlopen(f"{base}/api/tasks/{THREAD_ID}/snapshot") as response:

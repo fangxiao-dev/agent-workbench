@@ -183,7 +183,8 @@ h2 { margin: 0; font-family: "Palatino Linotype", "Yu Mincho", serif; font-size:
 .monitor-observations ol { max-height: 150px; margin: 0; padding: 0 4px 0 0; overflow-y: auto; list-style: none; scrollbar-color: rgba(95, 117, 23, .38) transparent; }
 .monitor-observations li { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-top: 1px solid rgba(32, 36, 31, .08); }
 .monitor-observations time { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1.5; white-space: nowrap; }
-.monitor-observations p { margin: 0; color: #3d423b; font-size: 13px; line-height: 1.5; }
+.monitor-observations strong { display: block; color: #2f352c; font-size: 13px; line-height: 1.4; }
+.monitor-observations p { margin: 2px 0 0; color: #3d423b; font-size: 13px; line-height: 1.5; }
 
 .activity-list { margin: 0; padding: 0; list-style: none; }
 .activity-item { display: grid; grid-template-columns: 112px 1fr; gap: 18px; padding: 16px 0; border-top: 1px solid var(--line); }

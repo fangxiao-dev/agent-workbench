@@ -24,6 +24,7 @@ EXPECTED_SKILLS = {
     "safety-review",
     "req-align",
     "execution-boundaries",
+    "monitor-progress",
 }
 
 # Merged/renamed skill directories (slim refactor): the flat skill set above
@@ -108,6 +109,34 @@ def test_plugin_exposes_the_slimmed_flat_skill_set() -> None:
     for name in EXPECTED_SKILLS - {"impl-package", "execution-boundaries"}:
         assert f"impl-{name}" in router
     assert "/plugin:skill" in router
+
+
+def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
+    skill_dir = PLUGIN / "skills" / "monitor-progress"
+    skill = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    template = (skill_dir / "templates" / "automation-prompt.md").read_text(encoding="utf-8")
+
+    assert "disable-model-invocation: true" in skill
+    assert "CODEX_THREAD_ID" in skill
+    assert skill.index("monitor_progress.py open") < skill.index("是否启用 automation 监控")
+    assert "用户拒绝时返回页面 URL 并停止" in skill
+    assert "monitor_progress.py" in skill
+    for marker in (
+        "STATIC_MONITOR_POLICY_V2",
+        "OWNER_OBSERVATION_POLICY",
+        "TARGET_BASELINE",
+        "MONITOR_PROGRESS_CLI_V2",
+        "RUNTIME_EVALUATION_LOOP",
+        "OUTPUT_CONTRACT",
+        "MONITOR_STATE",
+    ):
+        assert marker in template
+    for command in ("read", "write-evaluation", "put-observation", "remove-observation"):
+        assert f"monitorCliPath> {command}" in template
+    assert "{{MONITOR_CLI_PATH_JSON}}" in template
+    assert '"topic"' in template and '"content"' in template
+    for obsolete in ('"statement"', '"supersedes"', "ledgerFingerprint", "state=confirmed,status=active"):
+        assert obsolete not in template
 
 
 def test_migration_validator_is_standalone_and_not_a_runtime_entrypoint() -> None:

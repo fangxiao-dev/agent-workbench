@@ -446,11 +446,15 @@ function renderMonitor(monitor) {
   observations.forEach((item) => {
     const row = document.createElement("li");
     const time = document.createElement("time");
+    const body = document.createElement("div");
+    const topic = document.createElement("strong");
     const content = document.createElement("p");
     time.dateTime = item.observedAt;
     time.textContent = formatCompactTime(item.observedAt);
+    topic.textContent = item.topic;
     content.textContent = item.content;
-    row.append(time, content);
+    body.append(topic, content);
+    row.append(time, body);
     monitorObservationList.append(row);
   });
 }
