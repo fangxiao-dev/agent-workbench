@@ -20,6 +20,8 @@
 
 仅在标题和 anchor PASS 均确认后发送。
 
+需要 Handoff Notes 时，将占位符替换为用户或当前 agent 提供的 1–3 条已确认小坑，每条一行且只保留会影响本次 continuation 的内容；没有时删除整个 `## Handoff Notes` 章节。该章节不得复制 plan、Ticket AC、调度规则、测试命令、凭证或受控数据。
+
 ```text
 Continuation 已就绪；从 authority / entry 恢复，不回溯旧聊天或重做已登记工作。
 
@@ -29,6 +31,9 @@ Continuation 已就绪；从 authority / entry 恢复，不回溯旧聊天或重
 - authorization / blocker：[AUTHORIZATION_AND_NAMED_BLOCKERS]
 - WIP：保护未提交内容，不 reset、checkout、clean、覆盖或重建
 - external boundary：[ACTIONS_REQUIRING_SEPARATE_AUTHORIZATION]
+
+## Handoff Notes
+[OPTIONAL_HANDOFF_NOTES_OR_OMIT]
 
 Ticket package 使用 `/impl-package:dev-with-track` 恢复并持续执行 owning workflow；由 `$dispatcher` 调度，由 `/impl-package:subagent-driven-development` 约束 bounded worker。非 Ticket workflow 按 authority 指定的 recorded action 执行。直到 owning workflow 返回 terminal、blocker、idle/checkpoint，或确需换 session 时再停止。
 

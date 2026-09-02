@@ -36,15 +36,30 @@ def test_prompt_cards_separate_anchor_from_continuation() -> None:
     assert "只报告" in anchor and "anchor PASS" in anchor
     assert "不要读取恢复记录或开始工作" in anchor
     assert "ready work" not in anchor
+    assert "OPTIONAL_HANDOFF_NOTES_OR_OMIT" not in anchor
 
     assert "ACTIVE_CHECKPOINT" in continuation
     assert "CURRENT_STATUS_AND_CANONICAL_READY_TICKETS_OR_RECORDED_ACTION" in continuation
     assert "AUTHORIZATION_AND_NAMED_BLOCKERS" in continuation
+    assert "## Handoff Notes" in continuation
+    assert "OPTIONAL_HANDOFF_NOTES_OR_OMIT" in continuation
     assert "/impl-package:dev-with-track" in continuation
     assert "$dispatcher" in continuation
     assert "/impl-package:subagent-driven-development" in continuation
     assert "这是理解回报，不是执行预演" in continuation
     assert "不等待批准" in continuation
+
+
+def test_optional_handoff_notes_are_bounded_and_omittable() -> None:
+    template = read("skills/handoff-to-new-session/references/handoff-prompt-template.md")
+    _, continuation = template.split("## Second-stage continuation prompt", maxsplit=1)
+
+    assert "1–3 条" in continuation
+    assert "每条一行" in continuation
+    assert "没有时删除整个 `## Handoff Notes` 章节" in continuation
+    assert "用户或当前 agent 提供" in continuation
+    for excluded in ("plan", "Ticket AC", "调度规则", "测试命令", "凭证", "受控数据"):
+        assert excluded in continuation
 
 
 def test_execution_semantics_are_delegated_not_reimplemented() -> None:
