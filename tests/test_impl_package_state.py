@@ -221,6 +221,60 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(accepted["acceptance"]["revision"], git(repo, "rev-parse", "HEAD"))
         self.assertEqual(accepted["acceptance"]["environment"], "test")
 
+    def test_one_acceptance_criterion_with_two_atomic_claims_requires_both(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        ticket = package / "tickets" / "01-source.md"
+        ticket.write_text(
+            ticket.read_text(encoding="utf-8").replace(
+                "  - Stable claim ID：`AC-1`\n  - 证据时机：`early-falsification`",
+                "  - Stable claim ID：`AC-1`\n  - 证据时机：`early-falsification`\n"
+                "  - Stable claim ID：`AC-1-readback`\n  - 证据时机：`early-falsification`",
+            ),
+            encoding="utf-8",
+        )
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "split acceptance atom")
+        self.init(repo, package)
+        self.add_evidence(repo, package)
+        revision = git(repo, "rev-parse", "HEAD")
+
+        missing = self.cli(
+            repo,
+            package,
+            "ticket",
+            "satisfy",
+            "TKT-01",
+            "--expect",
+            "PENDING",
+            "--revision",
+            revision,
+            "--environment",
+            "test",
+            ok=False,
+        )
+        self.assertIn("AC-1-readback", missing.stderr)
+
+        self.cli(
+            repo,
+            package,
+            "evidence",
+            "add",
+            input_text=json.dumps(
+                {
+                    "ticket": "TKT-01",
+                    "claim": "AC-1-readback",
+                    "timing": "early-falsification",
+                    "artifact": "evidence.md",
+                    "revision": revision,
+                    "environment": "test",
+                    "conclusion": "supporting",
+                }
+            ),
+        )
+        self.satisfy(repo, package, "TKT-01")
+        self.assertEqual(self.state(package)["tickets"]["TKT-01"]["state"], "SATISFIED")
+
     def test_contradictory_evidence_blocks_satisfied(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)

@@ -13,7 +13,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "impl-package-ticket-first"
-CLI = ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "impl_package_state.py"
+PLUGIN = ROOT / "plugin-marketplace" / "plugins" / "impl-package"
+CLI = PLUGIN / "scripts" / "impl_package_state.py"
 
 
 def run(command: list[str], cwd: Path, *, ok: bool = True, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -196,6 +197,24 @@ class TicketFirstContractTests(unittest.TestCase):
 
         incomplete = {**index, "records": records[:-1]}
         self.assertNotEqual({(item["ticket"], item["claim"]) for item in incomplete["records"]}, claim_keys)
+
+    def test_stable_claim_atomization_is_owned_across_planning_review_and_execution(self) -> None:
+        composition = (PLUGIN / "references/impl-package-composition-contract.md").read_text(encoding="utf-8")
+        planning = (PLUGIN / "skills/impl-planning/SKILL.md").read_text(encoding="utf-8")
+        review = (PLUGIN / "skills/plan-review/SKILL.md").read_text(encoding="utf-8")
+        execution = (PLUGIN / "skills/dev-with-track/SKILL.md").read_text(encoding="utf-8")
+        situations = (PLUGIN / "skills/dev-with-track/situations.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("stable claim 是 runtime 可判定的 acceptance atom", composition)
+        self.assertIn("一个业务 AC 可以包含多个 stable claim ID", composition)
+        self.assertIn("stable claim acceptance atoms", planning)
+        self.assertIn("stable claim 已原子化", review)
+        self.assertIn("../../references/impl-package-composition-contract.md", review)
+        self.assertIn("逐 stable claim 核对 artifact", execution)
+        self.assertRegex(
+            situations,
+            r"(?s)- slug: ticket\.accept\.satisfiable.*?judgment: true.*?每个 stable claim 是否已是 acceptance atom",
+        )
 
     def test_ticket_only_runtime_keeps_strict_ready_barrier_without_task_surface(self) -> None:
         temp = tempfile.TemporaryDirectory()

@@ -76,6 +76,7 @@ Plan、Ticket 或 DAG 的语义变化只使受影响范围的 approval/validatio
 
 - 新 package 严格使用 Ticket barrier：未释放 `implementation` 边的 Ticket 不进入 `readyTickets`；`acceptance` 边允许实施但阻止最终 `SATISFIED`；`release` 边只在发布/Gate 前复核。
 - early evidence 只能索引真实产物，不能把 Ticket 推进到中间 acceptance 状态。Ticket 仍需覆盖全部 required claims 才能最终满足。
+- stable claim 是 runtime 可判定的 acceptance atom。一个业务 AC 可以包含多个 stable claim ID；可独立失败或需要不同 oracle/evidence lane 直接证明的子句必须拆成不同 ID，同一不可分割 oracle 共同裁决的一组场景可以保留一个 ID。多个 claim 可以引用同一 artifact，但每个 ID 都必须有自己的 evidence record。
 - Ticket AC 必须显式编号 stable claim ID；early falsification evidence 与 remaining completion evidence 分开描述。
 - 第一条可执行路径必须保持 tenant、RBAC、privacy、幂等和数据完整性不变量；早期路径可以窄，但不能薄。
 - 跨 session 续接沿用既有默认：交接前写 active checkpoint，长期判断写 ER judgment；compact 只作异常兜底，不是正常恢复权威。

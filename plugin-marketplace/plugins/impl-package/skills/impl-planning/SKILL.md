@@ -23,7 +23,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
    - 常见误判：patch 重述整份历史范围，会把未变化的 evidence 和 gate 重新混入当前 delta，无法判断真正受影响的边界。
 4. 新 package 固定选择 `tickets=true, dag=false`；`dag=true` 只允许在旧 package 迁移/恢复计划中出现。
    - 常见误判：为新 package 顺手创建 DAG，会重新引入 Ticket/Task 双层状态和两个 acceptance authority。
-5. 在 Ticket 拆分子流程中，将每个 Decision/Spec 约束映射到具体 Ticket 的 Contract references 与 AC，由 Ticket 自身承载该映射与逐项验证的 evidence owner；把 early falsification evidence、remaining completion evidence 和不可延后安全不变量分开写在 Ticket 里。Plan 只从已拆分的 Ticket 集合中提炼跨 Ticket 才存在的信息：顺序、typed dependency、共享资源串行规则、全局执行边界（集成顺序/回滚/目标分支）、以及跨 Ticket 的 Planned Verification。纵向切片装不下一个 worker 时，回去把该 seam 冻得更细，不要改成横向切分。
+5. 在 Ticket 拆分子流程中，将每个 Decision/Spec 约束映射到具体 Ticket 的 Contract references 与 AC，并按 Composition Contract 把 AC 编译为 stable claim acceptance atoms，由 Ticket 自身承载该映射与逐项验证的 evidence owner；把 early falsification evidence、remaining completion evidence 和不可延后安全不变量分开写在 Ticket 里。Plan 只从已拆分的 Ticket 集合中提炼跨 Ticket 才存在的信息：顺序、typed dependency、共享资源串行规则、全局执行边界（集成顺序/回滚/目标分支）、以及跨 Ticket 的 Planned Verification。纵向切片装不下一个 worker 时，回去把该 seam 冻得更细，不要改成横向切分。
    - 常见误判：把逐约束映射和逐项验证细节写回 Plan 的全局调度表，会与 Ticket 的 Contract references 与 AC 重复，制造两处可能漂移的合同来源。
 6. `tickets=true` 时执行本 Skill 的“Ticket 拆分”子流程；新 package 不调用 `create-task-dag`。
    - 常见误判：把 Ticket 拆分交给旧 DAG 入口，会把已经选择的 Ticket-only Composition 偷换成另一套任务结构。
@@ -53,11 +53,11 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
    - 常见误判：只让后端接线 Ticket 通过，会把 UI 形状错误或组件复用错误隐藏在“UI 已实现”的笼统声明里。
 5. **限定合同引用**：每个 Ticket 的 contract references 使用仓库相对路径并定位到 Decision/Spec/contract-design/Plan 的具体一级或二级大章节，不得裸指整份文档或使用行号；引用 `contract-design.md` 时，因其体量大，必须在章节定位之外命名具体 entry point（Operation/Aggregate/DTO/Seam/Projection 名，或函数/类名），格式为 `path#section-anchor · <entry point 名>`，不得只停在章节级。Ticket 只引用其建设内容与 AC 实际依赖的章节。Ticket AC 只写执行所需的 scenario 与 oracle；算法分档、tie-break、状态规则等已有可观察语义从 Decision/Spec 对应章节引用。
    - 常见误判：引用整份文档会让 Ticket 看似有依据，却无法判断实际依赖哪条 authority；引用 contract-design.md 只停在章节级而不点名 entry point，等于把一大节都当成了下游默认要读的上下文。
-6. **绑定 evidence 与覆盖检查**：evidence 说明验证入口或 owner，不复制通用 checklist；与当前 plan/spec 检查 coverage、重叠、依赖、section-level contract references 和 AC feasibility。Spec 章节发生变化时，扫描引用该章节的全部 Ticket 并标为受影响，覆盖检查以完整集合为准。
-   - 常见误判：只写“有测试”而不写入口、owner 和 coverage，会把不可执行或重叠的 AC 留到执行末端才暴露。
+6. **绑定 evidence 与覆盖检查**：evidence 说明验证入口或 owner，不复制通用 checklist；与当前 plan/spec 检查 coverage、重叠、依赖、section-level contract references、stable claim atomization 和 AC feasibility。Spec 章节发生变化时，扫描引用该章节的全部 Ticket 并标为受影响，覆盖检查以完整集合为准。
+   - 常见误判：只写“有测试”而不写入口、owner 和 coverage，或让一个 stable claim 同时承载可独立失败的结论，会把不可执行、重叠或部分可证的 AC 留到执行末端才暴露。
 7. **发布 Ticket-only Composition**：新 package 使用 `tickets=true, dag=false` Ticket-only 合同，不创建 DAG，也不建立 Ticket/Task 双层 bundle；由 execution-boundaries 发布当前 Attempt 的 Ticket，并通过现有 state CLI 原子推进为 Approved/PENDING。旧 package 的 `dag=true` 只读，不由本 Skill 创建或更新。
    - 常见误判：发布时又创建 Task/DAG 或手写状态，会产生第二个运行时 authority，Ticket 的 Approved/PENDING 也无法回放。
-8. **保留 Ticket acceptance 不变量**：Ticket acceptance state 保存在 `.impl-package/state.json`；Ticket AC 使用稳定 claim ID，把 early falsification evidence 与 remaining completion evidence 分开描述，其中只有真实 UI/provider/native tool 才能证伪的可观察结果（如真实入口是否呈现目标状态）标为 `early-falsification`，完整旅程验收仍标为 `remaining-completion`；第一条可执行路径必须保持 tenant、RBAC、privacy、幂等和数据完整性不变量；旧 Task `DONE` 不自动通过 Ticket；P 变化时只将实际受影响 Ticket 设为 `NEEDS-REVALIDATION`。
+8. **保留 Ticket acceptance 不变量**：Ticket acceptance state 保存在 `.impl-package/state.json`；Ticket AC 按 Composition Contract 使用稳定 claim ID，一个 AC 可包含多个原子 claim；把 early falsification evidence 与 remaining completion evidence 分开描述，其中只有真实 UI/provider/native tool 才能证伪的可观察结果（如真实入口是否呈现目标状态）标为 `early-falsification`，完整旅程验收仍标为 `remaining-completion`；第一条可执行路径必须保持 tenant、RBAC、privacy、幂等和数据完整性不变量；旧 Task `DONE` 不自动通过 Ticket；P 变化时只将实际受影响 Ticket 设为 `NEEDS-REVALIDATION`。
    - 常见误判：把旧 Task `DONE` 或一次 early falsification 当成 Ticket 满足，会漏掉 remaining evidence 和第一条路径上的安全不变量。
 9. **限制发布后的投影**：Ticket 发布后不承载 Phase、Next、worker、implementation progress 或 Runtime Acceptance projection；语义变化使受影响 Ticket 回到 Draft/重验流程；`package refresh-progress` 只重建 `progress.md` 与必要的 Execution Record header。新合同使用 `RETIRED` 统一表示 waived/superseded，并要求记录对应 disposition；3.4 runtime 旧状态只作为迁移输入。
    - 常见误判：把进度或 runtime projection 写回 Ticket，会让接受状态、执行状态和恢复投影形成多个可写来源。

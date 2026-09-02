@@ -47,6 +47,7 @@ PENDING Ticket 首次激活且 Planned Verification 声明 `Evidence Lane Contra
 ## State、ER 与 Trail
 
 - Ticket 状态使用 `ticket satisfy|block|needs-revalidation|pending|retire ... --expect ...`；`SATISFIED` 携带当前 revision/environment，`BLOCKED`/`RETIRED` 携带直接 evidence。stale transition 先重读。
+- 登记 `supporting` 或执行 `ticket satisfy` 前，逐 stable claim 核对 artifact 是否直接覆盖该 acceptance atom 的完整语义；部分覆盖不登记 `supporting`，Ticket 保持 `PENDING`。执行期发现一个 claim 内含可独立失败或需不同 oracle/evidence lane 的子句时，交回 `impl-planning` 修订受影响 Ticket；若该 Ticket 已 `SATISFIED`，先用 `needs-revalidation` 失效对应 evidence，不能由执行者临时把宽 claim 解释为已满足。
 - worker 只返回结构化事实；所有 state mutation 走语义 CLI，证据矛盾或部分写入时经 slow path 对账后仍由主 session 执行最终写入。
 - `recovery checkpoint` 只保存下一动作与恢复 evidence；长期判断写 `recovery judgment`。checkpoint 不授权派发、不释放 dependency、不创建新 Task 状态。
 - `dispatch`、`worker-return`、`fact`、`escape` 使用 `trail append`；轨迹只追加，写错时追加更正。显式 handoff 先写 checkpoint，再轮换 trail。

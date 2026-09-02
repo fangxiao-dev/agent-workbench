@@ -56,6 +56,13 @@
       "expected_output": "dev-with-track 先刷新 canonical facts、选择动作并裁决语义；按 foundation、ownership 与 closure point 形成 Topic 后，才交 Dispatcher 做 Topic-first admission、选择 coherent step 与 dispatch。",
       "files": [],
       "expectations": ["business control loop first", "semantic decision before dispatch", "Dispatcher owns mechanical scheduling"]
+    },
+    {
+      "id": 9,
+      "prompt": "TKT-05 的一个 stable claim 同时写了 concurrency、occupancy、source CAS 和 Office failed 状态。当前 artifact 只直接证明普通 PostgreSQL request/handler 和 Office success path，CLI 显示该 claim 已有一条 supporting。现在可以 satisfy 并释放下游吗？",
+      "expected_output": "Refuses Ticket satisfaction because the artifact only partially covers a divisible claim; keeps the Ticket pending, withholds downstream release, and routes the affected Ticket to impl-planning for atomic stable claims.",
+      "files": [],
+      "expectations": ["partial evidence is not supporting for the whole claim", "no ticket satisfy or dependency release", "route affected Ticket contract to impl-planning without inventing a checklist"]
     }
   ]
 }

@@ -366,13 +366,14 @@ situations:
       evidence.contradictory_unresolved: false
       ticket.acceptance_edge_released: true
       ticket.acceptance_revision_parseable: true
-    judgment: false
+    judgment: true
+    ask: "每个 stable claim 是否已是 acceptance atom，且 supporting artifact 直接覆盖其完整语义"
     actions:
       - id: ticket-satisfy
         default: true
         by: main-session
         do: "impl_package_state.py --package <package> ticket satisfy <id> --expect PENDING --revision <commit> --environment <env>"
-        effect: "Ticket 进入 SATISFIED 并释放依赖"
+        effect: "主 session 完成逐原子 evidence 对照后，Ticket 进入 SATISFIED 并释放依赖"
     escape: true
 
   - slug: ticket.rework.evidence-conflict
