@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <title>Codex 进度台</title>
-    <link rel="stylesheet" href="/style.css?v=8">
-    <script src="/app.js?v=8" defer></script>
+    <link rel="stylesheet" href="/style.css?v=9">
+    <script src="/app.js?v=9" defer></script>
   </head>
   <body>
     <div class="ambient ambient-one" aria-hidden="true"></div>
@@ -97,7 +97,29 @@
             </div>
             <span class="monitor-level loading" id="monitor-level">正在读取</span>
             <p class="monitor-summary" id="monitor-summary">正在读取最新监控记录。</p>
+            <dl class="monitor-evaluation" id="monitor-evaluation" hidden>
+              <div>
+                <dt>当前进展</dt>
+                <dd id="monitor-progress"></dd>
+              </div>
+              <div id="monitor-improvements-row">
+                <dt>可改进</dt>
+                <dd><ul id="monitor-improvements"></ul></dd>
+              </div>
+              <div>
+                <dt>下一步</dt>
+                <dd id="monitor-next"></dd>
+              </div>
+              <div id="monitor-owner-row" hidden>
+                <dt>Owner</dt>
+                <dd id="monitor-owner"></dd>
+              </div>
+            </dl>
             <p class="monitor-thread" id="monitor-thread" hidden></p>
+            <details class="monitor-observations" id="monitor-observations" hidden>
+              <summary>用户纠偏 <span id="monitor-observation-count"></span></summary>
+              <ol id="monitor-observation-list"></ol>
+            </details>
           </section>
 
           <section class="panel activity-panel" aria-labelledby="activity-title">

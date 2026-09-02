@@ -30,7 +30,17 @@ const monitorPanel = document.querySelector("#monitor-panel");
 const monitorTime = document.querySelector("#monitor-time");
 const monitorLevel = document.querySelector("#monitor-level");
 const monitorSummary = document.querySelector("#monitor-summary");
+const monitorEvaluation = document.querySelector("#monitor-evaluation");
+const monitorProgress = document.querySelector("#monitor-progress");
+const monitorImprovementsRow = document.querySelector("#monitor-improvements-row");
+const monitorImprovements = document.querySelector("#monitor-improvements");
+const monitorNext = document.querySelector("#monitor-next");
+const monitorOwnerRow = document.querySelector("#monitor-owner-row");
+const monitorOwner = document.querySelector("#monitor-owner");
 const monitorThread = document.querySelector("#monitor-thread");
+const monitorObservations = document.querySelector("#monitor-observations");
+const monitorObservationCount = document.querySelector("#monitor-observation-count");
+const monitorObservationList = document.querySelector("#monitor-observation-list");
 const auditList = document.querySelector("#audit-list");
 
 let events = null;
@@ -385,9 +395,14 @@ function renderMonitor(monitor) {
     monitorTime.textContent = "尚无记录";
     monitorLevel.className = "monitor-level waiting";
     monitorLevel.textContent = "暂无匹配监控";
+    monitorSummary.hidden = false;
     monitorSummary.textContent = "当前项目和任务包暂无匹配监控记录。";
+    monitorEvaluation.hidden = true;
     monitorThread.hidden = true;
     monitorThread.textContent = "";
+    monitorObservations.hidden = true;
+    monitorObservations.open = false;
+    clear(monitorObservationList);
     return;
   }
   const labels = {
@@ -400,9 +415,44 @@ function renderMonitor(monitor) {
   monitorTime.textContent = formatCompactTime(monitor.observedAt);
   monitorLevel.className = `monitor-level ${monitor.level}`;
   monitorLevel.textContent = labels[monitor.level];
-  monitorSummary.textContent = monitor.summary;
+  const evaluation = monitor.evaluation;
+  monitorSummary.hidden = Boolean(evaluation);
+  monitorEvaluation.hidden = !evaluation;
+  if (evaluation) {
+    monitorProgress.textContent = evaluation.progress;
+    monitorNext.textContent = evaluation.next;
+    clear(monitorImprovements);
+    const improvements = Array.isArray(evaluation.improvements) ? evaluation.improvements : [];
+    monitorImprovementsRow.hidden = !improvements.length;
+    improvements.forEach((item) => {
+      const row = document.createElement("li");
+      row.textContent = item;
+      monitorImprovements.append(row);
+    });
+    const hasOwnerDecision = evaluation.owner && !/^(暂无|无|none)$/i.test(evaluation.owner.trim());
+    monitorOwnerRow.hidden = !hasOwnerDecision;
+    monitorOwner.textContent = hasOwnerDecision ? evaluation.owner : "";
+  } else {
+    monitorSummary.textContent = monitor.summary;
+  }
   monitorThread.hidden = false;
   monitorThread.textContent = monitor.monitorThreadId;
+
+  const observations = Array.isArray(monitor.observations) ? monitor.observations : [];
+  monitorObservations.hidden = !observations.length;
+  if (!observations.length) monitorObservations.open = false;
+  monitorObservationCount.textContent = observations.length ? `· ${observations.length}` : "";
+  clear(monitorObservationList);
+  observations.forEach((item) => {
+    const row = document.createElement("li");
+    const time = document.createElement("time");
+    const content = document.createElement("p");
+    time.dateTime = item.observedAt;
+    time.textContent = formatCompactTime(item.observedAt);
+    content.textContent = item.content;
+    row.append(time, content);
+    monitorObservationList.append(row);
+  });
 }
 
 function render(snapshot) {

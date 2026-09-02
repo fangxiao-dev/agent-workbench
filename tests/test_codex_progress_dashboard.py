@@ -353,10 +353,84 @@ def test_snapshot_follows_latest_monitor_record_across_task_handoff(tmp_path: Pa
 
     monitor = module.build_snapshot(THREAD_ID, relative, db_path)["monitor"]
 
-    assert set(monitor) == {"observedAt", "level", "summary", "monitorThreadId"}
+    assert set(monitor) == {"observedAt", "level", "summary", "monitorThreadId", "observations"}
     assert monitor["observedAt"] == "2026-08-31T20:01:00Z"
     assert "private" not in monitor["summary"]
     assert "[本地路径]" in monitor["summary"]
+    assert monitor["observations"] == []
+
+
+def test_snapshot_projects_monitor_evaluation_and_latest_confirmed_observations(tmp_path: Path) -> None:
+    module = load_module()
+    db_path, workspace, rollout, _ = make_fixture(tmp_path)
+    package = make_package(workspace)
+    relative = package.relative_to(workspace).as_posix()
+    write_jsonl(rollout, [])
+    automation_id = "monitor-test"
+    monitor_dir = workspace / ".progress-record" / "codex-progress-dashboard" / "monitors"
+    observation_dir = workspace / ".progress-record" / "codex-progress-dashboard" / "observations"
+    monitor_dir.mkdir(parents=True)
+    observation_dir.mkdir(parents=True)
+    (monitor_dir / f"{automation_id}.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "automationId": automation_id,
+                "monitorThreadId": "01a05c65-2eac-7d22-aba9-c2671b2cd03d",
+                "targetThreadId": THREAD_ID,
+                "packagePath": str(package),
+                "observedAt": "2026-09-02T20:10:00Z",
+                "level": "attention",
+                "summary": "旧摘要",
+                "evaluation": {
+                    "progress": r"正在核验 C:\private\review.md",
+                    "improvements": ["先消费独立结果", "再进入真实验收"],
+                    "next": "等待审查返回。",
+                    "owner": "暂无",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    observations = [
+        {
+            "confirmation": "confirmed",
+            "status": "active",
+            "confirmedAt": f"2026-09-02T20:0{index}:00Z",
+            "statement": f"纠偏 {index}",
+        }
+        for index in range(1, 7)
+    ]
+    observations.extend(
+        [
+            {"confirmation": "candidate", "status": "active", "confirmedAt": "2026-09-02T20:09:00Z", "statement": "候选"},
+            {"confirmation": "confirmed", "status": "superseded", "confirmedAt": "2026-09-02T20:08:00Z", "statement": "已替代"},
+            {"confirmation": "confirmed", "status": "active", "confirmedAt": "不是时间", "statement": "坏时间"},
+            {"confirmation": "confirmed", "status": "active", "confirmedAt": "2026-09-02T20:07:00Z", "statement": r"联系 user@example.com，读取 C:\private\note.md"},
+        ]
+    )
+    (observation_dir / f"{automation_id}.json").write_text(
+        json.dumps({"version": 1, "automationId": automation_id, "observations": observations}),
+        encoding="utf-8",
+    )
+
+    monitor = module.build_snapshot(THREAD_ID, relative, db_path)["monitor"]
+
+    assert monitor["evaluation"] == {
+        "progress": "正在核验 [本地路径]",
+        "improvements": ["先消费独立结果", "再进入真实验收"],
+        "next": "等待审查返回。",
+        "owner": "暂无",
+    }
+    assert len(monitor["observations"]) == 5
+    assert [item["observedAt"] for item in monitor["observations"]] == [
+        "2026-09-02T20:07:00Z",
+        "2026-09-02T20:06:00Z",
+        "2026-09-02T20:05:00Z",
+        "2026-09-02T20:04:00Z",
+        "2026-09-02T20:03:00Z",
+    ]
+    assert monitor["observations"][0]["content"] == "联系 [邮箱已隐藏]，读取 [本地路径]"
 
 
 def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_path: Path) -> None:

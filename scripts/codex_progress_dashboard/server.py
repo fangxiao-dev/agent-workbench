@@ -40,7 +40,9 @@ COMMIT_RE = re.compile(r"\b[0-9a-f]{40}\b", re.I)
 MAX_ACTIVITY = 5
 MAX_ACTIVITY_CHARS = 1200
 MONITOR_DIR = Path(".progress-record") / "codex-progress-dashboard" / "monitors"
+OBSERVATION_DIR = Path(".progress-record") / "codex-progress-dashboard" / "observations"
 MONITOR_LEVELS = {"normal", "attention", "abnormal"}
+AUTOMATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
 
 def _iso_timestamp(value: Any) -> str | None:
@@ -164,17 +166,64 @@ def sanitise_activity(text: str) -> str:
     return text[:MAX_ACTIVITY_CHARS]
 
 
-def monitor_snapshot(workspace: Path, package_root: Path | None) -> dict[str, str] | None:
+def _monitor_evaluation(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    progress = sanitise_activity(value.get("progress")) if isinstance(value.get("progress"), str) else ""
+    next_action = sanitise_activity(value.get("next")) if isinstance(value.get("next"), str) else ""
+    owner = sanitise_activity(value.get("owner")) if isinstance(value.get("owner"), str) else ""
+    raw_improvements = value.get("improvements")
+    if not progress or not next_action or not owner or not isinstance(raw_improvements, list):
+        return None
+    improvements = [
+        clean
+        for item in raw_improvements[:2]
+        if isinstance(item, str) and (clean := sanitise_activity(item))
+    ]
+    return {"progress": progress, "improvements": improvements, "next": next_action, "owner": owner}
+
+
+def _monitor_observations(workspace: Path, automation_id: str) -> list[dict[str, str]]:
+    if not AUTOMATION_ID_RE.fullmatch(automation_id):
+        return []
+    path = workspace / OBSERVATION_DIR / f"{automation_id}.json"
+    try:
+        ledger = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return []
+    if not isinstance(ledger, dict) or ledger.get("version") != 1 or ledger.get("automationId") != automation_id:
+        return []
+    rows = []
+    for item in ledger.get("observations", []):
+        if not isinstance(item, dict) or item.get("confirmation") != "confirmed" or item.get("status") != "active":
+            continue
+        observed_at = item.get("confirmedAt")
+        statement = item.get("statement")
+        if not isinstance(observed_at, str) or not isinstance(statement, str):
+            continue
+        try:
+            timestamp = datetime.fromisoformat(observed_at.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            continue
+        content = sanitise_activity(statement)
+        if content:
+            rows.append((timestamp, {"observedAt": observed_at, "content": content}))
+    rows.sort(key=lambda row: row[0], reverse=True)
+    return [row[1] for row in rows[:5]]
+
+
+def monitor_snapshot(workspace: Path, package_root: Path | None) -> dict[str, Any] | None:
     if package_root is None:
         return None
     directory = workspace / MONITOR_DIR
     if not directory.is_dir():
         return None
 
-    newest: tuple[float, dict[str, str]] | None = None
+    newest: tuple[float, dict[str, Any]] | None = None
     for path in directory.glob("*.json"):
         try:
             record = json.loads(path.read_text(encoding="utf-8"))
+            automation_id = str(record["automationId"])
             observed_at = str(record["observedAt"])
             observed_timestamp = datetime.fromisoformat(observed_at.replace("Z", "+00:00")).timestamp()
             monitor_thread_id = str(record["monitorThreadId"])
@@ -186,6 +235,7 @@ def monitor_snapshot(workspace: Path, package_root: Path | None) -> dict[str, st
             continue
         if (
             record.get("version") != 1
+            or not AUTOMATION_ID_RE.fullmatch(automation_id)
             or not THREAD_ID_RE.fullmatch(monitor_thread_id)
             or not THREAD_ID_RE.fullmatch(target_thread_id)
             or level not in MONITOR_LEVELS
@@ -198,7 +248,11 @@ def monitor_snapshot(workspace: Path, package_root: Path | None) -> dict[str, st
             "level": level,
             "summary": summary,
             "monitorThreadId": monitor_thread_id,
+            "observations": _monitor_observations(workspace, automation_id),
         }
+        evaluation = _monitor_evaluation(record.get("evaluation"))
+        if evaluation:
+            candidate["evaluation"] = evaluation
         if newest is None or observed_timestamp > newest[0]:
             newest = (observed_timestamp, candidate)
     return newest[1] if newest else None
