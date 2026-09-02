@@ -22,7 +22,7 @@ Dispatcher 面向上游主控，指导 Topic-first admission、当前批次、di
 
 多个材料族、逐项结论或完整候选表只是检查信号；知识来源能分别阅读或返回，不等于必须分别派发。这个门槛不按文件数量、步骤数、内部命令数或检索范围设硬上限：为一个窄决策检索整个仓库仍可以是一个动作；多个紧密相关文件共同形成一个 coherent outcome 时也保持同一步。
 
-前置依赖已回答且能独立验证的动作才可派发；否则继续切分，同一依赖链只释放第一个已解锁动作。
+前置依赖已回答且能独立验证的动作才可派发；同一依赖链只释放第一个已解锁动作。结构 foundation 会改变下游行为或安全 finding 的 ownership、failure model 或验证判据时，foundation 就是该动作，return 与行为不变验证通过后再重扫。
 
 ## 调度循环
 
@@ -36,7 +36,7 @@ Dispatcher 面向上游主控，指导 Topic-first admission、当前批次、di
 
 ## Topic 生命周期
 
-- 同一 Topic 的 work execution lane 只有在 ownership、failure model 与动作边界稳定，且 worker 仍能准确复述这些事实时才复用；任一项实质变化或结果无法可靠归因时使用 fresh worker，Topic 闭合后退役。
+- 同一 Topic 的 work execution lane 只有在 ownership、failure model 与动作边界稳定，且 worker 仍能准确复述这些事实时才复用。连续重复且无法可靠解释的错误、不能准确复述既定边界、结果无法归因或实际 write-set 外溢，均触发 fresh worker；Topic 闭合后退役。
 - review execution lane 始终独立于 work lane，但同 Topic、同 review scope 的 recheck 可以复用 reviewer。
 - test execution lane 只在同一有界 campaign 内复用，campaign 结束后退役。
 - 新 Topic 使用 fresh worker；worker 空闲或角色相同不是复用理由。
