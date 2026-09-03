@@ -47,7 +47,7 @@ worker 返回后，caller 消费已有 evidence、diff 和验证结果，再决�
 | resource dependency | 对同一可变资源的同时执行 | 隔离 worktree 上的小 fix 或其他工作 |
 | authorization dependency | 未获授权的 mutation 或外部副作用 | 只读调查和不越权准备 |
 
-Acceptance 是结论点，不天然是 dispatch blocker。等待 worker、review、长时验证或 Gate 时做一次 `look-ahead`，只提前加入不绑定未稳定业务语义、结果可回收且有 cleanup owner 的一步准备。
+Acceptance 是结论点，不天然是 dispatch blocker。等待 worker、review、长时验证或 Gate 时做 `look-ahead`，只提前加入不绑定未稳定业务语义、结果可回收且有 cleanup owner 的准备。
 
 完成标准：当前不可开始、只不可验收和可提前准备的工作已经分开。
 

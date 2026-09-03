@@ -17,7 +17,7 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 6. **执行 bounded worker**：对每个已派发 Topic，caller 按 `/impl-package:subagent-driven-development` 分类 dependency、决定当前或隔离 worktree，并形成 mode、lane、lifecycle 与 review requirement。
 7. **消费结果**：核对可归因 diff、evidence、residue、cleanup 和 review 状态；局部 DONE 或 checkpoint PASS 只释放对应 Topic 下一步。随后用 package CLI 写 state/evidence/checkpoint/judgment/trail，当前批次收齐后再由 Dispatcher 全局重扫；调度 idle 后依据 canonical state、evidence、review 与 Gate 判断继续、blocked 或 closure。
 
-完成标准：每轮都有唯一业务下一动作；调度循环 idle 只表示当前没有已解锁且合格的动作，Ticket/package closure 仍由本 Skill 根据 canonical facts 判断。
+完成标准：每轮都有唯一业务下一动作；等待 review、fix 或长时验证返回不构成下一动作，下一动作是当前可独立开始的调研或隔离 worktree 上的工作；调度循环 idle 只表示队列当前没有已解锁且合格的动作，不表示没有可推进的工作，Ticket/package closure 仍由本 Skill 根据 canonical facts 判断。
 
 ## Owner 边界
 
