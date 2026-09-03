@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -19,6 +20,8 @@ from urllib.request import urlopen
 
 
 PROTOCOL_VERSION = 2
+CONTEXT_VERSION = 1
+POLICY_VERSION = "STATIC_MONITOR_POLICY_V4"
 DEFAULT_PORT = 43187
 LAST_PORT = 43197
 THREAD_ID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
@@ -62,6 +65,69 @@ WRITE_EVALUATION_FIELDS = {
     "level",
     "summary",
     "evaluation",
+}
+BASELINE_FIELDS = {
+    "goal",
+    "chosenDirection",
+    "coreInvariants",
+    "nonGoals",
+    "requiredEvidence",
+    "requiredReviews",
+    "manualAcceptance",
+    "ownerDecisionBoundary",
+}
+CONTEXT_FIELDS = {
+    "version",
+    "automationId",
+    "targetTitle",
+    "policyVersion",
+    "policySnapshot",
+    "targetBaseline",
+    "snapshotHash",
+    "runtimeState",
+}
+INIT_CONTEXT_FIELDS = {"targetTitle", "targetBaseline"}
+SOURCE_SCAN_FIELDS = {"lastSeenTurnId", "lastSeenUserMessageId", "backfillComplete", "threadUpdatedAt"}
+RUNTIME_FIELDS = {
+    "sourceScanState",
+    "observationFingerprint",
+    "pendingCandidateIds",
+    "lastMainMessageId",
+    "lastEvaluationFingerprint",
+    "incompleteStreak",
+    "baselineStatus",
+    "activeConcernFingerprints",
+    "lastTargetStatus",
+    "lastTargetTurnId",
+    "lastFallbackTurnId",
+    "lastFallbackAt",
+}
+WRITE_CYCLE_FIELDS = WRITE_EVALUATION_FIELDS | {"runtimeState"}
+TARGET_STATUSES = {"active", "idle", "blocked", "terminal", "unknown"}
+BASELINE_STATUSES = {"current", "stale"}
+
+POLICY_SNAPSHOT = {
+    "evaluation": [
+        "targetBaseline 是冻结的任务合同；confirmed observations 是当前 Owner 指令。两者冲突时报告，不静默覆盖。",
+        "按最新 task 状态评价进展、coherent step、worker lifecycle、review、evidence、manual acceptance、方向与 Owner 分叉。",
+        "缺失信息不推断为完成；worker return、focused tests 或局部提交不自动等于 Ticket、Gate 或 package closure。",
+    ],
+    "observations": [
+        "Owner 明确的纠偏直接记为 confirmed；监控推断先记 candidate，pending candidate 同时最多一条。",
+        "同一语义 topic 原地更新并保留短 ID；询问、讨论、附件或引用本身不形成 observation。",
+        "confirmed observation 与 baseline 冲突时报告 baselineConflict，不覆盖 baseline；合同变化只标 baselineStatus=stale。",
+    ],
+    "visibility": "read_thread 返回 items: [] 表示内容不可见，不能推断没有 userMessage、没有续行请求或不存在 blocker。",
+    "intervention": [
+        "默认不向 target 发送消息。只有 confirmed observation 明确授权某类消息且当前事实符合其条件时才可发送。",
+        "candidate observation 不授权动作。发送时记录采用的 observation ID，并用 runtime 的 target turn ID 去重。",
+    ],
+    "levels": {
+        "normal": "明确 terminal/closed 且无 finding、review、evidence 或 manual acceptance 缺口。",
+        "attention": "仍有 active step、pending Gate、调度或证据缺口、confirmed 纠偏未吸收或 baselineConflict。",
+        "abnormal": "同一 Topic 连续两轮显式 INCOMPLETE/BLOCKED、重复违背纠偏、closure 与 evidence 矛盾、baseline stale 或 CLI 失败。",
+    },
+    "boundaries": "只读两个 task；仅通过本 CLI 写监控 sidecar。除 confirmed observation 明确授权的窄范围消息外，不干预 target；不得修改任务包、代码、数据库、运行环境或控制 worker。",
 }
 
 
@@ -148,6 +214,10 @@ def _instance_paths(root: Path, automation_id: str) -> tuple[Path, Path]:
     return base / "monitors" / f"{automation_id}.json", base / "observations" / f"{automation_id}.json"
 
 
+def _context_path(root: Path, automation_id: str) -> Path:
+    return root / ".progress-record" / "codex-progress-dashboard" / "contexts" / f"{automation_id}.json"
+
+
 def _read_json(path: Path) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -173,6 +243,161 @@ def _atomic_write(path: Path, value: Any) -> None:
         except OSError:
             pass
         raise
+
+
+def _string_list(value: Any, label: str, *, limit: int = 2000) -> list[str]:
+    if not isinstance(value, list):
+        raise MonitorProgressError(f"{label} must be an array")
+    return [_text(item, f"{label}[]", limit=limit) for item in value]
+
+
+def _optional_token(value: Any, label: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not MESSAGE_ID_RE.fullmatch(value):
+        raise MonitorProgressError(f"{label} must be a valid token or null")
+    return value
+
+
+def validate_baseline(value: Any) -> dict[str, Any]:
+    record = _expect_fields(value, BASELINE_FIELDS, "target baseline")
+    return {
+        "goal": _text(record["goal"], "target baseline.goal"),
+        "chosenDirection": _string_list(record["chosenDirection"], "target baseline.chosenDirection"),
+        "coreInvariants": _string_list(record["coreInvariants"], "target baseline.coreInvariants"),
+        "nonGoals": _string_list(record["nonGoals"], "target baseline.nonGoals"),
+        "requiredEvidence": _string_list(record["requiredEvidence"], "target baseline.requiredEvidence"),
+        "requiredReviews": _string_list(record["requiredReviews"], "target baseline.requiredReviews"),
+        "manualAcceptance": _string_list(record["manualAcceptance"], "target baseline.manualAcceptance"),
+        "ownerDecisionBoundary": _text(
+            record["ownerDecisionBoundary"], "target baseline.ownerDecisionBoundary"
+        ),
+    }
+
+
+def _observation_runtime(observations: list[dict[str, Any]]) -> dict[str, Any]:
+    confirmed = sum(item["state"] == "confirmed" for item in observations)
+    candidates = sum(item["state"] == "candidate" for item in observations)
+    return {
+        "observationFingerprint": f"confirmed:{confirmed}|candidate:{candidates}",
+        "pendingCandidateIds": [
+            item["id"] for item in observations if item["state"] == "candidate" and item["response"] == "pending"
+        ],
+    }
+
+
+def default_runtime_state(observations: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    empty_scan = {
+        "lastSeenTurnId": None,
+        "lastSeenUserMessageId": None,
+        "backfillComplete": False,
+        "threadUpdatedAt": None,
+    }
+    return {
+        "sourceScanState": {"monitor": dict(empty_scan), "target": dict(empty_scan)},
+        **_observation_runtime(observations or []),
+        "lastMainMessageId": None,
+        "lastEvaluationFingerprint": None,
+        "incompleteStreak": 0,
+        "baselineStatus": "current",
+        "activeConcernFingerprints": [],
+        "lastTargetStatus": "unknown",
+        "lastTargetTurnId": None,
+        "lastFallbackTurnId": None,
+        "lastFallbackAt": None,
+    }
+
+
+def validate_runtime_state(value: Any) -> dict[str, Any]:
+    record = _expect_fields(value, RUNTIME_FIELDS, "runtime state")
+    scans = _expect_fields(record["sourceScanState"], {"monitor", "target"}, "runtime source scan state")
+    validated_scans: dict[str, dict[str, Any]] = {}
+    for source in ("monitor", "target"):
+        scan = _expect_fields(scans[source], SOURCE_SCAN_FIELDS, f"runtime source scan state.{source}")
+        if not isinstance(scan["backfillComplete"], bool):
+            raise MonitorProgressError(f"runtime source scan state.{source}.backfillComplete must be boolean")
+        validated_scans[source] = {
+            "lastSeenTurnId": _optional_token(scan["lastSeenTurnId"], f"runtime.{source}.lastSeenTurnId"),
+            "lastSeenUserMessageId": _optional_token(
+                scan["lastSeenUserMessageId"], f"runtime.{source}.lastSeenUserMessageId"
+            ),
+            "backfillComplete": scan["backfillComplete"],
+            "threadUpdatedAt": _iso(
+                scan["threadUpdatedAt"], f"runtime.{source}.threadUpdatedAt", nullable=True
+            ),
+        }
+    pending_ids = record["pendingCandidateIds"]
+    if not isinstance(pending_ids, list) or any(
+        not isinstance(item, str) or not OBSERVATION_ID_RE.fullmatch(item) for item in pending_ids
+    ):
+        raise MonitorProgressError("runtime.pendingCandidateIds must contain observation ids")
+    incomplete_streak = record["incompleteStreak"]
+    if not isinstance(incomplete_streak, int) or isinstance(incomplete_streak, bool) or incomplete_streak < 0:
+        raise MonitorProgressError("runtime.incompleteStreak must be a non-negative integer")
+    baseline_status = record["baselineStatus"]
+    if baseline_status not in BASELINE_STATUSES:
+        raise MonitorProgressError(f"runtime.baselineStatus must be one of {sorted(BASELINE_STATUSES)}")
+    target_status = record["lastTargetStatus"]
+    if target_status not in TARGET_STATUSES:
+        raise MonitorProgressError(f"runtime.lastTargetStatus must be one of {sorted(TARGET_STATUSES)}")
+    return {
+        "sourceScanState": validated_scans,
+        "observationFingerprint": _text(record["observationFingerprint"], "runtime.observationFingerprint"),
+        "pendingCandidateIds": pending_ids,
+        "lastMainMessageId": _optional_token(record["lastMainMessageId"], "runtime.lastMainMessageId"),
+        "lastEvaluationFingerprint": _text(
+            record["lastEvaluationFingerprint"], "runtime.lastEvaluationFingerprint", nullable=True
+        ),
+        "incompleteStreak": incomplete_streak,
+        "baselineStatus": baseline_status,
+        "activeConcernFingerprints": _string_list(
+            record["activeConcernFingerprints"], "runtime.activeConcernFingerprints", limit=500
+        ),
+        "lastTargetStatus": target_status,
+        "lastTargetTurnId": _optional_token(record["lastTargetTurnId"], "runtime.lastTargetTurnId"),
+        "lastFallbackTurnId": _optional_token(record["lastFallbackTurnId"], "runtime.lastFallbackTurnId"),
+        "lastFallbackAt": _iso(record["lastFallbackAt"], "runtime.lastFallbackAt", nullable=True),
+    }
+
+
+def _snapshot_hash(
+    target_baseline: dict[str, Any],
+    policy_version: str = POLICY_VERSION,
+    policy_snapshot: dict[str, Any] = POLICY_SNAPSHOT,
+) -> str:
+    payload = {
+        "policyVersion": policy_version,
+        "policySnapshot": policy_snapshot,
+        "targetBaseline": target_baseline,
+    }
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def validate_context(value: Any, *, require_current_policy: bool = True) -> dict[str, Any]:
+    record = _expect_fields(value, CONTEXT_FIELDS, "monitor context")
+    if record["version"] != CONTEXT_VERSION:
+        raise MonitorProgressError(f"monitor context version must be {CONTEXT_VERSION}")
+    policy_version = _text(record["policyVersion"], "monitor context.policyVersion", limit=200)
+    policy_snapshot = record["policySnapshot"]
+    if not isinstance(policy_snapshot, dict):
+        raise MonitorProgressError("monitor context.policySnapshot must be a JSON object")
+    if require_current_policy and (policy_version != POLICY_VERSION or policy_snapshot != POLICY_SNAPSHOT):
+        raise MonitorProgressError("monitor context policy snapshot does not match this CLI")
+    baseline = validate_baseline(record["targetBaseline"])
+    snapshot_hash = _text(record["snapshotHash"], "monitor context.snapshotHash", limit=64)
+    if snapshot_hash != _snapshot_hash(baseline, policy_version, policy_snapshot):
+        raise MonitorProgressError("monitor context snapshot hash mismatch")
+    return {
+        "version": CONTEXT_VERSION,
+        "automationId": _automation_id(record["automationId"]),
+        "targetTitle": _text(record["targetTitle"], "monitor context.targetTitle", limit=500),
+        "policyVersion": policy_version,
+        "policySnapshot": policy_snapshot,
+        "targetBaseline": baseline,
+        "snapshotHash": snapshot_hash,
+        "runtimeState": validate_runtime_state(record["runtimeState"]),
+    }
 
 
 def validate_evaluation(value: Any) -> dict[str, Any] | None:
@@ -350,10 +575,63 @@ def read_instance(root: Path, automation_id: str) -> dict[str, Any]:
     return {"monitor": monitor, "observations": observation_store["observations"]}
 
 
-def write_evaluation(root: Path, automation_id: str, payload: Any) -> dict[str, Any]:
-    record = _expect_fields(payload, WRITE_EVALUATION_FIELDS, "evaluation write payload")
-    current = read_instance(root, automation_id)["monitor"]
-    updated = validate_monitor(
+def init_context(root: Path, automation_id: str, payload: Any) -> dict[str, Any]:
+    record = _expect_fields(payload, INIT_CONTEXT_FIELDS, "context init payload")
+    instance = read_instance(root, automation_id)
+    baseline = validate_baseline(record["targetBaseline"])
+    expected = validate_context(
+        {
+            "version": CONTEXT_VERSION,
+            "automationId": automation_id,
+            "targetTitle": record["targetTitle"],
+            "policyVersion": POLICY_VERSION,
+            "policySnapshot": POLICY_SNAPSHOT,
+            "targetBaseline": baseline,
+            "snapshotHash": _snapshot_hash(baseline),
+            "runtimeState": default_runtime_state(instance["observations"]),
+        }
+    )
+    path = _context_path(root, automation_id)
+    if path.exists():
+        current = validate_context(_read_json(path))
+        immutable_fields = ("automationId", "targetTitle", "policyVersion", "policySnapshot", "targetBaseline", "snapshotHash")
+        if any(current[field] != expected[field] for field in immutable_fields):
+            raise MonitorProgressError("existing monitor context identity or snapshot does not match")
+        return {"context": current, **instance}
+    _atomic_write(path, expected)
+    return {"context": expected, **instance}
+
+
+def read_context(root: Path, automation_id: str) -> dict[str, Any]:
+    context = validate_context(_read_json(_context_path(root, automation_id)))
+    instance = read_instance(root, automation_id)
+    if context["automationId"] != automation_id:
+        raise MonitorProgressError("monitor context automation id mismatch")
+    return {"context": context, **instance}
+
+
+def refresh_context_policy(root: Path, automation_id: str) -> dict[str, Any]:
+    path = _context_path(root, automation_id)
+    context = validate_context(_read_json(path), require_current_policy=False)
+    instance = read_instance(root, automation_id)
+    if context["automationId"] != automation_id:
+        raise MonitorProgressError("monitor context automation id mismatch")
+    if context["policyVersion"] == POLICY_VERSION and context["policySnapshot"] == POLICY_SNAPSHOT:
+        return {"context": validate_context(context), **instance}
+    updated = validate_context(
+        {
+            **context,
+            "policyVersion": POLICY_VERSION,
+            "policySnapshot": POLICY_SNAPSHOT,
+            "snapshotHash": _snapshot_hash(context["targetBaseline"]),
+        }
+    )
+    _atomic_write(path, updated)
+    return {"context": updated, **instance}
+
+
+def _updated_monitor(current: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
+    return validate_monitor(
         {
             **current,
             "targetThreadId": record["targetThreadId"],
@@ -364,8 +642,30 @@ def write_evaluation(root: Path, automation_id: str, payload: Any) -> dict[str, 
             "evaluation": record["evaluation"],
         }
     )
+
+
+def write_evaluation(root: Path, automation_id: str, payload: Any) -> dict[str, Any]:
+    record = _expect_fields(payload, WRITE_EVALUATION_FIELDS, "evaluation write payload")
+    current = read_instance(root, automation_id)["monitor"]
+    updated = _updated_monitor(current, record)
     _atomic_write(_instance_paths(root, automation_id)[0], updated)
     return updated
+
+
+def write_cycle(root: Path, automation_id: str, payload: Any) -> dict[str, Any]:
+    record = _expect_fields(payload, WRITE_CYCLE_FIELDS, "cycle write payload")
+    current = read_context(root, automation_id)
+    runtime_state = {
+        **validate_runtime_state(record["runtimeState"]),
+        **_observation_runtime(current["observations"]),
+    }
+    updated_context = validate_context(
+        {**current["context"], "runtimeState": runtime_state}
+    )
+    updated_monitor = _updated_monitor(current["monitor"], record)
+    _atomic_write(_context_path(root, automation_id), updated_context)
+    _atomic_write(_instance_paths(root, automation_id)[0], updated_monitor)
+    return {"context": updated_context, "monitor": updated_monitor, "observations": current["observations"]}
 
 
 def _next_observation_id(next_number: int) -> str:
@@ -462,6 +762,8 @@ def latest_for_package(root: Path, package_path: Path) -> dict[str, Any] | None:
 def schema_contract() -> dict[str, Any]:
     return {
         "protocolVersion": PROTOCOL_VERSION,
+        "contextVersion": CONTEXT_VERSION,
+        "policyVersion": POLICY_VERSION,
         "monitor": {"required": sorted(MONITOR_FIELDS), "levels": sorted(LEVELS)},
         "evaluation": {"required": sorted(EVALUATION_FIELDS), "maxImprovements": 3},
         "observationStore": {"required": sorted(OBSERVATION_STORE_FIELDS)},
@@ -472,6 +774,10 @@ def schema_contract() -> dict[str, Any]:
             "responses": sorted(RESPONSES),
         },
         "writeEvaluationInput": {"required": sorted(WRITE_EVALUATION_FIELDS)},
+        "context": {"required": sorted(CONTEXT_FIELDS), "runtimeRequired": sorted(RUNTIME_FIELDS)},
+        "initContextInput": {"required": sorted(INIT_CONTEXT_FIELDS)},
+        "writeCycleInput": {"required": sorted(WRITE_CYCLE_FIELDS)},
+        "refreshContextPolicy": {"preserves": ["targetBaseline", "runtimeState", "monitor", "observations"]},
     }
 
 
@@ -592,8 +898,28 @@ def build_parser() -> argparse.ArgumentParser:
     read_parser = subparsers.add_parser("read", help="validate and print a v2 monitor instance")
     _common_instance_arguments(read_parser)
 
+    init_context_parser = subparsers.add_parser(
+        "init-context", help="create the validated policy, baseline, and runtime context from stdin"
+    )
+    _common_instance_arguments(init_context_parser)
+
+    read_context_parser = subparsers.add_parser(
+        "read-context", help="validate and print the complete effective monitor context"
+    )
+    _common_instance_arguments(read_context_parser)
+
+    refresh_context_parser = subparsers.add_parser(
+        "refresh-context-policy", help="replace only the validated static policy snapshot and hash"
+    )
+    _common_instance_arguments(refresh_context_parser)
+
     write_parser = subparsers.add_parser("write-evaluation", help="atomically update the monitor evaluation from stdin")
     _common_instance_arguments(write_parser)
+
+    write_cycle_parser = subparsers.add_parser(
+        "write-cycle", help="atomically update runtime state and the monitor evaluation from stdin"
+    )
+    _common_instance_arguments(write_cycle_parser)
 
     observation_parser = subparsers.add_parser("put-observation", help="atomically upsert one observation from stdin")
     _common_instance_arguments(observation_parser)
@@ -626,8 +952,16 @@ def main(argv: list[str] | None = None) -> int:
                 )
             elif args.command == "read":
                 result = read_instance(root, automation_id)
+            elif args.command == "init-context":
+                result = init_context(root, automation_id, _stdin_json())
+            elif args.command == "read-context":
+                result = read_context(root, automation_id)
+            elif args.command == "refresh-context-policy":
+                result = refresh_context_policy(root, automation_id)
             elif args.command == "write-evaluation":
                 result = write_evaluation(root, automation_id, _stdin_json())
+            elif args.command == "write-cycle":
+                result = write_cycle(root, automation_id, _stdin_json())
             elif args.command == "remove-observation":
                 result = remove_observation(root, automation_id, args.id)
             else:

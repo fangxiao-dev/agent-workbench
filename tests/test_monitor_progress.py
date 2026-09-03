@@ -50,6 +50,29 @@ def evaluation_payload() -> dict:
     }
 
 
+def baseline() -> dict:
+    return {
+        "goal": "完成示例任务包。",
+        "chosenDirection": ["沿用现有实现。"],
+        "coreInvariants": ["保持原子写入。"],
+        "nonGoals": ["不发布。"],
+        "requiredEvidence": ["focused tests。"],
+        "requiredReviews": ["implementation review。"],
+        "manualAcceptance": ["Owner 浏览器验收。"],
+        "ownerDecisionBoundary": "只有真实产品分叉需要 Owner。",
+    }
+
+
+def make_context(tmp_path: Path):
+    module, root, package, instance = make_instance(tmp_path)
+    context = module.init_context(
+        root,
+        "monitor-test",
+        {"targetTitle": "示例任务", "targetBaseline": baseline()},
+    )
+    return module, root, package, instance, context
+
+
 def observation(
     state: str = "candidate",
     confirmed_at=None,
@@ -104,6 +127,117 @@ def test_contract_rejects_unknown_fields_and_v1(tmp_path: Path) -> None:
         module.read_instance(root, "monitor-test")
 
 
+def test_context_is_idempotent_and_read_returns_complete_snapshot(tmp_path: Path) -> None:
+    module, root, _, _, created = make_context(tmp_path)
+
+    repeated = module.init_context(
+        root,
+        "monitor-test",
+        {"targetTitle": "示例任务", "targetBaseline": baseline()},
+    )
+    result = module.read_context(root, "monitor-test")
+
+    assert repeated == created
+    assert result["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V4"
+    assert len(result["context"]["snapshotHash"]) == 64
+    assert result["context"]["runtimeState"]["lastFallbackTurnId"] is None
+    assert result["context"]["policySnapshot"]["visibility"].startswith("read_thread")
+    assert "fallback" not in result["context"]["policySnapshot"]
+    assert result["observations"] == []
+
+
+def test_refresh_context_policy_preserves_dynamic_state(tmp_path: Path) -> None:
+    module, root, _, _, created = make_context(tmp_path)
+    confirmed = observation("confirmed", "2026-09-02T20:01:00Z")
+    module.put_observation(root, "monitor-test", confirmed)
+    module.write_cycle(
+        root,
+        "monitor-test",
+        {**evaluation_payload(), "runtimeState": created["context"]["runtimeState"]},
+    )
+    before = module.read_context(root, "monitor-test")
+    old_policy = {"fallback": {"localAuthorization": "旧任务级授权"}}
+    stale = {
+        **before["context"],
+        "policyVersion": "STATIC_MONITOR_POLICY_V3",
+        "policySnapshot": old_policy,
+        "snapshotHash": module._snapshot_hash(
+            before["context"]["targetBaseline"], "STATIC_MONITOR_POLICY_V3", old_policy
+        ),
+    }
+    context_path = root / ".progress-record" / "codex-progress-dashboard" / "contexts" / "monitor-test.json"
+    context_path.write_text(json.dumps(stale), encoding="utf-8")
+
+    with pytest.raises(module.MonitorProgressError, match="does not match"):
+        module.read_context(root, "monitor-test")
+    refreshed = module.refresh_context_policy(root, "monitor-test")
+    repeated = module.refresh_context_policy(root, "monitor-test")
+
+    assert refreshed == repeated
+    assert refreshed["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V4"
+    assert refreshed["context"]["targetBaseline"] == before["context"]["targetBaseline"]
+    assert refreshed["context"]["runtimeState"] == before["context"]["runtimeState"]
+    assert refreshed["monitor"] == before["monitor"]
+    assert [item["id"] for item in refreshed["observations"]] == ["O001"]
+
+
+def test_context_rejects_snapshot_conflict_unknown_field_and_hash_damage(tmp_path: Path) -> None:
+    module, root, _, _, _ = make_context(tmp_path)
+
+    changed = baseline()
+    changed["goal"] = "另一个目标。"
+    with pytest.raises(module.MonitorProgressError, match="does not match"):
+        module.init_context(root, "monitor-test", {"targetTitle": "示例任务", "targetBaseline": changed})
+    with pytest.raises(module.MonitorProgressError, match="unknown"):
+        module.init_context(
+            root,
+            "monitor-test",
+            {"targetTitle": "示例任务", "targetBaseline": baseline(), "extra": True},
+        )
+
+    context_path = root / ".progress-record" / "codex-progress-dashboard" / "contexts" / "monitor-test.json"
+    damaged = json.loads(context_path.read_text(encoding="utf-8"))
+    damaged["snapshotHash"] = "0" * 64
+    context_path.write_text(json.dumps(damaged), encoding="utf-8")
+    with pytest.raises(module.MonitorProgressError, match="hash mismatch"):
+        module.read_context(root, "monitor-test")
+
+
+def test_write_cycle_updates_runtime_and_evaluation(tmp_path: Path) -> None:
+    module, root, _, _, created = make_context(tmp_path)
+    runtime = created["context"]["runtimeState"]
+    runtime = {
+        **runtime,
+        "lastTargetStatus": "idle",
+        "lastTargetTurnId": THREAD_B,
+        "lastFallbackTurnId": THREAD_B,
+        "lastFallbackAt": "2026-09-02T20:02:00Z",
+    }
+
+    updated = module.write_cycle(root, "monitor-test", {**evaluation_payload(), "runtimeState": runtime})
+
+    assert updated["monitor"]["evaluation"]["next"] == "等待复核返回。"
+    assert updated["context"]["runtimeState"]["lastFallbackTurnId"] == THREAD_B
+    assert module.read_context(root, "monitor-test") == updated
+
+
+def test_failed_context_replace_preserves_previous_cycle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    module, root, _, _, created = make_context(tmp_path)
+    context_path = root / ".progress-record" / "codex-progress-dashboard" / "contexts" / "monitor-test.json"
+    before = context_path.read_text(encoding="utf-8")
+    monkeypatch.setattr(module.os, "replace", lambda source, target: (_ for _ in ()).throw(OSError("replace failed")))
+
+    with pytest.raises(OSError, match="replace failed"):
+        module.write_cycle(
+            root,
+            "monitor-test",
+            {**evaluation_payload(), "runtimeState": created["context"]["runtimeState"]},
+        )
+
+    assert context_path.read_text(encoding="utf-8") == before
+    assert not list(context_path.parent.glob("*.tmp"))
+
+
 def test_failed_atomic_replace_preserves_previous_monitor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     module, root, _, instance = make_instance(tmp_path)
     monitor_path = root / ".progress-record" / "codex-progress-dashboard" / "monitors" / "monitor-test.json"
@@ -124,6 +258,13 @@ def test_observation_create_and_update_keep_one_short_id(tmp_path: Path) -> None
 
     created = module.put_observation(root, "monitor-test", candidate)
     assert created["observation"]["id"] == "O001"
+    context = module.init_context(
+        root,
+        "monitor-test",
+        {"targetTitle": "示例任务", "targetBaseline": baseline()},
+    )
+    assert context["context"]["runtimeState"]["observationFingerprint"] == "confirmed:0|candidate:1"
+    assert context["context"]["runtimeState"]["pendingCandidateIds"] == ["O001"]
 
     confirmed = {
         **candidate,
@@ -238,6 +379,8 @@ def test_schema_reports_v2_enums() -> None:
     schema = module.schema_contract()
 
     assert schema["protocolVersion"] == 2
+    assert schema["contextVersion"] == 1
+    assert schema["policyVersion"] == "STATIC_MONITOR_POLICY_V4"
     assert schema["monitor"]["levels"] == ["abnormal", "attention", "normal"]
     assert schema["observation"]["states"] == ["candidate", "confirmed"]
 
@@ -268,6 +411,57 @@ def test_cli_writes_evaluation_from_one_stdin_line(tmp_path: Path) -> None:
     )
     assert init.returncode == 0, init.stderr
 
+    init_context = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "init-context",
+            "--root",
+            str(root),
+            "--automation-id",
+            "monitor-test",
+        ],
+        input=json.dumps({"targetTitle": "示例任务", "targetBaseline": baseline()}) + "\n",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert init_context.returncode == 0, init_context.stderr
+
+    read_context = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "read-context",
+            "--root",
+            str(root),
+            "--automation-id",
+            "monitor-test",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert read_context.returncode == 0, read_context.stderr
+    assert json.loads(read_context.stdout)["context"]["targetBaseline"] == baseline()
+
+    refresh_context = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "refresh-context-policy",
+            "--root",
+            str(root),
+            "--automation-id",
+            "monitor-test",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert refresh_context.returncode == 0, refresh_context.stderr
+    assert json.loads(refresh_context.stdout)["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V4"
+
     write = subprocess.run(
         [
             sys.executable,
@@ -286,6 +480,26 @@ def test_cli_writes_evaluation_from_one_stdin_line(tmp_path: Path) -> None:
 
     assert write.returncode == 0, write.stderr
     assert json.loads(write.stdout)["evaluation"]["next"] == "等待复核返回。"
+
+    context_payload = json.loads(read_context.stdout)
+    runtime = context_payload["context"]["runtimeState"]
+    cycle = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "write-cycle",
+            "--root",
+            str(root),
+            "--automation-id",
+            "monitor-test",
+        ],
+        input=json.dumps({**evaluation_payload(), "runtimeState": runtime}) + "\n",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert cycle.returncode == 0, cycle.stderr
+    assert json.loads(cycle.stdout)["monitor"]["evaluation"]["next"] == "等待复核返回。"
 
     put = subprocess.run(
         [

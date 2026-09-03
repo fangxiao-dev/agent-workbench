@@ -122,20 +122,33 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
     assert "用户拒绝时返回页面 URL 并停止" in skill
     assert "monitor_progress.py" in skill
     for marker in (
-        "STATIC_MONITOR_POLICY_V2",
-        "OWNER_OBSERVATION_POLICY",
-        "TARGET_BASELINE",
-        "MONITOR_PROGRESS_CLI_V2",
-        "RUNTIME_EVALUATION_LOOP",
-        "OUTPUT_CONTRACT",
-        "MONITOR_STATE",
+        "read-context",
+        "policySnapshot",
+        "targetBaseline",
+        "runtimeState",
+        "items: []",
+        "lastFallbackTurnId",
+        "state=confirmed",
+        "candidate 不授权动作",
+        "observation ID",
     ):
         assert marker in template
-    for command in ("read", "write-evaluation", "put-observation", "remove-observation"):
+    for command in ("read-context", "write-cycle", "put-observation", "remove-observation"):
         assert f"monitorCliPath> {command}" in template
     assert "{{MONITOR_CLI_PATH_JSON}}" in template
-    assert '"topic"' in template and '"content"' in template
-    for obsolete in ('"statement"', '"supersedes"', "ledgerFingerprint", "state=confirmed,status=active"):
+    assert len(template) < 4000
+    for obsolete in (
+        "TARGET_BASELINE_JSON",
+        "MONITOR_STATE",
+        "OWNER_FALLBACK_OVERRIDE",
+        "automation_update",
+        "真实测试 PDF",
+        "non-terminal idle/blocked",
+        "policySnapshot.fallback",
+        '"statement"',
+        '"supersedes"',
+        "ledgerFingerprint",
+    ):
         assert obsolete not in template
 
 
