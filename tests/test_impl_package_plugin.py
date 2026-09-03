@@ -122,22 +122,36 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
     assert "用户拒绝时返回页面 URL 并停止" in skill
     assert "monitor_progress.py" in skill
     for marker in (
-        "read-context",
-        "policySnapshot",
-        "targetBaseline",
-        "runtimeState",
+        "read-cycle",
+        "read-static",
+        "STATIC_HASH",
         "items: []",
-        "lastFallbackTurnId",
-        "state=confirmed",
+        "confirmed observation",
         "candidate 不授权动作",
-        "observation ID",
+        "语义变化",
     ):
         assert marker in template
-    for command in ("read-context", "write-cycle", "put-observation", "remove-observation"):
-        assert f"monitorCliPath> {command}" in template
+    for command in ("read-cycle", "read-static", "write-cycle", "put-observation", "remove-observation"):
+        assert command in template
     assert "{{MONITOR_CLI_PATH_JSON}}" in template
-    assert len(template) < 4000
+    assert len(template) < 1000
+    assert "工具调试不入任务 sidecar" in template
+    rendered = (
+        template.replace("{{AUTOMATION_ID}}", "impl-package-2026-08-31-bank-reconciliation-nm-settlement-groups")
+        .replace(
+            "{{WORKSPACE_ROOT_JSON}}",
+            r"D:\\CodeSpace\\kaispan-dev\\.worktrees\\260824-finance-assistant-mvp-implementation",
+        )
+        .replace(
+            "{{MONITOR_CLI_PATH_JSON}}",
+            r"C:\\Users\\Xiao\\.codex\\plugins\\cache\\agent-workbench\\impl-package\\0.4.2\\scripts\\monitor_progress.py",
+        )
+        .replace("{{STATIC_HASH}}", "f" * 64)
+    )
+    assert len(rendered) < 1000
     for obsolete in (
+        "{{MONITOR_THREAD_ID}}",
+        "{{TARGET_THREAD_ID}}",
         "TARGET_BASELINE_JSON",
         "MONITOR_STATE",
         "OWNER_FALLBACK_OVERRIDE",
@@ -145,6 +159,9 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
         "真实测试 PDF",
         "non-terminal idle/blocked",
         "policySnapshot.fallback",
+        "targetBaseline",
+        "policySnapshot",
+        "runtimeState",
         '"statement"',
         '"supersedes"',
         "ledgerFingerprint",

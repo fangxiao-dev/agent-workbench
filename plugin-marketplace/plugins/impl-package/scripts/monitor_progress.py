@@ -20,8 +20,9 @@ from urllib.request import urlopen
 
 
 PROTOCOL_VERSION = 2
-CONTEXT_VERSION = 1
-POLICY_VERSION = "STATIC_MONITOR_POLICY_V4"
+CONTEXT_VERSION = 2
+RUNTIME_VERSION = 1
+POLICY_VERSION = "STATIC_MONITOR_POLICY_V5"
 DEFAULT_PORT = 43187
 LAST_PORT = 43197
 THREAD_ID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
@@ -84,8 +85,9 @@ CONTEXT_FIELDS = {
     "policySnapshot",
     "targetBaseline",
     "snapshotHash",
-    "runtimeState",
 }
+LEGACY_CONTEXT_FIELDS = CONTEXT_FIELDS | {"runtimeState"}
+RUNTIME_STORE_FIELDS = {"version", "automationId", "runtimeState"}
 INIT_CONTEXT_FIELDS = {"targetTitle", "targetBaseline"}
 SOURCE_SCAN_FIELDS = {"lastSeenTurnId", "lastSeenUserMessageId", "backfillComplete", "threadUpdatedAt"}
 RUNTIME_FIELDS = {
@@ -113,6 +115,8 @@ POLICY_SNAPSHOT = {
         "缺失信息不推断为完成；worker return、focused tests 或局部提交不自动等于 Ticket、Gate 或 package closure。",
     ],
     "observations": [
+        "只有直接改变目标任务授权、执行方式、验收要求或 Owner 决策边界的纠偏才是本任务 observation。",
+        "针对监控模板、CLI、dashboard、prompt 或 observation 机制本身的反馈属于工具调试，不写入目标任务 sidecar。",
         "Owner 明确的纠偏直接记为 confirmed；监控推断先记 candidate，pending candidate 同时最多一条。",
         "同一语义 topic 原地更新并保留短 ID；询问、讨论、附件或引用本身不形成 observation。",
         "confirmed observation 与 baseline 冲突时报告 baselineConflict，不覆盖 baseline；合同变化只标 baselineStatus=stale。",
@@ -127,6 +131,11 @@ POLICY_SNAPSHOT = {
         "attention": "仍有 active step、pending Gate、调度或证据缺口、confirmed 纠偏未吸收或 baselineConflict。",
         "abnormal": "同一 Topic 连续两轮显式 INCOMPLETE/BLOCKED、重复违背纠偏、closure 与 evidence 矛盾、baseline stale 或 CLI 失败。",
     },
+    "communication": [
+        "Owner 通知默认只写当前做到哪里、是否正常、接下来做什么、是否需要 Owner。",
+        "内部执行术语只有在它本身构成故障时才出现，并同时解释真实对象、动作和影响。",
+        "监控器自身配置变化只在导致监控中断或需要 Owner 操作时通知。",
+    ],
     "boundaries": "只读两个 task；仅通过本 CLI 写监控 sidecar。除 confirmed observation 明确授权的窄范围消息外，不干预 target；不得修改任务包、代码、数据库、运行环境或控制 worker。",
 }
 
@@ -216,6 +225,10 @@ def _instance_paths(root: Path, automation_id: str) -> tuple[Path, Path]:
 
 def _context_path(root: Path, automation_id: str) -> Path:
     return root / ".progress-record" / "codex-progress-dashboard" / "contexts" / f"{automation_id}.json"
+
+
+def _runtime_path(root: Path, automation_id: str) -> Path:
+    return root / ".progress-record" / "codex-progress-dashboard" / "runtime" / f"{automation_id}.json"
 
 
 def _read_json(path: Path) -> Any:
@@ -396,8 +409,42 @@ def validate_context(value: Any, *, require_current_policy: bool = True) -> dict
         "policySnapshot": policy_snapshot,
         "targetBaseline": baseline,
         "snapshotHash": snapshot_hash,
+    }
+
+
+def validate_runtime_store(value: Any) -> dict[str, Any]:
+    record = _expect_fields(value, RUNTIME_STORE_FIELDS, "monitor runtime store")
+    if record["version"] != RUNTIME_VERSION:
+        raise MonitorProgressError(f"monitor runtime version must be {RUNTIME_VERSION}")
+    return {
+        "version": RUNTIME_VERSION,
+        "automationId": _automation_id(record["automationId"]),
         "runtimeState": validate_runtime_state(record["runtimeState"]),
     }
+
+
+def validate_legacy_context(value: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    record = _expect_fields(value, LEGACY_CONTEXT_FIELDS, "legacy monitor context")
+    if record["version"] != 1:
+        raise MonitorProgressError("legacy monitor context version must be 1")
+    policy_version = _text(record["policyVersion"], "legacy monitor context.policyVersion", limit=200)
+    policy_snapshot = record["policySnapshot"]
+    if not isinstance(policy_snapshot, dict):
+        raise MonitorProgressError("legacy monitor context.policySnapshot must be a JSON object")
+    baseline = validate_baseline(record["targetBaseline"])
+    snapshot_hash = _text(record["snapshotHash"], "legacy monitor context.snapshotHash", limit=64)
+    if snapshot_hash != _snapshot_hash(baseline, policy_version, policy_snapshot):
+        raise MonitorProgressError("legacy monitor context snapshot hash mismatch")
+    static_context = {
+        "version": CONTEXT_VERSION,
+        "automationId": _automation_id(record["automationId"]),
+        "targetTitle": _text(record["targetTitle"], "legacy monitor context.targetTitle", limit=500),
+        "policyVersion": policy_version,
+        "policySnapshot": policy_snapshot,
+        "targetBaseline": baseline,
+        "snapshotHash": snapshot_hash,
+    }
+    return static_context, validate_runtime_state(record["runtimeState"])
 
 
 def validate_evaluation(value: Any) -> dict[str, Any] | None:
@@ -588,36 +635,85 @@ def init_context(root: Path, automation_id: str, payload: Any) -> dict[str, Any]
             "policySnapshot": POLICY_SNAPSHOT,
             "targetBaseline": baseline,
             "snapshotHash": _snapshot_hash(baseline),
+        }
+    )
+    runtime_store = validate_runtime_store(
+        {
+            "version": RUNTIME_VERSION,
+            "automationId": automation_id,
             "runtimeState": default_runtime_state(instance["observations"]),
         }
     )
     path = _context_path(root, automation_id)
     if path.exists():
-        current = validate_context(_read_json(path))
+        current = read_context(root, automation_id)["context"]
         immutable_fields = ("automationId", "targetTitle", "policyVersion", "policySnapshot", "targetBaseline", "snapshotHash")
         if any(current[field] != expected[field] for field in immutable_fields):
             raise MonitorProgressError("existing monitor context identity or snapshot does not match")
         return {"context": current, **instance}
+    if _runtime_path(root, automation_id).exists():
+        raise MonitorProgressError("monitor runtime exists without a static context")
+    _atomic_write(_runtime_path(root, automation_id), runtime_store)
     _atomic_write(path, expected)
-    return {"context": expected, **instance}
+    return {"context": {**expected, "runtimeState": runtime_store["runtimeState"]}, **instance}
 
 
 def read_context(root: Path, automation_id: str) -> dict[str, Any]:
     context = validate_context(_read_json(_context_path(root, automation_id)))
+    runtime_store = validate_runtime_store(_read_json(_runtime_path(root, automation_id)))
     instance = read_instance(root, automation_id)
+    if context["automationId"] != automation_id or runtime_store["automationId"] != automation_id:
+        raise MonitorProgressError("monitor context automation id mismatch")
+    return {"context": {**context, "runtimeState": runtime_store["runtimeState"]}, **instance}
+
+
+def read_static(root: Path, automation_id: str) -> dict[str, Any]:
+    context = validate_context(_read_json(_context_path(root, automation_id)))
+    monitor = read_instance(root, automation_id)["monitor"]
     if context["automationId"] != automation_id:
         raise MonitorProgressError("monitor context automation id mismatch")
-    return {"context": context, **instance}
+    return {
+        "staticContext": {
+            **context,
+            "monitorThreadId": monitor["monitorThreadId"],
+            "targetThreadId": monitor["targetThreadId"],
+            "packagePath": monitor["packagePath"],
+        }
+    }
+
+
+def read_cycle(root: Path, automation_id: str) -> dict[str, Any]:
+    context = validate_context(
+        _read_json(_context_path(root, automation_id)), require_current_policy=False
+    )
+    runtime_store = validate_runtime_store(_read_json(_runtime_path(root, automation_id)))
+    instance = read_instance(root, automation_id)
+    if context["automationId"] != automation_id or runtime_store["automationId"] != automation_id:
+        raise MonitorProgressError("monitor context automation id mismatch")
+    current = context["policyVersion"] == POLICY_VERSION and context["policySnapshot"] == POLICY_SNAPSHOT
+    return {
+        "staticRef": {
+            "contextVersion": context["version"],
+            "policyVersion": context["policyVersion"],
+            "snapshotHash": context["snapshotHash"],
+            "status": "current" if current else "reload-required",
+        },
+        "runtimeState": runtime_store["runtimeState"],
+        **instance,
+    }
 
 
 def refresh_context_policy(root: Path, automation_id: str) -> dict[str, Any]:
     path = _context_path(root, automation_id)
-    context = validate_context(_read_json(path), require_current_policy=False)
+    raw_context = _read_json(path)
+    if isinstance(raw_context, dict) and raw_context.get("version") == 1:
+        context, runtime_state = validate_legacy_context(raw_context)
+    else:
+        context = validate_context(raw_context, require_current_policy=False)
+        runtime_state = validate_runtime_store(_read_json(_runtime_path(root, automation_id)))["runtimeState"]
     instance = read_instance(root, automation_id)
     if context["automationId"] != automation_id:
         raise MonitorProgressError("monitor context automation id mismatch")
-    if context["policyVersion"] == POLICY_VERSION and context["policySnapshot"] == POLICY_SNAPSHOT:
-        return {"context": validate_context(context), **instance}
     updated = validate_context(
         {
             **context,
@@ -626,8 +722,12 @@ def refresh_context_policy(root: Path, automation_id: str) -> dict[str, Any]:
             "snapshotHash": _snapshot_hash(context["targetBaseline"]),
         }
     )
+    runtime_store = validate_runtime_store(
+        {"version": RUNTIME_VERSION, "automationId": automation_id, "runtimeState": runtime_state}
+    )
+    _atomic_write(_runtime_path(root, automation_id), runtime_store)
     _atomic_write(path, updated)
-    return {"context": updated, **instance}
+    return {"context": {**updated, "runtimeState": runtime_state}, **instance}
 
 
 def _updated_monitor(current: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
@@ -659,13 +759,18 @@ def write_cycle(root: Path, automation_id: str, payload: Any) -> dict[str, Any]:
         **validate_runtime_state(record["runtimeState"]),
         **_observation_runtime(current["observations"]),
     }
-    updated_context = validate_context(
-        {**current["context"], "runtimeState": runtime_state}
+    runtime_store = validate_runtime_store(
+        {"version": RUNTIME_VERSION, "automationId": automation_id, "runtimeState": runtime_state}
     )
     updated_monitor = _updated_monitor(current["monitor"], record)
-    _atomic_write(_context_path(root, automation_id), updated_context)
+    _atomic_write(_runtime_path(root, automation_id), runtime_store)
     _atomic_write(_instance_paths(root, automation_id)[0], updated_monitor)
-    return {"context": updated_context, "monitor": updated_monitor, "observations": current["observations"]}
+    static_context = validate_context(_read_json(_context_path(root, automation_id)))
+    return {
+        "context": {**static_context, "runtimeState": runtime_state},
+        "monitor": updated_monitor,
+        "observations": current["observations"],
+    }
 
 
 def _next_observation_id(next_number: int) -> str:
@@ -763,6 +868,7 @@ def schema_contract() -> dict[str, Any]:
     return {
         "protocolVersion": PROTOCOL_VERSION,
         "contextVersion": CONTEXT_VERSION,
+        "runtimeVersion": RUNTIME_VERSION,
         "policyVersion": POLICY_VERSION,
         "monitor": {"required": sorted(MONITOR_FIELDS), "levels": sorted(LEVELS)},
         "evaluation": {"required": sorted(EVALUATION_FIELDS), "maxImprovements": 3},
@@ -774,7 +880,8 @@ def schema_contract() -> dict[str, Any]:
             "responses": sorted(RESPONSES),
         },
         "writeEvaluationInput": {"required": sorted(WRITE_EVALUATION_FIELDS)},
-        "context": {"required": sorted(CONTEXT_FIELDS), "runtimeRequired": sorted(RUNTIME_FIELDS)},
+        "context": {"required": sorted(CONTEXT_FIELDS)},
+        "runtimeStore": {"required": sorted(RUNTIME_STORE_FIELDS), "runtimeRequired": sorted(RUNTIME_FIELDS)},
         "initContextInput": {"required": sorted(INIT_CONTEXT_FIELDS)},
         "writeCycleInput": {"required": sorted(WRITE_CYCLE_FIELDS)},
         "refreshContextPolicy": {"preserves": ["targetBaseline", "runtimeState", "monitor", "observations"]},
@@ -908,6 +1015,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _common_instance_arguments(read_context_parser)
 
+    read_static_parser = subparsers.add_parser(
+        "read-static", help="validate and print only the immutable monitor document"
+    )
+    _common_instance_arguments(read_static_parser)
+
+    read_cycle_parser = subparsers.add_parser(
+        "read-cycle", help="print dynamic heartbeat state plus a compact static reference"
+    )
+    _common_instance_arguments(read_cycle_parser)
+
     refresh_context_parser = subparsers.add_parser(
         "refresh-context-policy", help="replace only the validated static policy snapshot and hash"
     )
@@ -956,6 +1073,10 @@ def main(argv: list[str] | None = None) -> int:
                 result = init_context(root, automation_id, _stdin_json())
             elif args.command == "read-context":
                 result = read_context(root, automation_id)
+            elif args.command == "read-static":
+                result = read_static(root, automation_id)
+            elif args.command == "read-cycle":
+                result = read_cycle(root, automation_id)
             elif args.command == "refresh-context-policy":
                 result = refresh_context_policy(root, automation_id)
             elif args.command == "write-evaluation":

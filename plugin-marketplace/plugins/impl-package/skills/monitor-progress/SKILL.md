@@ -39,24 +39,26 @@ disable-model-invocation: true
 仅在用户确认后继续：
 
 1. 用 package 所属 Git 根目录作为 monitor root；只读一次 `decision.md` 与 `spec.md`，提炼 `goal`、`chosenDirection`、`coreInvariants`、`nonGoals`、`requiredEvidence`、`requiredReviews`、`manualAcceptance`、`ownerDecisionBoundary` 八个 TARGET_BASELINE 字段。Decision 裁决方向，Spec 校准行为与 acceptance。
-2. 调用 CLI `init` 创建 v2 monitor 与 observation sidecar，再调用 `init-context`，从 stdin 写入 `{"targetTitle":"...","targetBaseline":{...}}`。CLI 冻结 policy/baseline、生成 hash 和 runtime 初值；同 ID 同快照幂等复用，身份或 hash 冲突时停止。
-3. 读取 [`templates/automation-prompt.md`](templates/automation-prompt.md)，只替换 automation、monitor、target、workspace root 和 CLI path placeholder。`*_JSON` 替换为不带外围引号的 JSON-escaped 字符串内容；`MONITOR_CLI_PATH_JSON` 使用当前已加载插件中的 CLI 绝对路径。
-4. 同 ID automation 存在时先 view 并原地更新；不存在时创建。使用 heartbeat、destination thread、`targetThreadId=<当前 monitor>`、`RRULE:FREQ=MINUTELY;INTERVAL=<interval-minutes>`、ACTIVE，并保留既有 notification policy。
-5. 再次 view automation，调用 CLI `read-context`，并验证 prompt 无 placeholder、monitor/target/package/id、baseline hash 与完整 context 一致。
+2. 调用 CLI `init` 创建 monitor 与 observation sidecar，再调用 `init-context`，从 stdin 写入 `{"targetTitle":"...","targetBaseline":{...}}`。CLI 创建只含固定 policy/baseline/identity/hash 的 context 文档和独立 runtime sidecar；同 ID 同快照幂等复用，身份或 hash 冲突时停止。
+3. 调用一次 `read-static`，把固定文档加载进当前 monitor chat，并取得 snapshot hash。正常 heartbeat 不再读取这份正文。
+4. 读取 [`templates/automation-prompt.md`](templates/automation-prompt.md)，只替换 automation、workspace root、CLI path 和 snapshot hash placeholder。`*_JSON` 替换为不带外围引号的 JSON-escaped 字符串内容；`MONITOR_CLI_PATH_JSON` 使用当前已加载插件中的 CLI 绝对路径。
+5. 同 ID automation 存在时先 view 并原地更新；不存在时创建。使用 heartbeat、destination thread、`targetThreadId=<当前 monitor>`、`RRULE:FREQ=MINUTELY;INTERVAL=<interval-minutes>`、ACTIVE，并保留既有 notification policy。
+6. 再次 view automation，调用 CLI `read-cycle`，并验证 prompt 无 placeholder、staticRef hash/status、monitor/target/package/id 和 observations 一致，且输出不含 policy/baseline 正文。
 
-完成标准：automation 已 ACTIVE；prompt 不携带 baseline 或 mutable state，runtime 只通过 CLI `read-context` / `write-cycle` 读写。
+完成标准：automation 已 ACTIVE；prompt 不携带固定正文或 mutable state，稳态只通过 CLI `read-cycle` / `write-cycle` 读写。
 
 ## 边界
 
 - 页面分支不读取 Decision/Spec、不创建 sidecar；automation 分支仅在创建时读取一次 Decision/Spec。
 - 运行期按模板不再读取 Skill、Decision/Spec、package、repo 或 rollout，且不手写 sidecar JSON、不用 `automation_update` 保存 runtime。
-- 只有 context 中的 fallback 条件成立时才向 target 发送一次幂等续行；其余情况不干预，不创建或控制 worker，不运行目标代码、测试、数据库、浏览器或验证脚本。
+- 只有某条 confirmed observation 明确授权且当前事实符合其条件时，才向 target 发送一次幂等消息；其余情况不干预，不创建或控制 worker，不运行目标代码、测试、数据库、浏览器或验证脚本。
+- observation 只记录直接改变目标任务授权、执行、验收或 Owner 决策边界的纠偏；监控模板、CLI、dashboard、prompt 或 observation 机制的调试反馈不进入目标任务 sidecar。
 - 不修改 implementation package、Decision/Spec、Ticket、Evidence、Checkpoint、State 或 Gate。
 - 同一 ID 优先更新，避免重复 automation；不同任务使用独立 observation sidecar，避免共享写冲突。
 - 本 Skill 不迁移 v1 sidecar；当前运行中的旧 automation 由 Owner 另行一次性切换。
 
-静态 policy 更新时，先暂停对应 automation，再调用 CLI `refresh-context-policy`。该命令校验旧 snapshot hash，只替换 policy/version/hash，保留 baseline、runtime、monitor evaluation 和 observations；更新短 prompt 后再恢复 automation。
+静态 policy 更新时，先暂停对应 automation，再调用 CLI `refresh-context-policy`。该命令校验旧 snapshot hash，只替换固定 context，保留独立 runtime、monitor evaluation 和 observations；随后调用一次 `read-static`，把新 hash 写入短 prompt 后恢复 automation。
 
 ## 输出
 
-未启用 automation 时只报告页面 URL。启用后再报告 automation ID、monitor/target、频率、monitor/observation/context 路径、ACTIVE 与 CLI `read-context` 验证结果。
+未启用 automation 时只报告页面 URL。启用后再报告 automation ID、monitor/target、频率、monitor/observation/context/runtime 路径、ACTIVE 与 CLI `read-cycle` 验证结果。

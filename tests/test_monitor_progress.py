@@ -138,12 +138,30 @@ def test_context_is_idempotent_and_read_returns_complete_snapshot(tmp_path: Path
     result = module.read_context(root, "monitor-test")
 
     assert repeated == created
-    assert result["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V4"
+    assert result["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V5"
     assert len(result["context"]["snapshotHash"]) == 64
     assert result["context"]["runtimeState"]["lastFallbackTurnId"] is None
     assert result["context"]["policySnapshot"]["visibility"].startswith("read_thread")
     assert "fallback" not in result["context"]["policySnapshot"]
+    policy_text = json.dumps(result["context"]["policySnapshot"], ensure_ascii=False)
+    assert "工具调试，不写入目标任务 sidecar" in policy_text
+    assert "默认只写当前做到哪里" in policy_text
     assert result["observations"] == []
+    stored_context = json.loads(
+        (root / ".progress-record" / "codex-progress-dashboard" / "contexts" / "monitor-test.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert "runtimeState" not in stored_context
+
+    static = module.read_static(root, "monitor-test")
+    cycle = module.read_cycle(root, "monitor-test")
+    assert "runtimeState" not in static["staticContext"]
+    assert "policySnapshot" not in cycle["staticRef"]
+    assert "targetBaseline" not in cycle["staticRef"]
+    assert cycle["runtimeState"] == result["context"]["runtimeState"]
+    assert cycle["observations"] == []
+    assert cycle["staticRef"]["status"] == "current"
 
 
 def test_refresh_context_policy_preserves_dynamic_state(tmp_path: Path) -> None:
@@ -159,6 +177,7 @@ def test_refresh_context_policy_preserves_dynamic_state(tmp_path: Path) -> None:
     old_policy = {"fallback": {"localAuthorization": "旧任务级授权"}}
     stale = {
         **before["context"],
+        "version": 1,
         "policyVersion": "STATIC_MONITOR_POLICY_V3",
         "policySnapshot": old_policy,
         "snapshotHash": module._snapshot_hash(
@@ -168,13 +187,13 @@ def test_refresh_context_policy_preserves_dynamic_state(tmp_path: Path) -> None:
     context_path = root / ".progress-record" / "codex-progress-dashboard" / "contexts" / "monitor-test.json"
     context_path.write_text(json.dumps(stale), encoding="utf-8")
 
-    with pytest.raises(module.MonitorProgressError, match="does not match"):
+    with pytest.raises(module.MonitorProgressError, match="fields mismatch|does not match"):
         module.read_context(root, "monitor-test")
     refreshed = module.refresh_context_policy(root, "monitor-test")
     repeated = module.refresh_context_policy(root, "monitor-test")
 
     assert refreshed == repeated
-    assert refreshed["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V4"
+    assert refreshed["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V5"
     assert refreshed["context"]["targetBaseline"] == before["context"]["targetBaseline"]
     assert refreshed["context"]["runtimeState"] == before["context"]["runtimeState"]
     assert refreshed["monitor"] == before["monitor"]
@@ -205,6 +224,8 @@ def test_context_rejects_snapshot_conflict_unknown_field_and_hash_damage(tmp_pat
 
 def test_write_cycle_updates_runtime_and_evaluation(tmp_path: Path) -> None:
     module, root, _, _, created = make_context(tmp_path)
+    context_path = root / ".progress-record" / "codex-progress-dashboard" / "contexts" / "monitor-test.json"
+    fixed_before = context_path.read_bytes()
     runtime = created["context"]["runtimeState"]
     runtime = {
         **runtime,
@@ -218,13 +239,16 @@ def test_write_cycle_updates_runtime_and_evaluation(tmp_path: Path) -> None:
 
     assert updated["monitor"]["evaluation"]["next"] == "等待复核返回。"
     assert updated["context"]["runtimeState"]["lastFallbackTurnId"] == THREAD_B
+    assert context_path.read_bytes() == fixed_before
     assert module.read_context(root, "monitor-test") == updated
 
 
-def test_failed_context_replace_preserves_previous_cycle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_failed_runtime_replace_preserves_fixed_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     module, root, _, _, created = make_context(tmp_path)
     context_path = root / ".progress-record" / "codex-progress-dashboard" / "contexts" / "monitor-test.json"
-    before = context_path.read_text(encoding="utf-8")
+    runtime_path = root / ".progress-record" / "codex-progress-dashboard" / "runtime" / "monitor-test.json"
+    fixed_before = context_path.read_text(encoding="utf-8")
+    runtime_before = runtime_path.read_text(encoding="utf-8")
     monkeypatch.setattr(module.os, "replace", lambda source, target: (_ for _ in ()).throw(OSError("replace failed")))
 
     with pytest.raises(OSError, match="replace failed"):
@@ -234,8 +258,9 @@ def test_failed_context_replace_preserves_previous_cycle(tmp_path: Path, monkeyp
             {**evaluation_payload(), "runtimeState": created["context"]["runtimeState"]},
         )
 
-    assert context_path.read_text(encoding="utf-8") == before
-    assert not list(context_path.parent.glob("*.tmp"))
+    assert context_path.read_text(encoding="utf-8") == fixed_before
+    assert runtime_path.read_text(encoding="utf-8") == runtime_before
+    assert not list(runtime_path.parent.glob("*.tmp"))
 
 
 def test_failed_atomic_replace_preserves_previous_monitor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -280,6 +305,7 @@ def test_observation_create_and_update_keep_one_short_id(tmp_path: Path) -> None
     assert len(updated["observations"]) == 1
     assert updated["observation"]["id"] == "O001"
     assert updated["observation"]["sourceThreadId"] == THREAD_A
+    assert [item["id"] for item in module.read_cycle(root, "monitor-test")["observations"]] == ["O001"]
     with pytest.raises(module.MonitorProgressError, match="invalid observation transition"):
         module.put_observation(root, "monitor-test", {**candidate, "id": "O001"})
 
@@ -379,8 +405,9 @@ def test_schema_reports_v2_enums() -> None:
     schema = module.schema_contract()
 
     assert schema["protocolVersion"] == 2
-    assert schema["contextVersion"] == 1
-    assert schema["policyVersion"] == "STATIC_MONITOR_POLICY_V4"
+    assert schema["contextVersion"] == 2
+    assert schema["runtimeVersion"] == 1
+    assert schema["policyVersion"] == "STATIC_MONITOR_POLICY_V5"
     assert schema["monitor"]["levels"] == ["abnormal", "attention", "normal"]
     assert schema["observation"]["states"] == ["candidate", "confirmed"]
 
@@ -445,6 +472,43 @@ def test_cli_writes_evaluation_from_one_stdin_line(tmp_path: Path) -> None:
     assert read_context.returncode == 0, read_context.stderr
     assert json.loads(read_context.stdout)["context"]["targetBaseline"] == baseline()
 
+    read_static = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "read-static",
+            "--root",
+            str(root),
+            "--automation-id",
+            "monitor-test",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert read_static.returncode == 0, read_static.stderr
+    assert json.loads(read_static.stdout)["staticContext"]["targetBaseline"] == baseline()
+
+    read_cycle = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "read-cycle",
+            "--root",
+            str(root),
+            "--automation-id",
+            "monitor-test",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert read_cycle.returncode == 0, read_cycle.stderr
+    cycle_payload = json.loads(read_cycle.stdout)
+    assert cycle_payload["staticRef"]["status"] == "current"
+    assert "targetBaseline" not in cycle_payload
+    assert "policySnapshot" not in cycle_payload
+
     refresh_context = subprocess.run(
         [
             sys.executable,
@@ -460,7 +524,7 @@ def test_cli_writes_evaluation_from_one_stdin_line(tmp_path: Path) -> None:
         check=False,
     )
     assert refresh_context.returncode == 0, refresh_context.stderr
-    assert json.loads(refresh_context.stdout)["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V4"
+    assert json.loads(refresh_context.stdout)["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V5"
 
     write = subprocess.run(
         [

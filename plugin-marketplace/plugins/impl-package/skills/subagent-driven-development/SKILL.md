@@ -44,10 +44,10 @@ worker 返回后，caller 消费已有 evidence、diff 和验证结果，再决�
 | --- | --- | --- |
 | foundation dependency | 会绑定未稳定语义、数据形状或材料 seam 的下游实现 | 与结果无关且资源隔离的准备 |
 | acceptance dependency | 正式验收、evidence 采信和状态宣称 | 环境、fixture、权限、身份、数据与 test carrier 准备 |
-| resource dependency | 对同一可变资源的同时执行 | 可隔离副本上的工作 |
+| resource dependency | 对同一可变资源的同时执行 | 隔离 worktree 上的小 fix 或其他工作 |
 | authorization dependency | 未获授权的 mutation 或外部副作用 | 只读调查和不越权准备 |
 
-Acceptance 是结论点，不天然是 dispatch blocker。等待 worker 或 Gate 时做一次 `look-ahead`，只提前加入不绑定未稳定业务语义、结果可回收且有 cleanup owner 的一步准备。
+Acceptance 是结论点，不天然是 dispatch blocker。等待 worker、review、长时验证或 Gate 时做一次 `look-ahead`，只提前加入不绑定未稳定业务语义、结果可回收且有 cleanup owner 的一步准备。
 
 完成标准：当前不可开始、只不可验收和可提前准备的工作已经分开。
 
