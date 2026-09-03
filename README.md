@@ -13,7 +13,7 @@
 - `skills/` 保存独立安装的正式 skill，包括自建 skill、审查过的第三方 skill、以及本地工作流知识库
 - `plugin-marketplace/` 是独立的插件发布根；其中 `plugins/` 保存多 skill 套件，并分别提供 Codex 与 Claude manifest
 - `plugin-marketplace/plugins/impl-package/` 包含共享调查与委派入口、Claude review agents，以及投影到 Codex 全局 role 的安装脚本；`skills/` 仍保留可选的通用 `reviewer`
-- `agents/` 保存可安装到宿主的 subagent 定义，目前正式 subagent 是 `audit-agent-setup`
+- `agents/` 保存可安装到宿主的 subagent 定义，目前包括 `audit-agent-setup` 与 `grok-monitor`
 - `commands/` 保存宿主 command 提示文件；是否能用 `/...` 唤出取决于具体宿主
 - `scripts/link_skill.py` 把单个（或全部顶层）skill **link** 到 `~/.claude` / `~/.codex` / `~/.grok` 的 `skills/`（Windows junction，Unix/macOS symlink）
 - `registry/` 只记录第三方资产来源和重装方式，不记录宿主本机状态
@@ -276,8 +276,11 @@ agent-workbench/
 │   ├── .claude-plugin/         ← Claude marketplace
 │   └── plugins/impl-package/   ← 双 manifest、skills、Claude agents 与 Codex role 投影脚本
 ├── agents/                     ← subagents，安装到已选宿主的 agents/
-│   └── audit-agent-setup/
-│       └── agent.md
+│   ├── audit-agent-setup/
+│   │   └── agent.md
+│   └── grok-monitor/           ← caller-started Grok 进程的逐项终态监控
+│       ├── agent.md
+│       └── grok-monitor.toml
 ├── commands/                   ← 宿主 command 提示文件，安装到已选宿主的 commands/
 │   └── audit.md
 ├── scripts/                    ← 仓库级辅助脚本，如 list-visible-skills.ps1

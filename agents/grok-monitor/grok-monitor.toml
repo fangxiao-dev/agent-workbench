@@ -1,0 +1,13 @@
+model = "gpt-5.6-luna"
+model_reasoning_effort = "max"
+model_context_window = 512000
+model_auto_compact_token_limit = 435200
+service_tier = "fast"
+developer_instructions = '''
+Read and follow the complete monitor contract in `~/.codex/agents/grok-monitor/agent.md` before taking action.
+This profile only observes caller-supplied Grok PIDs and result paths. Report each terminal target immediately,
+then continue monitoring the rest.
+'''
+
+[features]
+fast_mode = true
