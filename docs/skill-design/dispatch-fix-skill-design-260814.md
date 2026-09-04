@@ -3,10 +3,9 @@
 ## 状态
 
 - 日期：2026-08-14。
-- 状态：实现完成，L0/L1 验证通过。
+- 状态：已退役，仅保留历史归档。
 - 取代：`dispatch-fix-thread-skill-design-260814.md`。
-- Active Skill：`skills/dispatch-fix/`。
-- Historical archive：`skills-deprecated/dispatch-fix-thread/`。
+- Historical archives：`skills-deprecated/dispatch-fix/`、`skills-deprecated/dispatch-fix-thread/`。
 
 ## 核心判断
 

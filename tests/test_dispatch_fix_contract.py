@@ -9,7 +9,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = ROOT / "skills" / "dispatch-fix"
+SKILL_ROOT = ROOT / "skills-deprecated" / "dispatch-fix"
 ARCHIVE_ROOT = ROOT / "skills-deprecated" / "dispatch-fix-thread"
 SCRIPT = SKILL_ROOT / "scripts" / "group_bookkeeping.py"
 
@@ -84,12 +84,13 @@ def write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data), encoding="utf-8")
 
 
-def test_active_skill_is_an_autonomous_count_router() -> None:
+def test_dispatch_fix_is_deprecated_and_has_no_active_entry() -> None:
     root = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
 
+    assert not (ROOT / "skills" / "dispatch-fix" / "SKILL.md").exists()
     assert "name: dispatch-fix" in root
-    assert "当一批已确认的业务代码 findings 适合委派修复时使用" in root
-    assert "用户也可以显式调用 `$dispatch-fix`" in root
+    assert "disable-model-invocation: true" in root
+    assert "Deprecated historical archive. Do not invoke." in root
     assert "1–3 个 findings" in root
     assert "4 个及以上" in root
     assert "references/simple.md" in root
@@ -104,7 +105,7 @@ def test_previous_skill_is_deprecated_and_has_no_active_entry() -> None:
 
     assert not (ROOT / "skills" / "dispatch-fix-thread" / "SKILL.md").exists()
     assert "deprecated: true" in archived
-    assert "Use `$dispatch-fix`" in archived
+    assert "Deprecated historical archive. Do not invoke." in archived
     assert (ARCHIVE_ROOT / "scripts" / "bookkeeping.py").exists()
     assert (ARCHIVE_ROOT / "references" / "fixer.md").exists()
     assert (ARCHIVE_ROOT / "references" / "parent-dispatch.md").exists()

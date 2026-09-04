@@ -230,20 +230,9 @@ def test_retired_provider_and_fixed_output_references_are_removed() -> None:
 def test_method_and_review_owner_are_consistent_across_updated_direct_callers() -> None:
     protocols = json.loads((PLUGIN / "scripts" / "impl_package_runtime" / "protocols.json").read_text(encoding="utf-8"))
     protocol_text = "\n".join(protocols.values())
-    dispatch_fix = "\n".join(
-        read(path)
-        for path in (
-            "skills/dispatch-fix/SKILL.md",
-            "skills/dispatch-fix/references/simple.md",
-            "skills/dispatch-fix/references/grouped.md",
-        )
-    )
 
     assert "fresh fixer" not in protocol_text
     assert "同 Topic work lane" in protocol_text
-    assert "fresh invocation" not in dispatch_fix
-    assert "worker=@luna-worker" not in dispatch_fix
-    assert "Topic" in dispatch_fix and "work lane" in dispatch_fix
 
 
 def test_parallel_admission_classifies_dependency_and_resources() -> None:

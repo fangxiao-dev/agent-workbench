@@ -10,7 +10,7 @@
 - Revalidate only the subset affected by an actual contract or plan change.
 - [已确认] terminal Gate 只冻结命令执行时的 Git HEAD，并清空 active checkpoint；历史 judgment 留在 frozen Execution Record，而不继续投影为 active。
 - [已确认] review topology 与 coverage 由 `do-review` 拥有；本 skill 只消费 terminal-final coverage 和 finding closure 结论。
-- [已确认] 只有 parent 已接受并归类的 Track C / Spec fidelity finding 才在 fix 前消费一次独立 source recheck；该机制不新增 Ticket/Attempt 状态，也不扩张 `dispatch-fix`。
+- [已确认] 只有 parent 已接受并归类的 Track C / Spec fidelity finding 才在 fix 前消费一次独立 source recheck；该机制不新增 Ticket/Attempt 状态，也不扩张修复调度边界。
 - [已确认] 长任务先写 durable state/ER/Gate，再输出最终叙述；Ticket-only 的 `INCOMPLETE` 恢复事实使用 active checkpoint/Attempt ER，旧 Task package 才使用 Task Handoff。
 - [已确认] `$dispatcher` 与 `/impl-package:subagent-driven-development` 是平级指导：前者面向上游 Topic-first admission、baby step 批次、dispatch/return/idle，后者面向下游 bounded worker 的 Topic/dependency/mode/execution-lane/lifecycle；本 Skill 选择业务动作并消费两者结果。
 - [已确认] Dispatcher idle、worker 局部 DONE 与 SDD review PASSED 是局部事实；本 Skill 依据 canonical Ticket/State/Evidence/Gate 判断业务 closure。

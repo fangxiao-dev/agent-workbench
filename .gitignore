@@ -12,6 +12,9 @@ skills-deprecated/*
 !skills-deprecated/dispatch-fix-thread/
 !skills-deprecated/dispatch-fix-thread/**
 skills-deprecated/dispatch-fix-thread/**/__pycache__/
+!skills-deprecated/dispatch-fix/
+!skills-deprecated/dispatch-fix/**
+skills-deprecated/dispatch-fix/**/__pycache__/
 skills/feishu-skills/feishu-base/.env
 skills/feishu-skills/feishu-minutes/.env
 skills/feishu-skills/feishu-mail/.env

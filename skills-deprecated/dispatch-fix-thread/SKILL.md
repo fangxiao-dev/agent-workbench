@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # Dispatch Fix Thread
 
-> Deprecated historical archive. Use `$dispatch-fix` for active repair delegation.
+> Deprecated historical archive. Do not invoke.
 
 为一次有界修复工作建立独立 fixer task。parent 保留需求与最终验收所有权；fixer 独立管理分组、隔离 worktree、worker、聚焦验收和 fix branch。
 

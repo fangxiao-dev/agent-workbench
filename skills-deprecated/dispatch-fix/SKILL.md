@@ -1,9 +1,12 @@
 ---
 name: dispatch-fix
-description: 当一批已确认的业务代码 findings 适合委派修复时使用；少量问题由一个 subagent 原地修复，四个以上按 topic 与共写风险分组到独立 worktrees。用户也可以显式调用 `$dispatch-fix`。
+description: Deprecated archive of the former dispatch-fix workflow. Do not invoke.
+disable-model-invocation: true
 ---
 
 # Dispatch Fix
+
+> Deprecated historical archive. Do not invoke.
 
 由当前 task 控制一组已确认 findings 的修复。先去重并只计算需要修改业务代码的 findings；文档修正、重复项和仍需调查的问题不进入数量门槛。
 
