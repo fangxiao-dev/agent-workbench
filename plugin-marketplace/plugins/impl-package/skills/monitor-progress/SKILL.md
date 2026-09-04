@@ -39,7 +39,7 @@ disable-model-invocation: true
 仅在用户确认后继续：
 
 1. 用 package 所属 Git 根目录作为 monitor root；只读一次 `decision.md` 与 `spec.md`，提炼 `goal`、`chosenDirection`、`coreInvariants`、`nonGoals`、`requiredEvidence`、`requiredReviews`、`manualAcceptance`、`ownerDecisionBoundary` 八个 TARGET_BASELINE 字段。Decision 裁决方向，Spec 校准行为与 acceptance。
-2. 调用 CLI `init` 创建 monitor 与 observation sidecar，再调用 `init-context`，从 stdin 写入 `{"targetTitle":"...","targetBaseline":{...}}`。CLI 创建只含固定 policy/baseline/identity/hash 的 context 文档和独立 runtime sidecar；同 ID 同快照幂等复用，身份或 hash 冲突时停止。
+2. 调用 CLI `init` 创建 monitor 与 observation sidecar，再调用 `init-context`，从 stdin 写入 `{"targetTitle":"...","targetBaseline":{...}}`。CLI 创建只含固定 policy/baseline/identity/hash 的 context 文档和独立 runtime sidecar；同 ID 同快照幂等复用，身份或 hash 冲突时停止。Renderer 固定绑定 `127.0.0.1:43187`，启动或复用后在 workspace sidecar 原子记录 PID、instance ID 和启动时间。
 3. 调用一次 `read-static`，把固定文档加载进当前 monitor chat并取得 snapshot hash；再调用 `seed-rollout-cursors`，把 monitor/target 的 canonical rollout cursor 初始化到当前完整行末尾，避免导入历史消息。正常 heartbeat 不再读取固定正文。
 4. 读取 [`templates/automation-prompt.md`](templates/automation-prompt.md)，只替换 automation、workspace root、CLI path 和 snapshot hash placeholder。`*_JSON` 替换为不带外围引号的 JSON-escaped 字符串内容；`MONITOR_CLI_PATH_JSON` 使用当前已加载插件中的 CLI 绝对路径。
 5. 同 ID automation 存在时先 view 并原地更新；不存在时创建。使用 heartbeat、destination thread、`targetThreadId=<当前 monitor>`、`RRULE:FREQ=MINUTELY;INTERVAL=<interval-minutes>`、ACTIVE，并保留既有 notification policy。
@@ -53,6 +53,8 @@ disable-model-invocation: true
 - 运行期按模板不再读取 Skill、Decision/Spec、package 或 repo；`read-cycle` 只通过 Codex 数据库登记的两个 canonical rollout 增量补偿 active-turn Owner 输入，不扫描子任务或任意 session。消息分类完成后才由 `write-cycle` 保存返回的下一 cursor，写回失败则下轮按 message ID 和 observation topic 幂等重放。
 - observation 原地更新前，按 source、turn 和时间顺序结合同批前序消息、当前完整 observations 与 task 状态，明确 antecedent、主体、动作和范围；局部对象不扩大为整个类别，指代仍不明确时不改 confirmed observation、不授权 target 消息。
 - `ownerInputs` 只证明消息已读取；`observationDiff` 区分 observation 的新增、原地更新和删除。diff 非空时下一次 automation 报告必须逐条写出变化类型、ID、topic 和完整当前内容，即使任务进度没有其它变化；`write-cycle` 成功后才确认，失败则下轮重放。
+- confirmed observation 要求 dry-run 时不向 target 发送消息。只有实际满足纠偏条件，且原因或拟发送全文不同于 runtime 的 `lastSimulationCorrection` 时，报告“模拟纠偏（未发送）”、触发原因和拟发送全文；同一内容持续存在时不重复，无触发时写回 null，解除后再出现可重新报告。
+- 每轮 `read-cycle` 以 workspace renderer sidecar 的 PID 加 `/api/health` instance ID 核对同一进程，不扫描进程列表。`rendererDiff` 变为 dead、missing 或 mismatch 时报告 PID、固定端口和页面不可用影响，并明确未自动重启；同一状态在 `write-cycle` 确认后不重复。Renderer 仅当前开机周期 detached 常驻，不使用 Docker、Task Scheduler 或 heartbeat 自动重启。
 - 只有某条 confirmed observation 明确授权且当前事实符合其条件时，才向 target 发送一次幂等消息；其余情况不干预，不创建或控制 worker，不运行目标代码、测试、数据库、浏览器或验证脚本。
 - observation 只记录直接改变目标任务授权、执行、验收或 Owner 决策边界的纠偏；监控模板、CLI、dashboard、prompt 或 observation 机制的调试反馈不进入目标任务 sidecar。
 - 不修改 implementation package、Decision/Spec、Ticket、Evidence、Checkpoint、State 或 Gate。

@@ -129,6 +129,7 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
         "ownerInputs",
         "nextRolloutCursors",
         "observationDiff",
+        "lastSimulationCorrection",
         "同批前序消息",
         "confirmed observation",
         "candidate 不授权动作",
@@ -143,6 +144,8 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
     assert "Grok" not in template
     assert "antecedent、主体、动作和范围" in skill
     assert "新增/更新/删除" in template
+    assert "模拟纠偏（未发送）" in template
+    assert "dry-run" in template
     rendered = (
         template.replace("{{AUTOMATION_ID}}", "impl-package-2026-08-31-bank-reconciliation-nm-settlement-groups")
         .replace(

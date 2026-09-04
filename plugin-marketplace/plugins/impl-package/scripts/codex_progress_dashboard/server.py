@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sqlite3
 import sys
 import threading
 import time
+import uuid
 from collections import Counter, deque
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -762,7 +764,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler contract
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
-            self._json({"rendererVersion": 2, "monitorProgressProtocol": monitor_progress.PROTOCOL_VERSION})
+            self._json(
+                {
+                    "rendererVersion": 2,
+                    "monitorProgressProtocol": monitor_progress.PROTOCOL_VERSION,
+                    "instanceId": self.server.instance_id,  # type: ignore[attr-defined]
+                    "pid": os.getpid(),
+                    "startedAt": self.server.started_at,  # type: ignore[attr-defined]
+                }
+            )
             return
         if parsed.path == "/":
             self._static("index.html", "text/html; charset=utf-8")
@@ -815,9 +825,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.close_connection = True
 
 
-def create_server(db_path: Path = DEFAULT_DB, port: int = PORT) -> ThreadingHTTPServer:
+def create_server(
+    db_path: Path = DEFAULT_DB,
+    port: int = PORT,
+    instance_id: str = "embedded",
+    started_at: str | None = None,
+) -> ThreadingHTTPServer:
     server = ThreadingHTTPServer((HOST, port), DashboardHandler)
     server.db_path = db_path.resolve()  # type: ignore[attr-defined]
+    server.instance_id = instance_id  # type: ignore[attr-defined]
+    server.started_at = started_at or datetime.now().astimezone().isoformat(timespec="seconds")  # type: ignore[attr-defined]
     return server
 
 
@@ -825,12 +842,14 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Local Codex implementation progress dashboard")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--port", type=int, default=PORT)
+    parser.add_argument("--instance-id", default=uuid.uuid4().hex)
+    parser.add_argument("--started-at", default=datetime.now().astimezone().isoformat(timespec="seconds"))
     args = parser.parse_args(argv)
     if not args.db.is_file():
         raise SystemExit(f"Codex state database not found: {args.db}")
     if not 1 <= args.port <= 65535:
         raise SystemExit("port must be between 1 and 65535")
-    server = create_server(args.db, args.port)
+    server = create_server(args.db, args.port, args.instance_id, args.started_at)
     print(f"Codex progress dashboard: http://{HOST}:{args.port}")
     print("Press Ctrl+C to stop.")
     try:

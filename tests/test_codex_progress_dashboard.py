@@ -545,7 +545,12 @@ def test_http_endpoints_serve_tasks_snapshot_and_strict_csp(tmp_path: Path) -> N
     base = f"http://127.0.0.1:{server.server_address[1]}"
     try:
         with urlopen(f"{base}/api/health") as response:
-            assert json.load(response) == {"rendererVersion": 2, "monitorProgressProtocol": 2}
+            health = json.load(response)
+            assert health["rendererVersion"] == 2
+            assert health["monitorProgressProtocol"] == 2
+            assert health["instanceId"] == "embedded"
+            assert isinstance(health["pid"], int)
+            assert health["startedAt"]
         with urlopen(f"{base}/api/tasks") as response:
             assert json.load(response)["tasks"][0]["id"] == THREAD_ID
         with urlopen(f"{base}/api/tasks/{THREAD_ID}/snapshot") as response:

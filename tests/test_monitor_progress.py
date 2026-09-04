@@ -171,9 +171,10 @@ def test_context_is_idempotent_and_read_returns_complete_snapshot(tmp_path: Path
     result = module.read_context(root, "monitor-test")
 
     assert repeated == created
-    assert result["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V8"
+    assert result["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V10"
     assert len(result["context"]["snapshotHash"]) == 64
     assert result["context"]["runtimeState"]["lastFallbackTurnId"] is None
+    assert result["context"]["runtimeState"]["lastSimulationCorrection"] is None
     assert result["context"]["policySnapshot"]["visibility"].startswith("read_thread")
     assert "fallback" not in result["context"]["policySnapshot"]
     policy_text = json.dumps(result["context"]["policySnapshot"], ensure_ascii=False)
@@ -253,7 +254,7 @@ def test_refresh_context_policy_preserves_dynamic_state(tmp_path: Path) -> None:
     repeated = module.refresh_context_policy(root, "monitor-test")
 
     assert refreshed == repeated
-    assert refreshed["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V8"
+    assert refreshed["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V10"
     assert refreshed["context"]["targetBaseline"] == before["context"]["targetBaseline"]
     assert refreshed["context"]["runtimeState"] == before["context"]["runtimeState"]
     assert refreshed["monitor"] == before["monitor"]
@@ -293,12 +294,17 @@ def test_write_cycle_updates_runtime_and_evaluation(tmp_path: Path) -> None:
         "lastTargetTurnId": THREAD_B,
         "lastFallbackTurnId": THREAD_B,
         "lastFallbackAt": "2026-09-02T20:02:00Z",
+        "lastSimulationCorrection": {
+            "reason": "目标因已授权的本地环境停住。",
+            "message": "请使用已有本地授权继续。",
+        },
     }
 
     updated = module.write_cycle(root, "monitor-test", {**evaluation_payload(), "runtimeState": runtime})
 
     assert updated["monitor"]["evaluation"]["next"] == "等待复核返回。"
     assert updated["context"]["runtimeState"]["lastFallbackTurnId"] == THREAD_B
+    assert updated["context"]["runtimeState"]["lastSimulationCorrection"]["message"] == "请使用已有本地授权继续。"
     assert context_path.read_bytes() == fixed_before
     assert module.read_context(root, "monitor-test") == updated
 
@@ -368,13 +374,49 @@ def test_seed_migrates_v2_runtime_without_replaying_existing_observations(tmp_pa
     legacy = json.loads(runtime_path.read_text(encoding="utf-8"))
     legacy["version"] = 2
     legacy["runtimeState"].pop("reportedObservationDigests")
+    legacy["runtimeState"].pop("lastSimulationCorrection")
+    legacy["runtimeState"].pop("rendererState")
     runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
 
     migrated = module.seed_rollout_cursors(root, "monitor-test", database)
 
-    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 3
+    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 5
     assert migrated["observationDiff"] == []
     assert list(migrated["runtimeState"]["reportedObservationDigests"]) == ["O001"]
+
+
+def test_seed_migrates_v3_runtime_with_empty_simulation_state(tmp_path: Path) -> None:
+    module, root, _, _, _ = make_context(tmp_path)
+    database, _ = make_codex_store(tmp_path)
+    runtime_path = root / ".progress-record" / "codex-progress-dashboard" / "runtime" / "monitor-test.json"
+    legacy = json.loads(runtime_path.read_text(encoding="utf-8"))
+    original_scan = legacy["runtimeState"]["sourceScanState"]
+    legacy["version"] = 3
+    legacy["runtimeState"].pop("lastSimulationCorrection")
+    legacy["runtimeState"].pop("rendererState")
+    runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
+
+    migrated = module.seed_rollout_cursors(root, "monitor-test", database)
+
+    assert migrated["runtimeState"]["lastSimulationCorrection"] is None
+    assert migrated["runtimeState"]["sourceScanState"]["monitor"]["lastSeenTurnId"] == original_scan["monitor"]["lastSeenTurnId"]
+    assert migrated["observations"] == []
+
+
+def test_seed_migrates_v4_runtime_and_binds_renderer_state(tmp_path: Path) -> None:
+    module, root, _, _, _ = make_context(tmp_path)
+    database, _ = make_codex_store(tmp_path)
+    runtime_path = root / ".progress-record" / "codex-progress-dashboard" / "runtime" / "monitor-test.json"
+    legacy = json.loads(runtime_path.read_text(encoding="utf-8"))
+    legacy["version"] = 4
+    legacy["runtimeState"].pop("rendererState")
+    runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
+
+    migrated = module.seed_rollout_cursors(root, "monitor-test", database)
+
+    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 5
+    assert migrated["runtimeState"]["rendererState"]["status"] == "missing"
+    assert migrated["rendererDiff"] is None
 
 
 def test_failed_runtime_replace_preserves_fixed_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -531,36 +573,111 @@ def test_open_reuses_v2_server_and_builds_deep_link(tmp_path: Path, monkeypatch:
     package.mkdir(parents=True)
     (root / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
     opened: list[str] = []
-    monkeypatch.setattr(module, "_health", lambda port: port == 43187)
+    health = {
+        "rendererVersion": 2,
+        "monitorProgressProtocol": 2,
+        "instanceId": "renderer-1",
+        "pid": 1234,
+        "startedAt": "2026-09-04T08:00:00Z",
+    }
+    monkeypatch.setattr(module, "_health_payload", lambda port: health)
+    monkeypatch.setattr(module, "_process_alive", lambda pid: pid == 1234)
     monkeypatch.setattr(module, "_target_packages", lambda port, target: [{"path": "docs/implementations/example"}])
     monkeypatch.setattr(module.webbrowser, "open", lambda url: opened.append(url) or True)
 
     result = module.open_dashboard(THREAD_B, package)
 
     assert result["reused"] is True
+    assert result["pid"] == 1234
     assert "task=01a061c1-2bd2-7982-a497-23ee67c5f62f" in result["url"]
     assert "package=docs%2Fimplementations%2Fexample" in result["url"]
     assert opened == [result["url"]]
 
 
-def test_open_uses_next_available_port_without_opening_browser(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_open_starts_only_fixed_port_without_opening_browser(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     module = load_module()
     root = tmp_path / "workspace"
     package = root / "docs" / "implementations" / "example"
     package.mkdir(parents=True)
     (root / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
     started: list[int] = []
-    monkeypatch.setattr(module, "_health", lambda port: False)
-    monkeypatch.setattr(module, "_port_available", lambda port: port == 43188)
-    monkeypatch.setattr(module, "_start_server", lambda port, db: started.append(port))
-    monkeypatch.setattr(module, "_wait_for_server", lambda port: None)
+    renderer = {
+        "version": 1,
+        "pid": 4321,
+        "port": 43187,
+        "instanceId": "renderer-2",
+        "startedAt": "2026-09-04T08:00:00Z",
+    }
+    monkeypatch.setattr(module, "_health_payload", lambda port: None)
+    monkeypatch.setattr(module, "_port_available", lambda port: port == 43187)
+    monkeypatch.setattr(module, "_start_server", lambda port, db: started.append(port) or renderer)
     monkeypatch.setattr(module, "_target_packages", lambda port, target: [{"path": "docs/implementations/example"}])
 
     result = module.open_dashboard(THREAD_B, package, no_browser=True)
 
-    assert result["port"] == 43188
+    assert result["port"] == 43187
+    assert result["pid"] == 4321
     assert result["reused"] is False
-    assert started == [43188]
+    assert started == [43187]
+
+
+def test_open_rejects_foreign_process_on_fixed_port(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    module = load_module()
+    root = tmp_path / "workspace"
+    package = root / "docs" / "implementations" / "example"
+    package.mkdir(parents=True)
+    (root / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+    monkeypatch.setattr(module, "_health_payload", lambda port: None)
+    monkeypatch.setattr(module, "_port_available", lambda port: False)
+
+    with pytest.raises(module.MonitorProgressError, match="43187 is occupied"):
+        module.open_dashboard(THREAD_B, package, no_browser=True)
+
+
+def test_renderer_status_and_diff_detect_death_and_ack_per_automation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module, root, package, _, _ = make_context(tmp_path)
+    module.init_instance(root, "monitor-two", THREAD_A, THREAD_B, package)
+    module.init_context(root, "monitor-two", {"targetTitle": "示例二", "targetBaseline": baseline()})
+    renderer = {
+        "version": 1,
+        "pid": 2468,
+        "port": 43187,
+        "instanceId": "renderer-shared",
+        "startedAt": "2026-09-04T08:00:00Z",
+    }
+    module._atomic_write(module._renderer_path(root), renderer)
+    health = {
+        "rendererVersion": 2,
+        "monitorProgressProtocol": 2,
+        "instanceId": "renderer-shared",
+        "pid": 2468,
+        "startedAt": "2026-09-04T08:00:00Z",
+    }
+    monkeypatch.setattr(module, "_process_alive", lambda pid: True)
+    monkeypatch.setattr(module, "_health_payload", lambda port: health)
+
+    first = module.read_cycle(root, "monitor-test")
+    second = module.read_cycle(root, "monitor-two")
+    assert first["rendererStatus"]["status"] == "alive"
+    assert first["rendererDiff"]["previous"]["status"] == "missing"
+    assert second["rendererDiff"] is not None
+    first["runtimeState"]["rendererState"] = first["rendererStatus"]
+    module.write_cycle(root, "monitor-test", {**evaluation_payload(), "runtimeState": first["runtimeState"]})
+    assert module.read_cycle(root, "monitor-test")["rendererDiff"] is None
+    assert module.read_cycle(root, "monitor-two")["rendererDiff"] is not None
+
+    health["instanceId"] = "reused-pid"
+    mismatch = module.read_cycle(root, "monitor-test")
+    assert mismatch["rendererStatus"]["status"] == "mismatch"
+    health["instanceId"] = "renderer-shared"
+    monkeypatch.setattr(module, "_process_alive", lambda pid: False)
+    dead = module.read_cycle(root, "monitor-test")
+    assert dead["rendererStatus"]["status"] == "dead"
+    assert dead["rendererDiff"]["current"]["pid"] == 2468
+    module._renderer_path(root).unlink()
+    assert module.read_cycle(root, "monitor-test")["rendererStatus"]["status"] == "missing"
 
 
 def test_schema_reports_v2_enums() -> None:
@@ -569,8 +686,8 @@ def test_schema_reports_v2_enums() -> None:
 
     assert schema["protocolVersion"] == 2
     assert schema["contextVersion"] == 2
-    assert schema["runtimeVersion"] == 3
-    assert schema["policyVersion"] == "STATIC_MONITOR_POLICY_V8"
+    assert schema["runtimeVersion"] == 5
+    assert schema["policyVersion"] == "STATIC_MONITOR_POLICY_V10"
     assert schema["monitor"]["levels"] == ["abnormal", "attention", "normal"]
     assert schema["observation"]["states"] == ["candidate", "confirmed"]
 
@@ -709,7 +826,7 @@ def test_cli_writes_evaluation_from_one_stdin_line(tmp_path: Path) -> None:
         check=False,
     )
     assert refresh_context.returncode == 0, refresh_context.stderr
-    assert json.loads(refresh_context.stdout)["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V8"
+    assert json.loads(refresh_context.stdout)["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V10"
 
     write = subprocess.run(
         [

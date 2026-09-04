@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,10 +23,9 @@ from urllib.request import urlopen
 
 PROTOCOL_VERSION = 2
 CONTEXT_VERSION = 2
-RUNTIME_VERSION = 3
-POLICY_VERSION = "STATIC_MONITOR_POLICY_V8"
+RUNTIME_VERSION = 5
+POLICY_VERSION = "STATIC_MONITOR_POLICY_V10"
 DEFAULT_PORT = 43187
-LAST_PORT = 43197
 THREAD_ID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
 AUTOMATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 MESSAGE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$")
@@ -113,8 +113,17 @@ RUNTIME_FIELDS = {
     "lastTargetTurnId",
     "lastFallbackTurnId",
     "lastFallbackAt",
+    "lastSimulationCorrection",
+    "rendererState",
 }
-V2_RUNTIME_FIELDS = RUNTIME_FIELDS - {"reportedObservationDigests"}
+V4_RUNTIME_FIELDS = RUNTIME_FIELDS - {"rendererState"}
+V3_RUNTIME_FIELDS = V4_RUNTIME_FIELDS - {"lastSimulationCorrection"}
+V2_RUNTIME_FIELDS = V3_RUNTIME_FIELDS - {"reportedObservationDigests"}
+SIMULATION_CORRECTION_FIELDS = {"reason", "message"}
+RENDERER_STATE_FIELDS = {"status", "pid", "port", "instanceId", "startedAt", "health"}
+RENDERER_STATUSES = {"alive", "dead", "missing", "mismatch"}
+RENDERER_STATE_VERSION = 1
+RENDERER_FILE_FIELDS = {"version", "pid", "port", "instanceId", "startedAt"}
 WRITE_CYCLE_FIELDS = WRITE_EVALUATION_FIELDS | {"runtimeState"}
 TARGET_STATUSES = {"active", "idle", "blocked", "terminal", "unknown"}
 BASELINE_STATUSES = {"current", "stale"}
@@ -142,6 +151,7 @@ POLICY_SNAPSHOT = {
     "intervention": [
         "默认不向 target 发送消息。只有 confirmed observation 明确授权某类消息且当前事实符合其条件时才可发送。",
         "candidate observation 不授权动作。发送时记录采用的 observation ID，并用 runtime 的 target turn ID 去重。",
+        "confirmed observation 要求 dry-run 时禁止向 target 发送；仅在触发条件成立且拟纠偏不同于 lastSimulationCorrection 时报告原因和拟发送全文，并标记未发送。",
     ],
     "levels": {
         "normal": "明确 terminal/closed 且无 finding、review、evidence 或 manual acceptance 缺口。",
@@ -151,10 +161,12 @@ POLICY_SNAPSHOT = {
     "communication": [
         "Owner 通知默认只写当前做到哪里、是否正常、接下来做什么、是否需要 Owner。",
         "observationDiff 非空时下一次 heartbeat 必须逐条报告变化类型、ID、topic 和完整当前内容；删除至少报告 ID。成功 write-cycle 后才视为已报告。",
+        "模拟纠偏只在新触发或原因/拟发送内容变化时报告；未触发时不显示空栏目，并将 lastSimulationCorrection 写为 null。",
+        "rendererDiff 与其它 diff 并列；renderer 从 alive 变为 dead、missing 或 mismatch 时报告 PID、43187 和影响，明确未自动重启，同一状态只报告一次。",
         "内部执行术语只有在它本身构成故障时才出现，并同时解释真实对象、动作和影响。",
         "监控器自身配置变化只在导致监控中断或需要 Owner 操作时通知。",
     ],
-    "boundaries": "只读两个 task；仅通过本 CLI 写监控 sidecar。除 confirmed observation 明确授权的窄范围消息外，不干预 target；不得修改任务包、代码、数据库、运行环境或控制 worker。",
+    "boundaries": "只读两个 task；renderer 仅绑定 127.0.0.1:43187，使用当前开机周期的 detached 进程，死亡只报告不重启；仅通过本 CLI 写监控 sidecar。除 confirmed observation 明确授权的窄范围消息外，不干预 target。",
 }
 
 
@@ -249,6 +261,10 @@ def _runtime_path(root: Path, automation_id: str) -> Path:
     return root / ".progress-record" / "codex-progress-dashboard" / "runtime" / f"{automation_id}.json"
 
 
+def _renderer_path(root: Path) -> Path:
+    return root / ".progress-record" / "codex-progress-dashboard" / "renderer.json"
+
+
 def _read_json(path: Path) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -288,6 +304,53 @@ def _optional_token(value: Any, label: str) -> str | None:
     if not isinstance(value, str) or not MESSAGE_ID_RE.fullmatch(value):
         raise MonitorProgressError(f"{label} must be a valid token or null")
     return value
+
+
+def _missing_renderer_state() -> dict[str, Any]:
+    return {
+        "status": "missing",
+        "pid": None,
+        "port": DEFAULT_PORT,
+        "instanceId": None,
+        "startedAt": None,
+        "health": False,
+    }
+
+
+def validate_renderer_state(value: Any) -> dict[str, Any]:
+    record = _expect_fields(value, RENDERER_STATE_FIELDS, "renderer state")
+    status = record["status"]
+    if status not in RENDERER_STATUSES:
+        raise MonitorProgressError(f"renderer state.status must be one of {sorted(RENDERER_STATUSES)}")
+    pid = record["pid"]
+    if pid is not None and (not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0):
+        raise MonitorProgressError("renderer state.pid must be a positive integer or null")
+    if record["port"] != DEFAULT_PORT:
+        raise MonitorProgressError(f"renderer state.port must be {DEFAULT_PORT}")
+    if not isinstance(record["health"], bool):
+        raise MonitorProgressError("renderer state.health must be boolean")
+    return {
+        "status": status,
+        "pid": pid,
+        "port": DEFAULT_PORT,
+        "instanceId": _optional_token(record["instanceId"], "renderer state.instanceId"),
+        "startedAt": _iso(record["startedAt"], "renderer state.startedAt", nullable=True),
+        "health": record["health"],
+    }
+
+
+def validate_renderer_file(value: Any) -> dict[str, Any]:
+    record = _expect_fields(value, RENDERER_FILE_FIELDS, "renderer file")
+    if record["version"] != RENDERER_STATE_VERSION:
+        raise MonitorProgressError(f"renderer file version must be {RENDERER_STATE_VERSION}")
+    state = validate_renderer_state(
+        {
+            **{key: record[key] for key in RENDERER_FILE_FIELDS - {"version"}},
+            "status": "alive",
+            "health": True,
+        }
+    )
+    return {"version": RENDERER_STATE_VERSION, **{key: state[key] for key in RENDERER_FILE_FIELDS - {"version"}}}
 
 
 def validate_baseline(value: Any) -> dict[str, Any]:
@@ -364,6 +427,8 @@ def default_runtime_state(observations: list[dict[str, Any]] | None = None) -> d
         "lastTargetTurnId": None,
         "lastFallbackTurnId": None,
         "lastFallbackAt": None,
+        "lastSimulationCorrection": None,
+        "rendererState": _missing_renderer_state(),
     }
 
 
@@ -418,6 +483,16 @@ def validate_runtime_state(value: Any) -> dict[str, Any]:
     target_status = record["lastTargetStatus"]
     if target_status not in TARGET_STATUSES:
         raise MonitorProgressError(f"runtime.lastTargetStatus must be one of {sorted(TARGET_STATUSES)}")
+    simulation = record["lastSimulationCorrection"]
+    if simulation is not None:
+        simulation = _expect_fields(
+            simulation, SIMULATION_CORRECTION_FIELDS, "runtime.lastSimulationCorrection"
+        )
+        simulation = {
+            "reason": _text(simulation["reason"], "runtime.lastSimulationCorrection.reason"),
+            "message": _text(simulation["message"], "runtime.lastSimulationCorrection.message"),
+        }
+    renderer_state = validate_renderer_state(record["rendererState"])
     return {
         "sourceScanState": validated_scans,
         "observationFingerprint": _text(record["observationFingerprint"], "runtime.observationFingerprint"),
@@ -436,14 +511,33 @@ def validate_runtime_state(value: Any) -> dict[str, Any]:
         "lastTargetTurnId": _optional_token(record["lastTargetTurnId"], "runtime.lastTargetTurnId"),
         "lastFallbackTurnId": _optional_token(record["lastFallbackTurnId"], "runtime.lastFallbackTurnId"),
         "lastFallbackAt": _iso(record["lastFallbackAt"], "runtime.lastFallbackAt", nullable=True),
+        "lastSimulationCorrection": simulation,
+        "rendererState": renderer_state,
     }
 
 
 def validate_v2_runtime_state(value: Any, observations: list[dict[str, Any]]) -> dict[str, Any]:
     record = _expect_fields(value, V2_RUNTIME_FIELDS, "v2 runtime state")
     return validate_runtime_state(
-        {**record, "reportedObservationDigests": _observation_digests(observations)}
+        {
+            **record,
+            "reportedObservationDigests": _observation_digests(observations),
+            "lastSimulationCorrection": None,
+            "rendererState": _missing_renderer_state(),
+        }
     )
+
+
+def validate_v3_runtime_state(value: Any) -> dict[str, Any]:
+    record = _expect_fields(value, V3_RUNTIME_FIELDS, "v3 runtime state")
+    return validate_runtime_state(
+        {**record, "lastSimulationCorrection": None, "rendererState": _missing_renderer_state()}
+    )
+
+
+def validate_v4_runtime_state(value: Any) -> dict[str, Any]:
+    record = _expect_fields(value, V4_RUNTIME_FIELDS, "v4 runtime state")
+    return validate_runtime_state({**record, "rendererState": _missing_renderer_state()})
 
 
 def validate_v1_runtime_state(value: Any, observations: list[dict[str, Any]]) -> dict[str, Any]:
@@ -463,13 +557,20 @@ def _runtime_state_for_migration(
         raise MonitorProgressError("monitor runtime store must be a JSON object")
     if value.get("version") == RUNTIME_VERSION:
         store = validate_runtime_store(value)
-    elif value.get("version") in {1, 2}:
+    elif value.get("version") in {1, 2, 3, 4}:
         record = _expect_fields(value, RUNTIME_STORE_FIELDS, "legacy monitor runtime store")
-        validator = validate_v1_runtime_state if value.get("version") == 1 else validate_v2_runtime_state
+        if value.get("version") == 1:
+            runtime_state = validate_v1_runtime_state(record["runtimeState"], observations)
+        elif value.get("version") == 2:
+            runtime_state = validate_v2_runtime_state(record["runtimeState"], observations)
+        elif value.get("version") == 3:
+            runtime_state = validate_v3_runtime_state(record["runtimeState"])
+        else:
+            runtime_state = validate_v4_runtime_state(record["runtimeState"])
         store = {
             "version": RUNTIME_VERSION,
             "automationId": _automation_id(record["automationId"]),
-            "runtimeState": validator(record["runtimeState"], observations),
+            "runtimeState": runtime_state,
         }
     else:
         raise MonitorProgressError("unsupported monitor runtime version")
@@ -917,6 +1018,7 @@ def seed_rollout_cursors(
         runtime_state["sourceScanState"][source].update(
             {"rolloutOffset": _complete_line_end(rollout), "rolloutPathHash": _rollout_hash(rollout)}
         )
+    runtime_state["rendererState"] = _renderer_status(root)
     store = validate_runtime_store(
         {"version": RUNTIME_VERSION, "automationId": automation_id, "runtimeState": runtime_state}
     )
@@ -940,6 +1042,8 @@ def read_cycle(
         "monitor": _owner_inputs(monitor["monitorThreadId"], runtime_store["runtimeState"]["sourceScanState"]["monitor"], db_path),
         "target": _owner_inputs(monitor["targetThreadId"], runtime_store["runtimeState"]["sourceScanState"]["target"], db_path),
     }
+    renderer_status = _renderer_status(root)
+    previous_renderer = runtime_store["runtimeState"]["rendererState"]
     return {
         "staticRef": {
             "contextVersion": context["version"],
@@ -950,6 +1054,12 @@ def read_cycle(
         "runtimeState": runtime_store["runtimeState"],
         "observationDiff": _observation_diff(
             instance["observations"], runtime_store["runtimeState"]["reportedObservationDigests"]
+        ),
+        "rendererStatus": renderer_status,
+        "rendererDiff": (
+            None
+            if renderer_status == previous_renderer
+            else {"previous": previous_renderer, "current": renderer_status}
         ),
         "ownerInputs": {source: value["inputs"] for source, value in source_inputs.items()},
         "nextRolloutCursors": {
@@ -1150,6 +1260,8 @@ def schema_contract() -> dict[str, Any]:
             "changes": ["created", "updated", "removed"],
             "acknowledgedBy": "write-cycle",
         },
+        "rendererStatus": {"required": sorted(RENDERER_STATE_FIELDS), "states": sorted(RENDERER_STATUSES)},
+        "rendererDiff": {"acknowledgedBy": "write-cycle runtimeState.rendererState"},
         "initContextInput": {"required": sorted(INIT_CONTEXT_FIELDS)},
         "writeCycleInput": {"required": sorted(WRITE_CYCLE_FIELDS)},
         "refreshContextPolicy": {"preserves": ["targetBaseline", "runtimeState", "monitor", "observations"]},
@@ -1163,13 +1275,73 @@ def _find_root(package_path: Path) -> Path:
     raise MonitorProgressError("package is not inside a Git workspace")
 
 
-def _health(port: int) -> bool:
+def _health_payload(port: int) -> dict[str, Any] | None:
     try:
         with urlopen(f"http://127.0.0.1:{port}/api/health", timeout=0.4) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (HTTPError, OSError, URLError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _health(port: int, instance_id: str | None = None) -> bool:
+    payload = _health_payload(port)
+    return bool(
+        payload
+        and payload.get("monitorProgressProtocol") == PROTOCOL_VERSION
+        and (instance_id is None or payload.get("instanceId") == instance_id)
+    )
+
+
+def _process_alive(pid: int) -> bool:
+    if os.name == "nt":
+        import ctypes
+
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+        if not handle:
+            return False
+        try:
+            exit_code = ctypes.c_ulong()
+            return bool(
+                ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
+                and exit_code.value == 259
+            )
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except OSError:
         return False
-    return payload.get("monitorProgressProtocol") == PROTOCOL_VERSION
+    return True
+
+
+def _renderer_status(root: Path) -> dict[str, Any]:
+    path = _renderer_path(root)
+    if not path.is_file():
+        return _missing_renderer_state()
+    try:
+        renderer = validate_renderer_file(_read_json(path))
+    except MonitorProgressError:
+        return {**_missing_renderer_state(), "status": "mismatch"}
+    base = {
+        "pid": renderer["pid"],
+        "port": DEFAULT_PORT,
+        "instanceId": renderer["instanceId"],
+        "startedAt": renderer["startedAt"],
+    }
+    if not _process_alive(renderer["pid"]):
+        return validate_renderer_state({**base, "status": "dead", "health": False})
+    payload = _health_payload(DEFAULT_PORT)
+    matches = bool(
+        payload
+        and payload.get("monitorProgressProtocol") == PROTOCOL_VERSION
+        and payload.get("pid") == renderer["pid"]
+        and payload.get("instanceId") == renderer["instanceId"]
+        and payload.get("startedAt") == renderer["startedAt"]
+    )
+    return validate_renderer_state(
+        {**base, "status": "alive" if matches else "mismatch", "health": matches}
+    )
 
 
 def _port_available(port: int) -> bool:
@@ -1177,9 +1349,20 @@ def _port_available(port: int) -> bool:
         return connection.connect_ex(("127.0.0.1", port)) != 0
 
 
-def _start_server(port: int, db_path: Path | None) -> None:
+def _start_server(port: int, db_path: Path | None) -> dict[str, Any]:
     server = Path(__file__).resolve().parent / "codex_progress_dashboard" / "server.py"
-    command = [sys.executable, str(server), "--port", str(port)]
+    instance_id = uuid.uuid4().hex
+    started_at = _now()
+    command = [
+        sys.executable,
+        str(server),
+        "--port",
+        str(port),
+        "--instance-id",
+        instance_id,
+        "--started-at",
+        started_at,
+    ]
     if db_path is not None:
         command.extend(["--db", str(db_path)])
     kwargs: dict[str, Any] = {
@@ -1192,13 +1375,27 @@ def _start_server(port: int, db_path: Path | None) -> None:
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
     else:
         kwargs["start_new_session"] = True
-    subprocess.Popen(command, **kwargs)
+    process = subprocess.Popen(command, **kwargs)
+    try:
+        _wait_for_server(port, instance_id)
+    except Exception:
+        process.terminate()
+        raise
+    return validate_renderer_file(
+        {
+            "version": RENDERER_STATE_VERSION,
+            "pid": process.pid,
+            "port": port,
+            "instanceId": instance_id,
+            "startedAt": started_at,
+        }
+    )
 
 
-def _wait_for_server(port: int) -> None:
+def _wait_for_server(port: int, instance_id: str) -> None:
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
-        if _health(port):
+        if _health(port, instance_id):
             return
         time.sleep(0.1)
     raise MonitorProgressError("progress dashboard did not become ready within 5 seconds")
@@ -1224,14 +1421,32 @@ def open_dashboard(target: str, package: Path, *, no_browser: bool = False, db_p
         raise MonitorProgressError(f"package is unavailable: {package_path}")
     root = _find_root(package_path)
     relative_package = package_path.relative_to(root).as_posix()
-    port = next((candidate for candidate in range(DEFAULT_PORT, LAST_PORT + 1) if _health(candidate)), None)
-    reused = port is not None
-    if port is None:
-        port = next((candidate for candidate in range(DEFAULT_PORT, LAST_PORT + 1) if _port_available(candidate)), None)
-        if port is None:
-            raise MonitorProgressError(f"no dashboard port available in {DEFAULT_PORT}-{LAST_PORT}")
-        _start_server(port, db_path)
-        _wait_for_server(port)
+    port = DEFAULT_PORT
+    payload = _health_payload(port)
+    reusable = bool(
+        payload
+        and payload.get("monitorProgressProtocol") == PROTOCOL_VERSION
+        and isinstance(payload.get("pid"), int)
+        and _process_alive(payload["pid"])
+        and isinstance(payload.get("instanceId"), str)
+        and isinstance(payload.get("startedAt"), str)
+    )
+    if reusable:
+        renderer = validate_renderer_file(
+            {
+                "version": RENDERER_STATE_VERSION,
+                "pid": payload["pid"],
+                "port": port,
+                "instanceId": payload["instanceId"],
+                "startedAt": payload["startedAt"],
+            }
+        )
+    else:
+        if not _port_available(port):
+            raise MonitorProgressError(f"dashboard port {port} is occupied by another process")
+        renderer = _start_server(port, db_path)
+    _atomic_write(_renderer_path(root), renderer)
+    reused = reusable
     packages = _target_packages(port, target_thread_id)
     if not any(item.get("path") == relative_package for item in packages if isinstance(item, dict)):
         raise MonitorProgressError("package does not belong to the target task workspace")
@@ -1239,7 +1454,14 @@ def open_dashboard(target: str, package: Path, *, no_browser: bool = False, db_p
     url = f"http://127.0.0.1:{port}/?{query}"
     if not no_browser and not webbrowser.open(url):
         raise MonitorProgressError("browser did not accept the dashboard URL")
-    return {"url": url, "port": port, "reused": reused, "targetThreadId": target_thread_id, "packagePath": str(package_path)}
+    return {
+        "url": url,
+        "port": port,
+        "pid": renderer["pid"],
+        "reused": reused,
+        "targetThreadId": target_thread_id,
+        "packagePath": str(package_path),
+    }
 
 
 def _stdin_json() -> Any:
