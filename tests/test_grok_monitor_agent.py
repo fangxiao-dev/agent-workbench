@@ -13,6 +13,7 @@ def test_grok_monitor_profile_is_luna_max_and_reports_each_target_independently(
     assert 'model_reasoning_effort = "max"' in config
     assert "[features]\nfast_mode = true" in config
     assert "Track every target independently" in contract
+    assert "every 60 seconds by default" in contract
     assert "collaboration.send_message" in contract
     assert "never wait for the whole set" in contract
     assert "Never start" in contract

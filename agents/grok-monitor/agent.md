@@ -25,8 +25,9 @@ existing observations.
 
 ## Monitor
 
-Track every target independently. Use short bounded polls so messages and new targets can be
-received between checks.
+Track every target independently. Poll active targets every 60 seconds by default so messages and
+new targets can be received between checks. Use a different interval only when the caller explicitly
+requests one.
 
 A target is terminal when either:
 
