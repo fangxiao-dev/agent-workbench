@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "monitor_progress.py"
 THREAD_A = "01a05c65-2eac-7d22-aba9-c2671b2cd03d"
 THREAD_B = "01a061c1-2bd2-7982-a497-23ee67c5f62f"
+THREAD_C = "01a06b92-3e4e-7b62-b921-da7d3493230b"
 
 
 def load_module():
@@ -83,10 +84,15 @@ def make_codex_store(tmp_path: Path) -> tuple[Path, dict[str, Path]]:
         path.write_text("", encoding="utf-8")
     database = codex / "state_5.sqlite"
     with sqlite3.connect(database) as connection:
-        connection.execute("CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT, archived INTEGER)")
+        connection.execute(
+            "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT, archived INTEGER, title TEXT, name TEXT)"
+        )
         connection.executemany(
-            "INSERT INTO threads (id, rollout_path, archived) VALUES (?, ?, 0)",
-            [(thread_id, str(path)) for thread_id, path in rollouts.items()],
+            "INSERT INTO threads (id, rollout_path, archived, title, name) VALUES (?, ?, 0, ?, ?)",
+            [
+                (thread_id, str(path), "Preview", f"Task {thread_id[-4:]}")
+                for thread_id, path in rollouts.items()
+            ],
         )
     return database, rollouts
 
@@ -104,6 +110,21 @@ def rollout_user(message_id: str, turn_id: str, text: str, *, newline: bool = Tr
         },
     }
     return json.dumps(record, ensure_ascii=False).encode("utf-8") + (b"\n" if newline else b"")
+
+
+def rollout_assistant(message_id: str, turn_id: str, text: str) -> bytes:
+    record = {
+        "timestamp": "2026-09-03T07:39:04.657Z",
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "assistant",
+            "id": message_id,
+            "content": [{"type": "output_text", "text": text}],
+            "internal_chat_message_metadata_passthrough": {"turn_id": turn_id},
+        },
+    }
+    return json.dumps(record, ensure_ascii=False).encode("utf-8") + b"\n"
 
 
 def observation(
@@ -171,7 +192,7 @@ def test_context_is_idempotent_and_read_returns_complete_snapshot(tmp_path: Path
     result = module.read_context(root, "monitor-test")
 
     assert repeated == created
-    assert result["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V10"
+    assert result["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V11"
     assert len(result["context"]["snapshotHash"]) == 64
     assert result["context"]["runtimeState"]["lastFallbackTurnId"] is None
     assert result["context"]["runtimeState"]["lastSimulationCorrection"] is None
@@ -186,6 +207,8 @@ def test_context_is_idempotent_and_read_returns_complete_snapshot(tmp_path: Path
     assert "observationDiff 非空时下一次 heartbeat 必须逐条报告" in policy_text
     assert "Grok" not in policy_text
     assert "默认只写当前做到哪里" in policy_text
+    assert "evaluation 的 progress、improvements、next 和 owner 只描述 target" in policy_text
+    assert "独立监控健康告警" in policy_text
     assert result["observations"] == []
     stored_context = json.loads(
         (root / ".progress-record" / "codex-progress-dashboard" / "contexts" / "monitor-test.json").read_text(
@@ -254,11 +277,25 @@ def test_refresh_context_policy_preserves_dynamic_state(tmp_path: Path) -> None:
     repeated = module.refresh_context_policy(root, "monitor-test")
 
     assert refreshed == repeated
-    assert refreshed["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V10"
+    assert refreshed["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V11"
     assert refreshed["context"]["targetBaseline"] == before["context"]["targetBaseline"]
     assert refreshed["context"]["runtimeState"] == before["context"]["runtimeState"]
     assert refreshed["monitor"] == before["monitor"]
     assert [item["id"] for item in refreshed["observations"]] == ["O001"]
+
+
+def test_refresh_context_policy_migrates_v5_runtime(tmp_path: Path) -> None:
+    module, root, _, _, _ = make_context(tmp_path)
+    runtime_path = root / ".progress-record" / "codex-progress-dashboard" / "runtime" / "monitor-test.json"
+    legacy = json.loads(runtime_path.read_text(encoding="utf-8"))
+    legacy["version"] = 5
+    legacy["runtimeState"].pop("monitorHealthState")
+    runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
+
+    refreshed = module.refresh_context_policy(root, "monitor-test")
+
+    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 6
+    assert refreshed["context"]["runtimeState"]["monitorHealthState"] is None
 
 
 def test_context_rejects_snapshot_conflict_unknown_field_and_hash_damage(tmp_path: Path) -> None:
@@ -366,6 +403,149 @@ def test_rollout_partial_line_and_reset_are_explicit(tmp_path: Path) -> None:
     assert switched_cycle["ownerInputs"]["target"][0]["messageId"] == "msg-switched"
 
 
+def test_read_cycle_reports_explicit_handoff_as_monitor_health_diff(tmp_path: Path) -> None:
+    module, root, _, _, _ = make_context(tmp_path)
+    database, rollouts = make_codex_store(tmp_path)
+    module.seed_rollout_cursors(root, "monitor-test", database)
+    with rollouts[THREAD_B].open("ab") as stream:
+        stream.write(
+            rollout_assistant(
+                "msg-handoff",
+                THREAD_B,
+                f'继续由新任务处理。\n\n::created-thread{{threadId="{THREAD_C}"}}',
+            )
+        )
+
+    cycle = module.read_cycle(root, "monitor-test", database)
+
+    assert cycle["monitorHealthStatus"] == {
+        "status": "retarget-required",
+        "targetThreadId": THREAD_B,
+        "successorThreadId": THREAD_C,
+        "rendererStatus": "missing",
+    }
+    assert cycle["monitorHealthDiff"]["current"] == cycle["monitorHealthStatus"]
+
+    runtime = cycle["runtimeState"]
+    for source, cursor in cycle["nextRolloutCursors"].items():
+        runtime["sourceScanState"][source].update(
+            {"rolloutOffset": cursor["rolloutOffset"], "rolloutPathHash": cursor["rolloutPathHash"]}
+        )
+    runtime["rendererState"] = cycle["rendererStatus"]
+    runtime["monitorHealthState"] = cycle["monitorHealthStatus"]
+    module.write_cycle(root, "monitor-test", {**evaluation_payload(), "runtimeState": runtime})
+
+    repeated = module.read_cycle(root, "monitor-test", database)
+    assert repeated["monitorHealthStatus"]["status"] == "retarget-required"
+    assert repeated["monitorHealthDiff"] is None
+
+
+def test_read_cycle_reports_unavailable_target_without_failing(tmp_path: Path) -> None:
+    module, root, _, _, _ = make_context(tmp_path)
+    database, rollouts = make_codex_store(tmp_path)
+    module.seed_rollout_cursors(root, "monitor-test", database)
+    rollouts[THREAD_B].unlink()
+
+    cycle = module.read_cycle(root, "monitor-test", database)
+
+    assert cycle["ownerInputs"]["target"] == []
+    assert cycle["nextRolloutCursors"]["target"]["status"] == "unavailable"
+    assert cycle["monitorHealthStatus"]["status"] == "target-unavailable"
+
+
+def test_retarget_seeds_successor_cursor_and_preserves_state(tmp_path: Path) -> None:
+    module, root, _, _, created = make_context(tmp_path)
+    database, rollouts = make_codex_store(tmp_path)
+    successor = rollouts[THREAD_B].with_name("successor.jsonl")
+    successor.write_bytes(rollout_user("msg-existing", THREAD_C, "历史消息不应重放"))
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO threads (id, rollout_path, archived, title, name) VALUES (?, ?, 0, ?, ?)",
+            (THREAD_C, str(successor), "Successor preview", "Successor task"),
+        )
+    module.put_observation(root, "monitor-test", observation("confirmed", "2026-09-02T20:01:00Z"))
+    module.write_cycle(root, "monitor-test", {**evaluation_payload(), "runtimeState": created["context"]["runtimeState"]})
+    before = module.read_context(root, "monitor-test")
+
+    result = module.retarget(root, "monitor-test", THREAD_C, database)
+    cycle = module.read_cycle(root, "monitor-test", database)
+
+    assert result["retargeted"] is True
+    assert result["monitor"]["targetThreadId"] == THREAD_C
+    assert result["context"]["targetTitle"] == "Successor task"
+    assert result["monitor"]["evaluation"] == before["monitor"]["evaluation"]
+    assert result["observations"] == before["observations"]
+    assert cycle["ownerInputs"]["target"] == []
+    assert cycle["monitorHealthStatus"]["status"] == "renderer-abnormal"
+    assert cycle["monitorHealthDiff"] is None
+    assert module.retarget(root, "monitor-test", THREAD_C, database)["retargeted"] is False
+
+    with pytest.raises(module.MonitorProgressError, match="retarget command"):
+        module.write_evaluation(root, "monitor-test", {**evaluation_payload(), "targetThreadId": THREAD_B})
+
+
+def test_retarget_rolls_back_when_second_replace_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module, root, _, _, _ = make_context(tmp_path)
+    database, rollouts = make_codex_store(tmp_path)
+    successor = rollouts[THREAD_B].with_name("successor.jsonl")
+    successor.write_text("", encoding="utf-8")
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO threads (id, rollout_path, archived, title, name) VALUES (?, ?, 0, ?, ?)",
+            (THREAD_C, str(successor), "Successor preview", "Successor task"),
+        )
+    monitor_path = root / ".progress-record" / "codex-progress-dashboard" / "monitors" / "monitor-test.json"
+    runtime_path = root / ".progress-record" / "codex-progress-dashboard" / "runtime" / "monitor-test.json"
+    monitor_before = monitor_path.read_bytes()
+    runtime_before = runtime_path.read_bytes()
+    original_write = module._atomic_write
+    calls = 0
+
+    def fail_second(path: Path, value: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("replace failed")
+        original_write(path, value)
+
+    monkeypatch.setattr(module, "_atomic_write", fail_second)
+
+    with pytest.raises(OSError, match="replace failed"):
+        module.retarget(root, "monitor-test", THREAD_C, database)
+
+    assert monitor_path.read_bytes() == monitor_before
+    assert runtime_path.read_bytes() == runtime_before
+
+
+def test_rebind_monitor_seeds_new_cursor_and_preserves_target_state(tmp_path: Path) -> None:
+    module, root, _, _, created = make_context(tmp_path)
+    database, rollouts = make_codex_store(tmp_path)
+    new_monitor = rollouts[THREAD_B].with_name("new-monitor.jsonl")
+    new_monitor.write_bytes(rollout_user("msg-existing", THREAD_C, "历史监控消息不应重放"))
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO threads (id, rollout_path, archived, title, name) VALUES (?, ?, 0, ?, ?)",
+            (THREAD_C, str(new_monitor), "Monitor preview", "New monitor"),
+        )
+    module.put_observation(root, "monitor-test", observation("confirmed", "2026-09-02T20:01:00Z"))
+    module.write_cycle(root, "monitor-test", {**evaluation_payload(), "runtimeState": created["context"]["runtimeState"]})
+    before = module.read_context(root, "monitor-test")
+
+    result = module.rebind_monitor(root, "monitor-test", THREAD_C, database)
+    cycle = module.read_cycle(root, "monitor-test", database)
+
+    assert result["rebound"] is True
+    assert result["monitor"]["monitorThreadId"] == THREAD_C
+    assert result["monitor"]["targetThreadId"] == THREAD_B
+    assert result["monitor"]["evaluation"] == before["monitor"]["evaluation"]
+    assert result["observations"] == before["observations"]
+    assert cycle["ownerInputs"]["monitor"] == []
+    assert result["context"]["runtimeState"]["sourceScanState"]["target"] == before["context"]["runtimeState"]["sourceScanState"]["target"]
+    assert module.rebind_monitor(root, "monitor-test", THREAD_C, database)["rebound"] is False
+
+
 def test_seed_migrates_v2_runtime_without_replaying_existing_observations(tmp_path: Path) -> None:
     module, root, _, _, _ = make_context(tmp_path)
     module.put_observation(root, "monitor-test", observation())
@@ -376,11 +556,12 @@ def test_seed_migrates_v2_runtime_without_replaying_existing_observations(tmp_pa
     legacy["runtimeState"].pop("reportedObservationDigests")
     legacy["runtimeState"].pop("lastSimulationCorrection")
     legacy["runtimeState"].pop("rendererState")
+    legacy["runtimeState"].pop("monitorHealthState")
     runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
 
     migrated = module.seed_rollout_cursors(root, "monitor-test", database)
 
-    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 5
+    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 6
     assert migrated["observationDiff"] == []
     assert list(migrated["runtimeState"]["reportedObservationDigests"]) == ["O001"]
 
@@ -394,6 +575,7 @@ def test_seed_migrates_v3_runtime_with_empty_simulation_state(tmp_path: Path) ->
     legacy["version"] = 3
     legacy["runtimeState"].pop("lastSimulationCorrection")
     legacy["runtimeState"].pop("rendererState")
+    legacy["runtimeState"].pop("monitorHealthState")
     runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
 
     migrated = module.seed_rollout_cursors(root, "monitor-test", database)
@@ -410,13 +592,30 @@ def test_seed_migrates_v4_runtime_and_binds_renderer_state(tmp_path: Path) -> No
     legacy = json.loads(runtime_path.read_text(encoding="utf-8"))
     legacy["version"] = 4
     legacy["runtimeState"].pop("rendererState")
+    legacy["runtimeState"].pop("monitorHealthState")
     runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
 
     migrated = module.seed_rollout_cursors(root, "monitor-test", database)
 
-    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 5
+    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 6
     assert migrated["runtimeState"]["rendererState"]["status"] == "missing"
     assert migrated["rendererDiff"] is None
+
+
+def test_seed_migrates_v5_runtime_with_empty_monitor_health(tmp_path: Path) -> None:
+    module, root, _, _, _ = make_context(tmp_path)
+    database, _ = make_codex_store(tmp_path)
+    runtime_path = root / ".progress-record" / "codex-progress-dashboard" / "runtime" / "monitor-test.json"
+    legacy = json.loads(runtime_path.read_text(encoding="utf-8"))
+    legacy["version"] = 5
+    legacy["runtimeState"].pop("monitorHealthState")
+    runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
+
+    migrated = module.seed_rollout_cursors(root, "monitor-test", database)
+
+    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 6
+    assert migrated["runtimeState"]["monitorHealthState"] == migrated["monitorHealthStatus"]
+    assert migrated["monitorHealthDiff"] is None
 
 
 def test_failed_runtime_replace_preserves_fixed_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -537,7 +736,7 @@ def test_removed_ids_are_not_reused(tmp_path: Path) -> None:
     assert module._next_observation_id(1000) == "O1000"
 
 
-def test_latest_for_package_returns_latest_monitor_and_five_confirmed(tmp_path: Path) -> None:
+def test_latest_for_package_returns_latest_monitor_and_all_confirmed(tmp_path: Path) -> None:
     module, root, package, _ = make_instance(tmp_path)
     module.write_evaluation(root, "monitor-test", evaluation_payload())
     for index in range(6):
@@ -563,6 +762,7 @@ def test_latest_for_package_returns_latest_monitor_and_five_confirmed(tmp_path: 
         "观察 3",
         "观察 2",
         "观察 1",
+        "观察 0",
     ]
 
 
@@ -686,10 +886,18 @@ def test_schema_reports_v2_enums() -> None:
 
     assert schema["protocolVersion"] == 2
     assert schema["contextVersion"] == 2
-    assert schema["runtimeVersion"] == 5
-    assert schema["policyVersion"] == "STATIC_MONITOR_POLICY_V10"
+    assert schema["runtimeVersion"] == 6
+    assert schema["policyVersion"] == "STATIC_MONITOR_POLICY_V11"
     assert schema["monitor"]["levels"] == ["abnormal", "attention", "normal"]
     assert schema["observation"]["states"] == ["candidate", "confirmed"]
+    assert schema["monitorHealthStatus"]["states"] == [
+        "healthy",
+        "renderer-abnormal",
+        "retarget-required",
+        "target-unavailable",
+    ]
+    assert schema["retarget"]["seedsTargetCursorAt"] == "current complete-line end"
+    assert schema["rebindMonitor"]["seedsMonitorCursorAt"] == "current complete-line end"
 
 
 def test_cli_writes_evaluation_from_one_stdin_line(tmp_path: Path) -> None:
@@ -826,7 +1034,7 @@ def test_cli_writes_evaluation_from_one_stdin_line(tmp_path: Path) -> None:
         check=False,
     )
     assert refresh_context.returncode == 0, refresh_context.stderr
-    assert json.loads(refresh_context.stdout)["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V10"
+    assert json.loads(refresh_context.stdout)["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V11"
 
     write = subprocess.run(
         [

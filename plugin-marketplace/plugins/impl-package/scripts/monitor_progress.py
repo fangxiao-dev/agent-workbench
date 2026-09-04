@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -23,12 +24,13 @@ from urllib.request import urlopen
 
 PROTOCOL_VERSION = 2
 CONTEXT_VERSION = 2
-RUNTIME_VERSION = 5
-POLICY_VERSION = "STATIC_MONITOR_POLICY_V10"
+RUNTIME_VERSION = 6
+POLICY_VERSION = "STATIC_MONITOR_POLICY_V11"
 DEFAULT_PORT = 43187
 THREAD_ID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
 AUTOMATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 MESSAGE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$")
+CREATED_THREAD_RE = re.compile(r'::created-thread\{threadId="([0-9a-f-]{36})"\}', re.I)
 LEVELS = {"normal", "attention", "abnormal"}
 SCOPES = {"session", "task"}
 OBSERVATION_STATES = {"candidate", "confirmed"}
@@ -115,13 +117,17 @@ RUNTIME_FIELDS = {
     "lastFallbackAt",
     "lastSimulationCorrection",
     "rendererState",
+    "monitorHealthState",
 }
-V4_RUNTIME_FIELDS = RUNTIME_FIELDS - {"rendererState"}
+V5_RUNTIME_FIELDS = RUNTIME_FIELDS - {"monitorHealthState"}
+V4_RUNTIME_FIELDS = V5_RUNTIME_FIELDS - {"rendererState"}
 V3_RUNTIME_FIELDS = V4_RUNTIME_FIELDS - {"lastSimulationCorrection"}
 V2_RUNTIME_FIELDS = V3_RUNTIME_FIELDS - {"reportedObservationDigests"}
 SIMULATION_CORRECTION_FIELDS = {"reason", "message"}
 RENDERER_STATE_FIELDS = {"status", "pid", "port", "instanceId", "startedAt", "health"}
 RENDERER_STATUSES = {"alive", "dead", "missing", "mismatch"}
+MONITOR_HEALTH_FIELDS = {"status", "targetThreadId", "successorThreadId", "rendererStatus"}
+MONITOR_HEALTH_STATUSES = {"healthy", "target-unavailable", "retarget-required", "renderer-abnormal"}
 RENDERER_STATE_VERSION = 1
 RENDERER_FILE_FIELDS = {"version", "pid", "port", "instanceId", "startedAt"}
 WRITE_CYCLE_FIELDS = WRITE_EVALUATION_FIELDS | {"runtimeState"}
@@ -136,6 +142,8 @@ POLICY_SNAPSHOT = {
         "targetBaseline 是冻结的任务合同；confirmed observations 是当前 Owner 指令。两者冲突时报告，不静默覆盖。",
         "按最新 task 状态评价进展、baby step、worker lifecycle、review、evidence、manual acceptance、方向与 Owner 分叉。",
         "缺失信息不推断为完成；worker return、focused tests 或局部提交不自动等于 Ticket、Gate 或 package closure。",
+        "evaluation 的 progress、improvements、next 和 owner 只描述 target 的状态、问题、下一步与 Owner 决策；monitor、renderer、sidecar、automation 或 canonical target 的维护动作只进入独立监控健康告警。",
+        "target 没有可改进项时 improvements 为空数组；next 仍写 target 当前应执行的下一步。",
     ],
     "observations": [
         "只有直接改变目标任务授权、执行方式、验收要求或 Owner 决策边界的纠偏才是本任务 observation。",
@@ -162,9 +170,9 @@ POLICY_SNAPSHOT = {
         "Owner 通知默认只写当前做到哪里、是否正常、接下来做什么、是否需要 Owner。",
         "observationDiff 非空时下一次 heartbeat 必须逐条报告变化类型、ID、topic 和完整当前内容；删除至少报告 ID。成功 write-cycle 后才视为已报告。",
         "模拟纠偏只在新触发或原因/拟发送内容变化时报告；未触发时不显示空栏目，并将 lastSimulationCorrection 写为 null。",
-        "rendererDiff 与其它 diff 并列；renderer 从 alive 变为 dead、missing 或 mismatch 时报告 PID、43187 和影响，明确未自动重启，同一状态只报告一次。",
+        "monitorHealthDiff 与其它 diff 并列；target unavailable、retarget required 或 renderer abnormal 时单独报告。renderer 异常从 rendererStatus 读取 PID、43187 和影响并明确未自动重启，同一状态只报告一次。",
         "内部执行术语只有在它本身构成故障时才出现，并同时解释真实对象、动作和影响。",
-        "监控器自身配置变化只在导致监控中断或需要 Owner 操作时通知。",
+        "监控器自身配置变化只在导致监控中断或需要 Owner 操作时作为独立监控健康告警通知，不写入 target evaluation。",
     ],
     "boundaries": "只读两个 task；renderer 仅绑定 127.0.0.1:43187，使用当前开机周期的 detached 进程，死亡只报告不重启；仅通过本 CLI 写监控 sidecar。除 confirmed observation 明确授权的窄范围消息外，不干预 target。",
 }
@@ -353,6 +361,32 @@ def validate_renderer_file(value: Any) -> dict[str, Any]:
     return {"version": RENDERER_STATE_VERSION, **{key: state[key] for key in RENDERER_FILE_FIELDS - {"version"}}}
 
 
+def validate_monitor_health(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    record = _expect_fields(value, MONITOR_HEALTH_FIELDS, "monitor health state")
+    status = record["status"]
+    if status not in MONITOR_HEALTH_STATUSES:
+        raise MonitorProgressError(
+            f"monitor health state.status must be one of {sorted(MONITOR_HEALTH_STATUSES)}"
+        )
+    renderer_status = record["rendererStatus"]
+    if renderer_status not in RENDERER_STATUSES:
+        raise MonitorProgressError(
+            f"monitor health state.rendererStatus must be one of {sorted(RENDERER_STATUSES)}"
+        )
+    return {
+        "status": status,
+        "targetThreadId": normalise_thread_id(record["targetThreadId"]),
+        "successorThreadId": (
+            normalise_thread_id(record["successorThreadId"])
+            if record["successorThreadId"] is not None
+            else None
+        ),
+        "rendererStatus": renderer_status,
+    }
+
+
 def validate_baseline(value: Any) -> dict[str, Any]:
     record = _expect_fields(value, BASELINE_FIELDS, "target baseline")
     return {
@@ -429,6 +463,7 @@ def default_runtime_state(observations: list[dict[str, Any]] | None = None) -> d
         "lastFallbackAt": None,
         "lastSimulationCorrection": None,
         "rendererState": _missing_renderer_state(),
+        "monitorHealthState": None,
     }
 
 
@@ -493,6 +528,7 @@ def validate_runtime_state(value: Any) -> dict[str, Any]:
             "message": _text(simulation["message"], "runtime.lastSimulationCorrection.message"),
         }
     renderer_state = validate_renderer_state(record["rendererState"])
+    monitor_health_state = validate_monitor_health(record["monitorHealthState"])
     return {
         "sourceScanState": validated_scans,
         "observationFingerprint": _text(record["observationFingerprint"], "runtime.observationFingerprint"),
@@ -513,6 +549,7 @@ def validate_runtime_state(value: Any) -> dict[str, Any]:
         "lastFallbackAt": _iso(record["lastFallbackAt"], "runtime.lastFallbackAt", nullable=True),
         "lastSimulationCorrection": simulation,
         "rendererState": renderer_state,
+        "monitorHealthState": monitor_health_state,
     }
 
 
@@ -524,6 +561,7 @@ def validate_v2_runtime_state(value: Any, observations: list[dict[str, Any]]) ->
             "reportedObservationDigests": _observation_digests(observations),
             "lastSimulationCorrection": None,
             "rendererState": _missing_renderer_state(),
+            "monitorHealthState": None,
         }
     )
 
@@ -531,13 +569,25 @@ def validate_v2_runtime_state(value: Any, observations: list[dict[str, Any]]) ->
 def validate_v3_runtime_state(value: Any) -> dict[str, Any]:
     record = _expect_fields(value, V3_RUNTIME_FIELDS, "v3 runtime state")
     return validate_runtime_state(
-        {**record, "lastSimulationCorrection": None, "rendererState": _missing_renderer_state()}
+        {
+            **record,
+            "lastSimulationCorrection": None,
+            "rendererState": _missing_renderer_state(),
+            "monitorHealthState": None,
+        }
     )
 
 
 def validate_v4_runtime_state(value: Any) -> dict[str, Any]:
     record = _expect_fields(value, V4_RUNTIME_FIELDS, "v4 runtime state")
-    return validate_runtime_state({**record, "rendererState": _missing_renderer_state()})
+    return validate_runtime_state(
+        {**record, "rendererState": _missing_renderer_state(), "monitorHealthState": None}
+    )
+
+
+def validate_v5_runtime_state(value: Any) -> dict[str, Any]:
+    record = _expect_fields(value, V5_RUNTIME_FIELDS, "v5 runtime state")
+    return validate_runtime_state({**record, "monitorHealthState": None})
 
 
 def validate_v1_runtime_state(value: Any, observations: list[dict[str, Any]]) -> dict[str, Any]:
@@ -557,7 +607,7 @@ def _runtime_state_for_migration(
         raise MonitorProgressError("monitor runtime store must be a JSON object")
     if value.get("version") == RUNTIME_VERSION:
         store = validate_runtime_store(value)
-    elif value.get("version") in {1, 2, 3, 4}:
+    elif value.get("version") in {1, 2, 3, 4, 5}:
         record = _expect_fields(value, RUNTIME_STORE_FIELDS, "legacy monitor runtime store")
         if value.get("version") == 1:
             runtime_state = validate_v1_runtime_state(record["runtimeState"], observations)
@@ -565,8 +615,10 @@ def _runtime_state_for_migration(
             runtime_state = validate_v2_runtime_state(record["runtimeState"], observations)
         elif value.get("version") == 3:
             runtime_state = validate_v3_runtime_state(record["runtimeState"])
-        else:
+        elif value.get("version") == 4:
             runtime_state = validate_v4_runtime_state(record["runtimeState"])
+        else:
+            runtime_state = validate_v5_runtime_state(record["runtimeState"])
         store = {
             "version": RUNTIME_VERSION,
             "automationId": _automation_id(record["automationId"]),
@@ -903,13 +955,13 @@ def _is_within(path: Path, root: Path) -> bool:
     return True
 
 
-def _canonical_rollout(thread_id: str, db_path: Path = DEFAULT_CODEX_DB) -> Path:
+def _canonical_task(thread_id: str, db_path: Path = DEFAULT_CODEX_DB) -> tuple[Path, str]:
     database = db_path.resolve()
     uri = f"file:{database.as_posix()}?mode=ro"
     try:
         with sqlite3.connect(uri, uri=True) as connection:
             row = connection.execute(
-                "SELECT rollout_path FROM threads WHERE id = ?",
+                "SELECT rollout_path, COALESCE(NULLIF(name, ''), title) FROM threads WHERE id = ?",
                 (normalise_thread_id(thread_id),),
             ).fetchone()
     except sqlite3.Error as exc:
@@ -920,7 +972,11 @@ def _canonical_rollout(thread_id: str, db_path: Path = DEFAULT_CODEX_DB) -> Path
     sessions_root = (database.parent / "sessions").resolve()
     if not rollout.is_file() or not _is_within(rollout, sessions_root):
         raise MonitorProgressError("canonical rollout is unavailable or outside the Codex sessions directory")
-    return rollout
+    return rollout, _text(row[1], "Codex task title", limit=500)
+
+
+def _canonical_rollout(thread_id: str, db_path: Path = DEFAULT_CODEX_DB) -> Path:
+    return _canonical_task(thread_id, db_path)[0]
 
 
 def _rollout_hash(path: Path) -> str:
@@ -955,14 +1011,32 @@ def _message_text(payload: dict[str, Any]) -> str:
 
 def _owner_inputs(thread_id: str, scan: dict[str, Any], db_path: Path) -> dict[str, Any]:
     if scan["rolloutPathHash"] is None:
-        return {"status": "unseeded", "inputs": [], "nextOffset": 0, "pathHash": None, "reset": False}
-    rollout = _canonical_rollout(thread_id, db_path)
+        return {
+            "status": "unseeded",
+            "inputs": [],
+            "nextOffset": 0,
+            "pathHash": None,
+            "reset": False,
+            "successorThreadId": None,
+        }
+    try:
+        rollout = _canonical_rollout(thread_id, db_path)
+    except MonitorProgressError:
+        return {
+            "status": "unavailable",
+            "inputs": [],
+            "nextOffset": scan["rolloutOffset"],
+            "pathHash": scan["rolloutPathHash"],
+            "reset": False,
+            "successorThreadId": None,
+        }
     path_hash = _rollout_hash(rollout)
     offset = scan["rolloutOffset"]
     reset = scan["rolloutPathHash"] != path_hash or rollout.stat().st_size < offset
     if reset:
         offset = 0
     inputs: list[dict[str, Any]] = []
+    successor_thread_id = None
     next_offset = offset
     with rollout.open("rb") as stream:
         stream.seek(offset)
@@ -980,10 +1054,16 @@ def _owner_inputs(thread_id: str, scan: dict[str, Any], db_path: Path) -> dict[s
                 not isinstance(payload, dict)
                 or record.get("type") != "response_item"
                 or payload.get("type") != "message"
-                or payload.get("role") != "user"
             ):
                 continue
             text = _message_text(payload)
+            if payload.get("role") == "assistant":
+                matches = CREATED_THREAD_RE.findall(text)
+                if matches:
+                    successor_thread_id = normalise_thread_id(matches[-1])
+                continue
+            if payload.get("role") != "user":
+                continue
             if not text or text.lstrip().startswith("<heartbeat>"):
                 continue
             metadata = payload.get("internal_chat_message_metadata_passthrough")
@@ -1002,7 +1082,40 @@ def _owner_inputs(thread_id: str, scan: dict[str, Any], db_path: Path) -> dict[s
         "nextOffset": next_offset,
         "pathHash": path_hash,
         "reset": reset,
+        "successorThreadId": successor_thread_id,
     }
+
+
+def _monitor_health(
+    target_thread_id: str,
+    target_scan: dict[str, Any],
+    renderer_status: dict[str, Any],
+    previous: dict[str, Any] | None,
+) -> dict[str, Any]:
+    successor_thread_id = target_scan["successorThreadId"]
+    if (
+        successor_thread_id is None
+        and previous is not None
+        and previous["status"] == "retarget-required"
+        and previous["targetThreadId"] == target_thread_id
+    ):
+        successor_thread_id = previous["successorThreadId"]
+    if successor_thread_id and successor_thread_id != target_thread_id:
+        status = "retarget-required"
+    elif target_scan["status"] == "unavailable":
+        status = "target-unavailable"
+    elif renderer_status["status"] != "alive":
+        status = "renderer-abnormal"
+    else:
+        status = "healthy"
+    return validate_monitor_health(
+        {
+            "status": status,
+            "targetThreadId": target_thread_id,
+            "successorThreadId": successor_thread_id,
+            "rendererStatus": renderer_status["status"],
+        }
+    )
 
 
 def seed_rollout_cursors(
@@ -1019,6 +1132,15 @@ def seed_rollout_cursors(
             {"rolloutOffset": _complete_line_end(rollout), "rolloutPathHash": _rollout_hash(rollout)}
         )
     runtime_state["rendererState"] = _renderer_status(root)
+    runtime_state["monitorHealthState"] = _monitor_health(
+        monitor["targetThreadId"],
+        {
+            "status": "current",
+            "successorThreadId": None,
+        },
+        runtime_state["rendererState"],
+        None,
+    )
     store = validate_runtime_store(
         {"version": RUNTIME_VERSION, "automationId": automation_id, "runtimeState": runtime_state}
     )
@@ -1039,11 +1161,26 @@ def read_cycle(
     current = context["policyVersion"] == POLICY_VERSION and context["policySnapshot"] == POLICY_SNAPSHOT
     monitor = instance["monitor"]
     source_inputs = {
-        "monitor": _owner_inputs(monitor["monitorThreadId"], runtime_store["runtimeState"]["sourceScanState"]["monitor"], db_path),
-        "target": _owner_inputs(monitor["targetThreadId"], runtime_store["runtimeState"]["sourceScanState"]["target"], db_path),
+        "monitor": _owner_inputs(
+            monitor["monitorThreadId"],
+            runtime_store["runtimeState"]["sourceScanState"]["monitor"],
+            db_path,
+        ),
+        "target": _owner_inputs(
+            monitor["targetThreadId"],
+            runtime_store["runtimeState"]["sourceScanState"]["target"],
+            db_path,
+        ),
     }
     renderer_status = _renderer_status(root)
     previous_renderer = runtime_store["runtimeState"]["rendererState"]
+    monitor_health = _monitor_health(
+        monitor["targetThreadId"],
+        source_inputs["target"],
+        renderer_status,
+        runtime_store["runtimeState"]["monitorHealthState"],
+    )
+    previous_monitor_health = runtime_store["runtimeState"]["monitorHealthState"]
     return {
         "staticRef": {
             "contextVersion": context["version"],
@@ -1061,6 +1198,12 @@ def read_cycle(
             if renderer_status == previous_renderer
             else {"previous": previous_renderer, "current": renderer_status}
         ),
+        "monitorHealthStatus": monitor_health,
+        "monitorHealthDiff": (
+            None
+            if monitor_health == previous_monitor_health
+            else {"previous": previous_monitor_health, "current": monitor_health}
+        ),
         "ownerInputs": {source: value["inputs"] for source, value in source_inputs.items()},
         "nextRolloutCursors": {
             source: {
@@ -1075,15 +1218,125 @@ def read_cycle(
     }
 
 
+def retarget(
+    root: Path,
+    automation_id: str,
+    target_thread_id: str,
+    db_path: Path = DEFAULT_CODEX_DB,
+) -> dict[str, Any]:
+    target_thread_id = normalise_thread_id(target_thread_id)
+    current = read_context(root, automation_id)
+    monitor = current["monitor"]
+    rollout, target_title = _canonical_task(target_thread_id, db_path)
+    if monitor["targetThreadId"] == target_thread_id:
+        if current["context"]["targetTitle"] != target_title:
+            static_context = validate_context(
+                {
+                    **{key: current["context"][key] for key in CONTEXT_FIELDS},
+                    "targetTitle": target_title,
+                }
+            )
+            _atomic_write(_context_path(root, automation_id), static_context)
+            current = read_context(root, automation_id)
+        return {"retargeted": False, **current}
+    original_monitor = monitor
+    original_context = validate_context(_read_json(_context_path(root, automation_id)))
+    original_runtime_store = validate_runtime_store(_read_json(_runtime_path(root, automation_id)))
+    runtime_state = copy.deepcopy(original_runtime_store["runtimeState"])
+    runtime_state["sourceScanState"]["target"] = {
+        "lastSeenTurnId": None,
+        "lastSeenUserMessageId": None,
+        "backfillComplete": True,
+        "threadUpdatedAt": None,
+        "rolloutOffset": _complete_line_end(rollout),
+        "rolloutPathHash": _rollout_hash(rollout),
+    }
+    renderer_status = _renderer_status(root)
+    runtime_state["rendererState"] = renderer_status
+    runtime_state["monitorHealthState"] = _monitor_health(
+        target_thread_id,
+        {"status": "current", "successorThreadId": None},
+        renderer_status,
+        None,
+    )
+    updated_monitor = validate_monitor({**monitor, "targetThreadId": target_thread_id})
+    updated_runtime_store = validate_runtime_store(
+        {"version": RUNTIME_VERSION, "automationId": automation_id, "runtimeState": runtime_state}
+    )
+    updated_context = validate_context({**original_context, "targetTitle": target_title})
+    monitor_path = _instance_paths(root, automation_id)[0]
+    runtime_path = _runtime_path(root, automation_id)
+    context_path = _context_path(root, automation_id)
+    try:
+        _atomic_write(monitor_path, updated_monitor)
+        _atomic_write(runtime_path, updated_runtime_store)
+        _atomic_write(context_path, updated_context)
+    except Exception:
+        try:
+            _atomic_write(monitor_path, original_monitor)
+            _atomic_write(runtime_path, original_runtime_store)
+            _atomic_write(context_path, original_context)
+        except Exception as rollback_error:
+            raise MonitorProgressError("retarget failed and rollback could not restore monitor state") from rollback_error
+        raise
+    return {"retargeted": True, **read_context(root, automation_id)}
+
+
+def rebind_monitor(
+    root: Path,
+    automation_id: str,
+    monitor_thread_id: str,
+    db_path: Path = DEFAULT_CODEX_DB,
+) -> dict[str, Any]:
+    monitor_thread_id = normalise_thread_id(monitor_thread_id)
+    current = read_context(root, automation_id)
+    monitor = current["monitor"]
+    if monitor["monitorThreadId"] == monitor_thread_id:
+        return {"rebound": False, **current}
+    rollout = _canonical_rollout(monitor_thread_id, db_path)
+    original_monitor = monitor
+    original_runtime_store = validate_runtime_store(_read_json(_runtime_path(root, automation_id)))
+    runtime_state = copy.deepcopy(original_runtime_store["runtimeState"])
+    runtime_state["sourceScanState"]["monitor"] = {
+        "lastSeenTurnId": None,
+        "lastSeenUserMessageId": None,
+        "backfillComplete": True,
+        "threadUpdatedAt": None,
+        "rolloutOffset": _complete_line_end(rollout),
+        "rolloutPathHash": _rollout_hash(rollout),
+    }
+    updated_monitor = validate_monitor({**monitor, "monitorThreadId": monitor_thread_id})
+    updated_runtime_store = validate_runtime_store(
+        {"version": RUNTIME_VERSION, "automationId": automation_id, "runtimeState": runtime_state}
+    )
+    monitor_path = _instance_paths(root, automation_id)[0]
+    runtime_path = _runtime_path(root, automation_id)
+    try:
+        _atomic_write(monitor_path, updated_monitor)
+        _atomic_write(runtime_path, updated_runtime_store)
+    except Exception:
+        try:
+            _atomic_write(monitor_path, original_monitor)
+            _atomic_write(runtime_path, original_runtime_store)
+        except Exception as rollback_error:
+            raise MonitorProgressError("monitor rebind failed and rollback could not restore state") from rollback_error
+        raise
+    return {"rebound": True, **read_context(root, automation_id)}
+
+
 def refresh_context_policy(root: Path, automation_id: str) -> dict[str, Any]:
     path = _context_path(root, automation_id)
     raw_context = _read_json(path)
+    instance = read_instance(root, automation_id)
     if isinstance(raw_context, dict) and raw_context.get("version") == 1:
         context, runtime_state = validate_legacy_context(raw_context)
     else:
         context = validate_context(raw_context, require_current_policy=False)
-        runtime_state = validate_runtime_store(_read_json(_runtime_path(root, automation_id)))["runtimeState"]
-    instance = read_instance(root, automation_id)
+        runtime_state = _runtime_state_for_migration(
+            _read_json(_runtime_path(root, automation_id)),
+            automation_id,
+            instance["observations"],
+        )
     if context["automationId"] != automation_id:
         raise MonitorProgressError("monitor context automation id mismatch")
     updated = validate_context(
@@ -1103,10 +1356,11 @@ def refresh_context_policy(root: Path, automation_id: str) -> dict[str, Any]:
 
 
 def _updated_monitor(current: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
+    if record["targetThreadId"] != current["targetThreadId"]:
+        raise MonitorProgressError("target task change requires the retarget command")
     return validate_monitor(
         {
             **current,
-            "targetThreadId": record["targetThreadId"],
             "observedAt": record["observedAt"],
             "latestAssistantAt": record["latestAssistantAt"],
             "level": record["level"],
@@ -1233,7 +1487,7 @@ def latest_for_package(root: Path, package_path: Path) -> dict[str, Any] | None:
             (item for item in observations if item["state"] == "confirmed"),
             key=lambda item: _timestamp(item["confirmedAt"]),
             reverse=True,
-        )[:5]
+        )
     return {"monitor": monitor, "observations": confirmed}
 
 
@@ -1262,9 +1516,22 @@ def schema_contract() -> dict[str, Any]:
         },
         "rendererStatus": {"required": sorted(RENDERER_STATE_FIELDS), "states": sorted(RENDERER_STATUSES)},
         "rendererDiff": {"acknowledgedBy": "write-cycle runtimeState.rendererState"},
+        "monitorHealthStatus": {
+            "required": sorted(MONITOR_HEALTH_FIELDS),
+            "states": sorted(MONITOR_HEALTH_STATUSES),
+        },
+        "monitorHealthDiff": {"acknowledgedBy": "write-cycle runtimeState.monitorHealthState"},
         "initContextInput": {"required": sorted(INIT_CONTEXT_FIELDS)},
         "writeCycleInput": {"required": sorted(WRITE_CYCLE_FIELDS)},
         "refreshContextPolicy": {"preserves": ["targetBaseline", "runtimeState", "monitor", "observations"]},
+        "retarget": {
+            "preserves": ["targetBaseline", "observations", "evaluation", "monitor runtime"],
+            "seedsTargetCursorAt": "current complete-line end",
+        },
+        "rebindMonitor": {
+            "preserves": ["target task", "targetBaseline", "observations", "evaluation", "monitor runtime"],
+            "seedsMonitorCursorAt": "current complete-line end",
+        },
     }
 
 
@@ -1522,6 +1789,20 @@ def build_parser() -> argparse.ArgumentParser:
     _common_instance_arguments(seed_rollout_parser)
     seed_rollout_parser.add_argument("--db", type=Path, default=DEFAULT_CODEX_DB)
 
+    retarget_parser = subparsers.add_parser(
+        "retarget", help="bind the monitor to an explicit successor task without replaying its history"
+    )
+    _common_instance_arguments(retarget_parser)
+    retarget_parser.add_argument("--target-thread", required=True)
+    retarget_parser.add_argument("--db", type=Path, default=DEFAULT_CODEX_DB)
+
+    rebind_monitor_parser = subparsers.add_parser(
+        "rebind-monitor", help="move heartbeat ownership to an explicit monitor task"
+    )
+    _common_instance_arguments(rebind_monitor_parser)
+    rebind_monitor_parser.add_argument("--monitor-thread", required=True)
+    rebind_monitor_parser.add_argument("--db", type=Path, default=DEFAULT_CODEX_DB)
+
     refresh_context_parser = subparsers.add_parser(
         "refresh-context-policy", help="replace only the validated static policy snapshot and hash"
     )
@@ -1576,6 +1857,10 @@ def main(argv: list[str] | None = None) -> int:
                 result = read_cycle(root, automation_id, args.db)
             elif args.command == "seed-rollout-cursors":
                 result = seed_rollout_cursors(root, automation_id, args.db)
+            elif args.command == "retarget":
+                result = retarget(root, automation_id, args.target_thread, args.db)
+            elif args.command == "rebind-monitor":
+                result = rebind_monitor(root, automation_id, args.monitor_thread, args.db)
             elif args.command == "refresh-context-policy":
                 result = refresh_context_policy(root, automation_id)
             elif args.command == "write-evaluation":

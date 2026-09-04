@@ -18,6 +18,12 @@ SOURCE_DIR = PLUGIN_ROOT / "agents"
 AGENT_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 FRONTMATTER_FIELD_RE = re.compile(r"^(name|description):(?:\s+(.*))?$")
 MANAGED_MARKER = "# managed-by = agent-workbench:impl-package"
+CODEX_EXECUTION_PROFILES = {
+    "review-track-code": ("gpt-5.6-sol", "high"),
+    "review-track-safety": ("gpt-5.6-sol", "medium"),
+    "review-track-spec": ("gpt-5.6-sol", "high"),
+    "review-track-standards": ("gpt-5.6-sol", "medium"),
+}
 
 
 @dataclass(frozen=True)
@@ -109,14 +115,19 @@ def load_profiles(source_dir: Path = SOURCE_DIR) -> list[AgentProfile]:
     names = [profile.name for profile in profiles]
     if len(names) != len(set(names)):
         raise ValueError(f"duplicate agent profile names in {source_dir}")
+    if set(names) != set(CODEX_EXECUTION_PROFILES):
+        raise ValueError("Codex execution profiles must match the Impl-Package review agents")
     return profiles
 
 
 def render_codex_role(profile: AgentProfile) -> str:
+    model, reasoning_effort = CODEX_EXECUTION_PROFILES[profile.name]
     return (
         f"{MANAGED_MARKER}\n"
         f"name = {json.dumps(profile.name, ensure_ascii=False)}\n"
         f"description = {json.dumps(profile.description, ensure_ascii=False)}\n"
+        f"model = {json.dumps(model)}\n"
+        f"model_reasoning_effort = {json.dumps(reasoning_effort)}\n"
         "developer_instructions = '''\n"
         f"{profile.developer_instructions}\n"
         "'''\n"

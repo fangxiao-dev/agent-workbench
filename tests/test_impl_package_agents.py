@@ -20,6 +20,12 @@ EXPECTED = {
     "review-track-spec",
     "review-track-standards",
 }
+EXPECTED_EXECUTION = {
+    "review-track-code": ("gpt-5.6-sol", "high"),
+    "review-track-safety": ("gpt-5.6-sol", "medium"),
+    "review-track-spec": ("gpt-5.6-sol", "high"),
+    "review-track-standards": ("gpt-5.6-sol", "medium"),
+}
 
 
 def load_installer():
@@ -38,9 +44,16 @@ def test_codex_roles_are_projected_from_the_claude_agent_sources() -> None:
     assert {profile.name for profile in profiles} == EXPECTED
     for profile in profiles:
         parsed = tomllib.loads(installer.render_codex_role(profile))
-        assert set(parsed) == {"name", "description", "developer_instructions"}
+        assert set(parsed) == {
+            "name",
+            "description",
+            "model",
+            "model_reasoning_effort",
+            "developer_instructions",
+        }
         assert parsed["name"] == profile.name
         assert parsed["description"]
+        assert (parsed["model"], parsed["model_reasoning_effort"]) == EXPECTED_EXECUTION[profile.name]
         assert "verdict:" in parsed["developer_instructions"]
         assert installer.MANAGED_MARKER in installer.render_codex_role(profile)
 
@@ -71,6 +84,17 @@ def test_global_role_install_is_idempotent_and_non_destructive(tmp_path: Path) -
     forced = installer.install_profiles(target, force=True)
     assert forced["updated"] == ["review-track-code.toml"]
     assert installer.MANAGED_MARKER in changed.read_text(encoding="utf-8")
+
+    changed.write_text(
+        f"{installer.MANAGED_MARKER}\n{installer._render_legacy_codex_role(profile)}",
+        encoding="utf-8",
+    )
+    with pytest.raises(installer.InstallConflictError):
+        installer.install_profiles(target)
+    forced = installer.install_profiles(target, force=True)
+    assert forced["updated"] == ["review-track-code.toml"]
+    parsed = tomllib.loads(changed.read_text(encoding="utf-8"))
+    assert (parsed["model"], parsed["model_reasoning_effort"]) == EXPECTED_EXECUTION[profile.name]
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows reparse-point behavior is host-specific")

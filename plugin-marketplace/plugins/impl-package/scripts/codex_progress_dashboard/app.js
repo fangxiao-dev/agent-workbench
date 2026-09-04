@@ -11,10 +11,6 @@ const gateLabel = document.querySelector("#gate-label");
 const actualSummary = document.querySelector("#actual-summary");
 const activityList = document.querySelector("#activity-list");
 const freshness = document.querySelector("#freshness");
-const nextAction = document.querySelector("#next-action");
-const blocker = document.querySelector("#blocker");
-const divergencePanel = document.querySelector("#divergence-panel");
-const divergence = document.querySelector("#divergence");
 const flowLayout = document.querySelector("#flow-layout");
 const flowCanvas = document.querySelector("#flow-canvas");
 const flowStages = document.querySelector("#flow-stages");
@@ -23,7 +19,9 @@ const ticketTooltip = document.querySelector("#ticket-tooltip");
 const tooltipCode = document.querySelector("#tooltip-code");
 const tooltipName = document.querySelector("#tooltip-name");
 const tooltipState = document.querySelector("#tooltip-state");
-const tooltipDependencies = document.querySelector("#tooltip-dependencies");
+const tooltipTrailTime = document.querySelector("#tooltip-trail-time");
+const tooltipTrailState = document.querySelector("#tooltip-trail-state");
+const tooltipTrailSummary = document.querySelector("#tooltip-trail-summary");
 const tooltipHints = document.querySelector("#tooltip-hints");
 const ticketEmpty = document.querySelector("#ticket-empty");
 const monitorPanel = document.querySelector("#monitor-panel");
@@ -40,6 +38,9 @@ const monitorOwner = document.querySelector("#monitor-owner");
 const monitorThread = document.querySelector("#monitor-thread");
 const monitorObservations = document.querySelector("#monitor-observations");
 const monitorObservationCount = document.querySelector("#monitor-observation-count");
+const monitorObservationDialog = document.querySelector("#monitor-observation-dialog");
+const monitorObservationDialogCount = document.querySelector("#monitor-observation-dialog-count");
+const monitorObservationClose = document.querySelector("#monitor-observation-close");
 const monitorObservationList = document.querySelector("#monitor-observation-list");
 const auditList = document.querySelector("#audit-list");
 
@@ -49,9 +50,18 @@ let selectedTicketId = null;
 let previewTicketId = null;
 let currentTickets = [];
 let ticketSignature = "";
+let currentObservations = [];
+let pendingObservations = null;
+let observationSignature = "";
+let editingObservationId = null;
 
 function clear(node) {
   while (node.firstChild) node.firstChild.remove();
+}
+
+function closeObservationDialog() {
+  cancelObservationEdit();
+  if (monitorObservationDialog.open) monitorObservationDialog.close();
 }
 
 function option(value, label) {
@@ -252,14 +262,16 @@ function clearTicketPreview() {
   updateTicketHighlights();
 }
 
-function ticketRelationship(ticket) {
-  const dependents = currentTickets.filter((item) => item.dependencies.includes(ticket.id));
-  const parentNames = ticket.dependencies.map((id) => currentTickets.find((item) => item.id === id)?.name || id);
-  const childNames = dependents.map((item) => item.name);
-  const relationship = [];
-  relationship.push(parentNames.length ? `需要先完成：${parentNames.join("、")}` : "这是当前流程的起点");
-  if (childNames.length) relationship.push(`完成后释放：${childNames.join("、")}`);
-  return relationship.join("。") + "。";
+function trailOutcomeLabel(outcome) {
+  return {
+    RUNNING: "进行中",
+    DONE: "已返回",
+    INCOMPLETE: "未完成",
+    EVIDENCE_GAP: "证据不足",
+    BLOCKED: "已阻塞",
+    PASS: "已通过",
+    FAIL: "未通过",
+  }[String(outcome).toUpperCase()] || outcome || "状态未知";
 }
 
 function showTicketTooltip(ticket, anchor) {
@@ -267,7 +279,12 @@ function showTicketTooltip(ticket, anchor) {
   tooltipName.textContent = ticket.name;
   tooltipState.className = `state-badge ${(ticket.runtimeState || ticket.state).toLowerCase()}`;
   tooltipState.textContent = stateLabel(ticket.state, ticket.runtimeState);
-  tooltipDependencies.textContent = ticketRelationship(ticket);
+  const trail = ticket.latestTrail;
+  tooltipTrailTime.dateTime = trail?.at || "";
+  tooltipTrailTime.textContent = trail?.at ? formatCompactTime(trail.at) : "暂无记录";
+  tooltipTrailState.dataset.outcome = String(trail?.outcome || "unknown").toLowerCase();
+  tooltipTrailState.textContent = trail ? trailOutcomeLabel(trail.outcome) : "暂无记录";
+  tooltipTrailSummary.textContent = trail?.summary || "当前 attempt 尚未登记该 Ticket 的执行记录。";
   clear(tooltipHints);
   const hints = ticket.completionHints.length
     ? ticket.completionHints
@@ -401,8 +418,11 @@ function renderMonitor(monitor) {
     monitorThread.hidden = true;
     monitorThread.textContent = "";
     monitorObservations.hidden = true;
-    monitorObservations.open = false;
+    closeObservationDialog();
     clear(monitorObservationList);
+    currentObservations = [];
+    pendingObservations = null;
+    observationSignature = "";
     return;
   }
   const labels = {
@@ -440,23 +460,128 @@ function renderMonitor(monitor) {
 
   const observations = Array.isArray(monitor.observations) ? monitor.observations : [];
   monitorObservations.hidden = !observations.length;
-  if (!observations.length) monitorObservations.open = false;
+  if (!observations.length) closeObservationDialog();
   monitorObservationCount.textContent = observations.length ? `· ${observations.length}` : "";
+  monitorObservationDialogCount.textContent = observations.length ? `· ${observations.length}` : "";
+  const nextSignature = JSON.stringify(observations);
+  if (editingObservationId) {
+    pendingObservations = observations;
+  } else if (nextSignature !== observationSignature) {
+    renderObservationList(observations);
+  }
+}
+
+function renderObservationList(observations) {
+  currentObservations = observations;
+  observationSignature = JSON.stringify(observations);
   clear(monitorObservationList);
   observations.forEach((item) => {
     const row = document.createElement("li");
     const time = document.createElement("time");
     const body = document.createElement("div");
+    const heading = document.createElement("div");
     const topic = document.createElement("strong");
-    const content = document.createElement("p");
+    const edit = document.createElement("button");
     time.dateTime = item.observedAt;
     time.textContent = formatCompactTime(item.observedAt);
+    body.className = "observation-body";
+    heading.className = "observation-heading";
     topic.textContent = item.topic;
-    content.textContent = item.content;
-    body.append(topic, content);
+    edit.type = "button";
+    edit.className = "observation-edit";
+    edit.textContent = "编辑";
+    edit.disabled = Boolean(editingObservationId);
+    edit.setAttribute("aria-label", `编辑 ${item.topic} 的正文`);
+    edit.addEventListener("click", () => {
+      editingObservationId = item.id;
+      pendingObservations = null;
+      renderObservationList(currentObservations);
+      monitorObservationList.querySelector("textarea")?.focus();
+    });
+    heading.append(topic, edit);
+    body.append(heading);
+    if (editingObservationId === item.id) {
+      body.append(createObservationEditor(item));
+    } else {
+      const content = document.createElement("p");
+      content.textContent = item.content;
+      body.append(content);
+    }
     row.append(time, body);
     monitorObservationList.append(row);
   });
+}
+
+function createObservationEditor(item) {
+  const editor = document.createElement("div");
+  const textarea = document.createElement("textarea");
+  const actions = document.createElement("div");
+  const error = document.createElement("p");
+  const save = document.createElement("button");
+  const cancel = document.createElement("button");
+  editor.className = "observation-editor";
+  textarea.value = item.content;
+  textarea.maxLength = 2000;
+  textarea.rows = 7;
+  textarea.setAttribute("aria-label", `${item.topic} 的正文`);
+  actions.className = "observation-editor-actions";
+  error.className = "observation-editor-error";
+  error.setAttribute("aria-live", "polite");
+  save.type = "button";
+  save.className = "observation-save";
+  save.textContent = "保存";
+  cancel.type = "button";
+  cancel.className = "observation-cancel";
+  cancel.textContent = "取消";
+  save.addEventListener("click", () => saveObservation(item, textarea, save, cancel, error));
+  cancel.addEventListener("click", cancelObservationEdit);
+  actions.append(save, cancel);
+  editor.append(textarea, error, actions);
+  return editor;
+}
+
+function cancelObservationEdit() {
+  if (!editingObservationId) return;
+  editingObservationId = null;
+  const observations = pendingObservations || currentObservations;
+  pendingObservations = null;
+  renderObservationList(observations);
+}
+
+async function saveObservation(item, textarea, save, cancel, error) {
+  const content = textarea.value.trim();
+  if (!content) {
+    error.textContent = "正文不能为空。";
+    textarea.focus();
+    return;
+  }
+  textarea.disabled = true;
+  save.disabled = true;
+  cancel.disabled = true;
+  save.textContent = "保存中…";
+  error.textContent = "";
+  try {
+    const query = `?package=${encodeURIComponent(packageSelect.value)}`;
+    const response = await fetch(`/api/tasks/${encodeURIComponent(selectedTask)}/observation${query}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: item.id, content, revision: item.revision }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || `保存失败：${response.status}`);
+    editingObservationId = null;
+    pendingObservations = null;
+    renderObservationList(currentObservations.map((candidate) => (
+      candidate.id === item.id ? payload.observation : candidate
+    )));
+  } catch (caught) {
+    textarea.disabled = false;
+    save.disabled = false;
+    cancel.disabled = false;
+    save.textContent = "保存";
+    error.textContent = caught instanceof Error ? caught.message : String(caught);
+    textarea.focus();
+  }
 }
 
 function render(snapshot) {
@@ -469,11 +594,6 @@ function render(snapshot) {
   const pkg = snapshot.package;
   formalSummary.textContent = pkg ? pkg.formalSummary : "尚未关联";
   gateLabel.textContent = pkg ? pkg.gateLabel : "尚未关联";
-  nextAction.textContent = pkg ? pkg.nextAction : "关联任务包后显示正式登记的下一动作。";
-  blocker.hidden = !pkg?.blocker;
-  blocker.textContent = pkg?.blocker ? `当前阻塞：${pkg.blocker}` : "";
-  divergencePanel.hidden = !pkg?.discrepancy;
-  divergence.textContent = pkg?.discrepancy || "";
   renderTickets(pkg?.tickets || [], pkg?.currentTicketId || null);
   renderMonitor(snapshot.monitor);
 
@@ -543,6 +663,16 @@ packageSelect.addEventListener("change", () => {
   openEvents();
 });
 
+monitorObservations.addEventListener("click", () => {
+  monitorObservationDialog.showModal();
+  monitorObservationClose.focus();
+});
+
+monitorObservationClose.addEventListener("click", closeObservationDialog);
+monitorObservationDialog.addEventListener("click", (event) => {
+  if (event.target === monitorObservationDialog) closeObservationDialog();
+});
+
 function showError(error) {
   setConnection("error", "读取失败");
   actualSummary.textContent = error instanceof Error ? error.message : String(error);
@@ -585,6 +715,7 @@ window.addEventListener("scroll", () => {
 }, true);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
+    closeObservationDialog();
     clearTicketPreview();
     hideTicketTooltip();
   }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -49,6 +50,12 @@ EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
 COMMIT_RE = re.compile(r"\b[0-9a-f]{40}\b", re.I)
 MAX_ACTIVITY = 5
 MAX_ACTIVITY_CHARS = 1200
+MAX_TRAIL_SUMMARY_CHARS = 200
+MAX_REQUEST_BODY_BYTES = 8192
+
+
+class ObservationConflictError(ValueError):
+    pass
 
 
 def _iso_timestamp(value: Any) -> str | None:
@@ -184,6 +191,21 @@ def _monitor_evaluation(value: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
+def _observation_revision(value: dict[str, Any]) -> str:
+    canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _project_observation(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": value["id"],
+        "topic": sanitise_activity(value["topic"]),
+        "observedAt": value["confirmedAt"],
+        "content": sanitise_activity(value["content"]),
+        "revision": _observation_revision(value),
+    }
+
+
 def monitor_snapshot(workspace: Path, package_root: Path | None) -> dict[str, Any] | None:
     if package_root is None:
         return None
@@ -196,20 +218,38 @@ def monitor_snapshot(workspace: Path, package_root: Path | None) -> dict[str, An
         "level": record["level"],
         "summary": sanitise_activity(record["summary"]),
         "monitorThreadId": record["monitorThreadId"],
-        "observations": [
-            {
-                "id": item["id"],
-                "topic": sanitise_activity(item["topic"]),
-                "observedAt": item["confirmedAt"],
-                "content": sanitise_activity(item["content"]),
-            }
-            for item in projected["observations"]
-        ],
+        "observations": [_project_observation(item) for item in projected["observations"]],
     }
     evaluation = _monitor_evaluation(record["evaluation"])
     if evaluation:
         candidate["evaluation"] = evaluation
     return candidate
+
+
+def update_observation_content(
+    workspace: Path,
+    package_root: Path,
+    observation_id: str,
+    content: Any,
+    revision: Any,
+) -> dict[str, Any]:
+    projected = monitor_progress.latest_for_package(workspace, package_root)
+    if projected is None:
+        raise LookupError("monitor not found")
+    record = next(
+        (item for item in projected["observations"] if item["id"] == observation_id),
+        None,
+    )
+    if record is None:
+        raise LookupError("confirmed observation not found")
+    if not isinstance(revision, str) or revision != _observation_revision(record):
+        raise ObservationConflictError("纠偏内容已变化，请刷新后重试")
+    result = monitor_progress.put_observation(
+        workspace,
+        projected["monitor"]["automationId"],
+        {**record, "content": content},
+    )
+    return _project_observation(result["observation"])
 
 
 def _message_text(payload: dict[str, Any]) -> str:
@@ -543,12 +583,14 @@ def _trail_identifier(row: dict[str, Any]) -> str | None:
     return None
 
 
-def _running_ticket_ids(package_root: Path, attempt_id: Any, ticket_ids: set[str]) -> list[str]:
+def _ticket_trail_projection(
+    package_root: Path, attempt_id: Any, ticket_ids: list[str]
+) -> tuple[list[str], dict[str, dict[str, Any]]]:
     if not isinstance(attempt_id, str) or not attempt_id:
-        return []
+        return [], {}
     rows = _trail_rows(package_root / "execution" / attempt_id / "trail.jsonl")
     if rows is None:
-        return []
+        return [], {}
     result_ids = {
         str(row[name])
         for row in rows
@@ -557,11 +599,28 @@ def _running_ticket_ids(package_root: Path, attempt_id: Any, ticket_ids: set[str
         if row.get(name) is not None
     }
     running = []
+    latest: dict[str, dict[str, Any]] = {}
     for row in rows:
+        subject = row.get("subject")
+        if isinstance(subject, str) and subject.startswith("ticket:"):
+            ticket_id = _resolve_ticket_id(subject.removeprefix("ticket:"), ticket_ids)
+            if ticket_id in ticket_ids:
+                summary = row.get("summary") or row.get("step")
+                if not isinstance(summary, str) or not summary.strip():
+                    summary = (
+                        "该执行步骤已开始，等待结果返回。"
+                        if row.get("kind") == "dispatch"
+                        else "该执行步骤已返回，但没有登记摘要。"
+                    )
+                latest[ticket_id] = {
+                    "kind": str(row.get("kind") or "unknown"),
+                    "outcome": str(row.get("outcome") or "unknown"),
+                    "at": row.get("ts") if isinstance(row.get("ts"), str) else None,
+                    "summary": sanitise_activity(summary)[:MAX_TRAIL_SUMMARY_CHARS],
+                }
         if row.get("kind") != "dispatch" or str(row.get("outcome", "")).upper() != "RUNNING" or row.get("returned") is not False:
             continue
         identifier = _trail_identifier(row)
-        subject = row.get("subject")
         if identifier is not None and identifier in result_ids:
             continue
         if not isinstance(subject, str) or not subject.startswith("ticket:"):
@@ -569,7 +628,7 @@ def _running_ticket_ids(package_root: Path, attempt_id: Any, ticket_ids: set[str
         ticket_id = subject.removeprefix("ticket:")
         if ticket_id in ticket_ids and ticket_id not in running:
             running.append(ticket_id)
-    return running
+    return running, latest
 
 
 def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> dict[str, Any]:
@@ -619,10 +678,11 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
     terminal_ticket_ids = {
         ticket["id"] for ticket in tickets if ticket["state"] in {"SATISFIED", "RETIRED"}
     }
+    trail_running_ticket_ids, latest_trail = _ticket_trail_projection(
+        package_root, attempt.get("id"), ticket_ids
+    )
     running_ticket_ids = [
-        ticket_id
-        for ticket_id in _running_ticket_ids(package_root, attempt.get("id"), set(ticket_ids))
-        if ticket_id not in terminal_ticket_ids
+        ticket_id for ticket_id in trail_running_ticket_ids if ticket_id not in terminal_ticket_ids
     ]
     for ticket in tickets:
         ticket["runtimeState"] = (
@@ -632,6 +692,7 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
             if ticket["id"] in ready_ticket_ids
             else None
         )
+        ticket["latestTrail"] = latest_trail.get(ticket["id"])
     counts = Counter(ticket["state"] for ticket in tickets)
     checkpoints = state.get("activeCheckpoints")
     checkpoint = checkpoints.get("attempt", {}) if isinstance(checkpoints, dict) else {}
@@ -761,6 +822,24 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return thread_id, action, parse_qs(parsed.query).get("package", [None])[0]
         return "", None, None
 
+    def _request_json(self, fields: set[str]) -> dict[str, Any]:
+        origin = self.headers.get("Origin")
+        expected_origin = f"http://{HOST}:{self.server.server_address[1]}"  # type: ignore[attr-defined]
+        if origin and origin != expected_origin:
+            raise PermissionError("cross-origin write rejected")
+        if self.headers.get_content_type() != "application/json":
+            raise ValueError("content type must be application/json")
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError as exc:
+            raise ValueError("invalid content length") from exc
+        if not 0 < length <= MAX_REQUEST_BODY_BYTES:
+            raise ValueError("request body is empty or too large")
+        payload = json.loads(self.rfile.read(length))
+        if not isinstance(payload, dict) or set(payload) != fields:
+            raise ValueError(f"request fields must be {sorted(fields)}")
+        return payload
+
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler contract
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
@@ -798,6 +877,35 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._events(thread_id, package)
             else:
                 self._error(HTTPStatus.NOT_FOUND, "not found")
+        except (FileNotFoundError, LookupError) as exc:
+            self._error(HTTPStatus.NOT_FOUND, str(exc))
+        except (json.JSONDecodeError, OSError, sqlite3.Error, ValueError) as exc:
+            self._error(HTTPStatus.BAD_REQUEST, str(exc))
+
+    def do_PATCH(self) -> None:  # noqa: N802 - stdlib handler contract
+        thread_id, action, package = self._route()
+        if action != "observation":
+            self._error(HTTPStatus.NOT_FOUND, "not found")
+            return
+        try:
+            payload = self._request_json({"id", "content", "revision"})
+            row = _task_row(thread_id, self.db_path)
+            cwd, _ = _task_paths(row, self.db_path)
+            package_root = _package_root(cwd, package)
+            if package_root is None:
+                raise ValueError("package is required")
+            observation = update_observation_content(
+                cwd,
+                package_root,
+                payload["id"],
+                payload["content"],
+                payload["revision"],
+            )
+            self._json({"observation": observation})
+        except PermissionError as exc:
+            self._error(HTTPStatus.FORBIDDEN, str(exc))
+        except ObservationConflictError as exc:
+            self._error(HTTPStatus.CONFLICT, str(exc))
         except (FileNotFoundError, LookupError) as exc:
             self._error(HTTPStatus.NOT_FOUND, str(exc))
         except (json.JSONDecodeError, OSError, sqlite3.Error, ValueError) as exc:

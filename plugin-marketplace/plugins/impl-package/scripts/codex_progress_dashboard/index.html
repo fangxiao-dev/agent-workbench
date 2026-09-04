@@ -84,7 +84,14 @@
               </div>
               <span class="state-badge" id="tooltip-state"></span>
             </div>
-            <p class="tooltip-dependencies" id="tooltip-dependencies"></p>
+            <section class="tooltip-trail" aria-label="Trail 最新状态">
+              <div class="tooltip-trail-heading">
+                <strong>Trail 最新状态</strong>
+                <time id="tooltip-trail-time"></time>
+              </div>
+              <span class="tooltip-trail-state" id="tooltip-trail-state"></span>
+              <p id="tooltip-trail-summary"></p>
+            </section>
             <ul class="tooltip-hints" id="tooltip-hints"></ul>
           </div>
         </section>
@@ -116,10 +123,18 @@
               </div>
             </dl>
             <p class="monitor-thread" id="monitor-thread" hidden></p>
-            <details class="monitor-observations" id="monitor-observations" hidden>
-              <summary>用户纠偏 <span id="monitor-observation-count"></span></summary>
-              <ol id="monitor-observation-list"></ol>
-            </details>
+            <button
+              class="monitor-observations-trigger"
+              id="monitor-observations"
+              type="button"
+              aria-haspopup="dialog"
+              aria-controls="monitor-observation-dialog"
+              hidden
+            >
+              <span>用户纠偏</span>
+              <span id="monitor-observation-count"></span>
+              <span aria-hidden="true">↗</span>
+            </button>
           </section>
 
           <section class="panel activity-panel" aria-labelledby="activity-title">
@@ -130,20 +145,6 @@
               </div>
               <span class="freshness" id="freshness">等待首个快照</span>
             </div>
-            <section class="next-inline" aria-labelledby="next-title">
-              <p class="eyebrow">唯一下一动作</p>
-              <div class="next-heading-row">
-                <h3 id="next-title">接下来做什么</h3>
-                <span class="divergence-status" id="divergence-panel" hidden>
-                  <button class="divergence-badge" type="button" aria-describedby="divergence-tooltip">登记滞后</button>
-                  <span class="divergence-tooltip" id="divergence-tooltip" role="tooltip">
-                    <span id="divergence"></span>
-                  </span>
-                </span>
-              </div>
-              <p id="next-action">关联任务包后显示正式登记的下一动作。</p>
-              <div class="blocker" id="blocker" hidden></div>
-            </section>
             <ol class="activity-list" id="activity-list" aria-live="polite"></ol>
           </section>
         </aside>
@@ -154,5 +155,18 @@
         <dl id="audit-list"></dl>
       </details>
     </main>
+
+    <dialog class="observation-dialog" id="monitor-observation-dialog" aria-labelledby="monitor-observation-title">
+      <div class="observation-dialog-shell">
+        <header class="observation-dialog-heading">
+          <div>
+            <p class="eyebrow">调度监控</p>
+            <h2 id="monitor-observation-title">用户纠偏 <span id="monitor-observation-dialog-count"></span></h2>
+          </div>
+          <button class="observation-dialog-close" id="monitor-observation-close" type="button" aria-label="关闭用户纠偏浮窗">×</button>
+        </header>
+        <ol class="monitor-observation-list" id="monitor-observation-list"></ol>
+      </div>
+    </dialog>
   </body>
 </html>

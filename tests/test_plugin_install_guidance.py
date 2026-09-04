@@ -17,6 +17,8 @@ def test_agents_points_to_the_single_install_guide() -> None:
 
     assert "docs/workbench-design/04-install-spec.md" in agents
     assert "execute the host-native CLI directly" in agents
+    assert "scripts/codex_setup.py" in agents
+    assert "run `audit` first" in agents
     assert "agent-workbench-manager" not in agents
 
 
@@ -38,6 +40,9 @@ def test_guide_uses_direct_cli_for_each_host() -> None:
         assert command in guide
     assert "用户明确要求" in guide
     assert "cache" in guide
+    assert "python scripts/codex_setup.py audit --output codex-audit.md" in guide
+    assert "apply --expect-report <audit-sha>" in guide
+    assert "唯一允许包装 Codex plugin CLI" in guide
 
 
 def test_lifecycle_skill_and_wrapper_are_removed() -> None:
@@ -50,5 +55,7 @@ def test_readme_links_to_the_guide_without_copying_the_wrapper() -> None:
     readme = read(ROOT / "README.md")
 
     assert "docs/workbench-design/04-install-spec.md#plugin-生命周期agent-直接执行" in readme
+    assert "python scripts/codex_setup.py pull-diff" in readme
+    assert "apply --expect-report" in readme
     assert "plugin_lifecycle.py" not in readme
     assert "config.example.json" not in readme

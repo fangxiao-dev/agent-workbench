@@ -80,15 +80,27 @@ python plugin-marketplace/plugins/impl-package/scripts/install_codex_agents.py -
 
 安装或升级后开启新会话，使宿主从插件缓存重新加载 skills；Codex 的全局 review roles 需要在插件升级后重新运行上面的投影脚本。面向用户和 agent 的文档统一使用 `/impl-package:dev-with-track` 形式显式调用；宿主内部 registry/discovery 仍可显示不带 `/` 的 skill key。`link_skill.py --all` 不处理 `plugin-marketplace/`。
 
+### Codex 更新诊断与 bootstrap
+
+`codex_setup.py` 只盘点本仓库管理的 plugin、skills 和 agents，并以 SHA-256 比较当前仓库与全局 Codex 安装态；UTF-8 文本先统一换行为 LF，避免 Windows/macOS 换行差异造成假 drift，二进制仍按原始字节计算。用户自行安装的内容不进入报告。`pull-diff` 应在 `git pull` 后尽快运行，默认使用 `ORIG_HEAD..HEAD`：
+
+```powershell
+python scripts/codex_setup.py pull-diff
+python scripts/codex_setup.py audit --output codex-audit.md
+python scripts/codex_setup.py apply --expect-report <codex-audit.md 中的审计 SHA> --output codex-apply.md
+```
+
+`apply` 不能直接运行：它会重新计算当前审计 SHA，只有与上一份报告一致时才更新 plugin cache、skills links、agents links 和 managed review roles。报告后状态发生变化时必须重新运行 `audit`。脚本支持 Windows 与 macOS，优先使用 `CODEX_HOME`，否则检查 `~/.codex`；可用 `--codex-home` 显式指定目标。
+
 ### Impl-Package review agents
 
 `plugin-marketplace/plugins/impl-package/agents/*.md` 是 Claude 插件的原生 agent 定义，安装后可在 `/agents` 中看到 `review-track-code`、`review-track-standards`、`review-track-spec` 和 `review-track-safety`。Claude manifest 显式声明了这四个 Markdown 文件。
 
-Codex 当前插件 manifest 不支持 `agents` 字段，因此不能通过 `codex plugin add` 自动安装这些 role。`install_codex_agents.py --global` 会从同一组 Markdown 定义生成 Codex `.toml` role，并写入全局 `$CODEX_HOME/agents`（未设置时为 `~/.codex/agents`）。四个 role 使用与 `do-review` 相同的稳定名称，供 parent 的 leaf dispatch 解析；脚本默认拒绝覆盖非同内容文件，只有明确传入 `--force` 才更新带有本包管理标记（或本包旧格式）的已知文件，并拒绝写入符号链接或 Windows reparse point。
+Codex 当前插件 manifest 不支持 `agents` 字段，因此不能通过 `codex plugin add` 自动安装这些 role。`install_codex_agents.py --global` 会从同一组 Markdown 定义生成 Codex `.toml` role，并写入全局 `$CODEX_HOME/agents`（未设置时为 `~/.codex/agents`）。Code 与 Spec role 固定使用 `gpt-5.6-sol/high`，Standards 与 Safety role 固定使用 `gpt-5.6-sol/medium`；该配置同时适用于 `initial` 和 `terminal-final`，`finding-closure` 仍使用独立 `luna-worker`。四个 role 使用与 `do-review` 相同的稳定名称，供 parent 的 leaf dispatch 解析；脚本默认拒绝覆盖非同内容文件，只有明确传入 `--force` 才更新带有本包管理标记（或本包旧格式）的已知文件，并拒绝写入符号链接或 Windows reparse point。
 
 ### 插件生命周期（Codex / Claude / Grok）
 
-刷新缓存、重装或升级插件时，Agent 按 [安装器规范](docs/workbench-design/04-install-spec.md#plugin-生命周期agent-直接执行) 直接执行 Codex、Claude 或 Grok 的原生 CLI。仓库不维护 lifecycle Skill、包装脚本或机器专属配置；修改用户级宿主状态仍需用户明确要求，执行后必须核对安装版本与缓存。
+刷新缓存、重装或升级插件时，Agent 按 [安装器规范](docs/workbench-design/04-install-spec.md#plugin-生命周期agent-直接执行) 直接执行 Codex、Claude 或 Grok 的原生 CLI。唯一例外是上面的 Codex 一次性 `codex_setup.py` bootstrap；仓库不维护其他 lifecycle Skill、包装脚本或机器专属配置。修改用户级宿主状态仍需用户明确要求，执行后必须核对安装结果与缓存。
 
 ### Discuss Ledger MCP 注册
 

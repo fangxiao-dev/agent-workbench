@@ -54,7 +54,10 @@ disable-model-invocation: true
 - observation 原地更新前，按 source、turn 和时间顺序结合同批前序消息、当前完整 observations 与 task 状态，明确 antecedent、主体、动作和范围；局部对象不扩大为整个类别，指代仍不明确时不改 confirmed observation、不授权 target 消息。
 - `ownerInputs` 只证明消息已读取；`observationDiff` 区分 observation 的新增、原地更新和删除。diff 非空时下一次 automation 报告必须逐条写出变化类型、ID、topic 和完整当前内容，即使任务进度没有其它变化；`write-cycle` 成功后才确认，失败则下轮重放。
 - confirmed observation 要求 dry-run 时不向 target 发送消息。只有实际满足纠偏条件，且原因或拟发送全文不同于 runtime 的 `lastSimulationCorrection` 时，报告“模拟纠偏（未发送）”、触发原因和拟发送全文；同一内容持续存在时不重复，无触发时写回 null，解除后再出现可重新报告。
-- 每轮 `read-cycle` 以 workspace renderer sidecar 的 PID 加 `/api/health` instance ID 核对同一进程，不扫描进程列表。`rendererDiff` 变为 dead、missing 或 mismatch 时报告 PID、固定端口和页面不可用影响，并明确未自动重启；同一状态在 `write-cycle` 确认后不重复。Renderer 仅当前开机周期 detached 常驻，不使用 Docker、Task Scheduler 或 heartbeat 自动重启。
+- evaluation 的 `progress`、`improvements`、`next`、`owner` 只描述 target；monitor、renderer、sidecar、automation 或 canonical target 的维护问题只进入独立 `monitorHealthDiff`。target 没有可改进项时写空数组，`next` 仍写 target 下一步。
+- 每轮 `read-cycle` 以 workspace renderer sidecar 的 PID 加 `/api/health` instance ID 核对同一进程，不扫描进程列表；同时验证 canonical target，并只从明确的 `::created-thread{threadId="..."}` 识别 handoff successor。健康变化单独报告并在 `write-cycle` 确认，同一状态不重复；Renderer 仅当前开机周期 detached 常驻，不自动重启。
+- handoff 后使用 `retarget --target-thread <明确 ID>` 原子换绑；它把 successor cursor 初始化到当前完整行末尾，保留 baseline、observations、evaluation 和其它 runtime。不得用标题或时间猜测 successor，也不得通过 `write-cycle` 隐式换绑。
+- heartbeat 改由另一个 monitor task 承接时，先暂停 automation，再用 `rebind-monitor --monitor-thread <明确 ID>` 换绑并从新 task 当前行末开始读取，随后把同一 automation 的 `targetThreadId` 更新为新 monitor 后恢复；不得只移动 automation 回调而保留旧 monitor cursor。
 - 只有某条 confirmed observation 明确授权且当前事实符合其条件时，才向 target 发送一次幂等消息；其余情况不干预，不创建或控制 worker，不运行目标代码、测试、数据库、浏览器或验证脚本。
 - observation 只记录直接改变目标任务授权、执行、验收或 Owner 决策边界的纠偏；监控模板、CLI、dashboard、prompt 或 observation 机制的调试反馈不进入目标任务 sidecar。
 - 不修改 implementation package、Decision/Spec、Ticket、Evidence、Checkpoint、State 或 Gate。

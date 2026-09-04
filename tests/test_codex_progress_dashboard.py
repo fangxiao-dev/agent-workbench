@@ -6,12 +6,43 @@ import sqlite3
 import sys
 import threading
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.error import HTTPError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "scripts" / "codex_progress_dashboard" / "server.py"
 THREAD_ID = "01a05966-5246-73e3-b46f-fd6af55fb661"
+DASHBOARD_ROOT = ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "codex_progress_dashboard"
+
+
+def test_renderer_uses_observation_dialog_and_omits_duplicate_next_action() -> None:
+    html = (DASHBOARD_ROOT / "index.html").read_text(encoding="utf-8")
+    javascript = (DASHBOARD_ROOT / "app.js").read_text(encoding="utf-8")
+    stylesheet = (DASHBOARD_ROOT / "style.css").read_text(encoding="utf-8")
+    server = (DASHBOARD_ROOT / "server.py").read_text(encoding="utf-8")
+
+    assert "唯一下一动作" not in html
+    assert 'id="next-action"' not in html
+    assert "nextAction" not in javascript
+    assert ".next-inline" not in stylesheet
+    assert '"nextAction"' in server
+    assert '<dialog class="observation-dialog"' in html
+    assert 'aria-haspopup="dialog"' in html
+    assert '<details class="monitor-observations"' not in html
+    assert "showModal()" in javascript
+    assert "monitorObservationDialog.close()" in javascript
+    assert 'method: "PATCH"' in javascript
+    assert "textarea.maxLength = 2000" in javascript
+    assert "新增纠偏" not in html
+    assert ".observation-dialog::backdrop" in stylesheet
+    assert 'aria-label="Trail 最新状态"' in html
+    assert 'id="tooltip-trail-summary"' in html
+    assert "tooltip-dependencies" not in html
+    assert "ticketRelationship" not in javascript
 
 
 def load_module():
@@ -449,17 +480,54 @@ def test_snapshot_projects_monitor_evaluation_and_latest_confirmed_observations(
         "next": "等待审查返回。",
         "owner": None,
     }
-    assert len(monitor["observations"]) == 5
+    assert len(monitor["observations"]) == 7
     assert [item["observedAt"] for item in monitor["observations"]] == [
         "2026-09-02T20:07:00Z",
         "2026-09-02T20:06:00Z",
         "2026-09-02T20:05:00Z",
         "2026-09-02T20:04:00Z",
         "2026-09-02T20:03:00Z",
+        "2026-09-02T20:02:00Z",
+        "2026-09-02T20:01:00Z",
     ]
     assert monitor["observations"][0]["id"] == "O008"
     assert monitor["observations"][0]["topic"] == "敏感内容"
     assert monitor["observations"][0]["content"] == "联系 [邮箱已隐藏]，读取 [本地路径]"
+    assert len(monitor["observations"][0]["revision"]) == 64
+
+    before = module.monitor_progress.read_instance(workspace, automation_id)["observations"]
+    original = next(item for item in before if item["id"] == "O001")
+    projected = next(item for item in monitor["observations"] if item["id"] == "O001")
+    updated = module.update_observation_content(
+        workspace,
+        package,
+        "O001",
+        "手动修订后的正文。",
+        projected["revision"],
+    )
+    after = module.monitor_progress.read_instance(workspace, automation_id)["observations"]
+    stored = next(item for item in after if item["id"] == "O001")
+
+    assert updated["content"] == "手动修订后的正文。"
+    assert stored == {**original, "content": "手动修订后的正文。"}
+    with pytest.raises(module.ObservationConflictError, match="请刷新后重试"):
+        module.update_observation_content(
+            workspace,
+            package,
+            "O001",
+            "不应覆盖",
+            projected["revision"],
+        )
+    with pytest.raises(LookupError, match="confirmed observation"):
+        module.update_observation_content(workspace, package, "O007", "候选不可编辑", "invalid")
+    with pytest.raises(module.monitor_progress.MonitorProgressError, match="non-empty string"):
+        module.update_observation_content(
+            workspace,
+            package,
+            "O001",
+            " ",
+            updated["revision"],
+        )
 
 
 def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_path: Path) -> None:
@@ -482,6 +550,8 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
         "subject": "ticket:TKT-03",
         "outcome": "RUNNING",
         "returned": False,
+        "step": "backend-foundation",
+        "ts": "2026-09-04T09:00:00Z",
         "worker": "/root/tkt03-foundation",
     }
     write_jsonl(trail, [dispatch])
@@ -496,15 +566,37 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
     assert package_snapshot["currentTicketId"] == "TKT-03"
     assert tickets["TKT-03"]["runtimeState"] == "RUNNING"
     assert tickets["TKT-05"]["runtimeState"] == "READY"
+    assert tickets["TKT-03"]["latestTrail"] == {
+        "kind": "dispatch",
+        "outcome": "RUNNING",
+        "at": "2026-09-04T09:00:00Z",
+        "summary": "backend-foundation",
+    }
+    assert tickets["TKT-05"]["latestTrail"] is None
 
     write_jsonl(
         trail,
-        [dispatch, {"kind": "worker-return", "subject": "ticket:TKT-03", "of": 309, "outcome": "DONE"}],
+        [
+            dispatch,
+            {
+                "kind": "worker-return",
+                "subject": "ticket:TKT-03",
+                "of": 309,
+                "outcome": "DONE",
+                "ts": "2026-09-04T09:10:00Z",
+                "summary": "token=secret " + "执行步骤完成。" * 40,
+            },
+        ],
     )
     after_return = module.build_snapshot(THREAD_ID, relative, db_path)["package"]
+    after_ticket = next(ticket for ticket in after_return["tickets"] if ticket["id"] == "TKT-03")
 
     assert after_return["runningTicketIds"] == []
     assert after_return["currentTicketId"] == "TKT-03"
+    assert after_ticket["latestTrail"]["outcome"] == "DONE"
+    assert after_ticket["latestTrail"]["at"] == "2026-09-04T09:10:00Z"
+    assert "secret" not in after_ticket["latestTrail"]["summary"]
+    assert len(after_ticket["latestTrail"]["summary"]) == 200
 
 
 def test_snapshot_matches_slug_ticket_ids_case_insensitively(tmp_path: Path) -> None:
@@ -531,6 +623,7 @@ def test_http_endpoints_serve_tasks_snapshot_and_strict_csp(tmp_path: Path) -> N
     module = load_module()
     db_path, workspace, rollout, _ = make_fixture(tmp_path)
     package = make_package(workspace)
+    relative = package.relative_to(workspace).as_posix()
     write_jsonl(
         rollout,
         [
@@ -538,6 +631,29 @@ def test_http_endpoints_serve_tasks_snapshot_and_strict_csp(tmp_path: Path) -> N
             package_binding_record(package, workspace, "2026-08-31T20:00:01Z"),
         ],
     )
+    module.monitor_progress.init_instance(
+        workspace,
+        "monitor-http",
+        "01a05c65-2eac-7d22-aba9-c2671b2cd03d",
+        THREAD_ID,
+        package,
+    )
+    created = module.monitor_progress.put_observation(
+        workspace,
+        "monitor-http",
+        {
+            "id": None,
+            "topic": "并行边界",
+            "content": "原正文",
+            "scope": "task",
+            "state": "confirmed",
+            "sourceThreadId": THREAD_ID,
+            "sourceMessageId": "msg-http",
+            "confirmedAt": "2026-09-04T09:00:00Z",
+            "response": "accepted",
+            "baselineConflict": False,
+        },
+    )["observation"]
     module.ROLLOUT_READER = module.RolloutReader()
     server = module.create_server(db_path, 0)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
@@ -553,8 +669,61 @@ def test_http_endpoints_serve_tasks_snapshot_and_strict_csp(tmp_path: Path) -> N
             assert health["startedAt"]
         with urlopen(f"{base}/api/tasks") as response:
             assert json.load(response)["tasks"][0]["id"] == THREAD_ID
-        with urlopen(f"{base}/api/tasks/{THREAD_ID}/snapshot") as response:
-            assert json.load(response)["task"]["status"] == "进行中"
+        snapshot_url = f"{base}/api/tasks/{THREAD_ID}/snapshot?package={quote(relative)}"
+        with urlopen(snapshot_url) as response:
+            snapshot = json.load(response)
+            assert snapshot["task"]["status"] == "进行中"
+        observation = snapshot["monitor"]["observations"][0]
+        patch_url = f"{base}/api/tasks/{THREAD_ID}/observation?package={quote(relative)}"
+        request = Request(
+            patch_url,
+            data=json.dumps(
+                {"id": observation["id"], "content": "页面保存后的正文", "revision": observation["revision"]}
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Origin": base},
+            method="PATCH",
+        )
+        with urlopen(request) as response:
+            saved = json.load(response)["observation"]
+            assert saved["content"] == "页面保存后的正文"
+        stored = module.monitor_progress.read_instance(workspace, "monitor-http")["observations"][0]
+        assert stored == {**created, "content": "页面保存后的正文"}
+
+        for payload, status in (
+            ({"id": saved["id"], "content": "过期覆盖", "revision": observation["revision"]}, 409),
+            ({"id": saved["id"], "content": "未知字段", "revision": saved["revision"], "topic": "禁止"}, 400),
+        ):
+            invalid = Request(
+                patch_url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json", "Origin": base},
+                method="PATCH",
+            )
+            with pytest.raises(HTTPError) as error:
+                urlopen(invalid)
+            assert error.value.code == status
+        oversized = Request(
+            patch_url,
+            data=b"x" * (module.MAX_REQUEST_BODY_BYTES + 1),
+            headers={"Content-Type": "application/json", "Origin": base},
+            method="PATCH",
+        )
+        with pytest.raises(HTTPError) as error:
+            urlopen(oversized)
+        assert error.value.code == 400
+
+        rejected = Request(
+            patch_url,
+            data=json.dumps(
+                {"id": observation["id"], "content": "不应保存", "revision": observation["revision"]}
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Origin": "https://example.com"},
+            method="PATCH",
+        )
+        with pytest.raises(HTTPError) as error:
+            urlopen(rejected)
+        assert error.value.code == 403
+        assert module.monitor_progress.read_instance(workspace, "monitor-http")["observations"][0] == stored
         with urlopen(f"{base}/") as response:
             assert "default-src 'none'" in response.headers["Content-Security-Policy"]
             assert b"Codex" in response.read()
