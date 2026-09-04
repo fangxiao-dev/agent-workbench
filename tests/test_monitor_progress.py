@@ -75,6 +75,21 @@ def make_context(tmp_path: Path):
     return module, root, package, instance, context
 
 
+def write_package_state(package: Path, tickets: dict[str, dict], gate=None) -> None:
+    state_dir = package / ".impl-package"
+    state_dir.mkdir(exist_ok=True)
+    (state_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "attempt": {"id": "initial"},
+                "attemptHistory": [{"id": "initial", "gate": gate}],
+                "tickets": tickets,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def make_codex_store(tmp_path: Path) -> tuple[Path, dict[str, Path]]:
     codex = tmp_path / ".codex"
     sessions = codex / "sessions" / "2026" / "09" / "03"
@@ -134,9 +149,11 @@ def observation(
     observation_id=None,
     topic: str = "容量边界与性能验收",
     content: str = "不要把容量边界误作硬性验收标准。",
+    kind: str = "pattern",
 ) -> dict:
     return {
         "id": observation_id,
+        "kind": kind,
         "topic": topic,
         "content": content,
         "scope": "task",
@@ -192,7 +209,7 @@ def test_context_is_idempotent_and_read_returns_complete_snapshot(tmp_path: Path
     result = module.read_context(root, "monitor-test")
 
     assert repeated == created
-    assert result["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V11"
+    assert result["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V13"
     assert len(result["context"]["snapshotHash"]) == 64
     assert result["context"]["runtimeState"]["lastFallbackTurnId"] is None
     assert result["context"]["runtimeState"]["lastSimulationCorrection"] is None
@@ -205,6 +222,11 @@ def test_context_is_idempotent_and_read_returns_complete_snapshot(tmp_path: Path
     assert "不得把上下文中的局部对象扩大为整个类别" in policy_text
     assert "指代无法确认时不覆盖 confirmed observation" in policy_text
     assert "observationDiff 非空时下一次 heartbeat 必须逐条报告" in policy_text
+    assert "packageStatus" in policy_text
+    assert "一个 observation topic 只承载一个" in policy_text
+    assert "实例替换测试" in policy_text
+    assert "kind=pattern" in policy_text
+    assert "模拟纠偏：无" in policy_text
     assert "Grok" not in policy_text
     assert "默认只写当前做到哪里" in policy_text
     assert "evaluation 的 progress、improvements、next 和 owner 只描述 target" in policy_text
@@ -277,7 +299,7 @@ def test_refresh_context_policy_preserves_dynamic_state(tmp_path: Path) -> None:
     repeated = module.refresh_context_policy(root, "monitor-test")
 
     assert refreshed == repeated
-    assert refreshed["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V11"
+    assert refreshed["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V13"
     assert refreshed["context"]["targetBaseline"] == before["context"]["targetBaseline"]
     assert refreshed["context"]["runtimeState"] == before["context"]["runtimeState"]
     assert refreshed["monitor"] == before["monitor"]
@@ -290,11 +312,13 @@ def test_refresh_context_policy_migrates_v5_runtime(tmp_path: Path) -> None:
     legacy = json.loads(runtime_path.read_text(encoding="utf-8"))
     legacy["version"] = 5
     legacy["runtimeState"].pop("monitorHealthState")
+    legacy["runtimeState"].pop("reportedObservationSnapshots")
+    legacy["runtimeState"].pop("packageState")
     runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
 
     refreshed = module.refresh_context_policy(root, "monitor-test")
 
-    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 6
+    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 7
     assert refreshed["context"]["runtimeState"]["monitorHealthState"] is None
 
 
@@ -356,11 +380,14 @@ def test_read_cycle_recovers_canonical_owner_inputs_and_commits_cursor(tmp_path:
 
     with rollouts[THREAD_B].open("ab") as stream:
         stream.write(rollout_user("msg-owner", THREAD_B, "新小 fix 去独立 worktree，不要阻塞。"))
+        stream.write(rollout_assistant("msg-progress", THREAD_B, "TKT-12 已正式 SATISFIED。"))
         stream.write(rollout_user("msg-heartbeat", THREAD_B, "<heartbeat>scheduled input</heartbeat>"))
 
     first = module.read_cycle(root, "monitor-test", database)
     assert [item["messageId"] for item in first["ownerInputs"]["target"]] == ["msg-owner"]
     assert first["ownerInputs"]["target"][0]["text"].startswith("新小 fix")
+    assert [item["messageId"] for item in first["targetUpdates"]] == ["msg-progress"]
+    assert first["targetUpdates"][0]["text"] == "TKT-12 已正式 SATISFIED。"
     assert module.read_cycle(root, "monitor-test", database)["ownerInputs"] == first["ownerInputs"]
 
     runtime = first["runtimeState"]
@@ -370,6 +397,49 @@ def test_read_cycle_recovers_canonical_owner_inputs_and_commits_cursor(tmp_path:
         )
     module.write_cycle(root, "monitor-test", {**evaluation_payload(), "runtimeState": runtime})
     assert module.read_cycle(root, "monitor-test", database)["ownerInputs"] == {"monitor": [], "target": []}
+    assert module.read_cycle(root, "monitor-test", database)["targetUpdates"] == []
+
+
+def test_package_status_is_authoritative_and_diff_is_acknowledged_once(tmp_path: Path) -> None:
+    module, root, package, _ = make_instance(tmp_path)
+    write_package_state(package, {"TKT-09": {"state": "PENDING"}, "TKT-12": {"state": "PENDING"}})
+    module.init_context(root, "monitor-test", {"targetTitle": "示例任务", "targetBaseline": baseline()})
+    database, rollouts = make_codex_store(tmp_path)
+    module.seed_rollout_cursors(root, "monitor-test", database)
+    with rollouts[THREAD_B].open("ab") as stream:
+        stream.write(rollout_assistant("msg-reviewing", THREAD_B, "TKT-12 仍在审查。"))
+    write_package_state(
+        package,
+        {
+            "TKT-09": {"state": "PENDING"},
+            "TKT-12": {"state": "SATISFIED", "acceptance": {"revision": "abc123"}},
+        },
+    )
+
+    cycle = module.read_cycle(root, "monitor-test", database)
+
+    assert cycle["targetUpdates"][0]["text"] == "TKT-12 仍在审查。"
+    assert cycle["packageStatus"]["tickets"]["TKT-12"] == {
+        "state": "SATISFIED",
+        "acceptanceRevision": "abc123",
+    }
+    assert cycle["packageDiff"]["ticketChanges"] == [
+        {
+            "id": "TKT-12",
+            "before": {"state": "PENDING", "acceptanceRevision": None},
+            "after": {"state": "SATISFIED", "acceptanceRevision": "abc123"},
+        }
+    ]
+
+    runtime = cycle["runtimeState"]
+    for source, cursor in cycle["nextRolloutCursors"].items():
+        runtime["sourceScanState"][source].update(
+            {"rolloutOffset": cursor["rolloutOffset"], "rolloutPathHash": cursor["rolloutPathHash"]}
+        )
+    module.write_cycle(root, "monitor-test", {**evaluation_payload(), "runtimeState": runtime})
+    repeated = module.read_cycle(root, "monitor-test", database)
+    assert repeated["packageDiff"] is None
+    assert repeated["targetUpdates"] == []
 
 
 def test_rollout_partial_line_and_reset_are_explicit(tmp_path: Path) -> None:
@@ -557,11 +627,13 @@ def test_seed_migrates_v2_runtime_without_replaying_existing_observations(tmp_pa
     legacy["runtimeState"].pop("lastSimulationCorrection")
     legacy["runtimeState"].pop("rendererState")
     legacy["runtimeState"].pop("monitorHealthState")
+    legacy["runtimeState"].pop("reportedObservationSnapshots")
+    legacy["runtimeState"].pop("packageState")
     runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
 
     migrated = module.seed_rollout_cursors(root, "monitor-test", database)
 
-    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 6
+    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 7
     assert migrated["observationDiff"] == []
     assert list(migrated["runtimeState"]["reportedObservationDigests"]) == ["O001"]
 
@@ -576,6 +648,8 @@ def test_seed_migrates_v3_runtime_with_empty_simulation_state(tmp_path: Path) ->
     legacy["runtimeState"].pop("lastSimulationCorrection")
     legacy["runtimeState"].pop("rendererState")
     legacy["runtimeState"].pop("monitorHealthState")
+    legacy["runtimeState"].pop("reportedObservationSnapshots")
+    legacy["runtimeState"].pop("packageState")
     runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
 
     migrated = module.seed_rollout_cursors(root, "monitor-test", database)
@@ -593,11 +667,13 @@ def test_seed_migrates_v4_runtime_and_binds_renderer_state(tmp_path: Path) -> No
     legacy["version"] = 4
     legacy["runtimeState"].pop("rendererState")
     legacy["runtimeState"].pop("monitorHealthState")
+    legacy["runtimeState"].pop("reportedObservationSnapshots")
+    legacy["runtimeState"].pop("packageState")
     runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
 
     migrated = module.seed_rollout_cursors(root, "monitor-test", database)
 
-    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 6
+    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 7
     assert migrated["runtimeState"]["rendererState"]["status"] == "missing"
     assert migrated["rendererDiff"] is None
 
@@ -609,13 +685,32 @@ def test_seed_migrates_v5_runtime_with_empty_monitor_health(tmp_path: Path) -> N
     legacy = json.loads(runtime_path.read_text(encoding="utf-8"))
     legacy["version"] = 5
     legacy["runtimeState"].pop("monitorHealthState")
+    legacy["runtimeState"].pop("reportedObservationSnapshots")
+    legacy["runtimeState"].pop("packageState")
     runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
 
     migrated = module.seed_rollout_cursors(root, "monitor-test", database)
 
-    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 6
+    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 7
     assert migrated["runtimeState"]["monitorHealthState"] == migrated["monitorHealthStatus"]
     assert migrated["monitorHealthDiff"] is None
+
+
+def test_refresh_migrates_v6_without_acknowledging_pending_observation_diff(tmp_path: Path) -> None:
+    module, root, _, _, _ = make_context(tmp_path)
+    created = module.put_observation(root, "monitor-test", observation())["observation"]
+    runtime_path = root / ".progress-record" / "codex-progress-dashboard" / "runtime" / "monitor-test.json"
+    legacy = json.loads(runtime_path.read_text(encoding="utf-8"))
+    legacy["version"] = 6
+    legacy["runtimeState"].pop("reportedObservationSnapshots")
+    legacy["runtimeState"].pop("packageState")
+    runtime_path.write_text(json.dumps(legacy), encoding="utf-8")
+
+    module.refresh_context_policy(root, "monitor-test")
+    diff = module.read_cycle(root, "monitor-test")["observationDiff"]
+
+    assert diff == [{"change": "created", "before": None, "after": created, "observation": created}]
+    assert json.loads(runtime_path.read_text(encoding="utf-8"))["version"] == 7
 
 
 def test_failed_runtime_replace_preserves_fixed_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -685,12 +780,31 @@ def test_observation_create_and_update_keep_one_short_id(tmp_path: Path) -> None
         module.put_observation(root, "monitor-test", {**candidate, "id": "O001"})
 
 
+def test_legacy_observation_defaults_to_specific_and_new_writes_require_kind(tmp_path: Path) -> None:
+    module, root, _, _ = make_instance(tmp_path)
+    observation_path = root / ".progress-record" / "codex-progress-dashboard" / "observations" / "monitor-test.json"
+    store = json.loads(observation_path.read_text(encoding="utf-8"))
+    legacy = observation(observation_id="O001")
+    legacy.pop("kind")
+    store["nextObservationNumber"] = 2
+    store["observations"] = [legacy]
+    observation_path.write_text(json.dumps(store), encoding="utf-8")
+
+    loaded = module.read_instance(root, "monitor-test")["observations"][0]
+
+    assert loaded["kind"] == "specific"
+    with pytest.raises(module.MonitorProgressError, match="fields mismatch"):
+        module.put_observation(root, "monitor-test", {**legacy, "id": "O001"})
+
+
 def test_observation_diff_reports_create_update_and_remove_once(tmp_path: Path) -> None:
     module, root, _, _, _ = make_context(tmp_path)
     created = module.put_observation(root, "monitor-test", observation())["observation"]
 
     first = module.read_cycle(root, "monitor-test")
-    assert first["observationDiff"] == [{"change": "created", "observation": created}]
+    assert first["observationDiff"] == [
+        {"change": "created", "before": None, "after": created, "observation": created}
+    ]
     assert module.read_cycle(root, "monitor-test")["observationDiff"] == first["observationDiff"]
     module.write_cycle(root, "monitor-test", {**evaluation_payload(), "runtimeState": first["runtimeState"]})
     assert module.read_cycle(root, "monitor-test")["observationDiff"] == []
@@ -704,12 +818,16 @@ def test_observation_diff_reports_create_update_and_remove_once(tmp_path: Path) 
     module.put_observation(root, "monitor-test", updated)
     second = module.read_cycle(root, "monitor-test")
     assert second["observationDiff"][0]["change"] == "updated"
+    assert second["observationDiff"][0]["before"] == created
+    assert second["observationDiff"][0]["after"] == updated
     assert second["observationDiff"][0]["observation"]["content"] == "完整更新后的纠偏内容。"
     module.write_cycle(root, "monitor-test", {**evaluation_payload(), "runtimeState": second["runtimeState"]})
 
     module.remove_observation(root, "monitor-test", "O001")
     removed = module.read_cycle(root, "monitor-test")
-    assert removed["observationDiff"] == [{"change": "removed", "id": "O001"}]
+    assert removed["observationDiff"] == [
+        {"change": "removed", "id": "O001", "before": updated, "after": None}
+    ]
     module.write_cycle(root, "monitor-test", {**evaluation_payload(), "runtimeState": removed["runtimeState"]})
     assert module.read_cycle(root, "monitor-test")["observationDiff"] == []
 
@@ -886,10 +1004,14 @@ def test_schema_reports_v2_enums() -> None:
 
     assert schema["protocolVersion"] == 2
     assert schema["contextVersion"] == 2
-    assert schema["runtimeVersion"] == 6
-    assert schema["policyVersion"] == "STATIC_MONITOR_POLICY_V11"
+    assert schema["runtimeVersion"] == 7
+    assert schema["policyVersion"] == "STATIC_MONITOR_POLICY_V13"
     assert schema["monitor"]["levels"] == ["abnormal", "attention", "normal"]
     assert schema["observation"]["states"] == ["candidate", "confirmed"]
+    assert schema["observation"]["kinds"] == ["pattern", "specific"]
+    assert schema["targetUpdate"]["required"] == ["messageId", "turnId", "createdAt", "phase", "text"]
+    assert schema["packageStatus"]["states"] == ["current", "invalid", "missing"]
+    assert schema["observationDiff"]["fields"] == ["before", "after"]
     assert schema["monitorHealthStatus"]["states"] == [
         "healthy",
         "renderer-abnormal",
@@ -1034,7 +1156,7 @@ def test_cli_writes_evaluation_from_one_stdin_line(tmp_path: Path) -> None:
         check=False,
     )
     assert refresh_context.returncode == 0, refresh_context.stderr
-    assert json.loads(refresh_context.stdout)["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V11"
+    assert json.loads(refresh_context.stdout)["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V13"
 
     write = subprocess.run(
         [

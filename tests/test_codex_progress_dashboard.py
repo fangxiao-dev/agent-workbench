@@ -6,6 +6,7 @@ import sqlite3
 import sys
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -43,9 +44,14 @@ def test_renderer_uses_observation_dialog_and_omits_duplicate_next_action() -> N
     assert 'id="tooltip-active-list"' in html
     assert 'id="tooltip-result-summary"' in html
     assert "function stateLabel(value, runtimeState = null)" in javascript
-    assert 'if (runtimeState === "RUNNING") return "正在进行"' in javascript
+    assert 'if (runtimeState === "DEVELOPING") return "开发中"' in javascript
+    assert 'if (runtimeState === "INVESTIGATING") return "调研中"' in javascript
     assert 'if (runtimeState === "READY") return "可启动"' in javascript
     assert "tooltipState.textContent = stateLabel(ticket.state, ticket.runtimeState)" in javascript
+    assert '.flow-node.is-developing::after' in stylesheet
+    assert 'content: "开发中"' in stylesheet
+    assert '.flow-node.is-investigating::after' in stylesheet
+    assert 'content: "调研中"' in stylesheet
     assert 'id="task-select"' not in html
     assert '<output class="task-readout" id="task-readout"' in html
     assert "taskSelect" not in javascript
@@ -53,6 +59,23 @@ def test_renderer_uses_observation_dialog_and_omits_duplicate_next_action() -> N
     assert 'localStorage.setItem("codex-progress-package"' in javascript
     assert "tooltip-dependencies" not in html
     assert "ticketRelationship" not in javascript
+    assert 'id="review-stats-panel"' in html
+    assert 'id="review-stats-unique"' in html
+    assert 'id="review-stats-closed"' in html
+    assert 'id="review-chart-segments"' in html
+    assert 'id="review-chart-labels"' in html
+    assert 'id="review-chart-tooltip"' in html
+    assert 'id="review-stats-ticket-list"' not in html
+    assert 'id="review-stats-coverage"' not in html
+    assert "数据覆盖提示" not in html
+    assert "reviewStats" in javascript
+    assert "reviewStats" in server
+    assert "pointerenter" in javascript
+    assert 'segment.setAttribute("tabindex", "0")' in javascript
+    assert "innerHTML" not in javascript
+    assert "跨 Track 共同发现" in html
+    assert 'href="/style.css?v=12"' in html
+    assert 'src="/app.js?v=12"' in html
 
 
 def load_module():
@@ -420,6 +443,131 @@ def test_snapshot_reflects_package_state_changes_without_restart(tmp_path: Path)
     assert module.build_snapshot(THREAD_ID, relative, db_path)["package"]["formalSummary"] == "1/1 已正式验收"
 
 
+def test_snapshot_includes_review_stats_from_package_helper(tmp_path: Path) -> None:
+    module = load_module()
+    db_path, workspace, rollout, _ = make_fixture(tmp_path)
+    package = make_package(workspace)
+    relative = package.relative_to(workspace).as_posix()
+    expected = {
+        "version": 1,
+        "totals": {
+            "unique": 3,
+            "open": 1,
+            "closed": 2,
+            "trackContributions": 4,
+            "unattributed": 0,
+        },
+        "tracks": {
+            "Track A": {"caught": 2, "open": 1, "closed": 1},
+            "Track B": {"caught": 1, "open": 0, "closed": 1},
+            "Track C": {"caught": 1, "open": 0, "closed": 1},
+            "Track D": {"caught": 0, "open": 0, "closed": 0},
+        },
+        "tickets": {"TKT-01": {"unique": 3, "open": 1, "closed": 2}},
+        "coverage": {"warnings": []},
+    }
+    module.implementation.review_track_stats = SimpleNamespace(calculate_review_stats=lambda _: expected)
+    write_jsonl(rollout, [])
+
+    snapshot = module.build_snapshot(THREAD_ID, relative, db_path)
+
+    assert snapshot["package"]["reviewStats"] == expected
+
+
+def test_snapshot_isolates_review_stats_failure_with_zero_warning(tmp_path: Path) -> None:
+    module = load_module()
+    db_path, workspace, rollout, _ = make_fixture(tmp_path)
+    package = make_package(workspace)
+    relative = package.relative_to(workspace).as_posix()
+
+    def fail(_: Path) -> dict:
+        raise RuntimeError("fixture failure")
+
+    module.implementation.review_track_stats = SimpleNamespace(calculate_review_stats=fail)
+    write_jsonl(rollout, [])
+
+    snapshot = module.build_snapshot(THREAD_ID, relative, db_path)
+    review_stats = snapshot["package"]["reviewStats"]
+
+    assert review_stats["version"] == 1
+    assert review_stats["totals"] == {
+        "unique": 0,
+        "open": 0,
+        "closed": 0,
+        "trackContributions": 0,
+        "unattributed": 0,
+    }
+    assert review_stats["tracks"] == {
+        track: {"caught": 0, "open": 0, "closed": 0}
+        for track in ("Track A", "Track B", "Track C", "Track D")
+    }
+    assert review_stats["tickets"] == {}
+    assert review_stats["coverage"]["warnings"]
+
+
+def test_snapshot_review_warning_does_not_expose_workspace_path(tmp_path: Path) -> None:
+    module = load_module()
+    db_path, workspace, rollout, _ = make_fixture(tmp_path)
+    package = make_package(workspace)
+    relative = package.relative_to(workspace).as_posix()
+    trail = package / "execution" / "initial" / "trail.jsonl"
+    trail.parent.mkdir(parents=True)
+    trail.write_text("{broken\n", encoding="utf-8")
+    write_jsonl(rollout, [])
+
+    snapshot = module.build_snapshot(THREAD_ID, relative, db_path)
+    encoded = json.dumps(snapshot["package"]["reviewStats"], ensure_ascii=False)
+
+    assert str(tmp_path) not in encoded
+    assert "execution/initial/trail.jsonl:1" in encoded
+
+
+def test_snapshot_does_not_reflect_path_like_finding_keys_in_warning(tmp_path: Path) -> None:
+    module = load_module()
+    db_path, workspace, rollout, _ = make_fixture(tmp_path)
+    package = make_package(workspace)
+    relative = package.relative_to(workspace).as_posix()
+    path_like_key = str(tmp_path / "private" / "finding")
+    summary = {
+        "schemaVersion": 1,
+        "reviewRunId": "legacy",
+        "phase": "initial",
+        "resolvedHead": "a" * 40,
+        "findings": [{
+            "findingKey": path_like_key,
+            "id": "F-001",
+            "title": "Legacy finding",
+            "ticketIds": ["TKT-01"],
+            "tracks": [],
+            "classification": "blocker",
+            "lifecycle": "open",
+        }],
+    }
+    trail = package / "execution" / "initial" / "trail.jsonl"
+    write_jsonl(
+        trail,
+        [{
+            "v": 1,
+            "seq": 1,
+            "ts": "2026-09-01T10:00:00Z",
+            "kind": "fact",
+            "subject": "review:legacy",
+            "key": "review.canonical_summary",
+            "value": summary,
+            "head": "a" * 40,
+        }],
+    )
+    write_jsonl(rollout, [])
+
+    encoded = json.dumps(
+        module.build_snapshot(THREAD_ID, relative, db_path)["package"]["reviewStats"],
+        ensure_ascii=False,
+    )
+
+    assert path_like_key not in encoded
+    assert "no track attribution" in encoded
+
+
 def test_snapshot_follows_latest_monitor_record_across_task_handoff(tmp_path: Path) -> None:
     module = load_module()
     db_path, workspace, rollout, _ = make_fixture(tmp_path)
@@ -602,7 +750,7 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
     db_path, workspace, rollout, _ = make_fixture(tmp_path)
     package = make_package(
         workspace,
-        {"TKT-01": "SATISFIED", "TKT-03": "PENDING", "TKT-05": "PENDING"},
+        {"TKT-01": "SATISFIED", "TKT-03": "PENDING", "TKT-05": "PENDING", "TKT-07": "PENDING"},
     )
     ticket_dir = package / "tickets"
     for ticket_id in ("TKT-03", "TKT-05"):
@@ -610,9 +758,14 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
             f"# {ticket_id}\n\nTicket ID：{ticket_id}\n\n## 阻塞依赖\n\n- implementation: TKT-01\n",
             encoding="utf-8",
         )
+    (ticket_dir / "TKT-07.md").write_text(
+        "# TKT-07\n\nTicket ID：TKT-07\n\n## 阻塞依赖\n\n- implementation: TKT-05\n",
+        encoding="utf-8",
+    )
     trail = package / "execution" / "initial" / "trail.jsonl"
     dispatch = {
         "seq": 309,
+        "id": "TKT03-FOUNDATION",
         "kind": "dispatch",
         "subject": "ticket:TKT-03",
         "outcome": "RUNNING",
@@ -621,7 +774,18 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
         "ts": "2026-09-04T09:00:00Z",
         "worker": "/root/tkt03-foundation",
     }
-    write_jsonl(trail, [dispatch])
+    investigation = {
+        "seq": 310,
+        "id": "TKT07-LOOKAHEAD",
+        "kind": "dispatch",
+        "subject": "ticket:TKT-07",
+        "outcome": "RUNNING",
+        "returned": False,
+        "step": "look-ahead",
+        "ts": "2026-09-04T09:01:00Z",
+        "worker": "/root/tkt07-lookahead",
+    }
+    write_jsonl(trail, [dispatch, investigation])
     write_jsonl(rollout, [])
     relative = package.relative_to(workspace).as_posix()
 
@@ -629,10 +793,11 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
     tickets = {ticket["id"]: ticket for ticket in package_snapshot["tickets"]}
 
     assert package_snapshot["readyTicketIds"] == ["TKT-03", "TKT-05"]
-    assert package_snapshot["runningTicketIds"] == ["TKT-03"]
+    assert package_snapshot["runningTicketIds"] == ["TKT-03", "TKT-07"]
     assert package_snapshot["currentTicketId"] == "TKT-03"
-    assert tickets["TKT-03"]["runtimeState"] == "RUNNING"
+    assert tickets["TKT-03"]["runtimeState"] == "DEVELOPING"
     assert tickets["TKT-05"]["runtimeState"] == "READY"
+    assert tickets["TKT-07"]["runtimeState"] == "INVESTIGATING"
     assert tickets["TKT-03"]["activeActions"] == [{
         "label": "backend-foundation",
         "at": "2026-09-04T09:00:00Z",
@@ -648,7 +813,7 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
             {
                 "kind": "worker-return",
                 "subject": "ticket:TKT-03",
-                "of": 309,
+                "of": "TKT03-FOUNDATION",
                 "outcome": "INCOMPLETE",
                 "ts": "2026-09-04T09:10:00Z",
                 "summary": "token=secret " + "执行步骤完成。" * 40,
@@ -661,7 +826,7 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
     assert after_return["runningTicketIds"] == ["TKT-03"]
     assert after_return["currentTicketId"] == "TKT-03"
     assert after_ticket["state"] == "PENDING"
-    assert after_ticket["runtimeState"] == "RUNNING"
+    assert after_ticket["runtimeState"] == "DEVELOPING"
     assert after_ticket["activeActions"] == []
     assert after_ticket["latestResult"]["outcome"] == "INCOMPLETE"
     assert after_ticket["latestResult"]["at"] == "2026-09-04T09:10:00Z"
@@ -674,7 +839,7 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
     rotated_ticket = next(ticket for ticket in after_rotation["tickets"] if ticket["id"] == "TKT-03")
 
     assert after_rotation["runningTicketIds"] == ["TKT-03"]
-    assert rotated_ticket["runtimeState"] == "RUNNING"
+    assert rotated_ticket["runtimeState"] == "DEVELOPING"
     assert rotated_ticket["activeActions"] == []
     assert rotated_ticket["latestResult"]["outcome"] == "INCOMPLETE"
 
@@ -725,6 +890,37 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
 
     assert fallback_ticket["activeActions"] == [{"label": "Track B", "at": "2026-09-04T09:12:00Z"}]
     assert fallback_ticket["latestResult"]["outcome"] == "PASS"
+
+
+def test_terminal_ticket_never_exposes_orphaned_active_actions(tmp_path: Path) -> None:
+    module = load_module()
+    db_path, workspace, rollout, _ = make_fixture(tmp_path)
+    package = make_package(workspace, {"TKT-01": "SATISFIED"})
+    write_jsonl(
+        package / "execution" / "initial" / "trail.jsonl",
+        [{
+            "seq": 309,
+            "id": "TKT01-ORPHANED",
+            "kind": "dispatch",
+            "subject": "ticket:TKT-01",
+            "outcome": "RUNNING",
+            "returned": False,
+            "step": "stale-action",
+            "ts": "2026-09-04T09:00:00Z",
+        }],
+    )
+    write_jsonl(rollout, [])
+
+    package_snapshot = module.build_snapshot(
+        THREAD_ID,
+        package.relative_to(workspace).as_posix(),
+        db_path,
+    )["package"]
+    ticket = package_snapshot["tickets"][0]
+
+    assert ticket["state"] == "SATISFIED"
+    assert ticket["runtimeState"] is None
+    assert ticket["activeActions"] == []
 
 
 def test_snapshot_matches_slug_ticket_ids_case_insensitively(tmp_path: Path) -> None:

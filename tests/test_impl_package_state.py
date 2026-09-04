@@ -808,6 +808,37 @@ class ImplPackageStateTests(unittest.TestCase):
             result = self.cli(repo, package, "trail", "append", input_text=json.dumps(payload))
             self.assertTrue(json.loads(result.stdout)["appended"])
 
+    def test_trail_append_accepts_canonical_review_summary_fact(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+
+        value = {
+            "schemaVersion": 1,
+            "reviewRunId": "review-01",
+            "phase": "initial",
+            "resolvedHead": git(repo, "rev-parse", "HEAD"),
+            "findings": [],
+        }
+        result = self.cli(
+            repo,
+            package,
+            "trail",
+            "append",
+            input_text=json.dumps(
+                {
+                    "kind": "fact",
+                    "subject": "review:review-01",
+                    "key": "review.canonical_summary",
+                    "value": value,
+                }
+            ),
+        )
+
+        self.assertTrue(json.loads(result.stdout)["appended"])
+        row = json.loads((package / "execution/initial/trail.jsonl").read_text(encoding="utf-8"))
+        self.assertEqual(row["value"], value)
+
     def test_trail_append_rejects_unknown_fact_key_with_nearest_key(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)

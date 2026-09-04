@@ -81,6 +81,8 @@ def test_do_review_owns_the_judgment_heuristics() -> None:
         "Track C source recheck",
         "reviewer-registry.json",
         "review_ledger.py",
+        "review_track_stats.py record",
+        "review.canonical_summary",
         "native subagents",
         "owner approval",
     ):
@@ -88,6 +90,12 @@ def test_do_review_owns_the_judgment_heuristics() -> None:
     # Host-specific leaf mapping is gone from the skill (moved to presets).
     assert "review-track-code" not in review
     assert "spawn_subagent" not in review
+
+    output_contract = (PLUGIN / "skills" / "do-review" / "references" / "output-templates.md").read_text(
+        encoding="utf-8"
+    )
+    for marker in ("findingKey", "ticketIds", "tracks", "classification", "lifecycle"):
+        assert marker in output_contract
 
 
 def test_plugin_exposes_the_slimmed_flat_skill_set() -> None:
@@ -127,12 +135,17 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
         "STATIC_HASH",
         "items: []",
         "ownerInputs",
+        "packageStatus",
+        "packageDiff",
+        "targetUpdates",
         "nextRolloutCursors",
         "observationDiff",
         "lastSimulationCorrection",
-        "同批前序消息",
-        "confirmed observation",
-        "candidate 不授权动作",
+        "按 observations 顺序分类",
+        "confirmed 生效",
+        "candidate 不授权",
+        "kind=pattern",
+        "specific",
         "语义变化",
     ):
         assert marker in template
@@ -144,7 +157,8 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
     assert "Grok" not in template
     assert "antecedent、主体、动作和范围" in skill
     assert "新增/更新/删除" in template
-    assert "模拟纠偏（未发送）" in template
+    assert "模拟纠偏" in template
+    assert "否则写“无”" in template
     assert "dry-run" in template
     rendered = (
         template.replace("{{AUTOMATION_ID}}", "impl-package-2026-08-31-bank-reconciliation-nm-settlement-groups")

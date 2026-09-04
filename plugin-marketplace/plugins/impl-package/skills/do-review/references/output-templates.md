@@ -28,6 +28,32 @@ Default classification: blocker risks business data, money, inventory, order/cus
 
 The ledger context must preserve the broken invariant/failure mode, best evidence, parent decision/status, and covered/open boundary. Large detail may live in a readable artifact without changing the canonical ledger owner.
 
+## Canonical Finding Summary
+
+For an Impl-Package target, after atomically updating the Markdown ledger, send one complete machine-readable summary to `review_track_stats.py record`. Only accepted `blocker` and `follow-up` findings appear here; candidates, duplicates, disputed, backlog, out-of-scope, and unsupported entries remain in the human ledger and are not counted as bugs.
+
+```json
+{
+  "schemaVersion": 1,
+  "reviewRunId": "<stable ReviewRun id>",
+  "phase": "initial | finding-closure | terminal-final",
+  "resolvedHead": "<40-character commit SHA>",
+  "findings": [
+    {
+      "findingKey": "<package-stable broken-invariant key>",
+      "id": "F-001",
+      "title": "Short title",
+      "ticketIds": ["TKT-01"],
+      "tracks": ["Track A", "Track C"],
+      "classification": "blocker | follow-up",
+      "lifecycle": "open | closed"
+    }
+  ]
+}
+```
+
+Every summary is the complete latest accepted finding set for that ReviewRun, not a delta. Reuse `findingKey` when a later phase or ReviewRun rechecks the same broken invariant; the latest trail record owns lifecycle and track attribution. An empty `tracks` list is reserved for explicit legacy backfill and is rejected by normal `record`.
+
 ## Normal Review Report
 
 ```markdown

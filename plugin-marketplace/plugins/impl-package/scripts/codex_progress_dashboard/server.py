@@ -26,6 +26,12 @@ PLUGIN_SCRIPTS = Path(__file__).resolve().parents[1]
 if str(PLUGIN_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PLUGIN_SCRIPTS))
 import monitor_progress
+from impl_package_runtime import engine as impl_package_engine
+
+try:
+    import review_track_stats
+except Exception:  # pragma: no cover - the optional package helper may be absent during upgrades
+    review_track_stats = None  # type: ignore[assignment]
 
 
 HOST = "127.0.0.1"
@@ -53,6 +59,7 @@ MAX_ACTIVITY = 5
 MAX_ACTIVITY_CHARS = 1200
 MAX_TRAIL_SUMMARY_CHARS = 200
 MAX_REQUEST_BODY_BYTES = 8192
+REVIEW_TRACKS = ("Track A", "Track B", "Track C", "Track D")
 
 
 class ObservationConflictError(ValueError):
@@ -539,27 +546,6 @@ def _gate_label(state: dict[str, Any]) -> tuple[str, str]:
     return labels.get(verdict.lower(), verdict), verdict
 
 
-def _ticket_released(ticket_id: str, ticket_states: dict[str, Any], visiting: set[str] | None = None) -> bool:
-    row = ticket_states.get(ticket_id)
-    if not isinstance(row, dict):
-        return False
-    state = row.get("state")
-    if state == "SATISFIED":
-        return True
-    if state != "RETIRED":
-        return False
-    if row.get("disposition") == "waived":
-        return True
-    successor = row.get("successor")
-    if not isinstance(successor, str):
-        return False
-    visiting = set() if visiting is None else visiting
-    if ticket_id in visiting:
-        return False
-    visiting.add(ticket_id)
-    return _ticket_released(successor, ticket_states, visiting)
-
-
 def _trail_rows(path: Path) -> list[dict[str, Any]] | None:
     if not path.is_file():
         return []
@@ -607,11 +593,12 @@ def _attempt_trail_rows(package_root: Path, attempt_id: str) -> list[dict[str, A
     return rows
 
 
-def _trail_identifier(row: dict[str, Any]) -> str | None:
+def _trail_identifiers(row: dict[str, Any]) -> set[str]:
+    result = set()
     for name in ("seq", "id", "dispatch_id", "dispatchId", "decision_id", "decisionId"):
         if row.get(name) is not None:
-            return str(row[name])
-    return None
+            result.add(str(row[name]))
+    return result
 
 
 def _ticket_trail_projection(
@@ -654,7 +641,7 @@ def _ticket_trail_projection(
                 (
                     index
                     for index in range(len(open_dispatches) - 1, -1, -1)
-                    if _trail_identifier(open_dispatches[index]) == reference
+                    if reference in _trail_identifiers(open_dispatches[index])
                 ),
                 None,
             )
@@ -708,6 +695,61 @@ def _ticket_trail_projection(
     return started, active, projections
 
 
+def _empty_review_stats(warning: str) -> dict[str, Any]:
+    return {
+        "version": 1,
+        "totals": {
+            "unique": 0,
+            "open": 0,
+            "closed": 0,
+            "trackContributions": 0,
+            "unattributed": 0,
+        },
+        "tracks": {
+            track: {"caught": 0, "open": 0, "closed": 0}
+            for track in REVIEW_TRACKS
+        },
+        "tickets": {},
+        "coverage": {"warnings": [warning]},
+    }
+
+
+def _valid_review_stats(value: Any) -> bool:
+    if not isinstance(value, dict) or value.get("version") != 1:
+        return False
+    totals = value.get("totals")
+    if not isinstance(totals, dict):
+        return False
+    if any(
+        type(totals.get(key)) is not int or totals[key] < 0
+        for key in ("unique", "open", "closed", "trackContributions", "unattributed")
+    ):
+        return False
+    tracks = value.get("tracks")
+    if not isinstance(tracks, dict):
+        return False
+    for track in REVIEW_TRACKS:
+        counts = tracks.get(track)
+        if not isinstance(counts, dict) or any(
+            type(counts.get(key)) is not int or counts[key] < 0
+            for key in ("caught", "open", "closed")
+        ):
+            return False
+    return isinstance(value.get("tickets"), dict) and isinstance(value.get("coverage"), dict)
+
+
+def review_stats_snapshot(package_root: Path) -> dict[str, Any]:
+    if review_track_stats is None:
+        return _empty_review_stats("Review statistics helper is unavailable.")
+    try:
+        result = review_track_stats.calculate_review_stats(package_root)
+    except Exception:
+        return _empty_review_stats("Review statistics could not be calculated.")
+    if not _valid_review_stats(result):
+        return _empty_review_stats("Review statistics returned an invalid result.")
+    return result
+
+
 def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> dict[str, Any]:
     state_path = package_root / ".impl-package" / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -741,16 +783,15 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
             }
         )
     ticket_state_rows = {str(ticket_id): value for ticket_id, value in ticket_states.items()}
-    ready_ticket_ids = [
-        ticket["id"]
+    readiness_dependencies = {
+        ticket["id"]: [
+            (dependency_type, dependency)
+            for dependency_type in ("implementation", "acceptance", "release")
+            for dependency in ticket["dependencyTypes"][dependency_type]
+        ]
         for ticket in tickets
-        if ticket["state"] == "PENDING"
-        and ticket["id"].upper() in metadata
-        and all(
-            _ticket_released(dependency, ticket_state_rows)
-            for dependency in ticket["dependencyTypes"]["implementation"]
-        )
-    ]
+    }
+    ready_ticket_ids = impl_package_engine.ready_tickets(readiness_dependencies, ticket_state_rows)
     attempt = state.get("attempt") if isinstance(state.get("attempt"), dict) else {}
     terminal_ticket_ids = {
         ticket["id"] for ticket in tickets if ticket["state"] in {"SATISFIED", "RETIRED"}
@@ -767,14 +808,20 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
         ticket_id for ticket_id in trail_active_ticket_ids if ticket_id not in terminal_ticket_ids
     ]
     for ticket in tickets:
-        ticket["runtimeState"] = (
-            "RUNNING"
+        runtime_state = (
+            "DEVELOPING"
+            if ticket["id"] in running_ticket_ids and ticket["id"] in ready_ticket_ids
+            else "INVESTIGATING"
             if ticket["id"] in running_ticket_ids
             else "READY"
             if ticket["id"] in ready_ticket_ids
             else None
         )
-        ticket.update(trail_projection.get(ticket["id"], {"activeActions": [], "latestResult": None}))
+        ticket["runtimeState"] = runtime_state
+        projection = trail_projection.get(ticket["id"], {"activeActions": [], "latestResult": None})
+        if ticket["id"] in terminal_ticket_ids:
+            projection = {**projection, "activeActions": []}
+        ticket.update(projection)
     counts = Counter(ticket["state"] for ticket in tickets)
     checkpoints = state.get("activeCheckpoints")
     checkpoint = checkpoints.get("attempt", {}) if isinstance(checkpoints, dict) else {}
@@ -818,6 +865,7 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
         "runningTicketIds": running_ticket_ids,
         "tickets": tickets,
         "counts": dict(counts),
+        "reviewStats": review_stats_snapshot(package_root),
         "audit": {
             "relativePath": package_root.name,
             "attempt": attempt.get("id"),

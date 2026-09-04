@@ -706,7 +706,7 @@ def _attempt_history(state: dict[str, Any], package: Path) -> list[dict[str, Any
     return result
 
 
-def _ready_tickets(dependencies: dict[str, list[tuple[str, str]]], tickets: dict[str, Any]) -> list[str]:
+def ready_tickets(dependencies: dict[str, list[tuple[str, str]]], tickets: dict[str, Any]) -> list[str]:
     return [identifier for identifier, edges in dependencies.items() if tickets[identifier]["state"] == "PENDING" and all(_ticket_released(tickets, item) for kind, item in edges if kind == "implementation")]
 
 
@@ -715,7 +715,9 @@ def _ticket_released(tickets: dict[str, Any], identifier: str, visiting: set[str
     if identifier in visiting:
         return False
     visiting.add(identifier)
-    row = tickets[identifier]
+    row = tickets.get(identifier)
+    if not isinstance(row, dict):
+        return False
     if row["state"] == "SATISFIED":
         return True
     if row["state"] != "RETIRED":
@@ -804,7 +806,7 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
     history = _attempt_history(state, package)
     if not history or history[-1]["id"] != attempt["id"]:
         raise StateError("attemptHistory must end with current Attempt")
-    summary = {"formatVersion": FORMAT_VERSION, "attempt": attempt["id"], "revisions": {"decision": info["decision"], "spec": info["spec"], "plan": info["plan"]}, "predecessors": predecessors, "composition": {"tickets": True, "dag": False}, "tasks": 0, "tickets": len(tickets), "readyTickets": _ready_tickets(dependencies, tickets), "gate": lifecycle.gate, "_lifecycle": lifecycle, "_info": info, "_documents": documents, "_ticketDependencies": dependencies, "_claims": claims, "_claimTimings": claim_timings, "_evidence": evidence, "_checkpoints": checkpoints, "_history": history}
+    summary = {"formatVersion": FORMAT_VERSION, "attempt": attempt["id"], "revisions": {"decision": info["decision"], "spec": info["spec"], "plan": info["plan"]}, "predecessors": predecessors, "composition": {"tickets": True, "dag": False}, "tasks": 0, "tickets": len(tickets), "readyTickets": ready_tickets(dependencies, tickets), "gate": lifecycle.gate, "_lifecycle": lifecycle, "_info": info, "_documents": documents, "_ticketDependencies": dependencies, "_claims": claims, "_claimTimings": claim_timings, "_evidence": evidence, "_checkpoints": checkpoints, "_history": history}
     if projections:
         _validate_projections(package, state, summary)
     return summary

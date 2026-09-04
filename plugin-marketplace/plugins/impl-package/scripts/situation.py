@@ -98,6 +98,7 @@ FACT_KEYS = frozenset(
         "ticket.review_required",
         "ticket.review_trigger",
         "ticket.post_fix_regression_pending",
+        "review.canonical_summary",
         "evidence.sources_uniquely_decide",
         "git.comparison_head_fixed",
         "git.accepted_seam_changed",

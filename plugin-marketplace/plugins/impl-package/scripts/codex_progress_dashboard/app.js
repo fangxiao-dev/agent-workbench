@@ -44,6 +44,11 @@ const monitorObservationDialog = document.querySelector("#monitor-observation-di
 const monitorObservationDialogCount = document.querySelector("#monitor-observation-dialog-count");
 const monitorObservationClose = document.querySelector("#monitor-observation-close");
 const monitorObservationList = document.querySelector("#monitor-observation-list");
+const reviewStatsUnique = document.querySelector("#review-stats-unique");
+const reviewStatsClosed = document.querySelector("#review-stats-closed");
+const reviewChart = document.querySelector("#review-chart");
+const reviewBar = document.querySelector("#review-bar");
+const reviewBarDetail = document.querySelector("#review-bar-detail");
 const auditList = document.querySelector("#audit-list");
 
 let events = null;
@@ -107,7 +112,8 @@ function formatCompactTime(value) {
 }
 
 function stateLabel(value, runtimeState = null) {
-  if (runtimeState === "RUNNING") return "正在进行";
+  if (runtimeState === "DEVELOPING") return "开发中";
+  if (runtimeState === "INVESTIGATING") return "调研中";
   if (runtimeState === "READY") return "可启动";
   return {
     SATISFIED: "已正式验收",
@@ -188,8 +194,9 @@ function drawDependencyLines() {
   const highlightedTicketIds = new Set(
     previewTicketId
       ? [previewTicketId]
-      : currentTickets.filter((ticket) => ticket.runtimeState === "RUNNING").map((ticket) => ticket.id),
+      : currentTickets.filter((ticket) => ticket.runtimeState === "DEVELOPING").map((ticket) => ticket.id),
   );
+
   currentTickets.forEach((ticket) => {
     const target = flowStages.querySelector(`[data-ticket-id="${ticket.id}"]`);
     if (!target) return;
@@ -226,18 +233,18 @@ function updateTicketHighlights() {
   const highlighted = new Set();
   const focusTicketIds = previewTicketId
     ? [previewTicketId]
-    : currentTickets.filter((ticket) => ticket.runtimeState === "RUNNING").map((ticket) => ticket.id);
+    : currentTickets.filter((ticket) => ticket.runtimeState === "DEVELOPING").map((ticket) => ticket.id);
   focusTicketIds.forEach((ticketId) => directRelations(ticketId).forEach((relatedId) => highlighted.add(relatedId)));
   const visible = new Set(highlighted);
   currentTickets
-    .filter((ticket) => ticket.runtimeState === "READY" || ticket.runtimeState === "RUNNING")
+    .filter((ticket) => ["READY", "DEVELOPING", "INVESTIGATING"].includes(ticket.runtimeState))
     .forEach((ticket) => visible.add(ticket.id));
   flowStages.querySelectorAll(".flow-node").forEach((node) => {
     const ticketId = node.dataset.ticketId;
     const ticket = currentTickets.find((item) => item.id === ticketId);
     node.setAttribute(
       "aria-pressed",
-      String(ticketId === selectedTicketId && ticket?.runtimeState === "RUNNING"),
+      String(ticketId === selectedTicketId && ticket?.runtimeState === "DEVELOPING"),
     );
     node.classList.toggle("is-preview", ticketId === previewTicketId);
     node.classList.toggle(
@@ -534,6 +541,71 @@ function renderObservationList(observations) {
   });
 }
 
+const reviewTracks = [
+  { name: "Track A", className: "track-a", label: "A · Code" },
+  { name: "Track B", className: "track-b", label: "B · Standards" },
+  { name: "Track C", className: "track-c", label: "C · Spec" },
+  { name: "Track D", className: "track-d", label: "D · Safety" },
+];
+
+function reviewCount(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? String(value) : "—";
+}
+
+function reviewStatsSource(value) {
+  if (!value || typeof value !== "object") return {};
+  return value.totals && typeof value.totals === "object" ? value.totals : value;
+}
+
+function reviewTrackCounts(reviewStats, trackName) {
+  const source = reviewStatsSource(reviewStats?.tracks?.[trackName]);
+  return {
+    caught: Number.isSafeInteger(source.caught) && source.caught >= 0 ? source.caught : 0,
+    open: Number.isSafeInteger(source.open) && source.open >= 0 ? source.open : 0,
+  };
+}
+
+function renderReviewStats(reviewStats) {
+  const totals = reviewStatsSource(reviewStats);
+  const unique = Number.isSafeInteger(totals.unique) && totals.unique >= 0 ? totals.unique : 0;
+  const closed = Number.isSafeInteger(totals.closed) && totals.closed >= 0 ? totals.closed : 0;
+  const coverage = reviewStats?.coverage || {};
+  const hasLegacyActivity = coverage.reviewActivityRows > 0 && coverage.summaries === 0;
+  reviewStatsUnique.textContent = hasLegacyActivity ? "—" : reviewCount(unique);
+  reviewStatsClosed.textContent = hasLegacyActivity ? "—" : reviewCount(closed);
+  const trackRows = reviewTracks.map((track) => ({
+    ...track,
+    counts: reviewTrackCounts(reviewStats, track.name),
+  }));
+  const contributionTotal = trackRows.reduce((sum, track) => sum + track.counts.caught, 0);
+  clear(reviewBar);
+  trackRows.forEach((track) => {
+    const rawShare = contributionTotal > 0 ? (track.counts.caught / contributionTotal) * 100 : 25;
+    const share = Math.max(rawShare, 4);
+    const sharePct = contributionTotal > 0 ? Math.round(rawShare) : 0;
+    const tooltip = `${track.label} · 捕获 ${track.counts.caught} · 开放 ${track.counts.open} · ${sharePct}%`;
+
+    const segment = document.createElement("span");
+    segment.className = `review-bar-segment ${track.className}`;
+    segment.style.flex = `${share} 0 0%`;
+    segment.tabIndex = 0;
+    segment.setAttribute("aria-label", tooltip);
+    segment.addEventListener("pointerenter", () => { reviewBarDetail.textContent = tooltip; });
+    segment.addEventListener("pointerleave", () => { reviewBarDetail.textContent = ""; });
+    segment.addEventListener("focus", () => { reviewBarDetail.textContent = tooltip; });
+    segment.addEventListener("blur", () => { reviewBarDetail.textContent = ""; });
+
+    const label = document.createElement("span");
+    label.className = "review-bar-label";
+    label.textContent = track.label;
+    segment.append(label);
+
+    reviewBar.append(segment);
+  });
+  reviewChart.dataset.empty = contributionTotal === 0 ? "true" : "false";
+  reviewBarDetail.textContent = "";
+}
+
 function createObservationEditor(item) {
   const editor = document.createElement("div");
   const textarea = document.createElement("textarea");
@@ -618,6 +690,7 @@ function render(snapshot) {
   formalSummary.textContent = pkg ? pkg.formalSummary : "尚未关联";
   gateLabel.textContent = pkg ? pkg.gateLabel : "尚未关联";
   renderTickets(pkg?.tickets || [], pkg?.currentTicketId || null);
+  renderReviewStats(pkg?.reviewStats || null);
   renderMonitor(snapshot.monitor);
 
   clear(auditList);

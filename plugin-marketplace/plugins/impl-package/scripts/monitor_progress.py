@@ -24,8 +24,8 @@ from urllib.request import urlopen
 
 PROTOCOL_VERSION = 2
 CONTEXT_VERSION = 2
-RUNTIME_VERSION = 6
-POLICY_VERSION = "STATIC_MONITOR_POLICY_V11"
+RUNTIME_VERSION = 7
+POLICY_VERSION = "STATIC_MONITOR_POLICY_V13"
 DEFAULT_PORT = 43187
 THREAD_ID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
 AUTOMATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
@@ -34,6 +34,7 @@ CREATED_THREAD_RE = re.compile(r'::created-thread\{threadId="([0-9a-f-]{36})"\}'
 LEVELS = {"normal", "attention", "abnormal"}
 SCOPES = {"session", "task"}
 OBSERVATION_STATES = {"candidate", "confirmed"}
+OBSERVATION_KINDS = {"specific", "pattern"}
 RESPONSES = {"pending", "accepted", "contested", "not-applicable"}
 OBSERVATION_ID_RE = re.compile(r"^O([0-9]{3,})$")
 MONITOR_FIELDS = {
@@ -52,6 +53,7 @@ EVALUATION_FIELDS = {"progress", "improvements", "next", "owner"}
 OBSERVATION_STORE_FIELDS = {"version", "automationId", "nextObservationNumber", "observations"}
 OBSERVATION_FIELDS = {
     "id",
+    "kind",
     "topic",
     "content",
     "scope",
@@ -62,6 +64,7 @@ OBSERVATION_FIELDS = {
     "response",
     "baselineConflict",
 }
+LEGACY_OBSERVATION_FIELDS = OBSERVATION_FIELDS - {"kind"}
 WRITE_EVALUATION_FIELDS = {
     "targetThreadId",
     "observedAt",
@@ -105,6 +108,7 @@ RUNTIME_FIELDS = {
     "sourceScanState",
     "observationFingerprint",
     "reportedObservationDigests",
+    "reportedObservationSnapshots",
     "pendingCandidateIds",
     "lastMainMessageId",
     "lastEvaluationFingerprint",
@@ -118,8 +122,10 @@ RUNTIME_FIELDS = {
     "lastSimulationCorrection",
     "rendererState",
     "monitorHealthState",
+    "packageState",
 }
-V5_RUNTIME_FIELDS = RUNTIME_FIELDS - {"monitorHealthState"}
+V6_RUNTIME_FIELDS = RUNTIME_FIELDS - {"reportedObservationSnapshots", "packageState"}
+V5_RUNTIME_FIELDS = V6_RUNTIME_FIELDS - {"monitorHealthState"}
 V4_RUNTIME_FIELDS = V5_RUNTIME_FIELDS - {"rendererState"}
 V3_RUNTIME_FIELDS = V4_RUNTIME_FIELDS - {"lastSimulationCorrection"}
 V2_RUNTIME_FIELDS = V3_RUNTIME_FIELDS - {"reportedObservationDigests"}
@@ -136,9 +142,11 @@ BASELINE_STATUSES = {"current", "stale"}
 DEFAULT_CODEX_DB = Path.home() / ".codex" / "state_5.sqlite"
 MAX_OWNER_INPUT_CHARS = 4000
 MAX_OWNER_INPUTS = 100
+MAX_TARGET_UPDATES = 100
 
 POLICY_SNAPSHOT = {
     "evaluation": [
+        "正式 Ticket 与 Gate 状态只以 read-cycle.packageStatus 为准；targetUpdates 只解释正在执行什么，不得覆盖正式状态。",
         "targetBaseline 是冻结的任务合同；confirmed observations 是当前 Owner 指令。两者冲突时报告，不静默覆盖。",
         "按最新 task 状态评价进展、baby step、worker lifecycle、review、evidence、manual acceptance、方向与 Owner 分叉。",
         "缺失信息不推断为完成；worker return、focused tests 或局部提交不自动等于 Ticket、Gate 或 package closure。",
@@ -147,6 +155,9 @@ POLICY_SNAPSHOT = {
     ],
     "observations": [
         "只有直接改变目标任务授权、执行方式、验收要求或 Owner 决策边界的纠偏才是本任务 observation。",
+        "一个 observation topic 只承载一个可被未来消息独立修改的决策轴；同一消息改变多个轴时分别新增或更新，不把正式 Ticket 状态写入 observation。",
+        "先做实例替换测试：移除或替换具体 Ticket、session、人员与本次时间条件后仍应约束后续同类场景时 kind=pattern，否则 kind=specific；一条消息同时包含两者时拆开记录。",
+        "pattern 写成稳定的适用条件、行为和边界，不保留仅用于举例的实例；高置信时 confirmed，不确定时 candidate。specific 保留具体对象、动作和完成条件，不主动泛化。",
         "按 source、turn 和时间顺序处理新 Owner 输入；结合同批前序消息、当前完整 observations 与 task 状态，先消解 antecedent、主体、动作和范围，再决定 observation topic 或原地更新。",
         "不得把上下文中的局部对象扩大为整个类别；指代无法确认时不覆盖 confirmed observation，也不据此授权 target 消息。",
         "针对监控模板、CLI、dashboard、prompt 或 observation 机制本身的反馈属于工具调试，不写入目标任务 sidecar。",
@@ -155,7 +166,7 @@ POLICY_SNAPSHOT = {
         "confirmed observation 与 baseline 冲突时报告 baselineConflict，不覆盖 baseline；合同变化只标 baselineStatus=stale。",
         "ownerInputs 只证明消息已读取；observationDiff 才证明消息被收纳为 observation 的新增、更新或删除。",
     ],
-    "visibility": "read_thread 返回 items: [] 表示内容不可见；read-cycle 通过 Codex 数据库登记的 canonical rollout 增量补偿其中的新 Owner 消息。",
+    "visibility": "read_thread 返回 items: [] 表示内容不可见；read-cycle 通过 Codex 数据库登记的 canonical rollout 增量补偿新 Owner 消息和 target 的用户可见进展。",
     "intervention": [
         "默认不向 target 发送消息。只有 confirmed observation 明确授权某类消息且当前事实符合其条件时才可发送。",
         "candidate observation 不授权动作。发送时记录采用的 observation ID，并用 runtime 的 target turn ID 去重。",
@@ -168,8 +179,8 @@ POLICY_SNAPSHOT = {
     },
     "communication": [
         "Owner 通知默认只写当前做到哪里、是否正常、接下来做什么、是否需要 Owner。",
-        "observationDiff 非空时下一次 heartbeat 必须逐条报告变化类型、ID、topic 和完整当前内容；删除至少报告 ID。成功 write-cycle 后才视为已报告。",
-        "模拟纠偏只在新触发或原因/拟发送内容变化时报告；未触发时不显示空栏目，并将 lastSimulationCorrection 写为 null。",
+        "observationDiff 非空时下一次 heartbeat 必须逐条报告变化类型、ID、topic、具体变化和完整当前内容；删除至少报告 ID。成功 write-cycle 后才视为已报告。",
+        "每次 NOTIFY 都显示模拟纠偏；触发时报告原因、拟发送全文和未发送标记，无触发时显示‘模拟纠偏：无’并将 lastSimulationCorrection 写为 null。空模拟纠偏本身不触发 NOTIFY。",
         "monitorHealthDiff 与其它 diff 并列；target unavailable、retarget required 或 renderer abnormal 时单独报告。renderer 异常从 rendererStatus 读取 PID、43187 和影响并明确未自动重启，同一状态只报告一次。",
         "内部执行术语只有在它本身构成故障时才出现，并同时解释真实对象、动作和影响。",
         "监控器自身配置变化只在导致监控中断或需要 Owner 操作时作为独立监控健康告警通知，不写入 target evaluation。",
@@ -423,23 +434,145 @@ def _observation_digests(observations: list[dict[str, Any]]) -> dict[str, str]:
     }
 
 
-def _observation_diff(
+def _observation_snapshots(observations: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {item["id"]: copy.deepcopy(item) for item in observations}
+
+
+def _reported_observation_snapshots(
     observations: list[dict[str, Any]], reported: dict[str, str]
+) -> dict[str, dict[str, Any]]:
+    current = _observation_digests(observations)
+    return {
+        item["id"]: copy.deepcopy(item)
+        for item in observations
+        if reported.get(item["id"]) == current[item["id"]]
+    }
+
+
+def _observation_diff(
+    observations: list[dict[str, Any]],
+    reported: dict[str, str],
+    snapshots: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     current = _observation_digests(observations)
     changes = [
         {
             "change": "created" if item["id"] not in reported else "updated",
+            "before": snapshots.get(item["id"]),
+            "after": item,
             "observation": item,
         }
         for item in observations
         if reported.get(item["id"]) != current[item["id"]]
     ]
-    changes.extend({"change": "removed", "id": item_id} for item_id in reported if item_id not in current)
+    changes.extend(
+        {
+            "change": "removed",
+            "id": item_id,
+            "before": snapshots.get(item_id),
+            "after": None,
+        }
+        for item_id in reported
+        if item_id not in current
+    )
     return changes
 
 
-def default_runtime_state(observations: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def _package_status(package: Path) -> dict[str, Any]:
+    state_path = package / ".impl-package" / "state.json"
+    status = "current"
+    attempt = None
+    gate: Any = None
+    tickets: dict[str, dict[str, Any]] = {}
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8-sig"))
+        if not isinstance(state, dict):
+            raise ValueError("package state must be an object")
+        attempt_value = state.get("attempt")
+        if isinstance(attempt_value, dict) and isinstance(attempt_value.get("id"), str):
+            attempt = attempt_value["id"]
+        history = state.get("attemptHistory")
+        if isinstance(history, list) and history and isinstance(history[-1], dict):
+            gate = json.loads(json.dumps(history[-1].get("gate"), ensure_ascii=False))
+        ticket_values = state.get("tickets")
+        if not isinstance(ticket_values, dict):
+            raise ValueError("package tickets must be an object")
+        for ticket_id, value in ticket_values.items():
+            if not isinstance(ticket_id, str) or not isinstance(value, dict) or not isinstance(value.get("state"), str):
+                raise ValueError("invalid package ticket state")
+            acceptance = value.get("acceptance")
+            revision = acceptance.get("revision") if isinstance(acceptance, dict) else None
+            tickets[ticket_id] = {
+                "state": value["state"],
+                "acceptanceRevision": revision if isinstance(revision, str) else None,
+            }
+    except FileNotFoundError:
+        status = "missing"
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError, TypeError):
+        status = "invalid"
+        attempt = None
+        gate = None
+        tickets = {}
+    payload = {"status": status, "attempt": attempt, "gate": gate, "tickets": tickets}
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return {**payload, "fingerprint": hashlib.sha256(canonical.encode("utf-8")).hexdigest()}
+
+
+def _package_diff(previous: dict[str, Any], current: dict[str, Any]) -> dict[str, Any] | None:
+    if previous["fingerprint"] == current["fingerprint"]:
+        return None
+    ticket_changes = []
+    for ticket_id in sorted(set(previous["tickets"]) | set(current["tickets"])):
+        before = previous["tickets"].get(ticket_id)
+        after = current["tickets"].get(ticket_id)
+        if before != after:
+            ticket_changes.append({"id": ticket_id, "before": before, "after": after})
+    return {
+        "previousStatus": previous["status"],
+        "currentStatus": current["status"],
+        "previousAttempt": previous["attempt"],
+        "currentAttempt": current["attempt"],
+        "previousGate": previous["gate"],
+        "currentGate": current["gate"],
+        "ticketChanges": ticket_changes,
+    }
+
+
+def validate_package_status(value: Any) -> dict[str, Any]:
+    record = _expect_fields(value, {"status", "attempt", "gate", "tickets", "fingerprint"}, "package state")
+    if record["status"] not in {"current", "missing", "invalid"}:
+        raise MonitorProgressError("package state.status must be current, missing, or invalid")
+    attempt = _text(record["attempt"], "package state.attempt", nullable=True)
+    try:
+        gate = json.loads(json.dumps(record["gate"], ensure_ascii=False))
+    except (TypeError, ValueError) as error:
+        raise MonitorProgressError("package state.gate must be JSON serializable") from error
+    if not isinstance(record["tickets"], dict):
+        raise MonitorProgressError("package state.tickets must be an object")
+    tickets = {}
+    for ticket_id, value in record["tickets"].items():
+        if not isinstance(ticket_id, str):
+            raise MonitorProgressError("package state ticket ids must be strings")
+        ticket = _expect_fields(value, {"state", "acceptanceRevision"}, f"package state ticket {ticket_id}")
+        tickets[ticket_id] = {
+            "state": _text(ticket["state"], f"package state ticket {ticket_id}.state"),
+            "acceptanceRevision": _text(
+                ticket["acceptanceRevision"],
+                f"package state ticket {ticket_id}.acceptanceRevision",
+                nullable=True,
+            ),
+        }
+    fingerprint = _text(record["fingerprint"], "package state.fingerprint", limit=64)
+    payload = {"status": record["status"], "attempt": attempt, "gate": gate, "tickets": tickets}
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if fingerprint != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
+        raise MonitorProgressError("package state fingerprint mismatch")
+    return {**payload, "fingerprint": fingerprint}
+
+
+def default_runtime_state(
+    observations: list[dict[str, Any]] | None = None, package: Path | None = None
+) -> dict[str, Any]:
     empty_scan = {
         "lastSeenTurnId": None,
         "lastSeenUserMessageId": None,
@@ -452,6 +585,7 @@ def default_runtime_state(observations: list[dict[str, Any]] | None = None) -> d
         "sourceScanState": {"monitor": dict(empty_scan), "target": dict(empty_scan)},
         **_observation_runtime(observations or []),
         "reportedObservationDigests": _observation_digests(observations or []),
+        "reportedObservationSnapshots": _observation_snapshots(observations or []),
         "lastMainMessageId": None,
         "lastEvaluationFingerprint": None,
         "incompleteStreak": 0,
@@ -464,6 +598,7 @@ def default_runtime_state(observations: list[dict[str, Any]] | None = None) -> d
         "lastSimulationCorrection": None,
         "rendererState": _missing_renderer_state(),
         "monitorHealthState": None,
+        "packageState": _package_status(package or Path("__monitor_package_unset__")),
     }
 
 
@@ -509,6 +644,17 @@ def validate_runtime_state(value: Any) -> dict[str, Any]:
         for item_id, digest in reported.items()
     ):
         raise MonitorProgressError("runtime.reportedObservationDigests must map observation ids to SHA-256")
+    snapshots = record["reportedObservationSnapshots"]
+    if not isinstance(snapshots, dict):
+        raise MonitorProgressError("runtime.reportedObservationSnapshots must be an object")
+    validated_snapshots = {}
+    for item_id, snapshot in snapshots.items():
+        if not isinstance(item_id, str) or not OBSERVATION_ID_RE.fullmatch(item_id):
+            raise MonitorProgressError("runtime.reportedObservationSnapshots contains an invalid id")
+        validated = validate_observation(snapshot, allow_legacy=True)
+        if validated["id"] != item_id:
+            raise MonitorProgressError("runtime.reportedObservationSnapshots id mismatch")
+        validated_snapshots[item_id] = validated
     incomplete_streak = record["incompleteStreak"]
     if not isinstance(incomplete_streak, int) or isinstance(incomplete_streak, bool) or incomplete_streak < 0:
         raise MonitorProgressError("runtime.incompleteStreak must be a non-negative integer")
@@ -529,10 +675,12 @@ def validate_runtime_state(value: Any) -> dict[str, Any]:
         }
     renderer_state = validate_renderer_state(record["rendererState"])
     monitor_health_state = validate_monitor_health(record["monitorHealthState"])
+    package_state = validate_package_status(record["packageState"])
     return {
         "sourceScanState": validated_scans,
         "observationFingerprint": _text(record["observationFingerprint"], "runtime.observationFingerprint"),
         "reportedObservationDigests": reported,
+        "reportedObservationSnapshots": validated_snapshots,
         "pendingCandidateIds": pending_ids,
         "lastMainMessageId": _optional_token(record["lastMainMessageId"], "runtime.lastMainMessageId"),
         "lastEvaluationFingerprint": _text(
@@ -550,75 +698,132 @@ def validate_runtime_state(value: Any) -> dict[str, Any]:
         "lastSimulationCorrection": simulation,
         "rendererState": renderer_state,
         "monitorHealthState": monitor_health_state,
+        "packageState": package_state,
     }
 
 
-def validate_v2_runtime_state(value: Any, observations: list[dict[str, Any]]) -> dict[str, Any]:
+def validate_v2_runtime_state(
+    value: Any, observations: list[dict[str, Any]], package_state: dict[str, Any]
+) -> dict[str, Any]:
     record = _expect_fields(value, V2_RUNTIME_FIELDS, "v2 runtime state")
     return validate_runtime_state(
         {
             **record,
             "reportedObservationDigests": _observation_digests(observations),
+            "reportedObservationSnapshots": _observation_snapshots(observations),
             "lastSimulationCorrection": None,
             "rendererState": _missing_renderer_state(),
             "monitorHealthState": None,
+            "packageState": package_state,
         }
     )
 
 
-def validate_v3_runtime_state(value: Any) -> dict[str, Any]:
+def validate_v3_runtime_state(
+    value: Any, observations: list[dict[str, Any]], package_state: dict[str, Any]
+) -> dict[str, Any]:
     record = _expect_fields(value, V3_RUNTIME_FIELDS, "v3 runtime state")
     return validate_runtime_state(
         {
             **record,
+            "reportedObservationSnapshots": _reported_observation_snapshots(
+                observations, record["reportedObservationDigests"]
+            ),
             "lastSimulationCorrection": None,
             "rendererState": _missing_renderer_state(),
             "monitorHealthState": None,
+            "packageState": package_state,
         }
     )
 
 
-def validate_v4_runtime_state(value: Any) -> dict[str, Any]:
+def validate_v4_runtime_state(
+    value: Any, observations: list[dict[str, Any]], package_state: dict[str, Any]
+) -> dict[str, Any]:
     record = _expect_fields(value, V4_RUNTIME_FIELDS, "v4 runtime state")
     return validate_runtime_state(
-        {**record, "rendererState": _missing_renderer_state(), "monitorHealthState": None}
+        {
+            **record,
+            "reportedObservationSnapshots": _reported_observation_snapshots(
+                observations, record["reportedObservationDigests"]
+            ),
+            "rendererState": _missing_renderer_state(),
+            "monitorHealthState": None,
+            "packageState": package_state,
+        }
     )
 
 
-def validate_v5_runtime_state(value: Any) -> dict[str, Any]:
+def validate_v5_runtime_state(
+    value: Any, observations: list[dict[str, Any]], package_state: dict[str, Any]
+) -> dict[str, Any]:
     record = _expect_fields(value, V5_RUNTIME_FIELDS, "v5 runtime state")
-    return validate_runtime_state({**record, "monitorHealthState": None})
+    return validate_runtime_state(
+        {
+            **record,
+            "reportedObservationSnapshots": _reported_observation_snapshots(
+                observations, record["reportedObservationDigests"]
+            ),
+            "monitorHealthState": None,
+            "packageState": package_state,
+        }
+    )
 
 
-def validate_v1_runtime_state(value: Any, observations: list[dict[str, Any]]) -> dict[str, Any]:
+def validate_v6_runtime_state(
+    value: Any, observations: list[dict[str, Any]], package_state: dict[str, Any]
+) -> dict[str, Any]:
+    record = _expect_fields(value, V6_RUNTIME_FIELDS, "v6 runtime state")
+    return validate_runtime_state(
+        {
+            **record,
+            "reportedObservationSnapshots": _reported_observation_snapshots(
+                observations, record["reportedObservationDigests"]
+            ),
+            "packageState": package_state,
+        }
+    )
+
+
+def validate_v1_runtime_state(
+    value: Any, observations: list[dict[str, Any]], package_state: dict[str, Any]
+) -> dict[str, Any]:
     record = _expect_fields(value, V2_RUNTIME_FIELDS, "v1 runtime state")
     scans = _expect_fields(record["sourceScanState"], {"monitor", "target"}, "legacy source scan state")
     migrated_scans: dict[str, dict[str, Any]] = {}
     for source in ("monitor", "target"):
         scan = _expect_fields(scans[source], LEGACY_SOURCE_SCAN_FIELDS, f"legacy source scan state.{source}")
         migrated_scans[source] = {**scan, "rolloutOffset": 0, "rolloutPathHash": None}
-    return validate_v2_runtime_state({**record, "sourceScanState": migrated_scans}, observations)
+    return validate_v2_runtime_state(
+        {**record, "sourceScanState": migrated_scans}, observations, package_state
+    )
 
 
 def _runtime_state_for_migration(
-    value: Any, automation_id: str, observations: list[dict[str, Any]]
+    value: Any,
+    automation_id: str,
+    observations: list[dict[str, Any]],
+    package: Path,
 ) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise MonitorProgressError("monitor runtime store must be a JSON object")
     if value.get("version") == RUNTIME_VERSION:
         store = validate_runtime_store(value)
-    elif value.get("version") in {1, 2, 3, 4, 5}:
+    elif value.get("version") in {1, 2, 3, 4, 5, 6}:
         record = _expect_fields(value, RUNTIME_STORE_FIELDS, "legacy monitor runtime store")
+        package_state = _package_status(package)
         if value.get("version") == 1:
-            runtime_state = validate_v1_runtime_state(record["runtimeState"], observations)
+            runtime_state = validate_v1_runtime_state(record["runtimeState"], observations, package_state)
         elif value.get("version") == 2:
-            runtime_state = validate_v2_runtime_state(record["runtimeState"], observations)
+            runtime_state = validate_v2_runtime_state(record["runtimeState"], observations, package_state)
         elif value.get("version") == 3:
-            runtime_state = validate_v3_runtime_state(record["runtimeState"])
+            runtime_state = validate_v3_runtime_state(record["runtimeState"], observations, package_state)
         elif value.get("version") == 4:
-            runtime_state = validate_v4_runtime_state(record["runtimeState"])
+            runtime_state = validate_v4_runtime_state(record["runtimeState"], observations, package_state)
+        elif value.get("version") == 5:
+            runtime_state = validate_v5_runtime_state(record["runtimeState"], observations, package_state)
         else:
-            runtime_state = validate_v5_runtime_state(record["runtimeState"])
+            runtime_state = validate_v6_runtime_state(record["runtimeState"], observations, package_state)
         store = {
             "version": RUNTIME_VERSION,
             "automationId": _automation_id(record["automationId"]),
@@ -747,7 +952,11 @@ def _topic_key(value: str) -> str:
     return " ".join(value.split()).casefold()
 
 
-def validate_observation(value: Any, *, allow_new: bool = False) -> dict[str, Any]:
+def validate_observation(
+    value: Any, *, allow_new: bool = False, allow_legacy: bool = False
+) -> dict[str, Any]:
+    if allow_legacy and isinstance(value, dict) and set(value) == LEGACY_OBSERVATION_FIELDS:
+        value = {**value, "kind": "specific"}
     record = _expect_fields(value, OBSERVATION_FIELDS, "observation")
     observation_id = record["id"]
     message_id = record["sourceMessageId"]
@@ -759,11 +968,14 @@ def validate_observation(value: Any, *, allow_new: bool = False) -> dict[str, An
         raise MonitorProgressError("invalid source message id")
     scope = record["scope"]
     state = record["state"]
+    kind = record["kind"]
     response = record["response"]
     if scope not in SCOPES:
         raise MonitorProgressError(f"observation.scope must be one of {sorted(SCOPES)}")
     if state not in OBSERVATION_STATES:
         raise MonitorProgressError(f"observation.state must be one of {sorted(OBSERVATION_STATES)}")
+    if kind not in OBSERVATION_KINDS:
+        raise MonitorProgressError(f"observation.kind must be one of {sorted(OBSERVATION_KINDS)}")
     if response not in RESPONSES:
         raise MonitorProgressError(f"observation.response must be one of {sorted(RESPONSES)}")
     confirmed_at = record["confirmedAt"]
@@ -775,6 +987,7 @@ def validate_observation(value: Any, *, allow_new: bool = False) -> dict[str, An
         raise MonitorProgressError("observation.baselineConflict must be boolean")
     return {
         "id": observation_id,
+        "kind": kind,
         "topic": _text(record["topic"], "observation.topic", limit=200),
         "content": _text(record["content"], "observation.content", limit=2000),
         "scope": scope,
@@ -797,7 +1010,7 @@ def validate_observation_store(value: Any) -> dict[str, Any]:
     next_number = record["nextObservationNumber"]
     if not isinstance(next_number, int) or isinstance(next_number, bool) or next_number < 1:
         raise MonitorProgressError("observation store nextObservationNumber must be a positive integer")
-    validated = [validate_observation(item) for item in observations]
+    validated = [validate_observation(item, allow_legacy=True) for item in observations]
     ids = [item["id"] for item in validated]
     if len(ids) != len(set(ids)):
         raise MonitorProgressError("observation ids must be unique")
@@ -899,7 +1112,9 @@ def init_context(root: Path, automation_id: str, payload: Any) -> dict[str, Any]
         {
             "version": RUNTIME_VERSION,
             "automationId": automation_id,
-            "runtimeState": default_runtime_state(instance["observations"]),
+            "runtimeState": default_runtime_state(
+                instance["observations"], Path(instance["monitor"]["packagePath"])
+            ),
         }
     )
     path = _context_path(root, automation_id)
@@ -1014,6 +1229,7 @@ def _owner_inputs(thread_id: str, scan: dict[str, Any], db_path: Path) -> dict[s
         return {
             "status": "unseeded",
             "inputs": [],
+            "updates": [],
             "nextOffset": 0,
             "pathHash": None,
             "reset": False,
@@ -1025,6 +1241,7 @@ def _owner_inputs(thread_id: str, scan: dict[str, Any], db_path: Path) -> dict[s
         return {
             "status": "unavailable",
             "inputs": [],
+            "updates": [],
             "nextOffset": scan["rolloutOffset"],
             "pathHash": scan["rolloutPathHash"],
             "reset": False,
@@ -1036,11 +1253,12 @@ def _owner_inputs(thread_id: str, scan: dict[str, Any], db_path: Path) -> dict[s
     if reset:
         offset = 0
     inputs: list[dict[str, Any]] = []
+    updates: list[dict[str, Any]] = []
     successor_thread_id = None
     next_offset = offset
     with rollout.open("rb") as stream:
         stream.seek(offset)
-        while len(inputs) < MAX_OWNER_INPUTS:
+        while len(inputs) < MAX_OWNER_INPUTS and len(updates) < MAX_TARGET_UPDATES:
             raw = stream.readline()
             if not raw or not raw.endswith(b"\n"):
                 break
@@ -1061,6 +1279,18 @@ def _owner_inputs(thread_id: str, scan: dict[str, Any], db_path: Path) -> dict[s
                 matches = CREATED_THREAD_RE.findall(text)
                 if matches:
                     successor_thread_id = normalise_thread_id(matches[-1])
+                if text:
+                    metadata = payload.get("internal_chat_message_metadata_passthrough")
+                    turn_id = metadata.get("turn_id") if isinstance(metadata, dict) else None
+                    updates.append(
+                        {
+                            "messageId": _text(payload.get("id"), "rollout assistant message id", limit=200),
+                            "turnId": _optional_token(turn_id, "rollout assistant turn id"),
+                            "createdAt": _iso(record.get("timestamp"), "rollout assistant timestamp"),
+                            "phase": payload.get("phase") if payload.get("phase") in {"commentary", "final_answer"} else None,
+                            "text": text[:MAX_OWNER_INPUT_CHARS],
+                        }
+                    )
                 continue
             if payload.get("role") != "user":
                 continue
@@ -1079,6 +1309,7 @@ def _owner_inputs(thread_id: str, scan: dict[str, Any], db_path: Path) -> dict[s
     return {
         "status": "current",
         "inputs": inputs,
+        "updates": updates,
         "nextOffset": next_offset,
         "pathHash": path_hash,
         "reset": reset,
@@ -1122,16 +1353,20 @@ def seed_rollout_cursors(
     root: Path, automation_id: str, db_path: Path = DEFAULT_CODEX_DB
 ) -> dict[str, Any]:
     instance = read_instance(root, automation_id)
-    runtime_state = _runtime_state_for_migration(
-        _read_json(_runtime_path(root, automation_id)), automation_id, instance["observations"]
-    )
     monitor = instance["monitor"]
+    runtime_state = _runtime_state_for_migration(
+        _read_json(_runtime_path(root, automation_id)),
+        automation_id,
+        instance["observations"],
+        Path(monitor["packagePath"]),
+    )
     for source, thread_id in (("monitor", monitor["monitorThreadId"]), ("target", monitor["targetThreadId"])):
         rollout = _canonical_rollout(thread_id, db_path)
         runtime_state["sourceScanState"][source].update(
             {"rolloutOffset": _complete_line_end(rollout), "rolloutPathHash": _rollout_hash(rollout)}
         )
     runtime_state["rendererState"] = _renderer_status(root)
+    runtime_state["packageState"] = _package_status(Path(monitor["packagePath"]))
     runtime_state["monitorHealthState"] = _monitor_health(
         monitor["targetThreadId"],
         {
@@ -1174,6 +1409,8 @@ def read_cycle(
     }
     renderer_status = _renderer_status(root)
     previous_renderer = runtime_store["runtimeState"]["rendererState"]
+    package_status = _package_status(Path(monitor["packagePath"]))
+    previous_package_status = runtime_store["runtimeState"]["packageState"]
     monitor_health = _monitor_health(
         monitor["targetThreadId"],
         source_inputs["target"],
@@ -1190,8 +1427,12 @@ def read_cycle(
         },
         "runtimeState": runtime_store["runtimeState"],
         "observationDiff": _observation_diff(
-            instance["observations"], runtime_store["runtimeState"]["reportedObservationDigests"]
+            instance["observations"],
+            runtime_store["runtimeState"]["reportedObservationDigests"],
+            runtime_store["runtimeState"]["reportedObservationSnapshots"],
         ),
+        "packageStatus": package_status,
+        "packageDiff": _package_diff(previous_package_status, package_status),
         "rendererStatus": renderer_status,
         "rendererDiff": (
             None
@@ -1205,6 +1446,7 @@ def read_cycle(
             else {"previous": previous_monitor_health, "current": monitor_health}
         ),
         "ownerInputs": {source: value["inputs"] for source, value in source_inputs.items()},
+        "targetUpdates": source_inputs["target"]["updates"],
         "nextRolloutCursors": {
             source: {
                 "status": value["status"],
@@ -1336,6 +1578,7 @@ def refresh_context_policy(root: Path, automation_id: str) -> dict[str, Any]:
             _read_json(_runtime_path(root, automation_id)),
             automation_id,
             instance["observations"],
+            Path(instance["monitor"]["packagePath"]),
         )
     if context["automationId"] != automation_id:
         raise MonitorProgressError("monitor context automation id mismatch")
@@ -1385,6 +1628,8 @@ def write_cycle(root: Path, automation_id: str, payload: Any) -> dict[str, Any]:
         **validate_runtime_state(record["runtimeState"]),
         **_observation_runtime(current["observations"]),
         "reportedObservationDigests": _observation_digests(current["observations"]),
+        "reportedObservationSnapshots": _observation_snapshots(current["observations"]),
+        "packageState": _package_status(Path(current["monitor"]["packagePath"])),
     }
     runtime_store = validate_runtime_store(
         {"version": RUNTIME_VERSION, "automationId": automation_id, "runtimeState": runtime_state}
@@ -1502,6 +1747,7 @@ def schema_contract() -> dict[str, Any]:
         "observationStore": {"required": sorted(OBSERVATION_STORE_FIELDS)},
         "observation": {
             "required": sorted(OBSERVATION_FIELDS),
+            "kinds": sorted(OBSERVATION_KINDS),
             "scopes": sorted(SCOPES),
             "states": sorted(OBSERVATION_STATES),
             "responses": sorted(RESPONSES),
@@ -1510,8 +1756,15 @@ def schema_contract() -> dict[str, Any]:
         "context": {"required": sorted(CONTEXT_FIELDS)},
         "runtimeStore": {"required": sorted(RUNTIME_STORE_FIELDS), "runtimeRequired": sorted(RUNTIME_FIELDS)},
         "ownerInput": {"required": ["messageId", "turnId", "createdAt", "text"]},
+        "targetUpdate": {"required": ["messageId", "turnId", "createdAt", "phase", "text"]},
+        "packageStatus": {
+            "required": ["status", "attempt", "gate", "tickets", "fingerprint"],
+            "states": ["current", "invalid", "missing"],
+        },
+        "packageDiff": {"acknowledgedBy": "write-cycle"},
         "observationDiff": {
             "changes": ["created", "updated", "removed"],
+            "fields": ["before", "after"],
             "acknowledgedBy": "write-cycle",
         },
         "rendererStatus": {"required": sorted(RENDERER_STATE_FIELDS), "states": sorted(RENDERER_STATUSES)},
