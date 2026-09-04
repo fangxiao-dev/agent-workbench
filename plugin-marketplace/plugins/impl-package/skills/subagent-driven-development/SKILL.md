@@ -38,7 +38,7 @@ worker 返回后，caller 消费已有 evidence、diff 和验证结果，再决�
 
 `fix` 不阻塞后续开发，「等这个 fix 修完」不是暂停主线的理由：同 Topic 复用原 lane 与原 worktree；与当前开发不同 Topic 且写入交叉较小时，默认在隔离 worktree 并行进行，修好后合入。
 
-完成标准：当前派发只有一个已解锁 baby step，答案形态、write-set、局部验证与前置依赖均明确；既未预先授权后续决策，也未拆出边界内的机械动作。
+完成标准：当前派发只有一个已解锁 baby step，答案形态、write-set、局部验证与前置依赖均明确；既未预先授权后续决策，也未拆出边界内的机械动作。当前派发不跨越第二个主控 return point。
 
 ## Step 2 · 分类 dependency
 
