@@ -9,7 +9,7 @@ Topic 是共享 foundation、ownership 与 closure point 的横向交付范围�
 
 业务需求、Ticket/State/Evidence/Gate 仍由调用方及其 owning skill 决定；executor、model、provider 或 agent profile 由 Owner 选择或宿主原生能力解析。起草 `investigate`/`implement`/`fix` 的派发 prompt 时读取 [worker-briefs.md](references/worker-briefs.md)。worker 的验收目标是一个动作的答案，不是需求的 AC，也不是 Ticket 的终态；AC 与 Ticket 粒度归 impl-planning，运行状态与验收判断归 dev-with-track。同一个动作可以服务任何 Ticket，也可以不服务任何 Ticket。
 
-每个 bounded Topic 可以使用当前 worktree，也可以使用新隔离 worktree；caller 根据 write ownership 与资源交叉决定选择、创建和生命周期。文件 ownership 不冲突时可以共用当前 worktree；存在交叉但能通过新隔离 worktree 分开时继续 fan out。DB、端口、测试数据和外部记录分别验证隔离，独立 worktree 只解决文件写入边界；无法隔离的共享可变资源才要求串行。
+每个当前 baby step 可以使用当前 worktree，也可以使用新隔离 worktree；caller 按该 step 的实际 effect footprint（实际写入集与运行资源）决定选择、创建和生命周期。资源冲突按 baby step 的实际写入集与运行资源判断，不按 Topic 或 Ticket 的整体写集判断；两个 Topic 整体有交叉不等于当前两步冲突。文件 ownership 不冲突时可以共用当前 worktree；存在交叉但能通过新隔离 worktree 分开时继续 fan out。DB、端口、测试数据和外部记录分别验证隔离，独立 worktree 只解决文件写入边界；无法隔离的共享可变资源才要求串行。
 
 ## Topic first, baby step second
 
