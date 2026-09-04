@@ -6,6 +6,7 @@ import json
 import os
 import re
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -21,8 +22,8 @@ from urllib.request import urlopen
 
 PROTOCOL_VERSION = 2
 CONTEXT_VERSION = 2
-RUNTIME_VERSION = 1
-POLICY_VERSION = "STATIC_MONITOR_POLICY_V5"
+RUNTIME_VERSION = 3
+POLICY_VERSION = "STATIC_MONITOR_POLICY_V8"
 DEFAULT_PORT = 43187
 LAST_PORT = 43197
 THREAD_ID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
@@ -89,10 +90,19 @@ CONTEXT_FIELDS = {
 LEGACY_CONTEXT_FIELDS = CONTEXT_FIELDS | {"runtimeState"}
 RUNTIME_STORE_FIELDS = {"version", "automationId", "runtimeState"}
 INIT_CONTEXT_FIELDS = {"targetTitle", "targetBaseline"}
-SOURCE_SCAN_FIELDS = {"lastSeenTurnId", "lastSeenUserMessageId", "backfillComplete", "threadUpdatedAt"}
+SOURCE_SCAN_FIELDS = {
+    "lastSeenTurnId",
+    "lastSeenUserMessageId",
+    "backfillComplete",
+    "threadUpdatedAt",
+    "rolloutOffset",
+    "rolloutPathHash",
+}
+LEGACY_SOURCE_SCAN_FIELDS = SOURCE_SCAN_FIELDS - {"rolloutOffset", "rolloutPathHash"}
 RUNTIME_FIELDS = {
     "sourceScanState",
     "observationFingerprint",
+    "reportedObservationDigests",
     "pendingCandidateIds",
     "lastMainMessageId",
     "lastEvaluationFingerprint",
@@ -104,9 +114,13 @@ RUNTIME_FIELDS = {
     "lastFallbackTurnId",
     "lastFallbackAt",
 }
+V2_RUNTIME_FIELDS = RUNTIME_FIELDS - {"reportedObservationDigests"}
 WRITE_CYCLE_FIELDS = WRITE_EVALUATION_FIELDS | {"runtimeState"}
 TARGET_STATUSES = {"active", "idle", "blocked", "terminal", "unknown"}
 BASELINE_STATUSES = {"current", "stale"}
+DEFAULT_CODEX_DB = Path.home() / ".codex" / "state_5.sqlite"
+MAX_OWNER_INPUT_CHARS = 4000
+MAX_OWNER_INPUTS = 100
 
 POLICY_SNAPSHOT = {
     "evaluation": [
@@ -116,12 +130,15 @@ POLICY_SNAPSHOT = {
     ],
     "observations": [
         "只有直接改变目标任务授权、执行方式、验收要求或 Owner 决策边界的纠偏才是本任务 observation。",
+        "按 source、turn 和时间顺序处理新 Owner 输入；结合同批前序消息、当前完整 observations 与 task 状态，先消解 antecedent、主体、动作和范围，再决定 observation topic 或原地更新。",
+        "不得把上下文中的局部对象扩大为整个类别；指代无法确认时不覆盖 confirmed observation，也不据此授权 target 消息。",
         "针对监控模板、CLI、dashboard、prompt 或 observation 机制本身的反馈属于工具调试，不写入目标任务 sidecar。",
         "Owner 明确的纠偏直接记为 confirmed；监控推断先记 candidate，pending candidate 同时最多一条。",
         "同一语义 topic 原地更新并保留短 ID；询问、讨论、附件或引用本身不形成 observation。",
         "confirmed observation 与 baseline 冲突时报告 baselineConflict，不覆盖 baseline；合同变化只标 baselineStatus=stale。",
+        "ownerInputs 只证明消息已读取；observationDiff 才证明消息被收纳为 observation 的新增、更新或删除。",
     ],
-    "visibility": "read_thread 返回 items: [] 表示内容不可见，不能推断没有 userMessage、没有续行请求或不存在 blocker。",
+    "visibility": "read_thread 返回 items: [] 表示内容不可见；read-cycle 通过 Codex 数据库登记的 canonical rollout 增量补偿其中的新 Owner 消息。",
     "intervention": [
         "默认不向 target 发送消息。只有 confirmed observation 明确授权某类消息且当前事实符合其条件时才可发送。",
         "candidate observation 不授权动作。发送时记录采用的 observation ID，并用 runtime 的 target turn ID 去重。",
@@ -133,6 +150,7 @@ POLICY_SNAPSHOT = {
     },
     "communication": [
         "Owner 通知默认只写当前做到哪里、是否正常、接下来做什么、是否需要 Owner。",
+        "observationDiff 非空时下一次 heartbeat 必须逐条报告变化类型、ID、topic 和完整当前内容；删除至少报告 ID。成功 write-cycle 后才视为已报告。",
         "内部执行术语只有在它本身构成故障时才出现，并同时解释真实对象、动作和影响。",
         "监控器自身配置变化只在导致监控中断或需要 Owner 操作时通知。",
     ],
@@ -299,16 +317,44 @@ def _observation_runtime(observations: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _observation_digests(observations: list[dict[str, Any]]) -> dict[str, str]:
+    return {
+        item["id"]: hashlib.sha256(
+            json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        for item in observations
+    }
+
+
+def _observation_diff(
+    observations: list[dict[str, Any]], reported: dict[str, str]
+) -> list[dict[str, Any]]:
+    current = _observation_digests(observations)
+    changes = [
+        {
+            "change": "created" if item["id"] not in reported else "updated",
+            "observation": item,
+        }
+        for item in observations
+        if reported.get(item["id"]) != current[item["id"]]
+    ]
+    changes.extend({"change": "removed", "id": item_id} for item_id in reported if item_id not in current)
+    return changes
+
+
 def default_runtime_state(observations: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     empty_scan = {
         "lastSeenTurnId": None,
         "lastSeenUserMessageId": None,
         "backfillComplete": False,
         "threadUpdatedAt": None,
+        "rolloutOffset": 0,
+        "rolloutPathHash": None,
     }
     return {
         "sourceScanState": {"monitor": dict(empty_scan), "target": dict(empty_scan)},
         **_observation_runtime(observations or []),
+        "reportedObservationDigests": _observation_digests(observations or []),
         "lastMainMessageId": None,
         "lastEvaluationFingerprint": None,
         "incompleteStreak": 0,
@@ -329,6 +375,14 @@ def validate_runtime_state(value: Any) -> dict[str, Any]:
         scan = _expect_fields(scans[source], SOURCE_SCAN_FIELDS, f"runtime source scan state.{source}")
         if not isinstance(scan["backfillComplete"], bool):
             raise MonitorProgressError(f"runtime source scan state.{source}.backfillComplete must be boolean")
+        rollout_offset = scan["rolloutOffset"]
+        if not isinstance(rollout_offset, int) or isinstance(rollout_offset, bool) or rollout_offset < 0:
+            raise MonitorProgressError(f"runtime source scan state.{source}.rolloutOffset must be non-negative")
+        rollout_path_hash = scan["rolloutPathHash"]
+        if rollout_path_hash is not None and (
+            not isinstance(rollout_path_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", rollout_path_hash)
+        ):
+            raise MonitorProgressError(f"runtime source scan state.{source}.rolloutPathHash must be SHA-256 or null")
         validated_scans[source] = {
             "lastSeenTurnId": _optional_token(scan["lastSeenTurnId"], f"runtime.{source}.lastSeenTurnId"),
             "lastSeenUserMessageId": _optional_token(
@@ -338,12 +392,23 @@ def validate_runtime_state(value: Any) -> dict[str, Any]:
             "threadUpdatedAt": _iso(
                 scan["threadUpdatedAt"], f"runtime.{source}.threadUpdatedAt", nullable=True
             ),
+            "rolloutOffset": rollout_offset,
+            "rolloutPathHash": rollout_path_hash,
         }
     pending_ids = record["pendingCandidateIds"]
     if not isinstance(pending_ids, list) or any(
         not isinstance(item, str) or not OBSERVATION_ID_RE.fullmatch(item) for item in pending_ids
     ):
         raise MonitorProgressError("runtime.pendingCandidateIds must contain observation ids")
+    reported = record["reportedObservationDigests"]
+    if not isinstance(reported, dict) or any(
+        not isinstance(item_id, str)
+        or not OBSERVATION_ID_RE.fullmatch(item_id)
+        or not isinstance(digest, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", digest)
+        for item_id, digest in reported.items()
+    ):
+        raise MonitorProgressError("runtime.reportedObservationDigests must map observation ids to SHA-256")
     incomplete_streak = record["incompleteStreak"]
     if not isinstance(incomplete_streak, int) or isinstance(incomplete_streak, bool) or incomplete_streak < 0:
         raise MonitorProgressError("runtime.incompleteStreak must be a non-negative integer")
@@ -356,6 +421,7 @@ def validate_runtime_state(value: Any) -> dict[str, Any]:
     return {
         "sourceScanState": validated_scans,
         "observationFingerprint": _text(record["observationFingerprint"], "runtime.observationFingerprint"),
+        "reportedObservationDigests": reported,
         "pendingCandidateIds": pending_ids,
         "lastMainMessageId": _optional_token(record["lastMainMessageId"], "runtime.lastMainMessageId"),
         "lastEvaluationFingerprint": _text(
@@ -371,6 +437,45 @@ def validate_runtime_state(value: Any) -> dict[str, Any]:
         "lastFallbackTurnId": _optional_token(record["lastFallbackTurnId"], "runtime.lastFallbackTurnId"),
         "lastFallbackAt": _iso(record["lastFallbackAt"], "runtime.lastFallbackAt", nullable=True),
     }
+
+
+def validate_v2_runtime_state(value: Any, observations: list[dict[str, Any]]) -> dict[str, Any]:
+    record = _expect_fields(value, V2_RUNTIME_FIELDS, "v2 runtime state")
+    return validate_runtime_state(
+        {**record, "reportedObservationDigests": _observation_digests(observations)}
+    )
+
+
+def validate_v1_runtime_state(value: Any, observations: list[dict[str, Any]]) -> dict[str, Any]:
+    record = _expect_fields(value, V2_RUNTIME_FIELDS, "v1 runtime state")
+    scans = _expect_fields(record["sourceScanState"], {"monitor", "target"}, "legacy source scan state")
+    migrated_scans: dict[str, dict[str, Any]] = {}
+    for source in ("monitor", "target"):
+        scan = _expect_fields(scans[source], LEGACY_SOURCE_SCAN_FIELDS, f"legacy source scan state.{source}")
+        migrated_scans[source] = {**scan, "rolloutOffset": 0, "rolloutPathHash": None}
+    return validate_v2_runtime_state({**record, "sourceScanState": migrated_scans}, observations)
+
+
+def _runtime_state_for_migration(
+    value: Any, automation_id: str, observations: list[dict[str, Any]]
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise MonitorProgressError("monitor runtime store must be a JSON object")
+    if value.get("version") == RUNTIME_VERSION:
+        store = validate_runtime_store(value)
+    elif value.get("version") in {1, 2}:
+        record = _expect_fields(value, RUNTIME_STORE_FIELDS, "legacy monitor runtime store")
+        validator = validate_v1_runtime_state if value.get("version") == 1 else validate_v2_runtime_state
+        store = {
+            "version": RUNTIME_VERSION,
+            "automationId": _automation_id(record["automationId"]),
+            "runtimeState": validator(record["runtimeState"], observations),
+        }
+    else:
+        raise MonitorProgressError("unsupported monitor runtime version")
+    if store["automationId"] != automation_id:
+        raise MonitorProgressError("monitor runtime automation id mismatch")
+    return store["runtimeState"]
 
 
 def _snapshot_hash(
@@ -682,7 +787,146 @@ def read_static(root: Path, automation_id: str) -> dict[str, Any]:
     }
 
 
-def read_cycle(root: Path, automation_id: str) -> dict[str, Any]:
+def _normalise_codex_path(value: Any) -> Path:
+    text = _text(value, "Codex rollout path")
+    if text.startswith("\\\\?\\"):
+        text = text[4:]
+    return Path(text).resolve()
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _canonical_rollout(thread_id: str, db_path: Path = DEFAULT_CODEX_DB) -> Path:
+    database = db_path.resolve()
+    uri = f"file:{database.as_posix()}?mode=ro"
+    try:
+        with sqlite3.connect(uri, uri=True) as connection:
+            row = connection.execute(
+                "SELECT rollout_path FROM threads WHERE id = ?",
+                (normalise_thread_id(thread_id),),
+            ).fetchone()
+    except sqlite3.Error as exc:
+        raise MonitorProgressError(f"cannot read Codex task database: {database}") from exc
+    if row is None:
+        raise MonitorProgressError(f"Codex task is unavailable: {thread_id}")
+    rollout = _normalise_codex_path(row[0])
+    sessions_root = (database.parent / "sessions").resolve()
+    if not rollout.is_file() or not _is_within(rollout, sessions_root):
+        raise MonitorProgressError("canonical rollout is unavailable or outside the Codex sessions directory")
+    return rollout
+
+
+def _rollout_hash(path: Path) -> str:
+    return hashlib.sha256(str(path).casefold().encode("utf-8")).hexdigest()
+
+
+def _complete_line_end(path: Path) -> int:
+    size = path.stat().st_size
+    if size == 0:
+        return 0
+    with path.open("rb") as stream:
+        stream.seek(size - 1)
+        if stream.read(1) == b"\n":
+            return size
+        position = size - 1
+        while position > 0:
+            position -= 1
+            stream.seek(position)
+            if stream.read(1) == b"\n":
+                return position + 1
+    return 0
+
+
+def _message_text(payload: dict[str, Any]) -> str:
+    content = payload.get("content")
+    if not isinstance(content, list):
+        return ""
+    return "\n".join(
+        part["text"] for part in content if isinstance(part, dict) and isinstance(part.get("text"), str)
+    ).strip()
+
+
+def _owner_inputs(thread_id: str, scan: dict[str, Any], db_path: Path) -> dict[str, Any]:
+    if scan["rolloutPathHash"] is None:
+        return {"status": "unseeded", "inputs": [], "nextOffset": 0, "pathHash": None, "reset": False}
+    rollout = _canonical_rollout(thread_id, db_path)
+    path_hash = _rollout_hash(rollout)
+    offset = scan["rolloutOffset"]
+    reset = scan["rolloutPathHash"] != path_hash or rollout.stat().st_size < offset
+    if reset:
+        offset = 0
+    inputs: list[dict[str, Any]] = []
+    next_offset = offset
+    with rollout.open("rb") as stream:
+        stream.seek(offset)
+        while len(inputs) < MAX_OWNER_INPUTS:
+            raw = stream.readline()
+            if not raw or not raw.endswith(b"\n"):
+                break
+            next_offset = stream.tell()
+            try:
+                record = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            payload = record.get("payload") if isinstance(record, dict) else None
+            if (
+                not isinstance(payload, dict)
+                or record.get("type") != "response_item"
+                or payload.get("type") != "message"
+                or payload.get("role") != "user"
+            ):
+                continue
+            text = _message_text(payload)
+            if not text or text.lstrip().startswith("<heartbeat>"):
+                continue
+            metadata = payload.get("internal_chat_message_metadata_passthrough")
+            turn_id = metadata.get("turn_id") if isinstance(metadata, dict) else None
+            inputs.append(
+                {
+                    "messageId": _text(payload.get("id"), "rollout user message id", limit=200),
+                    "turnId": _optional_token(turn_id, "rollout user turn id"),
+                    "createdAt": _iso(record.get("timestamp"), "rollout user timestamp"),
+                    "text": text[:MAX_OWNER_INPUT_CHARS],
+                }
+            )
+    return {
+        "status": "current",
+        "inputs": inputs,
+        "nextOffset": next_offset,
+        "pathHash": path_hash,
+        "reset": reset,
+    }
+
+
+def seed_rollout_cursors(
+    root: Path, automation_id: str, db_path: Path = DEFAULT_CODEX_DB
+) -> dict[str, Any]:
+    instance = read_instance(root, automation_id)
+    runtime_state = _runtime_state_for_migration(
+        _read_json(_runtime_path(root, automation_id)), automation_id, instance["observations"]
+    )
+    monitor = instance["monitor"]
+    for source, thread_id in (("monitor", monitor["monitorThreadId"]), ("target", monitor["targetThreadId"])):
+        rollout = _canonical_rollout(thread_id, db_path)
+        runtime_state["sourceScanState"][source].update(
+            {"rolloutOffset": _complete_line_end(rollout), "rolloutPathHash": _rollout_hash(rollout)}
+        )
+    store = validate_runtime_store(
+        {"version": RUNTIME_VERSION, "automationId": automation_id, "runtimeState": runtime_state}
+    )
+    _atomic_write(_runtime_path(root, automation_id), store)
+    return read_cycle(root, automation_id, db_path)
+
+
+def read_cycle(
+    root: Path, automation_id: str, db_path: Path = DEFAULT_CODEX_DB
+) -> dict[str, Any]:
     context = validate_context(
         _read_json(_context_path(root, automation_id)), require_current_policy=False
     )
@@ -691,6 +935,11 @@ def read_cycle(root: Path, automation_id: str) -> dict[str, Any]:
     if context["automationId"] != automation_id or runtime_store["automationId"] != automation_id:
         raise MonitorProgressError("monitor context automation id mismatch")
     current = context["policyVersion"] == POLICY_VERSION and context["policySnapshot"] == POLICY_SNAPSHOT
+    monitor = instance["monitor"]
+    source_inputs = {
+        "monitor": _owner_inputs(monitor["monitorThreadId"], runtime_store["runtimeState"]["sourceScanState"]["monitor"], db_path),
+        "target": _owner_inputs(monitor["targetThreadId"], runtime_store["runtimeState"]["sourceScanState"]["target"], db_path),
+    }
     return {
         "staticRef": {
             "contextVersion": context["version"],
@@ -699,6 +948,19 @@ def read_cycle(root: Path, automation_id: str) -> dict[str, Any]:
             "status": "current" if current else "reload-required",
         },
         "runtimeState": runtime_store["runtimeState"],
+        "observationDiff": _observation_diff(
+            instance["observations"], runtime_store["runtimeState"]["reportedObservationDigests"]
+        ),
+        "ownerInputs": {source: value["inputs"] for source, value in source_inputs.items()},
+        "nextRolloutCursors": {
+            source: {
+                "status": value["status"],
+                "rolloutOffset": value["nextOffset"],
+                "rolloutPathHash": value["pathHash"],
+                "reset": value["reset"],
+            }
+            for source, value in source_inputs.items()
+        },
         **instance,
     }
 
@@ -758,6 +1020,7 @@ def write_cycle(root: Path, automation_id: str, payload: Any) -> dict[str, Any]:
     runtime_state = {
         **validate_runtime_state(record["runtimeState"]),
         **_observation_runtime(current["observations"]),
+        "reportedObservationDigests": _observation_digests(current["observations"]),
     }
     runtime_store = validate_runtime_store(
         {"version": RUNTIME_VERSION, "automationId": automation_id, "runtimeState": runtime_state}
@@ -882,6 +1145,11 @@ def schema_contract() -> dict[str, Any]:
         "writeEvaluationInput": {"required": sorted(WRITE_EVALUATION_FIELDS)},
         "context": {"required": sorted(CONTEXT_FIELDS)},
         "runtimeStore": {"required": sorted(RUNTIME_STORE_FIELDS), "runtimeRequired": sorted(RUNTIME_FIELDS)},
+        "ownerInput": {"required": ["messageId", "turnId", "createdAt", "text"]},
+        "observationDiff": {
+            "changes": ["created", "updated", "removed"],
+            "acknowledgedBy": "write-cycle",
+        },
         "initContextInput": {"required": sorted(INIT_CONTEXT_FIELDS)},
         "writeCycleInput": {"required": sorted(WRITE_CYCLE_FIELDS)},
         "refreshContextPolicy": {"preserves": ["targetBaseline", "runtimeState", "monitor", "observations"]},
@@ -1024,6 +1292,13 @@ def build_parser() -> argparse.ArgumentParser:
         "read-cycle", help="print dynamic heartbeat state plus a compact static reference"
     )
     _common_instance_arguments(read_cycle_parser)
+    read_cycle_parser.add_argument("--db", type=Path, default=DEFAULT_CODEX_DB)
+
+    seed_rollout_parser = subparsers.add_parser(
+        "seed-rollout-cursors", help="set canonical rollout cursors to the current complete-line ends"
+    )
+    _common_instance_arguments(seed_rollout_parser)
+    seed_rollout_parser.add_argument("--db", type=Path, default=DEFAULT_CODEX_DB)
 
     refresh_context_parser = subparsers.add_parser(
         "refresh-context-policy", help="replace only the validated static policy snapshot and hash"
@@ -1076,7 +1351,9 @@ def main(argv: list[str] | None = None) -> int:
             elif args.command == "read-static":
                 result = read_static(root, automation_id)
             elif args.command == "read-cycle":
-                result = read_cycle(root, automation_id)
+                result = read_cycle(root, automation_id, args.db)
+            elif args.command == "seed-rollout-cursors":
+                result = seed_rollout_cursors(root, automation_id, args.db)
             elif args.command == "refresh-context-policy":
                 result = refresh_context_policy(root, automation_id)
             elif args.command == "write-evaluation":

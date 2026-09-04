@@ -126,16 +126,23 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
         "read-static",
         "STATIC_HASH",
         "items: []",
+        "ownerInputs",
+        "nextRolloutCursors",
+        "observationDiff",
+        "同批前序消息",
         "confirmed observation",
         "candidate 不授权动作",
         "语义变化",
     ):
         assert marker in template
-    for command in ("read-cycle", "read-static", "write-cycle", "put-observation", "remove-observation"):
+    for command in ("read-cycle", "read-static", "write-cycle"):
         assert command in template
     assert "{{MONITOR_CLI_PATH_JSON}}" in template
     assert len(template) < 1000
-    assert "工具调试不入任务 sidecar" in template
+    assert "工具调试不入 sidecar" in template
+    assert "Grok" not in template
+    assert "antecedent、主体、动作和范围" in skill
+    assert "新增/更新/删除" in template
     rendered = (
         template.replace("{{AUTOMATION_ID}}", "impl-package-2026-08-31-bank-reconciliation-nm-settlement-groups")
         .replace(
