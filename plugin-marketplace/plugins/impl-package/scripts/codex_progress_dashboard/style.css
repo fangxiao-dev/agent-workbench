@@ -90,7 +90,16 @@ button, select { font: inherit; }
   align-items: center;
 }
 
-.task-controls label { color: var(--muted); font-size: 12px; letter-spacing: .08em; }
+.task-controls label, .task-readout-label { color: var(--muted); font-size: 12px; letter-spacing: .08em; }
+
+.task-readout {
+  min-width: 0;
+  padding: 0 2px;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 select {
   min-width: 0;
@@ -291,19 +300,21 @@ h2 { margin: 0; font-family: "Palatino Linotype", "Yu Mincho", serif; font-size:
 .dependency-edge { fill: none; stroke: rgba(32, 36, 31, .22); stroke-width: 1.25; vector-effect: non-scaling-stroke; }
 .dependency-edge.is-related { stroke: var(--acid); stroke-width: 2; }
 .dependency-lines marker path { fill: rgba(32, 36, 31, .42); }
-.ticket-tooltip { position: fixed; z-index: 40; width: min(380px, calc(100vw - 24px)); padding: 16px; color: #f8f4e9; border: 1px solid rgba(255,255,255,.14); border-radius: 12px; background: #242922; box-shadow: 0 18px 48px rgba(32, 36, 31, .24); pointer-events: none; }
+.ticket-tooltip { position: fixed; z-index: 40; width: min(430px, calc(100vw - 24px)); padding: 16px; color: #f8f4e9; border: 1px solid rgba(255,255,255,.14); border-radius: 12px; background: #242922; box-shadow: 0 18px 48px rgba(32, 36, 31, .24); pointer-events: none; }
 .ticket-tooltip[hidden] { display: none; }
 .tooltip-heading { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; }
 .tooltip-code { color: #c7df68; font-family: Consolas, monospace; font-size: 13px; }
 .ticket-tooltip h3 { margin: 5px 0 0; font-family: "Palatino Linotype", "Yu Mincho", serif; font-size: 21px; font-weight: 500; line-height: 1.18; }
 .ticket-tooltip .state-badge { flex: none; color: #e9e4d7; border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.06); }
-.tooltip-trail { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.12); }
-.tooltip-trail-heading { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; }
-.tooltip-trail-heading strong { color: #f8f4e9; font-size: 13px; }
-.tooltip-trail-heading time { color: #a9ac9f; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tooltip-trail-state { display: inline-flex; min-height: 24px; align-items: center; margin-top: 8px; padding: 2px 8px; color: #c7df68; border: 1px solid rgba(199,223,104,.28); border-radius: 999px; background: rgba(199,223,104,.08); font-size: 12px; font-weight: 600; }
-.tooltip-trail-state[data-outcome="incomplete"], .tooltip-trail-state[data-outcome="evidence_gap"], .tooltip-trail-state[data-outcome="blocked"], .tooltip-trail-state[data-outcome="fail"] { color: #efbb76; border-color: rgba(239,187,118,.32); background: rgba(239,187,118,.08); }
-.tooltip-trail p { display: -webkit-box; margin: 8px 0 0; overflow: hidden; color: #ded9cc; font-size: 13px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.tooltip-activity { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.12); }
+.tooltip-activity[hidden] { display: none; }
+.tooltip-activity p { display: -webkit-box; margin: 7px 0 0; overflow: hidden; color: #ded9cc; font-size: 13px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.tooltip-activity > strong, .tooltip-activity-heading strong { color: #f8f4e9; font-size: 13px; }
+.tooltip-activity-heading { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; }
+.tooltip-activity-heading time, .tooltip-activity li time { color: #a9ac9f; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tooltip-activity ul { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.tooltip-activity li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: baseline; color: #ded9cc; font-size: 13px; line-height: 1.45; }
+.tooltip-activity li span { overflow-wrap: anywhere; }
 .tooltip-hints { display: grid; gap: 7px; margin: 12px 0 0; padding: 12px 0 0 18px; color: #ded9cc; border-top: 1px solid rgba(255,255,255,.12); font-size: 13px; line-height: 1.5; }
 .empty-state { margin: 15px 0 0; color: var(--muted); font-size: 13px; }
 
@@ -333,7 +344,7 @@ h2 { margin: 0; font-family: "Palatino Linotype", "Yu Mincho", serif; font-size:
   .shell { width: min(100% - 24px, 1600px); padding-top: 8px; }
   .topbar { gap: 16px; }
   .task-controls { grid-template-columns: 1fr; gap: 6px; }
-  .package-label { margin-top: 5px; }
+  .task-readout-label { margin-top: 5px; }
   .overview-strip { padding: 20px 2px 16px; }
   .overview-metrics { grid-template-columns: 1fr; }
   .overview-metrics div { display: grid; grid-template-columns: 100px 1fr; border-right: 0; border-bottom: 1px solid var(--line); }

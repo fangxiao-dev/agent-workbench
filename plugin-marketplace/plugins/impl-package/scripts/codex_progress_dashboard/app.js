@@ -1,7 +1,7 @@
 "use strict";
 
-const taskSelect = document.querySelector("#task-select");
 const packageSelect = document.querySelector("#package-select");
+const taskReadout = document.querySelector("#task-readout");
 const connection = document.querySelector("#connection");
 const connectionLabel = document.querySelector("#connection-label");
 const taskTitle = document.querySelector("#task-title");
@@ -19,9 +19,11 @@ const ticketTooltip = document.querySelector("#ticket-tooltip");
 const tooltipCode = document.querySelector("#tooltip-code");
 const tooltipName = document.querySelector("#tooltip-name");
 const tooltipState = document.querySelector("#tooltip-state");
-const tooltipTrailTime = document.querySelector("#tooltip-trail-time");
-const tooltipTrailState = document.querySelector("#tooltip-trail-state");
-const tooltipTrailSummary = document.querySelector("#tooltip-trail-summary");
+const tooltipActive = document.querySelector("#tooltip-active");
+const tooltipActiveList = document.querySelector("#tooltip-active-list");
+const tooltipResult = document.querySelector("#tooltip-result");
+const tooltipResultTime = document.querySelector("#tooltip-result-time");
+const tooltipResultSummary = document.querySelector("#tooltip-result-summary");
 const tooltipHints = document.querySelector("#tooltip-hints");
 const ticketEmpty = document.querySelector("#ticket-empty");
 const monitorPanel = document.querySelector("#monitor-panel");
@@ -46,6 +48,8 @@ const auditList = document.querySelector("#audit-list");
 
 let events = null;
 let selectedTask = null;
+let selectedPackage = null;
+let packageGroups = [];
 let selectedTicketId = null;
 let previewTicketId = null;
 let currentTickets = [];
@@ -279,12 +283,26 @@ function showTicketTooltip(ticket, anchor) {
   tooltipName.textContent = ticket.name;
   tooltipState.className = `state-badge ${(ticket.runtimeState || ticket.state).toLowerCase()}`;
   tooltipState.textContent = stateLabel(ticket.state, ticket.runtimeState);
-  const trail = ticket.latestTrail;
-  tooltipTrailTime.dateTime = trail?.at || "";
-  tooltipTrailTime.textContent = trail?.at ? formatCompactTime(trail.at) : "暂无记录";
-  tooltipTrailState.dataset.outcome = String(trail?.outcome || "unknown").toLowerCase();
-  tooltipTrailState.textContent = trail ? trailOutcomeLabel(trail.outcome) : "暂无记录";
-  tooltipTrailSummary.textContent = trail?.summary || "当前 attempt 尚未登记该 Ticket 的执行记录。";
+  clear(tooltipActiveList);
+  const activeActions = Array.isArray(ticket.activeActions) ? ticket.activeActions : [];
+  tooltipActive.hidden = !activeActions.length;
+  activeActions.forEach((action) => {
+    const item = document.createElement("li");
+    const label = document.createElement("span");
+    const time = document.createElement("time");
+    label.textContent = action.label;
+    time.dateTime = action.at || "";
+    time.textContent = action.at ? formatCompactTime(action.at) : "时间未知";
+    item.append(label, time);
+    tooltipActiveList.append(item);
+  });
+  const result = ticket.latestResult;
+  tooltipResult.hidden = !result;
+  tooltipResultTime.dateTime = result?.at || "";
+  tooltipResultTime.textContent = result?.at ? formatCompactTime(result.at) : "时间未知";
+  tooltipResultSummary.textContent = result
+    ? `${trailOutcomeLabel(result.outcome)} · ${result.summary}`
+    : "";
   clear(tooltipHints);
   const hints = ticket.completionHints.length
     ? ticket.completionHints
@@ -297,6 +315,10 @@ function showTicketTooltip(ticket, anchor) {
 
   ticketTooltip.hidden = false;
   ticketTooltip.style.visibility = "hidden";
+  positionTicketTooltip(anchor);
+}
+
+function positionTicketTooltip(anchor) {
   const anchorRect = anchor.getBoundingClientRect();
   const tooltipRect = ticketTooltip.getBoundingClientRect();
   let left = anchorRect.right + 12;
@@ -561,7 +583,7 @@ async function saveObservation(item, textarea, save, cancel, error) {
   save.textContent = "保存中…";
   error.textContent = "";
   try {
-    const query = `?package=${encodeURIComponent(packageSelect.value)}`;
+    const query = `?package=${encodeURIComponent(selectedPackage.path)}`;
     const response = await fetch(`/api/tasks/${encodeURIComponent(selectedTask)}/observation${query}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -585,6 +607,7 @@ async function saveObservation(item, textarea, save, cancel, error) {
 }
 
 function render(snapshot) {
+  taskReadout.textContent = snapshot.task.name;
   taskTitle.textContent = snapshot.task.name;
   taskStatus.textContent = snapshot.task.status;
   actualSummary.textContent = snapshot.actualProgress.summary;
@@ -615,28 +638,45 @@ async function getJson(url) {
   return payload;
 }
 
-async function loadPackages(taskId) {
-  packageSelect.disabled = true;
-  clear(packageSelect);
-  packageSelect.append(option("", "正在查找任务包…"));
-  const { packages } = await getJson(`/api/tasks/${encodeURIComponent(taskId)}/packages`);
-  const requested = new URLSearchParams(window.location.search).get("package");
-  const requestedPackage = packages.find((item) => item.path === requested);
-  const currentPackages = packages.filter((item) => item.current);
-  const visiblePackages = requestedPackage && !currentPackages.includes(requestedPackage)
-    ? [requestedPackage, ...currentPackages]
-    : currentPackages;
-  clear(packageSelect);
-  if (!visiblePackages.length) packageSelect.append(option("", "未匹配到任务包"));
-  visiblePackages.forEach((item) => packageSelect.append(option(item.path, item.name)));
-  const candidate = requestedPackage || currentPackages[0] || null;
-  packageSelect.value = candidate?.path || "";
-  packageSelect.disabled = visiblePackages.length === 0;
+function groupPackages(tasks) {
+  const groups = new Map();
+  tasks.forEach((task) => {
+    const pkg = task.currentPackage;
+    const existing = groups.get(pkg.identity);
+    if (existing) {
+      existing.tasks.push(task);
+      return;
+    }
+    groups.set(pkg.identity, {
+      identity: pkg.identity,
+      name: pkg.name,
+      path: pkg.path,
+      workspaceName: pkg.workspaceName,
+      task,
+      tasks: [task],
+    });
+  });
+  return [...groups.values()];
+}
+
+function selectPackage(identity) {
+  const group = packageGroups.find((item) => item.identity === identity);
+  if (!group) return;
+  selectedPackage = group;
+  selectedTask = group.task.id;
+  packageSelect.value = group.identity;
+  taskReadout.textContent = group.task.name;
+  localStorage.setItem("codex-progress-package", group.identity);
+  const url = new URL(window.location.href);
+  url.searchParams.set("task", selectedTask);
+  url.searchParams.set("package", group.path);
+  window.history.replaceState(null, "", url);
+  openEvents();
 }
 
 function openEvents() {
   if (events) events.close();
-  const packagePath = packageSelect.value;
+  const packagePath = selectedPackage?.path || "";
   const query = packagePath ? `?package=${encodeURIComponent(packagePath)}` : "";
   const separator = query ? "&" : "?";
   setConnection("loading", "正在连接");
@@ -648,19 +688,8 @@ function openEvents() {
   events.onerror = () => setConnection("error", "正在重连");
 }
 
-async function selectTask(taskId) {
-  selectedTask = taskId;
-  localStorage.setItem("codex-progress-task", taskId);
-  await loadPackages(taskId);
-  openEvents();
-}
-
-taskSelect.addEventListener("change", () => {
-  selectTask(taskSelect.value).catch(showError);
-});
-
 packageSelect.addEventListener("change", () => {
-  openEvents();
+  selectPackage(packageSelect.value);
 });
 
 monitorObservations.addEventListener("click", () => {
@@ -679,27 +708,33 @@ function showError(error) {
 }
 
 async function boot() {
-  const requested = new URLSearchParams(window.location.search).get("task");
-  if (requested) {
-    clear(taskSelect);
-    taskSelect.append(option(requested, "正在读取当前项目…"));
-    taskSelect.value = requested;
-    await selectTask(requested);
-  }
-
+  const params = new URLSearchParams(window.location.search);
+  const requestedTask = params.get("task");
+  const requestedPath = params.get("package");
   const { tasks } = await getJson("/api/tasks");
-  clear(taskSelect);
   if (!tasks.length) throw new Error("没有匹配到含当前任务包的项目。");
-  if (requested && !tasks.some((task) => task.id === requested)) {
-    tasks.unshift({ id: requested, name: taskTitle.textContent });
-  }
-  tasks.forEach((task) => taskSelect.append(option(task.id, task.name)));
-  const saved = localStorage.getItem("codex-progress-task");
-  const initial = tasks.find((task) => task.id === requested)
-    || tasks.find((task) => task.id === saved)
-    || tasks[0];
-  taskSelect.value = initial.id;
-  if (!requested) await selectTask(initial.id);
+  packageGroups = groupPackages(tasks);
+  const duplicateNames = new Map();
+  packageGroups.forEach((group) => {
+    duplicateNames.set(group.name, (duplicateNames.get(group.name) || 0) + 1);
+  });
+  clear(packageSelect);
+  packageGroups.forEach((group) => {
+    const label = duplicateNames.get(group.name) > 1
+      ? `${group.name} · ${group.workspaceName}`
+      : group.name;
+    packageSelect.append(option(group.identity, label));
+  });
+  packageSelect.disabled = packageGroups.length === 0;
+  const requestedGroup = packageGroups.find((group) => (
+    group.path === requestedPath && group.tasks.some((task) => task.id === requestedTask)
+  )) || packageGroups.find((group) => group.path === requestedPath);
+  const saved = localStorage.getItem("codex-progress-package");
+  const initial = requestedGroup
+    || packageGroups.find((group) => group.identity === saved)
+    || packageGroups[0];
+  localStorage.removeItem("codex-progress-task");
+  selectPackage(initial.identity);
 }
 
 boot().catch(showError);

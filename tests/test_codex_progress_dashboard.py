@@ -39,8 +39,15 @@ def test_renderer_uses_observation_dialog_and_omits_duplicate_next_action() -> N
     assert "textarea.maxLength = 2000" in javascript
     assert "新增纠偏" not in html
     assert ".observation-dialog::backdrop" in stylesheet
-    assert 'aria-label="Trail 最新状态"' in html
-    assert 'id="tooltip-trail-summary"' in html
+    assert "Trail 最新状态" not in html
+    assert 'id="tooltip-active-list"' in html
+    assert 'id="tooltip-result-summary"' in html
+    assert "tooltipState.textContent = stateLabel(ticket.state, ticket.runtimeState)" in javascript
+    assert 'id="task-select"' not in html
+    assert '<output class="task-readout" id="task-readout"' in html
+    assert "taskSelect" not in javascript
+    assert "groupPackages(tasks)" in javascript
+    assert 'localStorage.setItem("codex-progress-package"' in javascript
     assert "tooltip-dependencies" not in html
     assert "ticketRelationship" not in javascript
 
@@ -182,6 +189,63 @@ def test_task_list_excludes_unnamed_tasks_instead_of_exposing_prompt_title(tmp_p
 
     assert tasks == []
     assert "password" not in json.dumps(tasks)
+
+
+def test_task_list_assigns_stable_package_identity_across_handoff_tasks(tmp_path: Path) -> None:
+    module = load_module()
+    db_path, workspace, rollout, codex_home = make_fixture(tmp_path)
+    package = make_package(workspace)
+    write_jsonl(rollout, [package_binding_record(package, workspace, "2026-08-31T20:00:00Z")])
+    sessions = codex_home / "sessions/2026/08/31"
+    successor_id = "01a05966-5246-73e3-b46f-fd6af55fb662"
+    successor_rollout = sessions / f"rollout-{successor_id}.jsonl"
+    write_jsonl(successor_rollout, [package_binding_record(package, workspace, "2026-09-01T08:00:00Z")])
+    other_workspace = tmp_path / "other-workspace"
+    other_workspace.mkdir()
+    other_package = make_package(other_workspace)
+    other_id = "01a05966-5246-73e3-b46f-fd6af55fb663"
+    other_rollout = sessions / f"rollout-{other_id}.jsonl"
+    write_jsonl(other_rollout, [package_binding_record(other_package, other_workspace, "2026-09-01T07:00:00Z")])
+    with sqlite3.connect(db_path) as connection:
+        connection.executemany(
+            """
+            INSERT INTO threads
+                (id, name, title, updated_at, updated_at_ms, recency_at_ms, cwd,
+                 rollout_path, git_branch, git_sha, archived)
+            VALUES (?, ?, '', ?, ?, ?, ?, ?, 'feat/test', ?, 0)
+            """,
+            [
+                (
+                    successor_id,
+                    "最新承载任务",
+                    1788249600,
+                    1788249600000,
+                    1788249600000,
+                    str(workspace),
+                    str(successor_rollout),
+                    "b" * 40,
+                ),
+                (
+                    other_id,
+                    "另一工作区任务",
+                    1788246000,
+                    1788246000000,
+                    1788246000000,
+                    str(other_workspace),
+                    str(other_rollout),
+                    "c" * 40,
+                ),
+            ],
+        )
+
+    tasks = module.list_tasks(db_path)
+    by_id = {task["id"]: task for task in tasks}
+
+    assert tasks[0]["id"] == successor_id
+    assert by_id[THREAD_ID]["currentPackage"]["identity"] == by_id[successor_id]["currentPackage"]["identity"]
+    assert by_id[other_id]["currentPackage"]["identity"] != by_id[successor_id]["currentPackage"]["identity"]
+    assert by_id[successor_id]["currentPackage"]["workspaceName"] == "workspace"
+    assert by_id[other_id]["currentPackage"]["workspaceName"] == "other-workspace"
 
 
 def test_rollout_reader_waits_for_complete_jsonl_line(tmp_path: Path) -> None:
@@ -566,13 +630,13 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
     assert package_snapshot["currentTicketId"] == "TKT-03"
     assert tickets["TKT-03"]["runtimeState"] == "RUNNING"
     assert tickets["TKT-05"]["runtimeState"] == "READY"
-    assert tickets["TKT-03"]["latestTrail"] == {
-        "kind": "dispatch",
-        "outcome": "RUNNING",
+    assert tickets["TKT-03"]["activeActions"] == [{
+        "label": "backend-foundation",
         "at": "2026-09-04T09:00:00Z",
-        "summary": "backend-foundation",
-    }
-    assert tickets["TKT-05"]["latestTrail"] is None
+    }]
+    assert tickets["TKT-03"]["latestResult"] is None
+    assert tickets["TKT-05"]["activeActions"] == []
+    assert tickets["TKT-05"]["latestResult"] is None
 
     write_jsonl(
         trail,
@@ -593,10 +657,59 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
 
     assert after_return["runningTicketIds"] == []
     assert after_return["currentTicketId"] == "TKT-03"
-    assert after_ticket["latestTrail"]["outcome"] == "DONE"
-    assert after_ticket["latestTrail"]["at"] == "2026-09-04T09:10:00Z"
-    assert "secret" not in after_ticket["latestTrail"]["summary"]
-    assert len(after_ticket["latestTrail"]["summary"]) == 200
+    assert after_ticket["activeActions"] == []
+    assert after_ticket["latestResult"]["outcome"] == "DONE"
+    assert after_ticket["latestResult"]["at"] == "2026-09-04T09:10:00Z"
+    assert "secret" not in after_ticket["latestResult"]["summary"]
+    assert len(after_ticket["latestResult"]["summary"]) == 200
+
+    write_jsonl(
+        trail,
+        [
+            dispatch,
+            {
+                "kind": "worker-return",
+                "subject": "ticket:TKT-03",
+                "of": 309,
+                "outcome": "DONE",
+                "ts": "2026-09-04T09:10:00Z",
+                "summary": "foundation done",
+            },
+            {
+                "seq": 310,
+                "kind": "dispatch",
+                "subject": "ticket:TKT-03",
+                "outcome": "RUNNING",
+                "returned": False,
+                "review_track": "Track A",
+                "worker": "/root/review-a",
+                "ts": "2026-09-04T09:11:00Z",
+            },
+            {
+                "seq": 311,
+                "kind": "dispatch",
+                "subject": "ticket:TKT-03",
+                "outcome": "RUNNING",
+                "returned": False,
+                "review_track": "Track B",
+                "worker": "/root/review-b",
+                "ts": "2026-09-04T09:12:00Z",
+            },
+            {
+                "kind": "worker-return",
+                "subject": "ticket:TKT-03",
+                "outcome": "PASS",
+                "worker": "/root/review-a",
+                "ts": "2026-09-04T09:13:00Z",
+                "summary": "Track A passed",
+            },
+        ],
+    )
+    fallback_pairing = module.build_snapshot(THREAD_ID, relative, db_path)["package"]
+    fallback_ticket = next(ticket for ticket in fallback_pairing["tickets"] if ticket["id"] == "TKT-03")
+
+    assert fallback_ticket["activeActions"] == [{"label": "Track B", "at": "2026-09-04T09:12:00Z"}]
+    assert fallback_ticket["latestResult"]["outcome"] == "PASS"
 
 
 def test_snapshot_matches_slug_ticket_ids_case_insensitively(tmp_path: Path) -> None:

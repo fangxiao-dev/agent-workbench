@@ -20,10 +20,10 @@
         </a>
 
         <div class="task-controls">
-          <label for="task-select">当前项目</label>
-          <select id="task-select" aria-label="切换项目"></select>
-          <label class="package-label" for="package-select">任务包</label>
-          <select id="package-select" aria-label="选择关联任务包"></select>
+          <label for="package-select">任务包</label>
+          <select id="package-select" aria-label="选择任务包"></select>
+          <span class="task-readout-label">当前项目</span>
+          <output class="task-readout" id="task-readout" for="package-select">正在定位…</output>
         </div>
 
         <div class="connection" id="connection" role="status" aria-live="polite">
@@ -84,13 +84,16 @@
               </div>
               <span class="state-badge" id="tooltip-state"></span>
             </div>
-            <section class="tooltip-trail" aria-label="Trail 最新状态">
-              <div class="tooltip-trail-heading">
-                <strong>Trail 最新状态</strong>
-                <time id="tooltip-trail-time"></time>
+            <section class="tooltip-activity" id="tooltip-active" aria-label="在途动作" hidden>
+              <strong>在途动作</strong>
+              <ul id="tooltip-active-list"></ul>
+            </section>
+            <section class="tooltip-activity" id="tooltip-result" aria-label="最近结果" hidden>
+              <div class="tooltip-activity-heading">
+                <strong>最近结果</strong>
+                <time id="tooltip-result-time"></time>
               </div>
-              <span class="tooltip-trail-state" id="tooltip-trail-state"></span>
-              <p id="tooltip-trail-summary"></p>
+              <p id="tooltip-result-summary"></p>
             </section>
             <ul class="tooltip-hints" id="tooltip-hints"></ul>
           </div>

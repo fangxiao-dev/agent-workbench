@@ -129,12 +129,19 @@ def list_tasks(db_path: Path = DEFAULT_DB, limit: int = 200) -> list[dict[str, A
         current_package = next((item for item in find_packages(cwd, rollout, roots) if item["current"]), None)
         if current_package is None:
             continue
+        package_root = (cwd / current_package["path"]).resolve()
         tasks.append(
             {
                 "id": row["id"],
                 "name": _safe_name(row["name"], row["updated_at"]),
                 "updatedAt": _iso_timestamp(row["updated_at"]),
-                "currentPackage": current_package,
+                "currentPackage": {
+                    **current_package,
+                    "identity": hashlib.sha256(
+                        os.path.normcase(str(package_root)).encode("utf-8")
+                    ).hexdigest(),
+                    "workspaceName": cwd.name,
+                },
             }
         )
     return tasks
@@ -591,44 +598,87 @@ def _ticket_trail_projection(
     rows = _trail_rows(package_root / "execution" / attempt_id / "trail.jsonl")
     if rows is None:
         return [], {}
-    result_ids = {
-        str(row[name])
-        for row in rows
-        if row.get("kind") in {"result", "worker-return"}
-        for name in ("of", "decision", "dispatch_id", "dispatchId", "decision_id", "decisionId")
-        if row.get(name) is not None
-    }
-    running = []
-    latest: dict[str, dict[str, Any]] = {}
+    open_dispatches: list[dict[str, Any]] = []
+    latest_results: dict[str, dict[str, Any]] = {}
     for row in rows:
         subject = row.get("subject")
-        if isinstance(subject, str) and subject.startswith("ticket:"):
-            ticket_id = _resolve_ticket_id(subject.removeprefix("ticket:"), ticket_ids)
-            if ticket_id in ticket_ids:
-                summary = row.get("summary") or row.get("step")
-                if not isinstance(summary, str) or not summary.strip():
-                    summary = (
-                        "该执行步骤已开始，等待结果返回。"
-                        if row.get("kind") == "dispatch"
-                        else "该执行步骤已返回，但没有登记摘要。"
-                    )
-                latest[ticket_id] = {
-                    "kind": str(row.get("kind") or "unknown"),
-                    "outcome": str(row.get("outcome") or "unknown"),
-                    "at": row.get("ts") if isinstance(row.get("ts"), str) else None,
-                    "summary": sanitise_activity(summary)[:MAX_TRAIL_SUMMARY_CHARS],
-                }
-        if row.get("kind") != "dispatch" or str(row.get("outcome", "")).upper() != "RUNNING" or row.get("returned") is not False:
-            continue
-        identifier = _trail_identifier(row)
-        if identifier is not None and identifier in result_ids:
-            continue
         if not isinstance(subject, str) or not subject.startswith("ticket:"):
             continue
-        ticket_id = subject.removeprefix("ticket:")
-        if ticket_id in ticket_ids and ticket_id not in running:
-            running.append(ticket_id)
-    return running, latest
+        ticket_id = _resolve_ticket_id(subject.removeprefix("ticket:"), ticket_ids)
+        if ticket_id not in ticket_ids:
+            continue
+        kind = row.get("kind")
+        if kind == "dispatch" and str(row.get("outcome", "")).upper() == "RUNNING" and row.get("returned") is False:
+            open_dispatches.append({"ticketId": ticket_id, **row})
+            continue
+        if kind not in {"result", "worker-return"}:
+            continue
+        reference = next(
+            (
+                str(row[name])
+                for name in ("of", "decision", "dispatch_id", "dispatchId", "decision_id", "decisionId")
+                if row.get(name) is not None
+            ),
+            None,
+        )
+        match_index = None
+        if reference is not None:
+            match_index = next(
+                (
+                    index
+                    for index in range(len(open_dispatches) - 1, -1, -1)
+                    if _trail_identifier(open_dispatches[index]) == reference
+                ),
+                None,
+            )
+        elif isinstance(row.get("worker"), str):
+            match_index = next(
+                (
+                    index
+                    for index in range(len(open_dispatches) - 1, -1, -1)
+                    if open_dispatches[index]["ticketId"] == ticket_id
+                    and open_dispatches[index].get("worker") == row["worker"]
+                ),
+                None,
+            )
+        if match_index is not None:
+            open_dispatches.pop(match_index)
+        summary = row.get("summary")
+        if not isinstance(summary, str) or not summary.strip():
+            summary = "该执行步骤已返回，但没有登记摘要。"
+        latest_results[ticket_id] = {
+            "outcome": str(row.get("outcome") or "unknown"),
+            "at": row.get("ts") if isinstance(row.get("ts"), str) else None,
+            "summary": sanitise_activity(summary)[:MAX_TRAIL_SUMMARY_CHARS],
+        }
+    projections: dict[str, dict[str, Any]] = {}
+    for ticket_id in ticket_ids:
+        actions = []
+        for row in open_dispatches:
+            if row["ticketId"] != ticket_id:
+                continue
+            track = row.get("review_track")
+            step = row.get("step")
+            label = " · ".join(
+                value.strip()
+                for value in (track, step)
+                if isinstance(value, str) and value.strip()
+            )
+            if not label:
+                worker = row.get("worker")
+                label = str(worker).rsplit("/", 1)[-1] if isinstance(worker, str) else "执行步骤"
+            actions.append(
+                {
+                    "label": sanitise_activity(label)[:MAX_TRAIL_SUMMARY_CHARS],
+                    "at": row.get("ts") if isinstance(row.get("ts"), str) else None,
+                }
+            )
+        projections[ticket_id] = {
+            "activeActions": actions,
+            "latestResult": latest_results.get(ticket_id),
+        }
+    running = [ticket_id for ticket_id in ticket_ids if projections[ticket_id]["activeActions"]]
+    return running, projections
 
 
 def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> dict[str, Any]:
@@ -678,7 +728,7 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
     terminal_ticket_ids = {
         ticket["id"] for ticket in tickets if ticket["state"] in {"SATISFIED", "RETIRED"}
     }
-    trail_running_ticket_ids, latest_trail = _ticket_trail_projection(
+    trail_running_ticket_ids, trail_projection = _ticket_trail_projection(
         package_root, attempt.get("id"), ticket_ids
     )
     running_ticket_ids = [
@@ -692,7 +742,7 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
             if ticket["id"] in ready_ticket_ids
             else None
         )
-        ticket["latestTrail"] = latest_trail.get(ticket["id"])
+        ticket.update(trail_projection.get(ticket["id"], {"activeActions": [], "latestResult": None}))
     counts = Counter(ticket["state"] for ticket in tickets)
     checkpoints = state.get("activeCheckpoints")
     checkpoint = checkpoints.get("attempt", {}) if isinstance(checkpoints, dict) else {}
