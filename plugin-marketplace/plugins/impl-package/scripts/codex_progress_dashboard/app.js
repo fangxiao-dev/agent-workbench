@@ -197,28 +197,32 @@ function drawDependencyLines() {
       : currentTickets.filter((ticket) => ticket.runtimeState === "DEVELOPING").map((ticket) => ticket.id),
   );
 
+  const edges = [];
   currentTickets.forEach((ticket) => {
     const target = flowStages.querySelector(`[data-ticket-id="${ticket.id}"]`);
     if (!target) return;
     ticket.dependencies.forEach((dependencyId) => {
       const source = flowStages.querySelector(`[data-ticket-id="${dependencyId}"]`);
       if (!source) return;
-      const from = source.getBoundingClientRect();
-      const to = target.getBoundingClientRect();
-      const x1 = from.left + from.width / 2 - canvasRect.left;
-      const y1 = from.bottom - canvasRect.top;
-      const x2 = to.left + to.width / 2 - canvasRect.left;
-      const y2 = to.top - canvasRect.top;
-      const bend = Math.max(24, (y2 - y1) * 0.48);
-      const path = document.createElementNS(namespace, "path");
-      path.setAttribute("d", `M ${x1} ${y1} C ${x1} ${y1 + bend}, ${x2} ${y2 - bend}, ${x2} ${y2}`);
-      path.setAttribute("marker-end", "url(#flow-arrow)");
-      path.classList.add("dependency-edge");
-      if (highlightedTicketIds.has(ticket.id) || highlightedTicketIds.has(dependencyId)) {
-        path.classList.add("is-related");
-      }
-      dependencyLines.append(path);
+      const isRelated = highlightedTicketIds.has(ticket.id) || highlightedTicketIds.has(dependencyId);
+      edges.push({ source, target, isRelated });
     });
+  });
+  // Draw unrelated edges first so the highlighted (related) ones always paint on top.
+  [...edges.filter((edge) => !edge.isRelated), ...edges.filter((edge) => edge.isRelated)].forEach(({ source, target, isRelated }) => {
+    const from = source.getBoundingClientRect();
+    const to = target.getBoundingClientRect();
+    const x1 = from.left + from.width / 2 - canvasRect.left;
+    const y1 = from.bottom - canvasRect.top;
+    const x2 = to.left + to.width / 2 - canvasRect.left;
+    const y2 = to.top - canvasRect.top;
+    const bend = Math.max(18, (y2 - y1) * 0.4);
+    const path = document.createElementNS(namespace, "path");
+    path.setAttribute("d", `M ${x1} ${y1} C ${x1} ${y1 + bend}, ${x2} ${y2 - bend}, ${x2} ${y2}`);
+    path.setAttribute("marker-end", "url(#flow-arrow)");
+    path.classList.add("dependency-edge");
+    if (isRelated) path.classList.add("is-related");
+    dependencyLines.append(path);
   });
 }
 
@@ -365,6 +369,52 @@ function populateTooltipEvents(ticket, node) {
   node.addEventListener("click", () => activateTicket(ticket, node));
 }
 
+function orderStagesByBarycenter(tickets, depths, maxDepth) {
+  const dependents = new Map(tickets.map((ticket) => [ticket.id, []]));
+  tickets.forEach((ticket) => ticket.dependencies.forEach((depId) => {
+    if (dependents.has(depId)) dependents.get(depId).push(ticket.id);
+  }));
+
+  const stages = [];
+  for (let depth = 0; depth <= maxDepth; depth += 1) {
+    stages.push(tickets.filter((ticket) => depths.get(ticket.id) === depth));
+  }
+
+  const columnOf = new Map();
+  const refreshColumns = () => {
+    columnOf.clear();
+    stages.forEach((stageTickets) => stageTickets.forEach((ticket, index) => columnOf.set(ticket.id, index)));
+  };
+  refreshColumns();
+
+  const barycenter = (relatedIds, originalIndex) => {
+    const positions = relatedIds.map((id) => columnOf.get(id)).filter((value) => value !== undefined);
+    return positions.length ? positions.reduce((sum, value) => sum + value, 0) / positions.length : originalIndex;
+  };
+
+  const sortStage = (stageTickets, relate) => stageTickets
+    .map((ticket, index) => ({ ticket, score: barycenter(relate(ticket), index), index }))
+    .sort((a, b) => (a.score - b.score) || (a.index - b.index))
+    .map((entry) => entry.ticket);
+
+  const SWEEPS = 4;
+  for (let sweep = 0; sweep < SWEEPS; sweep += 1) {
+    if (sweep % 2 === 0) {
+      for (let depth = 1; depth <= maxDepth; depth += 1) {
+        stages[depth] = sortStage(stages[depth], (ticket) => ticket.dependencies);
+        refreshColumns();
+      }
+    } else {
+      for (let depth = maxDepth - 1; depth >= 0; depth -= 1) {
+        stages[depth] = sortStage(stages[depth], (ticket) => dependents.get(ticket.id) || []);
+        refreshColumns();
+      }
+    }
+  }
+
+  return stages;
+}
+
 function renderTickets(tickets, currentTicketId) {
   const nextSignature = JSON.stringify({ tickets, currentTicketId });
   if (nextSignature === ticketSignature) return;
@@ -386,18 +436,16 @@ function renderTickets(tickets, currentTicketId) {
   tickets.forEach((ticket) => ticketDepth(ticket, byId, depths));
   const maxDepth = Math.max(...depths.values());
   flowCanvas.style.minWidth = "0";
-  flowCanvas.style.minHeight = `${Math.max(660, (maxDepth + 1) * 108)}px`;
-  flowStages.style.gridTemplateColumns = "1fr";
-  flowStages.style.gridTemplateRows = `repeat(${maxDepth + 1}, minmax(86px, auto))`;
+  const stages = orderStagesByBarycenter(tickets, depths, maxDepth);
 
   for (let depth = 0; depth <= maxDepth; depth += 1) {
     const stage = document.createElement("section");
     stage.className = "flow-stage";
-    const stageTickets = tickets.filter((ticket) => depths.get(ticket.id) === depth);
-    stage.style.setProperty("--node-count", String(stageTickets.length));
+    const stageTickets = stages[depth];
     const label = document.createElement("h3");
     label.textContent = stageLabel(depth, maxDepth);
-    stage.append(label);
+    const row = document.createElement("div");
+    row.className = "flow-stage-row";
     stageTickets.forEach((ticket) => {
       const node = document.createElement("button");
       node.type = "button";
@@ -406,16 +454,23 @@ function renderTickets(tickets, currentTicketId) {
       node.dataset.ticketId = ticket.id;
       node.setAttribute("aria-pressed", "false");
       node.setAttribute("aria-label", `${ticket.name}，${stateLabel(ticket.state, ticket.runtimeState)}`);
+      const head = document.createElement("span");
+      head.className = "flow-node-head";
       const code = document.createElement("span");
       code.className = "flow-node-code";
       code.textContent = ticket.id;
+      const badge = document.createElement("span");
+      badge.className = `state-badge ${(ticket.runtimeState || ticket.state).toLowerCase()}`;
+      badge.textContent = stateLabel(ticket.state, ticket.runtimeState);
+      head.append(code, badge);
       const title = document.createElement("span");
       title.className = "flow-node-title";
       title.textContent = ticket.name;
-      node.append(code, title);
+      node.append(head, title);
       populateTooltipEvents(ticket, node);
-      stage.append(node);
+      row.append(node);
     });
+    stage.append(label, row);
     flowStages.append(stage);
   }
 
