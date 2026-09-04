@@ -6,20 +6,32 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 GUIDE = ROOT / "docs" / "workbench-design" / "04-install-spec.md"
 LEGACY = ROOT / "skills" / "plugin-lifecycle"
+SETUP = ROOT / "skills" / "setup-workbench" / "SKILL.md"
 
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_agents_points_to_the_single_install_guide() -> None:
+def test_agents_points_to_setup_skill() -> None:
     agents = read(ROOT / "AGENTS.md")
 
-    assert "docs/workbench-design/04-install-spec.md" in agents
-    assert "execute the host-native CLI directly" in agents
-    assert "scripts/codex_setup.py" in agents
-    assert "run `audit` first" in agents
+    assert "[setup-workbench](skills/setup-workbench/SKILL.md)" in agents
+    assert "scripts/codex_setup.py" not in agents
     assert "agent-workbench-manager" not in agents
+
+
+def test_setup_skill_routes_report_before_apply() -> None:
+    skill = read(SETUP)
+
+    assert "name: setup-workbench" in skill
+    assert "disable-model-invocation" not in skill
+    assert "python scripts/codex_setup.py pull-diff" in skill
+    assert "python scripts/codex_setup.py audit" in skill
+    assert "python scripts/codex_setup.py apply --expect-report <audit-sha>" in skill
+    assert "Never apply before reporting" in skill
+    assert "run a fresh audit and stop for approval" in skill
+    assert "omit `MATCH` items" in skill
 
 
 def test_guide_uses_direct_cli_for_each_host() -> None:
