@@ -151,7 +151,7 @@ def test_dispatcher_and_sdd_are_peer_guidance_for_upstream_and_downstream() -> N
     dev = (PLUGIN / "skills" / "dev-with-track" / "SKILL.md").read_text(encoding="utf-8")
 
     assert "面向上游主控" in dispatcher
-    for marker in ("Topic-first", "coherent step", "dispatch", "worker return", "idle"):
+    for marker in ("Topic-first", "baby step", "dispatch", "worker return", "idle"):
         assert marker in dispatcher
     assert "下游" in sdd and "bounded worker" in sdd
     assert "$dispatcher" in dev

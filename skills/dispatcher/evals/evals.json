@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "只读模拟：主控要判断一个 shared runtime seam 是否存在，必须一起盘点 manifest、Skills、scripts、protocols 和 tests。各材料可以分别阅读，但任何单项都不能在综合前改变实现方向、ownership、dependency 或是否继续。判断是否应按材料拆分；禁止实际修改文件或派发 worker。",
-      "expected_output": "保持一个 Topic 的 investigate coherent step；知识来源可以分别阅读不等于分别派发，只有综合结论会改变 Topic 决策。",
+      "expected_output": "保持一个 Topic 的 investigate baby step；知识来源可以分别阅读不等于分别派发，只有综合结论会改变 Topic 决策。",
       "files": [],
       "expectations": ["Topic-first admission。", "知识来源不触发机械拆分。", "围绕一个窄决策综合。"]
     },
@@ -18,7 +18,7 @@
     {
       "id": 3,
       "prompt": "只读模拟：一个 implement 动作要完成同一个 validated configuration update outcome，必须同步修改多个紧密相关文件、运行 focused test、修复当前 diff 的 format 并普通重跑一次；其中任何单项都不能独立改变方向或交付。判断是否继续拆分；禁止实际修改文件或派发 worker。",
-      "expected_output": "保持一个 coherent step；多文件实现、focused test、format 和普通重跑共同交付同一 outcome，不创建新的业务 dispatch。",
+      "expected_output": "保持一个 baby step；多文件实现、focused test、format 和普通重跑共同交付同一 outcome，不创建新的业务 dispatch。",
       "files": [],
       "expectations": ["允许派发 coherent outcome。", "不按文件机械拆分。", "保留 focused verification。"]
     },

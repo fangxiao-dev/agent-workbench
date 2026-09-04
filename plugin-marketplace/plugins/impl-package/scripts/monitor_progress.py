@@ -134,7 +134,7 @@ MAX_OWNER_INPUTS = 100
 POLICY_SNAPSHOT = {
     "evaluation": [
         "targetBaseline 是冻结的任务合同；confirmed observations 是当前 Owner 指令。两者冲突时报告，不静默覆盖。",
-        "按最新 task 状态评价进展、coherent step、worker lifecycle、review、evidence、manual acceptance、方向与 Owner 分叉。",
+        "按最新 task 状态评价进展、baby step、worker lifecycle、review、evidence、manual acceptance、方向与 Owner 分叉。",
         "缺失信息不推断为完成；worker return、focused tests 或局部提交不自动等于 Ticket、Gate 或 package closure。",
     ],
     "observations": [

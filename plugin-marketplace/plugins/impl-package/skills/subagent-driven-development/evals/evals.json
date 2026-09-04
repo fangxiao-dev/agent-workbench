@@ -74,9 +74,9 @@
     {
       "id": 11,
       "prompt": "只读模拟：同一 Topic 的实现方向、write-set 和依赖均已稳定；实现后还需要 focused test、lint/format、普通重跑和清理本动作产生的临时目录。说明是否拆成多个 baby steps。",
-      "expected_output": "保持一个 coherent step；实现、自证和边界内机械 cleanup 沿同一 work lane 完成，不为每个工具动作创建新业务派发。",
+      "expected_output": "保持一个 baby step；实现、自证和边界内机械 cleanup 沿同一 work lane 完成，不为每个工具动作创建新业务派发。",
       "files": [],
-      "expectations": ["maximal coherent step", "verification follows implementation", "mechanical cleanup stays in step"]
+      "expectations": ["one bounded baby step", "verification follows implementation", "mechanical cleanup stays in step"]
     },
     {
       "id": 12,

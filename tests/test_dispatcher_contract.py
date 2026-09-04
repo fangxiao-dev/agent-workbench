@@ -16,7 +16,7 @@ def test_dispatcher_is_a_lightweight_upstream_scheduler() -> None:
     for marker in (
         "面向上游主控",
         "Topic-first 派发门槛",
-        "最大 coherent step",
+        "机械附属不单独派发",
         "当前批次",
         "fan out",
         "receipt",
@@ -93,7 +93,7 @@ def test_dispatcher_evals_cover_admission_batch_receipt_return_and_idle() -> Non
 
     assert "保持一个 Topic" in source_inventory["expected_output"]
     assert "允许派发" in broad_search["expected_output"]
-    assert "保持一个 coherent step" in multi_file["expected_output"]
+    assert "保持一个 baby step" in multi_file["expected_output"]
     assert "receipt" in batch["expected_output"] and "idle" in batch["expected_output"]
     assert "复用" in lifecycle["expected_output"] and "fresh" in lifecycle["expected_output"]
     assert "foundation investigation" in anti_thrash["expected_output"]

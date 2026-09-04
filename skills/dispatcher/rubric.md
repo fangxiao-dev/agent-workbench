@@ -5,8 +5,8 @@ updated: 2026-09-02
 
 ## 原则
 
-- [已确认] 复用 Topic 作为顶层连续交付 lane，不新增 Delivery Lane 对象、持久状态或第二套调度系统。
-- [已确认] 默认派发既定方向和 write-set 内最大的 coherent step；只有结果会改变 Topic 决策、ownership、dependency、authorization、资源 admission 或立即释放另一条 Topic 时才拆分。
+- [已确认] Topic 是共享 foundation、ownership 与 closure point 的横向交付范围；不新增 Delivery Lane 对象、持久状态或第二套调度系统。
+- [已确认] 默认沿一条 lane 派发既定方向和 write-set 内的一个 baby step；同一方向和 write-set 内的机械附属跟随同一步，只有结果会改变 Topic 决策、ownership、dependency、authorization、资源 admission 或立即释放另一条 Topic 时才拆分。
 - [已确认] 当前批次收齐后再全局重扫；连续 `INCOMPLETE`、新 caller/producer 家族或 write-set 外溢统一触发一次 foundation investigation，不叠加细碎 guard。
 - [已确认] 优先降低主控调度负担，不以增加模板、字段、预算或持久化记录换取局部形式完整。
 - [待验证] worker 复用使用可观察的上下文可信度信号。（证据: R2, R3, R4）
