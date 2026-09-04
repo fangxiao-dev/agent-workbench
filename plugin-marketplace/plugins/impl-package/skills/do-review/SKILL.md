@@ -31,7 +31,7 @@ allowed-tools:
 - **Finding acceptance/dedup/classification**：leaf 输出先是 candidate evidence，parent 写入唯一 canonical ledger 后才采信；按 broken invariant/observable failure 去重，不按 path/reviewer。blocker 是业务数据、money、inventory、order、customer state、安全或 runtime-visible product data 风险；follow-up 真实但不阻断；backlog 是非紧急清理。证据不足只能 disputed/downgraded/out-of-scope/`UNCERTAIN`，不能变成 verified blocker。
 - **Track C source recheck**：finding 被接受并归类为 Spec fidelity 后，移交 implementation 前做一次 fresh independent reviewer source recheck，范围限 accepted finding、fixed-head 的 immutable Decision/Spec/`contract-design.md`（若有）和直接引用的 Ticket/cross-module authority；结果只记录一次，不能再派第二次。记录为 sources uniquely decide、require contract revision 或 leave an owner decision；source recheck 不可用或 incomplete 阻断 handoff，不能跳过；未触及的 legacy package 缺 `contract-design.md` 本身不是 gap。
 - **Loop clean & convergence**：只有 parent 在完成 evidence verification、dedup、classification 且没有新 accepted blocker/follow-up 后才能判 track clean；连续两轮 clean 才 dormant，新 finding 让 track 回 active；convergence 是最新一轮无新 accepted 且所有 selected track dormant。
-- **Closure ≠ terminal**：`finding-closure` 只核对命名 findings，不能替代 `terminal-final`；terminal 必须在最终 implementation `HEAD` 上以完整适用 topology 运行 `terminal-final`。
+- **Closure ≠ terminal**：`finding-closure` 只核对命名 findings，不能替代 `terminal-final`；`terminal-final` 必须固定最终 implementation `HEAD`，按终审 admission 规则处理候选轨。沿用已 PASS 的轨不等于用 closure 顶替终审：closure 只核对点名 findings；沿用 PASS 的依据是该轨输入未变、结论继续成立。两者依据不同，不可互相替代。
 
 ## 1. Create One Immutable ReviewRun
 

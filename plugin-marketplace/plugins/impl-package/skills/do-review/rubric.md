@@ -14,7 +14,7 @@ updated: 2026-08-19
 - [待验证] 严格可维护性审查使用非穷尽启发式；建议应说明 diff 证据、维护后果和可行方向，但不设固定触发链或替代方案证明门槛。（证据: R3）
 - [待验证] leaf reviewer 的 `SKILL.md` 与其参考材料只说明自身审查方法和证据表达；role、track、交接、归属和跨域协作统一由 `do-review` 说明。（证据: R4）
 - [已确认] 高风险条件自动追加 Safety；显式 reviewer list 保持精确，但必须记录遗漏的适用 Safety 风险。（证据: R5）
-- [已确认] 中间 finding closure 采用保守增量复核；terminal final 必须在最终实现 `HEAD` 运行完整适用 topology。（证据: R5）
+- [已确认] 中间 finding closure 采用保守增量复核；terminal final 固定最终实现 `HEAD`，Track A 无条件运行，B、C、Safety 仅在本轮 ReviewRun 内更早 `HEAD` 已 PASS 且到最终 `HEAD` 的 delta 不满足该轨 admission 条件时沿用并跳过，否则按 admission 判定是否运行；跳过须记录沿用的 PASS `HEAD` 与判定所依据的 delta。（证据: R5）
 - [已确认] ReviewRun 原子创建固定 base/head、拒绝空 three-dot diff，并从 resolved head 解析 UTF-8 Git blob 合同来源；失败不产生 ledger。（证据: R6）
 - [已确认] 创建 ReviewRun 前必须先把审查单元本地 commit，使 `HEAD` 成为 comparison head；这是 `do-review` 的前置步骤，不把该规则写进通用 `git-commit` skill。（证据: R8）
 - [已确认] 每个 selected track 必须使用 matching leaf subagent；主会话审查或 generic subagent 不是替代。（证据: R8）

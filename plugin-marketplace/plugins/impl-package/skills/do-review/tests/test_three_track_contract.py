@@ -70,10 +70,14 @@ class ThreeTrackContractTests(unittest.TestCase):
 
         safety = markdown_section(topology, "Safety admission")
         self.assertRegex(safety, r"(?s)`initial`.*default_tracks.*Track A/C")
-        self.assertRegex(safety, r"(?s)`terminal-final`.*terminal_tracks.*Track A/B/C")
+        phases = markdown_section(topology, "Review phase")
+        terminal = f"{safety}\n{phases}"
+        self.assertRegex(
+            terminal,
+            r"(?s)`terminal-final`.*terminal_tracks.*Track A/B/C.*Track A unconditionally on the entire diff.*Tracks B, C, and Safety.*earlier `HEAD`.*PASS for that track.*delta from that PASS `HEAD` to the final `HEAD`.*admission condition.*reuse that PASS and skip.*Track C's admission range.*Ticket's section-level contract references.*record which PASS `HEAD` is reused.*delta used for the admission decision.*Admission is the only skip basis.*finding closure was clean.*Loop track was dormant",
+        )
         self.assertIn("independent of which tracks `initial`", safety)
 
-        phases = markdown_section(topology, "Review phase")
         self.assertIn("terminal_tracks", phases)
         self.assertNotIn("reactivate every applicable selected track", phases)
 
@@ -154,11 +158,18 @@ class ThreeTrackContractTests(unittest.TestCase):
         topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
         phases = markdown_section(topology, "Review phase")
         self.assertRegex(phases, r"(?s)`finding-closure`.*one independent `reviewer` leaf.*named findings")
-        self.assertRegex(phases, r"(?s)`terminal-final`.*final implementation `HEAD`.*complete applicable topology")
+        self.assertRegex(
+            phases,
+            r"(?s)`terminal-final`: pin the final implementation `HEAD`.*resolve topology from `terminal_tracks`.*Admission is the only skip basis",
+        )
         self.assertIn("cannot stand in for the terminal-final review", phases)
         # Slim skill keeps the closure≠terminal judgment; host-specific worker
         # names ($grok-worker) moved to providers/presets.
         self.assertIn("Closure ≠ terminal", skill)
+        self.assertIn(
+            "沿用已 PASS 的轨不等于用 closure 顶替终审：closure 只核对点名 findings；沿用 PASS 的依据是该轨输入未变、结论继续成立。两者依据不同，不可互相替代。",
+            skill,
+        )
         self.assertIn("finding-closure", skill)
         self.assertIn("terminal-final", skill)
         self.assertNotIn("$grok-worker", skill)
