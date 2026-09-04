@@ -145,6 +145,15 @@ def test_sdd_evals_keep_coherent_work_together_and_replan_thrashing() -> None:
     assert "foundation investigation first" in thrash["expectations"]
 
 
+def test_sdd_eval_requires_return_point_authorization_before_follow_up() -> None:
+    sdd_evals = json.loads((SDD / "evals" / "evals.json").read_text(encoding="utf-8"))["evals"]
+
+    stepwise = next(case for case in sdd_evals if "后端事务语义" in case["prompt"])
+
+    assert "主控验收后再授权下一段" in stepwise["expected_output"]
+    assert "独立 PostgreSQL/browser 验证单独派发" in stepwise["expected_output"]
+
+
 def test_dispatcher_and_sdd_are_peer_guidance_for_upstream_and_downstream() -> None:
     dispatcher = read("skills/dispatcher/SKILL.md")
     sdd = (SDD / "SKILL.md").read_text(encoding="utf-8")

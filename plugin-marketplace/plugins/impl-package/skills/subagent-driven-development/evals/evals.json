@@ -91,6 +91,13 @@
       "expected_output": "把结果作为 Topic 边界失配交回 Dispatcher；先做 foundation investigation，重新确定 Topic、producer inventory 和 ownership，不继续拆更小的 fix。",
       "files": [],
       "expectations": ["topic-boundary mismatch", "foundation investigation first", "stop micro-fix loop"]
+    },
+    {
+      "id": 14,
+      "prompt": "只读模拟：同一 implementer/work lane 依次处理后端事务语义、Controller/DTO/generated contracts、UI 动作与组件测试、独立 PostgreSQL/browser 验证。说明每段的授权与 lane 关系；禁止实际修改文件或派发 worker。",
+      "expected_output": "四段分别形成 baby step；同一 implementer/work lane 可以连续承接，但每段都先 return 并由主控验收后再授权下一段；独立 PostgreSQL/browser 验证单独派发。",
+      "files": [],
+      "expectations": ["按 return point 逐步授权。", "同一 implementer/work lane 可以连续承接。", "独立系统验证单独派发。"]
     }
   ]
 }

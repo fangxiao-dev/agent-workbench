@@ -83,13 +83,14 @@ def test_dispatcher_drains_batch_and_stops_thrashing() -> None:
 def test_dispatcher_evals_cover_admission_batch_receipt_return_and_idle() -> None:
     evals = json.loads(EVALS.read_text(encoding="utf-8"))["evals"]
 
-    assert [case["id"] for case in evals] == [1, 2, 3, 4, 5, 6]
+    assert [case["id"] for case in evals] == [1, 2, 3, 4, 5, 6, 7]
     source_inventory = next(case for case in evals if "shared runtime seam" in case["prompt"])
     broad_search = next(case for case in evals if "整个仓库搜索" in case["prompt"])
     multi_file = next(case for case in evals if "多个紧密相关文件" in case["prompt"])
     batch = next(case for case in evals if "两个互不依赖" in case["prompt"])
     lifecycle = next(case for case in evals if "同一 Topic" in case["prompt"] and "新 Topic" in case["prompt"])
     anti_thrash = next(case for case in evals if "连续两次返回 INCOMPLETE" in case["prompt"])
+    future_conflict = next(case for case in evals if "未来都会修改同一个 controller" in case["prompt"])
 
     assert "保持一个 Topic" in source_inventory["expected_output"]
     assert "允许派发" in broad_search["expected_output"]
@@ -97,6 +98,8 @@ def test_dispatcher_evals_cover_admission_batch_receipt_return_and_idle() -> Non
     assert "receipt" in batch["expected_output"] and "idle" in batch["expected_output"]
     assert "复用" in lifecycle["expected_output"] and "fresh" in lifecycle["expected_output"]
     assert "foundation investigation" in anti_thrash["expected_output"]
+    assert "当前两个 baby step" in future_conflict["expected_output"] and "`PARALLEL`" in future_conflict["expected_output"]
+    assert "冲突步骤到达" in future_conflict["expected_output"] and "`SERIAL`" in future_conflict["expected_output"]
 
 
 def test_evals_are_wellformed_read_only_scenarios() -> None:

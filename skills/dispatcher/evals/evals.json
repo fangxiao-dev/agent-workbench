@@ -42,6 +42,13 @@
       "expected_output": "停止继续切小 fix，先释放一个 foundation investigation，重新确认 Topic 边界、caller inventory 和 ownership，再形成下一批。",
       "files": [],
       "expectations": ["识别反抖动信号。", "回到 foundation investigation。", "不继续微型 fix。"]
+    },
+    {
+      "id": 7,
+      "prompt": "只读模拟：Ticket A 的当前 baby step 只写入一个新 service 文件，Ticket B 的当前 baby step 只修改 DTO/projection；两者未来都会修改同一个 controller。判断当前批次如何调度；禁止实际修改文件或派发 worker。",
+      "expected_output": "当前两个 baby step 的实际 effect footprint 不冲突，进入 `PARALLEL`；等共享 controller 的冲突步骤到达时，再按实际 footprint 改为 `SERIAL`，未来冲突不提前阻塞当前步骤。",
+      "files": [],
+      "expectations": ["按当前 baby step 的实际 effect footprint 判断。", "当前不冲突时 PARALLEL。", "未来冲突到达时再 SERIAL。"]
     }
   ]
 }
