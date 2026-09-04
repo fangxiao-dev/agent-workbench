@@ -35,6 +35,7 @@ worker 返回后，caller 消费已有 evidence、diff 和验证结果，再决�
 | `implement` | 已有唯一业务裁决，需要产生实现或可验证产物 | 答案为 `diff`；只承担当前 Topic 的 ownership 与局部验证 |
 | `fix` | finding 已确认且已边界化 | 答案为 `diff`；不重新裁决 finding、不扩大范围、不宣称 closure |
 | `verify` | 执行既定、无写副作用的检查 | 答案为判定；会重写 snapshot/generated file 的动作转入 `implement` 或 `fix` |
+
 `fix` 不阻塞后续开发，「等这个 fix 修完」不是暂停主线的理由：同 Topic 复用原 lane 与原 worktree；与当前开发不同 Topic 且写入交叉较小时，默认在隔离 worktree 并行进行，修好后合入。
 
 完成标准：当前派发只有一个已解锁 coherent step，答案形态、write-set、局部验证与前置依赖均明确；既未预先授权后续决策，也未拆出边界内的机械动作。
