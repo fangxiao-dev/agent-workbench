@@ -37,6 +37,7 @@ THREAD_ID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I
 TICKET_ID_PATTERN = r"TKT-\d+(?:-[A-Za-z0-9]+)*"
 TICKET_ID_RE = re.compile(rf"\b{TICKET_ID_PATTERN}\b", re.I)
 TICKET_REFERENCE_RE = re.compile(r"\bTKT-?\d+(?:-[A-Za-z0-9]+)*\b", re.I)
+TRAIL_ARCHIVE_RE = re.compile(r"^trail\.(\d{3})\.jsonl$")
 TYPED_DEPENDENCY_RE = re.compile(
     rf"\b(implementation|acceptance|release)\s*:\s*({TICKET_ID_PATTERN})\b",
     re.I,
@@ -583,6 +584,29 @@ def _trail_rows(path: Path) -> list[dict[str, Any]] | None:
     return rows
 
 
+def _attempt_trail_rows(package_root: Path, attempt_id: str) -> list[dict[str, Any]] | None:
+    directory = package_root / "execution" / attempt_id
+    archives = sorted(
+        (
+            (int(match.group(1)), path)
+            for path in directory.iterdir()
+            if path.is_file() and (match := TRAIL_ARCHIVE_RE.fullmatch(path.name))
+        ),
+        key=lambda item: item[0],
+    ) if directory.is_dir() else []
+    paths = [path for _, path in archives]
+    current = directory / "trail.jsonl"
+    if current.is_file():
+        paths.append(current)
+    rows = []
+    for path in paths:
+        current_rows = _trail_rows(path)
+        if current_rows is None:
+            return None
+        rows.extend(current_rows)
+    return rows
+
+
 def _trail_identifier(row: dict[str, Any]) -> str | None:
     for name in ("seq", "id", "dispatch_id", "dispatchId", "decision_id", "decisionId"):
         if row.get(name) is not None:
@@ -592,12 +616,13 @@ def _trail_identifier(row: dict[str, Any]) -> str | None:
 
 def _ticket_trail_projection(
     package_root: Path, attempt_id: Any, ticket_ids: list[str]
-) -> tuple[list[str], dict[str, dict[str, Any]]]:
+) -> tuple[list[str], list[str], dict[str, dict[str, Any]]]:
     if not isinstance(attempt_id, str) or not attempt_id:
-        return [], {}
-    rows = _trail_rows(package_root / "execution" / attempt_id / "trail.jsonl")
+        return [], [], {}
+    rows = _attempt_trail_rows(package_root, attempt_id)
     if rows is None:
-        return [], {}
+        return [], [], {}
+    started: list[str] = []
     open_dispatches: list[dict[str, Any]] = []
     latest_results: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -609,6 +634,8 @@ def _ticket_trail_projection(
             continue
         kind = row.get("kind")
         if kind == "dispatch" and str(row.get("outcome", "")).upper() == "RUNNING" and row.get("returned") is False:
+            if ticket_id not in started:
+                started.append(ticket_id)
             open_dispatches.append({"ticketId": ticket_id, **row})
             continue
         if kind not in {"result", "worker-return"}:
@@ -677,8 +704,8 @@ def _ticket_trail_projection(
             "activeActions": actions,
             "latestResult": latest_results.get(ticket_id),
         }
-    running = [ticket_id for ticket_id in ticket_ids if projections[ticket_id]["activeActions"]]
-    return running, projections
+    active = [ticket_id for ticket_id in ticket_ids if projections[ticket_id]["activeActions"]]
+    return started, active, projections
 
 
 def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> dict[str, Any]:
@@ -728,11 +755,16 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
     terminal_ticket_ids = {
         ticket["id"] for ticket in tickets if ticket["state"] in {"SATISFIED", "RETIRED"}
     }
-    trail_running_ticket_ids, trail_projection = _ticket_trail_projection(
+    trail_started_ticket_ids, trail_active_ticket_ids, trail_projection = _ticket_trail_projection(
         package_root, attempt.get("id"), ticket_ids
     )
     running_ticket_ids = [
-        ticket_id for ticket_id in trail_running_ticket_ids if ticket_id not in terminal_ticket_ids
+        ticket_id
+        for ticket_id in trail_started_ticket_ids
+        if ticket_id not in terminal_ticket_ids and ticket_state_rows[ticket_id].get("state") == "PENDING"
+    ]
+    active_ticket_ids = [
+        ticket_id for ticket_id in trail_active_ticket_ids if ticket_id not in terminal_ticket_ids
     ]
     for ticket in tickets:
         ticket["runtimeState"] = (
@@ -760,7 +792,7 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
         if ticket["state"] in {"PENDING", "NEEDS-REVALIDATION"} and ticket["id"] in mentioned
     ]
     current_ticket_id = next(
-        iter(running_ticket_ids or ready_ticket_ids),
+        iter(active_ticket_ids or running_ticket_ids or ready_ticket_ids),
         next(
             (ticket["id"] for ticket in tickets if ticket["state"] not in {"SATISFIED", "RETIRED"}),
             tickets[0]["id"] if tickets else None,

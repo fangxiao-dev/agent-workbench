@@ -42,6 +42,9 @@ def test_renderer_uses_observation_dialog_and_omits_duplicate_next_action() -> N
     assert "Trail 最新状态" not in html
     assert 'id="tooltip-active-list"' in html
     assert 'id="tooltip-result-summary"' in html
+    assert "function stateLabel(value, runtimeState = null)" in javascript
+    assert 'if (runtimeState === "RUNNING") return "正在进行"' in javascript
+    assert 'if (runtimeState === "READY") return "可启动"' in javascript
     assert "tooltipState.textContent = stateLabel(ticket.state, ticket.runtimeState)" in javascript
     assert 'id="task-select"' not in html
     assert '<output class="task-readout" id="task-readout"' in html
@@ -646,7 +649,7 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
                 "kind": "worker-return",
                 "subject": "ticket:TKT-03",
                 "of": 309,
-                "outcome": "DONE",
+                "outcome": "INCOMPLETE",
                 "ts": "2026-09-04T09:10:00Z",
                 "summary": "token=secret " + "执行步骤完成。" * 40,
             },
@@ -655,13 +658,25 @@ def test_snapshot_projects_ready_and_running_tickets_from_state_and_trail(tmp_pa
     after_return = module.build_snapshot(THREAD_ID, relative, db_path)["package"]
     after_ticket = next(ticket for ticket in after_return["tickets"] if ticket["id"] == "TKT-03")
 
-    assert after_return["runningTicketIds"] == []
+    assert after_return["runningTicketIds"] == ["TKT-03"]
     assert after_return["currentTicketId"] == "TKT-03"
+    assert after_ticket["state"] == "PENDING"
+    assert after_ticket["runtimeState"] == "RUNNING"
     assert after_ticket["activeActions"] == []
-    assert after_ticket["latestResult"]["outcome"] == "DONE"
+    assert after_ticket["latestResult"]["outcome"] == "INCOMPLETE"
     assert after_ticket["latestResult"]["at"] == "2026-09-04T09:10:00Z"
     assert "secret" not in after_ticket["latestResult"]["summary"]
     assert len(after_ticket["latestResult"]["summary"]) == 200
+
+    trail.replace(trail.with_name("trail.001.jsonl"))
+    write_jsonl(trail, [])
+    after_rotation = module.build_snapshot(THREAD_ID, relative, db_path)["package"]
+    rotated_ticket = next(ticket for ticket in after_rotation["tickets"] if ticket["id"] == "TKT-03")
+
+    assert after_rotation["runningTicketIds"] == ["TKT-03"]
+    assert rotated_ticket["runtimeState"] == "RUNNING"
+    assert rotated_ticket["activeActions"] == []
+    assert rotated_ticket["latestResult"]["outcome"] == "INCOMPLETE"
 
     write_jsonl(
         trail,
