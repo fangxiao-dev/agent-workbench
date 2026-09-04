@@ -39,7 +39,7 @@ python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --host claude c
 python3 /path/to/agent-workbench/scripts/link_skill.py --all --host claude
 
 # 卸载宿主 link（不删 workbench 源头）
-python3 /path/to/agent-workbench/scripts/link_skill.py verify-registry-state --unlink --host claude codex grok
+python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --unlink --host claude codex grok
 ```
 
 | 平台 | 机制 |
@@ -333,18 +333,6 @@ agent-workbench/
 - 只登记第三方资产，不登记本仓库自建 skill
 - 以”安装单位”记录，不展开插件内每个附带文件
 - skills 清单不记录宿主路径和安装状态；plugins 清单可记录启用状态
-
-### 刷新插件状态
-
-当你切换机器、执行过插件更新、或怀疑插件环境漂移时，运行：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File skills/verify-registry-state/scripts/verify-registry-state.ps1
-```
-
-它会检查 `registry/plugins.md` 里登记的 plugins 是否在当前机器存在，并把状态刷新为 `✅ 已装` 或 `⬜ 未装`。第三方 skills 以 `skills/<name>/` 中的正式内容为准，不维护状态列。
-
----
 
 ## 验证安装是否正常
 

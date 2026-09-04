@@ -27,7 +27,6 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `grok
   - review upstream first
   - install or copy a standalone approved skill into `skills/<name>/` or a plugin-owned skill into `plugin-marketplace/plugins/<plugin>/skills/<name>/`
   - register it in `registry/third-party-skills.md`
-- Use `verify-registry-state` after plugin registry changes.
 
 ## Delegation Workflow
 

@@ -139,8 +139,8 @@ python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --to /path/to/s
 python3 /path/to/agent-workbench/scripts/link_skill.py --migrate-only --host claude
 
 # 卸载宿主侧 link（不删除 workbench skills/ 源头）
-python3 /path/to/agent-workbench/scripts/link_skill.py verify-registry-state --unlink --host claude
-python3 /path/to/agent-workbench/scripts/link_skill.py verify-registry-state --uninstall --host claude grok
+python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --unlink --host claude
+python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --uninstall --host claude grok
 ```
 
 stdout 末行是 JSON summary（含 `platform`、`link_kind`、各 host 的 `linked|skipped|conflict`）。
