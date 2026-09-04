@@ -13,7 +13,7 @@ Capsule 与当前 package/HEAD/approval 匹配时，可作为本次恢复入口�
 1. 运行 `package validate`；projection drift 时先运行 `package refresh-progress`。
 2. 打开 `progress.md`，确认 current Attempt、lifecycle、Gate、blocker、active checkpoint 和 next action。
 3. 根据 typed Ticket dependency 选择业务动作；Progress/checkpoint 不授权 dispatch。
-4. 对当前业务候选应用 `$dispatcher` 的 Topic-first admission，形成当前 coherent-step 批次并消费 worker return；idle 不等于 package closed。
+4. 对当前业务候选应用 `$dispatcher` 的 Topic-first admission，形成当前 baby step 批次并消费 worker return；idle 不等于 package closed。
 5. 只打开当前动作需要的 Plan/Ticket/Execution Record/evidence；旧 package 才按需读取 DAG/Handoff。
 6. 消费结果后使用语义 Ticket/evidence/recovery/trail 命令写权威事实；真正 dispatch 前用普通 `situation.py render` 生成当前 credential。
 

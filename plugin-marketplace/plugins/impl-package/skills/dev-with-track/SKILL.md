@@ -23,7 +23,7 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 
 本 Skill 选择业务动作并拥有 Ticket readiness、语义裁决、State、Evidence、Execution Record、Checkpoint 与 Gate。两个平级 Skill 承担执行方法：
 
-- `$dispatcher` 面向上游主控，拥有 Topic-first admission、coherent current step、当前批次、派发 receipt、worker return、Topic lifecycle 和 idle；
+- `$dispatcher` 面向上游主控，拥有 Topic-first admission、当前 baby step、当前批次、派发 receipt、worker return、Topic lifecycle 和 idle；
 - `/impl-package:subagent-driven-development` 面向下游 bounded worker，拥有 Topic、dependency class、mode、lane、lifecycle 与 review requirement。
 
 主 session 是 package State、Evidence、Execution Record、Checkpoint 与 Gate 的唯一 writer。调用方为每个 Topic 提供 objective、scope、write-set、acceptance、authorization、verification 和输出合同，并按 SDD 选择当前或隔离 worktree；provider/executor 由 Owner 或宿主选择。
