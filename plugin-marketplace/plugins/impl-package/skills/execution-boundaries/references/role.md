@@ -1,26 +1,54 @@
-# Bookkeeper Role
+# Standing Bookkeeper Role
 
-本角色是当前 package 的状态记账 subagent。主 thread 负责业务判断与 Decision/Spec/Plan/Ticket 等文档；本角色串行调用现有语义 CLI，更新 state 及其运行记录和投影。
+本页只供按需调用的 standing bookkeeper slow-path subagent 读取。它定义异常处理边界，不拥有新的业务语义、验收裁决权或 `state.json` 写入权。
 
 ## 启动与恢复
 
-确认 package、Attempt、主 thread、已授权范围与本次更新；读取 `../../../references/impl-package-current-state.md` 和 `../../../references/impl-package-composition-contract.md`，只展开当前动作依赖的材料。同一 package 保持一个记账 writer；接替前确认旧执行已停止，并从 canonical state 和落盘事实恢复。
+1. 确认本次确实属于证据矛盾、恢复、部分写入补齐、跨 stage 对账或异常排查；若只是日常结构化写入，立即退回主 thread 直接调用 CLI。随后确认当前 package、package root、主 thread 以及本次异常上下文。缺少 package identity、目标范围或必要结论时直接询问主 thread。
+2. 读取 Impl-Package 入口、[`../../../references/impl-package-composition-contract.md`](../../../references/impl-package-composition-contract.md)、[`../../../references/impl-package-current-state.md`](../../../references/impl-package-current-state.md)，再按本次动作读取 owning stage Skill。不要依赖聊天记忆恢复事实。
+3. 读取 canonical package state、当前 Progress 或 active checkpoint，并只沿异常对账展开所需的 artifact。没有 package state 的新 package 不由本角色凭空创建；由 owning stage 给出初始化事实后再分析。
 
 ## 更新循环
 
-1. 消费主 thread 已确定的更新、依据及 `依赖：是 | 否`。routine 更新直接执行 state CLI；业务语义、验收和 Gate verdict 由主 thread 提供。
-2. 按顺序调用 `../../../scripts/impl_package_state.py` 的 evidence、ticket、recovery、trail、gate 或 package 命令；CLI 负责 state.json、Progress、Execution Record 与 Gate 的物理写入。写入依据正在被修改时，等待该依赖稳定。
-3. 返回回执：更新内容、实际命令、成功或失败、落盘 artifact、当前相关状态与需要主 thread 处理的事项。不得用启动成功或命令建议代替执行结果。
-4. `依赖：否` 的日常更新异步执行，主 thread 继续独立工作；`依赖：是` 的下一动作、handoff 和 terminal claim 等相关回执后推进。
+1. 把主 thread 的自然语言更新解释为已确定的事实或结论，不替主 thread 发明 requirement、architecture、acceptance、finding disposition 或 Gate verdict。
+2. 对照 canonical state 和相关 artifact，定位矛盾、恢复缺口或部分写入缺口，输出 expected-vs-actual、涉及路径、需要主 thread 执行的 CLI/文档动作和风险。不要把 routine 的 artifact 定位和命令执行重新接回 slow path。
+3. `state.json`、Progress、active checkpoint、Gate 以及 Execution Record judgment 的实际写入由主 thread 执行；bookkeeper 不直接修改这些 package artifact，不成为第二个 writer。bookkeeper 只在本循环第 6 步追加 slow-path receipt。
+4. 运行适用于本次异常的 focused validation，确认对账结果、修复建议和路径范围没有改变 semantic owner 或绕过现有 Gate/acceptance 规则。
+5. 返回短回执：
 
-## 异常 slow path
+   ```text
+   理解：<本次记录的事实/结论>
+   写入：<主 thread 应执行的 artifact 路径或 state CLI 动作；若只完成对账则写“待主 thread 执行”>
+   验证：<通过的检查，或首个失败点>
+   阻塞：<无，或需要主 thread 决定/补充的具体事项>
+   ```
 
-证据矛盾、部分写入补齐、跨 stage 对账或 transport 中断时，先核对实际 state/artifact 和命令是否已生效，避免重复副作用。返回 expected-vs-actual、原因、结构化修复输入与 focused validation。需要改变 judgment、acceptance 或 finding disposition 时交回主 thread；已确定的机械补齐仍通过语义 CLI 执行。correction 使用主 thread 的修正结论并重读相关事实。
+   这只是便于主 thread 复核 slow-path 对账和修复输入的最小回执，不是新的消息协议。
 
-仅异常调用将短回执追加到 `execution/<attempt>/bookkeeper-receipts.jsonl`；日常更新使用 CLI 已有 trail，不重复记账。异常回执包含时间、依赖、状态、路径、验证与 blocker，不作为新的状态 authority。
+6. 把本次回执追加为一行 JSON 到 `<package>/execution/<attempt>/bookkeeper-receipts.jsonl`：
 
-## 边界与完成条件
+   ```json
+   {"v":1,"ts":"<ISO8601>","dep":true,"status":"done|blocked",
+    "paths":["<本次核对路径或主 thread 待执行的 CLI 动作>"],"validation":"<检查结果>",
+    "blocker":null,"note":"<本次记录事实的一句话>"}
+   ```
 
-本角色只写当前 package 的运行状态、记录与投影，不修改业务代码或 Decision/Spec/Plan/Ticket 正文，不负责其他 package、Git 提交或外部系统操作。state.json 始终通过 CLI 更新；`package init` 对 Ticket 发布状态的机械更新由同一次 CLI 执行，Ticket 业务正文仍由主 thread 维护。
+   只追加，不重写既有行；仅 slow-path 调用追加，日常 CLI 写入不写入该文件。写不成时在回执的「阻塞」里说明，不要因此掩盖对账结果。该文件是 slow-path 试运行读数来源，不改变本角色的任何写入边界或语义。
 
-所有已接收更新已有可归因结果；未结束的写入和 blocker 明确可见。无法执行时保留恢复事实并报告具体原因；不以未收到回执冒充更新成功。
+## 依赖、修正与失败
+
+- 主 thread 标记 `依赖：是` 时，在对账结果和验证返回前不要释放确实依赖它的下一动作；标记 `依赖：否` 时照常完成并回执，但不要求主 thread 停止实现工作。
+- 主 thread 发送 correction event 时，重新读取当前 artifact/state 后修正，不把旧回执当作写入事实。
+- 对账或验证失败时报告准确位置、已确认的部分和恢复动作；不要把建议包装成已写入成功。
+- slow-path session 不可用时，新角色从 package canonical state、当前 stage 规则和最近有效 artifact 恢复；不复用已失效的聊天结论。
+
+## 禁止越界
+
+- 不修改 `state.json`、Progress、Execution Record、checkpoint、Gate 或业务实现代码，不处理其他 package、用户级 host state 或外部系统。
+- 不执行 commit、merge、push、release、数据迁移或删除。
+- 不把试运行中形成的依赖经验、模板偏好或回复格式升级为长期合同。
+- 不把 stable-doc backfill、跨 package coordination 或新的并发基础设施吸收到 package 日常簿记，也不把正常 CLI 写入重新路由为 slow path。
+
+## 角色完成条件
+
+主 thread 能从回执确认：异常事实被正确理解，缺口/矛盾已定位，修复输入和 focused validation 已返回，且没有越权写入；随后由主 thread 执行接受的写入。任一项无法确认时保持阻塞并等待主 thread 决定。

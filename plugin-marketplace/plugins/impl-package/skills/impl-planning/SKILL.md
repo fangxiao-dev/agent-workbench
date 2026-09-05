@@ -5,7 +5,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
 
 # Impl Planning（含 Ticket 拆分）
 
-为一个 implementation attempt 创建简洁、可执行的 plan，并把验收拆成可独立验收的 Ticket 合同；先读 `../../references/impl-package-composition-contract.md`，需要为 material seam 选择验证层级时再读 `../../references/progressive-system-evidence.md`。Plan 的语义、Coverage、执行策略、Planned Verification 与 Ticket 语义由本 Skill 与主 thread 拥有，主 thread 直接写入并验证 Plan/Ticket；state 初始化、运行记录与 Progress 投影由 `/impl-package:execution-boundaries` 记账 subagent 串行调用语义 CLI 执行。D/S gate 已通过才继续，未触及的 legacy Spec 可暂缺。
+为一个 implementation attempt 创建简洁、可执行的 plan，并把验收拆成可独立验收的 Ticket 合同；先读 `../../references/impl-package-composition-contract.md`，需要为 material seam 选择验证层级时再读 `../../references/progressive-system-evidence.md`。Plan 的语义、Coverage、执行策略、Planned Verification 与 Ticket 语义由本 Skill 与主 thread 拥有，主 thread 不直接编辑当前 package 的 Plan 或 runtime state；物理写入、state 初始化和 Progress 投影由 bound `/impl-package:execution-boundaries` 执行。D/S gate 已通过才继续，未触及的 legacy Spec 可暂缺。
 
 ## 输出与规则
 
@@ -17,7 +17,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
 
 1. initial 读取已批准 Decision、`spec.md`、从属 `contract-design.md` disposition 及当前代码/测试事实，确认 D/S gate 已通过；未触及的 legacy Spec 可暂缺该文件，同一 package 的 patch/update 沿用 initial bundle approval。
    - 常见误判：拿未批准或过期的 D/S 事实开始写 Plan，会把实现候选误写成已冻结的行为合同。
-2. 在创建或更新 Plan，或派发 state 更新前执行 admission backstop：若下一步仍需决定可观察行为、data identity、permission、concurrency、recovery 或 public shape，或 contract surface 命中幂等键 / CAS / 版本号、多个来源写同一个目标字段、替换 / 撤回 / 恢复语义、跨存储提交（两个 store 各自提交）或声明值 vs 检测值但 Spec 只有规则没有结果矩阵，停止 planning，明确缺失合同并路由 `/impl-package:req-align` 重新确认当前 Spec；不得创建或更新 Plan/state，也不得在 Plan 中补第二套 DTO/schema。
+2. 在让 execution-boundaries 创建或更新 Plan/state 前执行 admission backstop：若下一步仍需决定可观察行为、data identity、permission、concurrency、recovery 或 public shape，或 contract surface 命中幂等键 / CAS / 版本号、多个来源写同一个目标字段、替换 / 撤回 / 恢复语义、跨存储提交（两个 store 各自提交）或声明值 vs 检测值但 Spec 只有规则没有结果矩阵，停止 planning，明确缺失合同并路由 `/impl-package:req-align` 重新确认当前 Spec；不得创建或更新 Plan/state，也不得在 Plan 中补第二套 DTO/schema。
    - 常见误判：把 Plan 当成补齐 Spec 留白的地方，会产生第二套 DTO/schema，两个实施者随后可以按不同合同实现。
 3. 判断是 initial 还是 patch；patch 只描述相对上次 terminal gate 的实际 delta。
    - 常见误判：patch 重述整份历史范围，会把未变化的 evidence 和 gate 重新混入当前 delta，无法判断真正受影响的边界。
@@ -34,13 +34,13 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
 9. 进入 `/impl-package:execution-boundaries`，再交给 `/impl-package:dev-with-track`。
    - 常见误判：绕过 execution-boundaries 直接执行，会丢掉授权、write-set 和完成前 evidence gate 的边界。
 
-机械操作一律走 typed tools/语义 CLI；状态变更命令的处境与协议尾注由 `situation.py` 按 `situations.yaml` 注入。execution-boundaries 记账 subagent 完成 state 初始化和 `package validate` 后返回 receipt，主 thread 复核 receipt；初始 bundle approval 在同一 package 内跨 session、patch 和普通更新持续有效，作为唯一 approval receipt。
+机械操作一律走 typed tools/语义 CLI；状态变更命令的处境与协议尾注由 `situation.py` 按 `situations.yaml` 注入。execution-boundaries 完成写入、state 初始化和 `package validate` 后返回 receipt，主 thread 复核 receipt；初始 bundle approval 在同一 package 内跨 session、patch 和普通更新持续有效，作为唯一 approval receipt。
 
 ## Ticket 拆分（仅 `tickets=true`）
 
 仅在当前 plan 声明 `tickets=true` 时使用；Ticket 放在 package 固定的 `tickets/` 目录，文件名可排序且稳定。
 
-本 Skill 拥有 Ticket 的纵向切片、AC、contract references 和 typed dependency 语义；主 thread 直接写入 Ticket 正文，运行时 state 更新交给 `/impl-package:execution-boundaries` 记账 subagent 串行调用语义 CLI。
+本 Skill 拥有 Ticket 的纵向切片、AC、contract references 和 typed dependency 语义；Ticket 文件的物理写入与运行时 state 更新由 bound `/impl-package:execution-boundaries` 执行，主 thread 不直接编辑当前 package 的 Ticket 或 `.impl-package/state.json`。
 
 1. **切分纵向交付**：按可独立验收的纵向交付切片拆分，不按文件、层或 worker 拆分；一个 Ticket 交付恰好一个可验收的用户终态。终态分为权威转换（用户动作成功后产生新的权威记录，下游从此读取）和可验收的展示或编辑终态（用户到达稳定、可当场判定的界面状态，不产生新的权威记录）。
    - 计数判据：建设内容中终态为 0 个时作为层并入其他 Ticket，1 个为正确，2 个及以上拆分；读模型接线、后端算法、UI 只读化、加字段、补测试本身并入其服务的终态。
@@ -55,7 +55,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
    - 常见误判：引用整份文档会让 Ticket 看似有依据，却无法判断实际依赖哪条 authority；引用 contract-design.md 只停在章节级而不点名 entry point，等于把一大节都当成了下游默认要读的上下文。
 6. **绑定 evidence 与覆盖检查**：evidence 说明验证入口或 owner，不复制通用 checklist；与当前 plan/spec 检查 coverage、重叠、依赖、section-level contract references、stable claim atomization 和 AC feasibility。Spec 章节发生变化时，扫描引用该章节的全部 Ticket 并标为受影响，覆盖检查以完整集合为准。
    - 常见误判：只写“有测试”而不写入口、owner 和 coverage，或让一个 stable claim 同时承载可独立失败的结论，会把不可执行、重叠或部分可证的 AC 留到执行末端才暴露。
-7. **发布 Ticket-only Composition**：新 package 使用 `tickets=true, dag=false` Ticket-only 合同，不创建 DAG，也不建立 Ticket/Task 双层 bundle；主 thread 发布当前 Attempt 的 Ticket 合同，记账 subagent 通过现有 state CLI 初始化 Approved/PENDING。旧 package 的 `dag=true` 只读，不由本 Skill 创建或更新。
+7. **发布 Ticket-only Composition**：新 package 使用 `tickets=true, dag=false` Ticket-only 合同，不创建 DAG，也不建立 Ticket/Task 双层 bundle；由 execution-boundaries 发布当前 Attempt 的 Ticket，并通过现有 state CLI 原子推进为 Approved/PENDING。旧 package 的 `dag=true` 只读，不由本 Skill 创建或更新。
    - 常见误判：发布时又创建 Task/DAG 或手写状态，会产生第二个运行时 authority，Ticket 的 Approved/PENDING 也无法回放。
 8. **保留 Ticket acceptance 不变量**：Ticket acceptance state 保存在 `.impl-package/state.json`；Ticket AC 按 Composition Contract 使用稳定 claim ID，一个 AC 可包含多个原子 claim；把 early falsification evidence 与 remaining completion evidence 分开描述，其中只有真实 UI/provider/native tool 才能证伪的可观察结果（如真实入口是否呈现目标状态）标为 `early-falsification`，完整旅程验收仍标为 `remaining-completion`；第一条可执行路径必须保持 tenant、RBAC、privacy、幂等和数据完整性不变量；旧 Task `DONE` 不自动通过 Ticket；P 变化时只将实际受影响 Ticket 设为 `NEEDS-REVALIDATION`。
    - 常见误判：把旧 Task `DONE` 或一次 early falsification 当成 Ticket 满足，会漏掉 remaining evidence 和第一条路径上的安全不变量。

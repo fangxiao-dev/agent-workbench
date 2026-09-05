@@ -8,4 +8,3 @@
 - Plan holds only global scheduling — Composition, Ticket order/dependency, shared-resource serialization, integration/rollout boundary, and Final Gate criteria — while per-constraint coverage and verification live in each Ticket's Contract references and AC; current execution state stays in `state.json` and is exposed through `progress.md`.
 - Only affected records require revalidation after a plan change.
 - Plan only maps an already-frozen Spec contract ensemble to implementation and verification. If observable behavior, data identity, permission, concurrency, recovery, or public shape remains undecided, return to req-align without creating Plan/state or inventing a second DTO/schema contract.
-- [已确认 · 2026-09-05] owning-stage 主 thread 更新业务文档并裁决语义；一个 execution-boundaries 记账 subagent 串行调用 CLI 更新 state 与运行投影，日常异步，依赖落盘或收口时等待。

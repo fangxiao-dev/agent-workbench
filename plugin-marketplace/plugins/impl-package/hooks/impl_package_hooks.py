@@ -308,7 +308,7 @@ def _resume_capsule(binding: dict[str, Any], rendered: dict[str, Any]) -> str:
         f"warnings: {len(rendered.get('warnings', [])) if isinstance(rendered.get('warnings'), list) else 0}",
         f"undetermined: {len(rendered.get('undetermined', [])) if isinstance(rendered.get('undetermined'), list) else 0}",
         "This capsule is navigation context only; it is not Evidence, Acceptance, Gate, or closure.",
-        "Before dispatch or trail mutation, rerun situation.py render without --no-write-credential.",
+        "Before dispatch, rerun situation.py render without --no-write-credential; consume successful CLI updates without full restore.",
     ]
     return "\n".join(lines)
 

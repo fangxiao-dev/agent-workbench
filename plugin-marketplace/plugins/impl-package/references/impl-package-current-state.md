@@ -15,7 +15,7 @@
 └─ migration/archive/task-handoffs/   # 迁移后旧 handoff 归档
 ```
 
-`state.json` 是 package 唯一可写 current-state。主 session 决定语义并维护业务文档；execution-boundaries 的记账 subagent 是运行状态唯一 writer，通过语义 CLI 串行更新。实现/review worker 返回证据，日常记账异步进行，依赖落盘或收口时等待相关回执。`progress.md` 和 Execution Record header 是 machine-owned projection；Ticket 是发布后稳定的 Approved 合同，运行时验收状态不回写 Ticket。ER 只保存 judgment/history，不产生 active checkpoint。
+`state.json` 是 package 唯一可写 current-state。主 session 是唯一 writer；worker 只返回结构化证据。`progress.md` 和 Execution Record header 是 machine-owned projection；Ticket 是发布后稳定的 Approved 合同，运行时验收状态不回写 Ticket。ER 只保存 judgment/history，不产生 active checkpoint。
 
 路径口径固定：`attempt.plan`、`predecessors`、evidence 与 checkpoint evidence 是 repository-relative；`attemptHistory.executionRecord` 是 package-relative 的 `execution/<attempt>/execution-record.md`。
 

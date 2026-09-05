@@ -16,13 +16,13 @@
     {
       "id": 2,
       "prompt": "当前 package 需要把已批准的 Spec follow-up 写回 spec.md 与 contract-design.md。请判断 standing bookkeeper 和主 thread 各自负责什么，并说明如何处理写入失败。",
-      "expected_output": "主 thread 直接写入并验证已批准的 Spec/contract-design 文档；相关运行状态由记账 subagent 串行调用 CLI。失败时报告准确位置并在既有授权内修复，语义与批准仍归 req-align/main thread。",
+      "expected_output": "Routes the physical artifact write and focused validation to the package-bound bookkeeper, preserves req-align/main-thread semantic ownership, and reports the exact failure without claiming success.",
       "files": [],
       "expectations": [
-        "主 thread 直接更新业务文档。",
-        "记账 subagent 仅通过语义 CLI 更新运行状态。",
-        "不改变 Spec 语义与批准 owner。",
-        "partial write 不冒充成功。"
+        "Routes both physical artifact writes and focused validation to the package-bound bookkeeper.",
+        "Preserves req-align and the main thread as owners of the Spec semantics and approval.",
+        "Reports the exact failed location and any partial write instead of claiming success.",
+        "Does not create a second contract or move semantic ownership to the bookkeeper."
       ]
     },
     {
@@ -76,7 +76,7 @@
     {
       "id": 7,
       "prompt": "一次更新同时要求记录 runtime state 的 Ticket 状态和 Progress 中的可读进度。请说明哪些动作必须通过现有 state CLI，哪些内容由 bookkeeper 物理写入，以及如何避免双写 runtime state。",
-      "expected_output": "Bookkeeper uses the state CLI for the Ticket transition and its generated Progress projection; it does not directly edit the projection or create a second state ledger.",
+      "expected_output": "Uses the existing impl_package_state.py semantic command for runtime state, writes the readable Progress artifact within package scope, and does not create or manually maintain a second runtime-state ledger.",
       "files": [],
       "expectations": [
         "Uses the existing impl_package_state.py semantic command for the runtime state transition.",

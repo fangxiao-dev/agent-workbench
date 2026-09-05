@@ -27,7 +27,7 @@ review-track: <Track A/B/C/D>
 
 ## Terminal coverage record
 
-terminal-final 的 canonical ledger 更新且所需结果已返回后，parent 将下列 `review.terminal_summary` fact 交给记账 subagent 用 `trail append` 落盘。它复用已有 trail，不创建第二份 ledger。artifact 和 reuseEvidence 为 package-relative 路径；report 前四行必须含上面的真实 verdict/head/run/track，各 track 使用独占 artifact。A/B/C required；Safety 适用时追加 Track D。A 在最终 HEAD 重审，B/C/Safety 可在同一 ReviewRun 内复用旧 PASS，parent 在 reuseEvidence 中记录旧/新 SHA、该轨输入的 delta 与不受影响的依据。
+terminal-final 的 canonical ledger 更新且所需结果已返回后，parent 用 `trail append` 落盘下列 `review.terminal_summary` fact。它复用已有 trail，不创建第二份 ledger。artifact 和 reuseEvidence 为 package-relative 路径；report 前四行必须含上面的真实 verdict/head/run/track，各 track 使用独占 artifact。A/B/C required；Safety 适用时追加 Track D。A 在最终 HEAD 重审，B/C/Safety 可在同一 ReviewRun 内复用旧 PASS，parent 在 reuseEvidence 中记录旧/新 SHA、该轨输入的 delta 与不受影响的依据。
 
 ```json
 {

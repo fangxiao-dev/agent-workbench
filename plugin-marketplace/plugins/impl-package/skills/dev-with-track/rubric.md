@@ -15,4 +15,3 @@
 - [已确认] `$dispatcher` 与 `/impl-package:subagent-driven-development` 是平级指导：前者面向上游 Topic-first admission、baby step 批次、dispatch/return/idle，后者面向下游 bounded worker 的 Topic/dependency/mode/execution-lane/lifecycle；本 Skill 选择业务动作并消费两者结果。
 - [已确认] Dispatcher idle、worker 局部 DONE 与 SDD review PASSED 是局部事实；本 Skill 依据 canonical Ticket/State/Evidence/Gate 判断业务 closure。
 - [已确认] 业务控制循环置于入口前部，先刷新事实并选择动作，再形成 Topic、调用 Dispatcher/SDD、消费结果并写入 package 权威状态。
-- [已确认 · 2026-09-05] owning-stage 主 thread 更新业务文档并裁决语义；一个 execution-boundaries 记账 subagent 串行调用 CLI 更新 state 与运行投影，日常异步，依赖落盘或收口时等待；取代此前「主 thread 是 state 唯一 writer、bookkeeper 仅作异常 slow path」的表述。

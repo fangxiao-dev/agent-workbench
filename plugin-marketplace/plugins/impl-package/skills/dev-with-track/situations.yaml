@@ -134,7 +134,7 @@ situations:
       - id: audit-completion-claim
         default: true
         by: main-session
-        do: "/impl-package:execution-boundaries completion audit current Attempt"
+        do: "/impl-package:verification-before-completion audit current Attempt"
         effect: "全部 Ticket 为 SATISFIED 或 RETIRED 后开始全局收口"
     escape: true
 
@@ -287,11 +287,11 @@ situations:
       trail.last_worker_mode: implement
     judgment: false
     actions:
-      - id: inspect-recovery
+      - id: fresh-fallback
         default: true
-        by: main-session
-        do: "核进程、diff、residue 与 Topic context，按实际原因选择同 lane 恢复或重新调查"
-        effect: "上下文可信且有安全恢复路径则继续；失效时换 fresh worker，不按次数直接阻塞业务"
+        by: dispatch
+        do: "/impl-package:subagent-driven-development mode=implement (fallback=implement)"
+        effect: "INCOMPLETE 视为上下文污染/持续卡住，work lane 按退役条件换 fresh worker，允许一次 fallback"
     escape: true
 
   - slug: ticket.implement.worker-incomplete-second
@@ -302,11 +302,11 @@ situations:
       trail.last_worker_mode: implement
     judgment: false
     actions:
-      - id: investigate-cause
+      - id: normalize-blocked
         default: true
         by: main-session
-        do: "/impl-package:subagent-driven-development mode=investigate，核对重复 INCOMPLETE 的原因与安全恢复路径"
-        effect: "重新确定 Topic 边界；只有缺授权、真实外部依赖或安全路径耗尽才 BLOCKED"
+        do: "impl_package_state.py --package <package> ticket block <id> --expect PENDING --evidence <incomplete-evidence>"
+        effect: "停止第二次 INCOMPLETE 的 fallback"
     escape: true
 
   - slug: ticket.implement.worker-blocked
@@ -422,7 +422,7 @@ situations:
         requires_reason: true
       - id: confirm-original-conclusion
         by: main-session
-        do: "/impl-package:execution-boundaries completion audit recheck acceptance revision"
+        do: "/impl-package:verification-before-completion recheck acceptance revision"
         effect: "保留原结论"
         requires_reason: true
     escape: true
@@ -581,7 +581,7 @@ situations:
       - id: audit-before-completion
         default: true
         by: main-session
-        do: "/impl-package:execution-boundaries completion audit current Attempt"
+        do: "/impl-package:verification-before-completion audit current Attempt"
         effect: "完成声明前先审计证据"
     escape: true
 
@@ -717,7 +717,7 @@ situations:
       - id: drain-intake
         default: true
         by: main-session
-        do: "/impl-package:execution-boundaries bookkeeper drain intake queue"
+        do: "/impl-package:standing-bookkeeper drain intake queue"
         effect: "清空待落账队列"
     escape: true
 
@@ -896,7 +896,7 @@ situations:
         effect: "无效 envelope 视为上下文不可采信，work lane 按退役条件换 fresh worker；检查 diff 后重新派发"
       - id: direct-verify-invalid-envelope
         by: main-session
-        do: "/impl-package:execution-boundaries completion audit fixer diff; /impl-package:do-review phase=finding-closure"
+        do: "/impl-package:verification-before-completion audit fixer diff; /impl-package:do-review phase=finding-closure"
         requires_reason: true
     escape: true
 
