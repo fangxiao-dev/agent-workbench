@@ -99,6 +99,7 @@ FACT_KEYS = frozenset(
         "ticket.review_trigger",
         "ticket.post_fix_regression_pending",
         "review.canonical_summary",
+        "review.terminal_summary",
         "evidence.sources_uniquely_decide",
         "git.comparison_head_fixed",
         "git.accepted_seam_changed",
@@ -2455,50 +2456,66 @@ def _when_attempt_completion_claim_pending(context: FactContext) -> Fact:
 
 
 def _when_attempt_terminal_coverage_complete(context: FactContext) -> Fact:
-    explicit = context._explicit_bool("attempt.terminal_coverage_complete")
-    if explicit is not None:
-        return explicit
-    if context.snapshot.gate.verdict in TERMINAL_GATE_VERDICTS:
-        return _fact_value(True)
+    summary_fact = context._latest_fact("review.terminal_summary")
+    legacy = context._explicit_bool("attempt.terminal_coverage_complete")
+    if summary_fact is None and legacy is not None and legacy.known and legacy.value is False:
+        return legacy
     near_terminal = _when_attempt_all_tickets_terminal(context)
     if not near_terminal.known:
         return near_terminal
     if near_terminal.value is not True:
         return context.unknown("尚未进入终审阶段，terminal-final coverage 暂不适用")
 
-    rows = context._subject_rows()
-    if rows is None:
-        return _fact_value(False)
-    review_rows: list[dict[str, Any]] = []
-    tracks: set[str] = set()
-    for row in rows:
-        if _event_kind(row) != "dispatch" or row.get("review_phase") != "terminal-final":
-            continue
-        if row.get("review_recheck") is True:
-            continue
-        track = row.get("review_track")
-        if not isinstance(track, str) or track not in REVIEW_TRACKS:
-            continue
-        tracks.add(track)
-        review_rows.append(row)
-    if not REVIEW_TRACKS <= tracks:
-        return _fact_value(False)
-    current_head = context.snapshot.head
-    if not isinstance(current_head, str) or not current_head:
-        return _fact_value(False)
-    for row in review_rows:
-        review_head = row.get("head")
-        if not isinstance(review_head, str) or not review_head:
-            return _fact_value(False)
-        if review_head == current_head:
-            continue
-        source_changed = _diff_has_source_changes(
-            context,
-            review_head,
-            label="terminal-final review head",
-        )
-        if not source_changed.known or source_changed.value:
-            return _fact_value(False)
+    summary = summary_fact.value if summary_fact is not None else None
+    if not isinstance(summary, dict):
+        return _fact_value(False, "缺少 review.terminal_summary fact")
+    head = context.snapshot.head
+    if not head or summary.get("comparisonHead") != head or not isinstance(summary.get("safetyApplicable"), bool):
+        return _fact_value(False, "terminal_summary 的 comparisonHead 与当前 HEAD 不一致或缺少 safetyApplicable")
+    run_id = summary.get("reviewRunId")
+    results = summary.get("results")
+    if not isinstance(run_id, str) or not run_id.strip() or not isinstance(results, list):
+        return _fact_value(False, "terminal_summary 缺少 reviewRunId 或 results")
+    required = {"Track A", "Track B", "Track C"}
+    if summary["safetyApplicable"]:
+        required.add("Track D")
+    by_track = {}
+    for result in results:
+        if not isinstance(result, dict) or not isinstance(result.get("track"), str) or result["track"] not in REVIEW_TRACKS:
+            return _fact_value(False, "terminal_summary 的 results 含未知 track")
+        track = result["track"]
+        if track in by_track or result.get("verdict") != "PASS":
+            return _fact_value(False, f"{track} 重复出现或 verdict 不是 PASS")
+        by_track[track] = result
+    if not required <= by_track.keys():
+        return _fact_value(False, f"缺少必需轨的 PASS：{sorted(required - by_track.keys())}")
+
+    def artifact_text(value: Any) -> str | None:
+        if not isinstance(value, str) or not value or Path(value).is_absolute() or ".." in Path(value).parts:
+            return None
+        try:
+            view = context.snapshot.reader.read(value)
+        except (SituationError, OSError, ValueError):
+            return None
+        return view.text if not view.error else None
+
+    artifacts = set()
+    for track, result in by_track.items():
+        reviewed_head = result.get("reviewedHead")
+        report = artifact_text(result.get("artifact"))
+        if not isinstance(reviewed_head, str) or not reviewed_head or not report:
+            return _fact_value(False, f"{track} 缺少 reviewedHead 或报告文件读不到")
+        artifact = _safe_relative_path(context.snapshot.package, result["artifact"])
+        if artifact in artifacts:
+            return _fact_value(False, f"{track} 的报告路径与其它轨重复：{artifact}")
+        artifacts.add(artifact)
+        header = dict(line.split(": ", 1) for line in report.splitlines()[:4] if ": " in line)
+        if header != {"verdict": "PASS", "reviewed-head": reviewed_head, "review-run": run_id, "review-track": track}:
+            return _fact_value(False, f"{track} 报告前四行头不匹配（verdict/reviewed-head/review-run/review-track）")
+        if reviewed_head != head:
+            # 复用判据由 parent 对照该轨输入裁决，保留同一 ReviewRun 的 PASS 和 delta 证据。
+            if track == "Track A" or result.get("reused") is not True or not artifact_text(result.get("reuseEvidence")):
+                return _fact_value(False, f"{track} 的 reviewedHead 非当前 HEAD，但缺少 reused 标记或 reuseEvidence")
     return _fact_value(True)
 
 

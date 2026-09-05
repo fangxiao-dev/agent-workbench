@@ -4,7 +4,7 @@ Use the smallest template that matches the run. Keep source attribution and per-
 
 ## Leaf Return Contract
 
-The four `review-track-*` agents return a compact index. Full evidence, impact, handoff, and quotations stay in the parent-supplied review report artifact; do not ask a leaf to repeat them in its response.
+The four `review-track-*` agents return a compact index. Each leaf writes full evidence, impact, recommendations, handoff, and quotations to its exclusively assigned report artifact; do not ask a leaf to repeat them in its response.
 
 ```text
 verdict: PASS | FAIL | UNCERTAIN
@@ -15,6 +15,39 @@ report: <review report artifact path>
 ```
 
 Use `findings: none` when no candidate exists. Each finding line must contain the slug, file and line, severity, and one sentence; leaf output is candidate evidence, not a ledger decision.
+
+Impl-Package 的 leaf report 存在 parent 指定的 package 内独占路径，完整正文前写明以下四行，供终审核对来源：
+
+```text
+verdict: PASS | FAIL | UNCERTAIN
+reviewed-head: <实际审阅 SHA>
+review-run: <本次 ReviewRun ID>
+review-track: <Track A/B/C/D>
+```
+
+## Terminal coverage record
+
+terminal-final 的 canonical ledger 更新且所需结果已返回后，parent 将下列 `review.terminal_summary` fact 交给记账 subagent 用 `trail append` 落盘。它复用已有 trail，不创建第二份 ledger。artifact 和 reuseEvidence 为 package-relative 路径；report 前四行必须含上面的真实 verdict/head/run/track，各 track 使用独占 artifact。A/B/C required；Safety 适用时追加 Track D。A 在最终 HEAD 重审，B/C/Safety 可在同一 ReviewRun 内复用旧 PASS，parent 在 reuseEvidence 中记录旧/新 SHA、该轨输入的 delta 与不受影响的依据。
+
+```json
+{
+  "kind": "fact",
+  "subject": "attempt",
+  "key": "review.terminal_summary",
+  "value": {
+    "reviewRunId": "<ReviewRun ID>",
+    "comparisonHead": "<最终 implementation HEAD>",
+    "safetyApplicable": false,
+    "results": [
+      {"track": "Track A", "verdict": "PASS", "reviewedHead": "<最终 HEAD>", "artifact": "execution/initial/review-a.md"},
+      {"track": "Track B", "verdict": "PASS", "reviewedHead": "<旧 PASS HEAD>", "artifact": "execution/initial/review-b.md", "reused": true, "reuseEvidence": "execution/initial/review-reuse.md"},
+      {"track": "Track C", "verdict": "PASS", "reviewedHead": "<最终 HEAD>", "artifact": "execution/initial/review-c.md"}
+    ]
+  }
+}
+```
+
+新结果、comparison HEAD 或 Safety applicability 变化后记录完整新 summary；单独的 dispatch 或旧布尔 coverage 声明不证明终审结果。terminal metadata commit 后如行为与合同未变，parent 复核 metadata delta，沿用实际 implementation HEAD 的结论时仍须更新相应的完成声明依据。
 
 ## Canonical ledger and classification
 

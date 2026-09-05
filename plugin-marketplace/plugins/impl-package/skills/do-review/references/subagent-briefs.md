@@ -6,7 +6,7 @@ The four `review-track-*` agent definitions carry their own leaf-review brief. T
 
 ```text
 Review target:
-- Repo/worktree:
+- Repo/worktree: <ReviewRun repository; use snapshot_repo for a working-tree review>
 - Target revision or PR:
 - Comparison point input:
 - Resolved base SHA:
@@ -28,7 +28,7 @@ Review target:
 - User review-depth preference:
 - Safety applicability / evidence / coverage:
 - Canonical ledger artifact (read-only):
-- Review report artifact (parent-owned detail file):
+- Review report artifact (this leaf's exclusive writable detail file):
 
 Known findings ledger:
 <read the previous round's canonical ledger from the artifact; write "none yet" for round 1>
@@ -37,7 +37,7 @@ Return format:
 - Track leaf: compact `slug | repo-relative-file:line | severity | one-sentence summary` entries only; full evidence, impact, and suggested handoff belong in the parent-supplied review report artifact.
 - Closure verification: PASS/FAIL/UNCERTAIN per issue.
 - Every finding needs evidence.
-- Do not mutate files, issues, git state, data, or external systems.
+- Write full evidence, impact, and recommendations to the assigned report artifact. Keep business code, issues, source Git state, data, external systems, and the parent canonical ledger unchanged.
 ```
 
 ## Generic Leaf Reviewer Brief

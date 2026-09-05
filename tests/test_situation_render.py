@@ -457,11 +457,13 @@ def _coverage_context(
     diff_names: dict[str, list[str] | None] | None = None,
     state_valid: bool = True,
     gate_verdict: str | None = None,
+    reports: dict[str, str] | None = None,
 ) -> situation.FactContext:
     diff_names = diff_names or {}
     reader = SimpleNamespace(
         package_rel=None,
         diff_names=lambda base: diff_names.get(base),
+        read=lambda path: situation.FileView(path, (reports or {}).get(path)),
     )
     state = situation.StateView(
         raw={"tickets": {"TKT-01": {"state": ticket_state}}} if state_valid else None,
@@ -475,7 +477,7 @@ def _coverage_context(
         reader=reader,
         state=state,
         tickets={},
-        trail=situation.TrailView(True, rows),
+        trail=situation._parse_trail(situation.FileView("trail.jsonl", "\n".join(json.dumps(row) for row in rows))),
         gate=situation.GateView(gate_verdict is not None, gate_verdict, None),
         findings=situation.FindingsView(False, "", []),
         intake=situation.IntakeView(False, None),
@@ -505,68 +507,88 @@ def test_terminal_coverage_is_unknown_before_near_terminal_gate() -> None:
     assert fact.known is False
 
 
-def test_terminal_coverage_is_false_when_terminal_phase_lacks_four_tracks() -> None:
-    rows = [_terminal_dispatch(track) for track in ("Track A", "Track B", "Track C")]
-    context = _coverage_context(rows)
+def _terminal_summary(*, safety=False, old_tracks=()):
+    results = []
+    reports = {}
+    for track in ("Track A", "Track B", "Track C", *(("Track D",) if safety else ())):
+        reviewed_head = "old-head" if track in old_tracks else "current-head"
+        artifact = f"execution/{track}.md"
+        reports[artifact] = f"verdict: PASS\nreviewed-head: {reviewed_head}\nreview-run: run-1\nreview-track: {track}\n"
+        result = {"track": track, "verdict": "PASS", "reviewedHead": reviewed_head, "artifact": artifact}
+        if track in old_tracks:
+            result.update(reused=True, reuseEvidence="execution/reuse.md")
+            reports["execution/reuse.md"] = "run-1: old-head -> current-head; inputs unchanged"
+        results.append(result)
+    row = {"subject": "attempt", "kind": "fact", "ts": "2026-09-05T12:00:00Z", "key": "review.terminal_summary", "value": {
+        "reviewRunId": "run-1", "comparisonHead": "current-head", "safetyApplicable": safety, "results": results,
+    }}
+    return row, reports
 
-    fact = situation._when_attempt_terminal_coverage_complete(context)
 
-    assert fact.known is True
-    assert fact.value is False
+def test_terminal_coverage_accepts_three_results_without_safety():
+    row, reports = _terminal_summary()
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is True
 
 
-def test_terminal_coverage_is_true_for_four_current_head_tracks() -> None:
+def test_terminal_coverage_requires_applicable_safety_result():
+    row, reports = _terminal_summary(safety=True)
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is True
+    row["value"]["results"].pop()
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
+
+
+def test_terminal_coverage_does_not_accept_dispatch_or_legacy_boolean():
     rows = [_terminal_dispatch(track) for track in situation.REVIEW_TRACK_VALUES]
-    context = _coverage_context(rows)
-
-    fact = situation._when_attempt_terminal_coverage_complete(context)
-
-    assert fact.known is True
-    assert fact.value is True
+    rows.append({"subject": "attempt", "kind": "fact", "ts": "2026-09-05T12:00:00Z", "key": "attempt.terminal_coverage_complete", "value": True})
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context(rows)).value is False
 
 
-def test_terminal_coverage_is_false_after_source_commit() -> None:
-    rows = [_terminal_dispatch(track, head="review-head") for track in situation.REVIEW_TRACK_VALUES]
-    context = _coverage_context(rows, diff_names={"review-head": ["src/engine.py"]})
-
-    fact = situation._when_attempt_terminal_coverage_complete(context)
-
-    assert fact.known is True
-    assert fact.value is False
+def test_terminal_coverage_accepts_b_c_safety_reuse_with_same_run_evidence():
+    row, reports = _terminal_summary(safety=True, old_tracks=("Track B", "Track C", "Track D"))
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is True
+    del reports["execution/reuse.md"]
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
 
 
-def test_terminal_coverage_stays_true_after_docs_only_commit() -> None:
-    rows = [_terminal_dispatch(track, head="review-head") for track in situation.REVIEW_TRACK_VALUES]
-    context = _coverage_context(rows, diff_names={"review-head": ["docs/review.txt", "notes.md"]})
-
-    fact = situation._when_attempt_terminal_coverage_complete(context)
-
-    assert fact.known is True
-    assert fact.value is True
+def test_terminal_coverage_rejects_old_a_and_changed_comparison_head():
+    row, reports = _terminal_summary(old_tracks=("Track A",))
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
+    row, reports = _terminal_summary()
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], head="new-head", reports=reports)).value is False
 
 
-def test_terminal_coverage_ignores_legacy_track_value_without_render_error() -> None:
-    rows = [_terminal_dispatch(track) for track in ("Track A", "Track B", "Track D")]
-    rows.append(_terminal_dispatch("Track C source recheck"))
-    parsed = situation._parse_trail(
-        situation.FileView("execution/fixture-attempt/trail.jsonl", "\n".join(json.dumps(row) for row in rows))
-    )
-    context = _coverage_context(parsed.rows)
-
-    assert parsed.error is None
-    fact = situation._when_attempt_terminal_coverage_complete(context)
-    assert fact.value is False
+def test_terminal_coverage_rejects_missing_failed_or_wrong_run_report():
+    row, reports = _terminal_summary()
+    report = reports["execution/Track B.md"]
+    for invalid in ("", report.replace("PASS", "FAIL"), report.replace("run-1", "other-run"), report.replace("current-head", "other-head")):
+        reports["execution/Track B.md"] = invalid
+        assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
 
 
-def test_terminal_coverage_excludes_source_recheck_dispatch() -> None:
-    rows = [_terminal_dispatch(track) for track in ("Track A", "Track B", "Track D")]
-    rows.append(_terminal_dispatch("Track C", recheck=True))
-    context = _coverage_context(rows)
+def test_terminal_gate_does_not_substitute_for_review_results():
+    for verdict in ("pass", "fail", "defer"):
+        assert situation._when_attempt_terminal_coverage_complete(_coverage_context([], gate_verdict=verdict)).value is False
 
-    fact = situation._when_attempt_terminal_coverage_complete(context)
 
-    assert fact.known is True
-    assert fact.value is False
+def test_terminal_coverage_requires_distinct_track_reports():
+    row, reports = _terminal_summary()
+    row["value"]["results"][1]["artifact"] = row["value"]["results"][0]["artifact"]
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
+    row, reports = _terminal_summary()
+    reports["execution/Track B.md"] = reports["execution/Track A.md"]
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
+
+
+def test_terminal_coverage_rejects_uncertain_duplicate_or_malformed_results():
+    for value in ("UNCERTAIN", "FAIL"):
+        row, reports = _terminal_summary()
+        row["value"]["results"][0]["verdict"] = value
+        assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
+    row, reports = _terminal_summary()
+    row["value"]["results"].append(row["value"]["results"][0])
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
+    row["value"]["results"] = [{"track": []}]
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
 
 
 def test_json_render_exposes_digest_and_short_circuits_since() -> None:
