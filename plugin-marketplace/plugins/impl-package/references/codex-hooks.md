@@ -22,4 +22,4 @@ python <plugin-root>/hooks/impl_package_hooks.py activate --package <package>
 python <plugin-root>/hooks/impl_package_hooks.py deactivate
 ```
 
-同 session 未解绑就切换到普通任务时，后续 resume/compact 仍会注入 Capsule。Capsule 缺失、失配或 state 已变化时，按 `dev-with-track/references/runtime-protocol.md` 完整恢复。
+同 session 未解绑就切换到普通任务时，后续 resume/compact 仍会注入 Capsule。首次恢复 Capsule 缺失/失配或发生未知外部状态变化时，按 `dev-with-track/references/runtime-protocol.md` 完整恢复。

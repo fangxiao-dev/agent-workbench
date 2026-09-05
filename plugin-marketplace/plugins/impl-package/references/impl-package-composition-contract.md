@@ -54,7 +54,7 @@ Composition：tickets=true, dag=false
 3. Plan 冻结后，Ticket-only Composition 只创建 Draft Ticket；联合检查 coverage、typed dependency、证据可行性与集成顺序后取得一次 bundle approval。旧 package 的 DAG 只读，不重新发布。
 4. `init` 发布当前 Attempt 的 Ticket，初始化 state 和完整 Progress 层，进入执行；3.4 兼容字段不代表 Task execution。
 5. dev-with-track 从 `progress.md` 与 active checkpoint 恢复，根据 Ticket canonical dependency 选择下一动作，通过 CAS 更新状态并写 checkpoint/judgment。
-6. verification-before-completion 审计 completion claim。
+6. execution-boundaries 的 completion audit 审计完成声明。
 7. gate 写入当前判决；`pass` 才支持默认的 merge-ready 结论。
 8. durable delta 按需回刷稳定文档。
 
@@ -80,6 +80,6 @@ Plan、Ticket 或 DAG 的语义变化只使受影响范围的 approval/validatio
 - Ticket AC 必须显式编号 stable claim ID；early falsification evidence 与 remaining completion evidence 分开描述。
 - 第一条可执行路径必须保持 tenant、RBAC、privacy、幂等和数据完整性不变量；早期路径可以窄，但不能薄。
 - 跨 session 续接沿用既有默认：交接前写 active checkpoint，长期判断写 ER judgment；compact 只作异常兜底，不是正常恢复权威。
-- package task session 主线程是 `state.json` 唯一 writer；worker 只返回结构化 evidence。未来 broker 的协调 ledger 不属于本阶段。
+- package 主 thread 拥有业务语义与文档；execution-boundaries 记账 subagent 是 `state.json` 与 CLI 运行投影的唯一 writer，串行记账，独立业务动作异步继续。
 
 `RETIRED` 是新合同中原 `WAIVED`/`SUPERSEDED` 的统一 terminal 状态，必须带 `disposition: waived | superseded`。3.4 runtime 只作为一次性迁移输入；3.5 runtime 只接受 Ticket/evidence/checkpoint 状态。

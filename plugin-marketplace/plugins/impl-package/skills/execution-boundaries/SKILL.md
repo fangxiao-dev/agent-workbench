@@ -1,11 +1,11 @@
 ---
 name: execution-boundaries
-description: 覆盖执行前授权确认（preflight）、执行期异常 slow path（standing bookkeeper）与完成前 claim-evidence 审计（verification before completion）三个边界；三者合并为一个宿主无关入口。
+description: 覆盖执行前授权确认（preflight）、执行期异步状态记账与异常 slow path（standing bookkeeper）与完成前 claim-evidence 审计（verification before completion）三个边界；三者合并为一个宿主无关入口。
 ---
 
 # 执行边界与收口
 
-本入口覆盖三个独立边界，各自独立生效，互不串读：执行前确认授权，异常时恢复与对账，完成前审计 claim 是否有足够 evidence。日常状态变更走现有语义 CLI；恢复优先消费匹配的 `Impl-Package Resume Capsule v1`，缺失或失配时按自身 Wave/fallback 读取当前 digest、动作和 protocol，再展开本次动作所需材料。
+本入口覆盖三个独立边界，各自独立生效，互不串读：执行前确认授权，异步状态记账、异常时恢复与对账，完成前审计 claim 是否有足够 evidence。日常状态变更由记账 subagent 走现有语义 CLI；恢复优先消费匹配的 `Impl-Package Resume Capsule v1`，缺失或失配时按自身 Wave/fallback 读取当前 digest、动作和 protocol，再展开本次动作所需材料。
 
 ## 执行前（preflight）
 
@@ -59,49 +59,27 @@ blocker/owner decision: <none | item>
 
 输出 `Preflight: READY | BLOCKED + authorized write-set + 单一 next action`，不产生 receipt、profile artifact 或持久 readiness 状态。授权细节按需读 `references/authorization-contract.md`；需要调度时使用 `/impl-package:subagent-driven-development`，本边界只提供任务特定的 scope、write-set、authorization、verification 和输出合同。
 
-## 异常（standing bookkeeper slow path）
+## 状态记账与异常对账
 
-这是 package thread 的异常 slow path 入口，不是日常记账角色；日常结构化写入由主 thread 直接调用现有语义 CLI，Execution Record judgment 和 findings 分流也由主 thread 自己形成。bookkeeper 只在异常场景下恢复上下文、做对账并返回结构化修复建议或证据，不改变语义 owner、状态机或验收门。
+主 thread 拥有业务语义、acceptance、finding disposition 与 Gate verdict，并直接维护 Decision、Spec、contract-design、Plan、Ticket 等业务文档。通过 subagent 执行记账，方法见 [Bookkeeper Role](references/role.md)。
 
-### 触发判定
+### 单写者与异步更新
 
-仅当证据互相矛盾需核对 claim/revision/environment/timing/artifact pair、跨 session 或 transport 中断后恢复、部分写入已落盘需补齐、跨 stage 的 artifact/state/Progress/checkpoint/Gate 需要对账，或其他异常使主 thread 无法仅凭现有 state/CLI 安全收口时才进入 slow path。evidence、checkpoint、fact、trail、state transition、Gate 等日常结构化写入，以及 Execution Record judgment 和 findings 分流，不触发 bookkeeper。
+1. 当前 package 的第一个记账动作启动一个 bookkeeper；同一 package 复用该 subagent，串行执行现有语义 CLI。它是 state、evidence、checkpoint、trail 和 CLI 生成的 Progress、Execution Record、Gate 的唯一写入者。
+2. 主 thread 给出已确定的更新、依据及 `依赖：是 | 否`；bookkeeper 不替主 thread 裁决语义。日常更新默认异步，主线继续不依赖本次落盘的工作。
+3. 下一动作依赖状态释放、需要当前 dispatch credential，或准备 handoff/terminal Gate/完成声明时，等待相关记账回执并复核。启动或发送成功只代表已接收，不能当作已落盘。
+4. 成功回执包含已执行命令、结果和更新后的下一动作所需事实。主 thread 消费结果；出现已知 CLI 成功更新时按 delta 刷新视图，不重新完整 Restore。
+5. 换记账 subagent 前确认旧执行已停止并核对落盘结果；同一 package 不并发运行两个 state writer。业务文档正被主 thread 修改时，依赖这些文档的 CLI 等该次修改结束后读取。
 
-### 角色边界
+### 异常 slow path
 
-- 一个 package 不要求常驻或预先初始化 bookkeeper；需要时按当前 package/Attempt 按需启动或恢复。
-- 主 thread 保留 requirement、architecture、implementation direction、acceptance、finding disposition、Gate verdict、最终复核权，以及 `state.json` 的唯一写入权。
-- bookkeeper 只负责异常上下文重建、证据/状态对账、缺口定位和结构化修复建议；不独占 package 物理写入，不直接修改 `state.json`，不替主 thread 形成 judgment 或 disposition。
-- bookkeeper 不修改业务实现代码，不服务其他 package，不接管 commit、merge、push、release、数据迁移、删除或外部 mutation。
+只有证据矛盾、部分写入补齐、跨 stage 对账、未知外部状态变化或主 thread 无法安全解释结果时，展开异常调查。bookkeeper 从 canonical state 和实际 artifact 对账，返回原因、结构化修复建议与 focused validation；涉及业务语义的修复先交主 thread 裁决，再执行被接受的 CLI 更新。
 
-### 主 thread 流程
+普通证据登记、状态转换、judgment、checkpoint 与 trail 使用同一记账 subagent 的日常路径。异常时保留可归因结果；有安全恢复路径就继续恢复，只有缺授权、真实外部依赖或安全路径耗尽才报告具体 blocker。
 
-1. 无异常时主 thread 读取当前 state 并直接调用适用 CLI，不启动或等待 bookkeeper。
-   - 常见误判：把 bookkeeper 变成日常等待环节，会制造第二个 state writer 和不必要的协调延迟。
-2. 发现异常时按需启动/恢复 slow path，提供 package、Attempt、相关 artifact/state、已知事实、矛盾或缺口、期望收口条件；宿主无法维持可继续对话的 subagent 时报告 blocker，不扩展成新的协调系统。
-   - 常见误判：只给“有问题”而不给 canonical 上下文，slow path 只能猜缺口；把宿主能力缺失扩展成新协调系统也会越过本入口边界。
-3. slow path 返回结构化对账结果、修复建议和 focused validation；主 thread 复核后直接执行接受的 CLI/文档写入。最小输入可沿用：
-   - 常见误判：把 bookkeeper 的建议直接当作语义决定，会让异常辅助角色取得 requirement、judgment 或物理写入 ownership。
+### 完成条件
 
-   ```text
-   更新：
-   结论/事实：<要记录什么>
-   依据：<必要时提供>
-   依赖：是 | 否
-   ```
-
-4. `依赖：是` 只表示下一动作确实需要 slow-path 结果，主 thread 才等待回执；`依赖：否` 时可以继续推进，稍后消费回执，日常 CLI 写入不因依赖语义停顿。
-   - 常见误判：把所有回执都当成依赖，会让正常 CLI 停摆；把真正的依赖当成非依赖，则会在缺少对账结果时继续收口。
-5. 主 thread 检查回执中的理解、对账结果、修复建议和 focused validation；不正确时发送 correction event，仍由 slow path 修正，最终物理写入由主 thread 执行。
-   - 常见误判：主 thread 直接修正错误回执而跳过 correction event，会丢掉异常处理的可恢复链路。
-6. 每次 slow-path 回执只追加一行到 `<package>/execution/<attempt>/bookkeeper-receipts.jsonl`；正常 CLI 写入不追加该文件。回执格式、恢复读取顺序与失败边界按需读 `references/role.md`，不依赖聊天记录。
-   - 常见误判：把正常 CLI trail 和异常回执混在一起，会无法区分日常状态变更与需要恢复的 slow-path 事实。
-
-### 物理写入与完成条件
-
-- Decision、Spec、`contract-design.md`、Plan、Ticket、Progress、Execution Record、active checkpoint、execution findings 和 Gate 的日常物理写入由对应 owning stage 的主 thread 执行；slow path 只提供异常对账和修复输入，不成为第二个 state writer。
-- runtime state 优先通过现有 `../../scripts/impl_package_state.py` 语义命令更新；bookkeeper 不复制 state schema、另建 ledger 或引入并发协调设施。stable-doc backfill 由 `/impl-package:backfill-stable-docs` owning workflow 管理，不纳入日常 package 簿记。
-- 只有 bookkeeper 已完成异常对账、返回结构化修复输入、运行适用 focused validation，且主 thread 已复核并执行接受的写入，slow-path 更新才可采信；回执失败或信息不足时保持未完成并报告具体 blocker。
+主 thread 能区分已发送、已落盘和待对账，并取得下一动作实际依赖的回执；全部必要写入已收齐后才能形成 handoff 或 terminal claim。CLI 管理运行投影，主 thread 管理业务文档，二者各自保持唯一 writer。
 
 ## 收口（verification before completion）
 

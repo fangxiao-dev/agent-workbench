@@ -5,7 +5,7 @@ description: Review an implementation plan or complete plan/Ticket/DAG bundle fo
 
 # Plan Review
 
-审查实际 candidate 并返回判决，不做审计机械；review 只读，approved package edits are physically applied by the bound `/impl-package:execution-boundaries`。初始 Decision/Spec/Plan bundle 的 review 产出最终 owner approval；同一 package 的后续 patch、closure 或记录更新沿用该 approval。
+审查实际 candidate 并返回判决，不做审计机械；review 只读，批准后的业务文档由 owning-stage 主 thread 直接更新，运行状态交给 `/impl-package:execution-boundaries` 记账 subagent。初始 Decision/Spec/Plan bundle 的 review 产出最终 owner approval；同一 package 的后续 patch、closure 或记录更新沿用该 approval。
 
 审查包含 Ticket 的 bundle 时先读 `../../references/impl-package-composition-contract.md`，用其中的 Ticket、typed dependency 与 stable claim acceptance atom 合同判断 candidate。
 
@@ -54,7 +54,7 @@ mode 省略时使用 `full-review`。`bundle-admission` 只有在 bundle 完整�
 
 ## Apply boundary
 
-初始 bundle approval 前，按 owner 要求形成 review edits，由 bound `/impl-package:execution-boundaries` 写入显式 repository-relative 文件并验证；approval 后，同一 package 的 review edits 仍沿用该 bound writer。Git 提供 history 与 rollback，review outcome 继续写入现有记录。
+初始 bundle approval 前，按 owner 要求形成 review edits，由 owning-stage 主 thread 写入显式 repository-relative 业务文档并验证；approval 后，同一 package 的 review edits 沿用该初始授权。Git 提供 history 与 rollback，review outcome 继续写入现有记录。
 
 ## Output
 

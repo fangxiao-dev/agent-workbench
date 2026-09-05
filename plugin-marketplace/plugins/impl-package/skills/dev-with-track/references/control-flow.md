@@ -7,7 +7,7 @@ validate → progress restore → choose business action
                                   ↓
           bounded worker follows subagent-driven-development
                                   ↓
-               dev-with-track consumes result and writes
+               dev-with-track decides; bookkeeper writes via CLI
                State / Evidence / Checkpoint / Trail
                                   ↓
               review / manual acceptance / claim audit
@@ -15,7 +15,7 @@ validate → progress restore → choose business action
                         Stage 7 / current Gate
 ```
 
-Dispatcher 与 SDD 平级：前者指导上游主控调度，后者指导下游 bounded worker 方法；dev-with-track/main session 写入 package State、Evidence、Checkpoint 与 Gate。
+Dispatcher 与 SDD 平级：前者指导上游主控调度，后者指导下游 bounded worker 方法；dev-with-track/main session 裁决业务语义并写业务文档，execution-boundaries 记账 subagent 串行调用 CLI 写入 package State、Evidence、Checkpoint 与 Gate。
 
 - blocker 或 evidence 缺失：保留当前业务结论，写 checkpoint；Dispatcher 在没有已解锁且合格动作时进入 idle。
 - contract/plan 变化：记录 affected scope 并沿用 current package 的 initial bundle approval；新 package 才取得新 approval。

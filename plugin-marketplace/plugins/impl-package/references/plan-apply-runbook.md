@@ -20,4 +20,4 @@ python <impl-package-plugin-root>/scripts/impl_package_state.py --package <packa
 
 正常跨 session 续接只认 `state.json.activeCheckpoints`；checkpoint 覆盖写当前 subject，不授权派发、不释放依赖。ER 通过 `recovery judgment` 只记录 judgment，compact 仅是意外耗尽后的兜底。
 
-激活不执行 commit、push、merge、release 或外部 mutation。成功后进入 `/impl-package:execution-preflight`，由它确认本轮 write-set 和授权。
+激活不执行 commit、push、merge、release 或外部 mutation。成功后进入 `/impl-package:execution-boundaries`，由它确认本轮 write-set 和授权。
