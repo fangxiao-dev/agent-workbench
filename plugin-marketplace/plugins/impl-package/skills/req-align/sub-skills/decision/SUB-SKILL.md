@@ -24,8 +24,8 @@ description: req-align 内部的 Decision 阶段；对齐 requirement inputs、F
    - 常见误判：把需要授权的调查当普通查文件，或把可直接查清的事实都升级成 BLOCKED，会分别越过权限边界或制造无谓停顿。
 5. 用 [Alignment Proposal](../../assets/templates/alignment-proposal.md) 形成 working output；只有 discovery 与允许调查都无法关闭 intent、scope、trade-off 或 owner decision 时才问一个 focused question，proposal 不是 durable artifact。
    - 常见误判：过早把 proposal 当 durable artifact，或把本地可查事实问成用户偏好，会让 working hypothesis 变成错误承诺。
-6. earned Decision 使用 [Decision Template](../../assets/templates/decision.md)；主 thread 把已确定内容交给 bound `/impl-package:execution-boundaries` 写入并验证 `decision.md`，lightweight correction 在 Decision PASSED 后把最小 evidence 交给 Spec 的 Decision Gate Record，Decision BLOCKED 一律使用 `decision.md` 且不创建 Spec。机械写入走 typed/语义 CLI，回执可带当前处境协议。
-   - 常见误判：Decision BLOCKED 仍创建 Spec，或主 thread 绕过 bound writer 直接改 artifact，会留下没有正确 Gate/写入 provenance 的合同。
+6. earned Decision 使用 [Decision Template](../../assets/templates/decision.md)；主 thread 直接写入并验证 `decision.md`。lightweight correction 在 Decision PASSED 后把最小 evidence 交给 Spec 的 Decision Gate Record；Decision BLOCKED 使用 `decision.md` 且不创建 Spec。运行状态通过 `/impl-package:execution-boundaries` 记账 subagent 更新。
+   - 常见误判：Decision BLOCKED 仍创建 Spec，会让下游消费尚未裁决的合同。
 7. 仅 initial bundle 运行 Decision Gate；目标落点、Focused PRD（适用时）、input reconciliation、Core/Capability、repository fit、material choices 与所有 blocking uncertainty 全部闭合后才可 PASSED，follow-up 更新直接沿用 initial approval。
    - 常见误判：对 follow-up 重跑或重新发明 initial approval，或在 blocking uncertainty 仍存在时给 PASSED，会让后续阶段误以为方向已重新授权。
 
@@ -38,4 +38,4 @@ description: req-align 内部的 Decision 阶段；对齐 requirement inputs、F
 
 ## 返回 router
 
-返回 initial Decision Gate result，或 follow-up 更新后的 standalone `decision.md` / lightweight record、Spec 可消费的 boundary，以及 comparison evidence；artifact 的物理写入和 focused validation 由 bound `/impl-package:execution-boundaries` 完成，主 thread 负责采信结果。initial 的 decision-only 到此停止；initial full 只有 PASSED 才能进入 Spec。
+返回 initial Decision Gate result，或 follow-up 更新后的 standalone `decision.md` / lightweight record、Spec 可消费的 boundary 与 comparison evidence；主 thread 完成文档写入和 focused validation。initial decision-only 到此停止；initial full 只有 PASSED 才能进入 Spec。

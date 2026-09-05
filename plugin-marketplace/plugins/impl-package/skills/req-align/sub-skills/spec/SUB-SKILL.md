@@ -34,7 +34,7 @@ initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一
 
 ## 设计与写入
 
-本 sub-skill 拥有 Spec contract ensemble 的语义、Status 与 Gate 条件；主 thread 将已确认内容和批准交给 bound `/impl-package:execution-boundaries`，由其写入 canonical artifact 并运行 focused validation；机械操作走 typed/语义 CLI，状态变更可附 `situation.py` 按 `situations.yaml` 注入的处境协议。
+本 sub-skill 拥有 Spec contract ensemble 的语义、Status 与 Gate 条件；主 thread 直接写入 canonical artifact 并运行 focused validation。运行状态交给 `/impl-package:execution-boundaries` 记账 subagent，通过语义 CLI 更新。
 
 1. 使用 [Spec Template](../../assets/templates/spec.md)，首先写回完整的“Spec 设计范围”，再更新其他章节。
    - 常见误判：先改行为章节再补范围，会漏记新 surface，后面的 contract coherence 检查也失去全集。
@@ -49,7 +49,7 @@ initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一
 6. 仅当信号适用时评估 evidence-integrity contract 与 risk-driven Grill；它们不成为普通变化的固定流程。
    - 常见误判：把高成本检查固定到所有普通变化，会稀释真正 risk signal；完全跳过适用信号，又会让高风险 surface 没有额外审问。
 
-Formal artifact 的内容、Status 与 Gate result 必须反映当前已记录事实；initial bundle 完成 owner approval，follow-up 将 current truth 交给 execution-boundaries 写入并沿用该 approval，主 thread 不直接编辑当前 package artifact。
+Formal artifact 的内容、Status 与 Gate result 反映当前已记录事实；initial bundle 完成 owner approval，follow-up 由主 thread 写入 current truth 并沿用该 approval。
 
 ## Spec Gate（仅初始 bundle）
 
@@ -75,4 +75,4 @@ follow-up 更新直接沿用 initial approval。
 
 ## 返回 router
 
-返回 initial Spec Gate result，或 follow-up 更新后的 `spec.md`、`contract-design.md` disposition、Acceptance evidence 与 planning readiness；execution-boundaries 回报物理写入与 focused validation，主 thread 采信后再进入 planning。initial PASSED 授权 contract ensemble 进入 planning；implementation、verification、merge 与 release 由后续阶段处理。
+返回 initial Spec Gate result，或 follow-up 更新后的 `spec.md`、`contract-design.md` disposition、Acceptance evidence 与 planning readiness；主 thread 完成文档写入与 focused validation。initial PASSED 授权 contract ensemble 进入 planning；implementation、verification、merge 与 release 由后续阶段处理。

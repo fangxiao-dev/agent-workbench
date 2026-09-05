@@ -19,16 +19,16 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed 
 
 ## Ownership 与 fast path
 
-本 Skill 拥有 configured implementations root（默认 `docs/implementations/`）下 package 的 Decision、Spec、从属 `contract-design.md` 与可读 D/S aliases 的语义和内容；每个新建或被修订的 Spec 都生成该从属文件，未触及的 legacy Spec 到下次 req-align 再补齐。当前 package artifact 的物理写入和 focused validation 由绑定的 `/impl-package:execution-boundaries` 执行；本 Skill 不创建 tracker spec、第二套 behavior contract、plan 或 runtime state。
+本 Skill 拥有 configured implementations root（默认 `docs/implementations/`）下 Decision、Spec、从属 `contract-design.md` 与 D/S aliases 的语义和内容；owning-stage 主 thread 直接写入并验证业务文档。每个新建或修订的 Spec 都有从属 contract-design，legacy Spec 在下次 req-align 时补齐。运行状态交给 `/impl-package:execution-boundaries` 的记账 subagent，通过语义 CLI 更新。
 
-当需要创建或更新 Decision/Spec contract ensemble 时，主 thread 先把已确认的结论、必要依据和依赖性发送给 bound execution-boundaries；由其按本 Skill 与对应 sub-skill 定位并写入 canonical artifact，主 thread 保留 contract 语义、Gate 和最终采信权。机械操作一律走现有 typed tools/语义 CLI；状态变更命令的当前处境与协议尾注由 `situation.py` 按 `situations.yaml` 注入。
+主 thread 按本 Skill 与对应 sub-skill 直接更新 canonical artifact，主 thread 保留 contract 语义、Gate 和最终采信权；需要更新运行状态时将已确定事实异步交给 execution-boundaries 记账 subagent，只有下一动作依赖落盘时才等待回执。
 
 当 business result、Acceptance Semantics、security/data constraints 与 mutation authority 均未变化时，走 no-contract fast path：复用仍有效的 D/S，说明现有合同为何继续成立，并直接路由 owning skill；删除只要改变 promise 或 acceptance boundary，就仍是 contract-impacting。
    - 常见误判：只因为改动看起来像删除或普通实现变化就跳过合同判断，会把已经改变的 promise 或 acceptance boundary 隐藏在 fast path 后面。
 
 ## 主路径
 
-1. 分类 contract impact；需要 D/S 时先查找相关 package。没有相关 package，或相关 package 不适合 patch 时，按 initial 新建 package；存在可 patch 的相关 package 时，必须先询问 Owner 是否进入 patch 模式，获得显式确认前保持旧 package 只读，不得把本次输入当作 follow-up 或修改其 artifact。确认路由后识别 initial、follow-up 或 package closure，并读取 [Package Lifecycle](references/package-lifecycle.md)。
+1. 分类 contract impact；需要 D/S 时先查找相关 package。没有相关 package或不适合 patch 时按 initial 新建；已有明确指向目标 package 的 patch 授权时直接沿用，目标或 initial/patch 路由未定时才询问 Owner。确认路由后识别 initial、follow-up 或 package closure，并读取 [Package Lifecycle](references/package-lifecycle.md)。
    - 常见误判：把 behavior-contract 或 decision-direction 变化当成 implementation-only，或仅因找到相关 package 就静默进入 follow-up，会分别让下游消费失效 D/S，或改写尚未获准 patch 的旧 package。
 2. 解析 canonical package 与当前 Decision/Spec；已确认 patch 的 follow-up 默认把输入视为当前文档的 delta，只有 owner 明确声明 full replacement 才整体替换。
    - 常见误判：把普通 delta 当 full replacement，会静默丢掉未重复提及但仍需 carry forward 的 promise。
@@ -38,7 +38,7 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed 
    - 常见误判：Decision 尚未 PASSED 就进入 Spec，会让行为合同建立在未闭合的方向和 blocking uncertainty 上。
 5. initial bundle 的两个 Gate 均通过且 lifecycle registration 有效时，把同一 Spec contract ensemble 交给 `/impl-package:impl-planning`；follow-up 沿用该 bundle approval 进入后续工作。
    - 常见误判：只看到一个 Gate 通过就开始 planning，会把未完成的 contract surface 留给 Plan 临时发明。
-6. 直接引用当前 Decision/Spec 路径，记录用于 module-knowledge/code 比较的 Git commit；implementation attempt 获批前不创建 runtime state，formal artifact 的物理写入交给 bound execution-boundaries。
+6. 直接引用当前 Decision/Spec 路径，记录用于 module-knowledge/code 比较的 Git commit；主 thread 写入 formal artifact，implementation attempt 获批前不创建 runtime state。
    - 常见误判：在 attempt 获批前先创建 runtime state，会留下没有 approval provenance 的孤儿状态，也让 artifact 出现第二个写入 owner。
 7. 汇报任何 Gate 结果前读取 [Handoff](references/handoff.md)，输出最具体的可恢复状态。
    - 常见误判：只报 PASSED/BLOCKED 而不带恢复入口，下一 session 无法判断缺口、owner decision 和下一动作。
@@ -53,4 +53,4 @@ Package ID 创建后不得改名；后续 requirement delta 先按 implementatio
 
 ## 输出
 
-用业务语言说明 focused requirement、selected direction、route、Gate results、blockers/owner decisions 与下一有效步骤；发生 Spec artifact 写入时，由 execution-boundaries 返回 canonical package、Decision/Spec evidence 与 `contract-design.md` disposition，主 thread 复核后汇报，不粘贴完整 artifact。
+用业务语言说明 focused requirement、selected direction、route、Gate results、blockers/owner decisions 与下一有效步骤；发生 Spec artifact 写入时给出 canonical package、Decision/Spec evidence 与 `contract-design.md` disposition，不粘贴完整 artifact。
