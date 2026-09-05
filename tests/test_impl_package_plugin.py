@@ -135,24 +135,21 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
         "STATIC_HASH",
         "items: []",
         "ownerInputs",
-            "packageStatus",
-            "ticketPresentation",
-        "packageDiff",
+        "packageStatus",
+        "ticketPresentation",
         "targetUpdates",
-        "nextRolloutCursors",
-        "observationDiff",
         "lastSimulationCorrection",
         "按 observations 顺序分类",
         "confirmed 生效",
         "candidate 不授权",
         "kind=pattern",
         "one-time",
-            "明确实例/一次决策=one-time",
-            "steer前看上下文，idle≠block，讨论不发",
-        "语义变化",
+        "明确实例/一次决策=one-time",
+        "steer前看上下文，idle≠block，讨论不发",
         "progress=事实/必修问题",
-        "improvements=不影响收口的可选建议",
-        "不造字段",
+        "improvements=可选建议",
+        "notification.reportText",
+        "逐字输出",
     ):
         assert marker in template
     for command in ("read-cycle", "read-static", "write-cycle"):
@@ -162,10 +159,9 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
     assert "工具调试不入 sidecar" in template
     assert "Grok" not in template
     assert "antecedent、主体、动作和范围" in skill
-    assert "kind/增改删" in template
-    assert "模拟纠偏" in template
-    assert "否则写“无”" in template
     assert "dry-run" in template
+    for format_detail in ("kind/增改删", "模拟纠偏：无", "before→after", "监控健康："):
+        assert format_detail not in template
     rendered = (
         template.replace("{{AUTOMATION_ID}}", "impl-package-2026-08-31-bank-reconciliation-nm-settlement-groups")
         .replace(

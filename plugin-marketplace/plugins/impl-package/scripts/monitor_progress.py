@@ -25,7 +25,7 @@ from urllib.request import urlopen
 PROTOCOL_VERSION = 2
 CONTEXT_VERSION = 2
 RUNTIME_VERSION = 7
-POLICY_VERSION = "STATIC_MONITOR_POLICY_V18"
+POLICY_VERSION = "STATIC_MONITOR_POLICY_V20"
 DEFAULT_PORT = 43187
 THREAD_ID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
 AUTOMATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
@@ -168,6 +168,7 @@ POLICY_SNAPSHOT = {
         "同一语义 topic 原地更新并保留短 ID；询问、讨论、附件或引用本身不形成 observation。",
         "confirmed observation 与 baseline 冲突时报告 baselineConflict，不覆盖 baseline；合同变化只标 baselineStatus=stale。",
         "ownerInputs 只证明消息已读取；observationDiff 才证明消息被收纳为 observation 的新增、更新或删除。",
+        "observations 归属于被监控 package，不归属于某个 Attempt；切换 initial/patch plan 或历史 Ticket 视图时继续返回同一完整集合。",
     ],
     "visibility": "read_thread 返回 items: [] 表示内容不可见；read-cycle 通过 Codex 数据库登记的 canonical rollout 增量补偿新 Owner 消息和 target 的用户可见进展。",
     "intervention": [
@@ -183,9 +184,10 @@ POLICY_SNAPSHOT = {
     },
     "communication": [
         "Owner 通知默认只写当前做到哪里、是否正常、接下来做什么、是否需要 Owner。",
-        "observationDiff 非空时下一次 heartbeat 必须逐条报告变化类型、ID、topic、具体变化和完整当前内容；删除至少报告 ID。成功 write-cycle 后才视为已报告。",
-        "每次 NOTIFY 都显示模拟纠偏；触发时报告原因、拟发送全文和未发送标记，无触发时显示‘模拟纠偏：无’并将 lastSimulationCorrection 写为 null。空模拟纠偏本身不触发 NOTIFY。",
-        "monitorHealthDiff 与其它 diff 并列；target unavailable、retarget required 或 renderer abnormal 时单独报告。renderer 异常从 rendererStatus 读取 PID、43187 和影响并明确未自动重启，同一状态只报告一次。",
+        "write-cycle.notification 是用户可见报告格式的唯一来源；heartbeat 逐字输出 reportText，不自行改写、加标题或总结。",
+        "observationDiff 非空时由 write-cycle 按 ID 稳定排序，逐条报告增改删；更新包含 before、after 和当前全文。成功 write-cycle 后才视为已报告。",
+        "每次 NOTIFY 都由 write-cycle 显示模拟纠偏；新触发时报告原因、拟发送全文和未发送标记，否则显示‘模拟纠偏：无’。空模拟纠偏本身不触发 NOTIFY。",
+        "monitorHealthDiff 与其它 diff 由 write-cycle 并列呈现；target unavailable、retarget required 或 renderer abnormal 时单独报告，同一状态只报告一次。",
         "内部执行术语只有在它本身构成故障时才出现，并同时解释真实对象、动作和影响。",
         "监控器自身配置变化只在导致监控中断或需要 Owner 操作时作为独立监控健康告警通知，不写入 target evaluation。",
     ],
@@ -579,6 +581,116 @@ def _package_diff(previous: dict[str, Any], current: dict[str, Any]) -> dict[str
         "currentGate": current["gate"],
         "ticketChanges": ticket_changes,
     }
+
+
+def _observation_label(observation: dict[str, Any]) -> str:
+    return f"{observation['id']}｜{observation['kind']}｜{observation['topic']}"
+
+
+def _format_observation_diff(changes: list[dict[str, Any]]) -> list[str]:
+    lines = ["**Observation 变化：**"]
+    for change in sorted(
+        changes,
+        key=lambda item: (item.get("id") or item.get("observation", {}).get("id") or ""),
+    ):
+        before = change.get("before")
+        after = change.get("after")
+        if change["change"] == "created":
+            lines.append(f"- 新增 {_observation_label(after)}：{after['content']}")
+        elif change["change"] == "removed":
+            lines.append(
+                f"- 删除 {_observation_label(before)}：{before['content']}"
+                if before is not None
+                else f"- 删除 {change['id']}"
+            )
+        else:
+            lines.append(f"- 更新 {_observation_label(after)}")
+            lines.append(
+                f"  - 之前：{_observation_label(before)}：{before['content']}"
+                if before is not None
+                else "  - 之前：旧快照不可用"
+            )
+            lines.extend(
+                [
+                    f"  - 之后：{_observation_label(after)}：{after['content']}",
+                    f"  - 当前全文：{after['content']}",
+                ]
+            )
+    return lines
+
+
+def _format_monitor_health(cycle: dict[str, Any]) -> str:
+    health = cycle["monitorHealthStatus"]
+    renderer = cycle["rendererStatus"]
+    if health["status"] == "healthy":
+        return "监控正常。"
+    if health["status"] == "target-unavailable":
+        return "目标任务不可用，暂时无法读取最新状态。"
+    if health["status"] == "retarget-required":
+        return f"目标任务已交接，需要重新绑定到 {health['successorThreadId']}。"
+    endpoint = f"127.0.0.1:{renderer['port']}"
+    if renderer["status"] == "dead":
+        return f"Renderer 已停止（PID {renderer['pid']}，{endpoint}），进度页面不可用；未自动重启。"
+    if renderer["status"] == "missing":
+        return f"Renderer 状态记录缺失（{endpoint}），进度页面健康无法确认；未自动重启。"
+    return f"Renderer 实例不匹配（PID {renderer['pid']}，{endpoint}），进度页面不可用；未自动重启。"
+
+
+def _notification(
+    previous_monitor: dict[str, Any],
+    updated_monitor: dict[str, Any],
+    previous_runtime: dict[str, Any],
+    runtime_state: dict[str, Any],
+    cycle: dict[str, Any],
+) -> dict[str, Any]:
+    simulation = runtime_state["lastSimulationCorrection"]
+    simulation_changed = simulation is not None and simulation != previous_runtime["lastSimulationCorrection"]
+    health_changed = cycle["monitorHealthDiff"] is not None or cycle["rendererDiff"] is not None
+    should_notify = any(
+        (
+            previous_monitor["evaluation"] != updated_monitor["evaluation"],
+            cycle["packageDiff"] is not None,
+            bool(cycle["observationDiff"]),
+            simulation_changed,
+            health_changed,
+        )
+    )
+    if not should_notify:
+        return {"shouldNotify": False, "reportText": "DONT_NOTIFY"}
+
+    evaluation = updated_monitor["evaluation"] or {
+        "progress": updated_monitor["summary"],
+        "improvements": [],
+        "next": "等待首次评价。",
+        "owner": None,
+    }
+    lines = [f"**当前进展：**{evaluation['progress']}"]
+    if evaluation["improvements"]:
+        lines.extend(["", "**可改进：**", *(f"- {item}" for item in evaluation["improvements"])])
+    lines.extend(
+        [
+            "",
+            f"**下一步：**{evaluation['next']}",
+            "",
+            f"**需要 Owner：**{evaluation['owner'] or '无'}",
+        ]
+    )
+    if cycle["observationDiff"]:
+        lines.extend(["", *_format_observation_diff(cycle["observationDiff"])])
+    if simulation_changed:
+        lines.extend(
+            [
+                "",
+                "**模拟纠偏：**触发（未发送）",
+                f"- 原因：{simulation['reason']}",
+                f"- 拟发送：{simulation['message']}",
+            ]
+        )
+    else:
+        lines.extend(["", "**模拟纠偏：**无"])
+    if health_changed:
+        lines.extend(["", f"**监控健康：**{_format_monitor_health(cycle)}"])
+    return {"shouldNotify": True, "reportText": "\n".join(lines)}
 
 
 def validate_package_status(value: Any) -> dict[str, Any]:
@@ -1670,7 +1782,9 @@ def write_evaluation(root: Path, automation_id: str, payload: Any) -> dict[str, 
 
 def write_cycle(root: Path, automation_id: str, payload: Any) -> dict[str, Any]:
     record = _expect_fields(payload, WRITE_CYCLE_FIELDS, "cycle write payload")
+    cycle = read_cycle(root, automation_id)
     current = read_context(root, automation_id)
+    previous_runtime_store = validate_runtime_store(_read_json(_runtime_path(root, automation_id)))
     runtime_state = {
         **validate_runtime_state(record["runtimeState"]),
         **_observation_runtime(current["observations"]),
@@ -1682,13 +1796,35 @@ def write_cycle(root: Path, automation_id: str, payload: Any) -> dict[str, Any]:
         {"version": RUNTIME_VERSION, "automationId": automation_id, "runtimeState": runtime_state}
     )
     updated_monitor = _updated_monitor(current["monitor"], record)
-    _atomic_write(_runtime_path(root, automation_id), runtime_store)
-    _atomic_write(_instance_paths(root, automation_id)[0], updated_monitor)
+    notification = _notification(
+        current["monitor"],
+        updated_monitor,
+        previous_runtime_store["runtimeState"],
+        runtime_state,
+        cycle,
+    )
+    runtime_path = _runtime_path(root, automation_id)
+    monitor_path = _instance_paths(root, automation_id)[0]
+    runtime_written = False
+    try:
+        _atomic_write(runtime_path, runtime_store)
+        runtime_written = True
+        _atomic_write(monitor_path, updated_monitor)
+    except Exception:
+        if runtime_written:
+            try:
+                _atomic_write(runtime_path, previous_runtime_store)
+            except Exception as rollback_error:
+                raise MonitorProgressError(
+                    "write-cycle failed and rollback could not restore runtime state"
+                ) from rollback_error
+        raise
     static_context = validate_context(_read_json(_context_path(root, automation_id)))
     return {
         "context": {**static_context, "runtimeState": runtime_state},
         "monitor": updated_monitor,
         "observations": current["observations"],
+        "notification": notification,
     }
 
 
@@ -1827,6 +1963,10 @@ def schema_contract() -> dict[str, Any]:
         "monitorHealthDiff": {"acknowledgedBy": "write-cycle runtimeState.monitorHealthState"},
         "initContextInput": {"required": sorted(INIT_CONTEXT_FIELDS)},
         "writeCycleInput": {"required": sorted(WRITE_CYCLE_FIELDS)},
+        "writeCycleOutput": {
+            "notificationRequired": ["shouldNotify", "reportText"],
+            "quietText": "DONT_NOTIFY",
+        },
         "refreshContextPolicy": {"preserves": ["targetBaseline", "runtimeState", "monitor", "observations"]},
         "retarget": {
             "preserves": ["targetBaseline", "observations", "evaluation", "monitor runtime"],

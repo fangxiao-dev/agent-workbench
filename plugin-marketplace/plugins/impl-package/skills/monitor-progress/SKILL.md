@@ -54,9 +54,11 @@ disable-model-invocation: true
 - observation 原地更新前，按 source、turn 和时间顺序结合同批前序消息、当前完整 observations 与 task 状态，明确 antecedent、主体、动作和范围；局部对象不扩大为整个类别，指代仍不明确时不改 confirmed observation、不授权 target 消息。
 - `packageStatus` 是正式 Ticket/Gate 状态的唯一运行期 authority；`ticketPresentation` 复用 Renderer 的 readiness 与执行轨迹，提供“开发中/调研中/可启动/未开始”的 Owner 展示状态；`targetUpdates` 只解释当前动作。通知优先写展示状态，并同时保留正式状态；不得把“开发中”升级为正式验收。
 - 一个 observation topic 只承载一个能被未来消息独立修改的决策轴；一条消息改变多个轴时分别新增或更新，正式 Ticket 状态不写入 observation。
+- observations 归属于被监控 package，不随 initial/patch Attempt 或 Renderer 的历史 Ticket 视图切换；同一 automation/package 必须继续读取原 sidecar，不能重新初始化或清空。
 - 每条 observation 使用 `kind=one-time|pattern`。Owner 明示绑定具体 Ticket、session、本次动作或一次性决策时直接判为 one-time，不得靠改写正文泛化；仅在没有明示实例边界时做替换测试，替换具体实例后仍应约束后续同类场景才是 pattern。混合消息拆开记录；pattern 使用稳定的条件、行为和边界，高置信时 confirmed、不确定时 candidate；one-time 保留具体对象、动作与完成条件。
-- `ownerInputs` 只证明消息已读取；`observationDiff` 区分 observation 的新增、原地更新和删除，并返回 before/after。diff 非空时下一次 automation 报告必须逐条写出变化类型、ID、topic、具体变化和完整当前内容；`write-cycle` 成功后才确认，失败则下轮重放。
-- confirmed observation 要求 dry-run 时不向 target 发送消息。只有实际满足纠偏条件，且原因或拟发送全文不同于 runtime 的 `lastSimulationCorrection` 时，报告“模拟纠偏（未发送）”、触发原因和拟发送全文；每个 NOTIFY 在无触发时显示“模拟纠偏：无”，但空状态本身不触发 NOTIFY。同一纠偏持续存在时不重复，解除后写回 null，再出现时重新报告。
+- `ownerInputs` 只证明消息已读取；`observationDiff` 区分 observation 的新增、原地更新和删除，并返回 before/after。`write-cycle` 在确认 diff 前生成确定性报告，按 ID 稳定排序；成功后才确认，失败则回滚并在下轮重放。
+- confirmed observation 要求 dry-run 时不向 target 发送消息。只有实际满足纠偏条件，且原因或拟发送全文不同于 runtime 的 `lastSimulationCorrection` 时，才把新模拟纠偏传给 `write-cycle`；同一纠偏持续存在时不重复，解除后写回 null，再出现时重新报告。
+- 用户可见报告格式只由 `write-cycle.notification` 生成。heartbeat 最终逐字输出 `reportText`，不得重新组织、增加标题或追加总结；`shouldNotify=false` 时其值为 `DONT_NOTIFY`。工具调用前的 commentary 属于宿主进度信息，不是报告正文。
 - evaluation 的 `progress` 写 target 当前事实、执行进展和必须处理的 blocker、finding、失败测试或验收缺口；`improvements` 只写不采纳也不影响当前 Ticket/Gate 收口的可选建议，没有则为空数组；`next` 只写处理动作，`owner` 只写确需 Owner 裁决的事项。通知沿用这四个字段，不创造未定义栏目；monitor、renderer、sidecar、automation 或 canonical target 的维护问题只进入独立 `monitorHealthDiff`。
 - 每轮 `read-cycle` 以 workspace renderer sidecar 的 PID 加 `/api/health` instance ID 核对同一进程，不扫描进程列表；同时验证 canonical target，并只从明确的 `::created-thread{threadId="..."}` 识别 handoff successor。健康变化单独报告并在 `write-cycle` 确认，同一状态不重复；Renderer 仅当前开机周期 detached 常驻，不自动重启。
 - handoff 后使用 `retarget --target-thread <明确 ID>` 原子换绑；它把 successor cursor 初始化到当前完整行末尾，保留 baseline、observations、evaluation 和其它 runtime。不得用标题或时间猜测 successor，也不得通过 `write-cycle` 隐式换绑。

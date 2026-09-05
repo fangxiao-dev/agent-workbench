@@ -1,6 +1,6 @@
 ---
 target: plugin-marketplace/plugins/impl-package/skills/monitor-progress
-updated: 2026-09-04
+updated: 2026-09-05
 ---
 ## 原则
 
@@ -12,17 +12,10 @@ updated: 2026-09-04
 - [已确认] 真实兜底的 blocker 范围由当前 confirmed observation 决定；automation 模板不得缩窄为授权问题等固定类别。
 - [已确认] steer 必须先理解相邻对话；状态型 idle/notLoaded 不足以触发，Owner 正在讨论或目标正在等待回复时保持静默。
 - [已确认] Owner 通知中的 Ticket 状态与 Renderer 四态一致；“开发中/调研中”是展示状态，正式 PENDING/SATISFIED 仍单独保留。
+- [已确认] automation 最终报告由 CLI 确定性生成并逐字输出；Skill、policy 和 prompt 不维护第二份排版模板。
+- [已确认] 用户纠偏是 package 级连续合同，跨 initial/patch Attempt 保留；Renderer 默认展开，不因 Ticket 视图切换而过滤。
 
 ## 决策记录（滚动，最近 ≤5 轮）
-
-### R1 · 2026-09-04
-- 采纳 package state 与 canonical target updates 的混合事实源，避免把已 SATISFIED 的 Ticket 继续写成处理中。
-- 采纳拆分过宽 Observation，并在更新报告中显示 before/after。
-- 采纳 NOTIFY 报告显式显示空模拟纠偏，同时保留无变化静默。
-
-### R2 · 2026-09-04
-- 采纳 one-time/pattern 最小分类：只增加 kind 和实例替换测试，否决 activeDirectives、自动退休与额外 lifecycle。
-- pattern 使用通用条件、行为与边界；one-time 保留具体对象和动作。
 
 ### R3 · 2026-09-04
 - 采纳保持四字段 schema；实际开放问题归入 progress，improvements 仅承载可选建议。
@@ -34,3 +27,11 @@ updated: 2026-09-04
 
 ### R5 · 2026-09-04
 - 将 kind 值 specific 重命名为 one-time，使字段名称直接表达一次性边界。
+
+### R6 · 2026-09-05
+- 采纳 CLI 单一格式化来源：`write-cycle` 生成完整报告，heartbeat 只逐字输出，避免模型自由排版造成格式漂移。
+- 工具调用 commentary 与最终通知合同分离；确定性格式只约束最终通知正文。
+
+### R7 · 2026-09-05
+- 当前 Attempt 默认展示、历史 Attempt 主动切换；旧 Ticket 使用冻结快照，不混入当前 readyTickets。
+- 用户纠偏默认完整展开并明确为 package 级，切换 patch plan 后继续保留。

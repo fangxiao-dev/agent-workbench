@@ -209,7 +209,7 @@ def test_context_is_idempotent_and_read_returns_complete_snapshot(tmp_path: Path
     result = module.read_context(root, "monitor-test")
 
     assert repeated == created
-    assert result["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V18"
+    assert result["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V20"
     assert len(result["context"]["snapshotHash"]) == 64
     assert result["context"]["runtimeState"]["lastFallbackTurnId"] is None
     assert result["context"]["runtimeState"]["lastSimulationCorrection"] is None
@@ -221,7 +221,9 @@ def test_context_is_idempotent_and_read_returns_complete_snapshot(tmp_path: Path
     assert "先消解 antecedent、主体、动作和范围" in policy_text
     assert "不得把上下文中的局部对象扩大为整个类别" in policy_text
     assert "指代无法确认时不覆盖 confirmed observation" in policy_text
-    assert "observationDiff 非空时下一次 heartbeat 必须逐条报告" in policy_text
+    assert "observationDiff 非空时由 write-cycle 按 ID 稳定排序" in policy_text
+    assert "write-cycle.notification 是用户可见报告格式的唯一来源" in policy_text
+    assert "observations 归属于被监控 package" in policy_text
     assert "packageStatus" in policy_text
     assert "一个 observation topic 只承载一个" in policy_text
     assert "实例替换测试" in policy_text
@@ -307,7 +309,7 @@ def test_refresh_context_policy_preserves_dynamic_state(tmp_path: Path) -> None:
     repeated = module.refresh_context_policy(root, "monitor-test")
 
     assert refreshed == repeated
-    assert refreshed["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V18"
+    assert refreshed["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V20"
     assert refreshed["context"]["targetBaseline"] == before["context"]["targetBaseline"]
     assert refreshed["context"]["runtimeState"] == before["context"]["runtimeState"]
     assert refreshed["monitor"] == before["monitor"]
@@ -374,8 +376,212 @@ def test_write_cycle_updates_runtime_and_evaluation(tmp_path: Path) -> None:
     assert updated["monitor"]["evaluation"]["next"] == "等待复核返回。"
     assert updated["context"]["runtimeState"]["lastFallbackTurnId"] == THREAD_B
     assert updated["context"]["runtimeState"]["lastSimulationCorrection"]["message"] == "请使用已有本地授权继续。"
+    assert updated["notification"]["shouldNotify"] is True
+    assert "**模拟纠偏：**触发（未发送）" in updated["notification"]["reportText"]
     assert context_path.read_bytes() == fixed_before
-    assert module.read_context(root, "monitor-test") == updated
+    assert module.read_context(root, "monitor-test") == {
+        key: updated[key] for key in ("context", "monitor", "observations")
+    }
+
+
+def test_notification_has_one_deterministic_layout() -> None:
+    module = load_module()
+    evaluation = evaluation_payload()["evaluation"]
+    cycle = {
+        "packageDiff": None,
+        "observationDiff": [],
+        "rendererDiff": None,
+        "monitorHealthDiff": None,
+        "rendererStatus": module._missing_renderer_state(),
+        "monitorHealthStatus": {
+            "status": "healthy",
+            "targetThreadId": THREAD_B,
+            "successorThreadId": None,
+            "rendererStatus": "alive",
+        },
+    }
+
+    notification = module._notification(
+        {"evaluation": None},
+        {"evaluation": evaluation},
+        {"lastSimulationCorrection": None},
+        {"lastSimulationCorrection": None},
+        cycle,
+    )
+
+    assert notification == {
+        "shouldNotify": True,
+        "reportText": (
+            "**当前进展：**实现已完成，正在独立复核。\n\n"
+            "**可改进：**\n"
+            "- 先消费复核结果。\n"
+            "- 再进入真实验收。\n\n"
+            "**下一步：**等待复核返回。\n\n"
+            "**需要 Owner：**无\n\n"
+            "**模拟纠偏：**无"
+        ),
+    }
+
+    quiet = module._notification(
+        {"evaluation": evaluation},
+        {"evaluation": evaluation},
+        {"lastSimulationCorrection": None},
+        {"lastSimulationCorrection": None},
+        cycle,
+    )
+    assert quiet == {"shouldNotify": False, "reportText": "DONT_NOTIFY"}
+
+    without_improvements = {**evaluation, "improvements": [], "owner": "确认是否接受风险。"}
+    compact = module._notification(
+        {"evaluation": evaluation},
+        {"evaluation": without_improvements},
+        {"lastSimulationCorrection": None},
+        {"lastSimulationCorrection": None},
+        cycle,
+    )["reportText"]
+    assert "可改进" not in compact
+    assert "**需要 Owner：**确认是否接受风险。" in compact
+
+
+def test_write_cycle_returns_dont_notify_after_all_changes_are_acknowledged(tmp_path: Path) -> None:
+    module, root, _, _, _ = make_context(tmp_path)
+    first = module.read_cycle(root, "monitor-test")
+    runtime = json.loads(json.dumps(first["runtimeState"]))
+    runtime["rendererState"] = first["rendererStatus"]
+    runtime["monitorHealthState"] = first["monitorHealthStatus"]
+
+    module.write_cycle(root, "monitor-test", {**evaluation_payload(), "runtimeState": runtime})
+    second = module.read_cycle(root, "monitor-test")
+    runtime = json.loads(json.dumps(second["runtimeState"]))
+    runtime["rendererState"] = second["rendererStatus"]
+    runtime["monitorHealthState"] = second["monitorHealthStatus"]
+    result = module.write_cycle(root, "monitor-test", {**evaluation_payload(), "runtimeState": runtime})
+
+    assert result["notification"] == {"shouldNotify": False, "reportText": "DONT_NOTIFY"}
+
+
+def test_notification_sorts_and_renders_observation_changes() -> None:
+    module = load_module()
+    evaluation = evaluation_payload()["evaluation"]
+    before = observation(
+        observation_id="O001",
+        topic="旧规则",
+        content="旧内容。",
+        kind="one-time",
+    )
+    after = {**before, "topic": "新规则", "content": "新内容。", "kind": "pattern"}
+    created = observation(observation_id="O002", topic="新增规则", content="新增内容。")
+    removed = observation(observation_id="O003", topic="删除规则", content="删除内容。")
+    cycle = {
+        "packageDiff": None,
+        "observationDiff": [
+            {"change": "removed", "id": "O003", "before": removed, "after": None},
+            {"change": "created", "before": None, "after": created, "observation": created},
+            {"change": "updated", "before": before, "after": after, "observation": after},
+        ],
+        "rendererDiff": None,
+        "monitorHealthDiff": None,
+        "rendererStatus": module._missing_renderer_state(),
+        "monitorHealthStatus": {
+            "status": "healthy",
+            "targetThreadId": THREAD_B,
+            "successorThreadId": None,
+            "rendererStatus": "alive",
+        },
+    }
+
+    report = module._notification(
+        {"evaluation": evaluation},
+        {"evaluation": evaluation},
+        {"lastSimulationCorrection": None},
+        {"lastSimulationCorrection": None},
+        cycle,
+    )["reportText"]
+
+    assert report.index("更新 O001") < report.index("新增 O002") < report.index("删除 O003")
+    assert "之前：O001｜one-time｜旧规则：旧内容。" in report
+    assert "之后：O001｜pattern｜新规则：新内容。" in report
+    assert "当前全文：新内容。" in report
+    assert report.endswith("**模拟纠偏：**无")
+
+
+def test_notification_renders_new_simulation_and_health_change() -> None:
+    module = load_module()
+    evaluation = evaluation_payload()["evaluation"]
+    simulation = {"reason": "目标被授权问题阻塞。", "message": "使用已有授权继续。"}
+    renderer = {
+        "status": "dead",
+        "pid": 2468,
+        "port": 43187,
+        "instanceId": "renderer-test",
+        "startedAt": "2026-09-05T08:00:00Z",
+        "health": False,
+    }
+    cycle = {
+        "packageDiff": None,
+        "observationDiff": [],
+        "rendererDiff": {"previous": module._missing_renderer_state(), "current": renderer},
+        "monitorHealthDiff": {
+            "previous": None,
+            "current": {
+                "status": "renderer-abnormal",
+                "targetThreadId": THREAD_B,
+                "successorThreadId": None,
+                "rendererStatus": "dead",
+            },
+        },
+        "rendererStatus": renderer,
+        "monitorHealthStatus": {
+            "status": "renderer-abnormal",
+            "targetThreadId": THREAD_B,
+            "successorThreadId": None,
+            "rendererStatus": "dead",
+        },
+    }
+
+    report = module._notification(
+        {"evaluation": evaluation},
+        {"evaluation": evaluation},
+        {"lastSimulationCorrection": None},
+        {"lastSimulationCorrection": simulation},
+        cycle,
+    )["reportText"]
+
+    assert "**模拟纠偏：**触发（未发送）\n- 原因：目标被授权问题阻塞。\n- 拟发送：使用已有授权继续。" in report
+    assert report.endswith(
+        "**监控健康：**Renderer 已停止（PID 2468，127.0.0.1:43187），进度页面不可用；未自动重启。"
+    )
+
+
+def test_write_cycle_rolls_back_when_monitor_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module, root, _, _, created = make_context(tmp_path)
+    monitor_path = root / ".progress-record" / "codex-progress-dashboard" / "monitors" / "monitor-test.json"
+    runtime_path = root / ".progress-record" / "codex-progress-dashboard" / "runtime" / "monitor-test.json"
+    monitor_before = monitor_path.read_bytes()
+    runtime_before = runtime_path.read_bytes()
+    original_write = module._atomic_write
+    calls = 0
+
+    def fail_second(path: Path, value: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("replace failed")
+        original_write(path, value)
+
+    monkeypatch.setattr(module, "_atomic_write", fail_second)
+
+    with pytest.raises(OSError, match="replace failed"):
+        module.write_cycle(
+            root,
+            "monitor-test",
+            {**evaluation_payload(), "runtimeState": created["context"]["runtimeState"]},
+        )
+
+    assert monitor_path.read_bytes() == monitor_before
+    assert runtime_path.read_bytes() == runtime_before
 
 
 def test_read_cycle_recovers_canonical_owner_inputs_and_commits_cursor(tmp_path: Path) -> None:
@@ -1058,13 +1264,14 @@ def test_schema_reports_v2_enums() -> None:
     assert schema["protocolVersion"] == 2
     assert schema["contextVersion"] == 2
     assert schema["runtimeVersion"] == 7
-    assert schema["policyVersion"] == "STATIC_MONITOR_POLICY_V18"
+    assert schema["policyVersion"] == "STATIC_MONITOR_POLICY_V20"
     assert schema["monitor"]["levels"] == ["abnormal", "attention", "normal"]
     assert schema["observation"]["states"] == ["candidate", "confirmed"]
     assert schema["observation"]["kinds"] == ["one-time", "pattern"]
     assert schema["targetUpdate"]["required"] == ["messageId", "turnId", "createdAt", "phase", "text"]
     assert schema["packageStatus"]["states"] == ["current", "invalid", "missing"]
     assert schema["observationDiff"]["fields"] == ["before", "after"]
+    assert schema["writeCycleOutput"]["quietText"] == "DONT_NOTIFY"
     assert schema["monitorHealthStatus"]["states"] == [
         "healthy",
         "renderer-abnormal",
@@ -1209,7 +1416,7 @@ def test_cli_writes_evaluation_from_one_stdin_line(tmp_path: Path) -> None:
         check=False,
     )
     assert refresh_context.returncode == 0, refresh_context.stderr
-    assert json.loads(refresh_context.stdout)["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V18"
+    assert json.loads(refresh_context.stdout)["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V20"
 
     write = subprocess.run(
         [
@@ -1248,7 +1455,9 @@ def test_cli_writes_evaluation_from_one_stdin_line(tmp_path: Path) -> None:
         check=False,
     )
     assert cycle.returncode == 0, cycle.stderr
-    assert json.loads(cycle.stdout)["monitor"]["evaluation"]["next"] == "等待复核返回。"
+    cycle_output = json.loads(cycle.stdout)
+    assert cycle_output["monitor"]["evaluation"]["next"] == "等待复核返回。"
+    assert set(cycle_output["notification"]) == {"shouldNotify", "reportText"}
 
     put = subprocess.run(
         [
