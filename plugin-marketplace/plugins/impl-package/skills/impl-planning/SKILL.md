@@ -23,7 +23,9 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
    - 常见误判：patch 重述整份历史范围，会把未变化的 evidence 和 gate 重新混入当前 delta，无法判断真正受影响的边界。
 4. 新 package 固定选择 `tickets=true, dag=false`；`dag=true` 只允许在旧 package 迁移/恢复计划中出现。
    - 常见误判：为新 package 顺手创建 DAG，会重新引入 Ticket/Task 双层状态和两个 acceptance authority。
-5. 在 Ticket 拆分子流程中，将每个 Decision/Spec 约束映射到具体 Ticket 的 Contract references 与 AC，并按 Composition Contract 把 AC 编译为 stable claim acceptance atoms，由 Ticket 自身承载该映射与逐项验证的 evidence owner；把 early falsification evidence、remaining completion evidence 和不可延后安全不变量分开写在 Ticket 里。Plan 只从已拆分的 Ticket 集合中提炼跨 Ticket 才存在的信息：顺序、typed dependency、共享资源串行规则、全局执行边界（集成顺序/回滚/目标分支）、以及跨 Ticket 的 Planned Verification。纵向切片装不下一个 worker 时，回去把该 seam 冻得更细，不要改成横向切分。
+5. 在 Ticket 拆分子流程中，将每个 Decision/Spec 约束映射到具体 Ticket 的 Contract references 与 AC，并按 Composition Contract 把 AC 编译为 stable claim acceptance atoms，由 Ticket 自身承载该映射与逐项验证的 evidence owner；把 early falsification evidence、remaining completion evidence 和不可延后安全不变量分开写在 Ticket 里。Plan 只从已拆分的 Ticket 集合中提炼跨 Ticket 才存在的信息：实施与接线安排、typed dependency、共享资源协调、全局执行边界（集成顺序/回滚/目标分支）、以及跨 Ticket 的 Planned Verification。纵向切片装不下一个 worker 时，回去把该 seam 冻得更细，不要改成横向切分。
+   - 并行判断：结合冻结合同和当前代码，思考哪些工作现在就能独立实现并验证；下游真正等待什么产物，能否在上游整票完成前交付；哪些操作实际争用资源，能否局部错开或隔离。直接影响判断的复用入口要核实当前调用链，历史实现只作为恢复线索。
+   - 按整票的真实阻塞，依据 Composition Contract 选择 `implementation / acceptance / release` 并遵循既有 Ticket barrier；票内局部等待写成接线条件。Plan 只记录会改变安排的结论、少数关键交接产物及其验证条件，线性任务简述顺序即可，思考问题无需逐题输出。实际派发、步骤大小与人员调整交给 `$dispatcher` 和 `/impl-package:subagent-driven-development`，按执行时的依赖与资源动态安排。
    - 常见误判：把逐约束映射和逐项验证细节写回 Plan 的全局调度表，会与 Ticket 的 Contract references 与 AC 重复，制造两处可能漂移的合同来源。
 6. `tickets=true` 时执行本 Skill 的“Ticket 拆分”子流程；新 package 不调用 `create-task-dag`。
    - 常见误判：把 Ticket 拆分交给旧 DAG 入口，会把已经选择的 Ticket-only Composition 偷换成另一套任务结构。

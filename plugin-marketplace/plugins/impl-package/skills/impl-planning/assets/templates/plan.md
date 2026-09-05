@@ -4,7 +4,7 @@
 Attempt ID：<initial | YYYYMMDD-HHMM-patch-topic>
 Composition：tickets=true, dag=false
 
-> 直接引用当前 decision.md / spec.md。D/S/P 为可选旧别名，不因普通编辑升级；Git commit ID 是唯一允许持久化的历史锚点。Plan 只承载主 session 的全局调度（Composition、Ticket 顺序/依赖、共享资源串行规则、全局执行边界、Final Gate 判据）；Ticket 各自的建设内容、AC 和 contract references 属于 Ticket，不在此重复。
+> 直接引用当前 decision.md / spec.md。D/S/P 为可选旧别名，不因普通编辑升级；Git commit ID 是唯一允许持久化的历史锚点。Plan 只承载主 session 的全局调度（Composition、Ticket 实施与接线安排/依赖、共享资源协调、全局执行边界、Final Gate 判据）；Ticket 各自的建设内容、AC 和 contract references 属于 Ticket，不在此重复。
 
 ## 摘要
 
@@ -27,8 +27,10 @@ Composition：tickets=true, dag=false
 
 ## 全局调度
 
-| Ticket | 顺序 | Typed dependency | 共享资源（需串行） |
+| Ticket | 实施与接线安排 | Typed dependency | 共享资源与协调 |
 | --- | --- | --- | --- |
+
+用短说明写出可提前开展的工作、真正等待的产物及交接验证条件；资源冲突按实际操作协调。只保留影响安排的结论，线性任务简述顺序即可。
 
 只登记跨 Ticket 的调度信息；单个 Ticket 的建设内容、AC 与 contract references 详见该 Ticket 文件，不在此重复。约束到 Ticket 的映射由 Ticket 自身的 Contract references 承载，本表不重复该映射；跨 Ticket 覆盖完整性由 `plan-review` 在 bundle-admission/full-review 时对照 Decision/Spec 与全部 Ticket 直接核对。
 
