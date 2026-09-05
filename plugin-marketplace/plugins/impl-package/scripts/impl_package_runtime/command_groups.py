@@ -126,6 +126,9 @@ def _parser(group: str) -> argparse.ArgumentParser:
         init = commands.add_parser("init", help="initialize a 3.5 Ticket-only package")
         init.add_argument("--attempt", required=True)
         init.add_argument("--plan", required=True)
+        archive = commands.add_parser("archive-attempt", help="backfill a frozen Attempt Ticket snapshot")
+        archive.add_argument("--attempt", required=True)
+        archive.add_argument("--from-revision", required=True)
         for name in ("status", "validate"):
             child = commands.add_parser(name)
             child.add_argument("--commit")
@@ -237,6 +240,8 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
     if group == "package":
         if args.command == "init":
             return engine.command_init(package, args.attempt, args.plan)
+        if args.command == "archive-attempt":
+            return engine.command_archive_attempt(package, args.attempt, args.from_revision)
         if args.command in {"status", "validate"}:
             return engine.command_validate(package, args.commit, check_arrival_paths=args.command == "validate")
         return engine.command_refresh_progress(package)

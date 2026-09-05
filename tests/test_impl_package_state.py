@@ -1021,6 +1021,168 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(self.state(package)["activeCheckpoints"], {})
         self.assertEqual(self.state(package)["attemptHistory"][-1]["lifecycle"], "frozen")
 
+    def test_terminal_gate_archives_ticket_state_idempotently(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.add_evidence(repo, package)
+        for ticket_id in ("TKT-01", "TKT-02", "TKT-03", "TKT-04"):
+            self.satisfy(repo, package, ticket_id)
+        head = git(repo, "rev-parse", "HEAD")
+
+        self.cli(
+            repo,
+            package,
+            "gate",
+            "pass",
+            "--comparison-commit",
+            head,
+            "--reason",
+            "fixture",
+            "--no-durable-delta-reason",
+            "fixture",
+            "--environment",
+            "test",
+        )
+
+        archive_path = package / ".impl-package" / "attempts" / "initial.json"
+        archive = json.loads(archive_path.read_text(encoding="utf-8"))
+        self.assertEqual(archive["attempt"], "initial")
+        self.assertEqual(set(archive["tickets"]), {"TKT-01", "TKT-02", "TKT-03", "TKT-04"})
+        self.assertTrue(all(row["state"] == "SATISFIED" for row in archive["tickets"].values()))
+        before = archive_path.read_bytes()
+
+        repeated = self.cli(
+            repo,
+            package,
+            "gate",
+            "pass",
+            "--comparison-commit",
+            head,
+            "--reason",
+            "fixture",
+            "--no-durable-delta-reason",
+            "fixture",
+            "--environment",
+            "test",
+        )
+        self.assertTrue(json.loads(repeated.stdout)["idempotent"])
+        self.assertEqual(archive_path.read_bytes(), before)
+
+    def test_package_archive_attempt_backfills_from_revision_and_rejects_conflict(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.add_evidence(repo, package)
+        for ticket_id in ("TKT-01", "TKT-02", "TKT-03", "TKT-04"):
+            self.satisfy(repo, package, ticket_id)
+        head = git(repo, "rev-parse", "HEAD")
+        self.cli(
+            repo,
+            package,
+            "gate",
+            "defer",
+            "--comparison-commit",
+            head,
+            "--reason",
+            "fixture",
+            "--no-durable-delta-reason",
+            "fixture",
+        )
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "freeze initial attempt")
+        revision = git(repo, "rev-parse", "HEAD")
+        archive_path = package / ".impl-package" / "attempts" / "initial.json"
+        archive_path.unlink()
+
+        created = self.cli(
+            repo,
+            package,
+            "package",
+            "archive-attempt",
+            "--attempt",
+            "initial",
+            "--from-revision",
+            revision,
+        )
+        self.assertFalse(json.loads(created.stdout)["idempotent"])
+        repeated = self.cli(
+            repo,
+            package,
+            "package",
+            "archive-attempt",
+            "--attempt",
+            "initial",
+            "--from-revision",
+            revision,
+        )
+        self.assertTrue(json.loads(repeated.stdout)["idempotent"])
+
+        archive = json.loads(archive_path.read_text(encoding="utf-8"))
+        archive["tickets"]["TKT-01"] = {"state": "PENDING"}
+        archive_path.write_text(json.dumps(archive), encoding="utf-8")
+        conflict = self.cli(
+            repo,
+            package,
+            "package",
+            "archive-attempt",
+            "--attempt",
+            "initial",
+            "--from-revision",
+            revision,
+            ok=False,
+        )
+        self.assertIn("archive conflict", conflict.stderr)
+
+    def test_next_attempt_init_archives_a_legacy_frozen_attempt_before_replacement(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        head = git(repo, "rev-parse", "HEAD")
+        self.cli(
+            repo,
+            package,
+            "gate",
+            "defer",
+            "--comparison-commit",
+            head,
+            "--reason",
+            "fixture",
+            "--no-durable-delta-reason",
+            "fixture",
+        )
+        archive_path = package / ".impl-package" / "attempts" / "initial.json"
+        archive_path.unlink()
+        patch_plan = package / "patch-plan.md"
+        patch_plan.write_text(
+            (package / "plan.md").read_text(encoding="utf-8").replace("Attempt ID：initial", "Attempt ID：patch"),
+            encoding="utf-8",
+        )
+        patch_ticket = package / "tickets" / "05-patch.md"
+        patch_ticket.write_text(
+            (package / "tickets" / "01-source.md")
+            .read_text(encoding="utf-8")
+            .replace("TKT-01", "TKT-05")
+            .replace("initial", "patch"),
+            encoding="utf-8",
+        )
+
+        self.cli(
+            repo,
+            package,
+            "package",
+            "init",
+            "--attempt",
+            "patch",
+            "--plan",
+            "docs/implementations/20260813-example/patch-plan.md",
+        )
+
+        archive = json.loads(archive_path.read_text(encoding="utf-8"))
+        self.assertEqual(archive["attempt"], "initial")
+        self.assertEqual(set(archive["tickets"]), {"TKT-01", "TKT-02", "TKT-03", "TKT-04"})
+        self.assertEqual(set(self.state(package)["tickets"]), {"TKT-05"})
+
     def test_situation_footer_covers_each_trigger_class(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)

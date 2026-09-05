@@ -11,11 +11,12 @@
 ├─ progress.md
 ├─ execution/<attempt>/execution-record.md
 ├─ .impl-package/state.json
+├─ .impl-package/attempts/<attempt>.json
 ├─ gate.md
 └─ migration/archive/task-handoffs/   # 迁移后旧 handoff 归档
 ```
 
-`state.json` 是 package 唯一可写 current-state。主 session 是唯一 writer；worker 只返回结构化证据。`progress.md` 和 Execution Record header 是 machine-owned projection；Ticket 是发布后稳定的 Approved 合同，运行时验收状态不回写 Ticket。ER 只保存 judgment/history，不产生 active checkpoint。
+`state.json` 是 package 唯一可写 current-state。`.impl-package/attempts/` 保存 terminal Attempt 的不可变 Ticket 状态快照，只供历史查看，不参与当前 readiness、Gate 或恢复。主 session 是唯一 writer；worker 只返回结构化证据。`progress.md` 和 Execution Record header 是 machine-owned projection；Ticket 是发布后稳定的 Approved 合同，运行时验收状态不回写 Ticket。ER 只保存 judgment/history，不产生 active checkpoint。
 
 路径口径固定：`attempt.plan`、`predecessors`、evidence 与 checkpoint evidence 是 repository-relative；`attemptHistory.executionRecord` 是 package-relative 的 `execution/<attempt>/execution-record.md`。
 
@@ -49,6 +50,8 @@
 
 新 package 不包含 `tasks`、`resume`、DAG runtime projection 或 Task Handoff。`attemptHistory` 只作轻量导航；evidence/checkpoint 只覆盖 current Attempt。`activeCheckpoints` 覆盖写当前值，是正常跨 session 唯一恢复事实源；compact 仅为意外耗尽兜底。
 
+terminal Gate 自动写入 `.impl-package/attempts/<attempt>.json`；下一 Attempt 初始化前也会为旧 runtime 补写当前已冻结 Attempt。历史缺档时，只能用明确 Git revision 执行 `package archive-attempt`，不得从 Execution Record 文本猜测 Ticket 状态；已有不同快照时命令失败，不覆盖。
+
 ## Ticket 与 evidence
 
 Ticket 状态为 `PENDING | BLOCKED | NEEDS-REVALIDATION | SATISFIED | RETIRED`。`RETIRED` 在 Ticket record 中携带 `disposition: waived | superseded`、evidence；superseded 还需 successor。
@@ -61,6 +64,7 @@ Ticket 状态为 `PENDING | BLOCKED | NEEDS-REVALIDATION | SATISFIED | RETIRED`�
 python <plugin>/scripts/impl_package_state.py --package <package> package init --attempt <id> --plan <repo-relative-plan>
 python <plugin>/scripts/impl_package_state.py --package <package> package validate
 python <plugin>/scripts/impl_package_state.py --package <package> package refresh-progress
+python <plugin>/scripts/impl_package_state.py --package <package> package archive-attempt --attempt <id> --from-revision <commit>
 printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <package> evidence add
 python <plugin>/scripts/impl_package_state.py --package <package> evidence invalidate --ticket <id> --claim <id> --artifact <path> --invalidated-by <reason>
 python <plugin>/scripts/impl_package_state.py --package <package> ticket satisfy <id> --expect <state> --revision <commit> --environment <id>

@@ -40,4 +40,4 @@ Evidence 使用存在的仓库相对路径，可带 anchor，并足以解释状�
 - 其他 accepted finding：沿用 implementation、安全、证据或知识分流；review topology 与 closure 始终由 `do-review` 拥有。
 - durable knowledge：Stage 7 登记 `_pending.md` 与 truth pointer，后续交 backfill。
 
-Gate 每次重写 current `gate.md`；Git 与 frozen Execution Record 提供历史。terminal Gate 后全部 runtime mutation fail closed。
+Gate 每次重写 current `gate.md`，terminal Gate 同时生成 `.impl-package/attempts/<attempt>.json` 的只读 Ticket 快照；Git 与 frozen Execution Record 提供其余历史。历史快照缺失时只用明确 revision 运行 `package archive-attempt` 补录，不从叙述文本推断。terminal Gate 后全部 runtime mutation fail closed。

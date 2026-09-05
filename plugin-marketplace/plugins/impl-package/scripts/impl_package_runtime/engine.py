@@ -31,6 +31,7 @@ from situation import (
 )
 
 STATE_PATH = Path(".impl-package/state.json")
+ATTEMPT_ARCHIVE_PATH = Path(".impl-package/attempts")
 PROGRESS_PATH = Path("progress.md")
 EXECUTION_PATH = Path("execution")
 ACTIVE_TRAIL_NAME = "trail.jsonl"
@@ -130,6 +131,62 @@ def _write_text(path: Path, payload: str) -> None:
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:
     _write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+
+
+def _attempt_archive_path(package: Path, attempt: str) -> Path:
+    if ATTEMPT_ID_RE.fullmatch(attempt) is None:
+        raise StateError(f"invalid Attempt ID: {attempt!r}")
+    return package / ATTEMPT_ARCHIVE_PATH / f"{attempt}.json"
+
+
+def _ticket_snapshot(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        raise StateError("Attempt Ticket snapshot must be an object")
+    snapshot: dict[str, dict[str, Any]] = {}
+    for ticket_id, row in value.items():
+        if not isinstance(ticket_id, str) or not ticket_id or not isinstance(row, dict):
+            raise StateError("Attempt Ticket snapshot contains an invalid Ticket")
+        if row.get("state") not in TICKET_STATES:
+            raise StateError(f"Attempt Ticket snapshot has invalid state for {ticket_id}")
+        snapshot[ticket_id] = json.loads(json.dumps(row, ensure_ascii=False))
+    return snapshot
+
+
+def _write_attempt_archive(package: Path, attempt: str, tickets: Any) -> bool:
+    payload = {"attempt": attempt, "tickets": _ticket_snapshot(tickets)}
+    path = _attempt_archive_path(package, attempt)
+    if path.is_file():
+        if _load_json(path) != payload:
+            raise StateError(f"attempt archive conflict: {attempt}")
+        return False
+    _write_json(path, payload)
+    return True
+
+
+def command_archive_attempt(package: Path, attempt: str, revision: str) -> dict[str, Any]:
+    state = _load_json(package / STATE_PATH)
+    summary = _validate_state(package, state, projections=False)
+    history = next((row for row in summary["_history"] if row["id"] == attempt), None)
+    if history is None or history["lifecycle"] != "frozen":
+        raise StateError(f"Attempt {attempt} is not frozen in current history")
+    repo = _repo_root(package)
+    resolved = _validate_commit(repo, revision)
+    state_path = (package / STATE_PATH).resolve().relative_to(repo).as_posix()
+    try:
+        historical = json.loads(_run_git(repo, "show", f"{resolved}:{state_path}"))
+    except json.JSONDecodeError as exc:
+        raise StateError(f"invalid historical state at {resolved}") from exc
+    if not isinstance(historical, dict):
+        raise StateError(f"historical state at {resolved} must be an object")
+    historical_attempt = historical.get("attempt")
+    if not isinstance(historical_attempt, dict) or historical_attempt.get("id") != attempt:
+        raise StateError(f"historical state at {resolved} does not belong to Attempt {attempt}")
+    tickets = _ticket_snapshot(historical.get("tickets"))
+    document_ids = {document["id"] for document in _ticket_documents(package, attempt)}
+    if set(tickets) != document_ids:
+        raise StateError(f"historical Ticket state does not match Attempt {attempt} Ticket files")
+    created = _write_attempt_archive(package, attempt, tickets)
+    return {"attempt": attempt, "revision": resolved, "idempotent": not created}
 
 
 def _trail_path(package: Path, attempt: str) -> Path:
@@ -1030,6 +1087,7 @@ def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
             return _public(_validate_state(package, current))
         if not current_summary["_lifecycle"].frozen:
             raise StateError("current Attempt is not terminal; refusing to replace state")
+        _write_attempt_archive(package, current_summary["attempt"], current["tickets"])
         previous = current["attemptHistory"]
     else:
         previous = []
@@ -1505,6 +1563,7 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
     lifecycle: Lifecycle = summary["_lifecycle"]
     if lifecycle.frozen:
         if lifecycle.gate and lifecycle.gate["verdict"] == verdict and lifecycle.gate["commit"] == resolved:
+            _write_attempt_archive(package, summary["attempt"], state["tickets"])
             return {"formatVersion": FORMAT_VERSION, "verdict": verdict, "attempt": summary["attempt"], "commit": resolved, "idempotent": True}
         raise StateError(f"Attempt {summary['attempt']} is already frozen by terminal Gate {lifecycle.gate_verdict}")
     if verdict in TERMINAL_VERDICTS and resolved != _run_git(repo, "rev-parse", "HEAD"):
@@ -1548,4 +1607,6 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
     _validate_state(package, state, projections=False)
     _write_json(package / STATE_PATH, state)
     _refresh_projections(package, state)
+    if verdict in TERMINAL_VERDICTS:
+        _write_attempt_archive(package, summary["attempt"], state["tickets"])
     return {"formatVersion": FORMAT_VERSION, "verdict": verdict, "attempt": summary["attempt"], "commit": resolved, "idempotent": False}
