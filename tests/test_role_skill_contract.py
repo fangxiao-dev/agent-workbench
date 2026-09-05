@@ -26,9 +26,9 @@ def test_reviewer_uses_luna_worker_for_finding_closure() -> None:
     assert "instruct it not to dispatch subagents" in reviewer
     assert "instead of switching providers" in reviewer
     assert "model `grok-4.5`" not in reviewer
-    assert "model `gpt-5.6-sol`, reasoning effort `high`" in reviewer
-    assert "model `gpt-5.6-terra`, reasoning effort `high`" in reviewer
-    assert "skill definitions, agent protocol or setup, workflow docs" in reviewer
+    assert "Other review phases default to `luna-worker` for all review target classes" in reviewer
+    assert "gpt-5.6-sol" not in reviewer
+    assert "gpt-5.6-terra" not in reviewer
     assert "`P0`, `P1`, `P2`" in reviewer
 
 
