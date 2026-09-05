@@ -24,10 +24,10 @@
     },
     {
       "id": 4,
-      "prompt": "只读模拟：当前有两个互不依赖、资源隔离且已通过门槛的 baby steps。一次派发 receipt 明确成功，另一次 receipt 来源不明；成功的 worker 随后返回。说明当前批次、结果消费与 idle 条件；禁止实际修改文件或派发 worker。",
-      "expected_output": "两个动作进入当前批次 fan out；只确认 receipt 明确成功的派发，来源不明的 receipt 先消除歧义；当前批次的 receipt/return 全部确认或消除歧义后才全局重扫并判断 idle。",
+      "prompt": "只读模拟：当前有两个互不依赖、资源隔离且已通过门槛的 baby steps A/B。A 的 receipt 明确成功并返回，解锁独立的 A2；B 的 receipt 来源不明且可能仍运行。说明结果消费、补派与 idle 条件；禁止实际修改文件或派发 worker。",
+      "expected_output": "消费 A 的 return，核对 A2 的 dependency、授权和资源后立即补派，不等无关 B；B 的 receipt 歧义保持待核且继续保留其资源。整批结束或准备 idle 时全局重扫，所有在途 receipt/return 已确认或消除歧义后才能判断本轮 idle。",
       "files": [],
-      "expectations": ["形成完整当前批次。", "receipt 歧义解决前不推进。", "消费 return 后再判断 idle。"]
+      "expectations": ["A 返回后可补派独立 A2。", "B receipt 有歧义时保留其资源。", "整批结束或准备 idle 时全局重扫。"]
     },
     {
       "id": 5,

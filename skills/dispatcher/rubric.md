@@ -1,6 +1,6 @@
 ---
 target: skills/dispatcher
-updated: 2026-09-02
+updated: 2026-09-05
 ---
 
 ## 原则
@@ -8,7 +8,7 @@ updated: 2026-09-02
 - [已确认] Topic 是共享 foundation、ownership 与 closure point 的横向交付范围；不新增 Delivery Lane 对象、持久状态或第二套调度系统。
 - [已确认] 默认沿一条 lane 派发既定方向和 write-set 内的一个 baby step；同一方向和 write-set 内的机械附属跟随同一步，只有结果会改变 Topic 决策、ownership、dependency、authorization、资源 admission 或立即释放另一条 Topic 时才拆分。
 - [已确认] baby step 以主控 return point 为边界，不打包到 Topic closure；相邻 return point 只在接口稳定且不减少并行机会时合并。
-- [已确认] 当前批次收齐后再全局重扫；连续 `INCOMPLETE`、新 caller/producer 家族或 write-set 外溢统一触发一次 foundation investigation，不叠加细碎 guard。
+- [已确认] 消费 return 后检查受影响候选并补派，整批结束或准备 idle 时全局重扫；连续 `INCOMPLETE`、新 caller/producer 家族或 write-set 外溢统一触发一次 foundation investigation，不叠加细碎 guard。
 - [已确认] 优先降低主控调度负担，不以增加模板、字段、预算或持久化记录换取局部形式完整。
 - [待验证] worker 复用使用可观察的上下文可信度信号。（证据: R2, R3, R4）
 
@@ -16,7 +16,7 @@ updated: 2026-09-02
 
 ### R1 · 2026-09-01
 
-- 采纳 Topic-first、最大 coherent step、batch drain 与单一反抖动规则。
+- 采纳 Topic-first、最大 coherent step 与单一反抖动规则；batch drain 已由 2026-09-05 的按返回补派决定替代。
 - 否决独立 Delivery Lane 实体、lane 模板、数字 dispatch budget、多级 stabilization checkpoint 和持久化 lane 状态。
 - 用户原话：只想保留性价比最高的，不要再增加主控负担。
 

@@ -71,10 +71,12 @@ def test_breadth_gate_does_not_use_search_scope_or_file_count_as_a_limit() -> No
     assert "知识来源能分别阅读或返回，不等于必须分别派发" in gate
 
 
-def test_dispatcher_drains_batch_and_stops_thrashing() -> None:
+def test_dispatcher_refills_after_return_and_stops_thrashing() -> None:
     skill = SKILL.read_text(encoding="utf-8")
 
-    assert "当前批次的 receipt 与 return 全部确认或消除歧义后" in skill
+    assert "每次消费 return 后检查受影响候选" in skill
+    assert "不等待无关 worker" in skill
+    assert "当前批次全部结束或准备进入 idle 时再全局扫描" in skill
     assert "连续两次 `INCOMPLETE`" in skill
     assert "broad check 新发现一类 caller/producer" in skill
     assert "foundation investigation" in skill

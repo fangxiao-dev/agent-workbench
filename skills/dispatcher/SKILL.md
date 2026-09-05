@@ -30,7 +30,7 @@ Dispatcher 面向上游主控，指导 Topic-first admission、当前批次、di
 2. 为每个已解锁 Topic 选择当前 baby step，把互不依赖且资源隔离的步骤组成当前批次并 fan out。`PARALLEL | SERIAL` 只比较当前候选 baby step 的实际 effect footprint，不使用 Topic 或 Ticket 的最终 write-set 并集；未来步骤会冲突不影响当前步骤并行，冲突到达时再串行。review、验证或 worker 在途只阻塞依赖其结论或资源的步骤；其他 Ticket 的只读调研与准备继续释放。文件 ownership 交叉时先由 SDD 判断能否用隔离 worktree 分开。共享操作的合并与复用只是调度优化，不是 dependency；只有不延迟已解锁的独立动作时才合并，否则先执行当前合格步骤并在 return 后重扫。
 3. 单个派发只在宿主 receipt 明确成功后成立。迟到、重复、来源不明或结果不确定的 receipt 先消除歧义，不据此推进后续动作。
 4. worker return 后先消费可归因结果、evidence、diff、residue 与 cleanup，再判断当前 Topic 的下一步；返回不会自动授权后续工作。既定边界内的 tooling retry、format、普通重跑或机械 cleanup 续接当前动作，不创建新业务 step。
-5. 当前批次的 receipt 与 return 全部确认或消除歧义后，再全局扫描候选并形成下一批；没有已解锁且合格的动作时进入 idle。业务状态、验收和 closure 仍由调用方的 owning workflow 判断。
+5. 每次消费 return 后检查受影响候选，核对 dependency、授权与资源后补充派发，不等待无关 worker；当前批次全部结束或准备进入 idle 时再全局扫描。没有已解锁且合格的动作时进入 idle。业务状态、验收和 closure 仍由调用方的 owning workflow 判断。
 
 同一 Topic 连续两次 `INCOMPLETE`、broad check 新发现一类 caller/producer，或实际 write-set 超出原 ownership 时，停止继续派更小的 fix；先释放一个 foundation investigation，重新确定 Topic 边界。
 
