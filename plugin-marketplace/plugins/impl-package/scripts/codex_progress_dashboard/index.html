@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <title>Codex 进度台</title>
-    <link rel="stylesheet" href="/style.css?v=22">
-    <script src="/app.js?v=22" defer></script>
+    <link rel="stylesheet" href="/style.css?v=23">
+    <script src="/app.js?v=23" defer></script>
   </head>
   <body>
     <div class="ambient ambient-one" aria-hidden="true"></div>
@@ -43,7 +43,7 @@
             <dd id="task-status">读取中</dd>
           </div>
           <div>
-            <dt>正式验收</dt>
+            <dt>已验收</dt>
             <dd id="formal-summary">尚未关联</dd>
           </div>
           <div>
@@ -57,15 +57,22 @@
         <section class="panel tickets-panel" aria-labelledby="tickets-title">
           <div class="panel-heading tickets-heading">
             <div>
-              <p class="eyebrow">正式事项状态</p>
-              <h2 id="tickets-title">Tickets验收路径</h2>
+              <p class="eyebrow">实施进度</p>
+              <h2 id="tickets-title">Tickets进度</h2>
             </div>
-            <div class="ticket-legend" aria-label="状态说明">
-              <span><i class="legend-dot done"></i>已验收</span>
-              <span><i class="legend-dot developing"></i>开发中</span>
-              <span><i class="legend-dot investigating"></i>调研中</span>
+            <div class="ticket-view-tools">
+              <label class="attempt-select-label" for="attempt-select">
+                <span>Ticket 视图</span>
+                <select id="attempt-select" aria-label="选择当前或历史 Attempt"></select>
+              </label>
+              <div class="ticket-legend" aria-label="状态说明">
+                <span><i class="legend-dot done"></i>已验收</span>
+                <span><i class="legend-dot developing"></i>开发中</span>
+                <span><i class="legend-dot investigating"></i>调研中</span>
+              </div>
             </div>
           </div>
+          <p class="attempt-view-note" id="attempt-view-note"></p>
           <div class="flow-layout" id="flow-layout" hidden>
             <div class="flow-scroll" id="flow-scroll" aria-label="事项依赖关系图">
               <div class="flow-canvas" id="flow-canvas">
@@ -74,7 +81,7 @@
               </div>
             </div>
           </div>
-          <p class="empty-state" id="ticket-empty">选择一个任务包后显示正式验收状态。</p>
+          <p class="empty-state" id="ticket-empty">选择一个任务包后显示实施进度。</p>
           <div class="ticket-tooltip" id="ticket-tooltip" role="tooltip" hidden>
             <div class="tooltip-heading">
               <div>
@@ -125,18 +132,20 @@
               </div>
             </dl>
             <p class="monitor-thread" id="monitor-thread" hidden></p>
-            <button
-              class="monitor-observations-trigger"
-              id="monitor-observations"
-              type="button"
-              aria-haspopup="dialog"
-              aria-controls="monitor-observation-dialog"
-              hidden
-            >
-              <span>用户纠偏</span>
-              <span id="monitor-observation-count"></span>
-              <span aria-hidden="true">↗</span>
-            </button>
+            <section class="monitor-observations" id="monitor-observations" aria-labelledby="monitor-observation-title" hidden>
+              <header class="monitor-observation-heading">
+                <div>
+                  <h2 id="monitor-observation-title">用户纠偏 <span id="monitor-observation-count"></span></h2>
+                  <p>Package 级 · 跨 Attempt 保留</p>
+                </div>
+                <div class="observation-filter" role="group" aria-label="纠偏分类筛选">
+                  <button type="button" data-observation-filter="all" aria-pressed="true">全部 <span id="observation-filter-all-count">0</span></button>
+                  <button type="button" data-observation-filter="pattern" aria-pressed="false">Pattern <span id="observation-filter-pattern-count">0</span></button>
+                  <button type="button" data-observation-filter="specific" aria-pressed="false">具体动作 <span id="observation-filter-specific-count">0</span></button>
+                </div>
+              </header>
+              <ol class="monitor-observation-list" id="monitor-observation-list"></ol>
+            </section>
           </section>
 
           <section class="panel review-stats-panel" id="review-stats-panel" aria-labelledby="review-stats-title">
@@ -177,22 +186,5 @@
       </details>
     </main>
 
-    <dialog class="observation-dialog" id="monitor-observation-dialog" aria-labelledby="monitor-observation-title">
-      <div class="observation-dialog-shell">
-        <header class="observation-dialog-heading">
-          <div>
-            <p class="eyebrow">调度监控</p>
-            <h2 id="monitor-observation-title">用户纠偏 <span id="monitor-observation-dialog-count"></span></h2>
-            <div class="observation-filter" role="group" aria-label="纠偏分类筛选">
-              <button type="button" data-observation-filter="all" aria-pressed="true">全部 <span id="observation-filter-all-count">0</span></button>
-              <button type="button" data-observation-filter="pattern" aria-pressed="false">Pattern <span id="observation-filter-pattern-count">0</span></button>
-              <button type="button" data-observation-filter="specific" aria-pressed="false">具体动作 <span id="observation-filter-specific-count">0</span></button>
-            </div>
-          </div>
-          <button class="observation-dialog-close" id="monitor-observation-close" type="button" aria-label="关闭用户纠偏浮窗">×</button>
-        </header>
-        <ol class="monitor-observation-list" id="monitor-observation-list"></ol>
-      </div>
-    </dialog>
   </body>
 </html>

@@ -20,7 +20,7 @@ THREAD_ID = "01a05966-5246-73e3-b46f-fd6af55fb661"
 DASHBOARD_ROOT = ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "codex_progress_dashboard"
 
 
-def test_renderer_uses_observation_dialog_and_omits_duplicate_next_action() -> None:
+def test_renderer_uses_attempt_selector_and_inline_observations() -> None:
     html = (DASHBOARD_ROOT / "index.html").read_text(encoding="utf-8")
     javascript = (DASHBOARD_ROOT / "app.js").read_text(encoding="utf-8")
     stylesheet = (DASHBOARD_ROOT / "style.css").read_text(encoding="utf-8")
@@ -31,11 +31,16 @@ def test_renderer_uses_observation_dialog_and_omits_duplicate_next_action() -> N
     assert "nextAction" not in javascript
     assert ".next-inline" not in stylesheet
     assert '"nextAction"' in server
-    assert '<dialog class="observation-dialog"' in html
-    assert 'aria-haspopup="dialog"' in html
-    assert '<details class="monitor-observations"' not in html
-    assert "showModal()" in javascript
-    assert "monitorObservationDialog.close()" in javascript
+    assert 'id="attempt-select"' in html
+    assert 'id="attempt-view-note"' in html
+    assert "pkg?.attempts" in javascript
+    assert "selectedAttemptId" in javascript
+    assert '<section class="monitor-observations"' in html
+    assert "Package 级 · 跨 Attempt 保留" in html
+    assert '<dialog class="observation-dialog"' not in html
+    assert 'aria-haspopup="dialog"' not in html
+    assert "showModal()" not in javascript
+    assert "monitorObservationDialog.close()" not in javascript
     assert 'data-observation-filter="all"' in html
     assert 'data-observation-filter="pattern"' in html
     assert 'data-observation-filter="specific"' in html
@@ -52,7 +57,7 @@ def test_renderer_uses_observation_dialog_and_omits_duplicate_next_action() -> N
     assert 'method: "PATCH"' in javascript
     assert "textarea.maxLength = 2000" in javascript
     assert "新增纠偏" not in html
-    assert ".observation-dialog::backdrop" in stylesheet
+    assert ".observation-dialog::backdrop" not in stylesheet
     assert "Trail 最新状态" not in html
     assert 'id="tooltip-active-list"' in html
     assert 'id="tooltip-result-summary"' in html
@@ -95,8 +100,8 @@ def test_renderer_uses_observation_dialog_and_omits_duplicate_next_action() -> N
     assert "segment.tabIndex = 0" in javascript
     assert "innerHTML" not in javascript
     assert "跨 Track 共同发现" in html
-    assert 'href="/style.css?v=22"' in html
-    assert 'src="/app.js?v=22"' in html
+    assert 'href="/style.css?v=23"' in html
+    assert 'src="/app.js?v=23"' in html
 
 
 def load_module():
@@ -409,7 +414,7 @@ def test_snapshot_separates_observed_work_from_formal_acceptance(tmp_path: Path)
     snapshot = module.build_snapshot(THREAD_ID, relative, db_path)
 
     assert snapshot["actualProgress"]["summary"] == "TKT-01 已实现，四路独立 review 进行中。"
-    assert snapshot["package"]["formalSummary"] == "0/1 已正式验收"
+    assert snapshot["package"]["formalSummary"] == "0/1 已验收"
     assert snapshot["package"]["gateLabel"] == "尚未关闭"
     assert "正式验收状态仍未关闭" in snapshot["package"]["discrepancy"]
     assert snapshot["package"]["tickets"][0]["dependencies"] == ["TKT-00"]
@@ -454,14 +459,73 @@ def test_snapshot_reflects_package_state_changes_without_restart(tmp_path: Path)
     relative = package.relative_to(workspace).as_posix()
     write_jsonl(rollout, [])
     module.ROLLOUT_READER = module.RolloutReader()
-    assert module.build_snapshot(THREAD_ID, relative, db_path)["package"]["formalSummary"] == "0/1 已正式验收"
+    assert module.build_snapshot(THREAD_ID, relative, db_path)["package"]["formalSummary"] == "0/1 已验收"
 
     state_path = package / ".impl-package" / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
     state["tickets"]["TKT-01"]["state"] = "SATISFIED"
     state_path.write_text(json.dumps(state), encoding="utf-8")
 
-    assert module.build_snapshot(THREAD_ID, relative, db_path)["package"]["formalSummary"] == "1/1 已正式验收"
+    assert module.build_snapshot(THREAD_ID, relative, db_path)["package"]["formalSummary"] == "1/1 已验收"
+
+
+def test_package_snapshot_exposes_current_and_frozen_attempt_ticket_views(tmp_path: Path) -> None:
+    module = load_module()
+    _, workspace, _, _ = make_fixture(tmp_path)
+    package = make_package(workspace, {"TKT-14": "PENDING"})
+    state_path = package / ".impl-package" / "state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["attempt"] = {"id": "patch", "plan": "patch-plan.md"}
+    state["attemptHistory"] = [
+        {"id": "legacy", "lifecycle": "frozen", "gate": {"verdict": "defer"}},
+        {"id": "initial", "lifecycle": "frozen", "gate": {"verdict": "defer"}},
+        {"id": "patch", "lifecycle": "active", "gate": None},
+    ]
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    attempts = package / ".impl-package" / "attempts"
+    attempts.mkdir()
+    (attempts / "initial.json").write_text(
+        json.dumps(
+            {
+                "attempt": "initial",
+                "tickets": {
+                    "TKT-01": {"state": "SATISFIED"},
+                    "TKT-02": {"state": "RETIRED"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (package / "tickets" / "01-preview.md").write_text(
+        "# 01 — 初始预览\n\n**Ticket ID：** TKT-01\n**Attempt ID：** initial\n",
+        encoding="utf-8",
+    )
+    (package / "tickets" / "02-history.md").write_text(
+        "# 02 — 历史票\n\nTicket ID：TKT-02\nAttempt ID：initial\n",
+        encoding="utf-8",
+    )
+    (package / "tickets" / "14-current.md").write_text(
+        "# 14 — 当前票\n\nTicket ID：TKT-14\nAttempt ID：patch\n",
+        encoding="utf-8",
+    )
+
+    snapshot = module.package_snapshot(package, [])
+
+    assert [item["id"] for item in snapshot["attempts"]] == ["patch", "initial", "legacy"]
+    assert snapshot["attempts"][0]["current"] is True
+    assert [item["id"] for item in snapshot["attempts"][0]["tickets"]] == ["TKT-14"]
+    historical = snapshot["attempts"][1]
+    assert historical["current"] is False
+    assert historical["available"] is True
+    assert [(item["id"], item["state"]) for item in historical["tickets"]] == [
+        ("TKT-01", "SATISFIED"),
+        ("TKT-02", "RETIRED"),
+    ]
+    assert historical["tickets"][0]["name"] == "初始预览"
+    assert all(item["runtimeState"] is None for item in historical["tickets"])
+    assert all(item["activeActions"] == [] for item in historical["tickets"])
+    assert snapshot["attempts"][2]["available"] is False
+    assert snapshot["attempts"][2]["formalSummary"] == "Ticket 快照不可用"
 
 
 def test_snapshot_includes_review_stats_from_package_helper(tmp_path: Path) -> None:
@@ -742,6 +806,20 @@ def test_snapshot_projects_monitor_evaluation_and_latest_confirmed_observations(
     assert monitor["observations"][0]["topic"] == "敏感内容"
     assert monitor["observations"][0]["content"] == "联系 [邮箱已隐藏]，读取 [本地路径]"
     assert len(monitor["observations"][0]["revision"]) == 64
+
+    state_path = package / ".impl-package" / "state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["attempt"] = {"id": "patch"}
+    state["attemptHistory"] = [
+        {"id": "initial", "gate": {"verdict": "defer"}},
+        {"id": "patch", "gate": None},
+    ]
+    state["tickets"] = {"TKT-14": {"state": "PENDING"}}
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    after_attempt_switch = module.build_snapshot(THREAD_ID, relative, db_path)["monitor"]
+    assert [item["id"] for item in after_attempt_switch["observations"]] == [
+        item["id"] for item in monitor["observations"]
+    ]
 
     before = module.monitor_progress.read_instance(workspace, automation_id)["observations"]
     original = next(item for item in before if item["id"] == "O001")
@@ -1089,3 +1167,27 @@ def test_http_endpoints_serve_tasks_snapshot_and_strict_csp(tmp_path: Path) -> N
         server.shutdown()
         server.server_close()
         worker.join(timeout=2)
+
+
+def test_topic_trail_binding_projects_started_tickets_without_changing_acceptance(tmp_path: Path) -> None:
+    module = load_module()
+    _, workspace, _, _ = make_fixture(tmp_path)
+    package = make_package(workspace, {"TKT-01": "PENDING", "TKT-02": "PENDING", "TKT-03": "SATISFIED"})
+    (package / "tickets" / "01-preview.md").write_text("# TKT-01\n\nTicket ID：TKT-01\n", encoding="utf-8")
+    (package / "tickets" / "TKT-02.md").write_text("# TKT-02\n\nTicket ID：TKT-02\n\n## 阻塞依赖\n\n- implementation: TKT-01\n", encoding="utf-8")
+    write_jsonl(package / "execution" / "initial" / "trail.jsonl", [
+        {"kind": "dispatch", "seq": 1, "subject": "topic:shared", "worker": "/root/shared", "outcome": "RUNNING", "returned": False},
+        {"kind": "escape", "subject": "topic:shared", "ticketIds": ["TKT-01", "TKT-02", "TKT-03", "TKT-99"]},
+        {"kind": "worker-return", "subject": "topic:shared", "worker": "/root/shared", "outcome": "DONE", "summary": "increment returned"},
+        {"kind": "dispatch", "subject": "topic:unbound", "worker": "/root/unbound", "outcome": "RUNNING", "returned": False},
+    ])
+    snapshot = module.package_snapshot(package, [])
+    tickets = {ticket["id"]: ticket for ticket in snapshot["tickets"]}
+    assert tickets["TKT-01"]["runtimeState"] == "DEVELOPING"
+    assert tickets["TKT-02"]["runtimeState"] == "INVESTIGATING"
+    assert tickets["TKT-03"]["state"] == "SATISFIED"
+    assert tickets["TKT-03"]["runtimeState"] is None
+    for ticket_id in ("TKT-01", "TKT-02"):
+        assert tickets[ticket_id]["state"] == "PENDING"
+        assert tickets[ticket_id]["activeActions"] == []
+        assert tickets[ticket_id]["latestResult"]["summary"] == "increment returned"

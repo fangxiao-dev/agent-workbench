@@ -15,6 +15,8 @@ const flowLayout = document.querySelector("#flow-layout");
 const flowCanvas = document.querySelector("#flow-canvas");
 const flowStages = document.querySelector("#flow-stages");
 const dependencyLines = document.querySelector("#dependency-lines");
+const attemptSelect = document.querySelector("#attempt-select");
+const attemptViewNote = document.querySelector("#attempt-view-note");
 const ticketTooltip = document.querySelector("#ticket-tooltip");
 const tooltipCode = document.querySelector("#tooltip-code");
 const tooltipName = document.querySelector("#tooltip-name");
@@ -40,9 +42,6 @@ const monitorOwner = document.querySelector("#monitor-owner");
 const monitorThread = document.querySelector("#monitor-thread");
 const monitorObservations = document.querySelector("#monitor-observations");
 const monitorObservationCount = document.querySelector("#monitor-observation-count");
-const monitorObservationDialog = document.querySelector("#monitor-observation-dialog");
-const monitorObservationDialogCount = document.querySelector("#monitor-observation-dialog-count");
-const monitorObservationClose = document.querySelector("#monitor-observation-close");
 const monitorObservationList = document.querySelector("#monitor-observation-list");
 const observationFilterButtons = [...document.querySelectorAll("[data-observation-filter]")];
 const observationFilterAllCount = document.querySelector("#observation-filter-all-count");
@@ -61,6 +60,8 @@ let selectedPackage = null;
 let packageGroups = [];
 let selectedTicketId = null;
 let previewTicketId = null;
+let selectedAttemptId = null;
+let currentPackageSnapshot = null;
 let currentTickets = [];
 let ticketSignature = "";
 let currentObservations = [];
@@ -71,11 +72,6 @@ let observationFilter = "all";
 
 function clear(node) {
   while (node.firstChild) node.firstChild.remove();
-}
-
-function closeObservationDialog() {
-  cancelObservationEdit();
-  if (monitorObservationDialog.open) monitorObservationDialog.close();
 }
 
 function option(value, label) {
@@ -541,15 +537,62 @@ function renderMonitor(monitor) {
 
   const observations = Array.isArray(monitor.observations) ? monitor.observations : [];
   monitorObservations.hidden = !observations.length;
-  if (!observations.length) closeObservationDialog();
   monitorObservationCount.textContent = observations.length ? `· ${observations.length}` : "";
-  monitorObservationDialogCount.textContent = observations.length ? `· ${observations.length}` : "";
   const nextSignature = JSON.stringify(observations);
   if (editingObservationId) {
     pendingObservations = observations;
   } else if (nextSignature !== observationSignature) {
     renderObservationList(observations);
   }
+}
+
+function renderAttemptTickets(pkg) {
+  currentPackageSnapshot = pkg;
+  const attempts = Array.isArray(pkg?.attempts) && pkg.attempts.length
+    ? pkg.attempts
+    : pkg
+      ? [{
+        id: pkg.audit?.attempt || "current",
+        current: true,
+        available: true,
+        tickets: pkg.tickets || [],
+        formalSummary: pkg.formalSummary,
+      }]
+      : [];
+  const current = attempts.find((item) => item.current) || attempts[0] || null;
+  if (!attempts.some((item) => item.id === selectedAttemptId)) {
+    selectedAttemptId = current?.id || null;
+  }
+  clear(attemptSelect);
+  attempts.forEach((item) => {
+    const count = item.available ? item.tickets.length : "无快照";
+    const prefix = item.current ? "当前" : "历史";
+    attemptSelect.append(option(item.id, `${prefix} · ${item.id}（${count}）`));
+  });
+  attemptSelect.disabled = attempts.length < 2;
+  attemptSelect.value = selectedAttemptId || "";
+  const selected = attempts.find((item) => item.id === selectedAttemptId) || current;
+  if (!selected) {
+    attemptViewNote.textContent = "当前任务包没有可展示的 Attempt。";
+    ticketEmpty.textContent = "选择一个任务包后显示实施进度。";
+    renderTickets([], null);
+    return;
+  }
+  if (selected.current) {
+    const hiddenCount = attempts.filter((item) => !item.current).length;
+    attemptViewNote.textContent = hiddenCount
+      ? `当前视图只显示本次 Attempt；另有 ${hiddenCount} 个历史 Attempt 可主动查看。`
+      : "当前视图显示本次 Attempt。";
+  } else if (!selected.available) {
+    attemptViewNote.textContent = `历史快照 · 只读 · ${selected.id} 尚无 Ticket 快照。`;
+  } else {
+    const verdict = selected.gate?.verdict ? ` · Gate ${selected.gate.verdict}` : "";
+    attemptViewNote.textContent = `历史快照 · 只读 · ${selected.formalSummary}${verdict}`;
+  }
+  ticketEmpty.textContent = selected.available
+    ? "该 Attempt 没有 Ticket。"
+    : "该历史 Attempt 尚无 Ticket 快照。";
+  renderTickets(selected.tickets || [], selected.current ? pkg.currentTicketId : null);
 }
 
 function renderObservationList(observations) {
@@ -769,7 +812,7 @@ function render(snapshot) {
   const pkg = snapshot.package;
   formalSummary.textContent = pkg ? pkg.formalSummary : "尚未关联";
   gateLabel.textContent = pkg ? pkg.gateLabel : "尚未关联";
-  renderTickets(pkg?.tickets || [], pkg?.currentTicketId || null);
+  renderAttemptTickets(pkg);
   renderReviewStats(pkg?.reviewStats || null);
   renderMonitor(snapshot.monitor);
 
@@ -817,6 +860,9 @@ function selectPackage(identity) {
   if (!group) return;
   selectedPackage = group;
   selectedTask = group.task.id;
+  selectedAttemptId = null;
+  currentPackageSnapshot = null;
+  ticketSignature = "";
   packageSelect.value = group.identity;
   taskReadout.textContent = group.task.name;
   localStorage.setItem("codex-progress-package", group.identity);
@@ -845,11 +891,10 @@ packageSelect.addEventListener("change", () => {
   selectPackage(packageSelect.value);
 });
 
-monitorObservations.addEventListener("click", () => {
-  observationFilter = "all";
-  renderObservationList(currentObservations);
-  monitorObservationDialog.showModal();
-  monitorObservationClose.focus();
+attemptSelect.addEventListener("change", () => {
+  selectedAttemptId = attemptSelect.value;
+  ticketSignature = "";
+  renderAttemptTickets(currentPackageSnapshot);
 });
 
 observationFilterButtons.forEach((button) => {
@@ -858,11 +903,6 @@ observationFilterButtons.forEach((button) => {
     observationFilter = button.dataset.observationFilter;
     renderObservationList(currentObservations);
   });
-});
-
-monitorObservationClose.addEventListener("click", closeObservationDialog);
-monitorObservationDialog.addEventListener("click", (event) => {
-  if (event.target === monitorObservationDialog) closeObservationDialog();
 });
 
 function showError(error) {
@@ -892,6 +932,10 @@ async function boot() {
   const requestedGroup = packageGroups.find((group) => (
     group.path === requestedPath && group.tasks.some((task) => task.id === requestedTask)
   )) || packageGroups.find((group) => group.path === requestedPath);
+  if (requestedGroup && requestedTask) {
+    requestedGroup.task = requestedGroup.tasks.find((task) => task.id === requestedTask)
+      || { id: requestedTask, name: "正在读取指定任务…" };
+  }
   const saved = localStorage.getItem("codex-progress-package");
   const initial = requestedGroup
     || packageGroups.find((group) => group.identity === saved)
@@ -913,7 +957,6 @@ window.addEventListener("scroll", () => {
 }, true);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    closeObservationDialog();
     clearTicketPreview();
     hideTicketTooltip();
   }

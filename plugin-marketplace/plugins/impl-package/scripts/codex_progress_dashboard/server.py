@@ -497,7 +497,9 @@ def _plan_dependencies(package_root: Path, ticket_ids: list[str]) -> dict[str, d
     return result
 
 
-def _ticket_metadata(package_root: Path, ticket_ids: list[str]) -> dict[str, dict[str, Any]]:
+def _ticket_metadata(
+    package_root: Path, ticket_ids: list[str], attempt_id: str | None = None
+) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
     ticket_dir = package_root / "tickets"
     if not ticket_dir.is_dir():
@@ -507,9 +509,21 @@ def _ticket_metadata(package_root: Path, ticket_ids: list[str]) -> dict[str, dic
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        match = re.search(rf"Ticket ID\s*[：:]\s*({TICKET_ID_PATTERN})", text, re.I)
+        match = re.search(
+            rf"(?:\*\*)?Ticket ID(?:\*\*)?\s*[：:](?:\*\*)?\s*({TICKET_ID_PATTERN})",
+            text,
+            re.I,
+        )
         if not match:
             continue
+        if attempt_id is not None:
+            attempt_match = re.search(
+                r"(?:\*\*)?Attempt ID(?:\*\*)?\s*[：:](?:\*\*)?\s*([^\s*]+)",
+                text,
+                re.I,
+            )
+            if attempt_match and attempt_match.group(1) != attempt_id:
+                continue
         ticket_id = _resolve_ticket_id(match.group(1), ticket_ids)
         heading = next((line[2:].strip() for line in text.splitlines() if line.startswith("# ")), ticket_id)
         heading = re.sub(r"^\d+\s*[—–-]\s*", "", heading).strip()
@@ -531,6 +545,67 @@ def _ticket_metadata(package_root: Path, ticket_ids: list[str]) -> dict[str, dic
             "dependencyTypes": dependency_types,
         }
     return result
+
+
+def _historical_attempt(
+    package_root: Path, history: dict[str, Any]
+) -> dict[str, Any]:
+    attempt_id = str(history.get("id", ""))
+    unavailable = {
+        "id": attempt_id,
+        "current": False,
+        "available": False,
+        "lifecycle": history.get("lifecycle"),
+        "gate": history.get("gate"),
+        "formalSummary": "Ticket 快照不可用",
+        "tickets": [],
+        "counts": {},
+    }
+    if re.fullmatch(r"(?:initial|[A-Za-z0-9][A-Za-z0-9_-]{0,79})", attempt_id) is None:
+        return unavailable
+    archive_path = package_root / ".impl-package" / "attempts" / f"{attempt_id}.json"
+    try:
+        archive = json.loads(archive_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return unavailable
+    ticket_states = archive.get("tickets") if isinstance(archive, dict) else None
+    if not isinstance(archive, dict) or archive.get("attempt") != attempt_id or not isinstance(ticket_states, dict):
+        return unavailable
+    ticket_ids = [str(ticket_id) for ticket_id in ticket_states]
+    metadata = _ticket_metadata(package_root, ticket_ids, attempt_id)
+    tickets = []
+    for ticket_id, value in ticket_states.items():
+        meta = metadata.get(str(ticket_id).upper(), {})
+        dependency_types = {
+            name: list(meta.get("dependencyTypes", {}).get(name, []))
+            for name in ("implementation", "acceptance", "release")
+        }
+        dependencies = [
+            dependency
+            for dependency_type in ("implementation", "acceptance", "release")
+            for dependency in dependency_types[dependency_type]
+        ]
+        tickets.append(
+            {
+                "id": str(ticket_id),
+                "name": meta.get("name", str(ticket_id)),
+                "state": str(value.get("state", "UNKNOWN")) if isinstance(value, dict) else "UNKNOWN",
+                "completionHints": meta.get("completionHints", []),
+                "dependencies": list(dict.fromkeys(dependencies)),
+                "dependencyTypes": dependency_types,
+                "runtimeState": None,
+                "activeActions": [],
+                "latestResult": None,
+            }
+        )
+    counts = Counter(ticket["state"] for ticket in tickets)
+    return {
+        **unavailable,
+        "available": True,
+        "formalSummary": f"{counts.get('SATISFIED', 0)}/{len(tickets)} 已验收",
+        "tickets": tickets,
+        "counts": dict(counts),
+    }
 
 
 def _gate_label(state: dict[str, Any]) -> tuple[str, str]:
@@ -610,6 +685,25 @@ def _ticket_trail_projection(
     rows = _attempt_trail_rows(package_root, attempt_id)
     if rows is None:
         return [], [], {}
+    # Topic 的归属独立于派发/返回，可在旧记录之后补齐；只采信明确的 Ticket ID。
+    topic_tickets: dict[str, list[str]] = {}
+    for row in rows:
+        subject = row.get("subject")
+        bindings = row.get("ticketIds")
+        if isinstance(subject, str) and subject.startswith("topic:") and isinstance(bindings, list):
+            topic_tickets[subject] = list(dict.fromkeys(
+                resolved for token in bindings if isinstance(token, str)
+                if (resolved := _resolve_ticket_id(token, ticket_ids)) in ticket_ids
+            ))
+    expanded_rows = []
+    for row in rows:
+        subject = row.get("subject")
+        if isinstance(subject, str) and subject.startswith("topic:"):
+            expanded_rows.extend({**row, "subject": f"ticket:{ticket_id}"}
+                                 for ticket_id in topic_tickets.get(subject, []))
+        else:
+            expanded_rows.append(row)
+    rows = expanded_rows
     started: list[str] = []
     open_dispatches: list[dict[str, Any]] = []
     latest_results: dict[str, dict[str, Any]] = {}
@@ -642,7 +736,8 @@ def _ticket_trail_projection(
                 (
                     index
                     for index in range(len(open_dispatches) - 1, -1, -1)
-                    if reference in _trail_identifiers(open_dispatches[index])
+                    if open_dispatches[index]["ticketId"] == ticket_id
+                    and reference in _trail_identifiers(open_dispatches[index])
                 ),
                 None,
             )
@@ -756,7 +851,8 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
     state = json.loads(state_path.read_text(encoding="utf-8"))
     ticket_states = state.get("tickets") if isinstance(state.get("tickets"), dict) else {}
     ticket_ids = [str(ticket_id) for ticket_id in ticket_states]
-    metadata = _ticket_metadata(package_root, ticket_ids)
+    attempt = state.get("attempt") if isinstance(state.get("attempt"), dict) else {}
+    metadata = _ticket_metadata(package_root, ticket_ids, attempt.get("id"))
     plan_dependencies = _plan_dependencies(package_root, ticket_ids)
     tickets = []
     for ticket_id, value in ticket_states.items():
@@ -793,7 +889,6 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
         for ticket in tickets
     }
     ready_ticket_ids = impl_package_engine.ready_tickets(readiness_dependencies, ticket_state_rows)
-    attempt = state.get("attempt") if isinstance(state.get("attempt"), dict) else {}
     terminal_ticket_ids = {
         ticket["id"] for ticket in tickets if ticket["state"] in {"SATISFIED", "RETIRED"}
     }
@@ -853,9 +948,32 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
             "但正式验收状态仍未关闭；两种口径已分开保留。"
         )
     satisfied = counts.get("SATISFIED", 0)
+    current_attempt = attempt.get("id")
+    history = state.get("attemptHistory") if isinstance(state.get("attemptHistory"), list) else []
+    current_history = next(
+        (row for row in history if isinstance(row, dict) and row.get("id") == current_attempt),
+        {},
+    )
+    attempts = [
+        {
+            "id": current_attempt,
+            "current": True,
+            "available": True,
+            "lifecycle": current_history.get("lifecycle", "active"),
+            "gate": current_history.get("gate"),
+            "formalSummary": f"{satisfied}/{len(tickets)} 已验收",
+            "tickets": tickets,
+            "counts": dict(counts),
+        },
+        *[
+            _historical_attempt(package_root, row)
+            for row in reversed(history)
+            if isinstance(row, dict) and row.get("id") != current_attempt
+        ],
+    ]
     return {
         "name": _plan_name(package_root),
-        "formalSummary": f"{satisfied}/{len(tickets)} 已正式验收",
+        "formalSummary": f"{satisfied}/{len(tickets)} 已验收",
         "gateLabel": gate_label,
         "gateValue": gate_value,
         "nextAction": next_action or "当前 package 没有登记下一动作。",
@@ -865,6 +983,7 @@ def package_snapshot(package_root: Path, activities: list[dict[str, str]]) -> di
         "readyTicketIds": ready_ticket_ids,
         "runningTicketIds": running_ticket_ids,
         "tickets": tickets,
+        "attempts": attempts,
         "counts": dict(counts),
         "reviewStats": review_stats_snapshot(package_root),
         "audit": {
