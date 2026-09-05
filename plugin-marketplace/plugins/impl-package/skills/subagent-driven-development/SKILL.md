@@ -64,10 +64,10 @@ Acceptance 是结论点，不天然是 dispatch blocker。等待 worker、review
 | lane | lane 上依次出现的动作 | 独立性 | 退役或换 worker 的条件 |
 | --- | --- | --- | --- |
 | work lane | investigate → implement → fix | 拥有该 Topic 的实现上下文与 write ownership | Topic closure、scope/ownership 实质变化、上下文不可采信或持续卡住 |
-| review lane | initial review → finding recheck | 始终独立于 work lane；同 Topic reviewer 可以复用 | Topic closure、review scope 实质变化或独立性失效 |
+| review lane | delta review → finding recheck | 始终独立于 work lane，reviewer 不审自己实现的增量；同 review lane 默认复用，每次只交新的 base/head 与本次增量 | Topic closure、review scope 实质变化、独立性失效、上下文压缩失真、反复漏掉同类问题，或沿用旧结论而不核查新 diff |
 | test lane | 同一有界 test campaign 的运行、重跑与异常收集 | 不承担业务裁决或修复 | campaign 结束、环境/comparison point 变化或结果已交付 |
 
-新 Topic 使用 fresh worker；同一 Topic/lane 连续且上下文可信时复用。
+新 Topic 使用 fresh worker；同一 Topic/lane 连续且上下文可信时复用。更换 reviewer 时简述理由；正式终审（terminal-final）的 reviewer 选择由 `/impl-package:do-review` 另行决定。
 
 material-risk Topic（shared seam、安全、数据完整性、并发、migration、权限或不可逆外部副作用）读取 [Material Review Gate](references/review-gate.md)。
 
@@ -75,7 +75,7 @@ material-risk Topic（shared seam、安全、数据完整性、并发、migratio
 
 ## Step 5 · 消费结果并重排
 
-主 session 核对可归因 diff、evidence、residue 和 cleanup；worker 自证（focused tests、lint、diff check）通过后，先把当前 baby step 判定为 DONE/BLOCKED/INCOMPLETE，再冻结这次 dispatch-to-return 的增量（固定 diff 或直接 commit）作为轻量 delta review 的确定输入，并同时为每个 baby step 使用 fresh reviewer 启动轻量 delta review、显式释放下一个 baby step，不等 review 返回。当前返回不会自动授权下一步；轻量 delta review 不产生 review requirement、不改 Ticket/evidence 状态、不作为主线等待条件。
+主 session 核对可归因 diff、evidence、residue 和 cleanup；worker 自证（focused tests、lint、diff check）通过后，先把当前 baby step 判定为 DONE/BLOCKED/INCOMPLETE，再冻结这次 dispatch-to-return 的增量（固定 diff 或直接 commit）作为轻量 delta review 的确定输入，并同时沿同 Topic review lane 复用独立 reviewer 启动轻量 delta review、显式释放下一个 baby step，不等 review 返回。冻结增量与派出该步 delta review 属于同一次 return 消费，不先连续消费多步再集中补派。当前返回不会自动授权下一步；轻量 delta review 不产生 review requirement、不改 Ticket/evidence 状态、不作为主线等待条件。
 独立 formal review 的判断点是 shared seam、完整 source unit 或集成边界，由主 session 判断是否已到达；只有到达该点才产生 review requirement。只归一化真正有消费者的事实：
 
 - worker outcome：`DONE | BLOCKED | INCOMPLETE`；

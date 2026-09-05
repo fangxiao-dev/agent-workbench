@@ -1,6 +1,6 @@
 ---
 target: plugin-marketplace/plugins/impl-package/skills/subagent-driven-development
-updated: 2026-09-01
+updated: 2026-09-05
 ---
 
 ## 原则
@@ -10,7 +10,7 @@ updated: 2026-09-01
 - [已确认] 方法主轴是 `Topic → dependency class → execution lane → lifecycle`；worker 复用来自同一 Topic/lane 连续性，新 Topic fresh，Topic closure 后退役。（证据: R12）
 - [已确认] Acceptance Gate/Checkpoint 是结论点，不自动阻止隔离、可回收且不绑定未稳定语义的一步前瞻准备。（证据: R12）
 - [已确认] worker mode 统一为 `investigate | implement | fix | verify`；独立 review topology 与 finding closure 由 `do-review` 拥有。（证据: R12）
-- [已确认] work lane 可复用同 Topic implementer/fixer；review lane 必须独立于 work lane但可复用同 Topic reviewer；test lane 只在有界 campaign 内复用。（证据: R12）
+- [已确认] work lane 可复用同 Topic implementer/fixer；review lane 必须独立于 work lane，但同 review scope 默认复用 reviewer；test lane 只在有界 campaign 内复用。（证据: R12, R16）
 - [已确认] 真实消费者使用 `DONE|BLOCKED|INCOMPLETE`、`EVIDENCE_SUFFICIENT|EVIDENCE_GAP` 和 `PENDING_REVIEW|PASSED`，主 session 将其作为 Topic-local facts 消费。（证据: R12）
 - [已确认] foundation、acceptance、resource、authorization dependency 分开判断；共享可变资源能隔离才并行，否则串行并指定 cleanup owner。（证据: R12）
 - [已确认] `investigate`、`implement`、`fix` 的派发 prompt 由 caller 按单一目标和强相关上下文裁剪；executor、model、provider 选择不属于本 Skill。（证据: R14）
@@ -44,3 +44,11 @@ updated: 2026-09-01
 - 采纳最大 coherent step：局部调查、实现、自证、format、普通重跑和机械 cleanup 在边界稳定时跟随同一动作。
 - 采纳单一反抖动规则：连续 `INCOMPLETE`、新 caller/producer 家族或 write-set 外溢时回到 foundation investigation，不继续微型 fix。
 - 用户明确要求只保留性价比最高的改动，不增加主控负担。
+
+### R16 · 2026-09-05（轻量 delta review 的 reviewer 复用）
+
+- 撤销 Step 5 的 “每个 baby step 使用 fresh reviewer”：它与同文件 Step 4 的 lane 表、`review-gate.md` 和 R12 冲突，且在实运行中造成每步重建审查上下文。
+- 采纳默认复用：同 review lane 复用独立 reviewer，每次只交新的 base/head 与本次增量；reviewer 仍不得审自己实现的增量。
+- 换人条件收在 Step 4 lane 表：Topic closure、scope 实质变化、独立性失效、上下文压缩失真、反复漏掉同类问题、沿用旧结论不核查新 diff。
+- `review-gate.md` 不再克隆 reviewer lifecycle，改为回指 Step 4；terminal-final 的 reviewer 选择归 `do-review`。
+- 用户原话：独立性必须保留，上下文不必清空。

@@ -4,6 +4,6 @@ shared seam（改动是否改变多个执行方共同依赖的接口、协议、
 
 work lane 的 `DONE` 在 required review 完成前保持 `PENDING_REVIEW`；独立 review lane PASS 后才成为 `PASSED`。
 
-review lane 始终独立于 work lane。同一 Topic 的 reviewer 可以承担 finding recheck；review scope 实质变化、独立性失效或 Topic 已闭合时退役并重新选择 reviewer。finding 默认回到同 Topic work lane 修复；只有 scope/ownership 实质变化、上下文不可采信或需要全新视角时更换 worker。
+review lane 始终独立于 work lane；reviewer 的复用与退役按 SKILL.md Step 4 的 review lane lifecycle，本文件不另立条件。finding 默认回到同 Topic work lane 修复；只有 scope/ownership 实质变化、上下文不可采信或需要全新视角时更换 worker。
 
 完成标准：material risk Topic 已标记其所属 Ticket 需要 review，`PENDING_REVIEW` 未被压成 PASS，reviewer 与 implementer 保持独立。

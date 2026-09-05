@@ -10,15 +10,11 @@ updated: 2026-09-05
 - [已确认] baby step 以主控 return point 为边界，不打包到 Topic closure；相邻 return point 只在接口稳定且不减少并行机会时合并。
 - [已确认] 消费 return 后检查受影响候选并补派，整批结束或准备 idle 时全局重扫；连续 `INCOMPLETE`、新 caller/producer 家族或 write-set 外溢统一触发一次 foundation investigation，不叠加细碎 guard。
 - [已确认] 优先降低主控调度负担，不以增加模板、字段、预算或持久化记录换取局部形式完整。
+- [已确认] review lane 与 work lane 的独立性和上下文连续性是两件事：reviewer 不审自己实现的增量，但默认沿同 review scope 复用并只接新的 base/head 与本次增量。（证据: R6）
+- [已确认] 逐步复核的节拍靠可观察信号维持：派审与冻结增量同一次消费，派审滞后或 delta 积压是并发过载信号；不设固定 lane 数或数字预算。（证据: R6）
 - [待验证] worker 复用使用可观察的上下文可信度信号。（证据: R2, R3, R4）
 
 ## 决策记录（滚动，最近 ≤5 轮）
-
-### R1 · 2026-09-01
-
-- 采纳 Topic-first、最大 coherent step 与单一反抖动规则；batch drain 已由 2026-09-05 的按返回补派决定替代。
-- 否决独立 Delivery Lane 实体、lane 模板、数字 dispatch budget、多级 stabilization checkpoint 和持久化 lane 状态。
-- 用户原话：只想保留性价比最高的，不要再增加主控负担。
 
 ### R2 · 2026-09-02
 
@@ -42,3 +38,11 @@ updated: 2026-09-05
 
 - 采纳把结构 foundation 与下游行为或安全 finding 的分步规则合并进既有 dependency 语义，不新增特例段，也不在 SDD 复制。
 - 用户原话：统一；同意。
+
+### R6 · 2026-09-05
+
+- 采纳同 review scope 默认复用 reviewer：独立性由“不审自己实现的增量”保证，上下文连续性有助于发现旧问题被重新引入；换人条件写成可观察信号（scope 变化、上下文失真、反复漏检、沿用旧结论不核查新 diff）并要求简述理由。
+- 采纳逐步复核的节拍规则：冻结增量与派审同属一次 return 消费；在途 review 按轮消费；派审滞后或 delta 积压到 findings 赶不上下一步时先消化再扩并发。
+- 采纳“增量大到 review 跟不上”作为额外切分信号，仍不设行数上限。
+- 继续否决固定 lane 数与数字 dispatch budget。
+- 用户原话：不必每个 Step 都强制 fresh；主要不是同一个 Step 被重复审查，而是 Step 多、Review 派发滞后且消化不够及时。
