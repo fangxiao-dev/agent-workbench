@@ -25,7 +25,7 @@ worker 返回后，caller 消费已有 evidence、diff 和验证结果，再决�
 
 ## Step 1 · 定义 Topic
 
-先定义 Topic 的 foundation、ownership、closure point 与生命周期，再选择当前唯一 baby step。固定该动作的 bounded outcome、write-set、禁改范围、前置证据、成功条件与答案形态；comparison point 归 review lane，由 do-review 固定。只有通过 Dispatcher 的 Topic-first 门槛后，才选择本次 worker mode 并派发。
+先定义 Topic 的 foundation、ownership、closure point 与生命周期，再选择当前唯一 baby step。固定该动作的 bounded outcome、write-set、禁改范围、前置证据、成功条件与答案形态；comparison point 归 review lane，由 do-review 固定。只有通过 Dispatcher 的 Topic-first 门槛后，才选择本次 worker mode 并派发。上一步轻量 delta review 的已确认 findings 随下一个 baby step 的 brief 一并下发，默认在该步一起修复。
 
 常见误判既包括把整个 Ticket 交给一个 worker，也包括把同一 coherent outcome 的每个测试、格式化和机械修复都重新派发。前者缺少边界，后者制造调度开销；都应回到 Topic 的当前决策点。
 
@@ -75,8 +75,8 @@ material-risk Topic（shared seam、安全、数据完整性、并发、migratio
 
 ## Step 5 · 消费结果并重排
 
-主 session 核对可归因 diff、evidence、residue 和 cleanup；worker 自证（focused tests、lint、diff check）通过后，先把当前 baby step 判定为 DONE/BLOCKED/INCOMPLETE，再决定是否通过 follow-up 复用原 worker 执行同一 Topic 的下一步。当前返回不会自动授权下一步；review 只在到达 review 点后安排。
-独立 review 的判断点是 shared seam、完整 source unit 或集成边界，由主 session 判断是否已到达；review requirement 只在到达该点后产生。只归一化真正有消费者的事实：
+主 session 核对可归因 diff、evidence、residue 和 cleanup；worker 自证（focused tests、lint、diff check）通过后，先把当前 baby step 判定为 DONE/BLOCKED/INCOMPLETE，再冻结这次 dispatch-to-return 的增量（固定 diff 或直接 commit）作为轻量 delta review 的确定输入，并同时启动该轻量 review、显式释放下一个 baby step，不等 review 返回。当前返回不会自动授权下一步；轻量 delta review 不产生 review requirement、不改 Ticket/evidence 状态、不作为主线等待条件。
+独立 formal review 的判断点是 shared seam、完整 source unit 或集成边界，由主 session 判断是否已到达；只有到达该点才产生 review requirement。只归一化真正有消费者的事实：
 
 - worker outcome：`DONE | BLOCKED | INCOMPLETE`；
 - investigation：`EVIDENCE_SUFFICIENT | EVIDENCE_GAP`；
