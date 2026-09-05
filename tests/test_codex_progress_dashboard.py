@@ -36,6 +36,19 @@ def test_renderer_uses_observation_dialog_and_omits_duplicate_next_action() -> N
     assert '<details class="monitor-observations"' not in html
     assert "showModal()" in javascript
     assert "monitorObservationDialog.close()" in javascript
+    assert 'data-observation-filter="all"' in html
+    assert 'data-observation-filter="pattern"' in html
+    assert 'data-observation-filter="specific"' in html
+    assert 'role="group" aria-label="纠偏分类筛选"' in html
+    assert 'function observationKind(item)' in javascript
+    assert 'return item.kind === "pattern" ? "pattern" : "specific"' in javascript
+    assert 'kind.textContent = itemKind === "pattern" ? "Pattern" : "具体动作"' in javascript
+    assert 'empty.textContent = "该分类暂无用户纠偏。"' in javascript
+    assert "topic.textContent" not in javascript
+    assert "item.topic" not in javascript
+    assert '"kind": value["kind"]' in server
+    assert 'edit.setAttribute("aria-label", "编辑这条纠偏的正文")' in javascript
+    assert 'button.disabled = Boolean(editingObservationId)' in javascript
     assert 'method: "PATCH"' in javascript
     assert "textarea.maxLength = 2000" in javascript
     assert "新增纠偏" not in html
@@ -47,11 +60,20 @@ def test_renderer_uses_observation_dialog_and_omits_duplicate_next_action() -> N
     assert 'if (runtimeState === "DEVELOPING") return "开发中"' in javascript
     assert 'if (runtimeState === "INVESTIGATING") return "调研中"' in javascript
     assert 'if (runtimeState === "READY") return "可启动"' in javascript
+    assert 'SATISFIED: "已验收"' in javascript
     assert "tooltipState.textContent = stateLabel(ticket.state, ticket.runtimeState)" in javascript
-    assert '.flow-node.is-developing::after' in stylesheet
-    assert 'content: "开发中"' in stylesheet
-    assert '.flow-node.is-investigating::after' in stylesheet
-    assert 'content: "调研中"' in stylesheet
+    assert '<i class="legend-dot done"></i>已验收' in html
+    assert '<i class="legend-dot developing"></i>开发中' in html
+    assert '<i class="legend-dot investigating"></i>调研中' in html
+    assert 'grid-template-columns: repeat(2, minmax(0, 1fr))' in stylesheet
+    assert 'max-width: 868px' in stylesheet
+    assert 'flex: 1 1 168px' in stylesheet
+    assert '.flow-node.satisfied { border-left-color: var(--acid); background: rgba(139, 165, 39, .07); }' in stylesheet
+    assert '.flow-node.is-developing { border-color: #39789f; background: rgba(57, 120, 159, .1);' in stylesheet
+    assert "function stageLabel" not in javascript
+    assert 'document.createElement("h3")' not in javascript
+    assert ".flow-stage > h3" not in stylesheet
+    assert 'max-width: 208px' in stylesheet
     assert 'id="task-select"' not in html
     assert '<output class="task-readout" id="task-readout"' in html
     assert "taskSelect" not in javascript
@@ -62,20 +84,19 @@ def test_renderer_uses_observation_dialog_and_omits_duplicate_next_action() -> N
     assert 'id="review-stats-panel"' in html
     assert 'id="review-stats-unique"' in html
     assert 'id="review-stats-closed"' in html
-    assert 'id="review-chart-segments"' in html
-    assert 'id="review-chart-labels"' in html
-    assert 'id="review-chart-tooltip"' in html
+    assert 'id="review-bar"' in html
+    assert 'id="review-bar-detail"' in html
     assert 'id="review-stats-ticket-list"' not in html
     assert 'id="review-stats-coverage"' not in html
     assert "数据覆盖提示" not in html
     assert "reviewStats" in javascript
     assert "reviewStats" in server
     assert "pointerenter" in javascript
-    assert 'segment.setAttribute("tabindex", "0")' in javascript
+    assert "segment.tabIndex = 0" in javascript
     assert "innerHTML" not in javascript
     assert "跨 Track 共同发现" in html
-    assert 'href="/style.css?v=12"' in html
-    assert 'src="/app.js?v=12"' in html
+    assert 'href="/style.css?v=22"' in html
+    assert 'src="/app.js?v=22"' in html
 
 
 def load_module():
@@ -643,6 +664,7 @@ def test_snapshot_projects_monitor_evaluation_and_latest_confirmed_observations(
             automation_id,
             {
                 "id": None,
+                "kind": "pattern" if index <= 3 else "one-time",
                 "topic": f"纠偏事项 {index}",
                 "content": f"纠偏 {index}",
                 "scope": "task",
@@ -659,6 +681,7 @@ def test_snapshot_projects_monitor_evaluation_and_latest_confirmed_observations(
         automation_id,
         {
             "id": None,
+            "kind": "one-time",
             "topic": "待确认事项",
             "content": "候选",
             "scope": "task",
@@ -675,6 +698,7 @@ def test_snapshot_projects_monitor_evaluation_and_latest_confirmed_observations(
         automation_id,
         {
             "id": None,
+            "kind": "one-time",
             "topic": "敏感内容",
             "content": r"联系 user@example.com，读取 C:\private\note.md",
             "scope": "task",
@@ -696,6 +720,15 @@ def test_snapshot_projects_monitor_evaluation_and_latest_confirmed_observations(
         "owner": None,
     }
     assert len(monitor["observations"]) == 7
+    assert [item["kind"] for item in monitor["observations"]] == [
+        "one-time",
+        "one-time",
+        "one-time",
+        "one-time",
+        "pattern",
+        "pattern",
+        "pattern",
+    ]
     assert [item["observedAt"] for item in monitor["observations"]] == [
         "2026-09-02T20:07:00Z",
         "2026-09-02T20:06:00Z",
@@ -967,6 +1000,7 @@ def test_http_endpoints_serve_tasks_snapshot_and_strict_csp(tmp_path: Path) -> N
         "monitor-http",
         {
             "id": None,
+            "kind": "one-time",
             "topic": "并行边界",
             "content": "原正文",
             "scope": "task",

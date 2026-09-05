@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <title>Codex 进度台</title>
-    <link rel="stylesheet" href="/style.css?v=18">
-    <script src="/app.js?v=18" defer></script>
+    <link rel="stylesheet" href="/style.css?v=22">
+    <script src="/app.js?v=22" defer></script>
   </head>
   <body>
     <div class="ambient ambient-one" aria-hidden="true"></div>
@@ -62,8 +62,8 @@
             </div>
             <div class="ticket-legend" aria-label="状态说明">
               <span><i class="legend-dot done"></i>已验收</span>
-              <span><i class="legend-dot active"></i>需复核</span>
-              <span><i class="legend-dot waiting"></i>待推进</span>
+              <span><i class="legend-dot developing"></i>开发中</span>
+              <span><i class="legend-dot investigating"></i>调研中</span>
             </div>
           </div>
           <div class="flow-layout" id="flow-layout" hidden>
@@ -183,6 +183,11 @@
           <div>
             <p class="eyebrow">调度监控</p>
             <h2 id="monitor-observation-title">用户纠偏 <span id="monitor-observation-dialog-count"></span></h2>
+            <div class="observation-filter" role="group" aria-label="纠偏分类筛选">
+              <button type="button" data-observation-filter="all" aria-pressed="true">全部 <span id="observation-filter-all-count">0</span></button>
+              <button type="button" data-observation-filter="pattern" aria-pressed="false">Pattern <span id="observation-filter-pattern-count">0</span></button>
+              <button type="button" data-observation-filter="specific" aria-pressed="false">具体动作 <span id="observation-filter-specific-count">0</span></button>
+            </div>
           </div>
           <button class="observation-dialog-close" id="monitor-observation-close" type="button" aria-label="关闭用户纠偏浮窗">×</button>
         </header>

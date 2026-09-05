@@ -214,6 +214,7 @@ def _observation_revision(value: dict[str, Any]) -> str:
 def _project_observation(value: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": value["id"],
+        "kind": value["kind"],
         "topic": sanitise_activity(value["topic"]),
         "observedAt": value["confirmedAt"],
         "content": sanitise_activity(value["content"]),

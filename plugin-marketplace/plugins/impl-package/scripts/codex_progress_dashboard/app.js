@@ -44,6 +44,10 @@ const monitorObservationDialog = document.querySelector("#monitor-observation-di
 const monitorObservationDialogCount = document.querySelector("#monitor-observation-dialog-count");
 const monitorObservationClose = document.querySelector("#monitor-observation-close");
 const monitorObservationList = document.querySelector("#monitor-observation-list");
+const observationFilterButtons = [...document.querySelectorAll("[data-observation-filter]")];
+const observationFilterAllCount = document.querySelector("#observation-filter-all-count");
+const observationFilterPatternCount = document.querySelector("#observation-filter-pattern-count");
+const observationFilterSpecificCount = document.querySelector("#observation-filter-specific-count");
 const reviewStatsUnique = document.querySelector("#review-stats-unique");
 const reviewStatsClosed = document.querySelector("#review-stats-closed");
 const reviewChart = document.querySelector("#review-chart");
@@ -63,6 +67,7 @@ let currentObservations = [];
 let pendingObservations = null;
 let observationSignature = "";
 let editingObservationId = null;
+let observationFilter = "all";
 
 function clear(node) {
   while (node.firstChild) node.firstChild.remove();
@@ -116,7 +121,7 @@ function stateLabel(value, runtimeState = null) {
   if (runtimeState === "INVESTIGATING") return "调研中";
   if (runtimeState === "READY") return "可启动";
   return {
-    SATISFIED: "已正式验收",
+    SATISFIED: "已验收",
     PENDING: "等待推进",
     BLOCKED: "当前受阻",
     "NEEDS-REVALIDATION": "需要重新验证",
@@ -159,12 +164,6 @@ function ticketDepth(ticket, byId, cache, visiting = new Set()) {
   visiting.delete(ticket.id);
   cache.set(ticket.id, depth);
   return depth;
-}
-
-function stageLabel(depth, maxDepth) {
-  if (depth === 0) return "流程起点";
-  if (depth === maxDepth) return "最终收口";
-  return `阶段 ${depth + 1}`;
 }
 
 function drawDependencyLines() {
@@ -442,8 +441,6 @@ function renderTickets(tickets, currentTicketId) {
     const stage = document.createElement("section");
     stage.className = "flow-stage";
     const stageTickets = stages[depth];
-    const label = document.createElement("h3");
-    label.textContent = stageLabel(depth, maxDepth);
     const row = document.createElement("div");
     row.className = "flow-stage-row";
     stageTickets.forEach((ticket) => {
@@ -470,7 +467,7 @@ function renderTickets(tickets, currentTicketId) {
       populateTooltipEvents(ticket, node);
       row.append(node);
     });
-    stage.append(label, row);
+    stage.append(row);
     flowStages.append(stage);
   }
 
@@ -559,30 +556,54 @@ function renderObservationList(observations) {
   currentObservations = observations;
   observationSignature = JSON.stringify(observations);
   clear(monitorObservationList);
-  observations.forEach((item) => {
+  const counts = observations.reduce((result, item) => {
+    if (observationKind(item) === "pattern") result.pattern += 1;
+    else result.specific += 1;
+    return result;
+  }, { pattern: 0, specific: 0 });
+  observationFilterAllCount.textContent = String(observations.length);
+  observationFilterPatternCount.textContent = String(counts.pattern);
+  observationFilterSpecificCount.textContent = String(counts.specific);
+  observationFilterButtons.forEach((button) => {
+    button.disabled = Boolean(editingObservationId);
+    button.setAttribute("aria-pressed", String(button.dataset.observationFilter === observationFilter));
+  });
+  const visible = observationFilter === "all"
+    ? observations
+    : observations.filter((item) => observationKind(item) === observationFilter);
+  if (!visible.length) {
+    const empty = document.createElement("li");
+    empty.className = "observation-filter-empty";
+    empty.textContent = "该分类暂无用户纠偏。";
+    monitorObservationList.append(empty);
+    return;
+  }
+  visible.forEach((item) => {
     const row = document.createElement("li");
     const time = document.createElement("time");
     const body = document.createElement("div");
     const heading = document.createElement("div");
-    const topic = document.createElement("strong");
+    const kind = document.createElement("span");
     const edit = document.createElement("button");
     time.dateTime = item.observedAt;
     time.textContent = formatCompactTime(item.observedAt);
     body.className = "observation-body";
     heading.className = "observation-heading";
-    topic.textContent = item.topic;
+    const itemKind = observationKind(item);
+    kind.className = `observation-kind ${itemKind}`;
+    kind.textContent = itemKind === "pattern" ? "Pattern" : "具体动作";
     edit.type = "button";
     edit.className = "observation-edit";
     edit.textContent = "编辑";
     edit.disabled = Boolean(editingObservationId);
-    edit.setAttribute("aria-label", `编辑 ${item.topic} 的正文`);
+    edit.setAttribute("aria-label", "编辑这条纠偏的正文");
     edit.addEventListener("click", () => {
       editingObservationId = item.id;
       pendingObservations = null;
       renderObservationList(currentObservations);
       monitorObservationList.querySelector("textarea")?.focus();
     });
-    heading.append(topic, edit);
+    heading.append(kind, edit);
     body.append(heading);
     if (editingObservationId === item.id) {
       body.append(createObservationEditor(item));
@@ -594,6 +615,10 @@ function renderObservationList(observations) {
     row.append(time, body);
     monitorObservationList.append(row);
   });
+}
+
+function observationKind(item) {
+  return item.kind === "pattern" ? "pattern" : "specific";
 }
 
 const reviewTracks = [
@@ -672,7 +697,7 @@ function createObservationEditor(item) {
   textarea.value = item.content;
   textarea.maxLength = 2000;
   textarea.rows = 7;
-  textarea.setAttribute("aria-label", `${item.topic} 的正文`);
+  textarea.setAttribute("aria-label", "纠偏正文");
   actions.className = "observation-editor-actions";
   error.className = "observation-editor-error";
   error.setAttribute("aria-live", "polite");
@@ -821,8 +846,18 @@ packageSelect.addEventListener("change", () => {
 });
 
 monitorObservations.addEventListener("click", () => {
+  observationFilter = "all";
+  renderObservationList(currentObservations);
   monitorObservationDialog.showModal();
   monitorObservationClose.focus();
+});
+
+observationFilterButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    if (editingObservationId) return;
+    observationFilter = button.dataset.observationFilter;
+    renderObservationList(currentObservations);
+  });
 });
 
 monitorObservationClose.addEventListener("click", closeObservationDialog);

@@ -135,7 +135,8 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
         "STATIC_HASH",
         "items: []",
         "ownerInputs",
-        "packageStatus",
+            "packageStatus",
+            "ticketPresentation",
         "packageDiff",
         "targetUpdates",
         "nextRolloutCursors",
@@ -145,8 +146,13 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
         "confirmed 生效",
         "candidate 不授权",
         "kind=pattern",
-        "specific",
+        "one-time",
+            "明确实例/一次决策=one-time",
+            "steer前看上下文，idle≠block，讨论不发",
         "语义变化",
+        "progress=事实/必修问题",
+        "improvements=不影响收口的可选建议",
+        "不造字段",
     ):
         assert marker in template
     for command in ("read-cycle", "read-static", "write-cycle"):
@@ -156,7 +162,7 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
     assert "工具调试不入 sidecar" in template
     assert "Grok" not in template
     assert "antecedent、主体、动作和范围" in skill
-    assert "新增/更新/删除" in template
+    assert "kind/增改删" in template
     assert "模拟纠偏" in template
     assert "否则写“无”" in template
     assert "dry-run" in template

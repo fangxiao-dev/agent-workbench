@@ -25,7 +25,7 @@ from urllib.request import urlopen
 PROTOCOL_VERSION = 2
 CONTEXT_VERSION = 2
 RUNTIME_VERSION = 7
-POLICY_VERSION = "STATIC_MONITOR_POLICY_V13"
+POLICY_VERSION = "STATIC_MONITOR_POLICY_V18"
 DEFAULT_PORT = 43187
 THREAD_ID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
 AUTOMATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
@@ -34,7 +34,7 @@ CREATED_THREAD_RE = re.compile(r'::created-thread\{threadId="([0-9a-f-]{36})"\}'
 LEVELS = {"normal", "attention", "abnormal"}
 SCOPES = {"session", "task"}
 OBSERVATION_STATES = {"candidate", "confirmed"}
-OBSERVATION_KINDS = {"specific", "pattern"}
+OBSERVATION_KINDS = {"one-time", "pattern"}
 RESPONSES = {"pending", "accepted", "contested", "not-applicable"}
 OBSERVATION_ID_RE = re.compile(r"^O([0-9]{3,})$")
 MONITOR_FIELDS = {
@@ -147,17 +147,20 @@ MAX_TARGET_UPDATES = 100
 POLICY_SNAPSHOT = {
     "evaluation": [
         "正式 Ticket 与 Gate 状态只以 read-cycle.packageStatus 为准；targetUpdates 只解释正在执行什么，不得覆盖正式状态。",
+        "面向 Owner 的 Ticket 状态使用 read-cycle.ticketPresentation：DEVELOPING=开发中，INVESTIGATING=调研中；同时保留 packageStatus 的正式 PENDING/SATISFIED 口径。",
         "targetBaseline 是冻结的任务合同；confirmed observations 是当前 Owner 指令。两者冲突时报告，不静默覆盖。",
         "按最新 task 状态评价进展、baby step、worker lifecycle、review、evidence、manual acceptance、方向与 Owner 分叉。",
         "缺失信息不推断为完成；worker return、focused tests 或局部提交不自动等于 Ticket、Gate 或 package closure。",
-        "evaluation 的 progress、improvements、next 和 owner 只描述 target 的状态、问题、下一步与 Owner 决策；monitor、renderer、sidecar、automation 或 canonical target 的维护动作只进入独立监控健康告警。",
-        "target 没有可改进项时 improvements 为空数组；next 仍写 target 当前应执行的下一步。",
+        "evaluation.progress 写 target 当前事实、执行进展及必须处理的 blocker、finding、失败测试和验收缺口。",
+        "evaluation.improvements 只写不采纳也不影响当前 Ticket/Gate 收口的可选建议，没有则为空数组；必须处理的问题不得写入 improvements。",
+        "evaluation.next 只写处理当前事实与问题的下一动作，不重复问题清单；evaluation.owner 只写确需 Owner 裁决的事项，否则为 null。通知沿用这四个字段，不创造当前问题等未定义栏目。",
+        "monitor、renderer、sidecar、automation 或 canonical target 的维护动作只进入独立监控健康告警。",
     ],
     "observations": [
         "只有直接改变目标任务授权、执行方式、验收要求或 Owner 决策边界的纠偏才是本任务 observation。",
         "一个 observation topic 只承载一个可被未来消息独立修改的决策轴；同一消息改变多个轴时分别新增或更新，不把正式 Ticket 状态写入 observation。",
-        "先做实例替换测试：移除或替换具体 Ticket、session、人员与本次时间条件后仍应约束后续同类场景时 kind=pattern，否则 kind=specific；一条消息同时包含两者时拆开记录。",
-        "pattern 写成稳定的适用条件、行为和边界，不保留仅用于举例的实例；高置信时 confirmed，不确定时 candidate。specific 保留具体对象、动作和完成条件，不主动泛化。",
+        "先服从 Owner 明示范围：绑定具体 Ticket、session、本次动作或一次性决策时 kind=one-time，不得靠改写正文将其泛化。仅在没有明示实例边界时做实例替换测试：移除或替换实例后仍应约束后续同类场景才是 kind=pattern；混合消息拆开记录。",
+        "pattern 写成稳定的适用条件、行为和边界，不保留仅用于举例的实例；高置信时 confirmed，不确定时 candidate。one-time 保留具体对象、动作和完成条件，不主动泛化。",
         "按 source、turn 和时间顺序处理新 Owner 输入；结合同批前序消息、当前完整 observations 与 task 状态，先消解 antecedent、主体、动作和范围，再决定 observation topic 或原地更新。",
         "不得把上下文中的局部对象扩大为整个类别；指代无法确认时不覆盖 confirmed observation，也不据此授权 target 消息。",
         "针对监控模板、CLI、dashboard、prompt 或 observation 机制本身的反馈属于工具调试，不写入目标任务 sidecar。",
@@ -169,6 +172,7 @@ POLICY_SNAPSHOT = {
     "visibility": "read_thread 返回 items: [] 表示内容不可见；read-cycle 通过 Codex 数据库登记的 canonical rollout 增量补偿新 Owner 消息和 target 的用户可见进展。",
     "intervention": [
         "默认不向 target 发送消息。只有 confirmed observation 明确授权某类消息且当前事实符合其条件时才可发送。",
+        "任何 steer 前必须结合按时间排序的 ownerInputs、targetUpdates、完整 observations 与 packageStatus 识别对话上下文；idle、turn completed、blocked 或 notLoaded 状态本身不证明 blocker，讨论、澄清、问答或等待 Owner 回复时不得发送。",
         "candidate observation 不授权动作。发送时记录采用的 observation ID，并用 runtime 的 target turn ID 去重。",
         "confirmed observation 要求 dry-run 时禁止向 target 发送；仅在触发条件成立且拟纠偏不同于 lastSimulationCorrection 时报告原因和拟发送全文，并标记未发送。",
     ],
@@ -516,6 +520,45 @@ def _package_status(package: Path) -> dict[str, Any]:
     payload = {"status": status, "attempt": attempt, "gate": gate, "tickets": tickets}
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return {**payload, "fingerprint": hashlib.sha256(canonical.encode("utf-8")).hexdigest()}
+
+
+def _ticket_presentation(package: Path) -> dict[str, Any]:
+    state_path = package / ".impl-package" / "state.json"
+    if not state_path.is_file():
+        return {"status": "missing", "readyTicketIds": [], "runningTicketIds": [], "tickets": {}}
+    try:
+        scripts = str(Path(__file__).resolve().parent)
+        if scripts not in sys.path:
+            sys.path.insert(0, scripts)
+        from codex_progress_dashboard.server import package_snapshot
+
+        snapshot = package_snapshot(package, [])
+        tickets = {
+            ticket["id"]: {
+                "formalState": ticket["state"],
+                "runtimeState": ticket["runtimeState"],
+                "label": (
+                    "已验收"
+                    if ticket["state"] in {"SATISFIED", "RETIRED"}
+                    else "开发中"
+                    if ticket["runtimeState"] == "DEVELOPING"
+                    else "调研中"
+                    if ticket["runtimeState"] == "INVESTIGATING"
+                    else "可启动"
+                    if ticket["runtimeState"] == "READY"
+                    else "未开始"
+                ),
+            }
+            for ticket in snapshot["tickets"]
+        }
+        return {
+            "status": "current",
+            "readyTicketIds": snapshot["readyTicketIds"],
+            "runningTicketIds": snapshot["runningTicketIds"],
+            "tickets": tickets,
+        }
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError, TypeError, KeyError):
+        return {"status": "invalid", "readyTicketIds": [], "runningTicketIds": [], "tickets": {}}
 
 
 def _package_diff(previous: dict[str, Any], current: dict[str, Any]) -> dict[str, Any] | None:
@@ -956,7 +999,9 @@ def validate_observation(
     value: Any, *, allow_new: bool = False, allow_legacy: bool = False
 ) -> dict[str, Any]:
     if allow_legacy and isinstance(value, dict) and set(value) == LEGACY_OBSERVATION_FIELDS:
-        value = {**value, "kind": "specific"}
+        value = {**value, "kind": "one-time"}
+    elif allow_legacy and isinstance(value, dict) and value.get("kind") == "specific":
+        value = {**value, "kind": "one-time"}
     record = _expect_fields(value, OBSERVATION_FIELDS, "observation")
     observation_id = record["id"]
     message_id = record["sourceMessageId"]
@@ -1410,6 +1455,7 @@ def read_cycle(
     renderer_status = _renderer_status(root)
     previous_renderer = runtime_store["runtimeState"]["rendererState"]
     package_status = _package_status(Path(monitor["packagePath"]))
+    ticket_presentation = _ticket_presentation(Path(monitor["packagePath"]))
     previous_package_status = runtime_store["runtimeState"]["packageState"]
     monitor_health = _monitor_health(
         monitor["targetThreadId"],
@@ -1432,6 +1478,7 @@ def read_cycle(
             runtime_store["runtimeState"]["reportedObservationSnapshots"],
         ),
         "packageStatus": package_status,
+        "ticketPresentation": ticket_presentation,
         "packageDiff": _package_diff(previous_package_status, package_status),
         "rendererStatus": renderer_status,
         "rendererDiff": (
@@ -1760,6 +1807,10 @@ def schema_contract() -> dict[str, Any]:
         "packageStatus": {
             "required": ["status", "attempt", "gate", "tickets", "fingerprint"],
             "states": ["current", "invalid", "missing"],
+        },
+        "ticketPresentation": {
+            "required": ["status", "readyTicketIds", "runningTicketIds", "tickets"],
+            "runtimeStates": ["DEVELOPING", "INVESTIGATING", "READY", None],
         },
         "packageDiff": {"acknowledgedBy": "write-cycle"},
         "observationDiff": {
