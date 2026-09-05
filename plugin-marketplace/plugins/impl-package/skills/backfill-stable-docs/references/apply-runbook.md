@@ -1,6 +1,6 @@
 # Apply Runbook
 
-Apply 只接受 owner 明确批准的 report/CLI item ID；禁止把"将报告全部处理"解释为批准。每个 apply item 必须明确来源 package、目标 stable doc、durable delta 类型（system PRD / system architecture or ADR / context PRD / context architecture or contract / context language / module PRD / module spec）、代码或 commit 证据，以及与现有 stable docs 的关系（新增、修正、替换、删除废弃说法或 no-op）。仓库没有配置 `contextKnowledge` 时不得发明 context destination。
+Apply 将 owner 的明确批准解析并记录为精确 report/CLI item ID 集合；对已展示且未变化报告的明确批量批准可直接解析。冲突项、未决选择和 destructive apply 另行裁决；集合不明确时才询问。每个 apply item 必须明确来源 package、目标 stable doc、durable delta 类型（system PRD / system architecture or ADR / context PRD / context architecture or contract / context language / module PRD / module spec）、代码或 commit 证据，以及与现有 stable docs 的关系（新增、修正、替换、删除废弃说法或 no-op）。仓库没有配置 `contextKnowledge` 时不得发明 context destination。
 
 写入 stable docs 后，把对应 item 记录为 `done`（`records.done`）：
 

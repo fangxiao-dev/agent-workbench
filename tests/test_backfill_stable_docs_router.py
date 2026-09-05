@@ -17,7 +17,10 @@ VERIFY_RUNBOOK = (
 def test_audit_apply_verify_boundaries_are_explicit() -> None:
     assert "只读 audit" in TEXT
     assert "精确 item ID" in TEXT
-    assert "失败只报告，不自动修复" in TEXT
+    assert "验证器只读" in TEXT
+    assert "本轮 apply 在已批准 destination 内造成的链接、格式等机械错误" in TEXT
+    assert "回到同一授权 apply 修复并重验" in TEXT
+    assert "新增语义、destination、无关问题或破坏范围变化交回 owner" in TEXT
 
 
 def test_paths_and_versions_use_the_lightweight_contract() -> None:

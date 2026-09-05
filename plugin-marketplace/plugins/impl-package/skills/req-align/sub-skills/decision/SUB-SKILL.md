@@ -24,7 +24,7 @@ description: req-align 内部的 Decision 阶段；对齐 requirement inputs、F
    - 常见误判：把需要授权的调查当普通查文件，或把可直接查清的事实都升级成 BLOCKED，会分别越过权限边界或制造无谓停顿。
 5. 用 [Alignment Proposal](../../assets/templates/alignment-proposal.md) 形成 working output；只有 discovery 与允许调查都无法关闭 intent、scope、trade-off 或 owner decision 时才问一个 focused question，proposal 不是 durable artifact。
    - 常见误判：过早把 proposal 当 durable artifact，或把本地可查事实问成用户偏好，会让 working hypothesis 变成错误承诺。
-6. earned Decision 使用 [Decision Template](../../assets/templates/decision.md)；主 thread 直接写入并验证 `decision.md`。lightweight correction 在 Decision PASSED 后把最小 evidence 交给 Spec 的 Decision Gate Record；Decision BLOCKED 使用 `decision.md` 且不创建 Spec。运行状态通过 `/impl-package:execution-boundaries` 记账 subagent 更新。
+6. earned Decision 使用 [Decision Template](../../assets/templates/decision.md)；主 thread 直接写入并验证 `decision.md`。lightweight correction 在 Decision PASSED 后把最小 evidence 交给 Spec 的 Decision Gate Record；Decision BLOCKED 使用 `decision.md` 且不创建 Spec。运行状态由主 thread 直接通过语义 CLI 更新。
    - 常见误判：Decision BLOCKED 仍创建 Spec，会让下游消费尚未裁决的合同。
 7. 仅 initial bundle 运行 Decision Gate；目标落点、Focused PRD（适用时）、input reconciliation、Core/Capability、repository fit、material choices 与所有 blocking uncertainty 全部闭合后才可 PASSED，follow-up 更新直接沿用 initial approval。
    - 常见误判：对 follow-up 重跑或重新发明 initial approval，或在 blocking uncertainty 仍存在时给 PASSED，会让后续阶段误以为方向已重新授权。

@@ -40,4 +40,4 @@ updated: 2026-09-05
 - 采纳 `contract-design.md` 作为每个新建或被触及 Spec 的强制从属产物；允许 `not-required`，但理由必须证明精确语义已由 `spec.md` 完整承担。
 - 采纳 touch-time backfill；未触及的 legacy package 不做批量迁移。
 - 明确额外 independent review 只由 accepted Track C / Spec fidelity finding 触发，不加入初始 Spec Gate。
-- [已确认 · 2026-09-05] owning-stage 主 thread 更新业务文档并裁决语义；一个 execution-boundaries 记账 subagent 串行调用 CLI 更新 state 与运行投影，日常异步，依赖落盘或收口时等待。
+- [已确认 · 2026-09-05] owning-stage 主 thread 直接更新业务文档并裁决语义，运行状态仍由主 thread 调用语义 CLI 更新；不引入记账 subagent 作为第二个 writer。

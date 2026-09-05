@@ -19,9 +19,9 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed 
 
 ## Ownership 与 fast path
 
-本 Skill 拥有 configured implementations root（默认 `docs/implementations/`）下 Decision、Spec、从属 `contract-design.md` 与 D/S aliases 的语义和内容；owning-stage 主 thread 直接写入并验证业务文档。每个新建或修订的 Spec 都有从属 contract-design，legacy Spec 在下次 req-align 时补齐。运行状态交给 `/impl-package:execution-boundaries` 的记账 subagent，通过语义 CLI 更新。
+本 Skill 拥有 configured implementations root（默认 `docs/implementations/`）下 Decision、Spec、从属 `contract-design.md` 与 D/S aliases 的语义和内容；owning-stage 主 thread 直接写入并验证业务文档。每个新建或修订的 Spec 都有从属 contract-design，legacy Spec 在下次 req-align 时补齐。运行状态由主 thread 直接通过语义 CLI 更新。
 
-主 thread 按本 Skill 与对应 sub-skill 直接更新 canonical artifact，主 thread 保留 contract 语义、Gate 和最终采信权；需要更新运行状态时将已确定事实异步交给 execution-boundaries 记账 subagent，只有下一动作依赖落盘时才等待回执。
+主 thread 按本 Skill 与对应 sub-skill 直接更新 canonical artifact，主 thread 保留 contract 语义、Gate 和最终采信权；需要更新运行状态时直接调用语义 CLI。
 
 当 business result、Acceptance Semantics、security/data constraints 与 mutation authority 均未变化时，走 no-contract fast path：复用仍有效的 D/S，说明现有合同为何继续成立，并直接路由 owning skill；删除只要改变 promise 或 acceptance boundary，就仍是 contract-impacting。
    - 常见误判：只因为改动看起来像删除或普通实现变化就跳过合同判断，会把已经改变的 promise 或 acceptance boundary 隐藏在 fast path 后面。

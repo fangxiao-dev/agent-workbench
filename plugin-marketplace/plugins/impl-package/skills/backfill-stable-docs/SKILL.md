@@ -13,10 +13,10 @@ description: 当需要审计 durable knowledge delta、把 owner 批准的子集
    - 常见误判：不先固定基准就收集 source，会把 linked worktree 或本轮未合入内容混进 audit 事实。
 2. **Audit（只读）**：建立 inventory、gap-catching 和 disposition 候选，但不写入。
    - 常见误判：把 inventory 候选直接当成 owner 已批准的 durable delta，会越过冲突和意图判断。
-3. **Apply**：只对 owner 明确批准的精确 item ID 写入。
-   - 常见误判：把“这批”当成批准范围，会顺手修改同文件的其他候选或伪造 pending。
+3. **Apply**：将 owner 对已展示且未变化报告的明确批准解析为精确 item ID 集合后写入。
+   - 常见误判：批准必须能唯一确定 item 集合；报告变化、冲突项或删除范围仍需单独裁决。
 4. **Verify（只读）**：在 apply 后检查路径、target commit、链接和 audit shape。
-   - 常见误判：验证失败时自动修复，会把 verify 变成未经授权的第二次 apply。
+   - 常见误判：验证器保持只读；本轮 apply 造成的机械缺陷回到同一授权 apply 修复后重验。
 5. **Retirement（如适用）**：只有 package 已完全吸收且没有 inbound reference 时才列删除候选。
    - 常见误判：把 Gate terminal 或实现合入单独当成可删除证明，会丢掉未吸收的 durable delta 或活动引用。
 
@@ -47,7 +47,7 @@ Gate 不存在表示没有 Gate 证据；字段不完整、comparison commit 不
 
 ## Apply
 
-1. 只有 owner 明确批准 report/CLI 输出中的精确 item ID 才 apply。
+1. 先将 owner 对 report/CLI 输出的明确批准解析为精确 item ID；已展示且未变化报告的明确批量批准可直接解析，集合不明确时才询问。
    - 常见误判：把 report 中出现的所有 candidate 当成批准，会把 owner 尚未裁决的冲突一起写回。
 2. 只修改批准 item 的 destination、对应 pending 项（如有）和 done record；gap-catching 不伪造 pending，不顺手处理同文件其他候选。
    - 常见误判：借 apply 机会清理同文件其他候选，会让实际写集超出批准 item ID，且无法回放哪一项触发了修改。
@@ -58,8 +58,7 @@ Gate 不存在表示没有 Gate 证据；字段不完整、comparison commit 不
 
 ## Verify
 
-1. 运行 `verify_stable_docs.py`，检查显式路径、target Git commit、stable-doc 本地链接、audit shape 和 inventory；失败只报告，不自动修复。具体 target commit/version 与本地链接检查按需读 `references/verify-runbook.md`。
-   - 常见误判：把 verify failure 当成 apply 许可，自动修复会绕过 owner 对 destination 和 destructive scope 的授权。
+1. 运行 `verify_stable_docs.py`，检查显式路径、target Git commit、stable-doc 本地链接、audit shape 和 inventory；验证器只读；本轮 apply 在已批准 destination 内造成的链接、格式等机械错误，回到同一授权 apply 修复并重验。新增语义、destination、无关问题或破坏范围变化交回 owner。具体 target commit/version 与本地链接检查按需读 `references/verify-runbook.md`。
 
 ## Retirement
 
