@@ -75,7 +75,7 @@ material-risk Topic（shared seam、安全、数据完整性、并发、migratio
 
 ## Step 5 · 消费结果并重排
 
-主 session 核对可归因 diff、evidence、residue 和 cleanup；worker 自证（focused tests、lint、diff check）通过后，先把当前 baby step 判定为 DONE/BLOCKED/INCOMPLETE，再冻结这次 dispatch-to-return 的增量（固定 diff 或直接 commit）作为轻量 delta review 的确定输入，并同时启动该轻量 review、显式释放下一个 baby step，不等 review 返回。当前返回不会自动授权下一步；轻量 delta review 不产生 review requirement、不改 Ticket/evidence 状态、不作为主线等待条件。
+主 session 核对可归因 diff、evidence、residue 和 cleanup；worker 自证（focused tests、lint、diff check）通过后，先把当前 baby step 判定为 DONE/BLOCKED/INCOMPLETE，再冻结这次 dispatch-to-return 的增量（固定 diff 或直接 commit）作为轻量 delta review 的确定输入，并同时为每个 baby step 使用 fresh reviewer 启动轻量 delta review、显式释放下一个 baby step，不等 review 返回。当前返回不会自动授权下一步；轻量 delta review 不产生 review requirement、不改 Ticket/evidence 状态、不作为主线等待条件。
 独立 formal review 的判断点是 shared seam、完整 source unit 或集成边界，由主 session 判断是否已到达；只有到达该点才产生 review requirement。只归一化真正有消费者的事实：
 
 - worker outcome：`DONE | BLOCKED | INCOMPLETE`；

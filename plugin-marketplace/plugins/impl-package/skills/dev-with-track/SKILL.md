@@ -56,7 +56,7 @@ PENDING Ticket 首次激活且 Planned Verification 声明 `Evidence Lane Contra
 ## Review、Findings 与人工验收
 
 - `/impl-package:do-review` 拥有 initial、finding-closure、terminal-final topology、comparison point、coverage 与 closure；本 Skill 只消费报告。
-- accepted finding 作为同 Topic work lane 的 bounded fix 交给 Dispatcher；下游 worker 遵循 SDD。review lane 独立于 work lane，是否复用 reviewer 由同 Topic lifecycle 决定。派发前若同一 Topic 已经过两次以上修复方向仍未收敛、同一 finding 或同一机制在后续 round 重新出现，或 review 结论跨多个 writer、多个入口或共享 authority/lock seam，先按 `/diagnosing-bugs` 做定位再决定修复动作；其余直接 bounded fix。diagnosing-bugs 只返回定位结论，Ticket/Attempt 状态与 dependency release 继续由本流程处理，finding closure 继续由 `/impl-package:do-review` 拥有。
+- 轻量 delta review 的已确认 findings 随下一个 baby step 的 brief 一并下发，不单独派 bounded fix；独立 formal review 的 accepted finding 作为同 Topic work lane 的 bounded fix 交给 Dispatcher；下游 worker 遵循 SDD。review lane 独立于 work lane，是否复用 reviewer 由同 Topic lifecycle 决定。派发前若同一 Topic 已经过两次以上修复方向仍未收敛、同一 finding 或同一机制在后续 round 重新出现，或 review 结论跨多个 writer、多个入口或共享 authority/lock seam，先按 `/diagnosing-bugs` 做定位再决定修复动作；其余直接 bounded fix。diagnosing-bugs 只返回定位结论，Ticket/Attempt 状态与 dependency release 继续由本流程处理，finding closure 继续由 `/impl-package:do-review` 拥有。
 - terminal pass 要求 terminal-final coverage 完整且所有阻断 finding 已关闭；记录缺失或 incomplete 时交回 `do-review`。
 - Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 记录入口、oracle、环境、失败反馈与 teardown owner。
 
