@@ -1,0 +1,1787 @@
+# Workbench: current uncommitted changes from this task; pre-existing monitor/dashboard changes excluded.
+
+diff --git a/plugin-marketplace/plugins/impl-package/agents/review-track-code.md b/plugin-marketplace/plugins/impl-package/agents/review-track-code.md
+index 4eb5798..11fa705 100644
+--- a/plugin-marketplace/plugins/impl-package/agents/review-track-code.md
++++ b/plugin-marketplace/plugins/impl-package/agents/review-track-code.md
+@@ -9,7 +9,8 @@ tools:
+   - Grep
+   - Glob
+   - Bash
+-permission_mode: plan
++  - Write
++  - Edit
+ agents_md: true
+ skills:
+   - review-code
+@@ -17,7 +18,7 @@ skills:
+ 
+ # Review Track: Code
+ 
+-You are the read-only Track A leaf agent in a `do-review` topology already resolved by the parent.
++You are the Track A leaf agent in a `do-review` topology already resolved by the parent.
+ Use the declared `review-code` skill for the review method. The parent owns topology, capacity, cross-track attribution,
+ deduplication, classification, convergence, and the overall verdict.
+ 
+@@ -26,10 +27,10 @@ track's same-round output, or decide the overall verdict. Review only the comple
+ supplied by the parent. For `finding-closure`, inspect only the supplied named findings and do not search for unrelated
+ problems.
+ 
+-Read every contract source only from the immutable resolved head with `git show <resolved-head>:<path>`, using the exact
++Read every contract source from the ReviewRun repository (the isolated snapshot for working-tree reviews) with `git show <resolved-head>:<path>`, using the exact
+ repo-relative path supplied in the ReviewRun. Never use a working-tree contract source, recompute its hash, or create a
+ second provenance record. Treat the canonical ledger as read-only. Start each round fresh; a cancelled, timed-out,
+-stalled, partial, or incomplete invocation is not a PASS. Use Bash only for read-only inspection and checks.
++stalled, partial, or incomplete invocation is not a PASS. Write the assigned review report artifact with full finding evidence, impact, and recommendations. Keep business code, Git history/index, and external systems unchanged; the canonical ledger remains parent-owned.
+ 
+ The parent supplies the complete ReviewRun, target, phase, round, comparison point, included commits, repository
+ standards, immutable contract sources, Spec/Safety evidence, user policy, assigned skill path, prior canonical ledger,
+diff --git a/plugin-marketplace/plugins/impl-package/agents/review-track-safety.md b/plugin-marketplace/plugins/impl-package/agents/review-track-safety.md
+index ee92d90..0cfc50d 100644
+--- a/plugin-marketplace/plugins/impl-package/agents/review-track-safety.md
++++ b/plugin-marketplace/plugins/impl-package/agents/review-track-safety.md
+@@ -9,7 +9,8 @@ tools:
+   - Grep
+   - Glob
+   - Bash
+-permission_mode: plan
++  - Write
++  - Edit
+ agents_md: true
+ skills:
+   - safety-review
+@@ -17,7 +18,7 @@ skills:
+ 
+ # Review Track: Safety
+ 
+-You are the read-only conditional Safety leaf agent in a `do-review` topology already resolved by the parent.
++You are the conditional Safety leaf agent in a `do-review` topology already resolved by the parent.
+ Use the declared `safety-review` skill for the review method. The parent owns topology, capacity, cross-track
+ attribution, deduplication, classification, convergence, and the overall verdict.
+ 
+@@ -26,10 +27,10 @@ track's same-round output, or decide the overall verdict. Review only the comple
+ supplied by the parent. For `finding-closure`, inspect only the supplied named findings and do not search for unrelated
+ problems.
+ 
+-Read every contract source only from the immutable resolved head with `git show <resolved-head>:<path>`, using the exact
++Read every contract source from the ReviewRun repository (the isolated snapshot for working-tree reviews) with `git show <resolved-head>:<path>`, using the exact
+ repo-relative path supplied in the ReviewRun. Never use a working-tree contract source, recompute its hash, or create a
+ second provenance record. Treat the canonical ledger as read-only. Start each round fresh; a cancelled, timed-out,
+-stalled, partial, or incomplete invocation is not a PASS. Use Bash only for read-only inspection and checks.
++stalled, partial, or incomplete invocation is not a PASS. Write the assigned review report artifact with full finding evidence, impact, and recommendations. Keep business code, Git history/index, and external systems unchanged; the canonical ledger remains parent-owned.
+ 
+ The parent supplies the complete ReviewRun, target, phase, round, comparison point, included commits, repository
+ standards, immutable contract sources, Spec/Safety evidence, user policy, assigned skill path, prior canonical ledger,
+diff --git a/plugin-marketplace/plugins/impl-package/agents/review-track-spec.md b/plugin-marketplace/plugins/impl-package/agents/review-track-spec.md
+index 902d74b..1915a89 100644
+--- a/plugin-marketplace/plugins/impl-package/agents/review-track-spec.md
++++ b/plugin-marketplace/plugins/impl-package/agents/review-track-spec.md
+@@ -9,7 +9,8 @@ tools:
+   - Grep
+   - Glob
+   - Bash
+-permission_mode: plan
++  - Write
++  - Edit
+ agents_md: true
+ skills:
+   - review-code-by-spec
+@@ -17,7 +18,7 @@ skills:
+ 
+ # Review Track: Spec
+ 
+-You are the read-only Track C leaf agent in a `do-review` topology already resolved by the parent.
++You are the Track C leaf agent in a `do-review` topology already resolved by the parent.
+ Use the declared `review-code-by-spec` skill for the review method. The parent owns topology, capacity, cross-track
+ attribution, deduplication, classification, convergence, and the overall verdict.
+ 
+@@ -26,10 +27,10 @@ track's same-round output, or decide the overall verdict. Review only the comple
+ supplied by the parent. For `finding-closure`, inspect only the supplied named findings and do not search for unrelated
+ problems.
+ 
+-Read every contract source only from the immutable resolved head with `git show <resolved-head>:<path>`, using the exact
++Read every contract source from the ReviewRun repository (the isolated snapshot for working-tree reviews) with `git show <resolved-head>:<path>`, using the exact
+ repo-relative path supplied in the ReviewRun. Never use a working-tree contract source, recompute its hash, or create a
+ second provenance record. Treat the canonical ledger as read-only. Start each round fresh; a cancelled, timed-out,
+-stalled, partial, or incomplete invocation is not a PASS. Use Bash only for read-only inspection and checks.
++stalled, partial, or incomplete invocation is not a PASS. Write the assigned review report artifact with full finding evidence, impact, and recommendations. Keep business code, Git history/index, and external systems unchanged; the canonical ledger remains parent-owned.
+ 
+ The parent supplies the complete ReviewRun, target, phase, round, comparison point, included commits, repository
+ standards, immutable contract sources, Spec/Safety evidence, user policy, assigned skill path, prior canonical ledger,
+diff --git a/plugin-marketplace/plugins/impl-package/agents/review-track-standards.md b/plugin-marketplace/plugins/impl-package/agents/review-track-standards.md
+index bca9aef..9e5ce8f 100644
+--- a/plugin-marketplace/plugins/impl-package/agents/review-track-standards.md
++++ b/plugin-marketplace/plugins/impl-package/agents/review-track-standards.md
+@@ -9,7 +9,8 @@ tools:
+   - Grep
+   - Glob
+   - Bash
+-permission_mode: plan
++  - Write
++  - Edit
+ agents_md: true
+ skills:
+   - review-code-by-standards
+@@ -17,7 +18,7 @@ skills:
+ 
+ # Review Track: Standards
+ 
+-You are the read-only Track B leaf agent in a `do-review` topology already resolved by the parent.
++You are the Track B leaf agent in a `do-review` topology already resolved by the parent.
+ Use the declared `review-code-by-standards` skill for the review method. The parent owns topology, capacity,
+ cross-track attribution, deduplication, classification, convergence, and the overall verdict.
+ 
+@@ -26,10 +27,10 @@ track's same-round output, or decide the overall verdict. Review only the comple
+ supplied by the parent. For `finding-closure`, inspect only the supplied named findings and do not search for unrelated
+ problems.
+ 
+-Read every contract source only from the immutable resolved head with `git show <resolved-head>:<path>`, using the exact
++Read every contract source from the ReviewRun repository (the isolated snapshot for working-tree reviews) with `git show <resolved-head>:<path>`, using the exact
+ repo-relative path supplied in the ReviewRun. Never use a working-tree contract source, recompute its hash, or create a
+ second provenance record. Treat the canonical ledger as read-only. Start each round fresh; a cancelled, timed-out,
+-stalled, partial, or incomplete invocation is not a PASS. Use Bash only for read-only inspection and checks.
++stalled, partial, or incomplete invocation is not a PASS. Write the assigned review report artifact with full finding evidence, impact, and recommendations. Keep business code, Git history/index, and external systems unchanged; the canonical ledger remains parent-owned.
+ 
+ The parent supplies the complete ReviewRun, target, phase, round, comparison point, included commits, repository
+ standards, immutable contract sources, Spec/Safety evidence, user policy, assigned skill path, prior canonical ledger,
+diff --git a/plugin-marketplace/plugins/impl-package/hooks/impl_package_hooks.py b/plugin-marketplace/plugins/impl-package/hooks/impl_package_hooks.py
+index 9b88bb1..63d7256 100644
+--- a/plugin-marketplace/plugins/impl-package/hooks/impl_package_hooks.py
++++ b/plugin-marketplace/plugins/impl-package/hooks/impl_package_hooks.py
+@@ -308,7 +308,7 @@ def _resume_capsule(binding: dict[str, Any], rendered: dict[str, Any]) -> str:
+         f"warnings: {len(rendered.get('warnings', [])) if isinstance(rendered.get('warnings'), list) else 0}",
+         f"undetermined: {len(rendered.get('undetermined', [])) if isinstance(rendered.get('undetermined'), list) else 0}",
+         "This capsule is navigation context only; it is not Evidence, Acceptance, Gate, or closure.",
+-        "Before dispatch or trail mutation, rerun situation.py render without --no-write-credential.",
++        "Before dispatch, have the bookkeeper rerun situation.py render without --no-write-credential; consume successful CLI updates without full restore.",
+     ]
+     return "\n".join(lines)
+ 
+diff --git a/plugin-marketplace/plugins/impl-package/references/codex-hooks.md b/plugin-marketplace/plugins/impl-package/references/codex-hooks.md
+index b251140..7510d9d 100644
+--- a/plugin-marketplace/plugins/impl-package/references/codex-hooks.md
++++ b/plugin-marketplace/plugins/impl-package/references/codex-hooks.md
+@@ -22,4 +22,4 @@ python <plugin-root>/hooks/impl_package_hooks.py activate --package <package>
+ python <plugin-root>/hooks/impl_package_hooks.py deactivate
+ ```
+ 
+-同 session 未解绑就切换到普通任务时，后续 resume/compact 仍会注入 Capsule。Capsule 缺失、失配或 state 已变化时，按 `dev-with-track/references/runtime-protocol.md` 完整恢复。
++同 session 未解绑就切换到普通任务时，后续 resume/compact 仍会注入 Capsule。首次恢复 Capsule 缺失/失配或发生未知外部状态变化时，按 `dev-with-track/references/runtime-protocol.md` 完整恢复。
+diff --git a/plugin-marketplace/plugins/impl-package/references/impl-package-composition-contract.md b/plugin-marketplace/plugins/impl-package/references/impl-package-composition-contract.md
+index 5967201..b33546f 100644
+--- a/plugin-marketplace/plugins/impl-package/references/impl-package-composition-contract.md
++++ b/plugin-marketplace/plugins/impl-package/references/impl-package-composition-contract.md
+@@ -54,7 +54,7 @@ Composition：tickets=true, dag=false
+ 3. Plan 冻结后，Ticket-only Composition 只创建 Draft Ticket；联合检查 coverage、typed dependency、证据可行性与集成顺序后取得一次 bundle approval。旧 package 的 DAG 只读，不重新发布。
+ 4. `init` 发布当前 Attempt 的 Ticket，初始化 state 和完整 Progress 层，进入执行；3.4 兼容字段不代表 Task execution。
+ 5. dev-with-track 从 `progress.md` 与 active checkpoint 恢复，根据 Ticket canonical dependency 选择下一动作，通过 CAS 更新状态并写 checkpoint/judgment。
+-6. verification-before-completion 审计 completion claim。
++6. execution-boundaries 的 completion audit 审计完成声明。
+ 7. gate 写入当前判决；`pass` 才支持默认的 merge-ready 结论。
+ 8. durable delta 按需回刷稳定文档。
+ 
+@@ -80,6 +80,6 @@ Plan、Ticket 或 DAG 的语义变化只使受影响范围的 approval/validatio
+ - Ticket AC 必须显式编号 stable claim ID；early falsification evidence 与 remaining completion evidence 分开描述。
+ - 第一条可执行路径必须保持 tenant、RBAC、privacy、幂等和数据完整性不变量；早期路径可以窄，但不能薄。
+ - 跨 session 续接沿用既有默认：交接前写 active checkpoint，长期判断写 ER judgment；compact 只作异常兜底，不是正常恢复权威。
+-- package task session 主线程是 `state.json` 唯一 writer；worker 只返回结构化 evidence。未来 broker 的协调 ledger 不属于本阶段。
++- package 主 thread 拥有业务语义与文档；execution-boundaries 记账 subagent 是 `state.json` 与 CLI 运行投影的唯一 writer，串行记账，独立业务动作异步继续。
+ 
+ `RETIRED` 是新合同中原 `WAIVED`/`SUPERSEDED` 的统一 terminal 状态，必须带 `disposition: waived | superseded`。3.4 runtime 只作为一次性迁移输入；3.5 runtime 只接受 Ticket/evidence/checkpoint 状态。
+diff --git a/plugin-marketplace/plugins/impl-package/references/impl-package-current-state.md b/plugin-marketplace/plugins/impl-package/references/impl-package-current-state.md
+index 2d9aa14..1e4209d 100644
+--- a/plugin-marketplace/plugins/impl-package/references/impl-package-current-state.md
++++ b/plugin-marketplace/plugins/impl-package/references/impl-package-current-state.md
+@@ -15,7 +15,7 @@
+ └─ migration/archive/task-handoffs/   # 迁移后旧 handoff 归档
+ ```
+ 
+-`state.json` 是 package 唯一可写 current-state。主 session 是唯一 writer；worker 只返回结构化证据。`progress.md` 和 Execution Record header 是 machine-owned projection；Ticket 是发布后稳定的 Approved 合同，运行时验收状态不回写 Ticket。ER 只保存 judgment/history，不产生 active checkpoint。
++`state.json` 是 package 唯一可写 current-state。主 session 决定语义并维护业务文档；execution-boundaries 的记账 subagent 是运行状态唯一 writer，通过语义 CLI 串行更新。实现/review worker 返回证据，日常记账异步进行，依赖落盘或收口时等待相关回执。`progress.md` 和 Execution Record header 是 machine-owned projection；Ticket 是发布后稳定的 Approved 合同，运行时验收状态不回写 Ticket。ER 只保存 judgment/history，不产生 active checkpoint。
+ 
+ 路径口径固定：`attempt.plan`、`predecessors`、evidence 与 checkpoint evidence 是 repository-relative；`attemptHistory.executionRecord` 是 package-relative 的 `execution/<attempt>/execution-record.md`。
+ 
+diff --git a/plugin-marketplace/plugins/impl-package/references/plan-apply-runbook.md b/plugin-marketplace/plugins/impl-package/references/plan-apply-runbook.md
+index 41d83b8..5ec9b53 100644
+--- a/plugin-marketplace/plugins/impl-package/references/plan-apply-runbook.md
++++ b/plugin-marketplace/plugins/impl-package/references/plan-apply-runbook.md
+@@ -20,4 +20,4 @@ python <impl-package-plugin-root>/scripts/impl_package_state.py --package <packa
+ 
+ 正常跨 session 续接只认 `state.json.activeCheckpoints`；checkpoint 覆盖写当前 subject，不授权派发、不释放依赖。ER 通过 `recovery judgment` 只记录 judgment，compact 仅是意外耗尽后的兜底。
+ 
+-激活不执行 commit、push、merge、release 或外部 mutation。成功后进入 `/impl-package:execution-preflight`，由它确认本轮 write-set 和授权。
++激活不执行 commit、push、merge、release 或外部 mutation。成功后进入 `/impl-package:execution-boundaries`，由它确认本轮 write-set 和授权。
+diff --git a/plugin-marketplace/plugins/impl-package/references/situation-inputs.md b/plugin-marketplace/plugins/impl-package/references/situation-inputs.md
+index 86c627d..7124314 100644
+--- a/plugin-marketplace/plugins/impl-package/references/situation-inputs.md
++++ b/plugin-marketplace/plugins/impl-package/references/situation-inputs.md
+@@ -95,7 +95,7 @@ false；只有没有 U 且所有比较都相等时才是 true。
+ | `attempt.near_terminal_gate` | S + G：`all_tickets_terminal` 为 true，或 `gate.md` 存在且 Verdict 可解析 | 布尔 | state 无效 = U；state 合法且无 terminal Ticket、无可解析 Gate = F；malformed Gate 不满足该辅助条件；HF：无 | `attempt.disposition.findings-triage-pending` |
+ | `attempt.ready_ticket_count` | S + T：收集所有 `PENDING` Ticket，只有 implementation dependencies 全部由 `SATISFIED`、`RETIRED/waived` 或已释放 successor 释放时才进入 ready list；返回 list 长度 | 非负整数；用于表的比较是 `">1"` 或 `0` | state/Ticket/dependency 不可判定 = U；合法空图返回 0；HF：无 | `attempt.readiness.multiple-ready-tickets`、`attempt.readiness.all-edges-held` |
+ | `attempt.session_resumed` | S + R：不读取声明；`activeCheckpoints.attempt` 存在，且 checkpoint 后没有动作行时为 true | 布尔 | trail error 或 state/checkpoint 不可判定 = U；无 active checkpoint = F；有显式 checkpoint marker 时只计 marker 后的行；没有 marker 时忽略兼容性的 `attempt.session_resumed` 声明，但其它 typed fact/action 会使结果为 false；HF：无 | `attempt.record.session-resumed`（兼容 parser key） |
+-| `attempt.terminal_coverage_complete` | R + G：最新 fact 优先；没有 fact 且 terminal Gate verdict 已终结则 true；否则先要求 `attempt.all_tickets_terminal` 已知为 true，再从当前活动 trail 的 `terminal-final` review dispatch 收集四条封闭 Track（排除 `review_recheck=true`），并校验记录的 `head` 到当前 HEAD 之间只有 `docs/` 或 `.md` 改动 | 布尔 | 显式 fact 非布尔 = U；`attempt.all_tickets_terminal` 未知时传播该未知，已知 false 时给 U（终审阶段未到，不适用）；到终审阶段但缺 Track、缺 head、HEAD 间存在源码改动或 Git diff 无法证明 docs-only = 已知 false；HF：未知 fact key | `attempt.review.terminal-coverage-incomplete` |
++| `attempt.terminal_coverage_complete` | S + 最新 `review.terminal_summary` fact + package-relative report | 布尔；核对 comparisonHead、A/B/C 与按需 Safety 的 PASS，同 ReviewRun 的 B/C/Safety 可凭 reuseEvidence 复用 | 尚未终审为 U；缺结果或来源不匹配为 false；旧 false 仍可表示 gap，旧 true/dispatch 不能证明完成；Gate 终态不能替代结果 | `attempt.review.terminal-coverage-incomplete` |
+ | `attempt.terminal_gate_pending` | S + G：先要求所有 Ticket terminal；再取 `gate.terminal`，返回其否定 | 布尔 | state 或 gate verdict 不可判定 = U；尚有非 terminal Ticket = F；全 terminal 且 gate 缺失/非 terminal = true；pass/fail/defer = F；HF：无 | `attempt.gate.durable-delta-missing` |
+ | `git.acceptance_revision_diverged` | S + Git（ticket subject）：Ticket row 必须是 `SATISFIED`，读取 `acceptance.revision`，确认该 revision 可 resolve，再与当前 Git HEAD 比较 | 布尔；可 resolve 且不等于当前 HEAD = true，等于 = false | 非 ticket subject = U；state 无效时当前实现把无 row 当作“非 SATISFIED”，返回 F；缺 acceptance、HEAD、或 revision 无法 resolve = U；HF：无 | `ticket.rework.revision-diverged` |
+ | `git.comparison_head_fixed` | R：attempt scope 的最新 fact `git.comparison_head_fixed`；不再从自由文本 marker 推导 | 布尔 | 无 trail/无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.review.comparison-head-unfixed` |
+@@ -211,7 +211,7 @@ trail schema 硬失败。显式 fact 优先；trail 可读取但 key 未声明
+ | `attempt.manual_verification_owner` | `unknown` | 没有 owner 声明不能证明不需要人工复核，默认 false 会少提醒人工验证。 |
+ | `attempt.manual_verification_result_present` | `unknown` | 没有结果声明不能证明结果不存在，默认 false 会把未登记结果误报为缺失。 |
+ | `attempt.completion_claim_pending` | `unknown` | 没有 pending 声明不能证明完成声明已审计，默认 false 会少提醒完成前检查。 |
+-| `attempt.terminal_coverage_complete` | 按 `attempt.all_tickets_terminal` 闸门后的机械输入判定；终审阶段缺证据是 `false` | 全部 Ticket 尚未终态时为 U，不投递；到终审阶段没有四条有效 terminal-final Track、head 无法证明有效或存在源码改动时必须是 false，不能用 unknown 掩盖漏报。 |
++| `attempt.terminal_coverage_complete` | 按 required 结果和 report 判定；终审阶段缺证据是 `false` | 没有 summary 时旧 false 可保留 gap；新 summary 必须覆盖 A/B/C 与按需 Safety，并满足 head / 同 ReviewRun 复用约束。 |
+ | `ticket.blocker_maybe_resolved` | `unknown` | 没有变化声明不能判断 blocker 是否已解除，默认 false 会少提醒重新评估。 |
+ | `ticket.no_longer_needed` | `unknown` | 没有处置声明不能授权退休 Ticket，默认 false 会少提醒需要的处置判断。 |
+ | `ticket.release_edge_rechecked` | `false` | 未声明时默认就是“尚未复核”，保留 release-edge 提醒属于 fail-closed。 |
+@@ -965,7 +965,7 @@ P0 内部顺序就是 YAML 的顺序。P0 有多个 active match 时，renderer
+ | `ticket.accept.satisfiable` | `evidence.all_required_claims_supported = true` AND `evidence.contradictory_unresolved = false` AND `ticket.acceptance_edge_released = true` AND `ticket.acceptance_revision_parseable = true` | `evidence.all_required_claims_supported`、`evidence.contradictory_unresolved`、`ticket.acceptance_edge_released`、`ticket.acceptance_revision_parseable` | 需要 Ticket 的 Stable claims 可解析、同一 acceptance pair 覆盖全部 claims、该 pair 无 active contradictory/inconclusive、所有 acceptance edges 已释放，且 revision 能被当前 Git resolve；与 CLI `ticket satisfy` 的 `_evidence_coverage` 同一 pair 语义。 |
+ | `attempt.verify.manual-result-missing` | `attempt.manual_verification_owner = true` AND `attempt.manual_verification_result_present = false` | `attempt.manual_verification_owner`、`attempt.manual_verification_result_present` | 两个布尔都要由 owner/主控显式声明；缺 result 声明是 U，不会自动变成 false。 |
+ | `attempt.accept.completion-claim-unaudited` | `attempt.completion_claim_pending = true` | `attempt.completion_claim_pending` | 需要 attempt scope 的显式 pending fact；没有声明不能证明 completion claim 已 pending，也不能证明已审计。 |
+-| `attempt.review.terminal-coverage-incomplete` | `attempt.terminal_coverage_complete = false` | `attempt.terminal_coverage_complete` | 当前实现需要显式 `false` 才能命中；没有该 fact 且没有 terminal Gate 时是 U，不是“不完整”的已知 false。terminal Gate 存在时没有 fact 会按 Gate 推为 true。 |
++| `attempt.review.terminal-coverage-incomplete` | `attempt.terminal_coverage_complete = false` | `attempt.terminal_coverage_complete` | 最新 structured summary 缺少 required 结果或有效 report / 复用证据时命中；旧 false 可继续表示 gap，旧 true 不替代结果。 |
+ | `finding.disposition.grading-undecided` | `finding.grading_pending = true` | `finding.grading_pending` | 必须有可解析的 open finding，且没有合法 Grade 或有 `grading_pending`/待定级 marker；closed finding 会得到 false。 |
+ | `attempt.disposition.findings-triage-pending` | `findings.triage_pending = true` AND `attempt.near_terminal_gate = true` | `findings.triage_pending`、`attempt.near_terminal_gate` | execution-findings.md 必须存在且至少有一个 parsed finding 未分流；near-terminal 条件是“所有 Ticket terminal”或“Gate 文件存在且 Verdict 可解析”，malformed Gate 不再满足辅助条件。 |
+ | `attempt.accept.all-tickets-terminal` | `attempt.all_tickets_terminal = true` | `attempt.all_tickets_terminal` | state 必须合法、Ticket 集合非空，且每个 Ticket state 都是 `SATISFIED` 或 `RETIRED`；空 tickets 是已知 false。 |
+@@ -999,7 +999,7 @@ P0 内部顺序就是 YAML 的顺序。P0 有多个 active match 时，renderer
+ 13. **acceptance-edge-held 需要真实 acceptance edge。** 没有 acceptance dependency 时 `all([])=true`，不能把“无依赖”当作 held。
+ 14. **revision-diverged 需要两套比较都成立。** acceptance revision 必须可 resolve 且相对 HEAD 已分叉，同时 trail 旧 head 也必须存在且已前进。
+ 15. **findings triage 的 near-terminal 条件不接受 malformed Gate。** 所有 Ticket terminal，或 Gate 文件存在且 Verdict 可解析，才算接近 terminal。
+-16. **terminal-coverage-incomplete 在终审阶段由 trail 机械推导。** 显式 coverage fact 仍优先；全部 Ticket 尚未终态时不适用（U）；进入终审阶段后，四条有效 terminal-final Track 缺任一条、`review_recheck=true` 行、词表外 Track、缺 head 或源码改动都会给已知 false，四条 Track 且 HEAD 有效才给 true。terminal Gate 仍优先推为 true。
++16. **terminal coverage 使用结果证据。** 从最新 `review.terminal_summary` 与各 track 的独占 report 判定：A/B/C required，按需 Safety；A 最终 HEAD 重审，B/C/Safety 在同 ReviewRun 内凭 PASS 与 reuseEvidence 复用。dispatch 或 Gate 终态不替代结果。
+ 17. **release-edge-unchecked 需要显式 `release_edge_rechecked=false`。** 缺声明不会自动变成 false。
+ 18. **durable-delta-missing 需要一个存在且可解析的非 terminal Gate。** 缺 Gate 会让 `gate.stage7_complete` 为 U，而不是 false。
+ 19. **comparison-mismatch 在 pass 前检查。** 只有 completion claim pending、尚无 Gate 且当前 HEAD 与 SATISFIED acceptance revision 不一致时命中；pass 后不再产生该 row。
+@@ -1083,3 +1083,7 @@ key，空集有确定值，不把整行推入 `undetermined`：`evidence.indexed
+ 业务声明或 Git trail head 的 key，缺失或零行仍返回 U；特别是不能把老 package 未写入
+ 新版 trail 的动作当成“没有做过”。`ticket.release_edge_rechecked` 的既有缺省值只在
+ trail 可读且含事件时适用，缺失或零行仍为 U。
++
++### 终审结果事实
++
++`review.terminal_summary` 是 attempt-scoped structured fact，形状与写入时机见 `../skills/do-review/references/output-templates.md` 的 Terminal coverage record。renderer 读取 package 内 report 的 verdict、reviewed-head、review-run、review-track，核对当前 comparisonHead 与条件 Safety；B/C/Safety 旧 PASS 还需同 ReviewRun 的 reuseEvidence。旧 `attempt.terminal_coverage_complete` 布尔键只兼容读取历史行，不替代结果证据。
+diff --git a/plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/protocols.json b/plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/protocols.json
+index afd944d..fb160de 100644
+--- a/plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/protocols.json
++++ b/plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/protocols.json
+@@ -19,13 +19,13 @@
+   "attempt.record.trail-rotation-due": "轨迹轮换到期：按 trail schema 轮换活动文件，保留仍成立的 fact。",
+   "attempt.readiness.worker-still-running": "仍有 worker 在运行：不并发派发同一 source unit；等 worker-return 后再决策。",
+   "attempt.readiness.all-edges-held": "依赖边仍被持有：不能 dispatch；先确认 Ticket dependency 是否释放（release 边只在 Gate pass 前复核）。",
+-  "attempt.readiness.multiple-ready-tickets": "多个 ready Ticket：默认串行；确为并行候选时按 parallel-work-admission 决定，不擅自放宽。",
++  "attempt.readiness.multiple-ready-tickets": "多个 ready Ticket：按实际 dependency 和资源隔离决定并行；消费 return 后检查受影响候选补派，整批结束或准备 idle 时全局扫描。",
+   "ticket.readiness.blocker-maybe-resolved": "blocker 可能已解除：先验证解除事实，再决定是否需要 revalidation。",
+   "ticket.readiness.evidence-lane-preflight": "首次派发声明 Evidence Lane Contract 的 Ticket：主 session 核四项 lane（target 唯一、端口 owner、库分离、cleanup owner）只输出 READY|BLOCKED，每 Ticket 首次激活一次；子代理不得判 lane 生死；昂贵 runtime/E2E 前再核 health/session/S3。",
+   "attempt.readiness.integration-carrier-unavailable": "integration carrier 不可用：不 claim 集成完成；记录 gap，不伪造证据。",
+   "finding.fix.worker-envelope-invalid": "worker 结果不可归因：不采信并按 INCOMPLETE 处理；核进程、diff、residue 与 Topic context，可信则同 Topic work lane 继续，失效则退役重派。",
+   "ticket.implement.worker-incomplete-first": "worker 返回 INCOMPLETE：核进程、diff、residue 与 Topic context；可信则同 lane 继续，失效则由 Dispatcher 退役重派。",
+-  "ticket.implement.worker-incomplete-second": "同 Topic 连续 INCOMPLETE 且 context 仍不可采信：归一为 BLOCKED，记录 blocker 与唯一下一动作。",
++  "ticket.implement.worker-incomplete-second": "同 Topic 重复 INCOMPLETE：先调查实际原因、上下文可信度与安全恢复路径；有安全路径则恢复，只有缺授权、真实外部依赖或安全路径耗尽才 BLOCKED。",
+   "ticket.implement.worker-blocked": "业务 BLOCKED：保持 Ticket 状态，记录 blocker 与下一动作；不把换 executor 当成业务解除。",
+   "ticket.investigate.no-carrier": "investigate 无 carrier：扩大调查或请求 owner；不代替授权、不实施。",
+   "ticket.investigate.evidence-gap": "EVIDENCE_GAP：保留 cause、boundary 与最小下一项取证；不释放授权、acceptance 或 Gate。",
+@@ -38,7 +38,7 @@
+   "finding.review.source-recheck-pending": "Track C / Spec fidelity finding：接受前必须完成一次性 source recheck（只限该 finding + 不可变 Decision/Spec/contract-design），结果记录一次，不重复派发。",
+   "ticket.verify.contradictory-unresolved": "contradictory evidence 未处置不能 SATISFIED：先 invalidate（impl_evidence_invalidate）或补充决定性证据。",
+   "ticket.verify.safety-invariant-unfalsified": "安全不变量未 falsify 不能声称完成：early-falsification 需要真实反例尝试的证据。",
+-  "attempt.review.comparison-head-unfixed": "comparison HEAD 未固定：创建 ReviewRun 前先 commit 完整 review unit；未提交的 review-relevant 变更阻塞 ReviewRun。",
++  "attempt.review.comparison-head-unfixed": "comparison 未固定：已有 commit 固定 SHA；未提交审阅用 review_ledger.py create --working-tree 创建隔离快照，不要求提交用户工作区。",
+   "attempt.verify.integration-evidence-unavailable": "integration evidence 不可用：不声称集成验证通过；记录 gap 与最小忠实证据路径。",
+   "ticket.rework.evidence-conflict": "证据冲突：失效冲突证据（needs-revalidation），保留未受影响 evidence。",
+   "ticket.rework.revision-diverged": "revision 分叉：NEEDS-REVALIDATION 不释放依赖；重验受影响 claim 后再回到可满足路径。",
+@@ -52,7 +52,7 @@
+   "ticket.accept.release-edge-unchecked": "release 边未复核：Gate pass 前必须复核 release 边。",
+   "ticket.accept.satisfiable": "可满足：SATISFIED 必须带当前 revision/environment 并写入 acceptance，覆盖全部 required claims，无未处置 contradictory/inconclusive。",
+   "attempt.verify.manual-result-missing": "manual acceptance 缺结果：按 manual-acceptance-readiness 模板取得入口/oracle/环境/失败反馈/teardown owner 与结果证据。",
+-  "attempt.accept.completion-claim-unaudited": "complete/merge-ready 声称前：先做 verification-before-completion 审计证据。",
++  "attempt.accept.completion-claim-unaudited": "complete/merge-ready 声称前：先做 execution-boundaries 的 completion audit。",
+   "attempt.review.terminal-coverage-incomplete": "terminal-final coverage 不完整：不能支撑 terminal PASS；Safety 适用而缺失 = coverage INCOMPLETE。review_phase 合法值：{review_phase_values}；review_track 合法值：{review_track_values}。",
+   "finding.disposition.grading-undecided": "finding 定级未决：先定级（P0/P1）与 closure 判定，再进 gate。",
+   "attempt.disposition.findings-triage-pending": "findings 分流未决：先完成分流与 closure，再写 terminal gate。",
+diff --git a/plugin-marketplace/plugins/impl-package/scripts/situation.py b/plugin-marketplace/plugins/impl-package/scripts/situation.py
+index b0be27c..7483487 100644
+--- a/plugin-marketplace/plugins/impl-package/scripts/situation.py
++++ b/plugin-marketplace/plugins/impl-package/scripts/situation.py
+@@ -99,6 +99,7 @@ FACT_KEYS = frozenset(
+         "ticket.review_trigger",
+         "ticket.post_fix_regression_pending",
+         "review.canonical_summary",
++        "review.terminal_summary",
+         "evidence.sources_uniquely_decide",
+         "git.comparison_head_fixed",
+         "git.accepted_seam_changed",
+@@ -2455,50 +2456,66 @@ def _when_attempt_completion_claim_pending(context: FactContext) -> Fact:
+ 
+ 
+ def _when_attempt_terminal_coverage_complete(context: FactContext) -> Fact:
+-    explicit = context._explicit_bool("attempt.terminal_coverage_complete")
+-    if explicit is not None:
+-        return explicit
+-    if context.snapshot.gate.verdict in TERMINAL_GATE_VERDICTS:
+-        return _fact_value(True)
++    summary_fact = context._latest_fact("review.terminal_summary")
++    legacy = context._explicit_bool("attempt.terminal_coverage_complete")
++    if summary_fact is None and legacy is not None and legacy.known and legacy.value is False:
++        return legacy
+     near_terminal = _when_attempt_all_tickets_terminal(context)
+     if not near_terminal.known:
+         return near_terminal
+     if near_terminal.value is not True:
+         return context.unknown("尚未进入终审阶段，terminal-final coverage 暂不适用")
+ 
+-    rows = context._subject_rows()
+-    if rows is None:
++    summary = summary_fact.value if summary_fact is not None else None
++    if not isinstance(summary, dict):
+         return _fact_value(False)
+-    review_rows: list[dict[str, Any]] = []
+-    tracks: set[str] = set()
+-    for row in rows:
+-        if _event_kind(row) != "dispatch" or row.get("review_phase") != "terminal-final":
+-            continue
+-        if row.get("review_recheck") is True:
+-            continue
+-        track = row.get("review_track")
+-        if not isinstance(track, str) or track not in REVIEW_TRACKS:
+-            continue
+-        tracks.add(track)
+-        review_rows.append(row)
+-    if not REVIEW_TRACKS <= tracks:
++    head = context.snapshot.head
++    if not head or summary.get("comparisonHead") != head or not isinstance(summary.get("safetyApplicable"), bool):
+         return _fact_value(False)
+-    current_head = context.snapshot.head
+-    if not isinstance(current_head, str) or not current_head:
++    run_id = summary.get("reviewRunId")
++    results = summary.get("results")
++    if not isinstance(run_id, str) or not run_id.strip() or not isinstance(results, list):
+         return _fact_value(False)
+-    for row in review_rows:
+-        review_head = row.get("head")
+-        if not isinstance(review_head, str) or not review_head:
++    required = {"Track A", "Track B", "Track C"}
++    if summary["safetyApplicable"]:
++        required.add("Track D")
++    by_track = {}
++    for result in results:
++        if not isinstance(result, dict) or not isinstance(result.get("track"), str) or result["track"] not in REVIEW_TRACKS:
+             return _fact_value(False)
+-        if review_head == current_head:
+-            continue
+-        source_changed = _diff_has_source_changes(
+-            context,
+-            review_head,
+-            label="terminal-final review head",
+-        )
+-        if not source_changed.known or source_changed.value:
++        track = result["track"]
++        if track in by_track or result.get("verdict") != "PASS":
+             return _fact_value(False)
++        by_track[track] = result
++    if not required <= by_track.keys():
++        return _fact_value(False)
++
++    def artifact_text(value: Any) -> str | None:
++        if not isinstance(value, str) or not value or Path(value).is_absolute() or ".." in Path(value).parts:
++            return None
++        try:
++            view = context.snapshot.reader.read(value)
++        except (SituationError, OSError, ValueError):
++            return None
++        return view.text if not view.error else None
++
++    artifacts = set()
++    for track, result in by_track.items():
++        reviewed_head = result.get("reviewedHead")
++        report = artifact_text(result.get("artifact"))
++        if not isinstance(reviewed_head, str) or not reviewed_head or not report:
++            return _fact_value(False)
++        artifact = _safe_relative_path(context.snapshot.package, result["artifact"])
++        if artifact in artifacts:
++            return _fact_value(False)
++        artifacts.add(artifact)
++        header = dict(line.split(": ", 1) for line in report.splitlines()[:4] if ": " in line)
++        if header != {"verdict": "PASS", "reviewed-head": reviewed_head, "review-run": run_id, "review-track": track}:
++            return _fact_value(False)
++        if reviewed_head != head:
++            # 复用判据由 parent 对照该轨输入裁决，保留同一 ReviewRun 的 PASS 和 delta 证据。
++            if track == "Track A" or result.get("reused") is not True or not artifact_text(result.get("reuseEvidence")):
++                return _fact_value(False)
+     return _fact_value(True)
+ 
+ 
+diff --git a/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/SKILL.md b/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/SKILL.md
+index 733c4a0..126e9cf 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/SKILL.md
++++ b/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/SKILL.md
+@@ -13,10 +13,10 @@ description: 当需要审计 durable knowledge delta、把 owner 批准的子集
+    - 常见误判：不先固定基准就收集 source，会把 linked worktree 或本轮未合入内容混进 audit 事实。
+ 2. **Audit（只读）**：建立 inventory、gap-catching 和 disposition 候选，但不写入。
+    - 常见误判：把 inventory 候选直接当成 owner 已批准的 durable delta，会越过冲突和意图判断。
+-3. **Apply**：只对 owner 明确批准的精确 item ID 写入。
+-   - 常见误判：把“这批”当成批准范围，会顺手修改同文件的其他候选或伪造 pending。
++3. **Apply**：将 owner 对已展示且未变化报告的明确批准解析为精确 item ID 集合后写入。
++   - 常见误判：批准必须能唯一确定 item 集合；报告变化、冲突项或删除范围仍需单独裁决。
+ 4. **Verify（只读）**：在 apply 后检查路径、target commit、链接和 audit shape。
+-   - 常见误判：验证失败时自动修复，会把 verify 变成未经授权的第二次 apply。
++   - 常见误判：验证器保持只读；本轮 apply 造成的机械缺陷回到同一授权 apply 修复后重验。
+ 5. **Retirement（如适用）**：只有 package 已完全吸收且没有 inbound reference 时才列删除候选。
+    - 常见误判：把 Gate terminal 或实现合入单独当成可删除证明，会丢掉未吸收的 durable delta 或活动引用。
+ 
+@@ -47,7 +47,7 @@ Gate 不存在表示没有 Gate 证据；字段不完整、comparison commit 不
+ 
+ ## Apply
+ 
+-1. 只有 owner 明确批准 report/CLI 输出中的精确 item ID 才 apply。
++1. 先将 owner 对 report/CLI 输出的明确批准解析为精确 item ID；已展示且未变化报告的明确批量批准可直接解析，集合不明确时才询问。
+    - 常见误判：把 report 中出现的所有 candidate 当成批准，会把 owner 尚未裁决的冲突一起写回。
+ 2. 只修改批准 item 的 destination、对应 pending 项（如有）和 done record；gap-catching 不伪造 pending，不顺手处理同文件其他候选。
+    - 常见误判：借 apply 机会清理同文件其他候选，会让实际写集超出批准 item ID，且无法回放哪一项触发了修改。
+@@ -58,8 +58,7 @@ Gate 不存在表示没有 Gate 证据；字段不完整、comparison commit 不
+ 
+ ## Verify
+ 
+-1. 运行 `verify_stable_docs.py`，检查显式路径、target Git commit、stable-doc 本地链接、audit shape 和 inventory；失败只报告，不自动修复。具体 target commit/version 与本地链接检查按需读 `references/verify-runbook.md`。
+-   - 常见误判：把 verify failure 当成 apply 许可，自动修复会绕过 owner 对 destination 和 destructive scope 的授权。
++1. 运行 `verify_stable_docs.py`，检查显式路径、target Git commit、stable-doc 本地链接、audit shape 和 inventory；验证器只读；本轮 apply 在已批准 destination 内造成的链接、格式等机械错误，回到同一授权 apply 修复并重验。新增语义、destination、无关问题或破坏范围变化交回 owner。具体 target commit/version 与本地链接检查按需读 `references/verify-runbook.md`。
+ 
+ ## Retirement
+ 
+diff --git a/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/references/apply-runbook.md b/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/references/apply-runbook.md
+index d3e4e20..bc25ed2 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/references/apply-runbook.md
++++ b/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/references/apply-runbook.md
+@@ -1,6 +1,6 @@
+ # Apply Runbook
+ 
+-Apply 只接受 owner 明确批准的 report/CLI item ID；禁止把"将报告全部处理"解释为批准。每个 apply item 必须明确来源 package、目标 stable doc、durable delta 类型（system PRD / system architecture or ADR / context PRD / context architecture or contract / context language / module PRD / module spec）、代码或 commit 证据，以及与现有 stable docs 的关系（新增、修正、替换、删除废弃说法或 no-op）。仓库没有配置 `contextKnowledge` 时不得发明 context destination。
++Apply 将 owner 的明确批准解析并记录为精确 report/CLI item ID 集合；对已展示且未变化报告的明确批量批准可直接解析。冲突项、未决选择和 destructive apply 另行裁决；集合不明确时才询问。每个 apply item 必须明确来源 package、目标 stable doc、durable delta 类型（system PRD / system architecture or ADR / context PRD / context architecture or contract / context language / module PRD / module spec）、代码或 commit 证据，以及与现有 stable docs 的关系（新增、修正、替换、删除废弃说法或 no-op）。仓库没有配置 `contextKnowledge` 时不得发明 context destination。
+ 
+ 写入 stable docs 后，把对应 item 记录为 `done`（`records.done`）：
+ 
+diff --git a/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/references/verify-runbook.md b/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/references/verify-runbook.md
+index 30eb0d0..0fc5a5f 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/references/verify-runbook.md
++++ b/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/references/verify-runbook.md
+@@ -1,3 +1,3 @@
+ # Verify Runbook
+ 
+-Run the verifier after approved apply. It checks configured paths, the target Git commit, local Markdown links, audit item shape and package inventory. Also inspect the exact diff to ensure only approved item IDs changed. Verification never repairs failures automatically.
++Run the verifier after approved apply. It checks configured paths, the target Git commit, local Markdown links, audit item shape and package inventory. Also inspect the exact diff to ensure only approved item IDs changed. The verifier remains read-only. If verification exposes a mechanical error caused by this apply within its approved destinations, the caller returns to the same authorized apply, repairs it, and verifies again. New semantics, destinations, unrelated failures, or destructive scope require the missing owner decision.
+diff --git a/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/rubric.md b/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/rubric.md
+index a776289..911b7e5 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/rubric.md
++++ b/plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/rubric.md
+@@ -2,7 +2,7 @@
+ 
+ ## Confirmed preferences
+ 
+-- Audit is read-only; apply requires exact approved item IDs; verify is read-only.
++- Audit and the verifier are read-only. Apply records exact approved item IDs, including a uniquely resolved explicit batch approval of the unchanged report. The caller may repair this apply's mechanical errors within the same authorization and verify again.
+ - Configuration and evidence use explicit repository-relative paths.
+ - Git commit IDs provide the only version boundary.
+ - Gate keeps the current readable verdict; Git keeps history.
+diff --git a/plugin-marketplace/plugins/impl-package/skills/dev-with-track/SKILL.md b/plugin-marketplace/plugins/impl-package/skills/dev-with-track/SKILL.md
+index 58551ae..a60e3fe 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/dev-with-track/SKILL.md
++++ b/plugin-marketplace/plugins/impl-package/skills/dev-with-track/SKILL.md
+@@ -13,9 +13,9 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选
+ 2. **选择动作**：根据 Ticket typed dependency 与 canonical state 选择 Investigate、Decide、Implement 或 Evaluate。implementation edge 阻止绑定未稳定语义的下游实现；acceptance edge 只阻止正式验收与状态宣称；release edge 在 Gate 前复核。
+ 3. **裁决语义**：Decision/Spec 能唯一裁决时作为 implementation defect；存在多个合理业务结果时才请求 Owner。finding 的定级、disposition 与 acceptance point 也由本 Skill 判断。
+ 4. **形成 Topic**：按共享 foundation、ownership 与 closure point 把当前业务动作组织为连续 Topic，明确 bounded outcome、禁改范围、comparison point、成功条件与局部验证；需要 mutation 的 PENDING Ticket 先完成对应 preflight。
+-5. **交给 Dispatcher**：对候选执行 Topic-first admission，选择每个 Topic 的当前 baby step 并形成批次；review 或长时验证在途不等于 Attempt 阻塞，继续释放不依赖其结论且资源隔离的其他 Ticket 调研或准备；宿主 receipt 明确后确认派发，当前批次 return 全部消费后再全局重扫。Progress/checkpoint 不授权 dispatch。
++5. **交给 Dispatcher**：对候选执行 Topic-first admission，选择每个 Topic 的当前 baby step 并形成批次；review 或长时验证在途不等于 Attempt 阻塞，继续释放不依赖其结论且资源隔离的其他 Ticket 调研或准备；宿主 receipt 明确后确认派发，每次消费 return 后检查受影响候选并补派，整批结束或准备 idle 时全局重扫。Progress/checkpoint 不授权 dispatch。
+ 6. **执行 bounded worker**：对每个已派发 Topic，caller 按 `/impl-package:subagent-driven-development` 分类 dependency、决定当前或隔离 worktree，并形成 mode、lane、lifecycle 与 review requirement。
+-7. **消费结果**：核对可归因 diff、evidence、residue、cleanup 和 review 状态；局部 DONE 或 checkpoint PASS 只释放对应 Topic 下一步。随后用 package CLI 写 state/evidence/checkpoint/judgment/trail，当前批次收齐后再由 Dispatcher 全局重扫；调度 idle 后依据 canonical state、evidence、review 与 Gate 判断继续、blocked 或 closure。
++7. **消费结果**：核对可归因 diff、evidence、residue、cleanup 和 review 状态；局部 DONE 或 checkpoint PASS 只释放对应 Topic 下一步。随后将确定的 state/evidence/checkpoint/judgment/trail 更新交给记账 subagent；消费 return 后检查受影响候选并补派，整批结束或准备 idle 时由 Dispatcher 全局重扫；调度 idle 后依据 canonical state、evidence、review 与 Gate 判断继续、blocked 或 closure。
+ 
+ 完成标准：每轮都有唯一业务下一动作；等待 review、fix 或长时验证返回不构成下一动作，下一动作是当前可独立开始的调研或隔离 worktree 上的工作；调度循环 idle 只表示队列当前没有已解锁且合格的动作，不表示没有可推进的工作，Ticket/package closure 仍由本 Skill 根据 canonical facts 判断。
+ 
+@@ -26,29 +26,29 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选
+ - `$dispatcher` 面向上游主控，拥有 Topic-first admission、当前 baby step、当前批次、派发 receipt、worker return、Topic lifecycle 和 idle；
+ - `/impl-package:subagent-driven-development` 面向下游 bounded worker，拥有 Topic、dependency class、mode、lane、lifecycle 与 review requirement。
+ 
+-主 session 是 package State、Evidence、Execution Record、Checkpoint 与 Gate 的唯一 writer。调用方为每个 Topic 提供 objective、scope、write-set、acceptance、authorization、verification 和输出合同，并按 SDD 选择当前或隔离 worktree；provider/executor 由 Owner 或宿主选择。
++主 session 决定 State、Evidence、Execution Record judgment、Checkpoint 与 Gate 的语义，直接维护业务文档；`/impl-package:execution-boundaries` 记账 subagent 串行执行语义 CLI，是运行状态和 CLI 投影的唯一 writer。日常更新异步进行，只有下一动作依赖落盘或收口时才等待。调用方为每个 Topic 提供 objective、scope、write-set、acceptance、authorization、verification 和输出合同，并按 SDD 选择当前或隔离 worktree；provider/executor 由 Owner 或宿主选择。
+ 
+ 需要快速定位业务→调度→worker→状态写入时读取 [Control Flow](references/control-flow.md)；恢复、返工、evidence 或 Gate mutation 读取 [Runtime Protocol](references/runtime-protocol.md)。
+ 
+-证据矛盾、恢复、部分写入补齐、跨 stage 对账或异常排查时按需调用 `/impl-package:execution-boundaries` slow path；主 session 复核其结构化修复输入并执行最终写入。旧 Task Handoff 只作兼容恢复材料。
++证据矛盾、恢复、部分写入补齐、跨 stage 对账或异常排查时按需调用 `/impl-package:execution-boundaries` slow path；主 session 复核结构化修复输入，记账 subagent 执行接受的 CLI 更新。旧 Task Handoff 只作兼容恢复材料。
+ 
+ ## Restore
+ 
+ 首次确认 package anchor 后，Codex 从当前已加载 Skill 解析 plugin root，并调用 `python <plugin-root>/hooks/impl_package_hooks.py activate --package <package>` 绑定当前 session；其它宿主跳过。若有匹配 Capsule，只消费其中的恢复事实并复核 package、HEAD 与 initial approval，不把 Capsule 当作 acceptance 或 Gate evidence。
+ 
+-Capsule 缺失、失配、Hook 未信任/禁用，或本轮发生 state mutation 时，读取 [Runtime Protocol](references/runtime-protocol.md) 的完整恢复顺序。真正 dispatch 前仍运行普通 `situation.py render` 生成 credential；偏离建议或表外行动使用 `escape` 记录理由。
++首次恢复时 Capsule 缺失、失配或 Hook 不可用，或发生未知外部状态变化、CAS 失败、部分写入时，读取 [Runtime Protocol](references/runtime-protocol.md) 的完整恢复顺序。已知 CLI 成功更新后消费回执，按 delta 刷新当前事实；真正 dispatch 前由记账 subagent 运行普通 `situation.py render` 生成 credential；偏离建议或表外行动使用 `escape` 记录理由。
+ 
+ 显式离开 package 工作时，Codex 调用同一脚本的 `deactivate`；同 session 未解绑就切换到普通 SDD 时，后续 resume/compact 仍会注入 Capsule。Restore 只是导航，不推进 Gate。
+ 
+ ## Ticket 激活 preflight
+ 
+-PENDING Ticket 首次激活且 Planned Verification 声明 `Evidence Lane Contract` 时，调用 `/impl-package:execution-preflight` 核 URL identity、端口 owner、库分离和 cleanup owner，只消费 `READY | BLOCKED`。昂贵 runtime/E2E 真正运行前再核 health、session 和 S3。
++PENDING Ticket 首次激活且 Planned Verification 声明 `Evidence Lane Contract` 时，调用 `/impl-package:execution-boundaries` 核 URL identity、端口 owner、库分离和 cleanup owner，读取其中“Ticket 首次激活”部分，只消费 `READY | BLOCKED`。昂贵 runtime/E2E 真正运行前再核 health、session 和 S3。
+ 
+ ## State、ER 与 Trail
+ 
+ - Ticket 状态使用 `ticket satisfy|block|needs-revalidation|pending|retire ... --expect ...`；`SATISFIED` 携带当前 revision/environment，`BLOCKED`/`RETIRED` 携带直接 evidence。stale transition 先重读。
+ - 登记 `supporting` 或执行 `ticket satisfy` 前，逐 stable claim 核对 artifact 是否直接覆盖该 acceptance atom 的完整语义；部分覆盖不登记 `supporting`，Ticket 保持 `PENDING`。执行期发现一个 claim 内含可独立失败或需不同 oracle/evidence lane 的子句时，交回 `impl-planning` 修订受影响 Ticket；若该 Ticket 已 `SATISFIED`，先用 `needs-revalidation` 失效对应 evidence，不能由执行者临时把宽 claim 解释为已满足。
+-- worker 只返回结构化事实；所有 state mutation 走语义 CLI，证据矛盾或部分写入时经 slow path 对账后仍由主 session 执行最终写入。
++- worker 只返回结构化事实；所有 state mutation 由记账 subagent 走语义 CLI，证据矛盾或部分写入时经 slow path 对账、主 session 裁决后再执行。
+ - `recovery checkpoint` 只保存下一动作与恢复 evidence；长期判断写 `recovery judgment`。checkpoint 不授权派发、不释放 dependency、不创建新 Task 状态。
+ - `dispatch`、`worker-return`、`fact`、`escape` 使用 `trail append`；轨迹只追加，写错时追加更正。显式 handoff 先写 checkpoint，再轮换 trail。
+ - 新 package 不产生 `READY/RUNNING/DONE` Task 状态；旧 Task `DONE` 也不等于 Ticket `SATISFIED`。
+@@ -64,6 +64,6 @@ PENDING Ticket 首次激活且 Planned Verification 声明 `Evidence Lane Contra
+ 
+ Gate 只判断 current Attempt：`blocked` 保持 active 并记录 gap/next action；`pass` 要求所有 required Ticket/verification/review/manual acceptance/findings closure 已满足；`fail|defer` 如实终结，后续实现进入 patch Attempt。
+ 
+-terminal Gate 必须完成 Stage 7：记录 Durable Delta 与 truth pointer，或写明无增量理由；terminal 后冻结 state、checkpoint 和 Execution Record。transport disconnect 后从幂等事实恢复，不创建第二个完成结论。
++terminal Gate 前收齐必要记账回执，并完成 Stage 7：记录 Durable Delta 与 truth pointer，或写明无增量理由；terminal 后冻结 state、checkpoint 和 Execution Record。transport disconnect 后从幂等事实恢复，不创建第二个完成结论。
+ 
+ 先由本 Skill 根据 canonical state、Gate 与 evidence 判断 Ticket 总数、剩余数、blocker、是否 closed 和唯一下一动作；若 catalog 中存在 `talk-to-boss`，再由它组织叙述，不参与状态判断。
+diff --git a/plugin-marketplace/plugins/impl-package/skills/dev-with-track/references/control-flow.md b/plugin-marketplace/plugins/impl-package/skills/dev-with-track/references/control-flow.md
+index a6eb756..8f7841e 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/dev-with-track/references/control-flow.md
++++ b/plugin-marketplace/plugins/impl-package/skills/dev-with-track/references/control-flow.md
+@@ -7,7 +7,7 @@ validate → progress restore → choose business action
+                                   ↓
+           bounded worker follows subagent-driven-development
+                                   ↓
+-               dev-with-track consumes result and writes
++               dev-with-track decides; bookkeeper writes via CLI
+                State / Evidence / Checkpoint / Trail
+                                   ↓
+               review / manual acceptance / claim audit
+@@ -15,7 +15,7 @@ validate → progress restore → choose business action
+                         Stage 7 / current Gate
+ ```
+ 
+-Dispatcher 与 SDD 平级：前者指导上游主控调度，后者指导下游 bounded worker 方法；dev-with-track/main session 写入 package State、Evidence、Checkpoint 与 Gate。
++Dispatcher 与 SDD 平级：前者指导上游主控调度，后者指导下游 bounded worker 方法；dev-with-track/main session 裁决业务语义并写业务文档，execution-boundaries 记账 subagent 串行调用 CLI 写入 package State、Evidence、Checkpoint 与 Gate。
+ 
+ - blocker 或 evidence 缺失：保留当前业务结论，写 checkpoint；Dispatcher 在没有已解锁且合格动作时进入 idle。
+ - contract/plan 变化：记录 affected scope 并沿用 current package 的 initial bundle approval；新 package 才取得新 approval。
+diff --git a/plugin-marketplace/plugins/impl-package/skills/dev-with-track/rubric.md b/plugin-marketplace/plugins/impl-package/skills/dev-with-track/rubric.md
+index 3873a5f..07b83ce 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/dev-with-track/rubric.md
++++ b/plugin-marketplace/plugins/impl-package/skills/dev-with-track/rubric.md
+@@ -15,3 +15,4 @@
+ - [已确认] `$dispatcher` 与 `/impl-package:subagent-driven-development` 是平级指导：前者面向上游 Topic-first admission、baby step 批次、dispatch/return/idle，后者面向下游 bounded worker 的 Topic/dependency/mode/execution-lane/lifecycle；本 Skill 选择业务动作并消费两者结果。
+ - [已确认] Dispatcher idle、worker 局部 DONE 与 SDD review PASSED 是局部事实；本 Skill 依据 canonical Ticket/State/Evidence/Gate 判断业务 closure。
+ - [已确认] 业务控制循环置于入口前部，先刷新事实并选择动作，再形成 Topic、调用 Dispatcher/SDD、消费结果并写入 package 权威状态。
++- [已确认 · 2026-09-05] owning-stage 主 thread 更新业务文档并裁决语义；一个 execution-boundaries 记账 subagent 串行调用 CLI 更新 state 与运行投影，日常异步，依赖落盘或收口时等待。
+diff --git a/plugin-marketplace/plugins/impl-package/skills/dev-with-track/situations.yaml b/plugin-marketplace/plugins/impl-package/skills/dev-with-track/situations.yaml
+index 373ccaa..4b43abc 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/dev-with-track/situations.yaml
++++ b/plugin-marketplace/plugins/impl-package/skills/dev-with-track/situations.yaml
+@@ -134,7 +134,7 @@ situations:
+       - id: audit-completion-claim
+         default: true
+         by: main-session
+-        do: "/impl-package:verification-before-completion audit current Attempt"
++        do: "/impl-package:execution-boundaries completion audit current Attempt"
+         effect: "全部 Ticket 为 SATISFIED 或 RETIRED 后开始全局收口"
+     escape: true
+ 
+@@ -287,11 +287,11 @@ situations:
+       trail.last_worker_mode: implement
+     judgment: false
+     actions:
+-      - id: fresh-fallback
++      - id: inspect-recovery
+         default: true
+-        by: dispatch
+-        do: "/impl-package:subagent-driven-development mode=implement (fallback=implement)"
+-        effect: "INCOMPLETE 视为上下文污染/持续卡住，work lane 按退役条件换 fresh worker，允许一次 fallback"
++        by: main-session
++        do: "核进程、diff、residue 与 Topic context，按实际原因选择同 lane 恢复或重新调查"
++        effect: "上下文可信且有安全恢复路径则继续；失效时换 fresh worker，不按次数直接阻塞业务"
+     escape: true
+ 
+   - slug: ticket.implement.worker-incomplete-second
+@@ -302,11 +302,11 @@ situations:
+       trail.last_worker_mode: implement
+     judgment: false
+     actions:
+-      - id: normalize-blocked
++      - id: investigate-cause
+         default: true
+         by: main-session
+-        do: "impl_package_state.py --package <package> ticket block <id> --expect PENDING --evidence <incomplete-evidence>"
+-        effect: "停止第二次 INCOMPLETE 的 fallback"
++        do: "/impl-package:subagent-driven-development mode=investigate，核对重复 INCOMPLETE 的原因与安全恢复路径"
++        effect: "重新确定 Topic 边界；只有缺授权、真实外部依赖或安全路径耗尽才 BLOCKED"
+     escape: true
+ 
+   - slug: ticket.implement.worker-blocked
+@@ -422,7 +422,7 @@ situations:
+         requires_reason: true
+       - id: confirm-original-conclusion
+         by: main-session
+-        do: "/impl-package:verification-before-completion recheck acceptance revision"
++        do: "/impl-package:execution-boundaries completion audit recheck acceptance revision"
+         effect: "保留原结论"
+         requires_reason: true
+     escape: true
+@@ -581,7 +581,7 @@ situations:
+       - id: audit-before-completion
+         default: true
+         by: main-session
+-        do: "/impl-package:verification-before-completion audit current Attempt"
++        do: "/impl-package:execution-boundaries completion audit current Attempt"
+         effect: "完成声明前先审计证据"
+     escape: true
+ 
+@@ -717,7 +717,7 @@ situations:
+       - id: drain-intake
+         default: true
+         by: main-session
+-        do: "/impl-package:standing-bookkeeper drain intake queue"
++        do: "/impl-package:execution-boundaries bookkeeper drain intake queue"
+         effect: "清空待落账队列"
+     escape: true
+ 
+@@ -896,7 +896,7 @@ situations:
+         effect: "无效 envelope 视为上下文不可采信，work lane 按退役条件换 fresh worker；检查 diff 后重新派发"
+       - id: direct-verify-invalid-envelope
+         by: main-session
+-        do: "/impl-package:verification-before-completion audit fixer diff; /impl-package:do-review phase=finding-closure"
++        do: "/impl-package:execution-boundaries completion audit fixer diff; /impl-package:do-review phase=finding-closure"
+         requires_reason: true
+     escape: true
+ 
+diff --git a/plugin-marketplace/plugins/impl-package/skills/do-review/SKILL.md b/plugin-marketplace/plugins/impl-package/skills/do-review/SKILL.md
+index 9404e0e..d3a7ca4 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/do-review/SKILL.md
++++ b/plugin-marketplace/plugins/impl-package/skills/do-review/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: do-review
+-description: Orchestrate independent leaf reviewer agents for PR/code review, N-round review, loop/until-converged review, custom reviewer selection, and closure verification. Pins a committed comparison HEAD first and resolves the review strategy for every phase.
++description: Orchestrate independent leaf reviewer agents for PR/code review, N-round review, loop/until-converged review, custom reviewer selection, and closure verification. Pins an immutable committed revision or isolated working-tree snapshot first and resolves the review strategy for every phase.
+ allowed-tools:
+   - Read
+   - Grep
+@@ -12,14 +12,14 @@ allowed-tools:
+ 
+ `do-review` 是唯一 orchestrator：固定一个 immutable ReviewRun，解析 topology/capacity，派发独立 leaf，拥有 canonical ledger，验证并分类候选，控制收敛并 fail-closed 报告；main session 不是另一名 reviewer。
+ 
+-每个选中的 track 恰好派发一次对应的独立 leaf，映射见 [reviewer-registry.json](references/reviewer-registry.json)；leaf 定义拥有 skill 和 leaf brief，parent 传 common ReviewRun 与 phase addendum，派发经 native subagents。leaf 不得调用 `do-review`、再派 agent/subagent、重算 topology/capacity、查看同轮其它 track 输出、分类跨 track 结果或决定总 verdict；review skill 的 primary intent 不是排他能力边界，证据充分的跨域候选回 parent 归因分类。
++每个本轮需要运行的 track 恰好派发一次对应的独立 leaf，映射见 [reviewer-registry.json](references/reviewer-registry.json)；leaf 定义拥有 skill 和 leaf brief，parent 传 common ReviewRun 与 phase addendum，派发经 native subagents。leaf 不得调用 `do-review`、再派 agent/subagent、重算 topology/capacity、查看同轮其它 track 输出、分类跨 track 结果或决定总 verdict；review skill 的 primary intent 不是排他能力边界，证据充分的跨域候选回 parent 归因分类。
+ 
+ 带到达路径的 claim，reviewer 必须检查证据是否真的走过该路径：连上真实依赖并经过 composition root；只审单层文件不能替代路径证据。
+ 
+ ## Gate 0（判断）
+ 
+-1. ReviewRun 创建前先提交完整 review unit 以固定比较 `HEAD`；review 相关未提交改动阻断，剩余 dirty 文件明确记为 out of scope。这样审查对象不会在派发后漂移，也不会把未纳入 review unit 的改动误当成证据。
+-2. 每个 selected track 恰好派发一次匹配的独立 leaf invocation。逐 track 固定派发，才能避免 required coverage 被重复派发或静默漏掉。
++1. ReviewRun 使用已有 commit 固定比较 SHA；审阅未提交改动时用 `review_ledger.py create --working-tree` 生成隔离快照，纳入全部 tracked 改动和显式 `--include-untracked <path>` 文件，未纳入文件列为 out of scope。CLI 返回 snapshot_repo 时，所有 leaf 从该快照读取；用户工作区、index 和分支保持原样。
++2. 每个本轮需要运行的 track 恰好派发一次匹配的独立 leaf invocation；terminal-final 中满足复用条件的 B/C/Safety 消费旧 PASS，不重复派发。逐 track 固定派发，才能避免 required coverage 被重复派发或静默漏掉。
+ 3. leaf 或其执行 worker 不可用/未授权时，在创建 ReviewRun 前停止并询问“停止，或授权精确命名的 degraded 单 session 列表”，绝不自行降级。否则缺失的独立证据会被误报为完整 review。
+ 4. scope、phase、topology 固定前不预留 capacity。capacity 不能反过来决定应审哪些 track。
+ 
+@@ -38,7 +38,7 @@ allowed-tools:
+ 1. 确定完整 change unit 与可靠 base/head refs；审查 supplied PR/package/branch range 的全部可达 package commits，不只看 `HEAD^`。完整 change unit 是后续 coverage 的边界，避免只凭最近一个父提交漏掉可达变更。
+ 2. 按 tracker references → user paths → matching `docs/`、`specs/`、`.scratch/` → Impl-Package Decision/Spec/Plan/DAG 的顺序发现 Spec evidence，并记录搜索及空结果；无可用 evidence 时合理则询问，继续时记录 gap 且保留默认 Track C。记录空结果是为了让缺失合同成为可见 gap，而不是被静默当成没有约束。
+ 
+-3. 用 `scripts/review_ledger.py create` 原子创建 ledger 与 fixed scope，并为每个 path contract 重复 `--source`；CLI 负责解析 commits、拒绝空三点 diff、在写入前读取 resolved head 的 UTF-8 Git blob。把返回的 `ledger_path`、resolved SHAs、`diff_range` 和每个 `contract_sources` 的 path/object ID/SHA-256 当作 canonical ReviewRun；失败停在 reviewer selection 前，名称冲突用新 timestamp 重试。原子创建和 fixed scope 让后续 leaf 共享同一个不可变审查对象。
++3. 用 `scripts/review_ledger.py create` 原子创建 ledger 与 fixed scope，并为每个 path contract 重复 `--source`；CLI 负责解析 commits、拒绝空三点 diff、在写入前读取 resolved head 的 UTF-8 Git blob；working-tree 模式在临时 Git 仓库固定内容并复核源内容未在采集期间变化。把返回的 `ledger_path`、resolved SHAs、`diff_range` 和每个 `contract_sources` 的 path/object ID/SHA-256 当作 canonical ReviewRun；失败停在 reviewer selection 前，名称冲突用新 timestamp 重试。原子创建和 fixed scope 让后续 leaf 共享同一个不可变审查对象。
+ 
+ 4. Contract source 是 immutable revision evidence：reviewer 只能用 `git show <resolved-head>:<path>` 读取，不能从 working tree 读，也不能做第二次 hash/capture；tracker-only 内容留在 discovery record，不伪造 repository path。这样 reviewer 不会把可移动工作树或重复 capture 当成同一份合同证据。
+ 5. 按 [subagent-briefs.md](references/subagent-briefs.md) 准备 common context：target、mode/round/cap、phase、resolved SHAs/range、included commits、constraints、standards、contract sources、Spec discovery/gap、Safety decision、user policy、prior canonical ledger、assigned track/name/path；每个 leaf 收同一个 ReviewRun，Impl-Package target 的 lifecycle/Gate 仍由 `/impl-package:dev-with-track` 拥有。共同上下文保证各 track 在同一比较点上工作，而不让 leaf 重新裁决 lifecycle/Gate。
+@@ -49,11 +49,11 @@ allowed-tools:
+ 2. 无显式 reviewer 时，`initial` 从 registry `default_tracks`（Track A/C）起步，按 Track B admission、Safety admission 条件分别追加 `review-code-by-standards`、`safety-review`；`terminal-final` 无显式 reviewer 时始终从 registry `terminal_tracks`（Track A/B/C）起步——不受本次 ReviewRun 中 `initial` 或任何更早阶段实际选中子集的影响——按 Safety admission 条件追加 Safety；`finding-closure` 只用一个 independent `reviewer`，不按 registry 拆 track，也不另起 Safety leaf，reviewer 只检查 named findings 内的 safety implications；复用遵循 `/impl-package:subagent-driven-development` 的同 Topic review lane lifecycle。显式 closure selection 仍必须解析成恰好一个 leaf，其它 phase 按声明顺序运行并顺序编号 label。这样 closure scope 不会被扩成一次新的全量发现。
+ 3. reviewer 的 worker 选择独立于 topology，由 worker skill 负责 model/effort defaults，其它 phase 使用当前 host 对 caller target class 的 defaults（受显式约束）。worker 选择不应反向改变 required topology。
+ 
+-4. 通过 [reviewer-registry.json](references/reviewer-registry.json) 与 matching leaf-agent map 解析 track，并在 dispatch 前用 `verify-reviewer-skills.py` 校验 canonical skill path；ambiguous、unreadable、escaping 或 frontmatter mismatch 一律拒绝。主 session 不加载 selected track skill，由 leaf agent 的 `skills` 字段加载；每个 selected leaf 预留一个 slot，能并发则并发，显式 reviewer selection 按声明的完整列表运行，capacity 不能删除 reviewer。路径校验失败或 capacity 不足时不能用近似 leaf 填空。
++4. 通过 [reviewer-registry.json](references/reviewer-registry.json) 与 matching leaf-agent map 解析 track，并在 dispatch 前用 `verify-reviewer-skills.py` 校验 canonical skill path；ambiguous、unreadable、escaping 或 frontmatter mismatch 一律拒绝。主 session 不加载 selected track skill，由 leaf agent 的 `skills` 字段加载；仅为本轮需要运行的 leaf 预留 slot，能并发则并发，显式 reviewer selection 按声明的完整列表运行，capacity 不能删除 reviewer。路径校验失败或 capacity 不足时不能用近似 leaf 填空。
+ 
+ ## 3. Dispatch Independent Rounds
+ 
+-1. 先读 [subagent-briefs.md](references/subagent-briefs.md)：common block 每轮使用，closure brief 只给 Closure verification，anti-duplicate addendum 只在 round 1 后使用。派发 matching leaf，不让 generic subagent 自己拼 track brief；传入 verified reviewer `SKILL.md` path、canonical ledger path 和 parent-owned report artifact path。brief 由 parent 固定，避免 generic worker 临场改变 track 合同。
++1. 先读 [subagent-briefs.md](references/subagent-briefs.md)：common block 每轮使用，closure brief 只给 Closure verification，anti-duplicate addendum 只在 round 1 后使用。派发 matching leaf，不让 generic subagent 自己拼 track brief；传入 verified reviewer `SKILL.md` path、canonical ledger path 和 leaf 独占的 report artifact path。brief 由 parent 固定，避免 generic worker 临场改变 track 合同。
+ 
+ 2. Round 1 不传 prior findings；后续只传 parent 已验证的上一轮 canonical context，不传 raw reviewer output。按已解析 topology 与 matching leaf 执行本轮审查，逐项返回 PASS/FAIL/UNCERTAIN；canonical context 保持轮次之间的证据边界。
+ 3. timeout、cancellation、`PARTIAL` 或缺 evidence 都是 incomplete，不是 PASS。等待所有 required active tracks；Loop 中已记录 dormant 的 track 不算 missing，其他 incomplete 会阻断，除非用户授权了该精确 degraded topology。否则“没有返回”会被错误收敛为通过。
+@@ -61,10 +61,10 @@ allowed-tools:
+ ## 4. Canonicalize The Round
+ 
+ 1. 所有 leaf 返回后按 [output-templates.md](references/output-templates.md) 校验 ledger fields、evidence、dedup key、finding classification、convergence 和 atomic update；leaf 输出在 parent 写入唯一 canonical temp ledger 前只是 candidate，不建 per-round ledgers。先 canonicalize 再采信，才能防止 candidate evidence 绕过 parent 的验证与去重。
+-2. Impl-Package target 在 ledger 原子更新后，必须按 [output-templates.md](references/output-templates.md) 的 Canonical Finding Summary 调用 `python <plugin-root>/scripts/review_track_stats.py record --package <package>`，把本轮完整 accepted finding 集合写入 package trail 的 `review.canonical_summary` fact。`findingKey` 按 broken invariant/observable failure 稳定命名；多轨共同发现保留全部 `tracks`。记录失败使本轮 canonicalization `INCOMPLETE`，不得只留下 Markdown ledger 或从 reviewer prose 推导统计。
++2. Impl-Package target 在 ledger 原子更新后，主控按 [output-templates.md](references/output-templates.md) 形成 Canonical Finding Summary，交给唯一记账 subagent 调用 `python <plugin-root>/scripts/review_track_stats.py record --package <package>`，把本轮完整 accepted finding 集合写入 package trail 的 `review.canonical_summary` fact。`findingKey` 按 broken invariant/observable failure 稳定命名；多轨共同发现保留全部 `tracks`。记录失败使本轮 canonicalization `INCOMPLETE`，不得只留下 Markdown ledger 或从 reviewer prose 推导统计。
+ 3. Track C 的 source recheck 属于当前 ReviewRun 的 post-classification check，不创建新 phase/lifecycle；其它 accepted finding 和 unaccepted candidate 不触发它。将 recheck 限在已接受的 Spec fidelity finding，避免重复派发或把未采信候选升级成 handoff 阻断。
+ 
+-4. Loop 在分类后应用 topology 的 clean/dormant/convergence 规则；`finding-closure` 不能冒充 `terminal-final`，terminal result 必须在最终 implementation `HEAD` 以完整适用 topology 复核。只有完成分类与最终 HEAD 复核，收敛或 terminal PASS 才有完整证据。
++4. Loop 在分类后应用 topology 的 clean/dormant/convergence 规则；`finding-closure` 不能冒充 `terminal-final`，terminal result 必须在最终 implementation `HEAD` 以完整适用 topology 复核。只有完成分类与最终 HEAD 复核，收敛或 terminal PASS 才有完整证据。terminal-final 将 output-templates 中的 `review.terminal_summary` 交给记账 subagent，运行时核对 required 结果与同一 ReviewRun 的有效复用证据。
+ 
+ ## 5. Report
+ 
+@@ -73,4 +73,4 @@ allowed-tools:
+ 
+ ## Guardrails
+ 
+-除明确要求外不修改 code、issue、Git state、data 或 external system；reviewer 不修改 Git。不得把 Closure 扩成无关问题搜寻，也不得隐藏 unavailable/incomplete topology；不得创建、请求或推断 owner approval。GO attempt 将 findings 返回 `/impl-package:dev-with-track`，直接调用停在 review checkpoint；只有 reviewer skill 定义变化时才调整 reviewer responsibility/topology。
++leaf 写入指定的审阅报告；业务 code、issue、源仓库 Git state、data 与 external system 保持原样。不得把 Closure 扩成无关问题搜寻，也不得隐藏 unavailable/incomplete topology；不得创建、请求或推断 owner approval。GO attempt 将 findings 返回 `/impl-package:dev-with-track`，直接调用停在 review checkpoint；只有 reviewer skill 定义变化时才调整 reviewer responsibility/topology。
+diff --git a/plugin-marketplace/plugins/impl-package/skills/do-review/references/output-templates.md b/plugin-marketplace/plugins/impl-package/skills/do-review/references/output-templates.md
+index cfacd8e..74555b5 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/do-review/references/output-templates.md
++++ b/plugin-marketplace/plugins/impl-package/skills/do-review/references/output-templates.md
+@@ -4,7 +4,7 @@ Use the smallest template that matches the run. Keep source attribution and per-
+ 
+ ## Leaf Return Contract
+ 
+-The four `review-track-*` agents return a compact index. Full evidence, impact, handoff, and quotations stay in the parent-supplied review report artifact; do not ask a leaf to repeat them in its response.
++The four `review-track-*` agents return a compact index. Each leaf writes full evidence, impact, recommendations, handoff, and quotations to its exclusively assigned report artifact; do not ask a leaf to repeat them in its response.
+ 
+ ```text
+ verdict: PASS | FAIL | UNCERTAIN
+@@ -16,6 +16,39 @@ report: <review report artifact path>
+ 
+ Use `findings: none` when no candidate exists. Each finding line must contain the slug, file and line, severity, and one sentence; leaf output is candidate evidence, not a ledger decision.
+ 
++Impl-Package 的 leaf report 存在 parent 指定的 package 内独占路径，完整正文前写明以下四行，供终审核对来源：
++
++```text
++verdict: PASS | FAIL | UNCERTAIN
++reviewed-head: <实际审阅 SHA>
++review-run: <本次 ReviewRun ID>
++review-track: <Track A/B/C/D>
++```
++
++## Terminal coverage record
++
++terminal-final 的 canonical ledger 更新且所需结果已返回后，parent 将下列 `review.terminal_summary` fact 交给记账 subagent 用 `trail append` 落盘。它复用已有 trail，不创建第二份 ledger。artifact 和 reuseEvidence 为 package-relative 路径；report 前四行必须含上面的真实 verdict/head/run/track，各 track 使用独占 artifact。A/B/C required；Safety 适用时追加 Track D。A 在最终 HEAD 重审，B/C/Safety 可在同一 ReviewRun 内复用旧 PASS，parent 在 reuseEvidence 中记录旧/新 SHA、该轨输入的 delta 与不受影响的依据。
++
++```json
++{
++  "kind": "fact",
++  "subject": "attempt",
++  "key": "review.terminal_summary",
++  "value": {
++    "reviewRunId": "<ReviewRun ID>",
++    "comparisonHead": "<最终 implementation HEAD>",
++    "safetyApplicable": false,
++    "results": [
++      {"track": "Track A", "verdict": "PASS", "reviewedHead": "<最终 HEAD>", "artifact": "execution/initial/review-a.md"},
++      {"track": "Track B", "verdict": "PASS", "reviewedHead": "<旧 PASS HEAD>", "artifact": "execution/initial/review-b.md", "reused": true, "reuseEvidence": "execution/initial/review-reuse.md"},
++      {"track": "Track C", "verdict": "PASS", "reviewedHead": "<最终 HEAD>", "artifact": "execution/initial/review-c.md"}
++    ]
++  }
++}
++```
++
++新结果、comparison HEAD 或 Safety applicability 变化后记录完整新 summary；单独的 dispatch 或旧布尔 coverage 声明不证明终审结果。terminal metadata commit 后如行为与合同未变，parent 复核 metadata delta，沿用实际 implementation HEAD 的结论时仍须更新相应的完成声明依据。
++
+ ## Canonical ledger and classification
+ 
+ The parent owns one Markdown ledger for the whole ReviewRun. Leaf results are candidates, not accepted findings. After every round, wait for every required track, then deduplicate, verify, classify, and atomically rewrite that same ledger with verdicts, evidence, lifecycle transitions, and convergence. Never create a later-round ledger; a leaf result is not authoritative before this update.
+diff --git a/plugin-marketplace/plugins/impl-package/skills/do-review/references/subagent-briefs.md b/plugin-marketplace/plugins/impl-package/skills/do-review/references/subagent-briefs.md
+index 4c2d3cd..cf366b3 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/do-review/references/subagent-briefs.md
++++ b/plugin-marketplace/plugins/impl-package/skills/do-review/references/subagent-briefs.md
+@@ -6,7 +6,7 @@ The four `review-track-*` agent definitions carry their own leaf-review brief. T
+ 
+ ```text
+ Review target:
+-- Repo/worktree:
++- Repo/worktree: <ReviewRun repository; use snapshot_repo for a working-tree review>
+ - Target revision or PR:
+ - Comparison point input:
+ - Resolved base SHA:
+@@ -28,7 +28,7 @@ Review target:
+ - User review-depth preference:
+ - Safety applicability / evidence / coverage:
+ - Canonical ledger artifact (read-only):
+-- Review report artifact (parent-owned detail file):
++- Review report artifact (this leaf's exclusive writable detail file):
+ 
+ Known findings ledger:
+ <read the previous round's canonical ledger from the artifact; write "none yet" for round 1>
+@@ -37,7 +37,7 @@ Return format:
+ - Track leaf: compact `slug | repo-relative-file:line | severity | one-sentence summary` entries only; full evidence, impact, and suggested handoff belong in the parent-supplied review report artifact.
+ - Closure verification: PASS/FAIL/UNCERTAIN per issue.
+ - Every finding needs evidence.
+-- Do not mutate files, issues, git state, data, or external systems.
++- Write full evidence, impact, and recommendations to the assigned report artifact. Keep business code, issues, source Git state, data, external systems, and the parent canonical ledger unchanged.
+ ```
+ 
+ ## Generic Leaf Reviewer Brief
+diff --git a/plugin-marketplace/plugins/impl-package/skills/do-review/rubric.md b/plugin-marketplace/plugins/impl-package/skills/do-review/rubric.md
+index d733f4a..b18082c 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/do-review/rubric.md
++++ b/plugin-marketplace/plugins/impl-package/skills/do-review/rubric.md
+@@ -1,6 +1,6 @@
+ ---
+ target: plugin-marketplace/plugins/impl-package/skills/do-review
+-updated: 2026-08-19
++updated: 2026-09-05
+ ---
+ 
+ ## 原则
+@@ -16,7 +16,7 @@ updated: 2026-08-19
+ - [已确认] 高风险条件自动追加 Safety；显式 reviewer list 保持精确，但必须记录遗漏的适用 Safety 风险。（证据: R5）
+ - [已确认] 中间 finding closure 采用保守增量复核；terminal final 固定最终实现 `HEAD`，Track A 无条件运行，B、C、Safety 仅在本轮 ReviewRun 内更早 `HEAD` 已 PASS 且到最终 `HEAD` 的 delta 不满足该轨 admission 条件时沿用并跳过，否则按 admission 判定是否运行；跳过须记录沿用的 PASS `HEAD` 与判定所依据的 delta。（证据: R5）
+ - [已确认] ReviewRun 原子创建固定 base/head、拒绝空 three-dot diff，并从 resolved head 解析 UTF-8 Git blob 合同来源；失败不产生 ledger。（证据: R6）
+-- [已确认] 创建 ReviewRun 前必须先把审查单元本地 commit，使 `HEAD` 成为 comparison head；这是 `do-review` 的前置步骤，不把该规则写进通用 `git-commit` skill。（证据: R8）
++- [已确认] 创建 ReviewRun 固定审查对象：已有 commit 固定 SHA，未提交审阅在临时仓库建立内容快照，保持用户工作区、index 和分支不变。（证据: R8）
+ - [已确认] 每个 selected track 必须使用 matching leaf subagent；主会话审查或 generic subagent 不是替代。（证据: R8）
+ - [已确认] reviewer 只通过 `git show <resolved-head>:<path>` 读取合同，ReviewRun 的 object ID 与 SHA-256 是唯一 provenance，不再读取工作树或二次 hash。（证据: R6）
+ - [已确认] accepted Track C / Spec fidelity finding 在交给 fix 前做一次 finding-scoped 独立 source recheck；按 parent 语义归类触发，不依赖最先报告它的 leaf，也不新增 review phase 或 runtime state。（证据: R7）
+@@ -46,7 +46,7 @@ updated: 2026-08-19
+ - 采纳「少状态」：source recheck 留在当前 ReviewRun 的 finding 记录，不新增 phase、Ticket/Attempt 状态或 closure 替代物。
+ 
+ ### R8 · 2026-08-19
+-- 采纳「commit 是 do-review 前置步骤」：用户确认把 pin `HEAD` 的本地 commit 收进 `do-review` Gate，不写进通用 `git-commit` skill，也不把该 skill 收进 `do-review`。
++- 历史「commit 前置」已由 2026-09-05 的既有 SHA / 隔离内容快照选择替代。
+ - 采纳「必须使用 leaf subagent」：每个 selected track 派 matching leaf agent；不可用时停在 ReviewRun 创建前询问，不得自行降级。
+ 
+ ### R9 · 2026-08-25
+diff --git a/plugin-marketplace/plugins/impl-package/skills/do-review/scripts/review_ledger.py b/plugin-marketplace/plugins/impl-package/skills/do-review/scripts/review_ledger.py
+index 45bf992..ca9bdb3 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/do-review/scripts/review_ledger.py
++++ b/plugin-marketplace/plugins/impl-package/skills/do-review/scripts/review_ledger.py
+@@ -8,6 +8,8 @@ import hashlib
+ import json
+ import os
+ import re
++import shutil
++import stat
+ import subprocess
+ import sys
+ import tempfile
+@@ -136,32 +138,117 @@ def source_record(repo: Path, resolved_head: str, value: str) -> dict[str, str]:
+     }
+ 
+ 
++def snapshot_working_tree(repo: Path, head: str, untracked: list[str]) -> tuple[Path, str]:
++    """在临时仓库固定审阅内容，源仓库的 index、refs 与工作文件保持原样。"""
++    if resolve_commit(repo, "HEAD") != head:
++        raise ReviewRunError("working-tree review requires --head to resolve to current HEAD")
++
++    def capture() -> tuple[bytes, dict[str, bytes]]:
++        diff = run_git(repo, "diff", "--no-ext-diff", "--binary", "--full-index", head, "--", text=False)
++        if diff.returncode:
++            raise ReviewRunError(diff.stderr.decode("utf-8", errors="replace"))
++        files = {}
++        for value in untracked:
++            relative = normalize_source_path(repo, value)
++            path = repo / relative
++            if ".git" in Path(relative).parts or path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(repo):
++                raise ReviewRunError(f"untracked source must be a regular repository file: {value}")
++            if run_git(repo, "ls-files", "--error-unmatch", "--", relative).returncode == 0:
++                raise ReviewRunError(f"--include-untracked names a tracked file: {value}")
++            files[relative] = path.read_bytes()
++        return diff.stdout, files
++
++    before = capture()
++    directory = ledger_directory() / "snapshots"
++    directory.mkdir(parents=True, exist_ok=True)
++    snapshot = Path(tempfile.mkdtemp(prefix="review-", dir=directory)).resolve()
++    try:
++        git_output(repo, "clone", "--no-hardlinks", "--no-checkout", "--quiet", str(repo), str(snapshot))
++        git_output(snapshot, "-c", "core.hooksPath=", "checkout", "--quiet", "--detach", head)
++        if before[0]:
++            result = subprocess.run(
++                ["git", "-C", str(snapshot), "apply", "--binary", "-"],
++                input=before[0], capture_output=True, check=False,
++            )
++            if result.returncode:
++                raise ReviewRunError(result.stderr.decode("utf-8", errors="replace"))
++        for relative, content in before[1].items():
++            destination = snapshot / relative
++            if not destination.resolve().is_relative_to(snapshot):
++                raise ReviewRunError(f"snapshot path escapes repository: {relative}")
++            destination.parent.mkdir(parents=True, exist_ok=True)
++            destination.write_bytes(content)
++        if capture() != before or resolve_commit(repo, "HEAD") != head:
++            raise ReviewRunError("working tree changed during snapshot; retry after the source is stable")
++        git_output(snapshot, "add", "-A")
++        for relative in before[1]:
++            git_output(snapshot, "add", "--force", "--", relative)
++        git_output(snapshot, "-c", "core.hooksPath=", "-c", "commit.gpgsign=false",
++                   "-c", "user.name=Review Snapshot", "-c", "user.email=review@localhost",
++                   "commit", "--quiet", "--allow-empty", "-m", "Immutable review snapshot")
++        return snapshot, resolve_commit(snapshot, "HEAD")
++    except Exception:
++        # 只回收本次生成、已核实位于快照目录内的临时仓库。
++        discard_snapshot(snapshot)
++        raise
++
++
++def discard_snapshot(snapshot: Path) -> None:
++    directory = (ledger_directory() / "snapshots").resolve()
++    if snapshot.resolve().parent != directory or not snapshot.name.startswith("review-"):
++        raise ReviewRunError(f"refusing to remove a path outside review snapshots: {snapshot}")
++
++    def writable_retry(operation, path, error):
++        # 快照对象是独立副本，Windows Git 只读属性不影响源仓库。
++        os.chmod(path, stat.S_IWRITE)
++        operation(path)
++
++    shutil.rmtree(snapshot, onerror=writable_retry)
++
++
+ def prepare_review_run(args: argparse.Namespace) -> dict[str, object]:
+     repo = resolve_repo_root(args.repo_root)
+     resolved_base = resolve_commit(repo, args.base)
+     resolved_head = resolve_commit(repo, args.head)
++    source_paths = [normalize_source_path(repo, value) for value in args.source]
++    snapshot = None
++    if args.working_tree:
++        snapshot, resolved_head = snapshot_working_tree(repo, resolved_head, args.include_untracked)
++        repo = snapshot
++    elif args.include_untracked:
++        raise ReviewRunError("--include-untracked requires --working-tree")
+     diff_range = f"{resolved_base}...{resolved_head}"
+-    require_non_empty_diff(repo, diff_range)
+-    sources = [source_record(repo, resolved_head, value) for value in args.source]
+-    return {
++    try:
++        require_non_empty_diff(repo, diff_range)
++        sources = [source_record(repo, resolved_head, value) for value in source_paths]
++    except Exception:
++        if snapshot is not None:
++            discard_snapshot(snapshot)
++        raise
++    result = {
+         "resolved_base_sha": resolved_base,
+         "resolved_head_sha": resolved_head,
+         "diff_range": diff_range,
+         "contract_sources": sources,
+     }
++    if snapshot is not None:
++        result["snapshot_repo"] = str(snapshot)
++    return result
+ 
+ 
+ def create(args: argparse.Namespace) -> int:
+-    review_run = prepare_review_run(args)
+     slug = slugify(args.slug)
+-    resolved_head = str(review_run["resolved_head_sha"])
+-    short_sha = resolved_head[:7]
+     timestamp = args.timestamp or datetime.now().strftime("%y%m%d%H%M")
+     if not re.fullmatch(r"\d{10}", timestamp):
+         raise ValueError("timestamp must use YYMMDDHHMM")
++    review_run = prepare_review_run(args)
++    resolved_head = str(review_run["resolved_head_sha"])
++    short_sha = resolved_head[:7]
+     directory = ledger_directory()
+     path = directory / f"{timestamp}-{slug}-{short_sha}.md"
+     if path.exists():
++        if "snapshot_repo" in review_run:
++            discard_snapshot(Path(str(review_run["snapshot_repo"])))
+         raise FileExistsError(f"refusing to overwrite existing ledger: {path}")
+     contract_sources = json.dumps(review_run["contract_sources"], ensure_ascii=False, indent=2)
+     content = f"""# do-review canonical ledger
+@@ -172,6 +259,7 @@ def create(args: argparse.Namespace) -> int:
+ - Resolved base SHA: `{review_run['resolved_base_sha']}`
+ - Resolved head SHA: `{resolved_head}`
+ - Diff range: `{review_run['diff_range']}`
++- Review repository: `{review_run.get('snapshot_repo', args.repo_root)}`
+ - Mode: `{args.mode}`
+ - Round cap: `{args.round_cap}`
+ - Review phase: `pending`
+@@ -215,6 +303,8 @@ def create(args: argparse.Namespace) -> int:
+     except OSError:
+         if created:
+             path.unlink(missing_ok=True)
++        if "snapshot_repo" in review_run:
++            discard_snapshot(Path(str(review_run["snapshot_repo"])))
+         raise
+     output = {"ledger_path": str(path), **review_run}
+     print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
+@@ -247,6 +337,8 @@ def build_parser() -> argparse.ArgumentParser:
+     create_parser.add_argument("--repo-root", type=Path, required=True)
+     create_parser.add_argument("--base", required=True)
+     create_parser.add_argument("--head", required=True)
++    create_parser.add_argument("--working-tree", action="store_true", help="Review an isolated snapshot of current tracked changes.")
++    create_parser.add_argument("--include-untracked", action="append", default=[], help="Include this untracked file in the working-tree snapshot; repeat as needed.")
+     create_parser.add_argument(
+         "--source",
+         action="append",
+diff --git a/plugin-marketplace/plugins/impl-package/skills/do-review/tests/test_review_ledger.py b/plugin-marketplace/plugins/impl-package/skills/do-review/tests/test_review_ledger.py
+index bba2a90..9f0e29a 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/do-review/tests/test_review_ledger.py
++++ b/plugin-marketplace/plugins/impl-package/skills/do-review/tests/test_review_ledger.py
+@@ -129,6 +129,72 @@ class ReviewLedgerTests(unittest.TestCase):
+         self.assertEqual(code, 0, err)
+         self.assertEqual(json.loads(out)["contract_sources"][0]["path"], "contract.md")
+ 
++    def test_working_tree_snapshot_includes_changes_without_touching_source_git(self) -> None:
++        (self.repo / "contract.md").write_text("changed contract\n", encoding="utf-8")
++        (self.repo / "added.md").write_text("untracked proof\n", encoding="utf-8")
++        (self.repo / "private.txt").write_text("out of scope\n", encoding="utf-8")
++        self.git("add", "contract.md")
++        index = (self.repo / ".git/index").read_bytes()
++        status = self.git("status", "--porcelain").stdout
++        code, out, err = self.run_cli(self.create_args(
++            "--working-tree", "--include-untracked", "added.md", "--source", "contract.md",
++        ))
++        self.assertEqual(code, 0, err)
++        result = json.loads(out)
++        snapshot = Path(result["snapshot_repo"])
++        self.assertEqual((snapshot / "contract.md").read_text(), "changed contract\n")
++        self.assertEqual((snapshot / "added.md").read_text(), "untracked proof\n")
++        self.assertFalse((snapshot / "private.txt").exists())
++        self.assertEqual(self.git("rev-parse", "HEAD").stdout.strip(), self.head)
++        self.assertEqual(self.git("status", "--porcelain").stdout, status)
++        self.assertEqual((self.repo / ".git/index").read_bytes(), index)
++        (self.repo / "contract.md").write_text("later edit\n", encoding="utf-8")
++        self.assertEqual((snapshot / "contract.md").read_text(), "changed contract\n")
++
++    def test_working_tree_snapshot_rejects_source_drift(self) -> None:
++        original = self.module.run_git
++        captures = 0
++
++        def changing_git(repo, *args, **kwargs):
++            nonlocal captures
++            if repo == self.repo and args[:2] == ("diff", "--no-ext-diff"):
++                captures += 1
++                if captures == 2:
++                    (self.repo / "code.txt").write_text("concurrent edit\n", encoding="utf-8")
++            return original(repo, *args, **kwargs)
++
++        with mock.patch.object(self.module, "run_git", side_effect=changing_git):
++            code, _, err = self.run_cli(self.create_args("--working-tree"))
++        self.assertEqual(code, 2)
++        self.assertIn("changed during snapshot", err)
++        self.assertFalse(list(self.ledger_dir.glob("*.md")))
++
++    def test_working_tree_snapshot_requires_current_head_and_explicit_untracked(self) -> None:
++        code, _, err = self.run_cli(self.create_args("--working-tree", head=self.base))
++        self.assertEqual(code, 2)
++        self.assertIn("current HEAD", err)
++        code, _, err = self.run_cli(self.create_args("--include-untracked", "added.md"))
++        self.assertEqual(code, 2)
++        self.assertIn("requires --working-tree", err)
++
++    def test_failed_snapshot_validation_reclaims_the_temporary_repository(self) -> None:
++        for extra, base in (([], self.head), (["--source", "missing.md"], self.base)):
++            code, _, err = self.run_cli(self.create_args("--working-tree", *extra, base=base))
++            self.assertEqual(code, 2, err)
++            self.assertFalse(list((self.ledger_dir / "snapshots").iterdir()))
++            self.assertFalse(list(self.ledger_dir.glob("*.md")))
++
++    def test_duplicate_snapshot_ledger_preserves_first_snapshot_and_cleans_second(self) -> None:
++        dates = {"GIT_AUTHOR_DATE": "2026-09-05T12:00:00Z", "GIT_COMMITTER_DATE": "2026-09-05T12:00:00Z"}
++        with mock.patch.dict(os.environ, dates):
++            code, out, err = self.run_cli(self.create_args("--working-tree"))
++            self.assertEqual(code, 0, err)
++            first = Path(json.loads(out)["snapshot_repo"])
++            code, _, err = self.run_cli(self.create_args("--working-tree"))
++        self.assertEqual(code, 2)
++        self.assertIn("refusing to overwrite", err)
++        self.assertEqual(list((self.ledger_dir / "snapshots").iterdir()), [first])
++
+     def test_create_is_fail_closed_on_duplicate(self) -> None:
+         code, out, err = self.run_cli(self.create_args())
+         self.assertEqual(code, 0, err)
+diff --git a/plugin-marketplace/plugins/impl-package/skills/execution-boundaries/SKILL.md b/plugin-marketplace/plugins/impl-package/skills/execution-boundaries/SKILL.md
+index 01ea9f7..a46e790 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/execution-boundaries/SKILL.md
++++ b/plugin-marketplace/plugins/impl-package/skills/execution-boundaries/SKILL.md
+@@ -1,11 +1,11 @@
+ ---
+ name: execution-boundaries
+-description: 覆盖执行前授权确认（preflight）、执行期异常 slow path（standing bookkeeper）与完成前 claim-evidence 审计（verification before completion）三个边界；三者合并为一个宿主无关入口。
++description: 覆盖执行前授权确认（preflight）、执行期异步状态记账与异常 slow path（standing bookkeeper）与完成前 claim-evidence 审计（verification before completion）三个边界；三者合并为一个宿主无关入口。
+ ---
+ 
+ # 执行边界与收口
+ 
+-本入口覆盖三个独立边界，各自独立生效，互不串读：执行前确认授权，异常时恢复与对账，完成前审计 claim 是否有足够 evidence。日常状态变更走现有语义 CLI；恢复优先消费匹配的 `Impl-Package Resume Capsule v1`，缺失或失配时按自身 Wave/fallback 读取当前 digest、动作和 protocol，再展开本次动作所需材料。
++本入口覆盖三个独立边界，各自独立生效，互不串读：执行前确认授权，异步状态记账、异常时恢复与对账，完成前审计 claim 是否有足够 evidence。日常状态变更由记账 subagent 走现有语义 CLI；恢复优先消费匹配的 `Impl-Package Resume Capsule v1`，缺失或失配时按自身 Wave/fallback 读取当前 digest、动作和 protocol，再展开本次动作所需材料。
+ 
+ ## 执行前（preflight）
+ 
+@@ -59,49 +59,27 @@ blocker/owner decision: <none | item>
+ 
+ 输出 `Preflight: READY | BLOCKED + authorized write-set + 单一 next action`，不产生 receipt、profile artifact 或持久 readiness 状态。授权细节按需读 `references/authorization-contract.md`；需要调度时使用 `/impl-package:subagent-driven-development`，本边界只提供任务特定的 scope、write-set、authorization、verification 和输出合同。
+ 
+-## 异常（standing bookkeeper slow path）
++## 状态记账与异常对账
+ 
+-这是 package thread 的异常 slow path 入口，不是日常记账角色；日常结构化写入由主 thread 直接调用现有语义 CLI，Execution Record judgment 和 findings 分流也由主 thread 自己形成。bookkeeper 只在异常场景下恢复上下文、做对账并返回结构化修复建议或证据，不改变语义 owner、状态机或验收门。
++主 thread 拥有业务语义、acceptance、finding disposition 与 Gate verdict，并直接维护 Decision、Spec、contract-design、Plan、Ticket 等业务文档。通过 subagent 执行记账，方法见 [Bookkeeper Role](references/role.md)。
+ 
+-### 触发判定
++### 单写者与异步更新
+ 
+-仅当证据互相矛盾需核对 claim/revision/environment/timing/artifact pair、跨 session 或 transport 中断后恢复、部分写入已落盘需补齐、跨 stage 的 artifact/state/Progress/checkpoint/Gate 需要对账，或其他异常使主 thread 无法仅凭现有 state/CLI 安全收口时才进入 slow path。evidence、checkpoint、fact、trail、state transition、Gate 等日常结构化写入，以及 Execution Record judgment 和 findings 分流，不触发 bookkeeper。
++1. 当前 package 的第一个记账动作启动一个 bookkeeper；同一 package 复用该 subagent，串行执行现有语义 CLI。它是 state、evidence、checkpoint、trail 和 CLI 生成的 Progress、Execution Record、Gate 的唯一写入者。
++2. 主 thread 给出已确定的更新、依据及 `依赖：是 | 否`；bookkeeper 不替主 thread 裁决语义。日常更新默认异步，主线继续不依赖本次落盘的工作。
++3. 下一动作依赖状态释放、需要当前 dispatch credential，或准备 handoff/terminal Gate/完成声明时，等待相关记账回执并复核。启动或发送成功只代表已接收，不能当作已落盘。
++4. 成功回执包含已执行命令、结果和更新后的下一动作所需事实。主 thread 消费结果；出现已知 CLI 成功更新时按 delta 刷新视图，不重新完整 Restore。
++5. 换记账 subagent 前确认旧执行已停止并核对落盘结果；同一 package 不并发运行两个 state writer。业务文档正被主 thread 修改时，依赖这些文档的 CLI 等该次修改结束后读取。
+ 
+-### 角色边界
++### 异常 slow path
+ 
+-- 一个 package 不要求常驻或预先初始化 bookkeeper；需要时按当前 package/Attempt 按需启动或恢复。
+-- 主 thread 保留 requirement、architecture、implementation direction、acceptance、finding disposition、Gate verdict、最终复核权，以及 `state.json` 的唯一写入权。
+-- bookkeeper 只负责异常上下文重建、证据/状态对账、缺口定位和结构化修复建议；不独占 package 物理写入，不直接修改 `state.json`，不替主 thread 形成 judgment 或 disposition。
+-- bookkeeper 不修改业务实现代码，不服务其他 package，不接管 commit、merge、push、release、数据迁移、删除或外部 mutation。
++只有证据矛盾、部分写入补齐、跨 stage 对账、未知外部状态变化或主 thread 无法安全解释结果时，展开异常调查。bookkeeper 从 canonical state 和实际 artifact 对账，返回原因、结构化修复建议与 focused validation；涉及业务语义的修复先交主 thread 裁决，再执行被接受的 CLI 更新。
+ 
+-### 主 thread 流程
++普通证据登记、状态转换、judgment、checkpoint 与 trail 使用同一记账 subagent 的日常路径。异常时保留可归因结果；有安全恢复路径就继续恢复，只有缺授权、真实外部依赖或安全路径耗尽才报告具体 blocker。
+ 
+-1. 无异常时主 thread 读取当前 state 并直接调用适用 CLI，不启动或等待 bookkeeper。
+-   - 常见误判：把 bookkeeper 变成日常等待环节，会制造第二个 state writer 和不必要的协调延迟。
+-2. 发现异常时按需启动/恢复 slow path，提供 package、Attempt、相关 artifact/state、已知事实、矛盾或缺口、期望收口条件；宿主无法维持可继续对话的 subagent 时报告 blocker，不扩展成新的协调系统。
+-   - 常见误判：只给“有问题”而不给 canonical 上下文，slow path 只能猜缺口；把宿主能力缺失扩展成新协调系统也会越过本入口边界。
+-3. slow path 返回结构化对账结果、修复建议和 focused validation；主 thread 复核后直接执行接受的 CLI/文档写入。最小输入可沿用：
+-   - 常见误判：把 bookkeeper 的建议直接当作语义决定，会让异常辅助角色取得 requirement、judgment 或物理写入 ownership。
++### 完成条件
+ 
+-   ```text
+-   更新：
+-   结论/事实：<要记录什么>
+-   依据：<必要时提供>
+-   依赖：是 | 否
+-   ```
+-
+-4. `依赖：是` 只表示下一动作确实需要 slow-path 结果，主 thread 才等待回执；`依赖：否` 时可以继续推进，稍后消费回执，日常 CLI 写入不因依赖语义停顿。
+-   - 常见误判：把所有回执都当成依赖，会让正常 CLI 停摆；把真正的依赖当成非依赖，则会在缺少对账结果时继续收口。
+-5. 主 thread 检查回执中的理解、对账结果、修复建议和 focused validation；不正确时发送 correction event，仍由 slow path 修正，最终物理写入由主 thread 执行。
+-   - 常见误判：主 thread 直接修正错误回执而跳过 correction event，会丢掉异常处理的可恢复链路。
+-6. 每次 slow-path 回执只追加一行到 `<package>/execution/<attempt>/bookkeeper-receipts.jsonl`；正常 CLI 写入不追加该文件。回执格式、恢复读取顺序与失败边界按需读 `references/role.md`，不依赖聊天记录。
+-   - 常见误判：把正常 CLI trail 和异常回执混在一起，会无法区分日常状态变更与需要恢复的 slow-path 事实。
+-
+-### 物理写入与完成条件
+-
+-- Decision、Spec、`contract-design.md`、Plan、Ticket、Progress、Execution Record、active checkpoint、execution findings 和 Gate 的日常物理写入由对应 owning stage 的主 thread 执行；slow path 只提供异常对账和修复输入，不成为第二个 state writer。
+-- runtime state 优先通过现有 `../../scripts/impl_package_state.py` 语义命令更新；bookkeeper 不复制 state schema、另建 ledger 或引入并发协调设施。stable-doc backfill 由 `/impl-package:backfill-stable-docs` owning workflow 管理，不纳入日常 package 簿记。
+-- 只有 bookkeeper 已完成异常对账、返回结构化修复输入、运行适用 focused validation，且主 thread 已复核并执行接受的写入，slow-path 更新才可采信；回执失败或信息不足时保持未完成并报告具体 blocker。
++主 thread 能区分已发送、已落盘和待对账，并取得下一动作实际依赖的回执；全部必要写入已收齐后才能形成 handoff 或 terminal claim。CLI 管理运行投影，主 thread 管理业务文档，二者各自保持唯一 writer。
+ 
+ ## 收口（verification before completion）
+ 
+diff --git a/plugin-marketplace/plugins/impl-package/skills/execution-boundaries/references/role.md b/plugin-marketplace/plugins/impl-package/skills/execution-boundaries/references/role.md
+index 6bdba3c..c06ee2f 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/execution-boundaries/references/role.md
++++ b/plugin-marketplace/plugins/impl-package/skills/execution-boundaries/references/role.md
+@@ -1,54 +1,26 @@
+-# Standing Bookkeeper Role
++# Bookkeeper Role
+ 
+-本页只供按需调用的 standing bookkeeper slow-path subagent 读取。它定义异常处理边界，不拥有新的业务语义、验收裁决权或 `state.json` 写入权。
++本角色是当前 package 的状态记账 subagent。主 thread 负责业务判断与 Decision/Spec/Plan/Ticket 等文档；本角色串行调用现有语义 CLI，更新 state 及其运行记录和投影。
+ 
+ ## 启动与恢复
+ 
+-1. 确认本次确实属于证据矛盾、恢复、部分写入补齐、跨 stage 对账或异常排查；若只是日常结构化写入，立即退回主 thread 直接调用 CLI。随后确认当前 package、package root、主 thread 以及本次异常上下文。缺少 package identity、目标范围或必要结论时直接询问主 thread。
+-2. 读取 Impl-Package 入口、[`../../../references/impl-package-composition-contract.md`](../../../references/impl-package-composition-contract.md)、[`../../../references/impl-package-current-state.md`](../../../references/impl-package-current-state.md)，再按本次动作读取 owning stage Skill。不要依赖聊天记忆恢复事实。
+-3. 读取 canonical package state、当前 Progress 或 active checkpoint，并只沿异常对账展开所需的 artifact。没有 package state 的新 package 不由本角色凭空创建；由 owning stage 给出初始化事实后再分析。
++确认 package、Attempt、主 thread、已授权范围与本次更新；读取 `../../../references/impl-package-current-state.md` 和 `../../../references/impl-package-composition-contract.md`，只展开当前动作依赖的材料。同一 package 保持一个记账 writer；接替前确认旧执行已停止，并从 canonical state 和落盘事实恢复。
+ 
+ ## 更新循环
+ 
+-1. 把主 thread 的自然语言更新解释为已确定的事实或结论，不替主 thread 发明 requirement、architecture、acceptance、finding disposition 或 Gate verdict。
+-2. 对照 canonical state 和相关 artifact，定位矛盾、恢复缺口或部分写入缺口，输出 expected-vs-actual、涉及路径、需要主 thread 执行的 CLI/文档动作和风险。不要把 routine 的 artifact 定位和命令执行重新接回 slow path。
+-3. `state.json`、Progress、active checkpoint、Gate 以及 Execution Record judgment 的实际写入由主 thread 执行；bookkeeper 不直接修改这些 package artifact，不成为第二个 writer。bookkeeper 只在本循环第 6 步追加 slow-path receipt。
+-4. 运行适用于本次异常的 focused validation，确认对账结果、修复建议和路径范围没有改变 semantic owner 或绕过现有 Gate/acceptance 规则。
+-5. 返回短回执：
++1. 消费主 thread 已确定的更新、依据及 `依赖：是 | 否`。routine 更新直接执行 state CLI；业务语义、验收和 Gate verdict 由主 thread 提供。
++2. 按顺序调用 `../../../scripts/impl_package_state.py` 的 evidence、ticket、recovery、trail、gate 或 package 命令；CLI 负责 state.json、Progress、Execution Record 与 Gate 的物理写入。写入依据正在被修改时，等待该依赖稳定。
++3. 返回回执：更新内容、实际命令、成功或失败、落盘 artifact、当前相关状态与需要主 thread 处理的事项。不得用启动成功或命令建议代替执行结果。
++4. `依赖：否` 的日常更新异步执行，主 thread 继续独立工作；`依赖：是` 的下一动作、handoff 和 terminal claim 等相关回执后推进。
+ 
+-   ```text
+-   理解：<本次记录的事实/结论>
+-   写入：<主 thread 应执行的 artifact 路径或 state CLI 动作；若只完成对账则写“待主 thread 执行”>
+-   验证：<通过的检查，或首个失败点>
+-   阻塞：<无，或需要主 thread 决定/补充的具体事项>
+-   ```
++## 异常 slow path
+ 
+-   这只是便于主 thread 复核 slow-path 对账和修复输入的最小回执，不是新的消息协议。
++证据矛盾、部分写入补齐、跨 stage 对账或 transport 中断时，先核对实际 state/artifact 和命令是否已生效，避免重复副作用。返回 expected-vs-actual、原因、结构化修复输入与 focused validation。需要改变 judgment、acceptance 或 finding disposition 时交回主 thread；已确定的机械补齐仍通过语义 CLI 执行。correction 使用主 thread 的修正结论并重读相关事实。
+ 
+-6. 把本次回执追加为一行 JSON 到 `<package>/execution/<attempt>/bookkeeper-receipts.jsonl`：
++仅异常调用将短回执追加到 `execution/<attempt>/bookkeeper-receipts.jsonl`；日常更新使用 CLI 已有 trail，不重复记账。异常回执包含时间、依赖、状态、路径、验证与 blocker，不作为新的状态 authority。
+ 
+-   ```json
+-   {"v":1,"ts":"<ISO8601>","dep":true,"status":"done|blocked",
+-    "paths":["<本次核对路径或主 thread 待执行的 CLI 动作>"],"validation":"<检查结果>",
+-    "blocker":null,"note":"<本次记录事实的一句话>"}
+-   ```
++## 边界与完成条件
+ 
+-   只追加，不重写既有行；仅 slow-path 调用追加，日常 CLI 写入不写入该文件。写不成时在回执的「阻塞」里说明，不要因此掩盖对账结果。该文件是 slow-path 试运行读数来源，不改变本角色的任何写入边界或语义。
++本角色只写当前 package 的运行状态、记录与投影，不修改业务代码或 Decision/Spec/Plan/Ticket 正文，不负责其他 package、Git 提交或外部系统操作。state.json 始终通过 CLI 更新；`package init` 对 Ticket 发布状态的机械更新由同一次 CLI 执行，Ticket 业务正文仍由主 thread 维护。
+ 
+-## 依赖、修正与失败
+-
+-- 主 thread 标记 `依赖：是` 时，在对账结果和验证返回前不要释放确实依赖它的下一动作；标记 `依赖：否` 时照常完成并回执，但不要求主 thread 停止实现工作。
+-- 主 thread 发送 correction event 时，重新读取当前 artifact/state 后修正，不把旧回执当作写入事实。
+-- 对账或验证失败时报告准确位置、已确认的部分和恢复动作；不要把建议包装成已写入成功。
+-- slow-path session 不可用时，新角色从 package canonical state、当前 stage 规则和最近有效 artifact 恢复；不复用已失效的聊天结论。
+-
+-## 禁止越界
+-
+-- 不修改 `state.json`、Progress、Execution Record、checkpoint、Gate 或业务实现代码，不处理其他 package、用户级 host state 或外部系统。
+-- 不执行 commit、merge、push、release、数据迁移或删除。
+-- 不把试运行中形成的依赖经验、模板偏好或回复格式升级为长期合同。
+-- 不把 stable-doc backfill、跨 package coordination 或新的并发基础设施吸收到 package 日常簿记，也不把正常 CLI 写入重新路由为 slow path。
+-
+-## 角色完成条件
+-
+-主 thread 能从回执确认：异常事实被正确理解，缺口/矛盾已定位，修复输入和 focused validation 已返回，且没有越权写入；随后由主 thread 执行接受的写入。任一项无法确认时保持阻塞并等待主 thread 决定。
++所有已接收更新已有可归因结果；未结束的写入和 blocker 明确可见。无法执行时保留恢复事实并报告具体原因；不以未收到回执冒充更新成功。
+diff --git a/plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md b/plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md
+index 25a716a..d73c5e6 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md
++++ b/plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md
+@@ -27,7 +27,7 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
+ | `impl-impl-planning` | `/impl-package:impl-planning` | 创建 initial/patch plan、决定 Composition |
+ | `impl-plan-review` | `/impl-package:plan-review` | 审查 plan 或完整 Plan/Ticket/DAG bundle |
+ | `impl-to-tickets` | `/impl-package:impl-planning` 的 Ticket-split | 创建独立验收切片 |
+-| `impl-execution-boundaries` | `/impl-package:execution-boundaries` | 执行前授权、异常 slow path、完成前 evidence gate |
++| `impl-execution-boundaries` | `/impl-package:execution-boundaries` | 执行前授权、异步状态记账与异常对账、完成前 evidence gate |
+ | `impl-subagent-driven-development` | `/impl-package:subagent-driven-development` | 下游 bounded worker 的 Topic、dependency、mode、lane、lifecycle 与 review requirement |
+ | `impl-dev-with-track` | `/impl-package:dev-with-track` | 恢复执行、选择业务动作、消费 Dispatcher/SDD 结果、推进 Ticket 与写 Gate |
+ | `impl-monitor-progress` | `/impl-package:monitor-progress` | 打开实时进度页面，并可选创建只读主控监控 automation |
+diff --git a/plugin-marketplace/plugins/impl-package/skills/impl-planning/SKILL.md b/plugin-marketplace/plugins/impl-package/skills/impl-planning/SKILL.md
+index ca6568c..368ff61 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/impl-planning/SKILL.md
++++ b/plugin-marketplace/plugins/impl-package/skills/impl-planning/SKILL.md
+@@ -5,7 +5,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan
+ 
+ # Impl Planning（含 Ticket 拆分）
+ 
+-为一个 implementation attempt 创建简洁、可执行的 plan，并把验收拆成可独立验收的 Ticket 合同；先读 `../../references/impl-package-composition-contract.md`，需要为 material seam 选择验证层级时再读 `../../references/progressive-system-evidence.md`。Plan 的语义、Coverage、执行策略、Planned Verification 与 Ticket 语义由本 Skill 与主 thread 拥有，主 thread 不直接编辑当前 package 的 Plan 或 runtime state；物理写入、state 初始化和 Progress 投影由 bound `/impl-package:execution-boundaries` 执行。D/S gate 已通过才继续，未触及的 legacy Spec 可暂缺。
++为一个 implementation attempt 创建简洁、可执行的 plan，并把验收拆成可独立验收的 Ticket 合同；先读 `../../references/impl-package-composition-contract.md`，需要为 material seam 选择验证层级时再读 `../../references/progressive-system-evidence.md`。Plan 的语义、Coverage、执行策略、Planned Verification 与 Ticket 语义由本 Skill 与主 thread 拥有，主 thread 直接写入并验证 Plan/Ticket；state 初始化、运行记录与 Progress 投影由 `/impl-package:execution-boundaries` 记账 subagent 串行调用语义 CLI 执行。D/S gate 已通过才继续，未触及的 legacy Spec 可暂缺。
+ 
+ ## 输出与规则
+ 
+@@ -17,7 +17,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan
+ 
+ 1. initial 读取已批准 Decision、`spec.md`、从属 `contract-design.md` disposition 及当前代码/测试事实，确认 D/S gate 已通过；未触及的 legacy Spec 可暂缺该文件，同一 package 的 patch/update 沿用 initial bundle approval。
+    - 常见误判：拿未批准或过期的 D/S 事实开始写 Plan，会把实现候选误写成已冻结的行为合同。
+-2. 在让 execution-boundaries 创建或更新 Plan/state 前执行 admission backstop：若下一步仍需决定可观察行为、data identity、permission、concurrency、recovery 或 public shape，或 contract surface 命中幂等键 / CAS / 版本号、多个来源写同一个目标字段、替换 / 撤回 / 恢复语义、跨存储提交（两个 store 各自提交）或声明值 vs 检测值但 Spec 只有规则没有结果矩阵，停止 planning，明确缺失合同并路由 `/impl-package:req-align` 重新确认当前 Spec；不得创建或更新 Plan/state，也不得在 Plan 中补第二套 DTO/schema。
++2. 在创建或更新 Plan，或派发 state 更新前执行 admission backstop：若下一步仍需决定可观察行为、data identity、permission、concurrency、recovery 或 public shape，或 contract surface 命中幂等键 / CAS / 版本号、多个来源写同一个目标字段、替换 / 撤回 / 恢复语义、跨存储提交（两个 store 各自提交）或声明值 vs 检测值但 Spec 只有规则没有结果矩阵，停止 planning，明确缺失合同并路由 `/impl-package:req-align` 重新确认当前 Spec；不得创建或更新 Plan/state，也不得在 Plan 中补第二套 DTO/schema。
+    - 常见误判：把 Plan 当成补齐 Spec 留白的地方，会产生第二套 DTO/schema，两个实施者随后可以按不同合同实现。
+ 3. 判断是 initial 还是 patch；patch 只描述相对上次 terminal gate 的实际 delta。
+    - 常见误判：patch 重述整份历史范围，会把未变化的 evidence 和 gate 重新混入当前 delta，无法判断真正受影响的边界。
+@@ -34,13 +34,13 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan
+ 9. 进入 `/impl-package:execution-boundaries`，再交给 `/impl-package:dev-with-track`。
+    - 常见误判：绕过 execution-boundaries 直接执行，会丢掉授权、write-set 和完成前 evidence gate 的边界。
+ 
+-机械操作一律走 typed tools/语义 CLI；状态变更命令的处境与协议尾注由 `situation.py` 按 `situations.yaml` 注入。execution-boundaries 完成写入、state 初始化和 `package validate` 后返回 receipt，主 thread 复核 receipt；初始 bundle approval 在同一 package 内跨 session、patch 和普通更新持续有效，作为唯一 approval receipt。
++机械操作一律走 typed tools/语义 CLI；状态变更命令的处境与协议尾注由 `situation.py` 按 `situations.yaml` 注入。execution-boundaries 记账 subagent 完成 state 初始化和 `package validate` 后返回 receipt，主 thread 复核 receipt；初始 bundle approval 在同一 package 内跨 session、patch 和普通更新持续有效，作为唯一 approval receipt。
+ 
+ ## Ticket 拆分（仅 `tickets=true`）
+ 
+ 仅在当前 plan 声明 `tickets=true` 时使用；Ticket 放在 package 固定的 `tickets/` 目录，文件名可排序且稳定。
+ 
+-本 Skill 拥有 Ticket 的纵向切片、AC、contract references 和 typed dependency 语义；Ticket 文件的物理写入与运行时 state 更新由 bound `/impl-package:execution-boundaries` 执行，主 thread 不直接编辑当前 package 的 Ticket 或 `.impl-package/state.json`。
++本 Skill 拥有 Ticket 的纵向切片、AC、contract references 和 typed dependency 语义；主 thread 直接写入 Ticket 正文，运行时 state 更新交给 `/impl-package:execution-boundaries` 记账 subagent 串行调用语义 CLI。
+ 
+ 1. **切分纵向交付**：按可独立验收的纵向交付切片拆分，不按文件、层或 worker 拆分；一个 Ticket 交付恰好一个可验收的用户终态。终态分为权威转换（用户动作成功后产生新的权威记录，下游从此读取）和可验收的展示或编辑终态（用户到达稳定、可当场判定的界面状态，不产生新的权威记录）。
+    - 计数判据：建设内容中终态为 0 个时作为层并入其他 Ticket，1 个为正确，2 个及以上拆分；读模型接线、后端算法、UI 只读化、加字段、补测试本身并入其服务的终态。
+@@ -55,7 +55,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan
+    - 常见误判：引用整份文档会让 Ticket 看似有依据，却无法判断实际依赖哪条 authority；引用 contract-design.md 只停在章节级而不点名 entry point，等于把一大节都当成了下游默认要读的上下文。
+ 6. **绑定 evidence 与覆盖检查**：evidence 说明验证入口或 owner，不复制通用 checklist；与当前 plan/spec 检查 coverage、重叠、依赖、section-level contract references、stable claim atomization 和 AC feasibility。Spec 章节发生变化时，扫描引用该章节的全部 Ticket 并标为受影响，覆盖检查以完整集合为准。
+    - 常见误判：只写“有测试”而不写入口、owner 和 coverage，或让一个 stable claim 同时承载可独立失败的结论，会把不可执行、重叠或部分可证的 AC 留到执行末端才暴露。
+-7. **发布 Ticket-only Composition**：新 package 使用 `tickets=true, dag=false` Ticket-only 合同，不创建 DAG，也不建立 Ticket/Task 双层 bundle；由 execution-boundaries 发布当前 Attempt 的 Ticket，并通过现有 state CLI 原子推进为 Approved/PENDING。旧 package 的 `dag=true` 只读，不由本 Skill 创建或更新。
++7. **发布 Ticket-only Composition**：新 package 使用 `tickets=true, dag=false` Ticket-only 合同，不创建 DAG，也不建立 Ticket/Task 双层 bundle；主 thread 发布当前 Attempt 的 Ticket 合同，记账 subagent 通过现有 state CLI 初始化 Approved/PENDING。旧 package 的 `dag=true` 只读，不由本 Skill 创建或更新。
+    - 常见误判：发布时又创建 Task/DAG 或手写状态，会产生第二个运行时 authority，Ticket 的 Approved/PENDING 也无法回放。
+ 8. **保留 Ticket acceptance 不变量**：Ticket acceptance state 保存在 `.impl-package/state.json`；Ticket AC 按 Composition Contract 使用稳定 claim ID，一个 AC 可包含多个原子 claim；把 early falsification evidence 与 remaining completion evidence 分开描述，其中只有真实 UI/provider/native tool 才能证伪的可观察结果（如真实入口是否呈现目标状态）标为 `early-falsification`，完整旅程验收仍标为 `remaining-completion`；第一条可执行路径必须保持 tenant、RBAC、privacy、幂等和数据完整性不变量；旧 Task `DONE` 不自动通过 Ticket；P 变化时只将实际受影响 Ticket 设为 `NEEDS-REVALIDATION`。
+    - 常见误判：把旧 Task `DONE` 或一次 early falsification 当成 Ticket 满足，会漏掉 remaining evidence 和第一条路径上的安全不变量。
+diff --git a/plugin-marketplace/plugins/impl-package/skills/impl-planning/rubric.md b/plugin-marketplace/plugins/impl-package/skills/impl-planning/rubric.md
+index 3009756..b83cf2d 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/impl-planning/rubric.md
++++ b/plugin-marketplace/plugins/impl-package/skills/impl-planning/rubric.md
+@@ -8,3 +8,4 @@
+ - Plan holds only global scheduling — Composition, Ticket order/dependency, shared-resource serialization, integration/rollout boundary, and Final Gate criteria — while per-constraint coverage and verification live in each Ticket's Contract references and AC; current execution state stays in `state.json` and is exposed through `progress.md`.
+ - Only affected records require revalidation after a plan change.
+ - Plan only maps an already-frozen Spec contract ensemble to implementation and verification. If observable behavior, data identity, permission, concurrency, recovery, or public shape remains undecided, return to req-align without creating Plan/state or inventing a second DTO/schema contract.
++- [已确认 · 2026-09-05] owning-stage 主 thread 更新业务文档并裁决语义；一个 execution-boundaries 记账 subagent 串行调用 CLI 更新 state 与运行投影，日常异步，依赖落盘或收口时等待。
+diff --git a/plugin-marketplace/plugins/impl-package/skills/plan-review/SKILL.md b/plugin-marketplace/plugins/impl-package/skills/plan-review/SKILL.md
+index f731bd3..bdbd6ad 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/plan-review/SKILL.md
++++ b/plugin-marketplace/plugins/impl-package/skills/plan-review/SKILL.md
+@@ -5,7 +5,7 @@ description: Review an implementation plan or complete plan/Ticket/DAG bundle fo
+ 
+ # Plan Review
+ 
+-审查实际 candidate 并返回判决，不做审计机械；review 只读，approved package edits are physically applied by the bound `/impl-package:execution-boundaries`。初始 Decision/Spec/Plan bundle 的 review 产出最终 owner approval；同一 package 的后续 patch、closure 或记录更新沿用该 approval。
++审查实际 candidate 并返回判决，不做审计机械；review 只读，批准后的业务文档由 owning-stage 主 thread 直接更新，运行状态交给 `/impl-package:execution-boundaries` 记账 subagent。初始 Decision/Spec/Plan bundle 的 review 产出最终 owner approval；同一 package 的后续 patch、closure 或记录更新沿用该 approval。
+ 
+ 审查包含 Ticket 的 bundle 时先读 `../../references/impl-package-composition-contract.md`，用其中的 Ticket、typed dependency 与 stable claim acceptance atom 合同判断 candidate。
+ 
+@@ -54,7 +54,7 @@ mode 省略时使用 `full-review`。`bundle-admission` 只有在 bundle 完整
+ 
+ ## Apply boundary
+ 
+-初始 bundle approval 前，按 owner 要求形成 review edits，由 bound `/impl-package:execution-boundaries` 写入显式 repository-relative 文件并验证；approval 后，同一 package 的 review edits 仍沿用该 bound writer。Git 提供 history 与 rollback，review outcome 继续写入现有记录。
++初始 bundle approval 前，按 owner 要求形成 review edits，由 owning-stage 主 thread 写入显式 repository-relative 业务文档并验证；approval 后，同一 package 的 review edits 沿用该初始授权。Git 提供 history 与 rollback，review outcome 继续写入现有记录。
+ 
+ ## Output
+ 
+diff --git a/plugin-marketplace/plugins/impl-package/skills/req-align/SKILL.md b/plugin-marketplace/plugins/impl-package/skills/req-align/SKILL.md
+index 9e24d94..0a3c6e4 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/req-align/SKILL.md
++++ b/plugin-marketplace/plugins/impl-package/skills/req-align/SKILL.md
+@@ -19,16 +19,16 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed
+ 
+ ## Ownership 与 fast path
+ 
+-本 Skill 拥有 configured implementations root（默认 `docs/implementations/`）下 package 的 Decision、Spec、从属 `contract-design.md` 与可读 D/S aliases 的语义和内容；每个新建或被修订的 Spec 都生成该从属文件，未触及的 legacy Spec 到下次 req-align 再补齐。当前 package artifact 的物理写入和 focused validation 由绑定的 `/impl-package:execution-boundaries` 执行；本 Skill 不创建 tracker spec、第二套 behavior contract、plan 或 runtime state。
++本 Skill 拥有 configured implementations root（默认 `docs/implementations/`）下 Decision、Spec、从属 `contract-design.md` 与 D/S aliases 的语义和内容；owning-stage 主 thread 直接写入并验证业务文档。每个新建或修订的 Spec 都有从属 contract-design，legacy Spec 在下次 req-align 时补齐。运行状态交给 `/impl-package:execution-boundaries` 的记账 subagent，通过语义 CLI 更新。
+ 
+-当需要创建或更新 Decision/Spec contract ensemble 时，主 thread 先把已确认的结论、必要依据和依赖性发送给 bound execution-boundaries；由其按本 Skill 与对应 sub-skill 定位并写入 canonical artifact，主 thread 保留 contract 语义、Gate 和最终采信权。机械操作一律走现有 typed tools/语义 CLI；状态变更命令的当前处境与协议尾注由 `situation.py` 按 `situations.yaml` 注入。
++主 thread 按本 Skill 与对应 sub-skill 直接更新 canonical artifact，主 thread 保留 contract 语义、Gate 和最终采信权；需要更新运行状态时将已确定事实异步交给 execution-boundaries 记账 subagent，只有下一动作依赖落盘时才等待回执。
+ 
+ 当 business result、Acceptance Semantics、security/data constraints 与 mutation authority 均未变化时，走 no-contract fast path：复用仍有效的 D/S，说明现有合同为何继续成立，并直接路由 owning skill；删除只要改变 promise 或 acceptance boundary，就仍是 contract-impacting。
+    - 常见误判：只因为改动看起来像删除或普通实现变化就跳过合同判断，会把已经改变的 promise 或 acceptance boundary 隐藏在 fast path 后面。
+ 
+ ## 主路径
+ 
+-1. 分类 contract impact；需要 D/S 时先查找相关 package。没有相关 package，或相关 package 不适合 patch 时，按 initial 新建 package；存在可 patch 的相关 package 时，必须先询问 Owner 是否进入 patch 模式，获得显式确认前保持旧 package 只读，不得把本次输入当作 follow-up 或修改其 artifact。确认路由后识别 initial、follow-up 或 package closure，并读取 [Package Lifecycle](references/package-lifecycle.md)。
++1. 分类 contract impact；需要 D/S 时先查找相关 package。没有相关 package或不适合 patch 时按 initial 新建；已有明确指向目标 package 的 patch 授权时直接沿用，目标或 initial/patch 路由未定时才询问 Owner。确认路由后识别 initial、follow-up 或 package closure，并读取 [Package Lifecycle](references/package-lifecycle.md)。
+    - 常见误判：把 behavior-contract 或 decision-direction 变化当成 implementation-only，或仅因找到相关 package 就静默进入 follow-up，会分别让下游消费失效 D/S，或改写尚未获准 patch 的旧 package。
+ 2. 解析 canonical package 与当前 Decision/Spec；已确认 patch 的 follow-up 默认把输入视为当前文档的 delta，只有 owner 明确声明 full replacement 才整体替换。
+    - 常见误判：把普通 delta 当 full replacement，会静默丢掉未重复提及但仍需 carry forward 的 promise。
+@@ -38,7 +38,7 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed
+    - 常见误判：Decision 尚未 PASSED 就进入 Spec，会让行为合同建立在未闭合的方向和 blocking uncertainty 上。
+ 5. initial bundle 的两个 Gate 均通过且 lifecycle registration 有效时，把同一 Spec contract ensemble 交给 `/impl-package:impl-planning`；follow-up 沿用该 bundle approval 进入后续工作。
+    - 常见误判：只看到一个 Gate 通过就开始 planning，会把未完成的 contract surface 留给 Plan 临时发明。
+-6. 直接引用当前 Decision/Spec 路径，记录用于 module-knowledge/code 比较的 Git commit；implementation attempt 获批前不创建 runtime state，formal artifact 的物理写入交给 bound execution-boundaries。
++6. 直接引用当前 Decision/Spec 路径，记录用于 module-knowledge/code 比较的 Git commit；主 thread 写入 formal artifact，implementation attempt 获批前不创建 runtime state。
+    - 常见误判：在 attempt 获批前先创建 runtime state，会留下没有 approval provenance 的孤儿状态，也让 artifact 出现第二个写入 owner。
+ 7. 汇报任何 Gate 结果前读取 [Handoff](references/handoff.md)，输出最具体的可恢复状态。
+    - 常见误判：只报 PASSED/BLOCKED 而不带恢复入口，下一 session 无法判断缺口、owner decision 和下一动作。
+@@ -53,4 +53,4 @@ Package ID 创建后不得改名；后续 requirement delta 先按 implementatio
+ 
+ ## 输出
+ 
+-用业务语言说明 focused requirement、selected direction、route、Gate results、blockers/owner decisions 与下一有效步骤；发生 Spec artifact 写入时，由 execution-boundaries 返回 canonical package、Decision/Spec evidence 与 `contract-design.md` disposition，主 thread 复核后汇报，不粘贴完整 artifact。
++用业务语言说明 focused requirement、selected direction、route、Gate results、blockers/owner decisions 与下一有效步骤；发生 Spec artifact 写入时给出 canonical package、Decision/Spec evidence 与 `contract-design.md` disposition，不粘贴完整 artifact。
+diff --git a/plugin-marketplace/plugins/impl-package/skills/req-align/assets/templates/spec.md b/plugin-marketplace/plugins/impl-package/skills/req-align/assets/templates/spec.md
+index 0d104ff..a5c3a81 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/req-align/assets/templates/spec.md
++++ b/plugin-marketplace/plugins/impl-package/skills/req-align/assets/templates/spec.md
+@@ -88,7 +88,7 @@
+ | --- | --- | --- | --- |
+ 
+ <!-- 当条件化 evidence-integrity 合同适用时，只加入相关的 false-PASS 反例，例如：归一化掩盖比较 drift、副作用后失败、rollback/invalidation 失败、不兼容投影输入或状态 shape 漂移。这些只是示例，不是必选场景。 -->
+-<!-- 每条 AC 只覆盖一个权威转换；多个动作成功后分别产生权威记录时拆成多条 AC。 -->
++<!-- 每条 AC 覆盖一个可独立验收的用户终态；展示、编辑或拒绝结果可以不产生新记录，发生权威状态转换时明确记录、producer 和下游消费。 -->
+ 
+ ## 8. 合同一致性
+ 
+diff --git a/plugin-marketplace/plugins/impl-package/skills/req-align/references/spec-gate.md b/plugin-marketplace/plugins/impl-package/skills/req-align/references/spec-gate.md
+index 08464ce..7adfdae 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/req-align/references/spec-gate.md
++++ b/plugin-marketplace/plugins/impl-package/skills/req-align/references/spec-gate.md
+@@ -15,7 +15,7 @@ Spec 只有同时满足以下条件才可 PASSED：
+ - contract coherence 已闭合：required input 可取得；有副作用、并发或重试风险的 operation 已逐项定义 identity、重复/stale 结果与恢复；每个可观察字段，以及行为/状态机/工作流表与错误边界表中每一个用户可见结果，都有唯一 authority，并能指到承载它的 read-model 字段与实际 producer；
+ - 八个 behavior-contract 章节 substantive，behavior、state/workflow、permission/boundary、error/recovery 与 canonical model 内部一致；
+ - 每个 promise/constraint 映射到 observable evidence，并为 manual evidence 指定 owner；
+-- 每条 AC 恰好覆盖一个权威转换：用户完成一个动作、成功后系统产生一份新的权威记录，下游从此读取它；
++- 每条 AC 覆盖一个可独立验收的用户终态，并有可观察结果和 oracle；展示、编辑或拒绝结果可以不产生新记录，发生权威状态转换时明确唯一记录、producer 与下游消费；
+ - blocking owner decision、contract ambiguity 与 artifact authority conflict 为零；
+ - 两个独立实施者可以选择不同内部实现，但不会产生不同 API、data identity、permission、concurrency、recovery 或 public shape。
+ - initial artifact 已记录当前合同，所需 owner approval 已记录，Status、Gate result 与 handoff readiness 一致；正式阶段迁移以该 bundle 记录为依据。
+diff --git a/plugin-marketplace/plugins/impl-package/skills/req-align/rubric.md b/plugin-marketplace/plugins/impl-package/skills/req-align/rubric.md
+index 2eed029..757c4f4 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/req-align/rubric.md
++++ b/plugin-marketplace/plugins/impl-package/skills/req-align/rubric.md
+@@ -1,6 +1,6 @@
+ ---
+ target: plugin-marketplace/plugins/impl-package/skills/req-align
+-updated: 2026-08-14
++updated: 2026-09-05
+ ---
+ ## 原则
+ 
+@@ -40,3 +40,4 @@ updated: 2026-08-14
+ - 采纳 `contract-design.md` 作为每个新建或被触及 Spec 的强制从属产物；允许 `not-required`，但理由必须证明精确语义已由 `spec.md` 完整承担。
+ - 采纳 touch-time backfill；未触及的 legacy package 不做批量迁移。
+ - 明确额外 independent review 只由 accepted Track C / Spec fidelity finding 触发，不加入初始 Spec Gate。
++- [已确认 · 2026-09-05] owning-stage 主 thread 更新业务文档并裁决语义；一个 execution-boundaries 记账 subagent 串行调用 CLI 更新 state 与运行投影，日常异步，依赖落盘或收口时等待。
+diff --git a/plugin-marketplace/plugins/impl-package/skills/req-align/sub-skills/decision/SUB-SKILL.md b/plugin-marketplace/plugins/impl-package/skills/req-align/sub-skills/decision/SUB-SKILL.md
+index 96a9286..9f80bc4 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/req-align/sub-skills/decision/SUB-SKILL.md
++++ b/plugin-marketplace/plugins/impl-package/skills/req-align/sub-skills/decision/SUB-SKILL.md
+@@ -24,8 +24,8 @@ description: req-align 内部的 Decision 阶段；对齐 requirement inputs、F
+    - 常见误判：把需要授权的调查当普通查文件，或把可直接查清的事实都升级成 BLOCKED，会分别越过权限边界或制造无谓停顿。
+ 5. 用 [Alignment Proposal](../../assets/templates/alignment-proposal.md) 形成 working output；只有 discovery 与允许调查都无法关闭 intent、scope、trade-off 或 owner decision 时才问一个 focused question，proposal 不是 durable artifact。
+    - 常见误判：过早把 proposal 当 durable artifact，或把本地可查事实问成用户偏好，会让 working hypothesis 变成错误承诺。
+-6. earned Decision 使用 [Decision Template](../../assets/templates/decision.md)；主 thread 把已确定内容交给 bound `/impl-package:execution-boundaries` 写入并验证 `decision.md`，lightweight correction 在 Decision PASSED 后把最小 evidence 交给 Spec 的 Decision Gate Record，Decision BLOCKED 一律使用 `decision.md` 且不创建 Spec。机械写入走 typed/语义 CLI，回执可带当前处境协议。
+-   - 常见误判：Decision BLOCKED 仍创建 Spec，或主 thread 绕过 bound writer 直接改 artifact，会留下没有正确 Gate/写入 provenance 的合同。
++6. earned Decision 使用 [Decision Template](../../assets/templates/decision.md)；主 thread 直接写入并验证 `decision.md`。lightweight correction 在 Decision PASSED 后把最小 evidence 交给 Spec 的 Decision Gate Record；Decision BLOCKED 使用 `decision.md` 且不创建 Spec。运行状态通过 `/impl-package:execution-boundaries` 记账 subagent 更新。
++   - 常见误判：Decision BLOCKED 仍创建 Spec，会让下游消费尚未裁决的合同。
+ 7. 仅 initial bundle 运行 Decision Gate；目标落点、Focused PRD（适用时）、input reconciliation、Core/Capability、repository fit、material choices 与所有 blocking uncertainty 全部闭合后才可 PASSED，follow-up 更新直接沿用 initial approval。
+    - 常见误判：对 follow-up 重跑或重新发明 initial approval，或在 blocking uncertainty 仍存在时给 PASSED，会让后续阶段误以为方向已重新授权。
+ 
+@@ -38,4 +38,4 @@ description: req-align 内部的 Decision 阶段；对齐 requirement inputs、F
+ 
+ ## 返回 router
+ 
+-返回 initial Decision Gate result，或 follow-up 更新后的 standalone `decision.md` / lightweight record、Spec 可消费的 boundary，以及 comparison evidence；artifact 的物理写入和 focused validation 由 bound `/impl-package:execution-boundaries` 完成，主 thread 负责采信结果。initial 的 decision-only 到此停止；initial full 只有 PASSED 才能进入 Spec。
++返回 initial Decision Gate result，或 follow-up 更新后的 standalone `decision.md` / lightweight record、Spec 可消费的 boundary 与 comparison evidence；主 thread 完成文档写入和 focused validation。initial decision-only 到此停止；initial full 只有 PASSED 才能进入 Spec。
+diff --git a/plugin-marketplace/plugins/impl-package/skills/req-align/sub-skills/spec/SUB-SKILL.md b/plugin-marketplace/plugins/impl-package/skills/req-align/sub-skills/spec/SUB-SKILL.md
+index 6d35699..3c6702f 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/req-align/sub-skills/spec/SUB-SKILL.md
++++ b/plugin-marketplace/plugins/impl-package/skills/req-align/sub-skills/spec/SUB-SKILL.md
+@@ -34,7 +34,7 @@ initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一
+ 
+ ## 设计与写入
+ 
+-本 sub-skill 拥有 Spec contract ensemble 的语义、Status 与 Gate 条件；主 thread 将已确认内容和批准交给 bound `/impl-package:execution-boundaries`，由其写入 canonical artifact 并运行 focused validation；机械操作走 typed/语义 CLI，状态变更可附 `situation.py` 按 `situations.yaml` 注入的处境协议。
++本 sub-skill 拥有 Spec contract ensemble 的语义、Status 与 Gate 条件；主 thread 直接写入 canonical artifact 并运行 focused validation。运行状态交给 `/impl-package:execution-boundaries` 记账 subagent，通过语义 CLI 更新。
+ 
+ 1. 使用 [Spec Template](../../assets/templates/spec.md)，首先写回完整的“Spec 设计范围”，再更新其他章节。
+    - 常见误判：先改行为章节再补范围，会漏记新 surface，后面的 contract coherence 检查也失去全集。
+@@ -49,7 +49,7 @@ initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一
+ 6. 仅当信号适用时评估 evidence-integrity contract 与 risk-driven Grill；它们不成为普通变化的固定流程。
+    - 常见误判：把高成本检查固定到所有普通变化，会稀释真正 risk signal；完全跳过适用信号，又会让高风险 surface 没有额外审问。
+ 
+-Formal artifact 的内容、Status 与 Gate result 必须反映当前已记录事实；initial bundle 完成 owner approval，follow-up 将 current truth 交给 execution-boundaries 写入并沿用该 approval，主 thread 不直接编辑当前 package artifact。
++Formal artifact 的内容、Status 与 Gate result 反映当前已记录事实；initial bundle 完成 owner approval，follow-up 由主 thread 写入 current truth 并沿用该 approval。
+ 
+ ## Spec Gate（仅初始 bundle）
+ 
+@@ -75,4 +75,4 @@ follow-up 更新直接沿用 initial approval。
+ 
+ ## 返回 router
+ 
+-返回 initial Spec Gate result，或 follow-up 更新后的 `spec.md`、`contract-design.md` disposition、Acceptance evidence 与 planning readiness；execution-boundaries 回报物理写入与 focused validation，主 thread 采信后再进入 planning。initial PASSED 授权 contract ensemble 进入 planning；implementation、verification、merge 与 release 由后续阶段处理。
++返回 initial Spec Gate result，或 follow-up 更新后的 `spec.md`、`contract-design.md` disposition、Acceptance evidence 与 planning readiness；主 thread 完成文档写入与 focused validation。initial PASSED 授权 contract ensemble 进入 planning；implementation、verification、merge 与 release 由后续阶段处理。
+diff --git a/plugin-marketplace/plugins/impl-package/skills/review-code/SKILL.md b/plugin-marketplace/plugins/impl-package/skills/review-code/SKILL.md
+index 4550a52..d690232 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/review-code/SKILL.md
++++ b/plugin-marketplace/plugins/impl-package/skills/review-code/SKILL.md
+@@ -1,7 +1,6 @@
+ ---
+ name: review-code
+ description: 当需要审查 pull request、固定 comparison point 的代码 diff 或相关实现变更时使用；重点检查运行行为、错误处理、安全、性能、资源、并发/原子性、测试风险与一般代码质量。
+-allowed-tools: Read Grep Glob
+ metadata:
+   tags: review-code, code-review, code-quality, security, best-practices, PR-review
+   platforms: Codex, Claude, ChatGPT, Gemini
+diff --git a/plugin-marketplace/plugins/impl-package/skills/standing-bookkeeper/evals/evals.json b/plugin-marketplace/plugins/impl-package/skills/standing-bookkeeper/evals/evals.json
+index 87dbf0c..c2d2d32 100644
+--- a/plugin-marketplace/plugins/impl-package/skills/standing-bookkeeper/evals/evals.json
++++ b/plugin-marketplace/plugins/impl-package/skills/standing-bookkeeper/evals/evals.json
+@@ -16,13 +16,13 @@
+     {
+       "id": 2,
+       "prompt": "当前 package 需要把已批准的 Spec follow-up 写回 spec.md 与 contract-design.md。请判断 standing bookkeeper 和主 thread 各自负责什么，并说明如何处理写入失败。",
+-      "expected_output": "Routes the physical artifact write and focused validation to the package-bound bookkeeper, preserves req-align/main-thread semantic ownership, and reports the exact failure without claiming success.",
++      "expected_output": "主 thread 直接写入并验证已批准的 Spec/contract-design 文档；相关运行状态由记账 subagent 串行调用 CLI。失败时报告准确位置并在既有授权内修复，语义与批准仍归 req-align/main thread。",
+       "files": [],
+       "expectations": [
+-        "Routes both physical artifact writes and focused validation to the package-bound bookkeeper.",
+-        "Preserves req-align and the main thread as owners of the Spec semantics and approval.",
+-        "Reports the exact failed location and any partial write instead of claiming success.",
+-        "Does not create a second contract or move semantic ownership to the bookkeeper."
++        "主 thread 直接更新业务文档。",
++        "记账 subagent 仅通过语义 CLI 更新运行状态。",
++        "不改变 Spec 语义与批准 owner。",
++        "partial write 不冒充成功。"
+       ]
+     },
+     {
+@@ -76,7 +76,7 @@
+     {
+       "id": 7,
+       "prompt": "一次更新同时要求记录 runtime state 的 Ticket 状态和 Progress 中的可读进度。请说明哪些动作必须通过现有 state CLI，哪些内容由 bookkeeper 物理写入，以及如何避免双写 runtime state。",
+-      "expected_output": "Uses the existing impl_package_state.py semantic command for runtime state, writes the readable Progress artifact within package scope, and does not create or manually maintain a second runtime-state ledger.",
++      "expected_output": "Bookkeeper uses the state CLI for the Ticket transition and its generated Progress projection; it does not directly edit the projection or create a second state ledger.",
+       "files": [],
+       "expectations": [
+         "Uses the existing impl_package_state.py semantic command for the runtime state transition.",
+diff --git a/skills/dispatcher/SKILL.md b/skills/dispatcher/SKILL.md
+index 594b986..e0afc6e 100644
+--- a/skills/dispatcher/SKILL.md
++++ b/skills/dispatcher/SKILL.md
+@@ -30,7 +30,7 @@ Dispatcher 面向上游主控，指导 Topic-first admission、当前批次、di
+ 2. 为每个已解锁 Topic 选择当前 baby step，把互不依赖且资源隔离的步骤组成当前批次并 fan out。`PARALLEL | SERIAL` 只比较当前候选 baby step 的实际 effect footprint，不使用 Topic 或 Ticket 的最终 write-set 并集；未来步骤会冲突不影响当前步骤并行，冲突到达时再串行。review、验证或 worker 在途只阻塞依赖其结论或资源的步骤；其他 Ticket 的只读调研与准备继续释放。文件 ownership 交叉时先由 SDD 判断能否用隔离 worktree 分开。共享操作的合并与复用只是调度优化，不是 dependency；只有不延迟已解锁的独立动作时才合并，否则先执行当前合格步骤并在 return 后重扫。
+ 3. 单个派发只在宿主 receipt 明确成功后成立。迟到、重复、来源不明或结果不确定的 receipt 先消除歧义，不据此推进后续动作。
+ 4. worker return 后先消费可归因结果、evidence、diff、residue 与 cleanup，再判断当前 Topic 的下一步；返回不会自动授权后续工作。既定边界内的 tooling retry、format、普通重跑或机械 cleanup 续接当前动作，不创建新业务 step。
+-5. 当前批次的 receipt 与 return 全部确认或消除歧义后，再全局扫描候选并形成下一批；没有已解锁且合格的动作时进入 idle。业务状态、验收和 closure 仍由调用方的 owning workflow 判断。
++5. 每次消费 return 后检查受影响候选，核对 dependency、授权与资源后补充派发，不等待无关 worker；当前批次全部结束或准备进入 idle 时再全局扫描。没有已解锁且合格的动作时进入 idle。业务状态、验收和 closure 仍由调用方的 owning workflow 判断。
+ 
+ 同一 Topic 连续两次 `INCOMPLETE`、broad check 新发现一类 caller/producer，或实际 write-set 超出原 ownership 时，停止继续派更小的 fix；先释放一个 foundation investigation，重新确定 Topic 边界。
+ 
+diff --git a/skills/dispatcher/evals/evals.json b/skills/dispatcher/evals/evals.json
+index 5eb5647..c930482 100644
+--- a/skills/dispatcher/evals/evals.json
++++ b/skills/dispatcher/evals/evals.json
+@@ -24,10 +24,10 @@
+     },
+     {
+       "id": 4,
+-      "prompt": "只读模拟：当前有两个互不依赖、资源隔离且已通过门槛的 baby steps。一次派发 receipt 明确成功，另一次 receipt 来源不明；成功的 worker 随后返回。说明当前批次、结果消费与 idle 条件；禁止实际修改文件或派发 worker。",
+-      "expected_output": "两个动作进入当前批次 fan out；只确认 receipt 明确成功的派发，来源不明的 receipt 先消除歧义；当前批次的 receipt/return 全部确认或消除歧义后才全局重扫并判断 idle。",
++      "prompt": "只读模拟：当前有两个互不依赖、资源隔离且已通过门槛的 baby steps A/B。A 的 receipt 明确成功并返回，解锁独立的 A2；B 的 receipt 来源不明且可能仍运行。说明结果消费、补派与 idle 条件；禁止实际修改文件或派发 worker。",
++      "expected_output": "消费 A 的 return，核对 A2 的 dependency、授权和资源后立即补派，不等无关 B；B 的 receipt 歧义保持待核且继续保留其资源。整批结束或准备 idle 时全局重扫，所有在途 receipt/return 已确认或消除歧义后才能判断本轮 idle。",
+       "files": [],
+-      "expectations": ["形成完整当前批次。", "receipt 歧义解决前不推进。", "消费 return 后再判断 idle。"]
++      "expectations": ["A 返回后可补派独立 A2。", "B receipt 有歧义时保留其资源。", "整批结束或准备 idle 时全局重扫。"]
+     },
+     {
+       "id": 5,
+diff --git a/skills/dispatcher/rubric.md b/skills/dispatcher/rubric.md
+index 749d18d..67b1779 100644
+--- a/skills/dispatcher/rubric.md
++++ b/skills/dispatcher/rubric.md
+@@ -1,6 +1,6 @@
+ ---
+ target: skills/dispatcher
+-updated: 2026-09-02
++updated: 2026-09-05
+ ---
+ 
+ ## 原则
+@@ -8,7 +8,7 @@ updated: 2026-09-02
+ - [已确认] Topic 是共享 foundation、ownership 与 closure point 的横向交付范围；不新增 Delivery Lane 对象、持久状态或第二套调度系统。
+ - [已确认] 默认沿一条 lane 派发既定方向和 write-set 内的一个 baby step；同一方向和 write-set 内的机械附属跟随同一步，只有结果会改变 Topic 决策、ownership、dependency、authorization、资源 admission 或立即释放另一条 Topic 时才拆分。
+ - [已确认] baby step 以主控 return point 为边界，不打包到 Topic closure；相邻 return point 只在接口稳定且不减少并行机会时合并。
+-- [已确认] 当前批次收齐后再全局重扫；连续 `INCOMPLETE`、新 caller/producer 家族或 write-set 外溢统一触发一次 foundation investigation，不叠加细碎 guard。
++- [已确认] 消费 return 后检查受影响候选并补派，整批结束或准备 idle 时全局重扫；连续 `INCOMPLETE`、新 caller/producer 家族或 write-set 外溢统一触发一次 foundation investigation，不叠加细碎 guard。
+ - [已确认] 优先降低主控调度负担，不以增加模板、字段、预算或持久化记录换取局部形式完整。
+ - [待验证] worker 复用使用可观察的上下文可信度信号。（证据: R2, R3, R4）
+ 
+@@ -16,7 +16,7 @@ updated: 2026-09-02
+ 
+ ### R1 · 2026-09-01
+ 
+-- 采纳 Topic-first、最大 coherent step、batch drain 与单一反抖动规则。
++- 采纳 Topic-first、最大 coherent step 与单一反抖动规则；batch drain 已由 2026-09-05 的按返回补派决定替代。
+ - 否决独立 Delivery Lane 实体、lane 模板、数字 dispatch budget、多级 stabilization checkpoint 和持久化 lane 状态。
+ - 用户原话：只想保留性价比最高的，不要再增加主控负担。
+ 
+diff --git a/tests/test_dispatcher_contract.py b/tests/test_dispatcher_contract.py
+index 43b4d04..8419729 100644
+--- a/tests/test_dispatcher_contract.py
++++ b/tests/test_dispatcher_contract.py
+@@ -71,10 +71,12 @@ def test_breadth_gate_does_not_use_search_scope_or_file_count_as_a_limit() -> No
+     assert "知识来源能分别阅读或返回，不等于必须分别派发" in gate
+ 
+ 
+-def test_dispatcher_drains_batch_and_stops_thrashing() -> None:
++def test_dispatcher_refills_after_return_and_stops_thrashing() -> None:
+     skill = SKILL.read_text(encoding="utf-8")
+ 
+-    assert "当前批次的 receipt 与 return 全部确认或消除歧义后" in skill
++    assert "每次消费 return 后检查受影响候选" in skill
++    assert "不等待无关 worker" in skill
++    assert "当前批次全部结束或准备进入 idle 时再全局扫描" in skill
+     assert "连续两次 `INCOMPLETE`" in skill
+     assert "broad check 新发现一类 caller/producer" in skill
+     assert "foundation investigation" in skill
+diff --git a/tests/test_situation_render.py b/tests/test_situation_render.py
+index c36dfdd..732aea3 100644
+--- a/tests/test_situation_render.py
++++ b/tests/test_situation_render.py
+@@ -457,11 +457,13 @@ def _coverage_context(
+     diff_names: dict[str, list[str] | None] | None = None,
+     state_valid: bool = True,
+     gate_verdict: str | None = None,
++    reports: dict[str, str] | None = None,
+ ) -> situation.FactContext:
+     diff_names = diff_names or {}
+     reader = SimpleNamespace(
+         package_rel=None,
+         diff_names=lambda base: diff_names.get(base),
++        read=lambda path: situation.FileView(path, (reports or {}).get(path)),
+     )
+     state = situation.StateView(
+         raw={"tickets": {"TKT-01": {"state": ticket_state}}} if state_valid else None,
+@@ -475,7 +477,7 @@ def _coverage_context(
+         reader=reader,
+         state=state,
+         tickets={},
+-        trail=situation.TrailView(True, rows),
++        trail=situation._parse_trail(situation.FileView("trail.jsonl", "\n".join(json.dumps(row) for row in rows))),
+         gate=situation.GateView(gate_verdict is not None, gate_verdict, None),
+         findings=situation.FindingsView(False, "", []),
+         intake=situation.IntakeView(False, None),
+@@ -505,68 +507,88 @@ def test_terminal_coverage_is_unknown_before_near_terminal_gate() -> None:
+     assert fact.known is False
+ 
+ 
+-def test_terminal_coverage_is_false_when_terminal_phase_lacks_four_tracks() -> None:
+-    rows = [_terminal_dispatch(track) for track in ("Track A", "Track B", "Track C")]
+-    context = _coverage_context(rows)
++def _terminal_summary(*, safety=False, old_tracks=()):
++    results = []
++    reports = {}
++    for track in ("Track A", "Track B", "Track C", *(("Track D",) if safety else ())):
++        reviewed_head = "old-head" if track in old_tracks else "current-head"
++        artifact = f"execution/{track}.md"
++        reports[artifact] = f"verdict: PASS\nreviewed-head: {reviewed_head}\nreview-run: run-1\nreview-track: {track}\n"
++        result = {"track": track, "verdict": "PASS", "reviewedHead": reviewed_head, "artifact": artifact}
++        if track in old_tracks:
++            result.update(reused=True, reuseEvidence="execution/reuse.md")
++            reports["execution/reuse.md"] = "run-1: old-head -> current-head; inputs unchanged"
++        results.append(result)
++    row = {"subject": "attempt", "kind": "fact", "ts": "2026-09-05T12:00:00Z", "key": "review.terminal_summary", "value": {
++        "reviewRunId": "run-1", "comparisonHead": "current-head", "safetyApplicable": safety, "results": results,
++    }}
++    return row, reports
+ 
+-    fact = situation._when_attempt_terminal_coverage_complete(context)
+ 
+-    assert fact.known is True
+-    assert fact.value is False
++def test_terminal_coverage_accepts_three_results_without_safety():
++    row, reports = _terminal_summary()
++    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is True
+ 
+ 
+-def test_terminal_coverage_is_true_for_four_current_head_tracks() -> None:
+-    rows = [_terminal_dispatch(track) for track in situation.REVIEW_TRACK_VALUES]
+-    context = _coverage_context(rows)
++def test_terminal_coverage_requires_applicable_safety_result():
++    row, reports = _terminal_summary(safety=True)
++    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is True
++    row["value"]["results"].pop()
++    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
+ 
+-    fact = situation._when_attempt_terminal_coverage_complete(context)
+ 
+-    assert fact.known is True
+-    assert fact.value is True
++def test_terminal_coverage_does_not_accept_dispatch_or_legacy_boolean():
++    rows = [_terminal_dispatch(track) for track in situation.REVIEW_TRACK_VALUES]
++    rows.append({"subject": "attempt", "kind": "fact", "ts": "2026-09-05T12:00:00Z", "key": "attempt.terminal_coverage_complete", "value": True})
++    assert situation._when_attempt_terminal_coverage_complete(_coverage_context(rows)).value is False
+ 
+ 
+-def test_terminal_coverage_is_false_after_source_commit() -> None:
+-    rows = [_terminal_dispatch(track, head="review-head") for track in situation.REVIEW_TRACK_VALUES]
+-    context = _coverage_context(rows, diff_names={"review-head": ["src/engine.py"]})
++def test_terminal_coverage_accepts_b_c_safety_reuse_with_same_run_evidence():
++    row, reports = _terminal_summary(safety=True, old_tracks=("Track B", "Track C", "Track D"))
++    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is True
++    del reports["execution/reuse.md"]
++    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
+ 
+-    fact = situation._when_attempt_terminal_coverage_complete(context)
+ 
+-    assert fact.known is True
+-    assert fact.value is False
++def test_terminal_coverage_rejects_old_a_and_changed_comparison_head():
++    row, reports = _terminal_summary(old_tracks=("Track A",))
++    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
++    row, reports = _terminal_summary()
++    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], head="new-head", reports=reports)).value is False
+ 
+ 
+-def test_terminal_coverage_stays_true_after_docs_only_commit() -> None:
+-    rows = [_terminal_dispatch(track, head="review-head") for track in situation.REVIEW_TRACK_VALUES]
+-    context = _coverage_context(rows, diff_names={"review-head": ["docs/review.txt", "notes.md"]})
++def test_terminal_coverage_rejects_missing_failed_or_wrong_run_report():
++    row, reports = _terminal_summary()
++    report = reports["execution/Track B.md"]
++    for invalid in ("", report.replace("PASS", "FAIL"), report.replace("run-1", "other-run"), report.replace("current-head", "other-head")):
++        reports["execution/Track B.md"] = invalid
++        assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
+ 
+-    fact = situation._when_attempt_terminal_coverage_complete(context)
+ 
+-    assert fact.known is True
+-    assert fact.value is True
+-
+-
+-def test_terminal_coverage_ignores_legacy_track_value_without_render_error() -> None:
+-    rows = [_terminal_dispatch(track) for track in ("Track A", "Track B", "Track D")]
+-    rows.append(_terminal_dispatch("Track C source recheck"))
+-    parsed = situation._parse_trail(
+-        situation.FileView("execution/fixture-attempt/trail.jsonl", "\n".join(json.dumps(row) for row in rows))
+-    )
+-    context = _coverage_context(parsed.rows)
+-
+-    assert parsed.error is None
+-    fact = situation._when_attempt_terminal_coverage_complete(context)
+-    assert fact.value is False
++def test_terminal_gate_does_not_substitute_for_review_results():
++    for verdict in ("pass", "fail", "defer"):
++        assert situation._when_attempt_terminal_coverage_complete(_coverage_context([], gate_verdict=verdict)).value is False
+ 
+ 
+-def test_terminal_coverage_excludes_source_recheck_dispatch() -> None:
+-    rows = [_terminal_dispatch(track) for track in ("Track A", "Track B", "Track D")]
+-    rows.append(_terminal_dispatch("Track C", recheck=True))
+-    context = _coverage_context(rows)
++def test_terminal_coverage_requires_distinct_track_reports():
++    row, reports = _terminal_summary()
++    row["value"]["results"][1]["artifact"] = row["value"]["results"][0]["artifact"]
++    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
++    row, reports = _terminal_summary()
++    reports["execution/Track B.md"] = reports["execution/Track A.md"]
++    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
+ 
+-    fact = situation._when_attempt_terminal_coverage_complete(context)
+ 
+-    assert fact.known is True
+-    assert fact.value is False
++def test_terminal_coverage_rejects_uncertain_duplicate_or_malformed_results():
++    for value in ("UNCERTAIN", "FAIL"):
++        row, reports = _terminal_summary()
++        row["value"]["results"][0]["verdict"] = value
++        assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
++    row, reports = _terminal_summary()
++    row["value"]["results"].append(row["value"]["results"][0])
++    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
++    row["value"]["results"] = [{"track": []}]
++    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
+ 
+ 
+ def test_json_render_exposes_digest_and_short_circuits_since() -> None:
+diff --git a/tests/test_standing_bookkeeper_contract.py b/tests/test_standing_bookkeeper_contract.py
+index d26d7d7..c9bc643 100644
+--- a/tests/test_standing_bookkeeper_contract.py
++++ b/tests/test_standing_bookkeeper_contract.py
+@@ -26,9 +26,6 @@ def test_standing_bookkeeper_entry_and_role_are_complete() -> None:
+     assert "references/role.md" in entry.read_text(encoding="utf-8")
+ 
+     role_text = role.read_text(encoding="utf-8")
+-    # 降级为异常 slow path 后的不变量：只在异常场景触发、不写 state.json、
+-    # 返回结构化修复输入由主 thread 执行。依据见
+-    # docs/skill-design/impl-package-situation-table-260815/bookkeeper-practicality.md
+     for marker in (
+         "slow path",
+         "impl-package-composition-contract.md",
+@@ -76,11 +73,12 @@ def test_package_writers_delegate_physical_mutation_without_moving_semantic_owne
+         assert "/impl-package:execution-boundaries" in text
+ 
+     assert "主 thread 保留 contract 语义、Gate 和最终采信权" in callers["req-align"]
+-    assert "主 thread 不直接编辑当前 package 的 Plan 或 runtime state" in callers["impl-planning"]
+-    assert "Ticket 文件的物理写入与运行时 state 更新" in callers["ticket-split"]
+-    assert "approved package edits are physically applied" in callers["plan-review"]
+-    # bookkeeper 已降级为异常 slow path：日常结构化写入由主 session 直接调 CLI，
+-    # bookkeeper 不再写 state.json。依据见
+-    # docs/skill-design/impl-package-situation-table-260815/bookkeeper-practicality.md
++    assert "主 thread 直接写入并验证 Plan/Ticket" in callers["impl-planning"]
++    assert "主 thread 直接写入 Ticket 正文" in callers["ticket-split"]
++    assert "业务文档由 owning-stage 主 thread 直接更新" in callers["plan-review"]
+     assert "slow path" in callers["dev-with-track"]
+-    assert "不成为第二个 state writer" in callers["dev-with-track"]
++    assert "记账 subagent 串行执行语义 CLI" in callers["dev-with-track"]
++    role = read("skills/execution-boundaries/references/role.md")
++    assert "同一 package 保持一个记账 writer" in role
++    assert "异步执行" in role and "依赖：是" in role
++    assert "不修改业务代码或 Decision/Spec/Plan/Ticket 正文" in role
+
+# KaiSpan: AGENTS.md
+
+diff --git a/AGENTS.md b/AGENTS.md
+index 96dfed8d..2836a6b3 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -8,7 +8,7 @@
+ 
+ 省略日常进度播报。
+ 
+-Default to restraint: handle only the smallest scope the current user message clearly authorizes, and pause to define boundaries before short, ambiguous, or state-changing actions instead of extending historical plans or execution momentum into action.
++结合当前消息与本会话已有授权确定范围。
+ 
+ ## 设计分层与复用
+ 
