@@ -6,7 +6,7 @@ The four `review-track-*` agent definitions carry their own leaf-review brief. T
 
 ```text
 Review target:
-- Repo/worktree: <ReviewRun repository; use snapshot_repo for a working-tree review>
+- Repo/worktree:
 - Target revision or PR:
 - Comparison point input:
 - Resolved base SHA:

@@ -18,7 +18,7 @@ allowed-tools:
 
 ## Gate 0（判断）
 
-1. ReviewRun 使用已有 commit 固定比较 SHA；审阅未提交改动时用 `review_ledger.py create --working-tree` 生成隔离快照，纳入全部 tracked 改动和显式 `--include-untracked <path>` 文件，未纳入文件列为 out of scope。CLI 返回 snapshot_repo 时，所有 leaf 从该快照读取；用户工作区、index 和分支保持原样。
+1. ReviewRun 优先用已有 commit 固定比较 SHA。审阅未提交改动时不要求先提交：钉住纳入本次 review unit 的确切文件清单与内容哈希，其余 dirty 文件明确记为 out of scope，终审采信前复核这些文件未漂移。合同源始终从固定 `HEAD` 读取。
 2. 每个本轮需要运行的 track 恰好派发一次匹配的独立 leaf invocation；terminal-final 中满足复用条件的 B/C/Safety 消费旧 PASS，不重复派发。逐 track 固定派发，才能避免 required coverage 被重复派发或静默漏掉。
 3. leaf 或其执行 worker 不可用/未授权时，在创建 ReviewRun 前停止并询问“停止，或授权精确命名的 degraded 单 session 列表”，绝不自行降级。否则缺失的独立证据会被误报为完整 review。
 4. scope、phase、topology 固定前不预留 capacity。capacity 不能反过来决定应审哪些 track。
