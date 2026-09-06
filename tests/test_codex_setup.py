@@ -239,6 +239,88 @@ def test_audit_reports_missing_and_install_mismatch(
     assert role.status == "DRIFT"
 
 
+def test_agent_inventory_scans_top_level_toml_files(tmp_path: Path, mod, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    agents = repo / "agents"
+    (agents / "scout").mkdir(parents=True)
+    (agents / "scout" / "agent.md").write_text("# scout\n", encoding="utf-8")
+    (agents / "luna-worker.toml").write_text("name = 'luna-worker'\n", encoding="utf-8")
+    (agents / "README.md").write_text("notes\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "REPO_ROOT", repo)
+
+    directories, files = mod._agent_inventory()
+
+    assert [path.name for path in directories] == ["scout"]
+    assert [path.name for path in files] == ["luna-worker.toml"]
+
+
+def test_audit_tracks_agent_toml_inventory_and_stale_targets(
+    tmp_path: Path, mod, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, codex_home, _plugin, _cache = _make_workspace(tmp_path, mod, monkeypatch)
+    source = repo / "agents" / "luna-worker.toml"
+    content = f"{mod.MANAGED_AGENT_FILE_MARKER}\nname = 'luna-worker'\n".encode("utf-8")
+    source.write_bytes(content)
+
+    result = mod.audit_codex(codex_home)
+    file_item = next(item for item in result.items if item.kind == "agent-file")
+    assert file_item.status == "MISSING"
+    assert file_item.expected_path == str(source)
+
+    target = codex_home / "agents" / source.name
+    target.write_bytes(content)
+    result = mod.audit_codex(codex_home)
+    assert next(item for item in result.items if item.kind == "agent-file").status == "MATCH"
+
+    target.write_text("user-owned\n", encoding="utf-8")
+    result = mod.audit_codex(codex_home)
+    assert next(item for item in result.items if item.kind == "agent-file").status == "INSTALL-MISMATCH"
+
+    target.write_bytes(f"{mod.MANAGED_AGENT_FILE_MARKER}\nstale\n".encode("utf-8"))
+    result = mod.audit_codex(codex_home)
+    assert next(item for item in result.items if item.kind == "agent-file").status == "DRIFT"
+
+    source.unlink()
+    result = mod.audit_codex(codex_home)
+    stale = next(item for item in result.items if item.kind == "agent-file")
+    assert stale.status == "INSTALL-MISMATCH"
+    assert stale.expected_path == "removed from current agents/ inventory"
+
+
+def test_agent_file_apply_requires_adoption_and_projects_source(
+    tmp_path: Path, mod, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, codex_home, _plugin, _cache = _make_workspace(tmp_path, mod, monkeypatch)
+    source = repo / "agents" / "luna-worker.toml"
+    content = f"{mod.MANAGED_AGENT_FILE_MARKER}\nname = 'luna-worker'\n".encode("utf-8")
+    source.write_bytes(content)
+    target = codex_home / "agents" / source.name
+    target.write_text("user-owned\n", encoding="utf-8")
+    pre = mod.audit_codex(codex_home)
+
+    actions, ok = mod.apply_codex(pre, codex_home)
+    assert ok is False
+    assert "--adopt-agents" in actions[0]
+    assert target.read_text(encoding="utf-8") == "user-owned\n"
+
+    actions, ok = mod.apply_codex(pre, codex_home, adopt_agents=True)
+    assert ok is True
+    assert "UPDATED agent file `luna-worker.toml`" in actions
+    assert target.read_bytes() == content
+
+
+def test_agent_file_apply_rejects_linked_destination_parent(tmp_path: Path, mod) -> None:
+    source = tmp_path / "source.toml"
+    source.write_text("name = 'luna-worker'\n", encoding="utf-8")
+    actual = tmp_path / "actual"
+    actual.mkdir()
+    linked = tmp_path / "linked"
+    mod.link_skill.create_dir_link(actual, linked)
+
+    with pytest.raises(OSError, match="symlink or reparse point"):
+        mod._write_agent_file_atomically(source, linked / "luna-worker.toml")
+
+
 def test_apply_uses_native_commands_in_order(tmp_path: Path, mod, monkeypatch: pytest.MonkeyPatch) -> None:
     codex_home = tmp_path / "codex"
     pre = mod.AuditResult(
@@ -359,6 +441,10 @@ def test_cli_requires_report_before_apply(mod) -> None:
     parsed = mod.build_parser().parse_args(["apply", "--expect-report", "abc"])
     assert parsed.mode == "apply"
     assert parsed.expect_report == "abc"
+    adopted = mod.build_parser().parse_args(
+        ["apply", "--expect-report", "abc", "--adopt-agents"]
+    )
+    assert adopted.adopt_agents is True
 
 
 def test_apply_rejects_stale_report_before_mutation(
@@ -385,7 +471,11 @@ def test_apply_accepts_current_report_and_requires_clean_post_audit(
     )
     audits = iter([pre, post])
     monkeypatch.setattr(mod, "audit_codex", lambda home: next(audits))
-    monkeypatch.setattr(mod, "apply_codex", lambda result, home: (["PASS apply"], True))
+    monkeypatch.setattr(
+        mod,
+        "apply_codex",
+        lambda result, home, **_kwargs: (["PASS apply"], True),
+    )
     monkeypatch.setattr(mod, "render_report", lambda **kwargs: "report\n")
     monkeypatch.setattr(mod, "_write_report", lambda report, output: None)
     report_sha = mod.audit_fingerprint(pre, tmp_path)

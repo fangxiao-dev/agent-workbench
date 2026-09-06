@@ -82,7 +82,7 @@ python plugin-marketplace/plugins/impl-package/scripts/install_codex_agents.py -
 
 ### Codex 更新诊断与 bootstrap
 
-`codex_setup.py` 只盘点本仓库管理的 plugin、skills 和 agents，并以 SHA-256 比较当前仓库与全局 Codex 安装态；UTF-8 文本先统一换行为 LF，避免 Windows/macOS 换行差异造成假 drift，二进制仍按原始字节计算。用户自行安装的内容不进入报告。`pull-diff` 应在 `git pull` 后尽快运行，默认使用 `ORIG_HEAD..HEAD`：
+`codex_setup.py` 只盘点本仓库管理的 plugin、skills 和 agents，并以 SHA-256 比较当前仓库与全局 Codex 安装态；`agents/` 顶层目录由 inventory 扫描，子目录作为 agent link，顶层 `.toml` 作为 Codex role 文件投影。UTF-8 文本先统一换行为 LF，避免 Windows/macOS 换行差异造成假 drift，二进制仍按原始字节计算。用户自行安装的内容不进入报告。`pull-diff` 应在 `git pull` 后尽快运行，默认使用 `ORIG_HEAD..HEAD`：
 
 ```powershell
 python scripts/codex_setup.py pull-diff
@@ -90,13 +90,15 @@ python scripts/codex_setup.py audit --output codex-audit.md
 python scripts/codex_setup.py apply --expect-report <codex-audit.md 中的审计 SHA> --output codex-apply.md
 ```
 
-`apply` 不能直接运行：它会重新计算当前审计 SHA，只有与上一份报告一致时才更新 plugin cache、skills links、agents links 和 managed review roles。报告后状态发生变化时必须重新运行 `audit`。脚本支持 Windows 与 macOS，优先使用 `CODEX_HOME`，否则检查 `~/.codex`；可用 `--codex-home` 显式指定目标。
+`apply` 不能直接运行：它会重新计算当前审计 SHA，只有与上一份报告一致时才更新 plugin cache、skills links、agents links、inventory 中的 role files 和 managed review roles。首次接管已有的未受管顶层 role 文件时，在确认 audit 报告后追加 `--adopt-agents`；之后普通 apply 即可。报告后状态发生变化时必须重新运行 `audit`。脚本支持 Windows 与 macOS，优先使用 `CODEX_HOME`，否则检查 `~/.codex`；可用 `--codex-home` 显式指定目标。
 
 ### Impl-Package review agents
 
 `plugin-marketplace/plugins/impl-package/agents/*.md` 是 Claude 插件的原生 agent 定义，安装后可在 `/agents` 中看到 `review-track-code`、`review-track-standards`、`review-track-spec` 和 `review-track-safety`。Claude manifest 显式声明了这四个 Markdown 文件。
 
 Codex 当前插件 manifest 不支持 `agents` 字段，因此不能通过 `codex plugin add` 自动安装这些 role。`install_codex_agents.py --global` 会从同一组 Markdown 定义生成 Codex `.toml` role，并写入全局 `$CODEX_HOME/agents`（未设置时为 `~/.codex/agents`）。Code 与 Spec role 固定使用 `gpt-5.6-sol/high`，Standards 与 Safety role 固定使用 `gpt-5.6-sol/medium`；该配置同时适用于 `initial` 和 `terminal-final`，`finding-closure` 仍使用独立 `luna-worker`。四个 role 使用与 `do-review` 相同的稳定名称，供 parent 的 leaf dispatch 解析；脚本默认拒绝覆盖非同内容文件，只有明确传入 `--force` 才更新带有本包管理标记（或本包旧格式）的已知文件，并拒绝写入符号链接或 Windows reparse point。
+
+个人 Codex role 放在仓库根目录 `agents/*.toml`，由 `codex_setup.py` inventory 扫描并投影到 `$CODEX_HOME/agents`；当前 `agents/luna-worker.toml` 使用标准 `service_tier`，不走 Fast 处理。它与上述 impl-package review role 的生成和安装流程分开。
 
 ### 插件生命周期（Codex / Claude / Grok）
 

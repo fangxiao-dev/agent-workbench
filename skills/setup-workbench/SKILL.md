@@ -38,6 +38,10 @@ implementation. Run commands from the agent-workbench repository root.
 - Summarize only differences. For each item, show its category, name,
   installation location, status, and relevant SHA; omit `MATCH` items and file
   contents.
+- When the audit reports an existing unmanaged top-level TOML under the
+  repository's `agents/` inventory and the Owner explicitly wants to adopt it,
+  pass `--adopt-agents` to the approved `apply` command; do not use it for
+  unrelated files.
 - Do not treat `pull-diff` as setup approval. It only explains repository
   changes after a pull.
 

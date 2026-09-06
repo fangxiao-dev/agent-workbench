@@ -86,11 +86,21 @@ python scripts/codex_setup.py audit --output codex-audit.md
 python scripts/codex_setup.py apply --expect-report <audit-sha> --output codex-apply.md
 ```
 
-`audit` 永远只读；`apply` 没有上一份报告 SHA 时不能启动。apply 前重新计算 SHA，状态变化即阻断并要求重新 audit。通过门禁后，脚本按 marketplace/plugin → skills → agents → managed review roles 的顺序执行；任一步失败就停止后续写操作，最后重新只读审计并报告残余差异。外国链接、真实目录、用户文件和非本工具管理的 TOML 不覆盖、不删除。
+`audit` 永远只读；`apply` 没有上一份报告 SHA 时不能启动。apply 前重新计算 SHA，状态变化即阻断并要求重新 audit。通过门禁后，脚本按 marketplace/plugin → skills → agents inventory → managed review roles 的顺序执行；任一步失败就停止后续写操作，最后重新只读审计并报告残余差异。普通 apply 不覆盖未受管的用户文件；首次明确接管 `agents/` inventory 中已有的顶层 TOML 时，必须追加 `--adopt-agents`。来源被删除后的受管目标保留并报告，不自动删除。
 
 脚本优先使用 `CODEX_HOME`，否则使用 `~/.codex`；Windows 使用 junction，macOS/其他 Unix 使用 symlink。`--codex-home` 只在用户显式指定目标或测试时使用。
 
 ## Impl-Package agent profiles
+
+### Codex agent inventory
+
+仓库根目录 `agents/` 是个人 Codex agent 的来源目录：子目录继续按目录 link 投影到 `$CODEX_HOME/agents/<name>`，顶层 `*.toml` 由 `codex_setup.py` 投影到 `$CODEX_HOME/agents/<name>.toml`。新增或删除 inventory 条目不需要修改 setup 脚本；audit 会自动发现变化。现有未受管目标首次接管时使用：
+
+```powershell
+python scripts/codex_setup.py apply --expect-report <audit-sha> --adopt-agents
+```
+
+`--adopt-agents` 只允许当前仓库 inventory 中的顶层 TOML 进入受管状态，仍受审计 SHA、路径安全和 post-apply audit 约束。
 
 Claude 插件根目录的 `agents/` 由 Claude 原生扫描；`impl-package/.claude-plugin/plugin.json` 显式声明四个 Markdown agent 文件。安装后可在 `/agents` 中确认四个 `review-track-*` profile。
 
