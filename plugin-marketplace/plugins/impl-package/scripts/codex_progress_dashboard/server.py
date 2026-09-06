@@ -235,6 +235,15 @@ def monitor_snapshot(workspace: Path, package_root: Path | None) -> dict[str, An
         "summary": sanitise_activity(record["summary"]),
         "monitorThreadId": record["monitorThreadId"],
         "observations": [_project_observation(item) for item in projected["observations"]],
+        "observationAttempts": [
+            {
+                "attempt": item["attempt"],
+                "current": item["current"],
+                "available": item["available"],
+                "observations": [_project_observation(observation) for observation in item["observations"]],
+            }
+            for item in projected["observationAttempts"]
+        ],
     }
     evaluation = _monitor_evaluation(record["evaluation"])
     if evaluation:

@@ -39,7 +39,7 @@ disable-model-invocation: true
 仅在用户确认后继续：
 
 1. 用 package 所属 Git 根目录作为 monitor root；只读一次 `decision.md` 与 `spec.md`，提炼 `goal`、`chosenDirection`、`coreInvariants`、`nonGoals`、`requiredEvidence`、`requiredReviews`、`manualAcceptance`、`ownerDecisionBoundary` 八个 TARGET_BASELINE 字段。Decision 裁决方向，Spec 校准行为与 acceptance。
-2. 调用 CLI `init` 创建 monitor 与 observation sidecar，再调用 `init-context`，从 stdin 写入 `{"targetTitle":"...","targetBaseline":{...}}`。CLI 创建只含固定 policy/baseline/identity/hash 的 context 文档和独立 runtime sidecar；同 ID 同快照幂等复用，身份或 hash 冲突时停止。Renderer 固定绑定 `127.0.0.1:43187`，启动或复用后在 workspace sidecar 原子记录 PID、instance ID 和启动时间。
+2. 调用 CLI `init` 创建 monitor 并复用或创建 package 级 observation store，再调用 `init-context`，从 stdin 写入 `{"targetTitle":"...","targetBaseline":{...}}`。CLI 创建只含固定 policy/baseline/identity/hash 的 context 文档和独立 runtime sidecar；同 ID 同快照幂等复用，身份或 hash 冲突时停止。Renderer 固定绑定 `127.0.0.1:43187`，启动或复用后在 workspace sidecar 原子记录 PID、instance ID 和启动时间。
 3. 调用一次 `read-static`，把固定文档加载进当前 monitor chat并取得 snapshot hash；再调用 `seed-rollout-cursors`，把 monitor/target 的 canonical rollout cursor 初始化到当前完整行末尾，避免导入历史消息。正常 heartbeat 不再读取固定正文。
 4. 读取 [`templates/automation-prompt.md`](templates/automation-prompt.md)，只替换 automation、workspace root、CLI path 和 snapshot hash placeholder。`*_JSON` 替换为不带外围引号的 JSON-escaped 字符串内容；`MONITOR_CLI_PATH_JSON` 使用当前已加载插件中的 CLI 绝对路径。
 5. 同 ID automation 存在时先 view 并原地更新；不存在时创建。使用 heartbeat、destination thread、`targetThreadId=<当前 monitor>`、`RRULE:FREQ=MINUTELY;INTERVAL=<interval-minutes>`、ACTIVE，并保留既有 notification policy。
@@ -54,7 +54,7 @@ disable-model-invocation: true
 - observation 原地更新前，按 source、turn 和时间顺序结合同批前序消息、当前完整 observations 与 task 状态，明确 antecedent、主体、动作和范围；局部对象不扩大为整个类别，指代仍不明确时不改 confirmed observation、不授权 target 消息。
 - `packageStatus` 是正式 Ticket/Gate 状态的唯一运行期 authority；`ticketPresentation` 复用 Renderer 的 readiness 与执行轨迹，提供“开发中/调研中/可启动/未开始”的 Owner 展示状态；`targetUpdates` 只解释当前动作。通知优先写展示状态，并同时保留正式状态；不得把“开发中”升级为正式验收。
 - 一个 observation topic 只承载一个能被未来消息独立修改的决策轴；一条消息改变多个轴时分别新增或更新，正式 Ticket 状态不写入 observation。
-- observations 归属于被监控 package，不随 initial/patch Attempt 或 Renderer 的历史 Ticket 视图切换；同一 automation/package 必须继续读取原 sidecar，不能重新初始化或清空。
+- observations 归属于被监控 package，并在 package 级 canonical store 中跨 automation、monitor task 与 Attempt 累积；Attempt 切换时冻结旧集合供 Renderer 历史查看，heartbeat 始终读取当前累计全集，不受浮窗或 Ticket 视图选择影响。
 - 每条 observation 使用 `kind=one-time|pattern`。Owner 明示绑定具体 Ticket、session、本次动作或一次性决策时直接判为 one-time，不得靠改写正文泛化；仅在没有明示实例边界时做替换测试，替换具体实例后仍应约束后续同类场景才是 pattern。混合消息拆开记录；pattern 使用稳定的条件、行为和边界，高置信时 confirmed、不确定时 candidate；one-time 保留具体对象、动作与完成条件。
 - `ownerInputs` 只证明消息已读取；`observationDiff` 区分 observation 的新增、原地更新和删除，并返回 before/after。`write-cycle` 在确认 diff 前生成确定性报告，按 ID 稳定排序；成功后才确认，失败则回滚并在下轮重放。
 - confirmed observation 要求 dry-run 时不向 target 发送消息。只有实际满足纠偏条件，且原因或拟发送全文不同于 runtime 的 `lastSimulationCorrection` 时，才把新模拟纠偏传给 `write-cycle`；同一纠偏持续存在时不重复，解除后写回 null，再出现时重新报告。
@@ -66,10 +66,12 @@ disable-model-invocation: true
 - 真实兜底的 blocker 范围完全由 confirmed observation 决定，模板不另设授权类白名单。任何 steer 前必须按时间顺序结合最新 `ownerInputs`、`targetUpdates`、完整 observations 与 package 状态识别当前对话：idle、turn completed、blocked 或 notLoaded 状态本身不证明 blocker，讨论、澄清、问答或等待 Owner 回复时不得发送。确认符合 observation 条件后才向 target 发送一次幂等消息。
 - observation 只记录直接改变目标任务授权、执行、验收或 Owner 决策边界的纠偏；监控模板、CLI、dashboard、prompt 或 observation 机制的调试反馈不进入目标任务 sidecar。
 - 不修改 implementation package、Decision/Spec、Ticket、Evidence、Checkpoint、State 或 Gate。
-- 同一 ID 优先更新，避免重复 automation；不同任务使用独立 observation sidecar，避免共享写冲突。
+- 同一 ID 优先更新，避免重复 automation；不同 package 使用独立 observation store，避免共享写冲突。
 - 本 Skill 不迁移 v1 sidecar；当前运行中的旧 automation 由 Owner 另行一次性切换。
 
 静态 policy 更新时，先暂停对应 automation；旧 runtime 首次升级时先调用 `seed-rollout-cursors`，再调用 `refresh-context-policy`。后者校验旧 snapshot hash，只替换固定 context，保留独立 runtime、monitor evaluation 和 observations；随后调用一次 `read-static`，把新 hash 写入短 prompt后恢复 automation。
+
+旧的 per-automation observation stores 迁移时，先暂停 automation，再用 `migrate-package-observations` 一次性写入累计 current store 与历史 Attempt 快照；命令幂等且内容冲突时停止，旧文件保留为只读证据。
 
 ## 输出
 

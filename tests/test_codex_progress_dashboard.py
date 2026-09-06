@@ -20,7 +20,7 @@ THREAD_ID = "01a05966-5246-73e3-b46f-fd6af55fb661"
 DASHBOARD_ROOT = ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "codex_progress_dashboard"
 
 
-def test_renderer_uses_attempt_selector_and_inline_observations() -> None:
+def test_renderer_uses_attempt_selectors_and_observation_dialog() -> None:
     html = (DASHBOARD_ROOT / "index.html").read_text(encoding="utf-8")
     javascript = (DASHBOARD_ROOT / "app.js").read_text(encoding="utf-8")
     stylesheet = (DASHBOARD_ROOT / "style.css").read_text(encoding="utf-8")
@@ -35,12 +35,14 @@ def test_renderer_uses_attempt_selector_and_inline_observations() -> None:
     assert 'id="attempt-view-note"' in html
     assert "pkg?.attempts" in javascript
     assert "selectedAttemptId" in javascript
-    assert '<section class="monitor-observations"' in html
-    assert "Package 级 · 跨 Attempt 保留" in html
-    assert '<dialog class="observation-dialog"' not in html
-    assert 'aria-haspopup="dialog"' not in html
-    assert "showModal()" not in javascript
-    assert "monitorObservationDialog.close()" not in javascript
+    assert 'class="monitor-observations-trigger"' in html
+    assert 'aria-haspopup="dialog"' in html
+    assert '<dialog class="observation-dialog"' in html
+    assert 'id="observation-attempt-select"' in html
+    assert "Package 级 · 跨 Attempt 累积" in html
+    assert "selectedObservationAttemptId" in javascript
+    assert "monitorObservationDialog.showModal()" in javascript
+    assert "monitorObservationDialog.close()" in javascript
     assert 'data-observation-filter="all"' in html
     assert 'data-observation-filter="pattern"' in html
     assert 'data-observation-filter="specific"' in html
@@ -57,7 +59,7 @@ def test_renderer_uses_attempt_selector_and_inline_observations() -> None:
     assert 'method: "PATCH"' in javascript
     assert "textarea.maxLength = 2000" in javascript
     assert "新增纠偏" not in html
-    assert ".observation-dialog::backdrop" not in stylesheet
+    assert ".observation-dialog::backdrop" in stylesheet
     assert "Trail 最新状态" not in html
     assert 'id="tooltip-active-list"' in html
     assert 'id="tooltip-result-summary"' in html
@@ -100,8 +102,8 @@ def test_renderer_uses_attempt_selector_and_inline_observations() -> None:
     assert "segment.tabIndex = 0" in javascript
     assert "innerHTML" not in javascript
     assert "跨 Track 共同发现" in html
-    assert 'href="/style.css?v=23"' in html
-    assert 'src="/app.js?v=23"' in html
+    assert 'href="/style.css?v=24"' in html
+    assert 'src="/app.js?v=24"' in html
 
 
 def load_module():
@@ -684,11 +686,19 @@ def test_snapshot_follows_latest_monitor_record_across_task_handoff(tmp_path: Pa
 
     monitor = module.build_snapshot(THREAD_ID, relative, db_path)["monitor"]
 
-    assert set(monitor) == {"observedAt", "level", "summary", "monitorThreadId", "observations"}
+    assert set(monitor) == {
+        "observedAt",
+        "level",
+        "summary",
+        "monitorThreadId",
+        "observations",
+        "observationAttempts",
+    }
     assert monitor["observedAt"] == "2026-08-31T20:01:00Z"
     assert "private" not in monitor["summary"]
     assert "[本地路径]" in monitor["summary"]
     assert monitor["observations"] == []
+    assert monitor["observationAttempts"][0]["current"] is True
 
 
 def test_snapshot_projects_monitor_evaluation_and_latest_confirmed_observations(tmp_path: Path) -> None:
@@ -784,6 +794,14 @@ def test_snapshot_projects_monitor_evaluation_and_latest_confirmed_observations(
         "owner": None,
     }
     assert len(monitor["observations"]) == 7
+    assert monitor["observationAttempts"] == [
+        {
+            "attempt": "initial",
+            "current": True,
+            "available": True,
+            "observations": monitor["observations"],
+        }
+    ]
     assert [item["kind"] for item in monitor["observations"]] == [
         "one-time",
         "one-time",
@@ -820,6 +838,7 @@ def test_snapshot_projects_monitor_evaluation_and_latest_confirmed_observations(
     assert [item["id"] for item in after_attempt_switch["observations"]] == [
         item["id"] for item in monitor["observations"]
     ]
+    assert after_attempt_switch["observationAttempts"][0]["attempt"] == "patch"
 
     before = module.monitor_progress.read_instance(workspace, automation_id)["observations"]
     original = next(item for item in before if item["id"] == "O001")

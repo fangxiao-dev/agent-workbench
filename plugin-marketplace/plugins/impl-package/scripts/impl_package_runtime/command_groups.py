@@ -180,6 +180,9 @@ def _parser(group: str) -> argparse.ArgumentParser:
         invalidate.add_argument("--claim", required=True)
         invalidate.add_argument("--artifact", required=True)
         invalidate.add_argument("--invalidated-by", required=True)
+        retire_claim = commands.add_parser("retire-claim", help="remove an invalidated orphan claim")
+        retire_claim.add_argument("--ticket", required=True)
+        retire_claim.add_argument("--claim", required=True)
     elif group == "recovery":
         checkpoint = commands.add_parser("checkpoint", help="overwrite the active checkpoint")
         checkpoint.add_argument("--subject", default="attempt")
@@ -248,8 +251,11 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
     if group == "ticket":
         return _ticket_transition(package, args, args.state if args.command == "transition" else args.target)
     if group == "evidence":
-        return (engine.command_evidence_add(package, sys.stdin.read()) if args.command == "add" else
-                engine.command_evidence_invalidate(package, args.ticket, args.claim, args.artifact, args.invalidated_by))
+        if args.command == "add":
+            return engine.command_evidence_add(package, sys.stdin.read())
+        if args.command == "invalidate":
+            return engine.command_evidence_invalidate(package, args.ticket, args.claim, args.artifact, args.invalidated_by)
+        return engine.command_evidence_retire_claim(package, args.ticket, args.claim)
     if group == "recovery":
         return (engine.command_checkpoint(package, args.subject, args.next, args.blocker, args.evidence, args.handoff) if args.command == "checkpoint" else
                 engine.command_er_add(package, sys.stdin.read()))

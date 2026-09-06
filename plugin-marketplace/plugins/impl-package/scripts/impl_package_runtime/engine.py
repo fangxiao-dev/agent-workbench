@@ -1207,6 +1207,48 @@ def command_evidence_invalidate(package: Path, ticket: str, claim: str, artifact
     raise StateError("evidence record not found")
 
 
+def command_evidence_retire_claim(package: Path, ticket: str, claim: str) -> dict[str, Any]:
+    state = _load_json(package / STATE_PATH)
+    attempt = state.get("attempt")
+    attempt_id = attempt.get("id") if isinstance(attempt, dict) else None
+    if not isinstance(attempt_id, str) or ATTEMPT_ID_RE.fullmatch(attempt_id) is None:
+        raise StateError("state attempt must contain a valid id")
+
+    repo = _repo_root(package)
+    if _lifecycle(package, attempt_id, repo).frozen:
+        raise StateError(f"Attempt {attempt_id} is frozen")
+
+    claims = _ticket_claims(_ticket_documents(package, attempt_id))
+    if ticket not in claims:
+        raise StateError(f"unknown Ticket: {ticket}")
+    if claim in claims[ticket]:
+        raise StateError(f"Ticket claim is still current: {ticket}/{claim}")
+
+    evidence_index = state.get("evidenceIndex")
+    if not isinstance(evidence_index, dict):
+        raise StateError("evidenceIndex must be an object keyed by Ticket")
+    ticket_index = evidence_index.get(ticket)
+    if not isinstance(ticket_index, dict) or claim not in ticket_index:
+        raise StateError(f"evidence claim not found: {ticket}/{claim}")
+    records = ticket_index[claim]
+    if not isinstance(records, list) or not records:
+        raise StateError(f"evidence {ticket}/{claim} must contain records")
+    if any(
+        not isinstance(record, dict)
+        or not isinstance(record.get("invalidatedBy"), str)
+        or not record["invalidatedBy"].strip()
+        for record in records
+    ):
+        raise StateError(f"evidence {ticket}/{claim} must be fully invalidated before retirement")
+
+    candidate = json.loads(json.dumps(state, ensure_ascii=False))
+    del candidate["evidenceIndex"][ticket][claim]
+    _validate_state(package, candidate, projections=False)
+    _write_json(package / STATE_PATH, candidate)
+    _refresh_projections(package, candidate)
+    return {"ticket": ticket, "claim": claim, "retired": True, "removedRecords": len(records)}
+
+
 def command_set_state(
     package: Path,
     identifier: str,

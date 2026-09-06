@@ -95,6 +95,18 @@ class ImplPackageStateTests(unittest.TestCase):
             record.update({"revision": revision, "environment": environment, "artifact": "evidence.md"})
             self.cli(repo, package, "evidence-add", input_text=json.dumps(record))
 
+    def remove_source_claim(self, package: Path) -> None:
+        ticket = package / "tickets" / "01-source.md"
+        ticket.write_text(
+            ticket.read_text(encoding="utf-8").replace(
+                "- **AC-1：** 受支持输入可确定性生成 source snapshot。\n"
+                "  - Stable claim ID：`AC-1`\n"
+                "  - 证据时机：`early-falsification`\n",
+                "",
+            ),
+            encoding="utf-8",
+        )
+
     def satisfy(self, repo: Path, package: Path, ticket: str, *, expect: str = "PENDING") -> None:
         self.cli(repo, package, "set-state", "ticket", ticket, "SATISFIED", "--expect", expect, "--revision", git(repo, "rev-parse", "HEAD"), "--environment", "test")
 
@@ -302,6 +314,119 @@ class ImplPackageStateTests(unittest.TestCase):
         before = self.state(package)
         failed = self.cli(repo, package, "evidence-invalidate", "--ticket", "TKT-01", "--claim", "AC-1", "--artifact", "evidence.md", "--invalidated-by", "fixture", ok=False)
         self.assertIn("incomplete current evidence", failed.stderr)
+        self.assertEqual(self.state(package), before)
+
+    def test_retire_claim_removes_invalidated_orphan_and_refreshes_progress(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.add_evidence(repo, package)
+        self.cli(
+            repo,
+            package,
+            "evidence",
+            "invalidate",
+            "--ticket",
+            "TKT-01",
+            "--claim",
+            "AC-1",
+            "--artifact",
+            "evidence.md",
+            "--invalidated-by",
+            "claim-removed",
+        )
+        self.remove_source_claim(package)
+
+        result = json.loads(self.cli(repo, package, "evidence", "retire-claim", "--ticket", "TKT-01", "--claim", "AC-1").stdout)
+
+        self.assertEqual(result, {"claim": "AC-1", "removedRecords": 1, "retired": True, "ticket": "TKT-01"})
+        self.assertNotIn("AC-1", self.state(package)["evidenceIndex"]["TKT-01"])
+        self.assertTrue((repo / "evidence.md").is_file())
+        self.cli(repo, package, "package", "validate")
+        ticket_row = next(line for line in (package / "progress.md").read_text(encoding="utf-8").splitlines() if line.startswith("| TKT-01 |"))
+        self.assertNotIn("AC-1", ticket_row)
+
+    def test_retire_claim_rejects_current_claim_without_writing_state(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.add_evidence(repo, package)
+        before = self.state(package)
+
+        failed = self.cli(repo, package, "evidence", "retire-claim", "--ticket", "TKT-01", "--claim", "AC-1", ok=False)
+
+        self.assertIn("still current", failed.stderr)
+        self.assertEqual(self.state(package), before)
+
+    def test_retire_claim_requires_every_record_to_be_invalidated(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.add_evidence(repo, package)
+        self.remove_source_claim(package)
+        before = self.state(package)
+
+        failed = self.cli(repo, package, "evidence", "retire-claim", "--ticket", "TKT-01", "--claim", "AC-1", ok=False)
+
+        self.assertIn("fully invalidated", failed.stderr)
+        self.assertEqual(self.state(package), before)
+
+    def test_retire_claim_rejects_missing_mapping_on_repeat(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.add_evidence(repo, package)
+        self.cli(
+            repo,
+            package,
+            "evidence",
+            "invalidate",
+            "--ticket",
+            "TKT-01",
+            "--claim",
+            "AC-1",
+            "--artifact",
+            "evidence.md",
+            "--invalidated-by",
+            "claim-removed",
+        )
+        self.remove_source_claim(package)
+        self.cli(repo, package, "evidence", "retire-claim", "--ticket", "TKT-01", "--claim", "AC-1")
+        before = self.state(package)
+
+        failed = self.cli(repo, package, "evidence", "retire-claim", "--ticket", "TKT-01", "--claim", "AC-1", ok=False)
+
+        self.assertIn("evidence claim not found", failed.stderr)
+        self.assertEqual(self.state(package), before)
+
+    def test_retire_claim_rejects_frozen_attempt(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.add_evidence(repo, package)
+        for ticket_id in ("TKT-01", "TKT-02", "TKT-03", "TKT-04"):
+            self.satisfy(repo, package, ticket_id)
+        head = git(repo, "rev-parse", "HEAD")
+        self.cli(
+            repo,
+            package,
+            "gate",
+            "pass",
+            "--comparison-commit",
+            head,
+            "--reason",
+            "fixture",
+            "--no-durable-delta-reason",
+            "fixture",
+            "--environment",
+            "test",
+        )
+        self.remove_source_claim(package)
+        before = self.state(package)
+
+        failed = self.cli(repo, package, "evidence", "retire-claim", "--ticket", "TKT-01", "--claim", "AC-1", ok=False)
+
+        self.assertIn("is frozen", failed.stderr)
         self.assertEqual(self.state(package), before)
 
     def test_missing_claim_timing_is_not_inherited_from_the_next_claim(self) -> None:

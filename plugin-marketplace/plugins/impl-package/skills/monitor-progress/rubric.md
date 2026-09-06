@@ -13,13 +13,9 @@ updated: 2026-09-05
 - [已确认] steer 必须先理解相邻对话；状态型 idle/notLoaded 不足以触发，Owner 正在讨论或目标正在等待回复时保持静默。
 - [已确认] Owner 通知中的 Ticket 状态与 Renderer 四态一致；“开发中/调研中”是展示状态，正式 PENDING/SATISFIED 仍单独保留。
 - [已确认] automation 最终报告由 CLI 确定性生成并逐字输出；Skill、policy 和 prompt 不维护第二份排版模板。
-- [已确认] 用户纠偏是 package 级连续合同，跨 initial/patch Attempt 保留；Renderer 默认展开，不因 Ticket 视图切换而过滤。
+- [已确认] 用户纠偏是 package 级连续合同：heartbeat 跨 automation/Attempt 读取累计全集；Renderer 恢复浮窗并用独立 Attempt 下拉框查看冻结历史，不受 Ticket 视图影响。
 
 ## 决策记录（滚动，最近 ≤5 轮）
-
-### R3 · 2026-09-04
-- 采纳保持四字段 schema；实际开放问题归入 progress，improvements 仅承载可选建议。
-- 否决为问题另增字段，避免 sidecar、Renderer 和兼容迁移扩张。
 
 ### R4 · 2026-09-04
 - 纠正 one-time/pattern 判断顺序：TKT-10 Owner 一次性决策不得因正文可被泛化而标为 pattern。
@@ -34,4 +30,8 @@ updated: 2026-09-05
 
 ### R7 · 2026-09-05
 - 当前 Attempt 默认展示、历史 Attempt 主动切换；旧 Ticket 使用冻结快照，不混入当前 readyTickets。
-- 用户纠偏默认完整展开并明确为 package 级，切换 patch plan 后继续保留。
+- 用户纠偏属于 package 级，切换 patch plan 后继续保留。
+
+### R8 · 2026-09-05
+- 纠正 R7 的 UI 解释：用户纠偏恢复原浮窗，浮窗内使用独立 Attempt 下拉框查看历史快照。
+- heartbeat 读取 package 累积全集；UI 的 Attempt 选择只改变展示，不改变监控合同。

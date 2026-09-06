@@ -173,8 +173,9 @@ def test_init_and_write_evaluation_use_v2_contract(tmp_path: Path) -> None:
     assert instance["monitor"]["packagePath"] == str(package.resolve())
     assert instance["monitor"]["evaluation"] is None
     assert instance["observations"] == []
-    observation_path = root / ".progress-record" / "codex-progress-dashboard" / "observations" / "monitor-test.json"
-    assert json.loads(observation_path.read_text(encoding="utf-8"))["nextObservationNumber"] == 1
+    package_store = module.read_package_observation_store(root, package)
+    assert package_store["nextObservationNumber"] == 1
+    assert package_store["observations"] == []
 
     updated = module.write_evaluation(root, "monitor-test", evaluation_payload())
 
@@ -209,7 +210,7 @@ def test_context_is_idempotent_and_read_returns_complete_snapshot(tmp_path: Path
     result = module.read_context(root, "monitor-test")
 
     assert repeated == created
-    assert result["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V20"
+    assert result["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V21"
     assert len(result["context"]["snapshotHash"]) == 64
     assert result["context"]["runtimeState"]["lastFallbackTurnId"] is None
     assert result["context"]["runtimeState"]["lastSimulationCorrection"] is None
@@ -309,7 +310,7 @@ def test_refresh_context_policy_preserves_dynamic_state(tmp_path: Path) -> None:
     repeated = module.refresh_context_policy(root, "monitor-test")
 
     assert refreshed == repeated
-    assert refreshed["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V20"
+    assert refreshed["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V21"
     assert refreshed["context"]["targetBaseline"] == before["context"]["targetBaseline"]
     assert refreshed["context"]["runtimeState"] == before["context"]["runtimeState"]
     assert refreshed["monitor"] == before["monitor"]
@@ -1032,10 +1033,118 @@ def test_observation_create_and_update_keep_one_short_id(tmp_path: Path) -> None
         module.put_observation(root, "monitor-test", {**candidate, "id": "O001"})
 
 
+def test_package_observations_survive_new_automation_and_freeze_attempt(tmp_path: Path) -> None:
+    module, root, package, _ = make_instance(tmp_path)
+    write_package_state(package, {"TKT-01": {"state": "PENDING"}})
+    first = module.put_observation(
+        root,
+        "monitor-test",
+        observation("confirmed", "2026-09-02T20:01:00Z", topic="初始规则"),
+    )["observation"]
+
+    write_package_state(package, {"TKT-02": {"state": "PENDING"}})
+    state_path = package / ".impl-package" / "state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["attempt"] = {"id": "patch"}
+    state["attemptHistory"] = [
+        {"id": "initial", "gate": {"verdict": "defer"}},
+        {"id": "patch", "gate": None},
+    ]
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    second = module.put_observation(
+        root,
+        "monitor-test",
+        observation("confirmed", "2026-09-03T20:01:00Z", topic="补丁规则"),
+    )["observation"]
+
+    module.init_instance(root, "monitor-next", THREAD_A, THREAD_C, package)
+    inherited = module.read_instance(root, "monitor-next")["observations"]
+    attempts = module.read_package_observation_attempts(root, package)
+
+    assert [item["id"] for item in inherited] == [first["id"], second["id"]]
+    assert [(item["attempt"], item["current"], len(item["observations"])) for item in attempts] == [
+        ("patch", True, 2),
+        ("initial", False, 1),
+    ]
+    module.put_observation(
+        root,
+        "monitor-next",
+        {**first, "content": "仅修改当前累计真值。", "sourceThreadId": THREAD_C},
+    )
+    frozen = module.read_package_observation_attempts(root, package)[1]["observations"]
+    assert frozen[0]["content"] == first["content"]
+
+
+def test_package_observation_migration_is_idempotent_and_conflict_safe(tmp_path: Path) -> None:
+    module = load_module()
+    root = tmp_path / "workspace"
+    package = root / "docs" / "implementations" / "example"
+    package.mkdir(parents=True)
+    (root / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+    initial = observation(
+        "confirmed",
+        "2026-09-02T20:01:00Z",
+        observation_id="O001",
+        topic="初始规则",
+    )
+    patch = observation(
+        "confirmed",
+        "2026-09-03T20:01:00Z",
+        observation_id="O002",
+        topic="补丁规则",
+    )
+    payload = {
+        "currentAttempt": "patch",
+        "nextObservationNumber": 3,
+        "observations": [initial, patch],
+        "attempts": [{"attempt": "initial", "observations": [initial]}],
+    }
+    legacy_monitor = root / ".progress-record" / "codex-progress-dashboard" / "monitors" / "legacy.json"
+    legacy_monitor.parent.mkdir(parents=True)
+    legacy_monitor.write_text(json.dumps({"version": 1}), encoding="utf-8")
+
+    created = module.migrate_package_observations(root, package, payload)
+    repeated = module.migrate_package_observations(root, package, payload)
+
+    assert created["idempotent"] is False
+    assert repeated["idempotent"] is True
+    assert len(repeated["store"]["observations"]) == 2
+    with pytest.raises(module.MonitorProgressError, match="conflict"):
+        module.migrate_package_observations(
+            root,
+            package,
+            {**payload, "observations": [{**initial, "content": "冲突内容"}, patch]},
+        )
+
+
+def test_package_observation_migration_acknowledges_existing_runtime(tmp_path: Path) -> None:
+    module, root, package, _, _ = make_context(tmp_path)
+    module._package_observation_path(root, package).unlink()
+    migrated = observation(
+        "confirmed",
+        "2026-09-02T20:01:00Z",
+        observation_id="O001",
+        topic="迁移规则",
+    )
+
+    module.migrate_package_observations(
+        root,
+        package,
+        {
+            "currentAttempt": "initial",
+            "nextObservationNumber": 2,
+            "observations": [migrated],
+            "attempts": [],
+        },
+    )
+
+    assert module.read_cycle(root, "monitor-test")["observationDiff"] == []
+
+
 def test_legacy_observation_defaults_to_one_time_and_new_writes_require_kind(tmp_path: Path) -> None:
-    module, root, _, _ = make_instance(tmp_path)
-    observation_path = root / ".progress-record" / "codex-progress-dashboard" / "observations" / "monitor-test.json"
-    store = json.loads(observation_path.read_text(encoding="utf-8"))
+    module, root, package, _ = make_instance(tmp_path)
+    observation_path = module._package_observation_path(root, package)
+    store = module.read_package_observation_store(root, package)
     legacy = observation(observation_id="O001")
     legacy.pop("kind")
     old_specific = observation(
@@ -1264,7 +1373,7 @@ def test_schema_reports_v2_enums() -> None:
     assert schema["protocolVersion"] == 2
     assert schema["contextVersion"] == 2
     assert schema["runtimeVersion"] == 7
-    assert schema["policyVersion"] == "STATIC_MONITOR_POLICY_V20"
+    assert schema["policyVersion"] == "STATIC_MONITOR_POLICY_V21"
     assert schema["monitor"]["levels"] == ["abnormal", "attention", "normal"]
     assert schema["observation"]["states"] == ["candidate", "confirmed"]
     assert schema["observation"]["kinds"] == ["one-time", "pattern"]
@@ -1416,7 +1525,7 @@ def test_cli_writes_evaluation_from_one_stdin_line(tmp_path: Path) -> None:
         check=False,
     )
     assert refresh_context.returncode == 0, refresh_context.stderr
-    assert json.loads(refresh_context.stdout)["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V20"
+    assert json.loads(refresh_context.stdout)["context"]["policyVersion"] == "STATIC_MONITOR_POLICY_V21"
 
     write = subprocess.run(
         [

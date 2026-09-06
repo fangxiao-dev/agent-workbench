@@ -25,7 +25,8 @@ from urllib.request import urlopen
 PROTOCOL_VERSION = 2
 CONTEXT_VERSION = 2
 RUNTIME_VERSION = 7
-POLICY_VERSION = "STATIC_MONITOR_POLICY_V20"
+POLICY_VERSION = "STATIC_MONITOR_POLICY_V21"
+PACKAGE_OBSERVATION_VERSION = 1
 DEFAULT_PORT = 43187
 THREAD_ID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
 AUTOMATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
@@ -37,6 +38,7 @@ OBSERVATION_STATES = {"candidate", "confirmed"}
 OBSERVATION_KINDS = {"one-time", "pattern"}
 RESPONSES = {"pending", "accepted", "contested", "not-applicable"}
 OBSERVATION_ID_RE = re.compile(r"^O([0-9]{3,})$")
+ATTEMPT_ID_RE = re.compile(r"(?:initial|[A-Za-z0-9][A-Za-z0-9_-]{0,79})")
 MONITOR_FIELDS = {
     "version",
     "automationId",
@@ -51,6 +53,27 @@ MONITOR_FIELDS = {
 }
 EVALUATION_FIELDS = {"progress", "improvements", "next", "owner"}
 OBSERVATION_STORE_FIELDS = {"version", "automationId", "nextObservationNumber", "observations"}
+PACKAGE_OBSERVATION_STORE_FIELDS = {
+    "version",
+    "packagePath",
+    "currentAttempt",
+    "nextObservationNumber",
+    "observations",
+}
+ATTEMPT_OBSERVATION_SNAPSHOT_FIELDS = {
+    "version",
+    "packagePath",
+    "attempt",
+    "observations",
+    "snapshotHash",
+}
+MIGRATE_PACKAGE_OBSERVATIONS_FIELDS = {
+    "currentAttempt",
+    "nextObservationNumber",
+    "observations",
+    "attempts",
+}
+ATTEMPT_OBSERVATION_INPUT_FIELDS = {"attempt", "observations"}
 OBSERVATION_FIELDS = {
     "id",
     "kind",
@@ -168,7 +191,7 @@ POLICY_SNAPSHOT = {
         "同一语义 topic 原地更新并保留短 ID；询问、讨论、附件或引用本身不形成 observation。",
         "confirmed observation 与 baseline 冲突时报告 baselineConflict，不覆盖 baseline；合同变化只标 baselineStatus=stale。",
         "ownerInputs 只证明消息已读取；observationDiff 才证明消息被收纳为 observation 的新增、更新或删除。",
-        "observations 归属于被监控 package，不归属于某个 Attempt；切换 initial/patch plan 或历史 Ticket 视图时继续返回同一完整集合。",
+        "observations 归属于被监控 package；当前集合跨 Attempt 累积并供 heartbeat 完整读取，Attempt 切换时冻结旧集合供 Renderer 历史查看。automation、monitor task 或 UI 选择不得分裂或过滤 heartbeat 的真值。",
     ],
     "visibility": "read_thread 返回 items: [] 表示内容不可见；read-cycle 通过 Codex 数据库登记的 canonical rollout 增量补偿新 Owner 消息和 target 的用户可见进展。",
     "intervention": [
@@ -276,6 +299,22 @@ def _package(root: Path, value: str | Path) -> Path:
 def _instance_paths(root: Path, automation_id: str) -> tuple[Path, Path]:
     base = root / ".progress-record" / "codex-progress-dashboard"
     return base / "monitors" / f"{automation_id}.json", base / "observations" / f"{automation_id}.json"
+
+
+def _package_observation_dir(root: Path, package: Path) -> Path:
+    canonical = os.path.normcase(str(package.resolve())).encode("utf-8")
+    key = hashlib.sha256(canonical).hexdigest()
+    return root / ".progress-record" / "codex-progress-dashboard" / "packages" / key
+
+
+def _package_observation_path(root: Path, package: Path) -> Path:
+    return _package_observation_dir(root, package) / "observations.json"
+
+
+def _attempt_observation_path(root: Path, package: Path, attempt: str) -> Path:
+    if ATTEMPT_ID_RE.fullmatch(attempt) is None:
+        raise MonitorProgressError("invalid attempt id")
+    return _package_observation_dir(root, package) / "attempts" / f"{attempt}.json"
 
 
 def _context_path(root: Path, automation_id: str) -> Path:
@@ -1157,14 +1196,17 @@ def validate_observation(
     }
 
 
-def validate_observation_store(value: Any) -> dict[str, Any]:
-    record = _expect_fields(value, OBSERVATION_STORE_FIELDS, "observation store")
-    if record["version"] != PROTOCOL_VERSION:
-        raise MonitorProgressError(f"observation store version must be {PROTOCOL_VERSION}")
-    observations = record["observations"]
+def _attempt_id(value: Any, label: str, *, nullable: bool = False) -> str | None:
+    if nullable and value is None:
+        return None
+    if not isinstance(value, str) or ATTEMPT_ID_RE.fullmatch(value) is None:
+        raise MonitorProgressError(f"{label} must be a valid attempt id")
+    return value
+
+
+def _validated_observations(observations: Any, next_number: Any) -> tuple[list[dict[str, Any]], int]:
     if not isinstance(observations, list):
         raise MonitorProgressError("observation store observations must be an array")
-    next_number = record["nextObservationNumber"]
     if not isinstance(next_number, int) or isinstance(next_number, bool) or next_number < 1:
         raise MonitorProgressError("observation store nextObservationNumber must be a positive integer")
     validated = [validate_observation(item, allow_legacy=True) for item in observations]
@@ -1180,12 +1222,276 @@ def validate_observation_store(value: Any) -> dict[str, Any]:
     topics = [_topic_key(item["topic"]) for item in validated]
     if len(topics) != len(set(topics)):
         raise MonitorProgressError("observation topics must be unique")
+    return validated, next_number
+
+
+def validate_observation_store(value: Any) -> dict[str, Any]:
+    record = _expect_fields(value, OBSERVATION_STORE_FIELDS, "observation store")
+    if record["version"] != PROTOCOL_VERSION:
+        raise MonitorProgressError(f"observation store version must be {PROTOCOL_VERSION}")
+    validated, next_number = _validated_observations(
+        record["observations"], record["nextObservationNumber"]
+    )
     return {
         "version": PROTOCOL_VERSION,
         "automationId": _automation_id(record["automationId"]),
         "nextObservationNumber": next_number,
         "observations": validated,
     }
+
+
+def validate_package_observation_store(value: Any) -> dict[str, Any]:
+    record = _expect_fields(value, PACKAGE_OBSERVATION_STORE_FIELDS, "package observation store")
+    if record["version"] != PACKAGE_OBSERVATION_VERSION:
+        raise MonitorProgressError(
+            f"package observation store version must be {PACKAGE_OBSERVATION_VERSION}"
+        )
+    package_path = str(Path(_text(record["packagePath"], "package observation store.packagePath")).resolve())
+    validated, next_number = _validated_observations(
+        record["observations"], record["nextObservationNumber"]
+    )
+    return {
+        "version": PACKAGE_OBSERVATION_VERSION,
+        "packagePath": package_path,
+        "currentAttempt": _attempt_id(
+            record["currentAttempt"], "package observation store.currentAttempt", nullable=True
+        ),
+        "nextObservationNumber": next_number,
+        "observations": validated,
+    }
+
+
+def _json_hash(value: Any) -> str:
+    canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def validate_attempt_observation_snapshot(value: Any) -> dict[str, Any]:
+    record = _expect_fields(
+        value, ATTEMPT_OBSERVATION_SNAPSHOT_FIELDS, "attempt observation snapshot"
+    )
+    if record["version"] != PACKAGE_OBSERVATION_VERSION:
+        raise MonitorProgressError(
+            f"attempt observation snapshot version must be {PACKAGE_OBSERVATION_VERSION}"
+        )
+    package_path = str(
+        Path(_text(record["packagePath"], "attempt observation snapshot.packagePath")).resolve()
+    )
+    attempt = _attempt_id(record["attempt"], "attempt observation snapshot.attempt")
+    observations = record["observations"]
+    if not isinstance(observations, list):
+        raise MonitorProgressError("attempt observation snapshot observations must be an array")
+    highest = max(
+        (
+            int(OBSERVATION_ID_RE.fullmatch(str(item.get("id", ""))).group(1))
+            for item in observations
+            if isinstance(item, dict) and OBSERVATION_ID_RE.fullmatch(str(item.get("id", "")))
+        ),
+        default=0,
+    )
+    validated, _ = _validated_observations(observations, highest + 1)
+    payload = {"packagePath": package_path, "attempt": attempt, "observations": validated}
+    if record["snapshotHash"] != _json_hash(payload):
+        raise MonitorProgressError("attempt observation snapshot hash mismatch")
+    return {
+        "version": PACKAGE_OBSERVATION_VERSION,
+        **payload,
+        "snapshotHash": record["snapshotHash"],
+    }
+
+
+def _package_attempt(package: Path) -> str | None:
+    state_path = package / ".impl-package" / "state.json"
+    if not state_path.is_file():
+        return None
+    state = _read_json(state_path)
+    attempt = state.get("attempt") if isinstance(state, dict) else None
+    value = attempt.get("id") if isinstance(attempt, dict) else None
+    return _attempt_id(value, "package attempt", nullable=True)
+
+
+def _new_package_observation_store(package: Path) -> dict[str, Any]:
+    return validate_package_observation_store(
+        {
+            "version": PACKAGE_OBSERVATION_VERSION,
+            "packagePath": str(package.resolve()),
+            "currentAttempt": _package_attempt(package),
+            "nextObservationNumber": 1,
+            "observations": [],
+        }
+    )
+
+
+def read_package_observation_store(root: Path, package: Path) -> dict[str, Any]:
+    store = validate_package_observation_store(_read_json(_package_observation_path(root, package)))
+    if Path(store["packagePath"]).resolve() != package.resolve():
+        raise MonitorProgressError("package observation store identity mismatch")
+    return store
+
+
+def _write_attempt_observation_snapshot(
+    root: Path, package: Path, attempt: str, observations: list[dict[str, Any]]
+) -> dict[str, Any]:
+    payload = {
+        "packagePath": str(package.resolve()),
+        "attempt": _attempt_id(attempt, "attempt observation snapshot.attempt"),
+        "observations": observations,
+    }
+    snapshot = validate_attempt_observation_snapshot(
+        {
+            "version": PACKAGE_OBSERVATION_VERSION,
+            **payload,
+            "snapshotHash": _json_hash(payload),
+        }
+    )
+    path = _attempt_observation_path(root, package, attempt)
+    if path.exists():
+        current = validate_attempt_observation_snapshot(_read_json(path))
+        if current != snapshot:
+            raise MonitorProgressError(f"attempt observation snapshot conflict: {attempt}")
+        return current
+    _atomic_write(path, snapshot)
+    return snapshot
+
+
+def _sync_package_observation_store(
+    root: Path, package: Path, store: dict[str, Any]
+) -> dict[str, Any]:
+    current_attempt = _package_attempt(package)
+    if current_attempt is None or current_attempt == store["currentAttempt"]:
+        return store
+    previous_attempt = store["currentAttempt"]
+    if previous_attempt is not None:
+        _write_attempt_observation_snapshot(
+            root, package, previous_attempt, store["observations"]
+        )
+    updated = validate_package_observation_store({**store, "currentAttempt": current_attempt})
+    _atomic_write(_package_observation_path(root, package), updated)
+    return updated
+
+
+def read_package_observation_attempts(root: Path, package: Path) -> list[dict[str, Any]]:
+    store = read_package_observation_store(root, package)
+    current_attempt = _package_attempt(package) or store["currentAttempt"]
+    result = [
+        {
+            "attempt": current_attempt,
+            "current": True,
+            "available": True,
+            "observations": store["observations"],
+        }
+    ]
+    state_path = package / ".impl-package" / "state.json"
+    history: list[str] = []
+    if state_path.is_file():
+        state = _read_json(state_path)
+        rows = state.get("attemptHistory", []) if isinstance(state, dict) else []
+        if isinstance(rows, list):
+            for row in rows:
+                attempt = row.get("id") if isinstance(row, dict) else None
+                if isinstance(attempt, str) and ATTEMPT_ID_RE.fullmatch(attempt):
+                    history.append(attempt)
+    snapshot_dir = _package_observation_dir(root, package) / "attempts"
+    if snapshot_dir.is_dir():
+        history.extend(path.stem for path in snapshot_dir.glob("*.json"))
+    for attempt in reversed(list(dict.fromkeys(history))):
+        if attempt == current_attempt:
+            continue
+        path = _attempt_observation_path(root, package, attempt)
+        if path.is_file():
+            snapshot = validate_attempt_observation_snapshot(_read_json(path))
+            observations = snapshot["observations"]
+            available = True
+        else:
+            observations = []
+            available = False
+        result.append(
+            {
+                "attempt": attempt,
+                "current": False,
+                "available": available,
+                "observations": observations,
+            }
+        )
+    return result
+
+
+def migrate_package_observations(root: Path, package: Path, value: Any) -> dict[str, Any]:
+    record = _expect_fields(
+        value, MIGRATE_PACKAGE_OBSERVATIONS_FIELDS, "package observation migration"
+    )
+    store = validate_package_observation_store(
+        {
+            "version": PACKAGE_OBSERVATION_VERSION,
+            "packagePath": str(package.resolve()),
+            "currentAttempt": record["currentAttempt"],
+            "nextObservationNumber": record["nextObservationNumber"],
+            "observations": record["observations"],
+        }
+    )
+    snapshots: list[dict[str, Any]] = []
+    if not isinstance(record["attempts"], list):
+        raise MonitorProgressError("package observation migration.attempts must be an array")
+    for item in record["attempts"]:
+        row = _expect_fields(item, ATTEMPT_OBSERVATION_INPUT_FIELDS, "attempt observation input")
+        attempt = _attempt_id(row["attempt"], "attempt observation input.attempt")
+        snapshots.append(
+            {
+                "attempt": attempt,
+                "observations": _validated_observations(
+                    row["observations"], store["nextObservationNumber"]
+                )[0],
+            }
+        )
+    if len({item["attempt"] for item in snapshots}) != len(snapshots):
+        raise MonitorProgressError("package observation migration attempts must be unique")
+    path = _package_observation_path(root, package)
+    if path.exists():
+        current = read_package_observation_store(root, package)
+        if current != store:
+            raise MonitorProgressError("package observation migration conflict")
+        idempotent = True
+    else:
+        idempotent = False
+    for item in snapshots:
+        _write_attempt_observation_snapshot(
+            root, package, item["attempt"], item["observations"]
+        )
+    if not idempotent:
+        _atomic_write(path, store)
+    for monitor_path in (root / ".progress-record" / "codex-progress-dashboard" / "monitors").glob(
+        "*.json"
+    ):
+        try:
+            monitor = validate_monitor(_read_json(monitor_path))
+        except MonitorProgressError:
+            continue
+        if Path(monitor["packagePath"]).resolve() != package.resolve():
+            continue
+        runtime_path = _runtime_path(root, monitor["automationId"])
+        if not runtime_path.is_file():
+            continue
+        runtime_state = _runtime_state_for_migration(
+            _read_json(runtime_path), monitor["automationId"], store["observations"], package
+        )
+        runtime_state.update(
+            {
+                **_observation_runtime(store["observations"]),
+                "reportedObservationDigests": _observation_digests(store["observations"]),
+                "reportedObservationSnapshots": _observation_snapshots(store["observations"]),
+            }
+        )
+        _atomic_write(
+            runtime_path,
+            validate_runtime_store(
+                {
+                    "version": RUNTIME_VERSION,
+                    "automationId": monitor["automationId"],
+                    "runtimeState": runtime_state,
+                }
+            ),
+        )
+    return {"idempotent": idempotent, "store": store, "attempts": snapshots}
 
 
 def init_instance(
@@ -1195,12 +1501,9 @@ def init_instance(
     target_thread_id: str,
     package_path: Path,
 ) -> dict[str, Any]:
-    monitor_path, observation_path = _instance_paths(root, automation_id)
-    if monitor_path.exists() or observation_path.exists():
-        if not monitor_path.is_file() or not observation_path.is_file():
-            raise MonitorProgressError("existing monitor instance is incomplete")
-        current = read_instance(root, automation_id)
-        monitor = current["monitor"]
+    monitor_path, legacy_observation_path = _instance_paths(root, automation_id)
+    if monitor_path.exists():
+        monitor = validate_monitor(_read_json(monitor_path))
         expected = {
             "monitorThreadId": monitor_thread_id,
             "targetThreadId": target_thread_id,
@@ -1208,7 +1511,25 @@ def init_instance(
         }
         if any(monitor[key] != value for key, value in expected.items()):
             raise MonitorProgressError("existing monitor instance identity does not match")
-        return current
+        package_store_path = _package_observation_path(root, package_path)
+        if not package_store_path.exists():
+            if legacy_observation_path.is_file():
+                legacy = validate_observation_store(_read_json(legacy_observation_path))
+                package_store = validate_package_observation_store(
+                    {
+                        "version": PACKAGE_OBSERVATION_VERSION,
+                        "packagePath": str(package_path.resolve()),
+                        "currentAttempt": _package_attempt(package_path),
+                        "nextObservationNumber": legacy["nextObservationNumber"],
+                        "observations": legacy["observations"],
+                    }
+                )
+            else:
+                package_store = _new_package_observation_store(package_path)
+            _atomic_write(package_store_path, package_store)
+        return read_instance(root, automation_id)
+    if legacy_observation_path.exists():
+        raise MonitorProgressError("existing monitor instance is incomplete")
     monitor = validate_monitor(
         {
             "version": PROTOCOL_VERSION,
@@ -1223,30 +1544,30 @@ def init_instance(
             "evaluation": None,
         }
     )
-    observation_store = validate_observation_store(
-        {
-            "version": PROTOCOL_VERSION,
-            "automationId": automation_id,
-            "nextObservationNumber": 1,
-            "observations": [],
-        }
-    )
     _atomic_write(monitor_path, monitor)
-    _atomic_write(observation_path, observation_store)
-    return {"monitor": monitor, "observations": []}
+    package_store_path = _package_observation_path(root, package_path)
+    if not package_store_path.exists():
+        _atomic_write(package_store_path, _new_package_observation_store(package_path))
+    return read_instance(root, automation_id)
 
 
 def _read_observation_store(root: Path, automation_id: str) -> dict[str, Any]:
-    observation_path = _instance_paths(root, automation_id)[1]
-    return validate_observation_store(_read_json(observation_path))
+    monitor = validate_monitor(_read_json(_instance_paths(root, automation_id)[0]))
+    package = Path(monitor["packagePath"])
+    path = _package_observation_path(root, package)
+    if path.is_file():
+        return read_package_observation_store(root, package)
+    return validate_observation_store(_read_json(_instance_paths(root, automation_id)[1]))
 
 
 def read_instance(root: Path, automation_id: str) -> dict[str, Any]:
     monitor_path = _instance_paths(root, automation_id)[0]
     monitor = validate_monitor(_read_json(monitor_path))
     observation_store = _read_observation_store(root, automation_id)
-    if monitor["automationId"] != automation_id or observation_store["automationId"] != automation_id:
+    if monitor["automationId"] != automation_id:
         raise MonitorProgressError("monitor instance automation id mismatch")
+    if "automationId" in observation_store and observation_store["automationId"] != automation_id:
+        raise MonitorProgressError("monitor observation automation id mismatch")
     return {"monitor": monitor, "observations": observation_store["observations"]}
 
 
@@ -1782,6 +2103,11 @@ def write_evaluation(root: Path, automation_id: str, payload: Any) -> dict[str, 
 
 def write_cycle(root: Path, automation_id: str, payload: Any) -> dict[str, Any]:
     record = _expect_fields(payload, WRITE_CYCLE_FIELDS, "cycle write payload")
+    instance = read_instance(root, automation_id)
+    package = Path(instance["monitor"]["packagePath"])
+    _sync_package_observation_store(
+        root, package, read_package_observation_store(root, package)
+    )
     cycle = read_cycle(root, automation_id)
     current = read_context(root, automation_id)
     previous_runtime_store = validate_runtime_store(_read_json(_runtime_path(root, automation_id)))
@@ -1834,7 +2160,11 @@ def _next_observation_id(next_number: int) -> str:
 
 def put_observation(root: Path, automation_id: str, payload: Any) -> dict[str, Any]:
     incoming = validate_observation(payload, allow_new=True)
-    observation_store = _read_observation_store(root, automation_id)
+    monitor = read_instance(root, automation_id)["monitor"]
+    package = Path(monitor["packagePath"])
+    observation_store = _sync_package_observation_store(
+        root, package, read_package_observation_store(root, package)
+    )
     observations = list(observation_store["observations"])
     by_id = {item["id"]: item for item in observations}
     if incoming["id"] is None:
@@ -1869,25 +2199,29 @@ def put_observation(root: Path, automation_id: str, payload: Any) -> dict[str, A
             raise MonitorProgressError(f"observation topic already exists: {duplicate['id']}")
         index = observations.index(existing)
         observations[index] = incoming
-    updated = validate_observation_store(
+    updated = validate_package_observation_store(
         {**observation_store, "observations": observations}
     )
-    _atomic_write(_instance_paths(root, automation_id)[1], updated)
+    _atomic_write(_package_observation_path(root, package), updated)
     return {"observation": incoming, "observations": updated["observations"]}
 
 
 def remove_observation(root: Path, automation_id: str, observation_id: str) -> dict[str, Any]:
     if not OBSERVATION_ID_RE.fullmatch(observation_id):
         raise MonitorProgressError("invalid observation id")
-    observation_store = _read_observation_store(root, automation_id)
+    monitor = read_instance(root, automation_id)["monitor"]
+    package = Path(monitor["packagePath"])
+    observation_store = _sync_package_observation_store(
+        root, package, read_package_observation_store(root, package)
+    )
     observations = list(observation_store["observations"])
     if not any(item["id"] == observation_id for item in observations):
         raise MonitorProgressError(f"unknown observation id: {observation_id}")
     remaining = [item for item in observations if item["id"] != observation_id]
-    updated = validate_observation_store(
+    updated = validate_package_observation_store(
         {**observation_store, "observations": remaining}
     )
-    _atomic_write(_instance_paths(root, automation_id)[1], updated)
+    _atomic_write(_package_observation_path(root, package), updated)
     return {"removed": observation_id, "observations": updated["observations"]}
 
 
@@ -1907,16 +2241,25 @@ def latest_for_package(root: Path, package_path: Path) -> dict[str, Any] | None:
         return None
     monitor = max(candidates, key=lambda item: _timestamp(item["observedAt"]))
     try:
-        observations = read_instance(root, monitor["automationId"])["observations"]
+        attempts = read_package_observation_attempts(root, package_path)
     except MonitorProgressError:
         confirmed: list[dict[str, Any]] = []
+        projected_attempts: list[dict[str, Any]] = []
     else:
-        confirmed = sorted(
-            (item for item in observations if item["state"] == "confirmed"),
-            key=lambda item: _timestamp(item["confirmedAt"]),
-            reverse=True,
-        )
-    return {"monitor": monitor, "observations": confirmed}
+        projected_attempts = []
+        for attempt in attempts:
+            observations = sorted(
+                (item for item in attempt["observations"] if item["state"] == "confirmed"),
+                key=lambda item: _timestamp(item["confirmedAt"]),
+                reverse=True,
+            )
+            projected_attempts.append({**attempt, "observations": observations})
+        confirmed = projected_attempts[0]["observations"] if projected_attempts else []
+    return {
+        "monitor": monitor,
+        "observations": confirmed,
+        "observationAttempts": projected_attempts,
+    }
 
 
 def schema_contract() -> dict[str, Any]:
@@ -1928,6 +2271,13 @@ def schema_contract() -> dict[str, Any]:
         "monitor": {"required": sorted(MONITOR_FIELDS), "levels": sorted(LEVELS)},
         "evaluation": {"required": sorted(EVALUATION_FIELDS), "maxImprovements": 3},
         "observationStore": {"required": sorted(OBSERVATION_STORE_FIELDS)},
+        "packageObservationStore": {
+            "required": sorted(PACKAGE_OBSERVATION_STORE_FIELDS),
+            "version": PACKAGE_OBSERVATION_VERSION,
+        },
+        "observationAttempts": {
+            "required": ["attempt", "current", "available", "observations"]
+        },
         "observation": {
             "required": sorted(OBSERVATION_FIELDS),
             "kinds": sorted(OBSERVATION_KINDS),
@@ -2203,6 +2553,13 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("--target-thread", required=True)
     init_parser.add_argument("--package", required=True, type=Path)
 
+    migrate_observations_parser = subparsers.add_parser(
+        "migrate-package-observations",
+        help="create one canonical package observation store and frozen attempt snapshots from stdin",
+    )
+    migrate_observations_parser.add_argument("--root", required=True, type=Path)
+    migrate_observations_parser.add_argument("--package", required=True, type=Path)
+
     read_parser = subparsers.add_parser("read", help="validate and print a v2 monitor instance")
     _common_instance_arguments(read_parser)
 
@@ -2278,6 +2635,11 @@ def main(argv: list[str] | None = None) -> int:
             result = open_dashboard(args.target, args.package, no_browser=args.no_browser, db_path=args.db)
         elif args.command == "schema":
             result = schema_contract()
+        elif args.command == "migrate-package-observations":
+            root = _root(args.root)
+            result = migrate_package_observations(
+                root, _package(root, args.package), _stdin_json()
+            )
         else:
             root = _root(args.root)
             automation_id = _automation_id(args.automation_id)

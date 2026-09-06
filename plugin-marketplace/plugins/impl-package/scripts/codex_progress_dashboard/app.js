@@ -42,6 +42,11 @@ const monitorOwner = document.querySelector("#monitor-owner");
 const monitorThread = document.querySelector("#monitor-thread");
 const monitorObservations = document.querySelector("#monitor-observations");
 const monitorObservationCount = document.querySelector("#monitor-observation-count");
+const monitorObservationDialog = document.querySelector("#monitor-observation-dialog");
+const monitorObservationDialogCount = document.querySelector("#monitor-observation-dialog-count");
+const monitorObservationClose = document.querySelector("#monitor-observation-close");
+const observationAttemptSelect = document.querySelector("#observation-attempt-select");
+const observationAttemptNote = document.querySelector("#observation-attempt-note");
 const monitorObservationList = document.querySelector("#monitor-observation-list");
 const observationFilterButtons = [...document.querySelectorAll("[data-observation-filter]")];
 const observationFilterAllCount = document.querySelector("#observation-filter-all-count");
@@ -65,10 +70,13 @@ let currentPackageSnapshot = null;
 let currentTickets = [];
 let ticketSignature = "";
 let currentObservations = [];
+let currentObservationAttempts = [];
 let pendingObservations = null;
 let observationSignature = "";
 let editingObservationId = null;
 let observationFilter = "all";
+let selectedObservationAttemptId = null;
+let selectedObservationEditable = true;
 
 function clear(node) {
   while (node.firstChild) node.firstChild.remove();
@@ -498,8 +506,10 @@ function renderMonitor(monitor) {
     closeObservationDialog();
     clear(monitorObservationList);
     currentObservations = [];
+    currentObservationAttempts = [];
     pendingObservations = null;
     observationSignature = "";
+    selectedObservationAttemptId = null;
     return;
   }
   const labels = {
@@ -536,13 +546,22 @@ function renderMonitor(monitor) {
   monitorThread.textContent = monitor.monitorThreadId;
 
   const observations = Array.isArray(monitor.observations) ? monitor.observations : [];
+  const attempts = Array.isArray(monitor.observationAttempts) && monitor.observationAttempts.length
+    ? monitor.observationAttempts
+    : [{ attempt: "current", current: true, available: true, observations }];
+  const currentAttempt = attempts.find((item) => item.current) || attempts[0];
   monitorObservations.hidden = !observations.length;
   monitorObservationCount.textContent = observations.length ? `· ${observations.length}` : "";
-  const nextSignature = JSON.stringify(observations);
+  monitorObservationDialogCount.textContent = observations.length ? `· ${observations.length}` : "";
+  currentObservationAttempts = attempts;
+  if (!attempts.some((item) => item.attempt === selectedObservationAttemptId)) {
+    selectedObservationAttemptId = currentAttempt?.attempt || null;
+  }
+  const nextSignature = JSON.stringify(attempts);
   if (editingObservationId) {
     pendingObservations = observations;
   } else if (nextSignature !== observationSignature) {
-    renderObservationList(observations);
+    renderObservationAttempt();
   }
 }
 
@@ -595,9 +614,34 @@ function renderAttemptTickets(pkg) {
   renderTickets(selected.tickets || [], selected.current ? pkg.currentTicketId : null);
 }
 
+function renderObservationAttempt() {
+  const current = currentObservationAttempts.find((item) => item.current) || currentObservationAttempts[0] || null;
+  if (!currentObservationAttempts.some((item) => item.attempt === selectedObservationAttemptId)) {
+    selectedObservationAttemptId = current?.attempt || null;
+  }
+  clear(observationAttemptSelect);
+  currentObservationAttempts.forEach((item) => {
+    const count = item.available ? item.observations.length : "无快照";
+    observationAttemptSelect.append(option(
+      item.attempt,
+      `${item.current ? "当前" : "历史"} · ${item.attempt}（${count}）`,
+    ));
+  });
+  observationAttemptSelect.disabled = currentObservationAttempts.length < 2 || Boolean(editingObservationId);
+  observationAttemptSelect.value = selectedObservationAttemptId || "";
+  const selected = currentObservationAttempts.find((item) => item.attempt === selectedObservationAttemptId) || current;
+  selectedObservationEditable = Boolean(selected?.current);
+  observationAttemptNote.textContent = selected?.current
+    ? "当前累计纠偏 · 可编辑"
+    : selected?.available
+      ? "历史快照 · 只读"
+      : "该 Attempt 尚无纠偏快照";
+  renderObservationList(selected?.observations || []);
+}
+
 function renderObservationList(observations) {
   currentObservations = observations;
-  observationSignature = JSON.stringify(observations);
+  observationSignature = JSON.stringify(currentObservationAttempts);
   clear(monitorObservationList);
   const counts = observations.reduce((result, item) => {
     if (observationKind(item) === "pattern") result.pattern += 1;
@@ -635,18 +679,21 @@ function renderObservationList(observations) {
     const itemKind = observationKind(item);
     kind.className = `observation-kind ${itemKind}`;
     kind.textContent = itemKind === "pattern" ? "Pattern" : "具体动作";
-    edit.type = "button";
-    edit.className = "observation-edit";
-    edit.textContent = "编辑";
-    edit.disabled = Boolean(editingObservationId);
-    edit.setAttribute("aria-label", "编辑这条纠偏的正文");
-    edit.addEventListener("click", () => {
-      editingObservationId = item.id;
-      pendingObservations = null;
-      renderObservationList(currentObservations);
-      monitorObservationList.querySelector("textarea")?.focus();
-    });
-    heading.append(kind, edit);
+    heading.append(kind);
+    if (selectedObservationEditable) {
+      edit.type = "button";
+      edit.className = "observation-edit";
+      edit.textContent = "编辑";
+      edit.disabled = Boolean(editingObservationId);
+      edit.setAttribute("aria-label", "编辑这条纠偏的正文");
+      edit.addEventListener("click", () => {
+        editingObservationId = item.id;
+        pendingObservations = null;
+        renderObservationList(currentObservations);
+        monitorObservationList.querySelector("textarea")?.focus();
+      });
+      heading.append(edit);
+    }
     body.append(heading);
     if (editingObservationId === item.id) {
       body.append(createObservationEditor(item));
@@ -788,9 +835,13 @@ async function saveObservation(item, textarea, save, cancel, error) {
     if (!response.ok) throw new Error(payload.error || `保存失败：${response.status}`);
     editingObservationId = null;
     pendingObservations = null;
-    renderObservationList(currentObservations.map((candidate) => (
+    const updatedObservations = currentObservations.map((candidate) => (
       candidate.id === item.id ? payload.observation : candidate
-    )));
+    ));
+    currentObservationAttempts = currentObservationAttempts.map((attempt) => (
+      attempt.current ? { ...attempt, observations: updatedObservations } : attempt
+    ));
+    renderObservationAttempt();
   } catch (caught) {
     textarea.disabled = false;
     save.disabled = false;
@@ -895,6 +946,39 @@ attemptSelect.addEventListener("change", () => {
   selectedAttemptId = attemptSelect.value;
   ticketSignature = "";
   renderAttemptTickets(currentPackageSnapshot);
+});
+
+function closeObservationDialog() {
+  if (!monitorObservationDialog.open) return;
+  editingObservationId = null;
+  pendingObservations = null;
+  monitorObservationDialog.close();
+}
+
+monitorObservations.addEventListener("click", () => {
+  const current = currentObservationAttempts.find((item) => item.current) || currentObservationAttempts[0];
+  selectedObservationAttemptId = current?.attempt || null;
+  observationFilter = "all";
+  renderObservationAttempt();
+  monitorObservationDialog.showModal();
+  monitorObservationClose.focus();
+});
+
+monitorObservationClose.addEventListener("click", closeObservationDialog);
+monitorObservationDialog.addEventListener("close", () => {
+  editingObservationId = null;
+  pendingObservations = null;
+  monitorObservations.focus();
+});
+monitorObservationDialog.addEventListener("click", (event) => {
+  if (event.target === monitorObservationDialog) closeObservationDialog();
+});
+
+observationAttemptSelect.addEventListener("change", () => {
+  if (editingObservationId) return;
+  selectedObservationAttemptId = observationAttemptSelect.value;
+  observationFilter = "all";
+  renderObservationAttempt();
 });
 
 observationFilterButtons.forEach((button) => {

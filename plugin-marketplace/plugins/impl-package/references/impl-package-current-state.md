@@ -67,6 +67,7 @@ python <plugin>/scripts/impl_package_state.py --package <package> package refres
 python <plugin>/scripts/impl_package_state.py --package <package> package archive-attempt --attempt <id> --from-revision <commit>
 printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <package> evidence add
 python <plugin>/scripts/impl_package_state.py --package <package> evidence invalidate --ticket <id> --claim <id> --artifact <path> --invalidated-by <reason>
+python <plugin>/scripts/impl_package_state.py --package <package> evidence retire-claim --ticket <id> --claim <id>
 python <plugin>/scripts/impl_package_state.py --package <package> ticket satisfy <id> --expect <state> --revision <commit> --environment <id>
 python <plugin>/scripts/impl_package_state.py --package <package> ticket block <id> --expect <state> --evidence <path>
 python <plugin>/scripts/impl_package_state.py --package <package> ticket needs-revalidation <id> --expect <state> --claim <claim-id> [--claim <claim-id> ...] --invalidated-by <reason> [--evidence <path>]
@@ -76,6 +77,8 @@ python <plugin>/scripts/impl_package_state.py --package <package> recovery check
 printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <package> recovery judgment
 python <plugin>/scripts/impl_package_state.py --package <package> gate <verdict> --comparison-commit <commit> --reason <text>
 ```
+
+`evidence retire-claim` 只清理已从当前 Ticket 删除且所有旧 evidence 都已带 `invalidatedBy` 的孤立 claim mapping；它不删除 evidence artifact，也不创建额外历史副本。
 
 旧平铺拼法 `init`、`validate`、`set-state`、`evidence-add`、`checkpoint`、`er-add` 等保留为兼容别名；新文档和新 package 统一使用分组拼法。`ticket transition` 是旧 `set-state` 的组内兼容入口，优先使用上面的语义命令。
 

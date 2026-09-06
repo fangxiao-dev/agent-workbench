@@ -1,6 +1,6 @@
 {
   "name": "impl-package",
-  "version": "0.4.2",
+  "version": "0.4.2+codex.20260906084137",
   "description": "A staged implementation and review suite for requirements, planning, execution, verification, and stable-document backfill.",
   "author": {
     "name": "fangxiao-dev",
@@ -8,7 +8,12 @@
   },
   "homepage": "https://github.com/fangxiao-dev/agent-workbench",
   "repository": "https://github.com/fangxiao-dev/agent-workbench",
-  "keywords": ["implementation", "planning", "verification", "workflow"],
+  "keywords": [
+    "implementation",
+    "planning",
+    "verification",
+    "workflow"
+  ],
   "skills": "./skills/",
   "hooks": "./hooks/codex-hooks.json",
   "interface": {
@@ -17,7 +22,11 @@
     "longDescription": "Align requirements, review implementation plans, coordinate bounded execution and independent reviewers, verify completion evidence, and backfill durable project knowledge.",
     "developerName": "fangxiao-dev",
     "category": "Developer Tools",
-    "capabilities": ["Workflow"],
-    "defaultPrompt": ["Route this work through the appropriate Impl-Package stage."]
+    "capabilities": [
+      "Workflow"
+    ],
+    "defaultPrompt": [
+      "Route this work through the appropriate Impl-Package stage."
+    ]
   }
 }
