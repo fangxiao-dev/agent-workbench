@@ -23,6 +23,8 @@ Do not mix unit, status, and source into a name just to save space.
 
 ## Density Rules
 
+- For repeated items in one list, use one visible grouping boundary: keep row content and row actions flat, then separate rows with spacing or dividers.
+- Do not add separate pale borders or background panels around the row shell, its content block, and its action control at the same time. A visible boundary must represent a real object or hierarchy level, not a structural wrapper.
 - Do not wrap every child row in a rounded bordered card inside another bordered container.
 - A repeated line item inside a form should usually be one row.
 - If line items need headers, use a lightweight table rather than repeated labels per row.
@@ -42,5 +44,6 @@ Do not mix unit, status, and source into a name just to save space.
 - Can users compare row values without reading every sentence?
 - Are units and quantities in the same cell?
 - Is the row action visually scoped to that row?
+- Does each visible border or background represent a real object or hierarchy level?
 - Are all visible identifiers meaningful to the user rather than database/debug keys?
 - Could the same information be clearer as a table?
