@@ -96,7 +96,7 @@ python scripts/codex_setup.py apply --expect-report <codex-audit.md 中的审计
 
 `plugin-marketplace/plugins/impl-package/agents/*.md` 是 Claude 插件的原生 agent 定义，安装后可在 `/agents` 中看到 `review-track-code`、`review-track-standards`、`review-track-spec` 和 `review-track-safety`。Claude manifest 显式声明了这四个 Markdown 文件。
 
-Codex 当前插件 manifest 不支持 `agents` 字段，因此不能通过 `codex plugin add` 自动安装这些 role。`install_codex_agents.py --global` 会从同一组 Markdown 定义生成 Codex `.toml` role，并写入全局 `$CODEX_HOME/agents`（未设置时为 `~/.codex/agents`）。Code 与 Spec role 固定使用 `gpt-5.6-sol/high`，Standards 与 Safety role 固定使用 `gpt-5.6-sol/medium`；该配置同时适用于 `initial` 和 `terminal-final`，`finding-closure` 仍使用独立 `luna-worker`。四个 role 使用与 `do-review` 相同的稳定名称，供 parent 的 leaf dispatch 解析；脚本默认拒绝覆盖非同内容文件，只有明确传入 `--force` 才更新带有本包管理标记（或本包旧格式）的已知文件，并拒绝写入符号链接或 Windows reparse point。
+Codex 当前插件 manifest 不支持 `agents` 字段，因此不能通过 `codex plugin add` 自动安装这些 role。`install_codex_agents.py --global` 会从同一组 Markdown 定义生成 Codex `.toml` role，并写入全局 `$CODEX_HOME/agents`（未设置时为 `~/.codex/agents`）。Code role 固定使用 `gpt-6-astra/medium`，Safety、Spec 和 Standards role 固定使用 `gpt-5.6-sol/medium`；该配置同时适用于 `initial` 和 `terminal-final`，`finding-closure` 仍使用独立 `luna-worker`。四个 role 使用与 `do-review` 相同的稳定名称，供 parent 的 leaf dispatch 解析；脚本默认拒绝覆盖非同内容文件，只有明确传入 `--force` 才更新带有本包管理标记（或本包旧格式）的已知文件，并拒绝写入符号链接或 Windows reparse point。
 
 个人 Codex role 放在仓库根目录 `agents/*.toml`，由 `codex_setup.py` inventory 扫描并投影到 `$CODEX_HOME/agents`；当前 `agents/luna-worker.toml` 使用标准 `service_tier`，不走 Fast 处理。它与上述 impl-package review role 的生成和安装流程分开。
 

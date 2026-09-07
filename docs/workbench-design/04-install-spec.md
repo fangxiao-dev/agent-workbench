@@ -114,8 +114,8 @@ python plugin-marketplace/plugins/impl-package/scripts/install_codex_agents.py -
 
 | Codex role | Model | Reasoning effort |
 |------|------|------|
-| `review-track-code` | `gpt-5.6-sol` | `high` |
-| `review-track-spec` | `gpt-5.6-sol` | `high` |
+| `review-track-code` | `gpt-6-astra` | `medium` |
+| `review-track-spec` | `gpt-5.6-sol` | `medium` |
 | `review-track-standards` | `gpt-5.6-sol` | `medium` |
 | `review-track-safety` | `gpt-5.6-sol` | `medium` |
 
