@@ -10,6 +10,7 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, and `grok
 ## Working Rules
 
 - Keep changes host-neutral unless a host-specific behavior is required.
+- Preserve existing version numbers by default when updating plugins or other versioned artifacts; change versions (including build/cachebuster suffixes) only when the user explicitly requests it.
 - Unless the user explicitly specifies a remote branch, branch references mean local branches; for example, "merge into `develop`" means the local `develop` branch.
 - Do not mutate user-level host state (`~/.claude`, `~/.codex`, `~/.grok`) unless the task explicitly asks for it.
 - Prefer updating skill-link installer logic and docs together so behavior and guidance stay aligned.
