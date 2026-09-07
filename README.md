@@ -233,6 +233,8 @@ WT-PM 工作流拆成三个 skill：
 
 当你想审一个方案，但希望 agent 一边追问、一边代你调研代码事实，并把自动判断过程整理成中文记录时，使用 `/impl-package:grill-me-smartly`。
 
+通用提问协议是顶层普通 Skill `/grilling`，可用 `python scripts/link_skill.py grilling --host claude codex grok` 安装。`grill-me-smartly` 优先读取它，再增加 ledger、角色分工和 Review/Apply gate；未安装时使用插件内最小流程降级并明确报告。
+
 推荐说法：
 
 ```text
@@ -242,7 +244,7 @@ WT-PM 工作流拆成三个 skill：
 实际流程：
 
 - 主 session 是书记、裁判和用户意图网关，只通过脚本写入 ledger
-- 常驻 Questioner subagent 负责沿设计树提出下一个关键问题
+- 常驻 Questioner subagent 按 `/grilling` 生成当前完整 frontier，过大时分批
 - Answerer subagent 只回答可通过本地文件、代码库、git 历史或工具确认的问题
 - ledger 和最终 review 写在 OS 临时目录的 `codex-grill/` 下，仓库不保存过程状态
 - review 阶段只输出完整意见对齐文档，不直接改被审计划

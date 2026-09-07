@@ -1,5 +1,5 @@
 ---
-target: plugin-marketplace/plugins/impl-package/skills/grilling
+target: skills/grilling
 updated: 2026-08-11
 ---
 ## 原则

@@ -1,0 +1,38 @@
+{
+  "skill_name": "grill-me-smartly",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "用 /impl-package:grill-me-smartly 审一份跨服务账单迁移 Spec。方案涉及双写、历史数据回填、失败补偿和旧客户端兼容，请开始第一轮。",
+      "expected_output": "先加载普通 /grilling，以其完整 frontier 和分批规则驱动 Questioner，再由 grill-me-smartly 逐题写入 ledger 并保留 Review/Apply gate。",
+      "files": [],
+      "assertions": [
+        "明确使用 /grilling 作为提问协议，而不是在插件内建立第二套完整规则",
+        "Questioner 返回当前完整 frontier，过大时按 /grilling 分批",
+        "每个问题分别进入 ledger，review 阶段不修改目标 Spec"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "用 /impl-package:grill-me-smartly 审当前仓库的权限迁移计划。哪些调用方存在、哪些测试覆盖现状都能从本地查；产品是否允许旧 token 延迟失效需要我决定。",
+      "expected_output": "Answerer 自行查清本地事实并记录证据，只把真正需要产品意图的决定按 /grilling 的 batch 和 reply contract 交给用户。",
+      "files": [],
+      "assertions": [
+        "本地可查事实交给 Answerer，不反问用户",
+        "用户只收到需要 owner 意图的决策",
+        "事实答案、用户裁决和收敛结论分别记录"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "假设当前宿主没有安装 /grilling，仍用 /impl-package:grill-me-smartly 审这个删除数据的高风险方案。",
+      "expected_output": "使用 grill-me-smartly 自身的最小循环继续审问，每次提出下一个最高价值问题，并明确报告本次未加载 /grilling、使用了简化降级。",
+      "files": [],
+      "assertions": [
+        "不会因 /grilling 缺失而伪称已加载或直接失败",
+        "降级路径仍保留 ledger、角色边界、stop proof 和 Review/Apply gate",
+        "最终回复明确报告使用了简化降级"
+      ]
+    }
+  ]
+}

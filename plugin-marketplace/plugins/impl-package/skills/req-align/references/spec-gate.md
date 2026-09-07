@@ -40,4 +40,4 @@ Gate 可以发现设计范围与正文之间的明显漏项；发现后返回 Pr
 
 只有用户明确要求，或存在 unresolved material ambiguity、cross-module/external interface、migration/compatibility、security/data authority、destructive external mutation、evidence-integrity false-PASS risk 等高风险信号时，运行 `/impl-package:grill-me-smartly`。它不能静默应用 clarification。
 
-Ledger 位于 OS temp，不进入 package。向用户汇总 converged decisions 与 owner decisions；initial bundle 的 owner decision 是规划入口的必要输入。initial bundle 完成 owner approval；Spec PASSED 后的同一 package clarification 可直接更新 current Spec，`/impl-package:grilling` 仍只是可选 deeper review。
+Ledger 位于 OS temp，不进入 package。向用户汇总 converged decisions 与 owner decisions；initial bundle 的 owner decision 是规划入口的必要输入。initial bundle 完成 owner approval；Spec PASSED 后的同一 package clarification 可直接更新 current Spec。需要追加审问时仍进入 `/impl-package:grill-me-smartly`。

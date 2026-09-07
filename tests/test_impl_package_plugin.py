@@ -15,7 +15,6 @@ EXPECTED_SKILLS = {
     "impl-planning",
     "subagent-driven-development",
     "grill-me-smartly",
-    "grilling",
     "plan-review",
     "do-review",
     "review-code",
@@ -28,7 +27,7 @@ EXPECTED_SKILLS = {
 }
 
 # Merged/renamed skill directories (slim refactor): the flat skill set above
-# replaced these, except for the restored standalone grilling entry.
+# replaced these. Grilling now lives in the repository's top-level skills/.
 LEGACY_SKILL_DIRS = {
     "to-tickets",
     "execution-preflight",
@@ -111,12 +110,35 @@ def test_plugin_exposes_the_slimmed_flat_skill_set() -> None:
         assert not (PLUGIN / "skills" / legacy / "SKILL.md").exists(), f"{legacy} should be merged away"
     assert not (PLUGIN / "skills" / "investigate-before-implement").exists()
     assert not (PLUGIN / "skills" / "dispatch-bounded-task").exists()
+    assert not (PLUGIN / "skills" / "grilling").exists()
+    assert (ROOT / "skills" / "grilling" / "SKILL.md").is_file()
 
     router = (PLUGIN / "skills" / "impl-package" / "SKILL.md").read_text(encoding="utf-8")
     # The routing table is now a native-command index (`impl-<stage>`).
     for name in EXPECTED_SKILLS - {"impl-package", "execution-boundaries"}:
         assert f"impl-{name}" in router
     assert "/plugin:skill" in router
+    assert "impl-grilling" not in router
+    assert "/impl-package:grilling" not in router
+
+
+def test_grilling_is_the_standalone_question_protocol() -> None:
+    grilling = (ROOT / "skills" / "grilling" / "SKILL.md").read_text(encoding="utf-8")
+    smart = (PLUGIN / "skills" / "grill-me-smartly" / "SKILL.md").read_text(encoding="utf-8")
+    spec_gate = (PLUGIN / "skills" / "req-align" / "references" / "spec-gate.md").read_text(
+        encoding="utf-8"
+    )
+    evals = load_json(PLUGIN / "skills" / "grill-me-smartly" / "evals" / "evals.json")
+
+    assert "name: grilling" in grilling
+    assert "grill-me-smartly" not in grilling
+    assert "`/grilling`" in smart
+    assert smart.index("## Question Protocol Dependency") < smart.index("## Roles")
+    assert "简化降级" in smart
+    assert "/impl-package:grill-me-smartly" in spec_gate
+    assert "/impl-package:grilling" not in spec_gate
+    assert evals["skill_name"] == "grill-me-smartly"
+    assert len(evals["evals"]) == 3
 
 
 def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:

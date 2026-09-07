@@ -2,8 +2,7 @@
 name: grilling
 description: >
   对 plan、Decision 或 idea 做交互式深入质询（grilling）。当用户要求 grill、压力测试、
-  深化或挑战现有思路时使用；需要 Questioner/Answerer ledger 的高风险 Spec gate 审问时
-  使用 grill-me-smartly。
+  深化或挑战现有思路时使用；通过设计树和完整 frontier 分轮关闭所有重要决策。
 ---
 
 Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree**: every decision branches into the decisions that hang off it.
