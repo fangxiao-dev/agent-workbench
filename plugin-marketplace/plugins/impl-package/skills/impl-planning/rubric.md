@@ -1,6 +1,6 @@
 ---
 target: plugin-marketplace/plugins/impl-package/skills/impl-planning
-updated: 2026-09-05
+updated: 2026-09-07
 ---
 # Impl Planning Rubric
 
@@ -12,6 +12,15 @@ updated: 2026-09-05
 - Plan holds only global scheduling — Composition, Ticket order/dependency, shared-resource serialization, integration/rollout boundary, and Final Gate criteria — while per-constraint coverage and verification live in each Ticket's Contract references and AC; current execution state stays in `state.json` and is exposed through `progress.md`.
 - Only affected records require revalidation after a plan change.
 - Plan only maps an already-frozen Spec contract ensemble to implementation and verification. If observable behavior, data identity, permission, concurrency, recovery, or public shape remains undecided, return to req-align without creating Plan/state or inventing a second DTO/schema contract.
+
+- [已确认 · 2026-09-07] owning-stage 主 thread 直接写入并验证 Plan/Ticket；runtime state 由主 thread 直接通过语义 CLI 更新，execution-boundaries 不拥有业务文档写入权。
+- [已确认 · 2026-09-07] 保留真实 caller、复用入口、依赖产物、接线条件和验证可行性判断；不预列完整 baby-step 队列，不新增模板。
+
+## T7 常见误判分流
+
+- 同一规则只保留一个权威定义，其他位置使用带触发条件的指针。
+- 仍会改变规划判断的独特提醒下沉到 `references/common-misjudgments.md`；`SKILL.md` 只保留流程动作和阶段级指针。
+- 只有不影响执行、仅用于验证模型回归的案例才进入 `evals/`；现有规划 evals 已覆盖这类回归，不新增重复清单。
 
 ## 本轮原则
 

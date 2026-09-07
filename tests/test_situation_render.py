@@ -185,7 +185,6 @@ def test_cli_written_trail_rows_are_renderable() -> None:
         assert rendered["sources"]["trail"]["path"] == "execution/fixture-attempt/trail.jsonl"
         assert "error" not in rendered
         assert set(_primary_slugs(rendered)) == {
-            "attempt.record.ticket-boundary-handoff",
             "attempt.record.trail-rotation-due",
         }
         assert rendered["highest_match_layer"] == "P1"
@@ -221,7 +220,7 @@ def test_human_render_collapses_undetermined_and_supports_since() -> None:
     package = ROOT / "tests/fixtures/situations-a2/p0-evidence-unfiled"
 
     full = _render_text(package)
-    assert "无法判定 24 行\n" in full
+    assert "无法判定 11 行\n" in full
     assert "无法判定 23 行:" not in full
     assert "package.record.projection-drift" not in full
     digest_line = full.rsplit("\n", 1)[-1]
@@ -230,7 +229,7 @@ def test_human_render_collapses_undetermined_and_supports_since() -> None:
     assert len(digest) == 12
 
     explained = _render_text(package, "--explain-undetermined")
-    assert "无法判定 24 行: package.record.projection-drift (package)" in explained
+    assert "无法判定 11 行: package.record.projection-drift (package)" in explained
 
     unchanged = _render_text(package, "--since", digest)
     assert unchanged == f"处境未变 (digest: {digest})"
@@ -354,6 +353,55 @@ def test_compaction_pressure_is_high_low_or_unknown_without_fact_channel() -> No
     assert low_value["value"] is False
 
 
+def test_t9_removes_declaration_only_fact_keys() -> None:
+    removed = {
+        "attempt.handoff_or_long_task",
+        "attempt.integration_carrier_available",
+        "attempt.integration_evidence_available",
+        "attempt.manual_verification_owner",
+        "attempt.manual_verification_result_present",
+        "attempt.completion_claim_pending",
+        "ticket.no_longer_needed",
+        "ticket.review_required",
+        "ticket.review_trigger",
+        "ticket.post_fix_regression_pending",
+        "evidence.sources_uniquely_decide",
+        "git.comparison_head_fixed",
+        "trail.bookkeeper_partial_write",
+        "trail.handoff_in_flight",
+        "trail.checkpoint_refresh_needed",
+        "trail.judgment_unfiled",
+        "finding.closure_review_pending",
+    }
+    computed = {
+        "package.validate.projection_drift",
+        "attempt.session_resumed",
+        "attempt.in_flight",
+        "attempt.terminal_coverage_complete",
+        "git.accepted_seam_changed",
+    }
+
+    assert removed.isdisjoint(situation.FACT_KEYS)
+    assert computed.isdisjoint(situation.FACT_KEYS)
+    assert computed <= situation.WHEN_PARSERS.keys()
+
+
+def test_projection_drift_requires_structured_validation_result() -> None:
+    package = ROOT / "tests/fixtures/situations/p4-satisfiable-no-trail"
+
+    rendered = json.loads(
+        _render_text(
+            package,
+            "--validation-result",
+            '{"projection_drift":true}',
+            "--json",
+        )
+    )
+
+    assert _primary_slugs(rendered) == ["package.record.projection-drift"]
+    assert rendered["when_values"]["package.validate.projection_drift"][0]["value"] is True
+
+
 @pytest.mark.parametrize(
     ("first", "second", "expected_status"),
     [
@@ -447,6 +495,25 @@ def test_git_accepted_seam_changed_is_unknown_when_acceptance_revision_cannot_re
 
     assert fact.known is False
     assert "acceptance revision" in (fact.reason or "")
+
+
+def test_in_flight_ignores_removed_fact_override() -> None:
+    context = _coverage_context(
+        [
+            {
+                "subject": "attempt",
+                "kind": "fact",
+                "key": "attempt.in_flight",
+                "value": True,
+                "ts": "2026-09-07T12:00:00Z",
+            }
+        ]
+    )
+
+    fact = situation._when_attempt_in_flight(context)
+
+    assert fact.known is True
+    assert fact.value is False
 
 
 def _coverage_context(

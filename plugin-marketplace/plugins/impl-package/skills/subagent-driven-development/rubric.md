@@ -14,8 +14,9 @@ updated: 2026-09-05
 - [已确认] 真实消费者使用 `DONE|BLOCKED|INCOMPLETE`、`EVIDENCE_SUFFICIENT|EVIDENCE_GAP` 和 `PENDING_REVIEW|PASSED`，主 session 将其作为 Topic-local facts 消费。（证据: R12）
 - [已确认] foundation、acceptance、resource、authorization dependency 分开判断；共享可变资源能隔离才并行，否则串行并指定 cleanup owner。（证据: R12）
 - [已确认] `investigate`、`implement`、`fix` 的派发 prompt 由 caller 按单一目标和强相关上下文裁剪；executor、model、provider 选择不属于本 Skill。（证据: R14）
-- [已确认] Topic 是共享 foundation、ownership 与 closure point 的横向交付范围；baby step 是沿一条 lane 的授权边界，同一方向和 write-set 内的实现、focused verification、format、普通重跑与机械 cleanup 沿同一步完成。（证据: R15）
-- [已确认] baby step 以主控 return point 为边界，不打包到 Topic closure；相邻 return point 只在接口稳定且不减少并行机会时合并。
+- [已确认] Dispatcher 定义 Topic、baby step 与当前批次的调度边界；SDD 承接已准入 Topic，负责 dependency、mode、lane、lifecycle 与 worker result。（证据: R15）
+- [已确认] 当前 baby step 的 focused verification、format、普通重跑与机械 cleanup 随同一结果完成；相邻 return point 是否合并遵循 Dispatcher 的收益、并行与及时复核判断。
+- [已确认] 含新增实现代码的 baby step return 及时派独立 delta review；纯调查或只重跑测试且无新增代码时不机械派代码审查。
 - [已确认] carrier/tooling recovery 在边界可信时沿同一 worker 续接；连续第二个 `INCOMPLETE`、新 caller/producer 家族或 write-set 外溢交回 Dispatcher 做 foundation investigation。（证据: R15）
 
 ## 决策记录

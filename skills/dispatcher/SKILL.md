@@ -13,7 +13,7 @@ Dispatcher 面向上游主控，指导 Topic-first admission、当前批次、di
 
 每个 Topic 首次 admission 时用一句话固定 closure point；在它关闭前不得为了释放后续动作静默缩小。closure point 或 ownership 实质变化时，按新边界重新 admission。
 
-默认把既定方向和 write-set 内能共同完成的工作组织为一个 baby step，取到第一个有意义的主控 return point 为止，而不是 Topic closure；return point 是主控检查 diff/evidence 并据此决定是否授权下一段工作的边界。同一 worker 或 work lane 可以在主控消费 return 后连续承接下一步，但连续性不构成预授权。同一方向和 write-set 内的机械附属不单独派发，跟随同一步；相邻 return point 只有在接口已完全稳定、后段只是机械接线，且合并不会减少并行机会或主控决策能力时才可合并。必要的局部调查、实现、focused test、lint/format、普通重跑与当前动作产生的机械 cleanup 可以留在同一次派发。只有某个子结果会独立改变以下任一项时才继续切分：
+默认把既定方向和 write-set 内能共同完成的工作组织为一个 baby step，通常取到第一个有意义的主控 return point，而不是 Topic closure；return point 是主控检查 diff/evidence 并据此决定是否授权下一段工作的边界。同一 worker 或 work lane 可以在主控消费 return 后连续承接下一步，但连续性不构成预授权。同一方向和 write-set 内的机械附属不单独派发，跟随同一步；相邻 return point 只要无需新的主控裁决、不损失并行机会且不妨碍及时复核即可合并，由 Astra 根据任务难度决定。必要的局部调查、实现、focused test、lint/format、普通重跑与当前动作产生的机械 cleanup 可以留在同一次派发。只有某个子结果会独立改变以下任一项时才继续切分：
 
 - Topic 的实现方向或是否继续；
 - dependency、write ownership 或 authorization；
@@ -27,18 +27,16 @@ Dispatcher 面向上游主控，指导 Topic-first admission、当前批次、di
 ## 调度循环
 
 1. 扫描全部候选，按共享 foundation、ownership 与 closure point 形成 Topic，并重新核对 dependency。foundation 尚未稳定时保留下游动作；acceptance 只阻止正式验收和状态宣称；无法隔离的共享可变资源串行；缺少 mutation 授权的动作保持未释放。resource dependency 绑定当前 baby step 的具体 resource key，并按 read、write 与 observation 的完整 effect footprint 判断；读取或验证共享可变状态也占用对应 key。一个 key 只阻塞依赖它的步骤，不阻塞整个 Topic 或 Ticket。
-2. 为每个已解锁 Topic 选择当前 baby step，把互不依赖且资源隔离的步骤组成当前批次并 fan out。`PARALLEL | SERIAL` 只比较当前候选 baby step 的实际 effect footprint，不使用 Topic 或 Ticket 的最终 write-set 并集；未来步骤会冲突不影响当前步骤并行，冲突到达时再串行。review、验证或 worker 在途只阻塞依赖其结论或资源的步骤；其他 Ticket 的只读调研与准备继续释放。文件 ownership 交叉时先由 SDD 判断能否用隔离 worktree 分开。共享操作的合并与复用只是调度优化，不是 dependency；只有不延迟已解锁的独立动作时才合并，否则先执行当前合格步骤并在 return 后重扫。
+2. 为每个已解锁 Topic 选择当前 baby step，主动释放有实际收益、互不依赖且资源隔离的步骤并组成当前批次 fan out；预期收益不足的合格动作可以暂不派发，不视为 dependency blocked。是否现在派发，比较提前产出的价值与派发、回收、整合成本，不新增评分表或成本记录。`PARALLEL | SERIAL` 只比较当前候选 baby step 的实际 effect footprint，不使用 Topic 或 Ticket 的最终 write-set 并集；未来步骤会冲突不影响当前步骤并行，冲突到达时再串行。review、验证或 worker 在途只阻塞依赖其结论或资源的步骤；其他 Ticket 的只读调研与准备按同一收益判断释放。文件 ownership 交叉时先由 SDD 判断能否用隔离 worktree 分开。共享操作的合并与复用只是调度优化，不是 dependency；只有不延迟更有价值的独立动作时才合并，否则先执行当前合格步骤并在 return 后重扫。
 3. 单个派发只在宿主 receipt 明确成功后成立。迟到、重复、来源不明或结果不确定的 receipt 先消除歧义，不据此推进后续动作。中断或换 session 后恢复时，先按已有 report/artifact 与 trail 核对在途 review 是否已产出结论，确认缺失后才补派，不无条件重派。
-4. worker return 后先消费可归因结果、evidence、diff、residue 与 cleanup，再判断当前 Topic 的下一步；返回不会自动授权后续工作。冻结该步增量与派出对应的轻量 delta review 属于同一次 return 消费，不先连续提交多步再集中派审。既定边界内的 tooling retry、format、普通重跑或机械 cleanup 续接当前动作，不创建新业务 step。
-5. 每次消费 return 后检查受影响候选，核对 dependency、授权与资源后补充派发，不等待无关 worker；当前批次全部结束或准备进入 idle 时再全局扫描。在途 review 的返回同样按轮消费；派审持续滞后于实现返回，或未消费的 delta review 堆积到 findings 已经赶不上下一个 baby step 时，先消化 review 再释放新的并行 step——实施并发的上限来自这个可观察信号，不设固定数字。没有已解锁且合格的动作时进入 idle。业务状态、验收和 closure 仍由调用方的 owning workflow 判断。
+4. worker return 后先消费可归因结果、evidence、diff、residue 与 cleanup，再判断当前 Topic 的下一步；返回不会自动授权后续工作。若本步产生新的实现代码改动，冻结该步增量并在同一次 return 消费中沿独立 review lane 及时派轻量 delta review；纯调查或只重跑测试且没有新增代码改动时，不机械派代码审查。异步 review 不阻止不依赖其结论的下一步。既定边界内的 tooling retry、format、普通重跑或机械 cleanup 续接当前动作，不创建新业务 step。
+5. 每次消费 return 后检查受影响候选，核对 dependency、授权与资源后补充派发有实际收益的动作，不等待无关 worker；当前批次全部结束或准备进入 idle 时再全局扫描。在途 review 的返回同样按轮消费；派审持续滞后于实现返回，或未消费的 delta review 堆积到 findings 已经赶不上下一个 baby step 时，先消化 review 再释放新的并行 step——实施并发的上限来自这个可观察信号，不设固定数字。没有已解锁且合格且值得现在派发的动作时进入 idle。业务状态、验收和 closure 仍由调用方的 owning workflow 判断。
 
 同一 Topic 连续两次 `INCOMPLETE`、broad check 新发现一类 caller/producer，或实际 write-set 超出原 ownership 时，停止继续派更小的 fix；先释放一个 foundation investigation，重新确定 Topic 边界。
 
 ## Topic 生命周期
 
-- 同一 Topic 的 work execution lane 只有在 ownership、failure model 与动作边界稳定，且 worker 仍能准确复述这些事实时才复用。连续重复且无法可靠解释的错误、不能准确复述既定边界、结果无法归因或实际 write-set 外溢，均触发 fresh worker；Topic 闭合后退役。
-- review execution lane 始终独立于 work lane，reviewer 不审自己实现的增量；同 Topic、同 review scope 默认复用 reviewer，每次只交新的 base/head 与本次增量。scope 实质变化、上下文压缩失真、反复漏掉同类问题，或沿用旧结论而不核查新 diff 时换 fresh reviewer 并简述理由。
-- test execution lane 只在同一有界 campaign 内复用，campaign 结束后退役。
-- 新 Topic 使用 fresh worker；worker 空闲或角色相同不是复用理由。
+- 同一 Topic 的 work lane 只有在 ownership、failure model 与动作边界稳定，且 worker 仍能准确复述这些事实时才复用。连续重复且无法可靠解释的错误、不能准确复述既定边界、结果无法归因或实际 write-set 外溢，均触发 fresh worker；Topic 闭合后所有 lane 退役。
+- 新 Topic 使用 fresh worker；worker 空闲或角色相同不是复用理由。review/test lane 的独立性、复用与退役细节见 SDD Step 4，不在此重复。
 
-完成一个调度轮次的可观察条件是：当前批次所有派发 receipt 已确认或消除歧义，所有已返回结果已被主控消费，最后一次 Topic-first 扫描没有已解锁且合格的动作。
+完成一个调度轮次的可观察条件是：当前批次所有派发 receipt 已确认或消除歧义，所有已返回结果已被主控消费，最后一次 Topic-first 扫描没有已解锁且值得现在派发的合格动作。

@@ -26,4 +26,4 @@
 }
 ```
 
-Paths are repository-relative. Item IDs use `<package-path>::<delta-id>`. `candidate | already-covered | conflict | no-delta` are the only dispositions. Collector inventory may also emit `filtered-by-done` rows for audit visibility; those are not apply dispositions. The file contains current audit conclusions, not migration history.
+Paths are repository-relative. Item IDs use `<package-path>::<delta-id>`; derive them from the source's stable readable `delta-id`, never from row position or a temporary sequence. `candidate | already-covered | conflict | no-delta` are the only dispositions. Collector inventory may also emit `filtered-by-done` rows for audit visibility; those are not apply dispositions. The file contains current audit conclusions, not migration history.

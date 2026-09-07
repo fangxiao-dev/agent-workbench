@@ -49,6 +49,27 @@
       "expected_output": "当前两个 baby step 的实际 effect footprint 不冲突，进入 `PARALLEL`；等共享 controller 的冲突步骤到达时，再按实际 footprint 改为 `SERIAL`，未来冲突不提前阻塞当前步骤。",
       "files": [],
       "expectations": ["按当前 baby step 的实际 effect footprint 判断。", "当前不冲突时 PARALLEL。", "未来冲突到达时再 SERIAL。"]
+    },
+    {
+      "id": 8,
+      "prompt": "只读模拟：同一 implementer/work lane 要依次处理后端事务语义、Controller/DTO/generated contracts 和 UI 动作；方向与 write-set 稳定，不需要新的主控裁决，不损失并行机会，也不妨碍及时复核。判断是否必须按技术层拆成多个 baby step；禁止实际修改文件或派发 worker。",
+      "expected_output": "不因跨技术层或后段偏机械而强制拆分；Astra 可按任务难度把相邻 return point 合并为一个 baby step，仍不得预授权新的主控决策。",
+      "files": [],
+      "expectations": ["允许按任务难度合并相邻 return point。", "跨技术层不是强制拆分理由。", "保留主控授权边界。"]
+    },
+    {
+      "id": 9,
+      "prompt": "只读模拟：当前有两个已解锁、依赖和资源都满足的候选动作；A 能立即接通一条未完成业务路径，B 的预期产出很小且派发、回收、整合成本明显。判断当前是否必须同时派发；禁止实际修改文件或派发 worker。",
+      "expected_output": "主动释放 A；B 可因预期收益不足暂缓，不把暂缓误判为 dependency blocked，也不新增评分表或成本记录。",
+      "files": [],
+      "expectations": ["按实际收益主动释放。", "低收益动作可暂缓。", "不新增调度评分。"]
+    },
+    {
+      "id": 10,
+      "prompt": "只读模拟：一个 implement baby step 返回了新的代码 diff；另一个 investigate/测试重跑只返回证据、没有新增代码。说明两者的 review 节拍；禁止实际修改文件或派发 worker。",
+      "expected_output": "代码 diff 的 return 及时沿独立 review lane 派轻量 delta review，并可异步继续不依赖其结论的动作；纯调查或无新增代码的测试重跑不机械派代码审查。",
+      "files": [],
+      "expectations": ["代码增量及时独立 review。", "review 异步不阻塞无关动作。", "无代码增量不机械审查。"]
     }
   ]
 }

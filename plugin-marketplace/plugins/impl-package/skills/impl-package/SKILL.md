@@ -26,7 +26,7 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 | `impl-impl-planning` | `/impl-package:impl-planning` | 创建 initial/patch plan、决定 Composition |
 | `impl-plan-review` | `/impl-package:plan-review` | 审查 plan 或完整 Plan/Ticket/DAG bundle |
 | `impl-to-tickets` | `/impl-package:impl-planning` 的 Ticket-split | 创建独立验收切片 |
-| `impl-execution-boundaries` | `/impl-package:execution-boundaries` | 执行前授权、异常 slow path、完成前 evidence gate |
+| `impl-execution-boundaries` | `/impl-package:execution-boundaries` | 执行前授权、异常对账、完成前 evidence gate |
 | `impl-subagent-driven-development` | `/impl-package:subagent-driven-development` | 下游 bounded worker 的 Topic、dependency、mode、lane、lifecycle 与 review requirement |
 | `impl-dev-with-track` | `/impl-package:dev-with-track` | 恢复执行、选择业务动作、消费 Dispatcher/SDD 结果、推进 Ticket 与写 Gate |
 | `impl-monitor-progress` | `/impl-package:monitor-progress` | 打开实时进度页面，并可选创建只读主控监控 automation |
@@ -37,7 +37,7 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 | `impl-safety-review` | `/impl-package:safety-review` | 审查安全、数据完整性、并发和外部副作用 |
 | `impl-backfill-stable-docs` | `/impl-package:backfill-stable-docs` | 回刷稳定知识或退休 package |
 
-仅询问体系时停在本页；用户已明确阶段和动作时直达对应 skill。执行前、异常 slow path 和 completion claim 不再分派到已合并的 standalone 名称，统一进入 `execution-boundaries`；旧 Task/DAG 也只由下面的 legacy 章节承接，不创建新的独立入口。
+仅询问体系时停在本页；用户已明确阶段和动作时直达对应 skill。执行前、异常对账和 completion claim 不再分派到已合并的 standalone 名称，统一进入 `execution-boundaries`；旧 Task/DAG 也只由下面的 legacy 章节承接，不创建新的独立入口。
 
 ## 最小 package
 

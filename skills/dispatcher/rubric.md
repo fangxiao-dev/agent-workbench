@@ -1,14 +1,15 @@
 ---
 target: skills/dispatcher
-updated: 2026-09-05
+updated: 2026-09-07
 ---
 
 ## 原则
 
 - [已确认] Topic 是共享 foundation、ownership 与 closure point 的横向交付范围；不新增 Delivery Lane 对象、持久状态或第二套调度系统。
 - [已确认] 默认沿一条 lane 派发既定方向和 write-set 内的一个 baby step；同一方向和 write-set 内的机械附属跟随同一步，只有结果会改变 Topic 决策、ownership、dependency、authorization、资源 admission 或立即释放另一条 Topic 时才拆分。
-- [已确认] baby step 以主控 return point 为边界，不打包到 Topic closure；相邻 return point 只在接口稳定且不减少并行机会时合并。
-- [已确认] 消费 return 后检查受影响候选并补派，整批结束或准备 idle 时全局重扫；连续 `INCOMPLETE`、新 caller/producer 家族或 write-set 外溢统一触发一次 foundation investigation，不叠加细碎 guard。
+- [已确认] baby step 以主控 return point 为默认边界，不打包到 Topic closure；相邻 return point 只要无需新的主控裁决、不损失并行机会且不妨碍及时复核即可合并，由 Astra 按任务难度决定。
+- [已确认] 主动释放有实际收益的合格动作；预期收益不足时可暂缓，不新增评分或成本记录。消费 return 后检查受影响候选并补派，整批结束或准备 idle 时全局重扫；连续 `INCOMPLETE`、新 caller/producer 家族或 write-set 外溢统一触发一次 foundation investigation，不叠加细碎 guard。
+- [已确认] 含新增实现代码的每个 baby step return 都及时派独立 delta review；纯调查或只重跑测试且没有新增代码改动时不机械派代码审查。
 - [已确认] 优先降低主控调度负担，不以增加模板、字段、预算或持久化记录换取局部形式完整。
 - [已确认] review lane 与 work lane 的独立性和上下文连续性是两件事：reviewer 不审自己实现的增量，但默认沿同 review scope 复用并只接新的 base/head 与本次增量。（证据: R6）
 - [已确认] 逐步复核的节拍靠可观察信号维持：派审与冻结增量同一次消费，派审滞后或 delta 积压是并发过载信号；不设固定 lane 数或数字预算。（证据: R6）

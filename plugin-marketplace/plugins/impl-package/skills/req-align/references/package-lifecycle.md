@@ -1,6 +1,6 @@
 # Package Lifecycle
 
-1. **Aligning**：Decision/Spec 尚在收敛；创建不可变、带日期前缀的 package ID，但不创建运行状态。
+1. **Aligning**：Decision/Spec 尚在收敛；创建不可变、带日期前缀的 package ID，但不创建运行状态；implementation attempt 获批前也不初始化 runtime state。
 2. **Planned**：当前 attempt 的 plan 与 Composition 已批准。
 3. **Active**：`.impl-package/state.json` 已初始化并有下一动作。
 4. **Gate open**：实施/验证仍未形成 terminal verdict。
@@ -19,6 +19,9 @@ D/S/P 只是可选的可读别名；initial Decision/Spec/Plan bundle 只保留�
 - behavior-contract：更新当前 Spec，记录受影响范围并沿用 initial bundle approval。
 - decision-direction：更新当前 Decision 与当前 Spec，记录受影响范围并沿用 initial bundle approval。
 - editorial/projection-only：验证实际 diff 未改变行为、authority 或 acceptance。
+- 误把 behavior-contract 或 decision-direction 改动标成 implementation-only，会让下游继续消费已失效的 D/S；先核对 promise、acceptance boundary 与 authority 是否变化再分类。
+- 改动外观看起来像删除或普通实现变化，不足以跳过合同判断；只要 promise 或 acceptance boundary 变化，就不能走 no-contract fast path。
+- 找到相关 package 不等于获得 patch 授权；只有明确指向目标 package 的授权才能进入 follow-up，否则按 initial 路由或询问 Owner。
 
 只有实际受影响的 Plan/Ticket/Task/验证结果失效。未受影响范围保留；不得以“版本变化”为由机械清空全部执行状态。
 

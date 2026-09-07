@@ -1,6 +1,6 @@
 # Apply Runbook
 
-Apply 将 owner 的明确批准解析并记录为精确 report/CLI item ID 集合；对已展示且未变化报告的明确批量批准可直接解析。冲突项、未决选择和 destructive apply 另行裁决；集合不明确时才询问。每个 apply item 必须明确来源 package、目标 stable doc、durable delta 类型（system PRD / system architecture or ADR / context PRD / context architecture or contract / context language / module PRD / module spec）、代码或 commit 证据，以及与现有 stable docs 的关系（新增、修正、替换、删除废弃说法或 no-op）。仓库没有配置 `contextKnowledge` 时不得发明 context destination。
+Apply 将 owner 的明确批准解析并记录为精确 report/CLI item ID 集合；报告中出现的 candidate 不等于批准，对已展示且未变化报告的明确批量批准才可直接解析。冲突项、未决选择和 destructive apply 另行裁决；集合不明确时才询问。每个 apply item 必须明确来源 package、目标 stable doc、durable delta 类型（system PRD / system architecture or ADR / context PRD / context architecture or contract / context language / module PRD / module spec）、代码或 commit 证据，以及与现有 stable docs 的关系（新增、修正、替换、删除废弃说法或 no-op）。仓库没有配置 `contextKnowledge` 时不得发明 context destination。
 
 写入 stable docs 后，把对应 item 记录为 `done`（`records.done`）：
 
@@ -9,7 +9,7 @@ Apply 将 owner 的明确批准解析并记录为精确 report/CLI item ID 集�
 - 若该 item 来自 gap-catching（`origin: gap-catching`），**只写 `records.done`**，不要为了“关闭”去伪造一条 pending 再立刻关掉。
 - 若 owner 决定不回刷，也以 `done` 记录 decision 和原因；若存在对应 pending 行则一并关闭。
 
-每个批准 item 只写入唯一 canonical owner；跨 module 只写指针。首次创建 module PRD 必须满足 [module PRD 惰性创建门](constraint-extraction-and-routing.md#module-prd-惰性创建门)。
+每个批准 item 只写入唯一 canonical owner；跨 module 只写指针。不得借 apply 清理同文件的其他候选，实际写集必须能回放到批准的 item ID。普通 item approval 不包含移动、重命名、删除或 Package Retirement 的 destructive authorization。首次创建 module PRD 必须满足 [module PRD 惰性创建门](constraint-extraction-and-routing.md#module-prd-惰性创建门)。
 
 ## Destructive Apply
 

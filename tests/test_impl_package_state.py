@@ -660,7 +660,7 @@ class ImplPackageStateTests(unittest.TestCase):
             package,
             "trail",
             "append",
-            input_text=json.dumps({"kind": "fact", "subject": "attempt", "key": "attempt.in_flight", "value": True}),
+            input_text=json.dumps({"kind": "fact", "subject": "attempt", "key": "trail.envelope_valid", "value": True}),
         )
         self.write_situation_digest(package)
         dispatch = self.cli(
@@ -720,7 +720,7 @@ class ImplPackageStateTests(unittest.TestCase):
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
-        payload = json.dumps({"kind": "fact", "subject": "attempt", "key": "attempt.in_flight", "value": True})
+        payload = json.dumps({"kind": "fact", "subject": "attempt", "key": "trail.envelope_valid", "value": True})
 
         invalid = (
             (("--situation-digest", "not-a-digest"), "12-character hex"),
@@ -927,7 +927,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.init(repo, package)
         for payload in (
             {"kind": "escape", "subject": "attempt", "deviation": "manual", "reason": "fixture"},
-            {"kind": "fact", "subject": "attempt", "key": "attempt.in_flight", "value": True},
+            {"kind": "fact", "subject": "attempt", "key": "trail.envelope_valid", "value": True},
             {"kind": "worker-return", "subject": "attempt", "outcome": "DONE"},
         ):
             result = self.cli(repo, package, "trail", "append", input_text=json.dumps(payload))
@@ -964,7 +964,7 @@ class ImplPackageStateTests(unittest.TestCase):
         row = json.loads((package / "execution/initial/trail.jsonl").read_text(encoding="utf-8"))
         self.assertEqual(row["value"], value)
 
-    def test_trail_append_rejects_unknown_fact_key_with_nearest_key(self) -> None:
+    def test_trail_append_rejects_removed_fact_key(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
@@ -973,7 +973,7 @@ class ImplPackageStateTests(unittest.TestCase):
             package,
             "trail",
             "append",
-            input_text=json.dumps({"kind": "fact", "subject": "attempt", "key": "attempt.in_fligh", "value": True}),
+            input_text=json.dumps({"kind": "fact", "subject": "attempt", "key": "attempt.in_flight", "value": True}),
             ok=False,
         )
         self.assertIn("attempt.in_flight", result.stderr)

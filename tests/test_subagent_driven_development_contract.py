@@ -64,7 +64,7 @@ def test_dev_frontloads_the_business_control_loop() -> None:
     loop = dev.index("## 业务控制循环")
     assert loop < dev.index("## Owner 边界")
     assert loop < dev.index("## Restore")
-    assert loop < dev.index("## Ticket 激活 preflight")
+    assert loop < dev.index("## State、ER 与 Trail")
     for step in (
         "刷新事实",
         "选择动作",
@@ -145,13 +145,25 @@ def test_sdd_evals_keep_coherent_work_together_and_replan_thrashing() -> None:
     assert "foundation investigation first" in thrash["expectations"]
 
 
-def test_sdd_eval_requires_return_point_authorization_before_follow_up() -> None:
+def test_sdd_eval_allows_difficulty_based_merge_but_keeps_review_boundary() -> None:
     sdd_evals = json.loads((SDD / "evals" / "evals.json").read_text(encoding="utf-8"))["evals"]
 
     stepwise = next(case for case in sdd_evals if "后端事务语义" in case["prompt"])
 
-    assert "主控验收后再授权下一段" in stepwise["expected_output"]
+    assert "按任务难度判断" in stepwise["expected_output"]
+    assert "有代码增量的实现步骤及时派独立 reviewer" in stepwise["expected_output"]
     assert "独立 PostgreSQL/browser 验证单独派发" in stepwise["expected_output"]
+
+
+def test_dispatcher_owns_topic_definition_and_sdd_points_to_it() -> None:
+    dispatcher = read("skills/dispatcher/SKILL.md")
+    sdd = (SDD / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "Topic 是共享 foundation、ownership 与 closure point" in dispatcher
+    assert "Topic、baby step、当前批次、receipt、worker return 与 idle" in sdd
+    assert "以 `$dispatcher` 为准" in sdd
+    assert "Topic 是共享 foundation、ownership 与 closure point 的横向交付范围" not in sdd
+    assert "所有已解锁的合格动作都已进入当前批次" not in sdd
 
 
 def test_dispatcher_and_sdd_are_peer_guidance_for_upstream_and_downstream() -> None:

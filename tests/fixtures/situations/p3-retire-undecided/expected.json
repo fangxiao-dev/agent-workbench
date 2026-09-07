@@ -1,10 +1,8 @@
 {
   "source": "kaispan-dev/docs/implementations/legacy-impl-plans-retirement — original .impl-package/runtime-state.json contractVersion 3.2",
   "scenario": "legacy retirement ledger 表明 Ticket 已不再需要，但尚未决定 waived 还是 superseded；正文已脱敏。",
-  "expected_primary": [
-    "ticket.disposition.retire-undecided"
-  ],
-  "expected_layer": "P3",
+  "expected_primary": [],
+  "expected_layer": null,
   "expected_secondary": [],
   "must_not_hit": [
     "package.record.state-missing",

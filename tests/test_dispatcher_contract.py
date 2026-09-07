@@ -61,6 +61,15 @@ def test_topic_first_gate_splits_only_decision_changing_results() -> None:
     assert "继续切分" in gate
 
 
+def test_topic_first_gate_allows_difficulty_based_adjacent_step_merge() -> None:
+    skill = SKILL.read_text(encoding="utf-8")
+    gate = skill.split("## Topic-first 派发门槛", 1)[1].split("## 调度循环", 1)[0]
+
+    for marker in ("无需新的主控裁决", "不损失并行机会", "不妨碍及时复核", "由 Astra 根据任务难度决定"):
+        assert marker in gate
+    assert "后段只是机械接线" not in gate
+
+
 def test_breadth_gate_does_not_use_search_scope_or_file_count_as_a_limit() -> None:
     skill = SKILL.read_text(encoding="utf-8")
     gate = skill.split("## Topic-first 派发门槛", 1)[1].split("## 调度循环", 1)[0]
@@ -85,7 +94,7 @@ def test_dispatcher_refills_after_return_and_stops_thrashing() -> None:
 def test_dispatcher_evals_cover_admission_batch_receipt_return_and_idle() -> None:
     evals = json.loads(EVALS.read_text(encoding="utf-8"))["evals"]
 
-    assert [case["id"] for case in evals] == [1, 2, 3, 4, 5, 6, 7]
+    assert [case["id"] for case in evals] == list(range(1, 11))
     source_inventory = next(case for case in evals if "shared runtime seam" in case["prompt"])
     broad_search = next(case for case in evals if "整个仓库搜索" in case["prompt"])
     multi_file = next(case for case in evals if "多个紧密相关文件" in case["prompt"])
@@ -93,6 +102,9 @@ def test_dispatcher_evals_cover_admission_batch_receipt_return_and_idle() -> Non
     lifecycle = next(case for case in evals if "同一 Topic" in case["prompt"] and "新 Topic" in case["prompt"])
     anti_thrash = next(case for case in evals if "连续两次返回 INCOMPLETE" in case["prompt"])
     future_conflict = next(case for case in evals if "未来都会修改同一个 controller" in case["prompt"])
+    merge = next(case for case in evals if "不损失并行机会" in case["prompt"])
+    value = next(case for case in evals if "预期产出很小" in case["prompt"])
+    review = next(case for case in evals if "新的代码 diff" in case["prompt"])
 
     assert "保持一个 Topic" in source_inventory["expected_output"]
     assert "允许派发" in broad_search["expected_output"]
@@ -102,6 +114,18 @@ def test_dispatcher_evals_cover_admission_batch_receipt_return_and_idle() -> Non
     assert "foundation investigation" in anti_thrash["expected_output"]
     assert "当前两个 baby step" in future_conflict["expected_output"] and "`PARALLEL`" in future_conflict["expected_output"]
     assert "冲突步骤到达" in future_conflict["expected_output"] and "`SERIAL`" in future_conflict["expected_output"]
+    assert "按任务难度" in merge["expected_output"] and "合并" in merge["expected_output"]
+    assert "暂缓" in value["expected_output"] and "dependency blocked" in value["expected_output"]
+    assert "独立 review lane" in review["expected_output"] and "不机械派代码审查" in review["expected_output"]
+
+
+def test_dispatcher_uses_value_based_release_and_conditional_delta_review() -> None:
+    skill = SKILL.read_text(encoding="utf-8")
+
+    assert "有实际收益" in skill
+    assert "预期收益不足" in skill
+    assert "没有新增代码改动时，不机械派代码审查" in skill
+    assert "及时派轻量 delta review" in skill
 
 
 def test_evals_are_wellformed_read_only_scenarios() -> None:

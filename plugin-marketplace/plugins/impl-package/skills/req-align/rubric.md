@@ -1,6 +1,6 @@
 ---
 target: plugin-marketplace/plugins/impl-package/skills/req-align
-updated: 2026-09-05
+updated: 2026-09-07
 ---
 ## 原则
 
@@ -11,16 +11,9 @@ updated: 2026-09-05
 - [已确认] 每个新建或被修订的 Spec 都生成从属 `contract-design.md`；默认 `detailed`，只有 `spec.md` 已完整承担精确语义时才使用 `not-required` 并写明理由。文件不新增独立 revision、approval 或生命周期。（证据: R5, R7）
 - [待验证] Contract 漏检优化先收敛在 Spec 阶段，不因单次事故同时扩张 Plan、Task 验收或其他下游流程。（证据: R6）
 - [待验证] Spec Gate 规则表达跨业务场景成立的 contract invariant；具体事故只作为 eval，不进入正式流程规则。（证据: R6）
+- [已确认 · 2026-09-07] `常见误判`按真重复、执行提醒、纯回归测试价值三分：真重复只保留一个权威定义并用指针承接，执行提醒下沉到按需读取的 reference，只有不需要主控预先知道的内容进入 evals。（证据: R8）
 
 ## 决策记录（滚动，最近 ≤5 轮）
-
-### R2 · 2026-07-23
-
-- 采纳「blocking decision uncertainty」— feasibility / architecture-fit 的未知项只要反向答案会改变合同，就在 Decision Gate 关闭；read-only 调查直接执行，需授权或副作用的调查则持久化 BLOCKED。D/S gate 与已记录下游证据只推导 handoff 展示状态，不升级 schema。
-
-### R3 · 2026-07-25
-
-- 待验证「业务可读 Focused PRD」— 通用模板回答受益者/情境、问题/触发、结果/价值、核心行为、边界和成功信号；产品深挖由需求信号路由，字段合同、状态机、错误合同与实施步骤仍分别留在 Spec/Plan。
 
 ### R4 · 2026-07-25
 
@@ -41,3 +34,7 @@ updated: 2026-09-05
 - 采纳 touch-time backfill；未触及的 legacy package 不做批量迁移。
 - 明确额外 independent review 只由 accepted Track C / Spec fidelity finding 触发，不加入初始 Spec Gate。
 - [已确认 · 2026-09-05] owning-stage 主 thread 直接更新业务文档并裁决语义，运行状态仍由主 thread 调用语义 CLI 更新；不引入记账 subagent 作为第二个 writer。
+
+### R8 · 2026-09-07
+
+- 采纳 T7 的三分机制：`req-align` 主路径不逐步重复结构性误判提示；已有规则由对应 reference 承载，主路径只保留按需读取指针，纯回归价值由 evals 覆盖。

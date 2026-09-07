@@ -6,14 +6,14 @@
 
 Codex Hook 已显式激活当前 package 时，`SessionStart` 可注入 `Impl-Package Resume Capsule v1`。Capsule 只提供 session/package、Attempt、HEAD、state/Gate 读取状态、situation/action 与 preview digest；它不拥有业务裁决，也不充当 Evidence、Acceptance、Gate、closure 或 dispatch credential。
 
-Capsule 与当前 package/HEAD/approval 匹配时，可作为本次恢复入口；首次恢复缺失/失配 Capsule、Hook 不可用、读取 warning，或发生未知外部状态变化、CAS 失败、部分写入时，执行下方完整恢复顺序。已知 CLI 成功更新后消费记账回执，按 delta 更新当前事实，不重走完整恢复。普通 SDD 不激活 package，因此不产生 Capsule。
+Capsule 与当前 package/HEAD/approval 匹配时，可作为本次恢复入口；首次恢复缺失/失配 Capsule、Hook 不可用、读取 warning，或发生未知外部状态变化、CAS 失败、部分写入时，执行下方完整恢复顺序。已知 CLI 成功更新后按 delta 更新当前事实，不重走完整恢复。普通 SDD 不激活 package，因此不产生 Capsule。
 
 ## 恢复顺序
 
 1. 运行 `package validate`；projection drift 时先运行 `package refresh-progress`。
 2. 打开 `progress.md`，确认 current Attempt、lifecycle、Gate、blocker、active checkpoint 和 next action。
 3. 根据 typed Ticket dependency 选择业务动作；Progress/checkpoint 不授权 dispatch。
-4. 对当前业务候选应用 `$dispatcher` 的 Topic-first admission，形成当前 baby step 批次并消费 worker return；每次返回后检查受影响候选补派，整批结束或准备 idle 时全局扫描；idle 不等于 package closed。
+4. 对当前业务候选交给 `$dispatcher` 做 Topic-first admission；Dispatcher 负责当前批次、receipt、每次 return 后的受影响候选补派、review pacing、全局扫描与 idle；idle 不等于 package closed。
 5. 只打开当前动作需要的 Plan/Ticket/Execution Record/evidence；旧 package 才按需读取 DAG/Handoff。
 6. 消费结果后使用语义 Ticket/evidence/recovery/trail 命令写权威事实；真正 dispatch 前用普通 `situation.py render` 生成当前 credential。
 

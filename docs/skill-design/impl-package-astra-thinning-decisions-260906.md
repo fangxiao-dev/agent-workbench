@@ -1,7 +1,9 @@
 # Impl-Package 打薄讨论记录
 
-日期：2026-09-06
-状态：T1–T8、E1–E3、D1–D3 的决定及 D2 承接方案已确认，T7/D1 的复核补充已校正（T7 范围含 backfill-stable-docs）。E4–E5 保留观察。T9 本轮取舍已结束：32 个 fact key 中，删除 22 个声明入口（其中 5 个保留现有计算或结构化输入判定）、保留 2 个、暂缓 8 个；原处理分类不作为实施依据。T10 已确认通过 Codex hook 接入运行检查，2026-09-07 复核后收窄为只保留 `SessionStart` capsule 扩展（`PostToolUse`/`SubagentStop`/硬拦截三项撤销）。DSH 不在本轮范围内。backfill-stable-docs 核查健康、无需改动；do-review Loop 轮次上限留作观察。决策记录已更新，尚未应用 Skill 或代码修改。
+日期：2026-09-06（落地施工：2026-09-07）
+状态：T1–T8、E1–E3、D1–D3 的决定及 D2 承接方案已确认，T7/D1 的复核补充已校正（T7 范围含 backfill-stable-docs）。E4–E5 保留观察。T9 本轮取舍已结束：32 个 fact key 中，删除 22 个声明入口（其中 5 个保留现有计算或结构化输入判定）、保留 2 个、暂缓 8 个；原处理分类不作为实施依据。T10 已确认通过 Codex hook 接入运行检查，2026-09-07 复核后收窄为只保留 `SessionStart` capsule 扩展（`PostToolUse`/`SubagentStop`/硬拦截三项撤销）。DSH 不在本轮范围内。backfill-stable-docs 核查健康、无需改动；do-review Loop 轮次上限留作观察。
+
+**2026-09-07 落地完成**：T1、T3、T4、T7（含 dev-with-track/Dispatcher/SDD 定义去重与 req-align/impl-planning/execution-boundaries/backfill-stable-docs 的常见误判三分）、T8、T9（situation.py/situations.yaml/situation-inputs.md/protocols.json/回归 fixture）、D1（bookkeeper 角色与 role.md 删除、`standing-bookkeeper` 孤儿 evals 与悬空 intake-backlog 引用清理、impl-planning/plan-review 的 bound-writer 修正）、D2（dev-with-track 与 execution-boundaries 的 Ticket 激活 preflight 删除）均已通过 Codex 分批实施并交叉核对；`pytest tests/` 598 项全部通过。D3（situations.yaml 的 `ticket-boundary-handoff` 自动换 session 触发删除，含 `situation-inputs.md`/`protocols.json`/回归测试同步）与 `standing-bookkeeper/` 空目录清理已由主控直接完成（改动小、边界明确，未经 Codex 派发）。至此 T1–T10、D1–D3 本轮范围内的全部决定均已落地；`pytest tests/` 598 项全部通过。
 
 ## 讨论边界
 

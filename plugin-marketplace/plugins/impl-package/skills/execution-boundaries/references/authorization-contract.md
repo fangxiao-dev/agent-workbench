@@ -9,3 +9,9 @@
 本合同以现有 package 内容、initial approval、Git commit 和实际 diff 作为唯一内容、批准、版本与审计依据。
 
 委派执行仍由 `/impl-package:subagent-driven-development` 编排；本合同只传递任务特定授权，不定义 worker 角色或业务 prompt。
+
+## 渐进读取常见误判
+
+- 跳过 anchor 就开始读材料，会把 package 或 authority 已漂移的工作区误当成同一任务。
+- 没有先建立 control map，下一动作可能越过 write-set，或漏掉已经存在的 blocker/Gate 边界。
+- 把全量材料读取当成恢复证明，会增加选择性漏读；只读 active unit 才能让当前动作的证据边界保持可辨。

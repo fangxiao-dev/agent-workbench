@@ -373,7 +373,7 @@ def test_resume_capsule_supplies_facts_while_runtime_reference_keeps_the_fallbac
     )
     boundaries = (PLUGIN / "skills" / "execution-boundaries" / "SKILL.md").read_text(encoding="utf-8")
 
-    restore = dev.split("## Restore", 1)[1].split("## Ticket 激活 preflight", 1)[0]
+    restore = dev.split("## Restore", 1)[1].split("## State、ER 与 Trail", 1)[0]
     assert "Impl-Package Resume Capsule v1" in dev
     assert "references/runtime-protocol.md" in restore
     assert "activate --package <package>" in restore

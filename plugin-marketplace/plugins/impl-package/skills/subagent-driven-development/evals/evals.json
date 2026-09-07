@@ -95,9 +95,9 @@
     {
       "id": 14,
       "prompt": "只读模拟：同一 implementer/work lane 依次处理后端事务语义、Controller/DTO/generated contracts、UI 动作与组件测试、独立 PostgreSQL/browser 验证。说明每段的授权与 lane 关系；禁止实际修改文件或派发 worker。",
-      "expected_output": "四段分别形成 baby step；同一 implementer/work lane 可以连续承接，但每段都先 return 并由主控验收后再授权下一段；独立 PostgreSQL/browser 验证单独派发。",
+      "expected_output": "前三段是否合并由 Dispatcher 按任务难度判断：无需新的主控裁决、不损失并行机会且不妨碍及时复核时可以合并；若保留多个实际实现步骤，同一 implementer/work lane 也只能在主控消费 return 后承接下一段，每个有代码增量的实现步骤及时派独立 reviewer；独立 PostgreSQL/browser 验证单独派发。",
       "files": [],
-      "expectations": ["按 return point 逐步授权。", "同一 implementer/work lane 可以连续承接。", "独立系统验证单独派发。"]
+      "expectations": ["按收益和任务难度判断 return point 是否合并。", "同一 implementer/work lane 可以在主控消费 return 后连续承接。", "有代码增量的实现步骤及时独立 review。", "独立系统验证单独派发。"]
     }
   ]
 }

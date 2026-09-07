@@ -53,7 +53,6 @@ _PROTOCOL_PLACEHOLDERS = {
     "{review_track_values}": " | ".join(REVIEW_TRACK_VALUES),
 }
 _PROTOCOL_REQUIRED_PLACEHOLDERS = {
-    "ticket.review.required-trigger": tuple(_PROTOCOL_PLACEHOLDERS),
     "attempt.review.terminal-coverage-incomplete": tuple(_PROTOCOL_PLACEHOLDERS),
 }
 assert set(_PROTOCOL_PLACEHOLDERS) == {
@@ -78,45 +77,21 @@ LIVE_PACKAGE_REFERENCE_RE = re.compile(
 )
 RETIRED_PACKAGES_REL = "docs/implementations/retired.json"
 
-# Facts are intentionally a closed namespace.  The aliases below are only for
-# already-published legacy trail rows; new rows must use the canonical key.
+# Facts are intentionally a closed namespace for explicit trail declarations.
 FACT_KEYS = frozenset(
     {
-        "package.validate.projection_drift",
-        "attempt.session_resumed",
-        "attempt.in_flight",
-        "attempt.handoff_or_long_task",
-        "attempt.integration_carrier_available",
-        "attempt.integration_evidence_available",
-        "attempt.manual_verification_owner",
-        "attempt.manual_verification_result_present",
-        "attempt.completion_claim_pending",
-        "attempt.terminal_coverage_complete",
         "ticket.blocker_maybe_resolved",
-        "ticket.no_longer_needed",
         "ticket.release_edge_rechecked",
-        "ticket.review_required",
-        "ticket.review_trigger",
-        "ticket.post_fix_regression_pending",
         "review.canonical_summary",
         "review.terminal_summary",
-        "evidence.sources_uniquely_decide",
-        "git.comparison_head_fixed",
-        "git.accepted_seam_changed",
         "trail.anchor_mismatch",
-        "trail.bookkeeper_partial_write",
         "trail.checkpoint_projection_race",
-        "trail.checkpoint_refresh_needed",
         "trail.envelope_valid",
-        "trail.handoff_in_flight",
         "trail.handoff_recovery_needed",
         "trail.handoff_target_corrected",
-        "trail.judgment_unfiled",
         "trail.reviewer_unavailable",
-        "finding.closure_review_pending",
     }
 )
-FACT_KEY_ALIASES = {"ticket.judgment_unfiled": "trail.judgment_unfiled"}
 
 
 def describe_unknown_fact_keys(keys: tuple[str, ...]) -> str:
@@ -690,8 +665,7 @@ def _parse_bool(value: Any) -> bool | None:
 def _canonical_fact_key(value: Any) -> str | None:
     if not isinstance(value, str) or not value.strip():
         return None
-    key = value.strip()
-    return FACT_KEY_ALIASES.get(key, key)
+    return value.strip()
 
 
 def _timestamp_sort_key(value: str | None) -> tuple[int, int, float | str]:
@@ -1619,12 +1593,6 @@ class FactContext:
             return explicit
         return self._missing_fact(key)
 
-    def _trail_availability(self, key: str) -> Fact:
-        explicit = self._explicit_bool(key)
-        if explicit is not None:
-            return explicit
-        return self._missing_fact(key)
-
     def _last_worker_mode(self) -> Fact:
         explicit = self._explicit("trail.last_worker_mode")
         if explicit is not None:
@@ -1954,10 +1922,7 @@ def _when_package_validate_projection_drift(context: FactContext) -> Fact:
     validation = context.snapshot.validation_result
     if validation is not None:
         return _fact_value(validation.projection_drift)
-    explicit = context._explicit_bool("package.validate.projection_drift")
-    if explicit is not None:
-        return explicit
-    return context.unknown("缺少结构化 validation result 或 package.validate.projection_drift fact")
+    return context.unknown("缺少结构化 validation result")
 
 
 def _when_attempt_session_resumed(context: FactContext) -> Fact:
@@ -2012,9 +1977,6 @@ def _when_attempt_ready_ticket_count(context: FactContext) -> Fact:
 
 
 def _when_attempt_in_flight(context: FactContext) -> Fact:
-    explicit = context._explicit_bool("attempt.in_flight")
-    if explicit is not None:
-        return explicit
     value = context._open_dispatch()
     return _fact_value(value) if value is not None else context.unknown("trail.jsonl 不存在或无法读取")
 
@@ -2083,10 +2045,6 @@ def _when_trail_last_outcome(context: FactContext) -> Fact:
     return context.last_outcome()
 
 
-def _when_trail_handoff_in_flight(context: FactContext) -> Fact:
-    return context._trail_signal("trail.handoff_in_flight")
-
-
 def _when_trail_anchor_mismatch(context: FactContext) -> Fact:
     return context._trail_signal("trail.anchor_mismatch")
 
@@ -2099,20 +2057,8 @@ def _when_trail_handoff_target_corrected(context: FactContext) -> Fact:
     return context._trail_signal("trail.handoff_target_corrected")
 
 
-def _when_trail_checkpoint_refresh_needed(context: FactContext) -> Fact:
-    return context._trail_signal("trail.checkpoint_refresh_needed")
-
-
-def _when_trail_judgment_unfiled(context: FactContext) -> Fact:
-    return context._trail_signal("trail.judgment_unfiled")
-
-
 def _when_trail_checkpoint_projection_race(context: FactContext) -> Fact:
     return context._trail_signal("trail.checkpoint_projection_race")
-
-
-def _when_trail_bookkeeper_partial_write(context: FactContext) -> Fact:
-    return context._trail_signal("trail.bookkeeper_partial_write")
 
 
 def _when_trail_reviewer_unavailable(context: FactContext) -> Fact:
@@ -2121,24 +2067,6 @@ def _when_trail_reviewer_unavailable(context: FactContext) -> Fact:
 
 def _when_trail_decision_without_result(context: FactContext) -> Fact:
     return context._decision_without_result()
-
-
-def _when_evidence_sources_uniquely_decide(context: FactContext) -> Fact:
-    return context._manual_or_explicit("evidence.sources_uniquely_decide")
-
-
-def _when_ticket_review_required(context: FactContext) -> Fact:
-    explicit = context._explicit_bool("ticket.review_required")
-    if explicit is not None:
-        return explicit
-    rows = context._subject_rows()
-    if rows is None or context._trail_is_empty():
-        return context.unknown("trail.jsonl 不存在或无法读取")
-    if any(str(row.get("review_state", "")).upper() == "PENDING_REVIEW" for row in rows):
-        return _fact_value(True)
-    if context.ticket is not None and re.search(r"(?i)review\s*[:：=]\s*required", context.ticket.text):
-        return _fact_value(True)
-    return _fact_value(False)
 
 
 def _when_trail_direct_evidence_returned(context: FactContext) -> Fact:
@@ -2166,10 +2094,6 @@ def _when_evidence_indexed(context: FactContext) -> Fact:
         if link is not None
     }
     return _fact_value(all(link in indexed for link in links))
-
-
-def _when_ticket_review_trigger(context: FactContext) -> Fact:
-    return context._manual_or_explicit("ticket.review_trigger")
 
 
 def _when_ticket_safety_invariant_unfalsified(context: FactContext) -> Fact:
@@ -2337,9 +2261,6 @@ def _diff_has_source_changes(context: FactContext, base: str, *, label: str) -> 
 
 
 def _when_git_accepted_seam_changed(context: FactContext) -> Fact:
-    explicit = context._explicit_bool("git.accepted_seam_changed")
-    if explicit is not None:
-        return explicit
     if context.snapshot.head is None:
         return context.unknown("Git HEAD 无法读取")
     acceptance_revision = _resolved_satisfied_acceptance_revision(context)
@@ -2359,15 +2280,6 @@ def _when_ticket_revalidation_pending(context: FactContext) -> Fact:
     return _when_ticket_state(context)
 
 
-def _when_ticket_no_longer_needed(context: FactContext) -> Fact:
-    explicit = context._explicit_bool("ticket.no_longer_needed")
-    if explicit is not None:
-        return explicit
-    if context.ticket is not None and re.search(r"(?im)^\s*[-*]?\s*(?:no longer needed|不再需要)\s*[:：=]\s*(true|yes|是)\b", context.ticket.text):
-        return _fact_value(True)
-    return context.unknown("不再需要是业务判断，列出的机械输入没有裁决来源")
-
-
 def _when_finding_review_track(context: FactContext) -> Fact:
     finding = context._finding()
     if not context.snapshot.findings.present:
@@ -2384,23 +2296,6 @@ def _when_finding_source_recheck_pending(context: FactContext) -> Fact:
     if finding is None:
         return context.unknown("找不到该 finding 的结构化记录")
     return _fact_value(finding.source_recheck_pending)
-
-
-def _when_finding_closure_review_pending(context: FactContext) -> Fact:
-    explicit = context._explicit_bool("finding.closure_review_pending")
-    if explicit is not None:
-        return explicit
-    if not context.snapshot.findings.present:
-        return context.unknown("execution-findings.md 不存在或无法读取")
-    finding = context._finding()
-    if finding is None:
-        return context.unknown("找不到该 finding 的结构化记录")
-    if re.search(r"(?i)closed|resolved|retired|complete|已关闭|已解决|已完成", finding.status or ""):
-        return _fact_value(False)
-    block = finding.block.lower()
-    if re.search(r"closure.{0,30}(?:pending|awaiting)|(?:pending|awaiting).{0,30}closure", block):
-        return _fact_value(True)
-    return _fact_value(False)
 
 
 def _when_finding_grading_pending(context: FactContext) -> Fact:
@@ -2435,31 +2330,8 @@ def _when_attempt_near_terminal_gate(context: FactContext) -> Fact:
     return _fact_value(gate.verdict is not None)
 
 
-def _when_attempt_manual_verification_owner(context: FactContext) -> Fact:
-    return context._manual_or_explicit("attempt.manual_verification_owner")
-
-
-def _when_attempt_manual_verification_result_present(context: FactContext) -> Fact:
-    return context._manual_or_explicit("attempt.manual_verification_result_present")
-
-
-def _when_attempt_integration_evidence_available(context: FactContext) -> Fact:
-    return context._trail_availability("attempt.integration_evidence_available")
-
-
-def _when_attempt_integration_carrier_available(context: FactContext) -> Fact:
-    return context._trail_availability("attempt.integration_carrier_available")
-
-
-def _when_attempt_completion_claim_pending(context: FactContext) -> Fact:
-    return context._manual_or_explicit("attempt.completion_claim_pending")
-
-
 def _when_attempt_terminal_coverage_complete(context: FactContext) -> Fact:
     summary_fact = context._latest_fact("review.terminal_summary")
-    legacy = context._explicit_bool("attempt.terminal_coverage_complete")
-    if summary_fact is None and legacy is not None and legacy.known and legacy.value is False:
-        return legacy
     near_terminal = _when_attempt_all_tickets_terminal(context)
     if not near_terminal.known:
         return near_terminal
@@ -2573,47 +2445,6 @@ def _when_gate_present(context: FactContext) -> Fact:
     return _fact_value(context.snapshot.gate.present)
 
 
-def _when_git_comparison_revision_matches_acceptance(context: FactContext) -> Fact:
-    gate = context.snapshot.gate
-    if gate.verdict == "pass":
-        if not gate.comparison_commit:
-            return context.unknown("pass gate 缺少 comparison commit")
-        comparison_commit = gate.comparison_commit
-    elif not gate.present:
-        pending = _when_attempt_completion_claim_pending(context)
-        if not pending.known:
-            return pending
-        if not pending.value:
-            return _fact_value(False)
-        if context.snapshot.head is None:
-            return context.unknown("准备判 pass 时无法读取当前 Git HEAD")
-        comparison_commit = context.snapshot.head
-    else:
-        return _fact_value(False)
-    state = context.state()
-    if state is None:
-        return context.state_required() or context.unknown("state.json 无法判定")
-    resolved_comparison = context.snapshot.reader.resolve_commit(comparison_commit)
-    if resolved_comparison is None:
-        return context.unknown("comparison commit 无法解析")
-    for identifier, row in state.get("tickets", {}).items():
-        if not isinstance(row, dict) or row.get("state") != "SATISFIED":
-            continue
-        acceptance = row.get("acceptance")
-        if not isinstance(acceptance, dict) or not isinstance(acceptance.get("revision"), str):
-            return context.unknown(f"Ticket {identifier} acceptance revision 无法解析")
-        resolved_acceptance = context.snapshot.reader.resolve_commit(acceptance["revision"])
-        if resolved_acceptance is None:
-            return context.unknown(f"Ticket {identifier} acceptance revision 无法解析")
-        if resolved_acceptance != resolved_comparison:
-            return _fact_value(False)
-    return _fact_value(True)
-
-
-def _when_git_comparison_head_fixed(context: FactContext) -> Fact:
-    return context._trail_availability("git.comparison_head_fixed")
-
-
 def _when_git_contract_changed_since_last_trail(context: FactContext) -> Fact:
     base, advanced = context._git_since_last_trail()
     if base is None:
@@ -2632,10 +2463,6 @@ def _when_git_contract_changed_since_last_trail(context: FactContext) -> Fact:
     return _fact_value(False)
 
 
-def _when_attempt_handoff_or_long_task(context: FactContext) -> Fact:
-    return context._manual_or_explicit("attempt.handoff_or_long_task")
-
-
 def _when_intake_has_backlog(context: FactContext) -> Fact:
     intake = context.snapshot.intake
     if not intake.present:
@@ -2644,10 +2471,6 @@ def _when_intake_has_backlog(context: FactContext) -> Fact:
         return context.unknown(intake.error)
     assert intake.has_backlog is not None
     return _fact_value(intake.has_backlog)
-
-
-def _when_ticket_post_fix_regression_pending(context: FactContext) -> Fact:
-    return context._trail_signal("ticket.post_fix_regression_pending")
 
 
 WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
@@ -2672,21 +2495,14 @@ WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "ticket.investigation_context_clear": _when_ticket_investigation_context_clear,
     "evidence.count": _when_evidence_count,
     "trail.last_outcome": _when_trail_last_outcome,
-    "trail.handoff_in_flight": _when_trail_handoff_in_flight,
     "trail.anchor_mismatch": _when_trail_anchor_mismatch,
     "trail.handoff_recovery_needed": _when_trail_handoff_recovery_needed,
     "trail.handoff_target_corrected": _when_trail_handoff_target_corrected,
-    "trail.checkpoint_refresh_needed": _when_trail_checkpoint_refresh_needed,
-    "trail.judgment_unfiled": _when_trail_judgment_unfiled,
     "trail.checkpoint_projection_race": _when_trail_checkpoint_projection_race,
-    "trail.bookkeeper_partial_write": _when_trail_bookkeeper_partial_write,
     "trail.reviewer_unavailable": _when_trail_reviewer_unavailable,
     "trail.decision_without_result": _when_trail_decision_without_result,
-    "evidence.sources_uniquely_decide": _when_evidence_sources_uniquely_decide,
-    "ticket.review_required": _when_ticket_review_required,
     "trail.direct_evidence_returned": _when_trail_direct_evidence_returned,
     "evidence.indexed": _when_evidence_indexed,
-    "ticket.review_trigger": _when_ticket_review_trigger,
     "ticket.safety_invariant_unfalsified": _when_ticket_safety_invariant_unfalsified,
     "trail.incomplete_count": _when_trail_incomplete_count,
     "trail.last_worker_mode": _when_trail_last_worker_mode,
@@ -2700,18 +2516,11 @@ WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "evidence.new_claim_conflict": _when_evidence_new_claim_conflict,
     "git.acceptance_revision_diverged": _when_git_acceptance_revision_diverged,
     "git.head_advanced_since_last_trail": _when_git_head_advanced_since_last_trail,
-    "ticket.no_longer_needed": _when_ticket_no_longer_needed,
     "finding.review_track": _when_finding_review_track,
     "finding.source_recheck_pending": _when_finding_source_recheck_pending,
-    "finding.closure_review_pending": _when_finding_closure_review_pending,
     "finding.grading_pending": _when_finding_grading_pending,
     "findings.triage_pending": _when_findings_triage_pending,
     "attempt.near_terminal_gate": _when_attempt_near_terminal_gate,
-    "attempt.manual_verification_owner": _when_attempt_manual_verification_owner,
-    "attempt.manual_verification_result_present": _when_attempt_manual_verification_result_present,
-    "attempt.integration_evidence_available": _when_attempt_integration_evidence_available,
-    "attempt.integration_carrier_available": _when_attempt_integration_carrier_available,
-    "attempt.completion_claim_pending": _when_attempt_completion_claim_pending,
     "attempt.terminal_coverage_complete": _when_attempt_terminal_coverage_complete,
     "ticket.acceptance_conditions_satisfied": _when_ticket_acceptance_conditions_satisfied,
     "ticket.release_edge_rechecked": _when_ticket_release_edge_rechecked,
@@ -2719,13 +2528,9 @@ WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "attempt.terminal_gate_pending": _when_attempt_terminal_gate_pending,
     "gate.present": _when_gate_present,
     "gate.verdict": _when_gate_verdict,
-    "git.comparison_revision_matches_acceptance": _when_git_comparison_revision_matches_acceptance,
     "git.accepted_seam_changed": _when_git_accepted_seam_changed,
-    "git.comparison_head_fixed": _when_git_comparison_head_fixed,
     "git.contract_changed_since_last_trail": _when_git_contract_changed_since_last_trail,
-    "attempt.handoff_or_long_task": _when_attempt_handoff_or_long_task,
     "intake.has_backlog": _when_intake_has_backlog,
-    "ticket.post_fix_regression_pending": _when_ticket_post_fix_regression_pending,
 }
 
 

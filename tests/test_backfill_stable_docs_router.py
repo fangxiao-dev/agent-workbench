@@ -12,6 +12,9 @@ SCHEMA = json.loads(
 VERIFY_RUNBOOK = (
     ROOT / "plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/references/verify-runbook.md"
 ).read_text(encoding="utf-8")
+RUBRIC = (ROOT / "plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/rubric.md").read_text(
+    encoding="utf-8"
+)
 
 
 def test_audit_apply_verify_boundaries_are_explicit() -> None:
@@ -30,4 +33,17 @@ def test_paths_and_versions_use_the_lightweight_contract() -> None:
     assert r"(^|/)\.\.(/|$)" in path_contract["not"]["pattern"]
     assert r"[*?\[]" in path_contract["not"]["pattern"]
     assert "target Git commit" in VERIFY_RUNBOOK
-    assert "package-retirement" not in TEXT
+    assert "Package Retirement Runbook" in TEXT
+
+
+def test_common_misjudgments_use_progressive_disclosure() -> None:
+    assert "常见误判" not in TEXT
+    for marker in (
+        "Audit Runbook",
+        "Source Selection",
+        "Apply Runbook",
+        "Package Retirement Runbook",
+    ):
+        assert marker in TEXT
+    assert "T7 常见误判分流" in RUBRIC
+    assert "当前 backfill 没有此类条目" in RUBRIC

@@ -12,6 +12,8 @@
 - [已确认] review topology 与 coverage 由 `do-review` 拥有；本 skill 只消费 terminal-final coverage 和 finding closure 结论。
 - [已确认] 只有 parent 已接受并归类的 Track C / Spec fidelity finding 才在 fix 前消费一次独立 source recheck；该机制不新增 Ticket/Attempt 状态，也不扩张修复调度边界。
 - [已确认] 长任务先写 durable state/ER/Gate，再输出最终叙述；Ticket-only 的 `INCOMPLETE` 恢复事实使用 active checkpoint/Attempt ER，旧 Task package 才使用 Task Handoff。
-- [已确认] `$dispatcher` 与 `/impl-package:subagent-driven-development` 是平级指导：前者面向上游 Topic-first admission、baby step 批次、dispatch/return/idle，后者面向下游 bounded worker 的 Topic/dependency/mode/execution-lane/lifecycle；本 Skill 选择业务动作并消费两者结果。
+- [已确认] `$dispatcher` 与 `/impl-package:subagent-driven-development` 是平级指导：前者面向上游 Topic-first admission、baby step 批次、dispatch/return/idle，后者承接已准入 Topic 并负责下游 bounded worker 的 dependency/mode/execution-lane/lifecycle；本 Skill 选择业务动作并消费两者结果。
 - [已确认] Dispatcher idle、worker 局部 DONE 与 SDD review PASSED 是局部事实；本 Skill 依据 canonical Ticket/State/Evidence/Gate 判断业务 closure。
 - [已确认] 业务控制循环置于入口前部，先刷新事实并选择动作，再形成 Topic、调用 Dispatcher/SDD、消费结果并写入 package 权威状态。
+- [已确认] Dispatcher 只主动释放预期收益足够的合格动作；本 Skill 记录暂缓理由，不把收益不足误报成 dependency blocker。
+- [已确认] 每个含新增实现代码的 baby step return 都及时进入独立 delta review；纯调查或只重跑测试且无新增代码时不机械派代码审查，本 Skill 只消费结果。
