@@ -1,7 +1,7 @@
 # Impl-Package 打薄讨论记录
 
 日期：2026-09-06
-状态：T1–T8、E1–E3、D1–D3 的决定及 D2 承接方案已确认，T7/D1 的复核补充已校正。E4–E5 保留观察。T9 本轮取舍已结束：32 个 fact key 中，删除 22 个声明入口（其中 5 个保留现有计算或结构化输入判定）、保留 2 个、暂缓 8 个；原处理分类不作为实施依据。T10 已确认通过 Codex hook 接入运行检查，DSH 不在本轮范围内。决策记录已更新，尚未应用 Skill 或代码修改。
+状态：T1–T8、E1–E3、D1–D3 的决定及 D2 承接方案已确认，T7/D1 的复核补充已校正（T7 范围含 backfill-stable-docs）。E4–E5 保留观察。T9 本轮取舍已结束：32 个 fact key 中，删除 22 个声明入口（其中 5 个保留现有计算或结构化输入判定）、保留 2 个、暂缓 8 个；原处理分类不作为实施依据。T10 已确认通过 Codex hook 接入运行检查，2026-09-07 复核后收窄为只保留 `SessionStart` capsule 扩展（`PostToolUse`/`SubagentStop`/硬拦截三项撤销）。DSH 不在本轮范围内。backfill-stable-docs 核查健康、无需改动；do-review Loop 轮次上限留作观察。决策记录已更新，尚未应用 Skill 或代码修改。
 
 ## 讨论边界
 
@@ -80,7 +80,7 @@
 
 ## T7 · Skill 分工与文字（已确认；2026-09-06 复核后范围扩大）
 
-- 落点：跨 Skill 定义去重检查 [dev-with-track][dev-with-track]、[Dispatcher][dispatcher]、[SDD][sdd] 及直接 references；“常见误判”密度处理检查 [req-align][req-align]、[impl-planning][impl-planning]、[execution-boundaries][execution-boundaries]。
+- 落点：跨 Skill 定义去重检查 [dev-with-track][dev-with-track]、[Dispatcher][dispatcher]、[SDD][sdd] 及直接 references；“常见误判”密度处理检查 [req-align][req-align]、[impl-planning][impl-planning]、[execution-boundaries][execution-boundaries]、[backfill-stable-docs][backfill-stable-docs]（2026-09-07 补充：5 个阶段共 8 处“常见误判”，同一密度模式，见下方 T9 之后的补充记录）。
 - 决定（跨 Skill 定义去重）：保留 dev-with-track、Dispatcher、SDD 三个执行 Skill 的分工，每条规则只在一处详细定义；其他入口保留必要摘要和明确引用。例如 Topic 的定义目前在 dispatcher（`SKILL.md` 第 11 行）与 SDD（`SKILL.md` 第 6-7 行）中近乎原文重复，收敛为一处权威定义 + 指针引用。
 - 决定（“常见误判”三分机制，2026-09-06 复核确认）：不再统一“删除或进 evals”，按内容重复程度和用途三分：
   1. 跨文件内容真重复（同一定义/规则在两处几乎原文重复）→ 留一处权威定义，其余改为一句指针引用；
@@ -215,24 +215,29 @@
 
 - 确认依据：用户同意审阅意见 1、2、3 的文档校正，并将后续顺序明确为“先看实际运行是否需要，再决定字段处理”。原三分类不再是下一步直接执行的方案；尚未修改 situation.py/situations.yaml/situation-inputs.md。
 
-## T10 · 用 Codex Hook 接入运行检查（已确认）
+## 2026-09-07 补充排查：do-review、backfill-stable-docs
+
+- **do-review 的 Loop/N-rounds 上限**：用户直接确认这个上限（最多十轮）是拍脑袋定的数字，没有真实用量依据；实际行为是 initial review → 有 finding 就 closure review → terminal review → 如果 terminal 还有 finding 继续 closure，循环直到全部关闭，不是"设定 N 轮跑满"这种模式。本轮不深入调查、不改 do-review 实现，只记录这个观察，供以后需要调整轮次上限或 Loop 语义时参考。
+- **backfill-stable-docs 核查（未发现问题，无需改动）**：这是本轮唯一一个"查完发现machinery 是健康的、不是过度设计"的结果。KaiSpan 仓库里能找到真实的 `.stable-docs-backfill.json` 配置和一次真实 audit 输出（`.progress-record/pool-resume-stable-docs-audit.md`）：针对 F101-F110 六组修复逐条给出 `already-covered`/`no-delta` disposition、引用具体 spec 章节、明确写"当前没有 terminal Gate，不代表整包收口"、没有在证据不足时抢先下结论。这说明 audit/apply/verify 三段式和背后的脚本机械操作是真的在被使用，且用得谨慎、克制，跟 T9 的 fact 声明机制是完全相反的结果。
+  - 唯一两处小问题，优先级低：(1) 5 个阶段共 8 处"常见误判"，跟 req-align/impl-planning/execution-boundaries 是同一密度模式，已并入 T7 三分机制处理范围；(2) 该 skill 没有 `evals/` 目录（其他 skill 大多有），可以补，但因为机制本身已被真实验证有效，不紧急。
+
+## T10 · 用 Codex Hook 接入运行检查（已确认，2026-09-07 复核后大幅收窄）
 
 - 落点：[Codex hook 配置][codex-hooks-config]、[hook 实现][codex-hooks-code]及其[输入与 fallback 说明][codex-hooks-reference]；按职责对齐 [dev-with-track][dev-with-track]、[SDD worker 返回合同][worker-briefs]与[语义 CLI 的状态校验][state-engine]。
-- 当前基础：仓库现有 Codex hook 只有 `PreToolUse(apply_patch)` 状态写入保护与 `SessionStart` 恢复 capsule。下表是已确认的扩展方向，不代表当前已实现或已启用。
-- 决定：在真实执行事件发生时自动运行窄检查，让确定需要的规则得到执行机会，减少主控记住检查时机、额外声明布尔值的负担。复用现有 Codex hook；只在发现新问题时注入针对性上下文，不在每次工具调用后重跑整套 situation 或重复整张检查清单。
+- 当前基础（已核对源码确认）：`codex-hooks.json` 目前只注册了两个事件——`PreToolUse`（matcher 精确匹配 `^apply_patch$`，拦截直接改 `.impl-package/state.json` 的补丁）与 `SessionStart`（matcher `^(startup|resume|compact)$`，跑 `situation.py render` 拼一段 resume capsule 注入上下文）。原表格的 `PostToolUse`、`SubagentStop` 和"关键状态转换前"三行，2026-09-07 复核后全部撤销，理由分别记在下面。
 
-| 接入点 | 检查与输入 | 处理方式 |
-| --- | --- | --- |
-| `PostToolUse`，筛选相关工具与命令 | 命令实际失败、结构化校验结果、checkpoint 写入后状态，以及派审或交接工具返回的错误 | 给出具体异常与对应处理入口；按真实结果识别，不要求主控先补 fact |
-| `SubagentStop`，筛选相关 worker | 按已有最小返回合同检查内容及所引用报告是否存在 | 指出具体缺项，替代 worker 自报 `envelope_valid=true`；不把格式通过当实现正确 |
-| 关键状态转换前 | Ticket 验收、依赖放行、Gate 关闭前读取当前 state、证据和审查结果 | 程序可判定的验收硬条件继续由语义 CLI 校验和拒绝；hook 为需要主控判断的缺口提供针对性提醒 |
-| `SessionStart` 恢复时 | 当前 package/worktree/HEAD 与恢复锚点 | 扩展现有 capsule，暴露真实失配并路由恢复 |
+### 撤销的三行
 
-- 判断边界：hook 负责自动触发检查，不替 Astra 裁决业务阻塞是否解除或放行边是否充分。`blocker_maybe_resolved`、`release_edge_rechecked` 一类问题在相关事件或转换前提示判断，不自动填为 `true`。hook 的事件覆盖也不替代语义 CLI 的状态与验收约束。
-- 与 T9 的关系：不为使用 hook 而保住旧字段。若检测结果已直接触发处理，额外声明可在核实后删除；T9-P 八项的逐字段处置目前仍为暂缓，T10 不自动将它们改成全部保留、全部自动化或全部删除。
-- 验证要求：用真实工具事件或忠实的宿主事件测试验证“无需主控手工声明 → hook 执行检查 → 对应反馈到达或 CLI 拒绝非法转换”，同时确认无新问题时保持安静。只给 resolver 塞入 `true` 并检查命中，不能证明运行接入有效。
-- 能力依据：[官方 Codex Hooks 文档](https://learn.chatgpt.com/docs/hooks)（2026-09-06 查阅）提供工具前后、subagent 结束和 session 恢复等事件及上下文反馈能力；具体事件 payload 与工具覆盖在落地时按实际宿主核验。
-- 确认依据：用户同意 hook 接入方案并要求写入，同时明确 DSH 不在讨论范围内。本次仅记录决定。
+- **`PostToolUse`（撤销）**：主控自己跑的语义 CLI 命令本身就设计成会自我校验、失败就非零退出（例如 `_evidence_coverage` 检查、`package validate` 拒绝非法状态），主控在同一轮 Bash 结果里已经能看到失败信息；hook 再包一层等于重复这个已经存在的反馈，没有增量。
+- **`SubagentStop`（撤销）**：原方案是"worker 返回后检查其自报的信封格式、引用路径是否存在"。这类检查是纯格式核对，不产生 Astra 自己核实证据、diff 时不会顺带知道的新信息——如果 Astra 认真做了 SDD Step 5 的消费结果职责，格式问题会作为核实证据的副产品自然暴露；如果 Astra 没有认真核实，hook 报"格式通过"反而会造成假的安心感，不解决真正的问题（Astra 有没有真的去看）。撤销后改为在 worker 派发阶段（brief/[worker-briefs.md][worker-briefs]）把返回格式要求写清楚，属于既有流程加强，不是新增 hook。
+- **"关键状态转换前"硬拦截（撤销，已确认重复劳动）**：查证 [`engine.py:1329-1339`][state-engine] 的 `command_set_state`——`ticket satisfy` 已经在写入前调用 `_evidence_coverage` 核对每个 claim 是否有真实支撑证据、有无矛盾，以及 implementation/acceptance 依赖是否已放行，任一不满足直接 `raise StateError`，命令失败、状态不会被写坏。[`engine.py:1611-1629`][state-engine] 的 `command_gate` 在 `pass` verdict 时同样会重新核对每个 SATISFIED Ticket 的证据是否对得上当前 commit、依赖是否放行、terminal verdict 是否有 durable-delta 理由。这条设想的硬拦截已经在语义 CLI 里实现，不需要另建 hook。
+
+### 保留的部分
+
+- 决定：只保留 `SessionStart` capsule 的扩展方向——现有实现已经在 session 启动/恢复/compact 时自动跑 `situation.py render` 补上下文（这是 Astra 真的拿不到的信息，不是格式检查），可以考虑让同一套逻辑在更多衔接点（如 handoff）触发，内容不变，只是触发时机增加。这不是新机制，是扩展已经工作的现有 capsule。
+- 与 T9 的关系：不为使用 hook 而保住旧字段。T9-P 八项的逐字段处置仍为暂缓，本节收窄不改变 T9 的结论。
+- CLI 命令面核查（2026-09-07 新增）：搜索 `engine.py`/`command_groups.py`/`situation.py` 未发现任何专属于 D1（bookkeeper）、D2（Ticket 激活 preflight）的 CLI 命令或参数——这两项从一开始就是纯 SKILL.md/角色文字层面的协议，没有写成语义 CLI 的命令，因此退休它们不涉及代码层改动。旧的自由文本 marker 扫描代码也已经在更早的重构中清理干净，没有遗留死代码。T9 的 22 个删除项（`FACT_KEYS` 常量、对应 `_when_*` 函数、situations.yaml 消费 slug）已经是这部分代码变更的完整范围，没有发现额外需要退休的 CLI 命令面。
+- 确认依据：用户同意 hook 接入方案框架；2026-09-07 复核阶段，用户直接指出 `PostToolUse`"范围广、没有实际收益"、`SubagentStop` 的格式检查"没有新信息"，两点均查证成立并撤销；"关键状态转换前"经查证已在 `engine.py` 实现，同样撤销。
 
 ## 后续统一修改范围
 
@@ -242,7 +247,8 @@
 - 删除及承接：D1 execution-boundaries 专用 bookkeeper 流程、D2 Ticket 激活环境检查、D3 situations.yaml 中按 Ticket 自动交接的 legacy 触发；具体承接见下文。
 - 观察项：E4 全量检查协调、E5 terminal-final 时机。用户已同意先保留观察，不在本轮新增相关规则或门槛。
 - T9：T9-A–P 确认删除 22 个声明入口（其中 5 个保留现有计算或结构化输入判定）、保留 2 个 review summary、暂缓 8 个。本轮取舍结束；暂缓项不改，原分类表不作为实施依据。
-- T10：扩展现有 Codex hook，在相关执行事件上做窄检查并按新问题注入上下文；验收硬条件保留在语义 CLI，验证真实事件到反馈的完整接入。DSH 不在范围内。
+- T10（2026-09-07 收窄）：只保留 `SessionStart` capsule 扩展；`PostToolUse`、`SubagentStop`、"关键状态转换前"硬拦截三项已撤销（分别因为重复 CLI 自带校验、纯格式检查无新信息、已在 `engine.py` 实现）。DSH 不在范围内。CLI 命令面核查未发现 D1/D2 有专属命令需要退休，T9 的代码变更范围已完整。
+- 补充排查（2026-09-07）：backfill-stable-docs 核查健康，无需改动，其"常见误判"密度并入 T7；do-review 的 Loop 轮次上限确认为拍脑袋数字，本轮不改，留作观察。
 - 复核补充（2026-09-06）：T7 采用真重复/执行提醒/纯测试价值三分，独特但无决策价值的内容不搬进 references。D1 清理旧 bookkeeper evals、intake-backlog 悬空路由及 bound writer 转交；to-tickets 的活跃模板和检查先保留，如迁移到 impl-planning，须同步更新消费者引用。落地时同步更新受影响 skill 的 rubric，避免已确认决定与偏好记录脱节。
 
 ## 实例研究 · 2026-09-06（E1–E3 已确认，E4–E5 保留观察）
@@ -358,3 +364,4 @@
 [codex-hooks-reference]: ../../plugin-marketplace/plugins/impl-package/references/codex-hooks.md
 [review-output]: ../../plugin-marketplace/plugins/impl-package/skills/do-review/references/output-templates.md
 [planning-contract-check]: ../../plugin-marketplace/plugins/impl-package/skills/impl-planning/evals/step4_composition_contract.py
+[backfill-stable-docs]: ../../plugin-marketplace/plugins/impl-package/skills/backfill-stable-docs/SKILL.md
