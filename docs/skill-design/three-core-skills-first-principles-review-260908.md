@@ -9,7 +9,7 @@
 三条修正：
 
 1. **先改投影契约，再改正文。** 投影从"当前唯一处境"改成"全局闸门 `blocking` + 候选集 `runnable` + 缺席原因 `withheld` + 在途标注 `in_flight`"。`blocking[]` 只收全局 fail-closed，局部 barrier 一律进 `withheld[]`，否则串行化会在新契约里原样复发。这一步不动任何 Skill 正文，但要先固定输入合同。
-2. **outcome 类 fact 从 Ticket / attempt 聚合改成按 dispatch 归属。** 聚合粒度高于工作粒度时兄弟 dispatch 必然互相污染，这不是调参问题；代价是求值接口要动，不能声称零改动。
+2. **outcome 类 fact 从 Ticket / attempt 聚合改成按 dispatch 归属。** 聚合粒度高于工作粒度时兄弟 dispatch 必然互相污染，这不是调参问题；代价是求值接口要动，不能声称零改动。保持业务合法性、state schema 与 typed dependency 放行语义不变。
 3. **正文负责触发，runtime 负责核验。** receipt 成立、含代码 return 是否及时派了 delta review，`dispatch_audit.py` 读 trail 能核验，但它是只读事后报告、触发不了任何动作，所以正文各留一句触发、不再讲解。
 
 按此重排后，提案 V01–V16 中有 9 项从"模型行为评测"降级成普通 pytest fixture 断言。
@@ -74,7 +74,7 @@ runnable[]    当前全部合法候选，不按层压制、全量渲染
               每项带业务 subject、声明的 resource key、以及"为什么合法"
 withheld[]    某个候选为什么不在 runnable 里：带 dependency 类型 token
               （foundation / acceptance / resource / authorization）与作用范围
-in_flight[]   标注，不是处境：哪些 dispatch 在跑，各占用什么 subject / resource key
+in_flight[]   标注，不是处境：哪些 dispatch 在跑，各自声明的 resource key 范围；业务 subject 仅用于归属，不作为互斥单位
 ```
 
 **局部 barrier 不进 `blocking[]`。** 这是本节相对初稿的修正：初稿把"未释放的 implementation edge、缺 authorization、不可隔离的共享资源"和 terminal-frozen 一起列为"必须先清"。但 T1 的 implementation edge 未释放只挡 T1，把它放进有序的"必须先清"列表，等于在新契约里重造 §3 刚诊断掉的串行化，只是换了一层。局部 barrier 的正确位置是 `withheld[]`——它不是待办，而是某候选缺席的原因。这样"为什么不能跑"和"现在能跑什么"是同一次投影的两面。
@@ -85,9 +85,9 @@ in_flight[]   标注，不是处境：哪些 dispatch 在跑，各占用什么 s
 
 ### 5.2 in-flight 粒度
 
-把 `_decision_without_result` 的 attempt 级聚合改成按 dispatch 归属，`worker-still-running` 的"不并发派发同一 source unit"这条**真实**约束才第一次被准确表达——它本来就只想锁住同一个 source unit，是聚合粒度把它放大成了 attempt 锁。
+把 `_decision_without_result` 的 attempt 级聚合改成按 dispatch 归属，并以派发时声明的实际 resource key 范围判断冲突，`worker-still-running` 的并发约束才第一次被准确表达；业务 Ticket subject 不作为互斥单位。原先是聚合粒度把它放大成了 attempt 锁。
 
-但这不是零改动。`FactContext` 按 (kind, subject) 构造、`_subject_rows` 按 `row.get("subject")` 过滤、`when` 整体挂在这条轴上，所以 `of` / `dispatch_id` 只能关联事件，**不足以让求值器区分同票的 A 与 B**；要么加一条 dispatch 轴的 context，要么让 fact 返回按 dispatch 分组的值并改 `when` 的匹配方式，二选一都要动求值接口。而且 `resource_key` 在当前 runtime 里根本不存在（`scripts/` 与 `references/` 全仓无命中），所以"每项带 resource key"目前没有数据源。
+但这不是零改动。`FactContext` 按 (kind, subject) 构造、`_subject_rows` 按 `row.get("subject")` 过滤、`when` 整体挂在这条轴上，所以 `of` / `dispatch_id` 只能关联事件，**不足以让求值器区分同票的 A 与 B，并按各自声明的资源范围判断**；要么加一条 dispatch 轴的 context，要么让 fact 返回按 dispatch 分组的值并改 `when` 的匹配方式，二选一都要动求值接口，按提案 §9.3.1 落定。而且 `resource_key` 在当前 runtime 里根本不存在（`scripts/` 与 `references/` 全仓无命中），所以"每项带 resource key"目前没有数据源。
 
 因此投影改造要先定输入合同：dispatch 行带 `dispatch_id`、业务 `subject` 和**由派发方声明的** `resource_keys`，result 行带 `of`，字段缺失走已有的 `unknown` 路径而不是静默聚合。resource key 只接受声明、系统不推断——这同时划定了改造上界：投影负责把已声明的事实完整准确地呈现出来，资源与授权的实际判断仍归主控。
 
@@ -110,9 +110,9 @@ in_flight[]   标注，不是处境：哪些 dispatch 在跑，各占用什么 s
 | 规则 | 现状 | 改为 |
 | --- | --- | --- |
 | 单个派发只在宿主 receipt 明确成功后成立 | Dispatcher 正文第 3 条 | 正文留一句触发；`dispatch_audit.py` 断言：每条**实际 dispatch 行**有匹配 receipt 或消歧记录（非派发的业务 decision 不在断言范围） |
-| 含新增实现代码的 return 及时派独立 delta review | 三个 Skill 各写一遍 | 正文只在 Dispatcher 留一句触发；`dispatch_audit.py` 断言**时序**：同一 subject 上 review dispatch 早于下一次 implementation dispatch，或有显式 escape |
+| 含新增实现代码的 return 及时派独立 delta review | 三个 Skill 各写一遍 | 正文只在 Dispatcher 留一句触发；`dispatch_audit.py` 按具体代码 `return` 及其固定增量关联 review：核对同次消费及时触发，且 review dispatch 有真实 receipt；槽位不足则有明确待派审事实并在合适槽位补派，待派审不等于审查完成 |
 
-更准确的说法不是"搬进 runtime"，而是**正文负责触发、runtime 负责核验**：`dispatch_audit.py` 是只读事后报告（`main` 只做 `print(_format_report(...))`），既不能触发派审也不阻断状态推进，所以触发必须留在 Dispatcher 正文——但只留一句，不再讲解。两条核验也要写准：receipt 的断言对象限于实际 dispatch 行（`_dispatch_is_running` 已能区分），不能要求所有业务 decision 都有宿主 receipt；delta review 的可测条件是**时序**——同一 subject 上 review dispatch 必须早于下一次 implementation dispatch，只断言"result 之后存在 review dispatch"会被期末集中补审蒙混过关。这样三份正文里的重复段落仍然删得掉，同时保住原规则真正想要的行为。
+更准确的说法不是"搬进 runtime"，而是**正文负责触发、runtime 负责核验**：`dispatch_audit.py` 是只读事后报告（`main` 只做 `print(_format_report(...))`），既不能触发派审也不阻断状态推进，所以触发必须留在 Dispatcher 正文——但只留一句，不再讲解。两条核验也要写准：receipt 的断言对象限于实际 dispatch 行（`_dispatch_is_running` 已能区分），不能要求所有业务 decision 都有宿主 receipt；delta review 按具体含代码 `return` 及其固定增量核对：同次结果消费及时安排该增量的 review，并确认 review dispatch 的真实 receipt；容量不足时保留明确待派审事实并在后续合适槽位补派，待派审不等于审查完成。检查覆盖最后一个代码增量，即使没有下一次 implementation；同票互不依赖的实施继续，不以整个 Ticket 或全局等待作为闸门，也不以期末集中补审替代及时触发与补派。继续复用现有槽位与 `dispatch_audit.py`，不增加固定时间阈值、状态机或独立审计系统。这样三份正文里的重复段落仍然删得掉，同时保住原规则真正想要的行为。
 
 ## 5.5 同一个根因的第三、第四个症状
 
@@ -134,7 +134,7 @@ in_flight[]   标注，不是处境：哪些 dispatch 在跑，各占用什么 s
 
 **四个症状是同一个根因**：trail 投影按 Ticket / attempt 聚合，而工作按 dispatch 发生。聚合粒度高于工作粒度时，兄弟 dispatch 会互相污染——阻塞侧表现为一个 worker 锁住整个 attempt，读取侧表现为一个 DONE 抹掉兄弟的 INCOMPLETE。
 
-因此 §5.2 的修法要扩大一档：不只是 `_decision_without_result` 改 subject 级，而是**所有从 trail 派生的 outcome 类 fact 都按 dispatch 归属**（`of` / `dispatch_id` 关联机制 `_open_dispatch` 已经在用，不需要新状态系统）。`last_outcome` / `incomplete_count` 保留为导航摘要即可，但**不能再作为 `when` 条件驱动换人或 `ticket block`**——这是代码层修正，不是在正文里加一句"别只信 last_outcome"的告诫。
+因此 §5.2 的修法要扩大一档：不只是 `_decision_without_result` 按 dispatch 归属，而是**所有从 trail 派生的 outcome 类 fact 都按 dispatch 归属**（`of` / `dispatch_id` 关联机制 `_open_dispatch` 已经在用，不需要新状态系统）。`last_outcome` / `incomplete_count` 保留为导航摘要即可，但**不能再作为 `when` 条件驱动换人或 `ticket block`**——这是代码层修正，不是在正文里加一句"别只信 last_outcome"的告诫。
 
 ## 6. 对提案的逐条修正
 
@@ -172,7 +172,7 @@ in_flight[]   标注，不是处境：哪些 dispatch 在跑，各占用什么 s
 
 ## 7. 重排实施顺序
 
-每一步独立可发布、独立可验证，这是当前 A→E 顺序不具备的性质。
+开发步骤可分别开发、分别验证，发布按交付单元；B 与 C 集成验证后一起发布。这是当前 A→E 顺序不具备的性质。
 
 | 步 | 交付 | 验证 |
 | --- | --- | --- |
@@ -182,7 +182,7 @@ in_flight[]   标注，不是处境：哪些 dispatch 在跑，各占用什么 s
 | 4 | 退役 SDD 目录 + 迁移 §11.2 的消费面 | 引用闭合扫描、宿主入口可达 |
 | 5 | receipt / delta-review pacing 迁入 `dispatch_audit.py` | 该脚本自身的回归 |
 
-第 1、2 步是一个**交付单元、两个开发步骤**：第 1 步单独落地时新键已存在，但旧表的 `in_flight` 守卫和 wait 默认动作还在过滤候选，所以不能声称已修掉机械串行；发布边界画在两步集成验证之后。第 1 步排最前是因为它不依赖任何 Skill 内容决定。第 3 步必须在第 2 步之后：正文一旦先落，第 2 步可能推翻它的措辞。
+第 1、2 步是一个**交付单元、两个开发步骤**：两步可分别开发、分别跑 fixture；第 1 步单独落地时新键已存在，但旧表的 `in_flight` 守卫和 wait 默认动作还在过滤候选，所以不能声称已修掉机械串行；发布边界画在两步集成验证之后。第 1 步排最前是因为它不依赖任何 Skill 内容决定。第 3 步必须在第 2 步之后：正文一旦先落，第 2 步可能推翻它的措辞。
 
 ## 8. 验收分层
 
@@ -192,10 +192,10 @@ in_flight[]   标注，不是处境：哪些 dispatch 在跑，各占用什么 s
 
 补两个 fixture（提案与本文初稿都缺）：
 
-- **同票乱序返回**：同 Ticket 的 A、B 分别派发，A 返回 `INCOMPLETE`、B 返回 `DONE`，断言 A 的未完成事实仍出现在投影里、B 不被重复派发、局部失败不扩大成整票 `BLOCKED`。这一条直接证伪或证实 §5.5。
-- **代码已返回但审查未派成 + handoff**：断言恢复后能找回被冻结的增量、待派审如实保留、且不虚构成功 receipt。这是 V09 与恢复场景的组合。
+- **同票乱序返回**：同 Ticket 的 A、B 分别派发且互不依赖，A 返回 `INCOMPLETE`、B 返回 `DONE`，断言同票标签不强制互相等待，A 的未完成事实仍出现在投影里、B 不被重复派发、局部失败不扩大成整票 `BLOCKED`。这一条直接证伪或证实 §5.5。
+- **代码已返回但审查未派成 + handoff**：断言恢复后能找回被冻结的具体代码增量，核对其 review receipt 或明确待派审事实（即使没有下一次 implementation），待派审如实保留且不虚构成功 receipt。这是 V09 与恢复场景的组合。
 
-**trail 事后审计（`dispatch_audit`）**：V01、V09。V01 是可计算的——「存在两条时间上重叠、subject 不相交的 open dispatch，且当时 runnable 中有 ≥2 个独立 subject」。V09 是「无 receipt 的 dispatch 不得被当作已派发」。
+**trail 事后审计（`dispatch_audit`）**：V01、V09。V01 是可计算的——「存在两条时间上重叠、实际声明的 resource key 范围不交叉的 open dispatch，且当时 runnable 中有 ≥2 个独立候选」。V09 还要按每个含代码 return 的固定增量核对 review receipt 或明确待派审事实、同次消费的及时触发和容量恢复后的补派；没有下一次 implementation 时也检查最后增量，待派审不算审查完成。无 receipt 的 dispatch 不得被当作已派发。
 
 **真·模型行为评测（承认是采样）**：V04、V08、V14、V15、V16。这几项确实取决于主控当场的取舍，保留 eval 形式，接受它证明不了普遍性。
 
