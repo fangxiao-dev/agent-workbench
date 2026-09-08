@@ -4,7 +4,7 @@
 
 建议将 Dispatcher 与 Subagent-Driven Development（SDD）合并为一个通用执行协作 Skill，保留 `$dispatcher` 名称；dev-with-track 继续拥有业务合同、Ticket readiness、证据与 Gate，同时调整其向调度层提供候选工作的方式。联合修改直接调用入口、处境提示与验证合同，避免正文已经鼓励并行，运行时注入仍要求等待。
 
-**入口合并本身不解决串行化。** 复审确认，用户报告的串行来自运行时投影契约的粒度与输出形状，不是正文表述（证据见 §4.3、§4.8）。因此本方案把**投影契约改造列为第一实施步骤**：投影从“当前唯一处境”改为“blocking 集 + runnable 集 + in-flight 标注”，并把从 trail 派生的 outcome 类 fact 按 dispatch 归属。这一步不改任何 Skill 正文、不新增状态系统、不新建调度器，可独立发布与独立测试；正文合并排在其后，否则正文落地时注入仍在反着说。
+**入口合并本身不解决串行化。** 复审确认，用户报告的串行来自运行时投影契约的粒度与输出形状，不是正文表述（证据见 §4.3、§4.8）。因此本方案把**投影契约改造列为第一实施步骤**：投影从“当前唯一处境”改为“全局闸门 `blocking` + 候选集 `runnable` + 缺席原因 `withheld` + 在途标注 `in_flight`”，并把从 trail 派生的 outcome 类 fact 按 dispatch 归属。这一步不改任何 Skill 正文、不新增状态系统、不新建调度器；它与处境表重标（§9.3.2）构成一个交付单元，可分步开发、集成验证后一起发布。正文合并排在其后，否则正文落地时注入仍在反着说。
 
 本次优化以有效交付速度和执行可信度为目标。主控持续寻找能够推进主线的并行机会，准确限定局部阻塞的影响；worker 收到具体、可验证的委派合同。确定性落实在授权、行为要求、资源边界和证据上，执行路径由主控根据现场事实选择。
 
@@ -277,23 +277,43 @@ material risk 的七类判断启发式从 SDD `review-gate.md` 归入 dev 的既
 
 本节是实施第一步，先于正文合并落地。它改的是投影的输出形状与 fact 归属粒度，不改候选求值、state schema 与 typed dependency 语义。
 
-#### 9.3.1 投影契约：一个游标 → 两个集合 + 一组标注
+#### 9.3.1 投影契约：一个游标 → 一个全局闸门 + 一组候选 + 两组标注
 
 ```text
-blocking[]    fail-closed 条件，有序，必须先清。今天的 P0 + 真实 barrier
-              （未释放的 implementation edge、缺 authorization、不可隔离的共享资源、terminal-frozen）
+blocking[]    只放全局 fail-closed：命中即整个 Attempt 暂停
+              今天 P0 的记录完整性那一组——terminal-frozen、state-missing、
+              projection-drift、anchor-mismatch
 runnable[]    当前全部合法候选，不按层压制、全量渲染
-              每项带 subject、它触碰的 resource key，以及为什么合法
-in_flight[]   标注，不是处境：哪些 subject / resource key 已被占用
+              每项带业务 subject、声明的 resource key，以及为什么合法
+withheld[]    某个候选为什么不在 runnable 里：逐项带 dependency 类型 token
+              （foundation / acceptance / resource / authorization）
+              和它作用的 subject 或 resource key
+in_flight[]   哪些 dispatch 正在跑，各自占用的 subject 与 resource key
 ```
 
-关键的本体论修正：**在跑的 worker 不是一个“处境”（一个要求主控采取动作的状态），而是一个“事实”（一个收缩动作集合的约束）**。`worker-still-running` 现在占着一个 P1 处境位，这正是它能吞掉整层投影的原因；它应当移出 `situations`、成为 `in_flight[]` 标注。单游标语义保留在 `blocking[]` 内——那是确定性真正值钱的地方。
+**局部 barrier 不进 `blocking[]`。** 这是本节相对初稿的关键修正：初稿把"未释放的 implementation edge、缺 authorization、不可隔离的共享资源"和 terminal-frozen 一起列为"必须先清"。但 T1 的 implementation edge 未释放是局部事实，只挡 T1 的实施；把它放进有序的"必须先清"列表，等于在新契约里重造了 §4.3 刚诊断掉的串行化，只是换了一层。局部 barrier 的正确位置是 `withheld[]`——它不是"要先清的任务"，而是"某候选缺席的原因"。这样"为什么不能跑"和"现在能跑什么"是同一次投影的两面，消费者没有把局部误读成全局的余地。
 
-配套的 fact 归属修正（§4.8）：`_decision_without_result`、`last_outcome`、`_incomplete_count` 等从 trail 派生的 outcome 类 fact 一律按 dispatch 归属，不再按 Ticket / attempt 聚合。关联机制沿用 `_open_dispatch` 已在使用的 `of` / `dispatch_id`，不新建状态。
+关键的本体论修正：**在跑的 worker 不是一个“处境”（一个要求主控采取动作的状态），而是一个“事实”（一个收缩候选集合的约束）**。`worker-still-running` 现在占着一个 P1 处境位，这正是它能吞掉整层投影的原因；它应当移出 `situations`、成为 `in_flight[]` 标注。单游标语义只保留在 `blocking[]` 内——那是确定性真正值钱、且确实该停下整个 Attempt 的地方。
 
-渲染句 `判断点: 先选一个处境，再选其动作` 是显式单选命令，随之改写为呈现 `blocking[]` 与 `runnable[]` 全集。
+##### 输入合同（必须先定，否则 §4.8 的归属修正无法实现）
 
-**输出必须向后兼容**：`selected` / `parallel_matches` / `other_matches` / `suppressed_matches` 四个键继续按旧语义填充，新增 `blocking` / `runnable` / `in_flight`。理由见 §14 的版本错配风险——半迁移状态下进行中的 attempt 会同时遇到新旧渲染器。
+`FactContext` 今天按 (kind, subject) 构造，`_subject_rows` 按 `row.get("subject")` 过滤，`when` 的求值整体挂在这条轴上。因此 `of` / `dispatch_id` 只能关联事件，**不足以让求值器区分同一 Ticket 上的 A 与 B**；初稿"候选求值全部不动"的承诺站不住，支撑不了 V17。更缺的一项是：`resource_key` 在当前 runtime 里完全不存在（`scripts/` 与 `references/` 全仓无命中），所以"每项带 resource key"没有数据源。
+
+实施前先固定以下输入与求值合同：
+
+| 项 | 要求 |
+| --- | --- |
+| dispatch 轨迹行 | 必须带 `dispatch_id`、业务 `subject`，以及**由派发方声明的** `resource_keys` |
+| result 轨迹行 | 必须带 `of`，指向其 `dispatch_id` |
+| outcome 类 fact | `_decision_without_result`、`last_outcome`、`_incomplete_count` 改为按 dispatch 归属；求值维度要么新增一条 dispatch 轴的 context，要么让 fact 返回按 dispatch 分组的值并相应调整 `when` 的匹配方式——二选一都要动求值接口，不能声称零改动 |
+| 字段缺失 | 走已有的 `unknown` 路径并给出原因，不做静默聚合；旧轨迹缺 `dispatch_id` 时按历史兼容读取，但不参与新的按 dispatch 判定 |
+| resource key 来源 | 只接受派发方在派发时的**声明**，系统不推断、不扫描、不维护资源目录 |
+
+最后一条同时划定了本次改造的上界：投影负责"把已声明的事实完整、准确地呈现出来"，资源与授权的实际判断仍归主控。这不是在建一个能自己算出资源冲突的调度引擎。
+
+渲染句 `判断点: 先选一个处境，再选其动作` 是显式单选命令，随之改写为呈现 `blocking[]`、`runnable[]` 与 `withheld[]` 全集。
+
+**输出必须向后兼容**：`selected` / `parallel_matches` / `other_matches` / `suppressed_matches` 四个键继续按旧语义填充，新增 `blocking` / `runnable` / `withheld` / `in_flight`。理由见 §14 的版本错配风险——半迁移状态下进行中的 attempt 会同时遇到新旧渲染器。
 
 #### 9.3.2 处境表定点修订
 
@@ -323,8 +343,8 @@ in_flight[]   标注，不是处境：哪些 subject / resource key 已被占用
 | 按整个 Topic/Ticket write-set 判断冲突 | 保留纠正后的 step 级规则 | 以实际 effect footprint 判断 |
 | 共享读/观察资源影响 | 保留并澄清 | 对稳定状态的兼容读取可并行，变化中的观察需隔离 |
 | worktree 等价于完整运行隔离 | 保留纠正规则 | 实际工具链、DB、端口、数据分别确认 |
-| receipt 确认与迟到/重复结果归因 | 语义保留，执行搬进 `dispatch_audit.py` | 正文只能劝告，trail 能判：断言每条 decision 行有匹配 receipt 或消歧记录 |
-| 每个代码增量及时独立 delta review | 语义保留，执行搬进 `dispatch_audit.py` | 现在三个 Skill 各写一遍且都保证不了；改为断言带 diff 的 result 行之后存在对应 review dispatch 或显式 escape |
+| receipt 确认与迟到/重复结果归因 | 正文留一句触发，`dispatch_audit.py` 加核验 | audit 是只读事后报告，触发只能留在正文。断言对象限于实际 dispatch 行（`_dispatch_is_running` 已能区分），不要求所有业务 decision 都有宿主 receipt |
+| 每个代码增量及时独立 delta review | 正文留一句触发，`dispatch_audit.py` 加核验 | 现在三个 Skill 各写一遍，改为只在 Dispatcher 留一句。审计的可测条件是**时序**：同一 subject 上 review dispatch 必须早于下一次 implementation dispatch；只断言“result 之后存在 review dispatch”会被期末集中补审蒙混过关 |
 | review 积压触发全局收敛 | 改为收住受影响实现链 | 避免审查节点拖住全部工作 |
 | delta finding 一律随下一步修 | 删除绝对安排 | Dispatcher 按实际收益与依赖决定 |
 | work/review/test 三条 lane 必须显式建立 | 删除强制对象 | 保留实现/审查独立和有界测试活动 |
@@ -424,14 +444,16 @@ review 发现一个已确认的 API 局部缺陷，dev 判断它不改变接口�
 | 步骤 | 交付 | 该步验证 |
 | --- | --- | --- |
 | A 固定比较材料 | 当前三 Skill、references、处境提示与相关 eval 的基线；旧规则到新落点映射 | 逐项覆盖第 10 节，确认已有批准方向与新增设计细节 |
-| B 投影契约改造 | §9.3.1：`blocking` / `runnable` / `in_flight` 三段输出（旧四键并存）、trail outcome 类 fact 按 dispatch 归属、渲染句改写 | fixture pytest；不动任何 Skill 正文 |
+| B 投影契约改造 | §9.3.1：输入合同、`blocking` / `runnable` / `withheld` / `in_flight` 四段输出（旧四键并存）、trail outcome 类 fact 按 dispatch 归属、渲染句改写 | fixture pytest；不动任何 Skill 正文 |
 | C 处境表按新契约重标 | §9.3.2：`worker-still-running` 转标注、`multiple-ready-tickets` 去守卫、`worker-incomplete-first/second` 去次数门槛、finding 行去固定捆绑 | 复用 `tests/test_situation_render.py` fixture |
 | D 写合并主路径与 dev 适配 | Dispatcher 正文、两个必要 reference、dev 控制循环与 findings 分工；删掉 B/C 之后 runtime 已经拥有的段落 | 静态合同、pointer、模式/输出消费者兼容检查 |
 | E 迁移测试并退役 SDD | 行为 eval 归并、旧结构断言替换、有效调用清零后删除目录 | 调用闭合、历史回放兼容、Dispatcher 与 plugin 内容兼容（§11.3） |
-| F receipt 与 delta-review pacing 入 audit | 第 10 节两条从三份正文迁入 `dispatch_audit.py` | 该脚本自身的定点回归 |
+| F receipt 与 delta-review 核验入 audit | 第 10 节两条：正文收敛到 Dispatcher 一句触发，`dispatch_audit.py` 加关联与时序核验 | 该脚本自身的定点回归 |
 | G 行为验证并修正 | 固定输入下的调度与 worker 执行证据 | §13.2 中留在模型评测层的场景满足 |
 
-B 为什么能先做：它不依赖任何 Skill 内容决定，且立刻修掉用户报告症状的机械那一半。D 为什么必须在 C 之后：正文一旦先落，C 可能推翻它的措辞。
+**B 与 C 是一个交付单元、两个开发步骤。** B 单独落地时新键已经存在，但 `situations.yaml` 仍带 `in_flight: false` 守卫与 wait 默认动作，读新键拿到的候选照样被旧守卫过滤——所以 B 单独发布不能声称已修掉机械串行。B 可以独立开发、独立跑 fixture，但发布边界画在 B+C 集成验证之后。
+
+B 为什么排在最前：它不依赖任何 Skill 内容决定。D 为什么必须在 C 之后：正文一旦先落，C 可能推翻它的措辞。
 
 步骤是 proposal 的实施顺序，不新增 Task/DAG 或固定 worker 派发队列。实际可以合并不需要新决策的机械部分。
 
@@ -462,7 +484,7 @@ B 为什么能先做：它不依赖任何 Skill 内容决定，且立刻修掉�
 
 先复用现有 eval 格式和 fixture，不新建 benchmark 平台。初稿把 V01–V16 全部按模型行为评测安排，但同节又承认现有 eval 是只读问答、测不了执行习惯。投影改造（步骤 B）之后，其中多数可以降级成确定性检查，按“能不能由脚本判定”重新分层：
 
-**投影 fixture 测试（普通 pytest，无模型）**：V02、V03、V10、V11、V12、V13、V17、V18，以及 V05/V06 的合法性部分。给定 `state.json` + trail fixture，断言 `runnable[]` 含 X、`blocking[]` 含/不含 Y。V13 与 V17/V18 必须带真实处境注入。
+**投影 fixture 测试（普通 pytest，无模型）**：V02、V03、V10、V11、V12、V13、V17、V18，以及 V05/V06 的合法性部分。给定 `state.json` + trail fixture，断言 `runnable[]` 含 X、缺席项在 `withheld[]` 里带正确的 dependency 类型 token、`blocking[]` 只在全局 fail-closed 时非空。V11（仅 acceptance 边未释放）与 V02 顺带守住“局部 barrier 不得进 `blocking[]`”这条边界。V13 与 V17/V18 必须带真实处境注入。
 
 **trail 事后审计（`dispatch_audit`）**：V01、V09。V01 可计算——“存在两条时间上重叠、subject 不相交的 open dispatch，且当时 runnable 中有 ≥2 个独立 subject”。V09 为“无 receipt 的 dispatch 不得被当作已派发”。
 
@@ -493,14 +515,16 @@ L0 使用改变后的 Dispatcher/dev focused tests、eval 文件结构检查与�
 | 合并后只是形成一份更长的正文 | 按第 10 节真正删除无收益规则，reference 按读取条件设置 |
 | 低阶 worker 缺乏上下文 | brief 保留具体合同、不变量、已知结论和真实验证路径 |
 | 正文改善但处境提示继续发出等待命令 | 第 9.3 节先于正文落地（步骤 B/C 在 D 之前），并做带注入材料的框架内评测 |
-| 投影输出形状变化撞上半迁移的安装缓存 | 新增 `blocking`/`runnable`/`in_flight` 的同时保留旧四键按旧语义填充；旧渲染器仍可工作，等宿主装到新版本后再议退役 |
+| 投影输出形状变化撞上半迁移的安装缓存 | 新增 `blocking`/`runnable`/`withheld`/`in_flight` 的同时保留旧四键按旧语义填充；旧渲染器仍可工作，等宿主装到新版本后再议退役 |
+| 把局部 barrier 当成全局闸门，串行化在新契约里复发 | `blocking[]` 只收全局 fail-closed，局部 barrier 一律进 `withheld[]`（§9.3.1）；V02/V11 覆盖这条边界 |
+| 投影改造顺势扩张成自动调度引擎 | resource key 只接受派发方声明，系统不推断、不扫描、不维护资源目录；资源与授权的实际判断仍归主控 |
 | 旧 Dispatcher 与新 plugin 错配且不报错 | 宿主验收从“入口可达”提升为“内容兼容”，用 commit/内容指纹识别错配（§11.3） |
 | 同票并行后结果归属错乱、局部失败被投影抹掉 | outcome 类 fact 按 dispatch 归属（§4.8）；V17 作为该风险的定点 fixture |
 | 清理 SDD 导致插件/宿主入口失效 | 先迁移可达调用和测试，再退役；验证 standalone 依赖 |
 | 全仓重命名破坏历史 trail 与 parser | 保留历史事件读取兼容，按实际消费者定点修改 |
 | 缓存与源码混用污染结论 | 记录版本，分别标识研究基线、候选源码与实际安装产物 |
 
-后续源码实施完成需同时满足：投影输出已分为 blocking/runnable/in_flight 且 outcome 类 fact 按 dispatch 归属；通用执行方法只有 Dispatcher 一个权威入口；dev 保有业务事实和验收职责；当前调用链不再强制 SDD 或局部等待的全局串行；旧规则均有保留/替换/删除去向；投影 fixture 与 dispatch_audit 断言全绿、留在模型层的代表样例通过、直接回归通过；版本和宿主状态变更边界清楚。源码通过、宿主可用、真实业务收益应分别汇报，不能合成一个未经证据支持的“全部完成”。
+后续源码实施完成需同时满足：输入合同已固定（dispatch 行带 `dispatch_id`/`subject`/声明的 `resource_keys`，result 行带 `of`）；投影输出已分为 blocking/runnable/withheld/in_flight，局部 barrier 只出现在 withheld，且 outcome 类 fact 按 dispatch 归属；通用执行方法只有 Dispatcher 一个权威入口；dev 保有业务事实和验收职责；当前调用链不再强制 SDD 或局部等待的全局串行；旧规则均有保留/替换/删除去向；投影 fixture 与 dispatch_audit 断言全绿、留在模型层的代表样例通过、直接回归通过；版本和宿主状态变更边界清楚。源码通过、宿主可用、真实业务收益应分别汇报，不能合成一个未经证据支持的“全部完成”。
 
 本轮不需要再决定是否允许探索合并；Owner 已明确同意方向。具体条款和新增发现保留在本 proposal 中供审阅，后续实施按实际授权启动。暂不引入新的 runtime 状态或调度器。
 

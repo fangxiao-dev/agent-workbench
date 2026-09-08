@@ -8,9 +8,9 @@
 
 三条修正：
 
-1. **先改投影契约，再改正文。** 投影从"当前唯一处境"改成"blocking 集 + runnable 集 + in-flight 标注"。这一步不动任何 Skill 正文，可独立发布、独立测试。
-2. **in-flight 从 attempt 级布尔改成 subject 级集合。** attempt 级布尔在信息论上只能把整个 attempt 串行化，这不是调参问题。
-3. **把正文管不住的规则搬进 runtime，而不是在文件之间搬。** receipt 成立、含代码 return 是否及时派了 delta review，`dispatch_audit.py` 读 trail 就能判；写在正文里只是劝告。
+1. **先改投影契约，再改正文。** 投影从"当前唯一处境"改成"全局闸门 `blocking` + 候选集 `runnable` + 缺席原因 `withheld` + 在途标注 `in_flight`"。`blocking[]` 只收全局 fail-closed，局部 barrier 一律进 `withheld[]`，否则串行化会在新契约里原样复发。这一步不动任何 Skill 正文，但要先固定输入合同。
+2. **outcome 类 fact 从 Ticket / attempt 聚合改成按 dispatch 归属。** 聚合粒度高于工作粒度时兄弟 dispatch 必然互相污染，这不是调参问题；代价是求值接口要动，不能声称零改动。
+3. **正文负责触发，runtime 负责核验。** receipt 成立、含代码 return 是否及时派了 delta review，`dispatch_audit.py` 读 trail 能核验，但它是只读事后报告、触发不了任何动作，所以正文各留一句触发、不再讲解。
 
 按此重排后，提案 V01–V16 中有 9 项从"模型行为评测"降级成普通 pytest fixture 断言。
 
@@ -65,23 +65,31 @@
 
 ## 5. 目标形态
 
-### 5.1 投影契约：一个游标 → 两个集合 + 一组标注
+### 5.1 投影契约：一个游标 → 一个全局闸门 + 一组候选 + 两组标注
 
 ```text
-blocking[]    fail-closed 条件，有序，必须先清。今天的 P0 + 真实 barrier
-              （未释放的 implementation edge、缺 authorization、不可隔离的共享资源、terminal-frozen）
+blocking[]    只放全局 fail-closed：命中即整个 Attempt 暂停
+              （terminal-frozen、state-missing、projection-drift、anchor-mismatch）
 runnable[]    当前全部合法候选，不按层压制、全量渲染
-              每项带 subject、它触碰的 resource key、以及"为什么合法"
-in_flight[]   标注，不是处境：哪些 subject / resource key 已被占用
+              每项带业务 subject、声明的 resource key、以及"为什么合法"
+withheld[]    某个候选为什么不在 runnable 里：带 dependency 类型 token
+              （foundation / acceptance / resource / authorization）与作用范围
+in_flight[]   标注，不是处境：哪些 dispatch 在跑，各占用什么 subject / resource key
 ```
 
-关键的本体论修正：**在跑的 worker 不是一个"处境"（一个要求你采取动作的状态），而是一个"事实"（一个收缩动作集合的约束）**。`worker-still-running` 应当从 `situations` 移出，成为 `in_flight[]` 标注。它现在占着一个 P1 处境位，这就是它能吞掉整层投影的原因。
+**局部 barrier 不进 `blocking[]`。** 这是本节相对初稿的修正：初稿把"未释放的 implementation edge、缺 authorization、不可隔离的共享资源"和 terminal-frozen 一起列为"必须先清"。但 T1 的 implementation edge 未释放只挡 T1，把它放进有序的"必须先清"列表，等于在新契约里重造 §3 刚诊断掉的串行化，只是换了一层。局部 barrier 的正确位置是 `withheld[]`——它不是待办，而是某候选缺席的原因。这样"为什么不能跑"和"现在能跑什么"是同一次投影的两面。
 
-单游标语义保留在 `blocking[]` 内——那是确定性真正值钱的地方。
+关键的本体论修正：**在跑的 worker 不是一个"处境"（一个要求你采取动作的状态），而是一个"事实"（一个收缩候选集合的约束）**。`worker-still-running` 应当从 `situations` 移出，成为 `in_flight[]` 标注。它现在占着一个 P1 处境位，这就是它能吞掉整层投影的原因。
+
+单游标语义只保留在 `blocking[]` 内——那是确定性真正值钱、且确实该停下整个 Attempt 的地方。
 
 ### 5.2 in-flight 粒度
 
-trail 的 decision 行已经带 `subject`（`_subject_rows` 就在用），所以 `in_flight_subjects` 无需改 schema 即可派生。把 `_decision_without_result` 的 attempt 级聚合改成按 subject 聚合，`worker-still-running` 的"不并发派发同一 source unit"这条**真实**约束才第一次被准确表达——它本来就只想锁住同一个 source unit，是聚合粒度把它放大成了 attempt 锁。
+把 `_decision_without_result` 的 attempt 级聚合改成按 dispatch 归属，`worker-still-running` 的"不并发派发同一 source unit"这条**真实**约束才第一次被准确表达——它本来就只想锁住同一个 source unit，是聚合粒度把它放大成了 attempt 锁。
+
+但这不是零改动。`FactContext` 按 (kind, subject) 构造、`_subject_rows` 按 `row.get("subject")` 过滤、`when` 整体挂在这条轴上，所以 `of` / `dispatch_id` 只能关联事件，**不足以让求值器区分同票的 A 与 B**；要么加一条 dispatch 轴的 context，要么让 fact 返回按 dispatch 分组的值并改 `when` 的匹配方式，二选一都要动求值接口。而且 `resource_key` 在当前 runtime 里根本不存在（`scripts/` 与 `references/` 全仓无命中），所以"每项带 resource key"目前没有数据源。
+
+因此投影改造要先定输入合同：dispatch 行带 `dispatch_id`、业务 `subject` 和**由派发方声明的** `resource_keys`，result 行带 `of`，字段缺失走已有的 `unknown` 路径而不是静默聚合。resource key 只接受声明、系统不推断——这同时划定了改造上界：投影负责把已声明的事实完整准确地呈现出来，资源与授权的实际判断仍归主控。
 
 ### 5.3 正文 / reference 的切分依据：加载点，不是执行者
 
@@ -91,20 +99,20 @@ trail 的 decision 行已经带 `subject`（`_subject_rows` 就在用），所�
 - `references/delegation.md` = 组 brief 时读。
 - `references/resource-isolation.md` = 出现资源交叉时读。
 
-按这个判据复核提案第 7/8 节：五步循环留在正文是对的；delegation 进 reference 是对的。但第 10 节把 **dependency 四分类**（foundation / acceptance / resource / authorization）整个删掉是过头了——它不是流程枷锁，是让"blocked"这个词有确定含义的词汇表，删掉之后 `blocking[]` 的每一项就没有类型可标了。正确处理是**降级进 reference 并让投影复用同一套 token**，而不是删除。
+按这个判据复核提案第 7/8 节：五步循环留在正文是对的；delegation 进 reference 是对的。但第 10 节把 **dependency 四分类**（foundation / acceptance / resource / authorization）整个删掉是过头了——它不是流程枷锁，是让"blocked"这个词有确定含义的词汇表，删掉之后 `withheld[]` 的每一项就没有类型可标了。正确处理是**降级进 reference 并让投影复用同一套 token**（`withheld[]` 逐项标类型时就用它），而不是删除。
 
 同理，`investigate | implement | fix | verify` 四个 mode 应当整体保留：它有真实消费者（[situation.py](../../plugin-marketplace/plugins/impl-package/scripts/situation.py) 的 `_last_worker_mode`、trail、audit），一共四个词，而且是给弱模型 worker 的答案形态锚点。提案的"通用正文降为辅助、package 消费层保留兼容"会造出同一概念的两个等级——正是这次合并想消灭的克隆形态。
 
-### 5.4 把正文管不住的规则搬进 runtime
+### 5.4 正文负责触发，runtime 负责核验
 
-用户的四条诉求里有两条是关于**可靠性**的（执行更 deterministic、worker 是弱模型）。以下两条现在以正文形式散在三个 Skill 里，正文物理上无法保证它们成立，但 trail 能：
+用户的四条诉求里有两条是关于**可靠性**的（执行更 deterministic、worker 是弱模型）。以下两条现在以正文形式散在三个 Skill 里，正文物理上无法保证它们成立，但 trail 能核验：
 
 | 规则 | 现状 | 改为 |
 | --- | --- | --- |
-| 单个派发只在宿主 receipt 明确成功后成立 | Dispatcher 正文第 3 条 | `dispatch_audit.py` 断言：每条 decision 行有匹配 receipt 或消歧记录 |
-| 含新增实现代码的 return 及时派独立 delta review | 三个 Skill 各写一遍 | `dispatch_audit.py` 断言：带 diff 的 result 行之后存在对应 review dispatch，或有显式 escape |
+| 单个派发只在宿主 receipt 明确成功后成立 | Dispatcher 正文第 3 条 | 正文留一句触发；`dispatch_audit.py` 断言：每条**实际 dispatch 行**有匹配 receipt 或消歧记录（非派发的业务 decision 不在断言范围） |
+| 含新增实现代码的 return 及时派独立 delta review | 三个 Skill 各写一遍 | 正文只在 Dispatcher 留一句触发；`dispatch_audit.py` 断言**时序**：同一 subject 上 review dispatch 早于下一次 implementation dispatch，或有显式 escape |
 
-这一步同时删掉三份正文里的重复段落、让保证真正成立、并且挂在**已有的** `dispatch_audit.py` 上而不是新加 gate。提案第 10 节把这两条标为"保留"，等于继续用正文预算买一个买不到的东西。
+更准确的说法不是"搬进 runtime"，而是**正文负责触发、runtime 负责核验**：`dispatch_audit.py` 是只读事后报告（`main` 只做 `print(_format_report(...))`），既不能触发派审也不阻断状态推进，所以触发必须留在 Dispatcher 正文——但只留一句，不再讲解。两条核验也要写准：receipt 的断言对象限于实际 dispatch 行（`_dispatch_is_running` 已能区分），不能要求所有业务 decision 都有宿主 receipt；delta review 的可测条件是**时序**——同一 subject 上 review dispatch 必须早于下一次 implementation dispatch，只断言"result 之后存在 review dispatch"会被期末集中补审蒙混过关。这样三份正文里的重复段落仍然删得掉，同时保住原规则真正想要的行为。
 
 ## 5.5 同一个根因的第三、第四个症状
 
@@ -168,19 +176,19 @@ trail 的 decision 行已经带 `subject`（`_subject_rows` 就在用），所�
 
 | 步 | 交付 | 验证 |
 | --- | --- | --- |
-| 1 | 投影契约：`blocking` / `runnable` / `in_flight` 三段输出；trail outcome 类 fact 按 dispatch 归属（含 `_decision_without_result` / `last_outcome` / `_incomplete_count`）；渲染句改为「以下均可推进」 | fixture pytest，不动任何 Skill 正文 |
+| 1 | 输入合同 + 投影契约：`blocking` / `runnable` / `withheld` / `in_flight` 四段输出；trail outcome 类 fact 按 dispatch 归属（含 `_decision_without_result` / `last_outcome` / `_incomplete_count`）；渲染句改为「以下均可推进」 | fixture pytest，不动任何 Skill 正文 |
 | 2 | `situations.yaml` 按新契约重标：`worker-still-running` 转标注、`multiple-ready-tickets` 去守卫、`worker-incomplete-first/second` 去次数门槛、finding 行去掉固定捆绑 | 复用 `tests/test_situation_render.py` fixture |
 | 3 | Dispatcher 合并正文 + 两个 reference；删掉第 1/2 步之后 runtime 已经拥有的段落 | 结构合同测试 |
 | 4 | 退役 SDD 目录 + 迁移 §11.2 的消费面 | 引用闭合扫描、宿主入口可达 |
 | 5 | receipt / delta-review pacing 迁入 `dispatch_audit.py` | 该脚本自身的回归 |
 
-第 1 步为什么能先做：它不依赖任何 Skill 内容决定，且立刻把用户报告症状的机械那一半修掉。第 3 步为什么必须在第 2 步之后：正文一旦先落，第 2 步可能推翻它的措辞。
+第 1、2 步是一个**交付单元、两个开发步骤**：第 1 步单独落地时新键已存在，但旧表的 `in_flight` 守卫和 wait 默认动作还在过滤候选，所以不能声称已修掉机械串行；发布边界画在两步集成验证之后。第 1 步排最前是因为它不依赖任何 Skill 内容决定。第 3 步必须在第 2 步之后：正文一旦先落，第 2 步可能推翻它的措辞。
 
 ## 8. 验收分层
 
 按"能不能由脚本判定"重新切分提案的 V 表——这是把 16 项模型行为评测降成 9 项确定性测试的地方：
 
-**投影 fixture 测试（普通 pytest，无模型）**：V02、V03、V10、V11、V12、V13，以及 V05/V06 的合法性部分。给定 `state.json` + trail fixture，断言 `runnable[]` 含 X、`blocking[]` 含/不含 Y。V13 必须**带真实处境注入**验证，否则只证明了模型读懂新正文，没证明注入不再反着说。
+**投影 fixture 测试（普通 pytest，无模型）**：V02、V03、V10、V11、V12、V13，以及 V05/V06 的合法性部分。给定 `state.json` + trail fixture，断言 `runnable[]` 含 X、缺席项在 `withheld[]` 里带正确的 dependency 类型 token、`blocking[]` 只在全局 fail-closed 时非空。V13 必须**带真实处境注入**验证，否则只证明了模型读懂新正文，没证明注入不再反着说。
 
 补两个 fixture（提案与本文初稿都缺）：
 
@@ -197,7 +205,7 @@ trail 的 decision 行已经带 `subject`（`_subject_rows` 就在用），所�
 
 用户的实际运行时从安装缓存 `impl-package/0.4.2` 加载。投影输出结构变化会同时影响 `protocols.json` 注入与 Resume Capsule；缓存与源码半迁移状态下，一个进行中的 attempt 会拿到两套契约。
 
-因此第 1 步的投影改造必须**向后兼容输出**：保留 `selected` / `parallel_matches` / `other_matches` / `suppressed_matches` 四个键继续按旧语义填充，新增 `blocking` / `runnable` / `in_flight`。旧渲染器读旧键仍可工作，新渲染器读新键。等宿主装到新版本后再考虑退役旧键。
+因此第 1 步的投影改造必须**向后兼容输出**：保留 `selected` / `parallel_matches` / `other_matches` / `suppressed_matches` 四个键继续按旧语义填充，新增 `blocking` / `runnable` / `withheld` / `in_flight`。旧渲染器读旧键仍可工作，新渲染器读新键。等宿主装到新版本后再考虑退役旧键。
 
 ## 10. 未做的事
 
