@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import sys
+import copy
+import json
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -284,3 +288,154 @@ def test_needs_user_answer_does_not_populate_empty_user_summary(tmp_path: Path) 
     status = ledger.get_status(root=tmp_path, slug="intent")
     assert status.frontmatter["status"] == ledger.STATUS_NEEDS_USER
     assert status.questions["Q1"]["status"] == ledger.Q_STATUS_NEEDS_USER
+
+
+def round_example() -> dict:
+    reference = SRC.parent / "references" / "round-record.md"
+    return json.loads(reference.read_text(encoding="utf-8").split("```json\n", 1)[1].split("```", 1)[0])
+
+
+def test_import_round_cli_preserves_dialogue_and_owner_boundary(tmp_path: Path, capsys) -> None:
+    from grill_ledger_core import ledger
+
+    ledger.init_ledger(root=tmp_path, topic="Plan", slug="rounds", initiator="Codex")
+    batch = round_example()
+    batch["items"][0]["discussion"] += " 代码示例：<!-- comment -->"
+    owner = copy.deepcopy(batch["items"][0])
+    owner.update(id="R1-Q2", question="是否改为异步删除？", needs_user=True)
+    unresolved = copy.deepcopy(batch["items"][0])
+    unresolved.update(id="R1-Q3", questioner_review="证据不足，继续查证。")
+    unresolved.pop("proposal")
+    batch["items"].extend([owner, unresolved])
+    source = tmp_path / "round.json"
+    source.write_text(json.dumps(batch, ensure_ascii=False), encoding="utf-8")
+    args = ["--root", str(tmp_path), "import-round", "--slug", "rounds", "--file", str(source), "--accept", "R1-Q1"]
+
+    assert ledger.main(args) == 0
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["ids"] == {"R1-Q1": "Q1", "R1-Q2": "Q2", "R1-Q3": "Q3"}
+    status = ledger.get_status(root=tmp_path, slug="rounds")
+    assert [q["status"] for q in status.questions.values()] == [
+        ledger.Q_STATUS_CONVERGED, ledger.Q_STATUS_NEEDS_USER, ledger.Q_STATUS_ANSWERED,
+    ]
+    assert status.frontmatter["status"] == ledger.STATUS_NEEDS_USER
+    assert len(status.state["convergences"]) == 1
+    assert status.state["needs_user"][0]["line"] == owner["question"]
+    markdown = ledger.read_markdown(root=tmp_path, slug="rounds")
+    assert batch["items"][0]["discussion"] in markdown
+    assert unresolved["questioner_review"] in markdown
+    assert not ledger.review_path(tmp_path, "rounds").exists()
+
+    assert ledger.main(args) == 0
+    assert json.loads(capsys.readouterr().out)["replayed"] is True
+    assert ledger.read_markdown(root=tmp_path, slug="rounds") == markdown
+    # Post-processing still uses the existing Q IDs and records the real Owner answer.
+    ledger.record_answer(root=tmp_path, slug="rounds", question="Q2", author="Owner",
+                         answer="采纳异步删除", evidence="Owner 本轮回复", uncertainty="", needs_user=False)
+    ledger.converge_question(root=tmp_path, slug="rounds", question="Q2",
+                             line="改为异步删除", rationale="Owner 已裁决", impact="调整响应合同")
+    assert ledger.get_status(root=tmp_path, slug="rounds").state["needs_user"] == []
+
+
+@pytest.mark.parametrize("case", ["invalid_tail", "duplicate", "boolean", "owner_accept", "unknown_accept", "missing_proposal"])
+def test_import_round_rejects_invalid_batch_without_partial_write(tmp_path: Path, case: str) -> None:
+    from grill_ledger_core import ledger
+
+    ledger.init_ledger(root=tmp_path, topic="Plan", slug="invalid", initiator="Codex")
+    before = ledger.read_markdown(root=tmp_path, slug="invalid")
+    batch = round_example()
+    accept = []
+    if case == "invalid_tail":
+        batch["items"].append({"id": "bad"})
+    elif case == "duplicate":
+        batch["items"].append(copy.deepcopy(batch["items"][0]))
+    elif case == "boolean":
+        batch["items"][0]["needs_user"] = "false"
+    elif case == "owner_accept":
+        batch["items"][0]["needs_user"] = True
+        accept = ["R1-Q1"]
+    elif case == "unknown_accept":
+        accept = ["missing"]
+    else:
+        batch["items"][0].pop("proposal")
+        accept = ["R1-Q1"]
+    source = tmp_path / "round.json"
+    source.write_text(json.dumps(batch), encoding="utf-8")
+    with pytest.raises(ValueError):
+        ledger.import_round(root=tmp_path, slug="invalid", file=source, accept=accept)
+    assert ledger.read_markdown(root=tmp_path, slug="invalid") == before
+
+
+def test_round_import_has_no_question_quota_and_rejects_changed_replay(tmp_path: Path) -> None:
+    from grill_ledger_core import ledger
+
+    ledger.init_ledger(root=tmp_path, topic="Plan", slug="large", initiator="Codex")
+    batch = round_example()
+    template = batch["items"][0]
+    batch["items"] = [dict(template, id=f"R1-Q{i}") for i in range(1, 35)]
+    source = tmp_path / "round.json"
+    source.write_text(json.dumps(batch), encoding="utf-8")
+    ledger.import_round(root=tmp_path, slug="large", file=source)
+    before = ledger.read_markdown(root=tmp_path, slug="large")
+    assert len(ledger.get_status(root=tmp_path, slug="large").questions) == 34
+    with pytest.raises(ValueError, match="different content or acceptance"):
+        ledger.import_round(root=tmp_path, slug="large", file=source, accept=["R1-Q1"])
+    batch["items"][0]["answer"] = "changed"
+    source.write_text(json.dumps(batch), encoding="utf-8")
+    with pytest.raises(ValueError, match="different content or acceptance"):
+        ledger.import_round(root=tmp_path, slug="large", file=source)
+    assert ledger.read_markdown(root=tmp_path, slug="large") == before
+
+
+def test_round_import_publish_failure_keeps_existing_ledger(tmp_path: Path, monkeypatch) -> None:
+    from grill_ledger_core import ledger
+
+    ledger.init_ledger(root=tmp_path, topic="Plan", slug="atomic", initiator="Codex")
+    before = ledger.read_markdown(root=tmp_path, slug="atomic")
+    source = tmp_path / "round.json"
+    source.write_text(json.dumps(round_example()), encoding="utf-8")
+
+    def fail_replace(self, target):
+        raise OSError("simulated publish failure")
+
+    monkeypatch.setattr(Path, "replace", fail_replace)
+    with pytest.raises(OSError, match="simulated publish failure"):
+        ledger.import_round(root=tmp_path, slug="atomic", file=source)
+    assert ledger.read_markdown(root=tmp_path, slug="atomic") == before
+    assert not list(ledger.ledger_path(tmp_path, "atomic").parent.glob(".grill-import-*"))
+
+
+def test_round_import_rejects_reusing_stable_id_in_another_batch(tmp_path: Path) -> None:
+    from grill_ledger_core import ledger
+
+    ledger.init_ledger(root=tmp_path, topic="Plan", slug="ids", initiator="Codex")
+    batch = round_example()
+    source = tmp_path / "round.json"
+    source.write_text(json.dumps(batch), encoding="utf-8")
+    ledger.import_round(root=tmp_path, slug="ids", file=source)
+    before = ledger.read_markdown(root=tmp_path, slug="ids")
+    batch["batch_id"] = "R1-B2"
+    source.write_text(json.dumps(batch), encoding="utf-8")
+    with pytest.raises(ValueError, match="item ids already imported"):
+        ledger.import_round(root=tmp_path, slug="ids", file=source)
+    assert ledger.read_markdown(root=tmp_path, slug="ids") == before
+
+
+@pytest.mark.parametrize("include_owner", [False, True])
+def test_stop_refuses_unresolved_import_even_when_other_items_need_owner(tmp_path: Path, include_owner: bool) -> None:
+    from grill_ledger_core import ledger
+
+    ledger.init_ledger(root=tmp_path, topic="Plan", slug="stop", initiator="Codex")
+    batch = round_example()
+    batch["items"][0].pop("proposal")
+    batch["items"][0]["questioner_review"] = "证据不足，继续查证。"
+    if include_owner:
+        batch["items"].append(dict(batch["items"][0], id="R1-Q2", needs_user=True))
+    source = tmp_path / "round.json"
+    source.write_text(json.dumps(batch), encoding="utf-8")
+    ledger.import_round(root=tmp_path, slug="stop", file=source)
+    before = ledger.read_markdown(root=tmp_path, slug="stop")
+    with pytest.raises(ValueError, match="cannot stop with unresolved questions: Q1"):
+        ledger.stop_review(root=tmp_path, slug="stop", proof="未查清事实不能被此声明覆盖。")
+    assert ledger.read_markdown(root=tmp_path, slug="stop") == before
+    assert not ledger.review_path(tmp_path, "stop").exists()

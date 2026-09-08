@@ -4,23 +4,26 @@
     {
       "id": 1,
       "prompt": "用 /impl-package:grill-me-smartly 审一份跨服务账单迁移 Spec。方案涉及双写、历史数据回填、失败补偿和旧客户端兼容，请开始第一轮。",
-      "expected_output": "先加载普通 /grilling，以其完整 frontier 和分批规则驱动 Questioner，再由 grill-me-smartly 逐题写入 ledger 并保留 Review/Apply gate。",
+      "expected_output": "先加载普通 /grilling，由 Questioner 持续跟踪完整 frontier 并按原协议分批向 Answerer 提问。Answerer 保存当前批问答，主控按文件批量导入并后处理，保留 Review/Apply gate。",
       "files": [],
       "assertions": [
         "明确使用 /grilling 作为提问协议，而不是在插件内建立第二套完整规则",
-        "Questioner 返回当前完整 frontier，过大时按 /grilling 分批",
-        "每个问题分别进入 ledger，review 阶段不修改目标 Spec"
+        "Questioner 按 /grilling 原节奏只展开当前可读批次，剩余项保存稳定 ID 和前置条件，不增加固定题数或追问次数限制",
+        "Questioner 与 Answerer 直接问答，Answerer 写批文件，主控按路径读取并用 import-round 导入，每项仍独立可追踪",
+        "review 阶段不修改目标 Spec"
       ]
     },
     {
       "id": 2,
       "prompt": "用 /impl-package:grill-me-smartly 审当前仓库的权限迁移计划。哪些调用方存在、哪些测试覆盖现状都能从本地查；产品是否允许旧 token 延迟失效需要我决定。",
-      "expected_output": "Answerer 自行查清本地事实并记录证据，只把真正需要产品意图的决定按 /grilling 的 batch 和 reply contract 交给用户。",
+      "expected_output": "Answerer 先代 Owner 查清本地事实，将证据、澄清往返、Questioner 异议和候选结论保存到批文件。主控后处理，只把真正需要产品意图的决定按 /grilling 的 batch 和 reply contract 交给 Owner。",
       "files": [],
       "assertions": [
         "本地可查事实交给 Answerer，不反问用户",
         "用户只收到需要 owner 意图的决策",
-        "事实答案、用户裁决和收敛结论分别记录"
+        "事实答案、用户裁决和收敛结论分别记录，--accept 仅用于主控审定的事实候选",
+        "未决 Owner 选择阻塞依赖分支；未处理事实缺口或异议不能作为 stop proof",
+        "上下文压缩后从 frontier、ledger 和批文件恢复，已导入批重试不重复创建问题"
       ]
     },
     {

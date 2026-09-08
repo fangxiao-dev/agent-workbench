@@ -9,98 +9,66 @@ description: >
 
 # Grill Me Smartly
 
-Use this skill to stress-test a plan through a ledger-driven review loop. Ledger 是过程 source of truth，记录问题、回答、已收敛决策、待用户裁决与停止证明；只有合法停止时才生成独立中文 Grill Review，它是面向人的交付物和 approval surface，不混入过程日志。
+Questioner 按 grilling 的节奏提问，Answerer 先代 Owner 回答可查事实，两者直接对话并保存每轮记录。主控后处理记录、审定事实结论，再向 Owner 汇报与提请裁决。Ledger 保留过程证据；合法停止时生成独立中文 Grill Review，供 Owner 审阅后决定是否 apply。
 
 ## Question Protocol Dependency
 
-开始 review 前先通过宿主 Skill 目录读取普通 Skill `/grilling`。它唯一拥有设计树、frontier、分批提问、问题内容与回复合同；本 Skill 只增加 ledger、角色分工、stop proof 与 Review/Apply gate。
+开始前通过宿主 Skill 目录读取普通 Skill `/grilling`，并将其解析后的文件路径交给 Questioner。它唯一拥有设计树、frontier、分批提问、问题内容与回复合同。本 Skill 只负责角色协作、记录和 Review/Apply gate。
 
-若 `/grilling` 不可用，使用本文的 Roles、Loop 与 Question Quality Bar 继续最小降级流程：Questioner 每次只提出下一个最高价值问题。最终回复必须明确写出“未加载 `/grilling`，本次使用简化降级”，使行为差异可见；不要在这里复制完整 grilling 合同。
+完整 frontier 由 Questioner 持续跟踪；每次只展开 `/grilling` 当前可读的一批，收到该批回答后再计算后续问题。未展开项以稳定 ID、前置条件和分支摘要保存在 frontier 文件中，新的回答使某项失效时记录原因。题数、批次大小和追问节奏由 `/grilling` 决定。
 
-## User Invocation
-
-用户只需短请求，例如：
-
-```text
-用 /impl-package:grill-me-smartly 审 docs/plans/user-auth-migration.md。
-```
-
-短请求（如“审 docs/plans/x.md”）即视为授权运行全流程：初始化或加载 Grill Ledger，按需使用 Questioner/Answerer，记录中文摘要并只在有 stop proof 时停止；无需用户重述内部角色、ledger 机制或 subagent 编排。
+若 `/grilling` 不可用，使用简化降级：Questioner 每次提出下一个最高价值问题，点名分支、说明为何现在重要，并在证据充分时给推荐答案。仍执行本文角色、记录与停止规则；最终明确报告“未加载 `/grilling`，本次使用简化降级”。
 
 ## Review Then Apply
 
-1. **Review phase**：在 ledger 维护完整过程并生成 Grill Review，不修改被审阅的 plan、spec、PRD 或源文档。Grill Review 必须让用户无需阅读过程 ledger 就能理解最终选择、证据、影响、待裁决项和停止依据；ledger 作为 audit trail 保留。
-   - 常见误判：不先隔离 review，临时判断会被误写进目标文档，未决项也会看起来像已批准。
+短请求（如“用 /impl-package:grill-me-smartly 审 docs/plans/x.md”）授权初始化或恢复 ledger、运行问答并交付 Review。Review 期间只写临时过程产物，保持被审 plan、spec、PRD 和源文档不变。
 
-2. **Apply phase**：只有在用户读过 Grill Review 并明确要求 apply 后才开始，只应用已收敛决策与用户批准的裁决，未决项保留在 ledger 或先向用户询问。
-   - 常见误判：不经过这道门，模型会把自己的收敛误当成用户对 durable 文档的批准。
+只有 Owner 读过 Grill Review 并明确要求 apply 后，才将已收敛决策及 Owner 批准的裁决写入目标文档。未决项继续保留；subagent 共识是候选结论，不能替代 Owner 对新产品意图、偏好或风险取舍的批准。
 
 ## Roles
 
-- **Main session**：scribe、judge、user-intent gatekeeper，唯一 ledger 写入者，所有写入经 `scripts/grill_ledger.py`，并负责问真实用户。
-- **Questioner subagent**：拥有设计树；正常路径按 `/grilling` 返回当前完整 frontier（过大时按其规则分批），降级路径只返回下一个最高价值问题；不自答。
-- **Answerer subagent**：只回答本地文件、代码、git 历史、文档或工具可解决的事实问题；不回答产品意图、偏好或风险容忍度。
-- **Critic subagent（可选）**：每五个已回答问题后或停止前检查缺失分支、过早收敛、重复提问和把用户意图误当本地事实的问题；接受的批评点以新问题写入 ledger。
+- **Main session**：judge、user-intent gatekeeper。派发角色和材料，读取每批结果并通过脚本批量导入正式 ledger，审定事实结论、向 Owner 汇报与提问，最终检查 stop proof。正式 ledger 只有主控写入。
+- **Questioner subagent**：拥有设计树和 frontier 文件；按 `/grilling` 向 Answerer 提问，检查回答和证据、保留异议，决定本批是否需追问。向主控返回本批审查摘要、剩余分支索引和需要裁决的事项。
+- **Answerer subagent**：先代 Owner 回答本地文件、代码、git 历史、文档或工具可解决的问题，并引用证据。对于新意图或取舍，说明事实基础与缺口，标为 `needs_user`；已确认的 Owner 决策可以引用。负责保存双方每批的问答、澄清、异议和候选结论。
+- **Critic subagent（可选）**：每五个已回答问题后或停止前检查遗漏分支、过早收敛、重复提问和意图越界。接受的缺口回交 Questioner 作为问题处理。
 
-Subagents 不直接写 ledger 或目标文档，返回结构化文本由 main session 记录和判断。
+## 临时产物
 
-## Ledger Location
+文件位于 OS 临时目录 `<os-temp>/codex-grill/`，使用被审文档 basename 生成 slug；无文件锚定且没有明显 slug 时询问 Owner。
 
-Ledger 位于用户 OS 临时目录，不进入当前 workspace：
+| 文件 | 写入者与用途 |
+| --- | --- |
+| `grill-<slug>.frontier.md` | Questioner：设计树、稳定问题 ID、依赖、剩余项、失效原因与恢复锚点 |
+| `grill-<slug>.round-<batch-id>.json` | Answerer：当前批记录；`batch-id` 同时区分 grilling 的轮和轮内批次，如 `R1-B2` |
+| `grill-<slug>.ledger.md` | 主控通过脚本生成：已导入问答、审定结论、待用户裁决和停止依据 |
+| `grill-<slug>.review.md` | 合法 `stop` 时生成：面向 Owner 的中文独立交付物 |
 
-```text
-<os-temp>/codex-grill/grill-<slug>.ledger.md
-<os-temp>/codex-grill/grill-<slug>.review.md
-```
+frontier 和批记录是恢复依据，随产生及时保存；已导入的批记录保持不变，后续回答与裁决沿用原 ledger Q ID，澄清产生的新问题使用新批 ID 和新问题 ID 并引用原问题。发给主控的交回通知只传文件路径、当前批 ID 与简短增量摘要，主控按需读当前批。脚本兼容既有 `grill-<slug>.md` ledger；`init` 拒绝覆盖已有记录。
 
-脚本默认使用该临时位置；不要创建 repo-local `docs/exchange/grill/` ledger，也不要为此修改 `.gitignore`。优先用被审文档 basename 生成 slug；无文件锚定且没有明显 slug 时询问用户。`init` 拒绝覆盖已有 ledger，已有记录用 `status` 继续；为兼容既有记录仍可读取旧的 `grill-<slug>.md`，只有合法 `stop` 才创建或刷新 review 文件。
+## Loop
+
+1. **加载与恢复**：读取 `/grilling` 和目标材料。无 ledger 时 `init`；已有记录先 `status` 并读取摘要、frontier 与未导入批文件，识别已处理项和剩余项。
+2. **启动两个角色**：使用 standing Questioner 和 Answerer，向两者提供目标材料快照、协议路径、Owner 已确认选择、当前摘要、各自写入路径及对方 agent ID。宿主支持 peer messaging 时让两者直接通信；需由主控唤醒 idle agent 时只传批 ID 和文件路径。宿主只能经主控路由消息时，转交文件引用，仍由 Answerer 保存问答。发生上下文压缩后，从这些文件和材料快照启动 fresh 角色。
+3. **本批问答**：Questioner 按 `/grilling` 向 Answerer 提出当前批，Answerer 查证并按批回复。Questioner 检查证据，必要时继续澄清；Answerer 将有实质内容的往返完整保存在当前批文件，保留未解决分歧。需要 Owner 的问题及其依赖分支保持未决，独立的事实问题继续按协议推进。
+4. **交回本批**：Questioner 将检查意见回发 Answerer 并更新 frontier；Answerer 将反馈写入批记录后完成保存。两者向主控报告文件路径、问题数、候选结论和待裁决项，等待本批后处理结果。此时本批每项都有事实答案或明确缺口，后续分支有可恢复的索引。
+5. **主控后处理**：读取本批文件和 Questioner 检查结果，通过 `import-round` 一次导入问答；用 `--accept` 指定证据充分且不涉及新 Owner 取舍的候选结论 ID。其余记录保持已回答或待用户裁决，异议和不确定性可见。修改候选结论时使用现有 `converge`；Owner 回答经 `record-answer` 记录后再收敛。导入重试沿用原批文件和相同接纳列表。
+6. **汇报与继续**：主控向 Owner 汇报审定结论、影响与剩余事项；真正需要 Owner 的选择按 `/grilling` batch 与 reply contract 提出。将审定结果、ID 映射和 Owner 回答交还 Questioner，再继续下一批。需要 Owner 的前置选择得到回答后，才展开其依赖问题。`end-turn` 用于记录完成一轮；单项收敛不表示 review 结束。
+7. **检查与停止**：按需运行 Critic；停止前从 Questioner 或 Critic 获取 stop proof，核对 frontier、未导入批文件与 ledger。只有所有 material branch 已收敛、剩余项仅依赖真实 Owner，或继续提问只会重复已解决决策，才执行 `stop --proof`。未查清事实或未处理异议不满足停止条件。
+8. **交付**：提供临时 Review 与 Ledger 路径，说明已问已答、已收敛和仍待 Owner 的数量。Review 独立解释选择、理由、影响、证据、待裁决项与停止依据，不混入过程流水。Owner 审阅并明确要求 apply 后才进入写回。
 
 ## Ledger Commands
 
-命令可从目标仓库根执行，但 ledger 仍写入 OS 临时目录；参数含空格时遵守宿主 shell 的 quoting 规则：
+准备或导入批文件前，主控和 Answerer 读取 [批记录格式](references/round-record.md)。Questioner 读取其中检查反馈的字段要求。所有命令使用 [scripts/grill_ledger.py](scripts/grill_ledger.py)；从任意目标仓库运行，默认产物仍在 OS 临时目录。参数含空格时遵守宿主 shell quoting 规则。
 
 ```text
 python <skill>/scripts/grill_ledger.py init --topic <plan-or-topic> --slug <slug> --initiator <main-session-name>
 python <skill>/scripts/grill_ledger.py status --slug <slug>
-python <skill>/scripts/grill_ledger.py add-question --slug <slug> --author Questioner --branch <branch> --question <question> --why-now <reason> --recommended-default <default>
-python <skill>/scripts/grill_ledger.py record-answer --slug <slug> --question Q1 --author Answerer --answer <answer> --evidence <evidence> --uncertainty <uncertainty> --needs-user true|false
+python <skill>/scripts/grill_ledger.py import-round --slug <slug> --file <round-json> --accept R1-Q1 R1-Q2
+python <skill>/scripts/grill_ledger.py record-answer --slug <slug> --question Q1 --author Owner --answer <answer> --evidence <source> --uncertainty <uncertainty> --needs-user false
 python <skill>/scripts/grill_ledger.py converge --slug <slug> --question Q1 --line <decision> --rationale <why> --impact <impact>
-python <skill>/scripts/grill_ledger.py need-user --slug <slug> --question Q1 --line <question-for-user>
+python <skill>/scripts/grill_ledger.py need-user --slug <slug> --question Q1 --line <question-for-owner>
 python <skill>/scripts/grill_ledger.py end-turn --slug <slug>
 python <skill>/scripts/grill_ledger.py stop --slug <slug> --proof <stop-proof>
 ```
 
-## Loop
-
-1. **加载提问协议并确认目标**：先读取 `/grilling`；不可用时标记简化降级。识别正在审阅的 plan、spec、PRD 或当前对话，读到足以理解设计树；review 期间不编辑目标文档。
-   - 常见误判：没读够设计树就开始提问，后面的 frontier 会建立在错误前提上。
-2. **初始化/恢复 ledger**：无记录运行 `init`，有记录先 `status` 并读 Markdown；顶部中文摘要是实时过程摘要，更新仍必须经脚本完成，不是最终交付物。
-   - 常见误判：跳过恢复会丢掉已问问题和停止依据，重复提问会被误当成新发现。
-3. **启动 Questioner**：上下文未压缩时可复用 standing Questioner；发生 compaction 后用 plan snapshot 和 current ledger summary 启动 fresh Questioner。给它材料快照、摘要和当前提问协议；正常路径要求返回 `/grilling` 定义的完整 frontier，降级路径只返回下一个最高价值问题。每项包含 branch name、exact question、why-now、证据足够时的 recommended default、是否 locally answerable。
-   - 常见误判：压缩后复用旧上下文会让已失效的分支重新成为前提。
-4. **记录问题**：对 Questioner 返回的每项分别调用 `add-question`，不把无关问题合并到一个 Q item。
-   - 常见误判：合并后无法知道哪一个决定已回答，frontier 也会错误收敛。
-5. **本地回答与用户裁决**：问题可由本地事实解决时交 Answerer，并用 `record-answer` 记录简洁答案、文件/命令证据、不确定性和是否需要用户意图。正常路径把剩余用户决策按 `/grilling` 的 batch 与 reply contract 一次提出；降级路径用 `need-user` 只问一个具体问题。
-   - 常见误判：把可查事实交给用户，会把事实缺口伪装成偏好决策；把偏好交给 Answerer，则会替用户做决定。
-6. **收敛**：本地证据足以决定时用 `converge`，中文收敛行写明选择、理由和影响；每个问题解决不等于整个 review 结束。
-   - 常见误判：一个问题的 converge 只释放后续分支，不能证明整棵树已经走完。
-7. **继续回合**：每轮完成后 `end-turn`；状态仍为进行中就把更新后的 ledger 摘要交给 Questioner，按当前提问协议重新计算下一 frontier。不要因为一个问题已回答就停止。
-   - 常见误判：在首个回答后停止会把尚未展开的 material branch 静默丢掉。
-8. **Critic pass**：每五个回答、停止前或 review 显得过窄时运行 critic；把接受的缺口作为新问题记录，不把批评直接写成结论。
-   - 常见误判：只让原 Questioner 自检，容易把过早收敛误认为完整性。
-9. **停止证明**：只有所有 material branch 已收敛、剩余问题明确需要真实用户，或继续提问会重复已解决决策时，才用 `stop --proof`。proof 必须来自 Questioner 或 critic；单个 converge 不足以停止。`stop` 生成包含最终决策、理由、影响、证据、待用户裁决和停止依据的 `grill-<slug>.review.md`，不包含问题流水和机器状态。
-   - 常见误判：没有外部 stop proof 就停止，最终 Review 只是一份自信摘要，不是可审计的收口依据。
-10. **最终交付**：给出两个临时文件路径，并总结已做决策、已问已答和仍待用户；发生简化降级时明确报告。review 阶段不更新目标文档，要求用户检查后明确批准 apply。
-   - 常见误判：把过程 ledger 当最终交付，用户就无法只看 Review 判断选择、证据和待裁决项。
-
-## Chinese Summary Requirements
-
-Ledger 顶部摘要由脚本维护，至少让不读完整日志的读者看懂：`已收敛决策摘要`（每个选择的理由、影响、证据）、`待用户裁决`、`问题与回答总览`、`停止证明`。只有合法停止时才发布独立 Grill Review；它是用户 approval surface，不取代过程 ledger。
-
-## Question Quality Bar
-
-每个问题必须 force one exact decision、点名受影响分支、说明为何现在重要、证据充分时给 recommended default，并避免询问本地可查事实（除非让 Answerer 验证）。正常路径的 frontier 与提问深度以 `/grilling` 为准；降级路径只保证这些最小质量条件。坏问题是捆绑无关决策、重复询问 ledger 已记录信息、让 Answerer 推断用户偏好，或没有 stop proof 就停止。
-
-## Common Mistakes
-
-不要让 main session 重新掌管决策树（树归 Questioner）；不要让 subagent 直接写 Markdown（脚本拥有 ledger 结构）；不要把首个回答当成整个 review；不要只记录最终决策而丢掉问题/回答流水；不要在 review phase 修改目标文档。先生成 Grill Review，再等待用户明确批准 apply。
+省略 `--accept` 时仅导入问答和待用户项；接纳列表是主控的裁决，Answerer 只生成候选。旧 `add-question`、`record-answer` 命令继续支持恢复与补录；命令参数通过 `--help` 查看。

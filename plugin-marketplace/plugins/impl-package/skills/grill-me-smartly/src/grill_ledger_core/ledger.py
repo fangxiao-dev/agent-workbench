@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -145,6 +146,9 @@ def _recompute_status(state: dict) -> str:
 
 
 def _mark_stopped(state: dict, proof: str) -> str:
+    unresolved = [q["id"] for q in state["questions"] if q["status"] in {Q_STATUS_OPEN, Q_STATUS_ANSWERED}]
+    if unresolved:
+        raise ValueError(f"cannot stop with unresolved questions: {', '.join(unresolved)}")
     if any(q["status"] == Q_STATUS_NEEDS_USER for q in state["questions"]):
         status = STATUS_NEEDS_USER
         state["frontmatter"]["status"] = status
@@ -306,6 +310,102 @@ def end_turn(*, root: Path | str, slug: str, directory: str = DEFAULT_DIR) -> Co
     return CommandResult(f"ended turn; status = {status}")
 
 
+def import_round(
+    *,
+    root: Path | str,
+    slug: str,
+    file: Path | str,
+    accept: list[str] | None = None,
+    directory: str = DEFAULT_DIR,
+) -> CommandResult:
+    """Import an Answerer batch; only explicitly accepted factual proposals converge."""
+    if not _slug_is_safe(slug):
+        raise ValueError("unsafe slug")
+    batch = json.loads(Path(file).read_text(encoding="utf-8-sig"))
+    if not isinstance(batch, dict) or set(batch) != {"batch_id", "items"}:
+        raise ValueError("round must contain batch_id and items")
+    batch_id = batch["batch_id"]
+    if not isinstance(batch_id, str) or not batch_id.strip():
+        raise ValueError("batch_id must be a nonempty string")
+    if not isinstance(batch["items"], list) or not batch["items"]:
+        raise ValueError("items must be a nonempty list")
+    text_fields = {
+        "id", "branch", "question", "why_now", "recommended_default", "answer",
+        "evidence", "uncertainty", "discussion", "questioner_review",
+    }
+    ids = set()
+    for item in batch["items"]:
+        if not isinstance(item, dict) or not text_fields.union({"needs_user"}) <= item.keys():
+            raise ValueError("item is missing required fields")
+        if item.keys() - text_fields - {"needs_user", "proposal"}:
+            raise ValueError("item contains unknown fields")
+        for key in text_fields:
+            if not isinstance(item[key], str) or (key not in {"uncertainty", "discussion"} and not item[key].strip()):
+                raise ValueError(f"invalid text field: {key}")
+        if type(item["needs_user"]) is not bool:
+            raise ValueError("needs_user must be a boolean")
+        if item["id"] in ids:
+            raise ValueError(f"duplicate item id: {item['id']}")
+        ids.add(item["id"])
+        if "proposal" in item:
+            proposal = item["proposal"]
+            if not isinstance(proposal, dict) or set(proposal) != {"line", "rationale", "impact"}:
+                raise ValueError("proposal must contain line, rationale and impact")
+            if any(not isinstance(value, str) or not value.strip() for value in proposal.values()):
+                raise ValueError("proposal fields must be nonempty strings")
+    accepted = set(accept or [])
+    if accepted - ids:
+        raise ValueError(f"unknown accepted item ids: {sorted(accepted - ids)}")
+    for item in batch["items"]:
+        if item["id"] in accepted and (item["needs_user"] or "proposal" not in item):
+            raise ValueError(f"cannot accept {item['id']}: needs Owner or has no proposal")
+
+    path, state = _load(root, slug, directory)
+    fingerprint = hashlib.sha256(
+        json.dumps([batch, sorted(accepted)], ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    previous = state.get("imports", {}).get(batch_id)
+    if previous:
+        if previous["fingerprint"] != fingerprint:
+            raise ValueError(f"batch {batch_id} already imported with different content or acceptance")
+        return CommandResult(json.dumps({"batch_id": batch_id, "ids": previous["ids"], "replayed": True}))
+
+    existing_ids = {q["source_id"] for q in state["questions"] if "source_id" in q}
+    if existing_ids & ids:
+        raise ValueError(f"item ids already imported: {sorted(existing_ids & ids)}; use existing ledger Q IDs")
+
+    # Reuse existing ledger commands in a private staging directory; publish only the complete batch.
+    with tempfile.TemporaryDirectory(prefix=".grill-import-", dir=path.parent) as scratch:
+        staged_path = _write_state(scratch, slug, state)
+        mapping = {}
+        for item in batch["items"]:
+            question_id = add_question(
+                root=scratch, slug=slug, author="Questioner",
+                **{key: item[key] for key in ("branch", "question", "why_now", "recommended_default")},
+            ).question_id
+            mapping[item["id"]] = question_id
+            record_answer(
+                root=scratch, slug=slug, question=question_id, author="Answerer",
+                **{key: item[key] for key in ("answer", "evidence", "uncertainty", "needs_user")},
+            )
+            if item["needs_user"]:
+                need_user(root=scratch, slug=slug, question=question_id, line=item["question"])
+            elif item["id"] in accepted:
+                converge_question(root=scratch, slug=slug, question=question_id, **item["proposal"])
+        state = _load_state(staged_path)
+        questions = _question_map(state)
+        for item in batch["items"]:
+            questions[mapping[item["id"]]].update(
+                batch_id=batch_id, source_id=item["id"], discussion=item["discussion"],
+                questioner_review=item["questioner_review"], proposal=item.get("proposal"),
+            )
+        state.setdefault("imports", {})[batch_id] = {"fingerprint": fingerprint, "ids": mapping}
+        _recompute_status(state)
+        _write_state(scratch, slug, state)
+        staged_path.replace(path)
+    return CommandResult(json.dumps({"batch_id": batch_id, "ids": mapping, "replayed": False}))
+
+
 def stop_review(
     *,
     root: Path | str,
@@ -441,6 +541,12 @@ def _render_full_log(state: dict) -> list[str]:
                 f"- 回答：{item['answer'] or '尚未回答'}",
                 f"- 证据：{item['evidence'] or '尚未记录'}",
                 f"- 不确定性：{item['uncertainty'] or '尚未记录'}",
+                *([
+                    f"- 批记录：{item['batch_id']} / {item['source_id']}",
+                    f"- 澄清往返：{item['discussion'] or '无追加澄清'}",
+                    f"- Questioner 检查：{item['questioner_review']}",
+                    f"- 候选结论：{json.dumps(item['proposal'], ensure_ascii=False) if item['proposal'] else '无'}",
+                ] if "batch_id" in item else []),
                 f"- 状态：{item['status']}",
                 "",
             ]
@@ -454,7 +560,7 @@ def _render(state: dict) -> str:
         _render_frontmatter(state["frontmatter"]),
         "",
         STATE_START,
-        json.dumps(state, ensure_ascii=False, indent=2),
+        json.dumps(state, ensure_ascii=False, indent=2).replace(">", "\\u003e"),
         STATE_END,
         "",
         f"# Grill Ledger：{topic}",
@@ -540,6 +646,11 @@ def main(argv: list[str] | None = None) -> int:
     status = sub.add_parser("status")
     status.add_argument("--slug", required=True)
 
+    batch_parser = sub.add_parser("import-round")
+    batch_parser.add_argument("--slug", required=True)
+    batch_parser.add_argument("--file", required=True)
+    batch_parser.add_argument("--accept", nargs="*", default=[])
+
     add = sub.add_parser("add-question")
     add.add_argument("--slug", required=True)
     add.add_argument("--author", required=True)
@@ -603,6 +714,8 @@ def main(argv: list[str] | None = None) -> int:
                 recommended_default=args.recommended_default,
                 directory=args.dir,
             )
+        elif args.cmd == "import-round":
+            result = import_round(root=root, slug=args.slug, file=args.file, accept=args.accept, directory=args.dir)
         elif args.cmd == "record-answer":
             result = record_answer(
                 root=root,
@@ -633,7 +746,7 @@ def main(argv: list[str] | None = None) -> int:
             result = stop_review(root=root, slug=args.slug, proof=args.proof, directory=args.dir)
         else:
             raise AssertionError(args.cmd)
-    except (FileExistsError, FileNotFoundError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(result.message)
