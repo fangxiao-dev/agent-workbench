@@ -524,7 +524,7 @@ def _coverage_context(
     diff_names: dict[str, list[str] | None] | None = None,
     state_valid: bool = True,
     gate_verdict: str | None = None,
-    gate_attempt: str | None = None,
+    gate_attempt: str | None = "fixture-attempt",
     gate_text: str = "",
     attempt_id: str = "fixture-attempt",
     reports: dict[str, str] | None = None,
@@ -608,15 +608,20 @@ def test_gate_terminal_is_true_when_verdict_belongs_to_the_current_attempt() -> 
     assert fact.value is True
 
 
-def test_gate_terminal_assumes_current_attempt_when_gate_predates_attempt_line() -> None:
-    # Legacy/minimal gate.md without an `- Attempt:` line predates per-Attempt
-    # ownership tracking; a single-attempt package has nothing to mismatch against.
+def test_gate_without_attempt_is_unknown_for_all_current_gate_facts() -> None:
     context = _coverage_context([], gate_verdict="pass", gate_attempt=None)
-
-    fact = situation._when_gate_terminal(context)
-
-    assert fact.known is True
-    assert fact.value is True
+    context.snapshot.gate = situation._parse_gate(
+        situation.FileView("gate.md", "# Gate\n- Verdict: pass\n## Durable Deltas\n- old.md\n")
+    )
+    assert context.snapshot.gate.error == "gate.md 缺少 Attempt"
+    assert context.snapshot.gate.verdict is None
+    for parser in (
+        situation._when_gate_terminal,
+        situation._when_gate_present,
+        situation._when_gate_verdict,
+        situation._when_gate_stage7_complete,
+    ):
+        assert parser(context).known is False
 
 
 def test_gate_present_is_false_when_only_a_prior_attempts_gate_exists() -> None:

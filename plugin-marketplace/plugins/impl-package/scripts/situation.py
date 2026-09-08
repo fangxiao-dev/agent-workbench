@@ -987,6 +987,8 @@ def _parse_gate(view: FileView) -> GateView:
     attempt = attempt_match.group(1) if attempt_match else None
     if not verdict_match:
         return GateView(True, None, None, attempt, view.text, "gate.md 缺少 Verdict")
+    if attempt is None:
+        return GateView(True, None, None, text=view.text, error="gate.md 缺少 Attempt")
     return GateView(True, verdict_match.group(1).lower(), commit_match.group(1) if commit_match else None, attempt, view.text)
 
 
@@ -1000,7 +1002,7 @@ def _effective_gate(snapshot: Snapshot) -> GateView:
     matching the best-effort style of the rest of the `sources` block.
     """
     gate = snapshot.gate
-    if not gate.present or gate.error or gate.attempt is None:
+    if not gate.present or gate.error:
         return gate
     if not snapshot.state.valid or not snapshot.state.attempt_id:
         return gate
@@ -1983,14 +1985,13 @@ def _when_trail_last_ticket_terminal_transition(context: FactContext) -> Fact:
 def _gate_attempt_matches(context: FactContext, gate: GateView) -> Fact | bool:
     """Whether gate.md's Attempt line matches the currently active Attempt.
 
-    A Gate without an Attempt line predates per-Attempt ownership and always
-    matches; otherwise state.json's attempt id is the source of truth (mirrors
+    state.json's attempt id is the source of truth (mirrors
     engine.py's `_lifecycle`, which only freezes the Attempt a Gate was written
     for). Every gate.* fact reads through this so a prior Attempt's leftover
     Gate never masks the current Attempt's own state.
     """
     if gate.attempt is None:
-        return True
+        return context.unknown("gate.md 缺少 Attempt，无法判定归属")
     state_required = context.state_required()
     if state_required is not None:
         return state_required

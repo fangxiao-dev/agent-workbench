@@ -309,6 +309,20 @@ def test_session_start_injects_read_only_resume_capsule_for_each_supported_sourc
     assert not credential.exists()
 
 
+@pytest.mark.parametrize("gate_attempt", [None, "old-attempt"])
+def test_session_start_does_not_publish_an_unowned_gate_verdict(tmp_path: Path, gate_attempt: str | None) -> None:
+    repo, package = make_repo(tmp_path)
+    attempt_line = f"- Attempt: {gate_attempt}\n" if gate_attempt else ""
+    (package / "gate.md").write_text(
+        f"# Gate\n{attempt_line}- Verdict: defer\n- Comparison commit: {git(repo, 'rev-parse', 'HEAD')}\n",
+        encoding="utf-8",
+    )
+    assert_json_success(activate(repo, package, "unowned-gate"))
+    context = capsule_text(session_start(repo, "unowned-gate"))
+    assert "gate-verdict: none" in context
+    assert "gate-verdict: defer" not in context
+
+
 def test_session_start_reports_render_failure_as_warning_without_blocking_the_session(tmp_path: Path) -> None:
     repo, package = make_repo(tmp_path)
     assert_json_success(activate(repo, package))
