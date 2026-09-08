@@ -14,7 +14,7 @@ description: 当批准 implementation plan 正式开始或者恢复执行、选�
 3. **裁决语义**：Decision/Spec 能唯一裁决时作为 implementation defect；存在多个合理业务结果时才请求 Owner。finding 的定级、disposition 与 acceptance point 也由本 Skill 判断。
 4. **形成 Topic**：准备当前业务动作的 foundation、ownership、closure point、bounded outcome、禁改范围、成功条件与局部验证，交由 `$dispatcher` 按其 Topic-first 门槛确定当前 baby step；需要共享 DB、端口或测试数据时，按 [SDD Resource Admission](../subagent-driven-development/references/parallel-work-admission.md) 明确隔离、owner 和 cleanup，真正运行前按 Planned Verification 核对实际目标、身份/配置、健康状态与资源隔离。
 5. **交给 Dispatcher**：对候选调用 `$dispatcher` 的 admission、batch、receipt、return 与 idle 规则；只释放预期收益足够且依赖、授权、资源已满足的动作，Progress/checkpoint 不授权 dispatch。
-6. **执行 bounded worker**：对 Dispatcher 已准入的 baby step，caller 按 `/impl-package:subagent-driven-development` 分类 dependency、决定当前或隔离 worktree，并形成 mode、lane、lifecycle 与 review requirement。
+6. **执行 bounded worker**：对 Dispatcher 已准入的 baby step，caller 按 `/impl-package:subagent-driven-development` 分类 dependency、决定当前或隔离 worktree，并形成 mode、lane、lifecycle 与 review requirement。有清晰边界的工作继续交给 worker；当接线强依赖主控已有的综合上下文、拆分交接的成本高于主控直接完成时，主控可以直接实现，明确当次 write ownership，并按 T4 规则保留独立 delta review，不把主控直接编码变成另一套执行流程。
 7. **消费结果**：核对可归因 diff、evidence、residue、cleanup 和 review 状态；局部 DONE 或 checkpoint PASS 只释放对应 Topic 下一步。随后用 package CLI 写 state/evidence/checkpoint/judgment/trail；Dispatcher 负责 return 后的补派与重扫，调度 idle 后依据 canonical state、evidence、review 与 Gate 判断继续、blocked 或 closure。
 
 完成标准：每轮都能说明唯一业务下一动作，或说明合格动作因预期收益不足暂缓；等待 review、fix 或长时验证返回不构成下一动作，调度 idle 只表示当前没有值得现在派发的动作，不表示没有可推进的工作，Ticket/package closure 仍由本 Skill 根据 canonical facts 判断。

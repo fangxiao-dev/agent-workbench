@@ -524,6 +524,8 @@ def _coverage_context(
     diff_names: dict[str, list[str] | None] | None = None,
     state_valid: bool = True,
     gate_verdict: str | None = None,
+    gate_attempt: str | None = None,
+    attempt_id: str = "fixture-attempt",
     reports: dict[str, str] | None = None,
 ) -> situation.FactContext:
     diff_names = diff_names or {}
@@ -536,7 +538,7 @@ def _coverage_context(
         raw={"tickets": {"TKT-01": {"state": ticket_state}}} if state_valid else None,
         valid=state_valid,
         error=None if state_valid else "state.json 无法判定",
-        attempt_id="fixture-attempt",
+        attempt_id=attempt_id,
         ticket_ids=["TKT-01"],
     )
     snapshot = situation.Snapshot(
@@ -545,14 +547,14 @@ def _coverage_context(
         state=state,
         tickets={},
         trail=situation._parse_trail(situation.FileView("trail.jsonl", "\n".join(json.dumps(row) for row in rows))),
-        gate=situation.GateView(gate_verdict is not None, gate_verdict, None),
+        gate=situation.GateView(gate_verdict is not None, gate_verdict, None, gate_attempt),
         findings=situation.FindingsView(False, "", []),
         intake=situation.IntakeView(False, None),
         validation_result=None,
         compaction_pressure=None,
         head=head,
     )
-    return situation.FactContext(snapshot, "attempt", "fixture-attempt")
+    return situation.FactContext(snapshot, "attempt", attempt_id)
 
 
 def _terminal_dispatch(track: str, *, head: str = "current-head", recheck: bool = False) -> dict:
@@ -572,6 +574,48 @@ def test_terminal_coverage_is_unknown_before_near_terminal_gate() -> None:
     fact = situation._when_attempt_terminal_coverage_complete(context)
 
     assert fact.known is False
+
+
+def test_gate_terminal_is_false_when_verdict_belongs_to_a_prior_attempt() -> None:
+    # E1: an old initial/defer patch's terminal `gate.md` must not be read as
+    # terminal for a newer, still-active Attempt (mirrors engine.py `_lifecycle`,
+    # which already checks `gate["attempt"] == attempt`).
+    context = _coverage_context(
+        [],
+        gate_verdict="pass",
+        gate_attempt="old-attempt",
+        attempt_id="current-attempt",
+    )
+
+    fact = situation._when_gate_terminal(context)
+
+    assert fact.known is True
+    assert fact.value is False
+
+
+def test_gate_terminal_is_true_when_verdict_belongs_to_the_current_attempt() -> None:
+    context = _coverage_context(
+        [],
+        gate_verdict="pass",
+        gate_attempt="current-attempt",
+        attempt_id="current-attempt",
+    )
+
+    fact = situation._when_gate_terminal(context)
+
+    assert fact.known is True
+    assert fact.value is True
+
+
+def test_gate_terminal_assumes_current_attempt_when_gate_predates_attempt_line() -> None:
+    # Legacy/minimal gate.md without an `- Attempt:` line predates per-Attempt
+    # ownership tracking; a single-attempt package has nothing to mismatch against.
+    context = _coverage_context([], gate_verdict="pass", gate_attempt=None)
+
+    fact = situation._when_gate_terminal(context)
+
+    assert fact.known is True
+    assert fact.value is True
 
 
 def _terminal_summary(*, safety=False, old_tracks=()):

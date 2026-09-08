@@ -30,7 +30,7 @@ Dispatcher 面向上游主控，指导 Topic-first admission、当前批次、di
 2. 为每个已解锁 Topic 选择当前 baby step，主动释放有实际收益、互不依赖且资源隔离的步骤并组成当前批次 fan out；预期收益不足的合格动作可以暂不派发，不视为 dependency blocked。是否现在派发，比较提前产出的价值与派发、回收、整合成本，不新增评分表或成本记录。`PARALLEL | SERIAL` 只比较当前候选 baby step 的实际 effect footprint，不使用 Topic 或 Ticket 的最终 write-set 并集；未来步骤会冲突不影响当前步骤并行，冲突到达时再串行。review、验证或 worker 在途只阻塞依赖其结论或资源的步骤；其他 Ticket 的只读调研与准备按同一收益判断释放。文件 ownership 交叉时先由 SDD 判断能否用隔离 worktree 分开。共享操作的合并与复用只是调度优化，不是 dependency；只有不延迟更有价值的独立动作时才合并，否则先执行当前合格步骤并在 return 后重扫。
 3. 单个派发只在宿主 receipt 明确成功后成立。迟到、重复、来源不明或结果不确定的 receipt 先消除歧义，不据此推进后续动作。中断或换 session 后恢复时，先按已有 report/artifact 与 trail 核对在途 review 是否已产出结论，确认缺失后才补派，不无条件重派。
 4. worker return 后先消费可归因结果、evidence、diff、residue 与 cleanup，再判断当前 Topic 的下一步；返回不会自动授权后续工作。若本步产生新的实现代码改动，冻结该步增量并在同一次 return 消费中沿独立 review lane 及时派轻量 delta review；纯调查或只重跑测试且没有新增代码改动时，不机械派代码审查。异步 review 不阻止不依赖其结论的下一步。既定边界内的 tooling retry、format、普通重跑或机械 cleanup 续接当前动作，不创建新业务 step。
-5. 每次消费 return 后检查受影响候选，核对 dependency、授权与资源后补充派发有实际收益的动作，不等待无关 worker；当前批次全部结束或准备进入 idle 时再全局扫描。在途 review 的返回同样按轮消费；派审持续滞后于实现返回，或未消费的 delta review 堆积到 findings 已经赶不上下一个 baby step 时，先消化 review 再释放新的并行 step——实施并发的上限来自这个可观察信号，不设固定数字。没有已解锁且合格且值得现在派发的动作时进入 idle。业务状态、验收和 closure 仍由调用方的 owning workflow 判断。
+5. 每次消费 return 后检查受影响候选，优先看仍未接通的业务路径，释放已就绪、能推进交付的实施；不要只围绕最近 findings 循环安排局部修复。核对 dependency、授权与资源后补充派发有实际收益的动作，不等待无关 worker；当前批次全部结束或准备进入 idle 时再全局扫描。在途 review 的返回同样按轮消费；派审持续滞后于实现返回，或未消费的 delta review 堆积到 findings 已经赶不上下一个 baby step 时，先消化 review 再释放新的并行 step——实施并发的上限来自这个可观察信号，不设固定数字。没有已解锁且合格且值得现在派发的动作时进入 idle。业务状态、验收和 closure 仍由调用方的 owning workflow 判断。
 
 同一 Topic 连续两次 `INCOMPLETE`、broad check 新发现一类 caller/producer，或实际 write-set 超出原 ownership 时，停止继续派更小的 fix；先释放一个 foundation investigation，重新确定 Topic 边界。
 

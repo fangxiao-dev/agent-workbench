@@ -15,18 +15,16 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
 
 ## 流程
 
-需要在 admission、Ticket 拆分/发布、bundle review 或 state 初始化时核对 [常见误判](references/common-misjudgments.md)；其余步骤不逐项复制提醒。
-
 1. initial 读取已批准 Decision、`spec.md`、从属 `contract-design.md` disposition 及当前代码/测试事实，确认 D/S gate 已通过；未触及的 legacy Spec 可暂缺该文件，同一 package 的 patch/update 沿用 initial bundle approval。
-2. 在创建或更新 Plan，或更新 state 前执行 admission backstop：若下一步仍需决定可观察行为、data identity、permission、concurrency、recovery 或 public shape，或 contract surface 命中幂等键 / CAS / 版本号、多个来源写同一个目标字段、替换 / 撤回 / 恢复语义、跨存储提交（两个 store 各自提交）或声明值 vs 检测值但 Spec 只有规则没有结果矩阵，停止 planning，明确缺失合同并路由 `/impl-package:req-align` 重新确认当前 Spec；不得创建或更新 Plan/state，也不得在 Plan 中补第二套 DTO/schema。
+2. 在创建或更新 Plan，或更新 state 前执行 admission backstop：若下一步仍需决定可观察行为、data identity、permission、concurrency、recovery 或 public shape，或 contract surface 命中幂等键 / CAS / 版本号、多个来源写同一个目标字段、替换 / 撤回 / 恢复语义、跨存储提交（两个 store 各自提交）或声明值 vs 检测值但 Spec 只有规则没有结果矩阵，停止 planning，明确缺失合同并路由 `/impl-package:req-align` 重新确认当前 Spec；不得创建或更新 Plan/state，也不得在 Plan 中补第二套 DTO/schema。误判提醒见 [Admission 与计划](references/common-misjudgments.md#admission-与计划)。
 3. 判断是 initial 还是 patch；patch 只描述相对上次 terminal gate 的实际 delta。
 4. 新 package 固定选择 `tickets=true, dag=false`；`dag=true` 只允许在旧 package 迁移/恢复计划中出现。
 5. 在 Ticket 拆分子流程中，把每个 Decision/Spec 约束映射到具体 Ticket 的 Contract references 与 AC，并按 Composition Contract 编译为 stable claim acceptance atoms；Ticket 自身承载建设内容、逐项 evidence、early-falsification、remaining-completion 和安全不变量。Plan 只提炼跨 Ticket 的实施与接线安排、typed dependency、共享资源、全局执行边界与 Planned Verification。
    - 并行判断：先核实真实 caller、复用入口、依赖产物、接线条件和验证可行性；结合冻结合同与当前资源，只提前开展能独立实施并验证的工作。
-   - 按整票真实阻塞选择 `implementation / acceptance / release`，票内等待写成接线条件；只记录会改变安排的交接产物及其验证，不预列完整 baby-step 队列，派发和步骤大小交给 `$dispatcher` 与 `/impl-package:subagent-driven-development`。
+   - 按整票真实阻塞选择 `implementation / acceptance / release`，票内等待写成接线条件；只记录会改变安排的交接产物及其验证，不预列完整 baby-step 队列，派发和步骤大小交给 `$dispatcher` 与 `/impl-package:subagent-driven-development`。误判提醒见 [并行与调度安排](references/common-misjudgments.md#并行与调度安排)。
 6. `tickets=true` 时执行本 Skill 的“Ticket 拆分”子流程；新 package 不调用 `create-task-dag`。
 7. 初始 bundle 冻结 plan candidate 后调用 `/impl-package:plan-review` 的 `bundle-admission`；返回 `full-review` 时继续同一 skill 的完整审查，处理 material findings，并联合校验 coverage、typed dependency、ownership、证据可行性、Gate 边界与集成顺序，然后请求一次完整 bundle approval；后续 patch/update 直接沿用该 approval。
-8. 获批后，主 thread 使用当前已加载插件的 `impl_package_state.py` 语义 CLI 执行 `package init --attempt <id> --plan <repo-relative-plan>`，再执行 `package validate`；同时确认 execution-boundaries 的授权范围。插件根目录以当前已加载 skill 所属的插件根目录为准，不假设 workbench 仓库路径或宿主缓存路径。
+8. 获批后，主 thread 使用当前已加载插件的 `impl_package_state.py` 语义 CLI 执行 `package init --attempt <id> --plan <repo-relative-plan>`，再执行 `package validate`；同时确认 execution-boundaries 的授权范围。插件根目录以当前已加载 skill 所属的插件根目录为准，不假设 workbench 仓库路径或宿主缓存路径。误判提醒见 [State 与发布边界](references/common-misjudgments.md#state-与发布边界)。
 9. 进入 `/impl-package:execution-boundaries`，再交给 `/impl-package:dev-with-track`。
 
 机械操作一律走 typed tools/语义 CLI；状态变更命令的处境与协议尾注由 `situation.py` 按 `situations.yaml` 注入。主 thread 完成 Plan/Ticket 写入与 `package init`/`package validate`；execution-boundaries 负责授权与 completion evidence audit。初始 bundle approval 在同一 package 内跨 session、patch 和普通更新持续有效，作为唯一 approval receipt。
@@ -35,7 +33,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
 
 仅在当前 plan 声明 `tickets=true` 时使用；Ticket 放在 package 固定的 `tickets/` 目录，文件名可排序且稳定。
 
-本 Skill 拥有 Ticket 的纵向切片、AC、contract references 和 typed dependency 语义；主 thread 直接写入并验证 Ticket 正文，运行时 state 由主 thread 直接通过语义 CLI 更新。
+本 Skill 拥有 Ticket 的纵向切片、AC、contract references 和 typed dependency 语义；主 thread 直接写入并验证 Ticket 正文，运行时 state 由主 thread 直接通过语义 CLI 更新。以下 9 步的误判提醒见 [Ticket 合同与证据](references/common-misjudgments.md#ticket-合同与证据)。
 
 1. **切分纵向交付**：按可独立验收的纵向交付切片拆分，不按文件、层或 worker 拆分；一个 Ticket 交付恰好一个可验收的用户终态。终态分为权威转换（用户动作成功后产生新的权威记录，下游从此读取）和可验收的展示或编辑终态（用户到达稳定、可当场判定的界面状态，不产生新的权威记录）。
    - 计数判据：建设内容中终态为 0 个时作为层并入其他 Ticket，1 个为正确，2 个及以上拆分；读模型接线、后端算法、UI 只读化、加字段、补测试本身并入其服务的终态。

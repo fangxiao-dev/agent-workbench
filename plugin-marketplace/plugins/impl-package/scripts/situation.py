@@ -212,6 +212,7 @@ class GateView:
     present: bool
     verdict: str | None
     comparison_commit: str | None
+    attempt: str | None = None
     text: str = ""
     error: str | None = None
 
@@ -982,9 +983,11 @@ def _parse_gate(view: FileView) -> GateView:
     assert view.text is not None
     verdict_match = re.search(r"(?im)^-\s*(?:Verdict|判定)\s*[:：]\s*(pass|fail|blocked|defer|undecided)\s*$", view.text)
     commit_match = re.search(r"(?im)^-\s*(?:Comparison commit|比较提交)\s*[:：]\s*([0-9a-fA-F]{7,64})\s*$", view.text)
+    attempt_match = re.search(r"(?im)^-\s*(?:Attempt|尝试)\s*[:：]\s*(\S+)\s*$", view.text)
+    attempt = attempt_match.group(1) if attempt_match else None
     if not verdict_match:
-        return GateView(True, None, None, view.text, "gate.md 缺少 Verdict")
-    return GateView(True, verdict_match.group(1).lower(), commit_match.group(1) if commit_match else None, view.text)
+        return GateView(True, None, None, attempt, view.text, "gate.md 缺少 Verdict")
+    return GateView(True, verdict_match.group(1).lower(), commit_match.group(1) if commit_match else None, attempt, view.text)
 
 
 def _finding_blocks(text: str) -> list[tuple[str, str]]:
@@ -1966,7 +1969,22 @@ def _when_gate_terminal(context: FactContext) -> Fact:
         return _fact_value(False)
     if gate.verdict is None:
         return context.unknown("gate.md 的 verdict 无法解析")
-    return _fact_value(gate.verdict in TERMINAL_GATE_VERDICTS)
+    if gate.verdict not in TERMINAL_GATE_VERDICTS:
+        return _fact_value(False)
+    if gate.attempt is None:
+        # Legacy/minimal gate.md without an Attempt line predates per-Attempt
+        # ownership; a single-attempt package has no ambiguity to guard against.
+        return _fact_value(True)
+    # A terminal verdict only freezes the Attempt it was written for; an old
+    # initial/defer Gate left over from a prior Attempt must not be read as
+    # terminal for the current one (mirrors engine.py's `_lifecycle`).
+    state_required = context.state_required()
+    if state_required is not None:
+        return state_required
+    current_attempt = context.snapshot.state.attempt_id
+    if not current_attempt:
+        return context.unknown("state.json 缺少当前 attempt id，无法核对 gate.md 的 Attempt 是否匹配")
+    return _fact_value(gate.attempt == current_attempt)
 
 
 def _when_attempt_ready_ticket_count(context: FactContext) -> Fact:

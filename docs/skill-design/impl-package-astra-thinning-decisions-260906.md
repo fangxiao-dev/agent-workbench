@@ -5,6 +5,15 @@
 
 **2026-09-07 落地完成**：T1、T3、T4、T7（含 dev-with-track/Dispatcher/SDD 定义去重与 req-align/impl-planning/execution-boundaries/backfill-stable-docs 的常见误判三分）、T8、T9（situation.py/situations.yaml/situation-inputs.md/protocols.json/回归 fixture）、D1（bookkeeper 角色与 role.md 删除、`standing-bookkeeper` 孤儿 evals 与悬空 intake-backlog 引用清理、impl-planning/plan-review 的 bound-writer 修正）、D2（dev-with-track 与 execution-boundaries 的 Ticket 激活 preflight 删除）均已通过 Codex 分批实施并交叉核对；`pytest tests/` 598 项全部通过。D3（situations.yaml 的 `ticket-boundary-handoff` 自动换 session 触发删除，含 `situation-inputs.md`/`protocols.json`/回归测试同步）与 `standing-bookkeeper/` 空目录清理已由主控直接完成（改动小、边界明确，未经 Codex 派发）。至此 T1–T10、D1–D3 本轮范围内的全部决定均已落地；`pytest tests/` 598 项全部通过。
 
+**2026-09-07 独立审阅（commit `a0a33b2`）发现 4 项 P2 缺口，已逐条核实并修复**：验收声明偏满——主要删减符合设计、安全轨无新增边界回归，但以下 4 处已确认决定未真正落地，均已修复（无需新设计决定）：
+
+1. **E1 未修复**：`_when_gate_terminal`（[situation.py:1968](../../plugin-marketplace/plugins/impl-package/scripts/situation.py:1968)）此前只解析 verdict，未核对 `gate.md` 的 Attempt 是否等于当前 attempt，与 `engine.py` 的 `_lifecycle` 逻辑不一致，旧 initial/defer Gate 仍可能被导航器误判为当前 attempt 已 terminal。已修：`GateView` 新增 `attempt` 字段并解析 `gate.md` 的 `- Attempt:` 行；`_when_gate_terminal` 在 verdict terminal 后核对 attempt 是否匹配当前 `state.json`，不匹配则为 `false`；`gate.md` 未写 Attempt 行（legacy/单 attempt 场景）时假定匹配，避免误伤没有歧义的旧 fixture。新增 3 个直接单元测试覆盖 mismatch/match/无 Attempt 行三种情况。
+2. **E2 未承接**：Dispatcher（[dispatcher/SKILL.md:33](../../skills/dispatcher/SKILL.md:33)）只落地了 T3 的“有实际收益”一般判断，没有 E2 明确要求的“消费返回后优先检查未接通业务路径，不要只围绕最近 findings 循环”。已在调度循环步骤 5 开头补回这句话。
+3. **E3 缺失执行分支**：dev-with-track（[dev-with-track/SKILL.md:17](../../plugin-marketplace/plugins/impl-package/skills/dev-with-track/SKILL.md:17)）步骤 6 只描述了派发 bounded worker，没有 E3 的“主控直接实现”分支及其 write ownership、独立 delta review 条件。已补回该分支。
+4. **T7（impl-planning）质量问题，比最初报告更严重**：`references/common-misjudgments.md` 首版把原来 18 条“常见误判”（含“为什么错、错了有什么后果”的解释）压扁成规则复述，跟 `SKILL.md` 正文同一条规则重复，没有保留三分机制第 2 类要求的“独特提醒”；触发方式又是开头一句覆盖 admission/拆票/审查/初始化的笼统前言，等于普通规划全程都要读，没有真正减负。已重写：恢复原始 18 条的“会导致 XX 后果”解释、删除与正文重复的规则复述，并把触发方式改成逐步骤在 `SKILL.md` 对应句子后挂一句精确指针（对齐 req-align 已验证的做法）。
+
+以上 4 处修复直接由主控完成，未再派 Codex；修复 E2 时最初的措辞插入位置破坏了 `test_dispatcher_contract.py` 的一处精确字符串断言，已调整插入位置保留原断言字符串，不是放宽测试。跑通全套测试。
+
 ## 讨论边界
 
 - 主控使用 Astra/High，implementer 仍使用 Luna/Max。
