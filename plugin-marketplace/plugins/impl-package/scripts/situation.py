@@ -990,6 +990,25 @@ def _parse_gate(view: FileView) -> GateView:
     return GateView(True, verdict_match.group(1).lower(), commit_match.group(1) if commit_match else None, attempt, view.text)
 
 
+def _effective_gate(snapshot: Snapshot) -> GateView:
+    """gate.md's view when it belongs to the currently active Attempt, or an
+    absent GateView when the file predates the active Attempt. Mirrors
+    `_gate_attempt_matches`'s comparison for non-fact consumers (e.g. the
+    `sources.gate` diagnostic block the SessionStart capsule reads) so a prior
+    Attempt's leftover Gate never reads as the current Attempt's own state.
+    Falls back to the raw gate when state.json can't resolve the comparison,
+    matching the best-effort style of the rest of the `sources` block.
+    """
+    gate = snapshot.gate
+    if not gate.present or gate.error or gate.attempt is None:
+        return gate
+    if not snapshot.state.valid or not snapshot.state.attempt_id:
+        return gate
+    if gate.attempt == snapshot.state.attempt_id:
+        return gate
+    return GateView(False, None, None, gate.attempt)
+
+
 def _finding_blocks(text: str) -> list[tuple[str, str]]:
     matches = list(re.finditer(r"(?im)^#{2,6}\s+(.+?)\s*$", text))
     blocks: list[tuple[str, str]] = []
@@ -1961,6 +1980,26 @@ def _when_trail_last_ticket_terminal_transition(context: FactContext) -> Fact:
     return context._last_ticket_terminal_transition()
 
 
+def _gate_attempt_matches(context: FactContext, gate: GateView) -> Fact | bool:
+    """Whether gate.md's Attempt line matches the currently active Attempt.
+
+    A Gate without an Attempt line predates per-Attempt ownership and always
+    matches; otherwise state.json's attempt id is the source of truth (mirrors
+    engine.py's `_lifecycle`, which only freezes the Attempt a Gate was written
+    for). Every gate.* fact reads through this so a prior Attempt's leftover
+    Gate never masks the current Attempt's own state.
+    """
+    if gate.attempt is None:
+        return True
+    state_required = context.state_required()
+    if state_required is not None:
+        return state_required
+    current_attempt = context.snapshot.state.attempt_id
+    if not current_attempt:
+        return context.unknown("state.json 缺少当前 attempt id，无法核对 gate.md 的 Attempt 是否匹配")
+    return gate.attempt == current_attempt
+
+
 def _when_gate_terminal(context: FactContext) -> Fact:
     gate = context.snapshot.gate
     if gate.error:
@@ -1971,20 +2010,10 @@ def _when_gate_terminal(context: FactContext) -> Fact:
         return context.unknown("gate.md 的 verdict 无法解析")
     if gate.verdict not in TERMINAL_GATE_VERDICTS:
         return _fact_value(False)
-    if gate.attempt is None:
-        # Legacy/minimal gate.md without an Attempt line predates per-Attempt
-        # ownership; a single-attempt package has no ambiguity to guard against.
-        return _fact_value(True)
-    # A terminal verdict only freezes the Attempt it was written for; an old
-    # initial/defer Gate left over from a prior Attempt must not be read as
-    # terminal for the current one (mirrors engine.py's `_lifecycle`).
-    state_required = context.state_required()
-    if state_required is not None:
-        return state_required
-    current_attempt = context.snapshot.state.attempt_id
-    if not current_attempt:
-        return context.unknown("state.json 缺少当前 attempt id，无法核对 gate.md 的 Attempt 是否匹配")
-    return _fact_value(gate.attempt == current_attempt)
+    match = _gate_attempt_matches(context, gate)
+    if isinstance(match, Fact):
+        return match
+    return _fact_value(match)
 
 
 def _when_attempt_ready_ticket_count(context: FactContext) -> Fact:
@@ -2345,6 +2374,11 @@ def _when_attempt_near_terminal_gate(context: FactContext) -> Fact:
         return context.unknown(gate.error)
     if not gate.present:
         return _fact_value(False)
+    match = _gate_attempt_matches(context, gate)
+    if isinstance(match, Fact):
+        return match
+    if not match:
+        return _fact_value(False)
     return _fact_value(gate.verdict is not None)
 
 
@@ -2429,6 +2463,11 @@ def _when_gate_stage7_complete(context: FactContext) -> Fact:
         return context.unknown("gate.md 不存在")
     if gate.error:
         return context.unknown(gate.error)
+    match = _gate_attempt_matches(context, gate)
+    if isinstance(match, Fact):
+        return match
+    if not match:
+        return _fact_value(False)
     durable = re.search(r"(?ms)^##\s+Durable Deltas\s*$\n(.*?)(?=^##\s+|\Z)", gate.text)
     if durable is None:
         return _fact_value(False)
@@ -2454,13 +2493,24 @@ def _when_gate_verdict(context: FactContext) -> Fact:
         return context.unknown(gate.error)
     if not gate.present:
         return context.unknown("gate.md 不存在")
+    match = _gate_attempt_matches(context, gate)
+    if isinstance(match, Fact):
+        return match
+    if not match:
+        return context.unknown("gate.md 记录的是上一个 Attempt 的 verdict，当前 Attempt 尚未写 Gate")
     if gate.verdict is None:
         return context.unknown("gate.md 的 verdict 无法解析")
     return _fact_value(gate.verdict)
 
 
 def _when_gate_present(context: FactContext) -> Fact:
-    return _fact_value(context.snapshot.gate.present)
+    gate = context.snapshot.gate
+    if not gate.present:
+        return _fact_value(False)
+    match = _gate_attempt_matches(context, gate)
+    if isinstance(match, Fact):
+        return match
+    return _fact_value(match)
 
 
 def _when_git_contract_changed_since_last_trail(context: FactContext) -> Fact:
@@ -3111,6 +3161,7 @@ def _json_result(
     derived: dict[str, Any],
     digest: str,
 ) -> dict[str, Any]:
+    effective_gate = _effective_gate(snapshot)
     return {
         "stage": STAGE,
         "package": str(snapshot.package),
@@ -3133,7 +3184,7 @@ def _json_result(
         "sources": {
             "state": {"path": STATE_REL, "present": snapshot.state.raw is not None, "valid": snapshot.state.valid, "reason": snapshot.state.error},
             "trail": {"path": _active_trail_relative_path(snapshot.state.attempt_id) if snapshot.state.attempt_id else None, "present": snapshot.trail.present, "error": snapshot.trail.error},
-            "gate": {"path": GATE_REL, "present": snapshot.gate.present, "verdict": snapshot.gate.verdict, "error": snapshot.gate.error},
+            "gate": {"path": GATE_REL, "present": effective_gate.present, "verdict": effective_gate.verdict, "error": snapshot.gate.error},
             "findings": {"path": FINDINGS_REL, "present": snapshot.findings.present, "count": len(snapshot.findings.findings), "error": snapshot.findings.error},
             "intake": {"path": snapshot.intake.relative_path, "present": snapshot.intake.present, "error": snapshot.intake.error},
             "validation_result": (

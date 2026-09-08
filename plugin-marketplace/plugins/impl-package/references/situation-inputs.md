@@ -86,7 +86,7 @@ false；只有没有 U 且所有比较都相等时才是 true。
 | `attempt.has_pending_ticket` | S：`tickets[*].state` 是否至少有一个 `PENDING` | 布尔 | state 无效 = U；合法无 Ticket 或全非 PENDING = F；HF：无 | `attempt.readiness.all-edges-held` |
 | `attempt.implementation_edges_held` | S + T：先计算 `ready_ticket_ids`，再判断“存在 PENDING Ticket 且 ready 数量为 0”；implementation dependency 的释放规则见 `ticket.acceptance_edge_released` | 布尔 | state、Ticket 文件或 dependency 不可判定 = U；无 pending = F；有 pending 且至少一个 ready = F；HF：无 | `attempt.readiness.all-edges-held` |
 | `attempt.in_flight` | R：只根据 dispatch/decision 与未配 result 的结构推导；不接受 fact 覆盖 | 布尔；dispatch 可无 id；有 id 时 result-like 的 `of/dispatch_id/decision...` 可关闭 | 无 trail = U；trail 存在但没有 open dispatch = F；HF：无 | `attempt.readiness.multiple-ready-tickets` |
-| `attempt.near_terminal_gate` | S + G：`all_tickets_terminal` 为 true，或 `gate.md` 存在且 Verdict 可解析 | 布尔 | state 无效 = U；state 合法且无 terminal Ticket、无可解析 Gate = F；malformed Gate 不满足该辅助条件；HF：无 | `attempt.disposition.findings-triage-pending` |
+| `attempt.near_terminal_gate` | S + G：`all_tickets_terminal` 为 true，或 `gate.md` 存在、属于当前 Attempt 且 Verdict 可解析 | 布尔 | state 无效 = U；state 合法且无 terminal Ticket、无可解析 Gate = F；malformed Gate 或只有上一个 Attempt 的 Gate 不满足该辅助条件；Attempt 归属不可判定 = U；HF：无 | `attempt.disposition.findings-triage-pending` |
 | `attempt.ready_ticket_count` | S + T：收集所有 `PENDING` Ticket，只有 implementation dependencies 全部由 `SATISFIED`、`RETIRED/waived` 或已释放 successor 释放时才进入 ready list；返回 list 长度 | 非负整数；用于表的比较是 `">1"` 或 `0` | state/Ticket/dependency 不可判定 = U；合法空图返回 0；HF：无 | `attempt.readiness.multiple-ready-tickets`、`attempt.readiness.all-edges-held` |
 | `attempt.session_resumed` | S + R：不读取声明；`activeCheckpoints.attempt` 存在，且 checkpoint 后没有动作行时为 true | 布尔 | trail error 或 state/checkpoint 不可判定 = U；无 active checkpoint = F；有显式 checkpoint marker 时只计 marker 后的行；没有 marker 时忽略兼容性的 `attempt.session_resumed` 声明，但其它 typed fact/action 会使结果为 false；HF：无 | `attempt.record.session-resumed`（兼容 parser key） |
 | `attempt.terminal_coverage_complete` | S + 最新 `review.terminal_summary` fact + package-relative report | 布尔；核对 comparisonHead、A/B/C 与按需 Safety 的 PASS，同 ReviewRun 的 B/C/Safety 可凭 reuseEvidence 复用 | 尚未终审为 U；缺结果或来源不匹配为 false；Gate 终态不能替代结果 | `attempt.review.terminal-coverage-incomplete` |
@@ -119,10 +119,10 @@ false；只有没有 U 且所有比较都相等时才是 true。
 | `finding.review_track` | F：当前 finding block 中 `Track A/B/C/D` 或 `轨道 A/B/C/D` 的捕获值 | 枚举 `A`、`B`、`C`、`D`，没有 track 时是已知 `None` | F 缺失/错误或 finding 不存在 = U；finding 存在但没有 track = 已知值 None（与期望 `C` 不相等）；HF：无 | `finding.review.source-recheck-pending` |
 | `finding.source_recheck_pending` | F：block 中的 `source_recheck: pending`、`source recheck ... pending` 或中文待复核/待重查 marker | 布尔 | F 缺失/错误或 finding 不存在 = U；无 marker = F；HF：无 | `finding.review.source-recheck-pending` |
 | `findings.triage_pending` | F：对所有 parsed findings，`triage_pending` 为非 closed 且（有 `triage: pending`/未分流/待分流，或没有 Decision/Spec/Execution Record/Durable Delta route marker） | 布尔 | F 缺失/解析错误 = U；F 存在但没有 parsed finding = false；任一 finding pending = true；HF：无 | `attempt.disposition.findings-triage-pending` |
-| `gate.stage7_complete` | G：精确找到 `## Durable Deltas` section；其中至少一行 `- ...`，且不是 `- none` 或 `- Reason: none` | 布尔 | G 缺失或读取/解析错误 = U；没有 Durable Deltas section = F；有 meaningful bullet = true；HF：无 | `attempt.gate.durable-delta-missing` |
-| `gate.present` | G：`gate.md` 文件是否存在；不把文件内容是否 malformed 混入 presence | 布尔 | 缺 Gate = F；文件存在（即使 malformed）= true；HF：无 | `attempt.gate.missing`、`attempt.gate.verdict-undecided` |
-| `gate.terminal` | G 的 `Verdict`；`pass/fail/defer` 属于 terminal | 布尔 | G 缺失 = 已知 F；有文件但 Verdict 缺失/格式错 = U；`blocked/undecided` = F；`pass/fail/defer` = true；HF：无 | `attempt.gate.terminal-frozen` |
-| `gate.verdict` | G：`- Verdict: pass / fail / blocked / defer / undecided` 或中文 `判定` 行；只读取已存在 Gate 的显式 verdict | 枚举 `pass`、`fail`、`blocked`、`defer`、`undecided`，解析后转小写 | 缺 G = U（由 `gate.present=false` 单独表达）；有 G 但 Verdict 缺失/格式错 = U；HF：无 | `attempt.gate.verdict-undecided` |
+| `gate.stage7_complete` | G：先核对 `- Attempt:` 是否属于当前 Attempt（见 `gate.terminal` 的 Attempt 判据），再精确找到 `## Durable Deltas` section；其中至少一行 `- ...`，且不是 `- none` 或 `- Reason: none` | 布尔 | G 缺失或读取/解析错误 = U；没有 Durable Deltas section = F；只有上一个 Attempt 的 Gate = F（当前 Attempt 未完成 Stage 7）；Attempt 归属不可判定 = U；有 meaningful bullet 且属于当前 Attempt = true；HF：无 | `attempt.gate.durable-delta-missing` |
+| `gate.present` | G：`gate.md` 文件是否存在且其 `- Attempt:`（若有）属于当前 Attempt；不把文件内容是否 malformed 混入 presence | 布尔 | 缺 Gate = F；文件存在但只属于上一个 Attempt = F；文件存在（即使 malformed）且属于当前 Attempt 或无 Attempt 行 = true；Attempt 归属不可判定 = U；HF：无 | `attempt.gate.missing`、`attempt.gate.verdict-undecided` |
+| `gate.terminal` | G 的 `Verdict`；`pass/fail/defer` 属于 terminal；terminal 结论只对写下该 Verdict 的 Attempt 生效——`- Attempt:` 缺失时视为匹配（legacy Gate），否则须与 state.json 的当前 attempt id 相等，等价于 `engine.py` 的 `_lifecycle` 判据 | 布尔 | G 缺失 = 已知 F；有文件但 Verdict 缺失/格式错 = U；`blocked/undecided` = F；Verdict 是 terminal 但 Attempt 不匹配 = F；Attempt 归属不可判定 = U；`pass/fail/defer` 且 Attempt 匹配 = true；HF：无 | `attempt.gate.terminal-frozen` |
+| `gate.verdict` | G：`- Verdict: pass / fail / blocked / defer / undecided` 或中文 `判定` 行；只读取属于当前 Attempt 的已存在 Gate 的显式 verdict | 枚举 `pass`、`fail`、`blocked`、`defer`、`undecided`，解析后转小写 | 缺 G = U（由 `gate.present=false` 单独表达）；有 G 但 Verdict 缺失/格式错 = U；只有上一个 Attempt 的 Gate = U（当前 Attempt 尚未写 Gate）；Attempt 归属不可判定 = U；HF：无 | `attempt.gate.verdict-undecided` |
 | `intake.has_backlog` | I：按顺序找第一个存在的文件：`.impl-package/intake.jsonl`、`.impl-package/intake-queue.jsonl`、`.impl-package/intake.json`、`execution/intake.jsonl`、`execution/intake-queue.jsonl`、`execution/intake.json`、`intake.jsonl`、`intake.json`；其次找目录 `.impl-package/intake`、`.impl-package/intake-queue`、`execution/intake`、`execution/intake-queue`、`intake`、`intake-queue` | 布尔；JSON list 非空、dict 的 `items/queue` list 非空、非 JSON 但有非空行、目录有 entry = true | 所有候选不存在 = U；存在但空文本/空 list/空目录 = F；读取错误或 dict 无 list 时按非空文本 fallback；HF：无 | `package.record.intake-backlog` |
 | `trail.actions_since_checkpoint` | R（当前活动 `trail.jsonl`）：在适用 subject rows 中找最后一个 `kind=checkpoint`、`chosen/situation` 含 checkpoint 或 `checkpoint=true` 的 marker，返回 marker 后的行数；无 marker 时忽略兼容性的 `attempt.session_resumed` 声明并计其它 rows；轮换后不读取 `trail.NNN.jsonl` | 非负整数；表只比较 `0` | 无/坏 trail = U；state 无效导致 checkpoint 不可判定 = U；无 active checkpoint = 0；有 marker 且 marker 后无行 = 0；无 marker 且没有其它 typed fact/action = 0；HF：无 | `attempt.record.session-resumed` |
 | `trail.last_ticket_terminal_transition` | R（当前活动 `trail.jsonl`）：attempt scope 扫描全部 rows，Ticket scope 只扫描当前 Ticket；取最后一个 `kind=result`、`transition=ticket-state` 且 `subject` 为 `ticket:<id>` 的状态转换行，检查其 `to`（兼容 `outcome`）是否为 `SATISFIED` 或 `RETIRED`；轮换后不读取归档 | 布尔；最后一个 Ticket 状态转换进入 `SATISFIED/RETIRED` = true | trail 缺失或可读但为空 = F；坏 trail = U；没有状态转换 = F；最后状态转换不是终态 = F；普通 worker result 没有 `transition=ticket-state`，不参与；HF：无 | `attempt.record.trail-rotation-due` |
@@ -523,9 +523,11 @@ meaningful durable-delta bullet。
 
 没有 `gate.md` 时，`gate.present=false`、`gate.terminal=false`，`gate.verdict=U`；文件存在但
 Verdict 缺失、拼写错误或值不在五个枚举内时，`gate.verdict` 是 U。`blocked` 和 `undecided`
-不是 terminal；`pass`、`fail`、`defer` 才是 terminal。完整 runtime 还会检查 Attempt、
-comparison commit、Durable Deltas 以及其它 Gate 内容，并不把 renderer-only 的
-`undecided` 当作可发布 Gate 状态。
+不是 terminal；`pass`、`fail`、`defer` 才是 terminal。renderer 会核对 `gate.md` 的
+`- Attempt:` 与当前 attempt id，只有上一个 Attempt 遗留的 Gate 时 `gate.present`、
+`gate.verdict`、`gate.terminal`、`gate.stage7_complete` 均按“当前 Attempt 未写 Gate”
+处理，不会读到旧 Attempt 的 verdict；完整 runtime 还会检查 comparison commit、Durable
+Deltas 以及其它 Gate 内容，并不把 renderer-only 的 `undecided` 当作可发布 Gate 状态。
 
 ## 5. 三个端到端最小 package
 
@@ -911,10 +913,10 @@ P0 内部顺序就是 YAML 的顺序。P0 有多个 active match 时，renderer 
 | `ticket.accept.satisfiable` | `evidence.all_required_claims_supported = true` AND `evidence.contradictory_unresolved = false` AND `ticket.acceptance_edge_released = true` AND `ticket.acceptance_revision_parseable = true` | `evidence.all_required_claims_supported`、`evidence.contradictory_unresolved`、`ticket.acceptance_edge_released`、`ticket.acceptance_revision_parseable` | 需要 Ticket 的 Stable claims 可解析、同一 acceptance pair 覆盖全部 claims、该 pair 无 active contradictory/inconclusive、所有 acceptance edges 已释放，且 revision 能被当前 Git resolve；与 CLI `ticket satisfy` 的 `_evidence_coverage` 同一 pair 语义。 |
 | `attempt.review.terminal-coverage-incomplete` | `attempt.terminal_coverage_complete = false` | `attempt.terminal_coverage_complete` | 最新 structured summary 缺少 required 结果或有效 report / 复用证据时命中；手工 fact 不替代结果证据。 |
 | `finding.disposition.grading-undecided` | `finding.grading_pending = true` | `finding.grading_pending` | 必须有可解析的 open finding，且没有合法 Grade 或有 `grading_pending`/待定级 marker；closed finding 会得到 false。 |
-| `attempt.disposition.findings-triage-pending` | `findings.triage_pending = true` AND `attempt.near_terminal_gate = true` | `findings.triage_pending`、`attempt.near_terminal_gate` | execution-findings.md 必须存在且至少有一个 parsed finding 未分流；near-terminal 条件是“所有 Ticket terminal”或“Gate 文件存在且 Verdict 可解析”，malformed Gate 不再满足辅助条件。 |
+| `attempt.disposition.findings-triage-pending` | `findings.triage_pending = true` AND `attempt.near_terminal_gate = true` | `findings.triage_pending`、`attempt.near_terminal_gate` | execution-findings.md 必须存在且至少有一个 parsed finding 未分流；near-terminal 条件是“所有 Ticket terminal”或“属于当前 Attempt 的 Gate 文件存在且 Verdict 可解析”，malformed Gate 或只有上一个 Attempt 的 Gate 都不满足该辅助条件。 |
 | `attempt.accept.all-tickets-terminal` | `attempt.all_tickets_terminal = true` | `attempt.all_tickets_terminal` | state 必须合法、Ticket 集合非空，且每个 Ticket state 都是 `SATISFIED` 或 `RETIRED`；空 tickets 是已知 false。 |
-| `attempt.gate.durable-delta-missing` | `gate.stage7_complete = false` AND `attempt.terminal_gate_pending = true` | `gate.stage7_complete`、`attempt.terminal_gate_pending` | 要让这行真正可命中，Gate 文件必须存在且 Verdict 可解析为非 terminal（如 blocked/undecided），所有 Ticket 必须 terminal，同时 Durable Deltas section 没有 meaningful bullet。缺 Gate 会让 `stage7_complete` U，不能命中。 |
-| `attempt.gate.missing` | `gate.present = false` AND `attempt.terminal_gate_pending = true` | `gate.present`、`attempt.terminal_gate_pending` | 只在所有 Ticket 已 terminal 且 Gate 尚未写入时命中；非 terminal 工作窗口不会因为缺 Gate 产生该 row。 |
+| `attempt.gate.durable-delta-missing` | `gate.stage7_complete = false` AND `attempt.terminal_gate_pending = true` | `gate.stage7_complete`、`attempt.terminal_gate_pending` | 要让这行真正可命中，所有 Ticket 必须 terminal，且当前 Attempt 的 Gate 没有 meaningful Durable Delta bullet——包括“Gate 文件存在、属于当前 Attempt 且 Verdict 可解析为非 terminal（如 blocked/undecided）但缺 bullet”，以及“Gate 文件只属于上一个 Attempt（当前 Attempt 尚未写 Gate）”两种情形，后者 `stage7_complete` 直接为 false 而非 U。物理上完全缺 Gate 会让 `stage7_complete` U，不能命中。 |
+| `attempt.gate.missing` | `gate.present = false` AND `attempt.terminal_gate_pending = true` | `gate.present`、`attempt.terminal_gate_pending` | 只在所有 Ticket 已 terminal 且当前 Attempt 尚未写 Gate 时命中；物理上存在但只属于上一个 Attempt 的 Gate 按“当前 Attempt 缺 Gate”处理，同样能命中；非 terminal 工作窗口不会因为缺 Gate 产生该 row。 |
 | `attempt.gate.verdict-undecided` | `gate.present = true` AND `gate.verdict = "undecided"` | `gate.present`、`gate.verdict` | 只表示已写入 Gate 且 Verdict 显式为 `undecided`；缺 Gate 由 `attempt.gate.missing` 单独表达，malformed Verdict 是 U。 |
 
 ### 9.6 P5：intake 卫生
@@ -941,10 +943,10 @@ P0 内部顺序就是 YAML 的顺序。P0 有多个 active match 时，renderer 
 12. **satisfiable 需要同一 acceptance pair。** 所有 claims 必须在同一 revision/environment 下 supporting；evidence 数量大于 0 不足以命中。
 13. **acceptance-edge-held 需要真实 acceptance edge。** 没有 acceptance dependency 时 `all([])=true`，不能把“无依赖”当作 held。
 14. **revision-diverged 需要两套比较都成立。** acceptance revision 必须可 resolve 且相对 HEAD 已分叉，同时 trail 旧 head 也必须存在且已前进。
-15. **findings triage 的 near-terminal 条件不接受 malformed Gate。** 所有 Ticket terminal，或 Gate 文件存在且 Verdict 可解析，才算接近 terminal。
+15. **findings triage 的 near-terminal 条件不接受 malformed 或跨 Attempt 的 Gate。** 所有 Ticket terminal，或 Gate 文件存在、属于当前 Attempt 且 Verdict 可解析，才算接近 terminal；只有上一个 Attempt 的 Gate 不算数。
 16. **terminal coverage 使用结果证据。** 从最新 `review.terminal_summary` 与各 track 的独占 report 判定：A/B/C required，按需 Safety；A 最终 HEAD 重审，B/C/Safety 在同 ReviewRun 内凭 PASS 与 reuseEvidence 复用。dispatch 或 Gate 终态不替代结果。
 17. **release-edge-unchecked 需要显式 `release_edge_rechecked=false`。** 缺声明不会自动变成 false。
-18. **durable-delta-missing 需要一个存在且可解析的非 terminal Gate。** 缺 Gate 会让 `gate.stage7_complete` 为 U，而不是 false。
+18. **durable-delta-missing 也覆盖跨 Attempt 的 Gate。** 一个存在且可解析的非 terminal Gate 缺 bullet，或物理上只存在上一个 Attempt 的 Gate，都会让 `gate.stage7_complete` 为 false；物理上完全缺 Gate 才是 U。
 19. **comparison-mismatch 在 pass 前检查。** 只有 completion claim pending、尚无 Gate 且当前 HEAD 与 SATISFIED acceptance revision 不一致时命中；pass 后不再产生该 row。
 20. **缺 Gate 不再合成 `gate.verdict=undecided`。** terminal Gate pending 时由 `attempt.gate.missing` 表达；已有 Gate 且显式写 `undecided` 才进入 `attempt.gate.verdict-undecided`。
 21. **intake 是 first-existing-wins。** 前序候选即使为空，也会阻止后序候选被读取；不能只看目录里“某处”有 backlog。

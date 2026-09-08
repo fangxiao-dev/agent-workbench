@@ -525,6 +525,7 @@ def _coverage_context(
     state_valid: bool = True,
     gate_verdict: str | None = None,
     gate_attempt: str | None = None,
+    gate_text: str = "",
     attempt_id: str = "fixture-attempt",
     reports: dict[str, str] | None = None,
 ) -> situation.FactContext:
@@ -547,7 +548,7 @@ def _coverage_context(
         state=state,
         tickets={},
         trail=situation._parse_trail(situation.FileView("trail.jsonl", "\n".join(json.dumps(row) for row in rows))),
-        gate=situation.GateView(gate_verdict is not None, gate_verdict, None, gate_attempt),
+        gate=situation.GateView(gate_verdict is not None, gate_verdict, None, gate_attempt, gate_text),
         findings=situation.FindingsView(False, "", []),
         intake=situation.IntakeView(False, None),
         validation_result=None,
@@ -616,6 +617,72 @@ def test_gate_terminal_assumes_current_attempt_when_gate_predates_attempt_line()
 
     assert fact.known is True
     assert fact.value is True
+
+
+def test_gate_present_is_false_when_only_a_prior_attempts_gate_exists() -> None:
+    # A leftover gate.md from an earlier Attempt must not read as "Gate
+    # present" for a newer Attempt that hasn't written its own Gate yet,
+    # otherwise `attempt.gate.missing` never fires.
+    context = _coverage_context(
+        [],
+        gate_verdict="blocked",
+        gate_attempt="old-attempt",
+        attempt_id="current-attempt",
+    )
+
+    fact = situation._when_gate_present(context)
+
+    assert fact.known is True
+    assert fact.value is False
+
+
+def test_gate_verdict_is_unknown_when_only_a_prior_attempts_gate_exists() -> None:
+    context = _coverage_context(
+        [],
+        gate_verdict="blocked",
+        gate_attempt="old-attempt",
+        attempt_id="current-attempt",
+    )
+
+    fact = situation._when_gate_verdict(context)
+
+    assert fact.known is False
+
+
+def test_gate_stage7_complete_is_false_when_only_a_prior_attempts_gate_exists() -> None:
+    # Even though the stale gate.md's own Durable Deltas section is filled in,
+    # it belongs to a prior Attempt, so the current Attempt has not completed
+    # Stage 7 and `attempt.gate.durable-delta-missing` must still be able to fire.
+    context = _coverage_context(
+        [],
+        gate_verdict="blocked",
+        gate_attempt="old-attempt",
+        gate_text="## Durable Deltas\n- some/path.md\n",
+        attempt_id="current-attempt",
+    )
+
+    fact = situation._when_gate_stage7_complete(context)
+
+    assert fact.known is True
+    assert fact.value is False
+
+
+def test_near_terminal_gate_is_false_when_only_a_prior_attempts_gate_exists() -> None:
+    # Tickets are not all terminal, so `near_terminal_gate` must fall through to
+    # the Gate check; a stale prior-Attempt Gate must not count, otherwise
+    # `attempt.disposition.findings-triage-pending` could fire on the wrong basis.
+    context = _coverage_context(
+        [],
+        ticket_state="PENDING",
+        gate_verdict="pass",
+        gate_attempt="old-attempt",
+        attempt_id="current-attempt",
+    )
+
+    fact = situation._when_attempt_near_terminal_gate(context)
+
+    assert fact.known is True
+    assert fact.value is False
 
 
 def _terminal_summary(*, safety=False, old_tracks=()):

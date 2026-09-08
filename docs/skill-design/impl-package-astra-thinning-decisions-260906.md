@@ -14,6 +14,8 @@
 
 以上 4 处修复直接由主控完成，未再派 Codex；修复 E2 时最初的措辞插入位置破坏了 `test_dispatcher_contract.py` 的一处精确字符串断言，已调整插入位置保留原断言字符串，不是放宽测试。跑通全套测试。
 
+**2026-09-08 二次独立审阅发现 E1 残留（已核实并修复）**：commit `0046d3c` 的 E1 修复只改了 `_when_gate_terminal`，`gate.present`、`gate.verdict`、`gate.stage7_complete`、`attempt.near_terminal_gate` 四个消费者仍直接读 `snapshot.gate`，没有走 Attempt 匹配；`sources.gate`（[situation.py:3167](../../plugin-marketplace/plugins/impl-package/scripts/situation.py:3167)）同样未过滤，SessionStart capsule 的 `gate-verdict` 行（[impl_package_hooks.py:303](../../plugin-marketplace/plugins/impl-package/hooks/impl_package_hooks.py:303)）因此仍会显示上一个 Attempt 的 verdict。复现：旧 Attempt 留下 terminal Gate，新 Attempt 所有 Ticket 已 terminal 但未写 Gate 时，`attempt.gate.missing` 与 `attempt.gate.durable-delta-missing` 均不命中。已修：抽出共享判据 `_gate_attempt_matches`（[situation.py:1983](../../plugin-marketplace/plugins/impl-package/scripts/situation.py:1983)），`_when_gate_terminal`、`_when_gate_present`、`_when_gate_verdict`、`_when_gate_stage7_complete`、`_when_attempt_near_terminal_gate` 统一通过它核对 Attempt；`_effective_gate`（[situation.py:993](../../plugin-marketplace/plugins/impl-package/scripts/situation.py:993)）供 `_json_result` 的 `sources.gate` 复用同一判据，capsule 不再读到跨 Attempt 的 verdict。`references/situation-inputs.md` 同步更新 `gate.*` 四行、`attempt.near_terminal_gate` 行及相关叙述性段落，修正了 `gate.terminal` 一直未记录 Attempt 判据的既有文档缺口。新增 4 个单元测试覆盖 present/verdict/stage7_complete/near_terminal_gate 在跨 Attempt 场景下的取值；`pytest tests/` 全量跑通。
+
 ## 讨论边界
 
 - 主控使用 Astra/High，implementer 仍使用 Luna/Max。
