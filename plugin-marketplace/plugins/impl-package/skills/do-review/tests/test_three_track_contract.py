@@ -184,8 +184,8 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertIn("one independent reviewer for the whole named-finding set", briefs)
         # Slim skill keeps the single-reviewer closure judgment.
         self.assertIn("finding-closure", skill)
-        self.assertIn("review lane lifecycle", skill)
-        self.assertIn("subagent-driven-development", skill)
+        self.assertIn("reviewer lifecycle", skill)
+        self.assertIn("$dispatcher", skill)
         self.assertIn("named findings", skill)
         self.assertNotIn("$grok-worker", skill)
         self.assertNotIn("Uses Grok", skill)

@@ -103,12 +103,12 @@
     {
       "id": 10,
       "prompt": "只读模拟：主控准备把一整张含五个可独立验证切片的 Ticket 作为单个队列项交给一个 worker。说明这样做的问题和正确粒度；禁止实际修改文件或派发 worker。",
-      "expected_output": "拒绝整张 Ticket 一个队列项；一个队列项对应一个有界 Topic 工作单元，按切片拆成多项并按真实依赖排序；write-set、worker 复用与 worktree 选择归 SDD 与主控，不进 JSON。",
+      "expected_output": "拒绝整张 Ticket 一个队列项；一个队列项对应一个有界执行结果，按切片拆成多项并按真实依赖排序；write-set、worker 复用与 worktree 选择归 Dispatcher，不进 JSON。",
       "files": [],
       "expectations": [
         "拒绝把整张 Ticket 包成单个队列项，按有界 Topic 工作单元拆分。",
-        "说明粒度失守会让 SDD“Topic 大到需要中途止损就切小”的机制失效。",
-        "write-set、worker 复用和 worktree 选择留在 SDD 与主控，不写进 task-queue.json。"
+        "说明粒度失守会让 Dispatcher 的结果边界失效。",
+        "write-set、worker 复用和 worktree 选择留在 Dispatcher，不写进 task-queue.json。"
       ]
     },
     {

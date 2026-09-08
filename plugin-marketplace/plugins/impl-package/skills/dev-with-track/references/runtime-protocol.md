@@ -4,40 +4,39 @@
 
 ## Codex Resume Capsule
 
-Codex Hook 已显式激活当前 package 时，`SessionStart` 可注入 `Impl-Package Resume Capsule v1`。Capsule 只提供 session/package、Attempt、HEAD、state/Gate 读取状态、situation/action 与 preview digest；它不拥有业务裁决，也不充当 Evidence、Acceptance、Gate、closure 或 dispatch credential。
+Codex Hook 已激活 current package 时，`SessionStart` 可注入 `Impl-Package Resume Capsule v1`。Capsule 只提供 session/package、Attempt、HEAD、state/Gate 读取状态、situation/action 与 preview digest；它不拥有业务裁决，也不充当 Evidence、Acceptance、Gate、closure 或 dispatch credential。
 
-Capsule 与当前 package/HEAD/approval 匹配时，可作为本次恢复入口；首次恢复缺失/失配 Capsule、Hook 不可用、读取 warning，或发生未知外部状态变化、CAS 失败、部分写入时，执行下方完整恢复顺序。已知 CLI 成功更新后按 delta 更新当前事实，不重走完整恢复。普通 SDD 不激活 package，因此不产生 Capsule。
+Capsule 与 current package/HEAD/approval 匹配时可作为恢复入口；首次恢复缺失/失配、Hook 不可用、读取 warning、未知外部状态变化、CAS 失败或部分写入时执行完整恢复。已知 CLI 成功更新后按 delta 更新当前事实。
+
+Capsule 的 `projection-complete: false` 表示宿主长度预算只能承载摘要；先按其中命令读取完整只读 JSON 投影，再判断候选或写入。完整投影由 `situation.py render --no-write-credential --json` 提供，派发前另生成当前 credential。
 
 ## 恢复顺序
 
-1. 运行 `package validate`；projection drift 时先运行 `package refresh-progress`。
-2. 打开 `progress.md`，确认 current Attempt、lifecycle、Gate、blocker、active checkpoint 和 next action。
-3. 根据 typed Ticket dependency 选择业务动作；Progress/checkpoint 不授权 dispatch。
-4. 对当前业务候选交给 `$dispatcher` 做 Topic-first admission；Dispatcher 负责当前批次、receipt、每次 return 后的受影响候选补派、review pacing、全局扫描与 idle；idle 不等于 package closed。
-5. 只打开当前动作需要的 Plan/Ticket/Execution Record/evidence；旧 package 才按需读取 DAG/Handoff。
-6. 消费结果后使用语义 Ticket/evidence/recovery/trail 命令写权威事实；真正 dispatch 前用普通 `situation.py render` 生成当前 credential。
+1. 运行 `package validate`；projection drift 时运行 `package refresh-progress`。
+2. 打开 `progress.md`，确认 current Attempt、lifecycle、Gate、blocker、active checkpoint 和恢复入口。
+3. 根据 typed Ticket dependency 与批准范围恢复业务重点和全部相关候选；Progress/checkpoint 不授权 dispatch。
+4. 把候选交给 `$dispatcher`；Dispatcher 负责资源 admission、receipt、return、review pacing、补派与 idle，idle 不等于 package closed。
+5. 只打开当前候选需要的 Plan/Ticket/Execution Record/evidence；旧 package 才按需读取 DAG/Handoff。
+6. 准备派发、记录返回或恢复待派审增量时，读取 [Situation Inputs](../../../references/situation-inputs.md) 的 trail 合同；先追加当前候选快照，再用 `situation.py render` 生成 credential，取得真实 receipt 后记录派发。消费结果后用语义 Ticket/evidence/recovery/trail 命令写权威事实。
 
 ## Evidence 与 Execution Record
 
-Evidence 使用存在的仓库相对路径，可带 anchor，并足以解释状态变化；不保存额外完整性证明。
-
-- checkpoint：恢复边界；`activeCheckpoints[subject]` 是唯一 active 值并覆盖写。
-- judgment：执行期 decision、finding disposition、failure learning、外部证据解释。
-- routine state change、普通 PASS 和可从 Git/state 推导的事实不重复写入 Execution Record。
+Evidence 使用存在的仓库相对路径，可带 anchor，并足以解释状态变化。checkpoint 是恢复边界；judgment 记录执行期 decision、finding disposition、failure learning 与外部证据解释。routine state change、普通 PASS 和可从 Git/state 推导的事实不重复写入 Execution Record。
 
 ## Readiness、返工与调度
 
-- 新 package：Ticket typed dependency 决定业务 readiness；Dispatcher 只调度已解锁且合格的动作。
-- 旧 package：Task dependency 未释放时不得进入 READY/RUNNING；Task DONE 后仍需集成、共享验证与 Ticket AC 映射。
-- plan/contract 变化只使 affected subset 进入 revalidation，并沿用同一 initial bundle approval。
-- worker 返回不可归因或 `INCOMPLETE` 时，不套固定 fallback 次数。先核进程、diff、residue 与 Topic context；上下文可信则同 lane 继续，失效则由 Dispatcher 退役并重新派发。业务 `BLOCKED` 原样保留。
+- 新 package 由 Ticket typed dependency 决定业务 readiness；Dispatcher 只执行已获业务放行的候选。
+- 旧 package 的 Task dependency 未释放时不得进入 READY/RUNNING；Task DONE 后仍需集成、共享验证与 Ticket AC 映射。
+- plan/contract 变化只使 affected subset 进入 revalidation，并沿用 initial bundle approval。
+- worker return 不可归因或 `INCOMPLETE` 时，核对 dispatch identity、进程、diff、residue 与上下文。边界可信则沿原 worker 恢复；边界失真则由 Dispatcher 先调查受影响范围再决定 worker。业务 `BLOCKED` 原样保留。
+- native dispatch 已成功但 CLI 因 stale credential 未记入 trail 时，保留真实 receipt 与 `dispatch_id`，刷新 canonical facts 后补齐该次记录；记账恢复不得重派 worker。
 
 ## Findings、Review 与 Gate
 
-- accepted Track C finding：先消费 `do-review` 在同一 ReviewRun 内完成的一次独立 source recheck；该动作不改变 Ticket/Attempt 状态。
-- current sources uniquely decide：轻量 delta review 的已确认 findings 随下一个 baby step 的 brief 一并下发，不单独派 bounded fix；独立 formal review 的 finding 作为 implementation/evidence defect，交 Dispatcher 的同 Topic work lane，worker 使用 SDD `fix` 方法。派发前若同一 Topic 已经过两次以上修复方向仍未收敛、同一 finding 或同一机制在后续 round 重新出现，或 review 结论跨多个 writer、多个入口或共享 authority/lock seam，先按 `/diagnosing-bugs` 做定位再决定修复动作；其余直接 bounded fix。diagnosing-bugs 只返回定位结论，Ticket/Attempt 状态与 dependency release 继续由本流程处理，finding closure 继续由 `/impl-package:do-review` 拥有。
-- source missing/ambiguous/conflicting：先回 req-align；多个合理业务结果请求 Owner，结论前不派发 mutation。
-- 其他 accepted finding：沿用 implementation、安全、证据或知识分流；review topology 与 closure 始终由 `do-review` 拥有。
+- accepted Track C finding：先消费 do-review 在同一 ReviewRun 内完成的独立 source recheck；该动作不改变 Ticket/Attempt 状态。
+- current sources uniquely decide：把 finding 作为 implementation/evidence defect，保留原始意见、定位和裁决，交 Dispatcher 按影响、资源和整合成本安排 fix。
+- source missing/ambiguous/conflicting：回 req-align；多个合理业务结果请求 Owner，结论前不派 mutation。
+- 其他 accepted finding：沿用 implementation、安全、证据或知识分流；review topology 与 closure 由 do-review 拥有。
 - durable knowledge：Stage 7 登记 `_pending.md` 与 truth pointer，后续交 backfill。
 
-Gate 每次重写 current `gate.md`，terminal Gate 同时生成 `.impl-package/attempts/<attempt>.json` 的只读 Ticket 快照；Git 与 frozen Execution Record 提供其余历史。历史快照缺失时只用明确 revision 运行 `package archive-attempt` 补录，不从叙述文本推断。terminal Gate 后全部 runtime mutation fail closed。
+Gate 每次重写 current `gate.md`；terminal Gate 同时生成 `.impl-package/attempts/<attempt>.json` 的只读 Ticket 快照。历史快照缺失时只用明确 revision 运行 `package archive-attempt` 补录。terminal Gate 后全部 runtime mutation fail closed。

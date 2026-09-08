@@ -8,7 +8,7 @@
 
 本合同以现有 package 内容、initial approval、Git commit 和实际 diff 作为唯一内容、批准、版本与审计依据。
 
-委派执行仍由 `/impl-package:subagent-driven-development` 编排；本合同只传递任务特定授权，不定义 worker 角色或业务 prompt。
+委派执行由 `$dispatcher` 编排；本合同只传递任务特定授权，不定义 worker 角色或业务 prompt。
 
 ## 渐进读取常见误判
 

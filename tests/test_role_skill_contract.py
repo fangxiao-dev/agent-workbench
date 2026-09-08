@@ -39,19 +39,20 @@ def test_role_skills_leave_task_prompt_to_the_caller() -> None:
     assert "unless the caller explicitly" not in skill.lower()
 
 
-def test_global_entry_and_handoff_route_to_unified_delegation_skill() -> None:
+def test_global_entry_and_handoff_route_to_dispatcher() -> None:
     global_instructions = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     handoff = (ROOT / "skills" / "handoff" / "references" / "task-execution.md").read_text(
         encoding="utf-8"
     )
 
     for text in (global_instructions, handoff):
-        assert "impl-package:subagent-driven-development" in text
+        assert "$dispatcher" in text
+        assert "impl-package:subagent-driven-development" not in text
         assert "impl-package:investigate-before-implement" not in text
         assert "impl-package:dispatch-bounded-task" not in text
     assert "independent read-only review" in global_instructions
     assert "thin `reviewer` contract" in global_instructions
-    assert "单独只读 subagent" in handoff
+    assert "独立 review 使用只读 subagent" in handoff
     assert "存在 `reviewer`" in handoff
     assert not (
         ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "skills" / "investigate-before-implement" / "SKILL.md"
@@ -59,7 +60,7 @@ def test_global_entry_and_handoff_route_to_unified_delegation_skill() -> None:
     assert not (
         ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "skills" / "dispatch-bounded-task" / "SKILL.md"
     ).exists()
-    assert "Dispatcher and SDD are peer guidance" in global_instructions
+    assert "candidate selection" in global_instructions
     assert "`do-review` owns review topology and finding closure" in global_instructions
     assert "The caller supplies the task-specific" not in global_instructions
     assert "不在 handoff 中重复" in handoff

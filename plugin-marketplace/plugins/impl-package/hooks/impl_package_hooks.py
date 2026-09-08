@@ -23,6 +23,8 @@ SITUATION_CLI = PLUGIN_ROOT / "scripts" / "situation.py"
 STATE_REL = PurePosixPath(".impl-package/state.json")
 BINDING_VERSION = 1
 CAPSULE_VERSION = 1
+# A UTF-8 byte ceiling also fits the host's 1200-character/token context budget.
+CAPSULE_CONTEXT_BUDGET = 1200
 SESSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 PATCH_HEADER_RE = re.compile(
     r"^\*\*\* (?:Add File|Update File|Delete File|Move to):\s*(.+?)\s*$",
@@ -310,7 +312,38 @@ def _resume_capsule(binding: dict[str, Any], rendered: dict[str, Any]) -> str:
         "This capsule is navigation context only; it is not Evidence, Acceptance, Gate, or closure.",
         "Before dispatch, rerun situation.py render without --no-write-credential; consume successful CLI updates without full restore.",
     ]
-    return "\n".join(lines)
+    if "runnable" in rendered:
+        # New projections carry every candidate; the legacy cursor is fallback only.
+        lines = [line for line in lines if not line.startswith(("selected:", "actions:", "parallel:"))]
+        lines.append("projection-complete: true")
+        snapshot_fact = rendered.get("candidate_snapshot", {})
+        lines.append(f"candidate-snapshot: {snapshot_fact.get('status', 'unknown')} {snapshot_fact.get('reason', '')}".rstrip())
+        for partition in ("blocking", "runnable", "withheld", "in_flight"):
+            items = rendered.get(partition, [])
+            lines.append(f"{partition}:")
+            if not items:
+                lines.append("  none")
+            for item in items:
+                lines.append("  " + json.dumps(item, ensure_ascii=False, separators=(",", ":")))
+    text = "\n".join(lines)
+    if len(text.encode("utf-8")) <= CAPSULE_CONTEXT_BUDGET:
+        return text
+    # Never let the transport silently clip a tail of runnable or pending work.
+    summary = [line for line in lines if line.startswith((
+        "Impl-Package Resume", "package:", "attempt:", "head:", "state-valid:",
+        "gate-verdict:", "preview-digest:", "warnings:", "undetermined:",
+    ))]
+    summary.append("projection-complete: false")
+    summary.extend(f"{key}: {len(rendered.get(key, []))} (summary only)" for key in ("blocking", "runnable", "withheld", "in_flight"))
+    summary.extend([
+        "Read the FULL projection before decisions or writes: python <plugin-root>/scripts/situation.py render --package <package-above> --no-write-credential --json",
+        "Resolve plugin-root from the loaded dev-with-track Skill. Before dispatch rerun without --no-write-credential.",
+        "This capsule is navigation context only; it is not Evidence, Acceptance, Gate, or closure.",
+    ])
+    text = "\n".join(summary)
+    if len(text.encode("utf-8")) > CAPSULE_CONTEXT_BUDGET:
+        raise HookError("resume metadata exceeds the context budget; run the full dev-with-track Restore before decisions or writes")
+    return text
 
 
 def _session_start() -> int:

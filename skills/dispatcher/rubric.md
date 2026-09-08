@@ -1,49 +1,43 @@
 ---
 target: skills/dispatcher
-updated: 2026-09-07
+updated: 2026-09-08
 ---
 
 ## 原则
 
-- [已确认] Topic 是共享 foundation、ownership 与 closure point 的横向交付范围；不新增 Delivery Lane 对象、持久状态或第二套调度系统。
-- [已确认] 默认沿一条 lane 派发既定方向和 write-set 内的一个 baby step；同一方向和 write-set 内的机械附属跟随同一步，只有结果会改变 Topic 决策、ownership、dependency、authorization、资源 admission 或立即释放另一条 Topic 时才拆分。
-- [已确认] baby step 以主控 return point 为默认边界，不打包到 Topic closure；相邻 return point 只要无需新的主控裁决、不损失并行机会且不妨碍及时复核即可合并，由 Astra 按任务难度决定。
-- [已确认] 主动释放有实际收益的合格动作；预期收益不足时可暂缓，不新增评分或成本记录。消费 return 后检查受影响候选并补派，整批结束或准备 idle 时全局重扫；连续 `INCOMPLETE`、新 caller/producer 家族或 write-set 外溢统一触发一次 foundation investigation，不叠加细碎 guard。
-- [已确认] 含新增实现代码的每个 baby step return 都及时派独立 delta review；纯调查或只重跑测试且没有新增代码改动时不机械派代码审查。
-- [已确认] 优先降低主控调度负担，不以增加模板、字段、预算或持久化记录换取局部形式完整。
-- [已确认] review lane 与 work lane 的独立性和上下文连续性是两件事：reviewer 不审自己实现的增量，但默认沿同 review scope 复用并只接新的 base/head 与本次增量。（证据: R6）
-- [已确认] 逐步复核的节拍靠可观察信号维持：派审与冻结增量同一次消费，派审滞后或 delta 积压是并发过载信号；不设固定 lane 数或数字预算。（证据: R6）
-- [待验证] worker 复用使用可观察的上下文可信度信号。（证据: R2, R3, R4）
+- [已确认] Dispatcher 是 model-invoked 的通用执行协作入口；SDD 的委派、dependency、mode、资源隔离、lifecycle 与 return 方法并入本 Skill，不保留平级入口。
+- [已确认] 主路径保持五步：明确范围、发现候选、形成合同、核实返回并及时审查、限定阻塞并继续安排；不新增持久调度系统。
+- [已确认] Topic 是连续工作可用的组织概念，简单任务可直接表达目标、边界和返回条件；一次委派仍止于可验证结果或下一主控判断点。
+- [已确认] 主动释放有实际收益的独立工作；局部 foundation、acceptance、resource 或 authorization barrier 只影响对应候选。
+- [已确认] 并行按当前动作的完整 effect footprint 判断；worktree 只隔离文件，DB、端口、测试数据、输出与外部记录分别核验。
+- [已确认] `investigate | implement | fix | verify` 与三组 outcome 词汇整体保留，供通用路径和 Impl-Package 使用。
+- [已确认] worker brief 保留成功行为、不变量、ownership、真实路径验证、返回边界和 cleanup；同一结果的机械附属留在一次委派。
+- [已确认] worker/reviewer 复用取决于相关上下文可信、ownership 与 scope 稳定；Topic 名称、固定等待时间和 `INCOMPLETE` 次数不机械驱动换人。
+- [已确认] 每个代码 return 在同次消费中固定增量并及时派独立 delta review；容量不足记录具体待派审事实并在槽位恢复后补派。
+- [已确认] formal review 的业务 requirement 归 owning workflow；Impl-Package 的七类 material risk 归 dev-with-track，topology/coverage/closure 归 do-review。
 
 ## 决策记录（滚动，最近 ≤5 轮）
 
-### R2 · 2026-09-02
+### R7 · 2026-09-08
 
-- 采纳固定 Topic closure point、step 级 resource key 与完整 effect footprint；共享 key 只阻塞实际依赖它的步骤。
-- 采纳共享操作的合并只是一种优化；不得因此延迟已解锁的独立动作。
-- 采纳 worker 复用取决于 ownership、failure model 与动作边界仍可准确复述，不按会话时长或固定轮数机械切换。
-- 继续否决 Delivery Lane 对象、资源矩阵模板、数字预算和持久调度状态。
-- 用户原话：GO，按最小。
-
-### R3 · 2026-09-02
-
-- 采纳把重复且无法解释的错误、边界复述失败、结果无法归因和 write-set 外溢写成 fresh worker 的可观察触发信号。
-- 用户原话：这样写比较好吧；更新。
-
-### R4 · 2026-09-02
-
-- 保留 fresh worker 的可观察触发信号，删除不驱动动作的防御性说明。
-- 用户原话：不要写这个防御性文字。
-
-### R5 · 2026-09-02
-
-- 采纳把结构 foundation 与下游行为或安全 finding 的分步规则合并进既有 dependency 语义，不新增特例段，也不在 SDD 复制。
-- 用户原话：统一；同意。
+- Owner 批准合并 Dispatcher 与 SDD，保留 `$dispatcher` 名称并改为 model-invoked。
+- 主文件压缩为五步循环，仅保留 `delegation.md` 与 `resource-isolation.md` 两个分支 reference。
+- 删除 Topic-first 全面强制、新 Topic 一律 fresh、固定 15/30 分钟观察、连续两次 `INCOMPLETE`、finding 固定捆绑和三条 lane 强制对象。
+- 保留结果边界、四类 dependency、四个 mode、真实资源隔离、可归因 return 与独立 delta review。
 
 ### R6 · 2026-09-05
 
-- 采纳同 review scope 默认复用 reviewer：独立性由“不审自己实现的增量”保证，上下文连续性有助于发现旧问题被重新引入；换人条件写成可观察信号（scope 变化、上下文失真、反复漏检、沿用旧结论不核查新 diff）并要求简述理由。
-- 采纳逐步复核的节拍规则：冻结增量与派审同属一次 return 消费；在途 review 按轮消费；派审滞后或 delta 积压到 findings 赶不上下一步时先消化再扩并发。
-- 采纳“增量大到 review 跟不上”作为额外切分信号，仍不设行数上限。
-- 继续否决固定 lane 数与数字 dispatch budget。
-- 用户原话：不必每个 Step 都强制 fresh；主要不是同一个 Step 被重复审查，而是 Step 多、Review 派发滞后且消化不够及时。
+- 同 review scope 默认复用独立 reviewer；每次输入新的固定增量。
+- 派审滞后或 delta 积压是并发过载信号，不设固定 lane 数或数字预算。
+
+### R5 · 2026-09-02
+
+- 结构 foundation 改变下游行为或安全 finding 时先稳定 foundation。
+
+### R4 · 2026-09-02
+
+- worker 复用使用可观察的上下文可信度信号。
+
+### R2 · 2026-09-02
+
+- 共享 resource key 只阻塞依赖它的步骤；共享操作合并只是优化。

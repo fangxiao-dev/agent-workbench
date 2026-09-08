@@ -97,7 +97,7 @@
       "expected_output": "The continuation carries both canonical ready Tickets and routes execution to the owning skills, which keep the same session running until their workflow yields a real stop condition.",
       "expectations": [
         "Uses the canonical readyTickets set rather than narrowing it to the checkpoint's single Ticket.",
-        "Points to dev-with-track, Dispatcher and SDD; it does not restate foundation admission, parallel/serial resource rules or DAG mechanics.",
+        "Points to dev-with-track and Dispatcher; it does not restate foundation admission, parallel/serial resource rules or DAG mechanics.",
         "Leaves TKT-06 and later dependency continuation to the owning workflow instead of ending the handoff at TKT-03."
       ]
     },

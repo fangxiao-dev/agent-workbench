@@ -5,8 +5,8 @@
 `plugin-marketplace/plugins/impl-package/scripts/situation.py` 当前真正读取和判定的
 package 形状，目的是让不阅读推导器实现的人也能构造 fixture、per-package 覆盖和审计输入。
 
-截至 2026-09-07，正式表有 45 个 situation row、54 个唯一的非 `manual` `when` key。
-本文逐一覆盖这 54 个 key。`manual` row 不需要输入字段；它们始终出现在 `manual` 输出中，
+截至 2026-09-08，正式表有 42 个 situation row、51 个唯一的非 `manual` `when` key。
+本文逐一覆盖这些 key。`manual` row 不需要输入字段；它们始终出现在 `manual` 输出中，
 由主控做语义判断。
 
 > 重要边界：本文的“能被推导器识别”首先指 `situation.py render` 的输入合同。完整的
@@ -15,6 +15,10 @@ package 形状，目的是让不阅读推导器实现的人也能构造 fixture�
 > `references/impl-package-current-state.md`、`impl-package-composition-contract.md`
 > 和 runtime validate 为准。本文不会把 situation parser 偶然接受的宽松形状写成完整
 > runtime 的推荐写法。
+
+`skills/dev-with-track/references/runtime-protocol.md` 在候选快照、dispatch、worker-return 或恢复的
+热路径只需读取 1.2、3.1 和 4.3 的 trail 合同；其它 `when` 事实表、fixture 与历史缺陷说明仅在
+排查、构造 fixture 或审计时读取。主控按第 10 节的新分区执行。
 
 ## 1. 先记住三件事
 
@@ -26,7 +30,7 @@ package 形状，目的是让不阅读推导器实现的人也能构造 fixture�
 | --- | --- | --- |
 | S | `.impl-package/state.json` | 严格 JSON object；先做 state schema，再做 Ticket/evidence/checkpoint 交叉校验 |
 | T | `tickets/*.md` 的直接子文件 | 按正文里的 Ticket ID 建索引；文件名本身不参与 ID 解析 |
-| R | `execution/<attempt-id>/trail.jsonl` | `<attempt-id>` 来自 `S.attempt.id`；renderer 只读取当前未编号文件，每个非空行必须能解析成 JSON object；同目录的 `trail.NNN.jsonl` 是按序归档，仅由 `dispatch_audit.py` 做历史审计/回放 |
+| R | `execution/<attempt-id>/trail.NNN.jsonl` 与 `trail.jsonl` | `<attempt-id>` 来自 `S.attempt.id`；renderer 按编号归档后接活动文件读取，每个非空行必须能解析成 JSON object；dispatch/return 关联可跨轮换恢复 |
 | G | `gate.md` | 按固定 Markdown 行解析 Verdict 和可选 Comparison commit |
 | F | `execution-findings.md` | 按二级至六级 heading 分块，再解析 finding block |
 | I | intake 候选路径 | 见下文 `intake.has_backlog` 行的顺序 |
@@ -39,7 +43,46 @@ subject 不是自由标签。`attempt` scope 默认只看 trail 行的 `subject`
 `finding:<finding ID>` 或裸 finding ID。少数 attempt-level trail signal 会显式扫描全部 trail
 行，本文在对应 key 中标出。
 
-### 1.2 unknown、false 和硬失败不是一回事
+### 1.2 候选快照、dispatch 与新投影
+
+主控用 `kind=fact,key=dispatch.candidates,subject=attempt` 写入完整候选快照。`value.candidates`
+是数组；每项必须带 `candidate_id/subject/mode/action_id/resource_keys`，可带逐候选
+`blockers`。CLI 自动补 `value.attempt/head/state_sha256`。快照的 HEAD 或 state 指纹与当前包
+不符时，候选输入为 unknown。每次新 dispatch 前，主控先声明候选的业务 subject、工作边界、
+实际资源和已知 blocker，再把完整集合写入快照；dispatch 不能补写或扩大这份授权。
+
+候选 subject 与 mode 有硬边界：`implement/fix` 必须使用 `ticket:<存在的 Ticket ID>`；
+`attempt` 和 `finding:<id>` 只允许 `investigate/verify`，且 finding ID 必须存在于已解析的
+`execution-findings.md`。Ticket/finding subject 都不能用自由标签代替。finding 候选进入 brief 时，
+同时保留已确认意见、定位和裁决，避免 worker 丢失线索后重新猜测。
+
+`resource_keys` 只记录主控声明的 effect footprint。相同 key 不自动构成冲突：稳定只读可以共享；
+只有主控确认存在不兼容副作用时，才在相关候选的 `blockers` 中写
+`type=resource` 与受影响的 `resource_key`。renderer 不推断资源、不求交集、不加自动锁。
+
+新 dispatch 必须带 `dispatch_id/candidate_id/candidates_of/resource_keys/receipt/mode/chosen`，
+并与最新候选快照、当前 credential 的 `runnable_candidate_ids` 一致。credential 同时绑定
+HEAD、state SHA-256 与 trail 最新 seq；任一输入变化后先重新 render。CLI 自动把
+`state_sha256` 与 `runnable_candidate_ids` 复制进 dispatch 行。
+
+worker 返回使用 `kind=worker-return`，以 `of` 指向 dispatch_id，并带唯一 `return_id`。含代码
+增量时同时带完整 SHA 的 `code_delta={base,head}` 与 `consumption_id`。真实 delta review dispatch
+用 `reviews=<return_id>`、相同 code_delta/consumption_id 关联；容量不足用
+`review.dispatch_pending` fact 保留该增量。同一 dispatch_id 只接受一个 worker-return；原样
+return_id 重试幂等，迟到的第二个 return_id 被拒绝。该检查读取编号归档与活动 trail，因此轮换后
+仍按同一规则原样重试。renderer 对每个 dispatch 只采纳同 subject 的首个有效 return；迟到、
+重复、错 subject 和普通 Ticket 状态转换不会覆盖它。可信 worker 续接同一 candidate 时使用新的
+dispatch_id；当前恢复动作只看该 candidate 的最新 dispatch，旧 code_delta 仍独立保留待审。
+
+render 新增 `blocking/runnable/withheld/in_flight`。`blocking` 只含 terminal-frozen、
+state-missing、projection-drift、anchor-mismatch 四个全局 P0；局部 foundation/acceptance/
+resource/authorization 原因逐候选进入 `withheld`。`source=situation` 的 dispatch 建议在主控尚未
+声明边界和资源时进入 `withheld`；由主控执行的机械动作可以直接进入 `runnable`。`runnable`
+全量呈现合法机械动作、声明候选与待派 delta review；`in_flight` 按 dispatch_id 展示真实在途
+工作。主控从这四个分区决策，不从旧 cursor 选单一动作。旧四键仅按旧优先级算法保留在 JSON
+中供兼容消费者读取；`digest` 覆盖新四分区，`legacy_digest` 保留旧算法。
+
+### 1.3 unknown、false 和硬失败不是一回事
 
 本文表格使用以下词：
 
@@ -53,7 +96,7 @@ subject 不是自由标签。`attempt` scope 默认只看 trail 行的 `subject`
 对一个含多个 `when` 的 row，**任意一个 U 都使整行成为 unknown**，即使另一个 key 已知
 false；只有没有 U 且所有比较都相等时才是 true。
 
-### 1.3 `when` 比较表达式语法
+### 1.4 `when` 比较表达式语法
 
 `_compare` 的行为是固定的：
 
@@ -69,7 +112,7 @@ false；只有没有 U 且所有比较都相等时才是 true。
 `=>1`、`<>1`、`=1`、`between 1 and 2`、`truthy`、`not false` 和带单位的字符串都不支持；
 不匹配数值语法时会退回普通相等比较，通常得到已知 false，而不是 U。
 
-## 2. 54 个 `when` key 合同
+## 2. 51 个 `when` key 合同
 
 表中的“缺失/错误”列同时说明文件不存在、字段不存在、字段形状不对和没有匹配 marker
 时的行为；`HF：无`表示该 key 本身不会因该输入缺失直接让 CLI 失败。
@@ -85,7 +128,7 @@ false；只有没有 U 且所有比较都相等时才是 true。
 | `attempt.compaction_pressure_high` | CP：`--compaction-pressure` 传入的 JSON object 的 `high`；宿主脚本以第一段间隔为 baseline，最近三段间隔的中位数至少缩短 20% 且至少有三段间隔时才给 `high=true`；renderer 不重算 | 布尔 | 缺少参数 = U（不是 false）；合法 `high=false` = F；JSON 非 object、缺 `high`、类型/未知字段错误 = HF | `attempt.record.handoff-due` |
 | `attempt.has_pending_ticket` | S：`tickets[*].state` 是否至少有一个 `PENDING` | 布尔 | state 无效 = U；合法无 Ticket 或全非 PENDING = F；HF：无 | `attempt.readiness.all-edges-held` |
 | `attempt.implementation_edges_held` | S + T：先计算 `ready_ticket_ids`，再判断“存在 PENDING Ticket 且 ready 数量为 0”；implementation dependency 的释放规则见 `ticket.acceptance_edge_released` | 布尔 | state、Ticket 文件或 dependency 不可判定 = U；无 pending = F；有 pending 且至少一个 ready = F；HF：无 | `attempt.readiness.all-edges-held` |
-| `attempt.in_flight` | R：只根据 dispatch/decision 与未配 result 的结构推导；不接受 fact 覆盖 | 布尔；dispatch 可无 id；有 id 时 result-like 的 `of/dispatch_id/decision...` 可关闭 | 无 trail = U；trail 存在但没有 open dispatch = F；HF：无 | `attempt.readiness.multiple-ready-tickets` |
+| `attempt.in_flight` | R：旧 dispatch/decision 与 result 配对的兼容诊断；不接受 fact 覆盖 | 布尔；旧行可无 id；有关联 ID 时 result-like 可关闭 | 无 trail或无法归属 = U；可读且没有 open 旧事件 = F；HF：无 | 兼容 parser key；新运行读取 `in_flight[]`，不以此布尔压制候选 |
 | `attempt.near_terminal_gate` | S + G：`all_tickets_terminal` 为 true，或 `gate.md` 存在、属于当前 Attempt 且 Verdict 可解析 | 布尔 | state 无效 = U；state 合法且无 terminal Ticket、无可解析 Gate = F；malformed Gate 或只有上一个 Attempt 的 Gate 不满足该辅助条件；Attempt 归属不可判定 = U；HF：无 | `attempt.disposition.findings-triage-pending` |
 | `attempt.ready_ticket_count` | S + T：收集所有 `PENDING` Ticket，只有 implementation dependencies 全部由 `SATISFIED`、`RETIRED/waived` 或已释放 successor 释放时才进入 ready list；返回 list 长度 | 非负整数；用于表的比较是 `">1"` 或 `0` | state/Ticket/dependency 不可判定 = U；合法空图返回 0；HF：无 | `attempt.readiness.multiple-ready-tickets`、`attempt.readiness.all-edges-held` |
 | `attempt.session_resumed` | S + R：不读取声明；`activeCheckpoints.attempt` 存在，且 checkpoint 后没有动作行时为 true | 布尔 | trail error 或 state/checkpoint 不可判定 = U；无 active checkpoint = F；有显式 checkpoint marker 时只计 marker 后的行；没有 marker 时忽略兼容性的 `attempt.session_resumed` 声明，但其它 typed fact/action 会使结果为 false；HF：无 | `attempt.record.session-resumed`（兼容 parser key） |
@@ -124,26 +167,28 @@ false；只有没有 U 且所有比较都相等时才是 true。
 | `gate.terminal` | G 的 `Verdict`；`pass/fail/defer` 属于 terminal；terminal 结论只对写下该 Verdict 的 Attempt 生效——`- Attempt:` 必须存在并与 state.json 的当前 attempt id 相等；缺少 Attempt 时为 U，等价于 `engine.py` 的 `_lifecycle` 判据 | 布尔 | G 缺失 = 已知 F；有文件但 Verdict 缺失/格式错 = U；`blocked/undecided` = F；Verdict 是 terminal 但 Attempt 不匹配 = F；Attempt 归属不可判定 = U；`pass/fail/defer` 且 Attempt 匹配 = true；HF：无 | `attempt.gate.terminal-frozen` |
 | `gate.verdict` | G：`- Verdict: pass / fail / blocked / defer / undecided` 或中文 `判定` 行；只读取属于当前 Attempt 的已存在 Gate 的显式 verdict | 枚举 `pass`、`fail`、`blocked`、`defer`、`undecided`，解析后转小写 | 缺 G = U（由 `gate.present=false` 单独表达）；有 G 但 Verdict 缺失/格式错 = U；只有上一个 Attempt 的 Gate = U（当前 Attempt 尚未写 Gate）；Attempt 归属不可判定 = U；HF：无 | `attempt.gate.verdict-undecided` |
 | `intake.has_backlog` | I：按顺序找第一个存在的文件：`.impl-package/intake.jsonl`、`.impl-package/intake-queue.jsonl`、`.impl-package/intake.json`、`execution/intake.jsonl`、`execution/intake-queue.jsonl`、`execution/intake.json`、`intake.jsonl`、`intake.json`；其次找目录 `.impl-package/intake`、`.impl-package/intake-queue`、`execution/intake`、`execution/intake-queue`、`intake`、`intake-queue` | 布尔；JSON list 非空、dict 的 `items/queue` list 非空、非 JSON 但有非空行、目录有 entry = true | 所有候选不存在 = U；存在但空文本/空 list/空目录 = F；读取错误或 dict 无 list 时按非空文本 fallback；HF：无 | `package.record.intake-backlog` |
-| `trail.actions_since_checkpoint` | R（当前活动 `trail.jsonl`）：在适用 subject rows 中找最后一个 `kind=checkpoint`、`chosen/situation` 含 checkpoint 或 `checkpoint=true` 的 marker，返回 marker 后的行数；无 marker 时忽略兼容性的 `attempt.session_resumed` 声明并计其它 rows；轮换后不读取 `trail.NNN.jsonl` | 非负整数；表只比较 `0` | 无/坏 trail = U；state 无效导致 checkpoint 不可判定 = U；无 active checkpoint = 0；有 marker 且 marker 后无行 = 0；无 marker 且没有其它 typed fact/action = 0；HF：无 | `attempt.record.session-resumed` |
-| `trail.last_ticket_terminal_transition` | R（当前活动 `trail.jsonl`）：attempt scope 扫描全部 rows，Ticket scope 只扫描当前 Ticket；取最后一个 `kind=result`、`transition=ticket-state` 且 `subject` 为 `ticket:<id>` 的状态转换行，检查其 `to`（兼容 `outcome`）是否为 `SATISFIED` 或 `RETIRED`；轮换后不读取归档 | 布尔；最后一个 Ticket 状态转换进入 `SATISFIED/RETIRED` = true | trail 缺失或可读但为空 = F；坏 trail = U；没有状态转换 = F；最后状态转换不是终态 = F；普通 worker result 没有 `transition=ticket-state`，不参与；HF：无 | `attempt.record.trail-rotation-due` |
+| `trail.actions_since_checkpoint` | R（归档后接活动 trail）：在适用 subject rows 中找最后一个 checkpoint marker，返回 marker 后的行数；无 marker 时忽略兼容性的 `attempt.session_resumed` 声明并计其它 rows | 非负整数；表只比较 `0` | 无/坏 trail = U；state 无效导致 checkpoint 不可判定 = U；无 active checkpoint = 0；HF：无 | `attempt.record.session-resumed` |
+| `trail.last_ticket_terminal_transition` | R（编号归档后接活动 trail）：attempt scope 扫描全部 rows，Ticket scope 只扫描当前 Ticket；取最后一个 `kind=result`、`transition=ticket-state` 且 `subject` 为 `ticket:<id>` 的状态转换行，检查其 `to`（兼容 `outcome`）是否为 `SATISFIED` 或 `RETIRED` | 布尔；最后一个 Ticket 状态转换进入 `SATISFIED/RETIRED` = true | trail 缺失或可读但为空 = F；坏 trail = U；没有状态转换 = F；最后状态转换不是终态 = F；普通 worker result 没有 `transition=ticket-state`，不参与；HF：无 | `attempt.record.trail-rotation-due` |
 | `trail.anchor_mismatch` | R：attempt scope 的最新 fact；不再扫描 JSON 文本 marker | 布尔 | 无/坏 trail或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.record.anchor-mismatch` |
-| `trail.decision_without_result` | R（当前活动 `trail.jsonl`）：旧 decision/result 配对差集非空，或存在 `kind=dispatch`、`outcome=RUNNING`、`returned=false` 且未被 result-like `of/dispatch_id/...` 关闭；轮换后不读取归档 open dispatch | 布尔；dispatch 不要求 identifier；decision 旧写法要求 `seq/id/decision_id/decisionId` | 无/坏 trail = U；没有未配对 decision/dispatch = F；HF：无 | `attempt.readiness.worker-still-running` |
+| `trail.decision_without_result` | R（归档后接活动 trail）：按 dispatch_id/of 轴判断 dispatch 是否仍未返回；旧行缺关联 ID 时为 U，不做 Ticket/Attempt 聚合 | 布尔；新 dispatch 必须有 dispatch_id | 无/坏 trail或旧行缺关联 = U；已关联关闭 = F；HF：无 | 诊断输出；在途工作由 `in_flight[]` 呈现 |
 | `trail.direct_evidence_returned` | R：扫描 `kind=result` 与 `kind=worker-return`；其 payload key 是 `ref/evidence/artifact/evidence_ref/direct_evidence`，非空 scalar/list item 即算 direct payload | 布尔；payload 可以 object、string 或其他 truthy 值，但要继续判 `evidence.indexed` 时必须有 artifact/claim/revision/environment | 无/坏 trail = U；trail 有但没有 result-like payload = F；HF：无 | `ticket.record.evidence-unfiled` |
 | `trail.envelope_valid` | R：显式 fact `trail.envelope_valid` 优先；否则读取 result-like row 或 `envelope/result` 容器中的结构化 `envelope_valid/envelopeValid` | 布尔；建议 JSON bool `true/false` | 无/坏 trail = U；有 trail 但没有结构化字段/fact = U；显式非布尔 = U；不再识别 envelope 文本 marker；HF：未知 fact key | `finding.fix.worker-envelope-invalid` |
 | `trail.finding_source` | R：当前 subject rows 的顶层 `finding_source` 或 `findingSource` 字符串，取最后一个 | 字符串；表使用 `reviewer`、`main-session` | 无/坏 trail = U；trail 正常但没有字段 = 已知值 None（与任何字符串不等）；HF：无 | `finding.fix.reviewer-returned`、`finding.fix.main-session-discovered` |
 | `trail.handoff_recovery_needed` | R：attempt scope 的最新 fact；不再扫描 bootstrap/retry/rename/create-thread 文本 marker | 布尔 | 无/坏 trail 或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.record.handoff-recovery-needed` |
 | `trail.handoff_target_corrected` | R：attempt scope 的最新 fact；不再扫描 corrected target/order 文本 marker | 布尔 | 无/坏 trail 或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.record.handoff-target-corrected` |
 | `trail.has_investigate` | R：attempt context 扫全部 rows；ticket/finding context 扫各自 subject rows；`situation` 以 `ticket.investigate.` 开头，或 chosen 含 `investigate`，或 outcome 为 `EVIDENCE_GAP/EVIDENCE_SUFFICIENT` 即 true | 布尔 | 无/坏 trail = U；有 trail 无 signal = F；HF：无 | 兼容 parser key；正式 `ticket.investigate.no-carrier` 使用 `ticket.investigation_carrier_present` |
-| `trail.incomplete_count` | R（当前活动 `trail.jsonl`）：从适用 rows 末尾往前扫描 `kind=result` 或 `kind=worker-return`；连续 `outcome=INCOMPLETE` 计数，遇到另一个 result-like event 即停止；轮换是连续计数边界 | 非负整数；表精确比较 1 或 2 | 无/坏 trail = U；没有 result-like event 或最后一个不是 INCOMPLETE = 0；HF：无 | `ticket.implement.worker-incomplete-first`、`ticket.implement.worker-incomplete-second` |
-| `trail.last_outcome` | R（当前活动 `trail.jsonl`）：适用 rows 末尾优先找 result-like（`kind=result` 或 `kind=worker-return`）且 outcome 为字符串；找不到时退回任何 row 的字符串 outcome；轮换后不读取归档 outcome | 字符串枚举由表约定：`EVIDENCE_GAP`、`DONE`、`INCOMPLETE`、`BLOCKED`、`FINDING` 等；比较大小写敏感 | 无/坏 trail = U；正常空 trail/无 outcome = 已知 None；HF：无 | `ticket.investigate.evidence-gap`、`ticket.implement.worker-incomplete-first`、`ticket.implement.worker-incomplete-second`、`ticket.implement.worker-blocked`、`finding.fix.reviewer-returned` |
-| `trail.last_worker_mode` | R（当前活动 `trail.jsonl`）：显式 `trail.last_worker_mode` 优先；否则从 row、`facts/when/derived/worker/envelope/result` 读取 `worker_mode/workerMode/mode`，或从 chosen 匹配 `worker-mode` 或 `mode: <value>`；轮换后不读取归档 mode | 枚举 `investigate`、`implement`、`fix`、`verify`、`review`；解析后小写 | 无/坏 trail = U；正常 trail 无 mode = 已知 None；显式非允许值返回已知原值，因而与合法枚举不等；HF：无 | `ticket.implement.worker-incomplete-first`、`ticket.implement.worker-incomplete-second`、`ticket.implement.worker-blocked`、`finding.fix.worker-envelope-invalid` |
+| `trail.incomplete_count` | R（归档后接活动 trail）：按 dispatch_id/of 轴统计该派发末尾连续 INCOMPLETE；次数只作诊断观察，后续动作依据边界与上下文可信度 | 非负整数 | 无/坏 trail或旧 result 缺 of = U；没有 INCOMPLETE = 0；HF：无 | 诊断输出 |
+| `trail.last_outcome` | R（归档后接活动 trail）：按 dispatch_id/of 轴读取该派发最后一个 result-like outcome；旧 result 缺 of 时不聚合 | 字符串枚举由表约定；比较大小写敏感 | 无/坏 trail或旧行缺 of = U；该派发无 outcome = 已知 None；HF：无 | worker-return 消费处境 |
+| `trail.last_worker_mode` | R（编号归档后接活动 trail）：在当前 dispatch 轴上读取 dispatch/result 的结构化 `mode/worker_mode/workerMode`，并兼容旧 `facts` 与 `chosen` | 枚举 `investigate`、`implement`、`fix`、`verify`、`review`；解析后小写 | 无/坏 trail = U；没有对应 dispatch context 时不形成可执行 worker 结论；非允许值与合法枚举不等；HF：无 | `ticket.implement.worker-incomplete-first`、`ticket.implement.worker-blocked`、`finding.fix.worker-envelope-invalid` |
 | `trail.reviewer_unavailable` | R：attempt scope 的最新 fact；不再扫描 timeout/unavailable 文本 marker | 布尔 | 无/坏 trail或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.review.reviewer-unavailable` |
 
 ## 3. 比较、subject 和 per-package override 的实用规则
 
 ### 3.1 trail event schema、fact 通道和 validation result
 
-renderer 的当前输入是 `execution/<attempt-id>/trail.jsonl`，其每个非空行必须是 JSON object；轮换归档 `trail.NNN.jsonl` 不进入 renderer，只由 `dispatch_audit.py` 按序读作历史审计/回放输入。正式事件使用同一组公共字段：
+renderer 的 trail 输入是按编号排序的 `execution/<attempt-id>/trail.NNN.jsonl`，随后接活动
+`trail.jsonl`；每个非空行必须是 JSON object。dispatch/return、fact 最新值和恢复判断都跨轮换
+读取这条连续事件流。正式事件使用同一组公共字段：
 
 | 字段 | 作用 | 要求 |
 | --- | --- | --- |
@@ -158,12 +203,12 @@ renderer 的当前输入是 `execution/<attempt-id>/trail.jsonl`，其每个非�
 
 | `kind` | 正式形状 | renderer 消费 |
 | --- | --- | --- |
-| `decision` | `subject`、`seq/id/decision_id/decisionId` 至少一个、`chosen` | 与 result 的 `of/decision/...` 配对；未配对 dispatch 属于 in-flight |
-| `dispatch` | `subject`、`outcome:"RUNNING"`、`returned:false/true`、`worker`；建议带 `seq` 或 `id`；常规字段为 `situation_digest`；review dispatch 可带成对的 `review_phase`、`review_track`，以及可选布尔 `review_recheck` | `returned:false` 直接表示 worker 尚未返回；review dispatch 的 `review_phase` ∈ `initial | finding-closure | terminal-final`，`review_track` ∈ `Track A | Track B | Track C | Track D`，两者要么都没有、要么同时出现且合法；`review_recheck=true` 标记 source recheck；有匹配 `of` 的 return 才关闭带 id 的 dispatch；`situation_digest` 是本次派发所依据的 renderer 12 位 digest；老轨迹和手写轨迹缺失时由审计识别，不使 renderer 失败 |
+| `decision` | 历史形状：`subject`、`seq/id/decision_id/decisionId` 至少一个、`chosen` | 仅只读兼容旧 decision/result 配对；新运行不从该游标派发 |
+| `dispatch` | `subject`、`dispatch_id`、`candidate_id`、`candidates_of`、`resource_keys`、`receipt`、`mode`、`chosen`、`outcome:"RUNNING"`、`returned:false`、`worker`、`situation_digest` | 必须逐字段匹配最新候选快照与 credential 的 `runnable_candidate_ids`；匹配 `worker-return.of` 后关闭。review dispatch 还要用 `reviews/code_delta/consumption_id` 绑定原 return |
 | `escape` | `subject`、`deviation`、`reason`；可带 `of` 关联 dispatch/decision | 记录偏离 renderer 建议或处境表未覆盖的决定；作为事件读取，不进入 fact 通道 |
 | `result` | `subject`、`outcome`；返回 decision 时带 `of`；direct evidence 放在 `ref/evidence/artifact/evidence_ref/direct_evidence`；CLI Ticket 终态转换可带 `transition=ticket-state`、`from`、`to` | outcome、incomplete、旧 direct-evidence 写法和 decision 关闭；`transition=ticket-state` 供 Ticket 边界 when-key 读取 |
-| `worker-return` | `subject`、`outcome`、可选 `of`、worker 返回的 direct-evidence payload | 与 `result` 归一；`EVIDENCE_SUFFICIENT` + `evidence` 是规范 direct-evidence 返回 |
-| `fact` | `subject`、`kind:"fact"`、`key`、`value`、`ts`，可选 `seq` | renderer 在当前活动 `trail.jsonl` 内读取同一 key 的最新事实；`trail.NNN.jsonl` 只供 `dispatch_audit.py` 历史审计/回放；`ts` 会在 JSON `when_values` 中暴露，不添加过期规则 |
+| `worker-return` | `subject`、`outcome`、`of`、`return_id`；代码增量同时带 `code_delta/consumption_id`；可带 direct-evidence payload | `subject` 必须匹配 dispatch；同一 `of` 只接受一个 return_id，完全相同事件跨归档重试幂等 |
+| `fact` | `subject`、`kind:"fact"`、`key`、`value`、`ts`，可选 `seq` | renderer 在归档与活动 trail 的连续流中读取同一 key 的最新事实；`ts` 会在 JSON `when_values` 中暴露，不添加过期规则 |
 
 `checkpoint`、`handoff`、`judgment`、`integration`、`review` 等旧 kind 仍可作为普通事件，
 但它们不再通过自由文本 marker 产生本节列出的业务事实。迁移期允许任意旧 kind 携带旧
@@ -173,9 +218,9 @@ renderer 的当前输入是 `execution/<attempt-id>/trail.jsonl`，其每个非�
 {"v":1,"seq":12,"ts":"2026-08-15T12:00:00Z","subject":"attempt","kind":"fact","key":"trail.anchor_mismatch","value":true}
 ```
 
-同一活动 trail 中同一 subject、同一 key 有多条 fact 时，按 `ts` 新者优先，`ts` 相同按 `seq`
-新者优先，再以当前文件顺序作稳定兜底。轮换后归档 fact 不进入 renderer；陈旧 fact 在当前
-文件内不会自动失效，最新 fact 的 `ts` 始终可见。
+同一连续 trail 中同一 subject、同一 key 有多条 fact 时，按 `ts` 新者优先，`ts` 相同按 `seq`
+新者优先，再以归档到活动文件的读取顺序作稳定兜底。陈旧 fact 不会自动失效，最新 fact 的
+`ts` 始终可见。
 `value` 的类型由消费 key 校验；需要布尔的 key 只接受布尔/既有布尔兼容表示。
 
 #### 封闭的 fact key 集合与缺省语义
@@ -216,11 +261,13 @@ python plugin-marketplace/plugins/impl-package/scripts/situation.py render \
 result 是唯一来源；没有传入时该 key 为 U。该输入不启动 `impl_package_state.py`，也不解析
 stdout/stderr，因此 `--at <commit>` 可以用同一个结构化 result 回放快照。
 
-### 3.2 比较 row 的优先级
+### 3.2 旧四键 JSON 兼容
 
-P0 是有序 list；P1-P5 是无序 set。只要合法 P0 candidate 存在，所有低层 candidate 都
-进入 `suppressed_matches`。同一层没有 `selected` 时，输出 `parallel_matches`；因此“secondary”
-不是事实不成立，而是排序后的可见性结果。
+`selected/parallel_matches/other_matches/suppressed_matches` 继续按旧优先级算法输出：P0 是有序
+list，P1-P5 是无序 set；P0 存在时低层进入 `suppressed_matches`，否则最高命中层进入
+`parallel_matches`。这四键只供旧 JSON 消费者和历史审计兼容。主控运行时读取
+`blocking/runnable/withheld/in_flight`，不把 legacy `selected` 当成唯一下一动作，也不从
+`suppressed_matches` 推断工作不可推进。
 
 ### 3.3 package-level `situations.yaml` override
 
@@ -364,8 +411,8 @@ subject 只能是 `attempt` 或存在于 `tickets` 的 `ticket:<id>`；value key
 `evidence` 是字符串 list。不要写 `next: null`，也不要把 anchor、target、order、lifecycle
 塞进 checkpoint value；当前 parser 不消费这些字段，额外字段还会使 state invalid。
 
-state 缺失或非法不是“没有处境”：`package.state_invalid` 会返回已知 true，通常抢到 P0；
-state 合法但某个依赖它的 key 无法计算，则那些 key 返回 U。
+state 缺失或非法不是“没有处境”：`package.state_invalid` 返回已知 true，并进入新投影
+`blocking`；state 合法但某个依赖它的 key 无法计算，则那些 key 返回 U。
 
 ### 4.2 tickets/*.md：ID、claim 和 typed dependency 是正文正则，不是标题语义
 
@@ -420,14 +467,16 @@ Attempt ID：initial
 
 新增 `dispatch`、`escape`、`fact` 和 `worker-return` 的主入口是 `trail append`：将事件 JSON 从 stdin 交给 `python <impl-package-plugin-root>/scripts/impl_package_state.py --package <package> trail append`；CLI 自动补全 `v`、`seq`、`ts`、`head`，调用方不要传入这些字段，并校验 `kind` 与 fact key。`kind=dispatch` 必须先运行 `python <impl-package-plugin-root>/scripts/situation.py render --package <package> --json`，将返回的 12 位 `digest` 填入 `situation_digest`；render 写入 `execution/<attempt>/situation-digest.json`，`trail append` 要求该凭据对应当前 `.impl-package/state.json`。checkpoint、handoff、judgment 和 Ticket 状态转换仍由各自 CLI 追加；老 package 或异常补写仍可按本节 schema 手写轨迹。
 
-#### 最小完整 trail 示例
+#### 最小 dispatch 事件链
 
-以下三行分别建立规范 fact、可消费的 result outcome 和一个仍在运行的 dispatch：
+下面是 `trail append` 的三次独立输入。第一行先由主控声明候选边界和资源；render 生成当前
+credential 后，第二行才能派发；第三行用 `of` 唯一归还该 dispatch。CLI 会补公共字段及快照
+metadata，示例中的 `candidates_of` 和 digest 取自实际写入结果：
 
 ```jsonl
-{"v":1,"seq":1,"ts":"2026-08-15T12:00:00Z","subject":"attempt","kind":"fact","key":"trail.anchor_mismatch","value":true}
-{"timestamp":"2026-08-15T12:01:00Z","subject":"ticket:TKT-01","kind":"result","outcome":"EVIDENCE_GAP"}
-{"timestamp":"2026-08-15T12:02:00Z","subject":"attempt","kind":"dispatch","outcome":"RUNNING","worker":"worker-01","returned":false}
+{"subject":"attempt","kind":"fact","key":"dispatch.candidates","value":{"candidates":[{"candidate_id":"candidate-01","subject":"ticket:TKT-01","mode":"implement","action_id":"implement","resource_keys":["worktree:a"]}]}}
+{"subject":"ticket:TKT-01","kind":"dispatch","dispatch_id":"dispatch-01","candidate_id":"candidate-01","candidates_of":1,"resource_keys":["worktree:a"],"receipt":"thread-01","mode":"implement","chosen":"implement","outcome":"RUNNING","worker":"worker-01","returned":false,"situation_digest":"0123456789ab"}
+{"subject":"ticket:TKT-01","kind":"worker-return","of":"dispatch-01","return_id":"return-01","outcome":"DONE"}
 ```
 
 `trail.jsonl` 每个非空行必须是 JSON object；空行忽略。坏 JSON 或非 object 不会让 renderer
@@ -436,12 +485,12 @@ HF，但会把整个 TrailView 置为 error，所有依赖该 trail 的 key 通�
 
 | kind/写法 | 为被当前 parser 消费所需的字段 | 说明 |
 | --- | --- | --- |
-| `fact` | `subject`、`key`、`value`、`ts`；key 必须属于 3.1 的闭合集合 | 同 key 按 `ts/seq/文件顺序` 取最新；旧 `facts` object 只作为兼容输入 |
-| `decision` | `subject`、`seq/id/decision_id/decisionId` 至少一个；`chosen` 在 `attempt.in_flight` 中应含 `dispatch` 或 `sdd` | 旧 decision/result 配对继续识别 |
-| `dispatch` | `subject`、`outcome=RUNNING`、`returned=false`、`worker`；建议带 id/seq；常规字段为 `situation_digest` | `returned=false` 直接建立 `trail.decision_without_result=true`；`situation_digest` 是本次派发所依据的 renderer 12 位 digest；老轨迹和手写轨迹缺失时由审计识别，不使 renderer 失败 |
+| `fact` | `subject`、`key`、`value`；key 必须属于 3.1 的闭合集合 | CLI 补 `ts/seq`；同 key 跨归档按 `ts/seq/读取顺序` 取最新；旧 `facts` object 只读兼容 |
+| `decision` | 历史 `subject`、关联 ID、`chosen` | 只读兼容旧 decision/result 配对；新派发使用候选快照与 dispatch |
+| `dispatch` | 1.2 和 3.1 列出的完整字段 | 必须匹配最新快照和 credential；`in_flight[]` 按 dispatch_id 标注 |
 | `escape` | `subject`、`deviation`、`reason`；可带 `of` 关联 dispatch/decision | 偏离或表外处境的结构化事件；缺少这些字段不使 renderer 失败 |
 | `result` | `subject`、`outcome`；关闭 decision 可带 `of`/decision ID | 与 `worker-return` 统一为 result-like event |
-| `worker-return` | `subject`、`outcome=EVIDENCE_SUFFICIENT`、`evidence` payload；payload 需有 artifact/claim/revision/environment 才能判 indexed | 建立 direct evidence；旧 `kind=result` 写法保持有效 |
+| `worker-return` | `subject`、`outcome`、`of`、`return_id`；代码增量成对带 `code_delta/consumption_id` | 同一 `of` 只接受一个 return_id；完全相同事件跨归档重试幂等；可携带 direct evidence |
 | direct evidence | 在 result-like row 或 `ref/evidence/artifact/evidence_ref/direct_evidence` payload 中提供 artifact、claim、revision、environment | tuple 完整才能继续判 `evidence.indexed` |
 | `handoff`、`checkpoint`、`judgment`、`integration`、`review` | 无新的业务 fact 语义；需要声明事实时使用 `kind=fact` | `checkpoint` 仍可用 `checkpoint:true` 或 chosen/situation 含 checkpoint 来计算 actions |
 
@@ -536,9 +585,9 @@ Deltas 以及其它 Gate 内容，并不把 renderer-only 的 `undecided` 当作
 三个示例中的 `5f299f345d14389d1520d68e84eec52342d16564` 是本仓库 2026-08-15 的 HEAD；复制到
 别的 Git repository 时，把它替换为该 repository 中实际存在的 `git rev-parse HEAD`。
 
-### 5.1 P0 record：anchor mismatch
+### 5.1 全局 blocking：anchor mismatch
 
-应命中：`attempt.record.anchor-mismatch`（P0）。
+应命中 `attempt.record.anchor-mismatch`，并进入 `blocking`。
 
 目录：
 
@@ -589,7 +638,8 @@ p0-anchor-mismatch/
 
 该 package state 合法；显式 fact 让 `trail.anchor_mismatch=true`。没有 Gate，不会触发
 `gate.terminal`；没有 active checkpoint，不会触发 `attempt.record.session-resumed` 或
-`checkpoint-refresh`。低层可能出现在 diagnostics/suppressed 中，但 P0 primary 是 anchor mismatch。
+`checkpoint-refresh`。其它匹配仍保留在 diagnostics；`anchor-mismatch` 作为全局 blocker 清空
+本轮 `runnable`。
 
 ### 5.2 P2 worker return：invalid fixer envelope
 
@@ -723,8 +773,9 @@ Supporting evidence for AC-1.
 这里 `evidence.all_required_claims_supported=true`，因为 PENDING Ticket 的 evidence group
 提供了一个可解析的当前 HEAD revision；没有 acceptance dependency，所以
 `ticket.acceptance_edge_released=true`；Git 可 resolve，所以
-`ticket.acceptance_revision_parseable=true`。`gate.md` 使用 blocked 以避免无 Gate 时额外命中
-`attempt.gate.verdict-undecided`。该 package 的 primary 是 `ticket.accept.satisfiable`。
+`ticket.acceptance_revision_parseable=true`。`gate.md` 的 blocked 是显式非 terminal verdict；
+无 Gate 也不会合成 `attempt.gate.verdict-undecided`。`ticket.accept.satisfiable` 进入 `matches`，
+其主控机械 action 进入 `runnable`。
 
 ## 6. 形状缺陷清单和修复取舍
 
@@ -757,12 +808,13 @@ Supporting evidence for AC-1.
   evidence timing 写成非法的 `completion`。
 - `p2-closure-awaiting`、`p2-worker-envelope-invalid` 原先用不被识别的 `F-001`；本轮 regex
   已建立对应 finding subject，后续 envelope 语义仍按 4.3 的 event 字段合同判断。
-- `p0-terminal-frozen` 的 expected primary 本身是对的，但非法 state 还制造了不应有的
-  `package.record.state-missing` secondary，因此它同时属于形状误报。
+- `p0-terminal-frozen` 的 legacy expected primary 本身是对的，但非法 state 还制造了不应有的
+  legacy `package.record.state-missing` secondary，因此它同时属于形状误报；新投影把两者都
+  作为 `blocking` 事实呈现。
 
 剩下的 **1/11** 是 `p4-comparison-mismatch`：`Gate Verdict: pass` 按当前优先级必然命中
 P0 `attempt.gate.terminal-frozen`，expected 却把它列入 `must_not_hit`；这是 priority/语义
-边界错误，不是输入 shape 错误。上述 10/11 不是说所有 expected primary 都正确，而是说
+边界错误，不是输入 shape 错误。上述 10/11 不是说所有 legacy expected primary 都正确，而是说
 “造不出所依赖的合法事实形状”是主要失败原因。
 
 ## 7. 两个已知失效 key：修复后的规范形状
@@ -772,7 +824,7 @@ P0 `attempt.gate.terminal-frozen`，expected 却把它列入 `must_not_hit`；�
 **应有行为**：下列自然返回应该建立 `trail.direct_evidence_returned=true`：
 
 ```json
-{"subject":"ticket:TKT-01","kind":"worker-return","outcome":"EVIDENCE_SUFFICIENT","evidence":{"artifact":"evidence/returned.md#result","claim":"AC-1","revision":"5f299f3","environment":"fixture"}}
+{"subject":"ticket:TKT-01","kind":"worker-return","of":"dispatch-01","return_id":"return-01","outcome":"EVIDENCE_SUFFICIENT","evidence":{"artifact":"evidence/returned.md#result","claim":"AC-1","revision":"5f299f3","environment":"fixture"}}
 ```
 
 **当前行为（修复后）**：renderer 将 `kind=worker-return` 与 `kind=result` 归一为
@@ -788,17 +840,16 @@ result-like event，因此该行建立 `trail.direct_evidence_returned=true`。p
 两种 kind 都是正式兼容形状；新 worker 返回优先使用 `worker-return`，不要为了适配旧
 parser 把它改写成 `result`。
 
-### 7.2 `attempt.readiness.worker-still-running`
+### 7.2 `in_flight[]`
 
-**应有行为**：下列 dispatch liveness 应建立 `trail.decision_without_result=true`：
+**应有行为**：下列 dispatch liveness 应建立一条按 dispatch 归属的 `in_flight[]` 标注：
 
 ```json
-{"subject":"attempt","kind":"dispatch","outcome":"RUNNING","worker":"worker-01","returned":false}
+{"subject":"ticket:TKT-01","kind":"dispatch","dispatch_id":"dispatch-01","candidate_id":"candidate-01","candidates_of":1,"mode":"implement","chosen":"implement","resource_keys":["worktree:a"],"receipt":"thread-01","outcome":"RUNNING","worker":"worker-01","returned":false,"situation_digest":"0123456789ab"}
 ```
 
-**当前行为（修复后）**：`dispatch` 的 `outcome=RUNNING` 且 `returned=false` 直接建立
-`trail.decision_without_result=true`；如果 dispatch 带 id，后续 result-like 行可以通过
-`of/dispatch_id/decision...` 关闭它。旧的 decision/result 配对仍继续识别。
+`worker-return.of=dispatch-01` 关闭该项。在途 worker 是事实标注，不再命中一个默认 wait 的
+situation row；其它独立 runnable 候选仍同时呈现。
 
 旧写法仍然合法并保持同样语义：
 
@@ -806,8 +857,8 @@ parser 把它改写成 `result`。
 {"subject":"attempt","kind":"decision","seq":1,"chosen":"dispatch-worker"}
 ```
 
-且不要给它配匹配的 result 行；新写法应优先使用带 `returned=false` 的结构化 dispatch，
-因为它明确记录了 liveness，而不依赖“缺少 result”这一负向推断。
+旧 decision/result 仍只读兼容；缺少 dispatch_id/of 时关联结论为 unknown，不参与新的按
+dispatch 判定。
 
 ## 8. 验收自问与剩余缺口
 
@@ -818,22 +869,21 @@ parser 把它改写成 `result`。
 2. 用第 4.2 的正则字段和第 4.3 的 subject/kind 规则让 Ticket、evidence、worker、handoff
    和 checkpoint facts 进入正确 context；
 3. 用第 4.4/4.5 的 heading/line 形式构造 finding 和 Gate；
-4. 用第 2 节的 66 行逐项反查 source、expected value、缺失语义和 slug，并按第 5 节照抄
+4. 用第 2 节逐项反查 source、expected value、缺失语义和 slug，并按第 5 节照抄
    三个端到端目录。
 
-仍不能仅靠本文把 `manual` situation（`ticket.route.multiple-business-outcomes`、
-`ticket.route.sources-conflicting`）构造为自动 primary；它们本来就没有机械 when key，只能
-进入 `manual` 由主控做语义判断。
+`manual` situation（`ticket.route.multiple-business-outcomes`、
+`ticket.route.sources-conflicting`）没有机械 when key，只进入 `manual`，由主控做语义判断。
 
 projection drift 已改为结构化 validation result；owner 声明型业务事实的 ownership 统一落在
 trail 的 fact 通道，陈旧性只通过 `ts` 暴露，不由 renderer 自行过期。本文剩余的边界是
 `manual` row 的语义判断，以及完整 runtime 对 plan/spec、Publication Status、artifact、Git
 revision 和 projection 的额外校验。
 
-## 9. 45 行 `slug → when` 完整映射
+## 9. 42 行 `slug → when` 完整映射
 
 前面的第 2 节解释每一个 `when` key 如何产生值；本节把正式
-`situations.yaml` 的 45 行逐行展开。这里的“命中”严格指：在相应 subject context
+`situations.yaml` 的 42 行逐行展开。这里的“命中”严格指：在相应 subject context
 中，表格第二列的所有条件都比较为真。条件之间是 AND，不是“满足其中一个”。
 
 表中 `U key` 列列出该行的全部判据 key：其中任意一个变成 unknown，整行就是
@@ -848,15 +898,16 @@ scope 也必须同时满足：`package.*` 行在 package context 评估一次，
 明确扫描全部 attempt trail，见第 2 节。没有对应的合法 Ticket/finding context 时，
 不要把“文件里有一行文字”当成该 row 已经具备 subject。
 
-### 9.1 P0：有序的 fail-closed 层
+### 9.1 P0：legacy 有序层与全局 blocking
 
-P0 内部顺序就是 YAML 的顺序。P0 有多个 active match 时，renderer 取最前面的一个作为
-`selected`，其余 P0 match 放入同层 `other_matches`；所有 P1-P5 match 都被压到
-`suppressed_matches`。因此下表的序号也属于最终呈现规则的一部分。
+P0 内部顺序只决定旧四键的 `selected/other_matches/suppressed_matches` 兼容输出。新投影只把
+`attempt.gate.terminal-frozen`、`package.record.state-missing`、
+`package.record.projection-drift` 和 `attempt.record.anchor-mismatch` 放入 `blocking`；其余 P0
+命中仍作为普通动作参与新分区，不会凭 legacy 顺序暂停全部 runnable 工作。
 
 | 顺序 | slug | 完整命中条件（全部 AND） | U key | 命中所需的实现前置条件与常见漏项 |
 | ---: | --- | --- | --- | --- |
-| 1 | `attempt.gate.terminal-frozen` | `gate.terminal = true` | `gate.terminal` | `gate.md` 必须存在且 Verdict 可解析为 `pass`、`fail` 或 `defer`；缺 Gate 是已知 false，坏 Verdict 是 U。它会先于所有低层 row 抢占。 |
+| 1 | `attempt.gate.terminal-frozen` | `gate.terminal = true` | `gate.terminal` | `gate.md` 必须存在且 Verdict 可解析为 `pass`、`fail` 或 `defer`；缺 Gate 是已知 false，坏 Verdict 是 U。命中时进入新投影 `blocking`。 |
 | 2 | `package.record.state-missing` | `package.state_invalid = true` | 无（该 parser 总能给出已知 true/false；外围 package 不存在仍可 HF） | 缺失或不合法 state 都是已知 true，包括 schema、Ticket、evidence、checkpoint 交叉校验失败；不要把它当作“没有 state 才命中”。 |
 | 3 | `package.record.projection-drift` | `package.validate.projection_drift = true` | `package.validate.projection_drift` | 必须有结构化 `--validation-result` 且值为 true；错误的 validation result 是 HF，不是该 key 的 U。 |
 | 4 | `attempt.record.anchor-mismatch` | `trail.anchor_mismatch = true` | `trail.anchor_mismatch` | 当前正式入口是 attempt scope 的 typed fact；普通 prose 或相邻 marker 不建立该事实。 |
@@ -870,25 +921,23 @@ P0 内部顺序就是 YAML 的顺序。P0 有多个 active match 时，renderer 
 | slug | 完整命中条件（全部 AND） | U key | 命中所需的实现前置条件与常见漏项 |
 | --- | --- | --- | --- |
 | `attempt.record.handoff-due` | `attempt.compaction_pressure_high = true` | `attempt.compaction_pressure_high` | 需要调用方传入 `--compaction-pressure` 的合法 JSON 且 `high=true`；缺参数是 U，不命中该行；它位于 P1，因此 P0 完整性行仍先显示。默认动作是在主控选定的下一个 recovery checkpoint 后交接，不中断当前单元。 |
-| `attempt.record.trail-rotation-due` | `trail.last_ticket_terminal_transition = true` AND `attempt.has_pending_ticket = true` | `trail.last_ticket_terminal_transition`、`attempt.has_pending_ticket` | 与 Ticket 边界交接同一机械窗口；动作入口是显式 `recovery checkpoint --handoff`，不把普通 checkpoint 当作轮换触发，也不读取 pressure key。state 先提交，CLI 随后写 `kind=handoff` 并轮换活动 trail；轮换失败只 warning。轮换后 renderer 只看新的 `trail.jsonl`，归档由 audit 读取。 |
-| `attempt.readiness.worker-still-running` | `trail.decision_without_result = true` | `trail.decision_without_result` | trail 必须可读，并且存在未配 result 的 decision，或 `kind=dispatch`、`outcome=RUNNING`、`returned=false` 的 open dispatch。带 id 的 dispatch 只有匹配 result 才关闭；无 id 的 running dispatch 始终保持 open。 |
+| `attempt.record.trail-rotation-due` | `trail.last_ticket_terminal_transition = true` AND `attempt.has_pending_ticket = true` | `trail.last_ticket_terminal_transition`、`attempt.has_pending_ticket` | 与 Ticket 边界交接同一机械窗口；动作入口是显式 `recovery checkpoint --handoff`，不把普通 checkpoint 当作轮换触发，也不读取 pressure key。state 先提交，CLI 随后写 `kind=handoff` 并轮换活动 trail；轮换失败只 warning。轮换后 renderer 按编号归档后接新 `trail.jsonl` 恢复连续事实。 |
 | `attempt.readiness.all-edges-held` | `attempt.ready_ticket_count = 0` AND `attempt.has_pending_ticket = true` AND `attempt.implementation_edges_held = true` | `attempt.ready_ticket_count`、`attempt.has_pending_ticket`、`attempt.implementation_edges_held` | 需要合法 state、每个 Ticket 文件都能解析、implementation dependency 的目标状态都能判定，并且至少有一个 `PENDING` Ticket；不能只在“看起来没有 ready Ticket”时手写期望。后两个条件在当前实现中有推导重叠，但 row 仍会逐项比较。 |
-| `attempt.readiness.multiple-ready-tickets` | `attempt.ready_ticket_count > 1` AND `attempt.in_flight = false` | `attempt.ready_ticket_count`、`attempt.in_flight` | 需要完整 Ticket/dependency 图，且 open dispatch 已被明确排除。没有 trail 或无法证明没有 in-flight 时第二个 key 是 U，不是 false；“有两个 pending Ticket”也不等于有两个 ready Ticket。 |
+| `attempt.readiness.multiple-ready-tickets` | `attempt.ready_ticket_count > 1` | `attempt.ready_ticket_count` | 需要完整 Ticket/dependency 图；在途 dispatch 不再压掉其它 ready 候选，它们另列于 `in_flight[]`。 |
 | `ticket.readiness.blocker-maybe-resolved` | `ticket.state = "BLOCKED"` AND `ticket.blocker_maybe_resolved = true` | `ticket.state`、`ticket.blocker_maybe_resolved` | 当前 Ticket 必须可由 state 和 Ticket 文件建立 context；resolved 需要 typed fact 或兼容的 Ticket 正文声明。`BLOCKED` 本身不会把 blocker 自动变成 resolved。 |
 
 ### 9.3 P2：未完成动作、调查和 review 返回
 
 | slug | 完整命中条件（全部 AND） | U key | 命中所需的实现前置条件与常见漏项 |
 | --- | --- | --- | --- |
-| `finding.fix.worker-envelope-invalid` | `trail.last_worker_mode = "fix"` AND `trail.envelope_valid = false` | `trail.last_worker_mode`、`trail.envelope_valid` | 必须有合法 finding context，且当前 finding subject 的最后 worker mode 是 `fix`；envelope 的 false 必须来自 typed fact 或结构化字段。缺 envelope 不是 false，而是 U。 |
-| `ticket.implement.worker-incomplete-first` | `trail.last_outcome = "INCOMPLETE"` AND `trail.incomplete_count = 1` AND `trail.last_worker_mode = "implement"` | `trail.last_outcome`、`trail.incomplete_count`、`trail.last_worker_mode` | 三者都从当前 Ticket scope 读取；`incomplete_count=1` 是从末尾连续 result/worker-return 事件精确计数，不是“历史上曾经有一次 incomplete”。 |
-| `ticket.implement.worker-incomplete-second` | `trail.last_outcome = "INCOMPLETE"` AND `trail.incomplete_count = 2` AND `trail.last_worker_mode = "implement"` | `trail.last_outcome`、`trail.incomplete_count`、`trail.last_worker_mode` | 必须是末尾连续两个 result-like `INCOMPLETE`，中间不能有另一个 result-like outcome；它不会与 first row 因“至少一次 incomplete”同时命中。 |
-| `ticket.implement.worker-blocked` | `trail.last_outcome = "BLOCKED"` AND `trail.last_worker_mode = "implement"` | `trail.last_outcome`、`trail.last_worker_mode` | 当前 Ticket 的最后有效 outcome 必须精确为大写 `BLOCKED`，worker mode 必须能解析为 `implement`；缺 trail 是 U。 |
+| `finding.fix.worker-envelope-invalid` | `trail.last_worker_mode = "fix"` AND `trail.envelope_valid = false` | `trail.last_worker_mode`、`trail.envelope_valid` | 必须有合法 finding context 和可归属 dispatch；envelope 的 false 来自 typed fact 或结构化字段，缺 envelope 是 U。该 `source=situation` fix 先进入 withheld；真正 fix 候选改用 owning `ticket:<id>`，brief 保留 finding 线索。 |
+| `ticket.implement.worker-incomplete-first` | dispatch 轴的 `trail.last_outcome = "INCOMPLETE"` AND `trail.last_worker_mode = "implement"` | `trail.last_outcome`、`trail.last_worker_mode` | 按实际边界与上下文可信度选择恢复、调查或换人；次数不驱动不同分支，也不自动 BLOCKED。 |
+| `ticket.implement.worker-blocked` | `trail.last_outcome = "BLOCKED"` AND `trail.last_worker_mode = "implement"` | `trail.last_outcome`、`trail.last_worker_mode` | 当前 dispatch 的 outcome 必须精确为大写 `BLOCKED`，worker mode 必须能解析为 `implement`；缺 trail 或无法归属是 U。 |
 | `ticket.investigate.no-carrier` | `ticket.state = "PENDING"` AND `ticket.investigation_carrier_present = false` AND `ticket.investigation_context_clear = true` AND `evidence.count = 0` | `ticket.state`、`ticket.investigation_carrier_present`、`ticket.investigation_context_clear`、`evidence.count` | carrier 只由当前 Ticket 的 investigate 派发/结果或 `timing=early-falsification` evidence 建立；其它 typed fact 表示已有明确处境，不让该 P2 row 越权抢占；仍要求 evidenceIndex 完全为空以避开已进入 acceptance/补证窗口的 Ticket。 |
-| `ticket.investigate.evidence-gap` | `trail.last_outcome = "EVIDENCE_GAP"` | `trail.last_outcome` | 当前 Ticket scope 的最后 result-like outcome 必须精确为 `EVIDENCE_GAP`；只写普通 prose 或另一个 subject 的 outcome 不能保证该 row 命中。 |
-| `finding.fix.reviewer-returned` | `trail.last_outcome = "FINDING"` AND `trail.finding_source = "reviewer"` | `trail.last_outcome`、`trail.finding_source` | 需要解析出的 finding ID 与 trail subject 一致；`finding-source: reviewer` 写在 finding block 里不等同于 trail 的 `finding_source=reviewer`，本 row 看的是 trail。 |
+| `ticket.investigate.evidence-gap` | `trail.last_outcome = "EVIDENCE_GAP"` | `trail.last_outcome` | 当前 dispatch 的 result-like outcome 必须精确为 `EVIDENCE_GAP`；只写普通 prose、缺少 `of` 或另一个 dispatch 的 outcome 不能保证该 row 命中。 |
+| `finding.fix.reviewer-returned` | `trail.last_outcome = "FINDING"` AND `trail.finding_source = "reviewer"` | `trail.last_outcome`、`trail.finding_source` | finding ID 必须存在并与 trail subject 一致；文档来源字段不替代 trail source。该 fix 建议未声明时 withheld；主控以 owning Ticket 声明 fix，并把 reviewer 原始意见、定位和裁决带入 brief。 |
 | `attempt.review.reviewer-unavailable` | `trail.reviewer_unavailable = true` | `trail.reviewer_unavailable` | 必须有 attempt scope typed fact；`timeout`、`unavailable` 等自由文本不再触发。 |
-| `finding.fix.main-session-discovered` | `trail.finding_source = "main-session"` | `trail.finding_source` | 需要合法 finding context 和当前 finding trail 的 source 字段；finding 文档里的来源字段不替代 trail source。 |
+| `finding.fix.main-session-discovered` | `trail.finding_source = "main-session"` | `trail.finding_source` | 需要存在的 finding context 和当前 finding trail source。若选择修复，主控以 owning Ticket 声明 fix 候选，并把 finding 线索带入 brief。 |
 | `finding.review.source-recheck-pending` | `finding.review_track = "C"` AND `finding.source_recheck_pending = true` | `finding.review_track`、`finding.source_recheck_pending` | 必须有可解析 finding block，且 block 中是 Track C 与 source-recheck pending；没有 Track 会得到已知 None，不会命中 C。 |
 
 ### 9.4 P3：验证、返工和路由
@@ -933,10 +982,10 @@ P0 内部顺序就是 YAML 的顺序。P0 有多个 active match 时，renderer 
 2. **`session-resumed` 不依赖声明。** active checkpoint 加上 checkpoint 后没有动作即可命中；有 marker 时读 marker 后的行数，没有 marker 时忽略兼容性的 `attempt.session_resumed` 声明、但其它 typed fact/action 会使它不再是“刚接手”。
 3. **evidence-unfiled 需要完整 direct-evidence tuple。** payload 缺 artifact、claim、revision 或 environment 时，`evidence.indexed` 是 U，不会稳定得到 false。
 4. **ready/edge 行需要完整 Ticket dependency 图。** 缺 Ticket、坏 Ticket 或无法解析 dependency 时，ready count/edges 不能被“看起来为 0”替代。
-5. **multiple-ready 需要已知的 `in_flight=false`。** 没有 trail 或没有办法证明 open dispatch 已关闭，不足以进入多 ready 行。
+5. **multiple-ready 不受无关 in-flight 压制。** ready 仍由 canonical implementation dependencies 判定；在途工作单独呈现。
 6. **`no-carrier` 的“无 carrier”是组合推导。** 必须同时是 PENDING、没有结构化 investigate 派发/结果、没有 early-falsification evidence、没有其它 typed 处境，且 `evidenceIndex` 计数恰为 0；它不是单独的 carrier 字段。
 7. **`no-carrier` 的排除边界是显式 typed fact。** P3/P4 输入一旦已有其它 typed fact，no-carrier 不再越权抢占；纯 checkpoint marker 不算该排除条件。
-8. **worker incomplete 的次数是末尾连续次数。** 历史上出现过一次或两次 INCOMPLETE 不够，中间的 result-like outcome 会重置计数。
+8. **worker incomplete 按 dispatch 归属。** 次数只作观察；续接、调查或换人依据边界与上下文可信度。
 9. **finding 的文档来源和 trail 来源不是同一字段。** reviewer-returned/main-session-discovered 看 trail 的 `finding_source`；finding block 的 `finding-source` 不能替代它。
 10. **safety-invariant 行依赖 Stable claim ID 正则。** 只有 `INV-` 前缀 claim 会进入安全不变量集合；没有该 claim 时是已知 false。
 11. **awaiting-reviewer 的 Ticket prose fallback 仍依赖可读 trail。** 无 trail 时 parser 在 fallback 前返回 U，不能只凭 Ticket 正文的 `review: required` 预测命中。
@@ -953,22 +1002,24 @@ P0 内部顺序就是 YAML 的顺序。P0 有多个 active match 时，renderer 
 
 ## 10. 如何预测一个包最终呈现什么
 
-只读推导器输入并预测输出时，按下面顺序走查；不要只挑一个“看起来最像”的 slug：
+只读推导器输入并预测主控可执行集合时，按下面顺序走查：
 
-1. **先确认没有 HF。** package 路径、`--at` commit、正式/override table 需要可读取且合法；否则先得到 CLI/table failure，后面的 U/F 预测不适用。
-2. **确定 contexts。** 读取 state 的 attempt ID、Ticket map 和 parsed findings，分别建立 package、attempt、每个 Ticket、每个 finding context。先记录 subject；同一个 slug 可能对多个 Ticket 或 finding 各产生一条 match。
-3. **逐行枚举候选。** 按第 9 节从 P0 到 P5 检查属于该 context 的全部 45 行。对每一行逐项读取完整 `when` 组合：所有 key 都 true 才是 match；任一 key 已知 false 就不是 match；任一 key U 就记到 `undetermined`，不能把缺失当 false。
-4. **把 manual 单独记账。** `ticket.route.multiple-business-outcomes` 和 `ticket.route.sources-conflicting` 永远进入 `manual` 列表，但不会因为“感觉像”而成为机械 candidate；只有主控做出对应语义判断时才主动进入。
-5. **汇总所有 active matches，再算层。** 先看有没有 P0。只要有一个 P0，P0 抢占一切低层 match；P1-P5 全部是 `suppressed_matches`，不是当前可见 secondary。
-6. **P0 的特殊呈现。** 若命中多个 P0，按 YAML 的 P0 顺序取第一个 `selected`；同组其余 P0 放 `other_matches`。P0 不是 P1-P5 那种无序并列层。
-7. **没有 P0 时取最高命中层。** 取数值最小的 P1-P5 层。该层命中一条时，它出现在 `parallel_matches`，人读输出也把它作为当前处境；命中多条时全部并列，**没有主 slug**，主控要先在并列处境中选择。更低层的 active matches 进入 `other_matches`，也就是 secondary。
-8. **最后再看 undetermined。** undetermined 行不参加抢占，但必须保留在预测里，因为它表示“当前输入不足以证明不命中”，不是“确定不命中”。
+1. **确认硬失败。** package 路径、`--at` commit、正式/override table 和结构化外部输入必须可读且合法；HF 时停止，U/F 预测不适用。
+2. **建立 contexts 并枚举。** 从 state、Ticket 与 findings 建立合法 subject，对第 9 节全部 42 行求值。真值进入 `matches`，缺输入进入 `undetermined`，manual 保持单独列出；这些是诊断全集，不是单选 cursor。
+3. **先看 `blocking`。** 只有 terminal-frozen、state-missing、projection-drift、anchor-mismatch 四类全局事实阻止本轮全部 dispatch。其它命中继续参与候选分区。
+4. **核对 `in_flight`。** 按 dispatch_id 列出已派发且没有匹配 worker-return 的工作。它是并行安排与恢复事实，不会自动压掉无关 runnable。
+5. **核对候选快照。** 新 dispatch 前，主控先把候选 subject、mode、工作边界、resource_keys 与实际 blockers 写入最新 `dispatch.candidates` 快照。`implement/fix` 绑定存在且 ready 的 Ticket；attempt/finding 只承载 investigate/verify，finding 必须存在。
+6. **读取 `runnable/withheld` 全集。** 已声明且机械前置满足的候选进入 `runnable`；声明 blocker、业务前置不满足或待恢复容量的候选进入 `withheld`。处境表给出的 dispatch 建议在未声明时留在 `withheld`，主控机械动作可以直接 runnable。
+7. **按实际冲突安排。** `resource_keys` 相同只说明观察到同一资源，不自动表示互斥。主控把不兼容 effect footprint 写成 resource blocker；稳定读取可以并行，renderer 不建立资源锁。
+8. **派发或恢复。** dispatch 必须匹配最新快照、当前 HEAD/state/trail seq credential 与 `runnable_candidate_ids`。任一输入变化后重新 render。在途返回按 `of` 跨归档恢复；无 worthwhile runnable 时可以等待，但 idle/in-flight 不代表 Ticket 或 package closed。
+9. **保留 legacy 输出。** `selected/parallel_matches/other_matches/suppressed_matches` 和 `legacy_digest` 继续按旧优先级生成，供旧消费者读取；主控不依据它们裁掉新分区中的候选。
 
-### 10.1 常见的意外抢占
+### 10.1 关键分区边界
 
-- `ticket.investigate.no-carrier` 仍是 P2，但只覆盖 PENDING、无两类调查 carrier、无其它 typed 处境且 evidenceIndex 为空的 Ticket；其它现行 typed fact 也会让它变为 false。
-- `attempt.gate.missing` 只在所有 Ticket terminal 且缺 Gate 时命中；普通 PENDING 窗口不会因为尚未写 Gate 而和 acceptance row 并列。已有 Gate 且显式 `undecided` 才进入 `attempt.gate.verdict-undecided`。
-- `attempt.accept.all-tickets-terminal` 只要所有 Ticket 都是 SATISFIED/RETIRED 就会出现；它常和 P3 revision/rework 同时命中而成为 secondary；没有更高层 match 时，它也可能和其它 P4 row 并列。
+- `ticket.investigate.no-carrier` 只覆盖 PENDING、无调查 carrier、无其它 typed 处境且 evidenceIndex 为空的 Ticket；命中只是一个待声明的 dispatch 建议。
+- `attempt.gate.missing` 只在所有 Ticket terminal 且缺当前 Attempt Gate 时命中。普通 PENDING 窗口不会因缺 Gate 阻塞其它候选。
+- `attempt.accept.all-tickets-terminal` 是普通处境动作；只有四个 `GLOBAL_BLOCKING_SLUGS` 会清空新投影的 `runnable`。
+- worker 的 `INCOMPLETE/BLOCKED` 结论按 dispatch 归属。主控依据边界和上下文可信度决定续接、调查或换人，次数不产生自动升级。
 
 ### 10.2 关键输入的预测
 
@@ -981,21 +1032,21 @@ P0 内部顺序就是 YAML 的顺序。P0 有多个 active match 时，renderer 
 - `attempt.review.terminal-coverage-incomplete`：只按最新 `review.terminal_summary`、当前
   HEAD、required review tracks 与 report 判定，不接受旧布尔覆盖。
 - `p4-acceptance-edge-held`：evidence count 大于 0 且 acceptance edge 未释放使目标命中；
-  Ticket 尚未 terminal，所以缺 Gate 不产生 `attempt.gate.missing`，只有目标 row 可见。可预测。
+  Ticket 尚未 terminal，所以缺 Gate 不产生 `attempt.gate.missing`。该命中与其它候选一起进入
+  新分区，不生成唯一可见 row。
 
 ### 10.4 缺失或零行 trail 的降级补充
 
-`execution/<attempt-id>/trail.jsonl` 缺失，或文件可读但没有非空 JSON 行，统一视为
-“没有事件”；坏 JSON、读取错误仍按 U 处理。对直接查询“轨迹中是否记录过某类事件”的
-key，空集有确定值，不把整行推入 `undetermined`：`evidence.indexed=false`、
-`trail.decision_without_result=false`、`trail.direct_evidence_returned=false`、
-`trail.finding_source=None`、`trail.incomplete_count=0`、`trail.last_outcome=None`、
-`trail.last_worker_mode=None`。
+缺失全部 `trail.NNN.jsonl` 与活动 `trail.jsonl`，或连续流没有事件时，不存在候选快照、
+dispatch identity 或可恢复的 worker-return 轴。此时不能把 `last_outcome=None` 或
+`incomplete_count=0` 当成“worker 已成功/从未失败”的运行事实，也不能据此派发、换人或关闭
+工作；dispatch-scoped action 没有归属输入。旧 result/dispatch 存在但缺 `of/dispatch_id` 时，
+跨工作聚合结果为 U。
 
-其余依赖轨迹缺席来判断 worker、调查、复核、handoff recovery、handoff target、envelope、
-release recheck 或 Git trail head 的 key，缺失或零行仍返回 U；特别是不能把老 package 未写入
-新版 trail 的动作当成“没有做过”。`ticket.release_edge_rechecked` 的既有缺省值只在
-trail 可读且含事件时适用，缺失或零行仍为 U。
+其它 key 是否能从空事件集得到已知 false，逐项以第 2 节为准；坏 JSON、读取错误仍为 U。
+依赖调查 carrier、复核、handoff recovery、handoff target、envelope、release recheck 或 Git
+trail head 的判断不能用“没有事件”替代证据。恢复时读取编号归档加活动文件的完整连续流；
+旧 package 缺少新关联字段时保留兼容事实，并把无法归属的结论留为 unknown。
 
 ### 终审结果事实
 

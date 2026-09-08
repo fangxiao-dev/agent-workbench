@@ -35,7 +35,7 @@ Continuation 已就绪；从 authority / entry 恢复，不回溯旧聊天或重
 ## Handoff Notes
 [OPTIONAL_HANDOFF_NOTES_OR_OMIT]
 
-Ticket package 使用 `/impl-package:dev-with-track` 恢复并持续执行 owning workflow；由 `$dispatcher` 调度，由 `/impl-package:subagent-driven-development` 约束 bounded worker。非 Ticket workflow 按 authority 指定的 recorded action 执行。直到 owning workflow 返回 terminal、blocker、idle/checkpoint，或确需换 session 时再停止。
+Ticket package 使用 `/impl-package:dev-with-track` 恢复并持续执行 owning workflow；由 `$dispatcher` 选择候选、约束 bounded worker、消费 return，并恢复在途 dispatch 与待派审 code delta 后安排 review。非 Ticket workflow 按 authority 指定的 recorded action 执行。直到 owning workflow 返回 terminal、blocker、idle/checkpoint，或确需换 session 时再停止。
 
 收到后先用一条简洁 commentary 回报 authority、完整 ready work、所用 owning skills、授权/blocker 与停止条件；这是理解回报，不是执行预演，也不等待批准。随后立即从 entry point 恢复并执行。
 ```

@@ -1,5 +1,42 @@
 # Dispatcher、SDD 与 Dev With Track 联合调整提案
 
+## 实施记录（2026-09-08）
+
+Owner 已批准联合改造及候选来源补充：复用现有 trail 记录候选快照。实施基线为 `795ca95d0846f844a0845fa93889e124df4998f4`；实施前工作区干净，投影、审计、Dispatcher 与 SDD 四组基线测试共 122 项通过。当前源码、范围内验证与独立复核均已完成，本次源码交付 closed；剩余实施项 0，待 Owner 决策项 0。安装与缓存同步不在本次范围。
+
+Owner 在实施中明确排除 DSH：本次不修改 `dsh-impl-package` 的代码、命令、文档或测试；下文原 proposal 的 DSH 迁移条款不属于本次交付与验收。运行时兼容字段保留，宿主注入改造仅覆盖 Codex。
+
+Owner 同时明确脚本跨平台：本次新增与修改脚本使用 Python，路径与进程调用使用 pathlib、sys.executable 和参数数组；验证直接使用 Python/pytest，不新增或修改 `.ps1`。
+
+### 固定的新增 trail 合同
+
+- 候选事件：`kind=fact, key=dispatch.candidates, subject=attempt`，`value.candidates` 为完整数组（空数组清空），可带主控观察到的 `available_slots` 非负整数。CLI 写入时补 `value.attempt`、`value.head`、`value.state_sha256`；以当前 Attempt 最新快照整批替换旧快照，HEAD/state 字节指纹失配显示 unknown。
+- 每个候选：`candidate_id`、`subject`、`mode`、`action_id`、`resource_keys`；可带 `blockers` 数组，每项含 `type`（foundation/acceptance/resource/authorization）、`reason` 及受影响的 `subject` 或 `resource_key`。subject 使用存在的 `ticket:<id>`、`finding:<id>` 或 `attempt`；implement/fix 绑定 owning Ticket，finding 线索随 brief 保留。资源只接受声明；业务 readiness 仍用 canonical typed dependency。普通派发建议待主控声明后进入 runnable；主控机械动作可直接呈现。
+- 新派发：保留原 `worker/outcome=RUNNING/returned=false/situation_digest`，增加 `dispatch_id`、`candidate_id`、`candidates_of`（快照 seq）、`resource_keys`、真实宿主 `receipt`（非空字符串或对象），`chosen` 等于候选 action_id。subject/mode/resources 与快照一致。CLI 从 render credential 自动复制 `runnable_candidate_ids` 与 `state_sha256`，供审计核对当时实际可运行集合；历史输入继续只读兼容。
+- worker 返回：`kind=worker-return`，`of` 指向 dispatch_id，`return_id` 标识本次返回。含代码增量时带 `code_delta={base,head}`（固定 Git commit/snapshot commit）与 `consumption_id`；业务状态转换的普通 result 不套此合同。
+- delta review：真实 review dispatch 用 `reviews=<return_id>`、相同 `code_delta` 和 `consumption_id` 关联。容量不足时追加 `kind=fact,key=review.dispatch_pending,subject=<原subject>`，value 带 `return_id/code_delta/consumption_id/reason/capacity=0`。审计按具体返回检查同次消费；后续快照的 available_slots 提供补派机会证据，缺少证据报告不可核验。
+- 新输出保持旧四键按旧优先级算法填充，新增 blocking/runnable/withheld/in_flight；新 digest 覆盖新分区，另保留 legacy_digest 供历史审计。结果处境按可选 dispatch_id 求值，候选身份包括 slug、subject、dispatch_id。
+- Codex Capsule 遵守现有 1200 上下文上限：能容纳时展示完整分区并标记 `projection-complete: true`；超限时仅给计数、`projection-complete: false` 与完整只读 JSON 恢复命令，要求判断/写入前读取全部投影。CLI JSON 始终全量输出，胶囊不截取候选前缀冒充全集。
+
+### 规则迁移与验证记录
+
+第 10 节 26 个规则族已逐项标明实现落点；第 13 节为验收场景清单。Dispatcher 保留五步循环并吸收两份按需 reference，SDD 的有效调用、rubric 与 eval 完成迁移后删除其 6 个源文件。dev-with-track 保留业务单写和 material review 判断；do-review 保留 comparison point、topology 和 closure。Ticket schema、typed dependency、Gate 机制及所有版本号保持不变。
+
+| 验证层 | 实际结果与复跑入口 |
+| --- | --- |
+| 投影、归属与审计 L0 | `python -m pytest tests/test_situation_render.py tests/test_dev_with_track_situations_review_vocabulary.py tests/test_dispatch_audit.py -q`：最终 **120 passed**。包括同票 A INCOMPLETE/B DONE、迟到/重复/错 subject 返回、同候选续接、review 在途、局部/全局阻塞、implementation/acceptance、历史 unknown、待派审恢复和新旧输出。 |
+| CLI/state 与宿主注入集成 | `python -m pytest tests/test_impl_package_state.py tests/test_dispatch_audit.py tests/test_impl_package_hooks.py -q`：**101 passed，7 subtests passed**。后续 subject/归档幂等修复单独运行 state 的 `-k 'candidate_subjects or dispatch_retry'`：**2 passed**；最后投影变更后复查 hooks 的 `-k 'capsule_preserves or large_capsule'`：**2 passed**。这些是分阶段重叠验证，不累加成单次全量数量。 |
+| 直接消费者 L1 与宿主源码合同 | Dispatcher、SDD retirement、plugin、execution-boundaries、handoff、role、thread-harness、task-queue、dispatch-fix、do-review 三轨合同十个测试文件：**87 passed**。其中 `tests/test_impl_package_plugin.py` 验证 Codex/Claude/Grok 三宿主 manifest、新 Dispatcher/plugin 组合与旧 Dispatcher 错配识别。 |
+| Skill 与静态检查 | `quick_validate.py` 分别检查 Dispatcher、dev-with-track：均 valid；5 个变更 Python 模块 `py_compile` 通过；`git diff --check` 通过。DSH、`.ps1`、manifest 与 schema 文件的 diff 均为空。 |
+
+独立复核使用固定工作区快照和 SHA-256，不把运行中的 diff 当作不可变 comparison point。audit/hooks 的 4 项问题已修复并复核 PASS；runtime 的 subject 放行与跨归档重试两项问题已修复并复核 PASS。资源 key 重合自动阻塞的建议已撤回：稳定共享读取与主控声明局部 blocker 才是批准的合同。`archive-attempt --from-revision` 对活动 Ticket 文件的依赖经基线核查属于既有行为，不计作本次引入缺陷。最后新增的首个有效返回读取与同候选续接修复也已独立增量复核 PASS：8/8 文件指纹匹配，3 项定点测试通过，并确认旧 dispatch 的代码增量仍保留待审。
+
+模型行为采用相同输入、相同 `gpt-5.6-sol / medium` profile 分别运行基线和候选材料：V04、V08、V14、V16 产生具体决策；V15 实现原子 JSON 保存，并实际检查成功写入、失败保留原文件与临时产物清理，且从缺失的建议 Python carrier 恢复到可用解释器。两版均通过这些样例；候选 V14 首轮文案混淆 dispatch receipt 与审查结论，补清边界后用原输入复跑 PASS。它们证明代表样例可执行，不证明所有轨迹确定，也不构成速度提升证据。
+
+本地模型实跑证据（沿用既有、被 Git 忽略的 Skill workspace）：[统一输入](../../skills/dispatcher-workspace/consolidation-260908/prompt.txt)、[基线结果](../../skills/dispatcher-workspace/consolidation-260908/baseline/result.md)、[候选结果](../../skills/dispatcher-workspace/consolidation-260908/candidate/result.md)、[V14 最终复跑](../../skills/dispatcher-workspace/consolidation-260908/candidate/v14-recheck.json)。候选最终材料 SHA-256 为 `b157231fbd9aa91c4e0bbe7bd2e1feb8fcab5abf5bf4e6e1b99bd5c3c6e8433a`；本地原始轨迹不随源码提交自动携带，本节保留可审阅结论。
+
+宿主兼容结论限于源码合同和 Codex 注入测试，未执行用户级安装、缓存同步或 Linux/macOS 宿主实跑，也未发布；这些不计作已验证。以下第 1–15 节保留批准方案与调研背景，实施状态和 DSH 排除以本节为准。
+
 ## 1. 结论与文档状态
 
 建议将 Dispatcher 与 Subagent-Driven Development（SDD）合并为一个通用执行协作 Skill，保留 `$dispatcher` 名称；dev-with-track 继续拥有业务合同、Ticket readiness、证据与 Gate，同时调整其向调度层提供候选工作的方式。联合修改直接调用入口、处境提示与验证合同，避免正文已经鼓励并行，运行时注入仍要求等待。
@@ -331,36 +368,36 @@ in_flight[]   哪些 dispatch 正在跑，各自声明的 resource key 范围；
 
 ## 10. 旧规则删留与唯一落点
 
-| 原规则族 | 处理 | 原因/落点 |
-| --- | --- | --- |
-| 所有委派必须先建立 Topic | 弱化为连续工作可用的组织概念 | 简单任务直接表达目标、边界和返回条件 |
-| Topic closure 不得被静默缩小 | 保留实质要求 | 已授权交付范围改变需重新判断；不依赖 Topic 模板 |
-| 一个 baby step 到主控 return point | 保留、改为自然语言结果边界 | 防止预授权后续决策，避免微型往返 |
-| 文件数、检索范围、命令数的例外说明 | 删除冗长教学 | 用可验证结果和审查承接能力判断粒度 |
-| foundation 先稳定 | 保留 | 会改变下游语义的前提必须先确认 |
-| 四类 dependency 必填分类 | 降级进 reference，不删除 | 它是让“blocked”有确定含义的词汇表；投影的 `blocking[]` 逐项标类型时复用同一套 token |
-| 当前批次收齐再决定 | 删除批次同步含义 | 返回后及时释放有收益的独立工作 |
-| 必须主动寻找并行机会 | 强化并保留 | 对应用户反复观察到的局部串行问题 |
-| 按整个 Topic/Ticket write-set 判断冲突 | 保留纠正后的 step 级规则 | 以实际 effect footprint 判断 |
-| 共享读/观察资源影响 | 保留并澄清 | 对稳定状态的兼容读取可并行，变化中的观察需隔离 |
-| worktree 等价于完整运行隔离 | 保留纠正规则 | 实际工具链、DB、端口、数据分别确认 |
-| receipt 确认与迟到/重复结果归因 | 正文留一句触发，`dispatch_audit.py` 加核验 | audit 是只读事后报告，触发只能留在正文。断言对象限于实际 dispatch 行（`_dispatch_is_running` 已能区分），不要求所有业务 decision 都有宿主 receipt |
-| 每个代码增量及时独立 delta review | 正文留一句触发，`dispatch_audit.py` 加核验 | 现在三个 Skill 各写一遍，改为只在 Dispatcher 留一句。审计按具体含代码 `return` 及其固定代码增量关联审查：同次消费及时触发，且该增量的 review dispatch 有真实 receipt；槽位不足时记录明确待派审事实，后续合适槽位补派，待派审不等于审查完成。没有下一次 implementation 时仍检查最后代码增量；同票互不依赖的实施继续，不把整个 Ticket 等待作为闸门，也不以期末集中补审替代及时触发与补派。核验继续复用现有槽位事实与 `dispatch_audit.py`，不增加固定时间阈值、状态机、全局放行闸门或独立审计系统 |
-| review 积压触发全局收敛 | 改为收住受影响实现链 | 避免审查节点拖住全部工作 |
-| delta finding 一律随下一步修 | 删除绝对安排 | Dispatcher 按实际收益与依赖决定 |
-| work/review/test 三条 lane 必须显式建立 | 删除强制对象 | 保留实现/审查独立和有界测试活动 |
-| 新 Topic 一律 fresh、关闭后一律不能复用 | 改为相关可信上下文与明确新授权 | 释放责任与进程复用分别判断 |
-| reviewer 同 scope 复用 | 保留 | 独立性与上下文连续性分别保证 |
-| 固定观察 15/30 分钟 | 删除 | 使用实际活跃信号与任务特定超时 |
-| 连续第二次 INCOMPLETE 必须调查 | 删除数字门槛，保留失配触发 | 一次已证实的边界失配也应调查；可解释的恢复无需等次数。同一删除必须同时落到 `worker-incomplete-first/second` 两个分支（§9.3.2），否则处境表继续机械换人和 `ticket block` |
-| verify 可能写 snapshot/generated file | 保留实际副作用分类 | 工作名称不能覆盖真实资源占用和授权 |
-| 固定 mode 与 outcome enum | 整体保留，不分两级 | 有真实消费者（`_last_worker_mode`、trail、audit），共四个词，且是给弱模型 worker 的答案形态锚点；分级会造出同一概念的两个等级，正是本次合并要消灭的克隆形态 |
-| 真实路径验证、局部 self-check、cleanup | 保留 | 低阶 worker 的关键执行保障 |
-| material formal review requirement | 迁入 dev 的业务 review 判断 | 从通用委派中分离 Ticket 语义 |
-| State/Evidence/Gate 单写与验收证据 | 保留 | 与并行实施无冲突，提供结果确定性 |
-| provider/model、task-queue、宿主原生调用教程 | 继续使用既有 owner | 不新建解析、队列或模型策略层 |
+| 原规则族 | 处理 | 原因/落点 | 实施落点（26/26 完成） |
+| --- | --- | --- | --- |
+| 所有委派必须先建立 Topic | 弱化为连续工作可用的组织概念 | 简单任务直接表达目标、边界和返回条件 | Dispatcher 正文 |
+| Topic closure 不得被静默缩小 | 保留实质要求 | 已授权交付范围改变需重新判断；不依赖 Topic 模板 | Dispatcher 步骤 1 |
+| 一个 baby step 到主控 return point | 保留、改为自然语言结果边界 | 防止预授权后续决策，避免微型往返 | Dispatcher 步骤 3 / delegation |
+| 文件数、检索范围、命令数的例外说明 | 删除冗长教学 | 用可验证结果和审查承接能力判断粒度 | Dispatcher 步骤 3 |
+| foundation 先稳定 | 保留 | 会改变下游语义的前提必须先确认 | resource-isolation |
+| 四类 dependency 必填分类 | 降级进 reference，不删除 | 它是让“blocked”有确定含义的词汇表；投影的 `blocking[]` 逐项标类型时复用同一套 token | resource-isolation / withheld |
+| 当前批次收齐再决定 | 删除批次同步含义 | 返回后及时释放有收益的独立工作 | Dispatcher 步骤 2、5 / situation |
+| 必须主动寻找并行机会 | 强化并保留 | 对应用户反复观察到的局部串行问题 | Dispatcher 步骤 2、5 |
+| 按整个 Topic/Ticket write-set 判断冲突 | 保留纠正后的 step 级规则 | 以实际 effect footprint 判断 | resource-isolation |
+| 共享读/观察资源影响 | 保留并澄清 | 对稳定状态的兼容读取可并行，变化中的观察需隔离 | resource-isolation |
+| worktree 等价于完整运行隔离 | 保留纠正规则 | 实际工具链、DB、端口、数据分别确认 | resource-isolation |
+| receipt 确认与迟到/重复结果归因 | 正文留一句触发，`dispatch_audit.py` 加核验 | audit 是只读事后报告，触发只能留在正文。断言对象限于实际 dispatch 行（`_dispatch_is_running` 已能区分），不要求所有业务 decision 都有宿主 receipt | Dispatcher 步骤 4 / engine / situation / dispatch_audit |
+| 每个代码增量及时独立 delta review | 正文留一句触发，`dispatch_audit.py` 加核验 | 现在三个 Skill 各写一遍，改为只在 Dispatcher 留一句。审计按具体含代码 `return` 及其固定代码增量关联审查：同次消费及时触发，且该增量的 review dispatch 有真实 receipt；槽位不足时记录明确待派审事实，后续合适槽位补派，待派审不等于审查完成。没有下一次 implementation 时仍检查最后代码增量；同票互不依赖的实施继续，不把整个 Ticket 等待作为闸门，也不以期末集中补审替代及时触发与补派。核验继续复用现有槽位事实与 `dispatch_audit.py`，不增加固定时间阈值、状态机、全局放行闸门或独立审计系统 | Dispatcher 步骤 4 / dispatch_audit / review.dispatch_pending |
+| review 积压触发全局收敛 | 改为收住受影响实现链 | 避免审查节点拖住全部工作 | Dispatcher 步骤 5 / situations / protocols |
+| delta finding 一律随下一步修 | 删除绝对安排 | Dispatcher 按实际收益与依赖决定 | Dispatcher 步骤 2、5 / protocols |
+| work/review/test 三条 lane 必须显式建立 | 删除强制对象 | 保留实现/审查独立和有界测试活动 | Dispatcher / delegation |
+| 新 Topic 一律 fresh、关闭后一律不能复用 | 改为相关可信上下文与明确新授权 | 释放责任与进程复用分别判断 | Dispatcher / delegation |
+| reviewer 同 scope 复用 | 保留 | 独立性与上下文连续性分别保证 | delegation / do-review |
+| 固定观察 15/30 分钟 | 删除 | 使用实际活跃信号与任务特定超时 | Dispatcher 恢复规则 |
+| 连续第二次 INCOMPLETE 必须调查 | 删除数字门槛，保留失配触发 | 一次已证实的边界失配也应调查；可解释的恢复无需等次数。同一删除必须同时落到 `worker-incomplete-first/second` 两个分支（§9.3.2），否则处境表继续机械换人和 `ticket block` | Dispatcher / situations / protocols |
+| verify 可能写 snapshot/generated file | 保留实际副作用分类 | 工作名称不能覆盖真实资源占用和授权 | delegation / resource-isolation |
+| 固定 mode 与 outcome enum | 整体保留，不分两级 | 有真实消费者（`_last_worker_mode`、trail、audit），共四个词，且是给弱模型 worker 的答案形态锚点；分级会造出同一概念的两个等级，正是本次合并要消灭的克隆形态 | Dispatcher / runtime 合同 |
+| 真实路径验证、局部 self-check、cleanup | 保留 | 低阶 worker 的关键执行保障 | delegation / resource-isolation |
+| material formal review requirement | 迁入 dev 的业务 review 判断 | 从通用委派中分离 Ticket 语义 | dev-with-track review 规则 |
+| State/Evidence/Gate 单写与验收证据 | 保留 | 与并行实施无冲突，提供结果确定性 | dev-with-track / 既有 state 与 Gate 合同 |
+| provider/model、task-queue、宿主原生调用教程 | 继续使用既有 owner | 不新建解析、队列或模型策略层 | 既有 owner；入口与 eval 已适配 |
 
-上述删留是本次提案的显式语义变化。历史 rubric 中“两个平级入口”“Topic-first 全面强制”“新 Topic fresh”等已确认原则需要在正式实施时按本轮 Owner 决定修订，避免旧 rubric 重新阻止已批准的方向。当前文档写入不自动修改 rubric，也不把新的模型推断提升为全局偏好。
+上述 26 项已按 Owner 批准的语义完成迁移。Dispatcher、dev-with-track、do-review 及直接消费者 rubric 已同步；历史设计材料保留原有背景，不再作为活跃调用入口。模型样例观察不提升为全局偏好。
 
 ## 11. 文件组织、调用方与迁移范围
 

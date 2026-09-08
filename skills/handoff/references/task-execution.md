@@ -18,7 +18,7 @@ python <handoff-skill>/scripts/compact_anchor.py --worktree <absolute-local-work
 4. 只打开 next action 需要的 plan、Ticket、active checkpoint 和 evidence；迁移旧 package 时才读取 DAG/Task Handoff。
 5. 产品语义冲突、目标环境不明、shared/production mutation 或超授权时停止并请求 owner。
 
-执行编排继续遵循 Impl-Package 入口：调查、实现、修复、验证及主 session/worker 调度统一使用 `/impl-package:subagent-driven-development`，handoff 只保存已解析的 `mode / worker / schedule / review` 和任务特定输入。独立 review 派发单独只读 subagent；如果 active skill catalog 中存在 `reviewer`，优先使用其合同。这些 workflow 和 role 定义不在 handoff 中重复。
+执行协作统一使用 `$dispatcher`：handoff 只保存业务范围、已解析的 candidate/mode、授权、在途 dispatch、待派审 code delta 和任务特定输入。独立 review 使用只读 subagent；active skill catalog 中存在 `reviewer` 时优先使用其合同。这些 workflow 和 role 定义不在 handoff 中重复。
 
 ## Handoff 内容
 

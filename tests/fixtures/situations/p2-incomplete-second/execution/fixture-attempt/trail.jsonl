@@ -1,4 +1,4 @@
-{"subject":"ticket:TKT-01","kind":"result","outcome":"EVIDENCE_SUFFICIENT"}
-{"subject":"ticket:TKT-01","kind":"result","outcome":"INCOMPLETE","worker_mode":"implement"}
-{"subject":"ticket:TKT-01","kind":"result","outcome":"INCOMPLETE","worker_mode":"implement"}
-
+{"subject":"ticket:TKT-01","kind":"dispatch","seq":1,"dispatch_id":"dispatch-01","candidate_id":"candidate-01","mode":"implement","chosen":"implement","resource_keys":[],"receipt":"worker-01","outcome":"RUNNING","worker":"worker-01","returned":false}
+{"subject":"ticket:TKT-01","kind":"worker-return","seq":2,"of":"dispatch-01","return_id":"return-01","outcome":"INCOMPLETE","worker_mode":"implement"}
+{"subject":"ticket:TKT-01","kind":"dispatch","seq":3,"dispatch_id":"dispatch-02","candidate_id":"candidate-01","mode":"implement","chosen":"implement","resource_keys":[],"receipt":"worker-02","outcome":"RUNNING","worker":"worker-02","returned":false}
+{"subject":"ticket:TKT-01","kind":"worker-return","seq":4,"of":"dispatch-02","return_id":"return-02","outcome":"INCOMPLETE","worker_mode":"implement"}

@@ -1,42 +1,32 @@
 ---
 name: dispatcher
-description: 当主控需要先形成 Topic、再选择当前 baby step 并使用 subagent fan out 时提供轻量上游调度指导。
+description: 当任务需要 subagent、异步或并行调研/实现/修复/验证，或需要消费 worker 返回并继续安排工作时使用；统一定义执行范围、候选选择、委派合同、资源隔离、receipt、独立审查与 idle。
 ---
 
 # Dispatcher
 
-Dispatcher 面向上游主控，指导 Topic-first admission、当前批次、dispatch、worker return 与 idle。它与 `/impl-package:subagent-driven-development` 平级：Dispatcher 决定上游何时派什么，SDD 指导已派发 Topic 内的 dependency、mode、execution lane 与 lifecycle。
+Dispatcher 是通用执行协作入口。调用方提供交付目标、授权、业务依赖与验收事实；Dispatcher 负责从可推进工作到 worker 返回的执行闭环。Topic 只是连续工作可用的组织概念，不是每次派发的前置模板、持久队列或业务状态。
 
-## Topic-first 派发门槛
+## 执行循环
 
-**先形成 Topic，再选择当前 baby step。** Topic 是共享 foundation、ownership 与 closure point 的横向交付范围；它不要求新增模板、持久记录或第二套状态。一次派发只授权一个 Topic 当前一条 lane 上的一个 baby step，这个边界逐 Topic 生效，不把整个批次降为单线程。
+1. **明确交付范围。** 使用调用方给出的目标、限制、授权和事实；普通任务直接使用用户授权与仓库上下文。区分当前局部结果和整体完成，保留仍在授权范围内的剩余工作。
+2. **主动发现可推进工作。** 启动、worker 返回、出现 review/fix/等待或阻塞时扫描剩余路径。比较提前产出的价值、dependency、资源隔离和整合成本，推进值得开展的调查、实施、修复或验证；局部 barrier 只扣住受影响候选。
+3. **形成具体执行合同。** 以一个可验证结果或下一个需要主控判断的边界委派；同一结果所需的调查、实现、focused test、lint/format、普通重跑和机械 cleanup 一起完成。亲自执行也明确 write ownership、成功条件、自证和独立审查要求。形成 brief 时读取 [Delegation](references/delegation.md)；存在多个候选、共享资源或隔离 worktree 时读取 [Resource Isolation](references/resource-isolation.md)。
+4. **核实返回并及时审查。** 宿主 receipt 明确成功后派发才成立；消费时核对来源、实际 diff、验证、未完成项、residue 和 cleanup。新增实现代码的 return 在同次消费中固定 `code_delta={base,head}`，并沿独立 review lane 派 delta review；没有空闲 reviewer 容量时记录与该 return 关联的待派审事实，释放合适槽位后补派。纯调查或无代码重跑按证据检查。
+5. **限定阻塞范围并继续安排。** review、fix、在途 worker 和共享资源只影响依赖其结论或争用其资源的工作。审查跟不上时收住会继续累积未审查假设的实现链；其他独立工作继续评估。没有值得当前推进的工作时等待或返回调用方；idle 只表示当前无合格且值得派发的动作，整体 closure 归业务 owner。
 
-每个 Topic 首次 admission 时用一句话固定 closure point；在它关闭前不得为了释放后续动作静默缩小。closure point 或 ownership 实质变化时，按新边界重新 admission。
+完成标准：所有成功派发都有真实 receipt；所有返回都已按来源消费；代码增量已有独立 review receipt 或明确待派审事实；最后一次扫描没有被局部 barrier 错误压住的高价值候选。
 
-默认把既定方向和 write-set 内能共同完成的工作组织为一个 baby step，通常取到第一个有意义的主控 return point，而不是 Topic closure；return point 是主控检查 diff/evidence 并据此决定是否授权下一段工作的边界。同一 worker 或 work lane 可以在主控消费 return 后连续承接下一步，但连续性不构成预授权。同一方向和 write-set 内的机械附属不单独派发，跟随同一步；相邻 return point 只要无需新的主控裁决、不损失并行机会且不妨碍及时复核即可合并，由 Astra 根据任务难度决定。必要的局部调查、实现、focused test、lint/format、普通重跑与当前动作产生的机械 cleanup 可以留在同一次派发。只有某个子结果会独立改变以下任一项时才继续切分：
+## 候选、归因与返回
 
-- Topic 的实现方向或是否继续；
-- dependency、write ownership 或 authorization；
-- 当前批次的资源 admission；
-- 是否立即释放另一条可并行 Topic。
+`investigate | implement | fix | verify` 固定 worker 的答案形态。worker 返回 `DONE | BLOCKED | INCOMPLETE`；调查返回 `EVIDENCE_SUFFICIENT | EVIDENCE_GAP`；已产生的 required review 使用 `PENDING_REVIEW | PASSED`。这些都是局部事实，不代替 Ticket、acceptance 或 Gate。
 
-多个材料族、逐项结论或完整候选表只是检查信号；知识来源能分别阅读或返回，不等于必须分别派发。这个门槛不按文件数量、步骤数、内部命令数或检索范围设硬上限：为一个窄决策检索整个仓库仍可以是一个动作；多个紧密相关文件共同形成一个 coherent outcome 时也保持同一步。增量规模本身不是切分理由，但它有一个可观察后果：一步的增量大到轻量 delta review 无法在下一步返回前给出结论时，findings 就赶不上下一步的 brief，逐步复核退化成批量返工；出现这个信号时按可独立验证的接口边界再切一刀，仍不设行数上限。
+使用 Impl-Package trail 时，候选快照、dispatch、return 与 review 必须可归因：候选声明 `candidate_id`、业务 `subject`、`mode`、`action_id` 和 `resource_keys`；dispatch 增加 `dispatch_id`、快照关联和真实 receipt；worker return 用 `of` 指回 dispatch，并带唯一 `return_id`。含代码增量时，return 与 review 使用同一个 `code_delta` 和 `consumption_id`。旧轨迹只读兼容；字段缺失不得静默归到同 Ticket 的其他 dispatch。
 
-前置依赖已回答且能独立验证的动作才可派发；同一依赖链只释放第一个已解锁动作。结构 foundation 会改变下游行为或安全 finding 的 ownership、failure model 或验证判据时，foundation 就是该动作，return 与行为不变验证通过后再重扫。
+## 并行、复用与恢复
 
-## 调度循环
-
-1. 扫描全部候选，按共享 foundation、ownership 与 closure point 形成 Topic，并重新核对 dependency。foundation 尚未稳定时保留下游动作；acceptance 只阻止正式验收和状态宣称；无法隔离的共享可变资源串行；缺少 mutation 授权的动作保持未释放。resource dependency 绑定当前 baby step 的具体 resource key，并按 read、write 与 observation 的完整 effect footprint 判断；读取或验证共享可变状态也占用对应 key。一个 key 只阻塞依赖它的步骤，不阻塞整个 Topic 或 Ticket。
-2. 为每个已解锁 Topic 选择当前 baby step，主动释放有实际收益、互不依赖且资源隔离的步骤并组成当前批次 fan out；预期收益不足的合格动作可以暂不派发，不视为 dependency blocked。是否现在派发，比较提前产出的价值与派发、回收、整合成本，不新增评分表或成本记录。`PARALLEL | SERIAL` 只比较当前候选 baby step 的实际 effect footprint，不使用 Topic 或 Ticket 的最终 write-set 并集；未来步骤会冲突不影响当前步骤并行，冲突到达时再串行。review、验证或 worker 在途只阻塞依赖其结论或资源的步骤；其他 Ticket 的只读调研与准备按同一收益判断释放。文件 ownership 交叉时先由 SDD 判断能否用隔离 worktree 分开。共享操作的合并与复用只是调度优化，不是 dependency；只有不延迟更有价值的独立动作时才合并，否则先执行当前合格步骤并在 return 后重扫。
-3. 单个派发只在宿主 receipt 明确成功后成立。迟到、重复、来源不明或结果不确定的 receipt 先消除歧义，不据此推进后续动作。中断或换 session 后恢复时，先按已有 report/artifact 与 trail 核对在途 review 是否已产出结论，确认缺失后才补派，不无条件重派。
-4. worker return 后先消费可归因结果、evidence、diff、residue 与 cleanup，再判断当前 Topic 的下一步；返回不会自动授权后续工作。若本步产生新的实现代码改动，冻结该步增量并在同一次 return 消费中沿独立 review lane 及时派轻量 delta review；纯调查或只重跑测试且没有新增代码改动时，不机械派代码审查。异步 review 不阻止不依赖其结论的下一步。既定边界内的 tooling retry、format、普通重跑或机械 cleanup 续接当前动作，不创建新业务 step。
-5. 每次消费 return 后检查受影响候选，优先看仍未接通的业务路径，释放已就绪、能推进交付的实施；不要只围绕最近 findings 循环安排局部修复。核对 dependency、授权与资源后补充派发有实际收益的动作，不等待无关 worker；当前批次全部结束或准备进入 idle 时再全局扫描。在途 review 的返回同样按轮消费；派审持续滞后于实现返回，或未消费的 delta review 堆积到 findings 已经赶不上下一个 baby step 时，先消化 review 再释放新的并行 step——实施并发的上限来自这个可观察信号，不设固定数字。没有已解锁且合格且值得现在派发的动作时进入 idle。业务状态、验收和 closure 仍由调用方的 owning workflow 判断。
-
-同一 Topic 连续两次 `INCOMPLETE`、broad check 新发现一类 caller/producer，或实际 write-set 超出原 ownership 时，停止继续派更小的 fix；先释放一个 foundation investigation，重新确定 Topic 边界。
-
-## Topic 生命周期
-
-- 同一 Topic 的 work lane 只有在 ownership、failure model 与动作边界稳定，且 worker 仍能准确复述这些事实时才复用。连续重复且无法可靠解释的错误、不能准确复述既定边界、结果无法归因或实际 write-set 外溢，均触发 fresh worker；Topic 闭合后所有 lane 退役。
-- 新 Topic 使用 fresh worker；worker 空闲或角色相同不是复用理由。review/test lane 的独立性、复用与退役细节见 SDD Step 4，不在此重复。
-
-完成一个调度轮次的可观察条件是：当前批次所有派发 receipt 已确认或消除歧义，所有已返回结果已被主控消费，最后一次 Topic-first 扫描没有已解锁且值得现在派发的合格动作。
+- `foundation`、`acceptance`、`resource`、`authorization` 是 dependency 词汇；它们逐候选限制动作，不构成全局暂停。真实 implementation dependency 与授权仍由业务 owner 决定。
+- 并行按当前动作的实际 effect footprint 判断；未来可能交叉的 Topic/Ticket 不提前串行当前独立工作。可兼容的稳定读取可以共享；会改变他人读取结果或验证 oracle 的资源需要隔离或排序。
+- worker 复用取决于相关上下文仍准确、ownership 清楚且已有错误可解释。边界、failure model 或 write-set 已失真时先调查受影响范围，再使用 fresh worker；不按 Topic 名称、固定等待时间或 `INCOMPLETE` 次数机械换人。
+- worker 在途时间本身不授权重复派发。结合工具活动、进程、输出变化、任务特定超时与可观察进展判断健康；原边界仍可信的 carrier/tooling recovery 由同一 worker 完成。
+- reviewer 始终独立于所审实现；同 scope 上下文可信时可以复用，每次核对新的固定输入。formal review 的 topology、coverage 和 closure 由 owning review workflow 决定。

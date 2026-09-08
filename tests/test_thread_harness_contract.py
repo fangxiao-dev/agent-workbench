@@ -111,7 +111,7 @@ def test_role_a_and_b_delegate_scheduling_without_copying_a_mode() -> None:
     role_b = read("skills/thread-harness/references/role-b.md")
     dispatch = read("skills/thread-harness/references/session-dispatch.md")
 
-    marker = "子线调度由 `/impl-package:subagent-driven-development` 决定；本角色不另设 mode。"
+    marker = "子线执行协作由 `$dispatcher` 决定；本角色不另设 mode。"
     assert marker in role_a
     assert marker in role_b
     assert marker not in dispatch
@@ -151,6 +151,7 @@ def test_role_continuation_is_role_specific_and_minimal() -> None:
         "impl-package:investigate-before-implement",
         "impl-package:do-review",
         "impl-package:subagent-driven-development",
+        "impl-dispatcher",
         "impl-package:verification-before-completion",
     )
     for marker in repeated_workflow:

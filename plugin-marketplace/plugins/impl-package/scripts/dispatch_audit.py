@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 try:
-    from situation import FACT_KEYS
+    from situation import FACT_KEYS, _dispatch_is_running
 except ImportError:  # pragma: no cover
     FACT_KEYS = frozenset()
 
@@ -26,6 +26,10 @@ def _text(value):
 
 def _kind(row):
     return str(row.get("kind", "")).lower()
+
+
+def _sequence(value):
+    return value if type(value) is int and value > 0 else None
 
 
 def _digest(row):
@@ -167,15 +171,177 @@ def replay_situation(package, head):
     return (rendered, None) if isinstance(rendered.get("digest"), str) else (None, "situation render did not return a digest")
 
 
-def _action_ids(rendered, subject):
+def _action_ids(rendered, subject, *, legacy=False):
     ids = set()
-    for name in ("selected", "parallel_matches", "other_matches", "suppressed_matches"):
+    names = ("selected", "parallel_matches", "other_matches", "suppressed_matches")
+    if not legacy and "runnable" in rendered:
+        names = ("blocking",) if rendered.get("blocking") else ("runnable",)
+    for name in names:
         value = rendered.get(name)
         items = [value] if isinstance(value, dict) else value if isinstance(value, list) else []
         for item in items:
             if isinstance(item, dict) and item.get("subject") == subject:
                 ids.update(value for value in item.get("action_ids", []) if isinstance(value, str))
+                if _text(item.get("action_id")):
+                    ids.add(item["action_id"])
     return ids
+
+
+def _receipt(row):
+    value = row.get("receipt")
+    return bool(_text(value) or (isinstance(value, dict) and value))
+
+
+def _execution_audit(rows):
+    """Audit declared dispatch identity and fixed returns without inferring resources."""
+    issues, unknown, pending, overlaps = [], [], [], []
+    dispatches, returns, snapshots, waiting, reviews = {}, {}, {}, {}, {}
+    active = {}
+    verified_candidates = set()
+    completed_candidates = set()
+    opportunities = []
+    fix_counts = {}
+    latest_snapshot_seq = None
+    returned_dispatches = set()
+    for number, row in rows:
+        kind = _kind(row)
+        if kind == "fact" and row.get("key") == "dispatch.candidates":
+            latest_snapshot_seq = _sequence(row.get("seq"))
+            value = row.get("value")
+            if _sequence(row.get("seq")) is not None and isinstance(value, dict) and isinstance(value.get("candidates", []), list):
+                snapshots[row["seq"]] = (number, value)
+            else:
+                unknown.append({"line": number, "reason": "invalid candidate snapshot shape"})
+        if kind == "fact" and row.get("key") == "review.dispatch_pending":
+            value = row.get("value")
+            if isinstance(value, dict) and _text(value.get("return_id")):
+                waiting.setdefault(value.get("return_id"), []).append((number, row, value))
+        if kind == "dispatch" and _dispatch_is_running(row):
+            ident = _text(row.get("dispatch_id"))
+            if not ident:
+                unknown.append({"line": number, "reason": "legacy dispatch has no dispatch_id/receipt contract"})
+                continue
+            if not _text(row.get("subject")):
+                unknown.append({"line": number, "reason": "dispatch has no valid subject"})
+                continue
+            if ident in dispatches:
+                issues.append({"line": number, "reason": "duplicate dispatch_id", "dispatch_id": ident})
+                continue
+            if not _receipt(row):
+                issues.append({"line": number, "reason": "dispatch has no successful host receipt", "dispatch_id": ident})
+                continue
+            candidate_id = _text(row.get("candidate_id"))
+            if candidate_id and (candidate_id in completed_candidates or any(other.get("candidate_id") == candidate_id for _, other in active.values())):
+                issues.append({"line": number, "reason": "candidate already running or DONE", "candidate_id": candidate_id})
+            dispatches[ident] = (number, row)
+            if _text(row.get("reviews")):
+                reviews.setdefault(row["reviews"], []).append((number, row))
+            if row.get("mode") == "fix":
+                subject = row.get("subject")
+                fix_counts[subject] = fix_counts.get(subject, 0) + 1
+            snapshot_pair = snapshots.get(_sequence(row.get("candidates_of")))
+            if _sequence(row.get("candidates_of")) != latest_snapshot_seq:
+                issues.append({"line": number, "reason": "dispatch references a superseded candidate snapshot"})
+                snapshot_pair = None
+            resources = row.get("resource_keys")
+            if not isinstance(resources, list) or any(not _text(key) for key in resources):
+                unknown.append({"line": number, "reason": "missing or invalid declared resource_keys"})
+            elif snapshot_pair is None:
+                unknown.append({"line": number, "reason": "candidate snapshot is unavailable before dispatch"})
+            else:
+                _, snapshot = snapshot_pair
+                candidates = snapshot.get("candidates", []) if isinstance(snapshot, dict) else []
+                ready_ids = row.get("runnable_candidate_ids")
+                if not isinstance(ready_ids, list):
+                    unknown.append({"line": number, "reason": "dispatch has no rendered runnable candidate evidence"})
+                    ready_ids = []
+                eligible = {c["candidate_id"]: c for c in candidates if isinstance(c, dict) and _text(c.get("candidate_id")) and c["candidate_id"] in ready_ids}
+                candidate = next((c for c in candidates if isinstance(c, dict) and c.get("candidate_id") == row.get("candidate_id")), None)
+                candidate_matches = candidate is not None and all(candidate.get(key) == row.get(key) for key in ("subject", "mode", "resource_keys")) and candidate.get("action_id") == row.get("chosen")
+                if not candidate_matches:
+                    issues.append({"line": number, "reason": "dispatch differs from candidate snapshot"})
+                    eligible = {}
+                if not _text(snapshot.get("head")) or not _text(snapshot.get("state_sha256")) or snapshot.get("head") != row.get("head") or snapshot.get("state_sha256") != row.get("state_sha256"):
+                    unknown.append({"line": number, "reason": "candidate snapshot binding cannot be verified"})
+                    eligible = {}
+                if row.get("candidate_id") in eligible and not candidate.get("blockers"):
+                    verified_candidates.add(ident)
+                for other_id, (other_number, other) in active.items():
+                    other_resources = other.get("resource_keys")
+                    if isinstance(other_resources, list) and not set(resources).intersection(other_resources):
+                        # The first dispatch's renderer observed both candidates before either started.
+                        prior_ids = other.get("runnable_candidate_ids", [])
+                        if ident in verified_candidates and other_id in verified_candidates and row.get("candidate_id") in prior_ids and other.get("candidate_id") in prior_ids:
+                            overlaps.append({"dispatch_ids": [other_id, ident], "lines": [other_number, number]})
+                if row.get("candidate_id") in eligible and any(
+                    cid != row["candidate_id"] and isinstance(c.get("resource_keys"), list)
+                    and not set(resources).intersection(c["resource_keys"])
+                    for cid, c in eligible.items()
+                ):
+                    opportunities.append(ident)
+            active[ident] = (number, row)
+        if kind == "worker-return":
+            ident, return_id = _text(row.get("of")), _text(row.get("return_id"))
+            if not ident or not return_id:
+                unknown.append({"line": number, "reason": "worker return lacks dispatch/return identity"})
+                continue
+            if return_id in returns:
+                issues.append({"line": number, "reason": "duplicate return_id", "return_id": return_id})
+                continue
+            if ident in returned_dispatches:
+                issues.append({"line": number, "reason": "dispatch already returned; late return is not consumed", "return_id": return_id})
+                continue
+            if ident not in dispatches or dispatches[ident][1].get("subject") != row.get("subject"):
+                issues.append({"line": number, "reason": "return has no matching received dispatch", "return_id": return_id})
+                continue
+            returns[return_id] = (number, row)
+            returned_dispatches.add(ident)
+            active.pop(ident, None)
+            if str(row.get("outcome", "")).upper() == "DONE" and _text(dispatches[ident][1].get("candidate_id")):
+                completed_candidates.add(dispatches[ident][1]["candidate_id"])
+
+    for return_id, (number, row) in returns.items():
+        if not row.get("code_delta"):
+            continue
+        delta, consumption = row["code_delta"], _text(row.get("consumption_id"))
+        if not isinstance(delta, dict) or not all(re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", str(delta.get(key, ""))) for key in ("base", "head")) or not consumption:
+            unknown.append({"line": number, "reason": "code return lacks immutable delta/consumption identity"})
+            continue
+        matching_reviews = []
+        for review_number, review in reviews.get(return_id, []):
+            if review_number <= number or review.get("code_delta") != delta or review.get("subject") != row.get("subject") or review.get("consumption_id") != consumption:
+                issues.append({"line": review_number, "reason": "review does not match fixed return delta"})
+            elif review.get("worker") == dispatches[row["of"]][1].get("worker"):
+                issues.append({"line": review_number, "reason": "reviewer implemented the reviewed delta"})
+            else:
+                matching_reviews.append((review_number, review))
+        matching_pending = [(n, value) for n, fact, value in waiting.get(return_id, [])
+                            if n > number and fact.get("subject") == row.get("subject")
+                            and value.get("code_delta") == delta and value.get("consumption_id") == consumption
+                            and value.get("capacity") == 0 and _text(value.get("reason"))]
+        timely = any(review.get("consumption_id") == consumption for _, review in matching_reviews)
+        first_record = min([n for n, _ in matching_pending] + [n for n, review in matching_reviews if review.get("consumption_id") == consumption], default=float("inf"))
+        if any(number < n < first_record and dispatch.get("mode") in {"implement", "fix"} for n, dispatch in dispatches.values()):
+            issues.append({"line": number, "reason": "new implementation dispatched before recording delta review", "return_id": return_id})
+        if not timely and not matching_pending:
+            issues.append({"line": number, "reason": "code return has neither same-consumption review nor capacity-backed pending record", "return_id": return_id})
+        if not matching_reviews:
+            pending.append({"line": number, "return_id": return_id, "code_delta": delta, "recorded": bool(matching_pending)})
+        if matching_pending:
+            pending_line = matching_pending[0][0]
+            review_line = matching_reviews[0][0] if matching_reviews else float("inf")
+            available = [n for n, value in snapshots.values() if n > pending_line and isinstance(value, dict)
+                         and type(value.get("available_slots")) is int and value["available_slots"] > 0]
+            if not available and not timely:
+                unknown.append({"line": pending_line, "reason": "no capacity-restoration evidence for pending review", "return_id": return_id})
+            elif available and any(available[0] < n < review_line and not dispatch.get("reviews") for n, dispatch in dispatches.values()):
+                issues.append({"line": pending_line, "reason": "available slot used for new work before pending review", "return_id": return_id})
+    for return_id, entries in reviews.items():
+        if return_id not in returns:
+            issues.extend({"line": n, "reason": "review references unknown return", "return_id": return_id} for n, _ in entries)
+    return {"execution_issues": issues, "execution_uncheckable": unknown, "pending_reviews": pending,
+            "concurrent_dispatches": overlaps, "parallel_opportunities": opportunities,
+            "repeat_fixes": {subject: count - 1 for subject, count in fix_counts.items() if count > 1}}
 
 
 def audit_package(package):
@@ -184,6 +350,15 @@ def audit_package(package):
     dispatches = [(n, r) for n, r in rows if _kind(r) == "dispatch"]
     no_digest = [n for n, r in dispatches if _digest(r)[0] == "missing"]
     deviations, uncheckable, cache, replayed = [], [], {}, 0
+    candidate_checked = 0
+    snapshots = {row["seq"]: (number, row.get("value")) for number, row in rows
+                 if _kind(row) == "fact" and row.get("key") == "dispatch.candidates" and _sequence(row.get("seq")) is not None}
+    latest_at_dispatch, latest = {}, None
+    for number, row in rows:
+        if _kind(row) == "fact" and row.get("key") == "dispatch.candidates":
+            latest = _sequence(row.get("seq"))
+        elif _kind(row) == "dispatch":
+            latest_at_dispatch[number] = latest
     for number, row in dispatches:
         state, digest = _digest(row)
         if state == "missing":
@@ -203,22 +378,42 @@ def audit_package(package):
                 continue
             deviations.append({"line": number, "chosen": chosen, "reason": "escape has no reason"})
             continue
+        if "candidates_of" in row:
+            # These facts were captured by the CLI from the actual render credential.
+            # A Git HEAD alone cannot reconstruct an uncommitted execution trail.
+            if _sequence(row["candidates_of"]) != latest_at_dispatch.get(number):
+                deviations.append({"line": number, "chosen": chosen, "reason": "dispatch references a superseded candidate snapshot"})
+                continue
+            snapshot_number, snapshot = snapshots.get(_sequence(row["candidates_of"]), (number, None))
+            candidates = snapshot.get("candidates", []) if isinstance(snapshot, dict) and isinstance(snapshot.get("candidates"), list) else []
+            matching = [item for item in candidates if isinstance(item, dict) and item.get("candidate_id") == row.get("candidate_id")]
+            if snapshot_number < number and len(matching) == 1 and _text(snapshot.get("head")) and _text(snapshot.get("state_sha256")) and snapshot.get("head") == row.get("head") and snapshot.get("state_sha256") == row.get("state_sha256") and isinstance(row.get("runnable_candidate_ids"), list):
+                candidate = matching[0]
+                if candidate.get("candidate_id") not in row["runnable_candidate_ids"] or candidate.get("action_id") != chosen or candidate.get("subject") != subject:
+                    deviations.append({"line": number, "chosen": chosen, "reason": "candidate was not runnable in the dispatch credential"})
+                else:
+                    candidate_checked += 1
+            else:
+                uncheckable.append({"line": number, "reason": "candidate snapshot/render binding is incomplete"})
+            continue
         head = _text(row.get("head"))
         if head is None:
             uncheckable.append({"line": number, "reason": "dispatch has no head"})
             continue
-        cache.setdefault(head, replay_situation(package, head))
+        if head not in cache:
+            cache[head] = replay_situation(package, head)
         rendered, error = cache[head]
         if error or rendered is None:
             uncheckable.append({"line": number, "reason": error or "replay failed"})
             continue
-        if rendered.get("digest") != digest:
+        legacy = rendered.get("legacy_digest") == digest and rendered.get("digest") != digest
+        if rendered.get("digest") != digest and not legacy:
             uncheckable.append({"line": number, "reason": "digest differs from --at replay"})
             continue
         replayed += 1
-        if chosen not in _action_ids(rendered, subject) and not _related_reason(row, rows):
+        if chosen not in _action_ids(rendered, subject, legacy=legacy) and not _related_reason(row, rows):
             deviations.append({"line": number, "chosen": chosen, "reason": "chosen action is absent from replayed situation actions"})
-    return {"package": str(package), "attempt": attempt, "trail": str(trails[-1]), "trails": [str(path) for path in trails], "dispatches": len(dispatches), "no_digest": no_digest, "stale": _stale(dispatches), "deviations": deviations, "uncheckable": uncheckable, "replayed": replayed, "schema_violations": violations}
+    return {"package": str(package), "attempt": attempt, "trail": str(trails[-1]), "trails": [str(path) for path in trails], "dispatches": len(dispatches), "no_digest": no_digest, "stale": _stale(dispatches), "deviations": deviations, "uncheckable": uncheckable, "replayed": replayed, "candidate_checked": candidate_checked, "schema_violations": violations, **_execution_audit(rows)}
 
 
 def _format_report(report):
@@ -232,14 +427,20 @@ def _format_report(report):
     lines += [f"  deviation line {x['line']}: {x['reason']}" for x in report["deviations"]]
     lines += [f"  schema line {x['line']}: {', '.join(x['issues'])}" for x in report["schema_violations"]]
     lines += [f"  uncheckable line {x['line']}: {x['reason']}" for x in report["uncheckable"]]
+    lines += [f"{key}: {len(report.get(key, []))}" for key in ("execution_issues", "execution_uncheckable", "pending_reviews", "concurrent_dispatches", "parallel_opportunities")]
+    for key in ("execution_issues", "execution_uncheckable"):
+        lines += [f"  {key} line {x['line']}: {x['reason']}" for x in report.get(key, [])]
     return "\n".join(lines)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Read-only dispatch/situation digest audit.")
     parser.add_argument("--package", type=Path, required=True)
+    parser.add_argument("--json", action="store_true", help="Emit the complete audit evidence as JSON.")
     try:
-        print(_format_report(audit_package(parser.parse_args(argv).package)))
+        args = parser.parse_args(argv)
+        report = audit_package(args.package)
+        print(json.dumps(report, ensure_ascii=False, indent=2) if args.json else _format_report(report))
     except (OSError, ValueError) as exc:
         print(f"dispatch-audit: ERROR: {exc}", file=sys.stderr)
         return 2

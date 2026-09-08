@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from pathlib import Path
 
@@ -13,7 +14,6 @@ EXPECTED_SKILLS = {
     "backfill-stable-docs",
     "dev-with-track",
     "impl-planning",
-    "subagent-driven-development",
     "grill-me-smartly",
     "plan-review",
     "do-review",
@@ -39,6 +39,22 @@ LEGACY_SKILL_DIRS = {
 
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def dispatcher_plugin_compatibility(dispatcher_path: Path, plugin_root: Path) -> tuple[bool, str]:
+    dispatcher = dispatcher_path.read_bytes()
+    skill_files = sorted((plugin_root / "skills").glob("*/SKILL.md"))
+    plugin_content = b"\n".join(
+        path.relative_to(plugin_root).as_posix().encode("utf-8") + b"\0" + path.read_bytes()
+        for path in skill_files
+    )
+    plugin_fingerprint = hashlib.sha256(plugin_content).hexdigest()
+    dispatcher_fingerprint = hashlib.sha256(dispatcher).hexdigest()
+    dispatcher_text = dispatcher.decode("utf-8")
+    sdd_exists = (plugin_root / "skills" / "subagent-driven-development" / "SKILL.md").is_file()
+    compatible = "impl-package:subagent-driven-development" not in dispatcher_text or sdd_exists
+    detail = f"dispatcher_sha256={dispatcher_fingerprint} plugin_skills_sha256={plugin_fingerprint}"
+    return compatible, detail
 
 
 def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
@@ -262,37 +278,28 @@ def test_skill_resource_paths_stay_inside_plugin() -> None:
             assert target.exists(), f"missing resource: {skill_file}: {match.group(1)}"
 
 
-def test_unified_entry_owns_method_and_review_requirement_judgment() -> None:
-    skill_dir = PLUGIN / "skills" / "subagent-driven-development"
-    skill = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-    review = (skill_dir / "references" / "review-gate.md").read_text(encoding="utf-8")
+def test_dispatcher_and_plugin_content_are_compatible() -> None:
+    dispatcher = ROOT / "skills" / "dispatcher" / "SKILL.md"
+    compatible, detail = dispatcher_plugin_compatibility(dispatcher, PLUGIN)
 
-    assert len(skill.splitlines()) <= 140
-    for marker in (
-        "Topic",
-        "foundation dependency",
-        "acceptance dependency",
-        "work lane",
-        "review lane",
-        "test lane",
-        "investigate",
-        "EVIDENCE_SUFFICIENT",
-        "verify",
-        "不重新裁决",
-        "BLOCKED",
-        "始终拥有最终集成",
-    ):
-        assert marker in skill
-    assert "$grok-worker" not in skill
-    assert "@luna-worker" not in skill
-    assert "```yaml" not in skill
-    assert "PENDING_REVIEW" in review
-    assert "do-review" in review
-    assert not (skill_dir / "references" / "worker-resolver.md").exists()
-    assert not (skill_dir / "references" / "mode-contracts.md").exists()
+    assert compatible, detail
+    assert not (PLUGIN / "skills" / "subagent-driven-development").exists()
 
 
-def test_active_callers_reference_the_unified_entry() -> None:
+def test_old_dispatcher_reference_fails_with_content_fingerprints(tmp_path: Path) -> None:
+    old_dispatcher = tmp_path / "SKILL.md"
+    old_dispatcher.write_text(
+        "---\nname: dispatcher\n---\nUse /impl-package:subagent-driven-development for workers.\n",
+        encoding="utf-8",
+    )
+
+    compatible, detail = dispatcher_plugin_compatibility(old_dispatcher, PLUGIN)
+
+    assert not compatible
+    assert re.fullmatch(r"dispatcher_sha256=[0-9a-f]{64} plugin_skills_sha256=[0-9a-f]{64}", detail)
+
+
+def test_active_callers_reference_dispatcher() -> None:
     callers = (
         ROOT / "AGENTS.md",
         PLUGIN / "skills" / "impl-package" / "SKILL.md",
@@ -302,9 +309,9 @@ def test_active_callers_reference_the_unified_entry() -> None:
     )
     for caller in callers:
         text = caller.read_text(encoding="utf-8")
-        # Cross-host routing form (`/impl-package:subagent-driven-development`) or the
-        # DSH native command form (`impl-subagent-driven-development`).
-        assert "impl-package:subagent-driven-development" in text or "impl-subagent-driven-development" in text
+        assert "$dispatcher" in text
+        assert "impl-package:subagent-driven-development" not in text
+        assert "impl-subagent-driven-development" not in text
         assert "impl-package:investigate-before-implement" not in text
         assert "impl-package:dispatch-bounded-task" not in text
 
@@ -318,6 +325,8 @@ def test_active_workflow_tree_has_no_legacy_entry_reference() -> None:
         ROOT / "skills" / "thread-harness",
     )
     legacy = (
+        "impl-package:subagent-driven-development",
+        "impl-subagent-driven-development",
         "impl-package:investigate-before-implement",
         "impl-package:dispatch-bounded-task",
         "/impl-package:investigate-before-implement",
@@ -354,11 +363,11 @@ def test_hot_path_skills_stay_within_instruction_budget() -> None:
         PLUGIN / "skills" / "dev-with-track" / "SKILL.md",
         PLUGIN / "skills" / "do-review" / "SKILL.md",
         PLUGIN / "skills" / "review-code" / "SKILL.md",
-        PLUGIN / "skills" / "subagent-driven-development" / "SKILL.md",
+        ROOT / "skills" / "dispatcher" / "SKILL.md",
     )
     counts = {path.parent.name: len(path.read_text(encoding="utf-8").splitlines()) for path in paths}
 
-    assert counts["subagent-driven-development"] <= 180
+    assert counts["dispatcher"] <= 120
     assert counts["do-review"] <= 120
     assert counts["review-code"] <= 120
     checklist = PLUGIN / "skills" / "review-code" / "references" / "review-checklist.md"

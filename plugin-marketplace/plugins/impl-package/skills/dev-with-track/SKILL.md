@@ -1,66 +1,68 @@
 ---
 name: dev-with-track
-description: 当批准 implementation plan 正式开始或者恢复执行、选择下一业务动作、记录 evidence、处理 findings 或写 Gate 时使用；作为业务主控选择动作、消费调度结果并维护 Ticket/State/Evidence/Gate。
+description: 当批准 implementation plan 正式开始或恢复执行、确定业务重点与候选范围、记录 evidence、处理 findings 或写 Gate 时使用；拥有 Ticket readiness、语义裁决与 State/Evidence/Gate。
 ---
 
 # Dev With Track
 
-先读 `../../references/impl-package-composition-contract.md` 和 `../../references/impl-package-current-state.md`；当前 attempt 涉及 material seam、browser/provider/native-tool 或真实系统运行验证时，再读 [`../../references/progressive-system-evidence.md`](../../references/progressive-system-evidence.md)。
+先读 `../../references/impl-package-composition-contract.md` 和 `../../references/impl-package-current-state.md`；当前 Attempt 涉及 material seam、browser/provider/native-tool 或真实系统运行验证时，再读 [`../../references/progressive-system-evidence.md`](../../references/progressive-system-evidence.md)。
 
 ## 业务控制循环
 
-1. **刷新事实**：优先消费匹配当前 session/package 的 `Impl-Package Resume Capsule v1`；不存在或已失配时执行 Restore，取得 current Attempt、blocker、合法 action 与 situation digest。
-2. **选择动作**：根据 Ticket typed dependency 与 canonical state 选择 Investigate、Decide、Implement 或 Evaluate。implementation edge 阻止绑定未稳定语义的下游实现；acceptance edge 只阻止正式验收与状态宣称；release edge 在 Gate 前复核。
-3. **裁决语义**：Decision/Spec 能唯一裁决时作为 implementation defect；存在多个合理业务结果时才请求 Owner。finding 的定级、disposition 与 acceptance point 也由本 Skill 判断。
-4. **形成 Topic**：准备当前业务动作的 foundation、ownership、closure point、bounded outcome、禁改范围、成功条件与局部验证，交由 `$dispatcher` 按其 Topic-first 门槛确定当前 baby step；需要共享 DB、端口或测试数据时，按 [SDD Resource Admission](../subagent-driven-development/references/parallel-work-admission.md) 明确隔离、owner 和 cleanup，真正运行前按 Planned Verification 核对实际目标、身份/配置、健康状态与资源隔离。
-5. **交给 Dispatcher**：对候选调用 `$dispatcher` 的 admission、batch、receipt、return 与 idle 规则；只释放预期收益足够且依赖、授权、资源已满足的动作，Progress/checkpoint 不授权 dispatch。
-6. **执行 bounded worker**：对 Dispatcher 已准入的 baby step，caller 按 `/impl-package:subagent-driven-development` 分类 dependency、决定当前或隔离 worktree，并形成 mode、lane、lifecycle 与 review requirement。有清晰边界的工作继续交给 worker；当接线强依赖主控已有的综合上下文、拆分交接的成本高于主控直接完成时，主控可以直接实现，明确当次 write ownership，并按 T4 规则保留独立 delta review，不把主控直接编码变成另一套执行流程。
-7. **消费结果**：核对可归因 diff、evidence、residue、cleanup 和 review 状态；局部 DONE 或 checkpoint PASS 只释放对应 Topic 下一步。随后用 package CLI 写 state/evidence/checkpoint/judgment/trail；Dispatcher 负责 return 后的补派与重扫，调度 idle 后依据 canonical state、evidence、review 与 Gate 判断继续、blocked 或 closure。
+1. **刷新业务事实。** 优先消费匹配当前 session/package 的 `Impl-Package Resume Capsule v1`；缺失或失配时执行 Restore，取得 current Attempt、canonical Ticket state、blocker、候选与 situation digest。
+2. **确定重点和候选范围。** 根据 typed dependency、批准合同与 evidence 选定当前交付重点，同时把范围内相关剩余工作交给 Dispatcher 看见。`implementation` edge 阻止绑定未稳定语义的实现；`acceptance` edge 只阻止正式验收与状态宣称；`release` edge 在 Gate 前复核。Decision/Spec 能唯一裁决时按 implementation defect 处理；存在多个合理业务结果时请求 Owner。
+3. **应用 `$dispatcher`。** 提供业务目标、事实、授权、候选 subject、dependency、acceptance 和禁改范围，由 Dispatcher 完成候选选择、brief、资源隔离、dispatch/receipt、worker return、delta review 与 idle。主控直接实现时遵守相同 write ownership、自证和独立 delta review 要求。Progress/checkpoint 不授权 dispatch。
+4. **消费并记录。** 核对可归因 diff、evidence、residue、cleanup 和 review 状态；局部 `DONE`、`PASSED` 或 checkpoint PASS 只释放对应候选。随后用 package CLI 写 State、Evidence、Execution Record、Checkpoint 与 Trail；finding 的等级、disposition、影响范围和解决期限由本 Skill 判断。
+5. **判断继续或收口。** Dispatcher idle 后仍按 canonical State、Evidence、required review、manual acceptance、findings closure 与 Gate 判断继续、blocked 或 closure。每轮记录当前交付重点、可推进候选、局部 blocker 与恢复入口；局部等待不自动关闭 package。
 
-完成标准：每轮都能说明唯一业务下一动作，或说明合格动作因预期收益不足暂缓；等待 review、fix 或长时验证返回不构成下一动作，调度 idle 只表示当前没有值得现在派发的动作，不表示没有可推进的工作，Ticket/package closure 仍由本 Skill 根据 canonical facts 判断。
+完成标准：业务范围与候选没有被单一恢复 next 缩窄；每个状态变化有直接 evidence；Dispatcher 的局部结果没有被误报为 Ticket/package 完成；Gate 只由 current Attempt 的 canonical facts 决定。
 
 ## Owner 边界
 
-本 Skill 选择业务动作并拥有 Ticket readiness、语义裁决、State、Evidence、Execution Record、Checkpoint 与 Gate。两个平级 Skill 承担执行方法：
+本 Skill 拥有 Ticket readiness、语义裁决、State、Evidence、Execution Record、Checkpoint 与 Gate；`$dispatcher` 是通用执行协作入口，拥有候选选择、委派合同、资源隔离、receipt、return、delta review 和 idle。主 session 是 package 权威状态的唯一 writer；provider、executor、model 或 agent profile 由 Owner 或宿主选择。
 
-- `$dispatcher` 面向上游主控，拥有 Topic-first admission、当前 baby step、当前批次、派发 receipt、worker return、Topic lifecycle 和 idle；
-- `/impl-package:subagent-driven-development` 面向下游 bounded worker，承接 Dispatcher 已定义的 Topic，拥有 dependency class、mode、lane、lifecycle 与 review requirement。
-
-主 session 是 package State、Evidence、Execution Record、Checkpoint 与 Gate 的唯一 writer。调用方为每个 Topic 提供 objective、scope、write-set、acceptance、authorization、verification 和输出合同，并按 SDD 选择当前或隔离 worktree；provider/executor 由 Owner 或宿主选择。
-
-需要快速定位业务→调度→worker→状态写入时读取 [Control Flow](references/control-flow.md)；恢复、返工、evidence 或 Gate mutation 读取 [Runtime Protocol](references/runtime-protocol.md)。调度规则的唯一详述在 `$dispatcher`，worker 方法的唯一详述在 `/impl-package:subagent-driven-development`。
-
-证据矛盾、恢复、部分写入补齐、跨 stage 对账或异常排查时，主 session 直接核对当前 state 与相关 evidence/artifact；复杂时可委派只读调查，再依据结果完成修复并记录必要判断。旧 Task Handoff 只作兼容恢复材料。
+需要定位业务→执行协作→状态写入时读取 [Control Flow](references/control-flow.md)；恢复、返工、evidence 或 Gate mutation 时读取 [Runtime Protocol](references/runtime-protocol.md)。证据矛盾、部分写入、跨 stage 对账或异常排查时，主 session 直接核对 current state 与相关 artifact；复杂时可用 Dispatcher 委派只读调查。旧 Task Handoff 只作兼容恢复材料。
 
 ## Restore
 
-首次确认 package anchor 后，Codex 从当前已加载 Skill 解析 plugin root，并调用 `python <plugin-root>/hooks/impl_package_hooks.py activate --package <package>` 绑定当前 session；其它宿主跳过。若有匹配 Capsule，只消费其中的恢复事实并复核 package、HEAD 与 initial approval，不把 Capsule 当作 acceptance 或 Gate evidence。
+首次确认 package anchor 后，Codex 从当前已加载 Skill 解析 plugin root，并调用 `python <plugin-root>/hooks/impl_package_hooks.py activate --package <package>` 绑定当前 session；其他宿主跳过。匹配 Capsule 只提供恢复事实，仍复核 package、HEAD 与 initial approval，不把 Capsule 当 acceptance、Gate evidence 或 dispatch credential。
 
-Capsule 缺失、失配、Hook 未信任/禁用，或本轮发生 state mutation 时，读取 [Runtime Protocol](references/runtime-protocol.md) 的完整恢复顺序。真正 dispatch 前仍运行普通 `situation.py render` 生成 credential；偏离建议或表外行动使用 `escape` 记录理由。
+Capsule 缺失、失配、Hook 未信任/禁用，或本轮发生 state mutation 时，读取 [Runtime Protocol](references/runtime-protocol.md) 的完整恢复顺序。真正 dispatch 前运行 `situation.py render` 生成 credential；偏离建议或表外行动使用 `escape` 记录理由。
 
-显式离开 package 工作时，Codex 调用同一脚本的 `deactivate`；同 session 未解绑就切换到普通 SDD 时，后续 resume/compact 仍会注入 Capsule。Restore 只是导航，不推进 Gate。
+显式离开 package 工作时，Codex 调用同一脚本的 `deactivate`。Restore 只恢复范围与事实，不推进 Gate。
 
 ## State、ER 与 Trail
 
-- Ticket 状态使用 `ticket satisfy|block|needs-revalidation|pending|retire ... --expect ...`；`SATISFIED` 携带当前 revision/environment，`BLOCKED`/`RETIRED` 携带直接 evidence。stale transition 先重读。
-- 登记 `supporting` 或执行 `ticket satisfy` 前，逐 stable claim 核对 artifact 是否直接覆盖该 acceptance atom 的完整语义；部分覆盖不登记 `supporting`，Ticket 保持 `PENDING`。执行期发现一个 claim 内含可独立失败或需不同 oracle/evidence lane 的子句时，交回 `impl-planning` 修订受影响 Ticket；若该 Ticket 已 `SATISFIED`，先用 `needs-revalidation` 失效对应 evidence，不能由执行者临时把宽 claim 解释为已满足。
-- worker 只返回结构化事实；所有 state mutation 走语义 CLI；证据矛盾或部分写入时主 session 先核对再修复。
-- `recovery checkpoint` 只保存下一动作与恢复 evidence；长期判断写 `recovery judgment`。checkpoint 不授权派发、不释放 dependency、不创建新 Task 状态。
+- Ticket 状态使用 `ticket satisfy|block|needs-revalidation|pending|retire ... --expect ...`；`SATISFIED` 携带 current revision/environment，`BLOCKED`/`RETIRED` 携带直接 evidence。stale transition 先重读。
+- 登记 `supporting` 或执行 `ticket satisfy` 前，逐 stable claim 核对 artifact 是否覆盖完整 acceptance atom。可独立失败或需要不同 oracle/evidence lane 的子句交回 `impl-planning` 修订；已 `SATISFIED` 的 Ticket 先 `needs-revalidation`。
+- worker 只返回结构化事实；所有 state mutation 走语义 CLI。`recovery checkpoint` 保存恢复入口与 evidence；长期判断写 `recovery judgment`。
 - `dispatch`、`worker-return`、`fact`、`escape` 使用 `trail append`；轨迹只追加，写错时追加更正。显式 handoff 先写 checkpoint，再轮换 trail。
-- 新 package 不产生 `READY/RUNNING/DONE` Task 状态；旧 Task `DONE` 也不等于 Ticket `SATISFIED`。
+- 新 package 不产生 `READY/RUNNING/DONE` Task 状态；旧 Task `DONE` 不等于 Ticket `SATISFIED`。
 
 ## Review、Findings 与人工验收
 
-- `/impl-package:do-review` 拥有 initial、finding-closure、terminal-final topology、comparison point、coverage 与 closure；本 Skill 只消费报告。
-- 含新增实现代码的每个 baby step return 都由 Dispatcher/SDD 及时派独立轻量 delta review；纯调查或只重跑测试且没有新增代码改动时不机械派代码审查。这里仅消费 review 结果，不重复定义派审节拍。
-- 轻量 delta review 的已确认 findings 随下一个 baby step 的 brief 一并下发，不单独派 bounded fix；独立 formal review 的 accepted finding 作为同 Topic work lane 的 bounded fix 交给 Dispatcher，下游 worker 遵循 SDD，review lane 规则按两者各自 owner 执行。派发前若同一 Topic 已经过两次以上修复方向仍未收敛、同一 finding 或同一机制在后续 round 重新出现，或 review 结论跨多个 writer、多个入口或共享 authority/lock seam，先按 `/diagnosing-bugs` 做定位再决定修复动作；其余直接 bounded fix。diagnosing-bugs 只返回定位结论，Ticket/Attempt 状态与 dependency release 继续由本流程处理，finding closure 继续由 `/impl-package:do-review` 拥有。
-- terminal pass 要求 terminal-final coverage 完整且所有阻断 finding 已关闭；记录缺失或 incomplete 时交回 `do-review`。
-- Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 记录入口、oracle、环境、失败反馈与 teardown owner。
+`/impl-package:do-review` 拥有 initial、finding-closure、terminal-final topology、comparison point、coverage 与 closure；本 Skill 判断 formal review requirement 并消费报告。
+
+以下任一 material risk 命中时，当前 Ticket 需要独立 formal review：
+
+- shared seam：改变多个执行方共同依赖的接口、协议、模块或集成边界；
+- 安全：改变身份、信任边界或敏感数据暴露；
+- 数据完整性：可能造成已写数据丢失、重复、错配、越界或不可恢复；
+- 并发：改变多个执行路径读写同一可变状态的顺序；
+- migration：改变既有数据的 schema 或语义；
+- 权限：改变谁能执行动作、读取数据或触发外部副作用；
+- 不可逆外部副作用：效果不能靠重跑或回滚撤销。
+
+Plan/policy 明确要求时同样产生 formal review requirement。required review 完成前保持 `PENDING_REVIEW`；具体派发和 reviewer lifecycle 归 Dispatcher，formal topology 与 finding closure 归 do-review。
+
+已确认 finding 可立即修、随相关下一步修或隔离并行修，由 Dispatcher 根据影响、资源和整合成本安排。延后不能放行依赖该缺陷的实现或验收。修复方向已失去可信边界、同一机制再次出现或影响跨多个 writer/入口/shared authority 时，先按 `/diagnosing-bugs` 定位；finding closure 仍归 do-review。
+
+terminal pass 要求 terminal-final coverage 完整且阻断 findings 已闭合。Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 记录入口、oracle、环境、失败反馈与 teardown owner。
 
 ## Verify and Gate
 
-Gate 只判断 current Attempt：`blocked` 保持 active 并记录 gap/next action；`pass` 要求所有 required Ticket/verification/review/manual acceptance/findings closure 已满足；`fail|defer` 如实终结，后续实现进入 patch Attempt。
+Gate 只判断 current Attempt：`blocked` 保持 active 并记录 gap/next action；`pass` 要求 required Ticket、verification、review、manual acceptance 和 findings closure 均满足；`fail|defer` 如实终结，后续实现进入 patch Attempt。
 
-terminal Gate 必须完成 Stage 7：记录 Durable Delta 与 truth pointer，或写明无增量理由；terminal 后冻结 state、checkpoint 和 Execution Record。transport disconnect 后从幂等事实恢复，不创建第二个完成结论。
+terminal Gate 完成 Stage 7：记录 Durable Delta 与 truth pointer，或写明无增量理由；随后冻结 state、checkpoint 与 Execution Record。transport disconnect 后从幂等事实恢复。
 
-先由本 Skill 根据 canonical state、Gate 与 evidence 判断 Ticket 总数、剩余数、blocker、是否 closed 和唯一下一动作；若 catalog 中存在 `talk-to-boss`，再由它组织叙述，不参与状态判断。
+先由本 Skill 根据 canonical facts 判断 Ticket 总数、剩余数、blocker、是否 closed 和需要 Owner 的决定；若 catalog 中存在 `talk-to-boss`，再由它组织叙述。

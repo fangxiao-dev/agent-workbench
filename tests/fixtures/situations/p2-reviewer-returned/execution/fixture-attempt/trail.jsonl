@@ -1,1 +1,2 @@
-{"subject":"finding:FND-01","kind":"result","outcome":"FINDING","finding_source":"reviewer","worker_mode":"review","envelope_valid":true}
+{"subject":"finding:FND-01","kind":"dispatch","seq":1,"dispatch_id":"dispatch-01","candidate_id":"candidate-01","mode":"verify","chosen":"review","resource_keys":[],"receipt":"reviewer-01","outcome":"RUNNING","worker":"reviewer-01","returned":false}
+{"subject":"finding:FND-01","kind":"worker-return","seq":2,"of":"dispatch-01","return_id":"return-01","outcome":"FINDING","finding_source":"reviewer","worker_mode":"verify","envelope_valid":true}

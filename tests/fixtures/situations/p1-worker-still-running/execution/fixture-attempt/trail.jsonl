@@ -1,2 +1,1 @@
-{"subject":"attempt","kind":"decision","seq":1,"chosen":"dispatch-worker mode=implement"}
-
+{"subject":"attempt","kind":"dispatch","seq":1,"dispatch_id":"dispatch-01","candidate_id":"candidate-01","mode":"implement","chosen":"implement","resource_keys":["worktree:a"],"receipt":"worker-01","outcome":"RUNNING","worker":"worker-01","returned":false}

@@ -1,1 +1,2 @@
-{"subject":"ticket:TKT-01","kind":"result","outcome":"BLOCKED","worker_mode":"implement","envelope_valid":true,"blocker":"external dependency unavailable"}
+{"subject":"ticket:TKT-01","kind":"dispatch","seq":1,"dispatch_id":"dispatch-01","candidate_id":"candidate-01","mode":"implement","chosen":"implement","resource_keys":[],"receipt":"worker-01","outcome":"RUNNING","worker":"worker-01","returned":false}
+{"subject":"ticket:TKT-01","kind":"worker-return","seq":2,"of":"dispatch-01","return_id":"return-01","outcome":"BLOCKED","worker_mode":"implement","envelope_valid":true,"blocker":"external dependency unavailable"}

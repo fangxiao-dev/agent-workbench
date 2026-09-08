@@ -15,9 +15,9 @@ priority:
   - [attempt.gate.terminal-frozen, package.record.state-missing, package.record.projection-drift, package.record.live-package-reference, attempt.record.anchor-mismatch, attempt.record.handoff-recovery-needed, attempt.record.handoff-target-corrected, attempt.record.session-resumed, ticket.record.evidence-unfiled]
   # P1-P5 是无序集合；下面的书写顺序不是层内位次。
   # P1：attempt admission 与验证载体准入
-  - [attempt.record.handoff-due, attempt.record.trail-rotation-due, attempt.readiness.worker-still-running, attempt.readiness.all-edges-held, attempt.readiness.multiple-ready-tickets, ticket.readiness.blocker-maybe-resolved]
+  - [attempt.record.handoff-due, attempt.record.trail-rotation-due, attempt.readiness.all-edges-held, attempt.readiness.multiple-ready-tickets, ticket.readiness.blocker-maybe-resolved]
   # P2：消费 worker/reviewer 返回与当前 subject 的未完成动作
-  - [finding.fix.worker-envelope-invalid, ticket.implement.worker-incomplete-first, ticket.implement.worker-incomplete-second, ticket.implement.worker-blocked, ticket.investigate.no-carrier, ticket.investigate.evidence-gap, finding.fix.reviewer-returned, attempt.review.reviewer-unavailable, finding.fix.main-session-discovered, finding.review.source-recheck-pending]
+  - [finding.fix.worker-envelope-invalid, ticket.implement.worker-incomplete-first, ticket.implement.worker-blocked, ticket.investigate.no-carrier, ticket.investigate.evidence-gap, finding.fix.reviewer-returned, attempt.review.reviewer-unavailable, finding.fix.main-session-discovered, finding.review.source-recheck-pending]
   # P3：事实/合同/返工裁决与验证缺口
   - [ticket.verify.contradictory-unresolved, ticket.verify.safety-invariant-unfalsified, ticket.rework.evidence-conflict, ticket.rework.revision-diverged, ticket.rework.revalidation-pending, ticket.route.multiple-business-outcomes, ticket.route.sources-conflicting, attempt.rework.contract-changed]
   # P4：acceptance 与全局收口
@@ -42,7 +42,6 @@ situations:
         do: "impl_package_state.py --package <package> package init --attempt <attempt-id> --plan <repo-relative-plan>"
         effect: "初始化缺失 state"
     escape: true
-
   - slug: package.record.projection-drift
     basis: cli
     when:
@@ -100,13 +99,12 @@ situations:
     basis: prose
     when:
       attempt.ready_ticket_count: ">1"
-      attempt.in_flight: false
     judgment: true
-    ask: "本轮应选择哪一个 ready Ticket"
+    ask: "哪些 ready 候选的实际依赖与资源允许本轮同时推进"
     actions:
       - id: select-ready-ticket
         by: main-session
-        do: "/impl-package:subagent-driven-development mode=implement，以选中的 ready Ticket 作为当前 Topic"
+        do: "$dispatcher mode=implement，以选中的 ready Ticket 作为当前 Topic"
         effect: "依据依赖、集成顺序与共享资源"
     escape: true
 
@@ -165,11 +163,11 @@ situations:
       - id: dispatch-investigate
         default: true
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=investigate"
+        do: "$dispatcher mode=investigate"
         effect: "返回 EVIDENCE_SUFFICIENT 或 EVIDENCE_GAP"
       - id: implement-direct
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=implement"
+        do: "$dispatcher mode=implement"
         requires_reason: true
     escape: true
 
@@ -182,7 +180,7 @@ situations:
       - id: dispatch-followup-investigate
         default: true
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=investigate"
+        do: "$dispatcher mode=investigate"
         effect: "补取证，不进实现"
     escape: true
 
@@ -235,7 +233,7 @@ situations:
       - id: verify-safety-invariant
         default: true
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=verify"
+        do: "$dispatcher mode=verify"
         effect: "不得推迟到加固组"
     escape: true
 
@@ -243,30 +241,15 @@ situations:
     basis: prose
     when:
       trail.last_outcome: INCOMPLETE
-      trail.incomplete_count: 1
       trail.last_worker_mode: implement
-    judgment: false
+    judgment: true
+    ask: "原 Topic 边界与 worker 上下文是否仍可信；应同 lane 恢复、先调查边界，还是退役重派"
     actions:
-      - id: fresh-fallback
-        default: true
-        by: dispatch
-        do: "/impl-package:subagent-driven-development mode=implement (fallback=implement)"
-        effect: "INCOMPLETE 视为上下文污染/持续卡住，work lane 按退役条件换 fresh worker，允许一次 fallback"
-    escape: true
-
-  - slug: ticket.implement.worker-incomplete-second
-    basis: prose
-    when:
-      trail.last_outcome: INCOMPLETE
-      trail.incomplete_count: 2
-      trail.last_worker_mode: implement
-    judgment: false
-    actions:
-      - id: normalize-blocked
+      - id: recover-or-replace-worker
         default: true
         by: main-session
-        do: "impl_package_state.py --package <package> ticket block <id> --expect PENDING --evidence <incomplete-evidence>"
-        effect: "停止第二次 INCOMPLETE 的 fallback"
+        do: "$dispatcher 根据边界与上下文可信度选择恢复、调查或换人"
+        effect: "核对边界与上下文；可信则恢复同 lane，失效则退役重派。INCOMPLETE 次数只作观察，不自动 BLOCKED"
     escape: true
 
   - slug: ticket.implement.worker-blocked
@@ -279,7 +262,7 @@ situations:
     actions:
       - id: converge-shared-dependency
         by: main-session
-        do: "/impl-package:subagent-driven-development mode=implement，以共享依赖为当前 Topic 串行修复"
+        do: "$dispatcher mode=implement，以共享依赖为当前 Topic 修复"
         effect: "共享依赖：Ticket 保持 PENDING；跑通前不再派依赖它的单元"
       - id: block-ticket
         by: main-session
@@ -301,7 +284,7 @@ situations:
       - id: continue-implementation
         default: true
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=implement"
+        do: "$dispatcher mode=implement"
         effect: "可继续实施，不可 SATISFIED"
     escape: true
 
@@ -377,7 +360,7 @@ situations:
     actions:
       - id: re-investigate
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=investigate"
+        do: "$dispatcher mode=investigate"
         effect: "重新取证"
         requires_reason: true
       - id: confirm-original-conclusion
@@ -396,7 +379,7 @@ situations:
       - id: run-revalidation
         default: true
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=verify"
+        do: "$dispatcher mode=verify"
         effect: "走重验计划，ticket pending 后重新 satisfy"
     escape: true
 
@@ -423,8 +406,8 @@ situations:
       - id: dispatch-work-lane-fixer
         default: true
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=fix"
-        effect: "finding 回到同 Topic work lane 修复（不得复用发现它的 reviewer 进程）；修复后由同 scope reviewer 重审"
+        do: "$dispatcher mode=fix"
+        effect: "finding 作为当前候选安排；可独立隔离时单独修复，不复用发现它的 reviewer 进程"
     escape: true
 
   - slug: finding.review.source-recheck-pending
@@ -450,8 +433,8 @@ situations:
       - id: dispatch-direct-fixer
         default: true
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=fix"
-        effect: "回到同 Topic work lane 直接修复，不必先过 reviewer"
+        do: "$dispatcher mode=fix"
+        effect: "finding 作为当前候选安排；可独立隔离时单独修复，不必先过 reviewer"
     escape: true
 
   - slug: finding.disposition.grading-undecided
@@ -694,7 +677,7 @@ situations:
       - id: fresh-fix-invalid-envelope
         default: true
         by: dispatch
-        do: "/impl-package:subagent-driven-development mode=fix"
+        do: "$dispatcher mode=fix"
         effect: "无效 envelope 视为上下文不可采信，work lane 按退役条件换 fresh worker；检查 diff 后重新派发"
       - id: direct-verify-invalid-envelope
         by: main-session
@@ -717,22 +700,4 @@ situations:
         by: main-session
         do: "recovery checkpoint --subject attempt --next await fresh reviewer"
         requires_reason: true
-    escape: true
-
-  - slug: attempt.readiness.worker-still-running
-    basis: prose
-    when:
-      trail.decision_without_result: true
-    judgment: false
-    actions:
-      - id: wait-for-worker-result
-        default: true
-        by: main-session
-        do: "wait_threads <worker-session> until matching result"
-        effect: "等待 worker 返回，不另起动作"
-      - id: interrupt-worker-with-reason
-        by: main-session
-        do: "/impl-package:subagent-driven-development interrupt worker reason=<reason>"
-        requires_reason: true
-        effect: "仅在写明 reason 后允许打断"
     escape: true

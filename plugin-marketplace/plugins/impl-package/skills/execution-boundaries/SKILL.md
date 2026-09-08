@@ -22,7 +22,7 @@ Wave 1 已暴露 package/authority drift 时停止，不通过全量读取制造
 ### 必查与授权
 
 - 必查当前仓库/worktree、branch、HEAD Git commit；package 与 current plan 的仓库相对路径；初始 bundle 的 owner final approval、scope/write-set、明确禁区与 HITL；dirty paths 是否与 write-set 冲突；push/merge/发布、生产/shared mutation、数据迁移、删除等是否另需授权；`.impl-package/state.json` 是否通过 validate、`progress.md` 是否可重建、是否有 blocker/next action；高风险动作是否有 rollback、可观察结果和必要 HITL。
-- 授权列出的下一动作及同 package 的正常记录收口可继续，外部 mutation 必须另行授权。dirty paths 与 write-set 冲突，或高风险动作缺 rollback、可观察结果、必要 HITL 时 `BLOCKED`。需要共享 DB、端口或测试数据时，按 `../subagent-driven-development/references/parallel-work-admission.md` 明确资源 owner、隔离/串行安排和 cleanup owner；真正运行前按 Planned Verification 读取 `../../references/progressive-system-evidence.md`，核对实际目标、身份/配置、必要健康状态与应用/测试资源隔离。
+- 授权列出的下一动作及同 package 的正常记录收口可继续，外部 mutation 必须另行授权。dirty paths 与 write-set 冲突，或高风险动作缺 rollback、可观察结果、必要 HITL 时 `BLOCKED`。需要共享 DB、端口或测试数据时，按 `$dispatcher` 的资源隔离分支明确资源 owner、隔离/串行安排和 cleanup owner；真正运行前按 Planned Verification 读取 `../../references/progressive-system-evidence.md`，核对实际目标、身份/配置、必要健康状态与应用/测试资源隔离。
 
 ### 输出
 
@@ -39,7 +39,7 @@ next action: <one action>
 blocker/owner decision: <none | item>
 ```
 
-输出 `Preflight: READY | BLOCKED + authorized write-set + 单一 next action`，不产生持久 readiness 状态。授权细节按需读 `references/authorization-contract.md`；需要调度时使用 `/impl-package:subagent-driven-development`，本边界只提供任务特定的 scope、write-set、authorization、verification 和输出合同。
+输出 `Preflight: READY | BLOCKED + authorized write-set + candidate scope`，不产生持久 readiness 状态。授权细节按需读 `references/authorization-contract.md`；需要执行协作时使用 `$dispatcher`，本边界提供任务特定的 scope、write-set、authorization、verification 和输出合同。
 
 ## 异常对账
 

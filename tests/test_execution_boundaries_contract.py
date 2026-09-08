@@ -19,7 +19,8 @@ def test_execution_boundaries_keeps_auth_completion_and_thin_exception_path() ->
     assert "异常对账" in boundaries
     assert "主控直接核对" in boundaries
     assert "progressive-system-evidence.md" in boundaries
-    assert "parallel-work-admission.md" in boundaries
+    assert "资源隔离分支" in boundaries
+    assert "$dispatcher" in boundaries
     assert "references/authorization-contract.md" in boundaries
     assert "渐进读取常见误判" in authorization
     for retired in ("standing bookkeeper", "bookkeeper", "Ticket 首次激活", "slow path", "bookkeeper-receipts.jsonl"):

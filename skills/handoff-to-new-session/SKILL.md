@@ -11,7 +11,7 @@ compatibility: Requires Codex Desktop thread tools (create_thread, set_thread_ti
 ## Ownership
 
 - 本 Skill 只拥有 session 创建、existing-worktree 锚定、模型与标题继承、两阶段 prompt、交付纠偏和理解回报审计。
-- Ticket/State/Evidence/Gate 与 package 续跑由 `/impl-package:dev-with-track` 拥有；Topic、当前批次与 idle 由 `$dispatcher` 拥有；bounded worker 的 dependency、lane 与 lifecycle 由 `/impl-package:subagent-driven-development` 拥有。handoff 只传递 canonical `readyTickets`，不复述这些流程。
+- Ticket/State/Evidence/Gate 与 package 续跑由 `/impl-package:dev-with-track` 拥有；候选选择、bounded worker 合同、dependency/resource admission、return 与 idle 由 `$dispatcher` 拥有。handoff 只传递 canonical `readyTickets` 和在途事实，不复述这些流程。
 - downstream protocol 可以提供自己的 validation anchors 与 continuation；本 Skill 仍只负责通用创建和交付 gate。
 
 使用前确认：Owner 要求新 task；已有可恢复 authority 与 active checkpoint；目标 implementation worktree 和下一状态可从 authority 判定。滚动中的无 checkpoint 工作改用普通 handoff，不使用本 Skill。

@@ -45,7 +45,8 @@ def test_prompt_cards_separate_anchor_from_continuation() -> None:
     assert "OPTIONAL_HANDOFF_NOTES_OR_OMIT" in continuation
     assert "/impl-package:dev-with-track" in continuation
     assert "$dispatcher" in continuation
-    assert "/impl-package:subagent-driven-development" in continuation
+    assert "/impl-package:subagent-driven-development" not in continuation
+    assert "待派审 code delta" in continuation
     assert "这是理解回报，不是执行预演" in continuation
     assert "不等待批准" in continuation
 
@@ -69,10 +70,10 @@ def test_execution_semantics_are_delegated_not_reimplemented() -> None:
     for pointer in (
         "/impl-package:dev-with-track",
         "$dispatcher",
-        "/impl-package:subagent-driven-development",
     ):
         assert pointer in skill
         assert pointer in template
+    assert "/impl-package:subagent-driven-development" not in skill + template
 
     duplicated_execution_terms = (
         "run foundation admission for every ready Ticket",

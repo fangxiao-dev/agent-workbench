@@ -104,6 +104,8 @@ Codex 当前插件 manifest 不支持 `agents` 字段，因此不能通过 `code
 
 刷新缓存、重装或升级插件时，Agent 按 [安装器规范](docs/workbench-design/04-install-spec.md#plugin-生命周期agent-直接执行) 直接执行 Codex、Claude 或 Grok 的原生 CLI。唯一例外是上面的 Codex 一次性 `codex_setup.py` bootstrap；仓库不维护其他 lifecycle Skill、包装脚本或机器专属配置。修改用户级宿主状态仍需用户明确要求，执行后必须核对安装结果与缓存。
 
+发布 Impl-Package 与 standalone Dispatcher 的组合前，运行 `python -m pytest tests/test_impl_package_plugin.py -q`，验证仓库源码组合及旧 Dispatcher 错配回归；错配诊断包含两侧内容指纹。安装后的实际加载路径与内容仍在宿主安装验收时核对。
+
 ### Discuss Ledger MCP 注册
 
 `discuss-ledger` MCP **不**由 `link_skill.py` 注册，需单独运行：

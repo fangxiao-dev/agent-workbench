@@ -39,8 +39,8 @@ def test_situations_dispatch_review_through_do_review_phases_owned_by_do_review(
     assert "/impl-package:do-review phase=finding-closure" in text
 
 
-def test_situations_reuse_same_topic_work_lane_for_findings_by_default() -> None:
+def test_situations_schedule_confirmed_findings_as_independent_candidates() -> None:
     text = SITUATIONS.read_text(encoding="utf-8")
 
-    assert "finding 回到同 Topic work lane 修复" in text
-    assert "回到同 Topic work lane 直接修复" in text
+    assert text.count("finding 作为当前候选安排；可独立隔离时单独修复") == 2
+    assert "/impl-package:subagent-driven-development" not in text

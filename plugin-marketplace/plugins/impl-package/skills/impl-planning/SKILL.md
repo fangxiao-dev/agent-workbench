@@ -21,7 +21,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
 4. 新 package 固定选择 `tickets=true, dag=false`；`dag=true` 只允许在旧 package 迁移/恢复计划中出现。
 5. 在 Ticket 拆分子流程中，把每个 Decision/Spec 约束映射到具体 Ticket 的 Contract references 与 AC，并按 Composition Contract 编译为 stable claim acceptance atoms；Ticket 自身承载建设内容、逐项 evidence、early-falsification、remaining-completion 和安全不变量。Plan 只提炼跨 Ticket 的实施与接线安排、typed dependency、共享资源、全局执行边界与 Planned Verification。
    - 并行判断：先核实真实 caller、复用入口、依赖产物、接线条件和验证可行性；结合冻结合同与当前资源，只提前开展能独立实施并验证的工作。
-   - 按整票真实阻塞选择 `implementation / acceptance / release`，票内等待写成接线条件；只记录会改变安排的交接产物及其验证，不预列完整 baby-step 队列，派发和步骤大小交给 `$dispatcher` 与 `/impl-package:subagent-driven-development`。误判提醒见 [并行与调度安排](references/common-misjudgments.md#并行与调度安排)。
+   - 按整票真实阻塞选择 `implementation / acceptance / release`，票内等待写成接线条件；只记录会改变安排的交接产物及其验证，不预列完整 baby-step 队列，派发、步骤大小、worker 方法与资源隔离交给 `$dispatcher`。误判提醒见 [并行与调度安排](references/common-misjudgments.md#并行与调度安排)。
 6. `tickets=true` 时执行本 Skill 的“Ticket 拆分”子流程；新 package 不调用 `create-task-dag`。
 7. 初始 bundle 冻结 plan candidate 后调用 `/impl-package:plan-review` 的 `bundle-admission`；返回 `full-review` 时继续同一 skill 的完整审查，处理 material findings，并联合校验 coverage、typed dependency、ownership、证据可行性、Gate 边界与集成顺序，然后请求一次完整 bundle approval；后续 patch/update 直接沿用该 approval。
 8. 获批后，主 thread 使用当前已加载插件的 `impl_package_state.py` 语义 CLI 执行 `package init --attempt <id> --plan <repo-relative-plan>`，再执行 `package validate`；同时确认 execution-boundaries 的授权范围。插件根目录以当前已加载 skill 所属的插件根目录为准，不假设 workbench 仓库路径或宿主缓存路径。误判提醒见 [State 与发布边界](references/common-misjudgments.md#state-与发布边界)。

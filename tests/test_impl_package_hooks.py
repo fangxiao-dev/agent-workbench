@@ -299,14 +299,47 @@ def test_session_start_injects_read_only_resume_capsule_for_each_supported_sourc
     assert "state-valid: true" in context
     assert "gate-verdict: blocked" in context
     assert re.search(r"preview-digest: [0-9a-f]{12}", context)
-    assert "selected: " in context
-    assert "parallel: " in context
-    assert "actions: " in context
+    assert all(f"{key}:" in context for key in ("blocking", "runnable", "withheld", "in_flight"))
     assert re.search(r"warnings: \d+", context)
     assert re.search(r"undetermined: \d+", context)
     assert "not Evidence, Acceptance, Gate, or closure" in context
     assert "without --no-write-credential" in context
     assert not credential.exists()
+
+
+def test_capsule_preserves_all_candidates_and_legacy_fallback() -> None:
+    import runpy
+
+    capsule = runpy.run_path(str(HOOK))["_resume_capsule"]
+    rendered = {
+        "selected": {"slug": "legacy.cursor", "action_ids": ["old-wait"]},
+        "blocking": [],
+        "runnable": [{"candidate_id": "A", "protocol": "run A"}, {"candidate_id": "B", "protocol": "run B"}],
+        "withheld": [{"candidate_id": "C", "type": "foundation", "reason": "contract pending"}],
+        "in_flight": [{"dispatch_id": "D", "resource_keys": ["db:test"]}],
+    }
+    text = capsule({"package": "fixture"}, rendered)
+    assert all(value in text for value in ("run A", "run B", "contract pending", "db:test"))
+    assert "old-wait" not in text
+    legacy = capsule({"package": "fixture"}, {"selected": rendered["selected"]})
+    assert "selected: legacy.cursor" in legacy
+
+
+def test_large_capsule_requires_full_projection_before_decisions():
+    import runpy
+
+    hook = runpy.run_path(str(HOOK))
+    rendered = {"blocking": [], "runnable": [
+        {"candidate_id": f"candidate-{index}", "subject": "ticket:T", "protocol": "inspect this candidate and its current resource declarations"}
+        for index in range(30)
+    ], "withheld": [{"return_id": "last-code-return", "reason": "review slot unavailable"}], "in_flight": []}
+    text = hook["_resume_capsule"]({"package": "docs/implementations/example"}, rendered)
+    assert len(text.encode("utf-8")) <= hook["CAPSULE_CONTEXT_BUDGET"] <= 1200
+    assert "projection-complete: false" in text
+    assert "runnable: 30 (summary only)" in text
+    assert "withheld: 1 (summary only)" in text
+    assert "FULL projection before decisions or writes" in text
+    assert "--no-write-credential --json" in text
 
 
 @pytest.mark.parametrize("gate_attempt", [None, "old-attempt"])

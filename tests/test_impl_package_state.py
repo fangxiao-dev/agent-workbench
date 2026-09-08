@@ -61,7 +61,8 @@ class ImplPackageStateTests(unittest.TestCase):
     def assert_situation_footer(self, result: subprocess.CompletedProcess[str]) -> None:
         self.assertEqual(result.returncode, 0)
         self.assertRegex(result.stdout, r"\[处境\] digest=[0-9a-f]{12}")
-        self.assertIn("协议:", result.stdout)
+        for partition in ("blocking", "runnable", "withheld", "in_flight"):
+            self.assertIn(f"{partition}:", result.stdout)
 
     def init(self, repo: Path, package: Path) -> dict:
         return json.loads(self.cli(repo, package, "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md").stdout)
@@ -77,15 +78,130 @@ class ImplPackageStateTests(unittest.TestCase):
         state_sha256: str | None = None,
         ts: str = "2026-08-18T10:00:00Z",
     ) -> None:
+        snapshot = engine.command_trail_append(package, json.dumps({
+            "kind": "fact", "subject": "attempt", "key": "dispatch.candidates",
+            "value": {"candidates": [{"candidate_id": "candidate-01", "subject": "attempt",
+                "mode": "verify", "action_id": "dispatch-verify", "resource_keys": []}]},
+        }))
+        self._candidate_seq = snapshot["seq"]
         state_path = package / ".impl-package/state.json"
         credential = {
             "digest": digest,
             "ts": ts,
             "state_sha256": state_sha256 or hashlib.sha256(state_path.read_bytes()).hexdigest(),
+            "head": git(package, "rev-parse", "HEAD"),
+            "trail_seq": snapshot["seq"],
+            "runnable_candidate_ids": ["candidate-01"],
         }
         path = package / "execution" / "initial" / "situation-digest.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(credential), encoding="utf-8")
+
+    def dispatch_fields(self) -> dict:
+        return {"dispatch_id": "dispatch-01", "candidate_id": "candidate-01",
+                "candidates_of": getattr(self, "_candidate_seq", 1), "chosen": "dispatch-verify",
+                "mode": "verify", "resource_keys": [], "receipt": {"worker_id": "worker-01"}}
+
+    def test_dispatch_contract_requires_identity_resources_and_receipt(self) -> None:
+        valid = {**self.dispatch_fields(), "kind": "dispatch", "subject": "attempt",
+                 "worker": "worker-01", "outcome": "RUNNING", "returned": False,
+                 "situation_digest": "a1b2c3d4e5f6"}
+        for field in ("dispatch_id", "candidate_id", "candidates_of", "resource_keys", "receipt", "mode", "chosen"):
+            with self.subTest(field=field), self.assertRaises(engine.StateError):
+                engine._validate_trail_event({key: value for key, value in valid.items() if key != field})
+        with self.assertRaises(engine.StateError):
+            engine._validate_trail_event({**valid, "mode": "review"})
+        returned = {"kind": "worker-return", "subject": "attempt", "of": "dispatch-01",
+                    "return_id": "return-01", "outcome": "DONE", "consumption_id": "consume-01",
+                    "code_delta": {"base": "a" * 40, "head": "b" * 40}}
+        self.assertEqual(engine._validate_trail_event(returned), returned)
+        with self.assertRaises(engine.StateError):
+            engine._validate_trail_event({**returned, "code_delta": {"base": "a" * 7, "head": "b" * 40}})
+
+    def test_candidate_snapshot_binding_and_empty_replacement(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        before = (package / ".impl-package/state.json").read_bytes()
+        self.write_situation_digest(package)
+        snapshot = engine._active_trail_rows(package, "initial")[-1]
+        self.assertEqual(snapshot["value"]["attempt"], "initial")
+        self.assertEqual(snapshot["value"]["head"], git(repo, "rev-parse", "HEAD"))
+        self.assertEqual(snapshot["value"]["state_sha256"], hashlib.sha256(before).hexdigest())
+        self.assertEqual((package / ".impl-package/state.json").read_bytes(), before)
+        self.cli(repo, package, "trail", "append", input_text=json.dumps({
+            "kind": "fact", "key": "dispatch.candidates", "subject": "attempt", "value": {"candidates": []}}))
+        rendered = subprocess.run([sys.executable, str(CLI.with_name("situation.py")), "render", "--package", str(package), "--json"],
+                                  cwd=repo, text=True, capture_output=True, check=False)
+        self.assertEqual(rendered.returncode, 0, rendered.stderr)
+        projection = json.loads(rendered.stdout)
+        self.assertEqual(projection["candidate_snapshot"]["value"]["candidates"], [])
+        self.assertFalse(any(item.get("candidate_id") == "candidate-01" for item in projection["runnable"]))
+        stale = self.cli(repo, package, "trail", "append", ok=False, input_text=json.dumps({
+            **self.dispatch_fields(), "kind": "dispatch", "subject": "attempt", "worker": "worker-01",
+            "outcome": "RUNNING", "returned": False, "situation_digest": projection["digest"]}))
+        self.assertNotEqual(stale.returncode, 0)
+        self.assertIn("latest candidate snapshot", stale.stderr)
+
+    def test_dispatch_retry_and_return_identity_survive_handoff_archive(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.write_situation_digest(package)
+        rendered = subprocess.run([sys.executable, str(CLI.with_name("situation.py")), "render", "--package", str(package), "--json"],
+                                  cwd=repo, text=True, capture_output=True, check=False)
+        self.assertEqual(rendered.returncode, 0, rendered.stderr)
+        digest = json.loads(rendered.stdout)["digest"]
+        dispatch = {**self.dispatch_fields(), "kind": "dispatch", "subject": "attempt", "worker": "worker-01",
+                    "outcome": "RUNNING", "returned": False, "situation_digest": digest}
+        first = json.loads(self.cli(repo, package, "trail", "append", input_text=json.dumps(dispatch)).stdout)
+        self.cli(repo, package, "trail", "append", input_text=json.dumps({
+            "kind": "fact", "subject": "attempt", "key": "trail.envelope_valid", "value": True}))
+        stale = self.cli(repo, package, "trail", "append", input_text=json.dumps({**dispatch, "dispatch_id": "dispatch-new"}), ok=False)
+        self.assertNotEqual(stale.returncode, 0)
+        subprocess.run([sys.executable, str(CLI.with_name("situation.py")), "render", "--package", str(package), "--json"],
+                       cwd=repo, capture_output=True, check=True)
+        repeated = json.loads(self.cli(repo, package, "trail", "append", input_text=json.dumps(dispatch)).stdout)
+        self.assertFalse(repeated["appended"])
+        self.assertEqual(repeated["seq"], first["seq"])
+        self.cli(repo, package, "recovery", "checkpoint", "--subject", "attempt", "--next", "consume running worker",
+                 "--evidence", "evidence.md", "--handoff")
+        self.assertTrue((package / "execution/initial/trail.001.jsonl").exists())
+        returned = {"kind": "worker-return", "subject": "attempt", "outcome": "DONE", "of": "dispatch-01", "return_id": "return-01"}
+        wrong_subject = self.cli(repo, package, "trail", "append", input_text=json.dumps({**returned, "subject": "ticket:TKT-01"}), ok=False)
+        self.assertNotEqual(wrong_subject.returncode, 0)
+        self.assertIn("subject", wrong_subject.stderr)
+        self.cli(repo, package, "trail", "append", input_text=json.dumps(returned))
+        self.cli(repo, package, "recovery", "checkpoint", "--subject", "attempt", "--next", "recover after completed return",
+                 "--evidence", "evidence.md", "--handoff")
+        repeated_return = json.loads(self.cli(repo, package, "trail", "append", input_text=json.dumps(returned)).stdout)
+        self.assertFalse(repeated_return["appended"])
+        self.assertEqual(sum(row.get("return_id") == "return-01" for row in engine._active_trail_rows(package, "initial")), 1)
+        late = self.cli(repo, package, "trail", "append", input_text=json.dumps({**returned, "return_id": "late-return"}), ok=False)
+        self.assertNotEqual(late.returncode, 0)
+        self.assertIn("already has a worker-return", late.stderr)
+
+    def test_candidate_subjects_are_canonical_and_mutation_is_ticket_scoped(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        for subject, mode in (("TKT-02", "implement"), ("ticket:missing", "implement"), ("attempt", "fix"), ("finding:missing", "verify")):
+            candidate = {"candidate_id": "candidate", "subject": subject, "mode": mode,
+                         "action_id": "work", "resource_keys": []}
+            rejected = self.cli(repo, package, "trail", "append", ok=False, input_text=json.dumps({
+                "kind": "fact", "key": "dispatch.candidates", "subject": "attempt", "value": {"candidates": [candidate]}}))
+            self.assertNotEqual(rejected.returncode, 0, subject)
+            self.assertIn("subject", rejected.stderr)
+        candidate = {"candidate_id": "held-child", "subject": "ticket:TKT-02", "mode": "implement",
+                     "action_id": "implement-child", "resource_keys": []}
+        self.cli(repo, package, "trail", "append", input_text=json.dumps({
+            "kind": "fact", "key": "dispatch.candidates", "subject": "attempt", "value": {"candidates": [candidate]}}))
+        rendered = subprocess.run([sys.executable, str(CLI.with_name("situation.py")), "render", "--package", str(package), "--json"],
+                                  cwd=repo, text=True, capture_output=True, check=True)
+        projection = json.loads(rendered.stdout)
+        self.assertFalse(any(item.get("candidate_id") == "held-child" for item in projection["runnable"]))
+        withheld = next(item for item in projection["withheld"] if item.get("candidate_id") == "held-child")
+        self.assertTrue(any(blocker["type"] == "foundation" for blocker in withheld["blockers"]))
 
     def add_evidence(self, repo: Path, package: Path, *, revision: str | None = None, environment: str = "test") -> None:
         revision = revision or git(repo, "rev-parse", "HEAD")
@@ -668,17 +784,17 @@ class ImplPackageStateTests(unittest.TestCase):
             package,
             "trail",
             "append",
-            input_text=json.dumps({"kind": "dispatch", "subject": "attempt", "outcome": "RUNNING", "worker": "worker-01", "returned": False, "situation_digest": "a1b2c3d4e5f6"}),
+            input_text=json.dumps({**self.dispatch_fields(), "kind": "dispatch", "subject": "attempt", "outcome": "RUNNING", "worker": "worker-01", "returned": False, "situation_digest": "a1b2c3d4e5f6"}),
         )
         self.assertEqual(json.loads(fact.stdout)["appended"], True)
         self.assertEqual(json.loads(dispatch.stdout)["appended"], True)
         rows = [json.loads(line) for line in (package / "execution/initial/trail.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertEqual([row["seq"] for row in rows], [1, 2])
+        self.assertEqual([row["seq"] for row in rows], [1, 2, 3])
         for row in rows:
             self.assertEqual(row["v"], 1)
             self.assertTrue(row["ts"].endswith("Z"))
             self.assertEqual(row["head"], git(repo, "rev-parse", "HEAD"))
-        self.assertEqual(rows[1]["situation_digest"], "a1b2c3d4e5f6")
+        self.assertEqual(rows[2]["situation_digest"], "a1b2c3d4e5f6")
 
     def test_trail_append_named_flags_merge_into_event(self) -> None:
         temp, repo, package = self.make_repo()
@@ -700,7 +816,7 @@ class ImplPackageStateTests(unittest.TestCase):
             "--review-recheck",
             input_text=json.dumps(
                 {
-                    "kind": "dispatch",
+                    **self.dispatch_fields(), "kind": "dispatch",
                     "subject": "attempt",
                     "outcome": "RUNNING",
                     "worker": "worker-01",
@@ -710,7 +826,7 @@ class ImplPackageStateTests(unittest.TestCase):
         )
 
         self.assertTrue(json.loads(result.stdout)["appended"])
-        row = json.loads((package / "execution/initial/trail.jsonl").read_text(encoding="utf-8"))
+        row = json.loads((package / "execution/initial/trail.jsonl").read_text(encoding="utf-8").splitlines()[-1])
         self.assertEqual(row["situation_digest"], "a1b2c3d4e5f6")
         self.assertEqual(row["review_phase"], "initial")
         self.assertEqual(row["review_track"], "Track A")
@@ -737,7 +853,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
         base = {
-            "kind": "dispatch",
+            **self.dispatch_fields(), "kind": "dispatch",
             "subject": "attempt",
             "outcome": "RUNNING",
             "worker": "worker-01",
@@ -763,7 +879,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.init(repo, package)
         self.write_situation_digest(package)
         payload = {
-            "kind": "dispatch",
+            **self.dispatch_fields(), "kind": "dispatch",
             "subject": "attempt",
             "outcome": "RUNNING",
             "worker": "worker-01",
@@ -802,7 +918,7 @@ class ImplPackageStateTests(unittest.TestCase):
             "append",
             input_text=json.dumps(
                 {
-                    "kind": "dispatch",
+                    **self.dispatch_fields(), "kind": "dispatch",
                     "subject": "attempt",
                     "outcome": "RUNNING",
                     "worker": "worker-01",
@@ -818,7 +934,7 @@ class ImplPackageStateTests(unittest.TestCase):
 
     def test_review_dispatch_fields_use_closed_vocabulary_and_pairing(self) -> None:
         base = {
-            "kind": "dispatch",
+            **self.dispatch_fields(), "kind": "dispatch",
             "subject": "attempt",
             "outcome": "RUNNING",
             "worker": "worker-01",
@@ -865,7 +981,7 @@ class ImplPackageStateTests(unittest.TestCase):
             package,
             "trail",
             "append",
-            input_text=json.dumps({"kind": "dispatch", "subject": "attempt", "outcome": "RUNNING", "worker": "worker-01", "returned": False}),
+            input_text=json.dumps({**self.dispatch_fields(), "kind": "dispatch", "subject": "attempt", "outcome": "RUNNING", "worker": "worker-01", "returned": False}),
             ok=False,
         )
         self.assertIn("dispatch 需要当前处境的 digest", result.stderr)
@@ -881,7 +997,7 @@ class ImplPackageStateTests(unittest.TestCase):
             package,
             "trail",
             "append",
-            input_text=json.dumps({"kind": "dispatch", "subject": "attempt", "outcome": "RUNNING", "worker": "worker-01", "returned": False, "situation_digest": "a1b2c3d4e5f6"}),
+            input_text=json.dumps({**self.dispatch_fields(), "kind": "dispatch", "subject": "attempt", "outcome": "RUNNING", "worker": "worker-01", "returned": False, "situation_digest": "a1b2c3d4e5f6"}),
             ok=False,
         )
         self.assertIn("dispatch 需要当前处境的 digest：先运行 situation.py render 取 digest，再重写这条 dispatch", result.stderr)
@@ -897,7 +1013,7 @@ class ImplPackageStateTests(unittest.TestCase):
             package,
             "trail",
             "append",
-            input_text=json.dumps({"kind": "dispatch", "subject": "attempt", "outcome": "RUNNING", "worker": "worker-01", "returned": False, "situation_digest": "a1b2c3d4e5f6"}),
+            input_text=json.dumps({**self.dispatch_fields(), "kind": "dispatch", "subject": "attempt", "outcome": "RUNNING", "worker": "worker-01", "returned": False, "situation_digest": "a1b2c3d4e5f6"}),
             ok=False,
         )
         self.assertIn("dispatch 需要当前处境的 digest：先运行 situation.py render 取 digest，再重写这条 dispatch", result.stderr)
@@ -915,7 +1031,7 @@ class ImplPackageStateTests(unittest.TestCase):
             package,
             "trail",
             "append",
-            input_text=json.dumps({"kind": "dispatch", "subject": "attempt", "outcome": "RUNNING", "worker": "worker-01", "returned": False, "situation_digest": "a1b2c3d4e5f6"}),
+            input_text=json.dumps({**self.dispatch_fields(), "kind": "dispatch", "subject": "attempt", "outcome": "RUNNING", "worker": "worker-01", "returned": False, "situation_digest": "a1b2c3d4e5f6"}),
             ok=False,
         )
         self.assertIn("dispatch 需要当前处境的 digest：先运行 situation.py render 取 digest，再重写这条 dispatch", result.stderr)
@@ -925,10 +1041,16 @@ class ImplPackageStateTests(unittest.TestCase):
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
+        self.write_situation_digest(package)
+        self.cli(repo, package, "trail", "append", input_text=json.dumps({
+            **self.dispatch_fields(), "kind": "dispatch", "subject": "attempt",
+            "worker": "worker-01", "outcome": "RUNNING", "returned": False,
+            "situation_digest": "a1b2c3d4e5f6",
+        }))
         for payload in (
             {"kind": "escape", "subject": "attempt", "deviation": "manual", "reason": "fixture"},
             {"kind": "fact", "subject": "attempt", "key": "trail.envelope_valid", "value": True},
-            {"kind": "worker-return", "subject": "attempt", "outcome": "DONE"},
+            {"kind": "worker-return", "subject": "attempt", "outcome": "DONE", "of": "dispatch-01", "return_id": "return-01"},
         ):
             result = self.cli(repo, package, "trail", "append", input_text=json.dumps(payload))
             self.assertTrue(json.loads(result.stdout)["appended"])

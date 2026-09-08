@@ -44,6 +44,17 @@ REVIEW_PHASE_VALUES = ("initial", "finding-closure", "terminal-final")
 REVIEW_TRACK_VALUES = ("Track A", "Track B", "Track C", "Track D")
 REVIEW_PHASES = frozenset(REVIEW_PHASE_VALUES)
 REVIEW_TRACKS = frozenset(REVIEW_TRACK_VALUES)
+GLOBAL_BLOCKING_SLUGS = frozenset(
+    {
+        "attempt.gate.terminal-frozen",
+        "package.record.state-missing",
+        "package.record.projection-drift",
+        "attempt.record.anchor-mismatch",
+    }
+)
+DISPATCH_SCOPED_WHEN_KEYS = frozenset(
+    {"trail.decision_without_result", "trail.last_outcome", "trail.incomplete_count"}
+)
 VALID_BASIS = {"cli", "prose", "observed"}
 SLUG_RE = re.compile(r"^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$")
 COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
@@ -80,6 +91,8 @@ RETIRED_PACKAGES_REL = "docs/implementations/retired.json"
 # Facts are intentionally a closed namespace for explicit trail declarations.
 FACT_KEYS = frozenset(
     {
+        "dispatch.candidates",
+        "review.dispatch_pending",
         "ticket.blocker_maybe_resolved",
         "ticket.release_edge_rechecked",
         "review.canonical_summary",
@@ -115,6 +128,21 @@ def _unknown_fact_key_notice(keys: tuple[str, ...]) -> str:
 FACT_DEFAULTS: dict[str, Any] = {
     "ticket.release_edge_rechecked": False,
 }
+
+
+def candidate_subject_error(candidate: dict[str, Any], ticket_ids: Iterable[str], finding_ids: Iterable[str]) -> str | None:
+    subject = candidate.get("subject")
+    if not isinstance(subject, str):
+        return "candidate subject must be canonical"
+    if candidate.get("mode") in {"implement", "fix"} and not subject.startswith("ticket:"):
+        return "implementation/fix subject must identify its owning ticket:<id>"
+    if subject == "attempt":
+        return None
+    kind, separator, identifier = subject.partition(":")
+    known = ticket_ids if kind == "ticket" else finding_ids if kind == "finding" else ()
+    if not separator or not identifier or identifier not in known:
+        return "candidate subject must reference an existing ticket:<id>, finding:<id>, or attempt"
+    return None
 
 
 class SituationError(RuntimeError):
@@ -338,7 +366,7 @@ class Candidate:
 
     def as_json(self) -> dict[str, Any]:
         actions = list(self.row.get("actions", []))
-        return {
+        result = {
             "slug": self.slug,
             "protocol": _PROTOCOLS.get(self.slug, _PROTOCOLS["default"]),
             "subject": self.subject,
@@ -349,6 +377,9 @@ class Candidate:
             "actions": actions,
             "when": {key: fact.as_json() for key, fact in self.when.items()},
         }
+        if self.context.dispatch_id is not None:
+            result["dispatch_id"] = self.context.dispatch_id
+        return result
 
 
 @dataclass
@@ -364,13 +395,16 @@ class Undetermined:
             for key, fact in self.when.items()
             if not fact.known
         }
-        return {
+        result = {
             "slug": self.row["slug"],
             "subject": self.subject,
             "unknown_keys": sorted(unknown),
             "reasons": unknown,
             "when": {key: fact.as_json() for key, fact in self.when.items()},
         }
+        if self.context.dispatch_id is not None:
+            result["dispatch_id"] = self.context.dispatch_id
+        return result
 
 
 def _git_result(repo: Path, *arguments: str) -> tuple[int, str, str]:
@@ -647,8 +681,61 @@ def live_package_reference_fact(package: Path) -> Fact:
 
 
 def _active_trail_relative_path(attempt_id: str) -> str:
-    """The renderer's input stays on the unnumbered, active trail path."""
+    """Return the active trail path; archived rows are loaded beside it."""
     return f"execution/{attempt_id}/{ACTIVE_TRAIL_NAME}"
+
+
+def _read_attempt_trail(reader: PackageReader, attempt_id: str) -> FileView:
+    active = _active_trail_relative_path(attempt_id)
+    if reader.commit is None:
+        directory = reader.package / "execution" / attempt_id
+        archives = sorted(directory.glob("trail.[0-9][0-9][0-9].jsonl")) if directory.is_dir() else []
+        relatives = [path.relative_to(reader.package).as_posix() for path in archives]
+    else:
+        assert reader.repo is not None and reader.package_rel is not None
+        prefix = (reader.package_rel / "execution" / attempt_id).as_posix().rstrip("/") + "/"
+        code, output, _ = _git_result(reader.repo, "ls-tree", "-r", "--name-only", reader.commit, "--", prefix)
+        relatives = []
+        if code == 0:
+            for line in output.splitlines():
+                path = PurePosixPath(line.strip())
+                if re.fullmatch(r"trail\.\d{3}\.jsonl", path.name):
+                    relatives.append(path.relative_to(reader.package_rel).as_posix())
+            relatives.sort()
+    relatives.append(active)
+    views = [reader.read(relative) for relative in relatives]
+    errors = [view.error for view in views if view.error]
+    texts: list[str] = []
+    for relative, view in zip(relatives, views):
+        if view.text is None:
+            continue
+        if relative == active:
+            texts.append(view.text)
+            continue
+        retained: list[str] = []
+        for line in view.text.splitlines():
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                retained.append(line)
+                continue
+            if isinstance(row, dict) and (
+                _event_kind(row) in {"dispatch", "worker-return"}
+                or (
+                    _event_kind(row) == "fact"
+                    and row.get("key") == "review.dispatch_pending"
+                )
+            ):
+                retained.append(line)
+        if retained:
+            texts.append("\n".join(retained))
+    return FileView(
+        active,
+        "\n".join(text.rstrip("\n") for text in texts) + ("\n" if texts else "") if texts else None,
+        "; ".join(errors) if errors else None,
+    )
 
 
 def _parse_bool(value: Any) -> bool | None:
@@ -1165,7 +1252,7 @@ def _build_snapshot(
     attempt_id = state.attempt_id
     trail = TrailView(False, [])
     if attempt_id:
-        trail = _parse_trail(reader.read(_active_trail_relative_path(attempt_id)))
+        trail = _parse_trail(_read_attempt_trail(reader, attempt_id))
         if trail.error:
             warnings.append(trail.error)
         if trail.unknown_fact_keys:
@@ -1235,7 +1322,7 @@ def _result_event(row: dict[str, Any]) -> bool:
 
 
 def _event_identifier(row: dict[str, Any]) -> str | None:
-    for name in ("seq", "id", "dispatch_id", "dispatchId", "decision_id", "decisionId"):
+    for name in ("dispatch_id", "dispatchId", "decision_id", "decisionId", "id", "seq"):
         value = row.get(name)
         if value is not None:
             return str(value)
@@ -1250,13 +1337,47 @@ def _dispatch_is_running(row: dict[str, Any]) -> bool:
     )
 
 
+def _dispatch_returns(snapshot: Snapshot) -> dict[str, dict[str, Any]]:
+    """First attributable return wins; late copies cannot rewrite dispatch history."""
+    dispatches: dict[str, dict[str, Any]] = {}
+    returns: dict[str, dict[str, Any]] = {}
+    return_ids: set[str] = set()
+    for row in snapshot.trail.rows:
+        ident = row.get("dispatch_id")
+        if _dispatch_is_running(row) and isinstance(ident, str):
+            dispatches.setdefault(ident, row)
+        elif _result_event(row):
+            if row.get("transition") == "ticket-state" or not isinstance(row.get("outcome"), str) or not row["outcome"].strip():
+                continue
+            of = row.get("of")
+            dispatch = dispatches.get(of) if isinstance(of, str) else None
+            return_id = row.get("return_id")
+            if return_id is not None and (not isinstance(return_id, str) or not return_id.strip()):
+                continue
+            if dispatch is None or of in returns or row.get("subject") != dispatch.get("subject"):
+                continue
+            if isinstance(return_id, str) and return_id in return_ids:
+                continue
+            returns[of] = row
+            if isinstance(return_id, str):
+                return_ids.add(return_id)
+    return returns
+
+
 class FactContext:
     """Facts for one package/attempt/ticket/finding subject."""
 
-    def __init__(self, snapshot: Snapshot, kind: str, identifier: str) -> None:
+    def __init__(
+        self,
+        snapshot: Snapshot,
+        kind: str,
+        identifier: str,
+        dispatch_id: str | None = None,
+    ) -> None:
         self.snapshot = snapshot
         self.kind = kind
         self.identifier = identifier
+        self.dispatch_id = dispatch_id
 
     @property
     def subject(self) -> str:
@@ -1327,13 +1448,33 @@ class FactContext:
         rows = self.snapshot.trail.rows
         if self.kind == "ticket":
             accepted = {self.subject, self.identifier}
-            return [row for row in rows if row.get("subject") in accepted]
+            selected = [row for row in rows if row.get("subject") in accepted]
+            return self._dispatch_rows(selected)
         if self.kind == "finding":
             accepted = {self.subject, self.identifier}
-            return [row for row in rows if row.get("subject") in accepted]
+            selected = [row for row in rows if row.get("subject") in accepted]
+            return self._dispatch_rows(selected)
         if all_attempt_rows:
+            return self._dispatch_rows(rows)
+        return self._dispatch_rows(
+            [row for row in rows if row.get("subject") in {None, "", "attempt"}]
+        )
+
+    def _dispatch_rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if self.dispatch_id is None:
             return rows
-        return [row for row in rows if row.get("subject") in {None, "", "attempt"}]
+        returned = _dispatch_returns(self.snapshot).get(self.dispatch_id)
+        return [
+            row
+            for row in rows
+            if (
+                _event_kind(row) == "dispatch"
+                and str(row.get("dispatch_id")) == self.dispatch_id
+            )
+            or (
+                row is returned
+            )
+        ]
 
     def _trail_is_empty(self) -> bool:
         trail = self.snapshot.trail
@@ -1516,6 +1657,10 @@ class FactContext:
         rows = self._observation_rows()
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
+        if self.dispatch_id is None and any(
+            _result_event(row) and not row.get("of") for row in rows
+        ):
+            return self.unknown("历史 worker result 缺少 of，不能按 dispatch 归属")
         for row in reversed(rows):
             if _result_event(row) and isinstance(row.get("outcome"), str):
                 return _fact_value(row["outcome"])
@@ -1667,6 +1812,13 @@ class FactContext:
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
 
+        if self.dispatch_id is None and any(
+            (_event_kind(row) == "dispatch" and not row.get("dispatch_id"))
+            or (_result_event(row) and not row.get("of"))
+            for row in rows
+        ):
+            return self.unknown("历史 dispatch/result 缺少关联 ID，不能聚合未返回状态")
+
         decisions = {
             identifier
             for row in rows
@@ -1728,6 +1880,10 @@ class FactContext:
         rows = self._observation_rows()
         if rows is None:
             return self.unknown("trail.jsonl 不存在或无法读取")
+        if self.dispatch_id is None and any(
+            _result_event(row) and not row.get("of") for row in rows
+        ):
+            return self.unknown("历史 worker result 缺少 of，不能聚合 INCOMPLETE")
         count = 0
         for row in reversed(rows):
             if not _result_event(row):
@@ -1802,6 +1958,13 @@ class FactContext:
             return _fact_value(True)
         subjects = {None, "", "attempt", self.subject, self.identifier}
         if any(fact.subject in subjects for fact in self.snapshot.trail.facts):
+            return _fact_value(False)
+        if any(
+            _result_event(row)
+            and row.get("subject") in {self.subject, self.identifier}
+            and isinstance(row.get("of"), str)
+            for row in self.snapshot.trail.rows
+        ):
             return _fact_value(False)
         return _fact_value(True)
 
@@ -2885,7 +3048,10 @@ def _collect_when_values(
         elif prefix == "finding":
             selected = [context for context in contexts.values() if context.kind == "finding"]
         elif prefix == "trail":
-            selected = [context for context in contexts.values() if context.kind in {"attempt", "ticket", "finding"}]
+            if key in DISPATCH_SCOPED_WHEN_KEYS:
+                selected = _dispatch_contexts(snapshot)
+            else:
+                selected = [context for context in contexts.values() if context.kind in {"attempt", "ticket", "finding"}]
         elif prefix == "package":
             selected = [contexts.get("package")]
         elif prefix in {"attempt", "gate", "git", "findings", "intake"}:
@@ -2936,6 +3102,294 @@ def _candidate_sort_key(candidate: Candidate, layer_by_slug: dict[str, int], p0_
     )
 
 
+def _state_sha256(snapshot: Snapshot) -> str | None:
+    try:
+        if snapshot.reader.commit is None:
+            return hashlib.sha256((snapshot.package / STATE_REL).read_bytes()).hexdigest()
+        view = snapshot.reader.read(STATE_REL)
+        if view.text is None:
+            return None
+        return hashlib.sha256(view.text.encode("utf-8")).hexdigest()
+    except OSError:
+        return None
+
+
+def _latest_candidate_snapshot(snapshot: Snapshot) -> Fact:
+    rows = [
+        row
+        for row in snapshot.trail.rows
+        if _event_kind(row) == "fact"
+        and row.get("key") == "dispatch.candidates"
+        and row.get("subject") == "attempt"
+    ]
+    if not rows:
+        return Fact.unknown("当前 Attempt 缺少 dispatch.candidates 快照")
+    row = max(
+        rows,
+        key=lambda item: item.get("seq")
+        if isinstance(item.get("seq"), int) and not isinstance(item.get("seq"), bool)
+        else -1,
+    )
+    value = row.get("value")
+    if not isinstance(value, dict):
+        return Fact.unknown("dispatch.candidates value 不是 object")
+    expected = {
+        "attempt": snapshot.state.attempt_id,
+        "head": snapshot.head,
+        "state_sha256": _state_sha256(snapshot),
+    }
+    for field, current in expected.items():
+        if current is None or value.get(field) != current:
+            return Fact.unknown(f"dispatch.candidates {field} 与当前投影不匹配")
+    candidates = value.get("candidates")
+    if not isinstance(candidates, list):
+        return Fact.unknown("dispatch.candidates candidates 不是 array")
+    return _fact_value({"seq": row.get("seq"), **value})
+
+
+def _dispatch_contexts(snapshot: Snapshot) -> list[FactContext]:
+    contexts: list[FactContext] = []
+    latest: dict[str, dict[str, Any]] = {}
+    for row in snapshot.trail.rows:
+        if _event_kind(row) != "dispatch":
+            continue
+        ident = row.get("dispatch_id")
+        if isinstance(ident, str):
+            key = row.get("candidate_id") if isinstance(row.get("candidate_id"), str) else ident
+            latest[key] = row
+    for row in latest.values():
+        dispatch_id = row.get("dispatch_id")
+        subject = row.get("subject")
+        if not isinstance(dispatch_id, str) or not dispatch_id.strip() or not isinstance(subject, str):
+            continue
+        if subject.startswith("ticket:"):
+            contexts.append(FactContext(snapshot, "ticket", subject.split(":", 1)[1], dispatch_id))
+        elif subject.startswith("finding:"):
+            contexts.append(FactContext(snapshot, "finding", subject.split(":", 1)[1], dispatch_id))
+        elif subject == "attempt":
+            contexts.append(FactContext(snapshot, "attempt", snapshot.state.attempt_id or "attempt", dispatch_id))
+    return contexts
+
+
+def _action_mode(action: dict[str, Any]) -> str | None:
+    match = re.search(r"\bmode=(investigate|implement|fix|verify|review)\b", str(action.get("do", "")))
+    return match.group(1) if match else None
+
+
+def _situation_actions(candidates: list[Candidate]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for candidate in candidates:
+        for action in candidate.row.get("actions", []):
+            action_id = action.get("id")
+            if not isinstance(action_id, str):
+                continue
+            result.append(
+                {
+                    "candidate_id": f"situation:{candidate.slug}:{candidate.subject}:{action_id}",
+                    "source": "situation",
+                    "slug": candidate.slug,
+                    "subject": candidate.subject,
+                    "mode": _action_mode(action),
+                    "action_id": action_id,
+                    "resource_keys": None,
+                    "resources_declared": False,
+                    "reason": "处境表机械条件命中",
+                    "protocol": _PROTOCOLS.get(candidate.slug, _PROTOCOLS["default"]),
+                    "action_ids": [action_id],
+                    "actions": [dict(action)],
+                }
+            )
+    return result
+
+
+def _open_dispatches(snapshot: Snapshot) -> list[dict[str, Any]]:
+    returned = _dispatch_returns(snapshot)
+    return [
+        {
+            "dispatch_id": row.get("dispatch_id"),
+            "candidate_id": row.get("candidate_id"),
+            "subject": row.get("subject"),
+            "mode": row.get("mode"),
+            "resource_keys": list(row.get("resource_keys", [])),
+            "receipt": row.get("receipt"),
+        }
+        for row in snapshot.trail.rows
+        if _dispatch_is_running(row)
+        and isinstance(row.get("dispatch_id"), str)
+        and row["dispatch_id"] not in returned
+    ]
+
+
+def _declared_candidate_partitions(
+    snapshot: Snapshot,
+    candidate_snapshot: Fact,
+    in_flight: list[dict[str, Any]],
+    situation_actions: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if not candidate_snapshot.known or candidate_snapshot.value is None:
+        return [], []
+    open_ids = {item.get("candidate_id") for item in in_flight}
+    outcomes: dict[str, str] = {}
+    dispatch_candidates = {
+        row.get("dispatch_id"): row.get("candidate_id")
+        for row in snapshot.trail.rows
+        if _event_kind(row) == "dispatch" and isinstance(row.get("dispatch_id"), str)
+    }
+    for row in _dispatch_returns(snapshot).values():
+        candidate_id = dispatch_candidates.get(row["of"])
+        if isinstance(candidate_id, str) and isinstance(row.get("outcome"), str):
+            outcomes[candidate_id] = row["outcome"].upper()
+    runnable: list[dict[str, Any]] = []
+    withheld: list[dict[str, Any]] = []
+    actions_by_key = {
+        (item["subject"], item["action_id"]): item
+        for item in situation_actions
+    }
+    for raw in candidate_snapshot.value["candidates"]:
+        matched = actions_by_key.get((raw.get("subject"), raw.get("action_id")))
+        action = (
+            dict(matched["actions"][0])
+            if matched
+            else {
+                "id": raw.get("action_id"),
+                "by": "dispatch",
+                "do": f"$dispatcher mode={raw.get('mode')}",
+                "effect": "执行已声明的有界候选",
+            }
+        )
+        item = {
+            **raw,
+            "source": "declared",
+            "candidates_of": candidate_snapshot.value["seq"],
+            "protocol": matched["protocol"] if matched else _PROTOCOLS["default"],
+            "action_ids": [raw.get("action_id")],
+            "actions": [action],
+        }
+        blockers = list(raw.get("blockers", []))
+        subject = raw.get("subject")
+        if matched and matched.get("mode") is not None and matched["mode"] != raw.get("mode"):
+            blockers.append({"type": "authorization", "reason": "候选 mode 与对应处境动作不一致", "subject": subject})
+        subject_error = candidate_subject_error(raw, snapshot.state.ticket_ids, [finding.identifier for finding in snapshot.findings.findings])
+        if subject_error:
+            blockers.append({"type": "authorization", "reason": subject_error, "subject": subject})
+        if not subject_error and raw.get("mode") in {"implement", "fix"} and isinstance(subject, str) and subject.startswith("ticket:"):
+            ticket_id = subject.split(":", 1)[1]
+            ticket_context = FactContext(snapshot, "ticket", ticket_id)
+            state_ticket = ticket_context.state_ticket()
+            if not isinstance(state_ticket, dict) or state_ticket.get("state") != "PENDING":
+                blockers.append(
+                    {
+                        "type": "foundation",
+                        "reason": "Ticket 不是 PENDING，不能进入 implementation/fix",
+                        "subject": subject,
+                    }
+                )
+            dependency = ticket_context.dependency_released("implementation")
+            if not dependency.known or not dependency.value:
+                blockers.append(
+                    {
+                        "type": "foundation",
+                        "reason": dependency.reason or "canonical implementation dependency 未释放",
+                        "subject": subject,
+                    }
+                )
+        if blockers:
+            withheld.append({**item, "blockers": blockers})
+        elif item.get("candidate_id") not in open_ids and outcomes.get(str(item.get("candidate_id"))) in {None, "INCOMPLETE"}:
+            runnable.append({**item, "reason": "声明候选满足当前机械前置"})
+    return runnable, withheld
+
+
+def _pending_review_partitions(
+    snapshot: Snapshot,
+    candidate_snapshot: Fact,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    review_dispatches = [
+        row
+        for row in snapshot.trail.rows
+        if _dispatch_is_running(row)
+        and isinstance(row.get("reviews"), str)
+        and row.get("receipt")
+    ]
+    pending_facts: dict[str, tuple[dict[str, Any], int]] = {}
+    for row in snapshot.trail.rows:
+        if _event_kind(row) != "fact" or row.get("key") != "review.dispatch_pending":
+            continue
+        value = row.get("value")
+        if isinstance(value, dict) and isinstance(value.get("return_id"), str):
+            seq = row.get("seq") if isinstance(row.get("seq"), int) else -1
+            pending_facts[value["return_id"]] = (value, seq)
+    available_slots = None
+    if candidate_snapshot.known and isinstance(candidate_snapshot.value, dict):
+        available_slots = candidate_snapshot.value.get("available_slots")
+    runnable: list[dict[str, Any]] = []
+    withheld: list[dict[str, Any]] = []
+    seen_returns: set[str] = set()
+    for row in _dispatch_returns(snapshot).values():
+        if _event_kind(row) != "worker-return" or not isinstance(row.get("code_delta"), dict):
+            continue
+        return_id = row.get("return_id")
+        reviewed = any(
+            review.get("reviews") == return_id
+            and review.get("subject") == row.get("subject")
+            and review.get("code_delta") == row.get("code_delta")
+            and review.get("consumption_id") == row.get("consumption_id")
+            for review in review_dispatches
+        )
+        if not isinstance(return_id, str) or reviewed or return_id in seen_returns:
+            continue
+        seen_returns.add(return_id)
+        item = {
+            "candidate_id": f"review:{return_id}",
+            "source": "pending-review",
+            "subject": row.get("subject"),
+            "mode": "verify",
+            "action_id": "dispatch-delta-review",
+            "resource_keys": [],
+            "return_id": return_id,
+            "code_delta": row["code_delta"],
+            "consumption_id": row.get("consumption_id"),
+            "protocol": _PROTOCOLS["default"],
+            "action_ids": ["dispatch-delta-review"],
+            "actions": [
+                {
+                    "id": "dispatch-delta-review",
+                    "by": "dispatch",
+                    "do": "$dispatcher mode=verify，派发该 return 的独立 delta review",
+                    "effect": "固定 return_id/code_delta/consumption_id 后派发真实 review",
+                }
+            ],
+        }
+        pending_entry = pending_facts.get(return_id)
+        pending = pending_entry[0] if pending_entry else None
+        snapshot_seq = candidate_snapshot.value.get("seq") if candidate_snapshot.known else None
+        capacity_recovered = (
+            pending_entry is not None
+            and isinstance(snapshot_seq, int)
+            and snapshot_seq > pending_entry[1]
+            and isinstance(available_slots, int)
+            and available_slots > 0
+        )
+        if capacity_recovered:
+            runnable.append({**item, "reason": "后续候选快照显示已有可用槽位"})
+        elif pending is not None:
+            withheld.append(
+                {
+                    **item,
+                    "blockers": [
+                        {
+                            "type": "resource",
+                            "reason": str(pending.get("reason") or "review dispatch 容量不足"),
+                            "resource_key": "agent-slot",
+                        }
+                    ],
+                }
+            )
+        else:
+            runnable.append({**item, "reason": "代码增量已返回且尚无真实 review receipt"})
+    return runnable, withheld
+
+
 def _derive(table: TableModel, snapshot: Snapshot) -> dict[str, Any]:
     specs = _subject_specs(snapshot, table.rows)
     contexts: dict[str, FactContext] = {}
@@ -2956,12 +3410,21 @@ def _derive(table: TableModel, snapshot: Snapshot) -> dict[str, Any]:
     ]
     candidates: list[Candidate] = []
     undetermined: list[Undetermined] = []
+    dispatch_contexts = _dispatch_contexts(snapshot)
     by_slug = {row["slug"]: row for row in table.rows}
     for row in _rows_for_diagnostics(table):
         if row.get("when") == "manual":
             continue
         object_name = str(row["slug"]).split(".", 1)[0]
-        for subject, context in contexts.items():
+        when = row.get("when")
+        dispatch_scoped = isinstance(when, dict) and bool(DISPATCH_SCOPED_WHEN_KEYS & when.keys())
+        row_contexts = dispatch_contexts if dispatch_scoped and dispatch_contexts else list(contexts.values())
+        for context in row_contexts:
+            subject = (
+                f"{context.subject}@{context.dispatch_id}"
+                if context.dispatch_id is not None
+                else context.subject
+            )
             if context.kind != object_name:
                 continue
             status, values, reasons = _evaluate_row(row, context)
@@ -2974,9 +3437,9 @@ def _derive(table: TableModel, snapshot: Snapshot) -> dict[str, Any]:
     p0_order = {slug: index for index, slug in enumerate(table.priority[0])}
     candidates.sort(key=lambda item: _candidate_sort_key(item, layer_by_slug, p0_order))
     unique_candidates: list[Candidate] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str | None]] = set()
     for candidate in candidates:
-        key = (candidate.slug, candidate.subject)
+        key = (candidate.slug, candidate.subject, candidate.context.dispatch_id)
         if key not in seen:
             unique_candidates.append(candidate)
             seen.add(key)
@@ -3013,7 +3476,38 @@ def _derive(table: TableModel, snapshot: Snapshot) -> dict[str, Any]:
     else:
         unmatched = None
 
-    return {
+    blocking_candidates = [
+        candidate for candidate in unique_candidates if candidate.slug in GLOBAL_BLOCKING_SLUGS
+    ]
+    ordinary_candidates = [
+        candidate for candidate in unique_candidates if candidate.slug not in GLOBAL_BLOCKING_SLUGS
+    ]
+    in_flight = _open_dispatches(snapshot)
+    candidate_snapshot = _latest_candidate_snapshot(snapshot)
+    situation_runnable = _situation_actions(ordinary_candidates)
+    declared_runnable, withheld = _declared_candidate_partitions(
+        snapshot, candidate_snapshot, in_flight, situation_runnable
+    )
+    declared_actions = {(item.get("subject"), item.get("action_id")) for item in declared_runnable}
+    controller_actions = []
+    for item in situation_runnable:
+        action = item["actions"][0]
+        if action.get("by") == "dispatch" or item.get("mode") is not None:
+            if (item.get("subject"), item.get("action_id")) not in declared_actions:
+                withheld.append({**item, "blockers": [{"type": "authorization", "subject": item.get("subject"),
+                    "reason": "主控先声明该委派的业务 subject、边界与资源，并纳入当前候选快照"}]})
+        else:
+            controller_actions.append(item)
+    review_runnable, review_withheld = _pending_review_partitions(
+        snapshot, candidate_snapshot
+    )
+    withheld.extend(review_withheld)
+    runnable = [] if blocking_candidates else [
+        *controller_actions,
+        *declared_runnable,
+        *review_runnable,
+    ]
+    result = {
         "selected": selected.as_json() if selected else None,
         "parallel_matches": [candidate.as_json() for candidate in parallel_matches],
         "other_matches": [candidate.as_json() for candidate in other_matches],
@@ -3026,7 +3520,13 @@ def _derive(table: TableModel, snapshot: Snapshot) -> dict[str, Any]:
         "when_values": _collect_when_values(table, snapshot, contexts),
         "contexts": sorted(contexts),
         "table_warnings": table.warnings,
+        "blocking": [candidate.as_json() for candidate in blocking_candidates],
+        "runnable": runnable,
+        "withheld": withheld,
+        "in_flight": in_flight,
+        "candidate_snapshot": candidate_snapshot.as_json(),
     }
+    return result
 
 
 def _subject_label(subject: str) -> str:
@@ -3052,7 +3552,7 @@ def _digest_candidate(
     }
 
 
-def _situation_digest(table: TableModel, result: dict[str, Any]) -> str:
+def _legacy_situation_digest(table: TableModel, result: dict[str, Any]) -> str:
     layer_by_slug = _priority_layer_by_slug(table)
     groups = {
         name: [
@@ -3075,7 +3575,29 @@ def _situation_digest(table: TableModel, result: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:DIGEST_LENGTH]
 
 
-def _write_situation_digest(reader: PackageReader, state: StateView, digest: str) -> None:
+def _situation_digest(table: TableModel, result: dict[str, Any]) -> str:
+    payload = {
+        name: result.get(name, [])
+        for name in ("blocking", "runnable", "withheld", "in_flight")
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:DIGEST_LENGTH]
+
+
+def _write_situation_digest(
+    reader: PackageReader,
+    state: StateView,
+    digest: str,
+    legacy_digest: str,
+    runnable_candidate_ids: list[str],
+    head: str | None,
+    trail_seq: int,
+) -> None:
     try:
         if not state.attempt_id:
             raise OSError("current attempt is unavailable")
@@ -3085,8 +3607,12 @@ def _write_situation_digest(reader: PackageReader, state: StateView, digest: str
         credential_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "digest": digest,
+            "legacy_digest": legacy_digest,
             "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "state_sha256": state_sha256,
+            "runnable_candidate_ids": runnable_candidate_ids,
+            "head": head,
+            "trail_seq": trail_seq,
         }
         with credential_path.open("w", encoding="utf-8", newline="\n") as stream:
             json.dump(payload, stream, ensure_ascii=False, separators=(",", ":"))
@@ -3101,45 +3627,48 @@ def _render_human(
     *,
     explain_undetermined: bool = False,
 ) -> str:
-    selected = result.get("selected")
     lines: list[str] = []
-    if selected:
-        subject_label = _subject_label(selected["subject"])
-        lines.append(f"处境: {selected['slug']}  ({subject_label})")
-        actions = selected.get("actions", [])
-        if actions:
-            rendered_actions = []
-            for index, action in enumerate(actions):
-                rendered_actions.append(f"{chr(97 + index)}) {action.get('id')}")
-            lines.append("可选: " + "  ".join(rendered_actions))
-        if selected.get("judgment"):
-            lines.append(f"判断点: {selected.get('ask') or '由主控选择合适动作'}")
-        else:
-            lines.append("判断点: 机械条件命中，优先执行默认动作")
-    elif result.get("parallel_matches"):
-        layer = result.get("highest_match_layer") or "P?"
-        lines.append(f"处境层: {layer}（并列命中，由主控选择）")
-        rendered = []
-        for item in result["parallel_matches"]:
-            subject_label = _subject_label(item["subject"])
-            actions = "/".join(item.get("action_ids", [])) or "无动作"
-            rendered.append(f"{item['slug']} ({subject_label}) [{actions}]")
-        lines.append("并列处境: " + "  |  ".join(rendered))
-        lines.append("判断点: 先选一个处境，再选其动作")
+    blocking = result.get("blocking", [])
+    runnable = result.get("runnable", [])
+    withheld = result.get("withheld", [])
+    in_flight = result.get("in_flight", [])
+    if blocking:
+        lines.append("blocking:")
+        for item in blocking:
+            lines.append(f"- {item['slug']} ({item['subject']}): {item.get('protocol', '')}")
     else:
-        lines.append(f"处境: {result.get('unmatched') or 'attempt.record.unmatched'}")
-
-    others = result.get("other_matches", [])
-    if others:
-        labels = ", ".join(
-            f"{item['slug']} ({_subject_label(item['subject'])})" for item in others
+        lines.append("blocking: []")
+    lines.append("runnable:")
+    if not runnable:
+        lines.append("- []")
+    for item in runnable:
+        lines.append(f"- {item['candidate_id']} ({item.get('subject')}): {item.get('protocol', '')}")
+        for action in item.get("actions", []):
+            lines.append(
+                f"  action {action.get('id')}: {action.get('do', '')}; effect={action.get('effect', '')}"
+            )
+    lines.append("withheld:")
+    if not withheld:
+        lines.append("- []")
+    for item in withheld:
+        reasons = "; ".join(
+            f"{blocker.get('type')}:{blocker.get('reason')}"
+            for blocker in item.get("blockers", [])
         )
-        scope = "同层" if selected else "较低层"
-        lines.append(f"secondary（{scope}）{len(others)} 个：{labels}")
-    manual = result.get("manual", [])
-    if manual:
-        slugs = ", ".join(item["slug"] for item in manual)
-        lines.append(f"需要主控自行判断是否进入: {slugs}")
+        lines.append(f"- {item.get('candidate_id')} ({item.get('subject')}): {reasons}")
+    lines.append("in_flight:")
+    if not in_flight:
+        lines.append("- []")
+    for item in in_flight:
+        lines.append(
+            f"- {item.get('dispatch_id')} ({item.get('subject')}), resources={item.get('resource_keys')}"
+        )
+    candidate_snapshot = result.get("candidate_snapshot", {})
+    if candidate_snapshot.get("status") == "unknown":
+        lines.append(
+            "candidate_snapshot: unknown — "
+            + str(candidate_snapshot.get("reason") or "缺少候选快照")
+        )
     undetermined = result.get("undetermined", [])
     if undetermined:
         if explain_undetermined:
@@ -3161,6 +3690,7 @@ def _json_result(
     snapshot: Snapshot,
     derived: dict[str, Any],
     digest: str,
+    legacy_digest: str,
 ) -> dict[str, Any]:
     effective_gate = _effective_gate(snapshot)
     return {
@@ -3168,6 +3698,7 @@ def _json_result(
         "package": str(snapshot.package),
         "attempt": snapshot.state.attempt_id,
         "digest": digest,
+        "legacy_digest": legacy_digest,
         "unchanged": False,
         "at": snapshot.reader.at_label,
         "head": snapshot.head,
@@ -3177,6 +3708,11 @@ def _json_result(
         "suppressed_matches": derived["suppressed_matches"],
         "matches": derived["matches"],
         "highest_match_layer": derived["highest_match_layer"],
+        "blocking": derived["blocking"],
+        "runnable": derived["runnable"],
+        "withheld": derived["withheld"],
+        "in_flight": derived["in_flight"],
+        "candidate_snapshot": derived["candidate_snapshot"],
         "manual": derived["manual"],
         "undetermined": derived["undetermined"],
         "unmatched": derived["unmatched"],
@@ -3327,14 +3863,35 @@ def _run_render(args: argparse.Namespace) -> int:
     snapshot = _build_snapshot(reader, validation_result, compaction_pressure)
     derived = _derive(table, snapshot)
     digest = _situation_digest(table, derived)
+    legacy_digest = _legacy_situation_digest(table, derived)
     if not args.no_write_credential:
-        _write_situation_digest(reader, snapshot.state, digest)
+        _write_situation_digest(
+            reader,
+            snapshot.state,
+            digest,
+            legacy_digest,
+            [
+                item["candidate_id"]
+                for item in derived["runnable"]
+                if isinstance(item.get("candidate_id"), str)
+            ],
+            snapshot.head,
+            max(
+                (
+                    row["seq"]
+                    for row in snapshot.trail.rows
+                    if isinstance(row.get("seq"), int) and not isinstance(row.get("seq"), bool)
+                ),
+                default=0,
+            ),
+        )
     if args.since == digest:
         if args.json:
             print(
                 json.dumps(
                     {
                         "digest": digest,
+                        "legacy_digest": legacy_digest,
                         "unchanged": True,
                     },
                     ensure_ascii=False,
@@ -3347,7 +3904,7 @@ def _run_render(args: argparse.Namespace) -> int:
     if args.json:
         print(
             json.dumps(
-                _json_result(table, snapshot, derived, digest),
+                _json_result(table, snapshot, derived, digest, legacy_digest),
                 ensure_ascii=False,
                 indent=2,
             )
