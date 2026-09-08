@@ -138,7 +138,7 @@ def test_grilling_is_the_standalone_question_protocol() -> None:
     assert "/impl-package:grill-me-smartly" in spec_gate
     assert "/impl-package:grilling" not in spec_gate
     assert evals["skill_name"] == "grill-me-smartly"
-    assert len(evals["evals"]) == 3
+    assert {case["id"] for case in evals["evals"]} == {1, 2, 3, 4, 5}
 
 
 def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:

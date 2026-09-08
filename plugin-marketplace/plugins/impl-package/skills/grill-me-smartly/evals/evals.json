@@ -36,6 +36,35 @@
         "降级路径仍保留 ledger、角色边界、stop proof 和 Review/Apply gate",
         "最终回复明确报告使用了简化降级"
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "用 grill-me-smartly 的整合标准交付可靠删除的中文 Review。以下是回归用的虚构多轮 ledger 摘要，stop 已合法完成，不能当成其他项目的真实合同：Q1 已确认 PostgreSQL 保存删除意图后 REST 返回 202；Q2 早期结论为存储删除返回成功即可清理元数据；Q3 已确认失败保留记录并沿原 operation 重试；Q4 已确认父事件部分成功时保留进度、只重试未完成子项；Q5 Owner 后来明确批准以确认对象不存在作为完成条件，替代 Q2，仅更新这一处语义；Q6 已确认元数据在所有子项完成后清理，对象缺失视为满足不存在条件；Q7 是否允许自动重试仍待 Owner 裁决；Q8 已确认 UI 通过 REST 显示进度、失败和重试。本例源于截图中大量失败窗口被逐题展开的情形，请直接给整合后的 Review，不按 Q 编号逐条生成章节，并简述获准 Apply 后如何吸收到已有“删除生命周期”和“恢复行为”章节。",
+      "expected_output": "主控按设计主题整合整体方案、规则、边界例外与待裁决项；关联多轮来源 Q ID，显式说明 Q5 替代 Q2 的 Owner 批准依据，保留部分成功、对象缺失和自动重试待裁决语义。Apply 更新已有对应规则而非追加问答副本。",
+      "files": [],
+      "assertions": [
+        "Review 按概念组织，至少一个规则整合多个相关 Q；没有按全部 Q 逐题建章，也未把 6 条或任何数量当成配额；同一规则只在一处完整展开，跨主题使用引用，Apply 也指定唯一规范章节",
+        "Q1、Q3、Q4、Q5、Q6、Q8 的有效结论全部有归属并带来源 Q ID",
+        "Q2 明确被 Owner 批准的 Q5 替代，旧完成条件不再作为并行生效规则",
+        "部分成功保留进度、仅重试未完成项、对象缺失和全部完成后清理元数据的边界未丢失",
+        "Q7 自动重试仍单列待 Owner 裁决，没有被概括为已批准能力",
+        "整体方案、影响和停止依据可独立理解；Ledger 保留原问答，Review 展示整合结果",
+        "Apply 等待 Owner 明确批准，按已有文档章节更新和消除重复旧表述，同时保留有效状态与失败语义"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "恢复一个旧的 grill-legacy.md ledger：它的嵌入 JSON 含 67 个问题、多个批次和多轮答案。请保持只读查询，先给出紧凑 status，再用 list-questions 分页定位 Q3、Q41 和待用户裁决项，最后只用 get-question 取选中详情并说明何时需要 --history；不要把 67 个问题当作提问配额。假设一个已导入批原件后来缺失，另一个原件内容发生变化；说明 status、索引和详情命令各自的结果，以及首次 mutation 的 legacy 备份和原子发布顺序。最后按设计主题给出跨轮 Review 的整合方法。",
+      "expected_output": "先按 summary→分页索引→选中详情恢复，不展开整个旧 JSON；status 只显示计数、状态和路径，list-questions 返回分页的 ID/branch/preview/status/next_offset，get-question 只取所选有效详情，--history 才显示必要的历史。缺失或变更原件只让对应详情显式报错，不阻塞 status/index；首次 mutation 备份原字节、原子提交新 JSON 后再生成索引，跨轮 Review 按主题整合且不设问题数量配额。",
+      "files": [],
+      "assertions": [
+        "旧嵌入 JSON 保持只读查询；恢复路径是 status、分页 list-questions、选中 get-question，不使用 Get-Content 或等价方式展开全量状态",
+        "status 输出紧凑 counts/status/file paths；list-questions 支持 offset、limit、中文 status 和 branch 子串过滤，并返回 next_offset；get-question 支持多个 Q ID，history 默认关闭",
+        "67 个问题不被当成提问、追问或分页配额；/grilling 原有节奏继续决定问题展开",
+        "批原件按原路径和哈希校验；缺失或变更时详情返回明确错误，但 status 与索引仍可用",
+        "首次 mutation 备份原字节为 .legacy.md，先原子提交权威 JSON 再生成派生 Markdown 索引；索引失败不回滚 JSON，且不做批量迁移",
+        "跨轮 Review 按设计主题整合规则、边界、来源与待裁决项；直接答案/决策的必要前版本由 history 保留，不依赖通用事件日志"
+      ]
     }
   ]
 }
