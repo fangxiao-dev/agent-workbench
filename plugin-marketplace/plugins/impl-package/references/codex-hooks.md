@@ -16,7 +16,7 @@ python <plugin-root>/hooks/impl_package_hooks.py activate --package <package>
 
 绑定按 Codex session 与 Git worktree 隔离，保存在 worktree 本地 Git metadata，不进入仓库或 package artifact。绑定后，`SessionStart(startup|resume|compact)` 使用只读 situation render 注入 `Impl-Package Resume Capsule v1`；Capsule 是导航事实，不是 Evidence、Acceptance、Gate、closure 或 dispatch credential。
 
-Capsule 展示 blocking、runnable、withheld 与 in_flight；候选附带 `declaration_status` 和 `declaration_reason`，供恢复时判断清单新鲜度。`missing/stale` 本身不阻塞候选，主控仍按当前 dependency、授权、资源与 in-flight 判断。完整内容超过宿主预算时，改为明确标记 `projection-complete: false` 的计数摘要与完整只读投影入口，保持整个恢复提示在预算内。
+Capsule 展示 blocking、runnable、withheld 与 in_flight。投影只包含 renderer 派生的业务动作，不保证覆盖主控可发现的全部工作；主控仍按当前 dependency、授权、资源与 in-flight 判断。完整内容超过宿主预算时，改为明确标记 `projection-complete: false` 的计数摘要与完整只读投影入口，保持整个恢复提示在预算内。
 
 显式离开 package 工作时执行：
 

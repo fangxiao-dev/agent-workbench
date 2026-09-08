@@ -83,7 +83,8 @@ def test_dispatcher_correlates_receipt_return_and_delta_review() -> None:
         "code_delta",
         "consumption_id",
         "待派审事实",
-        "释放合适槽位后补派",
+        "待派审欠项",
+        "后续扫描继续处理",
     ):
         assert marker in skill
 

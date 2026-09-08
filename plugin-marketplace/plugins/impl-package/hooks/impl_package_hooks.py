@@ -316,8 +316,6 @@ def _resume_capsule(binding: dict[str, Any], rendered: dict[str, Any]) -> str:
         # New projections carry every candidate; the legacy cursor is fallback only.
         lines = [line for line in lines if not line.startswith(("selected:", "actions:", "parallel:"))]
         lines.append("projection-complete: true")
-        snapshot_fact = rendered.get("candidate_snapshot", {})
-        lines.append(f"candidate-snapshot: {snapshot_fact.get('status', 'unknown')} {snapshot_fact.get('reason', '')}".rstrip())
         for partition in ("blocking", "runnable", "withheld", "in_flight"):
             items = rendered.get(partition, [])
             lines.append(f"{partition}:")

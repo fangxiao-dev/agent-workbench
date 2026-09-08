@@ -1,5 +1,27 @@
 # Dispatcher、SDD 与 Dev With Track 联合调整提案
 
+## 大刀精简实施记录（2026-09-08）
+
+Owner 批准以 `dd6ed27` 为基线删除候选清单协议、漏派机会审计和容量推断，并选择由主控判断授权与资源、沿用现有判断和交接记录。本节替代下方两轮实施记录的清单合同；下文保留变更历史。本次源码与验证交付已 closed，范围内剩余项 0、待 Owner 决策项 0；Owner 已另行授权提交，未安装或发布。
+
+- 程序展示可由业务事实推导的动作，不承诺覆盖主控发现的全部工作；实际工作无需预登记。`candidate_id` 只标识已派发的工作及续接，保留 dispatch/return 身份、receipt、资源、增量与 review 关联。
+- 删除清单校验、匹配、指纹回退、补充候选分区与所有清单相关凭据字段。新写入拒绝旧清单 fact；历史清单只读忽略，旧 dispatch 附带的退役字段不影响恢复。主控恢复旧 Attempt 时仍读取并遵守旧记录中未解除的资源、授权限制。
+- 保留当前处境凭据、四类全局闸门、实际业务依赖、mode、在途与 DONE 防重；不新增独立 blocker fact。
+- 待派审记录只保存返回、固定增量、消费引用和原因。它是欠项，不因过去没空而永久阻塞；真实 review receipt 后转在途，独立结果仍由 owning review workflow 判断。
+- 审计只核查实际派发、归属、返回和审查时序；删除 `parallel_opportunities` 与容量恢复推断。`concurrent_dispatches` 表示已记录的在途区间重叠，附双方资源，不证明资源隔离安全或 CPU 并行。
+- 旧四键和 `legacy_digest` 输出本轮保留。下一次经授权安装同步后，核验启用宿主内容一致、直接消费者已使用新分区且历史恢复回归通过，再单独删除旧输出；旧日志 digest 读取兼容单独保留。DSH 已知失效入口仍未修复，目录不改；版本、Ticket schema、Gate 不变。
+
+本轮验证与净变化（相对基线，分组测试不累加）：
+
+| 分组 | 结果 |
+| --- | --- |
+| 运行代码（含 protocol） | 新增 82 行、删除 595 行，净减少 **513 行**。 |
+| 测试 | 新增 101 行、删除 550 行，净减少 **449 行**。 |
+| 文档（含本实施记录） | 新增 76 行、删除 67 行，净增加 **9 行**；包含本节历史证据记录。 |
+| 投影、宿主注入与审计 | `python -m pytest tests/test_situation_render.py tests/test_dev_with_track_situations_review_vocabulary.py tests/test_impl_package_hooks.py tests/test_dispatch_audit.py -q`：最终 **141 passed**。 |
+| CLI 与直接消费者 | CLI 派发/轨迹 24 项通过；清单记录移除后的序号断言已修正并定点复跑通过。另 4 项派审、实际 subject、退役写入兼容与序号定点通过；直接消费者与三宿主 manifest 合同 87 passed。 |
+| Skill / 静态 / review | Dispatcher 与 dev-with-track validator valid，编译和 diff-check 通过；固定核心快照 8/8 指纹一致，独立复核 PASS，无新增 P1/P2。DSH、`.ps1` 和版本 manifest diff 均为空。 |
+
 ## 修订记录：清单不再作为派发门槛（2026-09-08）
 
 Owner 已批准修订，基线为 `3e89ece6d9452db86a3f10e1c43402b7ba239003`。本节替代下方原实施记录中“必须先声明候选才能派发”的合同。本轮 7 项验收场景与验证要求已完成，源码修订 closed；范围内剩余项 0，待 Owner 决策项 0。Owner 已另行授权提交本轮修订。

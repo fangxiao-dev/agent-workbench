@@ -161,51 +161,12 @@ def test_rotated_trail_uses_current_file_only() -> None:
     assert "attempt.record.handoff-target-corrected" not in _primary_slugs(rendered)
 
 
-def _candidate_snapshot_row(
-    package: Path,
-    candidates: list[dict],
-    *,
-    seq: int,
-    available_slots: int | None = None,
-) -> dict:
-    value = {
-        "candidates": candidates,
-        "attempt": "fixture-attempt",
-        "head": situation.PackageReader(package, None).head(),
-        "state_sha256": hashlib.sha256(
-            (package / ".impl-package/state.json").read_bytes()
-        ).hexdigest(),
-    }
-    if available_slots is not None:
-        value["available_slots"] = available_slots
-    return {
-        "v": 1,
-        "seq": seq,
-        "ts": "2026-09-08T10:00:00Z",
-        "subject": "attempt",
-        "kind": "fact",
-        "key": "dispatch.candidates",
-        "value": value,
-    }
-
-
 def test_dispatch_outcomes_stay_bound_to_candidate_and_incomplete_is_recoverable() -> None:
     source = FIXTURES / "p1-multiple-ready"
     with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
         package = Path(temporary) / source.name
         shutil.copytree(source, package)
-        candidates = [
-            {
-                "candidate_id": candidate_id,
-                "subject": "ticket:TKT-01",
-                "mode": "implement",
-                "action_id": "implement",
-                "resource_keys": [f"worktree:{candidate_id}"],
-            }
-            for candidate_id in ("A", "B")
-        ]
         rows = [
-            _candidate_snapshot_row(package, candidates, seq=1, available_slots=2),
             {"v": 1, "seq": 2, "subject": "ticket:TKT-01", "kind": "dispatch", "dispatch_id": "dispatch-A", "candidate_id": "A", "mode": "implement", "chosen": "implement", "resource_keys": ["worktree:A"], "receipt": "worker-A", "worker": "worker-A", "outcome": "RUNNING", "returned": False},
             {"v": 1, "seq": 3, "subject": "ticket:TKT-01", "kind": "worker-return", "of": "dispatch-A", "return_id": "return-A", "outcome": "INCOMPLETE", "worker_mode": "implement"},
             {"v": 1, "seq": 4, "subject": "ticket:TKT-01", "kind": "dispatch", "dispatch_id": "dispatch-B", "candidate_id": "B", "mode": "implement", "chosen": "implement", "resource_keys": ["worktree:B"], "receipt": "worker-B", "worker": "worker-B", "outcome": "RUNNING", "returned": False},
@@ -215,12 +176,14 @@ def test_dispatch_outcomes_stay_bound_to_candidate_and_incomplete_is_recoverable
         ]
         trail = package / "execution/fixture-attempt/trail.jsonl"
         trail.parent.mkdir(parents=True, exist_ok=True)
+        trail.write_text(json.dumps(rows[0]) + "\n", encoding="utf-8")
+        running = json.loads(_render_text(package, "--json"))
+        assert [item["dispatch_id"] for item in running["in_flight"]] == ["dispatch-A"]
+        assert any(item.get("action_id") == "select-ready-ticket" for item in running["runnable"])
         trail.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
 
         rendered = json.loads(_render_text(package, "--json"))
 
-        declared = [item for item in rendered["runnable"] if item["source"] == "declared"]
-        assert [item["candidate_id"] for item in declared] == ["A"]
         assert any(
             item["slug"] == "ticket.implement.worker-incomplete-first"
             and item["dispatch_id"] == "dispatch-A"
@@ -255,130 +218,36 @@ def test_inflight_identity_distinguishes_independent_review_tracks():
                "action_id": "dispatch-delta-review", "mode": "verify", "resource_keys": [],
                "review_phase": "initial", "review_track": "Track A"}
     candidate = {**running, "candidate_id": "review-B", "review_track": "Track B"}
-    assert situation._candidate_blockers(snapshot, candidate, [], [], [running]) == []
+    assert situation._dispatch_blockers(snapshot, candidate, [], [running]) == []
     candidate["review_track"] = "Track A"
-    assert any("在途" in blocker["reason"] for blocker in situation._candidate_blockers(snapshot, candidate, [], [], [running]))
+    assert any("在途" in blocker["reason"] for blocker in situation._dispatch_blockers(snapshot, candidate, [], [running]))
 
 
-def test_unregistered_dispatch_suggestions_remain_runnable():
+def test_business_actions_are_runnable_without_registration():
     rendered = json.loads(_render_text(FIXTURES / "p4-acceptance-edge-held", "--json"))
     action = next(item for item in rendered["runnable"] if item.get("action_id") == "continue-implementation")
-    assert action["declaration_status"] == "missing"
+    assert "candidate_snapshot" not in rendered
+    assert "declaration_status" not in action
     assert "blockers" not in action
-    assert "declaration: missing" in _render_text(FIXTURES / "p4-acceptance-edge-held")
 
 
-def test_candidate_cannot_relabel_a_known_implementation_action_as_verify():
+def test_historical_registration_is_readable_but_not_projected():
     with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
         package = Path(temporary) / "package"
         shutil.copytree(FIXTURES / "p4-acceptance-edge-held", package)
-        before = json.loads(_render_text(package, "--json"))
-        action = next(item for item in before["runnable"] if item.get("action_id") == "continue-implementation")
-        candidate = {"candidate_id": "relabelled", "subject": action["subject"], "mode": "verify",
-                     "action_id": action["action_id"], "resource_keys": []}
         trail = package / "execution/fixture-attempt/trail.jsonl"
         trail.parent.mkdir(parents=True, exist_ok=True)
-        with trail.open("a", encoding="utf-8") as output:
-            output.write("\n" + json.dumps(_candidate_snapshot_row(package, [candidate], seq=100)) + "\n")
-        rendered = json.loads(_render_text(package, "--json"))
-        assert not any(item.get("candidate_id") == "relabelled" for item in rendered["runnable"])
-        held = next(item for item in rendered["withheld"] if item.get("candidate_id") == "relabelled")
-        assert any("mode" in item["reason"] for item in held["blockers"])
-        assert any(item["source"] == "situation" and item.get("action_id") == "continue-implementation" for item in rendered["runnable"])
-
-
-def test_candidate_checklist_completeness_does_not_remove_legal_work():
-    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
-        package = Path(temporary) / "package"
-        shutil.copytree(FIXTURES / "p4-acceptance-edge-held", package)
-        original = json.loads(_render_text(package, "--json"))
-        keys = lambda result: {(item["subject"], item["action_id"]) for item in result["runnable"]}
-        action = next(item for item in original["runnable"] if item.get("action_id") == "continue-implementation")
-        candidate = {"candidate_id": "B", "subject": action["subject"], "mode": action["mode"],
-                     "action_id": action["action_id"], "resource_keys": ["worktree:B"]}
-        trail = package / "execution/fixture-attempt/trail.jsonl"
-        trail.parent.mkdir(parents=True, exist_ok=True)
-        prior = trail.read_text(encoding="utf-8") if trail.exists() else ""
-        for status in ("current", "stale", "empty", "unrelated"):
-            candidates = [] if status == "empty" else [candidate]
-            if status == "unrelated":
-                candidates = [{**candidate, "candidate_id": "other", "action_id": "other"}]
-            row = _candidate_snapshot_row(package, candidates, seq=100)
-            if status == "stale":
-                row["value"]["state_sha256"] = "outdated"
-                row["value"]["head"] = "outdated"
-            trail.write_text(prior + "\n" + json.dumps(row) + "\n", encoding="utf-8")
-            result = json.loads(_render_text(package, "--json"))
-            assert keys(original) <= keys(result), status
-            if status in {"current", "stale"}:
-                assert next(item for item in result["runnable"] if item["candidate_id"] == "B")["declaration_status"] == status
-
-
-def test_stale_declarations_recheck_dependencies_and_keep_explicit_blockers():
-    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
-        package = Path(temporary) / "package"
-        shutil.copytree(FIXTURES / "p1-multiple-ready", package)
-        candidates = [
-            {"candidate_id": name, "subject": "ticket:TKT-01", "mode": "implement",
-             "action_id": "implement", "resource_keys": [name]}
-            for name in ("legal", "resource-held", "authorization-held")
-        ]
-        for candidate, kind in zip(candidates[1:], ("resource", "authorization")):
-            candidate["blockers"] = [{"type": kind, "subject": candidate["subject"], "reason": kind}]
-        row = _candidate_snapshot_row(package, candidates, seq=100)
-        row["value"]["state_sha256"] = "old"
-        trail = package / "execution/fixture-attempt/trail.jsonl"
-        trail.parent.mkdir(parents=True, exist_ok=True)
-        trail.write_text(json.dumps(row) + "\n", encoding="utf-8")
-        rendered = json.loads(_render_text(package, "--json"))
-        assert any(item["candidate_id"] == "legal" for item in rendered["runnable"])
-        assert {item["candidate_id"] for item in rendered["withheld"]} >= {"resource-held", "authorization-held"}
-        foreign = _candidate_snapshot_row(package, [], seq=101)
-        foreign["value"]["attempt"] = "other-attempt"
-        malformed = {**foreign, "seq": 102, "value": None}
         with trail.open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(foreign) + "\n" + json.dumps(malformed) + "\n")
-            bad_candidates = [{}, {**candidates[0], "mode": "review"},
-                              {**candidates[0], "resource_keys": {}},
-                              {**candidates[0], "blockers": [{"type": {}, "reason": "bad", "subject": "ticket:TKT-01"}]}]
-            for seq, bad_candidate in enumerate(bad_candidates, 103):
-                stream.write(json.dumps({**row, "seq": seq, "value": {**row["value"], "candidates": [bad_candidate]}}) + "\n")
-        preserved = json.loads(_render_text(package, "--json"))
-        assert preserved["candidate_snapshot"]["value"]["seq"] == 100
-        assert {item["candidate_id"] for item in preserved["withheld"]} >= {"resource-held", "authorization-held"}
-        state_path = package / ".impl-package/state.json"
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-        state["tickets"]["TKT-01"]["state"] = "BLOCKED"
-        state_path.write_text(json.dumps(state), encoding="utf-8")
-        held = json.loads(_render_text(package, "--json"))
-        assert not any(item["candidate_id"] == "legal" for item in held["runnable"])
+            stream.write("\n" + json.dumps({"kind": "fact", "subject": "attempt", "seq": 100,
+                "key": "dispatch.candidates", "value": {"candidates": [{"candidate_id": "old-only-work"}], "available_slots": 0}}) + "\n")
+        rendered = json.loads(_render_text(package, "--json"))
+        assert "candidate_snapshot" not in rendered
+        assert not any(item.get("candidate_id") == "old-only-work" for group in ("runnable", "withheld") for item in rendered[group])
+        assert any(item.get("action_id") == "continue-implementation" for item in rendered["runnable"])
+        assert not any("未知 fact key" in warning for warning in rendered.get("warnings", []))
 
 
-def test_declared_resource_blockers_preserve_shared_reading_and_local_scope():
-    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
-        package = Path(temporary) / "package"
-        shutil.copytree(FIXTURES / "p1-multiple-ready", package)
-        candidate = {"candidate_id": "B", "subject": "ticket:TKT-01", "mode": "verify",
-                     "action_id": "verify", "resource_keys": ["snapshot:stable"]}
-        rows = [_candidate_snapshot_row(package, [candidate], seq=1),
-                {"kind": "dispatch", "seq": 2, "dispatch_id": "A", "candidate_id": "A",
-                 "subject": "ticket:TKT-01", "mode": "verify", "resource_keys": ["snapshot:stable"],
-                 "worker": "reader-A", "receipt": "reader-A", "outcome": "RUNNING", "returned": False}]
-        trail = package / "execution/fixture-attempt/trail.jsonl"
-        trail.parent.mkdir(parents=True, exist_ok=True)
-        trail.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
-        shared = json.loads(_render_text(package, "--json"))
-        assert any(item.get("candidate_id") == "B" for item in shared["runnable"])
-        candidate["blockers"] = [{"type": "resource", "resource_key": "snapshot:stable", "reason": "caller confirmed incompatible observation"}]
-        rows.append(_candidate_snapshot_row(package, [candidate], seq=3))
-        trail.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
-        held = json.loads(_render_text(package, "--json"))
-        assert not held["blocking"]
-        assert not any(item.get("candidate_id") == "B" for item in held["runnable"])
-        assert any(item.get("candidate_id") == "B" and item["blockers"][0]["type"] == "resource" for item in held["withheld"])
-
-
-def test_pending_delta_review_survives_rotation_and_requires_later_capacity() -> None:
+def test_pending_delta_review_survives_rotation_without_capacity_gate() -> None:
     source = FIXTURES / "p1-multiple-ready"
     with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
         package = Path(temporary) / source.name
@@ -391,7 +260,6 @@ def test_pending_delta_review_survives_rotation_and_requires_later_capacity() ->
         ]
         active_rows = [
             {"v": 1, "seq": 4, "subject": "ticket:TKT-01", "kind": "dispatch", "dispatch_id": "review-wrong", "candidate_id": "review-A", "mode": "verify", "chosen": "dispatch-delta-review", "resource_keys": [], "receipt": "reviewer-wrong", "worker": "reviewer-wrong", "outcome": "RUNNING", "returned": False, "reviews": "return-A", "code_delta": {"base": "c" * 40, "head": "d" * 40}, "consumption_id": "consume-A"},
-            _candidate_snapshot_row(package, [], seq=5, available_slots=0),
         ]
         directory = package / "execution/fixture-attempt"
         directory.mkdir(parents=True, exist_ok=True)
@@ -400,34 +268,13 @@ def test_pending_delta_review_survives_rotation_and_requires_later_capacity() ->
         trail.write_text("\n".join(json.dumps(row) for row in active_rows) + "\n", encoding="utf-8")
 
         waiting = json.loads(_render_text(package, "--json"))
-        assert any(item.get("return_id") == "return-A" for item in waiting["withheld"])
+        assert any(item.get("return_id") == "return-A" for item in waiting["runnable"])
 
-        active_rows.append(_candidate_snapshot_row(package, [], seq=6, available_slots=1))
+        active_rows.append({**active_rows[0], "seq": 5, "dispatch_id": "review-correct", "candidate_id": "review-correct", "code_delta": delta})
         trail.write_text("\n".join(json.dumps(row) for row in active_rows) + "\n", encoding="utf-8")
-        recovered = json.loads(_render_text(package, "--json"))
-        review = next(item for item in recovered["runnable"] if item.get("return_id") == "return-A")
-        assert review["code_delta"] == delta
-        assert review["consumption_id"] == "consume-A"
-
-
-def test_review_capacity_snapshot_must_be_later_than_pending_fact() -> None:
-    delta = {"base": "a" * 40, "head": "b" * 40}
-    rows = [
-        {"seq": 1, "kind": "dispatch", "dispatch_id": "dispatch-A", "candidate_id": "A", "subject": "ticket:TKT-01", "mode": "implement", "resource_keys": [], "outcome": "RUNNING", "returned": False},
-        {"seq": 2, "subject": "ticket:TKT-01", "kind": "worker-return", "of": "dispatch-A", "return_id": "return-A", "outcome": "DONE", "code_delta": delta, "consumption_id": "consume-A"},
-        {"seq": 3, "subject": "ticket:TKT-01", "kind": "fact", "key": "review.dispatch_pending", "value": {"return_id": "return-A", "code_delta": delta, "consumption_id": "consume-A", "reason": "capacity", "capacity": 0}},
-    ]
-    context = _coverage_context(rows)
-    stale_capacity = situation._fact_value(
-        {"seq": 1, "candidates": [], "available_slots": 2}
-    )
-
-    runnable, withheld = situation._pending_review_partitions(
-        context.snapshot, stale_capacity
-    )
-
-    assert runnable == []
-    assert [item["return_id"] for item in withheld] == ["return-A"]
+        dispatched = json.loads(_render_text(package, "--json"))
+        assert not any(item.get("return_id") == "return-A" for item in dispatched["runnable"])
+        assert any(item.get("dispatch_id") == "review-correct" for item in dispatched["in_flight"])
 
 
 def test_cli_written_trail_rows_are_renderable() -> None:
@@ -523,7 +370,6 @@ def test_render_writes_situation_digest_credential() -> None:
             "legacy_digest",
             "ts",
             "state_sha256",
-            "runnable_candidate_ids",
             "head",
             "trail_seq",
             "blocking_slugs",
@@ -532,9 +378,7 @@ def test_render_writes_situation_digest_credential() -> None:
         assert rendered["attempt"] == attempt
         assert credential["digest"] == rendered["digest"]
         assert credential["legacy_digest"] == rendered["legacy_digest"]
-        assert credential["runnable_candidate_ids"] == [
-            item["candidate_id"] for item in rendered["runnable"]
-        ]
+
         assert len(credential["ts"]) > 10
         assert credential["state_sha256"] == hashlib.sha256(state_path.read_bytes()).hexdigest()
         assert not credential_bytes.startswith(b"\xef\xbb\xbf")

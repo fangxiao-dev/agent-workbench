@@ -16,7 +16,7 @@ package 形状，目的是让不阅读推导器实现的人也能构造 fixture�
 > 和 runtime validate 为准。本文不会把 situation parser 偶然接受的宽松形状写成完整
 > runtime 的推荐写法。
 
-`skills/dev-with-track/references/runtime-protocol.md` 在候选清单、dispatch、worker-return 或恢复的
+`skills/dev-with-track/references/runtime-protocol.md` 在 dispatch、worker-return、review 欠项或恢复的
 热路径只需读取 1.2、3.1 和 4.3 的 trail 合同；其它 `when` 事实表、fixture 与历史缺陷说明仅在
 排查、构造 fixture 或审计时读取。主控按第 10 节的新分区执行。
 
@@ -43,44 +43,31 @@ subject 不是自由标签。`attempt` scope 默认只看 trail 行的 `subject`
 `finding:<finding ID>` 或裸 finding ID。少数 attempt-level trail signal 会显式扫描全部 trail
 行，本文在对应 key 中标出。
 
-### 1.2 候选清单、dispatch 与新投影
+### 1.2 Dispatch、return 与新投影
 
-主控可用 `kind=fact,key=dispatch.candidates,subject=attempt` 写入辅助候选清单。
-`value.candidates` 是数组；每项带 `candidate_id/subject/mode/action_id/resource_keys`，可带逐候选
-`blockers`。CLI 自动补 `value.attempt/head/state_sha256`。指纹只说明清单新鲜度，不是语义 hash，
-也不拥有业务准入。投影为候选附加 `declaration_status=current|missing|stale` 与
-`declaration_reason`；该状态
-本身不是 blocker。关联声明按唯一 candidate_id、唯一 subject/action/resource footprint、唯一
-subject/action 的顺序判断；有歧义时不把某候选的局部限制套给其他工作。显式 resource_key
-仍按实际受影响资源检查。
-
-同一 Attempt 的旧清单即使 stale，renderer 仍按当前 state、typed dependency、授权、资源与
-in-flight 重新判断，并保留清单中显式 blocker。最新 `candidates=[]` 清除补充候选。没有清单时，
-合法的 situation action、主控机械动作和待派 review 仍可进入 `runnable`，状态为 `missing`。
-
-候选 subject 与 mode 有硬边界：`implement/fix` 必须使用 `ticket:<存在的 Ticket ID>`；
+工作无需候选清单预登记。`candidate_id` 是实际派发工作及其可信续接的身份；同一工作续接使用
+新的 `dispatch_id`，已经 `DONE` 的 candidate 不再派发。候选 subject 与 mode 有硬边界：
+`implement/fix` 必须使用 `ticket:<存在的 Ticket ID>`；
 `attempt` 和 `finding:<id>` 只允许 `investigate/verify`，且 finding ID 必须存在于已解析的
 `execution-findings.md`。Ticket/finding subject 都不能用自由标签代替。finding 候选进入 brief 时，
 同时保留已确认意见、定位和裁决，避免 worker 丢失线索后重新猜测。
 
-`resource_keys` 只记录主控声明的 effect footprint。相同 key 不自动构成冲突：稳定只读可以共享；
-只有主控确认存在不兼容副作用时，才在相关候选的 `blockers` 中写
-`type=resource` 与受影响的 `resource_key`。renderer 不推断资源、不求交集、不加自动锁。
+`resource_keys` 记录主控为本次 dispatch 选择的 effect footprint。相同 key 不自动构成冲突：
+稳定只读可以共享；不兼容副作用由主控判断并隔离或排序。renderer 不推断资源、不求交集、
+不加自动锁；授权与资源限制沿用现有 Execution Record、checkpoint 和 handoff，不建立独立
+blocker fact。
 
-新 dispatch 自身必须带 `dispatch_id/candidate_id/subject/resource_keys/receipt/mode/chosen`；
-`candidates_of` 可选，仅用于关联辅助清单。派发前重新 render 当前状态并使用 credential；
-subject、mode、resource、实际 dependency、已知 authorization/resource blocker 和同一工作
-in-flight 都按当前事实校验。CLI 自动把 `state_sha256` 与 `runnable_candidate_ids` 复制进
-dispatch 行作为审计证据，不把 ID 列表成员资格当作派发 gate。候选清单缺失或 stale 不放宽
-这些实时检查，也不额外阻止合法 dispatch。
-
-审计有完整清单时可以核对 dispatch 当时的候选全集；清单缺失或不完整时记为 uncheckable，
-不记违规，也不算通过。
+新 dispatch 必须带 `dispatch_id/candidate_id/subject/resource_keys/receipt/mode/chosen`。派发前重新
+render 当前状态并使用 credential。CLI 机械校验 identity、subject/mode 形状、implementation
+dependency、同一工作 in-flight 与全局 blocking；授权和资源冲突由主控根据当前事实判断，并由
+dispatch 记录选择结果。投影不承担主控工作清单，也不为 dispatch 授权。
 
 worker 返回使用 `kind=worker-return`，以 `of` 指向 dispatch_id，并带唯一 `return_id`。含代码
 增量时同时带完整 SHA 的 `code_delta={base,head}` 与 `consumption_id`。真实 delta review dispatch
-用 `reviews=<return_id>`、相同 code_delta/consumption_id 关联；容量不足用
-`review.dispatch_pending` fact 保留该增量。同一 dispatch_id 只接受一个 worker-return；原样
+用 `reviews=<return_id>`、相同 code_delta/consumption_id 关联；无法立即派审时用
+`review.dispatch_pending` 记录欠项，value 保留 `return_id/code_delta/consumption_id/reason`，
+不要求 capacity，也不形成永久资源门槛。真实 review receipt 转入 `in_flight`，主控消费独立
+审查结论后才可记录 `PASSED`。同一 dispatch_id 只接受一个 worker-return；原样
 return_id 重试幂等，迟到的第二个 return_id 被拒绝。该检查读取编号归档与活动 trail，因此轮换后
 仍按同一规则原样重试。renderer 对每个 dispatch 只采纳同 subject 的首个有效 return；迟到、
 重复、错 subject 和普通 Ticket 状态转换不会覆盖它。可信 worker 续接同一 candidate 时使用新的
@@ -88,11 +75,12 @@ dispatch_id；当前恢复动作只看该 candidate 的最新 dispatch，旧 cod
 
 render 新增 `blocking/runnable/withheld/in_flight`。`blocking` 只含 terminal-frozen、
 state-missing、projection-drift、anchor-mismatch 四个全局 P0；局部 foundation/acceptance/
-resource/authorization 原因逐候选进入 `withheld`。`source=situation` 的 dispatch 建议与主控机械
-动作都按当前事实分区；缺少匹配清单时仅标记 `declaration_status=missing`。`runnable` 全量呈现
-合法机械动作、补充候选与待派 delta review；`in_flight` 按 dispatch_id 展示真实在途工作。
-主控从这四个分区决策，不从旧 cursor 选单一动作。旧四键仅按旧优先级算法保留在 JSON 中供
-兼容消费者读取；`digest` 覆盖新四分区，`legacy_digest` 保留旧算法。
+resource/authorization 原因逐条派生动作进入 `withheld`；`runnable` 展示当前机械事实能推出的
+业务动作与待派 review；`in_flight` 按 dispatch_id 展示真实在途工作。这些分区不保证覆盖主控
+从完整交付范围发现的全部工作，主控仍需主动扫描和判断。
+
+机器只读忽略历史候选清单及其快照关联字段。恢复旧 Attempt 时，主控读取旧 trail/候选清单及
+Execution Record、checkpoint、handoff，沿用其中仍成立的授权和资源限制，无需重写旧记录。
 
 ### 1.3 unknown、false 和硬失败不是一回事
 
@@ -216,7 +204,7 @@ renderer 的 trail 输入是按编号排序的 `execution/<attempt-id>/trail.NNN
 | `kind` | 正式形状 | renderer 消费 |
 | --- | --- | --- |
 | `decision` | 历史形状：`subject`、`seq/id/decision_id/decisionId` 至少一个、`chosen` | 仅只读兼容旧 decision/result 配对；新运行不从该游标派发 |
-| `dispatch` | `subject`、`dispatch_id`、`candidate_id`、`resource_keys`、`receipt`、`mode`、`chosen`、`outcome:"RUNNING"`、`returned:false`、`worker`、`situation_digest`；可选 `candidates_of` | 使用当前 credential，并通过实时 dependency、授权、资源与 in-flight 校验；`runnable_candidate_ids` 只供审计。有 `candidates_of` 时核对辅助清单。匹配 `worker-return.of` 后关闭；review dispatch 还要用 `reviews/code_delta/consumption_id` 绑定原 return |
+| `dispatch` | `subject`、`dispatch_id`、`candidate_id`、`resource_keys`、`receipt`、`mode`、`chosen`、`outcome:"RUNNING"`、`returned:false`、`worker`、`situation_digest` | 使用当前 credential；CLI 机械校验 identity、subject/mode、implementation dependency、同一工作 in-flight 与全局 blocking，主控负责授权和资源判断。匹配 `worker-return.of` 后关闭；review dispatch 还要用 `reviews/code_delta/consumption_id` 绑定原 return |
 | `escape` | `subject`、`deviation`、`reason`；可带 `of` 关联 dispatch/decision | 记录偏离 renderer 建议或处境表未覆盖的决定；作为事件读取，不进入 fact 通道 |
 | `result` | `subject`、`outcome`；返回 decision 时带 `of`；direct evidence 放在 `ref/evidence/artifact/evidence_ref/direct_evidence`；CLI Ticket 终态转换可带 `transition=ticket-state`、`from`、`to` | outcome、incomplete、旧 direct-evidence 写法和 decision 关闭；`transition=ticket-state` 供 Ticket 边界 when-key 读取 |
 | `worker-return` | `subject`、`outcome`、`of`、`return_id`；代码增量同时带 `code_delta/consumption_id`；可带 direct-evidence payload | `subject` 必须匹配 dispatch；同一 `of` 只接受一个 return_id，完全相同事件跨归档重试幂等 |
@@ -252,6 +240,7 @@ trail 缺失或读取失败仍是输入不可用，不套用缺省值。
 | `trail.handoff_recovery_needed` | `unknown` | 没有 recovery 声明不能证明 bootstrap 正常，默认 false 会少提醒恢复动作。 |
 | `trail.handoff_target_corrected` | `unknown` | 没有 corrected 声明不能证明目标未修正，默认 false 会少提醒重发或取消。 |
 | `trail.reviewer_unavailable` | `unknown` | 没有 unavailable 声明不能证明 reviewer 可用，默认 false 会少提醒重新派发。 |
+| `review.dispatch_pending` | 结构化待派审欠项 | value 带 `return_id/code_delta/consumption_id/reason`；不要求 capacity，不代表 review 已派发或完成。 |
 | `review.canonical_summary` | `review` 的结构化 summary | 无默认值；由 review 流程写入并供追踪/统计消费 | `do-review` 的 ReviewRun 记录 |
 | `review.terminal_summary` | `review` 的结构化 terminal coverage summary | 无默认值；由 `attempt.terminal_coverage_complete` 按结果证据判定 | `attempt.review.terminal-coverage-incomplete` |
 
@@ -280,6 +269,10 @@ list，P1-P5 是无序 set；P0 存在时低层进入 `suppressed_matches`，否
 `parallel_matches`。这四键只供旧 JSON 消费者和历史审计兼容。主控运行时读取
 `blocking/runnable/withheld/in_flight`，不把 legacy `selected` 当成唯一下一动作，也不从
 `suppressed_matches` 推断工作不可推进。
+
+旧四键与 `legacy_digest` 的退役另行执行：下次获得安装同步授权后，先核验所有启用宿主内容
+一致、所有直接消费者已使用新分区，并通过历史恢复回归，再删除旧输出。旧日志中的 digest
+读取兼容单独保留，不与旧投影输出一起删除。
 
 ### 3.3 package-level `situations.yaml` override
 
@@ -481,17 +474,13 @@ Attempt ID：initial
 
 #### 最小 dispatch 事件链
 
-下面是 `trail append` 的两次独立输入。先 render 当前状态取得 candidate_id 与 credential，再由
-dispatch 自身声明 subject、mode 和 resources；第二行用 `of` 唯一归还该 dispatch。辅助清单和
-`candidates_of` 都可省略：
+下面是 `trail append` 的两次独立输入。先 render 当前状态取得 credential，再由
+dispatch 自身声明 subject、mode 和 resources；第二行用 `of` 唯一归还该 dispatch，不需预登记：
 
 ```jsonl
 {"subject":"ticket:TKT-01","kind":"dispatch","dispatch_id":"dispatch-01","candidate_id":"candidate-01","resource_keys":["worktree:a"],"receipt":"thread-01","mode":"implement","chosen":"implement","outcome":"RUNNING","worker":"worker-01","returned":false,"situation_digest":"0123456789ab"}
 {"subject":"ticket:TKT-01","kind":"worker-return","of":"dispatch-01","return_id":"return-01","outcome":"DONE"}
 ```
-
-若要补充清单，另写 `dispatch.candidates` fact；有 `candidates_of` 的 dispatch 必须引用对应清单。
-清单的 `head/state_sha256` 过期只把 declaration 标为 stale，当前业务与资源检查仍重新执行。
 
 `trail.jsonl` 每个非空行必须是 JSON object；空行忽略。坏 JSON 或非 object 不会让 renderer
 HF，但会把整个 TrailView 置为 error，所有依赖该 trail 的 key 通常变为 U。未知 fact key
@@ -501,7 +490,7 @@ HF，但会把整个 TrailView 置为 error，所有依赖该 trail 的 key 通�
 | --- | --- | --- |
 | `fact` | `subject`、`key`、`value`；key 必须属于 3.1 的闭合集合 | CLI 补 `ts/seq`；同 key 跨归档按 `ts/seq/读取顺序` 取最新；旧 `facts` object 只读兼容 |
 | `decision` | 历史 `subject`、关联 ID、`chosen` | 只读兼容旧 decision/result 配对；新派发使用当前投影与 dispatch |
-| `dispatch` | 1.2 和 3.1 列出的完整字段；`candidates_of` 可选 | 必须匹配当前 credential；有清单关联时额外核对该声明；`in_flight[]` 按 dispatch_id 标注 |
+| `dispatch` | 1.2 和 3.1 列出的完整字段 | 必须匹配当前 credential；CLI 执行 1.2 所列机械校验，授权与资源由主控判断；`in_flight[]` 按 dispatch_id 标注 |
 | `escape` | `subject`、`deviation`、`reason`；可带 `of` 关联 dispatch/decision | 偏离或表外处境的结构化事件；缺少这些字段不使 renderer 失败 |
 | `result` | `subject`、`outcome`；关闭 decision 可带 `of`/decision ID | 与 `worker-return` 统一为 result-like event |
 | `worker-return` | `subject`、`outcome`、`of`、`return_id`；代码增量成对带 `code_delta/consumption_id` | 同一 `of` 只接受一个 return_id；完全相同事件跨归档重试幂等；可携带 direct evidence |
@@ -859,11 +848,8 @@ parser 把它改写成 `result`。
 **应有行为**：下列 dispatch liveness 应建立一条按 dispatch 归属的 `in_flight[]` 标注：
 
 ```json
-{"subject":"ticket:TKT-01","kind":"dispatch","dispatch_id":"dispatch-01","candidate_id":"candidate-01","candidates_of":1,"mode":"implement","chosen":"implement","resource_keys":["worktree:a"],"receipt":"thread-01","outcome":"RUNNING","worker":"worker-01","returned":false,"situation_digest":"0123456789ab"}
+{"subject":"ticket:TKT-01","kind":"dispatch","dispatch_id":"dispatch-01","candidate_id":"candidate-01","mode":"implement","chosen":"implement","resource_keys":["worktree:a"],"receipt":"thread-01","outcome":"RUNNING","worker":"worker-01","returned":false,"situation_digest":"0123456789ab"}
 ```
-
-这里的 `candidates_of=1` 只演示可选清单关联；没有该字段的合法 dispatch 同样进入
-`in_flight[]`。
 
 `worker-return.of=dispatch-01` 关闭该项。在途 worker 是事实标注，不再命中一个默认 wait 的
 situation row；其它独立 runnable 候选仍同时呈现。
@@ -1025,15 +1011,15 @@ P0 内部顺序只决定旧四键的 `selected/other_matches/suppressed_matches`
 2. **建立 contexts 并枚举。** 从 state、Ticket 与 findings 建立合法 subject，对第 9 节全部 42 行求值。真值进入 `matches`，缺输入进入 `undetermined`，manual 保持单独列出；这些是诊断全集，不是单选 cursor。
 3. **先看 `blocking`。** 只有 terminal-frozen、state-missing、projection-drift、anchor-mismatch 四类全局事实阻止本轮全部 dispatch。其它命中继续参与候选分区。
 4. **核对 `in_flight`。** 按 dispatch_id 列出已派发且没有匹配 worker-return 的工作。它是并行安排与恢复事实，不会自动压掉无关 runnable。
-5. **核对候选清单状态。** 每项的 `declaration_status=current|missing|stale` 与 `declaration_reason` 只说明辅助记录新鲜度。stale 清单按当前事实重算并保留显式 blocker；最新空清单清除补充候选。`implement/fix` 绑定存在且 ready 的 Ticket；attempt/finding 只承载 investigate/verify，finding 必须存在。
-6. **读取 `runnable/withheld` 全集。** 当前 dependency、授权、实际资源冲突或同一工作 in-flight 形成 blocker 的候选进入 `withheld`；其余合法 situation action、主控机械动作、补充候选与待派 review 进入 `runnable`。missing/stale declaration 不改变分区结论。
-7. **按实际冲突安排。** `resource_keys` 相同只说明观察到同一资源，不自动表示互斥。主控把不兼容 effect footprint 写成 resource blocker；稳定读取可以并行，renderer 不建立资源锁。
-8. **派发或恢复。** dispatch 自身携带目标 subject、mode、resource_keys、identity 与 receipt；`candidates_of` 可选。任一状态输入变化后重新 render，并用实时 dependency、授权、资源与 in-flight 校验准入；credential 中的 `runnable_candidate_ids` 只供审计。在途返回按 `of` 跨归档恢复；无 worthwhile runnable 时可以等待，但 idle/in-flight 不代表 Ticket 或 package closed。
-9. **保留 legacy 输出。** `selected/parallel_matches/other_matches/suppressed_matches` 和 `legacy_digest` 继续按旧优先级生成，供旧消费者读取；主控不依据它们裁掉新分区中的候选。
+5. **读取派生分区。** `runnable/withheld` 只展示 renderer 能从当前机械事实推出的业务动作，不能当作主控工作的完整清单。`implement/fix` 仍绑定存在且 ready 的 Ticket；attempt/finding 只承载 investigate/verify，finding 必须存在。
+6. **扫描完整范围。** 主控结合批准合同、剩余工作、现有 ER/checkpoint/handoff 与现场事实发现其它工作，并自行判断授权和资源边界；投影没有列出不等于工作不可做。
+7. **按实际冲突安排。** `resource_keys` 相同只说明观察到同一资源，不自动表示互斥；稳定读取可以并行，不兼容 effect footprint 由主控隔离或排序，renderer 不建立资源锁。
+8. **派发或恢复。** dispatch 自身携带目标 subject、mode、resource_keys、candidate/dispatch identity 与 receipt。任一状态输入变化后重新 render；CLI 机械校验 implementation dependency、同一工作 in-flight 与全局 blocking，主控核对授权和资源。在途返回按 `of` 跨归档恢复；无 worthwhile runnable 时可以等待，但 idle/in-flight 不代表 Ticket 或 package closed。
+9. **保留 legacy 输出。** `selected/parallel_matches/other_matches/suppressed_matches` 和 `legacy_digest` 继续按旧优先级生成，供旧消费者读取；主控不依据它们裁掉新分区中的工作。退役门槛见 3.2。
 
 ### 10.1 关键分区边界
 
-- `ticket.investigate.no-carrier` 只覆盖 PENDING、无调查 carrier、无其它 typed 处境且 evidenceIndex 为空的 Ticket；命中只是一个待声明的 dispatch 建议。
+- `ticket.investigate.no-carrier` 只覆盖 PENDING、无调查 carrier、无其它 typed 处境且 evidenceIndex 为空的 Ticket；命中只是一个派生 dispatch 建议。
 - `attempt.gate.missing` 只在所有 Ticket terminal 且缺当前 Attempt Gate 时命中。普通 PENDING 窗口不会因缺 Gate 阻塞其它候选。
 - `attempt.accept.all-tickets-terminal` 是普通处境动作；只有四个 `GLOBAL_BLOCKING_SLUGS` 会清空新投影的 `runnable`。
 - worker 的 `INCOMPLETE/BLOCKED` 结论按 dispatch 归属。主控依据边界和上下文可信度决定续接、调查或换人，次数不产生自动升级。
@@ -1054,9 +1040,9 @@ P0 内部顺序只决定旧四键的 `selected/other_matches/suppressed_matches`
 
 ### 10.4 缺失或零行 trail 的降级补充
 
-缺失全部 `trail.NNN.jsonl` 与活动 `trail.jsonl`，或连续流没有事件时，候选 declaration 为
-missing，但这不阻止 situation 根据当前 package 事实产生合法 runnable。此时不存在已有
-dispatch identity 或可恢复的 worker-return 轴，不能把 `last_outcome=None` 或
+缺失全部 `trail.NNN.jsonl` 与活动 `trail.jsonl`，或连续流没有事件时，situation 仍可根据
+当前 package 事实产生派生业务动作。此时不存在已有 dispatch identity 或可恢复的 worker-return
+轴，不能把 `last_outcome=None` 或
 `incomplete_count=0` 当成“worker 已成功/从未失败”的运行事实，也不能据此派发、换人或关闭
 工作；dispatch-scoped action 没有归属输入。旧 result/dispatch 存在但缺 `of/dispatch_id` 时，
 跨工作聚合结果为 U。

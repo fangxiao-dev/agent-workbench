@@ -11,7 +11,7 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 
 1. **刷新业务事实。** 优先消费匹配当前 session/package 的 `Impl-Package Resume Capsule v1`；缺失或失配时执行 Restore，取得 current Attempt、canonical Ticket state、blocker、候选与 situation digest。
 2. **确定重点和候选范围。** 根据 typed dependency、批准合同与 evidence 选定当前交付重点，同时把范围内相关剩余工作交给 Dispatcher 看见。`implementation` edge 阻止绑定未稳定语义的实现；`acceptance` edge 只阻止正式验收与状态宣称；`release` edge 在 Gate 前复核。Decision/Spec 能唯一裁决时按 implementation defect 处理；存在多个合理业务结果时请求 Owner。
-3. **应用 `$dispatcher`。** 提供业务目标、事实、授权、候选 subject、dependency、acceptance 和禁改范围，由 Dispatcher 完成候选选择、brief、资源隔离、dispatch/receipt、worker return、delta review 与 idle。候选清单只辅助恢复与审计；缺失或过期时按当前事实重算，不构成业务 blocker。主控直接实现时遵守相同 write ownership、自证和独立 delta review 要求。Progress/checkpoint 不授权 dispatch。
+3. **应用 `$dispatcher`。** 提供业务目标、事实、授权、候选 subject、dependency、acceptance 和禁改范围，由 Dispatcher 完成候选选择、brief、资源隔离、dispatch/receipt、worker return、delta review 与 idle。工作无需预登记；资源与授权由主控按当前事实判断。主控直接实现时遵守相同 write ownership、自证和独立 delta review 要求。Progress/checkpoint 不授权 dispatch。
 4. **消费并记录。** 核对可归因 diff、evidence、residue、cleanup 和 review 状态；局部 `DONE`、`PASSED` 或 checkpoint PASS 只释放对应候选。随后用 package CLI 写 State、Evidence、Execution Record、Checkpoint 与 Trail；finding 的等级、disposition、影响范围和解决期限由本 Skill 判断。
 5. **判断继续或收口。** Dispatcher idle 后仍按 canonical State、Evidence、required review、manual acceptance、findings closure 与 Gate 判断继续、blocked 或 closure。每轮记录当前交付重点、可推进候选、局部 blocker 与恢复入口；局部等待不自动关闭 package。
 

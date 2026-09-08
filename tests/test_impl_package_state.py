@@ -78,20 +78,14 @@ class ImplPackageStateTests(unittest.TestCase):
         state_sha256: str | None = None,
         ts: str = "2026-08-18T10:00:00Z",
     ) -> None:
-        snapshot = engine.command_trail_append(package, json.dumps({
-            "kind": "fact", "subject": "attempt", "key": "dispatch.candidates",
-            "value": {"candidates": [{"candidate_id": "candidate-01", "subject": "attempt",
-                "mode": "verify", "action_id": "dispatch-verify", "resource_keys": []}]},
-        }))
-        self._candidate_seq = snapshot["seq"]
+        rows = engine._active_trail_rows(package, "initial")
         state_path = package / ".impl-package/state.json"
         credential = {
             "digest": digest,
             "ts": ts,
             "state_sha256": state_sha256 or hashlib.sha256(state_path.read_bytes()).hexdigest(),
             "head": git(package, "rev-parse", "HEAD"),
-            "trail_seq": snapshot["seq"],
-            "runnable_candidate_ids": ["candidate-01"],
+            "trail_seq": max((row["seq"] for row in rows), default=0),
         }
         path = package / "execution" / "initial" / "situation-digest.json"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -99,7 +93,7 @@ class ImplPackageStateTests(unittest.TestCase):
 
     def dispatch_fields(self) -> dict:
         return {"dispatch_id": "dispatch-01", "candidate_id": "candidate-01",
-                "candidates_of": getattr(self, "_candidate_seq", 1), "chosen": "dispatch-verify",
+                "chosen": "dispatch-verify",
                 "mode": "verify", "resource_keys": [], "receipt": {"worker_id": "worker-01"}}
 
     def render_current(self, package: Path, *args: str) -> dict:
@@ -116,12 +110,12 @@ class ImplPackageStateTests(unittest.TestCase):
                  **fields, "situation_digest": self.render_current(package)["digest"]}
         return engine.command_trail_append(package, json.dumps(event))
 
-    def test_missing_checklist_allows_dispatch_but_not_dependency_or_inflight_bypass(self):
+    def test_dispatch_identity_dependencies_and_independent_work(self):
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
         self.append_dispatch(package)
-        self.assertEqual(engine._active_trail_rows(package, "initial")[-1]["declaration_status"], "missing")
+        self.assertFalse(engine.RETIRED_DISPATCH_FIELDS & engine._active_trail_rows(package, "initial")[-1].keys())
         for overrides in ({"candidate_id": "renamed"}, {"candidate_id": "renamed", "mode": "verify"},
                           {"candidate_id": "child", "subject": "ticket:TKT-02", "chosen": "implement-child"}):
             with self.subTest(overrides=overrides), self.assertRaises(engine.StateError):
@@ -147,55 +141,8 @@ class ImplPackageStateTests(unittest.TestCase):
                 **self.dispatch_fields(), "kind": "dispatch", "subject": "attempt", "worker": "worker-01",
                 "outcome": "RUNNING", "returned": False, "situation_digest": projection["digest"]}))
 
-    def test_malformed_checklist_reference_does_not_block_legal_dispatch(self):
-        temp, repo, package = self.make_repo()
-        self.addCleanup(temp.cleanup)
-        self.init(repo, package)
-        self.write_situation_digest(package)
-        row = engine._active_trail_rows(package, "initial")[-1]
-        bad_seq = row["seq"] + 1
-        with (package / "execution/initial/trail.jsonl").open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps({**row, "seq": bad_seq, "value": {**row["value"], "candidates": None}}) + "\n")
-        self.append_dispatch(package, **{**self.dispatch_fields(), "candidates_of": bad_seq, "subject": "attempt"})
-        self.assertEqual(engine._active_trail_rows(package, "initial")[-1]["declaration_status"], "stale")
 
-    def test_stale_checklist_allows_work_after_checkpoint_evidence_and_commit(self):
-        temp, repo, package = self.make_repo()
-        self.addCleanup(temp.cleanup)
-        self.init(repo, package)
-        self.write_situation_digest(package)
-        seq = self._candidate_seq
-        self.add_evidence(repo, package)
-        self.cli(repo, package, "recovery", "checkpoint", "--subject", "attempt", "--next", "continue",
-                 "--evidence", "evidence.md")
-        git(repo, "add", ".")
-        git(repo, "commit", "-m", "record checkpoint")
-        self.append_dispatch(package, **{**self.dispatch_fields(), "candidates_of": seq, "subject": "attempt"})
-        self.assertEqual(engine._active_trail_rows(package, "initial")[-1]["declaration_status"], "stale")
-        self.assertEqual(sum(row.get("key") == "dispatch.candidates" for row in engine._active_trail_rows(package, "initial")), 1)
-
-    def test_stale_explicit_blockers_cannot_be_bypassed_by_omitting_reference(self):
-        temp, repo, package = self.make_repo()
-        self.addCleanup(temp.cleanup)
-        self.init(repo, package)
-        candidates = [{"candidate_id": kind, "subject": "ticket:TKT-01", "mode": "implement",
-                       "action_id": kind, "resource_keys": [kind],
-                       "blockers": [{"type": kind, "subject": "ticket:TKT-01", "reason": "confirmed " + kind}]}
-                      for kind in ("resource", "authorization")]
-        engine.command_trail_append(package, json.dumps({"kind": "fact", "subject": "attempt",
-            "key": "dispatch.candidates", "value": {"candidates": candidates}}))
-        self.cli(repo, package, "recovery", "checkpoint", "--subject", "attempt", "--next", "continue", "--evidence", "evidence.md")
-        for kind in ("resource", "authorization"):
-            for mode in ("implement", "verify"):
-                with self.subTest(kind=kind, mode=mode), self.assertRaisesRegex(engine.StateError, "confirmed"):
-                    self.append_dispatch(package, candidate_id="renamed", chosen=kind, mode=mode, resource_keys=["renamed:" + kind])
-        engine.command_trail_append(package, json.dumps({"kind": "fact", "subject": "attempt",
-            "key": "dispatch.candidates", "value": {"candidates": [{"candidate_id": "child",
-                "subject": "ticket:TKT-02", "mode": "implement", "action_id": "custom-child", "resource_keys": ["child"]}]}}))
-        with self.assertRaisesRegex(engine.StateError, "mode"):
-            self.append_dispatch(package, candidate_id="renamed", subject="ticket:TKT-02", chosen="custom-child", mode="verify", resource_keys=["changed"])
-
-    def test_pending_review_can_dispatch_without_checklist(self):
+    def test_pending_review_is_visible_until_actual_review_receipt(self):
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
@@ -203,11 +150,34 @@ class ImplPackageStateTests(unittest.TestCase):
         delta = {"base": git(repo, "rev-parse", "HEAD"), "head": git(repo, "rev-parse", "HEAD")}
         engine.command_trail_append(package, json.dumps({"kind": "worker-return", "subject": "ticket:TKT-01",
             "of": "A", "return_id": "return-A", "outcome": "DONE", "code_delta": delta, "consumption_id": "consume-A"}))
+        engine.command_trail_append(package, json.dumps({"kind": "fact", "subject": "ticket:TKT-01",
+            "key": "review.dispatch_pending", "value": {"return_id": "return-A", "code_delta": delta,
+            "consumption_id": "consume-A", "reason": "reviewer was unavailable"}}))
         projection = self.render_current(package)
         self.assertTrue(any(item.get("return_id") == "return-A" for item in projection["runnable"]))
         self.append_dispatch(package, dispatch_id="review-A", candidate_id="review:return-A", mode="verify",
             chosen="dispatch-delta-review", worker="reviewer", receipt="reviewer", reviews="return-A",
             code_delta=delta, consumption_id="consume-A", resource_keys=[])
+        projection = self.render_current(package)
+        self.assertFalse(any(item.get("return_id") == "return-A" for item in projection["runnable"]))
+        self.assertTrue(any(item.get("dispatch_id") == "review-A" for item in projection["in_flight"]))
+
+    def test_actual_dispatch_subject_is_canonical_and_mutations_are_ticket_scoped(self):
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        for subject, mode in (("TKT-02", "implement"), ("ticket:missing", "implement"), ("attempt", "fix"), ("finding:missing", "verify")):
+            with self.subTest(subject=subject), self.assertRaisesRegex(engine.StateError, "subject"):
+                self.append_dispatch(package, subject=subject, mode=mode, chosen="custom-work")
+
+    def test_retired_registration_cannot_be_written_and_old_dispatch_metadata_is_ignored(self):
+        with self.assertRaisesRegex(engine.StateError, "fact key"):
+            engine._validate_trail_event({"kind": "fact", "subject": "attempt", "key": "dispatch.candidates", "value": {"candidates": []}})
+        event = {**self.dispatch_fields(), "kind": "dispatch", "subject": "attempt", "worker": "worker-01",
+                 "outcome": "RUNNING", "returned": False, "situation_digest": "a1b2c3d4e5f6"}
+        legacy = {**event, "candidates_of": 7, "declaration_status": "current", "runnable_candidate_ids": ["candidate-01"], "state_sha256": "old"}
+        self.assertEqual(engine._validate_trail_event(dict(legacy)), event)
+        self.assertTrue(engine._same_event(legacy, event))
 
     def test_dispatch_contract_requires_identity_resources_and_receipt(self) -> None:
         valid = {**self.dispatch_fields(), "kind": "dispatch", "subject": "attempt",
@@ -224,36 +194,6 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(engine._validate_trail_event(returned), returned)
         with self.assertRaises(engine.StateError):
             engine._validate_trail_event({**returned, "code_delta": {"base": "a" * 7, "head": "b" * 40}})
-        candidate = {"candidate_id": "A", "subject": "attempt", "mode": "verify", "action_id": "verify", "resource_keys": []}
-        for malformed in ({}, {**candidate, "mode": "review"}, {**candidate, "resource_keys": {}},
-                          {**candidate, "blockers": [{"type": {}, "reason": "bad", "subject": "attempt"}]}):
-            with self.subTest(malformed=malformed), self.assertRaises(engine.StateError):
-                engine._validate_candidate_snapshot({"candidates": [malformed]})
-
-    def test_candidate_snapshot_binding_and_empty_replacement(self) -> None:
-        temp, repo, package = self.make_repo()
-        self.addCleanup(temp.cleanup)
-        self.init(repo, package)
-        before = (package / ".impl-package/state.json").read_bytes()
-        self.write_situation_digest(package)
-        snapshot = engine._active_trail_rows(package, "initial")[-1]
-        self.assertEqual(snapshot["value"]["attempt"], "initial")
-        self.assertEqual(snapshot["value"]["head"], git(repo, "rev-parse", "HEAD"))
-        self.assertEqual(snapshot["value"]["state_sha256"], hashlib.sha256(before).hexdigest())
-        self.assertEqual((package / ".impl-package/state.json").read_bytes(), before)
-        self.cli(repo, package, "trail", "append", input_text=json.dumps({
-            "kind": "fact", "key": "dispatch.candidates", "subject": "attempt", "value": {"candidates": []}}))
-        rendered = subprocess.run([sys.executable, str(CLI.with_name("situation.py")), "render", "--package", str(package), "--json"],
-                                  cwd=repo, text=True, capture_output=True, check=False)
-        self.assertEqual(rendered.returncode, 0, rendered.stderr)
-        projection = json.loads(rendered.stdout)
-        self.assertEqual(projection["candidate_snapshot"]["value"]["candidates"], [])
-        self.assertFalse(any(item.get("candidate_id") == "candidate-01" for item in projection["runnable"]))
-        stale = self.cli(repo, package, "trail", "append", ok=False, input_text=json.dumps({
-            **self.dispatch_fields(), "kind": "dispatch", "subject": "attempt", "worker": "worker-01",
-            "outcome": "RUNNING", "returned": False, "situation_digest": projection["digest"]}))
-        self.assertEqual(stale.returncode, 0, stale.stderr)
-        self.assertEqual(engine._active_trail_rows(package, "initial")[-1]["declaration_status"], "stale")
 
     def test_dispatch_retry_and_return_identity_survive_handoff_archive(self) -> None:
         temp, repo, package = self.make_repo()
@@ -293,27 +233,6 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertNotEqual(late.returncode, 0)
         self.assertIn("already has a worker-return", late.stderr)
 
-    def test_candidate_subjects_are_canonical_and_mutation_is_ticket_scoped(self) -> None:
-        temp, repo, package = self.make_repo()
-        self.addCleanup(temp.cleanup)
-        self.init(repo, package)
-        for subject, mode in (("TKT-02", "implement"), ("ticket:missing", "implement"), ("attempt", "fix"), ("finding:missing", "verify")):
-            candidate = {"candidate_id": "candidate", "subject": subject, "mode": mode,
-                         "action_id": "work", "resource_keys": []}
-            rejected = self.cli(repo, package, "trail", "append", ok=False, input_text=json.dumps({
-                "kind": "fact", "key": "dispatch.candidates", "subject": "attempt", "value": {"candidates": [candidate]}}))
-            self.assertNotEqual(rejected.returncode, 0, subject)
-            self.assertIn("subject", rejected.stderr)
-        candidate = {"candidate_id": "held-child", "subject": "ticket:TKT-02", "mode": "implement",
-                     "action_id": "implement-child", "resource_keys": []}
-        self.cli(repo, package, "trail", "append", input_text=json.dumps({
-            "kind": "fact", "key": "dispatch.candidates", "subject": "attempt", "value": {"candidates": [candidate]}}))
-        rendered = subprocess.run([sys.executable, str(CLI.with_name("situation.py")), "render", "--package", str(package), "--json"],
-                                  cwd=repo, text=True, capture_output=True, check=True)
-        projection = json.loads(rendered.stdout)
-        self.assertFalse(any(item.get("candidate_id") == "held-child" for item in projection["runnable"]))
-        withheld = next(item for item in projection["withheld"] if item.get("candidate_id") == "held-child")
-        self.assertTrue(any(blocker["type"] == "foundation" for blocker in withheld["blockers"]))
 
     def add_evidence(self, repo: Path, package: Path, *, revision: str | None = None, environment: str = "test") -> None:
         revision = revision or git(repo, "rev-parse", "HEAD")
@@ -901,12 +820,12 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(json.loads(fact.stdout)["appended"], True)
         self.assertEqual(json.loads(dispatch.stdout)["appended"], True)
         rows = [json.loads(line) for line in (package / "execution/initial/trail.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertEqual([row["seq"] for row in rows], [1, 2, 3])
+        self.assertEqual([row["seq"] for row in rows], [1, 2])
         for row in rows:
             self.assertEqual(row["v"], 1)
             self.assertTrue(row["ts"].endswith("Z"))
             self.assertEqual(row["head"], git(repo, "rev-parse", "HEAD"))
-        self.assertEqual(rows[2]["situation_digest"], "a1b2c3d4e5f6")
+        self.assertEqual(rows[1]["situation_digest"], "a1b2c3d4e5f6")
 
     def test_trail_append_named_flags_merge_into_event(self) -> None:
         temp, repo, package = self.make_repo()

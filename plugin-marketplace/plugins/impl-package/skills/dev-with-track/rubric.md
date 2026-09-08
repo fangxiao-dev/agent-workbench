@@ -14,11 +14,11 @@
 - finding 的等级、disposition、影响范围和期限归本 Skill；修复安排由 Dispatcher 按影响与资源选择。
 - shared seam、安全、数据完整性、并发、migration、权限、不可逆外部副作用七类 material risk 产生 formal review requirement。
 - 每个代码 return 的 delta review 节拍归 Dispatcher；本 Skill只消费结果，不克隆派审规则。
-- 候选清单只辅助恢复与审计；missing/stale 不阻塞按当前业务事实重算出的合法工作，旧显式 blocker 保留到最新清单更新。
+- 工作无需候选清单预登记；主控按当前业务事实、授权、资源和 in-flight 选择，旧 Attempt 从既有 trail/候选清单及 ER/checkpoint/handoff 只读恢复仍成立的限制。
 
 ## 2026-09-08 consolidation
 
 - Owner 批准把 Dispatcher 与 SDD 合并为单一 model-invoked 入口。
-- 业务循环从“唯一下一动作”改为“交付重点 + 相关剩余工作范围”，避免局部等待缩窄整个 Attempt；持久候选清单仅作辅助。
+- 业务循环从“唯一下一动作”改为“交付重点 + 相关剩余工作范围”，避免局部等待缩窄整个 Attempt。
 - finding 可立即修、随相关工作修或隔离并行修；review 来源不再固定安排。
 - SDD material review gate 的七类启发式迁入本 Skill，formal topology 与 closure 继续归 do-review。

@@ -21,11 +21,6 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from situation import (
-    FileView,
-    FINDINGS_REL,
-    _parse_findings,
-    candidate_subject_error,
-    candidate_snapshot_error,
     dispatch_admission,
     FACT_KEYS,
     REVIEW_PHASES,
@@ -52,6 +47,7 @@ TIMINGS = {"early-falsification", "remaining-completion"}
 CONCLUSIONS = {"supporting", "contradictory", "inconclusive"}
 DISPOSITIONS = {"waived", "superseded"}
 TRAIL_APPEND_KINDS = frozenset({"dispatch", "escape", "fact", "worker-return"})
+RETIRED_DISPATCH_FIELDS = frozenset({"candidates_of", "declaration_status", "declaration_reason", "runnable_candidate_ids", "state_sha256"})
 TRAIL_COMMON_FIELDS = frozenset({"v", "seq", "ts", "head"})
 TRAIL_DIGEST_RE = re.compile(r"^[0-9a-fA-F]{12}$")
 FIXED_COMMIT_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
@@ -1461,20 +1457,12 @@ def _validate_code_delta(value: Any) -> dict[str, str]:
     return value
 
 
-def _validate_candidate_snapshot(value: Any) -> None:
-    error = candidate_snapshot_error(value)
-    if error:
-        raise StateError(error)
-
-
 def _validate_review_pending(value: Any) -> None:
     if not isinstance(value, dict):
         raise StateError("review.dispatch_pending value must be an object")
     for field in ("return_id", "consumption_id", "reason"):
         _trail_text_field(value, field, "review.dispatch_pending")
     _validate_code_delta(value.get("code_delta"))
-    if value.get("capacity") != 0:
-        raise StateError("review.dispatch_pending capacity must equal 0")
 
 
 def _validate_dispatch_situation_digest(package: Path, attempt: str, event: dict[str, Any]) -> None:
@@ -1509,13 +1497,6 @@ def _validate_dispatch_situation_digest(package: Path, attempt: str, event: dict
     )
     if credential.get("head") != current_head or credential.get("trail_seq") != current_seq:
         raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；HEAD 或 trail 已更新")
-    runnable_candidate_ids = credential.get("runnable_candidate_ids")
-    if not isinstance(runnable_candidate_ids, list) or any(
-        not isinstance(item, str) or not item.strip() for item in runnable_candidate_ids
-    ):
-        raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；凭据缺少 runnable_candidate_ids")
-    event["state_sha256"] = state_sha256
-    event["runnable_candidate_ids"] = runnable_candidate_ids
 
 
 def _validate_review_dispatch_fields(event: dict[str, Any]) -> None:
@@ -1571,12 +1552,9 @@ def _validate_trail_event(event: dict[str, Any]) -> dict[str, Any]:
             raise StateError(f"trail append rejected fact key {key!r}：{describe_unknown_fact_keys((key,))}")
         if "value" not in event:
             raise StateError("trail fact requires value")
-        if key == "dispatch.candidates":
-            if event["subject"] != "attempt":
-                raise StateError("dispatch.candidates subject must be attempt")
-            _validate_candidate_snapshot(event["value"])
-        elif key == "review.dispatch_pending":
+        if key == "review.dispatch_pending":
             _validate_review_pending(event["value"])
+            event["value"].pop("capacity", None)
     elif kind == "escape":
         _trail_text_field(event, "deviation", kind)
         _trail_text_field(event, "reason", kind)
@@ -1586,9 +1564,8 @@ def _validate_trail_event(event: dict[str, Any]) -> dict[str, Any]:
             _trail_text_field(event, field, kind)
         if event["mode"] not in {"investigate", "implement", "fix", "verify"}:
             raise StateError("trail dispatch mode must be investigate|implement|fix|verify")
-        candidates_of = event.get("candidates_of")
-        if "candidates_of" in event and (not isinstance(candidates_of, int) or isinstance(candidates_of, bool) or candidates_of < 1):
-            raise StateError("trail dispatch candidates_of must be a positive snapshot seq")
+        for field in RETIRED_DISPATCH_FIELDS:
+            event.pop(field, None)
         _validate_resource_keys(event.get("resource_keys"), "dispatch resource_keys")
         validate_dispatch_receipt(event.get("receipt"))
         if event.get("outcome") != "RUNNING" or event.get("returned") is not False:
@@ -1636,54 +1613,17 @@ def _active_trail_rows(package: Path, attempt: str) -> list[dict[str, Any]]:
 
 
 def _same_event(existing: dict[str, Any], event: dict[str, Any]) -> bool:
-    automatic = TRAIL_COMMON_FIELDS | {"state_sha256", "runnable_candidate_ids", "declaration_status"}
+    automatic = TRAIL_COMMON_FIELDS | RETIRED_DISPATCH_FIELDS
     return (
         {key: value for key, value in existing.items() if key not in automatic}
         == {key: value for key, value in event.items() if key not in automatic}
     )
 
 
-def _candidate_snapshot_row(rows: list[dict[str, Any]], seq: int | None) -> dict[str, Any] | None:
-    snapshots = [
-        row
-        for row in rows
-        if row.get("kind") == "fact"
-        and row.get("key") == "dispatch.candidates"
-        and row.get("subject") == "attempt"
-        and isinstance(row.get("seq"), int)
-    ]
-    if not snapshots:
-        return None
-    latest = max(snapshots, key=lambda row: row["seq"])
-    return latest if latest["seq"] == seq else None
-
-
-def _validate_dispatch_against_snapshot(
-    package: Path,
-    attempt: str,
-    event: dict[str, Any],
-    rows: list[dict[str, Any]],
-) -> None:
-    reused = [row for row in rows if row.get("kind") == "dispatch" and row.get("dispatch_id") == event["dispatch_id"]]
-    if reused and not any(_same_event(row, event) for row in reused):
-        raise StateError(f"dispatch_id already exists: {event['dispatch_id']}")
-    snapshot = _candidate_snapshot_row(rows, event.get("candidates_of"))
-    value = snapshot.get("value") if snapshot else None
-    state_sha256 = hashlib.sha256((package / STATE_PATH).read_bytes()).hexdigest()
-    head = _run_git(_repo_root(package), "rev-parse", "HEAD")
-    if candidate_snapshot_error(value) is None and value.get("attempt") == attempt and value.get("head") == head and value.get("state_sha256") == state_sha256:
-        candidate = next((item for item in value.get("candidates", [])
-                          if isinstance(item, dict) and item.get("candidate_id") == event["candidate_id"]), None)
-        if candidate is not None:
-            expected = {"subject": candidate.get("subject"), "mode": candidate.get("mode"),
-                        "chosen": candidate.get("action_id"), "resource_keys": candidate.get("resource_keys")}
-            mismatched = [field for field, expected_value in expected.items() if event.get(field) != expected_value]
-            if mismatched:
-                raise StateError("trail dispatch does not match candidate snapshot: " + ", ".join(mismatched))
-    blockers, declaration_status = dispatch_admission(package, event)
+def _validate_actual_dispatch(package: Path, event: dict[str, Any], rows: list[dict[str, Any]]) -> None:
+    blockers = dispatch_admission(package, event)
     if blockers:
         raise StateError("trail dispatch is withheld: " + "; ".join(blocker["reason"] for blocker in blockers))
-    event["declaration_status"] = declaration_status
 
     if "reviews" in event:
         _trail_text_field(event, "reviews", "dispatch")
@@ -1775,31 +1715,11 @@ def command_trail_append(
                 "appended": False,
                 "seq": same.get("seq"),
             }
-    if event["kind"] == "fact" and event.get("key") == "dispatch.candidates":
-        finding_ids = []
-        if any(item["subject"].startswith("finding:") for item in event["value"]["candidates"]):
-            finding_path = package / FINDINGS_REL
-            view = FileView(FINDINGS_REL, text=finding_path.read_text(encoding="utf-8") if finding_path.is_file() else None)
-            finding_ids = [finding.identifier for finding in _parse_findings(view).findings]
-        for candidate in event["value"]["candidates"]:
-            error = candidate_subject_error(candidate, state["tickets"], finding_ids)
-            if error:
-                raise StateError(error)
-        supplied = {"attempt", "head", "state_sha256"} & event["value"].keys()
-        if supplied:
-            raise StateError("trail append fills dispatch.candidates metadata; omit " + ", ".join(sorted(supplied)))
-        event["value"].update(
-            {
-                "attempt": summary["attempt"],
-                "head": _run_git(_repo_root(package), "rev-parse", "HEAD"),
-                "state_sha256": hashlib.sha256((package / STATE_PATH).read_bytes()).hexdigest(),
-            }
-        )
-    elif event["kind"] == "fact" and event.get("key") == "review.dispatch_pending":
+    if event["kind"] == "fact" and event.get("key") == "review.dispatch_pending":
         _validate_review_pending_against_return(event, rows)
     elif event["kind"] == "dispatch":
         _validate_dispatch_situation_digest(package, summary["attempt"], event)
-        _validate_dispatch_against_snapshot(package, summary["attempt"], event, rows)
+        _validate_actual_dispatch(package, event, rows)
     elif event["kind"] == "worker-return":
         _validate_worker_return(event, rows)
         same = next((row for row in rows if row.get("kind") == "worker-return" and _same_event(row, event)), None)

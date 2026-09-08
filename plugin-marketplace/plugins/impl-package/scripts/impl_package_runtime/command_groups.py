@@ -46,8 +46,6 @@ def _situation_footer(package: Path) -> str | None:
             return None
         if "runnable" in rendered:
             lines = [f"[处境] digest={_text(rendered.get('digest'))}"]
-            candidate_snapshot = rendered.get("candidate_snapshot", {})
-            lines.append(f"candidate-snapshot: {candidate_snapshot.get('status', 'unknown')} {candidate_snapshot.get('reason', '')}".rstrip())
             for partition in ("blocking", "runnable", "withheld", "in_flight"):
                 lines.append(f"{partition}:")
                 items = rendered.get(partition, [])

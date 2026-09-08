@@ -13,9 +13,9 @@ updated: 2026-09-08
 - [已确认] `investigate | implement | fix | verify` 与三组 outcome 词汇整体保留，供通用路径和 Impl-Package 使用。
 - [已确认] worker brief 保留成功行为、不变量、ownership、真实路径验证、返回边界和 cleanup；同一结果的机械附属留在一次委派。
 - [已确认] worker/reviewer 复用取决于相关上下文可信、ownership 与 scope 稳定；Topic 名称、固定等待时间和 `INCOMPLETE` 次数不机械驱动换人。
-- [已确认] 每个代码 return 在同次消费中固定增量并及时派独立 delta review；容量不足记录具体待派审事实并在槽位恢复后补派。
+- [已确认] 每个代码 return 在同次消费中固定增量并及时派独立 delta review；无法立即派审时记录具体欠项并在后续扫描处理。
 - [已确认] formal review 的业务 requirement 归 owning workflow；Impl-Package 的七类 material risk 归 dev-with-track，topology/coverage/closure 归 do-review。
-- [已确认] Impl-Package 候选清单是恢复/审计辅助；`missing/stale` 只产生 `declaration_status/declaration_reason`，不阻塞按当前 dependency、授权、资源和 in-flight 重新核对后合法的 dispatch。
+- [已确认] Impl-Package 工作无需预登记；`candidate_id` 只标识实际派发工作及可信续接，资源与授权由主控按当前事实判断。
 
 ## 决策记录（滚动，最近 ≤5 轮）
 

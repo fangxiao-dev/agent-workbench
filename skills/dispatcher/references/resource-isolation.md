@@ -19,7 +19,7 @@ dependency 逐候选呈现；缺席候选带类型和受影响的 `subject` 或 
 
 每个并行动作声明 `resource_keys`、整合 owner 与 cleanup owner。资源声明由派发方提供；系统不推断、不扫描，也不把业务 Ticket/Topic 当作互斥单位。无法隔离的共享可变资源使用唯一串行顺序。
 
-候选清单可以辅助记录这些声明，但不拥有资源准入。清单缺失或指纹过期时，主控按当前 dependency、授权、已知实际冲突和在途工作重新判断；旧清单中的显式 blocker 继续生效，直到最新清单明确更新。相同 `resource_key` 本身不等于冲突。
+主控按当前 dependency、授权、已知实际冲突和在途工作判断资源准入；相同 `resource_key` 本身不等于冲突。恢复旧 Attempt 时，只读旧 trail/候选清单以及 Execution Record、checkpoint、handoff，沿用其中仍成立的授权和资源限制，不另建 blocker fact，也不重写旧记录。
 
 新 worktree 承担 format、lint 或 typecheck 前，先确认能解析所需 binary、shim 和本地依赖。完成声明用 diff、mtime 或命令输出证明；carrier 失败与产物失败分别处理。
 
