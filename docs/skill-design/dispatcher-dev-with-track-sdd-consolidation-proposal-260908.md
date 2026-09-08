@@ -4,6 +4,8 @@
 
 建议将 Dispatcher 与 Subagent-Driven Development（SDD）合并为一个通用执行协作 Skill，保留 `$dispatcher` 名称；dev-with-track 继续拥有业务合同、Ticket readiness、证据与 Gate，同时调整其向调度层提供候选工作的方式。联合修改直接调用入口、处境提示与验证合同，避免正文已经鼓励并行，运行时注入仍要求等待。
 
+**入口合并本身不解决串行化。** 复审确认，用户报告的串行来自运行时投影契约的粒度与输出形状，不是正文表述（证据见 §4.3、§4.8）。因此本方案把**投影契约改造列为第一实施步骤**：投影从“当前唯一处境”改为“blocking 集 + runnable 集 + in-flight 标注”，并把从 trail 派生的 outcome 类 fact 按 dispatch 归属。这一步不改任何 Skill 正文、不新增状态系统、不新建调度器，可独立发布与独立测试；正文合并排在其后，否则正文落地时注入仍在反着说。
+
 本次优化以有效交付速度和执行可信度为目标。主控持续寻找能够推进主线的并行机会，准确限定局部阻塞的影响；worker 收到具体、可验证的委派合同。确定性落实在授权、行为要求、资源边界和证据上，执行路径由主控根据现场事实选择。
 
 - 日期：2026-09-08。
@@ -11,7 +13,8 @@
 - 调研基线：仓库 HEAD `cb906e681292a0d85aa38f0b2084df731b992804`；开始调研时工作区干净。另只读对照用户指定的 `impl-package/0.4.2` 安装缓存。
 - 目标源文件：`skills/dispatcher/SKILL.md`、`plugin-marketplace/plugins/impl-package/skills/subagent-driven-development/SKILL.md`、`plugin-marketplace/plugins/impl-package/skills/dev-with-track/SKILL.md`。
 - 当前交付：一份包含研究证据、设计理由、职责归属、约束迁移、调用链影响和验证计划的 proposal。
-- 后续实施范围：Skill 内容与直接消费合同；保持现有 Ticket state schema、typed dependency 放行语义、证据与 Gate 机制。保留版本号，通过正常宿主安装流程处理后续发布。
+- 后续实施范围：投影契约（`situation.py` 的输出分区、渲染句与 trail fact 归属）、Skill 内容与直接消费合同；保持现有 Ticket state schema、typed dependency 放行语义、证据与 Gate 机制不变。保留版本号，通过正常宿主安装流程处理后续发布。
+- 本文经过一轮独立复审后修订。修订依据见 [三个核心执行 Skill 的第一性原则审查](three-core-skills-first-principles-review-260908.md)；被推翻的原判断在正文中就地改写，不保留两份说法。
 
 本文是一次变更设计，沿用仓库 `docs/skill-design/` 既有位置。实际工作方法仍以现役 Skill 为准，本文不成为第二份运行规则。
 
@@ -32,6 +35,8 @@
 “主控已经具备依赖分析能力”也不足以支持删除主动调度规则。能够解释并行机会，不等于执行过程中会持续发现并释放机会。用户报告的局部修复循环是需要保留明确行为约束的实际问题。
 
 放入 dev-with-track 后又发现，上游提供的候选范围、Ticket 的正式依赖和运行时处境提示都会影响并行度。因此只压缩 Dispatcher/SDD 正文无法构成完整方案。
+
+独立复审又推翻了一步：初稿把“同步处境提示”理解为修几行 `when` 并冻结 `situation.py`。实际证据显示串行化写在投影契约本身（单游标输出、最高层压制、单选渲染句、attempt 级 in-flight 布尔），改行不改契约无法生效；且同一粒度错配在读取侧还制造了第二组问题（§4.8）。因此本轮把投影契约改造从“仅在证明必要时才考虑的局部代码修复”提升为第一实施步骤。
 
 ### 2.3 什么应该确定，什么交给判断
 
@@ -56,7 +61,7 @@
 | R4 | [Dev With Track](../../plugin-marketplace/plugins/impl-package/skills/dev-with-track/SKILL.md)、[Control Flow](../../plugin-marketplace/plugins/impl-package/skills/dev-with-track/references/control-flow.md)、[Runtime Protocol](../../plugin-marketplace/plugins/impl-package/skills/dev-with-track/references/runtime-protocol.md)、[rubric](../../plugin-marketplace/plugins/impl-package/skills/dev-with-track/rubric.md) | 上游选择、状态单写、findings 与恢复 |
 | R5 | [Composition Contract](../../plugin-marketplace/plugins/impl-package/references/impl-package-composition-contract.md)、[Current State 3.5](../../plugin-marketplace/plugins/impl-package/references/impl-package-current-state.md)、[engine.py](../../plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/engine.py) 的 `ready_tickets` / `_ticket_released` | Ticket barrier 的文档与实现 |
 | R6 | [situations.yaml](../../plugin-marketplace/plugins/impl-package/skills/dev-with-track/situations.yaml)、[protocols.json](../../plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/protocols.json) | 实际处境候选与注入文案 |
-| R7 | [situation.py](../../plugin-marketplace/plugins/impl-package/scripts/situation.py) 的 `_when_attempt_in_flight` / `_open_dispatch` 与候选排序、[dispatch_audit.py](../../plugin-marketplace/plugins/impl-package/scripts/dispatch_audit.py) 的 `_action_ids` | 在途判断、优先层投影、派发审计 |
+| R7 | [situation.py](../../plugin-marketplace/plugins/impl-package/scripts/situation.py) 的 `_derive` 分层投影与渲染句、`_when_attempt_in_flight` / `_open_dispatch` / `_decision_without_result` / `last_outcome` / `_incomplete_count`、[dispatch_audit.py](../../plugin-marketplace/plugins/impl-package/scripts/dispatch_audit.py) 的 `_action_ids` | 在途判断、优先层投影与单选渲染、trail fact 归属粒度、派发审计 |
 | R8 | [Dispatcher 合同测试](../../tests/test_dispatcher_contract.py)、[SDD 合同测试](../../tests/test_subagent_driven_development_contract.py) | 对旧结构和精确措辞的保护 |
 | R9 | [Dispatcher evals](../../skills/dispatcher/evals/evals.json)、[SDD evals](../../plugin-marketplace/plugins/impl-package/skills/subagent-driven-development/evals/evals.json)、[dev evals](../../plugin-marketplace/plugins/impl-package/skills/dev-with-track/evals/evals.json) | 已有场景及行为验证缺口 |
 | R10 | [方法优先重设计](subagent-driven-development-method-first-redesign-260825.md)、[worker briefs 调整记录](subagent-driven-development-worker-briefs-260829.md) | 既有设计动机和需要保留的执行收益 |
@@ -78,7 +83,7 @@ R4 要求每轮说明“唯一业务下一动作”，先选择当前业务动�
 
 这是一种可解释的诱导风险，不是代码层单线程证据。设计上保留明确交付重点和一个恢复入口，同时允许当前执行集合包含多个候选。
 
-### 4.3 处境表包含更直接的等待与单选倾向
+### 4.3 串行化的机械来源在投影契约，不在正文
 
 R6 中存在以下精确规则：
 
@@ -89,9 +94,19 @@ R6 中存在以下精确规则：
 | 同名 protocol | “不并发派发同一 source unit；等 worker-return 后再决策” | 第一半句保护冲突，后一半句缺少不受影响工作的处理 |
 | `finding.fix.reviewer-returned` 等 protocol | finding 返回后直接导向同 Topic work lane | 缺少重新比较独立修复与主线安排的空间 |
 
-R7 的投影在 P0 命中时选择一个严格优先事项；其余情况下，将最高命中层放入 `parallel_matches`，较低层放入 `other_matches`。因此“有 parallel_matches”不等于“当前所有独立实施机会都已呈现为首选”，也不意味着这些候选已经通过资源隔离判断。
+这些行本身准确，但它们不是根因。根因是承载它们的投影契约：**投影的输出是一个游标，只能回答“当前唯一处境是什么”。** 三处代码事实叠加成一台确定性的串行机器：
 
-但该引擎并非机械地禁止一切并行：派发审计 `_action_ids` 会读取 `selected`、`parallel_matches`、`other_matches`、`suppressed_matches`，另有偏离理由路径。正确结论是入口存在保守等待倾向和候选呈现限制，需联合校准，不能直接宣称必须重写调度引擎。
+1. **只输出最高命中层。** `situation.py` 的 `_derive`：无 P0 命中时只有 `highest_layer` 的候选进入 `parallel_matches`，所有更低层候选降为 `other_matches`，渲染成一行 `secondary（较低层）N 个：…`。真正的实施工作全部住在 P2–P4。
+2. **渲染句直接下达单选命令。** 并列命中分支输出 `判断点: 先选一个处境，再选其动作`。
+3. **in-flight 是 attempt 级布尔。** `worker-still-running` 命中条件 `trail.decision_without_result` 由 `_decision_without_result` 以 `all_attempt_rows=True` 在整个 attempt 范围求值。
+
+合起来：attempt 里任何一处有未回收的 dispatch，P1 就命中，P2–P4 的全部实施候选被压成一行 secondary，注入文案是“等 worker-return 后再决策”，可选动作只有 `wait` 与 `interrupt`。
+
+最能说明问题的是：正确的并行指引早就写好了，只是挂在够不着的位置。`multiple-ready-tickets` 的注入文案是“按实际 dependency 和资源隔离决定并行”，但它的 `when` 带 `attempt.in_flight: false`——只在没有任何 worker 在跑时可达。**需要并行指引的时刻恰好是它被关掉的时刻，两条的可达条件是反的。**
+
+由此推翻本文初稿的一个判断：只改 `when` 而保持 `situation.py` 不变不足以成立。即使删掉 `in_flight: false` 守卫，两条 P1 同时命中仍然渲染成“并列命中，先选一个处境”。任何写在 Dispatcher 正文里的“主动发现并行机会”都排在 dispatch 时注入的 P1 默认动作之后。
+
+这不等于要重写调度引擎或新建调度器：需要改的是投影的**输出分区和 fact 归属粒度**，候选求值、状态 schema、typed dependency 语义全部不动。具体形状见 §9.3。
 
 ### 4.4 有些等待来自正式 Ticket barrier
 
@@ -119,6 +134,28 @@ R8 的测试断言具体章节、四类 dependency token、`fresh worker`、连�
 
 SDD 缓存版也比仓库版保留更多 Topic 定义、批次形成和返回调度规则。研究和未来评测必须记录实际加载版本。直接编辑安装缓存不能替代源码修复；安装同步属于后续显式执行范围。
 
+### 4.8 同一个根因的读取侧：trail fact 按 Ticket 聚合
+
+§4.3 是阻塞侧的粒度错配。同一个错配在读取侧同样成立，并且在允许同 Ticket 并行之后才变得危险：
+
+- `situation.py` 的 `last_outcome()` 在 Ticket 范围内倒序取**最后一条** result 的 outcome，不区分它属于哪一次 dispatch。
+- `_incomplete_count()` 只数尾部连续的 `INCOMPLETE`，遇到任何非 INCOMPLETE 结果就 `break`。
+
+于是同一 Ticket 上 A 返回 `INCOMPLETE`、B 随后返回 `DONE` 时，投影得到 `last_outcome=DONE`、`incomplete_count=0`——A 的未完成事实从投影中消失。A 的轨迹仍在 trail 里，但没有任何处境会因此命中。
+
+这两个 fact 的消费端存在第二个已确认问题：
+
+| slug | when | judgment | 默认动作 |
+| --- | --- | --- | --- |
+| `ticket.implement.worker-incomplete-first` | `trail.incomplete_count: 1` | `false` | `by: dispatch` 直接换 fresh worker，effect 写“视为上下文污染/持续卡住” |
+| `ticket.implement.worker-incomplete-second` | `trail.incomplete_count: 2` | `false` | `by: main-session` 直接 `ticket block` |
+
+两条都是 `judgment: false`，即机械命中、默认动作直接执行。它们与**同一个 Skill 当前就在发布的** `runtime-protocol.md`「worker 返回不可归因或 `INCOMPLETE` 时，不套固定 fallback 次数」直接冲突，也与 SDD「边界仍可信时沿同一 worker 续接」冲突。这不是本方案引入的新冲突，是现役就存在的正文/处境表不一致。
+
+**四个症状是同一个根因**：trail 投影按 Ticket / attempt 聚合，而工作按 dispatch 发生。聚合粒度高于工作粒度时兄弟 dispatch 互相污染——阻塞侧表现为一个 worker 锁住整个 attempt，读取侧表现为一个 `DONE` 抹掉兄弟的 `INCOMPLETE`。
+
+因此修法是让 outcome 类 fact 按 dispatch 归属（`of` / `dispatch_id` 关联机制 `_open_dispatch` 已经在用，不需要新状态系统），而不是在正文里加一句“别只信 `last_outcome`“的告诫——现在有两条 `when` 正拿它驱动换人和 `ticket block`，告诫管不住 `when`。
+
 ## 5. 设计选择与替代方案
 
 | 方案 | 成立前提 | 本轮判断 |
@@ -127,7 +164,9 @@ SDD 缓存版也比仓库版保留更多 Topic 定义、批次形成和返回调
 | 合并二者，dev 保留业务 owner | 通用执行方法可独立于 package 验收合同 | 推荐；减少一个方法入口，保留真正独立的职责 |
 | 主控 Skill 加一个真正面向 worker 的 Skill | worker 需要统一加载较长的通用执行方法 | 目前优先使用具体 brief 和既有专业方法，避免再建立一个与 brief 重复的入口 |
 | 三者全部并入 dev-with-track | 所有委派都只发生于 Impl-Package | 不满足普通调查、修复等使用场景，且扩大通用委派的上下文成本 |
-| 新建自动调度器、队列或 claim-level 状态 | 已有明确 runtime 能力缺口和足够收益 | 本轮证据不足；先修现有入口与消费合同 |
+| 只改 Skill 正文与处境表 `when`，冻结 `situation.py` | 串行化来自正文表述 | 已被 §4.3 证据推翻；投影仍会把候选压成单游标 |
+| 改投影的输出分区与 fact 归属粒度，其余不动 | 串行化来自投影契约而非候选求值 | 推荐；不触碰 state schema、typed dependency 语义与候选求值逻辑 |
+| 新建自动调度器、队列或 claim-level 状态 | 已有明确 runtime 能力缺口和足够收益 | 本轮证据不足；投影分区改造已覆盖已确认症状，不需要第二套状态 |
 
 推荐保留 `$dispatcher` 名称和 `skills/dispatcher/` 的单一源位置。名称能表达“安排工作”的作用；通用入口不绑定 package、provider 或某个主控模型。保留它作为 standalone Skill 的现有链接方式，避免在 plugin 内复制一份正文。
 
@@ -154,6 +193,8 @@ SDD 缓存版也比仓库版保留更多 Topic 定义、批次形成和返回调
 dev-with-track 提供当前目标、相关批准合同、剩余工作入口、业务依赖与授权限制、验收要求和必要的恢复事实。Dispatcher 可以据此发现新的执行候选；遇到语义或授权疑问时将局部问题交回业务判断，其他已满足条件的工作继续安排。
 
 候选和在途安排使用当前会话及现有派发记录表达。无需新建完整候选表、打分表、队列文件或并行预算。一个 checkpoint 可以记录最先恢复的动作，并引用已有在途记录；恢复后重新判断其他工作。
+
+**结果归属合同**：结果消费、续接和恢复按可归因的 dispatch 分别处理。Ticket 级 `last_outcome` 只是导航摘要，不能替代对未完成工作、待集成结果和待审增量的核对，也不得作为 `when` 条件驱动换人或 `ticket block`（§4.8）。这条合同由 §9.3 的投影改造在代码层保证，正文不重复讲解。
 
 ### 6.3 框架内循环
 
@@ -216,7 +257,7 @@ worker 完成同一结果所需的普通恢复。边界变化、关键前提不�
 
 删除 15/30 分钟通用观察门槛。结合工具活动、进程、输出变化、任务特定超时与可观察进展判断健康；在途时间本身不是重复派发的理由。固定错误次数改为边界可信度判断：证据已表明遗漏 caller/producer 家族或 ownership 外溢时，先重新调查受影响范围，避免继续局部补丁。
 
-通用 brief 只要求真实结果。Impl-Package 中由主 session 适配既有 `DONE | BLOCKED | INCOMPLETE`、`EVIDENCE_SUFFICIENT | EVIDENCE_GAP`、`PENDING_REVIEW | PASSED` 等真实消费者使用的值，本轮保持这些接口兼容。
+`investigate | implement | fix | verify` 四个 mode 与 `DONE | BLOCKED | INCOMPLETE`、`EVIDENCE_SUFFICIENT | EVIDENCE_GAP`、`PENDING_REVIEW | PASSED` 一并整体保留，通用路径与 Impl-Package 使用同一套值。它们有真实消费者（`_last_worker_mode`、trail、`dispatch_audit`），总共十来个词，并且是给弱模型 worker 的答案形态锚点；拆成“通用简化版 + package 兼容版”会造出同一概念的两个等级，正是本次合并要消灭的克隆形态。
 
 ## 9. Dev With Track 的联合修订
 
@@ -232,20 +273,40 @@ dev-with-track 负责确认 finding、等级、disposition、影响范围及解�
 
 material risk 的七类判断启发式从 SDD `review-gate.md` 归入 dev 的既有 review 规则所在位置；正式 review 的 requirement、业务边界和触发要求保持，具体 topology/coverage/closure 继续回到 do-review。通用任务按其 owning workflow 和 policy 判断正式 review。
 
-### 9.3 处境表与注入合同同步
+### 9.3 投影契约改造与处境表同步
 
-以下是需要跟随正文一起完成的定点修订，不是新建调度引擎：
+本节是实施第一步，先于正文合并落地。它改的是投影的输出形状与 fact 归属粒度，不改候选求值、state schema 与 typed dependency 语义。
+
+#### 9.3.1 投影契约：一个游标 → 两个集合 + 一组标注
+
+```text
+blocking[]    fail-closed 条件，有序，必须先清。今天的 P0 + 真实 barrier
+              （未释放的 implementation edge、缺 authorization、不可隔离的共享资源、terminal-frozen）
+runnable[]    当前全部合法候选，不按层压制、全量渲染
+              每项带 subject、它触碰的 resource key，以及为什么合法
+in_flight[]   标注，不是处境：哪些 subject / resource key 已被占用
+```
+
+关键的本体论修正：**在跑的 worker 不是一个“处境”（一个要求主控采取动作的状态），而是一个“事实”（一个收缩动作集合的约束）**。`worker-still-running` 现在占着一个 P1 处境位，这正是它能吞掉整层投影的原因；它应当移出 `situations`、成为 `in_flight[]` 标注。单游标语义保留在 `blocking[]` 内——那是确定性真正值钱的地方。
+
+配套的 fact 归属修正（§4.8）：`_decision_without_result`、`last_outcome`、`_incomplete_count` 等从 trail 派生的 outcome 类 fact 一律按 dispatch 归属，不再按 Ticket / attempt 聚合。关联机制沿用 `_open_dispatch` 已在使用的 `of` / `dispatch_id`，不新建状态。
+
+渲染句 `判断点: 先选一个处境，再选其动作` 是显式单选命令，随之改写为呈现 `blocking[]` 与 `runnable[]` 全集。
+
+**输出必须向后兼容**：`selected` / `parallel_matches` / `other_matches` / `suppressed_matches` 四个键继续按旧语义填充，新增 `blocking` / `runnable` / `in_flight`。理由见 §14 的版本错配风险——半迁移状态下进行中的 attempt 会同时遇到新旧渲染器。
+
+#### 9.3.2 处境表定点修订
 
 | 当前位置 | 拟变更 |
 | --- | --- |
-| `multiple-ready-tickets` | 取消“无在途才考虑其他 ready 工作”的限制；从选哪一票改为依据实际依赖与资源选择当前工作组合 |
-| `worker-still-running` | 默认先检查剩余工作与资源，确无可推进工作才等待；保留同一写入责任的防重复派发 |
+| `worker-still-running` | 移出 `situations`，改为 `in_flight[]` 标注；“不并发派发同一 source unit”这条真实约束由 subject 级 in-flight 准确表达 |
+| `multiple-ready-tickets` | 取消 `attempt.in_flight: false` 守卫；其注入文案本身正确，保留 |
+| `worker-incomplete-first` / `worker-incomplete-second` | 去掉 `incomplete_count` 次数门槛；次数只作观察事实，不再驱动 `fresh-fallback` 或 `ticket block`。换人依据改为边界失配与上下文不可信，与 `runtime-protocol.md` 现有表述对齐 |
 | finding 返回分支与 protocol | 业务确认后进入当前候选安排，允许独立 fix；去除由 review 来源决定固定捆绑的规则 |
-| `situations.yaml` 中 SDD 调用 | 改指 Dispatcher；mode 可保留为与既有事实消费者兼容的工作类型 |
-| P0/P1 等投影消费 | 保留 P0 的真实恢复/授权约束；其它优先层用于聚焦注意力，不把局部在途事实扩展成整个 Attempt 的互斥锁 |
+| `situations.yaml` 中 SDD 调用 | 改指 Dispatcher；四个 mode 整体保留，与既有事实消费者兼容 |
 | 普通偏离与表外动作 | 使用现有 credential/trail/escape 合同；把常见合法并行路径纳入正常候选，避免每次并行都需要特殊说明 |
 
-`situation.py` 的 `selected/parallel_matches/other_matches/suppressed_matches` 和 state schema 先保持不变。修改表条件后先用 fixture 验证；只有明确证明现有选择或注入代码仍阻止既定行为时，才提出局部代码修复，并补直接回归。不得以本提案为授权重写引擎或降低 P0/正式依赖要求。
+旧 slug 可为历史回放兼容保留。修改后先用 fixture 验证（§13.3）；不得以本节为授权降低 P0 或正式依赖要求。
 
 ## 10. 旧规则删留与唯一落点
 
@@ -256,23 +317,23 @@ material risk 的七类判断启发式从 SDD `review-gate.md` 归入 dev 的既
 | 一个 baby step 到主控 return point | 保留、改为自然语言结果边界 | 防止预授权后续决策，避免微型往返 |
 | 文件数、检索范围、命令数的例外说明 | 删除冗长教学 | 用可验证结果和审查承接能力判断粒度 |
 | foundation 先稳定 | 保留 | 会改变下游语义的前提必须先确认 |
-| 四类 dependency 必填分类 | 降为复杂情况参考 | 主路径固定授权、业务依赖与资源检查即可 |
+| 四类 dependency 必填分类 | 降级进 reference，不删除 | 它是让“blocked”有确定含义的词汇表；投影的 `blocking[]` 逐项标类型时复用同一套 token |
 | 当前批次收齐再决定 | 删除批次同步含义 | 返回后及时释放有收益的独立工作 |
 | 必须主动寻找并行机会 | 强化并保留 | 对应用户反复观察到的局部串行问题 |
 | 按整个 Topic/Ticket write-set 判断冲突 | 保留纠正后的 step 级规则 | 以实际 effect footprint 判断 |
 | 共享读/观察资源影响 | 保留并澄清 | 对稳定状态的兼容读取可并行，变化中的观察需隔离 |
 | worktree 等价于完整运行隔离 | 保留纠正规则 | 实际工具链、DB、端口、数据分别确认 |
-| receipt 确认与迟到/重复结果归因 | 保留 | 防止重复执行和虚假在途/完成事实 |
-| 每个代码增量及时独立 delta review | 保留，明确容量不足时的真实状态 | 保持审查节奏，不虚报已经派审 |
+| receipt 确认与迟到/重复结果归因 | 语义保留，执行搬进 `dispatch_audit.py` | 正文只能劝告，trail 能判：断言每条 decision 行有匹配 receipt 或消歧记录 |
+| 每个代码增量及时独立 delta review | 语义保留，执行搬进 `dispatch_audit.py` | 现在三个 Skill 各写一遍且都保证不了；改为断言带 diff 的 result 行之后存在对应 review dispatch 或显式 escape |
 | review 积压触发全局收敛 | 改为收住受影响实现链 | 避免审查节点拖住全部工作 |
 | delta finding 一律随下一步修 | 删除绝对安排 | Dispatcher 按实际收益与依赖决定 |
 | work/review/test 三条 lane 必须显式建立 | 删除强制对象 | 保留实现/审查独立和有界测试活动 |
 | 新 Topic 一律 fresh、关闭后一律不能复用 | 改为相关可信上下文与明确新授权 | 释放责任与进程复用分别判断 |
 | reviewer 同 scope 复用 | 保留 | 独立性与上下文连续性分别保证 |
 | 固定观察 15/30 分钟 | 删除 | 使用实际活跃信号与任务特定超时 |
-| 连续第二次 INCOMPLETE 必须调查 | 删除数字门槛，保留失配触发 | 一次已证实的边界失配也应调查；可解释的恢复无需等次数 |
+| 连续第二次 INCOMPLETE 必须调查 | 删除数字门槛，保留失配触发 | 一次已证实的边界失配也应调查；可解释的恢复无需等次数。同一删除必须同时落到 `worker-incomplete-first/second` 两个分支（§9.3.2），否则处境表继续机械换人和 `ticket block` |
 | verify 可能写 snapshot/generated file | 保留实际副作用分类 | 工作名称不能覆盖真实资源占用和授权 |
-| 固定 mode 与 outcome enum | 通用正文降为辅助；package 消费层保留兼容 | 不破坏既有 parser/trail 接口 |
+| 固定 mode 与 outcome enum | 整体保留，不分两级 | 有真实消费者（`_last_worker_mode`、trail、audit），共四个词，且是给弱模型 worker 的答案形态锚点；分级会造出同一概念的两个等级，正是本次合并要消灭的克隆形态 |
 | 真实路径验证、局部 self-check、cleanup | 保留 | 低阶 worker 的关键执行保障 |
 | material formal review requirement | 迁入 dev 的业务 review 判断 | 从通用委派中分离 Ticket 语义 |
 | State/Evidence/Gate 单写与验收证据 | 保留 | 与并行实施无冲突，提供结果确定性 |
@@ -315,8 +376,8 @@ reference 仅在分支需要时读取；不要把两份旧正文整体搬入 ref
 | 续接 | `skills/handoff/references/task-execution.md`、`skills/handoff-to-new-session/` | 恢复业务范围与在途事实，移除旧 SDD 指引 |
 | 外层任务协调 | `skills/thread-harness/references/role-a.md`、`role-b.md`、`design-notes.md` | 调整执行方法引用；区分现役规则与历史说明 |
 | 显式队列调用 | `skills/task-queue/SKILL.md` | 保持独立的显式调用入口，适配 Dispatcher 的局部结果术语 |
-| DSH 命令与文档 | `plugin-marketplace/plugins/dsh-impl-package/presets/impl-package/commands.mjs`、README、baseline、status-tick 脚本 | 分类活跃调用/纯历史文字；更新实际命令和可达路径 |
-| 安装与描述测试 | `tests/test_impl_package_plugin.py`、role/handoff/thread-harness 等直接测试 | 取消 SDD 必须存在的旧期望，验证新入口可达 |
+| DSH 命令与文档 | `plugin-marketplace/plugins/dsh-impl-package/presets/impl-package/commands.mjs`、`agent.cordis.yml`、README、baseline、status-tick 脚本 | 分类活跃调用/纯历史文字；`stage` 直接改指 `dispatcher`（理由见 §11.3） |
+| 安装与描述测试 | `tests/test_impl_package_plugin.py`、role/handoff/thread-harness 等直接测试 | 取消 SDD 必须存在的旧期望，验证加载到的 Dispatcher 与 plugin 内容兼容 |
 
 此表是已经定位的迁移入口，不是承诺修改每个命中文件。实施时对 `subagent-driven-development`、`impl-subagent-driven-development`、`SDD` 和旧资源路径再做引用闭合扫描；只改当前消费合同，历史记录保留历史事实。
 
@@ -324,7 +385,9 @@ reference 仅在分支需要时读取；不要把两份旧正文整体搬入 ref
 
 Dispatcher 仍由现有 standalone Skill 链接机制暴露。Impl-Package 调用它前需有可解析的已安装入口；仓库相对路径不能在安装 cache 中假定成立。沿用既有宿主 Skill 解析与单 Skill 链接，不把 Dispatcher 复制进 plugin，也不从 cache 使用多级 `..` 越界猜测仓库路径。
 
-DSH 的旧 `impl-subagent-driven-development` command 实际拼接 plugin stage 路径；删除 SDD 后不能只把 `stage` 改成 `dispatcher`，因为 suite 内没有该目录。拟将该活跃命令改为指向 standalone Dispatcher 的显式路由，复用同文件已有 `call-codex` 的自定义 `text` 模式，并验证宿主上该入口可达。同步迁移仓库内调用后删除旧命令，不建立永久兼容 wrapper。
+**DSH 判断修正。** 本文初稿称“旧 `impl-subagent-driven-development` command 实际拼接 plugin stage 路径，因此不能只把 `stage` 改成 `dispatcher`“，源码不支持这个理由：`commands.mjs` 的 handler 生成的是 steering 文本 `以 ${def.stage} 阶段处理当前 Impl-Package 任务。`，没有拼接任何 plugin 内 Skill 路径；`agent.cordis.yml` 的 `customSkillDirs` 同时注册了 plugin skills 目录与 standalone `skills/` 目录。因此直接把 `stage` 改成 `dispatcher` 即可解析。自定义 `text` 路由仍是可选项（能带更明确的意图），但不再以“路径不存在”为理由。同步迁移仓库内调用后删除旧命令，不建立永久兼容 wrapper。
+
+**宿主验收要验兼容，不能只验入口可达。** 旧 Dispatcher 同样可以正常解析，但它正文里有三处 `/impl-package:subagent-driven-development` 引用。宿主装了新 plugin（SDD 已删）却加载旧 Dispatcher 时，执行方法指向不存在的入口，而且不报错——主控会静默回到旧流程。因此验收条件从“能找到 `$dispatcher`“提升为”实际加载的 Dispatcher 与 plugin 内容兼容“，至少覆盖新版本组合成功、旧 Dispatcher 与新 plugin 错配可被识别。用已有的 commit / 内容指纹即可，不改版本号、不新建版本管理系统；安装与缓存变更继续等待单独授权。
 
 三个现有 host manifest 均使用 `skills: ./skills/`，没有逐项枚举 SDD；不要为了删除一个自动发现的目录做无效 manifest 修改。Skill 集合变化仍需运行相应插件清单/描述合同检查。版本保持 `0.4.2`；本 proposal 不授权改版本、重装或编辑用户级缓存。
 
@@ -356,13 +419,19 @@ review 发现一个已确认的 API 局部缺陷，dev 判断它不改变接口�
 
 ### 13.1 建议实施顺序
 
+顺序相对初稿做了重排。初稿是 A 基线 → B 正文 → C 处境提示 → D 退役 → E 行为验证；依赖方向其实是反的：正文在注入还反着说的时候无法验证，而投影改造正是让多数验收变成机械可判的前提。
+
 | 步骤 | 交付 | 该步验证 |
 | --- | --- | --- |
 | A 固定比较材料 | 当前三 Skill、references、处境提示与相关 eval 的基线；旧规则到新落点映射 | 逐项覆盖第 10 节，确认已有批准方向与新增设计细节 |
-| B 写合并主路径与 dev 适配 | Dispatcher 正文、两个必要 reference、dev 控制循环与 findings 分工 | 静态合同、pointer、模式/输出消费者兼容检查 |
-| C 联合修订处境提示和调用方 | situations/protocols、直接入口、宿主 command 路由 | 在途＋独立 ready 的 fixture，正常派发无需绕过业务约束 |
-| D 迁移测试并退役 SDD | 行为 eval 归并、旧结构断言替换、有效调用清零后删除目录 | 调用闭合、历史回放兼容、目标 host 入口可达 |
-| E 行为验证并修正 | 固定输入下的调度与 worker 执行证据 | 本节场景满足；再决定源码实施是否完成 |
+| B 投影契约改造 | §9.3.1：`blocking` / `runnable` / `in_flight` 三段输出（旧四键并存）、trail outcome 类 fact 按 dispatch 归属、渲染句改写 | fixture pytest；不动任何 Skill 正文 |
+| C 处境表按新契约重标 | §9.3.2：`worker-still-running` 转标注、`multiple-ready-tickets` 去守卫、`worker-incomplete-first/second` 去次数门槛、finding 行去固定捆绑 | 复用 `tests/test_situation_render.py` fixture |
+| D 写合并主路径与 dev 适配 | Dispatcher 正文、两个必要 reference、dev 控制循环与 findings 分工；删掉 B/C 之后 runtime 已经拥有的段落 | 静态合同、pointer、模式/输出消费者兼容检查 |
+| E 迁移测试并退役 SDD | 行为 eval 归并、旧结构断言替换、有效调用清零后删除目录 | 调用闭合、历史回放兼容、Dispatcher 与 plugin 内容兼容（§11.3） |
+| F receipt 与 delta-review pacing 入 audit | 第 10 节两条从三份正文迁入 `dispatch_audit.py` | 该脚本自身的定点回归 |
+| G 行为验证并修正 | 固定输入下的调度与 worker 执行证据 | §13.2 中留在模型评测层的场景满足 |
+
+B 为什么能先做：它不依赖任何 Skill 内容决定，且立刻修掉用户报告症状的机械那一半。D 为什么必须在 C 之后：正文一旦先落，C 可能推翻它的措辞。
 
 步骤是 proposal 的实施顺序，不新增 Task/DAG 或固定 worker 派发队列。实际可以合并不需要新决策的机械部分。
 
@@ -382,16 +451,26 @@ review 发现一个已确认的 API 局部缺陷，dev 判断它不改变接口�
 | V10 | 明确 implementation 边未释放，但有部分早期证据 | 不越过 barrier，不提前 satisfy；可报告真实依赖建模问题 |
 | V11 | 仅 acceptance 边未释放，其他实施条件已满足 | 可实施，最终验收保持未完成 |
 | V12 | 主控只收到一个恢复 next，但范围内还有 ready 工作 | 从权威范围恢复候选，不把 checkpoint 当作全局串行命令 |
-| V13 | worker 普通工具重跑，边界仍可信；或边界一次就明确外溢 | 前者原范围恢复；后者立即调查边界，不按固定次数决定 |
+| V13 | worker 普通工具重跑，边界仍可信；或边界一次就明确外溢 | 前者原范围恢复；后者立即调查边界，不按固定次数决定。**必须带真实处境注入验证**，否则只证明模型读懂了新正文，没证明注入不再反着说 |
 | V14 | reviewer 输入更新但 scope 连续，或 reviewer 实现过待审增量 | 前者可复用并核查新版本；后者保持独立审查 |
 | V15 | 低阶 worker 收到保存功能 brief | 实际实现规定的失败状态/不变量，验证走真实路径，返回可归因证据 |
 | V16 | Dispatcher idle，仍有在途工作/验收缺口 | dev 保持 package 未 closed，并准确记录下一恢复事实 |
+| V17 | 同一 Ticket 的 A、B 分别派发，A 返回 `INCOMPLETE`、B 返回 `DONE`，随后恢复并出现迟到/重复返回 | A 的未完成事实仍出现在投影里；结果各归其原派发；B 不被重复派发；局部失败不扩大成整票 `BLOCKED`。直接证伪或证实 §4.8 |
+| V18 | 代码已返回，审查因槽位不足尚未成功派发，此时发生 handoff | 恢复后能找回被冻结的增量；待派审如实保留；不虚构成功 receipt |
 
 ### 13.3 验证方式与完成证据
 
-先复用现有 eval 格式和 fixture，不新建 benchmark 平台。V01/V03/V04 采用带可控返回事件的多步任务回放：先让一项工作保持在途，再提供独立工作，观察下一次实际 dispatch。V15 用授权的目标 worker profile 在可丢弃的局部代码样例中执行，检查产物与真实验证。
+先复用现有 eval 格式和 fixture，不新建 benchmark 平台。初稿把 V01–V16 全部按模型行为评测安排，但同节又承认现有 eval 是只读问答、测不了执行习惯。投影改造（步骤 B）之后，其中多数可以降级成确定性检查，按“能不能由脚本判定”重新分层：
+
+**投影 fixture 测试（普通 pytest，无模型）**：V02、V03、V10、V11、V12、V13、V17、V18，以及 V05/V06 的合法性部分。给定 `state.json` + trail fixture，断言 `runnable[]` 含 X、`blocking[]` 含/不含 Y。V13 与 V17/V18 必须带真实处境注入。
+
+**trail 事后审计（`dispatch_audit`）**：V01、V09。V01 可计算——“存在两条时间上重叠、subject 不相交的 open dispatch，且当时 runnable 中有 ≥2 个独立 subject”。V09 为“无 receipt 的 dispatch 不得被当作已派发”。
+
+**真·模型行为评测（承认是采样）**：V04、V08、V14、V15、V16。这几项确实取决于主控当场的取舍，保留 eval 形式，接受它证明不了普遍性。V15 用授权的目标 worker profile 在可丢弃的局部代码样例中执行，检查产物与真实验证。
 
 只读场景回答能验证理解，不能单独证明执行习惯改变。源码基线与候选版使用相同任务输入、可用工具和 model/profile；评测输入不额外提醒“请并行”。记录使用版本、事件顺序、实际派发、资源冲突、审查输入与验证结果。证据存入已有 eval 工作目录或原生运行记录，不要求业务运行增加评分日志。
+
+**关于“有效交付速度”**：第 1 节把它列为目标，但现有合格标准只覆盖调度行为与安全边界。直接比较基线版与候选版达到同一验收条件的耗时或轮次，方向对，但不进完成条件——单次运行的方差远大于这次改动的效应量，少量重复分不出信号，而做到能分出信号的重复次数不值这个成本。改用两个稳定的确定性代理：`dispatch_audit` 统计“存在独立 runnable 工作时是否真的出现并发 dispatch”，以及返工轮次（同一 subject 的重复 fix）。真实耗时作为实跑观察记录，不作放行门槛。
 
 合格标准：已知有收益的独立工作能在无关等待完成前推进；真实依赖仍阻断对应实施；资源、授权、审查与验收没有回归。允许不同合法调度顺序。一次表现良好的样例不能证明普遍确定性，有波动或失败时补最小重复试验并如实报告。
 
@@ -413,12 +492,15 @@ L0 使用改变后的 Dispatcher/dev focused tests、eval 文件结构检查与�
 | 追求并发导致 speculative implementation | 遵守业务 barrier、稳定前提、授权和可回收准备边界 |
 | 合并后只是形成一份更长的正文 | 按第 10 节真正删除无收益规则，reference 按读取条件设置 |
 | 低阶 worker 缺乏上下文 | brief 保留具体合同、不变量、已知结论和真实验证路径 |
-| 正文改善但处境提示继续发出等待命令 | 第 9.3 节与正文同批闭合，并做带注入材料的框架内评测 |
+| 正文改善但处境提示继续发出等待命令 | 第 9.3 节先于正文落地（步骤 B/C 在 D 之前），并做带注入材料的框架内评测 |
+| 投影输出形状变化撞上半迁移的安装缓存 | 新增 `blocking`/`runnable`/`in_flight` 的同时保留旧四键按旧语义填充；旧渲染器仍可工作，等宿主装到新版本后再议退役 |
+| 旧 Dispatcher 与新 plugin 错配且不报错 | 宿主验收从“入口可达”提升为“内容兼容”，用 commit/内容指纹识别错配（§11.3） |
+| 同票并行后结果归属错乱、局部失败被投影抹掉 | outcome 类 fact 按 dispatch 归属（§4.8）；V17 作为该风险的定点 fixture |
 | 清理 SDD 导致插件/宿主入口失效 | 先迁移可达调用和测试，再退役；验证 standalone 依赖 |
 | 全仓重命名破坏历史 trail 与 parser | 保留历史事件读取兼容，按实际消费者定点修改 |
 | 缓存与源码混用污染结论 | 记录版本，分别标识研究基线、候选源码与实际安装产物 |
 
-后续源码实施完成需同时满足：通用执行方法只有 Dispatcher 一个权威入口；dev 保有业务事实和验收职责；当前调用链不再强制 SDD 或局部等待的全局串行；旧规则均有保留/替换/删除去向；代表行为样例与直接回归通过；版本和宿主状态变更边界清楚。源码通过、宿主可用、真实业务收益应分别汇报，不能合成一个未经证据支持的“全部完成”。
+后续源码实施完成需同时满足：投影输出已分为 blocking/runnable/in_flight 且 outcome 类 fact 按 dispatch 归属；通用执行方法只有 Dispatcher 一个权威入口；dev 保有业务事实和验收职责；当前调用链不再强制 SDD 或局部等待的全局串行；旧规则均有保留/替换/删除去向；投影 fixture 与 dispatch_audit 断言全绿、留在模型层的代表样例通过、直接回归通过；版本和宿主状态变更边界清楚。源码通过、宿主可用、真实业务收益应分别汇报，不能合成一个未经证据支持的“全部完成”。
 
 本轮不需要再决定是否允许探索合并；Owner 已明确同意方向。具体条款和新增发现保留在本 proposal 中供审阅，后续实施按实际授权启动。暂不引入新的 runtime 状态或调度器。
 
@@ -436,4 +518,6 @@ L0 使用改变后的 Dispatcher/dev focused tests、eval 文件结构检查与�
 
 本次 proposal 的核验范围是资料出处、相对链接、必需章节、内部职责与迁移逻辑，以及写入范围。第 13 节全部属于未来实施验证计划；本次未执行模型行为评测、业务测试、Skill 改写或宿主安装。
 
-落盘核验：28 个相对文件链接均存在；15 个章节与 16 个计划验收场景编号完整；代码围栏成对；三个目标 Skill 的 SHA-256 与调研基线一致。工作区只新增本提案文件。
+本文经一轮独立复审后修订，新增的代码事实（`_derive` 分层投影与渲染句、`_decision_without_result` 的 attempt 级聚合、`last_outcome` / `_incomplete_count` 的 Ticket 级聚合、`worker-incomplete-first/second` 的次数门槛、`commands.mjs` 的 steering 文本与 `agent.cordis.yml` 的 `customSkillDirs`）同样取自基线 HEAD 的仓库源码，不是安装缓存。
+
+落盘核验：15 个章节与 18 个计划验收场景编号完整；代码围栏成对；三个目标 Skill 的 SHA-256 与调研基线一致。
