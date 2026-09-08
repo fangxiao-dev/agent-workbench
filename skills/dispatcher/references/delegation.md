@@ -9,11 +9,11 @@
 - 单一目标、已知事实、关键 entry point 与必须遵循的合同章节；
 - 成功行为、边界状态、不变量和具体返回条件；
 - write ownership、禁改范围、实际工作目录、前置 dependency 与运行资源；
-- 走真实路径的 focused verification，以及该验证不能证明什么；
+- 明确验证目标与走真实路径的 focused verification；存在容易误采信的具体边界时说明限制；
 - 已确认 finding 的原始意见、定位和裁决；
 - 返回实际改动或结论、验证证据、未完成项、residue 与 cleanup 状态。
 
-`investigate` 回答一个会改变执行判断的问题；`implement` 交付已裁决的有界产物；`fix` 处理已确认且已边界化的 finding；`verify` 执行既定的无写副作用检查。会重写 snapshot 或 generated file 的验证按实际副作用使用 `implement` 或 `fix`。
+`investigate` 回答一个会改变执行判断的问题；`implement` 交付已裁决的有界产物；`fix` 处理已确认且已边界化的 finding；`verify` 检查既定行为，保持被交付的实现和基准不变。隔离环境中的临时测试写入、进程和日志可属于 `verify`，仍遵守授权、资源隔离与 cleanup 要求；更新 snapshot 基准或生成并纳入交付的文件使用 `implement` 或 `fix`。
 
 同一结果所需的 focused test、format、普通重跑和机械 cleanup 留在本次委派。需要新的业务裁决、授权、资源 owner 或独立 acceptance 的工作回到主控重新选择。
 

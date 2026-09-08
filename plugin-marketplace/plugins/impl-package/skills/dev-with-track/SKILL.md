@@ -27,7 +27,7 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 
 首次确认 package anchor 后，Codex 从当前已加载 Skill 解析 plugin root，并调用 `python <plugin-root>/hooks/impl_package_hooks.py activate --package <package>` 绑定当前 session；其他宿主跳过。匹配 Capsule 只提供恢复事实，仍复核 package、HEAD 与 initial approval，不把 Capsule 当 acceptance、Gate evidence 或 dispatch credential。
 
-Capsule 缺失、失配、Hook 未信任/禁用，或本轮发生 state mutation 时，读取 [Runtime Protocol](references/runtime-protocol.md) 的完整恢复顺序。真正 dispatch 前运行 `situation.py render` 生成 credential；偏离建议或表外行动使用 `escape` 记录理由。
+已知 CLI 成功更新后按 delta 更新当前事实；Capsule 缺失或失配、Hook 未信任/禁用、读取 warning、未知外部状态变化或状态更新失败时，按 [Runtime Protocol](references/runtime-protocol.md) 执行完整恢复。真正 dispatch 前运行 `situation.py render` 生成 credential；偏离建议或表外行动使用 `escape` 记录理由。
 
 显式离开 package 工作时，Codex 调用同一脚本的 `deactivate`。Restore 只恢复范围与事实，不推进 Gate。
 

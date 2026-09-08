@@ -6,7 +6,7 @@
 
 Codex Hook 已激活 current package 时，`SessionStart` 可注入 `Impl-Package Resume Capsule v1`。Capsule 只提供 session/package、Attempt、HEAD、state/Gate 读取状态、situation/action 与 preview digest；它不拥有业务裁决，也不充当 Evidence、Acceptance、Gate、closure 或 dispatch credential。
 
-Capsule 与 current package/HEAD/approval 匹配时可作为恢复入口；首次恢复缺失/失配、Hook 不可用、读取 warning、未知外部状态变化、CAS 失败或部分写入时执行完整恢复。已知 CLI 成功更新后按 delta 更新当前事实。
+Capsule 与 current package/HEAD/approval 匹配时可作为恢复入口；首次恢复缺失/失配、Hook 不可用、读取 warning、未知外部状态变化、状态更新失败（含 CAS 失败）或部分写入时执行完整恢复。已知 CLI 成功更新后按 delta 更新当前事实。
 
 Capsule 的 `projection-complete: false` 表示宿主长度预算只能承载摘要；先按其中命令读取完整只读 JSON 投影，再判断候选或写入。完整投影由 `situation.py render --no-write-credential --json` 提供，派发前另生成当前 credential。
 

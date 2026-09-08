@@ -11,6 +11,7 @@
 - `$dispatcher` 是唯一通用执行协作入口；本 Skill 提供业务重点、相关剩余工作范围、typed dependency、授权与 acceptance，并消费其局部结果。
 - Dispatcher idle、worker `DONE` 与 review `PASSED` 是局部事实；本 Skill依据 canonical Ticket/State/Evidence/Gate 判断 closure。
 - 业务控制循环先恢复 canonical facts 和候选范围，再调用 Dispatcher，随后消费结果并写 package 权威状态。
+- 已知 CLI 成功更新后按 delta 更新当前事实；失配、未知变化或状态更新失败才触发完整恢复，普通成功 mutation 不重跑恢复流程。
 - finding 的等级、disposition、影响范围和期限归本 Skill；修复安排由 Dispatcher 按影响与资源选择。
 - shared seam、安全、数据完整性、并发、migration、权限、不可逆外部副作用七类 material risk 产生 formal review requirement。
 - 每个代码 return 的 delta review 节拍归 Dispatcher；本 Skill只消费结果，不克隆派审规则。
@@ -22,3 +23,7 @@
 - 业务循环从“唯一下一动作”改为“交付重点 + 相关剩余工作范围”，避免局部等待缩窄整个 Attempt。
 - finding 可立即修、随相关工作修或隔离并行修；review 来源不再固定安排。
 - SDD material review gate 的七类启发式迁入本 Skill，formal topology 与 closure 继续归 do-review。
+
+## 2026-09-08 恢复触发精简
+
+- Owner 同意执行本轮建议 1：消除正文与 Runtime Protocol 的恢复条件矛盾，成功更新消费 delta，失配、未知变化或失败执行完整恢复。
