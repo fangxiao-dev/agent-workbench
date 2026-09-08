@@ -249,12 +249,23 @@ def test_wrong_subject_return_does_not_close_an_in_flight_dispatch():
     assert [item["dispatch_id"] for item in situation._open_dispatches(snapshot)] == ["A"]
 
 
-def test_unregistered_dispatch_suggestions_are_withheld_until_declared():
+def test_inflight_identity_distinguishes_independent_review_tracks():
+    snapshot = _coverage_context([]).snapshot
+    running = {"dispatch_id": "review-A", "candidate_id": "review-A", "subject": "ticket:TKT-01",
+               "action_id": "dispatch-delta-review", "mode": "verify", "resource_keys": [],
+               "review_phase": "initial", "review_track": "Track A"}
+    candidate = {**running, "candidate_id": "review-B", "review_track": "Track B"}
+    assert situation._candidate_blockers(snapshot, candidate, [], [], [running]) == []
+    candidate["review_track"] = "Track A"
+    assert any("在途" in blocker["reason"] for blocker in situation._candidate_blockers(snapshot, candidate, [], [], [running]))
+
+
+def test_unregistered_dispatch_suggestions_remain_runnable():
     rendered = json.loads(_render_text(FIXTURES / "p4-acceptance-edge-held", "--json"))
-    assert all(item["source"] != "situation" or
-               (item["actions"][0].get("by") != "dispatch" and item.get("mode") is None)
-               for item in rendered["runnable"])
-    assert any(item.get("action_id") == "continue-implementation" for item in rendered["withheld"])
+    action = next(item for item in rendered["runnable"] if item.get("action_id") == "continue-implementation")
+    assert action["declaration_status"] == "missing"
+    assert "blockers" not in action
+    assert "declaration: missing" in _render_text(FIXTURES / "p4-acceptance-edge-held")
 
 
 def test_candidate_cannot_relabel_a_known_implementation_action_as_verify():
@@ -262,7 +273,7 @@ def test_candidate_cannot_relabel_a_known_implementation_action_as_verify():
         package = Path(temporary) / "package"
         shutil.copytree(FIXTURES / "p4-acceptance-edge-held", package)
         before = json.loads(_render_text(package, "--json"))
-        action = next(item for item in before["withheld"] if item.get("action_id") == "continue-implementation")
+        action = next(item for item in before["runnable"] if item.get("action_id") == "continue-implementation")
         candidate = {"candidate_id": "relabelled", "subject": action["subject"], "mode": "verify",
                      "action_id": action["action_id"], "resource_keys": []}
         trail = package / "execution/fixture-attempt/trail.jsonl"
@@ -273,6 +284,74 @@ def test_candidate_cannot_relabel_a_known_implementation_action_as_verify():
         assert not any(item.get("candidate_id") == "relabelled" for item in rendered["runnable"])
         held = next(item for item in rendered["withheld"] if item.get("candidate_id") == "relabelled")
         assert any("mode" in item["reason"] for item in held["blockers"])
+        assert any(item["source"] == "situation" and item.get("action_id") == "continue-implementation" for item in rendered["runnable"])
+
+
+def test_candidate_checklist_completeness_does_not_remove_legal_work():
+    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+        package = Path(temporary) / "package"
+        shutil.copytree(FIXTURES / "p4-acceptance-edge-held", package)
+        original = json.loads(_render_text(package, "--json"))
+        keys = lambda result: {(item["subject"], item["action_id"]) for item in result["runnable"]}
+        action = next(item for item in original["runnable"] if item.get("action_id") == "continue-implementation")
+        candidate = {"candidate_id": "B", "subject": action["subject"], "mode": action["mode"],
+                     "action_id": action["action_id"], "resource_keys": ["worktree:B"]}
+        trail = package / "execution/fixture-attempt/trail.jsonl"
+        trail.parent.mkdir(parents=True, exist_ok=True)
+        prior = trail.read_text(encoding="utf-8") if trail.exists() else ""
+        for status in ("current", "stale", "empty", "unrelated"):
+            candidates = [] if status == "empty" else [candidate]
+            if status == "unrelated":
+                candidates = [{**candidate, "candidate_id": "other", "action_id": "other"}]
+            row = _candidate_snapshot_row(package, candidates, seq=100)
+            if status == "stale":
+                row["value"]["state_sha256"] = "outdated"
+                row["value"]["head"] = "outdated"
+            trail.write_text(prior + "\n" + json.dumps(row) + "\n", encoding="utf-8")
+            result = json.loads(_render_text(package, "--json"))
+            assert keys(original) <= keys(result), status
+            if status in {"current", "stale"}:
+                assert next(item for item in result["runnable"] if item["candidate_id"] == "B")["declaration_status"] == status
+
+
+def test_stale_declarations_recheck_dependencies_and_keep_explicit_blockers():
+    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+        package = Path(temporary) / "package"
+        shutil.copytree(FIXTURES / "p1-multiple-ready", package)
+        candidates = [
+            {"candidate_id": name, "subject": "ticket:TKT-01", "mode": "implement",
+             "action_id": "implement", "resource_keys": [name]}
+            for name in ("legal", "resource-held", "authorization-held")
+        ]
+        for candidate, kind in zip(candidates[1:], ("resource", "authorization")):
+            candidate["blockers"] = [{"type": kind, "subject": candidate["subject"], "reason": kind}]
+        row = _candidate_snapshot_row(package, candidates, seq=100)
+        row["value"]["state_sha256"] = "old"
+        trail = package / "execution/fixture-attempt/trail.jsonl"
+        trail.parent.mkdir(parents=True, exist_ok=True)
+        trail.write_text(json.dumps(row) + "\n", encoding="utf-8")
+        rendered = json.loads(_render_text(package, "--json"))
+        assert any(item["candidate_id"] == "legal" for item in rendered["runnable"])
+        assert {item["candidate_id"] for item in rendered["withheld"]} >= {"resource-held", "authorization-held"}
+        foreign = _candidate_snapshot_row(package, [], seq=101)
+        foreign["value"]["attempt"] = "other-attempt"
+        malformed = {**foreign, "seq": 102, "value": None}
+        with trail.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(foreign) + "\n" + json.dumps(malformed) + "\n")
+            bad_candidates = [{}, {**candidates[0], "mode": "review"},
+                              {**candidates[0], "resource_keys": {}},
+                              {**candidates[0], "blockers": [{"type": {}, "reason": "bad", "subject": "ticket:TKT-01"}]}]
+            for seq, bad_candidate in enumerate(bad_candidates, 103):
+                stream.write(json.dumps({**row, "seq": seq, "value": {**row["value"], "candidates": [bad_candidate]}}) + "\n")
+        preserved = json.loads(_render_text(package, "--json"))
+        assert preserved["candidate_snapshot"]["value"]["seq"] == 100
+        assert {item["candidate_id"] for item in preserved["withheld"]} >= {"resource-held", "authorization-held"}
+        state_path = package / ".impl-package/state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state["tickets"]["TKT-01"]["state"] = "BLOCKED"
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        held = json.loads(_render_text(package, "--json"))
+        assert not any(item["candidate_id"] == "legal" for item in held["runnable"])
 
 
 def test_declared_resource_blockers_preserve_shared_reading_and_local_scope():
@@ -447,7 +526,9 @@ def test_render_writes_situation_digest_credential() -> None:
             "runnable_candidate_ids",
             "head",
             "trail_seq",
+            "blocking_slugs",
         }
+        assert credential["blocking_slugs"] == [item["slug"] for item in rendered["blocking"]]
         assert rendered["attempt"] == attempt
         assert credential["digest"] == rendered["digest"]
         assert credential["legacy_digest"] == rendered["legacy_digest"]

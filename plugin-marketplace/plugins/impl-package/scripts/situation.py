@@ -145,6 +145,43 @@ def candidate_subject_error(candidate: dict[str, Any], ticket_ids: Iterable[str]
     return None
 
 
+def candidate_snapshot_error(value: Any) -> str | None:
+    """The same shape contract for append, projection and historical audit."""
+    if not isinstance(value, dict) or not isinstance(value.get("candidates"), list):
+        return "dispatch.candidates value must be an object with candidates array"
+    slots = value.get("available_slots")
+    if slots is not None and (type(slots) is not int or slots < 0):
+        return "dispatch.candidates available_slots must be a non-negative integer"
+    seen = set()
+    for candidate in value["candidates"]:
+        if not isinstance(candidate, dict):
+            return "dispatch.candidates entries must be objects"
+        for field in ("candidate_id", "subject", "mode", "action_id"):
+            if not isinstance(candidate.get(field), str) or not candidate[field].strip():
+                return f"trail candidate requires a non-empty {field}"
+        if candidate["mode"] not in {"investigate", "implement", "fix", "verify"}:
+            return "dispatch candidate mode must be investigate|implement|fix|verify"
+        resources = candidate.get("resource_keys")
+        if not isinstance(resources, list) or any(not isinstance(key, str) or not key.strip() for key in resources):
+            return "candidate resource_keys must be an array of non-empty strings"
+        if len(resources) != len(set(resources)):
+            return "candidate resource_keys must not contain duplicates"
+        blockers = candidate.get("blockers", [])
+        if not isinstance(blockers, list):
+            return "dispatch candidate blockers must be an array"
+        for blocker in blockers:
+            if not isinstance(blocker, dict) or blocker.get("type") not in ("foundation", "acceptance", "resource", "authorization"):
+                return "dispatch candidate blocker type must be foundation|acceptance|resource|authorization"
+            if not isinstance(blocker.get("reason"), str) or not blocker["reason"].strip():
+                return "trail candidate blocker requires a non-empty reason"
+            if not any(isinstance(blocker.get(key), str) and blocker[key].strip() for key in ("subject", "resource_key")):
+                return "dispatch candidate blocker requires an affected subject or resource_key"
+        if candidate["candidate_id"] in seen:
+            return "dispatch.candidates candidate_id values must be unique"
+        seen.add(candidate["candidate_id"])
+    return None
+
+
 class SituationError(RuntimeError):
     """A fatal table, CLI, or package-location error."""
 
@@ -3121,9 +3158,11 @@ def _latest_candidate_snapshot(snapshot: Snapshot) -> Fact:
         if _event_kind(row) == "fact"
         and row.get("key") == "dispatch.candidates"
         and row.get("subject") == "attempt"
+        and candidate_snapshot_error(row.get("value")) is None
+        and row["value"].get("attempt") == snapshot.state.attempt_id
     ]
     if not rows:
-        return Fact.unknown("当前 Attempt 缺少 dispatch.candidates 快照")
+        return Fact.unknown("当前 Attempt 缺少可用的 dispatch.candidates 快照")
     row = max(
         rows,
         key=lambda item: item.get("seq")
@@ -3131,20 +3170,16 @@ def _latest_candidate_snapshot(snapshot: Snapshot) -> Fact:
         else -1,
     )
     value = row.get("value")
-    if not isinstance(value, dict):
-        return Fact.unknown("dispatch.candidates value 不是 object")
     expected = {
         "attempt": snapshot.state.attempt_id,
         "head": snapshot.head,
         "state_sha256": _state_sha256(snapshot),
     }
-    for field, current in expected.items():
-        if current is None or value.get(field) != current:
-            return Fact.unknown(f"dispatch.candidates {field} 与当前投影不匹配")
-    candidates = value.get("candidates")
-    if not isinstance(candidates, list):
-        return Fact.unknown("dispatch.candidates candidates 不是 array")
-    return _fact_value({"seq": row.get("seq"), **value})
+    mismatches = [field for field, current in expected.items() if current is None or value.get(field) != current]
+    return _fact_value({**value, "seq": row.get("seq"),
+        "declaration_status": "stale" if mismatches else "current",
+        "declaration_reason": "快照指纹已过期，按当前业务事实重新判断：" + ", ".join(mismatches)
+            if mismatches else "当前候选声明"})
 
 
 def _dispatch_contexts(snapshot: Snapshot) -> list[FactContext]:
@@ -3188,11 +3223,12 @@ def _situation_actions(candidates: list[Candidate]) -> list[dict[str, Any]]:
                     "candidate_id": f"situation:{candidate.slug}:{candidate.subject}:{action_id}",
                     "source": "situation",
                     "slug": candidate.slug,
-                    "subject": candidate.subject,
+                    "subject": candidate.context.subject,
                     "mode": _action_mode(action),
                     "action_id": action_id,
                     "resource_keys": None,
-                    "resources_declared": False,
+                    "declaration_status": "missing",
+                    "declaration_reason": "未提供匹配的候选声明，不影响业务准入",
                     "reason": "处境表机械条件命中",
                     "protocol": _PROTOCOLS.get(candidate.slug, _PROTOCOLS["default"]),
                     "action_ids": [action_id],
@@ -3210,6 +3246,11 @@ def _open_dispatches(snapshot: Snapshot) -> list[dict[str, Any]]:
             "candidate_id": row.get("candidate_id"),
             "subject": row.get("subject"),
             "mode": row.get("mode"),
+            "action_id": row.get("chosen"),
+            "code_delta": row.get("code_delta"),
+            "reviews": row.get("reviews"),
+            "review_phase": row.get("review_phase"),
+            "review_track": row.get("review_track"),
             "resource_keys": list(row.get("resource_keys", [])),
             "receipt": row.get("receipt"),
         }
@@ -3218,6 +3259,78 @@ def _open_dispatches(snapshot: Snapshot) -> list[dict[str, Any]]:
         and isinstance(row.get("dispatch_id"), str)
         and row["dispatch_id"] not in returned
     ]
+
+
+def _same_candidate_work(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    return bool(left.get("candidate_id") and left.get("candidate_id") == right.get("candidate_id")) or (
+        left.get("subject") == right.get("subject")
+        and left.get("action_id") is not None
+        and left.get("action_id") == right.get("action_id")
+    )
+
+
+def _matching_declarations(item: dict[str, Any], declarations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    exact = [candidate for candidate in declarations if item.get("candidate_id") == candidate.get("candidate_id")]
+    if len(exact) == 1:
+        return exact
+    same_work = [candidate for candidate in declarations if _same_candidate_work(item, candidate)]
+    footprint = [candidate for candidate in same_work if item.get("resource_keys") is not None
+                 and set(item["resource_keys"]) == set(candidate.get("resource_keys") or [])]
+    if len(footprint) == 1:
+        return footprint
+    return same_work if len(same_work) == 1 else []
+
+
+def _candidate_blockers(snapshot: Snapshot, item: dict[str, Any], declarations: list[dict[str, Any]],
+                        actions: list[dict[str, Any]], in_flight: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Shared admission for projected candidates and actual CLI dispatches."""
+    blockers: list[dict[str, Any]] = []
+    subject = item.get("subject")
+    relevant = _matching_declarations(item, declarations)
+    for declared in declarations:
+        for blocker in declared.get("blockers", []):
+            affected_resource = blocker.get("resource_key") in (item.get("resource_keys") or [])
+            affected_work = declared in relevant
+            if affected_work or affected_resource:
+                if blocker not in blockers:
+                    blockers.append(blocker)
+    matched = [action for action in actions if action.get("subject") == subject
+               and action.get("action_id") == item.get("action_id")]
+    if item.get("source") != "situation":
+        matched.extend(relevant)
+    if any(action.get("mode") is not None and action["mode"] != item.get("mode") for action in matched):
+        blockers.append({"type": "authorization", "subject": subject, "reason": "候选 mode 与对应处境动作不一致"})
+    error = candidate_subject_error(item, snapshot.state.ticket_ids,
+                                    [finding.identifier for finding in snapshot.findings.findings])
+    if error:
+        blockers.append({"type": "authorization", "subject": subject, "reason": error})
+    elif item.get("mode") in {"implement", "fix"}:
+        context = FactContext(snapshot, "ticket", subject.split(":", 1)[1])
+        ticket = context.state_ticket()
+        if not isinstance(ticket, dict) or ticket.get("state") != "PENDING":
+            blockers.append({"type": "foundation", "subject": subject,
+                             "reason": "Ticket 不是 PENDING，不能进入 implementation/fix"})
+        dependency = context.dependency_released("implementation")
+        if not dependency.known or not dependency.value:
+            blockers.append({"type": "foundation", "subject": subject,
+                             "reason": dependency.reason or "canonical implementation dependency 未释放"})
+    for running in in_flight:
+        same_id = item.get("candidate_id") == running.get("candidate_id")
+        same_work = (_same_candidate_work(item, running)
+                     and set(item.get("resource_keys") or []) == set(running.get("resource_keys") or []))
+        if item.get("code_delta") is not None:
+            same_work = same_work and item["code_delta"] == running.get("code_delta")
+        same_work = same_work and all(item.get(key) == running.get(key) for key in ("review_phase", "review_track"))
+        if same_id or same_work:
+            blockers.append({"type": "resource", "subject": subject,
+                             "reason": f"工作已在途：{running.get('dispatch_id')}"})
+    dispatch_ids = {row.get("dispatch_id") for row in snapshot.trail.rows
+                    if _event_kind(row) == "dispatch" and item.get("candidate_id")
+                    and row.get("candidate_id") == item["candidate_id"]}
+    if any(ident in dispatch_ids and str(returned.get("outcome", "")).upper() == "DONE"
+           for ident, returned in _dispatch_returns(snapshot).items()):
+        blockers.append({"type": "foundation", "subject": subject, "reason": "该候选已经 DONE，不能重复派发已完成工作"})
+    return blockers
 
 
 def _declared_candidate_partitions(
@@ -3261,38 +3374,13 @@ def _declared_candidate_partitions(
             **raw,
             "source": "declared",
             "candidates_of": candidate_snapshot.value["seq"],
+            "declaration_status": candidate_snapshot.value.get("declaration_status", "current"),
+            "declaration_reason": candidate_snapshot.value.get("declaration_reason", "当前候选声明"),
             "protocol": matched["protocol"] if matched else _PROTOCOLS["default"],
             "action_ids": [raw.get("action_id")],
             "actions": [action],
         }
-        blockers = list(raw.get("blockers", []))
-        subject = raw.get("subject")
-        if matched and matched.get("mode") is not None and matched["mode"] != raw.get("mode"):
-            blockers.append({"type": "authorization", "reason": "候选 mode 与对应处境动作不一致", "subject": subject})
-        subject_error = candidate_subject_error(raw, snapshot.state.ticket_ids, [finding.identifier for finding in snapshot.findings.findings])
-        if subject_error:
-            blockers.append({"type": "authorization", "reason": subject_error, "subject": subject})
-        if not subject_error and raw.get("mode") in {"implement", "fix"} and isinstance(subject, str) and subject.startswith("ticket:"):
-            ticket_id = subject.split(":", 1)[1]
-            ticket_context = FactContext(snapshot, "ticket", ticket_id)
-            state_ticket = ticket_context.state_ticket()
-            if not isinstance(state_ticket, dict) or state_ticket.get("state") != "PENDING":
-                blockers.append(
-                    {
-                        "type": "foundation",
-                        "reason": "Ticket 不是 PENDING，不能进入 implementation/fix",
-                        "subject": subject,
-                    }
-                )
-            dependency = ticket_context.dependency_released("implementation")
-            if not dependency.known or not dependency.value:
-                blockers.append(
-                    {
-                        "type": "foundation",
-                        "reason": dependency.reason or "canonical implementation dependency 未释放",
-                        "subject": subject,
-                    }
-                )
+        blockers = _candidate_blockers(snapshot, item, candidate_snapshot.value["candidates"], situation_actions, in_flight)
         if blockers:
             withheld.append({**item, "blockers": blockers})
         elif item.get("candidate_id") not in open_ids and outcomes.get(str(item.get("candidate_id"))) in {None, "INCOMPLETE"}:
@@ -3488,25 +3576,36 @@ def _derive(table: TableModel, snapshot: Snapshot) -> dict[str, Any]:
     declared_runnable, withheld = _declared_candidate_partitions(
         snapshot, candidate_snapshot, in_flight, situation_runnable
     )
+    declarations = candidate_snapshot.value["candidates"] if candidate_snapshot.known else []
     declared_actions = {(item.get("subject"), item.get("action_id")) for item in declared_runnable}
     controller_actions = []
     for item in situation_runnable:
         action = item["actions"][0]
-        if action.get("by") == "dispatch" or item.get("mode") is not None:
-            if (item.get("subject"), item.get("action_id")) not in declared_actions:
-                withheld.append({**item, "blockers": [{"type": "authorization", "subject": item.get("subject"),
-                    "reason": "主控先声明该委派的业务 subject、边界与资源，并纳入当前候选快照"}]})
+        if (item.get("subject"), item.get("action_id")) in declared_actions:
+            continue
+        blockers = _candidate_blockers(snapshot, item, declarations, situation_runnable, in_flight) if action.get("by") == "dispatch" else []
+        if blockers:
+            withheld.append({**item, "blockers": blockers})
         else:
             controller_actions.append(item)
     review_runnable, review_withheld = _pending_review_partitions(
         snapshot, candidate_snapshot
     )
+    for item in review_runnable:
+        item.update(declaration_status="missing", declaration_reason="待派审由真实返回推导，无需先写候选清单")
+        blockers = _candidate_blockers(snapshot, item, declarations, situation_runnable, in_flight)
+        if blockers:
+            review_withheld.append({**item, "blockers": blockers})
     withheld.extend(review_withheld)
+    held_review_ids = {item["candidate_id"] for item in review_withheld}
     runnable = [] if blocking_candidates else [
         *controller_actions,
         *declared_runnable,
-        *review_runnable,
+        *(item for item in review_runnable if item["candidate_id"] not in held_review_ids),
     ]
+    for item in [*runnable, *withheld]:
+        item.setdefault("declaration_status", "missing")
+        item.setdefault("declaration_reason", "未提供匹配的候选声明，不影响业务准入")
     result = {
         "selected": selected.as_json() if selected else None,
         "parallel_matches": [candidate.as_json() for candidate in parallel_matches],
@@ -3527,6 +3626,31 @@ def _derive(table: TableModel, snapshot: Snapshot) -> dict[str, Any]:
         "candidate_snapshot": candidate_snapshot.as_json(),
     }
     return result
+
+
+def dispatch_admission(package: Path, event: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
+    """Check current business facts, independently of optional snapshot evidence."""
+    reader = PackageReader(package, None)
+    table = _load_table_for_package(reader)
+    snapshot = _build_snapshot(reader, None, None)
+    declared = _latest_candidate_snapshot(snapshot)
+    declarations = declared.value["candidates"] if declared.known else []
+    item = {**event, "action_id": event["chosen"]}
+    actions = [{"subject": event["subject"], "action_id": action.get("id"), "mode": _action_mode(action)}
+               for row in table.rows for action in row.get("actions", [])]
+    blockers = _candidate_blockers(snapshot, item, declarations, actions, _open_dispatches(snapshot))
+    projection = _derive(table, snapshot)
+    blockers.extend({"type": "foundation", "reason": entry["slug"]} for entry in projection["blocking"])
+    for entry in projection["withheld"]:
+        if event.get("reviews") and entry.get("return_id") == event["reviews"]:
+            blockers.extend(entry.get("blockers", []))
+    matches = _matching_declarations(item, declarations)
+    status = declared.value.get("declaration_status", "current") if matches else "missing"
+    if event.get("candidates_of") is not None and (
+        not declared.known or event["candidates_of"] != declared.value["seq"]
+    ):
+        status = "stale"
+    return blockers, status
 
 
 def _subject_label(subject: str) -> str:
@@ -3597,6 +3721,7 @@ def _write_situation_digest(
     runnable_candidate_ids: list[str],
     head: str | None,
     trail_seq: int,
+    blocking_slugs: list[str],
 ) -> None:
     try:
         if not state.attempt_id:
@@ -3613,6 +3738,7 @@ def _write_situation_digest(
             "runnable_candidate_ids": runnable_candidate_ids,
             "head": head,
             "trail_seq": trail_seq,
+            "blocking_slugs": blocking_slugs,
         }
         with credential_path.open("w", encoding="utf-8", newline="\n") as stream:
             json.dump(payload, stream, ensure_ascii=False, separators=(",", ":"))
@@ -3643,6 +3769,7 @@ def _render_human(
         lines.append("- []")
     for item in runnable:
         lines.append(f"- {item['candidate_id']} ({item.get('subject')}): {item.get('protocol', '')}")
+        lines.append(f"  declaration: {item.get('declaration_status', 'missing')}; {item.get('declaration_reason', '')}")
         for action in item.get("actions", []):
             lines.append(
                 f"  action {action.get('id')}: {action.get('do', '')}; effect={action.get('effect', '')}"
@@ -3884,6 +4011,7 @@ def _run_render(args: argparse.Namespace) -> int:
                 ),
                 default=0,
             ),
+            [item["slug"] for item in derived["blocking"]],
         )
     if args.since == digest:
         if args.json:

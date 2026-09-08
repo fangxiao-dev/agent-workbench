@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 try:
-    from situation import FACT_KEYS, _dispatch_is_running
+    from situation import FACT_KEYS, _dispatch_is_running, _matching_declarations, candidate_snapshot_error
 except ImportError:  # pragma: no cover
     FACT_KEYS = frozenset()
 
@@ -192,7 +192,64 @@ def _receipt(row):
     return bool(_text(value) or (isinstance(value, dict) and value))
 
 
-def _execution_audit(rows):
+def _declaration(row, latest_seq, snapshots):
+    """Return usable current declaration evidence, without treating its absence as misconduct."""
+    seq = _sequence(row.get("candidates_of"))
+    if seq is None:
+        return "missing", None, "candidate declaration is missing"
+    pair = snapshots.get(seq)
+    if seq != latest_seq or pair is None:
+        return "stale", None, "candidate declaration is stale or superseded"
+    _, snapshot = pair
+    if candidate_snapshot_error(snapshot) is not None:
+        return "stale", None, "candidate declaration snapshot is incomplete"
+    if (
+        not _text(snapshot.get("head"))
+        or not _text(snapshot.get("state_sha256"))
+        or snapshot.get("head") != row.get("head")
+        or snapshot.get("state_sha256") != row.get("state_sha256")
+    ):
+        return "stale", None, "candidate declaration binding is stale"
+    return "current", pair, None
+
+
+def _declared_candidate(row, snapshot):
+    candidates = [candidate for candidate in snapshot.get("candidates", []) if isinstance(candidate, dict)] if isinstance(snapshot, dict) else []
+    item = {**row, "action_id": row.get("chosen")}
+    resources = item.get("resource_keys")
+    if not isinstance(resources, list) or any(not _text(key) for key in resources):
+        item["resource_keys"] = None
+    matches = _matching_declarations(item, candidates)
+    return matches[0] if len(matches) == 1 else None
+
+
+def _persistent_blockers(row, snapshot):
+    candidates = [candidate for candidate in snapshot.get("candidates", []) if isinstance(candidate, dict)] if isinstance(snapshot, dict) else []
+    resources = row.get("resource_keys") if isinstance(row.get("resource_keys"), list) else []
+    item = {**row, "action_id": row.get("chosen"), "resource_keys": resources}
+    relevant = _matching_declarations(item, candidates)
+    result = []
+    for candidate in candidates:
+        for blocker in candidate.get("blockers", []):
+            if (
+                isinstance(blocker, dict)
+                and blocker.get("type") in {"resource", "authorization"}
+                and (candidate in relevant or blocker.get("resource_key") in resources)
+                and blocker not in result
+            ):
+                result.append(blocker)
+    return result
+
+
+def _snapshot_belongs_to_attempt(row, value, attempt):
+    return attempt is None or (
+        row.get("subject") == "attempt"
+        and isinstance(value, dict)
+        and value.get("attempt") == attempt
+    )
+
+
+def _execution_audit(rows, attempt=None):
     """Audit declared dispatch identity and fixed returns without inferring resources."""
     issues, unknown, pending, overlaps = [], [], [], []
     dispatches, returns, snapshots, waiting, reviews = {}, {}, {}, {}, {}
@@ -202,14 +259,18 @@ def _execution_audit(rows):
     opportunities = []
     fix_counts = {}
     latest_snapshot_seq = None
+    latest_usable_snapshot_seq = None
     returned_dispatches = set()
     for number, row in rows:
         kind = _kind(row)
         if kind == "fact" and row.get("key") == "dispatch.candidates":
-            latest_snapshot_seq = _sequence(row.get("seq"))
             value = row.get("value")
-            if _sequence(row.get("seq")) is not None and isinstance(value, dict) and isinstance(value.get("candidates", []), list):
+            if not _snapshot_belongs_to_attempt(row, value, attempt):
+                unknown.append({"line": number, "reason": "candidate snapshot Attempt binding cannot be verified"})
+            elif _sequence(row.get("seq")) is not None and candidate_snapshot_error(value) is None:
+                latest_snapshot_seq = row["seq"]
                 snapshots[row["seq"]] = (number, value)
+                latest_usable_snapshot_seq = row["seq"]
             else:
                 unknown.append({"line": number, "reason": "invalid candidate snapshot shape"})
         if kind == "fact" and row.get("key") == "review.dispatch_pending":
@@ -239,46 +300,55 @@ def _execution_audit(rows):
             if row.get("mode") == "fix":
                 subject = row.get("subject")
                 fix_counts[subject] = fix_counts.get(subject, 0) + 1
-            snapshot_pair = snapshots.get(_sequence(row.get("candidates_of")))
-            if _sequence(row.get("candidates_of")) != latest_snapshot_seq:
-                issues.append({"line": number, "reason": "dispatch references a superseded candidate snapshot"})
-                snapshot_pair = None
+            declaration_status, snapshot_pair, declaration_reason = _declaration(
+                row, latest_snapshot_seq, snapshots
+            )
+            latest_pair = snapshots.get(latest_usable_snapshot_seq)
+            persistent_blockers = _persistent_blockers(row, latest_pair[1]) if latest_pair else []
+            if persistent_blockers:
+                issues.append({"line": number, "reason": "dispatch contradicts known declaration blockers"})
             resources = row.get("resource_keys")
-            if not isinstance(resources, list) or any(not _text(key) for key in resources):
+            resources_valid = isinstance(resources, list) and not any(not _text(key) for key in resources)
+            if not resources_valid:
                 unknown.append({"line": number, "reason": "missing or invalid declared resource_keys"})
-            elif snapshot_pair is None:
-                unknown.append({"line": number, "reason": "candidate snapshot is unavailable before dispatch"})
+            if snapshot_pair is None:
+                unknown.append({"line": number, "reason": declaration_reason, "declaration_status": declaration_status})
             else:
                 _, snapshot = snapshot_pair
-                candidates = snapshot.get("candidates", []) if isinstance(snapshot, dict) else []
+                candidates = snapshot["candidates"]
                 ready_ids = row.get("runnable_candidate_ids")
                 if not isinstance(ready_ids, list):
                     unknown.append({"line": number, "reason": "dispatch has no rendered runnable candidate evidence"})
                     ready_ids = []
                 eligible = {c["candidate_id"]: c for c in candidates if isinstance(c, dict) and _text(c.get("candidate_id")) and c["candidate_id"] in ready_ids}
-                candidate = next((c for c in candidates if isinstance(c, dict) and c.get("candidate_id") == row.get("candidate_id")), None)
-                candidate_matches = candidate is not None and all(candidate.get(key) == row.get(key) for key in ("subject", "mode", "resource_keys")) and candidate.get("action_id") == row.get("chosen")
-                if not candidate_matches:
+                candidate = _declared_candidate(row, snapshot)
+                if candidate is None:
+                    unknown.append({"line": number, "reason": "dispatch candidate is absent from the current declaration", "declaration_status": "current"})
+                    eligible = {}
+                elif not all(candidate.get(key) == row.get(key) for key in ("subject", "mode", "resource_keys")) or candidate.get("action_id") != row.get("chosen"):
                     issues.append({"line": number, "reason": "dispatch differs from candidate snapshot"})
                     eligible = {}
-                if not _text(snapshot.get("head")) or not _text(snapshot.get("state_sha256")) or snapshot.get("head") != row.get("head") or snapshot.get("state_sha256") != row.get("state_sha256"):
-                    unknown.append({"line": number, "reason": "candidate snapshot binding cannot be verified"})
+                elif candidate.get("blockers") and not persistent_blockers:
+                    issues.append({"line": number, "reason": "dispatch contradicts declared candidate blockers"})
                     eligible = {}
-                if row.get("candidate_id") in eligible and not candidate.get("blockers"):
+                elif row.get("candidate_id") not in eligible:
+                    unknown.append({"line": number, "reason": "dispatch lacks complete rendered runnable candidate evidence", "declaration_status": "current"})
+                if resources_valid and candidate is not None and row.get("candidate_id") in eligible and not candidate.get("blockers"):
                     verified_candidates.add(ident)
-                for other_id, (other_number, other) in active.items():
-                    other_resources = other.get("resource_keys")
-                    if isinstance(other_resources, list) and not set(resources).intersection(other_resources):
-                        # The first dispatch's renderer observed both candidates before either started.
-                        prior_ids = other.get("runnable_candidate_ids", [])
-                        if ident in verified_candidates and other_id in verified_candidates and row.get("candidate_id") in prior_ids and other.get("candidate_id") in prior_ids:
-                            overlaps.append({"dispatch_ids": [other_id, ident], "lines": [other_number, number]})
-                if row.get("candidate_id") in eligible and any(
-                    cid != row["candidate_id"] and isinstance(c.get("resource_keys"), list)
-                    and not set(resources).intersection(c["resource_keys"])
-                    for cid, c in eligible.items()
-                ):
-                    opportunities.append(ident)
+                if resources_valid:
+                    for other_id, (other_number, other) in active.items():
+                        other_resources = other.get("resource_keys")
+                        if isinstance(other_resources, list) and all(_text(key) for key in other_resources) and not set(resources).intersection(other_resources):
+                            # The first dispatch's renderer observed both candidates before either started.
+                            prior_ids = other.get("runnable_candidate_ids", [])
+                            if ident in verified_candidates and other_id in verified_candidates and row.get("candidate_id") in prior_ids and other.get("candidate_id") in prior_ids:
+                                overlaps.append({"dispatch_ids": [other_id, ident], "lines": [other_number, number]})
+                    if row.get("candidate_id") in eligible and any(
+                        cid != row["candidate_id"] and isinstance(c.get("resource_keys"), list)
+                        and not set(resources).intersection(c["resource_keys"])
+                        for cid, c in eligible.items()
+                    ):
+                        opportunities.append(ident)
             active[ident] = (number, row)
         if kind == "worker-return":
             ident, return_id = _text(row.get("of")), _text(row.get("return_id"))
@@ -352,13 +422,21 @@ def audit_package(package):
     deviations, uncheckable, cache, replayed = [], [], {}, 0
     candidate_checked = 0
     snapshots = {row["seq"]: (number, row.get("value")) for number, row in rows
-                 if _kind(row) == "fact" and row.get("key") == "dispatch.candidates" and _sequence(row.get("seq")) is not None}
-    latest_at_dispatch, latest = {}, None
+                 if _kind(row) == "fact" and row.get("key") == "dispatch.candidates"
+                 and _sequence(row.get("seq")) is not None
+                 and _snapshot_belongs_to_attempt(row, row.get("value"), attempt)
+                 and candidate_snapshot_error(row.get("value")) is None}
+    latest_at_dispatch, latest_usable_at_dispatch, latest, latest_usable = {}, {}, None, None
     for number, row in rows:
         if _kind(row) == "fact" and row.get("key") == "dispatch.candidates":
-            latest = _sequence(row.get("seq"))
+            value = row.get("value")
+            if _snapshot_belongs_to_attempt(row, value, attempt):
+                latest = _sequence(row.get("seq"))
+                if latest is not None and candidate_snapshot_error(value) is None:
+                    latest_usable = latest
         elif _kind(row) == "dispatch":
             latest_at_dispatch[number] = latest
+            latest_usable_at_dispatch[number] = latest_usable
     for number, row in dispatches:
         state, digest = _digest(row)
         if state == "missing":
@@ -378,23 +456,39 @@ def audit_package(package):
                 continue
             deviations.append({"line": number, "chosen": chosen, "reason": "escape has no reason"})
             continue
-        if "candidates_of" in row:
+        if _text(row.get("dispatch_id")):
             # These facts were captured by the CLI from the actual render credential.
             # A Git HEAD alone cannot reconstruct an uncommitted execution trail.
-            if _sequence(row["candidates_of"]) != latest_at_dispatch.get(number):
-                deviations.append({"line": number, "chosen": chosen, "reason": "dispatch references a superseded candidate snapshot"})
+            declaration_status, snapshot_pair, declaration_reason = _declaration(
+                row, latest_at_dispatch.get(number), snapshots
+            )
+            latest_pair = snapshots.get(latest_usable_at_dispatch.get(number))
+            persistent_blockers = _persistent_blockers(row, latest_pair[1]) if latest_pair else []
+            if persistent_blockers:
+                deviations.append({"line": number, "chosen": chosen, "reason": "dispatch contradicts known declaration blockers"})
+            if snapshot_pair is None:
+                uncheckable.append({"line": number, "reason": declaration_reason, "declaration_status": declaration_status})
                 continue
-            snapshot_number, snapshot = snapshots.get(_sequence(row["candidates_of"]), (number, None))
-            candidates = snapshot.get("candidates", []) if isinstance(snapshot, dict) and isinstance(snapshot.get("candidates"), list) else []
-            matching = [item for item in candidates if isinstance(item, dict) and item.get("candidate_id") == row.get("candidate_id")]
-            if snapshot_number < number and len(matching) == 1 and _text(snapshot.get("head")) and _text(snapshot.get("state_sha256")) and snapshot.get("head") == row.get("head") and snapshot.get("state_sha256") == row.get("state_sha256") and isinstance(row.get("runnable_candidate_ids"), list):
+            snapshot_number, snapshot = snapshot_pair
+            candidates = snapshot["candidates"]
+            candidate = _declared_candidate(row, snapshot)
+            matching = [candidate] if candidate is not None else []
+            if snapshot_number < number and len(matching) == 1 and isinstance(row.get("runnable_candidate_ids"), list):
                 candidate = matching[0]
-                if candidate.get("candidate_id") not in row["runnable_candidate_ids"] or candidate.get("action_id") != chosen or candidate.get("subject") != subject:
+                if (candidate.get("action_id") != chosen
+                        or candidate.get("subject") != subject
+                        or candidate.get("mode") != row.get("mode")
+                        or candidate.get("resource_keys") != row.get("resource_keys")):
                     deviations.append({"line": number, "chosen": chosen, "reason": "candidate was not runnable in the dispatch credential"})
+                elif candidate.get("blockers") and not persistent_blockers:
+                    deviations.append({"line": number, "chosen": chosen, "reason": "dispatch contradicts declared candidate blockers"})
+                elif candidate.get("candidate_id") not in row["runnable_candidate_ids"]:
+                    uncheckable.append({"line": number, "reason": "dispatch lacks complete rendered runnable candidate evidence", "declaration_status": "current"})
                 else:
                     candidate_checked += 1
             else:
-                uncheckable.append({"line": number, "reason": "candidate snapshot/render binding is incomplete"})
+                reason = "dispatch candidate is absent from the current declaration" if not matching else "candidate snapshot/render binding is incomplete"
+                uncheckable.append({"line": number, "reason": reason, "declaration_status": "current"})
             continue
         head = _text(row.get("head"))
         if head is None:
@@ -413,7 +507,7 @@ def audit_package(package):
         replayed += 1
         if chosen not in _action_ids(rendered, subject, legacy=legacy) and not _related_reason(row, rows):
             deviations.append({"line": number, "chosen": chosen, "reason": "chosen action is absent from replayed situation actions"})
-    return {"package": str(package), "attempt": attempt, "trail": str(trails[-1]), "trails": [str(path) for path in trails], "dispatches": len(dispatches), "no_digest": no_digest, "stale": _stale(dispatches), "deviations": deviations, "uncheckable": uncheckable, "replayed": replayed, "candidate_checked": candidate_checked, "schema_violations": violations, **_execution_audit(rows)}
+    return {"package": str(package), "attempt": attempt, "trail": str(trails[-1]), "trails": [str(path) for path in trails], "dispatches": len(dispatches), "no_digest": no_digest, "stale": _stale(dispatches), "deviations": deviations, "uncheckable": uncheckable, "replayed": replayed, "candidate_checked": candidate_checked, "schema_violations": violations, **_execution_audit(rows, attempt)}
 
 
 def _format_report(report):

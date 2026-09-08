@@ -314,13 +314,16 @@ def test_capsule_preserves_all_candidates_and_legacy_fallback() -> None:
     rendered = {
         "selected": {"slug": "legacy.cursor", "action_ids": ["old-wait"]},
         "blocking": [],
-        "runnable": [{"candidate_id": "A", "protocol": "run A"}, {"candidate_id": "B", "protocol": "run B"}],
+        "runnable": [{"candidate_id": "A", "protocol": "run A", "declaration_status": "missing"},
+                     {"candidate_id": "B", "protocol": "run B", "declaration_status": "stale"}],
         "withheld": [{"candidate_id": "C", "type": "foundation", "reason": "contract pending"}],
         "in_flight": [{"dispatch_id": "D", "resource_keys": ["db:test"]}],
     }
     text = capsule({"package": "fixture"}, rendered)
     assert all(value in text for value in ("run A", "run B", "contract pending", "db:test"))
     assert "old-wait" not in text
+    assert '"declaration_status":"missing"' in text
+    assert '"declaration_status":"stale"' in text
     legacy = capsule({"package": "fixture"}, {"selected": rendered["selected"]})
     assert "selected: legacy.cursor" in legacy
 

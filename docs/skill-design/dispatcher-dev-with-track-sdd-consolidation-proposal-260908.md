@@ -1,5 +1,29 @@
 # Dispatcher、SDD 与 Dev With Track 联合调整提案
 
+## 修订记录：清单不再作为派发门槛（2026-09-08）
+
+Owner 已批准修订，基线为 `3e89ece6d9452db86a3f10e1c43402b7ba239003`。本节替代下方原实施记录中“必须先声明候选才能派发”的合同。本轮 7 项验收场景与验证要求已完成，源码修订 closed；范围内剩余项 0，待 Owner 决策项 0。Owner 已另行授权提交本轮修订。
+
+- 清单只补充候选与审计上下文。缺失、过期或未列出某项工作，不减少处境表能够识别的合法工作；同 Attempt 最新清单即使指纹过期，也保留其候选重新检查当前业务事实。最新空数组只清除补充声明。
+- 候选的 `declaration_status=current|missing|stale` 和 `declaration_reason` 单独描述记录完整性，不放进四类业务 blocker。已明确记录的 blocker 不因清单过期或派发省略引用而自动消失。
+- `candidates_of` 可选；实际派发的 subject、mode、resource_keys、dispatch_id、candidate_id、receipt 与归属明确的 return 仍需记录。CLI 直接检查当前业务依赖、已知 blocker 和在途工作，不以清单成员资格放行。有效引用中的字段矛盾仍报错。
+- 保留 HEAD/state 字节指纹用于证据新鲜度，不新增语义指纹算法。状态变化后重新 render 即可，不能要求主控整批重写清单。审计缺完整清单时报告不可核验；真实 receipt、增量审查、迟到/重复返回等检查继续执行。
+- 删除无人读取的 `resources_declared`；同步 CLI、胶囊、protocol、Skill 与输入合同。脚本跨平台，不改版本，不安装、同步缓存或发布。
+
+**DSH 已知兼容缺口：** `plugin-marketplace/plugins/dsh-impl-package/presets/impl-package/commands.mjs` 仍注册 `impl-subagent-driven-development`，steer 到已删除的 SDD 阶段。Owner 明确排除 DSH 修改，本轮保留该目录原样；该入口未修复，不能把本次源码与三宿主 manifest 检查解释为 DSH 已兼容。
+
+本轮验证记录（分组存在重叠，不累加为一次全量运行）：
+
+| 范围 | 命令/证据 |
+| --- | --- |
+| 投影、词汇、审计与 Codex 注入 | `python -m pytest tests/test_situation_render.py tests/test_dev_with_track_situations_review_vocabulary.py tests/test_dispatch_audit.py tests/test_impl_package_hooks.py -q`：最终 **160 passed**。包括清单单调性、错误声明不遮住 canonical action、局部资源、独立 review track、missing/stale 透传及坏清单回退。 |
+| 实际 CLI 派发与轨迹 | `python -m pytest tests/test_impl_package_state.py -q -k 'dispatch or trail or checklist or stale_explicit'`：24 passed、13 subtests passed。包括无清单派发、evidence 登记/checkpoint/commit 后无需重写清单、依赖与在途防重、跨归档幂等。最终修复后的 `-k 'dispatch_contract or missing_checklist or stale_explicit or current_credential_preserves'`：4 passed、17 subtests passed；`-k 'malformed_checklist or candidate_snapshot_binding'`：2 passed。另有无清单派审的定点检查通过。 |
+| 直接消费者与 Skill | 沿用原实施记录十个直接消费者测试文件：87 passed；Dispatcher 和 dev-with-track 的 `quick_validate.py` 均 valid；Python 编译与 diff-check 通过。 |
+
+独立复核在固定源码快照上完成，8/8 指纹匹配，最终 PASS、无新增 P1/P2。发现并关闭的边界包括：DONE 不得重复派发但 INCOMPLETE 可续接；声明按唯一身份/工作 footprint/工作动作关联，保留同票独立候选；坏声明不能反向覆盖合法处境动作；当前 credential 保留四类全局 blocking；格式坏的后置清单不能清除旧 blocker。清单格式校验由读取、CLI 写入和审计共用，合法空数组仍明确替换旧清单。DSH、`.ps1` 和版本 manifest 的 diff 为空。
+
+本轮不新增模型评测任务；上述是实际运行时回归，原 V04/V08/V14/V15/V16 模型样例仍属于前一提交材料，不冒充本修订版实跑结果。
+
 ## 实施记录（2026-09-08）
 
 Owner 已批准联合改造及候选来源补充：复用现有 trail 记录候选快照。实施基线为 `795ca95d0846f844a0845fa93889e124df4998f4`；实施前工作区干净，投影、审计、Dispatcher 与 SDD 四组基线测试共 122 项通过。当前源码、范围内验证与独立复核均已完成，本次源码交付 closed；剩余实施项 0，待 Owner 决策项 0。安装与缓存同步不在本次范围。

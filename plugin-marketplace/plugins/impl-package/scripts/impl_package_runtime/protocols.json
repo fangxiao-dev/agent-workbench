@@ -1,6 +1,6 @@
 {
   "_comment": "处境驱动协议注入：slug → 当该处境被 pre-step hook 选中时，附加到注入消息的协议片段。只放「规则/判断」，不放机械操作（机械操作已在 typed tools 与 CLI 校验里）。default 兜底未覆盖的 slug。来源：dev-with-track / do-review / Dispatcher 合同。",
-  "default": "处境表未覆盖此情形：按判断行动；若偏离渲染建议或处境表缺项，写一行 kind=escape 轨迹（subject/deviation/reason）。机械操作一律走 impl_* 工具。",
+  "default": "处境表未覆盖此情形：按判断行动；若偏离渲染建议或处境表缺项，写一行 kind=escape 轨迹（subject/deviation/reason）。候选清单缺失或过期只影响审计完整性，不是派发门槛；刷新当前处境后按真实依赖、授权、资源与在途事实判断。机械操作一律走 impl_* 工具。",
   "attempt.gate.terminal-frozen": "Gate 已终结：state、active checkpoint、Execution Record 冻结；不修改，如实汇报或转入 patch Attempt。",
   "package.record.state-missing": "state.json 缺失/无效：先 package init（--attempt --plan）再推进；init 前不派发任何动作。",
   "package.record.projection-drift": "projection drift：package refresh-progress 对齐；drift 本身不授权派发。",

@@ -17,7 +17,7 @@ Capsule 的 `projection-complete: false` 表示宿主长度预算只能承载摘
 3. 根据 typed Ticket dependency 与批准范围恢复业务重点和全部相关候选；Progress/checkpoint 不授权 dispatch。
 4. 把候选交给 `$dispatcher`；Dispatcher 负责资源 admission、receipt、return、review pacing、补派与 idle，idle 不等于 package closed。
 5. 只打开当前候选需要的 Plan/Ticket/Execution Record/evidence；旧 package 才按需读取 DAG/Handoff。
-6. 准备派发、记录返回或恢复待派审增量时，读取 [Situation Inputs](../../../references/situation-inputs.md) 的 trail 合同；先追加当前候选快照，再用 `situation.py render` 生成 credential，取得真实 receipt 后记录派发。消费结果后用语义 Ticket/evidence/recovery/trail 命令写权威事实。
+6. 准备派发、记录返回或恢复待派审增量时，读取 [Situation Inputs](../../../references/situation-inputs.md) 的 trail 合同。候选清单可补充恢复与审计上下文；无清单或清单过期时直接按当前业务事实、dependency、授权、资源与 in-flight 重算。派发前用 `situation.py render` 刷新当前投影和 credential，取得真实 receipt 后记录 dispatch；消费结果后用语义 Ticket/evidence/recovery/trail 命令写权威事实。
 
 ## Evidence 与 Execution Record
 
@@ -29,6 +29,7 @@ Evidence 使用存在的仓库相对路径，可带 anchor，并足以解释状�
 - 旧 package 的 Task dependency 未释放时不得进入 READY/RUNNING；Task DONE 后仍需集成、共享验证与 Ticket AC 映射。
 - plan/contract 变化只使 affected subset 进入 revalidation，并沿用 initial bundle approval。
 - worker return 不可归因或 `INCOMPLETE` 时，核对 dispatch identity、进程、diff、residue 与上下文。边界可信则沿原 worker 恢复；边界失真则由 Dispatcher 先调查受影响范围再决定 worker。业务 `BLOCKED` 原样保留。
+- 同 Attempt 的旧候选清单只提供线索：按当前状态重算业务准入，保留其中显式 blocker；最新 `candidates=[]` 清除补充候选。清单指纹只说明记录新鲜度，不替代语义判断。
 - native dispatch 已成功但 CLI 因 stale credential 未记入 trail 时，保留真实 receipt 与 `dispatch_id`，刷新 canonical facts 后补齐该次记录；记账恢复不得重派 worker。
 
 ## Findings、Review 与 Gate

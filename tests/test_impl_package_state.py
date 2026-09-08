@@ -102,11 +102,118 @@ class ImplPackageStateTests(unittest.TestCase):
                 "candidates_of": getattr(self, "_candidate_seq", 1), "chosen": "dispatch-verify",
                 "mode": "verify", "resource_keys": [], "receipt": {"worker_id": "worker-01"}}
 
+    def render_current(self, package: Path, *args: str) -> dict:
+        output = StringIO()
+        with redirect_stdout(output):
+            code = command_groups.situation.main(["render", "--package", str(package), "--json", *args])
+        self.assertEqual(code, 0)
+        return json.loads(output.getvalue())
+
+    def append_dispatch(self, package: Path, **fields) -> dict:
+        event = {"kind": "dispatch", "subject": "ticket:TKT-01", "worker": "worker-A",
+                 "dispatch_id": "A", "candidate_id": "A", "mode": "implement", "chosen": "continue-implementation",
+                 "resource_keys": ["worktree:A"], "receipt": "worker-A", "outcome": "RUNNING", "returned": False,
+                 **fields, "situation_digest": self.render_current(package)["digest"]}
+        return engine.command_trail_append(package, json.dumps(event))
+
+    def test_missing_checklist_allows_dispatch_but_not_dependency_or_inflight_bypass(self):
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.append_dispatch(package)
+        self.assertEqual(engine._active_trail_rows(package, "initial")[-1]["declaration_status"], "missing")
+        for overrides in ({"candidate_id": "renamed"}, {"candidate_id": "renamed", "mode": "verify"},
+                          {"candidate_id": "child", "subject": "ticket:TKT-02", "chosen": "implement-child"}):
+            with self.subTest(overrides=overrides), self.assertRaises(engine.StateError):
+                self.append_dispatch(package, dispatch_id="bypass", **overrides)
+        self.append_dispatch(package, dispatch_id="B", candidate_id="B", chosen="independent-step", resource_keys=["worktree:B"])
+        self.assertEqual(len([row for row in engine._active_trail_rows(package, "initial") if row["kind"] == "dispatch"]), 2)
+        engine.command_trail_append(package, json.dumps({"kind": "worker-return", "subject": "ticket:TKT-01",
+            "of": "A", "return_id": "return-A", "outcome": "INCOMPLETE"}))
+        self.append_dispatch(package, dispatch_id="A-resume")
+        engine.command_trail_append(package, json.dumps({"kind": "worker-return", "subject": "ticket:TKT-01",
+            "of": "A-resume", "return_id": "return-A-done", "outcome": "DONE"}))
+        with self.assertRaisesRegex(engine.StateError, "DONE"):
+            self.append_dispatch(package, dispatch_id="A-again")
+
+    def test_current_credential_preserves_explicit_global_projection_blocking(self):
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        projection = self.render_current(package, "--validation-result", '{"projection_drift":true}')
+        self.assertTrue(projection["blocking"])
+        with self.assertRaisesRegex(engine.StateError, "global blocking"):
+            engine.command_trail_append(package, json.dumps({
+                **self.dispatch_fields(), "kind": "dispatch", "subject": "attempt", "worker": "worker-01",
+                "outcome": "RUNNING", "returned": False, "situation_digest": projection["digest"]}))
+
+    def test_malformed_checklist_reference_does_not_block_legal_dispatch(self):
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.write_situation_digest(package)
+        row = engine._active_trail_rows(package, "initial")[-1]
+        bad_seq = row["seq"] + 1
+        with (package / "execution/initial/trail.jsonl").open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps({**row, "seq": bad_seq, "value": {**row["value"], "candidates": None}}) + "\n")
+        self.append_dispatch(package, **{**self.dispatch_fields(), "candidates_of": bad_seq, "subject": "attempt"})
+        self.assertEqual(engine._active_trail_rows(package, "initial")[-1]["declaration_status"], "stale")
+
+    def test_stale_checklist_allows_work_after_checkpoint_evidence_and_commit(self):
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.write_situation_digest(package)
+        seq = self._candidate_seq
+        self.add_evidence(repo, package)
+        self.cli(repo, package, "recovery", "checkpoint", "--subject", "attempt", "--next", "continue",
+                 "--evidence", "evidence.md")
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "record checkpoint")
+        self.append_dispatch(package, **{**self.dispatch_fields(), "candidates_of": seq, "subject": "attempt"})
+        self.assertEqual(engine._active_trail_rows(package, "initial")[-1]["declaration_status"], "stale")
+        self.assertEqual(sum(row.get("key") == "dispatch.candidates" for row in engine._active_trail_rows(package, "initial")), 1)
+
+    def test_stale_explicit_blockers_cannot_be_bypassed_by_omitting_reference(self):
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        candidates = [{"candidate_id": kind, "subject": "ticket:TKT-01", "mode": "implement",
+                       "action_id": kind, "resource_keys": [kind],
+                       "blockers": [{"type": kind, "subject": "ticket:TKT-01", "reason": "confirmed " + kind}]}
+                      for kind in ("resource", "authorization")]
+        engine.command_trail_append(package, json.dumps({"kind": "fact", "subject": "attempt",
+            "key": "dispatch.candidates", "value": {"candidates": candidates}}))
+        self.cli(repo, package, "recovery", "checkpoint", "--subject", "attempt", "--next", "continue", "--evidence", "evidence.md")
+        for kind in ("resource", "authorization"):
+            for mode in ("implement", "verify"):
+                with self.subTest(kind=kind, mode=mode), self.assertRaisesRegex(engine.StateError, "confirmed"):
+                    self.append_dispatch(package, candidate_id="renamed", chosen=kind, mode=mode, resource_keys=["renamed:" + kind])
+        engine.command_trail_append(package, json.dumps({"kind": "fact", "subject": "attempt",
+            "key": "dispatch.candidates", "value": {"candidates": [{"candidate_id": "child",
+                "subject": "ticket:TKT-02", "mode": "implement", "action_id": "custom-child", "resource_keys": ["child"]}]}}))
+        with self.assertRaisesRegex(engine.StateError, "mode"):
+            self.append_dispatch(package, candidate_id="renamed", subject="ticket:TKT-02", chosen="custom-child", mode="verify", resource_keys=["changed"])
+
+    def test_pending_review_can_dispatch_without_checklist(self):
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.append_dispatch(package)
+        delta = {"base": git(repo, "rev-parse", "HEAD"), "head": git(repo, "rev-parse", "HEAD")}
+        engine.command_trail_append(package, json.dumps({"kind": "worker-return", "subject": "ticket:TKT-01",
+            "of": "A", "return_id": "return-A", "outcome": "DONE", "code_delta": delta, "consumption_id": "consume-A"}))
+        projection = self.render_current(package)
+        self.assertTrue(any(item.get("return_id") == "return-A" for item in projection["runnable"]))
+        self.append_dispatch(package, dispatch_id="review-A", candidate_id="review:return-A", mode="verify",
+            chosen="dispatch-delta-review", worker="reviewer", receipt="reviewer", reviews="return-A",
+            code_delta=delta, consumption_id="consume-A", resource_keys=[])
+
     def test_dispatch_contract_requires_identity_resources_and_receipt(self) -> None:
         valid = {**self.dispatch_fields(), "kind": "dispatch", "subject": "attempt",
                  "worker": "worker-01", "outcome": "RUNNING", "returned": False,
                  "situation_digest": "a1b2c3d4e5f6"}
-        for field in ("dispatch_id", "candidate_id", "candidates_of", "resource_keys", "receipt", "mode", "chosen"):
+        for field in ("dispatch_id", "candidate_id", "resource_keys", "receipt", "mode", "chosen"):
             with self.subTest(field=field), self.assertRaises(engine.StateError):
                 engine._validate_trail_event({key: value for key, value in valid.items() if key != field})
         with self.assertRaises(engine.StateError):
@@ -117,6 +224,11 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(engine._validate_trail_event(returned), returned)
         with self.assertRaises(engine.StateError):
             engine._validate_trail_event({**returned, "code_delta": {"base": "a" * 7, "head": "b" * 40}})
+        candidate = {"candidate_id": "A", "subject": "attempt", "mode": "verify", "action_id": "verify", "resource_keys": []}
+        for malformed in ({}, {**candidate, "mode": "review"}, {**candidate, "resource_keys": {}},
+                          {**candidate, "blockers": [{"type": {}, "reason": "bad", "subject": "attempt"}]}):
+            with self.subTest(malformed=malformed), self.assertRaises(engine.StateError):
+                engine._validate_candidate_snapshot({"candidates": [malformed]})
 
     def test_candidate_snapshot_binding_and_empty_replacement(self) -> None:
         temp, repo, package = self.make_repo()
@@ -140,8 +252,8 @@ class ImplPackageStateTests(unittest.TestCase):
         stale = self.cli(repo, package, "trail", "append", ok=False, input_text=json.dumps({
             **self.dispatch_fields(), "kind": "dispatch", "subject": "attempt", "worker": "worker-01",
             "outcome": "RUNNING", "returned": False, "situation_digest": projection["digest"]}))
-        self.assertNotEqual(stale.returncode, 0)
-        self.assertIn("latest candidate snapshot", stale.stderr)
+        self.assertEqual(stale.returncode, 0, stale.stderr)
+        self.assertEqual(engine._active_trail_rows(package, "initial")[-1]["declaration_status"], "stale")
 
     def test_dispatch_retry_and_return_identity_survive_handoff_archive(self) -> None:
         temp, repo, package = self.make_repo()

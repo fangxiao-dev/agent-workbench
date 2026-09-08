@@ -14,7 +14,7 @@ def _execution_rows(*, pending=False, review=True, receipt=True):
         {"candidate_id": name, "subject": "ticket:TKT-01", "mode": "implement", "action_id": "implement", "resource_keys": [name]}
         for name in ("A", "B")
     ]
-    rows = [{"kind": "fact", "key": "dispatch.candidates", "seq": 1, "value": {"head": "head", "state_sha256": "state", "candidates": candidates, "available_slots": 2}}]
+    rows = [{"kind": "fact", "key": "dispatch.candidates", "subject": "attempt", "seq": 1, "value": {"attempt": "initial", "head": "head", "state_sha256": "state", "candidates": candidates, "available_slots": 2}}]
     for name in ("A", "B"):
         rows.append({"kind": "dispatch", "dispatch_id": name, "subject": "ticket:TKT-01", "worker": name,
                      "outcome": "RUNNING", "returned": False, "receipt": name if receipt else None,
@@ -28,8 +28,8 @@ def _execution_rows(*, pending=False, review=True, receipt=True):
     rows.append({"kind": "worker-return", "of": "B", "return_id": "return-B", "subject": "ticket:TKT-01", "outcome": "DONE"})
     if review:
         snapshot_seq = len(rows) + 1
-        rows.append({"kind": "fact", "key": "dispatch.candidates", "seq": snapshot_seq,
-                     "value": {"head": "head", "state_sha256": "state", "available_slots": 1,
+        rows.append({"kind": "fact", "key": "dispatch.candidates", "subject": "attempt", "seq": snapshot_seq,
+                     "value": {"attempt": "initial", "head": "head", "state_sha256": "state", "available_slots": 1,
                      "candidates": [{"candidate_id": "review-A", "subject": "ticket:TKT-01", "mode": "verify", "action_id": "delta-review", "resource_keys": ["snapshot:A"]}]}})
         rows.append({"kind": "dispatch", "dispatch_id": "review-A", "subject": "ticket:TKT-01", "worker": "reviewer",
                      "outcome": "RUNNING", "returned": False, "receipt": "review-receipt", "reviews": "return-A",
@@ -70,7 +70,8 @@ def test_missing_receipt_and_duplicate_return_cannot_count_as_execution():
 
 def test_capacity_restoration_prioritizes_pending_review_and_keeps_delta_fixed():
     rows = _execution_rows(pending=True, review=False)
-    rows.append({"kind": "fact", "key": "dispatch.candidates", "seq": 7, "value": {"available_slots": 1}})
+    rows.append({"kind": "fact", "key": "dispatch.candidates", "subject": "attempt", "seq": 7,
+                 "value": {"attempt": "initial", "available_slots": 1, "candidates": []}})
     next_dispatch = dict(rows[1], dispatch_id="C", worker="C")
     rows.append(next_dispatch)
     rows.extend(_execution_rows()[-1:])
@@ -128,15 +129,203 @@ def test_second_return_identity_for_same_dispatch_is_not_consumed():
 
 def test_replaced_snapshot_cannot_certify_a_dispatch(audit_tmp_path):
     rows = _execution_rows(review=False)
-    rows.insert(1, {"kind": "fact", "key": "dispatch.candidates", "seq": 2,
-                    "value": {"head": "head", "state_sha256": "state", "candidates": []}})
+    rows.insert(1, {"kind": "fact", "key": "dispatch.candidates", "subject": "attempt", "seq": 2,
+                    "value": {"attempt": "initial", "head": "head", "state_sha256": "state", "candidates": []}})
     for row in rows:
         if row["kind"] == "dispatch":
             row["situation_digest"] = "123456abcdef"
     report = dispatch_audit.audit_package(_package(audit_tmp_path, rows))
     assert report["candidate_checked"] == 0
-    assert len(report["deviations"]) == 2
+    assert report["deviations"] == []
+    assert len(report["uncheckable"]) == 2
+    assert all(item["declaration_status"] == "stale" for item in report["uncheckable"])
     assert report["concurrent_dispatches"] == []
+
+
+def test_new_dispatch_without_declaration_is_uncheckable_without_head_replay(audit_tmp_path, monkeypatch):
+    row = dict(_execution_rows(review=False)[1])
+    row.pop("candidates_of")
+    row["declaration_status"] = "missing"
+    row["situation_digest"] = "123456abcdef"
+    monkeypatch.setattr(dispatch_audit, "replay_situation", lambda *_: pytest.fail("new dispatch must not replay old HEAD"))
+
+    report = dispatch_audit.audit_package(_package(audit_tmp_path, [row]))
+
+    assert report["deviations"] == []
+    assert report["candidate_checked"] == 0
+    assert report["uncheckable"][0]["declaration_status"] == "missing"
+    assert report["execution_issues"] == []
+
+
+def test_stale_binding_is_uncheckable_but_current_field_conflict_is_an_issue(audit_tmp_path):
+    rows = _execution_rows(review=False)[:2]
+    rows[1]["declaration_status"] = "stale"
+    rows[1]["state_sha256"] = "new-state"
+    rows[1]["situation_digest"] = "123456abcdef"
+    stale = dispatch_audit.audit_package(_package(audit_tmp_path, rows))
+    assert stale["deviations"] == []
+    assert stale["execution_issues"] == []
+    assert stale["uncheckable"][0]["declaration_status"] == "stale"
+
+    rows[1]["declaration_status"] = "current"
+    rows[1]["state_sha256"] = "state"
+    rows[1]["mode"] = "verify"
+    current = dispatch_audit.audit_package(_package(audit_tmp_path / "current", rows))
+    assert any("candidate" in item["reason"] for item in current["deviations"])
+    assert any("candidate snapshot" in item["reason"] for item in current["execution_issues"])
+
+
+def test_declaration_status_label_cannot_hide_a_current_field_conflict(audit_tmp_path):
+    rows = _execution_rows(review=False)[:2]
+    rows[1].update(declaration_status="stale", mode="verify", situation_digest="123456abcdef")
+
+    report = dispatch_audit.audit_package(_package(audit_tmp_path, rows))
+
+    assert any("candidate" in item["reason"] for item in report["deviations"])
+    assert any("candidate snapshot" in item["reason"] for item in report["execution_issues"])
+
+
+def test_missing_or_stale_reference_does_not_bypass_latest_explicit_blocker(audit_tmp_path):
+    rows = _execution_rows(review=False)[:2]
+    rows[0]["value"]["candidates"][0]["blockers"] = [
+        {"type": "resource", "resource_key": "A", "reason": "caller confirmed conflict"}
+    ]
+    rows[1].update(candidate_id="renamed-A", declaration_status="missing", situation_digest="123456abcdef")
+    rows[1].pop("candidates_of")
+    rows.insert(1, {"kind": "fact", "key": "dispatch.candidates", "seq": None, "value": {"candidates": "invalid"}})
+
+    report = dispatch_audit.audit_package(_package(audit_tmp_path, rows))
+
+    assert any("known declaration blockers" in item["reason"] for item in report["deviations"])
+    assert any("known declaration blockers" in item["reason"] for item in report["execution_issues"])
+
+    rows[0]["value"]["candidates"] = []
+    cleared = dispatch_audit.audit_package(_package(audit_tmp_path / "cleared", rows))
+    assert cleared["deviations"] == []
+    assert cleared["execution_issues"] == []
+
+
+def test_explicit_resource_blocker_applies_across_candidates_only_to_its_resource(audit_tmp_path):
+    rows = _execution_rows(review=False)[:1]
+    rows[0]["value"]["candidates"][0]["blockers"] = [
+        {"type": "resource", "resource_key": "shared", "reason": "caller confirmed conflict"}
+    ]
+    rows[0]["value"]["candidates"][0]["resource_keys"] = ["shared"]
+    blocked = dict(_execution_rows(review=False)[1], candidate_id="other", subject="ticket:TKT-02",
+                   chosen="other-action", resource_keys=["shared"], declaration_status="missing",
+                   situation_digest="123456abcdef")
+    blocked.pop("candidates_of")
+    rows.append(blocked)
+
+    report = dispatch_audit.audit_package(_package(audit_tmp_path, rows))
+    assert any("known declaration blockers" in item["reason"] for item in report["execution_issues"])
+
+    rows[-1].update(subject="ticket:TKT-01", resource_keys=["other"])
+    allowed = dispatch_audit.audit_package(_package(audit_tmp_path / "allowed", rows))
+    assert allowed["execution_issues"] == []
+
+
+def test_unique_subject_action_keeps_authorization_after_candidate_and_resource_rename(audit_tmp_path):
+    rows = _execution_rows(review=False)[:1]
+    rows[0]["value"]["candidates"] = [{
+        "candidate_id": "old", "subject": "ticket:TKT-01", "mode": "implement",
+        "action_id": "implement", "resource_keys": ["old-resource"],
+        "blockers": [{"type": "authorization", "subject": "ticket:TKT-01", "reason": "approval missing"}],
+    }]
+    dispatch = dict(_execution_rows(review=False)[1], candidate_id="renamed", resource_keys=["new-resource"],
+                    declaration_status="missing", situation_digest="123456abcdef")
+    dispatch.pop("candidates_of")
+    rows.append(dispatch)
+
+    blocked = dispatch_audit.audit_package(_package(audit_tmp_path, rows))
+    assert any("known declaration blockers" in item["reason"] for item in blocked["execution_issues"])
+
+    rows[0]["value"]["candidates"].append({
+        "candidate_id": "independent", "subject": "ticket:TKT-01", "mode": "implement",
+        "action_id": "implement", "resource_keys": ["independent-resource"],
+    })
+    ambiguous = dispatch_audit.audit_package(_package(audit_tmp_path / "ambiguous", rows))
+    assert ambiguous["execution_issues"] == []
+
+
+def test_snapshot_from_another_or_unknown_attempt_cannot_supply_blockers(audit_tmp_path):
+    rows = _execution_rows(review=False)[:2]
+    rows[0]["value"]["candidates"][0]["blockers"] = [
+        {"type": "authorization", "subject": "ticket:TKT-01", "reason": "owner approval missing"}
+    ]
+    rows[1].update(declaration_status="missing", situation_digest="123456abcdef")
+    rows[1].pop("candidates_of")
+
+    rows[0]["value"]["attempt"] = "other"
+    other = dispatch_audit.audit_package(_package(audit_tmp_path, rows))
+    assert other["execution_issues"] == []
+    assert any("Attempt binding" in item["reason"] for item in other["execution_uncheckable"])
+
+    rows[0]["value"].pop("attempt")
+    unknown = dispatch_audit.audit_package(_package(audit_tmp_path / "unknown", rows))
+    assert unknown["execution_issues"] == []
+    assert any("Attempt binding" in item["reason"] for item in unknown["execution_uncheckable"])
+
+
+@pytest.mark.parametrize("malformed_candidates", [
+    [{}],
+    [{"candidate_id": "new", "subject": "ticket:TKT-01", "mode": "review",
+      "action_id": "implement", "resource_keys": []}],
+    [{"candidate_id": "new", "subject": "ticket:TKT-01", "mode": "implement",
+      "action_id": "implement", "resource_keys": [""]}],
+    [{"candidate_id": "new", "subject": "ticket:TKT-01", "mode": "implement",
+      "action_id": "implement", "resource_keys": [],
+      "blockers": [{"type": "unknown", "subject": "ticket:TKT-01", "reason": "bad"}]}],
+])
+def test_malformed_snapshot_cannot_clear_latest_valid_blocker_or_certify_dispatch(
+    audit_tmp_path, malformed_candidates
+):
+    rows = _execution_rows(review=False)[:1]
+    rows[0]["value"]["candidates"][0]["blockers"] = [
+        {"type": "authorization", "subject": "ticket:TKT-01", "reason": "approval missing"}
+    ]
+    rows.append({"kind": "fact", "key": "dispatch.candidates", "subject": "attempt", "seq": 2,
+                 "value": {"attempt": "initial", "head": "head", "state_sha256": "state",
+                           "candidates": malformed_candidates}})
+    dispatch = dict(_execution_rows(review=False)[1], candidates_of=2, declaration_status="current",
+                    situation_digest="123456abcdef")
+    rows.append(dispatch)
+
+    report = dispatch_audit.audit_package(_package(audit_tmp_path, rows))
+
+    assert report["candidate_checked"] == 0
+    assert any("known declaration blockers" in item["reason"] for item in report["execution_issues"])
+    assert any("invalid candidate snapshot shape" in item["reason"] for item in report["execution_uncheckable"])
+
+
+def test_current_snapshot_may_omit_a_business_legal_dispatch_but_cannot_certify_it(audit_tmp_path):
+    rows = _execution_rows(review=False)[:2]
+    rows[0]["value"]["candidates"] = []
+    rows[1]["declaration_status"] = "current"
+    rows[1]["situation_digest"] = "123456abcdef"
+
+    report = dispatch_audit.audit_package(_package(audit_tmp_path, rows))
+
+    assert report["deviations"] == []
+    assert report["execution_issues"] == []
+    assert report["candidate_checked"] == 0
+    assert any("absent" in item["reason"] for item in report["uncheckable"])
+    assert any("absent" in item["reason"] for item in report["execution_uncheckable"])
+
+
+def test_current_candidate_without_runnable_membership_is_uncheckable_not_illegal(audit_tmp_path):
+    rows = _execution_rows(review=False)[:2]
+    rows[1]["declaration_status"] = "current"
+    rows[1]["runnable_candidate_ids"] = []
+    rows[1]["situation_digest"] = "123456abcdef"
+
+    report = dispatch_audit.audit_package(_package(audit_tmp_path, rows))
+
+    assert report["deviations"] == []
+    assert report["execution_issues"] == []
+    assert report["candidate_checked"] == 0
+    assert any("runnable candidate evidence" in item["reason"] for item in report["uncheckable"])
+    assert any("runnable candidate evidence" in item["reason"] for item in report["execution_uncheckable"])
 
 
 def test_wrong_consumption_review_leaves_original_delta_pending():

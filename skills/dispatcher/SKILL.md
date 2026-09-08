@@ -21,7 +21,7 @@ Dispatcher 是通用执行协作入口。调用方提供交付目标、授权、
 
 `investigate | implement | fix | verify` 固定 worker 的答案形态。worker 返回 `DONE | BLOCKED | INCOMPLETE`；调查返回 `EVIDENCE_SUFFICIENT | EVIDENCE_GAP`；已产生的 required review 使用 `PENDING_REVIEW | PASSED`。这些都是局部事实，不代替 Ticket、acceptance 或 Gate。
 
-使用 Impl-Package trail 时，候选快照、dispatch、return 与 review 必须可归因：候选声明 `candidate_id`、业务 `subject`、`mode`、`action_id` 和 `resource_keys`；dispatch 增加 `dispatch_id`、快照关联和真实 receipt；worker return 用 `of` 指回 dispatch，并带唯一 `return_id`。含代码增量时，return 与 review 使用同一个 `code_delta` 和 `consumption_id`。旧轨迹只读兼容；字段缺失不得静默归到同 Ticket 的其他 dispatch。
+使用 Impl-Package trail 时，候选清单只辅助恢复与审计；缺失或过期不阻止重新核对后仍合法的工作。投影为每项候选给出 `declaration_status=current|missing|stale` 与 `declaration_reason`，该状态不是 blocker。dispatch 自身记录 `dispatch_id/candidate_id/subject/mode/chosen/resource_keys/receipt`，可选 `candidates_of` 只关联清单；worker return 用 `of` 指回 dispatch，并带唯一 `return_id`。含代码增量时，return 与 review 使用同一个 `code_delta` 和 `consumption_id`。旧轨迹只读兼容；字段缺失不得静默归到同 Ticket 的其他 dispatch。
 
 ## 并行、复用与恢复
 

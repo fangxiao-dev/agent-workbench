@@ -25,6 +25,8 @@ from situation import (
     FINDINGS_REL,
     _parse_findings,
     candidate_subject_error,
+    candidate_snapshot_error,
+    dispatch_admission,
     FACT_KEYS,
     REVIEW_PHASES,
     REVIEW_PHASE_VALUES,
@@ -55,7 +57,6 @@ TRAIL_DIGEST_RE = re.compile(r"^[0-9a-fA-F]{12}$")
 FIXED_COMMIT_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 SITUATION_DIGEST_NAME = "situation-digest.json"
 DISPATCH_DIGEST_GUIDANCE = "dispatch 需要当前处境的 digest：先运行 situation.py render 取 digest，再重写这条 dispatch"
-DEPENDENCY_BLOCKER_TYPES = frozenset({"foundation", "acceptance", "resource", "authorization"})
 
 ATTEMPT_RE = re.compile(r"(?m)^(?:\*\*)?(?:Attempt ID|执行尝试 ID（Attempt ID）)(?:\*\*)?\s*[：:](?:\*\*)?\s*([^\s*]+)")
 COMPOSITION_RE = re.compile(r"Composition[^\n]*tickets=(true|false),\s*dag=(true|false)", re.I)
@@ -1460,44 +1461,10 @@ def _validate_code_delta(value: Any) -> dict[str, str]:
     return value
 
 
-def _validate_candidate(candidate: Any) -> None:
-    if not isinstance(candidate, dict):
-        raise StateError("dispatch.candidates entries must be objects")
-    for field in ("candidate_id", "subject", "mode", "action_id"):
-        _trail_text_field(candidate, field, "candidate")
-    if candidate["mode"] not in {"investigate", "implement", "fix", "verify"}:
-        raise StateError("dispatch candidate mode must be investigate|implement|fix|verify")
-    _validate_resource_keys(candidate.get("resource_keys"), "candidate resource_keys")
-    blockers = candidate.get("blockers", [])
-    if not isinstance(blockers, list):
-        raise StateError("dispatch candidate blockers must be an array")
-    for blocker in blockers:
-        if not isinstance(blocker, dict) or blocker.get("type") not in DEPENDENCY_BLOCKER_TYPES:
-            raise StateError("dispatch candidate blocker type must be foundation|acceptance|resource|authorization")
-        _trail_text_field(blocker, "reason", "candidate blocker")
-        targets = [
-            blocker.get(field)
-            for field in ("subject", "resource_key")
-            if isinstance(blocker.get(field), str) and blocker[field].strip()
-        ]
-        if not targets:
-            raise StateError("dispatch candidate blocker requires an affected subject or resource_key")
-
-
 def _validate_candidate_snapshot(value: Any) -> None:
-    if not isinstance(value, dict) or not isinstance(value.get("candidates"), list):
-        raise StateError("dispatch.candidates value must be an object with candidates array")
-    available_slots = value.get("available_slots")
-    if available_slots is not None and (
-        not isinstance(available_slots, int) or isinstance(available_slots, bool) or available_slots < 0
-    ):
-        raise StateError("dispatch.candidates available_slots must be a non-negative integer")
-    seen: set[str] = set()
-    for candidate in value["candidates"]:
-        _validate_candidate(candidate)
-        if candidate["candidate_id"] in seen:
-            raise StateError("dispatch.candidates candidate_id values must be unique")
-        seen.add(candidate["candidate_id"])
+    error = candidate_snapshot_error(value)
+    if error:
+        raise StateError(error)
 
 
 def _validate_review_pending(value: Any) -> None:
@@ -1520,6 +1487,8 @@ def _validate_dispatch_situation_digest(package: Path, attempt: str, event: dict
         raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；未找到 {SITUATION_DIGEST_NAME} 凭据文件") from exc
     if credential.get("digest") != event["situation_digest"]:
         raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；digest 不匹配，凭据是 {credential.get('digest')}")
+    if credential.get("blocking_slugs"):
+        raise StateError(f"trail dispatch is withheld by global blocking: {credential['blocking_slugs']}")
     try:
         state_sha256 = hashlib.sha256((package / STATE_PATH).read_bytes()).hexdigest()
     except OSError as exc:
@@ -1618,7 +1587,7 @@ def _validate_trail_event(event: dict[str, Any]) -> dict[str, Any]:
         if event["mode"] not in {"investigate", "implement", "fix", "verify"}:
             raise StateError("trail dispatch mode must be investigate|implement|fix|verify")
         candidates_of = event.get("candidates_of")
-        if not isinstance(candidates_of, int) or isinstance(candidates_of, bool) or candidates_of < 1:
+        if "candidates_of" in event and (not isinstance(candidates_of, int) or isinstance(candidates_of, bool) or candidates_of < 1):
             raise StateError("trail dispatch candidates_of must be a positive snapshot seq")
         _validate_resource_keys(event.get("resource_keys"), "dispatch resource_keys")
         validate_dispatch_receipt(event.get("receipt"))
@@ -1667,14 +1636,14 @@ def _active_trail_rows(package: Path, attempt: str) -> list[dict[str, Any]]:
 
 
 def _same_event(existing: dict[str, Any], event: dict[str, Any]) -> bool:
-    automatic = TRAIL_COMMON_FIELDS | {"state_sha256", "runnable_candidate_ids"}
+    automatic = TRAIL_COMMON_FIELDS | {"state_sha256", "runnable_candidate_ids", "declaration_status"}
     return (
         {key: value for key, value in existing.items() if key not in automatic}
         == {key: value for key, value in event.items() if key not in automatic}
     )
 
 
-def _candidate_snapshot_row(rows: list[dict[str, Any]], seq: int) -> dict[str, Any] | None:
+def _candidate_snapshot_row(rows: list[dict[str, Any]], seq: int | None) -> dict[str, Any] | None:
     snapshots = [
         row
         for row in rows
@@ -1698,41 +1667,23 @@ def _validate_dispatch_against_snapshot(
     reused = [row for row in rows if row.get("kind") == "dispatch" and row.get("dispatch_id") == event["dispatch_id"]]
     if reused and not any(_same_event(row, event) for row in reused):
         raise StateError(f"dispatch_id already exists: {event['dispatch_id']}")
-    snapshot = _candidate_snapshot_row(rows, event["candidates_of"])
-    if snapshot is None:
-        raise StateError("trail dispatch candidates_of must reference the latest candidate snapshot")
-    value = snapshot.get("value")
+    snapshot = _candidate_snapshot_row(rows, event.get("candidates_of"))
+    value = snapshot.get("value") if snapshot else None
     state_sha256 = hashlib.sha256((package / STATE_PATH).read_bytes()).hexdigest()
     head = _run_git(_repo_root(package), "rev-parse", "HEAD")
-    if not isinstance(value, dict) or (
-        value.get("attempt") != attempt
-        or value.get("head") != head
-        or value.get("state_sha256") != state_sha256
-    ):
-        raise StateError("trail dispatch candidate snapshot is stale")
-    candidate = next(
-        (
-            item
-            for item in value.get("candidates", [])
-            if isinstance(item, dict) and item.get("candidate_id") == event["candidate_id"]
-        ),
-        None,
-    )
-    if candidate is None:
-        raise StateError("trail dispatch candidate_id is absent from candidates_of snapshot")
-    expected = {
-        "subject": candidate.get("subject"),
-        "mode": candidate.get("mode"),
-        "chosen": candidate.get("action_id"),
-        "resource_keys": candidate.get("resource_keys"),
-    }
-    mismatched = [field for field, value in expected.items() if event.get(field) != value]
-    if mismatched:
-        raise StateError("trail dispatch does not match candidate snapshot: " + ", ".join(mismatched))
-    if candidate.get("blockers"):
-        raise StateError("trail dispatch candidate is withheld by declared blockers")
-    if event["candidate_id"] not in event["runnable_candidate_ids"]:
-        raise StateError("trail dispatch candidate is absent from the current runnable projection")
+    if candidate_snapshot_error(value) is None and value.get("attempt") == attempt and value.get("head") == head and value.get("state_sha256") == state_sha256:
+        candidate = next((item for item in value.get("candidates", [])
+                          if isinstance(item, dict) and item.get("candidate_id") == event["candidate_id"]), None)
+        if candidate is not None:
+            expected = {"subject": candidate.get("subject"), "mode": candidate.get("mode"),
+                        "chosen": candidate.get("action_id"), "resource_keys": candidate.get("resource_keys")}
+            mismatched = [field for field, expected_value in expected.items() if event.get(field) != expected_value]
+            if mismatched:
+                raise StateError("trail dispatch does not match candidate snapshot: " + ", ".join(mismatched))
+    blockers, declaration_status = dispatch_admission(package, event)
+    if blockers:
+        raise StateError("trail dispatch is withheld: " + "; ".join(blocker["reason"] for blocker in blockers))
+    event["declaration_status"] = declaration_status
 
     if "reviews" in event:
         _trail_text_field(event, "reviews", "dispatch")
