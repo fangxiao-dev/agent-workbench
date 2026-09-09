@@ -11,7 +11,7 @@ compatibility: Requires Codex Desktop thread tools (create_thread, set_thread_ti
 ## Ownership
 
 - 本 Skill 只拥有 session 创建、existing-worktree 锚定、模型与标题继承、两阶段 prompt、交付纠偏和理解回报审计。
-- Ticket/State/Evidence/Gate 与 package 续跑由 `/impl-package:dev-with-track` 拥有；候选选择、bounded worker 合同、dependency/resource admission、return 与 idle 由 `$dispatcher` 拥有。handoff 只传递 canonical `readyTickets` 和在途事实，不复述这些流程。
+- Ticket/State/Evidence/Gate 与 package 续跑由 `/impl-package:dev-with-track` 拥有；候选选择、bounded worker 合同、dependency/resource admission、return 与 idle 由 `$dispatcher` 拥有。handoff 以 canonical `readyTickets` 和在途事实为续接输入；候选范围由 owning workflow 根据当前 authority 重新发现。
 - downstream protocol 可以提供自己的 validation anchors 与 continuation；本 Skill 仍只负责通用创建和交付 gate。
 
 使用前确认：Owner 要求新 task；已有可恢复 authority 与 active checkpoint；目标 implementation worktree 和下一状态可从 authority 判定。滚动中的无 checkpoint 工作改用普通 handoff，不使用本 Skill。
@@ -39,7 +39,7 @@ worktree、HEAD 或 authority 不符时报告 `anchor FAIL: source worktree setu
 1. 调用 `create_thread`，显式传入当前 `model` 与 `thinking=reasoning_effort`；target 固定为 `{ type: "project", projectId, environment: { type: "local" } }`。不得用 `fork_thread`、worktree environment、startingState、branch 或 source snapshot。
 2. 只有返回 `threadId` 时才继续；用 `set_thread_title` 确认递增后的标题。仅有 `clientThreadId` 时报告 incomplete delivery，不轮询或发送 continuation。
 3. 用返回的 `threadId`/`hostId` 等待 anchor。只有标题已确认且 child 明确 anchor PASS，才发送 continuation；timeout 不是 PASS。
-4. continuation 后每次 `wait_threads` 不超过 60 秒。审计 child commentary 是否正确复述 authority、完整 ready work、owning skills、授权/blocker 与停止条件。
+4. continuation 后每次 `wait_threads` 不超过 60 秒。审计 child commentary 是否正确复述 authority、完整 canonical `readyTickets`（非 Ticket workflow 为 recorded action）、owning skills、授权/blocker 与停止条件。
 5. receipt 对齐后保持静默并完成交付；缺失或偏差进入下方纠偏流程。
 
 ## Recoverable Deviations

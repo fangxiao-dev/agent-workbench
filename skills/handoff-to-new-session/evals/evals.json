@@ -110,6 +110,16 @@
         "Passes scoped blockers without deciding admission or dependency behavior inside the handoff Skill.",
         "Uses the owning workflow's terminal, blocker, idle/checkpoint or session-rotation result as the handoff stop signal."
       ]
+    },
+    {
+      "id": 12,
+      "prompt": "Dry-run a Ticket-package handoff from an older Attempt. Current canonical status reports readyTickets=[TKT-05]. The SessionStart capsule says projection-complete:false. The old trail contains retired dispatch.candidates rows, one real in-flight dispatch dispatch-02, and one returned code_delta whose review is still pending. The old records also contain still-valid authorization and resource restrictions. Prepare the two-stage prompts without calling thread tools.",
+      "expected_output": "Uses canonical readyTickets as the resume input, treats the situation projection and retired candidate rows as non-authoritative, and routes real dispatch/review recovery plus current candidate discovery to dev-with-track and Dispatcher.",
+      "expectations": [
+        "Does not transfer the retired candidate list as complete ready work or dispatch authorization.",
+        "Carries canonical readyTickets and the authority pointer while preserving still-valid authorization and resource restrictions.",
+        "Routes the real in-flight dispatch and pending review debt to the owning workflow without duplicating or redispatching stale candidate work."
+      ]
     }
   ]
 }

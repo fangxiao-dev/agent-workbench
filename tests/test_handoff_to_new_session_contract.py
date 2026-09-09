@@ -93,13 +93,27 @@ def test_ready_tickets_are_complete_but_checkpoint_does_not_own_scheduling() -> 
 
     assert "完整" in skill and "readyTickets" in skill
     assert "checkpoint 文案不能收窄" in skill
-    assert "handoff 只传递 canonical" in skill
-    assert "不复述这些流程" in skill
+    assert "handoff 以 canonical `readyTickets` 和在途事实为续接输入" in skill
+    assert "候选范围由 owning workflow 根据当前 authority 重新发现" in skill
     assert "持续执行 owning workflow" in template
     assert "TKT-03" not in skill
     assert "TKT-05" not in skill
     assert "TKT-03" not in template
     assert "TKT-05" not in template
+
+
+def test_resume_uses_authority_not_retired_candidate_inventory() -> None:
+    skill = read("skills/handoff-to-new-session/SKILL.md")
+    template = read("skills/handoff-to-new-session/references/handoff-prompt-template.md")
+    payload = json.loads(read("skills/handoff-to-new-session/evals/evals.json"))
+    evals = {item["id"]: item for item in payload["evals"]}
+
+    assert "完整 canonical `readyTickets`" in skill
+    assert "完整 canonical `readyTickets`" in template
+    assert "projection-complete:false" in evals[12]["prompt"]
+    assert "dispatch.candidates" in evals[12]["prompt"]
+    assert "non-authoritative" in evals[12]["expected_output"]
+    assert "pending review debt" in evals[12]["expectations"][2]
 
 
 def test_recoverable_delivery_variance_keeps_progressing_without_masking_real_mismatch() -> None:

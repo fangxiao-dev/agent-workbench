@@ -27,7 +27,7 @@ Continuation 已就绪；从 authority / entry 恢复，不回溯旧聊天或重
 
 - authority / entry：[AUTHORITY_AND_ENTRY_POINT]
 - checkpoint：[ACTIVE_CHECKPOINT]
-- status / ready work：[CURRENT_STATUS_AND_CANONICAL_READY_TICKETS_OR_RECORDED_ACTION]
+- 当前状态 / `readyTickets` 或 recorded action：[CURRENT_STATUS_AND_CANONICAL_READY_TICKETS_OR_RECORDED_ACTION]
 - authorization / blocker：[AUTHORIZATION_AND_NAMED_BLOCKERS]
 - WIP：保护未提交内容，不 reset、checkout、clean、覆盖或重建
 - external boundary：[ACTIONS_REQUIRING_SEPARATE_AUTHORIZATION]
@@ -37,5 +37,5 @@ Continuation 已就绪；从 authority / entry 恢复，不回溯旧聊天或重
 
 Ticket package 使用 `/impl-package:dev-with-track` 恢复并持续执行 owning workflow；由 `$dispatcher` 选择候选、约束 bounded worker、消费 return，并恢复在途 dispatch 与待派审 code delta 后安排 review。非 Ticket workflow 按 authority 指定的 recorded action 执行。直到 owning workflow 返回 terminal、blocker、idle/checkpoint，或确需换 session 时再停止。
 
-收到后先用一条简洁 commentary 回报 authority、完整 ready work、所用 owning skills、授权/blocker 与停止条件；这是理解回报，不是执行预演，也不等待批准。随后立即从 entry point 恢复并执行。
+收到后先用一条简洁 commentary 回报 authority、完整 canonical `readyTickets`（非 Ticket workflow 为 recorded action）、所用 owning skills、授权/blocker 与停止条件；这是理解回报，不是执行预演，也不等待批准。随后立即从 entry point 恢复并执行。
 ```
