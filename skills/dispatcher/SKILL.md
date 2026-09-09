@@ -21,6 +21,8 @@ Dispatcher 是通用执行协作入口。调用方提供交付目标、授权、
 
 `investigate | implement | fix | verify` 固定 worker 的答案形态。worker 返回 `DONE | BLOCKED | INCOMPLETE`；调查返回 `EVIDENCE_SUFFICIENT | EVIDENCE_GAP`；已产生的 required review 使用 `PENDING_REVIEW | PASSED`。这些都是局部事实，不代替 Ticket、acceptance 或 Gate。
 
+investigate/review 结果需要交给另一个 worker 或后续 implement/fix 消费时，由主控在用户 temp 目录提供一份临时 handoff 路径。investigator/reviewer 写入结论后，主控读取、按需原地修订并验收，再把同一路径作为下游 brief 的只读输入；消费完成后由主控清理。该 handoff 不进入仓库、Git revision、业务状态或 durable docs；没有下游消费时继续直接返回，避免无用文件。
+
 使用 Impl-Package trail 时，工作无需预登记；`candidate_id` 是实际派发工作及其可信续接的身份。dispatch 记录 `dispatch_id/candidate_id/subject/mode/chosen/resource_keys/receipt`；worker return 用 `of` 指回 dispatch，并带唯一 `return_id`。含代码增量时，return 与 review 使用同一个 `code_delta` 和 `consumption_id`。旧轨迹只读兼容；字段缺失不得静默归到同 Ticket 的其他 dispatch。
 
 ## 并行、复用与恢复
@@ -29,5 +31,5 @@ Dispatcher 是通用执行协作入口。调用方提供交付目标、授权、
 - 主控根据当前授权和资源事实选择工作；需要恢复的判断沿用现有 Execution Record、checkpoint、handoff 与 trail，不新建独立 blocker fact。
 - 并行按当前动作的实际 effect footprint 判断；未来可能交叉的 Topic/Ticket 不提前串行当前独立工作。可兼容的稳定读取可以共享；会改变他人读取结果或验证 oracle 的资源需要隔离或排序。
 - worker 复用取决于相关上下文仍准确、ownership 清楚且已有错误可解释。边界、failure model 或 write-set 已失真时先调查受影响范围，再使用 fresh worker；不按 Topic 名称、固定等待时间或 `INCOMPLETE` 次数机械换人。
-- worker 在途时间本身不授权重复派发。结合工具活动、进程、输出变化、任务特定超时与可观察进展判断健康；原边界仍可信的 carrier/tooling recovery 由同一 worker 完成。
+- worker 处于 `running` 时继续等待；需要收敛时向原 worker 发消息，让其停止扩展并总结已有结果。等待超时或在途时长只调整轮询，不触发中断、换人或重复派发；只有用户取消、确认越权或危险 mutation、不可恢复资源冲突、carrier/tool 明确失败时才中断。原边界仍可信的 carrier/tooling recovery 由同一 worker 完成。
 - reviewer 始终独立于所审实现；同 scope 上下文可信时可以复用，每次核对新的固定输入。formal review 的 topology、coverage 和 closure 由 owning review workflow 决定。
