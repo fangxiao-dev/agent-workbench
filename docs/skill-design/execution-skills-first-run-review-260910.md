@@ -1,0 +1,248 @@
+# 执行 Skill 套件改造后的首次实战复盘
+
+日期：2026-09-10
+状态：调研报告。以下结论均带运行实例证据；第 4 节的建议是候选建议，**不等于已批准修改**。
+
+## 0. 这份文档是什么
+
+[Astra 打薄决策](impl-package-astra-thinning-decisions-260906.md) 与 [Dispatcher/SDD/dev-with-track 联合调整提案](dispatcher-dev-with-track-sdd-consolidation-proposal-260908.md) 的改造已在 09-06～09-08 全部落地。09-09～09-10 有两个真实任务包在新规则下从立项跑到收口，这是改造后的第一次实战。本文用这批运行实例检验设计，并按性价比给出下一轮的候选修改。
+
+调研材料是 5 个 Codex session 的完整 rollout，约 110 MB / 34k 行，按包和阶段切成 5 个切片，由 5 个 codex worker 用同一套判定清单分头取证，主控合成。所有引用行号都是原始 jsonl 的 1-based 行号，抽查 20 条全部可回读。
+
+A2 的 session 在调研期间仍在追加（同一个 session 正在跑 backfill 阶段），本文所有 A2 数字都钉在 15,148 行这个快照上；主控与 worker 在该快照上分别独立统计，结果完全一致。
+
+| 切片 | 任务包 | session | 规模 | 时段 |
+| --- | --- | --- | --- | --- |
+| A1 | KaiSpan 银行对账批量触发（立项 + 交接） | `01a085fe` + fork `01a086c3` | 2,404 行 | 09-09 11:47 → 21:21 |
+| A2 | 同上（主执行 → PR → CI → backfill） | `01a086db` | 15,148 行 | 09-09 15:49 → 09-10 13:25 |
+| B1 | tinymlops #252 LabelingProfile（调研 + 立项） | `01a08588` | 2,904 行 | 09-09 09:38 → 14:08 |
+| B2 | 同上（主执行） | `01a0867b` | 8,167 行 | 09-09 14:03 → 09-10 00:26 |
+| B3 | 同上（续接 → 收口 → 单 MR 关 4 个 issue） | `01a088ae` | 5,648 行 | 09-10 00:18 → 12:09 |
+
+## 1. 本轮改造做了什么
+
+| commit | 内容 |
+| --- | --- |
+| `a0a33b2` → `cb906e6` | 打薄落地：跨 Skill 规则去重、删除 22 个 dev-with-track fact 声明入口、删除专用 bookkeeper 角色、删除 Ticket 激活环境 preflight、删除 Ticket 完成自动换 session、Gate 按 Attempt 归属（E1 修了三轮才干净） |
+| `3e89ece` | Dispatcher 吸收 SDD 并删除 SDD 目录；投影从单游标改为 `blocking / runnable / withheld / in_flight` 四分区；`worker-still-running` 从「处境」降为 `in_flight` 标注；取消 `multiple-ready-tickets` 的 `in_flight:false` 守卫；取消 INCOMPLETE 次数门槛与 15/30 分钟观察门槛；**同时引入了候选清单预登记协议** |
+| `dd6ed27` | 候选清单从「派发门槛」退为 advisory |
+| `6bd78a4` | 候选清单协议、漏派机会审计、容量推断整体删除（净 −1212 行） |
+| `27f70f0` / `e150587` / `8d21780` | delta recovery 与验证边界澄清；handoff 保留 worker 上下文与 canonical ready tickets |
+
+## 2. 设计落地情况
+
+### 2.1 12 条设计意图 × 5 个切片
+
+`○` 已执行 · `◐` 部分执行 · `×` 现场被违反 · `–` 该切片无相关场景
+
+| # | 设计意图 | A1 | A2 | B1 | B2 | B3 |
+| --- | --- | :--: | :--: | :--: | :--: | :--: |
+| 1 | 局部 barrier 只扣受影响候选，不升级为全局暂停 | – | ○ | ○ | ○ | ◐ |
+| 2 | 有 worker 在跑时其他独立工作仍被派发 | ○ | ○ | ◐ | ○ | ○ |
+| 3 | 同票多个 dispatch 的结果各归其原派发 | – | ○ | ○ | ○ | ○ |
+| 4 | 只走 Dispatcher 一个执行入口 | ○ | ○ | ○ | ○ | ○ |
+| 5 | 换人依据是边界失真，不是等待时长／INCOMPLETE 次数 | ◐ | ◐ | **×** | **×** | **×** |
+| 6 | 每个含代码 return 同次派独立 delta review | – | **×** | – | ◐ | ◐ |
+| 7 | 消费返回后优先接尚未打通的业务路径 | – | ○ | ◐ | ◐ | ○ |
+| 8 | 主控直接实现难拆的跨线接线 | – | – | – | – | ○ |
+| 9 | delta finding 按影响／资源／整合成本安排 | – | ○ | ◐ | ○ | ○ |
+| 10 | 候选工作无需预登记 | ○ | ○ | ○ | ○ | ○ |
+| 11 | 没有以 Ticket 激活为触发的固定环境 preflight | **×** | ○ | ○ | ○ | ○ |
+| 12 | handoff 保留在途 worker 上下文与 canonical ready tickets | ◐ | ○ | ◐ | ○ | ◐ |
+
+**干净落地的两条**：#4 单一执行入口和 #10 候选无需预登记，5/5 切片全部成立。全部 34k 行里没有任何 SDD 入口调用，也没有任何自建候选清单、配额或队列文件。合并和删清单这两个决定，实战直接确认。
+
+**唯一系统性失效的是 #5**：5 个切片里 3 个明确违反、2 个部分执行，**没有一个干净通过**。全程 19 次 `interrupt_agent`（A2 9 次、B3 5 次、B2 4 次、B1 1 次），触发理由几乎都是「超过预期时长」而不是边界失真。最关键的一条证据在 B2：用户在 `L320` 就明确说过「不应该打断后抛弃，而是应该让它直接总结已有的，否则就浪费了」；`L1229` 又专门指定「之后按最新的 `$dispatcher` 运作」，主控在 `L1244` 读完新规则后书面承诺 timeout 不再中断；结果 `L3022` 还是以「超过 30 分钟仍未到消息边界」中断了正在跑的 `tkt02_implement`。B1 `L1777` 同样是「reviewer 已超过本次有界复核所需时间」。
+
+这条的含义比「没遵守」更重要：**规则已经写在正文里、模型刚读过、还书面确认过，但在长 session 的压力下仍然失效。** 加强措辞不会有用，需要一个生效时机。
+
+**#6 的失效有原因**：A2 判「现场被违反」，但那是用户在 `L1220` 主动改了触发规则之后的结果——用户明确说「对明确 INCOMPLETE、尚未形成可复用纵切的代码，四轨 initial review 太重」。所以 #6 不是执行不到位，是**规则本身被实战否掉了**（详见 3.7）。
+
+**#12 有个盲区**：三个切片判「部分执行」，共同原因是这几次 handoff 发生时都恰好没有在途 worker，所以「保留在途 worker 上下文」这一半**从未被真正检验过**。`8d21780` / `e150587` 这两个修复目前没有实战证据支撑。
+
+**#11 在 A1 被违反**：`F2:278` 主控自己把流程写成「初始化 Attempt、写 active checkpoint、再执行只读 preflight」，随后 `F2:295`–`F2:317` 真的跑了一轮 init/validate/activate/checkpoint。删掉的旧机制以主控自拟流程的形式复活了。
+
+### 2.2 砍掉的机制：哪些砍对了、哪些砍错了
+
+| 机制 | 5 切片判定 | 结论 |
+| --- | --- | --- |
+| 22 个 dev-with-track fact 声明入口 | 5× 删对了 | **确认删对**。全程没有一条 `attempt.completion_claim_pending`、`git.comparison_head_fixed`、`ticket.review_required`、`trail.envelope_valid` 的声明或消费，包裹照样闭环、照样可恢复。 |
+| 候选清单预登记 + 漏派审计 + 容量推断 | 5× 删对了 | **确认删对**。候选都是在返回或状态变化后直接发现即派发。 |
+| 专用 bookkeeper 角色 + 回执循环 | 4× 删对了，1× 无场景 | **确认删对**。主控直接消费 return、直接写 trail。 |
+| Ticket 完成自动换 session | 5× 删对了 | **确认删对**。三次 handoff 都由用户显式触发。 |
+| Ticket 首次激活环境 preflight | 4× 删对了，1× 缺它有代价 | **删对了**，但见 #11：A1 自己把 preflight 重新绑回了 activation。 |
+| do-review Loop 十轮上限 | 5× 删对了／无场景 | 上限从来没有约束力（最多 7 轮）。真正的问题不是轮数，是**每轮都跑满四轨**（见 3.7）。 |
+| INCOMPLETE 次数门槛 | 5× 删对了 | **确认删对**。B3 `L1810` 的 INCOMPLETE 被正确归因到共享生产函数并直接修根因。 |
+| 固定 15/30 分钟观察门槛 | 2× 缺它有代价，3× 删对了 | **不是砍错了，是砍了没用**。现场依然在按时长判断健康（A1 用 180s/3600s 的 wait timeout，B2 用「超过 30 分钟」中断）。删掉门槛没有删掉行为，只是把明示数字换成了临场估计。恢复门槛解决不了问题。 |
+| `PostToolUse` / `SubagentStop` 机械格式校验 | **3× 缺它有代价**，2× 删对了 | **这是唯一一条真正砍错了的**，但形态要改，见下。 |
+| 全量 typecheck/build 由单一 owner 协调（E4 观察项） | 1× 缺它有代价，其余无场景／删对了 | **观察项应该落地了**，现在有硬数字，见 3.2。 |
+| terminal-final 时机门槛 | 5× 删对了／无场景 | 确认不需要额外门槛，但见 3.7 的实际问题。 |
+
+**关于砍错的那一条**：T10 撤销 `SubagentStop` 的理由是「worker 返回格式检查不产生新信息」——这个判断本身仍然成立，5 个切片里没有一次是因为 worker 返回格式坏了而付出代价。真正付代价的是**主控自己发出的工具调用参数写错**，一共约 15 次：A1 `F1:1241` malformed dispatch 重发；B1 `L2527` / `L2543` / `L2594` / `L2608` 的 `package init` 因 Attempt ID、中文字段、`## 安全不变量` 标题格式连续失败 4 次，随后 `L2615` / `L2648` 又重跑 validate；B2 `391` 插件路径 typo、`4152` patch 上下文不匹配、`6408`–`6422` malformed `followup_task`、`8109`–`8122` handoff/thread 语法错误；B3 `L201` trail dispatch 误带 `head` 字段被 CLI 拒绝、`L4128` `list_threads` 参数错误。单次成本 15 秒到 4 分钟，累计 15–25 分钟，且每次都要人工收拾。这是 `PreToolUse` 形态、针对主控自己调用的参数校验，不是 `SubagentStop`。
+
+## 3. 时间去哪了
+
+以下按「跨切片复现次数 × 累计时钟」排。只有在多个切片都出现的才算模式，单切片的标为个例。
+
+### 3.1 形式化取证：为已经用上的结果补台账（4/5 切片，≥77 分钟，两次独立用户纠偏）
+
+同一个现象在两个包里各触发了一次内容几乎一样的用户纠偏：
+
+- A2 `L13287`–`L13524`：真实链路和 named closure 都已通过，主控还在把每个已消费结果拆成 claim/evidence/ER 台账，登记了 34 个 claim、写了环境 evidence 报告和老板版报告。用户 `L13303`：「已完成的、已经用上的不一定需要 evidence 这么死板，写清楚就行了」。代价 42.1 分钟。
+- B3 `L4328`–`L4691`：为给每条历史 claim 补当前 revision evidence，启动逐 claim `evidence add` 循环，每条都触发一次完整包校验；跑过 4 分钟后用户 `L4414` 批注「CLI 每条 claim 都做一次完整包校验，能否更简单的方式聚焦验证即可」；纠偏后主控**仍然**先跑了 `MISSING=11` 的逐条循环，再跑 `MISSING=41`，长时间无输出被中断，最后才收缩成 9 条机械记录。逐 claim 活动累计约 26 分钟。
+- B2 `2557`–`2651`：TKT-01 evidence 已生成后又做批量 claims、timing/路径/help 重试和 package state 操作，3.3 分钟、14 次 exec。
+- B1 `L2524`–`L2648`：`package init` 4 次、exact validate 3 次，全是格式改写，没有业务语义变化，6.3 分钟。
+
+这不是主控偷懒或不认真，是**现役规则确实要求逐 stable claim 核对**（dev-with-track「登记 `supporting` 或执行 `ticket satisfy` 前，逐 stable claim 核对 artifact 是否覆盖完整 acceptance atom」）。规则没区分「未决 acceptance 需要建 claim」和「已被真实链路消费的结果只需引用 receipt」。
+
+### 3.2 重复跑同一个检查（5/5 切片，这是最普遍的浪费）
+
+| 切片 | 重复项 |
+| --- | --- |
+| A2 | `pnpm --filter @kaispan/api typecheck` **11 次**；`vitest run bank-reconciliation-real-fixture.spec.ts` 7 + 4 次；`tsx run-real-fixture-authenticated` **11 次**（只有两轮有业务价值）；`inspect-bank-review` 7 次；`inspect-real-fixture-residue` 5 次 |
+| B1 | `git diff --check` **15 次**；`git status` **34 次**；同一个 Issue 正文的 `glab api` 读取 **14 次** |
+| B2 | 同语义 `situation.py render` **17 次**；同一个 training-worker image build **5 次** |
+| B3 | `pytest -q server/tests` 全量 **5 次**（单次 5–8 分钟，纯重跑至少 20 分钟） |
+| A1 | 同一个 package 的 `git diff --check` 5 次、`git status` 5 次 |
+
+绝大多数重跑只是重申「没问题」，没有产生新的业务判断。E4 当初留作观察项的「全量检查由一个 owner 协调」，现在有数字了。
+
+### 3.3 等待串行（5/5 切片，原始时长最大）
+
+| 切片 | 等待 | 最有说明力的一段 |
+| --- | --- | --- |
+| A2 | 272 次 `wait_agent`，占 session **29.2%（约 6 小时 19 分）** | `L4006`–`L5491` 的 94.8 分钟里有 70 次 wait，主控多次只轮询，没有把独立验证/配置核验前置 |
+| A1 | 纯等待 56 分 27 秒 | 最长单段 22 分 08 秒（`F1:1724`），期间主控 turn 为 0 |
+| B1 | 45 分 27 秒（16.85%），**73.9% 的时间零 subagent 在途，峰值并发 1** | `L1720`–`L1785` 连续 5 次等待后按时长中断 |
+| B2 | TKT-02 implement worker 跑 63 分钟，期间 23 次 wait | `2909`–`3258` |
+| B3 | TKT-03 等待 20.5 分钟 | 用户 `L1638` 不得不提醒「等待的过程中你看看 #252 链接的 3 个小 task，能提前做的可以一起安排」 |
+
+关键点：Dispatcher 正文第 2 步和第 5 步**已经**写了「启动、worker 返回、出现 review/fix/等待或阻塞时扫描剩余路径」。规则在，投影也确实算出了 `runnable[]`。失效的是**衔接**——`runnable` 只在主控主动跑 `situation.py render` 时才会看到，而「决定继续等待」这个动作不触发 render。B3 里用户直接替 Dispatcher 干了第 2 步。
+
+### 3.4 立项没做「变更字段 → 下游消费者 → 终态」矩阵（3/5 切片，单点最贵，≥130 分钟）
+
+三个切片各有一次，都是最贵的单一事件：
+
+- B2 `L3709`–`L3897`：TKT-02 review 收口后启动完整 Fruits-360 Flow 1 / NATS / SeaweedFS live journey 当作 closure；用户 `L3897` 指出它只能证明 LabelProfile→DatasetVersion，真正缺的验收边界是 `LabelProfile-bound DatasetVersion → 既有正式 Original Training → ModelVersion`，而 Spec 明确排除了 training——**这是立项阶段（B1）的验收设计缺口**。错误 live 路线 28.4 分钟，后续 seam 补调约 23 分钟，`L4046`–`L4472` 还建了临时 TKT-04 又删掉，28.3 分钟。
+- B1 `L1939`–`L2318`：先按 4 个纵向终态写 4 Ticket / 45 AC，full reviewer 报 6 个覆盖缺口，主控继续按 Ticket 独立性拆 claim，直到用户 `L2311`「以实际核心功能完成为核心 + 真实 UI 验收兜底，不要为了 ticket 的独立性把设计弄得复杂」才收敛成 3 Ticket / 17 AC，约 40 分钟。
+- A1 `F1:1552`：用户重新给出旧强引用回归、部分成功、单次触发的完整合同；主控没有重建最小材料集，而是在已有 7 文件包上逐份 patch，13.2 分钟加一轮复核。用户在 `F1:571` 早就说过「你要基于第一性原理思考，不要打补丁」。
+
+共同结构：**立项时没有把「这次改的字段/接口有哪些已存在的下游消费者、各自的终态是什么」列出来**，于是验收对象在执行到一半时被推翻。这是 req-align / impl-planning 的缺口，不是 Dispatcher 的。
+
+### 3.5 环境与凭据事实没先盘点（3/5 切片，≥70 分钟）
+
+- B2 `1705`：自动测试完成后主控报「没有 DSN / project runtime」，把进程级 env 为空当成配置不存在；用户 `1822`「环境变量没有吗？而且我看到你之前创建过很多啊」；`1862`–`1865` 证明 canonical env 一直存在。误判 8 分 43 秒，随后 `1960`–`2183` 还创建了 55434 alternate PostgreSQL、用错 Label Studio 端点，37 分 07 秒。
+- B3 `L1661`–`L1836`：在实现 worktree 里找不到 `glab`，走 credential API 401 → 浏览器登录的回退链；用户 `L1773` 点名 skill、`L1797`「不可能不能用，我一直都在用，你去主工作区再看看」、`L1831`「不是切换，是读取，不要把两个 worktree 搞混了」。根因只是实现 worktree 没有 `.env`，主工作区有 `GITLAB_TOKEN`。9 分 22 秒 + 3 次纠偏。
+- A2：Azure inventory 不完整导致先接受「两条已有 Queue 够用」，真实 preflight 才发现三条物理 lane 必须 distinct，两次授权澄清 + `L10351`–`L10674` 命名/template/绑定返工 14.6 分钟。
+
+### 3.6 打断在途 worker（3/5 切片违反，19 次）
+
+见 2.1 的 #5。直接时钟代价不大（每次 2–4 分钟），真实代价是丢弃已投入的上下文——用户 `L320` 的原话就是「否则就浪费了」。
+
+### 3.7 review 触发粒度（主要在 A2，但用户纠偏最强）
+
+A2 的 82 次 spawn 里 **41 次是 review 轨**（`review-track-code` 11、`review-track-spec` 11、`review-track-safety` 10、`review-track-standards` 9），实施 worker 也是 41 次——**派发预算正好一半花在审查上**。
+
+- 纠偏前：TKT-03 3 轨 + TKT-02 4 轨 + TKT-01 4 轨 = **11 轨 initial review**，全部 FAIL，归并出 12 条实现 finding。但同一批返回里另有 2 条 evidence gap（worker isolation / arrival oracle）和 3 项已知未实现范围（root transaction、一次 job、post-commit publish）被混进了 code finding。
+- 用户 `L1220` 给出了完整的替代规则：真正实现缺陷只暂停依赖它的主线并立即修；已知未实现范围继续实施、不作为 finding 反复 closure；证据缺口保留为验收 pending、不阻塞无关代码；无关 Ticket 继续并行；修复后只派一个独立 reviewer 验证已命名 findings、不重跑全部 initial tracks；全部实现完成后再对最终 HEAD 做完整 terminal-final。
+- 纠偏后：coherent slice closure 都只派 1 名 reviewer，TKT-03 同 relation 升级 closure 明确没有重跑四轨。**但 terminal-final 跑了 7 轮，每轮 4 轨 = 28 轨**，每轮都确实找出了真实问题（loopback 绕过、DLQ dispatch fence、crash stale lock 等），所以不能说这 7 轮是浪费——真正的问题是最终候选一直在变，导致「完整终审」被反复重跑。
+
+这条对应提案里 E5「terminal-final 时机」的观察项：当时的建议是「已知会改变代码/合同的决定未闭合、或已知实现仍未完成时，继续 delta/必要范围审查；完整 terminal-final 等最终候选基本稳定再运行」。实战 7 轮说明这条观察项该落成规则了。
+
+### 3.8 个例（单切片，但成本可观）
+
+- **PR 前没有本地跑 CI 同构检查**：A2 `L13620`–`L14902`，首轮 CI 暴露 unused symbols、依赖注入、receiver fixture、Unit profile、lane mock、rejection/no-op 预期等 18 个集成失败，多轮 watch + 修复 + 推送，**61.2 分钟**，第二轮才 6/6 green。
+- **收尾工作挡住主线**：B3 `L3344`–`L3730`，先加载 `backfill-stable-docs` 全套说明，发现仓库没有 `.stable-docs-backfill.json`，再决定直接 patch 三个稳定文档（实际只花 3 分钟）；Issue 发布被推迟到用户 `L3719`「请先把 issue 任务发出去再刷文档，确保任务本身快速完成，不要因为 backfill 阻塞主线」之后。23.4 分钟。
+- **多 lane 未固定同一 comparison head 就提交**：B2 `800`–`944`，frontend review 未完成就推进 frontend lane，触发 server worker 的 fixed-HEAD `EVIDENCE_GAP`，13 分钟重核。
+- **跨 session 协调没有回报机制**：B3 用户 `L4123`「其他 3 个 chat 已经停下，你要让他们向你报告」；主控随后 `list_threads` 参数还写错，逐个唤醒到 `L4233`。
+- **交付三态被混为一谈**：B3 `L5634` 只证明 CI 4/4 通过，`L5640` MR 仍是 `opened / not_approved`，`L5645` 四个 issue 都还没关。「CI 绿」被当成「整体 closed」的风险是真实存在的。
+
+## 4. 候选建议（按性价比排序）
+
+性价比 = 实测可省时间 × 复现切片数 ÷ 改动成本。前 6 条是明确推荐，7–10 视优先级，最后一组明确不建议。
+
+### 1. evidence 只为未决 acceptance 建 claim，已消费结果引用现有 receipt
+
+- **依据**：3.1，4/5 切片、≥77 分钟、**两次独立用户纠偏**（A2 `L13303`、B3 `L4414`），且 B3 在纠偏后仍继续跑了两轮逐 claim 循环。
+- **改哪里**：`dev-with-track/SKILL.md` 现有那句「登记 `supporting` 或执行 `ticket satisfy` 前，逐 stable claim 核对……」加一个分流——已被真实链路消费并留有 receipt（focused / real / browser / cleanup）的结果引用 receipt 即可，逐 claim 核对只对未决 acceptance 和关键安全断言执行。
+- **成本**：改一句现有话。**这是全表最高的 ROI**：用户已经把结论说了两遍，只是规则里没有落点。
+
+### 2. 同 revision + 同环境下已获得的检查结果直接复用，并把共享全量检查交一个 owner
+
+- **依据**：3.2，5/5 切片。A2 API typecheck 11 次、B1 `git status` 34 次、B2 `situation.py render` 17 次、B3 全量 suite 5 次、B2 同一 image build 5 次。E4 观察项现在有数字。
+- **改哪里**：`references/progressive-system-evidence.md` 的运行前检查加一句：同一 revision / 同一环境已获得的检查结果可直接引用，重跑只在输入实际变化或需要新 oracle 时；全量 typecheck/build/跨包检查由一个 owner 在输入稳定时执行一次，其他 lane 引用其结果。
+- **成本**：一句规则 + 把 E4 从观察项落地。
+
+### 3. 给「继续等待」和「打断」这两个动作一个事实注入点
+
+- **依据**：3.3（5/5 切片、A2 单个 session 就有 6 小时 19 分等待）+ 3.6（19 次按时长中断，规则已写、刚读过、书面确认过，仍然违反）。
+- **为什么不是加强正文**：#5 的失效模式已经证明自然语言禁令在长 session 里不起作用。投影已经算出 `runnable[]` 和 `withheld[]`，但只在主控主动 render 时才可见，而「决定继续等待」不触发 render。
+- **改哪里**：T10 唯一保留的方向就是「让 `SessionStart` capsule 的同一套逻辑在更多衔接点触发，内容不变，只是触发时机增加」。这里正是那个衔接点：在等待／中断 worker 前呈现当前 `runnable` / `withheld` / `in_flight`。不是新机制，是把已批准的扩展方向用在最需要的时机。
+- **成本**：中等（hook 触发时机扩展）。**绝对收益最大的一条**。
+
+### 4. 立项时做「变更字段 → 已存在的下游消费者 → 各自终态」矩阵
+
+- **依据**：3.4，3/5 切片、≥130 分钟，且都是单点最贵事件（B2 的验收方向在执行到一半被推翻）。
+- **改哪里**：`req-align` 判定 contract impact 时增加一步；对改动了 schema / 引用 / lineage / 公开接口的变更，列出已存在的下游消费者并明确哪些进本次验收、哪些明确排除。B2 的教训正是「Spec 明确排除了 training」而 training 恰好是真正的下游消费者。
+- **成本**：req-align 增加一个判定步骤。
+
+### 5. 把用户 `L1220` 的 finding 五分法落成 review 触发规则
+
+- **依据**：3.7。用户已经把完整规则写好了，包括修复后只派一个 reviewer 验证已命名 findings、以及完整 terminal-final 等最终候选稳定后再跑。这同时把 E5 观察项落地。
+- **改哪里**：`dev-with-track` 的 Review/Findings 段落 + `do-review` 的 terminal-final 入口。核心是三条：code delta 只在形成可复用纵切时才触发 initial review；证据缺口和已知未实现范围不进 code finding；完整 terminal-final 在已知会改代码/合同的决定全部闭合后才跑。
+- **成本**：改两处现有段落。**用户已经代我们做完了设计**。
+
+### 6. 真正运行前先读已有环境与凭据 inventory
+
+- **依据**：3.5，3/5 切片、≥70 分钟。B2 把「进程级 env 为空」当成「配置不存在」是最典型的一次。
+- **改哪里**：`progressive-system-evidence.md` 加一句：核实目标前先读已有 canonical env / `.env*` / 容器与端口 inventory / 凭据来源，并区分「凭据只读来源」与「代码写入 worktree」；进程级 env 为空不等于配置不存在。
+- **成本**：一句规则。
+
+### 7. PR/MR 前按 CI 同构跑一遍，并把交付三态分开
+
+- **依据**：3.8 的第一条和最后一条。A2 首轮 CI 61.2 分钟；B3 存在把「CI 绿」当「整体 closed」的风险。
+- **改哪里**：`verification-before-completion` 加两句——CI required checks 构成 acceptance 依赖时，推之前先按 CI 同构在本地跑 static / unit / DB / full build；完成汇报把 package Gate、CI 状态、MR/Issue 状态分成三个字段，不合成一个「已完成」。
+- **成本**：两句规则。
+
+### 8. 收尾类工作不得作为主线前置
+
+- **依据**：3.8，B3 `L3719` 用户明确要求。backfill、稳定文档回刷、台账整理都是局部收尾 barrier，被误当成 Issue 主线前置。
+- **改哪里**：`backfill-stable-docs` 或 `dev-with-track` 收口段一句：durable delta 回刷是独立收尾候选，不阻塞仍可推进的交付主线；缺配置时直接回刷已批准的 delta，不为此新建基础设施。
+- **成本**：接近零。
+
+### 9. 主控自己的工具调用参数做发送前校验（PreToolUse 形态）
+
+- **依据**：2.2 末段，4/5 切片、约 15 次、累计 15–25 分钟。
+- **注意形态**：T10 撤销 `SubagentStop` 的理由仍然成立（worker 返回格式检查确实没产生新信息，5 个切片零反例）。要补的是**主控自己发出的调用**——`spawn_agent` / `followup_task` / continuation card 的必填字段、绝对 worktree 路径、`trail append` 不该带 CLI 自动填充的字段、PowerShell 脚本语法。
+- **成本**：中等（新 hook）。绝对收益不大，但它是这次唯一一条「砍错了」的证据。
+
+### 10. 多 lane 先固定同一 comparison head 再允许提交
+
+- **依据**：3.8，B2 `800`–`944`，13 分钟。1/5 切片。
+- **改哪里**：`dispatcher/references/resource-isolation.md` 一句：并行 lane 使用同一基线 SHA；任一 code return 未消费／审查前，不推进会改变其他 lane 读数的提交。
+- **成本**：一句规则。
+
+### 明确不建议做
+
+- **恢复 15/30 分钟观察门槛**。2.2 的证据显示删掉门槛后行为没变（照样按时长中断），说明问题不在有没有门槛，而在「不要按时长换人」这条正向指引缺生效点。恢复门槛只会把临场估计换回明示数字，不解决 #5。正确做法是建议 3。
+- **恢复候选清单／队列／配额**。5/5 切片确认删对了，没有一次因为缺少预登记而漏派。
+- **恢复 22 个 fact 声明入口**。5/5 切片确认删对了。
+- **恢复 do-review Loop 轮次上限**。上限从来没有约束力，问题在每轮跑满四轨（已由建议 5 覆盖）。
+- **跨 session 回报 registry**。只有 B3 一个切片有需求（用户 `L4123`），机制成本明显高于收益，先留作观察。
+
+## 5. 设计流程本身的一条教训
+
+这一轮的实施里有一次自己的绕远路，值得单独记：
+
+`3e89ece` 在做投影四分区改造的同时，引入了一整套候选清单预登记协议（`situation.py` +665 行、`engine.py` +320 行）；`dd6ed27` 把它退为 advisory；`6bd78a4` 整体删除，净删 1212 行。**而提案 §5 的备选方案表里本来就写着「新建自动调度器、队列或 claim-level 状态：本轮证据不足；投影分区改造已覆盖已确认症状，不需要第二套状态」。** 候选清单是同一类东西的变体，却还是先实现了一遍。
+
+教训不是「当时判断错了」，而是**提案里已经明确否决的备选方案，应该在实施前作为禁止清单逐条核对**——否则它会以别的名字重新进入实施范围。这和 3.4 里「立项没列下游消费者」是同一种结构：结论写在文档里，但没有一个核对时机。
+
+## 附：调研方法与证据边界
+
+- 5 个 worker 各读一个切片、互不重叠，使用同一套 12 条设计意图清单、11 项删除机制清单和固定的 6 节输出骨架；分类由主控提供，worker 不重新定义。
+- 主控独立算了一遍全局硬指标（spawn / wait / interrupt 计数、并发度、等待占比、exec 分类、重复命令），与 worker 的数字交叉校验一致。
+- 抽查了 20 条 worker 引用的行号并回读原 jsonl 核对，全部命中。
+- `spawn_agent` 的 brief 内容在 rollout 里是加密的，无法读取；worker 的最终结论通过 `agent_message` 的 `FINAL_ANSWER` 可读，agent 名称与层级通过 `author` 路径可读。因此「派发合同写得好不好」这一维度本轮无法取证，只能判断派发时机、拓扑和结果消费。
+- 时长按 rollout 时钟计算，包含用户空档和夜间等待，不等于纯工作时间；重叠区间不累加。单个 session 的时长差异远大于本次改动的效应量，所以本文的时钟数字只用于给成本模式排序，不作为改造前后的性能对比。
+- 判定「本 slice 无相关场景」的项目不能解释为设计未落地；需要看同一条在 5 个切片的分布（2.1 的表就是为此排的）。
