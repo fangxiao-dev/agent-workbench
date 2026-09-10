@@ -1,123 +1,27 @@
 ---
 name: project-knowledge-manager
-description: Use when preserving, curating, routing, summarizing, or maintaining durable project knowledge and documentation layers, including PRD structure, module PRDs/specs, requirement inboxes, implementation-local design/plan inputs, and hands-on knowledge with reusable pattern, trap, recovery, or reverse-lookup value.
+description: 回刷已完成工作产生的长期项目知识：一次调度 hands-on 与 stable-docs 两条 lane，并统一去重、应用和验收。
+disable-model-invocation: true
 ---
 
 # Project Knowledge Manager
 
-Route durable project knowledge and documentation to the right maintained home. Keep product intent, module intent, module behavior contracts, and point-in-time change design distinct.
+这是长期项目知识回刷的显式总入口。只有用户点名 `$project-knowledge-manager` 时运行；普通“沉淀经验”或“回刷稳定文档”继续走各自的单 lane Skill。
 
-This skill is the parent entrypoint for `docs/hands-on-knowledge/` and a router for adjacent long-lived documentation layers. It classifies incoming material, decides which maintainer skill should handle hands-on knowledge, and keeps project docs coherent without duplicating child-skill rules.
+Manager 只代替用户发出固定的下一组指令。知识分类、证据、目标、写作和 metadata 规则分别由全局 `$learn-lessons` 与 `/impl-package:backfill-stable-docs` 拥有。
 
-**Not for physical repository reorganization.** Moving, renaming, or relocating an already-approved canonical doc directory (for example a `docs/top-level-knowledge/` → `docs/system-knowledge/` migration) is mechanical execution against a design that has already been decided elsewhere — it needs no content classification or durability judgment. Do not load this skill for that kind of task; follow the migration's own plan (e.g. `backfill-stable-docs`'s Physical Migration Plan) directly: grep for references, `git mv`, fix links, verify. Loading a knowledge-routing skill for a pure rename risks it making unrequested content decisions outside the approved scope.
+## 固定调度
 
-Hands-on knowledge is reverse-indexed memory for future problem solving: experience, traps, symptoms, root causes, and fast lookup paths that help during implementation, debugging, verification, migration, recovery, or codebase orientation.
+1. 从参数或当前对话确定已完成工作的来源，记录仓库、branch、Source HEAD、dirty 状态，并读取仓库 instructions 与文档治理。
+2. 读取两个 peer Skill；有相应来源时，按 `$dispatcher` 同时派出两个只读审计：
+   - `$learn-lessons` 审计 hands-on knowledge；
+   - `/impl-package:backfill-stable-docs` 审计稳定产品、架构与行为合同。
+3. Codex 默认使用两个只读 `luna-worker`，其他宿主使用等价 worker；没有 subagent 能力时由主线程顺序完成同样的只读审计。brief 只需包含来源、Source HEAD、dirty 状态、目标 lane 和只读边界。
+4. Gate 缺失、schema 旧或来源不是标准 package 时仍派发；具体兼容审计由 peer Skill 自己执行。没有相应来源的 lane 跳过，两条都无候选时返回 `no-delta`。
+5. 主线程消费两个结果，按 peer Skill 规则复核、跨 lane 去重、应用非破坏性文档更新，并检查 diff、路径、链接、metadata 与最小验证。稳定合同不复制到 hands-on；冲突项停写并交给 Owner。
 
-## Load Extra Context
+## 授权与结果
 
-Read `references/routing-taxonomy.md` when:
+显式调用 Manager 即授权本轮非破坏性文档创建和更新。移动、重命名、删除、retirement、package 状态修改、代码或外部系统变更仍需独立授权。
 
-- routing among top-level PRD, module PRD/spec, requirement inbox, implementation-local design/plan inputs, and hands-on knowledge is ambiguous
-- the user asks for docs taxonomy, PRD cleanup, requirement lifecycle, or examples
-- you need neutral examples for final reporting or user explanation
-
-## Core Routing
-
-Split mixed input into small candidate knowledge items before routing. One request may route to multiple destinations.
-
-### Atomic Knowledge Item Gate
-
-Do not route a whole incident, PR, release, or debugging session as one knowledge item just because it happened together. First split by the future lookup question a developer would ask, then route each item to the narrowest durable home.
-
-Use these split signals:
-
-- A different future reader would search for it from a different place, such as deploy verification, frontend implementation, backend adapter behavior, schema contract drift, or product requirement.
-- The lesson has a different maintenance owner or source of truth, such as deploy script/tests, frontend tests, API models, PRD, or runbook.
-- The lesson has a different action shape: diagnose/recover, implement/avoid, verify/release, decide product behavior, or record a mandatory operating rule.
-- One paragraph would need both debug steps and implementation rules to stay correct.
-
-When any split signal is present, create separate candidate items even if the user asks for "top lessons" or "summarize this incident." Cross-link related docs instead of making one catch-all doc.
-
-Example: an outage investigation might produce one debug runbook for preview-domain/CORS verification, one implementation pattern for frontend error redaction and stale state clearing, and one deploy-script rule for split-runtime rollouts. The shared incident timeline is source material, not the documentation boundary.
-
-Use `impl-knowledge-maintainer` for hands-on implementation knowledge:
-
-- build, integration, migration, structure, or reuse patterns
-- module boundaries, schema patterns, validation, server/client separation, wrappers, or adapters
-- verified commands, test approaches, release checks, or implementation verification paths
-- package behavior, implementation retrospectives, or preserved implementation references
-
-Use `debug-knowledge-maintainer` for hands-on diagnostic knowledge:
-
-- symptoms, diagnosis, root cause, remediation, or recovery
-- known issues, recurring failure modes, platform/runtime traps, environment problems, or contract drift risks
-- debug investigations, runbooks, postmortems, or preserved logs with framing
-- feature-to-code entry paths that materially shorten diagnosis
-
-Use both child skills when a session produced both implementation lessons and debug/recovery lessons. Keep the implementation-facing lesson and diagnostic/recovery lesson separate.
-
-## Intent And Contract Routing
-
-Route outside child skills when the item is not hands-on implementation or debug knowledge.
-
-`backfill-stable-docs` is the public entrypoint Skill and owns the canonical routing taxonomy for durable product/system/context/module knowledge (PRD, architecture, behavior contracts, canonical vocabulary) — its Stable Destination Rules and `constraint-extraction-and-routing.md` are the single source of truth for that taxonomy; this skill does not keep a second copy of it. audit/apply/verify are runbook states the entrypoint loads by intent, not separately installable Skills; call `/impl-package:backfill-stable-docs`. When a candidate item is a durable product/system/context/module-level statement, hand it to that entrypoint (or, for items sourced from an active implementation package before its gate closes, follow that package's own Stage 7 `_pending.md` registration — see `impl-package-composition-contract.md` §7) instead of deciding its destination here.
-
-This skill still owns routing for the layers `backfill-stable-docs` does not cover:
-
-- new or changed requirements needing traceability, review, or owner decisions -> `docs/exchange/req-*.md`
-- broad roadmap or milestone strategy -> `docs/epic-plans/` when the repo uses it
-- point-in-time change design and temporary execution plans -> `docs/implementations/<slug>/`
-- mandatory operating rules -> `AGENTS.md` or `CLAUDE.md`, following the repo's canonical agent file
-
-Use two questions for durable deltas:
-
-1. If the implementation were completely replaced but the user value stayed the same, must the statement still hold? If yes, it is intent.
-2. Can tests, interfaces, state queries, or failure drills directly verify it? If yes, it is a behavior contract.
-
-Split statements that contain both why and how; do not duplicate the same statement in PRD and spec. New/changed requirements generally flow: `req` inbox -> PRD after acceptance (via `backfill-stable-docs`) -> implementation-local design when a change needs design -> spec after verified behavior becomes current contract (via `backfill-stable-docs`) -> hands-on only for reusable implementation/debug lessons.
-
-## Durability Gate
-
-Do not put an item in `docs/hands-on-knowledge/` just because it is important or implemented.
-
-Preserve hands-on knowledge only when it is likely to help a future agent after they hit a confusing symptom, failed verification, wrong assumption, environment mismatch, or non-obvious implementation trap in a way that PRD/requirement/design/test docs would not already cover.
-
-Preserve:
-
-- repeated implementation or debug patterns
-- non-obvious runtime, platform, integration, or package behavior
-- migration, refactor, verification, or recovery lessons
-- known failure modes or root causes likely to recur
-- codebase entry paths that materially shorten implementation or diagnosis
-
-Route elsewhere or ignore:
-
-- ordinary requirements, PRD content, design decisions, and execution plans
-- one-off logs, status updates, or per-session notes that do not change future behavior
-- product intent already covered by PRD, or behavior contracts already covered by module spec or executable tests
-- recent feature work whose only argument is "we changed this"
-- requirement refreshes with no new trap, symptom, recovery path, or reverse-lookup shortcut
-
-## Workflow
-
-1. Infer source material from the prompt, conversation, files, changed paths, plans, handoffs, logs, or notes.
-2. Confirm completion only when it is unclear whether the task, milestone, implementation, or investigation is done enough to preserve.
-3. Split mixed material into atomic candidate knowledge items using the future lookup question, maintenance owner, source of truth, and action shape. Do not preserve an incident narrative as one doc when it contains multiple reusable lessons.
-4. Apply the durability gate to each candidate.
-5. Classify each item as implementation, debug, both, module-spec, module-prd, top-level-prd, context-language, requirement inbox, change design, planning, mandatory rule, one-off, stale candidate, or unclear.
-6. Load `impl-knowledge-maintainer` or `debug-knowledge-maintainer` only for hands-on items.
-7. Before changing maintained docs, search existing relevant knowledge and prefer updating existing documents over creating new ones.
-8. If material changes under `docs/hands-on-knowledge/`, evaluate whether `docs/hands-on-knowledge/entry-map.md` needs a routing update.
-
-The child skills own detailed metadata, curation rules, destination decisions, and final document shape for implementation/debug knowledge.
-
-## Final Report
-
-Report:
-
-- implementation/debug/both-routed items and the docs updated or created
-- module-spec, module-prd, top-level-prd, context-language, requirement inbox, change-design, planning, or mandatory-rule items routed outside hands-on knowledge
-- ignored one-offs or unfinished items
-- whether `docs/hands-on-knowledge/entry-map.md` changed, and why
-
-If no maintained docs changed, say whether the material was one-off, already covered, unfinished, or better handled by another documentation layer.
+最终报告来源数、各 lane 是否运行、候选与 `applied | already-covered | no-delta | source-insufficient | pending | conflict` 计数、跨 lane 去重数、修改文件及验证结果。无 durable delta 时只报告 `no-delta`，不制造文档。

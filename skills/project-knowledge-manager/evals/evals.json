@@ -1,0 +1,61 @@
+{
+  "skill_name": "project-knowledge-manager",
+  "notes": "行为评估检查显式双 lane、兼容缺失 package 证据、主线程唯一写者、跨 lane 去重和冲突停写；不要求固定仓库路径。",
+  "evals": [
+    {
+      "id": 1,
+      "name": "explicit-dual-lane",
+      "prompt": "用户明确调用 $project-knowledge-manager，提供一个已完成任务包，材料同时包含 implementation verification trap 和已验证的 module behavior contract。请按 Manager 合同处理，禁止把 worker 当写者。",
+      "expected_output": "启动适用的 Learn Lessons 与 Stable Docs 两条只读 lane，主线程消费候选、去重后再应用非破坏性文档更新，并报告各 lane 计数与验证结果。",
+      "expectations": [
+        "只因用户显式调用 Manager 才启动双 lane",
+        "两个 lane 的 worker 都是只读候选审计，主线程是唯一写者",
+        "稳定合同与 hands-on 经验分开归属并分别报告"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "compat-without-gate-or-current-schema",
+      "prompt": "用户调用 Manager 回刷一个旧任务包：没有 terminal Gate，state schema 旧且缺少配置 sidecar，但用户给出了 package、当前代码、测试和 canonical docs。不要迁移 schema 或补造 Gate。",
+      "expected_output": "切换兼容审计，直接以用户提供的来源和当前证据审计两条 lane；缺失 Gate/schema 记录为限制但不阻塞非破坏性回刷，禁止伪造机械证据和 retirement。",
+      "expectations": [
+        "没有把缺失或旧 Gate/schema 当成回刷阻塞",
+        "没有创建或迁移 Gate、schema、manifest 或中间 JSON",
+        "明确禁止 package retirement、移动、删除和重命名"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "single-lane-and-no-delta",
+      "prompt": "用户显式调用 Manager，但来源只有一个已验证的实现验证捷径，stable contract 没有变化；随后给出一个完全没有可复用经验的来源。请分别说明调度和结果。",
+      "expected_output": "第一份只派 Learn Lessons，跳过无候选的 Stable Docs lane；第二份两条 lane 都标为 no-delta，不制造文档，并完整报告基线检查。",
+      "expectations": [
+        "按适用性单 lane 调度，不强行派发另一 lane",
+        "无 durable delta 时不新建文档",
+        "把 no-delta 与 audit/apply/verify 完成状态区分开"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "cross-lane-deduplication",
+      "prompt": "两个只读 worker 都提出同一个事实：一个建议写入 module spec，另一个建议写入 implementation hands-on。事实的稳定行为已由当前测试证明，但没有额外实现陷阱。",
+      "expected_output": "主线程将稳定行为保留在 stable-doc destination，拒绝在 hands-on 重复；只有额外的非显然经验才进入 hands-on，并报告合并/去重。",
+      "expectations": [
+        "不把同一稳定合同复制到 hands-on",
+        "以 source-of-truth 和未来检索问题决定归属",
+        "最终报告跨 lane 去重数量或处置原因"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "conflict-stops-semantic-write",
+      "prompt": "Decision/Spec 声明行为 X，但当前代码和测试一致证明行为 Y；两个 worker 都找到这个差异。用户要求回刷，但没有给出 Owner 对冲突的裁决。",
+      "expected_output": "主线程停止该候选的语义写入，保留冲突证据并列出需要 Owner 决定的问题；不能用代码猜意图，也不能以旧设计覆盖当前事实。其他无冲突候选仍可按授权应用。",
+      "expectations": [
+        "冲突项不写入稳定合同或 hands-on 作为已确认事实",
+        "报告具体证据和需要 Owner 决定的边界",
+        "不因单个冲突阻塞其他独立且已校准的候选"
+      ]
+    }
+  ]
+}

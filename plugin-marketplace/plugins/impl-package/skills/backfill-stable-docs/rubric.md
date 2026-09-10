@@ -3,6 +3,8 @@
 ## Confirmed preferences
 
 - Audit and the verifier are read-only. Apply records exact approved item IDs, including a uniquely resolved explicit batch approval of the unchanged report. The caller may repair this apply's mechanical errors within the same authorization and verify again.
+- A direct “回刷” request or explicit Project Knowledge Manager invocation authorizes non-destructive apply for the candidates audited from that named source; `audit-only` remains read-only, and destructive changes or semantic conflicts still require a separate Owner decision.
+- Gate and current package schema enable automatic discovery but are not prerequisites for manual audit of a user-specified completed source.
 - Configuration and evidence use explicit repository-relative paths.
 - Git commit IDs provide the only version boundary.
 - Gate keeps the current readable verdict; Git keeps history.

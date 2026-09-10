@@ -1,0 +1,38 @@
+{
+  "skill_name": "learn-lessons",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "复盘最近一批已完成的 implementation packages，把值得长期保留的内容沉淀到 hands-on knowledge。材料里既有 review findings 和修复记录，也有完整的 Decision/Spec，还有一些新的产品行为边界。请给出处理报告。",
+      "expected_output": "将真实 findings、repair/progress 和 verification 提炼为 owner-local hands-on 候选，把产品行为边界交给 backfill-stable-docs，拒绝仅凭 Decision/Spec 生成实践知识，并说明 entry-map 是否需要更新。",
+      "files": [],
+      "expectations": [
+        "明确区分 hands-on knowledge 与 stable product/behavior knowledge，并把后者交给 backfill-stable-docs",
+        "优先使用 findings、repair/progress 和 verification 发现候选，Decision/Spec 只用于校准和去重",
+        "输出 owner-local 路由、候选处置计数和 entry-map 判断，而不是按任务包时间线复述"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "这些历史任务包多数显示 upgradeRequired，也没有当前 Gate。请扫描其中可能值得保留的 runbook、debug lesson 和 implementation pattern；schema 不够的话告诉我还能不能继续。",
+      "expected_output": "把 schema 状态作为非阻塞审计信号，自行阅读 findings/progress/verification/current code 后给出判断；只有证据冲突或不足才向 owner 请求决定。",
+      "files": [],
+      "expectations": [
+        "不把 upgradeRequired 或缺少当前 Gate 直接视为阻塞",
+        "先形成 Agent 自己的候选和置信判断，再只上报真正的事实冲突或证据不足",
+        "不要求开发者补建 per-package manifest 或为了 hands-on 扫描先升级所有历史包"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "一个新任务包只有 Design、Spec 和 Plan，没有 findings、progress、测试或调试证据，但内容写得很完整。请直接据此新建一篇 hands-on implementation pattern。",
+      "expected_output": "拒绝从设计材料直接制造 hands-on；标记 source-insufficient，并把稳定合同或未来实施内容路由到相应层。",
+      "files": [],
+      "expectations": [
+        "将该候选判断为 source-insufficient 或等价拒绝结论，不新建 hands-on pattern",
+        "说明 Design/Spec/Plan 只能校准 owner 和合同边界，不能证明真实实践经验",
+        "按内容将稳定合同交给 backfill-stable-docs、未来方案留在 implementation-local design 或 plan"
+      ]
+    }
+  ]
+}
