@@ -20,7 +20,7 @@ initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一
 
 1. 读取 current `spec.md`、存在时的 `contract-design.md`、repository facts 与 [Spec Gate](../../references/spec-gate.md)；本次创建或修订 Spec 时补齐从属文件。
    - 常见误判：只读本轮 delta 或漏读从属文件，会把旧的 current truth 当成完整 Spec。
-2. 重建当前完整的 Spec 设计范围，逐项列出 API operations、persistence models、cross-module seams 与 public read models；结果是 current truth，不是本轮 delta 日志。
+2. 重建当前完整的 Spec 设计范围，逐项列出 API operations、persistence models、cross-module seams 与 public read models；结果是 current truth，不是本轮 delta 日志。修改 schema、引用、lineage 或公开接口时，沿受影响的既有消费者追踪到可观察终态，并在现有 Spec/contract-design 中分别写清修改范围与兼容性验收范围；下游实现不在修改范围，不等于免除兼容性验收。仅跟进实际受影响路径，不穷举下游。
    - 常见误判：把 delta 日志当设计范围，会让未变化但仍被实现消费的 surface 从 Gate 覆盖中消失。
 3. 对非空 contract surfaces 执行 contract coherence check：调用方能取得每个 required input；有副作用、并发或重试语义的 operation 已逐项关闭 identity、重复/stale 结果与恢复；每个可观察字段，以及行为/状态机/工作流表与错误边界表中每一个用户可见结果，都有唯一 authority，并能指到承载它的 read-model 字段与实际 producer。使用现有 `spec.md` 或 disposition 为 `detailed` 的 `contract-design.md` 表达；命中幂等键 / CAS / 版本号、多个来源写同一个目标字段、替换 / 撤回 / 恢复语义、terminal/finalized 状态被再次进入、materialize 或 replay、跨存储提交（两个 store 各自提交）、final authority 与 editable projection 共用同一 identity、声明值 vs 检测值任一触发时，该 contract surface 必须用结果矩阵，均不命中时维持散文，避免固定 artifact 或矩阵膨胀。
    - 矩阵必须有“禁止残留”一列，逐个失败点列出禁止留下的 source、draft、lineage、audit 或 pending object。
