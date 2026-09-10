@@ -45,6 +45,8 @@ TERMINAL_VERDICTS = {"pass", "fail", "defer"}
 VERDICTS = TERMINAL_VERDICTS | {"blocked"}
 TIMINGS = {"early-falsification", "remaining-completion"}
 CONCLUSIONS = {"supporting", "contradictory", "inconclusive"}
+EVIDENCE_REQUIRED_FIELDS = frozenset({"ticket", "claim", "timing", "artifact", "revision", "environment", "conclusion"})
+EVIDENCE_FIELDS = EVIDENCE_REQUIRED_FIELDS | {"invalidatedBy"}
 DISPOSITIONS = {"waived", "superseded"}
 TRAIL_APPEND_KINDS = frozenset({"dispatch", "escape", "fact", "worker-return"})
 RETIRED_DISPATCH_FIELDS = frozenset({"candidates_of", "declaration_status", "declaration_reason", "runnable_candidate_ids", "state_sha256"})
@@ -1157,39 +1159,73 @@ def _evidence_coverage(summary: dict[str, Any], ticket: str, revision: str, envi
     return _evidence_coverage_for(summary["_claims"], summary["_evidence"], ticket, revision, environment)
 
 
+def _normalize_evidence_record(repo: Path, summary: dict[str, Any], payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise StateError("evidence record must be an object")
+    if set(payload) - EVIDENCE_FIELDS or not EVIDENCE_REQUIRED_FIELDS <= set(payload):
+        raise StateError("evidence-add requires ticket, claim, timing, artifact, revision, environment, conclusion")
+    for field in ("ticket", "claim"):
+        if not isinstance(payload[field], str) or not payload[field].strip():
+            raise StateError(f"evidence {field} must be a non-empty string")
+    ticket, claim = payload["ticket"], payload["claim"]
+    if ticket not in summary["_claims"] or claim not in summary["_claims"][ticket]:
+        raise StateError(f"unknown Ticket/claim: {ticket}/{claim}")
+    record = dict(payload)
+    record["artifact"] = _repo_relative(repo, record["artifact"], "evidence artifact")
+    if (
+        not isinstance(record["timing"], str)
+        or record["timing"] not in TIMINGS
+        or not isinstance(record["conclusion"], str)
+        or record["conclusion"] not in CONCLUSIONS
+    ):
+        raise StateError("invalid evidence timing or conclusion")
+    for field in ("revision", "environment"):
+        if not isinstance(record[field], str) or not record[field].strip():
+            raise StateError(f"evidence {field} must be non-empty")
+    if "invalidatedBy" in record and record["invalidatedBy"] is not None:
+        if not isinstance(record["invalidatedBy"], str) or not record["invalidatedBy"].strip():
+            raise StateError("evidence invalidatedBy must be text or null")
+    record["revision"] = _validate_commit(repo, record["revision"])
+    return record
+
+
 def command_evidence_add(package: Path, payload_text: str) -> dict[str, Any]:
     try:
         payload = json.loads(payload_text)
     except json.JSONDecodeError as exc:
         raise StateError(f"evidence-add input is invalid JSON: {exc}") from exc
-    if not isinstance(payload, dict):
-        raise StateError("evidence-add input must be an object")
-    required = {"ticket", "claim", "timing", "artifact", "revision", "environment", "conclusion"}
-    if set(payload) - required - {"invalidatedBy"} or not required <= set(payload):
-        raise StateError("evidence-add requires ticket, claim, timing, artifact, revision, environment, conclusion")
+    if isinstance(payload, dict):
+        items = [payload]
+        is_batch = False
+    elif isinstance(payload, list):
+        if not payload:
+            raise StateError("evidence-add input array must be non-empty")
+        items = payload
+        is_batch = True
+    else:
+        raise StateError("evidence-add input must be an object or non-empty array")
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
     _assert_mutable(summary)
-    ticket, claim = payload["ticket"], payload["claim"]
-    if ticket not in summary["_claims"] or claim not in summary["_claims"][ticket]:
-        raise StateError(f"unknown Ticket/claim: {ticket}/{claim}")
     repo = _repo_root(package)
-    record = dict(payload)
-    record["artifact"] = _repo_relative(repo, record["artifact"], "evidence artifact")
-    if record["timing"] not in TIMINGS or record["conclusion"] not in CONCLUSIONS:
-        raise StateError("invalid evidence timing or conclusion")
-    for field in ("revision", "environment"):
-        if not isinstance(record[field], str) or not record[field].strip():
-            raise StateError(f"evidence {field} must be non-empty")
-    record["revision"] = _validate_commit(repo, record["revision"])
-    records = state["evidenceIndex"].setdefault(ticket, {}).setdefault(claim, [])
-    if record in records:
-        return {"ticket": ticket, "claim": claim, "idempotent": True}
-    records.append(record)
-    _validate_state(package, state, projections=False)
-    _write_json(package / STATE_PATH, state)
-    _refresh_projections(package, state)
-    return {"ticket": ticket, "claim": claim, "idempotent": False}
+    results: list[dict[str, Any]] = []
+    added = 0
+    for item in items:
+        record = _normalize_evidence_record(repo, summary, item)
+        ticket, claim = record["ticket"], record["claim"]
+        existing = state["evidenceIndex"].get(ticket, {}).get(claim, [])
+        idempotent = record in existing
+        results.append({"ticket": ticket, "claim": claim, "idempotent": idempotent})
+        if not idempotent:
+            state["evidenceIndex"].setdefault(ticket, {}).setdefault(claim, []).append(record)
+            added += 1
+    if added:
+        _validate_state(package, state, projections=False)
+        _write_json(package / STATE_PATH, state)
+        _refresh_projections(package, state)
+    if not is_batch:
+        return results[0]
+    return {"records": results, "added": added, "duplicates": len(items) - added}
 
 
 def command_evidence_invalidate(package: Path, ticket: str, claim: str, artifact: str, invalidated_by: str) -> dict[str, Any]:

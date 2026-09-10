@@ -78,6 +78,8 @@ printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <packa
 python <plugin>/scripts/impl_package_state.py --package <package> gate <verdict> --comparison-commit <commit> --reason <text>
 ```
 
+`evidence add` 从 stdin 接受一个 evidence object 或一个非空 evidence object array。单对象输出保持 `{ticket, claim, idempotent}`；数组输出为 `{records: [按输入顺序的单条结果], added, duplicates}`。批量输入会先完成全部记录的规范化与校验，任一元素非法则整批失败且不写入 state；完全重复（含批内重复）只返回幂等结果，不写入 state 或刷新 projection。含新增记录的批量调用只原子保存一次 state、刷新一次 projection，CLI 处境尾注仍按调用追加一次。
+
 `evidence retire-claim` 只清理已从当前 Ticket 删除且所有旧 evidence 都已带 `invalidatedBy` 的孤立 claim mapping；它不删除 evidence artifact，也不创建额外历史副本。
 
 旧平铺拼法 `init`、`validate`、`set-state`、`evidence-add`、`checkpoint`、`er-add` 等保留为兼容别名；新文档和新 package 统一使用分组拼法。`ticket transition` 是旧 `set-state` 的组内兼容入口，优先使用上面的语义命令。

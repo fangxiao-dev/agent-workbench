@@ -220,7 +220,7 @@ situations:
       - id: file-evidence
         default: true
         by: main-session
-        do: "impl_package_state.py --package <package> evidence add <evidence-payload.json>"
+        do: "printf '<evidence-object-or-non-empty-array-json>' | python impl_package_state.py --package <package> evidence add"
         effect: "必须带 timing"
     escape: true
 

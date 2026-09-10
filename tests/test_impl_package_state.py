@@ -452,6 +452,204 @@ class ImplPackageStateTests(unittest.TestCase):
         failed = self.cli(repo, package, "evidence-add", input_text=json.dumps(payload), ok=False)
         self.assertIn("timing", failed.stderr)
 
+    def test_evidence_add_batch_preserves_order_and_duplicate_noop(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        revision = git(repo, "rev-parse", "HEAD")
+        first = {
+            "ticket": "TKT-01",
+            "claim": "AC-1",
+            "timing": "early-falsification",
+            "artifact": "evidence.md",
+            "revision": revision,
+            "environment": "batch",
+            "conclusion": "supporting",
+        }
+        second = {**first, "claim": "AC-2", "timing": "remaining-completion"}
+
+        single = json.loads(self.cli(repo, package, "evidence-add", input_text=json.dumps(first)).stdout)
+        self.assertEqual(single, {"ticket": "TKT-01", "claim": "AC-1", "idempotent": False})
+        result = json.loads(
+            self.cli(repo, package, "evidence", "add", input_text=json.dumps([first, second, second])).stdout
+        )
+        self.assertEqual(
+            result,
+            {
+                "records": [
+                    {"ticket": "TKT-01", "claim": "AC-1", "idempotent": True},
+                    {"ticket": "TKT-01", "claim": "AC-2", "idempotent": False},
+                    {"ticket": "TKT-01", "claim": "AC-2", "idempotent": True},
+                ],
+                "added": 1,
+                "duplicates": 2,
+            },
+        )
+
+        state_path = package / ".impl-package/state.json"
+        progress_path = package / "progress.md"
+        state_before = state_path.read_bytes()
+        progress_before = progress_path.read_bytes()
+        with patch.object(engine, "_write_json", wraps=engine._write_json) as write_json, patch.object(
+            engine, "_refresh_projections", wraps=engine._refresh_projections
+        ) as refresh:
+            repeated = engine.command_evidence_add(package, json.dumps([first, second, second]))
+        self.assertEqual(repeated["added"], 0)
+        self.assertEqual(repeated["duplicates"], 3)
+        self.assertTrue(all(item["idempotent"] for item in repeated["records"]))
+        self.assertEqual(write_json.call_count, 0)
+        self.assertEqual(refresh.call_count, 0)
+        self.assertEqual(state_path.read_bytes(), state_before)
+        self.assertEqual(progress_path.read_bytes(), progress_before)
+
+        stdout = StringIO()
+        with patch.dict(os.environ, {"IMPL_PACKAGE_NO_SITUATION": "0"}), patch.object(
+            command_groups, "_situation_footer", return_value="footer"
+        ) as footer, patch("sys.stdin", StringIO(json.dumps([first, second]))), redirect_stdout(stdout):
+            code = command_groups.main(package, "evidence", ["add"])
+        self.assertEqual(code, 0)
+        self.assertEqual(footer.call_count, 1)
+        self.assertIn("footer", stdout.getvalue())
+
+    def test_evidence_add_batch_invalid_input_does_not_write_state(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        revision = git(repo, "rev-parse", "HEAD")
+        valid = {
+            "ticket": "TKT-01",
+            "claim": "AC-1",
+            "timing": "early-falsification",
+            "artifact": "evidence.md",
+            "revision": revision,
+            "environment": "batch",
+            "conclusion": "supporting",
+        }
+        invalid_batches = (
+            [valid, "invalid record"],
+            [valid, {**valid, "ticket": []}],
+            [valid, {**valid, "claim": []}],
+            [valid, {**valid, "timing": {}}],
+            [valid, {**valid, "timing": "wrong-timing"}],
+            [valid, {**valid, "artifact": []}],
+            [valid, {**valid, "artifact": "missing-evidence.md"}],
+            [valid, {**valid, "revision": []}],
+            [valid, {**valid, "environment": []}],
+            [valid, {**valid, "conclusion": {}}],
+            [valid, {**valid, "unknown": True}],
+            [valid, {**valid, "claim": "missing-claim"}],
+        )
+        state_path = package / ".impl-package/state.json"
+        progress_path = package / "progress.md"
+        for payload in invalid_batches:
+            with self.subTest(payload=payload[1]):
+                state_before = state_path.read_bytes()
+                progress_before = progress_path.read_bytes()
+                failed = self.cli(repo, package, "evidence", "add", input_text=json.dumps(payload), ok=False)
+                self.assertNotEqual(failed.returncode, 0)
+                self.assertEqual(state_path.read_bytes(), state_before)
+                self.assertEqual(progress_path.read_bytes(), progress_before)
+        failed = self.cli(repo, package, "evidence", "add", input_text=json.dumps([]), ok=False)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertEqual(state_path.read_bytes(), state_before)
+        self.assertEqual(progress_path.read_bytes(), progress_before)
+
+    def test_evidence_add_batch_writes_and_refreshes_once(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        revision = git(repo, "rev-parse", "HEAD")
+        records = [
+            {
+                "ticket": "TKT-01",
+                "claim": "AC-1",
+                "timing": "early-falsification",
+                "artifact": "evidence.md",
+                "revision": revision,
+                "environment": "batch",
+                "conclusion": "supporting",
+            },
+            {
+                "ticket": "TKT-01",
+                "claim": "AC-2",
+                "timing": "remaining-completion",
+                "artifact": "evidence.md",
+                "revision": revision,
+                "environment": "batch",
+                "conclusion": "supporting",
+            },
+            {
+                "ticket": "TKT-01",
+                "claim": "INV-tenant-isolation",
+                "timing": "early-falsification",
+                "artifact": "evidence.md",
+                "revision": revision,
+                "environment": "batch",
+                "conclusion": "supporting",
+            },
+        ]
+        with patch.object(engine, "_validate_state", wraps=engine._validate_state) as validate, patch.object(
+            engine, "_write_json", wraps=engine._write_json
+        ) as write_json, patch.object(engine, "_refresh_projections", wraps=engine._refresh_projections) as refresh:
+            result = engine.command_evidence_add(package, json.dumps(records))
+        self.assertEqual(result["added"], len(records))
+        self.assertEqual(write_json.call_count, 1)
+        self.assertEqual(refresh.call_count, 1)
+        self.assertEqual(validate.call_count, 3)
+        self.assertEqual(len(self.state(package)["evidenceIndex"]["TKT-01"]["AC-1"]), 1)
+
+    def test_evidence_add_batch_projection_failure_is_recoverable(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        revision = git(repo, "rev-parse", "HEAD")
+        payload = [
+            {
+                "ticket": "TKT-01",
+                "claim": "AC-1",
+                "timing": "early-falsification",
+                "artifact": "evidence.md",
+                "revision": revision,
+                "environment": "batch",
+                "conclusion": "supporting",
+            }
+        ]
+        with patch.object(engine, "_refresh_projections", side_effect=engine.StateError("projection failed")):
+            with self.assertRaisesRegex(engine.StateError, "projection failed"):
+                engine.command_evidence_add(package, json.dumps(payload))
+        self.assertEqual(len(self.state(package)["evidenceIndex"]["TKT-01"]["AC-1"]), 1)
+        engine.command_refresh_progress(package)
+        self.assertIn("AC-1", (package / "progress.md").read_text(encoding="utf-8"))
+
+    def test_evidence_add_batch_keeps_ticket_and_gate_revision_semantics(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        revision = git(repo, "rev-parse", "HEAD")
+        source = json.loads((FIXTURE / "evidence/index.json").read_text(encoding="utf-8"))
+        records = []
+        for item in source["records"]:
+            record = dict(item)
+            record.update({"artifact": "evidence.md", "revision": revision, "environment": "test"})
+            records.append(record)
+        result = json.loads(self.cli(repo, package, "evidence", "add", input_text=json.dumps(records)).stdout)
+        self.assertEqual(result["added"], len(records))
+        for ticket in ("TKT-01", "TKT-02", "TKT-03", "TKT-04"):
+            self.satisfy(repo, package, ticket)
+        passed = self.cli(
+            repo,
+            package,
+            "gate",
+            "pass",
+            "--comparison-commit",
+            revision,
+            "--reason",
+            "batch evidence",
+            "--no-durable-delta-reason",
+            "fixture",
+        )
+        self.assertEqual(json.loads(passed.stdout)["verdict"], "pass")
+
     def test_invalidating_satisfied_evidence_fails_before_writing_state(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
