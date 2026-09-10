@@ -13,8 +13,13 @@ def test_grok_monitor_profile_is_luna_max_and_reports_each_target_independently(
     assert 'model_reasoning_effort = "max"' in config
     assert "[features]\nfast_mode = true" in config
     assert "Track every target independently" in contract
-    assert "every 60 seconds by default" in contract
+    assert "as one batch every 3 minutes" in contract
+    assert "one compact batch progress brief every 6 minutes" in contract
     assert "collaboration.send_message" in contract
     assert "never wait for the whole set" in contract
+    assert "grok-progress:" in contract
+    assert "diff --name-status" in contract
+    assert "Never read\nor send full diff contents" in contract
+    assert "lightweight read-only Git summaries" in config
     assert "Never start" in contract
     assert "terminate Grok" in contract
