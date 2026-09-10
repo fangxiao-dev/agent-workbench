@@ -12,7 +12,7 @@ Dispatcher 是通用执行协作入口。调用方提供交付目标、授权、
 1. **明确交付范围。** 使用调用方给出的目标、限制、授权和事实；普通任务直接使用用户授权与仓库上下文。区分当前局部结果和整体完成，保留仍在授权范围内的剩余工作。
 2. **主动发现可推进工作。** 启动、worker 返回、出现 review/fix/等待或阻塞时扫描剩余路径。比较提前产出的价值、dependency、资源隔离和整合成本，推进值得开展的调查、实施、修复或验证；局部 barrier 只扣住受影响候选。
 3. **形成具体执行合同。** 以一个可验证结果或下一个需要主控判断的边界委派；同一结果所需的调查、实现、focused test、lint/format、普通重跑和机械 cleanup 一起完成。亲自执行也明确 write ownership、成功条件、自证和独立审查要求。形成 brief 时读取 [Delegation](references/delegation.md)；存在多个候选、共享资源或隔离 worktree 时读取 [Resource Isolation](references/resource-isolation.md)。
-4. **核实返回并及时审查。** 宿主 receipt 明确成功后派发才成立；消费时核对来源、实际 diff、验证、未完成项、residue 和 cleanup。新增实现代码的 return 在同次消费中固定 `code_delta={base,head}`，并沿独立 review lane 派 delta review；无法立即派审时记录与该 return 关联的待派审欠项，后续扫描继续处理。纯调查或无代码重跑按证据检查。
+4. **核实返回并及时审查。** 宿主 receipt 明确成功后派发才成立；消费时核对来源、实际 diff、验证、未完成项、residue 和 cleanup。新增实现代码的 return 在同次消费中固定 `code_delta={base,head}` 并安排独立 delta review：有额外 formal requirement 时按 owning review workflow 派发；没有时由一名独立 reviewer 检查该固定增量及直接受影响路径。已有真实 formal review 覆盖同一增量且输入与归属可核验时直接复用其结果，不叠加同范围轻量审查。无法立即派审时记录与该 return 关联的待派审欠项，后续扫描继续处理。纯调查或无代码重跑按证据检查。
 5. **限定阻塞范围并继续安排。** review、fix、在途 worker 和共享资源只影响依赖其结论或争用其资源的工作。审查跟不上时收住会继续累积未审查假设的实现链；其他独立工作继续评估。没有值得当前推进的工作时等待或返回调用方；idle 只表示当前无合格且值得派发的动作，整体 closure 归业务 owner。
 
 完成标准：所有成功派发都有真实 receipt；所有返回都已按来源消费；代码增量已有独立 review receipt 或明确待派审事实；最后一次扫描没有被局部 barrier 错误压住的高价值候选。

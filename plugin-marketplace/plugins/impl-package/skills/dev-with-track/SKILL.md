@@ -55,9 +55,11 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 
 Plan/policy 明确要求时同样产生 formal review requirement。required review 完成前保持 `PENDING_REVIEW`；具体派发和 reviewer lifecycle 归 Dispatcher，formal topology 与 finding closure 归 do-review。
 
+消费 return 时按原因分流：已知未实现范围继续实施；验收证据缺口保持 `acceptance pending`，不阻塞无关实现；真正实现缺陷按影响安排 `fix`。`INCOMPLETE` 只表达局部未完成，formal review requirement 仍按实际 material risk 判断，不因单一 return 自动改成完整 topology。
+
 已确认 finding 可立即修、随相关下一步修或隔离并行修，由 Dispatcher 根据影响、资源和整合成本安排。延后不能放行依赖该缺陷的实现或验收。修复方向已失去可信边界、同一机制再次出现或影响跨多个 writer/入口/shared authority 时，先按 `/diagnosing-bugs` 定位；finding closure 仍归 do-review。
 
-terminal pass 要求 terminal-final coverage 完整且阻断 findings 已闭合。Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 记录入口、oracle、环境、失败反馈与 teardown owner。
+terminal pass 要求 terminal-final coverage 完整且阻断 findings 已闭合；启动条件与结果复用遵循 do-review。Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 记录入口、oracle、环境、失败反馈与 teardown owner。
 
 ## Verify and Gate
 

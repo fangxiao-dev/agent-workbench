@@ -52,10 +52,10 @@
     },
     {
       "id": 8,
-      "prompt": "只读模拟：实现 return 含新代码，但全部 agent 槽位已占用。禁止实际修改文件或派发 worker。",
-      "expected_output": "固定 base/head 和 consumption identity，记录与本 return 关联的待派审事实；槽位恢复后补派，不把计划当 receipt。",
+      "prompt": "只读模拟：实现 worker return 含新代码且为 INCOMPLETE，原因是固定 code_delta 之外仍有已知未实现范围；当前没有新增 material risk，全部 agent 槽位已占用。说明如何消费该 return。禁止实际修改文件或派发 worker。",
+      "expected_output": "固定 base/head 和 consumption identity；已知未实现范围继续实施；delta review 保留为一名独立 reviewer 的待派审事实，槽位恢复后派发，不因 INCOMPLETE 升成 formal 四轨。",
       "files": [],
-      "expectations": ["fixed code delta", "pending review fact", "real receipt required"]
+      "expectations": ["fixed code delta", "pending single-reviewer delta review", "known unfinished scope continues", "INCOMPLETE does not trigger full formal topology"]
     },
     {
       "id": 9,
@@ -66,10 +66,10 @@
     },
     {
       "id": 10,
-      "prompt": "只读模拟：一个已确认 finding 可独立隔离，相关下一实现尚未 ready。禁止实际修改文件或派发 worker。",
-      "expected_output": "把 fix 作为独立候选评估并可立即派发，不等待不存在的下一实现。",
+      "prompt": "只读模拟：一个已确认且已命名的 finding 可独立隔离，相关下一实现尚未 ready。说明下一步调度与 review 衔接。禁止实际修改文件或派发 worker。",
+      "expected_output": "把 fix 作为独立候选评估并可立即派发；修复后由 do-review 的 finding-closure 使用一个 independent reviewer 检查该命名 finding，不重跑完整 topology。",
       "files": [],
-      "expectations": ["independent fix candidate", "impact-based scheduling", "no fixed bundling"]
+      "expectations": ["independent fix candidate", "impact-based scheduling", "single-reviewer finding closure", "no fixed bundling"]
     },
     {
       "id": 11,
