@@ -426,39 +426,38 @@ state 缺失或非法不是“没有处境”：`package.state_invalid` 返回�
 ```markdown
 # TKT-01 — 最小 Ticket
 
-Ticket ID：TKT-01
-Publication Status：Approved
-Attempt ID：initial
+Ticket ID: TKT-01
+Publication Status: Approved
+Attempt ID: initial
 
 ## 验收标准
 
 - AC-1：返回可观察的结果
-  - Stable claim ID：`AC-1`
-  - 证据时机：`remaining-completion`
+  - Stable claim ID: `AC-1`
+  - Evidence timing: `remaining-completion`
 
-## 安全不变量
+## Safety Invariants
 
 - 租户边界保持不变
-  - Stable claim ID：`INV-tenant-isolation`
-  - 证据时机：`early-falsification`
+  - Stable claim ID: `INV-tenant-isolation`
+  - Evidence timing: `early-falsification`
 
-## 阻塞依赖
+## Blocking Dependencies
 
 - 无
 ```
 
 推导器实际解析的部分是：
 
-1. `Ticket ID：TKT-01` 或 ASCII 冒号版本；它必须等于 state 的 key。缺失、与文件
-   state 不一致或同 Attempt 下找不到对应文件，会使 Ticket 无法参与 state 合法性。
-2. `Attempt ID：initial`（也接受英文/中文长字段名的 regex 变体）；它必须等于
-   `S.attempt.id`。有 active attempt 而 Ticket 不写该行，Ticket 会被标成 invalid。
-3. claim 只认形如 `Stable claim ID：` 加反引号包裹 ID，或 ASCII 冒号版本。反例是只写
-   `- **AC-1：** ...`：人能看懂，但 situation parser 的 `claims` 仍为空。claim 内容可以
-   是任意不含反引号的非空字符串；以 `INV-` 开头的 claim（大小写不敏感）会进入安全不变量
-   集合。
-4. typed dependency 只在 heading **`## 阻塞依赖`** 或 **`## Blocking Dependencies`**
-   到下一个 `##` 的 section 中解析。合法行是：
+1. `Ticket ID`、`Attempt ID` 等 metadata 只要求已知关键字出现在对应行；允许中文前缀、
+中英混排、括号、Markdown 加粗和全/半角冒号。捕获的 ID 仍必须等于 state/current
+Attempt 的值；缺失、冲突或找不到对应文件会使 Ticket 无法参与 state 合法性。
+2. claim 只认已知关键字 `Stable claim ID`（兼容旧写法）后跟反引号包裹的 ID。反例仍是
+只写 `- **AC-1:** ...`：人能看懂，但没有 stable claim metadata。claim 内容可以是任意
+不含反引号的非空字符串；以 `INV-` 开头的 claim（大小写不敏感）会进入安全不变量集合。
+3. typed dependency 只在 heading **`## Safety Invariants`** / **`## 安全不变量`** 或
+**`## Blocking Dependencies`** / **`## 阻塞依赖`** 的对应 section 中解析。Blocking
+Dependencies 的合法行是：
    `- implementation: TKT-01`、`- acceptance: TKT-01`、`- release: TKT-01`；kind
    大小写不敏感，target 是下一个空白前的字符串。无依赖用 `- 无` 或 `- none`。未知 target
    或 cycle 会使 state invalid；完整 runtime 还会拒绝 section 中格式错误的非空 dependency 行。

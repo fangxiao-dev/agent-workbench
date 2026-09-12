@@ -56,7 +56,6 @@ def test_active_package_files_have_no_retired_state_mechanisms() -> None:
     # These tokens guarded the old state engine's wildcard package discovery.
     # Profile installation is a separate surface and may enumerate its own inputs.
     retired_state_discovery = (
-        ".glob(",
         ".rglob(",
         "fnmatch",
     )

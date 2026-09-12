@@ -1,8 +1,8 @@
 # [执行尝试名称] 实施计划
 
 创建时间（Created）：
-Attempt ID：<initial | YYYYMMDD-HHMM-patch-topic>
-Composition：tickets=true, dag=false
+Attempt ID: <initial | YYYYMMDD-HHMM-patch-topic>
+Composition: tickets=true, dag=false
 
 > 直接引用当前 decision.md / spec.md。D/S/P 为可选旧别名，不因普通编辑升级；Git commit ID 是唯一允许持久化的历史锚点。Plan 只承载主 session 的全局调度（Composition、Ticket 实施与接线安排/依赖、共享资源协调、全局执行边界、Final Gate 判据）；Ticket 各自的建设内容、AC 和 contract references 属于 Ticket，不在此重复。
 
@@ -14,7 +14,7 @@ Composition：tickets=true, dag=false
 - 规格：spec.md + contract-design.md disposition（未触及的 legacy Spec 可暂缺）
 - 需求 / patch 来源：
 - 已检查的当前代码、测试和稳定文档：
-- 前置包（Predecessors）：None | <repo-relative-package-path>[, <repo-relative-package-path> ...]
+- Predecessors: None | <repo-relative-package-path>[, <repo-relative-package-path> ...]
 
 前置包必须显式填写 `None` 或一个/多个已存在的仓库相对 package 目录；不要留空或省略。`package init` 会把它写入 `.impl-package/state.json`，到达路径中的 `EXISTS` 先在这些前置包的 tracked 非 Markdown 产出范围查找。
 

@@ -71,15 +71,11 @@ assert set(_PROTOCOL_PLACEHOLDERS) == {
     for placeholders in _PROTOCOL_REQUIRED_PLACEHOLDERS.values()
     for placeholder in placeholders
 }
-TICKET_ID_RE = re.compile(
-    r"(?im)^\s*(?:\*\*)?(?:Ticket ID|Ticket ID（Ticket ID）)\s*[：:](?:\*\*)?\s*([^\s*]+)"
-)
-ATTEMPT_ID_RE = re.compile(
-    r"(?im)^\s*(?:\*\*)?(?:Attempt ID|执行尝试 ID（Attempt ID）)\s*[：:](?:\*\*)?\s*([^\s*]+)"
-)
-CLAIM_RE = re.compile(r"Stable claim ID：\s*`([^`]+)`")
-ASCII_CLAIM_RE = re.compile(r"Stable claim ID\s*:\s*`([^`]+)`", re.I)
-DEPENDENCY_HEADING_RE = re.compile(r"(?ms)^##\s+(?:阻塞依赖|Blocking Dependencies)\s*$\n(.*?)(?=^##\s+|\Z)")
+TICKET_ID_RE = re.compile(r"(?im)^[^\r\n]*Ticket ID[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*([^\s*]+)")
+ATTEMPT_ID_RE = re.compile(r"(?im)^[^\r\n]*(?:Attempt ID|执行尝试 ID)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*([^\s*]+)")
+CLAIM_RE = re.compile(r"(?im)^[^\r\n]*Stable claim ID[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*`([^`]+)`[^\r\n]*$")
+ASCII_CLAIM_RE = CLAIM_RE
+DEPENDENCY_HEADING_RE = re.compile(r"(?ms)^##\s+(?:阻塞依赖|Blocking Dependencies)\s*$\r?\n(.*?)(?=^##\s+|\Z)")
 FINDING_ID_RE = re.compile(r"\b(?:FINDING|FND|FIND|F)-[A-Za-z0-9][A-Za-z0-9._-]*\b", re.I)
 BOOL_RE = re.compile(r"^(true|false|yes|no|1|0|是|否)$", re.I)
 NUMERIC_COMPARISON_RE = re.compile(r"^(>=|<=|==|!=|>|<)\s*(-?(?:\d+(?:\.\d*)?|\.\d+))$")
@@ -953,7 +949,7 @@ def _parse_ticket(identifier: str, relative: str | None, text: str, expected_att
     if expected_attempt and (not attempt_match or attempt_match.group(1) != expected_attempt):
         return TicketInfo(identifier, relative, text, False, error="Attempt ID 与当前 attempt 不一致")
 
-    claims = list(dict.fromkeys(CLAIM_RE.findall(text) + ASCII_CLAIM_RE.findall(text)))
+    claims = list(dict.fromkeys(CLAIM_RE.findall(text)))
     safety_claims = [claim for claim in claims if claim.upper().startswith("INV-")]
     dependencies: list[tuple[str, str]] = []
     section = DEPENDENCY_HEADING_RE.search(text)

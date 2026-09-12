@@ -271,6 +271,32 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertFalse((package / "dag.md").exists())
         self.assertFalse((package / "execution/initial/task-handoffs").exists())
 
+    def test_canonical_english_metadata_is_accepted(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        replacements = {
+            "Attempt ID：": "Attempt ID:",
+            "Composition：": "Composition:",
+            "前置包（Predecessors）：": "Predecessors:",
+            "Ticket ID：": "Ticket ID:",
+            "Publication Status：": "Publication Status:",
+            "Stable claim ID：": "Stable claim ID:",
+            "到达路径：": "Arrival path:",
+            "证据时机：": "Evidence timing:",
+            "## 安全不变量": "## Safety Invariants",
+            "## 阻塞依赖": "## Blocking Dependencies",
+        }
+        for path in [package / "plan.md", *(package / "tickets").glob("*.md")]:
+            text = path.read_text(encoding="utf-8")
+            for source, target in replacements.items():
+                text = text.replace(source, target)
+            path.write_text(text, encoding="utf-8")
+
+        result = self.init(repo, package)
+
+        self.assertEqual(result["formatVersion"], "3.5")
+        self.assertEqual(result["tickets"], 4)
+
     def test_plan_must_explicitly_declare_predecessors(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)

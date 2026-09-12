@@ -155,6 +155,28 @@ class TicketFirstMigrationTests(unittest.TestCase):
         self.assertEqual(result["preMigrationAnchor"], pre_anchor)
         self.assertEqual(result["warnings"], [])
 
+    def test_validator_accepts_canonical_english_metadata(self) -> None:
+        temp, package = self.make_candidate()
+        self.addCleanup(temp.cleanup)
+        replacements = {
+            "Ticket ID：": "Ticket ID:",
+            "Publication Status：": "Publication Status:",
+            "Attempt ID：": "Attempt ID:",
+            "Stable claim ID：": "Stable claim ID:",
+            "证据时机：": "Evidence timing:",
+            "前置包（Predecessors）：": "Predecessors:",
+            "Composition：": "Composition:",
+        }
+        for path in (package / "plan.md", package / "tickets/01.md"):
+            text = path.read_text(encoding="utf-8")
+            for source, target in replacements.items():
+                text = text.replace(source, target)
+            path.write_text(text, encoding="utf-8")
+
+        result = validate_migration(package)
+
+        self.assertTrue(result["valid"])
+
     def test_validator_is_an_explicit_read_only_script(self) -> None:
         temp, package = self.make_candidate()
         self.addCleanup(temp.cleanup)

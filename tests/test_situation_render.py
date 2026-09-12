@@ -88,6 +88,26 @@ def _render_text(package: Path, *arguments: str) -> str:
     return completed.stdout.rstrip("\r\n")
 
 
+def test_parse_ticket_accepts_canonical_english_metadata() -> None:
+    text = (
+        "Ticket ID: TKT-01\n"
+        "Publication Status: Approved\n"
+        "Attempt ID: initial\n\n"
+        "## Acceptance Criteria\n"
+        "- Stable claim ID: `AC-1`\n\n"
+        "## Safety Invariants\n"
+        "- Stable claim ID: `INV-tenant-isolation`\n\n"
+        "## Blocking Dependencies\n"
+        "- none\n"
+    )
+
+    parsed = situation._parse_ticket("TKT-01", "tickets/01.md", text, "initial")
+
+    assert parsed.valid
+    assert parsed.claims == ["AC-1", "INV-tenant-isolation"]
+    assert parsed.safety_claims == ["INV-tenant-isolation"]
+
+
 @pytest.mark.parametrize("package", _fixture_dirs(), ids=lambda path: path.name)
 def test_situation_render(package: Path) -> None:
     expected = json.loads((package / "expected.json").read_text(encoding="utf-8"))

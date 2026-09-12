@@ -24,14 +24,19 @@ DISPOSITIONS = {"waived", "superseded"}
 COMMIT_RE = re.compile(r"[0-9a-fA-F]{7,64}")
 EDGE_RE = re.compile(r"-\s*(implementation|acceptance|release)\s*:\s*([^\s]+)")
 ATTEMPT_ID_RE = re.compile(r"(?:initial|[A-Za-z0-9][A-Za-z0-9_-]{0,79})")
-ATTEMPT_RE = re.compile(r"(?m)^(?:\*\*)?(?:Attempt ID|执行尝试 ID（Attempt ID）)(?:\*\*)?\s*[：:](?:\*\*)?\s*([^\s*]+)")
-PUBLICATION_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Publication Status|发布状态（Publication Status）)\s*[：:](?:\*\*)?\s*(Draft|Approved)\s*$")
+ATTEMPT_RE = re.compile(r"(?im)^[^\r\n]*(?:Attempt ID|执行尝试 ID)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*([^\s*]+)")
+COMPOSITION_RE = re.compile(r"Composition[^\n]*tickets=(true|false),\s*dag=(true|false)", re.I)
+PUBLICATION_RE = re.compile(r"(?im)^[^\r\n]*(?:Publication Status|发布状态)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*(Draft|Approved)[ \t]*$")
+TICKET_ID_RE = re.compile(r"(?im)^[^\r\n]*Ticket ID[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*([^\s*]+)")
+DECISION_RE = re.compile(r"(?im)^[^\r\n]*(?:Decision Revision|决策修订)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*(D\d+)\b")
+SPEC_RE = re.compile(r"(?im)^[^\r\n]*(?:Spec Revision|规格修订)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*(S\d+)\b")
+PLAN_RE = re.compile(r"(?im)^[^\r\n]*(?:Plan Revision|计划修订)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*(P\d+)\b")
+PREDECESSORS_RE = re.compile(r"(?im)^[^\r\n]*(?:Predecessors|前置包)[^：:\r\n]*[：:][ \t]*(.*?)[ \t]*$")
+CLAIM_RE = re.compile(r"(?im)^[^\r\n]*Stable claim ID[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*`([^`]+)`[^\r\n]*$")
+TIMING_RE = re.compile(r"(?im)^[^\r\n]*(?:Evidence timing|证据时机)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*`([^`]+)`[^\r\n]*$")
+DEPENDENCY_HEADING_RE = re.compile(r"(?ms)^##\s+(?:阻塞依赖|Blocking Dependencies)\s*$\r?\n(.*?)(?=^##\s+|\Z)")
+SAFETY_INVARIANTS_HEADING_RE = re.compile(r"(?im)^##\s+(?:安全不变量|Safety Invariants)\s*$")
 ER_ENTRY_RE = re.compile(r"(?m)^## ([^\s]+-ER-(\d{3})) · (checkpoint|judgment)\s*$")
-TICKET_ID_RE = re.compile(r"(?m)^\s*(?:\*\*)?Ticket ID\s*[：:](?:\*\*)?\s*([^\s*]+)")
-DECISION_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Decision Revision|决策修订（Decision Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(D\d+)\b")
-SPEC_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Spec Revision|规格修订（Spec Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(S\d+)\b")
-PLAN_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Plan Revision|计划修订（Plan Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(P\d+)\b")
-PREDECESSORS_RE = re.compile(r"(?m)^\s*-\s*前置包\s*(?:（Predecessors）|\(Predecessors\))\s*[：:]\s*(.*?)\s*$")
 RUNTIME_ACCEPTANCE_MARKER = "impl-package:projection runtime-acceptance"
 
 
@@ -501,7 +506,7 @@ def _ticket_claims(package: Path, attempt: str) -> dict[str, set[str]]:
                 raise MigrationError(f"Ticket {identifier.group(1)} must be Approved")
             if identifier.group(1) in claims:
                 raise MigrationError(f"duplicate Ticket ID for Attempt {attempt}: {identifier.group(1)}")
-            claim_ids = set(re.findall(r"Stable claim ID：\s*`([^`]+)`", text))
+            claim_ids = set(CLAIM_RE.findall(text))
             if not claim_ids:
                 raise MigrationError(f"Ticket {identifier.group(1)} has no stable claim IDs")
             claims[identifier.group(1)] = claim_ids
@@ -518,16 +523,16 @@ def _ticket_claim_timings(package: Path, attempt: str) -> dict[str, dict[str, st
         ticket_attempt = ATTEMPT_RE.search(text)
         if not identifier or not ticket_attempt or ticket_attempt.group(1) != attempt:
             continue
-        matches = list(re.finditer(r"Stable claim ID：\s*`([^`]+)`", text))
+        matches = list(CLAIM_RE.finditer(text))
         mapped: dict[str, str] = {}
         for index, match in enumerate(matches):
             segment = text[match.end(): matches[index + 1].start() if index + 1 < len(matches) else len(text)]
-            timing_values = [match.group(1) for line in segment.splitlines() if re.match(r"^\s*-\s*证据时机：", line) for match in [re.search(r"证据时机：\s*`([^`]+)`", line)] if match]
+            timing_values = TIMING_RE.findall(segment)
             if not timing_values:
                 heading_start = text.rfind("## ", 0, match.start())
                 heading_end = text.find("\n", heading_start)
                 heading = text[heading_start:heading_end if heading_end >= 0 else len(text)]
-                if "安全不变量" in heading:
+                if SAFETY_INVARIANTS_HEADING_RE.search(heading):
                     value = "early-falsification"
                 else:
                     raise MigrationError(f"Ticket {identifier.group(1)} claim {match.group(1)} has no evidence timing")
@@ -551,10 +556,10 @@ def _ticket_dependencies(package: Path, attempt: str, ticket_ids: set[str]) -> d
     for path in paths:
         text = path.read_text(encoding="utf-8")
         identifier = TICKET_ID_RE.search(text)
-        ticket_attempt = re.search(r"(?:\*\*)?(?:Attempt ID|执行尝试 ID（Attempt ID）)(?:\*\*)?\s*[：:]\s*(?:\*\*)?\s*([^\s*]+)", text)
+        ticket_attempt = ATTEMPT_RE.search(text)
         if not identifier or not ticket_attempt or ticket_attempt.group(1) != attempt:
             continue
-        section = re.search(r"(?ms)^## 阻塞依赖\s*$\n(.*?)(?=^## |\Z)", text)
+        section = DEPENDENCY_HEADING_RE.search(text)
         values: list[tuple[str, str]] = []
         if section:
             for line in section.group(1).splitlines():
@@ -631,7 +636,8 @@ def validate_migration(package: Path, *, pre_anchor: str | None = None) -> dict:
     except ValueError as exc:
         raise MigrationError("candidate plan must be inside the package") from exc
     plan_text = plan.read_text(encoding="utf-8")
-    if not re.search(r"Composition[^\n]*tickets=true,\s*dag=false", plan_text, re.I):
+    composition = COMPOSITION_RE.search(plan_text)
+    if not composition or composition.group(1).lower() != "true" or composition.group(2).lower() != "false":
         raise MigrationError("candidate plan must declare tickets=true, dag=false")
     plan_attempt = ATTEMPT_RE.search(plan_text)
     if plan_attempt is None or plan_attempt.group(1) != attempt["id"]:

@@ -519,17 +519,15 @@ def _ticket_metadata(
         except OSError:
             continue
         match = re.search(
-            rf"(?:\*\*)?Ticket ID(?:\*\*)?\s*[：:](?:\*\*)?\s*({TICKET_ID_PATTERN})",
+            rf"(?im)^[^\r\n]*Ticket ID[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*({TICKET_ID_PATTERN})",
             text,
-            re.I,
         )
         if not match:
             continue
         if attempt_id is not None:
             attempt_match = re.search(
-                r"(?:\*\*)?Attempt ID(?:\*\*)?\s*[：:](?:\*\*)?\s*([^\s*]+)",
+                r"(?im)^[^\r\n]*(?:Attempt ID|执行尝试 ID)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*([^\s*]+)",
                 text,
-                re.I,
             )
             if attempt_match and attempt_match.group(1) != attempt_id:
                 continue
@@ -540,7 +538,10 @@ def _ticket_metadata(
         for hint in re.findall(r"^-\s+\*\*(AC-\d+)[：:]\*\*\s*(.+)$", text, re.M):
             clean = re.sub(r"[`*_]", "", hint[1]).strip()
             hints.append(f"{hint[0]}：{clean[:180]}")
-        dependency_section = re.search(r"## 阻塞依赖\s*(.*?)(?=\n## |\Z)", text, re.S)
+        dependency_section = re.search(
+            r"(?ims)^##\s+(?:阻塞依赖|Blocking Dependencies)\s*$\r?\n(.*?)(?=^##\s+|\Z)",
+            text,
+        )
         dependency_types = _typed_dependencies(dependency_section.group(1), ticket_ids) if dependency_section else {}
         dependencies = [
             dependency

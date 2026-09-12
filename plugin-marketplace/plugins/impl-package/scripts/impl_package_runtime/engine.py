@@ -56,17 +56,20 @@ FIXED_COMMIT_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 SITUATION_DIGEST_NAME = "situation-digest.json"
 DISPATCH_DIGEST_GUIDANCE = "dispatch 需要当前处境的 digest：先运行 situation.py render 取 digest，再重写这条 dispatch"
 
-ATTEMPT_RE = re.compile(r"(?m)^(?:\*\*)?(?:Attempt ID|执行尝试 ID（Attempt ID）)(?:\*\*)?\s*[：:](?:\*\*)?\s*([^\s*]+)")
+ATTEMPT_RE = re.compile(r"(?im)^[^\r\n]*(?:Attempt ID|执行尝试 ID)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*([^\s*]+)")
 COMPOSITION_RE = re.compile(r"Composition[^\n]*tickets=(true|false),\s*dag=(true|false)", re.I)
-DECISION_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Decision Revision|决策修订（Decision Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(D\d+)\b")
-SPEC_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Spec Revision|规格修订（Spec Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(S\d+)\b")
-PLAN_RE = re.compile(r"(?m)^\s*(?:\*\*)?(?:Plan Revision|计划修订（Plan Revision）)(?:\*\*)?\s*[：:](?:\*\*)?\s*(P\d+)\b")
-PREDECESSORS_RE = re.compile(r"(?m)^\s*-\s*前置包\s*(?:（Predecessors）|\(Predecessors\))\s*[：:]\s*(.*?)\s*$")
-TICKET_ID_RE = re.compile(r"(?m)^\s*(?:\*\*)?Ticket ID\s*[：:](?:\*\*)?\s*([^\s*]+)")
-PUBLICATION_RE = re.compile(r"(?m)^(\s*(?:\*\*)?(?:Publication Status|发布状态（Publication Status）)\s*[：:](?:\*\*)?\s*)(Draft|Approved)\s*$")
-CLAIM_RE = re.compile(r"Stable claim ID：\s*`([^`]+)`")
-TIMING_RE = re.compile(r"证据时机：\s*`([^`]+)`")
-ARRIVAL_PATH_RE = re.compile(r"(?m)^\s*-\s*到达路径\s*[：:]\s*(.*?)\s*$")
+DECISION_RE = re.compile(r"(?im)^[^\r\n]*(?:Decision Revision|决策修订)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*(D\d+)\b")
+SPEC_RE = re.compile(r"(?im)^[^\r\n]*(?:Spec Revision|规格修订)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*(S\d+)\b")
+PLAN_RE = re.compile(r"(?im)^[^\r\n]*(?:Plan Revision|计划修订)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*(P\d+)\b")
+PREDECESSORS_RE = re.compile(r"(?im)^[^\r\n]*(?:Predecessors|前置包)[^：:\r\n]*[：:][ \t]*(.*?)[ \t]*$")
+TICKET_ID_RE = re.compile(r"(?im)^[^\r\n]*Ticket ID[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*([^\s*]+)")
+PUBLICATION_RE = re.compile(r"(?im)^([^\r\n]*(?:Publication Status|发布状态)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*)(Draft|Approved)[ \t]*$")
+CLAIM_RE = re.compile(r"(?im)^[^\r\n]*Stable claim ID[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*`([^`]+)`[^\r\n]*$")
+TIMING_RE = re.compile(r"(?im)^[^\r\n]*(?:Evidence timing|证据时机)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*`([^`]+)`[^\r\n]*$")
+ARRIVAL_PATH_RE = re.compile(r"(?im)^[^\r\n]*(?:Arrival path|到达路径)[^：:\r\n]*[：:][ \t]*(.*?)[ \t]*$")
+DEPENDENCY_HEADING_RE = re.compile(r"(?ims)^##\s+(?:阻塞依赖|Blocking Dependencies)\s*$\r?\n(.*?)(?=^##\s+|\Z)")
+SAFETY_INVARIANTS_HEADING_RE = re.compile(r"(?im)^##\s+(?:安全不变量|Safety Invariants)\s*$")
+
 ARRIVAL_SEGMENT_RE = re.compile(r"^(EXISTS|NEW)\s*:\s*(.+?)\s*$")
 ER_ENTRY_RE = re.compile(r"(?m)^## ([^\s]+-ER-(\d{3})) · (checkpoint|judgment)\s*$")
 COMMIT_RE = re.compile(r"[0-9a-fA-F]{7,64}")
@@ -489,12 +492,12 @@ def _ticket_documents(package: Path, attempt: str) -> list[dict[str, Any]]:
         for index, match in enumerate(matches):
             claim = match.group(1)
             segment = text[match.end(): matches[index + 1].start() if index + 1 < len(matches) else len(text)]
-            timing_values = [match.group(1) for line in segment.splitlines() if re.match(r"^\s*-\s*证据时机：", line) for match in [TIMING_RE.search(line)] if match]
+            timing_values = TIMING_RE.findall(segment)
             if not timing_values:
                 heading_start = text.rfind("## ", 0, match.start())
                 heading_end = text.find("\n", heading_start)
                 heading = text[heading_start:heading_end if heading_end >= 0 else len(text)]
-                if "安全不变量" in heading:
+                if SAFETY_INVARIANTS_HEADING_RE.search(heading):
                     timing_value = "early-falsification"
                 else:
                     raise StateError(f"Ticket {identifier} claim {claim} has no evidence timing")
@@ -517,7 +520,7 @@ def _ticket_dependencies(documents: list[dict[str, Any]]) -> dict[str, list[tupl
     identifiers = {row["id"] for row in documents}
     result: dict[str, list[tuple[str, str]]] = {}
     for row in documents:
-        section = re.search(r"(?ms)^## 阻塞依赖\s*$\n(.*?)(?=^## |\Z)", row["text"])
+        section = DEPENDENCY_HEADING_RE.search(row["text"])
         dependencies: list[tuple[str, str]] = []
         if section:
             for line in section.group(1).splitlines():
