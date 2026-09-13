@@ -13,7 +13,7 @@
 - `skills/` 保存独立安装的正式 skill，包括自建 skill、审查过的第三方 skill、以及本地工作流知识库
 - `plugin-marketplace/` 是独立的插件发布根；其中 `plugins/` 保存多 skill 套件，并分别提供 Codex 与 Claude manifest
 - `plugin-marketplace/plugins/impl-package/` 包含共享调查与委派入口、Claude review agents，以及投影到 Codex 全局 role 的安装脚本；`skills/` 仍保留可选的通用 `reviewer`
-- `agents/` 保存可安装到宿主的 subagent 定义，目前包括 `audit-agent-setup` 与 `grok-monitor`；后者在 Grok 运行中汇报轻量 diff 进度，并在结束后汇报终态
+- `agents/` 保存可安装到宿主的 subagent 定义，包括 Grok 运行监控与本地 Codex role
 - `commands/` 保存宿主 command 提示文件；是否能用 `/...` 唤出取决于具体宿主
 - `scripts/link_skill.py` 把单个（或全部顶层）skill **link** 到 `~/.claude` / `~/.codex` / `~/.grok` 的 `skills/`（Windows junction，Unix/macOS symlink）
 - `registry/` 只记录第三方资产来源和重装方式，不记录宿主本机状态
@@ -170,16 +170,6 @@ powershell -ExecutionPolicy Bypass -File scripts/list-visible-skills.ps1
 - `personal/global`
 - `Merged visible set`
 
-### 在任意项目里运行审查
-
-```
-/audit [path ...]
-/audit --full
-/audit --full --include-global [host ...]
-```
-
-默认只审指定文件；未指定时只审根 `AGENTS.md`、`CLAUDE.md`。`--full` 才扩展到项目级 agent setup，`--include-global [host ...]` 才读取指定的用户级宿主状态，并同步收窄项目级专属宿主目录。审计只输出带证据的改进建议，不修改文件。
-
 ### 自动讨论目标文档
 
 明确要求运行 `discuss-ledger` 的 local orchestrator，由当前 Codex 会话启动脚本，再自动调用 `codex,claude` 两个参与方轮流讨论。默认 `max-rounds=5`、`timeout-s=300`，直到一致、僵局或达到轮次上限停止。输出 ledger 位于目标项目的 `docs/exchange/discuss/`。
@@ -275,7 +265,6 @@ agent-workbench/
 ├── AGENTS.md                   ← 仓库级 agent instructions，单一指令源
 ├── scripts/link_skill.py       ← 多宿主 per-skill 安装入口
 ├── skills/                     ← 正式 skills：自建、第三方、工作流知识库
-│   ├── audit-agent-setup/      ← agent setup 审查知识库（rules + examples）
 │   ├── handoff-new-session/    ← 会话上下文落盘和新会话接续提示词
 │   ├── feishu-skills/          ← 国内飞书 skills bundle（feishu-*）
 │   ├── lark-skills/            ← Lark International bundle（using-lark 入口 + 内部 sub-skills）
@@ -294,13 +283,11 @@ agent-workbench/
 │   ├── .claude-plugin/         ← Claude marketplace
 │   └── plugins/impl-package/   ← 双 manifest、skills、Claude agents 与 Codex role 投影脚本
 ├── agents/                     ← subagents，安装到已选宿主的 agents/
-│   ├── audit-agent-setup/
-│   │   └── agent.md
 │   └── grok-monitor/           ← caller-started Grok 进程的轻量 diff 进度与逐项终态监控
 │       ├── agent.md
 │       └── grok-monitor.toml
 ├── commands/                   ← 宿主 command 提示文件，安装到已选宿主的 commands/
-│   └── audit.md
+│   └── discuss.md
 ├── scripts/                    ← 仓库级辅助脚本，如 list-visible-skills.ps1
 ├── tests/                      ← 安装器和工作流测试
 ├── templates/
@@ -345,8 +332,6 @@ agent-workbench/
 ```bash
 ls -la ~/.claude/skills/
 ls -la ~/.claude/agents/
-cat ~/.claude/skills/audit-agent-setup/SKILL.md   # 确认内容可读
-
 ls -la ~/.codex/skills/
 ls -la ~/.codex/agents/
 # Windows PowerShell：确认四个全局 review roles

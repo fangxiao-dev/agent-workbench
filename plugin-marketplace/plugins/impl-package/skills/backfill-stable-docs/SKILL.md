@@ -23,7 +23,7 @@ description: 当需要审计 durable knowledge delta、把 owner 批准的子集
 
 ## 显式来源兼容分支
 
-当 Project Knowledge Manager 或用户明确指定一项已完成工作、任务包或来源时，若没有 Gate、使用旧 schema 或包布局非标准，进入显式来源兼容分支。标准包仍优先使用现有配置和脚本自动发现；兼容分支只替代自动候选发现：
+当 Knowledge Manager 或用户明确指定一项已完成工作、任务包或来源时，若没有 Gate、使用旧 schema 或包布局非标准，进入显式来源兼容分支。标准包仍优先使用现有配置和脚本自动发现；兼容分支只替代自动候选发现：
 
 - 记录可取得的 source HEAD 与 dirty 状态，直接读取指定的 Decision、Spec、Plan、当前代码/测试和 canonical docs；
 - 沿用下方的事实校准、disposition、冲突处理、apply、verify 与 retirement 边界；
@@ -52,7 +52,7 @@ description: 当需要审计 durable knowledge delta、把 owner 批准的子集
 3. 移动、重命名、删除 stable docs 或退休 package 需要额外 destructive-apply 授权，精确到路径/package ID，不接受“这批全部”。
 4. 保持改动最小，随后运行 verify。
 
-Project Knowledge Manager 的明确“回刷”调用或用户明确请求本次“回刷”，可作为本轮审计候选的非破坏性 apply 授权；该授权仍不包含移动、重命名、删除、retirement 或解决语义冲突。明确 `audit-only` 的调用始终只读。
+Knowledge Manager 的明确“回刷”调用或用户明确请求本次“回刷”，可作为本轮审计候选的非破坏性 apply 授权；Knowledge Manager 派出的 peer worker 只执行 `audit-only`，不能继承或消费这份 apply 授权，只有 Manager 主线程消费审计结果后可以据此 apply。该授权仍不包含移动、重命名、删除、retirement 或解决语义冲突。明确 `audit-only` 的调用始终只读。
 
 Apply 的批准集合、写集与 destructive 边界提醒按需读取 [Apply Runbook](references/apply-runbook.md)。
 

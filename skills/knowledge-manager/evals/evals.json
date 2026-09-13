@@ -1,0 +1,94 @@
+{
+  "skill_name": "knowledge-manager",
+  "notes": "行为评估检查显式三 lane、兼容缺失 package 证据、一次 Source Snapshot、主线程唯一写者、environment 七类扫描、跨 lane primary-intervention 去重、session fallback、owner-gap 和冲突停写；不要求固定仓库路径。",
+  "evals": [
+    {
+      "id": 1,
+      "name": "explicit-dual-lane",
+      "prompt": "用户明确调用 $knowledge-manager，提供一个已完成任务包，材料同时包含 implementation verification trap 和已验证的 module behavior contract。请按 Manager 合同处理，禁止把 worker 当写者。",
+      "expected_output": "建立一次 Source Snapshot，启动适用的 Learn Lessons 与 Stable Docs 两条只读 lane，主线程消费候选、按 primary intervention 去重后再应用非破坏性文档更新，并报告各 lane 计数、environment lane 状态与验证结果。",
+      "expectations": [
+        "只因用户显式调用 Manager 才启动三 lane 流程",
+        "两个知识 lane 的 worker 都是只读候选审计，主线程是唯一写者",
+        "稳定合同与 hands-on 经验分开归属并分别报告，environment 没有候选时报告 0"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "compat-without-gate-or-current-schema",
+      "prompt": "用户调用 Manager 回刷一个旧任务包：没有 terminal Gate，state schema 旧且缺少配置 sidecar，但用户给出了 package、当前代码、测试和 canonical docs。不要迁移 schema 或补造 Gate。",
+      "expected_output": "固定一次 Source Snapshot，切换兼容审计，直接以用户提供的来源和当前证据审计适用的知识 lane；缺失 Gate/schema 记录为限制但不阻塞非破坏性回刷，环境 lane 若无可读 session 则单独标记 source-insufficient，禁止伪造机械证据和 retirement。",
+      "expectations": [
+        "没有把缺失或旧 Gate/schema 当成回刷阻塞",
+        "没有创建或迁移 Gate、schema、manifest、registry 或中间 JSON",
+        "明确禁止 package retirement、移动、删除和重命名"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "single-lane-and-no-delta",
+      "prompt": "用户显式调用 Manager，但来源只有一个已验证的实现验证捷径，stable contract 没有变化；随后给出一个完全没有可复用经验的来源。请分别说明调度和结果。",
+      "expected_output": "第一份建立同一 Source Snapshot，只派 Learn Lessons，跳过无候选的 Stable Docs lane；第二份知识 lane 均为 no-delta，environment 按 session 可用性运行或标为 source-insufficient，不制造文档，并完整报告所有 lane 的 0 计数。",
+      "expectations": [
+        "按适用性单 lane 调度，不强行派发另一知识 lane",
+        "无 durable delta 时不新建文档",
+        "把 no-delta 与 audit/apply/verify 完成状态区分开，并报告 environment 状态"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "cross-lane-deduplication",
+      "prompt": "两个只读 worker 都提出同一个事实：一个建议写入 module spec，另一个建议写入 implementation hands-on。事实的稳定行为已由当前测试证明，但没有额外实现陷阱。",
+      "expected_output": "主线程依据 primary intervention 和 source of truth 将稳定行为保留在 stable-doc destination，拒绝在 hands-on 重复，并报告 considered、merged 和各 destination；environment 不因同一事实制造 recommendation。",
+      "expectations": [
+        "不把同一稳定合同复制到 hands-on",
+        "以 source-of-truth 和未来检索问题决定归属",
+        "最终报告跨 lane 去重数量或处置原因"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "conflict-stops-semantic-write",
+      "prompt": "Decision/Spec 声明行为 X，但当前代码和测试一致证明行为 Y；两个 worker 都找到这个差异。用户要求回刷，但没有给出 Owner 对冲突的裁决。",
+      "expected_output": "主线程停止该候选的语义写入，保留冲突证据并列出需要 Owner 决定的问题；不能用代码猜意图，也不能以旧设计覆盖当前事实。其他无冲突候选仍可按授权应用。",
+      "expectations": [
+        "冲突项不写入稳定合同或 hands-on 作为已确认事实",
+        "报告具体证据和需要 Owner 决定的边界",
+        "不因单个冲突阻塞其他独立且已校准的候选"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "environment-primary-intervention",
+      "prompt": "用户显式调用 $knowledge-manager，当前 session 显示同一个手工检查被重复执行三次，仓库已有可运行的测试入口；同时有一条真实的非显然恢复经验。请完成一次完整吸收。",
+      "expected_output": "主线程扫描七类 environment categories，将可由现有检查入口机械消除的摩擦作为带证据、干预和 owner 的 environment recommendation，仅报告不修改环境；独立的非显然恢复路径进入 Learn Lessons；stable lane 若无 durable delta 则报告 no-delta。",
+      "expectations": [
+        "主线程明确扫描 Navigation、Checks、Standards、Instruction placement、Tool economy、No-ops、Information access",
+        "environment recommendation 不写代码、CI、工具或 instructions，并有明确 owner",
+        "机械 recommendation 与 hands-on recovery lesson 按 primary intervention 分开，跨 lane 计数可核对"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "session-source-insufficient",
+      "prompt": "用户显式调用 $knowledge-manager 并提供一个包含 findings、verification 和 stable behavior evidence 的已完成任务包，但当前会话无法读取，用户也没有提供 conversation/thread reference、transcript、file 或 link。请继续处理。",
+      "expected_output": "知识 lane 继续使用同一 Source Snapshot 审计和按授权应用；environment lane 单独标为 source-insufficient，不能创建自定义 session ID、manifest、registry、sidecar 或索引，也不能因此阻塞知识回刷。",
+      "expectations": [
+        "session 不可读只影响 environment lane",
+        "不发明新的 session 引用格式或持久化索引",
+        "最终报告分别给出 knowledge lane 结果、environment source-insufficient 和精确计数"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "audit-only-owner-gap",
+      "prompt": "用户以 audit-only 调用 $knowledge-manager。session 中发现一条反复发生的 information-access 摩擦，有证据和具体干预，但无法确定应该由哪个 owner 负责；两个知识 worker 也各返回一个候选。",
+      "expected_output": "三条 lane 全部只读；environment 条目进入独立 owner-gap 而不是 recommendation，保留证据与建议干预；知识候选不得写入文档，全部报告为 pending 或对应 no-delta/conflict，并给出精确 0/非 0 计数。",
+      "expectations": [
+        "audit-only 阻止 hands-on 和 stable docs 的所有写入",
+        "owner-gap 与带 owner 的 recommendation 是平行桶，不伪造 owner",
+        "报告三 lane status、候选分类、dedup 计数和未解决决定"
+      ]
+    }
+  ]
+}

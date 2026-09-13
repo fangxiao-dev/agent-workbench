@@ -11,7 +11,6 @@
 ```
 1. python3 scripts/link_skill.py <skill> --host claude  → 把 skill link 到宿主 skills/
 2. 说 "init-project-context"          → 梳理项目目标、交付物、技术边界
-3. /audit [path]                      → 定点审查已有 agent setup，获得改进建议
 ```
 
 ### 场景 B：多任务并行开发（主力场景）
@@ -47,17 +46,17 @@ python agent-workbench/scripts/link_skill.py --all --host claude codex grok
 
 ## 模块能力
 
-### 模块一：项目环境审查
+### 模块一：完成工作后的知识吸收
 
-| 组件 | 类型 | 说明 |
-|------|------|------|
-| `audit-agent-setup` | skill（知识库）| 定点 setup 审计范围、规则库与示例 |
-| `audit-agent-setup` | subagent | 按范围执行只读 setup 审计 |
-| `audit` | command | `/audit [path]` 触发入口 |
+对外只保留三个入口：
 
-**能力**：默认审查指定文件；未指定时只审根 `AGENTS.md`、`CLAUDE.md`。它判断已有 setup 的可执行性、安全边界和跨宿主冲突，并输出带证据的改进方向。`--full` 才审项目级 setup，`--include-global [host ...]` 才审指定的用户级宿主状态，并同步收窄项目级专属宿主目录。
+| Skill | 场景 | 职责 |
+|---|---|---|
+| `learn-lessons` | 只更新实现、验证、迁移或排障经验 | 独立处理 hands-on knowledge |
+| `/impl-package:backfill-stable-docs` | 只更新长期产品、架构或行为语义 | 独立处理 stable semantics |
+| `knowledge-manager` | 一键吸收一次已完成工作 | 统一运行两条知识 lane 和内部 environment retrospective，去重、应用并验收 |
 
-**触发**：`/audit [path]`、`/audit --full`，或明确要求审查已有 agent setup、AGENTS/CLAUDE 指令或跨宿主配置。
+`knowledge-manager` 是显式调用入口。它允许非破坏性知识文档更新；环境改进只报告候选，代码、CI、工具、权限或宿主状态变更仍需独立授权。
 
 ---
 
