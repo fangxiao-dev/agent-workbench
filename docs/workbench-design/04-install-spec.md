@@ -84,9 +84,14 @@ python scripts/codex_setup.py audit --output codex-audit.md
 
 # 只有当前状态仍匹配该报告 SHA 时才允许 apply
 python scripts/codex_setup.py apply --expect-report <audit-sha> --output codex-apply.md
+
+# Owner 明确批准删除报告中的旧受管 link 时
+python scripts/codex_setup.py apply --expect-report <audit-sha> --prune-stale
 ```
 
-`audit` 永远只读；`apply` 没有上一份报告 SHA 时不能启动。apply 前重新计算 SHA，状态变化即阻断并要求重新 audit。通过门禁后，脚本按 marketplace/plugin → skills → agents inventory → managed review roles 的顺序执行；任一步失败就停止后续写操作，最后重新只读审计并报告残余差异。普通 apply 不覆盖未受管的用户文件；首次明确接管 `agents/` inventory 中已有的顶层 TOML 时，必须追加 `--adopt-agents`。来源被删除后的受管目标保留并报告，不自动删除。
+`audit` 永远只读；`apply` 没有上一份报告 SHA 时不能启动。apply 前重新计算 SHA，状态变化即阻断并要求重新 audit。通过门禁后，脚本按 marketplace/plugin → skills → agents inventory → managed review roles 的顺序执行；任一步失败就停止后续写操作，最后重新只读审计并报告残余差异。普通 apply 不覆盖未受管的用户文件；首次明确接管 `agents/` inventory 中已有的顶层 TOML 时，必须追加 `--adopt-agents`。来源被删除后的受管 skill/agent link 默认保留并报告；只有 Owner 明确批准当前报告中的旧 link 时使用 `--prune-stale`。
+
+`--prune-stale` 只处理当前已批准 audit 中 `expected_path=removed from current workbench inventory` 的 skill/agent link。删除前必须一次性预检所有目标仍位于对应 Codex `skills/` 或 `agents/` 目录、仍是 link，且仍指向本 workbench 的对应来源根；任一目标变成真实目录、用户目标、其他 link 或路径发生变化时，整批停止并要求重新 audit。删除只移除 junction/symlink 节点，不删除其目标内容。
 
 脚本优先使用 `CODEX_HOME`，否则使用 `~/.codex`；Windows 使用 junction，macOS/其他 Unix 使用 symlink。`--codex-home` 只在用户显式指定目标或测试时使用。
 

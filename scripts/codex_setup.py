@@ -855,11 +855,49 @@ def _apply_agent_files(
     return True, actions
 
 
+def _prune_stale_links(pre: AuditResult, codex_home: Path) -> tuple[list[str], bool]:
+    candidates = sorted(
+        (
+            item
+            for item in pre.items
+            if item.kind in {"agent", "skill"}
+            and item.status == "INSTALL-MISMATCH"
+            and item.expected_path == "removed from current workbench inventory"
+        ),
+        key=lambda item: (item.kind, item.name.lower()),
+    )
+    plan: list[tuple[AuditItem, Path]] = []
+    for item in candidates:
+        installed_root = codex_home / ("agents" if item.kind == "agent" else "skills")
+        source_root = REPO_ROOT / ("agents" if item.kind == "agent" else "skills")
+        destination = link_skill.abspath_nofollow(installed_root / item.name)
+        audited_path = link_skill.abspath_nofollow(Path(item.actual_path))
+        target = link_skill.link_target(destination)
+        if (
+            not link_skill.same_path(destination, audited_path)
+            or not link_skill.is_link(destination)
+            or target is None
+            or not _path_is_within(target, source_root)
+        ):
+            return [f"BLOCKED stale {item.kind} `{item.name}` changed after audit; rerun audit"], False
+        plan.append((item, destination))
+
+    actions: list[str] = []
+    for item, destination in plan:
+        try:
+            link_skill.remove_link(destination)
+        except OSError as exc:
+            return [*actions, f"FAIL stale {item.kind} `{item.name}` — {exc}"], False
+        actions.append(f"REMOVED stale {item.kind} `{item.name}`")
+    return actions, True
+
+
 def apply_codex(
     pre: AuditResult,
     codex_home: Path,
     *,
     adopt_agents: bool = False,
+    prune_stale: bool = False,
 ) -> tuple[list[str], bool]:
     actions: list[str] = []
     env = _codex_env(codex_home)
@@ -946,6 +984,11 @@ def apply_codex(
             env=env,
         )
         actions.append(message)
+        if not ok:
+            return actions, False
+    if prune_stale:
+        prune_actions, ok = _prune_stale_links(pre, codex_home)
+        actions.extend(prune_actions)
         if not ok:
             return actions, False
     if not actions:
@@ -1092,6 +1135,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="adopt existing unmanaged top-level agent TOML files from the repository inventory",
     )
+    apply_parser.add_argument(
+        "--prune-stale",
+        action="store_true",
+        help="remove audited stale workbench skill and agent links",
+    )
     apply_parser.add_argument("--output", type=Path)
     apply_parser.add_argument("--codex-home", type=Path)
     return parser
@@ -1138,7 +1186,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return EXIT_ERROR
 
-        actions, apply_ok = apply_codex(pre, codex_home, adopt_agents=args.adopt_agents)
+        actions, apply_ok = apply_codex(
+            pre,
+            codex_home,
+            adopt_agents=args.adopt_agents,
+            prune_stale=args.prune_stale,
+        )
         result = audit_codex(codex_home)
         result_sha = audit_fingerprint(result, codex_home)
         _write_report(

@@ -445,6 +445,59 @@ def test_cli_requires_report_before_apply(mod) -> None:
         ["apply", "--expect-report", "abc", "--adopt-agents"]
     )
     assert adopted.adopt_agents is True
+    pruned = mod.build_parser().parse_args(
+        ["apply", "--expect-report", "abc", "--prune-stale"]
+    )
+    assert pruned.prune_stale is True
+
+
+def test_prune_stale_removes_only_audited_workbench_links(
+    tmp_path: Path, mod, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, codex_home, _plugin, _cache = _make_workspace(tmp_path, mod, monkeypatch)
+    stale_skill_source = repo / "skills" / "removed-skill"
+    stale_agent_source = repo / "agents" / "removed-agent"
+    stale_skill_source.mkdir()
+    stale_agent_source.mkdir()
+    stale_skill = codex_home / "skills" / "removed-skill"
+    stale_agent = codex_home / "agents" / "removed-agent"
+    mod.link_skill.create_dir_link(stale_skill_source, stale_skill)
+    mod.link_skill.create_dir_link(stale_agent_source, stale_agent)
+    stale_agent_source.rmdir()
+
+    audit = mod.audit_codex(codex_home)
+    actions, ok = mod._prune_stale_links(audit, codex_home)
+
+    assert ok is True
+    assert not mod.link_skill.is_link(stale_skill)
+    assert not mod.link_skill.is_link(stale_agent)
+    assert (codex_home / "skills" / "user-owned").is_dir()
+    assert actions == [
+        "REMOVED stale agent `removed-agent`",
+        "REMOVED stale skill `removed-skill`",
+    ]
+
+
+def test_prune_stale_preflights_every_target_before_removing_anything(
+    tmp_path: Path, mod, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, codex_home, _plugin, _cache = _make_workspace(tmp_path, mod, monkeypatch)
+    for name in ("first", "second"):
+        source = repo / "skills" / name
+        source.mkdir()
+        mod.link_skill.create_dir_link(source, codex_home / "skills" / name)
+    audit = mod.audit_codex(codex_home)
+    mod.link_skill.remove_link(codex_home / "skills" / "second")
+    (codex_home / "skills" / "second").mkdir()
+
+    actions, ok = mod._prune_stale_links(audit, codex_home)
+
+    assert ok is False
+    assert mod.link_skill.is_link(codex_home / "skills" / "first")
+    assert (codex_home / "skills" / "second").is_dir()
+    assert actions == [
+        "BLOCKED stale skill `second` changed after audit; rerun audit"
+    ]
 
 
 def test_apply_rejects_stale_report_before_mutation(
@@ -470,16 +523,32 @@ def test_apply_accepts_current_report_and_requires_clean_post_audit(
         [mod.AuditItem("skill", "alpha", "MATCH", expected_sha="a", actual_sha="a")]
     )
     audits = iter([pre, post])
+    options = []
     monkeypatch.setattr(mod, "audit_codex", lambda home: next(audits))
+
+    def apply(result, home, **kwargs):
+        options.append(kwargs)
+        return ["PASS apply"], True
+
     monkeypatch.setattr(
         mod,
         "apply_codex",
-        lambda result, home, **_kwargs: (["PASS apply"], True),
+        apply,
     )
     monkeypatch.setattr(mod, "render_report", lambda **kwargs: "report\n")
     monkeypatch.setattr(mod, "_write_report", lambda report, output: None)
     report_sha = mod.audit_fingerprint(pre, tmp_path)
     assert (
-        mod.main(["apply", "--expect-report", report_sha, "--codex-home", str(tmp_path)])
+        mod.main(
+            [
+                "apply",
+                "--expect-report",
+                report_sha,
+                "--codex-home",
+                str(tmp_path),
+                "--prune-stale",
+            ]
+        )
         == mod.EXIT_OK
     )
+    assert options == [{"adopt_agents": False, "prune_stale": True}]

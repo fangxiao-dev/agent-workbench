@@ -88,9 +88,11 @@ python plugin-marketplace/plugins/impl-package/scripts/install_codex_agents.py -
 python scripts/codex_setup.py pull-diff
 python scripts/codex_setup.py audit --output codex-audit.md
 python scripts/codex_setup.py apply --expect-report <codex-audit.md 中的审计 SHA> --output codex-apply.md
+# Owner 明确批准删除报告中的旧受管 link 时
+python scripts/codex_setup.py apply --expect-report <audit-sha> --prune-stale
 ```
 
-`apply` 不能直接运行：它会重新计算当前审计 SHA，只有与上一份报告一致时才更新 plugin cache、skills links、agents links、inventory 中的 role files 和 managed review roles。首次接管已有的未受管顶层 role 文件时，在确认 audit 报告后追加 `--adopt-agents`；之后普通 apply 即可。报告后状态发生变化时必须重新运行 `audit`。脚本支持 Windows 与 macOS，优先使用 `CODEX_HOME`，否则检查 `~/.codex`；可用 `--codex-home` 显式指定目标。
+`apply` 不能直接运行：它会重新计算当前审计 SHA，只有与上一份报告一致时才更新 plugin cache、skills links、agents links、inventory 中的 role files 和 managed review roles。首次接管已有的未受管顶层 role 文件时，在确认 audit 报告后追加 `--adopt-agents`；Owner 明确批准删除报告中的旧受管 skill/agent link 时追加 `--prune-stale`，真实目录、用户目标、已变化或未被审计的 link 一律拒绝删除。报告后状态发生变化时必须重新运行 `audit`。脚本支持 Windows 与 macOS，优先使用 `CODEX_HOME`，否则检查 `~/.codex`；可用 `--codex-home` 显式指定目标。
 
 ### Impl-Package review agents
 

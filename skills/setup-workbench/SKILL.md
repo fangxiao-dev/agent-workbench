@@ -24,6 +24,8 @@ implementation. Run commands from the agent-workbench repository root.
 - When the Owner explicitly approves the current report or asks to apply it,
   run `python scripts/codex_setup.py apply --expect-report <audit-sha>` using
   that report's exact SHA.
+- When the approved report contains stale workbench skill or agent links and the
+  Owner explicitly asks to delete them, append `--prune-stale` to that apply.
 
 ## Boundaries
 
@@ -42,6 +44,9 @@ implementation. Run commands from the agent-workbench repository root.
   repository's `agents/` inventory and the Owner explicitly wants to adopt it,
   pass `--adopt-agents` to the approved `apply` command; do not use it for
   unrelated files.
+- `--prune-stale` removes only stale skill or agent links named by the approved
+  audit and still pointing into this workbench. It refuses real directories,
+  user-owned targets, changed links, and unaudited paths.
 - Do not treat `pull-diff` as setup approval. It only explains repository
   changes after a pull.
 
