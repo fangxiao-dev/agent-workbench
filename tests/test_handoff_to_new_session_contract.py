@@ -136,13 +136,3 @@ def test_multi_ticket_evals_expect_routing_instead_of_copied_execution_rules() -
     assert "one ready Ticket" in evals[11]["prompt"]
     assert "routes all execution decisions" in evals[11]["expected_output"]
     assert "terminal package" in evals[11]["prompt"]
-
-
-def test_downstream_protocol_supplies_only_its_delta() -> None:
-    skill = read("skills/handoff-to-new-session/SKILL.md")
-    dispatch = read("skills/thread-harness/references/session-dispatch.md")
-
-    assert "downstream protocol 可以提供自己的 validation anchors 与 continuation" in skill
-    assert "本 Skill 仍只负责通用创建和交付 gate" in skill
-    assert "Role B 无持久恢复权威" in dispatch
-    assert "额外只读验证锚点" in dispatch

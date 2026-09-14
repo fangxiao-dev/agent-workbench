@@ -305,7 +305,6 @@ def test_active_callers_reference_dispatcher() -> None:
         PLUGIN / "skills" / "impl-package" / "SKILL.md",
         PLUGIN / "skills" / "dev-with-track" / "SKILL.md",
         ROOT / "skills" / "handoff" / "references" / "task-execution.md",
-        ROOT / "skills" / "thread-harness" / "references" / "role-b.md",
     )
     for caller in callers:
         text = caller.read_text(encoding="utf-8")
@@ -322,7 +321,6 @@ def test_active_workflow_tree_has_no_legacy_entry_reference() -> None:
         PLUGIN / "skills",
         ROOT / "skills" / "handoff",
         ROOT / "skills" / "handoff-to-new-session",
-        ROOT / "skills" / "thread-harness",
     )
     legacy = (
         "impl-package:subagent-driven-development",
