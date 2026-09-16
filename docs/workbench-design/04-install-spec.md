@@ -4,7 +4,15 @@
 
 ## Plugin 安装
 
-独立发布根位于 `plugin-marketplace/`。其中 Codex marketplace 位于 `.agents/plugins/marketplace.json`，Claude marketplace 位于 `.claude-plugin/marketplace.json`；两者均以 `agent-workbench` 为 marketplace 名，并从 `./plugins/<plugin>` 读取同一份插件 payload。manifest 使用宿主各自支持的字段，但版本字段必须保持一致；Codex marketplace entry 本身不复制 plugin version。
+独立发布根位于 `plugin-marketplace/`。其中 Codex marketplace 位于 `.agents/plugins/marketplace.json`，Claude marketplace 位于 `.claude-plugin/marketplace.json`，ZCode marketplace 位于发布根目录的 `marketplace.json`；三者均以 `agent-workbench` 为 marketplace 名，并从 `./plugins/<plugin>` 读取同一份插件 payload。manifest 使用宿主各自支持的字段，但版本字段必须保持一致；Codex marketplace entry 本身不复制 plugin version。
+
+插件 `impl-package` 的宿主 manifest：
+
+- `.codex-plugin/plugin.json`：skills + hooks（`./hooks/codex-hooks.json`，apply_patch 守卫与 SessionStart capsule）
+- `.claude-plugin/plugin.json`：skills + agents（4 个 review-track review agents）
+- `.zcode-plugin/plugin.json`：skills + hooks（`./hooks/zcode-hooks.json`，Edit/Write 守卫与 SessionStart capsule）+ agents（同一组 review-track 子代理，zcode 原生注册到 Settings → 子智能体）
+
+ZCode hooks 使用独立文件名 `zcode-hooks.json` 而非 `hooks/hooks.json`，避免被 Claude Code 的插件 hook 自动发现机制意外拾取。ZCode 侧 `impl_package_hooks.py activate` 拿不到 session 环境变量时自动落为仓库级 default 绑定；Codex 仍按 session 绑定。
 
 ```powershell
 codex plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
@@ -12,6 +20,9 @@ codex plugin add impl-package@agent-workbench
 
 claude plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
 claude plugin install impl-package@agent-workbench --scope project
+
+# ZCode：客户端 Settings → 插件管理 → Discover → "+" 添加本地目录
+# D:\path\to\agent-workbench\plugin-marketplace
 ```
 
 插件目录就是安装产物，不执行 build。安装和更新会进入宿主缓存；manifest/marketplace 的版本元数据必须同步，更新后开启新会话。除下述 Codex 一次性诊断/bootstrap 外，Workbench 不包装插件生命周期命令，也不在未授权时修改用户级宿主状态。
@@ -133,6 +144,7 @@ python plugin-marketplace/plugins/impl-package/scripts/install_codex_agents.py -
 
 支持宿主：
 
+- `agents` → `~/.agents/skills`（跨宿主共享的 Agent Skills 约定目录，非单一宿主）
 - `claude` → `~/.claude/skills`
 - `codex` → `~/.codex/skills`
 - `grok` → `~/.grok/skills`（可用 `GROK_HOME` 覆盖 grok 根）

@@ -15,7 +15,7 @@
 - `plugin-marketplace/plugins/impl-package/` 包含共享调查与委派入口、Claude review agents，以及投影到 Codex 全局 role 的安装脚本；`skills/` 仍保留可选的通用 `reviewer`
 - `agents/` 保存可安装到宿主的 subagent 定义，包括 Grok 运行监控与本地 Codex role
 - `commands/` 保存宿主 command 提示文件；是否能用 `/...` 唤出取决于具体宿主
-- `scripts/link_skill.py` 把单个（或全部顶层）skill **link** 到 `~/.claude` / `~/.codex` / `~/.grok` 的 `skills/`（Windows junction，Unix/macOS symlink）
+- `scripts/link_skill.py` 把单个（或全部顶层）skill **link** 到 `~/.agents` / `~/.claude` / `~/.codex` / `~/.grok` 的 `skills/`（Windows junction，Unix/macOS symlink）
 - `registry/` 只记录第三方资产来源和重装方式，不记录宿主本机状态
 - `docs/workbench-design/` 保存当前实现规范，README 只做入口说明
 - `tests/` 保存安装器和核心脚本测试
@@ -52,7 +52,7 @@ python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --unlink --host
 - 非破坏：冲突则跳过并报告，不覆盖
 - 仅链接**有效 skill 目标**：目录树内递归存在 `SKILL.md`（可在子目录）；无 `SKILL.md` 的空壳不链接
 - 若宿主 `skills` 仍是「整树指向本 workbench `skills/`」的旧 junction/symlink，会先拆掉并建成真实目录，再写 per-skill link
-- 支持宿主：`claude`、`codex`、`grok`
+- 支持宿主：`agents`（`~/.agents/skills`，跨宿主共享的 Agent Skills 约定目录）、`claude`、`codex`、`grok`
 - 不安装 `agents/` / `commands/`；不改项目 `.gitignore`
 
 `skills/` 支持 bundle（如 `skills/lark-skills/`）：按**顶层目录**链一次，内部子 skill 随目录暴露。
@@ -63,7 +63,7 @@ python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --unlink --host
 
 ## 安装（plugin marketplace）
 
-`impl-package` 是 Codex/Claude 共用插件。插件目录本身就是安装产物，不需要 build；marketplace 只负责告诉宿主插件名称、版本和来源位置。
+`impl-package` 是 Codex/Claude/ZCode 共用插件。插件目录本身就是安装产物，不需要 build；marketplace 只负责告诉宿主插件名称、版本和来源位置。
 
 ```powershell
 # Codex
@@ -74,11 +74,14 @@ codex plugin add impl-package@agent-workbench
 claude plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
 claude plugin install impl-package@agent-workbench --scope project
 
+# ZCode（客户端 Discover → + 添加本地目录）
+# marketplace 目录：D:\path\to\agent-workbench\plugin-marketplace（根目录 marketplace.json）
+
 # Codex 全局 review-track agent profiles（按需刷新）
 python plugin-marketplace/plugins/impl-package/scripts/install_codex_agents.py --global
 ```
 
-安装或升级后开启新会话，使宿主从插件缓存重新加载 skills；Codex 的全局 review roles 需要在插件升级后重新运行上面的投影脚本。面向用户和 agent 的文档统一使用 `/impl-package:dev-with-track` 形式显式调用；宿主内部 registry/discovery 仍可显示不带 `/` 的 skill key。`link_skill.py --all` 不处理 `plugin-marketplace/`。
+ZCode 侧 manifest 位于 `.zcode-plugin/plugin.json`（skills + hooks + agents 全量移植）；hooks 使用 `hooks/zcode-hooks.json`（不占用 Claude Code 自动发现的 `hooks/hooks.json` 文件名）。安装或升级后开启新会话，使宿主从插件缓存重新加载 skills；Codex 的全局 review roles 需要在插件升级后重新运行上面的投影脚本。面向用户和 agent 的文档统一使用 `/impl-package:dev-with-track` 形式显式调用；宿主内部 registry/discovery 仍可显示不带 `/` 的 skill key。`link_skill.py --all` 不处理 `plugin-marketplace/`。
 
 ### Codex 更新诊断与 bootstrap
 
@@ -98,7 +101,7 @@ python scripts/codex_setup.py apply --expect-report <audit-sha> --prune-stale
 
 `plugin-marketplace/plugins/impl-package/agents/*.md` 是 Claude 插件的原生 agent 定义，安装后可在 `/agents` 中看到 `review-track-code`、`review-track-standards`、`review-track-spec` 和 `review-track-safety`。Claude manifest 显式声明了这四个 Markdown 文件。
 
-Codex 当前插件 manifest 不支持 `agents` 字段，因此不能通过 `codex plugin add` 自动安装这些 role。`install_codex_agents.py --global` 会从同一组 Markdown 定义生成 Codex `.toml` role，并写入全局 `$CODEX_HOME/agents`（未设置时为 `~/.codex/agents`）。Code role 固定使用 `gpt-6-astra/medium`，Safety、Spec 和 Standards role 固定使用 `gpt-5.6-sol/medium`；该配置同时适用于 `initial` 和 `terminal-final`，`finding-closure` 仍使用独立 `luna-worker`。四个 role 使用与 `do-review` 相同的稳定名称，供 parent 的 leaf dispatch 解析；脚本默认拒绝覆盖非同内容文件，只有明确传入 `--force` 才更新带有本包管理标记（或本包旧格式）的已知文件，并拒绝写入符号链接或 Windows reparse point。
+Codex 当前插件 manifest 不支持 `agents` 字段，因此不能通过 `codex plugin add` 自动安装这些 role。`install_codex_agents.py --global` 会从同一组 Markdown 定义生成 Codex `.toml` role，并写入全局 `$CODEX_HOME/agents`（未设置时为 `~/.codex/agents`）。Code role 固定使用 `gpt-5.6-sol/high`，Safety、Spec 和 Standards role 固定使用 `gpt-5.6-sol/medium`；该配置同时适用于 `initial` 和 `terminal-final`，`finding-closure` 仍使用独立 `luna-worker`。四个 role 使用与 `do-review` 相同的稳定名称，供 parent 的 leaf dispatch 解析；脚本默认拒绝覆盖非同内容文件，只有明确传入 `--force` 才更新带有本包管理标记（或本包旧格式）的已知文件，并拒绝写入符号链接或 Windows reparse point。
 
 个人 Codex role 放在仓库根目录 `agents/*.toml`，由 `codex_setup.py` inventory 扫描并投影到 `$CODEX_HOME/agents`；当前 `agents/luna-worker.toml` 使用标准 `service_tier`，不走 Fast 处理。它与上述 impl-package review role 的生成和安装流程分开。
 
