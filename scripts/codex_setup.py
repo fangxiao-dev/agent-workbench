@@ -632,9 +632,32 @@ def _audit_role(
     )
 
 
+def _profile_body(content: bytes) -> list[str]:
+    """Normalize a role file for renamed-copy comparison: drop marker, name line and blank lines."""
+    lines = content.decode("utf-8", errors="replace").replace("\r\n", "\n").split("\n")
+    body: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped == MANAGED_AGENT_FILE_MARKER:
+            continue
+        if stripped.split("=", 1)[0].strip() == "name":
+            continue
+        body.append(stripped)
+    return body
+
+
+def _renamed_managed_source(content: bytes, expected_files: dict[str, bytes]) -> str | None:
+    body = _profile_body(content)
+    for expected_name, expected_content in expected_files.items():
+        if body == _profile_body(expected_content):
+            return expected_name
+    return None
+
+
 def _stale_agent_files(
     installed_root: Path,
     expected_names: set[str],
+    expected_files: dict[str, bytes] | None = None,
 ) -> list[AuditItem]:
     if not installed_root.is_dir():
         return []
@@ -655,6 +678,19 @@ def _stale_agent_files(
             results.append(_blocked("agent-file", child.name, f"cannot read {child}: {exc}"))
             continue
         if not content.startswith(marker):
+            renamed_from = _renamed_managed_source(content, expected_files or {})
+            if renamed_from is None:
+                continue
+            results.append(
+                AuditItem(
+                    kind="agent-file",
+                    name=child.name,
+                    status="INSTALL-MISMATCH",
+                    expected_path=f"superseded by {renamed_from}",
+                    actual_path=str(child),
+                    note="legacy copy of a renamed managed profile; delete it so the old name stops resolving",
+                )
+            )
             continue
         results.append(
             AuditItem(
@@ -717,7 +753,15 @@ def audit_codex(codex_home: Path) -> AuditResult:
             items.append(item)
             operational_error = operational_error or item.status == "BLOCKED"
 
-        stale_agent_files = _stale_agent_files(agents_dir, {source.name for source in agent_files})
+        expected_agent_files: dict[str, bytes] = {}
+        for source in agent_files:
+            try:
+                expected_agent_files[source.name] = source.read_bytes()
+            except OSError:
+                continue
+        stale_agent_files = _stale_agent_files(
+            agents_dir, {source.name for source in agent_files}, expected_agent_files
+        )
         items.extend(stale_agent_files)
         operational_error = operational_error or any(
             item.status == "BLOCKED" for item in stale_agent_files

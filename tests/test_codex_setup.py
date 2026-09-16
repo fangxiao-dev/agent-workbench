@@ -552,3 +552,26 @@ def test_apply_accepts_current_report_and_requires_clean_post_audit(
         == mod.EXIT_OK
     )
     assert options == [{"adopt_agents": False, "prune_stale": True}]
+
+
+def test_audit_flags_legacy_copy_of_renamed_managed_profile(
+    tmp_path: Path, mod, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, codex_home, _plugin, _cache = _make_workspace(tmp_path, mod, monkeypatch)
+    source = repo / "agents" / "backend-worker.toml"
+    body = "description = 'Backend implementation agent.'\nmodel = 'gpt-5.6-terra'\n"
+    source.write_text(f"{mod.MANAGED_AGENT_FILE_MARKER}\nname = \"backend-worker\"\n{body}", encoding="utf-8")
+    target_dir = codex_home / "agents"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    (target_dir / source.name).write_bytes(source.read_bytes())
+    legacy = target_dir / "backend.toml"
+    legacy.write_text(f"name = \"backend\"\n{body}\n", encoding="utf-8")
+    custom = target_dir / "my-agent.toml"
+    custom.write_text("name = \"my-agent\"\ndescription = 'user owned'\n", encoding="utf-8")
+
+    result = mod.audit_codex(codex_home)
+    by_name = {item.name: item for item in result.items if item.kind == "agent-file"}
+    assert by_name["backend-worker.toml"].status == "MATCH"
+    assert by_name["backend.toml"].status == "INSTALL-MISMATCH"
+    assert by_name["backend.toml"].expected_path == "superseded by backend-worker.toml"
+    assert "my-agent.toml" not in by_name
