@@ -100,6 +100,27 @@ def test_dispatcher_uses_context_signals_instead_of_numeric_fallbacks() -> None:
     assert "新 Topic 使用 fresh worker" not in skill
 
 
+def test_dispatcher_resolves_implementer_to_contract_consuming_executors() -> None:
+    skill = SKILL.read_text(encoding="utf-8")
+    section = skill.split("## Implementer executor", 1)[1].split("## 候选、归因与返回", 1)[0]
+
+    for marker in (
+        "`implementer` 保留为逻辑角色",
+        "`frontend-worker`",
+        "`backend-worker`",
+        "按可独立验收的候选和 write ownership 拆分 brief",
+        "同一 profile 可并行派发多次",
+        "共享契约视为只读输入",
+        "CONTRACT_CHANGE_REQUEST",
+        "主控裁决契约问题",
+        "不要求主控亲自完成所有动作",
+    ):
+        assert marker in section
+
+    assert "没有前后端归属的实现候选" in section
+    assert "`investigate | fix | verify`" in section
+
+
 def test_dispatcher_evals_cover_consolidated_behavior() -> None:
     evals = json.loads(EVALS.read_text(encoding="utf-8"))["evals"]
 
@@ -114,3 +135,24 @@ def test_dispatcher_evals_cover_consolidated_behavior() -> None:
         assert case["expectations"]
         assert "只读模拟" in case["prompt"]
         assert "禁止实际修改" in case["prompt"]
+
+
+def test_dispatcher_leads_with_the_four_execution_principles() -> None:
+    skill = SKILL.read_text(encoding="utf-8")
+    assert skill.index("## 执行原则") < skill.index("## 执行循环")
+    principles = skill.split("## 执行原则", 1)[1].split("## 执行循环", 1)[0]
+    bullets = [line for line in principles.splitlines() if line.startswith("- **")]
+    assert len(bullets) == 4
+    for marker in (
+        "角色 ≠ 载体",
+        "载体可以有自己的 worktree",
+        "先 foundation/seam 再 fan-out",
+        "Ticket ready 是验收粒度的依赖，不是执行 dependency",
+        "都可以同时有多个实例",
+        "有 worker 在途也不是等待理由",
+    ):
+        assert marker in principles
+    assert "形成第一份 brief 前先看这四条" in principles
+    assert "只挡绑定未稳定语义的实现" in skill
+    assert "可降为 `acceptance`" in skill
+    assert "默认包给 worker" in skill
