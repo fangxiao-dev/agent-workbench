@@ -21,7 +21,7 @@ Capsule 的 `projection-complete: false` 表示宿主长度预算只能承载摘
 
 ## Evidence 与 Execution Record
 
-Evidence 使用存在的仓库相对路径，可带 anchor，并足以解释状态变化。checkpoint 是恢复边界；judgment 记录执行期 decision、finding disposition、failure learning 与外部证据解释。routine state change、普通 PASS 和可从 Git/state 推导的事实不重复写入 Execution Record。
+Evidence 使用存在的仓库相对路径，可带 anchor，并足以解释状态变化。登记多条 evidence 时一律用数组一次提交，一次登记一个 revision：bash 用 `printf '<array-json>' | python impl_package_state.py --package <package> evidence add`；PowerShell 先把整段 JSON 数组 `Set-Content` 到临时 `evidence.json`，再 `Get-Content -Raw evidence.json | python impl_package_state.py --package <package> evidence add`，不要在 shell 里现场拼 hashtable。整批合法才写入，非法批次不部分写入。checkpoint 是恢复边界；judgment 记录执行期 decision、finding disposition、failure learning 与外部证据解释。routine state change、普通 PASS 和可从 Git/state 推导的事实不重复写入 Execution Record。
 
 ## Readiness、返工与调度
 

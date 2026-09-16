@@ -120,7 +120,7 @@ situations:
         default: true
         by: main-session
         do: "impl_package_state.py --package <package> package validate; impl_package_state.py --package <package> ticket block <id> --expect PENDING --evidence <blocker-evidence>"
-        effect: "不得硬上 implementation 边"
+        effect: "不得硬上 implementation 边；该边只挡绑定未稳定语义的实现，被挡 Ticket 的只读调研（ticket.investigate.no-carrier）、child-local 测试与无依赖 lane 可先做；package 自写的 implementation 边核实后可降为 acceptance 并记 judgment"
     escape: true
 
   - slug: attempt.accept.all-tickets-terminal
@@ -220,8 +220,8 @@ situations:
       - id: file-evidence
         default: true
         by: main-session
-        do: "printf '<evidence-object-or-non-empty-array-json>' | python impl_package_state.py --package <package> evidence add"
-        effect: "必须带 timing"
+        do: "多条一律数组、一次登记一个 revision。bash：printf '<evidence-object-or-non-empty-array-json>' | python impl_package_state.py --package <package> evidence add；PowerShell：先 Set-Content evidence.json 写入整段 JSON 数组，再 Get-Content -Raw evidence.json | python impl_package_state.py --package <package> evidence add；不要在 shell 里现场拼 hashtable"
+        effect: "必须带 timing；数组整批合法才一次写入，非法批次不部分写入"
     escape: true
 
   - slug: ticket.verify.safety-invariant-unfalsified
@@ -492,7 +492,7 @@ situations:
         default: true
         by: dispatch
         do: "/impl-package:do-review phase=terminal-final"
-        effect: "补齐 terminal-final coverage（完整 terminal_tracks，不继承此前任何 initial 选中的子集）"
+        effect: "补齐 terminal-final coverage（完整 terminal_tracks，不继承此前任何 initial 选中的子集）；accepted findings 未闭合或 fix 在途时先 finding-closure，不起 terminal-final；B/C/Safety 按 admission 复用旧 PASS"
     escape: true
 
   - slug: ticket.accept.release-edge-unchecked

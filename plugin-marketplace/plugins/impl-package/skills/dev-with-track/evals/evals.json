@@ -6,63 +6,112 @@
       "prompt": "从旧 tickets=true, dag=true 的 active Attempt 恢复。Task T1 DONE、T2 PENDING，Ticket 仍 PENDING。",
       "expected_output": "验证 state、读取 Progress/checkpoint，保持旧 Task 与 Ticket 轴分离；Task DONE 不接受 Ticket。",
       "files": [],
-      "expectations": ["canonical restore", "legacy Task is not Ticket acceptance", "repository-relative evidence"]
+      "expectations": [
+        "canonical restore",
+        "legacy Task is not Ticket acceptance",
+        "repository-relative evidence"
+      ]
     },
     {
       "id": 2,
       "prompt": "验证完成，准备在 current Git comparison point 写 pass Gate。",
       "expected_output": "先闭合 required review、manual acceptance、findings 与 Stage 7；evidence 支持时才写 Gate并冻结 current Attempt。",
       "files": [],
-      "expectations": ["comparison commit matches HEAD", "durable delta or reason", "terminal freeze"]
+      "expectations": [
+        "comparison commit matches HEAD",
+        "durable delta or reason",
+        "terminal freeze"
+      ]
     },
     {
       "id": 3,
       "prompt": "恢复后 checkpoint 只写了一个 next，但批准范围内另有 ready 工作。",
       "expected_output": "从 canonical Ticket/Plan 恢复业务重点和完整候选范围；checkpoint 只是恢复入口，Dispatcher 继续评估其他 ready 工作。",
       "files": [],
-      "expectations": ["candidate scope restored", "checkpoint does not serialize", "Dispatcher evaluates ready work"]
+      "expectations": [
+        "candidate scope restored",
+        "checkpoint does not serialize",
+        "Dispatcher evaluates ready work"
+      ]
     },
     {
       "id": 4,
       "prompt": "finding closure 有中间证据，但 do-review terminal-final coverage incomplete。可以写 terminal pass 吗？",
       "expected_output": "消费 do-review 权威报告并阻止 terminal pass，直到 coverage 完整且阻断 findings 闭合。",
       "files": [],
-      "expectations": ["do-review owns topology", "complete terminal coverage", "blocking findings closed"]
+      "expectations": [
+        "do-review owns topology",
+        "complete terminal coverage",
+        "blocking findings closed"
+      ]
     },
     {
       "id": 5,
       "prompt": "已确认且已命名 finding 可独立隔离，相关下一实现尚未 ready，且不改变其他候选语义。",
       "expected_output": "dev 记录 finding 的 disposition、影响与期限；Dispatcher 可把 fix 作为独立候选立即安排，closure 交 do-review 用一个 independent reviewer 完成。",
       "files": [],
-      "expectations": ["dev owns disposition", "Dispatcher schedules fix", "single-reviewer finding closure", "do-review owns closure"]
+      "expectations": [
+        "dev owns disposition",
+        "Dispatcher schedules fix",
+        "single-reviewer finding closure",
+        "do-review owns closure"
+      ]
     },
     {
       "id": 6,
       "prompt": "当前 Ticket 只剩 acceptance edge 未释放，实施合同和资源已经满足。",
       "expected_output": "保持 Ticket 未 SATISFIED，同时把实施作为候选交 Dispatcher；实施结果不提前成为 acceptance evidence。",
       "files": [],
-      "expectations": ["business readiness remains canonical", "implementation candidate may proceed", "no early evidence claim"]
+      "expectations": [
+        "business readiness remains canonical",
+        "implementation candidate may proceed",
+        "no early evidence claim"
+      ]
     },
     {
       "id": 7,
       "prompt": "Dispatcher 当前 idle，但仍有 running worker、Ticket evidence 缺失且 Gate open。整体完成了吗？",
       "expected_output": "Dispatcher 只是调度 idle；dev-with-track 根据 canonical facts 判断 package 未 closed并保留恢复入口。",
       "files": [],
-      "expectations": ["dispatcher idle is not closure", "dev owns completion", "preserve recovery fact"]
+      "expectations": [
+        "dispatcher idle is not closure",
+        "dev owns completion",
+        "preserve recovery fact"
+      ]
     },
     {
       "id": 8,
       "prompt": "候选范围已稳定；改动触及共享协议、权限与并发；实现 worker 已返回 DONE。说明 formal review requirement 如何进入现有 review workflow。",
       "expected_output": "命中 formal material review requirement；DONE 只是局部事实，保持 PENDING_REVIEW，由 do-review 完成 topology/coverage/closure；覆盖同一增量的 formal review 满足 delta review 时不再叠加同范围轻量审查。",
       "files": [],
-      "expectations": ["material risk review", "PENDING_REVIEW", "do-review owns formal review", "no duplicate light review"]
+      "expectations": [
+        "material risk review",
+        "PENDING_REVIEW",
+        "do-review owns formal review",
+        "no duplicate light review"
+      ]
     },
     {
       "id": 9,
       "prompt": "一个 stable claim 同时含多个可独立失败子句，artifact 只证明其中一部分。可以 satisfy 吗？",
       "expected_output": "拒绝 satisfy并保持 Ticket pending；不登记 supporting，交 impl-planning 修订 acceptance atoms。",
       "files": [],
-      "expectations": ["partial evidence is insufficient", "no dependency release", "route to impl-planning"]
+      "expectations": [
+        "partial evidence is insufficient",
+        "no dependency release",
+        "route to impl-planning"
+      ]
+    },
+    {
+      "prompt": "terminal-final 返回 FAIL：Track A 提出 2 个 accepted blocker，其中 1 个的 fix worker 仍在途。主控下一步派什么？",
+      "expected_output": "派 fix 并对已修复的 finding 派 finding-closure（一名 reviewer 只核对点名 findings）；不重新启动 terminal-final。等两个 finding 都闭合、没有在途 fix、HEAD 不再变化后，才在最终 HEAD 再起一次 terminal-final，并说明 B/C/Safety 是否按 admission 复用旧 PASS。",
+      "files": [],
+      "expectations": [
+        "Next action is fix + finding-closure, not another terminal-final",
+        "Terminal-final restarts only at the final HEAD after all accepted findings close",
+        "Reuse of B/C/Safety PASS is stated explicitly"
+      ],
+      "id": 10
     }
   ]
 }

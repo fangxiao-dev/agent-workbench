@@ -5,13 +5,13 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 
 # Dev With Track
 
-先读 `../../references/impl-package-composition-contract.md` 和 `../../references/impl-package-current-state.md`；当前 Attempt 涉及 material seam、browser/provider/native-tool 或真实系统运行验证时，再读 [`../../references/progressive-system-evidence.md`](../../references/progressive-system-evidence.md)。
+开工只需读 `$dispatcher` 的执行原则（四行）；其余材料按需读：登记 evidence 或核对 claim 时读 `../../references/impl-package-composition-contract.md`，恢复或核对 state 时读 `../../references/impl-package-current-state.md`，当前 Attempt 涉及 material seam、browser/provider/native-tool 或真实系统运行验证时读 [`../../references/progressive-system-evidence.md`](../../references/progressive-system-evidence.md)。
 
 ## 业务控制循环
 
 1. **刷新业务事实。** 优先消费匹配当前 session/package 的 `Impl-Package Resume Capsule v1`；缺失或失配时执行 Restore，取得 current Attempt、canonical Ticket state、blocker、候选与 situation digest。
 2. **确定重点和候选范围。** 根据 typed dependency、批准合同与 evidence 选定当前交付重点，同时把范围内相关剩余工作交给 Dispatcher 看见。`implementation` edge 阻止绑定未稳定语义的实现；`acceptance` edge 只阻止正式验收与状态宣称；`release` edge 在 Gate 前复核。Decision/Spec 能唯一裁决时按 implementation defect 处理；存在多个合理业务结果时请求 Owner。
-3. **应用 `$dispatcher`。** 提供业务目标、事实、授权、候选 subject、dependency、acceptance 和禁改范围，由 Dispatcher 完成候选选择、brief、资源隔离、dispatch/receipt、worker return、delta review 与 idle。工作无需预登记；资源与授权由主控按当前事实判断。主控直接实现时遵守相同 write ownership、自证和独立 delta review 要求。Progress/checkpoint 不授权 dispatch。
+3. **应用 `$dispatcher`。** 形成第一份 brief 前先读 `$dispatcher` 的执行原则（角色≠载体、载体可有 worktree、先 foundation 再 fan-out、ready≠执行 dependency），再提供业务目标、事实、授权、候选 subject、dependency、acceptance 和禁改范围，由 Dispatcher 完成候选选择、brief、资源隔离、dispatch/receipt、worker return、delta review 与 idle。工作无需预登记；资源与授权由主控按当前事实判断。主控直接实现时遵守相同 write ownership、自证和独立 delta review 要求。Progress/checkpoint 不授权 dispatch。
 4. **消费并记录。** 核对可归因 diff、evidence、residue、cleanup 和 review 状态；局部 `DONE`、`PASSED` 或 checkpoint PASS 只释放对应候选。随后用 package CLI 写 State、Evidence、Execution Record、Checkpoint 与 Trail；finding 的等级、disposition、影响范围和解决期限由本 Skill 判断。
 5. **判断继续或收口。** Dispatcher idle 后仍按 canonical State、Evidence、required review、manual acceptance、findings closure 与 Gate 判断继续、blocked 或 closure。每轮记录当前交付重点、可推进候选、局部 blocker 与恢复入口；局部等待不自动关闭 package。
 
@@ -25,11 +25,11 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 
 ## Restore
 
-首次确认 package anchor 后，Codex 从当前已加载 Skill 解析 plugin root，并调用 `python <plugin-root>/hooks/impl_package_hooks.py activate --package <package>` 绑定当前 session；其他宿主跳过。匹配 Capsule 只提供恢复事实，仍复核 package、HEAD 与 initial approval，不把 Capsule 当 acceptance、Gate evidence 或 dispatch credential。
+首次确认 package anchor 后，宿主（Codex/ZCode）从当前已加载 Skill 解析 plugin root，并调用 `python <plugin-root>/hooks/impl_package_hooks.py activate --package <package>` 绑定当前 session；Codex 经 session 环境变量绑定，ZCode 拿不到 session id 时自动落为仓库级 default 绑定；其他宿主跳过。匹配 Capsule 只提供恢复事实，仍复核 package、HEAD 与 initial approval，不把 Capsule 当 acceptance、Gate evidence 或 dispatch credential。
 
 已知 CLI 成功更新后按 delta 更新当前事实；Capsule 缺失或失配、Hook 未信任/禁用、读取 warning、未知外部状态变化或状态更新失败时，按 [Runtime Protocol](references/runtime-protocol.md) 执行完整恢复。真正 dispatch 前运行 `situation.py render` 生成 credential；偏离建议或表外行动使用 `escape` 记录理由。
 
-显式离开 package 工作时，Codex 调用同一脚本的 `deactivate`。Restore 只恢复范围与事实，不推进 Gate。
+显式离开 package 工作时，同一宿主调用同一脚本的 `deactivate`。Restore 只恢复范围与事实，不推进 Gate。
 
 ## State、ER 与 Trail
 
@@ -59,7 +59,7 @@ Plan/policy 明确要求时同样产生 formal review requirement。required rev
 
 已确认 finding 可立即修、随相关下一步修或隔离并行修，由 Dispatcher 根据影响、资源和整合成本安排。延后不能放行依赖该缺陷的实现或验收。修复方向已失去可信边界、同一机制再次出现或影响跨多个 writer/入口/shared authority 时，先按 `/diagnosing-bugs` 定位；finding closure 仍归 do-review。
 
-terminal pass 要求 terminal-final coverage 完整且阻断 findings 已闭合；启动条件与结果复用遵循 do-review。Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 记录入口、oracle、环境、失败反馈与 teardown owner。
+terminal pass 要求 terminal-final coverage 完整且阻断 findings 已闭合；启动条件与结果复用遵循 do-review。terminal-final 返回 FAIL/INCOMPLETE 后的下一步是 `fix` 加 `finding-closure`（一名 reviewer 只核对点名 findings），不是再起一轮 terminal-final；accepted findings 全部闭合、没有在途 fix、HEAD 不再变化时才在最终 HEAD 再起一次 terminal-final，B/C/Safety 按 admission 复用旧 PASS。Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 记录入口、oracle、环境、失败反馈与 teardown owner。
 
 ## Verify and Gate
 

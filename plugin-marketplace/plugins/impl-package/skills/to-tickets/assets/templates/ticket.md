@@ -45,4 +45,4 @@ Attempt ID: <attempt-id>
 
 - <implementation|acceptance|release>: <ticket-id>
 
-没有阻塞边时填写 `None`。依赖类型只允许 `implementation | acceptance | release`。不要添加 worker ownership、文件级步骤或 Task 进度。
+没有阻塞边时填写 `None`。依赖类型只允许 `implementation | acceptance | release`：默认 `acceptance`（只挡正式验收，不挡开工）；只有没有上游产物就无法实现、也无法做 child-local 验证时才写 `implementation`，并在该行后一句话写出所依赖的产物。不要添加 worker ownership、文件级步骤或 Task 进度。

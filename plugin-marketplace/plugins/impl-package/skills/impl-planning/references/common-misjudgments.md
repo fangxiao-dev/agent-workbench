@@ -14,6 +14,7 @@
 
 - 把逐约束映射和逐项验证细节写回 Plan 的全局调度表，会与 Ticket 的 Contract references 与 AC 重复，制造两处可能漂移的合同来源。
 - 把 Ticket 拆分交给旧 DAG 入口，会把已经选择的 Ticket-only Composition 偷换成另一套任务结构。
+- 上游只挡最终验收却写成 `implementation` 边，会让执行阶段的只读调研、child-local 测试和无依赖 lane 一起被挡住。
 
 ## Ticket 合同与证据
 

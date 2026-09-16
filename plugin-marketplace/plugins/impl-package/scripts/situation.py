@@ -3206,7 +3206,7 @@ def _dispatch_blockers(snapshot: Snapshot, item: dict[str, Any],
                              "reason": "Ticket 不是 PENDING，不能进入 implementation/fix"})
         dependency = context.dependency_released("implementation")
         if not dependency.known or not dependency.value:
-            blockers.append({"type": "foundation", "subject": subject,
+            blockers.append({"type": "foundation", "subject": subject, "kind": "implementation-dependency",
                              "reason": dependency.reason or "canonical implementation dependency 未释放"})
     for running in in_flight:
         same_id = item.get("candidate_id") == running.get("candidate_id")
@@ -3378,6 +3378,7 @@ def _derive(table: TableModel, snapshot: Snapshot) -> dict[str, Any]:
             runnable.append(item)
     if blocking_candidates:
         runnable = []
+    hints = _situation_hints(unique_candidates, runnable, withheld, in_flight)
     result = {
         "selected": selected.as_json() if selected else None,
         "parallel_matches": [candidate.as_json() for candidate in parallel_matches],
@@ -3395,8 +3396,29 @@ def _derive(table: TableModel, snapshot: Snapshot) -> dict[str, Any]:
         "runnable": runnable,
         "withheld": withheld,
         "in_flight": in_flight,
+        "hints": hints,
     }
     return result
+
+
+IN_FLIGHT_HINT = "在途 worker 不阻塞 runnable 里的独立候选；只有争用同一资源或依赖其结论的工作才等待。"
+IMPLEMENTATION_EDGE_HINT = (
+    "implementation 边只挡绑定未稳定语义的实现；被挡 Ticket 的只读调研、child-local 测试与无依赖 lane 可以先做。"
+)
+
+
+def _situation_hints(candidates: list[Any], runnable: list[dict[str, Any]],
+                     withheld: list[dict[str, Any]], in_flight: list[dict[str, Any]]) -> list[str]:
+    """Decision-point reminders for the two dispatch principles most often forgotten mid-session."""
+    hints: list[str] = []
+    if in_flight and runnable:
+        hints.append(IN_FLIGHT_HINT)
+    edge_held = any(candidate.slug == "attempt.readiness.all-edges-held" for candidate in candidates)
+    edge_withheld = any(blocker.get("kind") == "implementation-dependency"
+                        for item in withheld for blocker in item.get("blockers", []))
+    if edge_held or edge_withheld:
+        hints.append(IMPLEMENTATION_EDGE_HINT)
+    return hints
 
 
 def dispatch_admission(package: Path, event: dict[str, Any]) -> list[dict[str, Any]]:
@@ -3547,6 +3569,8 @@ def _render_human(
         lines.append(
             f"- {item.get('dispatch_id')} ({item.get('subject')}), resources={item.get('resource_keys')}"
         )
+    for hint in result.get("hints", []):
+        lines.append(f"hint: {hint}")
     undetermined = result.get("undetermined", [])
     if undetermined:
         if explain_undetermined:
@@ -3590,6 +3614,7 @@ def _json_result(
         "runnable": derived["runnable"],
         "withheld": derived["withheld"],
         "in_flight": derived["in_flight"],
+        "hints": derived.get("hints", []),
         "manual": derived["manual"],
         "undetermined": derived["undetermined"],
         "unmatched": derived["unmatched"],

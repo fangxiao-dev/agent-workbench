@@ -68,7 +68,7 @@ allowed-tools:
 
 ## 5. Report
 
-1. 读 `output-templates.md` 并使用最小匹配报告：先给 review phase、Safety applicability/coverage、每个 selected track verdict、material findings、stop reason 和 next action；ledger path 默认内部。先报告 coverage 与 stop reason，读者才能区分没有 finding、没有证据和没有运行 required track。
+1. 读 `output-templates.md` 并使用最小匹配报告：先给 review phase、Safety applicability/coverage、每个 selected track verdict（terminal-final 中复用旧 PASS 的 track 写明复用的 PASS `HEAD` 与 admission delta）、material findings、stop reason 和 next action；ledger path 默认内部。先报告 coverage 与 stop reason，读者才能区分没有 finding、没有证据和没有运行 required track。
 2. 任何 required `FAIL` 都 fail，随后 required `UNCERTAIN` 为 uncertain，其余只有所有 required track PASS 才 pass；无 required track、required 缺 verdict 或适用 Safety 未列入显式 terminal-final 都不能报告 PASS。fail-closed 把缺失或不确定证据留在可见状态，不会被压成绿色结论。
 
 ## Guardrails

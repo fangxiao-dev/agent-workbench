@@ -937,3 +937,30 @@ def test_json_render_exposes_digest_and_short_circuits_since() -> None:
         "legacy_digest": rendered["legacy_digest"],
         "unchanged": True,
     }
+
+
+def test_hints_surface_dispatch_principles_at_decision_points() -> None:
+    held = json.loads(_render_text(FIXTURES / "p1-all-edges-held", "--json"))
+    assert situation.IMPLEMENTATION_EDGE_HINT in held["hints"]
+    assert situation.IN_FLIGHT_HINT not in held["hints"]
+
+    waiting = json.loads(_render_text(FIXTURES / "p1-worker-still-running", "--json"))
+    assert waiting["in_flight"] and not waiting["runnable"]
+    assert situation.IN_FLIGHT_HINT not in waiting["hints"]
+
+    source = FIXTURES / "p1-multiple-ready"
+    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
+        package = Path(temporary) / source.name
+        shutil.copytree(source, package)
+        trail = package / "execution/fixture-attempt/trail.jsonl"
+        trail.parent.mkdir(parents=True, exist_ok=True)
+        trail.write_text(json.dumps({
+            "v": 1, "seq": 2, "subject": "ticket:TKT-01", "kind": "dispatch", "dispatch_id": "dispatch-A",
+            "candidate_id": "A", "mode": "implement", "chosen": "implement", "resource_keys": ["worktree:A"],
+            "receipt": "worker-A", "worker": "worker-A", "outcome": "RUNNING", "returned": False,
+        }) + "\n", encoding="utf-8")
+        running = json.loads(_render_text(package, "--json"))
+        assert running["in_flight"] and running["runnable"]
+        assert situation.IN_FLIGHT_HINT in running["hints"]
+        human = _render_text(package)
+        assert f"hint: {situation.IN_FLIGHT_HINT}" in human
