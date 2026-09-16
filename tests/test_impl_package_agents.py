@@ -21,7 +21,7 @@ EXPECTED = {
     "review-track-standards",
 }
 EXPECTED_EXECUTION = {
-    "review-track-code": ("gpt-6-astra", "medium"),
+    "review-track-code": ("gpt-5.6-sol", "high"),
     "review-track-safety": ("gpt-5.6-sol", "medium"),
     "review-track-spec": ("gpt-5.6-sol", "medium"),
     "review-track-standards": ("gpt-5.6-sol", "medium"),
