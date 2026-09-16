@@ -14,7 +14,7 @@ compatibility: Requires Codex Desktop thread tools (create_thread, set_thread_ti
 - Ticket/State/Evidence/Gate 与 package 续跑由 `/impl-package:dev-with-track` 拥有；候选选择、bounded worker 合同、dependency/resource admission、return 与 idle 由 `$dispatcher` 拥有。handoff 以 canonical `readyTickets` 和在途事实为续接输入；候选范围由 owning workflow 根据当前 authority 重新发现。
 - downstream protocol 可以提供自己的 validation anchors 与 continuation；本 Skill 仍只负责通用创建和交付 gate。
 
-使用前确认：Owner 要求新 task；已有可恢复 authority 与 active checkpoint；目标 implementation worktree 和下一状态可从 authority 判定。滚动中的无 checkpoint 工作改用普通 handoff，不使用本 Skill。
+使用前确认：Owner 要求新 task；已有可恢复 authority 与 active checkpoint；目标 implementation worktree 和下一状态可从 authority 判定。滚动中的无 checkpoint 工作改用普通 handoff，不使用本 Skill。用户要的是给人看的总结、环境重启或手测说明时也不使用本 Skill：不走 anchor / continuation，用已掌握的事实一次成文，只在缺具体命令或路径时再查。
 
 `context compaction is only an emergency fallback`；已有可恢复 checkpoint 时优先创建 clean local task。
 
@@ -32,7 +32,7 @@ worktree、HEAD 或 authority 不符时报告 `anchor FAIL: source worktree setu
 完整读取 [references/handoff-prompt-template.md](references/handoff-prompt-template.md)，从已验证事实填充两张卡。两卡使用 plain prompt text，不加 `<codex_delegation>`；不复制 plan、Ticket AC、调度算法、测试命令、凭证或受控数据。
 
 - Anchor card 只含 worktree、full HEAD、authority/entry 与必要的只读 validation anchors。child 必须在该 worktree 检查后报告 PASS/FAIL 并停止，不开始工作。
-- Continuation card 只含 authority、checkpoint、状态/完整 `readyTickets` 或 recorded action、授权与 blocker；它指向 owning skills，不展开其执行方法。
+- Continuation card 只含 authority、checkpoint、状态/完整 `readyTickets` 或 recorded action、授权与 blocker；它指向 owning skills 与 `$dispatcher` 的执行原则，不展开其执行方法。
 
 ## Create And Deliver
 

@@ -136,3 +136,14 @@ def test_multi_ticket_evals_expect_routing_instead_of_copied_execution_rules() -
     assert "one ready Ticket" in evals[11]["prompt"]
     assert "routes all execution decisions" in evals[11]["expected_output"]
     assert "terminal package" in evals[11]["prompt"]
+
+
+def test_continuation_points_to_dispatcher_principles_and_skill_declines_plain_docs() -> None:
+    skill = read("skills/handoff-to-new-session/SKILL.md")
+    template = read("skills/handoff-to-new-session/references/handoff-prompt-template.md")
+    continuation = template.split("## Second-stage continuation prompt", 1)[1]
+    assert "`$dispatcher` 的执行原则" in continuation
+    for marker in ("角色≠载体", "载体可有 worktree", "先 foundation 再 fan-out", "ready≠执行 dependency"):
+        assert marker in continuation
+    assert "`$dispatcher` 的执行原则" in skill
+    assert "环境重启或手测说明时也不使用本 Skill" in skill
