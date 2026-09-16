@@ -1,0 +1,39 @@
+{
+  "description": "ZCode Impl-Package state protection and session resume context.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Edit|Write|ApplyPatch)$",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "python",
+            "args": [
+              "${ZCODE_PLUGIN_ROOT}/hooks/impl_package_hooks.py",
+              "pre-tool-use"
+            ],
+            "timeoutMs": 5000,
+            "statusMessage": "Protecting Impl-Package state"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume|compact)$",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "python",
+            "args": [
+              "${ZCODE_PLUGIN_ROOT}/hooks/impl_package_hooks.py",
+              "session-start"
+            ],
+            "timeoutMs": 10000,
+            "statusMessage": "Restoring Impl-Package context"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-"""Codex lifecycle hooks for Impl-Package.
+"""Host lifecycle hooks for Impl-Package (Codex and ZCode).
 
 This module only protects machine-owned state and supplies a read-only resume
 capsule. Business state, acceptance, and Gate decisions remain owned by the
@@ -23,9 +23,15 @@ SITUATION_CLI = PLUGIN_ROOT / "scripts" / "situation.py"
 STATE_REL = PurePosixPath(".impl-package/state.json")
 BINDING_VERSION = 1
 CAPSULE_VERSION = 1
+# Repository-level binding used by hosts that do not expose a session id to
+# agent-run commands (ZCode). Explicit session bindings keep taking precedence.
+DEFAULT_SESSION_ID = "default"
 # A UTF-8 byte ceiling also fits the host's 1200-character/token context budget.
 CAPSULE_CONTEXT_BUDGET = 1200
 SESSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+# ZCode exposes state edits as Edit/Write (ApplyPatch is aliased onto them)
+# with the target path in tool_input instead of an apply_patch command body.
+ZCODE_PATCH_TOOLS = ("Edit", "Write", "ApplyPatch")
 PATCH_HEADER_RE = re.compile(
     r"^\*\*\* (?:Add File|Update File|Delete File|Move to):\s*(.+?)\s*$",
     re.MULTILINE,
@@ -45,9 +51,17 @@ def _warning(message: str) -> dict[str, str]:
 
 
 def _session_id(explicit: str | None = None) -> str:
-    value = explicit or os.environ.get("CODEX_SESSION_ID") or os.environ.get("CODEX_THREAD_ID")
-    if not value or not SESSION_RE.fullmatch(value):
-        raise HookError("a valid Codex session id is required")
+    value = (
+        explicit
+        or os.environ.get("CODEX_SESSION_ID")
+        or os.environ.get("CODEX_THREAD_ID")
+        or os.environ.get("ZCODE_SESSION_ID")
+        or os.environ.get("CLAUDE_SESSION_ID")
+    )
+    if not value:
+        return DEFAULT_SESSION_ID
+    if not SESSION_RE.fullmatch(value):
+        raise HookError("a valid session id is required")
     return value
 
 
@@ -175,15 +189,45 @@ def _deactivate(explicit_session: str | None) -> int:
     return 0
 
 
+def _protected_file_paths(raw_paths: list[str]) -> list[str]:
+    blocked: list[str] = []
+    for raw in raw_paths:
+        path = _normalized_patch_path(raw)
+        folded = tuple(part.casefold() for part in path.parts)
+        if len(folded) >= 2 and folded[-2:] == (".impl-package", "state.json") and not _is_fixture_path(path):
+            blocked.append(path.as_posix())
+    return sorted(set(blocked))
+
+
 def _pre_tool_use() -> int:
     try:
         event = _read_event()
-        if event.get("hook_event_name") != "PreToolUse" or event.get("tool_name") != "apply_patch":
+        if event.get("hook_event_name") != "PreToolUse":
             return 0
+        tool_name = event.get("tool_name")
         tool_input = event.get("tool_input")
-        if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
-            raise HookError("PreToolUse apply_patch event is missing tool_input.command")
-        blocked = _protected_patch_paths(tool_input["command"])
+        if tool_name == "apply_patch":
+            if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
+                raise HookError("PreToolUse apply_patch event is missing tool_input.command")
+            blocked = _protected_patch_paths(tool_input["command"])
+        elif tool_name in ZCODE_PATCH_TOOLS:
+            if not isinstance(tool_input, dict):
+                raise HookError(f"PreToolUse {tool_name} event is missing tool_input")
+            raw_paths: list[str] = []
+            if isinstance(tool_input.get("file_path"), str):
+                raw_paths.append(tool_input["file_path"])
+            edits = tool_input.get("edits")
+            if isinstance(edits, list):
+                raw_paths.extend(
+                    edit["file_path"]
+                    for edit in edits
+                    if isinstance(edit, dict) and isinstance(edit.get("file_path"), str)
+                )
+            if not raw_paths:
+                raise HookError(f"PreToolUse {tool_name} event is missing tool_input.file_path")
+            blocked = _protected_file_paths(raw_paths)
+        else:
+            return 0
         if not blocked:
             return 0
         _json_dump(
@@ -193,7 +237,8 @@ def _pre_tool_use() -> int:
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
                         "Impl-Package machine state must be changed through "
-                        "scripts/impl_package_state.py, not apply_patch. Blocked: "
+                        "scripts/impl_package_state.py, not apply_patch or direct file "
+                        "edits. Blocked: "
                         + ", ".join(blocked)
                     ),
                 }
@@ -206,17 +251,25 @@ def _pre_tool_use() -> int:
 
 
 def _load_binding(repo_root: Path, session_id: str) -> tuple[dict[str, Any] | None, str | None]:
-    binding_path = _binding_path(repo_root, session_id)
-    if not binding_path.is_file():
+    binding_path_ = _binding_path(repo_root, session_id)
+    if not binding_path_.is_file() and session_id != DEFAULT_SESSION_ID:
+        # Hosts without session ids fall back to the repository-level binding.
+        fallback = _binding_path(repo_root, DEFAULT_SESSION_ID)
+        if fallback.is_file():
+            binding_path_ = fallback
+    if not binding_path_.is_file():
         return None, None
     try:
-        payload = json.loads(binding_path.read_text(encoding="utf-8"))
+        payload = json.loads(binding_path_.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         return None, f"could not read the active package binding: {exc}"
     expected = {"version", "session_id", "repo_root", "package"}
     if not isinstance(payload, dict) or set(payload) != expected:
         return None, "the active package binding has an invalid shape"
-    if payload.get("version") != BINDING_VERSION or payload.get("session_id") != session_id:
+    if payload.get("version") != BINDING_VERSION:
+        return None, None
+    bound_session = payload.get("session_id")
+    if bound_session != session_id and bound_session != DEFAULT_SESSION_ID:
         return None, None
     if not isinstance(payload.get("repo_root"), str) or Path(payload["repo_root"]).resolve() != repo_root:
         return None, None
@@ -381,9 +434,9 @@ def _session_start() -> int:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Codex lifecycle hooks for Impl-Package")
+    parser = argparse.ArgumentParser(description="Host lifecycle hooks for Impl-Package")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    activate = subparsers.add_parser("activate", help="bind one package to the current Codex session")
+    activate = subparsers.add_parser("activate", help="bind one package to the current session")
     activate.add_argument("--package", required=True)
     activate.add_argument("--session-id")
     deactivate = subparsers.add_parser("deactivate", help="remove the current session binding")

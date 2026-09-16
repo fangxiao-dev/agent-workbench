@@ -60,26 +60,70 @@ def dispatcher_plugin_compatibility(dispatcher_path: Path, plugin_root: Path) ->
 def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
     codex = load_json(PLUGIN / ".codex-plugin" / "plugin.json")
     claude = load_json(PLUGIN / ".claude-plugin" / "plugin.json")
+    zcode = load_json(PLUGIN / ".zcode-plugin" / "plugin.json")
     agents_marketplace = load_json(MARKETPLACE / ".agents" / "plugins" / "marketplace.json")
     claude_marketplace = load_json(MARKETPLACE / ".claude-plugin" / "marketplace.json")
+    zcode_marketplace = load_json(MARKETPLACE / "marketplace.json")
 
-    assert codex["name"] == claude["name"] == "impl-package"
-    assert codex["version"] == claude["version"] == "0.4.2"
-    assert codex["skills"] == claude["skills"] == "./skills/"
+    assert codex["name"] == claude["name"] == zcode["name"] == "impl-package"
+    assert codex["version"] == claude["version"] == zcode["version"] == "0.4.2"
+    assert codex["skills"] == claude["skills"] == zcode["skills"] == "./skills/"
     assert codex["hooks"] == "./hooks/codex-hooks.json"
+    assert zcode["hooks"] == "./hooks/zcode-hooks.json"
     assert "hooks" not in claude
     assert (PLUGIN / "hooks" / "codex-hooks.json").is_file()
+    assert (PLUGIN / "hooks" / "zcode-hooks.json").is_file()
     assert (PLUGIN / "hooks" / "impl_package_hooks.py").is_file()
     assert "agents" not in codex
-    assert claude["agents"] == [
+    expected_agents = [
         "./agents/review-track-code.md",
         "./agents/review-track-standards.md",
         "./agents/review-track-spec.md",
         "./agents/review-track-safety.md",
     ]
+    assert claude["agents"] == expected_agents
+    assert zcode["agents"] == expected_agents
+    for relative in expected_agents:
+        assert (PLUGIN / relative.removeprefix("./")).is_file()
     assert agents_marketplace["plugins"][0]["source"]["path"] == "./plugins/impl-package"
     assert claude_marketplace["plugins"][0]["source"] == "./plugins/impl-package"
     assert claude_marketplace["plugins"][0]["version"] == claude["version"]
+    assert zcode_marketplace["name"] == "agent-workbench"
+    assert zcode_marketplace["plugins"][0]["source"] == "./plugins/impl-package"
+    assert zcode_marketplace["plugins"][0]["version"] == zcode["version"]
+
+
+def test_zcode_hooks_use_only_native_schema_and_supported_events() -> None:
+    hooks_config = load_json(PLUGIN / "hooks" / "zcode-hooks.json")
+    supported_events = {
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PermissionRequest",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "Stop",
+    }
+    assert set(hooks_config) == {"description", "hooks"}
+    assert set(hooks_config["hooks"]) <= supported_events
+
+    process_fields = {"type", "command", "args", "timeoutMs", "statusMessage"}
+    for event, entries in hooks_config["hooks"].items():
+        for entry in entries:
+            assert set(entry) <= {"matcher", "hooks"}
+            for hook in entry["hooks"]:
+                assert hook["type"] == "process"
+                assert set(hook) <= process_fields
+                assert hook["command"] == "python"
+                assert hook["args"][0] == "${ZCODE_PLUGIN_ROOT}/hooks/impl_package_hooks.py"
+                assert isinstance(hook["timeoutMs"], int)
+
+    pre_tool_matchers = [entry["matcher"] for entry in hooks_config["hooks"]["PreToolUse"]]
+    assert pre_tool_matchers == ["^(Edit|Write|ApplyPatch)$"]
+    serialized = json.dumps(hooks_config)
+    assert "commandWindows" not in serialized
+    assert "additionalContextLimit" not in serialized
+    assert "${PLUGIN_ROOT}" not in serialized
 
 
 def test_do_review_owns_the_judgment_heuristics() -> None:
@@ -238,7 +282,11 @@ def test_migration_validator_is_standalone_and_not_a_runtime_entrypoint() -> Non
     assert migration_validator.is_file()
     assert not (PLUGIN / "skills" / "validate_ticket_first_migration").exists()
 
-    for manifest_path in (PLUGIN / ".codex-plugin" / "plugin.json", PLUGIN / ".claude-plugin" / "plugin.json"):
+    for manifest_path in (
+        PLUGIN / ".codex-plugin" / "plugin.json",
+        PLUGIN / ".claude-plugin" / "plugin.json",
+        PLUGIN / ".zcode-plugin" / "plugin.json",
+    ):
         manifest = load_json(manifest_path)
         assert manifest["skills"] == "./skills/"
         assert "validate_ticket_first_migration.py" not in json.dumps(manifest)

@@ -1,0 +1,20 @@
+{
+  "name": "impl-package",
+  "version": "0.4.2",
+  "description": "A staged implementation and review suite for requirements, planning, execution, verification, and stable-document backfill.",
+  "author": {
+    "name": "fangxiao-dev",
+    "url": "https://github.com/fangxiao-dev"
+  },
+  "homepage": "https://github.com/fangxiao-dev/agent-workbench",
+  "repository": "https://github.com/fangxiao-dev/agent-workbench",
+  "keywords": ["implementation", "planning", "verification", "workflow"],
+  "skills": "./skills/",
+  "hooks": "./hooks/zcode-hooks.json",
+  "agents": [
+    "./agents/review-track-code.md",
+    "./agents/review-track-standards.md",
+    "./agents/review-track-spec.md",
+    "./agents/review-track-safety.md"
+  ]
+}

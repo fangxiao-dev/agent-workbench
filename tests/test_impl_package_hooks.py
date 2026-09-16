@@ -459,3 +459,107 @@ def test_pre_tool_use_malformed_events_fail_open_with_optional_warning(tmp_path:
     if result.stdout:
         warning = json.loads(result.stdout)
         assert "systemMessage" in warning
+
+
+def zcode_pre_tool_event(repo: Path, tool_name: str, tool_input: dict[str, object]) -> dict[str, object]:
+    return {
+        "session_id": "hook-test-session",
+        "cwd": str(repo.resolve()),
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool_name,
+        "tool_use_id": "tool-1",
+        "tool_input": tool_input,
+        "permission_mode": "default",
+    }
+
+
+NO_SESSION_ENV = {
+    "CODEX_SESSION_ID": "",
+    "CODEX_THREAD_ID": "",
+    "ZCODE_SESSION_ID": "",
+    "CLAUDE_SESSION_ID": "",
+}
+
+
+def test_zcode_pre_tool_use_denies_edit_and_write_state_paths(tmp_path: Path) -> None:
+    repo, _ = make_repo(tmp_path)
+    state_rel = PACKAGE_REL.as_posix() + "/.impl-package/state.json"
+    denied_cases = [
+        ("Edit", {"file_path": state_rel, "old_string": "a", "new_string": "b"}),
+        ("Write", {"file_path": "./" + state_rel, "content": "x"}),
+        (
+            "Edit",
+            {
+                "file_path": "src/main.py",
+                "edits": [{"file_path": state_rel, "old_string": "a", "new_string": "b"}],
+            },
+        ),
+    ]
+    for tool_name, tool_input in denied_cases:
+        result = run_hook(
+            repo, "pre-tool-use", payload=zcode_pre_tool_event(repo, tool_name, tool_input)
+        )
+        output = assert_json_success(result)
+        hook_output = output["hookSpecificOutput"]
+        assert isinstance(hook_output, dict)
+        assert hook_output["hookEventName"] == "PreToolUse"
+        assert hook_output["permissionDecision"] == "deny"
+        assert "impl_package_state.py" in hook_output["permissionDecisionReason"]
+        assert state_rel in hook_output["permissionDecisionReason"]
+
+    allowed = run_hook(
+        repo,
+        "pre-tool-use",
+        payload=zcode_pre_tool_event(
+            repo,
+            "Write",
+            {"file_path": PACKAGE_REL.as_posix() + "/.impl-package/progress.md", "content": "x"},
+        ),
+    )
+    assert allowed.returncode == 0
+    assert allowed.stdout == ""
+    assert allowed.stderr == ""
+
+    fixture_result = run_hook(
+        repo,
+        "pre-tool-use",
+        payload=zcode_pre_tool_event(
+            repo,
+            "Edit",
+            {"file_path": "tests/fixtures/situations/example/.impl-package/state.json"},
+        ),
+    )
+    assert fixture_result.returncode == 0
+    assert fixture_result.stdout == ""
+
+
+def test_activate_falls_back_to_repository_default_binding_without_session_env(tmp_path: Path) -> None:
+    repo, package = make_repo(tmp_path)
+
+    activated = assert_json_success(
+        run_hook(repo, "activate", "--package", PACKAGE_REL.as_posix(), env=NO_SESSION_ENV)
+    )
+    assert activated == {
+        "status": "activated",
+        "session_id": "default",
+        "package": PACKAGE_REL.as_posix(),
+    }
+    default_path = binding_path(repo, "default")
+    assert default_path.is_file()
+    assert json.loads(default_path.read_text(encoding="utf-8"))["session_id"] == "default"
+
+    # Any session in the same repository resumes the capsule from a default binding.
+    context = capsule_text(session_start(repo, "arbitrary-zcode-session"))
+    assert PACKAGE_REL.as_posix() in context
+
+    # Explicit session bindings keep taking precedence over the default binding.
+    assert_json_success(activate(repo, package, "explicit-session"))
+    assert binding_path(repo, "explicit-session").is_file()
+    explicit_context = capsule_text(session_start(repo, "explicit-session"))
+    assert explicit_context == capsule_text(session_start(repo, "explicit-session"))
+    assert session_start(repo, "explicit-session").stdout
+
+    deactivated = assert_json_success(run_hook(repo, "deactivate", env=NO_SESSION_ENV))
+    assert deactivated == {"status": "deactivated", "session_id": "default"}
+    assert not default_path.exists()
+    assert binding_path(repo, "explicit-session").is_file()
