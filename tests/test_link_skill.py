@@ -209,10 +209,10 @@ def test_multi_host_with_home(workbench, tmp_path: Path) -> None:
     mod, _wb, _skills = workbench
     home = tmp_path / "home"
     code = mod.main(
-        ["call-grok", "--host", "claude", "codex", "--home", str(home), "--json"]
+        ["call-grok", "--host", "claude", "codex", "agents", "--home", str(home), "--json"]
     )
     assert code == 0
-    for host in ("claude", "codex"):
+    for host in ("claude", "codex", "agents"):
         dest = home / f".{host}" / "skills" / "call-grok"
         assert dest.is_dir()
         assert_is_platform_link(mod, dest)
@@ -259,6 +259,8 @@ def test_host_skills_dir_paths(workbench, tmp_path: Path) -> None:
     home = tmp_path / "home"
     claude = mod.host_skills_dir("claude", home=home)
     assert claude == mod.abspath_nofollow(home / ".claude" / "skills")
+    agents = mod.host_skills_dir("agents", home=home)
+    assert agents == mod.abspath_nofollow(home / ".agents" / "skills")
     with pytest.raises(ValueError):
         mod.host_skills_dir("unknown", home=home)
 

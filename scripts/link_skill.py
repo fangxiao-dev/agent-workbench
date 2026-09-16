@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 WORKBENCH_ROOT = Path(__file__).resolve().parents[1]
 SKILLS_ROOT = WORKBENCH_ROOT / "skills"
 
-HOST_NAMES = ("claude", "codex", "grok")
+HOST_NAMES = ("agents", "claude", "codex", "grok")
 
 EXIT_OK = 0
 EXIT_USAGE = 1
