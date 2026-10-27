@@ -28,6 +28,8 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed 
 
 ## 主路径
 
+进入主路径前，仅当材料混杂、目标不清、关键事实冲突或缺乏方向比较依据时，调用独立的 `$req-discover` 理解材料并返回决策依据；探索本身不创建 package、Decision/Spec 或 Gate。通过宿主 Skill catalog 定位；源码位置为 [req-discover](../../../../../skills/req-discover/SKILL.md)，插件安装位置不保证该相对链接存在。Skill 不可用时报告缺少的能力与当前依据缺口，不臆造调查结论。信息充分则直接执行下述流程；单个明确事实缺口使用 `$research`。已进入正式阶段后发现的未知仍按该阶段的 blocking/Gate 规则处理，不借探索绕过。用户只要求探索时交付认识后结束，不自动进入正式起草。
+
 1. 分类 contract impact；需要 D/S 时先查找相关 package。没有相关 package或不适合 patch 时按 initial 新建；已有明确指向目标 package 的 patch 授权时直接沿用，目标或 initial/patch 路由未定时才询问 Owner。确认路由后识别 initial、follow-up 或 package closure，并读取 [Package Lifecycle](references/package-lifecycle.md)。
 2. 解析 canonical package 与当前 Decision/Spec；已确认 patch 的 follow-up 默认把输入视为当前文档的 delta，按 [Requirement Inputs](references/requirement-inputs.md) 归类；只有 owner 明确声明 full replacement 才整体替换。
 3. initial 的 full 或 decision-only 读取并执行 [Decision SUB-SKILL](sub-skills/decision/SUB-SKILL.md)；同一 package 的 follow-up 直接更新当前 Decision 并沿用初始 approval。

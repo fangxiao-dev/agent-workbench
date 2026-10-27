@@ -1,8 +1,12 @@
 # agent-workbench
 
-个人 Agentic Coding 基础设施工具库。这个仓库是 `claude`、`codex`、`grok` 多宿主共享的 skills、plugins、agents、commands、安装器和治理文档的 source of truth。
+面向持续开发和维护的多宿主 Agent 工程工作台。把需求探索、软件设计、开发协作、验证审查和知识积累组织为可按需组合的能力，支持从一个具体问题到跨模块、跨会话的复杂项目。
 
-**安装后能做什么？** → [docs/capabilities.md](docs/capabilities.md)
+你可以用它理清调研材料、推进前后端协作、验证业务路径、改善界面与多语言体验，也可以处理 Azure、Lark、DATEV 等专项问题，或将完成的工作沉淀为文档和经验。
+
+**了解能做什么、各类能力如何配合 → [仓库能力介绍](docs/capabilities.md)**
+
+本页说明安装与维护。仓库提供的方法不等同于当前机器已安装或已连接对应外部服务。
 
 ---
 
@@ -13,7 +17,7 @@
 - `skills/` 保存独立安装的正式 skill，包括自建 skill、审查过的第三方 skill、以及本地工作流知识库
 - `plugin-marketplace/` 是独立的插件发布根；其中 `plugins/` 保存多 skill 套件，并分别提供 Codex 与 Claude manifest
 - `plugin-marketplace/plugins/impl-package/` 包含共享调查与委派入口、Claude review agents，以及投影到 Codex 全局 role 的安装脚本；`skills/` 仍保留可选的通用 `reviewer`
-- `agents/` 保存可安装到宿主的 subagent 定义，包括 Grok 运行监控与本地 Codex role
+- `agents/` 保存可安装到宿主的 subagent 定义，包括 Grok 运行监控、本地 Codex role（顶层 `.toml`，投影到 `$CODEX_HOME/agents`）与同名 ZCode 子智能体（顶层 `.md`，复制到 `~/.zcode/agents`）；`frontend-worker`/`backend-worker` 的方法唯一源是同名 skill，宿主 agent 定义只是引用它的薄壳
 - `commands/` 保存宿主 command 提示文件；是否能用 `/...` 唤出取决于具体宿主
 - `scripts/link_skill.py` 把单个（或全部顶层）skill **link** 到 `~/.agents` / `~/.claude` / `~/.codex` / `~/.grok` 的 `skills/`（Windows junction，Unix/macOS symlink）
 - `registry/` 只记录第三方资产来源和重装方式，不记录宿主本机状态
@@ -97,6 +101,15 @@ python scripts/codex_setup.py apply --expect-report <audit-sha> --prune-stale
 
 `apply` 不能直接运行：它会重新计算当前审计 SHA，只有与上一份报告一致时才更新 plugin cache、skills links、agents links、inventory 中的 role files 和 managed review roles。首次接管已有的未受管顶层 role 文件时，在确认 audit 报告后追加 `--adopt-agents`；Owner 明确批准删除报告中的旧受管 skill/agent link 时追加 `--prune-stale`，真实目录、用户目标、已变化或未被审计的 link 一律拒绝删除。报告后状态发生变化时必须重新运行 `audit`。脚本支持 Windows 与 macOS，优先使用 `CODEX_HOME`，否则检查 `~/.codex`；可用 `--codex-home` 显式指定目标。
 
+### Claude 安装态审计
+
+`claude_setup.py audit` 只读盘点 Claude 宿主：通过 `claude plugin --json` 读取 marketplace 登记与插件安装项，对插件缓存目录（CLI 报告的 `installPath`）与 `plugin-marketplace/` 源树做 SHA-256 快照对比，并审计 `~/.claude/skills` 里的 workbench skill 链接与陈旧链接。退出码：`0` 一致、`2` 有差异、`1` 运行错误。它不提供 `apply`：插件修复走原生 `claude plugin` CLI（见安装器规范），skill 链接修复走 `link_skill.py --host claude`。脚本优先使用 `CLAUDE_CONFIG_DIR`，否则检查 `~/.claude`；可用 `--claude-home` 显式指定目标。
+
+```powershell
+python scripts/claude_setup.py audit
+python scripts/claude_setup.py audit --claude-home D:\custom\.claude
+```
+
 ### Impl-Package review agents
 
 `plugin-marketplace/plugins/impl-package/agents/*.md` 是 Claude 插件的原生 agent 定义，安装后可在 `/agents` 中看到 `review-track-code`、`review-track-standards`、`review-track-spec` 和 `review-track-safety`。Claude manifest 显式声明了这四个 Markdown 文件。
@@ -107,7 +120,7 @@ Codex 当前插件 manifest 不支持 `agents` 字段，因此不能通过 `code
 
 ### 插件生命周期（Codex / Claude / Grok）
 
-刷新缓存、重装或升级插件时，Agent 按 [安装器规范](docs/workbench-design/04-install-spec.md#plugin-生命周期agent-直接执行) 直接执行 Codex、Claude 或 Grok 的原生 CLI。唯一例外是上面的 Codex 一次性 `codex_setup.py` bootstrap；仓库不维护其他 lifecycle Skill、包装脚本或机器专属配置。修改用户级宿主状态仍需用户明确要求，执行后必须核对安装结果与缓存。
+刷新缓存、重装或升级插件时，Agent 按 [安装器规范](docs/workbench-design/04-install-spec.md#plugin-生命周期agent-直接执行) 直接执行 Codex、Claude 或 Grok 的原生 CLI。唯一例外是上面的 Codex 一次性 `codex_setup.py` bootstrap；仓库只额外提供只读安装态审计（`codex_setup.py audit` 与 `claude_setup.py audit`），不包装其他 lifecycle 命令或机器专属配置。修改用户级宿主状态仍需用户明确要求，执行后必须核对安装结果与缓存。
 
 发布 Impl-Package 与 standalone Dispatcher 的组合前，运行 `python -m pytest tests/test_impl_package_plugin.py -q`，验证仓库源码组合及旧 Dispatcher 错配回归；错配诊断包含两侧内容指纹。安装后的实际加载路径与内容仍在宿主安装验收时核对。
 
@@ -175,134 +188,11 @@ powershell -ExecutionPolicy Bypass -File scripts/list-visible-skills.ps1
 - `personal/global`
 - `Merged visible set`
 
-### 自动讨论目标文档
+### 按当前问题选择能力
 
-明确要求运行 `discuss-ledger` 的 local orchestrator，由当前 Codex 会话启动脚本，再自动调用 `codex,claude` 两个参与方轮流讨论。默认 `max-rounds=5`、`timeout-s=300`，直到一致、僵局或达到轮次上限停止。输出 ledger 位于目标项目的 `docs/exchange/discuss/`。
+从 [仓库能力介绍](docs/capabilities.md) 了解需求探索、复杂开发、验证排障、产品体验、知识沉淀和专项集成。相关方法可以单独使用，也可以与 Impl-Package 配合；具体触发条件、产物和授权以对应 Skill 为准。
 
-推荐说法：
-
-```text
-用 discuss orchestrator 审 docs/plan.md
-```
-
-或直接运行：
-
-```powershell
-python D:\CodeSpace\agent-workbench\skills\discuss-ledger\scripts\discuss_orchestrator.py --root D:\your\project --topic docs\plan.md
-```
-
-`commands/discuss.md` 只是可安装到宿主 command 目录的提示文件；它不保证在所有宿主里都能用 `/discuss` 唤出。
-
-### 初始化项目上下文
-
-`init-project-context` 用于新项目或上下文不足的项目：先稳定项目目标、交付物边界、术语和文档骨架，再进入实现规划。`templates/CLAUDE.md.tpl` 是这个流程按需使用的模板；安装器不会自动生成 `CLAUDE.md`。
-
-### 回刷常青文档
-
-`backfill-stable-docs` 是 `impl-package` 插件内维护阶段的公共入口，显式调用为 `/impl-package:backfill-stable-docs`。它按仓库内配置的显式相对路径收集 package、pending 和 stable docs。audit 只读生成带可读 item ID 的报告；apply 只处理 owner 对某报告明确批准的 item ID；verify 独立检查路径、目标 Git commit、链接、audit 结构和 inventory，且不补写内容。三个阶段必须分别汇报，audit 完成不表示 apply 或 verify 完成。
-
-### Implementation Package 规划发布
-
-当 plan、earned Ticket/DAG bundle 已 review 且 owner 批准后，直接写入批准内容并初始化最小 current state：
-
-```powershell
-python plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py --package <package> package init --attempt <attempt-id> --plan <repo-relative-plan>
-python plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py --package <package> package validate
-```
-
-D/S/P 只作为可读别名；跨 session 比较使用批准内容所在的 Git commit。所有持久化文件和 evidence 引用使用仓库相对路径。Git commit/push 与远程更新保持独立。
-
-不同仓库通过项目根 `.stable-docs-backfill.json` 或显式的仓库内配置文件声明 canonical docs、pending 和 Implementation Package 根目录。配置只接受显式仓库相对路径；目标基准使用本地可解析的 Git commit。
-
-### 多任务 / worktree 工作流
-
-WT-PM 工作流拆成三个 skill：
-
-| Skill | 场景 | 职责 |
-|-------|------|------|
-| `wt-pm` | 不确定当前阶段时 | 识别阶段并路由到 planning 或 dev |
-| `wt-plan` | trunk 规划侧 | 任务定义、plan 三文件、branch/worktree handoff |
-| `wt-dev` | task worktree 执行侧 | 加载 plan、实现、验证、回收和状态更新 |
-
-不需要 worktree 隔离时，用 `planning-with-files` 维护 `plans/todo_current.md` 和每个 task 的 plan 文件。
-
-### 用 Grill Me Smartly 审设计
-
-当你想审一个方案，但希望 agent 一边追问、一边代你调研代码事实，并把自动判断过程整理成中文记录时，使用 `/impl-package:grill-me-smartly`。
-
-通用提问协议是顶层普通 Skill `/grilling`，可用 `python scripts/link_skill.py grilling --host claude codex grok` 安装。`grill-me-smartly` 优先读取它，再增加 ledger、角色分工和 Review/Apply gate；未安装时使用插件内最小流程降级并明确报告。
-
-推荐说法：
-
-```text
-用 /impl-package:grill-me-smartly 审 docs/plans/user-auth-migration.md。
-```
-
-实际流程：
-
-- 主 session 是书记、裁判和用户意图网关，只通过脚本写入 ledger
-- 常驻 Questioner subagent 按 `/grilling` 生成当前完整 frontier，过大时分批
-- Answerer subagent 只回答可通过本地文件、代码库、git 历史或工具确认的问题
-- ledger 和最终 review 写在 OS 临时目录的 `codex-grill/` 下，仓库不保存过程状态
-- review 阶段只输出完整意见对齐文档，不直接改被审计划
-- 你检查 ledger 后明确要求应用时，才把已收敛意见更新回原文档
-
-适合用来审实现计划、架构设计、迁移方案、复杂 debug 路线；不适合让 subagent 替你拍板产品意图或风险接受度。
-
-### 保存 Session Handoff
-
-当你要把当前上下文迁移到新会话时，使用 `handoff-new-session`。
-
-默认 handoff 文件写到：
-
-```text
-docs/exchange/handoffs/handoff-<slug>-current.md
-```
-
-其中 `<slug>` 使用当前目标或工作流的 2-5 个小写 ASCII 词，例如 `checkout-integration`、`e2e-order-history`。默认刷新 rolling handoff；只有用户要求、审计冻结、长期分叉、或多个 child 必须从不同时间点恢复时，才额外写 timestamped 归档快照。
-
----
-
-## 目录结构
-
-```
-agent-workbench/
-├── AGENTS.md                   ← 仓库级 agent instructions，单一指令源
-├── scripts/link_skill.py       ← 多宿主 per-skill 安装入口
-├── skills/                     ← 正式 skills：自建、第三方、工作流知识库
-│   ├── handoff-new-session/    ← 会话上下文落盘和新会话接续提示词
-│   ├── feishu-skills/          ← 国内飞书 skills bundle（feishu-*）
-│   ├── lark-skills/            ← Lark International bundle（using-lark 入口 + 内部 sub-skills）
-│   ├── wt-pm/                  ← WT-PM 工作流知识库
-│   │   ├── SKILL.md            ← 全流程编排入口 skill
-│   │   ├── references/         ← 工作流参考文档
-│   │   ├── rules/              ← 协作边界、DoD、planning 规则
-│   │   ├── scripts/            ← plan_tracker.py、sync_worktree_config.*
-│   │   └── templates/          ← 项目初始化模板（workplans/README.md 等）
-│   ├── wt-plan/                ← trunk 规划阶段 skill
-│   ├── wt-dev/                 ← worktree 开发阶段 skill
-│   ├── planning-with-files/
-│   └── ...
-├── plugin-marketplace/         ← 独立插件发布根
-│   ├── .agents/plugins/        ← Codex marketplace
-│   ├── .claude-plugin/         ← Claude marketplace
-│   └── plugins/impl-package/   ← 双 manifest、skills、Claude agents 与 Codex role 投影脚本
-├── agents/                     ← subagents，安装到已选宿主的 agents/
-│   └── grok-monitor/           ← caller-started Grok 进程的轻量 diff 进度与逐项终态监控
-│       ├── agent.md
-│       └── grok-monitor.toml
-├── commands/                   ← 宿主 command 提示文件，安装到已选宿主的 commands/
-│   └── discuss.md
-├── scripts/                    ← 仓库级辅助脚本，如 list-visible-skills.ps1
-├── tests/                      ← 安装器和工作流测试
-├── templates/
-│   └── CLAUDE.md.tpl           ← 供 init-project-context 使用的模板
-├── registry/
-│   ├── third-party-skills.md   ← 第三方 skills 可复现清单
-│   ├── plugins.md              ← 第三方 plugins / MCP 可复现清单
-│   └── ...                     ← 只记录“安装单位”，不展开插件内每个文件
-└── docs/workbench-design/      ← workbench 自身的设计规范
-```
+仓库内容分工见上方“设计总览”，安装与宿主差异见 [安装规范](docs/workbench-design/04-install-spec.md)。
 
 ---
 
