@@ -22,6 +22,7 @@ from typing import Any
 
 from situation import (
     dispatch_admission,
+    ValidationResult,
     FACT_KEYS,
     REVIEW_PHASES,
     REVIEW_PHASE_VALUES,
@@ -29,6 +30,7 @@ from situation import (
     REVIEW_TRACK_VALUES,
     describe_unknown_fact_keys,
     live_package_reference_fact,
+    terminal_coverage_fact,
 )
 
 STATE_PATH = Path(".impl-package/state.json")
@@ -49,12 +51,9 @@ EVIDENCE_REQUIRED_FIELDS = frozenset({"ticket", "claim", "timing", "artifact", "
 EVIDENCE_FIELDS = EVIDENCE_REQUIRED_FIELDS | {"invalidatedBy"}
 DISPOSITIONS = {"waived", "superseded"}
 TRAIL_APPEND_KINDS = frozenset({"dispatch", "escape", "fact", "worker-return"})
-RETIRED_DISPATCH_FIELDS = frozenset({"candidates_of", "declaration_status", "declaration_reason", "runnable_candidate_ids", "state_sha256"})
+RETIRED_DISPATCH_FIELDS = frozenset({"candidates_of", "declaration_status", "declaration_reason", "runnable_candidate_ids", "state_sha256", "situation_digest"})
 TRAIL_COMMON_FIELDS = frozenset({"v", "seq", "ts", "head"})
-TRAIL_DIGEST_RE = re.compile(r"^[0-9a-fA-F]{12}$")
 FIXED_COMMIT_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
-SITUATION_DIGEST_NAME = "situation-digest.json"
-DISPATCH_DIGEST_GUIDANCE = "dispatch 需要当前处境的 digest：先运行 situation.py render 取 digest，再重写这条 dispatch"
 
 ATTEMPT_RE = re.compile(r"(?im)^[^\r\n]*(?:Attempt ID|执行尝试 ID)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*([^\s*]+)")
 COMPOSITION_RE = re.compile(r"Composition[^\n]*tickets=(true|false),\s*dag=(true|false)", re.I)
@@ -1504,40 +1503,6 @@ def _validate_review_pending(value: Any) -> None:
     _validate_code_delta(value.get("code_delta"))
 
 
-def _validate_dispatch_situation_digest(package: Path, attempt: str, event: dict[str, Any]) -> None:
-    credential_path = package / EXECUTION_PATH / attempt / SITUATION_DIGEST_NAME
-    if not credential_path.is_file():
-        raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；未找到 {SITUATION_DIGEST_NAME} 凭据文件")
-    try:
-        credential = _load_json(credential_path)
-    except StateError as exc:
-        raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；未找到 {SITUATION_DIGEST_NAME} 凭据文件") from exc
-    if credential.get("digest") != event["situation_digest"]:
-        raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；digest 不匹配，凭据是 {credential.get('digest')}")
-    if credential.get("blocking_slugs"):
-        raise StateError(f"trail dispatch is withheld by global blocking: {credential['blocking_slugs']}")
-    try:
-        state_sha256 = hashlib.sha256((package / STATE_PATH).read_bytes()).hexdigest()
-    except OSError as exc:
-        raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；无法读取当前 state.json：{exc}") from exc
-    if credential.get("state_sha256") != state_sha256:
-        raise StateError(
-            f"{DISPATCH_DIGEST_GUIDANCE}；处境已变，凭据渲染于 {credential.get('ts')} 之后 state.json 已更新"
-        )
-    current_head = _run_git(_repo_root(package), "rev-parse", "HEAD")
-    current_rows = _active_trail_rows(package, attempt)
-    current_seq = max(
-        (
-            row["seq"]
-            for row in current_rows
-            if isinstance(row.get("seq"), int) and not isinstance(row.get("seq"), bool)
-        ),
-        default=0,
-    )
-    if credential.get("head") != current_head or credential.get("trail_seq") != current_seq:
-        raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；HEAD 或 trail 已更新")
-
-
 def _validate_review_dispatch_fields(event: dict[str, Any]) -> None:
     has_phase = "review_phase" in event
     has_track = "review_track" in event
@@ -1610,13 +1575,6 @@ def _validate_trail_event(event: dict[str, Any]) -> dict[str, Any]:
         if event.get("outcome") != "RUNNING" or event.get("returned") is not False:
             raise StateError("trail dispatch requires outcome=RUNNING and returned=false")
         _validate_review_dispatch_fields(event)
-        if "situation_digest" not in event:
-            raise StateError(f"{DISPATCH_DIGEST_GUIDANCE}；事件缺少 situation_digest")
-        if (
-            not isinstance(event["situation_digest"], str)
-            or TRAIL_DIGEST_RE.fullmatch(event["situation_digest"]) is None
-        ):
-            raise StateError("trail dispatch situation_digest must be a 12-character hex digest")
     else:
         _trail_text_field(event, "outcome", kind)
         _trail_text_field(event, "of", kind)
@@ -1659,8 +1617,28 @@ def _same_event(existing: dict[str, Any], event: dict[str, Any]) -> bool:
     )
 
 
-def _validate_actual_dispatch(package: Path, event: dict[str, Any], rows: list[dict[str, Any]]) -> None:
-    blockers = dispatch_admission(package, event)
+def _current_validation_result(package: Path, state: dict[str, Any], summary: dict[str, Any]) -> ValidationResult:
+    """Authoritative validation result: the same projection check `package validate` runs."""
+    try:
+        _validate_projections(package, state, summary)
+    except StateError:
+        return ValidationResult(projection_drift=True, source="engine projection validation")
+    return ValidationResult(projection_drift=False, source="engine projection validation")
+
+
+def _validate_actual_dispatch(
+    package: Path,
+    event: dict[str, Any],
+    rows: list[dict[str, Any]],
+    validation_result: ValidationResult | None = None,
+) -> None:
+    blockers = dispatch_admission(package, event, validation_result)
+    foundation = [blocker["reason"] for blocker in blockers if blocker.get("type") == "foundation"]
+    if foundation:
+        raise StateError(
+            f"trail dispatch is withheld by global blocking: {foundation}；"
+            "运行 situation.py render 查看详情"
+        )
     if blockers:
         raise StateError("trail dispatch is withheld: " + "; ".join(blocker["reason"] for blocker in blockers))
 
@@ -1734,7 +1712,8 @@ def command_trail_append(
         event = _merge_trail_named_fields(event, named_fields)
     event = _validate_trail_event(event)
     state = _load_json(package / STATE_PATH)
-    summary = _validate_state(package, state)
+    # Dispatch reports projection drift as a global blocking slug instead of a bare mismatch error.
+    summary = _validate_state(package, state, projections=event["kind"] != "dispatch")
     _assert_mutable(summary)
     rows = _active_trail_rows(package, summary["attempt"])
     if event["kind"] == "dispatch":
@@ -1757,8 +1736,7 @@ def command_trail_append(
     if event["kind"] == "fact" and event.get("key") == "review.dispatch_pending":
         _validate_review_pending_against_return(event, rows)
     elif event["kind"] == "dispatch":
-        _validate_dispatch_situation_digest(package, summary["attempt"], event)
-        _validate_actual_dispatch(package, event, rows)
+        _validate_actual_dispatch(package, event, rows, _current_validation_result(package, state, summary))
     elif event["kind"] == "worker-return":
         _validate_worker_return(event, rows)
         same = next((row for row in rows if row.get("kind") == "worker-return" and _same_event(row, event)), None)
@@ -1864,6 +1842,13 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
                 + (live_references.reason or "package 引用了活体 package")
                 + "；先将每条引用通过 /impl-package:backfill-stable-docs 吸收进 stable docs，"
                 "再把当前 package 改为引用 stable docs"
+            )
+        coverage = terminal_coverage_fact(package)
+        if coverage.known and coverage.value is False:
+            raise StateError(
+                "pass Gate rejected: terminal review coverage 不完整（"
+                + (coverage.reason or "review.terminal_summary 未通过")
+                + "）；先按 /impl-package:do-review 完成 terminal-final review 并写入 review.terminal_summary"
             )
     normalized_evidence = [_repo_relative(repo, item, "gate evidence") for item in evidence]
     if verdict in TERMINAL_VERDICTS:

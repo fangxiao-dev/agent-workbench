@@ -58,7 +58,7 @@ def package_status(worktree: Path, package_value: str) -> dict[str, Any]:
         / "scripts"
         / "impl_package_state.py"
     )
-    result = run([sys.executable, str(validator), "--package", str(package), "status"], worktree)
+    result = run([sys.executable, str(validator), "--package", str(package), "--no-situation", "package", "status"], worktree)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "package validation failed")
     return {"path": package_relative, "state": json.loads(result.stdout)}

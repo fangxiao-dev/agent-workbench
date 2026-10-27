@@ -45,7 +45,7 @@ def _situation_footer(package: Path) -> str | None:
         if not isinstance(rendered, dict):
             return None
         if "runnable" in rendered:
-            lines = [f"[处境] digest={_text(rendered.get('digest'))}"]
+            lines = ["[处境]"]
             for partition in ("blocking", "runnable", "withheld", "in_flight"):
                 lines.append(f"{partition}:")
                 items = rendered.get(partition, [])
@@ -58,7 +58,7 @@ def _situation_footer(package: Path) -> str | None:
             selected = {}
         slug = selected.get("slug") or rendered.get("unmatched") or "（无）"
         lines = [
-            f"[处境] digest={_text(rendered.get('digest'))} · {_text(slug, '（无）')} · "
+            f"[处境] {_text(slug, '（无）')} · "
             f"basis={_text(selected.get('basis'))} · judgment={_text(selected.get('judgment'))}",
         ]
         actions = selected.get("actions")
@@ -112,12 +112,6 @@ def _expect(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--expect", required=True)
 
 
-def _trail_digest(value: str) -> str:
-    if engine.TRAIL_DIGEST_RE.fullmatch(value) is None:
-        raise argparse.ArgumentTypeError("must be a 12-character hex digest")
-    return value
-
-
 def _ticket_transition(package: Path, args: argparse.Namespace, target: str) -> dict[str, Any]:
     return engine.command_set_state(
         package, args.id, target, args.expect,
@@ -143,19 +137,6 @@ def _parser(group: str) -> argparse.ArgumentParser:
             child.add_argument("--commit")
         commands.add_parser("refresh-progress", help="refresh machine-owned projections")
     elif group == "ticket":
-        transition = commands.add_parser("transition", help="legacy set-state compatibility alias")
-        transition.add_argument("kind", choices=("ticket",))
-        transition.add_argument("id")
-        transition.add_argument("state", choices=sorted(engine.TICKET_STATES))
-        _expect(transition)
-        transition.add_argument("--revision")
-        transition.add_argument("--environment")
-        transition.add_argument("--disposition", choices=sorted(engine.DISPOSITIONS))
-        transition.add_argument("--successor")
-        transition.add_argument("--evidence")
-        transition.add_argument("--revalidation-plan")
-        transition.add_argument("--claim", action="append", default=[])
-        transition.add_argument("--invalidated-by")
         for command, target, help_text in (
             ("satisfy", "SATISFIED", "mark a Ticket SATISFIED"),
             ("block", "BLOCKED", "mark a Ticket BLOCKED"),
@@ -202,11 +183,6 @@ def _parser(group: str) -> argparse.ArgumentParser:
         commands.add_parser("judgment", help="append a judgment JSON payload from stdin")
     elif group == "trail":
         append = commands.add_parser("append", help="append a validated manual trail event from stdin")
-        append.add_argument(
-            "--situation-digest",
-            type=_trail_digest,
-            help="12-character hex digest previously emitted by situation.py render",
-        )
         append.add_argument("--review-phase", choices=situation.REVIEW_PHASE_VALUES)
         append.add_argument("--review-track", choices=situation.REVIEW_TRACK_VALUES)
         append.add_argument("--review-recheck", action="store_true", default=None)
@@ -258,7 +234,7 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
             return engine.command_validate(package, args.commit, check_arrival_paths=args.command == "validate")
         return engine.command_refresh_progress(package)
     if group == "ticket":
-        return _ticket_transition(package, args, args.state if args.command == "transition" else args.target)
+        return _ticket_transition(package, args, args.target)
     if group == "evidence":
         if args.command == "add":
             return engine.command_evidence_add(package, sys.stdin.read())
@@ -273,7 +249,6 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
             package,
             sys.stdin.read(),
             {
-                "situation_digest": args.situation_digest,
                 "review_phase": args.review_phase,
                 "review_track": args.review_track,
                 "review_recheck": args.review_recheck,

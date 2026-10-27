@@ -299,7 +299,6 @@ def _render_situation(package: Path) -> dict[str, Any]:
                 "render",
                 "--package",
                 str(package),
-                "--no-write-credential",
                 "--json",
             ],
             cwd=package,
@@ -356,14 +355,13 @@ def _resume_capsule(binding: dict[str, Any], rendered: dict[str, Any]) -> str:
         f"head: {rendered.get('head') or '?'}",
         f"state-valid: {str(bool(state.get('valid'))).lower()}",
         f"gate-verdict: {gate.get('verdict') or 'none'}",
-        f"preview-digest: {rendered.get('digest') or '?'}",
         f"selected: {selected_slug or 'none'}",
         f"actions: {','.join(selected_actions) if selected_actions else 'none'}",
         f"parallel: {';'.join(parallel_items) if parallel_items else 'none'}",
         f"warnings: {len(rendered.get('warnings', [])) if isinstance(rendered.get('warnings'), list) else 0}",
         f"undetermined: {len(rendered.get('undetermined', [])) if isinstance(rendered.get('undetermined'), list) else 0}",
         "This capsule is navigation context only; it is not Evidence, Acceptance, Gate, or closure.",
-        "Before dispatch, rerun situation.py render without --no-write-credential; consume successful CLI updates without full restore.",
+        "Consume successful CLI updates without full restore; trail append dispatch checks current global blocking itself.",
     ]
     if "runnable" in rendered:
         # New projections carry every candidate; the legacy cursor is fallback only.
@@ -382,13 +380,13 @@ def _resume_capsule(binding: dict[str, Any], rendered: dict[str, Any]) -> str:
     # Never let the transport silently clip a tail of runnable or pending work.
     summary = [line for line in lines if line.startswith((
         "Impl-Package Resume", "package:", "attempt:", "head:", "state-valid:",
-        "gate-verdict:", "preview-digest:", "warnings:", "undetermined:",
+        "gate-verdict:", "warnings:", "undetermined:",
     ))]
     summary.append("projection-complete: false")
     summary.extend(f"{key}: {len(rendered.get(key, []))} (summary only)" for key in ("blocking", "runnable", "withheld", "in_flight"))
     summary.extend([
-        "Read the FULL projection before decisions or writes: python <plugin-root>/scripts/situation.py render --package <package-above> --no-write-credential --json",
-        "Resolve plugin-root from the loaded dev-with-track Skill. Before dispatch rerun without --no-write-credential.",
+        "Read the FULL projection before decisions or writes: python <plugin-root>/scripts/situation.py render --package <package-above> --json",
+        "Resolve plugin-root from the loaded dev-with-track Skill.",
         "This capsule is navigation context only; it is not Evidence, Acceptance, Gate, or closure.",
     ])
     text = "\n".join(summary)

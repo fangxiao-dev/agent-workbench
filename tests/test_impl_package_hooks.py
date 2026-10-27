@@ -298,12 +298,12 @@ def test_session_start_injects_read_only_resume_capsule_for_each_supported_sourc
     assert re.search(r"head: [0-9a-f]{40}", context)
     assert "state-valid: true" in context
     assert "gate-verdict: blocked" in context
-    assert re.search(r"preview-digest: [0-9a-f]{12}", context)
+    assert "digest" not in context
     assert all(f"{key}:" in context for key in ("blocking", "runnable", "withheld", "in_flight"))
     assert re.search(r"warnings: \d+", context)
     assert re.search(r"undetermined: \d+", context)
     assert "not Evidence, Acceptance, Gate, or closure" in context
-    assert "without --no-write-credential" in context
+    assert "no-write-credential" not in context
     assert not credential.exists()
 
 
@@ -341,7 +341,8 @@ def test_large_capsule_requires_full_projection_before_decisions():
     assert "runnable: 30 (summary only)" in text
     assert "withheld: 1 (summary only)" in text
     assert "FULL projection before decisions or writes" in text
-    assert "--no-write-credential --json" in text
+    assert "render --package <package-above> --json" in text
+    assert "no-write-credential" not in text
 
 
 @pytest.mark.parametrize("gate_attempt", [None, "old-attempt"])

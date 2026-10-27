@@ -42,42 +42,7 @@ def _invoke_render(package: Path, *arguments: str) -> subprocess.CompletedProces
 
 
 def _run_render(package: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
-    state_path = package / ".impl-package" / "state.json"
-    credential_path: Path | None = None
-    credential_before: bytes | None = None
-    credential_parent_existed = False
-    credential_parent_empty_before = False
-    if state_path.is_file():
-        try:
-            state = json.loads(state_path.read_text(encoding="utf-8"))
-            attempt_id = state.get("attempt", {}).get("id")
-            if isinstance(attempt_id, str):
-                credential_path = package / "execution" / attempt_id / "situation-digest.json"
-                credential_parent_existed = credential_path.parent.is_dir()
-                credential_parent_empty_before = credential_parent_existed and not any(
-                    credential_path.parent.iterdir()
-                )
-                if credential_path.is_file():
-                    credential_before = credential_path.read_bytes()
-        except (OSError, UnicodeError, json.JSONDecodeError):
-            pass
-    try:
-        return _invoke_render(package, *arguments)
-    finally:
-        if credential_path is not None:
-            if credential_before is None:
-                if credential_path.is_file():
-                    credential_path.unlink()
-            else:
-                credential_path.write_bytes(credential_before)
-            if (
-                (not credential_parent_existed or credential_parent_empty_before)
-                and credential_path.parent.is_dir()
-            ):
-                try:
-                    credential_path.parent.rmdir()
-                except OSError:
-                    pass
+    return _invoke_render(package, *arguments)
 
 
 def _render_text(package: Path, *arguments: str) -> str:
@@ -352,121 +317,33 @@ def test_escape_event_and_legacy_escape_decision_are_read() -> None:
     assert parsed.rows == [new_escape, legacy_escape]
 
 
-def test_human_render_collapses_undetermined_and_supports_since() -> None:
+def test_human_render_collapses_undetermined() -> None:
     package = ROOT / "tests/fixtures/situations-a2/p0-evidence-unfiled"
 
     full = _render_text(package)
-    assert "无法判定 12 行\n" in full
+    assert full.endswith("无法判定 12 行")
     assert "无法判定 23 行:" not in full
     assert "package.record.projection-drift" not in full
-    digest_line = full.rsplit("\n", 1)[-1]
-    assert digest_line.startswith("digest: ")
-    digest = digest_line.removeprefix("digest: ")
-    assert len(digest) == 12
+    assert "digest" not in full
 
     explained = _render_text(package, "--explain-undetermined")
     assert "无法判定 12 行: package.record.projection-drift (package)" in explained
 
-    unchanged = _render_text(package, "--since", digest)
-    assert unchanged == f"处境未变 (digest: {digest})"
 
-
-def test_render_writes_situation_digest_credential() -> None:
+def test_render_is_read_only_and_exposes_no_digest() -> None:
     source = FIXTURES / "p0-evidence-unfiled"
     with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
         package = Path(temporary) / source.name
         shutil.copytree(source, package)
+        before = sorted(path.relative_to(package).as_posix() for path in package.rglob("*"))
         completed = _invoke_render(package, "--json")
         assert completed.returncode == 0, completed.stderr
-
-        state_path = package / ".impl-package/state.json"
-        attempt = json.loads(state_path.read_text(encoding="utf-8"))["attempt"]["id"]
-        credential_path = package / "execution" / attempt / "situation-digest.json"
-        credential_bytes = credential_path.read_bytes()
-        credential = json.loads(credential_bytes.decode("utf-8"))
         rendered = json.loads(completed.stdout)
-        assert set(credential) == {
-            "digest",
-            "legacy_digest",
-            "ts",
-            "state_sha256",
-            "head",
-            "trail_seq",
-            "blocking_slugs",
-        }
-        assert credential["blocking_slugs"] == [item["slug"] for item in rendered["blocking"]]
-        assert rendered["attempt"] == attempt
-        assert credential["digest"] == rendered["digest"]
-        assert credential["legacy_digest"] == rendered["legacy_digest"]
-
-        assert len(credential["ts"]) > 10
-        assert credential["state_sha256"] == hashlib.sha256(state_path.read_bytes()).hexdigest()
-        assert not credential_bytes.startswith(b"\xef\xbb\xbf")
-
-
-def test_render_can_skip_creating_situation_digest_credential() -> None:
-    source = FIXTURES / "p0-evidence-unfiled"
-    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
-        package = Path(temporary) / source.name
-        shutil.copytree(source, package)
-        completed = _invoke_render(package, "--no-write-credential", "--json")
-        assert completed.returncode == 0, completed.stderr
-
-        state = json.loads((package / ".impl-package/state.json").read_text(encoding="utf-8"))
-        credential_path = package / "execution" / state["attempt"]["id"] / "situation-digest.json"
-        rendered = json.loads(completed.stdout)
-        assert rendered["attempt"] == state["attempt"]["id"]
-        assert not credential_path.exists()
-
-
-def test_render_can_skip_updating_existing_situation_digest_credential() -> None:
-    source = FIXTURES / "p0-evidence-unfiled"
-    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
-        package = Path(temporary) / source.name
-        shutil.copytree(source, package)
-        first = _invoke_render(package, "--json")
-        assert first.returncode == 0, first.stderr
-
-        state = json.loads((package / ".impl-package/state.json").read_text(encoding="utf-8"))
-        credential_path = package / "execution" / state["attempt"]["id"] / "situation-digest.json"
-        before = credential_path.read_bytes()
-        second = _invoke_render(package, "--no-write-credential", "--json")
-        assert second.returncode == 0, second.stderr
-        assert credential_path.read_bytes() == before
-
-
-def test_render_since_writes_situation_digest_credential() -> None:
-    source = FIXTURES / "p0-evidence-unfiled"
-    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
-        package = Path(temporary) / source.name
-        shutil.copytree(source, package)
-        first = json.loads(_invoke_render(package, "--json").stdout)
-        second_run = _invoke_render(package, "--json", "--since", first["digest"])
-        assert second_run.returncode == 0, second_run.stderr
-        assert json.loads(second_run.stdout) == {
-            "digest": first["digest"],
-            "legacy_digest": first["legacy_digest"],
-            "unchanged": True,
-        }
-
-        state = json.loads((package / ".impl-package/state.json").read_text(encoding="utf-8"))
-        credential_path = package / "execution" / state["attempt"]["id"] / "situation-digest.json"
-        credential = json.loads(credential_path.read_text(encoding="utf-8"))
-        assert credential["digest"] == first["digest"]
-
-
-def test_render_succeeds_when_situation_digest_credential_cannot_be_written() -> None:
-    source = FIXTURES / "p0-evidence-unfiled"
-    with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
-        package = Path(temporary) / source.name
-        shutil.copytree(source, package)
-        state = json.loads((package / ".impl-package/state.json").read_text(encoding="utf-8"))
-        credential_path = package / "execution" / state["attempt"]["id"] / "situation-digest.json"
-        credential_path.mkdir(parents=True)
-
-        completed = _invoke_render(package, "--json")
-        assert completed.returncode == 0
-        assert "warning: could not write situation-digest.json:" in completed.stderr
+        assert "digest" not in rendered and "unchanged" not in rendered
+        assert sorted(path.relative_to(package).as_posix() for path in package.rglob("*")) == before
+        assert not list(package.rglob("situation-digest.json"))
+        for retired in ("--since", "--no-write-credential"):
+            assert _invoke_render(package, retired, "x").returncode != 0
 
 
 def test_compaction_pressure_is_high_low_or_unknown_without_fact_channel() -> None:
@@ -841,10 +718,10 @@ def test_near_terminal_gate_is_false_when_only_a_prior_attempts_gate_exists() ->
     assert fact.value is False
 
 
-def _terminal_summary(*, safety=False, old_tracks=()):
+def _terminal_summary(*, safety=False, old_tracks=(), legacy_track_b=False):
     results = []
     reports = {}
-    for track in ("Track A", "Track B", "Track C", *(("Track D",) if safety else ())):
+    for track in ("Track A", *(("Track B",) if legacy_track_b else ()), "Track C", *(("Track D",) if safety else ())):
         reviewed_head = "old-head" if track in old_tracks else "current-head"
         artifact = f"execution/{track}.md"
         reports[artifact] = f"verdict: PASS\nreviewed-head: {reviewed_head}\nreview-run: run-1\nreview-track: {track}\n"
@@ -859,9 +736,20 @@ def _terminal_summary(*, safety=False, old_tracks=()):
     return row, reports
 
 
-def test_terminal_coverage_accepts_three_results_without_safety():
+def test_terminal_coverage_accepts_a_c_results_without_safety_and_without_track_b():
     row, reports = _terminal_summary()
+    assert [result["track"] for result in row["value"]["results"]] == ["Track A", "Track C"]
     assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is True
+
+
+def test_terminal_coverage_does_not_require_track_b_but_reads_legacy_track_b_results():
+    row, reports = _terminal_summary()
+    assert "Track B" not in {result["track"] for result in row["value"]["results"]}
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is True
+    legacy_row, legacy_reports = _terminal_summary(legacy_track_b=True)
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([legacy_row], reports=legacy_reports)).value is True
+    legacy_row["value"]["results"] = [r for r in legacy_row["value"]["results"] if r["track"] != "Track C"]
+    assert situation._when_attempt_terminal_coverage_complete(_coverage_context([legacy_row], reports=legacy_reports)).value is False
 
 
 def test_terminal_coverage_requires_applicable_safety_result():
@@ -877,8 +765,8 @@ def test_terminal_coverage_does_not_accept_dispatch_or_legacy_boolean():
     assert situation._when_attempt_terminal_coverage_complete(_coverage_context(rows)).value is False
 
 
-def test_terminal_coverage_accepts_b_c_safety_reuse_with_same_run_evidence():
-    row, reports = _terminal_summary(safety=True, old_tracks=("Track B", "Track C", "Track D"))
+def test_terminal_coverage_accepts_c_safety_reuse_with_same_run_evidence():
+    row, reports = _terminal_summary(safety=True, old_tracks=("Track C", "Track D"))
     assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is True
     del reports["execution/reuse.md"]
     assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
@@ -893,9 +781,9 @@ def test_terminal_coverage_rejects_old_a_and_changed_comparison_head():
 
 def test_terminal_coverage_rejects_missing_failed_or_wrong_run_report():
     row, reports = _terminal_summary()
-    report = reports["execution/Track B.md"]
+    report = reports["execution/Track C.md"]
     for invalid in ("", report.replace("PASS", "FAIL"), report.replace("run-1", "other-run"), report.replace("current-head", "other-head")):
-        reports["execution/Track B.md"] = invalid
+        reports["execution/Track C.md"] = invalid
         assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
 
 
@@ -909,7 +797,7 @@ def test_terminal_coverage_requires_distinct_track_reports():
     row["value"]["results"][1]["artifact"] = row["value"]["results"][0]["artifact"]
     assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
     row, reports = _terminal_summary()
-    reports["execution/Track B.md"] = reports["execution/Track A.md"]
+    reports["execution/Track C.md"] = reports["execution/Track A.md"]
     assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
 
 
@@ -923,20 +811,6 @@ def test_terminal_coverage_rejects_uncertain_duplicate_or_malformed_results():
     assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
     row["value"]["results"] = [{"track": []}]
     assert situation._when_attempt_terminal_coverage_complete(_coverage_context([row], reports=reports)).value is False
-
-
-def test_json_render_exposes_digest_and_short_circuits_since() -> None:
-    package = ROOT / "tests/fixtures/situations-a2/p0-evidence-unfiled"
-    rendered = json.loads(_render_text(package, "--json"))
-    assert rendered["unchanged"] is False
-    assert len(rendered["digest"]) == 12
-
-    unchanged = json.loads(_render_text(package, "--json", "--since", rendered["digest"]))
-    assert unchanged == {
-        "digest": rendered["digest"],
-        "legacy_digest": rendered["legacy_digest"],
-        "unchanged": True,
-    }
 
 
 def test_hints_surface_dispatch_principles_at_decision_points() -> None:

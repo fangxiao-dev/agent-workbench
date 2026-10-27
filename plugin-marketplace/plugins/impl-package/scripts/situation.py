@@ -2,16 +2,14 @@
 
 The situation table is deliberately kept outside this module.  This file only
 loads it, reads the package facts named by the table contract, and renders a
-deterministic projection. Render best-effort writes a digest credential unless
-the caller explicitly requests a read-only projection; credential write failure
-does not fail the render.
+deterministic projection. Render is read-only; dispatch admission re-derives
+the current projection instead of relying on a render-time credential.
 """
 
 from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
 import json
 import re
 import subprocess
@@ -32,12 +30,10 @@ except ImportError:  # pragma: no cover - exercised only in incomplete installs
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 TABLE_PATH = PLUGIN_ROOT / "skills" / "dev-with-track" / "situations.yaml"
 STAGE = "dev-with-track"
-DIGEST_LENGTH = 12
 STATE_REL = ".impl-package/state.json"
 GATE_REL = "gate.md"
 FINDINGS_REL = "execution-findings.md"
 ACTIVE_TRAIL_NAME = "trail.jsonl"
-SITUATION_DIGEST_NAME = "situation-digest.json"
 TICKET_STATES = {"PENDING", "BLOCKED", "NEEDS-REVALIDATION", "SATISFIED", "RETIRED"}
 TERMINAL_GATE_VERDICTS = {"pass", "fail", "defer"}
 REVIEW_PHASE_VALUES = ("initial", "finding-closure", "terminal-final")
@@ -676,6 +672,16 @@ def live_package_reference_fact(package: Path) -> Fact:
         return _live_package_reference_fact(PackageReader(package, None))
     except (OSError, UnicodeError, SituationError) as exc:
         return Fact.unknown(f"无法扫描活体 package 引用：{exc}")
+
+
+def terminal_coverage_fact(package: Path) -> Fact:
+    """Return attempt.terminal_coverage_complete for a worktree package (used by pass Gate)."""
+    try:
+        snapshot = _build_snapshot(PackageReader(package, None))
+        context = FactContext(snapshot, "attempt", snapshot.state.attempt_id or "attempt")
+        return _when_attempt_terminal_coverage_complete(context)
+    except (OSError, UnicodeError, SituationError) as exc:
+        return Fact.unknown(f"无法判定 terminal coverage：{exc}")
 
 
 def _active_trail_relative_path(attempt_id: str) -> str:
@@ -2562,7 +2568,8 @@ def _when_attempt_terminal_coverage_complete(context: FactContext) -> Fact:
     results = summary.get("results")
     if not isinstance(run_id, str) or not run_id.strip() or not isinstance(results, list):
         return _fact_value(False, "terminal_summary 缺少 reviewRunId 或 results")
-    required = {"Track A", "Track B", "Track C"}
+    # Track B (retired standards track) stays a readable value for old trails but is not required.
+    required = {"Track A", "Track C"}
     if summary["safetyApplicable"]:
         required.add("Track D")
     by_track = {}
@@ -3421,11 +3428,19 @@ def _situation_hints(candidates: list[Any], runnable: list[dict[str, Any]],
     return hints
 
 
-def dispatch_admission(package: Path, event: dict[str, Any]) -> list[dict[str, Any]]:
-    """Check actual work against current business facts, without pre-registration."""
+def dispatch_admission(
+    package: Path,
+    event: dict[str, Any],
+    validation_result: ValidationResult | None = None,
+) -> list[dict[str, Any]]:
+    """Check actual work against current business facts, without pre-registration.
+
+    The caller supplies the authoritative validation result (the engine derives it
+    from its own projection validation); agents never pass it in.
+    """
     reader = PackageReader(package, None)
     table = _load_table_for_package(reader)
-    snapshot = _build_snapshot(reader, None, None)
+    snapshot = _build_snapshot(reader, validation_result, None)
     item = {**event, "action_id": event["chosen"]}
     actions = [{"subject": event["subject"], "action_id": action.get("id"), "mode": _action_mode(action)}
                for row in table.rows for action in row.get("actions", [])]
@@ -3441,90 +3456,6 @@ def _subject_label(subject: str) -> str:
     if subject.startswith("finding:"):
         return subject.split(":", 1)[1]
     return subject
-
-
-def _digest_candidate(
-    item: dict[str, Any] | None,
-    layer_by_slug: dict[str, int],
-) -> dict[str, Any] | None:
-    if item is None:
-        return None
-    slug = str(item["slug"])
-    return {
-        "slug": slug,
-        "subject": item.get("subject"),
-        "layer": layer_by_slug[slug],
-        "action_ids": list(item.get("action_ids", [])),
-    }
-
-
-def _legacy_situation_digest(table: TableModel, result: dict[str, Any]) -> str:
-    layer_by_slug = _priority_layer_by_slug(table)
-    groups = {
-        name: [
-            _digest_candidate(item, layer_by_slug)
-            for item in result.get(name, [])
-        ]
-        for name in ("parallel_matches", "other_matches", "suppressed_matches")
-    }
-    groups["selected"] = _digest_candidate(result.get("selected"), layer_by_slug)
-    payload = {
-        "match_groups": groups,
-        "highest_match_layer": result.get("highest_match_layer"),
-    }
-    canonical = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:DIGEST_LENGTH]
-
-
-def _situation_digest(table: TableModel, result: dict[str, Any]) -> str:
-    payload = {
-        name: result.get(name, [])
-        for name in ("blocking", "runnable", "withheld", "in_flight")
-    }
-    canonical = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:DIGEST_LENGTH]
-
-
-def _write_situation_digest(
-    reader: PackageReader,
-    state: StateView,
-    digest: str,
-    legacy_digest: str,
-    head: str | None,
-    trail_seq: int,
-    blocking_slugs: list[str],
-) -> None:
-    try:
-        if not state.attempt_id:
-            raise OSError("current attempt is unavailable")
-        state_path = reader.package / STATE_REL
-        state_sha256 = hashlib.sha256(state_path.read_bytes()).hexdigest()
-        credential_path = reader.package / "execution" / state.attempt_id / SITUATION_DIGEST_NAME
-        credential_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "digest": digest,
-            "legacy_digest": legacy_digest,
-            "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "state_sha256": state_sha256,
-            "head": head,
-            "trail_seq": trail_seq,
-            "blocking_slugs": blocking_slugs,
-        }
-        with credential_path.open("w", encoding="utf-8", newline="\n") as stream:
-            json.dump(payload, stream, ensure_ascii=False, separators=(",", ":"))
-            stream.write("\n")
-    except OSError as exc:
-        print(f"warning: could not write {SITUATION_DIGEST_NAME}: {exc}", file=sys.stderr)
 
 
 def _render_human(
@@ -3591,17 +3522,12 @@ def _json_result(
     table: TableModel,
     snapshot: Snapshot,
     derived: dict[str, Any],
-    digest: str,
-    legacy_digest: str,
 ) -> dict[str, Any]:
     effective_gate = _effective_gate(snapshot)
     return {
         "stage": STAGE,
         "package": str(snapshot.package),
         "attempt": snapshot.state.attempt_id,
-        "digest": digest,
-        "legacy_digest": legacy_digest,
-        "unchanged": False,
         "at": snapshot.reader.at_label,
         "head": snapshot.head,
         "selected": derived["selected"],
@@ -3736,19 +3662,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="read-only JSON object with boolean high, inline or from a file",
     )
     render.add_argument(
-        "--since",
-        metavar="DIGEST",
-        help="emit only a one-line unchanged marker when the digest matches",
-    )
-    render.add_argument(
         "--explain-undetermined",
         action="store_true",
         help="include the first undetermined situation slugs in human output",
-    )
-    render.add_argument(
-        "--no-write-credential",
-        action="store_true",
-        help=f"derive without writing execution/<attempt>/{SITUATION_DIGEST_NAME}",
     )
     render.add_argument("--json", action="store_true", help="emit structured JSON")
     table = subparsers.add_parser("print-table", help="print the formal YAML table")
@@ -3764,45 +3680,10 @@ def _run_render(args: argparse.Namespace) -> int:
     compaction_pressure = _load_compaction_pressure(args.compaction_pressure)
     snapshot = _build_snapshot(reader, validation_result, compaction_pressure)
     derived = _derive(table, snapshot)
-    digest = _situation_digest(table, derived)
-    legacy_digest = _legacy_situation_digest(table, derived)
-    if not args.no_write_credential:
-        _write_situation_digest(
-            reader,
-            snapshot.state,
-            digest,
-            legacy_digest,
-            snapshot.head,
-            max(
-                (
-                    row["seq"]
-                    for row in snapshot.trail.rows
-                    if isinstance(row.get("seq"), int) and not isinstance(row.get("seq"), bool)
-                ),
-                default=0,
-            ),
-            [item["slug"] for item in derived["blocking"]],
-        )
-    if args.since == digest:
-        if args.json:
-            print(
-                json.dumps(
-                    {
-                        "digest": digest,
-                        "legacy_digest": legacy_digest,
-                        "unchanged": True,
-                    },
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                )
-            )
-        else:
-            print(f"处境未变 (digest: {digest})")
-        return 0
     if args.json:
         print(
             json.dumps(
-                _json_result(table, snapshot, derived, digest, legacy_digest),
+                _json_result(table, snapshot, derived),
                 ensure_ascii=False,
                 indent=2,
             )
@@ -3813,7 +3694,7 @@ def _run_render(args: argparse.Namespace) -> int:
             snapshot,
             explain_undetermined=args.explain_undetermined,
         )
-        print(f"{body}\ndigest: {digest}")
+        print(body)
     return 0
 
 

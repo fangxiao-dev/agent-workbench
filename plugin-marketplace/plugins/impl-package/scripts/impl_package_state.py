@@ -23,23 +23,10 @@ GROUPS = {
     "gate",
 }
 
-LEGACY = {
-    "init": ("package", "init"),
-    "status": ("package", "status"),
-    "validate": ("package", "validate"),
-    "refresh-progress": ("package", "refresh-progress"),
-    "set-state": ("ticket", "transition"),
-    "evidence-add": ("evidence", "add"),
-    "evidence-invalidate": ("evidence", "invalidate"),
-    "checkpoint": ("recovery", "checkpoint"),
-    "er-add": ("recovery", "judgment"),
-}
-
 
 def _root_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Ticket-first Impl-Package state router (format 3.5)",
-        epilog="Flat 3.5 command spellings remain accepted as compatibility aliases.",
     )
     parser.add_argument("--package", type=Path, required=True)
     parser.add_argument("--no-situation", action="store_true", help="do not append the current situation")
@@ -57,9 +44,6 @@ def _route(argv: list[str]) -> tuple[Path, str, list[str]]:
     parser.add_argument("route")
     args, rest = parser.parse_known_args(argv)
     route = args.route
-    if route in LEGACY:
-        group, command = LEGACY[route]
-        return args.package.resolve(), group, [command, *rest]
     if route in GROUPS:
         return args.package.resolve(), route, rest
     _root_parser().error(f"unknown command group: {route}")
