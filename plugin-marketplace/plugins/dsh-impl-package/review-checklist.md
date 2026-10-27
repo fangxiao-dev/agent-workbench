@@ -1,6 +1,6 @@
-# SKILL 降载审校清单（Phase 2 主控核对，不外包）
+# SKILL 降载审校清单（主控自核，不外包）
 
-逐文件核对压缩版时按此清单过一遍。任何一项在压缩版中缺失/变味 → 打回或主控补写。
+改动 Impl-Package SKILL 后按此清单逐项过一遍。任何一项缺失/变味 → 打回或主控补写。
 
 ## 语义正确性（必须逐项保留）
 
@@ -42,7 +42,13 @@
 - [ ] 合并组内无重复段落（D 组三节、G 组三节各自独立）
 - [ ] 原 SKILL 引用的 references 路径在压缩版中仍有效（按需读的保留路径）
 
-## 0.4.2 补录（ef45e3b / a0d0e7a 教训）
+## 教训补录（跨宿主与适配层）
 
 - [ ] **跨宿主断指针检查**：被删段若只被 DSH 机制承接，而它的引用路径（SUB-SKILL 显式路径、writer/ownership 边界、legacy 边界、fail-closed canonical wording）对无原生路由的宿主是断链——压缩版必须保留显式路径或回补。
 - [ ] **判断规则不误下沉**：fail-closed 聚合规则这类"规则本身是判断、执行是机械"的半判断项，规则文本必须留在 SKILL（DSH orchestrator 只作执行设施，两者分支逐条对应）。
+- [ ] **trail schema 是适配层与 Python engine 的共享契约**：impl-tools 的 dispatch/worker-return 构造器必须与 engine `_validate_trail_event` 逐字段核对（dispatch：dispatch_id/candidate_id/mode 四值/chosen/receipt；worker-return：of/return_id + 可选 code_delta+consumption_id 配对）；smoke test 对 mode enum 做 Python 源 parity 断言——Python 侧改 schema 时同步改构造器与测试。
+- [ ] **命令表以 impl-package/SKILL.md 的 native entry 列为准**：路由合并（execution-boundaries/dispatcher）后旧入口不保留；移除前确认目标 skill 在 DSH catalog 仍可达（用户根 `~/.agents/skills` 或 customSkillDir），已删 SKILL.md 的 stage 不得作为 steer 目标。
+- [ ] **预设形状以现行 builtin `standard` 为 diff 基线**：上游 breaking 不全写进 release 标题（persona prefix/suffix 拆分、preset 默认工具行变化），重适配时先取 upstream `packages/preset/agent-presets/presets/standard/agent.cordis.yml` 逐行对照。
+- [ ] **机器路径不得进 preset 源文件**：统一 `{{WORKBENCH_ROOT}}` 标记 + lib 同步代换（`AGENT_WORKBENCH_ROOT` 覆盖；解析失败时 hook/tools 优雅回落祖先树解析）；新增机器专属配置（如 CLI 可执行路径）优先 env 插值，并登记进 README 首次真机验证清单。
+- [ ] **宿主包名不可提前采用**：未发布到目标线的包名（如 `dsh-workflow-ptc`）一旦写进 preset 会让整个 preset broken；以 npm dist-tags 的 `latest` 为准，alpha 线差异单独列表。
+- [ ] **boot 期 import 才是组合的真关卡**：`--dump-config` 只组树、不 import 模块，缺包/坏行会假阴性（exit 0）；profile roster 行是硬依赖——0.1.5-rc.1 实测缺 `@deepseek-ai/dsh-subagent-codex` 时整个 profile 无法启动。验收用一次性 headless 任务（`dsh --profile <p> "Reply with exactly: BOOT-OK"`）做无头预检，不要只看 dump-config。

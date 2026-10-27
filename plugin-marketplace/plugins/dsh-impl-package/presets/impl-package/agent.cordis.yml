@@ -2,6 +2,12 @@
 # Impl-Package workflow kernel (Ticket-first state, situation routing, review
 # topology). Based on the builtin `standard` preset.
 #
+# Re-aligned 2026-09 against dsh `latest` = 0.1.5-rc.1 (npm dist-tags: latest
+# 0.1.5-rc.1 / next 0.1.5-rc.2 / alpha 0.1.6-alpha.1): persona prefix/suffix
+# split, skill default roots (project/user `.agents/skills`), and
+# `{{WORKBENCH_ROOT}}` sync-time path substitution. Rows that differ on
+# 0.1.6-alpha.1 carry a forward note.
+#
 # This file is an AGENT-PLANE composition. The roster mounts it ONCE under a
 # standing scope; every session naming it joins by scope parentage, so the
 # tools and prompt sections registered here cover each joined agent while a
@@ -19,21 +25,24 @@
 
 # Main-controller persona. The pre-step situation hook injects the current
 # situation + legal actions every step; the persona only orients judgment.
+# dsh >= 0.1.5 splits persona config into a required `prefix` and an optional
+# `suffix` (the old single `text` key no longer exists).
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
-    text: >-
+    prefix: >-
       You are the Impl-Package main controller, a coding agent powered by the {{model}} model.
-      Your working directory is {{cwd}}.
 
       Each step the environment injects a compact `[impl-package 处境]` line: current
       situation slug, digest, and legal actions. Treat it as navigation, not a gate — you
       may deviate when judgment requires, but then write one `kind=escape` trail row with
       subject/deviation/reason. Mechanical state writes go through the impl_* typed tools
       (validate / situation render / ticket transition / evidence / checkpoint / judgment /
-      gate / trail), never raw shell commands. Workers dispatch through `subagent_codex` /
-      `subagent_grok` with the worker-resolver envelope contract (mode/worker/schedule/review).
+      gate / trail), never raw shell commands. Workers dispatch through `subagent_codex`
+      under the $dispatcher contract (candidate selection, bounded briefs,
+      receipt-proven dispatch, independent review of code deltas).
       state.json and Git remain the single source of truth; do not invent parallel state.
+    suffix: Your working directory is {{cwd}}.
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
@@ -51,7 +60,10 @@
   name: ./situation-hook.mjs
   config:
     stateFileName: .impl-package/state.json
-    implScriptsRoot: D:/CodeSpace/agent-workbench/plugin-marketplace/plugins/impl-package/scripts
+    # `{{WORKBENCH_ROOT}}` is substituted by lib/index.mjs at preset sync time
+    # (AGENT_WORKBENCH_ROOT overrides; unresolved markers degrade gracefully to
+    # the hook's ancestor-walk fallback).
+    implScriptsRoot: '{{WORKBENCH_ROOT}}/plugin-marketplace/plugins/impl-package/scripts'
     # packagePath: docs/implementations/<topic>   (explicit override)
     # python: python
 
@@ -63,7 +75,7 @@
 - id: impl-tools
   name: ./impl-tools.mjs
   config:
-    implScriptsRoot: D:/CodeSpace/agent-workbench/plugin-marketplace/plugins/impl-package/scripts
+    implScriptsRoot: '{{WORKBENCH_ROOT}}/plugin-marketplace/plugins/impl-package/scripts'
     # python: same default as the situation hook
 
 # ── impl-package: recovery anchoring (two-phase gate) ────────────────────────
@@ -141,21 +153,29 @@
 # The skill REGISTRY lives in the host composition and is layered per scope:
 # these rows register into THIS preset's layer of it, so they need no realm.
 # `skill-filesystem` contributes local-root discovery for agents on this preset.
-# customSkillDirs registers the Impl-Package plugin skills (19 `<name>/SKILL.md`
-# bundles) into the catalog so `tool-skill` loads them on demand — the slim
-# SKILLs are only read when a stage is actually entered. Path is
-# machine-specific; adjust if the workbench moves.
+# customSkillDirs registers the Impl-Package plugin skills (14 judgment-heuristic
+# SKILL.md bundles) into the catalog so `tool-skill` loads them on demand — the
+# slim SKILLs are only read when a stage is actually entered.
+# `{{WORKBENCH_ROOT}}` is substituted by lib/index.mjs at preset sync time
+# (AGENT_WORKBENCH_ROOT overrides). The repo-root `skills/` directory is NOT
+# mounted here: dsh >= 0.1.2 discovers project `.agents/skills`, user
+# `~/.agents/skills`, and `<dshHome>/skills` as default roots, which already
+# carry the workbench's standalone skills (dispatcher, task-queue, …).
 - id: skill-filesystem
   name: '@deepseek-ai/dsh-skill-filesystem'
   config:
     customSkillDirs:
-      - 'D:/CodeSpace/agent-workbench/plugin-marketplace/plugins/impl-package/skills'
-      - 'D:/CodeSpace/agent-workbench/skills'
+      - '{{WORKBENCH_ROOT}}/plugin-marketplace/plugins/impl-package/skills'
 
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'
 
 # ── goals ───────────────────────────────────────────────────────────────────
+
+# The goal service and session driver stay on the host plane; the human
+# command and model-facing tool register into this preset's scoped layers.
+- id: command-goal
+  name: '@deepseek-ai/dsh-command-goal'
 
 - id: tool-goal
   name: '@deepseek-ai/dsh-tool-goal'
@@ -212,17 +232,14 @@
 # composition. This preset contributes the delegation TOOLS, which resolve
 # that host registry.
 #
-# Native worker dispatch replaces call-codex / call-grok:
+# Native worker dispatch replaces call-codex process dispatch:
 # - `subagent_codex`: official @deepseek-ai/dsh-subagent-codex provider
 #   (ephemeral Codex thread, reuses the native codex login; one-shot).
-# - `subagent_grok`: official @deepseek-ai/dsh-subagent-acp provider driving
-#   the Grok CLI in ACP mode (`grok agent --always-approve stdio`; one-shot).
-# Both providers must be installed into the profile:
+# The provider must be installed into the profile:
 #   dsh plugin --profile desktop add @deepseek-ai/dsh-subagent-codex
-#   dsh plugin --profile desktop add @deepseek-ai/dsh-subagent-acp
 # One-shot out-of-process children cannot be tool-filtered or personified
-# from the host; the worker-resolver contract still bounds the brief and the
-# envelope. In-process spawn/fork remain available for scoped reviewer work.
+# from the host; the $dispatcher contract still bounds the brief and the
+# receipt. In-process spawn/fork remain available for scoped reviewer work.
 - id: delegation
   name: cordis:group
   group: true
@@ -240,6 +257,7 @@
       config:
         provider: spawn
         toolName: subagent
+        modelSelectionSettings: true
         backgroundMode: continuable
 
     - id: tool-subagent-fork
@@ -258,15 +276,11 @@
         backgroundMode: one-shot
         maxDepth: provider-managed
 
-    # Native Grok worker through ACP (replaces skills/call-grok process dispatch).
-    - id: tool-subagent-grok
-      name: '@deepseek-ai/dsh-tool-subagent'
-      config:
-        provider: acp
-        toolName: subagent_grok
-        backgroundMode: one-shot
-        maxDepth: provider-managed
-
+    # Workflow executor. Target is dsh `latest` (0.1.5-rc.1/rc.2), where the
+    # row is still `dsh-workflow-worker-thread`. dsh 0.1.6-alpha.1 renamed the
+    # family to `dsh-workflow-ptc` without aliases — on that version flip this
+    # row to `@deepseek-ai/dsh-workflow-ptc` (the package exists only from
+    # 0.1.6-alpha.1, so naming it earlier breaks the whole preset).
     - id: workflow-worker-thread
       name: '@deepseek-ai/dsh-workflow-worker-thread'
       config:
@@ -275,6 +289,8 @@
     - id: tool-workflow
       name: '@deepseek-ai/dsh-tool-workflow'
 
+    # Enabled by default on dsh 0.1.5 (upstream turns Ralph off only from
+    # 0.1.6-alpha.1). Add `disabled: true` when moving to 0.1.6.
     - id: tool-ralph
       name: '@deepseek-ai/dsh-tool-ralph'
       config:
@@ -291,8 +307,16 @@
   config:
     allowParallelInProgress: true
 
+# The `web` service and its search provider stay in the host composition; only
+# the model-facing tool is per-session. `fetch: true` follows the current
+# upstream default (public WebFetch enabled since dsh 0.1.2).
 - id: tool-web
   name: '@deepseek-ai/dsh-tool-web'
   config:
-    fetch: false
+    fetch: true
     searchTimeoutMs: 60000
+
+# File-delivery tool (explicit deliverables surfaced in the Web sidebar), added
+# for parity with the current builtin `standard` preset.
+- id: present
+  name: '@deepseek-ai/dsh-tool-present'

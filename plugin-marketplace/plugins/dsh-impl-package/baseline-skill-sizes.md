@@ -1,8 +1,9 @@
 # Impl-Package SKILL 全量降载说明
 
-> 状态：**2026-08 完成；0.4.2 已对齐**。原压缩快照为 14 个判断启发式文件；恢复 standalone `grilling` 入口后，当前为 **15 个**。references（~1,840 行）从"默认读"改"按需读"。跨宿主（Codex/Claude/Grok/DSH）通用，机制指针保持宿主无关。
-> 原压缩快照的行数口径：`Measure-Object -Line` 实测 md 主文件；evals/scripts/assets/tests 不计。234 行含 0.4.2 的 C 类内容回补（+3 行，见 §5.4）；standalone `grilling` 恢复后不沿用该历史总量。
+> 状态：**2026-08 完成；2026-09 重适配后对齐**。压缩快照为 14 个判断启发式文件（`grilling` 已移出到仓库根 standalone skill，`monitor-progress` 新增）。references（~1,840 行）从"默认读"改"按需读"。跨宿主（Codex/Claude/DSH）通用，机制指针保持宿主无关。
+> 原压缩快照的行数口径：`Measure-Object -Line` 实测 md 主文件；evals/scripts/assets/tests 不计。234 行含 0.4.2 的 C 类内容回补（+3 行，见 §5.4）。
 > 协议表位置：**`scripts/impl_package_runtime/protocols.json`（Python 侧，render 输出 `selected.protocol`）**——0.4.2 从 DSH preset 迁入，跨宿主同源，DSH hook 读 render 输出（不再本地加载）。
+> 本文 §6 的"承接机制"表与 §7 的 21 项清单反映**当前**适配状态；历史压缩过程与逐文件行数基线保留在 §5/§8。
 
 ---
 
@@ -159,13 +160,14 @@ Impl-Package 是一套跨宿主的开发工作流插件（Ticket 状态机、处
 | 机械负担（原来在 SKILL 里） | 承接机制 | 状态 |
 | --- | --- | --- |
 | 每轮 validate → render → digest | pre-step 处境注入 + Python render 的 protocol 字段 | ✅ |
-| CLI 命令 / JSON payload 拼装 | 12 个 typed 工具（impl_package_validate / impl_situation_render / impl_ticket_transition / impl_evidence_add / impl_evidence_invalidate / impl_recovery_checkpoint / impl_recovery_judgment / impl_gate_commit / impl_trail_dispatch / impl_trail_escape / impl_trail_fact / impl_trail_worker_return） | ✅ |
-| 阶段路由表 | 18 个原生命令（impl-req-align … impl-backfill-stable-docs，0 token） | ✅ |
-| worker 派发 / 宿主名 | 原生 subagent（subagent_codex / subagent_grok） | ✅ |
-| review topology / brief / 聚合 / 报告 | do-review-orchestrator.mjs（resolveTopology / buildBrief / aggregateVerdicts / renderReport）+ `impl_review_aggregate` 工具 | ✅ 纯函数完成；并行派发接线待续 |
+| CLI 命令 / JSON payload 拼装 | 14 个 typed 工具（impl_package_validate / impl_situation_render / impl_ticket_transition / impl_evidence_add / impl_evidence_add_batch / impl_evidence_invalidate / impl_evidence_retire_claim / impl_recovery_checkpoint / impl_recovery_judgment / impl_gate_commit / impl_trail_dispatch / impl_trail_escape / impl_trail_fact / impl_trail_worker_return） | ✅ |
+| 阶段路由表 | 16 个原生命令（15 个 impl-* + call-codex，0 token） | ✅ |
+| worker 派发 / 宿主名 | 原生 subagent（subagent_codex） | ✅ |
+| review topology / brief / 聚合 / 报告 | do-review-orchestrator.mjs（resolveTopology / buildBrief / aggregateVerdicts / renderReport / orchestrate）+ `impl_review_run` / `impl_review_aggregate` 工具 | ✅ 含并行派发接线 |
 | reviewer 只读边界 | 派发组装：`toolFilter: { allow: [read, grep, glob, skill, git_show] }` + 只读 persona（非独立 preset；选择器只显示主控） | ✅ |
 | 审查清单（safety 五类等） | references 按需读（five-categories.md 等） | ✅ |
-| skill on-demand 加载 | skill catalog 注册（customSkillDirs → plugin skills） | ✅ |
+| skill on-demand 加载 | skill catalog 注册（customSkillDirs → plugin skills；standalone skills 走 dsh 默认根） | ✅ |
+| 派发凭据（$dispatcher 合并） | trail dispatch/worker-return schema + CLI 校验（dispatch_id/candidate_id/mode/chosen/receipt；of/return_id） | ✅ |
 
 ## 7. 判断启发式保留清单（审校核对，21 项）
 
@@ -189,8 +191,20 @@ Gate 三态与 Stage 7 · SATISFIED 前提（revision/environment/claims 覆盖�
 
 ## 9. 遗留与后续
 
-- **orchestrator 派发接线**：纯函数核心（topology/brief/聚合/报告）完整；`dispatchLeaf`/`createReviewRun` 的并行派发与 ledger 接线待接入（主 session 驱动或 `impl-do-review` 命令触发）。
-- **grill ledger 目录名**：脚本默认路径含 `codex-grill`（宿主专属），压缩稿已用"OS 临时目录"规避；脚本层改名待办。
+**未决**
+
+- **grill ledger 目录名**：`skills/grill-me-smartly/src/grill_ledger_core/ledger.py` 的 `DEFAULT_DIR = "codex-grill"` 是宿主专属名，跨宿主运行需改名（压缩稿已用"OS 临时目录"规避，未改脚本）。
+
+**已闭环 / 已作废**
+
+- **orchestrator 派发接线**：已落地（`orchestrate` 的 `Promise.all` 并行派发 + `impl_review_run` 工具）。
+- **evals 宿主名断言**：`subagent-driven-development` 已并入 dispatcher（3e89ece），旧 evals 断言随 skill 目录删除而失效，不再适用。
+- **0.4.2 闭环**：协议表迁回 Python 侧（跨宿主同源）、状态尾注（写入即刷新处境）、trail 具名参数、fail-closed 规则回流 SKILL、C 类内容回补 5 处、版本 bump 0.4.2（宿主缓存刷新）。
+- **2026-09 重适配**：吃掉 dsh latest（0.1.5-rc.1）的 persona prefix/suffix 拆分；trail 派发 schema 对齐 `$dispatcher` 合同；typed 工具 12 → 14、原生命令 18 → 16；Grok-ACP worker 移除，只留 `subagent_codex`；机器路径改 `{{WORKBENCH_ROOT}}` 同步代换。详见 [README](README.md) 的「2026-09 重适配」一节。
 - **跨宿主**：压缩版 SKILL 机械细节从"默认读"变"按需读"；Codex/Claude 的执行效率依赖各自 adapter 成熟度，如遇回归可单文件 git revert（每文件独立 commit）。
-- **evals 宿主名断言**：subagent-driven-development 的 evals.json 仍含 `$grok-worker` 等旧断言，随 DSH provider 化后需迁移（登记，未执行）。
-- **0.4.2 已闭环**：协议表迁回 Python 侧（跨宿主同源）、状态尾注（写入即刷新处境）、trail 具名参数（4 个扁平工具）、fail-closed 规则回流 SKILL、C 类内容回补 5 处、版本 bump 0.4.2（宿主缓存刷新）。DSH 侧无残留旧协议引用；preset 同步用 `node plugin-marketplace/plugins/dsh-impl-package/test/sync-now.mjs`（preset 是独立包，不 sync 会静默跑旧协议）。
+
+## 10. 维护操作
+
+- **preset 同步**：preset 是独立包，改动 preset 源后不同步会静默跑旧协议：
+  `node plugin-marketplace/plugins/dsh-impl-package/test/sync-now.mjs`
+- **冒烟测试**：`node plugin-marketplace/plugins/dsh-impl-package/test/smoke-test.mjs`

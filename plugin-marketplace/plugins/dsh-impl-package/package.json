@@ -1,7 +1,7 @@
 {
   "name": "dsh-impl-package",
   "version": "0.1.0",
-  "description": "DSH native adapter for the Impl-Package workflow kernel: an agent/pre-step situation-injection hook (validate → situation render → inject legal actions), typed tools wrapping the existing impl_package_state.py CLI, and native subagent wiring (Codex / Grok-ACP) replacing call-codex / call-grok. The Python core, state.json, Git anchors, and cross-host artifacts stay authoritative.",
+  "description": "DSH native adapter for the Impl-Package workflow kernel: an agent/pre-step situation-injection hook (validate → situation render → inject legal actions), typed tools wrapping the existing impl_package_state.py CLI, and native Codex subagent wiring replacing call-codex. The Python core, state.json, Git anchors, and cross-host artifacts stay authoritative.",
   "type": "module",
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
@@ -21,8 +21,7 @@
     "lib",
     "presets",
     "cordis.patch.yml",
-    "README.md",
-    "LICENSE"
+    "README.md"
   ],
   "license": "MIT",
   "keywords": [

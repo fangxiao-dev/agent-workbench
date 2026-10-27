@@ -11,11 +11,11 @@
  * The heavy lifting lives in the preset itself (situation-hook.mjs,
  * impl-tools.mjs) — this file only makes the preset discoverable.
  *
- * Dependency-free by design: only node: builtins. The preset sync mirrors the
- * dsh-liangshen pattern (MIT) — see NOTICE in the workbench plugin.
+ * Dependency-free by design: only node: builtins. The preset sync follows the
+ * dsh-liangshen pattern (MIT).
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
@@ -96,10 +96,13 @@ function readStamp(target) {
 /**
  * Sync preset trees from `sourceRoot` into `targetRoot` (the harness-home
  * agent-presets root). A preset is re-copied only when its exact tree stamp
- * changed; presets not present in the source are left untouched.
+ * (plus the resolved workbench root) changed; presets not present in the
+ * source are left untouched. `workbenchRoot` defaults to resolveWorkbenchRoot();
+ * when it resolves, `{{WORKBENCH_ROOT}}` markers in the synced composition are
+ * substituted so the preset no longer carries machine-specific absolute paths.
  * Returns { synced, retired, failed }.
  */
-export function syncPresetTrees(sourceRoot, targetRoot, retire = []) {
+export function syncPresetTrees(sourceRoot, targetRoot, retire = [], workbenchRoot = resolveWorkbenchRoot()) {
   const synced = []
   const retired = []
   const failed = []
@@ -108,7 +111,7 @@ export function syncPresetTrees(sourceRoot, targetRoot, retire = []) {
     const source = join(sourceRoot, id)
     const target = join(targetRoot, id)
     try {
-      const stamp = treeStamp(source)
+      const stamp = `${treeStamp(source)}#${workbenchRoot ?? '-'}`
       if (readStamp(target) === stamp) {
         continue
       }
@@ -120,6 +123,10 @@ export function syncPresetTrees(sourceRoot, targetRoot, retire = []) {
       }
       rmSync(target, { recursive: true, force: true })
       copyDir(source, target)
+      if (workbenchRoot !== undefined) {
+        const compositionPath = join(target, 'agent.cordis.yml')
+        writeFileSync(compositionPath, substituteWorkbenchRoot(readFileSync(compositionPath, 'utf-8'), workbenchRoot))
+      }
       writeFileSync(join(target, STAMP_FILE), stamp)
       synced.push(id)
     } catch (error) {
@@ -149,13 +156,51 @@ function copyDir(source, target) {
   }
 }
 
+/** Marker in preset compositions replaced with the workbench root at sync time. */
+export const WORKBENCH_ROOT_MARKER = '{{WORKBENCH_ROOT}}'
+
+/**
+ * Derive the workbench root for path substitution. The AGENT_WORKBENCH_ROOT
+ * env override wins; otherwise walk up from this module's real path (a
+ * `link:` install resolves through the junction to the real tree). Returns
+ * undefined when the derived root does not actually contain the impl-package
+ * plugin — callers then leave the marker in place, and the preset-local
+ * plugins fall back to their ancestor-walk resolution at runtime.
+ */
+export function resolveWorkbenchRoot(env = process.env, moduleUrl = import.meta.url) {
+  const override = env.AGENT_WORKBENCH_ROOT
+  if (override !== undefined && override.trim() !== '') {
+    return override.trim().replace(/[\\/]+$/, '')
+  }
+  let dir = dirname(fileURLToPath(moduleUrl)) // <plugin>/lib
+  try {
+    dir = realpathSync(dir)
+  } catch {
+    // keep the unresolved path; the marker check below still guards us
+  }
+  // lib → plugin → plugins → plugin-marketplace → workbench root
+  const root = dirname(dirname(dirname(dirname(dir))))
+  if (!existsSync(join(root, 'plugin-marketplace', 'plugins', 'impl-package', 'scripts', 'impl_package_state.py'))) {
+    return undefined
+  }
+  return root.replace(/\\/g, '/')
+}
+
+/** Replace the workbench-root marker in a preset file's text. */
+export function substituteWorkbenchRoot(text, root) {
+  if (typeof text !== 'string' || root === undefined) return text
+  return text.split(WORKBENCH_ROOT_MARKER).join(root)
+}
+
 /** Model-facing announcement: what the adapter provides and its boundary. */
 export const IMPL_PACKAGE_GUIDANCE =
   '本机已安装 dsh-impl-package 插件（Impl-Package 原生适配）：主控预设会通过 agent/pre-step 自动注入「当前处境 + 合法动作 + digest」' +
   '（package validate → situation.py render），并提供 typed 工具（impl_package_validate / impl_situation_render / impl_ticket_transition / ' +
-  'impl_evidence_add / impl_recovery_checkpoint / impl_recovery_judgment / impl_gate_commit / impl_trail_dispatch / impl_trail_escape / impl_trail_fact / impl_trail_worker_return）直接调用现有语义 CLI。' +
+  'impl_evidence_add / impl_evidence_add_batch / impl_evidence_retire_claim / impl_recovery_checkpoint / impl_recovery_judgment / impl_gate_commit / ' +
+  'impl_trail_dispatch / impl_trail_escape / impl_trail_fact / impl_trail_worker_return）直接调用现有语义 CLI。' +
+  'trail dispatch 须带 dispatch_id/candidate_id/mode/chosen/receipt（$dispatcher 合同），worker-return 用 of 指回 dispatch 并带唯一 return_id。' +
   'state.json 与 Git 仍是唯一权威；本插件只做执行轨迹与处境注入，不另建事实源。' +
-  '原生 subagent（subagent_codex / subagent_grok）已替代 call-codex / call-grok 的进程外派发；envelope 与 fallback 规则沿用 worker-resolver 合同。'
+  '原生 subagent（subagent_codex）已替代 call-codex 的进程外派发；envelope 与 receipt 规则沿用 $dispatcher 合同。'
 
 /** Mount the plugin: sync presets, then announce through a prompt section. */
 export function apply(ctx, config) {
