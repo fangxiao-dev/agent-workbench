@@ -28,7 +28,7 @@
 ## State 与发布边界
 
 - 跳过 `package validate` 或先写 state 再确认 Plan，会把不可恢复的 runtime 事实当成已获批的 package 状态。
-- 绕过 execution-boundaries 的授权确认与完成前 evidence gate，会让 mutation 在未确认授权范围时发生。
+- 绕过 dev-with-track 的外部副作用授权与完成前 evidence gate，会让 mutation 在未确认授权范围时发生。
 - 发布时又创建 Task/DAG 或手写状态，会产生第二个运行时 authority，Ticket 的 Approved/PENDING 也无法回放。
 - 把旧 Task `DONE` 或一次 early falsification 当成 Ticket 满足，会漏掉 remaining evidence 和第一条路径上的安全不变量。
 - 把进度或 runtime projection 写回 Ticket，会让接受状态、执行状态和恢复投影形成多个可写来源。

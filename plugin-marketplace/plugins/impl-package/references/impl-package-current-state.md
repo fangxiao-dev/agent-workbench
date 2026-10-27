@@ -82,6 +82,4 @@ python <plugin>/scripts/impl_package_state.py --package <package> gate <verdict>
 
 `evidence retire-claim` 只清理已从当前 Ticket 删除且所有旧 evidence 都已带 `invalidatedBy` 的孤立 claim mapping；它不删除 evidence artifact，也不创建额外历史副本。
 
-旧平铺拼法 `init`、`validate`、`set-state`、`evidence-add`、`checkpoint`、`er-add` 等保留为兼容别名；新文档和新 package 统一使用分组拼法。`ticket transition` 是旧 `set-state` 的组内兼容入口，优先使用上面的语义命令。
-
 `NEEDS-REVALIDATION`、`BLOCKED` 不释放依赖。ER 中旧 checkpoint 正文可作为历史保留，但 runtime 不从 ER 推导 active checkpoint；迁移后恢复只认 `activeCheckpoints`。

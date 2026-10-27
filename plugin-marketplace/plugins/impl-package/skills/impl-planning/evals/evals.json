@@ -20,7 +20,7 @@
       "expectations": [
         "Leaves constraint-to-Ticket mapping in each Ticket's Contract references/AC rather than duplicating it in Plan",
         "Checks typed dependencies, evidence timing, safety invariants and shared-resource constraints",
-        "Does not call create-task-dag"
+        "Does not create Task/DAG"
       ]
     },
     {

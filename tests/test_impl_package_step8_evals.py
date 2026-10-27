@@ -27,10 +27,7 @@ def test_stage_evals_are_valid_and_nonempty() -> None:
     paths = [
         IMPL / "skills/req-align/evals/evals.json",
         IMPL / "skills/impl-planning/evals/evals.json",
-        IMPL / "skills/to-tickets/evals/evals.json",
-        IMPL / "skills/create-task-dag/evals/evals.json",
         IMPL / "skills/dev-with-track/evals/evals.json",
-        IMPL / "skills/verification-before-completion/evals/evals.json",
     ]
     for path in paths:
         payload = json.loads(path.read_text(encoding="utf-8"))

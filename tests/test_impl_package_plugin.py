@@ -18,11 +18,9 @@ EXPECTED_SKILLS = {
     "plan-review",
     "do-review",
     "review-code",
-    "review-code-by-standards",
     "review-code-by-spec",
     "safety-review",
     "req-align",
-    "execution-boundaries",
     "monitor-progress",
 }
 
@@ -34,6 +32,8 @@ LEGACY_SKILL_DIRS = {
     "standing-bookkeeper",
     "verification-before-completion",
     "create-task-dag",
+    "execution-boundaries",
+    "review-code-by-standards",
 }
 
 
@@ -77,7 +77,6 @@ def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
     assert "agents" not in codex
     expected_agents = [
         "./agents/review-track-code.md",
-        "./agents/review-track-standards.md",
         "./agents/review-track-spec.md",
         "./agents/review-track-safety.md",
     ]
@@ -175,7 +174,7 @@ def test_plugin_exposes_the_slimmed_flat_skill_set() -> None:
 
     router = (PLUGIN / "skills" / "impl-package" / "SKILL.md").read_text(encoding="utf-8")
     # The routing table is now a native-command index (`impl-<stage>`).
-    for name in EXPECTED_SKILLS - {"impl-package", "execution-boundaries"}:
+    for name in EXPECTED_SKILLS - {"impl-package"}:
         assert f"impl-{name}" in router
     assert "/plugin:skill" in router
     assert "impl-grilling" not in router
@@ -193,12 +192,14 @@ def test_grilling_is_the_standalone_question_protocol() -> None:
     assert "name: grilling" in grilling
     assert "grill-me-smartly" not in grilling
     assert "`/grilling`" in smart
-    assert smart.index("## Question Protocol Dependency") < smart.index("## Roles")
+    assert "needs_user" in smart
+    assert "ledger.json" not in smart
+    assert not (PLUGIN / "skills" / "grill-me-smartly" / "scripts").exists()
     assert "简化降级" in smart
     assert "/impl-package:grill-me-smartly" in spec_gate
     assert "/impl-package:grilling" not in spec_gate
     assert evals["skill_name"] == "grill-me-smartly"
-    assert {case["id"] for case in evals["evals"]} == {1, 2, 3, 4, 5}
+    assert {case["id"] for case in evals["evals"]} == {1, 2, 3, 4}
 
 
 def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
@@ -301,8 +302,8 @@ def test_migration_validator_is_standalone_and_not_a_runtime_entrypoint() -> Non
         assert "validate_ticket_first_migration" not in text
         assert "validate_migration(" not in text
 
-    preflight = (PLUGIN / "skills" / "execution-boundaries" / "SKILL.md").read_text(encoding="utf-8")
-    assert "validate_ticket_first_migration" not in preflight
+    dev_skill = (PLUGIN / "skills" / "dev-with-track" / "SKILL.md").read_text(encoding="utf-8")
+    assert "validate_ticket_first_migration" not in dev_skill
     linker = (ROOT / "scripts" / "link_skill.py").read_text(encoding="utf-8")
     assert "validate_ticket_first_migration" not in linker
 
@@ -400,7 +401,7 @@ def test_terminal_review_contract_remains_owned_by_do_review() -> None:
     assert "terminal Gate" in dev
     assert "Stage 7" in dev
     assert "dispatch-fix" not in dev
-    for duplicated_owner in ("review-code-by-standards", "review-code-by-spec", "safety-review"):
+    for duplicated_owner in ("review-code-by-spec", "safety-review"):
         assert duplicated_owner not in dev
 
 
@@ -426,7 +427,6 @@ def test_resume_capsule_supplies_facts_while_runtime_reference_keeps_the_fallbac
     runtime = (PLUGIN / "skills" / "dev-with-track" / "references" / "runtime-protocol.md").read_text(
         encoding="utf-8"
     )
-    boundaries = (PLUGIN / "skills" / "execution-boundaries" / "SKILL.md").read_text(encoding="utf-8")
 
     restore = dev.split("## Restore", 1)[1].split("## State、ER 与 Trail", 1)[0]
     assert "Impl-Package Resume Capsule v1" in dev
@@ -441,4 +441,3 @@ def test_resume_capsule_supplies_facts_while_runtime_reference_keeps_the_fallbac
     for marker in ("package validate", "progress.md", "situation.py render"):
         assert marker in runtime
     assert "task-queue.json" not in runtime
-    assert "Impl-Package Resume Capsule v1" in boundaries

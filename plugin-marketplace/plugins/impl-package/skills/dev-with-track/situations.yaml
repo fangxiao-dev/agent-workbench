@@ -132,7 +132,7 @@ situations:
       - id: audit-completion-claim
         default: true
         by: main-session
-        do: "/impl-package:verification-before-completion audit current Attempt"
+        do: "dev-with-track Verify and Gate：审计当前 Attempt 的 completion claim"
         effect: "全部 Ticket 为 SATISFIED 或 RETIRED 后开始全局收口"
     escape: true
 
@@ -365,7 +365,7 @@ situations:
         requires_reason: true
       - id: confirm-original-conclusion
         by: main-session
-        do: "/impl-package:verification-before-completion recheck acceptance revision"
+        do: "dev-with-track Verify and Gate：复核 acceptance revision 的 claim-evidence"
         effect: "保留原结论"
         requires_reason: true
     escape: true
@@ -492,7 +492,7 @@ situations:
         default: true
         by: dispatch
         do: "/impl-package:do-review phase=terminal-final"
-        effect: "补齐 terminal-final coverage（完整 terminal_tracks，不继承此前任何 initial 选中的子集）；accepted findings 未闭合或 fix 在途时先 finding-closure，不起 terminal-final；B/C/Safety 按 admission 复用旧 PASS"
+        effect: "补齐 terminal-final coverage（完整 terminal_tracks，不继承此前任何 initial 选中的子集）；accepted findings 未闭合或 fix 在途时先 finding-closure，不起 terminal-final；C/Safety 按 admission 复用旧 PASS"
     escape: true
 
   - slug: ticket.accept.release-edge-unchecked
@@ -681,7 +681,7 @@ situations:
         effect: "无效 envelope 视为上下文不可采信，work lane 按退役条件换 fresh worker；检查 diff 后重新派发"
       - id: direct-verify-invalid-envelope
         by: main-session
-        do: "/impl-package:verification-before-completion audit fixer diff; /impl-package:do-review phase=finding-closure"
+        do: "dev-with-track Verify and Gate：审计 fixer diff; /impl-package:do-review phase=finding-closure"
         requires_reason: true
     escape: true
 

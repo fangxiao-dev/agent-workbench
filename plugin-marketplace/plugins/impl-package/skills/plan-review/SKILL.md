@@ -1,6 +1,6 @@
 ---
 name: plan-review
-description: Review an implementation plan or complete plan/Ticket/DAG bundle for feasibility, scope, architecture, tests, risk, and decision readiness; optionally verify a focused closure batch.
+description: 审查 implementation plan 或完整 plan/Ticket/DAG bundle 的可行性、范围、架构、测试、风险与 decision readiness；可选地核验一批聚焦的 closure。
 ---
 
 # Plan Review

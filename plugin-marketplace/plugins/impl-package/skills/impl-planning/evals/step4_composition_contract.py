@@ -17,7 +17,7 @@ def read(relative: str) -> str:
 
 def main() -> None:
     plan = read("impl-planning/assets/templates/plan.md")
-    ticket = read("to-tickets/assets/templates/ticket.md")
+    ticket = read("impl-planning/assets/templates/ticket.md")
     dag = read("dev-with-track/assets/templates/dag.md")
     gate = read("dev-with-track/assets/templates/gate.md")
     state = read("references/impl-package-current-state.md")

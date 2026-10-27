@@ -54,7 +54,7 @@ Composition：tickets=true, dag=false
 3. Plan 冻结后，Ticket-only Composition 只创建 Draft Ticket；联合检查 coverage、typed dependency、证据可行性与集成顺序后取得一次 bundle approval。旧 package 的 DAG 只读，不重新发布。
 4. `init` 发布当前 Attempt 的 Ticket，初始化 state 和完整 Progress 层，进入执行；3.4 兼容字段不代表 Task execution。
 5. dev-with-track 从 `progress.md` 与 active checkpoint 恢复，根据 Ticket canonical dependency 选择下一动作，通过 CAS 更新状态并写 checkpoint/judgment。
-6. verification-before-completion 审计 completion claim。
+6. dev-with-track 的 Verify and Gate 审计 completion claim。
 7. gate 写入当前判决；`pass` 才支持默认的 merge-ready 结论。
 8. durable delta 按需回刷稳定文档。
 

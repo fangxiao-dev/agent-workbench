@@ -5,19 +5,13 @@ updated: 2026-09-08
 
 ## 原则
 
-- [待验证] 提问节奏直接复用 grilling，frontier 完整性通过持续跟踪和按协议分批保证。（证据: R1）
-- [待验证] Questioner 与 Answerer 直接完成每轮事实问答并保存记录，主控后处理并向 Owner 汇报与提请裁决。（证据: R1）
-- [待验证] 主控按设计主题跨轮整合规则、例外与冲突，Review 和 Apply 的结构由设计及目标文档决定，保留来源追溯。（证据: R2）
-- [待验证] JSON ledger 是唯一权威状态，Markdown 只保存紧凑状态、计数、首 20 条待处理索引和命令；恢复按 summary→分页索引→选中详情执行。（证据: R3）
-- [待验证] 批原件保持原路径和哈希不可变，详情解析失败不阻塞状态/索引；旧嵌入 JSON 只读，首次 mutation 备份原字节并原子发布新 JSON 后再生成索引。（证据: R3）
-- [待验证] 直接答案与决策保留必要的前一版本供 history 查询，不能以通用事件日志代替；提问数量和跨轮整合不设配额。（证据: R3）
+- [待验证] 提问节奏直接复用 grilling；Answerer 先代 Owner 回答可查事实，只有判断题回到 Owner。（证据: R1, R4）
+- [待验证] 输出是短 Grill Review（已解决+证据、needs_user、候选决策），Owner 批准后才写入 Decision/Spec。（证据: R2, R4）
 
 ## 决策记录（滚动，最近 ≤5 轮）
 
-### R3 · 2026-09-08
-- Owner 批准 ledger slimming：`grill-<slug>.ledger.json` 为权威状态，`.ledger.md` 仅为短状态/计数/前 20 条 pending 索引和命令；提供分页 `list-questions` 与按需 `get-question`，不在 status 或索引中展开完整 JSON/QAs。
-- 批原件保留原路径、哈希和引用；详情读取显式报告缺失/变更来源但不阻塞 status/index。旧嵌入 JSON 只读，首次 mutation 备份 `.legacy.md`，原子提交 JSON 后生成索引；索引失败不回滚 JSON，不做批量迁移。
-- 直接答案/决策保留必要历史版本；新增 67 问 legacy、多轮整合和失败来源场景 eval，不把问题数量当作提问配额。
+### R4
+- Owner 确认本 Skill 的原始目的是由 Answerer 代答可查事实、避免阻塞等待 Owner；批准删除 ledger、frontier、批原件、脚本导入、Critic 与临时文件表，仅保留 Questioner+Answerer 分工、needs_user 与 Review then Apply。
 
 ### R2 · 2026-09-08
 - 用户要求“需要整合而不是抄写”，并明确批准实施《将问答整合为设计》计划：Ledger 保留问答，主控整合 Review，Apply 吸收到目标文档。

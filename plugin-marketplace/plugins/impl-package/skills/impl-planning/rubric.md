@@ -13,7 +13,7 @@ updated: 2026-09-07
 - Only affected records require revalidation after a plan change.
 - Plan only maps an already-frozen Spec contract ensemble to implementation and verification. If observable behavior, data identity, permission, concurrency, recovery, or public shape remains undecided, return to req-align without creating Plan/state or inventing a second DTO/schema contract.
 
-- [已确认 · 2026-09-07] owning-stage 主 thread 直接写入并验证 Plan/Ticket；runtime state 由主 thread 直接通过语义 CLI 更新，execution-boundaries 不拥有业务文档写入权。
+- [已确认 · 2026-09-07] owning-stage 主 thread 直接写入并验证 Plan/Ticket；runtime state 由主 thread 直接通过语义 CLI 更新，dev-with-track 的收口不拥有业务文档写入权。
 - [已确认 · 2026-09-07] 保留真实 caller、复用入口、依赖产物、接线条件和验证可行性判断；不预列完整 baby-step 队列，不新增模板。
 
 ## T7 常见误判分流

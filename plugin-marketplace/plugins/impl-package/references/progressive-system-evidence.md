@@ -35,24 +35,17 @@
 
 对真实 E2E、provider、browser 或 native tool，在现有 Planned Verification 行中简短说明：正在证明的系统假设、独有剩余风险、必要 checkpoint/readiness，以及失败时如何初步区分内部 seam、真实环境、外部波动与观察缺口。
 
-昂贵运行开始前核对 Planned Verification 已声明的 readiness，不通过时先修复前置或记录环境 gap。browser 至少确认目标 route、session/auth、API base、实际加载 bundle、端口 ownership 与测试数据 ownership；这些事实只服务当前运行，不建立全局 readiness registry。runner 暴露 heartbeat/liveness 时在后台观察，不同步空等到总体超时。
+昂贵运行开始前，先使用项目提供的验证入口（环境、种子、测试身份、登录、DB/导出查看），它负责环境、身份、端口与数据就绪；项目没有时再按本参考的方法兜底，并确认目标 route、session/auth 与测试数据 ownership。这些事实只服务当前运行，不建立全局 readiness registry。runner 暴露 heartbeat/liveness 时在后台观察，不同步空等到总体超时。
 
 已知确定性内部前置缺证据时，默认先建立更便宜且忠实的证据，不反复消耗昂贵运行。这不是 E2E admission gate：当前风险依赖真实环境、需要探索诊断、边界尚未知，或真实运行能产生决定性 artifact 时，可以带明确目的进行有界探索。
 
-每次探索运行写清：
-
-- 待区分的候选假设；
-- 能改变下一步判断的 checkpoint 或 artifact；
-- 不同结果分别路由到内部修复、组装验证、环境处理或继续真实验证；
-- 相对上次新增的假设、环境/修复 delta 或观测能力。
-
-重复探索不需要新 gate，但必须有信息增量。没有新假设、delta 或决定性观察目标时停止无信息增益的重跑。mock 或 lower-level evidence 不得冒充真实 browser/provider/native-tool claim。
+重复运行要带来新信息（新假设、环境/修复 delta 或观测能力），没有就停止重跑，不设固定次数或审批门。mock 或 lower-level evidence 不得冒充真实 browser/provider/native-tool claim。
 
 ## 业务 checkpoint
 
 checkpoint 应使当前 failure 能定位最后成立和首个失效的业务假设，而不是只输出函数名、payload 或最终错误码。按风险选择最少信息：业务对象/revision/correlation、语义输入与决定、语义输出、authority/owner、版本解释、以及副作用阶段。
 
-可复用现有 test probe、结构化业务日志、只读 inspector、领域事件、审计记录或外部 artifact；不要为此建立全局 tracing 平台、第二状态源或强制 schema。
+可复用现有 test probe、结构化业务日志、只读 inspector、领域事件、审计记录或外部 artifact。
 
 用于证明权威状态切换、提交成功或副作用确认的 checkpoint，必须直接观察 authority，或可机械追溯其 authority、revision 与 environment。UI、cache、日志副本或派生投影可用于定位，但不能单独证明权威状态已成立。更多 checkpoint 不能改变定位或决策时停止添加。
 
@@ -67,7 +60,7 @@ checkpoint 应使当前 failure 能定位最后成立和首个失效的业务假
 
 ### 有限 seam sweep
 
-仅在版本兼容、序列化/映射、authority 切换、跨 consumer 解释分歧或静默信息丢失时触发。范围限于当前业务动作中直接读取、写入、转换同一受损表示，或依据同一 authority fact 作决定的语义相邻 producer/consumer；物理调用跳数不是边界，消息/事件连接只要参与当前 Acceptance Semantics 也可以相邻。不要全仓扫描、建立 consumer registry 或要求 worker 在派发前穷举 consumer。
+仅在版本兼容、序列化/映射、authority 切换、跨 consumer 解释分歧或静默信息丢失时触发。范围限于当前业务动作中直接读取、写入、转换同一受损表示，或依据同一 authority fact 作决定的语义相邻 producer/consumer；物理调用跳数不是边界，消息/事件连接只要参与当前 Acceptance Semantics 也可以相邻。不全仓扫描，也不要求 worker 在派发前穷举 consumer。
 
 当前 failure 已有稳定证据、语义相邻边界没有同类未覆盖风险、发现开始偏离当前动作，或继续需要新产品决策/公共平台时停止 sweep。
 
@@ -79,7 +72,7 @@ checkpoint 应使当前 failure 能定位最后成立和首个失效的业务假
 
 completion audit 只审计当前 claim，不重新设计验证策略，也不追溯清偿无关历史 failure、旧 package 技术债或未触及风险。
 
-复用 evidence 时，除 revision/worktree/environment 外，按当前 claim 检查关键因果输入是否变化，例如协议版本、feature flag、schema、部署配置、共享数据前置或认证策略。相关变化只使依赖它的 evidence stale；无关变化继续复用。不要创建 freshness registry 或因为任意配置变化机械全量重跑。
+复用 evidence 时，除 revision/worktree/environment 外，按当前 claim 检查关键因果输入是否变化，例如协议版本、feature flag、schema、部署配置、共享数据前置或认证策略。相关变化只使依赖它的 evidence stale；无关变化继续复用。
 
 与当前 claim 相关、已确认且 material 的确定性内部 failure，应已有稳定回归证据，或有可信理由说明其不满足下沉条件。偶发环境问题可以以 readiness/runbook/observability/真实验证风险收口，不能为了 completion 伪造绿色代码测试。
 
@@ -91,10 +84,8 @@ completion audit 只审计当前 claim，不重新设计验证策略，也不追
 
 停止扩展证据，当：当前 claim 的 material system assumption 已明确；所选证据忠实且成本合理；真实环境独有风险仍有真实证据；当前 claim 相关 failure 已下沉或诚实保留；必要 checkpoint 能定位且 provenance 足够；继续增加证据不能明显降低残余风险、反馈成本或诊断不确定性。
 
-## 明确禁止
+## 边界
 
-- 不创建全层测试要求、固定矩阵、case ID、evidence graph、checkpoint/consumer/freshness registry、新 runtime state 或 gate。
-- 不以 fixture、测试账号、provider 名称或样本常量改变 production 行为。
-- 不让 lower-level evidence 替代真实 E2E 的独有风险。
-- 不将任意 failure 强制下沉，不将任意内部 bug 强制 sweep，也不将探索运行变成固定次数或审批门。
-- 不因本方法论使低风险局部改动新增 Plan revision、Ticket、DAG、review 或 owner checkpoint。
+- 本方法论不创建固定矩阵、case ID、registry、新 runtime state 或 gate，也不使低风险局部改动新增 Plan revision、Ticket、DAG、review 或 owner checkpoint。
+- 不以 fixture、测试账号、provider 名称或样本常量改变 production 行为；不让 lower-level evidence 替代真实 E2E 的独有风险。
+- 不将任意 failure 强制下沉，也不将任意内部 bug 强制 sweep。
