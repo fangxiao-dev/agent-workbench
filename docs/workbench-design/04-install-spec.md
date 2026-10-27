@@ -9,7 +9,7 @@
 插件 `impl-package` 的宿主 manifest：
 
 - `.codex-plugin/plugin.json`：skills + hooks（`./hooks/codex-hooks.json`，apply_patch 守卫与 SessionStart capsule）
-- `.claude-plugin/plugin.json`：skills + agents（4 个 review-track review agents）
+- `.claude-plugin/plugin.json`：skills + agents（3 个 review-track review agents）
 - `.zcode-plugin/plugin.json`：skills + hooks（`./hooks/zcode-hooks.json`，Edit/Write 守卫与 SessionStart capsule）+ agents（同一组 review-track 子代理，zcode 原生注册到 Settings → 子智能体）
 
 ZCode hooks 使用独立文件名 `zcode-hooks.json` 而非 `hooks/hooks.json`，避免被 Claude Code 的插件 hook 自动发现机制意外拾取。ZCode 侧 `impl_package_hooks.py activate` 拿不到 session 环境变量时自动落为仓库级 default 绑定；Codex 仍按 session 绑定。
@@ -118,7 +118,7 @@ python scripts/codex_setup.py apply --expect-report <audit-sha> --adopt-agents
 
 `--adopt-agents` 只允许当前仓库 inventory 中的顶层 TOML 进入受管状态，仍受审计 SHA、路径安全和 post-apply audit 约束。
 
-Claude 插件根目录的 `agents/` 由 Claude 原生扫描；`impl-package/.claude-plugin/plugin.json` 显式声明四个 Markdown agent 文件。安装后可在 `/agents` 中确认四个 `review-track-*` profile。
+Claude 插件根目录的 `agents/` 由 Claude 原生扫描；`impl-package/.claude-plugin/plugin.json` 显式声明三个 Markdown agent 文件。安装后可在 `/agents` 中确认三个 `review-track-*` profile。
 
 Codex 当前插件 manifest 不支持 `agents` 字段，不能把它加入 `.codex-plugin/plugin.json`；否则不能保证插件通过宿主校验。Codex 角色使用全局 `$CODEX_HOME/agents`（未设置时 `~/.codex/agents`），由插件内的显式投影脚本安装：
 
@@ -126,16 +126,15 @@ Codex 当前插件 manifest 不支持 `agents` 字段，不能把它加入 `.cod
 python plugin-marketplace/plugins/impl-package/scripts/install_codex_agents.py --global
 ```
 
-脚本只生成 `review-track-code.toml`、`review-track-standards.toml`、`review-track-spec.toml` 和 `review-track-safety.toml` 四个已知文件；默认拒绝覆盖不同内容，`--force` 只更新带有本包管理标记（或本包旧格式）的这些目标，并拒绝符号链接或 Windows reparse point。四个 Codex role 与 `do-review` 的 leaf-agent 名称一致，插件升级后需重新运行脚本；项目级 `.codex/agents` 不属于本安装目标。
+脚本只生成 `review-track-code.toml`、`review-track-spec.toml` 和 `review-track-safety.toml` 三个已知文件；默认拒绝覆盖不同内容，`--force` 只更新带有本包管理标记（或本包旧格式）的这些目标，并拒绝符号链接或 Windows reparse point。三个 Codex role 与 `do-review` 的 leaf-agent 名称一致，插件升级后需重新运行脚本；项目级 `.codex/agents` 不属于本安装目标。
 
 | Codex role | Model | Reasoning effort |
 |------|------|------|
-| `review-track-code` | `gpt-6-astra` | `medium` |
+| `review-track-code` | `gpt-5.6-sol` | `high` |
 | `review-track-spec` | `gpt-5.6-sol` | `medium` |
-| `review-track-standards` | `gpt-5.6-sol` | `medium` |
 | `review-track-safety` | `gpt-5.6-sol` | `medium` |
 
-这些固定档位同时用于 `initial` 和 `terminal-final`；`finding-closure` 不使用四个 track role，仍由独立 `luna-worker` 处理。
+这些固定档位同时用于 `initial` 和 `terminal-final`；`finding-closure` 不使用三个 track role，仍由独立 `luna-worker` 处理。
 
 | 平台 | 链接类型 |
 |------|----------|

@@ -22,12 +22,12 @@ Impl-Package 的 leaf report 存在 parent 指定的 package 内独占路径，�
 verdict: PASS | FAIL | UNCERTAIN
 reviewed-head: <实际审阅 SHA>
 review-run: <本次 ReviewRun ID>
-review-track: <Track A/B/C/D>
+review-track: <Track A/C/D>
 ```
 
 ## Terminal coverage record
 
-terminal-final 的 canonical ledger 更新且所需结果已返回后，parent 用 `trail append` 落盘下列 `review.terminal_summary` fact。它复用已有 trail，不创建第二份 ledger。artifact 和 reuseEvidence 为 package-relative 路径；report 前四行必须含上面的真实 verdict/head/run/track，各 track 使用独占 artifact。A/B/C required；Safety 适用时追加 Track D。A 在最终 HEAD 重审，B/C/Safety 可在同一 ReviewRun 内复用旧 PASS，parent 在 reuseEvidence 中记录旧/新 SHA、该轨输入的 delta 与不受影响的依据。
+terminal-final 的 canonical ledger 更新且所需结果已返回后，parent 用 `trail append` 落盘下列 `review.terminal_summary` fact。它复用已有 trail，不创建第二份 ledger。artifact 和 reuseEvidence 为 package-relative 路径；report 前四行必须含上面的真实 verdict/head/run/track，各 track 使用独占 artifact。A/C required；Safety 适用时追加 Track D；旧 trail 中的 Track B 结果仍可读，不再必需。A 在最终 HEAD 重审，C/Safety 可在同一 ReviewRun 内复用旧 PASS，parent 在 reuseEvidence 中记录旧/新 SHA、该轨输入的 delta 与不受影响的依据。
 
 ```json
 {
@@ -40,8 +40,7 @@ terminal-final 的 canonical ledger 更新且所需结果已返回后，parent �
     "safetyApplicable": false,
     "results": [
       {"track": "Track A", "verdict": "PASS", "reviewedHead": "<最终 HEAD>", "artifact": "execution/initial/review-a.md"},
-      {"track": "Track B", "verdict": "PASS", "reviewedHead": "<旧 PASS HEAD>", "artifact": "execution/initial/review-b.md", "reused": true, "reuseEvidence": "execution/initial/review-reuse.md"},
-      {"track": "Track C", "verdict": "PASS", "reviewedHead": "<最终 HEAD>", "artifact": "execution/initial/review-c.md"}
+      {"track": "Track C", "verdict": "PASS", "reviewedHead": "<旧 PASS HEAD>", "artifact": "execution/initial/review-c.md", "reused": true, "reuseEvidence": "execution/initial/review-reuse.md"}
     ]
   }
 }
@@ -53,7 +52,7 @@ terminal-final 的 canonical ledger 更新且所需结果已返回后，parent �
 
 The parent owns one Markdown ledger for the whole ReviewRun. Leaf results are candidates, not accepted findings. After every round, wait for every required track, then deduplicate, verify, classify, and atomically rewrite that same ledger with verdicts, evidence, lifecycle transitions, and convergence. Never create a later-round ledger; a leaf result is not authoritative before this update.
 
-Use source labels `Track A (review-code)`, `Track B (review-code-by-standards)`, `Track C (review-code-by-spec)`, additional selected labels, `fused`, and `main-session` as applicable. Deduplicate by broken invariant or observable failure, not path or reviewer; retain every contributor for a shared issue.
+Use source labels `Track A (review-code)`, `Track C (review-code-by-spec)`, additional selected labels, `fused`, and `main-session` as applicable. Deduplicate by broken invariant or observable failure, not path or reviewer; retain every contributor for a shared issue.
 
 Before reporting a P1, P2, or blocker, verify cited target-revision evidence against the fixed ReviewRun and record whether the failure is in the diff, triggered by changed behavior, or pre-existing/baseline. Insufficient evidence becomes disputed, downgraded, out of scope, or `UNCERTAIN`, never a verified blocker.
 
@@ -109,7 +108,6 @@ Every summary is the complete latest accepted finding set for that ReviewRun, no
 | Track | Verdict | Coverage / note |
 | --- | --- | --- |
 | Track A (review-code) | PASS / FAIL / UNCERTAIN |  |
-| Track B (review-code-by-standards) | PASS / FAIL / UNCERTAIN |  |
 | Track C (review-code-by-spec) | PASS / FAIL / UNCERTAIN |  |
 
 ## Findings
@@ -123,7 +121,6 @@ Every summary is the complete latest accepted finding set for that ReviewRun, no
 | Source | Count | Notes |
 | --- | --- | --- |
 | Track A (review-code) |  |  |
-| Track B (review-code-by-standards) |  |  |
 | Track C (review-code-by-spec) |  |  |
 | fused |  |  |
 | main-session |  |  |
@@ -188,8 +185,8 @@ Main-session decision:
 ```markdown
 ## Review Rounds
 
-| Round | Track A (<skill>) | Track B (<skill>) | Track C (<skill>) | New accepted | Convergence note |
-| --- | --- | --- | --- | --- | --- |
+| Round | Track A (<skill>) | Track C (<skill>) | New accepted | Convergence note |
+| --- | --- | --- | --- | --- |
 
 ## Track Lifecycle
 

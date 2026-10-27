@@ -48,25 +48,25 @@ class ThreeTrackContractTests(unittest.TestCase):
             registry["terminal_tracks"],
             [
                 {"label": "Track A", "skill": "review-code"},
-                {"label": "Track B", "skill": "review-code-by-standards"},
                 {"label": "Track C", "skill": "review-code-by-spec"},
             ],
         )
         self.assertEqual(
             set(registry["reviewers"]),
-            {"review-code", "review-code-by-standards", "review-code-by-spec", "safety-review"},
+            {"review-code", "review-code-by-spec", "safety-review"},
         )
         for name, record in registry["reviewers"].items():
             self.assertEqual(record["canonical_skill_path"], f"skills/{name}/SKILL.md")
         self.assertNotIn("safety-review", [track["skill"] for track in registry["default_tracks"]])
         self.assertNotIn("safety-review", [track["skill"] for track in registry["terminal_tracks"]])
 
-    def test_track_b_admission_is_explicit_and_terminal_final_does_not_inherit_initial_selection(self) -> None:
+    def test_standards_review_is_owned_by_track_a_and_terminal_final_does_not_inherit_initial_selection(self) -> None:
         topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
-        track_b = markdown_section(topology, "Track B admission")
-        self.assertIn("module boundary", track_b)
-        self.assertIn("terminal-final", track_b)
-        self.assertIn("terminal_tracks", track_b)
+        self.assertNotIn("Track B admission", topology)
+        self.assertNotIn("review-code-by-standards", topology)
+        self.assertIn("Standards and maintainability review belongs to Track A", topology)
+        self.assertFalse((ROOT / "skills" / "review-code-by-standards").exists())
+        self.assertTrue((ROOT / "skills" / "review-code" / "references" / "strict-maintainability.md").is_file())
 
         safety = markdown_section(topology, "Safety admission")
         self.assertRegex(safety, r"(?s)`initial`.*default_tracks.*Track A/C")
@@ -74,7 +74,7 @@ class ThreeTrackContractTests(unittest.TestCase):
         terminal = f"{safety}\n{phases}"
         self.assertRegex(
             terminal,
-            r"(?s)`terminal-final`.*terminal_tracks.*Track A/B/C.*Track A unconditionally on the entire diff.*Tracks B, C, and Safety.*earlier `HEAD`.*PASS for that track.*delta from that PASS `HEAD` to the final `HEAD`.*admission condition.*reuse that PASS and skip.*Track C's admission range.*Ticket's section-level contract references.*record which PASS `HEAD` is reused.*delta used for the admission decision.*Admission is the only skip basis.*finding closure was clean.*Loop track was dormant",
+            r"(?s)`terminal-final`.*terminal_tracks.*Track A/C.*Track A unconditionally on the entire diff.*Tracks C and Safety.*earlier `HEAD`.*PASS for that track.*delta from that PASS `HEAD` to the final `HEAD`.*admission condition.*reuse that PASS and skip.*Track C's admission range.*Ticket's section-level contract references.*record which PASS `HEAD` is reused.*delta used for the admission decision.*Admission is the only skip basis.*finding closure was clean.*Loop track was dormant",
         )
         self.assertIn("independent of which tracks `initial`", safety)
 
@@ -180,7 +180,7 @@ class ThreeTrackContractTests(unittest.TestCase):
         briefs = BRIEFS_PATH.read_text(encoding="utf-8")
         closure = markdown_section(topology, "Review phase")
         self.assertIn("one independent `reviewer` leaf", closure)
-        self.assertIn("do not split the closure into source, standards, spec, or Safety tracks", closure)
+        self.assertIn("do not split the closure into code, spec, or Safety tracks", closure)
         self.assertIn("one independent reviewer for the whole named-finding set", briefs)
         # Slim skill keeps the single-reviewer closure judgment.
         self.assertIn("finding-closure", skill)

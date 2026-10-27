@@ -22,7 +22,6 @@ CODEX_EXECUTION_PROFILES = {
     "review-track-code": ("gpt-5.6-sol", "high"),
     "review-track-safety": ("gpt-5.6-sol", "medium"),
     "review-track-spec": ("gpt-5.6-sol", "medium"),
-    "review-track-standards": ("gpt-5.6-sol", "medium"),
 }
 
 

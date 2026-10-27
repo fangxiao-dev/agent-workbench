@@ -12,7 +12,6 @@
   "skills": "./skills/",
   "agents": [
     "./agents/review-track-code.md",
-    "./agents/review-track-standards.md",
     "./agents/review-track-spec.md",
     "./agents/review-track-safety.md"
   ]

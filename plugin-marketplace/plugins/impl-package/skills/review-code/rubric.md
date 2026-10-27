@@ -17,3 +17,6 @@ updated: 2026-07-22
 
 ### R3 · 2026-08-12
 - 采纳「按加载频率分层而不是不断给主路径加规则」— 保留完整审查知识，把详细 checklist、工具与实践下沉到 `references/review-checklist.md`，仅 full behavior review 条件加载。
+
+### R4 · 2026-10-27
+- 采纳「将 `review-code-by-standards` 并入 `review-code`」（Owner 批准；standards 并入 review-code，`review-code-by-standards` 退役）：规范优先、Fowler smell、codebase-design 词汇、hard/judgement 区分与工具已执行规则不重复报告并入 `references/review-checklist.md` 的 Standards and maintainability；`references/strict-maintainability.md` 作为显式深挖选项。

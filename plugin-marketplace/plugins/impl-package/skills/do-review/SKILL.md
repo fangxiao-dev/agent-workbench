@@ -1,6 +1,6 @@
 ---
 name: do-review
-description: Orchestrate independent leaf reviewer agents for PR/code review, N-round review, loop/until-converged review, custom reviewer selection, and closure verification. Pins an immutable committed revision or isolated working-tree snapshot first and resolves the review strategy for every phase.
+description: 编排独立 leaf reviewer agent，用于 PR/code review、N 轮 review、loop/until-converged review、自定义 reviewer 选择与 closure verification；先固定不可变的已提交 revision 或隔离的 working-tree snapshot，再为每个 phase 解析 review strategy。
 allowed-tools:
   - Read
   - Grep
@@ -19,14 +19,13 @@ allowed-tools:
 ## Gate 0（判断）
 
 1. ReviewRun 优先用已有 commit 固定比较 SHA。审阅未提交改动时不要求先提交：钉住纳入本次 review unit 的确切文件清单与内容哈希，其余 dirty 文件明确记为 out of scope，终审采信前复核这些文件未漂移。合同源始终从固定 `HEAD` 读取。
-2. 每个本轮需要运行的 track 恰好派发一次匹配的独立 leaf invocation；terminal-final 中满足复用条件的 B/C/Safety 消费旧 PASS，不重复派发。逐 track 固定派发，才能避免 required coverage 被重复派发或静默漏掉。
+2. 每个本轮需要运行的 track 恰好派发一次匹配的独立 leaf invocation；terminal-final 中满足复用条件的 C/Safety 消费旧 PASS，不重复派发。逐 track 固定派发，才能避免 required coverage 被重复派发或静默漏掉。
 3. leaf 或其执行 worker 不可用/未授权时，在创建 ReviewRun 前停止并询问“停止，或授权精确命名的 degraded 单 session 列表”，绝不自行降级。否则缺失的独立证据会被误报为完整 review。
 4. scope、phase、topology 固定前不预留 capacity。capacity 不能反过来决定应审哪些 track。
 
 ## 判断启发式（保留）
 
 - **Safety admission**：diff 触及 auth/session/credential、authorization/permission/tenant isolation、data integrity/durable write/reconciliation/money/order/customer state、concurrency/transaction/idempotency/locking/retry、schema migration/backfill/rollback 或 payment/webhook/job/remote storage/third-party mutation 等 external side effect 时适用；关键词只是线索，必须记录匹配边界与 diff/contract 事实。Safety 适用却未列入显式 `terminal-final` → coverage `INCOMPLETE`，不能支持 terminal PASS。
-- **Track B admission**：diff 引入/挪动 module boundary、新增 public interface/abstraction 或跨文件重构 module/目录结构时，`initial` 追加 `review-code-by-standards`；`terminal-final` 恒定包含 Track B（来自 `terminal_tracks`），不受此判断影响，Ticket 级 `initial` 省略它不构成 package 级 gap。
 - **Aggregate fail-closed**：无 required track → `INCOMPLETE`；任一 required `FAIL` → Overall `FAIL`；否则任一 required `UNCERTAIN` → Overall `UNCERTAIN`；否则任一 required track 不是 `PASS`（含缺 verdict）→ `INCOMPLETE`；只有每个 required track 都 PASS 才 PASS。terminal Safety 遗漏沿用 Safety admission 规则。
 - **Finding acceptance/dedup/classification**：leaf 输出先是 candidate evidence，parent 写入唯一 canonical ledger 后才采信；按 broken invariant/observable failure 去重，不按 path/reviewer。blocker 是业务数据、money、inventory、order、customer state、安全或 runtime-visible product data 风险；follow-up 真实但不阻断；backlog 是非紧急清理。证据不足只能 disputed/downgraded/out-of-scope/`UNCERTAIN`，不能变成 verified blocker。
 - **Track C source recheck**：finding 被接受并归类为 Spec fidelity 后，移交 implementation 前做一次 fresh independent reviewer source recheck，范围限 accepted finding、fixed-head 的 immutable Decision/Spec/`contract-design.md`（若有）和直接引用的 Ticket/cross-module authority；结果只记录一次，不能再派第二次。记录为 sources uniquely decide、require contract revision 或 leave an owner decision；source recheck 不可用或 incomplete 阻断 handoff，不能跳过；未触及的 legacy package 缺 `contract-design.md` 本身不是 gap。
@@ -46,7 +45,7 @@ allowed-tools:
 ## 2. Resolve Mode, Phase, Topology And Capacity
 
 1. 选择 `N rounds`（默认一轮）、`Loop`（默认上限十轮）或只针对命名 findings 的 `Closure verification`，再读 [review-topology.md](references/review-topology.md) 处理 Safety admission、`initial`/`finding-closure`/`terminal-final`、final-HEAD 和 Loop lifecycle。先确定 phase 和 lifecycle，避免把 closure 当成 terminal 或把 Loop 的规则临时改写。
-2. 无显式 reviewer 时，`initial` 从 registry `default_tracks`（Track A/C）起步，按 Track B admission、Safety admission 条件分别追加 `review-code-by-standards`、`safety-review`；`terminal-final` 无显式 reviewer 时始终从 registry `terminal_tracks`（Track A/B/C）起步——不受本次 ReviewRun 中 `initial` 或任何更早阶段实际选中子集的影响——按 Safety admission 条件追加 Safety；`finding-closure` 只用一个 independent `reviewer`，不按 registry 拆 track，也不另起 Safety leaf，reviewer 只检查 named findings 内的 safety implications；复用遵循 `$dispatcher` 的 reviewer lifecycle。显式 closure selection 仍必须解析成恰好一个 leaf，其它 phase 按声明顺序运行并顺序编号 label。这样 closure scope 不会被扩成一次新的全量发现。
+2. 无显式 reviewer 时，`initial` 从 registry `default_tracks`（Track A/C）起步，按 Safety admission 条件追加 `safety-review`；`terminal-final` 无显式 reviewer 时始终从 registry `terminal_tracks`（Track A/C）起步——不受本次 ReviewRun 中 `initial` 或任何更早阶段实际选中子集的影响——按 Safety admission 条件追加 Safety；`finding-closure` 只用一个 independent `reviewer`，不按 registry 拆 track，也不另起 Safety leaf，reviewer 只检查 named findings 内的 safety implications；复用遵循 `$dispatcher` 的 reviewer lifecycle。显式 closure selection 仍必须解析成恰好一个 leaf，其它 phase 按声明顺序运行并顺序编号 label。这样 closure scope 不会被扩成一次新的全量发现。
 3. reviewer 的 worker 选择独立于 topology，由 worker skill 负责 model/effort defaults，其它 phase 使用当前 host 对 caller target class 的 defaults（受显式约束）。worker 选择不应反向改变 required topology。
 
 4. 通过 [reviewer-registry.json](references/reviewer-registry.json) 与 matching leaf-agent map 解析 track，并在 dispatch 前用 `verify-reviewer-skills.py` 校验 canonical skill path；ambiguous、unreadable、escaping 或 frontmatter mismatch 一律拒绝。主 session 不加载 selected track skill，由 leaf agent 的 `skills` 字段加载；仅为本轮需要运行的 leaf 预留 slot，能并发则并发，显式 reviewer selection 按声明的完整列表运行，capacity 不能删除 reviewer。路径校验失败或 capacity 不足时不能用近似 leaf 填空。

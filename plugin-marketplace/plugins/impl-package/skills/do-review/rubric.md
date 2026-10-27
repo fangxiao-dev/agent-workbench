@@ -5,9 +5,9 @@ updated: 2026-09-05
 
 ## 原则
 
-- [已确认] `do-review` 是唯一 orchestrator；`initial` 默认两个并列 leaf track 为 `review-code`、`review-code-by-spec`，Track B admission 或高风险边界命中时分别条件追加 `review-code-by-standards`、`safety-review`；`terminal-final` 无显式 reviewer 时始终使用完整三轨 `terminal_tracks`，不受 `initial` 实际选中子集影响。（证据: R9）
+- [已确认] `do-review` 是唯一 orchestrator；`initial` 默认两个并列 leaf track 为 `review-code`、`review-code-by-spec`，高风险边界命中时条件追加 `safety-review`；`terminal-final` 无显式 reviewer 时始终使用 `terminal_tracks`（Track A/C），不受 `initial` 实际选中子集影响；规范与可维护性由 Track A（`review-code`）承担。（证据: R9, R11）
 - [已确认] `finding-closure` 使用一个独立于实现者的 reviewer；同 scope reviewer 复用遵循 Dispatcher lifecycle，executor 由宿主或 Owner 选择。（证据: R10）
-- [已确认] 同一完整 diff 与 fixed comparison point 只由主会话确定一次；三轨同轮独立，第二轮起只接收 canonical ledger。
+- [已确认] 同一完整 diff 与 fixed comparison point 只由主会话确定一次；各轨同轮独立，第二轮起只接收 canonical ledger。
 - [已确认] 涉及计划包时，审查范围覆盖整个计划包的 commits，不只审查最后一个实现 commit。
 - [待验证] 审阅编排使用最小必要的自然语言状态来保证轮次、证据和收敛可信，不以刚性 schema 或过度 canonical 字段限制 leaf reviewer 的主动探索。（证据: R2）
 - [待验证] reviewer role 用首要审查意图与交接方向引导，不用排他的能力禁令；跨域风险仍可作为 candidate 交给父会话的 canonical ledger 归属与去重。（证据: R3）
@@ -50,9 +50,13 @@ updated: 2026-09-05
 - 采纳「必须使用 leaf subagent」：每个 selected track 派 matching leaf agent；不可用时停在 ReviewRun 创建前询问，不得自行降级。
 
 ### R9 · 2026-08-25
-- 采纳「`initial` 默认精简为 Track A/C，`terminal-final` 恒定完整三轨」：用户原话确认"只有 terminal 需要 A/B/C+D，其余都可以 A/C+B/D"。Ticket 级 `initial` 由 dev-with-track 的 material-risk 判断触发；Track B 按 diff 是否触及 module boundary、抽象或结构重构追加。`terminal-final` 始终从完整三轨起步，不继承更早阶段实际选中子集。
+- [已被 R11 取代：Track B 与「terminal 完整三轨」拓扑退役，现为 Track A（含 standards）+ Track C + 条件 Safety] 采纳「`initial` 默认精简为 Track A/C，`terminal-final` 恒定完整三轨」：用户原话确认"只有 terminal 需要 A/B/C+D，其余都可以 A/C+B/D"。Ticket 级 `initial` 由 dev-with-track 的 material-risk 判断触发；Track B 按 diff 是否触及 module boundary、抽象或结构重构追加。`terminal-final` 始终从完整三轨起步，不继承更早阶段实际选中子集。
 - 退役执行方法侧的 `checkpoint` review 概念；material-risk requirement 归 dev-with-track，review topology 与 closure 归本 Skill。
 
 ### R10 · 2026-08-26
 
 - 采纳 provider-neutral closure：`finding-closure` 只决定一个 independent reviewer 的审查策略；同 scope 的复用遵循 Dispatcher reviewer lifecycle，不固定 Grok 或每轮 fresh。
+
+### R11 · 2026-10-27
+
+- 采纳「`review-code-by-standards` 并入 `review-code`」（Owner 批准）：默认拓扑为 Track A（code，含 standards）+ Track C（spec）+ 条件 Safety；Track B 退役，不再 required，旧 trail 中的 Track B 结果保持可读。

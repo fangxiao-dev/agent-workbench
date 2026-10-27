@@ -1,6 +1,6 @@
 # 严格可维护性深挖
 
-这是按需审查视角。常规 Standards 审查已经足够时不必加载它；当用户明确要求严格可维护性审查，或完整 diff 显示结构风险时，可用它帮助继续探索。
+这是按需审查视角。常规 standards 检查（[review-checklist.md](review-checklist.md) 的 Standards and maintainability）已经足够时不必加载它；当 Owner 明确要求严格可维护性审查，或 reviewer 凭完整 diff 的证据判断结构需要复核时，可用它帮助继续探索。
 
 ## 非穷尽信号
 
