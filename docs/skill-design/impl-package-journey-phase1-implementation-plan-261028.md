@@ -1,6 +1,6 @@
 # impl-package Journey 验收第一期实现计划
 
-本计划只覆盖已批准提案的第一期：§2、§3、§5 的第一期表和 §7 第 1–3 步；不实现第二期 seam 放行、存疑传播或 review 批次。推荐把 Journey 包落为新的数据格式 `formatVersion: "3.6"`，让既有 `3.5` Ticket/claim 包继续走原校验路径且不迁移；实现分四个提交阶段，治理小修可先行，3.6 runtime、合同、技能和 fixture 必须在最后一个阶段一起上线。
+本计划只覆盖已批准提案的第一期：§2、§3、§5 的第一期表和 §7 第 1–3 步；不实现第二期 seam 放行、存疑传播或 review 批次。Owner 已于 2026-10-28 批准本计划及 §11 全部决策。Journey 包落为新的数据格式 `formatVersion: "3.6"`，让既有 `3.5` Ticket/claim 包继续走原校验路径且不迁移；实现分四个提交阶段，治理小修可先行，3.6 runtime、合同、技能和 fixture 必须在最后一个阶段一起上线。
 
 ## 1. 新旧包共存方式
 
@@ -207,12 +207,14 @@ Journey step、suite 和 review 的具体 revision/environment/artifact 只在�
 5. 使用 `package amendment confirm`，在同一 final HEAD 下重读所有有效 Journey/Suite/Review/Release records，追加完整 release order，运行 `gate pass`，断言 `gate.md` 第一屏显示 Journey/Suite/Review/Amendment/Release order，state frozen 且 `.impl-package/attempts/initial.json` 生成。
 6. 在单独负例中再提交一个代码 commit 后直接 `gate pass`，断言旧 records 全部待复验；重新以新 HEAD 登记最小 required evidence 后才允许 pass。这个演练不访问外部系统、不启动真实浏览器/provider，真实新 package 的页面 Journey 仍由 Owner 按 Spec 的 operationEntry/observationSurface 记录 package-local artifact。
 
-## 11. 风险与需要 Owner 决定的点
+## 11. Owner 决策
 
-| Owner 决定 | 推荐 | 边界 |
+2026-10-28 Owner 全部采纳下表"决定"列。
+
+| 事项 | 决定 | 边界 |
 | --- | --- | --- |
 | 新包分流采用 3.6 还是 3.5+模式字段 | 采用 3.6；它是数据格式变化，不改插件版本 | 若 Owner 选择模式字段，必须另行批准 3.5 顶层 schema 放宽、缺省模式和旧包误分流的兼容合同；本计划不同时实现两套方案 |
-| 第一批真实新包的 required Journey 与 suite 清单 | 每个包先选 1–2 条最关键连续 Journey，规则 suite 只覆盖 Spec rule matrix，强制一个 package safety suite | Owner 必须在 req-align Spec Gate 中批准清单；不能由 impl-planning 或 Gate 临时补套件 |
+| 第一批真实新包的 required Journey 与 suite 清单 | 每个包先选 1–2 条最关键连续 Journey，规则 suite 只覆盖 Spec rule matrix，package safety suite 按 §2.1 依风险声明 | Owner 必须在 req-align Spec Gate 中批准清单；不能由 impl-planning 或 Gate 临时补套件 |
 | 生产/测试 environment 标识 | 每个 Journey/Suite 在 Spec 中列出明确字符串，记录按字符串精确匹配，不做环境相似推断 | 这决定哪些旧记录可以复用；默认不允许“同类环境”自动复用 |
 | required review 的最小绑定 | Ticket 声明 required review；同一 package 的 terminal-final 仍由 do-review 完整覆盖；per-Ticket receipt 只证明该 Ticket 的 required review | 不把 review batch、seam 放行或降级 topology 放入第一期 |
 | Amendment 的 Owner 身份与确认 artifact | 用 package-local `confirmedBy`、`confirmedRevision` 和 Owner confirmation artifact；不接入外部审批系统 | 未确认只能阻断最终 Gate，不阻止不依赖该语义的合法实施 |
