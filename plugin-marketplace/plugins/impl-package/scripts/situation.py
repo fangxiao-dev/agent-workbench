@@ -809,11 +809,35 @@ def _parse_state(view: FileView) -> StateView:
         ticket_ids = sorted(str(identifier) for identifier in tickets)
 
     errors: list[str] = []
-    expected = {"formatVersion", "attempt", "attemptHistory", "predecessors", "tickets", "evidenceIndex", "activeCheckpoints"}
+    base_fields = {"formatVersion", "attempt", "attemptHistory", "predecessors", "tickets", "evidenceIndex", "activeCheckpoints"}
+    format_version = raw.get("formatVersion")
+    expected = base_fields | ({"acceptance"} if format_version == "3.6" else set())
     if set(raw) != expected:
-        errors.append("顶层字段不符合 3.5 schema")
-    if raw.get("formatVersion") != "3.5":
-        errors.append("formatVersion 不是 3.5")
+        errors.append(f"顶层字段不符合 {format_version or '未知'} schema")
+    if format_version not in {"3.5", "3.6"}:
+        errors.append(f"不支持 formatVersion：{format_version!r}")
+    if format_version == "3.6":
+        acceptance = raw.get("acceptance")
+        if not isinstance(acceptance, dict) or set(acceptance) != {"contractBaseline", "releaseOrder", "amendments"}:
+            errors.append("acceptance 必须只含 contractBaseline、releaseOrder、amendments")
+        else:
+            if not isinstance(acceptance.get("releaseOrder"), str) or acceptance["releaseOrder"] not in {"required", "none"}:
+                errors.append("acceptance.releaseOrder 无效")
+            if not isinstance(acceptance.get("amendments"), list):
+                errors.append("acceptance.amendments 不是 list")
+            baseline = acceptance.get("contractBaseline")
+            if not isinstance(baseline, dict) or set(baseline) != {"head", "files"}:
+                errors.append("acceptance.contractBaseline 字段无效")
+            else:
+                if not isinstance(baseline.get("head"), str) or not COMMIT_RE.fullmatch(baseline["head"]):
+                    errors.append("acceptance.contractBaseline.head 不是 commit ID")
+                files = baseline.get("files")
+                if not isinstance(files, dict) or "spec.md" not in files:
+                    errors.append("acceptance.contractBaseline.files 缺少 spec.md")
+                elif set(files) - {"decision.md", "spec.md", "contract-design.md"} or any(
+                    not isinstance(value, str) or not COMMIT_RE.fullmatch(value) for value in files.values()
+                ):
+                    errors.append("acceptance.contractBaseline.files 含无效 blob hash")
     if not isinstance(attempt, dict) or not attempt_id:
         errors.append("attempt.id 缺失")
     elif set(attempt) != {"id", "plan"} or not isinstance(attempt.get("plan"), str) or not attempt.get("plan"):
@@ -846,6 +870,7 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
     if not state.valid or state.raw is None:
         return []
     raw = state.raw
+    format_version = raw.get("formatVersion", "3.5")
     errors: list[str] = []
     ticket_rows = raw.get("tickets", {})
     for identifier, row in ticket_rows.items():
@@ -877,35 +902,92 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
 
     index = raw.get("evidenceIndex", {})
     if isinstance(index, dict):
-        unknown_tickets = set(index) - set(ticket_rows)
-        if unknown_tickets:
-            errors.append("evidenceIndex 含未知 Ticket：" + ", ".join(sorted(unknown_tickets)))
-        for identifier, claim_map in index.items():
-            if not isinstance(claim_map, dict):
-                errors.append(f"evidenceIndex[{identifier}] 不是 claim mapping")
-                continue
-            known_claims = set(tickets.get(identifier, TicketInfo(identifier, None, "", False)).claims)
-            for claim, records in claim_map.items():
-                if claim not in known_claims:
-                    errors.append(f"evidenceIndex[{identifier}] 含未知 claim：{claim}")
-                if not isinstance(records, list):
-                    errors.append(f"evidenceIndex[{identifier}][{claim}] 不是 list")
+        if format_version == "3.5":
+            unknown_tickets = set(index) - set(ticket_rows)
+            if unknown_tickets:
+                errors.append("evidenceIndex 含未知 Ticket：" + ", ".join(sorted(unknown_tickets)))
+            for identifier, claim_map in index.items():
+                if not isinstance(claim_map, dict):
+                    errors.append(f"evidenceIndex[{identifier}] 不是 claim mapping")
+                    continue
+                known_claims = set(tickets.get(identifier, TicketInfo(identifier, None, "", False)).claims)
+                for claim, records in claim_map.items():
+                    if claim not in known_claims:
+                        errors.append(f"evidenceIndex[{identifier}] 含未知 claim：{claim}")
+                    if not isinstance(records, list):
+                        errors.append(f"evidenceIndex[{identifier}][{claim}] 不是 list")
+                        continue
+                    for record in records:
+                        required = {"timing", "artifact", "revision", "environment", "conclusion"}
+                        if not isinstance(record, dict) or not required <= set(record):
+                            errors.append(f"evidenceIndex[{identifier}][{claim}] evidence 字段不完整")
+                            continue
+                        if record.get("timing") not in {"early-falsification", "remaining-completion"}:
+                            errors.append(f"evidenceIndex[{identifier}][{claim}] timing 无效")
+                        if record.get("conclusion") not in {"supporting", "contradictory", "inconclusive"}:
+                            errors.append(f"evidenceIndex[{identifier}][{claim}] conclusion 无效")
+                        if not all(isinstance(record.get(field), str) and record.get(field).strip() for field in ("artifact", "revision", "environment")):
+                            errors.append(f"evidenceIndex[{identifier}][{claim}] artifact/revision/environment 无效")
+                        elif not COMMIT_RE.fullmatch(record["revision"]):
+                            errors.append(f"evidenceIndex[{identifier}][{claim}] revision 不是 commit ID")
+                        if "invalidatedBy" in record and record["invalidatedBy"] is not None and not isinstance(record["invalidatedBy"], str):
+                            errors.append(f"evidenceIndex[{identifier}][{claim}] invalidatedBy 无效")
+        else:
+            run_environments: dict[str, tuple[str, str]] = {}
+            for key, records in index.items():
+                if not isinstance(key, str) or not isinstance(records, list):
+                    errors.append(f"evidenceIndex[{key}] 必须是 evidenceKey 到 list 的映射")
                     continue
                 for record in records:
-                    required = {"timing", "artifact", "revision", "environment", "conclusion"}
-                    if not isinstance(record, dict) or not required <= set(record):
-                        errors.append(f"evidenceIndex[{identifier}][{claim}] evidence 字段不完整")
+                    if not isinstance(record, dict):
+                        errors.append(f"evidenceIndex[{key}] evidence 不是 object")
                         continue
-                    if record.get("timing") not in {"early-falsification", "remaining-completion"}:
-                        errors.append(f"evidenceIndex[{identifier}][{claim}] timing 无效")
-                    if record.get("conclusion") not in {"supporting", "contradictory", "inconclusive"}:
-                        errors.append(f"evidenceIndex[{identifier}][{claim}] conclusion 无效")
-                    if not all(isinstance(record.get(field), str) and record.get(field).strip() for field in ("artifact", "revision", "environment")):
-                        errors.append(f"evidenceIndex[{identifier}][{claim}] artifact/revision/environment 无效")
+                    kind = record.get("kind")
+                    fields_by_kind = {
+                        "journey-step": {"runId", "journeyId", "stepId", "entry"},
+                        "suite": {"suiteId"},
+                        "review": {"ticket"},
+                        "release": set(),
+                    }
+                    if not isinstance(kind, str) or kind not in fields_by_kind:
+                        errors.append(f"evidenceIndex[{key}] kind 无效")
+                        continue
+                    required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
+                    allowed = required | {"invalidatedBy", "timing"}
+                    if kind not in fields_by_kind or not required <= set(record) or set(record) - allowed:
+                        errors.append(f"evidenceIndex[{key}] {kind!r} evidence 字段不完整或含未知字段")
+                        continue
+                    if not isinstance(record.get("conclusion"), str) or record["conclusion"] not in {"supporting", "contradictory", "inconclusive"}:
+                        errors.append(f"evidenceIndex[{key}] conclusion 无效")
+                    if not all(isinstance(record.get(field), str) and record[field].strip() for field in ("artifact", "revision", "environment")):
+                        errors.append(f"evidenceIndex[{key}] artifact/revision/environment 无效")
                     elif not COMMIT_RE.fullmatch(record["revision"]):
-                        errors.append(f"evidenceIndex[{identifier}][{claim}] revision 不是 commit ID")
-                    if "invalidatedBy" in record and record["invalidatedBy"] is not None and not isinstance(record["invalidatedBy"], str):
-                        errors.append(f"evidenceIndex[{identifier}][{claim}] invalidatedBy 无效")
+                        errors.append(f"evidenceIndex[{key}] revision 不是 commit ID")
+                    if "timing" in record and (not isinstance(record["timing"], str) or record["timing"] not in {"early-falsification", "remaining-completion"}):
+                        errors.append(f"evidenceIndex[{key}] timing 无效")
+                    invalidated_by = record.get("invalidatedBy")
+                    if "invalidatedBy" in record and invalidated_by is not None and (not isinstance(invalidated_by, str) or not invalidated_by.strip()):
+                        errors.append(f"evidenceIndex[{key}] invalidatedBy 无效")
+                    if kind == "journey-step":
+                        run_id, journey_id, step_id, entry = (record.get(field) for field in ("runId", "journeyId", "stepId", "entry"))
+                        if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, entry)) or key != f"journey:{run_id}:{step_id}":
+                            errors.append(f"evidenceIndex[{key}] Journey evidence key 或字段无效")
+                        else:
+                            prior = run_environments.setdefault(run_id, (journey_id, record["environment"]))
+                            if prior != (journey_id, record["environment"]):
+                                errors.append(f"evidenceIndex[{key}] runId 的 Journey/environment 不一致")
+                    elif kind == "suite":
+                        suite_id = record.get("suiteId")
+                        if not isinstance(suite_id, str) or not suite_id.strip() or key != f"suite:{suite_id}":
+                            errors.append(f"evidenceIndex[{key}] suite evidence key 或 suiteId 无效")
+                    elif kind == "review":
+                        ticket = record.get("ticket")
+                        if not isinstance(ticket, str):
+                            errors.append(f"evidenceIndex[{key}] review evidence key 或 ticket 无效")
+                        elif (ticket != "package" and ticket not in ticket_rows) or key != f"review:{ticket}":
+                            errors.append(f"evidenceIndex[{key}] review ticket 或 evidence key 无效")
+                    elif key != "release":
+                        errors.append(f"evidenceIndex[{key}] release evidence key 必须为 release")
 
     checkpoints = raw.get("activeCheckpoints", {})
     if isinstance(checkpoints, dict):

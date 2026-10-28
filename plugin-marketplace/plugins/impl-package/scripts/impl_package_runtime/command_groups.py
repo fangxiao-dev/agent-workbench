@@ -166,9 +166,10 @@ def _parser(group: str) -> argparse.ArgumentParser:
     elif group == "evidence":
         commands.add_parser("add", help="add a JSON evidence record from stdin")
         invalidate = commands.add_parser("invalidate", help="invalidate one evidence artifact")
-        invalidate.add_argument("--ticket", required=True)
-        invalidate.add_argument("--claim", required=True)
-        invalidate.add_argument("--artifact", required=True)
+        invalidate.add_argument("--key")
+        invalidate.add_argument("--ticket")
+        invalidate.add_argument("--claim")
+        invalidate.add_argument("--artifact")
         invalidate.add_argument("--invalidated-by", required=True)
         retire_claim = commands.add_parser("retire-claim", help="remove an invalidated orphan claim")
         retire_claim.add_argument("--ticket", required=True)
@@ -247,7 +248,7 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
         if args.command == "add":
             return engine.command_evidence_add(package, sys.stdin.read())
         if args.command == "invalidate":
-            return engine.command_evidence_invalidate(package, args.ticket, args.claim, args.artifact, args.invalidated_by)
+            return engine.command_evidence_invalidate(package, args.ticket, args.claim, args.artifact, args.invalidated_by, args.key)
         return engine.command_evidence_retire_claim(package, args.ticket, args.claim)
     if group == "recovery":
         if args.command == "checkpoint":
