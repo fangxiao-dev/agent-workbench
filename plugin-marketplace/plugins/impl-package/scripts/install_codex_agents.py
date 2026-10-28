@@ -19,9 +19,9 @@ AGENT_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 FRONTMATTER_FIELD_RE = re.compile(r"^(name|description):(?:\s+(.*))?$")
 MANAGED_MARKER = "# managed-by = agent-workbench:impl-package"
 CODEX_EXECUTION_PROFILES = {
-    "review-track-code": ("gpt-5.6-sol", "high"),
-    "review-track-safety": ("gpt-5.6-sol", "medium"),
-    "review-track-spec": ("gpt-5.6-sol", "medium"),
+    "review-track-code": ("gpt-6.1-terra", "xhigh"),
+    "review-track-safety": ("gpt-6.1-terra", "high"),
+    "review-track-spec": ("gpt-6.1-terra", "high"),
 }
 
 
