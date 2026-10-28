@@ -103,6 +103,39 @@
         "Does not add worker ownership or file-level steps"
       ],
       "id": 9
+    },
+    {
+      "id": 10,
+      "prompt": "按 3.6 为 J1（J1-S1、J1-S2）创建计划。两张 Ticket 分别有通过的局部 mock 测试，但不在同一 run 或 environment 中；能否把这些局部 evidence 拼成 Journey 已走通？",
+      "expected_output": "拒绝把局部 evidence 拼成 Journey 走通；Ticket Coverage 分别认领 step，计划每次合入后从第 1 步开始，在同一 run 和 environment 中走到当前可达的最远步骤，并要求最终版本连续走完。",
+      "files": [],
+      "expectations": [
+        "Does not treat local tests or separate runs as a completed Journey",
+        "Plans a continuous run from the first step through the final Journey",
+        "Assigns each Journey step through Ticket Coverage"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "按 3.6 为一个窄 Journey 排 Ticket。首票准备先建通用登录平台、可复用 fixture framework、独立 CI 服务与完整 browser harness，后续才接第一个用户可见步骤；仓库已有登录、fixture 和测试入口。",
+      "expected_output": "把首票改成窄而完整的 walking skeleton，复用现有入口，只建设跑通第一条窄路径所需的 harness，并写明第一个用户可见 step 的到达时机。",
+      "files": [],
+      "expectations": [
+        "Keeps the first Ticket narrow and complete around an early visible step",
+        "Does not make a large speculative harness the first deliverable",
+        "Reuses existing login, fixture and test entry points"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "3.6 package 中有一张 Ticket，Coverage 写 Journey steps: none、Suites: none、Required review: integration review。它能否作为独立 Ticket 发布？",
+      "expected_output": "拒绝该 Ticket：Journey steps 和 suites 不能同时为 none，Required review 不能替代 step 或 suite 归属；将建设归入有覆盖的 Ticket，或补上它实际负责的 step/suite。",
+      "files": [],
+      "expectations": [
+        "Rejects a Ticket whose Journey steps and Suites are both none",
+        "Does not treat Required review as Ticket Coverage",
+        "Requires ownership of a Journey step or a registered suite"
+      ]
     }
   ]
 }

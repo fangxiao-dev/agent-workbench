@@ -20,10 +20,25 @@ Attempt ID: <attempt-id>
 ## 验收标准
 
 - **AC-1：** <可观察结果或约束>
-  - Stable claim ID: `AC-1`
-  - Arrival path: <跨模块 claim 必填；entry → EXISTS: <existing-symbol> → NEW: <new-symbol> → arrival>
-  - Evidence timing: `early-falsification` | `remaining-completion`
+  - Arrival path: <跨模块 AC 填写；entry → EXISTS: <existing-symbol> → NEW: <new-symbol> → arrival；规则见下方“到达路径规则”>
   - 证据：<计划证据或人工验证 owner>
+
+## Coverage
+
+- Journey steps: <J1-S1[, J1-S2 ...] | none>
+- Suites: <suite id[, ...] | none>
+- Required review: <none | review 范围与原因>
+
+Coverage 是 step 与套件归属的唯一来源，Spec 不点名 Ticket。steps 与 suites 不同时为 `none`；每个 step 和每个 ticket 级套件至少由一张 Ticket 认领。AC 写本票独有的可观察结果，Journey 与套件已覆盖的承诺引用 Spec，不在此复述。
+
+## 3.5 兼容分支
+
+<!-- AC 追加行与 Safety Invariants 仅沿用 3.5 的 package 的 Ticket 使用，新 package 删除这两部分，保留到达路径规则段。3.5 的 AC 在上面的验收标准下追加 Stable claim ID 与 Evidence timing，并保留下面的 Safety Invariants；到达路径规则对 3.5 和 3.6 都适用（3.6 的 Arrival path 随 AC 填写，缺失时 `package validate` 返回 finding）。 -->
+
+AC 追加行：
+
+- Stable claim ID: `AC-1`
+- Evidence timing: `early-falsification` | `remaining-completion`
 
 ## Safety Invariants
 

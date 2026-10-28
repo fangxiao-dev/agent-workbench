@@ -113,6 +113,20 @@ false；只有没有 U 且所有比较都相等时才是 true。
 `=>1`、`<>1`、`=1`、`between 1 and 2`、`truthy`、`not false` 和带单位的字符串都不支持；
 不匹配数值语法时会退回普通相等比较，通常得到已知 false，而不是 U。
 
+### 1.5 3.6 package 的输入
+
+第 2 节起描述 3.5 package。`formatVersion: "3.6"` 的 state 由同一个 parser 读取，输入差异如下（字段合同见 [current-state](impl-package-current-state.md) 的 3.6 节），派生事实对应 `situations.yaml` 的五个 attempt 级 key：`attempt.journey_incomplete`、`attempt.required_suite_missing`、`attempt.evidence_revalidation_pending`、`attempt.amendment_pending_or_unregistered`、`attempt.release_order_missing`：
+
+| 输入 | 3.6 形状 | 派生事实 |
+| --- | --- | --- |
+| S `evidenceIndex` | 按 `evidenceKey` 索引的 typed record，`kind` 为 `journey-step \| suite \| review \| release` | Journey reach 由 `journey-step` 记录派生，不存储；套件、review、发布顺序是否有有效记录 |
+| S `acceptance` | `contractBaseline`（`head` 与 `files` blob hash）、`releaseOrder`、`amendments[]` | Amendment 待确认、漏登（合同文件相对 baseline 变化而无 Amendment 覆盖）、发布顺序缺失 |
+| T 与 `spec.md §7` | Ticket 的 Coverage 区块；Spec 的三张固定表 | step、套件的归属与是否被认领 |
+| Git | revision 与 comparison commit 之间的 diff | 记录是否有效：revision 相同，或只改了 package 内文件 |
+| artifact 路径 | 必须在 package 内 | Temp 或 package 外路径是 gap |
+
+以 claim 为输入的 key（`evidence.*`、`ticket.safety_invariant_unfalsified` 等）描述 3.5；3.6 的 acceptance 行改读上表的派生事实。unknown 语义同 1.3：state、Spec、revision 或 diff 读不到时是 U，不压成 F，3.6 的 Gate 对 U 不放行。
+
 ## 2. 51 个 `when` key 合同
 
 表中的“缺失/错误”列同时说明文件不存在、字段不存在、字段形状不对和没有匹配 marker

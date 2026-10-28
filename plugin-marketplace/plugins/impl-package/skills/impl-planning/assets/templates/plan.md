@@ -3,6 +3,10 @@
 创建时间（Created）：
 Attempt ID: <initial | YYYYMMDD-HHMM-patch-topic>
 Composition: tickets=true, dag=false
+Acceptance: journey
+Release order: <required | none>
+
+<!-- 新 package 保留 Acceptance 与 Release order 两行（`package init` 据此生成 3.6）；沿用 3.5 的 package 的 patch plan 删除这两行。Release order 为 required 时，发布顺序表（合入、fixture/backfill、开关/发布、清理）作为 release evidence 登记。 -->
 
 > 直接引用当前 decision.md / spec.md。D/S/P 为可选旧别名，不因普通编辑升级；Git commit ID 是唯一允许持久化的历史锚点。Plan 只承载主 session 的全局调度（Composition、Ticket 实施与接线安排/依赖、共享资源协调、全局执行边界、Final Gate 判据）；Ticket 各自的建设内容、AC 和 contract references 属于 Ticket，不在此重复。
 
@@ -32,6 +36,8 @@ Composition: tickets=true, dag=false
 
 用短说明写出可提前开展的工作、真正等待的产物及交接验证条件；资源冲突按实际操作协调。只保留影响安排的结论，线性任务简述顺序即可。
 
+首个用户可见 step：<J?-S? 由哪张 Ticket、在第几张合入后可走通；harness 只建设该窄路径所需部分>。
+
 只登记跨 Ticket 的调度信息；单个 Ticket 的建设内容、AC 与 contract references 详见该 Ticket 文件，不在此重复。约束到 Ticket 的映射由 Ticket 自身的 Contract references 承载，本表不重复该映射；跨 Ticket 覆盖完整性由 `plan-review` 在 bundle-admission/full-review 时对照 Decision/Spec 与全部 Ticket 直接核对。
 
 ## 全局执行边界
@@ -46,11 +52,11 @@ Composition: tickets=true, dag=false
 | 场景 / 约束 | 检查 | 预期结果 | 证据 owner |
 | --- | --- | --- | --- |
 
-只登记跨 Ticket 的共享验证（如集成套件、契约生成、跨系统一致性检查）；单个 Ticket 内部场景的验证写在该 Ticket 的 AC，不在此重复。
+只登记跨 Ticket 的共享验证（如集成套件、契约生成、跨系统一致性检查，以及 Journey 的走通环境、入口与登记节奏：每次合入后从第 1 步走到当前可达的最远一步）；单个 Ticket 内部场景的验证写在该 Ticket 的 AC，不在此重复。
 
 ## Final Gate
 
-- 判据：默认沿用 dev-with-track 标准（全部 Required Ticket SATISFIED + review closed + durable delta 已登记或已说明无增量）；如本 Attempt 有额外判据在此列出。
+- 判据：默认沿用 dev-with-track 标准——全部 Required Ticket SATISFIED + review closed + durable delta 已登记或已说明无增量；3.6 另含每条 Journey 在最终版本上连续走通、Required Suites 全部通过、Amendment 无待确认，`Release order: required` 时发布顺序已登记。如本 Attempt 有额外判据在此列出。
 - 记录位置：`gate.md`（本节只声明判据，不复制 Gate 记录本身）。
 
 ## 交接

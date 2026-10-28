@@ -37,7 +37,7 @@
 - 当前设计范围已完整兑现：
 - 详细合同 authority 无重复或冲突：
 - 八个行为合同章节完整：
-- 验收证据已映射：
+- Journey 与必需套件已批准、行为合同的每条承诺有可观察证据：
 - 阻塞决策 / 歧义：
 - 批准人 / 日期：
 
@@ -84,11 +84,32 @@
 
 ## 7. 验收语义 / 验证证据
 
-| AC ID | 承诺结果 / 约束 | 证据 producer 或 manual owner | 通过证据 |
-| --- | --- | --- | --- |
+<!-- 新 package 的验收合同是下面三张固定表，表头与标题原样保留，Spec 不写 Ticket ID（Ticket 的 Coverage 认领 step 与套件）。沿用 3.5 的 package 保留逐 AC 表：AC ID | 承诺结果 / 约束 | 证据 producer 或 manual owner | 通过证据。 -->
 
+### Journeys
+
+<!-- 每条 Journey 用 Owner 语言写一次完整业务旅程，2–5 条是经验值。每步声明必经的操作入口和观察表面：承诺落在页面上的步骤，入口与表面都是页面；上一步的输出就是下一步的输入。step id 为 J<n>-S<m>。 -->
+
+#### J1 <终态>
+
+| Step | 操作入口 | 观察表面 | 预期 |
+| --- | --- | --- | --- |
+| J1-S1 | | | |
+
+### Rule Matrix
+
+| Rule | Suite | Oracle |
+| --- | --- | --- |
+
+<!-- 每条规则有可观察 oracle 并指向一个必需套件；展示、编辑或拒绝结果可以不产生新记录，发生权威状态转换时明确记录、producer 和下游消费。 -->
+
+### Required Suites
+
+| Suite | Kind | Scope | Entry | Environment |
+| --- | --- | --- | --- | --- |
+
+<!-- Kind：rule | safety；Scope：ticket | package。触及 tenant、RBAC/privacy、幂等或数据完整性时声明包级 safety 套件，未触及时在此写明理由。Environment 写明确字符串，记录按字符串精确匹配。 -->
 <!-- 当条件化 evidence-integrity 合同适用时，只加入相关的 false-PASS 反例，例如：归一化掩盖比较 drift、副作用后失败、rollback/invalidation 失败、不兼容投影输入或状态 shape 漂移。这些只是示例，不是必选场景。 -->
-<!-- 每条 AC 覆盖一条可独立验收的承诺；展示、编辑或拒绝结果可以不产生新记录，发生权威状态转换时明确记录、producer 和下游消费。 -->
 
 ## 8. 合同一致性
 

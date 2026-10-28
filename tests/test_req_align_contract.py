@@ -46,6 +46,8 @@ def test_spec_template_has_current_design_scope_and_required_subordinate_contrac
     assert "Disposition: detailed | not-required" in detail
     assert "not-required" in spec
     assert "Reason:" in detail
+    assert all(section in spec for section in ("### Journeys", "### Rule Matrix", "### Required Suites"))
+    assert "Ticket 的 Coverage 认领 step 与套件" in spec
 
 
 def test_spec_gate_and_planning_backstop_enforce_contract_completion() -> None:

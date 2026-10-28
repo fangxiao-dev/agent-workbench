@@ -1,6 +1,6 @@
-# Impl-Package Current State 3.5
+# Impl-Package Current State 3.5 / 3.6
 
-3.5 是 Ticket-first 的唯一运行格式。新 runtime 不双读 3.4；3.4/Task package 只能先按 [迁移 Runbook](ticket-first-migration-runbook.md) 生成并验证 candidate。Git commit ID 是历史锚点。
+3.5 与 3.6 是现役的 Ticket-first 运行格式，按 `state.formatVersion` 分流、互不读取对方字段：3.5 以 stable claim 验收（本文前半），3.6 以 Journey 与套件验收（[3.6 格式](#36-格式)）。新 runtime 不双读 3.4；3.4/Task package 只能先按 [迁移 Runbook](ticket-first-migration-runbook.md) 生成并验证 candidate。Git commit ID 是历史锚点。
 
 `scripts/validate_ticket_first_migration.py` 是一次性、只读、显式调用的迁移脚本，不是 3.5 runtime、`package validate` 或普通 preflight 的后备入口。它位于 plugin 的 `scripts/` 而非 `skills/`，不得被 host skill link 或普通 runtime 调用。
 
@@ -58,7 +58,7 @@ Ticket 状态为 `PENDING | BLOCKED | NEEDS-REVALIDATION | SATISFIED | RETIRED`�
 
 每个 Ticket 的 AC 和安全不变量必须有稳定 claim ID。AC claim 显式标记 evidence timing；安全不变量默认属于 `early-falsification`，不能被推迟到“加固组”。每条 evidence record 必须含 `timing`、`artifact`、`revision`、`environment`、`conclusion`；`invalidatedBy` 可选。`SATISFIED` 必须显式提供当前 revision/environment，并把该 pair 写入 Ticket 的 `acceptance`，覆盖全部 required claims、无未处置 contradictory/inconclusive evidence，且 implementation/acceptance 入边已释放。revision 必须是当前 Git 可解析的 commit；Gate pass 要求 acceptance revision 等于 comparison commit。release 边只在 Gate pass 前复核。`RETIRED/waived` 可释放边；`RETIRED/superseded` 只有 successor 已满足相应释放条件时才释放。
 
-命令入口：新调用按职责选择一个命令组；根 router 只暴露 `package`、`ticket`、`evidence`、`recovery`、`gate` 五组。
+命令入口：新调用按职责选择一个命令组；根 router 的语义组是 `package`、`ticket`、`evidence`、`recovery`、`gate` 五组，另有低层 `trail` 组（dispatch/return 记账，见 [Situation Inputs](situation-inputs.md)）。
 
 ```text
 python <plugin>/scripts/impl_package_state.py --package <package> package init --attempt <id> --plan <repo-relative-plan>
@@ -85,3 +85,61 @@ python <plugin>/scripts/impl_package_state.py --package <package> gate <verdict>
 `evidence retire-claim` 只清理已从当前 Ticket 删除且所有旧 evidence 都已带 `invalidatedBy` 的孤立 claim mapping；它不删除 evidence artifact，也不创建额外历史副本。
 
 `NEEDS-REVALIDATION`、`BLOCKED` 不释放依赖。ER 中旧 checkpoint 正文可作为历史保留，但 runtime 不从 ER 推导 active checkpoint；迁移后恢复只认 `activeCheckpoints`。
+
+## 3.6 格式
+
+`formatVersion: "3.6"` 由 plan 的 `Acceptance: journey` 选择，验收语义见 [composition contract §7](impl-package-composition-contract.md)。`attempt`、`attemptHistory`、`predecessors`、`tickets`、`activeCheckpoints`、唯一 writer 与 terminal 快照沿用上文；差异只有 `evidenceIndex` 与新增的 `acceptance`，没有 claim 映射。
+
+```json
+{
+  "formatVersion": "3.6",
+  "evidenceIndex": {
+    "journey:run-01:J1-S1": [{
+      "kind": "journey-step",
+      "runId": "run-01", "journeyId": "J1", "stepId": "J1-S1",
+      "entry": "<Spec 该步的操作入口原文>",
+      "artifact": "evidence/journey/run-01.md#j1-s1",
+      "revision": "<git commit>",
+      "environment": "<Journey run 使用的 environment 字符串>",
+      "conclusion": "supporting",
+      "invalidatedBy": null
+    }]
+  },
+  "acceptance": {
+    "contractBaseline": {"head": "<init HEAD>", "files": {"spec.md": "<blob hash>"}},
+    "releaseOrder": "required",
+    "amendments": [{
+      "id": "AM-1", "summary": "<一句话>", "affected": ["spec.md"],
+      "artifact": "amendments/AM-1.md", "status": "PENDING",
+      "confirmedBy": null, "confirmedRevision": null
+    }]
+  }
+}
+```
+
+`evidenceIndex` 按 `evidenceKey` 索引，key 由 runtime 从 record 推出（传入的 `evidenceKey` 必须与推导一致）；`timing` 可省略；`artifact` 必须是 package 内路径（`evidence/…`、`execution/<attempt>/reviews/…`）；`conclusion` 取值同 3.5。`amendments[].affected` 是 package 内合同文件路径（如 `spec.md`），不是 Journey step ID；多个路径分别传入多个 `--affected`。`contractBaseline.files` 记录 init 时 `spec.md` 及存在的 `decision.md`、`contract-design.md` 的 Git blob hash，用于发现未被 Amendment 的 `affected` 路径覆盖的合同文件变化；runtime 不判断改动是否用户可见，分类由登记者负责。
+
+| kind | 必填的专有字段 | evidenceKey | 说明 |
+| --- | --- | --- | --- |
+| `journey-step` | `runId`、`journeyId`、`stepId`、`entry` | `journey:<runId>:<stepId>` | `entry` 必须与 Spec 该步的操作入口一致；同一 run 从第 1 步起按顺序登记；失败不覆盖旧 run，另起新 run |
+| `suite` | `suiteId` | `suite:<id>` | environment 必须等于 Spec 声明；归属由 Ticket Coverage 反查 |
+| `review` | `ticket`（Ticket ID 或 `package`） | `review:<ticket>` | per-Ticket required review 的结果；最终 HEAD 的 review 仍由 terminal-final 承担 |
+| `release` | 无 | `release` | artifact 为 package 内发布顺序表 |
+
+**有效性**：记录的 `conclusion` 为 `supporting` 且未被 `invalidatedBy` 标记；`revision` 等于 Gate comparison commit，或两者之间只改动了本 package 目录内的文件；suite evidence 的 environment 与 Spec 字符串精确匹配，同一 Journey run 的 step evidence 使用同一 environment；active Attempt 的 artifact 文件存在。不满足的记录待复验，旧记录保留。**reach** 由 `journey-step` 记录派生（同一 run 内从第 1 步起连续有效的步数），不存储。
+
+Ticket 的 Coverage 区块、Spec 三张固定表和 `Release order` 在 `package validate` 时按固定标题与列名解析，列缺失或多出即失败。
+
+命令（长参数表以 `--help` 为准）：
+
+```text
+printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <package> evidence add      # 单条或数组，整批合法才写入
+python <plugin>/scripts/impl_package_state.py --package <package> evidence invalidate --key <evidenceKey> --invalidated-by <reason>
+python <plugin>/scripts/impl_package_state.py --package <package> package amendment add --id <id> --summary <text> --affected <contract path> [--affected <contract path> ...] --artifact <package 内路径>
+python <plugin>/scripts/impl_package_state.py --package <package> package amendment confirm --id <id> --expect PENDING --confirmed-by <owner> --confirmed-revision <commit>
+python <plugin>/scripts/impl_package_state.py --package <package> ticket satisfy <id> --expect <state> --revision <commit> --environment <id>
+python <plugin>/scripts/impl_package_state.py --package <package> gate pass --comparison-commit <commit> --reason <text> (--durable-delta <repo-relative path> ... | --no-durable-delta-reason <text>)
+python <plugin>/scripts/impl_package_state.py --package <package> gate blocked --comparison-commit <commit> --reason <gap and next action>
+```
+
+`ticket satisfy` 要求 `--revision` 是当前 HEAD 的 ancestor，负责套件与 required review 有有效 evidence，且 implementation/acceptance 入边已释放。3.6 CLI 仍要求 `--environment`，但套件环境核对读取 Spec 的 Required Suites.Environment，不读取该参数值。`gate pass` 在 header 后生成 `## Owner Summary`（每条 Journey 的走通进度、套件通过数、待确认或漏登的合同修订、发布顺序状态、最终版本短 SHA、结论），并按 composition contract §7 的两层清单核对；待确认或漏登的 Amendment 只阻止 pass。`gate pass` 还要求 `--durable-delta` 或 `--no-durable-delta-reason`，以及 `--comparison-commit`、`--reason`。`gate blocked` 记录缺口与 next action，Attempt 保持 active。`recovery lease acquire|release` 与 3.5 相同，lease 文件位于 `execution/<attempt>/leases/`。

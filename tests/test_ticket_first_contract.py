@@ -207,7 +207,7 @@ class TicketFirstContractTests(unittest.TestCase):
 
         self.assertIn("stable claim 是 runtime 可判定的 acceptance atom", composition)
         self.assertIn("一个业务 AC 可以包含多个 stable claim ID", composition)
-        self.assertIn("stable claim acceptance atoms", planning)
+        self.assertIn("stable claim atoms", planning)
         self.assertIn("stable claim 已原子化", review)
         self.assertIn("../../references/impl-package-composition-contract.md", review)
         self.assertIn("逐 stable claim 核对 artifact", execution)
@@ -215,6 +215,16 @@ class TicketFirstContractTests(unittest.TestCase):
             situations,
             r"(?s)- slug: ticket\.accept\.satisfiable.*?judgment: true.*?每个 stable claim 是否已是 acceptance atom",
         )
+
+    def test_v36_journey_coverage_and_walking_skeleton_contract_is_present(self) -> None:
+        composition = (PLUGIN / "references/impl-package-composition-contract.md").read_text(encoding="utf-8")
+        ticket = (PLUGIN / "skills/impl-planning/assets/templates/ticket.md").read_text(encoding="utf-8")
+        planning = (PLUGIN / "skills/impl-planning/SKILL.md").read_text(encoding="utf-8")
+
+        self.assertIn("## 7. 3.6 Journey 验收合同", composition)
+        self.assertIn("## Coverage", ticket)
+        self.assertIn("walking skeleton", planning)
+        self.assertIn("没有既无 step 也无套件的 Ticket", planning)
 
     def test_ticket_only_runtime_keeps_strict_ready_barrier_without_task_surface(self) -> None:
         temp = tempfile.TemporaryDirectory()

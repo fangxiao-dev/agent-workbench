@@ -15,6 +15,7 @@ def read(relative: str) -> str:
 def test_verify_and_gate_owns_claim_evidence_rules_and_execution_boundaries_is_gone() -> None:
     dev = read("skills/dev-with-track/SKILL.md")
     gate = dev.split("## Verify and Gate", 1)[1]
+    journey = dev.split("## Journey 验收（3.6 package）", 1)[1].split("## Review、Findings 与人工验收", 1)[0]
 
     assert not (PLUGIN / "skills/execution-boundaries").exists()
     for marker in (
@@ -36,6 +37,9 @@ def test_verify_and_gate_owns_claim_evidence_rules_and_execution_boundaries_is_g
         assert marker in dev, marker
     assert "Preflight: READY" not in dev
     assert "Wave 1" not in dev
+    assert "3.5 要求" in gate and "3.6 按 Journey 与 Required Suites 两层核对" in gate
+    assert "Amendment 待确认或漏登只阻止最终 `gate pass`" in journey
+    assert "再继续不依赖它的工作" in journey
     assert not (PLUGIN / "skills/dev-with-track/references/authorization-contract.md").exists()
     assert any(
         e["prompt"].startswith("Feature worktree") for e in json.loads(read("skills/dev-with-track/evals/evals.json"))["evals"]
