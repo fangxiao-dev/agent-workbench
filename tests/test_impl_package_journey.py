@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +24,8 @@ Predecessors: None
 Composition: tickets=true, dag=false
 Acceptance: journey
 """
+
+JOURNEY_FIXTURE = ROOT / "tests/fixtures/impl-package-journey"
 
 SPEC = """# Spec
 
@@ -104,6 +107,22 @@ def _make_package(
     }
     for name, text in ticket_docs.items():
         (package / "tickets" / name).write_text(text, encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "Journey fixture")
+    return repo, package
+
+
+def _make_fixture_package(root: Path) -> tuple[Path, Path]:
+    root.mkdir(parents=True, exist_ok=True)
+    repo = root / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.email", "journey@example.com")
+    _git(repo, "config", "user.name", "Journey Fixture")
+    package = repo / "docs/implementations/20261028-journey-phase1"
+    package.parent.mkdir(parents=True)
+    shutil.copytree(JOURNEY_FIXTURE, package)
+    (repo / "docs/implementations/retired.json").write_text('{"packages": []}\n', encoding="utf-8")
     _git(repo, "add", ".")
     _git(repo, "commit", "-m", "Journey fixture")
     return repo, package
@@ -193,8 +212,19 @@ def _review_record(revision: str, ticket: str, *, conclusion: str = "supporting"
     }
 
 
-def _satisfy(repo: Path, package: Path, ticket: str, revision: str, *, ok: bool = True) -> subprocess.CompletedProcess[str]:
-    result = _cli(repo, package, "ticket", "satisfy", ticket, "--expect", "PENDING", "--revision", revision, "--environment", "local-test")
+def _satisfy(
+    repo: Path,
+    package: Path,
+    ticket: str,
+    revision: str,
+    *,
+    environment: str | None = "local-test",
+    ok: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    args = ["ticket", "satisfy", ticket, "--expect", "PENDING", "--revision", revision]
+    if environment is not None:
+        args.extend(["--environment", environment])
+    result = _cli(repo, package, *args)
     if ok:
         assert result.returncode == 0, result.stderr or result.stdout
     return result
@@ -459,6 +489,19 @@ Attempt ID: initial
     _init(old_repo, old_package)
     old_state = _state(old_package)
     assert old_state["formatVersion"] == "3.5"
+    missing_environment = _cli(
+        old_repo,
+        old_package,
+        "ticket",
+        "satisfy",
+        "TKT-01",
+        "--expect",
+        "PENDING",
+        "--revision",
+        _git(old_repo, "rev-parse", "HEAD"),
+    )
+    assert missing_environment.returncode != 0
+    assert "--revision and --environment" in missing_environment.stderr
     old_state["acceptance"] = {"contractBaseline": {}, "releaseOrder": "none", "amendments": []}
     (old_package / ".impl-package/state.json").write_text(json.dumps(old_state), encoding="utf-8")
     rejected = _cli(old_repo, old_package, "package", "status")
@@ -579,6 +622,10 @@ def test_amendment_add_confirm_cas_idempotence_and_unregistered_contract_finding
     args = ("package", "amendment", "add", "--id", "A-1", "--summary", "补充时间锚点", "--affected", "spec.md", "--artifact", "artifacts/evidence.md")
     added = _cli(repo, package, *args)
     assert added.returncode == 0, added.stderr
+    state = _state(package)
+    assert state["acceptance"]["amendments"][0]["affectedBlobs"]["spec.md"] == _git(
+        repo, "hash-object", "--", package.relative_to(repo).as_posix() + "/spec.md"
+    )
     repeated = _cli(repo, package, *args)
     assert repeated.returncode == 0 and json.loads(repeated.stdout)["idempotent"] is True
     changed = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "different", "--affected", "spec.md", "--artifact", "artifacts/evidence.md")
@@ -595,6 +642,220 @@ def test_amendment_add_confirm_cas_idempotence_and_unregistered_contract_finding
     after = _cli(repo, package, "package", "validate")
     assert after.returncode == 0, after.stderr
     assert not any(row["code"] == "contract-amendment-unregistered" for row in json.loads(after.stdout)["findings"])
+
+
+def test_amendment_without_registration_blob_does_not_cover_contract_change(tmp_path: Path) -> None:
+    repo, package, _ = _init_v36(tmp_path)
+    spec = package / "spec.md"
+    spec.write_text(spec.read_text(encoding="utf-8") + "\n## Clarification\n", encoding="utf-8")
+    added = _cli(
+        repo,
+        package,
+        "package",
+        "amendment",
+        "add",
+        "--id",
+        "A-legacy",
+        "--summary",
+        "legacy amendment",
+        "--affected",
+        "spec.md",
+        "--artifact",
+        "artifacts/evidence.md",
+    )
+    assert added.returncode == 0, added.stderr
+    state = _state(package)
+    del state["acceptance"]["amendments"][0]["affectedBlobs"]
+    (package / ".impl-package/state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    validated = _cli(repo, package, "package", "validate")
+
+    assert validated.returncode == 0, validated.stderr
+    assert any(
+        row["code"] == "contract-amendment-unregistered" and row["path"] == "spec.md"
+        for row in json.loads(validated.stdout)["findings"]
+    )
+
+
+def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_path: Path) -> None:
+    repo, package = _make_fixture_package(tmp_path / "e2e")
+    initialized = _init(repo, package)
+    assert json.loads(initialized.stdout)["formatVersion"] == "3.6"
+    state = _state(package)
+    assert state["tickets"] == {"TKT-01": {"state": "PENDING"}, "TKT-02": {"state": "PENDING"}}
+    assert state["evidenceIndex"] == {}
+
+    revision = _git(repo, "rev-parse", "HEAD")
+    setup_evidence = [
+        {**_suite_record(revision, "S-resolver"), "artifact": "artifacts/evidence.md"},
+        {**_suite_record(revision, "S-workflow"), "artifact": "artifacts/evidence.md"},
+        {**_suite_record(revision, "S-safety"), "artifact": "artifacts/evidence.md"},
+        {**_review_record(revision, "TKT-01"), "artifact": "artifacts/review-receipt.md"},
+    ]
+    added = _cli(repo, package, "evidence", "add", input_value=setup_evidence)
+    assert added.returncode == 0, added.stderr
+
+    first_step = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S1"))
+    assert first_step.returncode == 0, first_step.stderr
+    assert "J1 走通 1/2" in (package / "progress.md").read_text(encoding="utf-8")
+    second_step = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S2"))
+    assert second_step.returncode == 0, second_step.stderr
+    assert "J1 走通 2/2" in (package / "progress.md").read_text(encoding="utf-8")
+    for command in ("validate", "status"):
+        result = _cli(repo, package, "package", command)
+        assert result.returncode == 0, result.stderr
+
+    blocked_by_edge = _satisfy(repo, package, "TKT-01", revision, environment=None, ok=False)
+    assert "dependencies are not released" in blocked_by_edge.stderr
+    _satisfy(repo, package, "TKT-02", revision, environment="local-test")
+    assert _state(package)["tickets"]["TKT-02"]["acceptance"] == {"revision": revision, "environment": "local-test"}
+    _satisfy(repo, package, "TKT-01", revision, environment=None)
+    assert _state(package)["tickets"]["TKT-01"]["acceptance"] == {"revision": revision}
+    assert not any(
+        record["kind"] == "claim"
+        for records in _state(package)["evidenceIndex"].values()
+        for record in records
+    )
+
+    spec = package / "spec.md"
+    spec.write_text(spec.read_text(encoding="utf-8") + "\n## Owner clarification\nFirst approved wording.\n", encoding="utf-8")
+    amendment_args = (
+        "package",
+        "amendment",
+        "add",
+        "--summary",
+        "clarify Journey wording",
+        "--affected",
+        "spec.md",
+        "--artifact",
+        "artifacts/amendment.md",
+    )
+    first_amendment = _cli(repo, package, *amendment_args, "--id", "A-1")
+    assert first_amendment.returncode == 0, first_amendment.stderr
+    pending_gate = _gate(repo, package, "pass", revision)
+    assert pending_gate.returncode != 0 and "待 Owner 确认" in pending_gate.stderr
+    blocked = _gate(repo, package, "blocked", revision, reason="A-1 needs Owner confirmation")
+    assert blocked.returncode == 0, blocked.stderr
+    assert not engine._lifecycle(package, "initial", repo).frozen
+
+    confirm_a1 = _cli(
+        repo,
+        package,
+        "package",
+        "amendment",
+        "confirm",
+        "--id",
+        "A-1",
+        "--expect",
+        "PENDING",
+        "--confirmed-by",
+        "Owner",
+        "--confirmed-revision",
+        revision,
+    )
+    assert confirm_a1.returncode == 0, confirm_a1.stderr
+    spec.write_text(spec.read_text(encoding="utf-8") + "\n## Owner clarification\nSecond approved wording.\n", encoding="utf-8")
+    stale_amendment_confirm = _cli(
+        repo,
+        package,
+        "package",
+        "amendment",
+        "confirm",
+        "--id",
+        "A-1",
+        "--expect",
+        "PENDING",
+        "--confirmed-by",
+        "Owner",
+        "--confirmed-revision",
+        revision,
+    )
+    assert stale_amendment_confirm.returncode != 0 and "no longer matches affected file contents" in stale_amendment_confirm.stderr
+    stale_contract_gate = _gate(repo, package, "pass", revision)
+    assert stale_contract_gate.returncode != 0 and "spec.md" in stale_contract_gate.stderr and "未登记 Amendment" in stale_contract_gate.stderr
+
+    second_amendment = _cli(repo, package, *amendment_args, "--id", "A-2")
+    assert second_amendment.returncode == 0, second_amendment.stderr
+    confirm_a2 = _cli(
+        repo,
+        package,
+        "package",
+        "amendment",
+        "confirm",
+        "--id",
+        "A-2",
+        "--expect",
+        "PENDING",
+        "--confirmed-by",
+        "Owner",
+        "--confirmed-revision",
+        revision,
+    )
+    assert confirm_a2.returncode == 0, confirm_a2.stderr
+
+    release = _cli(
+        repo,
+        package,
+        "evidence",
+        "add",
+        input_value={
+            "kind": "release",
+            "artifact": "artifacts/release-order.md",
+            "revision": revision,
+            "environment": "local-test",
+            "conclusion": "supporting",
+        },
+    )
+    assert release.returncode == 0, release.stderr
+    _add_terminal_summary(repo, package, revision)
+    passed = _gate(repo, package, "pass", revision, reason="all phase 1 checks satisfied")
+    assert passed.returncode == 0, passed.stderr or passed.stdout
+    gate_text = (package / "gate.md").read_text(encoding="utf-8")
+    assert "- J1 纠正后下一张账单用新科目：走通 2/2" in gate_text
+    assert "- 套件：3/3 通过" in gate_text
+    assert "- 合同修订：无待确认或漏登" in gate_text
+    assert "- 发布顺序：已记录" in gate_text
+    assert engine._lifecycle(package, "initial", repo).frozen
+    assert (package / ".impl-package/attempts/initial.json").is_file()
+
+    outside_repo, outside_package = _make_fixture_package(tmp_path / "outside")
+    _init(outside_repo, outside_package)
+    outside_revision = _git(outside_repo, "rev-parse", "HEAD")
+    outside_record = _journey_record(outside_revision, "J1-S1")
+    outside_added = _cli(outside_repo, outside_package, "evidence", "add", input_value=outside_record)
+    assert outside_added.returncode == 0, outside_added.stderr
+    outside_source = outside_repo / "src/app.py"
+    outside_source.parent.mkdir()
+    outside_source.write_text("value = 1\n", encoding="utf-8")
+    outside_head = _commit_path(outside_repo, outside_source, "outside package change")
+    outside_gate = _gate(outside_repo, outside_package, "pass", outside_head)
+    assert outside_gate.returncode != 0 and "Evidence journey:run-1:J1-S1 的 supporting 记录待复验" in outside_gate.stderr
+
+    local_repo, local_package = _make_fixture_package(tmp_path / "package-doc")
+    _init(local_repo, local_package)
+    local_revision = _git(local_repo, "rev-parse", "HEAD")
+    local_record = _suite_record(local_revision, "S-resolver")
+    local_added = _cli(local_repo, local_package, "evidence", "add", input_value=local_record)
+    assert local_added.returncode == 0, local_added.stderr
+    package_note = local_package / "implementation-note.md"
+    package_note.write_text("package-local documentation change\n", encoding="utf-8")
+    local_head = _commit_path(local_repo, package_note, "package documentation change")
+    assert engine._v36_record_valid(
+        local_package,
+        local_record,
+        local_head,
+        expected_environment="local-test",
+        attempt_active=True,
+    )
+
+    unregistered_repo, unregistered_package = _make_fixture_package(tmp_path / "unregistered-spec")
+    _init(unregistered_repo, unregistered_package)
+    unregistered_revision = _git(unregistered_repo, "rev-parse", "HEAD")
+    unregistered_spec = unregistered_package / "spec.md"
+    unregistered_spec.write_text(unregistered_spec.read_text(encoding="utf-8") + "\n## Unregistered change\n", encoding="utf-8")
+    unregistered_gate = _gate(unregistered_repo, unregistered_package, "pass", unregistered_revision)
+    assert unregistered_gate.returncode != 0
+    assert "spec.md" in unregistered_gate.stderr and "未登记 Amendment" in unregistered_gate.stderr
 
 
 def test_gate_pass_rejects_each_acceptance_gap_and_gate_blocked_keeps_attempt_active(tmp_path: Path) -> None:

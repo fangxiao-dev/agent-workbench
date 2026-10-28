@@ -110,14 +110,14 @@ python <plugin>/scripts/impl_package_state.py --package <package> gate <verdict>
     "releaseOrder": "required",
     "amendments": [{
       "id": "AM-1", "summary": "<一句话>", "affected": ["spec.md"],
-      "artifact": "amendments/AM-1.md", "status": "PENDING",
-      "confirmedBy": null, "confirmedRevision": null
+      "affectedBlobs": {"spec.md": "<registration-time Git blob hash>"},
+      "artifact": "amendments/AM-1.md", "status": "PENDING"
     }]
   }
 }
 ```
 
-`evidenceIndex` 按 `evidenceKey` 索引，key 由 runtime 从 record 推出（传入的 `evidenceKey` 必须与推导一致）；`timing` 可省略；`artifact` 必须是 package 内路径（`evidence/…`、`execution/<attempt>/reviews/…`）；`conclusion` 取值同 3.5。`amendments[].affected` 是 package 内合同文件路径（如 `spec.md`），不是 Journey step ID；多个路径分别传入多个 `--affected`。`contractBaseline.files` 记录 init 时 `spec.md` 及存在的 `decision.md`、`contract-design.md` 的 Git blob hash，用于发现未被 Amendment 的 `affected` 路径覆盖的合同文件变化；runtime 不判断改动是否用户可见，分类由登记者负责。
+`evidenceIndex` 按 `evidenceKey` 索引，key 由 runtime 从 record 推出（传入的 `evidenceKey` 必须与推导一致）；`timing` 可省略；`artifact` 必须是 package 内路径（`evidence/…`、`execution/<attempt>/reviews/…`）；`conclusion` 取值同 3.5。`amendments[].affected` 是 package 内合同文件路径（如 `spec.md`），不是 Journey step ID；多个路径分别传入多个 `--affected`，登记时的 blob 写入 `affectedBlobs`。漏登检测按当前内容匹配：合同文件当前 blob 不同于 `contractBaseline` 时，必须有一条 Amendment 为该路径记录相同 blob；旧 state 中没有 `affectedBlobs` 的 Amendment 不覆盖当前内容。每条 Amendment 都需 Owner 确认后才不再阻止 `gate pass`。
 
 | kind | 必填的专有字段 | evidenceKey | 说明 |
 | --- | --- | --- | --- |
@@ -137,9 +137,9 @@ printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <packa
 python <plugin>/scripts/impl_package_state.py --package <package> evidence invalidate --key <evidenceKey> --invalidated-by <reason>
 python <plugin>/scripts/impl_package_state.py --package <package> package amendment add --id <id> --summary <text> --affected <contract path> [--affected <contract path> ...] --artifact <package 内路径>
 python <plugin>/scripts/impl_package_state.py --package <package> package amendment confirm --id <id> --expect PENDING --confirmed-by <owner> --confirmed-revision <commit>
-python <plugin>/scripts/impl_package_state.py --package <package> ticket satisfy <id> --expect <state> --revision <commit> --environment <id>
+python <plugin>/scripts/impl_package_state.py --package <package> ticket satisfy <id> --expect <state> --revision <commit> [--environment <id>]
 python <plugin>/scripts/impl_package_state.py --package <package> gate pass --comparison-commit <commit> --reason <text> (--durable-delta <repo-relative path> ... | --no-durable-delta-reason <text>)
 python <plugin>/scripts/impl_package_state.py --package <package> gate blocked --comparison-commit <commit> --reason <gap and next action>
 ```
 
-`ticket satisfy` 要求 `--revision` 是当前 HEAD 的 ancestor，负责套件与 required review 有有效 evidence，且 implementation/acceptance 入边已释放。3.6 CLI 仍要求 `--environment`，但套件环境核对读取 Spec 的 Required Suites.Environment，不读取该参数值。`gate pass` 在 header 后生成 `## Owner Summary`（每条 Journey 的走通进度、套件通过数、待确认或漏登的合同修订、发布顺序状态、最终版本短 SHA、结论），并按 composition contract §7 的两层清单核对；待确认或漏登的 Amendment 只阻止 pass。`gate pass` 还要求 `--durable-delta` 或 `--no-durable-delta-reason`，以及 `--comparison-commit`、`--reason`。`gate blocked` 记录缺口与 next action，Attempt 保持 active。`recovery lease acquire|release` 与 3.5 相同，lease 文件位于 `execution/<attempt>/leases/`。
+`ticket satisfy` 要求 `--revision` 是当前 HEAD 的 ancestor，负责套件与 required review 有有效 evidence，且 implementation/acceptance 入边已释放。3.5 要求 `--environment`；3.6 可省略此参数，若提供则写入 Ticket acceptance。套件环境核对始终读取 Spec 的 Required Suites.Environment。`gate pass` 在 header 后生成 `## Owner Summary`（每条 Journey 的走通进度、套件通过数、待确认或漏登的合同修订、发布顺序状态、最终版本短 SHA、结论），并按 composition contract §7 的两层清单核对；待确认或漏登的 Amendment 只阻止 pass。`gate pass` 还要求 `--durable-delta` 或 `--no-durable-delta-reason`，以及 `--comparison-commit`、`--reason`。`gate blocked` 记录缺口与 next action，Attempt 保持 active。`recovery lease acquire|release` 与 3.5 相同，lease 文件位于 `execution/<attempt>/leases/`。

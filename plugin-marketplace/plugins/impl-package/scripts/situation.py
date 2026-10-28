@@ -881,6 +881,8 @@ def _parse_state(view: FileView) -> StateView:
                     status = amendment.get("status")
                     base = {"id", "summary", "affected", "artifact", "status"}
                     expected_amendment = base | ({"confirmedBy", "confirmedRevision"} if status == "CONFIRMED" else set())
+                    if "affectedBlobs" in amendment:
+                        expected_amendment.add("affectedBlobs")
                     identifier = amendment.get("id")
                     if status not in {"PENDING", "CONFIRMED"} or set(amendment) != expected_amendment:
                         errors.append(f"acceptance.amendments[{index}] 字段/status 无效")
@@ -891,6 +893,14 @@ def _parse_state(view: FileView) -> StateView:
                     affected = amendment.get("affected")
                     if not isinstance(amendment.get("summary"), str) or not amendment["summary"].strip() or not isinstance(affected, list) or not affected or any(not isinstance(item, str) or not item.strip() for item in affected):
                         errors.append(f"acceptance.amendments[{index}] summary/affected 无效")
+                    blobs = amendment.get("affectedBlobs")
+                    if "affectedBlobs" in amendment and (
+                        not isinstance(blobs, dict)
+                        or not isinstance(affected, list)
+                        or set(blobs) != set(affected)
+                        or any(value is not None and (not isinstance(value, str) or not COMMIT_RE.fullmatch(value)) for value in blobs.values())
+                    ):
+                        errors.append(f"acceptance.amendments[{index}] affectedBlobs 无效")
                     if not isinstance(amendment.get("artifact"), str) or not amendment["artifact"].strip():
                         errors.append(f"acceptance.amendments[{index}] artifact 无效")
                     if status == "CONFIRMED" and (
@@ -962,10 +972,16 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                 errors.append(f"RETIRED superseded Ticket {identifier} 的 successor 不存在")
         elif status == "SATISFIED":
             acceptance = row.get("acceptance")
-            if set(row) != {"state", "acceptance"} or not isinstance(acceptance, dict) or set(acceptance) != {"revision", "environment"}:
-                errors.append(f"SATISFIED Ticket {identifier} 缺少合法 acceptance revision/environment")
-            elif not COMMIT_RE.fullmatch(str(acceptance.get("revision", ""))) or not isinstance(acceptance.get("environment"), str) or not acceptance["environment"].strip():
-                errors.append(f"SATISFIED Ticket {identifier} 的 acceptance revision/environment 无效")
+            expected_acceptance = {"revision", "environment"} if format_version == "3.5" else {"revision"}
+            if format_version == "3.6" and isinstance(acceptance, dict) and "environment" in acceptance:
+                expected_acceptance.add("environment")
+            if set(row) != {"state", "acceptance"} or not isinstance(acceptance, dict) or set(acceptance) != expected_acceptance:
+                errors.append(f"SATISFIED Ticket {identifier} acceptance fields 不符合 {format_version} schema")
+            elif not COMMIT_RE.fullmatch(str(acceptance.get("revision", ""))) or (
+                "environment" in acceptance
+                and (not isinstance(acceptance["environment"], str) or not acceptance["environment"].strip())
+            ):
+                errors.append(f"SATISFIED Ticket {identifier} acceptance revision/environment 无效")
         elif status == "BLOCKED":
             if set(row) != {"state", "evidence"} or not isinstance(row.get("evidence"), str):
                 errors.append(f"BLOCKED Ticket {identifier} 缺少 evidence")
