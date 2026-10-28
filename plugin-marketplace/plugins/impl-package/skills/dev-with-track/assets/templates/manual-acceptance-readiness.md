@@ -7,6 +7,7 @@
 - 入口与最短路径（URL/route/command；有项目验证入口先引用；对应的 Journey step、操作入口与观察表面）：
 - 测试身份 / seed（有身份目录先引用，没有则直接写明）：
 - mock / not-wired 边界：
+- 承接的业务对象（Spec 该步“承接”非 `—` 时：本步 inputRef 与产出的 outputRef）：
 - 失败反馈方式：
 - environment（Spec 声明的字符串）：
 - reset / teardown owner 与清理结果（如适用）：

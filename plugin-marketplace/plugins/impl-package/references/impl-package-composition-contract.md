@@ -94,9 +94,11 @@ Plan、Ticket 或 DAG 的语义变化只使受影响范围的 approval/validatio
 
 | 表 | 列 | 要点 |
 | --- | --- | --- |
-| `### Journeys` 下每条 `#### J<n> <终态>` | `Step \| 操作入口 \| 观察表面 \| 预期` | step id 为 `J<n>-S<m>`，顺序固定；承诺落在页面上的步骤，入口与表面都是页面 |
-| `### Rule Matrix` | `Rule \| Suite \| Oracle` | 每条规则有 oracle，并指向一个已登记套件 |
+| `### Journeys` 下每条 `#### J<n> <终态>` | `Step \| 操作入口 \| 观察表面 \| 预期 \| 承接` | step id 为 `J<n>-S<m>`，顺序固定；承诺落在页面上的步骤，入口与表面都是页面；承接是上一步交给本步的业务对象（如 `账单 ID`），无则 `—`，第 1 步恒为 `—` |
+| `### Rule Matrix` | `Rule \| Source \| Suite \| Oracle` | 每条规则有 oracle，并指向一个已登记套件；Source 是 spec.md 内的章节引用（`§N`、`§N.M` 或标题原文，逗号分隔） |
 | `### Required Suites` | `Suite \| Kind \| Scope \| Entry \| Environment` | Kind 为 `rule \| safety`，Scope 为 `ticket \| package`；Environment 写明确字符串，记录按字符串精确匹配 |
+
+表后固定一行 `- 无需验收的章节：<章节引用 | none>`。除 §7 外，spec.md 每个二、三级标题都要被某条 Source 引用（引用父章节覆盖子章节）或列在该行，否则 `package validate`/`package init`/`package check-spec` 失败并列出章节。
 
 包级 safety 套件按风险声明：触及 tenant、RBAC/privacy、幂等或数据完整性时必须有，未触及时在 Spec 写明理由。套件清单是随 Spec Gate 审批的合同，Plan 与 Gate 不临时补造。
 

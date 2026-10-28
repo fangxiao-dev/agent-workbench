@@ -14,7 +14,7 @@ findings:
 report: <review report artifact path>
 ```
 
-Use `findings: none` when no candidate exists. Each finding line must contain the slug, file and line, severity, and one sentence; leaf output is candidate evidence, not a ledger decision.
+Use `findings: none` when no candidate exists. Each finding line must contain the slug, file and line, severity, and one sentence; leaf output is candidate evidence, not a ledger decision. Track C adds a `rule-coverage:` line after `coverage:` (3.6 packages report traced behaviors and gaps, others `n/a`); a missing line from a 3.6 Track C leaf makes that track incomplete.
 
 Impl-Package 的 leaf report 存在 parent 指定的 package 内独占路径，完整正文前写明以下四行，供终审核对来源：
 

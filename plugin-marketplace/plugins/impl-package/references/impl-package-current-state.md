@@ -88,6 +88,8 @@ python <plugin>/scripts/impl_package_state.py --package <package> gate <verdict>
 
 ## 3.6 格式
 
+`package check-spec --spec <repo-relative spec.md>` 不需要 state，执行与 `package validate`/`package init` 相同的 §7 解析和章节覆盖检查，有遗漏时非零退出并列出章节；req-align 在 init 前用它做 Spec Gate。
+
 `formatVersion: "3.6"` 由 plan 的 `Acceptance: journey` 选择，验收语义见 [composition contract §7](impl-package-composition-contract.md)。`attempt`、`attemptHistory`、`predecessors`、`tickets`、`activeCheckpoints`、唯一 writer 与 terminal 快照沿用上文；差异只有 `evidenceIndex` 与新增的 `acceptance`，没有 claim 映射。
 
 ```json
@@ -98,6 +100,7 @@ python <plugin>/scripts/impl_package_state.py --package <package> gate <verdict>
       "kind": "journey-step",
       "runId": "run-01", "journeyId": "J1", "stepId": "J1-S1",
       "entry": "<Spec 该步的操作入口原文>",
+      "inputRef": "<承接的业务对象 ID，承接为 — 时 null>", "outputRef": "<本步产出的业务对象 ID>",
       "artifact": "evidence/journey/run-01.md#j1-s1",
       "revision": "<git commit>",
       "environment": "<Journey run 使用的 environment 字符串>",
@@ -121,7 +124,7 @@ python <plugin>/scripts/impl_package_state.py --package <package> gate <verdict>
 
 | kind | 必填的专有字段 | evidenceKey | 说明 |
 | --- | --- | --- | --- |
-| `journey-step` | `runId`、`journeyId`、`stepId`、`entry` | `journey:<runId>:<stepId>` | `entry` 必须与 Spec 该步的操作入口一致；同一 run 从第 1 步起按顺序登记；失败不覆盖旧 run，另起新 run |
+| `journey-step` | `runId`、`journeyId`、`stepId`、`entry` | `journey:<runId>:<stepId>` | `entry` 必须与 Spec 该步的操作入口一致；同一 run 从第 1 步起按顺序登记；Spec 该步“承接”不是 `—` 时，`inputRef` 必须等于同一 run 上一步的 `outputRef`，否则 `evidence add` 拒绝；失败不覆盖旧 run，另起新 run |
 | `suite` | `suiteId` | `suite:<id>` | environment 必须等于 Spec 声明；归属由 Ticket Coverage 反查 |
 | `review` | `ticket`（Ticket ID 或 `package`） | `review:<ticket>` | per-Ticket required review 的结果；最终 HEAD 的 review 仍由 terminal-final 承担 |
 | `release` | 无 | `release` | artifact 为 package 内发布顺序表 |

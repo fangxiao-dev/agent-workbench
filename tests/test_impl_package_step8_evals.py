@@ -60,11 +60,10 @@ def test_active_package_files_have_no_retired_state_mechanisms() -> None:
             assert token not in text, f"{path.relative_to(ROOT)} contains {token}"
 
     engine = (IMPL / "scripts/impl_package_runtime/engine.py").read_text(encoding="utf-8")
-    # 3.6 uses Git blob ids only for the contract amendment baseline.
-    baseline = engine.split("def _contract_baseline", 1)[1].split("def _contract_amendment_findings", 1)[0]
-    amendment = engine.split("def _contract_amendment_findings", 1)[1].split("def command_init", 1)[0]
-    assert engine.count('"hash-object"') == 2
-    assert baseline.count('"hash-object"') == 1 and amendment.count('"hash-object"') == 1
+    # 3.6 uses Git blob ids only for contract files, through one helper.
+    blob_helper = engine.split("def _working_tree_blob", 1)[1].split(chr(10) + "def ", 1)[0]
+    assert engine.count('"hash-object"') == 1
+    assert blob_helper.count('"hash-object"') == 1
 
     # These tokens guarded the old state engine's wildcard package discovery.
     # Profile installation is a separate surface and may enumerate its own inputs.
