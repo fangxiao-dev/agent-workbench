@@ -1,4 +1,4 @@
-"""The single grouped CLI registry for the Ticket-first 3.5 runtime."""
+"""The single grouped CLI registry for the Ticket-first runtime."""
 
 from __future__ import annotations
 
@@ -136,6 +136,18 @@ def _parser(group: str) -> argparse.ArgumentParser:
             child = commands.add_parser(name)
             child.add_argument("--commit")
         commands.add_parser("refresh-progress", help="refresh machine-owned projections")
+        amendment = commands.add_parser("amendment", help="register or confirm a contract amendment")
+        amendment_commands = amendment.add_subparsers(dest="amendment_action", required=True)
+        add = amendment_commands.add_parser("add", help="register a pending amendment")
+        add.add_argument("--id", required=True)
+        add.add_argument("--summary", required=True)
+        add.add_argument("--affected", action="append", required=True)
+        add.add_argument("--artifact", required=True)
+        confirm = amendment_commands.add_parser("confirm", help="confirm a pending amendment")
+        confirm.add_argument("--id", required=True)
+        confirm.add_argument("--expect", required=True)
+        confirm.add_argument("--confirmed-by", required=True)
+        confirm.add_argument("--confirmed-revision", required=True)
     elif group == "ticket":
         for command, target, help_text in (
             ("satisfy", "SATISFIED", "mark a Ticket SATISFIED"),
@@ -241,6 +253,10 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
             return engine.command_archive_attempt(package, args.attempt, args.from_revision)
         if args.command in {"status", "validate"}:
             return engine.command_validate(package, args.commit, check_arrival_paths=args.command == "validate")
+        if args.command == "amendment":
+            if args.amendment_action == "add":
+                return engine.command_amendment_add(package, args.id, args.summary, args.affected, args.artifact)
+            return engine.command_amendment_confirm(package, args.id, args.expect, args.confirmed_by, args.confirmed_revision)
         return engine.command_refresh_progress(package)
     if group == "ticket":
         return _ticket_transition(package, args, args.target)
