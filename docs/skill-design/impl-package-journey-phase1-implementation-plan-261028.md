@@ -61,8 +61,9 @@ Ticket Coverage 区块：`Journey steps`（如 `J1-S2`）、`Suites`、`Required
 | state 区域 | 最小内容 | 用途 |
 | --- | --- | --- |
 | `evidenceIndex` | 3.6 按 `evidenceKey` 索引；记录沿用 `timing`、`artifact`、`revision`、`environment`、`conclusion`、`invalidatedBy`，新增 `kind`（`journey-step|suite|review|release`）、`entry`（journey-step 必填） | 复用 `evidence add` 的原子校验、幂等、批量、相对路径与失效机制；PASS/FAIL 用 `conclusion` 表达 |
-| `acceptance.journeyRuns[]` | `runId`、`journeyId`、`steps[]`（每步只存 `stepId`、`evidenceKey`）、`reach` | 记录一次从第 1 步起的连续运行；`reach` = 已连续走通到第几步，只用于 Owner 视图和进度，不参与 PASS 判定；PASS = 全部 step 都在同一 run 内且 evidence 有效 |
+| 走通进度（派生，不存储） | 由 `kind=journey-step` 记录的 `runId`、`journeyId`、`stepId` 派生 | `reach` = 同一 run 从第 1 步起连续有效的步数，只用于 Owner 视图和进度；PASS = 全部 step 都在同一 run 内且 evidence 有效。不另存 journeyRuns，保持单一来源 |
 | `acceptance.amendments[]` | `id`、`summary`、`affected`、`artifact`、`status`、`confirmedBy`、`confirmedRevision` | `status` 为 `PENDING|CONFIRMED`；内容变化必须使用新 ID，确认绑定具体修订版本 |
+| `acceptance.releaseOrder` | Plan 中 `Release order: required \| none` | 决定 Gate 是否要求 `kind=release` evidence |
 | `acceptance.contractBaseline` | `package init` 时 `decision.md`、`spec.md`、`contract-design.md` 的 Git blob hash 与 init HEAD | Amendment 漏登检测的机械基线（见 §3） |
 
 不设 `suiteResults`、`reviewResults`、`releaseOrder` 专用数组：套件和 review 结果就是 `kind=suite|review` 的 evidence，Ticket 归属从 Coverage 区块反查；发布顺序是一条 `kind=release` 的 evidence，artifact 为 package 内的 Markdown 发布顺序表。
