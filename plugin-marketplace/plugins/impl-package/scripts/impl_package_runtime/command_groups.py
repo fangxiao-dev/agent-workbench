@@ -126,7 +126,7 @@ def _parser(group: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=f"impl_package_state.py --package <package> {group}")
     commands = parser.add_subparsers(dest="command", required=True)
     if group == "package":
-        init = commands.add_parser("init", help="initialize a 3.5 Ticket-only package")
+        init = commands.add_parser("init", help="initialize a 3.5 Ticket-only or 3.6 Journey package based on the Plan")
         init.add_argument("--attempt", required=True)
         init.add_argument("--plan", required=True)
         archive = commands.add_parser("archive-attempt", help="backfill a frozen Attempt Ticket snapshot")
@@ -162,7 +162,7 @@ def _parser(group: str) -> argparse.ArgumentParser:
             _expect(child)
             if target == "SATISFIED":
                 child.add_argument("--revision", required=True)
-                child.add_argument("--environment", required=True)
+                child.add_argument("--environment")
             elif target == "BLOCKED":
                 child.add_argument("--evidence", required=True)
             elif target == "NEEDS-REVALIDATION":

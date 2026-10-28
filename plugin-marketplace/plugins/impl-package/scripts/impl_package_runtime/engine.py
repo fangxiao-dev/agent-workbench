@@ -1125,6 +1125,8 @@ def _validate_acceptance_state(package: Path, repo: Path, acceptance: Any, info:
         status = amendment.get("status")
         base = {"id", "summary", "affected", "artifact", "status"}
         expected = base | ({"confirmedBy", "confirmedRevision"} if status == "CONFIRMED" else set())
+        if "affectedBlobs" in amendment:
+            expected.add("affectedBlobs")
         if status not in {"PENDING", "CONFIRMED"} or set(amendment) != expected:
             raise StateError("amendment fields/status do not match PENDING or CONFIRMED")
         identifier = amendment.get("id")
@@ -1145,6 +1147,12 @@ def _validate_acceptance_state(package: Path, repo: Path, acceptance: Any, info:
         if len(set(normalized_affected)) != len(normalized_affected):
             raise StateError(f"amendment {identifier} affected paths must be unique")
         amendment["affected"] = normalized_affected
+        if "affectedBlobs" in amendment:
+            blobs = amendment["affectedBlobs"]
+            if not isinstance(blobs, dict) or set(blobs) != set(normalized_affected):
+                raise StateError(f"amendment {identifier} affectedBlobs must match affected paths")
+            if any(value is not None and (not isinstance(value, str) or FIXED_COMMIT_RE.fullmatch(value) is None) for value in blobs.values()):
+                raise StateError(f"amendment {identifier} affectedBlobs values must be full Git blob hashes or null")
         amendment["artifact"] = _package_relative_artifact(package, amendment.get("artifact"), f"amendment {identifier} artifact", must_exist=live)
         if status == "CONFIRMED":
             if not isinstance(amendment["confirmedBy"], str) or not amendment["confirmedBy"].strip():
@@ -1210,10 +1218,16 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
             if row["disposition"] == "superseded" and (row.get("successor") not in ticket_ids or row.get("successor") == identifier):
                 raise StateError(f"RETIRED superseded Ticket {identifier} requires a valid successor")
         elif row["state"] == "SATISFIED":
-            if set(row) != {"state", "acceptance"} or not isinstance(row["acceptance"], dict) or set(row["acceptance"]) != {"revision", "environment"}:
-                raise StateError(f"SATISFIED Ticket {identifier} requires acceptance revision/environment")
+            acceptance_fields = {"revision", "environment"}
+            if format_version == "3.6":
+                acceptance_fields = {"revision"}
+                if isinstance(row.get("acceptance"), dict) and "environment" in row["acceptance"]:
+                    acceptance_fields.add("environment")
+            if set(row) != {"state", "acceptance"} or not isinstance(row["acceptance"], dict) or set(row["acceptance"]) != acceptance_fields:
+                requirement = "revision" if format_version == "3.6" else "revision/environment"
+                raise StateError(f"SATISFIED Ticket {identifier} requires acceptance {requirement}")
             _validate_commit(repo, row["acceptance"]["revision"])
-            if not isinstance(row["acceptance"]["environment"], str) or not row["acceptance"]["environment"].strip():
+            if "environment" in row["acceptance"] and (not isinstance(row["acceptance"]["environment"], str) or not row["acceptance"]["environment"].strip()):
                 raise StateError(f"SATISFIED Ticket {identifier} acceptance environment must be non-empty")
         elif row["state"] == "BLOCKED":
             if set(row) != {"state", "evidence"} or not isinstance(row["evidence"], str):
@@ -1607,15 +1621,20 @@ def _arrival_findings(repo: Path, package: Path, summary: dict[str, Any], compar
     return findings
 
 
+def _working_tree_blob(repo: Path, package: Path, relative: str) -> str | None:
+    if not (package / relative).is_file():
+        return None
+    package_rel = package.resolve().relative_to(repo.resolve()).as_posix()
+    return _run_git(repo, "hash-object", "--", f"{package_rel}/{relative}")
+
+
 def _contract_baseline(package: Path, repo: Path) -> dict[str, Any]:
     head = _run_git(repo, "rev-parse", "HEAD")
-    package_rel = package.resolve().relative_to(repo.resolve()).as_posix()
     files: dict[str, str] = {}
     for name in ("decision.md", "spec.md", "contract-design.md"):
-        path = package / name
-        if path.is_file():
-            relative = f"{package_rel}/{name}"
-            files[name] = _run_git(repo, "hash-object", "--", relative)
+        blob = _working_tree_blob(repo, package, name)
+        if blob is not None:
+            files[name] = blob
     if "spec.md" not in files:
         raise StateError("contractBaseline requires spec.md")
     return {"head": head, "files": files}
@@ -1624,14 +1643,12 @@ def _contract_baseline(package: Path, repo: Path) -> dict[str, Any]:
 def _contract_amendment_findings(package: Path, repo: Path, acceptance: dict[str, Any]) -> list[dict[str, Any]]:
     baseline = acceptance["contractBaseline"]["files"]
     amendments = acceptance["amendments"]
-    package_rel = package.resolve().relative_to(repo.resolve()).as_posix()
     findings = []
     for name in CONTRACT_DOC_NAMES:
-        path = package / name
-        current = _run_git(repo, "hash-object", "--", f"{package_rel}/{name}") if path.is_file() else None
+        current = _working_tree_blob(repo, package, name)
         if current == baseline.get(name):
             continue
-        if any(name in row["affected"] for row in amendments):
+        if any(row.get("affectedBlobs", {}).get(name) == current for row in amendments):
             continue
         findings.append({"code": "contract-amendment-unregistered", "path": name, "baseline": baseline.get(name), "current": current})
     return findings
@@ -1738,6 +1755,7 @@ def command_amendment_add(package: Path, identifier: str, summary_text: str, aff
         "id": identifier,
         "summary": summary_text.strip(),
         "affected": normalized_affected,
+        "affectedBlobs": {name: _working_tree_blob(_repo_root(package), package, name) for name in normalized_affected},
         "artifact": _package_relative_artifact(package, artifact, "amendment artifact", must_exist=True),
         "status": "PENDING",
     }
@@ -1779,6 +1797,13 @@ def command_amendment_confirm(
     current = next((item for item in state["acceptance"]["amendments"] if item["id"] == identifier), None)
     if current is None:
         raise StateError(f"unknown amendment: {identifier}")
+    current_blobs = current.get("affectedBlobs", {})
+    changed = [
+        path for path in current["affected"]
+        if current_blobs.get(path) != _working_tree_blob(repo, package, path)
+    ]
+    if changed:
+        raise StateError(f"amendment {identifier} no longer matches affected file contents: {', '.join(changed)}; register a new amendment")
     if current["status"] == "CONFIRMED":
         if current["confirmedBy"] == confirmed_by.strip() and current["confirmedRevision"] == revision:
             return {"id": identifier, "status": "CONFIRMED", "idempotent": True}
@@ -2187,8 +2212,10 @@ def command_set_state(
     if target == "PENDING" and current in {"BLOCKED", "NEEDS-REVALIDATION"}:
         _repo_relative(repo, revalidation_plan, "revalidation plan")
     if target == "SATISFIED":
-        if not revision or not environment:
+        if not revision or (summary["formatVersion"] == "3.5" and not environment):
             raise StateError("SATISFIED requires --revision and --environment")
+        if environment is not None and not environment.strip():
+            raise StateError("SATISFIED --environment must be non-empty when provided")
         revision = _validate_commit(repo, revision)
         if summary["formatVersion"] == "3.6":
             gaps = _v36_ticket_satisfy_gaps(package, state, summary, identifier, revision)
@@ -2218,7 +2245,10 @@ def command_set_state(
         if normalized_evidence and target in {"BLOCKED", "NEEDS-REVALIDATION"}:
             state["tickets"][identifier]["evidence"] = normalized_evidence
         if target == "SATISFIED":
-            state["tickets"][identifier] = {"state": target, "acceptance": {"revision": revision, "environment": environment}}
+            acceptance = {"revision": revision}
+            if environment is not None:
+                acceptance["environment"] = environment
+            state["tickets"][identifier] = {"state": target, "acceptance": acceptance}
     _validate_state(package, state, projections=False)
     _write_json(package / STATE_PATH, state)
     _refresh_projections(package, state)
