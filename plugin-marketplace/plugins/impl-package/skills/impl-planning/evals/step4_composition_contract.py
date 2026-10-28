@@ -21,6 +21,9 @@ def main() -> None:
     dag = read("dev-with-track/assets/templates/dag.md")
     gate = read("dev-with-track/assets/templates/gate.md")
     state = read("references/impl-package-current-state.md")
+    planning = read("impl-planning/SKILL.md")
+    execution = read("dev-with-track/SKILL.md")
+    composition = read("references/impl-package-composition-contract.md")
 
     for field in ("Attempt ID", "Composition"):
         assert field in plan, f"plan missing {field}"
@@ -33,6 +36,10 @@ def main() -> None:
     for field in ('"attempt"', '"attemptHistory"', '"predecessors"', '"tickets"', '"evidenceIndex"', '"activeCheckpoints"'):
         assert field in state, f"current state reference missing {field}"
     assert '"tasks"' not in state and '"resume"' not in state
+    assert "## Coverage" in ticket
+    assert "walking skeleton" in planning
+    assert "## 7. 3.6 Journey 验收合同" in composition
+    assert "Amendment 待确认或漏登只阻止最终 `gate pass`" in execution
 
 
 if __name__ == "__main__":

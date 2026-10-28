@@ -15,15 +15,19 @@
 - 把逐约束映射和逐项验证细节写回 Plan 的全局调度表，会与 Ticket 的 Contract references 与 AC 重复，制造两处可能漂移的合同来源。
 - 把 Ticket 拆分交给旧 DAG 入口，会把已经选择的 Ticket-only Composition 偷换成另一套任务结构。
 - 上游只挡最终验收却写成 `implementation` 边，会让执行阶段的只读调研、child-local 测试和无依赖 lane 一起被挡住。
+- 首张 Ticket 做成大而全的 harness，会把第一个用户可见 step 推到包尾，Owner 很晚才看到产品结果，形状错误也晚暴露；复用现有登录与 fixture、只建第一条窄路径所需的部分，才能早走通。
 
 ## Ticket 合同与证据
 
 - 按文件或层切分会得到无法独立验收的半条路径，Ticket 数量看似增加但 acceptance 没有变清楚。
 - 缺少稳定 ID、owner 或 typed dependency，后续 evidence 无法归属，状态也会漂移到文档正文之外。
 - 不区分 `EXISTS`/`NEW`，reviewer 会把待建设入口当成已存在，或把已有依赖重复纳入本 Ticket。
+- 一张 Ticket 既不启用 Journey step、也不负责套件，没有任何验收结论会因它改变，Gate 时无法说明它为什么存在；反过来，某个 step 或 ticket 级套件没有 Ticket 认领，会到 Gate 才发现无人负责。
+- 在 Plan 里补写 Spec 没有的套件，会绕过 Owner 对套件清单的批准，规则覆盖范围随之失去审批依据。
+- 把几张 Ticket 的局部 evidence 当作 Journey 的走通，上一步输出并没有真正流入下一步，页面承诺可能从未被连续跑过。
 - 只让后端接线 Ticket 通过，会把 UI 形状错误或组件复用错误隐藏在“UI 已实现”的笼统声明里。
 - 引用整份文档会让 Ticket 看似有依据，却无法判断实际依赖哪条 authority；引用 `contract-design.md` 只停在章节级而不点名 entry point，等于把一大节都当成了下游默认要读的上下文。
-- 只写“有测试”而不写入口、owner 和 coverage，或让一个 stable claim 同时承载可独立失败的结论，会把不可执行、重叠或部分可证的 AC 留到执行末端才暴露。
+- 只写“有测试”而不写入口、owner 和 coverage，或（3.5）让一个 stable claim 同时承载可独立失败的结论，会把不可执行、重叠或部分可证的 AC 留到执行末端才暴露。
 
 ## State 与发布边界
 

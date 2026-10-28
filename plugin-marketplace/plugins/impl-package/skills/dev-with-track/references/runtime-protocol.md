@@ -21,7 +21,7 @@ Capsule 的 `projection-complete: false` 表示宿主长度预算只能承载摘
 
 ## Evidence 与 Execution Record
 
-Evidence 使用存在的仓库相对路径，可带 anchor，并足以解释状态变化。登记多条 evidence 时一律用数组一次提交，一次登记一个 revision：bash 用 `printf '<array-json>' | python impl_package_state.py --package <package> evidence add`；PowerShell 先把整段 JSON 数组 `Set-Content` 到临时 `evidence.json`，再 `Get-Content -Raw evidence.json | python impl_package_state.py --package <package> evidence add`，不要在 shell 里现场拼 hashtable。整批合法才写入，非法批次不部分写入。checkpoint 是恢复边界；judgment 记录执行期 decision、finding disposition、failure learning 与外部证据解释。routine state change、普通 PASS 和可从 Git/state 推导的事实不重复写入 Execution Record。
+Evidence 使用存在的仓库相对路径，可带 anchor，并足以解释状态变化；3.6 package 的 artifact 必须落在 package 内，record 带 `kind` 与 `evidenceKey`（见 current-state 3.6 节）。登记多条 evidence 时一律用数组一次提交，一次登记一个 revision：bash 用 `printf '<array-json>' | python impl_package_state.py --package <package> evidence add`；PowerShell 先把整段 JSON 数组 `Set-Content` 到临时 `evidence.json`，再 `Get-Content -Raw evidence.json | python impl_package_state.py --package <package> evidence add`，不要在 shell 里现场拼 hashtable。整批合法才写入，非法批次不部分写入。checkpoint 是恢复边界；judgment 记录执行期 decision、finding disposition、failure learning 与外部证据解释。routine state change、普通 PASS 和可从 Git/state 推导的事实不重复写入 Execution Record。
 
 ## Readiness、返工与调度
 
@@ -40,4 +40,4 @@ Evidence 使用存在的仓库相对路径，可带 anchor，并足以解释状�
 - 其他 accepted finding：沿用 implementation、安全、证据或知识分流；review topology 与 closure 由 do-review 拥有。
 - durable knowledge：Stage 7 登记 `_pending.md` 与 truth pointer，后续交 backfill。
 
-Gate 每次重写 current `gate.md`；terminal Gate 同时生成 `.impl-package/attempts/<attempt>.json` 的只读 Ticket 快照。历史快照缺失时只用明确 revision 运行 `package archive-attempt` 补录。terminal Gate 后全部 runtime mutation fail closed。
+Gate 每次重写 current `gate.md`（3.6 在 header 后由 runtime 生成 Owner Summary，不手改）；terminal Gate 同时生成 `.impl-package/attempts/<attempt>.json` 的只读 Ticket 快照。历史快照缺失时只用明确 revision 运行 `package archive-attempt` 补录。terminal Gate 后全部 runtime mutation fail closed。

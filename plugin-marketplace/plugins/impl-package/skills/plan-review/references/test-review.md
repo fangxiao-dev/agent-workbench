@@ -30,6 +30,10 @@ behavior | risk | test level | oracle | failure mode
 
 只判断语义链路是否稳定可定位，不要求统一 case/invariant ID、固定矩阵或每条 edge 单独建档；已有 AC anchor、场景名、测试名或清晰引用足以消除歧义时直接复用。缺少行为边界或 Acceptance Semantics 时路由 `/impl-package:req-align`，缺少验证选择、入口、oracle 或 evidence owner 时路由 `/impl-package:impl-planning`；reviewer 不替 owning skill 补写第二套合同。
 
+## Journey 与套件（`Acceptance: journey` 的新 package）
+
+Journey 的 oracle 是每一步的预期加上上一步输出确实成为下一步输入；检查连续走通能否在计划的环境和入口里执行（登录、fixture、种子数据从哪来），页面承诺的步骤有浏览器级取证。必需套件逐个核对 Entry 与 Environment 可执行、结果能区分正确与常见错误实现。再看两个场景是否有计划：合同修订出现（Amendment 待确认）时哪些工作继续、Gate 以 `blocked` 记录缺口；代码变化后哪些走通记录需要重跑。review 按 material risk 选择，不为每个 Journey step 另设 review 批次。
+
 ## Failure Modes
 
 对每个 material 行为或集成分别检查：是否有测试、是否有错误处理、失败是否对用户或 operator 可见。三者都缺失时形成 critical test requirement。

@@ -15,7 +15,8 @@ Spec 只有同时满足以下条件才可 PASSED：
 - contract coherence 已闭合：required input 可取得；有副作用、并发或重试风险的 operation 已逐项定义 identity、重复/stale 结果与恢复；每个可观察字段，以及行为/状态机/工作流表与错误边界表中每一个用户可见结果，都有唯一 authority，并能指到承载它的 read-model 字段与实际 producer；
 - 八个 behavior-contract 章节 substantive，behavior、state/workflow、permission/boundary、error/recovery 与 canonical model 内部一致；
 - 每个 promise/constraint 映射到 observable evidence，并为 manual evidence 指定 owner；
-- 每条 AC 覆盖一条可独立验收的承诺，并有可观察结果和 oracle；展示、编辑或拒绝结果可以不产生新记录，发生权威状态转换时明确唯一记录、producer 与下游消费；
+- 新 package 的 Journeys、Rule Matrix、Required Suites 三张表齐全：每个 step 有操作入口、观察表面与预期，每条规则有 oracle 并指向已登记套件，触及 tenant/RBAC/隐私/幂等/数据完整性时有包级 safety 套件，Environment 为明确字符串，Spec 不含 Ticket ID；沿用 3.5 的 package 则每条 AC 覆盖一条可独立验收的承诺并有可观察结果和 oracle；
+- 展示、编辑或拒绝结果可以不产生新记录，发生权威状态转换时明确唯一记录、producer 与下游消费；
 - blocking owner decision、contract ambiguity 与 artifact authority conflict 为零；
 - 两个独立实施者可以选择不同内部实现，但不会产生不同 API、data identity、permission、concurrency、recovery 或 public shape。
 - initial artifact 已记录当前合同，所需 owner approval 已记录，Status、Gate result 与 handoff readiness 一致；正式阶段迁移以该 bundle 记录为依据。
