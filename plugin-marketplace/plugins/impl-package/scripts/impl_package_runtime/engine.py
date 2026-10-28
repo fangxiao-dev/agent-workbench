@@ -65,6 +65,8 @@ DECISION_RE = re.compile(r"(?im)^[^\r\n]*(?:Decision Revision|决策修订)[^：
 SPEC_RE = re.compile(r"(?im)^[^\r\n]*(?:Spec Revision|规格修订)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*(S\d+)\b")
 PLAN_RE = re.compile(r"(?im)^[^\r\n]*(?:Plan Revision|计划修订)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*(P\d+)\b")
 PREDECESSORS_RE = re.compile(r"(?im)^[^\r\n]*(?:Predecessors|前置包)[^：:\r\n]*[：:][ \t]*(.*?)[ \t]*$")
+ACCEPTANCE_JOURNEY_RE = re.compile(r"(?m)^Acceptance: journey[ \t]*$")
+RELEASE_ORDER_RE = re.compile(r"(?m)^Release order: (required|none)[ \t]*$")
 TICKET_ID_RE = re.compile(r"(?im)^[^\r\n]*Ticket ID[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*([^\s*]+)")
 PUBLICATION_RE = re.compile(r"(?im)^([^\r\n]*(?:Publication Status|发布状态)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*)(Draft|Approved)[ \t]*$")
 CLAIM_RE = re.compile(r"(?im)^[^\r\n]*Stable claim ID[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*`([^`]+)`[^\r\n]*$")
@@ -193,7 +195,7 @@ def command_archive_attempt(package: Path, attempt: str, revision: str) -> dict[
     if not isinstance(historical_attempt, dict) or historical_attempt.get("id") != attempt:
         raise StateError(f"historical state at {resolved} does not belong to Attempt {attempt}")
     tickets = _ticket_snapshot(historical.get("tickets"))
-    document_ids = {document["id"] for document in _ticket_documents(package, attempt)}
+    document_ids = {document["id"] for document in _ticket_documents(package, attempt, summary["formatVersion"])}
     if set(tickets) != document_ids:
         raise StateError(f"historical Ticket state does not match Attempt {attempt} Ticket files")
     created = _write_attempt_archive(package, attempt, tickets)
@@ -436,10 +438,189 @@ def _plan_info(package: Path, repo: Path, plan_value: str) -> dict[str, Any]:
     dag = composition.group(2).lower() == "true"
     if dag or not tickets:
         raise StateError("format 3.5 accepts only tickets=true, dag=false; migrate legacy packages first")
+    journey_markers = ACCEPTANCE_JOURNEY_RE.findall(text)
+    if len(journey_markers) > 1:
+        raise StateError("plan must declare Acceptance: journey at most once")
+    format_version = "3.6" if journey_markers else FORMAT_VERSION
+    release_order = "none"
+    if format_version == "3.6":
+        release_markers = RELEASE_ORDER_RE.findall(text)
+        if len(release_markers) > 1:
+            raise StateError("plan must declare Release order at most once")
+        if re.search(r"(?m)^Release order:", text) and not release_markers:
+            raise StateError("Release order must be required or none")
+        if release_markers:
+            release_order = release_markers[0]
     attempt = _field(ATTEMPT_RE, text, "Attempt ID")
     if not isinstance(attempt, str) or ATTEMPT_ID_RE.fullmatch(attempt) is None:
         raise StateError(f"invalid Attempt ID: {attempt!r}")
-    return {"path": plan_rel, "attempt": attempt, "decision": _field(DECISION_RE, text, "Decision Revision", optional=True), "spec": _field(SPEC_RE, text, "Spec Revision", optional=True), "plan": _field(PLAN_RE, text, "Plan Revision", optional=True), "predecessors": _predecessors_from_plan(package, repo, text), "tickets": tickets, "dag": False}
+    return {"path": plan_rel, "attempt": attempt, "decision": _field(DECISION_RE, text, "Decision Revision", optional=True), "spec": _field(SPEC_RE, text, "Spec Revision", optional=True), "plan": _field(PLAN_RE, text, "Plan Revision", optional=True), "predecessors": _predecessors_from_plan(package, repo, text), "tickets": tickets, "dag": False, "formatVersion": format_version, "releaseOrder": release_order}
+
+
+def _markdown_section(text: str, title: str, level: int) -> list[str]:
+    lines = text.splitlines()
+    pattern = re.compile(rf"^{'#' * level} {re.escape(title)}[ \t]*$")
+    matches = [index for index, line in enumerate(lines) if pattern.fullmatch(line)]
+    if len(matches) != 1:
+        raise StateError(f"spec.md must contain exactly one {'#' * level} {title} section")
+    start = matches[0] + 1
+    end = len(lines)
+    for index in range(start, len(lines)):
+        heading = re.match(r"^(#+)\s", lines[index])
+        if heading and len(heading.group(1)) <= level:
+            end = index
+            break
+    return lines[start:end]
+
+
+def _table_cells(line: str, label: str) -> list[str]:
+    value = line.strip()
+    if not value.startswith("|") or not value.endswith("|"):
+        raise StateError(f"{label} must use a pipe-delimited Markdown table")
+    return [cell.replace(r"\|", "|").strip() for cell in re.split(r"(?<!\\)\|", value[1:-1])]
+
+
+def _markdown_table(lines: list[str], columns: tuple[str, ...], label: str) -> list[dict[str, str]]:
+    rows = [line.strip() for line in lines if line.strip().startswith("|")]
+    if len(rows) < 2:
+        raise StateError(f"{label} is missing its Markdown table header or separator")
+    header = _table_cells(rows[0], label)
+    if tuple(header) != columns:
+        raise StateError(f"{label} columns must be: {' | '.join(columns)}")
+    separator = _table_cells(rows[1], label)
+    if len(separator) != len(columns) or any(re.fullmatch(r":?-{3,}:?", cell) is None for cell in separator):
+        raise StateError(f"{label} has an invalid Markdown table separator")
+    result: list[dict[str, str]] = []
+    for number, line in enumerate(rows[2:], start=1):
+        cells = _table_cells(line, label)
+        if len(cells) != len(columns):
+            raise StateError(f"{label} row {number} has {len(cells)} cells; expected {len(columns)}")
+        if any(not cell for cell in cells):
+            raise StateError(f"{label} row {number} contains an empty cell")
+        result.append(dict(zip(columns, cells, strict=True)))
+    return result
+
+
+def _journey_spec(package: Path) -> dict[str, Any]:
+    text = _read(package / "spec.md")
+    journey_section = _markdown_section(text, "Journeys", 3)
+    headings: list[tuple[int, str, str]] = []
+    for index, line in enumerate(journey_section):
+        if not line.startswith("#### "):
+            continue
+        match = re.fullmatch(r"####\s+(J\d+)\s+(.+?)\s*", line)
+        if match is None:
+            raise StateError(f"invalid Journey heading in spec.md: {line.strip()}")
+        headings.append((index, match.group(1), match.group(2)))
+    if not headings:
+        raise StateError("spec.md Journeys section must contain at least one #### J<n> <terminal> heading")
+
+    journeys: list[dict[str, Any]] = []
+    steps: dict[str, dict[str, str]] = {}
+    journey_ids: set[str] = set()
+    for position, (start, identifier, terminal) in enumerate(headings):
+        if identifier in journey_ids:
+            raise StateError(f"duplicate Journey ID: {identifier}")
+        journey_ids.add(identifier)
+        end = headings[position + 1][0] if position + 1 < len(headings) else len(journey_section)
+        block = journey_section[start + 1:end]
+        table = _markdown_table(block, ("Step", "操作入口", "观察表面", "预期"), f"Journey {identifier} steps")
+        if not table:
+            raise StateError(f"Journey {identifier} must contain at least one step")
+        journey_steps: list[dict[str, str]] = []
+        for number, row in enumerate(table, start=1):
+            step_id = row["Step"]
+            if step_id != f"{identifier}-S{number}":
+                raise StateError(f"Journey {identifier} steps must be ordered and named {identifier}-S1, {identifier}-S2, ...")
+            if step_id in steps:
+                raise StateError(f"duplicate Journey step ID: {step_id}")
+            step = {"id": step_id, "operationEntry": row["操作入口"], "observationSurface": row["观察表面"], "expected": row["预期"]}
+            journey_steps.append(step)
+            steps[step_id] = {**step, "journeyId": identifier}
+        journeys.append({"id": identifier, "terminalResult": terminal, "steps": journey_steps})
+
+    rule_rows = _markdown_table(_markdown_section(text, "Rule Matrix", 3), ("Rule", "Suite", "Oracle"), "Rule Matrix")
+    suite_rows = _markdown_table(_markdown_section(text, "Required Suites", 3), ("Suite", "Kind", "Scope", "Entry", "Environment"), "Required Suites")
+    suites: dict[str, dict[str, str]] = {}
+    for row in suite_rows:
+        suite_id = row["Suite"]
+        if suite_id in suites:
+            raise StateError(f"duplicate required suite: {suite_id}")
+        if row["Kind"] not in {"rule", "safety"}:
+            raise StateError(f"suite {suite_id} Kind must be rule or safety")
+        if row["Scope"] not in {"ticket", "package"}:
+            raise StateError(f"suite {suite_id} Scope must be ticket or package")
+        suites[suite_id] = {"id": suite_id, "kind": row["Kind"], "scope": row["Scope"], "entry": row["Entry"], "environment": row["Environment"]}
+    rule_ids: set[str] = set()
+    for row in rule_rows:
+        if row["Rule"] in rule_ids:
+            raise StateError(f"duplicate Rule ID: {row['Rule']}")
+        rule_ids.add(row["Rule"])
+        if row["Suite"] not in suites:
+            raise StateError(f"Rule Matrix references unknown required suite: {row['Suite']}")
+    return {"journeys": journeys, "steps": steps, "suites": suites, "rules": rule_rows}
+
+
+def _coverage_list(value: str, label: str, ticket: str) -> list[str]:
+    if value.casefold() == "none":
+        return []
+    values = [item.strip() for item in value.split(",")]
+    if any(not item or item.casefold() == "none" for item in values):
+        raise StateError(f"Ticket {ticket} Coverage {label} must be none or a comma-separated list")
+    if len(values) != len(set(values)):
+        raise StateError(f"Ticket {ticket} Coverage {label} contains duplicates")
+    return values
+
+
+def _ticket_coverage(text: str, ticket: str) -> dict[str, Any]:
+    section = _markdown_section(text, "Coverage", 2)
+    fields: dict[str, str] = {}
+    expected = {"Journey steps", "Suites", "Required review"}
+    for line in section:
+        stripped = line.strip()
+        if not stripped.startswith("-"):
+            continue
+        match = re.fullmatch(r"-\s*(Journey steps|Suites|Required review):\s*(.*?)\s*", stripped)
+        if match is None:
+            raise StateError(f"Ticket {ticket} Coverage contains an invalid row: {stripped}")
+        name, value = match.groups()
+        if name in fields:
+            raise StateError(f"Ticket {ticket} Coverage repeats {name}")
+        if not value:
+            raise StateError(f"Ticket {ticket} Coverage {name} must not be empty")
+        fields[name] = value
+    missing = expected - set(fields)
+    if missing:
+        raise StateError(f"Ticket {ticket} Coverage is missing: {', '.join(sorted(missing))}")
+    journey_steps = _coverage_list(fields["Journey steps"], "Journey steps", ticket)
+    suites = _coverage_list(fields["Suites"], "Suites", ticket)
+    if not journey_steps and not suites:
+        raise StateError(f"Ticket {ticket} Coverage Journey steps and Suites cannot both be none")
+    return {"journeySteps": journey_steps, "suites": suites, "requiredReview": fields["Required review"]}
+
+
+def _validate_journey_coverage(spec: dict[str, Any], documents: list[dict[str, Any]]) -> None:
+    claimed_steps: set[str] = set()
+    claimed_suites: set[str] = set()
+    for document in documents:
+        coverage = document["coverage"]
+        for step_id in coverage["journeySteps"]:
+            if step_id not in spec["steps"]:
+                raise StateError(f"Ticket {document['id']} Coverage references unknown Journey step: {step_id}")
+            claimed_steps.add(step_id)
+        for suite_id in coverage["suites"]:
+            if suite_id not in spec["suites"]:
+                raise StateError(f"Ticket {document['id']} Coverage references unknown suite: {suite_id}")
+            claimed_suites.add(suite_id)
+    unclaimed_steps = sorted(set(spec["steps"]) - claimed_steps)
+    if unclaimed_steps:
+        raise StateError(f"Journey steps have no Ticket Coverage: {', '.join(unclaimed_steps)}")
+    unclaimed_suites = sorted(
+        suite_id for suite_id, suite in spec["suites"].items()
+        if suite["scope"] == "ticket" and suite_id not in claimed_suites
+    )
+    if unclaimed_suites:
+        raise StateError(f"ticket-scope suites have no Ticket Coverage: {', '.join(unclaimed_suites)}")
 
 
 def _arrival_paths(text: str, ticket_id: str, path: Path) -> list[dict[str, Any]]:
@@ -466,7 +647,7 @@ def _arrival_paths(text: str, ticket_id: str, path: Path) -> list[dict[str, Any]
     return result
 
 
-def _ticket_documents(package: Path, attempt: str) -> list[dict[str, Any]]:
+def _ticket_documents(package: Path, attempt: str, format_version: str = FORMAT_VERSION) -> list[dict[str, Any]]:
     directory = package / "tickets"
     if not directory.is_dir():
         raise StateError("Composition earns tickets but tickets/ is missing")
@@ -487,33 +668,43 @@ def _ticket_documents(package: Path, attempt: str) -> list[dict[str, Any]]:
         if "impl-package:projection runtime-acceptance" in text:
             raise StateError(f"Ticket {identifier} contains retired Runtime Acceptance projection")
         arrival_paths = _arrival_paths(text, str(identifier), child)
-        matches = list(CLAIM_RE.finditer(text))
-        claims = list(dict.fromkeys(match.group(1) for match in matches))
-        if not claims:
-            raise StateError(f"Ticket {identifier} has no stable claim IDs")
-        claim_timings: dict[str, str] = {}
-        for index, match in enumerate(matches):
-            claim = match.group(1)
-            segment = text[match.end(): matches[index + 1].start() if index + 1 < len(matches) else len(text)]
-            timing_values = TIMING_RE.findall(segment)
-            if not timing_values:
-                heading_start = text.rfind("## ", 0, match.start())
-                heading_end = text.find("\n", heading_start)
-                heading = text[heading_start:heading_end if heading_end >= 0 else len(text)]
-                if SAFETY_INVARIANTS_HEADING_RE.search(heading):
-                    timing_value = "early-falsification"
+        if format_version == "3.6":
+            claims: list[str] = []
+            claim_timings: dict[str, str] = {}
+            coverage = _ticket_coverage(text, str(identifier))
+            timings: list[str] = []
+        else:
+            matches = list(CLAIM_RE.finditer(text))
+            claims = list(dict.fromkeys(match.group(1) for match in matches))
+            if not claims:
+                raise StateError(f"Ticket {identifier} has no stable claim IDs")
+            claim_timings = {}
+            for index, match in enumerate(matches):
+                claim = match.group(1)
+                segment = text[match.end(): matches[index + 1].start() if index + 1 < len(matches) else len(text)]
+                timing_values = TIMING_RE.findall(segment)
+                if not timing_values:
+                    heading_start = text.rfind("## ", 0, match.start())
+                    heading_end = text.find("\n", heading_start)
+                    heading = text[heading_start:heading_end if heading_end >= 0 else len(text)]
+                    if SAFETY_INVARIANTS_HEADING_RE.search(heading):
+                        timing_value = "early-falsification"
+                    else:
+                        raise StateError(f"Ticket {identifier} claim {claim} has no evidence timing")
                 else:
-                    raise StateError(f"Ticket {identifier} claim {claim} has no evidence timing")
-            else:
-                if len(set(timing_values)) != 1:
+                    if len(set(timing_values)) != 1:
+                        raise StateError(f"Ticket {identifier} claim {claim} has conflicting evidence timing")
+                    timing_value = timing_values[0]
+                if timing_value not in TIMINGS:
+                    raise StateError(f"Ticket {identifier} has invalid evidence timing")
+                if claim in claim_timings and claim_timings[claim] != timing_value:
                     raise StateError(f"Ticket {identifier} claim {claim} has conflicting evidence timing")
-                timing_value = timing_values[0]
-            if timing_value not in TIMINGS:
-                raise StateError(f"Ticket {identifier} has invalid evidence timing")
-            if claim in claim_timings and claim_timings[claim] != timing_value:
-                raise StateError(f"Ticket {identifier} claim {claim} has conflicting evidence timing")
-            claim_timings[claim] = timing_value
-        result.append({"id": str(identifier), "path": child, "text": text, "publication": "Approved" if PUBLICATION_RE.search(text).group(2) == "Approved" else "Draft", "claims": claims, "claimTimings": claim_timings, "timings": sorted(set(claim_timings.values())), "arrivalPaths": arrival_paths})
+                claim_timings[claim] = timing_value
+            timings = sorted(set(claim_timings.values()))
+        document = {"id": str(identifier), "path": child, "text": text, "publication": "Approved" if PUBLICATION_RE.search(text).group(2) == "Approved" else "Draft", "claims": claims, "claimTimings": claim_timings, "timings": timings, "arrivalPaths": arrival_paths}
+        if format_version == "3.6":
+            document["coverage"] = coverage
+        result.append(document)
     if not result and directory.exists():
         raise StateError(f"Composition earns tickets but no Ticket belongs to Attempt {attempt}")
     return result
@@ -669,6 +860,13 @@ def _ticket_claim_timings(documents: list[dict[str, Any]]) -> dict[str, dict[str
     return {row["id"]: dict(row["claimTimings"]) for row in documents}
 
 
+def _state_format_version(state: Any) -> str:
+    version = state.get("formatVersion") if isinstance(state, dict) else None
+    if version not in {"3.5", "3.6"}:
+        raise StateError(f"unsupported state formatVersion {version!r}; expected '3.5' or '3.6'")
+    return version
+
+
 def _evidence_coverage_for(claims: dict[str, set[str]], evidence: dict[str, dict[str, list[dict[str, Any]]]], ticket: str, revision: str, environment: str) -> tuple[list[str], list[str]]:
     missing: list[str] = []
     conflicting: list[str] = []
@@ -722,6 +920,107 @@ def _validate_evidence_index(repo: Path, index: Any, claims: dict[str, set[str]]
                 if copy.get("invalidatedBy") is not None and (not isinstance(copy["invalidatedBy"], str) or not copy["invalidatedBy"].strip()):
                     raise StateError(f"evidence {ticket}/{claim} invalidatedBy must be text or null")
                 normalized[ticket][claim].append(copy)
+    return normalized
+
+
+def _package_relative_artifact(package: Path, value: Any, field: str, *, must_exist: bool) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise StateError(f"{field} must be a non-empty package-relative path")
+    raw = value.strip().replace("\\", "/")
+    path_value, separator, anchor_value = raw.partition("#")
+    path = PurePosixPath(path_value)
+    if path.is_absolute() or re.match(r"^[A-Za-z]:", raw) or raw.startswith("//") or ".." in path.parts or str(path) in {"", "."}:
+        raise StateError(f"{field} must be package-relative: {value!r}")
+    resolved = (package / Path(*path.parts)).resolve()
+    try:
+        resolved.relative_to(package.resolve())
+    except ValueError as exc:
+        raise StateError(f"{field} escapes the package: {value!r}") from exc
+    if must_exist and not resolved.exists():
+        raise StateError(f"{field} does not exist: {path.as_posix()}")
+    anchor = f"#{anchor_value}" if separator else ""
+    return path.as_posix() + anchor
+
+
+def _validate_journey_evidence_index(
+    package: Path,
+    repo: Path,
+    index: Any,
+    spec: dict[str, Any],
+    ticket_ids: set[str],
+    *,
+    live: bool,
+) -> dict[str, list[dict[str, Any]]]:
+    if not isinstance(index, dict):
+        raise StateError("3.6 evidenceIndex must be an object keyed by evidenceKey")
+    normalized: dict[str, list[dict[str, Any]]] = {}
+    run_environments: dict[str, tuple[str, str]] = {}
+    base_fields = {"kind", "artifact", "revision", "environment", "conclusion"}
+    fields_by_kind = {
+        "journey-step": {"runId", "journeyId", "stepId", "entry"},
+        "suite": {"suiteId"},
+        "review": {"ticket"},
+        "release": set(),
+    }
+    for evidence_key, records in index.items():
+        if not isinstance(evidence_key, str) or not evidence_key or not isinstance(records, list):
+            raise StateError(f"evidenceIndex[{evidence_key}] must map an evidenceKey to a list")
+        normalized[evidence_key] = []
+        for record in records:
+            if not isinstance(record, dict):
+                raise StateError(f"evidenceIndex[{evidence_key}] record must be an object")
+            kind = record.get("kind")
+            if not isinstance(kind, str) or kind not in fields_by_kind:
+                raise StateError(f"evidenceIndex[{evidence_key}] has invalid kind")
+            required = base_fields | fields_by_kind[kind]
+            if not required <= set(record) or set(record) - (required | {"invalidatedBy", "timing"}):
+                raise StateError(f"evidenceIndex[{evidence_key}] {kind} record has missing or unknown fields")
+            if not isinstance(record["conclusion"], str) or record["conclusion"] not in CONCLUSIONS:
+                raise StateError(f"evidenceIndex[{evidence_key}] has invalid conclusion")
+            if "timing" in record and (not isinstance(record["timing"], str) or record["timing"] not in TIMINGS):
+                raise StateError(f"evidenceIndex[{evidence_key}] has invalid timing")
+            invalidated_by = record.get("invalidatedBy")
+            if "invalidatedBy" in record and invalidated_by is not None and (not isinstance(invalidated_by, str) or not invalidated_by.strip()):
+                raise StateError(f"evidenceIndex[{evidence_key}] invalidatedBy must be text or null")
+            normalized_artifact = _package_relative_artifact(package, record["artifact"], f"evidence {evidence_key}", must_exist=live)
+            for field in ("revision", "environment"):
+                if not isinstance(record[field], str) or not record[field].strip():
+                    raise StateError(f"evidence {evidence_key} {field} must be non-empty")
+            copy = dict(record)
+            copy["artifact"] = normalized_artifact
+            copy["revision"] = _validate_commit(repo, record["revision"])
+            if kind == "journey-step":
+                run_id, journey_id, step_id, entry = (record[field] for field in ("runId", "journeyId", "stepId", "entry"))
+                if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, entry)):
+                    raise StateError(f"evidenceIndex[{evidence_key}] Journey fields must be non-empty strings")
+                if evidence_key != f"journey:{run_id}:{step_id}":
+                    raise StateError(f"evidenceIndex[{evidence_key}] must use journey:<runId>:<stepId>")
+                step = spec["steps"].get(step_id)
+                if step is None or step["journeyId"] != journey_id:
+                    raise StateError(f"evidenceIndex[{evidence_key}] references unknown Journey step")
+                if entry != step["operationEntry"]:
+                    raise StateError(f"evidenceIndex[{evidence_key}] entry does not match the Spec operation entry")
+                environment_tuple = (journey_id, record["environment"])
+                previous = run_environments.setdefault(run_id, environment_tuple)
+                if previous != environment_tuple:
+                    raise StateError(f"Journey run {run_id} must use one Journey and environment")
+            elif kind == "suite":
+                suite_id = record["suiteId"]
+                if not isinstance(suite_id, str) or suite_id not in spec["suites"]:
+                    raise StateError(f"evidenceIndex[{evidence_key}] references unknown suite")
+                if evidence_key != f"suite:{suite_id}":
+                    raise StateError(f"evidenceIndex[{evidence_key}] must use suite:<suiteId>")
+                if record["environment"] != spec["suites"][suite_id]["environment"]:
+                    raise StateError(f"evidenceIndex[{evidence_key}] environment does not match the Spec")
+            elif kind == "review":
+                ticket = record["ticket"]
+                if not isinstance(ticket, str) or (ticket != "package" and ticket not in ticket_ids):
+                    raise StateError(f"evidenceIndex[{evidence_key}] review ticket must be a known Ticket or package")
+                if evidence_key != f"review:{ticket}":
+                    raise StateError(f"evidenceIndex[{evidence_key}] must use review:<ticket>")
+            elif evidence_key != "release":
+                raise StateError("release evidence key must be release")
+            normalized[evidence_key].append(copy)
     return normalized
 
 
@@ -796,26 +1095,57 @@ def _ticket_released(tickets: dict[str, Any], identifier: str, visiting: set[str
     return isinstance(successor, str) and successor in tickets and _ticket_released(tickets, successor, visiting)
 
 
+def _validate_acceptance_state(repo: Path, acceptance: Any, info: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(acceptance, dict) or set(acceptance) != {"contractBaseline", "releaseOrder", "amendments"}:
+        raise StateError("3.6 acceptance must contain contractBaseline, releaseOrder, amendments")
+    if not isinstance(acceptance["releaseOrder"], str) or acceptance["releaseOrder"] not in {"required", "none"} or acceptance["releaseOrder"] != info["releaseOrder"]:
+        raise StateError("state acceptance.releaseOrder does not match the Plan")
+    if not isinstance(acceptance["amendments"], list):
+        raise StateError("state acceptance.amendments must be a list")
+    baseline = acceptance["contractBaseline"]
+    if not isinstance(baseline, dict) or set(baseline) != {"head", "files"}:
+        raise StateError("state acceptance.contractBaseline must contain head and files")
+    if not isinstance(baseline["head"], str):
+        raise StateError("state acceptance.contractBaseline.head must be a commit ID")
+    baseline["head"] = _validate_commit(repo, baseline["head"])
+    files = baseline["files"]
+    if not isinstance(files, dict) or "spec.md" not in files or set(files) - {"decision.md", "spec.md", "contract-design.md"}:
+        raise StateError("state acceptance.contractBaseline.files must contain spec.md and only contract document hashes")
+    if any(not isinstance(value, str) or FIXED_COMMIT_RE.fullmatch(value) is None for value in files.values()):
+        raise StateError("state acceptance.contractBaseline.files values must be full Git blob hashes")
+    return acceptance
+
+
 def _validate_state(package: Path, state: dict[str, Any], *, projections: bool = True) -> dict[str, Any]:
-    expected = {"formatVersion", "attempt", "attemptHistory", "predecessors", "tickets", "evidenceIndex", "activeCheckpoints"}
+    if not isinstance(state, dict):
+        raise StateError("state.json must be an object")
+    format_version = _state_format_version(state)
+    base_fields = {"formatVersion", "attempt", "attemptHistory", "predecessors", "tickets", "evidenceIndex", "activeCheckpoints"}
+    expected = base_fields | ({"acceptance"} if format_version == "3.6" else set())
     if set(state) != expected:
-        raise StateError("state.json must use formatVersion 3.5 and contain attempt, attemptHistory, predecessors, tickets, evidenceIndex, activeCheckpoints")
-    if state["formatVersion"] != FORMAT_VERSION:
-        raise StateError(f"unsupported state formatVersion {state['formatVersion']!r}; expected {FORMAT_VERSION!r}")
+        if format_version == "3.5":
+            raise StateError("state.json must use formatVersion 3.5 and contain attempt, attemptHistory, predecessors, tickets, evidenceIndex, activeCheckpoints")
+        raise StateError(f"state.json fields do not match formatVersion {format_version}")
     repo = _repo_root(package)
     attempt = state["attempt"]
     if not isinstance(attempt, dict) or set(attempt) != {"id", "plan"} or not isinstance(attempt["id"], str) or ATTEMPT_ID_RE.fullmatch(attempt["id"]) is None:
         raise StateError("state attempt must contain a valid id and plan")
     info = _plan_info(package, repo, attempt["plan"])
+    if info["formatVersion"] != format_version:
+        raise StateError(f"state formatVersion {format_version} does not match Plan formatVersion {info['formatVersion']}")
+    acceptance = _validate_acceptance_state(repo, state["acceptance"], info) if format_version == "3.6" else None
     if info["attempt"] != attempt["id"]:
         raise StateError("state Attempt ID does not match current plan")
     predecessors = _normalize_state_predecessors(package, repo, state["predecessors"])
     if predecessors != info["predecessors"]:
         raise StateError("state predecessors do not match the current plan")
     if not info["tickets"]:
-        raise StateError("format 3.5 requires tickets=true")
+        raise StateError(f"format {format_version} requires tickets=true")
     lifecycle = _lifecycle(package, attempt["id"], repo)
-    documents = _ticket_documents(package, attempt["id"])
+    journey_spec = _journey_spec(package) if format_version == "3.6" else None
+    documents = _ticket_documents(package, attempt["id"], format_version)
+    if journey_spec is not None:
+        _validate_journey_coverage(journey_spec, documents)
     ticket_ids = {row["id"] for row in documents}
     tickets = state["tickets"]
     if not isinstance(tickets, dict) or set(tickets) != ticket_ids:
@@ -861,20 +1191,27 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
             raise StateError(f"superseded Ticket {retired_ticket} still has inbound edges: {inbound}")
     claims = _ticket_claims(documents)
     claim_timings = _ticket_claim_timings(documents)
-    evidence = _validate_evidence_index(repo, state["evidenceIndex"], claims, claim_timings, live=lifecycle.value == "active")
-    for identifier, row in tickets.items():
-        if row["state"] != "SATISFIED":
-            continue
-        acceptance = row["acceptance"]
-        acceptance_revision = _validate_commit(repo, acceptance["revision"])
-        missing, conflicts = _evidence_coverage_for(claims, evidence, identifier, acceptance_revision, acceptance["environment"])
-        if missing or conflicts:
-            raise StateError(f"SATISFIED Ticket {identifier} has incomplete current evidence")
+    if format_version == "3.6":
+        assert journey_spec is not None
+        evidence = _validate_journey_evidence_index(package, repo, state["evidenceIndex"], journey_spec, ticket_ids, live=lifecycle.value == "active")
+    else:
+        evidence = _validate_evidence_index(repo, state["evidenceIndex"], claims, claim_timings, live=lifecycle.value == "active")
+        for identifier, row in tickets.items():
+            if row["state"] != "SATISFIED":
+                continue
+            acceptance_row = row["acceptance"]
+            acceptance_revision = _validate_commit(repo, acceptance_row["revision"])
+            missing, conflicts = _evidence_coverage_for(claims, evidence, identifier, acceptance_revision, acceptance_row["environment"])
+            if missing or conflicts:
+                raise StateError(f"SATISFIED Ticket {identifier} has incomplete current evidence")
     checkpoints = _validate_checkpoints(repo, state["activeCheckpoints"], ticket_ids, live=lifecycle.value == "active")
     history = _attempt_history(state, package)
     if not history or history[-1]["id"] != attempt["id"]:
         raise StateError("attemptHistory must end with current Attempt")
-    summary = {"formatVersion": FORMAT_VERSION, "attempt": attempt["id"], "revisions": {"decision": info["decision"], "spec": info["spec"], "plan": info["plan"]}, "predecessors": predecessors, "composition": {"tickets": True, "dag": False}, "tasks": 0, "tickets": len(tickets), "readyTickets": ready_tickets(dependencies, tickets), "gate": lifecycle.gate, "_lifecycle": lifecycle, "_info": info, "_documents": documents, "_ticketDependencies": dependencies, "_claims": claims, "_claimTimings": claim_timings, "_evidence": evidence, "_checkpoints": checkpoints, "_history": history}
+    summary = {"formatVersion": format_version, "attempt": attempt["id"], "revisions": {"decision": info["decision"], "spec": info["spec"], "plan": info["plan"]}, "predecessors": predecessors, "composition": {"tickets": True, "dag": False}, "tasks": 0, "tickets": len(tickets), "readyTickets": ready_tickets(dependencies, tickets), "gate": lifecycle.gate, "_lifecycle": lifecycle, "_info": info, "_documents": documents, "_ticketDependencies": dependencies, "_claims": claims, "_claimTimings": claim_timings, "_evidence": evidence, "_checkpoints": checkpoints, "_history": history}
+    if journey_spec is not None:
+        summary["_journeySpec"] = journey_spec
+        summary["_acceptance"] = acceptance
     if projections:
         _validate_projections(package, state, summary)
     return summary
@@ -889,13 +1226,62 @@ def _format_aliases(revisions: dict[str, str | None]) -> str:
     return " / ".join(values) if values else "none (Git commit is the history anchor)"
 
 
+def _journey_reaches(state: dict[str, Any], spec: dict[str, Any]) -> dict[str, int]:
+    runs: dict[str, dict[str, dict[str, bool]]] = {}
+    for evidence_key, records in state["evidenceIndex"].items():
+        for record in records:
+            if record["kind"] != "journey-step":
+                continue
+            run_id = record["runId"]
+            journey_id = record["journeyId"]
+            step_id = record["stepId"]
+            valid = record["conclusion"] == "supporting" and not record.get("invalidatedBy")
+            step_results = runs.setdefault(journey_id, {}).setdefault(run_id, {})
+            step_results[step_id] = step_results.get(step_id, False) or valid
+    reaches: dict[str, int] = {}
+    for journey in spec["journeys"]:
+        best = 0
+        for step_results in runs.get(journey["id"], {}).values():
+            reach = 0
+            for step in journey["steps"]:
+                if not step_results.get(step["id"], False):
+                    break
+                reach += 1
+            best = max(best, reach)
+        reaches[journey["id"]] = best
+    return reaches
+
+
 def _render_progress(package: Path, state: dict[str, Any], summary: dict[str, Any]) -> str:
     lifecycle: Lifecycle = summary["_lifecycle"]
     blockers = [f"ticket:{key}" for key, row in state["tickets"].items() if row["state"] == "BLOCKED"]
-    lines = [f"# Attempt Progress · {summary['attempt']}", "", "> machine-owned projection；使用 `refresh-progress` 重建，不直接编辑。", "", f"- Attempt: {summary['attempt']}", f"- Contract aliases: {_format_aliases(summary['revisions'])}", "- Composition: tickets=true, dag=false", f"- Lifecycle: {lifecycle.value}", f"- Latest gate: {lifecycle.gate_verdict}", f"- Blockers: {', '.join(blockers) if blockers else 'none'}", "", "## Ticket Acceptance", "", "| Ticket | State | Evidence |", "| --- | --- | --- |"]
-    for identifier, row in state["tickets"].items():
-        claims = ", ".join(sorted(state["evidenceIndex"].get(identifier, {}))) or "none"
-        lines.append(f"| {identifier} | {row['state']} | {_escape(claims)} |")
+    lines = [f"# Attempt Progress · {summary['attempt']}", "", "> machine-owned projection；使用 `refresh-progress` 重建，不直接编辑。", "", f"- Attempt: {summary['attempt']}", f"- Contract aliases: {_format_aliases(summary['revisions'])}", "- Composition: tickets=true, dag=false", f"- Lifecycle: {lifecycle.value}", f"- Latest gate: {lifecycle.gate_verdict}", f"- Blockers: {', '.join(blockers) if blockers else 'none'}"]
+    if summary["formatVersion"] == "3.6":
+        spec = summary["_journeySpec"]
+        reaches = _journey_reaches(state, spec)
+        lines.extend(["", "## Journey Progress", ""])
+        for journey in spec["journeys"]:
+            lines.append(f"- {journey['id']} 走通 {reaches[journey['id']]}/{len(journey['steps'])}")
+        lines.extend(["", "## Required Suite Results", "", "| Suite | Kind | Scope | Latest conclusion |", "| --- | --- | --- | --- |"])
+        for suite_id, suite in spec["suites"].items():
+            records = state["evidenceIndex"].get(f"suite:{suite_id}", [])
+            latest = records[-1] if records else None
+            conclusion = latest["conclusion"] if latest else "none"
+            if latest and latest.get("invalidatedBy"):
+                conclusion += " (invalidated)"
+            lines.append(f"| {suite_id} | {suite['kind']} | {suite['scope']} | {conclusion} |")
+        if not spec["suites"]:
+            lines.append("| none | none | none | none |")
+        lines.extend(["", "## Ticket Status", "", "| Ticket | State | Journey steps | Suites |", "| --- | --- | --- | --- |"])
+        for document in summary["_documents"]:
+            identifier = document["id"]
+            coverage = document["coverage"]
+            lines.append(f"| {identifier} | {state['tickets'][identifier]['state']} | {_escape(', '.join(coverage['journeySteps']) or 'none')} | {_escape(', '.join(coverage['suites']) or 'none')} |")
+    else:
+        lines.extend(["", "## Ticket Acceptance", "", "| Ticket | State | Evidence |", "| --- | --- | --- |"])
+        for identifier, row in state["tickets"].items():
+            claims = ", ".join(sorted(state["evidenceIndex"].get(identifier, {}))) or "none"
+            lines.append(f"| {identifier} | {row['state']} | {_escape(claims)} |")
     lines.extend(["", "## Active Checkpoints", "", "| Subject | Status | Next action | Evidence |", "| --- | --- | --- | --- |"])
     checkpoints = state["activeCheckpoints"] if not lifecycle.frozen else {}
     if checkpoints:
@@ -987,6 +1373,8 @@ def _contract_doc_name_findings(package: Path, summary: dict[str, Any]) -> list[
 
 
 def _uniform_ticket_timing_findings(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    if summary["formatVersion"] == "3.6":
+        return []
     claims = _ticket_claims(summary["_documents"])
     claim_timings = _ticket_claim_timings(summary["_documents"])
     findings: list[dict[str, Any]] = []
@@ -1080,6 +1468,20 @@ def _arrival_findings(repo: Path, package: Path, summary: dict[str, Any], compar
     return findings
 
 
+def _contract_baseline(package: Path, repo: Path) -> dict[str, Any]:
+    head = _run_git(repo, "rev-parse", "HEAD")
+    package_rel = package.resolve().relative_to(repo.resolve()).as_posix()
+    files: dict[str, str] = {}
+    for name in ("decision.md", "spec.md", "contract-design.md"):
+        path = package / name
+        if path.is_file():
+            relative = f"{package_rel}/{name}"
+            files[name] = _run_git(repo, "hash-object", "--", relative)
+    if "spec.md" not in files:
+        raise StateError("contractBaseline requires spec.md")
+    return {"head": head, "files": files}
+
+
 def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
     if PACKAGE_ID_RE.fullmatch(package.name) is None:
         raise StateError("package directory must use an immutable date-prefixed ID")
@@ -1102,12 +1504,14 @@ def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
         previous = current["attemptHistory"]
     else:
         previous = []
-    documents = _ticket_documents(package, attempt)
+    documents = _ticket_documents(package, attempt, info["formatVersion"])
     dependencies = _ticket_dependencies(documents)
     del dependencies
     history = list(previous)
     history.append({"id": attempt, "plan": info["path"], "lifecycle": "active", "gate": None, "executionRecord": f"execution/{attempt}/execution-record.md"})
-    state: dict[str, Any] = {"formatVersion": FORMAT_VERSION, "attempt": {"id": attempt, "plan": info["path"]}, "attemptHistory": history, "predecessors": info["predecessors"], "tickets": {document["id"]: {"state": "PENDING"} for document in documents}, "evidenceIndex": {}, "activeCheckpoints": {}}
+    state: dict[str, Any] = {"formatVersion": info["formatVersion"], "attempt": {"id": attempt, "plan": info["path"]}, "attemptHistory": history, "predecessors": info["predecessors"], "tickets": {document["id"]: {"state": "PENDING"} for document in documents}, "evidenceIndex": {}, "activeCheckpoints": {}}
+    if info["formatVersion"] == "3.6":
+        state["acceptance"] = {"contractBaseline": _contract_baseline(package, repo), "releaseOrder": info["releaseOrder"], "amendments": []}
     execution_record = _execution_record_path(package, attempt)
     created_execution_record = not execution_record.exists()
     if created_execution_record:
@@ -1165,6 +1569,90 @@ def _evidence_coverage(summary: dict[str, Any], ticket: str, revision: str, envi
     return _evidence_coverage_for(summary["_claims"], summary["_evidence"], ticket, revision, environment)
 
 
+def _normalize_journey_evidence(package: Path, repo: Path, summary: dict[str, Any], payload: Any) -> tuple[str, dict[str, Any]]:
+    if not isinstance(payload, dict):
+        raise StateError("evidence record must be an object")
+    kind = payload.get("kind")
+    fields_by_kind = {
+        "journey-step": {"runId", "journeyId", "stepId", "entry"},
+        "suite": {"suiteId"},
+        "review": {"ticket"},
+        "release": set(),
+    }
+    if not isinstance(kind, str) or kind not in fields_by_kind:
+        raise StateError("3.6 evidence kind must be journey-step, suite, review, or release")
+    required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
+    allowed = required | {"evidenceKey", "invalidatedBy", "timing"}
+    if not required <= set(payload) or set(payload) - allowed:
+        raise StateError("3.6 evidence record has missing or unknown fields")
+    record = {field: value for field, value in payload.items() if field != "evidenceKey"}
+    if not isinstance(record["conclusion"], str) or record["conclusion"] not in CONCLUSIONS:
+        raise StateError("invalid evidence conclusion")
+    if "timing" in record and record["timing"] not in TIMINGS:
+        raise StateError("invalid evidence timing")
+    if "invalidatedBy" in record and record["invalidatedBy"] is not None and (not isinstance(record["invalidatedBy"], str) or not record["invalidatedBy"].strip()):
+        raise StateError("evidence invalidatedBy must be text or null")
+    for field in ("revision", "environment"):
+        if not isinstance(record[field], str) or not record[field].strip():
+            raise StateError(f"evidence {field} must be non-empty")
+    record["artifact"] = _package_relative_artifact(package, record["artifact"], "evidence artifact", must_exist=False)
+    record["revision"] = _validate_commit(repo, record["revision"])
+
+    spec = summary["_journeySpec"]
+    if kind == "journey-step":
+        run_id, journey_id, step_id, entry = (record[field] for field in ("runId", "journeyId", "stepId", "entry"))
+        if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, entry)):
+            raise StateError("Journey evidence runId, journeyId, stepId, and entry must be non-empty")
+        step = spec["steps"].get(step_id)
+        if step is None or step["journeyId"] != journey_id:
+            raise StateError(f"unknown Journey step: {journey_id}/{step_id}")
+        if entry != step["operationEntry"]:
+            raise StateError("Journey evidence entry does not match the Spec operation entry")
+        evidence_key = f"journey:{run_id}:{step_id}"
+    elif kind == "suite":
+        suite_id = record["suiteId"]
+        if not isinstance(suite_id, str) or suite_id not in spec["suites"]:
+            raise StateError(f"unknown required suite: {suite_id}")
+        if record["environment"] != spec["suites"][suite_id]["environment"]:
+            raise StateError(f"suite {suite_id} evidence environment does not match the Spec")
+        evidence_key = f"suite:{suite_id}"
+    elif kind == "review":
+        ticket = record["ticket"]
+        if not isinstance(ticket, str) or (ticket != "package" and ticket not in {item["id"] for item in summary["_documents"]}):
+            raise StateError("review evidence ticket must be a known Ticket or package")
+        evidence_key = f"review:{ticket}"
+    else:
+        evidence_key = "release"
+    supplied_key = payload.get("evidenceKey")
+    if supplied_key is not None and supplied_key != evidence_key:
+        raise StateError(f"evidenceKey must be {evidence_key}")
+    return evidence_key, record
+
+
+def _validate_journey_step_order(state: dict[str, Any], spec: dict[str, Any], record: dict[str, Any]) -> None:
+    journey = next(item for item in spec["journeys"] if item["id"] == record["journeyId"])
+    positions = {step["id"]: index for index, step in enumerate(journey["steps"])}
+    current_position = positions[record["stepId"]]
+    steps_by_position: dict[int, list[dict[str, Any]]] = {}
+    for records in state["evidenceIndex"].values():
+        for existing in records:
+            if existing.get("kind") == "journey-step" and existing.get("runId") == record["runId"]:
+                steps_by_position.setdefault(positions[existing["stepId"]], []).append(existing)
+    if not steps_by_position:
+        if current_position != 0:
+            raise StateError(f"Journey run {record['runId']} must start at {journey['steps'][0]['id']}")
+        return
+    last_position = max(steps_by_position)
+    if set(steps_by_position) != set(range(last_position + 1)):
+        raise StateError(f"Journey run {record['runId']} has a missing earlier step; start a new run")
+    if current_position < last_position or current_position > last_position + 1:
+        raise StateError(f"Journey run {record['runId']} must record steps in Spec order")
+    if current_position == last_position + 1:
+        last_record = steps_by_position[last_position][-1]
+        if last_record.get("conclusion") != "supporting" or last_record.get("invalidatedBy"):
+            raise StateError(f"Journey run {record['runId']} cannot continue after a failed or invalidated step")
+
+
 def _normalize_evidence_record(repo: Path, summary: dict[str, Any], payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise StateError("evidence record must be an object")
@@ -1217,13 +1705,25 @@ def command_evidence_add(package: Path, payload_text: str) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     added = 0
     for item in items:
-        record = _normalize_evidence_record(repo, summary, item)
-        ticket, claim = record["ticket"], record["claim"]
-        existing = state["evidenceIndex"].get(ticket, {}).get(claim, [])
+        if summary["formatVersion"] == "3.6":
+            evidence_key, record = _normalize_journey_evidence(package, repo, summary, item)
+            existing = state["evidenceIndex"].get(evidence_key, [])
+            result = {"evidenceKey": evidence_key}
+        else:
+            record = _normalize_evidence_record(repo, summary, item)
+            ticket, claim = record["ticket"], record["claim"]
+            evidence_key = None
+            existing = state["evidenceIndex"].get(ticket, {}).get(claim, [])
+            result = {"ticket": ticket, "claim": claim}
         idempotent = record in existing
-        results.append({"ticket": ticket, "claim": claim, "idempotent": idempotent})
+        results.append({**result, "idempotent": idempotent})
         if not idempotent:
-            state["evidenceIndex"].setdefault(ticket, {}).setdefault(claim, []).append(record)
+            if evidence_key is not None:
+                if record["kind"] == "journey-step":
+                    _validate_journey_step_order(state, summary["_journeySpec"], record)
+                state["evidenceIndex"].setdefault(evidence_key, []).append(record)
+            else:
+                state["evidenceIndex"].setdefault(ticket, {}).setdefault(claim, []).append(record)
             added += 1
     if added:
         _validate_state(package, state, projections=False)
@@ -1234,12 +1734,40 @@ def command_evidence_add(package: Path, payload_text: str) -> dict[str, Any]:
     return {"records": results, "added": added, "duplicates": len(items) - added}
 
 
-def command_evidence_invalidate(package: Path, ticket: str, claim: str, artifact: str, invalidated_by: str) -> dict[str, Any]:
+def command_evidence_invalidate(
+    package: Path,
+    ticket: str | None,
+    claim: str | None,
+    artifact: str | None,
+    invalidated_by: str,
+    key: str | None = None,
+) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
     _assert_mutable(summary)
     if not isinstance(invalidated_by, str) or not invalidated_by.strip():
         raise StateError("invalidated-by must be non-empty")
+    if summary["formatVersion"] == "3.6":
+        if not isinstance(key, str) or not key.strip() or any(value is not None for value in (ticket, claim, artifact)):
+            raise StateError("3.6 evidence invalidate requires --key and does not accept Ticket/claim/artifact selectors")
+        records = state["evidenceIndex"].get(key)
+        if not isinstance(records, list) or not records:
+            raise StateError("evidence key not found")
+        changed = False
+        for record in records:
+            previous = record.get("invalidatedBy")
+            if previous is None:
+                record["invalidatedBy"] = invalidated_by.strip()
+                changed = True
+            elif previous != invalidated_by.strip():
+                raise StateError(f"evidence key {key} is already invalidated by {previous}")
+        if changed:
+            _validate_state(package, state, projections=False)
+            _write_json(package / STATE_PATH, state)
+            _refresh_projections(package, state)
+        return {"evidenceKey": key, "invalidated": True, "idempotent": not changed}
+    if key is not None or not all(isinstance(value, str) and value.strip() for value in (ticket, claim, artifact)):
+        raise StateError("3.5 evidence invalidate requires --ticket, --claim, and --artifact")
     normalized = _repo_relative(_repo_root(package), artifact, "evidence artifact", must_exist=False)
     records = state["evidenceIndex"].get(ticket, {}).get(claim, [])
     for record in records:
@@ -1254,6 +1782,8 @@ def command_evidence_invalidate(package: Path, ticket: str, claim: str, artifact
 
 def command_evidence_retire_claim(package: Path, ticket: str, claim: str) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
+    if _state_format_version(state) != "3.5":
+        raise StateError("claim evidence is not available for format 3.6")
     attempt = state.get("attempt")
     attempt_id = attempt.get("id") if isinstance(attempt, dict) else None
     if not isinstance(attempt_id, str) or ATTEMPT_ID_RE.fullmatch(attempt_id) is None:
@@ -1311,6 +1841,8 @@ def command_set_state(
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
     _assert_mutable(summary)
+    if summary["formatVersion"] == "3.6" and target == "SATISFIED":
+        raise StateError("ticket satisfy for format 3.6 is not available in Journey phase 1a")
     if identifier not in state["tickets"] or target not in TICKET_STATES:
         raise StateError(f"unknown Ticket or invalid state: {identifier}/{target}")
     current = state["tickets"][identifier]["state"]
@@ -1949,13 +2481,15 @@ def _update_history(state: dict[str, Any], attempt: str, lifecycle: str, gate: d
 def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence: list[str], durable: list[str], no_durable_reason: str | None, environment: str | None) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state, projections=False)
+    if summary["formatVersion"] == "3.6":
+        raise StateError("Gate for format 3.6 is not available in Journey phase 1a")
     repo = _repo_root(package)
     resolved = _validate_commit(repo, commit)
     lifecycle: Lifecycle = summary["_lifecycle"]
     if lifecycle.frozen:
         if lifecycle.gate and lifecycle.gate["verdict"] == verdict and lifecycle.gate["commit"] == resolved:
             _write_attempt_archive(package, summary["attempt"], state["tickets"])
-            return {"formatVersion": FORMAT_VERSION, "verdict": verdict, "attempt": summary["attempt"], "commit": resolved, "idempotent": True}
+            return {"formatVersion": summary["formatVersion"], "verdict": verdict, "attempt": summary["attempt"], "commit": resolved, "idempotent": True}
         raise StateError(f"Attempt {summary['attempt']} is already frozen by terminal Gate {lifecycle.gate_verdict}")
     if verdict in TERMINAL_VERDICTS and resolved != _run_git(repo, "rev-parse", "HEAD"):
         raise StateError("terminal Gate comparison commit must equal current HEAD")
@@ -2007,4 +2541,4 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
     _refresh_projections(package, state)
     if verdict in TERMINAL_VERDICTS:
         _write_attempt_archive(package, summary["attempt"], state["tickets"])
-    return {"formatVersion": FORMAT_VERSION, "verdict": verdict, "attempt": summary["attempt"], "commit": resolved, "idempotent": False}
+    return {"formatVersion": summary["formatVersion"], "verdict": verdict, "attempt": summary["attempt"], "commit": resolved, "idempotent": False}
