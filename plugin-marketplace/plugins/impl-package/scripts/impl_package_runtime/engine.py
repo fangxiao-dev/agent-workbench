@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -145,6 +146,22 @@ def _write_text(path: Path, payload: str) -> None:
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:
     _write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+
+
+def _utc_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _validate_iso_timestamp(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise StateError(f"{label} must be an ISO timestamp with a timezone")
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise StateError(f"{label} must be an ISO timestamp with a timezone") from exc
+    if parsed.tzinfo is None:
+        raise StateError(f"{label} must include a timezone")
+    return value
 
 
 def _attempt_archive_path(package: Path, attempt: str) -> Path:
@@ -303,6 +320,16 @@ def _best_effort_trail(package: Path, attempt: str, event: dict[str, Any]) -> No
             f"warning: state mutation committed but trail append failed ({event.get('kind', 'event')}): {exc}",
             file=sys.stderr,
         )
+
+
+def _best_effort_result(package: Path, attempt: str, event: dict[str, Any]) -> None:
+    try:
+        event = {"kind": "result", **event}
+        if any(row.get("kind") == "result" and _same_event(row, event) for row in _active_trail_rows(package, attempt)):
+            return
+        _append_trail(package, attempt, event)
+    except Exception as exc:  # trail is observational; state remains authoritative
+        print(f"warning: state mutation committed but trail append failed (result): {exc}", file=sys.stderr)
 
 
 def _next_trail_archive(path: Path) -> Path:
@@ -1125,13 +1152,15 @@ def _validate_journey_evidence_index(
             if not isinstance(kind, str) or kind not in fields_by_kind:
                 raise StateError(f"evidenceIndex[{evidence_key}] has invalid kind")
             required = base_fields | fields_by_kind[kind]
-            allowed = required | optional_fields_by_kind.get(kind, set()) | {"invalidatedBy", "timing"}
+            allowed = required | optional_fields_by_kind.get(kind, set()) | {"invalidatedBy", "timing", "recordedAt"}
             if not required <= set(record) or set(record) - allowed:
                 raise StateError(f"evidenceIndex[{evidence_key}] {kind} record has missing or unknown fields")
             if not isinstance(record["conclusion"], str) or record["conclusion"] not in CONCLUSIONS:
                 raise StateError(f"evidenceIndex[{evidence_key}] has invalid conclusion")
             if "timing" in record and (not isinstance(record["timing"], str) or record["timing"] not in TIMINGS):
                 raise StateError(f"evidenceIndex[{evidence_key}] has invalid timing")
+            if "recordedAt" in record:
+                _validate_iso_timestamp(record["recordedAt"], f"evidenceIndex[{evidence_key}] recordedAt")
             invalidated_by = record.get("invalidatedBy")
             if "invalidatedBy" in record and invalidated_by is not None and (not isinstance(invalidated_by, str) or not invalidated_by.strip()):
                 raise StateError(f"evidenceIndex[{evidence_key}] invalidatedBy must be text or null")
@@ -1266,6 +1295,7 @@ def _validate_acceptance_state(package: Path, repo: Path, acceptance: Any, info:
         status = amendment.get("status")
         base = {"id", "summary", "affected", "artifact", "status"}
         expected = base | ({"confirmedBy", "confirmedRevision"} if status == "CONFIRMED" else set())
+        expected |= {field for field in ("createdAt", "confirmedAt") if field in amendment}
         if "affectedBlobs" in amendment:
             expected.add("affectedBlobs")
         if status not in {"PENDING", "CONFIRMED"} or set(amendment) != expected:
@@ -1295,10 +1325,16 @@ def _validate_acceptance_state(package: Path, repo: Path, acceptance: Any, info:
             if any(value is not None and (not isinstance(value, str) or FIXED_COMMIT_RE.fullmatch(value) is None) for value in blobs.values()):
                 raise StateError(f"amendment {identifier} affectedBlobs values must be full Git blob hashes or null")
         amendment["artifact"] = _package_relative_artifact(package, amendment.get("artifact"), f"amendment {identifier} artifact", must_exist=live)
+        if "createdAt" in amendment:
+            _validate_iso_timestamp(amendment["createdAt"], f"amendment {identifier} createdAt")
         if status == "CONFIRMED":
             if not isinstance(amendment["confirmedBy"], str) or not amendment["confirmedBy"].strip():
                 raise StateError(f"amendment {identifier} confirmedBy must be non-empty")
             amendment["confirmedRevision"] = _validate_commit(repo, amendment["confirmedRevision"])
+            if "confirmedAt" in amendment:
+                _validate_iso_timestamp(amendment["confirmedAt"], f"amendment {identifier} confirmedAt")
+        elif "confirmedAt" in amendment:
+            raise StateError(f"pending amendment {identifier} cannot contain confirmedAt")
     baseline = acceptance["contractBaseline"]
     if not isinstance(baseline, dict) or set(baseline) != {"head", "files"}:
         raise StateError("state acceptance.contractBaseline must contain head and files")
@@ -1917,11 +1953,12 @@ def command_amendment_add(package: Path, identifier: str, summary_text: str, aff
         "affectedBlobs": {name: _working_tree_blob(_repo_root(package), package, name) for name in normalized_affected},
         "artifact": _package_relative_artifact(package, artifact, "amendment artifact", must_exist=True),
         "status": "PENDING",
+        "createdAt": _utc_timestamp(),
     }
     amendments = state["acceptance"]["amendments"]
     current = next((item for item in amendments if item["id"] == identifier), None)
     if current is not None:
-        if any(current[key] != row[key] for key in row if key != "status"):
+        if any(current.get(key) != row[key] for key in row if key not in {"status", "createdAt"}):
             raise StateError(f"amendment {identifier} already exists with different content; use a new id")
         return {"id": identifier, "status": current["status"], "idempotent": True}
     candidate = json.loads(json.dumps(state, ensure_ascii=False))
@@ -1929,6 +1966,10 @@ def command_amendment_add(package: Path, identifier: str, summary_text: str, aff
     _validate_state(package, candidate, projections=False)
     _write_json(package / STATE_PATH, candidate)
     _refresh_projections(package, candidate)
+    _best_effort_result(package, summary["attempt"], {
+        "subject": f"amendment:{identifier}", "transition": "amendment", "id": identifier,
+        "from": None, "to": "PENDING", "outcome": "PENDING",
+    })
     return {"id": identifier, "status": "PENDING", "idempotent": False}
 
 
@@ -1971,10 +2012,14 @@ def command_amendment_confirm(
         raise StateError(f"stale amendment transition for {identifier}: expected {expect}, found {current['status']}")
     candidate = json.loads(json.dumps(state, ensure_ascii=False))
     row = next(item for item in candidate["acceptance"]["amendments"] if item["id"] == identifier)
-    row.update({"status": "CONFIRMED", "confirmedBy": confirmed_by.strip(), "confirmedRevision": revision})
+    row.update({"status": "CONFIRMED", "confirmedBy": confirmed_by.strip(), "confirmedRevision": revision, "confirmedAt": _utc_timestamp()})
     _validate_state(package, candidate, projections=False)
     _write_json(package / STATE_PATH, candidate)
     _refresh_projections(package, candidate)
+    _best_effort_result(package, summary["attempt"], {
+        "subject": f"amendment:{identifier}", "transition": "amendment", "id": identifier,
+        "from": "PENDING", "to": "CONFIRMED", "outcome": "CONFIRMED",
+    })
     return {"id": identifier, "status": "CONFIRMED", "idempotent": False}
 
 
@@ -2052,7 +2097,7 @@ def _normalize_journey_evidence(package: Path, repo: Path, summary: dict[str, An
     if not isinstance(kind, str) or kind not in fields_by_kind:
         raise StateError("3.6 evidence kind must be journey-step, suite, review, or release")
     required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
-    allowed = required | optional_fields_by_kind.get(kind, set()) | {"evidenceKey", "invalidatedBy", "timing"}
+    allowed = required | optional_fields_by_kind.get(kind, set()) | {"evidenceKey", "invalidatedBy", "timing", "recordedAt"}
     if not required <= set(payload) or set(payload) - allowed:
         raise StateError("3.6 evidence record has missing or unknown fields")
     record = {field: value for field, value in payload.items() if field != "evidenceKey"}
@@ -2064,6 +2109,8 @@ def _normalize_journey_evidence(package: Path, repo: Path, summary: dict[str, An
                 raise StateError(f"Journey evidence {field} must be a non-empty business object identifier")
     if "timing" in record and record["timing"] not in TIMINGS:
         raise StateError("invalid evidence timing")
+    if "recordedAt" in record:
+        _validate_iso_timestamp(record["recordedAt"], "evidence recordedAt")
     if "invalidatedBy" in record and record["invalidatedBy"] is not None and (not isinstance(record["invalidatedBy"], str) or not record["invalidatedBy"].strip()):
         raise StateError("evidence invalidatedBy must be text or null")
     for field in ("revision", "environment"):
@@ -2208,6 +2255,8 @@ def command_evidence_add(package: Path, payload_text: str) -> dict[str, Any]:
     added = 0
     for item in items:
         if summary["formatVersion"] == "3.6":
+            if isinstance(item, dict) and "recordedAt" in item:
+                raise StateError("3.6 evidence recordedAt is generated by the runtime; omit it")
             evidence_key, record = _normalize_journey_evidence(package, repo, summary, item)
             existing = state["evidenceIndex"].get(evidence_key, [])
             result = {"evidenceKey": evidence_key}
@@ -2217,10 +2266,15 @@ def command_evidence_add(package: Path, payload_text: str) -> dict[str, Any]:
             evidence_key = None
             existing = state["evidenceIndex"].get(ticket, {}).get(claim, [])
             result = {"ticket": ticket, "claim": claim}
-        idempotent = record in existing
+        idempotent = any(
+            {key: value for key, value in previous.items() if key != "recordedAt"}
+            == {key: value for key, value in record.items() if key != "recordedAt"}
+            for previous in existing
+        ) if summary["formatVersion"] == "3.6" else record in existing
         results.append({**result, "idempotent": idempotent})
         if not idempotent:
             if evidence_key is not None:
+                record["recordedAt"] = _utc_timestamp()
                 if record["kind"] == "journey-step":
                     _validate_journey_step_order(state, summary["_journeySpec"], record)
                 state["evidenceIndex"].setdefault(evidence_key, []).append(record)
@@ -2768,6 +2822,27 @@ def _validate_trail_event(event: dict[str, Any]) -> dict[str, Any]:
         if has_delta:
             _validate_code_delta(event["code_delta"])
             _trail_text_field(event, "consumption_id", kind)
+        if "endedAt" in event:
+            _validate_iso_timestamp(event["endedAt"], "trail worker-return endedAt")
+        if "usage" in event:
+            usage = event["usage"]
+            if not isinstance(usage, dict) or set(usage) - {"input", "output", "costUsd"} or not {"input", "output"} <= set(usage):
+                raise StateError("trail worker-return usage requires input/output and optional costUsd")
+            for field in ("input", "output"):
+                if type(usage[field]) is not int or usage[field] < 0:
+                    raise StateError(f"trail worker-return usage.{field} must be a non-negative integer")
+            if "costUsd" in usage and (
+                isinstance(usage["costUsd"], bool)
+                or not isinstance(usage["costUsd"], (int, float))
+                or (isinstance(usage["costUsd"], float) and not math.isfinite(usage["costUsd"]))
+                or usage["costUsd"] < 0
+            ):
+                raise StateError("trail worker-return usage.costUsd must be a non-negative number")
+        if "failureClass" in event and (
+            not isinstance(event["failureClass"], str)
+            or event["failureClass"] not in {"flaky", "env", "real"}
+        ):
+            raise StateError("trail worker-return failureClass must be flaky|env|real")
     return event
 
 
@@ -3064,6 +3139,17 @@ def _owner_summary(
     return lines
 
 
+def _best_effort_metrics_path(package: Path, attempt: str) -> str | None:
+    try:
+        from .metrics import write_metrics
+
+        path = write_metrics(package, attempt)
+        return path.relative_to(package.resolve()).as_posix()
+    except Exception as exc:  # metrics are observational; Gate remains authoritative
+        print(f"warning: Gate committed but metrics report failed: {exc}", file=sys.stderr)
+        return None
+
+
 def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence: list[str], durable: list[str], no_durable_reason: str | None, environment: str | None) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state, projections=False)
@@ -3073,7 +3159,16 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
     if lifecycle.frozen:
         if lifecycle.gate and lifecycle.gate["verdict"] == verdict and lifecycle.gate["commit"] == resolved:
             _write_attempt_archive(package, summary["attempt"], state["tickets"])
-            return {"formatVersion": summary["formatVersion"], "verdict": verdict, "attempt": summary["attempt"], "commit": resolved, "idempotent": True}
+            _best_effort_result(package, summary["attempt"], {
+                "subject": f"attempt:{summary['attempt']}", "transition": "gate", "verdict": verdict,
+                "commit": resolved, "outcome": verdict,
+            })
+            result = {"formatVersion": summary["formatVersion"], "verdict": verdict, "attempt": summary["attempt"], "commit": resolved, "idempotent": True}
+            if summary["formatVersion"] == "3.6" and verdict == "pass":
+                metrics_path = _best_effort_metrics_path(package, summary["attempt"])
+                if metrics_path:
+                    result["_metricsPath"] = metrics_path
+            return result
         raise StateError(f"Attempt {summary['attempt']} is already frozen by terminal Gate {lifecycle.gate_verdict}")
     if verdict in TERMINAL_VERDICTS and resolved != _run_git(repo, "rev-parse", "HEAD"):
         raise StateError("terminal Gate comparison commit must equal current HEAD")
@@ -3141,4 +3236,13 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
     _refresh_projections(package, state)
     if verdict in TERMINAL_VERDICTS:
         _write_attempt_archive(package, summary["attempt"], state["tickets"])
-    return {"formatVersion": summary["formatVersion"], "verdict": verdict, "attempt": summary["attempt"], "commit": resolved, "idempotent": False}
+    _best_effort_result(package, summary["attempt"], {
+        "subject": f"attempt:{summary['attempt']}", "transition": "gate", "verdict": verdict,
+        "commit": resolved, "outcome": verdict,
+    })
+    result = {"formatVersion": summary["formatVersion"], "verdict": verdict, "attempt": summary["attempt"], "commit": resolved, "idempotent": False}
+    if summary["formatVersion"] == "3.6" and verdict == "pass":
+        metrics_path = _best_effort_metrics_path(package, summary["attempt"])
+        if metrics_path:
+            result["_metricsPath"] = metrics_path
+    return result

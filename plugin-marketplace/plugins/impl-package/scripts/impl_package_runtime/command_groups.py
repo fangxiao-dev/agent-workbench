@@ -14,7 +14,7 @@ from typing import Any
 
 import situation
 
-from . import engine
+from . import engine, metrics
 
 
 def _text(value: Any, missing: str = "?") -> str:
@@ -98,7 +98,10 @@ def _emit(
         should_append_situation = append_situation_on_error
         code = 1
     else:
+        metrics_path = result.pop("_metricsPath", None)
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        if metrics_path:
+            print(f"metrics: {metrics_path}")
         should_append_situation = append_situation
         code = 0
     if should_append_situation:
@@ -138,6 +141,9 @@ def _parser(group: str) -> argparse.ArgumentParser:
             child = commands.add_parser(name)
             child.add_argument("--commit")
         commands.add_parser("refresh-progress", help="refresh machine-owned projections")
+        metrics_command = commands.add_parser("metrics", help="write a read-only execution metrics report")
+        metrics_command.add_argument("--attempt")
+        metrics_command.add_argument("--out", type=Path)
         amendment = commands.add_parser("amendment", help="register or confirm a contract amendment")
         amendment_commands = amendment.add_subparsers(dest="amendment_action", required=True)
         add = amendment_commands.add_parser("add", help="register a pending amendment")
@@ -255,6 +261,8 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
             return engine.command_init(package, args.attempt, args.plan)
         if args.command == "archive-attempt":
             return engine.command_archive_attempt(package, args.attempt, args.from_revision)
+        if args.command == "metrics":
+            return metrics.command_metrics(package, args.attempt, args.out)
         if args.command in {"status", "validate"}:
             return engine.command_validate(package, args.commit, check_arrival_paths=args.command == "validate")
         if args.command == "amendment":
@@ -296,6 +304,14 @@ def main(package: Path, group: str, argv: list[str], *, no_situation: bool = Fal
     no_situation = no_situation or "--no-situation" in argv or os.environ.get("IMPL_PACKAGE_NO_SITUATION") == "1"
     argv = [value for value in argv if value != "--no-situation"]
     args = _parser(group).parse_args(_normalize_gate_argv(argv) if group == "gate" else argv)
+    if group == "package" and args.command == "metrics":
+        try:
+            result = _run(package.resolve(), group, args)
+        except (engine.StateError, OSError, ValueError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(result["summary"])
+        return 0
     trigger = group in {"ticket", "evidence", "recovery", "gate", "trail"}
     validate = group == "package" and args.command == "validate"
     return _emit(

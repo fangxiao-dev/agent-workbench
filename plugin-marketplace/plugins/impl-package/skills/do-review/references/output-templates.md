@@ -64,6 +64,8 @@ The ledger context must preserve the broken invariant/failure mode, best evidenc
 
 For an Impl-Package target, after atomically updating the Markdown ledger, send one complete machine-readable summary to `review_track_stats.py record`. Only accepted `blocker` and `follow-up` findings appear here; candidates, duplicates, disputed, backlog, out-of-scope, and unsupported entries remain in the human ledger and are not counted as bugs.
 
+Each finding requires `impact`: `seam` breaks a cross-Ticket interface or data promise; `safety` breaks a safety invariant; `local` is any other finding; `unknown` means impact cannot be determined.
+
 ```json
 {
   "schemaVersion": 1,
@@ -77,6 +79,7 @@ For an Impl-Package target, after atomically updating the Markdown ledger, send 
       "title": "Short title",
       "ticketIds": ["TKT-01"],
       "tracks": ["Track A", "Track C"],
+      "impact": "local",
       "classification": "blocker | follow-up",
       "lifecycle": "open | closed"
     }

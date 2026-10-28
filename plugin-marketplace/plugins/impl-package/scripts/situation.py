@@ -820,6 +820,15 @@ def _timestamp_sort_key(value: str | None) -> tuple[int, int, float | str]:
         return (1, 1, raw)
 
 
+def _iso_timestamp_with_timezone(value: Any) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    try:
+        return datetime.fromisoformat(value.strip().replace("Z", "+00:00")).tzinfo is not None
+    except ValueError:
+        return False
+
+
 def _sequence_sort_key(value: Any) -> tuple[int, int, float | str]:
     if value is None or isinstance(value, bool):
         return (0, 0, 0.0)
@@ -881,6 +890,7 @@ def _parse_state(view: FileView) -> StateView:
                     status = amendment.get("status")
                     base = {"id", "summary", "affected", "artifact", "status"}
                     expected_amendment = base | ({"confirmedBy", "confirmedRevision"} if status == "CONFIRMED" else set())
+                    expected_amendment |= {field for field in ("createdAt", "confirmedAt") if field in amendment}
                     if "affectedBlobs" in amendment:
                         expected_amendment.add("affectedBlobs")
                     identifier = amendment.get("id")
@@ -910,6 +920,10 @@ def _parse_state(view: FileView) -> StateView:
                         or not COMMIT_RE.fullmatch(amendment["confirmedRevision"])
                     ):
                         errors.append(f"acceptance.amendments[{index}] confirmation 无效")
+                    if any(field in amendment and not _iso_timestamp_with_timezone(amendment[field]) for field in ("createdAt", "confirmedAt")):
+                        errors.append(f"acceptance.amendments[{index}] timestamp 无效")
+                    if status != "CONFIRMED" and "confirmedAt" in amendment:
+                        errors.append(f"acceptance.amendments[{index}] pending amendment 不得包含 confirmedAt")
             baseline = acceptance.get("contractBaseline")
             if not isinstance(baseline, dict) or set(baseline) != {"head", "files"}:
                 errors.append("acceptance.contractBaseline 字段无效")
@@ -1045,7 +1059,7 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                         continue
                     required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
                     optional = {"inputRef", "outputRef"} if kind == "journey-step" else set()
-                    allowed = required | optional | {"invalidatedBy", "timing"}
+                    allowed = required | optional | {"invalidatedBy", "timing", "recordedAt"}
                     if kind not in fields_by_kind or not required <= set(record) or set(record) - allowed:
                         errors.append(f"evidenceIndex[{key}] {kind!r} evidence 字段不完整或含未知字段")
                         continue
@@ -1057,6 +1071,8 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                         errors.append(f"evidenceIndex[{key}] revision 不是 commit ID")
                     if "timing" in record and (not isinstance(record["timing"], str) or record["timing"] not in {"early-falsification", "remaining-completion"}):
                         errors.append(f"evidenceIndex[{key}] timing 无效")
+                    if "recordedAt" in record and not _iso_timestamp_with_timezone(record["recordedAt"]):
+                        errors.append(f"evidenceIndex[{key}] recordedAt 无效")
                     invalidated_by = record.get("invalidatedBy")
                     if "invalidatedBy" in record and invalidated_by is not None and (not isinstance(invalidated_by, str) or not invalidated_by.strip()):
                         errors.append(f"evidenceIndex[{key}] invalidatedBy 无效")
