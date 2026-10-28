@@ -4,7 +4,7 @@ description: >
   Standing read-only monitor for Grok processes already started by the caller.
   Use it to report lightweight worktree-diff progress while they run and each
   terminal result immediately.
-model: gpt-5.6-luna
+model: gpt-6-luna
 reasoning_effort: max
 ---
 
