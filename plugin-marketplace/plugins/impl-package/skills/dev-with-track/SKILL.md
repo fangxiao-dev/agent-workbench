@@ -44,11 +44,11 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 3.5 package 沿用上文的 claim 流程。3.6 的格式与命令见 current-state，这里只写怎么做：
 
 - 每次合入后，从 Journey 第 1 步起按 Spec 的操作入口走到当前能到的最远一步，在观察表面取证，登记 `journey-step` evidence（同一 run、同一 environment，artifact 在 package 内）。reach 让 Owner 看到产品结果逐步前移；Gate 要的是最终版本上的一次走完。
-- 页面承诺的步骤用浏览器取证（可用 Playwright），API 重放只证明它实际覆盖的部分。Spec 该步“承接”不是 `—` 时，登记上一步的 `outputRef`（业务对象 ID）并把它作为本步 `inputRef`，两者不一致 `evidence add` 会拒绝；失败后另起 run 从第 1 步重走，局部测试、mock 和套件结果用来定位原因，不拼进走通记录。
+- 页面步用该步角色的账号走，录 Playwright trace（动作须含对声明控件的操作）登记 `surface: page`，或人工走查时写 `manualBy` 并附 package 内截图；文件步登记用户实际收到的文件；`记录` 步登记 package 内日志文件（`surface: log`）。UI 出现前可先用 API 跑 Journey 做预演（`surface: api`），它进 `rehearsalReach`，不进 Gate 认的 `reach`。Spec 该步“承接”不是 `—` 时，登记上一步的 `outputRef`（业务对象 ID）并把它作为本步 `inputRef`，两者不一致 `evidence add` 会拒绝；失败后另起 run 从第 1 步重走，局部测试、mock 和套件结果用来定位原因，不拼进走通记录。
 - 套件按 Required Suites 的入口与环境运行，结果以 `suite:<id>` 登记；revision 已合入、implementation/acceptance 入边已释放、负责的套件通过且 required review 完成后 `ticket satisfy`。
 - 后续提交让旧记录待复验时重跑受影响的 Journey；只动 package 内文件的提交不使记录失效。
 - 实现中确认的合同澄清若改变用户可见结果，先 `package amendment add` 登记并告知 Owner，再继续不依赖它的工作；写进 ER 而不登记，Gate 就看不到这条修订。Amendment 待确认或漏登只阻止最终 `gate pass`，`gate blocked` 记录缺口与 next action，不停工。
-- Manual 取证的 Journey 记录用 `assets/templates/manual-acceptance-readiness.md`，结果同样登记为 package 内 evidence。
+- 人工走查的 Journey 记录用 `assets/templates/manual-acceptance-readiness.md`，登记时带 `manualBy` 与截图，作为 package 内 evidence。
 
 ## Review、Findings 与人工验收
 

@@ -4,7 +4,8 @@
 
 - 通过标准与可观察结果：
 - manual owner（谁人验、为什么必须人验）：
-- 入口与最短路径（URL/route/command；有项目验证入口先引用；对应的 Journey step、操作入口与观察表面）：
+- 入口与最短路径（URL/route/command；有项目验证入口先引用；对应的 Journey step、角色、控件、操作入口与观察表面）：
+- 走查人（登记为 `manualBy`）与截图（package 内路径，登记为该步 artifact）：
 - 测试身份 / seed（有身份目录先引用，没有则直接写明）：
 - mock / not-wired 边界：
 - 承接的业务对象（Spec 该步“承接”非 `—` 时：本步 inputRef 与产出的 outputRef）：

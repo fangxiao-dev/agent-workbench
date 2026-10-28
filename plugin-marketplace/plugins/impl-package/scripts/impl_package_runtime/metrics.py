@@ -448,11 +448,18 @@ def _journey_metrics(
             valid_by_step: dict[str, list[dict[str, Any]]] = {}
             for step in steps:
                 for record in run_records:
-                    if record.get("stepId") == step["id"] and environment is not None and engine.evidence_record_valid(
+                    if record.get("stepId") != step["id"] or environment is None:
+                        continue
+                    if not engine.evidence_record_valid(
                         record, comparison, repo=repo, package=package,
                         expected_environment=environment, attempt_active=attempt_active,
                     ):
-                        valid_by_step.setdefault(step["id"], []).append(record)
+                        continue
+                    try:
+                        engine._validate_journey_surface_evidence(package, step, record)
+                    except (OSError, engine.StateError):
+                        continue
+                    valid_by_step.setdefault(step["id"], []).append(record)
             step_rows = []
             for step in steps:
                 valid = valid_by_step.get(step["id"], [])
@@ -462,6 +469,10 @@ def _journey_metrics(
                 step_rows.append({
                     "stepId": _metric(step["id"], "spec.md"),
                     "validRecordCount": _metric(len(valid), ".impl-package/state.json evidenceIndex"),
+                    "surfaceCounts": {
+                        surface: _metric(sum(record.get("surface") == surface for record in valid), ".impl-package/state.json evidenceIndex")
+                        for surface in ("page", "file", "api", "log")
+                    },
                     "firstValidAt": _metric(
                         first[0].get("recordedAt") if first else None,
                         ".impl-package/state.json evidenceIndex",
@@ -480,25 +491,76 @@ def _journey_metrics(
             end_time = max(last_times) if last_times else None
             interval = round((end_time - start_time).total_seconds(), 6) if start_time and end_time and end_time >= start_time else None
             missing_steps = [step["id"] for step in steps if not valid_by_step.get(step["id"])]
-            complete = bool(steps) and environment is not None and not missing_steps
+            page_missing_steps = [
+                step["id"] for step in steps
+                if not any(
+                    record.get("surface") == engine._journey_expected_surface(step)
+                    for record in valid_by_step.get(step["id"], [])
+                )
+            ]
+            rehearsal_reach = 0
+            page_reach = 0
+            for step in steps:
+                valid = valid_by_step.get(step["id"], [])
+                if not valid:
+                    break
+                rehearsal_reach += 1
+            for step in steps:
+                valid = valid_by_step.get(step["id"], [])
+                if not valid:
+                    break
+                expected_surface = engine._journey_expected_surface(step)
+                if not any(record.get("surface") == expected_surface for record in valid):
+                    break
+                page_reach += 1
+            valid_records = [record for step_records in valid_by_step.values() for record in step_records]
+            surface_counts = {
+                surface: sum(record.get("surface") == surface for record in valid_records)
+                for surface in ("page", "file", "api", "log")
+            }
+            complete = bool(steps) and environment is not None and page_reach == len(steps)
+            rehearsal_complete = bool(steps) and environment is not None and rehearsal_reach == len(steps)
             run_rows.append({
                 "runId": _metric(run_id, ".impl-package/state.json evidenceIndex"),
                 "stepCount": _metric(len(run_records), ".impl-package/state.json evidenceIndex"),
                 "uniqueStepCount": _metric(len({record.get("stepId") for record in run_records}), ".impl-package/state.json evidenceIndex"),
+                "pageReach": _metric(page_reach, "spec.md and .impl-package/state.json evidenceIndex"),
+                "rehearsalReach": _metric(rehearsal_reach, "spec.md and .impl-package/state.json evidenceIndex"),
+                "surfaceCounts": {
+                    surface: _metric(count, ".impl-package/state.json evidenceIndex")
+                    for surface, count in surface_counts.items()
+                },
                 "firstLastRecordedAtSeconds": _metric(
                     interval, ".impl-package/state.json evidenceIndex",
                     None if interval is not None else "first or last step recordedAt is missing or invalid",
                 ),
                 "steps": step_rows,
                 "complete": _metric(complete, ".impl-package/state.json evidenceIndex and final comparison revision",
-                                     None if complete else (f"no valid evidence for Journey steps: {', '.join(missing_steps)}" if environment is not None else "run contains multiple environments")),
+                                     None if complete else (f"no valid page/file/log evidence for Journey steps: {', '.join(page_missing_steps)}" if environment is not None else "run contains multiple environments")),
+                "rehearsalComplete": _metric(rehearsal_complete, ".impl-package/state.json evidenceIndex and final comparison revision",
+                                              None if rehearsal_complete else (f"no valid evidence for Journey steps: {', '.join(missing_steps)}" if environment is not None else "run contains multiple environments")),
             })
+        best_page_reach = max((row["pageReach"]["value"] for row in run_rows), default=0)
+        best_rehearsal_reach = max((row["rehearsalReach"]["value"] for row in run_rows), default=0)
+        journey_surface_counts = {
+            surface: sum(row["surfaceCounts"][surface]["value"] for row in run_rows)
+            for surface in ("page", "file", "api", "log")
+        }
         output.append({
             "journeyId": _metric(journey["id"], "spec.md"),
+            "preparation": _metric(journey["preparation"], "spec.md", "no preparation note"),
             "runCount": _metric(len(runs), ".impl-package/state.json evidenceIndex"),
             "runs": _metric(run_rows, ".impl-package/state.json evidenceIndex", None),
+            "pageReach": _metric(best_page_reach, "spec.md and .impl-package/state.json evidenceIndex"),
+            "rehearsalReach": _metric(best_rehearsal_reach, "spec.md and .impl-package/state.json evidenceIndex"),
+            "surfaceCounts": {
+                surface: _metric(count, ".impl-package/state.json evidenceIndex")
+                for surface, count in journey_surface_counts.items()
+            },
             "complete": _metric(any(row["complete"]["value"] is True for row in run_rows), ".impl-package/state.json evidenceIndex and final comparison revision",
                                  None if run_rows else "no run recorded for this Journey"),
+            "rehearsalComplete": _metric(any(row["rehearsalComplete"]["value"] is True for row in run_rows), ".impl-package/state.json evidenceIndex and final comparison revision",
+                                          None if run_rows else "no run recorded for this Journey"),
         })
     return _metric(output, source, None)
 

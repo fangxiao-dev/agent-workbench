@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -52,10 +54,12 @@ SPEC = """# Spec
 
 #### J1 纠正后下一张账单用新科目
 
-| Step | 操作入口 | 观察表面 | 预期 | 承接 |
-| --- | --- | --- | --- | --- |
-| J1-S1 | 税务端 Review 页确认账单 | 门店答案读取 API | 答案为 4982 | — |
-| J1-S2 | 企业端打开下一张同类账单 | 工作台科目控件 | 预填 4982，标签“本门店记忆” | 账单 ID |
+准备：同一门店、三张同条件票据。
+
+| Step | 角色 | 入口类型 | 控件 | 操作入口 | 观察表面 | 预期 | 承接 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| J1-S1 | 税务师 | 页面 | 完成 | 税务端 Review 页点击“完成” | Review 页记录 | 答案为 4982 | — |
+| J1-S2 | 企业端用户 | 页面 | 科目 | 企业端打开下一张同类账单 | 工作台科目控件 | 预填 4982，标签“本门店记忆” | 账单 ID |
 
 ### Rule Matrix
 
@@ -121,6 +125,7 @@ def _make_package(
     (package / "spec.md").write_text(spec, encoding="utf-8")
     (package / "decision.md").write_text("# Decision\n", encoding="utf-8")
     (package / "artifacts/evidence.md").write_text("fixture evidence\n", encoding="utf-8")
+    _write_trace(package)
     (repo / "docs/implementations/retired.json").write_text('{"packages": []}\n', encoding="utf-8")
     ticket_docs = tickets or {
         "01.md": _ticket("TKT-01", "J1-S1", "S-resolver"),
@@ -143,6 +148,7 @@ def _make_fixture_package(root: Path) -> tuple[Path, Path]:
     package = repo / "docs/implementations/20261028-journey-phase1"
     package.parent.mkdir(parents=True)
     shutil.copytree(JOURNEY_FIXTURE, package)
+    _write_trace(package)
     (repo / "docs/implementations/retired.json").write_text('{"packages": []}\n', encoding="utf-8")
     _git(repo, "add", ".")
     _git(repo, "commit", "-m", "Journey fixture")
@@ -193,27 +199,67 @@ def _init_v36(root: Path) -> tuple[Path, Path, str]:
     return repo, package, _git(repo, "rev-parse", "HEAD")
 
 
-def _journey_record(revision: str, step_id: str, *, run_id: str = "run-1", environment: str = "local-test") -> dict:
-    entries = {
-        "J1-S1": "税务端 Review 页确认账单",
-        "J1-S2": "企业端打开下一张同类账单",
-    }
+def _write_trace(package: Path, events: list[dict] | None = None, artifact: str = "artifacts/page-trace.zip") -> Path:
+    path = package / artifact
+    path.parent.mkdir(parents=True, exist_ok=True)
+    events = events or [
+        {"type": "before", "apiName": "locator.click", "method": "click", "params": {"selector": "getByRole('button', { name: '完成' })"}},
+        {"type": "before", "apiName": "locator.click", "method": "click", "params": {"selector": "getByRole('textbox', { name: '科目' })"}},
+    ]
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("trace.trace", "\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n")
+    return path
+
+
+def _journey_record(
+    revision: str,
+    step_id: str,
+    *,
+    run_id: str = "run-1",
+    environment: str = "local-test",
+    surface: str = "page",
+    artifact: str | None = None,
+    manual_by: str | None = None,
+    actor: str | None = None,
+    entry: str | None = None,
+) -> dict:
+    step = engine._journey_spec_text(SPEC)["steps"][step_id]
     record = {
         "kind": "journey-step",
         "runId": run_id,
         "journeyId": "J1",
         "stepId": step_id,
-        "entry": entries[step_id],
-        "artifact": "artifacts/evidence.md",
+        "actor": actor or step["role"],
+        "entry": entry or step["operationEntry"],
+        "surface": surface,
+        "artifact": artifact or ("artifacts/page-trace.zip" if surface == "page" else "artifacts/evidence.md"),
         "revision": revision,
         "environment": environment,
         "conclusion": "supporting",
     }
+    if manual_by is not None:
+        record["manualBy"] = manual_by
     if step_id == "J1-S1":
         record["outputRef"] = "bill-123"
     elif step_id == "J1-S2":
         record["inputRef"] = "bill-123"
     return record
+
+
+def _file_step_spec() -> str:
+    return SPEC.replace(
+        "| J1-S1 | 税务师 | 页面 | 完成 | 税务端 Review 页点击“完成” | Review 页记录 | 答案为 4982 | — |",
+        "| J1-S1 | 税务师 | 文件 | — | 下载更正后的账单 | 更正账单下载文件 | 答案为 4982 | — |",
+    )
+
+
+def _log_step_spec(*, first_step: bool = False, all_steps: bool = False) -> str:
+    first = "| J1-S1 | 税务师 | 页面 | 完成 | 税务端 Review 页点击“完成” | Review 页记录 | 答案为 4982 | — |"
+    second = "| J1-S2 | 企业端用户 | 页面 | 科目 | 企业端打开下一张同类账单 | 工作台科目控件 | 预填 4982，标签“本门店记忆” | 账单 ID |"
+    first_record = "| J1-S1 | 验收执行者 | 记录 | — | 核对 AI 调用记录 | AI 运行记录 | 确实调用平台经验工具 | — |"
+    second_record = "| J1-S2 | 验收执行者 | 记录 | — | 核对 AI 调用记录 | AI 运行记录 | 确实调用平台经验工具 | 账单 ID |"
+    result = SPEC.replace(first, first_record) if first_step or all_steps else SPEC
+    return result.replace(second, second_record) if not first_step or all_steps else result
 
 
 def _suite_record(revision: str, suite_id: str, *, conclusion: str = "supporting", environment: str | None = None) -> dict:
@@ -397,6 +443,76 @@ def test_unclassified_spec_chapter_fails_check_spec_init_and_validate(tmp_path: 
         assert not (package / ".impl-package/state.json").exists()
 
 
+@pytest.mark.parametrize("command", ["check-spec", "init", "validate"])
+@pytest.mark.parametrize(
+    "old_table",
+    [
+        "| Step | 操作入口 | 观察表面 | 预期 | 承接 |\n| --- | --- | --- | --- | --- |\n| J1-S1 | 税务端 Review 页确认账单 | 门店答案读取 API | 答案为 4982 | — |\n| J1-S2 | 企业端打开下一张同类账单 | 工作台科目控件 | 预填 4982，标签‘本门店记忆’ | 账单 ID |",
+        "| Step | 入口类型 | 控件 | 操作入口 | 观察表面 | 预期 | 承接 |\n| --- | --- | --- | --- | --- | --- | --- |\n| J1-S1 | 页面 | 完成 | 税务端 Review 页确认账单 | 门店答案读取 API | 答案为 4982 | — |\n| J1-S2 | 页面 | 科目 | 企业端打开下一张同类账单 | 工作台科目控件 | 预填 4982，标签‘本门店记忆’ | 账单 ID |",
+    ],
+)
+def test_old_journey_tables_are_rejected_by_check_spec_init_and_validate(tmp_path: Path, command: str, old_table: str) -> None:
+    current_table = "| Step | 角色 | 入口类型 | 控件 | 操作入口 | 观察表面 | 预期 | 承接 |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| J1-S1 | 税务师 | 页面 | 完成 | 税务端 Review 页点击“完成” | Review 页记录 | 答案为 4982 | — |\n| J1-S2 | 企业端用户 | 页面 | 科目 | 企业端打开下一张同类账单 | 工作台科目控件 | 预填 4982，标签“本门店记忆” | 账单 ID |"
+    old_spec = SPEC.replace(current_table, old_table)
+    repo, package = _make_package(tmp_path, spec=SPEC)
+    if command == "validate":
+        _init(repo, package)
+    (package / "spec.md").write_text(old_spec, encoding="utf-8")
+
+    if command == "check-spec":
+        result = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
+    elif command == "init":
+        result = _init(repo, package, ok=False)
+    else:
+        result = _cli(repo, package, "package", "validate")
+
+    assert result.returncode != 0
+    assert "must use the 3.6 header" in result.stderr
+    assert "Step | 角色 | 入口类型 | 控件 | 操作入口 | 观察表面 | 预期 | 承接" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("spec", "message"),
+    [
+        (SPEC.replace("| J1-S1 | 税务师 | 页面 | 完成 |", "| J1-S1 | 税务师 | API | 完成 |"), "入口类型必须是 页面、文件 或 记录"),
+        (SPEC.replace("| J1-S1 | 税务师 | 页面 | 完成 |", "| J1-S1 | 税务师 | 页面 | — |"), "页面步必须填写控件可见名称"),
+        (SPEC.replace("| J1-S1 | 税务师 | 页面 | 完成 |", "| J1-S1 | 税务师 | 文件 | 完成 |"), "文件或记录步的控件必须为 —"),
+    ],
+)
+def test_spec_validates_entry_type_and_control(spec: str, message: str) -> None:
+    with pytest.raises(engine.StateError, match=message):
+        engine._journey_spec_text(spec)
+
+
+@pytest.mark.parametrize("command", ["check-spec", "init", "validate"])
+@pytest.mark.parametrize(
+    ("spec", "message"),
+    [
+        (_log_step_spec(first_step=True), "第 1 步 J1-S1 不能是记录"),
+        (_log_step_spec(all_steps=True), "cannot consist only of 记录 steps"),
+    ],
+)
+def test_record_steps_cannot_start_or_make_up_a_whole_journey(
+    tmp_path: Path, command: str, spec: str, message: str,
+) -> None:
+    repo, package = _make_package(tmp_path, spec=SPEC)
+    if command == "validate":
+        _init(repo, package)
+    (package / "spec.md").write_text(spec, encoding="utf-8")
+
+    if command == "check-spec":
+        result = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
+    elif command == "init":
+        result = _init(repo, package, ok=False)
+    else:
+        result = _cli(repo, package, "package", "validate")
+
+    assert result.returncode != 0
+    assert message in result.stderr
+    if command == "init":
+        assert not (package / ".impl-package/state.json").exists()
+
+
 def test_situation_render_reports_unclassified_spec_chapter(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     repo, package, _ = _init_v36(tmp_path)
     invalid_spec = SPEC.replace("## 7. 验收", "## 4. 新增业务约束\n\n需要给出独立验收。\n\n## 7. 验收")
@@ -412,6 +528,8 @@ def test_situation_render_reports_unclassified_spec_chapter(tmp_path: Path, caps
 
 def test_journey_handoff_column_parses_and_first_step_must_not_handoff(tmp_path: Path) -> None:
     journey = engine._journey_spec_text(SPEC)["journeys"][0]
+    assert journey["preparation"] == "同一门店、三张同条件票据。"
+    assert [step["role"] for step in journey["steps"]] == ["税务师", "企业端用户"]
     assert [step["handoff"] for step in journey["steps"]] == ["—", "账单 ID"]
 
     repo, package = _make_package(tmp_path, spec=SPEC.replace("| — |\n| J1-S2", "| 账单 ID |\n| J1-S2"))
@@ -433,8 +551,8 @@ def test_init_persists_required_release_order(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("spec", "tickets", "message"),
     [
-        (SPEC.replace("| 操作入口 |", "| 入口 |"), None, "columns must be"),
-        (SPEC.replace("| J1-S1 | 税务端 Review 页确认账单 |", "| J1-S1 |  |"), None, "empty cell"),
+        (SPEC.replace("| 入口类型 |", "| 入口 |"), None, "must use the 3.6 header"),
+        (SPEC.replace("| J1-S1 | 税务师 | 页面 | 完成 | 税务端 Review 页点击“完成” |", "| J1-S1 | 税务师 | 页面 | 完成 |  |"), None, "empty cell"),
         (SPEC, {"01.md": _ticket("TKT-01", "J1-S9", "S-resolver"), "02.md": _ticket("TKT-02", "J1-S2", "S-workflow")}, "unknown Journey step"),
         (SPEC, {"01.md": _ticket("TKT-01", "J1-S1", "S-unknown"), "02.md": _ticket("TKT-02", "J1-S2", "S-workflow")}, "unknown suite"),
         (SPEC, {"01.md": _ticket("TKT-01", "J1-S1", "S-resolver"), "02.md": _ticket("TKT-02", "none", "S-workflow")}, "no Ticket Coverage"),
@@ -630,7 +748,8 @@ def test_journey_step_with_dash_handoff_does_not_compare_references(tmp_path: Pa
 @pytest.mark.parametrize(
     ("record", "message"),
     [
-        ({"kind": "journey-step", "runId": "run", "journeyId": "J1", "stepId": "J1-S1", "entry": "wrong", "artifact": "artifacts/evidence.md", "revision": "", "environment": "local-test", "conclusion": "supporting"}, "operation entry"),
+        ({"kind": "journey-step", "runId": "run", "journeyId": "J1", "stepId": "J1-S1", "entry": "税务端 Review 页点击“完成”", "artifact": "artifacts/evidence.md", "revision": "", "environment": "local-test", "conclusion": "supporting"}, "missing or unknown fields"),
+        ({"kind": "journey-step", "runId": "run", "journeyId": "J1", "stepId": "J1-S1", "actor": "税务师", "entry": "wrong", "surface": "page", "artifact": "artifacts/evidence.md", "revision": "", "environment": "local-test", "conclusion": "supporting"}, "operation entry"),
         ({"kind": "suite", "suiteId": "S-unknown", "artifact": "artifacts/evidence.md", "revision": "", "environment": "local-test", "conclusion": "supporting"}, "unknown required suite"),
         ({"kind": "review", "ticket": "TKT-unknown", "artifact": "artifacts/evidence.md", "revision": "", "environment": "local-test", "conclusion": "supporting"}, "known Ticket or package"),
         ({"kind": "release", "artifact": "artifacts/evidence.md", "revision": "", "environment": "local-test", "conclusion": "supporting", "ticket": "TKT-01"}, "missing or unknown fields"),
@@ -648,21 +767,249 @@ def test_evidence_add_rejects_entry_unknown_suite_and_external_artifact(tmp_path
     assert _state(package)["evidenceIndex"] == {}
 
 
+def test_journey_evidence_actor_must_match_spec_role(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    record = _journey_record(revision, "J1-S1", actor="企业端用户")
+
+    result = _cli(repo, package, "evidence", "add", input_value=record)
+
+    assert result.returncode != 0
+    assert "actor does not match the Spec role" in result.stderr
+    assert _state(package)["evidenceIndex"] == {}
+
+
+def test_page_evidence_accepts_playwright_trace_with_spec_control_click(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+
+    added = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S1"))
+
+    assert added.returncode == 0, added.stderr
+    stored = _state(package)["evidenceIndex"]["journey:run-1:J1-S1"][0]
+    assert stored["surface"] == "page"
+    assert stored["artifact"] == "artifacts/page-trace.zip"
+
+
+@pytest.mark.parametrize(
+    ("events", "message"),
+    [
+        ([{"type": "before", "method": "waitForTimeout", "params": {"timeout": 10}}], "actual actions: none"),
+        ([{"type": "before", "apiName": "locator.click", "method": "click", "params": {"selector": "getByRole('button', { name: '取消' })"}}], "click"),
+    ],
+)
+def test_page_evidence_rejects_missing_or_mismatched_control_action(tmp_path: Path, events: list[dict], message: str) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    _write_trace(package, events)
+
+    added = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S1"))
+
+    assert added.returncode != 0
+    assert "完成" in added.stderr
+    assert message in added.stderr
+    assert _state(package)["evidenceIndex"] == {}
+
+
+def test_page_evidence_rejects_malformed_playwright_trace(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    with zipfile.ZipFile(package / "artifacts/page-trace.zip", "w") as archive:
+        archive.writestr("trace.trace", "{not json\n")
+
+    added = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S1"))
+
+    assert added.returncode != 0
+    assert "Playwright trace JSONL 无法解析" in added.stderr
+    assert _state(package)["evidenceIndex"] == {}
+
+
+def test_page_trace_error_limits_action_summary_to_five_entries(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    events = [
+        {"type": "before", "apiName": "locator.click", "method": "click", "params": {"selector": f"button:{index}"}}
+        for index in range(6)
+    ]
+    _write_trace(package, events)
+
+    added = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S1"))
+
+    assert added.returncode != 0
+    assert "actual actions:" in added.stderr
+    actual = added.stderr.split("actual actions:", 1)[1]
+    assert actual.count("click") == 5
+    assert "button:4" in actual and "button:5" not in actual
+
+
+def test_page_manual_walkthrough_requires_manual_by_and_package_image(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    image = package / "artifacts/manual.png"
+    image.write_bytes(b"fixture image")
+    record = _journey_record(revision, "J1-S1", artifact="artifacts/manual.png", manual_by=" 张三 ")
+
+    added = _cli(repo, package, "evidence", "add", input_value=record)
+
+    assert added.returncode == 0, added.stderr
+    stored = _state(package)["evidenceIndex"]["journey:run-1:J1-S1"][0]
+    assert stored["manualBy"] == "张三"
+    assert engine._v36_acceptance_status(
+        package, _state(package), engine._validate_state(package, _state(package)), revision, attempt_active=True,
+    )["journeys"][0]["manualWalkthroughs"] == [{"stepId": "J1-S1", "manualBy": "张三"}]
+
+    rejected = _cli(
+        repo,
+        package,
+        "evidence",
+        "add",
+        input_value=_journey_record(revision, "J1-S2", artifact="artifacts/evidence.md", manual_by="张三"),
+    )
+
+    assert rejected.returncode != 0
+    assert "package image" in rejected.stderr
+
+
+def test_file_surface_rejects_markdown_and_records_artifact_sha256(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path, spec=_file_step_spec())
+    _init(repo, package)
+    revision = _git(repo, "rev-parse", "HEAD")
+    markdown = _journey_record(revision, "J1-S1", surface="file", artifact="artifacts/evidence.md")
+    markdown["entry"] = "下载更正后的账单"
+    rejected = _cli(repo, package, "evidence", "add", input_value=markdown)
+    assert rejected.returncode != 0
+    assert "must not use .md, .txt, or .log" in rejected.stderr
+
+    output = package / "artifacts/corrected-invoice.csv"
+    output.write_bytes(b"invoice_id,account\n123,4982\n")
+    record = _journey_record(revision, "J1-S1", surface="file", artifact="artifacts/corrected-invoice.csv")
+    record["entry"] = "下载更正后的账单"
+
+    added = _cli(repo, package, "evidence", "add", input_value=record)
+
+    assert added.returncode == 0, added.stderr
+    stored = _state(package)["evidenceIndex"]["journey:run-1:J1-S1"][0]
+    assert stored["artifactSha256"] == hashlib.sha256(output.read_bytes()).hexdigest()
+
+
+def test_api_records_count_as_rehearsal_and_mixed_surface_reach_is_contiguous(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    api_run = [
+        _journey_record(revision, step_id, run_id="api-run", surface="api")
+        for step_id in ("J1-S1", "J1-S2")
+    ]
+    added = _cli(repo, package, "evidence", "add", input_value=api_run)
+    assert added.returncode == 0, added.stderr
+    status = engine._v36_acceptance_status(package, _state(package), engine._validate_state(package, _state(package)), revision, attempt_active=True)
+    assert status["journeys"][0]["reach"] == 0
+    assert status["journeys"][0]["rehearsalReach"] == 2
+    assert status["journeys"][0]["surfaceCounts"] == {"page": 0, "file": 0, "api": 2, "log": 0}
+    assert "J1 有效步骤走通 0/2 · API 预演 2/2" in (package / "progress.md").read_text(encoding="utf-8")
+    metrics_result = _cli(repo, package, "package", "metrics")
+    assert metrics_result.returncode == 0, metrics_result.stderr
+    metrics_journey = json.loads((package / "execution/initial/metrics.json").read_text(encoding="utf-8"))["journeys"]["value"][0]
+    assert metrics_journey["pageReach"]["value"] == 0
+    assert metrics_journey["rehearsalReach"]["value"] == 2
+    assert metrics_journey["surfaceCounts"]["api"]["value"] == 2
+
+    mixed_run = [
+        _journey_record(revision, "J1-S1", run_id="mixed-run", surface="page"),
+        _journey_record(revision, "J1-S2", run_id="mixed-run", surface="api"),
+    ]
+    mixed = _cli(repo, package, "evidence", "add", input_value=mixed_run)
+    assert mixed.returncode == 0, mixed.stderr
+    status = engine._v36_acceptance_status(package, _state(package), engine._validate_state(package, _state(package)), revision, attempt_active=True)
+    mixed_status = next(run for run in status["journeys"][0]["runs"] if run["runId"] == "mixed-run")
+    assert mixed_status["reach"] == 1
+    assert mixed_status["rehearsalReach"] == 2
+    assert mixed_status["surfaceCounts"] == {"page": 1, "file": 0, "api": 1, "log": 0}
+
+
+def test_log_records_count_as_reach_and_preparation_is_metrics_only(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path, spec=_log_step_spec())
+    _init(repo, package)
+    revision = _git(repo, "rev-parse", "HEAD")
+    log = package / "artifacts/runtime.log"
+    log.write_text("platform experience tool called\n", encoding="utf-8")
+    records = [
+        _journey_record(revision, "J1-S1", run_id="log-run"),
+        _journey_record(
+            revision, "J1-S2", run_id="log-run", surface="log", artifact="artifacts/runtime.log",
+            actor="验收执行者", entry="核对 AI 调用记录",
+        ),
+    ]
+
+    added = _cli(repo, package, "evidence", "add", input_value=records)
+
+    assert added.returncode == 0, added.stderr
+    summary = engine._validate_state(package, _state(package))
+    status = engine._v36_acceptance_status(package, _state(package), summary, revision, attempt_active=True)
+    journey = status["journeys"][0]
+    assert journey["reach"] == 2
+    assert journey["rehearsalReach"] == 2
+    assert journey["surfaceCounts"] == {"page": 1, "file": 0, "api": 0, "log": 1}
+    progress = (package / "progress.md").read_text(encoding="utf-8")
+    assert "J1 有效步骤走通 2/2 · API 预演 2/2" in progress
+    assert "准备" not in progress and "三张同条件票据" not in progress
+    owner_summary = "".join(engine._owner_summary(status, revision, "blocked", "still validating"))
+    assert "准备" not in owner_summary and "三张同条件票据" not in owner_summary
+
+    metrics_result = _cli(repo, package, "package", "metrics")
+    assert metrics_result.returncode == 0, metrics_result.stderr
+    metrics_journey = json.loads((package / "execution/initial/metrics.json").read_text(encoding="utf-8"))["journeys"]["value"][0]
+    assert metrics_journey["pageReach"]["value"] == 2
+    assert metrics_journey["rehearsalReach"]["value"] == 2
+    assert metrics_journey["surfaceCounts"]["log"]["value"] == 1
+    assert metrics_journey["preparation"]["value"] == "同一门店、三张同条件票据。"
+
+
+def test_record_surface_requires_a_record_entry_and_any_package_file(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path, spec=_log_step_spec())
+    _init(repo, package)
+    revision = _git(repo, "rev-parse", "HEAD")
+    log = package / "artifacts/runtime.log"
+    log.write_text("tool called\n", encoding="utf-8")
+
+    wrong_step = _journey_record(revision, "J1-S1", surface="log", artifact="artifacts/runtime.log")
+    wrong_step_result = _cli(repo, package, "evidence", "add", input_value=wrong_step)
+    first_step_result = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S1"))
+    valid_step = _journey_record(
+        revision, "J1-S2", surface="log", artifact="artifacts/runtime.log",
+        actor="验收执行者", entry="核对 AI 调用记录",
+    )
+    valid_step["artifact"] = "artifacts/evidence.md"
+    valid_step_result = _cli(repo, package, "evidence", "add", input_value=valid_step)
+
+    assert wrong_step_result.returncode != 0
+    assert "entry type 页面 requires surface=page" in wrong_step_result.stderr
+    assert first_step_result.returncode == 0, first_step_result.stderr
+    assert valid_step_result.returncode == 0, valid_step_result.stderr
+
+
+def test_situation_prompts_page_or_file_after_full_api_rehearsal(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    records = [_journey_record(revision, step, surface="api") for step in ("J1-S1", "J1-S2")]
+    added = _cli(repo, package, "evidence", "add", input_value=records)
+    assert added.returncode == 0, added.stderr
+
+    code = situation.main(["render", "--package", str(package), "--json"])
+    rendered = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    journey = next(row for row in rendered["matches"] if row["slug"] == "attempt.accept.journey-incomplete")
+    assert "API 预演已走通，仍需页面/文件/记录证据" in journey["protocol"]
+    assert "API 预演已走通，仍需页面/文件/记录证据" in journey["actions"][0]["do"]
+
+
 def test_journey_reach_is_contiguous_per_run_and_invalidation_uses_key(tmp_path: Path) -> None:
     repo, package, revision = _init_v36(tmp_path)
     first = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S1"))
     assert first.returncode == 0, first.stderr
-    assert "J1 走通 1/2" in (package / "progress.md").read_text(encoding="utf-8")
+    assert "J1 有效步骤走通 1/2 · API 预演 1/2" in (package / "progress.md").read_text(encoding="utf-8")
 
     second = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S2"))
     assert second.returncode == 0, second.stderr
-    assert "J1 走通 2/2" in (package / "progress.md").read_text(encoding="utf-8")
+    assert "J1 有效步骤走通 2/2 · API 预演 2/2" in (package / "progress.md").read_text(encoding="utf-8")
     assert "S-resolver" in (package / "progress.md").read_text(encoding="utf-8")
     assert "TKT-01 | PENDING" in (package / "progress.md").read_text(encoding="utf-8")
 
     invalidated = _cli(repo, package, "evidence", "invalidate", "--key", "journey:run-1:J1-S1", "--invalidated-by", "fixture")
     assert invalidated.returncode == 0, invalidated.stderr
-    assert "J1 走通 0/2" in (package / "progress.md").read_text(encoding="utf-8")
+    assert "J1 有效步骤走通 0/2 · API 预演 0/2" in (package / "progress.md").read_text(encoding="utf-8")
     repeated = _cli(repo, package, "evidence", "invalidate", "--key", "journey:run-1:J1-S1", "--invalidated-by", "fixture")
     assert repeated.returncode == 0, repeated.stderr
     assert json.loads(repeated.stdout)["idempotent"] is True
@@ -683,7 +1030,7 @@ def test_skipping_first_step_has_zero_reach_and_mixed_run_environment_is_atomic(
     assert added.returncode == 0, added.stderr
     invalidated = _cli(repo, package, "evidence", "invalidate", "--key", "journey:run-to-invalidate:J1-S1", "--invalidated-by", "fixture")
     assert invalidated.returncode == 0, invalidated.stderr
-    assert "J1 走通 0/2" in (package / "progress.md").read_text(encoding="utf-8")
+    assert "J1 有效步骤走通 0/2 · API 预演 0/2" in (package / "progress.md").read_text(encoding="utf-8")
 
     before = _state(package)
     mixed = [
@@ -832,7 +1179,7 @@ def test_evidence_freshness_rejects_external_diff_and_accepts_package_only_diff(
     external_head = _commit_path(repo, source, "external code change")
     refreshed = _cli(repo, package, "package", "refresh-progress")
     assert refreshed.returncode == 0, refreshed.stderr
-    assert "J1 走通 0/2" in (package / "progress.md").read_text(encoding="utf-8")
+    assert "J1 有效步骤走通 0/2 · API 预演 0/2" in (package / "progress.md").read_text(encoding="utf-8")
     stale_gate = _gate(repo, package, "pass", external_head)
     assert stale_gate.returncode != 0
     assert "Evidence journey:run-1:J1-S1 的 supporting 记录待复验" in stale_gate.stderr
@@ -854,7 +1201,7 @@ def test_evidence_freshness_rejects_external_diff_and_accepts_package_only_diff(
     note.write_text("package-local document change\n", encoding="utf-8")
     package_head = _commit_path(repo2, note, "package documentation change")
 
-    assert "J1 走通 2/2" in (package2 / "progress.md").read_text(encoding="utf-8")
+    assert "J1 有效步骤走通 2/2 · API 预演 2/2" in (package2 / "progress.md").read_text(encoding="utf-8")
     _satisfy(repo2, package2, "TKT-01", package_head)
 
 
@@ -961,10 +1308,10 @@ def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_p
 
     first_step = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S1"))
     assert first_step.returncode == 0, first_step.stderr
-    assert "J1 走通 1/2" in (package / "progress.md").read_text(encoding="utf-8")
+    assert "J1 有效步骤走通 1/2 · API 预演 1/2" in (package / "progress.md").read_text(encoding="utf-8")
     second_step = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S2"))
     assert second_step.returncode == 0, second_step.stderr
-    assert "J1 走通 2/2" in (package / "progress.md").read_text(encoding="utf-8")
+    assert "J1 有效步骤走通 2/2 · API 预演 2/2" in (package / "progress.md").read_text(encoding="utf-8")
     for command in ("validate", "status"):
         result = _cli(repo, package, "package", command)
         assert result.returncode == 0, result.stderr
@@ -1074,7 +1421,7 @@ def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_p
     passed = _gate(repo, package, "pass", revision, reason="all phase 1 checks satisfied")
     assert passed.returncode == 0, passed.stderr or passed.stdout
     gate_text = (package / "gate.md").read_text(encoding="utf-8")
-    assert "- J1 纠正后下一张账单用新科目：走通 2/2" in gate_text
+    assert "- J1 纠正后下一张账单用新科目：有效步骤走通 2/2 · API 预演 2/2" in gate_text
     assert "- 套件：3/3 通过" in gate_text
     assert "- 合同修订：无待确认或漏登" in gate_text
     assert "- 发布顺序：已记录" in gate_text
@@ -1162,13 +1509,29 @@ def test_journey_gate_pass_confirms_amendment_requires_release_and_freezes_archi
         added_suite = _cli(repo, package, "evidence", "add", input_value=_suite_record(revision, suite))
         assert added_suite.returncode == 0, added_suite.stderr
     for step in ("J1-S1", "J1-S2"):
-        added_step = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, step))
+        added_step = _cli(
+            repo, package, "evidence", "add",
+            input_value=_journey_record(revision, step, run_id="api-rehearsal", surface="api"),
+        )
         assert added_step.returncode == 0, added_step.stderr
     _satisfy(repo, package, "TKT-01", revision)
     _satisfy(repo, package, "TKT-02", revision)
     release = _cli(repo, package, "evidence", "add", input_value={"kind": "release", "artifact": "artifacts/evidence.md", "revision": revision, "environment": "local-test", "conclusion": "supporting"})
     assert release.returncode == 0, release.stderr
     _add_terminal_summary(repo, package, revision)
+
+    api_only = _gate(repo, package, "pass", revision, reason="API rehearsal only")
+    assert api_only.returncode != 0
+    assert "API 预演已走通，仍需页面/文件/记录证据" in api_only.stderr
+    assert not engine._lifecycle(package, "initial", repo).frozen
+
+    (package / "artifacts/manual.png").write_bytes(b"manual walkthrough image")
+    page_records = [
+        _journey_record(revision, "J1-S1", run_id="page-run", artifact="artifacts/manual.png", manual_by="张三"),
+        _journey_record(revision, "J1-S2", run_id="page-run"),
+    ]
+    added_pages = _cli(repo, package, "evidence", "add", input_value=page_records)
+    assert added_pages.returncode == 0, added_pages.stderr
 
     passed = _gate(repo, package, "pass", revision, reason="全部验收满足")
     assert passed.returncode == 0, passed.stderr or passed.stdout
@@ -1177,12 +1540,15 @@ def test_journey_gate_pass_confirms_amendment_requires_release_and_freezes_archi
     gate_events = [row for row in engine._active_trail_rows(package, "initial") if row.get("transition") == "gate"]
     assert gate_events[-1]["verdict"] == "pass" and gate_events[-1]["commit"] == revision
     text = (package / "gate.md").read_text(encoding="utf-8")
-    assert "- J1 纠正后下一张账单用新科目：走通 2/2" in text
+    assert "三张同条件票据" not in text
+    assert "三张同条件票据" not in (package / "progress.md").read_text(encoding="utf-8")
+    assert "- J1 纠正后下一张账单用新科目：有效步骤走通 2/2 · API 预演 2/2" in text
     assert "- 套件：3/3 通过" in text
     assert "- 合同修订：无待确认或漏登" in text
     assert "- 发布顺序：已记录" in text
     assert f"- 最终版本：{revision[:7]}" in text
     assert "- 结论：pass — 全部验收满足" in text
+    assert "- 人工走查：J1-S1（张三）" in text
     assert engine._gate_info(package, repo) == {"verdict": "pass", "attempt": "initial", "commit": revision}
     assert engine._lifecycle(package, "initial", repo).frozen
     assert (package / ".impl-package/attempts/initial.json").is_file()
@@ -1290,6 +1656,13 @@ def test_package_metrics_reports_numeric_sections_and_keeps_situation_and_progre
     journey = report["journeys"]["value"][0]
     assert journey["runCount"]["value"] == 1
     assert journey["runs"]["value"][0]["firstLastRecordedAtSeconds"]["value"] == 100.0
+    assert journey["pageReach"]["value"] == 2
+    assert journey["rehearsalReach"]["value"] == 2
+    assert journey["surfaceCounts"]["page"]["value"] == 2
+    assert journey["surfaceCounts"]["file"]["value"] == 0
+    assert journey["surfaceCounts"]["api"]["value"] == 0
+    assert journey["surfaceCounts"]["log"]["value"] == 0
+    assert journey["runs"]["value"][0]["pageReach"]["value"] == 2
     assert journey["complete"]["value"] is True
     assert report["amendments"]["value"][0]["elapsedSeconds"]["value"] == 120.0
     assert report["usage"]["input"]["value"] == 20

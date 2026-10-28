@@ -356,13 +356,28 @@ class Candidate:
 
     @property
     def row_index(self) -> int:
+    def action_rows(self) -> list[dict[str, Any]]:
+        actions = [dict(action) for action in self.row.get("actions", [])]
+        fact = self.when.get("attempt.journey_incomplete")
+        if self.slug == "attempt.accept.journey-incomplete" and fact and fact.reason:
+            for action in actions:
+                action["do"] = f"{action.get('do', '')}；{fact.reason}"
+        return actions
+
+    def protocol_text(self) -> str:
+        protocol = _PROTOCOLS.get(self.slug, _PROTOCOLS["default"])
+        fact = self.when.get("attempt.journey_incomplete")
+        if self.slug == "attempt.accept.journey-incomplete" and fact and fact.reason:
+            protocol = f"{protocol}；{fact.reason}"
+        return protocol
+
         return int(self.row["_row_index"])
 
     def as_json(self) -> dict[str, Any]:
-        actions = list(self.row.get("actions", []))
+        actions = self.action_rows()
         result = {
             "slug": self.slug,
-            "protocol": _PROTOCOLS.get(self.slug, _PROTOCOLS["default"]),
+            "protocol": self.protocol_text(),
             "subject": self.subject,
             "basis": self.row.get("basis"),
             "judgment": self.row.get("judgment"),
@@ -1049,7 +1064,7 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                         continue
                     kind = record.get("kind")
                     fields_by_kind = {
-                        "journey-step": {"runId", "journeyId", "stepId", "entry"},
+                        "journey-step": {"runId", "journeyId", "stepId", "actor", "entry", "surface"},
                         "suite": {"suiteId"},
                         "review": {"ticket"},
                         "release": set(),
@@ -1058,7 +1073,7 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                         errors.append(f"evidenceIndex[{key}] kind 无效")
                         continue
                     required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
-                    optional = {"inputRef", "outputRef"} if kind == "journey-step" else set()
+                    optional = {"inputRef", "outputRef", "manualBy", "artifactSha256"} if kind == "journey-step" else set()
                     allowed = required | optional | {"invalidatedBy", "timing", "recordedAt"}
                     if kind not in fields_by_kind or not required <= set(record) or set(record) - allowed:
                         errors.append(f"evidenceIndex[{key}] {kind!r} evidence 字段不完整或含未知字段")
@@ -1075,13 +1090,23 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                         errors.append(f"evidenceIndex[{key}] recordedAt 无效")
                     invalidated_by = record.get("invalidatedBy")
                     if "invalidatedBy" in record and invalidated_by is not None and (not isinstance(invalidated_by, str) or not invalidated_by.strip()):
+                        surface = record.get("surface")
+                        if surface not in {"page", "file", "api", "log"}:
+                            errors.append(f"evidenceIndex[{key}] surface 无效")
+                        if "manualBy" in record and (not isinstance(record["manualBy"], str) or not record["manualBy"].strip()):
+                            errors.append(f"evidenceIndex[{key}] manualBy 无效")
+                        if surface == "file":
+                            if not isinstance(record.get("artifactSha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", record["artifactSha256"]):
+                                errors.append(f"evidenceIndex[{key}] file surface 的 artifactSha256 无效")
+                        elif "artifactSha256" in record:
+                            errors.append(f"evidenceIndex[{key}] artifactSha256 仅适用于 file surface")
                         errors.append(f"evidenceIndex[{key}] invalidatedBy 无效")
                     if kind == "journey-step":
                         for field in ("inputRef", "outputRef"):
                             if field in record and (not isinstance(record[field], str) or not record[field].strip()):
                                 errors.append(f"evidenceIndex[{key}] {field} 必须是非空业务对象标识")
-                        run_id, journey_id, step_id, entry = (record.get(field) for field in ("runId", "journeyId", "stepId", "entry"))
-                        if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, entry)) or key != f"journey:{run_id}:{step_id}":
+                        run_id, journey_id, step_id, actor, entry = (record.get(field) for field in ("runId", "journeyId", "stepId", "actor", "entry"))
+                        if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, actor, entry)) or key != f"journey:{run_id}:{step_id}":
                             errors.append(f"evidenceIndex[{key}] Journey evidence key 或字段无效")
                         else:
                             prior = run_environments.setdefault(run_id, (journey_id, record["environment"]))
@@ -2360,7 +2385,13 @@ def _v36_acceptance_fact(context: FactContext, key: str) -> Fact:
     if isinstance(status, Fact):
         return status
     if key == "attempt.journey_incomplete":
-        return _fact_value(any(row["reached"] < row["total"] for row in status["journeys"]))
+        incomplete = any(row["reach"] < row["total"] for row in status["journeys"])
+        rehearsal_complete = any(
+            row["rehearsalReach"] == row["total"] and row["reach"] < row["total"]
+            for row in status["journeys"]
+        )
+        reason = "API 预演已走通，仍需页面/文件/记录证据" if rehearsal_complete else None
+        return _fact_value(incomplete, reason=reason)
     if key == "attempt.required_suite_missing":
         return _fact_value(any(not row["valid"] for row in status["suites"]))
     if key == "attempt.evidence_revalidation_pending":
@@ -3420,7 +3451,7 @@ def _action_mode(action: dict[str, Any]) -> str | None:
 def _situation_actions(candidates: list[Candidate]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for candidate in candidates:
-        for action in candidate.row.get("actions", []):
+        for action in candidate.action_rows():
             action_id = action.get("id")
             if not isinstance(action_id, str):
                 continue
@@ -3434,7 +3465,7 @@ def _situation_actions(candidates: list[Candidate]) -> list[dict[str, Any]]:
                     "action_id": action_id,
                     "resource_keys": None,
                     "reason": "处境表机械条件命中",
-                    "protocol": _PROTOCOLS.get(candidate.slug, _PROTOCOLS["default"]),
+                    "protocol": candidate.protocol_text(),
                     "action_ids": [action_id],
                     "actions": [dict(action)],
                 }
