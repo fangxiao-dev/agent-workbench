@@ -19,6 +19,7 @@ CLI = ROOT / "plugin-marketplace/plugins/impl-package/scripts/impl_package_state
 FIXTURE = ROOT / "tests/fixtures/impl-package-ticket-first"
 sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
 from impl_package_runtime import command_groups, engine  # noqa: E402
+from situation import Fact  # noqa: E402
 
 
 def git(repo: Path, *args: str) -> str:
@@ -1557,9 +1558,24 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("terminal review coverage", rejected.stderr + rejected.stdout)
         # Track B no longer substitutes for the required Track C.
         self.add_terminal_summary(repo, package, tracks=("Track A", "Track B"))
+        coverage = engine.terminal_coverage_fact(package)
+        self.assertTrue(coverage.known)
+        self.assertIs(coverage.value, False)
         self.assertNotEqual(self.cli(repo, package, *gate_args, ok=False).returncode, 0)
+        unknown_reason = "无法读取 execution/initial/trail.jsonl"
+        with patch.object(engine, "terminal_coverage_fact", return_value=Fact.unknown(unknown_reason)):
+            with self.assertRaises(engine.StateError) as unknown_rejection:
+                engine.command_gate(package, "pass", head, "fixture", [], [], "fixture", "test")
+        message = str(unknown_rejection.exception)
+        self.assertIn(unknown_reason, message)
+        self.assertIn("/impl-package:do-review", message)
+        self.assertIn("terminal-final", message)
+        self.assertIn("review.terminal_summary", message)
         # Track B is not required: A/C alone completes terminal coverage.
         self.add_terminal_summary(repo, package)
+        coverage = engine.terminal_coverage_fact(package)
+        self.assertTrue(coverage.known)
+        self.assertIs(coverage.value, True)
         result = self.cli(repo, package, *gate_args)
         self.assertEqual(json.loads(result.stdout)["verdict"], "pass")
         self.assertEqual(self.state(package)["activeCheckpoints"], {})

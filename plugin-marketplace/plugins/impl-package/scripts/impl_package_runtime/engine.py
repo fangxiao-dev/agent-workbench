@@ -1985,7 +1985,7 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
                 "再把当前 package 改为引用 stable docs"
             )
         coverage = terminal_coverage_fact(package)
-        if coverage.known and coverage.value is False:
+        if not coverage.known or coverage.value is not True:
             raise StateError(
                 "pass Gate rejected: terminal review coverage 不完整（"
                 + (coverage.reason or "review.terminal_summary 未通过")

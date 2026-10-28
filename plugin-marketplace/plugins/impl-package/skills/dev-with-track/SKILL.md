@@ -59,7 +59,7 @@ Plan/policy 明确要求时同样产生 formal review requirement。required rev
 
 已确认 finding 可立即修、随相关下一步修或隔离并行修，由 Dispatcher 根据影响、资源和整合成本安排。延后不能放行依赖该缺陷的实现或验收。修复方向已失去可信边界、同一机制再次出现或影响跨多个 writer/入口/shared authority 时，先按 `/diagnosing-bugs` 定位；finding closure 仍归 do-review。
 
-terminal pass 要求 terminal-final coverage 完整且阻断 findings 已闭合；启动条件与结果复用遵循 do-review。terminal-final 返回 FAIL/INCOMPLETE 后的下一步是 `fix` 加 `finding-closure`（一名 reviewer 只核对点名 findings），不是再起一轮 terminal-final；accepted findings 全部闭合、没有在途 fix、HEAD 不再变化时才在最终 HEAD 再起一次 terminal-final，C/Safety 按 admission 复用旧 PASS。Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 记录通过标准与 manual owner。
+terminal pass 要求 `review.terminal_summary` 支撑的 terminal-final coverage 明确完整（unknown 时拒绝），且阻断 findings 已闭合；启动条件与结果复用遵循 do-review。terminal-final 返回 FAIL/INCOMPLETE 后的下一步是 `fix` 加 `finding-closure`（一名 reviewer 只核对点名 findings），不是再起一轮 terminal-final；accepted findings 全部闭合、没有在途 fix、HEAD 不再变化时才在最终 HEAD 再起一次 terminal-final，C/Safety 按 admission 复用旧 PASS。Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 记录通过标准与 manual owner。
 
 ## Verify and Gate
 
