@@ -99,9 +99,11 @@ python <plugin>/scripts/impl_package_state.py --package <package> gate <verdict>
     "journey:run-01:J1-S1": [{
       "kind": "journey-step",
       "runId": "run-01", "journeyId": "J1", "stepId": "J1-S1",
+      "actor": "<Spec 该步的角色>",
       "entry": "<Spec 该步的操作入口原文>",
+      "surface": "page",
       "inputRef": "<承接的业务对象 ID，承接为 — 时 null>", "outputRef": "<本步产出的业务对象 ID>",
-      "artifact": "evidence/journey/run-01.md#j1-s1",
+      "artifact": "evidence/journey/run-01-s1.zip",
       "revision": "<git commit>",
       "environment": "<Journey run 使用的 environment 字符串>",
       "conclusion": "supporting",
@@ -124,12 +126,12 @@ python <plugin>/scripts/impl_package_state.py --package <package> gate <verdict>
 
 | kind | 必填的专有字段 | evidenceKey | 说明 |
 | --- | --- | --- | --- |
-| `journey-step` | `runId`、`journeyId`、`stepId`、`entry` | `journey:<runId>:<stepId>` | `entry` 必须与 Spec 该步的操作入口一致；同一 run 从第 1 步起按顺序登记；Spec 该步“承接”不是 `—` 时，`inputRef` 必须等于同一 run 上一步的 `outputRef`，否则 `evidence add` 拒绝；失败不覆盖旧 run，另起新 run |
+| `journey-step` | `runId`、`journeyId`、`stepId`、`entry`、`surface`（`page \| file \| log \| api`） | `journey:<runId>:<stepId>` | `entry` 必须与 Spec 该步的操作入口一致；`page` 需 package 内 Playwright trace `.zip`（动作含对 Spec 声明控件的 click/press/fill，否则拒绝），或 `manualBy` 加 package 内截图；`file` 需用户实际收到的文件（不接受 .md/.txt/.log），runtime 存其 sha256；`log`（对应 Spec 的 `记录` 步）的 artifact 须为 package 内文件；`api` 恒接受；同一 run 从第 1 步起按顺序登记；Spec 该步“承接”不是 `—` 时，`inputRef` 必须等于同一 run 上一步的 `outputRef`，否则 `evidence add` 拒绝；失败不覆盖旧 run，另起新 run |
 | `suite` | `suiteId` | `suite:<id>` | environment 必须等于 Spec 声明；归属由 Ticket Coverage 反查 |
 | `review` | `ticket`（Ticket ID 或 `package`） | `review:<ticket>` | per-Ticket required review 的结果；最终 HEAD 的 review 仍由 terminal-final 承担 |
 | `release` | 无 | `release` | artifact 为 package 内发布顺序表 |
 
-**有效性**：记录的 `conclusion` 为 `supporting` 且未被 `invalidatedBy` 标记；`revision` 等于 Gate comparison commit，或两者之间只改动了本 package 目录内的文件；suite evidence 的 environment 与 Spec 字符串精确匹配，同一 Journey run 的 step evidence 使用同一 environment；active Attempt 的 artifact 文件存在。不满足的记录待复验，旧记录保留。**reach** 由 `journey-step` 记录派生（同一 run 内从第 1 步起连续有效的步数），不存储。
+**有效性**：记录的 `conclusion` 为 `supporting` 且未被 `invalidatedBy` 标记；`revision` 等于 Gate comparison commit，或两者之间只改动了本 package 目录内的文件；suite evidence 的 environment 与 Spec 字符串精确匹配，同一 Journey run 的 step evidence 使用同一 environment；active Attempt 的 artifact 文件存在。不满足的记录待复验，旧记录保留。进度由 `journey-step` 记录派生，不存储：**reach** 是同一 run 内从第 1 步起、surface 与 Spec 入口类型一致（页面—page、文件—file、记录—log）的连续有效步数，Gate 只认它；**rehearsalReach** 不限 surface。Owner Summary 形如 `J1 …：页面走通 2/4 · API 预演 4/4`，并列出人工走查的步骤。
 
 Ticket 的 Coverage 区块、Spec 三张固定表和 `Release order` 在 `package validate` 时按固定标题与列名解析，列缺失或多出即失败。
 

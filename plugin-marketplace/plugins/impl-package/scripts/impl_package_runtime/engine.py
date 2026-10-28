@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import uuid
+import zipfile
 from dataclasses import dataclass
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -663,9 +664,30 @@ def _journey_spec_text(text: str, spec_label: str = "spec.md") -> dict[str, Any]
         journey_ids.add(identifier)
         end = headings[position + 1][0] if position + 1 < len(headings) else len(journey_section)
         block = journey_section[start + 1:end]
-        table = _markdown_table(block, ("Step", "操作入口", "观察表面", "预期", "承接"), f"{spec_label} Journey {identifier} steps")
+        preparation_lines = [line.strip() for line in block if line.strip().startswith("准备：")]
+        if len(preparation_lines) > 1:
+            raise StateError(f"Journey {identifier} may contain only one 准备： line")
+        preparation = None
+        if preparation_lines:
+            match = re.fullmatch(r"准备：\s*(.+?)\s*", preparation_lines[0])
+            if match is None:
+                raise StateError(f"Journey {identifier} 准备： must contain text")
+            preparation = match.group(1).strip()
+
+        columns = ("Step", "角色", "入口类型", "控件", "操作入口", "观察表面", "预期", "承接")
+        try:
+            table = _markdown_table(block, columns, f"{spec_label} Journey {identifier} steps")
+        except StateError as exc:
+            if "columns must be:" in str(exc):
+                raise StateError(
+                    f"{spec_label} Journey {identifier} steps must use the 3.6 header: "
+                    + " | ".join(columns)
+                ) from exc
+            raise
         if not table:
             raise StateError(f"Journey {identifier} must contain at least one step")
+        if all(row["入口类型"] == "记录" for row in table):
+            raise StateError(f"Journey {identifier} cannot consist only of 记录 steps")
         journey_steps: list[dict[str, str]] = []
         for number, row in enumerate(table, start=1):
             step_id = row["Step"]
@@ -673,12 +695,29 @@ def _journey_spec_text(text: str, spec_label: str = "spec.md") -> dict[str, Any]
                 raise StateError(f"Journey {identifier} steps must be ordered and named {identifier}-S1, {identifier}-S2, ...")
             if number == 1 and row["承接"] != "—":
                 raise StateError(f"{spec_label} Journey {identifier} 第 1 步 {step_id} 的承接必须为 —")
+            if row["入口类型"] not in {"页面", "文件", "记录"}:
+                raise StateError(f"{spec_label} Journey {step_id} 入口类型必须是 页面、文件 或 记录")
+            if row["入口类型"] == "记录" and number == 1:
+                raise StateError(f"{spec_label} Journey 第 1 步 {step_id} 不能是记录")
+            if row["入口类型"] == "页面" and row["控件"] == "—":
+                raise StateError(f"{spec_label} Journey {step_id} 页面步必须填写控件可见名称")
+            if row["入口类型"] in {"文件", "记录"} and row["控件"] != "—":
+                raise StateError(f"{spec_label} Journey {step_id} 文件或记录步的控件必须为 —")
             if step_id in steps:
                 raise StateError(f"duplicate Journey step ID: {step_id}")
-            step = {"id": step_id, "operationEntry": row["操作入口"], "observationSurface": row["观察表面"], "expected": row["预期"], "handoff": row["承接"]}
+            step = {
+                "id": step_id,
+                "role": row["角色"],
+                "entryType": row["入口类型"],
+                "control": row["控件"],
+                "operationEntry": row["操作入口"],
+                "observationSurface": row["观察表面"],
+                "expected": row["预期"],
+                "handoff": row["承接"],
+            }
             journey_steps.append(step)
             steps[step_id] = {**step, "journeyId": identifier}
-        journeys.append({"id": identifier, "terminalResult": terminal, "steps": journey_steps})
+        journeys.append({"id": identifier, "terminalResult": terminal, "preparation": preparation, "steps": journey_steps})
 
     matrix_section = _markdown_section(text, "Rule Matrix", 3, spec_label)
     rule_rows = _markdown_table(matrix_section, ("Rule", "Source", "Suite", "Oracle"), f"{spec_label} §7 Rule Matrix")
@@ -719,6 +758,10 @@ def _journey_spec_text(text: str, spec_label: str = "spec.md") -> dict[str, Any]
 
 def _journey_spec(package: Path) -> dict[str, Any]:
     return _journey_spec_text(_read(package / "spec.md"))
+
+
+def _journey_expected_surface(step: dict[str, Any]) -> str:
+    return {"页面": "page", "文件": "file", "记录": "log"}[step["entryType"]]
 
 
 def validate_spec_document(path: Path, spec_label: str = "spec.md") -> dict[str, Any]:
@@ -1120,6 +1163,142 @@ def _package_relative_artifact(package: Path, value: Any, field: str, *, must_ex
     return path.as_posix() + anchor
 
 
+def _trace_action_method(event: dict[str, Any]) -> str | None:
+    actions = {"click", "tap", "check", "press", "fill"}
+    pending: list[Any] = [event]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key.casefold() in {"method", "apiname", "type", "name"} and isinstance(child, str):
+                    method = child.rsplit(".", 1)[-1].casefold()
+                    if method in actions:
+                        return method
+                if isinstance(child, (dict, list)):
+                    pending.append(child)
+        elif isinstance(value, list):
+            pending.extend(value)
+    return None
+
+
+def _trace_action_description(event: dict[str, Any]) -> str:
+    descriptors: list[str] = []
+    pending: list[Any] = [event]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key.casefold() in {"selector", "params", "locator", "description", "locatordescription", "locator_description"}:
+                    descriptors.append(child if isinstance(child, str) else json.dumps(child, ensure_ascii=False, sort_keys=True))
+                elif isinstance(child, (dict, list)):
+                    pending.append(child)
+        elif isinstance(value, list):
+            pending.extend(value)
+    return " ".join(descriptors)
+
+
+def _playwright_trace_actions(path: Path, control: str) -> tuple[bool, list[str]]:
+    actions: list[str] = []
+    found = False
+    trace_files = 0
+    try:
+        with zipfile.ZipFile(path) as archive:
+            for info in archive.infolist():
+                if info.is_dir() or PurePosixPath(info.filename).suffix.casefold() != ".trace":
+                    continue
+                trace_files += 1
+                with archive.open(info) as stream:
+                    for line_number, line in enumerate(stream, start=1):
+                        if not line.strip():
+                            continue
+                        try:
+                            event = json.loads(line)
+                        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                            raise StateError(f"Playwright trace JSONL 无法解析：{info.filename}:{line_number}: {exc}") from exc
+                        if not isinstance(event, dict):
+                            raise StateError(f"Playwright trace JSONL 事件必须是 object：{info.filename}:{line_number}")
+                        method = _trace_action_method(event)
+                        if method is None:
+                            continue
+                        description = _trace_action_description(event)
+                        actions.append((method + (f" {description}" if description else ""))[:240])
+                        if control.casefold() in description.casefold():
+                            found = True
+    except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile, RuntimeError) as exc:
+        raise StateError(f"Playwright trace 无法解析：{exc}") from exc
+    if not trace_files:
+        raise StateError("Playwright trace ZIP 未包含 *.trace JSONL 文件")
+    return found, actions
+
+
+def _validate_journey_surface_evidence(
+    package: Path, step: dict[str, Any], record: dict[str, Any], *, live: bool = True,
+) -> str | None:
+    surface = record.get("surface")
+    if surface not in {"page", "file", "api", "log"}:
+        raise StateError("Journey evidence surface must be page, file, api, or log")
+    artifact = record.get("artifact")
+    relative = PurePosixPath(str(artifact).replace("\\", "/").partition("#")[0])
+    path = (package / Path(*relative.parts)).resolve()
+    try:
+        path.relative_to(package.resolve())
+    except ValueError as exc:
+        raise StateError("Journey evidence artifact must be package-relative") from exc
+
+    if surface == "api":
+        if "manualBy" in record or "artifactSha256" in record:
+            raise StateError("API Journey evidence cannot include manualBy or artifactSha256")
+        return None
+
+    expected_surface = _journey_expected_surface(step)
+    if surface != expected_surface:
+        raise StateError(f"Journey step {step['id']} entry type {step['entryType']} requires surface={expected_surface}")
+    if live and not path.is_file():
+        raise StateError(f"Journey {surface} artifact must be an existing package file: {record['artifact']}")
+
+    if surface == "log":
+        if "manualBy" in record or "artifactSha256" in record:
+            raise StateError("log Journey evidence cannot include manualBy or artifactSha256")
+        return None
+
+    suffix = path.suffix.casefold()
+    if surface == "page":
+        if "artifactSha256" in record:
+            raise StateError("page Journey evidence cannot include artifactSha256")
+        if "manualBy" in record:
+            manual_by = record["manualBy"]
+            if not isinstance(manual_by, str) or not manual_by.strip():
+                raise StateError("manualBy must be a non-empty string")
+            if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+                raise StateError("manualBy requires a package image artifact (.png, .jpg, .jpeg, .webp)")
+            record["manualBy"] = manual_by.strip()
+            return None
+        if suffix != ".zip":
+            raise StateError("page Journey evidence requires a Playwright trace .zip or manualBy plus a package image")
+        if not live:
+            return None
+        found, actions = _playwright_trace_actions(path, step["control"])
+        if not found:
+            actual = "; ".join(actions[:5]) or "none"
+            raise StateError(
+                f"Playwright trace must contain a click/tap/check/press/fill action for control "
+                f"{step['control']!r}; actual actions: {actual}"
+            )
+        return None
+
+    if "manualBy" in record:
+        raise StateError("file Journey evidence cannot include manualBy")
+    if suffix in {".md", ".txt", ".log"}:
+        raise StateError("file Journey artifact must not use .md, .txt, or .log")
+    if not live:
+        return None
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    recorded_digest = record.get("artifactSha256")
+    if recorded_digest is not None and recorded_digest != digest:
+        raise StateError("file Journey artifact sha256 does not match artifactSha256")
+    return digest
+
+
 def _validate_journey_evidence_index(
     package: Path,
     repo: Path,
@@ -1135,12 +1314,12 @@ def _validate_journey_evidence_index(
     run_environments: dict[str, tuple[str, str]] = {}
     base_fields = {"kind", "artifact", "revision", "environment", "conclusion"}
     fields_by_kind = {
-        "journey-step": {"runId", "journeyId", "stepId", "entry"},
+        "journey-step": {"runId", "journeyId", "stepId", "actor", "entry", "surface"},
         "suite": {"suiteId"},
         "review": {"ticket"},
         "release": set(),
     }
-    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef"}}
+    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef", "manualBy", "artifactSha256"}}
     for evidence_key, records in index.items():
         if not isinstance(evidence_key, str) or not evidence_key or not isinstance(records, list):
             raise StateError(f"evidenceIndex[{evidence_key}] must map an evidenceKey to a list")
@@ -1185,6 +1364,18 @@ def _validate_journey_evidence_index(
                     raise StateError(f"evidenceIndex[{evidence_key}] references unknown Journey step")
                 if entry != step["operationEntry"]:
                     raise StateError(f"evidenceIndex[{evidence_key}] entry does not match the Spec operation entry")
+                if record["surface"] not in {"page", "file", "api", "log"}:
+                    raise StateError(f"evidenceIndex[{evidence_key}] surface must be page, file, api, or log")
+                if record["actor"] != step["role"]:
+                    raise StateError(f"evidenceIndex[{evidence_key}] actor does not match the Spec role")
+                digest = _validate_journey_surface_evidence(package, step, copy, live=live)
+                if record["surface"] == "file":
+                    if not isinstance(record.get("artifactSha256"), str) or re.fullmatch(r"[0-9a-f]{64}", record["artifactSha256"]) is None:
+                        raise StateError(f"evidenceIndex[{evidence_key}] file surface requires artifactSha256")
+                    if live and digest != record["artifactSha256"]:
+                        raise StateError(f"evidenceIndex[{evidence_key}] file artifact sha256 does not match artifactSha256")
+                elif "artifactSha256" in record:
+                    raise StateError(f"evidenceIndex[{evidence_key}] artifactSha256 is only valid for file surface")
                 environment_tuple = (journey_id, record["environment"])
                 previous = run_environments.setdefault(run_id, environment_tuple)
                 if previous != environment_tuple:
@@ -1479,25 +1670,39 @@ def _v36_acceptance_status(
     records_by_key = state["evidenceIndex"]
     stale: set[str] = set()
     run_records: dict[tuple[str, str], list[tuple[str, dict[str, Any]]]] = {}
+    surface_validity: dict[int, bool] = {}
     for evidence_key, records in records_by_key.items():
         for record in records:
             kind = record["kind"]
             expected_environment = spec["suites"][record["suiteId"]]["environment"] if kind == "suite" else None
-            if record["conclusion"] == "supporting" and not evidence_record_valid(
+            valid = evidence_record_valid(
                 record,
                 comparison_commit,
                 repo=repo,
                 package=package,
                 expected_environment=expected_environment,
                 attempt_active=attempt_active,
-            ):
+            )
+            if kind == "journey-step":
+                step = spec["steps"][record["stepId"]]
+                try:
+                    _validate_journey_surface_evidence(package, step, record)
+                    surface_validity[id(record)] = True
+                except (OSError, StateError):
+                    surface_validity[id(record)] = False
+                    valid = False
+            if record["conclusion"] == "supporting" and not valid:
                 stale.add(evidence_key)
             if kind == "journey-step":
                 run_records.setdefault((record["journeyId"], record["runId"]), []).append((evidence_key, record))
 
     journey_rows = []
     for journey in spec["journeys"]:
-        best = 0
+        best_reach = 0
+        best_rehearsal_reach = 0
+        surface_counts = {surface: 0 for surface in ("page", "file", "api", "log")}
+        manual_walkthroughs: set[tuple[str, str]] = set()
+        run_rows = []
         for (journey_id, _run_id), records in run_records.items():
             if journey_id != journey["id"]:
                 continue
@@ -1508,10 +1713,16 @@ def _v36_acceptance_status(
             by_step: dict[str, list[dict[str, Any]]] = {}
             for _, record in records:
                 by_step.setdefault(record["stepId"], []).append(record)
-            reached = 0
+            reach = 0
+            rehearsal_reach = 0
+            run_surface_counts = {surface: 0 for surface in ("page", "file", "api", "log")}
+            valid_by_step: dict[str, list[dict[str, Any]]] = {}
             for step in journey["steps"]:
-                if not any(
-                    evidence_record_valid(
+                valid_by_step[step["id"]] = [
+                    record
+                    for record in by_step.get(step["id"], [])
+                    if surface_validity.get(id(record), False)
+                    and evidence_record_valid(
                         record,
                         comparison_commit,
                         repo=repo,
@@ -1519,12 +1730,47 @@ def _v36_acceptance_status(
                         expected_environment=environment,
                         attempt_active=attempt_active,
                     )
-                    for record in by_step.get(step["id"], [])
-                ):
+                ]
+                for record in valid_by_step[step["id"]]:
+                    run_surface_counts[record["surface"]] += 1
+                    if record["surface"] == "page" and record.get("manualBy"):
+                        manual_walkthroughs.add((step["id"], record["manualBy"]))
+            for step in journey["steps"]:
+                valid_records = valid_by_step[step["id"]]
+                if not valid_records:
                     break
-                reached += 1
-            best = max(best, reached)
-        journey_rows.append({"id": journey["id"], "title": journey["terminalResult"], "reached": best, "total": len(journey["steps"])})
+                rehearsal_reach += 1
+            for step in journey["steps"]:
+                valid_records = valid_by_step[step["id"]]
+                if not valid_records:
+                    break
+                expected_surface = _journey_expected_surface(step)
+                if not any(record["surface"] == expected_surface for record in valid_records):
+                    break
+                reach += 1
+            best_reach = max(best_reach, reach)
+            best_rehearsal_reach = max(best_rehearsal_reach, rehearsal_reach)
+            for surface, count in run_surface_counts.items():
+                surface_counts[surface] += count
+            run_rows.append({
+                "runId": _run_id,
+                "reach": reach,
+                "rehearsalReach": rehearsal_reach,
+                "surfaceCounts": run_surface_counts,
+            })
+        journey_rows.append({
+            "id": journey["id"],
+            "title": journey["terminalResult"],
+            "reach": best_reach,
+            "rehearsalReach": best_rehearsal_reach,
+            "total": len(journey["steps"]),
+            "surfaceCounts": surface_counts,
+            "runs": run_rows,
+            "manualWalkthroughs": [
+                {"stepId": step_id, "manualBy": manual_by}
+                for step_id, manual_by in sorted(manual_walkthroughs)
+            ],
+        })
 
     suite_rows = []
     for suite_id, suite in spec["suites"].items():
@@ -1571,7 +1817,7 @@ def _journey_reaches(package: Path, state: dict[str, Any], summary: dict[str, An
     repo = _repo_root(package)
     head = _run_git(repo, "rev-parse", "HEAD")
     status = _v36_acceptance_status(package, state, summary, head, attempt_active=not lifecycle.frozen)
-    return {row["id"]: row["reached"] for row in status["journeys"]}
+    return {row["id"]: row["reach"] for row in status["journeys"]}
 
 
 def _render_progress(package: Path, state: dict[str, Any], summary: dict[str, Any]) -> str:
@@ -1587,10 +1833,15 @@ def _render_progress(package: Path, state: dict[str, Any], summary: dict[str, An
             _run_git(_repo_root(package), "rev-parse", "HEAD"),
             attempt_active=not lifecycle.frozen,
         )
-        reaches = {row["id"]: row["reached"] for row in status["journeys"]}
+        reaches = {row["id"]: row for row in status["journeys"]}
         lines.extend(["", "## Journey Progress", ""])
         for journey in spec["journeys"]:
-            lines.append(f"- {journey['id']} 走通 {reaches[journey['id']]}/{len(journey['steps'])}")
+            progress = reaches[journey["id"]]
+            total = len(journey["steps"])
+            lines.append(
+                f"- {journey['id']} 有效步骤走通 {progress['reach']}/{total} · "
+                f"API 预演 {progress['rehearsalReach']}/{total}"
+            )
         lines.extend(["", "## Required Suite Results", "", "| Suite | Kind | Scope | Latest conclusion |", "| --- | --- | --- | --- |"])
         for suite_id, suite in spec["suites"].items():
             records = state["evidenceIndex"].get(f"suite:{suite_id}", [])
@@ -2088,12 +2339,12 @@ def _normalize_journey_evidence(package: Path, repo: Path, summary: dict[str, An
         raise StateError("evidence record must be an object")
     kind = payload.get("kind")
     fields_by_kind = {
-        "journey-step": {"runId", "journeyId", "stepId", "entry"},
+        "journey-step": {"runId", "journeyId", "stepId", "actor", "entry", "surface"},
         "suite": {"suiteId"},
         "review": {"ticket"},
         "release": set(),
     }
-    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef"}}
+    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef", "manualBy"}}
     if not isinstance(kind, str) or kind not in fields_by_kind:
         raise StateError("3.6 evidence kind must be journey-step, suite, review, or release")
     required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
@@ -2121,14 +2372,23 @@ def _normalize_journey_evidence(package: Path, repo: Path, summary: dict[str, An
 
     spec = summary["_journeySpec"]
     if kind == "journey-step":
-        run_id, journey_id, step_id, entry = (record[field] for field in ("runId", "journeyId", "stepId", "entry"))
-        if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, entry)):
-            raise StateError("Journey evidence runId, journeyId, stepId, and entry must be non-empty")
+        run_id, journey_id, step_id, actor, entry = (record[field] for field in ("runId", "journeyId", "stepId", "actor", "entry"))
+        if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, actor, entry)):
+            raise StateError("Journey evidence runId, journeyId, stepId, actor, and entry must be non-empty")
         step = spec["steps"].get(step_id)
         if step is None or step["journeyId"] != journey_id:
             raise StateError(f"unknown Journey step: {journey_id}/{step_id}")
+        if actor != step["role"]:
+            raise StateError("Journey evidence actor does not match the Spec role")
         if entry != step["operationEntry"]:
             raise StateError("Journey evidence entry does not match the Spec operation entry")
+        if record["surface"] not in {"page", "file", "api", "log"}:
+            raise StateError("Journey evidence surface must be page, file, api, or log")
+        if "artifactSha256" in payload:
+            raise StateError("artifactSha256 is generated automatically for file Journey evidence")
+        digest = _validate_journey_surface_evidence(package, step, record)
+        if record["surface"] == "file":
+            record["artifactSha256"] = digest
         evidence_key = f"journey:{run_id}:{step_id}"
     elif kind == "suite":
         suite_id = record["suiteId"]
@@ -3075,8 +3335,12 @@ def _v36_gate_gaps(
     status = _v36_acceptance_status(package, state, summary, comparison_commit, attempt_active=not lifecycle.frozen)
     gaps: list[str] = []
     for journey in status["journeys"]:
-        if journey["reached"] != journey["total"]:
-            gaps.append(f"Journey {journey['id']} 尚未在同一 run 走通全部步骤（{journey['reached']}/{journey['total']}）")
+        if journey["reach"] != journey["total"]:
+            hint = "；API 预演已走通，仍需页面/文件/记录证据" if journey["rehearsalReach"] == journey["total"] else ""
+            gaps.append(
+                f"Journey {journey['id']} 尚未在同一 run 走通全部页面/文件/记录步骤 "
+                f"（有效步骤走通 {journey['reach']}/{journey['total']}，API 预演 {journey['rehearsalReach']}/{journey['total']}）{hint}"
+            )
     for suite in status["suites"]:
         if not suite["valid"]:
             gaps.append(f"Required Suite {suite['id']} 缺少当前有效的 supporting 记录")
@@ -3115,7 +3379,10 @@ def _owner_summary(
 ) -> list[str]:
     lines = ["## Owner Summary\n"]
     for journey in status["journeys"]:
-        lines.append(f"- {journey['id']} {journey['title']}：走通 {journey['reached']}/{journey['total']}\n")
+        lines.append(
+            f"- {journey['id']} {journey['title']}：有效步骤走通 {journey['reach']}/{journey['total']} · "
+            f"API 预演 {journey['rehearsalReach']}/{journey['total']}\n"
+        )
     valid_suites = sum(1 for row in status["suites"] if row["valid"])
     lines.append(f"- 套件：{valid_suites}/{len(status['suites'])} 通过\n")
     pending = status["pendingAmendments"]
@@ -3136,6 +3403,13 @@ def _owner_summary(
     lines.append(f"- 最终版本：{comparison_commit[:7]}\n")
     conclusion = reason.strip() or ("所有验收项已满足" if verdict == "pass" else "仍有验收缺口")
     lines.append(f"- 结论：{verdict} — {conclusion}\n")
+    manual = [
+        f"{item['stepId']}（{item['manualBy']}）"
+        for journey in status["journeys"]
+        for item in journey["manualWalkthroughs"]
+    ]
+    if manual:
+        lines.append(f"- 人工走查：{'、'.join(manual)}\n")
     return lines
 
 

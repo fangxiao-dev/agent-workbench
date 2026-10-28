@@ -94,7 +94,7 @@ Plan、Ticket 或 DAG 的语义变化只使受影响范围的 approval/validatio
 
 | 表 | 列 | 要点 |
 | --- | --- | --- |
-| `### Journeys` 下每条 `#### J<n> <终态>` | `Step \| 操作入口 \| 观察表面 \| 预期 \| 承接` | step id 为 `J<n>-S<m>`，顺序固定；承诺落在页面上的步骤，入口与表面都是页面；承接是上一步交给本步的业务对象（如 `账单 ID`），无则 `—`，第 1 步恒为 `—` |
+| `### Journeys` 下每条 `#### J<n> <终态>` | `Step \| 角色 \| 入口类型 \| 控件 \| 操作入口 \| 观察表面 \| 预期 \| 承接` | step id 为 `J<n>-S<m>`，顺序固定；角色是执行该步的人（页面步用该角色自己的账号）；入口类型为 `页面 \| 文件 \| 记录`，页面步的控件写触发该步的可见控件名，文件与记录步写 `—`；`记录` 核对页面无法呈现的运行记录，不替代页面/文件步，不能是第 1 步；Journey 标题下可有 `准备：` 行写账号、权限、种子账套等由 harness 预置的前置条件，它不是 step；Journey 只含用户亲手做或亲自收到的步骤，用户看不到的行为（并发、幂等、回滚、租户隔离）归 Rule Matrix 与套件；承接是上一步交给本步的业务对象（如 `账单 ID`），无则 `—`，第 1 步恒为 `—` |
 | `### Rule Matrix` | `Rule \| Source \| Suite \| Oracle` | 每条规则有 oracle，并指向一个已登记套件；Source 是 spec.md 内的章节引用（`§N`、`§N.M` 或标题原文，逗号分隔） |
 | `### Required Suites` | `Suite \| Kind \| Scope \| Entry \| Environment` | Kind 为 `rule \| safety`，Scope 为 `ticket \| package`；Environment 写明确字符串，记录按字符串精确匹配 |
 
@@ -114,7 +114,14 @@ steps 与 suites 不同时为 `none`，harness、migration、加固类 Ticket �
 
 **Ticket `SATISFIED`** 的依据是：`--revision` 已合入（当前 HEAD 的 ancestor）、Coverage 里负责的套件都有有效 evidence、Required review 有有效结果，且 implementation/acceptance 入边已释放。Journey step 不是 Ticket 的满足条件，它归 Gate，下游因此不必等上游走通整条旅程。
 
-**Journey 走通** 用 `journey-step` evidence 登记；reach 是同一 run 内从第 1 步起连续有效的步数，给 Owner 看进度，不是 Gate 条件。Gate 要求每条 Journey 在最终版本上有一次覆盖全部 step 的连续 run。runtime 只核对 `entry` 与 Spec 一致、顺序与有效期；“上一步输出是下一步输入”由执行者在 artifact 中记录，由 review 与 Owner 抽查。
+**Journey 走通** 用 `journey-step` evidence 登记，每条带 `surface`（`page | file | log | api`）。面向客户的端到端验收是页面级（或用户实际收到的文件）；API 跑 Journey 是早期预演，在 UI 出现前让进度可见。
+
+- `page`：package 内 Playwright trace `.zip`，其记录的动作含对该步声明控件的 click/press/fill（runtime 解析 trace，不符即拒绝）；或 `manualBy` 加 package 内截图（人工走查）。
+- `file`：用户实际收到的文件（不接受 .md/.txt/.log），runtime 记录其 sha256。
+- `log`：对应 `记录` 步，artifact 为 package 内文件。
+- `api`：恒被接受，只计入预演。
+
+两个进度数：`reach` 是同一 run 内从第 1 步起、surface 与声明的入口类型一致的连续有效步数，Gate 只认它；`rehearsalReach` 不限 surface。Gate 要求每条 Journey 在最终版本上有一次 reach 覆盖全部 step 的连续 run。runtime 还核对 `entry` 与 Spec 一致、顺序与有效期；“上一步输出是下一步输入”由执行者在 artifact 中记录，由 review 与 Owner 抽查。
 
 **Gate 分两层核对**：产品层（Journey）与规则/安全层（Required Suites）；其余是 Ticket 与合入、最终 HEAD 的 terminal-final review、Amendment、发布顺序和既有终态条件。任一必需事实 unknown 即不放行。
 
