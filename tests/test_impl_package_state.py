@@ -88,6 +88,27 @@ class ImplPackageStateTests(unittest.TestCase):
                  **fields}
         return engine.command_trail_append(package, json.dumps(event))
 
+    def acquire_lease(self, repo: Path, package: Path, *keys: str, owner: str = "worker-A") -> dict:
+        argv = ["--no-situation", "recovery", "lease", "acquire", "--owner", owner]
+        for key in keys:
+            argv.extend(("--key", key))
+        return json.loads(self.cli(repo, package, *argv).stdout)
+
+    def release_lease(self, repo: Path, package: Path, lease: dict, *, token: str | None = None, ok: bool = True):
+        return self.cli(
+            repo,
+            package,
+            "--no-situation",
+            "recovery",
+            "lease",
+            "release",
+            "--lease-id",
+            lease["lease_id"],
+            "--owner-token",
+            token if token is not None else lease["owner_token"],
+            ok=ok,
+        )
+
     def test_dispatch_identity_dependencies_and_independent_work(self):
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
@@ -159,6 +180,74 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(engine._validate_trail_event(returned), returned)
         with self.assertRaises(engine.StateError):
             engine._validate_trail_event({**returned, "code_delta": {"base": "a" * 7, "head": "b" * 40}})
+
+    def test_lease_double_acquire_fails_and_release_allows_reacquire(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        lease = self.acquire_lease(repo, package, "worktree:A", "database:fixture")
+        self.assertEqual(len(lease["lease_relative_paths"]), 2)
+        conflict = self.cli(
+            repo, package, "--no-situation", "recovery", "lease", "acquire", "--owner", "worker-B",
+            "--key", "worktree:A", ok=False,
+        )
+        self.assertNotEqual(conflict.returncode, 0)
+        self.assertIn("already held", conflict.stderr)
+
+        released = json.loads(self.release_lease(repo, package, lease).stdout)
+        self.assertTrue(released["released"])
+        reacquired = self.acquire_lease(repo, package, "worktree:A", "database:fixture", owner="worker-B")
+        self.assertNotEqual(reacquired["lease_id"], lease["lease_id"])
+
+    def test_lease_release_checks_owner_and_is_idempotent(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        lease = self.acquire_lease(repo, package, "database:fixture")
+        wrong_owner = self.release_lease(repo, package, lease, token="not-the-owner-token", ok=False)
+        self.assertNotEqual(wrong_owner.returncode, 0)
+        self.assertIn("owner token mismatch", wrong_owner.stderr)
+        self.assertTrue((package / lease["lease_relative_paths"][0]).exists())
+
+        first = json.loads(self.release_lease(repo, package, lease).stdout)
+        second = json.loads(self.release_lease(repo, package, lease).stdout)
+        self.assertTrue(first["released"])
+        self.assertTrue(second["idempotent"])
+
+    def test_dispatch_lease_is_optional_but_validates_held_owner(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+
+        legacy = self.append_dispatch(package)
+        self.assertTrue(legacy["appended"])
+        own_lease = self.acquire_lease(repo, package, "worktree:B")
+        leased = self.append_dispatch(
+            package,
+            dispatch_id="leased",
+            candidate_id="leased",
+            resource_keys=["worktree:B"],
+            lease_id=own_lease["lease_id"],
+        )
+        self.assertTrue(leased["appended"])
+
+        other_lease = self.acquire_lease(repo, package, "worktree:C", owner="worker-C")
+        with self.assertRaisesRegex(engine.StateError, "does not match lease owner"):
+            self.append_dispatch(
+                package,
+                dispatch_id="wrong-owner",
+                candidate_id="wrong-owner",
+                resource_keys=["worktree:C"],
+                lease_id=other_lease["lease_id"],
+            )
+        with self.assertRaisesRegex(engine.StateError, "does not identify a held lease"):
+            self.append_dispatch(
+                package,
+                dispatch_id="missing-lease",
+                candidate_id="missing-lease",
+                resource_keys=["worktree:D"],
+                lease_id="0" * 32,
+            )
 
     def test_dispatch_retry_and_return_identity_survive_handoff_archive(self) -> None:
         temp, repo, package = self.make_repo()

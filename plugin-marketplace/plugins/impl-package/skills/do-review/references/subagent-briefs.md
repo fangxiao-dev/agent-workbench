@@ -27,7 +27,7 @@ Review target:
 - User policy:
 - User review-depth preference:
 - Safety applicability / evidence / coverage:
-- Canonical ledger artifact (read-only):
+- Canonical ledger artifact (read-only, package-relative for Impl-Package):
 - Review report artifact (this leaf's exclusive writable detail file):
 
 Known findings ledger:

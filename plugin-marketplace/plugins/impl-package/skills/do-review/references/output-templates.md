@@ -50,7 +50,7 @@ terminal-final 的 canonical ledger 更新且所需结果已返回后，parent �
 
 ## Canonical ledger and classification
 
-The parent owns one Markdown ledger for the whole ReviewRun. Leaf results are candidates, not accepted findings. After every round, wait for every required track, then deduplicate, verify, classify, and atomically rewrite that same ledger with verdicts, evidence, lifecycle transitions, and convergence. Never create a later-round ledger; a leaf result is not authoritative before this update.
+The parent owns one Markdown ledger for the whole ReviewRun. Impl-Package runs keep it under `execution/<attempt>/reviews/`; pass its package-relative path to `write` and `show`. Leaf results are candidates, not accepted findings. After every round, wait for every required track, then deduplicate, verify, classify, and atomically rewrite that same ledger with verdicts, evidence, lifecycle transitions, and convergence. Never create a later-round ledger; a leaf result is not authoritative before this update.
 
 Use source labels `Track A (review-code)`, `Track C (review-code-by-spec)`, additional selected labels, `fused`, and `main-session` as applicable. Deduplicate by broken invariant or observable failure, not path or reviewer; retain every contributor for a shared issue.
 
