@@ -21,7 +21,7 @@ priority:
   # P3：事实/合同/返工裁决与验证缺口
   - [ticket.verify.contradictory-unresolved, ticket.verify.safety-invariant-unfalsified, ticket.rework.evidence-conflict, ticket.rework.revision-diverged, ticket.rework.revalidation-pending, ticket.route.multiple-business-outcomes, ticket.route.sources-conflicting, attempt.rework.contract-changed]
   # P4：acceptance 与全局收口
-  - [ticket.accept.acceptance-edge-held, ticket.accept.release-edge-unchecked, ticket.accept.satisfiable, attempt.review.terminal-coverage-incomplete, finding.disposition.grading-undecided, attempt.disposition.findings-triage-pending, attempt.accept.all-tickets-terminal, attempt.gate.durable-delta-missing, attempt.gate.missing, attempt.gate.verdict-undecided]
+  - [ticket.accept.acceptance-edge-held, ticket.accept.release-edge-unchecked, ticket.accept.satisfiable, attempt.review.terminal-coverage-incomplete, finding.disposition.grading-undecided, attempt.disposition.findings-triage-pending, attempt.accept.all-tickets-terminal, attempt.accept.journey-incomplete, attempt.accept.required-suite-missing, attempt.accept.evidence-revalidation-pending, attempt.accept.amendment-owner-confirmation, attempt.accept.release-order-missing, attempt.gate.durable-delta-missing, attempt.gate.missing, attempt.gate.verdict-undecided]
   # P5：记录层卫生
   - [package.record.intake-backlog]
 
@@ -134,6 +134,71 @@ situations:
         by: main-session
         do: "dev-with-track Verify and Gate：审计当前 Attempt 的 completion claim"
         effect: "全部 Ticket 为 SATISFIED 或 RETIRED 后开始全局收口"
+    escape: true
+
+  - slug: attempt.accept.journey-incomplete
+    basis: cli
+    when:
+      attempt.journey_incomplete: true
+    judgment: false
+    actions:
+      - id: finish-journey-run
+        default: true
+        by: main-session
+        do: "按 Spec 从 Journey 第一步开始，用同一 run 连续登记每一步的观察与 artifact"
+        effect: "只接受当前比较点仍有效的 supporting 记录"
+    escape: true
+
+  - slug: attempt.accept.required-suite-missing
+    basis: cli
+    when:
+      attempt.required_suite_missing: true
+    judgment: false
+    actions:
+      - id: run-required-suite
+        default: true
+        by: main-session
+        do: "运行 Spec Required Suites 中缺记录的套件，并用 evidence add 登记 supporting 结果"
+        effect: "环境与 Spec 声明值一致"
+    escape: true
+
+  - slug: attempt.accept.evidence-revalidation-pending
+    basis: cli
+    when:
+      attempt.evidence_revalidation_pending: true
+    judgment: false
+    actions:
+      - id: revalidate-acceptance-evidence
+        default: true
+        by: main-session
+        do: "对失效、过期或缺 artifact 的记录重新取证并登记"
+        effect: "旧记录保留，不用于当前 acceptance"
+    escape: true
+
+  - slug: attempt.accept.amendment-owner-confirmation
+    basis: cli
+    when:
+      attempt.amendment_pending_or_unregistered: true
+    judgment: false
+    actions:
+      - id: resolve-contract-amendment
+        default: true
+        by: main-session
+        do: "漏登的修订用 package amendment add 登记并告知 Owner；Owner 确认后用 package amendment confirm 记录"
+        effect: "待确认修订只阻止 Gate，不阻止无依赖的 Ticket 实施"
+    escape: true
+
+  - slug: attempt.accept.release-order-missing
+    basis: cli
+    when:
+      attempt.release_order_missing: true
+    judgment: false
+    actions:
+      - id: record-release-order
+        default: true
+        by: main-session
+        do: "按 Plan 声明登记当前有效的 kind=release evidence"
+        effect: "artifact 覆盖声明的合入、fixture/backfill、开关/发布与清理顺序"
     escape: true
 
   - slug: ticket.readiness.blocker-maybe-resolved

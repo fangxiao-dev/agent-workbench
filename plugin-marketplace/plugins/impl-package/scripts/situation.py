@@ -413,6 +413,53 @@ def _git_result(repo: Path, *arguments: str) -> tuple[int, str, str]:
     return result.returncode, result.stdout.strip(), result.stderr.strip()
 
 
+def evidence_record_valid(
+    record: dict[str, Any],
+    comparison_commit: str,
+    *,
+    repo: Path,
+    package: Path,
+    expected_environment: str | None = None,
+    attempt_active: bool = True,
+) -> bool:
+    """Whether typed acceptance evidence still supports the comparison point."""
+    if record.get("conclusion") != "supporting" or record.get("invalidatedBy") is not None:
+        return False
+    if expected_environment is not None and record.get("environment") != expected_environment:
+        return False
+    revision = record.get("revision")
+    if not isinstance(revision, str) or not revision:
+        return False
+    package = package.resolve()
+    repo = repo.resolve()
+    try:
+        package_rel = package.relative_to(repo).as_posix()
+    except ValueError:
+        return False
+    if revision != comparison_commit:
+        code, _, _ = _git_result(
+            repo,
+            "diff", "--quiet", revision, comparison_commit, "--", ".", f":!{package_rel}",
+        )
+        if code != 0:
+            return False
+    if attempt_active:
+        artifact = record.get("artifact")
+        if not isinstance(artifact, str) or not artifact.strip():
+            return False
+        relative = PurePosixPath(artifact.replace("\\", "/").partition("#")[0])
+        if relative.is_absolute() or ".." in relative.parts or not relative.parts:
+            return False
+        path = (package / Path(*relative.parts)).resolve()
+        try:
+            path.relative_to(package)
+        except ValueError:
+            return False
+        if not path.is_file():
+            return False
+    return True
+
+
 def _find_git_root(path: Path) -> Path | None:
     probe = path if path.is_dir() else path.parent
     while True:
@@ -825,6 +872,34 @@ def _parse_state(view: FileView) -> StateView:
                 errors.append("acceptance.releaseOrder 无效")
             if not isinstance(acceptance.get("amendments"), list):
                 errors.append("acceptance.amendments 不是 list")
+            else:
+                amendment_ids: set[str] = set()
+                for index, amendment in enumerate(acceptance["amendments"]):
+                    if not isinstance(amendment, dict):
+                        errors.append(f"acceptance.amendments[{index}] 不是 object")
+                        continue
+                    status = amendment.get("status")
+                    base = {"id", "summary", "affected", "artifact", "status"}
+                    expected_amendment = base | ({"confirmedBy", "confirmedRevision"} if status == "CONFIRMED" else set())
+                    identifier = amendment.get("id")
+                    if status not in {"PENDING", "CONFIRMED"} or set(amendment) != expected_amendment:
+                        errors.append(f"acceptance.amendments[{index}] 字段/status 无效")
+                    if not isinstance(identifier, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", identifier) or identifier in amendment_ids:
+                        errors.append(f"acceptance.amendments[{index}] id 无效或重复")
+                    elif isinstance(identifier, str):
+                        amendment_ids.add(identifier)
+                    affected = amendment.get("affected")
+                    if not isinstance(amendment.get("summary"), str) or not amendment["summary"].strip() or not isinstance(affected, list) or not affected or any(not isinstance(item, str) or not item.strip() for item in affected):
+                        errors.append(f"acceptance.amendments[{index}] summary/affected 无效")
+                    if not isinstance(amendment.get("artifact"), str) or not amendment["artifact"].strip():
+                        errors.append(f"acceptance.amendments[{index}] artifact 无效")
+                    if status == "CONFIRMED" and (
+                        not isinstance(amendment.get("confirmedBy"), str)
+                        or not amendment["confirmedBy"].strip()
+                        or not isinstance(amendment.get("confirmedRevision"), str)
+                        or not COMMIT_RE.fullmatch(amendment["confirmedRevision"])
+                    ):
+                        errors.append(f"acceptance.amendments[{index}] confirmation 无效")
             baseline = acceptance.get("contractBaseline")
             if not isinstance(baseline, dict) or set(baseline) != {"head", "files"}:
                 errors.append("acceptance.contractBaseline 字段无效")
@@ -1026,7 +1101,7 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
     return errors
 
 
-def _parse_ticket(identifier: str, relative: str | None, text: str, expected_attempt: str | None) -> TicketInfo:
+def _parse_ticket(identifier: str, relative: str | None, text: str, expected_attempt: str | None, format_version: str = "3.5") -> TicketInfo:
     if not text:
         return TicketInfo(identifier, relative, text, False, error="Ticket 文件为空")
     id_match = TICKET_ID_RE.search(text)
@@ -1038,6 +1113,14 @@ def _parse_ticket(identifier: str, relative: str | None, text: str, expected_att
         return TicketInfo(identifier, relative, text, False, error="Attempt ID 与当前 attempt 不一致")
 
     claims = list(dict.fromkeys(CLAIM_RE.findall(text)))
+    valid = bool(claims)
+    if format_version == "3.6":
+        coverage = re.search(r"(?ms)^##\s+Coverage\s*$\n(.*?)(?=^##\s+|\Z)", text)
+        fields = {
+            key: value.strip()
+            for key, value in re.findall(r"(?m)^-\s*(Journey steps|Suites|Required review):\s*(.*?)\s*$", coverage.group(1) if coverage else "")
+        }
+        valid = set(fields) == {"Journey steps", "Suites", "Required review"} and all(fields.values())
     safety_claims = [claim for claim in claims if claim.upper().startswith("INV-")]
     dependencies: list[tuple[str, str]] = []
     section = DEPENDENCY_HEADING_RE.search(text)
@@ -1053,7 +1136,7 @@ def _parse_ticket(identifier: str, relative: str | None, text: str, expected_att
         identifier,
         relative,
         text,
-        bool(claims),
+        valid,
         claims=claims,
         safety_claims=safety_claims,
         dependencies=dependencies,
@@ -1315,7 +1398,7 @@ def _build_snapshot(
     for identifier in ids:
         if identifier in ticket_files:
             relative, text = ticket_files[identifier]
-            ticket = _parse_ticket(identifier, relative, text, state.attempt_id)
+            ticket = _parse_ticket(identifier, relative, text, state.attempt_id, str(state.raw.get("formatVersion", "3.5")) if state.raw else "3.5")
         else:
             ticket = TicketInfo(identifier, None, "", False, error="Ticket 文件缺失")
         tickets[identifier] = ticket
@@ -1464,6 +1547,33 @@ class FactContext:
         self.kind = kind
         self.identifier = identifier
         self.dispatch_id = dispatch_id
+
+    def journey_acceptance_status(self) -> dict[str, Any] | Fact | None:
+        if hasattr(self, "_journey_status"):
+            return self._journey_status
+        state = self.state()
+        if state is None or state.get("formatVersion") != "3.6":
+            self._journey_status = None
+            return None
+        reader = self.snapshot.reader
+        if reader.repo is None or self.snapshot.head is None:
+            result: dict[str, Any] | Fact = self.unknown("无法确定仓库或当前 HEAD")
+        else:
+            try:
+                from impl_package_runtime import engine
+
+                summary = engine._validate_state(self.snapshot.package, state, projections=False, validate_live_artifacts=False)
+                result = engine._v36_acceptance_status(
+                    self.snapshot.package,
+                    state,
+                    summary,
+                    self.snapshot.head,
+                    attempt_active=not summary["_lifecycle"].frozen,
+                )
+            except Exception as exc:
+                result = self.unknown(f"无法计算 Journey acceptance facts：{exc}")
+        self._journey_status = result
+        return result
 
     @property
     def subject(self) -> str:
@@ -2198,6 +2308,45 @@ def _when_package_validate_projection_drift(context: FactContext) -> Fact:
     return context.unknown("缺少结构化 validation result")
 
 
+def _v36_acceptance_fact(context: FactContext, key: str) -> Fact:
+    status = context.journey_acceptance_status()
+    if status is None:
+        return _fact_value(False)
+    if isinstance(status, Fact):
+        return status
+    if key == "attempt.journey_incomplete":
+        return _fact_value(any(row["reached"] < row["total"] for row in status["journeys"]))
+    if key == "attempt.required_suite_missing":
+        return _fact_value(any(not row["valid"] for row in status["suites"]))
+    if key == "attempt.evidence_revalidation_pending":
+        return _fact_value(bool(status["staleEvidence"]))
+    if key == "attempt.amendment_pending_or_unregistered":
+        return _fact_value(bool(status["pendingAmendments"] or status["unregisteredAmendments"]))
+    if key == "attempt.release_order_missing":
+        return _fact_value(status["releaseRequired"] and not status["releaseValid"])
+    return context.unknown(f"不支持的 3.6 acceptance fact：{key}")
+
+
+def _when_attempt_journey_incomplete(context: FactContext) -> Fact:
+    return _v36_acceptance_fact(context, "attempt.journey_incomplete")
+
+
+def _when_attempt_required_suite_missing(context: FactContext) -> Fact:
+    return _v36_acceptance_fact(context, "attempt.required_suite_missing")
+
+
+def _when_attempt_evidence_revalidation_pending(context: FactContext) -> Fact:
+    return _v36_acceptance_fact(context, "attempt.evidence_revalidation_pending")
+
+
+def _when_attempt_amendment_pending_or_unregistered(context: FactContext) -> Fact:
+    return _v36_acceptance_fact(context, "attempt.amendment_pending_or_unregistered")
+
+
+def _when_attempt_release_order_missing(context: FactContext) -> Fact:
+    return _v36_acceptance_fact(context, "attempt.release_order_missing")
+
+
 def _when_attempt_session_resumed(context: FactContext) -> Fact:
     if context.snapshot.trail.error:
         return context.unknown(context.snapshot.trail.error)
@@ -2796,6 +2945,11 @@ WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "package.state_invalid": _when_package_state_invalid,
     "package.references.live_package": _when_package_references_live_package,
     "package.validate.projection_drift": _when_package_validate_projection_drift,
+    "attempt.journey_incomplete": _when_attempt_journey_incomplete,
+    "attempt.required_suite_missing": _when_attempt_required_suite_missing,
+    "attempt.evidence_revalidation_pending": _when_attempt_evidence_revalidation_pending,
+    "attempt.amendment_pending_or_unregistered": _when_attempt_amendment_pending_or_unregistered,
+    "attempt.release_order_missing": _when_attempt_release_order_missing,
     "attempt.session_resumed": _when_attempt_session_resumed,
     "attempt.compaction_pressure_high": _when_attempt_compaction_pressure_high,
     "attempt.active_checkpoint_present": _when_attempt_active_checkpoint_present,

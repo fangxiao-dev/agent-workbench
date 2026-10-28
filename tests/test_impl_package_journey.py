@@ -51,7 +51,7 @@ SPEC = """# Spec
 """
 
 
-def _ticket(ticket_id: str, journey_steps: str, suites: str) -> str:
+def _ticket(ticket_id: str, journey_steps: str, suites: str, *, required_review: str = "none", dependencies: str = "- none") -> str:
     return f"""# {ticket_id}
 
 Ticket ID: {ticket_id}
@@ -62,11 +62,11 @@ Attempt ID: initial
 
 - Journey steps: {journey_steps}
 - Suites: {suites}
-- Required review: none
+- Required review: {required_review}
 
 ## Blocking Dependencies
 
-- none
+{dependencies}
 """
 
 
@@ -97,6 +97,7 @@ def _make_package(
     (package / "spec.md").write_text(spec, encoding="utf-8")
     (package / "decision.md").write_text("# Decision\n", encoding="utf-8")
     (package / "artifacts/evidence.md").write_text("fixture evidence\n", encoding="utf-8")
+    (repo / "docs/implementations/retired.json").write_text('{"packages": []}\n', encoding="utf-8")
     ticket_docs = tickets or {
         "01.md": _ticket("TKT-01", "J1-S1", "S-resolver"),
         "02.md": _ticket("TKT-02", "J1-S2", "S-workflow"),
@@ -168,6 +169,81 @@ def _journey_record(revision: str, step_id: str, *, run_id: str = "run-1", envir
         "environment": environment,
         "conclusion": "supporting",
     }
+
+
+def _suite_record(revision: str, suite_id: str, *, conclusion: str = "supporting", environment: str | None = None) -> dict:
+    return {
+        "kind": "suite",
+        "suiteId": suite_id,
+        "artifact": "artifacts/evidence.md",
+        "revision": revision,
+        "environment": environment or ("local-pg" if suite_id == "S-safety" else "local-test"),
+        "conclusion": conclusion,
+    }
+
+
+def _review_record(revision: str, ticket: str, *, conclusion: str = "supporting") -> dict:
+    return {
+        "kind": "review",
+        "ticket": ticket,
+        "artifact": "artifacts/evidence.md",
+        "revision": revision,
+        "environment": "local-test",
+        "conclusion": conclusion,
+    }
+
+
+def _satisfy(repo: Path, package: Path, ticket: str, revision: str, *, ok: bool = True) -> subprocess.CompletedProcess[str]:
+    result = _cli(repo, package, "ticket", "satisfy", ticket, "--expect", "PENDING", "--revision", revision, "--environment", "local-test")
+    if ok:
+        assert result.returncode == 0, result.stderr or result.stdout
+    return result
+
+
+def _gate(repo: Path, package: Path, verdict: str, revision: str, *, reason: str = "fixture reason") -> subprocess.CompletedProcess[str]:
+    return _cli(
+        repo,
+        package,
+        "gate",
+        verdict,
+        "--comparison-commit",
+        revision,
+        "--reason",
+        reason,
+        "--no-durable-delta-reason",
+        "No durable delta in fixture",
+    )
+
+
+def _add_terminal_summary(repo: Path, package: Path, revision: str) -> None:
+    results = []
+    for track, suffix in (("Track A", "a"), ("Track C", "c")):
+        artifact = f"artifacts/terminal-{suffix}.md"
+        (package / artifact).write_text(
+            f"verdict: PASS\nreviewed-head: {revision}\nreview-run: terminal-1\nreview-track: {track}\n\n",
+            encoding="utf-8",
+        )
+        results.append({"track": track, "verdict": "PASS", "reviewedHead": revision, "artifact": artifact})
+    added = _cli(
+        repo,
+        package,
+        "trail",
+        "append",
+        input_value={
+            "kind": "fact",
+            "subject": "attempt",
+            "key": "review.terminal_summary",
+            "value": {"reviewRunId": "terminal-1", "comparisonHead": revision, "safetyApplicable": False, "results": results},
+        },
+    )
+    assert added.returncode == 0, added.stderr or added.stdout
+
+
+def _commit_path(repo: Path, path: Path, message: str) -> str:
+    relative = path.relative_to(repo).as_posix()
+    _git(repo, "add", "--", relative)
+    _git(repo, "commit", "-m", message)
+    return _git(repo, "rev-parse", "HEAD")
 
 
 def test_init_validate_and_status_use_v36_and_record_contract_baseline(tmp_path: Path) -> None:
@@ -363,7 +439,7 @@ def test_v36_is_not_claim_validated_while_v35_rejects_v36_fields(tmp_path: Path)
     engine._validate_state(package, state, projections=False)
     failed_satisfy = _cli(repo, package, "ticket", "satisfy", "TKT-01", "--expect", "PENDING", "--revision", revision, "--environment", "local-test")
     assert failed_satisfy.returncode != 0
-    assert "phase 1a" in failed_satisfy.stderr
+    assert "Suite S-resolver" in failed_satisfy.stderr
 
     old_plan = PLAN.replace("Acceptance: journey\n", "")
     old_ticket = """# TKT-01
@@ -389,3 +465,229 @@ Attempt ID: initial
     assert rejected.returncode != 0
     assert "formatVersion 3.5" in rejected.stderr
     assert "activeCheckpoints" in rejected.stderr
+
+
+def test_ticket_satisfy_uses_suite_and_required_review_without_journey_steps(tmp_path: Path) -> None:
+    tickets = {
+        "01.md": _ticket("TKT-01", "J1-S1", "S-resolver", required_review="terminal-final"),
+        "02.md": _ticket("TKT-02", "J1-S2", "S-workflow"),
+    }
+    repo, package = _make_package(tmp_path, tickets=tickets)
+    _init(repo, package)
+    revision = _git(repo, "rev-parse", "HEAD")
+
+    missing_suite = _satisfy(repo, package, "TKT-01", revision, ok=False)
+    assert "Suite S-resolver" in missing_suite.stderr
+    added_suite = _cli(repo, package, "evidence", "add", input_value=_suite_record(revision, "S-resolver"))
+    assert added_suite.returncode == 0, added_suite.stderr
+    unrelated = _git(repo, "commit-tree", f"{revision}^{{tree}}", "-m", "unrelated root")
+    wrong_revision = _satisfy(repo, package, "TKT-01", unrelated, ok=False)
+    assert "ancestor of current HEAD" in wrong_revision.stderr
+    missing_review = _satisfy(repo, package, "TKT-01", revision, ok=False)
+    assert "supporting review" in missing_review.stderr
+
+    inconclusive = _cli(repo, package, "evidence", "add", input_value=_review_record(revision, "TKT-01", conclusion="inconclusive"))
+    assert inconclusive.returncode == 0, inconclusive.stderr
+    failed_review = _satisfy(repo, package, "TKT-01", revision, ok=False)
+    assert "supporting review" in failed_review.stderr
+    added_review = _cli(repo, package, "evidence", "add", input_value=_review_record(revision, "TKT-01"))
+    assert added_review.returncode == 0, added_review.stderr
+    satisfied = _satisfy(repo, package, "TKT-01", revision)
+
+    assert json.loads(satisfied.stdout)["state"] == "SATISFIED"
+    assert not any(record["kind"] == "journey-step" for records in _state(package)["evidenceIndex"].values() for record in records)
+
+
+def test_ticket_satisfy_keeps_implementation_and_acceptance_edges(tmp_path: Path) -> None:
+    tickets = {
+        "01.md": _ticket("TKT-01", "J1-S1", "S-resolver", dependencies="- implementation: TKT-02\n- acceptance: TKT-02"),
+        "02.md": _ticket("TKT-02", "J1-S2", "S-workflow"),
+    }
+    repo, package = _make_package(tmp_path, tickets=tickets)
+    _init(repo, package)
+    revision = _git(repo, "rev-parse", "HEAD")
+    for suite in ("S-resolver", "S-workflow"):
+        added = _cli(repo, package, "evidence", "add", input_value=_suite_record(revision, suite))
+        assert added.returncode == 0, added.stderr
+
+    held = _satisfy(repo, package, "TKT-01", revision, ok=False)
+    assert "dependencies are not released" in held.stderr
+    _satisfy(repo, package, "TKT-02", revision)
+    _satisfy(repo, package, "TKT-01", revision)
+
+
+def test_evidence_freshness_rejects_external_diff_and_accepts_package_only_diff(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path / "external")
+    for step in ("J1-S1", "J1-S2"):
+        added = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, step))
+        assert added.returncode == 0, added.stderr
+    added = _cli(repo, package, "evidence", "add", input_value=_suite_record(revision, "S-resolver"))
+    assert added.returncode == 0, added.stderr
+
+    source = repo / "src/app.py"
+    source.parent.mkdir()
+    source.write_text("value = 1\n", encoding="utf-8")
+    external_head = _commit_path(repo, source, "external code change")
+    refreshed = _cli(repo, package, "package", "refresh-progress")
+    assert refreshed.returncode == 0, refreshed.stderr
+    assert "J1 走通 0/2" in (package / "progress.md").read_text(encoding="utf-8")
+    stale_gate = _gate(repo, package, "pass", external_head)
+    assert stale_gate.returncode != 0
+    assert "Evidence journey:run-1:J1-S1 的 supporting 记录待复验" in stale_gate.stderr
+    assert "Evidence suite:S-resolver 的 supporting 记录待复验" in stale_gate.stderr
+    stale = _satisfy(repo, package, "TKT-01", external_head, ok=False)
+    assert "Suite S-resolver" in stale.stderr
+    assert not situation.evidence_record_valid(
+        _suite_record(revision, "S-resolver"), external_head, repo=repo, package=package,
+        expected_environment="local-test", attempt_active=True,
+    )
+
+    repo2, package2, revision2 = _init_v36(tmp_path / "package-only")
+    for step in ("J1-S1", "J1-S2"):
+        added = _cli(repo2, package2, "evidence", "add", input_value=_journey_record(revision2, step))
+        assert added.returncode == 0, added.stderr
+    added = _cli(repo2, package2, "evidence", "add", input_value=_suite_record(revision2, "S-resolver"))
+    assert added.returncode == 0, added.stderr
+    note = package2 / "implementation-note.md"
+    note.write_text("package-local document change\n", encoding="utf-8")
+    package_head = _commit_path(repo2, note, "package documentation change")
+
+    assert "J1 走通 2/2" in (package2 / "progress.md").read_text(encoding="utf-8")
+    _satisfy(repo2, package2, "TKT-01", package_head)
+
+
+def test_evidence_artifact_is_required_only_while_attempt_is_active(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    added = _cli(repo, package, "evidence", "add", input_value=_suite_record(revision, "S-resolver"))
+    assert added.returncode == 0, added.stderr
+    failed = _gate(repo, package, "fail", revision, reason="fixture terminal failure")
+    assert failed.returncode == 0, failed.stderr
+
+    (package / "artifacts/evidence.md").unlink()
+    validated = _cli(repo, package, "package", "validate")
+    assert validated.returncode == 0, validated.stderr
+
+
+def test_amendment_add_confirm_cas_idempotence_and_unregistered_contract_finding(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    spec = package / "spec.md"
+    spec.write_text(spec.read_text(encoding="utf-8") + "\n## Owner clarification\nThe accepted wording is unchanged.\n", encoding="utf-8")
+    before = _cli(repo, package, "package", "validate")
+    assert before.returncode == 0, before.stderr
+    assert any(row["code"] == "contract-amendment-unregistered" and row["path"] == "spec.md" for row in json.loads(before.stdout)["findings"])
+
+    args = ("package", "amendment", "add", "--id", "A-1", "--summary", "补充时间锚点", "--affected", "spec.md", "--artifact", "artifacts/evidence.md")
+    added = _cli(repo, package, *args)
+    assert added.returncode == 0, added.stderr
+    repeated = _cli(repo, package, *args)
+    assert repeated.returncode == 0 and json.loads(repeated.stdout)["idempotent"] is True
+    changed = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "different", "--affected", "spec.md", "--artifact", "artifacts/evidence.md")
+    assert changed.returncode != 0 and "use a new id" in changed.stderr
+    missing = _cli(repo, package, "package", "amendment", "confirm", "--id", "missing", "--expect", "PENDING", "--confirmed-by", "Owner", "--confirmed-revision", revision)
+    assert missing.returncode != 0 and "unknown amendment" in missing.stderr
+
+    confirmed = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--expect", "PENDING", "--confirmed-by", "Owner", "--confirmed-revision", revision)
+    assert confirmed.returncode == 0, confirmed.stderr
+    repeated_confirm = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--expect", "PENDING", "--confirmed-by", "Owner", "--confirmed-revision", revision)
+    assert repeated_confirm.returncode == 0 and json.loads(repeated_confirm.stdout)["idempotent"] is True
+    different_confirm = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--expect", "PENDING", "--confirmed-by", "Another Owner", "--confirmed-revision", revision)
+    assert different_confirm.returncode != 0 and "different confirmation" in different_confirm.stderr
+    after = _cli(repo, package, "package", "validate")
+    assert after.returncode == 0, after.stderr
+    assert not any(row["code"] == "contract-amendment-unregistered" for row in json.loads(after.stdout)["findings"])
+
+
+def test_gate_pass_rejects_each_acceptance_gap_and_gate_blocked_keeps_attempt_active(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path, plan=PLAN + "Release order: required\n")
+    _init(repo, package)
+    revision = _git(repo, "rev-parse", "HEAD")
+    (package / "spec.md").write_text((package / "spec.md").read_text(encoding="utf-8") + "\n## Owner clarification\nAmended wording.\n", encoding="utf-8")
+    unregistered = _gate(repo, package, "pass", revision)
+    assert unregistered.returncode != 0 and "未登记 Amendment" in unregistered.stderr
+    add_amendment = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "补充规则", "--affected", "spec.md", "--artifact", "artifacts/evidence.md")
+    assert add_amendment.returncode == 0, add_amendment.stderr
+
+    rejected = _gate(repo, package, "pass", revision)
+    assert rejected.returncode != 0
+    for gap in ("Journey J1", "Required Suite S-resolver", "Required Ticket TKT-01", "待 Owner 确认", "发布顺序", "terminal review coverage"):
+        assert gap in rejected.stderr
+    blocked = _gate(repo, package, "blocked", revision, reason="A-1 needs Owner confirmation")
+    assert blocked.returncode == 0, blocked.stderr
+    gate_text = (package / "gate.md").read_text(encoding="utf-8")
+    assert "## Owner Summary" in gate_text
+    assert "合同修订：1 条待 Owner 确认（A-1 补充规则）" in gate_text
+    owner_summary = gate_text.split("## Owner Summary", 1)[1].split("## Evidence", 1)[0]
+    assert not any(line.startswith(("- Verdict:", "- Attempt:", "- Comparison commit:")) for line in owner_summary.splitlines())
+    assert engine._gate_info(package, repo) == {"verdict": "blocked", "attempt": "initial", "commit": revision}
+    assert not engine._lifecycle(package, "initial", repo).frozen
+
+
+def test_journey_gate_pass_confirms_amendment_requires_release_and_freezes_archive(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path, plan=PLAN + "Release order: required\n")
+    _init(repo, package)
+    revision = _git(repo, "rev-parse", "HEAD")
+    (package / "spec.md").write_text((package / "spec.md").read_text(encoding="utf-8") + "\n## Owner clarification\nApproved wording.\n", encoding="utf-8")
+    added = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "回填时间锚点", "--affected", "spec.md", "--artifact", "artifacts/evidence.md")
+    assert added.returncode == 0, added.stderr
+    assert _gate(repo, package, "pass", revision).returncode != 0
+    _gate(repo, package, "blocked", revision, reason="A-1 pending").check_returncode()
+    _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--expect", "PENDING", "--confirmed-by", "Owner", "--confirmed-revision", revision).check_returncode()
+
+    for suite in ("S-resolver", "S-workflow", "S-safety"):
+        added_suite = _cli(repo, package, "evidence", "add", input_value=_suite_record(revision, suite))
+        assert added_suite.returncode == 0, added_suite.stderr
+    for step in ("J1-S1", "J1-S2"):
+        added_step = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, step))
+        assert added_step.returncode == 0, added_step.stderr
+    _satisfy(repo, package, "TKT-01", revision)
+    _satisfy(repo, package, "TKT-02", revision)
+    release = _cli(repo, package, "evidence", "add", input_value={"kind": "release", "artifact": "artifacts/evidence.md", "revision": revision, "environment": "local-test", "conclusion": "supporting"})
+    assert release.returncode == 0, release.stderr
+    _add_terminal_summary(repo, package, revision)
+
+    passed = _gate(repo, package, "pass", revision, reason="全部验收满足")
+    assert passed.returncode == 0, passed.stderr or passed.stdout
+    text = (package / "gate.md").read_text(encoding="utf-8")
+    assert "- J1 纠正后下一张账单用新科目：走通 2/2" in text
+    assert "- 套件：3/3 通过" in text
+    assert "- 合同修订：无待确认或漏登" in text
+    assert "- 发布顺序：已记录" in text
+    assert f"- 最终版本：{revision[:7]}" in text
+    assert "- 结论：pass — 全部验收满足" in text
+    assert engine._gate_info(package, repo) == {"verdict": "pass", "attempt": "initial", "commit": revision}
+    assert engine._lifecycle(package, "initial", repo).frozen
+    assert (package / ".impl-package/attempts/initial.json").is_file()
+
+
+def test_situation_renders_new_v36_acceptance_rows_without_changing_global_blocking(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path, plan=PLAN + "Release order: required\n")
+    _init(repo, package)
+    revision = _git(repo, "rev-parse", "HEAD")
+    added = _cli(repo, package, "evidence", "add", input_value=_suite_record(revision, "S-resolver"))
+    assert added.returncode == 0, added.stderr
+    outside = repo / "src/change.py"
+    outside.parent.mkdir()
+    outside.write_text("changed = True\n", encoding="utf-8")
+    _commit_path(repo, outside, "change outside package")
+    spec = package / "spec.md"
+    spec.write_text(spec.read_text(encoding="utf-8") + "\n## Owner clarification\nChanged.\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts/situation.py"), "render", "--package", str(package), "--json"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    rendered = json.loads(result.stdout)
+    slugs = {row["slug"] for row in rendered["matches"]}
+    assert {
+        "attempt.accept.journey-incomplete",
+        "attempt.accept.required-suite-missing",
+        "attempt.accept.evidence-revalidation-pending",
+        "attempt.accept.amendment-owner-confirmation",
+        "attempt.accept.release-order-missing",
+    } <= slugs
+    assert "attempt.accept.amendment-owner-confirmation" not in situation.GLOBAL_BLOCKING_SLUGS

@@ -31,6 +31,7 @@ from situation import (
     REVIEW_TRACKS,
     REVIEW_TRACK_VALUES,
     describe_unknown_fact_keys,
+    evidence_record_valid,
     live_package_reference_fact,
     terminal_coverage_fact,
 )
@@ -757,6 +758,20 @@ def _validate_commit(repo: Path, commit: str) -> str:
     return _run_git(repo, "rev-parse", "--verify", f"{commit}^{{commit}}")
 
 
+def _is_ancestor(repo: Path, revision: str, head: str) -> bool:
+    result = subprocess.run(
+        ["git", "-C", str(repo), "merge-base", "--is-ancestor", revision, head],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    raise StateError(result.stderr.strip() or "cannot determine Git ancestry")
+
+
 def _gate_info(package: Path, repo: Path) -> dict[str, Any] | None:
     path = package / GATE_PATH
     if not path.exists():
@@ -1095,13 +1110,46 @@ def _ticket_released(tickets: dict[str, Any], identifier: str, visiting: set[str
     return isinstance(successor, str) and successor in tickets and _ticket_released(tickets, successor, visiting)
 
 
-def _validate_acceptance_state(repo: Path, acceptance: Any, info: dict[str, Any]) -> dict[str, Any]:
+def _validate_acceptance_state(package: Path, repo: Path, acceptance: Any, info: dict[str, Any], *, validate_live_artifacts: bool = True) -> dict[str, Any]:
     if not isinstance(acceptance, dict) or set(acceptance) != {"contractBaseline", "releaseOrder", "amendments"}:
         raise StateError("3.6 acceptance must contain contractBaseline, releaseOrder, amendments")
     if not isinstance(acceptance["releaseOrder"], str) or acceptance["releaseOrder"] not in {"required", "none"} or acceptance["releaseOrder"] != info["releaseOrder"]:
         raise StateError("state acceptance.releaseOrder does not match the Plan")
     if not isinstance(acceptance["amendments"], list):
         raise StateError("state acceptance.amendments must be a list")
+    live = validate_live_artifacts and not _lifecycle(package, info["attempt"], repo).frozen
+    amendment_ids: set[str] = set()
+    for amendment in acceptance["amendments"]:
+        if not isinstance(amendment, dict):
+            raise StateError("amendment must be an object")
+        status = amendment.get("status")
+        base = {"id", "summary", "affected", "artifact", "status"}
+        expected = base | ({"confirmedBy", "confirmedRevision"} if status == "CONFIRMED" else set())
+        if status not in {"PENDING", "CONFIRMED"} or set(amendment) != expected:
+            raise StateError("amendment fields/status do not match PENDING or CONFIRMED")
+        identifier = amendment.get("id")
+        if not isinstance(identifier, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", identifier) is None or identifier in amendment_ids:
+            raise StateError("amendment id must be unique non-empty text")
+        amendment_ids.add(identifier)
+        if not isinstance(amendment.get("summary"), str) or not amendment["summary"].strip():
+            raise StateError(f"amendment {identifier} summary must be non-empty")
+        affected = amendment.get("affected")
+        if not isinstance(affected, list) or not affected:
+            raise StateError(f"amendment {identifier} affected must be a non-empty path list")
+        normalized_affected = []
+        for item in affected:
+            normalized = _package_relative_artifact(package, item, f"amendment {identifier} affected", must_exist=False)
+            if "#" in normalized:
+                raise StateError(f"amendment {identifier} affected paths cannot contain anchors")
+            normalized_affected.append(normalized)
+        if len(set(normalized_affected)) != len(normalized_affected):
+            raise StateError(f"amendment {identifier} affected paths must be unique")
+        amendment["affected"] = normalized_affected
+        amendment["artifact"] = _package_relative_artifact(package, amendment.get("artifact"), f"amendment {identifier} artifact", must_exist=live)
+        if status == "CONFIRMED":
+            if not isinstance(amendment["confirmedBy"], str) or not amendment["confirmedBy"].strip():
+                raise StateError(f"amendment {identifier} confirmedBy must be non-empty")
+            amendment["confirmedRevision"] = _validate_commit(repo, amendment["confirmedRevision"])
     baseline = acceptance["contractBaseline"]
     if not isinstance(baseline, dict) or set(baseline) != {"head", "files"}:
         raise StateError("state acceptance.contractBaseline must contain head and files")
@@ -1116,7 +1164,7 @@ def _validate_acceptance_state(repo: Path, acceptance: Any, info: dict[str, Any]
     return acceptance
 
 
-def _validate_state(package: Path, state: dict[str, Any], *, projections: bool = True) -> dict[str, Any]:
+def _validate_state(package: Path, state: dict[str, Any], *, projections: bool = True, validate_live_artifacts: bool = True) -> dict[str, Any]:
     if not isinstance(state, dict):
         raise StateError("state.json must be an object")
     format_version = _state_format_version(state)
@@ -1133,7 +1181,7 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
     info = _plan_info(package, repo, attempt["plan"])
     if info["formatVersion"] != format_version:
         raise StateError(f"state formatVersion {format_version} does not match Plan formatVersion {info['formatVersion']}")
-    acceptance = _validate_acceptance_state(repo, state["acceptance"], info) if format_version == "3.6" else None
+    acceptance = _validate_acceptance_state(package, repo, state["acceptance"], info, validate_live_artifacts=validate_live_artifacts) if format_version == "3.6" else None
     if info["attempt"] != attempt["id"]:
         raise StateError("state Attempt ID does not match current plan")
     predecessors = _normalize_state_predecessors(package, repo, state["predecessors"])
@@ -1142,6 +1190,7 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
     if not info["tickets"]:
         raise StateError(f"format {format_version} requires tickets=true")
     lifecycle = _lifecycle(package, attempt["id"], repo)
+    live_artifacts = validate_live_artifacts and lifecycle.value == "active"
     journey_spec = _journey_spec(package) if format_version == "3.6" else None
     documents = _ticket_documents(package, attempt["id"], format_version)
     if journey_spec is not None:
@@ -1157,7 +1206,7 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
             allowed_retired = {"state", "disposition", "evidence"} | ({"successor"} if row.get("disposition") == "superseded" else set())
             if set(row) != allowed_retired or row["disposition"] not in DISPOSITIONS or not isinstance(row["evidence"], str):
                 raise StateError(f"RETIRED Ticket {identifier} requires disposition")
-            _repo_relative(repo, row["evidence"], f"RETIRED {identifier} evidence", must_exist=lifecycle.value == "active")
+            _repo_relative(repo, row["evidence"], f"RETIRED {identifier} evidence", must_exist=live_artifacts)
             if row["disposition"] == "superseded" and (row.get("successor") not in ticket_ids or row.get("successor") == identifier):
                 raise StateError(f"RETIRED superseded Ticket {identifier} requires a valid successor")
         elif row["state"] == "SATISFIED":
@@ -1169,12 +1218,12 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
         elif row["state"] == "BLOCKED":
             if set(row) != {"state", "evidence"} or not isinstance(row["evidence"], str):
                 raise StateError(f"BLOCKED Ticket {identifier} requires evidence")
-            _repo_relative(repo, row["evidence"], f"BLOCKED {identifier} evidence", must_exist=lifecycle.value == "active")
+            _repo_relative(repo, row["evidence"], f"BLOCKED {identifier} evidence", must_exist=live_artifacts)
         elif row["state"] == "NEEDS-REVALIDATION":
             if set(row) not in ({"state"}, {"state", "evidence"}):
                 raise StateError(f"invalid NEEDS-REVALIDATION record: {identifier}")
             if "evidence" in row:
-                _repo_relative(repo, row["evidence"], f"revalidation {identifier} evidence", must_exist=lifecycle.value == "active")
+                _repo_relative(repo, row["evidence"], f"revalidation {identifier} evidence", must_exist=live_artifacts)
         elif set(row) != {"state"}:
             raise StateError(f"invalid Ticket state record: {identifier}")
     dependencies = _ticket_dependencies(documents)
@@ -1193,9 +1242,9 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
     claim_timings = _ticket_claim_timings(documents)
     if format_version == "3.6":
         assert journey_spec is not None
-        evidence = _validate_journey_evidence_index(package, repo, state["evidenceIndex"], journey_spec, ticket_ids, live=lifecycle.value == "active")
+        evidence = _validate_journey_evidence_index(package, repo, state["evidenceIndex"], journey_spec, ticket_ids, live=live_artifacts)
     else:
-        evidence = _validate_evidence_index(repo, state["evidenceIndex"], claims, claim_timings, live=lifecycle.value == "active")
+        evidence = _validate_evidence_index(repo, state["evidenceIndex"], claims, claim_timings, live=live_artifacts)
         for identifier, row in tickets.items():
             if row["state"] != "SATISFIED":
                 continue
@@ -1204,7 +1253,7 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
             missing, conflicts = _evidence_coverage_for(claims, evidence, identifier, acceptance_revision, acceptance_row["environment"])
             if missing or conflicts:
                 raise StateError(f"SATISFIED Ticket {identifier} has incomplete current evidence")
-    checkpoints = _validate_checkpoints(repo, state["activeCheckpoints"], ticket_ids, live=lifecycle.value == "active")
+    checkpoints = _validate_checkpoints(repo, state["activeCheckpoints"], ticket_ids, live=live_artifacts)
     history = _attempt_history(state, package)
     if not history or history[-1]["id"] != attempt["id"]:
         raise StateError("attemptHistory must end with current Attempt")
@@ -1226,30 +1275,112 @@ def _format_aliases(revisions: dict[str, str | None]) -> str:
     return " / ".join(values) if values else "none (Git commit is the history anchor)"
 
 
-def _journey_reaches(state: dict[str, Any], spec: dict[str, Any]) -> dict[str, int]:
-    runs: dict[str, dict[str, dict[str, bool]]] = {}
-    for evidence_key, records in state["evidenceIndex"].items():
+def _v36_acceptance_status(
+    package: Path,
+    state: dict[str, Any],
+    summary: dict[str, Any],
+    comparison_commit: str,
+    *,
+    attempt_active: bool,
+) -> dict[str, Any]:
+    repo = _repo_root(package)
+    spec = summary["_journeySpec"]
+    records_by_key = state["evidenceIndex"]
+    stale: set[str] = set()
+    run_records: dict[tuple[str, str], list[tuple[str, dict[str, Any]]]] = {}
+    for evidence_key, records in records_by_key.items():
         for record in records:
-            if record["kind"] != "journey-step":
-                continue
-            run_id = record["runId"]
-            journey_id = record["journeyId"]
-            step_id = record["stepId"]
-            valid = record["conclusion"] == "supporting" and not record.get("invalidatedBy")
-            step_results = runs.setdefault(journey_id, {}).setdefault(run_id, {})
-            step_results[step_id] = step_results.get(step_id, False) or valid
-    reaches: dict[str, int] = {}
+            kind = record["kind"]
+            expected_environment = spec["suites"][record["suiteId"]]["environment"] if kind == "suite" else None
+            if record["conclusion"] == "supporting" and not evidence_record_valid(
+                record,
+                comparison_commit,
+                repo=repo,
+                package=package,
+                expected_environment=expected_environment,
+                attempt_active=attempt_active,
+            ):
+                stale.add(evidence_key)
+            if kind == "journey-step":
+                run_records.setdefault((record["journeyId"], record["runId"]), []).append((evidence_key, record))
+
+    journey_rows = []
     for journey in spec["journeys"]:
         best = 0
-        for step_results in runs.get(journey["id"], {}).values():
-            reach = 0
+        for (journey_id, _run_id), records in run_records.items():
+            if journey_id != journey["id"]:
+                continue
+            environments = {record["environment"] for _, record in records}
+            if len(environments) != 1:
+                continue
+            environment = next(iter(environments))
+            by_step: dict[str, list[dict[str, Any]]] = {}
+            for _, record in records:
+                by_step.setdefault(record["stepId"], []).append(record)
+            reached = 0
             for step in journey["steps"]:
-                if not step_results.get(step["id"], False):
+                if not any(
+                    evidence_record_valid(
+                        record,
+                        comparison_commit,
+                        repo=repo,
+                        package=package,
+                        expected_environment=environment,
+                        attempt_active=attempt_active,
+                    )
+                    for record in by_step.get(step["id"], [])
+                ):
                     break
-                reach += 1
-            best = max(best, reach)
-        reaches[journey["id"]] = best
-    return reaches
+                reached += 1
+            best = max(best, reached)
+        journey_rows.append({"id": journey["id"], "title": journey["terminalResult"], "reached": best, "total": len(journey["steps"])})
+
+    suite_rows = []
+    for suite_id, suite in spec["suites"].items():
+        valid = any(
+            evidence_record_valid(
+                record,
+                comparison_commit,
+                repo=repo,
+                package=package,
+                expected_environment=suite["environment"],
+                attempt_active=attempt_active,
+            )
+            for record in records_by_key.get(f"suite:{suite_id}", [])
+        )
+        suite_rows.append({"id": suite_id, "valid": valid})
+
+    release_required = summary["_acceptance"]["releaseOrder"] == "required"
+    release_valid = any(
+        evidence_record_valid(
+            record,
+            comparison_commit,
+            repo=repo,
+            package=package,
+            attempt_active=attempt_active,
+        )
+        for record in records_by_key.get("release", [])
+        if record["kind"] == "release"
+    )
+    pending = [row for row in summary["_acceptance"]["amendments"] if row["status"] == "PENDING"]
+    unregistered = _contract_amendment_findings(package, repo, summary["_acceptance"])
+    return {
+        "journeys": journey_rows,
+        "suites": suite_rows,
+        "staleEvidence": sorted(stale),
+        "pendingAmendments": pending,
+        "unregisteredAmendments": unregistered,
+        "releaseRequired": release_required,
+        "releaseValid": release_valid,
+    }
+
+
+def _journey_reaches(package: Path, state: dict[str, Any], summary: dict[str, Any]) -> dict[str, int]:
+    lifecycle: Lifecycle = summary["_lifecycle"]
+    repo = _repo_root(package)
+    head = _run_git(repo, "rev-parse", "HEAD")
+    status = _v36_acceptance_status(package, state, summary, head, attempt_active=not lifecycle.frozen)
+    return {row["id"]: row["reached"] for row in status["journeys"]}
 
 
 def _render_progress(package: Path, state: dict[str, Any], summary: dict[str, Any]) -> str:
@@ -1258,7 +1389,14 @@ def _render_progress(package: Path, state: dict[str, Any], summary: dict[str, An
     lines = [f"# Attempt Progress · {summary['attempt']}", "", "> machine-owned projection；使用 `refresh-progress` 重建，不直接编辑。", "", f"- Attempt: {summary['attempt']}", f"- Contract aliases: {_format_aliases(summary['revisions'])}", "- Composition: tickets=true, dag=false", f"- Lifecycle: {lifecycle.value}", f"- Latest gate: {lifecycle.gate_verdict}", f"- Blockers: {', '.join(blockers) if blockers else 'none'}"]
     if summary["formatVersion"] == "3.6":
         spec = summary["_journeySpec"]
-        reaches = _journey_reaches(state, spec)
+        status = _v36_acceptance_status(
+            package,
+            state,
+            summary,
+            _run_git(_repo_root(package), "rev-parse", "HEAD"),
+            attempt_active=not lifecycle.frozen,
+        )
+        reaches = {row["id"]: row["reached"] for row in status["journeys"]}
         lines.extend(["", "## Journey Progress", ""])
         for journey in spec["journeys"]:
             lines.append(f"- {journey['id']} 走通 {reaches[journey['id']]}/{len(journey['steps'])}")
@@ -1266,9 +1404,10 @@ def _render_progress(package: Path, state: dict[str, Any], summary: dict[str, An
         for suite_id, suite in spec["suites"].items():
             records = state["evidenceIndex"].get(f"suite:{suite_id}", [])
             latest = records[-1] if records else None
-            conclusion = latest["conclusion"] if latest else "none"
-            if latest and latest.get("invalidatedBy"):
-                conclusion += " (invalidated)"
+            valid = any(row["id"] == suite_id and row["valid"] for row in status["suites"])
+            conclusion = "supporting" if valid else ("待复验" if latest and latest["conclusion"] == "supporting" else latest["conclusion"] if latest else "none")
+            if latest and latest.get("invalidatedBy") and not valid:
+                conclusion = "待复验"
             lines.append(f"| {suite_id} | {suite['kind']} | {suite['scope']} | {conclusion} |")
         if not spec["suites"]:
             lines.append("| none | none | none | none |")
@@ -1482,6 +1621,22 @@ def _contract_baseline(package: Path, repo: Path) -> dict[str, Any]:
     return {"head": head, "files": files}
 
 
+def _contract_amendment_findings(package: Path, repo: Path, acceptance: dict[str, Any]) -> list[dict[str, Any]]:
+    baseline = acceptance["contractBaseline"]["files"]
+    amendments = acceptance["amendments"]
+    package_rel = package.resolve().relative_to(repo.resolve()).as_posix()
+    findings = []
+    for name in CONTRACT_DOC_NAMES:
+        path = package / name
+        current = _run_git(repo, "hash-object", "--", f"{package_rel}/{name}") if path.is_file() else None
+        if current == baseline.get(name):
+            continue
+        if any(name in row["affected"] for row in amendments):
+            continue
+        findings.append({"code": "contract-amendment-unregistered", "path": name, "baseline": baseline.get(name), "current": current})
+    return findings
+
+
 def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
     if PACKAGE_ID_RE.fullmatch(package.name) is None:
         raise StateError("package directory must use an immutable date-prefixed ID")
@@ -1544,6 +1699,7 @@ def command_validate(package: Path, commit: str | None, *, check_arrival_paths: 
         comparison_commit = resolved or _run_git(repo, "rev-parse", "HEAD")
         result["findings"] = (
             _contract_doc_name_findings(package, summary)
+            + (_contract_amendment_findings(package, repo, summary["_acceptance"]) if summary["formatVersion"] == "3.6" else [])
             + _uniform_ticket_timing_findings(summary)
             + _plan_prose_gate_findings(repo, package, summary)
             + _arrival_path_absent_findings(package, summary)
@@ -1560,6 +1716,84 @@ def command_refresh_progress(package: Path) -> dict[str, Any]:
     return {"attempt": summary["attempt"], "progress": _package_relative(package, package / PROGRESS_PATH)}
 
 
+def command_amendment_add(package: Path, identifier: str, summary_text: str, affected: list[str], artifact: str) -> dict[str, Any]:
+    state = _load_json(package / STATE_PATH)
+    summary = _validate_state(package, state)
+    _assert_mutable(summary)
+    if summary["formatVersion"] != "3.6":
+        raise StateError("Amendments require formatVersion 3.6")
+    if not isinstance(identifier, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", identifier) is None:
+        raise StateError("amendment --id must be non-empty identifier text")
+    if not isinstance(summary_text, str) or not summary_text.strip():
+        raise StateError("amendment --summary must be non-empty")
+    if not affected:
+        raise StateError("amendment requires at least one --affected path")
+    normalized_affected = [
+        _package_relative_artifact(package, value, "amendment affected", must_exist=False)
+        for value in affected
+    ]
+    if any("#" in value for value in normalized_affected) or len(set(normalized_affected)) != len(normalized_affected):
+        raise StateError("amendment affected paths must be unique package-relative paths without anchors")
+    row = {
+        "id": identifier,
+        "summary": summary_text.strip(),
+        "affected": normalized_affected,
+        "artifact": _package_relative_artifact(package, artifact, "amendment artifact", must_exist=True),
+        "status": "PENDING",
+    }
+    amendments = state["acceptance"]["amendments"]
+    current = next((item for item in amendments if item["id"] == identifier), None)
+    if current is not None:
+        if any(current[key] != row[key] for key in row if key != "status"):
+            raise StateError(f"amendment {identifier} already exists with different content; use a new id")
+        return {"id": identifier, "status": current["status"], "idempotent": True}
+    candidate = json.loads(json.dumps(state, ensure_ascii=False))
+    candidate["acceptance"]["amendments"].append(row)
+    _validate_state(package, candidate, projections=False)
+    _write_json(package / STATE_PATH, candidate)
+    _refresh_projections(package, candidate)
+    return {"id": identifier, "status": "PENDING", "idempotent": False}
+
+
+def command_amendment_confirm(
+    package: Path,
+    identifier: str,
+    expect: str,
+    confirmed_by: str,
+    confirmed_revision: str,
+) -> dict[str, Any]:
+    state = _load_json(package / STATE_PATH)
+    summary = _validate_state(package, state)
+    _assert_mutable(summary)
+    if summary["formatVersion"] != "3.6":
+        raise StateError("Amendments require formatVersion 3.6")
+    if expect != "PENDING":
+        raise StateError("amendment confirm currently requires --expect PENDING")
+    if not isinstance(confirmed_by, str) or not confirmed_by.strip():
+        raise StateError("--confirmed-by must be non-empty")
+    repo = _repo_root(package)
+    revision = _validate_commit(repo, confirmed_revision)
+    head = _run_git(repo, "rev-parse", "HEAD")
+    if not _is_ancestor(repo, revision, head):
+        raise StateError("--confirmed-revision must be an ancestor of current HEAD")
+    current = next((item for item in state["acceptance"]["amendments"] if item["id"] == identifier), None)
+    if current is None:
+        raise StateError(f"unknown amendment: {identifier}")
+    if current["status"] == "CONFIRMED":
+        if current["confirmedBy"] == confirmed_by.strip() and current["confirmedRevision"] == revision:
+            return {"id": identifier, "status": "CONFIRMED", "idempotent": True}
+        raise StateError(f"amendment {identifier} already has a different confirmation")
+    if current["status"] != expect:
+        raise StateError(f"stale amendment transition for {identifier}: expected {expect}, found {current['status']}")
+    candidate = json.loads(json.dumps(state, ensure_ascii=False))
+    row = next(item for item in candidate["acceptance"]["amendments"] if item["id"] == identifier)
+    row.update({"status": "CONFIRMED", "confirmedBy": confirmed_by.strip(), "confirmedRevision": revision})
+    _validate_state(package, candidate, projections=False)
+    _write_json(package / STATE_PATH, candidate)
+    _refresh_projections(package, candidate)
+    return {"id": identifier, "status": "CONFIRMED", "idempotent": False}
+
+
 def _assert_mutable(summary: dict[str, Any]) -> None:
     if summary["_lifecycle"].frozen:
         raise StateError(f"Attempt {summary['attempt']} is frozen by terminal Gate {summary['_lifecycle'].gate_verdict}")
@@ -1567,6 +1801,57 @@ def _assert_mutable(summary: dict[str, Any]) -> None:
 
 def _evidence_coverage(summary: dict[str, Any], ticket: str, revision: str, environment: str) -> tuple[list[str], list[str]]:
     return _evidence_coverage_for(summary["_claims"], summary["_evidence"], ticket, revision, environment)
+
+
+def _v36_record_valid(
+    package: Path,
+    record: dict[str, Any],
+    comparison_commit: str,
+    *,
+    expected_environment: str | None = None,
+    attempt_active: bool = True,
+) -> bool:
+    return evidence_record_valid(
+        record,
+        comparison_commit,
+        repo=_repo_root(package),
+        package=package,
+        expected_environment=expected_environment,
+        attempt_active=attempt_active,
+    )
+
+
+def _v36_ticket_satisfy_gaps(package: Path, state: dict[str, Any], summary: dict[str, Any], identifier: str, revision: str) -> list[str]:
+    repo = _repo_root(package)
+    head = _run_git(repo, "rev-parse", "HEAD")
+    if not _is_ancestor(repo, revision, head):
+        return ["--revision must be an ancestor of current HEAD"]
+    document = next(row for row in summary["_documents"] if row["id"] == identifier)
+    gaps = []
+    spec = summary["_journeySpec"]
+    lifecycle: Lifecycle = summary["_lifecycle"]
+    for suite_id in document["coverage"]["suites"]:
+        suite = spec["suites"][suite_id]
+        records = state["evidenceIndex"].get(f"suite:{suite_id}", [])
+        if not any(
+            _v36_record_valid(
+                package,
+                record,
+                revision,
+                expected_environment=suite["environment"],
+                attempt_active=not lifecycle.frozen,
+            )
+            for record in records
+        ):
+            gaps.append(f"Suite {suite_id} 缺少对当前 revision 有效的 supporting 记录")
+    if document["coverage"]["requiredReview"] != "none":
+        records = state["evidenceIndex"].get(f"review:{identifier}", [])
+        if not any(
+            _v36_record_valid(package, record, revision, attempt_active=not lifecycle.frozen)
+            for record in records
+        ):
+            gaps.append(f"Ticket {identifier} 缺少有效的 supporting review（需无未关闭 blocker）")
+    return gaps
 
 
 def _normalize_journey_evidence(package: Path, repo: Path, summary: dict[str, Any], payload: Any) -> tuple[str, dict[str, Any]]:
@@ -1841,8 +2126,6 @@ def command_set_state(
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
     _assert_mutable(summary)
-    if summary["formatVersion"] == "3.6" and target == "SATISFIED":
-        raise StateError("ticket satisfy for format 3.6 is not available in Journey phase 1a")
     if identifier not in state["tickets"] or target not in TICKET_STATES:
         raise StateError(f"unknown Ticket or invalid state: {identifier}/{target}")
     current = state["tickets"][identifier]["state"]
@@ -1907,11 +2190,16 @@ def command_set_state(
         if not revision or not environment:
             raise StateError("SATISFIED requires --revision and --environment")
         revision = _validate_commit(repo, revision)
-        missing, conflicts = _evidence_coverage(summary, identifier, revision, environment)
-        if missing:
-            raise StateError(f"SATISFIED missing claims: {', '.join(missing)}")
-        if conflicts:
-            raise StateError(f"SATISFIED has contradictory evidence: {', '.join(conflicts)}")
+        if summary["formatVersion"] == "3.6":
+            gaps = _v36_ticket_satisfy_gaps(package, state, summary, identifier, revision)
+            if gaps:
+                raise StateError("SATISFIED rejected: " + "; ".join(gaps))
+        else:
+            missing, conflicts = _evidence_coverage(summary, identifier, revision, environment)
+            if missing:
+                raise StateError(f"SATISFIED missing claims: {', '.join(missing)}")
+            if conflicts:
+                raise StateError(f"SATISFIED has contradictory evidence: {', '.join(conflicts)}")
         if any(not _ticket_released(state["tickets"], dep) for kind, dep in summary["_ticketDependencies"][identifier] if kind in {"implementation", "acceptance"}):
             raise StateError("Ticket implementation or acceptance dependencies are not released")
     if target == "BLOCKED" and not evidence:
@@ -2478,11 +2766,85 @@ def _update_history(state: dict[str, Any], attempt: str, lifecycle: str, gate: d
             return
 
 
+def _v36_gate_gaps(
+    package: Path,
+    state: dict[str, Any],
+    summary: dict[str, Any],
+    comparison_commit: str,
+    durable: list[str],
+    no_durable_reason: str | None,
+) -> tuple[list[str], dict[str, Any], Any, Any]:
+    lifecycle: Lifecycle = summary["_lifecycle"]
+    status = _v36_acceptance_status(package, state, summary, comparison_commit, attempt_active=not lifecycle.frozen)
+    gaps: list[str] = []
+    for journey in status["journeys"]:
+        if journey["reached"] != journey["total"]:
+            gaps.append(f"Journey {journey['id']} 尚未在同一 run 走通全部步骤（{journey['reached']}/{journey['total']}）")
+    for suite in status["suites"]:
+        if not suite["valid"]:
+            gaps.append(f"Required Suite {suite['id']} 缺少当前有效的 supporting 记录")
+    gaps.extend(f"Evidence {key} 的 supporting 记录待复验" for key in status["staleEvidence"])
+    for ticket, row in state["tickets"].items():
+        if row["state"] != "SATISFIED":
+            gaps.append(f"Required Ticket {ticket} 状态为 {row['state']}，需要 SATISFIED")
+    for ticket, edges in summary["_ticketDependencies"].items():
+        for kind, dependency in edges:
+            if not _ticket_released(state["tickets"], dependency):
+                gaps.append(f"Ticket {ticket} 的 {kind} 入边 {dependency} 未释放")
+    if status["pendingAmendments"]:
+        gaps.extend(f"合同修订 {row['id']} 待 Owner 确认：{row['summary']}" for row in status["pendingAmendments"])
+    gaps.extend(f"合同文件 {row['path']} 相对 contractBaseline 有变化但未登记 Amendment" for row in status["unregisteredAmendments"])
+    if status["releaseRequired"] and not status["releaseValid"]:
+        gaps.append("Plan 要求发布顺序，但缺少当前有效的 release 记录")
+    coverage = terminal_coverage_fact(package)
+    if not coverage.known or coverage.value is not True:
+        label = "unknown" if not coverage.known else "incomplete"
+        gaps.append(f"terminal review coverage {label}：{coverage.reason or '未通过'}")
+    live_references = live_package_reference_fact(package)
+    if not live_references.known:
+        gaps.append(f"live package reference 无法判定：{live_references.reason or 'unknown'}")
+    elif live_references.value is True:
+        gaps.append(live_references.reason or "package 含活体 package 引用")
+    if not durable and not (no_durable_reason and no_durable_reason.strip()):
+        gaps.append("terminal Gate 需要 Durable Delta 或 --no-durable-delta-reason")
+    return gaps, status, coverage, live_references
+
+
+def _owner_summary(
+    status: dict[str, Any],
+    comparison_commit: str,
+    verdict: str,
+    reason: str,
+) -> list[str]:
+    lines = ["## Owner Summary\n"]
+    for journey in status["journeys"]:
+        lines.append(f"- {journey['id']} {journey['title']}：走通 {journey['reached']}/{journey['total']}\n")
+    valid_suites = sum(1 for row in status["suites"] if row["valid"])
+    lines.append(f"- 套件：{valid_suites}/{len(status['suites'])} 通过\n")
+    pending = status["pendingAmendments"]
+    unregistered = status["unregisteredAmendments"]
+    if pending:
+        descriptions = "；".join(f"{row['id']} {row['summary']}" for row in pending)
+        lines.append(f"- 合同修订：{len(pending)} 条待 Owner 确认（{descriptions}）\n")
+    elif unregistered:
+        files = "、".join(row["path"] for row in unregistered)
+        lines.append(f"- 合同修订：存在漏登文件 {files}\n")
+    else:
+        lines.append("- 合同修订：无待确认或漏登\n")
+    if not status["releaseRequired"]:
+        release = "未要求"
+    else:
+        release = "已记录" if status["releaseValid"] else "缺失"
+    lines.append(f"- 发布顺序：{release}\n")
+    lines.append(f"- 最终版本：{comparison_commit[:7]}\n")
+    conclusion = reason.strip() or ("所有验收项已满足" if verdict == "pass" else "仍有验收缺口")
+    lines.append(f"- 结论：{verdict} — {conclusion}\n")
+    return lines
+
+
 def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence: list[str], durable: list[str], no_durable_reason: str | None, environment: str | None) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state, projections=False)
-    if summary["formatVersion"] == "3.6":
-        raise StateError("Gate for format 3.6 is not available in Journey phase 1a")
     repo = _repo_root(package)
     resolved = _validate_commit(repo, commit)
     lifecycle: Lifecycle = summary["_lifecycle"]
@@ -2493,9 +2855,21 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
         raise StateError(f"Attempt {summary['attempt']} is already frozen by terminal Gate {lifecycle.gate_verdict}")
     if verdict in TERMINAL_VERDICTS and resolved != _run_git(repo, "rev-parse", "HEAD"):
         raise StateError("terminal Gate comparison commit must equal current HEAD")
-    if verdict in TERMINAL_VERDICTS and not durable and not (no_durable_reason and no_durable_reason.strip()):
+    if verdict in TERMINAL_VERDICTS and not durable and not (no_durable_reason and no_durable_reason.strip()) and not (summary["formatVersion"] == "3.6" and verdict == "pass"):
         raise StateError("terminal Gate requires --durable-delta or --no-durable-delta-reason")
-    if verdict == "pass":
+    v36_status = None
+    if summary["formatVersion"] == "3.6":
+        if verdict == "pass":
+            gaps, v36_status, _coverage, _live_references = _v36_gate_gaps(
+                package, state, summary, resolved, durable, no_durable_reason,
+            )
+            if gaps:
+                raise StateError("pass Gate rejected: " + "; ".join(gaps))
+        else:
+            v36_status = _v36_acceptance_status(
+                package, state, summary, resolved, attempt_active=not lifecycle.frozen,
+            )
+    if verdict == "pass" and summary["formatVersion"] != "3.6":
         unfinished = [key for key in state["tickets"] if not _ticket_released(state["tickets"], key)]
         if unfinished:
             raise StateError(f"pass Gate has unfinished Tickets: {', '.join(unfinished)}")
@@ -2530,7 +2904,11 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
         state["activeCheckpoints"] = {}
     gate = {"verdict": verdict, "commit": resolved, "environment": environment}
     _update_history(state, summary["attempt"], "frozen" if verdict in TERMINAL_VERDICTS else "active", gate)
-    lines = ["# Gate\n", f"- Verdict: {verdict}\n", f"- Attempt: {summary['attempt']}\n", f"- Comparison commit: {resolved}\n", f"- Reason: {reason.strip()}\n", "\n## Evidence\n"]
+    lines = ["# Gate\n", f"- Verdict: {verdict}\n", f"- Attempt: {summary['attempt']}\n", f"- Comparison commit: {resolved}\n", f"- Reason: {reason.strip()}\n"]
+    if v36_status is not None:
+        lines.append("\n")
+        lines.extend(_owner_summary(v36_status, resolved, verdict, reason))
+    lines.append("\n## Evidence\n")
     lines.extend(f"- {item}\n" for item in normalized_evidence) or lines.append("- none\n")
     lines.append("\n## Durable Deltas\n")
     lines.extend(f"- {item}\n" for item in durable) or lines.append(f"- Reason: {no_durable_reason or 'none'}\n")
