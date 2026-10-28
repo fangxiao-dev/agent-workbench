@@ -29,20 +29,40 @@ JOURNEY_FIXTURE = ROOT / "tests/fixtures/impl-package-journey"
 
 SPEC = """# Spec
 
+## 1. 核心目标
+
+在账单更正后将稳定的判定结果用于下一张同类账单。
+
+## 2. 业务规则
+
+更正确认后，后续同类账单应读取门店记忆。
+
+### 2.1 账单标识
+
+后续账单通过账单 ID 关联到记忆。
+
+## 3. 实施边界
+
+该 Spec 不规定界面布局。
+
+## 7. 验收
+
 ### Journeys
 
 #### J1 纠正后下一张账单用新科目
 
-| Step | 操作入口 | 观察表面 | 预期 |
-| --- | --- | --- | --- |
-| J1-S1 | 税务端 Review 页确认账单 | 门店答案读取 API | 答案为 4982 |
-| J1-S2 | 企业端打开下一张同类账单 | 工作台科目控件 | 预填 4982，标签“本门店记忆” |
+| Step | 操作入口 | 观察表面 | 预期 | 承接 |
+| --- | --- | --- | --- | --- |
+| J1-S1 | 税务端 Review 页确认账单 | 门店答案读取 API | 答案为 4982 | — |
+| J1-S2 | 企业端打开下一张同类账单 | 工作台科目控件 | 预填 4982，标签“本门店记忆” | 账单 ID |
 
 ### Rule Matrix
 
-| Rule | Suite | Oracle |
-| --- | --- | --- |
-| R1 | S-resolver | 解析表每行来源与状态正确 |
+| Rule | Source | Suite | Oracle |
+| --- | --- | --- | --- |
+| R1 | §2 | S-resolver | 解析表每行来源与状态正确 |
+
+- 无需验收的章节： §1, §3
 
 ### Required Suites
 
@@ -177,7 +197,7 @@ def _journey_record(revision: str, step_id: str, *, run_id: str = "run-1", envir
         "J1-S1": "税务端 Review 页确认账单",
         "J1-S2": "企业端打开下一张同类账单",
     }
-    return {
+    record = {
         "kind": "journey-step",
         "runId": run_id,
         "journeyId": "J1",
@@ -188,6 +208,11 @@ def _journey_record(revision: str, step_id: str, *, run_id: str = "run-1", envir
         "environment": environment,
         "conclusion": "supporting",
     }
+    if step_id == "J1-S1":
+        record["outputRef"] = "bill-123"
+    elif step_id == "J1-S2":
+        record["inputRef"] = "bill-123"
+    return record
 
 
 def _suite_record(revision: str, suite_id: str, *, conclusion: str = "supporting", environment: str | None = None) -> dict:
@@ -276,6 +301,14 @@ def _commit_path(repo: Path, path: Path, message: str) -> str:
     return _git(repo, "rev-parse", "HEAD")
 
 
+def _append_spec_note(package: Path, note: str) -> None:
+    spec = package / "spec.md"
+    text = spec.read_text(encoding="utf-8")
+    anchor = "该 Spec 不规定界面布局。"
+    assert anchor in text
+    spec.write_text(text.replace(anchor, f"{anchor}\n\n{note}", 1), encoding="utf-8")
+
+
 def test_init_validate_and_status_use_v36_and_record_contract_baseline(tmp_path: Path) -> None:
     repo, package, _ = _init_v36(tmp_path)
     state = _state(package)
@@ -289,6 +322,102 @@ def test_init_validate_and_status_use_v36_and_record_contract_baseline(tmp_path:
         result = _cli(repo, package, "package", command)
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout)["formatVersion"] == "3.6"
+
+
+def test_check_spec_resolves_rule_and_no_acceptance_chapters_by_number_or_title(tmp_path: Path) -> None:
+    spec = SPEC.replace("R1 | §2 |", "R1 | 业务规则 |")
+    spec = spec.replace("- 无需验收的章节： §1, §3", "- 无需验收的章节： 核心目标, 实施边界")
+    repo, package = _make_package(tmp_path, spec=spec)
+
+    result = _cli(
+        repo,
+        package,
+        "package",
+        "check-spec",
+        "--spec",
+        package.joinpath("spec.md").relative_to(repo).as_posix(),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["valid"] is True
+    assert not (package / ".impl-package/state.json").exists()
+
+
+def test_check_spec_accepts_none_when_rules_cover_every_chapter(tmp_path: Path) -> None:
+    spec = SPEC.replace("R1 | §2 |", "R1 | §1, §2, §3 |")
+    spec = spec.replace("- 无需验收的章节： §1, §3", "- 无需验收的章节： none")
+    repo, package = _make_package(tmp_path, spec=spec)
+
+    result = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("spec", "reference"),
+    [
+        (SPEC.replace("R1 | §2 |", "R1 | §99 |"), "§99"),
+        (SPEC.replace("- 无需验收的章节： §1, §3", "- 无需验收的章节： 不存在章节"), "不存在章节"),
+    ],
+)
+def test_check_spec_reports_unresolved_source_and_exemption_references(tmp_path: Path, spec: str, reference: str) -> None:
+    repo, package = _make_package(tmp_path, spec=spec)
+
+    result = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
+
+    assert result.returncode != 0
+    assert reference in result.stderr
+    assert "spec.md §7 Rule Matrix" in result.stderr
+
+
+@pytest.mark.parametrize("command", ["check-spec", "init", "validate"])
+def test_unclassified_spec_chapter_fails_check_spec_init_and_validate(tmp_path: Path, command: str) -> None:
+    invalid_spec = SPEC.replace("## 7. 验收", "## 4. 新增业务约束\n\n需要给出独立验收。\n\n## 7. 验收")
+    repo, package = _make_package(tmp_path)
+    if command == "validate":
+        _init(repo, package)
+    (package / "spec.md").write_text(invalid_spec, encoding="utf-8")
+
+    if command == "check-spec":
+        result = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
+    elif command == "init":
+        result = _init(repo, package, ok=False)
+    else:
+        result = _cli(repo, package, "package", "validate")
+
+    assert result.returncode != 0
+    assert "§4" in result.stderr
+    assert "新增业务约束" in result.stderr
+    assert "增加引用该章节的规则行" in result.stderr
+    assert "无需验收的章节" in result.stderr
+    if command == "check-spec":
+        assert not (package / ".impl-package/state.json").exists()
+    if command == "init":
+        assert not (package / ".impl-package/state.json").exists()
+
+
+def test_situation_render_reports_unclassified_spec_chapter(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    repo, package, _ = _init_v36(tmp_path)
+    invalid_spec = SPEC.replace("## 7. 验收", "## 4. 新增业务约束\n\n需要给出独立验收。\n\n## 7. 验收")
+    (package / "spec.md").write_text(invalid_spec, encoding="utf-8")
+
+    code = situation.main(["render", "--package", str(package), "--json"])
+    rendered = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert rendered["selected"]["slug"] == "package.record.state-missing"
+    assert any("§4" in warning for warning in rendered["warnings"])
+
+
+def test_journey_handoff_column_parses_and_first_step_must_not_handoff(tmp_path: Path) -> None:
+    journey = engine._journey_spec_text(SPEC)["journeys"][0]
+    assert [step["handoff"] for step in journey["steps"]] == ["—", "账单 ID"]
+
+    repo, package = _make_package(tmp_path, spec=SPEC.replace("| — |\n| J1-S2", "| 账单 ID |\n| J1-S2"))
+    result = _init(repo, package, ok=False)
+
+    assert result.returncode != 0
+    assert "第 1 步 J1-S1 的承接必须为 —" in result.stderr
 
 
 def test_init_persists_required_release_order(tmp_path: Path) -> None:
@@ -366,6 +495,92 @@ def test_evidence_add_supports_all_kinds_idempotence_and_atomic_batch(tmp_path: 
     assert failed.returncode != 0
     assert "operation entry" in failed.stderr
     assert _state(package) == before
+
+
+@pytest.mark.parametrize(
+    ("case", "message"),
+    [
+        ("missing-input", "缺少 inputRef"),
+        ("missing-output", "缺少 outputRef"),
+        ("mismatch", "不一致"),
+    ],
+)
+def test_journey_handoff_requires_matching_input_and_previous_output(
+    tmp_path: Path, case: str, message: str
+) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    first_record = _journey_record(revision, "J1-S1")
+    if case == "missing-output":
+        first_record.pop("outputRef")
+    first = _cli(repo, package, "evidence", "add", input_value=first_record)
+    assert first.returncode == 0, first.stderr
+
+    next_record = _journey_record(revision, "J1-S2")
+    if case == "missing-input":
+        next_record.pop("inputRef")
+    elif case == "mismatch":
+        next_record["inputRef"] = "bill-999"
+    result = _cli(repo, package, "evidence", "add", input_value=next_record)
+
+    assert result.returncode != 0
+    assert "Journey J1" in result.stderr
+    assert "J1-S2" in result.stderr
+    assert "账单 ID" in result.stderr
+    assert message in result.stderr
+    if case == "missing-input":
+        assert "bill-123" in result.stderr
+    if case == "missing-output":
+        assert "evidence invalidate" in result.stderr
+        assert "另起 run" in result.stderr
+    assert set(_state(package)["evidenceIndex"]) == {"journey:run-1:J1-S1"}
+
+
+def test_journey_handoff_mismatch_rejects_entire_batch(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    before = _state(package)
+    records = [
+        _journey_record(revision, "J1-S1", run_id="atomic-handoff"),
+        {**_journey_record(revision, "J1-S2", run_id="atomic-handoff"), "inputRef": "different-bill"},
+    ]
+
+    result = _cli(repo, package, "evidence", "add", input_value=records)
+
+    assert result.returncode != 0
+    assert "账单 ID" in result.stderr
+    assert _state(package) == before
+
+
+def test_journey_handoff_is_checked_for_every_record_of_the_step(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    assert _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S1")).returncode == 0
+    assert _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S2")).returncode == 0
+    before = _state(package)
+    duplicate_step = _journey_record(revision, "J1-S2")
+    duplicate_step["inputRef"] = "another-bill"
+
+    result = _cli(repo, package, "evidence", "add", input_value=duplicate_step)
+
+    assert result.returncode != 0
+    assert "账单 ID" in result.stderr
+    assert "不一致" in result.stderr
+    assert _state(package) == before
+
+
+def test_journey_step_with_dash_handoff_does_not_compare_references(tmp_path: Path) -> None:
+    spec = SPEC.replace("| 账单 ID |", "| — |")
+    repo, package = _make_package(tmp_path, spec=spec)
+    _init(repo, package)
+    revision = _git(repo, "rev-parse", "HEAD")
+    first_record = _journey_record(revision, "J1-S1")
+    first_record["outputRef"] = "bill-123"
+    second_record = _journey_record(revision, "J1-S2")
+    second_record["inputRef"] = "unrelated-bill"
+
+    first = _cli(repo, package, "evidence", "add", input_value=first_record)
+    second = _cli(repo, package, "evidence", "add", input_value=second_record)
+
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
 
 
 @pytest.mark.parametrize(
@@ -613,8 +828,7 @@ def test_evidence_artifact_is_required_only_while_attempt_is_active(tmp_path: Pa
 
 def test_amendment_add_confirm_cas_idempotence_and_unregistered_contract_finding(tmp_path: Path) -> None:
     repo, package, revision = _init_v36(tmp_path)
-    spec = package / "spec.md"
-    spec.write_text(spec.read_text(encoding="utf-8") + "\n## Owner clarification\nThe accepted wording is unchanged.\n", encoding="utf-8")
+    _append_spec_note(package, "Owner clarification: The accepted wording is unchanged.")
     before = _cli(repo, package, "package", "validate")
     assert before.returncode == 0, before.stderr
     assert any(row["code"] == "contract-amendment-unregistered" and row["path"] == "spec.md" for row in json.loads(before.stdout)["findings"])
@@ -646,8 +860,7 @@ def test_amendment_add_confirm_cas_idempotence_and_unregistered_contract_finding
 
 def test_amendment_without_registration_blob_does_not_cover_contract_change(tmp_path: Path) -> None:
     repo, package, _ = _init_v36(tmp_path)
-    spec = package / "spec.md"
-    spec.write_text(spec.read_text(encoding="utf-8") + "\n## Clarification\n", encoding="utf-8")
+    _append_spec_note(package, "Clarification: Wording is clarified.")
     added = _cli(
         repo,
         package,
@@ -717,8 +930,7 @@ def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_p
         for record in records
     )
 
-    spec = package / "spec.md"
-    spec.write_text(spec.read_text(encoding="utf-8") + "\n## Owner clarification\nFirst approved wording.\n", encoding="utf-8")
+    _append_spec_note(package, "Owner clarification: First approved wording.")
     amendment_args = (
         "package",
         "amendment",
@@ -754,7 +966,7 @@ def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_p
         revision,
     )
     assert confirm_a1.returncode == 0, confirm_a1.stderr
-    spec.write_text(spec.read_text(encoding="utf-8") + "\n## Owner clarification\nSecond approved wording.\n", encoding="utf-8")
+    _append_spec_note(package, "Owner clarification: Second approved wording.")
     stale_amendment_confirm = _cli(
         repo,
         package,
@@ -851,8 +1063,7 @@ def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_p
     unregistered_repo, unregistered_package = _make_fixture_package(tmp_path / "unregistered-spec")
     _init(unregistered_repo, unregistered_package)
     unregistered_revision = _git(unregistered_repo, "rev-parse", "HEAD")
-    unregistered_spec = unregistered_package / "spec.md"
-    unregistered_spec.write_text(unregistered_spec.read_text(encoding="utf-8") + "\n## Unregistered change\n", encoding="utf-8")
+    _append_spec_note(unregistered_package, "Unregistered change")
     unregistered_gate = _gate(unregistered_repo, unregistered_package, "pass", unregistered_revision)
     assert unregistered_gate.returncode != 0
     assert "spec.md" in unregistered_gate.stderr and "未登记 Amendment" in unregistered_gate.stderr
@@ -862,7 +1073,7 @@ def test_gate_pass_rejects_each_acceptance_gap_and_gate_blocked_keeps_attempt_ac
     repo, package = _make_package(tmp_path, plan=PLAN + "Release order: required\n")
     _init(repo, package)
     revision = _git(repo, "rev-parse", "HEAD")
-    (package / "spec.md").write_text((package / "spec.md").read_text(encoding="utf-8") + "\n## Owner clarification\nAmended wording.\n", encoding="utf-8")
+    _append_spec_note(package, "Owner clarification: Amended wording.")
     unregistered = _gate(repo, package, "pass", revision)
     assert unregistered.returncode != 0 and "未登记 Amendment" in unregistered.stderr
     add_amendment = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "补充规则", "--affected", "spec.md", "--artifact", "artifacts/evidence.md")
@@ -887,7 +1098,7 @@ def test_journey_gate_pass_confirms_amendment_requires_release_and_freezes_archi
     repo, package = _make_package(tmp_path, plan=PLAN + "Release order: required\n")
     _init(repo, package)
     revision = _git(repo, "rev-parse", "HEAD")
-    (package / "spec.md").write_text((package / "spec.md").read_text(encoding="utf-8") + "\n## Owner clarification\nApproved wording.\n", encoding="utf-8")
+    _append_spec_note(package, "Owner clarification: Approved wording.")
     added = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "回填时间锚点", "--affected", "spec.md", "--artifact", "artifacts/evidence.md")
     assert added.returncode == 0, added.stderr
     assert _gate(repo, package, "pass", revision).returncode != 0
@@ -930,8 +1141,7 @@ def test_situation_renders_new_v36_acceptance_rows_without_changing_global_block
     outside.parent.mkdir()
     outside.write_text("changed = True\n", encoding="utf-8")
     _commit_path(repo, outside, "change outside package")
-    spec = package / "spec.md"
-    spec.write_text(spec.read_text(encoding="utf-8") + "\n## Owner clarification\nChanged.\n", encoding="utf-8")
+    _append_spec_note(package, "Owner clarification: Changed.")
 
     result = subprocess.run(
         [sys.executable, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts/situation.py"), "render", "--package", str(package), "--json"],

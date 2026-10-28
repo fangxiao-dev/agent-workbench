@@ -1044,7 +1044,8 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                         errors.append(f"evidenceIndex[{key}] kind 无效")
                         continue
                     required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
-                    allowed = required | {"invalidatedBy", "timing"}
+                    optional = {"inputRef", "outputRef"} if kind == "journey-step" else set()
+                    allowed = required | optional | {"invalidatedBy", "timing"}
                     if kind not in fields_by_kind or not required <= set(record) or set(record) - allowed:
                         errors.append(f"evidenceIndex[{key}] {kind!r} evidence 字段不完整或含未知字段")
                         continue
@@ -1060,6 +1061,9 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                     if "invalidatedBy" in record and invalidated_by is not None and (not isinstance(invalidated_by, str) or not invalidated_by.strip()):
                         errors.append(f"evidenceIndex[{key}] invalidatedBy 无效")
                     if kind == "journey-step":
+                        for field in ("inputRef", "outputRef"):
+                            if field in record and (not isinstance(record[field], str) or not record[field].strip()):
+                                errors.append(f"evidenceIndex[{key}] {field} 必须是非空业务对象标识")
                         run_id, journey_id, step_id, entry = (record.get(field) for field in ("runId", "journeyId", "stepId", "entry"))
                         if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, entry)) or key != f"journey:{run_id}:{step_id}":
                             errors.append(f"evidenceIndex[{key}] Journey evidence key 或字段无效")
@@ -1397,6 +1401,15 @@ def _build_snapshot(
 ) -> Snapshot:
     warnings = list(reader.warnings)
     state = _parse_state(reader.read(STATE_REL))
+    if state.raw and state.raw.get("formatVersion") == "3.6":
+        from impl_package_runtime import engine
+
+        try:
+            engine.validate_spec_document(reader.package / "spec.md")
+        except engine.StateError as exc:
+            state.valid = False
+            state.error = f"{state.error}; {exc}" if state.error else str(exc)
+            warnings.append(str(exc))
     ticket_files: dict[str, tuple[str, str]] = {}
     for relative in reader.list_ticket_files():
         view = reader.read(relative)

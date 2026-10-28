@@ -126,6 +126,8 @@ def _parser(group: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=f"impl_package_state.py --package <package> {group}")
     commands = parser.add_subparsers(dest="command", required=True)
     if group == "package":
+        check_spec = commands.add_parser("check-spec", help="validate the 3.6 Spec contract before package initialization")
+        check_spec.add_argument("--spec", required=True, help="repository-relative Spec path")
         init = commands.add_parser("init", help="initialize a 3.5 Ticket-only or 3.6 Journey package based on the Plan")
         init.add_argument("--attempt", required=True)
         init.add_argument("--plan", required=True)
@@ -247,6 +249,8 @@ def _normalize_gate_argv(argv: list[str]) -> list[str]:
 
 def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
     if group == "package":
+        if args.command == "check-spec":
+            return engine.command_check_spec(package, args.spec)
         if args.command == "init":
             return engine.command_init(package, args.attempt, args.plan)
         if args.command == "archive-attempt":

@@ -458,12 +458,12 @@ def _plan_info(package: Path, repo: Path, plan_value: str) -> dict[str, Any]:
     return {"path": plan_rel, "attempt": attempt, "decision": _field(DECISION_RE, text, "Decision Revision", optional=True), "spec": _field(SPEC_RE, text, "Spec Revision", optional=True), "plan": _field(PLAN_RE, text, "Plan Revision", optional=True), "predecessors": _predecessors_from_plan(package, repo, text), "tickets": tickets, "dag": False, "formatVersion": format_version, "releaseOrder": release_order}
 
 
-def _markdown_section(text: str, title: str, level: int) -> list[str]:
+def _markdown_section(text: str, title: str, level: int, spec_label: str = "spec.md") -> list[str]:
     lines = text.splitlines()
     pattern = re.compile(rf"^{'#' * level} {re.escape(title)}[ \t]*$")
     matches = [index for index, line in enumerate(lines) if pattern.fullmatch(line)]
     if len(matches) != 1:
-        raise StateError(f"spec.md must contain exactly one {'#' * level} {title} section")
+        raise StateError(f"{spec_label} must contain exactly one {'#' * level} {title} section")
     start = matches[0] + 1
     end = len(lines)
     for index in range(start, len(lines)):
@@ -502,9 +502,120 @@ def _markdown_table(lines: list[str], columns: tuple[str, ...], label: str) -> l
     return result
 
 
-def _journey_spec(package: Path) -> dict[str, Any]:
-    text = _read(package / "spec.md")
-    journey_section = _markdown_section(text, "Journeys", 3)
+def _chapter_headings(text: str) -> list[dict[str, Any]]:
+    headings: list[dict[str, Any]] = []
+    parent: int | None = None
+    section_seven = False
+    numbered_title = re.compile(r"^(\d+(?:\.\d+)*)(?:[.)])?\s+(.+)$")
+    for line in text.splitlines():
+        match = re.match(r"^(#{2,3})\s+(.+?)\s*$", line)
+        if match is None:
+            continue
+        level = len(match.group(1))
+        title = match.group(2)
+        number_match = numbered_title.fullmatch(title)
+        number = number_match.group(1) if number_match else None
+        plain_title = number_match.group(2) if number_match else title
+        if level == 2:
+            section_seven = number == "7"
+            parent = len(headings)
+        headings.append({
+            "index": len(headings),
+            "level": level,
+            "title": title,
+            "plainTitle": plain_title,
+            "number": number,
+            "parent": parent if level == 3 else None,
+            "sectionSeven": section_seven,
+        })
+    return headings
+
+
+def _chapter_references(value: str, label: str, *, allow_none: bool) -> list[str]:
+    if allow_none and value.casefold() == "none":
+        return []
+    if not value.strip():
+        raise StateError(f"{label} must be a chapter reference list separated by ', ', or none")
+    references = [item.strip() for item in value.split(", ")]
+    if any(not item or item.casefold() == "none" or "," in item for item in references):
+        raise StateError(f"{label} must be a chapter reference list separated by ', ', or none")
+    return references
+
+
+def _resolve_chapter_reference(reference: str, headings: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if reference.startswith("§"):
+        number = reference[1:]
+        if re.fullmatch(r"\d+(?:\.\d+)?", number) is None:
+            return None
+        matches = [heading for heading in headings if heading["number"] == number]
+    else:
+        matches = [
+            heading for heading in headings
+            if heading["title"] == reference or heading["plainTitle"] == reference
+        ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _chapter_label(heading: dict[str, Any]) -> str:
+    if heading["number"]:
+        return f"§{heading['number']} ({heading['title']})"
+    return f"“{heading['title']}”"
+
+
+def _spec_coverage_findings(
+    text: str,
+    rule_rows: list[dict[str, str]],
+    no_acceptance_value: str,
+    spec_label: str,
+) -> list[str]:
+    headings = _chapter_headings(text)
+    findings: list[str] = []
+    covered: set[int] = set()
+    not_required: set[int] = set()
+
+    def resolve_references(value: str, label: str, *, allow_none: bool) -> list[dict[str, Any]]:
+        try:
+            references = _chapter_references(value, label, allow_none=allow_none)
+        except StateError as exc:
+            findings.append(f"{label}：{exc}")
+            return []
+        resolved: list[dict[str, Any]] = []
+        for reference in references:
+            heading = _resolve_chapter_reference(reference, headings)
+            if heading is None:
+                findings.append(
+                    f"{label} 引用 {reference!r} 未能唯一解析到 spec 标题；请改为实际章节编号（§N/§N.M）或标题原文。"
+                )
+                continue
+            resolved.append(heading)
+        return resolved
+
+    for row in rule_rows:
+        label = f"{spec_label} §7 Rule Matrix 的 Rule {row['Rule']} Source"
+        for source in resolve_references(row["Source"], label, allow_none=False):
+            covered.add(source["index"])
+    no_acceptance_label = f"{spec_label} §7 Rule Matrix 的‘无需验收的章节’行"
+    not_required.update(
+        heading["index"]
+        for heading in resolve_references(no_acceptance_value, no_acceptance_label, allow_none=True)
+    )
+
+    excluded_titles = {"Journeys", "Rule Matrix", "Required Suites"}
+    for heading in headings:
+        if heading["sectionSeven"] or heading["title"] in excluded_titles or heading["plainTitle"] in excluded_titles:
+            continue
+        is_covered = heading["index"] in covered or heading["index"] in not_required
+        if not is_covered and heading["level"] == 3 and heading["parent"] is not None:
+            is_covered = heading["parent"] in covered or heading["parent"] in not_required
+        if not is_covered:
+            findings.append(
+                f"{spec_label} {_chapter_label(heading)} 未分类；请在 §7 Rule Matrix 增加引用该章节的规则行，或加入‘无需验收的章节’行。"
+            )
+    return findings
+
+
+def _journey_spec_text(text: str, spec_label: str = "spec.md") -> dict[str, Any]:
+    journey_section = _markdown_section(text, "Journeys", 3, spec_label)
     headings: list[tuple[int, str, str]] = []
     for index, line in enumerate(journey_section):
         if not line.startswith("#### "):
@@ -525,7 +636,7 @@ def _journey_spec(package: Path) -> dict[str, Any]:
         journey_ids.add(identifier)
         end = headings[position + 1][0] if position + 1 < len(headings) else len(journey_section)
         block = journey_section[start + 1:end]
-        table = _markdown_table(block, ("Step", "操作入口", "观察表面", "预期"), f"Journey {identifier} steps")
+        table = _markdown_table(block, ("Step", "操作入口", "观察表面", "预期", "承接"), f"{spec_label} Journey {identifier} steps")
         if not table:
             raise StateError(f"Journey {identifier} must contain at least one step")
         journey_steps: list[dict[str, str]] = []
@@ -533,15 +644,32 @@ def _journey_spec(package: Path) -> dict[str, Any]:
             step_id = row["Step"]
             if step_id != f"{identifier}-S{number}":
                 raise StateError(f"Journey {identifier} steps must be ordered and named {identifier}-S1, {identifier}-S2, ...")
+            if number == 1 and row["承接"] != "—":
+                raise StateError(f"{spec_label} Journey {identifier} 第 1 步 {step_id} 的承接必须为 —")
             if step_id in steps:
                 raise StateError(f"duplicate Journey step ID: {step_id}")
-            step = {"id": step_id, "operationEntry": row["操作入口"], "observationSurface": row["观察表面"], "expected": row["预期"]}
+            step = {"id": step_id, "operationEntry": row["操作入口"], "observationSurface": row["观察表面"], "expected": row["预期"], "handoff": row["承接"]}
             journey_steps.append(step)
             steps[step_id] = {**step, "journeyId": identifier}
         journeys.append({"id": identifier, "terminalResult": terminal, "steps": journey_steps})
 
-    rule_rows = _markdown_table(_markdown_section(text, "Rule Matrix", 3), ("Rule", "Suite", "Oracle"), "Rule Matrix")
-    suite_rows = _markdown_table(_markdown_section(text, "Required Suites", 3), ("Suite", "Kind", "Scope", "Entry", "Environment"), "Required Suites")
+    matrix_section = _markdown_section(text, "Rule Matrix", 3, spec_label)
+    rule_rows = _markdown_table(matrix_section, ("Rule", "Source", "Suite", "Oracle"), f"{spec_label} §7 Rule Matrix")
+    table_lines = [index for index, line in enumerate(matrix_section) if line.strip().startswith("|")]
+    no_acceptance_lines = [
+        (index, line.strip())
+        for index, line in enumerate(matrix_section)
+        if line.strip().startswith("- 无需验收的章节：")
+    ]
+    if len(no_acceptance_lines) != 1 or not table_lines or no_acceptance_lines[0][0] <= table_lines[-1]:
+        raise StateError(f"{spec_label} §7 Rule Matrix 表格后必须有一行‘- 无需验收的章节：’并填写章节引用或 none")
+    no_acceptance_match = re.fullmatch(r"- 无需验收的章节：\s*(.*?)\s*", no_acceptance_lines[0][1])
+    if no_acceptance_match is None or not no_acceptance_match.group(1):
+        raise StateError(f"{spec_label} §7 Rule Matrix 的‘无需验收的章节’行必须填写章节引用或 none")
+    coverage_findings = _spec_coverage_findings(text, rule_rows, no_acceptance_match.group(1), spec_label)
+    if coverage_findings:
+        raise StateError("Spec 章节覆盖检查失败：\n- " + "\n- ".join(coverage_findings))
+    suite_rows = _markdown_table(_markdown_section(text, "Required Suites", 3, spec_label), ("Suite", "Kind", "Scope", "Entry", "Environment"), f"{spec_label} Required Suites")
     suites: dict[str, dict[str, str]] = {}
     for row in suite_rows:
         suite_id = row["Suite"]
@@ -560,6 +688,14 @@ def _journey_spec(package: Path) -> dict[str, Any]:
         if row["Suite"] not in suites:
             raise StateError(f"Rule Matrix references unknown required suite: {row['Suite']}")
     return {"journeys": journeys, "steps": steps, "suites": suites, "rules": rule_rows}
+
+
+def _journey_spec(package: Path) -> dict[str, Any]:
+    return _journey_spec_text(_read(package / "spec.md"))
+
+
+def validate_spec_document(path: Path, spec_label: str = "spec.md") -> dict[str, Any]:
+    return _journey_spec_text(_read(path), spec_label)
 
 
 def _coverage_list(value: str, label: str, ticket: str) -> list[str]:
@@ -977,6 +1113,7 @@ def _validate_journey_evidence_index(
         "review": {"ticket"},
         "release": set(),
     }
+    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef"}}
     for evidence_key, records in index.items():
         if not isinstance(evidence_key, str) or not evidence_key or not isinstance(records, list):
             raise StateError(f"evidenceIndex[{evidence_key}] must map an evidenceKey to a list")
@@ -988,7 +1125,8 @@ def _validate_journey_evidence_index(
             if not isinstance(kind, str) or kind not in fields_by_kind:
                 raise StateError(f"evidenceIndex[{evidence_key}] has invalid kind")
             required = base_fields | fields_by_kind[kind]
-            if not required <= set(record) or set(record) - (required | {"invalidatedBy", "timing"}):
+            allowed = required | optional_fields_by_kind.get(kind, set()) | {"invalidatedBy", "timing"}
+            if not required <= set(record) or set(record) - allowed:
                 raise StateError(f"evidenceIndex[{evidence_key}] {kind} record has missing or unknown fields")
             if not isinstance(record["conclusion"], str) or record["conclusion"] not in CONCLUSIONS:
                 raise StateError(f"evidenceIndex[{evidence_key}] has invalid conclusion")
@@ -1008,6 +1146,9 @@ def _validate_journey_evidence_index(
                 run_id, journey_id, step_id, entry = (record[field] for field in ("runId", "journeyId", "stepId", "entry"))
                 if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, entry)):
                     raise StateError(f"evidenceIndex[{evidence_key}] Journey fields must be non-empty strings")
+                for field in ("inputRef", "outputRef"):
+                    if field in record and (not isinstance(record[field], str) or not record[field].strip()):
+                        raise StateError(f"evidenceIndex[{evidence_key}] {field} must be a non-empty business object identifier")
                 if evidence_key != f"journey:{run_id}:{step_id}":
                     raise StateError(f"evidenceIndex[{evidence_key}] must use journey:<runId>:<stepId>")
                 step = spec["steps"].get(step_id)
@@ -1654,6 +1795,22 @@ def _contract_amendment_findings(package: Path, repo: Path, acceptance: dict[str
     return findings
 
 
+def command_check_spec(package: Path, spec_value: str) -> dict[str, Any]:
+    repo = _repo_root(package)
+    spec_relative = _repo_relative(repo, spec_value, "spec")
+    if "#" in spec_relative:
+        raise StateError("spec must not contain a text anchor")
+    spec = validate_spec_document(repo / spec_relative, spec_relative)
+    return {
+        "spec": spec_relative,
+        "valid": True,
+        "journeys": len(spec["journeys"]),
+        "steps": len(spec["steps"]),
+        "rules": len(spec["rules"]),
+        "suites": len(spec["suites"]),
+    }
+
+
 def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
     if PACKAGE_ID_RE.fullmatch(package.name) is None:
         raise StateError("package directory must use an immutable date-prefixed ID")
@@ -1661,6 +1818,8 @@ def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
     info = _plan_info(package, repo, plan)
     if info["attempt"] != attempt:
         raise StateError("--attempt does not match the plan Attempt ID")
+    if info["formatVersion"] == "3.6":
+        command_check_spec(package, _package_relative(repo, package / "spec.md"))
     path = package / STATE_PATH
     if path.exists():
         current = _load_json(path)
@@ -1889,15 +2048,20 @@ def _normalize_journey_evidence(package: Path, repo: Path, summary: dict[str, An
         "review": {"ticket"},
         "release": set(),
     }
+    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef"}}
     if not isinstance(kind, str) or kind not in fields_by_kind:
         raise StateError("3.6 evidence kind must be journey-step, suite, review, or release")
     required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
-    allowed = required | {"evidenceKey", "invalidatedBy", "timing"}
+    allowed = required | optional_fields_by_kind.get(kind, set()) | {"evidenceKey", "invalidatedBy", "timing"}
     if not required <= set(payload) or set(payload) - allowed:
         raise StateError("3.6 evidence record has missing or unknown fields")
     record = {field: value for field, value in payload.items() if field != "evidenceKey"}
     if not isinstance(record["conclusion"], str) or record["conclusion"] not in CONCLUSIONS:
         raise StateError("invalid evidence conclusion")
+    if kind == "journey-step":
+        for field in ("inputRef", "outputRef"):
+            if field in record and (not isinstance(record[field], str) or not record[field].strip()):
+                raise StateError(f"Journey evidence {field} must be a non-empty business object identifier")
     if "timing" in record and record["timing"] not in TIMINGS:
         raise StateError("invalid evidence timing")
     if "invalidatedBy" in record and record["invalidatedBy"] is not None and (not isinstance(record["invalidatedBy"], str) or not record["invalidatedBy"].strip()):
@@ -1961,6 +2125,34 @@ def _validate_journey_step_order(state: dict[str, Any], spec: dict[str, Any], re
         last_record = steps_by_position[last_position][-1]
         if last_record.get("conclusion") != "supporting" or last_record.get("invalidatedBy"):
             raise StateError(f"Journey run {record['runId']} cannot continue after a failed or invalidated step")
+    current_step = journey["steps"][current_position]
+    handoff = current_step["handoff"]
+    if current_position > 0 and handoff != "—":
+        previous_step = journey["steps"][current_position - 1]
+        previous_records = steps_by_position[current_position - 1]
+        previous_record = previous_records[-1]
+        previous_output = previous_record.get("outputRef")
+        context = (
+            f"Journey {journey['id']} 第 {current_position + 1} 步 {current_step['id']} "
+            f"承接‘{handoff}’"
+        )
+        if not isinstance(previous_output, str) or not previous_output.strip():
+            raise StateError(
+                f"{context}无法核对：第 {current_position} 步 {previous_step['id']} 缺少 outputRef，"
+                "期望值为上一条记录的 outputRef。请用 evidence invalidate --key "
+                f"journey:{record['runId']}:{previous_step['id']} --invalidated-by <原因> 失效该步后补带 outputRef 重新登记，或另起 run。"
+            )
+        actual_input = record.get("inputRef")
+        if not isinstance(actual_input, str) or not actual_input.strip():
+            raise StateError(
+                f"{context}缺少 inputRef；期望值为 {previous_output!r}，需与 "
+                f"{previous_step['id']} 的 outputRef 完全相等。"
+            )
+        if actual_input != previous_output:
+            raise StateError(
+                f"{context}的 inputRef 与 {previous_step['id']} outputRef 不一致；"
+                f"期望值为 {previous_output!r}，实际为 {actual_input!r}。"
+            )
 
 
 def _normalize_evidence_record(repo: Path, summary: dict[str, Any], payload: Any) -> dict[str, Any]:
