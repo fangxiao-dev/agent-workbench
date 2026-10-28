@@ -17,7 +17,7 @@ dependency 逐候选呈现；缺席候选带类型和受影响的 `subject` 或 
 
 按当前动作声明并核验文件 write ownership、读取/观察影响、integration carrier、DB、端口、测试数据、输出目录和外部记录。两个稳定只读操作可以共享；一方会改变另一方的读取结果或验证 oracle 时隔离或排序。独立 worktree 只隔离文件，运行资源分别核验。
 
-每个并行动作声明 `resource_keys`、整合 owner 与 cleanup owner。资源声明由派发方提供；系统不推断、不扫描，也不把业务 Ticket/Topic 当作互斥单位。无法隔离的共享可变资源使用唯一串行顺序。
+每个并行动作声明 `resource_keys`、整合 owner 与 cleanup owner。资源声明由派发方提供；系统不推断、不扫描，也不把业务 Ticket/Topic 当作互斥单位。优先用独立 worktree、schema 或数据库隔离；仍需独占的资源在 worker 进程启动前通过 `recovery lease acquire`，并把 `lease_id` 与 `resource_keys` 写入 dispatch。dispatch 记录或 worker 启动失败时立即 release；worker 返回后由 cleanup owner 清理进程、schema/数据库、端口和临时文件，再 release。清理或 release 失败要返回 residue 并阻止相关 acceptance。互斥只来自 lease，trail 只记录结果；残留 lease 由 owner 显式 release。无法隔离的共享可变资源使用唯一串行顺序。
 
 主控按当前 dependency、授权、已知实际冲突和在途工作判断资源准入；相同 `resource_key` 本身不等于冲突。恢复旧 Attempt 时，只读旧 trail/候选清单以及 Execution Record、checkpoint、handoff，沿用其中仍成立的授权和资源限制，不另建 blocker fact，也不重写旧记录。
 

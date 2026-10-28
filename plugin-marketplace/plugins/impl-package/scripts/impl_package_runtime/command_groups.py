@@ -181,6 +181,14 @@ def _parser(group: str) -> argparse.ArgumentParser:
         checkpoint.add_argument("--evidence", action="append", default=[])
         checkpoint.add_argument("--handoff", action="store_true")
         commands.add_parser("judgment", help="append a judgment JSON payload from stdin")
+        lease = commands.add_parser("lease", help="acquire or release exclusive resource leases")
+        lease_commands = lease.add_subparsers(dest="lease_action", required=True)
+        acquire = lease_commands.add_parser("acquire", help="atomically acquire one or more resource keys")
+        acquire.add_argument("--key", action="append", required=True)
+        acquire.add_argument("--owner", required=True)
+        release = lease_commands.add_parser("release", help="release a lease after cleanup")
+        release.add_argument("--lease-id", required=True)
+        release.add_argument("--owner-token", required=True)
     elif group == "trail":
         append = commands.add_parser("append", help="append a validated manual trail event from stdin")
         append.add_argument("--review-phase", choices=situation.REVIEW_PHASE_VALUES)
@@ -242,8 +250,13 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
             return engine.command_evidence_invalidate(package, args.ticket, args.claim, args.artifact, args.invalidated_by)
         return engine.command_evidence_retire_claim(package, args.ticket, args.claim)
     if group == "recovery":
-        return (engine.command_checkpoint(package, args.subject, args.next, args.blocker, args.evidence, args.handoff) if args.command == "checkpoint" else
-                engine.command_er_add(package, sys.stdin.read()))
+        if args.command == "checkpoint":
+            return engine.command_checkpoint(package, args.subject, args.next, args.blocker, args.evidence, args.handoff)
+        if args.command == "judgment":
+            return engine.command_er_add(package, sys.stdin.read())
+        if args.lease_action == "acquire":
+            return engine.command_lease_acquire(package, args.key, args.owner)
+        return engine.command_lease_release(package, args.lease_id, args.owner_token)
     if group == "trail":
         return engine.command_trail_append(
             package,

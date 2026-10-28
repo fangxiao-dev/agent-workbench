@@ -37,7 +37,7 @@ allowed-tools:
 1. 确定完整 change unit 与可靠 base/head refs；审查 supplied PR/package/branch range 的全部可达 package commits，不只看 `HEAD^`。完整 change unit 是后续 coverage 的边界，避免只凭最近一个父提交漏掉可达变更。
 2. 按 tracker references → user paths → matching `docs/`、`specs/`、`.scratch/` → Impl-Package Decision/Spec/Plan/DAG 的顺序发现 Spec evidence，并记录搜索及空结果；无可用 evidence 时合理则询问，继续时记录 gap 且保留默认 Track C。记录空结果是为了让缺失合同成为可见 gap，而不是被静默当成没有约束。
 
-3. 用 `scripts/review_ledger.py create` 原子创建 ledger 与 fixed scope，并为每个 path contract 重复 `--source`；CLI 负责解析 commits、拒绝空三点 diff、在写入前读取 resolved head 的 UTF-8 Git blob；working-tree 模式在临时 Git 仓库固定内容并复核源内容未在采集期间变化。把返回的 `ledger_path`、resolved SHAs、`diff_range` 和每个 `contract_sources` 的 path/object ID/SHA-256 当作 canonical ReviewRun；失败停在 reviewer selection 前，名称冲突用新 timestamp 重试。原子创建和 fixed scope 让后续 leaf 共享同一个不可变审查对象。
+3. 用 `scripts/review_ledger.py create` 原子创建 ledger 与 fixed scope，并为每个 path contract 重复 `--source`；Impl-Package target 传 `--package <package>`，ledger 落在当前 Attempt 的 `execution/<attempt>/reviews/` 并使用返回的 `ledgerRelativePath`；不带 `--package` 的旧调用继续使用 Temp。CLI 负责解析 commits、拒绝空三点 diff、在写入前读取 resolved head 的 UTF-8 Git blob；working-tree 模式在临时 Git 仓库固定内容并复核源内容未在采集期间变化。把返回的 ledger path、resolved SHAs、`diff_range` 和每个 `contract_sources` 的 path/object ID/SHA-256 当作 canonical ReviewRun；失败停在 reviewer selection 前，名称冲突用新 timestamp 重试。原子创建和 fixed scope 让后续 leaf 共享同一个不可变审查对象。
 
 4. Contract source 是 immutable revision evidence：reviewer 只能用 `git show <resolved-head>:<path>` 读取，不能从 working tree 读，也不能做第二次 hash/capture；tracker-only 内容留在 discovery record，不伪造 repository path。这样 reviewer 不会把可移动工作树或重复 capture 当成同一份合同证据。
 5. 按 [subagent-briefs.md](references/subagent-briefs.md) 准备 common context：target、mode/round/cap、phase、resolved SHAs/range、included commits、constraints、standards、contract sources、Spec discovery/gap、Safety decision、user policy、prior canonical ledger、assigned track/name/path；每个 leaf 收同一个 ReviewRun，Impl-Package target 的 lifecycle/Gate 仍由 `/impl-package:dev-with-track` 拥有。共同上下文保证各 track 在同一比较点上工作，而不让 leaf 重新裁决 lifecycle/Gate。
@@ -59,7 +59,7 @@ allowed-tools:
 
 ## 4. Canonicalize The Round
 
-1. 所有 leaf 返回后按 [output-templates.md](references/output-templates.md) 校验 ledger fields、evidence、dedup key、finding classification、convergence 和 atomic update；leaf 输出在 parent 写入唯一 canonical temp ledger 前只是 candidate，不建 per-round ledgers。先 canonicalize 再采信，才能防止 candidate evidence 绕过 parent 的验证与去重。
+1. 所有 leaf 返回后按 [output-templates.md](references/output-templates.md) 校验 ledger fields、evidence、dedup key、finding classification、convergence 和 atomic update；leaf 输出在 parent 写入唯一 canonical ledger 前只是 candidate，不建 per-round ledgers。Impl-Package 的 ledger 和报告使用 package-relative 路径。先 canonicalize 再采信，才能防止 candidate evidence 绕过 parent 的验证与去重。
 2. Impl-Package target 在 ledger 原子更新后，主控按 [output-templates.md](references/output-templates.md) 形成 Canonical Finding Summary，调用 `python <plugin-root>/scripts/review_track_stats.py record --package <package>`，把本轮完整 accepted finding 集合写入 package trail 的 `review.canonical_summary` fact。`findingKey` 按 broken invariant/observable failure 稳定命名；多轨共同发现保留全部 `tracks`。记录失败使本轮 canonicalization `INCOMPLETE`，不得只留下 Markdown ledger 或从 reviewer prose 推导统计。
 3. Track C 的 source recheck 属于当前 ReviewRun 的 post-classification check，不创建新 phase/lifecycle；其它 accepted finding 和 unaccepted candidate 不触发它。将 recheck 限在已接受的 Spec fidelity finding，避免重复派发或把未采信候选升级成 handoff 阻断。
 

@@ -53,9 +53,10 @@ subject 不是自由标签。`attempt` scope 默认只看 trail 行的 `subject`
 同时保留已确认意见、定位和裁决，避免 worker 丢失线索后重新猜测。
 
 `resource_keys` 记录主控为本次 dispatch 选择的 effect footprint。相同 key 不自动构成冲突：
-稳定只读可以共享；不兼容副作用由主控判断并隔离或排序。renderer 不推断资源、不求交集、
-不加自动锁；授权与资源限制沿用现有 Execution Record、checkpoint 和 handoff，不建立独立
-blocker fact。
+稳定只读可以共享，不兼容副作用优先用独立 schema/数据库隔离。需要独占时，worker 启动前
+通过 `recovery lease acquire`；dispatch 可带 `lease_id`，CLI 校验当前 Attempt 中的 lease 和
+worker owner。旧 dispatch 不带 lease 仍可读写；trail 只记录结果，不承担互斥，renderer 不推断资源、
+不求交集、不加自动锁，也不建立独立 blocker fact。
 
 新 dispatch 必须带 `dispatch_id/candidate_id/subject/resource_keys/receipt/mode/chosen`。派发前重新
 `trail append` 直接按当前状态检查全局 blocking，不需要携带指纹。CLI 机械校验 identity、subject/mode 形状、implementation
@@ -204,7 +205,7 @@ renderer 的 trail 输入是按编号排序的 `execution/<attempt-id>/trail.NNN
 | `kind` | 正式形状 | renderer 消费 |
 | --- | --- | --- |
 | `decision` | 历史形状：`subject`、`seq/id/decision_id/decisionId` 至少一个、`chosen` | 仅只读兼容旧 decision/result 配对；新运行不从该游标派发 |
-| `dispatch` | `subject`、`dispatch_id`、`candidate_id`、`resource_keys`、`receipt`、`mode`、`chosen`、`outcome:"RUNNING"`、`returned:false`、`worker` | CLI 按当前状态机械校验 identity、subject/mode、implementation dependency、同一工作 in-flight 与全局 blocking，主控负责授权和资源判断。匹配 `worker-return.of` 后关闭；review dispatch 还要用 `reviews/code_delta/consumption_id` 绑定原 return |
+| `dispatch` | `subject`、`dispatch_id`、`candidate_id`、`resource_keys`、`receipt`、`mode`、`chosen`、`outcome:"RUNNING"`、`returned:false`、`worker`；可带 `lease_id` | CLI 按当前状态机械校验 identity、subject/mode、implementation dependency、同一工作 in-flight 与全局 blocking；带 `lease_id` 时还核对当前 Attempt 的 lease 存在且 owner 等于 worker。匹配 `worker-return.of` 后关闭；review dispatch 还要用 `reviews/code_delta/consumption_id` 绑定原 return |
 | `escape` | `subject`、`deviation`、`reason`；可带 `of` 关联 dispatch/decision | 记录偏离 renderer 建议或处境表未覆盖的决定；作为事件读取，不进入 fact 通道 |
 | `result` | `subject`、`outcome`；返回 decision 时带 `of`；direct evidence 放在 `ref/evidence/artifact/evidence_ref/direct_evidence`；CLI Ticket 终态转换可带 `transition=ticket-state`、`from`、`to` | outcome、incomplete、旧 direct-evidence 写法和 decision 关闭；`transition=ticket-state` 供 Ticket 边界 when-key 读取 |
 | `worker-return` | `subject`、`outcome`、`of`、`return_id`；代码增量同时带 `code_delta/consumption_id`；可带 direct-evidence payload | `subject` 必须匹配 dispatch；同一 `of` 只接受一个 return_id，完全相同事件跨归档重试幂等 |
@@ -1010,8 +1011,8 @@ P0 内部顺序只决定旧四键的 `selected/other_matches/suppressed_matches`
 4. **核对 `in_flight`。** 按 dispatch_id 列出已派发且没有匹配 worker-return 的工作。它是并行安排与恢复事实，不会自动压掉无关 runnable。
 5. **读取派生分区。** `runnable/withheld` 只展示 renderer 能从当前机械事实推出的业务动作，不能当作主控工作的完整清单。`implement/fix` 仍绑定存在且 ready 的 Ticket；attempt/finding 只承载 investigate/verify，finding 必须存在。
 6. **扫描完整范围。** 主控结合批准合同、剩余工作、现有 ER/checkpoint/handoff 与现场事实发现其它工作，并自行判断授权和资源边界；投影没有列出不等于工作不可做。
-7. **按实际冲突安排。** `resource_keys` 相同只说明观察到同一资源，不自动表示互斥；稳定读取可以并行，不兼容 effect footprint 由主控隔离或排序，renderer 不建立资源锁。
-8. **派发或恢复。** dispatch 自身携带目标 subject、mode、resource_keys、candidate/dispatch identity 与 receipt。任一状态输入变化后重新 render；CLI 机械校验 implementation dependency、同一工作 in-flight 与全局 blocking，主控核对授权和资源。在途返回按 `of` 跨归档恢复；无 worthwhile runnable 时可以等待，但 idle/in-flight 不代表 Ticket 或 package closed。
+7. **按实际冲突安排。** `resource_keys` 相同只说明观察到同一资源，不自动表示互斥；优先隔离共享 schema/数据库，确需独占时显式 acquire lease，稳定读取可以并行，renderer 不建立资源锁。
+8. **派发或恢复。** dispatch 自身携带目标 subject、mode、resource_keys、candidate/dispatch identity 与 receipt；使用 lease 时还带 `lease_id`。dispatch 记录或 worker 启动失败立即 release；worker 返回后 cleanup owner 完成清理再 release。任一状态输入变化后重新 render；CLI 机械校验 implementation dependency、同一工作 in-flight、lease owner 与全局 blocking，trail 记录结果而不提供互斥。在途返回按 `of` 跨归档恢复；无 worthwhile runnable 时可以等待，但 idle/in-flight 不代表 Ticket 或 package closed。
 9. **保留 legacy 输出。** `selected/parallel_matches/other_matches/suppressed_matches` 继续按旧优先级生成，供旧消费者读取；主控不依据它们裁掉新分区中的工作。
 
 ### 10.1 关键分区边界

@@ -44,7 +44,7 @@ Dispatcher 是通用执行协作入口。调用方提供交付目标、授权、
 
 investigate/review 结果需要交给另一个 worker 或后续 implement/fix 消费时，由主控在用户 temp 目录提供一份临时 handoff 路径。investigator/reviewer 写入结论后，主控读取、按需原地修订并验收，再把同一路径作为下游 brief 的只读输入；消费完成后由主控清理。该 handoff 不进入仓库、Git revision、业务状态或 durable docs；没有下游消费时继续直接返回，避免无用文件。
 
-使用 Impl-Package trail 时，工作无需预登记；`candidate_id` 是实际派发工作及其可信续接的身份。dispatch 记录 `dispatch_id/candidate_id/subject/mode/chosen/resource_keys/receipt`；worker return 用 `of` 指回 dispatch，并带唯一 `return_id`。含代码增量时，return 与 review 使用同一个 `code_delta` 和 `consumption_id`。旧轨迹只读兼容；字段缺失不得静默归到同 Ticket 的其他 dispatch。
+使用 Impl-Package trail 时，工作无需预登记；`candidate_id` 是实际派发工作及其可信续接的身份。独占资源在启动 worker 前 acquire lease，dispatch 记录 `dispatch_id/candidate_id/subject/mode/chosen/lease_id/resource_keys/receipt`；worker return 用 `of` 指回 dispatch，并带唯一 `return_id`。含代码增量时，return 与 review 使用同一个 `code_delta` 和 `consumption_id`。旧轨迹只读兼容；字段缺失不得静默归到同 Ticket 的其他 dispatch。lease 生命周期见 [Resource Isolation](references/resource-isolation.md)。
 
 ## 并行、复用与恢复
 
