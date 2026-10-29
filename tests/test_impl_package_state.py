@@ -30,9 +30,17 @@ def git(repo: Path, *args: str) -> str:
 
 
 class ImplPackageStateTests(unittest.TestCase):
-    def make_repo(self) -> tuple[tempfile.TemporaryDirectory[str], Path, Path]:
-        temp = tempfile.TemporaryDirectory()
-        repo = Path(temp.name)
+    _templates: dict[bool, tuple[tempfile.TemporaryDirectory[str], Path]] = {}
+
+    @classmethod
+    def _template_repo(cls, initialized: bool) -> Path:
+        cached = cls._templates.get(initialized)
+        if cached is not None:
+            return cached[1]
+
+        temp = tempfile.TemporaryDirectory(prefix="impl-package-state-template-")
+        repo = Path(temp.name) / "repo"
+        repo.mkdir()
         git(repo, "init")
         git(repo, "config", "user.email", "test@example.com")
         git(repo, "config", "user.name", "Ticket-first fixture")
@@ -46,6 +54,33 @@ class ImplPackageStateTests(unittest.TestCase):
         (repo / "evidence.md").write_text("fixture evidence\n", encoding="utf-8")
         git(repo, "add", ".")
         git(repo, "commit", "-m", "fixture")
+
+        if initialized:
+            result = subprocess.run(
+                [sys.executable, str(CLI), "--package", str(package), "package", "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md"],
+                cwd=repo,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if result.returncode:
+                temp.cleanup()
+                raise AssertionError(result.stderr or result.stdout)
+
+        cls._templates[initialized] = (temp, repo)
+        return repo
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        for temp, _ in cls._templates.values():
+            temp.cleanup()
+        cls._templates.clear()
+
+    def make_repo(self, *, initialized: bool = True) -> tuple[tempfile.TemporaryDirectory[str], Path, Path]:
+        temp = tempfile.TemporaryDirectory()
+        repo = Path(temp.name) / "repo"
+        shutil.copytree(self._template_repo(initialized), repo)
+        package = repo / "docs/implementations/20260813-example"
         return temp, repo, package
 
     def cli(self, repo: Path, package: Path, *args: str, ok: bool = True, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -65,6 +100,9 @@ class ImplPackageStateTests(unittest.TestCase):
             self.assertIn(f"{partition}:", result.stdout)
 
     def init(self, repo: Path, package: Path) -> dict:
+        state_path = package / ".impl-package/state.json"
+        if state_path.is_file():
+            return json.loads(state_path.read_text(encoding="utf-8"))
         return json.loads(self.cli(repo, package, "package", "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md").stdout)
 
     def state(self, package: Path) -> dict:
@@ -318,7 +356,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.cli(repo, package, "ticket", "satisfy", ticket, "--expect", expect, "--revision", git(repo, "rev-parse", "HEAD"), "--environment", "test")
 
     def test_init_uses_exact_35_ticket_only_schema(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         result = self.init(repo, package)
         self.assertEqual(result["formatVersion"], "3.5")
@@ -332,7 +370,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertFalse((package / "execution/initial/task-handoffs").exists())
 
     def test_canonical_english_metadata_is_accepted(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         replacements = {
             "Attempt ID：": "Attempt ID:",
@@ -358,7 +396,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(result["tickets"], 4)
 
     def test_plan_must_explicitly_declare_predecessors(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         plan = package / "plan.md"
         plan.write_text(plan.read_text(encoding="utf-8").replace("- 前置包（Predecessors）：None\n", ""), encoding="utf-8")
@@ -378,7 +416,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("declare 前置包", failed.stderr)
 
     def test_predecessor_paths_are_recorded_and_searched_first(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         predecessor = repo / "docs/implementations/20260801-base"
         predecessor.mkdir(parents=True)
@@ -432,7 +470,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("predecessors", failed.stderr)
 
     def test_state_predecessors_must_match_plan(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         predecessor = repo / "docs/implementations/20260801-base"
         predecessor.mkdir(parents=True)
@@ -467,7 +505,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(accepted["acceptance"]["environment"], "test")
 
     def test_one_acceptance_criterion_with_two_atomic_claims_requires_both(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         ticket = package / "tickets" / "01-source.md"
         ticket.write_text(
@@ -863,7 +901,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(self.state(package), before)
 
     def test_missing_claim_timing_is_not_inherited_from_the_next_claim(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         ticket = package / "tickets" / "01-source.md"
         text = ticket.read_text(encoding="utf-8")
@@ -873,7 +911,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("no evidence timing", failed.stderr)
 
     def test_arrival_path_requires_exists_or_new_markers(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         ticket = package / "tickets" / "01-source.md"
         ticket.write_text(
@@ -897,7 +935,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("unmarked segment", failed.stderr)
 
     def test_package_validate_reports_missing_exists_symbols_without_blocking(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         symbols = (
             "TaxOfficeDelegatedAccessAdapter",
@@ -921,7 +959,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertTrue(all(item["code"] == "arrival-exists-symbol-not-found" for item in arrival_findings))
 
     def test_package_validate_checks_exists_at_comparison_commit_and_skips_new(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         ticket = package / "tickets" / "01-source.md"
         text = ticket.read_text(encoding="utf-8")
@@ -1456,7 +1494,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(self.state(package)["tickets"]["TKT-01"], {"state": "PENDING"})
 
     def test_superseded_ticket_releases_only_after_successor_is_released(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         for name in ("02-transform.md", "03-verify.md", "04-publish.md"):
             ticket = package / "tickets" / name
