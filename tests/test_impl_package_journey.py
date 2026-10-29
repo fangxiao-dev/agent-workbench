@@ -4,19 +4,35 @@ import json
 import hashlib
 import os
 import shutil
-import subprocess
+import subprocess as _subprocess
 import sys
+import tempfile
 import zipfile
 from collections.abc import Callable
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py"
+_PYTHON_CACHE_PREFIX = Path(
+    os.environ.get("PYTHONPYCACHEPREFIX")
+    or Path(tempfile.gettempdir()) / f"impl-package-cli-pycache-{os.getpid()}"
+)
+SUBPROCESS_TESTS = (
+    "test_init_validate_and_status_use_v36_and_record_contract_baseline",
+    "test_evidence_add_supports_all_kinds_idempotence_and_atomic_batch",
+    "test_journey_gate_pass_confirms_amendment_requires_release_and_freezes_archive",
+    "test_situation_prompts_page_or_file_after_full_api_rehearsal",
+    "test_check_spec_reports_unresolved_source_and_exemption_references",
+)
 sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
 from impl_package_runtime import engine  # noqa: E402
+from impl_package_state import main as cli_main  # noqa: E402
 import situation  # noqa: E402
 import review_track_stats  # noqa: E402
 
@@ -143,7 +159,7 @@ Attempt ID: initial
 
 
 def _git(repo: Path, *args: str) -> str:
-    result = subprocess.run(["git", *args], cwd=repo, text=True, capture_output=True, check=False)
+    result = _subprocess.run(["git", *args], cwd=repo, text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr or result.stdout
     return result.stdout.strip()
 
@@ -215,8 +231,14 @@ def _make_fixture_package(root: Path, *, initialized: bool = False) -> tuple[Pat
 
 
 def _cli(
-    repo: Path, package: Path, *args: str, input_value: object | None = None, auto_setup: bool = True,
-) -> subprocess.CompletedProcess[str]:
+    repo: Path,
+    package: Path,
+    *args: str,
+    input_value: object | None = None,
+    auto_setup: bool = True,
+    subprocess: bool = False,
+    no_situation: bool = True,
+) -> _subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["IMPL_PACKAGE_NO_SITUATION"] = "1"
     if auto_setup and args[:2] == ("evidence", "add") and input_value is not None:
@@ -248,19 +270,48 @@ def _cli(
             if len(adjusted) != len(items):
                 input_value = adjusted
     input_text = None if input_value is None else json.dumps(input_value, ensure_ascii=False)
-    return subprocess.run(
-        [sys.executable, str(CLI), "--package", str(package), *args],
-        cwd=repo,
-        input=input_text,
-        text=True,
-        capture_output=True,
-        encoding="utf-8",
-        env=env,
-        check=False,
-    )
+    env["IMPL_PACKAGE_NO_SITUATION"] = "1" if no_situation else "0"
+    env.pop("PYTHONDONTWRITEBYTECODE", None)
+    _PYTHON_CACHE_PREFIX.mkdir(parents=True, exist_ok=True)
+    env["PYTHONPYCACHEPREFIX"] = str(_PYTHON_CACHE_PREFIX)
+    command = [sys.executable, str(CLI), "--package", str(package), *args]
+    if subprocess:
+        return _subprocess.run(
+            command,
+            cwd=repo,
+            input=input_text,
+            text=True,
+            capture_output=True,
+            encoding="utf-8",
+            env=env,
+            check=False,
+        )
+
+    stdout, stderr = StringIO(), StringIO()
+    previous_cwd, previous_stdin = Path.cwd(), sys.stdin
+    try:
+        os.chdir(repo)
+        sys.stdin = StringIO(input_text or "")
+        with patch.dict(os.environ, env, clear=True), redirect_stdout(stdout), redirect_stderr(stderr):
+            try:
+                returncode = cli_main(["--package", str(package), *args])
+            except SystemExit as exc:
+                if isinstance(exc.code, int):
+                    returncode = exc.code
+                elif exc.code is None:
+                    returncode = 0
+                else:
+                    print(exc.code, file=sys.stderr)
+                    returncode = 1
+    finally:
+        sys.stdin = previous_stdin
+        os.chdir(previous_cwd)
+    return _subprocess.CompletedProcess(command, returncode, stdout.getvalue(), stderr.getvalue())
 
 
-def _init(repo: Path, package: Path, *, ok: bool = True) -> subprocess.CompletedProcess[str]:
+def _init(
+    repo: Path, package: Path, *, ok: bool = True, subprocess: bool = False,
+) -> _subprocess.CompletedProcess[str]:
     result = _cli(
         repo,
         package,
@@ -270,6 +321,7 @@ def _init(repo: Path, package: Path, *, ok: bool = True) -> subprocess.Completed
         "initial",
         "--plan",
         "docs/implementations/20261028-journey-phase1/plan.md",
+        subprocess=subprocess,
     )
     if ok:
         assert result.returncode == 0, result.stderr or result.stdout
@@ -397,7 +449,7 @@ def _satisfy(
     *,
     environment: str | None = "local-test",
     ok: bool = True,
-) -> subprocess.CompletedProcess[str]:
+) -> _subprocess.CompletedProcess[str]:
     args = ["ticket", "satisfy", ticket, "--expect", "PENDING", "--revision", revision]
     if environment is not None:
         args.extend(["--environment", environment])
@@ -407,7 +459,15 @@ def _satisfy(
     return result
 
 
-def _gate(repo: Path, package: Path, verdict: str, revision: str, *, reason: str = "fixture reason") -> subprocess.CompletedProcess[str]:
+def _gate(
+    repo: Path,
+    package: Path,
+    verdict: str,
+    revision: str,
+    *,
+    reason: str = "fixture reason",
+    subprocess: bool = False,
+) -> _subprocess.CompletedProcess[str]:
     return _cli(
         repo,
         package,
@@ -419,6 +479,7 @@ def _gate(repo: Path, package: Path, verdict: str, revision: str, *, reason: str
         reason,
         "--no-durable-delta-reason",
         "No durable delta in fixture",
+        subprocess=subprocess,
     )
 
 
@@ -461,8 +522,14 @@ def _append_spec_note(package: Path, note: str) -> None:
     spec.write_text(text.replace(anchor, f"{anchor}\n\n{note}", 1), encoding="utf-8")
 
 
+def test_subprocess_test_names_exist() -> None:
+    assert SUBPROCESS_TESTS
+    assert all(name in globals() for name in SUBPROCESS_TESTS)
+
+
 def test_init_validate_and_status_use_v36_and_record_contract_baseline(tmp_path: Path) -> None:
-    repo, package, _ = _init_v36(tmp_path)
+    repo, package = _make_package(tmp_path)
+    _init(repo, package, subprocess=True)
     state = _state(package)
 
     assert state["acceptance"]["releaseOrder"] == "none"
@@ -488,14 +555,7 @@ def test_check_spec_resolves_rule_and_no_acceptance_chapters_by_number_or_title(
     spec = spec.replace("- 无需验收的章节： §1, §3", "- 无需验收的章节： 核心目标, 实施边界")
     repo, package = _make_package(tmp_path, spec=spec)
 
-    result = _cli(
-        repo,
-        package,
-        "package",
-        "check-spec",
-        "--spec",
-        package.joinpath("spec.md").relative_to(repo).as_posix(),
-    )
+    result = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["valid"] is True
@@ -507,7 +567,14 @@ def test_check_spec_accepts_none_when_rules_cover_every_chapter(tmp_path: Path) 
     spec = spec.replace("- 无需验收的章节： §1, §3", "- 无需验收的章节： none")
     repo, package = _make_package(tmp_path, spec=spec)
 
-    result = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
+    result = _cli(
+        repo,
+        package,
+        "package",
+        "check-spec",
+        "--spec",
+        package.joinpath("spec.md").relative_to(repo).as_posix(),
+    )
 
     assert result.returncode == 0, result.stderr
 
@@ -522,7 +589,15 @@ def test_check_spec_accepts_none_when_rules_cover_every_chapter(tmp_path: Path) 
 def test_check_spec_reports_unresolved_source_and_exemption_references(tmp_path: Path, spec: str, reference: str) -> None:
     repo, package = _make_package(tmp_path, spec=spec)
 
-    result = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
+    result = _cli(
+        repo,
+        package,
+        "package",
+        "check-spec",
+        "--spec",
+        package.joinpath("spec.md").relative_to(repo).as_posix(),
+        subprocess=True,
+    )
 
     assert result.returncode != 0
     assert reference in result.stderr
@@ -699,7 +774,7 @@ def test_evidence_add_supports_all_kinds_idempotence_and_atomic_batch(tmp_path: 
         {"kind": "release", "artifact": "artifacts/evidence.md", "revision": revision, "environment": "local-test", "conclusion": "supporting"},
     ]
 
-    added = _cli(repo, package, "evidence", "add", input_value=records)
+    added = _cli(repo, package, "evidence", "add", input_value=records, subprocess=True)
     assert added.returncode == 0, added.stderr
     assert json.loads(added.stdout)["added"] == 5
     state = _state(package)
@@ -1226,8 +1301,9 @@ def test_record_surface_requires_a_record_entry_and_any_package_file(tmp_path: P
 def test_situation_prompts_page_or_file_after_full_api_rehearsal(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     repo, package, revision = _init_v36(tmp_path)
     records = [_journey_record(revision, step, surface="api") for step in ("J1-S1", "J1-S2")]
-    added = _cli(repo, package, "evidence", "add", input_value=records)
+    added = _cli(repo, package, "evidence", "add", input_value=records, subprocess=True, no_situation=False)
     assert added.returncode == 0, added.stderr
+    assert "[处境]" in added.stdout
 
     code = situation.main(["render", "--package", str(package), "--json"])
     rendered = json.loads(capsys.readouterr().out)
@@ -1769,7 +1845,7 @@ def test_journey_gate_pass_confirms_amendment_requires_release_and_freezes_archi
     added_pages = _cli(repo, package, "evidence", "add", input_value=page_records)
     assert added_pages.returncode == 0, added_pages.stderr
 
-    passed = _gate(repo, package, "pass", revision, reason="全部验收满足")
+    passed = _gate(repo, package, "pass", revision, reason="全部验收满足", subprocess=True)
     assert passed.returncode == 0, passed.stderr or passed.stdout
     assert "metrics: execution/initial/metrics.json" in passed.stdout
     assert (package / "execution/initial/metrics.json").is_file()
@@ -1989,7 +2065,7 @@ def test_situation_renders_new_v36_acceptance_rows_without_changing_global_block
     _commit_path(repo, outside, "change outside package")
     _append_spec_note(package, "Owner clarification: Changed.")
 
-    result = subprocess.run(
+    result = _subprocess.run(
         [sys.executable, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts/situation.py"), "render", "--package", str(package), "--json"],
         cwd=repo,
         capture_output=True,

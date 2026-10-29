@@ -4,7 +4,7 @@ import json
 import os
 import re
 import shutil
-import subprocess
+import subprocess as _subprocess
 import sys
 import tempfile
 import unittest
@@ -17,20 +17,85 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py"
 FIXTURE = ROOT / "tests/fixtures/impl-package-ticket-first"
+_PYTHON_CACHE_PREFIX = Path(
+    os.environ.get("PYTHONPYCACHEPREFIX")
+    or Path(tempfile.gettempdir()) / f"impl-package-cli-pycache-{os.getpid()}"
+)
+SUBPROCESS_TESTS = (
+    "test_init_uses_exact_35_ticket_only_schema",
+    "test_evidence_add_batch_preserves_order_and_duplicate_noop",
+    "test_gate_checks_release_edges_and_clears_active_checkpoints",
+    "test_no_situation_flag_and_environment_switch_each_disable_footer",
+    "test_trail_append_named_flags_reject_invalid_values",
+)
 sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
 from impl_package_runtime import command_groups, engine  # noqa: E402
+from impl_package_state import main as cli_main  # noqa: E402
 from situation import Fact  # noqa: E402
 
 
 def git(repo: Path, *args: str) -> str:
-    result = subprocess.run(["git", *args], cwd=repo, text=True, capture_output=True, check=False)
+    result = _subprocess.run(["git", *args], cwd=repo, text=True, capture_output=True, check=False)
     if result.returncode:
         raise AssertionError(result.stderr or result.stdout)
     return result.stdout.strip()
 
 
+def _cli(
+    repo: Path,
+    package: Path,
+    *args: str,
+    input_text: str | None = None,
+    subprocess: bool = False,
+    no_situation: bool | None = None,
+) -> _subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env.pop("PYTHONDONTWRITEBYTECODE", None)
+    env["PYTHONPYCACHEPREFIX"] = str(_PYTHON_CACHE_PREFIX)
+    if no_situation is not None:
+        env["IMPL_PACKAGE_NO_SITUATION"] = "1" if no_situation else "0"
+    _PYTHON_CACHE_PREFIX.mkdir(parents=True, exist_ok=True)
+    command = [sys.executable, str(CLI), "--package", str(package), *args]
+    if subprocess:
+        return _subprocess.run(
+            command,
+            cwd=repo,
+            input=input_text,
+            text=True,
+            capture_output=True,
+            encoding="utf-8",
+            env=env,
+            check=False,
+        )
+
+    stdout, stderr = StringIO(), StringIO()
+    previous_cwd, previous_stdin = Path.cwd(), sys.stdin
+    try:
+        os.chdir(repo)
+        sys.stdin = StringIO(input_text or "")
+        with patch.dict(os.environ, env, clear=True), redirect_stdout(stdout), redirect_stderr(stderr):
+            try:
+                returncode = cli_main(["--package", str(package), *args])
+            except SystemExit as exc:
+                if isinstance(exc.code, int):
+                    returncode = exc.code
+                elif exc.code is None:
+                    returncode = 0
+                else:
+                    print(exc.code, file=sys.stderr)
+                    returncode = 1
+    finally:
+        sys.stdin = previous_stdin
+        os.chdir(previous_cwd)
+    return _subprocess.CompletedProcess(command, returncode, stdout.getvalue(), stderr.getvalue())
+
+
 class ImplPackageStateTests(unittest.TestCase):
     _templates: dict[bool, tuple[tempfile.TemporaryDirectory[str], Path]] = {}
+
+    def test_subprocess_test_names_exist(self) -> None:
+        self.assertTrue(SUBPROCESS_TESTS)
+        self.assertTrue(all(callable(getattr(type(self), name, None)) for name in SUBPROCESS_TESTS))
 
     @classmethod
     def _template_repo(cls, initialized: bool) -> Path:
@@ -56,12 +121,15 @@ class ImplPackageStateTests(unittest.TestCase):
         git(repo, "commit", "-m", "fixture")
 
         if initialized:
-            result = subprocess.run(
-                [sys.executable, str(CLI), "--package", str(package), "package", "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md"],
-                cwd=repo,
-                text=True,
-                capture_output=True,
-                check=False,
+            result = _cli(
+                repo,
+                package,
+                "package",
+                "init",
+                "--attempt",
+                "initial",
+                "--plan",
+                "docs/implementations/20260813-example/plan.md",
             )
             if result.returncode:
                 temp.cleanup()
@@ -83,27 +151,54 @@ class ImplPackageStateTests(unittest.TestCase):
         package = repo / "docs/implementations/20260813-example"
         return temp, repo, package
 
-    def cli(self, repo: Path, package: Path, *args: str, ok: bool = True, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
-        result = subprocess.run([sys.executable, str(CLI), "--package", str(package), *args], cwd=repo, input=input_text, text=True, capture_output=True, check=False)
+    def cli(
+        self,
+        repo: Path,
+        package: Path,
+        *args: str,
+        ok: bool = True,
+        input_text: str | None = None,
+        subprocess: bool = False,
+    ) -> _subprocess.CompletedProcess[str]:
+        result = _cli(repo, package, *args, input_text=input_text, subprocess=subprocess)
         if ok and result.returncode:
             raise AssertionError(result.stderr or result.stdout)
         return result
 
-    def cli_with_situation(self, repo: Path, package: Path, *args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+    def cli_with_situation(
+        self,
+        repo: Path,
+        package: Path,
+        *args: str,
+        input_text: str | None = None,
+        subprocess: bool = False,
+    ) -> _subprocess.CompletedProcess[str]:
         with patch.dict(os.environ, {"IMPL_PACKAGE_NO_SITUATION": "0"}):
-            return self.cli(repo, package, *args, input_text=input_text)
+            return self.cli(repo, package, *args, input_text=input_text, subprocess=subprocess)
 
-    def assert_situation_footer(self, result: subprocess.CompletedProcess[str]) -> None:
+    def assert_situation_footer(self, result: _subprocess.CompletedProcess[str]) -> None:
         self.assertEqual(result.returncode, 0)
         self.assertRegex(result.stdout, r"\[处境\]")
         for partition in ("blocking", "runnable", "withheld", "in_flight"):
             self.assertIn(f"{partition}:", result.stdout)
 
-    def init(self, repo: Path, package: Path) -> dict:
+    def init(self, repo: Path, package: Path, *, subprocess: bool = False) -> dict:
         state_path = package / ".impl-package/state.json"
         if state_path.is_file():
             return json.loads(state_path.read_text(encoding="utf-8"))
-        return json.loads(self.cli(repo, package, "package", "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md").stdout)
+        return json.loads(
+            self.cli(
+                repo,
+                package,
+                "package",
+                "init",
+                "--attempt",
+                "initial",
+                "--plan",
+                "docs/implementations/20260813-example/plan.md",
+                subprocess=subprocess,
+            ).stdout
+        )
 
     def state(self, package: Path) -> dict:
         return json.loads((package / ".impl-package/state.json").read_text(encoding="utf-8"))
@@ -358,7 +453,7 @@ class ImplPackageStateTests(unittest.TestCase):
     def test_init_uses_exact_35_ticket_only_schema(self) -> None:
         temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
-        result = self.init(repo, package)
+        result = self.init(repo, package, subprocess=True)
         self.assertEqual(result["formatVersion"], "3.5")
         self.assertEqual(result["tasks"], 0)
         self.assertEqual(result["readyTickets"], ["TKT-01", "TKT-03", "TKT-04"])
@@ -592,7 +687,9 @@ class ImplPackageStateTests(unittest.TestCase):
         }
         second = {**first, "claim": "AC-2", "timing": "remaining-completion"}
 
-        single = json.loads(self.cli(repo, package, "evidence", "add", input_text=json.dumps(first)).stdout)
+        single = json.loads(
+            self.cli(repo, package, "evidence", "add", input_text=json.dumps(first), subprocess=True).stdout
+        )
         self.assertEqual(single, {"ticket": "TKT-01", "claim": "AC-1", "idempotent": False})
         result = json.loads(
             self.cli(repo, package, "evidence", "add", input_text=json.dumps([first, second, second])).stdout
@@ -1193,8 +1290,18 @@ class ImplPackageStateTests(unittest.TestCase):
             (("--review-phase", "terminal"), "invalid choice"),
             (("--review-track", "Track E"), "invalid choice"),
         )
-        for (option, value), message in invalid:
-            result = self.cli(repo, package, "trail", "append", option, value, input_text=payload, ok=False)
+        for index, ((option, value), message) in enumerate(invalid):
+            result = self.cli(
+                repo,
+                package,
+                "trail",
+                "append",
+                option,
+                value,
+                input_text=payload,
+                ok=False,
+                subprocess=index == 0,
+            )
             self.assertEqual(result.returncode, 2)
             self.assertIn(message, result.stderr)
 
@@ -1591,7 +1698,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.cli(repo, package, "recovery", "checkpoint", "--next", "gate", "--evidence", "evidence.md")
         head = git(repo, "rev-parse", "HEAD")
         gate_args = ("gate", "pass", "--comparison-commit", head, "--reason", "fixture", "--no-durable-delta-reason", "fixture", "--environment", "test")
-        rejected = self.cli(repo, package, *gate_args, ok=False)
+        rejected = self.cli(repo, package, *gate_args, ok=False, subprocess=True)
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("terminal review coverage", rejected.stderr + rejected.stdout)
         # Track B no longer substitutes for the required Track C.
@@ -1893,6 +2000,17 @@ class ImplPackageStateTests(unittest.TestCase):
         self.init(repo, package)
 
         with patch.dict(os.environ, {"IMPL_PACKAGE_NO_SITUATION": "0"}):
+            footer = self.cli(
+                repo,
+                package,
+                "recovery",
+                "checkpoint",
+                "--next",
+                "footer enabled",
+                "--evidence",
+                "evidence.md",
+                subprocess=True,
+            )
             flag = self.cli(
                 repo,
                 package,
@@ -1903,6 +2021,7 @@ class ImplPackageStateTests(unittest.TestCase):
                 "flag disabled",
                 "--evidence",
                 "evidence.md",
+                subprocess=True,
             )
         with patch.dict(os.environ, {"IMPL_PACKAGE_NO_SITUATION": "1"}):
             env = self.cli(
@@ -1914,8 +2033,10 @@ class ImplPackageStateTests(unittest.TestCase):
                 "environment disabled",
                 "--evidence",
                 "evidence.md",
+                subprocess=True,
             )
 
+        self.assert_situation_footer(footer)
         for result in (flag, env):
             self.assertEqual(result.returncode, 0)
             self.assertNotIn("[处境]", result.stdout)
