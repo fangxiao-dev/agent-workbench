@@ -155,14 +155,9 @@ skill catalog 可达（非 impl-package 阶段路由）。
 
 ## 压缩与 handoff 决策（防误接）
 
-**背景**：跨宿主处境表里有 6 个 handoff 处境（`handoff-due` / `handoff-in-flight` / `handoff-recovery-needed` / `handoff-target-corrected` / `ticket-boundary-handoff` / `trail-rotation-due`）及对应协议片段。其中 `attempt.record.handoff-due` 由 `attempt.compaction_pressure_high` 驱动（renderer 需要宿主传 `--compaction-pressure`）。
+`attempt.record.handoff-due` 由 `attempt.compaction_pressure_high` 驱动，需要宿主传入 `--compaction-pressure`。DSH 压缩后在同一 session 继续，由 `impl-anchor` 重新锚定；situation-hook 保持不传此参数，压缩压力保持 unknown，不触发换会话建议。
 
-**决策（2026-08）**：
-
-1. **DSH 不传 compaction-pressure 给 renderer**（situation-hook 有意省略，代码注释在 `refreshSituation`）。`compaction_pressure_high` 因此保持"无法判定"而非 false——处境表永远不会在 DSH 上选中 `handoff-due`。理由：handoff 是为 Codex 式"上下文耗尽→开新 thread→需显式交接"服务的；DSH 会话压缩后**原地继续**（同 session 恢复 + `impl-anchor` 压缩回落重新锚定），handoff 建议在 DSH 是错误指导。
-2. **DSH 若未来需要压缩感知，归 `impl-anchor` 的回落逻辑**（压缩后重注入刷新处境），**绝不**通过接通 pressure 激活 `handoff-due`。
-3. **其余 handoff 处境在 DSH 保持存活且正确**：`handoff-in-flight` / `handoff-recovery-needed` / `handoff-target-corrected`（显式交接协议与异常对账）、`ticket-boundary-handoff`（Ticket 终态交接机会）、`trail-rotation-due`（轨迹轮换）——这些不依赖 pressure，DSH 里照常触发且语义成立。
-4. **跨宿主零改动**：situations.yaml / protocols.json（Python 侧）保留全部 handoff 行——对 Codex/Claude 仍有效（若用），对 DSH 只是不触发，无副作用。不做 DSH 专属标注污染跨宿主文件。
+DSH 的压缩感知归 `impl-anchor` 回落逻辑；轨迹轮换等包内恢复仍由跨宿主 harness 负责。交接内容统一使用 `handoff`，不在适配器中维护会话创建或重发协议。
 
 **检查清单（未来改动时）**：
 - [ ] 不要给 situation-hook 的 render 调用加 `--compaction-pressure`

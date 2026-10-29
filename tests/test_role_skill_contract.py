@@ -41,7 +41,7 @@ def test_role_skills_leave_task_prompt_to_the_caller() -> None:
 
 def test_global_entry_and_handoff_route_to_dispatcher() -> None:
     global_instructions = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    handoff = (ROOT / "skills" / "handoff" / "references" / "task-execution.md").read_text(
+    handoff = (ROOT / "skills" / "handoff" / "references" / "impl-package.md").read_text(
         encoding="utf-8"
     )
 
@@ -52,8 +52,7 @@ def test_global_entry_and_handoff_route_to_dispatcher() -> None:
         assert "impl-package:dispatch-bounded-task" not in text
     assert "independent read-only review" in global_instructions
     assert "thin `reviewer` contract" in global_instructions
-    assert "独立 review 使用只读 subagent" in handoff
-    assert "存在 `reviewer`" in handoff
+    assert "不在交接中复制调度或审查流程" in handoff
     assert not (
         ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "skills" / "investigate-before-implement" / "SKILL.md"
     ).exists()
@@ -63,4 +62,3 @@ def test_global_entry_and_handoff_route_to_dispatcher() -> None:
     assert "candidate selection" in global_instructions
     assert "`do-review` owns review topology and finding closure" in global_instructions
     assert "The caller supplies the task-specific" not in global_instructions
-    assert "不在 handoff 中重复" in handoff

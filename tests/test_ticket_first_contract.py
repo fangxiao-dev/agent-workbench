@@ -441,7 +441,7 @@ class TicketFirstContractTests(unittest.TestCase):
         composition = (ROOT / "plugin-marketplace/plugins/impl-package/references/impl-package-composition-contract.md").read_text(encoding="utf-8")
         planning = (ROOT / "plugin-marketplace/plugins/impl-package/skills/impl-planning/SKILL.md").read_text(encoding="utf-8")
         dag = (ROOT / "plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md").read_text(encoding="utf-8")
-        handoff = (ROOT / "skills/handoff-to-new-session/SKILL.md").read_text(encoding="utf-8")
+        handoff = (ROOT / "skills/handoff/references/impl-package.md").read_text(encoding="utf-8")
 
         self.assertIn("dag=false", composition)
         self.assertIn("RETIRED", composition)
@@ -449,8 +449,8 @@ class TicketFirstContractTests(unittest.TestCase):
         self.assertIn("新 package 一律不创建 Task DAG", dag)
         self.assertIn("owner 明确授权恢复/迁移已有 3.4 package", dag)
         self.assertIn("不把 Task handoff 或 `DONE` 当 acceptance proof", dag)
-        self.assertIn("active checkpoint", handoff)
-        self.assertIn("context compaction is only an emergency fallback", handoff)
+        self.assertIn("/impl-package:dev-with-track", handoff)
+        self.assertIn("不复制 Ticket 状态", handoff)
         self.assertIn("新 package 不创建 Task/DAG", planning)
 
     def make_validate_package(

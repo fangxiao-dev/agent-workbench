@@ -189,8 +189,6 @@ false；只有没有 U 且所有比较都相等时才是 true。
 | `trail.direct_evidence_returned` | R：扫描 `kind=result` 与 `kind=worker-return`；其 payload key 是 `ref/evidence/artifact/evidence_ref/direct_evidence`，非空 scalar/list item 即算 direct payload | 布尔；payload 可以 object、string 或其他 truthy 值，但要继续判 `evidence.indexed` 时必须有 artifact/claim/revision/environment | 无/坏 trail = U；trail 有但没有 result-like payload = F；HF：无 | `ticket.record.evidence-unfiled` |
 | `trail.envelope_valid` | R：显式 fact `trail.envelope_valid` 优先；否则读取 result-like row 或 `envelope/result` 容器中的结构化 `envelope_valid/envelopeValid` | 布尔；建议 JSON bool `true/false` | 无/坏 trail = U；有 trail 但没有结构化字段/fact = U；显式非布尔 = U；不再识别 envelope 文本 marker；HF：未知 fact key | `finding.fix.worker-envelope-invalid` |
 | `trail.finding_source` | R：当前 subject rows 的顶层 `finding_source` 或 `findingSource` 字符串，取最后一个 | 字符串；表使用 `reviewer`、`main-session` | 无/坏 trail = U；trail 正常但没有字段 = 已知值 None（与任何字符串不等）；HF：无 | `finding.fix.reviewer-returned`、`finding.fix.main-session-discovered` |
-| `trail.handoff_recovery_needed` | R：attempt scope 的最新 fact；不再扫描 bootstrap/retry/rename/create-thread 文本 marker | 布尔 | 无/坏 trail 或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.record.handoff-recovery-needed` |
-| `trail.handoff_target_corrected` | R：attempt scope 的最新 fact；不再扫描 corrected target/order 文本 marker | 布尔 | 无/坏 trail 或无 fact = U；fact 非布尔 = U；未知 fact key = HF | `attempt.record.handoff-target-corrected` |
 | `trail.has_investigate` | R：attempt context 扫全部 rows；ticket/finding context 扫各自 subject rows；`situation` 以 `ticket.investigate.` 开头，或 chosen 含 `investigate`，或 outcome 为 `EVIDENCE_GAP/EVIDENCE_SUFFICIENT` 即 true | 布尔 | 无/坏 trail = U；有 trail 无 signal = F；HF：无 | 兼容 parser key；正式 `ticket.investigate.no-carrier` 使用 `ticket.investigation_carrier_present` |
 | `trail.incomplete_count` | R（归档后接活动 trail）：按 dispatch_id/of 轴统计该派发末尾连续 INCOMPLETE；次数只作诊断观察，后续动作依据边界与上下文可信度 | 非负整数 | 无/坏 trail或旧 result 缺 of = U；没有 INCOMPLETE = 0；HF：无 | 诊断输出 |
 | `trail.last_outcome` | R（归档后接活动 trail）：按 dispatch_id/of 轴读取该派发最后一个 result-like outcome；旧 result 缺 of 时不聚合 | 字符串枚举由表约定；比较大小写敏感 | 无/坏 trail或旧行缺 of = U；该派发无 outcome = 已知 None；HF：无 | worker-return 消费处境 |
@@ -252,8 +250,6 @@ trail 缺失或读取失败仍是输入不可用，不套用缺省值。
 | `trail.anchor_mismatch` | `unknown` | 没有 mismatch 声明不能证明锚点一致，默认 false 会少提醒锚点恢复。 |
 | `trail.checkpoint_projection_race` | `unknown` | 没有 race 声明不能证明不存在竞态，默认 false 会少提醒 checkpoint 对账。 |
 | `trail.envelope_valid` | `unknown` | 没有结构化 validity 声明不能证明 envelope 无效，默认 false 会把无 envelope 误报为 invalid。 |
-| `trail.handoff_recovery_needed` | `unknown` | 没有 recovery 声明不能证明 bootstrap 正常，默认 false 会少提醒恢复动作。 |
-| `trail.handoff_target_corrected` | `unknown` | 没有 corrected 声明不能证明目标未修正，默认 false 会少提醒重发或取消。 |
 | `trail.reviewer_unavailable` | `unknown` | 没有 unavailable 声明不能证明 reviewer 可用，默认 false 会少提醒重新派发。 |
 | `review.dispatch_pending` | 结构化待派审欠项 | value 带 `return_id/code_delta/consumption_id/reason`；不要求 capacity，不代表 review 已派发或完成。 |
 | `review.canonical_summary` | `review` 的结构化 summary | 无默认值；由 review 流程写入并供追踪/统计消费 | `do-review` 的 ReviewRun 记录 |
@@ -926,8 +922,6 @@ P0 内部顺序只决定旧四键的 `selected/other_matches/suppressed_matches`
 | 2 | `package.record.state-missing` | `package.state_invalid = true` | 无（该 parser 总能给出已知 true/false；外围 package 不存在仍可 HF） | 缺失或不合法 state 都是已知 true，包括 schema、Ticket、evidence、checkpoint 交叉校验失败；不要把它当作“没有 state 才命中”。 |
 | 3 | `package.record.projection-drift` | `package.validate.projection_drift = true` | `package.validate.projection_drift` | 必须有结构化 `--validation-result` 且值为 true；错误的 validation result 是 HF，不是该 key 的 U。 |
 | 4 | `attempt.record.anchor-mismatch` | `trail.anchor_mismatch = true` | `trail.anchor_mismatch` | 当前正式入口是 attempt scope 的 typed fact；普通 prose 或相邻 marker 不建立该事实。 |
-| 5 | `attempt.record.handoff-recovery-needed` | `trail.handoff_recovery_needed = true` | `trail.handoff_recovery_needed` | 必须有 attempt scope 的 typed fact；缺声明是 U，不是“恢复正常”的 false。 |
-| 6 | `attempt.record.handoff-target-corrected` | `trail.handoff_target_corrected = true` | `trail.handoff_target_corrected` | 必须有 attempt scope 的 typed fact；`chosen` 或 prose 中写 corrected 不再自动命中。 |
 | 7 | `attempt.record.session-resumed` | `attempt.active_checkpoint_present = true` AND `trail.actions_since_checkpoint = 0` | `attempt.active_checkpoint_present`、`trail.actions_since_checkpoint` | 只需要合法 state 中的 `activeCheckpoints.attempt`，以及 checkpoint 后没有动作。显式 `attempt.session_resumed` 不再是判据；有 marker 时检查 marker 后的行数，没有 marker 时忽略兼容性的 session declaration、但其它 typed fact/action 会使计数大于 0。 |
 | 8 | `ticket.record.evidence-unfiled` | `trail.direct_evidence_returned = true` AND `evidence.indexed = false` | `trail.direct_evidence_returned`、`evidence.indexed` | 必须在当前 Ticket subject 下有 `result` 或 `worker-return` 的 direct-evidence payload；要让 `evidence.indexed` 确定为 false，payload 还必须能解析出完整的 artifact、claim、revision、environment tuple，但该 tuple 不得出现在未 invalidated 的 `evidenceIndex` 中。payload 缺 link 字段会使第二个 key U。 |
 
