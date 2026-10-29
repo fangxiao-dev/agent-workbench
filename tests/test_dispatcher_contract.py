@@ -72,6 +72,17 @@ def test_resource_reference_classifies_local_dependencies_and_real_resources() -
         assert marker in text
     assert "局部 barrier 不升级为全局 blocking" in text
     assert "独立 worktree 只隔离文件" in text
+    for marker in (
+        "独立 worktree、schema 或数据库隔离",
+        "worker 进程启动前通过 `recovery lease acquire`",
+        "`lease_id` 与 `resource_keys` 写入 dispatch",
+        "worker 启动失败时立即 release",
+        "cleanup owner 清理进程",
+        "清理或 release 失败要返回 residue",
+        "互斥只来自 lease",
+        "残留 lease 由 owner 显式 release",
+    ):
+        assert marker in text
 
 
 def test_dispatcher_correlates_receipt_return_and_delta_review() -> None:

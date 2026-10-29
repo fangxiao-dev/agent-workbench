@@ -74,6 +74,8 @@ Plan、Ticket 或 DAG 的语义变化只使受影响范围的 approval/validatio
 
 ## 6. Ticket-only 运行边界
 
+以下 stable claim 条目是 3.5 package 的 acceptance 合同；3.6 package 见 §7。
+
 - 新 package 严格使用 Ticket barrier：未释放 `implementation` 边的 Ticket 不进入 `readyTickets`；`acceptance` 边允许实施但阻止最终 `SATISFIED`；`release` 边只在发布/Gate 前复核。
 - early evidence 只能索引真实产物，不能把 Ticket 推进到中间 acceptance 状态。Ticket 仍需覆盖全部 required claims 才能最终满足。
 - stable claim 是 runtime 可判定的 acceptance atom。一个业务 AC 可以包含多个 stable claim ID；可独立失败或需要不同 oracle/evidence lane 直接证明的子句必须拆成不同 ID，同一不可分割 oracle 共同裁决的一组场景可以保留一个 ID。多个 claim 可以引用同一 artifact，但每个 ID 都必须有自己的 evidence record。
@@ -82,4 +84,58 @@ Plan、Ticket 或 DAG 的语义变化只使受影响范围的 approval/validatio
 - 跨 session 续接沿用既有默认：交接前写 active checkpoint，长期判断写 ER judgment；compact 只作异常兜底，不是正常恢复权威。
 - package task session 主线程是 `state.json` 唯一 writer；worker 只返回结构化 evidence。未来 broker 的协调 ledger 不属于本阶段。
 
-`RETIRED` 是新合同中原 `WAIVED`/`SUPERSEDED` 的统一 terminal 状态，必须带 `disposition: waived | superseded`。3.4 runtime 只作为一次性迁移输入；3.5 runtime 只接受 Ticket/evidence/checkpoint 状态。
+`RETIRED` 是新合同中原 `WAIVED`/`SUPERSEDED` 的统一 terminal 状态，必须带 `disposition: waived | superseded`。3.4 runtime 只作为一次性迁移输入；3.5/3.6 runtime 只接受 Ticket/evidence/checkpoint 状态。
+
+## 7. 3.6 Journey 验收合同
+
+新 package 的 plan 写 `Acceptance: journey` 生成 `formatVersion: "3.6"`；`Release order: required | none` 可选，缺省为 `none`。无该标记的 plan 与既有 3.5 package 继续使用 §6 的 stable claim 合同，不迁移；两种格式互不读取对方字段。字段、record 与命令见 [current-state](impl-package-current-state.md)。
+
+**验收对象由 Spec 定义，归属由 Ticket 声明。** `spec.md §7` 用三张固定列表承载合同，Spec 只写 Journey、step 与套件，不点名 Ticket：
+
+| 表 | 列 | 要点 |
+| --- | --- | --- |
+| `### Journeys` 下每条 `#### J<n> <终态>` | `Step \| 角色 \| 入口类型 \| 控件 \| 操作入口 \| 观察表面 \| 预期 \| 承接` | step id 为 `J<n>-S<m>`，顺序固定；角色是执行该步的人（页面步用该角色自己的账号）；入口类型为 `页面 \| 文件 \| 记录`，页面步的控件写触发该步的可见控件名，文件与记录步写 `—`；`记录` 核对页面无法呈现的运行记录，不替代页面/文件步，不能是第 1 步；Journey 标题下可有 `准备：` 行写账号、权限、种子账套等由 harness 预置的前置条件，它不是 step；Journey 只含用户亲手做或亲自收到的步骤，用户看不到的行为（并发、幂等、回滚、租户隔离）归 Rule Matrix 与套件；承接是上一步交给本步的业务对象（如 `账单 ID`），无则 `—`，第 1 步恒为 `—` |
+| `### Rule Matrix` | `Rule \| Source \| Suite \| Oracle` | 每条规则有 oracle，并指向一个已登记套件；Source 是 spec.md 内的章节引用（`§N`、`§N.M` 或标题原文，逗号分隔） |
+| `### Required Suites` | `Suite \| Kind \| Scope \| Entry \| Environment` | Kind 为 `rule \| safety`，Scope 为 `ticket \| package`；Environment 写明确字符串，记录按字符串精确匹配 |
+
+表后固定一行 `- 无需验收的章节：<章节引用 | none>`。除 §7 外，spec.md 每个二、三级标题都要被某条 Source 引用（引用父章节覆盖子章节）或列在该行，否则 `package validate`/`package init`/`package check-spec` 失败并列出章节。
+
+包级 safety 套件按风险声明：触及 tenant、RBAC/privacy、幂等或数据完整性时必须有，未触及时在 Spec 写明理由。套件清单是随 Spec Gate 审批的合同，Plan 与 Gate 不临时补造。
+
+Ticket 的 `## Coverage` 是归属的唯一来源：
+
+```text
+- Journey steps: J1-S1, J1-S2 | none
+- Suites: <suite id>[, ...] | none
+- Required review: none | <review 范围与原因>
+```
+
+steps 与 suites 不同时为 `none`，harness、migration、加固类 Ticket 因负责套件而合法；每个 step 与每个 ticket 级套件至少被一张 Ticket 认领。依赖仍写在 `## Blocking Dependencies`，三类 typed edge 不变。
+
+**Ticket `SATISFIED`** 的依据是：`--revision` 已合入（当前 HEAD 的 ancestor）、Coverage 里负责的套件都有有效 evidence、Required review 有有效结果，且 implementation/acceptance 入边已释放。Journey step 不是 Ticket 的满足条件，它归 Gate，下游因此不必等上游走通整条旅程。
+
+**Journey 走通** 用 `journey-step` evidence 登记，每条带 `surface`（`page | file | log | api`）。面向客户的端到端验收是页面级（或用户实际收到的文件）；API 跑 Journey 是早期预演，在 UI 出现前让进度可见。
+
+- `page`：package 内 Playwright trace `.zip`，其记录的动作含对该步声明控件的 click/press/fill（runtime 解析 trace，不符即拒绝）；或 `manualBy` 加 package 内截图（人工走查）。
+- `file`：用户实际收到的文件（不接受 .md/.txt/.log），runtime 记录其 sha256。
+- `log`：对应 `记录` 步，artifact 为 package 内文件。
+- `api`：恒被接受，只计入预演。
+
+两个进度数：`reach` 是同一 run 内从第 1 步起、surface 与声明的入口类型一致的连续有效步数，Gate 只认它；`rehearsalReach` 不限 surface。Gate 要求每条 Journey 在最终版本上有一次 reach 覆盖全部 step 的连续 run。runtime 还核对 `entry` 与 Spec 一致、顺序与有效期；“上一步输出是下一步输入”由执行者在 artifact 中记录，由 review 与 Owner 抽查。
+
+**Harness 与 run 隔离**：3.6 plan 用固定行 `Harness setup/precheck/cleanup`、`Harness isolation: per-run` 与 `First visible step: <StepId> @ <TicketId>` 声明验证 harness（命令来自项目 QA 入口，性质见 `validation-harness`），缺失或无效时 `package init/validate` 拒绝。每个 run 先登记 `run-setup` evidence（setup 与 precheck 输出），该 run 的 `journey-step` 才被接受；第 1 步的 `outputRef` 不得出现在其他 run，即每个 run 使用自己创建的对象。声明的 Ticket 已 `SATISFIED` 而声明的 step 仍无匹配的 page/file record 时，触发 `attempt.walking_skeleton_overdue`，进入 situation 与 Owner Summary。
+
+**Gate 分两层核对**：产品层（Journey）与规则/安全层（Required Suites）；其余是 Ticket 与合入、最终 HEAD 的 terminal-final review、Amendment、发布顺序和既有终态条件。任一必需事实 unknown 即不放行。
+
+**Amendment** 登记批准后改变用户可见结果的合同修订，Owner 确认绑定具体修订版本，内容再变化用新 ID。待确认或漏登的 Amendment 只阻止 `gate pass`，已授权且不依赖该语义的工作继续。
+
+**发布顺序** `Release order: required` 时是一条 `release` evidence，artifact 为 package 内的发布顺序表（合入、fixture/backfill、开关/发布、清理），不逐条记录 worker dispatch。
+
+**旧检查的接替关系**：
+
+| 3.5 检查 | 3.6 |
+| --- | --- |
+| Ticket AC stable claim、per-claim evidence | Journey 连续走通记录与规则套件结果，按套件登记 |
+| Safety Invariants claim | 包级 safety 套件 |
+| Ticket `SATISFIED` 的 claim 覆盖 | 已合入 + 负责套件通过 + required review 通过 |
+| acceptance map、Final Gate “Spec AC 能定位到 Ticket claim” | Gate 两层核对 |

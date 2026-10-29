@@ -42,6 +42,8 @@ partial requirements, scope creep, incorrect behavior, interface/seam drift, com
 and cross-module boundaries. Every finding needs stable contract evidence and diff evidence. Do not replace a missing
 contract with repository convention or personal design preference.
 
+For a 3.6 package (Spec has `### Rule Matrix`), also trace every behavior the diff implements to a Rule Matrix row with a Suite, and read the sections listed under `无需验收的章节` for acceptance-relevant rules. Untraced behaviors and such rules are findings, and the `rule-coverage` line below reports the result.
+
 ## Return contract (hard)
 
 Full evidence, impact, suggested handoff, and any necessary quotation belong in the parent-supplied review report
@@ -50,6 +52,7 @@ artifact. Return only this compact index; do not return a complete narrative or 
 ```text
 verdict: PASS | FAIL | UNCERTAIN
 coverage: <one compact line or report pointer>
+rule-coverage: <3.6 only: traced N/M behaviors; untraced: <list>|none; 无需验收 sections with rules: <list>|none> | n/a
 findings:
 - <slug> | <repo-relative-file>:<line> | <severity> | <one sentence>
 report: <review report artifact path>

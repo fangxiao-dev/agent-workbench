@@ -1,4 +1,4 @@
-"""The single grouped CLI registry for the Ticket-first 3.5 runtime."""
+"""The single grouped CLI registry for the Ticket-first runtime."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import Any
 
 import situation
 
-from . import engine
+from . import engine, metrics
 
 
 def _text(value: Any, missing: str = "?") -> str:
@@ -98,7 +98,10 @@ def _emit(
         should_append_situation = append_situation_on_error
         code = 1
     else:
+        metrics_path = result.pop("_metricsPath", None)
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        if metrics_path:
+            print(f"metrics: {metrics_path}")
         should_append_situation = append_situation
         code = 0
     if should_append_situation:
@@ -126,7 +129,9 @@ def _parser(group: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=f"impl_package_state.py --package <package> {group}")
     commands = parser.add_subparsers(dest="command", required=True)
     if group == "package":
-        init = commands.add_parser("init", help="initialize a 3.5 Ticket-only package")
+        check_spec = commands.add_parser("check-spec", help="validate the 3.6 Spec contract before package initialization")
+        check_spec.add_argument("--spec", required=True, help="repository-relative Spec path")
+        init = commands.add_parser("init", help="initialize a 3.5 Ticket-only or 3.6 Journey package based on the Plan")
         init.add_argument("--attempt", required=True)
         init.add_argument("--plan", required=True)
         archive = commands.add_parser("archive-attempt", help="backfill a frozen Attempt Ticket snapshot")
@@ -136,6 +141,21 @@ def _parser(group: str) -> argparse.ArgumentParser:
             child = commands.add_parser(name)
             child.add_argument("--commit")
         commands.add_parser("refresh-progress", help="refresh machine-owned projections")
+        metrics_command = commands.add_parser("metrics", help="write a read-only execution metrics report")
+        metrics_command.add_argument("--attempt")
+        metrics_command.add_argument("--out", type=Path)
+        amendment = commands.add_parser("amendment", help="register or confirm a contract amendment")
+        amendment_commands = amendment.add_subparsers(dest="amendment_action", required=True)
+        add = amendment_commands.add_parser("add", help="register a pending amendment")
+        add.add_argument("--id", required=True)
+        add.add_argument("--summary", required=True)
+        add.add_argument("--affected", action="append", required=True)
+        add.add_argument("--artifact", required=True)
+        confirm = amendment_commands.add_parser("confirm", help="confirm a pending amendment")
+        confirm.add_argument("--id", required=True)
+        confirm.add_argument("--expect", required=True)
+        confirm.add_argument("--confirmed-by", required=True)
+        confirm.add_argument("--confirmed-revision", required=True)
     elif group == "ticket":
         for command, target, help_text in (
             ("satisfy", "SATISFIED", "mark a Ticket SATISFIED"),
@@ -150,7 +170,7 @@ def _parser(group: str) -> argparse.ArgumentParser:
             _expect(child)
             if target == "SATISFIED":
                 child.add_argument("--revision", required=True)
-                child.add_argument("--environment", required=True)
+                child.add_argument("--environment")
             elif target == "BLOCKED":
                 child.add_argument("--evidence", required=True)
             elif target == "NEEDS-REVALIDATION":
@@ -166,9 +186,10 @@ def _parser(group: str) -> argparse.ArgumentParser:
     elif group == "evidence":
         commands.add_parser("add", help="add a JSON evidence record from stdin")
         invalidate = commands.add_parser("invalidate", help="invalidate one evidence artifact")
-        invalidate.add_argument("--ticket", required=True)
-        invalidate.add_argument("--claim", required=True)
-        invalidate.add_argument("--artifact", required=True)
+        invalidate.add_argument("--key")
+        invalidate.add_argument("--ticket")
+        invalidate.add_argument("--claim")
+        invalidate.add_argument("--artifact")
         invalidate.add_argument("--invalidated-by", required=True)
         retire_claim = commands.add_parser("retire-claim", help="remove an invalidated orphan claim")
         retire_claim.add_argument("--ticket", required=True)
@@ -181,6 +202,14 @@ def _parser(group: str) -> argparse.ArgumentParser:
         checkpoint.add_argument("--evidence", action="append", default=[])
         checkpoint.add_argument("--handoff", action="store_true")
         commands.add_parser("judgment", help="append a judgment JSON payload from stdin")
+        lease = commands.add_parser("lease", help="acquire or release exclusive resource leases")
+        lease_commands = lease.add_subparsers(dest="lease_action", required=True)
+        acquire = lease_commands.add_parser("acquire", help="atomically acquire one or more resource keys")
+        acquire.add_argument("--key", action="append", required=True)
+        acquire.add_argument("--owner", required=True)
+        release = lease_commands.add_parser("release", help="release a lease after cleanup")
+        release.add_argument("--lease-id", required=True)
+        release.add_argument("--owner-token", required=True)
     elif group == "trail":
         append = commands.add_parser("append", help="append a validated manual trail event from stdin")
         append.add_argument("--review-phase", choices=situation.REVIEW_PHASE_VALUES)
@@ -226,12 +255,20 @@ def _normalize_gate_argv(argv: list[str]) -> list[str]:
 
 def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
     if group == "package":
+        if args.command == "check-spec":
+            return engine.command_check_spec(package, args.spec)
         if args.command == "init":
             return engine.command_init(package, args.attempt, args.plan)
         if args.command == "archive-attempt":
             return engine.command_archive_attempt(package, args.attempt, args.from_revision)
+        if args.command == "metrics":
+            return metrics.command_metrics(package, args.attempt, args.out)
         if args.command in {"status", "validate"}:
             return engine.command_validate(package, args.commit, check_arrival_paths=args.command == "validate")
+        if args.command == "amendment":
+            if args.amendment_action == "add":
+                return engine.command_amendment_add(package, args.id, args.summary, args.affected, args.artifact)
+            return engine.command_amendment_confirm(package, args.id, args.expect, args.confirmed_by, args.confirmed_revision)
         return engine.command_refresh_progress(package)
     if group == "ticket":
         return _ticket_transition(package, args, args.target)
@@ -239,11 +276,16 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
         if args.command == "add":
             return engine.command_evidence_add(package, sys.stdin.read())
         if args.command == "invalidate":
-            return engine.command_evidence_invalidate(package, args.ticket, args.claim, args.artifact, args.invalidated_by)
+            return engine.command_evidence_invalidate(package, args.ticket, args.claim, args.artifact, args.invalidated_by, args.key)
         return engine.command_evidence_retire_claim(package, args.ticket, args.claim)
     if group == "recovery":
-        return (engine.command_checkpoint(package, args.subject, args.next, args.blocker, args.evidence, args.handoff) if args.command == "checkpoint" else
-                engine.command_er_add(package, sys.stdin.read()))
+        if args.command == "checkpoint":
+            return engine.command_checkpoint(package, args.subject, args.next, args.blocker, args.evidence, args.handoff)
+        if args.command == "judgment":
+            return engine.command_er_add(package, sys.stdin.read())
+        if args.lease_action == "acquire":
+            return engine.command_lease_acquire(package, args.key, args.owner)
+        return engine.command_lease_release(package, args.lease_id, args.owner_token)
     if group == "trail":
         return engine.command_trail_append(
             package,
@@ -258,10 +300,18 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
                                args.durable_delta, args.no_durable_delta_reason, args.environment)
 
 
-def main(package: Path, group: str, argv: list[str], *, no_situation: bool = False) -> int:
+def _main(package: Path, group: str, argv: list[str], *, no_situation: bool = False) -> int:
     no_situation = no_situation or "--no-situation" in argv or os.environ.get("IMPL_PACKAGE_NO_SITUATION") == "1"
     argv = [value for value in argv if value != "--no-situation"]
     args = _parser(group).parse_args(_normalize_gate_argv(argv) if group == "gate" else argv)
+    if group == "package" and args.command == "metrics":
+        try:
+            result = _run(package.resolve(), group, args)
+        except (engine.StateError, OSError, ValueError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(result["summary"])
+        return 0
     trigger = group in {"ticket", "evidence", "recovery", "gate", "trail"}
     validate = group == "package" and args.command == "validate"
     return _emit(
@@ -270,3 +320,8 @@ def main(package: Path, group: str, argv: list[str], *, no_situation: bool = Fal
         append_situation=(trigger or validate) and not no_situation,
         append_situation_on_error=validate and not no_situation,
     )
+
+
+def main(package: Path, group: str, argv: list[str], *, no_situation: bool = False) -> int:
+    with engine.git_query_scope():
+        return _main(package, group, argv, no_situation=no_situation)

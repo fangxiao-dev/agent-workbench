@@ -33,7 +33,7 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed 
 1. 分类 contract impact；需要 D/S 时先查找相关 package。没有相关 package或不适合 patch 时按 initial 新建；已有明确指向目标 package 的 patch 授权时直接沿用，目标或 initial/patch 路由未定时才询问 Owner。确认路由后识别 initial、follow-up 或 package closure，并读取 [Package Lifecycle](references/package-lifecycle.md)。
 2. 解析 canonical package 与当前 Decision/Spec；已确认 patch 的 follow-up 默认把输入视为当前文档的 delta，按 [Requirement Inputs](references/requirement-inputs.md) 归类；只有 owner 明确声明 full replacement 才整体替换。
 3. initial 的 full 或 decision-only 读取并执行 [Decision SUB-SKILL](sub-skills/decision/SUB-SKILL.md)；同一 package 的 follow-up 直接更新当前 Decision 并沿用初始 approval。
-4. initial 的 full 在 Decision `PASSED` 后、或 spec-only 前置验证通过后，读取并执行 [Spec SUB-SKILL](sub-skills/spec/SUB-SKILL.md)；同一 package 的 follow-up 直接更新当前 Spec 并沿用初始 approval。
+4. initial 的 full 在 Decision `PASSED` 后、或 spec-only 前置验证通过后，读取并执行 [Spec SUB-SKILL](sub-skills/spec/SUB-SKILL.md)；同一 package 的 follow-up 直接更新当前 Spec 并沿用初始 approval。新 package 的验收合同由 Journey、规则矩阵与必需套件清单组成（格式见 [composition contract §7](../../references/impl-package-composition-contract.md)），随 Spec Gate 一起交 Owner 批准；沿用 3.5 的 package 保留逐 AC 表。
 5. initial bundle 的两个 Gate 均通过且 lifecycle registration 有效时，把同一 Spec contract ensemble 交给 `/impl-package:impl-planning`；follow-up 沿用该 bundle approval 进入后续工作。
 6. 直接引用当前 Decision/Spec 路径，记录用于 module-knowledge/code 比较的 Git commit；主 thread 写入 formal artifact，implementation attempt 获批前不创建 runtime state。
 7. 汇报任何 Gate 结果前读取 [Handoff](references/handoff.md)，输出最具体的可恢复状态。
@@ -43,7 +43,7 @@ Package ID 创建后不得改名；后续 requirement delta 先按 implementatio
 ## 完成条件
 
 - fast path 已证明现行合同继续成立，或 initial bundle 已完成所选 route 的全部 Gate；follow-up 已更新 current artifact 并沿用 initial bundle approval；
-- Decision、Spec 与从属 contract-design 没有平行 authority，且 contract-design 已记录 `detailed | not-required` disposition；
+- Decision、Spec 与从属 contract-design 没有平行 authority，且 contract-design 已记录 `detailed | not-required` disposition；新 package 的 Journey 与必需套件清单已交 Owner 批准，下游不需要再补造；
 - blocked 状态说明 exact missing decision/contract 与下一有效动作；ready 状态只在 planning 不再需要发明行为或数据合同后成立。
 
 ## 输出

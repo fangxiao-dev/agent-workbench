@@ -15,7 +15,8 @@ Spec 只有同时满足以下条件才可 PASSED：
 - contract coherence 已闭合：required input 可取得；有副作用、并发或重试风险的 operation 已逐项定义 identity、重复/stale 结果与恢复；每个可观察字段，以及行为/状态机/工作流表与错误边界表中每一个用户可见结果，都有唯一 authority，并能指到承载它的 read-model 字段与实际 producer；
 - 八个 behavior-contract 章节 substantive，behavior、state/workflow、permission/boundary、error/recovery 与 canonical model 内部一致；
 - 每个 promise/constraint 映射到 observable evidence，并为 manual evidence 指定 owner；
-- 每条 AC 覆盖一条可独立验收的承诺，并有可观察结果和 oracle；展示、编辑或拒绝结果可以不产生新记录，发生权威状态转换时明确唯一记录、producer 与下游消费；
+- 新 package 的 Journeys、Rule Matrix、Required Suites 三张表齐全：每个 step 是某角色亲手做或亲自收到的事（页面步有具名控件，`记录` 步不是第 1 步），有入口类型、操作入口、观察表面、预期与承接，每条规则有 Source、oracle 并指向已登记套件，`package check-spec` 无遗漏章节，触及 tenant/RBAC/隐私/幂等/数据完整性时有包级 safety 套件，Environment 为明确字符串，Spec 不含 Ticket ID；沿用 3.5 的 package 则每条 AC 覆盖一条可独立验收的承诺并有可观察结果和 oracle；
+- 展示、编辑或拒绝结果可以不产生新记录，发生权威状态转换时明确唯一记录、producer 与下游消费；
 - blocking owner decision、contract ambiguity 与 artifact authority conflict 为零；
 - 两个独立实施者可以选择不同内部实现，但不会产生不同 API、data identity、permission、concurrency、recovery 或 public shape。
 - initial artifact 已记录当前合同，所需 owner approval 已记录，Status、Gate result 与 handoff readiness 一致；正式阶段迁移以该 bundle 记录为依据。
@@ -25,6 +26,13 @@ Gate 可以发现设计范围与正文之间的明显漏项；发现后返回 Pr
 完整交互中存在无法取得的 required input、未裁决的重复 authority、未闭合的 retry/concurrency/recovery 语义，或没有 authoritative producer 的承诺输出时，Gate 必须 `BLOCKED`。先报告最小断点；不要求为无相关风险的 operation 发明幂等、恢复或额外持久化机制。
 
 `spec.md`/`contract-design.md` 不得包含 stable-doc backfill maps、durable-delta queues、Composition、worker steps、verification command logs 或 tracker publication metadata。
+
+## 覆盖核对（新 package）
+
+Gate 的固定动作：
+
+1. 运行 `package check-spec --spec <repo-relative spec.md>`（无需 state），逐条处理列出的章节：补一条带 Source 的规则，或把该章节列入“无需验收的章节”。
+2. 独立覆盖核对：reviewer 对照 Spec 各章规则与 Rule Matrix，从作者声明的“无需验收的章节”开始读，遗漏通常藏在那里；发现含验收相关规则的章节，回到 1。
 
 ## Blocked persistence
 

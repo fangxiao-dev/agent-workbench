@@ -29,13 +29,13 @@
 
 先用这四问和反例保留排除不忠实边界；再在忠实候选中比较总证据成本：能力建设、单次运行、长期维护、诊断成本、稳定性、复用概率与 false-confidence 风险。成本接近时优先更早反馈。真实环境独有风险仍由真实验证证明。
 
-不要把 evidence ladder 当作逐层必跑的序列：局部语义、seam/contract、组装业务动作与真实 E2E 是对 claim 的风险分解。较早证据证明内部确定性合同，真实 E2E 证明环境独有剩余风险，二者可组合支持同一 claim。
+不要把 evidence ladder 当作逐层必跑的序列：局部语义、seam/contract、组装业务动作与真实 E2E 是对风险的分解。较早证据和套件证明内部确定性规则、帮助定位失败；真实 E2E 证明环境独有的剩余风险。一条 Journey 的完成只由从第 1 步起、在声明的入口类型上（页面或用户收到的文件）的连续走通证明，API 跑是预演，局部或套件证据用来诊断，不替代走通，也不与另一轮结果拼接（3.5 package 的 stable claim 仍可由两类证据联合支持）。
 
 ## 昂贵验证与探索
 
 对真实 E2E、provider、browser 或 native tool，在现有 Planned Verification 行中简短说明：正在证明的系统假设、独有剩余风险、必要 checkpoint/readiness，以及失败时如何初步区分内部 seam、真实环境、外部波动与观察缺口。
 
-昂贵运行开始前，先使用项目提供的验证入口（环境、种子、测试身份、登录、DB/导出查看），它负责环境、身份、端口与数据就绪；项目没有时再按本参考的方法兜底，并确认目标 route、session/auth 与测试数据 ownership。这些事实只服务当前运行，不建立全局 readiness registry。runner 暴露 heartbeat/liveness 时在后台观察，不同步空等到总体超时。
+昂贵运行开始前，按 `validation-harness` 使用或补齐项目的验证入口（环境、种子、测试身份、登录、DB/导出查看），并确认目标 route、session/auth 与测试数据 ownership。这些事实只服务当前运行，不建立全局 readiness registry。runner 暴露 heartbeat/liveness 时在后台观察，不同步空等到总体超时。
 
 已知确定性内部前置缺证据时，默认先建立更便宜且忠实的证据，不反复消耗昂贵运行。这不是 E2E admission gate：当前风险依赖真实环境、需要探索诊断、边界尚未知，或真实运行能产生决定性 artifact 时，可以带明确目的进行有界探索。
 

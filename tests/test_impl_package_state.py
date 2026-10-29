@@ -4,7 +4,7 @@ import json
 import os
 import re
 import shutil
-import subprocess
+import subprocess as _subprocess
 import sys
 import tempfile
 import unittest
@@ -17,21 +17,95 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py"
 FIXTURE = ROOT / "tests/fixtures/impl-package-ticket-first"
+_PYTHON_CACHE_PREFIX = Path(
+    os.environ.get("PYTHONPYCACHEPREFIX")
+    or Path(tempfile.gettempdir()) / f"impl-package-cli-pycache-{os.getpid()}"
+)
+SUBPROCESS_TESTS = (
+    "test_init_uses_exact_35_ticket_only_schema",
+    "test_evidence_add_batch_preserves_order_and_duplicate_noop",
+    "test_gate_checks_release_edges_and_clears_active_checkpoints",
+    "test_no_situation_flag_and_environment_switch_each_disable_footer",
+    "test_trail_append_named_flags_reject_invalid_values",
+)
 sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
 from impl_package_runtime import command_groups, engine  # noqa: E402
+from impl_package_state import main as cli_main  # noqa: E402
+from situation import Fact  # noqa: E402
 
 
 def git(repo: Path, *args: str) -> str:
-    result = subprocess.run(["git", *args], cwd=repo, text=True, capture_output=True, check=False)
+    result = _subprocess.run(["git", *args], cwd=repo, text=True, capture_output=True, check=False)
     if result.returncode:
         raise AssertionError(result.stderr or result.stdout)
     return result.stdout.strip()
 
 
+def _cli(
+    repo: Path,
+    package: Path,
+    *args: str,
+    input_text: str | None = None,
+    subprocess: bool = False,
+    no_situation: bool | None = None,
+) -> _subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env.pop("PYTHONDONTWRITEBYTECODE", None)
+    env["PYTHONPYCACHEPREFIX"] = str(_PYTHON_CACHE_PREFIX)
+    if no_situation is not None:
+        env["IMPL_PACKAGE_NO_SITUATION"] = "1" if no_situation else "0"
+    _PYTHON_CACHE_PREFIX.mkdir(parents=True, exist_ok=True)
+    command = [sys.executable, str(CLI), "--package", str(package), *args]
+    if subprocess:
+        return _subprocess.run(
+            command,
+            cwd=repo,
+            input=input_text,
+            text=True,
+            capture_output=True,
+            encoding="utf-8",
+            env=env,
+            check=False,
+        )
+
+    stdout, stderr = StringIO(), StringIO()
+    previous_cwd, previous_stdin = Path.cwd(), sys.stdin
+    try:
+        os.chdir(repo)
+        sys.stdin = StringIO(input_text or "")
+        with patch.dict(os.environ, env, clear=True), redirect_stdout(stdout), redirect_stderr(stderr):
+            try:
+                returncode = cli_main(["--package", str(package), *args])
+            except SystemExit as exc:
+                if isinstance(exc.code, int):
+                    returncode = exc.code
+                elif exc.code is None:
+                    returncode = 0
+                else:
+                    print(exc.code, file=sys.stderr)
+                    returncode = 1
+    finally:
+        sys.stdin = previous_stdin
+        os.chdir(previous_cwd)
+    return _subprocess.CompletedProcess(command, returncode, stdout.getvalue(), stderr.getvalue())
+
+
 class ImplPackageStateTests(unittest.TestCase):
-    def make_repo(self) -> tuple[tempfile.TemporaryDirectory[str], Path, Path]:
-        temp = tempfile.TemporaryDirectory()
-        repo = Path(temp.name)
+    _templates: dict[bool, tuple[tempfile.TemporaryDirectory[str], Path]] = {}
+
+    def test_subprocess_test_names_exist(self) -> None:
+        self.assertTrue(SUBPROCESS_TESTS)
+        self.assertTrue(all(callable(getattr(type(self), name, None)) for name in SUBPROCESS_TESTS))
+
+    @classmethod
+    def _template_repo(cls, initialized: bool) -> Path:
+        cached = cls._templates.get(initialized)
+        if cached is not None:
+            return cached[1]
+
+        temp = tempfile.TemporaryDirectory(prefix="impl-package-state-template-")
+        repo = Path(temp.name) / "repo"
+        repo.mkdir()
         git(repo, "init")
         git(repo, "config", "user.email", "test@example.com")
         git(repo, "config", "user.name", "Ticket-first fixture")
@@ -45,26 +119,86 @@ class ImplPackageStateTests(unittest.TestCase):
         (repo / "evidence.md").write_text("fixture evidence\n", encoding="utf-8")
         git(repo, "add", ".")
         git(repo, "commit", "-m", "fixture")
+
+        if initialized:
+            result = _cli(
+                repo,
+                package,
+                "package",
+                "init",
+                "--attempt",
+                "initial",
+                "--plan",
+                "docs/implementations/20260813-example/plan.md",
+            )
+            if result.returncode:
+                temp.cleanup()
+                raise AssertionError(result.stderr or result.stdout)
+
+        cls._templates[initialized] = (temp, repo)
+        return repo
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        for temp, _ in cls._templates.values():
+            temp.cleanup()
+        cls._templates.clear()
+
+    def make_repo(self, *, initialized: bool = True) -> tuple[tempfile.TemporaryDirectory[str], Path, Path]:
+        temp = tempfile.TemporaryDirectory()
+        repo = Path(temp.name) / "repo"
+        shutil.copytree(self._template_repo(initialized), repo)
+        package = repo / "docs/implementations/20260813-example"
         return temp, repo, package
 
-    def cli(self, repo: Path, package: Path, *args: str, ok: bool = True, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
-        result = subprocess.run([sys.executable, str(CLI), "--package", str(package), *args], cwd=repo, input=input_text, text=True, capture_output=True, check=False)
+    def cli(
+        self,
+        repo: Path,
+        package: Path,
+        *args: str,
+        ok: bool = True,
+        input_text: str | None = None,
+        subprocess: bool = False,
+    ) -> _subprocess.CompletedProcess[str]:
+        result = _cli(repo, package, *args, input_text=input_text, subprocess=subprocess)
         if ok and result.returncode:
             raise AssertionError(result.stderr or result.stdout)
         return result
 
-    def cli_with_situation(self, repo: Path, package: Path, *args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+    def cli_with_situation(
+        self,
+        repo: Path,
+        package: Path,
+        *args: str,
+        input_text: str | None = None,
+        subprocess: bool = False,
+    ) -> _subprocess.CompletedProcess[str]:
         with patch.dict(os.environ, {"IMPL_PACKAGE_NO_SITUATION": "0"}):
-            return self.cli(repo, package, *args, input_text=input_text)
+            return self.cli(repo, package, *args, input_text=input_text, subprocess=subprocess)
 
-    def assert_situation_footer(self, result: subprocess.CompletedProcess[str]) -> None:
+    def assert_situation_footer(self, result: _subprocess.CompletedProcess[str]) -> None:
         self.assertEqual(result.returncode, 0)
         self.assertRegex(result.stdout, r"\[处境\]")
         for partition in ("blocking", "runnable", "withheld", "in_flight"):
             self.assertIn(f"{partition}:", result.stdout)
 
-    def init(self, repo: Path, package: Path) -> dict:
-        return json.loads(self.cli(repo, package, "package", "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md").stdout)
+    def init(self, repo: Path, package: Path, *, subprocess: bool = False) -> dict:
+        state_path = package / ".impl-package/state.json"
+        if state_path.is_file():
+            return json.loads(state_path.read_text(encoding="utf-8"))
+        return json.loads(
+            self.cli(
+                repo,
+                package,
+                "package",
+                "init",
+                "--attempt",
+                "initial",
+                "--plan",
+                "docs/implementations/20260813-example/plan.md",
+                subprocess=subprocess,
+            ).stdout
+        )
 
     def state(self, package: Path) -> dict:
         return json.loads((package / ".impl-package/state.json").read_text(encoding="utf-8"))
@@ -87,6 +221,27 @@ class ImplPackageStateTests(unittest.TestCase):
                  "resource_keys": ["worktree:A"], "receipt": "worker-A", "outcome": "RUNNING", "returned": False,
                  **fields}
         return engine.command_trail_append(package, json.dumps(event))
+
+    def acquire_lease(self, repo: Path, package: Path, *keys: str, owner: str = "worker-A") -> dict:
+        argv = ["--no-situation", "recovery", "lease", "acquire", "--owner", owner]
+        for key in keys:
+            argv.extend(("--key", key))
+        return json.loads(self.cli(repo, package, *argv).stdout)
+
+    def release_lease(self, repo: Path, package: Path, lease: dict, *, token: str | None = None, ok: bool = True):
+        return self.cli(
+            repo,
+            package,
+            "--no-situation",
+            "recovery",
+            "lease",
+            "release",
+            "--lease-id",
+            lease["lease_id"],
+            "--owner-token",
+            token if token is not None else lease["owner_token"],
+            ok=ok,
+        )
 
     def test_dispatch_identity_dependencies_and_independent_work(self):
         temp, repo, package = self.make_repo()
@@ -160,6 +315,74 @@ class ImplPackageStateTests(unittest.TestCase):
         with self.assertRaises(engine.StateError):
             engine._validate_trail_event({**returned, "code_delta": {"base": "a" * 7, "head": "b" * 40}})
 
+    def test_lease_double_acquire_fails_and_release_allows_reacquire(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        lease = self.acquire_lease(repo, package, "worktree:A", "database:fixture")
+        self.assertEqual(len(lease["lease_relative_paths"]), 2)
+        conflict = self.cli(
+            repo, package, "--no-situation", "recovery", "lease", "acquire", "--owner", "worker-B",
+            "--key", "worktree:A", ok=False,
+        )
+        self.assertNotEqual(conflict.returncode, 0)
+        self.assertIn("already held", conflict.stderr)
+
+        released = json.loads(self.release_lease(repo, package, lease).stdout)
+        self.assertTrue(released["released"])
+        reacquired = self.acquire_lease(repo, package, "worktree:A", "database:fixture", owner="worker-B")
+        self.assertNotEqual(reacquired["lease_id"], lease["lease_id"])
+
+    def test_lease_release_checks_owner_and_is_idempotent(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        lease = self.acquire_lease(repo, package, "database:fixture")
+        wrong_owner = self.release_lease(repo, package, lease, token="not-the-owner-token", ok=False)
+        self.assertNotEqual(wrong_owner.returncode, 0)
+        self.assertIn("owner token mismatch", wrong_owner.stderr)
+        self.assertTrue((package / lease["lease_relative_paths"][0]).exists())
+
+        first = json.loads(self.release_lease(repo, package, lease).stdout)
+        second = json.loads(self.release_lease(repo, package, lease).stdout)
+        self.assertTrue(first["released"])
+        self.assertTrue(second["idempotent"])
+
+    def test_dispatch_lease_is_optional_but_validates_held_owner(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+
+        legacy = self.append_dispatch(package)
+        self.assertTrue(legacy["appended"])
+        own_lease = self.acquire_lease(repo, package, "worktree:B")
+        leased = self.append_dispatch(
+            package,
+            dispatch_id="leased",
+            candidate_id="leased",
+            resource_keys=["worktree:B"],
+            lease_id=own_lease["lease_id"],
+        )
+        self.assertTrue(leased["appended"])
+
+        other_lease = self.acquire_lease(repo, package, "worktree:C", owner="worker-C")
+        with self.assertRaisesRegex(engine.StateError, "does not match lease owner"):
+            self.append_dispatch(
+                package,
+                dispatch_id="wrong-owner",
+                candidate_id="wrong-owner",
+                resource_keys=["worktree:C"],
+                lease_id=other_lease["lease_id"],
+            )
+        with self.assertRaisesRegex(engine.StateError, "does not identify a held lease"):
+            self.append_dispatch(
+                package,
+                dispatch_id="missing-lease",
+                candidate_id="missing-lease",
+                resource_keys=["worktree:D"],
+                lease_id="0" * 32,
+            )
+
     def test_dispatch_retry_and_return_identity_survive_handoff_archive(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
@@ -228,9 +451,9 @@ class ImplPackageStateTests(unittest.TestCase):
         self.cli(repo, package, "ticket", "satisfy", ticket, "--expect", expect, "--revision", git(repo, "rev-parse", "HEAD"), "--environment", "test")
 
     def test_init_uses_exact_35_ticket_only_schema(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
-        result = self.init(repo, package)
+        result = self.init(repo, package, subprocess=True)
         self.assertEqual(result["formatVersion"], "3.5")
         self.assertEqual(result["tasks"], 0)
         self.assertEqual(result["readyTickets"], ["TKT-01", "TKT-03", "TKT-04"])
@@ -242,7 +465,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertFalse((package / "execution/initial/task-handoffs").exists())
 
     def test_canonical_english_metadata_is_accepted(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         replacements = {
             "Attempt ID：": "Attempt ID:",
@@ -268,7 +491,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(result["tickets"], 4)
 
     def test_plan_must_explicitly_declare_predecessors(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         plan = package / "plan.md"
         plan.write_text(plan.read_text(encoding="utf-8").replace("- 前置包（Predecessors）：None\n", ""), encoding="utf-8")
@@ -288,7 +511,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("declare 前置包", failed.stderr)
 
     def test_predecessor_paths_are_recorded_and_searched_first(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         predecessor = repo / "docs/implementations/20260801-base"
         predecessor.mkdir(parents=True)
@@ -342,7 +565,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("predecessors", failed.stderr)
 
     def test_state_predecessors_must_match_plan(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         predecessor = repo / "docs/implementations/20260801-base"
         predecessor.mkdir(parents=True)
@@ -377,7 +600,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(accepted["acceptance"]["environment"], "test")
 
     def test_one_acceptance_criterion_with_two_atomic_claims_requires_both(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         ticket = package / "tickets" / "01-source.md"
         ticket.write_text(
@@ -464,7 +687,9 @@ class ImplPackageStateTests(unittest.TestCase):
         }
         second = {**first, "claim": "AC-2", "timing": "remaining-completion"}
 
-        single = json.loads(self.cli(repo, package, "evidence", "add", input_text=json.dumps(first)).stdout)
+        single = json.loads(
+            self.cli(repo, package, "evidence", "add", input_text=json.dumps(first), subprocess=True).stdout
+        )
         self.assertEqual(single, {"ticket": "TKT-01", "claim": "AC-1", "idempotent": False})
         result = json.loads(
             self.cli(repo, package, "evidence", "add", input_text=json.dumps([first, second, second])).stdout
@@ -773,7 +998,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(self.state(package), before)
 
     def test_missing_claim_timing_is_not_inherited_from_the_next_claim(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         ticket = package / "tickets" / "01-source.md"
         text = ticket.read_text(encoding="utf-8")
@@ -783,7 +1008,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("no evidence timing", failed.stderr)
 
     def test_arrival_path_requires_exists_or_new_markers(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         ticket = package / "tickets" / "01-source.md"
         ticket.write_text(
@@ -807,7 +1032,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("unmarked segment", failed.stderr)
 
     def test_package_validate_reports_missing_exists_symbols_without_blocking(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         symbols = (
             "TaxOfficeDelegatedAccessAdapter",
@@ -831,7 +1056,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertTrue(all(item["code"] == "arrival-exists-symbol-not-found" for item in arrival_findings))
 
     def test_package_validate_checks_exists_at_comparison_commit_and_skips_new(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         ticket = package / "tickets" / "01-source.md"
         text = ticket.read_text(encoding="utf-8")
@@ -1065,8 +1290,18 @@ class ImplPackageStateTests(unittest.TestCase):
             (("--review-phase", "terminal"), "invalid choice"),
             (("--review-track", "Track E"), "invalid choice"),
         )
-        for (option, value), message in invalid:
-            result = self.cli(repo, package, "trail", "append", option, value, input_text=payload, ok=False)
+        for index, ((option, value), message) in enumerate(invalid):
+            result = self.cli(
+                repo,
+                package,
+                "trail",
+                "append",
+                option,
+                value,
+                input_text=payload,
+                ok=False,
+                subprocess=index == 0,
+            )
             self.assertEqual(result.returncode, 2)
             self.assertIn(message, result.stderr)
 
@@ -1366,7 +1601,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(self.state(package)["tickets"]["TKT-01"], {"state": "PENDING"})
 
     def test_superseded_ticket_releases_only_after_successor_is_released(self) -> None:
-        temp, repo, package = self.make_repo()
+        temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         for name in ("02-transform.md", "03-verify.md", "04-publish.md"):
             ticket = package / "tickets" / name
@@ -1463,14 +1698,29 @@ class ImplPackageStateTests(unittest.TestCase):
         self.cli(repo, package, "recovery", "checkpoint", "--next", "gate", "--evidence", "evidence.md")
         head = git(repo, "rev-parse", "HEAD")
         gate_args = ("gate", "pass", "--comparison-commit", head, "--reason", "fixture", "--no-durable-delta-reason", "fixture", "--environment", "test")
-        rejected = self.cli(repo, package, *gate_args, ok=False)
+        rejected = self.cli(repo, package, *gate_args, ok=False, subprocess=True)
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("terminal review coverage", rejected.stderr + rejected.stdout)
         # Track B no longer substitutes for the required Track C.
         self.add_terminal_summary(repo, package, tracks=("Track A", "Track B"))
+        coverage = engine.terminal_coverage_fact(package)
+        self.assertTrue(coverage.known)
+        self.assertIs(coverage.value, False)
         self.assertNotEqual(self.cli(repo, package, *gate_args, ok=False).returncode, 0)
+        unknown_reason = "无法读取 execution/initial/trail.jsonl"
+        with patch.object(engine, "terminal_coverage_fact", return_value=Fact.unknown(unknown_reason)):
+            with self.assertRaises(engine.StateError) as unknown_rejection:
+                engine.command_gate(package, "pass", head, "fixture", [], [], "fixture", "test")
+        message = str(unknown_rejection.exception)
+        self.assertIn(unknown_reason, message)
+        self.assertIn("/impl-package:do-review", message)
+        self.assertIn("terminal-final", message)
+        self.assertIn("review.terminal_summary", message)
         # Track B is not required: A/C alone completes terminal coverage.
         self.add_terminal_summary(repo, package)
+        coverage = engine.terminal_coverage_fact(package)
+        self.assertTrue(coverage.known)
+        self.assertIs(coverage.value, True)
         result = self.cli(repo, package, *gate_args)
         self.assertEqual(json.loads(result.stdout)["verdict"], "pass")
         self.assertEqual(self.state(package)["activeCheckpoints"], {})
@@ -1750,6 +2000,17 @@ class ImplPackageStateTests(unittest.TestCase):
         self.init(repo, package)
 
         with patch.dict(os.environ, {"IMPL_PACKAGE_NO_SITUATION": "0"}):
+            footer = self.cli(
+                repo,
+                package,
+                "recovery",
+                "checkpoint",
+                "--next",
+                "footer enabled",
+                "--evidence",
+                "evidence.md",
+                subprocess=True,
+            )
             flag = self.cli(
                 repo,
                 package,
@@ -1760,6 +2021,7 @@ class ImplPackageStateTests(unittest.TestCase):
                 "flag disabled",
                 "--evidence",
                 "evidence.md",
+                subprocess=True,
             )
         with patch.dict(os.environ, {"IMPL_PACKAGE_NO_SITUATION": "1"}):
             env = self.cli(
@@ -1771,8 +2033,10 @@ class ImplPackageStateTests(unittest.TestCase):
                 "environment disabled",
                 "--evidence",
                 "evidence.md",
+                subprocess=True,
             )
 
+        self.assert_situation_footer(footer)
         for result in (flag, env):
             self.assertEqual(result.returncode, 0)
             self.assertNotIn("[处境]", result.stdout)

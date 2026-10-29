@@ -14,7 +14,7 @@ findings:
 report: <review report artifact path>
 ```
 
-Use `findings: none` when no candidate exists. Each finding line must contain the slug, file and line, severity, and one sentence; leaf output is candidate evidence, not a ledger decision.
+Use `findings: none` when no candidate exists. Each finding line must contain the slug, file and line, severity, and one sentence; leaf output is candidate evidence, not a ledger decision. Track C adds a `rule-coverage:` line after `coverage:` (3.6 packages report traced behaviors and gaps, others `n/a`); a missing line from a 3.6 Track C leaf makes that track incomplete.
 
 Impl-Package 的 leaf report 存在 parent 指定的 package 内独占路径，完整正文前写明以下四行，供终审核对来源：
 
@@ -50,7 +50,7 @@ terminal-final 的 canonical ledger 更新且所需结果已返回后，parent �
 
 ## Canonical ledger and classification
 
-The parent owns one Markdown ledger for the whole ReviewRun. Leaf results are candidates, not accepted findings. After every round, wait for every required track, then deduplicate, verify, classify, and atomically rewrite that same ledger with verdicts, evidence, lifecycle transitions, and convergence. Never create a later-round ledger; a leaf result is not authoritative before this update.
+The parent owns one Markdown ledger for the whole ReviewRun. Impl-Package runs keep it under `execution/<attempt>/reviews/`; pass its package-relative path to `write` and `show`. Leaf results are candidates, not accepted findings. After every round, wait for every required track, then deduplicate, verify, classify, and atomically rewrite that same ledger with verdicts, evidence, lifecycle transitions, and convergence. Never create a later-round ledger; a leaf result is not authoritative before this update.
 
 Use source labels `Track A (review-code)`, `Track C (review-code-by-spec)`, additional selected labels, `fused`, and `main-session` as applicable. Deduplicate by broken invariant or observable failure, not path or reviewer; retain every contributor for a shared issue.
 
@@ -63,6 +63,8 @@ The ledger context must preserve the broken invariant/failure mode, best evidenc
 ## Canonical Finding Summary
 
 For an Impl-Package target, after atomically updating the Markdown ledger, send one complete machine-readable summary to `review_track_stats.py record`. Only accepted `blocker` and `follow-up` findings appear here; candidates, duplicates, disputed, backlog, out-of-scope, and unsupported entries remain in the human ledger and are not counted as bugs.
+
+Each finding requires `impact`: `seam` breaks a cross-Ticket interface or data promise; `safety` breaks a safety invariant; `local` is any other finding; `unknown` means impact cannot be determined.
 
 ```json
 {
@@ -77,6 +79,7 @@ For an Impl-Package target, after atomically updating the Markdown ledger, send 
       "title": "Short title",
       "ticketIds": ["TKT-01"],
       "tracks": ["Track A", "Track C"],
+      "impact": "local",
       "classification": "blocker | follow-up",
       "lifecycle": "open | closed"
     }

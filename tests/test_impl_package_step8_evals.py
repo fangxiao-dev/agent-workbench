@@ -35,12 +35,21 @@ def test_stage_evals_are_valid_and_nonempty() -> None:
         assert payload["evals"]
 
 
+def test_impl_planning_evals_cover_v36_journey_failure_cases() -> None:
+    path = IMPL / "skills/impl-planning/evals/evals.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    by_id = {case.get("id"): case for case in payload["evals"] if case.get("id") in {10, 11, 12}}
+    assert set(by_id) == {10, 11, 12}
+    combined = "\n".join(json.dumps(case, ensure_ascii=False) for case in by_id.values())
+    for marker in ("局部 evidence", "harness", "Journey steps 和 suites 不能同时为 none"):
+        assert marker in combined
+
+
 def test_active_package_files_have_no_retired_state_mechanisms() -> None:
     retired_state = (
         "revision-bindings.json",
         "runtime-state.json",
         "contractVersion",
-        "hash-object",
         "contentSha256",
     )
     for path in files_under(IMPL):
@@ -49,6 +58,12 @@ def test_active_package_files_have_no_retired_state_mechanisms() -> None:
         text = path.read_text(encoding="utf-8")
         for token in retired_state:
             assert token not in text, f"{path.relative_to(ROOT)} contains {token}"
+
+    engine = (IMPL / "scripts/impl_package_runtime/engine.py").read_text(encoding="utf-8")
+    # 3.6 uses Git blob ids only for contract files, through one helper.
+    blob_helper = engine.split("def _working_tree_blob", 1)[1].split(chr(10) + "def ", 1)[0]
+    assert engine.count('_run_git(repo, "hash-object"') == 1
+    assert blob_helper.count('"hash-object"') == 1
 
     # These tokens guarded the old state engine's wildcard package discovery.
     # Profile installation is a separate surface and may enumerate its own inputs.

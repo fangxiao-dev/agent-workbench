@@ -5,7 +5,7 @@
 规格：[spec.md](spec.md)
 对应门禁：[gate.md](gate.md)
 
-本文记录执行过程中确认的重要发现、风险、方法性经验与跨 task 发现，可供整个任务包及后续 attempt 使用，并作为 package-local provenance 保留。它不是第二份行为合同，也不是临时待办队列。Task 局部交接留在 `execution/<attempt>/task-handoffs/<task-id>-handoff.md`；gate evaluation 前必须把决策与 rationale 分流到 `decision.md`、规范性行为分流到 `spec.md`、长期项目知识分流到 gate Durable Deltas / `_pending.md`、验证证据与判断分流到当前 Attempt 的 `execution-record.md`。
+本文记录执行过程中确认的重要发现、风险、方法性经验与跨 task 发现，可供整个任务包及后续 attempt 使用，并作为 package-local provenance 保留。它不是第二份行为合同，也不是临时待办队列；引用的 closure、截图、ledger 等 artifact 一律是 package 内相对路径。改变用户可见结果的合同澄清登记为 Amendment（`package amendment add`），分流到 `spec.md` 时附其 ID。Task 局部交接留在 `execution/<attempt>/task-handoffs/<task-id>-handoff.md`；gate evaluation 前必须把决策与 rationale 分流到 `decision.md`、规范性行为分流到 `spec.md`、长期项目知识分流到 gate Durable Deltas / `_pending.md`、验证证据与判断分流到当前 Attempt 的 `execution-record.md`。
 
 ## [YYYY-MM-DD] [执行尝试 ID] [Slice / Task / Gate] 发现
 

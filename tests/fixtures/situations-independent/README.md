@@ -16,8 +16,8 @@
 | p0-state-missing | `package.record.state-missing` | supplyer `260712-order-detail-lifecycle-retirement` |
 | p0-projection-drift | `package.record.projection-drift` | supplyer `order-create-release-consistency` |
 | p0-anchor-mismatch | `attempt.record.anchor-mismatch` | supplyer `260719-rechnung-email-216` |
-| p0-handoff-recovery-needed | `attempt.record.handoff-recovery-needed` | supplyer `260720-persistent-operation-recovery` |
-| p0-handoff-target-corrected | `attempt.record.handoff-target-corrected` | kaispan `2026-07-22-kassel-pdf-to-extf-poc` |
+| p0-handoff-recovery-needed | 无；历史信号负向回归 | supplyer `260720-persistent-operation-recovery` |
+| p0-handoff-target-corrected | 无；历史信号负向回归 | kaispan `2026-07-22-kassel-pdf-to-extf-poc` |
 | p0-session-resumed | `attempt.record.session-resumed` | supplyer `260720-persistent-operation-recovery` |
 | p0-checkpoint-missing | `attempt.record.checkpoint-missing` | supplyer `inventory-lock-renewal` |
 | p0-checkpoint-refresh | `attempt.record.checkpoint-refresh` | kaispan `260803-1332-category-sachkonto-bwa-coverage` |
@@ -52,6 +52,6 @@
 
 `confidence=low`：`p0-anchor-mismatch`。
 
-`confidence=medium`：`p0-projection-drift`、`p0-handoff-recovery-needed`、`p0-handoff-target-corrected`、`p0-checkpoint-missing`、`p0-checkpoint-refresh`、`p0-handoff-in-flight`、`p0-judgment-unfiled`、`p3-integration-evidence-unavailable`、`p1-integration-carrier-unavailable`、`p4-release-edge-unchecked`。
+`confidence=medium`：`p0-projection-drift`、`p0-checkpoint-missing`、`p0-checkpoint-refresh`、`p0-handoff-in-flight`、`p0-judgment-unfiled`、`p3-integration-evidence-unavailable`、`p1-integration-carrier-unavailable`、`p4-release-edge-unchecked`。
 
 这些犹豫都已写在各自 `expected.json.note` 中；主要问题是人读表没有公开 active checkpoint、handoff 和 projection drift 的机械字段形状，或 legacy 没有 trail 只能按真实时间线补写。
