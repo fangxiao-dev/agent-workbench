@@ -122,11 +122,14 @@ python <plugin>/scripts/impl_package_state.py --package <package> gate <verdict>
 }
 ```
 
+plan 固定行（`package init/validate` 缺失或无效即拒绝）：`Harness setup: <cmd>`、`Harness precheck: <cmd>`、`Harness cleanup: <cmd>`、`Harness isolation: per-run`、`First visible step: <StepId> @ <TicketId>`。每个 run 的第 1 步 `outputRef` 不得出现在其他 run 中（每个 run 创建新对象）。`attempt.walking_skeleton_overdue`：声明的 Ticket 已 `SATISFIED` 而声明的 step 仍无匹配的 page/file record 时，situation 出一行并在 Owner Summary 提示。方法见 `validation-harness`。
+
 `evidenceIndex` 按 `evidenceKey` 索引，key 由 runtime 从 record 推出（传入的 `evidenceKey` 必须与推导一致）；`timing` 可省略；`artifact` 必须是 package 内路径（`evidence/…`、`execution/<attempt>/reviews/…`）；`conclusion` 取值同 3.5。`amendments[].affected` 是 package 内合同文件路径（如 `spec.md`），不是 Journey step ID；多个路径分别传入多个 `--affected`，登记时的 blob 写入 `affectedBlobs`。漏登检测按当前内容匹配：合同文件当前 blob 不同于 `contractBaseline` 时，必须有一条 Amendment 为该路径记录相同 blob；旧 state 中没有 `affectedBlobs` 的 Amendment 不覆盖当前内容。每条 Amendment 都需 Owner 确认后才不再阻止 `gate pass`。
 
 | kind | 必填的专有字段 | evidenceKey | 说明 |
 | --- | --- | --- | --- |
 | `journey-step` | `runId`、`journeyId`、`stepId`、`entry`、`surface`（`page \| file \| log \| api`） | `journey:<runId>:<stepId>` | `entry` 必须与 Spec 该步的操作入口一致；`page` 需 package 内 Playwright trace `.zip`（动作含对 Spec 声明控件的 click/press/fill，否则拒绝），或 `manualBy` 加 package 内截图；`file` 需用户实际收到的文件（不接受 .md/.txt/.log），runtime 存其 sha256；`log`（对应 Spec 的 `记录` 步）的 artifact 须为 package 内文件；`api` 恒接受；同一 run 从第 1 步起按顺序登记；Spec 该步“承接”不是 `—` 时，`inputRef` 必须等于同一 run 上一步的 `outputRef`，否则 `evidence add` 拒绝；失败不覆盖旧 run，另起新 run |
+| `run-setup` | `runId` | `run-setup:<runId>` | artifact 为 plan 的 `Harness setup` 与 `Harness precheck` 输出（package 内文件）；某 runId 的 `journey-step` 必须在该 run 已有有效 `run-setup` 后才被接受 |
 | `suite` | `suiteId` | `suite:<id>` | environment 必须等于 Spec 声明；归属由 Ticket Coverage 反查 |
 | `review` | `ticket`（Ticket ID 或 `package`） | `review:<ticket>` | per-Ticket required review 的结果；最终 HEAD 的 review 仍由 terminal-final 承担 |
 | `release` | 无 | `release` | artifact 为 package 内发布顺序表 |

@@ -21,7 +21,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
 4. 按 Composition Contract 选择 Ticket-only Composition（阶段 A 写法 `tickets=true, dag=false`）；`dag=true` 只在旧 package 迁移/恢复计划中出现。
 5. 在 Ticket 拆分子流程中，把每个 Decision/Spec 约束映射到具体 Ticket 的 Contract references 与 AC，并把 Journey step 与套件归属写进 Ticket 的 Coverage（3.5 package 则按 Composition Contract §6 编译为 stable claim atoms）；Ticket 自身承载建设内容、逐项 evidence 与 Coverage。Plan 只提炼跨 Ticket 的实施与接线安排、typed dependency、共享资源、全局执行边界与 Planned Verification。
    - 并行判断：先核实真实 caller、复用入口、依赖产物、接线条件和验证可行性；结合冻结合同与当前资源，只提前开展能独立实施并验证的工作。
-   - walking skeleton：首张 Ticket 排成窄而完整，尽早让第一个用户可见的 Journey step 可走通（API 预演可以先行，但该 step 要在页面上走通才计入 reach）；harness 只建设第一条窄路径需要的部分，优先复用现有登录、fixture 和测试入口，不先膨胀成基础设施 Ticket。Plan 写出第一个可见 step 预计由哪张 Ticket 在何时到达。
+   - walking skeleton：首张 Ticket 排成窄而完整，尽早让第一个用户可见的 Journey step 可走通（API 预演可以先行，但该 step 要在页面上走通才计入 reach）；harness 只建设第一条窄路径需要的部分，优先复用现有登录、fixture 和测试入口，不先膨胀成基础设施 Ticket。Plan 写出第一个可见 step 预计由哪张 Ticket 在何时到达。3.6 plan 用固定行 `Harness setup/precheck/cleanup/isolation` 与 `First visible step: <StepId> @ <TicketId>` 承载；harness 的性质与命令来源见 `validation-harness`。
    - 按整票真实阻塞选择 `implementation / acceptance / release`：默认 `acceptance`；只有下游没有上游产物就无法实现、也无法做 child-local 验证时才写 `implementation`，并在依赖行后用一句话写出该产物是什么；票内等待写成接线条件；只记录会改变安排的交接产物及其验证，不预列完整 baby-step 队列，派发、步骤大小、worker 方法与资源隔离交给 `$dispatcher`。误判提醒见 [并行与调度安排](references/common-misjudgments.md#并行与调度安排)。
 6. `tickets=true` 时执行本 Skill 的“Ticket 拆分”子流程；新 package 不创建 Task/DAG。
 7. 初始 bundle 冻结 plan candidate 后调用 `/impl-package:plan-review` 的 `bundle-admission`；返回 `full-review` 时继续同一 skill 的完整审查，处理 material findings，并联合校验 coverage、typed dependency、ownership、证据可行性、Gate 边界与集成顺序，然后请求一次完整 bundle approval；后续 patch/update 直接沿用该 approval。

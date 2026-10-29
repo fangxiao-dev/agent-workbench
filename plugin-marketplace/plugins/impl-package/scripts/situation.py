@@ -91,14 +91,12 @@ FACT_KEYS = frozenset(
         "trail.anchor_mismatch",
         "trail.checkpoint_projection_race",
         "trail.envelope_valid",
-        "trail.handoff_recovery_needed",
-        "trail.handoff_target_corrected",
         "trail.reviewer_unavailable",
     }
 )
 
 
-LEGACY_FACT_KEYS = frozenset({"dispatch.candidates"})
+LEGACY_FACT_KEYS = frozenset({"dispatch.candidates", "trail.handoff_recovery_needed", "trail.handoff_target_corrected"})
 
 
 def describe_unknown_fact_keys(keys: tuple[str, ...]) -> str:
@@ -356,6 +354,8 @@ class Candidate:
 
     @property
     def row_index(self) -> int:
+        return int(self.row["_row_index"])
+
     def action_rows(self) -> list[dict[str, Any]]:
         actions = [dict(action) for action in self.row.get("actions", [])]
         fact = self.when.get("attempt.journey_incomplete")
@@ -370,8 +370,6 @@ class Candidate:
         if self.slug == "attempt.accept.journey-incomplete" and fact and fact.reason:
             protocol = f"{protocol}；{fact.reason}"
         return protocol
-
-        return int(self.row["_row_index"])
 
     def as_json(self) -> dict[str, Any]:
         actions = self.action_rows()
@@ -889,9 +887,20 @@ def _parse_state(view: FileView) -> StateView:
         errors.append(f"不支持 formatVersion：{format_version!r}")
     if format_version == "3.6":
         acceptance = raw.get("acceptance")
-        if not isinstance(acceptance, dict) or set(acceptance) != {"contractBaseline", "releaseOrder", "amendments"}:
-            errors.append("acceptance 必须只含 contractBaseline、releaseOrder、amendments")
+        if not isinstance(acceptance, dict) or set(acceptance) != {"contractBaseline", "releaseOrder", "amendments", "harness"}:
+            errors.append("acceptance 必须只含 contractBaseline、releaseOrder、amendments、harness")
         else:
+            harness = acceptance.get("harness")
+            if (
+                not isinstance(harness, dict)
+                or set(harness) != {"setup", "precheck", "cleanup", "isolation", "firstVisibleStep"}
+                or any(not isinstance(harness.get(field), str) or not harness[field].strip() for field in ("setup", "precheck", "cleanup"))
+                or harness.get("isolation") != "per-run"
+                or not isinstance(harness.get("firstVisibleStep"), dict)
+                or set(harness["firstVisibleStep"]) != {"step", "ticket"}
+                or any(not isinstance(harness["firstVisibleStep"].get(field), str) or not harness["firstVisibleStep"][field].strip() for field in ("step", "ticket"))
+            ):
+                errors.append("acceptance.harness 字段无效")
             if not isinstance(acceptance.get("releaseOrder"), str) or acceptance["releaseOrder"] not in {"required", "none"}:
                 errors.append("acceptance.releaseOrder 无效")
             if not isinstance(acceptance.get("amendments"), list):
@@ -1054,6 +1063,10 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                             errors.append(f"evidenceIndex[{identifier}][{claim}] invalidatedBy 无效")
         else:
             run_environments: dict[str, tuple[str, str]] = {}
+            run_setup_environments: dict[str, str] = {}
+            journey_run_environments: dict[str, str] = {}
+            setup_run_ids: set[str] = set()
+            journey_run_ids: set[str] = set()
             for key, records in index.items():
                 if not isinstance(key, str) or not isinstance(records, list):
                     errors.append(f"evidenceIndex[{key}] 必须是 evidenceKey 到 list 的映射")
@@ -1065,6 +1078,7 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                     kind = record.get("kind")
                     fields_by_kind = {
                         "journey-step": {"runId", "journeyId", "stepId", "actor", "entry", "surface"},
+                        "run-setup": {"runId"},
                         "suite": {"suiteId"},
                         "review": {"ticket"},
                         "release": set(),
@@ -1090,6 +1104,8 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                         errors.append(f"evidenceIndex[{key}] recordedAt 无效")
                     invalidated_by = record.get("invalidatedBy")
                     if "invalidatedBy" in record and invalidated_by is not None and (not isinstance(invalidated_by, str) or not invalidated_by.strip()):
+                        errors.append(f"evidenceIndex[{key}] invalidatedBy 无效")
+                    if kind == "journey-step":
                         surface = record.get("surface")
                         if surface not in {"page", "file", "api", "log"}:
                             errors.append(f"evidenceIndex[{key}] surface 无效")
@@ -1100,8 +1116,6 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                                 errors.append(f"evidenceIndex[{key}] file surface 的 artifactSha256 无效")
                         elif "artifactSha256" in record:
                             errors.append(f"evidenceIndex[{key}] artifactSha256 仅适用于 file surface")
-                        errors.append(f"evidenceIndex[{key}] invalidatedBy 无效")
-                    if kind == "journey-step":
                         for field in ("inputRef", "outputRef"):
                             if field in record and (not isinstance(record[field], str) or not record[field].strip()):
                                 errors.append(f"evidenceIndex[{key}] {field} 必须是非空业务对象标识")
@@ -1112,6 +1126,17 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                             prior = run_environments.setdefault(run_id, (journey_id, record["environment"]))
                             if prior != (journey_id, record["environment"]):
                                 errors.append(f"evidenceIndex[{key}] runId 的 Journey/environment 不一致")
+                            journey_run_ids.add(run_id)
+                            journey_run_environments[run_id] = record["environment"]
+                    elif kind == "run-setup":
+                        run_id = record.get("runId")
+                        if not isinstance(run_id, str) or not run_id.strip() or key != f"run-setup:{run_id}":
+                            errors.append(f"evidenceIndex[{key}] run-setup evidence key 或 runId 无效")
+                        else:
+                            setup_run_ids.add(run_id)
+                            previous_environment = run_setup_environments.setdefault(run_id, record["environment"])
+                            if previous_environment != record["environment"]:
+                                errors.append(f"run-setup {run_id} 的 environment 不一致")
                     elif kind == "suite":
                         suite_id = record.get("suiteId")
                         if not isinstance(suite_id, str) or not suite_id.strip() or key != f"suite:{suite_id}":
@@ -1124,6 +1149,11 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                             errors.append(f"evidenceIndex[{key}] review ticket 或 evidence key 无效")
                     elif key != "release":
                         errors.append(f"evidenceIndex[{key}] release evidence key 必须为 release")
+            for run_id in sorted(journey_run_ids - setup_run_ids):
+                errors.append(f"Journey run {run_id} 缺少 run-setup")
+            for run_id in sorted(journey_run_ids & setup_run_ids):
+                if run_setup_environments.get(run_id) != journey_run_environments.get(run_id):
+                    errors.append(f"Journey run {run_id} 的 run-setup environment 不一致")
 
     checkpoints = raw.get("activeCheckpoints", {})
     if isinstance(checkpoints, dict):
@@ -2392,6 +2422,8 @@ def _v36_acceptance_fact(context: FactContext, key: str) -> Fact:
         )
         reason = "API 预演已走通，仍需页面/文件/记录证据" if rehearsal_complete else None
         return _fact_value(incomplete, reason=reason)
+    if key == "attempt.walking_skeleton_overdue":
+        return _fact_value(status["walkingSkeletonOverdue"])
     if key == "attempt.required_suite_missing":
         return _fact_value(any(not row["valid"] for row in status["suites"]))
     if key == "attempt.evidence_revalidation_pending":
@@ -2405,6 +2437,10 @@ def _v36_acceptance_fact(context: FactContext, key: str) -> Fact:
 
 def _when_attempt_journey_incomplete(context: FactContext) -> Fact:
     return _v36_acceptance_fact(context, "attempt.journey_incomplete")
+
+
+def _when_attempt_walking_skeleton_overdue(context: FactContext) -> Fact:
+    return _v36_acceptance_fact(context, "attempt.walking_skeleton_overdue")
 
 
 def _when_attempt_required_suite_missing(context: FactContext) -> Fact:
@@ -2569,14 +2605,6 @@ def _when_trail_last_outcome(context: FactContext) -> Fact:
 
 def _when_trail_anchor_mismatch(context: FactContext) -> Fact:
     return context._trail_signal("trail.anchor_mismatch")
-
-
-def _when_trail_handoff_recovery_needed(context: FactContext) -> Fact:
-    return context._trail_signal("trail.handoff_recovery_needed")
-
-
-def _when_trail_handoff_target_corrected(context: FactContext) -> Fact:
-    return context._trail_signal("trail.handoff_target_corrected")
 
 
 def _when_trail_checkpoint_projection_race(context: FactContext) -> Fact:
@@ -3022,6 +3050,7 @@ WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "package.references.live_package": _when_package_references_live_package,
     "package.validate.projection_drift": _when_package_validate_projection_drift,
     "attempt.journey_incomplete": _when_attempt_journey_incomplete,
+    "attempt.walking_skeleton_overdue": _when_attempt_walking_skeleton_overdue,
     "attempt.required_suite_missing": _when_attempt_required_suite_missing,
     "attempt.evidence_revalidation_pending": _when_attempt_evidence_revalidation_pending,
     "attempt.amendment_pending_or_unregistered": _when_attempt_amendment_pending_or_unregistered,
@@ -3045,8 +3074,6 @@ WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "evidence.count": _when_evidence_count,
     "trail.last_outcome": _when_trail_last_outcome,
     "trail.anchor_mismatch": _when_trail_anchor_mismatch,
-    "trail.handoff_recovery_needed": _when_trail_handoff_recovery_needed,
-    "trail.handoff_target_corrected": _when_trail_handoff_target_corrected,
     "trail.checkpoint_projection_race": _when_trail_checkpoint_projection_race,
     "trail.reviewer_unavailable": _when_trail_reviewer_unavailable,
     "trail.decision_without_result": _when_trail_decision_without_result,

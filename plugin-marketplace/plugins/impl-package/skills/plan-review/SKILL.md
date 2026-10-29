@@ -29,7 +29,7 @@ mode 省略时使用 `full-review`。`bundle-admission` 只有在 bundle 完整�
 3. **审查维度**：按以下顺序逐项检查：
    1. **完整性**：对照 Decision/Spec 结构与全部 Ticket 的 Contract references 与 AC，确认 candidate 对其声明的 Composition 完整；Plan 不再维护独立 Coverage & Change Map 表格，完整性核对直接读 Ticket 集合。新 package 另核：Spec 的每个 Journey step 与 ticket 级套件都被某张 Ticket 的 Coverage 认领，套件清单对照 Rule Matrix 完整，没有既不启用 step 也不负责套件的 Ticket。否则可能只实现 happy path，留下无法验收的半套接线。
    2. **范围**：scope，检查真实消费者、跨平台镜像、旧布局/旧 contract 入口以及 `NOT in scope`；否则遗漏或静默扩大的范围会在实施时才暴露。
-   3. **顺序**：sequencing，检查前置依赖、迁移窗口、integration point 和 release gate 的先后，以及第一个用户可见 Journey step 由哪张 Ticket、合入几张后可走通（首票是否窄而完整，harness 是否只做到第一条窄路径所需）；否则依赖未释放或迁移窗口错位会让计划不可执行，Owner 要到包尾才看到产品结果。
+   3. **顺序**：sequencing，检查前置依赖、迁移窗口、integration point 和 release gate 的先后，以及第一个用户可见 Journey step 由哪张 Ticket、合入几张后可走通（首票是否窄而完整，harness 是否只做到第一条窄路径所需；3.6 plan 的 `Harness setup/precheck/cleanup` 是否为项目里真实可运行的命令、`First visible step` 是否排得靠前）；否则依赖未释放或迁移窗口错位会让计划不可执行，Owner 要到包尾才看到产品结果。
    4. **结构**：architecture/seams，检查组件责任、依赖方向、数据流、失败隔离和跨边界耦合；否则 ownership 与真实生产失败场景会被推迟到实施阶段才发现。
    5. **验证**：Planned Verification，确认每个 material behavior 有入口、测试层级、可观察 oracle 和 evidence owner，每个 Journey step 声明了操作入口与观察表面（页面承诺的步骤是页面入口）；否则“增加测试”不能区分正确实现与常见错误实现。
    6. **回退**：rollback，检查兼容、迁移、拒绝、归档或 compensation 语义；否则破坏性变化会把恢复方案留给实施者猜测。

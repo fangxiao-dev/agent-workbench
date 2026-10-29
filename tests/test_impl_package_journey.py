@@ -26,6 +26,11 @@ Attempt ID: initial
 Predecessors: None
 Composition: tickets=true, dag=false
 Acceptance: journey
+Harness setup: python harness.py setup
+Harness precheck: python harness.py precheck
+Harness cleanup: python harness.py cleanup
+Harness isolation: per-run
+First visible step: J1-S1 @ TKT-01
 """
 
 JOURNEY_FIXTURE = ROOT / "tests/fixtures/impl-package-journey"
@@ -155,9 +160,39 @@ def _make_fixture_package(root: Path) -> tuple[Path, Path]:
     return repo, package
 
 
-def _cli(repo: Path, package: Path, *args: str, input_value: object | None = None) -> subprocess.CompletedProcess[str]:
+def _cli(
+    repo: Path, package: Path, *args: str, input_value: object | None = None, auto_setup: bool = True,
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["IMPL_PACKAGE_NO_SITUATION"] = "1"
+    if auto_setup and args[:2] == ("evidence", "add") and input_value is not None:
+        items = input_value if isinstance(input_value, list) else [input_value]
+        if all(isinstance(item, dict) for item in items):
+            state_path = package / ".impl-package/state.json"
+            state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.is_file() else {}
+            existing_setup_ids = {
+                record.get("runId")
+                for key, records in state.get("evidenceIndex", {}).items()
+                if key.startswith("run-setup:") and isinstance(records, list)
+                for record in records if isinstance(record, dict) and record.get("kind") == "run-setup"
+            }
+            explicit_setup_ids = {item.get("runId") for item in items if item.get("kind") == "run-setup"}
+            adjusted = []
+            inserted: set[str] = set()
+            for item in items:
+                run_id = item.get("runId") if item.get("kind") == "journey-step" else None
+                if (
+                    isinstance(run_id, str) and run_id.strip()
+                    and run_id not in existing_setup_ids
+                    and run_id not in explicit_setup_ids
+                    and run_id not in inserted
+                    and all(isinstance(item.get(field), str) and item[field].strip() for field in ("revision", "environment"))
+                ):
+                    adjusted.append(_run_setup_record(item["revision"], run_id, item["environment"]))
+                    inserted.add(run_id)
+                adjusted.append(item)
+            if len(adjusted) != len(items):
+                input_value = adjusted
     input_text = None if input_value is None else json.dumps(input_value, ensure_ascii=False)
     return subprocess.run(
         [sys.executable, str(CLI), "--package", str(package), *args],
@@ -240,10 +275,21 @@ def _journey_record(
     if manual_by is not None:
         record["manualBy"] = manual_by
     if step_id == "J1-S1":
-        record["outputRef"] = "bill-123"
+        record["outputRef"] = "bill-123" if run_id == "run-1" else f"bill-{run_id}"
     elif step_id == "J1-S2":
-        record["inputRef"] = "bill-123"
+        record["inputRef"] = "bill-123" if run_id == "run-1" else f"bill-{run_id}"
     return record
+
+
+def _run_setup_record(revision: str, run_id: str = "run-1", environment: str = "local-test") -> dict:
+    return {
+        "kind": "run-setup",
+        "runId": run_id,
+        "artifact": "artifacts/evidence.md",
+        "revision": revision,
+        "environment": environment,
+        "conclusion": "supporting",
+    }
 
 
 def _file_step_spec() -> str:
@@ -362,6 +408,13 @@ def test_init_validate_and_status_use_v36_and_record_contract_baseline(tmp_path:
 
     assert state["acceptance"]["releaseOrder"] == "none"
     assert state["acceptance"]["amendments"] == []
+    assert state["acceptance"]["harness"] == {
+        "setup": "python harness.py setup",
+        "precheck": "python harness.py precheck",
+        "cleanup": "python harness.py cleanup",
+        "isolation": "per-run",
+        "firstVisibleStep": {"step": "J1-S1", "ticket": "TKT-01"},
+    }
     assert set(state["acceptance"]["contractBaseline"]["files"]) == {"decision.md", "spec.md"}
     assert state["acceptance"]["contractBaseline"]["head"] == _git(repo, "rev-parse", "HEAD")
     assert state["tickets"] == {"TKT-01": {"state": "PENDING"}, "TKT-02": {"state": "PENDING"}}
@@ -596,9 +649,9 @@ def test_evidence_add_supports_all_kinds_idempotence_and_atomic_batch(tmp_path: 
 
     added = _cli(repo, package, "evidence", "add", input_value=records)
     assert added.returncode == 0, added.stderr
-    assert json.loads(added.stdout)["added"] == 4
+    assert json.loads(added.stdout)["added"] == 5
     state = _state(package)
-    assert set(state["evidenceIndex"]) == {"journey:run-1:J1-S1", "suite:S-resolver", "review:TKT-01", "release"}
+    assert set(state["evidenceIndex"]) == {"run-setup:run-1", "journey:run-1:J1-S1", "suite:S-resolver", "review:TKT-01", "release"}
     assert "evidenceKey" not in state["evidenceIndex"]["journey:run-1:J1-S1"][0]
     recorded_at = state["evidenceIndex"]["journey:run-1:J1-S1"][0]["recordedAt"]
     assert recorded_at.endswith("Z") and engine._validate_iso_timestamp(recorded_at, "recordedAt") == recorded_at
@@ -617,6 +670,98 @@ def test_evidence_add_supports_all_kinds_idempotence_and_atomic_batch(tmp_path: 
     assert failed.returncode != 0
     assert "operation entry" in failed.stderr
     assert _state(package) == before
+
+
+def test_journey_step_requires_run_setup_and_setup_is_ordered_in_batches(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    journey = _journey_record(revision, "J1-S1", run_id="missing-setup")
+    rejected = _cli(repo, package, "evidence", "add", input_value=journey, auto_setup=False)
+    assert rejected.returncode != 0
+    assert "先运行 Plan 中的 Harness setup 与 Harness precheck 并登记 run-setup" in rejected.stderr
+    assert _state(package)["evidenceIndex"] == {}
+
+    setup = _run_setup_record(revision, "registered")
+    added_setup = _cli(repo, package, "evidence", "add", input_value=setup, auto_setup=False)
+    assert added_setup.returncode == 0, added_setup.stderr
+    assert _state(package)["evidenceIndex"]["run-setup:registered"][0]["recordedAt"].endswith("Z")
+    added_step = _cli(
+        repo, package, "evidence", "add",
+        input_value=_journey_record(revision, "J1-S1", run_id="registered"), auto_setup=False,
+    )
+    assert added_step.returncode == 0, added_step.stderr
+
+    batch_repo, batch_package, batch_revision = _init_v36(tmp_path / "batch")
+    batch = [
+        _run_setup_record(batch_revision, "same-batch"),
+        _journey_record(batch_revision, "J1-S1", run_id="same-batch"),
+    ]
+    batch_result = _cli(batch_repo, batch_package, "evidence", "add", input_value=batch, auto_setup=False)
+    assert batch_result.returncode == 0, batch_result.stderr
+    assert set(_state(batch_package)["evidenceIndex"]) == {"run-setup:same-batch", "journey:same-batch:J1-S1"}
+
+    reverse_repo, reverse_package, reverse_revision = _init_v36(tmp_path / "reverse")
+    reverse = [
+        _journey_record(reverse_revision, "J1-S1", run_id="same-batch"),
+        _run_setup_record(reverse_revision, "same-batch"),
+    ]
+    reverse_result = _cli(reverse_repo, reverse_package, "evidence", "add", input_value=reverse, auto_setup=False)
+    assert reverse_result.returncode != 0
+    assert "Harness setup" in reverse_result.stderr
+    assert _state(reverse_package)["evidenceIndex"] == {}
+
+
+def test_first_journey_step_cannot_reuse_an_object_from_another_run(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    first = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S1"))
+    assert first.returncode == 0, first.stderr
+    reused = _journey_record(revision, "J1-S1", run_id="second-run")
+    reused["outputRef"] = "bill-123"
+
+    rejected = _cli(repo, package, "evidence", "add", input_value=reused)
+
+    assert rejected.returncode != 0
+    assert "第 1 步产出的对象已在 run run-1 中出现，每次 run 需新建业务对象" in rejected.stderr
+    assert "journey:second-run:J1-S1" not in _state(package)["evidenceIndex"]
+
+
+def test_walking_skeleton_overdue_follows_satisfied_ticket_and_valid_first_visible_evidence(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    suite = _cli(repo, package, "evidence", "add", input_value=_suite_record(revision, "S-resolver"))
+    assert suite.returncode == 0, suite.stderr
+    satisfied = _satisfy(repo, package, "TKT-01", revision)
+    assert satisfied.returncode == 0, satisfied.stderr
+
+    state = _state(package)
+    status = engine._v36_acceptance_status(
+        package, state, engine._validate_state(package, state), revision, attempt_active=True,
+    )
+    snapshot = situation._build_snapshot(situation.PackageReader(package, None))
+    fact = situation._when_attempt_walking_skeleton_overdue(situation.FactContext(snapshot, "attempt", "initial"))
+    assert status["walkingSkeletonOverdue"] is True
+    assert fact.known and fact.value is True
+    assert situation.main(["render", "--package", str(package), "--json"]) == 0
+    rendered = json.loads(capsys.readouterr().out)
+    assert any(row["slug"] == "attempt.accept.walking-skeleton-overdue" for row in rendered["matches"])
+    overdue_summary = "".join(engine._owner_summary(status, revision, "blocked", "walking skeleton pending"))
+    assert "- walking skeleton：J1-S1 应在 TKT-01 合入后走通，尚未走通" in overdue_summary
+
+    added = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S1"))
+    assert added.returncode == 0, added.stderr
+    state = _state(package)
+    status = engine._v36_acceptance_status(
+        package, state, engine._validate_state(package, state), revision, attempt_active=True,
+    )
+    snapshot = situation._build_snapshot(situation.PackageReader(package, None))
+    fact = situation._when_attempt_walking_skeleton_overdue(situation.FactContext(snapshot, "attempt", "initial"))
+    assert status["walkingSkeletonOverdue"] is False
+    assert fact.known and fact.value is False
+    assert situation.main(["render", "--package", str(package), "--json"]) == 0
+    rendered = json.loads(capsys.readouterr().out)
+    assert not any(row["slug"] == "attempt.accept.walking-skeleton-overdue" for row in rendered["matches"])
+    completed_summary = "".join(engine._owner_summary(status, revision, "blocked", "walking skeleton complete"))
+    assert "walking skeleton：" not in completed_summary
 
 
 def test_evidence_add_rejects_caller_recorded_at(tmp_path: Path) -> None:
@@ -694,7 +839,7 @@ def test_journey_handoff_requires_matching_input_and_previous_output(
     if case == "missing-output":
         assert "evidence invalidate" in result.stderr
         assert "另起 run" in result.stderr
-    assert set(_state(package)["evidenceIndex"]) == {"journey:run-1:J1-S1"}
+    assert set(_state(package)["evidenceIndex"]) == {"run-setup:run-1", "journey:run-1:J1-S1"}
 
 
 def test_journey_handoff_mismatch_rejects_entire_batch(tmp_path: Path) -> None:
@@ -957,6 +1102,56 @@ def test_log_records_count_as_reach_and_preparation_is_metrics_only(tmp_path: Pa
     assert metrics_journey["preparation"]["value"] == "同一门店、三张同条件票据。"
 
 
+@pytest.mark.parametrize("field", [
+    "Harness setup", "Harness precheck", "Harness cleanup", "Harness isolation", "First visible step",
+])
+@pytest.mark.parametrize("command", ["init", "validate"])
+def test_harness_plan_requires_all_fixed_rows(tmp_path: Path, field: str, command: str) -> None:
+    line = next(line for line in PLAN.splitlines() if line.startswith(f"{field}:"))
+    invalid_plan = PLAN.replace(line + "\n", "")
+    repo, package = _make_package(tmp_path, plan=invalid_plan if command == "init" else PLAN)
+    if command == "validate":
+        _init(repo, package)
+        (package / "plan.md").write_text(invalid_plan, encoding="utf-8")
+        result = _cli(repo, package, "package", "validate")
+    else:
+        result = _init(repo, package, ok=False)
+
+    assert result.returncode != 0
+    assert field in result.stderr
+    assert {
+        "Harness setup": "Harness setup: <命令>",
+        "Harness precheck": "Harness precheck: <命令>",
+        "Harness cleanup": "Harness cleanup: <命令>",
+        "Harness isolation": "Harness isolation: per-run",
+        "First visible step": "First visible step: <StepId> @ <TicketId>",
+    }[field] in result.stderr
+    assert "正确格式" in result.stderr
+    if command == "init":
+        assert not (package / ".impl-package/state.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("plan", "spec", "tickets", "message"),
+    [
+        (PLAN.replace("Harness isolation: per-run", "Harness isolation: shared"), SPEC, None, "Harness isolation: shared"),
+        (PLAN.replace("J1-S1 @ TKT-01", "J1-S9 @ TKT-01"), SPEC, None, "J1-S9"),
+        (PLAN.replace("J1-S1 @ TKT-01", "J1-S2 @ TKT-02"), _log_step_spec(), None, "页面 或 文件"),
+        (PLAN.replace("J1-S1 @ TKT-01", "J1-S1 @ TKT-99"), SPEC, None, "TKT-99"),
+    ],
+)
+def test_harness_plan_rejects_invalid_values_and_targets(
+    tmp_path: Path, plan: str, spec: str, tickets: dict[str, str] | None, message: str,
+) -> None:
+    repo, package = _make_package(tmp_path, plan=plan, spec=spec, tickets=tickets)
+
+    result = _init(repo, package, ok=False)
+
+    assert result.returncode != 0
+    assert message in result.stderr
+    assert "First visible step:" in result.stderr or "Harness isolation:" in result.stderr
+
+
 def test_record_surface_requires_a_record_entry_and_any_package_file(tmp_path: Path) -> None:
     repo, package = _make_package(tmp_path, spec=_log_step_spec())
     _init(repo, package)
@@ -1039,7 +1234,7 @@ def test_skipping_first_step_has_zero_reach_and_mixed_run_environment_is_atomic(
     ]
     failed = _cli(repo, package, "evidence", "add", input_value=mixed)
     assert failed.returncode != 0
-    assert "one Journey and environment" in failed.stderr
+    assert "run-setup" in failed.stderr
     assert _state(package) == before
 
 
@@ -1606,6 +1801,7 @@ def test_package_metrics_reports_numeric_sections_and_keeps_situation_and_progre
     assert confirmed.returncode == 0, confirmed.stderr
 
     state = _state(package)
+    state["evidenceIndex"]["run-setup:run-1"][0]["recordedAt"] = "2026-10-01T09:59:00Z"
     state["evidenceIndex"]["journey:run-1:J1-S1"][0]["recordedAt"] = "2026-10-01T10:00:00Z"
     state["evidenceIndex"]["journey:run-1:J1-S2"][0]["recordedAt"] = "2026-10-01T10:01:40Z"
     amendment = state["acceptance"]["amendments"][0]
@@ -1654,8 +1850,13 @@ def test_package_metrics_reports_numeric_sections_and_keeps_situation_and_progre
     assert report["findings"]["byImpact"]["seam"]["value"] == 1
     assert report["findings"]["upstreamSeamSafetyRatio"]["value"] == {"numerator": 1, "denominator": 1, "ratio": 1.0}
     journey = report["journeys"]["value"][0]
+    assert report["journeys"]["firstVisibleStep"]["declared"]["value"] == {"step": "J1-S1", "ticket": "TKT-01"}
+    assert report["journeys"]["firstVisibleStep"]["firstRecordedAt"]["value"] == "2026-10-01T10:00:00Z"
+    assert report["journeys"]["firstVisibleStep"]["secondsFromFirstDispatch"]["value"] == 0.0
     assert journey["runCount"]["value"] == 1
     assert journey["runs"]["value"][0]["firstLastRecordedAtSeconds"]["value"] == 100.0
+    assert journey["runs"]["value"][0]["setupAt"]["value"] == "2026-10-01T09:59:00Z"
+    assert journey["runs"]["value"][0]["setupToFirstStepSeconds"]["value"] == 60.0
     assert journey["pageReach"]["value"] == 2
     assert journey["rehearsalReach"]["value"] == 2
     assert journey["surfaceCounts"]["page"]["value"] == 2
@@ -1670,7 +1871,7 @@ def test_package_metrics_reports_numeric_sections_and_keeps_situation_and_progre
     assert report["usage"]["costUsd"]["value"] == 0.4
     assert report["failures"]["counts"]["flaky"]["value"] == 1
     assert report["coverage"]["endedAt"]["value"] == {"filled": 1, "records": 4, "rate": 0.25}
-    assert report["coverage"]["recordedAt"]["value"] == {"filled": 2, "records": 2, "rate": 1.0}
+    assert report["coverage"]["recordedAt"]["value"] == {"filled": 3, "records": 3, "rate": 1.0}
     assert (package / "progress.md").read_bytes() == progress_before
     assert (package / ".impl-package/state.json").read_bytes() == state_before
 
