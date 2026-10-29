@@ -12,7 +12,6 @@ import argparse
 import copy
 import json
 import re
-import subprocess
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -415,15 +414,10 @@ class Undetermined:
 
 
 def _git_result(repo: Path, *arguments: str) -> tuple[int, str, str]:
-    result = subprocess.run(
-        ["git", "-C", str(repo), *arguments],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
-    return result.returncode, result.stdout.strip(), result.stderr.strip()
+    from impl_package_runtime.engine import _run_git_result
+
+    code, stdout, stderr = _run_git_result(repo, *arguments, encoding="utf-8", errors="replace")
+    return code, stdout.strip(), stderr.strip()
 
 
 def evidence_record_valid(
@@ -4037,7 +4031,7 @@ def _run_render(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     try:
@@ -4061,6 +4055,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"situation: FAIL\n- {exc}", file=sys.stderr)
         return 2
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    from impl_package_runtime.engine import git_query_scope
+
+    with git_query_scope():
+        return _main(argv)
 
 
 if __name__ == "__main__":

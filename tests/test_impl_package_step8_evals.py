@@ -62,7 +62,7 @@ def test_active_package_files_have_no_retired_state_mechanisms() -> None:
     engine = (IMPL / "scripts/impl_package_runtime/engine.py").read_text(encoding="utf-8")
     # 3.6 uses Git blob ids only for contract files, through one helper.
     blob_helper = engine.split("def _working_tree_blob", 1)[1].split(chr(10) + "def ", 1)[0]
-    assert engine.count('"hash-object"') == 1
+    assert engine.count('_run_git(repo, "hash-object"') == 1
     assert blob_helper.count('"hash-object"') == 1
 
     # These tokens guarded the old state engine's wildcard package discovery.

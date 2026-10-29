@@ -6,7 +6,6 @@ import json
 import math
 import os
 import re
-import subprocess
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -103,13 +102,10 @@ def _read_selected_state(package: Path, state: dict[str, Any], attempt: str, his
     if isinstance(commit, str):
         repo = engine._repo_root(package)
         state_path = (package / engine.STATE_PATH).resolve().relative_to(repo).as_posix()
-        result = subprocess.run(
-            ["git", "-C", str(repo), "show", f"{commit}:{state_path}"],
-            capture_output=True, text=True, encoding="utf-8", check=False,
-        )
-        if result.returncode == 0:
+        code, stdout, _ = engine._run_git_result(repo, "show", f"{commit}:{state_path}", encoding="utf-8")
+        if code == 0:
             try:
-                historical = json.loads(result.stdout)
+                historical = json.loads(stdout)
                 if isinstance(historical, dict) and historical.get("attempt", {}).get("id") == attempt:
                     return historical
             except json.JSONDecodeError:
@@ -866,6 +862,7 @@ def _write_json(path: Path, value: dict[str, Any]) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
+        engine._invalidate_working_tree_hash(path)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
