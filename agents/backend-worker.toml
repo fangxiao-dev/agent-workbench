@@ -2,7 +2,7 @@
 name = "backend-worker"
 description = "Backend implementation agent. Implements server-side behavior strictly against the shared contract without modifying the contract."
 
-model = "gpt-5.6-terra"
+model = "gpt-6.1-terra"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 
@@ -34,3 +34,4 @@ CONTRACT_STATUS
 BLOCKERS
 - remaining blockers, if any
 """
+
