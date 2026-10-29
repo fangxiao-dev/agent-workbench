@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -84,6 +85,44 @@ SPEC = """# Spec
 """
 
 
+_TEMPLATE_ROOT: Path | None = None
+_CACHED_REPOS: dict[str, tuple[Path, str | None]] = {}
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _template_cache(tmp_path_factory: pytest.TempPathFactory):
+    global _TEMPLATE_ROOT
+    _TEMPLATE_ROOT = tmp_path_factory.mktemp("impl-package-journey-templates")
+    yield
+    _CACHED_REPOS.clear()
+    _TEMPLATE_ROOT = None
+
+
+def _template_key(kind: str, contents: object) -> str:
+    encoded = json.dumps(contents, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return f"{kind}-{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _package_template_key(plan: str, spec: str, tickets: dict[str, str], initialized: bool) -> str:
+    return _template_key("package", {"plan": plan, "spec": spec, "tickets": tickets, "initialized": initialized})
+
+
+def _copy_cached_repo(root: Path, key: str, build: Callable[[Path], str | None]) -> tuple[Path, str | None]:
+    if _TEMPLATE_ROOT is None:
+        raise RuntimeError("pytest template cache is not initialized")
+    cached = _CACHED_REPOS.get(key)
+    if cached is None:
+        template_repo = _TEMPLATE_ROOT / key / "repo"
+        template_repo.parent.mkdir(parents=True)
+        init_output = build(template_repo)
+        cached = (template_repo, init_output)
+        _CACHED_REPOS[key] = cached
+    root.mkdir(parents=True, exist_ok=True)
+    repo = root / "repo"
+    shutil.copytree(cached[0], repo)
+    return repo, cached[1]
+
+
 def _ticket(ticket_id: str, journey_steps: str, suites: str, *, required_review: str = "none", dependencies: str = "- none") -> str:
     return f"""# {ticket_id}
 
@@ -115,48 +154,63 @@ def _make_package(
     plan: str = PLAN,
     spec: str = SPEC,
     tickets: dict[str, str] | None = None,
+    initialized: bool = False,
 ) -> tuple[Path, Path]:
-    root.mkdir(parents=True, exist_ok=True)
-    repo = root / "repo"
-    repo.mkdir()
-    _git(repo, "init")
-    _git(repo, "config", "user.email", "journey@example.com")
-    _git(repo, "config", "user.name", "Journey Fixture")
-    package = repo / "docs/implementations/20261028-journey-phase1"
-    (package / "tickets").mkdir(parents=True)
-    (package / "artifacts").mkdir()
-    (package / "execution").mkdir()
-    (package / "plan.md").write_text(plan, encoding="utf-8")
-    (package / "spec.md").write_text(spec, encoding="utf-8")
-    (package / "decision.md").write_text("# Decision\n", encoding="utf-8")
-    (package / "artifacts/evidence.md").write_text("fixture evidence\n", encoding="utf-8")
-    _write_trace(package)
-    (repo / "docs/implementations/retired.json").write_text('{"packages": []}\n', encoding="utf-8")
     ticket_docs = tickets or {
         "01.md": _ticket("TKT-01", "J1-S1", "S-resolver"),
         "02.md": _ticket("TKT-02", "J1-S2", "S-workflow"),
     }
-    for name, text in ticket_docs.items():
-        (package / "tickets" / name).write_text(text, encoding="utf-8")
-    _git(repo, "add", ".")
-    _git(repo, "commit", "-m", "Journey fixture")
+    key = _package_template_key(plan, spec, ticket_docs, initialized)
+
+    def build(repo: Path) -> str | None:
+        repo.mkdir()
+        _git(repo, "init")
+        _git(repo, "config", "user.email", "journey@example.com")
+        _git(repo, "config", "user.name", "Journey Fixture")
+        package = repo / "docs/implementations/20261028-journey-phase1"
+        (package / "tickets").mkdir(parents=True)
+        (package / "artifacts").mkdir()
+        (package / "execution").mkdir()
+        (package / "plan.md").write_text(plan, encoding="utf-8")
+        (package / "spec.md").write_text(spec, encoding="utf-8")
+        (package / "decision.md").write_text("# Decision\n", encoding="utf-8")
+        (package / "artifacts/evidence.md").write_text("fixture evidence\n", encoding="utf-8")
+        _write_trace(package)
+        (repo / "docs/implementations/retired.json").write_text('{"packages": []}\n', encoding="utf-8")
+        for name, text in ticket_docs.items():
+            (package / "tickets" / name).write_text(text, encoding="utf-8")
+        _git(repo, "add", ".")
+        _git(repo, "commit", "-m", "Journey fixture")
+        if initialized:
+            return _init(repo, package).stdout
+        return None
+
+    repo, _ = _copy_cached_repo(root, key, build)
+    package = repo / "docs/implementations/20261028-journey-phase1"
     return repo, package
 
 
-def _make_fixture_package(root: Path) -> tuple[Path, Path]:
-    root.mkdir(parents=True, exist_ok=True)
-    repo = root / "repo"
-    repo.mkdir()
-    _git(repo, "init")
-    _git(repo, "config", "user.email", "journey@example.com")
-    _git(repo, "config", "user.name", "Journey Fixture")
+def _make_fixture_package(root: Path, *, initialized: bool = False) -> tuple[Path, Path]:
+    key = _template_key("fixture-package", {"fixture": "impl-package-journey", "initialized": initialized})
+
+    def build(repo: Path) -> str | None:
+        repo.mkdir()
+        _git(repo, "init")
+        _git(repo, "config", "user.email", "journey@example.com")
+        _git(repo, "config", "user.name", "Journey Fixture")
+        package = repo / "docs/implementations/20261028-journey-phase1"
+        package.parent.mkdir(parents=True)
+        shutil.copytree(JOURNEY_FIXTURE, package)
+        _write_trace(package)
+        (repo / "docs/implementations/retired.json").write_text('{"packages": []}\n', encoding="utf-8")
+        _git(repo, "add", ".")
+        _git(repo, "commit", "-m", "Journey fixture")
+        if initialized:
+            return _init(repo, package).stdout
+        return None
+
+    repo, _ = _copy_cached_repo(root, key, build)
     package = repo / "docs/implementations/20261028-journey-phase1"
-    package.parent.mkdir(parents=True)
-    shutil.copytree(JOURNEY_FIXTURE, package)
-    _write_trace(package)
-    (repo / "docs/implementations/retired.json").write_text('{"packages": []}\n', encoding="utf-8")
-    _git(repo, "add", ".")
-    _git(repo, "commit", "-m", "Journey fixture")
     return repo, package
 
 
@@ -227,9 +281,14 @@ def _state(package: Path) -> dict:
 
 
 def _init_v36(root: Path) -> tuple[Path, Path, str]:
-    repo, package = _make_package(root)
-    result = _init(repo, package)
-    state = json.loads(result.stdout)
+    repo, package = _make_package(root, initialized=True)
+    key = _package_template_key(PLAN, SPEC, {
+        "01.md": _ticket("TKT-01", "J1-S1", "S-resolver"),
+        "02.md": _ticket("TKT-02", "J1-S2", "S-workflow"),
+    }, True)
+    init_output = _CACHED_REPOS[key][1]
+    assert init_output is not None
+    state = json.loads(init_output)
     assert state["formatVersion"] == "3.6"
     return repo, package, _git(repo, "rev-parse", "HEAD")
 
@@ -473,9 +532,7 @@ def test_check_spec_reports_unresolved_source_and_exemption_references(tmp_path:
 @pytest.mark.parametrize("command", ["check-spec", "init", "validate"])
 def test_unclassified_spec_chapter_fails_check_spec_init_and_validate(tmp_path: Path, command: str) -> None:
     invalid_spec = SPEC.replace("## 7. 验收", "## 4. 新增业务约束\n\n需要给出独立验收。\n\n## 7. 验收")
-    repo, package = _make_package(tmp_path)
-    if command == "validate":
-        _init(repo, package)
+    repo, package = _make_package(tmp_path, initialized=command == "validate")
     (package / "spec.md").write_text(invalid_spec, encoding="utf-8")
 
     if command == "check-spec":
@@ -507,9 +564,7 @@ def test_unclassified_spec_chapter_fails_check_spec_init_and_validate(tmp_path: 
 def test_old_journey_tables_are_rejected_by_check_spec_init_and_validate(tmp_path: Path, command: str, old_table: str) -> None:
     current_table = "| Step | 角色 | 入口类型 | 控件 | 操作入口 | 观察表面 | 预期 | 承接 |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| J1-S1 | 税务师 | 页面 | 完成 | 税务端 Review 页点击“完成” | Review 页记录 | 答案为 4982 | — |\n| J1-S2 | 企业端用户 | 页面 | 科目 | 企业端打开下一张同类账单 | 工作台科目控件 | 预填 4982，标签“本门店记忆” | 账单 ID |"
     old_spec = SPEC.replace(current_table, old_table)
-    repo, package = _make_package(tmp_path, spec=SPEC)
-    if command == "validate":
-        _init(repo, package)
+    repo, package = _make_package(tmp_path, spec=SPEC, initialized=command == "validate")
     (package / "spec.md").write_text(old_spec, encoding="utf-8")
 
     if command == "check-spec":
@@ -548,9 +603,7 @@ def test_spec_validates_entry_type_and_control(spec: str, message: str) -> None:
 def test_record_steps_cannot_start_or_make_up_a_whole_journey(
     tmp_path: Path, command: str, spec: str, message: str,
 ) -> None:
-    repo, package = _make_package(tmp_path, spec=SPEC)
-    if command == "validate":
-        _init(repo, package)
+    repo, package = _make_package(tmp_path, spec=SPEC, initialized=command == "validate")
     (package / "spec.md").write_text(spec, encoding="utf-8")
 
     if command == "check-spec":
@@ -626,8 +679,7 @@ def test_init_rejects_invalid_journey_contracts(
 
 
 def test_validate_still_reports_ticket_ids_named_in_spec(tmp_path: Path) -> None:
-    repo, package = _make_package(tmp_path, spec=SPEC + "\nThis contract mentions TKT-01.\n")
-    _init(repo, package)
+    repo, package = _make_package(tmp_path, spec=SPEC + "\nThis contract mentions TKT-01.\n", initialized=True)
 
     result = _cli(repo, package, "package", "validate")
 
@@ -875,8 +927,7 @@ def test_journey_handoff_is_checked_for_every_record_of_the_step(tmp_path: Path)
 
 def test_journey_step_with_dash_handoff_does_not_compare_references(tmp_path: Path) -> None:
     spec = SPEC.replace("| 账单 ID |", "| — |")
-    repo, package = _make_package(tmp_path, spec=spec)
-    _init(repo, package)
+    repo, package = _make_package(tmp_path, spec=spec, initialized=True)
     revision = _git(repo, "rev-parse", "HEAD")
     first_record = _journey_record(revision, "J1-S1")
     first_record["outputRef"] = "bill-123"
@@ -1010,8 +1061,7 @@ def test_page_manual_walkthrough_requires_manual_by_and_package_image(tmp_path: 
 
 
 def test_file_surface_rejects_markdown_and_records_artifact_sha256(tmp_path: Path) -> None:
-    repo, package = _make_package(tmp_path, spec=_file_step_spec())
-    _init(repo, package)
+    repo, package = _make_package(tmp_path, spec=_file_step_spec(), initialized=True)
     revision = _git(repo, "rev-parse", "HEAD")
     markdown = _journey_record(revision, "J1-S1", surface="file", artifact="artifacts/evidence.md")
     markdown["entry"] = "下载更正后的账单"
@@ -1065,8 +1115,7 @@ def test_api_records_count_as_rehearsal_and_mixed_surface_reach_is_contiguous(tm
 
 
 def test_log_records_count_as_reach_and_preparation_is_metrics_only(tmp_path: Path) -> None:
-    repo, package = _make_package(tmp_path, spec=_log_step_spec())
-    _init(repo, package)
+    repo, package = _make_package(tmp_path, spec=_log_step_spec(), initialized=True)
     revision = _git(repo, "rev-parse", "HEAD")
     log = package / "artifacts/runtime.log"
     log.write_text("platform experience tool called\n", encoding="utf-8")
@@ -1153,8 +1202,7 @@ def test_harness_plan_rejects_invalid_values_and_targets(
 
 
 def test_record_surface_requires_a_record_entry_and_any_package_file(tmp_path: Path) -> None:
-    repo, package = _make_package(tmp_path, spec=_log_step_spec())
-    _init(repo, package)
+    repo, package = _make_package(tmp_path, spec=_log_step_spec(), initialized=True)
     revision = _git(repo, "rev-parse", "HEAD")
     log = package / "artifacts/runtime.log"
     log.write_text("tool called\n", encoding="utf-8")
@@ -1316,8 +1364,7 @@ def test_ticket_satisfy_uses_suite_and_required_review_without_journey_steps(tmp
         "01.md": _ticket("TKT-01", "J1-S1", "S-resolver", required_review="terminal-final"),
         "02.md": _ticket("TKT-02", "J1-S2", "S-workflow"),
     }
-    repo, package = _make_package(tmp_path, tickets=tickets)
-    _init(repo, package)
+    repo, package = _make_package(tmp_path, tickets=tickets, initialized=True)
     revision = _git(repo, "rev-parse", "HEAD")
 
     missing_suite = _satisfy(repo, package, "TKT-01", revision, ok=False)
@@ -1347,8 +1394,7 @@ def test_ticket_satisfy_keeps_implementation_and_acceptance_edges(tmp_path: Path
         "01.md": _ticket("TKT-01", "J1-S1", "S-resolver", dependencies="- implementation: TKT-02\n- acceptance: TKT-02"),
         "02.md": _ticket("TKT-02", "J1-S2", "S-workflow"),
     }
-    repo, package = _make_package(tmp_path, tickets=tickets)
-    _init(repo, package)
+    repo, package = _make_package(tmp_path, tickets=tickets, initialized=True)
     revision = _git(repo, "rev-parse", "HEAD")
     for suite in ("S-resolver", "S-workflow"):
         added = _cli(repo, package, "evidence", "add", input_value=_suite_record(revision, suite))
@@ -1623,8 +1669,7 @@ def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_p
     assert engine._lifecycle(package, "initial", repo).frozen
     assert (package / ".impl-package/attempts/initial.json").is_file()
 
-    outside_repo, outside_package = _make_fixture_package(tmp_path / "outside")
-    _init(outside_repo, outside_package)
+    outside_repo, outside_package = _make_fixture_package(tmp_path / "outside", initialized=True)
     outside_revision = _git(outside_repo, "rev-parse", "HEAD")
     outside_record = _journey_record(outside_revision, "J1-S1")
     outside_added = _cli(outside_repo, outside_package, "evidence", "add", input_value=outside_record)
@@ -1636,8 +1681,7 @@ def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_p
     outside_gate = _gate(outside_repo, outside_package, "pass", outside_head)
     assert outside_gate.returncode != 0 and "Evidence journey:run-1:J1-S1 的 supporting 记录待复验" in outside_gate.stderr
 
-    local_repo, local_package = _make_fixture_package(tmp_path / "package-doc")
-    _init(local_repo, local_package)
+    local_repo, local_package = _make_fixture_package(tmp_path / "package-doc", initialized=True)
     local_revision = _git(local_repo, "rev-parse", "HEAD")
     local_record = _suite_record(local_revision, "S-resolver")
     local_added = _cli(local_repo, local_package, "evidence", "add", input_value=local_record)
@@ -1653,8 +1697,7 @@ def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_p
         attempt_active=True,
     )
 
-    unregistered_repo, unregistered_package = _make_fixture_package(tmp_path / "unregistered-spec")
-    _init(unregistered_repo, unregistered_package)
+    unregistered_repo, unregistered_package = _make_fixture_package(tmp_path / "unregistered-spec", initialized=True)
     unregistered_revision = _git(unregistered_repo, "rev-parse", "HEAD")
     _append_spec_note(unregistered_package, "Unregistered change")
     unregistered_gate = _gate(unregistered_repo, unregistered_package, "pass", unregistered_revision)
@@ -1663,8 +1706,7 @@ def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_p
 
 
 def test_gate_pass_rejects_each_acceptance_gap_and_gate_blocked_keeps_attempt_active(tmp_path: Path) -> None:
-    repo, package = _make_package(tmp_path, plan=PLAN + "Release order: required\n")
-    _init(repo, package)
+    repo, package = _make_package(tmp_path, plan=PLAN + "Release order: required\n", initialized=True)
     revision = _git(repo, "rev-parse", "HEAD")
     _append_spec_note(package, "Owner clarification: Amended wording.")
     unregistered = _gate(repo, package, "pass", revision)
@@ -1688,8 +1730,7 @@ def test_gate_pass_rejects_each_acceptance_gap_and_gate_blocked_keeps_attempt_ac
 
 
 def test_journey_gate_pass_confirms_amendment_requires_release_and_freezes_archive(tmp_path: Path) -> None:
-    repo, package = _make_package(tmp_path, plan=PLAN + "Release order: required\n")
-    _init(repo, package)
+    repo, package = _make_package(tmp_path, plan=PLAN + "Release order: required\n", initialized=True)
     revision = _git(repo, "rev-parse", "HEAD")
     _append_spec_note(package, "Owner clarification: Approved wording.")
     added = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "回填时间锚点", "--affected", "spec.md", "--artifact", "artifacts/evidence.md")
@@ -1787,8 +1828,7 @@ def test_package_metrics_reports_numeric_sections_and_keeps_situation_and_progre
         "01.md": _ticket("TKT-01", "J1-S1", "S-resolver"),
         "02.md": _ticket("TKT-02", "J1-S2", "S-workflow", dependencies="- implementation: TKT-01"),
     }
-    repo, package = _make_package(tmp_path, tickets=tickets)
-    _init(repo, package)
+    repo, package = _make_package(tmp_path, tickets=tickets, initialized=True)
     revision = _git(repo, "rev-parse", "HEAD")
     for step_id in ("J1-S1", "J1-S2"):
         added = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, step_id))
@@ -1895,8 +1935,7 @@ def test_package_metrics_keeps_unavailable_values_null_with_reasons(tmp_path: Pa
         "01.md": _ticket("TKT-01", "J1-S1", "S-resolver"),
         "02.md": _ticket("TKT-02", "J1-S2", "S-workflow", dependencies="- implementation: TKT-01"),
     }
-    repo, package = _make_package(tmp_path, tickets=tickets)
-    _init(repo, package)
+    repo, package = _make_package(tmp_path, tickets=tickets, initialized=True)
     _write_metrics_trail(package, [
         _metrics_row(1, "2026-10-01T10:00:00Z", "dispatch", "ticket:TKT-01", dispatch_id="d1", mode="fix"),
         _metrics_row(2, "2026-10-01T10:01:00Z", "dispatch", "ticket:TKT-02", dispatch_id="d2", mode="implement"),
@@ -1940,8 +1979,7 @@ def test_package_metrics_runs_on_35_and_marks_journey_sections_unavailable(tmp_p
 
 
 def test_situation_renders_new_v36_acceptance_rows_without_changing_global_blocking(tmp_path: Path) -> None:
-    repo, package = _make_package(tmp_path, plan=PLAN + "Release order: required\n")
-    _init(repo, package)
+    repo, package = _make_package(tmp_path, plan=PLAN + "Release order: required\n", initialized=True)
     revision = _git(repo, "rev-parse", "HEAD")
     added = _cli(repo, package, "evidence", "add", input_value=_suite_record(revision, "S-resolver"))
     assert added.returncode == 0, added.stderr
