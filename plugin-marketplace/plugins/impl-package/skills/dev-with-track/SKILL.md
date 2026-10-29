@@ -43,6 +43,7 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 
 3.5 package 沿用上文的 claim 流程。3.6 的格式与命令见 current-state，这里只写怎么做：
 
+- 每次 run 先执行 plan 的 `Harness setup` 与 `Harness precheck`，输出登记为 `run-setup` evidence；每个 run 创建新的业务对象，不重开别的 run 或后续步骤改过的对象（方法见 `validation-harness`）。
 - 每次合入后，从 Journey 第 1 步起按 Spec 的操作入口走到当前能到的最远一步，在观察表面取证，登记 `journey-step` evidence（同一 run、同一 environment，artifact 在 package 内）。reach 让 Owner 看到产品结果逐步前移；Gate 要的是最终版本上的一次走完。
 - 页面步用该步角色的账号走，录 Playwright trace（动作须含对声明控件的操作）登记 `surface: page`，或人工走查时写 `manualBy` 并附 package 内截图；文件步登记用户实际收到的文件；`记录` 步登记 package 内日志文件（`surface: log`）。UI 出现前可先用 API 跑 Journey 做预演（`surface: api`），它进 `rehearsalReach`，不进 Gate 认的 `reach`。Spec 该步“承接”不是 `—` 时，登记上一步的 `outputRef`（业务对象 ID）并把它作为本步 `inputRef`，两者不一致 `evidence add` 会拒绝；失败后另起 run 从第 1 步重走，局部测试、mock 和套件结果用来定位原因，不拼进走通记录。
 - 套件按 Required Suites 的入口与环境运行，结果以 `suite:<id>` 登记；revision 已合入、implementation/acceptance 入边已释放、负责的套件通过且 required review 完成后 `ticket satisfy`。
@@ -88,4 +89,4 @@ Completion claim 不能宽于 evidence；准备写 terminal pass 或声称 compl
 
 terminal Gate 完成 Stage 7：记录 Durable Delta 与 truth pointer，或写明无增量理由；随后冻结 state、checkpoint 与 Execution Record。transport disconnect 后从幂等事实恢复。
 
-先由本 Skill 根据 canonical facts 判断 Ticket 总数、剩余数、blocker、是否 closed 和需要 Owner 的决定；3.6 的 Gate 第一屏由 runtime 生成 Owner Summary（Journey 走通进度、套件、待确认 Amendment、发布顺序、最终版本），汇报先说产品结果；若 catalog 中存在 `talk-to-boss`，再由它组织叙述。
+先由本 Skill 根据 canonical facts 判断 Ticket 总数、剩余数、blocker、是否 closed 和需要 Owner 的决定；3.6 的 Gate 第一屏由 runtime 生成 Owner Summary（Journey 走通进度、套件、待确认 Amendment、发布顺序、最终版本），汇报先说产品结果。

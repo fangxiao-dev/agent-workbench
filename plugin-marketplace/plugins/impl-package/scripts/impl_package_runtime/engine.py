@@ -450,6 +450,65 @@ def _package_relative(package: Path, path: Path) -> str:
     return path.resolve().relative_to(package.resolve()).as_posix()
 
 
+HARNESS_PLAN_FORMATS = {
+    "Harness setup": "Harness setup: <命令>",
+    "Harness precheck": "Harness precheck: <命令>",
+    "Harness cleanup": "Harness cleanup: <命令>",
+    "Harness isolation": "Harness isolation: per-run",
+    "First visible step": "First visible step: <StepId> @ <TicketId>",
+}
+
+
+def _harness_from_plan(text: str) -> dict[str, Any]:
+    values: dict[str, str] = {}
+    errors: list[str] = []
+    for field in HARNESS_PLAN_FORMATS:
+        rows = [line for line in text.splitlines() if line.startswith(f"{field}:")]
+        if len(rows) != 1:
+            errors.append(f"{field}：{'缺失' if not rows else '只能出现一次'}")
+            continue
+        value = rows[0].partition(":")[2].strip()
+        if not value:
+            errors.append(f"{field}：值不能为空")
+            continue
+        values[field] = value
+
+    isolation = values.get("Harness isolation")
+    if isolation is not None and isolation != "per-run":
+        errors.append(f"Harness isolation: {isolation}（只接受 per-run）")
+    first_visible = values.get("First visible step")
+    match = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9._-]*)\s+@\s+([A-Za-z0-9][A-Za-z0-9._-]*)", first_visible or "")
+    if first_visible is not None and match is None:
+        errors.append(f"First visible step: {first_visible}（StepId 与 TicketId 格式无效）")
+    if errors:
+        expected = "\n".join(f"- {line}" for line in HARNESS_PLAN_FORMATS.values())
+        raise StateError("plan Harness 字段缺失或非法：\n- " + "\n- ".join(errors) + "\n正确格式：\n" + expected)
+
+    assert match is not None
+    return {
+        "setup": values["Harness setup"],
+        "precheck": values["Harness precheck"],
+        "cleanup": values["Harness cleanup"],
+        "isolation": isolation,
+        "firstVisibleStep": {"step": match.group(1), "ticket": match.group(2)},
+    }
+
+
+def _validate_first_visible_step(harness: dict[str, Any], spec: dict[str, Any], documents: list[dict[str, Any]]) -> None:
+    first = harness["firstVisibleStep"]
+    step = spec["steps"].get(first["step"])
+    if step is None or step["entryType"] not in {"页面", "文件"}:
+        raise StateError(
+            f"First visible step {first['step']} 必须存在于 Spec 且入口类型为 页面 或 文件；"
+            f"正确格式：{HARNESS_PLAN_FORMATS['First visible step']}"
+        )
+    if first["ticket"] not in {document["id"] for document in documents}:
+        raise StateError(
+            f"First visible step Ticket {first['ticket']} 不存在；"
+            f"正确格式：{HARNESS_PLAN_FORMATS['First visible step']}"
+        )
+
+
 def _plan_info(package: Path, repo: Path, plan_value: str) -> dict[str, Any]:
     plan_rel = _repo_relative(repo, plan_value, "plan")
     plan_path = repo / plan_rel.split("#", 1)[0]
@@ -472,6 +531,7 @@ def _plan_info(package: Path, repo: Path, plan_value: str) -> dict[str, Any]:
         raise StateError("plan must declare Acceptance: journey at most once")
     format_version = "3.6" if journey_markers else FORMAT_VERSION
     release_order = "none"
+    harness = None
     if format_version == "3.6":
         release_markers = RELEASE_ORDER_RE.findall(text)
         if len(release_markers) > 1:
@@ -480,10 +540,11 @@ def _plan_info(package: Path, repo: Path, plan_value: str) -> dict[str, Any]:
             raise StateError("Release order must be required or none")
         if release_markers:
             release_order = release_markers[0]
+        harness = _harness_from_plan(text)
     attempt = _field(ATTEMPT_RE, text, "Attempt ID")
     if not isinstance(attempt, str) or ATTEMPT_ID_RE.fullmatch(attempt) is None:
         raise StateError(f"invalid Attempt ID: {attempt!r}")
-    return {"path": plan_rel, "attempt": attempt, "decision": _field(DECISION_RE, text, "Decision Revision", optional=True), "spec": _field(SPEC_RE, text, "Spec Revision", optional=True), "plan": _field(PLAN_RE, text, "Plan Revision", optional=True), "predecessors": _predecessors_from_plan(package, repo, text), "tickets": tickets, "dag": False, "formatVersion": format_version, "releaseOrder": release_order}
+    return {"path": plan_rel, "attempt": attempt, "decision": _field(DECISION_RE, text, "Decision Revision", optional=True), "spec": _field(SPEC_RE, text, "Spec Revision", optional=True), "plan": _field(PLAN_RE, text, "Plan Revision", optional=True), "predecessors": _predecessors_from_plan(package, repo, text), "tickets": tickets, "dag": False, "formatVersion": format_version, "releaseOrder": release_order, "harness": harness}
 
 
 def _markdown_section(text: str, title: str, level: int, spec_label: str = "spec.md") -> list[str]:
@@ -1312,9 +1373,14 @@ def _validate_journey_evidence_index(
         raise StateError("3.6 evidenceIndex must be an object keyed by evidenceKey")
     normalized: dict[str, list[dict[str, Any]]] = {}
     run_environments: dict[str, tuple[str, str]] = {}
+    run_setup_environments: dict[str, str] = {}
+    journey_run_environments: dict[str, str] = {}
+    setup_run_ids: set[str] = set()
+    journey_run_ids: set[str] = set()
     base_fields = {"kind", "artifact", "revision", "environment", "conclusion"}
     fields_by_kind = {
         "journey-step": {"runId", "journeyId", "stepId", "actor", "entry", "surface"},
+        "run-setup": {"runId"},
         "suite": {"suiteId"},
         "review": {"ticket"},
         "release": set(),
@@ -1380,6 +1446,18 @@ def _validate_journey_evidence_index(
                 previous = run_environments.setdefault(run_id, environment_tuple)
                 if previous != environment_tuple:
                     raise StateError(f"Journey run {run_id} must use one Journey and environment")
+                journey_run_ids.add(run_id)
+                journey_run_environments[run_id] = record["environment"]
+            elif kind == "run-setup":
+                run_id = record["runId"]
+                if not isinstance(run_id, str) or not run_id.strip():
+                    raise StateError(f"evidenceIndex[{evidence_key}] run-setup runId must be non-empty")
+                if evidence_key != f"run-setup:{run_id}":
+                    raise StateError(f"evidenceIndex[{evidence_key}] must use run-setup:<runId>")
+                setup_run_ids.add(run_id)
+                previous_environment = run_setup_environments.setdefault(run_id, record["environment"])
+                if previous_environment != record["environment"]:
+                    raise StateError(f"run-setup {run_id} must use one environment")
             elif kind == "suite":
                 suite_id = record["suiteId"]
                 if not isinstance(suite_id, str) or suite_id not in spec["suites"]:
@@ -1397,6 +1475,15 @@ def _validate_journey_evidence_index(
             elif evidence_key != "release":
                 raise StateError("release evidence key must be release")
             normalized[evidence_key].append(copy)
+    missing_setups = sorted(journey_run_ids - setup_run_ids)
+    if missing_setups:
+        raise StateError("Journey runs missing run-setup: " + ", ".join(missing_setups))
+    mismatched_setups = sorted(
+        run_id for run_id in journey_run_ids
+        if run_setup_environments.get(run_id) != journey_run_environments.get(run_id)
+    )
+    if mismatched_setups:
+        raise StateError("Journey run-setup environment must match its Journey run: " + ", ".join(mismatched_setups))
     return normalized
 
 
@@ -1472,10 +1559,23 @@ def _ticket_released(tickets: dict[str, Any], identifier: str, visiting: set[str
 
 
 def _validate_acceptance_state(package: Path, repo: Path, acceptance: Any, info: dict[str, Any], *, validate_live_artifacts: bool = True) -> dict[str, Any]:
-    if not isinstance(acceptance, dict) or set(acceptance) != {"contractBaseline", "releaseOrder", "amendments"}:
-        raise StateError("3.6 acceptance must contain contractBaseline, releaseOrder, amendments")
+    if not isinstance(acceptance, dict) or set(acceptance) != {"contractBaseline", "releaseOrder", "amendments", "harness"}:
+        raise StateError("3.6 acceptance must contain contractBaseline, releaseOrder, amendments, harness")
     if not isinstance(acceptance["releaseOrder"], str) or acceptance["releaseOrder"] not in {"required", "none"} or acceptance["releaseOrder"] != info["releaseOrder"]:
         raise StateError("state acceptance.releaseOrder does not match the Plan")
+    harness = acceptance["harness"]
+    if (
+        not isinstance(harness, dict)
+        or set(harness) != {"setup", "precheck", "cleanup", "isolation", "firstVisibleStep"}
+        or any(not isinstance(harness.get(field), str) or not harness[field].strip() for field in ("setup", "precheck", "cleanup"))
+        or harness.get("isolation") != "per-run"
+        or not isinstance(harness.get("firstVisibleStep"), dict)
+        or set(harness["firstVisibleStep"]) != {"step", "ticket"}
+        or any(not isinstance(harness["firstVisibleStep"].get(field), str) or not harness["firstVisibleStep"][field].strip() for field in ("step", "ticket"))
+    ):
+        raise StateError("state acceptance.harness fields are invalid")
+    if harness != info["harness"]:
+        raise StateError("state acceptance.harness does not match the Plan")
     if not isinstance(acceptance["amendments"], list):
         raise StateError("state acceptance.amendments must be a list")
     live = validate_live_artifacts and not _lifecycle(package, info["attempt"], repo).frozen
@@ -1571,6 +1671,7 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
     documents = _ticket_documents(package, attempt["id"], format_version)
     if journey_spec is not None:
         _validate_journey_coverage(journey_spec, documents)
+        _validate_first_visible_step(info["harness"], journey_spec, documents)
     ticket_ids = {row["id"] for row in documents}
     tickets = state["tickets"]
     if not isinstance(tickets, dict) or set(tickets) != ticket_ids:
@@ -1671,6 +1772,27 @@ def _v36_acceptance_status(
     stale: set[str] = set()
     run_records: dict[tuple[str, str], list[tuple[str, dict[str, Any]]]] = {}
     surface_validity: dict[int, bool] = {}
+    first_visible = summary["_acceptance"]["harness"]["firstVisibleStep"]
+    first_visible_records: list[dict[str, Any]] = []
+    setup_validity: dict[tuple[str, str], bool] = {}
+
+    def has_valid_run_setup(run_id: str, environment: str) -> bool:
+        key = (run_id, environment)
+        if key not in setup_validity:
+            setup_validity[key] = any(
+                evidence_record_valid(
+                    record,
+                    comparison_commit,
+                    repo=repo,
+                    package=package,
+                    expected_environment=environment,
+                    attempt_active=attempt_active,
+                )
+                for record in records_by_key.get(f"run-setup:{run_id}", [])
+                if record.get("kind") == "run-setup"
+            )
+        return setup_validity[key]
+
     for evidence_key, records in records_by_key.items():
         for record in records:
             kind = record["kind"]
@@ -1722,6 +1844,7 @@ def _v36_acceptance_status(
                     record
                     for record in by_step.get(step["id"], [])
                     if surface_validity.get(id(record), False)
+                    and has_valid_run_setup(_run_id, environment)
                     and evidence_record_valid(
                         record,
                         comparison_commit,
@@ -1731,6 +1854,12 @@ def _v36_acceptance_status(
                         attempt_active=attempt_active,
                     )
                 ]
+                if step["id"] == first_visible["step"]:
+                    expected_surface = _journey_expected_surface(step)
+                    first_visible_records.extend(
+                        record for record in valid_by_step[step["id"]]
+                        if record["surface"] == expected_surface
+                    )
                 for record in valid_by_step[step["id"]]:
                     run_surface_counts[record["surface"]] += 1
                     if record["surface"] == "page" and record.get("manualBy"):
@@ -1801,6 +1930,7 @@ def _v36_acceptance_status(
     )
     pending = [row for row in summary["_acceptance"]["amendments"] if row["status"] == "PENDING"]
     unregistered = _contract_amendment_findings(package, repo, summary["_acceptance"])
+    first_visible_ticket = first_visible["ticket"]
     return {
         "journeys": journey_rows,
         "suites": suite_rows,
@@ -1809,6 +1939,8 @@ def _v36_acceptance_status(
         "unregisteredAmendments": unregistered,
         "releaseRequired": release_required,
         "releaseValid": release_valid,
+        "firstVisibleStep": dict(first_visible),
+        "walkingSkeletonOverdue": state["tickets"][first_visible_ticket]["state"] == "SATISFIED" and not first_visible_records,
     }
 
 
@@ -2123,13 +2255,15 @@ def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
     else:
         previous = []
     documents = _ticket_documents(package, attempt, info["formatVersion"])
+    if info["formatVersion"] == "3.6":
+        _validate_first_visible_step(info["harness"], _journey_spec(package), documents)
     dependencies = _ticket_dependencies(documents)
     del dependencies
     history = list(previous)
     history.append({"id": attempt, "plan": info["path"], "lifecycle": "active", "gate": None, "executionRecord": f"execution/{attempt}/execution-record.md"})
     state: dict[str, Any] = {"formatVersion": info["formatVersion"], "attempt": {"id": attempt, "plan": info["path"]}, "attemptHistory": history, "predecessors": info["predecessors"], "tickets": {document["id"]: {"state": "PENDING"} for document in documents}, "evidenceIndex": {}, "activeCheckpoints": {}}
     if info["formatVersion"] == "3.6":
-        state["acceptance"] = {"contractBaseline": _contract_baseline(package, repo), "releaseOrder": info["releaseOrder"], "amendments": []}
+        state["acceptance"] = {"contractBaseline": _contract_baseline(package, repo), "releaseOrder": info["releaseOrder"], "amendments": [], "harness": info["harness"]}
     execution_record = _execution_record_path(package, attempt)
     created_execution_record = not execution_record.exists()
     if created_execution_record:
@@ -2334,19 +2468,27 @@ def _v36_ticket_satisfy_gaps(package: Path, state: dict[str, Any], summary: dict
     return gaps
 
 
-def _normalize_journey_evidence(package: Path, repo: Path, summary: dict[str, Any], payload: Any) -> tuple[str, dict[str, Any]]:
+def _normalize_journey_evidence(
+    package: Path,
+    repo: Path,
+    summary: dict[str, Any],
+    state: dict[str, Any],
+    comparison_commit: str,
+    payload: Any,
+) -> tuple[str, dict[str, Any]]:
     if not isinstance(payload, dict):
         raise StateError("evidence record must be an object")
     kind = payload.get("kind")
     fields_by_kind = {
         "journey-step": {"runId", "journeyId", "stepId", "actor", "entry", "surface"},
+        "run-setup": {"runId"},
         "suite": {"suiteId"},
         "review": {"ticket"},
         "release": set(),
     }
     optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef", "manualBy"}}
     if not isinstance(kind, str) or kind not in fields_by_kind:
-        raise StateError("3.6 evidence kind must be journey-step, suite, review, or release")
+        raise StateError("3.6 evidence kind must be journey-step, run-setup, suite, review, or release")
     required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
     allowed = required | optional_fields_by_kind.get(kind, set()) | {"evidenceKey", "invalidatedBy", "timing", "recordedAt"}
     if not required <= set(payload) or set(payload) - allowed:
@@ -2386,10 +2528,38 @@ def _normalize_journey_evidence(package: Path, repo: Path, summary: dict[str, An
             raise StateError("Journey evidence surface must be page, file, api, or log")
         if "artifactSha256" in payload:
             raise StateError("artifactSha256 is generated automatically for file Journey evidence")
+        attempt_active = not summary["_lifecycle"].frozen
+        run_setup = state["evidenceIndex"].get(f"run-setup:{run_id}", [])
+        if not any(
+            setup.get("kind") == "run-setup"
+            and evidence_record_valid(
+                setup,
+                comparison_commit,
+                repo=repo,
+                package=package,
+                expected_environment=record["environment"],
+                attempt_active=attempt_active,
+            )
+            for setup in run_setup
+        ):
+            raise StateError(
+                f"Journey run {run_id} 缺少有效 run-setup；请先运行 Plan 中的 Harness setup 与 Harness precheck 并登记 run-setup"
+            )
         digest = _validate_journey_surface_evidence(package, step, record)
         if record["surface"] == "file":
             record["artifactSha256"] = digest
         evidence_key = f"journey:{run_id}:{step_id}"
+    elif kind == "run-setup":
+        run_id = record["runId"]
+        if not isinstance(run_id, str) or not run_id.strip():
+            raise StateError("run-setup runId must be non-empty")
+        if any(
+            existing.get("environment") != record["environment"]
+            for existing in state["evidenceIndex"].get(f"run-setup:{run_id}", [])
+            if existing.get("kind") == "run-setup"
+        ):
+            raise StateError(f"run-setup {run_id} must use one environment")
+        evidence_key = f"run-setup:{run_id}"
     elif kind == "suite":
         suite_id = record["suiteId"]
         if not isinstance(suite_id, str) or suite_id not in spec["suites"]:
@@ -2408,6 +2578,25 @@ def _normalize_journey_evidence(package: Path, repo: Path, summary: dict[str, An
     if supplied_key is not None and supplied_key != evidence_key:
         raise StateError(f"evidenceKey must be {evidence_key}")
     return evidence_key, record
+
+
+def _validate_first_step_object_is_new(state: dict[str, Any], spec: dict[str, Any], record: dict[str, Any]) -> None:
+    if record.get("kind") != "journey-step" or not record.get("outputRef"):
+        return
+    journey = next(item for item in spec["journeys"] if item["id"] == record["journeyId"])
+    if record["stepId"] != journey["steps"][0]["id"]:
+        return
+    output_ref = record["outputRef"]
+    for records in state["evidenceIndex"].values():
+        for existing in records:
+            if (
+                existing.get("kind") == "journey-step"
+                and existing.get("runId") != record["runId"]
+                and output_ref in {existing.get("inputRef"), existing.get("outputRef")}
+            ):
+                raise StateError(
+                    f"第 1 步产出的对象已在 run {existing['runId']} 中出现，每次 run 需新建业务对象"
+                )
 
 
 def _validate_journey_step_order(state: dict[str, Any], spec: dict[str, Any], record: dict[str, Any]) -> None:
@@ -2513,11 +2702,12 @@ def command_evidence_add(package: Path, payload_text: str) -> dict[str, Any]:
     repo = _repo_root(package)
     results: list[dict[str, Any]] = []
     added = 0
+    comparison_commit = _run_git(repo, "rev-parse", "HEAD") if summary["formatVersion"] == "3.6" else ""
     for item in items:
         if summary["formatVersion"] == "3.6":
             if isinstance(item, dict) and "recordedAt" in item:
                 raise StateError("3.6 evidence recordedAt is generated by the runtime; omit it")
-            evidence_key, record = _normalize_journey_evidence(package, repo, summary, item)
+            evidence_key, record = _normalize_journey_evidence(package, repo, summary, state, comparison_commit, item)
             existing = state["evidenceIndex"].get(evidence_key, [])
             result = {"evidenceKey": evidence_key}
         else:
@@ -2537,6 +2727,7 @@ def command_evidence_add(package: Path, payload_text: str) -> dict[str, Any]:
                 record["recordedAt"] = _utc_timestamp()
                 if record["kind"] == "journey-step":
                     _validate_journey_step_order(state, summary["_journeySpec"], record)
+                    _validate_first_step_object_is_new(state, summary["_journeySpec"], record)
                 state["evidenceIndex"].setdefault(evidence_key, []).append(record)
             else:
                 state["evidenceIndex"].setdefault(ticket, {}).setdefault(claim, []).append(record)
@@ -3382,6 +3573,11 @@ def _owner_summary(
         lines.append(
             f"- {journey['id']} {journey['title']}：有效步骤走通 {journey['reach']}/{journey['total']} · "
             f"API 预演 {journey['rehearsalReach']}/{journey['total']}\n"
+        )
+    if status.get("walkingSkeletonOverdue"):
+        first_visible = status["firstVisibleStep"]
+        lines.append(
+            f"- walking skeleton：{first_visible['step']} 应在 {first_visible['ticket']} 合入后走通，尚未走通\n"
         )
     valid_suites = sum(1 for row in status["suites"] if row["valid"])
     lines.append(f"- 套件：{valid_suites}/{len(status['suites'])} 通过\n")

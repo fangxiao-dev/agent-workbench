@@ -123,6 +123,8 @@ steps 与 suites 不同时为 `none`，harness、migration、加固类 Ticket �
 
 两个进度数：`reach` 是同一 run 内从第 1 步起、surface 与声明的入口类型一致的连续有效步数，Gate 只认它；`rehearsalReach` 不限 surface。Gate 要求每条 Journey 在最终版本上有一次 reach 覆盖全部 step 的连续 run。runtime 还核对 `entry` 与 Spec 一致、顺序与有效期；“上一步输出是下一步输入”由执行者在 artifact 中记录，由 review 与 Owner 抽查。
 
+**Harness 与 run 隔离**：3.6 plan 用固定行 `Harness setup/precheck/cleanup`、`Harness isolation: per-run` 与 `First visible step: <StepId> @ <TicketId>` 声明验证 harness（命令来自项目 QA 入口，性质见 `validation-harness`），缺失或无效时 `package init/validate` 拒绝。每个 run 先登记 `run-setup` evidence（setup 与 precheck 输出），该 run 的 `journey-step` 才被接受；第 1 步的 `outputRef` 不得出现在其他 run，即每个 run 使用自己创建的对象。声明的 Ticket 已 `SATISFIED` 而声明的 step 仍无匹配的 page/file record 时，触发 `attempt.walking_skeleton_overdue`，进入 situation 与 Owner Summary。
+
 **Gate 分两层核对**：产品层（Journey）与规则/安全层（Required Suites）；其余是 Ticket 与合入、最终 HEAD 的 terminal-final review、Amendment、发布顺序和既有终态条件。任一必需事实 unknown 即不放行。
 
 **Amendment** 登记批准后改变用户可见结果的合同修订，Owner 确认绑定具体修订版本，内容再变化用新 ID。待确认或漏登的 Amendment 只阻止 `gate pass`，已授权且不依赖该语义的工作继续。

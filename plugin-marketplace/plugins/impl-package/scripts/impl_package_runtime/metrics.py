@@ -410,6 +410,7 @@ def _review_metrics(package: Path, attempt: str, version: str, rows: list[dict[s
 
 def _journey_metrics(
     package: Path, version: str, state: dict[str, Any] | None, history_row: dict[str, Any],
+    trail_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     source = ".impl-package/state.json evidenceIndex"
     if version != "3.6":
@@ -427,6 +428,23 @@ def _journey_metrics(
         comparison = engine._run_git(repo, "rev-parse", "HEAD")
     attempt_active = history_row.get("lifecycle") == "active"
     repo = engine._repo_root(package)
+    harness = state.get("acceptance", {}).get("harness") if isinstance(state.get("acceptance"), dict) else None
+    if not isinstance(harness, dict):
+        info = engine._plan_info(package, repo, history_row["plan"])
+        harness = {"firstVisibleStep": info["harness"]["firstVisibleStep"]}
+    first_visible = harness["firstVisibleStep"]
+    first_visible_step = spec["steps"].get(first_visible["step"])
+    if first_visible_step is None:
+        return _metric(None, "plan.md and spec.md", "First visible step is missing from the Journey Spec")
+    if trail_rows is None:
+        trail_rows, _, _ = _trail_rows(package, str(history_row["id"]))
+    first_dispatch_times = [
+        timestamp
+        for entry in trail_rows
+        if entry["row"].get("kind") == "dispatch"
+        if (timestamp := _parse_time(entry["row"].get("ts"))) is not None
+    ]
+    first_dispatch = min(first_dispatch_times) if first_dispatch_times else None
     records = [
         record
         for group in state["evidenceIndex"].values()
@@ -434,7 +452,31 @@ def _journey_metrics(
         for record in group
         if isinstance(record, dict) and record.get("kind") == "journey-step"
     ]
+    setup_records = {
+        run_id: [
+            record for record in group
+            if isinstance(record, dict) and record.get("kind") == "run-setup"
+        ]
+        for key, group in state["evidenceIndex"].items()
+        if isinstance(group, list) and key.startswith("run-setup:")
+        for run_id in [key.removeprefix("run-setup:")]
+    }
+    valid_setup_cache: dict[tuple[str, str], list[dict[str, Any]]] = {}
+
+    def valid_setups(run_id: str, environment: str) -> list[dict[str, Any]]:
+        key = (run_id, environment)
+        if key not in valid_setup_cache:
+            valid_setup_cache[key] = [
+                record for record in setup_records.get(run_id, [])
+                if engine.evidence_record_valid(
+                    record, comparison, repo=repo, package=package,
+                    expected_environment=environment, attempt_active=attempt_active,
+                )
+            ]
+        return valid_setup_cache[key]
+
     output = []
+    first_visible_matches: list[dict[str, Any]] = []
     for journey in spec["journeys"]:
         steps = journey["steps"]
         runs: dict[str, list[dict[str, Any]]] = {}
@@ -450,6 +492,8 @@ def _journey_metrics(
                 for record in run_records:
                     if record.get("stepId") != step["id"] or environment is None:
                         continue
+                    if not valid_setups(run_id, environment):
+                        continue
                     if not engine.evidence_record_valid(
                         record, comparison, repo=repo, package=package,
                         expected_environment=environment, attempt_active=attempt_active,
@@ -460,6 +504,11 @@ def _journey_metrics(
                     except (OSError, engine.StateError):
                         continue
                     valid_by_step.setdefault(step["id"], []).append(record)
+            if first_visible_step["journeyId"] == journey["id"]:
+                first_visible_matches.extend(
+                    record for record in valid_by_step.get(first_visible["step"], [])
+                    if record.get("surface") == engine._journey_expected_surface(first_visible_step)
+                )
             step_rows = []
             for step in steps:
                 valid = valid_by_step.get(step["id"], [])
@@ -490,6 +539,25 @@ def _journey_metrics(
             start_time = min(first_times) if first_times else None
             end_time = max(last_times) if last_times else None
             interval = round((end_time - start_time).total_seconds(), 6) if start_time and end_time and end_time >= start_time else None
+            timed_setups = [
+                (record, timestamp)
+                for record in valid_setups(run_id, environment or "")
+                if (timestamp := _parse_time(record.get("recordedAt"))) is not None
+            ] if environment is not None else []
+            first_setup = min(timed_setups, key=lambda item: item[1]) if timed_setups else None
+            setup_time = first_setup[1] if first_setup else None
+            first_run_step_times = [
+                timestamp
+                for record in valid_by_step.get(first_step, [])
+                if first_step is not None and record.get("surface") == engine._journey_expected_surface(steps[0])
+                if (timestamp := _parse_time(record.get("recordedAt"))) is not None
+            ] if steps else []
+            first_run_step_time = min(first_run_step_times) if first_run_step_times else None
+            setup_to_first_step = (
+                round((first_run_step_time - setup_time).total_seconds(), 6)
+                if setup_time is not None and first_run_step_time is not None and first_run_step_time >= setup_time
+                else None
+            )
             missing_steps = [step["id"] for step in steps if not valid_by_step.get(step["id"])]
             page_missing_steps = [
                 step["id"] for step in steps
@@ -534,6 +602,16 @@ def _journey_metrics(
                     interval, ".impl-package/state.json evidenceIndex",
                     None if interval is not None else "first or last step recordedAt is missing or invalid",
                 ),
+                "setupAt": _metric(
+                    first_setup[0].get("recordedAt") if first_setup else None,
+                    ".impl-package/state.json evidenceIndex",
+                    None if setup_time is not None else ("valid run-setup has no valid recordedAt" if valid_setups(run_id, environment or "") else "no valid run-setup"),
+                ),
+                "setupToFirstStepSeconds": _metric(
+                    setup_to_first_step,
+                    ".impl-package/state.json evidenceIndex",
+                    None if setup_to_first_step is not None else "setup or first step recordedAt is missing, invalid, or out of order",
+                ),
                 "steps": step_rows,
                 "complete": _metric(complete, ".impl-package/state.json evidenceIndex and final comparison revision",
                                      None if complete else (f"no valid page/file/log evidence for Journey steps: {', '.join(page_missing_steps)}" if environment is not None else "run contains multiple environments")),
@@ -562,7 +640,36 @@ def _journey_metrics(
             "rehearsalComplete": _metric(any(row["rehearsalComplete"]["value"] is True for row in run_rows), ".impl-package/state.json evidenceIndex and final comparison revision",
                                           None if run_rows else "no run recorded for this Journey"),
         })
-    return _metric(output, source, None)
+    first_visible_timed = [
+        (record, timestamp)
+        for record in first_visible_matches
+        if (timestamp := _parse_time(record.get("recordedAt"))) is not None
+    ]
+    first_visible_recorded_at = min(first_visible_timed, key=lambda item: item[1])[0].get("recordedAt") if first_visible_timed else None
+    visible_time = min((item[1] for item in first_visible_timed), default=None)
+    first_visible_delay = (
+        round((visible_time - first_dispatch).total_seconds(), 6)
+        if visible_time is not None and first_dispatch is not None and visible_time >= first_dispatch
+        else None
+    )
+    result = _metric(output, source, None)
+    result["firstVisibleStep"] = {
+        "declared": _metric(
+            {"step": first_visible["step"], "ticket": first_visible["ticket"]},
+            "plan.md",
+        ),
+        "firstRecordedAt": _metric(
+            first_visible_recorded_at,
+            ".impl-package/state.json evidenceIndex",
+            None if first_visible_recorded_at is not None else "no valid matching first-visible-step record with recordedAt",
+        ),
+        "secondsFromFirstDispatch": _metric(
+            first_visible_delay,
+            ".impl-package/state.json evidenceIndex and execution trail",
+            None if first_visible_delay is not None else "first matching record or first dispatch is missing, invalid, or out of order",
+        ),
+    }
+    return result
 
 
 def _amendment_metrics(version: str, state: dict[str, Any] | None) -> dict[str, Any]:
@@ -728,9 +835,9 @@ def _report(package: Path, attempt: str | None = None) -> tuple[dict[str, Any], 
     if version == "3.6" and selected_state is not None and not isinstance(comparison, str):
         journeys = _metric(None, ".impl-package/state.json evidenceIndex", "final comparison commit is unavailable")
     elif version == "3.6":
-        journeys = _journey_metrics(package, version, selected_state, history_row)
+        journeys = _journey_metrics(package, version, selected_state, history_row, rows)
     else:
-        journeys = _journey_metrics(package, version, selected_state, history_row)
+        journeys = _journey_metrics(package, version, selected_state, history_row, rows)
     report = {
         "schemaVersion": _metric(1, "impl-package metrics schema"),
         "formatVersion": _metric(version, ".impl-package/state.json formatVersion"),

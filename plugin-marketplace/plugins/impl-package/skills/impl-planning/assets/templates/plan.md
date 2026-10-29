@@ -36,7 +36,12 @@ Release order: <required | none>
 
 用短说明写出可提前开展的工作、真正等待的产物及交接验证条件；资源冲突按实际操作协调。只保留影响安排的结论，线性任务简述顺序即可。
 
-首个用户可见 step：<J?-S? 由哪张 Ticket、在第几张合入后可走通；harness 只建设该窄路径所需部分>。
+<!-- 3.6：命令来自项目的 QA 入口，方法见 validation-harness；harness 只建设第一条窄路径所需部分 -->
+Harness setup: <从零建出准备状态的幂等命令>
+Harness precheck: <第 1 步前断言前置条件的命令>
+Harness cleanup: <运行后拆除临时状态、保留证据的命令>
+Harness isolation: per-run
+First visible step: <StepId> @ <TicketId>
 
 只登记跨 Ticket 的调度信息；单个 Ticket 的建设内容、AC 与 contract references 详见该 Ticket 文件，不在此重复。约束到 Ticket 的映射由 Ticket 自身的 Contract references 承载，本表不重复该映射；跨 Ticket 覆盖完整性由 `plan-review` 在 bundle-admission/full-review 时对照 Decision/Spec 与全部 Ticket 直接核对。
 
