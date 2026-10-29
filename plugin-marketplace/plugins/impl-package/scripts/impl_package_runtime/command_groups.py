@@ -300,7 +300,7 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
                                args.durable_delta, args.no_durable_delta_reason, args.environment)
 
 
-def main(package: Path, group: str, argv: list[str], *, no_situation: bool = False) -> int:
+def _main(package: Path, group: str, argv: list[str], *, no_situation: bool = False) -> int:
     no_situation = no_situation or "--no-situation" in argv or os.environ.get("IMPL_PACKAGE_NO_SITUATION") == "1"
     argv = [value for value in argv if value != "--no-situation"]
     args = _parser(group).parse_args(_normalize_gate_argv(argv) if group == "gate" else argv)
@@ -320,3 +320,8 @@ def main(package: Path, group: str, argv: list[str], *, no_situation: bool = Fal
         append_situation=(trigger or validate) and not no_situation,
         append_situation_on_error=validate and not no_situation,
     )
+
+
+def main(package: Path, group: str, argv: list[str], *, no_situation: bool = False) -> int:
+    with engine.git_query_scope():
+        return _main(package, group, argv, no_situation=no_situation)

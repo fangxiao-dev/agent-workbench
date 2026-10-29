@@ -18,6 +18,7 @@ import sys
 import tempfile
 import uuid
 import zipfile
+from contextvars import ContextVar
 from dataclasses import dataclass
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -103,11 +104,99 @@ class Lifecycle:
         return self.gate["verdict"] if self.gate else "open"
 
 
+_GitResult = tuple[int, str, str]
+_git_query_cache: ContextVar[dict[tuple[Any, ...], tuple[_GitResult, frozenset[Path]]] | None] = ContextVar(
+    "impl_package_git_query_cache", default=None,
+)
+
+
+@contextmanager
+def git_query_scope():
+    if _git_query_cache.get() is not None:
+        yield
+        return
+    token = _git_query_cache.set({})
+    try:
+        yield
+    finally:
+        _git_query_cache.reset(token)
+
+
+def _cacheable_git_query(args: tuple[str, ...]) -> bool:
+    if not args:
+        return False
+    command = args[0]
+    if command == "rev-parse":
+        return True
+    if command == "merge-base":
+        return len(args) == 4 and args[1] == "--is-ancestor"
+    if command == "show":
+        return len(args) == 2 and ":" in args[1]
+    if command == "cat-file":
+        return len(args) >= 3 and not any(arg.startswith("--batch") for arg in args)
+    if command == "grep":
+        return len(args) >= 9 and args[1:5] == ("-I", "-F", "-l", "-e") and args[7] == "--"
+    if command == "diff":
+        return len(args) >= 6 and args[1] == "--quiet" and args[4] == "--" and "--cached" not in args
+    return (
+        command == "hash-object"
+        and "-w" not in args
+        and "--stdin" not in args
+        and "--stdin-paths" not in args
+        and "--" in args
+        and args.index("--") < len(args) - 1
+    )
+
+
+def _hash_object_paths(repo: Path, args: tuple[str, ...]) -> frozenset[Path]:
+    if not args or args[0] != "hash-object" or not _cacheable_git_query(args):
+        return frozenset()
+    try:
+        marker = args.index("--")
+    except ValueError:
+        return frozenset()
+    return frozenset((repo / value).resolve() for value in args[marker + 1:] if value)
+
+
+def _run_git_result(
+    repo: Path, *args: str, encoding: str | None = None, errors: str | None = None,
+) -> _GitResult:
+    cache = _git_query_cache.get()
+    query = _cacheable_git_query(args)
+    key = (repo.resolve(), args, encoding, errors)
+    if cache is not None and query and key in cache:
+        return cache[key][0]
+
+    options: dict[str, Any] = {"capture_output": True, "text": True, "check": False}
+    if encoding is not None:
+        options["encoding"] = encoding
+    if errors is not None:
+        options["errors"] = errors
+    result = subprocess.run(["git", "-C", str(repo), *args], **options)
+    value = (result.returncode, result.stdout, result.stderr)
+    if cache is not None:
+        if query:
+            cache[key] = (value, _hash_object_paths(repo, args))
+        else:
+            cache.clear()
+    return value
+
+
+def _invalidate_working_tree_hash(path: Path) -> None:
+    cache = _git_query_cache.get()
+    if cache is None:
+        return
+    resolved = path.resolve()
+    for key, (_, paths) in tuple(cache.items()):
+        if resolved in paths:
+            del cache[key]
+
+
 def _run_git(repo: Path, *args: str) -> str:
-    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        raise StateError(result.stderr.strip() or result.stdout.strip() or "git command failed")
-    return result.stdout.strip()
+    code, stdout, stderr = _run_git_result(repo, *args)
+    if code != 0:
+        raise StateError(stderr.strip() or stdout.strip() or "git command failed")
+    return stdout.strip()
 
 
 def _repo_root(package: Path) -> Path:
@@ -140,6 +229,7 @@ def _write_text(path: Path, payload: str) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temp_name, path)
+        _invalidate_working_tree_hash(path)
     finally:
         if os.path.exists(temp_name):
             os.unlink(temp_name)
@@ -1026,17 +1116,12 @@ def _validate_commit(repo: Path, commit: str) -> str:
 
 
 def _is_ancestor(repo: Path, revision: str, head: str) -> bool:
-    result = subprocess.run(
-        ["git", "-C", str(repo), "merge-base", "--is-ancestor", revision, head],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode == 0:
+    code, _, stderr = _run_git_result(repo, "merge-base", "--is-ancestor", revision, head)
+    if code == 0:
         return True
-    if result.returncode == 1:
+    if code == 1:
         return False
-    raise StateError(result.stderr.strip() or "cannot determine Git ancestry")
+    raise StateError(stderr.strip() or "cannot determine Git ancestry")
 
 
 def _gate_info(package: Path, repo: Path) -> dict[str, Any] | None:
@@ -2036,15 +2121,15 @@ def _public(summary: dict[str, Any]) -> dict[str, Any]:
 
 
 def _git_grep_symbol(repo: Path, commit: str, symbol: str, paths: list[str], excluded: list[str]) -> list[str]:
-    command = ["git", "-C", str(repo), "grep", "-I", "-F", "-l", "-e", symbol, commit, "--"]
-    command.extend(paths or ["."])
-    command.extend(f":!(exclude){path}" for path in excluded)
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
-    if result.returncode == 1:
+    args = ["grep", "-I", "-F", "-l", "-e", symbol, commit, "--"]
+    args.extend(paths or ["."])
+    args.extend(f":!(exclude){path}" for path in excluded)
+    code, stdout, stderr = _run_git_result(repo, *args)
+    if code == 1:
         return []
-    if result.returncode != 0:
-        raise StateError(result.stderr.strip() or f"cannot search comparison commit {commit}")
-    return [line for line in result.stdout.splitlines() if line.strip()]
+    if code != 0:
+        raise StateError(stderr.strip() or f"cannot search comparison commit {commit}")
+    return [line for line in stdout.splitlines() if line.strip()]
 
 
 PLAN_GATE_RE = re.compile(r"(?:不派发|不进入|必须先[^。；;\n]*?PASS|失败时不[^。；;\n]*)", re.I)
@@ -2181,20 +2266,21 @@ def _arrival_findings(repo: Path, package: Path, summary: dict[str, Any], compar
     return findings
 
 
-def _working_tree_blob(repo: Path, package: Path, relative: str) -> str | None:
-    if not (package / relative).is_file():
-        return None
+def _working_tree_blobs(repo: Path, package: Path, relatives: list[str] | tuple[str, ...]) -> dict[str, str]:
+    existing = [relative for relative in relatives if (package / relative).is_file()]
+    if not existing:
+        return {}
     package_rel = package.resolve().relative_to(repo.resolve()).as_posix()
-    return _run_git(repo, "hash-object", "--", f"{package_rel}/{relative}")
+    paths = [f"{package_rel}/{relative}" for relative in existing]
+    hashes = _run_git(repo, "hash-object", "--", *paths).splitlines()
+    if len(hashes) != len(paths):
+        raise StateError("Git returned an unexpected number of working-tree blob IDs")
+    return dict(zip(existing, hashes, strict=True))
 
 
 def _contract_baseline(package: Path, repo: Path) -> dict[str, Any]:
     head = _run_git(repo, "rev-parse", "HEAD")
-    files: dict[str, str] = {}
-    for name in ("decision.md", "spec.md", "contract-design.md"):
-        blob = _working_tree_blob(repo, package, name)
-        if blob is not None:
-            files[name] = blob
+    files = _working_tree_blobs(repo, package, CONTRACT_DOC_NAMES)
     if "spec.md" not in files:
         raise StateError("contractBaseline requires spec.md")
     return {"head": head, "files": files}
@@ -2204,8 +2290,9 @@ def _contract_amendment_findings(package: Path, repo: Path, acceptance: dict[str
     baseline = acceptance["contractBaseline"]["files"]
     amendments = acceptance["amendments"]
     findings = []
+    current_blobs = _working_tree_blobs(repo, package, CONTRACT_DOC_NAMES)
     for name in CONTRACT_DOC_NAMES:
-        current = _working_tree_blob(repo, package, name)
+        current = current_blobs.get(name)
         if current == baseline.get(name):
             continue
         if any(row.get("affectedBlobs", {}).get(name) == current for row in amendments):
@@ -2331,11 +2418,13 @@ def command_amendment_add(package: Path, identifier: str, summary_text: str, aff
     ]
     if any("#" in value for value in normalized_affected) or len(set(normalized_affected)) != len(normalized_affected):
         raise StateError("amendment affected paths must be unique package-relative paths without anchors")
+    repo = _repo_root(package)
+    affected_blobs = _working_tree_blobs(repo, package, normalized_affected)
     row = {
         "id": identifier,
         "summary": summary_text.strip(),
         "affected": normalized_affected,
-        "affectedBlobs": {name: _working_tree_blob(_repo_root(package), package, name) for name in normalized_affected},
+        "affectedBlobs": {name: affected_blobs.get(name) for name in normalized_affected},
         "artifact": _package_relative_artifact(package, artifact, "amendment artifact", must_exist=True),
         "status": "PENDING",
         "createdAt": _utc_timestamp(),
@@ -2383,9 +2472,10 @@ def command_amendment_confirm(
     if current is None:
         raise StateError(f"unknown amendment: {identifier}")
     current_blobs = current.get("affectedBlobs", {})
+    current_working_blobs = _working_tree_blobs(repo, package, current["affected"])
     changed = [
         path for path in current["affected"]
-        if current_blobs.get(path) != _working_tree_blob(repo, package, path)
+        if current_blobs.get(path) != current_working_blobs.get(path)
     ]
     if changed:
         raise StateError(f"amendment {identifier} no longer matches affected file contents: {', '.join(changed)}; register a new amendment")
