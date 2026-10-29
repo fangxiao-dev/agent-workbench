@@ -321,13 +321,13 @@ def test_human_render_collapses_undetermined() -> None:
     package = ROOT / "tests/fixtures/situations-a2/p0-evidence-unfiled"
 
     full = _render_text(package)
-    assert full.endswith("无法判定 12 行")
+    assert full.endswith("无法判定 10 行")
     assert "无法判定 23 行:" not in full
     assert "package.record.projection-drift" not in full
     assert "digest" not in full
 
     explained = _render_text(package, "--explain-undetermined")
-    assert "无法判定 12 行: package.record.projection-drift (package)" in explained
+    assert "无法判定 10 行: package.record.projection-drift (package)" in explained
 
 
 def test_render_is_read_only_and_exposes_no_digest() -> None:
@@ -397,6 +397,8 @@ def test_t9_removes_declaration_only_fact_keys() -> None:
         "git.comparison_head_fixed",
         "trail.bookkeeper_partial_write",
         "trail.handoff_in_flight",
+        "trail.handoff_recovery_needed",
+        "trail.handoff_target_corrected",
         "trail.checkpoint_refresh_needed",
         "trail.judgment_unfiled",
         "finding.closure_review_pending",

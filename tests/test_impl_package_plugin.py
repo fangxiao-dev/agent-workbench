@@ -353,7 +353,7 @@ def test_active_callers_reference_dispatcher() -> None:
         ROOT / "AGENTS.md",
         PLUGIN / "skills" / "impl-package" / "SKILL.md",
         PLUGIN / "skills" / "dev-with-track" / "SKILL.md",
-        ROOT / "skills" / "handoff" / "references" / "task-execution.md",
+        ROOT / "skills" / "handoff" / "references" / "impl-package.md",
     )
     for caller in callers:
         text = caller.read_text(encoding="utf-8")
@@ -369,7 +369,6 @@ def test_active_workflow_tree_has_no_legacy_entry_reference() -> None:
         ROOT / "AGENTS.md",
         PLUGIN / "skills",
         ROOT / "skills" / "handoff",
-        ROOT / "skills" / "handoff-to-new-session",
     )
     legacy = (
         "impl-package:subagent-driven-development",
