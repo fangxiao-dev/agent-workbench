@@ -27,6 +27,10 @@ claude plugin install impl-package@agent-workbench --scope project
 
 插件目录就是安装产物，不执行 build。安装和更新会进入宿主缓存；manifest/marketplace 的版本元数据必须同步，更新后开启新会话。除下述 Codex 一次性诊断/bootstrap 外，Workbench 不包装插件生命周期命令，也不在未授权时修改用户级宿主状态。
 
+### DSH（自包含例外宿主）
+
+`dsh-impl-package` 与 `dsh-dispatch-scan` 不走上述 marketplace/link 体系：它们是 DSH profile bundle（manifest `dsh.bundle.patch` + agent preset），安装（`dsh plugin --profile desktop add "link:..."`）、卸载与 preset 同步全部自包含在插件目录与各自 README 内。它们不进入 `scripts/link_skill.py` 的 host 列表（DSH 侧 skills 由 preset 的 `customSkillDirs` 与 dsh 默认发现根承接），也不登记 registry——这是有意保留的薄适配例外，不算漏配。
+
 ## Plugin 生命周期：Agent 直接执行
 
 安装、升级、重装或刷新缓存时，Agent 直接调用目标宿主的原生 CLI。仓库不提供 lifecycle Skill、其他包装脚本或机器专属配置。
@@ -66,6 +70,10 @@ claude plugin update impl-package@agent-workbench --scope <scope>
 claude plugin uninstall impl-package@agent-workbench --scope <scope> --yes
 claude plugin install impl-package@agent-workbench --scope <scope>
 ```
+
+### Claude 安装态审计（只读）
+
+`scripts/claude_setup.py audit` 是 Claude 宿主唯一的仓库包装入口，且只读：读取 `claude plugin marketplace list --json` 与 `claude plugin list --json`，对插件缓存目录（CLI 报告的 `installPath`）与 `plugin-marketplace/` 源树做 SHA-256 快照对比，并审计 `<claude-home>/skills` 下的 workbench skill 链接与陈旧链接。报告带审计 SHA 供前后对比；退出码 `0` 一致、`2` 有差异、`1` 运行错误。它没有 `apply`：安装、升级、重装仍按上面的原生 CLI 执行，skill 链接修复使用 `scripts/link_skill.py`。默认 home 优先 `CLAUDE_CONFIG_DIR`，否则 `~/.claude`，可用 `--claude-home` 覆盖。快照、差异、链接审计与报告渲染原语与 `codex_setup.py` 共享自 `scripts/host_setup_core.py`。
 
 ### Grok
 
@@ -110,7 +118,7 @@ python scripts/codex_setup.py apply --expect-report <audit-sha> --prune-stale
 
 ### Codex agent inventory
 
-仓库根目录 `agents/` 是个人 Codex agent 的来源目录：子目录继续按目录 link 投影到 `$CODEX_HOME/agents/<name>`，顶层 `*.toml` 由 `codex_setup.py` 投影到 `$CODEX_HOME/agents/<name>.toml`。新增或删除 inventory 条目不需要修改 setup 脚本；audit 会自动发现变化。现有未受管目标首次接管时使用：
+仓库根目录 `agents/` 是个人 Codex agent 的来源目录：子目录继续按目录 link 投影到 `$CODEX_HOME/agents/<name>`，顶层 `*.toml` 由 `codex_setup.py` 投影到 `$CODEX_HOME/agents/<name>.toml`。顶层 `*.md`（ZCode 子智能体格式）不进入 Codex inventory，手动复制到 `~/.zcode/agents/<name>.md` 安装，与同名 `.toml` role 保持同一来源。`frontend-worker`/`backend-worker` 采用薄壳模式：方法唯一源是 `skills/<name>/SKILL.md`（经 `link_skill.py` 链入各宿主），`.toml` 与 `.md` 的指令只引用该 skill 并保留载体契约（并行边界与返回格式）。新增或删除 inventory 条目不需要修改 setup 脚本；audit 会自动发现变化。现有未受管目标首次接管时使用：
 
 ```powershell
 python scripts/codex_setup.py apply --expect-report <audit-sha> --adopt-agents
