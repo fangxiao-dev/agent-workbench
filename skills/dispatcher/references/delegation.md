@@ -7,6 +7,7 @@
 每次委派提供：
 
 - 单一目标、已知事实、关键 entry point 与必须遵循的合同章节；
+- 接收者的角色、需要自行读取的执行合同路径及章节、本轮用户补充约束；约束变化时同步给受影响的执行者，规则正文用引用传递；
 - 成功行为、边界状态、不变量和具体返回条件；
 - write ownership、禁改范围、实际工作目录；涉及 Git 时明确 worktree 与 branch，detached HEAD 时改用完整 commit SHA；worker 的仓库命令统一在该 worktree 执行；
 - 明确验证目标与走真实路径的 focused verification；存在容易误采信的具体边界时说明限制；

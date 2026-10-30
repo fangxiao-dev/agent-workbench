@@ -38,6 +38,12 @@ Dispatcher 是通用执行协作入口。调用方提供交付目标、授权、
 
 没有前后端归属的实现候选，以及 `investigate | fix | verify` 的 worker 选择，继续沿用现有候选、上下文与资源判断。
 
+## Reviewer executor
+
+派独立只读审查时，由调用方选择并启动执行者，默认使用 `luna-worker`，为其提供 [reviewer](../reviewer/SKILL.md) 执行合同和本次 brief。已选定的 reviewer 直接完成审查并回报；复用按下文的上下文与独立性条件判断。
+
+formal review 的 reviewer selection、topology 与 `finding-closure` 范围由 owning workflow 决定，Dispatcher 按该要求派发。
+
 ## 候选、归因与返回
 
 `investigate | implement | fix | verify` 固定 worker 的答案形态。worker 返回 `DONE | BLOCKED | INCOMPLETE`；调查返回 `EVIDENCE_SUFFICIENT | EVIDENCE_GAP`；已产生的 required review 使用 `PENDING_REVIEW | PASSED`。这些都是局部事实，不代替 Ticket、acceptance 或 Gate。
