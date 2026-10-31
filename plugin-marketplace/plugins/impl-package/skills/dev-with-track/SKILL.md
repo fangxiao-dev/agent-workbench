@@ -27,7 +27,7 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 
 ## Restore
 
-首次确认 package anchor 后，宿主（Codex/ZCode）从当前已加载 Skill 解析 plugin root，并调用 `python <plugin-root>/hooks/impl_package_hooks.py activate --package <package>` 绑定当前 session；Codex 经 session 环境变量绑定，ZCode 拿不到 session id 时自动落为仓库级 default 绑定；其他宿主跳过。匹配 Capsule 只提供恢复事实，仍复核 package、HEAD 与 initial approval，不把 Capsule 当 acceptance、Gate evidence 或 dispatch credential。
+首次确认 package anchor 后，宿主（Codex/ZCode/Claude Code）从当前已加载 Skill 解析 plugin root，并调用 `python <plugin-root>/hooks/impl_package_hooks.py activate --package <package>` 绑定当前 session；Codex 与 Claude Code 经 session 环境变量绑定，ZCode 拿不到 session id 时自动落为仓库级 default 绑定；其他宿主跳过。匹配 Capsule 只提供恢复事实，仍复核 package、HEAD 与 initial approval，不把 Capsule 当 acceptance、Gate evidence 或 dispatch credential。
 
 已知 CLI 成功更新后按 delta 更新当前事实；Capsule 缺失或失配、Hook 未信任/禁用、读取 warning、未知外部状态变化或状态更新失败时，按 [Runtime Protocol](references/runtime-protocol.md) 执行完整恢复。真正 dispatch 前运行 `situation.py render` 刷新当前投影（`trail append` 会自行检查全局 blocking）；偏离建议或表外行动使用 `escape` 记录理由。
 

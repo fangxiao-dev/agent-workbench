@@ -1,4 +1,4 @@
-"""Host lifecycle hooks for Impl-Package (Codex and ZCode).
+"""Host lifecycle hooks for Impl-Package (Codex, ZCode and Claude Code).
 
 This module only protects machine-owned state and supplies a read-only resume
 capsule. Business state, acceptance, and Gate decisions remain owned by the
@@ -29,9 +29,10 @@ DEFAULT_SESSION_ID = "default"
 # A UTF-8 byte ceiling also fits the host's 1200-character/token context budget.
 CAPSULE_CONTEXT_BUDGET = 1200
 SESSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
-# ZCode exposes state edits as Edit/Write (ApplyPatch is aliased onto them)
-# with the target path in tool_input instead of an apply_patch command body.
-ZCODE_PATCH_TOOLS = ("Edit", "Write", "ApplyPatch")
+# ZCode and Claude Code expose state edits as Edit/Write (ZCode aliases
+# ApplyPatch onto them) with the target path in tool_input instead of an
+# apply_patch command body.
+FILE_EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "ApplyPatch")
 PATCH_HEADER_RE = re.compile(
     r"^\*\*\* (?:Add File|Update File|Delete File|Move to):\s*(.+?)\s*$",
     re.MULTILINE,
@@ -56,7 +57,7 @@ def _session_id(explicit: str | None = None) -> str:
         or os.environ.get("CODEX_SESSION_ID")
         or os.environ.get("CODEX_THREAD_ID")
         or os.environ.get("ZCODE_SESSION_ID")
-        or os.environ.get("CLAUDE_SESSION_ID")
+        or os.environ.get("CLAUDE_CODE_SESSION_ID")
     )
     if not value:
         return DEFAULT_SESSION_ID
@@ -210,7 +211,7 @@ def _pre_tool_use() -> int:
             if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
                 raise HookError("PreToolUse apply_patch event is missing tool_input.command")
             blocked = _protected_patch_paths(tool_input["command"])
-        elif tool_name in ZCODE_PATCH_TOOLS:
+        elif tool_name in FILE_EDIT_TOOLS:
             if not isinstance(tool_input, dict):
                 raise HookError(f"PreToolUse {tool_name} event is missing tool_input")
             raw_paths: list[str] = []
@@ -400,7 +401,7 @@ def _session_start() -> int:
         event = _read_event()
         if event.get("hook_event_name") != "SessionStart":
             return 0
-        if event.get("source") not in {"startup", "resume", "compact"}:
+        if event.get("source") not in {"startup", "resume", "clear", "compact"}:
             return 0
         event_session = event.get("session_id")
         if not isinstance(event_session, str) or not SESSION_RE.fullmatch(event_session):

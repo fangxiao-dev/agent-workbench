@@ -12,7 +12,7 @@
 - `.claude-plugin/plugin.json`：skills + agents（3 个 review-track review agents）
 - `.zcode-plugin/plugin.json`：skills + hooks（`./hooks/zcode-hooks.json`，Edit/Write 守卫与 SessionStart capsule）+ agents（同一组 review-track 子代理，zcode 原生注册到 Settings → 子智能体）
 
-ZCode hooks 使用独立文件名 `zcode-hooks.json` 而非 `hooks/hooks.json`，避免被 Claude Code 的插件 hook 自动发现机制意外拾取。ZCode 侧 `impl_package_hooks.py activate` 拿不到 session 环境变量时自动落为仓库级 default 绑定；Codex 仍按 session 绑定。
+Claude manifest 声明 `./hooks/claude-hooks.json`（Edit/Write/MultiEdit 守卫与 SessionStart capsule，`activate` 经 `CLAUDE_CODE_SESSION_ID` 按 session 绑定）。ZCode hooks 使用独立文件名 `zcode-hooks.json` 而非 `hooks/hooks.json`，避免被 Claude Code 的插件 hook 自动发现机制意外拾取。ZCode 侧 `impl_package_hooks.py activate` 拿不到 session 环境变量时自动落为仓库级 default 绑定；Codex 仍按 session 绑定。
 
 ```powershell
 codex plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace

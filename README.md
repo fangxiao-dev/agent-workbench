@@ -85,7 +85,7 @@ claude plugin install impl-package@agent-workbench --scope project
 python plugin-marketplace/plugins/impl-package/scripts/install_codex_agents.py --global
 ```
 
-ZCode 侧 manifest 位于 `.zcode-plugin/plugin.json`（skills + hooks + agents 全量移植）；hooks 使用 `hooks/zcode-hooks.json`（不占用 Claude Code 自动发现的 `hooks/hooks.json` 文件名）。安装或升级后开启新会话，使宿主从插件缓存重新加载 skills；Codex 的全局 review roles 需要在插件升级后重新运行上面的投影脚本。面向用户和 agent 的文档统一使用 `/impl-package:dev-with-track` 形式显式调用；宿主内部 registry/discovery 仍可显示不带 `/` 的 skill key。`link_skill.py --all` 不处理 `plugin-marketplace/`。
+ZCode 侧 manifest 位于 `.zcode-plugin/plugin.json`（skills + hooks + agents 全量移植）；hooks 使用 `hooks/zcode-hooks.json`；Claude 侧 manifest 同样声明 hooks，使用 `hooks/claude-hooks.json`（两者都不占用 Claude Code 自动发现的 `hooks/hooks.json` 文件名）。安装或升级后开启新会话，使宿主从插件缓存重新加载 skills；Codex 的全局 review roles 需要在插件升级后重新运行上面的投影脚本。面向用户和 agent 的文档统一使用 `/impl-package:dev-with-track` 形式显式调用；宿主内部 registry/discovery 仍可显示不带 `/` 的 skill key。`link_skill.py --all` 不处理 `plugin-marketplace/`。
 
 ### Codex 更新诊断与 bootstrap
 

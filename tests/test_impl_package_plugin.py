@@ -70,7 +70,8 @@ def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
     assert codex["skills"] == claude["skills"] == zcode["skills"] == "./skills/"
     assert codex["hooks"] == "./hooks/codex-hooks.json"
     assert zcode["hooks"] == "./hooks/zcode-hooks.json"
-    assert "hooks" not in claude
+    assert claude["hooks"] == "./hooks/claude-hooks.json"
+    assert (PLUGIN / "hooks" / "claude-hooks.json").is_file()
     assert (PLUGIN / "hooks" / "codex-hooks.json").is_file()
     assert (PLUGIN / "hooks" / "zcode-hooks.json").is_file()
     assert (PLUGIN / "hooks" / "impl_package_hooks.py").is_file()
@@ -122,6 +123,23 @@ def test_zcode_hooks_use_only_native_schema_and_supported_events() -> None:
     serialized = json.dumps(hooks_config)
     assert "commandWindows" not in serialized
     assert "additionalContextLimit" not in serialized
+    assert "${PLUGIN_ROOT}" not in serialized
+
+
+def test_claude_hooks_use_native_schema_and_plugin_root() -> None:
+    hooks_config = load_json(PLUGIN / "hooks" / "claude-hooks.json")
+    assert set(hooks_config) == {"description", "hooks"}
+    assert set(hooks_config["hooks"]) == {"PreToolUse", "SessionStart"}
+    for entries in hooks_config["hooks"].values():
+        for entry in entries:
+            for hook in entry["hooks"]:
+                assert hook["type"] == "command"
+                assert "${CLAUDE_PLUGIN_ROOT}/hooks/impl_package_hooks.py" in hook["command"]
+                assert isinstance(hook["timeout"], int)
+    assert hooks_config["hooks"]["PreToolUse"][0]["matcher"] == "^(Edit|Write|MultiEdit)$"
+    assert hooks_config["hooks"]["SessionStart"][0]["matcher"] == "^(startup|resume|clear|compact)$"
+    serialized = json.dumps(hooks_config)
+    assert "commandWindows" not in serialized
     assert "${PLUGIN_ROOT}" not in serialized
 
 
