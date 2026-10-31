@@ -624,6 +624,41 @@ def test_stale_journey_history_requires_one_complete_current_run(
     assert "run-setup:old-run" in status["staleEvidence"]
 
 
+def test_shared_run_setup_stays_stale_until_all_associated_journeys_are_complete(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    state = _state(package)
+    shared_setup = _run_setup_record(revision, "shared")
+    shared_setup["invalidatedBy"] = "superseded historical setup"
+    shared_j1 = _journey_record(revision, "J1-S1", run_id="shared")
+    shared_j1["invalidatedBy"] = "superseded historical run"
+    shared_j2 = {**_journey_record(revision, "J1-S1", run_id="shared"), "journeyId": "J2", "stepId": "J2-S1"}
+    shared_j2["invalidatedBy"] = "superseded historical run"
+    current_j1 = [_journey_record(revision, step_id, run_id="current-j1") for step_id in ("J1-S1", "J1-S2")]
+    state["evidenceIndex"] = {
+        "run-setup:shared": [shared_setup],
+        "journey:shared:J1-S1": [shared_j1],
+        "journey:shared:J2-S1": [shared_j2],
+        "run-setup:current-j1": [_run_setup_record(revision, "current-j1")],
+        "journey:current-j1:J1-S1": [current_j1[0]],
+        "journey:current-j1:J1-S2": [current_j1[1]],
+    }
+    summary = engine._validate_state(package, _state(package), projections=False)
+    journey_spec = summary["_journeySpec"]
+    j2_step = {**journey_spec["steps"]["J1-S1"], "id": "J2-S1", "journeyId": "J2"}
+    journey_spec["steps"]["J2-S1"] = j2_step
+    journey_spec["journeys"].append({
+        "id": "J2",
+        "terminalResult": "secondary result",
+        "steps": [j2_step],
+    })
+
+    status = engine._v36_acceptance_status(package, state, summary, revision, attempt_active=True)
+
+    assert status["journeys"][0]["reach"] == 2
+    assert status["journeys"][1]["reach"] == 0
+    assert "run-setup:shared" in status["staleEvidence"]
+
+
 def test_stale_review_replacement_must_be_current_and_not_invalidated(tmp_path: Path) -> None:
     repo, package, revision = _init_v36(tmp_path)
     old = _review_record(revision, "TKT-01")
@@ -810,6 +845,27 @@ def test_live_package_reference_reads_singular_and_grouped_retirement_ids(tmp_pa
 
 def test_live_package_reference_keeps_legacy_retired_registry_route(tmp_path: Path) -> None:
     _repo, package = _make_package(tmp_path)
+
+    fact = situation.live_package_reference_fact(package)
+
+    assert fact.known and fact.value is False
+
+
+def test_live_package_reference_keeps_legacy_registry_extra_metadata(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path)
+    (repo / "docs/implementations/retired.json").write_text(
+        json.dumps({
+            "version": 1,
+            "source": {"path": "docs/implementations/retired.json"},
+            "packages": [{"package_id": "retired-with-metadata", "legacyNote": {"source": "archive"}}],
+        }),
+        encoding="utf-8",
+    )
+    plan = package / "plan.md"
+    plan.write_text(
+        plan.read_text(encoding="utf-8") + "\nSee docs/implementations/retired-with-metadata/spec.md.\n",
+        encoding="utf-8",
+    )
 
     fact = situation.live_package_reference_fact(package)
 

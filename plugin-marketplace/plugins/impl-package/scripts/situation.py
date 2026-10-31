@@ -747,17 +747,11 @@ def _retired_package_ids(reader: PackageReader) -> tuple[set[str] | None, str | 
             if error:
                 return None, error
     else:
-        if set(value) not in ({"packages"}, {"version", "packages"}) or not isinstance(value.get("packages"), list):
+        if not isinstance(value.get("packages"), list):
             return None, f"{relative} legacy schema must contain packages list"
-        if "version" in value and not (isinstance(value["version"], str) and value["version"].strip() or type(value["version"]) is int and value["version"] >= 1):
-            return None, f"{relative} legacy version 无效"
-        full_fields = {"package_id", "retired_at", "retirement_reason", "gate", "source_head", "absorbed_into", "deleted_in_commit"}
         for index, item in enumerate(value["packages"]):
-            if not isinstance(item, dict) or set(item) not in ({"package_id"}, full_fields) or not isinstance(item.get("package_id"), str) or not item["package_id"].strip():
-                return None, f"{relative} packages[{index}] schema/package_id 无效"
-            if set(item) == full_fields:
-                if not all(isinstance(item.get(field), str) and item[field].strip() for field in ("retired_at", "retirement_reason", "source_head", "deleted_in_commit")) or not isinstance(item["gate"], dict) or not isinstance(item["absorbed_into"], list) or not all(isinstance(value, str) and value.strip() for value in item["absorbed_into"]):
-                    return None, f"{relative} packages[{index}] retirement metadata 无效"
+            if not isinstance(item, dict) or not isinstance(item.get("package_id"), str) or not item["package_id"].strip():
+                return None, f"{relative} packages[{index}].package_id 无效"
             error = add_ids([item["package_id"]], "packages")
             if error:
                 return None, error

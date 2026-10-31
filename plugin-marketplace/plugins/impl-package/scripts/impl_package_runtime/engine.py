@@ -2006,7 +2006,8 @@ def _v36_acceptance_status(
         if journey_ids & complete_journeys:
             stale.discard(evidence_key)
     for run_id in stale_run_setup_ids:
-        if run_journeys.get(run_id, set()) & complete_journeys:
+        associated_journeys = run_journeys.get(run_id, set())
+        if associated_journeys and associated_journeys <= complete_journeys:
             stale.discard(f"run-setup:{run_id}")
 
     suite_rows = []
