@@ -134,7 +134,7 @@ plan 固定行（`package init/validate` 缺失或无效即拒绝）：`Harness 
 | `review` | `ticket`（Ticket ID 或 `package`） | `review:<ticket>` | per-Ticket required review 的结果；最终 HEAD 的 review 仍由 terminal-final 承担 |
 | `release` | 无 | `release` | artifact 为 package 内发布顺序表 |
 
-**有效性**：记录的 `conclusion` 为 `supporting` 且未被 `invalidatedBy` 标记；`revision` 等于 Gate comparison commit，或两者之间只改动了本 package 目录内的文件；suite evidence 的 environment 与 Spec 字符串精确匹配，同一 Journey run 的 step evidence 使用同一 environment；active Attempt 的 artifact 文件存在。不满足的记录待复验，旧记录保留。进度由 `journey-step` 记录派生，不存储：**reach** 是同一 run 内从第 1 步起、surface 与 Spec 入口类型一致（页面—page、文件—file、记录—log）的连续有效步数，Gate 只认它；**rehearsalReach** 不限 surface。Owner Summary 形如 `J1 …：页面走通 2/4 · API 预演 4/4`，并列出人工走查的步骤。
+**有效性**：记录的 `conclusion` 为 `supporting` 且未被 `invalidatedBy` 标记；`revision` 等于 Gate comparison commit，或两者之间只改动了本 package 目录内的文件；suite evidence 的 environment 与 Spec 字符串精确匹配，同一 Journey run 的 step evidence 使用同一 environment；active Attempt 的 artifact 文件存在。不满足的记录待复验，旧记录保留。Gate 只在缺少当前有效替代时保留 stale blocker：非 Journey evidence 需同 key 的当前有效 supporting 记录；Journey 历史 step/setup 需同一 Journey 的完整连续有效 run，步骤不跨 run 拼接。invalidated 或非 supporting 记录不构成替代。进度由 `journey-step` 记录派生，不存储：**reach** 是同一 run 内从第 1 步起、surface 与 Spec 入口类型一致（页面—page、文件—file、记录—log）的连续有效步数，Gate 只认它；**rehearsalReach** 不限 surface。Owner Summary 形如 `J1 …：页面走通 2/4 · API 预演 4/4`，并列出人工走查的步骤。
 
 Ticket 的 Coverage 区块、Spec 三张固定表和 `Release order` 在 `package validate` 时按固定标题与列名解析，列缺失或多出即失败。
 

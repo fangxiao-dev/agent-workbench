@@ -507,6 +507,170 @@ def _add_terminal_summary(repo: Path, package: Path, revision: str) -> None:
     assert added.returncode == 0, added.stderr or added.stdout
 
 
+def _ready_v36_gate(root: Path) -> tuple[Path, Path, str]:
+    repo, package = _make_package(root, initialized=True)
+    revision = _git(repo, "rev-parse", "HEAD")
+    evidence = [
+        _journey_record(revision, step_id, run_id="old-run")
+        for step_id in ("J1-S1", "J1-S2")
+    ]
+    evidence.extend(_suite_record(revision, suite_id) for suite_id in ("S-resolver", "S-workflow", "S-safety"))
+    evidence.append(_review_record(revision, "TKT-01"))
+    added = _cli(repo, package, "evidence", "add", input_value=evidence)
+    assert added.returncode == 0, added.stderr
+    _satisfy(repo, package, "TKT-01", revision)
+    _satisfy(repo, package, "TKT-02", revision)
+    _add_terminal_summary(repo, package, revision)
+    return repo, package, revision
+
+
+def _invalidate_historical_run_and_review(repo: Path, package: Path, run_id: str = "old-run") -> None:
+    keys = [
+        f"run-setup:{run_id}",
+        f"journey:{run_id}:J1-S1",
+        f"journey:{run_id}:J1-S2",
+        "review:TKT-01",
+    ]
+    for key in keys:
+        invalidated = _cli(
+            repo, package, "evidence", "invalidate", "--key", key,
+            "--invalidated-by", "replaced by current acceptance evidence",
+        )
+        assert invalidated.returncode == 0, invalidated.stderr
+
+
+def _invalidated_journey_evidence(revision: str, run_id: str = "old-run") -> dict[str, list[dict]]:
+    setup = _run_setup_record(revision, run_id)
+    steps = [_journey_record(revision, step_id, run_id=run_id) for step_id in ("J1-S1", "J1-S2")]
+    records = [setup, *steps]
+    for record in records:
+        record["invalidatedBy"] = "superseded historical run"
+    return {
+        f"run-setup:{run_id}": [setup],
+        f"journey:{run_id}:J1-S1": [steps[0]],
+        f"journey:{run_id}:J1-S2": [steps[1]],
+    }
+
+
+def test_gate_pass_accepts_valid_current_run_and_review_with_stale_history(tmp_path: Path) -> None:
+    repo, package, revision = _ready_v36_gate(tmp_path)
+    _invalidate_historical_run_and_review(repo, package)
+
+    current = [
+        _journey_record(revision, step_id, run_id="current-run")
+        for step_id in ("J1-S1", "J1-S2")
+    ]
+    current.append(_review_record(revision, "TKT-01"))
+    added = _cli(repo, package, "evidence", "add", input_value=current)
+    assert added.returncode == 0, added.stderr
+
+    snapshot = situation._build_snapshot(situation.PackageReader(package, None))
+    revalidation = situation._v36_acceptance_fact(
+        situation.FactContext(snapshot, "attempt", "initial"),
+        "attempt.evidence_revalidation_pending",
+    )
+    assert revalidation.known and revalidation.value is False
+
+    passed = _gate(repo, package, "pass", revision, reason="current evidence replaces stale history")
+
+    assert passed.returncode == 0, passed.stderr or passed.stdout
+
+
+def test_gate_rejects_invalidated_history_without_current_replacement(tmp_path: Path) -> None:
+    repo, package, revision = _ready_v36_gate(tmp_path)
+    _invalidate_historical_run_and_review(repo, package)
+
+    rejected = _gate(repo, package, "pass", revision, reason="current evidence is missing")
+
+    assert rejected.returncode != 0
+    assert "Evidence journey:old-run:J1-S1 的 supporting 记录待复验" in rejected.stderr
+    assert "Evidence review:TKT-01 的 supporting 记录待复验" in rejected.stderr
+
+
+@pytest.mark.parametrize(
+    ("replacement", "expected_reach"),
+    [("none", 0), ("partial", 1), ("cross-run", 1), ("wrong-environment", 0)],
+)
+def test_stale_journey_history_requires_one_complete_current_run(
+    tmp_path: Path, replacement: str, expected_reach: int,
+) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    state = _state(package)
+    state["evidenceIndex"] = _invalidated_journey_evidence(revision)
+    summary = engine._validate_state(package, _state(package), projections=False)
+
+    if replacement == "partial":
+        run_ids = [("partial", "J1-S1", "local-test")]
+    elif replacement == "cross-run":
+        run_ids = [("split-one", "J1-S1", "local-test"), ("split-two", "J1-S2", "local-test")]
+    elif replacement == "wrong-environment":
+        run_ids = [("wrong-environment", "J1-S1", "local-test"), ("wrong-environment", "J1-S2", "local-test")]
+    else:
+        run_ids = []
+
+    for run_id in {run_id for run_id, _step_id, _environment in run_ids}:
+        state["evidenceIndex"].setdefault(f"run-setup:{run_id}", []).append(
+            _run_setup_record(revision, run_id, "local-pg" if replacement == "wrong-environment" else "local-test")
+        )
+    for run_id, step_id, environment in run_ids:
+        state["evidenceIndex"].setdefault(f"journey:{run_id}:{step_id}", []).append(
+            _journey_record(revision, step_id, run_id=run_id, environment=environment)
+        )
+
+    status = engine._v36_acceptance_status(package, state, summary, revision, attempt_active=True)
+
+    assert status["journeys"][0]["reach"] == expected_reach
+    assert "journey:old-run:J1-S1" in status["staleEvidence"]
+    assert "run-setup:old-run" in status["staleEvidence"]
+
+
+def test_stale_review_replacement_must_be_current_and_not_invalidated(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    old = _review_record(revision, "TKT-01")
+    old["invalidatedBy"] = "superseded historical review"
+    current = _review_record(revision, "TKT-01")
+    state = _state(package)
+    state["evidenceIndex"] = {"review:TKT-01": [old, current]}
+    summary = engine._validate_state(package, state, projections=False)
+
+    assert "review:TKT-01" not in engine._v36_acceptance_status(
+        package, state, summary, revision, attempt_active=True,
+    )["staleEvidence"]
+
+    current["invalidatedBy"] = "explicitly invalidated"
+    status = engine._v36_acceptance_status(
+        package, state, summary, revision, attempt_active=True,
+    )
+    assert "review:TKT-01" in status["staleEvidence"]
+
+    current.pop("invalidatedBy")
+    source = repo / "src/changed.py"
+    source.parent.mkdir()
+    source.write_text("value = 1\n", encoding="utf-8")
+    comparison = _commit_path(repo, source, "external change makes review stale")
+    status = engine._v36_acceptance_status(
+        package, state, summary, comparison, attempt_active=True,
+    )
+    assert "review:TKT-01" in status["staleEvidence"]
+
+
+def test_stale_suite_replacement_must_match_required_environment(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    stale = _suite_record(revision, "S-resolver")
+    stale["invalidatedBy"] = "superseded historical suite"
+    wrong_environment = _suite_record(revision, "S-resolver", environment="wrong-env")
+    state = _state(package)
+    state["evidenceIndex"] = {"suite:S-resolver": [stale, wrong_environment]}
+    summary = engine._validate_state(package, _state(package), projections=False)
+
+    status = engine._v36_acceptance_status(package, state, summary, revision, attempt_active=True)
+
+    assert status["suites"][0] == {"id": "S-resolver", "valid": False}
+    assert "suite:S-resolver" in status["staleEvidence"]
+
+    rejected = _cli(repo, package, "evidence", "add", input_value=wrong_environment)
+    assert rejected.returncode != 0
+    assert "environment does not match" in rejected.stderr
 def _commit_path(repo: Path, path: Path, message: str) -> str:
     relative = path.relative_to(repo).as_posix()
     _git(repo, "add", "--", relative)
@@ -548,6 +712,143 @@ def test_init_validate_and_status_use_v36_and_record_contract_baseline(tmp_path:
         result = _cli(repo, package, "package", command)
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout)["formatVersion"] == "3.6"
+
+
+def test_situation_ignores_ticket_documents_from_previous_attempt(tmp_path: Path) -> None:
+    repo, package, _revision = _init_v36(tmp_path)
+    old_ticket = _ticket("OLD-TICKET", "J1-S1", "S-resolver").replace("Attempt ID: initial", "Attempt ID: previous")
+    (package / "tickets/old-attempt.md").write_text(old_ticket, encoding="utf-8")
+
+    snapshot = situation._build_snapshot(situation.PackageReader(package, None))
+
+    assert snapshot.state.valid
+    assert set(snapshot.tickets) == {"TKT-01", "TKT-02"}
+
+
+def test_situation_rejects_duplicate_current_attempt_ticket_ids(tmp_path: Path) -> None:
+    _repo, package, _revision = _init_v36(tmp_path)
+    duplicate = (package / "tickets/01.md").read_text(encoding="utf-8")
+    (package / "tickets/duplicate.md").write_text(duplicate, encoding="utf-8")
+
+    snapshot = situation._build_snapshot(situation.PackageReader(package, None))
+
+    assert not snapshot.state.valid
+    assert "重复 Ticket ID：TKT-01" in (snapshot.state.error or "")
+
+
+def test_situation_rejects_current_attempt_ticket_without_attempt_id(tmp_path: Path) -> None:
+    _repo, package, _revision = _init_v36(tmp_path)
+    ticket = (package / "tickets/02.md").read_text(encoding="utf-8").replace("Attempt ID: initial\n", "")
+    (package / "tickets/02.md").write_text(ticket, encoding="utf-8")
+
+    snapshot = situation._build_snapshot(situation.PackageReader(package, None))
+
+    assert not snapshot.state.valid
+    assert "缺少 Attempt ID/Ticket ID" in (snapshot.state.error or "")
+
+
+def test_situation_rejects_missing_current_attempt_ticket_file(tmp_path: Path) -> None:
+    _repo, package, _revision = _init_v36(tmp_path)
+    (package / "tickets/02.md").unlink()
+
+    snapshot = situation._build_snapshot(situation.PackageReader(package, None))
+
+    assert not snapshot.state.valid
+    assert "TKT-02: Ticket 文件缺失" in "\n".join(snapshot.warnings)
+
+
+def test_live_package_reference_reads_current_retired_registry_route(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path)
+    (repo / "docs/implementations/retired.json").unlink()
+    current_registry = repo / "docs/_backfill/retired.json"
+    current_registry.parent.mkdir(parents=True)
+    current_registry.write_text('{"contractVersion":"3.2","retirements":[]}\n', encoding="utf-8")
+
+    fact = situation.live_package_reference_fact(package)
+
+    assert fact.known and fact.value is False
+
+
+def test_live_package_reference_reads_singular_and_grouped_retirement_ids(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path)
+    (repo / "docs/implementations/retired.json").unlink()
+    current_registry = repo / "docs/_backfill/retired.json"
+    current_registry.parent.mkdir(parents=True)
+    singular = {
+        "packageId": "retired-single",
+        "retiredAt": "2026-10-01T00:00:00Z",
+        "gateEntry": "docs/archive/gate.md#pass",
+        "closureCommit": "a" * 40,
+        "baselineCarrier": "docs/archive/closure.md",
+        "stableEvidence": ["docs/stable/README.md"],
+        "retirementCommit": "b" * 40,
+    }
+    grouped = {
+        "packageId": "retired-group",
+        "packageIds": ["retired-group-a", "retired-group-b"],
+        "retiredAt": "2026-10-01T00:00:00Z",
+        "closureEvidence": "docs/archive/closure.md",
+        "stableEvidence": ["docs/stable/README.md"],
+        "retirementCommit": None,
+    }
+    current_registry.write_text(
+        json.dumps({"contractVersion": "3.2", "retirements": [singular, grouped]}),
+        encoding="utf-8",
+    )
+    plan = package / "plan.md"
+    plan.write_text(
+        plan.read_text(encoding="utf-8")
+        + "\nReferences: docs/implementations/retired-single/spec.md, "
+        + "docs/implementations/retired-group-a/spec.md, docs/implementations/retired-group-b/spec.md\n",
+        encoding="utf-8",
+    )
+
+    fact = situation.live_package_reference_fact(package)
+
+    assert fact.known and fact.value is False
+
+
+def test_live_package_reference_keeps_legacy_retired_registry_route(tmp_path: Path) -> None:
+    _repo, package = _make_package(tmp_path)
+
+    fact = situation.live_package_reference_fact(package)
+
+    assert fact.known and fact.value is False
+
+
+def test_live_package_reference_fails_closed_for_malformed_current_registry(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path)
+    (repo / "docs/implementations/retired.json").unlink()
+    current_registry = repo / "docs/_backfill/retired.json"
+    current_registry.parent.mkdir(parents=True)
+    current_registry.write_text(
+        '{"contractVersion":"3.2","retirements":[{"packageId":"retired-1"}]}\n',
+        encoding="utf-8",
+    )
+
+    fact = situation.live_package_reference_fact(package)
+
+    assert not fact.known
+    assert "schema 无效" in (fact.reason or "")
+
+
+def test_live_package_reference_fails_closed_for_missing_or_ambiguous_registry(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path)
+    legacy_registry = repo / "docs/implementations/retired.json"
+    legacy_registry.unlink()
+
+    missing = situation.live_package_reference_fact(package)
+    assert not missing.known
+    assert "retired registry" in (missing.reason or "")
+
+    current_registry = repo / "docs/_backfill/retired.json"
+    current_registry.parent.mkdir(parents=True)
+    current_registry.write_text('{"packages": []}\n', encoding="utf-8")
+    legacy_registry.write_text('{"packages": []}\n', encoding="utf-8")
+
+    ambiguous = situation.live_package_reference_fact(package)
+    assert not ambiguous.known
+    assert "路径含糊" in (ambiguous.reason or "")
 
 
 def test_check_spec_resolves_rule_and_no_acceptance_chapters_by_number_or_title(tmp_path: Path) -> None:

@@ -77,7 +77,10 @@ NUMERIC_COMPARISON_RE = re.compile(r"^(>=|<=|==|!=|>|<)\s*(-?(?:\d+(?:\.\d*)?|\.
 LIVE_PACKAGE_REFERENCE_RE = re.compile(
     r"(?<![A-Za-z0-9_])docs/implementations/([A-Za-z0-9][A-Za-z0-9._-]*)/"
 )
-RETIRED_PACKAGES_REL = "docs/implementations/retired.json"
+RETIRED_PACKAGE_REGISTRY_RELS = (
+    "docs/_backfill/retired.json",
+    "docs/implementations/retired.json",
+)
 
 # Facts are intentionally a closed namespace for explicit trail declarations.
 FACT_KEYS = frozenset(
@@ -631,6 +634,24 @@ def _read_repo_relative(reader: PackageReader, relative: str) -> FileView:
     return FileView(relative, output)
 
 
+def _repo_relative_exists(reader: PackageReader, relative: str) -> tuple[bool | None, str | None]:
+    if reader.repo is None:
+        return None, "package 不在 Git 仓库内，无法定位 repository-relative 文件"
+    if reader.commit is None:
+        try:
+            path = _safe_relative_path(reader.repo, relative)
+            path.lstat()
+            return True, None
+        except FileNotFoundError:
+            return False, None
+        except (OSError, SituationError) as exc:
+            return None, f"cannot inspect {relative}: {exc}"
+    code, output, error = _git_result(reader.repo, "ls-tree", reader.commit, "--", relative)
+    if code != 0:
+        return None, f"cannot inspect {relative} at {reader.commit}: {error or output}"
+    return bool(output), None
+
+
 def _live_reference_document_paths(reader: PackageReader) -> list[str]:
     paths = ["decision.md", "spec.md", "plan.md"]
     if reader.commit is not None:
@@ -666,20 +687,80 @@ def _live_reference_document_paths(reader: PackageReader) -> list[str]:
 
 
 def _retired_package_ids(reader: PackageReader) -> tuple[set[str] | None, str | None]:
-    view = _read_repo_relative(reader, RETIRED_PACKAGES_REL)
+    present: list[str] = []
+    for relative in RETIRED_PACKAGE_REGISTRY_RELS:
+        exists, error = _repo_relative_exists(reader, relative)
+        if error:
+            return None, error
+        if exists:
+            present.append(relative)
+    if not present:
+        return None, "retired registry 不存在（预期一个：" + ", ".join(RETIRED_PACKAGE_REGISTRY_RELS) + ")"
+    if len(present) != 1:
+        return None, "retired registry 路径含糊：" + ", ".join(present)
+
+    relative = present[0]
+    view = _read_repo_relative(reader, relative)
     if view.error or view.text is None:
-        return None, view.error or f"{RETIRED_PACKAGES_REL} 为空"
+        return None, view.error or f"{relative} 为空"
     try:
         value = json.loads(view.text)
     except json.JSONDecodeError as exc:
-        return None, f"{RETIRED_PACKAGES_REL} 不是合法 JSON：{exc}"
-    if not isinstance(value, dict) or not isinstance(value.get("packages"), list):
-        return None, f"{RETIRED_PACKAGES_REL} 缺少 packages list"
+        return None, f"{relative} 不是合法 JSON：{exc}"
+    if not isinstance(value, dict):
+        return None, f"{relative} 顶层必须是 object"
     package_ids: set[str] = set()
-    for index, item in enumerate(value["packages"]):
-        if not isinstance(item, dict) or not isinstance(item.get("package_id"), str) or not item["package_id"].strip():
-            return None, f"{RETIRED_PACKAGES_REL} packages[{index}].package_id 无效"
-        package_ids.add(item["package_id"])
+
+    def add_ids(values: list[Any], label: str) -> str | None:
+        for index, package_id in enumerate(values):
+            if not isinstance(package_id, str) or not package_id.strip():
+                return f"{relative} {label}[{index}] package ID 无效"
+            if package_id in package_ids:
+                return f"{relative} package ID 重复：{package_id}"
+            package_ids.add(package_id)
+        return None
+
+    if relative == "docs/_backfill/retired.json":
+        if set(value) != {"contractVersion", "retirements"} or value.get("contractVersion") != "3.2" or not isinstance(value.get("retirements"), list):
+            return None, f"{relative} 不符合 contractVersion 3.2 schema"
+        singular_fields = {"packageId", "retiredAt", "gateEntry", "closureCommit", "baselineCarrier", "stableEvidence", "retirementCommit"}
+        group_fields = {"packageId", "packageIds", "retiredAt", "closureEvidence", "stableEvidence", "retirementCommit"}
+        for index, row in enumerate(value["retirements"]):
+            if not isinstance(row, dict) or frozenset(row) not in {frozenset(singular_fields), frozenset(group_fields)}:
+                return None, f"{relative} retirements[{index}] schema 无效"
+            if any(not isinstance(row.get(field), str) or not row[field].strip() for field in ("packageId", "retiredAt")):
+                return None, f"{relative} retirements[{index}] packageId/retiredAt 无效"
+            if not isinstance(row.get("stableEvidence"), list) or not row["stableEvidence"] or not all(isinstance(item, str) and item.strip() for item in row["stableEvidence"]):
+                return None, f"{relative} retirements[{index}].stableEvidence 无效"
+            retirement_commit = row.get("retirementCommit")
+            if retirement_commit is not None and (not isinstance(retirement_commit, str) or COMMIT_RE.fullmatch(retirement_commit) is None):
+                return None, f"{relative} retirements[{index}].retirementCommit 无效"
+            if frozenset(row) == frozenset(singular_fields):
+                if not all(isinstance(row.get(field), str) and row[field].strip() for field in ("gateEntry", "baselineCarrier")) or not isinstance(row["closureCommit"], str) or COMMIT_RE.fullmatch(row["closureCommit"]) is None:
+                    return None, f"{relative} retirements[{index}] closure metadata 无效"
+                ids = [row["packageId"]]
+            else:
+                if not isinstance(row.get("closureEvidence"), str) or not row["closureEvidence"].strip() or not isinstance(row.get("packageIds"), list):
+                    return None, f"{relative} retirements[{index}] closureEvidence/packageIds 无效"
+                ids = row["packageIds"] or [row["packageId"]]
+            error = add_ids(ids, f"retirements[{index}]")
+            if error:
+                return None, error
+    else:
+        if set(value) not in ({"packages"}, {"version", "packages"}) or not isinstance(value.get("packages"), list):
+            return None, f"{relative} legacy schema must contain packages list"
+        if "version" in value and not (isinstance(value["version"], str) and value["version"].strip() or type(value["version"]) is int and value["version"] >= 1):
+            return None, f"{relative} legacy version 无效"
+        full_fields = {"package_id", "retired_at", "retirement_reason", "gate", "source_head", "absorbed_into", "deleted_in_commit"}
+        for index, item in enumerate(value["packages"]):
+            if not isinstance(item, dict) or set(item) not in ({"package_id"}, full_fields) or not isinstance(item.get("package_id"), str) or not item["package_id"].strip():
+                return None, f"{relative} packages[{index}] schema/package_id 无效"
+            if set(item) == full_fields:
+                if not all(isinstance(item.get(field), str) and item[field].strip() for field in ("retired_at", "retirement_reason", "source_head", "deleted_in_commit")) or not isinstance(item["gate"], dict) or not isinstance(item["absorbed_into"], list) or not all(isinstance(value, str) and value.strip() for value in item["absorbed_into"]):
+                    return None, f"{relative} packages[{index}] retirement metadata 无效"
+            error = add_ids([item["package_id"]], "packages")
+            if error:
+                return None, error
     return package_ids, None
 
 
@@ -1476,16 +1557,28 @@ def _build_snapshot(
             state.error = f"{state.error}; {exc}" if state.error else str(exc)
             warnings.append(str(exc))
     ticket_files: dict[str, tuple[str, str]] = {}
+    duplicate_ticket_ids: set[str] = set()
+    unscoped_ticket_files: list[str] = []
     for relative in reader.list_ticket_files():
         view = reader.read(relative)
         if view.error:
             warnings.append(view.error)
+            unscoped_ticket_files.append(relative)
             continue
         if view.text is None:
             continue
+        attempt_match = ATTEMPT_ID_RE.search(view.text)
+        if attempt_match and state.attempt_id and attempt_match.group(1) != state.attempt_id:
+            continue
         id_match = TICKET_ID_RE.search(view.text)
-        if id_match:
-            ticket_files[id_match.group(1)] = (relative, view.text)
+        if not state.attempt_id or not attempt_match or not id_match:
+            unscoped_ticket_files.append(relative)
+            continue
+        identifier = id_match.group(1)
+        if identifier in ticket_files:
+            duplicate_ticket_ids.add(identifier)
+        else:
+            ticket_files[identifier] = (relative, view.text)
 
     tickets: dict[str, TicketInfo] = {}
     ids = sorted(set(state.ticket_ids) | set(ticket_files))
@@ -1502,9 +1595,13 @@ def _build_snapshot(
     if state.valid:
         expected = set(state.ticket_ids)
         actual = set(tickets)
-        if expected != actual or any(not tickets[key].valid for key in expected):
+        if expected != actual or duplicate_ticket_ids or unscoped_ticket_files or any(not tickets[key].valid for key in expected):
             state.valid = False
-            state.error = "state 与 tickets/*.md 不一致或 Ticket 文件无法解析"
+            state.error = "state 与当前 Attempt 的 tickets/*.md 不一致或 Ticket 文件无法解析"
+            if duplicate_ticket_ids:
+                state.error += "；当前 Attempt 存在重复 Ticket ID：" + ", ".join(sorted(duplicate_ticket_ids))
+            if unscoped_ticket_files:
+                state.error += "；存在无法读取或缺少 Attempt ID/Ticket ID 的文件：" + ", ".join(sorted(unscoped_ticket_files))
             warnings.append(state.error)
     state_errors = _state_ticket_errors(state, tickets)
     if state_errors:

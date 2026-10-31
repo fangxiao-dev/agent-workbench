@@ -1855,7 +1855,11 @@ def _v36_acceptance_status(
     spec = summary["_journeySpec"]
     records_by_key = state["evidenceIndex"]
     stale: set[str] = set()
+    current_supporting_keys: set[str] = set()
+    stale_journey_keys: dict[str, set[str]] = {}
+    stale_run_setup_ids: set[str] = set()
     run_records: dict[tuple[str, str], list[tuple[str, dict[str, Any]]]] = {}
+    run_journeys: dict[str, set[str]] = {}
     surface_validity: dict[int, bool] = {}
     first_visible = summary["_acceptance"]["harness"]["firstVisibleStep"]
     first_visible_records: list[dict[str, Any]] = []
@@ -1898,12 +1902,21 @@ def _v36_acceptance_status(
                 except (OSError, StateError):
                     surface_validity[id(record)] = False
                     valid = False
-            if record["conclusion"] == "supporting" and not valid:
-                stale.add(evidence_key)
+            if record["conclusion"] == "supporting":
+                if not valid:
+                    stale.add(evidence_key)
+                    if kind == "journey-step":
+                        stale_journey_keys.setdefault(evidence_key, set()).add(record["journeyId"])
+                    elif kind == "run-setup":
+                        stale_run_setup_ids.add(record["runId"])
+                elif kind not in {"journey-step", "run-setup"}:
+                    current_supporting_keys.add(evidence_key)
             if kind == "journey-step":
                 run_records.setdefault((record["journeyId"], record["runId"]), []).append((evidence_key, record))
+                run_journeys.setdefault(record["runId"], set()).add(record["journeyId"])
 
     journey_rows = []
+    complete_journeys: set[str] = set()
     for journey in spec["journeys"]:
         best_reach = 0
         best_rehearsal_reach = 0
@@ -1962,6 +1975,8 @@ def _v36_acceptance_status(
                 if not any(record["surface"] == expected_surface for record in valid_records):
                     break
                 reach += 1
+            if reach == len(journey["steps"]):
+                complete_journeys.add(journey["id"])
             best_reach = max(best_reach, reach)
             best_rehearsal_reach = max(best_rehearsal_reach, rehearsal_reach)
             for surface, count in run_surface_counts.items():
@@ -1985,6 +2000,14 @@ def _v36_acceptance_status(
                 for step_id, manual_by in sorted(manual_walkthroughs)
             ],
         })
+
+    stale.difference_update(current_supporting_keys)
+    for evidence_key, journey_ids in stale_journey_keys.items():
+        if journey_ids & complete_journeys:
+            stale.discard(evidence_key)
+    for run_id in stale_run_setup_ids:
+        if run_journeys.get(run_id, set()) & complete_journeys:
+            stale.discard(f"run-setup:{run_id}")
 
     suite_rows = []
     for suite_id, suite in spec["suites"].items():
