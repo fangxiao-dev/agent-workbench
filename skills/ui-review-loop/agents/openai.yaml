@@ -1,0 +1,6 @@
+interface:
+  display_name: "UI Review Loop"
+  short_description: "实施主控与 UI 评审者分角色的截图评审闭环"
+  default_prompt: "Use $ui-review-loop as <实施主控|UI评审者>; principles: <path>; review: <path>; acceptance: <path>."
+policy:
+  allow_implicit_invocation: false
