@@ -1476,16 +1476,28 @@ def _build_snapshot(
             state.error = f"{state.error}; {exc}" if state.error else str(exc)
             warnings.append(str(exc))
     ticket_files: dict[str, tuple[str, str]] = {}
+    duplicate_ticket_ids: set[str] = set()
+    unscoped_ticket_files: list[str] = []
     for relative in reader.list_ticket_files():
         view = reader.read(relative)
         if view.error:
             warnings.append(view.error)
+            unscoped_ticket_files.append(relative)
             continue
         if view.text is None:
             continue
+        attempt_match = ATTEMPT_ID_RE.search(view.text)
+        if attempt_match and state.attempt_id and attempt_match.group(1) != state.attempt_id:
+            continue
         id_match = TICKET_ID_RE.search(view.text)
-        if id_match:
-            ticket_files[id_match.group(1)] = (relative, view.text)
+        if not state.attempt_id or not attempt_match or not id_match:
+            unscoped_ticket_files.append(relative)
+            continue
+        identifier = id_match.group(1)
+        if identifier in ticket_files:
+            duplicate_ticket_ids.add(identifier)
+        else:
+            ticket_files[identifier] = (relative, view.text)
 
     tickets: dict[str, TicketInfo] = {}
     ids = sorted(set(state.ticket_ids) | set(ticket_files))
@@ -1502,9 +1514,13 @@ def _build_snapshot(
     if state.valid:
         expected = set(state.ticket_ids)
         actual = set(tickets)
-        if expected != actual or any(not tickets[key].valid for key in expected):
+        if expected != actual or duplicate_ticket_ids or unscoped_ticket_files or any(not tickets[key].valid for key in expected):
             state.valid = False
-            state.error = "state 与 tickets/*.md 不一致或 Ticket 文件无法解析"
+            state.error = "state 与当前 Attempt 的 tickets/*.md 不一致或 Ticket 文件无法解析"
+            if duplicate_ticket_ids:
+                state.error += "；当前 Attempt 存在重复 Ticket ID：" + ", ".join(sorted(duplicate_ticket_ids))
+            if unscoped_ticket_files:
+                state.error += "；存在无法读取或缺少 Attempt ID/Ticket ID 的文件：" + ", ".join(sorted(unscoped_ticket_files))
             warnings.append(state.error)
     state_errors = _state_ticket_errors(state, tickets)
     if state_errors:

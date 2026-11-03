@@ -52,14 +52,6 @@ def _git(project: Path, *args: str, ok: bool = True) -> subprocess.CompletedProc
     return result
 
 
-def _main_worktree(project: Path) -> Path:
-    output = _git(project, "worktree", "list", "--porcelain").stdout.splitlines()
-    first = next((line.removeprefix("worktree ") for line in output if line.startswith("worktree ")), None)
-    if first is None:
-        raise CollectorError("cannot resolve the main Git worktree")
-    return Path(first).resolve()
-
-
 def _worktree_context(project: Path) -> dict[str, Any]:
     branch = _git(project, "symbolic-ref", "--quiet", "--short", "HEAD", ok=False)
     return {
@@ -158,7 +150,7 @@ def _done_reason(match: dict[str, Any]) -> str:
 
 def collect_inventory(project_root: Path | str, config_path: Path | str | None = None) -> dict[str, Any]:
     invoked = _git_root(project_root)
-    project = _git_root(_main_worktree(invoked))
+    project = invoked
     config, metadata = load_repository_config(project, config_path)
     target_commit = resolve_target_branch(project, config["targetBranch"])
     preflight = run_preflight(project, config)

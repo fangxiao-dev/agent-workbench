@@ -19,7 +19,7 @@ description: 当需要审计 durable knowledge delta、把 owner 批准的子集
 
 标准包的仓库根 `.stable-docs-backfill.json` 或显式的仓库内配置必须列出 `targetBranch`、implementation 根目录、stable-doc 文件/目录、ignore 条目和 done record；pending 文件可选，默认为空。报告通过 CLI 输出或显式 output path 生成，不要求 reports 目录。所有路径是仓库相对路径；ignore 每项必须有 `path`、`owner`、`reason`，不接受 wildcard 或仓库外配置。路径拒绝规则由 `config/repository-config.schema.json` 承接，配置由 `scripts/validate_config.py` 校验。显式来源兼容分支以用户或 Manager 指定的来源为最小输入，不因缺失上述配置阻塞人工审计。
 
-默认使用 `git worktree list --porcelain` 的第一条主工作区，记录路径、branch、HEAD 和 dirty 状态；调用发生在 linked worktree 时不把未合入内容混入当前事实。Source HEAD 定义本轮读取快照，`targetBranch` 独立用于判断 Gate comparison commit 是否已进入目标分支；target Git commit 的验证细节由 `references/verify-runbook.md` 承接。配置与基准提醒按需读取 [Audit Runbook](references/audit-runbook.md)；source/target、pending 与 done 的边界按需读取 [Source Selection](references/source-selection-and-pending-consumption.md)。
+每轮由调用方选择一个 Git 工作区 root（CLI 的 `--project-root`）；手动调用由操作者指定，定时入口由调用方传入。配置、Source HEAD、dirty 状态、inventory 与 verify 全程使用同一工作区；显式 `--config` 也必须位于该仓库内，不得在 inventory 中切换到主工作区。Source HEAD 定义本轮读取快照，`targetBranch` 独立用于判断 Gate comparison commit 是否已进入目标分支；target Git commit 的验证细节由 `references/verify-runbook.md` 承接。配置与基准提醒按需读取 [Audit Runbook](references/audit-runbook.md)；source/target、pending 与 done 的边界按需读取 [Source Selection](references/source-selection-and-pending-consumption.md)。
 
 ## 显式来源兼容分支
 

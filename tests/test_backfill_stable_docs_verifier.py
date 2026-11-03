@@ -16,6 +16,12 @@ def git(repo: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
 
 
+def add_linked_worktree(repo: Path) -> Path:
+    linked = repo.with_name(f"{repo.name}-linked")
+    git(repo, "worktree", "add", "--detach", str(linked), "HEAD")
+    return linked
+
+
 class VerifierTests(unittest.TestCase):
     def fixture(self, *, with_pending: bool = False) -> tuple[tempfile.TemporaryDirectory[str], Path]:
         temp = tempfile.TemporaryDirectory()
@@ -54,6 +60,29 @@ class VerifierTests(unittest.TestCase):
         temp, repo = self.fixture()
         self.addCleanup(temp.cleanup)
         result = self.run_verify(repo)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(json.loads(result.stdout)["passed"])
+
+    def test_linked_worktree_verifies_with_its_explicit_config(self) -> None:
+        temp, repo = self.fixture()
+        self.addCleanup(temp.cleanup)
+        linked = add_linked_worktree(repo)
+        self.addCleanup(
+            lambda: subprocess.run(
+                ["git", "worktree", "remove", "--force", str(linked)],
+                cwd=repo,
+                capture_output=True,
+                check=False,
+            )
+        )
+        config_path = linked / "backfill.json"
+        config_path.write_text((linked / ".stable-docs-backfill.json").read_text(encoding="utf-8"), encoding="utf-8")
+        (linked / ".stable-docs-backfill.json").unlink()
+        (linked / "docs/implementations").mkdir(parents=True, exist_ok=True)
+        (repo / ".stable-docs-backfill.json").unlink()
+
+        result = self.run_verify(linked, "--config", str(config_path))
+
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(json.loads(result.stdout)["passed"])
 

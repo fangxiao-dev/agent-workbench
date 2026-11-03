@@ -211,7 +211,18 @@ def _parser(group: str) -> argparse.ArgumentParser:
         release.add_argument("--lease-id", required=True)
         release.add_argument("--owner-token", required=True)
     elif group == "trail":
-        append = commands.add_parser("append", help="append a validated manual trail event from stdin")
+        append = commands.add_parser(
+            "append",
+            help="append a validated manual trail event from stdin",
+            description="Append one validated manual trail event from stdin.",
+            epilog=(
+                "Minimum valid stdin JSON:\n"
+                '  {"subject":"attempt","kind":"escape","deviation":"manual route","reason":"no matching situation"}\n\n'
+                'ER judgment is separate: `recovery judgment` requires "purpose":"judgment":\n'
+                '  {"purpose":"judgment","subject":"attempt","title":"Decision","content":"Keep the narrow path."}'
+            ),
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
         append.add_argument("--review-phase", choices=situation.REVIEW_PHASE_VALUES)
         append.add_argument("--review-track", choices=situation.REVIEW_TRACK_VALUES)
         append.add_argument("--review-recheck", action="store_true", default=None)

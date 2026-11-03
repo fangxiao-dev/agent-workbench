@@ -1083,6 +1083,83 @@ class ImplPackageStateTests(unittest.TestCase):
             [],
         )
 
+    def test_package_validate_and_situation_scope_tickets_to_current_attempt(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        historical = package / "tickets" / "90-historical.md"
+        historical.write_text(
+            "Ticket ID: OLD-TICKET\nAttempt ID: previous-attempt\n",
+            encoding="utf-8",
+        )
+
+        validated = self.cli(repo, package, "--no-situation", "package", "validate")
+        rendered = self.render_current(package)
+
+        self.assertEqual(json.loads(validated.stdout)["tickets"], len(self.state(package)["tickets"]))
+        self.assertTrue(rendered["sources"]["state"]["valid"], rendered["sources"]["state"]["reason"])
+        self.assertFalse(any("OLD-TICKET" in warning for warning in rendered["warnings"]))
+
+        unreadable = package / "tickets" / "93-unreadable.md"
+        unreadable.write_bytes(b"\xff")
+        rendered = self.render_current(package)
+        self.assertFalse(rendered["sources"]["state"]["valid"])
+        self.assertIn("93-unreadable.md", rendered["sources"]["state"]["reason"])
+        unreadable.unlink()
+
+        duplicate = package / "tickets" / "91-duplicate.md"
+        duplicate.write_text("Ticket ID: TKT-01\nAttempt ID: initial\n", encoding="utf-8")
+        rendered = self.render_current(package)
+        rejected = self.cli(repo, package, "--no-situation", "package", "validate", ok=False)
+        self.assertFalse(rendered["sources"]["state"]["valid"])
+        self.assertIn("重复 Ticket ID：TKT-01", rendered["sources"]["state"]["reason"])
+        self.assertIn("duplicate Ticket ID for Attempt initial", rejected.stderr)
+        duplicate.unlink()
+
+        unscoped = package / "tickets" / "92-unscoped.md"
+        unscoped.write_text("Attempt ID: initial\n", encoding="utf-8")
+        rendered = self.render_current(package)
+        rejected = self.cli(repo, package, "--no-situation", "package", "validate", ok=False)
+        self.assertFalse(rendered["sources"]["state"]["valid"])
+        self.assertIn("92-unscoped.md", rendered["sources"]["state"]["reason"])
+        self.assertIn("Ticket ID in 92-unscoped.md", rejected.stderr)
+        unscoped.unlink()
+
+        current_ticket = package / "tickets" / "01-source.md"
+        text = current_ticket.read_text(encoding="utf-8")
+        current_ticket.write_text(
+            text.replace("**Attempt ID：** initial", "**Attempt ID：** previous-attempt"),
+            encoding="utf-8",
+        )
+        rendered = self.render_current(package)
+        rejected = self.cli(repo, package, "--no-situation", "package", "validate", ok=False)
+
+        self.assertFalse(rendered["sources"]["state"]["valid"])
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("ticket state does not match current Attempt Ticket files", rejected.stderr)
+
+    def test_trail_append_help_shows_valid_event_and_judgment_input(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        trail_event = (
+            '{"subject":"attempt","kind":"escape","deviation":"manual route",'
+            '"reason":"no matching situation"}'
+        )
+        judgment = (
+            '{"purpose":"judgment","subject":"attempt","title":"Decision",'
+            '"content":"Keep the narrow path."}'
+        )
+
+        help_result = self.cli(repo, package, "--no-situation", "trail", "append", "--help")
+
+        self.assertIn("Minimum valid stdin JSON:", help_result.stdout)
+        self.assertIn(trail_event, help_result.stdout)
+        self.assertIn('`recovery judgment` requires "purpose":"judgment"', help_result.stdout)
+        self.assertIn(judgment, help_result.stdout)
+        appended = self.cli(repo, package, "--no-situation", "trail", "append", input_text=trail_event)
+        self.assertTrue(json.loads(appended.stdout)["appended"])
+        recorded = self.cli(repo, package, "--no-situation", "recovery", "judgment", input_text=judgment)
+        self.assertEqual(json.loads(recorded.stdout)["recordId"], "initial-ER-001")
+
     def test_checkpoint_overwrites_state_and_er_accepts_judgment_only(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)

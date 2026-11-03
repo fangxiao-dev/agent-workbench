@@ -1,6 +1,6 @@
 # Audit Runbook
 
-1. Resolve the main worktree and record Source HEAD、branch、dirty state.
+1. Select one repository root with `--project-root` and record that worktree's path, Source HEAD, branch, and dirty state. Manual callers choose the root; scheduled callers pass it.
 2. Validate the repository configuration and target branch.
 3. Collect optional pending files, `records.done`, and direct child packages.
 4. Emit item-level inventory: `pending-registry` items, reachable terminal Gate Durable Deltas as `gap-catching`, and done-filtered items with reasons. Pending never suppresses gap-catching; done does.
@@ -11,6 +11,6 @@
 
 ## 判断提醒
 
-- 先固定主工作区的 Source HEAD、branch 和 dirty 状态，再收集 source；Source HEAD 只定义本轮读取快照，target branch 另行证明是否已合入。
+- All phases use the selected root for configuration, source collection, and verification. Do not resolve a different worktree during inventory. Source HEAD defines this run's read snapshot; target branch separately proves whether a comparison commit has been merged.
 - inventory 只提供候选；`candidate`、冲突和 owner intent 仍由 agent 依据直接证据判断，报告中的候选不等于 apply 批准。
 - `validate_config.py`、`contract_preflight.py` 和 inventory 脚本保持只读；`contract_preflight.py` 委托当前状态引擎校验 format/version，backfill 不另建兼容层。Audit 输出也不改变 stable docs、pending、records 或 package。

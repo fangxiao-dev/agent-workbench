@@ -911,6 +911,43 @@ def _journey_spec(package: Path) -> dict[str, Any]:
     return _journey_spec_text(_read(package / "spec.md"))
 
 
+def _frozen_journey_spec(
+    package: Path,
+    repo: Path,
+    revision: str,
+    acceptance: dict[str, Any],
+) -> dict[str, Any]:
+    baseline = acceptance["contractBaseline"]
+    if not _is_ancestor(repo, baseline["head"], revision):
+        raise StateError(
+            "frozen contract baseline is not an ancestor of the Gate comparison commit"
+        )
+    package_rel = package.resolve().relative_to(repo.resolve()).as_posix()
+    spec_path = f"{package_rel}/spec.md"
+    code, text, error = _run_git_result(repo, "show", f"{revision}:{spec_path}")
+    if code != 0:
+        detail = error.strip() or "file not found"
+        raise StateError(
+            f"frozen contract spec.md is unavailable at {revision}: {detail}"
+        )
+    code, blob, error = _run_git_result(repo, "rev-parse", "--verify", f"{revision}:{spec_path}")
+    if code != 0 or FIXED_COMMIT_RE.fullmatch(blob.strip()) is None:
+        detail = error.strip() or blob.strip() or "invalid blob ID"
+        raise StateError(f"frozen contract spec.md has no readable Git blob at {revision}: {detail}")
+    accepted_blobs = {baseline["files"]["spec.md"]}
+    accepted_blobs.update(
+        amendment.get("affectedBlobs", {}).get("spec.md")
+        for amendment in acceptance["amendments"]
+        if amendment.get("affectedBlobs", {}).get("spec.md") is not None
+    )
+    if blob.strip() not in accepted_blobs:
+        raise StateError(
+            f"frozen contract spec.md blob {blob.strip()} at {revision} "
+            "does not match contractBaseline or a recorded Amendment"
+        )
+    return _journey_spec_text(text, f"spec.md@{revision[:7]}")
+
+
 def _journey_expected_surface(step: dict[str, Any]) -> str:
     return {"页面": "page", "文件": "file", "记录": "log"}[step["entryType"]]
 
@@ -1725,7 +1762,14 @@ def _validate_acceptance_state(package: Path, repo: Path, acceptance: Any, info:
     return acceptance
 
 
-def _validate_state(package: Path, state: dict[str, Any], *, projections: bool = True, validate_live_artifacts: bool = True) -> dict[str, Any]:
+def _validate_state(
+    package: Path,
+    state: dict[str, Any],
+    *,
+    projections: bool = True,
+    validate_live_artifacts: bool = True,
+    frozen_contract_commit: str | None = None,
+) -> dict[str, Any]:
     if not isinstance(state, dict):
         raise StateError("state.json must be an object")
     format_version = _state_format_version(state)
@@ -1751,8 +1795,17 @@ def _validate_state(package: Path, state: dict[str, Any], *, projections: bool =
     if not info["tickets"]:
         raise StateError(f"format {format_version} requires tickets=true")
     lifecycle = _lifecycle(package, attempt["id"], repo)
-    live_artifacts = validate_live_artifacts and lifecycle.value == "active"
-    journey_spec = _journey_spec(package) if format_version == "3.6" else None
+    live_artifacts = validate_live_artifacts and lifecycle.value == "active" and frozen_contract_commit is None
+    if format_version == "3.6" and (lifecycle.frozen or frozen_contract_commit is not None):
+        assert acceptance is not None
+        journey_spec = _frozen_journey_spec(
+            package,
+            repo,
+            frozen_contract_commit or lifecycle.gate["commit"],
+            acceptance,
+        )
+    else:
+        journey_spec = _journey_spec(package) if format_version == "3.6" else None
     documents = _ticket_documents(package, attempt["id"], format_version)
     if journey_spec is not None:
         _validate_journey_coverage(journey_spec, documents)
@@ -1855,7 +1908,11 @@ def _v36_acceptance_status(
     spec = summary["_journeySpec"]
     records_by_key = state["evidenceIndex"]
     stale: set[str] = set()
+    current_supporting_keys: set[str] = set()
+    stale_journey_keys: dict[str, set[str]] = {}
+    stale_run_setup_ids: set[str] = set()
     run_records: dict[tuple[str, str], list[tuple[str, dict[str, Any]]]] = {}
+    run_journeys: dict[str, set[str]] = {}
     surface_validity: dict[int, bool] = {}
     first_visible = summary["_acceptance"]["harness"]["firstVisibleStep"]
     first_visible_records: list[dict[str, Any]] = []
@@ -1898,12 +1955,21 @@ def _v36_acceptance_status(
                 except (OSError, StateError):
                     surface_validity[id(record)] = False
                     valid = False
-            if record["conclusion"] == "supporting" and not valid:
-                stale.add(evidence_key)
+            if record["conclusion"] == "supporting":
+                if not valid:
+                    stale.add(evidence_key)
+                    if kind == "journey-step":
+                        stale_journey_keys.setdefault(evidence_key, set()).add(record["journeyId"])
+                    elif kind == "run-setup":
+                        stale_run_setup_ids.add(record["runId"])
+                elif kind not in {"journey-step", "run-setup"}:
+                    current_supporting_keys.add(evidence_key)
             if kind == "journey-step":
                 run_records.setdefault((record["journeyId"], record["runId"]), []).append((evidence_key, record))
+                run_journeys.setdefault(record["runId"], set()).add(record["journeyId"])
 
     journey_rows = []
+    complete_journeys: set[str] = set()
     for journey in spec["journeys"]:
         best_reach = 0
         best_rehearsal_reach = 0
@@ -1962,6 +2028,8 @@ def _v36_acceptance_status(
                 if not any(record["surface"] == expected_surface for record in valid_records):
                     break
                 reach += 1
+            if reach == len(journey["steps"]):
+                complete_journeys.add(journey["id"])
             best_reach = max(best_reach, reach)
             best_rehearsal_reach = max(best_rehearsal_reach, rehearsal_reach)
             for surface, count in run_surface_counts.items():
@@ -1985,6 +2053,15 @@ def _v36_acceptance_status(
                 for step_id, manual_by in sorted(manual_walkthroughs)
             ],
         })
+
+    stale.difference_update(current_supporting_keys)
+    for evidence_key, journey_ids in stale_journey_keys.items():
+        if journey_ids & complete_journeys:
+            stale.discard(evidence_key)
+    for run_id in stale_run_setup_ids:
+        associated_journeys = run_journeys.get(run_id, set())
+        if associated_journeys and associated_journeys <= complete_journeys:
+            stale.discard(f"run-setup:{run_id}")
 
     suite_rows = []
     for suite_id, suite in spec["suites"].items():
@@ -3781,6 +3858,13 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
         state["activeCheckpoints"] = {}
     gate = {"verdict": verdict, "commit": resolved, "environment": environment}
     _update_history(state, summary["attempt"], "frozen" if verdict in TERMINAL_VERDICTS else "active", gate)
+    if verdict in TERMINAL_VERDICTS:
+        _validate_state(
+            package,
+            state,
+            projections=False,
+            frozen_contract_commit=resolved,
+        )
     lines = ["# Gate\n", f"- Verdict: {verdict}\n", f"- Attempt: {summary['attempt']}\n", f"- Comparison commit: {resolved}\n", f"- Reason: {reason.strip()}\n"]
     if v36_status is not None:
         lines.append("\n")

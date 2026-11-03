@@ -20,4 +20,4 @@ Gap-catching candidates are item-level and form only when:
 
 Pending-registry items remain readable even when Gate recognition is unavailable. Closing or deleting a pending line must not reintroduce the same delta: `records.done` is the sole machine dedup for already-handled items. A new patch / new comparison commit can re-open candidacy for the same delta-id.
 
-Backfill always records the main worktree Source HEAD/branch/dirty state. Other worktrees are optional research inputs and must not be merged into the source snapshot silently. Missing configured implementation/stable-doc paths are verification failures; missing optional pending or a not-yet-created done file is not.
+Backfill records the selected `--project-root` worktree's Source HEAD/branch/dirty state and uses that same root for configuration, inventory, and verification. Manual callers choose the root; scheduled callers pass it. Other worktrees are optional research inputs and must not be merged into the source snapshot silently. Missing configured implementation/stable-doc paths are verification failures; missing optional pending or a not-yet-created done file is not.
