@@ -98,16 +98,13 @@ def terminate_process_tree(pid: int) -> None:
 
 
 def resolve_codex_executable(explicit: str | None) -> str:
-    """Find a usable CLI without selecting the WindowsApps package resource."""
+    """Prefer the newest desktop CLI (the PATH shim may be an outdated install), without selecting the WindowsApps package resource."""
 
     if explicit:
         return explicit
     override = os.environ.get("CODEX_EXECUTABLE")
     if override:
         return override
-    path_command = shutil.which("codex.cmd") or shutil.which("codex")
-    if path_command and "\\windowsapps\\" not in path_command.lower().replace("/", "\\"):
-        return path_command
     local_app_data = os.environ.get("LOCALAPPDATA")
     if local_app_data:
         desktop_bin = Path(local_app_data) / "OpenAI" / "Codex" / "bin"
@@ -115,6 +112,9 @@ def resolve_codex_executable(explicit: str | None) -> str:
         usable_candidates = [candidate for candidate in desktop_candidates if candidate.is_file()]
         if usable_candidates:
             return str(max(usable_candidates, key=lambda candidate: candidate.stat().st_mtime))
+    path_command = shutil.which("codex.cmd") or shutil.which("codex")
+    if path_command and "\\windowsapps\\" not in path_command.lower().replace("/", "\\"):
+        return path_command
     raise ExecutorError("BINARY_NOT_FOUND", "could not find a usable Codex CLI; set --executable or CODEX_EXECUTABLE")
 
 

@@ -22,51 +22,6 @@ LEDGER_PARTICIPANT_PROMPT_PATH = SKILL_DIR / "references" / "ledger-participant-
 CALL_CODEX = SKILL_DIR.parent / "call-codex" / "scripts" / "call_codex.py"
 CALL_CLAUDE = SKILL_DIR.parent / "call-claude" / "scripts" / "call_claude.py"
 CALL_GROK = SKILL_DIR.parent / "call-grok" / "scripts" / "grok_task.py"
-CLAUDE_AGENT_RESULT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "additionalProperties": False,
-    "properties": {
-        "convergences": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "point": {"type": "string"},
-                    "marker": {"type": "string"},
-                    "line": {"type": "string"},
-                },
-                "required": ["point", "marker", "line"],
-            },
-        },
-        "contests": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "point": {"type": "string"},
-                    "body": {"type": "string"},
-                    "movement": {"type": "boolean"},
-                },
-                "required": ["point", "body", "movement"],
-            },
-        },
-        "new_points": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "summary": {"type": "string"},
-                    "body": {"type": "string"},
-                },
-                "required": ["summary", "body"],
-            },
-        },
-    },
-    "required": ["convergences", "contests", "new_points"],
-}
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
@@ -74,6 +29,17 @@ from discuss_ledger_core import ledger
 
 
 SUPPORTED_AGENTS = {"codex", "claude", "grok"}
+CLAUDE_MODEL_ARGS = ["--model", "sonnet", "--effort", "high"]
+CLAUDE_SYSTEM_PROMPT = "You are a non-interactive discuss-ledger participant. Prefer Chinese unless the task explicitly requires another language. Return only the requested structured result."
+
+
+def claude_schema_json(path: Path = SCHEMA_PATH) -> str:
+    """Canonical schema without the draft markers Claude's validator rejects."""
+
+    schema = json.loads(path.read_text(encoding="utf-8"))
+    schema.pop("$schema", None)
+    schema.pop("$id", None)
+    return json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
 
 
 class AdapterError(RuntimeError):
@@ -175,22 +141,6 @@ def iter_agent_result_candidates(value: Any):
     elif isinstance(value, list):
         for nested in value:
             yield from iter_agent_result_candidates(nested)
-
-
-def parse_codex_jsonl(output: str) -> dict[str, Any]:
-    candidates: list[dict[str, Any]] = []
-    for line in output.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        candidates.extend(iter_agent_result_candidates(event))
-    if candidates:
-        return candidates[-1]
-    return parse_json_object(output)
 
 
 def extract_agent_result(data: Any) -> dict[str, Any] | None:
@@ -452,6 +402,10 @@ def run_codex(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
         [
             "--config",
             'service_tier="fast"',
+            "--config",
+            'model_reasoning_effort="high"',
+            "--model",
+            "",
             "--sandbox",
             "read-only",
             "--ephemeral",
@@ -465,55 +419,23 @@ def run_codex(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
     return parse_json_object(text)
 
 
-def run_claude(prompt: str, root: Path, timeout_s: int, effort: str = "low") -> dict[str, Any]:
-    schema_json = json.dumps(CLAUDE_AGENT_RESULT_SCHEMA, ensure_ascii=False, separators=(",", ":"))
-    text = run_executor(
-        CALL_CLAUDE,
-        [
-            "--no-session-persistence",
-            "--disable-slash-commands",
-            "--effort",
-            effort,
-            "--tools",
-            "Read,Glob,Grep",
-            "--system-prompt",
-            "You are a non-interactive discuss-ledger participant. Prefer Chinese unless the task explicitly requires another language. Return only the requested structured result.",
-            "--json-schema",
-            schema_json,
-        ],
-        prompt,
-        root,
-        timeout_s,
-    )
+def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
+    schema_json = claude_schema_json()
+    base = ["--no-session-persistence", "--disable-slash-commands", *CLAUDE_MODEL_ARGS, "--system-prompt", CLAUDE_SYSTEM_PROMPT]
+    text = run_executor(CALL_CLAUDE, [*base, "--tools", "Read,Glob,Grep", "--json-schema", schema_json], prompt, root, timeout_s)
     result = extract_agent_result_from_text(text)
     if result is not None:
         return result
 
-    invalid_output = text
     repair_prompt = (
         "Repair the following Claude result text into one JSON object matching the discuss-ledger schema. "
         "Return only the repaired agent result object, not the Claude CLI wrapper, not markdown. "
         "Preserve or convert prose to Chinese unless another language is explicitly required. "
         "Escape quotation marks inside JSON string values.\n\n"
         f"Schema:\n{schema_json}\n\n"
-        f"Invalid Claude result text:\n{invalid_output}"
+        f"Invalid Claude result text:\n{text}"
     )
-    retry_text = run_executor(
-        CALL_CLAUDE,
-        [
-            "--no-session-persistence",
-            "--disable-slash-commands",
-            "--effort",
-            effort,
-            "--tools",
-            "",
-            "--system-prompt",
-            "You are a non-interactive discuss-ledger participant. Prefer Chinese unless the task explicitly requires another language. Return only the requested structured result.",
-        ],
-        repair_prompt,
-        root,
-        timeout_s,
-    )
+    retry_text = run_executor(CALL_CLAUDE, [*base, "--tools", ""], repair_prompt, root, timeout_s)
     result = extract_agent_result_from_text(retry_text)
     if result is not None:
         return result
@@ -577,14 +499,13 @@ def call_agent(
     status: ledger.LedgerStatus,
     fake: bool,
     timeout_s: int,
-    claude_effort: str = "low",
 ) -> dict[str, Any]:
     if fake:
         return run_fake(agent, status)
     if agent == "codex":
         return run_codex(prompt, root, timeout_s)
     if agent == "claude":
-        return run_claude(prompt, root, timeout_s, claude_effort)
+        return run_claude(prompt, root, timeout_s)
     if agent == "grok":
         return run_grok(prompt, root, timeout_s)
     raise AdapterError("UNSUPPORTED_AGENT", agent)
@@ -606,7 +527,6 @@ def orchestrate(
     max_rounds: int,
     fake: bool,
     timeout_s: int,
-    claude_effort: str = "low",
 ) -> int:
     ensure_ledger(root, topic, slug, agents)
     for _round_index in range(max_rounds):
@@ -619,14 +539,14 @@ def orchestrate(
             status = ledger.get_status(root=root, slug=slug)
             target_document = read_target_document(root, topic)
             prompt = build_prompt(agent, topic, target_document, status)
-            payload = normalize_result(call_agent(agent, prompt, root, status, fake, timeout_s, claude_effort))
+            payload = normalize_result(call_agent(agent, prompt, root, status, fake, timeout_s))
             try:
                 validate_turn_against_ledger(status, payload)
             except AdapterError as exc:
                 if exc.code != "INVALID_TURN":
                     raise
                 correction_prompt = build_turn_correction_prompt(prompt, status, exc)
-                payload = normalize_result(call_agent(agent, correction_prompt, root, status, fake, timeout_s, claude_effort))
+                payload = normalize_result(call_agent(agent, correction_prompt, root, status, fake, timeout_s))
                 validate_turn_against_ledger(status, payload)
             try:
                 result = ledger.record_agent_turn(
@@ -668,17 +588,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--adapter-mode", choices=["real", "fake"], default="real")
     parser.add_argument("--fake", action="store_true", help="use deterministic fake adapters")
     parser.add_argument("--timeout-s", type=int, default=300, help="per-agent timeout in seconds")
-    parser.add_argument("--claude-effort", choices=["low", "medium"], default="low", help="Claude effort selected by the calling agent from target scale")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    ledger_path: Path | None = None
     try:
         root, topic = resolve_root_and_topic(args.root, args.topic)
         agents = parse_agents(args.agents)
         slug = args.slug or ledger.derive_slug(topic)
+        ledger_path = root / ledger.DEFAULT_DIR / f"discuss-{slug}.md"
         fake = args.fake or args.adapter_mode == "fake"
         return orchestrate(
             root=root,
@@ -688,10 +609,13 @@ def main(argv: list[str] | None = None) -> int:
             max_rounds=args.max_rounds,
             fake=fake,
             timeout_s=args.timeout_s,
-            claude_effort=args.claude_effort,
         )
     except (AdapterError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
+        if ledger_path is not None and ledger_path.exists():
+            print(f"ledger kept: {ledger_path}", file=sys.stderr)
+        if isinstance(exc, AdapterError) and exc.code == "AUTH":
+            print("auth looks wrong: see references/claude-code-noninteractive.md", file=sys.stderr)
         return 2
 
 

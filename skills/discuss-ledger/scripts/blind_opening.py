@@ -86,21 +86,11 @@ def executor_path(agent: str) -> Path:
         raise BlindOpeningError(f"unsupported agent: {agent}") from exc
 
 
-def claude_schema_json() -> str:
-    """Render the canonical schema for Claude's draft-agnostic validator."""
-
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-    schema.pop("$schema", None)
-    schema.pop("$id", None)
-    return json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
-
-
 def call_executor(
     agent: str,
     prompt: str,
     root: Path,
     timeout_s: int,
-    claude_effort: str = "low",
 ) -> dict[str, list[dict[str, str]]]:
     path = executor_path(agent)
     if not path.is_file():
@@ -111,8 +101,12 @@ def call_executor(
             [
                 "--timeout-s",
                 str(timeout_s),
+                "--model",
+                "",
                 "--config",
                 'service_tier="fast"',
+                "--config",
+                'model_reasoning_effort="high"',
                 "--sandbox",
                 "read-only",
                 "--ephemeral",
@@ -125,14 +119,13 @@ def call_executor(
             [
                 "--timeout-s",
                 str(timeout_s),
-                "--effort",
-                claude_effort,
+                *orchestrator.CLAUDE_MODEL_ARGS,
                 "--tools",
                 "Read,Glob,Grep",
                 "--system-prompt",
                 "You are a non-interactive Blind Opening participant. Return only the requested structured result.",
                 "--json-schema",
-                claude_schema_json(),
+                orchestrator.claude_schema_json(SCHEMA_PATH),
                 "--no-session-persistence",
             ]
         )
@@ -227,19 +220,10 @@ def run_blind_opening(
     timeout_s: int,
     output_dir: Path,
     fake: bool = False,
-    claude_effort: str = "low",
     agent_runner: Callable[[str, str, Path, int], dict[str, list[dict[str, str]]]] | None = None,
 ) -> dict[str, Any]:
     target_document = orchestrator.read_target_document(root, topic)
-    runner = agent_runner or (
-        lambda agent, prompt, runner_root, runner_timeout: call_executor(
-            agent,
-            prompt,
-            runner_root,
-            runner_timeout,
-            claude_effort,
-        )
-    )
+    runner = agent_runner or call_executor
     participants: list[dict[str, Any]] = []
     for agent in agents:
         prompt = build_prompt(agent, topic, target_document)
@@ -263,7 +247,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--slug", help="result slug; defaults to topic-derived slug")
     parser.add_argument("--agents", default="codex,claude", help="comma list: codex, claude, grok")
     parser.add_argument("--timeout-s", type=int, default=300, help="per participant timeout in seconds")
-    parser.add_argument("--claude-effort", choices=["low", "medium"], default="low", help="Claude effort selected by the calling agent from target scale")
     parser.add_argument("--output-dir", default=str(Path(tempfile.gettempdir()) / "discuss-ledger"))
     parser.add_argument("--fake", action="store_true", help="use deterministic fake participants")
     return parser
@@ -283,7 +266,6 @@ def main(argv: list[str] | None = None) -> int:
             timeout_s=args.timeout_s,
             output_dir=Path(args.output_dir),
             fake=args.fake,
-            claude_effort=args.claude_effort,
         )
         print(json.dumps({"ok": True, "artifacts": result["artifacts"], "initial_points": result["initial_points"]}, ensure_ascii=False))
         return 0
