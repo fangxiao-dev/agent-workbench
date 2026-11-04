@@ -36,11 +36,15 @@ Completion criterion: every dispatch records its phase and resolved reviewer lea
 This section applies only to `Loop`. The parent records each selected track as `active`, `probation`, or `dormant`, with a consecutive-clean count:
 
 - Every selected track starts `active` at zero and participates in Round 1.
-- Only the parent may call a track clean, after deduplication, evidence verification, and classification. Clean means no distinct new accepted blocker or follow-up from that track; duplicate, refinement, disputed, out-of-scope, and backlog-only candidates do not reset the count.
+- Only the parent may call a track clean, after deduplication, evidence verification, and classification. Clean means no **new, must-fix** finding from that track: both conditions must hold for a round to stay dirty.
+  - **Must-fix** means an accepted blocker. An accepted follow-up is recorded in the ledger and tracked to closure, but it does not reset the count.
+  - **New** means the finding does not derive from an earlier accepted finding. A candidate that continues an earlier finding, or that the fix for an earlier finding introduced, is a *derived* finding. The parent links it to that earlier finding in the ledger and closes it through `finding-closure` for that finding. It does not reset the count and does not open a new formal round for the track.
+  - The parent makes the new-or-derived call and records the link. A reviewer's own framing does not decide it.
+  - Duplicate, refinement, disputed, out-of-scope, and backlog-only candidates do not reset the count either.
 - The first clean round moves a track to `probation`, and it must run again. The second consecutive clean round moves it to `dormant`, so later Loop rounds need not dispatch it.
-- A new accepted blocker/follow-up resets its source track to `active` at zero. A finding from another track reactivates a dormant track when it materially affects that track's responsibility, evidence boundary, or likely fix surface.
+- A new accepted blocker resets its source track to `active` at zero. A finding from another track reactivates a dormant track when it materially affects that track's responsibility, evidence boundary, or likely fix surface.
 - Incomplete, timeout, `PARTIAL`, `UNCERTAIN`, or an evidence gap never counts as clean. Dormant means two independently clean rounds, not permanent removal or proof by itself.
 
-Convergence requires both no distinct new accepted blocker/follow-up in the latest completed round and every selected track dormant. A reactivated track must again complete two consecutive clean rounds. `N rounds` and `Closure verification` keep all resolved tracks active and do not use dormancy.
+Convergence requires both no new must-fix finding (as defined above) in the latest completed round and every selected track dormant. Derived findings must be closed through `finding-closure` before convergence is reported, but they never reopen a formal round on their own. A reactivated track must again complete two consecutive clean rounds. `N rounds` and `Closure verification` keep all resolved tracks active and do not use dormancy.
 
 Completion criterion: the ledger explains every lifecycle transition and the evidence/classification that caused it.

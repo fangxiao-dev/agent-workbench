@@ -216,7 +216,10 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertIn("first clean round", lifecycle)
         self.assertIn("second consecutive clean round", lifecycle)
         self.assertIn("reactivates a dormant track", lifecycle)
-        self.assertRegex(lifecycle, r"(?s)Convergence requires.*no distinct new accepted blocker/follow-up.*every selected track dormant")
+        self.assertRegex(lifecycle, r"(?s)Convergence requires.*no new must-fix finding.*every selected track dormant")
+        self.assertIn("*derived* finding", lifecycle)
+        self.assertIn("does not open a new formal round", lifecycle)
+        self.assertIn("follow-up is recorded in the ledger and tracked to closure, but it does not reset the count", lifecycle)
 
     def test_output_structure_preserves_per_track_fail_closed_and_terminal_coverage(self) -> None:
         templates = TEMPLATES_PATH.read_text(encoding="utf-8")
