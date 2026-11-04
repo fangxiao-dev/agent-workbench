@@ -2622,7 +2622,12 @@ def _validate_journey_step_order(state: dict[str, Any], spec: dict[str, Any], re
     steps_by_position: dict[int, list[dict[str, Any]]] = {}
     for records in state["evidenceIndex"].values():
         for existing in records:
-            if existing.get("kind") == "journey-step" and existing.get("runId") == record["runId"]:
+            # 一次 run 可连续走多条 Journey，顺序只在同一 Journey 内核对。
+            if (
+                existing.get("kind") == "journey-step"
+                and existing.get("runId") == record["runId"]
+                and existing.get("journeyId") == record["journeyId"]
+            ):
                 steps_by_position.setdefault(positions[existing["stepId"]], []).append(existing)
     if not steps_by_position:
         if current_position != 0:
