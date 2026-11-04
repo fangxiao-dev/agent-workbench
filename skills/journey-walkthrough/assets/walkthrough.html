@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Journey 导览 · 骨架示例</title>
+<style>
+:root{color-scheme:light;--ink:#242b2a;--muted:#596763;--line:#d9dfda;--green:#176047}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}
+body{margin:0;background:#fafbf8;color:var(--ink);font:17px/1.85 "Segoe UI","Microsoft YaHei",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:48px 40px 72px}
+h1{font-size:36px;line-height:1.4;margin:10px 0 20px}h2{font-size:26px;line-height:1.5;margin:8px 0 18px}
+p{margin:12px 0 20px}a{color:var(--green)}.muted,small{color:var(--muted);font-size:14px}
+header,section{padding-bottom:32px;margin-bottom:32px;border-bottom:1px solid var(--line)}
+.tags{display:flex;gap:8px;flex-wrap:wrap}.tag{font-size:14px;padding:3px 10px;border:1px solid var(--line);border-radius:4px;background:white}
+.pass{background:#e8f2eb;color:#176047}.pending{background:#fff4d9;color:#795514}.fail{background:#fff0ee;color:#9c3026}
+nav{display:flex;gap:20px;margin:24px 0;font-size:15px}
+.callout{padding:12px 20px;background:#eef3ee;border-left:3px solid var(--green)}
+figure{margin:24px 0;background:white;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+figure img{display:block;width:100%;height:auto}figcaption{padding:12px 18px;font-size:15px}
+.image-tools{padding:0 18px 14px}button{font:inherit;font-size:14px;padding:5px 12px;color:var(--green);background:white;border:1px solid #bacbc0;border-radius:4px;cursor:pointer}
+button:hover{background:#edf4ee}button:focus-visible,a:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+details{font-size:14px;margin:20px 0}summary{cursor:pointer;color:var(--green)}code{overflow-wrap:anywhere}
+dialog{width:94vw;max-width:1700px;height:92vh;padding:0;border:0;border-radius:5px}
+dialog::backdrop{background:#17251dcc}.viewer-bar{display:flex;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+.viewer-bar span{flex:1;font-size:14px}.viewer-body{height:calc(100% - 60px);overflow:auto;background:#eee}
+.viewer-body img{display:block;width:100%;height:auto}.viewer-body.actual img{width:auto;max-width:none}
+</style>
+</head>
+<body>
+<main>
+<!-- 这些是可自由组合的组件示例，不是固定章节格式。 -->
+<header>
+  <p class="muted">骨架示例 · 以下文案和图片不是实际验收证据</p>
+  <h1>功能名称：跟着截图走一遍</h1>
+  <p>这里说明本次展示的业务变化、范围，以及哪些结果已经实际验证。</p>
+  <div class="tags"><span class="tag">环境与版本</span><span class="tag pass">已通过：示例</span><span class="tag pending">待验证：示例</span><span class="tag fail">失败：示例</span></div>
+</header>
+<!-- 可选目录；Journey 少时可以删除。 -->
+<nav aria-label="导览目录"><a href="#journey">查看操作过程</a><a href="#remaining">查看剩余事项</a></nav>
+<section id="journey">
+  <p class="muted">01 · Journey 名称</p>
+  <h2>用用户要完成的事情作为标题</h2>
+  <p>说明谁在什么情况下，从哪个入口进行了什么操作。根据材料自由安排段落，不需要复用本示例的句式。</p>
+  <p class="callout">看图提示：指出截图中的具体位置，以及它与本次操作结果的关系。</p>
+  <figure>
+    <!-- 用真实截图的 data URI 替换 src；占位图只是说明组件如何显示。 -->
+    <img alt="示例占位，非验收截图" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1000' height='260'%3E%3Crect width='1000' height='260' fill='%23edf2ee'/%3E%3Ctext x='500' y='140' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%23596763'%3EScreenshot placeholder - replace with actual evidence%3C/text%3E%3C/svg%3E">
+    <figcaption>图注：解释这张图展示的状态。截图之外的持久化或数据结果另用文字和来源说明。</figcaption>
+    <div class="image-tools"><button type="button" class="zoom">放大查看原图</button></div>
+  </figure>
+  <p>实际结果：根据本次执行记录说明结果和证据边界。若没有对应记录，明确写“尚未验证”。</p>
+  <details><summary>查看这一项的证据来源</summary><p>示例：项目相对路径 <code>任务目录/验收报告.md</code>，对应运行标识与截图名称。这里不是有效文件链接，交付时替换。</p></details>
+</section>
+<section id="remaining">
+  <h2>还需要确认什么</h2>
+  <p>如实说明未完成、失败或材料不足的部分；没有剩余事项时可以删除本节。</p>
+</section>
+</main>
+<dialog id="viewer" aria-labelledby="viewer-title">
+  <div class="viewer-bar"><span id="viewer-title">截图</span><button id="size" type="button">原始尺寸</button><button id="close" type="button">关闭</button></div>
+  <div class="viewer-body" id="viewer-body"><img id="large" alt=""></div>
+</dialog>
+<script>
+const viewer=document.getElementById('viewer'),large=document.getElementById('large');
+const body=document.getElementById('viewer-body'),size=document.getElementById('size');
+document.querySelectorAll('.zoom').forEach(button=>button.addEventListener('click',()=>{
+  const img=button.closest('figure').querySelector('img');
+  large.src=img.src;large.alt=img.alt;
+  document.getElementById('viewer-title').textContent=img.alt;
+  body.classList.remove('actual');size.textContent='原始尺寸';
+  viewer.showModal();body.scrollTop=0;body.scrollLeft=0;
+}));
+document.getElementById('close').addEventListener('click',()=>viewer.close());
+size.addEventListener('click',()=>{body.classList.toggle('actual');size.textContent=body.classList.contains('actual')?'适合宽度':'原始尺寸'});
+viewer.addEventListener('click',event=>{if(event.target===viewer)viewer.close()});
+</script>
+</body>
+</html>

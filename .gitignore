@@ -36,3 +36,7 @@ skills-local/
 
 # situation render credentials produced by fixture tests
 /tests/fixtures/situations/**/situation-digest.json
+
+# private skills (personal data)
+/skills/chat-with-liv/
+/skills/search-pyq/
