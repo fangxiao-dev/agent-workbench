@@ -7,7 +7,7 @@ description: 审查 implementation plan 或完整 plan/Ticket/DAG bundle 的可�
 
 审查实际 candidate 并返回判决，不做审计机械；review 只读，批准后的业务文档由 owning-stage 主 thread 在 approved write-set 内直接更新，运行状态由主 thread 直接通过语义 CLI 更新。初始 Decision/Spec/Plan bundle 的 review 产出最终 owner approval；同一 package 的后续 patch、closure 或记录更新沿用该 approval。
 
-审查包含 Ticket 的 bundle 时先读 `../../references/impl-package-composition-contract.md`，用其中的 Ticket、typed dependency 与验收合同判断 candidate：`Acceptance: journey` 的新 package 看 §7（Journey、套件、Ticket Coverage），沿用 3.5 的 package 看 §6（stable claim acceptance atom）。
+审查包含 Ticket 的 bundle 时先读 `../../references/impl-package-composition-contract.md`，用其中的 Ticket、typed dependency 与验收合同判断 candidate：验收看 §7（Journey、套件、Ticket Coverage）。
 
 ## Modes
 
@@ -34,7 +34,7 @@ mode 省略时使用 `full-review`。`bundle-admission` 只有在 bundle 完整�
    5. **验证**：Planned Verification，确认每个 material behavior 有入口、测试层级、可观察 oracle 和 evidence owner，每个 Journey step 声明了操作入口与观察表面（页面承诺的步骤是页面入口）；否则“增加测试”不能区分正确实现与常见错误实现。
    6. **回退**：rollback，检查兼容、迁移、拒绝、归档或 compensation 语义；否则破坏性变化会把恢复方案留给实施者猜测。
    7. **归属**：ownership/dependencies，确认 owner、handoff、依赖释放和真实消费者边界；否则没有明确责任人承接失败、迁移或发布协调。
-   8. **验收**：Ticket AC，检查验收条件是否能落到可验证行为与 evidence，3.5 package 并按 Composition Contract 确认 stable claim 已原子化；可独立失败或依赖不同 oracle/evidence lane 的子句共用一个 claim 时返回 `revise`，同一不可分割 oracle 裁决的一组场景不强拆。否则 runtime 可能用部分 evidence 错误满足整个 Ticket。
+   8. **验收**：Ticket AC，检查验收条件是否能落到可验证行为与 evidence，每个 Journey step 与 ticket 级套件被某张 Ticket 的 Coverage 认领；可独立失败或依赖不同 oracle/evidence lane 的结论混在同一承诺里时返回 `revise`，同一不可分割 oracle 裁决的一组场景不强拆。否则 runtime 可能用部分 evidence 错误满足整个 Ticket。
    9. **授权**：integration authorization，确认 bundle approval、owner decision 和 integration gate；否则执行可能先于授权改变方案结果或产生不可逆影响。
 4. **区分问题类型**：material finding 会改变 behavior、safety、feasibility、acceptance、authority 或 execution order；editorial improvement 单独归类。
 5. **形成可执行结论**：每个 material item 给 evidence、impact、recommendation；仅当证据支持两个以上 material 不同有效结果时才请求 exact owner decision。

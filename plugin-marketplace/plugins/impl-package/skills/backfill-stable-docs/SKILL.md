@@ -43,7 +43,7 @@ description: 当需要审计 durable knowledge delta、把 owner 批准的子集
 
 在标准脚本路径下，Gate 不存在表示没有 Gate 证据；字段不完整、comparison commit 不可用或尚未进入 `targetBranch` 时不得形成 gap-catching/retirement 候选，但 pending-registry 仍可人工审计。Gate Durable Deltas 为 `none` 时不产生候选。显式来源兼容分支不要求 Gate 证据，但仍须按指定来源和 current evidence 人工形成候选并完成同样的校准。
 
-`contract_preflight.py` 在标准脚本路径下委托当前 Impl-Package 状态引擎校验活动 package，因此间接执行 `state.json` 的 `formatVersion: "3.5"` 检查；旧 schema 在兼容分支中只作为审计信号，不要求迁移，backfill 不复制或另行维护格式版本。
+`contract_preflight.py` 在标准脚本路径下委托当前 Impl-Package 状态引擎校验活动 package，因此间接执行 `state.json` 的 `formatVersion` 检查；旧 schema 在兼容分支中只作为审计信号，不要求迁移，backfill 不复制或另行维护格式版本。
 
 ## Apply
 

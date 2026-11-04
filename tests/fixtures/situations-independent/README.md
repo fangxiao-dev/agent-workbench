@@ -22,7 +22,6 @@
 | p0-checkpoint-missing | `attempt.record.checkpoint-missing` | supplyer `inventory-lock-renewal` |
 | p0-checkpoint-refresh | `attempt.record.checkpoint-refresh` | kaispan `260803-1332-category-sachkonto-bwa-coverage` |
 | p0-handoff-in-flight | `attempt.record.handoff-in-flight` | supplyer `260719-rechnung-email-216` |
-| p0-evidence-unfiled | `ticket.record.evidence-unfiled` | supplyer `order-create-release-consistency` |
 | p0-judgment-unfiled | `ticket.record.judgment-unfiled` | kaispan `2026-08-04-ocr-ai-worker-lane-split` |
 | p2-closure-awaiting | `finding.review.closure-awaiting` | supplyer `260719-rechnung-email-216` |
 | p2-worker-envelope-invalid | `finding.fix.worker-envelope-invalid` | kaispan `2026-08-04-ocr-ai-worker-lane-split` |
@@ -32,10 +31,6 @@
 | p3-comparison-head-unfixed | `attempt.review.comparison-head-unfixed` | kaispan `2026-07-14-datev-format-validator-spike` |
 | p1-worker-still-running | `attempt.readiness.worker-still-running` | kaispan `2026-08-04-ocr-ai-worker-lane-split` |
 | p1-all-edges-held | `attempt.readiness.all-edges-held` | kaispan `260803-1332-category-sachkonto-bwa-coverage` |
-| p4-acceptance-edge-held | `ticket.accept.acceptance-edge-held` | supplyer `order-create-release-consistency` |
-| p3-contradictory-unresolved | `ticket.verify.contradictory-unresolved` | supplyer `260719-rechnung-email-216` |
-| p4-satisfiable | `ticket.accept.satisfiable` | kaispan `260803-1332-category-sachkonto-bwa-coverage` |
-| p4-release-edge-unchecked | `ticket.accept.release-edge-unchecked` | supplyer `order-create-release-consistency` |
 | p4-comparison-mismatch | `attempt.gate.comparison-mismatch` | supplyer `order-create-release-consistency` |
 
 ## 未覆盖
@@ -55,3 +50,5 @@
 `confidence=medium`：`p0-projection-drift`、`p0-checkpoint-missing`、`p0-checkpoint-refresh`、`p0-handoff-in-flight`、`p0-judgment-unfiled`、`p3-integration-evidence-unavailable`、`p1-integration-carrier-unavailable`、`p4-release-edge-unchecked`。
 
 这些犹豫都已写在各自 `expected.json.note` 中；主要问题是人读表没有公开 active checkpoint、handoff 和 projection drift 的机械字段形状，或 legacy 没有 trail 只能按真实时间线补写。
+
+> state 已翻译到 3.6（`acceptance`、`spec.md`、Ticket Coverage）；对应已随 3.5 删除的 situation 的 fixture 已移除。

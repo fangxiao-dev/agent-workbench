@@ -5,7 +5,9 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 
 # Dev With Track
 
-开工只需读 `$dispatcher` 的执行原则（四行）；其余材料按需读：登记 evidence 或核对 claim 时读 `../../references/impl-package-composition-contract.md`（3.6 package 读 §7），恢复或核对 state 时读 `../../references/impl-package-current-state.md`（3.6 格式与命令在其“3.6 格式”节），当前 Attempt 涉及 material seam、browser/provider/native-tool 或真实系统运行验证时读 [`../../references/progressive-system-evidence.md`](../../references/progressive-system-evidence.md)。
+开工只需读 `$dispatcher` 的执行原则（四行）；其余材料按需读：登记 evidence 或核对 claim 时读 `../../references/impl-package-composition-contract.md` §7，恢复或核对 state 时读 `../../references/impl-package-current-state.md` 的“State schema”与“Ticket 与 evidence”节，当前 Attempt 涉及 material seam、browser/provider/native-tool 或真实系统运行验证时读 [`../../references/progressive-system-evidence.md`](../../references/progressive-system-evidence.md)。
+
+本 Skill 按 3.6（Journey 验收）书写；`formatVersion` 不是 3.6 的旧 package 不再支持。
 
 ## 业务控制循环
 
@@ -21,7 +23,7 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 
 本 Skill 拥有 Ticket readiness、语义裁决、State、Evidence、Execution Record、Checkpoint 与 Gate；`$dispatcher` 是通用执行协作入口，拥有候选选择、委派合同、资源隔离、receipt、return、delta review 和 idle。provider、executor、model 或 agent profile 由 Owner 或宿主选择。
 
-需要定位业务→执行协作→状态写入时读取 [Control Flow](references/control-flow.md)；恢复、返工、evidence 或 Gate mutation 时读取 [Runtime Protocol](references/runtime-protocol.md)。证据矛盾、部分写入、跨 stage 对账或异常排查时，主 session 直接核对 current state 与相关 artifact；复杂时可用 Dispatcher 委派只读调查。旧 Task Handoff 只作兼容恢复材料。
+需要定位业务→执行协作→状态写入时读取 [Control Flow](references/control-flow.md)；恢复、返工、evidence 或 Gate mutation 时读取 [Runtime Protocol](references/runtime-protocol.md)。证据矛盾、部分写入、跨 stage 对账或异常排查时，主 session 直接核对 current state 与相关 artifact；复杂时可用 Dispatcher 委派只读调查。
 
 外部副作用（push、merge、发布、生产/shared mutation、数据迁移、删除）需要独立授权；高风险动作先有 rollback 与可观察结果。
 
@@ -36,12 +38,11 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 ## State、ER 与 Trail
 
 - Ticket 状态、Evidence、Checkpoint 与 Trail 都通过 `impl_package_state.py` 语义 CLI 写入（唯一 writer 与 Task/Ticket 关系见 Composition Contract）；被拒就按错误信息处理，stale 先重读。worker 只返回结构化事实。
-- （3.5）登记 `supporting` 或 `ticket satisfy` 前，逐 stable claim 核对 artifact 是否覆盖完整 acceptance atom；可独立失败或需要不同 oracle 的子句交回 `impl-planning` 修订，已 `SATISFIED` 的 Ticket 先 `needs-revalidation`。
 - 显式 handoff 先写 checkpoint 再轮换 trail；trail 写错时追加更正。
 
-## Journey 验收（3.6 package）
+## Journey 验收
 
-3.5 package 沿用上文的 claim 流程。3.6 的格式与命令见 current-state，这里只写怎么做：
+格式与命令见 current-state，这里只写怎么做：
 
 - 每次 run 先执行 plan 的 `Harness setup` 与 `Harness precheck`，输出登记为 `run-setup` evidence；每个 run 创建新的业务对象，不重开别的 run 或后续步骤改过的对象（方法见 `validation-harness`）。
 - 每次合入后，从 Journey 第 1 步起按 Spec 的操作入口走到当前能到的最远一步，在观察表面取证，登记 `journey-step` evidence（同一 run、同一 environment，artifact 在 package 内）。reach 让 Owner 看到产品结果逐步前移；Gate 要的是最终版本上的一次走完。
@@ -80,7 +81,7 @@ terminal pass 要求 `review.terminal_summary` 支撑的 terminal-final coverage
 
 ## Verify and Gate
 
-Gate 只判断 current Attempt：`blocked` 保持 active 并记录 gap/next action；`pass` 按格式核对：3.5 要求 required Ticket、verification、review、manual acceptance 和 findings closure 均满足；3.6 按 Journey 与 Required Suites 两层核对，并检查 Ticket/依赖、terminal-final review、Amendment、发布顺序和既有终态条件，必需事实缺失或 unknown 时拒绝；`fail|defer` 如实终结，后续实现进入 patch Attempt。
+Gate 只判断 current Attempt：`blocked` 保持 active 并记录 gap/next action；`pass` 按 Journey 与 Required Suites 两层核对，并检查 Ticket/依赖、terminal-final review、Amendment、发布顺序和既有终态条件，必需事实缺失或 unknown 时拒绝；`fail|defer` 如实终结，后续实现进入 patch Attempt。
 
 Completion claim 不能宽于 evidence；准备写 terminal pass 或声称 complete/closed/fixed/merge-ready/release-ready 时，逐条核对 claim 与 evidence：
 
@@ -99,4 +100,4 @@ Completion claim 不能宽于 evidence；准备写 terminal pass 或声称 compl
 
 terminal Gate 完成 Stage 7：记录 Durable Delta 与 truth pointer，或写明无增量理由；随后冻结 state、checkpoint 与 Execution Record。transport disconnect 后从幂等事实恢复。
 
-先由本 Skill 根据 canonical facts 判断 Ticket 总数、剩余数、blocker、是否 closed 和需要 Owner 的决定；3.6 的 Gate 第一屏由 runtime 生成 Owner Summary（Journey 走通进度、套件、待确认 Amendment、发布顺序、最终版本），汇报先说产品结果。
+先由本 Skill 根据 canonical facts 判断 Ticket 总数、剩余数、blocker、是否 closed 和需要 Owner 的决定；Gate 第一屏由 runtime 生成 Owner Summary（Journey 走通进度、套件、待确认 Amendment、发布顺序、最终版本），汇报先说产品结果。

@@ -13,7 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "review_track_stats.py"
 STATE_CLI = ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "impl_package_state.py"
-PACKAGE_FIXTURE = ROOT / "tests" / "fixtures" / "impl-package-ticket-first"
+PACKAGE_FIXTURE = ROOT / "tests" / "fixtures" / "impl-package-state"
 
 
 def load_module():
@@ -39,7 +39,7 @@ def make_package(tmp_path: Path, attempts: tuple[str, ...] = ("initial",)) -> Pa
         for index, attempt in enumerate(attempts)
     ]
     state = {
-        "formatVersion": "3.5",
+        "formatVersion": "3.6",
         "attempt": {"id": attempts[-1], "plan": "plan.md"},
         "attemptHistory": history,
         "tickets": {"TKT-01": {"state": "PENDING"}, "TKT-02": {"state": "PENDING"}},
@@ -61,8 +61,8 @@ def make_runtime_package(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     package = repo / "docs" / "implementations" / "20260813-example"
     (package / "tickets").mkdir(parents=True)
-    shutil.copy2(PACKAGE_FIXTURE / "ticket-only-plan.md", package / "plan.md")
-    (package / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    shutil.copy2(PACKAGE_FIXTURE / "plan.md", package / "plan.md")
+    shutil.copy2(PACKAGE_FIXTURE / "spec.md", package / "spec.md")
     (package / "decision.md").write_text("# Decision\n", encoding="utf-8")
     for source in (PACKAGE_FIXTURE / "tickets").glob("*.md"):
         shutil.copy2(source, package / "tickets" / source.name)
@@ -113,6 +113,7 @@ def finding(
         "tracks": ["Track A"] if tracks is None else tracks,
         "classification": classification,
         "lifecycle": lifecycle,
+        "impact": "local",
     }
 
 
@@ -377,20 +378,33 @@ def test_record_uses_existing_state_cli_and_subject(tmp_path: Path, monkeypatch:
     assert captured["event"]["key"] == "review.canonical_summary"
 
 
-def test_v35_record_allows_impact_omission_and_rejects_invalid_values(tmp_path: Path) -> None:
+def test_record_requires_impact_and_rejects_invalid_values(tmp_path: Path) -> None:
     module = load_module()
     package = make_runtime_package(tmp_path)
-    legacy = summary("legacy-no-impact", [finding("one")])
+    missing = {key: value for key, value in finding("one").items() if key != "impact"}
 
-    result = module.record_summary(package, legacy)
-
-    assert result["appended"] is True
-    assert module.calculate_review_stats(package)["totals"]["unique"] == 1
+    with pytest.raises(module.ReviewStatsError, match="impact is required"):
+        module.record_summary(package, summary("no-impact", [missing]))
     with pytest.raises(module.ReviewStatsError, match="impact must be one of"):
         module.validate_canonical_summary(
-            summary("legacy-invalid-impact", [{**finding("bad"), "impact": "large"}]),
-            format_version="3.5",
+            summary("invalid-impact", [{**finding("bad"), "impact": "large"}]),
         )
+    assert module.record_summary(package, summary("with-impact", [finding("one")]))["appended"] is True
+    assert module.calculate_review_stats(package)["totals"]["unique"] == 1
+
+
+def test_record_rejects_unsupported_state_format(tmp_path: Path) -> None:
+    module = load_module()
+    package = make_package(tmp_path)
+    state_path = package / ".impl-package" / "state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["formatVersion"] = "3.5"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    with pytest.raises(module.ReviewStatsError, match="format 3.5 is no longer supported; start a new package"):
+        module.record_summary(package, summary("run-1", [finding("one")]))
+    with pytest.raises(module.ReviewStatsError, match="format 3.5 is no longer supported"):
+        module.calculate_review_stats(package)
 
 
 def test_backfill_dry_run_and_apply_are_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -4,7 +4,6 @@
 
 - Attempt: <attempt-id>
 - Contract aliases: optional; Git commit is the history anchor
-- Composition: tickets=true, dag=false（阶段 A 兼容占位）
 - Lifecycle: <active|frozen>
 - Latest gate: <open|blocked|pass|fail|defer>
 - Blockers: <none|items>

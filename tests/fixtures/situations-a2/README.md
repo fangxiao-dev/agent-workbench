@@ -18,7 +18,6 @@
 | p0-checkpoint-missing | P0 | attempt.record.checkpoint-missing | medium |
 | p0-checkpoint-refresh | P0 | attempt.record.checkpoint-refresh | medium |
 | p0-handoff-in-flight | P0 | attempt.record.handoff-in-flight | high |
-| p0-evidence-unfiled | P0 | ticket.record.evidence-unfiled | medium |
 | p0-judgment-unfiled | P0 | ticket.record.judgment-unfiled | high |
 | p2-closure-awaiting | P2 | finding.review.closure-awaiting | medium |
 | p2-worker-envelope-invalid | P2 | finding.fix.worker-envelope-invalid | medium |
@@ -27,9 +26,6 @@
 | p1-integration-carrier-unavailable | P1 | attempt.readiness.integration-carrier-unavailable | high |
 | p3-comparison-head-unfixed | P3 | attempt.review.comparison-head-unfixed | high |
 | p1-worker-still-running | P1 | attempt.readiness.worker-still-running | high |
-| p4-acceptance-edge-held | P4 | ticket.accept.acceptance-edge-held | high |
-| p4-satisfiable | P4 | ticket.accept.satisfiable | high |
-| p4-release-edge-unchecked | P4 | ticket.accept.release-edge-unchecked；ticket.accept.satisfiable | medium |
 | p3-revision-diverged | P3 | ticket.rework.revision-diverged | medium |
 | p3-revalidation-pending | P3 | ticket.rework.revalidation-pending | high |
 | p4-durable-delta-missing | P4 | attempt.gate.durable-delta-missing；attempt.accept.all-tickets-terminal | medium |
@@ -65,3 +61,5 @@ medium：
 - 未读取 situation.py、situations.yaml、既有 situations/situations-independent fixture 内容、tests/test_situation_render.py、reverify-report.md 或 replay 报告。
 - 未以任何方式运行 situation.py。验证只做了本目录的 JSON、JSONL、Ticket 字段、state 顶层键和 canonical fact key 闭集合检查。
 - p0-state-invalid 是目标行定义要求的故意 invalid state；其余 state 均按 3.5 输入合同的最小外形书写。
+
+> state 已翻译到 3.6（`acceptance`、`spec.md`、Ticket Coverage）；对应已随 3.5 删除的 situation 的 fixture 已移除。

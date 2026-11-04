@@ -92,17 +92,6 @@
       ]
     },
     {
-      "id": 9,
-      "prompt": "一个 stable claim 同时含多个可独立失败子句，artifact 只证明其中一部分。可以 satisfy 吗？",
-      "expected_output": "拒绝 satisfy并保持 Ticket pending；不登记 supporting，交 impl-planning 修订 acceptance atoms。",
-      "files": [],
-      "expectations": [
-        "partial evidence is insufficient",
-        "no dependency release",
-        "route to impl-planning"
-      ]
-    },
-    {
       "prompt": "terminal-final 返回 FAIL：Track A 提出 2 个 accepted blocker，其中 1 个的 fix worker 仍在途。主控下一步派什么？",
       "expected_output": "派 fix 并对已修复的 finding 派 finding-closure（一名 reviewer 只核对点名 findings）；不重新启动 terminal-final。等两个 finding 都闭合、没有在途 fix、HEAD 不再变化后，才在最终 HEAD 再起一次 terminal-final，并说明 C/Safety 是否按 admission 复用旧 PASS。",
       "files": [],

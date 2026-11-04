@@ -41,9 +41,13 @@ def _canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def validate_canonical_summary(
-    value: Any, *, allow_empty_tracks: bool = False, format_version: str | None = None
-) -> dict[str, Any]:
+def _require_current_format(state: Any) -> None:
+    version = state.get("formatVersion") if isinstance(state, dict) else None
+    if version != "3.6":
+        raise ReviewStatsError(f"format {version if version is not None else '(missing)'} is no longer supported; start a new package")
+
+
+def validate_canonical_summary(value: Any, *, allow_empty_tracks: bool = False) -> dict[str, Any]:
     """Validate and return a normalized machine-readable canonical summary."""
 
     if not isinstance(value, dict):
@@ -144,15 +148,14 @@ def validate_canonical_summary(
                 f"findings[{index}].lifecycle must be one of: {', '.join(sorted(LIFECYCLES))}"
             )
         item["lifecycle"] = lifecycle
-        if "impact" not in finding and format_version == "3.6":
-            raise ReviewStatsError(f"findings[{index}].impact is required for formatVersion 3.6")
-        if "impact" in finding:
-            impact = _non_empty_string(finding["impact"], f"findings[{index}].impact")
-            if impact not in IMPACTS:
-                raise ReviewStatsError(
-                    f"findings[{index}].impact must be one of: {', '.join(sorted(IMPACTS))}"
-                )
-            item["impact"] = impact
+        if "impact" not in finding:
+            raise ReviewStatsError(f"findings[{index}].impact is required")
+        impact = _non_empty_string(finding["impact"], f"findings[{index}].impact")
+        if impact not in IMPACTS:
+            raise ReviewStatsError(
+                f"findings[{index}].impact must be one of: {', '.join(sorted(IMPACTS))}"
+            )
+        item["impact"] = impact
         normalized_findings.append(item)
     normalized["findings"] = normalized_findings
     return normalized
@@ -331,20 +334,17 @@ def _iter_trail_rows(
 
 
 def _scan_summaries(
-    package: Path, attempt: str | None = None, format_version: str | None = None
+    package: Path, attempt: str | None = None
 ) -> tuple[list[dict[str, Any]], dict[str, Any], list[str]]:
     coverage = _empty_coverage()
     warnings: list[str] = []
     selected = _selected_attempts(package, attempt, warnings, coverage)
-    if format_version is None:
-        try:
-            state = _load_json(package / ".impl-package" / "state.json", label=".impl-package/state.json")
-            format_version = state.get("formatVersion") if isinstance(state, dict) else None
-            if format_version not in {"3.5", "3.6"}:
-                _warn(warnings, "state.json formatVersion must be 3.5 or 3.6")
-                format_version = None
-        except ReviewStatsError as exc:
-            _warn(warnings, str(exc))
+    try:
+        state = _load_json(package / ".impl-package" / "state.json", label=".impl-package/state.json")
+    except ReviewStatsError as exc:
+        _warn(warnings, str(exc))
+    else:
+        _require_current_format(state)
     summaries: list[dict[str, Any]] = []
     for row, order, attempt_id, source in _iter_trail_rows(package, selected, warnings, coverage):
         if row.get("kind") in {"dispatch", "worker-return"} and row.get("review_track") in TRACKS:
@@ -354,7 +354,7 @@ def _scan_summaries(
         if not _valid_row_metadata(row, source, warnings):
             continue
         try:
-            summary = validate_canonical_summary(row.get("value"), allow_empty_tracks=True, format_version=format_version)
+            summary = validate_canonical_summary(row.get("value"), allow_empty_tracks=True)
         except ReviewStatsError as exc:
             _warn(warnings, f"{source}: invalid canonical summary: {exc}")
             continue
@@ -515,7 +515,7 @@ def _append_via_state_cli(
     return payload
 
 
-def _load_manifest(path: Path, *, format_version: str | None = None) -> tuple[str, list[dict[str, Any]]]:
+def _load_manifest(path: Path) -> tuple[str, list[dict[str, Any]]]:
     try:
         manifest = _load_json(path)
     except ReviewStatsError:
@@ -529,7 +529,7 @@ def _load_manifest(path: Path, *, format_version: str | None = None) -> tuple[st
     normalized: list[dict[str, Any]] = []
     for index, summary in enumerate(summaries):
         try:
-            normalized.append(validate_canonical_summary(summary, allow_empty_tracks=True, format_version=format_version))
+            normalized.append(validate_canonical_summary(summary, allow_empty_tracks=True))
         except ReviewStatsError as exc:
             raise ReviewStatsError(f"manifest.summaries[{index}] is invalid: {exc}") from exc
     return import_id, normalized
@@ -606,20 +606,16 @@ def _manifest_matches(
 
 def record_summary(package: Path, summary: Any) -> dict[str, Any]:
     state = _load_json(package / ".impl-package" / "state.json", label=".impl-package/state.json")
-    version = state.get("formatVersion") if isinstance(state, dict) else None
-    if version not in {"3.5", "3.6"}:
-        raise ReviewStatsError("state.json formatVersion must be 3.5 or 3.6")
-    normalized = validate_canonical_summary(summary, format_version=version)
+    _require_current_format(state)
+    normalized = validate_canonical_summary(summary)
     payload = _append_via_state_cli(package, normalized)
     return {"reviewRunId": normalized["reviewRunId"], **payload}
 
 
 def backfill_manifest(package: Path, manifest: Path, *, apply: bool) -> dict[str, Any]:
     state = _load_json(Path(package) / ".impl-package" / "state.json", label=".impl-package/state.json")
-    version = state.get("formatVersion") if isinstance(state, dict) else None
-    if version not in {"3.5", "3.6"}:
-        raise ReviewStatsError("state.json formatVersion must be 3.5 or 3.6")
-    import_id, summaries = _load_manifest(Path(manifest), format_version=version)
+    _require_current_format(state)
+    import_id, summaries = _load_manifest(Path(manifest))
     existing, scan_warnings = _existing_import_rows(Path(package), import_id)
     missing, matched = _manifest_matches(existing, summaries, import_id)
     result: dict[str, Any] = {

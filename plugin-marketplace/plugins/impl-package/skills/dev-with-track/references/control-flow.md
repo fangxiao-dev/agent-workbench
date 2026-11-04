@@ -16,7 +16,6 @@ dev-with-track/main session 拥有业务 readiness、语义裁决和 package sta
 
 - blocker 或 evidence 缺失：记录受影响候选和恢复入口；Dispatcher 继续评估其他合法候选。
 - contract/plan 变化：记录 affected scope 并沿用 current package 的 initial bundle approval；新 package 才取得新 approval。
-- 旧 package 的 Task 完成后由 Working Branch owner 集成，不自动接受 Ticket。
 - terminal Gate 后冻结 current Attempt；新工作由 impl-planning 创建 patch Attempt。
 
 完成条件：任一节点都能明确属于业务裁决、执行协作或 package state write，且候选范围没有被局部等待缩成单一路径。

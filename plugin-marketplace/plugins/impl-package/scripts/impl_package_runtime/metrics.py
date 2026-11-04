@@ -320,7 +320,7 @@ def _critical_path_metrics(
     }
 
 
-def _review_metrics(package: Path, attempt: str, version: str, rows: list[dict[str, Any]], ticket_ids: list[str], upstream_tickets: set[str]) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
+def _review_metrics(package: Path, attempt: str, rows: list[dict[str, Any]], ticket_ids: list[str], upstream_tickets: set[str]) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
     stats = review_track_stats.calculate_review_stats(package, attempt)
     canonical_sources = [
         entry["source"] for entry in rows
@@ -342,7 +342,7 @@ def _review_metrics(package: Path, attempt: str, version: str, rows: list[dict[s
             continue
         try:
             value = review_track_stats.validate_canonical_summary(
-                row.get("value"), allow_empty_tracks=True, format_version=version,
+                row.get("value"), allow_empty_tracks=True,
             )
         except review_track_stats.ReviewStatsError as exc:
             warnings.append(f"{entry['source']}: invalid canonical summary: {exc}")
@@ -369,8 +369,7 @@ def _review_metrics(package: Path, attempt: str, version: str, rows: list[dict[s
         by_impact[impact] = _metric(count, [item["entry"]["source"] for item in findings] or canonical_sources, None)
     unclassified = sum("impact" not in item["finding"] for item in findings)
     by_impact["unclassified"] = _metric(
-        unclassified, [item["entry"]["source"] for item in findings] or canonical_sources,
-        "3.5 findings may omit impact" if unclassified else None,
+        unclassified, [item["entry"]["source"] for item in findings] or canonical_sources, None,
     )
     upstream_associations = [
         item for item in findings
@@ -405,12 +404,10 @@ def _review_metrics(package: Path, attempt: str, version: str, rows: list[dict[s
 
 
 def _journey_metrics(
-    package: Path, version: str, state: dict[str, Any] | None, history_row: dict[str, Any],
+    package: Path, state: dict[str, Any] | None, history_row: dict[str, Any],
     trail_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     source = ".impl-package/state.json evidenceIndex"
-    if version != "3.6":
-        return _metric(None, source, "Journey metrics require formatVersion 3.6")
     if not isinstance(state, dict) or not isinstance(state.get("evidenceIndex"), dict):
         return _metric(None, source, "selected Attempt evidenceIndex is unavailable")
     try:
@@ -668,10 +665,8 @@ def _journey_metrics(
     return result
 
 
-def _amendment_metrics(version: str, state: dict[str, Any] | None) -> dict[str, Any]:
+def _amendment_metrics(state: dict[str, Any] | None) -> dict[str, Any]:
     source = ".impl-package/state.json acceptance.amendments"
-    if version != "3.6":
-        return _metric(None, source, "Amendments require formatVersion 3.6")
     if not isinstance(state, dict) or not isinstance(state.get("acceptance"), dict):
         return _metric(None, source, "selected Attempt acceptance data is unavailable")
     amendments = state["acceptance"].get("amendments")
@@ -727,7 +722,7 @@ def _usage_metrics(worker_returns: list[dict[str, Any]], trail_sources: list[str
     return usage_report, failure_report
 
 
-def _coverage(version: str, rows: list[dict[str, Any]], state: dict[str, Any] | None, trail_sources: list[str]) -> dict[str, Any]:
+def _coverage(rows: list[dict[str, Any]], state: dict[str, Any] | None, trail_sources: list[str]) -> dict[str, Any]:
     worker_returns = [entry for entry in rows if entry["row"].get("kind") == "worker-return"]
     output = {}
     for field in ("endedAt", "usage", "failureClass"):
@@ -767,26 +762,23 @@ def _coverage(version: str, rows: list[dict[str, Any]], state: dict[str, Any] | 
             "no canonical finding records" if not raw_findings else f"{len(raw_findings) - impact_filled} finding records omit or have invalid impact"
         ),
     )
-    if version != "3.6":
-        output["recordedAt"] = _metric(None, ".impl-package/state.json evidenceIndex", "3.5 evidence records do not write recordedAt")
-    else:
-        evidence_index = state.get("evidenceIndex") if isinstance(state, dict) else None
-        records = [record for items in evidence_index.values() if isinstance(items, list) for record in items if isinstance(record, dict)] if isinstance(evidence_index, dict) else []
-        filled = sum(_parse_time(record.get("recordedAt")) is not None for record in records)
-        output["recordedAt"] = _metric(
-            {"filled": filled, "records": len(records), "rate": filled / len(records)} if records else None,
-            ".impl-package/state.json evidenceIndex",
-            None if records and filled == len(records) else (
-                "no evidence records" if not records else f"{len(records) - filled} evidence records omit or have invalid recordedAt"
-            ),
-        )
+    evidence_index = state.get("evidenceIndex") if isinstance(state, dict) else None
+    records = [record for items in evidence_index.values() if isinstance(items, list) for record in items if isinstance(record, dict)] if isinstance(evidence_index, dict) else []
+    filled = sum(_parse_time(record.get("recordedAt")) is not None for record in records)
+    output["recordedAt"] = _metric(
+        {"filled": filled, "records": len(records), "rate": filled / len(records)} if records else None,
+        ".impl-package/state.json evidenceIndex",
+        None if records and filled == len(records) else (
+            "no evidence records" if not records else f"{len(records) - filled} evidence records omit or have invalid recordedAt"
+        ),
+    )
     return output
 
 
 def _report(package: Path, attempt: str | None = None) -> tuple[dict[str, Any], str]:
     package = package.resolve()
     state = engine._load_json(package / engine.STATE_PATH)
-    version = engine._state_format_version(state)
+    engine._state_format_version(state)
     active_attempt = state.get("attempt", {}).get("id")
     history = state.get("attemptHistory")
     if not isinstance(active_attempt, str) or not isinstance(history, list):
@@ -798,7 +790,7 @@ def _report(package: Path, attempt: str | None = None) -> tuple[dict[str, Any], 
     selected_state = _read_selected_state(package, state, attempt, history_row)
     state_source = ".impl-package/state.json" if attempt == active_attempt else f".impl-package/attempts/{attempt}.json or gate revision"
     try:
-        documents = engine._ticket_documents(package, attempt, version)
+        documents = engine._ticket_documents(package, attempt)
         ticket_ids = [item["id"] for item in documents]
         dependencies = engine._ticket_dependencies(documents)
     except engine.StateError:
@@ -816,7 +808,7 @@ def _report(package: Path, attempt: str | None = None) -> tuple[dict[str, Any], 
         for kind, upstream in edges
         if kind == "implementation"
     }
-    findings, _latest_findings, review_warnings = _review_metrics(package, attempt, version, rows, ticket_ids, upstream_tickets)
+    findings, _latest_findings, review_warnings = _review_metrics(package, attempt, rows, ticket_ids, upstream_tickets)
     warnings.extend(warning for warning in review_warnings if warning not in warnings)
     worker_returns = [entry for entry in rows if entry["row"].get("kind") == "worker-return"]
     usage, failures = _usage_metrics(worker_returns, trail_sources)
@@ -828,25 +820,23 @@ def _report(package: Path, attempt: str | None = None) -> tuple[dict[str, Any], 
             comparison = engine._run_git(repo, "rev-parse", "HEAD")
         except engine.StateError:
             comparison = None
-    if version == "3.6" and selected_state is not None and not isinstance(comparison, str):
+    if selected_state is not None and not isinstance(comparison, str):
         journeys = _metric(None, ".impl-package/state.json evidenceIndex", "final comparison commit is unavailable")
-    elif version == "3.6":
-        journeys = _journey_metrics(package, version, selected_state, history_row, rows)
     else:
-        journeys = _journey_metrics(package, version, selected_state, history_row, rows)
+        journeys = _journey_metrics(package, selected_state, history_row, rows)
     report = {
         "schemaVersion": _metric(1, "impl-package metrics schema"),
-        "formatVersion": _metric(version, ".impl-package/state.json formatVersion"),
+        "formatVersion": _metric(engine.FORMAT_VERSION, ".impl-package/state.json formatVersion"),
         "attempt": _metric(attempt, ".impl-package/state.json attemptHistory"),
         "dispatch": dispatch,
         "tickets": tickets,
         "criticalPathWait": _critical_path_metrics(dependencies, ticket_ids, rows, dispatch_rows, trail_sources),
         "findings": findings,
         "journeys": journeys,
-        "amendments": _amendment_metrics(version, selected_state),
+        "amendments": _amendment_metrics(selected_state),
         "usage": usage,
         "failures": failures,
-        "coverage": _coverage(version, rows, selected_state, trail_sources),
+        "coverage": _coverage(rows, selected_state, trail_sources),
         "readWarnings": _metric(warnings, trail_sources, None if not warnings else "some source rows could not be fully interpreted"),
     }
     return report, attempt

@@ -12,16 +12,16 @@ allowed:
 
 priority:
   # P0：fail-closed 与记录完整性；本组顺序严格有效。
-  - [attempt.gate.terminal-frozen, package.record.state-missing, package.record.projection-drift, package.record.live-package-reference, attempt.record.anchor-mismatch, attempt.record.session-resumed, ticket.record.evidence-unfiled]
+  - [attempt.gate.terminal-frozen, package.record.state-missing, package.record.projection-drift, package.record.live-package-reference, attempt.record.anchor-mismatch, attempt.record.session-resumed]
   # P1-P5 是无序集合；下面的书写顺序不是层内位次。
   # P1：attempt admission 与验证载体准入
   - [attempt.record.handoff-due, attempt.record.trail-rotation-due, attempt.readiness.all-edges-held, attempt.readiness.multiple-ready-tickets, ticket.readiness.blocker-maybe-resolved]
   # P2：消费 worker/reviewer 返回与当前 subject 的未完成动作
   - [finding.fix.worker-envelope-invalid, ticket.implement.worker-incomplete-first, ticket.implement.worker-blocked, ticket.investigate.no-carrier, ticket.investigate.evidence-gap, finding.fix.reviewer-returned, attempt.review.reviewer-unavailable, finding.fix.main-session-discovered, finding.review.source-recheck-pending]
   # P3：事实/合同/返工裁决与验证缺口
-  - [ticket.verify.contradictory-unresolved, ticket.verify.safety-invariant-unfalsified, ticket.rework.evidence-conflict, ticket.rework.revision-diverged, ticket.rework.revalidation-pending, ticket.route.multiple-business-outcomes, ticket.route.sources-conflicting, attempt.rework.contract-changed]
+  - [ticket.rework.revision-diverged, ticket.rework.revalidation-pending, ticket.route.multiple-business-outcomes, ticket.route.sources-conflicting, attempt.rework.contract-changed]
   # P4：acceptance 与全局收口
-  - [ticket.accept.acceptance-edge-held, ticket.accept.release-edge-unchecked, ticket.accept.satisfiable, attempt.review.terminal-coverage-incomplete, finding.disposition.grading-undecided, attempt.disposition.findings-triage-pending, attempt.accept.all-tickets-terminal, attempt.accept.journey-incomplete, attempt.accept.walking-skeleton-overdue, attempt.accept.required-suite-missing, attempt.accept.evidence-revalidation-pending, attempt.accept.amendment-owner-confirmation, attempt.accept.release-order-missing, attempt.gate.durable-delta-missing, attempt.gate.missing, attempt.gate.verdict-undecided]
+  - [attempt.review.terminal-coverage-incomplete, finding.disposition.grading-undecided, attempt.disposition.findings-triage-pending, attempt.accept.all-tickets-terminal, attempt.accept.journey-incomplete, attempt.accept.walking-skeleton-overdue, attempt.accept.required-suite-missing, attempt.accept.evidence-revalidation-pending, attempt.accept.amendment-owner-confirmation, attempt.accept.release-order-missing, attempt.gate.durable-delta-missing, attempt.gate.missing, attempt.gate.verdict-undecided]
   # P5：记录层卫生
   - [package.record.intake-backlog]
 
@@ -234,7 +234,6 @@ situations:
       ticket.state: PENDING
       ticket.investigation_carrier_present: false
       ticket.investigation_context_clear: true
-      evidence.count: 0
     judgment: true
     ask: "违约边界是否已经确认"
     actions:
@@ -288,33 +287,6 @@ situations:
         effect: "更新后再进入实现"
     escape: true
 
-  - slug: ticket.record.evidence-unfiled
-    basis: prose
-    when:
-      trail.direct_evidence_returned: true
-      evidence.indexed: false
-    judgment: false
-    actions:
-      - id: file-evidence
-        default: true
-        by: main-session
-        do: "多条一律数组、一次登记一个 revision。bash：printf '<evidence-object-or-non-empty-array-json>' | python impl_package_state.py --package <package> evidence add；PowerShell：先 Set-Content evidence.json 写入整段 JSON 数组，再 Get-Content -Raw evidence.json | python impl_package_state.py --package <package> evidence add；不要在 shell 里现场拼 hashtable"
-        effect: "必须带 timing；数组整批合法才一次写入，非法批次不部分写入"
-    escape: true
-
-  - slug: ticket.verify.safety-invariant-unfalsified
-    basis: prose
-    when:
-      ticket.safety_invariant_unfalsified: true
-    judgment: false
-    actions:
-      - id: verify-safety-invariant
-        default: true
-        by: dispatch
-        do: "$dispatcher mode=verify"
-        effect: "不得推迟到加固组"
-    escape: true
-
   - slug: ticket.implement.worker-incomplete-first
     basis: prose
     when:
@@ -352,81 +324,6 @@ situations:
         requires_reason: true
     escape: true
 
-  - slug: ticket.accept.acceptance-edge-held
-    basis: cli
-    when:
-      evidence.count: ">0"
-      ticket.acceptance_edge_released: false
-    judgment: false
-    actions:
-      - id: continue-implementation
-        default: true
-        by: dispatch
-        do: "$dispatcher mode=implement"
-        effect: "可继续实施，不可 SATISFIED"
-    escape: true
-
-  - slug: ticket.verify.contradictory-unresolved
-    basis: cli
-    when:
-      evidence.contradictory_unresolved: true
-    judgment: true
-    ask: "矛盾证据应如何处置"
-    actions:
-      - id: resolve-contradiction
-        by: main-session
-        do: "impl_package_state.py --package <package> evidence invalidate --ticket <id> --claim <claim-id> --artifact <path> --invalidated-by <reason>"
-        effect: "处置后方可 satisfy"
-    escape: true
-
-  - slug: ticket.accept.satisfiable
-    basis: cli
-    when:
-      ticket.state: PENDING
-      evidence.all_required_claims_supported: true
-      evidence.contradictory_unresolved: false
-      ticket.acceptance_edge_released: true
-      ticket.acceptance_revision_parseable: true
-    judgment: true
-    ask: "每个 stable claim 是否已是 acceptance atom，且 supporting artifact 直接覆盖其完整语义"
-    actions:
-      - id: ticket-satisfy
-        default: true
-        by: main-session
-        do: "impl_package_state.py --package <package> ticket satisfy <id> --expect PENDING --revision <commit> --environment <env>"
-        effect: "主 session 完成逐原子 evidence 对照后，Ticket 进入 SATISFIED 并释放依赖"
-    escape: true
-
-  - slug: ticket.rework.evidence-conflict
-    basis: prose
-    when:
-      ticket.state: SATISFIED
-      evidence.new_claim_conflict: true
-    judgment: true
-    ask: "这条证据是证伪了原 claim，还是提出了新要求"
-    actions:
-      - id: invalidate-evidence
-        by: main-session
-        do: "impl_package_state.py --package <package> evidence invalidate --ticket <id> --claim <id> --artifact <path> --invalidated-by <reason>"
-        effect: "claim 失去支撑，不自动改 Ticket 状态"
-        requires_reason: true
-      - id: request-revalidation
-        by: main-session
-        do: "impl_package_state.py --package <package> ticket needs-revalidation <id> --expect SATISFIED --claim <id> --invalidated-by <reason>"
-        effect: "不释放依赖；下游 acceptance 边被卡；Progress 标 stale"
-        requires_reason: true
-      - id: record-new-finding
-        by: main-session
-        do: "Get-Content <finding-payload.json> -Raw | impl_package_state.py --package <package> recovery judgment"
-        effect: "不动本 Ticket"
-        requires_reason: true
-      - id: retire-superseded
-        by: main-session
-        do: "impl_package_state.py --package <package> ticket retire <id> --expect SATISFIED --disposition superseded --successor <successor-id> --evidence <path>"
-        effect: "successor 满足前不释放边"
-        requires_reason: true
-    escape: true
-
   - slug: ticket.rework.revision-diverged
     basis: cli
     when:
@@ -443,7 +340,7 @@ situations:
         requires_reason: true
       - id: confirm-original-conclusion
         by: main-session
-        do: "dev-with-track Verify and Gate：复核 acceptance revision 的 claim-evidence"
+        do: "dev-with-track Verify and Gate：复核 acceptance revision 的 Ticket 验收证据"
         effect: "保留原结论"
         requires_reason: true
     escape: true
@@ -571,21 +468,6 @@ situations:
         by: dispatch
         do: "/impl-package:do-review phase=terminal-final"
         effect: "补齐 terminal-final coverage（完整 terminal_tracks，不继承此前任何 initial 选中的子集）；accepted findings 未闭合或 fix 在途时先 finding-closure，不起 terminal-final；C/Safety 按 admission 复用旧 PASS"
-    escape: true
-
-  - slug: ticket.accept.release-edge-unchecked
-    basis: prose
-    when:
-      ticket.acceptance_conditions_satisfied: true
-      ticket.release_edge_present: true
-      ticket.release_edge_rechecked: false
-    judgment: false
-    actions:
-      - id: recheck-release-edge
-        default: true
-        by: main-session
-        do: "/impl-package:dev-with-track recheck Ticket release edge before Gate"
-        effect: "确认 release 边已复核"
     escape: true
 
   - slug: attempt.gate.durable-delta-missing

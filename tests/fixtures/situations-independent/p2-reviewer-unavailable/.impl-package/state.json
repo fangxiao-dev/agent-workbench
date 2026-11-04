@@ -1,5 +1,5 @@
 {
-  "formatVersion": "3.5",
+  "formatVersion": "3.6",
   "predecessors": null,
   "attempt": {
     "id": "initial",
@@ -25,7 +25,29 @@
     "attempt": {
       "next": "close the old review run and reopen a fresh review",
       "blocker": "reviewer unavailable",
-      "evidence": ["execution/initial/trail.jsonl#review"]
+      "evidence": [
+        "execution/initial/trail.jsonl#review"
+      ]
+    }
+  },
+  "acceptance": {
+    "contractBaseline": {
+      "head": "0000000000000000000000000000000000000000",
+      "files": {
+        "spec.md": "1111111111111111111111111111111111111111"
+      }
+    },
+    "releaseOrder": "none",
+    "amendments": [],
+    "harness": {
+      "setup": "python harness.py setup",
+      "precheck": "python harness.py precheck",
+      "cleanup": "python harness.py cleanup",
+      "isolation": "per-run",
+      "firstVisibleStep": {
+        "step": "J1-S1",
+        "ticket": "TKT-01"
+      }
     }
   }
 }

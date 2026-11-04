@@ -1,4 +1,4 @@
-"""Thin Ticket-first state CLI router for the 3.5 grouped runtime."""
+"""Thin Ticket-first state CLI router for the 3.6 grouped runtime."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ GROUPS = {
 
 def _root_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Ticket-first Impl-Package state router (format 3.5)",
+        description="Ticket-first Impl-Package state router (format 3.6)",
     )
     parser.add_argument("--package", type=Path, required=True)
     parser.add_argument("--no-situation", action="store_true", help="do not append the current situation")

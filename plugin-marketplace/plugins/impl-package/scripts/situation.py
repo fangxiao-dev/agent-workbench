@@ -13,7 +13,6 @@ import copy
 import json
 import re
 import sys
-from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from difflib import get_close_matches
@@ -68,8 +67,6 @@ assert set(_PROTOCOL_PLACEHOLDERS) == {
 }
 TICKET_ID_RE = re.compile(r"(?im)^[^\r\n]*Ticket ID[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*([^\s*]+)")
 ATTEMPT_ID_RE = re.compile(r"(?im)^[^\r\n]*(?:Attempt ID|执行尝试 ID)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*([^\s*]+)")
-CLAIM_RE = re.compile(r"(?im)^[^\r\n]*Stable claim ID[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*`([^`]+)`[^\r\n]*$")
-ASCII_CLAIM_RE = CLAIM_RE
 DEPENDENCY_HEADING_RE = re.compile(r"(?ms)^##\s+(?:阻塞依赖|Blocking Dependencies)\s*$\r?\n(.*?)(?=^##\s+|\Z)")
 FINDING_ID_RE = re.compile(r"\b(?:FINDING|FND|FIND|F)-[A-Za-z0-9][A-Za-z0-9._-]*\b", re.I)
 BOOL_RE = re.compile(r"^(true|false|yes|no|1|0|是|否)$", re.I)
@@ -84,7 +81,6 @@ FACT_KEYS = frozenset(
     {
         "review.dispatch_pending",
         "ticket.blocker_maybe_resolved",
-        "ticket.release_edge_rechecked",
         "review.canonical_summary",
         "review.terminal_summary",
         "trail.anchor_mismatch",
@@ -116,9 +112,7 @@ def _unknown_fact_key_notice(keys: tuple[str, ...]) -> str:
 
 # Only defaults that preserve the fail-closed direction belong here.  A key
 # absent from this mapping remains unknown when its fact channel is readable.
-FACT_DEFAULTS: dict[str, Any] = {
-    "ticket.release_edge_rechecked": False,
-}
+FACT_DEFAULTS: dict[str, Any] = {}
 
 
 def candidate_subject_error(candidate: dict[str, Any], ticket_ids: Iterable[str], finding_ids: Iterable[str]) -> str | None:
@@ -201,8 +195,6 @@ class TicketInfo:
     relative_path: str | None
     text: str
     valid: bool
-    claims: list[str] = field(default_factory=list)
-    safety_claims: list[str] = field(default_factory=list)
     dependencies: list[tuple[str, str]] = field(default_factory=list)
     error: str | None = None
 
@@ -874,11 +866,11 @@ def _parse_state(view: FileView) -> StateView:
     errors: list[str] = []
     base_fields = {"formatVersion", "attempt", "attemptHistory", "predecessors", "tickets", "evidenceIndex", "activeCheckpoints"}
     format_version = raw.get("formatVersion")
-    expected = base_fields | ({"acceptance"} if format_version == "3.6" else set())
-    if set(raw) != expected:
-        errors.append(f"顶层字段不符合 {format_version or '未知'} schema")
-    if format_version not in {"3.5", "3.6"}:
-        errors.append(f"不支持 formatVersion：{format_version!r}")
+    expected = base_fields | {"acceptance"}
+    if format_version != "3.6":
+        errors.append(f"format {format_version if format_version is not None else '(missing)'} is no longer supported; start a new package")
+    elif set(raw) != expected:
+        errors.append("顶层字段不符合 3.6 schema")
     if format_version == "3.6":
         acceptance = raw.get("acceptance")
         if not isinstance(acceptance, dict) or set(acceptance) != {"contractBaseline", "releaseOrder", "amendments", "harness"}:
@@ -987,7 +979,6 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
     if not state.valid or state.raw is None:
         return []
     raw = state.raw
-    format_version = raw.get("formatVersion", "3.5")
     errors: list[str] = []
     ticket_rows = raw.get("tickets", {})
     for identifier, row in ticket_rows.items():
@@ -1004,11 +995,11 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                 errors.append(f"RETIRED superseded Ticket {identifier} 的 successor 不存在")
         elif status == "SATISFIED":
             acceptance = row.get("acceptance")
-            expected_acceptance = {"revision", "environment"} if format_version == "3.5" else {"revision"}
-            if format_version == "3.6" and isinstance(acceptance, dict) and "environment" in acceptance:
+            expected_acceptance = {"revision"}
+            if isinstance(acceptance, dict) and "environment" in acceptance:
                 expected_acceptance.add("environment")
             if set(row) != {"state", "acceptance"} or not isinstance(acceptance, dict) or set(acceptance) != expected_acceptance:
-                errors.append(f"SATISFIED Ticket {identifier} acceptance fields 不符合 {format_version} schema")
+                errors.append(f"SATISFIED Ticket {identifier} acceptance fields 不符合 3.6 schema")
             elif not COMMIT_RE.fullmatch(str(acceptance.get("revision", ""))) or (
                 "environment" in acceptance
                 and (not isinstance(acceptance["environment"], str) or not acceptance["environment"].strip())
@@ -1025,129 +1016,98 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
 
     index = raw.get("evidenceIndex", {})
     if isinstance(index, dict):
-        if format_version == "3.5":
-            unknown_tickets = set(index) - set(ticket_rows)
-            if unknown_tickets:
-                errors.append("evidenceIndex 含未知 Ticket：" + ", ".join(sorted(unknown_tickets)))
-            for identifier, claim_map in index.items():
-                if not isinstance(claim_map, dict):
-                    errors.append(f"evidenceIndex[{identifier}] 不是 claim mapping")
+        run_environments: dict[str, tuple[str, str]] = {}
+        run_setup_environments: dict[str, str] = {}
+        journey_run_environments: dict[str, str] = {}
+        setup_run_ids: set[str] = set()
+        journey_run_ids: set[str] = set()
+        for key, records in index.items():
+            if not isinstance(key, str) or not isinstance(records, list):
+                errors.append(f"evidenceIndex[{key}] 必须是 evidenceKey 到 list 的映射")
+                continue
+            for record in records:
+                if not isinstance(record, dict):
+                    errors.append(f"evidenceIndex[{key}] evidence 不是 object")
                     continue
-                known_claims = set(tickets.get(identifier, TicketInfo(identifier, None, "", False)).claims)
-                for claim, records in claim_map.items():
-                    if claim not in known_claims:
-                        errors.append(f"evidenceIndex[{identifier}] 含未知 claim：{claim}")
-                    if not isinstance(records, list):
-                        errors.append(f"evidenceIndex[{identifier}][{claim}] 不是 list")
-                        continue
-                    for record in records:
-                        required = {"timing", "artifact", "revision", "environment", "conclusion"}
-                        if not isinstance(record, dict) or not required <= set(record):
-                            errors.append(f"evidenceIndex[{identifier}][{claim}] evidence 字段不完整")
-                            continue
-                        if record.get("timing") not in {"early-falsification", "remaining-completion"}:
-                            errors.append(f"evidenceIndex[{identifier}][{claim}] timing 无效")
-                        if record.get("conclusion") not in {"supporting", "contradictory", "inconclusive"}:
-                            errors.append(f"evidenceIndex[{identifier}][{claim}] conclusion 无效")
-                        if not all(isinstance(record.get(field), str) and record.get(field).strip() for field in ("artifact", "revision", "environment")):
-                            errors.append(f"evidenceIndex[{identifier}][{claim}] artifact/revision/environment 无效")
-                        elif not COMMIT_RE.fullmatch(record["revision"]):
-                            errors.append(f"evidenceIndex[{identifier}][{claim}] revision 不是 commit ID")
-                        if "invalidatedBy" in record and record["invalidatedBy"] is not None and not isinstance(record["invalidatedBy"], str):
-                            errors.append(f"evidenceIndex[{identifier}][{claim}] invalidatedBy 无效")
-        else:
-            run_environments: dict[str, tuple[str, str]] = {}
-            run_setup_environments: dict[str, str] = {}
-            journey_run_environments: dict[str, str] = {}
-            setup_run_ids: set[str] = set()
-            journey_run_ids: set[str] = set()
-            for key, records in index.items():
-                if not isinstance(key, str) or not isinstance(records, list):
-                    errors.append(f"evidenceIndex[{key}] 必须是 evidenceKey 到 list 的映射")
+                kind = record.get("kind")
+                fields_by_kind = {
+                    "journey-step": {"runId", "journeyId", "stepId", "actor", "entry", "surface"},
+                    "run-setup": {"runId"},
+                    "suite": {"suiteId"},
+                    "review": {"ticket"},
+                    "release": set(),
+                }
+                if not isinstance(kind, str) or kind not in fields_by_kind:
+                    errors.append(f"evidenceIndex[{key}] kind 无效")
                     continue
-                for record in records:
-                    if not isinstance(record, dict):
-                        errors.append(f"evidenceIndex[{key}] evidence 不是 object")
-                        continue
-                    kind = record.get("kind")
-                    fields_by_kind = {
-                        "journey-step": {"runId", "journeyId", "stepId", "actor", "entry", "surface"},
-                        "run-setup": {"runId"},
-                        "suite": {"suiteId"},
-                        "review": {"ticket"},
-                        "release": set(),
-                    }
-                    if not isinstance(kind, str) or kind not in fields_by_kind:
-                        errors.append(f"evidenceIndex[{key}] kind 无效")
-                        continue
-                    required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
-                    optional = {"inputRef", "outputRef", "manualBy", "artifactSha256"} if kind == "journey-step" else set()
-                    allowed = required | optional | {"invalidatedBy", "timing", "recordedAt"}
-                    if kind not in fields_by_kind or not required <= set(record) or set(record) - allowed:
-                        errors.append(f"evidenceIndex[{key}] {kind!r} evidence 字段不完整或含未知字段")
-                        continue
-                    if not isinstance(record.get("conclusion"), str) or record["conclusion"] not in {"supporting", "contradictory", "inconclusive"}:
-                        errors.append(f"evidenceIndex[{key}] conclusion 无效")
-                    if not all(isinstance(record.get(field), str) and record[field].strip() for field in ("artifact", "revision", "environment")):
-                        errors.append(f"evidenceIndex[{key}] artifact/revision/environment 无效")
-                    elif not COMMIT_RE.fullmatch(record["revision"]):
-                        errors.append(f"evidenceIndex[{key}] revision 不是 commit ID")
-                    if "timing" in record and (not isinstance(record["timing"], str) or record["timing"] not in {"early-falsification", "remaining-completion"}):
-                        errors.append(f"evidenceIndex[{key}] timing 无效")
-                    if "recordedAt" in record and not _iso_timestamp_with_timezone(record["recordedAt"]):
-                        errors.append(f"evidenceIndex[{key}] recordedAt 无效")
-                    invalidated_by = record.get("invalidatedBy")
-                    if "invalidatedBy" in record and invalidated_by is not None and (not isinstance(invalidated_by, str) or not invalidated_by.strip()):
-                        errors.append(f"evidenceIndex[{key}] invalidatedBy 无效")
-                    if kind == "journey-step":
-                        surface = record.get("surface")
-                        if surface not in {"page", "file", "api", "log"}:
-                            errors.append(f"evidenceIndex[{key}] surface 无效")
-                        if "manualBy" in record and (not isinstance(record["manualBy"], str) or not record["manualBy"].strip()):
-                            errors.append(f"evidenceIndex[{key}] manualBy 无效")
-                        if surface == "file":
-                            if not isinstance(record.get("artifactSha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", record["artifactSha256"]):
-                                errors.append(f"evidenceIndex[{key}] file surface 的 artifactSha256 无效")
-                        elif "artifactSha256" in record:
-                            errors.append(f"evidenceIndex[{key}] artifactSha256 仅适用于 file surface")
-                        for field in ("inputRef", "outputRef"):
-                            if field in record and (not isinstance(record[field], str) or not record[field].strip()):
-                                errors.append(f"evidenceIndex[{key}] {field} 必须是非空业务对象标识")
-                        run_id, journey_id, step_id, actor, entry = (record.get(field) for field in ("runId", "journeyId", "stepId", "actor", "entry"))
-                        if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, actor, entry)) or key != f"journey:{run_id}:{step_id}":
-                            errors.append(f"evidenceIndex[{key}] Journey evidence key 或字段无效")
-                        else:
-                            prior = run_environments.setdefault(run_id, (journey_id, record["environment"]))
-                            if prior != (journey_id, record["environment"]):
-                                errors.append(f"evidenceIndex[{key}] runId 的 Journey/environment 不一致")
-                            journey_run_ids.add(run_id)
-                            journey_run_environments[run_id] = record["environment"]
-                    elif kind == "run-setup":
-                        run_id = record.get("runId")
-                        if not isinstance(run_id, str) or not run_id.strip() or key != f"run-setup:{run_id}":
-                            errors.append(f"evidenceIndex[{key}] run-setup evidence key 或 runId 无效")
-                        else:
-                            setup_run_ids.add(run_id)
-                            previous_environment = run_setup_environments.setdefault(run_id, record["environment"])
-                            if previous_environment != record["environment"]:
-                                errors.append(f"run-setup {run_id} 的 environment 不一致")
-                    elif kind == "suite":
-                        suite_id = record.get("suiteId")
-                        if not isinstance(suite_id, str) or not suite_id.strip() or key != f"suite:{suite_id}":
-                            errors.append(f"evidenceIndex[{key}] suite evidence key 或 suiteId 无效")
-                    elif kind == "review":
-                        ticket = record.get("ticket")
-                        if not isinstance(ticket, str):
-                            errors.append(f"evidenceIndex[{key}] review evidence key 或 ticket 无效")
-                        elif (ticket != "package" and ticket not in ticket_rows) or key != f"review:{ticket}":
-                            errors.append(f"evidenceIndex[{key}] review ticket 或 evidence key 无效")
-                    elif key != "release":
-                        errors.append(f"evidenceIndex[{key}] release evidence key 必须为 release")
-            for run_id in sorted(journey_run_ids - setup_run_ids):
-                errors.append(f"Journey run {run_id} 缺少 run-setup")
-            for run_id in sorted(journey_run_ids & setup_run_ids):
-                if run_setup_environments.get(run_id) != journey_run_environments.get(run_id):
-                    errors.append(f"Journey run {run_id} 的 run-setup environment 不一致")
+                required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
+                optional = {"inputRef", "outputRef", "manualBy", "artifactSha256"} if kind == "journey-step" else set()
+                allowed = required | optional | {"invalidatedBy", "timing", "recordedAt"}
+                if kind not in fields_by_kind or not required <= set(record) or set(record) - allowed:
+                    errors.append(f"evidenceIndex[{key}] {kind!r} evidence 字段不完整或含未知字段")
+                    continue
+                if not isinstance(record.get("conclusion"), str) or record["conclusion"] not in {"supporting", "contradictory", "inconclusive"}:
+                    errors.append(f"evidenceIndex[{key}] conclusion 无效")
+                if not all(isinstance(record.get(field), str) and record[field].strip() for field in ("artifact", "revision", "environment")):
+                    errors.append(f"evidenceIndex[{key}] artifact/revision/environment 无效")
+                elif not COMMIT_RE.fullmatch(record["revision"]):
+                    errors.append(f"evidenceIndex[{key}] revision 不是 commit ID")
+                if "timing" in record and (not isinstance(record["timing"], str) or record["timing"] not in {"early-falsification", "remaining-completion"}):
+                    errors.append(f"evidenceIndex[{key}] timing 无效")
+                if "recordedAt" in record and not _iso_timestamp_with_timezone(record["recordedAt"]):
+                    errors.append(f"evidenceIndex[{key}] recordedAt 无效")
+                invalidated_by = record.get("invalidatedBy")
+                if "invalidatedBy" in record and invalidated_by is not None and (not isinstance(invalidated_by, str) or not invalidated_by.strip()):
+                    errors.append(f"evidenceIndex[{key}] invalidatedBy 无效")
+                if kind == "journey-step":
+                    surface = record.get("surface")
+                    if surface not in {"page", "file", "api", "log"}:
+                        errors.append(f"evidenceIndex[{key}] surface 无效")
+                    if "manualBy" in record and (not isinstance(record["manualBy"], str) or not record["manualBy"].strip()):
+                        errors.append(f"evidenceIndex[{key}] manualBy 无效")
+                    if surface == "file":
+                        if not isinstance(record.get("artifactSha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", record["artifactSha256"]):
+                            errors.append(f"evidenceIndex[{key}] file surface 的 artifactSha256 无效")
+                    elif "artifactSha256" in record:
+                        errors.append(f"evidenceIndex[{key}] artifactSha256 仅适用于 file surface")
+                    for field in ("inputRef", "outputRef"):
+                        if field in record and (not isinstance(record[field], str) or not record[field].strip()):
+                            errors.append(f"evidenceIndex[{key}] {field} 必须是非空业务对象标识")
+                    run_id, journey_id, step_id, actor, entry = (record.get(field) for field in ("runId", "journeyId", "stepId", "actor", "entry"))
+                    if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, actor, entry)) or key != f"journey:{run_id}:{step_id}":
+                        errors.append(f"evidenceIndex[{key}] Journey evidence key 或字段无效")
+                    else:
+                        prior = run_environments.setdefault(run_id, (journey_id, record["environment"]))
+                        if prior != (journey_id, record["environment"]):
+                            errors.append(f"evidenceIndex[{key}] runId 的 Journey/environment 不一致")
+                        journey_run_ids.add(run_id)
+                        journey_run_environments[run_id] = record["environment"]
+                elif kind == "run-setup":
+                    run_id = record.get("runId")
+                    if not isinstance(run_id, str) or not run_id.strip() or key != f"run-setup:{run_id}":
+                        errors.append(f"evidenceIndex[{key}] run-setup evidence key 或 runId 无效")
+                    else:
+                        setup_run_ids.add(run_id)
+                        previous_environment = run_setup_environments.setdefault(run_id, record["environment"])
+                        if previous_environment != record["environment"]:
+                            errors.append(f"run-setup {run_id} 的 environment 不一致")
+                elif kind == "suite":
+                    suite_id = record.get("suiteId")
+                    if not isinstance(suite_id, str) or not suite_id.strip() or key != f"suite:{suite_id}":
+                        errors.append(f"evidenceIndex[{key}] suite evidence key 或 suiteId 无效")
+                elif kind == "review":
+                    ticket = record.get("ticket")
+                    if not isinstance(ticket, str):
+                        errors.append(f"evidenceIndex[{key}] review evidence key 或 ticket 无效")
+                    elif (ticket != "package" and ticket not in ticket_rows) or key != f"review:{ticket}":
+                        errors.append(f"evidenceIndex[{key}] review ticket 或 evidence key 无效")
+                elif key != "release":
+                    errors.append(f"evidenceIndex[{key}] release evidence key 必须为 release")
+        for run_id in sorted(journey_run_ids - setup_run_ids):
+            errors.append(f"Journey run {run_id} 缺少 run-setup")
+        for run_id in sorted(journey_run_ids & setup_run_ids):
+            if run_setup_environments.get(run_id) != journey_run_environments.get(run_id):
+                errors.append(f"Journey run {run_id} 的 run-setup environment 不一致")
 
     checkpoints = raw.get("activeCheckpoints", {})
     if isinstance(checkpoints, dict):
@@ -1186,7 +1146,7 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
     return errors
 
 
-def _parse_ticket(identifier: str, relative: str | None, text: str, expected_attempt: str | None, format_version: str = "3.5") -> TicketInfo:
+def _parse_ticket(identifier: str, relative: str | None, text: str, expected_attempt: str | None) -> TicketInfo:
     if not text:
         return TicketInfo(identifier, relative, text, False, error="Ticket 文件为空")
     id_match = TICKET_ID_RE.search(text)
@@ -1197,16 +1157,12 @@ def _parse_ticket(identifier: str, relative: str | None, text: str, expected_att
     if expected_attempt and (not attempt_match or attempt_match.group(1) != expected_attempt):
         return TicketInfo(identifier, relative, text, False, error="Attempt ID 与当前 attempt 不一致")
 
-    claims = list(dict.fromkeys(CLAIM_RE.findall(text)))
-    valid = bool(claims)
-    if format_version == "3.6":
-        coverage = re.search(r"(?ms)^##\s+Coverage\s*$\n(.*?)(?=^##\s+|\Z)", text)
-        fields = {
-            key: value.strip()
-            for key, value in re.findall(r"(?m)^-\s*(Journey steps|Suites|Required review):\s*(.*?)\s*$", coverage.group(1) if coverage else "")
-        }
-        valid = set(fields) == {"Journey steps", "Suites", "Required review"} and all(fields.values())
-    safety_claims = [claim for claim in claims if claim.upper().startswith("INV-")]
+    coverage = re.search(r"(?ms)^##\s+Coverage\s*$\n(.*?)(?=^##\s+|\Z)", text)
+    fields = {
+        key: value.strip()
+        for key, value in re.findall(r"(?m)^-\s*(Journey steps|Suites|Required review):\s*(.*?)\s*$", coverage.group(1) if coverage else "")
+    }
+    valid = set(fields) == {"Journey steps", "Suites", "Required review"} and all(fields.values())
     dependencies: list[tuple[str, str]] = []
     section = DEPENDENCY_HEADING_RE.search(text)
     if section:
@@ -1222,8 +1178,6 @@ def _parse_ticket(identifier: str, relative: str | None, text: str, expected_att
         relative,
         text,
         valid,
-        claims=claims,
-        safety_claims=safety_claims,
         dependencies=dependencies,
     )
 
@@ -1504,7 +1458,7 @@ def _build_snapshot(
     for identifier in ids:
         if identifier in ticket_files:
             relative, text = ticket_files[identifier]
-            ticket = _parse_ticket(identifier, relative, text, state.attempt_id, str(state.raw.get("formatVersion", "3.5")) if state.raw else "3.5")
+            ticket = _parse_ticket(identifier, relative, text, state.attempt_id)
         else:
             ticket = TicketInfo(identifier, None, "", False, error="Ticket 文件缺失")
         tickets[identifier] = ticket
@@ -1569,27 +1523,6 @@ def _fact_value(
     seq: Any = None,
 ) -> Fact:
     return Fact(value=value, known=True, reason=reason, ts=ts, seq=seq)
-
-
-def _evidence_link(record: dict[str, Any]) -> tuple[str, str, str, str] | None:
-    def string(*names: str) -> str | None:
-        for name in names:
-            value = record.get(name)
-            if isinstance(value, str) and value.strip():
-                return value
-        return None
-
-    artifact = string("artifact", "ref", "evidence_ref", "evidence", "direct_evidence")
-    claim = string("claim", "claim_id", "claimId")
-    revision = string("revision", "commit", "head")
-    environment = string("environment", "env")
-    if None in {artifact, claim, revision, environment}:
-        return None
-    return artifact, claim, revision, environment
-
-
-def _evidence_invalidated(record: dict[str, Any]) -> bool:
-    return bool(record.get("invalidatedBy") or record.get("invalidated"))
 
 
 def _event_kind(row: dict[str, Any]) -> str:
@@ -1726,27 +1659,6 @@ class FactContext:
             return None
         row = state.get("tickets", {}).get(self.identifier)
         return row if isinstance(row, dict) else None
-
-    def evidence_records(self) -> list[dict[str, Any]] | None:
-        state = self.state()
-        if state is None or self.kind != "ticket":
-            return None
-        index = state.get("evidenceIndex", {})
-        if not isinstance(index, dict):
-            return None
-        claim_map = index.get(self.identifier, {})
-        if not isinstance(claim_map, dict):
-            return None
-        records: list[dict[str, Any]] = []
-        for claim, values in claim_map.items():
-            if isinstance(values, list):
-                for item in values:
-                    if not isinstance(item, dict):
-                        continue
-                    record = dict(item)
-                    record.setdefault("claim", claim)
-                    records.append(record)
-        return records
 
     def _subject_rows(self, *, all_attempt_rows: bool = False) -> list[dict[str, Any]] | None:
         if not self.snapshot.trail.present or self.snapshot.trail.error:
@@ -1922,42 +1834,6 @@ class FactContext:
             if all(values):
                 ready.append(identifier)
         return _fact_value(ready)
-
-    def ticket_evidence_groups(self) -> dict[tuple[str, str], dict[str, list[dict[str, Any]]]] | None:
-        records = self.evidence_records()
-        if records is None:
-            return None
-        groups: dict[tuple[str, str], dict[str, list[dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
-        for record in records:
-            revision = record.get("revision")
-            environment = record.get("environment")
-            claim = record.get("claim")
-            if not isinstance(revision, str) or not isinstance(environment, str) or not isinstance(claim, str):
-                continue
-            if record.get("invalidatedBy"):
-                continue
-            groups[(revision, environment)][claim].append(record)
-        return groups
-
-    def revision_parseable(self, revision: str) -> bool | None:
-        if self.snapshot.reader.repo is None:
-            return None
-        return self.snapshot.reader.resolve_commit(revision) is not None
-
-    def acceptance_pair(self) -> tuple[str, str] | None:
-        row = self.state_ticket()
-        if isinstance(row, dict):
-            acceptance = row.get("acceptance")
-            if isinstance(acceptance, dict) and isinstance(acceptance.get("revision"), str) and isinstance(acceptance.get("environment"), str):
-                return acceptance["revision"], acceptance["environment"]
-            if row.get("state") != "PENDING":
-                return None
-        groups = self.ticket_evidence_groups()
-        if groups:
-            for revision, environment in groups:
-                if self.revision_parseable(revision) is not False:
-                    return revision, environment
-        return None
 
     def last_outcome(self) -> Fact:
         rows = self._observation_rows()
@@ -2146,42 +2022,6 @@ class FactContext:
         )
         return _fact_value(bool(decisions - results) or pending_dispatch)
 
-    def _direct_evidence_returned(self) -> bool | None:
-        evidence = self.direct_evidence_payloads()
-        return bool(evidence.value) if evidence.known else None
-
-    def direct_evidence_payloads(self) -> Fact:
-        """Return direct result evidence in the current ticket trail.
-
-        A trail row may put the payload directly on the row, or under one of
-        the historic `ref`/`evidence` aliases.  Keep the enclosing row as
-        fallback metadata so an artifact payload can still pair with its
-        claim, revision, and environment.
-        """
-        rows = self._observation_rows()
-        if rows is None:
-            return self.unknown(self.snapshot.trail.error or "trail.jsonl 不存在或无法读取")
-        keys = ("ref", "evidence", "artifact", "evidence_ref", "direct_evidence")
-        payloads: list[dict[str, Any]] = []
-        for row in rows:
-            if not _result_event(row):
-                continue
-            for key in keys:
-                value = row.get(key)
-                values = value if isinstance(value, list) else [value]
-                for item in values:
-                    if not item:
-                        continue
-                    payload = dict(row)
-                    if isinstance(item, dict):
-                        payload.update(item)
-                    elif isinstance(item, str):
-                        payload.setdefault("artifact", item)
-                    else:
-                        payload.setdefault("artifact", item)
-                    payloads.append(payload)
-        return _fact_value(payloads)
-
     def _incomplete_count(self) -> Fact:
         rows = self._observation_rows()
         if rows is None:
@@ -2238,24 +2078,8 @@ class FactContext:
                     return _fact_value(True)
         return _fact_value(False)
 
-    def _has_early_falsification_evidence(self) -> Fact:
-        records = self.evidence_records()
-        if records is None:
-            return self.state_required() or self.unknown("evidenceIndex 无法判定")
-        return _fact_value(any(record.get("timing") == "early-falsification" for record in records))
-
     def _investigation_carrier_present(self) -> Fact:
-        dispatched = self._has_investigate_dispatch()
-        early_evidence = self._has_early_falsification_evidence()
-        if dispatched.known and dispatched.value:
-            return _fact_value(True)
-        if early_evidence.known and early_evidence.value:
-            return _fact_value(True)
-        if not dispatched.known:
-            return dispatched
-        if not early_evidence.known:
-            return early_evidence
-        return _fact_value(False)
+        return self._has_investigate_dispatch()
 
     def _investigation_context_clear(self) -> Fact:
         if self._trail_is_empty() or self.snapshot.trail.error:
@@ -2273,13 +2097,6 @@ class FactContext:
         ):
             return _fact_value(False)
         return _fact_value(True)
-
-    def _release_edge_present(self) -> Fact:
-        if self.kind != "ticket":
-            return self.unknown("该 key 需要 ticket subject")
-        if self.ticket is None or not self.ticket.valid:
-            return self.unknown("Ticket 文件缺失或无法解析 typed dependency")
-        return _fact_value(any(kind == "release" for kind, _ in self.ticket.dependencies))
 
     def _finding_source(self) -> Fact:
         rows = self._observation_rows()
@@ -2602,13 +2419,6 @@ def _when_ticket_investigation_context_clear(context: FactContext) -> Fact:
     return context._investigation_context_clear()
 
 
-def _when_evidence_count(context: FactContext) -> Fact:
-    records = context.evidence_records()
-    if records is None:
-        return context.state_required() or context.unknown("evidenceIndex 无法判定")
-    return _fact_value(len(records))
-
-
 def _when_trail_last_outcome(context: FactContext) -> Fact:
     return context.last_outcome()
 
@@ -2629,51 +2439,6 @@ def _when_trail_decision_without_result(context: FactContext) -> Fact:
     return context._decision_without_result()
 
 
-def _when_trail_direct_evidence_returned(context: FactContext) -> Fact:
-    value = context._direct_evidence_returned()
-    return _fact_value(value) if value is not None else context.unknown("trail.jsonl 不存在或无法读取")
-
-
-def _when_evidence_indexed(context: FactContext) -> Fact:
-    direct = context.direct_evidence_payloads()
-    if not direct.known:
-        return direct
-    if not direct.value:
-        return _fact_value(False)
-    links = [_evidence_link(payload) for payload in direct.value]
-    if any(link is None for link in links):
-        return context.unknown("trail 直接证据缺少 artifact/claim/revision/environment 关联字段")
-    records = context.evidence_records()
-    if records is None:
-        return context.state_required() or context.unknown("evidenceIndex 无法判定")
-    indexed = {
-        link
-        for record in records
-        if not _evidence_invalidated(record)
-        for link in [_evidence_link(record)]
-        if link is not None
-    }
-    return _fact_value(all(link in indexed for link in links))
-
-
-def _when_ticket_safety_invariant_unfalsified(context: FactContext) -> Fact:
-    if context.kind != "ticket" or context.ticket is None:
-        return context.unknown("该 key 需要 ticket subject")
-    if not context.ticket.valid:
-        return context.unknown("Ticket 文件缺失或无法解析安全不变量")
-    records = context.evidence_records()
-    if records is None:
-        return context.state_required() or context.unknown("evidenceIndex 无法判定")
-    if not context.ticket.safety_claims:
-        return _fact_value(False)
-    active_claims = {
-        str(record.get("claim"))
-        for record in records
-        if isinstance(record.get("claim"), str) and not record.get("invalidatedBy")
-    }
-    return _fact_value(not set(context.ticket.safety_claims) <= active_claims)
-
-
 def _when_trail_incomplete_count(context: FactContext) -> Fact:
     return context._incomplete_count()
 
@@ -2688,90 +2453,6 @@ def _when_trail_envelope_valid(context: FactContext) -> Fact:
 
 def _when_trail_finding_source(context: FactContext) -> Fact:
     return context._finding_source()
-
-
-def _when_evidence_contradictory_unresolved(context: FactContext) -> Fact:
-    if context.kind != "ticket" or context.ticket is None:
-        return context.unknown("该 key 需要 ticket subject")
-    if not context.ticket.valid:
-        return context.unknown("Ticket 文件缺失或无法解析 required claims")
-    records = context.evidence_records()
-    if records is None:
-        return context.state_required() or context.unknown("evidenceIndex 无法判定")
-    pair = context.acceptance_pair()
-    if pair is None:
-        return _fact_value(False)
-    revision, environment = pair
-    required_claims = set(context.ticket.claims)
-    return _fact_value(
-        any(
-            record.get("claim") in required_claims
-            and record.get("revision") == revision
-            and record.get("environment") == environment
-            and record.get("conclusion") in {"contradictory", "inconclusive"}
-            and not record.get("invalidatedBy")
-            for record in records
-        )
-    )
-
-
-def _when_evidence_all_required_claims_supported(context: FactContext) -> Fact:
-    if context.kind != "ticket" or context.ticket is None:
-        return context.unknown("该 key 需要 ticket subject")
-    if not context.ticket.valid:
-        return context.unknown("Ticket 文件缺失或无法解析 required claims")
-    records = context.evidence_records()
-    if records is None:
-        return context.state_required() or context.unknown("evidenceIndex 无法判定")
-    if not context.ticket.claims:
-        return _fact_value(False)
-    pair = context.acceptance_pair()
-    if pair is not None:
-        revision, environment = pair
-        current = [
-            record
-            for record in records
-            if record.get("revision") == revision
-            and record.get("environment") == environment
-            and not record.get("invalidatedBy")
-        ]
-        return _fact_value(
-            all(any(record.get("claim") == claim and record.get("conclusion") == "supporting" for record in current) for claim in context.ticket.claims)
-        )
-    return _fact_value(False)
-
-
-def _when_ticket_acceptance_edge_released(context: FactContext) -> Fact:
-    return context.dependency_released("acceptance")
-
-
-def _when_ticket_release_edge_present(context: FactContext) -> Fact:
-    return context._release_edge_present()
-
-
-def _when_ticket_acceptance_revision_parseable(context: FactContext) -> Fact:
-    if context.kind != "ticket":
-        return context.unknown("该 key 需要 ticket subject")
-    pair = context.acceptance_pair()
-    if pair is None:
-        records = context.evidence_records()
-        if records is None:
-            return context.state_required() or context.unknown("evidenceIndex 无法判定")
-        return _fact_value(False)
-    parsed = context.revision_parseable(pair[0])
-    if parsed is None:
-        return context.unknown("当前 Git 仓库不可用，无法校验 acceptance revision")
-    return _fact_value(parsed)
-
-
-def _when_evidence_new_claim_conflict(context: FactContext) -> Fact:
-    state = context.state()
-    if state is None:
-        return context.state_required() or context.unknown("state.json 无法判定")
-    row = context.state_ticket()
-    if row is None or row.get("state") != "SATISFIED":
-        return _fact_value(False)
-    return _when_evidence_contradictory_unresolved(context)
 
 
 def _resolved_satisfied_acceptance_revision(context: FactContext) -> Fact:
@@ -2957,20 +2638,6 @@ def _when_attempt_terminal_coverage_complete(context: FactContext) -> Fact:
     return _fact_value(True)
 
 
-def _when_ticket_acceptance_conditions_satisfied(context: FactContext) -> Fact:
-    supported = _when_evidence_all_required_claims_supported(context)
-    conflicts = _when_evidence_contradictory_unresolved(context)
-    if not supported.known:
-        return supported
-    if not conflicts.known:
-        return conflicts
-    return _fact_value(bool(supported.value) and not bool(conflicts.value))
-
-
-def _when_ticket_release_edge_rechecked(context: FactContext) -> Fact:
-    return context._trail_signal("ticket.release_edge_rechecked")
-
-
 def _when_gate_stage7_complete(context: FactContext) -> Fact:
     gate = context.snapshot.gate
     if not gate.present:
@@ -3081,25 +2748,15 @@ WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "trail.has_investigate": _when_trail_has_investigate,
     "ticket.investigation_carrier_present": _when_ticket_investigation_carrier_present,
     "ticket.investigation_context_clear": _when_ticket_investigation_context_clear,
-    "evidence.count": _when_evidence_count,
     "trail.last_outcome": _when_trail_last_outcome,
     "trail.anchor_mismatch": _when_trail_anchor_mismatch,
     "trail.checkpoint_projection_race": _when_trail_checkpoint_projection_race,
     "trail.reviewer_unavailable": _when_trail_reviewer_unavailable,
     "trail.decision_without_result": _when_trail_decision_without_result,
-    "trail.direct_evidence_returned": _when_trail_direct_evidence_returned,
-    "evidence.indexed": _when_evidence_indexed,
-    "ticket.safety_invariant_unfalsified": _when_ticket_safety_invariant_unfalsified,
     "trail.incomplete_count": _when_trail_incomplete_count,
     "trail.last_worker_mode": _when_trail_last_worker_mode,
     "trail.envelope_valid": _when_trail_envelope_valid,
     "trail.finding_source": _when_trail_finding_source,
-    "evidence.contradictory_unresolved": _when_evidence_contradictory_unresolved,
-    "evidence.all_required_claims_supported": _when_evidence_all_required_claims_supported,
-    "ticket.acceptance_edge_released": _when_ticket_acceptance_edge_released,
-    "ticket.release_edge_present": _when_ticket_release_edge_present,
-    "ticket.acceptance_revision_parseable": _when_ticket_acceptance_revision_parseable,
-    "evidence.new_claim_conflict": _when_evidence_new_claim_conflict,
     "git.acceptance_revision_diverged": _when_git_acceptance_revision_diverged,
     "git.head_advanced_since_last_trail": _when_git_head_advanced_since_last_trail,
     "finding.review_track": _when_finding_review_track,
@@ -3108,8 +2765,6 @@ WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "findings.triage_pending": _when_findings_triage_pending,
     "attempt.near_terminal_gate": _when_attempt_near_terminal_gate,
     "attempt.terminal_coverage_complete": _when_attempt_terminal_coverage_complete,
-    "ticket.acceptance_conditions_satisfied": _when_ticket_acceptance_conditions_satisfied,
-    "ticket.release_edge_rechecked": _when_ticket_release_edge_rechecked,
     "gate.stage7_complete": _when_gate_stage7_complete,
     "attempt.terminal_gate_pending": _when_attempt_terminal_gate_pending,
     "gate.present": _when_gate_present,

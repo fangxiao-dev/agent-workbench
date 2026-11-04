@@ -1,5 +1,5 @@
 {
-  "formatVersion": "3.5",
+  "formatVersion": "3.6",
   "predecessors": null,
   "attempt": {
     "id": "initial",
@@ -26,6 +26,26 @@
       "next": "record the implementation routing judgment",
       "blocker": null,
       "evidence": []
+    }
+  },
+  "acceptance": {
+    "contractBaseline": {
+      "head": "0000000000000000000000000000000000000000",
+      "files": {
+        "spec.md": "1111111111111111111111111111111111111111"
+      }
+    },
+    "releaseOrder": "none",
+    "amendments": [],
+    "harness": {
+      "setup": "python harness.py setup",
+      "precheck": "python harness.py precheck",
+      "cleanup": "python harness.py cleanup",
+      "isolation": "per-run",
+      "firstVisibleStep": {
+        "step": "J1-S1",
+        "ticket": "TKT-01"
+      }
     }
   }
 }

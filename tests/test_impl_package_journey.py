@@ -41,7 +41,6 @@ PLAN = """# Plan
 
 Attempt ID: initial
 Predecessors: None
-Composition: tickets=true, dag=false
 Acceptance: journey
 Harness setup: python harness.py setup
 Harness precheck: python harness.py precheck
@@ -548,6 +547,14 @@ def test_init_validate_and_status_use_v36_and_record_contract_baseline(tmp_path:
         result = _cli(repo, package, "package", command)
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout)["formatVersion"] == "3.6"
+
+
+def test_init_rejects_plan_that_still_declares_dag_composition(tmp_path: Path) -> None:
+    plan = PLAN.replace("Acceptance: journey", "Composition: tickets=true, dag=true\nAcceptance: journey")
+    repo, package = _make_package(tmp_path, plan=plan)
+    result = _init(repo, package, ok=False)
+    assert result.returncode != 0
+    assert "only tickets=true, dag=false is supported" in (result.stderr + result.stdout)
 
 
 def test_check_spec_resolves_rule_and_no_acceptance_chapters_by_number_or_title(tmp_path: Path) -> None:
@@ -1385,54 +1392,31 @@ def test_v36_situation_parser_reads_state_and_terminal_fact_without_format_error
     assert "3.5 schema" not in (fact.reason or "")
 
 
-def test_v36_is_not_claim_validated_while_v35_rejects_v36_fields(tmp_path: Path) -> None:
+def test_v36_has_no_claim_state_and_old_formats_are_rejected(tmp_path: Path) -> None:
     repo, package, revision = _init_v36(tmp_path)
     state = _state(package)
     summary = engine._validate_state(package, state, projections=False)
-    assert summary["_claims"] == {"TKT-01": set(), "TKT-02": set()}
+    assert "_claims" not in summary
     state["tickets"]["TKT-01"] = {"state": "SATISFIED", "acceptance": {"revision": revision, "environment": "local-test"}}
     engine._validate_state(package, state, projections=False)
     failed_satisfy = _cli(repo, package, "ticket", "satisfy", "TKT-01", "--expect", "PENDING", "--revision", revision, "--environment", "local-test")
     assert failed_satisfy.returncode != 0
     assert "Suite S-resolver" in failed_satisfy.stderr
 
-    old_plan = PLAN.replace("Acceptance: journey\n", "")
-    old_ticket = """# TKT-01
+    state_path = package / ".impl-package/state.json"
+    for old_version in ("3.5", "3.4"):
+        old_state = _state(package)
+        old_state["formatVersion"] = old_version
+        state_path.write_text(json.dumps(old_state), encoding="utf-8")
+        rejected = _cli(repo, package, "package", "status")
+        assert rejected.returncode != 0
+        assert f"format {old_version} is no longer supported; start a new package" in rejected.stderr
 
-Ticket ID: TKT-01
-Publication Status: Draft
-Attempt ID: initial
-
-## Acceptance Criteria
-- Stable claim ID: `AC-1`
-- Evidence timing: `remaining-completion`
-
-## Blocking Dependencies
-- none
-"""
-    old_repo, old_package = _make_package(tmp_path / "legacy", plan=old_plan, tickets={"01.md": old_ticket})
-    _init(old_repo, old_package)
-    old_state = _state(old_package)
-    assert old_state["formatVersion"] == "3.5"
-    missing_environment = _cli(
-        old_repo,
-        old_package,
-        "ticket",
-        "satisfy",
-        "TKT-01",
-        "--expect",
-        "PENDING",
-        "--revision",
-        _git(old_repo, "rev-parse", "HEAD"),
-    )
-    assert missing_environment.returncode != 0
-    assert "--revision and --environment" in missing_environment.stderr
-    old_state["acceptance"] = {"contractBaseline": {}, "releaseOrder": "none", "amendments": []}
-    (old_package / ".impl-package/state.json").write_text(json.dumps(old_state), encoding="utf-8")
-    rejected = _cli(old_repo, old_package, "package", "status")
-    assert rejected.returncode != 0
-    assert "formatVersion 3.5" in rejected.stderr
-    assert "activeCheckpoints" in rejected.stderr
+    old_repo, old_package = _make_package(tmp_path / "legacy", plan=PLAN.replace("Acceptance: journey\n", ""))
+    rejected_plan = _init(old_repo, old_package, ok=False)
+    assert rejected_plan.returncode != 0
+    assert "Acceptance: journey" in rejected_plan.stderr
+    assert not (old_package / ".impl-package/state.json").exists()
 
 
 def test_ticket_satisfy_uses_suite_and_required_review_without_journey_steps(tmp_path: Path) -> None:
@@ -1878,7 +1862,7 @@ def test_review_record_requires_impact_for_v36_and_rejects_unknown_impact(tmp_pa
         "resolvedHead": revision, "findings": [finding],
     }
 
-    with pytest.raises(review_track_stats.ReviewStatsError, match="impact is required for formatVersion 3.6"):
+    with pytest.raises(review_track_stats.ReviewStatsError, match="impact is required"):
         review_track_stats.record_summary(package, canonical)
     with pytest.raises(review_track_stats.ReviewStatsError, match="impact must be one of"):
         review_track_stats.record_summary(package, {**canonical, "findings": [{**finding, "impact": "wide"}]})
@@ -2031,27 +2015,6 @@ def test_package_metrics_keeps_unavailable_values_null_with_reasons(tmp_path: Pa
     assert report["journeys"]["value"][0]["runCount"]["value"] == 0
     assert report["coverage"]["recordedAt"]["value"] is None
     assert report["coverage"]["recordedAt"]["missingReason"] == "no evidence records"
-
-
-def test_package_metrics_runs_on_35_and_marks_journey_sections_unavailable(tmp_path: Path) -> None:
-    plan = PLAN.replace("Acceptance: journey\n", "")
-    tickets = {
-        "01.md": "# TKT-01\n\nTicket ID: TKT-01\nPublication Status: Draft\nAttempt ID: initial\n\n## Claims\n\n- Stable claim ID: `AC-1`\n  - Evidence timing: `remaining-completion`\n",
-    }
-    repo, package = _make_package(tmp_path, plan=plan, tickets=tickets)
-    initialized = _init(repo, package)
-    assert json.loads(initialized.stdout)["formatVersion"] == "3.5"
-
-    result = _cli(repo, package, "package", "metrics")
-
-    assert result.returncode == 0, result.stderr
-    report = json.loads((package / "execution/initial/metrics.json").read_text(encoding="utf-8"))
-    assert report["formatVersion"]["value"] == "3.5"
-    assert report["journeys"]["value"] is None
-    assert "require formatVersion 3.6" in report["journeys"]["missingReason"]
-    assert report["amendments"]["value"] is None
-    assert report["coverage"]["recordedAt"]["value"] is None
-    assert "3.5" in report["coverage"]["recordedAt"]["missingReason"]
 
 
 def test_situation_renders_new_v36_acceptance_rows_without_changing_global_blocking(tmp_path: Path) -> None:

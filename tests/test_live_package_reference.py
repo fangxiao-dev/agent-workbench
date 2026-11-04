@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SITUATION_CLI = ROOT / "plugin-marketplace/plugins/impl-package/scripts/situation.py"
 STATE_CLI = ROOT / "plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py"
-SOURCE_FIXTURE = ROOT / "tests/fixtures/impl-package-ticket-first"
+SOURCE_FIXTURE = ROOT / "tests/fixtures/impl-package-state"
 sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
 from impl_package_runtime import engine  # noqa: E402
 
@@ -52,13 +52,13 @@ def _make_ready_package(tmp_path: Path) -> tuple[Path, Path]:
     repo = tmp_path / "repo"
     package = repo / "docs/implementations/20260821-live-reference-consumer"
     (package / "tickets").mkdir(parents=True)
-    shutil.copy2(SOURCE_FIXTURE / "ticket-only-plan.md", package / "plan.md")
-    shutil.copytree(SOURCE_FIXTURE / "evidence", repo / "evidence")
+    shutil.copy2(SOURCE_FIXTURE / "plan.md", package / "plan.md")
     for source in (SOURCE_FIXTURE / "tickets").glob("*.md"):
         shutil.copy2(source, package / "tickets" / source.name)
     (package / "decision.md").write_text("# Decision\n", encoding="utf-8")
     (package / "spec.md").write_text(
-        "# Spec\n\nReference: docs/implementations/260801-live-contract/\n",
+        (SOURCE_FIXTURE / "spec.md").read_text(encoding="utf-8")
+        + "\nReference: docs/implementations/260801-live-contract/\n",
         encoding="utf-8",
     )
     (repo / "docs/implementations/retired.json").write_text(
@@ -78,15 +78,8 @@ def _make_ready_package(tmp_path: Path) -> tuple[Path, Path]:
         "docs/implementations/20260821-live-reference-consumer/plan.md",
     )
     revision = _git(repo, "rev-parse", "HEAD")
-    index = json.loads((SOURCE_FIXTURE / "evidence/index.json").read_text(encoding="utf-8"))
-    evidence_index: dict[str, dict[str, list[dict[str, str]]]] = {}
-    for source in index["records"]:
-        record = dict(source)
-        record.update({"revision": revision, "environment": "test", "artifact": source["artifact"]})
-        evidence_index.setdefault(record["ticket"], {}).setdefault(record["claim"], []).append(record)
     state_path = package / ".impl-package/state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    state["evidenceIndex"] = evidence_index
     state["tickets"] = {
         ticket: {"state": "SATISFIED", "acceptance": {"revision": revision, "environment": "test"}}
         for ticket in state["tickets"]

@@ -1,5 +1,5 @@
 {
-  "formatVersion": "3.5",
+  "formatVersion": "3.6",
   "predecessors": null,
   "attempt": {
     "id": "fixture-attempt",
@@ -11,18 +11,26 @@
       "state": "PENDING"
     }
   },
-  "evidenceIndex": {
-    "TKT-01": {
-      "AC-1": [
-        {
-          "timing": "remaining-completion",
-          "artifact": "evidence/sanitized-supporting",
-          "revision": "5f299f3",
-          "environment": "sanitized-env",
-          "conclusion": "supporting"
-        }
-      ]
+  "evidenceIndex": {},
+  "activeCheckpoints": {},
+  "acceptance": {
+    "contractBaseline": {
+      "head": "0000000000000000000000000000000000000000",
+      "files": {
+        "spec.md": "1111111111111111111111111111111111111111"
+      }
+    },
+    "releaseOrder": "none",
+    "amendments": [],
+    "harness": {
+      "setup": "python harness.py setup",
+      "precheck": "python harness.py precheck",
+      "cleanup": "python harness.py cleanup",
+      "isolation": "per-run",
+      "firstVisibleStep": {
+        "step": "J1-S1",
+        "ticket": "TKT-01"
+      }
     }
-  },
-  "activeCheckpoints": {}
+  }
 }

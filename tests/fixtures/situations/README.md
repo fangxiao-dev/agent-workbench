@@ -2,19 +2,7 @@
 
 这组 fixture 来自两个只读 legacy 源仓库中按 `.impl-package/` 标志目录发现的真实 package。只保留 `situation.py` 会读取的状态、Ticket claim/typed dependency、evidence index、Gate、finding 和 trail 字段；业务正文、客户/账号/金额/真实地址等均替换为占位。
 
-共 53 个 fixture；由于一个 fixture 可以覆盖同层并列或 secondary 处境，当前覆盖以各 fixture 的 `expected.json` 和测试结果为准。测试把 `selected` 或 `parallel_matches` 视为 primary，把 `other_matches` 视为 secondary；`expected_suppressed` 用于验证被更高优先级正确压住的行；`must_not_hit` 针对可见集合断言。
-
-## 2026-08-16 语义修正回归更新
-
-按修正后的 situation table 与 `situation-inputs.md` 合同，更新以下 5 个回归 fixture 的 `expected.json`：
-
-- `p2-awaiting-reviewer`：没有真实 release dependency，移除误报的 `ticket.accept.release-edge-unchecked`。
-- `p3-contradictory`：同一 acceptance pair 有 active contradictory evidence，移除不再满足条件的 `ticket.accept.satisfiable`。
-- `p4-comparison-mismatch`：pass Gate 已存在，移除 Gate 后仍检查 `attempt.gate.comparison-mismatch` 的旧 suppressed 期望。
-- `p4-gate-verdict-undecided`：没有 Gate 且 Ticket 集合为空，不再合成 `attempt.gate.verdict-undecided`，也不满足 `attempt.gate.missing` 的 all-terminal 前提。
-- `p4-release-edge-unchecked`：没有真实 typed release dependency，只保留 `ticket.accept.satisfiable`。
-
-本次没有调整这 5 个 fixture 的输入数据；A2 与 independent 冻结 oracle 未修改。
+共 46 个 fixture；由于一个 fixture 可以覆盖同层并列或 secondary 处境，当前覆盖以各 fixture 的 `expected.json` 和测试结果为准。测试把 `selected` 或 `parallel_matches` 视为 primary，把 `other_matches` 视为 secondary；`expected_suppressed` 用于验证被更高优先级正确压住的行；`must_not_hit` 针对可见集合断言。
 
 ## 2026-09-07 T9 收窄 fact 声明入口
 
@@ -29,14 +17,13 @@ T9 删除的声明型 fact fixture 保留在本目录作为负向回归：旧 fa
 | `p0-anchor-mismatch` | kaispan-dev/docs/domains/finance-assistant/historical-unverifiable/260731-1332-kontierung-rule-engine — original .impl-package/runtime-state.json contractVersion 3.2 | legacy package 的 revision binding/anchor 无法回读；trail 为按真实恢复失败时间线补写的 anchor-mismatch 事实。 | attempt.record.anchor-mismatch |
 | `p0-checkpoint-missing` | kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-16-datev-accounting-rules — original .impl-package/runtime-state.json contractVersion 3.2 | 退役的 handoff/long-task 声明 fact；现行表不再从该声明提醒 checkpoint。 | 无可见 situation |
 | `p0-checkpoint-refresh` | kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4 | 退役的 checkpoint-refresh 声明 fact；现行表不再从该声明提醒刷新。 | 无可见 situation |
-| `p0-evidence-unfiled` | prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2 | legacy gate 记录了直接 evidence，但没有把它登记进 evidence index；正文已脱敏。 | ticket.record.evidence-unfiled |
 | `p0-handoff-in-flight` | kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-16-datev-accounting-rules — original .impl-package/runtime-state.json contractVersion 3.2 | 退役的 handoff-in-flight 声明 fact；交接职责由 handoff 流程承接。 | 无可见 situation |
 | `p0-handoff-recovery-needed` | prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2 | 历史交接信号的负向回归：不再触发创建或重发动作。 | 无交接专用处境 |
 | `p0-handoff-target-corrected` | kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4 | 历史交接信号的负向回归：不再触发创建或重发动作。 | 无交接专用处境 |
 | `p0-judgment-unfiled` | prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2 | 退役的 judgment-unfiled 声明 fact；当前无调查载体时仍按现行组合条件显示 no-carrier。 | ticket.investigate.no-carrier |
 | `p0-projection-drift` | kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4 | 旧 trail fact 作为负向回归保留；projection drift 现需通过结构化 `--validation-result` 输入。 | 无可见 situation |
 | `p0-session-resumed` | kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4 | legacy execution record 多次以 Resume checkpoint 接续；trail 为按真实接续时间线补写，checkpoint 后尚无新动作。 | attempt.record.session-resumed |
-| `p0-state-missing` | kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-12-finance-office-tax-advisor — original marker had no state.json/runtime-state.json | 原包只有标志目录而没有可用 runtime state；state-missing 用缺失 state 还原，故本 fixture 是唯一不放 3.5 state.json 的例外。 | package.record.state-missing |
+| `p0-state-missing` | kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-12-finance-office-tax-advisor — original marker had no state.json/runtime-state.json | 原包只有标志目录而没有可用 runtime state；state-missing 用缺失 state 还原，故本 fixture 是唯一不放 3.6 state.json 的例外。 | package.record.state-missing |
 | `p0-terminal-frozen` | prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2 | legacy package 已有 terminal pass Gate；翻译为全部 Ticket 已满足且当前 attempt 被 terminal Gate 冻结。 | attempt.gate.terminal-frozen |
 | `p4-comparison-mismatch` | prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2 | legacy Gate 虽为 pass，但 comparison commit 与 satisfied Ticket 的 acceptance revision 不一致；现行 F7 只在 Gate 写入前检查，因此已有 pass Gate 时只保留 P0 terminal-frozen。 | attempt.gate.terminal-frozen |
 
@@ -54,7 +41,6 @@ T9 删除的声明型 fact fixture 保留在本目录作为负向回归：旧 fa
 
 | fixture | 真实来源（原格式） | 还原场景 | primary / secondary |
 |---|---|---|---|
-| `p2-awaiting-reviewer` | prj-supplyer-webapp/docs/implementations/order-snapshot-reuse — original .impl-package/runtime-state.json contractVersion 3.2 | 退役的 reviewer requirement 声明/兼容 marker；当前合法 evidence 仍显示 Ticket 可满足。 | ticket.accept.satisfiable |
 | `p2-closure-awaiting` | kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4 | 退役的 closure-pending 声明；当前 finding 状态仍分别命中 grading 与 triage。 | finding.disposition.grading-undecided, attempt.disposition.findings-triage-pending |
 | `p2-envelope-invalid` | prj-supplyer-webapp/docs/implementations/inventory-manufacture-issues-153-158 — original .impl-package/runtime-state.json contractVersion 3.2 | legacy review-fix package 有审查 finding 与修复返回边界；trail 为按真实 fixer 返回 envelope 不可采信补写。 | finding.fix.worker-envelope-invalid；secondary: attempt.disposition.findings-triage-pending |
 | `p2-incomplete-first` | kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-16-datev-accounting-rules — original .impl-package/runtime-state.json contractVersion 3.2 | legacy 外部验证首次未完成，仍允许一次 fresh fallback；trail 为按真实一次 INCOMPLETE 返回补写。 | ticket.implement.worker-incomplete-first |
@@ -73,27 +59,22 @@ T9 删除的声明型 fact fixture 保留在本目录作为负向回归：旧 fa
 | fixture | 真实来源（原格式） | 还原场景 | primary / secondary |
 |---|---|---|---|
 | `p3-comparison-head-unfixed` | kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4 | 退役的 comparison-head 声明 fact；正式 review 的 comparison point 由实际 ReviewRun/HEAD 记录承接。 | 无可见 situation |
-| `p3-contradictory` | prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2 | legacy 已 satisfied 的 Ticket 后续出现同 acceptance pair 的 contradictory evidence，需先裁决冲突；正文已脱敏。 | ticket.verify.contradictory-unresolved, ticket.rework.evidence-conflict；secondary: attempt.accept.all-tickets-terminal, attempt.gate.durable-delta-missing |
 | `p3-integration-evidence-unavailable` | prj-supplyer-webapp/docs/implementations/release-external-readiness-audit — original .impl-package/runtime-state.json contractVersion 3.2 | 退役的 integration-evidence 声明 fact；现行表保留逐 claim 证据判断。 | 无可见 situation |
 | `p3-retire-undecided` | kaispan-dev/docs/implementations/legacy-impl-plans-retirement — original .impl-package/runtime-state.json contractVersion 3.2 | 退役的 no-longer-needed 声明/正文 fallback；Ticket 处置仍由 `ticket retire` 承担。 | 无可见 situation |
 | `p3-revalidation-pending` | prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2 | legacy evidence/contract 变化后 Ticket 被置为 NEEDS-REVALIDATION，重验尚未完成。 | ticket.rework.revalidation-pending |
 | `p3-revision-diverged` | kaispan-dev/docs/domains/finance-assistant/historical-unverifiable/260731-1332-kontierung-rule-engine — original .impl-package/runtime-state.json contractVersion 3.2 | legacy satisfied 绑定的 acceptance revision 已落后于当前 HEAD，且 trail 也证明 HEAD 已前进；trail 为按真实返工时间线补写。 | ticket.rework.revision-diverged；secondary: attempt.accept.all-tickets-terminal, attempt.gate.durable-delta-missing |
-| `p3-safety-invariant` | prj-supplyer-webapp/docs/implementations/inventory-manufacture-issues-153-158 — original .impl-package/runtime-state.json contractVersion 3.2 | legacy 验证已覆盖普通 acceptance，但安全不变量没有被证据反驳/确认，需单独 verify；trail 为按真实验证时间线补写。 | ticket.verify.safety-invariant-unfalsified |
 | `p3-sources-unique` | kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-22-kassel-pdf-to-extf-poc — original .impl-package/runtime-state.json contractVersion 3.2 | 退役的 sources-uniquely-decision 声明 fact；来源裁决仍由主控按合同判断。 | 无可见 situation |
 
 ### P4
 
 | fixture | 真实来源（原格式） | 还原场景 | primary / secondary |
 |---|---|---|---|
-| `p4-acceptance-edge-held` | prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2 | legacy Ticket 已有部分 evidence，但 acceptance dependency 仍被 blocker 持有，不能进入 satisfied；正文已脱敏。 | ticket.accept.acceptance-edge-held |
 | `p4-all-terminal-durable-missing` | kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4 | legacy attempt 的 Ticket 已全部 terminal，但 Gate 前要求的 durable delta 尚未记录；这两个 P4 条件在状态上并列。 | attempt.accept.all-tickets-terminal, attempt.gate.durable-delta-missing |
 | `p4-completion-claim-unaudited` | prj-supplyer-webapp/docs/implementations/order-document-completion-workflow — original .impl-package/runtime-state.json contractVersion 3.2 | 退役的 completion-claim 声明 fact；完成前审计与 Gate CLI 校验继续保留。 | 无可见 situation |
 | `p4-findings-triage-pending` | kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-16-datev-accounting-rules — original .impl-package/runtime-state.json contractVersion 3.2 | legacy finding 已定为 P1，但仍没有分流到 Decision/Spec/Execution Record/Durable Delta；正文已脱敏。 | attempt.disposition.findings-triage-pending |
 | `p4-gate-verdict-undecided` | kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-12-finance-office-tax-advisor — marker had no state.json; translated as original legacy package with missing Gate verdict | fixture 没有 Gate，且 state 中没有 Ticket；缺 Gate 不合成 undecided，all-terminal 前提也不成立。 | 无可见 situation |
 | `p4-grading-undecided` | prj-supplyer-webapp/docs/implementations/inventory-manufacture-issues-153-158 — original .impl-package/runtime-state.json contractVersion 3.2 | legacy finding 已有候选 route，但仍未决定 P1/P2 还是 editorial grade；正文已脱敏。 | finding.disposition.grading-undecided |
 | `p4-manual-result-missing` | kaispan-dev/docs/domains/finance-assistant/implementations/2026-07-22-kassel-pdf-to-extf-poc — original .impl-package/runtime-state.json contractVersion 3.2 | 退役的 manual-verification owner/result 声明 facts；人工验收责任与真实结果证据仍在 Plan/Ticket/Gate。 | 无可见 situation |
-| `p4-release-edge-unchecked` | prj-supplyer-webapp/docs/implementations/order-create-release-consistency — original .impl-package/runtime-state.json contractVersion 3.2 | legacy acceptance evidence 已支持 claim，但当前 fixture 没有真实 typed release dependency。 | ticket.accept.satisfiable |
-| `p4-satisfiable` | kaispan-dev/docs/implementations/2026-08-10-accounting-scope-policy-ownership — original .impl-package/state.json formatVersion 3.4 | legacy Ticket 的 required claims 已有同 revision supporting evidence，acceptance/release 边均已复核，达到 satisfiable。 | ticket.accept.satisfiable |
 | `p4-terminal-coverage-incomplete` | prj-supplyer-webapp/docs/implementations/inventory-manufacture-issues-153-158 — original .impl-package/runtime-state.json contractVersion 3.2 | terminal summary 缺失；现行计算同时显示全部 Ticket 已终态与 durable delta 缺失。 | attempt.accept.all-tickets-terminal, attempt.review.terminal-coverage-incomplete, attempt.gate.durable-delta-missing |
 
 ### P5
@@ -112,7 +93,9 @@ T9 删除的声明型 fact fixture 保留在本目录作为负向回归：旧 fa
 
 ## 备注
 
-- legacy package 原始格式是 `.impl-package/runtime-state.json` contractVersion 3.2，或少量 `.impl-package/state.json` formatVersion 3.4；fixture 翻译到 3.5。
+- legacy package 原始格式是 `.impl-package/runtime-state.json` contractVersion 3.2，或少量 `.impl-package/state.json` formatVersion 3.4；fixture 翻译到 3.6（`acceptance`、`spec.md` 与 Ticket Coverage 为统一占位，原 stable claim evidence 不保留）。
 - legacy 没有 trail；凡 `expected.json` scenario 标注“trail 为按真实流程补写”的 fixture，只补写从真实 Execution Record/Gate/阻塞时间线可直接推出的最小行。
-- `p0-state-missing` 是有意例外：它验证缺失 state 的 fail-closed 行，因此不放 3.5 `state.json`。
+- `p0-state-missing` 是有意例外：它验证缺失 state 的 fail-closed 行，因此不放 3.6 `state.json`。
 - 未把 `situations.yaml`、`situation.py` 或两个素材仓库作为测试适配目标修改。
+- `p1-no-trail`：完整 3.6 package 没有 `execution/`，轨迹输入为空；用作 compaction-pressure、projection-drift 与 hooks 测试的无 trail 载体。
+- 随 3.5 删除的 situation（`ticket.record.evidence-unfiled`、`ticket.verify.contradictory-unresolved`、`ticket.verify.safety-invariant-unfalsified`、`ticket.rework.evidence-conflict`、`ticket.accept.acceptance-edge-held`、`ticket.accept.release-edge-unchecked`、`ticket.accept.satisfiable`）对应的 fixture 已一并删除。

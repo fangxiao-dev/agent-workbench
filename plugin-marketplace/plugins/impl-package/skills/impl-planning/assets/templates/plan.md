@@ -2,32 +2,24 @@
 
 创建时间（Created）：
 Attempt ID: <initial | YYYYMMDD-HHMM-patch-topic>
-Composition: tickets=true, dag=false
 Acceptance: journey
 Release order: <required | none>
 
-<!-- 新 package 保留 Acceptance 与 Release order 两行（`package init` 据此生成 3.6）；沿用 3.5 的 package 的 patch plan 删除这两行。Release order 为 required 时，发布顺序表（合入、fixture/backfill、开关/发布、清理）作为 release evidence 登记。 -->
+<!-- Release order 为 required 时，发布顺序表（合入、fixture/backfill、开关/发布、清理）作为 release evidence 登记。 -->
 
-> 直接引用当前 decision.md / spec.md。D/S/P 为可选旧别名，不因普通编辑升级；Git commit ID 是唯一允许持久化的历史锚点。Plan 只承载主 session 的全局调度（Composition、Ticket 实施与接线安排/依赖、共享资源协调、全局执行边界、Final Gate 判据）；Ticket 各自的建设内容、AC 和 contract references 属于 Ticket，不在此重复。
+> 直接引用当前 decision.md / spec.md。D/S/P 为可选旧别名，不因普通编辑升级；Git commit ID 是唯一允许持久化的历史锚点。Plan 只承载主 session 的全局调度（Ticket 实施与接线安排/依赖、共享资源协调、全局执行边界、Final Gate 判据）；Ticket 各自的建设内容、AC 和 contract references 属于 Ticket，不在此重复。
 
 ## 摘要
 
 ## 输入
 
 - 决策：decision.md 或 spec.md 内的轻量 Decision
-- 规格：spec.md + contract-design.md disposition（未触及的 legacy Spec 可暂缺）
+- 规格：spec.md + contract-design.md disposition（未触及的既有 Spec 可暂缺）
 - 需求 / patch 来源：
 - 已检查的当前代码、测试和稳定文档：
 - Predecessors: None | <repo-relative-package-path>[, <repo-relative-package-path> ...]
 
 前置包必须显式填写 `None` 或一个/多个已存在的仓库相对 package 目录；不要留空或省略。`package init` 会把它写入 `.impl-package/state.json`，到达路径中的 `EXISTS` 先在这些前置包的 tracked 非 Markdown 产出范围查找。
-
-## 执行组合决策
-
-- Tickets：yes（新 package 固定 Ticket-only）
-- 理由：
-- DAG：新 package 固定 no；`dag=false` 是 3.5 Composition 合同字段，旧 3.4 package 迁移前只读
-- 旧 package 迁移/恢复例外：<N/A | legacy package path + owner authorization>
 
 ## 全局调度
 
@@ -67,7 +59,6 @@ First visible step: <StepId> @ <TicketId>
 ## 交接
 
 - Ticket 集合：<tickets/ | N/A>
-- DAG：N/A（新 package）；旧 package 仅引用 existing DAG
 - 下一动作：
 - 剩余 owner 决策：<none | 具体事项>
 

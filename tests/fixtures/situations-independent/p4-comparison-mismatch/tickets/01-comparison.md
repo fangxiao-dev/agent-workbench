@@ -2,10 +2,12 @@
 
 **Ticket ID:** TKT-01
 
-## 验收标准
-
-- **AC-1：** Placeholder claim with supporting evidence.
-
 ## 阻塞依赖
 
 None
+
+## Coverage
+
+- Journey steps: J1-S1
+- Suites: S-fixture
+- Required review: none

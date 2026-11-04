@@ -1,4 +1,4 @@
-"""The single grouped CLI registry for the Ticket-first runtime."""
+"""The single grouped CLI registry for the Ticket-first runtime (format 3.6)."""
 
 from __future__ import annotations
 
@@ -121,7 +121,7 @@ def _ticket_transition(package: Path, args: argparse.Namespace, target: str) -> 
         getattr(args, "revision", None), getattr(args, "environment", None),
         getattr(args, "disposition", None), getattr(args, "successor", None),
         getattr(args, "evidence", None), getattr(args, "revalidation_plan", None),
-        getattr(args, "claim", None), getattr(args, "invalidated_by", None),
+        getattr(args, "invalidated_by", None),
     )
 
 
@@ -131,7 +131,7 @@ def _parser(group: str) -> argparse.ArgumentParser:
     if group == "package":
         check_spec = commands.add_parser("check-spec", help="validate the 3.6 Spec contract before package initialization")
         check_spec.add_argument("--spec", required=True, help="repository-relative Spec path")
-        init = commands.add_parser("init", help="initialize a 3.5 Ticket-only or 3.6 Journey package based on the Plan")
+        init = commands.add_parser("init", help="initialize a 3.6 Journey package from the Plan")
         init.add_argument("--attempt", required=True)
         init.add_argument("--plan", required=True)
         archive = commands.add_parser("archive-attempt", help="backfill a frozen Attempt Ticket snapshot")
@@ -175,7 +175,6 @@ def _parser(group: str) -> argparse.ArgumentParser:
                 child.add_argument("--evidence", required=True)
             elif target == "NEEDS-REVALIDATION":
                 child.add_argument("--evidence")
-                child.add_argument("--claim", action="append", required=True)
                 child.add_argument("--invalidated-by", required=True)
             elif target == "PENDING":
                 child.add_argument("--revalidation-plan")
@@ -185,15 +184,9 @@ def _parser(group: str) -> argparse.ArgumentParser:
                 child.add_argument("--successor")
     elif group == "evidence":
         commands.add_parser("add", help="add a JSON evidence record from stdin")
-        invalidate = commands.add_parser("invalidate", help="invalidate one evidence artifact")
-        invalidate.add_argument("--key")
-        invalidate.add_argument("--ticket")
-        invalidate.add_argument("--claim")
-        invalidate.add_argument("--artifact")
+        invalidate = commands.add_parser("invalidate", help="invalidate the records of one evidence key")
+        invalidate.add_argument("--key", required=True)
         invalidate.add_argument("--invalidated-by", required=True)
-        retire_claim = commands.add_parser("retire-claim", help="remove an invalidated orphan claim")
-        retire_claim.add_argument("--ticket", required=True)
-        retire_claim.add_argument("--claim", required=True)
     elif group == "recovery":
         checkpoint = commands.add_parser("checkpoint", help="overwrite the active checkpoint")
         checkpoint.add_argument("--subject", default="attempt")
@@ -265,6 +258,8 @@ def _normalize_gate_argv(argv: list[str]) -> list[str]:
 
 
 def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
+    if not (group == "package" and args.command == "check-spec"):
+        engine.require_current_format(package)
     if group == "package":
         if args.command == "check-spec":
             return engine.command_check_spec(package, args.spec)
@@ -286,9 +281,7 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
     if group == "evidence":
         if args.command == "add":
             return engine.command_evidence_add(package, sys.stdin.read())
-        if args.command == "invalidate":
-            return engine.command_evidence_invalidate(package, args.ticket, args.claim, args.artifact, args.invalidated_by, args.key)
-        return engine.command_evidence_retire_claim(package, args.ticket, args.claim)
+        return engine.command_evidence_invalidate(package, args.key, args.invalidated_by)
     if group == "recovery":
         if args.command == "checkpoint":
             return engine.command_checkpoint(package, args.subject, args.next, args.blocker, args.evidence, args.handoff)

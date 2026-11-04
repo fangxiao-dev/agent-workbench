@@ -16,13 +16,13 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "plugin-marketplace/plugins/impl-package/scripts/impl_package_state.py"
-FIXTURE = ROOT / "tests/fixtures/impl-package-ticket-first"
+FIXTURE = ROOT / "tests/fixtures/impl-package-state"
 _PYTHON_CACHE_PREFIX = Path(
     os.environ.get("PYTHONPYCACHEPREFIX")
     or Path(tempfile.gettempdir()) / f"impl-package-cli-pycache-{os.getpid()}"
 )
 SUBPROCESS_TESTS = (
-    "test_init_uses_exact_35_ticket_only_schema",
+    "test_init_uses_exact_36_schema",
     "test_evidence_add_batch_preserves_order_and_duplicate_noop",
     "test_gate_checks_release_edges_and_clears_active_checkpoints",
     "test_no_situation_flag_and_environment_switch_each_disable_footer",
@@ -111,12 +111,16 @@ class ImplPackageStateTests(unittest.TestCase):
         git(repo, "config", "user.name", "Ticket-first fixture")
         package = repo / "docs/implementations/20260813-example"
         (package / "tickets").mkdir(parents=True)
-        shutil.copy2(FIXTURE / "ticket-only-plan.md", package / "plan.md")
-        (package / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        shutil.copy2(FIXTURE / "plan.md", package / "plan.md")
+        shutil.copy2(FIXTURE / "spec.md", package / "spec.md")
+        (package / "artifacts").mkdir()
+        (package / "artifacts/result.csv").write_text("id,value\n1,ok\n", encoding="utf-8")
+        (package / "artifacts/evidence.md").write_text("fixture evidence\n", encoding="utf-8")
         (package / "decision.md").write_text("# Decision\n", encoding="utf-8")
         for source in (FIXTURE / "tickets").glob("*.md"):
             shutil.copy2(source, package / "tickets" / source.name)
         (repo / "evidence.md").write_text("fixture evidence\n", encoding="utf-8")
+        (repo / "docs/implementations/retired.json").write_text('{"packages": []}\n', encoding="utf-8")
         git(repo, "add", ".")
         git(repo, "commit", "-m", "fixture")
 
@@ -415,13 +419,22 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("already has a worker-return", late.stderr)
 
 
-    def add_evidence(self, repo: Path, package: Path, *, revision: str | None = None, environment: str = "test") -> None:
+    def evidence_records(self, revision: str, environment: str = "local-test") -> list[dict]:
+        return [
+            {"kind": "run-setup", "runId": "run-1", "artifact": "artifacts/evidence.md",
+             "revision": revision, "environment": environment, "conclusion": "supporting"},
+            {"kind": "journey-step", "runId": "run-1", "journeyId": "J1", "stepId": "J1-S1",
+             "actor": "操作员", "entry": "下载结果文件", "surface": "file", "artifact": "artifacts/result.csv",
+             "revision": revision, "environment": environment, "conclusion": "supporting"},
+            {"kind": "suite", "suiteId": "S-source", "artifact": "artifacts/evidence.md",
+             "revision": revision, "environment": "local-test", "conclusion": "supporting"},
+            {"kind": "suite", "suiteId": "S-safety", "artifact": "artifacts/evidence.md",
+             "revision": revision, "environment": "local-test", "conclusion": "supporting"},
+        ]
+
+    def add_evidence(self, repo: Path, package: Path, *, revision: str | None = None, environment: str = "local-test") -> None:
         revision = revision or git(repo, "rev-parse", "HEAD")
-        index = json.loads((FIXTURE / "evidence/index.json").read_text(encoding="utf-8"))
-        for source in index["records"]:
-            record = dict(source)
-            record.update({"revision": revision, "environment": environment, "artifact": "evidence.md"})
-            self.cli(repo, package, "evidence", "add", input_text=json.dumps(record))
+        self.cli(repo, package, "evidence", "add", input_text=json.dumps(self.evidence_records(revision, environment)))
 
     def add_terminal_summary(self, repo: Path, package: Path, *, tracks: tuple[str, ...] = ("Track A", "Track C")) -> None:
         head = git(repo, "rev-parse", "HEAD")
@@ -435,30 +448,18 @@ class ImplPackageStateTests(unittest.TestCase):
             "kind": "fact", "subject": "attempt", "key": "review.terminal_summary",
             "value": {"reviewRunId": "run-1", "comparisonHead": head, "safetyApplicable": False, "results": results}}))
 
-    def remove_source_claim(self, package: Path) -> None:
-        ticket = package / "tickets" / "01-source.md"
-        ticket.write_text(
-            ticket.read_text(encoding="utf-8").replace(
-                "- **AC-1：** 受支持输入可确定性生成 source snapshot。\n"
-                "  - Stable claim ID：`AC-1`\n"
-                "  - 证据时机：`early-falsification`\n",
-                "",
-            ),
-            encoding="utf-8",
-        )
-
     def satisfy(self, repo: Path, package: Path, ticket: str, *, expect: str = "PENDING") -> None:
         self.cli(repo, package, "ticket", "satisfy", ticket, "--expect", expect, "--revision", git(repo, "rev-parse", "HEAD"), "--environment", "test")
 
-    def test_init_uses_exact_35_ticket_only_schema(self) -> None:
+    def test_init_uses_exact_36_schema(self) -> None:
         temp, repo, package = self.make_repo(initialized=False)
         self.addCleanup(temp.cleanup)
         result = self.init(repo, package, subprocess=True)
-        self.assertEqual(result["formatVersion"], "3.5")
+        self.assertEqual(result["formatVersion"], "3.6")
         self.assertEqual(result["tasks"], 0)
         self.assertEqual(result["readyTickets"], ["TKT-01", "TKT-03", "TKT-04"])
         self.assertIsNone(self.state(package)["predecessors"])
-        self.assertEqual(set(self.state(package)), {"formatVersion", "attempt", "attemptHistory", "predecessors", "tickets", "evidenceIndex", "activeCheckpoints"})
+        self.assertEqual(set(self.state(package)), {"formatVersion", "attempt", "attemptHistory", "predecessors", "tickets", "evidenceIndex", "activeCheckpoints", "acceptance"})
         self.assertNotIn("tasks", self.state(package))
         self.assertNotIn("resume", self.state(package))
         self.assertFalse((package / "dag.md").exists())
@@ -473,10 +474,7 @@ class ImplPackageStateTests(unittest.TestCase):
             "前置包（Predecessors）：": "Predecessors:",
             "Ticket ID：": "Ticket ID:",
             "Publication Status：": "Publication Status:",
-            "Stable claim ID：": "Stable claim ID:",
             "到达路径：": "Arrival path:",
-            "证据时机：": "Evidence timing:",
-            "## 安全不变量": "## Safety Invariants",
             "## 阻塞依赖": "## Blocking Dependencies",
         }
         for path in [package / "plan.md", *(package / "tickets").glob("*.md")]:
@@ -487,7 +485,7 @@ class ImplPackageStateTests(unittest.TestCase):
 
         result = self.init(repo, package)
 
-        self.assertEqual(result["formatVersion"], "3.5")
+        self.assertEqual(result["formatVersion"], "3.6")
         self.assertEqual(result["tickets"], 4)
 
     def test_plan_must_explicitly_declare_predecessors(self) -> None:
@@ -533,8 +531,8 @@ class ImplPackageStateTests(unittest.TestCase):
         text = ticket.read_text(encoding="utf-8")
         ticket.write_text(
             text.replace(
-                "\n## 安全不变量\n",
-                "\n- 到达路径：entry → EXISTS: DatevPolicyWorkbenchDto → arrival\n\n## 安全不变量\n",
+                "\n## Coverage\n",
+                "\n- 到达路径：entry → EXISTS: DatevPolicyWorkbenchDto → arrival\n\n## Coverage\n",
             ),
             encoding="utf-8",
         )
@@ -584,113 +582,33 @@ class ImplPackageStateTests(unittest.TestCase):
 
         self.assertIn("state predecessors do not match", failed.stderr)
 
-    def test_satisfied_requires_all_claims_current_context_and_dependencies(self) -> None:
+    def test_satisfied_requires_released_dependencies_and_records_acceptance(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
-        missing_context = self.cli(repo, package, "ticket", "satisfy", "TKT-01", "--expect", "PENDING", "--revision", git(repo, "rev-parse", "HEAD"), ok=False)
-        self.assertIn("environment", missing_context.stderr)
+        head = git(repo, "rev-parse", "HEAD")
+        missing_revision = self.cli(repo, package, "ticket", "satisfy", "TKT-01", "--expect", "PENDING", ok=False)
+        self.assertIn("--revision", missing_revision.stderr)
         self.add_evidence(repo, package)
-        blocked = self.cli(repo, package, "ticket", "satisfy", "TKT-03", "--expect", "PENDING", "--revision", git(repo, "rev-parse", "HEAD"), "--environment", "test", ok=False)
+        blocked = self.cli(repo, package, "ticket", "satisfy", "TKT-03", "--expect", "PENDING", "--revision", head, "--environment", "test", ok=False)
         self.assertIn("dependencies", blocked.stderr)
         self.satisfy(repo, package, "TKT-01")
         accepted = self.state(package)["tickets"]["TKT-01"]
         self.assertEqual(accepted["state"], "SATISFIED")
-        self.assertEqual(accepted["acceptance"]["revision"], git(repo, "rev-parse", "HEAD"))
+        self.assertEqual(accepted["acceptance"]["revision"], head)
         self.assertEqual(accepted["acceptance"]["environment"], "test")
-
-    def test_one_acceptance_criterion_with_two_atomic_claims_requires_both(self) -> None:
-        temp, repo, package = self.make_repo(initialized=False)
-        self.addCleanup(temp.cleanup)
-        ticket = package / "tickets" / "01-source.md"
-        ticket.write_text(
-            ticket.read_text(encoding="utf-8").replace(
-                "  - Stable claim ID：`AC-1`\n  - 证据时机：`early-falsification`",
-                "  - Stable claim ID：`AC-1`\n  - 证据时机：`early-falsification`\n"
-                "  - Stable claim ID：`AC-1-readback`\n  - 证据时机：`early-falsification`",
-            ),
-            encoding="utf-8",
-        )
-        git(repo, "add", ".")
-        git(repo, "commit", "-m", "split acceptance atom")
-        self.init(repo, package)
-        self.add_evidence(repo, package)
-        revision = git(repo, "rev-parse", "HEAD")
-
-        missing = self.cli(
-            repo,
-            package,
-            "ticket",
-            "satisfy",
-            "TKT-01",
-            "--expect",
-            "PENDING",
-            "--revision",
-            revision,
-            "--environment",
-            "test",
-            ok=False,
-        )
-        self.assertIn("AC-1-readback", missing.stderr)
-
-        self.cli(
-            repo,
-            package,
-            "evidence",
-            "add",
-            input_text=json.dumps(
-                {
-                    "ticket": "TKT-01",
-                    "claim": "AC-1-readback",
-                    "timing": "early-falsification",
-                    "artifact": "evidence.md",
-                    "revision": revision,
-                    "environment": "test",
-                    "conclusion": "supporting",
-                }
-            ),
-        )
-        self.satisfy(repo, package, "TKT-01")
-        self.assertEqual(self.state(package)["tickets"]["TKT-01"]["state"], "SATISFIED")
-
-    def test_contradictory_evidence_blocks_satisfied(self) -> None:
-        temp, repo, package = self.make_repo()
-        self.addCleanup(temp.cleanup)
-        self.init(repo, package)
-        self.add_evidence(repo, package)
-        payload = {"ticket": "TKT-01", "claim": "AC-1", "timing": "early-falsification", "artifact": "evidence.md", "revision": git(repo, "rev-parse", "HEAD"), "environment": "test", "conclusion": "contradictory"}
-        self.cli(repo, package, "evidence", "add", input_text=json.dumps(payload))
-        failed = self.cli(repo, package, "ticket", "satisfy", "TKT-01", "--expect", "PENDING", "--revision", git(repo, "rev-parse", "HEAD"), "--environment", "test", ok=False)
-        self.assertIn("contradictory", failed.stderr)
-
-    def test_evidence_timing_is_bound_to_the_ticket_claim(self) -> None:
-        temp, repo, package = self.make_repo()
-        self.addCleanup(temp.cleanup)
-        self.init(repo, package)
-        payload = {"ticket": "TKT-01", "claim": "AC-2", "timing": "early-falsification", "artifact": "evidence.md", "revision": git(repo, "rev-parse", "HEAD"), "environment": "test", "conclusion": "supporting"}
-        failed = self.cli(repo, package, "evidence", "add", input_text=json.dumps(payload), ok=False)
-        self.assertIn("timing", failed.stderr)
 
     def test_evidence_add_batch_preserves_order_and_duplicate_noop(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
         revision = git(repo, "rev-parse", "HEAD")
-        first = {
-            "ticket": "TKT-01",
-            "claim": "AC-1",
-            "timing": "early-falsification",
-            "artifact": "evidence.md",
-            "revision": revision,
-            "environment": "batch",
-            "conclusion": "supporting",
-        }
-        second = {**first, "claim": "AC-2", "timing": "remaining-completion"}
+        first, second = self.evidence_records(revision)[2:]
 
         single = json.loads(
             self.cli(repo, package, "evidence", "add", input_text=json.dumps(first), subprocess=True).stdout
         )
-        self.assertEqual(single, {"ticket": "TKT-01", "claim": "AC-1", "idempotent": False})
+        self.assertEqual(single, {"evidenceKey": "suite:S-source", "idempotent": False})
         result = json.loads(
             self.cli(repo, package, "evidence", "add", input_text=json.dumps([first, second, second])).stdout
         )
@@ -698,9 +616,9 @@ class ImplPackageStateTests(unittest.TestCase):
             result,
             {
                 "records": [
-                    {"ticket": "TKT-01", "claim": "AC-1", "idempotent": True},
-                    {"ticket": "TKT-01", "claim": "AC-2", "idempotent": False},
-                    {"ticket": "TKT-01", "claim": "AC-2", "idempotent": True},
+                    {"evidenceKey": "suite:S-source", "idempotent": True},
+                    {"evidenceKey": "suite:S-safety", "idempotent": False},
+                    {"evidenceKey": "suite:S-safety", "idempotent": True},
                 ],
                 "added": 1,
                 "duplicates": 2,
@@ -737,28 +655,20 @@ class ImplPackageStateTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
         revision = git(repo, "rev-parse", "HEAD")
-        valid = {
-            "ticket": "TKT-01",
-            "claim": "AC-1",
-            "timing": "early-falsification",
-            "artifact": "evidence.md",
-            "revision": revision,
-            "environment": "batch",
-            "conclusion": "supporting",
-        }
+        valid = self.evidence_records(revision)[2]
         invalid_batches = (
             [valid, "invalid record"],
-            [valid, {**valid, "ticket": []}],
-            [valid, {**valid, "claim": []}],
-            [valid, {**valid, "timing": {}}],
-            [valid, {**valid, "timing": "wrong-timing"}],
+            [valid, {**valid, "kind": []}],
+            [valid, {**valid, "suiteId": []}],
+            [valid, {**valid, "suiteId": "S-missing"}],
             [valid, {**valid, "artifact": []}],
             [valid, {**valid, "artifact": "missing-evidence.md"}],
             [valid, {**valid, "revision": []}],
             [valid, {**valid, "environment": []}],
+            [valid, {**valid, "environment": "wrong-environment"}],
             [valid, {**valid, "conclusion": {}}],
             [valid, {**valid, "unknown": True}],
-            [valid, {**valid, "claim": "missing-claim"}],
+            [valid, {**valid, "recordedAt": "2026-01-01T00:00:00Z"}],
         )
         state_path = package / ".impl-package/state.json"
         progress_path = package / "progress.md"
@@ -779,36 +689,7 @@ class ImplPackageStateTests(unittest.TestCase):
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
-        revision = git(repo, "rev-parse", "HEAD")
-        records = [
-            {
-                "ticket": "TKT-01",
-                "claim": "AC-1",
-                "timing": "early-falsification",
-                "artifact": "evidence.md",
-                "revision": revision,
-                "environment": "batch",
-                "conclusion": "supporting",
-            },
-            {
-                "ticket": "TKT-01",
-                "claim": "AC-2",
-                "timing": "remaining-completion",
-                "artifact": "evidence.md",
-                "revision": revision,
-                "environment": "batch",
-                "conclusion": "supporting",
-            },
-            {
-                "ticket": "TKT-01",
-                "claim": "INV-tenant-isolation",
-                "timing": "early-falsification",
-                "artifact": "evidence.md",
-                "revision": revision,
-                "environment": "batch",
-                "conclusion": "supporting",
-            },
-        ]
+        records = self.evidence_records(git(repo, "rev-parse", "HEAD"))
         with patch.object(engine, "_validate_state", wraps=engine._validate_state) as validate, patch.object(
             engine, "_write_json", wraps=engine._write_json
         ) as write_json, patch.object(engine, "_refresh_projections", wraps=engine._refresh_projections) as refresh:
@@ -817,42 +698,26 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertEqual(write_json.call_count, 1)
         self.assertEqual(refresh.call_count, 1)
         self.assertEqual(validate.call_count, 3)
-        self.assertEqual(len(self.state(package)["evidenceIndex"]["TKT-01"]["AC-1"]), 1)
+        self.assertEqual(len(self.state(package)["evidenceIndex"]["suite:S-source"]), 1)
 
     def test_evidence_add_batch_projection_failure_is_recoverable(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
-        revision = git(repo, "rev-parse", "HEAD")
-        payload = [
-            {
-                "ticket": "TKT-01",
-                "claim": "AC-1",
-                "timing": "early-falsification",
-                "artifact": "evidence.md",
-                "revision": revision,
-                "environment": "batch",
-                "conclusion": "supporting",
-            }
-        ]
+        payload = [self.evidence_records(git(repo, "rev-parse", "HEAD"))[2]]
         with patch.object(engine, "_refresh_projections", side_effect=engine.StateError("projection failed")):
             with self.assertRaisesRegex(engine.StateError, "projection failed"):
                 engine.command_evidence_add(package, json.dumps(payload))
-        self.assertEqual(len(self.state(package)["evidenceIndex"]["TKT-01"]["AC-1"]), 1)
+        self.assertEqual(len(self.state(package)["evidenceIndex"]["suite:S-source"]), 1)
         engine.command_refresh_progress(package)
-        self.assertIn("AC-1", (package / "progress.md").read_text(encoding="utf-8"))
+        self.assertIn("| S-source | rule | ticket | supporting |", (package / "progress.md").read_text(encoding="utf-8"))
 
     def test_evidence_add_batch_keeps_ticket_and_gate_revision_semantics(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
         revision = git(repo, "rev-parse", "HEAD")
-        source = json.loads((FIXTURE / "evidence/index.json").read_text(encoding="utf-8"))
-        records = []
-        for item in source["records"]:
-            record = dict(item)
-            record.update({"artifact": "evidence.md", "revision": revision, "environment": "test"})
-            records.append(record)
+        records = self.evidence_records(revision)
         result = json.loads(self.cli(repo, package, "evidence", "add", input_text=json.dumps(records)).stdout)
         self.assertEqual(result["added"], len(records))
         for ticket in ("TKT-01", "TKT-02", "TKT-03", "TKT-04"):
@@ -870,142 +735,7 @@ class ImplPackageStateTests(unittest.TestCase):
             "--no-durable-delta-reason",
             "fixture",
         )
-        self.assertEqual(json.loads(passed.stdout)["verdict"], "pass")
-
-    def test_invalidating_satisfied_evidence_fails_before_writing_state(self) -> None:
-        temp, repo, package = self.make_repo()
-        self.addCleanup(temp.cleanup)
-        self.init(repo, package)
-        self.add_evidence(repo, package)
-        self.satisfy(repo, package, "TKT-01")
-        before = self.state(package)
-        failed = self.cli(repo, package, "evidence", "invalidate", "--ticket", "TKT-01", "--claim", "AC-1", "--artifact", "evidence.md", "--invalidated-by", "fixture", ok=False)
-        self.assertIn("incomplete current evidence", failed.stderr)
-        self.assertEqual(self.state(package), before)
-
-    def test_retire_claim_removes_invalidated_orphan_and_refreshes_progress(self) -> None:
-        temp, repo, package = self.make_repo()
-        self.addCleanup(temp.cleanup)
-        self.init(repo, package)
-        self.add_evidence(repo, package)
-        self.cli(
-            repo,
-            package,
-            "evidence",
-            "invalidate",
-            "--ticket",
-            "TKT-01",
-            "--claim",
-            "AC-1",
-            "--artifact",
-            "evidence.md",
-            "--invalidated-by",
-            "claim-removed",
-        )
-        self.remove_source_claim(package)
-
-        result = json.loads(self.cli(repo, package, "evidence", "retire-claim", "--ticket", "TKT-01", "--claim", "AC-1").stdout)
-
-        self.assertEqual(result, {"claim": "AC-1", "removedRecords": 1, "retired": True, "ticket": "TKT-01"})
-        self.assertNotIn("AC-1", self.state(package)["evidenceIndex"]["TKT-01"])
-        self.assertTrue((repo / "evidence.md").is_file())
-        self.cli(repo, package, "package", "validate")
-        ticket_row = next(line for line in (package / "progress.md").read_text(encoding="utf-8").splitlines() if line.startswith("| TKT-01 |"))
-        self.assertNotIn("AC-1", ticket_row)
-
-    def test_retire_claim_rejects_current_claim_without_writing_state(self) -> None:
-        temp, repo, package = self.make_repo()
-        self.addCleanup(temp.cleanup)
-        self.init(repo, package)
-        self.add_evidence(repo, package)
-        before = self.state(package)
-
-        failed = self.cli(repo, package, "evidence", "retire-claim", "--ticket", "TKT-01", "--claim", "AC-1", ok=False)
-
-        self.assertIn("still current", failed.stderr)
-        self.assertEqual(self.state(package), before)
-
-    def test_retire_claim_requires_every_record_to_be_invalidated(self) -> None:
-        temp, repo, package = self.make_repo()
-        self.addCleanup(temp.cleanup)
-        self.init(repo, package)
-        self.add_evidence(repo, package)
-        self.remove_source_claim(package)
-        before = self.state(package)
-
-        failed = self.cli(repo, package, "evidence", "retire-claim", "--ticket", "TKT-01", "--claim", "AC-1", ok=False)
-
-        self.assertIn("fully invalidated", failed.stderr)
-        self.assertEqual(self.state(package), before)
-
-    def test_retire_claim_rejects_missing_mapping_on_repeat(self) -> None:
-        temp, repo, package = self.make_repo()
-        self.addCleanup(temp.cleanup)
-        self.init(repo, package)
-        self.add_evidence(repo, package)
-        self.cli(
-            repo,
-            package,
-            "evidence",
-            "invalidate",
-            "--ticket",
-            "TKT-01",
-            "--claim",
-            "AC-1",
-            "--artifact",
-            "evidence.md",
-            "--invalidated-by",
-            "claim-removed",
-        )
-        self.remove_source_claim(package)
-        self.cli(repo, package, "evidence", "retire-claim", "--ticket", "TKT-01", "--claim", "AC-1")
-        before = self.state(package)
-
-        failed = self.cli(repo, package, "evidence", "retire-claim", "--ticket", "TKT-01", "--claim", "AC-1", ok=False)
-
-        self.assertIn("evidence claim not found", failed.stderr)
-        self.assertEqual(self.state(package), before)
-
-    def test_retire_claim_rejects_frozen_attempt(self) -> None:
-        temp, repo, package = self.make_repo()
-        self.addCleanup(temp.cleanup)
-        self.init(repo, package)
-        self.add_evidence(repo, package)
-        for ticket_id in ("TKT-01", "TKT-02", "TKT-03", "TKT-04"):
-            self.satisfy(repo, package, ticket_id)
-        head = git(repo, "rev-parse", "HEAD")
-        self.add_terminal_summary(repo, package)
-        self.cli(
-            repo,
-            package,
-            "gate",
-            "pass",
-            "--comparison-commit",
-            head,
-            "--reason",
-            "fixture",
-            "--no-durable-delta-reason",
-            "fixture",
-            "--environment",
-            "test",
-        )
-        self.remove_source_claim(package)
-        before = self.state(package)
-
-        failed = self.cli(repo, package, "evidence", "retire-claim", "--ticket", "TKT-01", "--claim", "AC-1", ok=False)
-
-        self.assertIn("is frozen", failed.stderr)
-        self.assertEqual(self.state(package), before)
-
-    def test_missing_claim_timing_is_not_inherited_from_the_next_claim(self) -> None:
-        temp, repo, package = self.make_repo(initialized=False)
-        self.addCleanup(temp.cleanup)
-        ticket = package / "tickets" / "01-source.md"
-        text = ticket.read_text(encoding="utf-8")
-        text = text.replace("  - 证据时机：`early-falsification`\n", "", 1)
-        ticket.write_text(text, encoding="utf-8")
-        failed = self.cli(repo, package, "package", "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md", ok=False)
-        self.assertIn("no evidence timing", failed.stderr)
+        self.assertEqual(json.loads(passed.stdout.splitlines()[0])["verdict"], "pass")
 
     def test_arrival_path_requires_exists_or_new_markers(self) -> None:
         temp, repo, package = self.make_repo(initialized=False)
@@ -1043,7 +773,7 @@ class ImplPackageStateTests(unittest.TestCase):
         route = "entry → " + " → ".join(f"EXISTS: {symbol}" for symbol in symbols) + " → arrival"
         ticket = package / "tickets" / "01-source.md"
         text = ticket.read_text(encoding="utf-8")
-        ticket.write_text(text.replace("\n## 安全不变量\n", f"\n- 到达路径：{route}\n\n## 安全不变量\n"), encoding="utf-8")
+        ticket.write_text(text.replace("\n## Coverage\n", f"\n- 到达路径：{route}\n\n## Coverage\n"), encoding="utf-8")
         self.init(repo, package)
 
         result = self.cli(repo, package, "package", "validate")
@@ -1062,8 +792,8 @@ class ImplPackageStateTests(unittest.TestCase):
         text = ticket.read_text(encoding="utf-8")
         ticket.write_text(
             text.replace(
-                "\n## 安全不变量\n",
-                "\n- 到达路径：entry → EXISTS: withTaxOfficeDelegatedFinanceScopeLease → NEW: CreateDatevPolicyCandidateResponse → arrival\n\n## 安全不变量\n",
+                "\n## Coverage\n",
+                "\n- 到达路径：entry → EXISTS: withTaxOfficeDelegatedFinanceScopeLease → NEW: CreateDatevPolicyCandidateResponse → arrival\n\n## Coverage\n",
             ),
             encoding="utf-8",
         )
@@ -1124,7 +854,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("Ticket ID in 92-unscoped.md", rejected.stderr)
         unscoped.unlink()
 
-        current_ticket = package / "tickets" / "01-source.md"
+        current_ticket = package / "tickets" / "02-transform.md"
         text = current_ticket.read_text(encoding="utf-8")
         current_ticket.write_text(
             text.replace("**Attempt ID：** initial", "**Attempt ID：** previous-attempt"),
@@ -1659,7 +1389,6 @@ class ImplPackageStateTests(unittest.TestCase):
                 None,
                 None,
                 None,
-                [],
                 None,
             )
 
@@ -1714,7 +1443,7 @@ class ImplPackageStateTests(unittest.TestCase):
             self.assertIn("terminal", failed.stderr)
             self.assertEqual(self.state(package)["tickets"]["TKT-01"], before)
 
-    def test_needs_revalidation_invalidates_selected_claims_only(self) -> None:
+    def test_needs_revalidation_invalidates_ticket_owned_evidence_only(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
@@ -1722,19 +1451,97 @@ class ImplPackageStateTests(unittest.TestCase):
         self.satisfy(repo, package, "TKT-01")
         transition = self.cli(
             repo, package, "ticket", "needs-revalidation", "TKT-01", "--expect", "SATISFIED",
-            "--claim", "AC-1", "--invalidated-by", "spec-change",
+            "--invalidated-by", "spec-change",
         )
         result = json.loads(transition.stdout)
-        self.assertEqual(result["claims"], ["AC-1"])
-        self.assertGreater(result["invalidatedEvidence"], 0)
-        evidence = self.state(package)["evidenceIndex"]["TKT-01"]
-        self.assertTrue(all(row.get("invalidatedBy") == "spec-change" for row in evidence["AC-1"]))
-        self.assertTrue(all(row.get("invalidatedBy") is None for row in evidence["AC-2"]))
+        self.assertEqual(result["state"], "NEEDS-REVALIDATION")
+        self.assertEqual(result["invalidatedEvidence"], 1)
+        self.assertNotIn("claims", result)
+        index = self.state(package)["evidenceIndex"]
+        self.assertTrue(all(row.get("invalidatedBy") == "spec-change" for row in index["suite:S-source"]))
+        self.assertTrue(all(row.get("invalidatedBy") is None for row in index["suite:S-safety"]))
+        self.assertTrue(all(row.get("invalidatedBy") is None for row in index["journey:run-1:J1-S1"]))
+        repeated = json.loads(self.cli(
+            repo, package, "ticket", "needs-revalidation", "TKT-01", "--expect", "NEEDS-REVALIDATION",
+            "--invalidated-by", "spec-change",
+        ).stdout)
+        self.assertTrue(repeated["idempotent"])
         self.cli(repo, package, "ticket", "pending", "TKT-01", "--expect", "NEEDS-REVALIDATION", "--revalidation-plan", "docs/implementations/20260813-example/plan.md")
         old_only = self.cli(repo, package, "ticket", "satisfy", "TKT-01", "--expect", "PENDING", "--revision", git(repo, "rev-parse", "HEAD"), "--environment", "test", ok=False)
-        self.assertIn("missing claims", old_only.stderr)
+        self.assertIn("Suite S-source", old_only.stderr)
         self.add_evidence(repo, package)
         self.satisfy(repo, package, "TKT-01")
+
+    def test_needs_revalidation_requires_reason_and_has_no_claim_option(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.add_evidence(repo, package)
+        self.satisfy(repo, package, "TKT-01")
+        no_reason = self.cli(repo, package, "ticket", "needs-revalidation", "TKT-01", "--expect", "SATISFIED", ok=False)
+        self.assertIn("--invalidated-by", no_reason.stderr)
+        with_claim = self.cli(
+            repo, package, "ticket", "needs-revalidation", "TKT-01", "--expect", "SATISFIED",
+            "--claim", "AC-1", "--invalidated-by", "x", ok=False,
+        )
+        self.assertIn("--claim", with_claim.stderr)
+        self.assertEqual(self.state(package)["tickets"]["TKT-01"]["state"], "SATISFIED")
+
+    def test_evidence_invalidate_requires_key_and_retire_claim_is_gone(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        self.add_evidence(repo, package)
+        no_key = self.cli(repo, package, "evidence", "invalidate", "--invalidated-by", "x", ok=False)
+        self.assertIn("--key", no_key.stderr)
+        legacy = self.cli(repo, package, "evidence", "invalidate", "--ticket", "TKT-01", "--claim", "AC-1", "--artifact", "evidence.md", "--invalidated-by", "x", ok=False)
+        self.assertNotEqual(legacy.returncode, 0)
+        retired = self.cli(repo, package, "evidence", "retire-claim", "--ticket", "TKT-01", "--claim", "AC-1", ok=False)
+        self.assertNotEqual(retired.returncode, 0)
+        invalidated = json.loads(self.cli(repo, package, "evidence", "invalidate", "--key", "suite:S-safety", "--invalidated-by", "x").stdout)
+        self.assertEqual(invalidated, {"evidenceKey": "suite:S-safety", "idempotent": False, "invalidated": True})
+
+    def test_unsupported_state_format_is_rejected_by_every_command(self) -> None:
+        temp, repo, package = self.make_repo()
+        self.addCleanup(temp.cleanup)
+        self.init(repo, package)
+        state_path = package / ".impl-package/state.json"
+        state = self.state(package)
+        state["formatVersion"] = "3.5"
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        before = state_path.read_bytes()
+        record = json.dumps(self.evidence_records(git(repo, "rev-parse", "HEAD"))[2])
+        invocations = (
+            (("package", "validate"), None),
+            (("package", "status"), None),
+            (("package", "refresh-progress"), None),
+            (("package", "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md"), None),
+            (("package", "metrics"), None),
+            (("evidence", "add"), record),
+            (("evidence", "invalidate", "--key", "suite:S-safety", "--invalidated-by", "x"), None),
+            (("ticket", "block", "TKT-01", "--expect", "PENDING", "--evidence", "evidence.md"), None),
+            (("recovery", "checkpoint", "--next", "x", "--evidence", "evidence.md"), None),
+            (("trail", "append"), json.dumps({"kind": "escape", "subject": "attempt", "deviation": "x", "reason": "y"})),
+            (("gate", "blocked", "--comparison-commit", "HEAD", "--reason", "x"), None),
+        )
+        for args, input_text in invocations:
+            with self.subTest(args=args):
+                failed = self.cli(repo, package, "--no-situation", *args, input_text=input_text, ok=False)
+                self.assertNotEqual(failed.returncode, 0)
+                self.assertIn("format 3.5 is no longer supported; start a new package", failed.stderr)
+        self.assertEqual(state_path.read_bytes(), before)
+
+    def test_plan_without_acceptance_journey_is_rejected(self) -> None:
+        temp, repo, package = self.make_repo(initialized=False)
+        self.addCleanup(temp.cleanup)
+        plan = package / "plan.md"
+        plan.write_text(plan.read_text(encoding="utf-8").replace("Acceptance: journey\n", ""), encoding="utf-8")
+        failed = self.cli(
+            repo, package, "package", "init", "--attempt", "initial",
+            "--plan", "docs/implementations/20260813-example/plan.md", ok=False,
+        )
+        self.assertIn("Acceptance: journey", failed.stderr)
+        self.assertFalse((package / ".impl-package/state.json").exists())
 
     def test_ticket_bytes_are_stable_after_runtime_updates(self) -> None:
         temp, repo, package = self.make_repo()
@@ -1790,16 +1597,14 @@ class ImplPackageStateTests(unittest.TestCase):
                 engine.command_gate(package, "pass", head, "fixture", [], [], "fixture", "test")
         message = str(unknown_rejection.exception)
         self.assertIn(unknown_reason, message)
-        self.assertIn("/impl-package:do-review", message)
-        self.assertIn("terminal-final", message)
-        self.assertIn("review.terminal_summary", message)
+        self.assertIn("terminal review coverage unknown", message)
         # Track B is not required: A/C alone completes terminal coverage.
         self.add_terminal_summary(repo, package)
         coverage = engine.terminal_coverage_fact(package)
         self.assertTrue(coverage.known)
         self.assertIs(coverage.value, True)
         result = self.cli(repo, package, *gate_args)
-        self.assertEqual(json.loads(result.stdout)["verdict"], "pass")
+        self.assertEqual(json.loads(result.stdout.splitlines()[0])["verdict"], "pass")
         self.assertEqual(self.state(package)["activeCheckpoints"], {})
         self.assertEqual(self.state(package)["attemptHistory"][-1]["lifecycle"], "frozen")
 
@@ -1813,7 +1618,7 @@ class ImplPackageStateTests(unittest.TestCase):
         head = git(repo, "rev-parse", "HEAD")
         self.add_terminal_summary(repo, package, tracks=("Track A", "Track B", "Track C"))
         result = self.cli(repo, package, "gate", "pass", "--comparison-commit", head, "--reason", "fixture", "--no-durable-delta-reason", "fixture", "--environment", "test")
-        self.assertEqual(json.loads(result.stdout)["verdict"], "pass")
+        self.assertEqual(json.loads(result.stdout.splitlines()[0])["verdict"], "pass")
 
     def test_terminal_gate_archives_ticket_state_idempotently(self) -> None:
         temp, repo, package = self.make_repo()
@@ -1861,7 +1666,7 @@ class ImplPackageStateTests(unittest.TestCase):
             "--environment",
             "test",
         )
-        self.assertTrue(json.loads(repeated.stdout)["idempotent"])
+        self.assertTrue(json.loads(repeated.stdout.splitlines()[0])["idempotent"])
         self.assertEqual(archive_path.read_bytes(), before)
 
     def test_package_archive_attempt_backfills_from_revision_and_rejects_conflict(self) -> None:
@@ -1950,7 +1755,7 @@ class ImplPackageStateTests(unittest.TestCase):
         archive_path.unlink()
         patch_plan = package / "patch-plan.md"
         patch_plan.write_text(
-            (package / "plan.md").read_text(encoding="utf-8").replace("Attempt ID：initial", "Attempt ID：patch"),
+            (package / "plan.md").read_text(encoding="utf-8").replace("Attempt ID：initial", "Attempt ID：patch").replace("@ TKT-01", "@ TKT-05"),
             encoding="utf-8",
         )
         patch_ticket = package / "tickets" / "05-patch.md"
@@ -1992,17 +1797,7 @@ class ImplPackageStateTests(unittest.TestCase):
             package,
             "evidence",
             "add",
-            input_text=json.dumps(
-                {
-                    "ticket": "TKT-01",
-                    "claim": "AC-1",
-                    "timing": "early-falsification",
-                    "artifact": "evidence.md",
-                    "revision": revision,
-                    "environment": "test",
-                    "conclusion": "supporting",
-                }
-            ),
+            input_text=json.dumps(self.evidence_records(revision)[3]),
         )
         recovery = self.cli_with_situation(
             repo, package, "recovery", "checkpoint", "--next", "continue with fixture", "--evidence", "evidence.md"

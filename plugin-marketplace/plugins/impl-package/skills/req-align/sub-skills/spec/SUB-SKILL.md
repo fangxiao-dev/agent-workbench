@@ -9,7 +9,7 @@ description: req-align 内部的 Spec 阶段；先做 Spec Design Preflight，�
 
 ## 前置输入
 
-- current Passed Decision evidence 与 selected direction；canonical package、current Spec/contract-design（未触及的 legacy Spec 允许暂缺从属文件）；
+- current Passed Decision evidence 与 selected direction；canonical package、current Spec/contract-design（未触及的既有 Spec 允许暂缺从属文件）；
 - current requirement delta、repository authority、相关 code/tests 与安全边界。
 
 initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一 package 的 follow-up 沿用 initial bundle approval，直接更新 current Spec。

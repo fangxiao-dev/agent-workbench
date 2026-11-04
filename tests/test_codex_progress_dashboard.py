@@ -205,7 +205,7 @@ def make_package(workspace: Path, states: dict[str, str] | None = None) -> Path:
     ticket_dir.mkdir()
     states = states or {"TKT-01": "PENDING"}
     state = {
-        "formatVersion": "3.5",
+        "formatVersion": "3.6",
         "attempt": {"id": "initial"},
         "attemptHistory": [{"id": "initial", "gate": None}],
         "tickets": {ticket_id: {"state": value} for ticket_id, value in states.items()},
@@ -628,6 +628,7 @@ def test_snapshot_does_not_reflect_path_like_finding_keys_in_warning(tmp_path: P
             "tracks": [],
             "classification": "blocker",
             "lifecycle": "open",
+            "impact": "local",
         }],
     }
     trail = package / "execution" / "initial" / "trail.jsonl"

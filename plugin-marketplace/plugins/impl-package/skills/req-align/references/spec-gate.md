@@ -4,7 +4,7 @@
 
 ## Gate inputs
 
-Gate 读取当前 `spec.md`、其“Spec 设计范围”、从属 `contract-design.md`、Decision outcomes、repository facts 与 Acceptance Semantics。`contract-design.md` 与 `spec.md` 共用 Status、approval 和 Gate，不形成第二套 behavior contract；`not-required` 必须说明 `spec.md` 如何完整承担精确语义。未触及的 legacy Spec 只在下次 req-align 时补齐。
+Gate 读取当前 `spec.md`、其“Spec 设计范围”、从属 `contract-design.md`、Decision outcomes、repository facts 与 Acceptance Semantics。`contract-design.md` 与 `spec.md` 共用 Status、approval 和 Gate，不形成第二套 behavior contract；`not-required` 必须说明 `spec.md` 如何完整承担精确语义。未触及的既有 Spec 只在下次 req-align 时补齐。
 
 ## Pass criteria
 
@@ -15,7 +15,7 @@ Spec 只有同时满足以下条件才可 PASSED：
 - contract coherence 已闭合：required input 可取得；有副作用、并发或重试风险的 operation 已逐项定义 identity、重复/stale 结果与恢复；每个可观察字段，以及行为/状态机/工作流表与错误边界表中每一个用户可见结果，都有唯一 authority，并能指到承载它的 read-model 字段与实际 producer；
 - 八个 behavior-contract 章节 substantive，behavior、state/workflow、permission/boundary、error/recovery 与 canonical model 内部一致；
 - 每个 promise/constraint 映射到 observable evidence，并为 manual evidence 指定 owner；
-- 新 package 的 Journeys、Rule Matrix、Required Suites 三张表齐全：每个 step 是某角色亲手做或亲自收到的事（页面步有具名控件，`记录` 步不是第 1 步），有入口类型、操作入口、观察表面、预期与承接，每条规则有 Source、oracle 并指向已登记套件，`package check-spec` 无遗漏章节，触及 tenant/RBAC/隐私/幂等/数据完整性时有包级 safety 套件，Environment 为明确字符串，Spec 不含 Ticket ID；沿用 3.5 的 package 则每条 AC 覆盖一条可独立验收的承诺并有可观察结果和 oracle；
+- Journeys、Rule Matrix、Required Suites 三张表齐全：每个 step 是某角色亲手做或亲自收到的事（页面步有具名控件，`记录` 步不是第 1 步），有入口类型、操作入口、观察表面、预期与承接，每条规则有 Source、oracle 并指向已登记套件，`package check-spec` 无遗漏章节，触及 tenant/RBAC/隐私/幂等/数据完整性时有包级 safety 套件，Environment 为明确字符串，Spec 不含 Ticket ID；
 - 展示、编辑或拒绝结果可以不产生新记录，发生权威状态转换时明确唯一记录、producer 与下游消费；
 - blocking owner decision、contract ambiguity 与 artifact authority conflict 为零；
 - 两个独立实施者可以选择不同内部实现，但不会产生不同 API、data identity、permission、concurrency、recovery 或 public shape。

@@ -3,7 +3,6 @@
 ## Confirmed preferences
 
 - `state.json` 是 current state 的唯一来源；Progress 与 runtime tables 是投影。
-- 旧 Task completion 不等于 Ticket acceptance；新 package 不创建 Task 状态。
 - Evidence 使用存在的仓库相对路径；Gate 保存 current verdict，Git 保存历史。
 - 只 revalidate 被实际 contract/plan 变化影响的子集。
 - terminal Gate 冻结执行时 Git HEAD 并清空 active checkpoint；历史 judgment 留在 frozen Execution Record。

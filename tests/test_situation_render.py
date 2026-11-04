@@ -58,19 +58,19 @@ def test_parse_ticket_accepts_canonical_english_metadata() -> None:
         "Ticket ID: TKT-01\n"
         "Publication Status: Approved\n"
         "Attempt ID: initial\n\n"
-        "## Acceptance Criteria\n"
-        "- Stable claim ID: `AC-1`\n\n"
-        "## Safety Invariants\n"
-        "- Stable claim ID: `INV-tenant-isolation`\n\n"
+        "## Coverage\n\n"
+        "- Journey steps: J1-S1\n"
+        "- Suites: S-fixture\n"
+        "- Required review: none\n\n"
         "## Blocking Dependencies\n"
-        "- none\n"
+        "- implementation: TKT-00\n"
     )
 
     parsed = situation._parse_ticket("TKT-01", "tickets/01.md", text, "initial")
 
     assert parsed.valid
-    assert parsed.claims == ["AC-1", "INV-tenant-isolation"]
-    assert parsed.safety_claims == ["INV-tenant-isolation"]
+    assert parsed.dependencies == [("implementation", "TKT-00")]
+    assert not situation._parse_ticket("TKT-01", "tickets/01.md", text.replace("- Suites: S-fixture\n", ""), "initial").valid
 
 
 @pytest.mark.parametrize("package", _fixture_dirs(), ids=lambda path: path.name)
@@ -209,8 +209,8 @@ def test_inflight_identity_distinguishes_independent_review_tracks():
 
 
 def test_business_actions_are_runnable_without_registration():
-    rendered = json.loads(_render_text(FIXTURES / "p4-acceptance-edge-held", "--json"))
-    action = next(item for item in rendered["runnable"] if item.get("action_id") == "continue-implementation")
+    rendered = json.loads(_render_text(FIXTURES / "p1-multiple-ready", "--json"))
+    action = next(item for item in rendered["runnable"] if item.get("action_id") == "select-ready-ticket")
     assert "candidate_snapshot" not in rendered
     assert "declaration_status" not in action
     assert "blockers" not in action
@@ -219,7 +219,7 @@ def test_business_actions_are_runnable_without_registration():
 def test_historical_registration_is_readable_but_not_projected():
     with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
         package = Path(temporary) / "package"
-        shutil.copytree(FIXTURES / "p4-acceptance-edge-held", package)
+        shutil.copytree(FIXTURES / "p1-multiple-ready", package)
         trail = package / "execution/fixture-attempt/trail.jsonl"
         trail.parent.mkdir(parents=True, exist_ok=True)
         with trail.open("a", encoding="utf-8") as stream:
@@ -228,7 +228,7 @@ def test_historical_registration_is_readable_but_not_projected():
         rendered = json.loads(_render_text(package, "--json"))
         assert "candidate_snapshot" not in rendered
         assert not any(item.get("candidate_id") == "old-only-work" for group in ("runnable", "withheld") for item in rendered[group])
-        assert any(item.get("action_id") == "continue-implementation" for item in rendered["runnable"])
+        assert any(item.get("action_id") == "select-ready-ticket" for item in rendered["runnable"])
         assert not any("未知 fact key" in warning for warning in rendered.get("warnings", []))
 
 
@@ -263,7 +263,7 @@ def test_pending_delta_review_survives_rotation_without_capacity_gate() -> None:
 
 
 def test_cli_written_trail_rows_are_renderable() -> None:
-    source = FIXTURES / "p4-satisfiable-no-trail"
+    source = FIXTURES / "p1-no-trail"
     with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
         package = Path(temporary) / source.name
         shutil.copytree(source, package)
@@ -318,20 +318,20 @@ def test_escape_event_and_legacy_escape_decision_are_read() -> None:
 
 
 def test_human_render_collapses_undetermined() -> None:
-    package = ROOT / "tests/fixtures/situations-a2/p0-evidence-unfiled"
+    package = ROOT / "tests/fixtures/situations/p1-no-trail"
 
     full = _render_text(package)
-    assert full.endswith("无法判定 10 行")
+    assert full.endswith("无法判定 17 行")
     assert "无法判定 23 行:" not in full
     assert "package.record.projection-drift" not in full
     assert "digest" not in full
 
     explained = _render_text(package, "--explain-undetermined")
-    assert "无法判定 10 行: package.record.projection-drift (package)" in explained
+    assert "无法判定 17 行: package.record.projection-drift (package)" in explained
 
 
 def test_render_is_read_only_and_exposes_no_digest() -> None:
-    source = FIXTURES / "p0-evidence-unfiled"
+    source = FIXTURES / "p1-multiple-ready"
     with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
         package = Path(temporary) / source.name
         shutil.copytree(source, package)
@@ -347,7 +347,7 @@ def test_render_is_read_only_and_exposes_no_digest() -> None:
 
 
 def test_compaction_pressure_is_high_low_or_unknown_without_fact_channel() -> None:
-    package = ROOT / "tests/fixtures/situations/p4-satisfiable-no-trail"
+    package = ROOT / "tests/fixtures/situations/p1-no-trail"
     pressure = json.dumps(
         {
             "compactions": 5,
@@ -375,7 +375,7 @@ def test_compaction_pressure_is_high_low_or_unknown_without_fact_channel() -> No
 
     low_pressure = pressure.replace('"high":true', '"high":false')
     low = json.loads(_render_text(package, "--compaction-pressure", low_pressure, "--json"))
-    assert _primary_slugs(low) == ["ticket.accept.satisfiable"]
+    assert _primary_slugs(low) == []
     low_value = low["when_values"]["attempt.compaction_pressure_high"][0]
     assert low_value["status"] == "known"
     assert low_value["value"] is False
@@ -417,7 +417,7 @@ def test_t9_removes_declaration_only_fact_keys() -> None:
 
 
 def test_projection_drift_requires_structured_validation_result() -> None:
-    package = ROOT / "tests/fixtures/situations/p4-satisfiable-no-trail"
+    package = ROOT / "tests/fixtures/situations/p1-no-trail"
 
     rendered = json.loads(
         _render_text(

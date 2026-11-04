@@ -19,7 +19,7 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed 
 
 ## Ownership 与 fast path
 
-本 Skill 拥有 configured implementations root（默认 `docs/implementations/`）下 Decision、Spec、从属 `contract-design.md` 与 D/S aliases 的语义和内容；owning-stage 主 thread 直接写入并验证业务文档。每个新建或修订的 Spec 都有从属 contract-design，legacy Spec 在下次 req-align 时补齐。运行状态由主 thread 直接通过语义 CLI 更新。
+本 Skill 拥有 configured implementations root（默认 `docs/implementations/`）下 Decision、Spec、从属 `contract-design.md` 与 D/S aliases 的语义和内容；owning-stage 主 thread 直接写入并验证业务文档。每个新建或修订的 Spec 都有从属 contract-design，既有 Spec 在下次 req-align 时补齐。运行状态由主 thread 直接通过语义 CLI 更新。
 
 主 thread 按本 Skill 与对应 sub-skill 直接更新 canonical artifact，主 thread 保留 contract 语义、Gate 和最终采信权；需要更新运行状态时直接调用语义 CLI。
 
@@ -33,7 +33,7 @@ spec-only 可以使用当前 passed `decision.md`、当前 `spec.md` 的 Passed 
 1. 分类 contract impact；需要 D/S 时先查找相关 package。没有相关 package或不适合 patch 时按 initial 新建；已有明确指向目标 package 的 patch 授权时直接沿用，目标或 initial/patch 路由未定时才询问 Owner。确认路由后识别 initial、follow-up 或 package closure，并读取 [Package Lifecycle](references/package-lifecycle.md)。
 2. 解析 canonical package 与当前 Decision/Spec；已确认 patch 的 follow-up 默认把输入视为当前文档的 delta，按 [Requirement Inputs](references/requirement-inputs.md) 归类；只有 owner 明确声明 full replacement 才整体替换。
 3. initial 的 full 或 decision-only 读取并执行 [Decision SUB-SKILL](sub-skills/decision/SUB-SKILL.md)；同一 package 的 follow-up 直接更新当前 Decision 并沿用初始 approval。
-4. initial 的 full 在 Decision `PASSED` 后、或 spec-only 前置验证通过后，读取并执行 [Spec SUB-SKILL](sub-skills/spec/SUB-SKILL.md)；同一 package 的 follow-up 直接更新当前 Spec 并沿用初始 approval。新 package 的验收合同由 Journey、规则矩阵与必需套件清单组成（格式见 [composition contract §7](../../references/impl-package-composition-contract.md)），随 Spec Gate 一起交 Owner 批准；沿用 3.5 的 package 保留逐 AC 表。
+4. initial 的 full 在 Decision `PASSED` 后、或 spec-only 前置验证通过后，读取并执行 [Spec SUB-SKILL](sub-skills/spec/SUB-SKILL.md)；同一 package 的 follow-up 直接更新当前 Spec 并沿用初始 approval。验收合同由 Journey、规则矩阵与必需套件清单组成（格式见 [composition contract §7](../../references/impl-package-composition-contract.md)），随 Spec Gate 一起交 Owner 批准。
 5. initial bundle 的两个 Gate 均通过且 lifecycle registration 有效时，把同一 Spec contract ensemble 交给 `/impl-package:impl-planning`；follow-up 沿用该 bundle approval 进入后续工作。
 6. 直接引用当前 Decision/Spec 路径，记录用于 module-knowledge/code 比较的 Git commit；主 thread 写入 formal artifact，implementation attempt 获批前不创建 runtime state。
 7. 汇报任何 Gate 结果前读取 [Handoff](references/handoff.md)，输出最具体的可恢复状态。

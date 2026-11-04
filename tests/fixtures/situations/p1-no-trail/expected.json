@@ -1,0 +1,12 @@
+{
+  "source": "synthetic 3.6 fixture without execution/",
+  "scenario": "完整 3.6 package 没有 execution/ 目录，轨迹输入为空；依赖 trail 的 situation 全部无法判定，不出现任何可见 situation。",
+  "expected_primary": [],
+  "expected_layer": null,
+  "expected_secondary": [],
+  "expected_undetermined_count": 17,
+  "must_not_hit": [
+    "package.record.state-missing",
+    "attempt.gate.terminal-frozen"
+  ]
+}

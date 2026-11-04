@@ -89,8 +89,8 @@ def test_touched_spec_requires_contract_design_but_untouched_legacy_is_not_migra
     subskill = read("skills/req-align/sub-skills/spec/SUB-SKILL.md")
 
     for text in (lifecycle, subskill):
-        assert "未触及的 legacy Spec" in text
+        assert "未触及的既有 Spec" in text
     # router 用等价表述承载同一二分：新建/修订当场补齐，legacy 留到下次。
     assert "每个新建或修订的 Spec 都有从属 contract-design" in router
-    assert "legacy Spec 在下次 req-align 时补齐" in router
+    assert "既有 Spec 在下次 req-align 时补齐" in router
     assert "本次创建或修订 Spec 时补齐从属文件" in subskill

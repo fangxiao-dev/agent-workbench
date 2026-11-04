@@ -3,6 +3,8 @@
 **Ticket ID:** TKT-BASE
 **Attempt ID:** fixture-attempt
 
-## Acceptance Criteria
-- Stable claim ID: `AC-1`
+## Coverage
 
+- Journey steps: J1-S1
+- Suites: S-fixture
+- Required review: none

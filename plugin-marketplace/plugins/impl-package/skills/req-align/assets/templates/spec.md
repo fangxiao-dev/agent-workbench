@@ -84,7 +84,7 @@
 
 ## 7. 验收语义 / 验证证据
 
-<!-- 新 package 的验收合同是下面三张固定表，表头与标题原样保留，Spec 不写 Ticket ID（Ticket 的 Coverage 认领 step 与套件）。沿用 3.5 的 package 保留逐 AC 表：AC ID | 承诺结果 / 约束 | 证据 producer 或 manual owner | 通过证据。 -->
+<!-- 验收合同是下面三张固定表，表头与标题原样保留，Spec 不写 Ticket ID（Ticket 的 Coverage 认领 step 与套件）。-->
 
 ### Journeys
 

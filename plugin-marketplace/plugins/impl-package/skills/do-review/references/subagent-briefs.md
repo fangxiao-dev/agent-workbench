@@ -77,7 +77,7 @@ For UNCERTAIN:
 Use this brief only after the parent has accepted and classified a finding as Track C / Spec fidelity. This is one fresh independent, finding-scoped source check inside the existing ReviewRun; it is not `finding-closure` and does not search for unrelated implementation findings.
 
 ```text
-Review only the supplied accepted finding and immutable design sources. Read the current Decision, Spec, subordinate contract-design.md when present at the fixed head, and any directly referenced Ticket or cross-module authority from the resolved ReviewRun head. An untouched legacy package may legitimately lack contract-design.md; absence alone is not a gap, so judge whether the available Spec contract uniquely decides the finding.
+Review only the supplied accepted finding and immutable design sources. Read the current Decision, Spec, subordinate contract-design.md when present at the fixed head, and any directly referenced Ticket or cross-module authority from the resolved ReviewRun head. An untouched existing package may legitimately lack contract-design.md; absence alone is not a gap, so judge whether the available Spec contract uniquely decides the finding.
 
 Answer one question: do those sources uniquely determine the expected behavior for this finding?
 

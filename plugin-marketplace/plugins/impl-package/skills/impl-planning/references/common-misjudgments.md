@@ -13,7 +13,6 @@
 ## 并行与调度安排
 
 - 把逐约束映射和逐项验证细节写回 Plan 的全局调度表，会与 Ticket 的 Contract references 与 AC 重复，制造两处可能漂移的合同来源。
-- 把 Ticket 拆分交给旧 DAG 入口，会把已经选择的 Ticket-only Composition 偷换成另一套任务结构。
 - 上游只挡最终验收却写成 `implementation` 边，会让执行阶段的只读调研、child-local 测试和无依赖 lane 一起被挡住。
 - 首张 Ticket 做成大而全的 harness，会把第一个用户可见 step 推到包尾，Owner 很晚才看到产品结果，形状错误也晚暴露；复用现有登录与 fixture、只建第一条窄路径所需的部分，才能早走通。
 
@@ -27,7 +26,7 @@
 - 把几张 Ticket 的局部 evidence 当作 Journey 的走通，上一步输出并没有真正流入下一步，页面承诺可能从未被连续跑过。
 - 只让后端接线 Ticket 通过，会把 UI 形状错误或组件复用错误隐藏在“UI 已实现”的笼统声明里。
 - 引用整份文档会让 Ticket 看似有依据，却无法判断实际依赖哪条 authority；引用 `contract-design.md` 只停在章节级而不点名 entry point，等于把一大节都当成了下游默认要读的上下文。
-- 只写“有测试”而不写入口、owner 和 coverage，或（3.5）让一个 stable claim 同时承载可独立失败的结论，会把不可执行、重叠或部分可证的 AC 留到执行末端才暴露。
+- 只写“有测试”而不写入口、owner 和 coverage，会把不可执行、重叠或部分可证的 AC 留到执行末端才暴露。
 
 ## State 与发布边界
 
@@ -39,4 +38,4 @@
 
 ## 仅进 evals 的回归价值
 
-`../evals/evals.json` 只验证上述规则在模型行为中仍成立，例如缺合同时回 req-align、stable claim 原子化、不可分拆 oracle、真实依赖与轻量调度判断；它不替代本页的执行提醒。
+`../evals/evals.json` 只验证上述规则在模型行为中仍成立，例如缺合同时回 req-align、真实依赖与轻量调度判断；它不替代本页的执行提醒。

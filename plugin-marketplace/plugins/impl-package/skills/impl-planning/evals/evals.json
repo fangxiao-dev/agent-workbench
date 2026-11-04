@@ -36,28 +36,6 @@
       ]
     },
     {
-      "id": 4,
-      "prompt": "为一个已批准的 Match Run 终态创建 Ticket：同一条业务 AC 同时包含并发去重、occupancy、source CAS 和真实浏览器 failed 状态，这些条件可以分别失败并由不同 evidence lane 证明。",
-      "expected_output": "Keeps one vertical Ticket and one business AC when appropriate, but compiles the independently decidable clauses into separate stable claim IDs with their own evidence records.",
-      "files": [],
-      "expectations": [
-        "Treats stable claims as acceptance atoms",
-        "Splits independently failing or differently evidenced clauses",
-        "Does not create a second checklist, state axis, or extra Ticket solely for evidence granularity"
-      ]
-    },
-    {
-      "id": 5,
-      "prompt": "一个 AC 要求纯函数对同一输入稳定返回同一规范化结果，正常值和边界值都由同一个参数化测试 oracle 一次裁决。请登记 Ticket claim。",
-      "expected_output": "Keeps the scenarios under one stable claim because they share one indivisible oracle and cannot produce separate acceptance verdicts.",
-      "files": [],
-      "expectations": [
-        "Does not over-split one oracle into per-case claims",
-        "Uses one stable claim ID and one evidence timing",
-        "Keeps the Ticket contract compact"
-      ]
-    },
-    {
       "id": 6,
       "prompt": "请为已批准的双池改造补充简洁的全局调度。当前合同、DTO 与算法输入输出都已冻结。TKT-14 交付归属基础及读取，TKT-16 交付组编辑保存，TKT-18 交付匹配；验收顺序为 14→16→18。现有三栏组件和纯匹配 Core 均有实际 caller 和 focused tests；UI 状态模块、Core、schema/helper 分属不同文件。新 revision helper 尚需实现，组事务接入需要它；真实 API 接线需要生成的 client。TKT-14 最终还有数据库及浏览器验收。Ticket 边界已批准，本轮只补调度安排。",
       "expected_output": "主动识别 UI、Core 与基础可以提前实施；依据冻结合同保留 acceptance 顺序，明确 helper/client 的真实接线条件及局部验证，不等待基础整票验收。",

@@ -83,12 +83,11 @@ def test_core_templates_expose_only_current_contract() -> None:
     plan = (IMPL / "skills/impl-planning/assets/templates/plan.md").read_text(encoding="utf-8")
     state = (IMPL / "references/impl-package-current-state.md").read_text(encoding="utf-8")
     gate = (IMPL / "skills/dev-with-track/assets/templates/gate.md").read_text(encoding="utf-8")
-    assert "tickets=true, dag=false" in plan
-    assert '"formatVersion": "3.5"' in state
+    assert "dag=false" not in plan
+    assert '"formatVersion": "3.6"' in state
     assert all(field in state for field in ('"attempt"', '"attemptHistory"', '"predecessors"', '"tickets"', '"evidenceIndex"', '"activeCheckpoints"'))
     assert '"tasks"' not in state and '"resume"' not in state
     assert "execution/<attempt>/execution-record.md" in state
-    assert "migration/archive/task-handoffs" in state
     assert "ticket satisfy <id> --expect <state>" in state
     assert "recovery checkpoint" in state
     assert "Comparison commit" in gate

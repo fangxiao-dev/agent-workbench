@@ -4,12 +4,12 @@
 **Publication Status：** Approved
 **Attempt ID：** initial
 
-## 验收标准
-
-- AC-1：the long task can be resumed safely
-  - Stable claim ID：`AC-1`
-  - 证据时机：`remaining-completion`
-
 ## 阻塞依赖
 
 - 无
+
+## Coverage
+
+- Journey steps: J1-S1
+- Suites: S-fixture
+- Required review: none

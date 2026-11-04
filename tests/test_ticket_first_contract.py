@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "tests" / "fixtures" / "impl-package-ticket-first"
+FIXTURE = ROOT / "tests" / "fixtures" / "impl-package-state"
 PLUGIN = ROOT / "plugin-marketplace" / "plugins" / "impl-package"
 CLI = PLUGIN / "scripts" / "impl_package_state.py"
 
@@ -100,9 +100,9 @@ class TicketFirstContractTests(unittest.TestCase):
         git(repo, "config", "user.name", "Ticket-first grouped fixture")
         package = repo / "docs" / "implementations" / "260813-grouped"
         (package / "tickets").mkdir(parents=True)
-        shutil.copy2(FIXTURE / "ticket-only-plan.md", package / "plan.md")
+        shutil.copy2(FIXTURE / "plan.md", package / "plan.md")
         (package / "decision.md").write_text("# Decision\n", encoding="utf-8")
-        (package / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        shutil.copy2(FIXTURE / "spec.md", package / "spec.md")
         for source in (FIXTURE / "tickets").glob("*.md"):
             shutil.copy2(source, package / "tickets" / source.name)
         (repo / "evidence.md").write_text("grouped fixture evidence\n", encoding="utf-8")
@@ -116,105 +116,60 @@ class TicketFirstContractTests(unittest.TestCase):
                 repo,
             ).stdout
         )
-        self.assertEqual(initialized["formatVersion"], "3.5")
+        self.assertEqual(initialized["formatVersion"], "3.6")
         revision = git(repo, "rev-parse", "HEAD")
-        index = json.loads((FIXTURE / "evidence" / "index.json").read_text(encoding="utf-8"))
-        for source in index["records"]:
-            record = dict(source)
-            record.update({"artifact": "evidence.md", "revision": revision, "environment": "grouped"})
-            run([sys.executable, str(CLI), "--package", str(package), "evidence", "add"], repo, input_text=json.dumps(record))
 
         grouped = json.loads(
             run(
-                [sys.executable, str(CLI), "--package", str(package), "ticket", "satisfy", "TKT-01", "--expect", "PENDING", "--revision", revision, "--environment", "grouped"],
+                [sys.executable, str(CLI), "--package", str(package), "ticket", "satisfy", "TKT-04", "--expect", "PENDING", "--revision", revision, "--environment", "grouped"],
                 repo,
             ).stdout
         )
         flat = run(
-            [sys.executable, str(CLI), "--package", str(package), "set-state", "ticket", "TKT-02", "SATISFIED", "--expect", "PENDING", "--revision", revision, "--environment", "grouped"],
+            [sys.executable, str(CLI), "--package", str(package), "set-state", "ticket", "TKT-03", "SATISFIED", "--expect", "PENDING", "--revision", revision, "--environment", "grouped"],
             repo,
             ok=False,
         )
         self.assertIn("unknown command group", flat.stderr)
         self.assertEqual(grouped["state"], "SATISFIED")
         state = json.loads((package / ".impl-package" / "state.json").read_text(encoding="utf-8"))
-        self.assertEqual(state["tickets"]["TKT-01"]["state"], "SATISFIED")
-        self.assertEqual(state["tickets"]["TKT-02"]["state"], "PENDING")
+        self.assertEqual(state["tickets"]["TKT-04"]["state"], "SATISFIED")
+        self.assertEqual(state["tickets"]["TKT-03"]["state"], "PENDING")
 
-    def test_fixture_declares_ticket_only_edges_claim_timing_and_safety(self) -> None:
-        plan = (FIXTURE / "ticket-only-plan.md").read_text(encoding="utf-8")
+    def test_fixture_declares_ticket_only_edges_and_journey_coverage(self) -> None:
+        plan = (FIXTURE / "plan.md").read_text(encoding="utf-8")
         self.assertIn("Composition：tickets=true, dag=false", plan)
+        self.assertIn("Acceptance: journey", plan)
         self.assertNotIn("dag.md", plan)
 
         typed_edges: set[str] = set()
         ticket_ids: set[str] = set()
-        claim_keys: set[tuple[str, str]] = set()
-        timing_values: set[str] = set()
         for path in sorted((FIXTURE / "tickets").glob("*.md")):
             text = path.read_text(encoding="utf-8")
             identifier = re.search(r"\*\*Ticket ID：\*\*\s*(\S+)", text)
             self.assertIsNotNone(identifier, path)
-            ticket_id = identifier.group(1)
-            ticket_ids.add(ticket_id)
-            claims = re.findall(r"Stable claim ID：`([^`]+)`", text)
-            self.assertTrue(claims, path)
-            self.assertEqual(len(claims), len(set(claims)), path)
-            claim_keys.update((ticket_id, claim) for claim in claims)
-            timings = re.findall(r"证据时机：`([^`]+)`", text)
-            self.assertTrue(timings, path)
-            self.assertTrue(set(timings) <= {"early-falsification", "remaining-completion"}, path)
-            timing_values.update(timings)
-            for label in ("tenant", "RBAC / privacy", "幂等 / 数据完整性"):
-                value = re.search(rf"^- {re.escape(label)}：(.+)$", text, re.MULTILINE)
-                self.assertIsNotNone(value, path)
-                self.assertTrue(value.group(1).strip() and not value.group(1).strip().startswith("<"), path)
+            ticket_ids.add(identifier.group(1))
+            self.assertNotIn("Stable claim ID", text, path)
+            for label in ("Journey steps", "Suites", "Required review"):
+                self.assertRegex(text, rf"(?m)^- {label}: \S+", path)
             for edge in re.findall(r"^- (implementation|acceptance|release):\s*(\S+)$", text, re.MULTILINE):
                 typed_edges.add(edge[0])
                 self.assertIn(edge[1], {"TKT-01", "TKT-02", "TKT-03", "TKT-04"})
 
         self.assertEqual(ticket_ids, {"TKT-01", "TKT-02", "TKT-03", "TKT-04"})
         self.assertEqual(typed_edges, {"implementation", "acceptance", "release"})
-        self.assertEqual(timing_values, {"early-falsification", "remaining-completion"})
 
-        index = json.loads((FIXTURE / "evidence" / "index.json").read_text(encoding="utf-8"))
-        records = index["records"]
-        self.assertEqual(
-            {(item["ticket"], item["claim"]) for item in records},
-            claim_keys,
-        )
-        for item in records:
-            self.assertEqual(item["revision"], index["revision"])
-            self.assertEqual(item["environment"], index["environment"])
-            for field in ("ticket", "claim", "revision", "environment", "timing", "artifact", "conclusion"):
-                self.assertTrue(item.get(field), item)
-            self.assertIn(item["timing"], {"early-falsification", "remaining-completion"})
-            self.assertEqual(item["conclusion"], "supporting")
-            artifact, _, anchor = item["artifact"].partition("#")
-            artifact_path = FIXTURE / artifact
-            self.assertTrue(artifact_path.is_file(), item)
-            if anchor:
-                self.assertIn(anchor.lower(), artifact_path.read_text(encoding="utf-8").lower(), item)
-
-        incomplete = {**index, "records": records[:-1]}
-        self.assertNotEqual({(item["ticket"], item["claim"]) for item in incomplete["records"]}, claim_keys)
-
-    def test_stable_claim_atomization_is_owned_across_planning_review_and_execution(self) -> None:
+    def test_journey_coverage_is_owned_across_planning_review_and_execution(self) -> None:
         composition = (PLUGIN / "references/impl-package-composition-contract.md").read_text(encoding="utf-8")
         planning = (PLUGIN / "skills/impl-planning/SKILL.md").read_text(encoding="utf-8")
         review = (PLUGIN / "skills/plan-review/SKILL.md").read_text(encoding="utf-8")
         execution = (PLUGIN / "skills/dev-with-track/SKILL.md").read_text(encoding="utf-8")
-        situations = (PLUGIN / "skills/dev-with-track/situations.yaml").read_text(encoding="utf-8")
 
-        self.assertIn("stable claim 是 runtime 可判定的 acceptance atom", composition)
-        self.assertIn("一个业务 AC 可以包含多个 stable claim ID", composition)
-        self.assertIn("stable claim atoms", planning)
-        self.assertIn("stable claim 已原子化", review)
+        self.assertNotIn("stable claim", composition.lower())
+        self.assertIn("Journey step 与套件归属写进 Ticket 的 Coverage", planning)
+        self.assertIn("被某张 Ticket 的 Coverage 认领", review)
         self.assertIn("../../references/impl-package-composition-contract.md", review)
-        self.assertIn("逐 stable claim 核对 artifact", execution)
-        self.assertRegex(
-            situations,
-            r"(?s)- slug: ticket\.accept\.satisfiable.*?judgment: true.*?每个 stable claim 是否已是 acceptance atom",
-        )
+        self.assertIn("逐条核对 claim 与 evidence", execution)
 
     def test_v36_journey_coverage_and_walking_skeleton_contract_is_present(self) -> None:
         composition = (PLUGIN / "references/impl-package-composition-contract.md").read_text(encoding="utf-8")
@@ -236,11 +191,11 @@ class TicketFirstContractTests(unittest.TestCase):
 
         package = repo / "docs" / "implementations" / "260813-ticket-first"
         (package / "tickets").mkdir(parents=True)
-        (package / "plan.md").write_text((FIXTURE / "ticket-only-plan.md").read_text(encoding="utf-8"), encoding="utf-8")
+        (package / "plan.md").write_text((FIXTURE / "plan.md").read_text(encoding="utf-8"), encoding="utf-8")
         for source in (FIXTURE / "tickets").glob("*.md"):
             shutil.copy2(source, package / "tickets" / source.name)
         (package / "decision.md").write_text("# Decision\n", encoding="utf-8")
-        (package / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        shutil.copy2(FIXTURE / "spec.md", package / "spec.md")
         (repo / "evidence.md").write_text("verified artifact\n", encoding="utf-8")
         git(repo, "add", ".")
         git(repo, "commit", "-m", "fixture")
@@ -259,59 +214,19 @@ class TicketFirstContractTests(unittest.TestCase):
         self.assertFalse((package / "execution" / "initial" / "task-handoffs").exists())
 
         progress = (package / "progress.md").read_text(encoding="utf-8")
-        self.assertIn("## Ticket Acceptance", progress)
+        self.assertIn("## Ticket Status", progress)
         self.assertNotIn("## Task Execution", progress)
 
-        evidence_index = json.loads((FIXTURE / "evidence" / "index.json").read_text(encoding="utf-8"))
         fixture_revision = git(repo, "rev-parse", "HEAD")
-        for source in evidence_index["records"]:
-            record = dict(source)
-            record.update({"artifact": "evidence.md", "revision": fixture_revision, "environment": "ticket-first-contract-fixture"})
-            run(
-                [sys.executable, str(CLI), "--package", str(package), "evidence", "add"],
-                repo,
-                input_text=json.dumps(record),
-            )
-
+        satisfy = [sys.executable, str(CLI), "--package", str(package), "ticket", "satisfy"]
         blocked = run(
-            [
-                sys.executable,
-                str(CLI),
-                "--package",
-                str(package),
-                "ticket",
-                "satisfy",
-                "TKT-03",
-                "--expect",
-                "PENDING",
-                "--revision",
-                fixture_revision,
-                "--environment",
-                "ticket-first-contract-fixture",
-            ],
+            [*satisfy, "TKT-03", "--expect", "PENDING", "--revision", fixture_revision],
             repo,
             ok=False,
         )
         self.assertIn("dependencies are not released", blocked.stderr)
 
-        release = run(
-            [
-                sys.executable,
-                str(CLI),
-                "--package",
-                str(package),
-                "ticket",
-                "satisfy",
-                "TKT-04",
-                "--expect",
-                "PENDING",
-                "--revision",
-                fixture_revision,
-                "--environment",
-                "ticket-first-contract-fixture",
-            ],
-            repo,
-        )
+        release = run([*satisfy, "TKT-04", "--expect", "PENDING", "--revision", fixture_revision], repo)
         self.assertEqual(json.loads(release.stdout)["state"], "SATISFIED")
         gate = run(
             [
@@ -331,111 +246,8 @@ class TicketFirstContractTests(unittest.TestCase):
             repo,
             ok=False,
         )
-        self.assertIn("unfinished", gate.stderr)
-
-    def test_migration_fixture_rejects_handoff_as_proof_and_preserves_authority(self) -> None:
-        legacy = json.loads((FIXTURE / "migration" / "legacy-state.json").read_text(encoding="utf-8"))
-        candidate = json.loads((FIXTURE / "migration" / "expected-candidate.json").read_text(encoding="utf-8"))
-        handoff = (FIXTURE / "migration" / "legacy-task-handoff.md").read_text(encoding="utf-8")
-        execution_record = (FIXTURE / "migration" / "legacy-execution-record.md").read_text(encoding="utf-8")
-
-        self.assertEqual(legacy["formatVersion"], "3.4")
-        self.assertEqual(candidate["composition"], {"tickets": True, "dag": False})
-        self.assertEqual(candidate["taskArtifacts"], [])
-        self.assertEqual(candidate["legacyArchive"], "migration/archive/task-handoffs/T1-handoff.md")
-        self.assertIn("evidence/source-output.md", candidate["evidenceSources"])
-        self.assertIn("execution/initial/task-handoffs/T1-handoff.md", candidate["rejectedEvidence"])
-        self.assertIn("not acceptance evidence", handoff)
-        self.assertIn("evidence/source-output.md", execution_record)
-        retired = candidate["retiredExamples"]
-        self.assertEqual({item["disposition"] for item in retired}, {"waived", "superseded"})
-        self.assertEqual(retired[0]["state"], "RETIRED")
-        self.assertEqual(retired[1]["successor"], "TKT-02")
-        self.assertEqual(
-            {item["authority"] for item in candidate["interruptions"] if item["point"] != "after-switch"},
-            {"pre-migration-anchor"},
-        )
-        self.assertEqual(candidate["interruptions"][-1]["authority"], "single-migration-commit")
-
-    def test_migration_fixture_models_staging_interruptions_and_single_switch(self) -> None:
-        temp = tempfile.TemporaryDirectory()
-        self.addCleanup(temp.cleanup)
-        repo = Path(temp.name) / "repo"
-        repo.mkdir()
-        git(repo, "init")
-        git(repo, "config", "user.email", "test@example.com")
-        git(repo, "config", "user.name", "Ticket-first migration fixture")
-
-        package = repo / "package"
-        (package / ".impl-package").mkdir(parents=True)
-        (package / "execution" / "initial" / "task-handoffs").mkdir(parents=True)
-        (package / "evidence").mkdir()
-        shutil.copy2(FIXTURE / "migration" / "legacy-state.json", package / ".impl-package" / "state.json")
-        shutil.copy2(FIXTURE / "migration" / "legacy-task-handoff.md", package / "execution" / "initial" / "task-handoffs" / "T1-handoff.md")
-        shutil.copy2(FIXTURE / "migration" / "legacy-execution-record.md", package / "execution" / "initial" / "execution-record.md")
-        shutil.copy2(FIXTURE / "migration" / "evidence" / "source-output.md", package / "evidence" / "source-output.md")
-        (repo / "README.md").write_text("legacy package\n", encoding="utf-8")
-        git(repo, "add", ".")
-        git(repo, "commit", "-m", "legacy package")
-        pre_anchor = git(repo, "rev-parse", "HEAD")
-        legacy_state = (package / ".impl-package" / "state.json").read_text(encoding="utf-8")
-
-        candidate_state = json.loads((FIXTURE / "migration" / "candidate-state.json").read_text(encoding="utf-8"))
-
-        stage_number = 0
-
-        def stage_candidate(*, include_index: bool) -> Path:
-            nonlocal stage_number
-            stage_number += 1
-            staging = Path(temp.name) / f"staging-{stage_number}-{include_index}"
-            shutil.copytree(package, staging)
-            (staging / ".impl-package" / "state.json").write_text(json.dumps(candidate_state, indent=2) + "\n", encoding="utf-8")
-            if include_index:
-                shutil.copy2(FIXTURE / "evidence" / "index.json", staging / "evidence" / "index.json")
-                archive = staging / "migration" / "archive" / "task-handoffs"
-                archive.mkdir(parents=True)
-                shutil.copy2(
-                    staging / "execution" / "initial" / "task-handoffs" / "T1-handoff.md",
-                    archive / "T1-handoff.md",
-                )
-                shutil.rmtree(staging / "execution" / "initial" / "task-handoffs")
-            return staging
-
-        def validate_candidate(staging: Path) -> None:
-            state = json.loads((staging / ".impl-package" / "state.json").read_text(encoding="utf-8"))
-            self.assertEqual(state["composition"], {"tickets": True, "dag": False})
-            self.assertEqual(state["tasks"], {})
-            self.assertTrue((staging / state["evidenceIndex"]).is_file())
-            self.assertTrue((staging / state["legacyArchive"]).is_file())
-            self.assertFalse((staging / "execution" / "initial" / "task-handoffs").exists())
-            index_text = (staging / state["evidenceIndex"]).read_text(encoding="utf-8")
-            self.assertNotIn("task-handoffs/", index_text)
-
-        # Before validation, during validation, and after validation-before-switch all
-        # leave the package and Git authority at the pre-migration anchor.
-        stage_candidate(include_index=True)
-        self.assertEqual(git(repo, "rev-parse", "HEAD"), pre_anchor)
-        self.assertEqual((package / ".impl-package" / "state.json").read_text(encoding="utf-8"), legacy_state)
-
-        invalid = stage_candidate(include_index=False)
-        with self.assertRaises(AssertionError):
-            validate_candidate(invalid)
-        self.assertEqual(git(repo, "rev-parse", "HEAD"), pre_anchor)
-        self.assertEqual((package / ".impl-package" / "state.json").read_text(encoding="utf-8"), legacy_state)
-
-        valid = stage_candidate(include_index=True)
-        validate_candidate(valid)
-        self.assertEqual(git(repo, "rev-parse", "HEAD"), pre_anchor)
-        self.assertEqual((package / ".impl-package" / "state.json").read_text(encoding="utf-8"), legacy_state)
-
-        shutil.rmtree(package)
-        shutil.copytree(valid, package)
-        git(repo, "add", ".")
-        git(repo, "commit", "-m", "ticket-first migration")
-        migration_commit = git(repo, "rev-parse", "HEAD")
-        self.assertNotEqual(migration_commit, pre_anchor)
-        self.assertEqual(git(repo, "rev-parse", "HEAD^"), pre_anchor)
-        validate_candidate(package)
+        self.assertIn("Required Ticket TKT-01", gate.stderr)
+        self.assertIn("release 入边 TKT-01 未释放", gate.stderr)
 
     def test_stage_a_docs_mark_legacy_task_and_checkpoint_boundaries(self) -> None:
         composition = (ROOT / "plugin-marketplace/plugins/impl-package/references/impl-package-composition-contract.md").read_text(encoding="utf-8")
@@ -443,21 +255,18 @@ class TicketFirstContractTests(unittest.TestCase):
         dag = (ROOT / "plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md").read_text(encoding="utf-8")
         handoff = (ROOT / "skills/handoff/references/impl-package.md").read_text(encoding="utf-8")
 
-        self.assertIn("dag=false", composition)
+        self.assertNotIn("dag=false", composition)
         self.assertIn("RETIRED", composition)
-        self.assertIn("early falsification evidence", composition)
-        self.assertIn("新 package 一律不创建 Task DAG", dag)
-        self.assertIn("owner 明确授权恢复/迁移已有 3.4 package", dag)
-        self.assertIn("不把 Task handoff 或 `DONE` 当 acceptance proof", dag)
+        self.assertIn("`formatVersion` 不是 3.6 的旧 package 不再支持", dag)
         self.assertIn("/impl-package:dev-with-track", handoff)
         self.assertIn("不复制 Ticket 状态", handoff)
-        self.assertIn("新 package 不创建 Task/DAG", planning)
+        self.assertNotIn("dag=", planning)
 
     def make_validate_package(
         self,
         *,
         decision: str = "# Decision\n",
-        spec: str = "# Spec\n",
+        spec: str | None = None,
         contract: str = "# Contract design\n",
         plan_suffix: str = "",
         ticket_edits: dict[str, list[tuple[str, str]]] | None = None,
@@ -469,10 +278,10 @@ class TicketFirstContractTests(unittest.TestCase):
         git(repo, "config", "user.name", "Validate findings fixture")
         package = repo / "docs" / "implementations" / "260813-validate-findings"
         (package / "tickets").mkdir(parents=True)
-        plan = (FIXTURE / "ticket-only-plan.md").read_text(encoding="utf-8") + plan_suffix
+        plan = (FIXTURE / "plan.md").read_text(encoding="utf-8") + plan_suffix
         (package / "plan.md").write_text(plan, encoding="utf-8")
         (package / "decision.md").write_text(decision, encoding="utf-8")
-        (package / "spec.md").write_text(spec, encoding="utf-8")
+        (package / "spec.md").write_text(spec if spec is not None else (FIXTURE / "spec.md").read_text(encoding="utf-8"), encoding="utf-8")
         (package / "contract-design.md").write_text(contract, encoding="utf-8")
         for source in (FIXTURE / "tickets").glob("*.md"):
             text = source.read_text(encoding="utf-8")
@@ -506,7 +315,7 @@ class TicketFirstContractTests(unittest.TestCase):
     def test_validate_reports_ticket_names_in_contract_documents(self) -> None:
         temp, repo, package = self.make_validate_package(
             decision="# Decision\nTKT-01 TKT-02 TKT-01\n",
-            spec="# Spec\nTKT-03\n",
+            spec=(FIXTURE / "spec.md").read_text(encoding="utf-8") + "\nTKT-03\n",
             contract="# Contract\nTKT-04 TKT-04\n",
         )
         self.addCleanup(temp.cleanup)
@@ -526,32 +335,6 @@ class TicketFirstContractTests(unittest.TestCase):
         findings = self.validate_findings(repo, package)
 
         self.assertNotIn("contract-doc-names-ticket", {item["code"] for item in findings})
-
-    def test_validate_reports_uniform_ticket_claim_timing(self) -> None:
-        timing = "  - 证据时机：`remaining-completion`\n"
-        edits = {
-            "04-publish.md": [
-                ("  - Stable claim ID：`INV-tenant-isolation`\n", "  - Stable claim ID：`INV-tenant-isolation`\n" + timing),
-                ("  - Stable claim ID：`INV-rbac-privacy`\n", "  - Stable claim ID：`INV-rbac-privacy`\n" + timing),
-                ("  - Stable claim ID：`INV-idempotency-integrity`\n", "  - Stable claim ID：`INV-idempotency-integrity`\n" + timing),
-            ]
-        }
-        temp, repo, package = self.make_validate_package(ticket_edits=edits)
-        self.addCleanup(temp.cleanup)
-
-        findings = [item for item in self.validate_findings(repo, package) if item["code"] == "ticket-evidence-timing-uniform"]
-        by_ticket = {item["ticket"]: item for item in findings}
-
-        self.assertEqual(by_ticket["TKT-04"]["timing"], "remaining-completion")
-        self.assertEqual(by_ticket["TKT-04"]["claimCount"], 4)
-
-    def test_validate_omits_uniform_timing_finding_for_mixed_claims(self) -> None:
-        temp, repo, package = self.make_validate_package()
-        self.addCleanup(temp.cleanup)
-
-        findings = [item for item in self.validate_findings(repo, package) if item["code"] == "ticket-evidence-timing-uniform"]
-
-        self.assertNotIn("TKT-01", {item["ticket"] for item in findings})
 
     def test_validate_reports_prose_gate_only_for_acceptance_inbound_edges(self) -> None:
         temp, repo, package = self.make_validate_package(
@@ -589,7 +372,7 @@ class TicketFirstContractTests(unittest.TestCase):
 
     def test_validate_omits_arrival_finding_when_a_path_is_declared(self) -> None:
         temp, repo, package = self.make_validate_package(
-            ticket_edits={"01-source.md": [("\n## 安全不变量\n", "\n- 到达路径：entry → NEW: FixtureEntry → arrival\n\n## 安全不变量\n")]},
+            ticket_edits={"01-source.md": [("\n## Coverage\n", "\n- 到达路径：entry → NEW: FixtureEntry → arrival\n\n## Coverage\n")]},
         )
         self.addCleanup(temp.cleanup)
 

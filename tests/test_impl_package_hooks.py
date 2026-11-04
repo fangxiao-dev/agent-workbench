@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / "plugin-marketplace/plugins/impl-package/hooks/impl_package_hooks.py"
 HOOK_CONFIG = ROOT / "plugin-marketplace/plugins/impl-package/hooks/codex-hooks.json"
 CODEX_MANIFEST = ROOT / "plugin-marketplace/plugins/impl-package/.codex-plugin/plugin.json"
-FIXTURE = ROOT / "tests/fixtures/situations/p4-satisfiable-no-trail"
+FIXTURE = ROOT / "tests/fixtures/situations/p1-no-trail"
 PACKAGE_REL = Path("docs/implementations/hook-package")
 
 

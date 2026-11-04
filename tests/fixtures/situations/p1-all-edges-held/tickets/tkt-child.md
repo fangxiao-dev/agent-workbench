@@ -3,9 +3,11 @@
 **Ticket ID:** TKT-CHILD
 **Attempt ID:** fixture-attempt
 
-## Acceptance Criteria
-- Stable claim ID: `AC-1`
-
 ## Blocking Dependencies
 - implementation: TKT-BASE
 
+## Coverage
+
+- Journey steps: J1-S1
+- Suites: S-fixture
+- Required review: none

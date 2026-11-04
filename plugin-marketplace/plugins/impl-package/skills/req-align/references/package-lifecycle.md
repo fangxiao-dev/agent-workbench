@@ -11,7 +11,7 @@
 
 D/S/P 只是可选的可读别名；initial Decision/Spec/Plan bundle 只保留一次最终 owner approval，普通编辑和后续 package 更新均直接沿用该 approval。Git commit 是跨 session 比较和历史审计的唯一版本锚点。
 
-`contract-design.md` 是当前 `spec.md` 的从属 artifact：与 `spec.md` 共用 Status、审批与 Spec Gate，没有独立 alias、revision、状态或生命周期。每个新建或被修订的 Spec 都生成该文件；默认 `Disposition: detailed`，精确语义已由 `spec.md` 完整承担时使用 `Disposition: not-required` 并写明理由。未触及的 legacy Spec 到下次 req-align 再补齐。
+`contract-design.md` 是当前 `spec.md` 的从属 artifact：与 `spec.md` 共用 Status、审批与 Spec Gate，没有独立 alias、revision、状态或生命周期。每个新建或被修订的 Spec 都生成该文件；默认 `Disposition: detailed`，精确语义已由 `spec.md` 完整承担时使用 `Disposition: not-required` 并写明理由。未触及的既有 Spec 到下次 req-align 再补齐。
 
 ## 影响路由
 

@@ -5,7 +5,7 @@
     {
       "name": "impl-package",
       "source": "./plugins/impl-package",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "description": "A staged implementation and review suite for requirements, planning, execution, verification, and stable-document backfill.",
       "category": "Developer Tools"
     }

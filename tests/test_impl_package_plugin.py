@@ -66,7 +66,7 @@ def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
     zcode_marketplace = load_json(MARKETPLACE / "marketplace.json")
 
     assert codex["name"] == claude["name"] == zcode["name"] == "impl-package"
-    assert codex["version"] == claude["version"] == zcode["version"] == "0.4.2"
+    assert codex["version"] == claude["version"] == zcode["version"] == "0.4.3"
     assert codex["skills"] == claude["skills"] == zcode["skills"] == "./skills/"
     assert codex["hooks"] == "./hooks/codex-hooks.json"
     assert zcode["hooks"] == "./hooks/zcode-hooks.json"
@@ -296,38 +296,27 @@ def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
         assert obsolete not in template
 
 
-def test_migration_validator_is_standalone_and_not_a_runtime_entrypoint() -> None:
-    migration_validator = PLUGIN / "scripts" / "validate_ticket_first_migration.py"
-    assert migration_validator.is_file()
-    assert not (PLUGIN / "skills" / "validate_ticket_first_migration").exists()
-
-    for manifest_path in (
-        PLUGIN / ".codex-plugin" / "plugin.json",
-        PLUGIN / ".claude-plugin" / "plugin.json",
-        PLUGIN / ".zcode-plugin" / "plugin.json",
+def test_legacy_migration_artifacts_are_removed() -> None:
+    for relative in (
+        "scripts/validate_ticket_first_migration.py",
+        "references/ticket-first-migration-runbook.md",
+        "assets/prompts/ticket-first-migration.md",
     ):
-        manifest = load_json(manifest_path)
-        assert manifest["skills"] == "./skills/"
-        assert "validate_ticket_first_migration.py" not in json.dumps(manifest)
+        assert not (PLUGIN / relative).exists(), relative
 
     runtime_sources = (
         PLUGIN / "scripts" / "impl_package_state.py",
+        PLUGIN / "scripts" / "situation.py",
+        PLUGIN / "scripts" / "review_track_stats.py",
         PLUGIN / "scripts" / "impl_package_runtime" / "command_groups.py",
         PLUGIN / "scripts" / "impl_package_runtime" / "engine.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "metrics.py",
     )
     for source in runtime_sources:
         text = source.read_text(encoding="utf-8")
-        assert "validate_ticket_first_migration" not in text
-        assert "validate_migration(" not in text
-
-    dev_skill = (PLUGIN / "skills" / "dev-with-track" / "SKILL.md").read_text(encoding="utf-8")
-    assert "validate_ticket_first_migration" not in dev_skill
-    linker = (ROOT / "scripts" / "link_skill.py").read_text(encoding="utf-8")
-    assert "validate_ticket_first_migration" not in linker
-
-    runbook = (PLUGIN / "references" / "ticket-first-migration-runbook.md").read_text(encoding="utf-8")
-    assert "scripts/validate_ticket_first_migration.py" in runbook
-    assert "普通 3.5 runtime 不会主动调用它" in runbook
+        assert "ticket_first_migration" not in text
+        assert "Stable claim" not in text, source
+        assert "retire-claim" not in text, source
 
 
 def test_skill_resource_paths_stay_inside_plugin() -> None:

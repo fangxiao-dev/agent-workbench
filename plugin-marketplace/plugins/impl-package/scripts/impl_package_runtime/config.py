@@ -1,6 +1,6 @@
 """Stable document grammar exported for older Harness adapters.
 
-The runtime is 3.5 Ticket-only.  These patterns are compatibility metadata for
+The runtime is 3.6 Ticket-only.  These patterns are compatibility metadata for
 adapters that still inspect legacy 3.2/3.4 documents; they are not a second
 runtime state reader.
 """
