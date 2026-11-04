@@ -42,20 +42,12 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 
 ## Journey 验收
 
-格式与命令见 current-state，这里只写怎么做：
-
-- 每次 run 先执行 plan 的 `Harness setup` 与 `Harness precheck`，输出登记为 `run-setup` evidence；每个 run 创建新的业务对象，不重开别的 run 或后续步骤改过的对象（方法见 `validation-harness`）。
-- 每次合入后，从 Journey 第 1 步起按 Spec 的操作入口走到当前能到的最远一步，在观察表面取证，登记 `journey-step` evidence（同一 run、同一 environment，artifact 在 package 内）。reach 让 Owner 看到产品结果逐步前移；Gate 要的是最终版本上的一次走完。
-- 页面步用该步角色的账号走，录 Playwright trace（动作须含对声明控件的操作）登记 `surface: page`，或人工走查时写 `manualBy` 并附 package 内截图；文件步登记用户实际收到的文件；`记录` 步登记 package 内日志文件（`surface: log`）。UI 出现前可先用 API 跑 Journey 做预演（`surface: api`），它进 `rehearsalReach`，不进 Gate 认的 `reach`。Spec 该步“承接”不是 `—` 时，登记上一步的 `outputRef`（业务对象 ID）并把它作为本步 `inputRef`，两者不一致 `evidence add` 会拒绝；失败后另起 run 从第 1 步重走，局部测试、mock 和套件结果用来定位原因，不拼进走通记录。
-- 套件按 Required Suites 的入口与环境运行，结果以 `suite:<id>` 登记；revision 已合入、implementation/acceptance 入边已释放、负责的套件通过且 required review 完成后 `ticket satisfy`。
-- 后续提交让旧记录待复验时重跑受影响的 Journey；只动 package 内文件的提交不使记录失效。
+- 每次合入后，按 `$run-acceptance` 的走查手册从 Journey 第 1 步走到当前能到的最远一步；每个 run 先执行 plan 的 `Harness setup` 与 `Harness precheck` 并登记 `run-setup` evidence，使用自己新建的业务对象（方法见 `validation-harness`）。
+- 按 current-state 登记 `journey-step` evidence：同一 run、同一 environment，artifact 在 package 内，承接步带 `inputRef`/`outputRef`；UI 出现前的 API 预演登记 `surface: api`，只进 `rehearsalReach`。失败后另起 run 从第 1 步重走，局部测试、mock 和套件结果只用来定位原因。
+- reach 让 Owner 看到产品结果逐步前移；Gate 要的是最终版本上每条 Journey 的一次完整走通。
+- page 证据是每步截图加 `manualBy`；只有 Spec 的 `取证：` 行声明 Playwright 的步骤才录 trace。命令与格式见项目 QA 入口和 current-state。
+- 套件按 Required Suites 的入口与环境运行，结果以 `suite:<id>` 登记；revision 已合入、入边已释放、负责的套件通过且 required review 完成后 `ticket satisfy`。后续提交让旧记录待复验时重跑受影响的 Journey；只动 package 内文件的提交不使记录失效。
 - 实现中确认的合同澄清若改变用户可见结果，先 `package amendment add` 登记并告知 Owner，再继续不依赖它的工作；写进 ER 而不登记，Gate 就看不到这条修订。Amendment 待确认或漏登只阻止最终 `gate pass`，`gate blocked` 记录缺口与 next action，不停工。
-- 登记前用项目自己的转换脚本，把 run 的 step manifest 和 Spec 的 Journey 表转换成 evidence JSON，并在本地先做 `evidence add` 会做的核对，不要手工拼。以下几种情况会被拒绝：
-  - trace 里没有对 Spec「控件」列子串的 click/press/fill；
-  - 承接的 `inputRef` 与上一步的 `outputRef` 不一致；
-  - artifact 是被 git 忽略的扩展名（如 `.log`），应改用 `.txt`。
-  - 控件列要写 trace 里真实可匹配的标识（testid 或可访问名称片段），不要写自然语言描述。
-- 人工走查的 Journey 记录用 `assets/templates/manual-acceptance-readiness.md`，登记时带 `manualBy` 与截图，作为 package 内 evidence。
 
 ## Review、Findings 与人工验收
 
@@ -77,7 +69,7 @@ Plan/policy 或 Ticket Coverage 的 Required review 明确要求时同样产生 
 
 已确认 finding 可立即修、随相关下一步修或隔离并行修，由 Dispatcher 根据影响、资源和整合成本安排。延后不能放行依赖该缺陷的实现或验收。修复方向已失去可信边界、同一机制再次出现或影响跨多个 writer/入口/shared authority 时，先按 `/diagnosing-bugs` 定位；finding closure 仍归 do-review。
 
-terminal pass 要求 `review.terminal_summary` 支撑的 terminal-final coverage 明确完整（unknown 时拒绝），且阻断 findings 已闭合；启动条件与结果复用遵循 do-review。terminal-final 返回 FAIL/INCOMPLETE 后的下一步是 `fix` 加 `finding-closure`（一名 reviewer 只核对点名 findings），不是再起一轮 terminal-final；accepted findings 全部闭合、没有在途 fix、HEAD 不再变化时才在最终 HEAD 再起一次 terminal-final，C/Safety 按 admission 复用旧 PASS。Planned Verification 有 manual owner 时，使用 `assets/templates/manual-acceptance-readiness.md` 记录通过标准与 manual owner。
+terminal pass 要求 `review.terminal_summary` 支撑的 terminal-final coverage 明确完整（unknown 时拒绝），且阻断 findings 已闭合；启动条件与结果复用遵循 do-review。terminal-final 返回 FAIL/INCOMPLETE 后的下一步是 `fix` 加 `finding-closure`（一名 reviewer 只核对点名 findings），不是再起一轮 terminal-final；accepted findings 全部闭合、没有在途 fix、HEAD 不再变化时才在最终 HEAD 再起一次 terminal-final，C/Safety 按 admission 复用旧 PASS。Planned Verification 有须 Owner 本人验的项时，用 `$run-acceptance` 的走查记录模板登记通过标准与待 Owner 步骤。
 
 ## Verify and Gate
 

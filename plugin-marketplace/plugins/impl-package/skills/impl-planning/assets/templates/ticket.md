@@ -21,7 +21,7 @@ Attempt ID: <attempt-id>
 
 - **AC-1：** <可观察结果或约束>
   - Arrival path: <跨模块 AC 填写；entry → EXISTS: <existing-symbol> → NEW: <new-symbol> → arrival；规则见下方“到达路径规则”>
-  - 证据：<计划证据或人工验证 owner>
+  - 证据：<计划证据；须 Owner 本人验的项写 owner>
 
 ## Coverage
 
