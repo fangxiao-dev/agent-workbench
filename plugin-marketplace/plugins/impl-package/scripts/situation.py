@@ -412,6 +412,64 @@ def _git_result(repo: Path, *arguments: str) -> tuple[int, str, str]:
     return code, stdout.strip(), stderr.strip()
 
 
+# 版本漂移按实际判断：这些路径的改动不会改变运行行为，证据自动沿用。
+NON_RUNTIME_PREFIXES = ("docs/", ".agents/", ".claude/")
+NON_RUNTIME_SUFFIXES = (".md",)
+CARRIED_FORWARD_FIELDS = {"to", "reason", "judgedBy"}
+
+
+def carried_forward_error(value: Any) -> str | None:
+    if (
+        not isinstance(value, dict)
+        or set(value) != CARRIED_FORWARD_FIELDS
+        or not all(isinstance(item, str) and item.strip() for item in value.values())
+    ):
+        return "carriedForward 必须是含非空 to/reason/judgedBy 的对象"
+    if COMMIT_RE.fullmatch(value["to"]) is None:
+        return "carriedForward.to 不是 commit ID"
+    return None
+
+
+def _runtime_diff(repo: Path, package_rel: str, start: str, end: str) -> bool:
+    """Whether start..end changes any runtime path outside the package; git failure counts as runtime."""
+    code, out, _ = _git_result(
+        repo, "diff", "--name-only", "--no-renames", "-z", start, end, "--", ".", f":!{package_rel}",
+    )
+    if code != 0:
+        return True
+    return any(
+        not (path.startswith(NON_RUNTIME_PREFIXES) or path.endswith(NON_RUNTIME_SUFFIXES))
+        for path in out.split("\0")
+        if path
+    )
+
+
+def evidence_revision_coverage(
+    record: dict[str, Any], comparison_commit: str, *, repo: Path, package: Path,
+) -> str | None:
+    """'same' | 'docs' (only non-runtime drift) | 'carried' (agent carry-forward) | None (stale)."""
+    revision = record.get("revision")
+    if not isinstance(revision, str) or not revision:
+        return None
+    if revision == comparison_commit:
+        return "same"
+    try:
+        package_rel = package.resolve().relative_to(repo.resolve()).as_posix()
+    except ValueError:
+        return None
+    if not _runtime_diff(repo, package_rel, revision, comparison_commit):
+        return "docs"
+    carried = record.get("carriedForward")
+    if carried is None or carried_forward_error(carried) is not None:
+        return None
+    target = carried["to"]
+    if target != comparison_commit:
+        code, _, _ = _git_result(repo, "merge-base", "--is-ancestor", target, comparison_commit)
+        if code != 0 or _runtime_diff(repo, package_rel, target, comparison_commit):
+            return None
+    return "carried"
+
+
 def evidence_record_valid(
     record: dict[str, Any],
     comparison_commit: str,
@@ -426,22 +484,10 @@ def evidence_record_valid(
         return False
     if expected_environment is not None and record.get("environment") != expected_environment:
         return False
-    revision = record.get("revision")
-    if not isinstance(revision, str) or not revision:
-        return False
     package = package.resolve()
     repo = repo.resolve()
-    try:
-        package_rel = package.relative_to(repo).as_posix()
-    except ValueError:
+    if evidence_revision_coverage(record, comparison_commit, repo=repo, package=package) is None:
         return False
-    if revision != comparison_commit:
-        code, _, _ = _git_result(
-            repo,
-            "diff", "--quiet", revision, comparison_commit, "--", ".", f":!{package_rel}",
-        )
-        if code != 0:
-            return False
     if attempt_active:
         artifact = record.get("artifact")
         if not isinstance(artifact, str) or not artifact.strip():
@@ -1042,7 +1088,7 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                     continue
                 required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
                 optional = {"inputRef", "outputRef", "manualBy", "artifactSha256"} if kind == "journey-step" else set()
-                allowed = required | optional | {"invalidatedBy", "timing", "recordedAt"}
+                allowed = required | optional | {"invalidatedBy", "timing", "recordedAt", "carriedForward"}
                 if kind not in fields_by_kind or not required <= set(record) or set(record) - allowed:
                     errors.append(f"evidenceIndex[{key}] {kind!r} evidence 字段不完整或含未知字段")
                     continue
@@ -1059,6 +1105,8 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                 invalidated_by = record.get("invalidatedBy")
                 if "invalidatedBy" in record and invalidated_by is not None and (not isinstance(invalidated_by, str) or not invalidated_by.strip()):
                     errors.append(f"evidenceIndex[{key}] invalidatedBy 无效")
+                if "carriedForward" in record and (message := carried_forward_error(record["carriedForward"])):
+                    errors.append(f"evidenceIndex[{key}] {message}")
                 if kind == "journey-step":
                     surface = record.get("surface")
                     if surface not in {"page", "file", "api", "log"}:

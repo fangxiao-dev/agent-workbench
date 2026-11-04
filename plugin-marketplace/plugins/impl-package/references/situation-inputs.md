@@ -122,7 +122,7 @@ false；只有没有 U 且所有比较都相等时才是 true。
 | S `evidenceIndex` | 按 `evidenceKey` 索引的 typed record，`kind` 为 `journey-step \| suite \| review \| release` | Journey reach 由 `journey-step` 记录派生，不存储；套件、review、发布顺序是否有有效记录 |
 | S `acceptance` | `contractBaseline`（`head` 与 `files` blob hash）、`releaseOrder`、`amendments[]` | Amendment 待确认、漏登（合同文件相对 baseline 变化而无 Amendment 覆盖）、发布顺序缺失 |
 | T 与 `spec.md §7` | Ticket 的 Coverage 区块；Spec 的三张固定表 | step、套件的归属与是否被认领 |
-| Git | revision 与 comparison commit 之间的 diff | 记录是否有效：revision 相同，或只改了 package 内文件 |
+| Git | revision 与 comparison commit 之间的 diff | 记录是否有效：revision 相同，或包外只改了非运行时路径，或带 `carriedForward` 且覆盖到 comparison commit |
 | artifact 路径 | 必须在 package 内 | Temp 或 package 外路径是 gap |
 
 unknown 语义同 1.3：state、Spec、revision 或 diff 读不到时是 U，不压成 F，Gate 对 U 不放行。

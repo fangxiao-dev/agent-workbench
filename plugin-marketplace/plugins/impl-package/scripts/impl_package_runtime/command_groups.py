@@ -187,6 +187,11 @@ def _parser(group: str) -> argparse.ArgumentParser:
         invalidate = commands.add_parser("invalidate", help="invalidate the records of one evidence key")
         invalidate.add_argument("--key", required=True)
         invalidate.add_argument("--invalidated-by", required=True)
+        carry = commands.add_parser("carry-forward", help="record the agent judgment that a key's evidence still holds up to a later commit")
+        carry.add_argument("--key", required=True)
+        carry.add_argument("--to", required=True)
+        carry.add_argument("--reason", required=True)
+        carry.add_argument("--judged-by", required=True)
     elif group == "recovery":
         checkpoint = commands.add_parser("checkpoint", help="overwrite the active checkpoint")
         checkpoint.add_argument("--subject", default="attempt")
@@ -281,6 +286,8 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
     if group == "evidence":
         if args.command == "add":
             return engine.command_evidence_add(package, sys.stdin.read())
+        if args.command == "carry-forward":
+            return engine.command_evidence_carry_forward(package, args.key, args.to, args.reason, args.judged_by)
         return engine.command_evidence_invalidate(package, args.key, args.invalidated_by)
     if group == "recovery":
         if args.command == "checkpoint":

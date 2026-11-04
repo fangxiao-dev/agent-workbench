@@ -33,7 +33,9 @@ from situation import (
     REVIEW_TRACKS,
     REVIEW_TRACK_VALUES,
     describe_unknown_fact_keys,
+    carried_forward_error,
     evidence_record_valid,
+    evidence_revision_coverage,
     live_package_reference_fact,
     terminal_coverage_fact,
 )
@@ -1414,9 +1416,11 @@ def _validate_journey_evidence_index(
             if not isinstance(kind, str) or kind not in fields_by_kind:
                 raise StateError(f"evidenceIndex[{evidence_key}] has invalid kind")
             required = base_fields | fields_by_kind[kind]
-            allowed = required | optional_fields_by_kind.get(kind, set()) | {"invalidatedBy", "timing", "recordedAt"}
+            allowed = required | optional_fields_by_kind.get(kind, set()) | {"invalidatedBy", "timing", "recordedAt", "carriedForward"}
             if not required <= set(record) or set(record) - allowed:
                 raise StateError(f"evidenceIndex[{evidence_key}] {kind} record has missing or unknown fields")
+            if "carriedForward" in record and (message := carried_forward_error(record["carriedForward"])):
+                raise StateError(f"evidenceIndex[{evidence_key}] {message}")
             if not isinstance(record["conclusion"], str) or record["conclusion"] not in CONCLUSIONS:
                 raise StateError(f"evidenceIndex[{evidence_key}] has invalid conclusion")
             if "timing" in record and (not isinstance(record["timing"], str) or record["timing"] not in TIMINGS):
@@ -1433,6 +1437,8 @@ def _validate_journey_evidence_index(
             copy = dict(record)
             copy["artifact"] = normalized_artifact
             copy["revision"] = _validate_commit(repo, record["revision"])
+            if "carriedForward" in record:
+                copy["carriedForward"] = {**record["carriedForward"], "to": _validate_commit(repo, record["carriedForward"]["to"])}
             if kind == "journey-step":
                 run_id, journey_id, step_id, entry = (record[field] for field in ("runId", "journeyId", "stepId", "entry"))
                 if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, entry)):
@@ -1774,6 +1780,7 @@ def _v36_acceptance_status(
     spec = summary["_journeySpec"]
     records_by_key = state["evidenceIndex"]
     stale: set[str] = set()
+    carried_rows: list[dict[str, str]] = []
     current_supporting_keys: set[str] = set()
     stale_journey_keys: dict[str, set[str]] = {}
     stale_run_setup_ids: set[str] = set()
@@ -1821,6 +1828,12 @@ def _v36_acceptance_status(
                 except (OSError, StateError):
                     surface_validity[id(record)] = False
                     valid = False
+            if valid and record["conclusion"] == "supporting" and "carriedForward" in record:
+                if evidence_revision_coverage(record, comparison_commit, repo=repo, package=package) == "carried":
+                    carried_rows.append({
+                        "key": evidence_key, "from": record["revision"], "to": record["carriedForward"]["to"],
+                        "reason": record["carriedForward"]["reason"], "judgedBy": record["carriedForward"]["judgedBy"],
+                    })
             if record["conclusion"] == "supporting":
                 if not valid:
                     stale.add(evidence_key)
@@ -1963,6 +1976,7 @@ def _v36_acceptance_status(
         "journeys": journey_rows,
         "suites": suite_rows,
         "staleEvidence": sorted(stale),
+        "carriedForwardEvidence": carried_rows,
         "pendingAmendments": pending,
         "unregisteredAmendments": unregistered,
         "releaseRequired": release_required,
@@ -2728,6 +2742,36 @@ def command_evidence_invalidate(package: Path, key: str, invalidated_by: str) ->
     return {"evidenceKey": key, "invalidated": True, "idempotent": not changed}
 
 
+def command_evidence_carry_forward(package: Path, key: str, to: str, reason: str, judged_by: str) -> dict[str, Any]:
+    """Record the agent's judgment that a key's supporting evidence still covers runtime changes up to `to`."""
+    state = _load_json(package / STATE_PATH)
+    summary = _validate_state(package, state)
+    _assert_mutable(summary)
+    if not all(isinstance(value, str) and value.strip() for value in (key, reason, judged_by)):
+        raise StateError("evidence carry-forward requires non-empty --key, --reason and --judged-by")
+    repo = _repo_root(package)
+    target = _validate_commit(repo, to)
+    records = [
+        row for row in state["evidenceIndex"].get(key, [])
+        if row.get("conclusion") == "supporting" and row.get("invalidatedBy") is None
+    ]
+    if not records:
+        raise StateError("evidence key has no supporting, non-invalidated record to carry forward")
+    carried = {"to": target, "reason": reason.strip(), "judgedBy": judged_by.strip()}
+    changed = False
+    for record in records:
+        if not _is_ancestor(repo, record["revision"], target):
+            raise StateError(f"evidence revision {record['revision'][:7]} is not an ancestor of {target[:7]}")
+        if record.get("carriedForward") != carried:
+            record["carriedForward"] = dict(carried)
+            changed = True
+    if changed:
+        _validate_state(package, state, projections=False)
+        _write_json(package / STATE_PATH, state)
+        _refresh_projections(package, state)
+    return {"evidenceKey": key, "carriedForward": carried, "idempotent": not changed}
+
+
 def command_set_state(
     package: Path,
     identifier: str,
@@ -3456,6 +3500,10 @@ def _owner_summary(
         )
     valid_suites = sum(1 for row in status["suites"] if row["valid"])
     lines.append(f"- 套件：{valid_suites}/{len(status['suites'])} 通过\n")
+    for row in status.get("carriedForwardEvidence", []):
+        lines.append(
+            f"- 沿用证据：{row['key']} {row['from'][:7]}→{row['to'][:7]}，{row['reason']}（{row['judgedBy']}判断）\n"
+        )
     pending = status["pendingAmendments"]
     unregistered = status["unregisteredAmendments"]
     if pending:

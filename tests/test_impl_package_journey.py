@@ -2047,3 +2047,101 @@ def test_situation_renders_new_v36_acceptance_rows_without_changing_global_block
         "attempt.accept.release-order-missing",
     } <= slugs
     assert "attempt.accept.amendment-owner-confirmation" not in situation.GLOBAL_BLOCKING_SLUGS
+
+
+def _drift_fixture(tmp_path: Path) -> tuple[Path, Path, str, dict]:
+    repo, package, revision = _init_v36(tmp_path)
+    added = _cli(repo, package, "evidence", "add", input_value=_suite_record(revision, "S-resolver"))
+    assert added.returncode == 0, added.stderr
+    return repo, package, revision, _suite_record(revision, "S-resolver")
+
+
+def _valid(repo: Path, package: Path, record: dict, head: str) -> bool:
+    return situation.evidence_record_valid(
+        record, head, repo=repo, package=package, expected_environment="local-test", attempt_active=True,
+    )
+
+
+def _commit_file(repo: Path, relative: str, text: str) -> str:
+    path = repo / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return _commit_path(repo, path, f"change {relative}")
+
+
+def _record_in_state(package: Path, key: str = "suite:S-resolver") -> dict:
+    return _state(package)["evidenceIndex"][key][-1]
+
+
+def test_evidence_non_runtime_drift_stays_valid_without_carry_forward(tmp_path: Path) -> None:
+    repo, package, _revision, record = _drift_fixture(tmp_path)
+    _commit_file(repo, "docs/guide.md", "docs\n")
+    _commit_file(repo, "src/README.md", "readme\n")
+    head = _commit_file(repo, ".claude/notes.txt", "notes\n")
+    assert _valid(repo, package, record, head)
+
+
+def test_evidence_runtime_drift_is_stale_without_carry_forward(tmp_path: Path) -> None:
+    repo, package, _revision, record = _drift_fixture(tmp_path)
+    head = _commit_file(repo, "src/app.py", "value = 1\n")
+    assert not _valid(repo, package, record, head)
+
+
+def test_evidence_carry_forward_covers_runtime_drift_and_is_listed(tmp_path: Path) -> None:
+    repo, package, revision, _record = _drift_fixture(tmp_path)
+    head = _commit_file(repo, "src/app.py", "value = 1\n")
+    assert _cli(repo, package, "package", "refresh-progress").returncode == 0
+    carried = _cli(
+        repo, package, "evidence", "carry-forward", "--key", "suite:S-resolver", "--to", head,
+        "--reason", "only a log line changed", "--judged-by", "controller",
+    )
+    assert carried.returncode == 0, carried.stderr
+    record = _record_in_state(package)
+    assert record["carriedForward"] == {"to": head, "reason": "only a log line changed", "judgedBy": "controller"}
+    assert _valid(repo, package, record, head)
+    # docs-only commits after the carry-forward target keep it valid
+    later = _commit_file(repo, "docs/later.md", "later\n")
+    assert _valid(repo, package, record, later)
+
+    summary = engine._validate_state(package, _state(package))
+    status = engine._v36_acceptance_status(package, _state(package), summary, head, attempt_active=True)
+    assert status["carriedForwardEvidence"] == [{
+        "key": "suite:S-resolver", "from": revision, "to": head,
+        "reason": "only a log line changed", "judgedBy": "controller",
+    }]
+    owner_summary = "".join(engine._owner_summary(status, head, "blocked", "x"))
+    assert "沿用证据：suite:S-resolver" in owner_summary and "only a log line changed" in owner_summary
+    assert "controller" in owner_summary
+
+
+def test_evidence_carry_forward_is_stale_after_later_runtime_change(tmp_path: Path) -> None:
+    repo, package, _revision, _record = _drift_fixture(tmp_path)
+    mid = _commit_file(repo, "src/app.py", "value = 1\n")
+    assert _cli(repo, package, "package", "refresh-progress").returncode == 0
+    carried = _cli(
+        repo, package, "evidence", "carry-forward", "--key", "suite:S-resolver", "--to", mid,
+        "--reason", "harmless", "--judged-by", "controller",
+    )
+    assert carried.returncode == 0, carried.stderr
+    head = _commit_file(repo, "src/app.py", "value = 2\n")
+    assert not _valid(repo, package, _record_in_state(package), head)
+
+
+def test_evidence_invalidated_by_overrides_carry_forward(tmp_path: Path) -> None:
+    repo, package, _revision, _record = _drift_fixture(tmp_path)
+    head = _commit_file(repo, "src/app.py", "value = 1\n")
+    assert _cli(repo, package, "package", "refresh-progress").returncode == 0
+    carried = _cli(
+        repo, package, "evidence", "carry-forward", "--key", "suite:S-resolver", "--to", head,
+        "--reason", "harmless", "--judged-by", "controller",
+    )
+    assert carried.returncode == 0, carried.stderr
+    invalidated = _cli(repo, package, "evidence", "invalidate", "--key", "suite:S-resolver", "--invalidated-by", "found regression")
+    assert invalidated.returncode == 0, invalidated.stderr
+    assert not _valid(repo, package, _record_in_state(package), head)
+    assert _cli(repo, package, "package", "refresh-progress").returncode == 0
+    again = _cli(
+        repo, package, "evidence", "carry-forward", "--key", "suite:S-resolver", "--to", head,
+        "--reason", "harmless", "--judged-by", "controller",
+    )
+    assert again.returncode != 0
