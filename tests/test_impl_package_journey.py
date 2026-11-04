@@ -1844,7 +1844,7 @@ def test_journey_gate_pass_confirms_amendment_requires_release_and_freezes_archi
     assert "- 发布顺序：已记录" in text
     assert f"- 最终版本：{revision[:7]}" in text
     assert "- 结论：pass — 全部验收满足" in text
-    assert "- 人工走查：J1-S1（张三）" in text
+    assert "- 走查：J1-S1（张三）" in text
     assert engine._gate_info(package, repo) == {"verdict": "pass", "attempt": "initial", "commit": revision}
     assert engine._lifecycle(package, "initial", repo).frozen
     assert (package / ".impl-package/attempts/initial.json").is_file()

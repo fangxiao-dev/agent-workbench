@@ -3480,7 +3480,7 @@ def _owner_summary(
         for item in journey["manualWalkthroughs"]
     ]
     if manual:
-        lines.append(f"- 人工走查：{'、'.join(manual)}\n")
+        lines.append(f"- 走查：{'、'.join(manual)}\n")
     return lines
 
 
