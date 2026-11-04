@@ -49,6 +49,11 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 - 套件按 Required Suites 的入口与环境运行，结果以 `suite:<id>` 登记；revision 已合入、implementation/acceptance 入边已释放、负责的套件通过且 required review 完成后 `ticket satisfy`。
 - 后续提交让旧记录待复验时重跑受影响的 Journey；只动 package 内文件的提交不使记录失效。
 - 实现中确认的合同澄清若改变用户可见结果，先 `package amendment add` 登记并告知 Owner，再继续不依赖它的工作；写进 ER 而不登记，Gate 就看不到这条修订。Amendment 待确认或漏登只阻止最终 `gate pass`，`gate blocked` 记录缺口与 next action，不停工。
+- 登记前用项目自己的转换脚本，把 run 的 step manifest 和 Spec 的 Journey 表转换成 evidence JSON，并在本地先做 `evidence add` 会做的核对，不要手工拼。以下几种情况会被拒绝：
+  - trace 里没有对 Spec「控件」列子串的 click/press/fill；
+  - 承接的 `inputRef` 与上一步的 `outputRef` 不一致；
+  - artifact 是被 git 忽略的扩展名（如 `.log`），应改用 `.txt`。
+  - 控件列要写 trace 里真实可匹配的标识（testid 或可访问名称片段），不要写自然语言描述。
 - 人工走查的 Journey 记录用 `assets/templates/manual-acceptance-readiness.md`，登记时带 `manualBy` 与截图，作为 package 内 evidence。
 
 ## Review、Findings 与人工验收
@@ -86,6 +91,11 @@ Completion claim 不能宽于 evidence；准备写 terminal pass 或声称 compl
 - terminal metadata commit、merge 或 environment 变化后，声称前重审 delta。
 - 行为代码、合同或影响 behavior 的配置变化使旧 Gate 失效，进入 patch Attempt 重验受影响范围；仅 runtime metadata 变化时复用 provenance 完整的行为 evidence。
 - 复用 subagent、Execution Record 或 CI evidence 前对照实际 diff，不只信 success label。
+
+`gate pass` 前先确认机械前置条件，否则会被逐条拒绝：
+- `review.terminal_summary` 的 `comparisonHead` 是当前 HEAD 的完整 SHA，Track A 的 `reviewedHead` 必须是当前 HEAD，不能复用；C 和 Safety 可以凭 reuseEvidence 复用；
+- 仓库存在 `docs/implementations/retired.json`（至少 `{"packages": []}`）；
+- `ticket satisfy` 需带 `--expect <当前状态>`。
 
 terminal Gate 完成 Stage 7：记录 Durable Delta 与 truth pointer，或写明无增量理由；随后冻结 state、checkpoint 与 Execution Record。transport disconnect 后从幂等事实恢复。
 
