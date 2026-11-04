@@ -92,9 +92,11 @@ steps 与 suites 不同时为 `none`，harness、migration、加固类 Ticket �
 
 **Ticket `SATISFIED`** 的依据是：`--revision` 已合入（当前 HEAD 的 ancestor）、Coverage 里负责的套件都有有效 evidence、Required review 有有效结果，且 implementation/acceptance 入边已释放。Journey step 不是 Ticket 的满足条件，它归 Gate，下游因此不必等上游走通整条旅程。
 
+**取证方式**是 Spec 合同的一部分：每条 Journey 在 `准备：` 下有 `取证：浏览器走查` 或 `取证：Playwright（理由：…）` 一行，建 Journey 时定，`package check-spec` 不解析它，由 Spec Gate 与 plan-review 核对。
+
 **Journey 走通** 用 `journey-step` evidence 登记，每条带 `surface`（`page | file | log | api`）。面向客户的端到端验收是页面级（或用户实际收到的文件）；API 跑 Journey 是早期预演，在 UI 出现前让进度可见。
 
-- `page`：package 内 Playwright trace `.zip`，其记录的动作含对该步声明控件的 click/press/fill（runtime 解析 trace，不符即拒绝）；或 `manualBy` 加 package 内截图（人工走查）。
+- `page`：默认是 package 内每步截图加 `manualBy`（走查人：Owner 或执行 agent 的标识，字段名沿用），走查方法见 `run-acceptance`。Playwright trace `.zip` 只用于 Spec 的 `取证：` 行声明了 Playwright 的步骤，其记录的动作须含对该步声明控件的 click/press/fill（runtime 解析 trace，不符即拒绝）。
 - `file`：用户实际收到的文件（不接受 .md/.txt/.log），runtime 记录其 sha256。
 - `log`：对应 `记录` 步，artifact 为 package 内文件。
 - `api`：恒被接受，只计入预演。

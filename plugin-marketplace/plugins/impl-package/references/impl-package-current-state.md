@@ -77,15 +77,15 @@ Ticket 状态为 `PENDING | BLOCKED | NEEDS-REVALIDATION | SATISFIED | RETIRED`�
 
 | kind | 必填的专有字段 | evidenceKey | 说明 |
 | --- | --- | --- | --- |
-| `journey-step` | `runId`、`journeyId`、`stepId`、`entry`、`surface`（`page \| file \| log \| api`） | `journey:<runId>:<stepId>` | `entry` 必须与 Spec 该步的操作入口一致；`page` 需 package 内 Playwright trace `.zip`（动作含对 Spec 声明控件的 click/press/fill，否则拒绝），或 `manualBy` 加 package 内截图；`file` 需用户实际收到的文件（不接受 .md/.txt/.log），runtime 存其 sha256；`log`（对应 Spec 的 `记录` 步）的 artifact 须为 package 内文件；`api` 恒接受；同一 run 从第 1 步起按顺序登记；Spec 该步“承接”不是 `—` 时，`inputRef` 必须等于同一 run 上一步的 `outputRef`，否则 `evidence add` 拒绝；失败不覆盖旧 run，另起新 run |
+| `journey-step` | `runId`、`journeyId`、`stepId`、`entry`、`surface`（`page \| file \| log \| api`） | `journey:<runId>:<stepId>` | `entry` 必须与 Spec 该步的操作入口一致；`page` 默认是 package 内截图加 `manualBy`（走查人：Owner 或执行 agent 的标识），Spec 的 `取证：` 声明 Playwright 的步骤才用 package 内 trace `.zip`（动作含对 Spec 声明控件的 click/press/fill，否则拒绝）；`file` 需用户实际收到的文件（不接受 .md/.txt/.log），runtime 存其 sha256；`log`（对应 Spec 的 `记录` 步）的 artifact 须为 package 内文件；`api` 恒接受；同一 run 从第 1 步起按顺序登记；Spec 该步“承接”不是 `—` 时，`inputRef` 必须等于同一 run 上一步的 `outputRef`，否则 `evidence add` 拒绝；失败不覆盖旧 run，另起新 run |
 | `run-setup` | `runId` | `run-setup:<runId>` | artifact 为 plan 的 `Harness setup` 与 `Harness precheck` 输出（package 内文件）；某 runId 的 `journey-step` 必须在该 run 已有有效 `run-setup` 后才被接受 |
 | `suite` | `suiteId` | `suite:<id>` | environment 必须等于 Spec 声明；归属由 Ticket Coverage 反查 |
 | `review` | `ticket`（Ticket ID 或 `package`） | `review:<ticket>` | per-Ticket required review 的结果；最终 HEAD 的 review 仍由 terminal-final 承担 |
 | `release` | 无 | `release` | artifact 为 package 内发布顺序表 |
 
-**有效性**：记录的 `conclusion` 为 `supporting` 且未被 `invalidatedBy` 标记；`revision` 等于 Gate comparison commit，或两者之间只改动了本 package 目录内的文件；suite evidence 的 environment 与 Spec 字符串精确匹配，同一 Journey run 的 step evidence 使用同一 environment；active Attempt 的 artifact 文件存在。不满足的记录待复验，旧记录保留。Gate 只在缺少当前有效替代时保留 stale blocker：非 Journey evidence 需同 key 的当前有效 supporting 记录；Journey 历史 step/setup 需同一 Journey 的完整连续有效 run，步骤不跨 run 拼接。invalidated 或非 supporting 记录不构成替代。terminal Gate 在任何持久化写入前按 comparison commit 的完整冻结合同校验；冻结 Attempt 的 Journey 校验读取该 commit 中的 `spec.md`，并由 `contractBaseline` 或已登记 Amendment 的 blob 证明归属；历史合同缺失或 blob 不匹配时拒绝。活动 Attempt 校验工作区合同。进度由 `journey-step` 记录派生，不存储：**reach** 是同一 run 内从第 1 步起、surface 与 Spec 入口类型一致（页面—page、文件—file、记录—log）的连续有效步数，Gate 只认它；**rehearsalReach** 不限 surface。Owner Summary 形如 `J1 …：页面走通 2/4 · API 预演 4/4`，并列出人工走查的步骤。
+**有效性**：记录的 `conclusion` 为 `supporting` 且未被 `invalidatedBy` 标记；`revision` 等于 Gate comparison commit，或两者之间只改动了本 package 目录内的文件；suite evidence 的 environment 与 Spec 字符串精确匹配，同一 Journey run 的 step evidence 使用同一 environment；active Attempt 的 artifact 文件存在。不满足的记录待复验，旧记录保留。Gate 只在缺少当前有效替代时保留 stale blocker：非 Journey evidence 需同 key 的当前有效 supporting 记录；Journey 历史 step/setup 需同一 Journey 的完整连续有效 run，步骤不跨 run 拼接。invalidated 或非 supporting 记录不构成替代。terminal Gate 在任何持久化写入前按 comparison commit 的完整冻结合同校验；冻结 Attempt 的 Journey 校验读取该 commit 中的 `spec.md`，并由 `contractBaseline` 或已登记 Amendment 的 blob 证明归属；历史合同缺失或 blob 不匹配时拒绝。活动 Attempt 校验工作区合同。进度由 `journey-step` 记录派生，不存储：**reach** 是同一 run 内从第 1 步起、surface 与 Spec 入口类型一致（页面—page、文件—file、记录—log）的连续有效步数，Gate 只认它；**rehearsalReach** 不限 surface。Owner Summary 形如 `J1 …：页面走通 2/4 · API 预演 4/4`，并列出走查的步骤。
 
-Ticket 的 Coverage 区块、Spec 三张固定表和 `Release order` 在 `package validate` 时按固定标题与列名解析，列缺失或多出即失败。
+Ticket 的 Coverage 区块、Spec 三张固定表和 `Release order` 在 `package validate` 时按固定标题与列名解析，列缺失或多出即失败。Journey 标题下的 `准备：` 行被解析，`取证：` 行是 Spec 合同的一部分但 runtime 不解析，加减该行不影响校验。
 
 ## 命令
 

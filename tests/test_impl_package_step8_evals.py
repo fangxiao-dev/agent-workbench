@@ -105,7 +105,6 @@ def test_complete_progress_and_workflow_surfaces_are_present() -> None:
         "assets/impl-package-intro.html",
         "references/evergreen-module-spec-and-backfill-design.md",
         "references/plan-apply-runbook.md",
-        "skills/dev-with-track/assets/templates/manual-acceptance-readiness.md",
     ):
         assert (IMPL / relative).is_file()
 

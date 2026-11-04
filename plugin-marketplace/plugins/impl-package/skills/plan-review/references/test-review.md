@@ -32,7 +32,7 @@ behavior | risk | test level | oracle | failure mode
 
 ## Journey 与套件（`Acceptance: journey` 的新 package）
 
-Journey 的 oracle 是每一步的预期加上上一步输出确实成为下一步输入；检查连续走通能否在计划的环境和入口里执行（登录、fixture、种子数据从哪来），页面承诺的步骤有浏览器级取证。必需套件逐个核对 Entry 与 Environment 可执行、结果能区分正确与常见错误实现。再看两个场景是否有计划：合同修订出现（Amendment 待确认）时哪些工作继续、Gate 以 `blocked` 记录缺口；代码变化后哪些走通记录需要重跑。review 按 material risk 选择，不为每个 Journey step 另设 review 批次。
+Journey 的 oracle 是每一步的预期加上上一步输出确实成为下一步输入；检查连续走通能否在计划的环境和入口里执行（登录、fixture、种子数据从哪来），每条 Journey 在 `准备：` 下有 `取证：` 行（`浏览器走查` 或 `Playwright（理由：…）`），Playwright 的理由是点名 step 的精确测量（响应时间、延迟阈值、动画时长），理由缺失或不是测量就退回 Spec。必需套件逐个核对 Entry 与 Environment 可执行、结果能区分正确与常见错误实现。再看两个场景是否有计划：合同修订出现（Amendment 待确认）时哪些工作继续、Gate 以 `blocked` 记录缺口；代码变化后哪些走通记录需要重跑。review 按 material risk 选择，不为每个 Journey step 另设 review 批次。
 
 ## Failure Modes
 
