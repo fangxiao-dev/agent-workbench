@@ -196,7 +196,7 @@ export function substituteWorkbenchRoot(text, root) {
 export const IMPL_PACKAGE_GUIDANCE =
   '本机已安装 dsh-impl-package 插件（Impl-Package 原生适配）：主控预设会通过 agent/pre-step 自动注入「当前处境 + 合法动作 + digest」' +
   '（package validate → situation.py render），并提供 typed 工具（impl_package_validate / impl_situation_render / impl_ticket_transition / ' +
-  'impl_evidence_add / impl_evidence_add_batch / impl_evidence_retire_claim / impl_recovery_checkpoint / impl_recovery_judgment / impl_gate_commit / ' +
+  'impl_evidence_add / impl_evidence_add_batch / impl_evidence_invalidate / impl_recovery_checkpoint / impl_recovery_judgment / impl_gate_commit / ' +
   'impl_trail_dispatch / impl_trail_escape / impl_trail_fact / impl_trail_worker_return）直接调用现有语义 CLI。' +
   'trail dispatch 须带 dispatch_id/candidate_id/mode/chosen/receipt（$dispatcher 合同），worker-return 用 of 指回 dispatch 并带唯一 return_id。' +
   'state.json 与 Git 仍是唯一权威；本插件只做执行轨迹与处境注入，不另建事实源。' +

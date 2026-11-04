@@ -81,11 +81,13 @@ console.log('== ticket argv ==')
 const base = { packageDir: 'P', scriptsRoot: 'S' }
 const satisfy = buildTicketArgv('S', 'P', { action: 'satisfy', ticket: 'TKT-01', expect: 'PENDING', revision: 'abc1234', environment: 'unit' })
 check('satisfy argv', satisfy.includes('--revision') && satisfy.includes('abc1234') && satisfy.includes('--environment'))
-const revalidate = buildTicketArgv('S', 'P', { action: 'needs-revalidation', ticket: 'TKT-01', expect: 'SATISFIED', claims: ['AC-1', 'AC-2'], invalidatedBy: 'regression' })
-check('needs-revalidation argv', revalidate.filter((a) => a === '--claim').length === 2 && revalidate.includes('--invalidated-by'))
+const satisfyNoEnv = buildTicketArgv('S', 'P', { action: 'satisfy', ticket: 'TKT-01', expect: 'PENDING', revision: 'abc1234' })
+check('satisfy environment is optional', !satisfyNoEnv.includes('--environment'))
+const revalidate = buildTicketArgv('S', 'P', { action: 'needs-revalidation', ticket: 'TKT-01', expect: 'SATISFIED', invalidatedBy: 'regression' })
+check('needs-revalidation argv', !revalidate.includes('--claim') && revalidate.includes('--invalidated-by'))
 let threw = false
-try { buildTicketArgv('S', 'P', { action: 'needs-revalidation', ticket: 'T', expect: 'SATISFIED', invalidatedBy: 'x' }) } catch { threw = true }
-check('needs-revalidation rejects missing claims', threw)
+try { buildTicketArgv('S', 'P', { action: 'needs-revalidation', ticket: 'T', expect: 'SATISFIED' }) } catch { threw = true }
+check('needs-revalidation requires invalidatedBy', threw)
 threw = false
 try { buildTicketArgv('S', 'P', { action: 'satisfy', ticket: 'T', expect: 'PENDING' }) } catch { threw = true }
 check('satisfy rejects missing revision', threw)
@@ -184,9 +186,10 @@ const registeredImplTools = []
 applyImplTools({ tools: { register(definition) { registeredImplTools.push(definition) } } }, {})
 const trailToolNames = ['impl_trail_dispatch', 'impl_trail_escape', 'impl_trail_fact', 'impl_trail_worker_return']
 check('four typed trail tools are registered', trailToolNames.every((name) => registeredImplTools.some((tool) => tool.name === name)))
-check('evidence batch + retire-claim tools are registered', registeredImplTools.some((tool) => tool.name === 'impl_evidence_add_batch') && registeredImplTools.some((tool) => tool.name === 'impl_evidence_retire_claim'))
+check('evidence batch + invalidate tools are registered', registeredImplTools.some((tool) => tool.name === 'impl_evidence_add_batch') && registeredImplTools.some((tool) => tool.name === 'impl_evidence_invalidate'))
+check('claim-only retire-claim tool is removed', !registeredImplTools.some((tool) => tool.name === 'impl_evidence_retire_claim'))
 check('generic impl_trail_append is removed', !registeredImplTools.some((tool) => tool.name === 'impl_trail_append'))
-check('14 typed impl tools registered', registeredImplTools.length === 14, String(registeredImplTools.length))
+check('13 typed impl tools registered', registeredImplTools.length === 13, String(registeredImplTools.length))
 
 const pythonSituation = readFileSync(join(workbench, 'plugin-marketplace/plugins/impl-package/scripts/situation.py'), 'utf-8')
 const pythonEngine = readFileSync(join(workbench, 'plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/engine.py'), 'utf-8')

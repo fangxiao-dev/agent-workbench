@@ -125,13 +125,11 @@ export function buildTicketArgv(scriptsRoot, packageDir, args) {
   argv.push('--expect', expect)
   if (args.action === 'satisfy') {
     argv.push('--revision', str(args.revision, 'revision (required for satisfy)'))
-    argv.push('--environment', str(args.environment, 'environment (required for satisfy)'))
+    const environment = optionalStr(args.environment)
+    if (environment !== undefined) argv.push('--environment', environment)
   } else if (args.action === 'block') {
     argv.push('--evidence', str(args.evidence, 'evidence (required for block)'))
   } else if (args.action === 'needs-revalidation') {
-    const claims = strList(args.claims, 'claims')
-    if (claims.length === 0) throw new Error('impl-tools: needs-revalidation requires at least one claim')
-    for (const claim of claims) argv.push('--claim', claim)
     argv.push('--invalidated-by', str(args.invalidatedBy, 'invalidatedBy (required for needs-revalidation)'))
     const evidence = optionalStr(args.evidence)
     if (evidence !== undefined) argv.push('--evidence', evidence)
@@ -317,7 +315,7 @@ export function apply(ctx, config) {
 
   registerTool(ctx, cfg, stateFileName, {
     name: 'impl_ticket_transition',
-    description: 'Apply a semantic Ticket transition (PENDING | BLOCKED | NEEDS-REVALIDATION | SATISFIED | RETIRED). satisfy requires revision+environment; block requires evidence; needs-revalidation requires claims+invalidatedBy; retire requires disposition (waived|superseded)+evidence. Every transition requires the current state via expect; stale transitions are rejected.',
+    description: 'Apply a semantic Ticket transition (PENDING | BLOCKED | NEEDS-REVALIDATION | SATISFIED | RETIRED). satisfy requires revision (environment optional); block requires evidence; needs-revalidation requires invalidatedBy; retire requires disposition (waived|superseded)+evidence. Every transition requires the current state via expect; stale transitions are rejected.',
     parameters: {
       type: 'object',
       properties: {
@@ -326,9 +324,8 @@ export function apply(ctx, config) {
         action: { type: 'string', enum: ['satisfy', 'block', 'needs-revalidation', 'pending', 'retire'] },
         expect: { type: 'string', enum: ['PENDING', 'BLOCKED', 'NEEDS-REVALIDATION', 'SATISFIED', 'RETIRED'], description: 'Expected current state; stale transition is rejected.' },
         revision: { type: 'string', description: 'Git commit (satisfy, required).' },
-        environment: { type: 'string', description: 'Explicit environment id (satisfy, required).' },
+        environment: { type: 'string', description: 'Environment id (satisfy, optional).' },
         evidence: { type: 'string', description: 'Repo-relative evidence path (block/retire required; needs-revalidation optional).' },
-        claims: { type: 'array', items: { type: 'string' }, description: 'Claim ids (needs-revalidation, required).' },
         invalidatedBy: { type: 'string', description: 'Reason (needs-revalidation, required).' },
         revalidationPlan: { type: 'string', description: 'Plan path (pending, optional).' },
         disposition: { type: 'string', enum: ['waived', 'superseded'], description: 'Retire disposition (retire, required).' },
@@ -345,60 +342,42 @@ export function apply(ctx, config) {
 
   registerTool(ctx, cfg, stateFileName, {
     name: 'impl_evidence_add',
-    description: 'Append one evidence record to a Ticket claim. Required: ticket, claim, timing (early-falsification|remaining-completion), artifact (repo-relative), revision (resolvable commit), environment, conclusion (supporting|contradictory|inconclusive). Optional invalidatedBy.',
+    description: 'Append one typed evidence record (kind journey-step | run-setup | suite | review | release, with the fields current-state requires for that kind). The CLI validates the record and returns {evidenceKey, idempotent}.',
     parameters: {
       type: 'object',
       properties: {
         package: { type: 'string', description: 'Package directory; default: resolved from the session cwd.' },
-        ticket: { type: 'string' },
-        claim: { type: 'string' },
-        timing: { type: 'string', enum: ['early-falsification', 'remaining-completion'] },
-        artifact: { type: 'string', description: 'Repo-relative path, e.g. evidence/test.md#anchor.' },
-        revision: { type: 'string', description: 'Git commit id.' },
-        environment: { type: 'string' },
-        conclusion: { type: 'string', enum: ['supporting', 'contradictory', 'inconclusive'] },
-        invalidatedBy: { type: 'string' },
+        record: { type: 'object', description: 'Evidence object as accepted by `evidence add`.' },
       },
-      required: ['ticket', 'claim', 'timing', 'artifact', 'revision', 'environment', 'conclusion'],
+      required: ['record'],
       additionalProperties: false,
     },
     async execute(args, _exec, { packageDir, scriptsRoot, python }) {
-      const payload = {
-        ticket: str(args.ticket, 'ticket'),
-        claim: str(args.claim, 'claim'),
-        timing: str(args.timing, 'timing'),
-        artifact: str(args.artifact, 'artifact'),
-        revision: str(args.revision, 'revision'),
-        environment: str(args.environment, 'environment'),
-        conclusion: str(args.conclusion, 'conclusion'),
+      if (args.record === null || typeof args.record !== 'object' || Array.isArray(args.record)) {
+        throw new Error('impl-tools: record must be an object')
       }
-      if (args.invalidatedBy !== undefined && args.invalidatedBy !== '') payload.invalidatedBy = args.invalidatedBy
       const argv = [join(scriptsRoot, 'impl_package_state.py'), '--package', packageDir, 'evidence', 'add']
-      return runCli(ctx, python, argv, packageDir, undefined, JSON.stringify(payload))
+      return runCli(ctx, python, argv, packageDir, undefined, JSON.stringify(args.record))
     },
   })
 
   registerTool(ctx, cfg, stateFileName, {
     name: 'impl_evidence_invalidate',
-    description: 'Mark one evidence artifact invalidated on a Ticket claim (artifact + invalidatedBy required).',
+    description: 'Invalidate one evidence record by evidenceKey (key + invalidatedBy required).',
     parameters: {
       type: 'object',
       properties: {
         package: { type: 'string', description: 'Package directory; default: resolved from the session cwd.' },
-        ticket: { type: 'string' },
-        claim: { type: 'string' },
-        artifact: { type: 'string', description: 'Repo-relative artifact path.' },
+        key: { type: 'string', description: 'evidenceKey, e.g. journey:<runId>:<stepId> or suite:<id>.' },
         invalidatedBy: { type: 'string' },
       },
-      required: ['ticket', 'claim', 'artifact', 'invalidatedBy'],
+      required: ['key', 'invalidatedBy'],
       additionalProperties: false,
     },
     async execute(args, _exec, { packageDir, scriptsRoot, python }) {
       const argv = [
         join(scriptsRoot, 'impl_package_state.py'), '--package', packageDir, 'evidence', 'invalidate',
-        '--ticket', str(args.ticket, 'ticket'),
-        '--claim', str(args.claim, 'claim'),
-        '--artifact', str(args.artifact, 'artifact'),
+        '--key', str(args.key, 'key'),
         '--invalidated-by', str(args.invalidatedBy, 'invalidatedBy'),
       ]
       return runCli(ctx, python, argv, packageDir)
@@ -407,31 +386,12 @@ export function apply(ctx, config) {
 
   registerTool(ctx, cfg, stateFileName, {
     name: 'impl_evidence_add_batch',
-    description: 'Append one or more evidence records in a single CLI call (evidence add accepts a JSON array). Each record needs: ticket, claim, timing (early-falsification|remaining-completion), artifact (repo-relative), revision (resolvable commit), environment, conclusion (supporting|contradictory|inconclusive); optional invalidatedBy. Returns {records, added, duplicates} with per-record idempotence.',
+    description: 'Append one or more typed evidence records in a single CLI call; the whole batch is validated before anything is written. Returns {records, added, duplicates} with per-record idempotence.',
     parameters: {
       type: 'object',
       properties: {
         package: { type: 'string', description: 'Package directory; default: resolved from the session cwd.' },
-        records: {
-          type: 'array',
-          minItems: 1,
-          description: 'Evidence records to append.',
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-              ticket: { type: 'string' },
-              claim: { type: 'string' },
-              timing: { type: 'string', enum: ['early-falsification', 'remaining-completion'] },
-              artifact: { type: 'string', description: 'Repo-relative path, e.g. evidence/test.md#anchor.' },
-              revision: { type: 'string', description: 'Git commit id.' },
-              environment: { type: 'string' },
-              conclusion: { type: 'string', enum: ['supporting', 'contradictory', 'inconclusive'] },
-              invalidatedBy: { type: 'string' },
-            },
-            required: ['ticket', 'claim', 'timing', 'artifact', 'revision', 'environment', 'conclusion'],
-          },
-        },
+        records: { type: 'array', minItems: 1, items: { type: 'object' }, description: 'Evidence objects as accepted by `evidence add`.' },
       },
       required: ['records'],
       additionalProperties: false,
@@ -440,44 +400,11 @@ export function apply(ctx, config) {
       if (!Array.isArray(args.records) || args.records.length === 0) {
         throw new Error('impl-tools: records must be a non-empty array')
       }
-      const payload = args.records.map((item) => {
-        const record = {
-          ticket: str(item?.ticket, 'ticket'),
-          claim: str(item?.claim, 'claim'),
-          timing: str(item?.timing, 'timing'),
-          artifact: str(item?.artifact, 'artifact'),
-          revision: str(item?.revision, 'revision'),
-          environment: str(item?.environment, 'environment'),
-          conclusion: str(item?.conclusion, 'conclusion'),
-        }
-        if (item?.invalidatedBy !== undefined && item?.invalidatedBy !== '') record.invalidatedBy = item.invalidatedBy
-        return record
-      })
+      if (args.records.some((item) => item === null || typeof item !== 'object' || Array.isArray(item))) {
+        throw new Error('impl-tools: every record must be an object')
+      }
       const argv = [join(scriptsRoot, 'impl_package_state.py'), '--package', packageDir, 'evidence', 'add']
-      return runCli(ctx, python, argv, packageDir, undefined, JSON.stringify(payload))
-    },
-  })
-
-  registerTool(ctx, cfg, stateFileName, {
-    name: 'impl_evidence_retire_claim',
-    description: 'Remove an invalidated orphan claim (evidence retire-claim). Required: ticket, claim.',
-    parameters: {
-      type: 'object',
-      properties: {
-        package: { type: 'string', description: 'Package directory; default: resolved from the session cwd.' },
-        ticket: { type: 'string' },
-        claim: { type: 'string' },
-      },
-      required: ['ticket', 'claim'],
-      additionalProperties: false,
-    },
-    async execute(args, _exec, { packageDir, scriptsRoot, python }) {
-      const argv = [
-        join(scriptsRoot, 'impl_package_state.py'), '--package', packageDir, 'evidence', 'retire-claim',
-        '--ticket', str(args.ticket, 'ticket'),
-        '--claim', str(args.claim, 'claim'),
-      ]
-      return runCli(ctx, python, argv, packageDir)
+      return runCli(ctx, python, argv, packageDir, undefined, JSON.stringify(args.records))
     },
   })
 
