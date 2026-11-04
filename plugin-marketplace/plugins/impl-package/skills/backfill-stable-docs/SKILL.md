@@ -62,7 +62,7 @@ Apply 的批准集合、写集与 destructive 边界提醒按需读取 [Apply Ru
 
 ## Retirement
 
-仅当 package Gate terminal、实现已到达 target branch、所有 durable delta 已吸收/关闭，且没有 inbound reference 或剩余活动材料时，才列为删除候选；删除仍需要 owner 明确授权。
+仅当 package Gate terminal、实现已到达 target branch、所有 durable delta 已吸收/关闭，且没有 inbound reference 或剩余活动材料时，才列为删除候选；删除仍需要 owner 明确授权。删除前把 `decision.md`（连同后续补充决定）转成 ADR：优先用仓库本地 ADR 模板，没有时用 `assets/adr-template.md`。
 Retirement 的终态、目标分支、delta 吸收和入站引用核对按需读取 [Package Retirement Runbook](references/package-retirement-runbook.md)。
 
 先由本 skill 根据权威结果确定 audit/apply/verify/retirement 各阶段、计数、剩余项和是否收口。
