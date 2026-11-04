@@ -1,19 +1,16 @@
 ---
 name: impl-package
-description: Impl-Package 体系的入口地图与路由：判断从需求对齐、计划、Ticket/DAG、执行、验证、进度监控或稳定文档回刷的哪个阶段进入；并承载高风险审问与旧 DAG 只读审计的入口判断。只导航，不代替阶段 skill 执行。
+description: Impl-Package 体系的入口地图与路由：判断从需求对齐、计划、Ticket、执行、验证、进度监控或稳定文档回刷的哪个阶段进入；并承载高风险审问与旧 package 迁移的入口判断。只导航，不代替阶段 skill 执行。
 ---
 
 # Impl-Package
 
-Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract ensemble → Plan → 可选 Ticket → execution state → verification → Gate → stable-doc backfill；DAG/Task 只为旧 package 的恢复与迁移保留。
+Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract ensemble → Plan → Ticket-only Composition → execution state → verification → Gate → stable-doc backfill；旧 package 的 Task/DAG 只经迁移 Runbook 处理。
 
 ## 核心原则
 
 - 只保存会改变下一动作、阻止 false PASS 或约束危险 mutation 的状态；D/S/P 只作为可选的人类可读别名，不是新 package 的必填字段，也不绑定文件内容。
-- 只有 Git commit ID 可作为版本/比较点；外部文件和 evidence 一律使用仓库相对 POSIX 路径，拒绝绝对路径和 `..`；已知 artifact 使用固定目录或显式路径，不保存扫描结果副本。
-- Git 负责历史审计；现役格式不维护 contract/schema 版本、迁移账本或兼容层。正式规则见 [Composition Contract](../../references/impl-package-composition-contract.md) 与 [Current State](../../references/impl-package-current-state.md)。
-- 机械操作一律走现有语义 CLI：状态、Ticket、evidence、Gate 和 trail 的写入由 `../../scripts/impl_package_state.py` 及其 runtime command groups 校验；关键 trail 字段使用具名参数和 `--help` 可见的 `choices`。状态变更后 CLI 可追加当前处境 footer，处境协议由 `../../scripts/situation.py`/宿主注入提供导航，不复制成第二套持久规则。
-- Codex-only 的 state guard、session activation 与 Resume Capsule 见 [Codex Hooks](../../references/codex-hooks.md)；Hook 只提供事实和防绕过，不拥有业务状态或 Gate。
+- 机械操作（状态、Ticket、evidence、Gate、trail 的写入）一律走 `../../scripts/impl_package_state.py` 的语义 CLI；被拒就按错误信息处理。正式规则见 [Composition Contract](../../references/impl-package-composition-contract.md) 与 [Current State](../../references/impl-package-current-state.md)；Codex hook 见 [Codex Hooks](../../references/codex-hooks.md)。
 
 ## 入口：阶段命令
 
@@ -22,22 +19,20 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 | native entry | 跨宿主 route | 用途 |
 | --- | --- | --- |
 | `impl-req-align` | `/impl-package:req-align` | 需求/Decision/Spec 对齐 |
-| `impl-grill-me-smartly` | `/impl-package:grill-me-smartly` | 高风险 Spec gate 的 ledger 审问 |
+| `impl-grill-me-smartly` | `/impl-package:grill-me-smartly` | 高风险 Spec gate 的审问：Answerer 代答可查事实，判断题回 Owner |
 | `impl-impl-planning` | `/impl-package:impl-planning` | 创建 initial/patch plan、决定 Composition |
 | `impl-plan-review` | `/impl-package:plan-review` | 审查 plan 或完整 Plan/Ticket/DAG bundle |
 | `impl-to-tickets` | `/impl-package:impl-planning` 的 Ticket-split | 创建独立验收切片 |
-| `impl-execution-boundaries` | `/impl-package:execution-boundaries` | 执行前授权、异常对账、完成前 evidence gate |
 | `impl-dispatcher` | `$dispatcher` | 候选选择、bounded brief、dependency/resource admission、dispatch/return/review 与 idle；进入执行阶段先读其「执行原则」四行 |
 | `impl-dev-with-track` | `/impl-package:dev-with-track` | 恢复执行、确定业务重点与候选范围、消费 Dispatcher 结果、推进 Ticket 与写 Gate |
 | `impl-monitor-progress` | `/impl-package:monitor-progress` | 打开实时进度页面，并可选创建只读主控监控 automation |
 | `impl-do-review` | `/impl-package:do-review` | 多 reviewer 编排、fail-closed 聚合 findings 并判断收敛 |
-| `impl-review-code` | `/impl-package:review-code` | 审查实现正确性与可维护性 |
-| `impl-review-code-by-standards` | `/impl-package:review-code-by-standards` | 按规范、interface、depth、locality 审查 |
+| `impl-review-code` | `/impl-package:review-code` | 审查实现正确性、仓库规范与可维护性 |
 | `impl-review-code-by-spec` | `/impl-package:review-code-by-spec` | 按需求、Spec、Plan 审查实现忠实度 |
 | `impl-safety-review` | `/impl-package:safety-review` | 审查安全、数据完整性、并发和外部副作用 |
 | `impl-backfill-stable-docs` | `/impl-package:backfill-stable-docs` | 回刷稳定知识或退休 package |
 
-仅询问体系时停在本页；用户已明确阶段和动作时直达对应 skill。执行前、异常对账和 completion claim 不再分派到已合并的 standalone 名称，统一进入 `execution-boundaries`；旧 Task/DAG 也只由下面的 legacy 章节承接，不创建新的独立入口。
+仅询问体系时停在本页；用户已明确阶段和动作时直达对应 skill。执行前授权、异常对账和 completion claim 不再有 standalone 入口，统一在 `dev-with-track`（Verify and Gate）；旧 Task/DAG 只由下面的“旧 package”章节承接。
 
 ## 最小 package
 
@@ -52,30 +47,12 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
   execution/
     <attempt>/
       execution-record.md
-      task-handoffs/      # 仅旧 Task package 实际发生 handoff 时创建
   .impl-package/state.json
   gate.md                 # 首次 gate evaluation 时创建
 ```
 
-新 package 统一使用 `tickets=true, dag=false` Ticket-only 合同；阶段 A 的 `dag=false` 是 3.4 兼容占位，不表示创建 Task/DAG；`dag=true` 只读旧 package。不要为审计完整感增加 artifact。每个新建或被修订的 Spec 都有从属 `contract-design.md`；默认 `Disposition: detailed`，精确语义已由 `spec.md` 完整承担时使用 `Disposition: not-required` 并写明理由。未触及的 legacy Spec 到下次 req-align 再补齐；该文件没有独立 alias、revision、状态、审批或生命周期。
+新 package 统一使用 `tickets=true, dag=false` Ticket-only 合同；`dag=false` 是 3.4 兼容占位，不表示创建 Task/DAG。不要为审计完整感增加 artifact。每个新建或被修订的 Spec 都有从属 `contract-design.md`；默认 `Disposition: detailed`，精确语义已由 `spec.md` 完整承担时使用 `Disposition: not-required` 并写明理由。未触及的 legacy Spec 到下次 req-align 再补齐；该文件没有独立 alias、revision、状态、审批或生命周期。
 
-## Legacy（旧 Task/DAG，只读）
+## 旧 package
 
-新 package 一律不创建 Task DAG，不调用 `create-task-dag`；仅在 owner 明确授权恢复/迁移已有 3.4 package、且 artifact 已存在时读取 `dag.md` 或 `<attempt-id>.patch-dag.md`。先读取 current plan；有 Tickets 时同时读取 `tickets/` 的直接 Markdown 子文件。
-
-1. **先读当前 package 事实**：先读取 current plan；有 Tickets 时同时读取 `tickets/` 的直接 Markdown 子文件。
-   - 常见误判：跳过 current plan 直接看旧 DAG，会把已经被新 Composition 替代的依赖当成现行要求。
-2. **审计 Task 的核心关系**：只审计已有 Task 的 primary ownership、确定依赖、贡献 Ticket、已知 seam/risk 和 section-level contract references。
-   - 常见误判：把 Task 数量或 handoff 数量当成完整性证明，会漏掉真正的 ownership、依赖和 seam 风险。
-3. **把真实产物映射回 Ticket**：迁移时把 Task 的真实产物映射回 Ticket claim，不把 Task handoff 或 `DONE` 当 acceptance proof。
-   - 常见误判：把局部 Task `DONE` 当 Ticket 已满足，会把可集成产物误报成 acceptance proof。
-4. **限定 contract reference**：Contract reference 使用仓库相对路径定位到 Decision/Spec/contract-design/Plan 的具体一级或二级章节，不裸指整份文档或使用行号，只保留 Task 执行所需章节，不复制合同正文。
-   - 常见误判：裸指整份合同或复制正文会让迁移后的引用失去可定位的 authority 边界。
-5. **拒绝预列和新 DAG 扩张**：不预列所有文件、consumer、失败模式或 Phase/epic/子任务层；发现新 DAG 需求时回到 `impl-planning`，不在本入口创建。
-   - 常见误判：为了“审计完整”预建一棵新 DAG，会把只读恢复入口变成新的任务系统。
-6. **联合检查 Gate 可行性**：与 plan/Ticket 做只读联合检查：coverage、typed dependency、cycle、ownership、contribution mapping、section-level refs、evidence feasibility、integration order 和 Gate 边界。
-   - 常见误判：只核单个 Task 会错过跨 Ticket 的 cycle、证据不可行或 integration order 问题。
-7. **保留现行状态语义**：Task 状态只保存在 `.impl-package/state.json`；Task `DONE` 表示局部产出可集成，不表示 Ticket `SATISFIED`。P 变化时只把实际受影响 Task 设为 `NEEDS-REVALIDATION`。
-   - 常见误判：另建状态轴或把所有 Task 重验，会破坏 state.json 的唯一状态 authority 和受影响范围。
-8. **按旧 package 规则恢复运行时投影**：初始化后 DAG Runtime State 表由 `refresh-progress` 维护；只有 dependency 已释放的 Task 才能进入 `READY/RUNNING`，未知 dependency 和 cycle 必须在发布前阻断。旧 package 的细节按需读 `../create-task-dag/references/` 下的 `dag-and-ownership`、`worker-prompts`、`review-and-verification`、`slice-to-dag`。
-   - 常见误判：在 dependency 未释放或 cycle 未阻断时发布，会让恢复后的 READY/RUNNING 状态失去可解释性。
+新 package 一律不创建 Task DAG。仅当 owner 明确授权恢复/迁移已有 3.4 package（`dag=true` 或带 Task/DAG）时，按 [Ticket-first 迁移 Runbook](../../references/ticket-first-migration-runbook.md) 迁移：把真实产物映射回 Ticket claim，不把 Task handoff 或 `DONE` 当 acceptance proof。

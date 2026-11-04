@@ -116,7 +116,7 @@ Owner 贴的四行为什么有效：短、具体、用业务词、**紧挨着第
 
 **证据**：report §4.7。W6 L7000 缺 worktree/branch/HEAD → L7011；L7034「业务比较点」→ L7041；W1b 一份说明文档 12.7 分钟 → L16538。
 
-**改什么**：[`talk-to-boss/SKILL.md`](../../../skills/talk-to-boss/SKILL.md) 完成条件加：涉及仓库状态的汇报首段带 worktree、分支、HEAD；内部词同句写它与当前 HEAD 的关系。[`handoff-to-new-session/SKILL.md`](../../../skills/handoff-to-new-session/SKILL.md) 开头加边界：用户要的是给人看的说明文档而不是 session 交接时，不走 anchor/continuation，用已有事实一次成文。
+**改什么**：`talk-to-boss/SKILL.md` 完成条件加：涉及仓库状态的汇报首段带 worktree、分支、HEAD；内部词同句写它与当前 HEAD 的关系。[`handoff-to-new-session/SKILL.md`](../../../skills/handoff-to-new-session/SKILL.md) 开头加边界：用户要的是给人看的说明文档而不是 session 交接时，不走 anchor/continuation，用已有事实一次成文。
 
 **验收**：`tests/test_handoff_to_new_session_contract.py` + talk-to-boss validator。
 

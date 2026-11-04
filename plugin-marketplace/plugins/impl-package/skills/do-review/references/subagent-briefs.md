@@ -1,6 +1,6 @@
 # Do Review Parent Briefs
 
-The four `review-track-*` agent definitions carry their own leaf-review brief. The parent supplies the common block and exactly one applicable phase brief. Add the anti-duplicate block only after round 1; do not append another track's output or same-round summary.
+The three `review-track-*` agent definitions carry their own leaf-review brief. The parent supplies the common block and exactly one applicable phase brief. Add the anti-duplicate block only after round 1; do not append another track's output or same-round summary.
 
 ## Common Context Block
 
@@ -27,7 +27,7 @@ Review target:
 - User policy:
 - User review-depth preference:
 - Safety applicability / evidence / coverage:
-- Canonical ledger artifact (read-only):
+- Canonical ledger artifact (read-only, package-relative for Impl-Package):
 - Review report artifact (this leaf's exclusive writable detail file):
 
 Known findings ledger:

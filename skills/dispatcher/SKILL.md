@@ -38,13 +38,19 @@ Dispatcher 是通用执行协作入口。调用方提供交付目标、授权、
 
 没有前后端归属的实现候选，以及 `investigate | fix | verify` 的 worker 选择，继续沿用现有候选、上下文与资源判断。
 
+## Reviewer executor
+
+派独立只读审查时，由调用方选择并启动执行者，默认使用 `luna-worker`，为其提供 [reviewer](../reviewer/SKILL.md) 执行合同和本次 brief。已选定的 reviewer 直接完成审查并回报；复用按下文的上下文与独立性条件判断。
+
+formal review 的 reviewer selection、topology 与 `finding-closure` 范围由 owning workflow 决定，Dispatcher 按该要求派发。
+
 ## 候选、归因与返回
 
 `investigate | implement | fix | verify` 固定 worker 的答案形态。worker 返回 `DONE | BLOCKED | INCOMPLETE`；调查返回 `EVIDENCE_SUFFICIENT | EVIDENCE_GAP`；已产生的 required review 使用 `PENDING_REVIEW | PASSED`。这些都是局部事实，不代替 Ticket、acceptance 或 Gate。
 
 investigate/review 结果需要交给另一个 worker 或后续 implement/fix 消费时，由主控在用户 temp 目录提供一份临时 handoff 路径。investigator/reviewer 写入结论后，主控读取、按需原地修订并验收，再把同一路径作为下游 brief 的只读输入；消费完成后由主控清理。该 handoff 不进入仓库、Git revision、业务状态或 durable docs；没有下游消费时继续直接返回，避免无用文件。
 
-使用 Impl-Package trail 时，工作无需预登记；`candidate_id` 是实际派发工作及其可信续接的身份。dispatch 记录 `dispatch_id/candidate_id/subject/mode/chosen/resource_keys/receipt`；worker return 用 `of` 指回 dispatch，并带唯一 `return_id`。含代码增量时，return 与 review 使用同一个 `code_delta` 和 `consumption_id`。旧轨迹只读兼容；字段缺失不得静默归到同 Ticket 的其他 dispatch。
+使用 Impl-Package trail 时，工作无需预登记；`candidate_id` 是实际派发工作及其可信续接的身份。独占资源在启动 worker 前 acquire lease，dispatch 记录 `dispatch_id/candidate_id/subject/mode/chosen/lease_id/resource_keys/receipt`；worker return 用 `of` 指回 dispatch，并带唯一 `return_id`。含代码增量时，return 与 review 使用同一个 `code_delta` 和 `consumption_id`。旧轨迹只读兼容；字段缺失不得静默归到同 Ticket 的其他 dispatch。lease 生命周期见 [Resource Isolation](references/resource-isolation.md)。
 
 ## 并行、复用与恢复
 

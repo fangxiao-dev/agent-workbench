@@ -33,3 +33,12 @@ ZCode manifest（`.zcode-plugin/plugin.json`）加载 `hooks/zcode-hooks.json`�
 - State guard：`PreToolUse` matcher 为 `^(Edit|Write|ApplyPatch)$`（ZCode 工具名与别名），按 `tool_input.file_path` 判定，不再解析 apply_patch 补丁文本；deny 语义与 fixture 豁免与 Codex 一致。
 - Resume Capsule：`SessionStart(startup|resume|compact)` 行为一致。ZCode 不向 agent 运行的命令暴露 session id，`activate`/`deactivate` 无 session 环境变量时自动使用仓库级 `default` 绑定（同仓库任意 session 可恢复 Capsule）；显式 session 绑定优先。
 - 注册形态使用 `type: "process"`（参数向量、无 shell、跨平台）；ZCode 无 `additionalContextLimit` 字段，超预算回退由脚本内 1200 字节预算逻辑保证。
+
+## Claude Code 差异
+
+Claude manifest（`.claude-plugin/plugin.json`）加载 `hooks/claude-hooks.json`，同一脚本提供等价的两项能力：
+
+- State guard：`PreToolUse` matcher 为 `^(Edit|Write|MultiEdit)$`，按 `tool_input.file_path` 判定；deny 语义与 fixture 豁免与 Codex 一致。
+- Resume Capsule：`SessionStart` matcher 为 `^(startup|resume|clear|compact)$`。`activate`/`deactivate` 经 `CLAUDE_CODE_SESSION_ID` 按 session 绑定，与 hook 事件里的 `session_id` 一致。
+- 注册形态使用 `type: "command"` 与 `${CLAUDE_PLUGIN_ROOT}`，命令写成 `python3 … || python …`（Windows Git Bash 常无 `python3`）；Claude 无 `additionalContextLimit`，超预算回退由脚本内预算逻辑保证。
+- 配置文件不使用自动发现的 `hooks/hooks.json`，避免与 manifest 声明重复加载。

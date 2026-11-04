@@ -16,6 +16,7 @@ from pathlib import Path
 
 
 LEDGER_NAME = re.compile(r"^\d{10}-[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{7}\.md$")
+ATTEMPT_ID = re.compile(r"(?:initial|[A-Za-z0-9][A-Za-z0-9_-]{0,79})")
 
 
 class ReviewRunError(ValueError):
@@ -26,6 +27,30 @@ def ledger_directory() -> Path:
     return Path(os.environ.get("TEMP") or os.environ.get("TMP") or tempfile.gettempdir()).resolve() / "do-review"
 
 
+def package_review_directory(package: Path) -> tuple[Path, str, Path]:
+    root = package.resolve()
+    if not root.is_dir():
+        raise ReviewRunError(f"package path is not a directory: {root}")
+    state_path = root / ".impl-package" / "state.json"
+    resolved_state = state_path.resolve()
+    try:
+        resolved_state.relative_to(root)
+    except ValueError as error:
+        raise ReviewRunError("package state path escapes package") from error
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ReviewRunError(f"cannot read package current Attempt from {state_path}: {error}") from error
+    attempt = state.get("attempt") if isinstance(state, dict) else None
+    attempt_id = attempt.get("id") if isinstance(attempt, dict) else None
+    if not isinstance(attempt_id, str) or ATTEMPT_ID.fullmatch(attempt_id) is None:
+        raise ReviewRunError("package state must contain a valid current attempt id")
+    directory = root / "execution" / attempt_id / "reviews"
+    if directory.resolve() != directory:
+        raise ReviewRunError("package review directory must not traverse symlinks")
+    return root, attempt_id, directory
+
+
 def slugify(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     if not slug:
@@ -33,11 +58,22 @@ def slugify(value: str) -> str:
     return slug
 
 
-def validate_ledger_path(value: str) -> Path:
-    path = Path(value).resolve()
-    directory = ledger_directory()
+def validate_ledger_path(value: str, package: Path | None = None) -> Path:
+    candidate = Path(value)
+    if package is None:
+        path = candidate.resolve()
+        directory = ledger_directory()
+        if path.parent != directory or not LEDGER_NAME.fullmatch(path.name):
+            raise ValueError(f"ledger path must be a do-review temp ledger: {directory}\\<YYMMDDHHMM>-<slug>-<shortsha>.md")
+        return path
+
+    root, attempt, directory = package_review_directory(package)
+    path = (candidate if candidate.is_absolute() else root / candidate).resolve()
     if path.parent != directory or not LEDGER_NAME.fullmatch(path.name):
-        raise ValueError(f"ledger path must be a do-review temp ledger: {directory}\\<YYMMDDHHMM>-<slug>-<shortsha>.md")
+        raise ValueError(
+            "ledger path must be in the current package Attempt's "
+            f"execution/{attempt}/reviews/<YYMMDDHHMM>-<slug>-<shortsha>.md"
+        )
     return path
 
 
@@ -159,14 +195,24 @@ def create(args: argparse.Namespace) -> int:
     timestamp = args.timestamp or datetime.now().strftime("%y%m%d%H%M")
     if not re.fullmatch(r"\d{10}", timestamp):
         raise ValueError("timestamp must use YYMMDDHHMM")
-    directory = ledger_directory()
+    package = args.package.resolve() if args.package else None
+    if package is None:
+        directory = ledger_directory()
+        ledger_path_text = None
+    else:
+        package, _attempt, directory = package_review_directory(package)
+        ledger_path_text = (directory / f"{timestamp}-{slug}-{short_sha}.md").relative_to(package).as_posix()
     path = directory / f"{timestamp}-{slug}-{short_sha}.md"
     if path.exists():
         raise FileExistsError(f"refusing to overwrite existing ledger: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if package is not None:
+        path = validate_ledger_path(str(path), package)
+        ledger_path_text = path.relative_to(package).as_posix()
     contract_sources = json.dumps(review_run["contract_sources"], ensure_ascii=False, indent=2)
     content = f"""# do-review canonical ledger
 
-- Ledger path: `{path}`
+- Ledger path: `{ledger_path_text or path}`
 - Review slug: `{slug}`
 - Created at (local): `{datetime.now().astimezone().isoformat(timespec='seconds')}`
 - Resolved base SHA: `{review_run['resolved_base_sha']}`
@@ -206,7 +252,6 @@ def create(args: argparse.Namespace) -> int:
 
 - Stop reason: `pending`
 """
-    directory.mkdir(parents=True, exist_ok=True)
     created = False
     try:
         with path.open("x", encoding="utf-8", newline="\n") as ledger:
@@ -216,25 +261,25 @@ def create(args: argparse.Namespace) -> int:
         if created:
             path.unlink(missing_ok=True)
         raise
-    output = {"ledger_path": str(path), **review_run}
+    output = {"ledgerRelativePath": ledger_path_text, **review_run} if package is not None else {"ledger_path": str(path), **review_run}
     print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 
 
 def write(args: argparse.Namespace) -> int:
-    path = validate_ledger_path(args.ledger)
+    path = validate_ledger_path(args.ledger, args.package)
     content = sys.stdin.read()
     if not content.strip():
         raise ValueError("refusing to write an empty ledger")
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(content.rstrip() + "\n", encoding="utf-8", newline="\n")
     os.replace(temporary, path)
-    print(path)
+    print(path.relative_to(args.package.resolve()).as_posix() if args.package else path)
     return 0
 
 
 def show(args: argparse.Namespace) -> int:
-    path = validate_ledger_path(args.ledger)
+    path = validate_ledger_path(args.ledger, args.package)
     sys.stdout.write(path.read_text(encoding="utf-8"))
     return 0
 
@@ -245,6 +290,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     create_parser = subparsers.add_parser("create", help="create a new canonical ledger")
     create_parser.add_argument("--repo-root", type=Path, required=True)
+    create_parser.add_argument("--package", type=Path, help="write under the package's current Attempt")
     create_parser.add_argument("--base", required=True)
     create_parser.add_argument("--head", required=True)
     create_parser.add_argument(
@@ -260,10 +306,12 @@ def build_parser() -> argparse.ArgumentParser:
     create_parser.set_defaults(handler=create)
 
     write_parser = subparsers.add_parser("write", help="atomically replace an existing ledger from stdin")
+    write_parser.add_argument("--package", type=Path, help="validate a package-local ledger path")
     write_parser.add_argument("--ledger", required=True)
     write_parser.set_defaults(handler=write)
 
     show_parser = subparsers.add_parser("show", help="read an existing ledger")
+    show_parser.add_argument("--package", type=Path, help="validate a package-local ledger path")
     show_parser.add_argument("--ledger", required=True)
     show_parser.set_defaults(handler=show)
     return parser

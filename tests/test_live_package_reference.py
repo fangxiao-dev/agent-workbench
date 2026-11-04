@@ -122,7 +122,6 @@ def _test_live_reference_renders_and_rejects_pass_gate(tmp_path: Path) -> None:
         "RENDER_OUTPUT="
         + json.dumps(
             {
-                "digest": rendered["digest"],
                 "selected": rendered["selected"]["slug"],
                 "fact": fact,
             },

@@ -10,9 +10,9 @@
   "repository": "https://github.com/fangxiao-dev/agent-workbench",
   "keywords": ["implementation", "planning", "verification", "workflow"],
   "skills": "./skills/",
+  "hooks": "./hooks/claude-hooks.json",
   "agents": [
     "./agents/review-track-code.md",
-    "./agents/review-track-standards.md",
     "./agents/review-track-spec.md",
     "./agents/review-track-safety.md"
   ]

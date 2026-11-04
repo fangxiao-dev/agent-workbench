@@ -26,6 +26,14 @@ Every document and pointer you add spends one of two budgets:
 
 Material reached only through a pointer escapes context load at the price of the pointer's own line; material with no pointer at all rides entirely on cognitive load.
 
+## Proportionate process
+
+Match procedural detail to the user's purpose, the consequences of failure, and the cost of recovery. For personal, reversible workflows, start with enough guidance to act, hand off, and resume; leave routine engineering choices to the agent.
+
+Add a rule, approval step, record, or verification mechanism when it addresses an observed failure, an explicit requirement, or a concrete risk with meaningful consequences. Choose the smallest mechanism that changes the outcome: an existing note or a version reference may be enough. Expand the process when actual use exposes a gap, rather than anticipating every possible exception.
+
+Completion criteria should cover the agreed task, not an imagined production system. Keep required safety and authorization boundaries, while scaling bookkeeping and validation to the work at hand.
+
 ## Information hierarchy
 
 A document is built from two content types — **steps** (the ordered actions the agent performs) and **reference** (definitions, rules, facts consulted on demand) — that mix freely: all steps (a recipe), all reference (a review's rules, this skill), or both. The core decision is where each piece sits on the **information hierarchy**, a ladder ranked by how immediately the agent needs the material:

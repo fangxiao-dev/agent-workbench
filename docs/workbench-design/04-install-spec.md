@@ -9,10 +9,10 @@
 插件 `impl-package` 的宿主 manifest：
 
 - `.codex-plugin/plugin.json`：skills + hooks（`./hooks/codex-hooks.json`，apply_patch 守卫与 SessionStart capsule）
-- `.claude-plugin/plugin.json`：skills + agents（4 个 review-track review agents）
+- `.claude-plugin/plugin.json`：skills + agents（3 个 review-track review agents）
 - `.zcode-plugin/plugin.json`：skills + hooks（`./hooks/zcode-hooks.json`，Edit/Write 守卫与 SessionStart capsule）+ agents（同一组 review-track 子代理，zcode 原生注册到 Settings → 子智能体）
 
-ZCode hooks 使用独立文件名 `zcode-hooks.json` 而非 `hooks/hooks.json`，避免被 Claude Code 的插件 hook 自动发现机制意外拾取。ZCode 侧 `impl_package_hooks.py activate` 拿不到 session 环境变量时自动落为仓库级 default 绑定；Codex 仍按 session 绑定。
+Claude manifest 声明 `./hooks/claude-hooks.json`（Edit/Write/MultiEdit 守卫与 SessionStart capsule，`activate` 经 `CLAUDE_CODE_SESSION_ID` 按 session 绑定）。ZCode hooks 使用独立文件名 `zcode-hooks.json` 而非 `hooks/hooks.json`，避免被 Claude Code 的插件 hook 自动发现机制意外拾取。ZCode 侧 `impl_package_hooks.py activate` 拿不到 session 环境变量时自动落为仓库级 default 绑定；Codex 仍按 session 绑定。
 
 ```powershell
 codex plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
@@ -26,6 +26,10 @@ claude plugin install impl-package@agent-workbench --scope project
 ```
 
 插件目录就是安装产物，不执行 build。安装和更新会进入宿主缓存；manifest/marketplace 的版本元数据必须同步，更新后开启新会话。除下述 Codex 一次性诊断/bootstrap 外，Workbench 不包装插件生命周期命令，也不在未授权时修改用户级宿主状态。
+
+### DSH（自包含例外宿主）
+
+`dsh-impl-package` 与 `dsh-dispatch-scan` 不走上述 marketplace/link 体系：它们是 DSH profile bundle（manifest `dsh.bundle.patch` + agent preset），安装（`dsh plugin --profile desktop add "link:..."`）、卸载与 preset 同步全部自包含在插件目录与各自 README 内。它们不进入 `scripts/link_skill.py` 的 host 列表（DSH 侧 skills 由 preset 的 `customSkillDirs` 与 dsh 默认发现根承接），也不登记 registry——这是有意保留的薄适配例外，不算漏配。
 
 ## Plugin 生命周期：Agent 直接执行
 
@@ -66,6 +70,10 @@ claude plugin update impl-package@agent-workbench --scope <scope>
 claude plugin uninstall impl-package@agent-workbench --scope <scope> --yes
 claude plugin install impl-package@agent-workbench --scope <scope>
 ```
+
+### Claude 安装态审计（只读）
+
+`scripts/claude_setup.py audit` 是 Claude 宿主唯一的仓库包装入口，且只读：读取 `claude plugin marketplace list --json` 与 `claude plugin list --json`，对插件缓存目录（CLI 报告的 `installPath`）与 `plugin-marketplace/` 源树做 SHA-256 快照对比，并审计 `<claude-home>/skills` 下的 workbench skill 链接与陈旧链接。报告带审计 SHA 供前后对比；退出码 `0` 一致、`2` 有差异、`1` 运行错误。它没有 `apply`：安装、升级、重装仍按上面的原生 CLI 执行，skill 链接修复使用 `scripts/link_skill.py`。默认 home 优先 `CLAUDE_CONFIG_DIR`，否则 `~/.claude`，可用 `--claude-home` 覆盖。快照、差异、链接审计与报告渲染原语与 `codex_setup.py` 共享自 `scripts/host_setup_core.py`。
 
 ### Grok
 
@@ -110,7 +118,7 @@ python scripts/codex_setup.py apply --expect-report <audit-sha> --prune-stale
 
 ### Codex agent inventory
 
-仓库根目录 `agents/` 是个人 Codex agent 的来源目录：子目录继续按目录 link 投影到 `$CODEX_HOME/agents/<name>`，顶层 `*.toml` 由 `codex_setup.py` 投影到 `$CODEX_HOME/agents/<name>.toml`。新增或删除 inventory 条目不需要修改 setup 脚本；audit 会自动发现变化。现有未受管目标首次接管时使用：
+仓库根目录 `agents/` 是个人 Codex agent 的来源目录：子目录继续按目录 link 投影到 `$CODEX_HOME/agents/<name>`，顶层 `*.toml` 由 `codex_setup.py` 投影到 `$CODEX_HOME/agents/<name>.toml`。顶层 `*.md`（ZCode 子智能体格式）不进入 Codex inventory，手动复制到 `~/.zcode/agents/<name>.md` 安装，与同名 `.toml` role 保持同一来源。`frontend-worker`/`backend-worker` 采用薄壳模式：方法唯一源是 `skills/<name>/SKILL.md`（经 `link_skill.py` 链入各宿主），`.toml` 与 `.md` 的指令只引用该 skill 并保留载体契约（并行边界与返回格式）。新增或删除 inventory 条目不需要修改 setup 脚本；audit 会自动发现变化。现有未受管目标首次接管时使用：
 
 ```powershell
 python scripts/codex_setup.py apply --expect-report <audit-sha> --adopt-agents
@@ -118,7 +126,7 @@ python scripts/codex_setup.py apply --expect-report <audit-sha> --adopt-agents
 
 `--adopt-agents` 只允许当前仓库 inventory 中的顶层 TOML 进入受管状态，仍受审计 SHA、路径安全和 post-apply audit 约束。
 
-Claude 插件根目录的 `agents/` 由 Claude 原生扫描；`impl-package/.claude-plugin/plugin.json` 显式声明四个 Markdown agent 文件。安装后可在 `/agents` 中确认四个 `review-track-*` profile。
+Claude 插件根目录的 `agents/` 由 Claude 原生扫描；`impl-package/.claude-plugin/plugin.json` 显式声明三个 Markdown agent 文件。安装后可在 `/agents` 中确认三个 `review-track-*` profile。
 
 Codex 当前插件 manifest 不支持 `agents` 字段，不能把它加入 `.codex-plugin/plugin.json`；否则不能保证插件通过宿主校验。Codex 角色使用全局 `$CODEX_HOME/agents`（未设置时 `~/.codex/agents`），由插件内的显式投影脚本安装：
 
@@ -126,16 +134,15 @@ Codex 当前插件 manifest 不支持 `agents` 字段，不能把它加入 `.cod
 python plugin-marketplace/plugins/impl-package/scripts/install_codex_agents.py --global
 ```
 
-脚本只生成 `review-track-code.toml`、`review-track-standards.toml`、`review-track-spec.toml` 和 `review-track-safety.toml` 四个已知文件；默认拒绝覆盖不同内容，`--force` 只更新带有本包管理标记（或本包旧格式）的这些目标，并拒绝符号链接或 Windows reparse point。四个 Codex role 与 `do-review` 的 leaf-agent 名称一致，插件升级后需重新运行脚本；项目级 `.codex/agents` 不属于本安装目标。
+脚本只生成 `review-track-code.toml`、`review-track-spec.toml` 和 `review-track-safety.toml` 三个已知文件；默认拒绝覆盖不同内容，`--force` 只更新带有本包管理标记（或本包旧格式）的这些目标，并拒绝符号链接或 Windows reparse point。三个 Codex role 与 `do-review` 的 leaf-agent 名称一致，插件升级后需重新运行脚本；项目级 `.codex/agents` 不属于本安装目标。
 
 | Codex role | Model | Reasoning effort |
 |------|------|------|
-| `review-track-code` | `gpt-6-astra` | `medium` |
+| `review-track-code` | `gpt-5.6-sol` | `high` |
 | `review-track-spec` | `gpt-5.6-sol` | `medium` |
-| `review-track-standards` | `gpt-5.6-sol` | `medium` |
 | `review-track-safety` | `gpt-5.6-sol` | `medium` |
 
-这些固定档位同时用于 `initial` 和 `terminal-final`；`finding-closure` 不使用四个 track role，仍由独立 `luna-worker` 处理。
+这些固定档位同时用于 `initial` 和 `terminal-final`；`finding-closure` 不使用三个 track role，仍由独立 `luna-worker` 处理。
 
 | 平台 | 链接类型 |
 |------|----------|

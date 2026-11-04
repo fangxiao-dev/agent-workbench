@@ -1,7 +1,7 @@
 # managed-by = agent-workbench:codex-setup
 name = "luna-worker"
 description = "Executes clearly bounded delegated tasks with explicit scope and acceptance criteria."
-model = "gpt-5.6-luna"
+model = "gpt-6-luna"
 model_reasoning_effort = "max"
 model_context_window = 512000
 model_auto_compact_token_limit = 435200

@@ -9,7 +9,7 @@ def test_grok_monitor_profile_is_luna_max_and_reports_each_target_independently(
     config = (AGENT_DIR / "grok-monitor.toml").read_text(encoding="utf-8")
     contract = (AGENT_DIR / "agent.md").read_text(encoding="utf-8")
 
-    assert 'model = "gpt-5.6-luna"' in config
+    assert 'model = "gpt-6-luna"' in config
     assert 'model_reasoning_effort = "max"' in config
     assert "[features]\nfast_mode = true" in config
     assert "Track every target independently" in contract

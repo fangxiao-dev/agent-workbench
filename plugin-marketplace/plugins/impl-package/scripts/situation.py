@@ -2,19 +2,16 @@
 
 The situation table is deliberately kept outside this module.  This file only
 loads it, reads the package facts named by the table contract, and renders a
-deterministic projection. Render best-effort writes a digest credential unless
-the caller explicitly requests a read-only projection; credential write failure
-does not fail the render.
+deterministic projection. Render is read-only; dispatch admission re-derives
+the current projection instead of relying on a render-time credential.
 """
 
 from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
 import json
 import re
-import subprocess
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -32,12 +29,10 @@ except ImportError:  # pragma: no cover - exercised only in incomplete installs
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 TABLE_PATH = PLUGIN_ROOT / "skills" / "dev-with-track" / "situations.yaml"
 STAGE = "dev-with-track"
-DIGEST_LENGTH = 12
 STATE_REL = ".impl-package/state.json"
 GATE_REL = "gate.md"
 FINDINGS_REL = "execution-findings.md"
 ACTIVE_TRAIL_NAME = "trail.jsonl"
-SITUATION_DIGEST_NAME = "situation-digest.json"
 TICKET_STATES = {"PENDING", "BLOCKED", "NEEDS-REVALIDATION", "SATISFIED", "RETIRED"}
 TERMINAL_GATE_VERDICTS = {"pass", "fail", "defer"}
 REVIEW_PHASE_VALUES = ("initial", "finding-closure", "terminal-final")
@@ -95,14 +90,12 @@ FACT_KEYS = frozenset(
         "trail.anchor_mismatch",
         "trail.checkpoint_projection_race",
         "trail.envelope_valid",
-        "trail.handoff_recovery_needed",
-        "trail.handoff_target_corrected",
         "trail.reviewer_unavailable",
     }
 )
 
 
-LEGACY_FACT_KEYS = frozenset({"dispatch.candidates"})
+LEGACY_FACT_KEYS = frozenset({"dispatch.candidates", "trail.handoff_recovery_needed", "trail.handoff_target_corrected"})
 
 
 def describe_unknown_fact_keys(keys: tuple[str, ...]) -> str:
@@ -362,11 +355,26 @@ class Candidate:
     def row_index(self) -> int:
         return int(self.row["_row_index"])
 
+    def action_rows(self) -> list[dict[str, Any]]:
+        actions = [dict(action) for action in self.row.get("actions", [])]
+        fact = self.when.get("attempt.journey_incomplete")
+        if self.slug == "attempt.accept.journey-incomplete" and fact and fact.reason:
+            for action in actions:
+                action["do"] = f"{action.get('do', '')}；{fact.reason}"
+        return actions
+
+    def protocol_text(self) -> str:
+        protocol = _PROTOCOLS.get(self.slug, _PROTOCOLS["default"])
+        fact = self.when.get("attempt.journey_incomplete")
+        if self.slug == "attempt.accept.journey-incomplete" and fact and fact.reason:
+            protocol = f"{protocol}；{fact.reason}"
+        return protocol
+
     def as_json(self) -> dict[str, Any]:
-        actions = list(self.row.get("actions", []))
+        actions = self.action_rows()
         result = {
             "slug": self.slug,
-            "protocol": _PROTOCOLS.get(self.slug, _PROTOCOLS["default"]),
+            "protocol": self.protocol_text(),
             "subject": self.subject,
             "basis": self.row.get("basis"),
             "judgment": self.row.get("judgment"),
@@ -406,15 +414,57 @@ class Undetermined:
 
 
 def _git_result(repo: Path, *arguments: str) -> tuple[int, str, str]:
-    result = subprocess.run(
-        ["git", "-C", str(repo), *arguments],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
-    return result.returncode, result.stdout.strip(), result.stderr.strip()
+    from impl_package_runtime.engine import _run_git_result
+
+    code, stdout, stderr = _run_git_result(repo, *arguments, encoding="utf-8", errors="replace")
+    return code, stdout.strip(), stderr.strip()
+
+
+def evidence_record_valid(
+    record: dict[str, Any],
+    comparison_commit: str,
+    *,
+    repo: Path,
+    package: Path,
+    expected_environment: str | None = None,
+    attempt_active: bool = True,
+) -> bool:
+    """Whether typed acceptance evidence still supports the comparison point."""
+    if record.get("conclusion") != "supporting" or record.get("invalidatedBy") is not None:
+        return False
+    if expected_environment is not None and record.get("environment") != expected_environment:
+        return False
+    revision = record.get("revision")
+    if not isinstance(revision, str) or not revision:
+        return False
+    package = package.resolve()
+    repo = repo.resolve()
+    try:
+        package_rel = package.relative_to(repo).as_posix()
+    except ValueError:
+        return False
+    if revision != comparison_commit:
+        code, _, _ = _git_result(
+            repo,
+            "diff", "--quiet", revision, comparison_commit, "--", ".", f":!{package_rel}",
+        )
+        if code != 0:
+            return False
+    if attempt_active:
+        artifact = record.get("artifact")
+        if not isinstance(artifact, str) or not artifact.strip():
+            return False
+        relative = PurePosixPath(artifact.replace("\\", "/").partition("#")[0])
+        if relative.is_absolute() or ".." in relative.parts or not relative.parts:
+            return False
+        path = (package / Path(*relative.parts)).resolve()
+        try:
+            path.relative_to(package)
+        except ValueError:
+            return False
+        if not path.is_file():
+            return False
+    return True
 
 
 def _find_git_root(path: Path) -> Path | None:
@@ -678,6 +728,16 @@ def live_package_reference_fact(package: Path) -> Fact:
         return Fact.unknown(f"无法扫描活体 package 引用：{exc}")
 
 
+def terminal_coverage_fact(package: Path) -> Fact:
+    """Return attempt.terminal_coverage_complete for a worktree package (used by pass Gate)."""
+    try:
+        snapshot = _build_snapshot(PackageReader(package, None))
+        context = FactContext(snapshot, "attempt", snapshot.state.attempt_id or "attempt")
+        return _when_attempt_terminal_coverage_complete(context)
+    except (OSError, UnicodeError, SituationError) as exc:
+        return Fact.unknown(f"无法判定 terminal coverage：{exc}")
+
+
 def _active_trail_relative_path(attempt_id: str) -> str:
     """Return the active trail path; archived rows are loaded beside it."""
     return f"execution/{attempt_id}/{ACTIVE_TRAIL_NAME}"
@@ -767,6 +827,15 @@ def _timestamp_sort_key(value: str | None) -> tuple[int, int, float | str]:
         return (1, 1, raw)
 
 
+def _iso_timestamp_with_timezone(value: Any) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    try:
+        return datetime.fromisoformat(value.strip().replace("Z", "+00:00")).tzinfo is not None
+    except ValueError:
+        return False
+
+
 def _sequence_sort_key(value: Any) -> tuple[int, int, float | str]:
     if value is None or isinstance(value, bool):
         return (0, 0, 0.0)
@@ -803,11 +872,89 @@ def _parse_state(view: FileView) -> StateView:
         ticket_ids = sorted(str(identifier) for identifier in tickets)
 
     errors: list[str] = []
-    expected = {"formatVersion", "attempt", "attemptHistory", "predecessors", "tickets", "evidenceIndex", "activeCheckpoints"}
+    base_fields = {"formatVersion", "attempt", "attemptHistory", "predecessors", "tickets", "evidenceIndex", "activeCheckpoints"}
+    format_version = raw.get("formatVersion")
+    expected = base_fields | ({"acceptance"} if format_version == "3.6" else set())
     if set(raw) != expected:
-        errors.append("顶层字段不符合 3.5 schema")
-    if raw.get("formatVersion") != "3.5":
-        errors.append("formatVersion 不是 3.5")
+        errors.append(f"顶层字段不符合 {format_version or '未知'} schema")
+    if format_version not in {"3.5", "3.6"}:
+        errors.append(f"不支持 formatVersion：{format_version!r}")
+    if format_version == "3.6":
+        acceptance = raw.get("acceptance")
+        if not isinstance(acceptance, dict) or set(acceptance) != {"contractBaseline", "releaseOrder", "amendments", "harness"}:
+            errors.append("acceptance 必须只含 contractBaseline、releaseOrder、amendments、harness")
+        else:
+            harness = acceptance.get("harness")
+            if (
+                not isinstance(harness, dict)
+                or set(harness) != {"setup", "precheck", "cleanup", "isolation", "firstVisibleStep"}
+                or any(not isinstance(harness.get(field), str) or not harness[field].strip() for field in ("setup", "precheck", "cleanup"))
+                or harness.get("isolation") != "per-run"
+                or not isinstance(harness.get("firstVisibleStep"), dict)
+                or set(harness["firstVisibleStep"]) != {"step", "ticket"}
+                or any(not isinstance(harness["firstVisibleStep"].get(field), str) or not harness["firstVisibleStep"][field].strip() for field in ("step", "ticket"))
+            ):
+                errors.append("acceptance.harness 字段无效")
+            if not isinstance(acceptance.get("releaseOrder"), str) or acceptance["releaseOrder"] not in {"required", "none"}:
+                errors.append("acceptance.releaseOrder 无效")
+            if not isinstance(acceptance.get("amendments"), list):
+                errors.append("acceptance.amendments 不是 list")
+            else:
+                amendment_ids: set[str] = set()
+                for index, amendment in enumerate(acceptance["amendments"]):
+                    if not isinstance(amendment, dict):
+                        errors.append(f"acceptance.amendments[{index}] 不是 object")
+                        continue
+                    status = amendment.get("status")
+                    base = {"id", "summary", "affected", "artifact", "status"}
+                    expected_amendment = base | ({"confirmedBy", "confirmedRevision"} if status == "CONFIRMED" else set())
+                    expected_amendment |= {field for field in ("createdAt", "confirmedAt") if field in amendment}
+                    if "affectedBlobs" in amendment:
+                        expected_amendment.add("affectedBlobs")
+                    identifier = amendment.get("id")
+                    if status not in {"PENDING", "CONFIRMED"} or set(amendment) != expected_amendment:
+                        errors.append(f"acceptance.amendments[{index}] 字段/status 无效")
+                    if not isinstance(identifier, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", identifier) or identifier in amendment_ids:
+                        errors.append(f"acceptance.amendments[{index}] id 无效或重复")
+                    elif isinstance(identifier, str):
+                        amendment_ids.add(identifier)
+                    affected = amendment.get("affected")
+                    if not isinstance(amendment.get("summary"), str) or not amendment["summary"].strip() or not isinstance(affected, list) or not affected or any(not isinstance(item, str) or not item.strip() for item in affected):
+                        errors.append(f"acceptance.amendments[{index}] summary/affected 无效")
+                    blobs = amendment.get("affectedBlobs")
+                    if "affectedBlobs" in amendment and (
+                        not isinstance(blobs, dict)
+                        or not isinstance(affected, list)
+                        or set(blobs) != set(affected)
+                        or any(value is not None and (not isinstance(value, str) or not COMMIT_RE.fullmatch(value)) for value in blobs.values())
+                    ):
+                        errors.append(f"acceptance.amendments[{index}] affectedBlobs 无效")
+                    if not isinstance(amendment.get("artifact"), str) or not amendment["artifact"].strip():
+                        errors.append(f"acceptance.amendments[{index}] artifact 无效")
+                    if status == "CONFIRMED" and (
+                        not isinstance(amendment.get("confirmedBy"), str)
+                        or not amendment["confirmedBy"].strip()
+                        or not isinstance(amendment.get("confirmedRevision"), str)
+                        or not COMMIT_RE.fullmatch(amendment["confirmedRevision"])
+                    ):
+                        errors.append(f"acceptance.amendments[{index}] confirmation 无效")
+                    if any(field in amendment and not _iso_timestamp_with_timezone(amendment[field]) for field in ("createdAt", "confirmedAt")):
+                        errors.append(f"acceptance.amendments[{index}] timestamp 无效")
+                    if status != "CONFIRMED" and "confirmedAt" in amendment:
+                        errors.append(f"acceptance.amendments[{index}] pending amendment 不得包含 confirmedAt")
+            baseline = acceptance.get("contractBaseline")
+            if not isinstance(baseline, dict) or set(baseline) != {"head", "files"}:
+                errors.append("acceptance.contractBaseline 字段无效")
+            else:
+                if not isinstance(baseline.get("head"), str) or not COMMIT_RE.fullmatch(baseline["head"]):
+                    errors.append("acceptance.contractBaseline.head 不是 commit ID")
+                files = baseline.get("files")
+                if not isinstance(files, dict) or "spec.md" not in files:
+                    errors.append("acceptance.contractBaseline.files 缺少 spec.md")
+                elif set(files) - {"decision.md", "spec.md", "contract-design.md"} or any(
+                    not isinstance(value, str) or not COMMIT_RE.fullmatch(value) for value in files.values()
+                ):
+                    errors.append("acceptance.contractBaseline.files 含无效 blob hash")
     if not isinstance(attempt, dict) or not attempt_id:
         errors.append("attempt.id 缺失")
     elif set(attempt) != {"id", "plan"} or not isinstance(attempt.get("plan"), str) or not attempt.get("plan"):
@@ -840,6 +987,7 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
     if not state.valid or state.raw is None:
         return []
     raw = state.raw
+    format_version = raw.get("formatVersion", "3.5")
     errors: list[str] = []
     ticket_rows = raw.get("tickets", {})
     for identifier, row in ticket_rows.items():
@@ -856,10 +1004,16 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                 errors.append(f"RETIRED superseded Ticket {identifier} 的 successor 不存在")
         elif status == "SATISFIED":
             acceptance = row.get("acceptance")
-            if set(row) != {"state", "acceptance"} or not isinstance(acceptance, dict) or set(acceptance) != {"revision", "environment"}:
-                errors.append(f"SATISFIED Ticket {identifier} 缺少合法 acceptance revision/environment")
-            elif not COMMIT_RE.fullmatch(str(acceptance.get("revision", ""))) or not isinstance(acceptance.get("environment"), str) or not acceptance["environment"].strip():
-                errors.append(f"SATISFIED Ticket {identifier} 的 acceptance revision/environment 无效")
+            expected_acceptance = {"revision", "environment"} if format_version == "3.5" else {"revision"}
+            if format_version == "3.6" and isinstance(acceptance, dict) and "environment" in acceptance:
+                expected_acceptance.add("environment")
+            if set(row) != {"state", "acceptance"} or not isinstance(acceptance, dict) or set(acceptance) != expected_acceptance:
+                errors.append(f"SATISFIED Ticket {identifier} acceptance fields 不符合 {format_version} schema")
+            elif not COMMIT_RE.fullmatch(str(acceptance.get("revision", ""))) or (
+                "environment" in acceptance
+                and (not isinstance(acceptance["environment"], str) or not acceptance["environment"].strip())
+            ):
+                errors.append(f"SATISFIED Ticket {identifier} acceptance revision/environment 无效")
         elif status == "BLOCKED":
             if set(row) != {"state", "evidence"} or not isinstance(row.get("evidence"), str):
                 errors.append(f"BLOCKED Ticket {identifier} 缺少 evidence")
@@ -871,35 +1025,129 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
 
     index = raw.get("evidenceIndex", {})
     if isinstance(index, dict):
-        unknown_tickets = set(index) - set(ticket_rows)
-        if unknown_tickets:
-            errors.append("evidenceIndex 含未知 Ticket：" + ", ".join(sorted(unknown_tickets)))
-        for identifier, claim_map in index.items():
-            if not isinstance(claim_map, dict):
-                errors.append(f"evidenceIndex[{identifier}] 不是 claim mapping")
-                continue
-            known_claims = set(tickets.get(identifier, TicketInfo(identifier, None, "", False)).claims)
-            for claim, records in claim_map.items():
-                if claim not in known_claims:
-                    errors.append(f"evidenceIndex[{identifier}] 含未知 claim：{claim}")
-                if not isinstance(records, list):
-                    errors.append(f"evidenceIndex[{identifier}][{claim}] 不是 list")
+        if format_version == "3.5":
+            unknown_tickets = set(index) - set(ticket_rows)
+            if unknown_tickets:
+                errors.append("evidenceIndex 含未知 Ticket：" + ", ".join(sorted(unknown_tickets)))
+            for identifier, claim_map in index.items():
+                if not isinstance(claim_map, dict):
+                    errors.append(f"evidenceIndex[{identifier}] 不是 claim mapping")
+                    continue
+                known_claims = set(tickets.get(identifier, TicketInfo(identifier, None, "", False)).claims)
+                for claim, records in claim_map.items():
+                    if claim not in known_claims:
+                        errors.append(f"evidenceIndex[{identifier}] 含未知 claim：{claim}")
+                    if not isinstance(records, list):
+                        errors.append(f"evidenceIndex[{identifier}][{claim}] 不是 list")
+                        continue
+                    for record in records:
+                        required = {"timing", "artifact", "revision", "environment", "conclusion"}
+                        if not isinstance(record, dict) or not required <= set(record):
+                            errors.append(f"evidenceIndex[{identifier}][{claim}] evidence 字段不完整")
+                            continue
+                        if record.get("timing") not in {"early-falsification", "remaining-completion"}:
+                            errors.append(f"evidenceIndex[{identifier}][{claim}] timing 无效")
+                        if record.get("conclusion") not in {"supporting", "contradictory", "inconclusive"}:
+                            errors.append(f"evidenceIndex[{identifier}][{claim}] conclusion 无效")
+                        if not all(isinstance(record.get(field), str) and record.get(field).strip() for field in ("artifact", "revision", "environment")):
+                            errors.append(f"evidenceIndex[{identifier}][{claim}] artifact/revision/environment 无效")
+                        elif not COMMIT_RE.fullmatch(record["revision"]):
+                            errors.append(f"evidenceIndex[{identifier}][{claim}] revision 不是 commit ID")
+                        if "invalidatedBy" in record and record["invalidatedBy"] is not None and not isinstance(record["invalidatedBy"], str):
+                            errors.append(f"evidenceIndex[{identifier}][{claim}] invalidatedBy 无效")
+        else:
+            run_environments: dict[str, tuple[str, str]] = {}
+            run_setup_environments: dict[str, str] = {}
+            journey_run_environments: dict[str, str] = {}
+            setup_run_ids: set[str] = set()
+            journey_run_ids: set[str] = set()
+            for key, records in index.items():
+                if not isinstance(key, str) or not isinstance(records, list):
+                    errors.append(f"evidenceIndex[{key}] 必须是 evidenceKey 到 list 的映射")
                     continue
                 for record in records:
-                    required = {"timing", "artifact", "revision", "environment", "conclusion"}
-                    if not isinstance(record, dict) or not required <= set(record):
-                        errors.append(f"evidenceIndex[{identifier}][{claim}] evidence 字段不完整")
+                    if not isinstance(record, dict):
+                        errors.append(f"evidenceIndex[{key}] evidence 不是 object")
                         continue
-                    if record.get("timing") not in {"early-falsification", "remaining-completion"}:
-                        errors.append(f"evidenceIndex[{identifier}][{claim}] timing 无效")
-                    if record.get("conclusion") not in {"supporting", "contradictory", "inconclusive"}:
-                        errors.append(f"evidenceIndex[{identifier}][{claim}] conclusion 无效")
-                    if not all(isinstance(record.get(field), str) and record.get(field).strip() for field in ("artifact", "revision", "environment")):
-                        errors.append(f"evidenceIndex[{identifier}][{claim}] artifact/revision/environment 无效")
+                    kind = record.get("kind")
+                    fields_by_kind = {
+                        "journey-step": {"runId", "journeyId", "stepId", "actor", "entry", "surface"},
+                        "run-setup": {"runId"},
+                        "suite": {"suiteId"},
+                        "review": {"ticket"},
+                        "release": set(),
+                    }
+                    if not isinstance(kind, str) or kind not in fields_by_kind:
+                        errors.append(f"evidenceIndex[{key}] kind 无效")
+                        continue
+                    required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
+                    optional = {"inputRef", "outputRef", "manualBy", "artifactSha256"} if kind == "journey-step" else set()
+                    allowed = required | optional | {"invalidatedBy", "timing", "recordedAt"}
+                    if kind not in fields_by_kind or not required <= set(record) or set(record) - allowed:
+                        errors.append(f"evidenceIndex[{key}] {kind!r} evidence 字段不完整或含未知字段")
+                        continue
+                    if not isinstance(record.get("conclusion"), str) or record["conclusion"] not in {"supporting", "contradictory", "inconclusive"}:
+                        errors.append(f"evidenceIndex[{key}] conclusion 无效")
+                    if not all(isinstance(record.get(field), str) and record[field].strip() for field in ("artifact", "revision", "environment")):
+                        errors.append(f"evidenceIndex[{key}] artifact/revision/environment 无效")
                     elif not COMMIT_RE.fullmatch(record["revision"]):
-                        errors.append(f"evidenceIndex[{identifier}][{claim}] revision 不是 commit ID")
-                    if "invalidatedBy" in record and record["invalidatedBy"] is not None and not isinstance(record["invalidatedBy"], str):
-                        errors.append(f"evidenceIndex[{identifier}][{claim}] invalidatedBy 无效")
+                        errors.append(f"evidenceIndex[{key}] revision 不是 commit ID")
+                    if "timing" in record and (not isinstance(record["timing"], str) or record["timing"] not in {"early-falsification", "remaining-completion"}):
+                        errors.append(f"evidenceIndex[{key}] timing 无效")
+                    if "recordedAt" in record and not _iso_timestamp_with_timezone(record["recordedAt"]):
+                        errors.append(f"evidenceIndex[{key}] recordedAt 无效")
+                    invalidated_by = record.get("invalidatedBy")
+                    if "invalidatedBy" in record and invalidated_by is not None and (not isinstance(invalidated_by, str) or not invalidated_by.strip()):
+                        errors.append(f"evidenceIndex[{key}] invalidatedBy 无效")
+                    if kind == "journey-step":
+                        surface = record.get("surface")
+                        if surface not in {"page", "file", "api", "log"}:
+                            errors.append(f"evidenceIndex[{key}] surface 无效")
+                        if "manualBy" in record and (not isinstance(record["manualBy"], str) or not record["manualBy"].strip()):
+                            errors.append(f"evidenceIndex[{key}] manualBy 无效")
+                        if surface == "file":
+                            if not isinstance(record.get("artifactSha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", record["artifactSha256"]):
+                                errors.append(f"evidenceIndex[{key}] file surface 的 artifactSha256 无效")
+                        elif "artifactSha256" in record:
+                            errors.append(f"evidenceIndex[{key}] artifactSha256 仅适用于 file surface")
+                        for field in ("inputRef", "outputRef"):
+                            if field in record and (not isinstance(record[field], str) or not record[field].strip()):
+                                errors.append(f"evidenceIndex[{key}] {field} 必须是非空业务对象标识")
+                        run_id, journey_id, step_id, actor, entry = (record.get(field) for field in ("runId", "journeyId", "stepId", "actor", "entry"))
+                        if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, actor, entry)) or key != f"journey:{run_id}:{step_id}":
+                            errors.append(f"evidenceIndex[{key}] Journey evidence key 或字段无效")
+                        else:
+                            prior = run_environments.setdefault(run_id, (journey_id, record["environment"]))
+                            if prior != (journey_id, record["environment"]):
+                                errors.append(f"evidenceIndex[{key}] runId 的 Journey/environment 不一致")
+                            journey_run_ids.add(run_id)
+                            journey_run_environments[run_id] = record["environment"]
+                    elif kind == "run-setup":
+                        run_id = record.get("runId")
+                        if not isinstance(run_id, str) or not run_id.strip() or key != f"run-setup:{run_id}":
+                            errors.append(f"evidenceIndex[{key}] run-setup evidence key 或 runId 无效")
+                        else:
+                            setup_run_ids.add(run_id)
+                            previous_environment = run_setup_environments.setdefault(run_id, record["environment"])
+                            if previous_environment != record["environment"]:
+                                errors.append(f"run-setup {run_id} 的 environment 不一致")
+                    elif kind == "suite":
+                        suite_id = record.get("suiteId")
+                        if not isinstance(suite_id, str) or not suite_id.strip() or key != f"suite:{suite_id}":
+                            errors.append(f"evidenceIndex[{key}] suite evidence key 或 suiteId 无效")
+                    elif kind == "review":
+                        ticket = record.get("ticket")
+                        if not isinstance(ticket, str):
+                            errors.append(f"evidenceIndex[{key}] review evidence key 或 ticket 无效")
+                        elif (ticket != "package" and ticket not in ticket_rows) or key != f"review:{ticket}":
+                            errors.append(f"evidenceIndex[{key}] review ticket 或 evidence key 无效")
+                    elif key != "release":
+                        errors.append(f"evidenceIndex[{key}] release evidence key 必须为 release")
+            for run_id in sorted(journey_run_ids - setup_run_ids):
+                errors.append(f"Journey run {run_id} 缺少 run-setup")
+            for run_id in sorted(journey_run_ids & setup_run_ids):
+                if run_setup_environments.get(run_id) != journey_run_environments.get(run_id):
+                    errors.append(f"Journey run {run_id} 的 run-setup environment 不一致")
 
     checkpoints = raw.get("activeCheckpoints", {})
     if isinstance(checkpoints, dict):
@@ -938,7 +1186,7 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
     return errors
 
 
-def _parse_ticket(identifier: str, relative: str | None, text: str, expected_attempt: str | None) -> TicketInfo:
+def _parse_ticket(identifier: str, relative: str | None, text: str, expected_attempt: str | None, format_version: str = "3.5") -> TicketInfo:
     if not text:
         return TicketInfo(identifier, relative, text, False, error="Ticket 文件为空")
     id_match = TICKET_ID_RE.search(text)
@@ -950,6 +1198,14 @@ def _parse_ticket(identifier: str, relative: str | None, text: str, expected_att
         return TicketInfo(identifier, relative, text, False, error="Attempt ID 与当前 attempt 不一致")
 
     claims = list(dict.fromkeys(CLAIM_RE.findall(text)))
+    valid = bool(claims)
+    if format_version == "3.6":
+        coverage = re.search(r"(?ms)^##\s+Coverage\s*$\n(.*?)(?=^##\s+|\Z)", text)
+        fields = {
+            key: value.strip()
+            for key, value in re.findall(r"(?m)^-\s*(Journey steps|Suites|Required review):\s*(.*?)\s*$", coverage.group(1) if coverage else "")
+        }
+        valid = set(fields) == {"Journey steps", "Suites", "Required review"} and all(fields.values())
     safety_claims = [claim for claim in claims if claim.upper().startswith("INV-")]
     dependencies: list[tuple[str, str]] = []
     section = DEPENDENCY_HEADING_RE.search(text)
@@ -965,7 +1221,7 @@ def _parse_ticket(identifier: str, relative: str | None, text: str, expected_att
         identifier,
         relative,
         text,
-        bool(claims),
+        valid,
         claims=claims,
         safety_claims=safety_claims,
         dependencies=dependencies,
@@ -1210,24 +1466,45 @@ def _build_snapshot(
 ) -> Snapshot:
     warnings = list(reader.warnings)
     state = _parse_state(reader.read(STATE_REL))
+    if state.raw and state.raw.get("formatVersion") == "3.6":
+        from impl_package_runtime import engine
+
+        try:
+            engine.validate_spec_document(reader.package / "spec.md")
+        except engine.StateError as exc:
+            state.valid = False
+            state.error = f"{state.error}; {exc}" if state.error else str(exc)
+            warnings.append(str(exc))
     ticket_files: dict[str, tuple[str, str]] = {}
+    duplicate_ticket_ids: set[str] = set()
+    unscoped_ticket_files: list[str] = []
     for relative in reader.list_ticket_files():
         view = reader.read(relative)
         if view.error:
             warnings.append(view.error)
+            unscoped_ticket_files.append(relative)
             continue
         if view.text is None:
             continue
+        attempt_match = ATTEMPT_ID_RE.search(view.text)
+        if attempt_match and state.attempt_id and attempt_match.group(1) != state.attempt_id:
+            continue
         id_match = TICKET_ID_RE.search(view.text)
-        if id_match:
-            ticket_files[id_match.group(1)] = (relative, view.text)
+        if not state.attempt_id or not attempt_match or not id_match:
+            unscoped_ticket_files.append(relative)
+            continue
+        identifier = id_match.group(1)
+        if identifier in ticket_files:
+            duplicate_ticket_ids.add(identifier)
+        else:
+            ticket_files[identifier] = (relative, view.text)
 
     tickets: dict[str, TicketInfo] = {}
     ids = sorted(set(state.ticket_ids) | set(ticket_files))
     for identifier in ids:
         if identifier in ticket_files:
             relative, text = ticket_files[identifier]
-            ticket = _parse_ticket(identifier, relative, text, state.attempt_id)
+            ticket = _parse_ticket(identifier, relative, text, state.attempt_id, str(state.raw.get("formatVersion", "3.5")) if state.raw else "3.5")
         else:
             ticket = TicketInfo(identifier, None, "", False, error="Ticket 文件缺失")
         tickets[identifier] = ticket
@@ -1237,9 +1514,13 @@ def _build_snapshot(
     if state.valid:
         expected = set(state.ticket_ids)
         actual = set(tickets)
-        if expected != actual or any(not tickets[key].valid for key in expected):
+        if expected != actual or duplicate_ticket_ids or unscoped_ticket_files or any(not tickets[key].valid for key in expected):
             state.valid = False
-            state.error = "state 与 tickets/*.md 不一致或 Ticket 文件无法解析"
+            state.error = "state 与当前 Attempt 的 tickets/*.md 不一致或 Ticket 文件无法解析"
+            if duplicate_ticket_ids:
+                state.error += "；当前 Attempt 存在重复 Ticket ID：" + ", ".join(sorted(duplicate_ticket_ids))
+            if unscoped_ticket_files:
+                state.error += "；存在无法读取或缺少 Attempt ID/Ticket ID 的文件：" + ", ".join(sorted(unscoped_ticket_files))
             warnings.append(state.error)
     state_errors = _state_ticket_errors(state, tickets)
     if state_errors:
@@ -1376,6 +1657,33 @@ class FactContext:
         self.kind = kind
         self.identifier = identifier
         self.dispatch_id = dispatch_id
+
+    def journey_acceptance_status(self) -> dict[str, Any] | Fact | None:
+        if hasattr(self, "_journey_status"):
+            return self._journey_status
+        state = self.state()
+        if state is None or state.get("formatVersion") != "3.6":
+            self._journey_status = None
+            return None
+        reader = self.snapshot.reader
+        if reader.repo is None or self.snapshot.head is None:
+            result: dict[str, Any] | Fact = self.unknown("无法确定仓库或当前 HEAD")
+        else:
+            try:
+                from impl_package_runtime import engine
+
+                summary = engine._validate_state(self.snapshot.package, state, projections=False, validate_live_artifacts=False)
+                result = engine._v36_acceptance_status(
+                    self.snapshot.package,
+                    state,
+                    summary,
+                    self.snapshot.head,
+                    attempt_active=not summary["_lifecycle"].frozen,
+                )
+            except Exception as exc:
+                result = self.unknown(f"无法计算 Journey acceptance facts：{exc}")
+        self._journey_status = result
+        return result
 
     @property
     def subject(self) -> str:
@@ -2110,6 +2418,57 @@ def _when_package_validate_projection_drift(context: FactContext) -> Fact:
     return context.unknown("缺少结构化 validation result")
 
 
+def _v36_acceptance_fact(context: FactContext, key: str) -> Fact:
+    status = context.journey_acceptance_status()
+    if status is None:
+        return _fact_value(False)
+    if isinstance(status, Fact):
+        return status
+    if key == "attempt.journey_incomplete":
+        incomplete = any(row["reach"] < row["total"] for row in status["journeys"])
+        rehearsal_complete = any(
+            row["rehearsalReach"] == row["total"] and row["reach"] < row["total"]
+            for row in status["journeys"]
+        )
+        reason = "API 预演已走通，仍需页面/文件/记录证据" if rehearsal_complete else None
+        return _fact_value(incomplete, reason=reason)
+    if key == "attempt.walking_skeleton_overdue":
+        return _fact_value(status["walkingSkeletonOverdue"])
+    if key == "attempt.required_suite_missing":
+        return _fact_value(any(not row["valid"] for row in status["suites"]))
+    if key == "attempt.evidence_revalidation_pending":
+        return _fact_value(bool(status["staleEvidence"]))
+    if key == "attempt.amendment_pending_or_unregistered":
+        return _fact_value(bool(status["pendingAmendments"] or status["unregisteredAmendments"]))
+    if key == "attempt.release_order_missing":
+        return _fact_value(status["releaseRequired"] and not status["releaseValid"])
+    return context.unknown(f"不支持的 3.6 acceptance fact：{key}")
+
+
+def _when_attempt_journey_incomplete(context: FactContext) -> Fact:
+    return _v36_acceptance_fact(context, "attempt.journey_incomplete")
+
+
+def _when_attempt_walking_skeleton_overdue(context: FactContext) -> Fact:
+    return _v36_acceptance_fact(context, "attempt.walking_skeleton_overdue")
+
+
+def _when_attempt_required_suite_missing(context: FactContext) -> Fact:
+    return _v36_acceptance_fact(context, "attempt.required_suite_missing")
+
+
+def _when_attempt_evidence_revalidation_pending(context: FactContext) -> Fact:
+    return _v36_acceptance_fact(context, "attempt.evidence_revalidation_pending")
+
+
+def _when_attempt_amendment_pending_or_unregistered(context: FactContext) -> Fact:
+    return _v36_acceptance_fact(context, "attempt.amendment_pending_or_unregistered")
+
+
+def _when_attempt_release_order_missing(context: FactContext) -> Fact:
+    return _v36_acceptance_fact(context, "attempt.release_order_missing")
+
+
 def _when_attempt_session_resumed(context: FactContext) -> Fact:
     if context.snapshot.trail.error:
         return context.unknown(context.snapshot.trail.error)
@@ -2256,14 +2615,6 @@ def _when_trail_last_outcome(context: FactContext) -> Fact:
 
 def _when_trail_anchor_mismatch(context: FactContext) -> Fact:
     return context._trail_signal("trail.anchor_mismatch")
-
-
-def _when_trail_handoff_recovery_needed(context: FactContext) -> Fact:
-    return context._trail_signal("trail.handoff_recovery_needed")
-
-
-def _when_trail_handoff_target_corrected(context: FactContext) -> Fact:
-    return context._trail_signal("trail.handoff_target_corrected")
 
 
 def _when_trail_checkpoint_projection_race(context: FactContext) -> Fact:
@@ -2562,7 +2913,8 @@ def _when_attempt_terminal_coverage_complete(context: FactContext) -> Fact:
     results = summary.get("results")
     if not isinstance(run_id, str) or not run_id.strip() or not isinstance(results, list):
         return _fact_value(False, "terminal_summary 缺少 reviewRunId 或 results")
-    required = {"Track A", "Track B", "Track C"}
+    # Track B (retired standards track) stays a readable value for old trails but is not required.
+    required = {"Track A", "Track C"}
     if summary["safetyApplicable"]:
         required.add("Track D")
     by_track = {}
@@ -2707,6 +3059,12 @@ WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "package.state_invalid": _when_package_state_invalid,
     "package.references.live_package": _when_package_references_live_package,
     "package.validate.projection_drift": _when_package_validate_projection_drift,
+    "attempt.journey_incomplete": _when_attempt_journey_incomplete,
+    "attempt.walking_skeleton_overdue": _when_attempt_walking_skeleton_overdue,
+    "attempt.required_suite_missing": _when_attempt_required_suite_missing,
+    "attempt.evidence_revalidation_pending": _when_attempt_evidence_revalidation_pending,
+    "attempt.amendment_pending_or_unregistered": _when_attempt_amendment_pending_or_unregistered,
+    "attempt.release_order_missing": _when_attempt_release_order_missing,
     "attempt.session_resumed": _when_attempt_session_resumed,
     "attempt.compaction_pressure_high": _when_attempt_compaction_pressure_high,
     "attempt.active_checkpoint_present": _when_attempt_active_checkpoint_present,
@@ -2726,8 +3084,6 @@ WHEN_PARSERS: dict[str, Callable[[FactContext], Fact]] = {
     "evidence.count": _when_evidence_count,
     "trail.last_outcome": _when_trail_last_outcome,
     "trail.anchor_mismatch": _when_trail_anchor_mismatch,
-    "trail.handoff_recovery_needed": _when_trail_handoff_recovery_needed,
-    "trail.handoff_target_corrected": _when_trail_handoff_target_corrected,
     "trail.checkpoint_projection_race": _when_trail_checkpoint_projection_race,
     "trail.reviewer_unavailable": _when_trail_reviewer_unavailable,
     "trail.decision_without_result": _when_trail_decision_without_result,
@@ -3132,7 +3488,7 @@ def _action_mode(action: dict[str, Any]) -> str | None:
 def _situation_actions(candidates: list[Candidate]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for candidate in candidates:
-        for action in candidate.row.get("actions", []):
+        for action in candidate.action_rows():
             action_id = action.get("id")
             if not isinstance(action_id, str):
                 continue
@@ -3146,7 +3502,7 @@ def _situation_actions(candidates: list[Candidate]) -> list[dict[str, Any]]:
                     "action_id": action_id,
                     "resource_keys": None,
                     "reason": "处境表机械条件命中",
-                    "protocol": _PROTOCOLS.get(candidate.slug, _PROTOCOLS["default"]),
+                    "protocol": candidate.protocol_text(),
                     "action_ids": [action_id],
                     "actions": [dict(action)],
                 }
@@ -3421,11 +3777,19 @@ def _situation_hints(candidates: list[Any], runnable: list[dict[str, Any]],
     return hints
 
 
-def dispatch_admission(package: Path, event: dict[str, Any]) -> list[dict[str, Any]]:
-    """Check actual work against current business facts, without pre-registration."""
+def dispatch_admission(
+    package: Path,
+    event: dict[str, Any],
+    validation_result: ValidationResult | None = None,
+) -> list[dict[str, Any]]:
+    """Check actual work against current business facts, without pre-registration.
+
+    The caller supplies the authoritative validation result (the engine derives it
+    from its own projection validation); agents never pass it in.
+    """
     reader = PackageReader(package, None)
     table = _load_table_for_package(reader)
-    snapshot = _build_snapshot(reader, None, None)
+    snapshot = _build_snapshot(reader, validation_result, None)
     item = {**event, "action_id": event["chosen"]}
     actions = [{"subject": event["subject"], "action_id": action.get("id"), "mode": _action_mode(action)}
                for row in table.rows for action in row.get("actions", [])]
@@ -3441,90 +3805,6 @@ def _subject_label(subject: str) -> str:
     if subject.startswith("finding:"):
         return subject.split(":", 1)[1]
     return subject
-
-
-def _digest_candidate(
-    item: dict[str, Any] | None,
-    layer_by_slug: dict[str, int],
-) -> dict[str, Any] | None:
-    if item is None:
-        return None
-    slug = str(item["slug"])
-    return {
-        "slug": slug,
-        "subject": item.get("subject"),
-        "layer": layer_by_slug[slug],
-        "action_ids": list(item.get("action_ids", [])),
-    }
-
-
-def _legacy_situation_digest(table: TableModel, result: dict[str, Any]) -> str:
-    layer_by_slug = _priority_layer_by_slug(table)
-    groups = {
-        name: [
-            _digest_candidate(item, layer_by_slug)
-            for item in result.get(name, [])
-        ]
-        for name in ("parallel_matches", "other_matches", "suppressed_matches")
-    }
-    groups["selected"] = _digest_candidate(result.get("selected"), layer_by_slug)
-    payload = {
-        "match_groups": groups,
-        "highest_match_layer": result.get("highest_match_layer"),
-    }
-    canonical = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:DIGEST_LENGTH]
-
-
-def _situation_digest(table: TableModel, result: dict[str, Any]) -> str:
-    payload = {
-        name: result.get(name, [])
-        for name in ("blocking", "runnable", "withheld", "in_flight")
-    }
-    canonical = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:DIGEST_LENGTH]
-
-
-def _write_situation_digest(
-    reader: PackageReader,
-    state: StateView,
-    digest: str,
-    legacy_digest: str,
-    head: str | None,
-    trail_seq: int,
-    blocking_slugs: list[str],
-) -> None:
-    try:
-        if not state.attempt_id:
-            raise OSError("current attempt is unavailable")
-        state_path = reader.package / STATE_REL
-        state_sha256 = hashlib.sha256(state_path.read_bytes()).hexdigest()
-        credential_path = reader.package / "execution" / state.attempt_id / SITUATION_DIGEST_NAME
-        credential_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "digest": digest,
-            "legacy_digest": legacy_digest,
-            "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "state_sha256": state_sha256,
-            "head": head,
-            "trail_seq": trail_seq,
-            "blocking_slugs": blocking_slugs,
-        }
-        with credential_path.open("w", encoding="utf-8", newline="\n") as stream:
-            json.dump(payload, stream, ensure_ascii=False, separators=(",", ":"))
-            stream.write("\n")
-    except OSError as exc:
-        print(f"warning: could not write {SITUATION_DIGEST_NAME}: {exc}", file=sys.stderr)
 
 
 def _render_human(
@@ -3591,17 +3871,12 @@ def _json_result(
     table: TableModel,
     snapshot: Snapshot,
     derived: dict[str, Any],
-    digest: str,
-    legacy_digest: str,
 ) -> dict[str, Any]:
     effective_gate = _effective_gate(snapshot)
     return {
         "stage": STAGE,
         "package": str(snapshot.package),
         "attempt": snapshot.state.attempt_id,
-        "digest": digest,
-        "legacy_digest": legacy_digest,
-        "unchanged": False,
         "at": snapshot.reader.at_label,
         "head": snapshot.head,
         "selected": derived["selected"],
@@ -3736,19 +4011,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="read-only JSON object with boolean high, inline or from a file",
     )
     render.add_argument(
-        "--since",
-        metavar="DIGEST",
-        help="emit only a one-line unchanged marker when the digest matches",
-    )
-    render.add_argument(
         "--explain-undetermined",
         action="store_true",
         help="include the first undetermined situation slugs in human output",
-    )
-    render.add_argument(
-        "--no-write-credential",
-        action="store_true",
-        help=f"derive without writing execution/<attempt>/{SITUATION_DIGEST_NAME}",
     )
     render.add_argument("--json", action="store_true", help="emit structured JSON")
     table = subparsers.add_parser("print-table", help="print the formal YAML table")
@@ -3764,45 +4029,10 @@ def _run_render(args: argparse.Namespace) -> int:
     compaction_pressure = _load_compaction_pressure(args.compaction_pressure)
     snapshot = _build_snapshot(reader, validation_result, compaction_pressure)
     derived = _derive(table, snapshot)
-    digest = _situation_digest(table, derived)
-    legacy_digest = _legacy_situation_digest(table, derived)
-    if not args.no_write_credential:
-        _write_situation_digest(
-            reader,
-            snapshot.state,
-            digest,
-            legacy_digest,
-            snapshot.head,
-            max(
-                (
-                    row["seq"]
-                    for row in snapshot.trail.rows
-                    if isinstance(row.get("seq"), int) and not isinstance(row.get("seq"), bool)
-                ),
-                default=0,
-            ),
-            [item["slug"] for item in derived["blocking"]],
-        )
-    if args.since == digest:
-        if args.json:
-            print(
-                json.dumps(
-                    {
-                        "digest": digest,
-                        "legacy_digest": legacy_digest,
-                        "unchanged": True,
-                    },
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                )
-            )
-        else:
-            print(f"处境未变 (digest: {digest})")
-        return 0
     if args.json:
         print(
             json.dumps(
-                _json_result(table, snapshot, derived, digest, legacy_digest),
+                _json_result(table, snapshot, derived),
                 ensure_ascii=False,
                 indent=2,
             )
@@ -3813,11 +4043,11 @@ def _run_render(args: argparse.Namespace) -> int:
             snapshot,
             explain_undetermined=args.explain_undetermined,
         )
-        print(f"{body}\ndigest: {digest}")
+        print(body)
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     try:
@@ -3841,6 +4071,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"situation: FAIL\n- {exc}", file=sys.stderr)
         return 2
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    from impl_package_runtime.engine import git_query_scope
+
+    with git_query_scope():
+        return _main(argv)
 
 
 if __name__ == "__main__":

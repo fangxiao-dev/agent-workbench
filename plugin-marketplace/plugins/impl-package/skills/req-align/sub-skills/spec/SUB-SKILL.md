@@ -48,6 +48,8 @@ initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一
    - 常见误判：只改 disposition、不吸收有效精确合同，会留下引用看似完整但实际无 owner 的 shape。
 6. 仅当信号适用时评估 evidence-integrity contract 与 risk-driven Grill；它们不成为普通变化的固定流程。
    - 常见误判：把高成本检查固定到所有普通变化，会稀释真正 risk signal；完全跳过适用信号，又会让高风险 surface 没有额外审问。
+7. 新 package 的 §7 按模板写 Journeys、Rule Matrix 与 Required Suites：Journey 用 Owner 语言按终态定义，每步写出角色、入口类型（页面/文件/记录）、控件、操作入口、观察表面和承接（上一步交来的业务对象，无则 `—`），步骤只含用户亲手做或亲自收到的事，用户看不到的行为（并发、幂等、回滚、租户隔离）归规则矩阵与套件，账号、权限、种子账套写在 Journey 的 `准备：` 行；规则逐条写 Source（Spec 章节引用）、挂到一个套件并给出 oracle，不需要验收的章节列在“无需验收的章节”行；包级 safety 套件按风险声明。套件清单是合同，由 Owner 在 Spec Gate 批准，Plan 之后不再补造。
+   - 常见误判：步骤只写“用户完成 X”而没有入口与表面，执行者只能用 API 重放代替页面；套件清单留给 Plan，则 Gate 时才发现规则没有 oracle。
 
 Formal artifact 的内容、Status 与 Gate result 反映当前已记录事实；initial bundle 完成 owner approval，follow-up 由主 thread 写入 current truth 并沿用该 approval。
 
@@ -63,8 +65,9 @@ Gate 只在 initial bundle 验证前置承诺是否完整兑现：
    - 常见误判：两个文件都能改同一字段或状态，后续修订会产生不可判定的 canonical meaning。
 4. 八个行为合同章节内部一致。
    - 常见误判：单章节看似完整但章节之间冲突，实施者会选择自己更容易实现的一条解释。
-5. 每个 promise/constraint 映射到 observable evidence。
+5. 每个 promise/constraint 映射到 observable evidence：新 package 的每个 Journey step 是用户亲手做或亲自收到的事，有角色、入口类型、页面步的具名控件、表面、预期与承接，每条规则有 Source、oracle 并指向已登记套件，safety 套件按风险声明或写明理由。
    - 常见误判：只写“已覆盖”而没有可观察证据，Gate 会把信心或邻近测试误当兑现证明。
+   - 运行 `package check-spec --spec <repo-relative spec.md>` 并处理列出的每个章节：补带 Source 的规则，或列入“无需验收的章节”；再由 reviewer 对照 Spec 规则与 Rule Matrix 做一次独立覆盖核对，从“无需验收的章节”读起（遗漏藏在那里）。
 6. blocking owner decision 与 ambiguity 为零。
    - 常见误判：把未决 owner decision 留到 Plan，Plan 就会被迫替 Spec 发明行为或数据合同。
 

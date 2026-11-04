@@ -15,6 +15,17 @@ Only read this reference when `review-code` selects **Full behavior review**. Ap
 - Appropriate abstraction levels?
 - Logical file/folder structure?
 
+## Standards and maintainability
+
+仓库规范、smell 与设计基线在同一份完整 diff 上与行为审查一并完成；先完成这一基线，再决定是否深挖。
+
+- **仓库规范优先**：应用调用者提供的全部仓库规则（AGENTS.md、CODING_STANDARDS.md、CONTRIBUTING.md 等）；仓库认可的写法覆盖通用 baseline，与之冲突的 smell 不作 finding；lint/formatter/类型检查等工具已可靠执行的规则不重复报告。
+- **Hard violation 与 judgement call 分开**：违反仓库规则文件是 hard violation，必须引用规则文件；Fowler smell 和 deep-module 词汇是 judgement call，点名 baseline 并引用 changed hunk，不伪装成仓库未声明的硬规则。
+- **Fowler code-smell baseline**（每条落到具体 hunk）：Mysterious Name（名称说不清职责→重命名，无法诚实命名则指出设计含糊）；Duplicated Code（多处相同逻辑形状→抽取共享形状）；Feature Envy（访问他人数据多于自身→行为移到数据侧）；Data Clumps（相同字段/参数组合反复同行→提炼类型）；Primitive Obsession（primitive/string 代替值得命名的领域概念→小型领域类型）；Repeated Switches（同类 switch/条件链重复→多态或共享映射）；Shotgun Surgery（一个逻辑变化散落多文件→收拢到共同 module）；Divergent Change（一个文件因多个无关原因被修改→按变化原因拆分）；Speculative Generality（未被需求要求的抽象/参数/hook→删除）；Message Chains（调用者依赖长导航链→在起点隐藏导航）；Middle Man（主要只转发的层→移除）；Refused Bequest（子类忽略或覆盖大部分继承合同→改用组合）。
+- **codebase-design 词汇**：active skill catalog 有 `codebase-design` 时优先读其 deep module 词汇，否则用此基线——interface 以小表面承载足够行为（depth/leverage）；知识与验证留在合适 seam（locality）；新增 adapter 要有真实可变性依据；interface 包含调用方必须知道的 invariant、错误模式和顺序约束，而不只是类型签名。
+- **深挖选择**：普通局部 diff 做完基线即可。Owner 明确要求严格可维护性审查，或 reviewer 凭证据判断结构需要复核（shared path 出现 feature-specific 分支、同一概念的条件/flag/mode 跨 hunk 增长、adapter/wrapper/松散类型边界增加、知识离开 canonical layer、模块明显膨胀、存在可删除整层间接的机会）时，读 [strict-maintainability.md](strict-maintainability.md)。这些信号是非穷尽启发式，不自动成为 finding；不因“还能更优雅”、单一文件行数或个人偏好产生 finding。
+- **证据**：structural finding 说明 changed hunk 中新增或放大的复杂度、可解释的维护风险、可行的简化或集中方向，以及它是 hard violation 还是 judgement call。
+
 ## Detailed code review
 
 **Naming**:

@@ -1,6 +1,6 @@
 ---
 name: review-code
-description: 当需要审查 pull request、固定 comparison point 的代码 diff 或相关实现变更时使用；重点检查运行行为、错误处理、安全、性能、资源、并发/原子性、测试风险与一般代码质量。
+description: 当需要审查 pull request、固定 comparison point 的代码 diff 或相关实现变更时使用；重点检查运行行为、错误处理、安全、性能、资源、并发/原子性、测试风险，以及仓库规范、code smell 与模块设计（interface depth、locality）。
 allowed-tools: Read Grep Glob
 metadata:
   tags: review-code, code-review, code-quality, security, best-practices, PR-review
@@ -11,22 +11,22 @@ metadata:
 
 ## 审查意图
 
-优先关注变更后的行为、错误处理、安全、性能、资源、并发/原子性和测试风险。结构、模块归属、抽象与一般 code-quality 现象仍可发现和报告；偏重是注意力启发式，不是能力禁令。
+优先关注变更后的行为、错误处理、安全、性能、资源、并发/原子性和测试风险。仓库规范、code smell 与模块设计（结构、归属、抽象、interface depth、locality）在同一份完整 diff 上一并审查，不另设 standards 轨；偏重是注意力启发式，不是能力禁令。
 
 适用于 pull request、固定 comparison point 的实现 diff、代码质量反馈、潜在 bug、安全或性能审查。调用者应提供目标、完整 diff、comparison point、相关合同与仓库上下文；证据不足时明确范围，不猜测未提供的事实。若涉及状态/轨迹机制，以语义 CLI 的 `--help`、`choices`、校验和错误输出为机械事实；当前处境以处境注入或 CLI 尾注为上下文。
 
 ## Profile（判断）
 
-选择能忠实覆盖 diff 的最小 profile：**Full behavior review**（代码或运行行为变化；除本文件外读 [Full Review Checklist](references/review-checklist.md)）；**Focused review**（仅 docs、evidence、config metadata——核对 canonical source、事实一致性、链接/路径、ownership、authorization claim、generated/source 边界与是否意外改变 executable behavior，不加载不适用的函数、性能或测试 checklist）；删除或方向纠正按剩余 authority 审查，除非可观察合同改变，不要求替代内容或扩大测试。若 focused diff 实际改变 runtime behavior，或隐藏未解决的 contract/safety 变化，升级为 full behavior review。
+选择能忠实覆盖 diff 的最小 profile：**Full behavior review**（代码或运行行为变化；除本文件外读 [Full Review Checklist](references/review-checklist.md)，其 Standards and maintainability 一节承载规范、smell 与设计基线）；**Focused review**（仅 docs、evidence、config metadata——核对 canonical source、事实一致性、链接/路径、ownership、authorization claim、generated/source 边界与是否意外改变 executable behavior，不加载不适用的函数、性能或测试 checklist）；删除或方向纠正按剩余 authority 审查，除非可观察合同改变，不要求替代内容或扩大测试。若 focused diff 实际改变 runtime behavior，或隐藏未解决的 contract/safety 变化，升级为 full behavior review。
 
 ## Review
 
 1. 理解目标、issue、变更类型、文件范围、已有测试和特殊约束。先固定审查边界；证据不足时明确范围，不猜测未提供的事实。
 2. 从完整 diff 追踪运行入口、数据流、错误路径、资源生命周期与可观察结果；检查行为正确性、边界条件、失败模式和兼容性。只看局部 hunk 会漏掉从入口到结果之间的路径证据。
 3. 检查输入与权限边界、敏感数据、依赖、并发/原子性、外部副作用、查询与缓存、cleanup 及性能退化。异常和副作用不会因为 happy path 正确就自动成立。
-4. 检查测试是否覆盖新行为、错误与边界，是否可读、确定且正确 setup/teardown；检查实现是否符合仓库惯例且没有不必要复杂度。否则通过的测试可能只证明绿色路径，不能证明失败路径或隔离性。
+4. 检查测试是否覆盖新行为、错误与边界，是否可读、确定且正确 setup/teardown；按 checklist 的 Standards and maintainability 检查实现是否符合仓库规范（引用规则文件）、是否引入 smell 或浅 module；Owner 要求严格可维护性审查，或你凭证据判断结构需要复核时，读 [strict-maintainability.md](references/strict-maintainability.md) 深挖。否则通过的测试可能只证明绿色路径，不能证明失败路径或隔离性。
 5. 每项 finding 只陈述可定位证据、影响与建议；按 Critical、Important、Nice-to-have 排序（Critical/Important/Nice-to-have），不把偏好写成缺陷。这样结论才能复核，也不会把个人偏好升级为缺陷。
 
 ## 输出合同（leaf 结构化输出）
 
-Findings 优先，给文件和紧凑行范围；无 finding 也不得只返回裸 `PASS`。始终给 Coverage：检查过的生产入口/模块、采用的审查维度、无 finding 的高风险路径、无法从 diff 或上下文验证的范围；建议具体、建设性并解释原因，示例见 [审查示例](references/examples.md)。返回 `verdict | coverage | findings` 紧凑索引，完整证据/影响/建议写入 parent 提供的报告 artifact。
+Findings 优先，给文件和紧凑行范围；规范/设计类 finding 另标 hard violation（引用规则文件）或 judgement call（点名 smell/baseline 与 changed hunk）；无 finding 也不得只返回裸 `PASS`。始终给 Coverage：检查过的生产入口/模块、采用的审查维度（含 standards：检查过的 module/public API/adapter/state 入口及 interface depth、locality、重复逻辑等维度；是否启用了 strict-maintainability 深挖）、无 finding 的高风险路径、无法从 diff 或上下文验证的范围；建议具体、建设性并解释原因，示例见 [审查示例](references/examples.md)。返回 `verdict | coverage | findings` 紧凑索引，完整证据/影响/建议写入 parent 提供的报告 artifact。

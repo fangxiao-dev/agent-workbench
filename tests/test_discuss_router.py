@@ -26,7 +26,6 @@ def test_router_defaults_to_ledger_with_original_two_participants() -> None:
     args = router.build_parser().parse_args(["--topic", "Target"])
 
     assert args.mode == "ledger"
-    assert args.claude_effort == "low"
     assert router.resolve_agents(args.agents) == ["codex", "claude"]
 
 
@@ -51,7 +50,7 @@ def test_router_dispatches_modes_without_mixing_mode_and_participant_selection(m
     monkeypatch.setattr(router.blind_opening, "main", lambda argv: calls.append(("blind", argv)) or 11)
     monkeypatch.setattr(router.blind_opening_then_ledger, "main", lambda argv: calls.append(("combined", argv)) or 12)
 
-    assert router.main(["--topic", "T", "--claude-effort", "medium"]) == 10
+    assert router.main(["--topic", "T"]) == 10
     assert router.main(["--mode", "blind", "--agents", "codex,grok", "--topic", "T"]) == 11
     assert router.main(["--mode", "combined", "--agents", "full", "--topic", "T"]) == 12
 
@@ -66,8 +65,6 @@ def test_router_dispatches_modes_without_mixing_mode_and_participant_selection(m
             "codex,claude",
             "--timeout-s",
             "300",
-            "--claude-effort",
-            "medium",
             "--max-rounds",
             "5",
         ],

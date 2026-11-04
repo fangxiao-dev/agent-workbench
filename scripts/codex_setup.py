@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, field
-import hashlib
 import importlib.util
 import json
 import os
@@ -16,6 +14,25 @@ import tempfile
 from typing import Any, Sequence
 
 import link_skill
+from host_setup_core import (
+    STATUS_ORDER,
+    AuditItem,
+    AuditResult,
+    SetupError,
+    audit_linked_directory,
+    blocked,
+    diff_snapshots,
+    path_is_within,
+    render_actions,
+    render_audit,
+    render_pull,
+    render_template,
+    render_workspace,
+    sha256_bytes,
+    snapshot_content,
+    snapshot_tree,
+    stale_workbench_links,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -26,128 +43,9 @@ ROLE_INSTALLER = (
     MARKETPLACE_ROOT / "plugins" / "impl-package" / "scripts" / "install_codex_agents.py"
 )
 MANAGED_AGENT_FILE_MARKER = "# managed-by = agent-workbench:codex-setup"
-IGNORED_DIRS = {".git", ".pytest_cache", "__pycache__"}
-IGNORED_FILES = {".DS_Store"}
-IGNORED_SUFFIXES = {".pyc", ".pyo"}
-STATUS_ORDER = ("BLOCKED", "DRIFT", "MISSING", "INSTALL-MISMATCH")
 EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_DRIFT = 2
-
-
-class SetupError(RuntimeError):
-    pass
-
-
-@dataclass(frozen=True)
-class Snapshot:
-    sha256: str
-    entries: dict[str, str]
-
-
-@dataclass
-class AuditItem:
-    kind: str
-    name: str
-    status: str
-    expected_sha: str = "—"
-    actual_sha: str = "—"
-    expected_path: str = "—"
-    actual_path: str = "—"
-    note: str = ""
-    differences: list[str] = field(default_factory=list)
-
-
-@dataclass
-class AuditResult:
-    items: list[AuditItem]
-    operational_error: bool = False
-
-    @property
-    def clean(self) -> bool:
-        return not self.operational_error and all(item.status == "MATCH" for item in self.items)
-
-
-def _sha256_bytes(content: bytes) -> str:
-    return hashlib.sha256(content).hexdigest()
-
-
-def _sha256_content(content: bytes) -> str:
-    try:
-        content.decode("utf-8")
-    except UnicodeDecodeError:
-        canonical = content
-    else:
-        canonical = content.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
-    return _sha256_bytes(canonical)
-
-
-def _ignored(path: Path) -> bool:
-    return (
-        path.name in IGNORED_DIRS
-        or path.name in IGNORED_FILES
-        or path.suffix.lower() in IGNORED_SUFFIXES
-    )
-
-
-def snapshot_tree(root: Path) -> Snapshot:
-    root = Path(root)
-    if not root.is_dir():
-        raise SetupError(f"directory is unavailable: {root}")
-
-    entries: dict[str, str] = {}
-
-    def visit(directory: Path) -> None:
-        try:
-            children = sorted(directory.iterdir(), key=lambda item: item.name)
-        except OSError as exc:
-            raise SetupError(f"cannot read directory {directory}: {exc}") from exc
-        for child in children:
-            if _ignored(child):
-                continue
-            relative = child.relative_to(root).as_posix()
-            if link_skill.is_link(child):
-                target = link_skill.link_target(child)
-                target_text = str(target) if target is not None else "<unresolved>"
-                entries[relative] = f"link:{_sha256_bytes(target_text.encode('utf-8'))}"
-                continue
-            try:
-                if child.is_dir():
-                    visit(child)
-                elif child.is_file():
-                    entries[relative] = f"file:{_sha256_content(child.read_bytes())}"
-            except OSError as exc:
-                raise SetupError(f"cannot hash {child}: {exc}") from exc
-
-    visit(root)
-    digest = hashlib.sha256()
-    for relative, identity in sorted(entries.items()):
-        digest.update(relative.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(identity.encode("ascii"))
-        digest.update(b"\n")
-    return Snapshot(digest.hexdigest(), entries)
-
-
-def snapshot_content(name: str, content: bytes) -> Snapshot:
-    digest = _sha256_content(content)
-    return Snapshot(digest, {name: f"file:{digest}"})
-
-
-def diff_snapshots(expected: Snapshot, actual: Snapshot) -> list[str]:
-    differences: list[str] = []
-    for path in sorted(set(expected.entries) | set(actual.entries)):
-        wanted = expected.entries.get(path)
-        found = actual.entries.get(path)
-        if wanted == found:
-            continue
-        if wanted is None:
-            differences.append(f"A {path} | actual {found}")
-        elif found is None:
-            differences.append(f"D {path} | expected {wanted}")
-        else:
-            differences.append(f"M {path} | expected {wanted} | actual {found}")
-    return differences
 
 
 def _run(
@@ -323,63 +221,18 @@ def _marketplace_root(data: dict[str, Any]) -> Path | None:
     return None
 
 
-def _blocked(kind: str, name: str, note: str) -> AuditItem:
-    return AuditItem(kind=kind, name=name, status="BLOCKED", note=note)
-
-
-def _path_is_within(path: Path, root: Path) -> bool:
-    path_key = link_skill.normalize_path_key(path)
-    root_key = link_skill.normalize_path_key(root)
-    try:
-        return os.path.commonpath([path_key, root_key]) == root_key
-    except ValueError:
-        return False
-
-
-def _stale_workbench_links(
-    kind: str,
-    installed_root: Path,
-    source_root: Path,
-    expected_names: set[str],
-) -> list[AuditItem]:
-    if not installed_root.is_dir():
-        return []
-    results: list[AuditItem] = []
-    try:
-        children = list(installed_root.iterdir())
-    except OSError as exc:
-        return [_blocked(kind, installed_root.name, f"cannot enumerate {installed_root}: {exc}")]
-    for child in sorted(children, key=lambda value: value.name.lower()):
-        if child.name in expected_names or not link_skill.is_link(child):
-            continue
-        target = link_skill.link_target(child)
-        if target is None or not _path_is_within(target, source_root):
-            continue
-        results.append(
-            AuditItem(
-                kind=kind,
-                name=child.name,
-                status="INSTALL-MISMATCH",
-                expected_path="removed from current workbench inventory",
-                actual_path=str(child),
-                note=f"stale workbench link points to {target}",
-            )
-        )
-    return results
-
-
 def audit_plugins(codex_home: Path) -> tuple[list[AuditItem], bool]:
     try:
         expected_plugins = _expected_plugins()
     except SetupError as exc:
-        return [_blocked("plugin", "agent-workbench", str(exc))], True
+        return [blocked("plugin", "agent-workbench", str(exc))], True
 
     env = _codex_env(codex_home)
     try:
         marketplaces = _run_json(["codex", "plugin", "marketplace", "list", "--json"], env=env)
         root = _marketplace_root(marketplaces)
     except SetupError as exc:
-        return [_blocked("plugin", item["name"], str(exc)) for item in expected_plugins], True
+        return [blocked("plugin", item["name"], str(exc)) for item in expected_plugins], True
 
     if root is None:
         return [
@@ -410,10 +263,10 @@ def audit_plugins(codex_home: Path) -> tuple[list[AuditItem], bool]:
             ["codex", "plugin", "list", "--marketplace", MARKETPLACE_NAME, "--json"], env=env
         )
     except SetupError as exc:
-        return [_blocked("plugin", item["name"], str(exc)) for item in expected_plugins], True
+        return [blocked("plugin", item["name"], str(exc)) for item in expected_plugins], True
     installed_values = listing.get("installed")
     if not isinstance(installed_values, list):
-        return [_blocked("plugin", item["name"], "codex plugin list JSON has no installed list") for item in expected_plugins], True
+        return [blocked("plugin", item["name"], "codex plugin list JSON has no installed list") for item in expected_plugins], True
     installed = {
         item.get("name"): item
         for item in installed_values
@@ -427,7 +280,7 @@ def audit_plugins(codex_home: Path) -> tuple[list[AuditItem], bool]:
         try:
             wanted = snapshot_tree(source)
         except SetupError as exc:
-            results.append(_blocked("plugin", expected["name"], str(exc)))
+            results.append(blocked("plugin", expected["name"], str(exc)))
             continue
         if actual is None:
             results.append(
@@ -459,7 +312,7 @@ def audit_plugins(codex_home: Path) -> tuple[list[AuditItem], bool]:
         try:
             found = snapshot_tree(cache)
         except SetupError as exc:
-            results.append(_blocked("plugin", expected["name"], str(exc)))
+            results.append(blocked("plugin", expected["name"], str(exc)))
             continue
         status = "MATCH" if wanted.sha256 == found.sha256 else "DRIFT"
         note = f"source version {expected['version']}; installed version {installed_version}"
@@ -480,69 +333,6 @@ def audit_plugins(codex_home: Path) -> tuple[list[AuditItem], bool]:
             )
         )
     return results, any(item.status == "BLOCKED" for item in results)
-
-
-def _audit_linked_directory(kind: str, name: str, source: Path, destination: Path) -> AuditItem:
-    try:
-        wanted = snapshot_tree(source)
-    except SetupError as exc:
-        return _blocked(kind, name, str(exc))
-    if not destination.exists() and not link_skill.is_link(destination):
-        return AuditItem(
-            kind=kind,
-            name=name,
-            status="MISSING",
-            expected_sha=wanted.sha256,
-            expected_path=str(source),
-            actual_path=str(destination),
-        )
-    if link_skill.is_link(destination):
-        target = link_skill.link_target(destination)
-        if target is not None and link_skill.same_path(target, source):
-            return AuditItem(
-                kind=kind,
-                name=name,
-                status="MATCH",
-                expected_sha=wanted.sha256,
-                actual_sha=wanted.sha256,
-                expected_path=str(source),
-                actual_path=str(destination),
-                note=f"linked to {target}",
-            )
-        return AuditItem(
-            kind=kind,
-            name=name,
-            status="INSTALL-MISMATCH",
-            expected_sha=wanted.sha256,
-            expected_path=str(source),
-            actual_path=str(destination),
-            note=f"link points to {target or '<unresolved>'}",
-        )
-    if not destination.is_dir():
-        return AuditItem(
-            kind=kind,
-            name=name,
-            status="INSTALL-MISMATCH",
-            expected_sha=wanted.sha256,
-            expected_path=str(source),
-            actual_path=str(destination),
-            note="destination is not a directory link",
-        )
-    try:
-        found = snapshot_tree(destination)
-    except SetupError as exc:
-        return _blocked(kind, name, str(exc))
-    return AuditItem(
-        kind=kind,
-        name=name,
-        status="INSTALL-MISMATCH",
-        expected_sha=wanted.sha256,
-        actual_sha=found.sha256,
-        expected_path=str(source),
-        actual_path=str(destination),
-        note="destination is a real directory; it will not follow workbench updates",
-        differences=diff_snapshots(wanted, found),
-    )
 
 
 def _agent_inventory() -> tuple[list[Path], list[Path]]:
@@ -608,7 +398,7 @@ def _audit_role(
     try:
         actual_content = destination.read_bytes()
     except OSError as exc:
-        return _blocked(kind, name, f"cannot read {destination}: {exc}")
+        return blocked(kind, name, f"cannot read {destination}: {exc}")
     found = snapshot_content(name, actual_content)
     if wanted.sha256 == found.sha256:
         status = "MATCH"
@@ -665,7 +455,7 @@ def _stale_agent_files(
     try:
         children = sorted(installed_root.iterdir(), key=lambda path: path.name.lower())
     except OSError as exc:
-        return [_blocked("agent-file", installed_root.name, f"cannot enumerate {installed_root}: {exc}")]
+        return [blocked("agent-file", installed_root.name, f"cannot enumerate {installed_root}: {exc}")]
     marker = f"{MANAGED_AGENT_FILE_MARKER}\n".encode("utf-8")
     for child in children:
         if child.name in expected_names or child.suffix.lower() != ".toml":
@@ -675,7 +465,7 @@ def _stale_agent_files(
         try:
             content = child.read_bytes()
         except OSError as exc:
-            results.append(_blocked("agent-file", child.name, f"cannot read {child}: {exc}"))
+            results.append(blocked("agent-file", child.name, f"cannot read {child}: {exc}"))
             continue
         if not content.startswith(marker):
             renamed_from = _renamed_managed_source(content, expected_files or {})
@@ -710,10 +500,10 @@ def audit_codex(codex_home: Path) -> AuditResult:
     skills_dir = codex_home / "skills"
     skill_sources = link_skill.list_all_skill_sources()
     for source in skill_sources:
-        item = _audit_linked_directory("skill", source.name, source, skills_dir / source.name)
+        item = audit_linked_directory("skill", source.name, source, skills_dir / source.name)
         items.append(item)
         operational_error = operational_error or item.status == "BLOCKED"
-    stale_skills = _stale_workbench_links(
+    stale_skills = stale_workbench_links(
         "skill", skills_dir, REPO_ROOT / "skills", {source.name for source in skill_sources}
     )
     items.extend(stale_skills)
@@ -723,14 +513,14 @@ def audit_codex(codex_home: Path) -> AuditResult:
     try:
         agent_sources, agent_files = _agent_inventory()
     except OSError as exc:
-        items.append(_blocked("agent", "agents", f"cannot enumerate repository agents: {exc}"))
+        items.append(blocked("agent", "agents", f"cannot enumerate repository agents: {exc}"))
         operational_error = True
     else:
         for source in agent_sources:
-            item = _audit_linked_directory("agent", source.name, source, agents_dir / source.name)
+            item = audit_linked_directory("agent", source.name, source, agents_dir / source.name)
             items.append(item)
             operational_error = operational_error or item.status == "BLOCKED"
-        stale_agents = _stale_workbench_links(
+        stale_agents = stale_workbench_links(
             "agent", agents_dir, REPO_ROOT / "agents", {source.name for source in agent_sources}
         )
         items.extend(stale_agents)
@@ -740,7 +530,7 @@ def audit_codex(codex_home: Path) -> AuditResult:
             try:
                 content = source.read_bytes()
             except OSError as exc:
-                item = _blocked("agent-file", source.name, f"cannot read {source}: {exc}")
+                item = blocked("agent-file", source.name, f"cannot read {source}: {exc}")
             else:
                 item = _audit_role(
                     source.name,
@@ -770,7 +560,7 @@ def audit_codex(codex_home: Path) -> AuditResult:
     try:
         roles, marker = _expected_roles()
     except Exception as exc:  # renderer is an external repository contract
-        items.append(_blocked("role", "review-track-*", f"cannot render expected roles: {exc}"))
+        items.append(blocked("role", "review-track-*", f"cannot render expected roles: {exc}"))
         operational_error = True
     else:
         for name, content in sorted(roles.items()):
@@ -799,7 +589,7 @@ def audit_fingerprint(result: AuditResult, codex_home: Path) -> str:
         ],
     }
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return _sha256_bytes(canonical.encode("utf-8"))
+    return sha256_bytes(canonical.encode("utf-8"))
 
 
 def _command_action(args: Sequence[str], *, env: dict[str, str] | None = None) -> tuple[bool, str]:
@@ -921,7 +711,7 @@ def _prune_stale_links(pre: AuditResult, codex_home: Path) -> tuple[list[str], b
             not link_skill.same_path(destination, audited_path)
             or not link_skill.is_link(destination)
             or target is None
-            or not _path_is_within(target, source_root)
+            or not path_is_within(target, source_root)
         ):
             return [f"BLOCKED stale {item.kind} `{item.name}` changed after audit; rerun audit"], False
         plan.append((item, destination))
@@ -1040,72 +830,6 @@ def apply_codex(
     return actions, True
 
 
-def _escape(value: Any) -> str:
-    return str(value).replace("|", "\\|").replace("\n", " ")
-
-
-def _render_pull(data: dict[str, Any] | None) -> str:
-    if data is None:
-        return "未运行。"
-    lines = [
-        f"- Pull 前：`{data['before']}`",
-        f"- Pull 后：`{data['after']}`",
-        f"- 统计：{data['stat']}",
-        "",
-        "### Commits",
-        "",
-    ]
-    lines.extend(
-        f"- `{commit}` {subject}" for commit, subject in data["commits"]
-    )
-    if not data["commits"]:
-        lines.append("- 无新增 commit")
-    for group, changes in data["groups"].items():
-        if not changes:
-            continue
-        lines.extend(["", f"### {group}", ""])
-        lines.extend(f"- `{_escape(change)}`" for change in changes)
-    return "\n".join(lines)
-
-
-def _render_audit(result: AuditResult | None) -> str:
-    if result is None:
-        return "未运行。"
-    sections: list[str] = []
-    for status in STATUS_ORDER:
-        items = [item for item in result.items if item.status == status]
-        if not items:
-            continue
-        sections.extend(
-            [
-                f"### {status} ({len(items)})",
-                "",
-                "| 类型 | 名称 | 安装位置 |",
-                "|---|---|---|",
-            ]
-        )
-        for item in items:
-            sections.append(
-                f"| {_escape(item.kind)} | `{_escape(item.name)}` | `{_escape(item.actual_path)}` |"
-            )
-        sections.append("")
-    return "\n".join(sections).rstrip() or "未发现差异。"
-
-
-def _render_workspace(dirty: list[str]) -> str:
-    if not dirty:
-        return "工作树 clean。"
-    return "工作树存在以下未提交路径；它们未混入 pull commit 增量：\n\n" + "\n".join(
-        f"- `{_escape(line)}`" for line in dirty
-    )
-
-
-def _render_actions(actions: list[str]) -> str:
-    if not actions:
-        return "未执行 apply。"
-    return "\n".join(f"- {line}" for line in actions)
-
-
 def render_report(
     *,
     mode: str,
@@ -1115,33 +839,26 @@ def render_report(
     codex_home: Path | None = None,
     report_sha: str = "—",
 ) -> str:
-    try:
-        template = TEMPLATE_PATH.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise SetupError(f"cannot read report template {TEMPLATE_PATH}: {exc}") from exc
     dirty = pull["dirty"] if pull is not None else _git(["status", "--porcelain=v1"]).stdout.splitlines()
     if audit is None:
         summary = f"Pull commits: {len(pull['commits']) if pull else 0}"
-        body = f"## Pull 增量\n\n{_render_pull(pull)}\n\n## 当前工作树\n\n{_render_workspace(dirty)}"
+        body = f"## Pull 增量\n\n{render_pull(pull)}\n\n## 当前工作树\n\n{render_workspace(dirty)}"
     else:
         counts = {status: sum(item.status == status for item in audit.items) for status in STATUS_ORDER}
         summary = ", ".join(f"{status}: {count}" for status, count in counts.items() if count)
-        body = f"## 差异\n\n{_render_audit(audit)}"
+        body = f"## 差异\n\n{render_audit(audit)}"
         if actions:
-            body += f"\n\n## Apply 动作\n\n{_render_actions(actions)}"
-    values = {
-        "mode": mode,
-        "summary": summary or "未发现差异",
-        "codex_home": str(codex_home) if codex_home is not None else "—",
-        "report_sha": report_sha,
-        "body": body,
-    }
-    report = template
-    for key, value in values.items():
-        report = report.replace(f"{{{{{key}}}}}", value)
-    if "{{" in report or "}}" in report:
-        raise SetupError("report template contains an unresolved placeholder")
-    return report.rstrip() + "\n"
+            body += f"\n\n## Apply 动作\n\n{render_actions(actions)}"
+    return render_template(
+        TEMPLATE_PATH,
+        {
+            "mode": mode,
+            "summary": summary or "未发现差异",
+            "codex_home": str(codex_home) if codex_home is not None else "—",
+            "report_sha": report_sha,
+            "body": body,
+        },
+    )
 
 
 def _write_report(report: str, output: Path | None) -> None:

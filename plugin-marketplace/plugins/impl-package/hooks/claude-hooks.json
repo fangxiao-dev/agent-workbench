@@ -1,0 +1,31 @@
+{
+  "description": "Claude Code Impl-Package state protection and session resume context.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Edit|Write|MultiEdit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/impl_package_hooks.py\" pre-tool-use || python \"${CLAUDE_PLUGIN_ROOT}/hooks/impl_package_hooks.py\" pre-tool-use",
+            "timeout": 5,
+            "statusMessage": "Protecting Impl-Package state"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume|clear|compact)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/impl_package_hooks.py\" session-start || python \"${CLAUDE_PLUGIN_ROOT}/hooks/impl_package_hooks.py\" session-start",
+            "timeout": 10,
+            "statusMessage": "Restoring Impl-Package context"
+          }
+        ]
+      }
+    ]
+  }
+}

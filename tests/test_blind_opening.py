@@ -27,7 +27,7 @@ def load_module(name: str, path: Path):
 def test_claude_schema_omits_draft_metadata() -> None:
     blind = load_module("blind_opening_schema_under_test", BLIND)
 
-    schema = json.loads(blind.claude_schema_json())
+    schema = json.loads(blind.orchestrator.claude_schema_json(blind.SCHEMA_PATH))
 
     assert "$schema" not in schema
     assert "$id" not in schema
@@ -40,8 +40,8 @@ def test_blind_opening_registers_grok_executor() -> None:
     assert blind.executor_path("grok").name == "grok_task.py"
 
 
-def test_blind_opening_passes_selected_claude_effort(monkeypatch, tmp_path: Path) -> None:
-    blind = load_module("blind_opening_claude_effort_under_test", BLIND)
+def test_blind_opening_runs_claude_on_sonnet_high(monkeypatch, tmp_path: Path) -> None:
+    blind = load_module("blind_opening_claude_model_under_test", BLIND)
     calls = []
     payload = {
         "ideas": [{"summary": "Idea", "body": "Independent idea"}],
@@ -57,9 +57,10 @@ def test_blind_opening_passes_selected_claude_effort(monkeypatch, tmp_path: Path
         )
 
     monkeypatch.setattr(blind.subprocess, "run", fake_run)
-    assert blind.call_executor("claude", "prompt", tmp_path, 10, "medium") == payload
+    assert blind.call_executor("claude", "prompt", tmp_path, 10) == payload
     command = calls[0][0]
-    assert command[command.index("--effort") + 1] == "medium"
+    assert command[command.index("--effort") + 1] == "high"
+    assert command[command.index("--model") + 1] == "sonnet"
 
 
 def test_blind_opening_extracts_schema_result_from_fenced_model_text() -> None:
@@ -151,31 +152,3 @@ def test_combined_mode_refuses_to_overwrite_existing_ledger(tmp_path: Path) -> N
         assert "LEDGER_EXISTS" in str(exc)
     else:
         raise AssertionError("expected collision failure")
-
-
-def test_combined_mode_reuses_claude_effort_in_both_stages(monkeypatch, tmp_path: Path) -> None:
-    combined = load_module("blind_opening_then_ledger_effort_under_test", COMBINED)
-    observed = []
-
-    def fake_opening(**kwargs):
-        observed.append(("blind", kwargs["claude_effort"]))
-        return {"artifacts": {"markdown": "opening.md"}, "initial_points": []}
-
-    def fake_orchestrate(**kwargs):
-        observed.append(("ledger", kwargs["claude_effort"]))
-        return 0
-
-    monkeypatch.setattr(combined.blind_opening, "run_blind_opening", fake_opening)
-    monkeypatch.setattr(combined.orchestrator, "orchestrate", fake_orchestrate)
-    assert combined.run_combined(
-        root=tmp_path,
-        topic="Large plan",
-        slug="large-plan",
-        agents=["codex", "claude"],
-        max_rounds=2,
-        timeout_s=10,
-        output_dir=tmp_path / "out",
-        fake=False,
-        claude_effort="medium",
-    ) == 0
-    assert observed == [("blind", "medium"), ("ledger", "medium")]

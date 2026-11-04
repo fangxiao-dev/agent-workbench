@@ -2,7 +2,6 @@ import importlib.util
 import json
 import sys
 import tempfile
-from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -60,16 +59,16 @@ def test_missing_receipt_and_duplicate_return_cannot_count_as_execution():
     assert any(item["reason"] == "duplicate return_id" for item in report["execution_issues"])
 
 
-def test_new_dispatch_does_not_replay_head(audit_tmp_path, monkeypatch):
+def test_legacy_situation_digest_field_is_ignored(audit_tmp_path, monkeypatch):
     rows = _execution_rows(pending=True, review=False)
     for row in rows:
         if row["kind"] == "dispatch":
             row["situation_digest"] = "legacy-field-is-ignored"
-    monkeypatch.setattr(dispatch_audit, "replay_situation", lambda *_: pytest.fail("new dispatch must not replay old HEAD"))
     report = dispatch_audit.audit_package(_package(audit_tmp_path, rows))
-    assert report["deviations"] == []
-    assert report["uncheckable"] == []
     assert report["schema_violations"] == []
+    assert report["execution_issues"] == []
+    assert not {"no_digest", "stale", "deviations", "uncheckable", "replayed"} & set(report)
+    assert "digest" not in dispatch_audit._format_report(report)
 
 
 def test_second_return_identity_for_same_dispatch_is_not_consumed():
@@ -157,18 +156,6 @@ def audit_tmp_path():
         yield Path(directory)
 
 
-def test_old_trail_without_digest_is_reported_as_no_digest(audit_tmp_path: Path) -> None:
-    report = dispatch_audit.audit_package(
-        _package(audit_tmp_path, [_dispatch(id="dispatch-01"), _dispatch(id="dispatch-02")])
-    )
-
-    assert report["dispatches"] == 2
-    assert report["no_digest"] == [1, 2]
-    assert report["stale"] == []
-    assert report["deviations"] == []
-    assert "no-digest: 2/2 (100.0%)" in dispatch_audit._format_report(report)
-
-
 def test_audit_reads_numbered_archives_before_current_trail(audit_tmp_path: Path) -> None:
     package = _package(audit_tmp_path, [_dispatch(id="dispatch-current")])
     archive = package / "execution" / "initial" / "trail.001.jsonl"
@@ -182,100 +169,6 @@ def test_audit_reads_numbered_archives_before_current_trail(audit_tmp_path: Path
         str(package / "execution" / "initial" / "trail.jsonl"),
     ]
     assert report["trail"] == str(package / "execution" / "initial" / "trail.jsonl")
-
-
-def test_normal_digest_is_checked_against_replayed_action(audit_tmp_path: Path, monkeypatch) -> None:
-    digest = "a1b2c3d4e5f6"
-    head = "0123456789abcdef0123456789abcdef01234567"
-    package = _package(
-        audit_tmp_path,
-        [_dispatch(chosen="dispatch-investigate", situation_digest=digest, head=head)],
-    )
-    monkeypatch.setattr(
-        dispatch_audit,
-        "replay_situation",
-        lambda _package_arg, _head_arg: (
-            {
-                "digest": digest,
-                "at": head,
-                "head": head,
-                "selected": {"subject": "ticket:TKT-01", "action_ids": ["dispatch-investigate"]},
-            },
-            None,
-        ),
-    )
-
-    report = dispatch_audit.audit_package(package)
-
-    assert report["no_digest"] == []
-    assert report["deviations"] == []
-    assert report["uncheckable"] == []
-    assert report["replayed"] == 1
-
-
-def test_action_outside_replayed_situation_is_deviation(audit_tmp_path: Path, monkeypatch) -> None:
-    digest = "a1b2c3d4e5f6"
-    head = "0123456789abcdef0123456789abcdef01234567"
-    package = _package(
-        audit_tmp_path,
-        [_dispatch(chosen="block-ticket", situation_digest=digest, head=head)],
-    )
-    monkeypatch.setattr(
-        dispatch_audit,
-        "replay_situation",
-        lambda _package_arg, _head_arg: (
-            {
-                "digest": digest,
-                "at": head,
-                "head": head,
-                "selected": {"subject": "ticket:TKT-01", "action_ids": ["dispatch-investigate"]},
-            },
-            None,
-        ),
-    )
-
-    report = dispatch_audit.audit_package(package)
-
-    assert report["deviations"] == [
-        {
-            "line": 1,
-            "chosen": "block-ticket",
-            "reason": "chosen action is absent from replayed situation actions",
-        }
-    ]
-
-
-def test_replay_calls_situation_at_json(audit_tmp_path: Path, monkeypatch) -> None:
-    head = "0123456789abcdef0123456789abcdef01234567"
-    calls = []
-
-    def fake_run(command, **_kwargs):
-        calls.append(command)
-        if command[0] == "git":
-            return SimpleNamespace(returncode=0, stdout=f"{head}\n", stderr="")
-        return SimpleNamespace(
-            returncode=0,
-            stdout=json.dumps({"at": head, "head": head, "digest": "a1b2c3d4e5f6"}),
-            stderr="",
-        )
-
-    monkeypatch.setattr(dispatch_audit.subprocess, "run", fake_run)
-
-    rendered, error = dispatch_audit.replay_situation(audit_tmp_path, head)
-
-    assert error is None
-    assert rendered["digest"] == "a1b2c3d4e5f6"
-    assert calls[1][-3:] == ["--at", head, "--json"]
-
-
-def test_three_consecutive_same_digests_are_stale(audit_tmp_path: Path) -> None:
-    digest = "a1b2c3d4e5f6"
-    rows = [_dispatch(id=f"dispatch-{index}", situation_digest=digest) for index in range(1, 4)]
-
-    report = dispatch_audit.audit_package(_package(audit_tmp_path, rows))
-
-    assert len(report["stale"]) == 1
-    assert report["stale"][0] == {"digest": digest, "count": 3, "lines": [1, 2, 3]}
 
 
 def test_fact_subject_key_and_missing_key_are_schema_violations(audit_tmp_path: Path) -> None:

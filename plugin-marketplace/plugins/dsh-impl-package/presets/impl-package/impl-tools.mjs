@@ -4,6 +4,12 @@
  * trail command groups). The model stops composing shell commands and JSON
  * payloads by hand; the Python CLI remains the authority on state.json.
  *
+ * Trail schema re-aligned 2026-09 with the $dispatcher consolidation
+ * (engine.py `_validate_trail_event`): dispatch requires dispatch_id /
+ * candidate_id / mode / chosen / receipt; worker-return requires of (→
+ * dispatch) and a unique return_id, with an optional code_delta +
+ * consumption_id pair.
+ *
  * Loaded as a preset-local plugin (`name: ./impl-tools.mjs`). Package and
  * scripts-root resolution are shared with the situation hook
  * (./situation-hook.mjs); stdin payload commands use the host subprocess
@@ -143,7 +149,7 @@ export function buildTicketArgv(scriptsRoot, packageDir, args) {
   return argv
 }
 
-const TRAIL_DISPATCH_OUTCOMES = ['RUNNING']
+const TRAIL_DISPATCH_MODES = ['investigate', 'implement', 'fix', 'verify']
 const TRAIL_REVIEW_PHASE_VALUES = ['initial', 'finding-closure', 'terminal-final']
 const TRAIL_REVIEW_TRACK_VALUES = ['Track A', 'Track B', 'Track C', 'Track D']
 
@@ -161,15 +167,33 @@ function optionalTrailFlag(value, field) {
   return str(value, field)
 }
 
+/** Non-empty string or non-empty object (mirrors engine.validate_dispatch_receipt). */
+function receiptValue(value) {
+  if (typeof value === 'string' && value.trim() !== '') return value
+  if (value !== undefined && value !== null && typeof value === 'object' && Object.keys(value).length > 0) return value
+  throw new Error('impl-tools: receipt is required (non-empty string or object proving host acceptance)')
+}
+
 /** Pure: build the dispatch trail CLI argv and stdin payload. Exported for tests. */
 export function buildTrailDispatchInvocation(scriptsRoot, packageDir, args) {
+  const mode = str(args.mode, 'mode')
+  if (!TRAIL_DISPATCH_MODES.includes(mode)) {
+    throw new Error(`impl-tools: dispatch mode must be one of ${TRAIL_DISPATCH_MODES.join('|')}`)
+  }
   const payload = {
     kind: 'dispatch',
     subject: str(args.subject, 'subject'),
     worker: str(args.worker, 'worker'),
-    outcome: str(args.outcome, 'outcome'),
-    returned: requiredBool(args.returned, 'returned'),
+    dispatch_id: str(args.dispatchId, 'dispatchId'),
+    candidate_id: str(args.candidateId, 'candidateId'),
+    mode,
+    chosen: str(args.chosen, 'chosen'),
+    outcome: 'RUNNING',
+    returned: false,
+    receipt: receiptValue(args.receipt),
   }
+  const resourceKeys = strList(args.resourceKeys, 'resourceKeys')
+  if (resourceKeys.length > 0) payload.resource_keys = resourceKeys
   const argv = trailAppendArgv(scriptsRoot, packageDir)
   argv.push('--situation-digest', str(args.situationDigest, 'situationDigest'))
   const reviewPhase = optionalTrailFlag(args.reviewPhase, 'reviewPhase')
@@ -215,13 +239,27 @@ export function buildTrailFactInvocation(scriptsRoot, packageDir, args) {
 
 /** Pure: build the worker-return trail CLI argv and stdin payload. Exported for tests. */
 export function buildTrailWorkerReturnInvocation(scriptsRoot, packageDir, args) {
+  const payload = {
+    kind: 'worker-return',
+    subject: str(args.subject, 'subject'),
+    outcome: str(args.outcome, 'outcome'),
+    of: str(args.of, 'of (the dispatch_id this return closes)'),
+    return_id: str(args.returnId, 'returnId'),
+  }
+  const hasDelta = args.codeDelta !== undefined && args.codeDelta !== null
+  const hasConsumption = args.consumptionId !== undefined && args.consumptionId !== ''
+  if (hasDelta !== hasConsumption) {
+    throw new Error('impl-tools: codeDelta and consumptionId must be supplied together')
+  }
+  if (hasDelta) {
+    const base = str(args.codeDelta?.base, 'codeDelta.base')
+    const head = str(args.codeDelta?.head, 'codeDelta.head')
+    payload.code_delta = { base, head }
+    payload.consumption_id = str(args.consumptionId, 'consumptionId')
+  }
   return {
     argv: trailAppendArgv(scriptsRoot, packageDir),
-    stdinData: JSON.stringify({
-      kind: 'worker-return',
-      subject: str(args.subject, 'subject'),
-      outcome: str(args.outcome, 'outcome'),
-    }),
+    stdinData: JSON.stringify(payload),
   }
 }
 
@@ -368,6 +406,82 @@ export function apply(ctx, config) {
   })
 
   registerTool(ctx, cfg, stateFileName, {
+    name: 'impl_evidence_add_batch',
+    description: 'Append one or more evidence records in a single CLI call (evidence add accepts a JSON array). Each record needs: ticket, claim, timing (early-falsification|remaining-completion), artifact (repo-relative), revision (resolvable commit), environment, conclusion (supporting|contradictory|inconclusive); optional invalidatedBy. Returns {records, added, duplicates} with per-record idempotence.',
+    parameters: {
+      type: 'object',
+      properties: {
+        package: { type: 'string', description: 'Package directory; default: resolved from the session cwd.' },
+        records: {
+          type: 'array',
+          minItems: 1,
+          description: 'Evidence records to append.',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              ticket: { type: 'string' },
+              claim: { type: 'string' },
+              timing: { type: 'string', enum: ['early-falsification', 'remaining-completion'] },
+              artifact: { type: 'string', description: 'Repo-relative path, e.g. evidence/test.md#anchor.' },
+              revision: { type: 'string', description: 'Git commit id.' },
+              environment: { type: 'string' },
+              conclusion: { type: 'string', enum: ['supporting', 'contradictory', 'inconclusive'] },
+              invalidatedBy: { type: 'string' },
+            },
+            required: ['ticket', 'claim', 'timing', 'artifact', 'revision', 'environment', 'conclusion'],
+          },
+        },
+      },
+      required: ['records'],
+      additionalProperties: false,
+    },
+    async execute(args, _exec, { packageDir, scriptsRoot, python }) {
+      if (!Array.isArray(args.records) || args.records.length === 0) {
+        throw new Error('impl-tools: records must be a non-empty array')
+      }
+      const payload = args.records.map((item) => {
+        const record = {
+          ticket: str(item?.ticket, 'ticket'),
+          claim: str(item?.claim, 'claim'),
+          timing: str(item?.timing, 'timing'),
+          artifact: str(item?.artifact, 'artifact'),
+          revision: str(item?.revision, 'revision'),
+          environment: str(item?.environment, 'environment'),
+          conclusion: str(item?.conclusion, 'conclusion'),
+        }
+        if (item?.invalidatedBy !== undefined && item?.invalidatedBy !== '') record.invalidatedBy = item.invalidatedBy
+        return record
+      })
+      const argv = [join(scriptsRoot, 'impl_package_state.py'), '--package', packageDir, 'evidence', 'add']
+      return runCli(ctx, python, argv, packageDir, undefined, JSON.stringify(payload))
+    },
+  })
+
+  registerTool(ctx, cfg, stateFileName, {
+    name: 'impl_evidence_retire_claim',
+    description: 'Remove an invalidated orphan claim (evidence retire-claim). Required: ticket, claim.',
+    parameters: {
+      type: 'object',
+      properties: {
+        package: { type: 'string', description: 'Package directory; default: resolved from the session cwd.' },
+        ticket: { type: 'string' },
+        claim: { type: 'string' },
+      },
+      required: ['ticket', 'claim'],
+      additionalProperties: false,
+    },
+    async execute(args, _exec, { packageDir, scriptsRoot, python }) {
+      const argv = [
+        join(scriptsRoot, 'impl_package_state.py'), '--package', packageDir, 'evidence', 'retire-claim',
+        '--ticket', str(args.ticket, 'ticket'),
+        '--claim', str(args.claim, 'claim'),
+      ]
+      return runCli(ctx, python, argv, packageDir)
+    },
+  })
+
+  registerTool(ctx, cfg, stateFileName, {
     name: 'impl_recovery_checkpoint',
     description: 'Overwrite the active checkpoint for a subject (attempt | ticket:<id>): next action, optional blocker, evidence paths, optional handoff flag. Checkpoints do not authorize dispatch — they record recovery facts.',
     parameters: {
@@ -459,21 +573,25 @@ export function apply(ctx, config) {
 
   registerTool(ctx, cfg, stateFileName, {
     name: 'impl_trail_dispatch',
-    description: 'Append a dispatch trail event. situationDigest is required and must be the 12-character digest emitted by impl_situation_render; outcome is RUNNING and returned is false for a valid dispatch. reviewPhase and reviewTrack must be supplied together when used.',
+    description: 'Append a dispatch trail event ($dispatcher contract). Required: subject, worker, dispatchId (this dispatch\'s id), candidateId (the dispatched work\'s identity), mode (investigate|implement|fix|verify), chosen (chosen candidate/worker), receipt (non-empty string or object proving the host accepted the dispatch), situationDigest (12-character digest from impl_situation_render). outcome is always RUNNING and returned false for a valid dispatch. reviewPhase and reviewTrack must be supplied together when used.',
     parameters: {
       type: 'object',
       properties: {
         package: { type: 'string', description: 'Package directory; default: resolved from the session cwd.' },
         subject: { type: 'string' },
         worker: { type: 'string' },
-        outcome: { type: 'string', enum: TRAIL_DISPATCH_OUTCOMES },
-        returned: { type: 'boolean' },
+        dispatchId: { type: 'string', description: 'This dispatch\'s id.' },
+        candidateId: { type: 'string', description: 'Identity of the actually dispatched work (and its trusted continuation).' },
+        mode: { type: 'string', enum: TRAIL_DISPATCH_MODES },
+        chosen: { type: 'string', description: 'Chosen candidate / worker for this dispatch.' },
+        receipt: { description: 'Non-empty string or object proving host acceptance (e.g. the subagent/job start receipt).' },
+        resourceKeys: { type: 'array', items: { type: 'string' }, description: 'Optional unique resource isolation keys.' },
         situationDigest: { type: 'string', description: 'Required 12-character digest from impl_situation_render.' },
         reviewPhase: { type: 'string', enum: TRAIL_REVIEW_PHASE_VALUES },
         reviewTrack: { type: 'string', enum: TRAIL_REVIEW_TRACK_VALUES },
         reviewRecheck: { type: 'boolean' },
       },
-      required: ['subject', 'worker', 'outcome', 'returned', 'situationDigest'],
+      required: ['subject', 'worker', 'dispatchId', 'candidateId', 'mode', 'chosen', 'receipt', 'situationDigest'],
       additionalProperties: false,
     },
     async execute(args, _exec, { packageDir, scriptsRoot, python }) {
@@ -524,15 +642,28 @@ export function apply(ctx, config) {
 
   registerTool(ctx, cfg, stateFileName, {
     name: 'impl_trail_worker_return',
-    description: 'Append a worker-return trail event with the worker outcome.',
+    description: 'Append a worker-return trail event with the worker outcome. Required: subject, outcome, of (the dispatch_id this return closes), returnId (unique return id). For code-bearing returns also pass codeDelta {base, head} (Git commits) together with consumptionId — the pair is required jointly and shared with the follow-up review.',
     parameters: {
       type: 'object',
       properties: {
         package: { type: 'string', description: 'Package directory; default: resolved from the session cwd.' },
         subject: { type: 'string' },
         outcome: { type: 'string' },
+        of: { type: 'string', description: 'The dispatch_id this return closes.' },
+        returnId: { type: 'string', description: 'Unique return id.' },
+        codeDelta: {
+          type: 'object',
+          description: 'Fixed code increment {base, head} (Git commits); required jointly with consumptionId.',
+          properties: {
+            base: { type: 'string' },
+            head: { type: 'string' },
+          },
+          required: ['base', 'head'],
+          additionalProperties: false,
+        },
+        consumptionId: { type: 'string', description: 'Consumption id shared with the follow-up review; required jointly with codeDelta.' },
       },
-      required: ['subject', 'outcome'],
+      required: ['subject', 'outcome', 'of', 'returnId'],
       additionalProperties: false,
     },
     async execute(args, _exec, { packageDir, scriptsRoot, python }) {

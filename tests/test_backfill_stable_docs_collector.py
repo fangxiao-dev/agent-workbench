@@ -25,6 +25,7 @@ class CollectorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.project = Path(self.temp.name)
+        self.linked_worktrees: list[Path] = []
         git(self.project, "init")
         git(self.project, "config", "user.email", "test@example.com")
         git(self.project, "config", "user.name", "Test")
@@ -48,7 +49,20 @@ class CollectorTests(unittest.TestCase):
         git(self.project, "commit", "-m", "fixture")
 
     def tearDown(self) -> None:
+        for worktree in self.linked_worktrees:
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", str(worktree)],
+                cwd=self.project,
+                capture_output=True,
+                check=False,
+            )
         self.temp.cleanup()
+
+    def _add_linked_worktree(self) -> Path:
+        linked = Path(f"{self.project}-linked")
+        git(self.project, "worktree", "add", "--detach", str(linked), "HEAD")
+        self.linked_worktrees.append(linked)
+        return linked
 
     def _write_gate(self, *, head: str | None = None, deltas: list[str] | None = None, none: bool = False) -> str:
         commit = head or git(self.project, "rev-parse", "HEAD")
@@ -116,6 +130,26 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(inventory["sourceWorktree"]["head"], head)
         self.assertEqual(inventory["config"]["source"], ".stable-docs-backfill.json")
         self.assertEqual(inventory["done"]["status"], "missing")
+
+    def test_inventory_uses_linked_worktree_and_explicit_config(self) -> None:
+        linked = self._add_linked_worktree()
+        config_path = linked / "backfill.json"
+        config_path.write_text(json.dumps(self.config), encoding="utf-8")
+        package = linked / "docs/implementations/example"
+        package.mkdir(parents=True, exist_ok=True)
+        head = git(linked, "rev-parse", "HEAD")
+        (package / "gate.md").write_text(
+            "# Gate\n\n- Verdict: pass\n- Attempt: initial\n"
+            f"- Comparison commit: {head}\n\n## Durable Deltas\n\n- DD-1: Linked workspace fact\n",
+            encoding="utf-8",
+        )
+
+        inventory = collect_sources.collect_inventory(linked, config_path)
+
+        self.assertEqual(inventory["sourceWorktree"]["path"], str(linked.resolve()))
+        self.assertEqual(inventory["invokedWorktree"], str(linked.resolve()))
+        self.assertEqual(inventory["config"]["source"], "backfill.json")
+        self.assertEqual(inventory["gapCatchingCandidates"], ["docs/implementations/example::DD-1"])
 
     def test_gate_none_produces_no_candidates(self) -> None:
         self._write_gate(none=True)

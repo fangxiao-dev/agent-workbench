@@ -333,6 +333,7 @@ def test_path_like_finding_key_is_never_reflected_in_warnings(tmp_path: Path) ->
 
 def test_record_validation_rejects_empty_tracks_before_append(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     module = load_module()
+    package = make_package(tmp_path)
     called = False
 
     def unexpected(*_args: object, **_kwargs: object) -> None:
@@ -341,7 +342,7 @@ def test_record_validation_rejects_empty_tracks_before_append(tmp_path: Path, mo
 
     monkeypatch.setattr(module, "_append_via_state_cli", unexpected)
     with pytest.raises(module.ReviewStatsError, match="has no tracks"):
-        module.record_summary(tmp_path / "package", summary("run-1", [finding("one", tracks=[])]))
+        module.record_summary(package, summary("run-1", [finding("one", tracks=[])]))
     assert called is False
 
 
@@ -354,6 +355,7 @@ def test_record_validation_rejects_missing_ticket_owner(tmp_path: Path) -> None:
 
 def test_record_uses_existing_state_cli_and_subject(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     module = load_module()
+    package = make_package(tmp_path)
     captured: dict[str, object] = {}
 
     class Result:
@@ -367,12 +369,28 @@ def test_record_uses_existing_state_cli_and_subject(tmp_path: Path, monkeypatch:
         return Result()
 
     monkeypatch.setattr(module.subprocess, "run", fake_run)
-    result = module.record_summary(tmp_path / "package", summary("run-1", [finding("one")]))
+    result = module.record_summary(package, summary("run-1", [finding("one")]))
 
     assert result["appended"] is True
     assert captured["command"][-2:] == ["trail", "append"]
     assert captured["event"]["subject"] == "review:run-1"
     assert captured["event"]["key"] == "review.canonical_summary"
+
+
+def test_v35_record_allows_impact_omission_and_rejects_invalid_values(tmp_path: Path) -> None:
+    module = load_module()
+    package = make_runtime_package(tmp_path)
+    legacy = summary("legacy-no-impact", [finding("one")])
+
+    result = module.record_summary(package, legacy)
+
+    assert result["appended"] is True
+    assert module.calculate_review_stats(package)["totals"]["unique"] == 1
+    with pytest.raises(module.ReviewStatsError, match="impact must be one of"):
+        module.validate_canonical_summary(
+            summary("legacy-invalid-impact", [{**finding("bad"), "impact": "large"}]),
+            format_version="3.5",
+        )
 
 
 def test_backfill_dry_run_and_apply_are_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

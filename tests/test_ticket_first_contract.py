@@ -29,7 +29,7 @@ def git(repo: Path, *args: str) -> str:
 
 
 class TicketFirstContractTests(unittest.TestCase):
-    def test_grouped_router_help_and_legacy_alias_surface(self) -> None:
+    def test_grouped_router_help_and_flat_aliases_removed(self) -> None:
         runtime = ROOT / "plugin-marketplace" / "plugins" / "impl-package" / "scripts" / "impl_package_runtime"
         self.assertTrue((runtime / "command_groups.py").is_file())
         for adapter in ("package_commands.py", "ticket_commands.py", "evidence_commands.py", "recovery_commands.py", "gate_commands.py", "cli_support.py"):
@@ -91,7 +91,7 @@ class TicketFirstContractTests(unittest.TestCase):
         spec.loader.exec_module(module)
         self.assertIn("compositionPattern", module.CONFIG["documents"])
 
-    def test_grouped_package_init_and_ticket_satisfy_match_legacy_engine(self) -> None:
+    def test_grouped_package_init_and_ticket_satisfy_reject_flat_spelling(self) -> None:
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         repo = Path(temp.name)
@@ -130,16 +130,16 @@ class TicketFirstContractTests(unittest.TestCase):
                 repo,
             ).stdout
         )
-        legacy = json.loads(
-            run(
-                [sys.executable, str(CLI), "--package", str(package), "set-state", "ticket", "TKT-02", "SATISFIED", "--expect", "PENDING", "--revision", revision, "--environment", "grouped"],
-                repo,
-            ).stdout
+        flat = run(
+            [sys.executable, str(CLI), "--package", str(package), "set-state", "ticket", "TKT-02", "SATISFIED", "--expect", "PENDING", "--revision", revision, "--environment", "grouped"],
+            repo,
+            ok=False,
         )
-        self.assertEqual(grouped["state"], legacy["state"])
+        self.assertIn("unknown command group", flat.stderr)
+        self.assertEqual(grouped["state"], "SATISFIED")
         state = json.loads((package / ".impl-package" / "state.json").read_text(encoding="utf-8"))
         self.assertEqual(state["tickets"]["TKT-01"]["state"], "SATISFIED")
-        self.assertEqual(state["tickets"]["TKT-02"]["state"], "SATISFIED")
+        self.assertEqual(state["tickets"]["TKT-02"]["state"], "PENDING")
 
     def test_fixture_declares_ticket_only_edges_claim_timing_and_safety(self) -> None:
         plan = (FIXTURE / "ticket-only-plan.md").read_text(encoding="utf-8")
@@ -207,7 +207,7 @@ class TicketFirstContractTests(unittest.TestCase):
 
         self.assertIn("stable claim 是 runtime 可判定的 acceptance atom", composition)
         self.assertIn("一个业务 AC 可以包含多个 stable claim ID", composition)
-        self.assertIn("stable claim acceptance atoms", planning)
+        self.assertIn("stable claim atoms", planning)
         self.assertIn("stable claim 已原子化", review)
         self.assertIn("../../references/impl-package-composition-contract.md", review)
         self.assertIn("逐 stable claim 核对 artifact", execution)
@@ -215,6 +215,16 @@ class TicketFirstContractTests(unittest.TestCase):
             situations,
             r"(?s)- slug: ticket\.accept\.satisfiable.*?judgment: true.*?每个 stable claim 是否已是 acceptance atom",
         )
+
+    def test_v36_journey_coverage_and_walking_skeleton_contract_is_present(self) -> None:
+        composition = (PLUGIN / "references/impl-package-composition-contract.md").read_text(encoding="utf-8")
+        ticket = (PLUGIN / "skills/impl-planning/assets/templates/ticket.md").read_text(encoding="utf-8")
+        planning = (PLUGIN / "skills/impl-planning/SKILL.md").read_text(encoding="utf-8")
+
+        self.assertIn("## 7. 3.6 Journey 验收合同", composition)
+        self.assertIn("## Coverage", ticket)
+        self.assertIn("walking skeleton", planning)
+        self.assertIn("没有既无 step 也无套件的 Ticket", planning)
 
     def test_ticket_only_runtime_keeps_strict_ready_barrier_without_task_surface(self) -> None:
         temp = tempfile.TemporaryDirectory()
@@ -238,7 +248,7 @@ class TicketFirstContractTests(unittest.TestCase):
         relative_plan = (package / "plan.md").relative_to(repo).as_posix()
         result = json.loads(
             run(
-                [sys.executable, str(CLI), "--package", str(package), "init", "--attempt", "initial", "--plan", relative_plan],
+                [sys.executable, str(CLI), "--package", str(package), "package", "init", "--attempt", "initial", "--plan", relative_plan],
                 repo,
             ).stdout
         )
@@ -258,7 +268,7 @@ class TicketFirstContractTests(unittest.TestCase):
             record = dict(source)
             record.update({"artifact": "evidence.md", "revision": fixture_revision, "environment": "ticket-first-contract-fixture"})
             run(
-                [sys.executable, str(CLI), "--package", str(package), "evidence-add"],
+                [sys.executable, str(CLI), "--package", str(package), "evidence", "add"],
                 repo,
                 input_text=json.dumps(record),
             )
@@ -269,10 +279,9 @@ class TicketFirstContractTests(unittest.TestCase):
                 str(CLI),
                 "--package",
                 str(package),
-                "set-state",
                 "ticket",
+                "satisfy",
                 "TKT-03",
-                "SATISFIED",
                 "--expect",
                 "PENDING",
                 "--revision",
@@ -291,10 +300,9 @@ class TicketFirstContractTests(unittest.TestCase):
                 str(CLI),
                 "--package",
                 str(package),
-                "set-state",
                 "ticket",
+                "satisfy",
                 "TKT-04",
-                "SATISFIED",
                 "--expect",
                 "PENDING",
                 "--revision",
@@ -433,7 +441,7 @@ class TicketFirstContractTests(unittest.TestCase):
         composition = (ROOT / "plugin-marketplace/plugins/impl-package/references/impl-package-composition-contract.md").read_text(encoding="utf-8")
         planning = (ROOT / "plugin-marketplace/plugins/impl-package/skills/impl-planning/SKILL.md").read_text(encoding="utf-8")
         dag = (ROOT / "plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md").read_text(encoding="utf-8")
-        handoff = (ROOT / "skills/handoff-to-new-session/SKILL.md").read_text(encoding="utf-8")
+        handoff = (ROOT / "skills/handoff/references/impl-package.md").read_text(encoding="utf-8")
 
         self.assertIn("dag=false", composition)
         self.assertIn("RETIRED", composition)
@@ -441,9 +449,9 @@ class TicketFirstContractTests(unittest.TestCase):
         self.assertIn("新 package 一律不创建 Task DAG", dag)
         self.assertIn("owner 明确授权恢复/迁移已有 3.4 package", dag)
         self.assertIn("不把 Task handoff 或 `DONE` 当 acceptance proof", dag)
-        self.assertIn("active checkpoint", handoff)
-        self.assertIn("context compaction is only an emergency fallback", handoff)
-        self.assertIn("新 package 不调用 `create-task-dag`", planning)
+        self.assertIn("/impl-package:dev-with-track", handoff)
+        self.assertIn("不复制 Ticket 状态", handoff)
+        self.assertIn("新 package 不创建 Task/DAG", planning)
 
     def make_validate_package(
         self,

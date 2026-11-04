@@ -713,7 +713,7 @@ function observationKind(item) {
 
 const reviewTracks = [
   { name: "Track A", className: "track-a", label: "A · Code" },
-  { name: "Track B", className: "track-b", label: "B · Standards" },
+  { name: "Track B", className: "track-b", label: "B · Standards (legacy)" },
   { name: "Track C", className: "track-c", label: "C · Spec" },
   { name: "Track D", className: "track-d", label: "D · Safety" },
 ];

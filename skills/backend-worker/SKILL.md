@@ -1,0 +1,125 @@
+---
+name: backend-worker
+description: >
+  Backend implementation discipline for work against a shared frontend-backend contract.
+  Use when implementing API endpoints, services, or persistence, when acting as the backend
+  worker in a parallel frontend/backend split, or before changing contract-facing behavior.
+---
+
+# Backend Worker
+
+Backend implementation against the shared contract. The frontend agent may be working concurrently.
+
+## Shared contract
+
+Frontend and backend are developed independently against the SAME shared contract.
+
+The contract is the source of truth for:
+- API shape
+- request and response schemas
+- field names and types
+- status / enum semantics
+- validation boundaries
+- error semantics
+- cross-layer behavioral expectations
+
+Treat every contract artifact as READ-ONLY.
+
+You MUST NOT:
+- modify the contract
+- rewrite or "fix" the contract
+- silently reinterpret the contract
+- change shared contract types to make backend implementation easier
+- expose backend behavior that contradicts the contract
+
+If the contract is incomplete, contradictory, or impossible to implement:
+
+1. Do NOT modify it.
+2. Clearly identify the exact contract issue.
+3. Continue with all unaffected backend work when possible.
+4. Return a `CONTRACT_CHANGE_REQUEST` describing:
+   - affected contract item
+   - current behavior/schema
+   - problem
+   - proposed change
+   - backend impact
+
+The contract owner decides whether the contract changes.
+
+## Ownership boundary
+
+You own backend implementation, including where applicable:
+
+- API endpoints / handlers
+- application services
+- domain logic
+- persistence
+- database access
+- migrations
+- authorization / permissions
+- server-side validation
+- integrations
+- background processing
+- backend tests
+
+Do not implement frontend UI behavior.
+
+Do not modify frontend implementation merely to make the backend work.
+
+If frontend behavior appears incompatible with the contract, report the mismatch rather than adapting the contract or frontend yourself.
+
+## Implementation rule
+
+Implement against the CONTRACT, not against guesses about the frontend implementation.
+
+Do not depend on undocumented behavior from frontend code.
+
+Prefer clear boundaries:
+
+transport/API
+→ application/domain logic
+→ persistence/integrations
+
+Keep transport-specific concerns out of core domain logic when practical.
+
+## Contract enforcement
+
+At the backend boundary:
+
+- validate contract-defined inputs
+- return contract-defined outputs
+- preserve documented error semantics
+- preserve documented status / enum semantics
+- do not leak internal persistence models when they differ from the contract
+
+Internal database/domain models may differ from the contract when useful.
+Translate explicitly at the boundary.
+
+## Derived artifacts
+
+Generated server types, validators, adapters, fixtures, migrations, and test data may be created or updated when they are DERIVED FROM the contract.
+
+They must not redefine or contradict the contract.
+
+Never edit the source contract itself.
+
+## Verification
+
+Before declaring work complete:
+
+- typecheck / compile affected backend code
+- run relevant backend tests
+- run lint/build checks when appropriate
+- verify endpoint behavior against the contract
+- verify validation and error paths
+- verify persistence changes and migrations when relevant
+
+Do not claim checks passed unless you actually ran them.
+
+## Scope discipline
+
+Stay within backend ownership.
+
+Small shared-code changes are allowed only when they are implementation infrastructure and do not alter the contract or frontend behavior.
+
+For anything crossing the frontend/backend contract boundary, report it instead of unilaterally changing it.

@@ -6,6 +6,8 @@
 - Comparison commit: <Git commit ID>
 - Reason: <直接说明判决理由>
 
+<!-- 3.6 package：header 与 Evidence 之间由 runtime 生成 `## Owner Summary`，含每条 Journey 的走通进度、套件通过数、合同修订（待确认或漏登）、发布顺序状态、最终版本短 SHA 和结论。不手写、不手改；3.5 package 无此节。 -->
+
 ## Evidence
 
 - <repo-relative-path#anchor>

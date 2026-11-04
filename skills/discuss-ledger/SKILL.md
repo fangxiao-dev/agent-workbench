@@ -10,16 +10,23 @@ Choose the requested mode before creating an artifact. Keep user-facing discussi
 
 ## Router settings
 
-Mode and participants are separate choices. The default is normal `ledger` with `codex,claude`, preserving the former two-party behavior. Use `--mode blind` for independent discovery or `--mode combined` for Blind Opening followed by Ledger; use `--agents full` only when all three participants (`codex,claude,grok`) are wanted, or specify exactly two distinct participants such as `codex,grok`.
+Mode and participants are separate choices. `discuss_router.py` only selects the workflow and participants and forwards the rest; it defines no model identity, role, prompt or permission.
 
-The full public contract is in [references/router.md](references/router.md).
+| Setting | Default | Accepted values | Effect |
+| --- | --- | --- | --- |
+| `--mode` | `ledger` | `ledger`, `blind`, `combined` | Normal discussion, independent discovery, or Blind Opening followed by normal Ledger. |
+| `--agents` | `codex,claude` | `full`, or exactly two distinct names from `codex`, `claude`, `grok` | `full` expands to `codex,claude,grok`. One participant or a literal three-name list is rejected. |
+| `--max-rounds` | `5` | integer | Full participant cycles for `ledger` / `combined`. |
+| `--timeout-s` | `300` | integer | Per-agent, per-call timeout. |
 
-当参与者包含 Claude 时，调用 agent 在启动 workflow 前按讨论对象规模选择 `--claude-effort`：跨模块/系统、迁移或 cutover、权限/数据正确性/recovery、多阶段交付等大计划使用 `medium`；单模块、聚焦修订、短文档或窄决策等小计划使用 `low`。存在任一大计划信号就选 `medium`，否则选 `low`；不要向用户追加规模确认。模型仍由 Claude Code 当前默认配置选择。
+Models are the hosts' own defaults, with no version pinned: Claude runs the latest `sonnet` alias at `high`; Codex runs its configured default (`sol`) at `high`. Neither is configurable per call; do not add model version numbers.
+
+Dispatch: `ledger` → `discuss_orchestrator.py`; `blind` → `blind_opening.py` (writes only the independent-opening artifacts); `combined` → `blind_opening_then_ledger.py` (hands consolidated points to the unchanged Ledger workflow).
 
 ```powershell
-python <skill>\scripts\discuss_router.py --claude-effort low --topic <target>
+python <skill>\scripts\discuss_router.py --topic <target>
 python <skill>\scripts\discuss_router.py --mode blind --agents codex,grok --topic <target>
-python <skill>\scripts\discuss_router.py --mode combined --agents full --claude-effort medium --topic <target>
+python <skill>\scripts\discuss_router.py --mode combined --agents full --topic <target>
 ```
 
 | User intent | Mode | Read first |
@@ -30,7 +37,7 @@ python <skill>\scripts\discuss_router.py --mode combined --agents full --claude-
 
 Existing Discuss Ledger triggers default to normal Ledger for compatibility. If the requested mode remains materially ambiguous, ask one question; do not silently choose a mode.
 
-Blind Opening is independent of Ledger and may end after its Markdown result. The combined mode hands consolidated initial points to the existing Ledger workflow; it does not alter the normal Ledger prompt, CLI, or state machine.
+Blind Opening is independent of Ledger and may end after its Markdown result. The combined mode does not alter the normal Ledger prompt, CLI, or state machine.
 
 ## Trigger boundary
 

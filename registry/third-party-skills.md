@@ -22,11 +22,11 @@
 | setup-matt-pocock-skills | `mattpocock/skills` | `npx skills add mattpocock/skills@setup-matt-pocock-skills -g -y` | 已放入 `skills/setup-matt-pocock-skills/`；已同步上游 |
 | tdd | `mattpocock/skills` | `npx skills add mattpocock/skills@tdd -g -y` | 已放入 `skills/tdd/`；已同步上游（reference-only red→green / seam） |
 | to-spec | `mattpocock/skills` | 人工迁移上游 `skills/engineering/to-spec` | Vendored 只读参考（上游 `391a270`），不进入 Impl-Package 主链；repo facts、testing seam 与 user-semantics synthesis 方法已吸收进 `req-align` |
-| to-tickets | `mattpocock/skills` | 基于上游 `skills/engineering/to-tickets` 本地分叉 | Impl-Package 本地 fork，位于 `plugin-marketplace/plugins/impl-package/skills/to-tickets/`（上游基线 `391a270`）；上游更新只做人工 diff/选择性合并，不直接覆盖 |
+| to-tickets (retired) | `mattpocock/skills` | 历史本地分叉 | 本地 fork 已删除；Ticket splitting 已并入 `plugin-marketplace/plugins/impl-package/skills/impl-planning/`（上游基线 `391a270`），不再保留独立 skill |
 | domain-modeling | `mattpocock/skills` | `npx skills add mattpocock/skills@domain-modeling -g -y` | 已放入 `skills/domain-modeling/` |
 | codebase-design | `mattpocock/skills` | `npx skills add mattpocock/skills@codebase-design -g -y` | 已放入 `skills/codebase-design/` |
-| standards-review | `mattpocock/skills` | 人工迁移上游 `skills/engineering/code-review` | 基于 `391a270` 的原 module-review Standards 轴拆分并中文化后放入 `plugin-marketplace/plugins/impl-package/skills/standards-review/` |
-| spec-review | `mattpocock/skills` | 人工迁移上游 `skills/engineering/code-review` | 基于 `391a270` 的原 module-review Spec 轴拆分并中文化后放入 `plugin-marketplace/plugins/impl-package/skills/spec-review/` |
+| standards-review (merged) | `mattpocock/skills` | 人工迁移上游 `skills/engineering/code-review` | 已并入 `plugin-marketplace/plugins/impl-package/skills/review-code/`（Track A 含 standards 轴），不再保留独立 skill（基线 `391a270`） |
+| spec-review (renamed) | `mattpocock/skills` | 人工迁移上游 `skills/engineering/code-review` | 现为 `plugin-marketplace/plugins/impl-package/skills/review-code-by-spec/`（Track C，基线 `391a270`） |
 | module-review (deprecated) | `mattpocock/skills` | 历史本地归档 | 原双轴 reviewer 已移至 `skills-deprecated/module-review/`，不在 active registry、preflight 或默认 topology 中 |
 | improve-codebase-architecture | `mattpocock/skills` | `npx skills add mattpocock/skills@improve-codebase-architecture -g -y` | 已放入 `skills/improve-codebase-architecture/`；已同步上游（YAGNI 范围 + harness-neutral subagent） |
 | grilling | `mattpocock/skills` | `npx skills add mattpocock/skills@grilling -g -y` | 已放入 `skills/grilling/`；上游 frontier-rounds 基线 + 本地成熟度自适应聚焦、穷尽式分批、Decision 内容深度与延后 writeback；作为普通 Skill 被 `grill-me-smartly` 复用，历史 `grilling-waves` 已完全吸收，不保留 active entry |

@@ -31,7 +31,6 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, `grok`, a
 ## Delegation Workflow
 
 - Use `$dispatcher` whenever work uses subagents, async/parallel execution, or worker returns: it owns candidate selection, bounded briefs, dependency/resource admission, dispatch receipt, return consumption, independent delta review, worker lifecycle, and idle.
-- Use `$task-queue` only for explicit `task-queue.json`, `depOn`, `get-next-tasks`, or queue CLI requests; it persists Dispatcher-admitted baby steps.
 - For independent read-only review, use the thin `reviewer` contract; `do-review` owns review topology and finding closure.
 
 ## Implementation Expectations

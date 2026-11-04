@@ -18,11 +18,9 @@ EXPECTED_SKILLS = {
     "plan-review",
     "do-review",
     "review-code",
-    "review-code-by-standards",
     "review-code-by-spec",
     "safety-review",
     "req-align",
-    "execution-boundaries",
     "monitor-progress",
 }
 
@@ -34,6 +32,8 @@ LEGACY_SKILL_DIRS = {
     "standing-bookkeeper",
     "verification-before-completion",
     "create-task-dag",
+    "execution-boundaries",
+    "review-code-by-standards",
 }
 
 
@@ -70,14 +70,14 @@ def test_host_manifests_and_marketplaces_share_plugin_identity() -> None:
     assert codex["skills"] == claude["skills"] == zcode["skills"] == "./skills/"
     assert codex["hooks"] == "./hooks/codex-hooks.json"
     assert zcode["hooks"] == "./hooks/zcode-hooks.json"
-    assert "hooks" not in claude
+    assert claude["hooks"] == "./hooks/claude-hooks.json"
+    assert (PLUGIN / "hooks" / "claude-hooks.json").is_file()
     assert (PLUGIN / "hooks" / "codex-hooks.json").is_file()
     assert (PLUGIN / "hooks" / "zcode-hooks.json").is_file()
     assert (PLUGIN / "hooks" / "impl_package_hooks.py").is_file()
     assert "agents" not in codex
     expected_agents = [
         "./agents/review-track-code.md",
-        "./agents/review-track-standards.md",
         "./agents/review-track-spec.md",
         "./agents/review-track-safety.md",
     ]
@@ -123,6 +123,23 @@ def test_zcode_hooks_use_only_native_schema_and_supported_events() -> None:
     serialized = json.dumps(hooks_config)
     assert "commandWindows" not in serialized
     assert "additionalContextLimit" not in serialized
+    assert "${PLUGIN_ROOT}" not in serialized
+
+
+def test_claude_hooks_use_native_schema_and_plugin_root() -> None:
+    hooks_config = load_json(PLUGIN / "hooks" / "claude-hooks.json")
+    assert set(hooks_config) == {"description", "hooks"}
+    assert set(hooks_config["hooks"]) == {"PreToolUse", "SessionStart"}
+    for entries in hooks_config["hooks"].values():
+        for entry in entries:
+            for hook in entry["hooks"]:
+                assert hook["type"] == "command"
+                assert "${CLAUDE_PLUGIN_ROOT}/hooks/impl_package_hooks.py" in hook["command"]
+                assert isinstance(hook["timeout"], int)
+    assert hooks_config["hooks"]["PreToolUse"][0]["matcher"] == "^(Edit|Write|MultiEdit)$"
+    assert hooks_config["hooks"]["SessionStart"][0]["matcher"] == "^(startup|resume|clear|compact)$"
+    serialized = json.dumps(hooks_config)
+    assert "commandWindows" not in serialized
     assert "${PLUGIN_ROOT}" not in serialized
 
 
@@ -175,7 +192,7 @@ def test_plugin_exposes_the_slimmed_flat_skill_set() -> None:
 
     router = (PLUGIN / "skills" / "impl-package" / "SKILL.md").read_text(encoding="utf-8")
     # The routing table is now a native-command index (`impl-<stage>`).
-    for name in EXPECTED_SKILLS - {"impl-package", "execution-boundaries"}:
+    for name in EXPECTED_SKILLS - {"impl-package"}:
         assert f"impl-{name}" in router
     assert "/plugin:skill" in router
     assert "impl-grilling" not in router
@@ -193,12 +210,14 @@ def test_grilling_is_the_standalone_question_protocol() -> None:
     assert "name: grilling" in grilling
     assert "grill-me-smartly" not in grilling
     assert "`/grilling`" in smart
-    assert smart.index("## Question Protocol Dependency") < smart.index("## Roles")
+    assert "needs_user" in smart
+    assert "ledger.json" not in smart
+    assert not (PLUGIN / "skills" / "grill-me-smartly" / "scripts").exists()
     assert "简化降级" in smart
     assert "/impl-package:grill-me-smartly" in spec_gate
     assert "/impl-package:grilling" not in spec_gate
     assert evals["skill_name"] == "grill-me-smartly"
-    assert {case["id"] for case in evals["evals"]} == {1, 2, 3, 4, 5}
+    assert {case["id"] for case in evals["evals"]} == {1, 2, 3, 4}
 
 
 def test_monitor_progress_opens_dashboard_before_optional_automation() -> None:
@@ -301,8 +320,8 @@ def test_migration_validator_is_standalone_and_not_a_runtime_entrypoint() -> Non
         assert "validate_ticket_first_migration" not in text
         assert "validate_migration(" not in text
 
-    preflight = (PLUGIN / "skills" / "execution-boundaries" / "SKILL.md").read_text(encoding="utf-8")
-    assert "validate_ticket_first_migration" not in preflight
+    dev_skill = (PLUGIN / "skills" / "dev-with-track" / "SKILL.md").read_text(encoding="utf-8")
+    assert "validate_ticket_first_migration" not in dev_skill
     linker = (ROOT / "scripts" / "link_skill.py").read_text(encoding="utf-8")
     assert "validate_ticket_first_migration" not in linker
 
@@ -352,7 +371,7 @@ def test_active_callers_reference_dispatcher() -> None:
         ROOT / "AGENTS.md",
         PLUGIN / "skills" / "impl-package" / "SKILL.md",
         PLUGIN / "skills" / "dev-with-track" / "SKILL.md",
-        ROOT / "skills" / "handoff" / "references" / "task-execution.md",
+        ROOT / "skills" / "handoff" / "references" / "impl-package.md",
     )
     for caller in callers:
         text = caller.read_text(encoding="utf-8")
@@ -368,7 +387,6 @@ def test_active_workflow_tree_has_no_legacy_entry_reference() -> None:
         ROOT / "AGENTS.md",
         PLUGIN / "skills",
         ROOT / "skills" / "handoff",
-        ROOT / "skills" / "handoff-to-new-session",
     )
     legacy = (
         "impl-package:subagent-driven-development",
@@ -400,7 +418,7 @@ def test_terminal_review_contract_remains_owned_by_do_review() -> None:
     assert "terminal Gate" in dev
     assert "Stage 7" in dev
     assert "dispatch-fix" not in dev
-    for duplicated_owner in ("review-code-by-standards", "review-code-by-spec", "safety-review"):
+    for duplicated_owner in ("review-code-by-spec", "safety-review"):
         assert duplicated_owner not in dev
 
 
@@ -426,7 +444,6 @@ def test_resume_capsule_supplies_facts_while_runtime_reference_keeps_the_fallbac
     runtime = (PLUGIN / "skills" / "dev-with-track" / "references" / "runtime-protocol.md").read_text(
         encoding="utf-8"
     )
-    boundaries = (PLUGIN / "skills" / "execution-boundaries" / "SKILL.md").read_text(encoding="utf-8")
 
     restore = dev.split("## Restore", 1)[1].split("## State、ER 与 Trail", 1)[0]
     assert "Impl-Package Resume Capsule v1" in dev
@@ -441,4 +458,3 @@ def test_resume_capsule_supplies_facts_while_runtime_reference_keeps_the_fallbac
     for marker in ("package validate", "progress.md", "situation.py render"):
         assert marker in runtime
     assert "task-queue.json" not in runtime
-    assert "Impl-Package Resume Capsule v1" in boundaries

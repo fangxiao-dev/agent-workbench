@@ -33,6 +33,11 @@ class ReviewLedgerTests(unittest.TestCase):
         root = Path(self._tmp.name).resolve()
         self.repo = root / "repo"
         self.repo.mkdir()
+        self.package = root / "package"
+        (self.package / ".impl-package").mkdir(parents=True)
+        (self.package / ".impl-package" / "state.json").write_text(
+            json.dumps({"attempt": {"id": "attempt-2"}}), encoding="utf-8"
+        )
         self.git("init", "-q")
         self.git("config", "user.email", "review@example.test")
         self.git("config", "user.name", "Review Test")
@@ -139,6 +144,44 @@ class ReviewLedgerTests(unittest.TestCase):
         self.assertEqual(out, "")
         self.assertIn("refusing to overwrite", err)
         self.assertEqual(path.read_text(encoding="utf-8"), before)
+
+    def test_package_ledger_create_write_show_uses_current_attempt_path(self) -> None:
+        code, out, err = self.run_cli(self.create_args("--package", str(self.package)))
+        self.assertEqual(code, 0, err)
+        payload = json.loads(out)
+        relative = payload["ledgerRelativePath"]
+        expected = f"execution/attempt-2/reviews/2601010900-my-review-{self.head[:7]}.md"
+        self.assertEqual(relative, expected)
+        self.assertNotIn("ledger_path", payload)
+        self.assertFalse(self.ledger_dir.exists())
+        path = self.package / Path(relative)
+        self.assertEqual(path.read_text(encoding="utf-8").splitlines()[2], f"- Ledger path: `{relative}`")
+
+        code, shown, err = self.run_cli(["show", "--package", str(self.package), "--ledger", relative])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(shown, path.read_text(encoding="utf-8"))
+        code, written, err = self.run_cli(
+            ["write", "--package", str(self.package), "--ledger", relative], stdin="# updated package ledger\n"
+        )
+        self.assertEqual(code, 0, err)
+        self.assertEqual(written.strip(), relative)
+        self.assertEqual(path.read_text(encoding="utf-8"), "# updated package ledger\n")
+
+    def test_package_ledger_rejects_duplicate_filename_and_temp_path(self) -> None:
+        args = self.create_args("--package", str(self.package))
+        code, out, err = self.run_cli(args)
+        self.assertEqual(code, 0, err)
+        relative = json.loads(out)["ledgerRelativePath"]
+
+        code, out, err = self.run_cli(args)
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertIn("refusing to overwrite", err)
+
+        temp_path = self.ledger_dir / Path(relative).name
+        code, _, err = self.run_cli(["show", "--package", str(self.package), "--ledger", str(temp_path)])
+        self.assertEqual(code, 2)
+        self.assertIn("current package Attempt", err)
 
     def test_create_rejects_empty_three_dot_diff_without_ledger(self) -> None:
         code, out, err = self.run_cli(self.create_args(base=self.base, head=self.base))

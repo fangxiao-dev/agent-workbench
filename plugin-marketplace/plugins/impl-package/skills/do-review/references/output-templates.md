@@ -14,7 +14,7 @@ findings:
 report: <review report artifact path>
 ```
 
-Use `findings: none` when no candidate exists. Each finding line must contain the slug, file and line, severity, and one sentence; leaf output is candidate evidence, not a ledger decision.
+Use `findings: none` when no candidate exists. Each finding line must contain the slug, file and line, severity, and one sentence; leaf output is candidate evidence, not a ledger decision. Track C adds a `rule-coverage:` line after `coverage:` (3.6 packages report traced behaviors and gaps, others `n/a`); a missing line from a 3.6 Track C leaf makes that track incomplete.
 
 Impl-Package 的 leaf report 存在 parent 指定的 package 内独占路径，完整正文前写明以下四行，供终审核对来源：
 
@@ -22,12 +22,12 @@ Impl-Package 的 leaf report 存在 parent 指定的 package 内独占路径，�
 verdict: PASS | FAIL | UNCERTAIN
 reviewed-head: <实际审阅 SHA>
 review-run: <本次 ReviewRun ID>
-review-track: <Track A/B/C/D>
+review-track: <Track A/C/D>
 ```
 
 ## Terminal coverage record
 
-terminal-final 的 canonical ledger 更新且所需结果已返回后，parent 用 `trail append` 落盘下列 `review.terminal_summary` fact。它复用已有 trail，不创建第二份 ledger。artifact 和 reuseEvidence 为 package-relative 路径；report 前四行必须含上面的真实 verdict/head/run/track，各 track 使用独占 artifact。A/B/C required；Safety 适用时追加 Track D。A 在最终 HEAD 重审，B/C/Safety 可在同一 ReviewRun 内复用旧 PASS，parent 在 reuseEvidence 中记录旧/新 SHA、该轨输入的 delta 与不受影响的依据。
+terminal-final 的 canonical ledger 更新且所需结果已返回后，parent 用 `trail append` 落盘下列 `review.terminal_summary` fact。它复用已有 trail，不创建第二份 ledger。artifact 和 reuseEvidence 为 package-relative 路径；report 前四行必须含上面的真实 verdict/head/run/track，各 track 使用独占 artifact。A/C required；Safety 适用时追加 Track D；旧 trail 中的 Track B 结果仍可读，不再必需。A 在最终 HEAD 重审，C/Safety 可在同一 ReviewRun 内复用旧 PASS，parent 在 reuseEvidence 中记录旧/新 SHA、该轨输入的 delta 与不受影响的依据。
 
 ```json
 {
@@ -40,8 +40,7 @@ terminal-final 的 canonical ledger 更新且所需结果已返回后，parent �
     "safetyApplicable": false,
     "results": [
       {"track": "Track A", "verdict": "PASS", "reviewedHead": "<最终 HEAD>", "artifact": "execution/initial/review-a.md"},
-      {"track": "Track B", "verdict": "PASS", "reviewedHead": "<旧 PASS HEAD>", "artifact": "execution/initial/review-b.md", "reused": true, "reuseEvidence": "execution/initial/review-reuse.md"},
-      {"track": "Track C", "verdict": "PASS", "reviewedHead": "<最终 HEAD>", "artifact": "execution/initial/review-c.md"}
+      {"track": "Track C", "verdict": "PASS", "reviewedHead": "<旧 PASS HEAD>", "artifact": "execution/initial/review-c.md", "reused": true, "reuseEvidence": "execution/initial/review-reuse.md"}
     ]
   }
 }
@@ -51,9 +50,9 @@ terminal-final 的 canonical ledger 更新且所需结果已返回后，parent �
 
 ## Canonical ledger and classification
 
-The parent owns one Markdown ledger for the whole ReviewRun. Leaf results are candidates, not accepted findings. After every round, wait for every required track, then deduplicate, verify, classify, and atomically rewrite that same ledger with verdicts, evidence, lifecycle transitions, and convergence. Never create a later-round ledger; a leaf result is not authoritative before this update.
+The parent owns one Markdown ledger for the whole ReviewRun. Impl-Package runs keep it under `execution/<attempt>/reviews/`; pass its package-relative path to `write` and `show`. Leaf results are candidates, not accepted findings. After every round, wait for every required track, then deduplicate, verify, classify, and atomically rewrite that same ledger with verdicts, evidence, lifecycle transitions, and convergence. Never create a later-round ledger; a leaf result is not authoritative before this update.
 
-Use source labels `Track A (review-code)`, `Track B (review-code-by-standards)`, `Track C (review-code-by-spec)`, additional selected labels, `fused`, and `main-session` as applicable. Deduplicate by broken invariant or observable failure, not path or reviewer; retain every contributor for a shared issue.
+Use source labels `Track A (review-code)`, `Track C (review-code-by-spec)`, additional selected labels, `fused`, and `main-session` as applicable. Deduplicate by broken invariant or observable failure, not path or reviewer; retain every contributor for a shared issue.
 
 Before reporting a P1, P2, or blocker, verify cited target-revision evidence against the fixed ReviewRun and record whether the failure is in the diff, triggered by changed behavior, or pre-existing/baseline. Insufficient evidence becomes disputed, downgraded, out of scope, or `UNCERTAIN`, never a verified blocker.
 
@@ -64,6 +63,8 @@ The ledger context must preserve the broken invariant/failure mode, best evidenc
 ## Canonical Finding Summary
 
 For an Impl-Package target, after atomically updating the Markdown ledger, send one complete machine-readable summary to `review_track_stats.py record`. Only accepted `blocker` and `follow-up` findings appear here; candidates, duplicates, disputed, backlog, out-of-scope, and unsupported entries remain in the human ledger and are not counted as bugs.
+
+Each finding requires `impact`: `seam` breaks a cross-Ticket interface or data promise; `safety` breaks a safety invariant; `local` is any other finding; `unknown` means impact cannot be determined.
 
 ```json
 {
@@ -78,6 +79,7 @@ For an Impl-Package target, after atomically updating the Markdown ledger, send 
       "title": "Short title",
       "ticketIds": ["TKT-01"],
       "tracks": ["Track A", "Track C"],
+      "impact": "local",
       "classification": "blocker | follow-up",
       "lifecycle": "open | closed"
     }
@@ -109,7 +111,6 @@ Every summary is the complete latest accepted finding set for that ReviewRun, no
 | Track | Verdict | Coverage / note |
 | --- | --- | --- |
 | Track A (review-code) | PASS / FAIL / UNCERTAIN |  |
-| Track B (review-code-by-standards) | PASS / FAIL / UNCERTAIN |  |
 | Track C (review-code-by-spec) | PASS / FAIL / UNCERTAIN |  |
 
 ## Findings
@@ -123,7 +124,6 @@ Every summary is the complete latest accepted finding set for that ReviewRun, no
 | Source | Count | Notes |
 | --- | --- | --- |
 | Track A (review-code) |  |  |
-| Track B (review-code-by-standards) |  |  |
 | Track C (review-code-by-spec) |  |  |
 | fused |  |  |
 | main-session |  |  |
@@ -188,8 +188,8 @@ Main-session decision:
 ```markdown
 ## Review Rounds
 
-| Round | Track A (<skill>) | Track B (<skill>) | Track C (<skill>) | New accepted | Convergence note |
-| --- | --- | --- | --- | --- | --- |
+| Round | Track A (<skill>) | Track C (<skill>) | New accepted | Convergence note |
+| --- | --- | --- | --- | --- |
 
 ## Track Lifecycle
 

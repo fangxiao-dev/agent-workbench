@@ -19,7 +19,7 @@ import {
 import { COMMANDS, buildRouteMessage, apply as applyCommands } from '../presets/impl-package/commands.mjs'
 import { aggregateVerdicts, resolveTopology, buildBrief, parseLeafOutput, buildReviewRunArgv, leafPersona, resolvePluginRoot, READONLY_TOOLS } from '../presets/impl-package/do-review-orchestrator.mjs'
 import { extractAnchor, referencesAnchor, filterAnchorTools, decidePromotion, newState, scanEvents, resetToControlled } from '../presets/impl-package/impl-anchor.mjs'
-import { validateAgentCordis, syncPresetTrees, resolveDshHome } from '../lib/index.mjs'
+import { validateAgentCordis, syncPresetTrees, resolveDshHome, resolveWorkbenchRoot, substituteWorkbenchRoot } from '../lib/index.mjs'
 
 import { existsSync, mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -93,9 +93,13 @@ check('satisfy rejects missing revision', threw)
 console.log('== trail tools ==')
 const dispatchInvocation = buildTrailDispatchInvocation('S', 'P', {
   subject: 'attempt',
-  worker: 'worker-01',
-  outcome: 'RUNNING',
-  returned: false,
+  worker: 'codex',
+  dispatchId: 'DSP-01',
+  candidateId: 'CAND-7',
+  mode: 'implement',
+  chosen: 'CAND-7 via subagent_codex',
+  receipt: 'started subagent job job-123',
+  resourceKeys: ['ticket:TKT-01'],
   situationDigest: 'a1b2c3d4e5f6',
   reviewPhase: 'initial',
   reviewTrack: 'Track A',
@@ -103,17 +107,32 @@ const dispatchInvocation = buildTrailDispatchInvocation('S', 'P', {
 })
 const dispatchPayload = JSON.parse(dispatchInvocation.stdinData)
 check(
-  'dispatch constructor builds flat payload and named flags',
+  'dispatch constructor builds $dispatcher payload and named flags',
   dispatchInvocation.argv.includes('trail') && dispatchInvocation.argv.includes('append')
   && dispatchInvocation.argv.includes('--situation-digest') && dispatchInvocation.argv.includes('a1b2c3d4e5f6')
   && dispatchInvocation.argv.includes('--review-phase') && dispatchInvocation.argv.includes('initial')
   && dispatchInvocation.argv.includes('--review-track') && dispatchInvocation.argv.includes('Track A')
   && dispatchInvocation.argv.includes('--review-recheck')
   && dispatchPayload.kind === 'dispatch' && dispatchPayload.subject === 'attempt'
+  && dispatchPayload.worker === 'codex'
+  && dispatchPayload.dispatch_id === 'DSP-01' && dispatchPayload.candidate_id === 'CAND-7'
+  && dispatchPayload.mode === 'implement' && dispatchPayload.chosen === 'CAND-7 via subagent_codex'
   && dispatchPayload.outcome === 'RUNNING' && dispatchPayload.returned === false
+  && dispatchPayload.receipt === 'started subagent job job-123'
+  && JSON.stringify(dispatchPayload.resource_keys) === JSON.stringify(['ticket:TKT-01'])
   && dispatchPayload.situation_digest === undefined
   && dispatchPayload.review_phase === undefined && dispatchPayload.review_track === undefined,
 )
+threw = false
+try { buildTrailDispatchInvocation('S', 'P', { subject: 'a', worker: 'w', dispatchId: 'd', candidateId: 'c', mode: 'investigate', chosen: 'x', situationDigest: 'a1b2c3d4e5f6' }) } catch { threw = true }
+check('dispatch rejects missing receipt', threw)
+threw = false
+try { buildTrailDispatchInvocation('S', 'P', { subject: 'a', worker: 'w', dispatchId: 'd', candidateId: 'c', mode: 'deploy', chosen: 'x', receipt: 'ok', situationDigest: 'a1b2c3d4e5f6' }) } catch { threw = true }
+check('dispatch rejects unknown mode', threw)
+const objectReceiptInvocation = buildTrailDispatchInvocation('S', 'P', {
+  subject: 'a', worker: 'w', dispatchId: 'd', candidateId: 'c', mode: 'fix', chosen: 'x', receipt: { job: 'j-1' }, situationDigest: 'a1b2c3d4e5f6',
+})
+check('dispatch accepts object receipt', JSON.parse(objectReceiptInvocation.stdinData).receipt?.job === 'j-1')
 
 const escapeInvocation = buildTrailEscapeInvocation('S', 'P', {
   subject: 'attempt', deviation: 'manual', reason: 'fixture',
@@ -138,21 +157,36 @@ check(
 )
 
 const workerReturnInvocation = buildTrailWorkerReturnInvocation('S', 'P', {
-  subject: 'attempt', outcome: 'EVIDENCE_GAP',
+  subject: 'attempt',
+  outcome: 'DONE',
+  of: 'DSP-01',
+  returnId: 'RET-01',
+  codeDelta: { base: 'abc1234', head: 'def5678' },
+  consumptionId: 'CONS-01',
 })
+const workerReturnPayload = JSON.parse(workerReturnInvocation.stdinData)
 check(
-  'worker-return constructor builds required payload',
+  'worker-return constructor builds required payload + code_delta pair',
   workerReturnInvocation.argv.includes('trail')
-  && JSON.stringify(JSON.parse(workerReturnInvocation.stdinData)) === JSON.stringify({
-    kind: 'worker-return', subject: 'attempt', outcome: 'EVIDENCE_GAP',
-  }),
+  && workerReturnPayload.kind === 'worker-return' && workerReturnPayload.subject === 'attempt'
+  && workerReturnPayload.outcome === 'DONE' && workerReturnPayload.of === 'DSP-01' && workerReturnPayload.return_id === 'RET-01'
+  && workerReturnPayload.code_delta?.base === 'abc1234' && workerReturnPayload.code_delta?.head === 'def5678'
+  && workerReturnPayload.consumption_id === 'CONS-01',
 )
+threw = false
+try { buildTrailWorkerReturnInvocation('S', 'P', { subject: 'a', outcome: 'o', of: 'd', returnId: 'r', codeDelta: { base: 'a', head: 'b' } }) } catch { threw = true }
+check('worker-return rejects codeDelta without consumptionId', threw)
+threw = false
+try { buildTrailWorkerReturnInvocation('S', 'P', { subject: 'a', outcome: 'o' }) } catch { threw = true }
+check('worker-return rejects missing of/returnId', threw)
 
 const registeredImplTools = []
 applyImplTools({ tools: { register(definition) { registeredImplTools.push(definition) } } }, {})
 const trailToolNames = ['impl_trail_dispatch', 'impl_trail_escape', 'impl_trail_fact', 'impl_trail_worker_return']
 check('four typed trail tools are registered', trailToolNames.every((name) => registeredImplTools.some((tool) => tool.name === name)))
+check('evidence batch + retire-claim tools are registered', registeredImplTools.some((tool) => tool.name === 'impl_evidence_add_batch') && registeredImplTools.some((tool) => tool.name === 'impl_evidence_retire_claim'))
 check('generic impl_trail_append is removed', !registeredImplTools.some((tool) => tool.name === 'impl_trail_append'))
+check('14 typed impl tools registered', registeredImplTools.length === 14, String(registeredImplTools.length))
 
 const pythonSituation = readFileSync(join(workbench, 'plugin-marketplace/plugins/impl-package/scripts/situation.py'), 'utf-8')
 const pythonEngine = readFileSync(join(workbench, 'plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/engine.py'), 'utf-8')
@@ -162,12 +196,12 @@ function parsePythonTuple(source, name) {
 }
 const dispatchTool = registeredImplTools.find((tool) => tool.name === 'impl_trail_dispatch')
 const dispatchProperties = dispatchTool?.parameters?.properties ?? {}
-const pythonDispatchOutcome = pythonEngine.match(/event\.get\("outcome"\) != "([^"]+)"/)
-const pythonDispatchOutcomes = pythonDispatchOutcome === null ? [] : [pythonDispatchOutcome[1]]
+const pythonDispatchModes = [...pythonEngine.matchAll(/event\["mode"\] not in \{([^}]+)\}/g)]
+  .flatMap((match) => [...match[1].matchAll(/"([^"]+)"/g)].map((item) => item[1]))
 check(
-  'dispatch outcome enum parity with Python validator',
-  JSON.stringify(dispatchProperties.outcome?.enum) === JSON.stringify(pythonDispatchOutcomes),
-  `JS=${JSON.stringify(dispatchProperties.outcome?.enum)} Python=${JSON.stringify(pythonDispatchOutcomes)}`,
+  'dispatch mode enum parity with Python validator',
+  JSON.stringify(dispatchProperties.mode?.enum) === JSON.stringify(pythonDispatchModes),
+  `JS=${JSON.stringify(dispatchProperties.mode?.enum)} Python=${JSON.stringify(pythonDispatchModes)}`,
 )
 check(
   'review phase enum parity with situation.py',
@@ -196,6 +230,9 @@ if (render !== undefined) {
 console.log('== commands ==')
 check('command names match registry pattern', COMMANDS.every((c) => /^[a-z][a-z0-9_-]*$/.test(c.name)), COMMANDS.map((c) => c.name).join(','))
 check('command stages unique', new Set(COMMANDS.map((c) => c.stage)).size === COMMANDS.length)
+check('command table matches current route map', COMMANDS.some((c) => c.stage === 'dispatcher') && COMMANDS.some((c) => c.stage === 'execution-boundaries') && COMMANDS.some((c) => c.stage === 'monitor-progress'))
+check('merged/retired stages are gone', !COMMANDS.some((c) => ['subagent-driven-development', 'execution-preflight', 'standing-bookkeeper', 'verification-before-completion', 'create-task-dag', 'grilling'].includes(c.stage)))
+check('command count (15 impl-* + call-codex)', COMMANDS.length === 16, String(COMMANDS.length))
 const registered = []
 const steered = []
 applyCommands({
@@ -217,6 +254,10 @@ check('buildRouteMessage shape', buildRouteMessage('x', 'impl-x').role === 'user
 console.log('== host half ==')
 const presetDoc = readFileSync(join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/presets/impl-package/agent.cordis.yml'), 'utf-8')
 check('agent.cordis.yml structurally valid', validateAgentCordis(presetDoc).length === 0, validateAgentCordis(presetDoc).join('; '))
+check('persona uses prefix/suffix schema', presetDoc.includes('prefix: >-') && presetDoc.includes('suffix: Your working directory is {{cwd}}.') && !presetDoc.includes('text: >-'))
+check('preset mounts the latest-line workflow executor', presetDoc.includes("name: '@deepseek-ai/dsh-workflow-worker-thread'") && !presetDoc.includes("name: '@deepseek-ai/dsh-workflow-ptc'"))
+check('preset carries no machine-specific absolute paths', !/D:[\\/]/.test(presetDoc) && presetDoc.includes('{{WORKBENCH_ROOT}}'))
+check('grok provider/tool removed from preset', !/grok/i.test(presetDoc))
 const tmp = mkdtempSync(join(tmpdir(), 'dsh-impl-package-test-'))
 try {
   const target = join(tmp, 'agent-presets')
@@ -229,12 +270,18 @@ try {
   check('synced agent.cordis.yml exists', existsSync(join(target, 'impl-package/agent.cordis.yml')))
   check('synced hook exists', existsSync(join(target, 'impl-package/situation-hook.mjs')))
   check('synced tools exist', existsSync(join(target, 'impl-package/impl-tools.mjs')))
+  const syncedDoc = readFileSync(join(target, 'impl-package/agent.cordis.yml'), 'utf-8')
+  check('synced composition substitutes the workbench root', !syncedDoc.includes('{{WORKBENCH_ROOT}}') && syncedDoc.includes(workbench))
   const second = syncPresetTrees(join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/presets'), target)
   check('second sync is a no-op (stamp based)', second.synced.length === 0)
 } finally {
   rmSync(tmp, { recursive: true, force: true })
 }
 check('resolveDshHome default', resolveDshHome({}, 'C:/Users/test').endsWith('.dsh'))
+check('resolveWorkbenchRoot env override wins and normalizes trailing separators', resolveWorkbenchRoot({ AGENT_WORKBENCH_ROOT: 'X:/wb/' }) === 'X:/wb')
+check('resolveWorkbenchRoot derives the real workbench from a module URL', resolveWorkbenchRoot({}, import.meta.url) === workbench)
+check('substituteWorkbenchRoot replaces all markers', substituteWorkbenchRoot('a {{WORKBENCH_ROOT}} b {{WORKBENCH_ROOT}} c', 'W') === 'a W b W c')
+check('substituteWorkbenchRoot keeps text without a resolved root', substituteWorkbenchRoot('x {{WORKBENCH_ROOT}}', undefined) === 'x {{WORKBENCH_ROOT}}')
 
 console.log('== leaf assembly (orchestrator, no standalone presets) ==')
 check('no review-* preset dirs remain', !existsSync(join(workbench, 'plugin-marketplace/plugins/dsh-impl-package/presets/review-code'))

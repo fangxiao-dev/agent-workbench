@@ -59,10 +59,9 @@ def test_active_callers_route_execution_collaboration_to_dispatcher() -> None:
         ROOT / "AGENTS.md",
         PLUGIN / "skills" / "impl-package" / "SKILL.md",
         PLUGIN / "skills" / "impl-planning" / "SKILL.md",
-        PLUGIN / "skills" / "execution-boundaries" / "SKILL.md",
+        PLUGIN / "skills" / "dev-with-track" / "SKILL.md",
         PLUGIN / "skills" / "do-review" / "SKILL.md",
-        ROOT / "skills" / "handoff" / "references" / "task-execution.md",
-        ROOT / "skills" / "handoff-to-new-session" / "SKILL.md",
+        ROOT / "skills" / "handoff" / "references" / "impl-package.md",
     )
     for path in callers:
         text = path.read_text(encoding="utf-8")

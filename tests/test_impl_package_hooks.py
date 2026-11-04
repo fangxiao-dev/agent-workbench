@@ -280,12 +280,12 @@ def test_session_start_without_binding_or_with_mismatched_session_is_silent(tmp_
     assert mismatched.stdout == ""
     assert mismatched.stderr == ""
 
-    # The explicit hook also remains silent for SessionStart sources excluded by
-    # the manifest matcher, such as a cleared session.
-    assert session_start(repo, "bound-session", "clear").stdout == ""
+    # The explicit hook also remains silent for SessionStart sources outside the
+    # supported set.
+    assert session_start(repo, "bound-session", "unknown").stdout == ""
 
 
-@pytest.mark.parametrize("source", ["startup", "resume", "compact"])
+@pytest.mark.parametrize("source", ["startup", "resume", "clear", "compact"])
 def test_session_start_injects_read_only_resume_capsule_for_each_supported_source(tmp_path: Path, source: str) -> None:
     repo, package = make_repo(tmp_path)
     assert_json_success(activate(repo, package))
@@ -298,12 +298,12 @@ def test_session_start_injects_read_only_resume_capsule_for_each_supported_sourc
     assert re.search(r"head: [0-9a-f]{40}", context)
     assert "state-valid: true" in context
     assert "gate-verdict: blocked" in context
-    assert re.search(r"preview-digest: [0-9a-f]{12}", context)
+    assert "digest" not in context
     assert all(f"{key}:" in context for key in ("blocking", "runnable", "withheld", "in_flight"))
     assert re.search(r"warnings: \d+", context)
     assert re.search(r"undetermined: \d+", context)
     assert "not Evidence, Acceptance, Gate, or closure" in context
-    assert "without --no-write-credential" in context
+    assert "no-write-credential" not in context
     assert not credential.exists()
 
 
@@ -341,7 +341,8 @@ def test_large_capsule_requires_full_projection_before_decisions():
     assert "runnable: 30 (summary only)" in text
     assert "withheld: 1 (summary only)" in text
     assert "FULL projection before decisions or writes" in text
-    assert "--no-write-credential --json" in text
+    assert "render --package <package-above> --json" in text
+    assert "no-write-credential" not in text
 
 
 @pytest.mark.parametrize("gate_attempt", [None, "old-attempt"])
@@ -477,7 +478,7 @@ NO_SESSION_ENV = {
     "CODEX_SESSION_ID": "",
     "CODEX_THREAD_ID": "",
     "ZCODE_SESSION_ID": "",
-    "CLAUDE_SESSION_ID": "",
+    "CLAUDE_CODE_SESSION_ID": "",
 }
 
 
@@ -487,6 +488,7 @@ def test_zcode_pre_tool_use_denies_edit_and_write_state_paths(tmp_path: Path) ->
     denied_cases = [
         ("Edit", {"file_path": state_rel, "old_string": "a", "new_string": "b"}),
         ("Write", {"file_path": "./" + state_rel, "content": "x"}),
+        ("MultiEdit", {"file_path": state_rel, "edits": [{"old_string": "a", "new_string": "b"}]}),
         (
             "Edit",
             {
@@ -531,6 +533,14 @@ def test_zcode_pre_tool_use_denies_edit_and_write_state_paths(tmp_path: Path) ->
     )
     assert fixture_result.returncode == 0
     assert fixture_result.stdout == ""
+
+
+def test_activate_uses_claude_code_session_environment(tmp_path: Path) -> None:
+    repo, _ = make_repo(tmp_path)
+    env = {**NO_SESSION_ENV, "CLAUDE_CODE_SESSION_ID": "claude-session"}
+    activated = assert_json_success(run_hook(repo, "activate", "--package", PACKAGE_REL.as_posix(), env=env))
+    assert activated["session_id"] == "claude-session"
+    assert binding_path(repo, "claude-session").is_file()
 
 
 def test_activate_falls_back_to_repository_default_binding_without_session_env(tmp_path: Path) -> None:
