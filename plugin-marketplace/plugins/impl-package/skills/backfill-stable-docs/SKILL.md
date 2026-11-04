@@ -27,15 +27,16 @@ description: 当需要审计 durable knowledge delta、把 owner 批准的子集
 
 - 记录可取得的 source HEAD 与 dirty 状态，直接读取指定的 Decision、Spec、Plan、当前代码/测试和 canonical docs；
 - 沿用下方的事实校准、disposition、冲突处理、apply、verify 与 retirement 边界；
-- 不补造 Gate 或状态，不迁移 schema，不新增中间 JSON、manifest 或 package 记录。
+- 不补造 Gate 或状态，不迁移 schema，不新增中间 JSON、manifest 或 package 记录；
+- 仓库配置了 `records.done` 时仍照常写 done（`<包路径>::<deltaId>`）；包没有 Gate 时 `comparisonCommit` 取该包最后一次改动的提交。
 
 缺少事实证据或设计与当前事实冲突仍须交给 owner 决策；兼容分支不把它们变成候选，也不绕过任何收口条件。
 
 ## Audit（只读）
 
-1. 标准包运行 `validate_config.py`、`contract_preflight.py` 和 `collect_sources.py`，再按需使用 `gate_recognition.py` 与 `make_item_id.py`；显式来源兼容分支可直接读取指定来源，自动发现脚本缺失、报旧 schema 或不识别布局不构成阻塞；机械操作不改 stable docs、pending 或 package。
+1. 标准包运行 `validate_config.py`、`contract_preflight.py` 和 `collect_sources.py`（在仓库根执行，例如 `python <skill>/scripts/validate_config.py --project-root .`；脚本靠同目录 import，不要加 `python -I`），再按需使用 `gate_recognition.py` 与 `make_item_id.py`；显式来源兼容分支可直接读取指定来源，自动发现脚本缺失、报旧 schema 或不识别布局不构成阻塞；机械操作不改 stable docs、pending 或 package。
 2. 标准包读取 optional pending（`pending-registry`）与 `records.done`，检查 terminal Gate Durable Deltas 是否已进入 `targetBranch` 的 gap-catching；pending 不抑制 gap-catching，done 是唯一机器去重依据。兼容分支仅在指定来源中已有这些记录时读取，不要求补齐。脚本只列 inventory，不决定 disposition。
-3. 对每项给出 `candidate | already-covered | conflict | no-delta`，引用 current code/tests/stable docs 的直接证据；代码能证明 current behavior，不能单独证明 product intent，发生冲突时报告 owner decision，不猜。
+3. 对每项给出 `candidate | already-covered | conflict | no-delta`；证据只存在于配置为 ignore 的目录（如 hands-on）时算 `candidate`，不算 `already-covered`。引用 current code/tests/stable docs 的直接证据；代码能证明 current behavior，不能单独证明 product intent，发生冲突时报告 owner decision，不猜。
 4. 标准包 item ID 使用 `<source-relative-path>::<delta-id>`，由来源提供稳定且可读的 delta ID；兼容分支在现有报告中使用同样可追踪的来源路径和 delta 标识，不要求包 schema 提供字段。
 5. 标准包输出 report 和 audit JSON；兼容分支复用已有输出形状（如有），不新增中间 JSON、manifest 或 package 记录；任何路径均不修改 stable docs、pending 或 package。
 

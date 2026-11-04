@@ -5,6 +5,8 @@ Apply 将 owner 的明确批准解析并记录为精确 report/CLI item ID 集�
 写入 stable docs 后，把对应 item 记录为 `done`（`records.done`）：
 
 - 每条 done 记录至少包含 `id`（`<package-path>::<delta-id>`）、`packagePath`、`deltaId`、`comparisonCommit`，以及 disposition/decision 说明。这是 gap-catching 去重的唯一机器依据。
+- `result` 取 `applied | already-covered | no-delta | deferred`；`deferred` 表示迁入 pending，附 `pendingRef`。
+- done、retired 等 JSON 记录用文本级追加，保持原缩进与换行，不用整体重写（避免无关格式 diff）。
 - 若该 item 来自 `_pending.md` 的既有登记（`origin: pending-registry`），同时在该 pending 文件中关闭对应行（划掉或删除，按项目既有约定），避免人工队列继续挂着。
 - 若该 item 来自 gap-catching（`origin: gap-catching`），**只写 `records.done`**，不要为了“关闭”去伪造一条 pending 再立刻关掉。
 - 若 owner 决定不回刷，也以 `done` 记录 decision 和原因；若存在对应 pending 行则一并关闭。
