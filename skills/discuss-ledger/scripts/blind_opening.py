@@ -101,12 +101,9 @@ def call_executor(
             [
                 "--timeout-s",
                 str(timeout_s),
-                "--model",
-                "",
+                *orchestrator.codex_model_args(),
                 "--config",
                 'service_tier="fast"',
-                "--config",
-                'model_reasoning_effort="high"',
                 "--sandbox",
                 "read-only",
                 "--ephemeral",
@@ -119,7 +116,7 @@ def call_executor(
             [
                 "--timeout-s",
                 str(timeout_s),
-                *orchestrator.CLAUDE_MODEL_ARGS,
+                *orchestrator.claude_model_args(),
                 "--tools",
                 "Read,Glob,Grep",
                 "--system-prompt",
@@ -132,8 +129,7 @@ def call_executor(
     else:
         command.extend(
             [
-                "--effort",
-                "low",
+                *orchestrator.grok_model_args(),
                 "--tools",
                 "",
                 "--no-subagents",
@@ -249,11 +245,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout-s", type=int, default=300, help="per participant timeout in seconds")
     parser.add_argument("--output-dir", default=str(Path(tempfile.gettempdir()) / "discuss-ledger"))
     parser.add_argument("--fake", action="store_true", help="use deterministic fake participants")
+    orchestrator.add_model_arguments(parser)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    orchestrator.apply_model_arguments(args)
     try:
         root, topic = orchestrator.resolve_root_and_topic(args.root, args.topic)
         agents = orchestrator.parse_agents(args.agents)

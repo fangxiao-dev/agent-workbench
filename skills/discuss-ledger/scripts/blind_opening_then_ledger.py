@@ -20,6 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout-s", type=int, default=300, help="per agent timeout in seconds")
     parser.add_argument("--output-dir", default=str(Path(tempfile.gettempdir()) / "discuss-ledger"))
     parser.add_argument("--fake", action="store_true", help="use deterministic fake participants")
+    orchestrator.add_model_arguments(parser)
     return parser
 
 
@@ -63,6 +64,7 @@ def run_combined(
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    orchestrator.apply_model_arguments(args)
     try:
         root, topic = orchestrator.resolve_root_and_topic(args.root, args.topic)
         agents = orchestrator.parse_agents(args.agents)

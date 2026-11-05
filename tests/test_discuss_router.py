@@ -71,3 +71,31 @@ def test_router_dispatches_modes_without_mixing_mode_and_participant_selection(m
     )
     assert calls[1][0] == "blind" and "codex,grok" in calls[1][1] and "--max-rounds" not in calls[1][1]
     assert calls[2][0] == "combined" and "codex,claude,grok" in calls[2][1] and "--max-rounds" in calls[2][1]
+
+
+def test_model_overrides_default_and_forwarding():
+    import argparse
+    import copy
+    discuss_router = load_router()
+    orchestrator = discuss_router.orchestrator
+
+    saved = copy.deepcopy(orchestrator.AGENT_MODELS)
+    try:
+        assert orchestrator.codex_model_args() == ["--model", "", "--config", 'model_reasoning_effort="high"']
+        assert orchestrator.claude_model_args() == ["--model", "sonnet", "--effort", "high"]
+        assert orchestrator.grok_model_args() == ["--effort", "low"]
+
+        args = discuss_router.build_parser().parse_args(
+            ["--mode", "blind", "--topic", "t", "--codex-model", "gpt-6-astra", "--codex-effort", "low"]
+        )
+        forwarded = discuss_router.downstream_args(args, ["codex", "claude"])
+        i = forwarded.index("--codex-model")
+        assert forwarded[i : i + 4] == ["--codex-model", "gpt-6-astra", "--codex-effort", "low"]
+        assert "--claude-model" not in forwarded
+
+        orchestrator.apply_model_arguments(argparse.Namespace(codex_model="gpt-6-astra", codex_effort="low"))
+        assert orchestrator.codex_model_args() == ["--model", "gpt-6-astra", "--config", 'model_reasoning_effort="low"']
+        assert orchestrator.claude_model_args() == ["--model", "sonnet", "--effort", "high"]
+    finally:
+        orchestrator.AGENT_MODELS.clear()
+        orchestrator.AGENT_MODELS.update(saved)

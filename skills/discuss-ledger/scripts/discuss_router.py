@@ -35,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout-s", type=int, default=300, help="per-agent timeout in seconds")
     parser.add_argument("--output-dir", default=str(Path(tempfile.gettempdir()) / "discuss-ledger"), help="Blind Opening artifact directory")
     parser.add_argument("--fake", action="store_true", help="use deterministic fake participants")
+    orchestrator.add_model_arguments(parser)
     return parser
 
 
@@ -53,6 +54,7 @@ def downstream_args(args: argparse.Namespace, agents: list[str]) -> list[str]:
         common.extend(["--slug", args.slug])
     if args.fake:
         common.append("--fake")
+    common.extend(orchestrator.model_cli_args(args))
     if args.mode == "ledger":
         return [*common, "--max-rounds", str(args.max_rounds)]
     if args.mode == "blind":

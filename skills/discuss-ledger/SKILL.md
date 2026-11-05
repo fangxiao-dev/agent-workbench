@@ -18,8 +18,9 @@ Mode and participants are separate choices. `discuss_router.py` only selects the
 | `--agents` | `codex,claude` | `full`, or exactly two distinct names from `codex`, `claude`, `grok` | `full` expands to `codex,claude,grok`. One participant or a literal three-name list is rejected. |
 | `--max-rounds` | `5` | integer | Full participant cycles for `ledger` / `combined`. |
 | `--timeout-s` | `300` | integer | Per-agent, per-call timeout. |
+| `--<agent>-model` / `--<agent>-effort` | see below | `<agent>` is `codex`, `claude` or `grok` | Per-run model and reasoning-effort override for that participant; unset keeps the default. |
 
-Models are the hosts' own defaults, with no version pinned: Claude runs the latest `sonnet` alias at `high`; Codex runs its configured default (`sol`) at `high`. Neither is configurable per call; do not add model version numbers.
+Defaults: Claude runs the `sonnet` alias at `high`; Codex runs its configured default model at `high`; Grok runs call-grok's default model at `low`. Override only when the user asks, e.g. `--codex-model gpt-6-astra --codex-effort low`; the router forwards overrides to every mode. Do not pin model versions on your own.
 
 Dispatch: `ledger` → `discuss_orchestrator.py`; `blind` → `blind_opening.py` (writes only the independent-opening artifacts); `combined` → `blind_opening_then_ledger.py` (hands consolidated points to the unchanged Ledger workflow).
 

@@ -29,7 +29,54 @@ from discuss_ledger_core import ledger
 
 
 SUPPORTED_AGENTS = {"codex", "claude", "grok"}
-CLAUDE_MODEL_ARGS = ["--model", "sonnet", "--effort", "high"]
+# Per-agent model / effort. Defaults keep each host's established setting; CLI flags override per run.
+# codex model "" means the Codex CLI's configured default model; grok model None means call-grok's default.
+AGENT_MODELS: dict[str, dict[str, str | None]] = {
+    "codex": {"model": "", "effort": "high"},
+    "claude": {"model": "sonnet", "effort": "high"},
+    "grok": {"model": None, "effort": "low"},
+}
+
+
+def add_model_arguments(parser: argparse.ArgumentParser) -> None:
+    for agent, setting in AGENT_MODELS.items():
+        parser.add_argument(f"--{agent}-model", help=f"{agent} model id (default: {setting['model'] or 'host default'})")
+        parser.add_argument(f"--{agent}-effort", help=f"{agent} reasoning effort (default: {setting['effort']})")
+
+
+def apply_model_arguments(args: argparse.Namespace) -> None:
+    for agent, setting in AGENT_MODELS.items():
+        for key in ("model", "effort"):
+            value = getattr(args, f"{agent}_{key}", None)
+            if value:
+                setting[key] = value
+
+
+def model_cli_args(args: argparse.Namespace) -> list[str]:
+    """Re-emit only the overrides the caller set, for forwarding to another entry point."""
+    forwarded: list[str] = []
+    for agent in AGENT_MODELS:
+        for key in ("model", "effort"):
+            value = getattr(args, f"{agent}_{key}", None)
+            if value:
+                forwarded.extend([f"--{agent}-{key}", value])
+    return forwarded
+
+
+def codex_model_args() -> list[str]:
+    setting = AGENT_MODELS["codex"]
+    return ["--model", setting["model"] or "", "--config", f'model_reasoning_effort="{setting["effort"]}"']
+
+
+def claude_model_args() -> list[str]:
+    setting = AGENT_MODELS["claude"]
+    return ["--model", str(setting["model"]), "--effort", str(setting["effort"])]
+
+
+def grok_model_args() -> list[str]:
+    setting = AGENT_MODELS["grok"]
+    model = ["--model", setting["model"]] if setting["model"] else []
+    return [*model, "--effort", str(setting["effort"])]
 CLAUDE_SYSTEM_PROMPT = "You are a non-interactive discuss-ledger participant. Prefer Chinese unless the task explicitly requires another language. Return only the requested structured result."
 
 
@@ -402,10 +449,7 @@ def run_codex(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
         [
             "--config",
             'service_tier="fast"',
-            "--config",
-            'model_reasoning_effort="high"',
-            "--model",
-            "",
+            *codex_model_args(),
             "--sandbox",
             "read-only",
             "--ephemeral",
@@ -421,7 +465,7 @@ def run_codex(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
 
 def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
     schema_json = claude_schema_json()
-    base = ["--no-session-persistence", "--disable-slash-commands", *CLAUDE_MODEL_ARGS, "--system-prompt", CLAUDE_SYSTEM_PROMPT]
+    base = ["--no-session-persistence", "--disable-slash-commands", *claude_model_args(), "--system-prompt", CLAUDE_SYSTEM_PROMPT]
     text = run_executor(CALL_CLAUDE, [*base, "--tools", "Read,Glob,Grep", "--json-schema", schema_json], prompt, root, timeout_s)
     result = extract_agent_result_from_text(text)
     if result is not None:
@@ -446,8 +490,7 @@ def run_grok(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
     text = run_executor(
         CALL_GROK,
         [
-            "--effort",
-            "low",
+            *grok_model_args(),
             "--tools",
             "",
             "--no-subagents",
@@ -588,12 +631,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--adapter-mode", choices=["real", "fake"], default="real")
     parser.add_argument("--fake", action="store_true", help="use deterministic fake adapters")
     parser.add_argument("--timeout-s", type=int, default=300, help="per-agent timeout in seconds")
+    add_model_arguments(parser)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    apply_model_arguments(args)
     ledger_path: Path | None = None
     try:
         root, topic = resolve_root_and_topic(args.root, args.topic)
