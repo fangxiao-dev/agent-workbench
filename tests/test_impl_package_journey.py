@@ -569,6 +569,29 @@ def test_check_spec_resolves_rule_and_no_acceptance_chapters_by_number_or_title(
     assert not (package / ".impl-package/state.json").exists()
 
 
+def test_journey_variant_section_does_not_change_parsed_journey_or_init(tmp_path: Path) -> None:
+    variants = """### Journey 变体
+
+#### J1-S2 企业端打开下一张同类账单
+
+- 要读的数据：门店记忆、历史账单科目。
+
+| 变体执行者 | 预期 | 可观察表现 | 必验 |
+| --- | --- | --- | --- |
+| 代班员工（当天委派） | 完成 | 预填 4982 | 是 |
+| 只读角色 | 部分 | 能看，不能修改科目 | 否 |
+
+### Rule Matrix"""
+    spec = SPEC.replace("### Rule Matrix", variants, 1)
+    assert engine._journey_spec_text(spec)["journeys"] == engine._journey_spec_text(SPEC)["journeys"]
+
+    repo, package = _make_package(tmp_path, spec=spec)
+    checked = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
+    assert checked.returncode == 0, checked.stderr
+    assert json.loads(checked.stdout)["valid"] is True
+    _init(repo, package)
+
+
 def test_check_spec_accepts_none_when_rules_cover_every_chapter(tmp_path: Path) -> None:
     spec = SPEC.replace("R1 | §2 |", "R1 | §1, §2, §3 |")
     spec = spec.replace("- 无需验收的章节： §1, §3", "- 无需验收的章节： none")
