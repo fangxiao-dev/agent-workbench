@@ -4,7 +4,7 @@ Spec 子技能第 7 步读取。只用于新 package 的 `spec.md §7`；表结�
 
 ## 起草顺序
 
-先形成稳定的行为合同草稿（§1–§6、§8 与 contract-design），再起草验收合同。起草时逐条读 [场景风险清单](../../../references/scenario-risk-patterns.md)，问“这个需求里有没有这种情况”；清单是提问线索，不是合同来源。发现行为合同缺口时回到对应章节修改，并同步 Journey、变体、矩阵与套件，最后仍一起过同一个 Spec Gate。
+先形成稳定的行为合同草稿（§1–§6、§8 与 contract-design），再起草验收合同。起草时逐条读 [场景风险清单](../../../references/scenario-risk-patterns.md)（清单目前均为候选，只作提问线索，引用时注明），问“这个需求里有没有这种情况”；清单是提问线索，不是合同来源。发现行为合同缺口时回到对应章节修改，并同步 Journey、变体、矩阵与套件，最后仍一起过同一个 Spec Gate。
 
 ## Journeys
 

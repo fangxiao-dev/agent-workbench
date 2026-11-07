@@ -46,9 +46,9 @@ initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一
    - 常见误判：把新 surface 留到最终 Gate 才分类，后续步骤会在错误的 owner 或遗漏的 coherence 检查上继续。
 5. detailed contract 不再需要时，把仍有效的精确合同吸收回 `spec.md`，更新引用并把 disposition 改为 `not-required`；保留从属文件，Git 保存历史。
    - 常见误判：只改 disposition、不吸收有效精确合同，会留下引用看似完整但实际无 owner 的 shape。
-6. 仅当信号适用时评估 evidence-integrity contract 与 risk-driven Grill；它们不成为普通变化的固定流程。风险审问时逐条对照 [场景风险清单](../../../../references/scenario-risk-patterns.md)，问“这个需求里有没有这种情况”。
+6. 仅当信号适用时评估 evidence-integrity contract 与 risk-driven Grill；它们不成为普通变化的固定流程。风险审问时逐条对照 [场景风险清单](../../../../references/scenario-risk-patterns.md)（清单目前均为候选，只作提问线索，引用时注明），问“这个需求里有没有这种情况”。
    - 常见误判：把高成本检查固定到所有普通变化，会稀释真正 risk signal；完全跳过适用信号，又会让高风险 surface 没有额外审问。
-7. 新 package 的 §7 按模板写 Journeys、Journey 变体、Rule Matrix 与 Required Suites，细则读 [验收合同](../../references/acceptance-contract.md)。起草前读 [场景风险清单](../../../../references/scenario-risk-patterns.md)；涉及权限或数据范围的步骤补“要读的数据”与“变体执行者”，无适用变体的步骤（或整条 Journey）写“不适用”及理由。必验变体的走查核对属于验收 Gate，见验收合同。
+7. 新 package 的 §7 按模板写 Journeys、Journey 变体、Rule Matrix 与 Required Suites，细则读 [验收合同](../../references/acceptance-contract.md)。起草前读 [场景风险清单](../../../../references/scenario-risk-patterns.md)（清单目前均为候选，只作提问线索，引用时注明）；涉及权限或数据范围的步骤补“要读的数据”与“变体执行者”，无适用变体的步骤（或整条 Journey）写“不适用”及理由。必验变体的走查核对属于验收 Gate，见验收合同。
    - 常见误判：起草验收合同时发现行为缺口只改 Journey，不回到行为合同同步，Gate 会对着自相矛盾的合同通过。
 
 Formal artifact 的内容、Status 与 Gate result 反映当前已记录事实；initial bundle 完成 owner approval，follow-up 由主 thread 写入 current truth 并沿用该 approval。
