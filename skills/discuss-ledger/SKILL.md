@@ -35,6 +35,9 @@ python <skill>\scripts\discuss_router.py --mode combined --agents full --topic <
 | Independent ideas, brainstorming, or “do not let participants influence each other” | Blind Opening | [references/blind-opening.md](references/blind-opening.md) |
 | Debate, respond to disagreements, converge, deadlock, or continue an existing ledger | Discuss Ledger | [references/ledger-discussion.md](references/ledger-discussion.md) |
 | “First independently explore, then discuss/converge” | Blind Opening + Ledger | [references/blind-opening-plus-ledger.md](references/blind-opening-plus-ledger.md) |
+| Multi-round loop over any mode (“loop 审查”, “盲审 loop”) | Loop over that mode | [references/loop-mode.md](references/loop-mode.md) |
+
+Every run follows [references/convergence.md](references/convergence.md): the goal and boundary come first, and value and convergence are judged against them.
 
 Existing Discuss Ledger triggers default to normal Ledger for compatibility. If the requested mode remains materially ambiguous, ask one question; do not silently choose a mode.
 
