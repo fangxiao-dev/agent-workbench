@@ -2145,3 +2145,56 @@ def test_evidence_invalidated_by_overrides_carry_forward(tmp_path: Path) -> None
         "--reason", "harmless", "--judged-by", "controller",
     )
     assert again.returncode != 0
+
+
+def test_amendment_add_rejects_non_contract_affected_and_records_tickets(tmp_path: Path) -> None:
+    repo, package, _ = _init_v36(tmp_path)
+    _append_spec_note(package, "Owner clarification: ticket-scoped wording.")
+    wrong = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "x", "--affected", "TKT-01")
+    assert wrong.returncode != 0
+    assert "must name changed contract files" in wrong.stderr and "--tickets" in wrong.stderr
+    unknown = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "x", "--affected", "spec.md", "--tickets", "TKT-99")
+    assert unknown.returncode != 0 and "TKT-99" in unknown.stderr
+    added = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "x", "--affected", "spec.md", "--tickets", "TKT-01")
+    assert added.returncode == 0, added.stderr
+    row = _state(package)["acceptance"]["amendments"][0]
+    assert row["artifact"] == "spec.md" and row["tickets"] == ["TKT-01"]
+    assert _cli(repo, package, "package", "validate").returncode == 0
+
+
+def test_amendment_confirm_defaults_and_multiple_ids(tmp_path: Path) -> None:
+    repo, package, _ = _init_v36(tmp_path)
+    _append_spec_note(package, "Owner clarification: two amendments.")
+    for identifier in ("A-1", "A-2"):
+        added = _cli(repo, package, "package", "amendment", "add", "--id", identifier, "--summary", "x", "--affected", "spec.md")
+        assert added.returncode == 0, added.stderr
+    confirmed = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--id", "A-2", "--confirmed-by", "Owner")
+    assert confirmed.returncode == 0, confirmed.stderr
+    assert [row["status"] for row in json.loads(confirmed.stdout)["results"]] == ["CONFIRMED", "CONFIRMED"]
+    head = _git(repo, "rev-parse", "HEAD")
+    assert {row["confirmedRevision"] for row in _state(package)["acceptance"]["amendments"]} == {head}
+
+
+def test_evidence_add_error_names_missing_and_unknown_fields(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    record = {"kind": "review", "ticket": "TKT-01", "artifact": "artifacts/evidence.md", "revision": revision, "conclusion": "supporting", "extra": 1}
+    result = _cli(repo, package, "evidence", "add", input_value=record)
+    assert result.returncode != 0
+    assert "missing: environment" in result.stderr and "unknown: extra" in result.stderr
+
+
+def test_ticket_satisfy_defaults_revision_to_head_and_lists_all_gaps(tmp_path: Path) -> None:
+    tickets = {
+        "01.md": _ticket("TKT-01", "J1-S1", "S-resolver", required_review="terminal-final", dependencies="- implementation: TKT-02"),
+        "02.md": _ticket("TKT-02", "J1-S2", "S-workflow"),
+    }
+    repo, package = _make_package(tmp_path, tickets=tickets, initialized=True)
+    revision = _git(repo, "rev-parse", "HEAD")
+    held = _cli(repo, package, "ticket", "satisfy", "TKT-01", "--expect", "PENDING", "--environment", "local-test")
+    assert held.returncode != 0
+    for needle in ("Suite S-resolver", "supporting review", "dependencies are not released: TKT-02", "evidence add", revision):
+        assert needle in held.stderr
+    added = _cli(repo, package, "evidence", "add", input_value=_suite_record(revision, "S-workflow"))
+    assert added.returncode == 0, added.stderr
+    satisfied = _cli(repo, package, "ticket", "satisfy", "TKT-02", "--expect", "PENDING", "--environment", "local-test")
+    assert satisfied.returncode == 0, satisfied.stderr

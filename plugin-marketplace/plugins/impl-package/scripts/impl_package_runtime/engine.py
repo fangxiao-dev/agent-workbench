@@ -1418,7 +1418,7 @@ def _validate_journey_evidence_index(
             required = base_fields | fields_by_kind[kind]
             allowed = required | optional_fields_by_kind.get(kind, set()) | {"invalidatedBy", "timing", "recordedAt", "carriedForward"}
             if not required <= set(record) or set(record) - allowed:
-                raise StateError(f"evidenceIndex[{evidence_key}] {kind} record has missing or unknown fields")
+                raise StateError(f"evidenceIndex[{evidence_key}] " + _evidence_field_error(kind, required, allowed, record))
             if "carriedForward" in record and (message := carried_forward_error(record["carriedForward"])):
                 raise StateError(f"evidenceIndex[{evidence_key}] {message}")
             if not isinstance(record["conclusion"], str) or record["conclusion"] not in CONCLUSIONS:
@@ -1612,6 +1612,11 @@ def _validate_acceptance_state(package: Path, repo: Path, acceptance: Any, info:
         expected |= {field for field in ("createdAt", "confirmedAt") if field in amendment}
         if "affectedBlobs" in amendment:
             expected.add("affectedBlobs")
+        if "tickets" in amendment:
+            expected.add("tickets")
+            tickets = amendment["tickets"]
+            if not isinstance(tickets, list) or not all(isinstance(item, str) and item.strip() for item in tickets) or len(set(tickets)) != len(tickets):
+                raise StateError("amendment tickets must be a list of unique Ticket IDs")
         if status not in {"PENDING", "CONFIRMED"} or set(amendment) != expected:
             raise StateError("amendment fields/status do not match PENDING or CONFIRMED")
         identifier = amendment.get("id")
@@ -2326,7 +2331,17 @@ def command_refresh_progress(package: Path) -> dict[str, Any]:
     return {"attempt": summary["attempt"], "progress": _package_relative(package, package / PROGRESS_PATH)}
 
 
-def command_amendment_add(package: Path, identifier: str, summary_text: str, affected: list[str], artifact: str) -> dict[str, Any]:
+AMENDMENT_CONTRACT_FILES = ("decision.md", "spec.md", "contract-design.md")
+
+
+def command_amendment_add(
+    package: Path,
+    identifier: str,
+    summary_text: str,
+    affected: list[str],
+    artifact: str | None = None,
+    tickets: list[str] | None = None,
+) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
     _assert_mutable(summary)
@@ -2342,6 +2357,16 @@ def command_amendment_add(package: Path, identifier: str, summary_text: str, aff
     ]
     if any("#" in value for value in normalized_affected) or len(set(normalized_affected)) != len(normalized_affected):
         raise StateError("amendment affected paths must be unique package-relative paths without anchors")
+    wrong = [value for value in normalized_affected if value not in AMENDMENT_CONTRACT_FILES]
+    if wrong:
+        raise StateError(
+            f"amendment --affected must name changed contract files ({', '.join(AMENDMENT_CONTRACT_FILES)}), got: {', '.join(wrong)}; "
+            "repeat --affected once per file, and record impacted Tickets with --tickets"
+        )
+    ticket_ids = list(dict.fromkeys(item.strip() for item in (tickets or [])))
+    unknown_tickets = [item for item in ticket_ids if item not in state["tickets"]]
+    if unknown_tickets:
+        raise StateError(f"amendment --tickets names unknown Ticket(s): {', '.join(unknown_tickets)}")
     repo = _repo_root(package)
     affected_blobs = _working_tree_blobs(repo, package, normalized_affected)
     row = {
@@ -2349,10 +2374,12 @@ def command_amendment_add(package: Path, identifier: str, summary_text: str, aff
         "summary": summary_text.strip(),
         "affected": normalized_affected,
         "affectedBlobs": {name: affected_blobs.get(name) for name in normalized_affected},
-        "artifact": _package_relative_artifact(package, artifact, "amendment artifact", must_exist=True),
+        "artifact": _package_relative_artifact(package, artifact or normalized_affected[0], "amendment artifact", must_exist=True),
         "status": "PENDING",
         "createdAt": _utc_timestamp(),
     }
+    if ticket_ids:
+        row["tickets"] = ticket_ids
     amendments = state["acceptance"]["amendments"]
     current = next((item for item in amendments if item["id"] == identifier), None)
     if current is not None:
@@ -2374,20 +2401,21 @@ def command_amendment_add(package: Path, identifier: str, summary_text: str, aff
 def command_amendment_confirm(
     package: Path,
     identifier: str,
-    expect: str,
+    expect: str | None,
     confirmed_by: str,
-    confirmed_revision: str,
+    confirmed_revision: str | None,
 ) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
     _assert_mutable(summary)
+    expect = expect or "PENDING"
     if expect != "PENDING":
         raise StateError("amendment confirm currently requires --expect PENDING")
     if not isinstance(confirmed_by, str) or not confirmed_by.strip():
         raise StateError("--confirmed-by must be non-empty")
     repo = _repo_root(package)
-    revision = _validate_commit(repo, confirmed_revision)
     head = _run_git(repo, "rev-parse", "HEAD")
+    revision = _validate_commit(repo, confirmed_revision or head)
     if not _is_ancestor(repo, revision, head):
         raise StateError("--confirmed-revision must be an ancestor of current HEAD")
     current = next((item for item in state["acceptance"]["amendments"] if item["id"] == identifier), None)
@@ -2473,15 +2501,26 @@ def _v36_ticket_satisfy_gaps(package: Path, state: dict[str, Any], summary: dict
             )
             for record in records
         ):
-            gaps.append(f"Suite {suite_id} 缺少对当前 revision 有效的 supporting 记录")
+            template = json.dumps({"kind": "suite", "suiteId": suite_id, "environment": suite["environment"], "revision": revision, "artifact": "evidence/<file>", "conclusion": "supporting"}, ensure_ascii=False)
+            gaps.append(f"Suite {suite_id} 缺少对当前 revision 有效的 supporting 记录；补登：echo '{template}' | impl_package_state.py --package <package> evidence add")
     if document["coverage"]["requiredReview"] != "none":
         records = state["evidenceIndex"].get(f"review:{identifier}", [])
         if not any(
             _v36_record_valid(package, record, revision, attempt_active=not lifecycle.frozen)
             for record in records
         ):
-            gaps.append(f"Ticket {identifier} 缺少有效的 supporting review（需无未关闭 blocker）")
+            template = json.dumps({"kind": "review", "ticket": identifier, "environment": "<env>", "revision": revision, "artifact": "execution/<attempt>/reviews/<file>", "conclusion": "supporting"}, ensure_ascii=False)
+            gaps.append(f"Ticket {identifier} 缺少有效的 supporting review（需无未关闭 blocker）；补登：echo '{template}' | impl_package_state.py --package <package> evidence add")
     return gaps
+
+
+def _evidence_field_error(kind: str, required: set[str], allowed: set[str], record: dict[str, Any]) -> str:
+    missing = sorted(required - set(record))
+    unknown = sorted(set(record) - allowed)
+    return (
+        f"3.6 {kind} evidence record has missing or unknown fields: "
+        f"missing: {', '.join(missing) or '-'}; unknown: {', '.join(unknown) or '-'}"
+    )
 
 
 def _normalize_journey_evidence(
@@ -2508,7 +2547,7 @@ def _normalize_journey_evidence(
     required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
     allowed = required | optional_fields_by_kind.get(kind, set()) | {"evidenceKey", "invalidatedBy", "timing", "recordedAt"}
     if not required <= set(payload) or set(payload) - allowed:
-        raise StateError("3.6 evidence record has missing or unknown fields")
+        raise StateError(_evidence_field_error(kind, required, allowed, payload))
     record = {field: value for field, value in payload.items() if field != "evidenceKey"}
     if not isinstance(record["conclusion"], str) or record["conclusion"] not in CONCLUSIONS:
         raise StateError("invalid evidence conclusion")
@@ -2838,15 +2877,19 @@ def command_set_state(
         _repo_relative(repo, revalidation_plan, "revalidation plan")
     if target == "SATISFIED":
         if not revision:
-            raise StateError("SATISFIED requires --revision")
+            revision = _run_git(repo, "rev-parse", "HEAD")
         if environment is not None and not environment.strip():
             raise StateError("SATISFIED --environment must be non-empty when provided")
         revision = _validate_commit(repo, revision)
         gaps = _v36_ticket_satisfy_gaps(package, state, summary, identifier, revision)
+        unreleased = [
+            dep for kind, dep in summary["_ticketDependencies"][identifier]
+            if kind in {"implementation", "acceptance"} and not _ticket_released(state["tickets"], dep)
+        ]
+        if unreleased:
+            gaps.append(f"Ticket implementation or acceptance dependencies are not released: {', '.join(unreleased)}")
         if gaps:
-            raise StateError("SATISFIED rejected: " + "; ".join(gaps))
-        if any(not _ticket_released(state["tickets"], dep) for kind, dep in summary["_ticketDependencies"][identifier] if kind in {"implementation", "acceptance"}):
-            raise StateError("Ticket implementation or acceptance dependencies are not released")
+            raise StateError("SATISFIED rejected (all gaps):\n- " + "\n- ".join(gaps))
     if target == "BLOCKED" and not evidence:
         raise StateError("BLOCKED requires --evidence")
     normalized_evidence = _repo_relative(repo, evidence, "Ticket evidence") if evidence else None

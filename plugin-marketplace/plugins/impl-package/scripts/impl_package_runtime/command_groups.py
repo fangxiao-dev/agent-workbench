@@ -125,6 +125,15 @@ def _ticket_transition(package: Path, args: argparse.Namespace, target: str) -> 
     )
 
 
+EVIDENCE_ADD_EPILOG = """Every record needs kind, artifact, revision, environment, conclusion; minimum JSON per kind:
+  journey-step: {"kind":"journey-step","runId":"r1","journeyId":"J1","stepId":"J1-S1","actor":"agent","entry":"<Spec entry>","surface":"page","artifact":"evidence/<file>","revision":"<commit>","environment":"local","conclusion":"supporting"}
+  run-setup:    {"kind":"run-setup","runId":"r1","artifact":"evidence/<file>","revision":"<commit>","environment":"local","conclusion":"supporting"}
+  suite:        {"kind":"suite","suiteId":"<id>","artifact":"evidence/<file>","revision":"<commit>","environment":"<Spec environment>","conclusion":"supporting"}
+  review:       {"kind":"review","ticket":"T01","artifact":"execution/<attempt>/reviews/<file>","revision":"<commit>","environment":"local","conclusion":"supporting"}
+  release:      {"kind":"release","artifact":"evidence/<file>","revision":"<commit>","environment":"local","conclusion":"supporting"}
+Optional (journey-step): inputRef, outputRef, manualBy."""
+
+
 def _parser(group: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=f"impl_package_state.py --package <package> {group}")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -149,13 +158,17 @@ def _parser(group: str) -> argparse.ArgumentParser:
         add = amendment_commands.add_parser("add", help="register a pending amendment")
         add.add_argument("--id", required=True)
         add.add_argument("--summary", required=True)
-        add.add_argument("--affected", action="append", required=True)
-        add.add_argument("--artifact", required=True)
-        confirm = amendment_commands.add_parser("confirm", help="confirm a pending amendment")
-        confirm.add_argument("--id", required=True)
-        confirm.add_argument("--expect", required=True)
+        add.add_argument(
+            "--affected", action="append", required=True,
+            help="changed contract file: decision.md, spec.md or contract-design.md; repeat once per file",
+        )
+        add.add_argument("--artifact", help="package-relative artifact describing the change (default: first --affected)")
+        add.add_argument("--tickets", action="append", default=[], help="impacted Ticket ID; repeat once per Ticket")
+        confirm = amendment_commands.add_parser("confirm", help="confirm pending amendments")
+        confirm.add_argument("--id", action="append", required=True, help="amendment id; repeat to confirm several")
+        confirm.add_argument("--expect", default="PENDING")
         confirm.add_argument("--confirmed-by", required=True)
-        confirm.add_argument("--confirmed-revision", required=True)
+        confirm.add_argument("--confirmed-revision", help="commit the Owner confirmed (default: HEAD)")
     elif group == "ticket":
         for command, target, help_text in (
             ("satisfy", "SATISFIED", "mark a Ticket SATISFIED"),
@@ -169,7 +182,7 @@ def _parser(group: str) -> argparse.ArgumentParser:
             child.add_argument("id")
             _expect(child)
             if target == "SATISFIED":
-                child.add_argument("--revision", required=True)
+                child.add_argument("--revision", help="commit the evidence is checked against (default: HEAD)")
                 child.add_argument("--environment")
             elif target == "BLOCKED":
                 child.add_argument("--evidence", required=True)
@@ -183,7 +196,13 @@ def _parser(group: str) -> argparse.ArgumentParser:
                 child.add_argument("--evidence", required=True)
                 child.add_argument("--successor")
     elif group == "evidence":
-        commands.add_parser("add", help="add a JSON evidence record from stdin")
+        commands.add_parser(
+            "add",
+            help="add a JSON evidence record from stdin",
+            description="Add one JSON evidence record from stdin.",
+            epilog=EVIDENCE_ADD_EPILOG,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
         invalidate = commands.add_parser("invalidate", help="invalidate the records of one evidence key")
         invalidate.add_argument("--key", required=True)
         invalidate.add_argument("--invalidated-by", required=True)
@@ -278,8 +297,12 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
             return engine.command_validate(package, args.commit, check_arrival_paths=args.command == "validate")
         if args.command == "amendment":
             if args.amendment_action == "add":
-                return engine.command_amendment_add(package, args.id, args.summary, args.affected, args.artifact)
-            return engine.command_amendment_confirm(package, args.id, args.expect, args.confirmed_by, args.confirmed_revision)
+                return engine.command_amendment_add(package, args.id, args.summary, args.affected, args.artifact, args.tickets)
+            results = [
+                engine.command_amendment_confirm(package, identifier, args.expect, args.confirmed_by, args.confirmed_revision)
+                for identifier in args.id
+            ]
+            return results[0] if len(results) == 1 else {"results": results}
         return engine.command_refresh_progress(package)
     if group == "ticket":
         return _ticket_transition(package, args, args.target)
