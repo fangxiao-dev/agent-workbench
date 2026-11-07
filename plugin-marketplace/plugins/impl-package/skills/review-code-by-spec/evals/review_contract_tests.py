@@ -27,7 +27,7 @@ def main() -> None:
         "comparison point",
         "调用者必须提供",
         "issue、Decision、Spec、Plan、DAG",
-        "缺失或部分实现的需求",
+        "缺失/部分实现的需求",
         "scope creep",
         "兼容窗口",
         "状态机",
