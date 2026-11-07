@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -54,9 +55,12 @@ def _run(
     cwd: Path | None = None,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    # Windows subprocess does not resolve .cmd shims (e.g. codex.cmd) from a bare name.
+    path = (env or os.environ).get("PATH")
+    command = shutil.which(str(args[0]), path=path) or str(args[0])
     try:
         return subprocess.run(
-            list(args),
+            [command, *args[1:]],
             cwd=cwd or REPO_ROOT,
             env=env,
             capture_output=True,
