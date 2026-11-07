@@ -17,7 +17,8 @@ user-invocable: true
 3. 访问 GitHub 审查上游内容，先看 `SKILL.md` 与关键目录摘要
 4. 用户确认后，默认安装或复制到仓库 `skills/<name>/`；同一上游的成组能力可显式指定 `skills/<bundle>/<name>/`
 5. 更新 `registry/third-party-skills.md`
-6. 若同名 skill 已存在，则跳过并输出对比摘要，交给用户决策
+6. 用 `scripts/link_skill.py` 把 skill 链接到 `agents`、`codex`、`claude` 宿主
+7. 若同名 skill 已存在，则跳过并输出对比摘要，交给用户决策
 
 ## 输入
 
@@ -69,4 +70,5 @@ bash skills/import-third-party-skill/scripts/import-third-party-skill.sh \
 
 - 第三方 skill 位于默认的 `skills/<name>/`，或显式指定的 `skills/<bundle>/<name>/`
 - `registry/third-party-skills.md` 记录 skill 名称、来源、获取方式和备注
+- skill 已通过 `scripts/link_skill.py` 以 junction/symlink 链接到 `~\.agents\skills\`、`~\.codex\skills\`、`~\.claude\skills\`
 - 如发现同名冲突：输出元数据与文件摘要，不自动覆盖

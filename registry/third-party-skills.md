@@ -2,6 +2,7 @@
 
 | Skill | 来源 | 获取方式 | 备注 |
 |-------|------|----------|------|
+| security-audit | `cloudflare/security-audit-skill` | `npx skills add cloudflare/security-audit-skill@security-audit -g -y` | 已放入 `skills/security-audit/` |
 | research | `mattpocock/skills` | `npx skills add mattpocock/skills@research -g -y` | 已放入 `skills/research/` |
 | cso | `garrytan/gstack` | `npx skills add garrytan/gstack --skill cso --full-depth -y --copy` | 已放入 `skills/gstack/cso/` |
 | office-hours | `garrytan/gstack` | `npx skills add garrytan/gstack --skill office-hours --full-depth -y --copy` | 已放入 `skills/gstack/office-hours/` |
@@ -35,6 +36,7 @@
 | writing-for-agents | `mattpocock/skills` | `npx skills add mattpocock/skills@writing-for-agents -g -y` | 上游自 `writing-great-skills` 重命名；已放入 `skills/writing-for-agents/`；`write-skill-smartly` 已改引用 |
 | resolving-merge-conflicts | `mattpocock/skills` | `npx skills add mattpocock/skills@resolving-merge-conflicts -g -y` | 已放入 `skills/resolving-merge-conflicts/` |
 | wait-what | `mattpocock/skills` | `npx skills add mattpocock/skills@wait-what -g -y` | 已放入 `skills/wait-what/` |
+| to-questionnaire | `mattpocock/skills` | 人工迁移上游 `skills/productivity/to-questionnaire` | 已放入 `skills/to-questionnaire/`；`agents/openai.yaml` 禁止隐式调用 |
 | vercel-react-best-practices | `vercel-labs/agent-skills` | `npx skills add vercel-labs/agent-skills@vercel-react-best-practices -g -y` | 已放入 `skills/vercel-react-best-practices/` |
 | find-skills | `vercel-labs/skills` | `npx skills add vercel-labs/skills@find-skills -g -y` | 已放入 `skills/find-skills/` |
 | powershell-windows | `davila7/claude-code-templates` | `npx skills add davila7/claude-code-templates@powershell-windows -g -y` | 已放入 `skills/powershell-windows/` |
