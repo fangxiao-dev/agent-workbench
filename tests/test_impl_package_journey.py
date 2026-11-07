@@ -646,6 +646,15 @@ def test_filled_spec_template_with_variants_passes_check_spec_and_init(tmp_path:
     _init(repo, package)
 
 
+def test_unreplaced_variant_placeholder_is_not_caught_by_runtime(tmp_path: Path) -> None:
+    # 现状记录：变体小节不被 runtime 解析，模板占位 `#### J1-S?` 留进正式 Spec 不会报错，只能靠 Spec Gate 人工核对。
+    spec = SPEC + "\n### Journey 变体\n\n#### J1-S? <步骤简述>\n\n- J?-S?：不适用（理由：）\n"
+    repo, package = _make_package(tmp_path, spec=spec)
+    checked = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
+    assert checked.returncode == 0, checked.stderr
+    assert json.loads(checked.stdout)["valid"] is True
+
+
 def test_changing_only_variant_section_requires_amendment(tmp_path: Path) -> None:
     repo, package, _revision = _init_v36(tmp_path)
     spec_path = package / "spec.md"
