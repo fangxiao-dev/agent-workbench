@@ -16,7 +16,7 @@ Spec 只有同时满足以下条件才可 PASSED：
 - 八个 behavior-contract 章节 substantive，behavior、state/workflow、permission/boundary、error/recovery 与 canonical model 内部一致；
 - 每个 promise/constraint 映射到 observable evidence，需要 Owner 本人验的项指定 owner；
 - Journeys、Rule Matrix、Required Suites 三张表齐全：每个 step 是某角色亲手做或亲自收到的事（页面步有具名控件，`记录` 步不是第 1 步），有入口类型、操作入口、观察表面、预期与承接，每条 Journey 有 `取证：浏览器走查` 或 `取证：Playwright（理由：…）`——Playwright 无理由或理由不是精确测量即不通过，每条规则有 Source、oracle 并指向已登记套件，`package check-spec` 无遗漏章节，触及 tenant/RBAC/隐私/幂等/数据完整性时有包级 safety 套件，Environment 为明确字符串，Spec 不含 Ticket ID；
-- 涉及权限或数据范围的 Journey 步骤在 `### Journey 变体` 有补充信息（要读的数据；每个变体执行者的预期、可观察表现与是否必验），无适用变体的 Journey 写“不适用”及理由；必验变体本期由主控在 Gate 前人工核对走查证据，现有 runtime 与 `gate pass` 不证明变体已覆盖；
+- 涉及权限或数据范围的 Journey 步骤在 `### Journey 变体` 有补充信息（要读的数据；每个变体执行者的预期、可观察表现与是否必验），无适用变体的 Journey 写“不适用”及理由；每个变体都有预期、可观察表现与必验标记；
 - 展示、编辑或拒绝结果可以不产生新记录，发生权威状态转换时明确唯一记录、producer 与下游消费；
 - blocking owner decision、contract ambiguity 与 artifact authority conflict 为零；
 - 两个独立实施者可以选择不同内部实现，但不会产生不同 API、data identity、permission、concurrency、recovery 或 public shape。
