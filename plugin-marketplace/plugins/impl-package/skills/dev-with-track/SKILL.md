@@ -90,7 +90,7 @@ Completion claim 不能宽于 evidence；准备写 terminal pass 或声称 compl
 - 仓库存在 `docs/implementations/retired.json`（至少 `{"packages": []}`）；
 - `ticket satisfy` 需带 `--expect <当前状态>`；`--revision` 默认 HEAD。
 
-Spec 有 `### Journey 变体` 时，`gate pass` 前还要确认变体核对（Spec 中全部必验变体 + 覆盖表中已选变体）已完成：runtime 不检查这一项，由主控按 `run-acceptance` 的收口条件人工确认。
+Spec 有 `### Journey 变体` 时，`gate pass` 前确认 `run-acceptance` 收口的变体核对已完成（runtime 不检查）。
 
 terminal Gate 完成 Stage 7：记录 Durable Delta 与 truth pointer，或写明无增量理由；随后冻结 state、checkpoint 与 Execution Record。transport disconnect 后从幂等事实恢复。
 

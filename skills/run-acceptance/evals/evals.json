@@ -33,43 +33,19 @@
       "expectations": [
         "Does not register journey-step evidence for the variant",
         "Uses a runId separate from the main path",
-        "Ends the partial variant record at the variant step once the expected behavior is captured",
         "Keeps the main path proven by its complete continuous run"
       ]
     },
     {
       "id": 4,
-      "prompt": "必验变体 J3-S2 的走查记录完整，受验 HEAD 为 abc123。之后最终 HEAD 只多了两次提交：一次改 docs/*.md，另一次改了 API 的权限判断代码。另一个变体的记录之后只有文档改动。请判断两条变体记录能否沿用。",
-      "expected_output": "Carries forward the docs-only variant record; for the runtime change the controller reviews the diff and either re-walks J3-S2's variant or records the carry-forward reason in the walkthrough record, without evidence carry-forward.",
+      "prompt": "三条必验变体记录都完整。之后：A 的记录之后只改了 docs/*.md；B 的记录之后改了 API 的权限判断代码；C 的记录之后只有文档改动，但 C 依赖的 J2-S3 预期从“看到昨日结余”改成了“看到近 7 日结余”。请判断三条记录能否沿用。",
+      "expected_output": "A carries forward; B follows the same rule as the main path (controller reviews the diff, re-walks on a new run or writes the reason in the walkthrough record); C is re-judged against the revised contract and re-walked because the old evidence cannot show the 7-day balance.",
       "files": [],
       "expectations": [
-        "Allows automatic carry-forward when only non-runtime paths changed",
-        "Requires the controller to review the runtime diff for J3-S2",
-        "Re-walks the variant or writes the carry-forward reason in the walkthrough record",
-        "Does not use evidence carry-forward for variant records"
-      ]
-    },
-    {
-      "id": 5,
-      "prompt": "J4 的合同要求连续验证（上一步产生、下一步复用）。必验变体 J4-S3 的记录完整，之后最终 HEAD 新增了一次服务端代码改动；另一条变体记录之后只改了 docs/*.md。请判断。",
-      "expected_output": "Re-walks J4 on the final HEAD from step 1 continuously to the J4-S3 variant's end point; the docs-only record carries forward.",
-      "files": [],
-      "expectations": [
-        "Requires a continuous re-walk from step 1 to the variant end point on the final HEAD for the continuity Journey",
-        "Does not accept a diff-based carry-forward reason for the continuity Journey",
-        "Carries forward the docs-only variant record",
-        "Uses fresh business objects and the variant's own preparation for the re-walk"
-      ]
-    },
-    {
-      "id": 6,
-      "prompt": "必验变体 J2-S3“代班员工”的走查记录完整，之后 Spec 的 Journey 变体表没改，但 J2-S3 的预期从“看到昨日结余”改成了“看到近 7 日结余”，其间只有文档改动。能否沿用这条变体记录？",
-      "expected_output": "Re-judges the variant record against the revised J2-S3 contract and re-walks it because the old evidence does not show the 7-day balance.",
-      "files": [],
-      "expectations": [
-        "Does not carry forward just because the variant table and code are unchanged",
-        "Treats the revised dependent step as invalidating the old judgement",
-        "Re-walks the variant when the record cannot prove the new expectation"
+        "Carries forward A automatically for a docs-only change",
+        "Applies the main-path version-drift rule to B and records any carry-forward reason in the walkthrough record",
+        "Re-judges C against the revised contract instead of carrying it forward",
+        "Re-walks C when the record cannot prove the new expectation"
       ]
     }
   ]

@@ -16,7 +16,7 @@ Spec 只有同时满足以下条件才可 PASSED：
 - 八个 behavior-contract 章节 substantive，behavior、state/workflow、permission/boundary、error/recovery 与 canonical model 内部一致；
 - 每个 promise/constraint 映射到 observable evidence，需要 Owner 本人验的项指定 owner；
 - Journeys、Rule Matrix、Required Suites 三张表齐全：每个 step 是某角色亲手做或亲自收到的事（页面步有具名控件，`记录` 步不是第 1 步），有入口类型、操作入口、观察表面、预期与承接，每条 Journey 有 `取证：浏览器走查` 或 `取证：Playwright（理由：…）`——Playwright 无理由或理由不是精确测量即不通过，每条规则有 Source、oracle 并指向已登记套件，`package check-spec` 无遗漏章节，触及 tenant/RBAC/隐私/幂等/数据完整性时有包级 safety 套件，Environment 为明确字符串，Spec 不含 Ticket ID；
-- 每个涉及权限或数据范围的 Journey 步骤都在 `### Journey 变体` 出现：有要读的数据和变体（各含前置、预期、可观察表现、必验标记），或有步骤级“不适用”及理由；整条 Journey 的“不适用”理由点名其各步角色与数据范围；
+- 每个涉及权限或数据范围的 Journey 步骤在 `### Journey 变体` 写全变体信息（要读的数据；各变体的前置、预期、可观察表现、必验），或写“不适用”及理由；是否走过不在本 Gate 检查；
 - 展示、编辑或拒绝结果可以不产生新记录，发生权威状态转换时明确唯一记录、producer 与下游消费；
 - blocking owner decision、contract ambiguity 与 artifact authority conflict 为零；
 - 两个独立实施者可以选择不同内部实现，但不会产生不同 API、data identity、permission、concurrency、recovery 或 public shape。
@@ -33,7 +33,7 @@ Gate 可以发现设计范围与正文之间的明显漏项；发现后返回 Pr
 Gate 的固定动作：
 
 1. 运行 `package check-spec --spec <repo-relative spec.md>`（无需 state），逐条处理列出的章节：补一条带 Source 的规则，或把该章节列入“无需验收的章节”。
-2. 独立覆盖核对：reviewer 对照 Spec 各章规则与 Rule Matrix，从作者声明的“无需验收的章节”开始读，遗漏通常藏在那里；同时逐步骤核对 Journeys：每个涉及权限或数据范围的步骤都在 `### Journey 变体` 出现，挑战“不适用”理由，静默遗漏的步骤要指出（人工判断，不加机械检查）；发现含验收相关规则的章节，回到 1。
+2. 独立覆盖核对：reviewer 对照 Spec 各章规则与 Rule Matrix，从作者声明的“无需验收的章节”开始读，遗漏通常藏在那里；同时逐步骤核对 Journeys，指出漏写变体的权限/数据范围步骤，挑战“不适用”理由；发现含验收相关规则的章节，回到 1。
 
 ## Blocked persistence
 

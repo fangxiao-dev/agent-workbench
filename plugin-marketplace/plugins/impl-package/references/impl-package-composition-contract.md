@@ -76,7 +76,7 @@ plan 必须写 `Acceptance: journey`（缺失即拒绝），生成 `formatVersio
 | `### Rule Matrix` | `Rule \| Source \| Suite \| Oracle` | 每条规则有 oracle，并指向一个已登记套件；Source 是 spec.md 内的章节引用（`§N`、`§N.M` 或标题原文，逗号分隔） |
 | `### Required Suites` | `Suite \| Kind \| Scope \| Entry \| Environment` | Kind 为 `rule \| safety`，Scope 为 `ticket \| package`；Environment 写明确字符串，记录按字符串精确匹配 |
 
-§7 可另有与 `### Journeys` 同级的 `### Journey 变体` 补充小节（权限/数据范围步骤的变体执行者，语义见 req-align 的 acceptance-contract），runtime 不解析；它放进 `### Journeys` 内会被当作 Journey 解析并报错。
+§7 可另有与 `### Journeys` 同级的 `### Journey 变体` 小节（语义见 req-align 的 acceptance-contract），runtime 不解析；放进 `### Journeys` 内会被当作 Journey 解析并报错。
 
 表后固定一行 `- 无需验收的章节：<章节引用 | none>`。除 §7 外，spec.md 每个二、三级标题都要被某条 Source 引用（引用父章节覆盖子章节）或列在该行，否则 `package validate`/`package init`/`package check-spec` 失败并列出章节。
 
