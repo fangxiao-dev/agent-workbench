@@ -1,6 +1,6 @@
 # Loop Mode
 
-Use this only when the user explicitly asks for a bounded multi-round loop (`组织 3 轮 loop 审查`, `继续按 loop 深挖`). A loop is a series of normal orchestrations (see [orchestrator.md](orchestrator.md)); this file only says how to decide whether another round is worth running and what to carry between rounds. Do not add loop control to the normal orchestration path.
+Use this only when the user explicitly asks for a bounded multi-round loop (`组织 3 轮 loop 审查`, `继续按 loop 深挖`). A loop is a series of normal orchestrations (see [orchestrator.md](orchestrator.md)); this file only says how to run rounds and what to carry between them. Whether another round is worth running follows [convergence.md](convergence.md). Do not add loop control to the normal orchestration path.
 
 ## Judging Another Round
 

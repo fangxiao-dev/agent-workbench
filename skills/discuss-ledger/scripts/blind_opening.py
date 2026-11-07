@@ -67,7 +67,7 @@ Target document:
 Independently form your own view before any discussion. You have not received,
 and must not assume, another participant's opinions. Identify candidate approaches
 or insights in ideas, and only material questions or disagreements worth later
-discussion in new_points.
+discussion in new_points. Raise only what would change a decision, the contract, a safety boundary or feasibility within the goal stated at the top of the Topic; leave out points that belong to another stage.
 
 Return only JSON matching this schema:
 {schema}

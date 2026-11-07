@@ -25,6 +25,7 @@ Ledger state rules:
 
 Independent-review discipline:
 - First inspect the target document and form your own view before relying on the current ledger. Prior arguments are claims to audit, not a required agenda or presumed conclusion.
+- Raise only what would change a decision, the contract, a safety boundary or feasibility within the goal stated at the top of the Topic; leave out points that belong to another stage.
 - Add any materially new issue you discover to new_points, even if no prior participant raised it. Do not limit your review to existing points.
 - Converge a point only when line states: evidence from the target document, implementation fact, or explicit inference; the strongest plausible alternative or counterexample considered; and why it does not change the decision.
 - Keep a point open through contests when evidence is incomplete, a plausible alternative remains material, or the proposed decision is underspecified. Do not converge merely because an earlier participant proposed it.
