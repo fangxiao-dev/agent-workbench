@@ -186,8 +186,8 @@ Spec 子技能一个阶段里叠了三件性质不同的事，要求在同一个
 - 结果：只要登记过带 `--tickets` 的 amendment，`package validate` 就报 `acceptance.amendments[i] 字段/status 无效`，state 被判为缺失或无效，所有派发都被阻断。
 
 修复：
-- 在 `situation.py` 的 amendment 字段校验里加上一句：有 `tickets` 时允许该字段。邮箱一期已在本机这样改过，校验恢复正常。
-- 本提案随附这一行修复。还需要补一个回归测试：登记带 `--tickets` 的 amendment 后，`package validate` 通过。
+- `situation.py` 的 amendment 字段校验已允许 `tickets`，见提交 `c01733c`。
+- 还缺一个回归测试：登记带 `--tickets` 的 amendment 后，`package validate` 应通过。
 
 ## 5. 试金石：用邮箱包验证
 
@@ -217,7 +217,7 @@ Spec 子技能一个阶段里叠了三件性质不同的事，要求在同一个
 | 2 | Spec 子技能拆出验收合同步骤；新增 `references/acceptance-contract.md`；Journey 条件字段与模板注释；Spec Gate 补条件字段检查 | agent-workbench `impl-package/skills/req-align` |
 | 3 | `review-code-by-spec` 读取风险清单；`learn-lessons` 接入积累入口 | agent-workbench |
 | 4 | run-acceptance：增加变体执行者走查，并把 §4.4 表中的执行问题写进走查手册 | agent-workbench（其中 harness 分段那一条写在 KaiSpan 的 start-env 或 plan 模板里） |
-| 4a | do-review 的 terminal-final 报告增加盲审 loop 提醒（§4.6）；CLI 补 amendment `tickets` 校验和回归测试（§4.7） | agent-workbench |
+| 4a | do-review 的 terminal-final 报告增加盲审 loop 提醒（§4.6）；CLI 补 amendment `tickets` 的回归测试（§4.7，修复已在 c01733c） | agent-workbench |
 | 5 | 邮箱包与代班案例试点（§5） | KaiSpan |
 | 6 | 根据试点结果决定是否推广；在 KaiSpan 写入“规则集中放”约定 | KaiSpan AGENTS.md 与架构文档 |
 
