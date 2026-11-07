@@ -5,6 +5,7 @@
 environment：<Spec 声明的字符串>
 取证方式：浏览器走查 | Playwright（Spec 的「取证：」行原文）
 执行者变体：主路径 | <Spec「Journey 变体」中的变体执行者>（必验 | 非必验）| 探索性抽查：<身份>
+必验变体勾对：<按覆盖表的必验清单逐项写 `[x] J<n>-S<m> <变体执行者>`；不适用写 none>
 
 <!-- 每步一行。截图放 package 的 evidence 目录，路径写成 package 内相对路径，同时是该步 evidence 的 artifact。截图拍到通过标准依赖的可见元素：标签、来源、数值、状态。观察结果写看到了什么，不写判断。“方法”列填 `走查` 或 `Playwright（原因）`，原因是 Spec 点名的测量或浏览器工具做不到的具体点。Spec 该步“承接”不是 `—` 时，inputRef 等于上一步的 outputRef。 -->
 

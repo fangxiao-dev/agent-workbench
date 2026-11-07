@@ -88,7 +88,8 @@ Completion claim 不能宽于 evidence；准备写 terminal pass 或声称 compl
 `gate pass` 前先确认机械前置条件，否则会被逐条拒绝：
 - `review.terminal_summary` 的 `comparisonHead` 是当前 HEAD 的完整 SHA，Track A 的 `reviewedHead` 必须是当前 HEAD，不能复用；C 和 Safety 可以凭 reuseEvidence 复用；
 - 仓库存在 `docs/implementations/retired.json`（至少 `{"packages": []}`）；
-- `ticket satisfy` 需带 `--expect <当前状态>`；`--revision` 默认 HEAD。
+- `ticket satisfy` 需带 `--expect <当前状态>`；`--revision` 默认 HEAD；
+- Spec 有 `### Journey 变体` 时，`run-acceptance` 收口条件中的必验变体核对已完成（runtime 不检查这一项）。
 
 terminal Gate 完成 Stage 7：记录 Durable Delta 与 truth pointer，或写明无增量理由；随后冻结 state、checkpoint 与 Execution Record。transport disconnect 后从幂等事实恢复。
 
