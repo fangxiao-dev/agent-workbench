@@ -949,6 +949,8 @@ def _parse_state(view: FileView) -> StateView:
                     expected_amendment |= {field for field in ("createdAt", "confirmedAt") if field in amendment}
                     if "affectedBlobs" in amendment:
                         expected_amendment.add("affectedBlobs")
+                    if "tickets" in amendment:
+                        expected_amendment.add("tickets")
                     identifier = amendment.get("id")
                     if status not in {"PENDING", "CONFIRMED"} or set(amendment) != expected_amendment:
                         errors.append(f"acceptance.amendments[{index}] 字段/status 无效")
