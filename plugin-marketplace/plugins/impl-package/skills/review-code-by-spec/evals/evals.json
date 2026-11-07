@@ -24,6 +24,7 @@
       "expected_output": "The report identifies partial implementation and scope creep with contract and diff evidence.",
       "files": [],
       "expectations": ["Detects missing or partial requirements", "Detects scope creep", "Does not turn repository style preferences into Spec findings"]
-    }
+    },
+    {"id": 4, "name": "risk-list-clue-without-contract-is-not-a-finding", "prompt": "Review the supplied fixed diff against the supplied Spec. The diff compares a retention timestamp using the process clock; the scenario risk list's 时间边界 pattern matches, but no Spec section states which clock is authoritative.", "expected_output": "Records the clock question as an unverifiable boundary in the Coverage record or returns UNCERTAIN, without a Spec finding.", "files": [], "expectations": ["Does not report a Spec finding based only on the scenario risk list", "Puts the clue in the Coverage record boundaries or uses verdict=UNCERTAIN", "Does not treat the risk list as a contract source"]}
   ]
 }

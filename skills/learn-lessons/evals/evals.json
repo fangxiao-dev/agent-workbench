@@ -33,6 +33,7 @@
         "说明 Design/Spec/Plan 只能校准 owner 和合同边界，不能证明真实实践经验",
         "按内容将稳定合同交给 backfill-stable-docs、未来方案留在 implementation-local design 或 plan"
       ]
-    }
+    },
+    {"id": 4, "prompt": "在 KaiSpan 仓库里复盘租户邮箱一期的 accepted findings：其中一条是清理与重投竞争（可归入已确认的“状态在中途被别人改了”模式），另一条是 webhook 重放窗口过宽，清单里没有对应模式。请处理场景风险清单相关部分。", "expected_output": "Because it runs outside the agent-workbench repo, outputs append suggestions instead of writing the list: a case for the confirmed pattern and a [候选] new pattern, each with a controlled reference and a non-sensitive summary.", "files": [], "expectations": ["Does not write the scenario risk list into the KaiSpan repo", "Proposes the race case as an append to the confirmed pattern", "Marks the replay-window pattern as [候选] for Owner confirmation", "Uses controlled references and non-sensitive summaries without customer data or project internals"]}
   ]
 }
