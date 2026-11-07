@@ -48,6 +48,18 @@
         "Re-walks the variant or writes the carry-forward reason in the walkthrough record",
         "Does not use evidence carry-forward for variant records"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "J4 的合同要求连续验证（上一步产生、下一步复用）。必验变体 J4-S3 的记录完整，之后最终 HEAD 新增了一次服务端代码改动；另一条变体记录之后只改了 docs/*.md。请判断。",
+      "expected_output": "Re-walks J4 on the final HEAD from step 1 continuously to the J4-S3 variant's end point; the docs-only record carries forward.",
+      "files": [],
+      "expectations": [
+        "Requires a continuous re-walk from step 1 to the variant end point on the final HEAD for the continuity Journey",
+        "Does not accept a diff-based carry-forward reason for the continuity Journey",
+        "Carries forward the docs-only variant record",
+        "Uses fresh business objects and the variant's own preparation for the re-walk"
+      ]
     }
   ]
 }
