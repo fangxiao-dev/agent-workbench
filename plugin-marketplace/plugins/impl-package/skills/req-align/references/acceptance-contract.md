@@ -17,7 +17,7 @@ Spec 子技能第 7 步读取。只用于新 package 的 `spec.md §7`；表结�
 
 ## Journey 变体
 
-只对涉及权限或数据范围的步骤补充，写在 `### Journey 变体` 小节，按 step id 关联到 Journey 步骤。Journey 表头、步骤格式与 step id 不变；变体不另起 step。
+只对涉及权限或数据范围的步骤补充，写在与 `### Journeys` 同级的 `### Journey 变体` 小节（放进 Journeys 内会被 runtime 当作 Journey 解析而报错），每个关联步骤一个小标题 `#### J<n>-S<m> <步骤简述>`，其下写“要读的数据”与变体表。Journey 表头、步骤格式与 step id 不变；变体不另起 step。
 
 每个关联步骤写：
 - **要读的数据**：完成这一步需要读到的全部数据，包括历史数据、跨门店数据和参考数据。

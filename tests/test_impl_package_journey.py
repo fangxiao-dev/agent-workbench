@@ -592,6 +592,18 @@ def test_journey_variant_section_does_not_change_parsed_journey_or_init(tmp_path
     _init(repo, package)
 
 
+def test_journey_variant_section_nested_inside_journeys_is_rejected() -> None:
+    nested = SPEC.replace("### Rule Matrix", """#### J1-S2 企业端打开下一张同类账单
+
+| 变体执行者 | 预期 | 可观察表现 | 必验 |
+| --- | --- | --- | --- |
+| 代班员工 | 完成 | 预填 4982 | 是 |
+
+### Rule Matrix""", 1)
+    with pytest.raises(engine.StateError, match="invalid Journey heading"):
+        engine._journey_spec_text(nested)
+
+
 def test_check_spec_accepts_none_when_rules_cover_every_chapter(tmp_path: Path) -> None:
     spec = SPEC.replace("R1 | §2 |", "R1 | §1, §2, §3 |")
     spec = spec.replace("- 无需验收的章节： §1, §3", "- 无需验收的章节： none")
