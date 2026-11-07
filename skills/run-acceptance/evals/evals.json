@@ -1,0 +1,53 @@
+{
+  "skill_name": "run-acceptance",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "主控收口验收：Spec 的 J2-S3 列了必验变体“代班员工（当天委派）”，覆盖表里主路径全部走通，但没有这个变体的走查记录。验收者说主路径已覆盖同一步。请判定整包结论。",
+      "expected_output": "Refuses package PASS until the must-verify variant has a complete walkthrough record that passes its expected result.",
+      "files": [],
+      "expectations": [
+        "Does not judge the package PASS",
+        "Names the missing J2-S3 must-verify variant record",
+        "Does not accept the main-path run as a substitute for the variant",
+        "Notes runtime gate pass would not catch this, so the controller checks it manually"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "验收者临时用“刚被移出门店的店员”身份试了 J1-S2，发现还能打开页面；Spec 的 Journey 变体里没有这个身份，合同也没写移出后的权限。请分诊。",
+      "expected_output": "Treats it as an exploratory spot check with a contract gap: routes it to journey amendment and Owner decision, proposes adding it as a must-verify variant, and does not make it a gate condition this round.",
+      "files": [],
+      "expectations": [
+        "Classifies the identity as exploratory, not a selected variant",
+        "Does not dispatch it as an implementation defect without a contract basis",
+        "Proposes an amendment to add the identity as a must-verify variant for Owner decision",
+        "Does not block this round's gate on it"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "验收者走完 J1 的必验变体“只读角色”（预期部分可用），截了图，准备用 evidence add 登记 journey-step，runId 沿用主路径的 run-03。请指导。",
+      "expected_output": "Tells the verifier not to register variant evidence; variant evidence stays in the walkthrough record and screenshots with a separate runId, and the main path keeps its own continuous run.",
+      "files": [],
+      "expectations": [
+        "Does not register journey-step evidence for the variant",
+        "Uses a runId separate from the main path",
+        "Ends the partial variant record at the variant step once the expected behavior is captured",
+        "Keeps the main path proven by its complete continuous run"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "必验变体 J3-S2 的走查记录完整，受验 HEAD 为 abc123。之后最终 HEAD 只多了两次提交：一次改 docs/*.md，另一次改了 API 的权限判断代码。另一个变体的记录之后只有文档改动。请判断两条变体记录能否沿用。",
+      "expected_output": "Carries forward the docs-only variant record; for the runtime change the controller reviews the diff and either re-walks J3-S2's variant or records the carry-forward reason in the walkthrough record, without evidence carry-forward.",
+      "files": [],
+      "expectations": [
+        "Allows automatic carry-forward when only non-runtime paths changed",
+        "Requires the controller to review the runtime diff for J3-S2",
+        "Re-walks the variant or writes the carry-forward reason in the walkthrough record",
+        "Does not use evidence carry-forward for variant records"
+      ]
+    }
+  ]
+}
