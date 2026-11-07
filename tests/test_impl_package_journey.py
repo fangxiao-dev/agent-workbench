@@ -1580,6 +1580,23 @@ def test_amendment_add_confirm_cas_idempotence_and_unregistered_contract_finding
     assert not any(row["code"] == "contract-amendment-unregistered" for row in json.loads(after.stdout)["findings"])
 
 
+def test_amendment_with_tickets_keeps_state_valid(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    repo, package, _revision = _init_v36(tmp_path)
+    _append_spec_note(package, "Owner clarification: ticket-scoped amendment.")
+    added = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "补充规则", "--affected", "spec.md", "--artifact", "artifacts/evidence.md", "--tickets", "TKT-01")
+    assert added.returncode == 0, added.stderr
+    assert _state(package)["acceptance"]["amendments"][0]["tickets"] == ["TKT-01"]
+
+    validated = _cli(repo, package, "package", "validate", no_situation=False)
+    assert validated.returncode == 0, validated.stderr
+    capsys.readouterr()
+    assert situation.main(["render", "--package", str(package), "--json"]) == 0
+    rendered = json.loads(capsys.readouterr().out)
+    # 回归 c01733c：situation 的 state 校验曾拒绝 amendment 的 tickets 字段，把整包判为 state 无效。
+    assert (rendered["selected"] or {}).get("slug") != "package.record.state-missing"
+    assert "acceptance.amendments" not in json.dumps(rendered, ensure_ascii=False)
+
+
 def test_amendment_without_registration_blob_does_not_cover_contract_change(tmp_path: Path) -> None:
     repo, package, _ = _init_v36(tmp_path)
     _append_spec_note(package, "Clarification: Wording is clarified.")
