@@ -907,6 +907,26 @@ def test_evidence_add_supports_all_kinds_idempotence_and_atomic_batch(tmp_path: 
     assert _state(package) == before
 
 
+def test_evidence_check_validates_batch_without_writing_state(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    good = [
+        {"kind": "run-setup", "runId": "chk", "artifact": "artifacts/evidence.md", "revision": revision, "environment": "local-test", "conclusion": "supporting"},
+        _journey_record(revision, "J1-S1", run_id="chk"),
+    ]
+    bad = [good[0], {**_journey_record(revision, "J1-S1", run_id="chk"), "entry": "wrong entry"}]
+    before = _state(package)
+    for records, ok in ((good, True), (bad, False)):
+        path = tmp_path / "records.json"
+        path.write_text(json.dumps(records), encoding="utf-8")
+        result = _cli(repo, package, "evidence", "check", "--file", str(path))
+        assert (result.returncode == 0) is ok, result.stderr
+        if ok:
+            assert json.loads(result.stdout)["wouldAdd"] == 2
+        else:
+            assert "operation entry" in result.stderr
+        assert _state(package) == before
+
+
 def test_journey_step_requires_run_setup_and_setup_is_ordered_in_batches(tmp_path: Path) -> None:
     repo, package, revision = _init_v36(tmp_path)
     journey = _journey_record(revision, "J1-S1", run_id="missing-setup")

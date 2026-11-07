@@ -2711,7 +2711,7 @@ def _validate_journey_step_order(state: dict[str, Any], spec: dict[str, Any], re
             )
 
 
-def command_evidence_add(package: Path, payload_text: str) -> dict[str, Any]:
+def command_evidence_add(package: Path, payload_text: str, dry_run: bool = False) -> dict[str, Any]:
     try:
         payload = json.loads(payload_text)
     except json.JSONDecodeError as exc:
@@ -2751,6 +2751,11 @@ def command_evidence_add(package: Path, payload_text: str) -> dict[str, Any]:
                 _validate_first_step_object_is_new(state, summary["_journeySpec"], record)
             state["evidenceIndex"].setdefault(evidence_key, []).append(record)
             added += 1
+    if dry_run:
+        # 只读预检：用同一套校验跑完整批，不写 state。
+        if added:
+            _validate_state(package, state, projections=False)
+        return {"checked": len(items), "wouldAdd": added, "duplicates": len(items) - added}
     if added:
         _validate_state(package, state, projections=False)
         _write_json(package / STATE_PATH, state)
