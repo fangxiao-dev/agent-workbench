@@ -90,6 +90,8 @@ Completion claim 不能宽于 evidence；准备写 terminal pass 或声称 compl
 - 仓库存在 `docs/implementations/retired.json`（至少 `{"packages": []}`）；
 - `ticket satisfy` 需带 `--expect <当前状态>`；`--revision` 默认 HEAD。
 
+Spec 有 `### Journey 变体` 时，`gate pass` 前确认 `run-acceptance` 收口的变体核对已完成（runtime 不检查）。
+
 terminal Gate 完成 Stage 7：记录 Durable Delta 与 truth pointer，或写明无增量理由；随后冻结 state、checkpoint 与 Execution Record。transport disconnect 后从幂等事实恢复。
 
 先由本 Skill 根据 canonical facts 判断 Ticket 总数、剩余数、blocker、是否 closed 和需要 Owner 的决定；Gate 第一屏由 runtime 生成 Owner Summary（Journey 走通进度、套件、待确认 Amendment、发布顺序、最终版本），汇报先说产品结果。

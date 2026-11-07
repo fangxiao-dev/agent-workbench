@@ -94,3 +94,24 @@ def test_touched_spec_requires_contract_design_but_untouched_legacy_is_not_migra
     assert "每个新建或修订的 Spec 都有从属 contract-design" in router
     assert "既有 Spec 在下次 req-align 时补齐" in router
     assert "本次创建或修订 Spec 时补齐从属文件" in subskill
+
+
+def test_scenario_risk_and_variant_links_resolve() -> None:
+    import re
+
+    files = [
+        PLUGIN / "references/scenario-risk-patterns.md",
+        REQ_ALIGN / "references/acceptance-contract.md",
+        REQ_ALIGN / "sub-skills/spec/SUB-SKILL.md",
+        PLUGIN / "skills/review-code-by-spec/SKILL.md",
+        ROOT / "skills/learn-lessons/SKILL.md",
+        ROOT / "skills/run-acceptance/SKILL.md",
+        ROOT / "skills/run-acceptance/references/controller.md",
+        ROOT / "skills/run-acceptance/references/verifier.md",
+    ]
+    link = re.compile(r"\]\(([^)#\s]+)(?:#[^)]*)?\)")
+    for path in files:
+        targets = [t for t in link.findall(path.read_text(encoding="utf-8")) if "://" not in t]
+        for target in targets:
+            assert (path.parent / target).exists(), f"{path.relative_to(ROOT)} -> {target}"
+    assert "scenario-risk-patterns.md" in (REQ_ALIGN / "references/acceptance-contract.md").read_text(encoding="utf-8")

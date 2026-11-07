@@ -50,6 +50,7 @@ Decision、Design、PRD、Spec 和 Architecture 材料只用于确认 owner、�
 - 混合材料：同时使用两个 maintainer，并将实现 lesson 与 debug lesson 分开；
 - 稳定的 product/system/module/context 语句、behavior contract 或 canonical vocabulary：交给 `backfill-stable-docs`，不写入 hands-on 文档；
 - requirements、future design、temporary plans 和 mandatory repository rules：使用仓库指定的 requirement、design、planning 或 agent-rule 归档位置。
+- 可复用的场景风险（accepted finding 暴露的、需求阶段本该追问的情况，如委派权限读不到历史数据、时钟混用）：按场景风险清单（impl-package 插件根的 `references/scenario-risk-patterns.md`；workbench 内见[此处](../../plugin-marketplace/plugins/impl-package/references/scenario-risk-patterns.md)）的“条目与积累”机会性提出。保留条件放宽为 finding 已接受、出处可核对。在 workbench 仓库内直接写入，其他仓库只在汇报里给追加建议。
 
 忽略一次性日志、普通状态、显而易见的代码结构、未完成计划以及已由 canonical contract 完整覆盖的事实，除非来源额外暴露了陷阱或恢复路径。
 
@@ -82,6 +83,7 @@ Decision、Design、PRD、Spec 和 Architecture 材料只用于确认 owner、�
 - 更新或创建了哪些 implementation、integration、migration 和 verification 文档；
 - 更新或创建了哪些 debug/runbook 文档；
 - 哪些稳定语义已交给 `backfill-stable-docs`；
+- 场景风险清单的追加案例与 `[候选]` 模式或维度（如有）；
 - 哪些一次性、过期、未完成或 design-only 材料被拒绝及原因；
 - entry map 是否改变以及原因；
 - 哪些当前 code/test 证据缺失，或存在 canonical 冲突。

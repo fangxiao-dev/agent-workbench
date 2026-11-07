@@ -1,0 +1,52 @@
+{
+  "skill_name": "run-acceptance",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "主控收口验收：Spec 的 J2-S3 列了必验变体“代班员工（当天委派）”，覆盖表里主路径全部走通，但没有这个变体的走查记录。验收者说主路径已覆盖同一步。请判定整包结论。",
+      "expected_output": "Refuses package PASS until the must-verify variant has a complete walkthrough record that passes its expected result.",
+      "files": [],
+      "expectations": [
+        "Does not judge the package PASS",
+        "Names the missing J2-S3 must-verify variant record",
+        "Does not accept the main-path run as a substitute for the variant",
+        "Notes runtime gate pass would not catch this, so the controller checks it manually"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "验收者临时用“刚被移出门店的店员”身份试了 J1-S2，发现还能打开页面；Spec 的 Journey 变体里没有这个身份，合同也没写移出后的权限。请分诊。",
+      "expected_output": "Treats it as an exploratory spot check with a contract gap: routes it to journey amendment and Owner decision, proposes adding it as a must-verify variant, and does not make it a gate condition this round.",
+      "files": [],
+      "expectations": [
+        "Classifies the identity as exploratory, not a selected variant",
+        "Does not dispatch it as an implementation defect without a contract basis",
+        "Proposes an amendment to add the identity as a must-verify variant for Owner decision",
+        "Does not block this round's gate on it"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "验收者走完 J1 的必验变体“只读角色”（预期部分可用），截了图，准备用 evidence add 登记 journey-step，runId 沿用主路径的 run-03。请指导。",
+      "expected_output": "Tells the verifier not to register variant evidence; variant evidence stays in the walkthrough record and screenshots with a separate runId, and the main path keeps its own continuous run.",
+      "files": [],
+      "expectations": [
+        "Does not register journey-step evidence for the variant",
+        "Uses a runId separate from the main path",
+        "Keeps the main path proven by its complete continuous run"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "三条必验变体记录都完整。之后：A 的记录之后只改了 docs/*.md；B 的记录之后改了 API 的权限判断代码；C 的记录之后只有文档改动，但 C 依赖的 J2-S3 预期从“看到昨日结余”改成了“看到近 7 日结余”。请判断三条记录能否沿用。",
+      "expected_output": "A carries forward; B follows the same rule as the main path (controller reviews the diff, re-walks on a new run or writes the reason in the walkthrough record); C is re-judged against the revised contract and re-walked because the old evidence cannot show the 7-day balance.",
+      "files": [],
+      "expectations": [
+        "Carries forward A automatically for a docs-only change",
+        "Applies the main-path version-drift rule to B and records any carry-forward reason in the walkthrough record",
+        "Re-judges C against the revised contract instead of carrying it forward",
+        "Re-walks C when the record cannot prove the new expectation"
+      ]
+    }
+  ]
+}

@@ -13,5 +13,7 @@ description: >
 1. 逐项对照合同与完整 diff，报告以下无序维度：缺失/部分实现的需求；未被要求的 scope creep；看似实现但行为错误的需求；implementation interface 与 seam 是否忠实遵守声明合同；module boundary 是否忠实遵守 issue、Decision、Spec、Plan 或 DAG；兼容窗口、状态机、跨 slice/跨模块 seam 是否偏离声明合同。若涉及状态/轨迹机制，语义 CLI 的 `--help`、`choices`、校验/错误输出和处境注入只作为实现接口的机械证据，不替代合同判断。
 2. 每条 finding 必须同时有稳定合同来源（章节级引用：合同原文或稳定来源）与 diff 证据；合同未规定某项行为时，不得以仓库规范、Fowler smell、deep module design、代码组织或个人设计偏好代替合同报告为 Spec finding。没有两侧证据时，意见不能被可靠地归类为 Spec finding。
 
+[场景风险清单](../../references/scenario-risk-patterns.md) 只作寻找遗漏的线索。命中模式但调用者提供的合同里确无适用条款时，写进 coverage 的“合同缺口（待裁决）”，不算 finding、不影响 verdict；相关章节缺失或矛盾时仍按开头规则报 evidence gap。
+
 ## 输出合同（leaf 结构化输出）
-≤400 words：每条 finding 给需求/合同项、类型（缺失/部分/scope creep/错误行为/contract drift）、合同原文或稳定来源、文件/行或稳定 hunk、可观察的不忠实行为、建议动作。无 finding 不得只写 `PASS`，必须含精简 Coverage record（对照的合同来源/关键条款、检查过的 diff module/interface/seam、未形成 finding 的结论、无法验证的边界）。Coverage record 是本轮 Spec 审查证据，不得替代合同证据，也不修改既有 400 words 上限。返回 `verdict | coverage | findings` 紧凑索引；不要以 repository conventions、Fowler smell、deep module design、代码组织或实现约定替代合同证据。
+≤400 words：每条 finding 给需求/合同项、类型（缺失/部分/scope creep/错误行为/contract drift）、合同原文或稳定来源、文件/行或稳定 hunk、可观察的不忠实行为、建议动作。无 finding 不得只写 `PASS`，必须含精简 Coverage record（对照的合同来源/关键条款、检查过的 diff module/interface/seam、未形成 finding 的结论、无法验证的边界，以及“合同缺口（待裁决）”，无则写 none）。Coverage record 是本轮 Spec 审查证据，不得替代合同证据，也不修改既有 400 words 上限。返回 `verdict | coverage | findings` 紧凑索引；不要以 repository conventions、Fowler smell、deep module design、代码组织或实现约定替代合同证据。

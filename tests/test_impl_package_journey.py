@@ -569,6 +569,107 @@ def test_check_spec_resolves_rule_and_no_acceptance_chapters_by_number_or_title(
     assert not (package / ".impl-package/state.json").exists()
 
 
+def test_journey_variant_section_does_not_change_parsed_journey_or_init(tmp_path: Path) -> None:
+    variants = """### Journey 变体
+
+#### J1-S2 企业端打开下一张同类账单
+
+- 要读的数据：门店记忆、历史账单科目。
+
+| 变体执行者 | 预期 | 可观察表现 | 必验 |
+| --- | --- | --- | --- |
+| 代班员工（当天委派） | 完成 | 预填 4982 | 是 |
+| 只读角色 | 部分 | 能看，不能修改科目 | 否 |
+
+### Rule Matrix"""
+    spec = SPEC.replace("### Rule Matrix", variants, 1)
+    assert engine._journey_spec_text(spec)["journeys"] == engine._journey_spec_text(SPEC)["journeys"]
+
+    repo, package = _make_package(tmp_path, spec=spec)
+    checked = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
+    assert checked.returncode == 0, checked.stderr
+    assert json.loads(checked.stdout)["valid"] is True
+    _init(repo, package)
+
+
+def test_journey_variant_section_nested_inside_journeys_is_rejected() -> None:
+    nested = SPEC.replace("### Rule Matrix", """#### J1-S2 企业端打开下一张同类账单
+
+| 变体执行者 | 预期 | 可观察表现 | 必验 |
+| --- | --- | --- | --- |
+| 代班员工 | 完成 | 预填 4982 | 是 |
+
+### Rule Matrix""", 1)
+    with pytest.raises(engine.StateError, match="invalid Journey heading"):
+        engine._journey_spec_text(nested)
+
+
+VARIANT_SECTION = """### Journey 变体
+
+#### J1-S2 企业端打开下一张同类账单
+
+- 要读的数据：门店记忆、历史账单科目。
+
+| 变体执行者 | 预期 | 可观察表现 | 必验 |
+| --- | --- | --- | --- |
+| 代班员工（当天委派） | 完成 | 预填 4982 | 是 |
+
+- J1-S1：不适用（理由：税务师步骤不涉及委派或跨范围数据）
+"""
+
+
+def test_journey_variant_section_after_required_suites_still_parses(tmp_path: Path) -> None:
+    spec = SPEC + "\n" + VARIANT_SECTION
+    assert engine._journey_spec_text(spec)["journeys"] == engine._journey_spec_text(SPEC)["journeys"]
+    repo, package = _make_package(tmp_path, spec=spec)
+    checked = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
+    assert checked.returncode == 0, checked.stderr
+
+
+def test_filled_spec_template_with_variants_passes_check_spec_and_init(tmp_path: Path) -> None:
+    template = (ROOT / "plugin-marketplace/plugins/impl-package/skills/req-align/assets/templates/spec.md").read_text(encoding="utf-8")
+    fixture_journey = SPEC[SPEC.index("#### J1 "):SPEC.index("### Rule Matrix")]
+    fixture_suites = SPEC[SPEC.index("| Suite | Kind |"):]
+    spec = template[:template.index("#### J1 <终态>")] + fixture_journey + template[template.index("\n### Journey 变体\n") + 1:]
+    variant_body = VARIANT_SECTION.split("\n", 2)[2]
+    spec = spec[:spec.index("#### J1-S? <步骤简述>")] + variant_body + "\n" + spec[spec.index("### Rule Matrix"):]
+    rule_header = "| Rule | Source | Suite | Oracle |\n| --- | --- | --- | --- |\n"
+    spec = spec.replace(rule_header, rule_header + "| R1 | §1 | S-resolver | 范围内行为可观察 |\n", 1)
+    exempt = "Decision 门记录（Decision Gate Record）, Spec 设计范围, Spec 门记录（Spec Gate Record）, §2, §3, §4, §5, §6, §8, 变更说明"
+    spec = spec.replace("- 无需验收的章节：\n", f"- 无需验收的章节： {exempt}\n", 1)
+    spec = spec[:spec.index("| Suite | Kind |")] + fixture_suites + "\n" + spec[spec.index("<!-- Kind："):]
+
+    repo, package = _make_package(tmp_path, spec=spec)
+    checked = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
+    assert checked.returncode == 0, checked.stderr + checked.stdout
+    assert json.loads(checked.stdout)["valid"] is True
+    _init(repo, package)
+
+
+def test_unreplaced_variant_placeholder_is_not_caught_by_runtime(tmp_path: Path) -> None:
+    # 现状记录：变体小节不被 runtime 解析，模板占位 `#### J1-S?` 留进正式 Spec 不会报错，只能靠 Spec Gate 人工核对。
+    spec = SPEC + "\n### Journey 变体\n\n#### J1-S? <步骤简述>\n\n- J?-S?：不适用（理由：）\n"
+    repo, package = _make_package(tmp_path, spec=spec)
+    checked = _cli(repo, package, "package", "check-spec", "--spec", package.joinpath("spec.md").relative_to(repo).as_posix())
+    assert checked.returncode == 0, checked.stderr
+    assert json.loads(checked.stdout)["valid"] is True
+
+
+def test_changing_only_variant_section_requires_amendment(tmp_path: Path) -> None:
+    repo, package, _revision = _init_v36(tmp_path)
+    spec_path = package / "spec.md"
+    spec_text = spec_path.read_text(encoding="utf-8")
+    spec_path.write_text(spec_text.replace("### Rule Matrix", VARIANT_SECTION + "\n### Rule Matrix", 1), encoding="utf-8")
+    before = _cli(repo, package, "package", "validate")
+    assert any(row["code"] == "contract-amendment-unregistered" and row["path"] == "spec.md" for row in json.loads(before.stdout)["findings"])
+
+    added = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "补充变体", "--affected", "spec.md", "--artifact", "artifacts/evidence.md")
+    assert added.returncode == 0, added.stderr
+    after = _cli(repo, package, "package", "validate")
+    assert after.returncode == 0, after.stderr
+    assert not any(row["code"] == "contract-amendment-unregistered" for row in json.loads(after.stdout)["findings"])
+
+
 def test_check_spec_accepts_none_when_rules_cover_every_chapter(tmp_path: Path) -> None:
     spec = SPEC.replace("R1 | §2 |", "R1 | §1, §2, §3 |")
     spec = spec.replace("- 无需验收的章节： §1, §3", "- 无需验收的章节： none")
@@ -1555,6 +1656,23 @@ def test_amendment_add_confirm_cas_idempotence_and_unregistered_contract_finding
     after = _cli(repo, package, "package", "validate")
     assert after.returncode == 0, after.stderr
     assert not any(row["code"] == "contract-amendment-unregistered" for row in json.loads(after.stdout)["findings"])
+
+
+def test_amendment_with_tickets_keeps_state_valid(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    repo, package, _revision = _init_v36(tmp_path)
+    _append_spec_note(package, "Owner clarification: ticket-scoped amendment.")
+    added = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "补充规则", "--affected", "spec.md", "--artifact", "artifacts/evidence.md", "--tickets", "TKT-01")
+    assert added.returncode == 0, added.stderr
+    assert _state(package)["acceptance"]["amendments"][0]["tickets"] == ["TKT-01"]
+
+    validated = _cli(repo, package, "package", "validate", no_situation=False)
+    assert validated.returncode == 0, validated.stderr
+    capsys.readouterr()
+    assert situation.main(["render", "--package", str(package), "--json"]) == 0
+    rendered = json.loads(capsys.readouterr().out)
+    # 回归 c01733c：situation 的 state 校验曾拒绝 amendment 的 tickets 字段，把整包判为 state 无效。
+    assert (rendered["selected"] or {}).get("slug") != "package.record.state-missing"
+    assert "acceptance.amendments" not in json.dumps(rendered, ensure_ascii=False)
 
 
 def test_amendment_without_registration_blob_does_not_cover_contract_change(tmp_path: Path) -> None:
