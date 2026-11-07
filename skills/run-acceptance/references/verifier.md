@@ -17,7 +17,7 @@
 
 **页面步**
 
-- 用你自带的内置浏览器工具走查（Claude 用自己的浏览器工具，Codex 用 codex in chrome，其余按宿主），每步操作后截图，截图拍到通过标准依赖的可见元素：标签、来源、数值、状态。Claude 子代理用 Claude in Chrome 时，先以 `createIfEmpty: true` 建自己的标签组，结束时关掉自己的标签。
+- 用你自带的内置浏览器工具走查（Claude 用自己的浏览器工具，Codex 用 codex in chrome，其余按宿主），每步操作后截图，截图拍到通过标准依赖的可见元素：标签、来源、数值、状态。默认尺寸拍不全或布局被挤成窄屏形态时，先试着调整视口或窗口尺寸再截图；用什么方法、设多大，按你的宿主工具能做到的自行选择。Claude 子代理用 Claude in Chrome 时，先以 `createIfEmpty: true` 建自己的标签组，结束时关掉自己的标签。
 - 每步按[走查记录模板](../assets/walkthrough-record.md)落一行，截图存 package 的 `evidence/` 目录。走查人写你自己的标识，登记时作为 `manualBy`。
 - Journey 的“取证：”行写了 Playwright 的步骤，那一步改跑 Playwright 脚本并保存 trace；其余步仍走查。
 - 命中模板“须 Owner 本人验”的步骤，备好入口与读回方法，标“待 Owner”。
