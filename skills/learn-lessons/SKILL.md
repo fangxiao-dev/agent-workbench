@@ -50,7 +50,7 @@ Decision、Design、PRD、Spec 和 Architecture 材料只用于确认 owner、�
 - 混合材料：同时使用两个 maintainer，并将实现 lesson 与 debug lesson 分开；
 - 稳定的 product/system/module/context 语句、behavior contract 或 canonical vocabulary：交给 `backfill-stable-docs`，不写入 hands-on 文档；
 - requirements、future design、temporary plans 和 mandatory repository rules：使用仓库指定的 requirement、design、planning 或 agent-rule 归档位置。
-- 跨项目反复出现的场景风险（findings 暴露的需求阶段本该追问的情况，例如委派权限读不到历史数据、时钟混用、中途状态被改）：对照场景风险清单 `references/scenario-risk-patterns.md`（清单目前均为候选，只作提问线索，引用时注明）。按已加载的 impl-package 插件根或明确的 agent-workbench 根定位；在 workbench 仓库内为 `plugin-marketplace/plugins/impl-package/references/scenario-risk-patterns.md`（[链接](../../plugin-marketplace/plugins/impl-package/references/scenario-risk-patterns.md)）。只有在 workbench 仓库内运行时才直接写入；否则或定位不到时，只在汇报中产出追加建议（模式名、案例、出处、非敏感摘要），不写进目标项目。写入按清单的“积累规则”：能归入已确认模式的案例直接追加；新模式、新维度，以及候选模式的新案例，并入 `[候选]` 批次交 Owner 确认。这类案例来自 findings 本身，上文保留条件中的“当前代码、测试或 canonical owner 文档支持”改为：finding 已被接受且出处可核对，并且是可复用的场景模式而非一次性事故。机会性提出即可，不要求为每个 finding 做映射。
+- 跨项目反复出现的场景风险（findings 暴露的需求阶段本该追问的情况，例如委派权限读不到历史数据、时钟混用、中途状态被改）：对照场景风险清单 `references/scenario-risk-patterns.md`（只作提问线索，按清单中各模式的状态标记引用）。按已加载的 impl-package 插件根或明确的 agent-workbench 根定位；在 workbench 仓库内为 `plugin-marketplace/plugins/impl-package/references/scenario-risk-patterns.md`（[链接](../../plugin-marketplace/plugins/impl-package/references/scenario-risk-patterns.md)）。只有在 workbench 仓库内运行时才直接写入；否则或定位不到时，只在汇报中产出追加建议（模式名、案例、出处、非敏感摘要），不写进目标项目。写入按清单的“积累规则”：能归入已确认模式的案例直接追加；新模式、新维度，以及候选模式的新案例，并入 `[候选]` 批次交 Owner 确认。这类案例来自 findings 本身，上文保留条件中的“当前代码、测试或 canonical owner 文档支持”改为：finding 已被接受且出处可核对，并且是可复用的场景模式而非一次性事故。机会性提出即可，不要求为每个 finding 做映射。
 
 忽略一次性日志、普通状态、显而易见的代码结构、未完成计划以及已由 canonical contract 完整覆盖的事实，除非来源额外暴露了陷阱或恢复路径。
 
