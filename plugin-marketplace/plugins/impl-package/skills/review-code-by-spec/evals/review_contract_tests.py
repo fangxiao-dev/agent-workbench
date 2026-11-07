@@ -31,8 +31,7 @@ def main() -> None:
         "scope creep",
         "兼容窗口",
         "状态机",
-        "跨 slice seam",
-        "跨模块 seam",
+        "跨 slice/跨模块 seam",
         "contract evidence",
         "400 words",
     ):
