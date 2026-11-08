@@ -1071,7 +1071,7 @@ def _ticket_dependencies(documents: list[dict[str, Any]]) -> dict[str, list[tupl
                 stripped = line.strip()
                 if not stripped.startswith("-") or stripped.lower() in {"- none", "- 无"}:
                     continue
-                match = re.fullmatch(r"-\s*(implementation|acceptance|release)\s*:\s*([^\s]+)", stripped)
+                match = re.fullmatch(r"-\s*(implementation|acceptance|release)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\s*[（(:：—–-].*)?", stripped)
                 if match is None:
                     raise StateError(f"Ticket {row['id']} has invalid typed dependency: {stripped}")
                 if match.group(2) not in identifiers:

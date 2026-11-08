@@ -582,6 +582,28 @@ class ImplPackageStateTests(unittest.TestCase):
 
         self.assertIn("state predecessors do not match", failed.stderr)
 
+    def test_typed_dependency_accepts_trailing_note(self) -> None:
+        temp, repo, package = self.make_repo(initialized=False)
+        self.addCleanup(temp.cleanup)
+        notes = ["（需要上游产物）", " (upstream artifact)", "：共享文件串行", " — shared file"]
+        for index, ticket in enumerate(sorted((package / "tickets").glob("*.md"))):
+            text = ticket.read_text(encoding="utf-8")
+            for kind in ("implementation", "acceptance", "release"):
+                text = re.sub(rf"(?m)^(- {kind}: TKT-01)$", rf"\g<1>{notes[index % len(notes)]}", text)
+            ticket.write_text(text, encoding="utf-8")
+        annotated = [line for ticket in (package / "tickets").glob("*.md") for line in ticket.read_text(encoding="utf-8").splitlines() if re.match(r"- (implementation|acceptance|release): TKT-01\S", line) or re.match(r"- (implementation|acceptance|release): TKT-01 ", line)]
+        self.assertTrue(annotated)
+        result = self.init(repo, package, subprocess=True)
+        self.assertEqual(result["readyTickets"], ["TKT-01", "TKT-03", "TKT-04"])
+
+    def test_typed_dependency_still_rejects_malformed_line(self) -> None:
+        temp, repo, package = self.make_repo(initialized=False)
+        self.addCleanup(temp.cleanup)
+        ticket = package / "tickets" / "02-transform.md"
+        ticket.write_text(ticket.read_text(encoding="utf-8").replace("- implementation: TKT-01", "- implementation TKT-01"), encoding="utf-8")
+        failed = self.cli(repo, package, "package", "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md", ok=False)
+        self.assertIn("invalid typed dependency", failed.stderr)
+
     def test_satisfied_requires_released_dependencies_and_records_acceptance(self) -> None:
         temp, repo, package = self.make_repo()
         self.addCleanup(temp.cleanup)
