@@ -609,12 +609,11 @@ class ImplPackageStateTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.init(repo, package)
         head = git(repo, "rev-parse", "HEAD")
-        missing_revision = self.cli(repo, package, "ticket", "satisfy", "TKT-01", "--expect", "PENDING", ok=False)
-        self.assertIn("--revision", missing_revision.stderr)
         self.add_evidence(repo, package)
         blocked = self.cli(repo, package, "ticket", "satisfy", "TKT-03", "--expect", "PENDING", "--revision", head, "--environment", "test", ok=False)
         self.assertIn("dependencies", blocked.stderr)
-        self.satisfy(repo, package, "TKT-01")
+        # --revision omitted: defaults to HEAD
+        self.cli(repo, package, "ticket", "satisfy", "TKT-01", "--expect", "PENDING", "--environment", "test")
         accepted = self.state(package)["tickets"]["TKT-01"]
         self.assertEqual(accepted["state"], "SATISFIED")
         self.assertEqual(accepted["acceptance"]["revision"], head)
