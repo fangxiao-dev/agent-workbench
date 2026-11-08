@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import subprocess
@@ -220,12 +221,14 @@ def run_blind_opening(
 ) -> dict[str, Any]:
     target_document = orchestrator.read_target_document(root, topic)
     runner = agent_runner or call_executor
-    participants: list[dict[str, Any]] = []
-    for agent in agents:
+    def run_one(agent: str) -> dict[str, Any]:
         prompt = build_prompt(agent, topic, target_document)
         raw = fake_result(agent) if fake else runner(agent, prompt, root, timeout_s)
-        normalized = validate_result(raw)
-        participants.append({"agent": agent, **normalized})
+        return {"agent": agent, **validate_result(raw)}
+
+    # Participants are independent subprocess calls; map() keeps the input order and re-raises the first failure.
+    with ThreadPoolExecutor(max_workers=len(agents)) as pool:
+        participants = list(pool.map(run_one, agents))
     result: dict[str, Any] = {
         "topic": topic,
         "slug": slug,
