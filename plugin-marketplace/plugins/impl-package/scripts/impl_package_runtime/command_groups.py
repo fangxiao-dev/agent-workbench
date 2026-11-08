@@ -203,6 +203,8 @@ def _parser(group: str) -> argparse.ArgumentParser:
             epilog=EVIDENCE_ADD_EPILOG,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
+        check = commands.add_parser("check", help="read-only check of a JSON evidence array file; writes nothing")
+        check.add_argument("--file", required=True)
         invalidate = commands.add_parser("invalidate", help="invalidate the records of one evidence key")
         invalidate.add_argument("--key", required=True)
         invalidate.add_argument("--invalidated-by", required=True)
@@ -309,6 +311,8 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
     if group == "evidence":
         if args.command == "add":
             return engine.command_evidence_add(package, sys.stdin.read())
+        if args.command == "check":
+            return engine.command_evidence_add(package, Path(args.file).read_text(encoding="utf-8"), dry_run=True)
         if args.command == "carry-forward":
             return engine.command_evidence_carry_forward(package, args.key, args.to, args.reason, args.judged_by)
         return engine.command_evidence_invalidate(package, args.key, args.invalidated_by)

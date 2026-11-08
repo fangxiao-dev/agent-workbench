@@ -1220,7 +1220,7 @@ def _parse_ticket(identifier: str, relative: str | None, text: str, expected_att
             stripped = line.strip()
             if not stripped or stripped.lower() in {"- none", "- 无"}:
                 continue
-            match = re.fullmatch(r"-\s*(implementation|acceptance|release)\s*:\s*([^\s]+)", stripped, re.I)
+            match = re.fullmatch(r"-\s*(implementation|acceptance|release)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\s*[（(:：—–-].*)?", stripped, re.I)
             if match:
                 dependencies.append((match.group(1).lower(), match.group(2)))
     return TicketInfo(

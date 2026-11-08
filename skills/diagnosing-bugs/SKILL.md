@@ -51,7 +51,7 @@ Spend disproportionate effort here. **Be aggressive. Be creative. Refuse to give
 7. **Property / fuzz loop.** If the bug is "sometimes wrong output", run 1000 random inputs and look for the failure mode.
 8. **Bisection harness.** If the bug appeared between two known states (commit, dataset, version), automate "boot at state X, check, repeat" so you can `git bisect run` it.
 9. **Differential loop.** Run the same input through old-version vs new-version (or two configs) and diff outputs.
-10. **HITL script.** Last resort. If a human must click, copy and adapt the platform template: `scripts/hitl-loop.template.ps1` for Windows PowerShell, or `scripts/hitl-loop.template.sh` for Bash on Linux, macOS, or WSL. Captured output feeds back to you.
+10. **HITL script.** Last resort. If a human must click, copy and adapt the cross-platform template: `scripts/hitl_loop_template.py`. Captured output feeds back to you.
 
 Build the right feedback loop, and the bug is 90% fixed.
 
@@ -80,7 +80,7 @@ Phase 1 is done when the loop is **tight** and **red-capable**: you can name **o
 - [ ] **Red-capable** — it drives the actual bug code path and asserts the **user's exact symptom**, so it can go red on this bug and green once fixed. Not "runs without erroring" — it must be able to _catch this specific bug_.
 - [ ] **Deterministic** — same verdict every run (flaky bugs: a pinned, high reproduction rate, per above).
 - [ ] **Tight enough for repeated experiments** — substantially narrower or faster than the original failure path. Prefer a seconds-fast signal, but allow slower build, performance, CI-only, or remote loops when no faithful narrower signal exists; record the constraint and keep searching for a cheaper proxy.
-- [ ] **Agent-runnable** — you can run it unattended; a human in the loop only through the platform-appropriate template in `scripts/`.
+- [ ] **Agent-runnable** — you can run it unattended; a human in the loop only through the template in `scripts/`.
 
 Reading code and data flow to construct the loop is allowed. What must stop is committing to a fix hypothesis without evidence that distinguishes it from alternatives. No red-capable command, no Phase 2 unless the failure is genuinely remote-only and the unavailable signal is reported as a blocker or instrumentation need.
 
