@@ -12,24 +12,24 @@ description: 把一个任务交给 DeepSeek 驱动的 `claude -p` 子进程执�
 ## 调用
 
 ```powershell
-pwsh -NoProfile -File "$HOME\.claude\skills\call-ds-in-claude\scripts\call-ds.ps1" -Prompt "<任务>" -Cwd "<目录>"
+python "$HOME/.claude/skills/call-ds-in-claude/scripts/call_ds.py" --prompt "<任务>" --cwd "<目录>"
 ```
 
-prompt 长或含引号时用 `-PromptFile <文件>`。耗时长就用 Bash/PowerShell 的 `run_in_background`,完成会通知。
+prompt 长或含引号时用 `--prompt-file <文件>`。耗时长就用终端宿主的 `run_in_background`,完成会通知。
 
 ## 参数
 
 | 参数 | 默认 | 说明 |
 | --- | --- | --- |
-| `-Prompt` / `-PromptFile` | 必填其一 | 任务文本 |
-| `-Cwd` | 当前目录 | 子进程工作目录,它能读到这里的文件 |
-| `-Model` | `deepseek-v4-flash` | 同时映射到 Haiku/Sonnet/Opus 与子代理档 |
-| `-Permission` | `acceptEdits` | 要让它无人值守跑 Bash 用 `bypassPermissions`;只读任务用 `plan` |
-| `-Tools` | 全部默认工具 | 如 `Read,Grep,Glob` 限制为只读 |
-| `-Resume` | 无 | 续接上次会话:传 `[done]` 行里的 `session=` 值,且 `-Cwd` 必须与上次相同 |
-| `-ClipChars` | `400` | 日志里每条工具结果的截断长度 |
-| `-IdleTimeoutSec` | `900` | 连续这么久没有任何输出行就杀掉子进程树并退出(exit 2),`[timeout]` 行带 `session=` 可 `-Resume` 续跑;`0` = 不限 |
-| `-HeartbeatSec` | `60` | 静默超过该秒数输出一行 `[hb] elapsed/idle/events`;`0` = 关闭 |
+| `--prompt` / `--prompt-file` | 必填其一 | 任务文本 |
+| `--cwd` | 当前目录 | 子进程工作目录,它能读到这里的文件 |
+| `--model` | `deepseek-v4-flash` | 同时映射到 Haiku/Sonnet/Opus 与子代理档 |
+| `--permission` | `acceptEdits` | 要让它无人值守跑 Bash 用 `bypassPermissions`;只读任务用 `plan` |
+| `--tools` | 全部默认工具 | 如 `Read,Grep,Glob` 限制为只读 |
+| `--resume` | 无 | 续接上次会话:传 `[done]` 行里的 `session=` 值,且 `--cwd` 必须与上次相同 |
+| `--clip-chars` | `400` | 日志里每条工具结果的截断长度 |
+| `--idle-timeout-sec` | `900` | 连续这么久没有任何输出行就杀掉子进程树并退出(exit 2),`[timeout]` 行带 `session=` 可 `--resume` 续跑;`0` = 不限 |
+| `--heartbeat-sec` | `60` | 静默超过该秒数输出一行 `[hb] elapsed/idle/events`;`0` = 关闭 |
 
 ## 输出
 
@@ -41,4 +41,4 @@ prompt 长或含引号时用 `-PromptFile <文件>`。耗时长就用 Bash/Power
 - 内容会发给 DeepSeek 服务端:不要给它 `.env`、密钥、真实客户数据。用 `-Tools Read,Grep,Glob` 时先确认 `-Cwd` 范围。
 - 它的结论按外部输入核对后再采纳,不直接写入权威文档或代码。
 - Key 读 `DEEPSEEK_API_KEY`,否则读 `~\.claude\secrets\deepseek.key`;不要打印。
-- claude 可执行文件:优先 PATH(非 Volta),否则取桌面应用自带的最新版;可用 `CLAUDE_EXE` 覆盖。
+- claude 可执行文件:优先 PATH(非 Volta),Windows 下否则取桌面应用自带的最新版;可用 `CLAUDE_EXE` 覆盖。
