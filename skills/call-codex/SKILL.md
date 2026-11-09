@@ -65,7 +65,17 @@ reviewer(fresh, read-only) → findings
 - 需要全新视角或原实现方向有根本问题的 finding，仍走 fresh fixer；
 - 修复后仍由独立 reviewer 重审（同一 scope），implementer 不得自判 closure。
 
-## 参数事实表（已实测，codex 0.149.0）
+### 7. 并行的独立任务用独立进程
+
+多个互不依赖的 codex 任务（例如代码、合同、安全三轨只读审阅）**每个起一个后台进程同时跑**，不要在一个循环里依次 `codex exec`（串行会把总耗时叠成各轨之和，也失去中途单独 kill 一轨的能力）。每个进程用 `-o <文件>` 写最终答复，`*> <日志>` 记过程，主 session 只读输出文件：
+
+```powershell
+codex exec -C <repo> -s read-only -o out\code.md "<prompt>" *> logs\code.log
+```
+
+每轨照此各起一个后台进程（`run_in_background` / `Start-Process`），日志文件分开；进程结束前不重复读日志，只看各自的 `out\*.md`。
+
+## 参数事实表（已实测，codex 0.149.0；★ 行实测于 2026-11-09，codex-cli 0.167.0-alpha.3.2）
 
 | 用法 | 结果 |
 | --- | --- |
@@ -77,6 +87,9 @@ reviewer(fresh, read-only) → findings
 | `--json` | JSONL 事件流（流式） |
 | `--skip-git-repo-check` | 跳过 git 仓库检查（只读 review 等场景可用） |
 | 只读审查 | `-s read-only`（与 `--approve-for-me` 互斥，二选一） |
+| ★ `codex` 的 PATH 解析 | 本机解析为 `C:\Users\Xiao\.local\bin\codex.cmd`；Git Bash 里找不到 codex，要从 PowerShell 调；不再是 Volta shim |
+| ★ 模型 id | 见 `~/.codex/magpie-desktop-models.json`；口头说的 “sol/high” 对应 `-m gpt-6.1-sol -c 'model_reasoning_effort="high"'` |
+| ★ 长 prompt 从 stdin 传 | `Get-Content prompt.md -Raw \| codex exec ... -`（末尾 `-`） |
 
 注：`--enable <feature>` 的合法 feature 名随版本变化，用前先验证；未在本表的行为以 `codex exec --help` 为准。
 
@@ -103,8 +116,9 @@ Pass exactly one of `--prompt` or `--prompt-file`. Repeat `--config` for multipl
 the right CLI, in this order: `CODEX_EXECUTABLE` (repository-local `.env` or process
 environment) -> a PATH `codex.cmd` / `codex` that is not the non-executable WindowsApps
 package resource -> the newest per-user Desktop binary under
-`%LOCALAPPDATA%\OpenAI\Codex\bin\`, including its hashed subdirs. Where Codex is
-installed through Volta, PATH resolves to the Volta shim, which is what you want.
+`%LOCALAPPDATA%\OpenAI\Codex\bin\`, including its hashed subdirs. On this machine PATH
+resolves `codex` to `C:\Users\Xiao\.local\bin\codex.cmd` (no longer a Volta shim), which
+is what you want; Git Bash does not find `codex`, so call it from PowerShell.
 
 In particular, never hardcode `%LOCALAPPDATA%\OpenAI\Codex\bin\codex.exe`. That top-level
 file is a stale leftover; the desktop app self-updates its real binary inside a hashed
