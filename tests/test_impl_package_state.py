@@ -603,6 +603,7 @@ class ImplPackageStateTests(unittest.TestCase):
         ticket.write_text(ticket.read_text(encoding="utf-8").replace("- implementation: TKT-01", "- implementation TKT-01"), encoding="utf-8")
         failed = self.cli(repo, package, "package", "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md", ok=False)
         self.assertIn("invalid typed dependency", failed.stderr)
+        self.assertIn("正确格式：`- implementation: T01`", failed.stderr)
 
     def test_satisfied_requires_released_dependencies_and_records_acceptance(self) -> None:
         temp, repo, package = self.make_repo()

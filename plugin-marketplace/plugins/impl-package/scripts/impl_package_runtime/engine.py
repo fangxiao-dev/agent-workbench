@@ -1073,7 +1073,11 @@ def _ticket_dependencies(documents: list[dict[str, Any]]) -> dict[str, list[tupl
                     continue
                 match = re.fullmatch(r"-\s*(implementation|acceptance|release)\s*:\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\s*[（(:：—–-].*)?", stripped)
                 if match is None:
-                    raise StateError(f"Ticket {row['id']} has invalid typed dependency: {stripped}")
+                    raise StateError(
+                        f"Ticket {row['id']} has invalid typed dependency: {stripped}；"
+                        "正确格式：`- implementation: T01`（或 acceptance/release）；"
+                        "同行注释须紧跟在 id 后、以（ ( : ： — – - 之一开头，否则放到列表下方的独立段落"
+                    )
                 if match.group(2) not in identifiers:
                     raise StateError(f"Ticket {row['id']} has unknown dependency: {match.group(2)}")
                 dependencies.append((match.group(1), match.group(2)))
@@ -1456,7 +1460,11 @@ def _validate_journey_evidence_index(
                 if record["surface"] not in {"page", "file", "api", "log"}:
                     raise StateError(f"evidenceIndex[{evidence_key}] surface must be page, file, api, or log")
                 if record["actor"] != step["role"]:
-                    raise StateError(f"evidenceIndex[{evidence_key}] actor does not match the Spec role")
+                    raise StateError(
+                        f"evidenceIndex[{evidence_key}] actor 与 Spec 不一致："
+                        f"实际为 {record['actor']!r}，Spec Journey 表该步允许的角色为 {step['role']!r}；"
+                        "走查人写在 manualBy"
+                    )
                 digest = _validate_journey_surface_evidence(package, step, copy, live=live)
                 if record["surface"] == "file":
                     if not isinstance(record.get("artifactSha256"), str) or re.fullmatch(r"[0-9a-f]{64}", record["artifactSha256"]) is None:
@@ -1487,8 +1495,13 @@ def _validate_journey_evidence_index(
                     raise StateError(f"evidenceIndex[{evidence_key}] references unknown suite")
                 if evidence_key != f"suite:{suite_id}":
                     raise StateError(f"evidenceIndex[{evidence_key}] must use suite:<suiteId>")
-                if record["environment"] != spec["suites"][suite_id]["environment"]:
-                    raise StateError(f"evidenceIndex[{evidence_key}] environment does not match the Spec")
+                expected_environment = spec["suites"][suite_id]["environment"]
+                if record["environment"] != expected_environment:
+                    raise StateError(
+                        f"evidenceIndex[{evidence_key}] environment 与 Spec 不一致："
+                        f"Spec Suite {suite_id} 要求 {expected_environment!r}，实际为 {record['environment']!r}；"
+                        "environment 须与 Spec 逐字一致"
+                    )
             elif kind == "review":
                 ticket = record["ticket"]
                 if not isinstance(ticket, str) or (ticket != "package" and ticket not in ticket_ids):
@@ -2576,7 +2589,11 @@ def _normalize_journey_evidence(
         if step is None or step["journeyId"] != journey_id:
             raise StateError(f"unknown Journey step: {journey_id}/{step_id}")
         if actor != step["role"]:
-            raise StateError("Journey evidence actor does not match the Spec role")
+            raise StateError(
+                f"Journey evidence actor 与 Spec 不一致：实际为 {actor!r}，"
+                f"Spec Journey 表 {journey_id}/{step_id} 允许的角色为 {step['role']!r}；"
+                "走查人写在 manualBy"
+            )
         if entry != step["operationEntry"]:
             raise StateError("Journey evidence entry does not match the Spec operation entry")
         if record["surface"] not in {"page", "file", "api", "log"}:
@@ -2619,8 +2636,13 @@ def _normalize_journey_evidence(
         suite_id = record["suiteId"]
         if not isinstance(suite_id, str) or suite_id not in spec["suites"]:
             raise StateError(f"unknown required suite: {suite_id}")
-        if record["environment"] != spec["suites"][suite_id]["environment"]:
-            raise StateError(f"suite {suite_id} evidence environment does not match the Spec")
+        expected_environment = spec["suites"][suite_id]["environment"]
+        if record["environment"] != expected_environment:
+            raise StateError(
+                f"suite {suite_id} evidence environment 与 Spec 不一致："
+                f"Spec 要求 {expected_environment!r}，实际为 {record['environment']!r}；"
+                "environment 须与 Spec 逐字一致"
+            )
         evidence_key = f"suite:{suite_id}"
     elif kind == "review":
         ticket = record["ticket"]
@@ -2649,8 +2671,10 @@ def _validate_first_step_object_is_new(state: dict[str, Any], spec: dict[str, An
                 and existing.get("runId") != record["runId"]
                 and output_ref in {existing.get("inputRef"), existing.get("outputRef")}
             ):
+                suggested_ref = f"{record['runId']}-{output_ref}"
                 raise StateError(
-                    f"第 1 步产出的对象已在 run {existing['runId']} 中出现，每次 run 需新建业务对象"
+                    f"第 1 步产出的对象 {output_ref!r} 已在 run {existing['runId']} 中出现，"
+                    f"每次 run 需新建业务对象；给 outputRef/inputRef 加 runId 前缀（例如 {suggested_ref!r}）"
                 )
 
 
@@ -2670,7 +2694,10 @@ def _validate_journey_step_order(state: dict[str, Any], spec: dict[str, Any], re
                 steps_by_position.setdefault(positions[existing["stepId"]], []).append(existing)
     if not steps_by_position:
         if current_position != 0:
-            raise StateError(f"Journey run {record['runId']} must start at {journey['steps'][0]['id']}")
+            raise StateError(
+                f"Journey run {record['runId']} must start at {journey['steps'][0]['id']}；"
+                "若第 1 步刚因对象复用被拒，先修正第 1 步的 outputRef/inputRef 再按 Spec 顺序重试"
+            )
         return
     last_position = max(steps_by_position)
     if set(steps_by_position) != set(range(last_position + 1)):
@@ -3494,6 +3521,11 @@ def _v36_gate_gaps(
     lifecycle: Lifecycle = summary["_lifecycle"]
     status = _v36_acceptance_status(package, state, summary, comparison_commit, attempt_active=not lifecycle.frozen)
     gaps: list[str] = []
+    gaps.extend(
+        f"合同文件 {row['path']} 相对 contractBaseline 有变化但未登记 Amendment；"
+        "合同已变更，需登记 Amendment 并经 Owner 确认"
+        for row in status["unregisteredAmendments"]
+    )
     for journey in status["journeys"]:
         if journey["reach"] != journey["total"]:
             hint = "；API 预演已走通，仍需页面/文件/记录证据" if journey["rehearsalReach"] == journey["total"] else ""
@@ -3504,7 +3536,11 @@ def _v36_gate_gaps(
     for suite in status["suites"]:
         if not suite["valid"]:
             gaps.append(f"Required Suite {suite['id']} 缺少当前有效的 supporting 记录")
-    gaps.extend(f"Evidence {key} 的 supporting 记录待复验" for key in status["staleEvidence"])
+    gaps.extend(
+        f"Evidence {key} 的 supporting 记录待复验；若变更不影响运行时，用 "
+        f"evidence carry-forward --key {key} --to <HEAD> --reason <理由> --judged-by <人>"
+        for key in status["staleEvidence"]
+    )
     for ticket, row in state["tickets"].items():
         if row["state"] != "SATISFIED":
             gaps.append(f"Required Ticket {ticket} 状态为 {row['state']}，需要 SATISFIED")
@@ -3514,7 +3550,6 @@ def _v36_gate_gaps(
                 gaps.append(f"Ticket {ticket} 的 {kind} 入边 {dependency} 未释放")
     if status["pendingAmendments"]:
         gaps.extend(f"合同修订 {row['id']} 待 Owner 确认：{row['summary']}" for row in status["pendingAmendments"])
-    gaps.extend(f"合同文件 {row['path']} 相对 contractBaseline 有变化但未登记 Amendment" for row in status["unregisteredAmendments"])
     if status["releaseRequired"] and not status["releaseValid"]:
         gaps.append("Plan 要求发布顺序，但缺少当前有效的 release 记录")
     coverage = terminal_coverage_fact(package)

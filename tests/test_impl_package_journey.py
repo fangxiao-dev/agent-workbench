@@ -975,7 +975,9 @@ def test_first_journey_step_cannot_reuse_an_object_from_another_run(tmp_path: Pa
     rejected = _cli(repo, package, "evidence", "add", input_value=reused)
 
     assert rejected.returncode != 0
-    assert "第 1 步产出的对象已在 run run-1 中出现，每次 run 需新建业务对象" in rejected.stderr
+    assert "第 1 步产出的对象" in rejected.stderr and "bill-123" in rejected.stderr
+    assert "给 outputRef/inputRef 加 runId 前缀" in rejected.stderr
+    assert "second-run-bill-123" in rejected.stderr
     assert "journey:second-run:J1-S1" not in _state(package)["evidenceIndex"]
 
 
@@ -1173,7 +1175,22 @@ def test_journey_evidence_actor_must_match_spec_role(tmp_path: Path) -> None:
     result = _cli(repo, package, "evidence", "add", input_value=record)
 
     assert result.returncode != 0
-    assert "actor does not match the Spec role" in result.stderr
+    assert "actor 与 Spec 不一致" in result.stderr
+    assert "'企业端用户'" in result.stderr and "'税务师'" in result.stderr
+    assert "走查人写在 manualBy" in result.stderr
+    assert _state(package)["evidenceIndex"] == {}
+
+
+def test_suite_evidence_environment_must_match_spec_verbatim(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    record = _suite_record(revision, "S-resolver", environment="local-test ")
+
+    result = _cli(repo, package, "evidence", "add", input_value=record)
+
+    assert result.returncode != 0
+    assert "environment 与 Spec 不一致" in result.stderr
+    assert "'local-test'" in result.stderr and "'local-test '" in result.stderr
+    assert "environment 须与 Spec 逐字一致" in result.stderr
     assert _state(package)["evidenceIndex"] == {}
 
 
@@ -1467,6 +1484,7 @@ def test_skipping_first_step_has_zero_reach_and_mixed_run_environment_is_atomic(
     skipped = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S2", run_id="skip-first"))
     assert skipped.returncode != 0
     assert "must start at J1-S1" in skipped.stderr
+    assert "先修正第 1 步的 outputRef/inputRef" in skipped.stderr
     assert _state(package)["evidenceIndex"] == {}
 
     complete_run = [
@@ -1606,6 +1624,7 @@ def test_evidence_freshness_rejects_external_diff_and_accepts_package_only_diff(
     assert stale_gate.returncode != 0
     assert "Evidence journey:run-1:J1-S1 的 supporting 记录待复验" in stale_gate.stderr
     assert "Evidence suite:S-resolver 的 supporting 记录待复验" in stale_gate.stderr
+    assert "evidence carry-forward --key journey:run-1:J1-S1 --to <HEAD> --reason <理由> --judged-by <人>" in stale_gate.stderr
     stale = _satisfy(repo, package, "TKT-01", external_head, ok=False)
     assert "Suite S-resolver" in stale.stderr
     assert not situation.evidence_record_valid(
@@ -1901,6 +1920,7 @@ def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_p
     unregistered_gate = _gate(unregistered_repo, unregistered_package, "pass", unregistered_revision)
     assert unregistered_gate.returncode != 0
     assert "spec.md" in unregistered_gate.stderr and "未登记 Amendment" in unregistered_gate.stderr
+    assert "合同已变更，需登记 Amendment 并经 Owner 确认" in unregistered_gate.stderr
 
 
 def test_gate_pass_rejects_each_acceptance_gap_and_gate_blocked_keeps_attempt_active(tmp_path: Path) -> None:
