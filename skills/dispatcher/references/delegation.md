@@ -24,7 +24,7 @@ worker 以 `DONE | BLOCKED | INCOMPLETE` 返回局部 outcome；调查附 `EVIDE
 
 review receipt 确认审查已派发；主控消费该固定增量的独立审查结果后，才依据结论记录 `PASSED`。
 
-同一范围的实现或修复在上下文可信且 ownership 不变时可以复用 worker。reviewer 与 implementer 保持独立；同一 review scope 可复用 reviewer 并输入新的固定增量。有界 test campaign 可在环境和 comparison point 不变时复用执行上下文。
+执行者选择沿用主路径的复用规则。reviewer 与 implementer 保持独立；同一 review scope 复核时输入新的固定增量。有界 test campaign 可在环境和 comparison point 不变时复用执行上下文。
 
 错误 cwd、缺少本地 binary、format 或普通测试载体故障，在边界仍可信时属于当前动作 recovery。关键前提失效、遗漏 caller/producer 家族、实际 write-set 外溢或结果无法归因时返回事实，由主控重新调查边界。
 
