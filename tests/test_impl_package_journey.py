@@ -2356,3 +2356,19 @@ def test_ticket_satisfy_defaults_revision_to_head_and_lists_all_gaps(tmp_path: P
     assert added.returncode == 0, added.stderr
     satisfied = _cli(repo, package, "ticket", "satisfy", "TKT-02", "--expect", "PENDING", "--environment", "local-test")
     assert satisfied.returncode == 0, satisfied.stderr
+
+
+def test_spec_rewrite_marks_drifted_journey_evidence_invalidated(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    record = _journey_record(revision, "J1-S1")
+    assert _cli(repo, package, "evidence", "add", input_value=record).returncode == 0
+    old_entry = record["entry"]
+    spec = package / "spec.md"
+    spec.write_text(spec.read_text(encoding="utf-8").replace(old_entry, "改写后的入口"), encoding="utf-8")
+
+    result = _cli(repo, package, "evidence", "invalidate", "--key", "journey:run-1:J1-S1", "--invalidated-by", "amendment:A")
+
+    assert result.returncode == 0, result.stderr
+    assert _state(package)["evidenceIndex"]["journey:run-1:J1-S1"][0]["invalidatedBy"] in {"amendment:A", "spec-drift:entry"}
+    rejected = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S1", run_id="run-2"))
+    assert rejected.returncode != 0

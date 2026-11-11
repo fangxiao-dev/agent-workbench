@@ -1453,18 +1453,24 @@ def _validate_journey_evidence_index(
                 if evidence_key != f"journey:{run_id}:{step_id}":
                     raise StateError(f"evidenceIndex[{evidence_key}] must use journey:<runId>:<stepId>")
                 step = spec["steps"].get(step_id)
-                if step is None or step["journeyId"] != journey_id:
-                    raise StateError(f"evidenceIndex[{evidence_key}] references unknown Journey step")
-                if entry != step["operationEntry"]:
-                    raise StateError(f"evidenceIndex[{evidence_key}] entry does not match the Spec operation entry")
+                drift = (
+                    "step" if step is None or step["journeyId"] != journey_id
+                    else "entry" if entry != step["operationEntry"]
+                    else "actor" if record["actor"] != step["role"]
+                    else None
+                )
+                if drift:
+                    # Spec 改写 Journey 后，对不上当前步骤的旧走查记录视为失效，只保留为审计痕迹，不再计入 reach。
+                    if not copy.get("invalidatedBy"):
+                        copy["invalidatedBy"] = f"spec-drift:{drift}"
+                    if record["surface"] not in {"page", "file", "api", "log"}:
+                        raise StateError(f"evidenceIndex[{evidence_key}] surface must be page, file, api, or log")
+                    journey_run_ids.add(run_id)
+                    journey_run_environments[run_id] = record["environment"]
+                    normalized[evidence_key].append(copy)
+                    continue
                 if record["surface"] not in {"page", "file", "api", "log"}:
                     raise StateError(f"evidenceIndex[{evidence_key}] surface must be page, file, api, or log")
-                if record["actor"] != step["role"]:
-                    raise StateError(
-                        f"evidenceIndex[{evidence_key}] actor 与 Spec 不一致："
-                        f"实际为 {record['actor']!r}，Spec Journey 表该步允许的角色为 {step['role']!r}；"
-                        "走查人写在 manualBy"
-                    )
                 digest = _validate_journey_surface_evidence(package, step, copy, live=live)
                 if record["surface"] == "file":
                     if not isinstance(record.get("artifactSha256"), str) or re.fullmatch(r"[0-9a-f]{64}", record["artifactSha256"]) is None:
