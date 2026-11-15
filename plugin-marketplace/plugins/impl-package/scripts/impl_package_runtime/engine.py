@@ -596,8 +596,13 @@ def _validate_first_visible_step(harness: dict[str, Any], spec: dict[str, Any], 
 
 
 def _plan_info(package: Path, repo: Path, plan_value: str) -> dict[str, Any]:
-    plan_rel = _repo_relative(repo, plan_value, "plan")
+    plan_rel = _repo_relative(repo, plan_value, "plan", must_exist=False)
     plan_path = repo / plan_rel.split("#", 1)[0]
+    if not plan_path.exists():
+        raise StateError(
+            f"plan does not exist: {plan_rel}；--plan 必须是相对仓库根的路径，"
+            f"例如 {_package_relative(repo, package)}/<attempt>.patch-plan.md"
+        )
     try:
         plan_path.resolve().relative_to(package.resolve())
     except ValueError as exc:
@@ -975,36 +980,51 @@ def _ticket_coverage(text: str, ticket: str) -> dict[str, Any]:
         fields[name] = value
     missing = expected - set(fields)
     if missing:
-        raise StateError(f"Ticket {ticket} Coverage is missing: {', '.join(sorted(missing))}")
+        raise StateError(
+            f"Ticket {ticket} Coverage is missing: {', '.join(sorted(missing))}；"
+            "## Coverage 须含三行：`- Journey steps: <J1-S1, J1-S2 | none>`、"
+            "`- Suites: <S-id | none>`、`- Required review: <none | 说明>`"
+        )
     journey_steps = _coverage_list(fields["Journey steps"], "Journey steps", ticket)
     suites = _coverage_list(fields["Suites"], "Suites", ticket)
     if not journey_steps and not suites:
-        raise StateError(f"Ticket {ticket} Coverage Journey steps and Suites cannot both be none")
+        raise StateError(f"Ticket {ticket} Coverage Journey steps and Suites cannot both be none（至少认领一个 Journey step 或 Suite）")
     return {"journeySteps": journey_steps, "suites": suites, "requiredReview": fields["Required review"]}
 
 
-def _validate_journey_coverage(spec: dict[str, Any], documents: list[dict[str, Any]]) -> None:
+def _journey_coverage_errors(spec: dict[str, Any], documents: list[dict[str, Any]]) -> list[str]:
+    errors: list[str] = []
     claimed_steps: set[str] = set()
     claimed_suites: set[str] = set()
     for document in documents:
         coverage = document["coverage"]
         for step_id in coverage["journeySteps"]:
             if step_id not in spec["steps"]:
-                raise StateError(f"Ticket {document['id']} Coverage references unknown Journey step: {step_id}")
+                errors.append(f"Ticket {document['id']} Coverage references unknown Journey step: {step_id}")
             claimed_steps.add(step_id)
         for suite_id in coverage["suites"]:
             if suite_id not in spec["suites"]:
-                raise StateError(f"Ticket {document['id']} Coverage references unknown suite: {suite_id}")
+                errors.append(f"Ticket {document['id']} Coverage references unknown suite: {suite_id}")
             claimed_suites.add(suite_id)
     unclaimed_steps = sorted(set(spec["steps"]) - claimed_steps)
     if unclaimed_steps:
-        raise StateError(f"Journey steps have no Ticket Coverage: {', '.join(unclaimed_steps)}")
+        errors.append(
+            f"Journey steps have no Ticket Coverage: {', '.join(unclaimed_steps)}"
+            "（每个 Attempt 含 patch 都要由其 Ticket 认领 Spec 的全部 Journey step，Gate 只认当前 Attempt 的走查证据）"
+        )
     unclaimed_suites = sorted(
         suite_id for suite_id, suite in spec["suites"].items()
         if suite["scope"] == "ticket" and suite_id not in claimed_suites
     )
     if unclaimed_suites:
-        raise StateError(f"ticket-scope suites have no Ticket Coverage: {', '.join(unclaimed_suites)}")
+        errors.append(f"ticket-scope suites have no Ticket Coverage: {', '.join(unclaimed_suites)}")
+    return errors
+
+
+def _validate_journey_coverage(spec: dict[str, Any], documents: list[dict[str, Any]]) -> None:
+    errors = _journey_coverage_errors(spec, documents)
+    if errors:
+        raise StateError("\n".join(errors))
 
 
 def _arrival_paths(text: str, ticket_id: str, path: Path) -> list[dict[str, Any]]:
@@ -1031,7 +1051,8 @@ def _arrival_paths(text: str, ticket_id: str, path: Path) -> list[dict[str, Any]
     return result
 
 
-def _ticket_documents(package: Path, attempt: str) -> list[dict[str, Any]]:
+def _ticket_documents(package: Path, attempt: str, errors: list[str] | None = None) -> list[dict[str, Any]]:
+    """Parse the Attempt's Ticket files; with `errors`, record each bad file and keep going."""
     directory = package / "tickets"
     if not directory.is_dir():
         raise StateError("Composition earns tickets but tickets/ is missing")
@@ -1039,25 +1060,35 @@ def _ticket_documents(package: Path, attempt: str) -> list[dict[str, Any]]:
     for child in sorted(directory.iterdir(), key=lambda item: item.name):
         if not child.is_file() or child.suffix.lower() != ".md":
             continue
-        text = _read(child)
-        identifier = _field(TICKET_ID_RE, text, f"Ticket ID in {child.name}")
-        ticket_attempt = _field(ATTEMPT_RE, text, f"Attempt ID in {child.name}")
-        if ticket_attempt != attempt:
+        if errors is None:
+            _append_ticket_document(package, attempt, child, result)
             continue
-        if any(row["id"] == identifier for row in result):
-            raise StateError(f"duplicate Ticket ID for Attempt {attempt}: {identifier}")
-        publication = PUBLICATION_RE.search(text)
-        if publication is None:
-            raise StateError(f"missing Publication Status in {child.name}")
-        if "impl-package:projection runtime-acceptance" in text:
-            raise StateError(f"Ticket {identifier} contains retired Runtime Acceptance projection")
-        arrival_paths = _arrival_paths(text, str(identifier), child)
-        coverage = _ticket_coverage(text, str(identifier))
-        document = {"id": str(identifier), "path": child, "text": text, "publication": "Approved" if PUBLICATION_RE.search(text).group(2) == "Approved" else "Draft", "coverage": coverage, "arrivalPaths": arrival_paths}
-        result.append(document)
-    if not result and directory.exists():
+        try:
+            _append_ticket_document(package, attempt, child, result)
+        except StateError as exc:
+            errors.append(f"tickets/{child.name}: {exc}")
+    if not result and directory.exists() and not errors:
         raise StateError(f"Composition earns tickets but no Ticket belongs to Attempt {attempt}")
     return result
+
+
+def _append_ticket_document(package: Path, attempt: str, child: Path, result: list[dict[str, Any]]) -> None:
+    text = _read(child)
+    identifier = _field(TICKET_ID_RE, text, f"Ticket ID in {child.name}")
+    ticket_attempt = _field(ATTEMPT_RE, text, f"Attempt ID in {child.name}")
+    if ticket_attempt != attempt:
+        return
+    if any(row["id"] == identifier for row in result):
+        raise StateError(f"duplicate Ticket ID for Attempt {attempt}: {identifier}")
+    publication = PUBLICATION_RE.search(text)
+    if publication is None:
+        raise StateError(f"missing Publication Status in {child.name}")
+    if "impl-package:projection runtime-acceptance" in text:
+        raise StateError(f"Ticket {identifier} contains retired Runtime Acceptance projection")
+    arrival_paths = _arrival_paths(text, str(identifier), child)
+    coverage = _ticket_coverage(text, str(identifier))
+    document = {"id": str(identifier), "path": child, "text": text, "publication": "Approved" if publication.group(2) == "Approved" else "Draft", "coverage": coverage, "arrivalPaths": arrival_paths}
+    result.append(document)
 
 
 def _ticket_dependencies(documents: list[dict[str, Any]]) -> dict[str, list[tuple[str, str]]]:
@@ -1354,11 +1385,17 @@ def _validate_journey_surface_evidence(
             if not isinstance(manual_by, str) or not manual_by.strip():
                 raise StateError("manualBy must be a non-empty string")
             if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
-                raise StateError("manualBy requires a package image artifact (.png, .jpg, .jpeg, .webp)")
+                raise StateError(
+                    "manualBy requires a package image artifact (.png, .jpg, .jpeg, .webp)；"
+                    "每个页面步只提交 1 张该步截图，其余原始产物放被 git 忽略的 output/qa/<runId>/"
+                )
             record["manualBy"] = manual_by.strip()
             return None
         if suffix != ".zip":
-            raise StateError("page Journey evidence requires a Playwright trace .zip or manualBy plus a package image")
+            raise StateError(
+                "page Journey evidence requires a Playwright trace .zip or manualBy plus a package image "
+                "(1 张该步截图，.png/.jpg/.jpeg/.webp)"
+            )
         if not live:
             return None
         found, actions = _playwright_trace_actions(path, step["control"])
@@ -1373,7 +1410,10 @@ def _validate_journey_surface_evidence(
     if "manualBy" in record:
         raise StateError("file Journey evidence cannot include manualBy")
     if suffix in {".md", ".txt", ".log"}:
-        raise StateError("file Journey artifact must not use .md, .txt, or .log")
+        raise StateError(
+            "file Journey artifact must not use .md, .txt, or .log；"
+            "放该步产出的文件或接口返回本体（如 .json/.csv/.xlsx/.pdf），每个文件/接口步只提交 1 个"
+        )
     if not live:
         return None
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -1636,6 +1676,11 @@ def _validate_acceptance_state(package: Path, repo: Path, acceptance: Any, info:
             tickets = amendment["tickets"]
             if not isinstance(tickets, list) or not all(isinstance(item, str) and item.strip() for item in tickets) or len(set(tickets)) != len(tickets):
                 raise StateError("amendment tickets must be a list of unique Ticket IDs")
+        if "supersedes" in amendment:
+            expected.add("supersedes")
+            superseded = amendment["supersedes"]
+            if not isinstance(superseded, list) or not superseded or not all(isinstance(item, str) and item.strip() for item in superseded) or len(set(superseded)) != len(superseded):
+                raise StateError("amendment supersedes must be a non-empty list of unique amendment IDs")
         if status not in {"PENDING", "CONFIRMED"} or set(amendment) != expected:
             raise StateError("amendment fields/status do not match PENDING or CONFIRMED")
         identifier = amendment.get("id")
@@ -1673,6 +1718,10 @@ def _validate_acceptance_state(package: Path, repo: Path, acceptance: Any, info:
                 _validate_iso_timestamp(amendment["confirmedAt"], f"amendment {identifier} confirmedAt")
         elif "confirmedAt" in amendment:
             raise StateError(f"pending amendment {identifier} cannot contain confirmedAt")
+    for amendment in acceptance["amendments"]:
+        unknown = [item for item in amendment.get("supersedes", []) if item not in amendment_ids or item == amendment["id"]]
+        if unknown:
+            raise StateError(f"amendment {amendment['id']} supersedes unknown amendment(s): {', '.join(unknown)}")
     baseline = acceptance["contractBaseline"]
     if not isinstance(baseline, dict) or set(baseline) != {"head", "files"}:
         raise StateError("state acceptance.contractBaseline must contain head and files")
@@ -1993,7 +2042,7 @@ def _v36_acceptance_status(
         for record in records_by_key.get("release", [])
         if record["kind"] == "release"
     )
-    pending = [row for row in summary["_acceptance"]["amendments"] if row["status"] == "PENDING"]
+    pending = _pending_amendments(summary["_acceptance"]["amendments"])
     unregistered = _contract_amendment_findings(package, repo, summary["_acceptance"])
     first_visible_ticket = first_visible["ticket"]
     return {
@@ -2241,6 +2290,12 @@ def _contract_baseline(package: Path, repo: Path) -> dict[str, Any]:
     return {"head": head, "files": files}
 
 
+def _pending_amendments(amendments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """PENDING amendments that no later amendment supersedes; superseded ones no longer block the Gate."""
+    superseded = {item for row in amendments for item in row.get("supersedes", [])}
+    return [row for row in amendments if row["status"] == "PENDING" and row["id"] not in superseded]
+
+
 def _contract_amendment_findings(package: Path, repo: Path, acceptance: dict[str, Any]) -> list[dict[str, Any]]:
     baseline = acceptance["contractBaseline"]["files"]
     amendments = acceptance["amendments"]
@@ -2276,10 +2331,32 @@ def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
     if PACKAGE_ID_RE.fullmatch(package.name) is None:
         raise StateError("package directory must use an immutable date-prefixed ID")
     repo = _repo_root(package)
-    info = _plan_info(package, repo, plan)
-    if info["attempt"] != attempt:
+    # 先把 plan、Ticket、Journey 覆盖、First visible step 的缺项一次性收齐，避免逐条报错试探。
+    problems: list[str] = []
+    try:
+        info = _plan_info(package, repo, plan)
+    except StateError as exc:
+        info = None
+        problems.append(str(exc))
+    if info is not None and info["attempt"] != attempt:
         raise StateError("--attempt does not match the plan Attempt ID")
     command_check_spec(package, _package_relative(repo, package / "spec.md"))
+    ticket_problems: list[str] = []
+    try:
+        documents = _ticket_documents(package, attempt, ticket_problems)
+    except StateError as exc:
+        documents = []
+        ticket_problems.append(str(exc))
+    problems.extend(ticket_problems)
+    if not ticket_problems:
+        problems.extend(_journey_coverage_errors(_journey_spec(package), documents))
+        if info is not None:
+            try:
+                _validate_first_visible_step(info["harness"], _journey_spec(package), documents)
+            except StateError as exc:
+                problems.append(str(exc))
+    if problems:
+        raise StateError(f"package init 发现 {len(problems)} 处需修正：\n- " + "\n- ".join(problems))
     path = package / STATE_PATH
     if path.exists():
         current = _load_json(path)
@@ -2295,8 +2372,6 @@ def command_init(package: Path, attempt: str, plan: str) -> dict[str, Any]:
         previous = current["attemptHistory"]
     else:
         previous = []
-    documents = _ticket_documents(package, attempt)
-    _validate_first_visible_step(info["harness"], _journey_spec(package), documents)
     dependencies = _ticket_dependencies(documents)
     del dependencies
     history = list(previous)
@@ -2360,6 +2435,7 @@ def command_amendment_add(
     affected: list[str],
     artifact: str | None = None,
     tickets: list[str] | None = None,
+    supersedes: list[str] | None = None,
 ) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
@@ -2386,6 +2462,19 @@ def command_amendment_add(
     unknown_tickets = [item for item in ticket_ids if item not in state["tickets"]]
     if unknown_tickets:
         raise StateError(f"amendment --tickets names unknown Ticket(s): {', '.join(unknown_tickets)}")
+    superseded_ids = list(dict.fromkeys(item.strip() for item in (supersedes or [])))
+    for old_id in superseded_ids:
+        old = next((item for item in state["acceptance"]["amendments"] if item["id"] == old_id), None)
+        if old is None or old_id == identifier:
+            raise StateError(f"amendment --supersedes names unknown amendment: {old_id}")
+        if old["status"] != "PENDING":
+            raise StateError(f"amendment --supersedes {old_id} is already {old['status']}; only PENDING amendments can be superseded")
+        missing = [path for path in old["affected"] if path not in normalized_affected]
+        if missing:
+            raise StateError(
+                f"amendment {identifier} must also list --affected {', '.join(missing)} "
+                f"so that superseded {old_id} stays covered"
+            )
     repo = _repo_root(package)
     affected_blobs = _working_tree_blobs(repo, package, normalized_affected)
     row = {
@@ -2399,6 +2488,8 @@ def command_amendment_add(
     }
     if ticket_ids:
         row["tickets"] = ticket_ids
+    if superseded_ids:
+        row["supersedes"] = superseded_ids
     amendments = state["acceptance"]["amendments"]
     current = next((item for item in amendments if item["id"] == identifier), None)
     if current is not None:
@@ -2440,6 +2531,9 @@ def command_amendment_confirm(
     current = next((item for item in state["acceptance"]["amendments"] if item["id"] == identifier), None)
     if current is None:
         raise StateError(f"unknown amendment: {identifier}")
+    successor = next((row["id"] for row in state["acceptance"]["amendments"] if identifier in row.get("supersedes", [])), None)
+    if successor is not None:
+        raise StateError(f"amendment {identifier} is superseded by {successor}; confirm {successor} instead")
     current_blobs = current.get("affectedBlobs", {})
     current_working_blobs = _working_tree_blobs(repo, package, current["affected"])
     changed = [
@@ -2447,7 +2541,8 @@ def command_amendment_confirm(
         if current_blobs.get(path) != current_working_blobs.get(path)
     ]
     if changed:
-        raise StateError(f"amendment {identifier} no longer matches affected file contents: {', '.join(changed)}; register a new amendment")
+        raise StateError(f"amendment {identifier} no longer matches affected file contents: {', '.join(changed)}; "
+            f"register a new amendment with --supersedes {identifier} (covering the current contract files) and confirm that one")
     if current["status"] == "CONFIRMED":
         if current["confirmedBy"] == confirmed_by.strip() and current["confirmedRevision"] == revision:
             return {"id": identifier, "status": "CONFIRMED", "idempotent": True}
