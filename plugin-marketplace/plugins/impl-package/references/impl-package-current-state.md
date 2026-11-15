@@ -19,7 +19,7 @@
 
 ## State schema
 
-`package check-spec --spec <repo-relative spec.md>` 不需要 state，执行与 `package validate`/`package init` 相同的 §7 解析和章节覆盖检查，有遗漏时非零退出并列出章节；req-align 在 init 前用它做 Spec Gate。
+`package check-spec [--spec <repo-relative spec.md>]`（缺省为 `<package>/spec.md`）不需要 state，执行与 `package validate`/`package init` 相同的 §7 解析和章节覆盖检查，有遗漏时非零退出并列出章节；req-align 在 init 前用它做 Spec Gate。
 
 ```json
 {
@@ -100,12 +100,15 @@ printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <packa
 python <plugin>/scripts/impl_package_state.py --package <package> evidence invalidate --key <evidenceKey> --invalidated-by <reason>
 python <plugin>/scripts/impl_package_state.py --package <package> evidence carry-forward --key <evidenceKey> --to <commit> --reason <text> --judged-by <who>   # agent 看过 diff 后判断运行时改动不影响该证据；漂移后先 package refresh-progress
 python <plugin>/scripts/impl_package_state.py --package <package> package amendment add --id <id> --summary <text> --affected <contract path> [--affected <contract path> ...] --artifact <package 内路径> [--supersedes <PENDING 旧 id> ...]
+python <plugin>/scripts/impl_package_state.py --package <package> package amendment supersede --id <旧 id> --by <新 id>
+python <plugin>/scripts/impl_package_state.py --package <package> package amendment withdraw --id <id> --reason <原因>
+python <plugin>/scripts/impl_package_state.py --package <package> package sync-predecessors   # 改了 Plan 的 Predecessors 后重读进 state
 python <plugin>/scripts/impl_package_state.py --package <package> package amendment confirm --id <id> [--id <id> ...] --confirmed-by <owner> [--expect PENDING] [--confirmed-revision <commit，默认 HEAD>]
 python <plugin>/scripts/impl_package_state.py --package <package> ticket satisfy <id> --expect <state> [--revision <commit，默认 HEAD>] [--environment <id>]
 python <plugin>/scripts/impl_package_state.py --package <package> ticket block <id> --expect <state> --evidence <path>
 python <plugin>/scripts/impl_package_state.py --package <package> ticket needs-revalidation <id> --expect <state> --invalidated-by <reason> [--evidence <path>]
 python <plugin>/scripts/impl_package_state.py --package <package> ticket pending <id> --expect <state> [--revalidation-plan <path>]
-python <plugin>/scripts/impl_package_state.py --package <package> ticket retire <id> --expect <state> --disposition waived|superseded --evidence <path> [--successor <id>]
+python <plugin>/scripts/impl_package_state.py --package <package> ticket retire <id> --expect <state> --disposition waived|superseded --evidence <path> [--successor <id | attempt/ticket>]
 python <plugin>/scripts/impl_package_state.py --package <package> recovery checkpoint --subject attempt|ticket:<id> --next <text> [--blocker <text>] [--evidence <path>] [--handoff]
 python <plugin>/scripts/impl_package_state.py --package <package> recovery lease acquire --owner <worker-id> --key <resource-key> [--key <resource-key> ...]
 python <plugin>/scripts/impl_package_state.py --package <package> recovery lease release --lease-id <id> --owner-token <token>

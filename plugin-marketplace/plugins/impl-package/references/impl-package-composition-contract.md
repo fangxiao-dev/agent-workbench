@@ -62,7 +62,7 @@ Plan、Ticket 或 DAG 的语义变化只使受影响范围的 approval/validatio
 - 跨 session 续接沿用既有默认：交接前写 active checkpoint，长期判断写 ER judgment；compact 只作异常兜底，不是正常恢复权威。
 - package task session 主线程是 `state.json` 唯一 writer；worker 只返回结构化 evidence。未来 broker 的协调 ledger 不属于本阶段。
 
-`RETIRED` 是新合同中原 `WAIVED`/`SUPERSEDED` 的统一 terminal 状态，必须带 `disposition: waived | superseded`。3.6 runtime 只接受 Ticket/evidence/checkpoint 状态。
+`RETIRED/superseded` 的 successor 默认是同 Attempt 的 Ticket ID，也可写 `<attempt>/<ticket>` 指向另一个 Attempt 的 Ticket（视为已释放）。`RETIRED` 是新合同中原 `WAIVED`/`SUPERSEDED` 的统一 terminal 状态，必须带 `disposition: waived | superseded`。3.6 runtime 只接受 Ticket/evidence/checkpoint 状态。
 
 ## 7. 3.6 Journey 验收合同
 
@@ -78,7 +78,7 @@ plan 必须写 `Acceptance: journey`（缺失即拒绝），生成 `formatVersio
 
 §7 可另有与 `### Journeys` 同级的 `### Journey 变体` 小节（语义见 req-align 的 acceptance-contract），runtime 不解析；放进 `### Journeys` 内会被当作 Journey 解析并报错。
 
-表后固定一行 `- 无需验收的章节：<章节引用 | none>`。除 §7 外，spec.md 每个二、三级标题都要被某条 Source 引用（引用父章节覆盖子章节）或列在该行，否则 `package validate`/`package init`/`package check-spec` 失败并列出章节。
+表后固定一行 `- 无需验收的章节：<章节引用 | none>`。除 §7 外，spec.md 每个二、三级标题都要被某条 Source 引用（引用父章节覆盖子章节；只含子节的父标题在其全部子节都已分类时自动视为已分类）或列在该行，否则 `package validate`/`package init`/`package check-spec` 失败并列出章节。
 
 包级 safety 套件按风险声明：触及 tenant、RBAC/privacy、幂等或数据完整性时必须有，未触及时在 Spec 写明理由。套件清单是随 Spec Gate 审批的合同，Plan 与 Gate 不临时补造。
 
@@ -109,6 +109,6 @@ steps 与 suites 不同时为 `none`，harness、migration、加固类 Ticket �
 
 **Gate 分两层核对**：产品层（Journey）与规则/安全层（Required Suites）；其余是 Ticket 与合入、最终 HEAD 的 terminal-final review、Amendment、发布顺序和既有终态条件。任一必需事实 unknown 即不放行。
 
-**Amendment** 登记批准后改变用户可见结果的合同修订，Owner 确认绑定具体修订版本，内容再变化用新 ID；新条目用 `--supersedes <旧 id>` 取代仍 PENDING 的旧条目，被取代者不再阻止 Gate。待确认或漏登的 Amendment 只阻止 `gate pass`，已授权且不依赖该语义的工作继续。
+**Amendment** 登记批准后改变用户可见结果的合同修订，Owner 确认绑定具体修订版本，内容再变化用新 ID；新条目用 `--supersedes <旧 id>` 取代仍 PENDING 的旧条目，被取代者不再阻止 Gate；已登记的旧条目事后才发现被覆盖时用 `package amendment supersede --id <旧> --by <新>`（新条目须覆盖旧条目的合同文件），修订已不适用时用 `package amendment withdraw --id <id> --reason <原因>`（状态 WITHDRAWN，保留在 state 与 trail 中，不阻止 Gate）。同一文件多条修订只需最后一条与当前文件匹配，其余用 supersede 收口。待确认或漏登的 Amendment 只阻止 `gate pass`，已授权且不依赖该语义的工作继续。
 
 **发布顺序** `Release order: required` 时是一条 `release` evidence，artifact 为 package 内的发布顺序表（合入、fixture/backfill、开关/发布、清理），不逐条记录 worker dispatch。

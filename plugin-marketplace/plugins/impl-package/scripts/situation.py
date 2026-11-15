@@ -946,6 +946,8 @@ def _parse_state(view: FileView) -> StateView:
                     status = amendment.get("status")
                     base = {"id", "summary", "affected", "artifact", "status"}
                     expected_amendment = base | ({"confirmedBy", "confirmedRevision"} if status == "CONFIRMED" else set())
+                    if status == "WITHDRAWN":
+                        expected_amendment |= {"withdrawnReason", "withdrawnAt"}
                     expected_amendment |= {field for field in ("createdAt", "confirmedAt") if field in amendment}
                     if "affectedBlobs" in amendment:
                         expected_amendment.add("affectedBlobs")
@@ -957,7 +959,7 @@ def _parse_state(view: FileView) -> StateView:
                         if not isinstance(superseded, list) or not superseded or any(not isinstance(item, str) or not item.strip() for item in superseded):
                             errors.append(f"acceptance.amendments[{index}] supersedes 无效")
                     identifier = amendment.get("id")
-                    if status not in {"PENDING", "CONFIRMED"} or set(amendment) != expected_amendment:
+                    if status not in {"PENDING", "CONFIRMED", "WITHDRAWN"} or set(amendment) != expected_amendment:
                         errors.append(f"acceptance.amendments[{index}] 字段/status 无效")
                     if not isinstance(identifier, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", identifier) or identifier in amendment_ids:
                         errors.append(f"acceptance.amendments[{index}] id 无效或重复")
@@ -1044,7 +1046,8 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                 allowed.add("successor")
             if set(row) != allowed or row.get("disposition") not in {"waived", "superseded"} or not isinstance(row.get("evidence"), str):
                 errors.append(f"RETIRED Ticket {identifier} 的字段不符合 schema")
-            if row.get("disposition") == "superseded" and row.get("successor") not in ticket_rows:
+            successor = row.get("successor")
+            if row.get("disposition") == "superseded" and not (successor in ticket_rows or (isinstance(successor, str) and "/" in successor)):
                 errors.append(f"RETIRED superseded Ticket {identifier} 的 successor 不存在")
         elif status == "SATISFIED":
             acceptance = row.get("acceptance")
@@ -1858,6 +1861,8 @@ class FactContext:
         if row.get("disposition") == "waived":
             return True
         successor = row.get("successor")
+        if isinstance(successor, str) and "/" in successor:
+            return True
         return self._release(successor, visiting) if isinstance(successor, str) else False
 
     def dependency_released(self, kind: str) -> Fact:

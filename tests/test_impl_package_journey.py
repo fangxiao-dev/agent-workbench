@@ -2444,3 +2444,63 @@ def test_help_texts_state_minimum_evidence_and_terminal_summary_shapes(tmp_path:
     assert "review.terminal_summary" in trail.stdout and "comparisonHead" in trail.stdout
     confirm = _cli(repo, package, "package", "amendment", "confirm", "--help", subprocess=True)
     assert "--confirmed-by Owner" in confirm.stdout
+
+
+def test_amendment_supersede_and_withdraw_unblock_gate_and_leave_trail(tmp_path: Path) -> None:
+    repo, package, _ = _init_v36(tmp_path)
+    _append_spec_note(package, "Owner clarification: first wording.")
+    assert _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "first", "--affected", "spec.md").returncode == 0
+    _append_spec_note(package, "Owner clarification: second wording.")
+    assert _cli(repo, package, "package", "amendment", "add", "--id", "A-2", "--summary", "second", "--affected", "spec.md").returncode == 0
+    assert {row["id"] for row in engine._pending_amendments(_state(package)["acceptance"]["amendments"])} == {"A-1", "A-2"}
+
+    narrower = _cli(repo, package, "package", "amendment", "supersede", "--id", "A-1", "--by", "A-1")
+    assert narrower.returncode != 0
+    done = _cli(repo, package, "package", "amendment", "supersede", "--id", "A-1", "--by", "A-2")
+    assert done.returncode == 0, done.stderr
+    assert _cli(repo, package, "package", "amendment", "supersede", "--id", "A-1", "--by", "A-2").returncode == 0  # idempotent
+    assert [row["id"] for row in engine._pending_amendments(_state(package)["acceptance"]["amendments"])] == ["A-2"]
+
+    assert _cli(repo, package, "package", "amendment", "withdraw", "--id", "A-2", "--reason", "合同回退").returncode == 0
+    state = _state(package)
+    assert engine._pending_amendments(state["acceptance"]["amendments"]) == []
+    assert next(row for row in state["acceptance"]["amendments"] if row["id"] == "A-2")["status"] == "WITHDRAWN"
+    assert _cli(repo, package, "package", "amendment", "confirm", "--id", "A-2", "--confirmed-by", "Owner").returncode != 0
+    assert _cli(repo, package, "package", "validate").returncode == 0
+    assert situation._parse_state(situation.FileView("state.json", json.dumps(state))).valid
+    trail = "".join(p.read_text(encoding="utf-8") for p in (package / "execution").rglob("*.jsonl"))
+    assert "amendment:A-1" in trail and "SUPERSEDED" in trail and "WITHDRAWN" in trail
+
+
+def test_superseded_successor_may_name_another_attempt(tmp_path: Path) -> None:
+    repo, package, _ = _init_v36(tmp_path)
+    (package / "evidence.md").write_text("x", encoding="utf-8")
+    evidence = (package / "evidence.md").relative_to(repo).as_posix()
+    args = ("ticket", "retire", "TKT-02", "--expect", "PENDING", "--disposition", "superseded", "--evidence", evidence)
+    assert _cli(repo, package, *args, "--successor", "BAD ID/x").returncode != 0
+    assert _cli(repo, package, *args, "--successor", "TKT-02").returncode != 0
+    done = _cli(repo, package, *args, "--successor", "later/TKT-01")
+    assert done.returncode == 0, done.stderr
+    assert _state(package)["tickets"]["TKT-02"]["successor"] == "later/TKT-01"
+    assert _cli(repo, package, "package", "validate").returncode == 0
+
+
+def test_check_spec_defaults_to_package_spec_and_parent_heading_with_only_children(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path, spec=SPEC.replace("| R1 | §2 |", "| R1 | §2.1 |"))
+    ok = _cli(repo, package, "package", "check-spec")
+    assert ok.returncode == 0, ok.stderr
+    assert json.loads(ok.stdout)["valid"] is True
+
+
+def test_sync_predecessors_rereads_plan(tmp_path: Path) -> None:
+    repo, package, _ = _init_v36(tmp_path)
+    (repo / "docs" / "pred").mkdir(parents=True)
+    plan = package / "plan.md"
+    plan_path = next(p for p in package.glob("*plan*.md"))
+    plan_path.write_text(plan_path.read_text(encoding="utf-8").replace("Predecessors: None", "Predecessors: docs/pred"), encoding="utf-8")
+    stale = _cli(repo, package, "package", "validate")
+    assert stale.returncode != 0
+    synced = _cli(repo, package, "package", "sync-predecessors")
+    assert synced.returncode == 0, synced.stderr
+    assert _state(package)["predecessors"] == ["docs/pred"]
+    assert _cli(repo, package, "package", "sync-predecessors").returncode == 0

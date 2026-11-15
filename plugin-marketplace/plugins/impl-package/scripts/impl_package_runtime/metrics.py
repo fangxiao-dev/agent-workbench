@@ -410,12 +410,20 @@ def _journey_metrics(
     source = ".impl-package/state.json evidenceIndex"
     if not isinstance(state, dict) or not isinstance(state.get("evidenceIndex"), dict):
         return _metric(None, source, "selected Attempt evidenceIndex is unavailable")
-    try:
-        spec = engine._journey_spec(package)
-    except engine.StateError as exc:
-        return _metric(None, "spec.md", f"Journey Spec could not be read: {exc}")
     gate = history_row.get("gate")
     comparison = gate.get("commit") if isinstance(gate, dict) else None
+    try:
+        spec = None
+        if isinstance(comparison, str) and isinstance(state.get("acceptance"), dict):
+            # 已冻结 Attempt 按冻结时的 spec 版本读取，当前 spec 可能已删改 Journey
+            try:
+                spec = engine._frozen_journey_spec(package, engine._repo_root(package), comparison, state["acceptance"])
+            except (engine.StateError, KeyError):
+                spec = None
+        if spec is None:
+            spec = engine._journey_spec(package)
+    except engine.StateError as exc:
+        return _metric(None, "spec.md", f"Journey Spec could not be read: {exc}")
     if not isinstance(comparison, str):
         repo = engine._repo_root(package)
         comparison = engine._run_git(repo, "rev-parse", "HEAD")
