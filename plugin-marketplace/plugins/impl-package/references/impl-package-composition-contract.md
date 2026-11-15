@@ -109,6 +109,6 @@ steps 与 suites 不同时为 `none`，harness、migration、加固类 Ticket �
 
 **Gate 分两层核对**：产品层（Journey）与规则/安全层（Required Suites）；其余是 Ticket 与合入、最终 HEAD 的 terminal-final review、Amendment、发布顺序和既有终态条件。任一必需事实 unknown 即不放行。
 
-**Amendment** 登记批准后改变用户可见结果的合同修订，Owner 确认绑定具体修订版本，内容再变化用新 ID；新条目用 `--supersedes <旧 id>` 取代仍 PENDING 的旧条目，被取代者不再阻止 Gate；已登记的旧条目事后才发现被覆盖时用 `package amendment supersede --id <旧> --by <新>`（新条目须覆盖旧条目的合同文件），修订已不适用时用 `package amendment withdraw --id <id> --reason <原因>`（状态 WITHDRAWN，保留在 state 与 trail 中，不阻止 Gate）。同一文件多条修订只需最后一条与当前文件匹配，其余用 supersede 收口。待确认或漏登的 Amendment 只阻止 `gate pass`，已授权且不依赖该语义的工作继续。
+**Amendment** 登记批准后改变用户可见结果的合同修订，Owner 确认绑定具体修订版本，内容再变化用新 ID；合同再次变化时，先登记覆盖旧条目合同文件的新条目，再用 `package amendment supersede --id <旧> --by <新>` 取代仍 PENDING 的旧条目，被取代者不再阻止 Gate；（新条目须覆盖旧条目的合同文件），修订已不适用时用 `package amendment withdraw --id <id> --reason <原因>`（状态 WITHDRAWN，保留在 state 与 trail 中，不阻止 Gate）。同一文件多条修订只需最后一条与当前文件匹配，其余用 supersede 收口。待确认或漏登的 Amendment 只阻止 `gate pass`，已授权且不依赖该语义的工作继续。
 
 **发布顺序** `Release order: required` 时是一条 `release` evidence，artifact 为 package 内的发布顺序表（合入、fixture/backfill、开关/发布、清理），不逐条记录 worker dispatch。

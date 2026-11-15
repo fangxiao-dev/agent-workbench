@@ -378,8 +378,6 @@ def _confirm_workspace_amendment(repo: Path, revision: str) -> None:
         "confirm",
         "--id",
         "A-j20",
-        "--expect",
-        "PENDING",
         "--confirmed-by",
         "Owner",
         "--confirmed-revision",

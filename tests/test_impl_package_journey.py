@@ -1679,18 +1679,18 @@ def test_amendment_add_confirm_cas_idempotence_and_unregistered_contract_finding
     assert repeated.returncode == 0 and json.loads(repeated.stdout)["idempotent"] is True
     changed = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "different", "--affected", "spec.md", "--artifact", "artifacts/evidence.md")
     assert changed.returncode != 0 and "use a new id" in changed.stderr
-    missing = _cli(repo, package, "package", "amendment", "confirm", "--id", "missing", "--expect", "PENDING", "--confirmed-by", "Owner", "--confirmed-revision", revision)
+    missing = _cli(repo, package, "package", "amendment", "confirm", "--id", "missing", "--confirmed-by", "Owner", "--confirmed-revision", revision)
     assert missing.returncode != 0 and "unknown amendment" in missing.stderr
 
-    confirmed = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--expect", "PENDING", "--confirmed-by", "Owner", "--confirmed-revision", revision)
+    confirmed = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--confirmed-by", "Owner", "--confirmed-revision", revision)
     assert confirmed.returncode == 0, confirmed.stderr
     state = _state(package)
     assert state["acceptance"]["amendments"][0]["confirmedAt"].endswith("Z")
     amendment_events = [row for row in engine._active_trail_rows(package, "initial") if row.get("transition") == "amendment"]
     assert [(row.get("from"), row.get("to")) for row in amendment_events] == [(None, "PENDING"), ("PENDING", "CONFIRMED")]
-    repeated_confirm = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--expect", "PENDING", "--confirmed-by", "Owner", "--confirmed-revision", revision)
+    repeated_confirm = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--confirmed-by", "Owner", "--confirmed-revision", revision)
     assert repeated_confirm.returncode == 0 and json.loads(repeated_confirm.stdout)["idempotent"] is True
-    different_confirm = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--expect", "PENDING", "--confirmed-by", "Another Owner", "--confirmed-revision", revision)
+    different_confirm = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--confirmed-by", "Another Owner", "--confirmed-revision", revision)
     assert different_confirm.returncode != 0 and "different confirmation" in different_confirm.stderr
     after = _cli(repo, package, "package", "validate")
     assert after.returncode == 0, after.stderr
@@ -1814,8 +1814,6 @@ def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_p
         "confirm",
         "--id",
         "A-1",
-        "--expect",
-        "PENDING",
         "--confirmed-by",
         "Owner",
         "--confirmed-revision",
@@ -1831,8 +1829,6 @@ def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_p
         "confirm",
         "--id",
         "A-1",
-        "--expect",
-        "PENDING",
         "--confirmed-by",
         "Owner",
         "--confirmed-revision",
@@ -1852,8 +1848,6 @@ def test_journey_phase1_fixture_runs_end_to_end_with_fresh_amendment_blobs(tmp_p
         "confirm",
         "--id",
         "A-2",
-        "--expect",
-        "PENDING",
         "--confirmed-by",
         "Owner",
         "--confirmed-revision",
@@ -1957,7 +1951,7 @@ def test_journey_gate_pass_confirms_amendment_requires_release_and_freezes_archi
     _gate(repo, package, "blocked", revision, reason="A-1 pending").check_returncode()
     gate_events = [row for row in engine._active_trail_rows(package, "initial") if row.get("transition") == "gate"]
     assert gate_events[-1]["verdict"] == "blocked" and gate_events[-1]["commit"] == revision
-    _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--expect", "PENDING", "--confirmed-by", "Owner", "--confirmed-revision", revision).check_returncode()
+    _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--confirmed-by", "Owner", "--confirmed-revision", revision).check_returncode()
 
     for suite in ("S-resolver", "S-workflow", "S-safety"):
         added_suite = _cli(repo, package, "evidence", "add", input_value=_suite_record(revision, suite))
@@ -2055,7 +2049,7 @@ def test_package_metrics_reports_numeric_sections_and_keeps_situation_and_progre
     _append_spec_note(package, "Owner clarification: Keep the accepted wording.")
     added = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "Clarify wording", "--affected", "spec.md", "--artifact", "artifacts/evidence.md")
     assert added.returncode == 0, added.stderr
-    confirmed = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--expect", "PENDING", "--confirmed-by", "Owner", "--confirmed-revision", revision)
+    confirmed = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--confirmed-by", "Owner", "--confirmed-revision", revision)
     assert confirmed.returncode == 0, confirmed.stderr
 
     state = _state(package)
@@ -2407,22 +2401,18 @@ def test_init_plan_path_error_names_repo_relative_form(tmp_path: Path) -> None:
     assert "docs/implementations/20261028-journey-phase1/" in result.stderr
 
 
-def test_amendment_supersedes_unblocks_confirm_after_contract_changed_again(tmp_path: Path) -> None:
+def test_amendment_supersede_unblocks_confirm_after_contract_changed_again(tmp_path: Path) -> None:
     repo, package, _ = _init_v36(tmp_path)
     _append_spec_note(package, "Owner clarification: first wording.")
     assert _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "first", "--affected", "spec.md").returncode == 0
     _append_spec_note(package, "Owner clarification: second wording.")
     stale = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--confirmed-by", "Owner")
-    assert stale.returncode != 0 and "--supersedes A-1" in stale.stderr
+    assert stale.returncode != 0 and "amendment supersede --id A-1" in stale.stderr
 
-    missing = _cli(repo, package, "package", "amendment", "add", "--id", "A-2", "--summary", "x", "--affected", "spec.md", "--supersedes", "A-9")
-    assert missing.returncode != 0 and "unknown amendment: A-9" in missing.stderr
-    narrower = _cli(repo, package, "package", "amendment", "add", "--id", "A-2", "--summary", "x", "--affected", "decision.md", "--supersedes", "A-1")
-    assert narrower.returncode != 0 and "spec.md" in narrower.stderr
-
-    args = ("package", "amendment", "add", "--id", "A-2", "--summary", "both wordings", "--affected", "spec.md", "--supersedes", "A-1")
-    assert _cli(repo, package, *args).returncode == 0
-    assert _cli(repo, package, *args).returncode == 0  # idempotent
+    assert _cli(repo, package, "package", "amendment", "add", "--id", "A-2", "--summary", "both wordings", "--affected", "spec.md").returncode == 0
+    missing = _cli(repo, package, "package", "amendment", "supersede", "--id", "A-1", "--by", "A-9")
+    assert missing.returncode != 0
+    assert _cli(repo, package, "package", "amendment", "supersede", "--id", "A-1", "--by", "A-2").returncode == 0
     rows = _state(package)["acceptance"]["amendments"]
     assert [row["id"] for row in engine._pending_amendments(rows)] == ["A-2"]
     old = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--confirmed-by", "Owner")

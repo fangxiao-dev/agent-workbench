@@ -2468,7 +2468,6 @@ def command_amendment_add(
     affected: list[str],
     artifact: str | None = None,
     tickets: list[str] | None = None,
-    supersedes: list[str] | None = None,
 ) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
@@ -2495,19 +2494,6 @@ def command_amendment_add(
     unknown_tickets = [item for item in ticket_ids if item not in state["tickets"]]
     if unknown_tickets:
         raise StateError(f"amendment --tickets names unknown Ticket(s): {', '.join(unknown_tickets)}")
-    superseded_ids = list(dict.fromkeys(item.strip() for item in (supersedes or [])))
-    for old_id in superseded_ids:
-        old = next((item for item in state["acceptance"]["amendments"] if item["id"] == old_id), None)
-        if old is None or old_id == identifier:
-            raise StateError(f"amendment --supersedes names unknown amendment: {old_id}")
-        if old["status"] != "PENDING":
-            raise StateError(f"amendment --supersedes {old_id} is already {old['status']}; only PENDING amendments can be superseded")
-        missing = [path for path in old["affected"] if path not in normalized_affected]
-        if missing:
-            raise StateError(
-                f"amendment {identifier} must also list --affected {', '.join(missing)} "
-                f"so that superseded {old_id} stays covered"
-            )
     repo = _repo_root(package)
     affected_blobs = _working_tree_blobs(repo, package, normalized_affected)
     row = {
@@ -2521,8 +2507,6 @@ def command_amendment_add(
     }
     if ticket_ids:
         row["tickets"] = ticket_ids
-    if superseded_ids:
-        row["supersedes"] = superseded_ids
     amendments = state["acceptance"]["amendments"]
     current = next((item for item in amendments if item["id"] == identifier), None)
     if current is not None:
@@ -2544,16 +2528,12 @@ def command_amendment_add(
 def command_amendment_confirm(
     package: Path,
     identifier: str,
-    expect: str | None,
     confirmed_by: str,
     confirmed_revision: str | None,
 ) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
     _assert_mutable(summary)
-    expect = expect or "PENDING"
-    if expect != "PENDING":
-        raise StateError("amendment confirm currently requires --expect PENDING")
     if not isinstance(confirmed_by, str) or not confirmed_by.strip():
         raise StateError("--confirmed-by must be non-empty")
     repo = _repo_root(package)
@@ -2575,13 +2555,13 @@ def command_amendment_confirm(
     ]
     if changed:
         raise StateError(f"amendment {identifier} no longer matches affected file contents: {', '.join(changed)}; "
-            f"register a new amendment with --supersedes {identifier} (covering the current contract files) and confirm that one")
+            f"register a new amendment covering the current contract files, run `amendment supersede --id {identifier} --by <new id>`, and confirm the new one")
     if current["status"] == "CONFIRMED":
         if current["confirmedBy"] == confirmed_by.strip() and current["confirmedRevision"] == revision:
             return {"id": identifier, "status": "CONFIRMED", "idempotent": True}
         raise StateError(f"amendment {identifier} already has a different confirmation")
-    if current["status"] != expect:
-        raise StateError(f"stale amendment transition for {identifier}: expected {expect}, found {current['status']}")
+    if current["status"] != "PENDING":
+        raise StateError(f"amendment {identifier} is {current['status']}; only PENDING amendments can be confirmed")
     candidate = json.loads(json.dumps(state, ensure_ascii=False))
     row = next(item for item in candidate["acceptance"]["amendments"] if item["id"] == identifier)
     row.update({"status": "CONFIRMED", "confirmedBy": confirmed_by.strip(), "confirmedRevision": revision, "confirmedAt": _utc_timestamp()})

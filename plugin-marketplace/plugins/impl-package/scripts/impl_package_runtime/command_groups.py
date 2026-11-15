@@ -188,11 +188,6 @@ def _parser(group: str) -> argparse.ArgumentParser:
         )
         add.add_argument("--artifact", help="package-relative artifact describing the change (default: first --affected)")
         add.add_argument("--tickets", action="append", default=[], help="impacted Ticket ID; repeat once per Ticket")
-        add.add_argument(
-            "--supersedes", action="append", default=[],
-            help="PENDING amendment id replaced by this one (its contract files must be re-listed in --affected); "
-            "superseded amendments no longer block the Gate. Use when the contract changed again after the earlier add",
-        )
         supersede = amendment_commands.add_parser("supersede", help="mark a PENDING amendment as covered by a later one")
         supersede.add_argument("--id", required=True, help="PENDING amendment being superseded")
         supersede.add_argument("--by", required=True, help="later amendment that covers it (must list the same contract files)")
@@ -201,7 +196,6 @@ def _parser(group: str) -> argparse.ArgumentParser:
         withdraw.add_argument("--reason", required=True)
         confirm = amendment_commands.add_parser("confirm", help="confirm pending amendments")
         confirm.add_argument("--id", action="append", required=True, help="amendment id; repeat to confirm several")
-        confirm.add_argument("--expect", default="PENDING")
         confirm.add_argument("--confirmed-by", required=True, help="Owner name, required, e.g. --confirmed-by Owner")
         confirm.add_argument("--confirmed-revision", help="commit the Owner confirmed (default: HEAD)")
     elif group == "ticket":
@@ -337,13 +331,13 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
             return engine.command_validate(package, args.commit, check_arrival_paths=args.command == "validate")
         if args.command == "amendment":
             if args.amendment_action == "add":
-                return engine.command_amendment_add(package, args.id, args.summary, args.affected, args.artifact, args.tickets, args.supersedes)
+                return engine.command_amendment_add(package, args.id, args.summary, args.affected, args.artifact, args.tickets)
             if args.amendment_action == "supersede":
                 return engine.command_amendment_supersede(package, args.id, args.by)
             if args.amendment_action == "withdraw":
                 return engine.command_amendment_withdraw(package, args.id, args.reason)
             results = [
-                engine.command_amendment_confirm(package, identifier, args.expect, args.confirmed_by, args.confirmed_revision)
+                engine.command_amendment_confirm(package, identifier, args.confirmed_by, args.confirmed_revision)
                 for identifier in args.id
             ]
             return results[0] if len(results) == 1 else {"results": results}

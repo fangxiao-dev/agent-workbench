@@ -99,11 +99,11 @@ python <plugin>/scripts/impl_package_state.py --package <package> package archiv
 printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <package> evidence add      # 单条或数组，整批合法才写入
 python <plugin>/scripts/impl_package_state.py --package <package> evidence invalidate --key <evidenceKey> --invalidated-by <reason>
 python <plugin>/scripts/impl_package_state.py --package <package> evidence carry-forward --key <evidenceKey> --to <commit> --reason <text> --judged-by <who>   # agent 看过 diff 后判断运行时改动不影响该证据；漂移后先 package refresh-progress
-python <plugin>/scripts/impl_package_state.py --package <package> package amendment add --id <id> --summary <text> --affected <contract path> [--affected <contract path> ...] --artifact <package 内路径> [--supersedes <PENDING 旧 id> ...]
+python <plugin>/scripts/impl_package_state.py --package <package> package amendment add --id <id> --summary <text> --affected <contract path> [--affected <contract path> ...] --artifact <package 内路径>
 python <plugin>/scripts/impl_package_state.py --package <package> package amendment supersede --id <旧 id> --by <新 id>
 python <plugin>/scripts/impl_package_state.py --package <package> package amendment withdraw --id <id> --reason <原因>
 python <plugin>/scripts/impl_package_state.py --package <package> package sync-predecessors   # 改了 Plan 的 Predecessors 后重读进 state
-python <plugin>/scripts/impl_package_state.py --package <package> package amendment confirm --id <id> [--id <id> ...] --confirmed-by <owner> [--expect PENDING] [--confirmed-revision <commit，默认 HEAD>]
+python <plugin>/scripts/impl_package_state.py --package <package> package amendment confirm --id <id> [--id <id> ...] --confirmed-by <owner> [--confirmed-revision <commit，默认 HEAD>]
 python <plugin>/scripts/impl_package_state.py --package <package> ticket satisfy <id> --expect <state> [--revision <commit，默认 HEAD>] [--environment <id>]
 python <plugin>/scripts/impl_package_state.py --package <package> ticket block <id> --expect <state> --evidence <path>
 python <plugin>/scripts/impl_package_state.py --package <package> ticket needs-revalidation <id> --expect <state> --invalidated-by <reason> [--evidence <path>]
