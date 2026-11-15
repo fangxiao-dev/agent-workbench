@@ -889,4 +889,4 @@ trail head 的判断不能用“没有事件”替代证据。恢复时读取编
 
 ### 终审结果事实
 
-`review.terminal_summary` 是 attempt-scoped structured fact，形状与写入时机见 `../skills/do-review/references/output-templates.md` 的 Terminal coverage record。renderer 读取 package 内 report 的 verdict、reviewed-head、review-run、review-track，核对当前 comparisonHead 与条件 Safety；B/C/Safety 旧 PASS 还需同 ReviewRun 的 reuseEvidence。`attempt.terminal_coverage_complete` 只由这些结果证据计算。
+`review.terminal_summary` 是 attempt-scoped structured fact，形状与写入时机见 `../skills/do-review/references/output-templates.md` 的 Terminal coverage record。renderer 读取 package 内 report 的 verdict、reviewed-head、review-run、review-track，核对当前 comparisonHead 与条件 Safety；B/C/Safety 旧 PASS 还需同 ReviewRun 的 reuseEvidence。`attempt.terminal_coverage_complete` 只由这些结果证据计算。`trail append --help` 给出该 fact 的最小示例，Gate 拒绝时的 reason 会指出具体缺项（如 comparisonHead 与当前 HEAD 的值、报告头的期望与实际）。

@@ -73,7 +73,7 @@ plan 固定行（`package init/validate` 缺失或无效即拒绝）：`Harness 
 
 Ticket 状态为 `PENDING | BLOCKED | NEEDS-REVALIDATION | SATISFIED | RETIRED`。`RETIRED` 在 Ticket record 中携带 `disposition: waived | superseded`、evidence；superseded 还需 successor。`NEEDS-REVALIDATION`、`BLOCKED` 不释放依赖。`RETIRED/waived` 可释放边；`RETIRED/superseded` 只有 successor 已满足相应释放条件时才释放。release 边只在 Gate pass 前复核。ER 中旧 checkpoint 正文可作为历史保留，但 runtime 不从 ER 推导 active checkpoint；恢复只认 `activeCheckpoints`。
 
-`evidenceIndex` 按 `evidenceKey` 索引，key 由 runtime 从 record 推出（传入的 `evidenceKey` 必须与推导一致）；`timing` 可省略；`artifact` 必须是 package 内路径（`evidence/…`、`execution/<attempt>/reviews/…`）；`conclusion` 取值为 `supporting | contradictory | inconclusive`。`amendments[].affected` 只能是 package 内合同文件 `decision.md`、`spec.md`、`contract-design.md`，不是 Ticket 或 Journey step ID（`add` 会拒绝）；多个路径分别传入多个 `--affected`；受影响的 Ticket 用可选的 `--tickets` 记录（写入 `tickets`）；`--artifact` 省略时取第一个 `--affected`；登记时的 blob 写入 `affectedBlobs`。漏登检测按当前内容匹配：合同文件当前 blob 不同于 `contractBaseline` 时，必须有一条 Amendment 为该路径记录相同 blob；旧 state 中没有 `affectedBlobs` 的 Amendment 不覆盖当前内容。每条 Amendment 都需 Owner 确认后才不再阻止 `gate pass`。
+`evidenceIndex` 按 `evidenceKey` 索引，key 由 runtime 从 record 推出（传入的 `evidenceKey` 必须与推导一致）；`timing` 可省略；`artifact` 必须是 package 内路径（`evidence/…`、`execution/<attempt>/reviews/…`）；`conclusion` 取值为 `supporting | contradictory | inconclusive`。`amendments[].affected` 只能是 package 内合同文件 `decision.md`、`spec.md`、`contract-design.md`，不是 Ticket 或 Journey step ID（`add` 会拒绝）；多个路径分别传入多个 `--affected`；受影响的 Ticket 用可选的 `--tickets` 记录（写入 `tickets`）；`--artifact` 省略时取第一个 `--affected`；登记时的 blob 写入 `affectedBlobs`。漏登检测按当前内容匹配：合同文件当前 blob 不同于 `contractBaseline` 时，必须有一条 Amendment 为该路径记录相同 blob；旧 state 中没有 `affectedBlobs` 的 Amendment 不覆盖当前内容。每条 Amendment 都需 Owner 确认后才不再阻止 `gate pass`；登记后合同文件又变化时，旧 Amendment 的 blob 已不匹配、无法再确认，用 `amendment add --supersedes <旧 id>`（可重复）登记覆盖当前内容的新 Amendment：新条目须重列旧条目的全部 `--affected`，旧条目（仍须是 PENDING）不再阻止 Gate，也不能再被确认，只确认新条目（新条目的 `supersedes` 字段记录被取代的 id）。
 
 | kind | 必填的专有字段 | evidenceKey | 说明 |
 | --- | --- | --- | --- |
@@ -99,7 +99,7 @@ python <plugin>/scripts/impl_package_state.py --package <package> package archiv
 printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <package> evidence add      # 单条或数组，整批合法才写入
 python <plugin>/scripts/impl_package_state.py --package <package> evidence invalidate --key <evidenceKey> --invalidated-by <reason>
 python <plugin>/scripts/impl_package_state.py --package <package> evidence carry-forward --key <evidenceKey> --to <commit> --reason <text> --judged-by <who>   # agent 看过 diff 后判断运行时改动不影响该证据；漂移后先 package refresh-progress
-python <plugin>/scripts/impl_package_state.py --package <package> package amendment add --id <id> --summary <text> --affected <contract path> [--affected <contract path> ...] --artifact <package 内路径>
+python <plugin>/scripts/impl_package_state.py --package <package> package amendment add --id <id> --summary <text> --affected <contract path> [--affected <contract path> ...] --artifact <package 内路径> [--supersedes <PENDING 旧 id> ...]
 python <plugin>/scripts/impl_package_state.py --package <package> package amendment confirm --id <id> [--id <id> ...] --confirmed-by <owner> [--expect PENDING] [--confirmed-revision <commit，默认 HEAD>]
 python <plugin>/scripts/impl_package_state.py --package <package> ticket satisfy <id> --expect <state> [--revision <commit，默认 HEAD>] [--environment <id>]
 python <plugin>/scripts/impl_package_state.py --package <package> ticket block <id> --expect <state> --evidence <path>

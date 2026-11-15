@@ -951,6 +951,11 @@ def _parse_state(view: FileView) -> StateView:
                         expected_amendment.add("affectedBlobs")
                     if "tickets" in amendment:
                         expected_amendment.add("tickets")
+                    if "supersedes" in amendment:
+                        expected_amendment.add("supersedes")
+                        superseded = amendment["supersedes"]
+                        if not isinstance(superseded, list) or not superseded or any(not isinstance(item, str) or not item.strip() for item in superseded):
+                            errors.append(f"acceptance.amendments[{index}] supersedes 无效")
                     identifier = amendment.get("id")
                     if status not in {"PENDING", "CONFIRMED"} or set(amendment) != expected_amendment:
                         errors.append(f"acceptance.amendments[{index}] 字段/status 无效")
@@ -2626,6 +2631,9 @@ def _when_attempt_near_terminal_gate(context: FactContext) -> Fact:
     return _fact_value(gate.verdict is not None)
 
 
+TERMINAL_SUMMARY_HINT = "用 trail append 写入该 fact，最小示例见 `impl_package_state.py --package <package> trail append --help`"
+
+
 def _when_attempt_terminal_coverage_complete(context: FactContext) -> Fact:
     summary_fact = context._latest_fact("review.terminal_summary")
     near_terminal = _when_attempt_all_tickets_terminal(context)
@@ -2636,14 +2644,18 @@ def _when_attempt_terminal_coverage_complete(context: FactContext) -> Fact:
 
     summary = summary_fact.value if summary_fact is not None else None
     if not isinstance(summary, dict):
-        return _fact_value(False, "缺少 review.terminal_summary fact")
+        return _fact_value(False, f"缺少 review.terminal_summary fact；{TERMINAL_SUMMARY_HINT}")
     head = context.snapshot.head
-    if not head or summary.get("comparisonHead") != head or not isinstance(summary.get("safetyApplicable"), bool):
-        return _fact_value(False, "terminal_summary 的 comparisonHead 与当前 HEAD 不一致或缺少 safetyApplicable")
+    if not head or summary.get("comparisonHead") != head:
+        return _fact_value(False, f"terminal_summary.comparisonHead 是 {summary.get('comparisonHead')!r}，必须等于当前 HEAD 完整 SHA {head!r}")
+    if not isinstance(summary.get("safetyApplicable"), bool):
+        return _fact_value(False, "terminal_summary.safetyApplicable 缺失或不是布尔值（true 时还需要 Track D 的 PASS）")
     run_id = summary.get("reviewRunId")
     results = summary.get("results")
-    if not isinstance(run_id, str) or not run_id.strip() or not isinstance(results, list):
-        return _fact_value(False, "terminal_summary 缺少 reviewRunId 或 results")
+    if not isinstance(run_id, str) or not run_id.strip():
+        return _fact_value(False, "terminal_summary.reviewRunId 缺失或为空")
+    if not isinstance(results, list):
+        return _fact_value(False, "terminal_summary.results 缺失或不是数组；每轨一项 {track, verdict, reviewedHead, artifact}")
     # Track B (retired standards track) stays a readable value for old trails but is not required.
     required = {"Track A", "Track C"}
     if summary["safetyApplicable"]:
@@ -2673,14 +2685,15 @@ def _when_attempt_terminal_coverage_complete(context: FactContext) -> Fact:
         reviewed_head = result.get("reviewedHead")
         report = artifact_text(result.get("artifact"))
         if not isinstance(reviewed_head, str) or not reviewed_head or not report:
-            return _fact_value(False, f"{track} 缺少 reviewedHead 或报告文件读不到")
+            return _fact_value(False, f"{track} 缺少 reviewedHead，或 artifact 报告读不到（须为包内相对路径的已存在文件）：{result.get('artifact')!r}")
         artifact = _safe_relative_path(context.snapshot.package, result["artifact"])
         if artifact in artifacts:
             return _fact_value(False, f"{track} 的报告路径与其它轨重复：{artifact}")
         artifacts.add(artifact)
         header = dict(line.split(": ", 1) for line in report.splitlines()[:4] if ": " in line)
         if header != {"verdict": "PASS", "reviewed-head": reviewed_head, "review-run": run_id, "review-track": track}:
-            return _fact_value(False, f"{track} 报告前四行头不匹配（verdict/reviewed-head/review-run/review-track）")
+            expected_header = {"verdict": "PASS", "reviewed-head": reviewed_head, "review-run": run_id, "review-track": track}
+            return _fact_value(False, f"{track} 报告前四行头不匹配；期望 {expected_header}，实际 {header}")
         if reviewed_head != head:
             # 复用判据由 parent 对照该轨输入裁决，保留同一 ReviewRun 的 PASS 和 delta 证据。
             if track == "Track A" or result.get("reused") is not True or not artifact_text(result.get("reuseEvidence")):

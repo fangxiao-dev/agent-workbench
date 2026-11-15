@@ -1607,12 +1607,22 @@ class ImplPackageStateTests(unittest.TestCase):
         rejected = self.cli(repo, package, *gate_args, ok=False, subprocess=True)
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("terminal review coverage", rejected.stderr + rejected.stdout)
+        self.assertIn("trail append --help", rejected.stderr + rejected.stdout)
         # Track B no longer substitutes for the required Track C.
         self.add_terminal_summary(repo, package, tracks=("Track A", "Track B"))
         coverage = engine.terminal_coverage_fact(package)
         self.assertTrue(coverage.known)
         self.assertIs(coverage.value, False)
+        self.assertIn("Track C", coverage.reason)
         self.assertNotEqual(self.cli(repo, package, *gate_args, ok=False).returncode, 0)
+        # A report header that disagrees with the summary names the expected and the actual header.
+        self.add_terminal_summary(repo, package)
+        (package / "execution/initial/review-a.md").write_text(
+            f"verdict: PASS\nreviewed-head: {head}\nreview-run: other\nreview-track: Track A\n\n", encoding="utf-8")
+        mismatch = engine.terminal_coverage_fact(package)
+        self.assertIs(mismatch.value, False)
+        self.assertIn("期望", mismatch.reason)
+        self.assertIn("'review-run': 'other'", mismatch.reason)
         unknown_reason = "无法读取 execution/initial/trail.jsonl"
         with patch.object(engine, "terminal_coverage_fact", return_value=Fact.unknown(unknown_reason)):
             with self.assertRaises(engine.StateError) as unknown_rejection:

@@ -20,6 +20,26 @@ Patch 归属于 package 已有 terminal gate 之后的生命周期，并继续�
 - 需要恢复时只使用文档化 `state.json.activeCheckpoints`，compact 仅作意外耗尽兜底。
 - Planned Verification 引用权威 policy；实际证据写入 `execution/<attempt>/execution-record.md`。
 
+## Patch plan 最小模板
+
+`package init --attempt <id> --plan <相对仓库根的路径>` 会一次性列出缺项。patch plan 至少含：
+
+```
+Attempt ID: <id>
+Acceptance: journey
+Release order: none
+前置包（Predecessors）: None
+Harness setup: <命令>
+Harness precheck: <命令>
+Harness cleanup: <命令>
+Harness isolation: per-run
+First visible step: <真实 StepId> @ <本 patch 的 TicketId>
+```
+
+每张 patch Ticket 含 `Ticket ID`、`Publication Status`、`Attempt ID: <id>` 与 `## Coverage` 三行：`- Journey steps: <J1-S1, ... | none>`、`- Suites: <S-id | none>`（两者不能都为 none）、`- Required review: <none | 说明>`。
+
+patch 的 Ticket 须认领 Spec 的全部 Journey step，即使改动不影响页面可观察行为：Gate 只认当前 Attempt 的走查证据，没有“沿用上一 Attempt 的 Journey”的豁免。改动不影响页面时，用一张 Ticket 认领全部 step 并在修复后版本重走，每步只提交 Gate 依赖的最少凭据（页面步 1 张截图，文件/接口步 1 个返回），其余原始产物写被 git 忽略的 `output/qa/<runId>/`。
+
 ## Patch artifacts
 
 - 创建属于本 Attempt ID 的新 ticket files；ticket id 在 package 内保持唯一。

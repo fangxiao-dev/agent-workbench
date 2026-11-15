@@ -134,6 +134,26 @@ EVIDENCE_ADD_EPILOG = """Every record needs kind, artifact, revision, environmen
 Optional (journey-step): inputRef, outputRef, manualBy."""
 
 
+EVIDENCE_ADD_RULES = """
+Commit only the minimum evidence the Gate depends on: one screenshot per page step, one returned file/response per file/API step.
+Keep raw artifacts (traces, full logs, DB dumps) in the git-ignored output/qa/<runId>/ instead.
+  journey-step surface=page: artifact is a Playwright trace .zip, or a package image (.png/.jpg/.jpeg/.webp) together with manualBy
+  journey-step surface=file: artifact is the produced file itself (not .md/.txt/.log); no manualBy
+  journey-step surface=log: any package file; no manualBy
+Artifact paths are relative to the package directory and the file must already exist."""
+
+TRAIL_APPEND_TERMINAL_SUMMARY = """
+
+Terminal review coverage (written once the final terminal-final review has returned; comparisonHead must be the full current HEAD SHA):
+  {"kind":"fact","subject":"attempt","key":"review.terminal_summary","value":{
+     "reviewRunId":"<ReviewRun id>","comparisonHead":"<HEAD full SHA>","safetyApplicable":false,
+     "results":[
+       {"track":"Track A","verdict":"PASS","reviewedHead":"<HEAD full SHA>","artifact":"<package-relative report>"},
+       {"track":"Track C","verdict":"PASS","reviewedHead":"<SHA>","artifact":"<package-relative report>"}]}}
+  Each report's first four lines: verdict: PASS / reviewed-head: <SHA> / review-run: <id> / review-track: Track A|C|D.
+  safetyApplicable=true additionally needs a Track D result. A track reviewed at an older head needs "reused":true and "reuseEvidence":"<package-relative file>" (never Track A)."""
+
+
 def _parser(group: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=f"impl_package_state.py --package <package> {group}")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -142,7 +162,10 @@ def _parser(group: str) -> argparse.ArgumentParser:
         check_spec.add_argument("--spec", required=True, help="repository-relative Spec path")
         init = commands.add_parser("init", help="initialize a 3.6 Journey package from the Plan")
         init.add_argument("--attempt", required=True)
-        init.add_argument("--plan", required=True)
+        init.add_argument(
+            "--plan", required=True,
+            help="plan path relative to the repository root (not the package dir), e.g. docs/.../<package>/p1.patch-plan.md",
+        )
         archive = commands.add_parser("archive-attempt", help="backfill a frozen Attempt Ticket snapshot")
         archive.add_argument("--attempt", required=True)
         archive.add_argument("--from-revision", required=True)
@@ -164,10 +187,15 @@ def _parser(group: str) -> argparse.ArgumentParser:
         )
         add.add_argument("--artifact", help="package-relative artifact describing the change (default: first --affected)")
         add.add_argument("--tickets", action="append", default=[], help="impacted Ticket ID; repeat once per Ticket")
+        add.add_argument(
+            "--supersedes", action="append", default=[],
+            help="PENDING amendment id replaced by this one (its contract files must be re-listed in --affected); "
+            "superseded amendments no longer block the Gate. Use when the contract changed again after the earlier add",
+        )
         confirm = amendment_commands.add_parser("confirm", help="confirm pending amendments")
         confirm.add_argument("--id", action="append", required=True, help="amendment id; repeat to confirm several")
         confirm.add_argument("--expect", default="PENDING")
-        confirm.add_argument("--confirmed-by", required=True)
+        confirm.add_argument("--confirmed-by", required=True, help="Owner name, required, e.g. --confirmed-by Owner")
         confirm.add_argument("--confirmed-revision", help="commit the Owner confirmed (default: HEAD)")
     elif group == "ticket":
         for command, target, help_text in (
@@ -200,7 +228,7 @@ def _parser(group: str) -> argparse.ArgumentParser:
             "add",
             help="add a JSON evidence record from stdin",
             description="Add one JSON evidence record from stdin.",
-            epilog=EVIDENCE_ADD_EPILOG,
+            epilog=EVIDENCE_ADD_EPILOG + EVIDENCE_ADD_RULES,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
         check = commands.add_parser("check", help="read-only check of a JSON evidence array file; writes nothing")
@@ -239,6 +267,7 @@ def _parser(group: str) -> argparse.ArgumentParser:
                 '  {"subject":"attempt","kind":"escape","deviation":"manual route","reason":"no matching situation"}\n\n'
                 'ER judgment is separate: `recovery judgment` requires "purpose":"judgment":\n'
                 '  {"purpose":"judgment","subject":"attempt","title":"Decision","content":"Keep the narrow path."}'
+                + TRAIL_APPEND_TERMINAL_SUMMARY
             ),
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
@@ -299,7 +328,7 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
             return engine.command_validate(package, args.commit, check_arrival_paths=args.command == "validate")
         if args.command == "amendment":
             if args.amendment_action == "add":
-                return engine.command_amendment_add(package, args.id, args.summary, args.affected, args.artifact, args.tickets)
+                return engine.command_amendment_add(package, args.id, args.summary, args.affected, args.artifact, args.tickets, args.supersedes)
             results = [
                 engine.command_amendment_confirm(package, identifier, args.expect, args.confirmed_by, args.confirmed_revision)
                 for identifier in args.id

@@ -2372,3 +2372,75 @@ def test_spec_rewrite_marks_drifted_journey_evidence_invalidated(tmp_path: Path)
     assert _state(package)["evidenceIndex"]["journey:run-1:J1-S1"][0]["invalidatedBy"] in {"amendment:A", "spec-drift:entry"}
     rejected = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, "J1-S1", run_id="run-2"))
     assert rejected.returncode != 0
+
+
+def test_init_reports_plan_ticket_and_coverage_problems_together(tmp_path: Path) -> None:
+    bad_plan = PLAN.replace("Harness isolation: per-run", "Harness isolation: shared")
+    tickets = {
+        "01.md": _ticket("TKT-01", "J1-S1", "S-resolver").replace("- Required review: none\n", ""),
+        "02.md": _ticket("TKT-02", "none", "none"),
+    }
+    repo, package = _make_package(tmp_path / "a", plan=bad_plan, tickets=tickets)
+
+    result = _init(repo, package, ok=False)
+
+    assert result.returncode != 0
+    for needle in ("Harness isolation: shared", "Required review", "cannot both be none"):
+        assert needle in result.stderr, result.stderr
+
+    repo, package = _make_package(
+        tmp_path / "b",
+        plan=PLAN.replace("J1-S1 @ TKT-01", "J1-S1 @ TKT-99"),
+        tickets={"01.md": _ticket("TKT-01", "J1-S1", "S-resolver"), "02.md": _ticket("TKT-02", "none", "S-workflow")},
+    )
+    result = _init(repo, package, ok=False)
+    assert "J1-S2" in result.stderr and "TKT-99" in result.stderr, result.stderr
+
+
+def test_init_plan_path_error_names_repo_relative_form(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path)
+
+    result = _cli(repo, package, "package", "init", "--attempt", "initial", "--plan", "plan.md")
+
+    assert result.returncode != 0
+    assert "plan does not exist" in result.stderr and "相对仓库根" in result.stderr
+    assert "docs/implementations/20261028-journey-phase1/" in result.stderr
+
+
+def test_amendment_supersedes_unblocks_confirm_after_contract_changed_again(tmp_path: Path) -> None:
+    repo, package, _ = _init_v36(tmp_path)
+    _append_spec_note(package, "Owner clarification: first wording.")
+    assert _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "first", "--affected", "spec.md").returncode == 0
+    _append_spec_note(package, "Owner clarification: second wording.")
+    stale = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--confirmed-by", "Owner")
+    assert stale.returncode != 0 and "--supersedes A-1" in stale.stderr
+
+    missing = _cli(repo, package, "package", "amendment", "add", "--id", "A-2", "--summary", "x", "--affected", "spec.md", "--supersedes", "A-9")
+    assert missing.returncode != 0 and "unknown amendment: A-9" in missing.stderr
+    narrower = _cli(repo, package, "package", "amendment", "add", "--id", "A-2", "--summary", "x", "--affected", "decision.md", "--supersedes", "A-1")
+    assert narrower.returncode != 0 and "spec.md" in narrower.stderr
+
+    args = ("package", "amendment", "add", "--id", "A-2", "--summary", "both wordings", "--affected", "spec.md", "--supersedes", "A-1")
+    assert _cli(repo, package, *args).returncode == 0
+    assert _cli(repo, package, *args).returncode == 0  # idempotent
+    rows = _state(package)["acceptance"]["amendments"]
+    assert [row["id"] for row in engine._pending_amendments(rows)] == ["A-2"]
+    old = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--confirmed-by", "Owner")
+    assert old.returncode != 0 and "superseded by A-2" in old.stderr
+    assert _cli(repo, package, "package", "amendment", "confirm", "--id", "A-2", "--confirmed-by", "Owner").returncode == 0
+    assert engine._pending_amendments(_state(package)["acceptance"]["amendments"]) == []
+    validated = _cli(repo, package, "package", "validate")
+    assert validated.returncode == 0, validated.stderr
+    assert not any(row["code"] == "contract-amendment-unregistered" for row in json.loads(validated.stdout)["findings"])
+    state = _state(package)
+    assert situation._parse_state(situation.FileView("state.json", json.dumps(state))).valid
+
+
+def test_help_texts_state_minimum_evidence_and_terminal_summary_shapes(tmp_path: Path) -> None:
+    repo, package = _make_package(tmp_path)
+    evidence = _cli(repo, package, "evidence", "add", "--help", subprocess=True)
+    assert "output/qa/<runId>/" in evidence.stdout and "manualBy" in evidence.stdout
+    trail = _cli(repo, package, "trail", "append", "--help", subprocess=True)
+    assert "review.terminal_summary" in trail.stdout and "comparisonHead" in trail.stdout
+    confirm = _cli(repo, package, "package", "amendment", "confirm", "--help", subprocess=True)
+    assert "--confirmed-by Owner" in confirm.stdout
