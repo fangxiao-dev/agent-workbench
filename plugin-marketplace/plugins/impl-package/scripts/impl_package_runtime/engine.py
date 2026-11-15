@@ -780,6 +780,10 @@ def _spec_coverage_findings(
         is_covered = heading["index"] in covered or heading["index"] in not_required
         if not is_covered and heading["level"] == 3 and heading["parent"] is not None:
             is_covered = heading["parent"] in covered or heading["parent"] in not_required
+        if not is_covered and heading["level"] == 2:
+            # 只有子节的父标题：所有子节都已分类即视为已分类
+            children = [item for item in headings if item["parent"] == heading["index"]]
+            is_covered = bool(children) and all(item["index"] in covered or item["index"] in not_required for item in children)
         if not is_covered:
             findings.append(
                 f"{spec_label} {_chapter_label(heading)} 未分类；请在 §7 Rule Matrix 增加引用该章节的规则行，或加入‘无需验收的章节’行。"
@@ -899,6 +903,27 @@ def _journey_spec_text(text: str, spec_label: str = "spec.md") -> dict[str, Any]
         if row["Suite"] not in suites:
             raise StateError(f"Rule Matrix references unknown required suite: {row['Suite']}")
     return {"journeys": journeys, "steps": steps, "suites": suites, "rules": rule_rows}
+
+
+def _valid_successor(package: Path, successor: Any, identifier: str, attempt: str, ticket_ids: set[str]) -> bool:
+    """Successor is a same-Attempt Ticket ID, or `<attempt>/<ticket>` naming another Attempt's Ticket."""
+    if not isinstance(successor, str):
+        return False
+    if "/" not in successor:
+        return successor in ticket_ids and successor != identifier
+    other, _, ticket = successor.partition("/")
+    if other == attempt:
+        return ticket in ticket_ids and ticket != identifier
+    if ATTEMPT_ID_RE.fullmatch(other) is None or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", ticket) is None:
+        return False
+    # The other Attempt may not exist yet (successor planned in the next Attempt); only check when its tickets are readable.
+    archive = _attempt_archive_path(package, other)
+    if archive.is_file():
+        try:
+            return ticket in _load_json(archive).get("tickets", {})
+        except (StateError, AttributeError):
+            return False
+    return True
 
 
 def _journey_spec(package: Path) -> dict[str, Any]:
@@ -1637,6 +1662,8 @@ def _ticket_released(tickets: dict[str, Any], identifier: str, visiting: set[str
     if row.get("disposition") == "waived":
         return True
     successor = row.get("successor")
+    if isinstance(successor, str) and "/" in successor:
+        return True  # successor lives in another Attempt; the retirement itself releases dependents
     return isinstance(successor, str) and successor in tickets and _ticket_released(tickets, successor, visiting)
 
 
@@ -1668,6 +1695,7 @@ def _validate_acceptance_state(package: Path, repo: Path, acceptance: Any, info:
         status = amendment.get("status")
         base = {"id", "summary", "affected", "artifact", "status"}
         expected = base | ({"confirmedBy", "confirmedRevision"} if status == "CONFIRMED" else set())
+        expected |= {"withdrawnReason", "withdrawnAt"} if status == "WITHDRAWN" else set()
         expected |= {field for field in ("createdAt", "confirmedAt") if field in amendment}
         if "affectedBlobs" in amendment:
             expected.add("affectedBlobs")
@@ -1681,8 +1709,12 @@ def _validate_acceptance_state(package: Path, repo: Path, acceptance: Any, info:
             superseded = amendment["supersedes"]
             if not isinstance(superseded, list) or not superseded or not all(isinstance(item, str) and item.strip() for item in superseded) or len(set(superseded)) != len(superseded):
                 raise StateError("amendment supersedes must be a non-empty list of unique amendment IDs")
-        if status not in {"PENDING", "CONFIRMED"} or set(amendment) != expected:
-            raise StateError("amendment fields/status do not match PENDING or CONFIRMED")
+        if status not in {"PENDING", "CONFIRMED", "WITHDRAWN"} or set(amendment) != expected:
+            raise StateError("amendment fields/status do not match PENDING, CONFIRMED or WITHDRAWN")
+        if status == "WITHDRAWN":
+            if not isinstance(amendment["withdrawnReason"], str) or not amendment["withdrawnReason"].strip():
+                raise StateError("withdrawn amendment withdrawnReason must be non-empty")
+            _validate_iso_timestamp(amendment["withdrawnAt"], "amendment withdrawnAt")
         identifier = amendment.get("id")
         if not isinstance(identifier, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", identifier) is None or identifier in amendment_ids:
             raise StateError("amendment id must be unique non-empty text")
@@ -1717,7 +1749,7 @@ def _validate_acceptance_state(package: Path, repo: Path, acceptance: Any, info:
             if "confirmedAt" in amendment:
                 _validate_iso_timestamp(amendment["confirmedAt"], f"amendment {identifier} confirmedAt")
         elif "confirmedAt" in amendment:
-            raise StateError(f"pending amendment {identifier} cannot contain confirmedAt")
+            raise StateError(f"non-confirmed amendment {identifier} cannot contain confirmedAt")
     for amendment in acceptance["amendments"]:
         unknown = [item for item in amendment.get("supersedes", []) if item not in amendment_ids or item == amendment["id"]]
         if unknown:
@@ -1787,8 +1819,8 @@ def _validate_state(
             if set(row) != allowed_retired or row["disposition"] not in DISPOSITIONS or not isinstance(row["evidence"], str):
                 raise StateError(f"RETIRED Ticket {identifier} requires disposition")
             _repo_relative(repo, row["evidence"], f"RETIRED {identifier} evidence", must_exist=live_artifacts)
-            if row["disposition"] == "superseded" and (row.get("successor") not in ticket_ids or row.get("successor") == identifier):
-                raise StateError(f"RETIRED superseded Ticket {identifier} requires a valid successor")
+            if row["disposition"] == "superseded" and not _valid_successor(package, row.get("successor"), identifier, attempt["id"], ticket_ids):
+                raise StateError(f"RETIRED superseded Ticket {identifier} requires a valid successor (same-attempt Ticket ID or <attempt>/<ticket>)")
         elif row["state"] == "SATISFIED":
             acceptance_fields = {"revision"}
             if isinstance(row.get("acceptance"), dict) and "environment" in row["acceptance"]:
@@ -2311,8 +2343,9 @@ def _contract_amendment_findings(package: Path, repo: Path, acceptance: dict[str
     return findings
 
 
-def command_check_spec(package: Path, spec_value: str) -> dict[str, Any]:
+def command_check_spec(package: Path, spec_value: str | None = None) -> dict[str, Any]:
     repo = _repo_root(package)
+    spec_value = spec_value or _package_relative(repo, package / "spec.md")
     spec_relative = _repo_relative(repo, spec_value, "spec")
     if "#" in spec_relative:
         raise StateError("spec must not contain a text anchor")
@@ -2435,7 +2468,6 @@ def command_amendment_add(
     affected: list[str],
     artifact: str | None = None,
     tickets: list[str] | None = None,
-    supersedes: list[str] | None = None,
 ) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
@@ -2462,19 +2494,6 @@ def command_amendment_add(
     unknown_tickets = [item for item in ticket_ids if item not in state["tickets"]]
     if unknown_tickets:
         raise StateError(f"amendment --tickets names unknown Ticket(s): {', '.join(unknown_tickets)}")
-    superseded_ids = list(dict.fromkeys(item.strip() for item in (supersedes or [])))
-    for old_id in superseded_ids:
-        old = next((item for item in state["acceptance"]["amendments"] if item["id"] == old_id), None)
-        if old is None or old_id == identifier:
-            raise StateError(f"amendment --supersedes names unknown amendment: {old_id}")
-        if old["status"] != "PENDING":
-            raise StateError(f"amendment --supersedes {old_id} is already {old['status']}; only PENDING amendments can be superseded")
-        missing = [path for path in old["affected"] if path not in normalized_affected]
-        if missing:
-            raise StateError(
-                f"amendment {identifier} must also list --affected {', '.join(missing)} "
-                f"so that superseded {old_id} stays covered"
-            )
     repo = _repo_root(package)
     affected_blobs = _working_tree_blobs(repo, package, normalized_affected)
     row = {
@@ -2488,8 +2507,6 @@ def command_amendment_add(
     }
     if ticket_ids:
         row["tickets"] = ticket_ids
-    if superseded_ids:
-        row["supersedes"] = superseded_ids
     amendments = state["acceptance"]["amendments"]
     current = next((item for item in amendments if item["id"] == identifier), None)
     if current is not None:
@@ -2511,16 +2528,12 @@ def command_amendment_add(
 def command_amendment_confirm(
     package: Path,
     identifier: str,
-    expect: str | None,
     confirmed_by: str,
     confirmed_revision: str | None,
 ) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
     _assert_mutable(summary)
-    expect = expect or "PENDING"
-    if expect != "PENDING":
-        raise StateError("amendment confirm currently requires --expect PENDING")
     if not isinstance(confirmed_by, str) or not confirmed_by.strip():
         raise StateError("--confirmed-by must be non-empty")
     repo = _repo_root(package)
@@ -2542,13 +2555,13 @@ def command_amendment_confirm(
     ]
     if changed:
         raise StateError(f"amendment {identifier} no longer matches affected file contents: {', '.join(changed)}; "
-            f"register a new amendment with --supersedes {identifier} (covering the current contract files) and confirm that one")
+            f"register a new amendment covering the current contract files, run `amendment supersede --id {identifier} --by <new id>`, and confirm the new one")
     if current["status"] == "CONFIRMED":
         if current["confirmedBy"] == confirmed_by.strip() and current["confirmedRevision"] == revision:
             return {"id": identifier, "status": "CONFIRMED", "idempotent": True}
         raise StateError(f"amendment {identifier} already has a different confirmation")
-    if current["status"] != expect:
-        raise StateError(f"stale amendment transition for {identifier}: expected {expect}, found {current['status']}")
+    if current["status"] != "PENDING":
+        raise StateError(f"amendment {identifier} is {current['status']}; only PENDING amendments can be confirmed")
     candidate = json.loads(json.dumps(state, ensure_ascii=False))
     row = next(item for item in candidate["acceptance"]["amendments"] if item["id"] == identifier)
     row.update({"status": "CONFIRMED", "confirmedBy": confirmed_by.strip(), "confirmedRevision": revision, "confirmedAt": _utc_timestamp()})
@@ -2560,6 +2573,80 @@ def command_amendment_confirm(
         "from": "PENDING", "to": "CONFIRMED", "outcome": "CONFIRMED",
     })
     return {"id": identifier, "status": "CONFIRMED", "idempotent": False}
+
+
+def _amendment_transition(package: Path, mutate: Any, subject_id: str, to: str, outcome_extra: dict[str, Any]) -> dict[str, Any]:
+    state = _load_json(package / STATE_PATH)
+    summary = _validate_state(package, state)
+    _assert_mutable(summary)
+    candidate = json.loads(json.dumps(state, ensure_ascii=False))
+    idempotent = mutate(candidate["acceptance"]["amendments"])
+    if idempotent:
+        return {"id": subject_id, "status": to, "idempotent": True}
+    _validate_state(package, candidate, projections=False)
+    _write_json(package / STATE_PATH, candidate)
+    _refresh_projections(package, candidate)
+    _best_effort_result(package, summary["attempt"], {
+        "subject": f"amendment:{subject_id}", "transition": "amendment", "id": subject_id,
+        "from": "PENDING", "to": to, "outcome": to, **outcome_extra,
+    })
+    return {"id": subject_id, "status": to, "idempotent": False, **outcome_extra}
+
+
+def command_amendment_supersede(package: Path, identifier: str, by: str) -> dict[str, Any]:
+    """Mark an existing amendment as covered by a later one; superseded amendments no longer block the Gate."""
+    def mutate(amendments: list[dict[str, Any]]) -> bool:
+        old = next((row for row in amendments if row["id"] == identifier), None)
+        new = next((row for row in amendments if row["id"] == by), None)
+        if old is None or new is None or identifier == by:
+            raise StateError(f"amendment supersede needs two distinct existing amendments: --id {identifier} --by {by}")
+        if identifier in new.get("supersedes", []):
+            return True
+        if old["status"] != "PENDING":
+            raise StateError(f"amendment {identifier} is {old['status']}; only PENDING amendments can be superseded")
+        if new["status"] == "WITHDRAWN":
+            raise StateError(f"amendment {by} is WITHDRAWN and cannot supersede {identifier}")
+        missing = [path for path in old["affected"] if path not in new["affected"]]
+        if missing:
+            raise StateError(f"amendment {by} must also list affected {', '.join(missing)} so that superseded {identifier} stays covered")
+        new["supersedes"] = [*new.get("supersedes", []), identifier]
+        return False
+    return _amendment_transition(package, mutate, identifier, "SUPERSEDED", {"supersededBy": by})
+
+
+def command_amendment_withdraw(package: Path, identifier: str, reason: str) -> dict[str, Any]:
+    """Withdraw a PENDING amendment that no longer applies; it stays in state for the audit trail but never blocks the Gate."""
+    if not isinstance(reason, str) or not reason.strip():
+        raise StateError("amendment withdraw --reason must be non-empty")
+
+    def mutate(amendments: list[dict[str, Any]]) -> bool:
+        row = next((item for item in amendments if item["id"] == identifier), None)
+        if row is None:
+            raise StateError(f"unknown amendment: {identifier}")
+        if row["status"] == "WITHDRAWN":
+            return True
+        if row["status"] != "PENDING":
+            raise StateError(f"amendment {identifier} is {row['status']}; only PENDING amendments can be withdrawn")
+        row.update({"status": "WITHDRAWN", "withdrawnReason": reason.strip(), "withdrawnAt": _utc_timestamp()})
+        return False
+    return _amendment_transition(package, mutate, identifier, "WITHDRAWN", {"reason": reason.strip()})
+
+
+def command_sync_predecessors(package: Path) -> dict[str, Any]:
+    """Re-read 前置包（Predecessors） from the current Plan into state, for a plan revised after init."""
+    state = _load_json(package / STATE_PATH)
+    repo = _repo_root(package)
+    plan = _repo_relative(repo, state["attempt"]["plan"], "plan")
+    candidate = json.loads(json.dumps(state, ensure_ascii=False))
+    new = _predecessors_from_plan(package, repo, _read(repo / plan))
+    if new == state["predecessors"]:
+        return {"predecessors": new, "idempotent": True}
+    candidate["predecessors"] = new
+    summary = _validate_state(package, candidate, projections=False)
+    _assert_mutable(summary)
+    _write_json(package / STATE_PATH, candidate)
+    _refresh_projections(package, candidate)
+    return {"predecessors": new, "idempotent": False}
 
 
 def _assert_mutable(summary: dict[str, Any]) -> None:
