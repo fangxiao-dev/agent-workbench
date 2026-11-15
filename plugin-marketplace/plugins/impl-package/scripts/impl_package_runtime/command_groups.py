@@ -126,11 +126,11 @@ def _ticket_transition(package: Path, args: argparse.Namespace, target: str) -> 
 
 
 EVIDENCE_ADD_EPILOG = """Every record needs kind, artifact, revision, environment, conclusion; minimum JSON per kind:
-  journey-step: {"kind":"journey-step","runId":"r1","journeyId":"J1","stepId":"J1-S1","actor":"agent","entry":"<Spec entry>","surface":"page","artifact":"evidence/<file>","revision":"<commit>","environment":"local","conclusion":"supporting"}
-  run-setup:    {"kind":"run-setup","runId":"r1","artifact":"evidence/<file>","revision":"<commit>","environment":"local","conclusion":"supporting"}
-  suite:        {"kind":"suite","suiteId":"<id>","artifact":"evidence/<file>","revision":"<commit>","environment":"<Spec environment>","conclusion":"supporting"}
+  journey-step: {"kind":"journey-step","runId":"r1","journeyId":"J1","stepId":"J1-S1","actor":"agent","entry":"<Spec entry>","surface":"page","artifact":"<package-relative file>","revision":"<commit>","environment":"local","conclusion":"supporting"}
+  run-setup:    {"kind":"run-setup","runId":"r1","artifact":"<package-relative file>","revision":"<commit>","environment":"local","conclusion":"supporting"}
+  suite:        {"kind":"suite","suiteId":"<id>","artifact":"<package-relative file>","revision":"<commit>","environment":"<Spec environment>","conclusion":"supporting"}
   review:       {"kind":"review","ticket":"T01","artifact":"execution/<attempt>/reviews/<file>","revision":"<commit>","environment":"local","conclusion":"supporting"}
-  release:      {"kind":"release","artifact":"evidence/<file>","revision":"<commit>","environment":"local","conclusion":"supporting"}
+  release:      {"kind":"release","artifact":"<package-relative file>","revision":"<commit>","environment":"local","conclusion":"supporting"}
 Optional (journey-step): inputRef, outputRef, manualBy."""
 
 

@@ -2702,7 +2702,7 @@ def _v36_ticket_satisfy_gaps(package: Path, state: dict[str, Any], summary: dict
             )
             for record in records
         ):
-            template = json.dumps({"kind": "suite", "suiteId": suite_id, "environment": suite["environment"], "revision": revision, "artifact": "evidence/<file>", "conclusion": "supporting"}, ensure_ascii=False)
+            template = json.dumps({"kind": "suite", "suiteId": suite_id, "environment": suite["environment"], "revision": revision, "artifact": "<package-relative file>", "conclusion": "supporting"}, ensure_ascii=False)
             gaps.append(f"Suite {suite_id} 缺少对当前 revision 有效的 supporting 记录；补登：echo '{template}' | impl_package_state.py --package <package> evidence add")
     if document["coverage"]["requiredReview"] != "none":
         records = state["evidenceIndex"].get(f"review:{identifier}", [])

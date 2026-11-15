@@ -87,15 +87,26 @@ def executor_path(agent: str) -> Path:
         raise BlindOpeningError(f"unsupported agent: {agent}") from exc
 
 
+RESUME_LEAD = (
+    "重新看：把目标文档和它引用的全部材料当作第一次审查，从头完整阅读并对照代码核验，"
+    "不要只检查上一轮提到或修改过的地方；之前的问题可能已修、修错或引入新问题。\n\n"
+)
+
+
 def call_executor(
     agent: str,
     prompt: str,
     root: Path,
     timeout_s: int,
+    session_dir: Path | None = None,
 ) -> dict[str, list[dict[str, str]]]:
     path = executor_path(agent)
     if not path.is_file():
         raise BlindOpeningError(f"EXECUTOR_NOT_FOUND: {path}")
+    session_file = session_dir / f"{agent}.session" if session_dir and agent in ("codex", "claude") else None
+    session_id = session_file.read_text(encoding="utf-8").strip() if session_file and session_file.is_file() else None
+    if session_id:
+        prompt = RESUME_LEAD + prompt
     command = [sys.executable, str(path), "--cwd", str(root), "--prompt", prompt]
     if agent == "codex":
         command.extend(
@@ -107,11 +118,14 @@ def call_executor(
                 'service_tier="fast"',
                 "--sandbox",
                 "read-only",
-                "--ephemeral",
                 "--output-schema",
                 str(SCHEMA_PATH),
             ]
         )
+        if session_id:
+            command.extend(["--resume", session_id])
+        elif not session_file:
+            command.append("--ephemeral")
     elif agent == "claude":
         command.extend(
             [
@@ -124,9 +138,15 @@ def call_executor(
                 "You are a non-interactive Blind Opening participant. Return only the requested structured result.",
                 "--json-schema",
                 orchestrator.claude_schema_json(SCHEMA_PATH),
-                "--no-session-persistence",
             ]
         )
+        if session_id:
+            command.extend(["--resume", session_id])
+        elif session_file:
+            session_id = str(uuid.uuid4())
+            command.extend(["--session-id", session_id])
+        else:
+            command.append("--no-session-persistence")
     else:
         command.extend(
             [
@@ -148,6 +168,11 @@ def call_executor(
     if completed.returncode != 0 or not envelope.get("ok"):
         error = envelope.get("error") or {"code": "AGENT_FAILED", "message": completed.stderr.strip()}
         raise BlindOpeningError(f"{error.get('code', 'AGENT_FAILED')}: {error.get('message', agent)}")
+    if session_file:
+        new_id = envelope.get("thread_id") if agent == "codex" else session_id
+        if new_id:
+            session_file.parent.mkdir(parents=True, exist_ok=True)
+            session_file.write_text(str(new_id), encoding="utf-8")
     text = envelope.get("text")
     if not isinstance(text, str):
         raise BlindOpeningError(f"INVALID_OUTPUT: {agent} did not return Blind Opening text")
@@ -217,10 +242,11 @@ def run_blind_opening(
     timeout_s: int,
     output_dir: Path,
     fake: bool = False,
+    session_dir: Path | None = None,
     agent_runner: Callable[[str, str, Path, int], dict[str, list[dict[str, str]]]] | None = None,
 ) -> dict[str, Any]:
     target_document = orchestrator.read_target_document(root, topic)
-    runner = agent_runner or call_executor
+    runner = agent_runner or (lambda a, p, r, t: call_executor(a, p, r, t, session_dir))
     def run_one(agent: str) -> dict[str, Any]:
         prompt = build_prompt(agent, topic, target_document)
         raw = fake_result(agent) if fake else runner(agent, prompt, root, timeout_s)
@@ -248,6 +274,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout-s", type=int, default=300, help="per participant timeout in seconds")
     parser.add_argument("--output-dir", default=str(Path(tempfile.gettempdir()) / "discuss-ledger"))
     parser.add_argument("--fake", action="store_true", help="use deterministic fake participants")
+    parser.add_argument("--session-dir", help="persist codex/claude sessions here and resume them on later runs (default: ephemeral)")
     orchestrator.add_model_arguments(parser)
     return parser
 
@@ -267,6 +294,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout_s=args.timeout_s,
             output_dir=Path(args.output_dir),
             fake=args.fake,
+            session_dir=Path(args.session_dir) if args.session_dir else None,
         )
         print(json.dumps({"ok": True, "artifacts": result["artifacts"], "initial_points": result["initial_points"]}, ensure_ascii=False))
         return 0

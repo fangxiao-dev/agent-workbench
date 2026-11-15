@@ -45,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sandbox", help="Codex sandbox policy supplied by the caller")
     parser.add_argument("--ephemeral", action="store_true", help="request an ephemeral Codex session")
     parser.add_argument("--output-schema", type=Path, help="caller-supplied Codex output schema")
+    parser.add_argument("--resume", help="resume a persisted Codex session (thread id); sandbox and cwd come from that session")
     return parser
 
 
@@ -63,7 +64,7 @@ def build_command(
     executable: str = "codex",
     ignore_user_config: bool = False,
 ) -> list[str]:
-    command = [executable, "exec"]
+    command = [executable, "exec", "resume", args.resume] if args.resume else [executable, "exec"]
     if ignore_user_config:
         command.append("--ignore-user-config")
     command.append("--json")
@@ -74,13 +75,16 @@ def build_command(
         configs.insert(0, DEFAULT_REASONING_CONFIG)
     for config in configs:
         command.extend(["-c", config])
-    if args.sandbox:
+    # `codex exec resume` rejects --sandbox/--cd; the resumed session keeps its own.
+    if args.sandbox and not args.resume:
         command.extend(["--sandbox", args.sandbox])
     if args.ephemeral:
         command.append("--ephemeral")
     if args.output_schema:
         command.extend(["--output-schema", str(args.output_schema)])
-    command.extend(["--cd", str(Path(args.cwd).resolve()), "-"])
+    if not args.resume:
+        command.extend(["--cd", str(Path(args.cwd).resolve())])
+    command.append("-")
     return command
 
 
@@ -223,6 +227,17 @@ def parse_codex_jsonl(output: str) -> tuple[str, dict[str, Any] | None]:
     return final_text, usage
 
 
+def parse_thread_id(output: str) -> str | None:
+    for line in output.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict) and event.get("type") == "thread.started" and event.get("thread_id"):
+            return str(event["thread_id"])
+    return None
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     if args.timeout_s <= 0:
         return {
@@ -258,7 +273,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         if completed.returncode != 0:
             raise classify_process_error(completed.returncode, completed.stdout, completed.stderr)
         text, usage = parse_codex_jsonl(completed.stdout)
-        return {"ok": True, "status": "completed", "text": text, "usage": usage, "exit_code": 0, "error": None}
+        envelope = {"ok": True, "status": "completed", "text": text, "usage": usage, "exit_code": 0, "error": None}
+        thread_id = parse_thread_id(completed.stdout) or args.resume
+        if thread_id:
+            envelope["thread_id"] = thread_id
+        return envelope
     except ExecutorError as exc:
         return {
             "ok": False,

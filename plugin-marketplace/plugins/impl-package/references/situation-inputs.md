@@ -368,10 +368,10 @@ runtime 还要求该 row 的其他字段和 history 末项与 current attempt �
 | state | value 必须的 key | 合法示例 | 非法示例 |
 | --- | --- | --- | --- |
 | `PENDING` | 只有 `state` | `{"state":"PENDING"}` | `{"state":"PENDING","lifecycle":"active"}` |
-| `BLOCKED` | `state`、`evidence` | `{"state":"BLOCKED","evidence":"evidence/blocker.md"}` | 缺 `evidence`，或 `evidence: null` |
+| `BLOCKED` | `state`、`evidence` | `{"state":"BLOCKED","evidence":"<package-relative file>"}` | 缺 `evidence`，或 `evidence: null` |
 | `NEEDS-REVALIDATION` | `state`，可选 `evidence` | `{"state":"NEEDS-REVALIDATION"}` | 增加任意第三个字段 |
 | `SATISFIED` | 只有 `state`、`acceptance`；acceptance 有 `revision`，可选 `environment` | `{"state":"SATISFIED","acceptance":{"revision":"5f299f3"}}` | `{"state":"SATISFIED","acceptance":{"commit":"..."}}` |
-| `RETIRED` | `state`、`disposition`、`evidence`；若 superseded 再加 `successor` | `{"state":"RETIRED","disposition":"waived","evidence":"evidence/waive.md"}` | `waived` 带 successor；`superseded` 缺 successor |
+| `RETIRED` | `state`、`disposition`、`evidence`；若 superseded 再加 `successor` | `{"state":"RETIRED","disposition":"waived","evidence":"<package-relative file>"}` | `waived` 带 successor；`superseded` 缺 successor |
 
 `revision` 必须匹配 7–64 位十六进制 commit ID。situation parser 只检查形状；完整 runtime
 还会调用 Git resolve。`BLOCKED`、`RETIRED` 和 revalidation 的 evidence 也必须是非空字符串；
@@ -412,12 +412,12 @@ active checkpoint 的合法最小形状是：
     "attempt": {
       "next": "continue TKT-01",
       "blocker": null,
-      "evidence": ["evidence/context.md#anchor"]
+      "evidence": ["<package-relative file>#anchor"]
     },
     "ticket:TKT-01": {
       "next": "verify AC-1",
       "blocker": "awaiting read-back",
-      "evidence": ["evidence/context.md#ticket"]
+      "evidence": ["<package-relative file>#ticket"]
     }
   }
 }

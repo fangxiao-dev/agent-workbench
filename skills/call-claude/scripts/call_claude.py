@@ -55,6 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Pass Claude's no-session-persistence flag for this invocation.",
     )
+    parser.add_argument("--session-id", help="Start a persisted Claude session with this UUID.")
+    parser.add_argument("--resume", help="Resume a persisted Claude session by ID.")
     return parser
 
 
@@ -76,6 +78,10 @@ def build_command(
     command = [executable, "-p", "--output-format", "json"]
     if args.no_session_persistence:
         command.append("--no-session-persistence")
+    if args.session_id:
+        command.extend(["--session-id", args.session_id])
+    if args.resume:
+        command.extend(["--resume", args.resume])
     if args.disable_slash_commands:
         command.append("--disable-slash-commands")
     if args.model is not None:

@@ -27,7 +27,7 @@ review-track: <Track A/C/D>
 
 ## Terminal coverage record
 
-terminal-final 的 canonical ledger 更新且所需结果已返回后，parent 用 `trail append` 落盘下列 `review.terminal_summary` fact。它复用已有 trail，不创建第二份 ledger。artifact 和 reuseEvidence 为 package-relative 路径；report 前四行必须含上面的真实 verdict/head/run/track，各 track 使用独占 artifact。A/C required；Safety 适用时追加 Track D；旧 trail 中的 Track B 结果仍可读，不再必需。A 在最终 HEAD 重审，C/Safety 可在同一 ReviewRun 内复用旧 PASS，parent 在 reuseEvidence 中记录旧/新 SHA、该轨输入的 delta 与不受影响的依据。
+terminal-final 的 canonical ledger 更新且所需结果已返回后，parent 用 `trail append` 落盘下列 `review.terminal_summary` fact。它复用已有 trail，不创建第二份 ledger。artifact 和 reuseEvidence 为 package-relative 路径；report 前四行必须含上面的真实 verdict/head/run/track，各 track 使用独占 artifact。A/C required；Safety 适用时追加 Track D；旧 trail 中的 Track B 结果仍可读，不再必需。A 在最终 HEAD 重审，C/Safety 可在同一 ReviewRun 内复用旧 PASS，parent 在 reuseEvidence 中记录旧/新 SHA、该轨输入的 delta 与不受影响的依据。所有 results（含复用）报告前四行的 `review-run` 都必须等于 summary 的 `reviewRunId`，所以复用的 C/Safety PASS 必须来自同一个 ReviewRun：修复后不要为最终 HEAD 新建 ledger/ReviewRun，把最终轮作为原 ReviewRun 的下一轮记录。`trail append` 报 `progress projection mismatch` 时先跑 `package refresh-progress` 再重试。
 
 ```json
 {

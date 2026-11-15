@@ -208,3 +208,19 @@ def test_explicit_executable_takes_precedence_over_discovery(tmp_path: Path) -> 
     executor = load_executor()
 
     assert executor.resolve_codex_executable(str(tmp_path / "codex.exe")) == str(tmp_path / "codex.exe")
+
+
+def test_resume_command_drops_sandbox_and_cd(tmp_path: Path) -> None:
+    executor = load_executor()
+    args = executor.build_parser().parse_args(
+        ["--cwd", str(tmp_path), "--prompt", "p", "--sandbox", "read-only", "--resume", "thread-1"]
+    )
+    command = executor.build_command(args)
+    assert command[:4] == ["codex", "exec", "resume", "thread-1"]
+    assert "--sandbox" not in command and "--cd" not in command
+    assert command[-1] == "-"
+
+
+def test_parse_thread_id_reads_thread_started_event() -> None:
+    executor = load_executor()
+    assert executor.parse_thread_id('{"type":"thread.started","thread_id":"t-9"}\n{"type":"x"}') == "t-9"

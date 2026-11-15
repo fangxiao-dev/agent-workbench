@@ -152,3 +152,45 @@ def test_combined_mode_refuses_to_overwrite_existing_ledger(tmp_path: Path) -> N
         assert "LEDGER_EXISTS" in str(exc)
     else:
         raise AssertionError("expected collision failure")
+
+
+def test_session_dir_persists_then_resumes_with_reread_lead(monkeypatch, tmp_path: Path) -> None:
+    blind = load_module("blind_opening_session_under_test", BLIND)
+    calls = []
+    payload = {"ideas": [], "new_points": []}
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        envelope = {"ok": True, "text": json.dumps(payload)}
+        if "call_codex.py" in command[1] and "--resume" not in command:
+            envelope["thread_id"] = "thread-1"
+        return SimpleNamespace(returncode=0, stdout=json.dumps(envelope), stderr="")
+
+    monkeypatch.setattr(blind.subprocess, "run", fake_run)
+    sessions = tmp_path / "sessions"
+    for agent in ("claude", "codex"):
+        blind.call_executor(agent, "prompt", tmp_path, 10, sessions)
+        blind.call_executor(agent, "prompt", tmp_path, 10, sessions)
+    first_claude, second_claude, first_codex, second_codex = calls
+    assert "--no-session-persistence" not in first_claude and "--session-id" in first_claude
+    claude_id = first_claude[first_claude.index("--session-id") + 1]
+    assert second_claude[second_claude.index("--resume") + 1] == claude_id
+    assert "--ephemeral" not in first_codex and "--resume" not in first_codex
+    assert second_codex[second_codex.index("--resume") + 1] == "thread-1"
+    assert second_codex[second_codex.index("--prompt") + 1].startswith("重新看")
+    assert not first_codex[first_codex.index("--prompt") + 1].startswith("重新看")
+
+
+def test_without_session_dir_stays_ephemeral(monkeypatch, tmp_path: Path) -> None:
+    blind = load_module("blind_opening_ephemeral_under_test", BLIND)
+    calls = []
+    monkeypatch.setattr(
+        blind.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append(command)
+        or SimpleNamespace(returncode=0, stdout=json.dumps({"ok": True, "text": '{"ideas": [], "new_points": []}'}), stderr=""),
+    )
+    blind.call_executor("claude", "prompt", tmp_path, 10)
+    blind.call_executor("codex", "prompt", tmp_path, 10)
+    assert "--no-session-persistence" in calls[0]
+    assert "--ephemeral" in calls[1]

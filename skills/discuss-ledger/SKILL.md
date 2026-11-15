@@ -18,6 +18,7 @@ Mode and participants are separate choices. `discuss_router.py` only selects the
 | `--agents` | `codex,claude` | `full`, or exactly two distinct names from `codex`, `claude`, `grok` | `full` expands to `codex,claude,grok`. One participant or a literal three-name list is rejected. |
 | `--max-rounds` | `5` | integer | Full participant cycles for `ledger` / `combined`. |
 | `--timeout-s` | `300` | integer | Per-agent, per-call timeout. |
+| `--session-dir` | unset (ephemeral) | directory | `blind` only: persist Codex/Claude sessions there and resume them on later runs with the same directory; resumed prompts start with “重新看” so participants re-read everything. |
 | `--<agent>-model` / `--<agent>-effort` | see below | `<agent>` is `codex`, `claude` or `grok` | Per-run model and reasoning-effort override for that participant; unset keeps the default. |
 
 Defaults: Claude runs the `sonnet` alias (the latest `sonnet`) at `high`; Codex runs its configured default model at `high`; Grok runs call-grok's default model at `low`. Override only when the user asks, e.g. `--codex-model gpt-6-astra --codex-effort low`; the router forwards overrides to every mode. Do not pin model versions on your own.
