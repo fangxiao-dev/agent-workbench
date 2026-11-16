@@ -981,6 +981,26 @@ def test_first_journey_step_cannot_reuse_an_object_from_another_run(tmp_path: Pa
     assert "journey:second-run:J1-S1" not in _state(package)["evidenceIndex"]
 
 
+def test_reregistered_run_setup_supersedes_its_invalidated_record(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    key = "run-setup:orphan"
+    first = _cli(repo, package, "evidence", "add", input_value=_run_setup_record(revision, "orphan"), auto_setup=False)
+    assert first.returncode == 0, first.stderr
+    invalidated = _cli(repo, package, "evidence", "invalidate", "--key", key, "--invalidated-by", "fixture")
+    assert invalidated.returncode == 0, invalidated.stderr
+
+    def stale() -> list[str]:
+        state = _state(package)
+        return engine._v36_acceptance_status(
+            package, state, engine._validate_state(package, state), revision, attempt_active=True,
+        )["staleEvidence"]
+
+    assert stale() == [key]
+    again = _cli(repo, package, "evidence", "add", input_value=_run_setup_record(revision, "orphan"), auto_setup=False)
+    assert again.returncode == 0, again.stderr
+    assert stale() == []
+
+
 def test_walking_skeleton_overdue_follows_satisfied_ticket_and_valid_first_visible_evidence(
     tmp_path: Path, capsys: pytest.CaptureFixture[str],
 ) -> None:
