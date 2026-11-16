@@ -47,7 +47,7 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 - reach 让 Owner 看到产品结果逐步前移；Gate 要的是最终版本上每条 Journey 的一次完整走通。
 - page 证据是每步截图加 `manualBy`；只有 Spec 的 `取证：` 行声明 Playwright 的步骤才录 trace。命令与格式见项目 QA 入口和 current-state。
 - 套件按 Required Suites 的入口与环境运行，结果以 `suite:<id>` 登记；revision 已合入、入边已释放、负责的套件通过且 required review 完成后 `ticket satisfy`。后续提交让旧记录待复验时重跑受影响的 Journey；只动 package 内文件的提交不使记录失效。
-- 实现中确认的合同澄清若改变用户可见结果，先 `package amendment add` 登记并告知 Owner，再继续不依赖它的工作；写进 ER 而不登记，Gate 就看不到这条修订。`add` 会记录受影响合同文件当时的 blob，之后再改该文件，旧条目的 `confirm` 会以 `no longer matches affected file contents` 拒绝；此时再 `add` 一条覆盖当前内容的新条目，用 `amendment supersede --id <旧> --by <新>` 取代旧条目（已不适用的条目用 `amendment withdraw --id <id> --reason <原因>` 撤回），只确认新条目，旧条目不再挡 `gate pass`。改 Spec 时不要动 Required Suites 的 Environment 列，已登记的 suite evidence 会因 environment 不逐字一致而被拒。Amendment 待确认或漏登只阻止最终 `gate pass`，`gate blocked` 记录缺口与 next action，不停工。
+- 实现中确认的合同澄清若改变用户可见结果，先 `package amendment add` 登记并告知 Owner，再继续不依赖它的工作；写进 ER 而不登记，Gate 就看不到这条修订。`add` 会记录受影响合同文件当时的 blob，之后再改该文件，旧条目的 `confirm` 会以 `no longer matches affected file contents` 拒绝；此时再 `add` 一条覆盖当前内容的新条目，用 `amendment supersede --id <旧> --by <新>` 取代旧条目（已不适用的条目用 `amendment withdraw --id <id> --reason <原因>` 撤回），只确认新条目，旧条目不再挡 `gate pass`。改 Spec 时不要动 Required Suites 的 Environment 列，已登记的 suite evidence 会因 environment 不逐字一致而被拒。Amendment 待确认或漏登只阻止最终 `gate pass`，`gate blocked` 记录缺口与 next action，不停工。Gate pass 后发现的纯文字更正（不改步骤入口、Suites、Rule 绑定）用 `amendment add --post-gate` 登记并 `confirm`，不重开 Gate。
 
 ## Review、Findings 与人工验收
 

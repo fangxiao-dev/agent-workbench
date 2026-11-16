@@ -2344,6 +2344,12 @@ def _contract_amendment_findings(package: Path, repo: Path, acceptance: dict[str
     return findings
 
 
+def _post_gate_pending_findings(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    if not summary["_lifecycle"].frozen or summary["_lifecycle"].gate_verdict != "pass":
+        return []
+    return [{"code": "post-gate-amendment-pending", "id": row["id"]} for row in _pending_amendments(summary["_acceptance"]["amendments"])]
+
+
 def command_check_spec(package: Path, spec_value: str | None = None) -> dict[str, Any]:
     repo = _repo_root(package)
     spec_value = spec_value or _package_relative(repo, package / "spec.md")
@@ -2447,6 +2453,7 @@ def command_validate(package: Path, commit: str | None, *, check_arrival_paths: 
             + _plan_prose_gate_findings(repo, package, summary)
             + _arrival_path_absent_findings(package, summary)
             + _arrival_findings(repo, package, summary, comparison_commit)
+            + _post_gate_pending_findings(summary)
         )
         result["comparisonCommit"] = comparison_commit
     result.update({"active": True, "commit": resolved})
@@ -2462,6 +2469,29 @@ def command_refresh_progress(package: Path) -> dict[str, Any]:
 AMENDMENT_CONTRACT_FILES = ("decision.md", "spec.md", "contract-design.md")
 
 
+def _amendment_post_gate(summary: dict[str, Any], *, requested: bool = True) -> bool:
+    """Amendments stay editable after a terminal Gate pass (text-only corrections); any other frozen Attempt stays closed."""
+    lifecycle: Lifecycle = summary["_lifecycle"]
+    if not lifecycle.frozen:
+        return False
+    if lifecycle.gate_verdict == "pass" and requested:
+        return True
+    hint = "; pass --post-gate to register a text-only correction after a Gate pass" if lifecycle.gate_verdict == "pass" else ""
+    raise StateError(f"Attempt {summary['attempt']} is frozen by terminal Gate {lifecycle.gate_verdict}{hint}")
+
+
+def _post_gate_spec_drift(frozen: dict[str, Any], current: dict[str, Any]) -> list[str]:
+    """Wording may change; anything Gate evidence binds to (steps, entries, suites, rule bindings) may not."""
+    def steps(spec: dict[str, Any]) -> dict[str, Any]:
+        return {key: {field: value for field, value in row.items() if field != "expected"} for key, row in spec["steps"].items()}
+    drift = [name for name, same in (
+        ("Journey steps", steps(frozen) == steps(current)),
+        ("Required Suites", frozen["suites"] == current["suites"]),
+        ("Rule-to-Suite bindings", {r["Rule"]: r["Suite"] for r in frozen["rules"]} == {r["Rule"]: r["Suite"] for r in current["rules"]}),
+    ) if not same]
+    return drift
+
+
 def command_amendment_add(
     package: Path,
     identifier: str,
@@ -2469,10 +2499,11 @@ def command_amendment_add(
     affected: list[str],
     artifact: str | None = None,
     tickets: list[str] | None = None,
+    post_gate: bool = False,
 ) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
-    _assert_mutable(summary)
+    frozen = _amendment_post_gate(summary, requested=post_gate)
     if not isinstance(identifier, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", identifier) is None:
         raise StateError("amendment --id must be non-empty identifier text")
     if not isinstance(summary_text, str) or not summary_text.strip():
@@ -2496,6 +2527,13 @@ def command_amendment_add(
     if unknown_tickets:
         raise StateError(f"amendment --tickets names unknown Ticket(s): {', '.join(unknown_tickets)}")
     repo = _repo_root(package)
+    if frozen and "spec.md" in normalized_affected:
+        drift = _post_gate_spec_drift(summary["_journeySpec"], validate_spec_document(package / "spec.md"))
+        if drift:
+            raise StateError(
+                f"post-Gate amendment may change only wording; spec.md differs from the Gate spec in: {', '.join(drift)}; "
+                "a change to what Gate evidence binds to needs a new Attempt"
+            )
     affected_blobs = _working_tree_blobs(repo, package, normalized_affected)
     row = {
         "id": identifier,
@@ -2521,7 +2559,7 @@ def command_amendment_add(
     _refresh_projections(package, candidate)
     _best_effort_result(package, summary["attempt"], {
         "subject": f"amendment:{identifier}", "transition": "amendment", "id": identifier,
-        "from": None, "to": "PENDING", "outcome": "PENDING",
+        "from": None, "to": "PENDING", "outcome": "PENDING", **({"postGate": True} if frozen else {}),
     })
     return {"id": identifier, "status": "PENDING", "idempotent": False}
 
@@ -2534,7 +2572,7 @@ def command_amendment_confirm(
 ) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
-    _assert_mutable(summary)
+    frozen = _amendment_post_gate(summary)
     if not isinstance(confirmed_by, str) or not confirmed_by.strip():
         raise StateError("--confirmed-by must be non-empty")
     repo = _repo_root(package)
@@ -2571,7 +2609,7 @@ def command_amendment_confirm(
     _refresh_projections(package, candidate)
     _best_effort_result(package, summary["attempt"], {
         "subject": f"amendment:{identifier}", "transition": "amendment", "id": identifier,
-        "from": "PENDING", "to": "CONFIRMED", "outcome": "CONFIRMED",
+        "from": "PENDING", "to": "CONFIRMED", "outcome": "CONFIRMED", **({"postGate": True} if frozen else {}),
     })
     return {"id": identifier, "status": "CONFIRMED", "idempotent": False}
 
@@ -2579,7 +2617,7 @@ def command_amendment_confirm(
 def _amendment_transition(package: Path, mutate: Any, subject_id: str, to: str, outcome_extra: dict[str, Any]) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state)
-    _assert_mutable(summary)
+    frozen = _amendment_post_gate(summary)
     candidate = json.loads(json.dumps(state, ensure_ascii=False))
     idempotent = mutate(candidate["acceptance"]["amendments"])
     if idempotent:
@@ -2589,7 +2627,7 @@ def _amendment_transition(package: Path, mutate: Any, subject_id: str, to: str, 
     _refresh_projections(package, candidate)
     _best_effort_result(package, summary["attempt"], {
         "subject": f"amendment:{subject_id}", "transition": "amendment", "id": subject_id,
-        "from": "PENDING", "to": to, "outcome": to, **outcome_extra,
+        "from": "PENDING", "to": to, "outcome": to, **outcome_extra, **({"postGate": True} if frozen else {}),
     })
     return {"id": subject_id, "status": to, "idempotent": False, **outcome_extra}
 

@@ -2446,6 +2446,76 @@ def test_amendment_supersede_unblocks_confirm_after_contract_changed_again(tmp_p
     assert situation._parse_state(situation.FileView("state.json", json.dumps(state))).valid
 
 
+def _freeze_with_pass(repo: Path, package: Path, revision: str) -> str:
+    """Freeze via a fail Gate, then relabel it pass: the full pass Gate chain is covered elsewhere."""
+    assert _gate(repo, package, "fail", revision).returncode == 0
+    gate = package / "gate.md"
+    gate.write_text(gate.read_text(encoding="utf-8").replace("- Verdict: fail", "- Verdict: pass", 1), encoding="utf-8")
+    engine._set_execution_record_status(package, "initial", "frozen", "pass")
+    state = _state(package)
+    state["attemptHistory"][-1]["gate"]["verdict"] = "pass"
+    (package / ".impl-package/state.json").write_text(json.dumps(state), encoding="utf-8")
+    assert _cli(repo, package, "package", "refresh-progress").returncode == 0
+    assert engine._lifecycle(package, "initial", repo).gate_verdict == "pass"
+    return gate.read_text(encoding="utf-8")
+
+
+def test_post_gate_amendment_registers_text_correction_on_frozen_pass_attempt(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    gate_before = _freeze_with_pass(repo, package, revision)
+    add = ("package", "amendment", "add", "--id", "PG-1", "--summary", "口径更正", "--affected", "spec.md")
+
+    plain = _cli(repo, package, *add)
+    assert plain.returncode != 0 and "frozen by terminal Gate pass" in plain.stderr and "--post-gate" in plain.stderr
+
+    _append_spec_note(package, "Owner clarification: post-gate wording fix.")
+    unregistered = _cli(repo, package, "package", "validate")
+    assert any(row["code"] == "contract-amendment-unregistered" for row in json.loads(unregistered.stdout)["findings"])
+
+    added = _cli(repo, package, *add, "--post-gate")
+    assert added.returncode == 0, added.stderr
+    pending = _cli(repo, package, "package", "validate")
+    codes = [row["code"] for row in json.loads(pending.stdout)["findings"]]
+    assert "post-gate-amendment-pending" in codes and "contract-amendment-unregistered" not in codes
+
+    confirmed = _cli(repo, package, "package", "amendment", "confirm", "--id", "PG-1", "--confirmed-by", "Owner")
+    assert confirmed.returncode == 0, confirmed.stderr
+    validated = _cli(repo, package, "package", "validate")
+    assert validated.returncode == 0, validated.stderr
+    assert not [row for row in json.loads(validated.stdout)["findings"] if "amendment" in row["code"]]
+    assert _state(package)["acceptance"]["amendments"][0]["status"] == "CONFIRMED"
+    events = [row for row in engine._active_trail_rows(package, "initial") if row.get("transition") == "amendment"]
+    assert [(row["to"], row.get("postGate")) for row in events] == [("PENDING", True), ("CONFIRMED", True)]
+    assert (package / "gate.md").read_text(encoding="utf-8") == gate_before
+    assert engine._lifecycle(package, "initial", repo).gate_verdict == "pass"
+
+
+def test_post_gate_amendment_rejects_non_pass_and_structure_changes(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    assert _gate(repo, package, "fail", revision).returncode == 0
+    _append_spec_note(package, "Owner clarification: wording.")
+    args = ("package", "amendment", "add", "--id", "PG-1", "--summary", "s", "--affected", "spec.md", "--post-gate")
+    failed = _cli(repo, package, *args)
+    assert failed.returncode != 0 and "frozen by terminal Gate fail" in failed.stderr
+
+    _freeze_with_pass(repo, package, revision)
+    spec = package / "spec.md"
+    spec.write_text(spec.read_text(encoding="utf-8").replace("税务端 Review 页点击“完成”", "改写后的入口"), encoding="utf-8")
+    drift = _cli(repo, package, *args)
+    assert drift.returncode != 0 and "only wording" in drift.stderr
+    assert _state(package)["acceptance"]["amendments"] == []
+
+
+def test_post_gate_amendment_can_be_withdrawn_while_pending(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    _freeze_with_pass(repo, package, revision)
+    _append_spec_note(package, "Owner clarification: wording.")
+    assert _cli(repo, package, "package", "amendment", "add", "--id", "PG-1", "--summary", "s", "--affected", "spec.md", "--post-gate").returncode == 0
+    withdrawn = _cli(repo, package, "package", "amendment", "withdraw", "--id", "PG-1", "--reason", "Owner changed mind")
+    assert withdrawn.returncode == 0, withdrawn.stderr
+    assert _state(package)["acceptance"]["amendments"][0]["status"] == "WITHDRAWN"
+
+
 def test_help_texts_state_minimum_evidence_and_terminal_summary_shapes(tmp_path: Path) -> None:
     repo, package = _make_package(tmp_path)
     evidence = _cli(repo, package, "evidence", "add", "--help", subprocess=True)

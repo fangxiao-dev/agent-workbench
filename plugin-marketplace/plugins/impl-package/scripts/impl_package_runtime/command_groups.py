@@ -188,6 +188,10 @@ def _parser(group: str) -> argparse.ArgumentParser:
         )
         add.add_argument("--artifact", help="package-relative artifact describing the change (default: first --affected)")
         add.add_argument("--tickets", action="append", default=[], help="impacted Ticket ID; repeat once per Ticket")
+        add.add_argument(
+            "--post-gate", action="store_true",
+            help="after a terminal Gate pass: register a wording-only correction (Journey steps, Suites and Rule bindings must stay identical); needs Owner confirm, Gate stays pass",
+        )
         supersede = amendment_commands.add_parser("supersede", help="mark a PENDING amendment as covered by a later one")
         supersede.add_argument("--id", required=True, help="PENDING amendment being superseded")
         supersede.add_argument("--by", required=True, help="later amendment that covers it (must list the same contract files)")
@@ -331,7 +335,7 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
             return engine.command_validate(package, args.commit, check_arrival_paths=args.command == "validate")
         if args.command == "amendment":
             if args.amendment_action == "add":
-                return engine.command_amendment_add(package, args.id, args.summary, args.affected, args.artifact, args.tickets)
+                return engine.command_amendment_add(package, args.id, args.summary, args.affected, args.artifact, args.tickets, args.post_gate)
             if args.amendment_action == "supersede":
                 return engine.command_amendment_supersede(package, args.id, args.by)
             if args.amendment_action == "withdraw":
