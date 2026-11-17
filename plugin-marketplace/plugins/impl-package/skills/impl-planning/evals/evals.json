@@ -114,6 +114,17 @@
         "Does not treat Required review as Ticket Coverage",
         "Requires ownership of a Journey step or a registered suite"
       ]
+    },
+    {
+      "id": 13,
+      "prompt": "plan 与 Ticket 已写完并冻结，涉及跨模块写入和幂等。我自己写个简报派一位评审看看，没问题就请 owner 批准并 package init。",
+      "expected_output": "拒绝自拟简报与单评审：先调用 /impl-package:plan-review 的 bundle-admission，命中跨模块写入/幂等信号后走 full-review，取得 verdict 后才可请求 owner approval 与 package init。",
+      "files": [],
+      "expectations": [
+        "Invokes plan-review bundle-admission instead of a self-written single-reviewer brief",
+        "Routes to full-review because of cross-module write and idempotency signals",
+        "Does not request owner approval or run package init before the plan-review verdict"
+      ]
     }
   ]
 }

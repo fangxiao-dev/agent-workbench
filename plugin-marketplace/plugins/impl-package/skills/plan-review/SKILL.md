@@ -15,7 +15,16 @@ description: 审查 implementation plan 或完整 plan/Ticket/DAG bundle 的可�
 - `bundle-admission`：判断低风险且完整 bundle 是否可免 full review。
 - `focused-closure-verification`：核对预先同意的有限 finding/decision batch；除非 scope 扩大，不重开一般发现。
 
-mode 省略时使用 `full-review`。`bundle-admission` 只有在 bundle 完整、低风险、无跨模块 material seam、无安全/数据/外部 mutation 信号且 Planned Verification 足以裁决时返回 `admitted`；否则路由 `full-review`，不能用 admission 降低审查强度。
+mode 省略时使用 `full-review`。主 thread 不自拟评审简报：每个 mode 的 reviewer 简报一律取自 `references/subagent-prompts.md` 的模板，只填入 candidate 路径与 commit。`bundle-admission` 只有在 bundle 完整、低风险、无跨模块 material seam、无安全/数据/外部 mutation 信号且 Planned Verification 足以裁决时返回 `admitted`；否则路由 `full-review`，不能用 admission 降低审查强度。
+
+速查：出现任一信号即 `full-review`——
+- 跨组织或跨模块写入；
+- 权限、租户、隐私、幂等、数据完整性；
+- 外部副作用（外部系统写入、邮件/消息、队列、支付等）；
+- 共享文件被多个包或多张 Ticket 改动；
+- 新增并发、时序、重试或恢复语义；
+- 夹具或 harness 体量不明，或首个可见 step 无法在窄路径上走通；
+- Spec 的 Rule Matrix、Journey 或套件清单缺失或被 Plan 补造。
 
 ## Inputs
 
@@ -40,7 +49,7 @@ mode 省略时使用 `full-review`。`bundle-admission` 只有在 bundle 完整�
 5. **形成可执行结论**：每个 material item 给 evidence、impact、recommendation；仅当证据支持两个以上 material 不同有效结果时才请求 exact owner decision。
 6. **有限 decision waves**：初始 bundle 形成完整 material batch，取得 owner decision，应用一个 closure batch，只重审 affected scope；初始 approval 后的更新可直接应用，review 只报告 affected scope/findings 并沿用既有 approval。
 
-专项清单按需读 `references/scope-review.md`、`architecture-review.md`、`test-review.md`、`performance-review.md`、`code-quality-review.md` 和 `decision-policy.md`；独立 reviewer prompts 见 `references/subagent-prompts.md`，输出模板见 `references/final-report.md`。
+专项清单按需读 `references/scope-review.md`、`architecture-review.md`、`test-review.md`、`performance-review.md`、`code-quality-review.md` 和 `decision-policy.md`；独立 reviewer 简报模板见 `references/subagent-prompts.md`（直接复制使用），输出模板见 `references/final-report.md`。
 
 ## Verdicts
 
