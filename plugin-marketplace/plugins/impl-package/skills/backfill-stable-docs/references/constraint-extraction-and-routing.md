@@ -53,7 +53,7 @@
 
 ## Module PRD 惰性创建门
 
-缺失的 module PRD 只有同时满足 Purpose、用户或 journey、Outcomes、Scope/Non-goals、owning context PRD 上链（仓库未配置 context 层时链接现有 system intent；跨 context 时再上链 system PRD）、module behavior/spec 下链，以及 intent authority 来自 system/context PRD、批准 design、owner 决策或 confirmed gate 时才可在 apply 首建。材料不足时保留 pending；不得用代码行为扩写缺失的 intent，也不得创建只有标题和一句 slogan 的文件。
+回刷时模块没有 `prd.md`，回刷者按已批准的 decision、spec、规则与已上线行为起草 module PRD，随回刷一并提交，文件头标“回刷起草（日期），待 Owner 审阅”，不得因缺 PRD 跳过。PRD 每条主张须有已批准材料依据（system/context PRD、批准 design、owner 决策、confirmed gate、spec、已上线行为），不新增产品主张；须含 Purpose、用户或 journey、Outcomes、Scope/Non-goals、owning context PRD 上链（仓库未配置 context 层时链接现有 system intent；跨 context 时再上链 system PRD）、module behavior/spec 下链。材料不足以支撑某条主张时省略该条，不得用代码行为扩写 intent，也不得创建只有标题和一句 slogan 的文件。
 
 ## 人工 fixtures
 

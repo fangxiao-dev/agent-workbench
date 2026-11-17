@@ -11,7 +11,7 @@ Apply 将 owner 的明确批准解析并记录为精确 report/CLI item ID 集�
 - 若该 item 来自 gap-catching（`origin: gap-catching`），**只写 `records.done`**，不要为了“关闭”去伪造一条 pending 再立刻关掉。
 - 若 owner 决定不回刷，也以 `done` 记录 decision 和原因；若存在对应 pending 行则一并关闭。
 
-每个批准 item 只写入唯一 canonical owner；跨 module 只写指针。不得借 apply 清理同文件的其他候选，实际写集必须能回放到批准的 item ID。普通 item approval 不包含移动、重命名、删除或 Package Retirement 的 destructive authorization。首次创建 module PRD 必须满足 [module PRD 惰性创建门](constraint-extraction-and-routing.md#module-prd-惰性创建门)。
+每个批准 item 只写入唯一 canonical owner；跨 module 只写指针。不得借 apply 清理同文件的其他候选，实际写集必须能回放到批准的 item ID。普通 item approval 不包含移动、重命名、删除或 Package Retirement 的 destructive authorization。缺失的 module PRD 由回刷者起草并随 apply 提交，须满足 [module PRD 惰性创建门](constraint-extraction-and-routing.md#module-prd-惰性创建门)。
 
 ## Destructive Apply
 
