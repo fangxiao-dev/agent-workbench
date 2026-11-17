@@ -24,7 +24,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
    - walking skeleton：首张 Ticket 排成窄而完整，尽早让第一个用户可见的 Journey step 可走通（API 预演可以先行，但该 step 要在页面上走通才计入 reach）；harness 只建设第一条窄路径需要的部分，优先复用现有登录、fixture 和测试入口，不先膨胀成基础设施 Ticket。Plan 写出第一个可见 step 预计由哪张 Ticket 在何时到达。Journey 的取证方式只引用 Spec 的 `取证：` 行，Plan 不另定也不改。Plan 用固定行 `Harness setup/precheck/cleanup/isolation` 与 `First visible step: <StepId> @ <TicketId>` 承载；harness 的性质与命令来源见 `validation-harness`。
    - 按整票真实阻塞选择 `implementation / acceptance / release`：默认 `acceptance`；只有下游没有上游产物就无法实现、也无法做 child-local 验证时才写 `implementation`，并在依赖行后用一句话写出该产物是什么；票内等待写成接线条件；只记录会改变安排的交接产物及其验证，不预列完整 baby-step 队列，派发、步骤大小、worker 方法与资源隔离交给 `$dispatcher`。误判提醒见 [并行与调度安排](references/common-misjudgments.md#并行与调度安排)。
 5. 执行本 Skill 的“Ticket 拆分”子流程。
-6. 初始 bundle 冻结 plan candidate 后调用 `/impl-package:plan-review` 的 `bundle-admission`；返回 `full-review` 时继续同一 skill 的完整审查，处理 material findings，并联合校验 coverage、typed dependency、ownership、证据可行性、Gate 边界与集成顺序，然后请求一次完整 bundle approval；后续 patch/update 直接沿用该 approval。
+6. 初始 bundle 冻结 plan candidate 后调用 `/impl-package:plan-review` 的 `bundle-admission`；返回 `full-review` 时继续同一 skill 的完整审查（按 `plan-review/references/subagent-prompts.md` 并行派三位独立评审），处理 material findings，并联合校验 coverage、typed dependency、ownership、证据可行性、Gate 边界与集成顺序，然后请求一次完整 bundle approval；后续 patch/update 直接沿用该 approval。
 7. 获批后，主 thread 使用当前已加载插件的 `impl_package_state.py` 语义 CLI 执行 `package init --attempt <id> --plan <repo-relative-plan>`，再执行 `package validate`。插件根目录以当前已加载 skill 所属的插件根目录为准，不假设 workbench 仓库路径或宿主缓存路径。误判提醒见 [State 与发布边界](references/common-misjudgments.md#state-与发布边界)。
 8. 交给 `/impl-package:dev-with-track`。
 
