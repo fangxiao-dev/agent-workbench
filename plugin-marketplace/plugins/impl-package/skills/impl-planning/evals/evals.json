@@ -125,6 +125,18 @@
         "Routes to full-review because of cross-module write and idempotency signals",
         "Does not request owner approval or run package init before the plan-review verdict"
       ]
+    },
+    {
+      "id": 14,
+      "prompt": "Spec 已批准，请写 Ticket。其中一张的建设内容我想写成一段话：新建对账服务、请求过滤器、审计写入方法，并新建对应的测试套件，另外要改既有的 700 多行页面组件。",
+      "expected_output": "该 Ticket 的建设内容含 `预计批次：N（切点：① …；② …）`，N 大于 1 且切点各自能单独跑通测试；既有大组件部分按“补特征测试、只搬不改、再改行为”排序；不因批次拆票。",
+      "files": [],
+      "expectations": [
+        "Writes a `预计批次：` line with N>1 for the oversized one-paragraph Ticket, not a bare 1",
+        "Candidate cut points are positions where tests can run on their own",
+        "Keeps it as one Ticket instead of splitting by batch",
+        "Every other Ticket also carries a 预计批次 line"
+      ]
     }
   ]
 }

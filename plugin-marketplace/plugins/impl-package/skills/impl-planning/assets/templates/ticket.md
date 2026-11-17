@@ -10,6 +10,8 @@ Attempt ID: <attempt-id>
 
 <一个范围窄、边界完整、用户可见的交付与验收切片。>
 
+预计批次：<1（理由）| N（切点：① …；② …）>
+
 ## Contract references
 
 - `<repo-relative-path>#<major-section-anchor>` — `<该章节约束本 Ticket 的内容>`
