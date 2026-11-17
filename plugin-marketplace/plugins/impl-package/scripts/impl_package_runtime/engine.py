@@ -1961,6 +1961,7 @@ def _v36_acceptance_status(
         surface_counts = {surface: 0 for surface in ("page", "file", "api", "log")}
         manual_walkthroughs: set[tuple[str, str]] = set()
         run_rows = []
+        env_valid: dict[str, list[dict[str, list[dict[str, Any]]]]] = {}
         for (journey_id, _run_id), records in run_records.items():
             if journey_id != journey["id"]:
                 continue
@@ -2015,6 +2016,7 @@ def _v36_acceptance_status(
                 reach += 1
             if reach == len(journey["steps"]):
                 complete_journeys.add(journey["id"])
+            env_valid.setdefault(environment, []).append(valid_by_step)
             best_reach = max(best_reach, reach)
             best_rehearsal_reach = max(best_rehearsal_reach, rehearsal_reach)
             for surface, count in run_surface_counts.items():
@@ -2025,6 +2027,32 @@ def _v36_acceptance_status(
                 "rehearsalReach": rehearsal_reach,
                 "surfaceCounts": run_surface_counts,
             })
+        # 按影响范围复测：跨 run 每步取最新有效证据，承接处用 inputRef==上一步 outputRef 校验（沿用步已按 carriedForward 计入有效）。
+        for runs_valid in env_valid.values():
+            if len(runs_valid) < 2:
+                continue
+            outputs: set[str | None] | None = None
+            merged = 0
+            for index, step in enumerate(journey["steps"]):
+                expected_surface = _journey_expected_surface(step)
+                candidates = [
+                    record
+                    for valid_by_step in runs_valid
+                    for record in valid_by_step[step["id"]]
+                    if record["surface"] == expected_surface
+                    and (
+                        index == 0
+                        or step["handoff"] == "—"
+                        or (record.get("inputRef") and record["inputRef"] in outputs)
+                    )
+                ]
+                if not candidates:
+                    break
+                outputs = {record.get("outputRef") for record in candidates}
+                merged += 1
+            if merged == len(journey["steps"]):
+                complete_journeys.add(journey["id"])
+            best_reach = max(best_reach, merged)
         journey_rows.append({
             "id": journey["id"],
             "title": journey["terminalResult"],
@@ -2921,13 +2949,28 @@ def _validate_journey_step_order(state: dict[str, Any], spec: dict[str, Any], re
                 steps_by_position.setdefault(positions[existing["stepId"]], []).append(existing)
     if not steps_by_position:
         if current_position != 0:
-            raise StateError(
-                f"Journey run {record['runId']} must start at {journey['steps'][0]['id']}；"
-                "若第 1 步刚因对象复用被拒，先修正第 1 步的 outputRef/inputRef 再按 Spec 顺序重试"
+            # 按影响范围复测：新 run 可从受影响步骤起步，但承接须对上其他 run 上一步的有效 outputRef。
+            previous_step = journey["steps"][current_position - 1]
+            inherited = record.get("inputRef")
+            ok = isinstance(inherited, str) and any(
+                existing.get("kind") == "journey-step"
+                and existing.get("journeyId") == record["journeyId"]
+                and existing.get("stepId") == previous_step["id"]
+                and existing.get("conclusion") == "supporting"
+                and not existing.get("invalidatedBy")
+                and existing.get("outputRef") == inherited
+                for records in state["evidenceIndex"].values()
+                for existing in records
             )
+            if not ok:
+                raise StateError(
+                    f"Journey run {record['runId']} must start at {journey['steps'][0]['id']}；"
+                    "若第 1 步刚因对象复用被拒，先修正第 1 步的 outputRef/inputRef 再按 Spec 顺序重试。"
+                    "按影响范围复测时可从受影响步骤起步，但其 inputRef 须等于其他 run 上一步的 outputRef"
+                )
         return
     last_position = max(steps_by_position)
-    if set(steps_by_position) != set(range(last_position + 1)):
+    if set(steps_by_position) != set(range(min(steps_by_position), last_position + 1)):
         raise StateError(f"Journey run {record['runId']} has a missing earlier step; start a new run")
     if current_position < last_position or current_position > last_position + 1:
         raise StateError(f"Journey run {record['runId']} must record steps in Spec order")

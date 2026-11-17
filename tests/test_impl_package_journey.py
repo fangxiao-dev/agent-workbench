@@ -2584,3 +2584,40 @@ def test_sync_predecessors_rereads_plan(tmp_path: Path) -> None:
     assert synced.returncode == 0, synced.stderr
     assert _state(package)["predecessors"] == ["docs/pred"]
     assert _cli(repo, package, "package", "sync-predecessors").returncode == 0
+
+
+def test_scoped_retest_combines_carried_step_with_rewalked_tail_across_runs(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    assert _cli(repo, package, "evidence", "add", input_value=[_run_setup_record(revision)]).returncode == 0
+    assert _cli(repo, package, "evidence", "add", input_value=[
+        _journey_record(revision, "J1-S1"), _journey_record(revision, "J1-S2"),
+    ]).returncode == 0
+    head = _commit_file(repo, "src/app.py", "value = 1\n")
+    assert _cli(repo, package, "package", "refresh-progress").returncode == 0
+    carried = _cli(
+        repo, package, "evidence", "carry-forward", "--key", "journey:run-1:J1-S1", "--to", head,
+        "--reason", "S1 path untouched", "--judged-by", "controller",
+    )
+    assert carried.returncode == 0, carried.stderr
+    setup = _cli(
+        repo, package, "evidence", "carry-forward", "--key", "run-setup:run-1", "--to", head,
+        "--reason", "harness unchanged", "--judged-by", "controller",
+    )
+    assert setup.returncode == 0, setup.stderr
+
+    def reach() -> int:
+        state = _state(package)
+        summary = engine._validate_state(package, state)
+        status = engine._v36_acceptance_status(package, state, summary, head, attempt_active=True)
+        return status["journeys"][0]["reach"]
+
+    assert reach() == 1  # S2 evidence is stale at head
+    assert _cli(repo, package, "evidence", "add", input_value=[_run_setup_record(head, run_id="run-2")]).returncode == 0
+    tail = _journey_record(head, "J1-S2", run_id="run-2")
+    tail["inputRef"] = "bill-bogus"
+    bad = _cli(repo, package, "evidence", "add", input_value=tail)
+    assert bad.returncode != 0 and "inputRef" in bad.stderr
+    tail["inputRef"] = "bill-123"
+    ok = _cli(repo, package, "evidence", "add", input_value=tail)
+    assert ok.returncode == 0, ok.stderr
+    assert reach() == 2

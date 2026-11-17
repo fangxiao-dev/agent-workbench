@@ -53,7 +53,7 @@ First visible step: <StepId> @ <TicketId>
 
 ## Final Gate
 
-- 判据：默认沿用 dev-with-track 标准——全部 Required Ticket SATISFIED + review closed + durable delta 已登记或已说明无增量；3.6 另含每条 Journey 在最终版本上连续走通、Required Suites 全部通过、Amendment 无待确认，`Release order: required` 时发布顺序已登记。如本 Attempt 有额外判据在此列出。
+- 判据：默认沿用 dev-with-track 标准——全部 Required Ticket SATISFIED + review closed + durable delta 已登记或已说明无增量；3.6 另含每条 Journey 在最终版本上走通（受影响步骤重走 + 未受影响步骤沿用，可跨 run）、Required Suites 全部通过、Amendment 无待确认，`Release order: required` 时发布顺序已登记。如本 Attempt 有额外判据在此列出。
 - 记录位置：`gate.md`（本节只声明判据，不复制 Gate 记录本身）。
 
 ## 交接

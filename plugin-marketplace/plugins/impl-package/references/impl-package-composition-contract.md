@@ -103,7 +103,7 @@ steps 与 suites 不同时为 `none`，harness、migration、加固类 Ticket �
 - `log`：对应 `记录` 步，artifact 为 package 内文件。
 - `api`：恒被接受，只计入预演。
 
-两个进度数：`reach` 是同一 run 内从第 1 步起、surface 与声明的入口类型一致的连续有效步数，Gate 只认它；`rehearsalReach` 不限 surface。Gate 要求每条 Journey 在最终版本上有一次 reach 覆盖全部 step 的连续 run。证据版本漂移按实际判断：包外只有非运行时路径改动时自动沿用；有运行时改动时由 agent 看 diff 决定重走，或用 `evidence carry-forward` 登记沿用并写明理由与判断人（Owner Summary 单列）。runtime 还核对 `entry` 与 Spec 一致、顺序与有效期；“上一步输出是下一步输入”由执行者在 artifact 中记录，由 review 与 Owner 抽查。
+两个进度数：`reach` 是从第 1 步起、surface 与声明的入口类型一致的连续有效步数，Gate 只认它；`rehearsalReach` 不限 surface。同一 run 内连续走通算；也可跨 run 拼接（按影响范围复测）：每步取有效证据，承接处后一步的 `inputRef` 须等于前一步有效记录的 `outputRef`，同一 environment。Gate 要求每条 Journey 在最终版本上 reach 覆盖全部 step。运行时改动后默认只把受影响步骤从因果链起点在最终 HEAD 上重走（新 run 可从该步起步，`inputRef` 对上其他 run 上一步的 `outputRef`），未受影响步骤（连同其 run 的 `run-setup`）用 `evidence carry-forward` 沿用；改动波及前置数据或全局行为（夹具、迁移、权限模型、时钟），或合同明确要求整条连续验证时，必须整条在最终 HEAD 上从第 1 步重走（由 agent 判断，引擎不替判）。证据版本漂移按实际判断：包外只有非运行时路径改动时自动沿用；有运行时改动时由 agent 看 diff 决定重走，或用 `evidence carry-forward` 登记沿用并写明理由与判断人（Owner Summary 单列）。runtime 还核对 `entry` 与 Spec 一致、顺序与有效期；“上一步输出是下一步输入”由执行者在 artifact 中记录，由 review 与 Owner 抽查。
 
 **Harness 与 run 隔离**：3.6 plan 用固定行 `Harness setup/precheck/cleanup`、`Harness isolation: per-run` 与 `First visible step: <StepId> @ <TicketId>` 声明验证 harness（命令来自项目 QA 入口，性质见 `validation-harness`），缺失或无效时 `package init/validate` 拒绝。每个 run 先登记 `run-setup` evidence（setup 与 precheck 输出），该 run 的 `journey-step` 才被接受；第 1 步的 `outputRef` 不得出现在其他 run，即每个 run 使用自己创建的对象。声明的 Ticket 已 `SATISFIED` 而声明的 step 仍无匹配的 page/file record 时，触发 `attempt.walking_skeleton_overdue`，进入 situation 与 Owner Summary。
 
