@@ -381,6 +381,15 @@ class TicketFirstContractTests(unittest.TestCase):
         self.assertNotIn("TKT-01", {item["ticket"] for item in findings})
         self.assertEqual(len(findings), 3)
 
+    def test_validate_warns_on_ticket_without_batch_estimate(self) -> None:
+        temp, repo, package = self.make_validate_package(
+            ticket_edits={"01-source.md": [("\n## Coverage\n", "\n预计批次：1（单一入口，一次可自证）\n\n## Coverage\n")]},
+        )
+        self.addCleanup(temp.cleanup)
+
+        findings = [item for item in self.validate_findings(repo, package) if item["code"] == "ticket-batch-estimate-absent"]
+
+        self.assertEqual({item["ticket"] for item in findings}, {"TKT-02", "TKT-03", "TKT-04"})
 
 if __name__ == "__main__":
     unittest.main()

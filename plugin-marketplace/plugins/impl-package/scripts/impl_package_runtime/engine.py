@@ -72,6 +72,7 @@ ACCEPTANCE_JOURNEY_RE = re.compile(r"(?m)^Acceptance: journey[ \t]*$")
 RELEASE_ORDER_RE = re.compile(r"(?m)^Release order: (required|none)[ \t]*$")
 TICKET_ID_RE = re.compile(r"(?im)^[^\r\n]*Ticket ID[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*([^\s*]+)")
 PUBLICATION_RE = re.compile(r"(?im)^([^\r\n]*(?:Publication Status|发布状态)[^：:\r\n]*[：:][ \t]*(?:\*\*)?[ \t]*)(Draft|Approved)[ \t]*$")
+BATCH_ESTIMATE_RE = re.compile(r"(?m)^[^\r\n]*预计批次[：:]")
 ARRIVAL_PATH_RE = re.compile(r"(?im)^[^\r\n]*(?:Arrival path|到达路径)[^：:\r\n]*[：:][ \t]*(.*?)[ \t]*$")
 DEPENDENCY_HEADING_RE = re.compile(r"(?ims)^##\s+(?:阻塞依赖|Blocking Dependencies)\s*$\r?\n(.*?)(?=^##\s+|\Z)")
 
@@ -1095,6 +1096,14 @@ def _ticket_documents(package: Path, attempt: str, errors: list[str] | None = No
     if not result and directory.exists() and not errors:
         raise StateError(f"Composition earns tickets but no Ticket belongs to Attempt {attempt}")
     return result
+
+
+def _batch_estimate_absent_findings(package: Path, summary: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {"code": "ticket-batch-estimate-absent", "ticket": document["id"], "path": _package_relative(package, document["path"])}
+        for document in summary["_documents"]
+        if not BATCH_ESTIMATE_RE.search(document["text"])
+    ]
 
 
 def _append_ticket_document(package: Path, attempt: str, child: Path, result: list[dict[str, Any]]) -> None:
@@ -2480,6 +2489,7 @@ def command_validate(package: Path, commit: str | None, *, check_arrival_paths: 
             + _contract_amendment_findings(package, repo, summary["_acceptance"])
             + _plan_prose_gate_findings(repo, package, summary)
             + _arrival_path_absent_findings(package, summary)
+            + _batch_estimate_absent_findings(package, summary)
             + _arrival_findings(repo, package, summary, comparison_commit)
             + _post_gate_pending_findings(summary)
         )

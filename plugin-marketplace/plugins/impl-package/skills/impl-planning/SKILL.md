@@ -36,7 +36,7 @@ Ticket 放在 package 固定的 `tickets/` 目录，文件名可排序且稳定�
 
 本 Skill 拥有 Ticket 的纵向切片、AC、contract references 和 typed dependency 语义；主 thread 直接写入并验证 Ticket 正文，运行时 state 由主 thread 直接通过语义 CLI 更新。误判提醒见 [Ticket 合同与证据](references/common-misjudgments.md#ticket-合同与证据)。
 
-1. **切分纵向交付**：按可独立验收的纵向交付切片拆分，不按文件、层或 worker 拆分。拆分判据是“这张 Ticket 启用某个 Journey step，或负责某个已登记的套件”；harness、migration、加固类 Ticket 因负责套件而合法，不因层次相近强行合票。读模型接线、后端算法、加字段、补测试并入它所服务的 step 或套件。一张 Ticket 预计超出单个执行者一次上下文时，不为此拆票，而在建设内容里写 `预计批次：` 与候选切点（切点是能单独跑通测试的位置）；批次的实际切法、交接文件与检查点由执行阶段按第一批的实际粒度决定。
+1. **切分纵向交付**：按可独立验收的纵向交付切片拆分，不按文件、层或 worker 拆分。拆分判据是“这张 Ticket 启用某个 Journey step，或负责某个已登记的套件”；harness、migration、加固类 Ticket 因负责套件而合法，不因层次相近强行合票。读模型接线、后端算法、加字段、补测试并入它所服务的 step 或套件。一张 Ticket 预计超出单个执行者一次上下文时，不为此拆票。每张 Ticket 的建设内容里都写一行 `预计批次：1（理由）` 或 `预计批次：N（切点：① …；② …）`；切点是能单独跑通测试的位置，批次的实际切法、交接文件与检查点由执行阶段按第一批的实际粒度决定。判断方式：一个执行者一次上下文能否完成实现并自证。参考实例：新建多个组件并新建套件；大文件要先补特征测试、只搬不改，再改行为；跨前后端或多个模块。建设内容写成一段话的 Ticket 也逐张套用这个判断。
 2. **登记 Ticket 合同**：每个 Ticket 写 Ticket ID、Attempt、S/P 别名、`Draft`、建设内容、可观察 AC、evidence owner 和 typed dependency，运行时验收状态只写入 `.impl-package/state.json`。typed dependency 每行 `- <implementation|acceptance|release>: <TicketId>`，Ticket ID 之后可跟括号、冒号或破折号引出的一句说明（写出交接产物）。建设内容要改既有代码时，先排“补特征测试固定现状 → 单独一次只搬不改提交（`git diff --color-moved` 核对纯移动）→ 在新位置改行为”，三步写进同一张 Ticket，不拆票。
 3. **标记到达路径**：跨模块 AC 的到达路径中间段先标成 `EXISTS` 或 `NEW`；Plan 的 `Predecessors` 显式写 `None` 或仓库相对路径，供查找与 review 使用。
 4. **单独赚取 UI 形状验收**：当交付面包含实质 UI，且“形状对不对”本身构成独立验收结论时，把“UI 落进目标 app”单独 earn 一个 Ticket，排在接线 Ticket 之前，以 fixture 在真实 app shell 内验收且不依赖后端；这看似与“不按文件、层或 worker 拆分”冲突，但仍符合“只有 Ticket 能减少验收歧义时才 earned”，因为要观察真实渲染状态而非靠 mock 通过，是独立的纵向验收切片。AC 写可观察的渲染状态与组件复用事实而非“UI 已实现”：目标组件/样式系统在真实 app shell 内渲染，恰好一个 surface 组件同时被 fixture 入口与将来的真实入口引用，状态模型作为目标模块内独立模块并有 focused test，fixture 覆盖正常/缺失/冲突/失败/部分成功且逐状态可达可截图、无后端副作用，验收者按 `run-acceptance` 逐状态走查截图、主控核对截图后判定（AC 不写成 Owner 走查；确需 Owner 本人确认的状态才单列为待 Owner 项）。
@@ -50,7 +50,7 @@ Ticket 放在 package 固定的 `tickets/` 目录，文件名可排序且稳定�
 
 - plan 与 Decision/Spec 语义一致，无 `TBD` blocker；
 - 全部 active 约束都能在某个 Ticket 的 Contract references 与 AC 中定位（无遗漏、无重复认领），每个 Journey step 与 ticket 级套件都被某张 Ticket 的 Coverage 认领；跨 Ticket 的 Planned Verification 可执行且有 owner，第一个用户可见 step 的到达时机已写明；
-- 新 package 的 Ticket 存在并与当前 Attempt 一致；
+- 新 package 的 Ticket 存在并与当前 Attempt 一致，每张 Ticket 都写了预计批次；
 - 初始 bundle 已经 `/impl-package:plan-review` 的 `bundle-admission`（命中信号则 `full-review`）并取得 owner approval，对话中能指出该次调用的 verdict；后续 patch 直接沿用该 approval；
 - `state.json` 已初始化并通过 validate；
 - owner 能从汇报直接判断能否进入执行。
