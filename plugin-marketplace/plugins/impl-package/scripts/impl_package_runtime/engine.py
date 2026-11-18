@@ -2683,7 +2683,8 @@ def command_amendment_supersede(package: Path, identifier: str, by: str) -> dict
             raise StateError(f"amendment {identifier} is {old['status']}; only PENDING amendments can be superseded")
         if new["status"] == "WITHDRAWN":
             raise StateError(f"amendment {by} is WITHDRAWN and cannot supersede {identifier}")
-        missing = [path for path in old["affected"] if path not in new["affected"]]
+        # 只核对合同文件：旧版修订可能登记过 tickets/ 等非合同路径，而 add 已不接受这类路径，否则这些旧条永远无法被取代。
+        missing = [path for path in old["affected"] if path in AMENDMENT_CONTRACT_FILES and path not in new["affected"]]
         if missing:
             raise StateError(f"amendment {by} must also list affected {', '.join(missing)} so that superseded {identifier} stays covered")
         new["supersedes"] = [*new.get("supersedes", []), identifier]

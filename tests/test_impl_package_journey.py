@@ -2446,6 +2446,21 @@ def test_amendment_supersede_unblocks_confirm_after_contract_changed_again(tmp_p
     assert situation._parse_state(situation.FileView("state.json", json.dumps(state))).valid
 
 
+def test_amendment_supersede_ignores_legacy_non_contract_affected_paths(tmp_path: Path) -> None:
+    repo, package, _ = _init_v36(tmp_path)
+    _append_spec_note(package, "Owner clarification: legacy wording.")
+    assert _cli(repo, package, "package", "amendment", "add", "--id", "L-1", "--summary", "legacy", "--affected", "spec.md").returncode == 0
+    state = _state(package)
+    legacy = next(row for row in state["acceptance"]["amendments"] if row["id"] == "L-1")
+    legacy["affected"] = ["spec.md", "tickets/01-T01.md"]
+    legacy.pop("affectedBlobs", None)
+    (package / ".impl-package/state.json").write_text(json.dumps(state), encoding="utf-8")
+    assert _cli(repo, package, "package", "amendment", "add", "--id", "L-2", "--summary", "covers legacy", "--affected", "spec.md").returncode == 0
+    result = _cli(repo, package, "package", "amendment", "supersede", "--id", "L-1", "--by", "L-2")
+    assert result.returncode == 0, result.stderr
+    assert [row["id"] for row in engine._pending_amendments(_state(package)["acceptance"]["amendments"])] == ["L-2"]
+
+
 def _freeze_with_pass(repo: Path, package: Path, revision: str) -> str:
     """Freeze via a fail Gate, then relabel it pass: the full pass Gate chain is covered elsewhere."""
     assert _gate(repo, package, "fail", revision).returncode == 0
