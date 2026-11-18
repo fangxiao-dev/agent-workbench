@@ -29,7 +29,7 @@ SUBPROCESS_TESTS = (
     "test_trail_append_named_flags_reject_invalid_values",
 )
 sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
-from impl_package_runtime import attempt_store, command_groups, engine  # noqa: E402
+from impl_package_runtime import attempt_store, command_groups, engine, validate_state  # noqa: E402
 from impl_package_state import main as cli_main  # noqa: E402
 from situation import Fact  # noqa: E402
 
@@ -714,7 +714,9 @@ class ImplPackageStateTests(unittest.TestCase):
         records = self.evidence_records(git(repo, "rev-parse", "HEAD"))
         with patch.object(engine, "_validate_state", wraps=engine._validate_state) as validate, patch.object(
             engine, "_write_json", wraps=engine._write_json
-        ) as write_json, patch.object(engine, "_refresh_projections", wraps=engine._refresh_projections) as refresh:
+        ) as write_json, patch.object(engine, "_refresh_projections", wraps=engine._refresh_projections) as refresh, patch.object(
+            validate_state, "_validate_state", validate
+        ):
             result = engine.command_evidence_add(package, json.dumps(records))
         self.assertEqual(result["added"], len(records))
         self.assertEqual(write_json.call_count, 1)
