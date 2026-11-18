@@ -11,6 +11,7 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
+from impl_package_runtime import usage_log  # noqa: E402
 from impl_package_runtime.config import CONFIG  # noqa: E402
 
 
@@ -25,7 +26,7 @@ GROUPS = {
 
 
 def _root_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = usage_log.UsageArgumentParser(
         description="Ticket-first Impl-Package state router (format 3.6)",
     )
     parser.add_argument("--package", type=Path, required=True)
@@ -39,7 +40,7 @@ def _command_groups():
 
 
 def _route(argv: list[str]) -> tuple[Path, str, list[str]]:
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = usage_log.UsageArgumentParser(add_help=False)
     parser.add_argument("--package", type=Path, required=True)
     parser.add_argument("route")
     args, rest = parser.parse_known_args(argv)
@@ -66,6 +67,23 @@ def _command_token(argv: list[str]) -> str | None:
 
 def main(argv: list[str] | None = None) -> int:
     values = list(sys.argv[1:] if argv is None else argv)
+    label = usage_log.command_label(values)
+    usage_log.begin()
+    code = 1
+    try:
+        code = _main(values)
+        return code
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 0 if exc.code is None else 1
+        raise
+    except BaseException as exc:
+        usage_log.note_error(type(exc).__name__, str(exc))
+        raise
+    finally:
+        usage_log.record(label, code)
+
+
+def _main(values: list[str]) -> int:
     no_situation = "--no-situation" in values
     values = [value for value in values if value != "--no-situation"]
     if not values or _command_token(values) is None:

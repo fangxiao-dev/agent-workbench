@@ -96,9 +96,10 @@ python <plugin>/scripts/impl_package_state.py --package <package> package init -
 python <plugin>/scripts/impl_package_state.py --package <package> package validate
 python <plugin>/scripts/impl_package_state.py --package <package> package refresh-progress
 python <plugin>/scripts/impl_package_state.py --package <package> package archive-attempt --attempt <id> --from-revision <commit>
-printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <package> evidence add      # 单条或数组，整批合法才写入
+printf '<json>' | python <plugin>/scripts/impl_package_state.py --package <package> evidence add      # 单个对象、JSON 数组或 JSON Lines（每行一条）；整批合法才写入，报错带行号
 python <plugin>/scripts/impl_package_state.py --package <package> evidence invalidate --key <evidenceKey> --invalidated-by <reason>
 python <plugin>/scripts/impl_package_state.py --package <package> evidence carry-forward --key <evidenceKey> --to <commit> --reason <text> --judged-by <who>   # agent 看过 diff 后判断运行时改动不影响该证据；漂移后先 package refresh-progress
+python <plugin>/scripts/impl_package_state.py --package <package> evidence carry-forward --to <commit> --judged-by <who> --select run:<runId> --reason <text> --select kind:suite --reason <text> [--dry-run]   # 批量：每个 --select（run:<id> | kind:suite|review | ticket:<id> | key:<key>）按序配一个 --reason，整批原子；--dry-run 按组列 key 与运行时改动文件
 python <plugin>/scripts/impl_package_state.py --package <package> package amendment add --id <id> --summary <text> --affected <contract path> [--affected <contract path> ...] --artifact <package 内路径> [--post-gate]   # --post-gate：终版 Gate pass 后登记纯文字更正，见 composition-contract Amendment
 python <plugin>/scripts/impl_package_state.py --package <package> package amendment supersede --id <旧 id> --by <新 id>
 python <plugin>/scripts/impl_package_state.py --package <package> package amendment withdraw --id <id> --reason <原因>

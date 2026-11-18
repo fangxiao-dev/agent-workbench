@@ -310,7 +310,20 @@ def test_legacy_migration_artifacts_are_removed() -> None:
         PLUGIN / "scripts" / "review_track_stats.py",
         PLUGIN / "scripts" / "impl_package_runtime" / "command_groups.py",
         PLUGIN / "scripts" / "impl_package_runtime" / "engine.py",
-        PLUGIN / "scripts" / "impl_package_runtime" / "metrics.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "state_core.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "attempt_store.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "spec_journey.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "plan_tickets.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "journey_evidence.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "acceptance.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "validate_state.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "cmd_evidence.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "cmd_package.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "cmd_trail.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "cmd_gate.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "evidence_batch.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "usage_log.py",
+        PLUGIN / "scripts" / "impl_package_usage_summary.py",
     )
     for source in runtime_sources:
         text = source.read_text(encoding="utf-8")

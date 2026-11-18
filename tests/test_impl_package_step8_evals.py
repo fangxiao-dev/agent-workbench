@@ -59,7 +59,7 @@ def test_active_package_files_have_no_retired_state_mechanisms() -> None:
         for token in retired_state:
             assert token not in text, f"{path.relative_to(ROOT)} contains {token}"
 
-    engine = (IMPL / "scripts/impl_package_runtime/engine.py").read_text(encoding="utf-8")
+    engine = chr(10).join(path.read_text(encoding="utf-8") for path in sorted((IMPL / "scripts/impl_package_runtime").glob("*.py")))
     # 3.6 uses Git blob ids only for contract files, through one helper.
     blob_helper = engine.split("def _working_tree_blob", 1)[1].split(chr(10) + "def ", 1)[0]
     assert engine.count('_run_git(repo, "hash-object"') == 1

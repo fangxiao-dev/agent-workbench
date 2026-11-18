@@ -29,7 +29,7 @@ SUBPROCESS_TESTS = (
     "test_trail_append_named_flags_reject_invalid_values",
 )
 sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
-from impl_package_runtime import command_groups, engine  # noqa: E402
+from impl_package_runtime import attempt_store, cmd_gate, cmd_trail, command_groups, engine, validate_state  # noqa: E402
 from impl_package_state import main as cli_main  # noqa: E402
 from situation import Fact  # noqa: E402
 
@@ -714,7 +714,9 @@ class ImplPackageStateTests(unittest.TestCase):
         records = self.evidence_records(git(repo, "rev-parse", "HEAD"))
         with patch.object(engine, "_validate_state", wraps=engine._validate_state) as validate, patch.object(
             engine, "_write_json", wraps=engine._write_json
-        ) as write_json, patch.object(engine, "_refresh_projections", wraps=engine._refresh_projections) as refresh:
+        ) as write_json, patch.object(engine, "_refresh_projections", wraps=engine._refresh_projections) as refresh, patch.object(
+            validate_state, "_validate_state", validate
+        ):
             result = engine.command_evidence_add(package, json.dumps(records))
         self.assertEqual(result["added"], len(records))
         self.assertEqual(write_json.call_count, 1)
@@ -980,7 +982,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.init(repo, package)
         stderr = StringIO()
 
-        with patch.object(engine, "_rotate_trail", side_effect=OSError("disk full")), redirect_stderr(stderr):
+        with patch.object(attempt_store, "_rotate_trail", side_effect=OSError("disk full")), redirect_stderr(stderr):
             result = engine.command_checkpoint(package, "attempt", "continue after handoff", None, [], True)
 
         self.assertEqual(set(result), {"subject", "checkpoint", "idempotent"})
@@ -1385,7 +1387,7 @@ class ImplPackageStateTests(unittest.TestCase):
         stderr = StringIO()
         stdout = StringIO()
         payload = json.dumps({"kind": "escape", "subject": "attempt", "deviation": "manual", "reason": "fixture"})
-        with patch.object(engine, "_append_trail", side_effect=OSError("disk full")), patch.object(command_groups.sys, "stdin", StringIO(payload)), redirect_stderr(stderr), redirect_stdout(stdout):
+        with patch.object(cmd_trail, "_append_trail", side_effect=OSError("disk full")), patch.object(command_groups.sys, "stdin", StringIO(payload)), redirect_stderr(stderr), redirect_stdout(stdout):
             result = command_groups.main(package, "trail", ["append"])
         self.assertEqual(result, 1)
         self.assertEqual(stdout.getvalue(), "")
@@ -1399,7 +1401,7 @@ class ImplPackageStateTests(unittest.TestCase):
         revision = git(repo, "rev-parse", "HEAD")
         stderr = StringIO()
 
-        with patch.object(engine, "_append_trail", side_effect=OSError("disk full")), redirect_stderr(stderr):
+        with patch.object(attempt_store, "_append_trail", side_effect=OSError("disk full")), redirect_stderr(stderr):
             result = engine.command_set_state(
                 package,
                 "TKT-01",
@@ -1538,7 +1540,6 @@ class ImplPackageStateTests(unittest.TestCase):
             (("package", "status"), None),
             (("package", "refresh-progress"), None),
             (("package", "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md"), None),
-            (("package", "metrics"), None),
             (("evidence", "add"), record),
             (("evidence", "invalidate", "--key", "suite:S-safety", "--invalidated-by", "x"), None),
             (("ticket", "block", "TKT-01", "--expect", "PENDING", "--evidence", "evidence.md"), None),
@@ -1624,7 +1625,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("期望", mismatch.reason)
         self.assertIn("'review-run': 'other'", mismatch.reason)
         unknown_reason = "无法读取 execution/initial/trail.jsonl"
-        with patch.object(engine, "terminal_coverage_fact", return_value=Fact.unknown(unknown_reason)):
+        with patch.object(cmd_gate, "terminal_coverage_fact", return_value=Fact.unknown(unknown_reason)):
             with self.assertRaises(engine.StateError) as unknown_rejection:
                 engine.command_gate(package, "pass", head, "fixture", [], [], "fixture", "test")
         message = str(unknown_rejection.exception)

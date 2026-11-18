@@ -1334,12 +1334,6 @@ def test_api_records_count_as_rehearsal_and_mixed_surface_reach_is_contiguous(tm
     assert status["journeys"][0]["rehearsalReach"] == 2
     assert status["journeys"][0]["surfaceCounts"] == {"page": 0, "file": 0, "api": 2, "log": 0}
     assert "J1 有效步骤走通 0/2 · API 预演 2/2" in (package / "progress.md").read_text(encoding="utf-8")
-    metrics_result = _cli(repo, package, "package", "metrics")
-    assert metrics_result.returncode == 0, metrics_result.stderr
-    metrics_journey = json.loads((package / "execution/initial/metrics.json").read_text(encoding="utf-8"))["journeys"]["value"][0]
-    assert metrics_journey["pageReach"]["value"] == 0
-    assert metrics_journey["rehearsalReach"]["value"] == 2
-    assert metrics_journey["surfaceCounts"]["api"]["value"] == 2
 
     mixed_run = [
         _journey_record(revision, "J1-S1", run_id="mixed-run", surface="page"),
@@ -1381,14 +1375,6 @@ def test_log_records_count_as_reach_and_preparation_is_metrics_only(tmp_path: Pa
     assert "准备" not in progress and "三张同条件票据" not in progress
     owner_summary = "".join(engine._owner_summary(status, revision, "blocked", "still validating"))
     assert "准备" not in owner_summary and "三张同条件票据" not in owner_summary
-
-    metrics_result = _cli(repo, package, "package", "metrics")
-    assert metrics_result.returncode == 0, metrics_result.stderr
-    metrics_journey = json.loads((package / "execution/initial/metrics.json").read_text(encoding="utf-8"))["journeys"]["value"][0]
-    assert metrics_journey["pageReach"]["value"] == 2
-    assert metrics_journey["rehearsalReach"]["value"] == 2
-    assert metrics_journey["surfaceCounts"]["log"]["value"] == 1
-    assert metrics_journey["preparation"]["value"] == "同一门店、三张同条件票据。"
 
 
 @pytest.mark.parametrize("field", [
@@ -2003,8 +1989,8 @@ def test_journey_gate_pass_confirms_amendment_requires_release_and_freezes_archi
 
     passed = _gate(repo, package, "pass", revision, reason="全部验收满足", subprocess=True)
     assert passed.returncode == 0, passed.stderr or passed.stdout
-    assert "metrics: execution/initial/metrics.json" in passed.stdout
-    assert (package / "execution/initial/metrics.json").is_file()
+    assert "metrics:" not in passed.stdout
+    assert not (package / "execution/initial/metrics.json").exists()
     gate_events = [row for row in engine._active_trail_rows(package, "initial") if row.get("transition") == "gate"]
     assert gate_events[-1]["verdict"] == "pass" and gate_events[-1]["commit"] == revision
     text = (package / "gate.md").read_text(encoding="utf-8")
@@ -2041,152 +2027,6 @@ def test_review_record_requires_impact_for_v36_and_rejects_unknown_impact(tmp_pa
 
     recorded = review_track_stats.record_summary(package, {**canonical, "findings": [{**finding, "impact": "seam"}]})
     assert recorded["appended"] is True
-
-
-def _metrics_row(seq: int, ts: str, kind: str, subject: str, **fields: object) -> dict[str, object]:
-    return {"v": 1, "seq": seq, "ts": ts, "kind": kind, "subject": subject, "head": "a" * 40, **fields}
-
-
-def _write_metrics_trail(package: Path, rows: list[dict[str, object]]) -> None:
-    trail = package / "execution/initial/trail.jsonl"
-    trail.parent.mkdir(parents=True, exist_ok=True)
-    trail.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
-
-
-def test_package_metrics_reports_numeric_sections_and_keeps_situation_and_progress_clean(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str],
-) -> None:
-    tickets = {
-        "01.md": _ticket("TKT-01", "J1-S1", "S-resolver"),
-        "02.md": _ticket("TKT-02", "J1-S2", "S-workflow", dependencies="- implementation: TKT-01"),
-    }
-    repo, package = _make_package(tmp_path, tickets=tickets, initialized=True)
-    revision = _git(repo, "rev-parse", "HEAD")
-    for step_id in ("J1-S1", "J1-S2"):
-        added = _cli(repo, package, "evidence", "add", input_value=_journey_record(revision, step_id))
-        assert added.returncode == 0, added.stderr
-
-    _append_spec_note(package, "Owner clarification: Keep the accepted wording.")
-    added = _cli(repo, package, "package", "amendment", "add", "--id", "A-1", "--summary", "Clarify wording", "--affected", "spec.md", "--artifact", "artifacts/evidence.md")
-    assert added.returncode == 0, added.stderr
-    confirmed = _cli(repo, package, "package", "amendment", "confirm", "--id", "A-1", "--confirmed-by", "Owner", "--confirmed-revision", revision)
-    assert confirmed.returncode == 0, confirmed.stderr
-
-    state = _state(package)
-    state["evidenceIndex"]["run-setup:run-1"][0]["recordedAt"] = "2026-10-01T09:59:00Z"
-    state["evidenceIndex"]["journey:run-1:J1-S1"][0]["recordedAt"] = "2026-10-01T10:00:00Z"
-    state["evidenceIndex"]["journey:run-1:J1-S2"][0]["recordedAt"] = "2026-10-01T10:01:40Z"
-    amendment = state["acceptance"]["amendments"][0]
-    amendment["createdAt"] = "2026-10-01T10:00:00Z"
-    amendment["confirmedAt"] = "2026-10-01T10:02:00Z"
-    (package / ".impl-package/state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-    rows = [
-        _metrics_row(1, "2026-10-01T10:00:00Z", "dispatch", "ticket:TKT-01", dispatch_id="d1", mode="fix"),
-        _metrics_row(2, "2026-10-01T10:00:10Z", "worker-return", "ticket:TKT-01", of="d1", return_id="r1", outcome="DONE", endedAt="2026-10-01T10:00:20Z", usage={"input": 10, "output": 5, "costUsd": 0.25}, failureClass="flaky"),
-        _metrics_row(3, "2026-10-01T10:01:00Z", "dispatch", "ticket:TKT-01", dispatch_id="d2", mode="fix"),
-        _metrics_row(4, "2026-10-01T10:01:10Z", "worker-return", "ticket:TKT-01", of="d2", return_id="r2", outcome="DONE", usage={"input": 3, "output": 4}, failureClass="real"),
-        _metrics_row(5, "2026-10-01T10:02:00Z", "dispatch", "ticket:TKT-01", dispatch_id="d3", mode="verify"),
-        _metrics_row(6, "2026-10-01T10:02:30Z", "worker-return", "ticket:TKT-01", of="d3", return_id="r3", outcome="DONE"),
-        _metrics_row(7, "2026-10-01T10:03:00Z", "result", "ticket:TKT-01", transition="ticket-state", **{"from": "PENDING", "to": "SATISFIED", "outcome": "SATISFIED"}),
-        _metrics_row(8, "2026-10-01T10:05:00Z", "dispatch", "ticket:TKT-02", dispatch_id="d4", mode="implement"),
-        _metrics_row(9, "2026-10-01T10:07:00Z", "worker-return", "ticket:TKT-02", of="d4", return_id="r4", outcome="DONE", usage={"input": 7, "output": 1, "costUsd": 0.15}, failureClass="env"),
-        _metrics_row(10, "2026-10-01T10:08:00Z", "result", "ticket:TKT-02", transition="ticket-state", **{"from": "PENDING", "to": "SATISFIED", "outcome": "SATISFIED"}),
-        _metrics_row(11, "2026-10-01T10:09:00Z", "fact", "review:review-1", key="review.canonical_summary", value={
-            "schemaVersion": 1, "reviewRunId": "review-1", "phase": "initial", "resolvedHead": revision,
-            "findings": [{"findingKey": "seam-1", "id": "F-001", "title": "Broken seam", "ticketIds": ["TKT-01"], "tracks": ["Track A"], "impact": "seam", "classification": "blocker", "lifecycle": "open"}],
-        }),
-        _metrics_row(12, "2026-10-01T10:10:00Z", "fact", "attempt", key="review.terminal_summary", value={"reviewRunId": "terminal-1", "comparisonHead": revision, "safetyApplicable": False, "results": []}),
-    ]
-    _write_metrics_trail(package, rows)
-    progress_before = (package / "progress.md").read_bytes()
-    state_before = (package / ".impl-package/state.json").read_bytes()
-
-    result = _cli(repo, package, "package", "metrics")
-    assert result.returncode == 0, result.stderr
-    assert len(result.stdout.splitlines()) <= 30
-    assert "[处境]" not in result.stdout
-    report = json.loads((package / "execution/initial/metrics.json").read_text(encoding="utf-8"))
-
-    assert report["dispatch"]["total"]["value"] == 4
-    assert {mode: report["dispatch"]["byMode"][mode]["value"] for mode in ("fix", "verify", "implement")} == {"fix": 2, "verify": 1, "implement": 1}
-    assert [row["seconds"]["value"] for row in report["dispatch"]["durations"]] == [20.0, 10.0, 30.0, 120.0]
-    assert report["dispatch"]["ticketCounts"]["TKT-01"]["repeatedFix"]["value"] == 1
-    assert report["tickets"]["TKT-01"]["wallClockSeconds"]["value"] == 180.0
-    edge = report["criticalPathWait"]["edges"]["value"][0]
-    assert edge["waitSeconds"]["value"] == 120.0
-    assert edge["upstreamDispatchesBeforeSatisfied"]["value"] == 3
-    assert report["criticalPathWait"]["dispatchesBeforeFirstDownstreamImplement"]["value"] == 3
-    assert report["findings"]["byTrack"]["Track A"]["value"] == 1
-    assert report["findings"]["byTicket"]["TKT-01"]["value"] == 1
-    assert report["findings"]["byImpact"]["seam"]["value"] == 1
-    assert report["findings"]["upstreamSeamSafetyRatio"]["value"] == {"numerator": 1, "denominator": 1, "ratio": 1.0}
-    journey = report["journeys"]["value"][0]
-    assert report["journeys"]["firstVisibleStep"]["declared"]["value"] == {"step": "J1-S1", "ticket": "TKT-01"}
-    assert report["journeys"]["firstVisibleStep"]["firstRecordedAt"]["value"] == "2026-10-01T10:00:00Z"
-    assert report["journeys"]["firstVisibleStep"]["secondsFromFirstDispatch"]["value"] == 0.0
-    assert journey["runCount"]["value"] == 1
-    assert journey["runs"]["value"][0]["firstLastRecordedAtSeconds"]["value"] == 100.0
-    assert journey["runs"]["value"][0]["setupAt"]["value"] == "2026-10-01T09:59:00Z"
-    assert journey["runs"]["value"][0]["setupToFirstStepSeconds"]["value"] == 60.0
-    assert journey["pageReach"]["value"] == 2
-    assert journey["rehearsalReach"]["value"] == 2
-    assert journey["surfaceCounts"]["page"]["value"] == 2
-    assert journey["surfaceCounts"]["file"]["value"] == 0
-    assert journey["surfaceCounts"]["api"]["value"] == 0
-    assert journey["surfaceCounts"]["log"]["value"] == 0
-    assert journey["runs"]["value"][0]["pageReach"]["value"] == 2
-    assert journey["complete"]["value"] is True
-    assert report["amendments"]["value"][0]["elapsedSeconds"]["value"] == 120.0
-    assert report["usage"]["input"]["value"] == 20
-    assert report["usage"]["output"]["value"] == 10
-    assert report["usage"]["costUsd"]["value"] == 0.4
-    assert report["failures"]["counts"]["flaky"]["value"] == 1
-    assert report["coverage"]["endedAt"]["value"] == {"filled": 1, "records": 4, "rate": 0.25}
-    assert report["coverage"]["recordedAt"]["value"] == {"filled": 3, "records": 3, "rate": 1.0}
-    assert (package / "progress.md").read_bytes() == progress_before
-    assert (package / ".impl-package/state.json").read_bytes() == state_before
-
-    assert situation.main(["render", "--package", str(package), "--json"]) == 0
-    rendered = capsys.readouterr().out
-    rendered_value = json.loads(rendered)
-
-    def keys(value: object) -> set[str]:
-        if isinstance(value, dict):
-            return {str(key) for key in value} | set().union(*(keys(item) for item in value.values()))
-        if isinstance(value, list):
-            return set().union(*(keys(item) for item in value)) if value else set()
-        return set()
-
-    assert "metrics.json" not in rendered.lower()
-    assert "metrics" not in {key.lower() for key in keys(rendered_value)}
-
-
-def test_package_metrics_keeps_unavailable_values_null_with_reasons(tmp_path: Path) -> None:
-    tickets = {
-        "01.md": _ticket("TKT-01", "J1-S1", "S-resolver"),
-        "02.md": _ticket("TKT-02", "J1-S2", "S-workflow", dependencies="- implementation: TKT-01"),
-    }
-    repo, package = _make_package(tmp_path, tickets=tickets, initialized=True)
-    _write_metrics_trail(package, [
-        _metrics_row(1, "2026-10-01T10:00:00Z", "dispatch", "ticket:TKT-01", dispatch_id="d1", mode="fix"),
-        _metrics_row(2, "2026-10-01T10:01:00Z", "dispatch", "ticket:TKT-02", dispatch_id="d2", mode="implement"),
-    ])
-    out = tmp_path / "metrics.json"
-
-    result = _cli(repo, package, "package", "metrics", "--out", str(out))
-
-    assert result.returncode == 0, result.stderr
-    report = json.loads(out.read_text(encoding="utf-8"))
-    assert report["dispatch"]["durations"][0]["seconds"]["value"] is None
-    assert report["dispatch"]["durations"][0]["seconds"]["missingReason"] == "no matching worker-return"
-    assert report["criticalPathWait"]["edges"]["value"][0]["waitSeconds"]["value"] is None
-    assert report["criticalPathWait"]["edges"]["value"][0]["waitSeconds"]["missingReason"] == "upstream Ticket has no SATISFIED result"
-    assert report["usage"]["input"]["value"] is None
-    assert "no worker-return usage.input" in report["usage"]["input"]["missingReason"]
-    assert report["journeys"]["value"][0]["runCount"]["value"] == 0
-    assert report["coverage"]["recordedAt"]["value"] is None
-    assert report["coverage"]["recordedAt"]["missingReason"] == "no evidence records"
 
 
 def test_situation_renders_new_v36_acceptance_rows_without_changing_global_blocking(tmp_path: Path) -> None:

@@ -192,7 +192,7 @@ check('generic impl_trail_append is removed', !registeredImplTools.some((tool) =
 check('13 typed impl tools registered', registeredImplTools.length === 13, String(registeredImplTools.length))
 
 const pythonSituation = readFileSync(join(workbench, 'plugin-marketplace/plugins/impl-package/scripts/situation.py'), 'utf-8')
-const pythonEngine = readFileSync(join(workbench, 'plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/engine.py'), 'utf-8')
+const pythonEngine = readFileSync(join(workbench, 'plugin-marketplace/plugins/impl-package/scripts/impl_package_runtime/cmd_trail.py'), 'utf-8')
 function parsePythonTuple(source, name) {
   const match = source.match(new RegExp(`^${name}\\s*=\\s*\\(([^)]*)\\)`, 'm'))
   return match === null ? [] : [...match[1].matchAll(/["']([^"']+)["']/g)].map((item) => item[1])

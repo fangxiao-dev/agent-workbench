@@ -14,7 +14,7 @@ from typing import Any
 
 import situation
 
-from . import engine, metrics
+from . import engine, usage_log
 
 
 def _text(value: Any, missing: str = "?") -> str:
@@ -94,14 +94,12 @@ def _emit(
     try:
         result = action()
     except (engine.StateError, OSError) as exc:
+        usage_log.note_error(type(exc).__name__, str(exc))
         print(str(exc), file=sys.stderr)
         should_append_situation = append_situation_on_error
         code = 1
     else:
-        metrics_path = result.pop("_metricsPath", None)
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
-        if metrics_path:
-            print(f"metrics: {metrics_path}")
         should_append_situation = append_situation
         code = 0
     if should_append_situation:
@@ -155,7 +153,7 @@ Terminal review coverage (written once the final terminal-final review has retur
 
 
 def _parser(group: str) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog=f"impl_package_state.py --package <package> {group}")
+    parser = usage_log.UsageArgumentParser(prog=f"impl_package_state.py --package <package> {group}")
     commands = parser.add_subparsers(dest="command", required=True)
     if group == "package":
         check_spec = commands.add_parser("check-spec", help="validate the 3.6 Spec contract before package initialization")
@@ -170,13 +168,21 @@ def _parser(group: str) -> argparse.ArgumentParser:
         archive = commands.add_parser("archive-attempt", help="backfill a frozen Attempt Ticket snapshot")
         archive.add_argument("--attempt", required=True)
         archive.add_argument("--from-revision", required=True)
-        for name in ("status", "validate"):
-            child = commands.add_parser(name)
-            child.add_argument("--commit")
+        status = commands.add_parser(
+            "status",
+            help="read-only snapshot of the current Attempt: lifecycle, Tickets, evidence coverage, projection drift",
+            description=(
+                "Print the current Attempt's validated state as JSON without writing anything. "
+                "Use it to see where a package stands or to confirm progress.md / the Execution Record still match state.json. "
+                "Unlike `validate`, it skips the contract, Plan and arrival-path findings."
+            ),
+            epilog="Example:\n  python impl_package_state.py --package docs/implementations/<package> package status",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
+        status.add_argument("--commit", help="commit to resolve and report (default: none)")
+        validate = commands.add_parser("validate", help="validate state and report contract / arrival-path findings")
+        validate.add_argument("--commit")
         commands.add_parser("refresh-progress", help="refresh machine-owned projections")
-        metrics_command = commands.add_parser("metrics", help="write a read-only execution metrics report")
-        metrics_command.add_argument("--attempt")
-        metrics_command.add_argument("--out", type=Path)
         amendment = commands.add_parser("amendment", help="register or confirm a contract amendment")
         amendment_commands = amendment.add_subparsers(dest="amendment_action", required=True)
         add = amendment_commands.add_parser("add", help="register a pending amendment")
@@ -231,21 +237,41 @@ def _parser(group: str) -> argparse.ArgumentParser:
     elif group == "evidence":
         commands.add_parser(
             "add",
-            help="add a JSON evidence record from stdin",
-            description="Add one JSON evidence record from stdin.",
+            help="add JSON evidence record(s) from stdin",
+            description="Add evidence from stdin: one JSON object, a JSON array, or JSON Lines (one record per line). A batch is all-or-nothing; errors name the failing line.",
             epilog=EVIDENCE_ADD_EPILOG + EVIDENCE_ADD_RULES,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
-        check = commands.add_parser("check", help="read-only check of a JSON evidence array file; writes nothing")
-        check.add_argument("--file", required=True)
+        check = commands.add_parser(
+            "check",
+            help="dry-run `evidence add` on a file; writes nothing",
+            description=(
+                "Run the same validation as `evidence add` against a JSON / JSON Lines file without recording anything. "
+                "Use it before `evidence add` to catch a bad artifact path, revision or record shape; errors name the failing line."
+            ),
+            epilog="Example:\n  python impl_package_state.py --package docs/implementations/<package> evidence check --file evidence.jsonl",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
+        check.add_argument("--file", required=True, help="JSON object, JSON array or JSON Lines file")
         invalidate = commands.add_parser("invalidate", help="invalidate the records of one evidence key")
         invalidate.add_argument("--key", required=True)
         invalidate.add_argument("--invalidated-by", required=True)
-        carry = commands.add_parser("carry-forward", help="record the agent judgment that a key's evidence still holds up to a later commit")
-        carry.add_argument("--key", required=True)
+        carry = commands.add_parser(
+            "carry-forward",
+            help="record the agent judgment that evidence still holds up to a later commit (single --key or batched --select groups)",
+            description=(
+                "Carry supporting evidence forward to --to. Use --key K --reason R for one key, or repeat "
+                "--select <selector> --reason <text> pairs (matched in order) for a whole batch: "
+                "run:<runId> (run-setup + all journey steps), kind:suite, kind:review, ticket:<id> (its review key), key:<key>. "
+                "The batch is atomic; --dry-run lists each group's keys and the runtime files changed since each record's revision."
+            ),
+        )
+        carry.add_argument("--key")
+        carry.add_argument("--select", action="append", default=[])
         carry.add_argument("--to", required=True)
-        carry.add_argument("--reason", required=True)
+        carry.add_argument("--reason", action="append", default=[])
         carry.add_argument("--judged-by", required=True)
+        carry.add_argument("--dry-run", action="store_true", help="write nothing; report keys and runtime-changed files per group")
     elif group == "recovery":
         checkpoint = commands.add_parser("checkpoint", help="overwrite the active checkpoint")
         checkpoint.add_argument("--subject", default="attempt")
@@ -329,8 +355,6 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
             return engine.command_sync_predecessors(package)
         if args.command == "archive-attempt":
             return engine.command_archive_attempt(package, args.attempt, args.from_revision)
-        if args.command == "metrics":
-            return metrics.command_metrics(package, args.attempt, args.out)
         if args.command in {"status", "validate"}:
             return engine.command_validate(package, args.commit, check_arrival_paths=args.command == "validate")
         if args.command == "amendment":
@@ -354,7 +378,9 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
         if args.command == "check":
             return engine.command_evidence_add(package, Path(args.file).read_text(encoding="utf-8"), dry_run=True)
         if args.command == "carry-forward":
-            return engine.command_evidence_carry_forward(package, args.key, args.to, args.reason, args.judged_by)
+            return engine.command_evidence_carry_forward(
+                package, args.key, args.to, args.reason, args.judged_by, args.select, args.dry_run,
+            )
         return engine.command_evidence_invalidate(package, args.key, args.invalidated_by)
     if group == "recovery":
         if args.command == "checkpoint":
@@ -382,14 +408,6 @@ def _main(package: Path, group: str, argv: list[str], *, no_situation: bool = Fa
     no_situation = no_situation or "--no-situation" in argv or os.environ.get("IMPL_PACKAGE_NO_SITUATION") == "1"
     argv = [value for value in argv if value != "--no-situation"]
     args = _parser(group).parse_args(_normalize_gate_argv(argv) if group == "gate" else argv)
-    if group == "package" and args.command == "metrics":
-        try:
-            result = _run(package.resolve(), group, args)
-        except (engine.StateError, OSError, ValueError) as exc:
-            print(str(exc), file=sys.stderr)
-            return 1
-        print(result["summary"])
-        return 0
     trigger = group in {"ticket", "evidence", "recovery", "gate", "trail"}
     validate = group == "package" and args.command == "validate"
     return _emit(
