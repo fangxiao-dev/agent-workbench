@@ -14,6 +14,7 @@ from test_impl_package_journey import (  # noqa: E402
     CLI, _template_cache, _cli, _commit_file, _init_v36, _journey_record, _review_record, _run_setup_record, _state, _suite_record,
     engine, situation,
 )
+from impl_package_runtime import validate_state  # noqa: E402
 
 _ = _template_cache  # autouse session fixture that primes the repo template cache
 REASON_FLAGS = ("--judged-by", "controller")
@@ -138,7 +139,10 @@ def test_validate_state_call_count_is_constant(tmp_path: Path) -> None:
     repo, package, _rev, head = _seed(tmp_path)
 
     def calls(*pairs) -> int:
-        with patch.object(engine, "_validate_state", wraps=engine._validate_state) as spy:
+        # _refresh_projections 在 validate_state 模块内调用自己的 _validate_state，用同一个 spy 一并计数
+        with patch.object(engine, "_validate_state", wraps=engine._validate_state) as spy, patch.object(
+            validate_state, "_validate_state", spy
+        ):
             engine.command_evidence_carry_forward(
                 package, None, head, [r for _, r in pairs], "controller", [s for s, _ in pairs],
             )
