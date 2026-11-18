@@ -322,6 +322,8 @@ def test_legacy_migration_artifacts_are_removed() -> None:
         PLUGIN / "scripts" / "impl_package_runtime" / "cmd_trail.py",
         PLUGIN / "scripts" / "impl_package_runtime" / "cmd_gate.py",
         PLUGIN / "scripts" / "impl_package_runtime" / "evidence_batch.py",
+        PLUGIN / "scripts" / "impl_package_runtime" / "usage_log.py",
+        PLUGIN / "scripts" / "impl_package_usage_summary.py",
     )
     for source in runtime_sources:
         text = source.read_text(encoding="utf-8")

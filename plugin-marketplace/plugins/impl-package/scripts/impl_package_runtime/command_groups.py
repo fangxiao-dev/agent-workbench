@@ -14,7 +14,7 @@ from typing import Any
 
 import situation
 
-from . import engine
+from . import engine, usage_log
 
 
 def _text(value: Any, missing: str = "?") -> str:
@@ -94,6 +94,7 @@ def _emit(
     try:
         result = action()
     except (engine.StateError, OSError) as exc:
+        usage_log.note_error(type(exc).__name__, str(exc))
         print(str(exc), file=sys.stderr)
         should_append_situation = append_situation_on_error
         code = 1
@@ -152,7 +153,7 @@ Terminal review coverage (written once the final terminal-final review has retur
 
 
 def _parser(group: str) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog=f"impl_package_state.py --package <package> {group}")
+    parser = usage_log.UsageArgumentParser(prog=f"impl_package_state.py --package <package> {group}")
     commands = parser.add_subparsers(dest="command", required=True)
     if group == "package":
         check_spec = commands.add_parser("check-spec", help="validate the 3.6 Spec contract before package initialization")
