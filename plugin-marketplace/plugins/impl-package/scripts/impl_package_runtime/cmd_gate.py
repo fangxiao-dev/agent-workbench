@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -207,17 +206,6 @@ def _owner_summary(
     return lines
 
 
-def _best_effort_metrics_path(package: Path, attempt: str) -> str | None:
-    try:
-        from .metrics import write_metrics
-
-        path = write_metrics(package, attempt)
-        return path.relative_to(package.resolve()).as_posix()
-    except Exception as exc:  # metrics are observational; Gate remains authoritative
-        print(f"warning: Gate committed but metrics report failed: {exc}", file=sys.stderr)
-        return None
-
-
 def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence: list[str], durable: list[str], no_durable_reason: str | None, environment: str | None) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state, projections=False)
@@ -232,10 +220,6 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
                 "commit": resolved, "outcome": verdict,
             })
             result = {"formatVersion": summary["formatVersion"], "verdict": verdict, "attempt": summary["attempt"], "commit": resolved, "idempotent": True}
-            if verdict == "pass":
-                metrics_path = _best_effort_metrics_path(package, summary["attempt"])
-                if metrics_path:
-                    result["_metricsPath"] = metrics_path
             return result
         raise StateError(f"Attempt {summary['attempt']} is already frozen by terminal Gate {lifecycle.gate_verdict}")
     if verdict in TERMINAL_VERDICTS and resolved != _run_git(repo, "rev-parse", "HEAD"):
@@ -283,8 +267,4 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
         "commit": resolved, "outcome": verdict,
     })
     result = {"formatVersion": summary["formatVersion"], "verdict": verdict, "attempt": summary["attempt"], "commit": resolved, "idempotent": False}
-    if verdict == "pass":
-        metrics_path = _best_effort_metrics_path(package, summary["attempt"])
-        if metrics_path:
-            result["_metricsPath"] = metrics_path
     return result

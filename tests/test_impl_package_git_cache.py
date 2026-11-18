@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
-from impl_package_runtime import engine, metrics  # noqa: E402
+from impl_package_runtime import engine  # noqa: E402
 
 
 def test_git_query_cache_reuses_result_within_command_scope(tmp_path: Path) -> None:
@@ -58,7 +58,7 @@ def test_writing_a_hashed_file_invalidates_its_cached_blob(tmp_path: Path) -> No
             metrics_file = tmp_path / "metrics.json"
             first_metrics_hash = engine._run_git(tmp_path, "hash-object", "--", "metrics.json")
             assert engine._run_git(tmp_path, "hash-object", "--", "metrics.json") == first_metrics_hash
-            metrics._write_json(metrics_file, {})
+            engine._write_json(metrics_file, {})
             assert engine._run_git(tmp_path, "hash-object", "--", "metrics.json") == "blob-4"
 
     assert len(calls) == 4

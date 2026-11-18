@@ -1540,7 +1540,6 @@ class ImplPackageStateTests(unittest.TestCase):
             (("package", "status"), None),
             (("package", "refresh-progress"), None),
             (("package", "init", "--attempt", "initial", "--plan", "docs/implementations/20260813-example/plan.md"), None),
-            (("package", "metrics"), None),
             (("evidence", "add"), record),
             (("evidence", "invalidate", "--key", "suite:S-safety", "--invalidated-by", "x"), None),
             (("ticket", "block", "TKT-01", "--expect", "PENDING", "--evidence", "evidence.md"), None),

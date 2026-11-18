@@ -6,7 +6,7 @@ formatVersion 3.6 is rejected.
 This module is the stable facade: the implementation lives in the sibling
 modules (state_core, attempt_store, spec_journey, plan_tickets,
 journey_evidence, acceptance, validate_state, cmd_*) and is re-exported here so
-command_groups, metrics, situation and tests keep addressing `engine.<name>`.
+command_groups, situation and tests keep addressing `engine.<name>`.
 """
 # ruff: noqa: F401
 
