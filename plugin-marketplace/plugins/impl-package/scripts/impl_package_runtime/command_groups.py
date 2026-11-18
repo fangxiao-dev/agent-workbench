@@ -167,9 +167,20 @@ def _parser(group: str) -> argparse.ArgumentParser:
         archive = commands.add_parser("archive-attempt", help="backfill a frozen Attempt Ticket snapshot")
         archive.add_argument("--attempt", required=True)
         archive.add_argument("--from-revision", required=True)
-        for name in ("status", "validate"):
-            child = commands.add_parser(name)
-            child.add_argument("--commit")
+        status = commands.add_parser(
+            "status",
+            help="read-only snapshot of the current Attempt: lifecycle, Tickets, evidence coverage, projection drift",
+            description=(
+                "Print the current Attempt's validated state as JSON without writing anything. "
+                "Use it to see where a package stands or to confirm progress.md / the Execution Record still match state.json. "
+                "Unlike `validate`, it skips the contract, Plan and arrival-path findings."
+            ),
+            epilog="Example:\n  python impl_package_state.py --package docs/implementations/<package> package status",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
+        status.add_argument("--commit", help="commit to resolve and report (default: none)")
+        validate = commands.add_parser("validate", help="validate state and report contract / arrival-path findings")
+        validate.add_argument("--commit")
         commands.add_parser("refresh-progress", help="refresh machine-owned projections")
         amendment = commands.add_parser("amendment", help="register or confirm a contract amendment")
         amendment_commands = amendment.add_subparsers(dest="amendment_action", required=True)
@@ -230,8 +241,17 @@ def _parser(group: str) -> argparse.ArgumentParser:
             epilog=EVIDENCE_ADD_EPILOG + EVIDENCE_ADD_RULES,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
-        check = commands.add_parser("check", help="read-only check of a JSON / JSON Lines evidence file; writes nothing")
-        check.add_argument("--file", required=True)
+        check = commands.add_parser(
+            "check",
+            help="dry-run `evidence add` on a file; writes nothing",
+            description=(
+                "Run the same validation as `evidence add` against a JSON / JSON Lines file without recording anything. "
+                "Use it before `evidence add` to catch a bad artifact path, revision or record shape; errors name the failing line."
+            ),
+            epilog="Example:\n  python impl_package_state.py --package docs/implementations/<package> evidence check --file evidence.jsonl",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
+        check.add_argument("--file", required=True, help="JSON object, JSON array or JSON Lines file")
         invalidate = commands.add_parser("invalidate", help="invalidate the records of one evidence key")
         invalidate.add_argument("--key", required=True)
         invalidate.add_argument("--invalidated-by", required=True)
