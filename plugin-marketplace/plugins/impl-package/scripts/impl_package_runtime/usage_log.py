@@ -9,16 +9,33 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import tempfile
 from datetime import datetime, timezone
 
 REASON_LIMIT = 200
+SUBCOMMAND_RE = re.compile(r"[a-z][a-z-]*")
+# Windows drive, UNC, ~, then POSIX absolute (at least two segments); order matters.
+# A path stops at whitespace or a quote and does not swallow trailing punctuation.
+_TAIL = r"(?:[^\s'\"]*[^\s'\":,;.)])?"
+_PATH_PATTERNS = (
+    re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]" + _TAIL),
+    re.compile(r"\\\\[^\s\\/'\"]+[\\/]" + _TAIL),
+    re.compile(r"(?<![\w])~[\w.-]*[\\/]" + _TAIL),
+    re.compile(r"(?<![\w/:.~])/[^\s/'\"]+/" + _TAIL),
+)
 
 _noted: tuple[str, str] | None = None
 
 
 def log_path() -> str:
     return os.path.join(tempfile.gettempdir(), "impl-package", "usage.jsonl")
+
+
+def redact_paths(text: str) -> str:
+    for pattern in _PATH_PATTERNS:
+        text = pattern.sub("<path>", text)
+    return text
 
 
 def begin() -> None:
@@ -57,11 +74,12 @@ def command_label(argv: list[str]) -> str:
     rest = argv[index + 1:]
     if "-h" in argv or "--help" in argv:
         return f"{group} --help"
+    words = [group]
     for value in rest:
-        if value.startswith("-"):
+        if len(words) == 3 or not SUBCOMMAND_RE.fullmatch(value):
             break
-        return f"{group} {value}"
-    return group
+        words.append(value)
+    return " ".join(words)
 
 
 def record(command: str, code: int) -> None:
@@ -71,7 +89,7 @@ def record(command: str, code: int) -> None:
         if not ok:
             if _noted is not None:
                 error_type = _noted[0]
-                reason = (_noted[1].strip().splitlines() or [""])[0][:REASON_LIMIT]
+                reason = redact_paths((_noted[1].strip().splitlines() or [""])[0])[:REASON_LIMIT]
             else:
                 error_type = f"exit:{code}"
         row = {
