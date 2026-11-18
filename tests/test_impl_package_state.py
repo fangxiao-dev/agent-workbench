@@ -29,7 +29,7 @@ SUBPROCESS_TESTS = (
     "test_trail_append_named_flags_reject_invalid_values",
 )
 sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
-from impl_package_runtime import attempt_store, command_groups, engine, validate_state  # noqa: E402
+from impl_package_runtime import attempt_store, cmd_trail, command_groups, engine, validate_state  # noqa: E402
 from impl_package_state import main as cli_main  # noqa: E402
 from situation import Fact  # noqa: E402
 
@@ -1387,7 +1387,7 @@ class ImplPackageStateTests(unittest.TestCase):
         stderr = StringIO()
         stdout = StringIO()
         payload = json.dumps({"kind": "escape", "subject": "attempt", "deviation": "manual", "reason": "fixture"})
-        with patch.object(engine, "_append_trail", side_effect=OSError("disk full")), patch.object(command_groups.sys, "stdin", StringIO(payload)), redirect_stderr(stderr), redirect_stdout(stdout):
+        with patch.object(cmd_trail, "_append_trail", side_effect=OSError("disk full")), patch.object(command_groups.sys, "stdin", StringIO(payload)), redirect_stderr(stderr), redirect_stdout(stdout):
             result = command_groups.main(package, "trail", ["append"])
         self.assertEqual(result, 1)
         self.assertEqual(stdout.getvalue(), "")
