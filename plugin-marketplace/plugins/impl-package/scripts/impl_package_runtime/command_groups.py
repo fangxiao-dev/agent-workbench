@@ -231,21 +231,32 @@ def _parser(group: str) -> argparse.ArgumentParser:
     elif group == "evidence":
         commands.add_parser(
             "add",
-            help="add a JSON evidence record from stdin",
-            description="Add one JSON evidence record from stdin.",
+            help="add JSON evidence record(s) from stdin",
+            description="Add evidence from stdin: one JSON object, a JSON array, or JSON Lines (one record per line). A batch is all-or-nothing; errors name the failing line.",
             epilog=EVIDENCE_ADD_EPILOG + EVIDENCE_ADD_RULES,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
-        check = commands.add_parser("check", help="read-only check of a JSON evidence array file; writes nothing")
+        check = commands.add_parser("check", help="read-only check of a JSON / JSON Lines evidence file; writes nothing")
         check.add_argument("--file", required=True)
         invalidate = commands.add_parser("invalidate", help="invalidate the records of one evidence key")
         invalidate.add_argument("--key", required=True)
         invalidate.add_argument("--invalidated-by", required=True)
-        carry = commands.add_parser("carry-forward", help="record the agent judgment that a key's evidence still holds up to a later commit")
-        carry.add_argument("--key", required=True)
+        carry = commands.add_parser(
+            "carry-forward",
+            help="record the agent judgment that evidence still holds up to a later commit (single --key or batched --select groups)",
+            description=(
+                "Carry supporting evidence forward to --to. Use --key K --reason R for one key, or repeat "
+                "--select <selector> --reason <text> pairs (matched in order) for a whole batch: "
+                "run:<runId> (run-setup + all journey steps), kind:suite, kind:review, ticket:<id> (its review key), key:<key>. "
+                "The batch is atomic; --dry-run lists each group's keys and the runtime files changed since each record's revision."
+            ),
+        )
+        carry.add_argument("--key")
+        carry.add_argument("--select", action="append", default=[])
         carry.add_argument("--to", required=True)
-        carry.add_argument("--reason", required=True)
+        carry.add_argument("--reason", action="append", default=[])
         carry.add_argument("--judged-by", required=True)
+        carry.add_argument("--dry-run", action="store_true", help="write nothing; report keys and runtime-changed files per group")
     elif group == "recovery":
         checkpoint = commands.add_parser("checkpoint", help="overwrite the active checkpoint")
         checkpoint.add_argument("--subject", default="attempt")
@@ -354,7 +365,9 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
         if args.command == "check":
             return engine.command_evidence_add(package, Path(args.file).read_text(encoding="utf-8"), dry_run=True)
         if args.command == "carry-forward":
-            return engine.command_evidence_carry_forward(package, args.key, args.to, args.reason, args.judged_by)
+            return engine.command_evidence_carry_forward(
+                package, args.key, args.to, args.reason, args.judged_by, args.select, args.dry_run,
+            )
         return engine.command_evidence_invalidate(package, args.key, args.invalidated_by)
     if group == "recovery":
         if args.command == "checkpoint":

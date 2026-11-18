@@ -430,18 +430,23 @@ def carried_forward_error(value: Any) -> str | None:
     return None
 
 
-def _runtime_diff(repo: Path, package_rel: str, start: str, end: str) -> bool:
-    """Whether start..end changes any runtime path outside the package; git failure counts as runtime."""
+def runtime_changed_files(repo: Path, package_rel: str, start: str, end: str) -> list[str] | None:
+    """Runtime paths changed by start..end outside the package; None when git fails (counts as runtime)."""
     code, out, _ = _git_result(
         repo, "diff", "--name-only", "--no-renames", "-z", start, end, "--", ".", f":!{package_rel}",
     )
     if code != 0:
-        return True
-    return any(
-        not (path.startswith(NON_RUNTIME_PREFIXES) or path.endswith(NON_RUNTIME_SUFFIXES))
-        for path in out.split("\0")
-        if path
-    )
+        return None
+    return [
+        path for path in out.split("\0")
+        if path and not (path.startswith(NON_RUNTIME_PREFIXES) or path.endswith(NON_RUNTIME_SUFFIXES))
+    ]
+
+
+def _runtime_diff(repo: Path, package_rel: str, start: str, end: str) -> bool:
+    """Whether start..end changes any runtime path outside the package; git failure counts as runtime."""
+    changed = runtime_changed_files(repo, package_rel, start, end)
+    return changed is None or bool(changed)
 
 
 def evidence_revision_coverage(
