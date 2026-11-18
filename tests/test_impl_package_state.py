@@ -29,7 +29,7 @@ SUBPROCESS_TESTS = (
     "test_trail_append_named_flags_reject_invalid_values",
 )
 sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
-from impl_package_runtime import command_groups, engine  # noqa: E402
+from impl_package_runtime import attempt_store, command_groups, engine  # noqa: E402
 from impl_package_state import main as cli_main  # noqa: E402
 from situation import Fact  # noqa: E402
 
@@ -980,7 +980,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.init(repo, package)
         stderr = StringIO()
 
-        with patch.object(engine, "_rotate_trail", side_effect=OSError("disk full")), redirect_stderr(stderr):
+        with patch.object(attempt_store, "_rotate_trail", side_effect=OSError("disk full")), redirect_stderr(stderr):
             result = engine.command_checkpoint(package, "attempt", "continue after handoff", None, [], True)
 
         self.assertEqual(set(result), {"subject", "checkpoint", "idempotent"})
@@ -1399,7 +1399,7 @@ class ImplPackageStateTests(unittest.TestCase):
         revision = git(repo, "rev-parse", "HEAD")
         stderr = StringIO()
 
-        with patch.object(engine, "_append_trail", side_effect=OSError("disk full")), redirect_stderr(stderr):
+        with patch.object(attempt_store, "_append_trail", side_effect=OSError("disk full")), redirect_stderr(stderr):
             result = engine.command_set_state(
                 package,
                 "TKT-01",
