@@ -29,7 +29,7 @@ SUBPROCESS_TESTS = (
     "test_trail_append_named_flags_reject_invalid_values",
 )
 sys.path.insert(0, str(ROOT / "plugin-marketplace/plugins/impl-package/scripts"))
-from impl_package_runtime import attempt_store, cmd_trail, command_groups, engine, validate_state  # noqa: E402
+from impl_package_runtime import attempt_store, cmd_gate, cmd_trail, command_groups, engine, validate_state  # noqa: E402
 from impl_package_state import main as cli_main  # noqa: E402
 from situation import Fact  # noqa: E402
 
@@ -1626,7 +1626,7 @@ class ImplPackageStateTests(unittest.TestCase):
         self.assertIn("期望", mismatch.reason)
         self.assertIn("'review-run': 'other'", mismatch.reason)
         unknown_reason = "无法读取 execution/initial/trail.jsonl"
-        with patch.object(engine, "terminal_coverage_fact", return_value=Fact.unknown(unknown_reason)):
+        with patch.object(cmd_gate, "terminal_coverage_fact", return_value=Fact.unknown(unknown_reason)):
             with self.assertRaises(engine.StateError) as unknown_rejection:
                 engine.command_gate(package, "pass", head, "fixture", [], [], "fixture", "test")
         message = str(unknown_rejection.exception)
