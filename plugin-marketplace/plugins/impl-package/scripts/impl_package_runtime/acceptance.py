@@ -117,7 +117,7 @@ def _v36_acceptance_status(
                         stale_journey_keys.setdefault(evidence_key, set()).add(record["journeyId"])
                     elif kind == "run-setup":
                         stale_run_setup_ids.add(record["runId"])
-                elif kind != "journey-step":
+                elif valid and kind != "journey-step":
                     # 同 key 后补的有效 run-setup 取代旧的已失效记录；journey-step 仍按旅程是否走通判定。
                     current_supporting_keys.add(evidence_key)
             if kind == "journey-step":

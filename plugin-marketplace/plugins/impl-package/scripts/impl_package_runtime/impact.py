@@ -17,7 +17,7 @@ from typing import Any
 
 from situation import evidence_revision_coverage, runtime_changed_files
 
-from .state_core import STATE_PATH, _load_json, _repo_root, _validate_commit
+from .state_core import STATE_PATH, _load_json, _repo_root, _run_git, _validate_commit
 
 _COVERS_RE = re.compile(r"covers:\s*(.+)$", re.I)
 _SPEC_RE = re.compile(r"--spec[=\s]+[`'\"]?([^\s`'\"]+)")
@@ -76,7 +76,7 @@ def evidence_impact(package: Path, to: str, judged_by: str | None = None) -> dic
     summary = _validate_state(package, state, projections=False)
     spec = summary["_journeySpec"]
     repo = _repo_root(package)
-    target = _validate_commit(repo, to)
+    target = _validate_commit(repo, _run_git(repo, "rev-parse", to) if to == "HEAD" else to)
     package_rel = package.resolve().relative_to(repo).as_posix()
     judged = judged_by or "<judged-by>"
     cache: dict[str, list[str] | None] = {}

@@ -981,7 +981,7 @@ def test_first_journey_step_cannot_reuse_an_object_from_another_run(tmp_path: Pa
     assert "journey:second-run:J1-S1" not in _state(package)["evidenceIndex"]
 
 
-def test_reregistered_run_setup_supersedes_its_invalidated_record(tmp_path: Path) -> None:
+def test_invalidated_run_setup_is_not_stale_and_reregistering_keeps_it_clean(tmp_path: Path) -> None:
     repo, package, revision = _init_v36(tmp_path)
     key = "run-setup:orphan"
     first = _cli(repo, package, "evidence", "add", input_value=_run_setup_record(revision, "orphan"), auto_setup=False)
@@ -995,7 +995,7 @@ def test_reregistered_run_setup_supersedes_its_invalidated_record(tmp_path: Path
             package, state, engine._validate_state(package, state), revision, attempt_active=True,
         )["staleEvidence"]
 
-    assert stale() == [key]
+    assert stale() == []  # eb60774a：已作废的记录不再要求复验
     again = _cli(repo, package, "evidence", "add", input_value=_run_setup_record(revision, "orphan"), auto_setup=False)
     assert again.returncode == 0, again.stderr
     assert stale() == []
