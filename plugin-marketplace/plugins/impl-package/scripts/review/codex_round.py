@@ -45,7 +45,9 @@ def track_prompt(common: str, sections: dict[str, str], letter: str, base: str) 
 
 def header_requirement(head: str, run: str, track: str) -> str:
     return (
-        "\n\n---\n报告必须以下面四行开头（之后空一行再写正文），不要在前面加任何文字：\n"
+        f"\n\n---\n本轨审阅由你自己完成，不要把审阅任务交给子代理。"
+        "只有在需要调查具体细节时，才可派 Luna Max 子代理辅助取证，结论仍由你判断。\n"
+        "\n报告必须以下面四行开头（之后空一行再写正文），不要在前面加任何文字：\n"
         f"verdict: PASS 或 FAIL\nreviewed-head: {head}\nreview-run: {run}\nreview-track: {track}\n"
     )
 
