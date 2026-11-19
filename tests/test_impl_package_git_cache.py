@@ -62,3 +62,24 @@ def test_writing_a_hashed_file_invalidates_its_cached_blob(tmp_path: Path) -> No
             assert engine._run_git(tmp_path, "hash-object", "--", "metrics.json") == "blob-4"
 
     assert len(calls) == 4
+
+
+def test_commit_to_commit_name_only_diff_is_cached_but_worktree_diff_is_not(tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "a.py\0", "")
+
+    a, b = "a" * 40, "b" * 40
+    diff = ("diff", "--name-only", "--no-renames", "-z", a, b, "--", ".", ":!pkg")
+    with patch.object(engine.subprocess, "run", side_effect=run):
+        with engine.git_query_scope():
+            engine._run_git_result(tmp_path, *diff)
+            engine._run_git_result(tmp_path, "merge-base", "--is-ancestor", a, b)
+            engine._run_git_result(tmp_path, *diff)  # still cached: only cacheable queries ran in between
+            assert len(calls) == 2
+            worktree = ("diff", "--name-only", "-z", "HEAD", "--", ".")
+            engine._run_git_result(tmp_path, *worktree)
+            engine._run_git_result(tmp_path, *worktree)
+            assert len(calls) == 4

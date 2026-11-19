@@ -2476,3 +2476,60 @@ def test_scoped_retest_combines_carried_step_with_rewalked_tail_across_runs(tmp_
     ok = _cli(repo, package, "evidence", "add", input_value=tail)
     assert ok.returncode == 0, ok.stderr
     assert reach() == 2
+
+
+def _page_run(repo: Path, package: Path, revision: str, run_id: str) -> None:
+    (package / "artifacts/manual.png").write_bytes(b"manual walkthrough image")
+    records = [
+        _journey_record(revision, "J1-S1", run_id=run_id, artifact="artifacts/manual.png", manual_by="张三"),
+        _journey_record(revision, "J1-S2", run_id=run_id),
+    ]
+    added = _cli(repo, package, "evidence", "add", input_value=records)
+    assert added.returncode == 0, added.stderr
+
+
+def test_invalidated_run_setup_superseded_by_another_complete_run_does_not_block(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    _page_run(repo, package, revision, "old-run")
+    invalidated = _cli(repo, package, "evidence", "invalidate", "--key", "run-setup:old-run", "--invalidated-by", "superseded by new-run")
+    assert invalidated.returncode == 0, invalidated.stderr
+
+    def stale() -> list[str]:
+        state = _state(package)
+        return engine._v36_acceptance_status(
+            package, state, engine._validate_state(package, state), revision, attempt_active=True,
+        )["staleEvidence"]
+
+    assert "run-setup:old-run" in stale()  # nothing replaces it yet: still blocking
+    _page_run(repo, package, revision, "new-run")
+    assert stale() == []  # J1 is fully walked by new-run, so the invalidated old setup no longer blocks
+
+
+def test_invalidated_run_setup_of_a_dead_run_does_not_block_but_its_live_stale_keys_do(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    _page_run(repo, package, revision, "dead-run")
+    for key in ("run-setup:dead-run", "journey:dead-run:J1-S1", "journey:dead-run:J1-S2"):
+        assert _cli(repo, package, "evidence", "invalidate", "--key", key, "--invalidated-by", "gone").returncode == 0
+    state = _state(package)
+    stale = engine._v36_acceptance_status(
+        package, state, engine._validate_state(package, state), revision, attempt_active=True,
+    )["staleEvidence"]
+    assert "run-setup:dead-run" not in stale
+    assert "journey:dead-run:J1-S1" in stale  # step keys keep the old blocking rule
+
+
+def test_invalidated_stepless_run_setup_clears_once_every_journey_is_complete(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    added = _cli(repo, package, "evidence", "add", input_value=_run_setup_record(revision, "orphan"), auto_setup=False)
+    assert added.returncode == 0, added.stderr
+    assert _cli(repo, package, "evidence", "invalidate", "--key", "run-setup:orphan", "--invalidated-by", "superseded").returncode == 0
+
+    def stale() -> list[str]:
+        state = _state(package)
+        return engine._v36_acceptance_status(
+            package, state, engine._validate_state(package, state), revision, attempt_active=True,
+        )["staleEvidence"]
+
+    assert stale() == ["run-setup:orphan"]  # no Journey complete yet: still blocking
+    _page_run(repo, package, revision, "new-run")
+    assert stale() == []

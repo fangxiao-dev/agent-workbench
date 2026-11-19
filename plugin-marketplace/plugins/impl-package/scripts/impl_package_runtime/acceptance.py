@@ -59,6 +59,9 @@ def _v36_acceptance_status(
     current_supporting_keys: set[str] = set()
     stale_journey_keys: dict[str, set[str]] = {}
     stale_run_setup_ids: set[str] = set()
+    invalidated_setup_ids: set[str] = set()
+    live_stale_setup_ids: set[str] = set()
+    run_with_valid_step: set[str] = set()
     run_records: dict[tuple[str, str], list[tuple[str, dict[str, Any]]]] = {}
     run_journeys: dict[str, set[str]] = {}
     surface_validity: dict[int, bool] = {}
@@ -110,16 +113,18 @@ def _v36_acceptance_status(
                         "reason": record["carriedForward"]["reason"], "judgedBy": record["carriedForward"]["judgedBy"],
                     })
             if record["conclusion"] == "supporting":
-                # 已作废的记录不再要求复验：carry-forward 也会拒绝它们，否则 Gate 永远卡住。
-                if not valid and not record.get("invalidatedBy"):
+                if not valid:
                     stale.add(evidence_key)
                     if kind == "journey-step":
                         stale_journey_keys.setdefault(evidence_key, set()).add(record["journeyId"])
                     elif kind == "run-setup":
                         stale_run_setup_ids.add(record["runId"])
+                        (invalidated_setup_ids if record.get("invalidatedBy") else live_stale_setup_ids).add(record["runId"])
                 elif kind != "journey-step":
                     # 同 key 后补的有效 run-setup 取代旧的已失效记录；journey-step 仍按旅程是否走通判定。
                     current_supporting_keys.add(evidence_key)
+                if kind == "journey-step" and valid:
+                    run_with_valid_step.add(record["runId"])
             if kind == "journey-step":
                 run_records.setdefault((record["journeyId"], record["runId"]), []).append((evidence_key, record))
                 run_journeys.setdefault(record["runId"], set()).add(record["journeyId"])
@@ -242,9 +247,16 @@ def _v36_acceptance_status(
     for evidence_key, journey_ids in stale_journey_keys.items():
         if journey_ids & complete_journeys:
             stale.discard(evidence_key)
+    all_journeys_complete = {journey["id"] for journey in spec["journeys"]} <= complete_journeys
     for run_id in stale_run_setup_ids:
         associated_journeys = run_journeys.get(run_id, set())
-        if associated_journeys and associated_journeys <= complete_journeys:
+        superseded = bool(associated_journeys) and associated_journeys <= complete_journeys
+        # 被作废且整个 run 已无有效步骤的 run-setup：已被其他 run 取代，carry-forward 又拒绝作废记录，不能让它卡住 Gate。
+        dead = (
+            run_id in invalidated_setup_ids and run_id not in live_stale_setup_ids and run_id not in run_with_valid_step
+            and (bool(associated_journeys) or all_journeys_complete)
+        )
+        if superseded or dead:
             stale.discard(f"run-setup:{run_id}")
 
     suite_rows = []

@@ -108,6 +108,11 @@ def _cacheable_git_query(args: tuple[str, ...]) -> bool:
         return len(args) >= 3 and not any(arg.startswith("--batch") for arg in args)
     if command == "grep":
         return len(args) >= 9 and args[1:5] == ("-I", "-F", "-l", "-e") and args[7] == "--"
+    if command == "diff" and "--name-only" in args:
+        # runtime_changed_files：两个 commit 之间的文件名，不依赖工作区
+        return "--cached" not in args and "--" in args and args.index("--") >= 3 and all(
+            re.fullmatch(r"[0-9a-f]{7,64}", value) for value in args[args.index("--") - 2:args.index("--")]
+        )
     if command == "diff":
         return len(args) >= 6 and args[1] == "--quiet" and args[4] == "--" and "--cached" not in args
     return (
