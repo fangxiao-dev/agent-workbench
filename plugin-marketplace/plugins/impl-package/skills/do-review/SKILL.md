@@ -61,6 +61,7 @@ allowed-tools:
 ## 4. Canonicalize The Round
 
 1. 所有 leaf 返回后按 [output-templates.md](references/output-templates.md) 校验 ledger fields、evidence、dedup key、finding classification、convergence 和 atomic update；leaf 输出在 parent 写入唯一 canonical ledger 前只是 candidate，不建 per-round ledgers。Impl-Package 的 ledger 和报告使用 package-relative 路径。先 canonicalize 再采信，才能防止 candidate evidence 绕过 parent 的验证与去重。
+2a. 用 Codex 并行跑 Track A/C/D 终审时可用 `python <plugin-root>/scripts/review/codex_round.py --package <package> --run <id> --base <commit> --prompt-file <f> (--new | --sessions A,C,D) --model <m> --effort <e>`：它校验报告四行头、把报告写入当前 Attempt 的 `execution/<attempt>/reviews/`，并输出可直接 `trail append` 的 `review.terminal_summary` fact。
 2. Impl-Package target 在 ledger 原子更新后，主控按 [output-templates.md](references/output-templates.md) 形成 Canonical Finding Summary，调用 `python <plugin-root>/scripts/review_track_stats.py record --package <package>`，把本轮完整 accepted finding 集合写入 package trail 的 `review.canonical_summary` fact。`findingKey` 按 broken invariant/observable failure 稳定命名；多轨共同发现保留全部 `tracks`。记录失败使本轮 canonicalization `INCOMPLETE`，不得只留下 Markdown ledger 或从 reviewer prose 推导统计。
 3. Track C 的 source recheck 属于当前 ReviewRun 的 post-classification check，不创建新 phase/lifecycle；其它 accepted finding 和 unaccepted candidate 不触发它。将 recheck 限在已接受的 Spec fidelity finding，避免重复派发或把未采信候选升级成 handoff 阻断。
 
