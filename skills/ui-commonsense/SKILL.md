@@ -30,6 +30,16 @@ Load `references/reusable-components.md` for reusable component discovery, extra
 
 Normal UI should expose user-meaningful names, statuses, timestamps, actors, quantities, and operational evidence. Do not show database-facing keys, record IDs, operation IDs, idempotency keys, or integration linkage keys unless the surface is explicitly a developer/debug/diagnostic view.
 
+## Forbidden: Explanatory Subtext
+
+Do not add small grey explanatory lines under titles, controls, sections, or tables. Examples: "到今天为止该付多少小时" under a month switcher, "按门店看·当前门店…，切换门店请使用顶栏选择器", or a paragraph under a table title explaining how its columns are calculated. They clutter the layout and push content down.
+
+- Make the meaning clear through the label, column header, or value itself, such as "计薪工时" or "截至 11月2日".
+- If an explanation is really needed, put it in the page's "使用说明" or behind a hover or `?` tooltip on the specific term, not as always-visible subtext.
+- Status that the user must act on, such as a warning, error, or blocking reason, is not subtext. Show it as a proper alert or inline message.
+
+When reviewing, treat any new always-visible explanatory subtext as a defect.
+
 ## Reference Map
 
 - `references/object-owned-operations.md`
