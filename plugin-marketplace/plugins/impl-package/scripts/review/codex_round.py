@@ -5,6 +5,12 @@
   python <plugin>/scripts/review/codex_round.py --package docs/implementations/<包> --run <review-run> \
     --base <基线commit> --prompt-file <正文.md> (--new | --sessions A_ID,C_ID,D_ID) --model M --effort E
 
+提示词文件格式:
+  开头是给所有轨的公共部分；之后每轨一段，段标记为独占一行的 `## Track A`、
+  `## Track C`、`## Track D`（字母大写），段落延续到下一个 `## Track ` 标记或文件末尾。
+  每个会话只收到公共部分 + 自己那一轨的段落 + 报头要求；缺所选轨的段落或完全没有
+  段标记时直接报错退出，不发任何 codex 请求。
+
 模型与推理强度不设默认值，但必须由调用方传入（--model / --effort）。
 """
 import argparse, json, re, shutil, subprocess, sys, tempfile
@@ -12,6 +18,29 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 HEADER_KEYS = ["verdict", "reviewed-head", "review-run", "review-track"]
+TRACK_HEADING = re.compile(r"^## Track ([A-Z])[ \t]*$")
+
+
+def split_prompt(body: str) -> tuple[str, dict[str, str]]:
+    """返回 (公共部分, {轨字母: 段正文})；段标记须独占一行且字母大写。"""
+    common, sections, current = [], {}, None
+    for line in body.splitlines(keepends=True):
+        m = TRACK_HEADING.match(line.rstrip("\r\n"))
+        if m:
+            current = m.group(1)
+            sections[current] = []
+        elif current is None:
+            common.append(line)
+        else:
+            sections[current].append(line)
+    if not sections:
+        raise ValueError(
+            "提示词文件没有任何 `## Track <字母>` 段标记；需改为公共部分 + 每轨一个 `## Track X` 段")
+    return "".join(common), {k: "".join(v) for k, v in sections.items()}
+
+
+def track_prompt(common: str, sections: dict[str, str], letter: str, base: str) -> str:
+    return common + sections[letter] + f"\n\n对比基线：{base}\n"
 
 
 def header_requirement(head: str, run: str, track: str) -> str:
@@ -55,6 +84,7 @@ def validate_header(report: str, head: str, run: str, track: str) -> str:
 
 def run_track(key, track, args, body, head, codex, workdir):
     prompt = body + header_requirement(head, args.run, track)
+    # body 已按轨裁剪（公共部分 + 本轨段落 + 对比基线），这里只补报头要求。
     opts = []
     if args.model:
         opts += ["-m", args.model]
@@ -96,12 +126,17 @@ def main() -> int:
         if len(ids) != len(tracks):
             p.error("--sessions 个数需与 --tracks 一致")
         args.session_ids = dict(zip(tracks, ids))
+    raw = Path(args.prompt_file).read_text(encoding="utf-8")
+    common, sections = split_prompt(raw)
+    missing = [l for l in letters if l.upper() not in sections]
+    if missing:
+        p.error("提示词文件缺少轨道段: " + ", ".join(f"## Track {l.upper()}" for l in missing))
+    prompts = {k: track_prompt(common, sections, k.upper(), args.base) for k in tracks}
     codex = shutil.which("codex")
     if not codex:
         print("找不到 codex 命令", file=sys.stderr)
         return 2
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, cwd=args.cwd).strip()
-    body = Path(args.prompt_file).read_text(encoding="utf-8") + f"\n\n对比基线：{args.base}\n"
     workdir = Path(args.cwd)
     package = Path(args.package) if Path(args.package).is_absolute() else workdir / args.package
     attempt = json.loads((package / ".impl-package/state.json").read_text(encoding="utf-8"))["attempt"]["id"]
@@ -109,7 +144,7 @@ def main() -> int:
     reviews.mkdir(parents=True, exist_ok=True)
 
     with ThreadPoolExecutor(len(tracks)) as pool:
-        results = list(pool.map(lambda k: run_track(k, tracks[k], args, body, head, codex, workdir), tracks))
+        results = list(pool.map(lambda k: run_track(k, tracks[k], args, prompts[k], head, codex, workdir), tracks))
 
     verdicts, problems = {}, []
     for key, track, log, rc in results:
