@@ -1,7 +1,6 @@
 ---
 name: knowledge-manager
 description: 一键吸收已完成工作的实现经验、长期稳定语义和 Agent 环境改进；仅在用户显式调用时运行。
-disable-model-invocation: true
 ---
 
 # Knowledge Manager
