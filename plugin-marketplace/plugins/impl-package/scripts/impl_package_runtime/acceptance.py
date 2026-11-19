@@ -110,7 +110,8 @@ def _v36_acceptance_status(
                         "reason": record["carriedForward"]["reason"], "judgedBy": record["carriedForward"]["judgedBy"],
                     })
             if record["conclusion"] == "supporting":
-                if not valid:
+                # 已作废的记录不再要求复验：carry-forward 也会拒绝它们，否则 Gate 永远卡住。
+                if not valid and not record.get("invalidatedBy"):
                     stale.add(evidence_key)
                     if kind == "journey-step":
                         stale_journey_keys.setdefault(evidence_key, set()).add(record["journeyId"])
