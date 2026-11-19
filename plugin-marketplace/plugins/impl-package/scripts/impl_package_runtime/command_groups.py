@@ -14,7 +14,7 @@ from typing import Any
 
 import situation
 
-from . import engine, usage_log
+from . import cmd_gate, engine, impact, usage_log
 
 
 def _text(value: Any, missing: str = "?") -> str:
@@ -106,6 +106,27 @@ def _emit(
         footer = _situation_footer(package)
         if footer:
             print(footer)
+    return code
+
+
+def _emit_report(package: Path, group: str, args: argparse.Namespace) -> int:
+    """Read-only reports with a text/JSON choice and (for preflight) a meaningful exit code."""
+    try:
+        engine.require_current_format(package)
+        if group == "evidence":
+            result = impact.evidence_impact(package, args.to, args.judged_by)
+            text, code = impact.render_impact(result), 0
+        else:
+            result = cmd_gate.gate_preflight(package, args.comparison_commit, args.durable_delta, args.no_durable_delta_reason)
+            code = 0 if result["ok"] else 1
+            text = cmd_gate.render_preflight(result, summary_only=args.summary)
+            if args.quiet and not args.summary:
+                return code
+    except (engine.StateError, OSError) as exc:
+        usage_log.note_error(type(exc).__name__, str(exc))
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True) if args.json else text)
     return code
 
 
@@ -256,6 +277,19 @@ def _parser(group: str) -> argparse.ArgumentParser:
         invalidate = commands.add_parser("invalidate", help="invalidate the records of one evidence key")
         invalidate.add_argument("--key", required=True)
         invalidate.add_argument("--invalidated-by", required=True)
+        impact = commands.add_parser(
+            "impact",
+            help="read-only: which evidence needs a rerun vs can be carried forward up to --to",
+            description=(
+                "For every Required Suite and Journey run, intersect the runtime files changed since the evidence revision with the paths it covers. "
+                "Suite coverage: `covers: a/, b/` in the Spec Entry cell, else the directory of each `--spec <file>`. "
+                "Journey coverage: `covers:` in a step cell, else path/route tokens in 操作入口/观察表面; underivable counts as affected. "
+                "Prints rerun commands and one ready `evidence carry-forward` batch."
+            ),
+        )
+        impact.add_argument("--to", required=True)
+        impact.add_argument("--judged-by", help="name written into the generated carry-forward command")
+        impact.add_argument("--json", action="store_true")
         carry = commands.add_parser(
             "carry-forward",
             help="record the agent judgment that evidence still holds up to a later commit (single --key or batched --select groups)",
@@ -315,6 +349,13 @@ def _parser(group: str) -> argparse.ArgumentParser:
             child.add_argument("--durable-delta", action="append", default=[])
             child.add_argument("--no-durable-delta-reason")
             child.add_argument("--environment")
+        pre = commands.add_parser("preflight", help="read-only: run every `gate pass` check and list gaps with fix commands")
+        pre.add_argument("--comparison-commit", help="default: HEAD")
+        pre.add_argument("--durable-delta", action="append", default=[])
+        pre.add_argument("--no-durable-delta-reason")
+        pre.add_argument("--json", action="store_true")
+        pre.add_argument("--quiet", action="store_true", help="print nothing; use the exit code")
+        pre.add_argument("--summary", action="store_true", help="one-line result (with --quiet, only this line)")
     else:
         raise KeyError(group)
     return parser
@@ -410,6 +451,8 @@ def _main(package: Path, group: str, argv: list[str], *, no_situation: bool = Fa
     args = _parser(group).parse_args(_normalize_gate_argv(argv) if group == "gate" else argv)
     trigger = group in {"ticket", "evidence", "recovery", "gate", "trail"}
     validate = group == "package" and args.command == "validate"
+    if (group, args.command) in {("evidence", "impact"), ("gate", "preflight")}:
+        return _emit_report(package.resolve(), group, args)
     return _emit(
         lambda: _run(package.resolve(), group, args),
         package=package.resolve(),

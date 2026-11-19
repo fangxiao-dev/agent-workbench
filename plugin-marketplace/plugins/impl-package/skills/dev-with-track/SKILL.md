@@ -85,6 +85,8 @@ Completion claim 不能宽于 evidence；准备写 terminal pass 或声称 compl
 - 行为代码、合同或影响 behavior 的配置变化使旧 Gate 失效，进入 patch Attempt 重验受影响范围；仅 runtime metadata 变化时复用 provenance 完整的行为 evidence。
 - 复用 subagent、Execution Record 或 CI evidence 前对照实际 diff，不只信 success label。
 
+收尾顺序：后续提交使证据待复验时，先 `evidence impact --to HEAD` 分出需重跑与可沿用，重跑受影响的、直接执行它给出的 `carry-forward` 批量命令；写 `gate pass` 前先 `gate preflight`，一次看清全部缺口及修复命令，退出码 0 再 pass，别拿 `gate pass` 当探测。
+
 `gate pass` 前先确认机械前置条件，否则会被逐条拒绝：
 - `review.terminal_summary` 的 `comparisonHead` 是当前 HEAD 的完整 SHA，Track A 的 `reviewedHead` 必须是当前 HEAD，不能复用；C 和 Safety 可以凭 reuseEvidence 复用；
 - 仓库存在 `docs/implementations/retired.json`（至少 `{"packages": []}`）；
