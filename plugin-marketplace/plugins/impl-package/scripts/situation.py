@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -415,6 +416,13 @@ def _git_result(repo: Path, *arguments: str) -> tuple[int, str, str]:
 # 版本漂移按实际判断：这些路径的改动不会改变运行行为，证据自动沿用。
 NON_RUNTIME_PREFIXES = ("docs/", ".agents/", ".claude/")
 NON_RUNTIME_SUFFIXES = (".md",)
+# 额外的非运行时路径前缀，逗号分隔，例如 "ops/,scripts/dev/"；只做加法。
+NON_RUNTIME_ENV = "IMPL_PACKAGE_NON_RUNTIME_PREFIXES"
+
+
+def _non_runtime_prefixes() -> tuple[str, ...]:
+    extra = tuple(p.strip() for p in os.environ.get(NON_RUNTIME_ENV, "").split(",") if p.strip())
+    return NON_RUNTIME_PREFIXES + extra
 CARRIED_FORWARD_FIELDS = {"to", "reason", "judgedBy"}
 
 
@@ -439,7 +447,7 @@ def runtime_changed_files(repo: Path, package_rel: str, start: str, end: str) ->
         return None
     return [
         path for path in out.split("\0")
-        if path and not (path.startswith(NON_RUNTIME_PREFIXES) or path.endswith(NON_RUNTIME_SUFFIXES))
+        if path and not (path.startswith(_non_runtime_prefixes()) or path.endswith(NON_RUNTIME_SUFFIXES))
     ]
 
 
@@ -2656,7 +2664,17 @@ def _when_attempt_terminal_coverage_complete(context: FactContext) -> Fact:
     if not isinstance(summary, dict):
         return _fact_value(False, f"缺少 review.terminal_summary fact；{TERMINAL_SUMMARY_HINT}")
     head = context.snapshot.head
-    if not head or summary.get("comparisonHead") != head:
+
+    def head_drift_non_runtime(commit: Any) -> bool:
+        """commit 是 HEAD 的祖先，且 commit..HEAD 只改了本包或非运行时路径（只提交文档不必重审）。"""
+        snapshot = context.snapshot.reader
+        if not head or not isinstance(commit, str) or not commit or snapshot.repo is None or snapshot.package_rel is None:
+            return False
+        if _git_result(snapshot.repo, "merge-base", "--is-ancestor", commit, head)[0] != 0:
+            return False
+        return not _runtime_diff(snapshot.repo, snapshot.package_rel.as_posix(), commit, head)
+
+    if not head or (summary.get("comparisonHead") != head and not head_drift_non_runtime(summary.get("comparisonHead"))):
         return _fact_value(False, f"terminal_summary.comparisonHead 是 {summary.get('comparisonHead')!r}，必须等于当前 HEAD 完整 SHA {head!r}")
     if not isinstance(summary.get("safetyApplicable"), bool):
         return _fact_value(False, "terminal_summary.safetyApplicable 缺失或不是布尔值（true 时还需要 Track D 的 PASS）")
@@ -2704,7 +2722,7 @@ def _when_attempt_terminal_coverage_complete(context: FactContext) -> Fact:
         if header != {"verdict": "PASS", "reviewed-head": reviewed_head, "review-run": run_id, "review-track": track}:
             expected_header = {"verdict": "PASS", "reviewed-head": reviewed_head, "review-run": run_id, "review-track": track}
             return _fact_value(False, f"{track} 报告前四行头不匹配；期望 {expected_header}，实际 {header}")
-        if reviewed_head != head:
+        if reviewed_head != head and not head_drift_non_runtime(reviewed_head):
             # 复用判据由 parent 对照该轨输入裁决，保留同一 ReviewRun 的 PASS 和 delta 证据。
             if track == "Track A" or result.get("reused") is not True or not artifact_text(result.get("reuseEvidence")):
                 return _fact_value(False, f"{track} 的 reviewedHead 非当前 HEAD，但缺少 reused 标记或 reuseEvidence")

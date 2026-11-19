@@ -287,7 +287,7 @@ def _owner_summary(
     return lines
 
 
-def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence: list[str], durable: list[str], no_durable_reason: str | None, environment: str | None) -> dict[str, Any]:
+def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence: list[str], durable: list[str], no_durable_reason: str | None, environment: str | None, commit_changes: bool = False) -> dict[str, Any]:
     state = _load_json(package / STATE_PATH)
     summary = _validate_state(package, state, projections=False)
     repo = _repo_root(package)
@@ -348,4 +348,16 @@ def command_gate(package: Path, verdict: str, commit: str, reason: str, evidence
         "commit": resolved, "outcome": verdict,
     })
     result = {"formatVersion": summary["formatVersion"], "verdict": verdict, "attempt": summary["attempt"], "commit": resolved, "idempotent": False}
+    if commit_changes:
+        result["packageCommit"] = _commit_package(package, repo, summary["attempt"], verdict)
     return result
+
+
+def _commit_package(package: Path, repo: Path, attempt: str, verdict: str) -> str | None:
+    """Commit only the package directory; the message carries no attribution trailer. None when nothing changed."""
+    rel = package.resolve().relative_to(repo).as_posix()
+    _run_git(repo, "add", "--", rel)
+    if _run_git(repo, "status", "--porcelain", "--", rel) == "":
+        return None
+    _run_git(repo, "commit", "-m", f"docs({package.name}): Gate {verdict} {attempt}", "--", rel)
+    return _run_git(repo, "rev-parse", "HEAD")

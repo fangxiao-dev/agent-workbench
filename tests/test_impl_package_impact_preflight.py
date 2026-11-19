@@ -131,3 +131,54 @@ def test_preflight_message_set_matches_gate_pass(tmp_path: Path) -> None:
     gaps = json.loads(_cli(repo, package, "gate", "preflight", "--json").stdout)["gaps"]
     rejected = _cli(repo, package, "gate", "pass", "--comparison-commit", head, "--reason", "r").stderr
     assert all(g["message"] in rejected for g in gaps if g["category"] != "durable")
+
+
+def _terminal_ready(tmp_path: Path):
+    from test_impl_package_journey import _add_terminal_summary, _satisfy
+
+    repo, package, rev = _init_v36(tmp_path)
+    for suite in ("S-resolver", "S-workflow", "S-safety"):
+        assert _cli(repo, package, "evidence", "add", input_value=_suite_record(rev, suite)).returncode == 0
+    (package / "artifacts/manual.png").write_bytes(b"manual walkthrough image")
+    pages = [_journey_record(rev, "J1-S1", run_id="page-run", artifact="artifacts/manual.png", manual_by="张三"), _journey_record(rev, "J1-S2", run_id="page-run")]
+    assert _cli(repo, package, "evidence", "add", input_value=pages).returncode == 0
+    _satisfy(repo, package, "TKT-01", rev)
+    _satisfy(repo, package, "TKT-02", rev)
+    _add_terminal_summary(repo, package, rev)
+    return repo, package
+
+
+def test_terminal_review_survives_docs_only_commits_but_not_runtime_ones(tmp_path: Path, monkeypatch) -> None:
+    from situation import terminal_coverage_fact
+
+    repo, package = _terminal_ready(tmp_path)
+    assert terminal_coverage_fact(package).value is True
+    _commit_file(repo, "docs/notes.md", "n\n")
+    (package / "artifacts/extra.md").write_text("e\n", encoding="utf-8")
+    _commit_path(repo, package / "artifacts/extra.md", "package only")
+    assert terminal_coverage_fact(package).value is True  # Track A reviewedHead is behind HEAD, drift is non-runtime
+    _commit_file(repo, "ops/deploy.yaml", "x: 1\n")
+    assert terminal_coverage_fact(package).value is not True  # ops/ is runtime by default
+    monkeypatch.setenv("IMPL_PACKAGE_NON_RUNTIME_PREFIXES", "ops/")
+    assert terminal_coverage_fact(package).value is True  # configurable
+    _commit_file(repo, "src/app.py", "v = 1\n")
+    fact = terminal_coverage_fact(package)
+    assert fact.value is not True
+
+
+def test_gate_pass_commit_flag_commits_only_the_package_without_attribution(tmp_path: Path) -> None:
+    import subprocess
+
+    repo, package = _terminal_ready(tmp_path)
+    (repo / "unrelated.txt").write_text("keep out\n", encoding="utf-8")
+    rev = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
+    result = _cli(repo, package, "gate", "pass", "--comparison-commit", rev, "--reason", "ok", "--no-durable-delta-reason", "none", "--commit")
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout.splitlines()[0])["packageCommit"]
+    files = subprocess.run(["git", "show", "--name-only", "--format=%B", "HEAD"], cwd=repo, capture_output=True, text=True).stdout
+    assert "gate.md" in files and "unrelated.txt" not in files
+    assert "Co-Authored-By" not in files and "Claude" not in files
+    status = subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True).stdout
+    assert status.strip() == "?? unrelated.txt"
+    again = _cli(repo, package, "gate", "preflight")
+    assert again.returncode == 0 and "已 pass" in again.stdout

@@ -349,6 +349,7 @@ def _parser(group: str) -> argparse.ArgumentParser:
             child.add_argument("--durable-delta", action="append", default=[])
             child.add_argument("--no-durable-delta-reason")
             child.add_argument("--environment")
+            child.add_argument("--commit", action="store_true", help="after the Gate is written, commit only the package directory (no attribution trailer)")
         pre = commands.add_parser("preflight", help="read-only: run every `gate pass` check and list gaps with fix commands")
         pre.add_argument("--comparison-commit", help="default: HEAD")
         pre.add_argument("--durable-delta", action="append", default=[])
@@ -442,7 +443,7 @@ def _run(package: Path, group: str, args: argparse.Namespace) -> dict[str, Any]:
             },
         )
     return engine.command_gate(package, args.verdict, args.comparison_commit, args.reason, args.evidence,
-                               args.durable_delta, args.no_durable_delta_reason, args.environment)
+                               args.durable_delta, args.no_durable_delta_reason, args.environment, args.commit)
 
 
 def _main(package: Path, group: str, argv: list[str], *, no_situation: bool = False) -> int:
