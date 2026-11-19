@@ -2668,11 +2668,12 @@ def _when_attempt_terminal_coverage_complete(context: FactContext) -> Fact:
     def head_drift_non_runtime(commit: Any) -> bool:
         """commit 是 HEAD 的祖先，且 commit..HEAD 只改了本包或非运行时路径（只提交文档不必重审）。"""
         snapshot = context.snapshot.reader
-        if not head or not isinstance(commit, str) or not commit or snapshot.repo is None or snapshot.package_rel is None:
+        repo, package_rel = getattr(snapshot, "repo", None), getattr(snapshot, "package_rel", None)
+        if not head or not isinstance(commit, str) or not commit or repo is None or package_rel is None:
             return False
-        if _git_result(snapshot.repo, "merge-base", "--is-ancestor", commit, head)[0] != 0:
+        if _git_result(repo, "merge-base", "--is-ancestor", commit, head)[0] != 0:
             return False
-        return not _runtime_diff(snapshot.repo, snapshot.package_rel.as_posix(), commit, head)
+        return not _runtime_diff(repo, package_rel.as_posix(), commit, head)
 
     if not head or (summary.get("comparisonHead") != head and not head_drift_non_runtime(summary.get("comparisonHead"))):
         return _fact_value(False, f"terminal_summary.comparisonHead 是 {summary.get('comparisonHead')!r}，必须等于当前 HEAD 完整 SHA {head!r}")
