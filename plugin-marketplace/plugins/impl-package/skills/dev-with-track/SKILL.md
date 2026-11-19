@@ -73,6 +73,8 @@ terminal pass 要求 `review.terminal_summary` 支撑的 terminal-final coverage
 
 ## Verify and Gate
 
+**收口顺序**：实现与修复全部合入 → terminal-final（A/C/Safety）→ `fix` 加 `finding-closure` 直到 accepted findings 闭合 → 冻结 HEAD → 在冻结 HEAD 上取最终 Journey 走通与 Required Suites 证据（未受影响步骤按影响范围沿用）→ `gate pass`。最终证据不早于 terminal-final 闭合，否则修复会让证据失效；冻结后只允许非运行时提交（证据、文档、state）。此前的走查只作 rehearsal 与问题发现。
+
 Gate 只判断 current Attempt：`blocked` 保持 active 并记录 gap/next action；`pass` 按 Journey 与 Required Suites 两层核对，并检查 Ticket/依赖、terminal-final review、Amendment、发布顺序和既有终态条件，必需事实缺失或 unknown 时拒绝；`fail|defer` 如实终结，后续实现进入 patch Attempt。
 
 Completion claim 不能宽于 evidence；准备写 terminal pass 或声称 complete/closed/fixed/merge-ready/release-ready 时，逐条核对 claim 与 evidence：
