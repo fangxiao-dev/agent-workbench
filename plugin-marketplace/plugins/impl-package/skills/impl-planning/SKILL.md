@@ -9,7 +9,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
 
 ## 输出与规则
 
-- initial 写 `plan.md`，patch 写 `<attempt-id>.patch-plan.md`；必填 Attempt ID、`Acceptance: journey` 与 `Release order: required | none`、全局调度（Ticket 顺序/依赖/共享资源）、全局执行边界、Planned Verification（跨 Ticket 范围）、集成顺序、Final Gate 判据和下一动作。
+- initial 写 `plan.md`，patch 写 `<attempt-id>.patch-plan.md`；必填 Attempt ID、`Acceptance: journey` 与 `Release order: required | none`、全局调度（Ticket 顺序/依赖/共享资源）、全局执行边界、Planned Verification（跨 Ticket 范围）、集成顺序、Final Gate 判据（含收口顺序：终审闭合、HEAD 冻结后再取最终 Journey 与 Required Suites 证据）和下一动作。
 - plan candidate 冻结后必须调用 `/impl-package:plan-review`（先 `bundle-admission`，命中风险信号则 `full-review`，见流程第 6 步）；主 thread 不自拟评审简报、不自派通用评审代替；未调用不得请求 owner approval，也不得 `package init`。
 - Plan 直接引用当前 `decision.md` / `spec.md` 路径；D/S/P 仅为可选旧别名，不要求因普通编辑升级；所有文件/evidence 引用使用仓库相对路径。
 - Plan 不复制 Decision/Spec contract ensemble、Ticket 状态或通用 checklist，新 plan 不建立 Task 状态轴；只有 Ticket 能减少验收歧义时才 earned；Plan 不复制 Decision/Spec 约束到 Ticket 的映射、Ticket 的建设内容或逐项验证细节——这些属于 Ticket；Plan 只保留跨 Ticket 才存在的调度、共享资源、全局边界与 Final Gate 判据。
