@@ -29,6 +29,18 @@ def test_validate_header_checks_head_run_track_and_verdict() -> None:
             codex_round.validate_header(bad, HEAD, "r1", "Track A")
 
 
+def test_extract_session_id_takes_last_session_line_and_tolerates_absence() -> None:
+    log = "codex exec\nsession id: 019a\n\nsession id: 019b\n"
+    assert codex_round.extract_session_id(log) == "019b"
+    assert codex_round.extract_session_id("no session line\n") is None
+
+
+def test_report_paths_pairs_report_with_raw_backup(tmp_path) -> None:
+    report, raw = codex_round.report_paths(tmp_path, "r1", "c")
+    assert report.name == "r1-track-c.md"
+    assert raw.name == "r1-track-c.raw.md" and raw.parent == report.parent
+
+
 PROMPT = """公共要求
 所有轨都看这里。
 

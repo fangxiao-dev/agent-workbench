@@ -19,6 +19,7 @@ from pathlib import Path
 
 HEADER_KEYS = ["verdict", "reviewed-head", "review-run", "review-track"]
 TRACK_HEADING = re.compile(r"^## Track ([A-Z])[ \t]*$")
+SESSION_ID = re.compile(r"^session id:[ \t]*(\S+)[ \t]*$", re.MULTILINE)
 
 
 def split_prompt(body: str) -> tuple[str, dict[str, str]]:
@@ -84,6 +85,17 @@ def validate_header(report: str, head: str, run: str, track: str) -> str:
     return got["verdict"]
 
 
+def extract_session_id(log: str) -> str | None:
+    """codex 在输出头部打印 `session id: <id>`；续接日志里可能有多次，取最后一条。"""
+    found = SESSION_ID.findall(log)
+    return found[-1] if found else None
+
+
+def report_paths(reviews: Path, run: str, key: str) -> tuple[Path, Path]:
+    """(本轨报告, codex 原始输出备份)。"""
+    return reviews / f"{run}-track-{key}.md", reviews / f"{run}-track-{key}.raw.md"
+
+
 def run_track(key, track, args, body, head, codex, workdir):
     prompt = body + header_requirement(head, args.run, track)
     # body 已按轨裁剪（公共部分 + 本轨段落 + 对比基线），这里只补报头要求。
@@ -99,10 +111,14 @@ def run_track(key, track, args, body, head, codex, workdir):
         cmd = [codex, "exec", "resume", args.session_ids[key], *opts, "-"]
     proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
                           encoding="utf-8", errors="replace", cwd=workdir)
-    log = proc.stdout + "\n" + proc.stderr
-    if args.new and out.exists() and out.read_text(encoding="utf-8").strip():
-        log = out.read_text(encoding="utf-8")
-    return key, track, log, proc.returncode
+    raw = proc.stdout + "\n" + proc.stderr
+    log = raw
+    if args.new and out.exists():
+        text = out.read_text(encoding="utf-8")
+        if text.strip():
+            log = text
+    # log 可能只取 -o 文件内容，session id 只能从 stdout/stderr 的 raw 里取
+    return key, track, log, raw, proc.returncode
 
 
 def main() -> int:
@@ -148,14 +164,27 @@ def main() -> int:
     with ThreadPoolExecutor(len(tracks)) as pool:
         results = list(pool.map(lambda k: run_track(k, tracks[k], args, prompts[k], head, codex, workdir), tracks))
 
-    verdicts, problems = {}, []
-    for key, track, log, rc in results:
+    verdicts, problems, sessions = {}, [], {}
+    for key, track, log, output, rc in results:
+        report_path, raw_path = report_paths(reviews, args.run, key)
+        raw_path.write_text(log, encoding="utf-8")
+        if args.new:
+            sessions[key] = extract_session_id(output)
         try:
             report = extract_report(log)
             verdicts[track] = validate_header(report, head, args.run, track)
-            (reviews / f"{args.run}-track-{key}.md").write_text(report, encoding="utf-8")
+            report_path.write_text(report, encoding="utf-8")
         except ValueError as e:
             problems.append(f"{track}: {e}（codex 退出码 {rc}）")
+    if sessions:
+        ids = {k.upper(): v for k, v in sessions.items()}
+        if all(ids.values()):
+            (reviews / f"{args.run}-sessions.json").write_text(
+                json.dumps(ids, ensure_ascii=False) + "\n", encoding="utf-8")
+            print("sessions: " + ",".join(f"{k}={v}" for k, v in ids.items()))
+        else:
+            missing = [f"Track {k}" for k, v in ids.items() if not v]
+            print("未取到 session id: " + ", ".join(missing), file=sys.stderr)
     if problems:
         print("报告未通过校验：\n" + "\n".join(problems), file=sys.stderr)
         return 1
