@@ -5,7 +5,10 @@ open registers the tracks a round must run; record stores each track's return;
 close refuses until every registered track has returned; export (after close)
 lists the round's reports. Fix dispatch, the canonical summary and the overall
 verdict all start from a closed round. A group that has used 3 rounds cannot
-open another round: use a fresh group id.
+open another round: use a fresh group id. Group rounds are counted across every
+ledger in the same directory (the package's execution/<attempt>/reviews/, or the
+do-review temp folder without --package), so a new ledger for a new head does not
+restart the count.
 """
 
 from __future__ import annotations
@@ -58,8 +61,20 @@ def overall(tracks: dict) -> str:
     return "PASS" if all(v == "PASS" for v in verdicts) else "INCOMPLETE"
 
 
+def group_rounds_used(ledger: Path, group: str) -> int:
+    """Rounds this group has opened on every ledger beside this one."""
+    return sum(
+        1
+        for sibling in ledger.parent.glob("*.rounds.json")
+        for r in load(sibling)["rounds"]
+        if r["group"] == group
+    )
+
+
 def summary(state: dict, round_: dict) -> dict:
-    used = sum(1 for r in state["rounds"] if r["group"] == round_["group"] and r["round"] <= round_["round"])
+    used = round_.get("groupRound") or sum(
+        1 for r in state["rounds"] if r["group"] == round_["group"] and r["round"] <= round_["round"]
+    )
     return {
         "round": round_["round"],
         "group": round_["group"],
@@ -78,11 +93,12 @@ def emit(payload: dict) -> int:
 
 
 def open_round(args: argparse.Namespace) -> int:
-    path = state_path(validate_ledger_path(args.ledger, args.package))
+    ledger = validate_ledger_path(args.ledger, args.package)
+    path = state_path(ledger)
     state = load(path)
     if state["rounds"] and not state["rounds"][-1]["closed"]:
         raise ValueError(f"round {state['rounds'][-1]['round']} is still open; record every track and close it first")
-    used = sum(1 for r in state["rounds"] if r["group"] == args.group)
+    used = group_rounds_used(ledger, args.group)
     if used >= GROUP_ROUND_CAP:
         raise ValueError(f"group {args.group} has used {used} rounds (cap {GROUP_ROUND_CAP}); open the next round with a fresh group id")
     tracks: dict = {}
@@ -92,7 +108,7 @@ def open_round(args: argparse.Namespace) -> int:
         if not label or label in tracks:
             raise ValueError(f"empty or duplicate track: {spec!r}")
         tracks[label] = {"leaf": leaf.strip() or None, "verdict": None, "report": None}
-    round_ = {"round": len(state["rounds"]) + 1, "group": args.group, "phase": args.phase, "tracks": tracks, "closed": False}
+    round_ = {"round": len(state["rounds"]) + 1, "group": args.group, "groupRound": used + 1, "phase": args.phase, "tracks": tracks, "closed": False}
     state["rounds"].append(round_)
     save(path, state)
     return emit({"round": round_["round"], "group": args.group, "groupRound": used + 1, "tracks": list(tracks)})

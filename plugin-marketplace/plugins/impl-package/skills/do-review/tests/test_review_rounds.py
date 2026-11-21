@@ -95,6 +95,48 @@ class ReviewRoundsTests(unittest.TestCase):
         code, result, _ = self.open("g2", "Track A")
         self.assertEqual((code, result["round"], result["groupRound"]), (0, 4, 1))
 
+    def test_group_count_continues_across_ledgers_and_groups_are_independent(self) -> None:
+        first = self.ledger
+        second = first.with_name("2611211300-demo-def5678.md")
+        second.write_text("# ledger 2\n", encoding="utf-8")
+        for number in (1, 2):
+            self.open("g1", "Track A")
+            self.record("Track A")
+            self.run_cli("close")
+        self.ledger = second
+        code, opened, _ = self.open("g1", "Track A")
+        self.assertEqual((code, opened["groupRound"]), (0, 3))
+        self.record("Track A")
+        _, closed, _ = self.run_cli("close")
+        self.assertTrue(closed["freshGroupRequired"])
+        code, _, err = self.open("g1", "Track A")
+        self.assertEqual(code, 2)
+        self.assertIn("fresh group", err)
+        self.ledger = first
+        self.assertEqual(self.open("g1", "Track A")[0], 2)
+        code, opened, _ = self.open("g2", "Track A")
+        self.assertEqual((code, opened["groupRound"]), (0, 1))
+
+    def test_package_mode_counts_across_ledgers_in_the_attempt_reviews_folder(self) -> None:
+        with TemporaryDirectory() as tmp:
+            package = Path(tmp).resolve() / "package"
+            (package / ".impl-package").mkdir(parents=True)
+            (package / ".impl-package" / "state.json").write_text(json.dumps({"attempt": {"id": "initial"}}), encoding="utf-8")
+            reviews = package / "execution" / "initial" / "reviews"
+            reviews.mkdir(parents=True)
+            codes = []
+            for index in range(4):
+                ledger = reviews / f"261121120{index}-demo-abc123{index}.md"
+                ledger.write_text("# ledger\n", encoding="utf-8")
+                out, err = io.StringIO(), io.StringIO()
+                with redirect_stdout(out), redirect_stderr(err):
+                    argv = ["open", "--package", str(package), "--ledger", str(ledger), "--group", "g1", "--phase", "terminal-final", "--track", "Track A"]
+                    codes.append(self.module.main(argv))
+                    if codes[-1] == 0:
+                        self.module.main(["record", "--package", str(package), "--ledger", str(ledger), "--track", "Track A", "--verdict", "PASS", "--report", "a.md"])
+                        self.module.main(["close", "--package", str(package), "--ledger", str(ledger)])
+            self.assertEqual(codes, [0, 0, 0, 2])
+
 
 if __name__ == "__main__":
     unittest.main()
