@@ -22,6 +22,8 @@ Use this reference when UI feels too sparse, too cramped, visually unbalanced, o
 - Artificial row height from fixed `min-height`, `1fr` spacer tracks, or empty filler elements used to force alignment.
 - Adding broad `overflow-x-auto` or scroll containers to a shared shell to hide one page's wide table. This can break sticky headers, sidebars, overlays, focus containment, and viewport-specific verification.
 - Filter/tool/action grids with fixed desktop columns that push buttons or selects outside the card at medium widths.
+- Short page-level controls stacked one per row (a view switcher, then a date/period navigator in its own card, then a title) while the right side of each row stays empty.
+- Short metadata split across several lines under a title ("2 people in this store" / "data as of 01.01.2027").
 
 ## Fix Patterns
 
@@ -32,11 +34,14 @@ Use this reference when UI feels too sparse, too cramped, visually unbalanced, o
 - Remove section wrappers that do not add grouping meaning.
 - Use row dividers instead of separate cards when list items belong to one continuous set.
 - Scope overflow fixes to the content that is actually wide. For example, wrap a business table or row group locally instead of placing horizontal scrolling on the admin shell, page root, sticky header ancestor, or navigation container.
+- Put short controls that act on the same view on one toolbar row: view switcher first, period navigator (‹ period › back-to-today) right next to it, with no separate card around the navigator; let the row wrap on narrow screens. Apply the same layout to every view mode (day/week/month).
+- Join short metadata into one muted line with a separator, e.g. `2 people · data as of 01.01.2027`.
 - For toolbar and filter forms, use responsive wrapping first: let inputs form 1-2 columns before wide desktop, keep action buttons `min-w-0`, and only switch to dense fixed tracks when the viewport can actually contain them.
 
 ## Checks
 
 - Can the user scan the important values in one horizontal pass?
+- Is any short control or metadata line alone on its own row while that row is mostly empty to the right?
 - Are actions close to the fields they save or affect?
 - Does the layout still look intentional when only one row/item exists?
 - Is any large blank region caused by flex/grid stretching rather than real content?
