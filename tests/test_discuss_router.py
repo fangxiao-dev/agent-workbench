@@ -81,7 +81,12 @@ def test_model_overrides_default_and_forwarding():
 
     saved = copy.deepcopy(orchestrator.AGENT_MODELS)
     try:
-        assert orchestrator.codex_model_args() == ["--model", "", "--config", 'model_reasoning_effort="high"']
+        try:
+            orchestrator.codex_model_args()
+        except ValueError as exc:
+            assert "--codex-model and --codex-effort" in str(exc)
+        else:
+            raise AssertionError("Codex model and effort must be explicit")
         assert orchestrator.claude_model_args() == ["--model", "sonnet", "--effort", "high"]
         assert orchestrator.grok_model_args() == ["--effort", "low"]
 
@@ -94,7 +99,7 @@ def test_model_overrides_default_and_forwarding():
         assert "--claude-model" not in forwarded
 
         orchestrator.apply_model_arguments(argparse.Namespace(codex_model="gpt-6-astra", codex_effort="low"))
-        assert orchestrator.codex_model_args() == ["--model", "gpt-6-astra", "--config", 'model_reasoning_effort="low"']
+        assert orchestrator.codex_model_args() == ["--model", "gpt-6-astra", "--effort", "low"]
         assert orchestrator.claude_model_args() == ["--model", "sonnet", "--effort", "high"]
     finally:
         orchestrator.AGENT_MODELS.clear()
