@@ -20,10 +20,6 @@ from executor_env import load_executor_env
 
 load_executor_env(SCRIPT_ROOT.parent)
 
-DEFAULT_MODEL = "gpt-5.6-luna"
-DEFAULT_REASONING_CONFIG = 'model_reasoning_effort="max"'
-
-
 class ExecutorError(RuntimeError):
     def __init__(self, code: str, message: str, *, exit_code: int | None = None):
         super().__init__(message)
@@ -40,7 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
     prompt.add_argument("--prompt-file", type=Path, help="UTF-8 task prompt file")
     parser.add_argument("--timeout-s", type=int, default=1800, help="process timeout in seconds")
     parser.add_argument("--executable", help="Codex executable path or command; otherwise use discovery")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="Codex model")
+    parser.add_argument("--model", required=True, help="Codex model")
+    parser.add_argument("--effort", required=True, help="Codex reasoning effort")
     parser.add_argument("--config", action="append", default=[], help="repeatable Codex -c configuration")
     parser.add_argument("--sandbox", help="Codex sandbox policy supplied by the caller")
     parser.add_argument("--ephemeral", action="store_true", help="request an ephemeral Codex session")
@@ -68,13 +65,14 @@ def build_command(
     if ignore_user_config:
         command.append("--ignore-user-config")
     command.append("--json")
-    if args.model:
-        command.extend(["-m", args.model])
-    configs = list(args.config)
-    if not any(config.partition("=")[0].strip() == "model_reasoning_effort" for config in configs):
-        configs.insert(0, DEFAULT_REASONING_CONFIG)
-    for config in configs:
+    if not args.model.strip() or not args.effort.strip():
+        raise ExecutorError("INVALID_ARGUMENT", "--model and --effort must not be empty")
+    if any(config.partition("=")[0].strip() == "model_reasoning_effort" for config in args.config):
+        raise ExecutorError("INVALID_ARGUMENT", "set model_reasoning_effort with --effort, not --config")
+    command.extend(["-m", args.model])
+    for config in args.config:
         command.extend(["-c", config])
+    command.extend(["-c", f'model_reasoning_effort="{args.effort}"'])
     # `codex exec resume` rejects --sandbox/--cd; the resumed session keeps its own.
     if args.sandbox and not args.resume:
         command.extend(["--sandbox", args.sandbox])

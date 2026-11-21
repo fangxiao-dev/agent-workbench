@@ -24,8 +24,8 @@ def test_build_command_transparently_maps_explicit_caller_configuration(tmp_path
     executor = load_executor()
     args = executor.build_parser().parse_args(
         [
-            "--cwd", str(tmp_path), "--prompt", "do work", "--timeout-s", "12", "--model", "gpt-test",
-            "--config", 'service_tier="fast"', "--config", 'model_reasoning_effort="high"',
+            "--cwd", str(tmp_path), "--prompt", "do work", "--timeout-s", "12", "--model", "gpt-test", "--effort", "high",
+            "--config", 'service_tier="fast"',
             "--sandbox", "read-only", "--ephemeral", "--output-schema", str(tmp_path / "schema.json"),
         ]
     )
@@ -42,9 +42,42 @@ def test_build_command_transparently_maps_explicit_caller_configuration(tmp_path
 
 def test_default_timeout_is_30_minutes(tmp_path: Path) -> None:
     executor = load_executor()
-    args = executor.build_parser().parse_args(["--cwd", str(tmp_path), "--prompt", "prompt"])
+    args = executor.build_parser().parse_args(["--cwd", str(tmp_path), "--prompt", "prompt", "--model", "gpt-test", "--effort", "medium"])
 
     assert args.timeout_s == 1800
+
+
+def test_model_and_effort_are_required(tmp_path: Path) -> None:
+    executor = load_executor()
+    parser = executor.build_parser()
+
+    for options in (
+        ["--cwd", str(tmp_path), "--prompt", "prompt"],
+        ["--cwd", str(tmp_path), "--prompt", "prompt", "--model", "gpt-test"],
+        ["--cwd", str(tmp_path), "--prompt", "prompt", "--effort", "high"],
+    ):
+        try:
+            parser.parse_args(options)
+        except SystemExit as exc:
+            assert exc.code == 2
+        else:
+            raise AssertionError("--model and --effort must both be supplied")
+
+
+def test_empty_model_or_effort_is_rejected_instead_of_falling_back(tmp_path: Path) -> None:
+    executor = load_executor()
+    parser = executor.build_parser()
+
+    for model, effort in (("", "high"), ("gpt-test", "")):
+        args = parser.parse_args(
+            ["--cwd", str(tmp_path), "--prompt", "prompt", "--model", model, "--effort", effort]
+        )
+        try:
+            executor.build_command(args)
+        except executor.ExecutorError as exc:
+            assert exc.code == "INVALID_ARGUMENT"
+        else:
+            raise AssertionError("empty model and effort values must be rejected")
 
 
 def test_run_returns_final_jsonl_text_and_usage(monkeypatch, tmp_path: Path) -> None:
@@ -65,7 +98,7 @@ def test_run_returns_final_jsonl_text_and_usage(monkeypatch, tmp_path: Path) -> 
         })()
 
     monkeypatch.setattr(executor, "run_process", fake_run_process)
-    args = executor.build_parser().parse_args(["--cwd", str(tmp_path), "--prompt", "prompt", "--timeout-s", "5"])
+    args = executor.build_parser().parse_args(["--cwd", str(tmp_path), "--prompt", "prompt", "--timeout-s", "5", "--model", "gpt-test", "--effort", "high"])
 
     result = executor.run(args)
 
@@ -75,8 +108,8 @@ def test_run_returns_final_jsonl_text_and_usage(monkeypatch, tmp_path: Path) -> 
     }
     assert calls == [(
         [
-            "codex", "exec", "--json", "-m", "gpt-5.6-luna", "-c",
-            'model_reasoning_effort="max"', "--cd", str(tmp_path.resolve()), "-",
+            "codex", "exec", "--json", "-m", "gpt-test", "-c",
+            'model_reasoning_effort="high"', "--cd", str(tmp_path.resolve()), "-",
         ],
         "prompt",
         5,
@@ -113,7 +146,7 @@ def test_run_retries_config_error_once_with_ignore_user_config(monkeypatch, tmp_
         })()
 
     monkeypatch.setattr(executor, "run_process", fake_run_process)
-    args = executor.build_parser().parse_args(["--cwd", str(tmp_path), "--prompt", "prompt", "--config", 'service_tier="fast"'])
+    args = executor.build_parser().parse_args(["--cwd", str(tmp_path), "--prompt", "prompt", "--model", "gpt-test", "--effort", "high", "--config", 'service_tier="fast"'])
 
     result = executor.run(args)
 
@@ -126,7 +159,7 @@ def test_run_retries_config_error_once_with_ignore_user_config(monkeypatch, tmp_
 def test_run_reports_timeout_and_invalid_output_as_error_envelopes(monkeypatch, tmp_path: Path) -> None:
     executor = load_executor()
     monkeypatch.setattr(executor, "resolve_codex_executable", lambda _explicit: "codex")
-    args = executor.build_parser().parse_args(["--cwd", str(tmp_path), "--prompt", "prompt"])
+    args = executor.build_parser().parse_args(["--cwd", str(tmp_path), "--prompt", "prompt", "--model", "gpt-test", "--effort", "high"])
 
     monkeypatch.setattr(executor, "run_process", lambda *args, **kwargs: (_ for _ in ()).throw(executor.ExecutorError("TIMEOUT", "codex timed out after 1s")))
     timeout = executor.run(args)
@@ -151,7 +184,7 @@ def test_run_classifies_nonzero_auth_failure(monkeypatch, tmp_path: Path) -> Non
             "returncode": 17, "stdout": "", "stderr": "not authenticated; please login",
         })(),
     )
-    args = executor.build_parser().parse_args(["--cwd", str(tmp_path), "--prompt", "prompt"])
+    args = executor.build_parser().parse_args(["--cwd", str(tmp_path), "--prompt", "prompt", "--model", "gpt-test", "--effort", "high"])
 
     result = executor.run(args)
 
@@ -213,7 +246,7 @@ def test_explicit_executable_takes_precedence_over_discovery(tmp_path: Path) -> 
 def test_resume_command_drops_sandbox_and_cd(tmp_path: Path) -> None:
     executor = load_executor()
     args = executor.build_parser().parse_args(
-        ["--cwd", str(tmp_path), "--prompt", "p", "--sandbox", "read-only", "--resume", "thread-1"]
+        ["--cwd", str(tmp_path), "--prompt", "p", "--sandbox", "read-only", "--resume", "thread-1", "--model", "gpt-test", "--effort", "high"]
     )
     command = executor.build_command(args)
     assert command[:4] == ["codex", "exec", "resume", "thread-1"]

@@ -18,6 +18,8 @@ description: Recommend effective Codex CLI collaboration — resume continuation
 
 ## 协作模式
 
+**每次调用都显式指定模型和推理 effort。** 原生 CLI 使用 `-m <model>` 与 `-c 'model_reasoning_effort="<effort>"'`；程序化 wrapper 使用必填参数 `--model <model>` 和 `--effort <effort>`。调用方没有提供任一值时，先询问调用方并暂停派发；不采用 Codex 配置、wrapper 或 agent profile 的默认值。
+
 ### 1. 会话模型：exec 一次性 vs resume 续接
 
 - `codex exec <prompt>`：一次性会话。适合短任务、探针、连接验证。
@@ -79,16 +81,16 @@ reviewer(fresh, read-only) → findings
 多个互不依赖的 codex 任务（例如代码、合同、安全三轨只读审阅）**每个起一个后台进程同时跑**，不要在一个循环里依次 `codex exec`（串行会把总耗时叠成各轨之和，也失去中途单独 kill 一轨的能力）。每个进程用 `-o <文件>` 写最终答复，`*> <日志>` 记过程，主 session 只读输出文件：
 
 ```powershell
-codex exec -C <repo> -s read-only -o out\code.md "<prompt>" *> logs\code.log
+codex exec -C <repo> -s read-only -m <model> -c 'model_reasoning_effort="<effort>"' -o out\code.md "<prompt>" *> logs\code.log
 ```
 
-每轨照此各起一个后台进程（`run_in_background` / `Start-Process`），日志文件分开；进程结束前不重复读日志，只看各自的 `out\*.md`。
+每轨照此各起一个后台进程（`run_in_background` / `Start-Process`），日志文件分开；命令显式带上 `-m <model> -c 'model_reasoning_effort="<effort>"'`；进程结束前不重复读日志，只看各自的 `out\*.md`。
 
 ## 参数事实表（已实测，codex 0.149.0；★ 行实测于 2026-11-09，codex-cli 0.167.0-alpha.3.2）
 
 | 用法 | 结果 |
 | --- | --- |
-| `-m gpt-5.6-luna` | 模型选择有效 |
+| 原生 CLI：`-m <model> -c 'model_reasoning_effort="<effort>"'`；wrapper：`--model <model> --effort <effort>` | 显式指定模型与推理强度；每次调用都传两项 |
 | `-c 'service_tier="fast"'` | fast tier 有效 |
 | `--approve-for-me` | 自动批准（自带 workspace-write 沙箱）；**与 `-s <mode>` 互斥**，不能同用 |
 | 默认（无 `-s`） | workspace-write 沙箱 + approval on-request/auto_review（依 `~/.codex/config.toml`） |
@@ -111,15 +113,15 @@ python "<repo>\skills\call-codex\scripts\call_codex.py" `
   --cwd "<target-repo>" `
   --prompt-file "<prompt-file>" `
   --timeout-s 1800 `
-  --model "gpt-5.6-luna" `
-  --config 'model_reasoning_effort="max"' `
+  --model "<model-id>" `
+  --effort "<effort>" `
   --config 'service_tier="fast"' `
   --sandbox read-only `
   --ephemeral `
   --output-schema "<schema.json>"
 ```
 
-Pass exactly one of `--prompt` or `--prompt-file`. Repeat `--config` for multiple Codex `-c` settings.
+Pass exactly one of `--prompt` or `--prompt-file`. Always provide `--model` and `--effort` explicitly; if either is missing, stop and ask the caller instead of relying on a configured or wrapper default. Repeat `--config` for additional Codex `-c` settings; use `--effort` for reasoning strength.
 
 **Do not pass `--executable` unless you have a specific reason.** Discovery already picks
 the right CLI, in this order: `CODEX_EXECUTABLE` (repository-local `.env` or process
