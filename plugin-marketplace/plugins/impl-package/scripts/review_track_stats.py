@@ -14,6 +14,7 @@ from typing import Any, Iterable
 
 
 FACT_KEY = "review.canonical_summary"
+GROUP_ROUND_CAP = 3
 SCHEMA_VERSION = 1
 TRACKS = ("Track A", "Track B", "Track C", "Track D")
 CLASSIFICATIONS = {"blocker", "follow-up"}
@@ -64,6 +65,8 @@ def validate_canonical_summary(value: Any, *, allow_empty_tracks: bool = False) 
     normalized["phase"] = _non_empty_string(value["phase"], "phase")
     if normalized["phase"] not in PHASES:
         raise ReviewStatsError(f"phase must be one of: {', '.join(sorted(PHASES))}")
+    if "reviewGroup" in value:
+        normalized["reviewGroup"] = _non_empty_string(value["reviewGroup"], "reviewGroup")
     normalized["resolvedHead"] = _non_empty_string(value["resolvedHead"], "resolvedHead")
     if re.fullmatch(r"[0-9a-fA-F]{40}", normalized["resolvedHead"]) is None:
         raise ReviewStatsError("resolvedHead must be a 40-character commit SHA")
@@ -608,8 +611,31 @@ def record_summary(package: Path, summary: Any) -> dict[str, Any]:
     state = _load_json(package / ".impl-package" / "state.json", label=".impl-package/state.json")
     _require_current_format(state)
     normalized = validate_canonical_summary(summary)
+    group_rounds = _group_rounds_after(package, normalized)
     payload = _append_via_state_cli(package, normalized)
-    return {"reviewRunId": normalized["reviewRunId"], **payload}
+    result = {"reviewRunId": normalized["reviewRunId"], **payload}
+    if group_rounds is not None:
+        result["reviewGroup"] = normalized["reviewGroup"]
+        result["groupRounds"] = group_rounds
+        if group_rounds >= GROUP_ROUND_CAP:
+            result["warning"] = (
+                f"review group {normalized['reviewGroup']} has used {group_rounds} rounds "
+                f"(cap {GROUP_ROUND_CAP}); start a fresh review group for the next round"
+            )
+    return result
+
+
+def _group_rounds_after(package: Path, summary: dict[str, Any]) -> int | None:
+    """Rounds the summary's reviewGroup has used once this summary is recorded."""
+
+    group = summary.get("reviewGroup")
+    if group is None:
+        return None
+    runs = {summary["reviewRunId"]}
+    for entry in _scan_summaries(package)[0]:
+        if entry["summary"].get("reviewGroup") == group:
+            runs.add(entry["summary"]["reviewRunId"])
+    return len(runs)
 
 
 def backfill_manifest(package: Path, manifest: Path, *, apply: bool) -> dict[str, Any]:
@@ -710,7 +736,10 @@ def main(argv: list[str] | None = None) -> int:
                 value = json.loads(raw)
             except json.JSONDecodeError as exc:
                 raise ReviewStatsError(f"record input is not valid JSON: {exc}") from exc
-            _print_json(record_summary(args.package, value))
+            result = record_summary(args.package, value)
+            _print_json(result)
+            if "warning" in result:
+                print(f"review_track_stats: {result['warning']}", file=sys.stderr)
             return 0
         if args.command == "backfill":
             _print_json(backfill_manifest(args.package, args.manifest, apply=args.apply))

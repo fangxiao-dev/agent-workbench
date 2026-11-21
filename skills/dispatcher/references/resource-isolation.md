@@ -21,6 +21,13 @@ dependency 逐候选呈现；缺席候选带类型和受影响的 `subject` 或 
 
 主控按当前 dependency、授权、已知实际冲突和在途工作判断资源准入；相同 `resource_key` 本身不等于冲突。恢复旧 Attempt 时，只读旧 trail/候选清单以及 Execution Record、checkpoint、handoff，沿用其中仍成立的授权和资源限制，不另建 blocker fact，也不重写旧记录。
 
+写代码的 worker（任何模型）在专属 worktree 中工作，做法固定：
+
+- brief 给出 `git worktree add .worktrees/<slug> <集成 sha> -b <分支>` 和该 worktree 的绝对路径（或主控先建好），worker 只在其中工作，结束时报分支与 SHA。
+- 不使用 Agent 工具的 `isolation: "worktree"`：它从默认分支切出，缺未推送的集成分支和实施包；worker 停下后未改动的 worktree 会被自动清理。
+- 写代码的 worker 可用 SendMessage 续派，会接着在原 worktree 工作；续派前确认该 worktree 还在。CLI 起法用 `--cwd` 指向它。
+- 合入后由主控删除分支和 worktree。
+
 新 worktree 承担 format、lint 或 typecheck 前，先确认能解析所需 binary、shim 和本地依赖。完成声明用 diff、mtime 或命令输出证明；carrier 失败与产物失败分别处理。
 
 环境、fixture、权限、身份、数据或 test carrier 只有在不绑定未稳定业务语义、结果可回收且不提前充当 acceptance evidence 时，才作为独立候选。

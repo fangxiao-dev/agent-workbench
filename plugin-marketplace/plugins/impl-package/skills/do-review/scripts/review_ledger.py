@@ -233,7 +233,7 @@ def create(args: argparse.Namespace) -> int:
 
 ## Track lifecycle
 
-| Track | State | Consecutive clean rounds | Last completed round | Reactivation reason |
+| Track | State | Review group / rounds used | Converged by (fresh-group round) | Reactivation reason |
 | --- | --- | --- | --- | --- |
 
 - The main session initializes this table before Round 1. It is required only for `Loop` mode; `N rounds` and `Closure verification` keep every selected track active.

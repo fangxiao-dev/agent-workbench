@@ -135,6 +135,9 @@ def main() -> int:
     p.add_argument("--model", required=True)
     p.add_argument("--effort", required=True)
     args = p.parse_args()
+    for flag in ("model", "effort"):
+        if not getattr(args, flag).strip():
+            p.error(f"--{flag} must not be empty")
     if args.new == bool(args.sessions):
         p.error("--new 与 --sessions 二选一")
     letters = [t.strip() for t in args.tracks.split(",")]

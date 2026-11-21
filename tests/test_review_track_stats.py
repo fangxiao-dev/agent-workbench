@@ -378,6 +378,27 @@ def test_record_uses_existing_state_cli_and_subject(tmp_path: Path, monkeypatch:
     assert captured["event"]["key"] == "review.canonical_summary"
 
 
+def test_record_warns_when_review_group_reaches_round_cap(tmp_path: Path) -> None:
+    module = load_module()
+    package = make_runtime_package(tmp_path)
+
+    def record(run: str, group: str | None) -> dict[str, object]:
+        value = summary(run, [finding(run)])
+        if group is not None:
+            value["reviewGroup"] = group
+        return module.record_summary(package, value)
+
+    assert "groupRounds" not in record("run-0", None)
+    first, second = record("run-1", "g1"), record("run-2", "g1")
+    assert (first["groupRounds"], second["groupRounds"]) == (1, 2)
+    assert "warning" not in second
+    third = record("run-3", "g1")
+    assert third["groupRounds"] == 3 and "fresh review group" in third["warning"]
+    assert record("run-4", "g2")["groupRounds"] == 1
+    with pytest.raises(module.ReviewStatsError, match="reviewGroup"):
+        module.validate_canonical_summary({**summary("run-5", []), "reviewGroup": " "})
+
+
 def test_record_requires_impact_and_rejects_invalid_values(tmp_path: Path) -> None:
     module = load_module()
     package = make_runtime_package(tmp_path)

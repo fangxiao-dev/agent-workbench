@@ -74,7 +74,7 @@ class ThreeTrackContractTests(unittest.TestCase):
         terminal = f"{safety}\n{phases}"
         self.assertRegex(
             terminal,
-            r"(?s)`terminal-final`.*terminal_tracks.*Track A/C.*Track A unconditionally on the entire diff.*Tracks C and Safety.*earlier `HEAD`.*PASS for that track.*delta from that PASS `HEAD` to the final `HEAD`.*admission condition.*reuse that PASS and skip.*Track C's admission range.*Ticket's section-level contract references.*record which PASS `HEAD` is reused.*delta used for the admission decision.*Admission is the only skip basis.*finding closure was clean.*Loop track was dormant",
+            r"(?s)`terminal-final`.*terminal_tracks.*Track A/C.*Track A unconditionally on the entire diff.*Tracks C and Safety.*earlier `HEAD`.*PASS for that track.*delta from that PASS `HEAD` to the final `HEAD`.*admission condition.*reuse that PASS and skip.*Track C's admission range.*Ticket's section-level contract references.*record which PASS `HEAD` is reused.*delta used for the admission decision.*Admission is the only skip basis.*finding closure was clean.*Loop track was converged",
         )
         self.assertIn("independent of which tracks `initial`", safety)
 
@@ -210,13 +210,22 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertIn("Design-source recheck:", templates)
         self.assertNotIn("source recheck", markdown_section(topology, "Review phase").lower())
 
-    def test_loop_lifecycle_requires_two_clean_rounds_and_preserves_reactivation(self) -> None:
+    def test_loop_lifecycle_converges_only_through_a_fresh_group(self) -> None:
         topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
+        skill = SKILL_PATH.read_text(encoding="utf-8")
         lifecycle = markdown_section(topology, "Loop track lifecycle")
-        self.assertIn("first clean round", lifecycle)
-        self.assertIn("second consecutive clean round", lifecycle)
-        self.assertIn("reactivates a dormant track", lifecycle)
-        self.assertRegex(lifecycle, r"(?s)Convergence requires.*no distinct new accepted blocker/follow-up.*every selected track dormant")
+        for needle in ("`active` or `converged`", "only through a fresh group", "never converges a track", "reactivates it", "Convergence requires every selected track `converged`"):
+            self.assertIn(needle, lifecycle)
+        for retired in ("dormant", "probation", "consecutive clean", "two clean"):
+            self.assertNotIn(retired, (lifecycle + skill + topology).lower())
+
+    def test_review_group_continuation_rules_apply_to_every_review(self) -> None:
+        topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
+        skill = SKILL_PATH.read_text(encoding="utf-8")
+        group = markdown_section(topology, "Review group continuation")
+        for needle in ("at most 3 rounds", "fresh group", "重新分析", "只核实关闭", "design-type", "control-type", "original implementer"):
+            self.assertIn(needle, group)
+        self.assertIn("Review group continuation", skill)
 
     def test_output_structure_preserves_per_track_fail_closed_and_terminal_coverage(self) -> None:
         templates = TEMPLATES_PATH.read_text(encoding="utf-8")
