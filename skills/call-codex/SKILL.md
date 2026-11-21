@@ -7,6 +7,15 @@ description: Recommend effective Codex CLI collaboration — resume continuation
 
 本 skill 的定位是「**推荐与 codex CLI 更好的合作方式**」，不是「把 CLI 再包一遍」。协作模式全部来自 2026-08-24 fork 会话实测（见各节案例）；`scripts/call_codex.py` 仅保留给需要程序化 envelope 的一次性调用（如 discuss-ledger 的 downstream executor），协作场景一律走原生 CLI。
 
+## 两种起法
+
+同一个 GPT 模型有两种起法,按场合选:
+
+| 起法 | 怎么用 | 续派 |
+| --- | --- | --- |
+| 原生子代理 | Agent 工具 `subagent_type: magpie-sol-high` / `magpie-sol-medium` / `magpie-terra-high` / `magpie-terra-medium` | `SendMessage` 发给原子代理;写代码的子代理接着在原 worktree 工作 |
+| Codex CLI(下文各节) | `codex exec -C <worktree>`,后台进程 | `codex exec resume <session-id>`,必须同时显式传 `-m <model>` 和 `-c 'model_reasoning_effort="<effort>"'`(resume 不继承原会话的模型与强度) |
+
 ## 协作模式
 
 ### 1. 会话模型：exec 一次性 vs resume 续接
@@ -88,7 +97,7 @@ codex exec -C <repo> -s read-only -o out\code.md "<prompt>" *> logs\code.log
 | `--skip-git-repo-check` | 跳过 git 仓库检查（只读 review 等场景可用） |
 | 只读审查 | `-s read-only`（与 `--approve-for-me` 互斥，二选一） |
 | ★ `codex` 的 PATH 解析 | 本机解析为 `C:\Users\Xiao\.local\bin\codex.cmd`；Git Bash 里找不到 codex，要从 PowerShell 调；不再是 Volta shim |
-| ★ 模型 id | 见 `~/.codex/magpie-desktop-models.json`；口头说的 “sol/high” 对应 `-m gpt-6.1-sol -c 'model_reasoning_effort="high"'` |
+| ★ 模型 id | 口头说的 “sol/high” 指 sol 系列当前最新的模型加 high 强度；具体 id 以 `~/.codex/magpie-desktop-models.json` 为准，文档和 brief 里只写 sol / terra 系列名，不写死版本号 |
 | ★ 长 prompt 从 stdin 传 | `Get-Content prompt.md -Raw \| codex exec ... -`（末尾 `-`） |
 
 注：`--enable <feature>` 的合法 feature 名随版本变化，用前先验证；未在本表的行为以 `codex exec --help` 为准。
