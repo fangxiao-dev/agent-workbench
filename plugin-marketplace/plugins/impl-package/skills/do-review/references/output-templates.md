@@ -70,7 +70,6 @@ Each finding requires `impact`: `seam` breaks a cross-Ticket interface or data p
 {
   "schemaVersion": 1,
   "reviewRunId": "<stable ReviewRun id>",
-  "reviewGroup": "<optional review-group id; record warns when one group reaches 3 rounds>",
   "phase": "initial | finding-closure | terminal-final",
   "resolvedHead": "<40-character commit SHA>",
   "findings": [

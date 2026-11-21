@@ -219,6 +219,16 @@ class ThreeTrackContractTests(unittest.TestCase):
         for retired in ("dormant", "probation", "consecutive clean", "two clean"):
             self.assertNotIn(retired, (lifecycle + skill + topology).lower())
 
+    def test_skill_triggers_on_final_review_and_gates_fixes_on_a_closed_round(self) -> None:
+        skill = SKILL_PATH.read_text(encoding="utf-8")
+        description = skill.split("description:", 1)[1].split("\n", 1)[0]
+        for needle in ("终审", "final review", "terminal-final", "多轮审阅", "派修复"):
+            self.assertIn(needle, description)
+        for needle in ("review_rounds.py open", "record", "close", "不得派修复", "Track A=<subagent_type>", "不另起流程", "不得把两条轨合并"):
+            self.assertIn(needle, skill)
+        briefs = (DO_REVIEW_DIR / "references" / "subagent-briefs.md").read_text(encoding="utf-8")
+        self.assertIn("Caller-Assigned Leaf", briefs)
+
     def test_review_group_continuation_rules_apply_to_every_review(self) -> None:
         topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
         skill = SKILL_PATH.read_text(encoding="utf-8")

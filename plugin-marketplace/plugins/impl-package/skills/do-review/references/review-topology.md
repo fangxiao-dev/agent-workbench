@@ -40,7 +40,7 @@ Applies to every review (`initial` rounds, `finding-closure`, `terminal-final`, 
 - **Fresh group**: one group runs at most 3 rounds. After 3 rounds, or as soon as only control-type findings are left, dispatch one fresh group (new leaves, no prior sessions) for one full-scope round. The new group's count restarts at 1; the Loop round cap counts rounds across all groups. The review is converged only when the fresh group also leaves only control-type findings.
 - **Severity and class**: the parent judges severity and does not copy the reviewer's rating. Findings are design-type (behavior, data, permissions, pay calculation, contract) or control-type (commands, gate order, evidence registration, wording). Only control-type findings left, with no design-type finding, is what triggers the fresh group above.
 - **Fix**: the original implementer fixes, resumed. Design-type fixes change the plan document first, which goes into the next review round; code follows after it passes, then stable docs. The parent fixes control-type findings directly and records them in the ledger without another round.
-- The ledger records, per group, the group id, member leaves and rounds used. For an Impl-Package target, put the group id in the canonical summary as `reviewGroup`; `review_track_stats.py record` counts the group's rounds and warns when it reaches 3.
+- `review_rounds.py` keeps the per-group state beside the ledger (group id, tracks and their leaves, rounds used): `open` registers every track of the round and refuses a fourth round in one group, `close` refuses while a registered track has not returned, `export` works only on a closed round.
 
 ## Loop track lifecycle
 

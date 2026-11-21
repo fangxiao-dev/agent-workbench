@@ -1,6 +1,6 @@
 ---
 name: do-review
-description: 编排独立 leaf reviewer agent，用于 PR/code review、N 轮 review、loop/until-converged review、自定义 reviewer 选择与 closure verification；先固定不可变的已提交 revision 或隔离的 working-tree snapshot，再为每个 phase 解析 review strategy。
+description: 编排独立 leaf reviewer agent，用于 PR/code review、终审（final review / terminal-final）、多轮审阅（N 轮 review、loop/until-converged review）、审阅结果回来后要派修复或判断收敛、自定义 reviewer 选择与 closure verification；先固定不可变的已提交 revision 或隔离的 working-tree snapshot，再为每个 phase 解析 review strategy。
 allowed-tools:
   - Read
   - Grep
@@ -22,6 +22,7 @@ allowed-tools:
 2. 每个本轮需要运行的 track 恰好派发一次匹配的独立 leaf invocation；terminal-final 中满足复用条件的 C/Safety 消费旧 PASS，不重复派发。逐 track 固定派发，才能避免 required coverage 被重复派发或静默漏掉。
 3. leaf 或其执行 worker 不可用/未授权时，在创建 ReviewRun 前停止并询问“停止，或授权精确命名的 degraded 单 session 列表”，绝不自行降级。否则缺失的独立证据会被误报为完整 review。
 4. scope、phase、topology 固定前不预留 capacity。capacity 不能反过来决定应审哪些 track。
+5. 调用方指定模型或 subagent 类型时，用 `review_rounds.py open --track "Track A=<subagent_type>"` 的映射落地：只替换该 track 的 leaf，topology、brief、ledger、轮次状态、等待和 canonical 流程原样执行，不另起流程；这不算 degraded。每个 required track 恰好一个 leaf，不得把两条轨合并给同一个 leaf。
 
 ## 判断启发式（保留）
 
@@ -53,7 +54,8 @@ allowed-tools:
 
 ## 3. Dispatch Independent Rounds
 
-1. 先读 [subagent-briefs.md](references/subagent-briefs.md)：common block 每轮使用，closure brief 只给 Closure verification，anti-duplicate addendum 只在 round 1 后使用。派发 matching leaf，不让 generic subagent 自己拼 track brief；传入 verified reviewer `SKILL.md` path、canonical ledger path 和 leaf 独占的 report artifact path。brief 由 parent 固定，避免 generic worker 临场改变 track 合同。
+0. 派发前用 `scripts/review_rounds.py open --ledger <ledger> --group <组 id> --phase <phase> --track <轨>…` 登记本轮要跑的全部轨；每条轨返回后立即 `record --track <轨> --verdict <V> --report <报告>`；全部返回后 `close`。有轨缺失时 `close` 拒绝并列出缺的轨；`close` 成功前不得派修复、不得写 canonical summary、不得报告本轮结论；`export` 只在 `close` 之后可用，输出本轮汇总和待分诊的报告。同一审阅组满 3 轮后 `open` 拒绝，必须换新组 id。
+1. 先读 [subagent-briefs.md](references/subagent-briefs.md)：common block 每轮使用，closure brief 只给 Closure verification，anti-duplicate addendum 只在 round 1 后使用。派发 matching leaf，不让 generic subagent 自己拼 track brief（调用方指定了 subagent 类型时，parent 按 subagent-briefs.md 的 Caller-Assigned Leaf 补全 skill 路径和 leaf 合同）；传入 verified reviewer `SKILL.md` path、canonical ledger path 和 leaf 独占的 report artifact path。brief 由 parent 固定，避免 generic worker 临场改变 track 合同。
 
 2. Round 1 不传 prior findings；后续只传 parent 已验证的上一轮 canonical context，不传 raw reviewer output。第 2 轮起续用同一审阅组的 leaf 会话，每轮写明“重新分析”或“只核实关闭”，同组最多 3 轮后换全新一组做一轮全量审阅，规则见 [review-topology.md](references/review-topology.md) 的 Review group continuation，普通审阅与终审都适用。按已解析 topology 与 matching leaf 执行本轮审查，逐项返回 PASS/FAIL/UNCERTAIN；canonical context 保持轮次之间的证据边界。
 3. timeout、cancellation、`PARTIAL` 或缺 evidence 都是 incomplete，不是 PASS。等待所有 required active tracks；Loop 中已记录 converged 的 track 不算 missing，其他 incomplete 会阻断，除非用户授权了该精确 degraded topology。否则“没有返回”会被错误收敛为通过。
