@@ -7,7 +7,18 @@ description: Recommend effective Codex CLI collaboration — resume continuation
 
 本 skill 的定位是「**推荐与 codex CLI 更好的合作方式**」，不是「把 CLI 再包一遍」。协作模式全部来自 2026-08-24 fork 会话实测（见各节案例）；`scripts/call_codex.py` 仅保留给需要程序化 envelope 的一次性调用（如 discuss-ledger 的 downstream executor），协作场景一律走原生 CLI。
 
+## 两种起法
+
+同一个 GPT 模型有两种起法,按场合选:
+
+| 起法 | 怎么用 | 续派 |
+| --- | --- | --- |
+| 原生子代理 | Agent 工具 `subagent_type: magpie-sol-high` / `magpie-sol-medium` / `magpie-terra-high` / `magpie-terra-medium` | `SendMessage` 发给原子代理;写代码的子代理接着在原 worktree 工作 |
+| Codex CLI(下文各节) | `codex exec -C <worktree>`,后台进程 | `codex exec resume <session-id>`,必须同时显式传 `-m <model>` 和 `-c 'model_reasoning_effort="<effort>"'`(resume 不继承原会话的模型与强度) |
+
 ## 协作模式
+
+**每次调用都显式指定模型和推理 effort。** 原生 CLI 使用 `-m <model>` 与 `-c 'model_reasoning_effort="<effort>"'`；程序化 wrapper 使用必填参数 `--model <model>` 和 `--effort <effort>`。调用方没有提供任一值时，先询问调用方并暂停派发；不采用 Codex 配置、wrapper 或 agent profile 的默认值。
 
 ### 1. 会话模型：exec 一次性 vs resume 续接
 
@@ -70,16 +81,16 @@ reviewer(fresh, read-only) → findings
 多个互不依赖的 codex 任务（例如代码、合同、安全三轨只读审阅）**每个起一个后台进程同时跑**，不要在一个循环里依次 `codex exec`（串行会把总耗时叠成各轨之和，也失去中途单独 kill 一轨的能力）。每个进程用 `-o <文件>` 写最终答复，`*> <日志>` 记过程，主 session 只读输出文件：
 
 ```powershell
-codex exec -C <repo> -s read-only -o out\code.md "<prompt>" *> logs\code.log
+codex exec -C <repo> -s read-only -m <model> -c 'model_reasoning_effort="<effort>"' -o out\code.md "<prompt>" *> logs\code.log
 ```
 
-每轨照此各起一个后台进程（`run_in_background` / `Start-Process`），日志文件分开；进程结束前不重复读日志，只看各自的 `out\*.md`。
+每轨照此各起一个后台进程（`run_in_background` / `Start-Process`），日志文件分开；命令显式带上 `-m <model> -c 'model_reasoning_effort="<effort>"'`；进程结束前不重复读日志，只看各自的 `out\*.md`。
 
 ## 参数事实表（已实测，codex 0.149.0；★ 行实测于 2026-11-09，codex-cli 0.167.0-alpha.3.2）
 
 | 用法 | 结果 |
 | --- | --- |
-| `-m gpt-5.6-luna` | 模型选择有效 |
+| 原生 CLI：`-m <model> -c 'model_reasoning_effort="<effort>"'`；wrapper：`--model <model> --effort <effort>` | 显式指定模型与推理强度；每次调用都传两项 |
 | `-c 'service_tier="fast"'` | fast tier 有效 |
 | `--approve-for-me` | 自动批准（自带 workspace-write 沙箱）；**与 `-s <mode>` 互斥**，不能同用 |
 | 默认（无 `-s`） | workspace-write 沙箱 + approval on-request/auto_review（依 `~/.codex/config.toml`） |
@@ -88,7 +99,7 @@ codex exec -C <repo> -s read-only -o out\code.md "<prompt>" *> logs\code.log
 | `--skip-git-repo-check` | 跳过 git 仓库检查（只读 review 等场景可用） |
 | 只读审查 | `-s read-only`（与 `--approve-for-me` 互斥，二选一） |
 | ★ `codex` 的 PATH 解析 | 本机解析为 `C:\Users\Xiao\.local\bin\codex.cmd`；Git Bash 里找不到 codex，要从 PowerShell 调；不再是 Volta shim |
-| ★ 模型 id | 见 `~/.codex/magpie-desktop-models.json`；口头说的 “sol/high” 对应 `-m gpt-6.1-sol -c 'model_reasoning_effort="high"'` |
+| ★ 模型 id | 口头说的 “sol/high” 指 sol 系列当前最新的模型加 high 强度；具体 id 以 `~/.codex/magpie-desktop-models.json` 为准，文档和 brief 里只写 sol / terra 系列名，不写死版本号 |
 | ★ 长 prompt 从 stdin 传 | `Get-Content prompt.md -Raw \| codex exec ... -`（末尾 `-`） |
 
 注：`--enable <feature>` 的合法 feature 名随版本变化，用前先验证；未在本表的行为以 `codex exec --help` 为准。
@@ -102,15 +113,15 @@ python "<repo>\skills\call-codex\scripts\call_codex.py" `
   --cwd "<target-repo>" `
   --prompt-file "<prompt-file>" `
   --timeout-s 1800 `
-  --model "gpt-5.6-luna" `
-  --config 'model_reasoning_effort="max"' `
+  --model "<model-id>" `
+  --effort "<effort>" `
   --config 'service_tier="fast"' `
   --sandbox read-only `
   --ephemeral `
   --output-schema "<schema.json>"
 ```
 
-Pass exactly one of `--prompt` or `--prompt-file`. Repeat `--config` for multiple Codex `-c` settings.
+Pass exactly one of `--prompt` or `--prompt-file`. Always provide `--model` and `--effort` explicitly; if either is missing, stop and ask the caller instead of relying on a configured or wrapper default. Repeat `--config` for additional Codex `-c` settings; use `--effort` for reasoning strength.
 
 **Do not pass `--executable` unless you have a specific reason.** Discovery already picks
 the right CLI, in this order: `CODEX_EXECUTABLE` (repository-local `.env` or process

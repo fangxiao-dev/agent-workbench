@@ -73,6 +73,20 @@ def test_split_prompt_requires_track_markers() -> None:
         codex_round.split_prompt("只有公共部分，没有任何段标记\n")
 
 
+def test_main_rejects_empty_model_or_effort_before_launching(tmp_path, monkeypatch) -> None:
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("公共\n\n## Track A\nA 职责\n", encoding="utf-8")
+    for flag, args in (("model", ["--model", " ", "--effort", "e"]), ("effort", ["--model", "m", "--effort", ""])):
+        monkeypatch.setattr(sys, "argv", [
+            "codex_round.py", "--package", "p", "--run", "r", "--base", "b",
+            "--prompt-file", str(prompt), "--tracks", "A", "--new", *args,
+        ])
+        monkeypatch.setattr(codex_round.shutil, "which", lambda _: pytest.fail("不应启动 codex"))
+        with pytest.raises(SystemExit) as exc:
+            codex_round.main()
+        assert exc.value.code == 2
+
+
 def test_main_rejects_missing_selected_track_before_launching(tmp_path, monkeypatch) -> None:
     prompt = tmp_path / "prompt.md"
     prompt.write_text("公共\n\n## Track A\nA 职责\n", encoding="utf-8")

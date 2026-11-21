@@ -6,8 +6,17 @@ description: 把一个任务交给 DeepSeek 驱动的 `claude -p` 子进程执�
 # call-ds-in-claude
 
 起一次性 `claude -p`,模型走 DeepSeek 的 Anthropic 兼容端点(默认 `deepseek-v4-flash`)。
-环境变量只设在子进程内;默认每次是新进程,上下文必须写进 prompt;要延续上下文用 `-Resume`(会话历史会存在本机 `.claude/projects`)。
-同一任务 scope 内上下文可复用时(追问、补改、基于它刚读过的材料继续、超时后续跑),优先 `-Resume` 而不是起新进程重新交代背景;换了任务或旧上下文已经污染/过长时再起新的。
+## 两种起法
+
+同一个 DeepSeek 模型有两种起法,按场合选:
+
+| 起法 | 怎么用 | 续派 |
+| --- | --- | --- |
+| 原生子代理(默认) | Agent 工具 `subagent_type: magpie-deepseek` | `SendMessage` 发给原子代理;写代码的子代理接着在原 worktree 工作 |
+| CLI(本 skill) | 下文 `call_ds.py`,`--cwd` 指定工作目录 | `--resume <session>`,`--cwd` 与上次相同 |
+
+CLI 的环境变量只设在子进程内;默认每次是新进程,上下文必须写进 prompt;要延续上下文用 `--resume`(会话历史会存在本机 `.claude/projects`)。
+同一任务 scope 内上下文可复用时(追问、补改、基于它刚读过的材料继续、超时后续跑),两种起法都优先续派而不是起新的重新交代背景;换了任务或旧上下文已经污染/过长时再起新的。
 
 ## 调用
 

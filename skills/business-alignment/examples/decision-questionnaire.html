@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Questionnaire</title>
+<style>
+  :root {
+    --ink: #1f2430; --muted: #5d6475; --line: #e3e6ec; --bg: #f6f7f9; --card: #fff;
+    --accent: #2f5bd3; --accent-soft: #edf2ff;
+    --agree: #1f8a4c; --agree-soft: #e8f6ee; --later: #8a6a12; --later-soft: #fbf4e0;
+    --own: #6b3fc4; --own-soft: #f2ecfd; --head: 52px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: calc(var(--head) + 12px); }
+  body { margin: 0; font: 15px/1.55 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; color: var(--ink); background: var(--bg); }
+  header { position: sticky; top: 0; z-index: 20; background: #fff; border-bottom: 1px solid var(--line); }
+  .bar { max-width: 1180px; margin: 0 auto; padding: 0 20px; height: var(--head); display: flex; align-items: center; gap: 12px; }
+  .bar h1 { font-size: 16px; margin: 0; flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .progress { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .progress-track { height: 3px; background: var(--line); }
+  .progress-fill { height: 3px; background: var(--accent); width: 0; transition: width .2s; }
+  .btn { border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 7px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .btn.ghost { background: #fff; color: var(--accent); }
+  .layout { max-width: 1180px; margin: 0 auto; padding: 16px 20px 60px; display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 24px; align-items: start; }
+  aside { position: sticky; top: calc(var(--head) + 16px); max-height: calc(100vh - var(--head) - 32px); overflow: auto; }
+  .toc { display: flex; flex-direction: column; gap: 2px; }
+  .toc a { display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 14px; border-left: 3px solid transparent; }
+  .toc a:hover { background: #fff; }
+  .toc a.active { background: #fff; border-left-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .toc .count { color: var(--muted); font-size: 12px; white-space: nowrap; font-weight: 400; }
+  .toc a.done .count { color: var(--agree); }
+  .intro { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; font-size: 14px; }
+  .intro p { margin: 0 0 6px; } .intro p:last-child { margin: 0; }
+  section.chapter { margin-top: 22px; }
+  section.chapter > h2 { font-size: 18px; margin: 0 0 2px; }
+  .chapter-note { color: var(--muted); margin: 0 0 8px; font-size: 13px; }
+  .q { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; margin: 8px 0; }
+  .q.answered { border-left: 3px solid var(--accent); }
+  .q-title { font-weight: 600; margin: 0 0 4px; }
+  .q-num { color: var(--accent); margin-right: 6px; }
+  .q-desc { color: var(--muted); margin: 0 0 6px; font-size: 14px; }
+  .q-rec { background: var(--accent-soft); border-radius: 7px; padding: 6px 10px; margin: 0 0 8px; font-size: 14px; }
+  .q-rec b { color: var(--accent); }
+  .q-tax { display: inline-block; margin-left: 6px; font-size: 11px; color: var(--later); background: var(--later-soft); border-radius: 5px; padding: 0 6px; vertical-align: 1px; font-weight: 400; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .choices { display: flex; flex-wrap: wrap; gap: 6px; }
+  .choices button { border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; cursor: pointer; font: inherit; font-size: 14px; background: #fff; color: var(--ink); }
+  .choices button:hover { border-color: #b9c0cc; }
+  .choices button.c-agree[aria-pressed="true"] { background: var(--agree-soft); border-color: var(--agree); color: var(--agree); }
+  .choices button.c-future[aria-pressed="true"] { background: var(--later-soft); border-color: var(--later); color: var(--later); }
+  .choices button.c-no[aria-pressed="true"] { background: #fdecec; border-color: #b4372f; color: #b4372f; }
+  .choices button.c-own[aria-pressed="true"] { background: var(--own-soft); border-color: var(--own); color: var(--own); }
+  .choices button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .saved.warn { color: #b4372f; }
+  .old { font-size: 13px; color: var(--muted); background: #f7f7f9; border-radius: 6px; padding: 4px 8px; margin: 0 0 8px; }
+  .seg { display: flex; margin: 12px 10px 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+  .seg button { flex: 1; border: 0; background: #fff; padding: 5px 0; font: inherit; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .toc-part { font-size: 12px; color: var(--muted); padding: 10px 10px 2px; }
+  .part-head { margin: 36px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--later-soft); color: var(--later); font-weight: 600; }
+  .defaults { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 8px 0; font-size: 14px; }
+  .defaults li { margin: 4px 0; }
+  textarea { display: none; width: 100%; margin-top: 8px; min-height: 64px; resize: vertical; border: 1px solid var(--own); border-radius: 7px; padding: 8px 10px; font: inherit; font-size: 14px; }
+  .q.own textarea { display: block; }
+  .saved { font-size: 12px; color: var(--muted); }
+  .view-open .q.answered:not(.keep) { display: none; }
+  .view-done .q:not(.answered):not(.keep) { display: none; }
+  .foot { color: var(--muted); font-size: 13px; margin-top: 24px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 9px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 30; }
+  .toast.show { opacity: 1; }
+  @media (max-width: 860px) {
+    .layout { display: block; padding: 0 12px 50px; }
+    aside { position: sticky; top: calc(var(--head) + 3px); z-index: 15; max-height: none; overflow: visible; background: var(--bg); margin: 0 -12px; padding: 8px 12px 6px; border-bottom: 1px solid var(--line); }
+    .toc { flex-direction: row; overflow-x: auto; gap: 6px; scrollbar-width: none; }
+    .toc a { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; padding: 4px 10px; font-size: 13px; }
+    .toc a.active { border-color: var(--accent); }
+    .seg { margin: 6px 0 0; max-width: 320px; }
+    .toc-part { display: none; }
+    html { scroll-padding-top: calc(var(--head) + 84px); }
+    .intro { margin-top: 12px; }
+    .bar { padding: 0 12px; gap: 8px; }
+    .bar h1 { font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1 id="pageTitle"></h1>
+    <span class="progress" id="progressText"></span>
+    <button class="btn ghost" id="copyBtn" type="button"></button>
+    <button class="btn" id="exportBtn" type="button"></button>
+  </div>
+  <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+</header>
+
+<div class="layout">
+  <aside>
+    <nav class="toc" id="toc"></nav>
+    <div class="seg" id="viewSeg" role="group">
+      <button type="button" data-view="all" aria-pressed="true"></button>
+      <button type="button" data-view="open" aria-pressed="false"></button>
+      <button type="button" data-view="done" aria-pressed="false"></button>
+    </div>
+  </aside>
+  <main>
+    <div class="intro" id="intro"></div>
+    <div id="chapters"></div>
+    <p class="foot" id="foot"></p>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== 只改这一段：CONFIG 与 DATA =====
+const CONFIG = {
+  title: "示例 · 业务问题确认",          // 页面标题，也是导出第一行
+  storeKey: "example-questionnaire",      // localStorage 键：每份问卷唯一；改版时不要改，否则已填答复读不回来
+  exportFilePrefix: "业务问题答复",        // 导出文件名前缀，后面自动加日期
+  // legacyChoices: { later: "future" }, // 可省：改过选项值时，旧值 → 新值
+  // 说明区：每项一段，可含 <b>；写清选项含义、先答哪部分、怎么发回
+  intro: [
+    "每题四个选项：<b>同意推荐</b>、<b>未来再做</b>、<b>不做</b>，或选<b>我的意见</b>后直接写下您的想法。选完或写完自动保存在这台设备上；再点一次已选的按钮可以取消。",
+    "<b>第一部分请先答</b>；第二部分可以晚点再答。答完（或答一部分）后，点右上角“导出答复”或“复制答复”发给我们。"
+  ],
+  // 界面文字：换语言时整体替换这一组
+  ui: {
+    lang: "zh-CN",
+    choices: { agree: "同意推荐", future: "未来再做", no: "不做", own: "我的意见" },
+    chapter: (n, title) => "第 " + n + " 章 · " + title,
+    part1: "第一部分 · 请先答", part2: "第二部分 · 以后再答",
+    flag: "需专业人士确认",
+    why: "为什么问：", rec: "我们的推荐：",
+    oldAnswer: "您之前在相关旧题里的回答：",
+    ownPlaceholder: "请写下您的想法，写完自动保存",
+    ownEmpty: "意见还是空的，不算回答", saved: "已保存", autosaved: "已自动保存",
+    unanswered: "（未回答）", empty: "（空）",
+    progress: (p1done, p1, done, total, hasParts) => (hasParts ? "第一部分 " + p1done + " / " + p1 + " · " : "") + "全部 " + done + " / " + total,
+    views: { all: "全部", open: "未回答", done: "已回答" },
+    copy: "复制答复", export: "导出答复",
+    exportHead: " · 答复", exportTime: "导出时间：", exportCount: (d, t) => "已回答 " + d + " / " + t,
+    exportReply: "答复：", exportSource: "来源：", exportOrphans: "【旧版问卷里已删除或合并的题，您当时的回答】",
+    toastExported: "答复文件已下载，请发给我们", toastCopied: "已复制，可以直接粘贴到消息或邮件里发给我们",
+    toastCopyFailed: "复制失败，请改用“导出答复”",
+    foot: "答复只保存在这台设备的这个浏览器里，换设备或换浏览器打开会是空白的，请在同一台设备上答完再导出。"
+  }
+};
+
+// 每章：title（只写主题，编号由引擎生成）、note、questions；later: true 归入第二部分（放在最后）
+// 每题：id（稳定题号，永不复用）、source（来源条目，导出时一并输出）、q、desc（为什么问）、rec（我们的推荐）
+//       可选 flag: true（需专业人士确认）、from: [旧题号]（合并题：显示旧答复）
+const DATA = [
+  {
+    title: "示例主题",
+    note: "这一章影响后面的大部分决定，请优先回答。",
+    questions: [
+      { id: "Q-001", source: "REQ-12", q: "新订单默认由谁审核？",
+        desc: "审核人决定订单多快能处理，也决定谁对错误负责。",
+        rec: "默认由各门店负责人审核；金额较大的再交给总负责人。" },
+      { id: "Q-002", source: "REQ-15", q: "资料需要保存多久？", flag: true,
+        desc: "保存太短可能不符合规定，太长会增加管理成本。",
+        rec: "按专业顾问给的年限设置；在此之前先保存 10 年。" }
+    ]
+  },
+  {
+    title: "以后再定的事项", later: true,
+    note: "这一章的功能以后才做，可以晚点再答。",
+    questions: [
+      { id: "Q-010", source: "REQ-30", q: "以后是否需要按月汇总报表？", from: ["Q-009"],
+        desc: "汇总报表要提前预留数据。",
+        rec: "需要，按月汇总；格式等功能开始做时再定。" }
+    ]
+  }
+];
+// ===== 以下为通用引擎，一般不用改 =====
+
+const UI = CONFIG.ui;
+const KEYS = ["agree", "future", "no", "own"];
+let answers = {};
+try { answers = JSON.parse(localStorage.getItem(CONFIG.storeKey) || "{}") || {}; } catch (e) { answers = {}; }
+const legacy = CONFIG.legacyChoices || {};
+Object.values(answers).forEach((a) => { if (a && legacy[a.choice]) a.choice = legacy[a.choice]; });
+
+function save() { try { localStorage.setItem(CONFIG.storeKey, JSON.stringify(answers)); } catch (e) {} }
+function answeredValue(a) { return Boolean(a && a.choice && (a.choice !== "own" || (a.text || "").trim())); }
+function isAnswered(id) { return answeredValue(answers[id]); }
+function describe(a) {
+  if (!a || !a.choice) return UI.unanswered;
+  if (a.choice === "own") return UI.choices.own + "：" + ((a.text || "").trim() || UI.empty);
+  return UI.choices[a.choice] || a.choice;
+}
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  Object.entries(attrs || {}).forEach(([k, v]) => {
+    if (k === "class") node.className = v; else if (k === "text") node.textContent = v; else node.setAttribute(k, v);
+  });
+  (children || []).forEach((c) => node.appendChild(typeof c === "string" ? document.createTextNode(c) : c));
+  return node;
+}
+const hasParts = DATA.some((c) => c.later);
+
+function render() {
+  const toc = document.getElementById("toc");
+  const root = document.getElementById("chapters");
+  DATA.forEach((chapter, ci) => {
+    const anchor = "ch" + (ci + 1);
+    if (chapter.later && !(DATA[ci - 1] || {}).later) {
+      toc.appendChild(el("div", { class: "toc-part", text: UI.part2 }));
+      root.appendChild(el("div", { class: "part-head", text: UI.part2 }));
+    } else if (ci === 0 && hasParts) {
+      toc.appendChild(el("div", { class: "toc-part", text: UI.part1 }));
+    }
+    toc.appendChild(el("a", { href: "#" + anchor }, [
+      el("span", { text: (ci + 1) + ". " + chapter.title }),
+      el("span", { class: "count", id: "tocCount" + ci, text: "" })
+    ]));
+    const section = el("section", { class: "chapter" });
+    section.id = anchor;
+    section.appendChild(el("h2", { text: UI.chapter(ci + 1, chapter.title) }));
+    if (chapter.note) section.appendChild(el("p", { class: "chapter-note", text: chapter.note }));
+
+    chapter.questions.forEach((item, qi) => {
+      const num = (ci + 1) + "." + (qi + 1);
+      const card = el("div", { class: "q", id: "q-" + item.id });
+      const title = el("p", { class: "q-title" }, [el("span", { class: "q-num", text: num }), item.q]);
+      if (item.flag) title.appendChild(el("span", { class: "q-tax", text: UI.flag }));
+      card.appendChild(title);
+      card.appendChild(el("p", { class: "q-desc" }, [el("b", { text: UI.why }), item.desc]));
+      card.appendChild(el("p", { class: "q-rec" }, [el("b", { text: UI.rec }), item.rec]));
+      (item.from || []).forEach((oldId) => {
+        if (answeredValue(answers[oldId])) card.appendChild(el("p", { class: "old", text: UI.oldAnswer + describe(answers[oldId]) }));
+      });
+      // 在筛选视图里操作时保留当前卡片；焦点离开卡片或切换视图后再按筛选隐藏
+      const keep = () => card.classList.add("keep");
+      card.addEventListener("focusout", (e) => { if (!card.contains(e.relatedTarget)) card.classList.remove("keep"); });
+      const choices = el("div", { class: "choices", role: "group", "aria-label": num });
+      KEYS.forEach((key) => {
+        const btn = el("button", { type: "button", class: "c-" + key, "data-key": key, "aria-pressed": "false", text: UI.choices[key] });
+        btn.addEventListener("click", () => {
+          keep();
+          const cur = answers[item.id] || {};
+          answers[item.id] = Object.assign({}, cur, { choice: cur.choice === key ? null : key, at: new Date().toISOString() });
+          save(); refresh(card, item.id);
+          if (answers[item.id].choice === "own") card.querySelector("textarea").focus();
+        });
+        choices.appendChild(btn);
+      });
+      card.appendChild(el("div", { class: "row" }, [choices, el("span", { class: "saved" })]));
+      const area = el("textarea", { placeholder: UI.ownPlaceholder, "aria-label": num + " " + UI.choices.own });
+      area.value = (answers[item.id] && answers[item.id].text) || "";
+      area.addEventListener("input", () => {
+        keep();
+        answers[item.id] = Object.assign({}, answers[item.id], { choice: "own", text: area.value, at: new Date().toISOString() });
+        save(); refresh(card, item.id);
+      });
+      card.appendChild(area);
+      section.appendChild(card);
+      refresh(card, item.id, true);
+    });
+    root.appendChild(section);
+  });
+  updateProgress();
+}
+
+function refresh(card, id, initial) {
+  const a = answers[id] || {};
+  card.querySelectorAll(".choices button").forEach((b) => b.setAttribute("aria-pressed", String(a.choice === b.dataset.key)));
+  card.classList.toggle("own", a.choice === "own");
+  card.classList.toggle("answered", isAnswered(id));
+  const saved = card.querySelector(".saved");
+  saved.classList.remove("warn");
+  if (a.choice === "own" && !(a.text || "").trim()) { saved.textContent = UI.ownEmpty; saved.classList.add("warn"); }
+  else saved.textContent = a.choice ? (initial ? UI.saved : UI.autosaved) : "";
+  if (!initial) updateProgress();
+}
+
+function updateProgress() {
+  let total = 0, done = 0, p1 = 0, p1done = 0;
+  DATA.forEach((chapter, ci) => {
+    let cd = 0;
+    chapter.questions.forEach((q) => {
+      const ok = isAnswered(q.id); total++; if (ok) { done++; cd++; }
+      if (!chapter.later) { p1++; if (ok) p1done++; }
+    });
+    const c = document.getElementById("tocCount" + ci);
+    if (c) { c.textContent = cd + "/" + chapter.questions.length; c.parentElement.classList.toggle("done", cd === chapter.questions.length); }
+  });
+  document.getElementById("progressText").textContent = UI.progress(p1done, p1, done, total, hasParts);
+  document.getElementById("progressFill").style.width = (total ? done / total * 100 : 0) + "%";
+}
+
+function buildExport() {
+  const lines = [CONFIG.title + UI.exportHead, UI.exportTime + new Date().toLocaleString(UI.lang), ""];
+  let done = 0, total = 0;
+  DATA.forEach((chapter, ci) => {
+    lines.push("【" + UI.chapter(ci + 1, chapter.title) + "】");
+    chapter.questions.forEach((item, qi) => {
+      total++; if (isAnswered(item.id)) done++;
+      lines.push((ci + 1) + "." + (qi + 1) + " " + item.q);
+      lines.push("    " + UI.exportReply + (isAnswered(item.id) ? describe(answers[item.id]) : UI.unanswered) +
+        "    [" + item.id + "]" + (item.source ? "  " + UI.exportSource + item.source : ""));
+    });
+    lines.push("");
+  });
+  const current = new Set(DATA.flatMap((c) => c.questions.map((q) => q.id)));
+  const orphans = Object.entries(answers).filter(([id, a]) => !current.has(id) && answeredValue(a));
+  if (orphans.length) {
+    lines.push(UI.exportOrphans);
+    orphans.forEach(([id, a]) => lines.push("    [" + id + "] " + describe(a)));
+    lines.push("");
+  }
+  lines.splice(2, 0, UI.exportCount(done, total));
+  return lines.join("\n");
+}
+
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+document.documentElement.lang = UI.lang;
+document.title = CONFIG.title;
+document.getElementById("pageTitle").textContent = CONFIG.title;
+document.getElementById("copyBtn").textContent = UI.copy;
+document.getElementById("exportBtn").textContent = UI.export;
+document.getElementById("foot").textContent = UI.foot;
+document.querySelectorAll("#viewSeg button").forEach((b) => { b.textContent = UI.views[b.dataset.view]; });
+CONFIG.intro.forEach((html) => { const p = document.createElement("p"); p.innerHTML = html; document.getElementById("intro").appendChild(p); });
+
+document.getElementById("exportBtn").addEventListener("click", () => {
+  const blob = new Blob(["﻿" + buildExport()], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = CONFIG.exportFilePrefix + "-" + new Date().toISOString().slice(0, 10) + ".txt";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast(UI.toastExported);
+});
+document.getElementById("copyBtn").addEventListener("click", async () => {
+  const text = buildExport();
+  try { await navigator.clipboard.writeText(text); toast(UI.toastCopied); }
+  catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast(UI.toastCopied); } catch (err) { toast(UI.toastCopyFailed); }
+    ta.remove();
+  }
+});
+document.querySelectorAll("#viewSeg button").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll("#viewSeg button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  document.querySelectorAll(".q.keep").forEach((c) => c.classList.remove("keep"));
+  const root = document.getElementById("chapters");
+  root.classList.toggle("view-open", b.dataset.view === "open");
+  root.classList.toggle("view-done", b.dataset.view === "done");
+}));
+
+render();
+
+const tocLinks = [...document.querySelectorAll("#toc a")];
+const narrow = window.matchMedia("(max-width: 860px)");
+function spy() {
+  const offset = narrow.matches ? 150 : 90;
+  let current = 0;
+  document.querySelectorAll("section.chapter").forEach((sec, i) => { if (sec.getBoundingClientRect().top - offset <= 0) current = i; });
+  tocLinks.forEach((a, i) => a.classList.toggle("active", i === current));
+  const nav = document.getElementById("toc"), link = tocLinks[current];
+  if (narrow.matches && link) nav.scrollLeft = link.offsetLeft - (nav.clientWidth - link.offsetWidth) / 2;
+}
+window.addEventListener("scroll", () => { cancelAnimationFrame(spy.r); spy.r = requestAnimationFrame(spy); }, { passive: true });
+spy();
+</script>
+</body>
+</html>

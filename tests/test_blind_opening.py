@@ -156,6 +156,7 @@ def test_combined_mode_refuses_to_overwrite_existing_ledger(tmp_path: Path) -> N
 
 def test_session_dir_persists_then_resumes_with_reread_lead(monkeypatch, tmp_path: Path) -> None:
     blind = load_module("blind_opening_session_under_test", BLIND)
+    blind.orchestrator.AGENT_MODELS["codex"].update(model="gpt-test", effort="medium")
     calls = []
     payload = {"ideas": [], "new_points": []}
 
@@ -183,6 +184,7 @@ def test_session_dir_persists_then_resumes_with_reread_lead(monkeypatch, tmp_pat
 
 def test_without_session_dir_stays_ephemeral(monkeypatch, tmp_path: Path) -> None:
     blind = load_module("blind_opening_ephemeral_under_test", BLIND)
+    blind.orchestrator.AGENT_MODELS["codex"].update(model="gpt-test", effort="medium")
     calls = []
     monkeypatch.setattr(
         blind.subprocess,

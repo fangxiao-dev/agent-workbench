@@ -88,6 +88,10 @@ Answer one question: do those sources uniquely determine the expected behavior f
 Do not inspect the implementation broadly, discover unrelated findings, propose a new review phase, or decide package/Ticket state. Return a concise conclusion with source citations.
 ```
 
+## Caller-Assigned Leaf
+
+When the caller names a model or `subagent_type` for a track (registered through `review_rounds.py open --track "Track A=<subagent_type>"`), that subagent replaces only the leaf. Its definition does not load the reviewer skill, so the parent adds to the common block: the verified reviewer `SKILL.md` path with "read and use exactly this skill", and the Generic Leaf Reviewer Brief above. Everything else (one leaf per required track, fixed ReviewRun, report artifact, wait for every track, canonical ledger) is unchanged.
+
 ## Round-N Anti-Duplicate Addendum
 
 ```text

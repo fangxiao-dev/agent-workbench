@@ -15,7 +15,7 @@
 - [ ] **fast path 条件**（req-align）：business result/Acceptance Semantics/security-data constraints/mutation authority 均未变化；删除改变 promise 即 contract-impacting
 - [ ] **Safety admission 六类边界**（do-review）：auth/授权与租户隔离、数据完整性/钱/库存/订单/客户状态、并发/事务/幂等、schema 迁移、外部副作用；记录匹配边界与证据；不把关键字当充分证据
 - [ ] **finding 分类**：blocker（业务数据/安全/运行时可见）、follow-up、backlog；去重按 broken invariant 而非路径/reviewer
-- [ ] **Loop 收敛**：最新轮无新 accepted + 全部 track dormant；clean 需连续两轮；dormant 非永久移除
+- [ ] **Loop 收敛**：同组最多 3 轮或只剩控制类问题 → 换新组全量一轮；新组也只剩控制类问题，该 track 才 converged；全部 selected track converged 才收敛
 - [ ] **closure 不替代 terminal-final**：terminal 需最终 HEAD 上完整 applicable topology
 - [ ] **Track C source recheck**：接受并归类为 Spec fidelity 后的一次性独立检查；结论三选一（sources 唯一裁决/req-align/owner）
 - [ ] **claim-evidence 五条**（verification）：直接执行/检查、同 worktree/revision/environment、晚于最后影响变化、含 command/exit/failure count/artifact、覆盖 gate；相邻 evidence 不能替代

@@ -76,6 +76,7 @@ def test_orchestrator_passes_legacy_codex_and_claude_configuration_to_executors(
     calls = []
     codex_payload = {"convergences": [], "contests": [], "new_points": []}
     claude_payload = {"convergences": [], "contests": [], "new_points": []}
+    orchestrator.AGENT_MODELS["codex"].update(model="gpt-test", effort="medium")
 
     def fake_executor(script, arguments, prompt, root, timeout_s):
         calls.append((script, arguments, prompt, root, timeout_s))
@@ -94,8 +95,8 @@ def test_orchestrator_passes_legacy_codex_and_claude_configuration_to_executors(
     assert "--json-schema" in claude_args
     assert claude_args[claude_args.index("--effort") + 1] == "high"
     assert claude_args[claude_args.index("--model") + 1] == "sonnet"
-    assert codex_args[codex_args.index("--model") + 1] == ""
-    assert 'model_reasoning_effort="high"' in codex_args
+    assert codex_args[codex_args.index("--model") + 1] == "gpt-test"
+    assert codex_args[codex_args.index("--effort") + 1] == "medium"
 
 
 def test_orchestrator_passes_explicit_grok_configuration_to_executor(monkeypatch, tmp_path: Path) -> None:
@@ -145,6 +146,7 @@ def test_orchestrator_keeps_claude_business_json_repair_above_executor(monkeypat
 
 def test_real_orchestration_still_owns_round_robin_after_executor_extraction(monkeypatch, tmp_path: Path) -> None:
     orchestrator = load_orchestrator()
+    orchestrator.AGENT_MODELS["codex"].update(model="gpt-test", effort="medium")
     payloads = [
         {"convergences": [], "contests": [], "new_points": [{"summary": "Opening", "body": "Codex point"}]},
         {"convergences": [{"point": "D1", "marker": "一致", "line": "Claude agrees"}], "contests": [], "new_points": []},

@@ -25,22 +25,34 @@ Record one phase separately from the review mode:
 
 - `initial`: run the complete applicable topology selected above.
 - `finding-closure`: dispatch one independent `reviewer` leaf for all named findings. Use the closure brief and verify only named findings; do not split the closure into code, spec, or Safety tracks.
-- `terminal-final`: pin the final implementation `HEAD`, resolve topology from `terminal_tracks` (not from whatever `initial` or any earlier phase in this ReviewRun selected), and run Track A unconditionally on the entire diff. For Tracks C and Safety, if an earlier `HEAD` in this ReviewRun already has a PASS for that track and the delta from that PASS `HEAD` to the final `HEAD` does not satisfy its admission condition, reuse that PASS and skip the track; otherwise apply that admission rule normally. Track C's admission range is bounded by the Ticket's section-level contract references (the contract sections and implementation surfaces). Whenever skipping, record which PASS `HEAD` is reused and the delta used for the admission decision. Admission is the only skip basis, even if intermediate finding closure was clean or a Loop track was dormant.
+- `terminal-final`: pin the final implementation `HEAD`, resolve topology from `terminal_tracks` (not from whatever `initial` or any earlier phase in this ReviewRun selected), and run Track A unconditionally on the entire diff. For Tracks C and Safety, if an earlier `HEAD` in this ReviewRun already has a PASS for that track and the delta from that PASS `HEAD` to the final `HEAD` does not satisfy its admission condition, reuse that PASS and skip the track; otherwise apply that admission rule normally. Track C's admission range is bounded by the Ticket's section-level contract references (the contract sections and implementation surfaces). Whenever skipping, record which PASS `HEAD` is reused and the delta used for the admission decision. Admission is the only skip basis, even if intermediate finding closure was clean or a Loop track was converged.
 
 A finding-closure result closes only its named findings. It cannot stand in for the terminal-final review. If a closure fix changes the diff or contract facts, refresh the single closure review brief before dispatch. The terminal verdict uses the terminal-final result from the same final implementation `HEAD`.
 
 Completion criterion: every dispatch records its phase and resolved reviewer leaf; terminal completion has one complete applicable-topology result on the final implementation `HEAD`.
 
+## Review group continuation
+
+Applies to every review (`initial` rounds, `finding-closure`, `terminal-final`, `N rounds` and `Loop`); normal reviews and final reviews use the same rules.
+
+- **Review group**: the leaves selected for one review. Keep each leaf's session for the group's whole lifecycle; from round 2 send incremental instructions instead of starting new leaves.
+- **Round mode**: the first line of every round brief says `重新分析` (default: review the fixed input again) or `只核实关闭` (only check that the previous round's fixed findings are closed). The brief also lists fixed items and registered backlog so they are not reported again. A `只核实关闭` PASS is not convergence.
+- **Fresh group**: one group runs at most 3 rounds. After 3 rounds, or as soon as only control-type findings are left, dispatch one fresh group (new leaves, no prior sessions) for one full-scope round. The new group's count restarts at 1; the Loop round cap counts rounds across all groups. The review is converged only when the fresh group also leaves only control-type findings.
+- **Severity and class**: the parent judges severity and does not copy the reviewer's rating. Findings are design-type (behavior, data, permissions, pay calculation, contract) or control-type (commands, gate order, evidence registration, wording). Only control-type findings left, with no design-type finding, is what triggers the fresh group above.
+- **Fix**: the original implementer fixes, resumed. Design-type fixes change the plan document first, which goes into the next review round; code follows after it passes, then stable docs. The parent fixes control-type findings directly and records them in the ledger without another round.
+- `review_rounds.py` keeps the per-group state beside the ledger (group id, tracks and their leaves, rounds used): `open` registers every track of the round and refuses a fourth round in one group, `close` refuses while a registered track has not returned, `export` works only on a closed round.
+
 ## Loop track lifecycle
 
-This section applies only to `Loop`. The parent records each selected track as `active`, `probation`, or `dormant`, with a consecutive-clean count:
+This section applies only to `Loop`. The parent records each selected track as `active` or `converged`:
 
-- Every selected track starts `active` at zero and participates in Round 1.
-- Only the parent may call a track clean, after deduplication, evidence verification, and classification. Clean means no distinct new accepted blocker or follow-up from that track; duplicate, refinement, disputed, out-of-scope, and backlog-only candidates do not reset the count.
-- The first clean round moves a track to `probation`, and it must run again. The second consecutive clean round moves it to `dormant`, so later Loop rounds need not dispatch it.
-- A new accepted blocker/follow-up resets its source track to `active` at zero. A finding from another track reactivates a dormant track when it materially affects that track's responsibility, evidence boundary, or likely fix surface.
-- Incomplete, timeout, `PARTIAL`, `UNCERTAIN`, or an evidence gap never counts as clean. Dormant means two independently clean rounds, not permanent removal or proof by itself.
+- Every selected track starts `active` and participates in Round 1. Rounds follow Review group continuation.
+- A track becomes `converged` only through a fresh group: the track's current group reaches 3 rounds or has only control-type findings left, a fresh group reviews the whole scope for one round, and that round also leaves only control-type findings (no design-type accepted blocker/follow-up). The parent decides after deduplication, evidence verification, and classification. A clean round inside the same group never converges a track.
+- If the fresh group's round finds a design-type finding, the track stays `active`: fix it, and the fresh group continues as the track's group with its count at 1.
+- Control-type findings are fixed directly and recorded; they neither block convergence nor reactivate a track. Duplicate, refinement, disputed, out-of-scope, and backlog-only candidates are not findings for this purpose.
+- A converged track is not dispatched again. A new design-type accepted finding from another track reactivates it when that finding materially affects the converged track's responsibility, evidence boundary, or likely fix surface; it then needs a fresh-group round again.
+- Incomplete, timeout, `PARTIAL`, `UNCERTAIN`, or an evidence gap never counts toward convergence.
 
-Convergence requires both no distinct new accepted blocker/follow-up in the latest completed round and every selected track dormant. A reactivated track must again complete two consecutive clean rounds. `N rounds` and `Closure verification` keep all resolved tracks active and do not use dormancy.
+Convergence requires every selected track `converged`. `N rounds` and `Closure verification` keep all resolved tracks active and do not track convergence.
 
 Completion criterion: the ledger explains every lifecycle transition and the evidence/classification that caused it.

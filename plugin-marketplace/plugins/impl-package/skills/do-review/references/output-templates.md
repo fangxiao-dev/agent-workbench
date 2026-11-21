@@ -136,12 +136,12 @@ Every summary is the complete latest accepted finding set for that ReviewRun, no
 
 For a custom full-review selection, replace the rows with exactly the selected Track label/skill pairs; retain one verdict row per selected reviewer and the same fail-closed aggregation rule. For `finding-closure`, use one `Independent closure reviewer` row covering all named findings; report any relevant Safety implication as scoped closure coverage, not as a separate track. When conditional Safety is selected for a full review, append its assigned track row. When applicable Safety is omitted from an explicit full-review list, keep the list exact and record the omitted boundary in the summary; a `terminal-final` report marks coverage `INCOMPLETE`.
 
-当 `Mode` 为 `Loop` 时，在 `Track Verdicts` 后补充 track lifecycle，明确哪些 track 仍在 `active` / `probation`、哪些已因连续两轮 clean 而 `dormant`，以及是否曾因新 finding 重新激活：
+当 `Mode` 为 `Loop` 时，在 `Track Verdicts` 后补充 track lifecycle，明确哪些 track 仍 `active`、哪些已经新审阅组全量复审后 `converged`，以及是否曾因其他 track 的设计类 finding 重新激活：
 
 ```markdown
 ## Track Lifecycle
 
-| Track | Final state | Consecutive clean rounds | Last review round | Reactivated because |
+| Track | Final state | Review group / rounds used | Converged by (fresh-group round) | Reactivated because |
 | --- | --- | --- | --- | --- |
 ```
 

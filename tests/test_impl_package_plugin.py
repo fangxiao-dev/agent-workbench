@@ -153,7 +153,7 @@ def test_do_review_owns_the_judgment_heuristics() -> None:
         "Closure ≠ terminal",
         "terminal-final",
         "finding-closure",
-        "Loop clean & convergence",
+        "Loop convergence",
         "Track C source recheck",
         "reviewer-registry.json",
         "review_ledger.py",

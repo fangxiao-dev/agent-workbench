@@ -9,12 +9,14 @@
 - 单一目标、已知事实、关键 entry point 与必须遵循的合同章节；
 - 接收者的角色、需要自行读取的执行合同路径及章节、本轮用户补充约束；约束变化时同步给受影响的执行者，规则正文用引用传递；
 - 成功行为、边界状态、不变量和具体返回条件；
-- write ownership、禁改范围、实际工作目录；涉及 Git 时明确 worktree 与 branch，detached HEAD 时改用完整 commit SHA；worker 的仓库命令统一在该 worktree 执行；
+- write ownership、禁改范围、实际工作目录；涉及 Git 时明确 worktree 与 branch，detached HEAD 时改用完整 commit SHA；worker 的仓库命令统一在该 worktree 执行；写代码 worker 的 worktree 做法见 [Resource Isolation](resource-isolation.md)；
 - 明确验证目标与走真实路径的 focused verification；存在容易误采信的具体边界时说明限制；
 - 已确认 finding 的原始意见、定位和裁决；
 - 返回实际改动或结论、验证证据、未完成项、residue 与 cleanup 状态。
 
 `investigate` 回答一个会改变执行判断的问题；`implement` 交付已裁决的有界产物；`fix` 处理已确认且已边界化的 finding；`verify` 检查既定行为，保持被交付的实现和基准不变。隔离环境中的临时测试写入、进程和日志可属于 `verify`，仍遵守授权、资源隔离与 cleanup 要求；更新 snapshot 基准或生成并纳入交付的文件使用 `implement` 或 `fix`。
+
+`fix` 分两档：偏差大或设计型的修复（要改方案、数据形状、行为、权限、计薪口径）先调研、出方案，与主控对齐后再改，设计型修复同时遵循 do-review 的“方案文档先行”；控制类问题（命令、门禁顺序、证据登记、措辞）和 brief 已写清目标的修复直接修，事后回报，修法与 brief 有偏差时先停下回报。
 
 同一结果所需的 focused test、format、普通重跑和机械 cleanup 留在本次委派。需要新的业务裁决、授权、资源 owner 或独立 acceptance 的工作回到主控重新选择。
 

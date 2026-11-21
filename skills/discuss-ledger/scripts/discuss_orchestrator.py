@@ -29,10 +29,10 @@ from discuss_ledger_core import ledger
 
 
 SUPPORTED_AGENTS = {"codex", "claude", "grok"}
-# Per-agent model / effort. Defaults keep each host's established setting; CLI flags override per run.
-# codex model "" means the Codex CLI's configured default model; grok model None means call-grok's default.
+# Per-agent model / effort. Codex requires both values from the caller; CLI flags set them per run.
+# Grok model None means call-grok's default.
 AGENT_MODELS: dict[str, dict[str, str | None]] = {
-    "codex": {"model": "", "effort": "high"},
+    "codex": {"model": None, "effort": None},
     "claude": {"model": "sonnet", "effort": "high"},
     "grok": {"model": None, "effort": "low"},
 }
@@ -65,7 +65,9 @@ def model_cli_args(args: argparse.Namespace) -> list[str]:
 
 def codex_model_args() -> list[str]:
     setting = AGENT_MODELS["codex"]
-    return ["--model", setting["model"] or "", "--config", f'model_reasoning_effort="{setting["effort"]}"']
+    if not setting["model"] or not setting["effort"]:
+        raise ValueError("Codex requires explicit --codex-model and --codex-effort")
+    return ["--model", setting["model"], "--effort", setting["effort"]]
 
 
 def claude_model_args() -> list[str]:
