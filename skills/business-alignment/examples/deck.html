@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>示例：门店请假怎么处理</title>
+<!--
+  翻页讲解范式（探索 / 汇报 / 讲解中插确认项）。用法见 ../SKILL.md 与 blocks.md。
+  改内容：只改 <main> 里的 <section class="page">，以及下面 CONFIG。脚本引擎不用改。
+  每页 data-id 稳定不变（意见按它存）；确认项 data-id 是题号，同样稳定、永不复用。
+-->
+<script>
+const CONFIG = {
+  title: "示例：门店请假怎么处理",
+  intent: "探索",                 // 探索 / 拍板 / 汇报，写给下一个接手改版的 session 看
+  storeKey: "example-deck-leave",  // 每份材料唯一；题号整体重编时才换，换前提醒对方先导出
+};
+</script>
+<style>
+  :root { --ink:#1d2433; --muted:#5d6577; --line:#e3e6ee; --bg:#f5f6fa; --card:#fff;
+    --accent:#4f46e5; --accent-soft:#ecebff; --ok:#15803d; --ok-soft:#ecf8ef; --bad:#c2410c; --bad-soft:#fff1ec;
+    --settled:#0f766e; --settled-soft:#e3f5f2; --warn:#a16207; --warn-soft:#fdf5dc; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; }
+  .deck { height:100%; display:grid; grid-template-columns:250px 1fr; }
+  .toc { border-right:1px solid var(--line); background:#fff; padding:22px 12px; overflow:auto; }
+  .toc .t { font-size:13px; color:var(--muted); padding:0 10px 10px; }
+  .toc a { display:flex; gap:8px; padding:8px 10px; border-radius:8px; color:var(--ink); text-decoration:none; font-size:14px; line-height:1.4; cursor:pointer; }
+  .toc a span { color:var(--muted); min-width:18px; }
+  .toc a i { margin-left:auto; font-style:normal; color:var(--accent); font-size:12px; }
+  .toc a:hover { background:var(--bg); }
+  .toc a.on { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  .tools { margin:14px 10px 0; display:grid; gap:6px; }
+  .tools small { color:var(--muted); font-size:12px; line-height:1.5; }
+  .main { display:flex; flex-direction:column; min-width:0; height:100%; }
+  .page { display:none; flex:1; padding:36px 56px 16px; gap:36px; overflow:auto; }
+  .page.on { display:grid; grid-template-columns:1.35fr 1fr; }
+  .page.wide.on { grid-template-columns:1fr; }
+  .visual { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:26px; display:flex; flex-direction:column; justify-content:center; gap:14px; }
+  .talk { display:flex; flex-direction:column; justify-content:center; gap:12px; font-size:16px; line-height:1.7; }
+  .talk p { margin:0; } .talk ul { margin:0; padding-left:20px; }
+  .kicker { font-size:13px; letter-spacing:.06em; color:var(--muted); }
+  h1 { font-size:30px; margin:0; line-height:1.3; } h2 { font-size:24px; margin:0; line-height:1.35; }
+  .note { font-size:14px; color:var(--muted); border-left:3px solid var(--line); padding-left:12px; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; }
+  .card { flex:1; min-width:150px; border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:#fff; }
+  .card h3 { margin:0 0 6px; font-size:16px; } .card p { margin:0; font-size:14px; color:var(--muted); line-height:1.55; }
+  .flow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .step { border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:#fbfbfe; font-size:14px; text-align:center; }
+  .step b { display:block; } .arrow { color:#9aa1b2; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:13px; }
+  /* 积木：界面示意 */
+  .mock { border:1px solid #d5d9e4; border-radius:12px; overflow:hidden; background:#fff; box-shadow:0 6px 18px rgba(20,30,60,.06); }
+  .mock .bar { background:#eef0f6; padding:6px 12px; font-size:12px; color:var(--muted); }
+  .mock .body { padding:14px 16px; font-size:14px; display:grid; gap:10px; }
+  .field { border:1px solid #d5d9e4; border-radius:8px; padding:8px 10px; color:#8a91a3; }
+  .btn { border:0; background:var(--accent); color:#fff; border-radius:8px; padding:8px 12px; font:inherit; font-size:14px; font-weight:600; cursor:pointer; text-align:center; }
+  .btn.plain { background:#fff; color:var(--ink); border:1px solid var(--line); font-weight:400; }
+  .msg { border-radius:8px; padding:9px 12px; font-size:14px; }
+  .msg.ok { background:var(--ok-soft); color:var(--ok); } .msg.bad { background:var(--bad-soft); color:var(--bad); }
+  /* 积木：情况切换 */
+  .cases { display:flex; gap:6px; }
+  /* 积木：确认项 */
+  .confirm { display:grid; grid-template-columns:1fr auto; column-gap:14px; background:#fff; border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:10px; padding:10px 14px; font-size:14px; line-height:1.6; }
+  .confirm > * { grid-column:1; } .confirm p { margin:2px 0; }
+  .confirm .id { font-size:12px; font-weight:700; color:var(--accent); }
+  .confirm .law { font-size:12px; color:var(--warn); background:var(--warn-soft); border-radius:5px; padding:0 6px; margin-left:6px; }
+  .confirm .decide { grid-column:2; grid-row:1 / span 2; display:flex; gap:6px; align-items:start; }
+  .confirm .decide button { border:1px solid #cfd6df; background:#fff; padding:3px 10px; border-radius:8px; font:inherit; font-size:13px; cursor:pointer; white-space:nowrap; }
+  .confirm .decide .yes.on { background:var(--ok); border-color:var(--ok); color:#fff; }
+  .confirm .decide .no.on { background:var(--bad); border-color:var(--bad); color:#fff; }
+  .confirm textarea { grid-column:1 / -1; display:none; margin-top:8px; }
+  /* 积木：上次已确认 */
+  .settled { background:var(--settled-soft); border-radius:10px; padding:10px 14px; font-size:14px; line-height:1.6; }
+  .settled b { color:var(--settled); font-size:12px; }
+  .settled p { margin:4px 0 0; }
+  /* 积木：本页意见 */
+  .comment { margin:0 56px; display:grid; gap:6px; }
+  .comment label { font-size:13px; color:var(--muted); display:flex; justify-content:space-between; }
+  textarea { width:100%; min-height:60px; resize:vertical; border:1px solid var(--line); border-radius:10px; padding:9px 12px; font:inherit; font-size:14px; background:#fff; }
+  textarea:focus { outline:2px solid #c9c6ff; border-color:var(--accent); }
+  .footer { display:flex; align-items:center; justify-content:space-between; padding:10px 56px 18px; color:var(--muted); font-size:13px; }
+  pre.out { white-space:pre-wrap; background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px; font-size:13px; max-height:50vh; overflow:auto; margin:0; }
+  @media (max-width:900px) { .deck { grid-template-columns:1fr; } .toc { display:none; } .page.on { grid-template-columns:1fr; padding:24px; } .comment, .footer { margin:0; padding-left:24px; padding-right:24px; } }
+  @media print { .toc, .comment, .footer { display:none; } .deck { display:block; } .page { display:grid !important; page-break-after:always; min-height:100vh; } }
+</style>
+</head>
+<body>
+<div class="deck">
+<nav class="toc" id="toc"><div class="t">目录</div></nav>
+<div class="main">
+<main id="pages">
+
+<!-- 第一页固定为总览：标题 + 怎么用 + 一页总结。汇报类必须有；探索类写「这次想弄清什么」 -->
+<section class="page wide" data-id="overview" data-title="总览">
+  <div class="talk" style="max-width:900px;margin:auto">
+    <div class="kicker">示例公司 · 门店请假 · 总览</div>
+    <h1>门店员工请假：谁批、怎么交接、出了例外怎么办</h1>
+    <p class="note">每页左边是画面或流程，右边是解说。有想法直接写在页面底部的「本页意见」；最后点左侧「导出全部意见」发回给我们。</p>
+    <div class="row">
+      <div class="card"><h3>这次想弄清</h3><p>请假由谁批、临时缺人谁顶班。</p></div>
+      <div class="card"><h3>已经确认</h3><p>请假只在本店内审批，不跨店。</p></div>
+      <div class="card"><h3>需要你选</h3><p>2 个确认项：L1、L2。</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="page" data-id="approve" data-title="谁来批请假">
+  <div class="visual">
+    <div class="flow">
+      <div class="step"><b>① 员工提交</b>选日期</div><span class="arrow">→</span>
+      <div class="step"><b>② 店长审批</b>同意 / 拒绝</div><span class="arrow">→</span>
+      <div class="step"><b>③ 排班更新</b>自动空出</div>
+    </div>
+    <div class="settled"><b>上次已确认</b><p>请假只在本店内审批，不跨店。</p></div>
+    <div class="confirm" data-id="L1">
+      <span class="id">确认项 L1</span>
+      <p>店长不在时，由<strong>值班主管</strong>代批，不等店长回来。</p>
+    </div>
+  </div>
+  <div class="talk">
+    <div class="kicker">场景 A · 员工请一天假</div>
+    <h2>谁来批请假</h2>
+    <p>例：员工 Lena 下周三想请假。她在手机上选好日期提交，店长同意后，排班表上那天自动空出来。</p>
+    <p>现在想确认的是：店长休假时，请假要不要等他回来。</p>
+  </div>
+</section>
+
+<section class="page" data-id="cover" data-title="临时缺人谁顶班">
+  <div class="visual">
+    <div class="cases">
+      <button class="btn" data-case="cover:found">有人愿意顶</button>
+      <button class="btn plain" data-case="cover:none">没人愿意顶</button>
+    </div>
+    <div class="mock">
+      <div class="bar">店长手机 · 排班</div>
+      <div class="body">
+        <div class="field">周三 早班 · 缺 1 人</div>
+        <div class="msg ok" data-show="cover:found">Jonas 已接下周三早班。</div>
+        <div class="msg bad" data-show="cover:none">没人接班，已提醒店长。</div>
+      </div>
+    </div>
+    <div class="confirm" data-id="L2" data-law="需先问顾问">
+      <span class="id">确认项 L2</span>
+      <p>没人接班时，店长可以指定一人加班，加班按规定另算工资。</p>
+    </div>
+  </div>
+  <div class="talk">
+    <div class="kicker">场景 B · 当天有人请病假</div>
+    <h2>临时缺人谁顶班</h2>
+    <p>左边可以切换两种情况：有人愿意顶班、没人愿意顶班。</p>
+    <p>L2 涉及劳动法里的加班规定，请先问一下顾问再选。</p>
+  </div>
+</section>
+
+</main>
+<div class="comment">
+  <label for="cbox"><span id="clabel">本页意见</span><span id="csaved"></span></label>
+  <textarea id="cbox" placeholder="对这一页有什么意见、疑问或要改的地方，直接写在这里。会自动保存在本机浏览器里。"></textarea>
+</div>
+<div class="footer">
+  <div><button class="btn plain" id="prev">← 上一页</button> <button class="btn plain" id="next">下一页 →</button></div>
+  <div id="count"></div>
+</div>
+</div>
+</div>
+
+<script>
+// ===== 引擎：一般不用改 =====
+const $ = (id) => document.getElementById(id);
+const pages = [...document.querySelectorAll(".page")];
+const load = (k) => { try { return JSON.parse(localStorage.getItem(k) || "{}") || {}; } catch (e) { return {}; } };
+const comments = load(CONFIG.storeKey), decisions = load(CONFIG.storeKey + "-decisions");
+const save = () => { try { localStorage.setItem(CONFIG.storeKey, JSON.stringify(comments)); localStorage.setItem(CONFIG.storeKey + "-decisions", JSON.stringify(decisions)); } catch (e) {} };
+const filled = (p) => (comments[p.dataset.id] || "").trim() || [...p.querySelectorAll(".confirm")].some((c) => decisions[c.dataset.id]);
+document.title = CONFIG.title;
+
+const toc = $("toc");
+const links = pages.map((p, n) => {
+  const a = document.createElement("a");
+  a.innerHTML = `<span>${n + 1}</span><div></div><i></i>`;
+  a.querySelector("div").textContent = p.dataset.title;
+  a.onclick = () => go(n);
+  toc.appendChild(a);
+  return a;
+});
+const mark = () => links.forEach((a, k) => (a.querySelector("i").textContent = filled(pages[k]) ? "●" : ""));
+const tools = document.createElement("div");
+tools.className = "tools";
+tools.innerHTML = '<button class="btn" id="exp" type="button">导出全部意见</button><button class="btn plain" id="reset" type="button">清空重来</button><small>标 ● 的页面已有意见或选择。只保存在这台电脑的这个浏览器里，换设备前请先导出。</small>';
+toc.appendChild(tools);
+
+// 确认项：同意 / 不同意，不同意时填说明；再点一次取消
+document.querySelectorAll(".confirm").forEach((box) => {
+  const id = box.dataset.id;
+  if (box.dataset.law) box.querySelector(".id").insertAdjacentHTML("beforeend", `<span class="law">${box.dataset.law}</span>`);
+  const d = document.createElement("div"); d.className = "decide";
+  d.innerHTML = '<button class="yes" type="button">同意</button><button class="no" type="button">不同意</button>';
+  const ta = document.createElement("textarea"); ta.placeholder = "为什么不同意？你希望怎么做？";
+  box.append(d, ta);
+  const paint = () => {
+    const v = decisions[id] || {};
+    d.querySelector(".yes").classList.toggle("on", v.v === "yes");
+    d.querySelector(".no").classList.toggle("on", v.v === "no");
+    ta.style.display = v.v === "no" ? "block" : "none"; ta.value = v.note || "";
+  };
+  const pick = (v) => { if ((decisions[id] || {}).v === v) delete decisions[id]; else decisions[id] = { v, note: (decisions[id] || {}).note || "" }; save(); paint(); mark(); if (v === "no" && decisions[id]) ta.focus(); };
+  d.querySelector(".yes").onclick = () => pick("yes");
+  d.querySelector(".no").onclick = () => pick("no");
+  ta.oninput = () => { if (decisions[id]) { decisions[id].note = ta.value; save(); } };
+  ta.onkeydown = (e) => e.stopPropagation();
+  paint();
+});
+
+// 情况切换：按钮 data-case="组:值"，内容 data-show="组:值"
+const setCase = (key) => {
+  const g = key.split(":")[0];
+  document.querySelectorAll(`[data-show^="${g}:"]`).forEach((el) => (el.style.display = el.dataset.show === key ? "" : "none"));
+  document.querySelectorAll(`[data-case^="${g}:"]`).forEach((b) => b.classList.toggle("plain", b.dataset.case !== key));
+};
+const seen = new Set();
+document.querySelectorAll("[data-case]").forEach((b) => { b.onclick = () => setCase(b.dataset.case); const g = b.dataset.case.split(":")[0]; if (!seen.has(g)) { seen.add(g); setCase(b.dataset.case); } });
+
+// 本页意见：按页 data-id 存
+const box = $("cbox");
+box.oninput = () => { const id = pages[i].dataset.id; if (box.value.trim()) comments[id] = box.value; else delete comments[id]; save(); $("csaved").textContent = "已保存"; mark(); };
+box.onkeydown = (e) => e.stopPropagation();
+
+function exportText() {
+  const L = [`# ${CONFIG.title}：意见`, "", `用途：${CONFIG.intent}　导出时间：${new Date().toLocaleString("zh-CN")}`, ""];
+  pages.forEach((p, n) => {
+    const items = [...p.querySelectorAll(".confirm")].map((c) => {
+      const v = decisions[c.dataset.id];
+      return `- ${c.dataset.id}：${!v ? "（未选）" : v.v === "yes" ? "同意" : "不同意。说明：" + ((v.note || "").trim() || "（未填写）")}`;
+    });
+    const c = (comments[p.dataset.id] || "").trim();
+    if (!items.length && !c) return;
+    L.push(`## 第 ${n + 1} 页：${p.dataset.title}`, "", ...items, ...(c ? ["", c] : []), "");
+  });
+  return L.join("\n");
+}
+$("exp").onclick = () => {
+  const url = URL.createObjectURL(new Blob([exportText()], { type: "text/markdown;charset=utf-8" }));
+  const a = document.createElement("a"); a.href = url; a.download = `${CONFIG.title}-意见-${new Date().toISOString().slice(0, 10)}.md`; a.click(); URL.revokeObjectURL(url);
+};
+$("reset").onclick = () => {
+  if (!confirm("清空所有意见和选择？此操作不能撤销，建议先导出。")) return;
+  localStorage.removeItem(CONFIG.storeKey); localStorage.removeItem(CONFIG.storeKey + "-decisions"); location.reload();
+};
+
+let i = 0;
+function go(n) {
+  i = Math.max(0, Math.min(pages.length - 1, n));
+  pages.forEach((p, k) => p.classList.toggle("on", k === i));
+  links.forEach((a, k) => a.classList.toggle("on", k === i));
+  links[i].scrollIntoView({ block: "nearest" });
+  box.value = comments[pages[i].dataset.id] || ""; $("csaved").textContent = "";
+  $("clabel").textContent = `本页意见（第 ${i + 1} 页：${pages[i].dataset.title}）`;
+  $("count").textContent = `${i + 1} / ${pages.length}`;
+  $("prev").disabled = i === 0; $("next").disabled = i === pages.length - 1;
+  history.replaceState(null, "", "#" + pages[i].dataset.id);
+}
+$("prev").onclick = () => go(i - 1);
+$("next").onclick = () => go(i + 1);
+document.addEventListener("keydown", (e) => { if (e.key === "ArrowRight" || e.key === "PageDown") go(i + 1); if (e.key === "ArrowLeft" || e.key === "PageUp") go(i - 1); });
+mark();
+go(Math.max(0, pages.findIndex((p) => "#" + p.dataset.id === location.hash)));
+</script>
+</body>
+</html>
