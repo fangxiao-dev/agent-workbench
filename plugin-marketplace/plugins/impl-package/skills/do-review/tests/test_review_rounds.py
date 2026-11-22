@@ -79,33 +79,33 @@ class ReviewRoundsTests(unittest.TestCase):
         self.assertEqual(self.record("Track A")[0], 0)
         self.assertEqual(self.record("Track A")[0], 2)
 
-    def test_next_round_needs_closed_previous_and_group_stops_after_three(self) -> None:
+    def test_next_round_needs_closed_previous_and_group_stops_after_five_code_rounds(self) -> None:
         self.open("g1", "Track A")
         self.assertEqual(self.open("g1", "Track A")[0], 2)
-        for round_number in (1, 2, 3):
+        for round_number in (1, 2, 3, 4, 5):
             if round_number > 1:
                 self.assertEqual(self.open("g1", "Track A")[0], 0)
             self.record("Track A", "UNCERTAIN" if round_number == 1 else "PASS")
             _, closed, _ = self.run_cli("close")
-            self.assertEqual(closed["freshGroupRequired"], round_number == 3)
+            self.assertEqual(closed["freshGroupRequired"], round_number == 5)
         self.assertEqual(self.run_cli("export", "--round", "1")[1]["overall"], "UNCERTAIN")
         code, _, err = self.open("g1", "Track A")
         self.assertEqual(code, 2)
         self.assertIn("fresh group", err)
         code, result, _ = self.open("g2", "Track A")
-        self.assertEqual((code, result["round"], result["groupRound"]), (0, 4, 1))
+        self.assertEqual((code, result["round"], result["groupRound"]), (0, 6, 1))
 
     def test_group_count_continues_across_ledgers_and_groups_are_independent(self) -> None:
         first = self.ledger
         second = first.with_name("2611211300-demo-def5678.md")
         second.write_text("# ledger 2\n", encoding="utf-8")
-        for number in (1, 2):
+        for number in (1, 2, 3, 4):
             self.open("g1", "Track A")
             self.record("Track A")
             self.run_cli("close")
         self.ledger = second
         code, opened, _ = self.open("g1", "Track A")
-        self.assertEqual((code, opened["groupRound"]), (0, 3))
+        self.assertEqual((code, opened["groupRound"]), (0, 5))
         self.record("Track A")
         _, closed, _ = self.run_cli("close")
         self.assertTrue(closed["freshGroupRequired"])
@@ -125,7 +125,7 @@ class ReviewRoundsTests(unittest.TestCase):
             reviews = package / "execution" / "initial" / "reviews"
             reviews.mkdir(parents=True)
             codes = []
-            for index in range(4):
+            for index in range(6):
                 ledger = reviews / f"261121120{index}-demo-abc123{index}.md"
                 ledger.write_text("# ledger\n", encoding="utf-8")
                 out, err = io.StringIO(), io.StringIO()
@@ -135,7 +135,157 @@ class ReviewRoundsTests(unittest.TestCase):
                     if codes[-1] == 0:
                         self.module.main(["record", "--package", str(package), "--ledger", str(ledger), "--track", "Track A", "--verdict", "PASS", "--report", "a.md"])
                         self.module.main(["close", "--package", str(package), "--ledger", str(ledger)])
-            self.assertEqual(codes, [0, 0, 0, 2])
+            self.assertEqual(codes, [0, 0, 0, 0, 0, 2])
+
+
+    # --- group ownership: plan phase, triage, status ---
+
+    def run_round(self, group: str, phase: str, verdict: str = "PASS", succeeds: str | None = None):
+        args = ["open", "--group", group, "--phase", phase, "--track", "Track A"]
+        if succeeds:
+            args += ["--succeeds", succeeds]
+        code, opened, err = self.run_cli(*args)
+        if code != 0:
+            return code, opened, err
+        self.record("Track A", verdict)
+        return self.run_cli("close")
+
+    def triage(self, *argv: str):
+        return self.run_cli("triage", *argv)
+
+    def add(self, group: str, round_number: int, source: str = "impl-drift", klass: str = "design"):
+        return self.triage("add", "--group", group, "--round", str(round_number), "--source", source, "--class", klass, "--summary", "x")
+
+    def test_plan_rounds_warn_from_the_third_round_but_never_block(self) -> None:
+        for number in (1, 2, 3, 4, 5, 6, 7):
+            code, opened, _ = self.run_cli("open", "--group", "g1", "--phase", "plan", "--track", "Track A")
+            self.assertEqual(code, 0)
+            self.assertEqual("warnings" in opened, number >= 3)
+            self.record("Track A", "FAIL")
+            self.run_cli("close")
+
+    def test_code_is_refused_until_the_group_plan_passed(self) -> None:
+        self.run_round("g1", "plan", "FAIL")
+        code, _, err = self.open("g1", "Track A")
+        self.assertEqual(code, 2)
+        self.assertIn("plan must pass", err)
+        self.run_round("g1", "plan", "PASS")
+        self.assertEqual(self.open("g1", "Track A")[0], 0)
+
+    def test_group_without_plan_rounds_is_not_gated(self) -> None:
+        self.assertEqual(self.open("g1", "Track A")[0], 0)
+
+    def test_open_plan_gap_allows_only_plan_rounds_until_verified(self) -> None:
+        self.run_round("g1", "plan")
+        self.run_round("g1", "initial")
+        self.assertEqual(self.add("g1", 2, source="plan-gap")[1]["id"], "F1")
+        code, _, err = self.open("g1", "Track A")
+        self.assertEqual(code, 2)
+        self.assertIn("plan gaps are still open", err)
+        self.triage("fixed", "--group", "g1", "--id", "F1", "--commit", "abc")
+        self.assertEqual(self.open("g1", "Track A")[0], 2)
+        self.run_round("g1", "plan")
+        self.assertEqual(self.triage("verify", "--group", "g1", "--id", "F1", "--round", "3")[0], 0)
+        self.assertEqual(self.open("g1", "Track A")[0], 0)
+
+    def test_triage_needs_a_closed_round_and_verify_needs_a_later_round(self) -> None:
+        self.open("g1", "Track A")
+        self.assertEqual(self.add("g1", 1)[0], 2)
+        self.record("Track A", "FAIL")
+        self.run_cli("close")
+        self.assertEqual(self.add("g1", 1)[0], 0)
+        self.assertEqual(self.triage("verify", "--group", "g1", "--id", "F1", "--round", "1")[0], 2)
+        self.triage("fixed", "--group", "g1", "--id", "F1", "--commit", "abc")
+        code, _, err = self.triage("verify", "--group", "g1", "--id", "F1", "--round", "1")
+        self.assertEqual(code, 2)
+        self.assertIn("later round", err)
+        self.run_round("g1", "terminal-final")
+        self.assertEqual(self.triage("verify", "--group", "g1", "--id", "F1", "--round", "2")[1]["status"], "verified")
+
+    def test_second_reopen_needs_a_root_cut_sentence(self) -> None:
+        self.run_round("g1", "initial", "FAIL")
+        self.add("g1", 1)
+        self.triage("fixed", "--group", "g1", "--id", "F1", "--commit", "a")
+        self.assertEqual(self.triage("reopen", "--group", "g1", "--id", "F1")[1]["reopens"], 1)
+        self.triage("fixed", "--group", "g1", "--id", "F1", "--commit", "b")
+        code, _, err = self.triage("reopen", "--group", "g1", "--id", "F1")
+        self.assertEqual(code, 2)
+        self.assertIn("root", err)
+        code, result, _ = self.triage("reopen", "--group", "g1", "--id", "F1", "--root-cut", "drop the cross-store path")
+        self.assertEqual((code, result["reopens"], result["rootCut"]), (0, 2, "drop the cross-store path"))
+
+    def test_downgrade_needs_a_reason_and_control_findings_can_self_verify(self) -> None:
+        self.run_round("g1", "initial", "FAIL")
+        self.add("g1", 1)
+        self.add("g1", 1, klass="control")
+        self.assertEqual(self.triage("downgrade", "--group", "g1", "--id", "F1")[0], 2)
+        self.assertEqual(self.triage("downgrade", "--group", "g1", "--id", "F1", "--reason", "rare")[1]["status"], "downgraded")
+        self.assertEqual(self.triage("fixed", "--group", "g1", "--id", "F2", "--commit", "c", "--self-verified")[1]["status"], "verified")
+        design = self.add("g1", 1)[1]["id"]
+        self.assertEqual(self.triage("fixed", "--group", "g1", "--id", design, "--commit", "c", "--self-verified")[0], 2)
+
+    def test_status_complete_only_when_findings_closed_and_last_round_has_no_new_design_finding(self) -> None:
+        self.run_round("g1", "initial", "FAIL")
+        self.add("g1", 1)
+        status = self.run_cli("status", "--group", "g1")[1]
+        self.assertFalse(status["complete"])
+        self.assertEqual(status["findings"]["open"], 1)
+        self.triage("fixed", "--group", "g1", "--id", "F1", "--commit", "a")
+        self.run_round("g1", "initial", "FAIL")
+        self.add("g1", 2)
+        self.triage("verify", "--group", "g1", "--id", "F1", "--round", "2")
+        status = self.run_cli("status", "--group", "g1")[1]
+        self.assertFalse(status["complete"])
+        self.assertTrue(any("new design findings" in reason for reason in status["reasons"]))
+        self.triage("fixed", "--group", "g1", "--id", "F2", "--commit", "b")
+        self.run_round("g1", "initial", "PASS")
+        self.triage("verify", "--group", "g1", "--id", "F2", "--round", "3")
+        status = self.run_cli("status", "--group", "g1")[1]
+        self.assertTrue(status["complete"])
+        self.assertFalse(status["converged"])
+        self.assertIn("fresh group", status["nextAction"])
+
+    def test_fresh_group_that_completes_after_a_complete_group_converges(self) -> None:
+        self.run_round("g1", "initial", "PASS")
+        self.assertTrue(self.run_cli("status", "--group", "g1")[1]["complete"])
+        self.run_round("g2", "initial", "PASS", succeeds="g1")
+        status = self.run_cli("status", "--group", "g2")[1]
+        self.assertEqual((status["complete"], status["converged"]), (True, True))
+
+    def test_fresh_group_that_raised_design_findings_does_not_converge_until_the_next_fresh_group_is_clean(self) -> None:
+        self.run_round("g1", "initial", "PASS")
+        self.run_round("g2", "initial", "FAIL", succeeds="g1")
+        self.assertEqual(self.triage("add", "--group", "g2", "--round", "2", "--source", "impl-drift", "--class", "design", "--summary", "x")[0], 0)
+        self.triage("fixed", "--group", "g2", "--id", "F1", "--commit", "a")
+        self.run_round("g2", "initial", "PASS")
+        self.triage("verify", "--group", "g2", "--id", "F1", "--round", "3")
+        status = self.run_cli("status", "--group", "g2")[1]
+        self.assertEqual((status["complete"], status["converged"]), (True, False))
+        self.assertIn("another fresh group", status["nextAction"])
+        self.run_round("g3", "initial", "PASS", succeeds="g2")
+        self.assertTrue(self.run_cli("status", "--group", "g3")[1]["converged"])
+
+    def test_chain_of_unconverged_fresh_groups_warns_without_blocking(self) -> None:
+        self.run_round("g1", "initial", "PASS")
+        code, opened, _ = self.run_cli("open", "--group", "g2", "--phase", "initial", "--track", "Track A", "--succeeds", "g1")
+        self.assertEqual((code, "warnings" in opened), (0, False))
+        self.record("Track A")
+        self.run_cli("close")
+        code, opened, _ = self.run_cli("open", "--group", "g3", "--phase", "initial", "--track", "Track A", "--succeeds", "g2")
+        self.assertEqual((code, "warnings" in opened), (0, True))
+
+    def test_old_state_without_findings_still_loads(self) -> None:
+        self.open("g1", "Track A")
+        path = self.ledger.with_suffix(".rounds.json")
+        state = json.loads(path.read_text(encoding="utf-8"))
+        state.pop("findings")
+        state["schemaVersion"] = 1
+        for r in state["rounds"]:
+            r.pop("ledger", None)
+        path.write_text(json.dumps(state), encoding="utf-8")
+        self.record("Track A")
+        self.assertEqual(self.run_cli("close")[0], 0)
+        self.assertTrue(self.run_cli("status", "--group", "g1")[1]["complete"])
 
 
 if __name__ == "__main__":

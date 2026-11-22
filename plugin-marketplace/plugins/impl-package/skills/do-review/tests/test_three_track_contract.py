@@ -74,7 +74,7 @@ class ThreeTrackContractTests(unittest.TestCase):
         terminal = f"{safety}\n{phases}"
         self.assertRegex(
             terminal,
-            r"(?s)`terminal-final`.*terminal_tracks.*Track A/C.*Track A unconditionally on the entire diff.*Tracks C and Safety.*earlier `HEAD`.*PASS for that track.*delta from that PASS `HEAD` to the final `HEAD`.*admission condition.*reuse that PASS and skip.*Track C's admission range.*Ticket's section-level contract references.*record which PASS `HEAD` is reused.*delta used for the admission decision.*Admission is the only skip basis.*finding closure was clean.*Loop track was converged",
+            r"(?s)`terminal-final`.*terminal_tracks.*Track A/C.*Track A unconditionally on the entire diff.*Tracks C and Safety.*earlier `HEAD`.*PASS for that track.*delta from that PASS `HEAD` to the final `HEAD`.*admission condition.*reuse that PASS and skip.*Track C's admission range.*Ticket's section-level contract references.*record which PASS `HEAD` is reused.*delta used for the admission decision.*Admission is the only skip basis.*finding closure was clean.*review group was complete",
         )
         self.assertIn("independent of which tracks `initial`", safety)
 
@@ -210,14 +210,15 @@ class ThreeTrackContractTests(unittest.TestCase):
         self.assertIn("Design-source recheck:", templates)
         self.assertNotIn("source recheck", markdown_section(topology, "Review phase").lower())
 
-    def test_loop_lifecycle_converges_only_through_a_fresh_group(self) -> None:
+    def test_group_ownership_replaces_the_track_lifecycle(self) -> None:
         topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
         skill = SKILL_PATH.read_text(encoding="utf-8")
-        lifecycle = markdown_section(topology, "Loop track lifecycle")
-        for needle in ("`active` or `converged`", "only through a fresh group", "never converges a track", "reactivates it", "Convergence requires every selected track `converged`"):
-            self.assertIn(needle, lifecycle)
+        self.assertNotIn("Loop track lifecycle", topology)
+        group = markdown_section(topology, "Review group continuation")
+        for needle in ("plan-gap", "impl-drift", "triage fixed", "triage verify", "--root-cut", "Group complete", "at most 5 code rounds", "no total round cap across groups"):
+            self.assertIn(needle, group)
         for retired in ("dormant", "probation", "consecutive clean", "two clean"):
-            self.assertNotIn(retired, (lifecycle + skill + topology).lower())
+            self.assertNotIn(retired, (group + skill + topology).lower())
 
     def test_skill_triggers_on_final_review_and_gates_fixes_on_a_closed_round(self) -> None:
         skill = SKILL_PATH.read_text(encoding="utf-8")
@@ -233,7 +234,7 @@ class ThreeTrackContractTests(unittest.TestCase):
         topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
         skill = SKILL_PATH.read_text(encoding="utf-8")
         group = markdown_section(topology, "Review group continuation")
-        for needle in ("at most 3 rounds", "fresh group", "重新分析", "只核实关闭", "design-type", "control-type", "original implementer"):
+        for needle in ("at most 5 code rounds", "fresh group", "重新分析", "只核实关闭", "design-type", "control-type", "original implementer", "principal engineer"):
             self.assertIn(needle, group)
         self.assertIn("Review group continuation", skill)
 
