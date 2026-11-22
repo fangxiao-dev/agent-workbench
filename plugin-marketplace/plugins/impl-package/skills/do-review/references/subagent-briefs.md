@@ -1,6 +1,6 @@
 # Do Review Parent Briefs
 
-The three `review-track-*` agent definitions carry their own leaf-review brief. The parent supplies the common block and exactly one applicable phase brief. Add the anti-duplicate block only after round 1; do not append another track's output or same-round summary.
+The three `review-track-*` agent definitions carry their own leaf-review brief. The parent supplies the common block and exactly one applicable phase brief. Add the anti-duplicate block only after round 1, and the triage-principles block whenever the receiving session triages findings; do not append another track's output or same-round summary.
 
 ## Common Context Block
 
@@ -91,6 +91,17 @@ Do not inspect the implementation broadly, discover unrelated findings, propose 
 ## Caller-Assigned Leaf
 
 When the caller names a model or `subagent_type` for a track (registered through `review_rounds.py open --track "Track A=<subagent_type>"`), that subagent replaces only the leaf. Its definition does not load the reviewer skill, so the parent adds to the common block: the verified reviewer `SKILL.md` path with "read and use exactly this skill", and the Generic Leaf Reviewer Brief above. Everything else (one leaf per required track, fixed ReviewRun, report artifact, wait for every track, canonical ledger) is unchanged.
+
+## Finding Triage Principles (for the parent and for sessions it briefs)
+
+```text
+Reviewers are strict by nature. Before forwarding, accepting or acting on a finding, read it as a principal engineer would:
+- Only user-visible behavior and data safety block. Everything else is a non-blocking backlog item.
+- For a feature that is simple from the outside, cut coarsely near the root; do not add fine branches, copy or acceptance.
+- Decide per finding whether the plan missed it (plan-gap: revise the plan first) or the code did not follow the plan (impl-drift: fix the code).
+- If the same kind of finding comes back a second time, first ask whether the requirement can be cut near its root instead of patching again.
+Pass this block on when briefing any session that triages review findings.
+```
 
 ## Round-N Anti-Duplicate Addendum
 
