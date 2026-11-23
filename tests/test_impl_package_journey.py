@@ -1349,6 +1349,35 @@ def test_journey_step_evidence_records_the_reverify_route(tmp_path: Path) -> Non
     assert engine._validate_state(package, _state(package)) is not None
 
 
+def _test_output_record(repo: Path, revision: str, route: str) -> dict:
+    output = repo / "output/qa/run-1/J1-S1.vitest.txt"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text("✓ copy.spec.tsx > shows the confirm hint\n", encoding="utf-8")
+    record = _journey_record(revision, "J1-S1", artifact="output/qa/run-1/J1-S1.vitest.txt")
+    record.update({"route": route, "testFile": "copy.spec.tsx", "testCase": "shows the confirm hint"})
+    return record
+
+
+def test_r1_page_step_accepts_component_test_output(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+
+    added = _cli(repo, package, "evidence", "add", input_value=_test_output_record(repo, revision, "R1"))
+
+    assert added.returncode == 0, added.stderr
+    stored = _state(package)["evidenceIndex"]["journey:run-1:J1-S1"][0]
+    assert (stored["route"], stored["testFile"], stored["testCase"]) == ("R1", "copy.spec.tsx", "shows the confirm hint")
+
+
+@pytest.mark.parametrize("route", ["R2", "R3"])
+def test_other_routes_reject_component_test_output_as_page_evidence(tmp_path: Path, route: str) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+
+    rejected = _cli(repo, package, "evidence", "add", input_value=_test_output_record(repo, revision, route))
+
+    assert rejected.returncode != 0
+    assert "R1" in rejected.stderr
+
+
 def test_journey_step_evidence_rejects_an_unknown_route(tmp_path: Path) -> None:
     repo, package, revision = _init_v36(tmp_path)
     shot = repo / "output/qa/run-1/J1-S1.png"
