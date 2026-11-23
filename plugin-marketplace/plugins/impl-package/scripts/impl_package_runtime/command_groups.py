@@ -154,12 +154,11 @@ Optional (journey-step): inputRef, outputRef, manualBy."""
 
 
 EVIDENCE_ADD_RULES = """
-Commit only the minimum evidence the Gate depends on: one screenshot per page step, one returned file/response per file/API step.
-Keep raw artifacts (traces, full logs, DB dumps) in the git-ignored output/qa/<runId>/ instead.
-  journey-step surface=page: artifact is a Playwright trace .zip, or a package image (.png/.jpg/.jpeg/.webp) together with manualBy
+Screenshots and other raw artifacts (traces, full logs, DB dumps) are never committed: keep them in the git-ignored output/qa/<runId>/ and point artifact at that local path; commit only the walkthrough record.
+  journey-step surface=page: artifact is a Playwright trace .zip, or an image (.png/.jpg/.jpeg/.webp) together with manualBy; the file may be a package file or output/qa/<runId>/...
   journey-step surface=file: artifact is the produced file itself (not .md/.txt/.log); no manualBy
   journey-step surface=log: any package file; no manualBy
-Artifact paths are relative to the package directory and the file must already exist."""
+Artifact paths are relative to the package directory (or start with output/qa/, relative to the repo root) and the file must already exist."""
 
 TRAIL_APPEND_TERMINAL_SUMMARY = """
 

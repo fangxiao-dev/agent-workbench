@@ -11,6 +11,7 @@ from typing import Any
 
 from situation import (
     carried_forward_error,
+    evidence_artifact_base,
     evidence_record_valid,
 )
 
@@ -26,7 +27,7 @@ from .state_core import (
 )
 
 
-def _package_relative_artifact(package: Path, value: Any, field: str, *, must_exist: bool) -> str:
+def _package_relative_artifact(package: Path, value: Any, field: str, *, must_exist: bool, local_ok: bool = False) -> str:
     if not isinstance(value, str) or not value.strip():
         raise StateError(f"{field} must be a non-empty package-relative path")
     raw = value.strip().replace("\\", "/")
@@ -34,9 +35,10 @@ def _package_relative_artifact(package: Path, value: Any, field: str, *, must_ex
     path = PurePosixPath(path_value)
     if path.is_absolute() or re.match(r"^[A-Za-z]:", raw) or raw.startswith("//") or ".." in path.parts or str(path) in {"", "."}:
         raise StateError(f"{field} must be package-relative: {value!r}")
-    resolved = (package / Path(*path.parts)).resolve()
+    base = evidence_artifact_base(package, path) if local_ok else package
+    resolved = (base / Path(*path.parts)).resolve()
     try:
-        resolved.relative_to(package.resolve())
+        resolved.relative_to(base.resolve())
     except ValueError as exc:
         raise StateError(f"{field} escapes the package: {value!r}") from exc
     if must_exist and not resolved.exists():
@@ -121,9 +123,10 @@ def _validate_journey_surface_evidence(
         raise StateError("Journey evidence surface must be page, file, api, or log")
     artifact = record.get("artifact")
     relative = PurePosixPath(str(artifact).replace("\\", "/").partition("#")[0])
-    path = (package / Path(*relative.parts)).resolve()
+    base = evidence_artifact_base(package, relative)
+    path = (base / Path(*relative.parts)).resolve()
     try:
-        path.relative_to(package.resolve())
+        path.relative_to(base.resolve())
     except ValueError as exc:
         raise StateError("Journey evidence artifact must be package-relative") from exc
 
@@ -154,14 +157,14 @@ def _validate_journey_surface_evidence(
             if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
                 raise StateError(
                     "manualBy requires a package image artifact (.png, .jpg, .jpeg, .webp)；"
-                    "每个页面步只提交 1 张该步截图，其余原始产物放被 git 忽略的 output/qa/<runId>/"
+                    "截图不提交：放被 git 忽略的 output/qa/<runId>/，artifact 直接写该本地路径"
                 )
             record["manualBy"] = manual_by.strip()
             return None
         if suffix != ".zip":
             raise StateError(
                 "page Journey evidence requires a Playwright trace .zip or manualBy plus a package image "
-                "(1 张该步截图，.png/.jpg/.jpeg/.webp)"
+                "(.png/.jpg/.jpeg/.webp；截图可放被 git 忽略的 output/qa/<runId>/)"
             )
         if not live:
             return None
@@ -179,7 +182,7 @@ def _validate_journey_surface_evidence(
     if suffix in {".md", ".txt", ".log"}:
         raise StateError(
             "file Journey artifact must not use .md, .txt, or .log；"
-            "放该步产出的文件或接口返回本体（如 .json/.csv/.xlsx/.pdf），每个文件/接口步只提交 1 个"
+            "放该步产出的文件或接口返回本体（如 .json/.csv/.xlsx/.pdf）"
         )
     if not live:
         return None
@@ -241,7 +244,7 @@ def _validate_journey_evidence_index(
             invalidated_by = record.get("invalidatedBy")
             if "invalidatedBy" in record and invalidated_by is not None and (not isinstance(invalidated_by, str) or not invalidated_by.strip()):
                 raise StateError(f"evidenceIndex[{evidence_key}] invalidatedBy must be text or null")
-            normalized_artifact = _package_relative_artifact(package, record["artifact"], f"evidence {evidence_key}", must_exist=live)
+            normalized_artifact = _package_relative_artifact(package, record["artifact"], f"evidence {evidence_key}", must_exist=live, local_ok=True)
             for field in ("revision", "environment"):
                 if not isinstance(record[field], str) or not record[field].strip():
                     raise StateError(f"evidence {evidence_key} {field} must be non-empty")
@@ -386,7 +389,7 @@ def _normalize_journey_evidence(
     for field in ("revision", "environment"):
         if not isinstance(record[field], str) or not record[field].strip():
             raise StateError(f"evidence {field} must be non-empty")
-    record["artifact"] = _package_relative_artifact(package, record["artifact"], "evidence artifact", must_exist=False)
+    record["artifact"] = _package_relative_artifact(package, record["artifact"], "evidence artifact", must_exist=False, local_ok=True)
     record["revision"] = _validate_commit(repo, record["revision"])
 
     spec = summary["_journeySpec"]

@@ -508,9 +508,10 @@ def evidence_record_valid(
         relative = PurePosixPath(artifact.replace("\\", "/").partition("#")[0])
         if relative.is_absolute() or ".." in relative.parts or not relative.parts:
             return False
-        path = (package / Path(*relative.parts)).resolve()
+        base = evidence_artifact_base(package, relative)
+        path = (base / Path(*relative.parts)).resolve()
         try:
-            path.relative_to(package)
+            path.relative_to(base)
         except ValueError:
             return False
         if not path.is_file():
@@ -528,6 +529,15 @@ def _find_git_root(path: Path) -> Path | None:
         if probe.parent == probe:
             return None
         probe = probe.parent
+
+
+def evidence_artifact_base(package: Path, relative: PurePosixPath) -> Path:
+    """Evidence under output/qa/ is git-ignored local output at the repo root, not part of the package."""
+    if relative.parts[:2] == ("output", "qa") and len(relative.parts) > 2:
+        for parent in (package.resolve(), *package.resolve().parents):
+            if (parent / ".git").exists():
+                return parent
+    return package
 
 
 def _safe_relative_path(base: Path, relative: str) -> Path:

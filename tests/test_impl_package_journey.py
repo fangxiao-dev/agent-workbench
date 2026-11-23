@@ -1300,6 +1300,37 @@ def test_page_manual_walkthrough_requires_manual_by_and_package_image(tmp_path: 
     assert "package image" in rejected.stderr
 
 
+def test_page_manual_walkthrough_accepts_git_ignored_local_screenshot(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    local = repo / "output/qa/run-1/J1-S1.png"
+    local.parent.mkdir(parents=True)
+    local.write_bytes(b"fixture image")
+    record = _journey_record(revision, "J1-S1", artifact="output/qa/run-1/J1-S1.png", manual_by="张三")
+
+    added = _cli(repo, package, "evidence", "add", input_value=record)
+
+    assert added.returncode == 0, added.stderr
+    stored = _state(package)["evidenceIndex"]["journey:run-1:J1-S1"][0]
+    assert stored["artifact"] == "output/qa/run-1/J1-S1.png"
+    assert engine._v36_acceptance_status(
+        package, _state(package), engine._validate_state(package, _state(package)), revision, attempt_active=True,
+    )["journeys"][0]["manualWalkthroughs"] == [{"stepId": "J1-S1", "manualBy": "张三"}]
+
+
+def test_local_screenshot_must_exist_and_stay_under_output_qa(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    missing = _cli(repo, package, "evidence", "add", input_value=_journey_record(
+        revision, "J1-S1", artifact="output/qa/run-1/absent.png", manual_by="张三"))
+    assert missing.returncode != 0
+    assert "existing" in missing.stderr
+    other = repo / "output/other/J1-S1.png"
+    other.parent.mkdir(parents=True)
+    other.write_bytes(b"fixture image")
+    outside = _cli(repo, package, "evidence", "add", input_value=_journey_record(
+        revision, "J1-S1", artifact="output/other/J1-S1.png", manual_by="张三"))
+    assert outside.returncode != 0
+
+
 def test_file_surface_rejects_markdown_and_records_artifact_sha256(tmp_path: Path) -> None:
     repo, package = _make_package(tmp_path, spec=_file_step_spec(), initialized=True)
     revision = _git(repo, "rev-parse", "HEAD")
