@@ -33,21 +33,45 @@ Completion criterion: every dispatch records its phase and resolved reviewer lea
 
 ## Review group continuation
 
-Applies to every review (`initial` rounds, `finding-closure`, `terminal-final`, `N rounds` and `Loop`); normal reviews and final reviews use the same rules.
+Applies to every review (`initial` rounds, `finding-closure`, `terminal-final`, `N rounds` and `Loop`). A review group owns the findings it raises: it keeps reviewing until the same group has verified each fix, and a fresh group then confirms. `review_rounds.py status --group <id>` prints the group `state` and the `nextAction` derived from the tables below, so every step is a command, not a judgment from memory.
 
-A review group owns the findings it raises: it keeps reviewing until each one is fixed and verified by the same group. Round counts are only a backstop against endless loops.
+Principles (everything else is the tables):
 
-- **Review group**: the leaves selected for one review. Keep each leaf's session for the group's whole lifecycle; from round 2 send incremental instructions instead of starting new leaves.
-- **Plan first**: when the work has a plan, the group reviews the plan (`--phase plan`) until a plan round closes with PASS, and only then reviews code. A group that never opened a plan round is not gated. Plan rounds are counted apart from code rounds: from the third plan round each `open` warns, without blocking, so the parent checks whether the review is stuck in local detail and whether the requirement can be narrowed at its root.
-- **Round mode**: the first line of every round brief says `重新分析` (default: review the fixed input again) or `只核实关闭` (only check that the findings marked fixed are closed). The brief also lists fixed items and registered backlog so they are not reported again. A `只核实关闭` PASS is not convergence.
-- **Triage**: after `close`, the parent records each accepted finding with `review_rounds.py triage add` as `plan-gap` (the plan did not design it) or `impl-drift` (the code did not follow the plan), and as design-type or control-type. A `plan-gap` sends the group back to plan rounds before more code is reviewed; an `impl-drift` is fixed in code directly.
-- **Severity and class**: the parent judges severity and does not copy the reviewer's rating. Findings are design-type (behavior, data, permissions, pay calculation, contract) or control-type (commands, gate order, evidence registration, wording). The reviewers are strict by nature: before a finding is accepted the parent reads it as a principal engineer would. Only user-visible behavior and data safety block; for a feature that is simple from the outside, cut coarsely near the root instead of adding fine branches, copy or acceptance; everything else is a non-blocking backlog item.
-- **Fix**: the original implementer fixes, resumed, and records it with `triage fixed --commit`. Design-type fixes change the plan document first, which goes into the next review round; code follows after it passes, then stable docs. The parent fixes control-type findings directly (`--self-verified`) without another round.
-- **Verify**: the same group's next round checks every `fixed` finding and records `triage verify` (closed) or `triage reopen` (back to open). The second reopen of one finding needs a `--root-cut` sentence first: say whether the requirement can be cut near its root instead of patching again. The same kind of leak showing up a second time downstream (not visible to the script) calls for the same judgment.
-- **Downgrade**: only the parent downgrades a finding to non-blocking, with a written reason (`triage downgrade --reason`); it goes to the backlog and no longer blocks the group.
-- **Group complete**: every finding of the group is `verified` or downgraded, and the group's latest closed round raised no new design-type finding (`review_rounds.py status --group`).
-- **Fresh group**: a complete group's work is not proof. Dispatch one fresh group (new leaves, no prior sessions, `open --succeeds <group>`) for one full-scope round to check whether anything important remains. If it raises design-type findings, it becomes the group that owns them and is judged by the same completion rule, but it has not confirmed anything: once it is complete, another fresh group follows. The review is converged only when a fresh group is complete and raised no design-type finding itself (`status` reports `converged`). Review keeps going until then.
-- **Backstop**: one group runs at most 5 code rounds; `open` then refuses and a fresh group takes over the unresolved findings. There is no total round cap across groups, because that would cut review off before a fresh group can confirm. Instead, when three fresh groups in a row have not converged, `open` warns: stop and decide whether the requirement can be cut near its root, or ask the Owner.
-- `review_rounds.py` keeps the per-group state beside the ledger (rounds, findings): `open` registers every track of the round and enforces the plan gate and the code-round cap, `close` refuses while a registered track has not returned, `triage` and `status` track ownership, `export` works only on a closed round.
+- Only user-visible behavior and data safety block. Reviewers are strict by nature: the parent reads each finding as a principal engineer would, and for a feature that is simple from the outside it cuts coarsely near the root instead of adding fine branches, copy or acceptance.
+- The same kind of finding a second time: first ask whether the requirement can be cut near its root. The script demands a `--root-cut` sentence on the second reopen of one finding; the same kind of leak across two groups needs the same judgment, which the script cannot see.
+- The plan comes before code. A plan gap is never dispatched together with code fixes: revise the plan, pass a plan round, then fix code.
+- When direction changes mid-flight, interrupt the running session and confirm it received the change before going on.
+
+### Group states
+
+| State | Holds when | Event → action / command |
+| --- | --- | --- |
+| `plan-open` | a plan round is open, or no plan round has passed yet, or a plan-gap is not yet verified | `open --phase plan --track …`, `record` each track, `close`. PASS → `plan-pass`, and the close verifies every `fixed` plan-gap recorded before that round opened. Not PASS → `triage add`, revise the plan, `triage fixed --commit <plan commit>` before the next plan round opens. Each `open` from the third plan round since the last PASS warns (no block): check for local detail and for a root cut |
+| `plan-pass` | a plan round passed, no code round yet, no open plan-gap | `open --phase initial …` → `code-open`. A group without a plan starts here |
+| `code-open` | a code round is open | `record` each track, `close` → `code-closed` |
+| `code-closed` | the latest round is closed; the group is not complete, converged or capped | `triage add` each accepted finding (`--source plan-gap` → `plan-open`; `impl-drift` → the implementer fixes, `triage fixed --commit`). Next round `只核实关闭`: `triage verify` or `triage reopen`. **Group complete** = every finding verified or downgraded and the latest round raised no new design-type finding → `open --group <new> --succeeds <this>` for a fresh group |
+| `converged` | the group is complete, follows a complete group, and raised no design-type finding itself | stop |
+| `cap-reached` | at most 5 code rounds per group and the group is still incomplete | `open` refuses; `open --group <new> --succeeds <this>` moves the unresolved findings to the new group |
+
+A complete group is not proof. The fresh group (new leaves, no prior sessions, full scope) either raises nothing important and converges, or raises design-type findings, owns them, completes, and is followed by another fresh group. There is no total round cap across groups; three fresh groups in a row without convergence make `open` warn: cut the requirement near its root, or ask the Owner.
+
+### Finding states
+
+| State | Set by | Next |
+| --- | --- | --- |
+| `open` | `triage add --source plan-gap\|impl-drift --class design\|control --severity P0\|P1\|P2 --summary …` (`--round` defaults to the group's latest closed round) | the original implementer fixes, resumed: `triage fixed --commit`. The parent fixes control-type findings itself with `--self-verified` (→ `verified`) |
+| `fixed` | `triage fixed` | the same group's next round: `triage verify` (round defaults to the group's latest closed round) or `triage reopen` |
+| `verified` | `triage verify`, `--self-verified`, or a passing plan round for a plan-gap | closed |
+| `reopened` | `triage reopen`; the second reopen of one finding needs `--root-cut "<one sentence>"` | fix again: `triage fixed` |
+| `downgraded` | `triage downgrade --reason "<why>"`, parent only | backlog; no longer blocks. P2 is not downgraded by default: fix it in passing when it costs almost nothing, downgrade only the P2 that cannot be fixed in passing |
+
+### Dispatch rules
+
+- **Plan round**: only the relevant tracks. A rule-wording plan goes to Track C alone; add Safety when it touches permissions, concurrency or data ownership.
+- **Verification round**: tracks follow the fix scope. A narrow fix opens only the track that raised the finding; the other tracks keep their previous PASS (note it in the ledger).
+- **Round brief**: the first line says `重新分析` (review the fixed input again) or `只核实关闭` (only check that the findings marked `fixed` are closed), and lists fixed items and registered backlog so they are not reported again. A `只核实关闭` PASS is not convergence.
+- **Fix**: the original implementer fixes, resumed. The brief names the rule behavior as the basis; test names carry the rule-case ID; the receipt ends with a rule → test table. Design-type fixes change the plan document first.
+- **Class**: design-type (behavior, data, permissions, pay calculation, contract) or control-type (commands, gate order, evidence registration, wording); the parent judges severity and class and does not copy the reviewer's rating.
+- **Fresh group on a large diff**: reports P0/P1 and the P2 that cost almost nothing to fix; the remaining P2 go to the backlog and the journey walkthrough covers them.
 
 Completion criterion: the ledger explains every group completion, fresh-group handover and downgrade, and the evidence/classification that caused it. Incomplete, timeout, `PARTIAL`, `UNCERTAIN`, or an evidence gap never counts toward completion. `N rounds` and `Closure verification` run their fixed rounds and do not track convergence.

@@ -220,6 +220,13 @@ class ThreeTrackContractTests(unittest.TestCase):
         for retired in ("dormant", "probation", "consecutive clean", "two clean"):
             self.assertNotIn(retired, (group + skill + topology).lower())
 
+    def test_topology_states_are_the_states_the_script_derives(self) -> None:
+        group = markdown_section(TOPOLOGY_PATH.read_text(encoding="utf-8"), "Review group continuation")
+        script = (DO_REVIEW_DIR / "scripts" / "review_rounds.py").read_text(encoding="utf-8")
+        for state in ("plan-open", "plan-pass", "code-open", "code-closed", "converged", "cap-reached", "open", "fixed", "verified", "reopened", "downgraded"):
+            self.assertIn(f"`{state}`", group)
+            self.assertIn(f'"{state}"', script)
+
     def test_skill_triggers_on_final_review_and_gates_fixes_on_a_closed_round(self) -> None:
         skill = SKILL_PATH.read_text(encoding="utf-8")
         description = skill.split("description:", 1)[1].split("\n", 1)[0]
@@ -234,7 +241,7 @@ class ThreeTrackContractTests(unittest.TestCase):
         topology = TOPOLOGY_PATH.read_text(encoding="utf-8")
         skill = SKILL_PATH.read_text(encoding="utf-8")
         group = markdown_section(topology, "Review group continuation")
-        for needle in ("at most 5 code rounds", "fresh group", "重新分析", "只核实关闭", "design-type", "control-type", "original implementer", "principal engineer"):
+        for needle in ("at most 5 code rounds", "fresh group", "重新分析", "只核实关闭", "design-type", "control-type", "original implementer", "principal engineer", "rule → test table"):
             self.assertIn(needle, group)
         self.assertIn("Review group continuation", skill)
 

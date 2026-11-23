@@ -6,14 +6,18 @@ close refuses until every registered track has returned; export (after close)
 lists the round's reports. Fix dispatch, the canonical summary and the overall
 verdict all start from a closed round.
 
-A review group owns the findings it raises: `triage` records each accepted finding
-(plan-gap or impl-drift, design or control), its fix, and the same group's
-verification; `status` says whether the group is complete. Round counts are only a
-backstop: plan rounds warn from PLAN_WARN_ROUND on, code rounds stop at
-CODE_ROUND_CAP and need a fresh group id. Group state is counted across every
-ledger in the same directory (the package's execution/<attempt>/reviews/, or the
-do-review temp folder without --package), so a new ledger for a new head does not
-restart the count.
+A review group owns the findings it raises. `triage` records each accepted finding
+(source plan-gap | impl-drift, class design | control, severity P0 | P1 | P2) and moves
+it open -> fixed -> verified (or reopened, downgraded). `status` derives the group
+state (plan-open, plan-pass, code-open, code-closed, converged, cap-reached) and the
+next action. references/review-topology.md lists the same states and transitions.
+
+Round counts are only a backstop: plan rounds warn from PLAN_WARN_ROUND on (counted
+since the last passed plan round), code rounds stop at CODE_ROUND_CAP and need a fresh
+group id (`open --succeeds <group>`, which takes over the unresolved findings). Group
+state is counted across every ledger in the same directory (the package's
+execution/<attempt>/reviews/, or the do-review temp folder without --package), so a new
+ledger for a new head does not restart the count.
 """
 
 from __future__ import annotations
@@ -34,6 +38,8 @@ REOPEN_ROOT_CUT = 2
 PHASES = ("plan", "initial", "finding-closure", "terminal-final")
 SOURCES = ("plan-gap", "impl-drift")
 CLASSES = ("design", "control")
+SEVERITIES = ("P0", "P1", "P2")
+FINDING_STATES = ("open", "fixed", "verified", "reopened", "downgraded")
 VERDICTS = ("PASS", "FAIL", "UNCERTAIN", "INCOMPLETE")
 
 
@@ -84,6 +90,10 @@ def group_rounds(ledger: Path, group: str) -> list[dict]:
     return [r for _, state in sibling_states(ledger) for r in state["rounds"] if r["group"] == group]
 
 
+def ordered_rounds(ledger: Path, group: str) -> list[dict]:
+    return sorted(group_rounds(ledger, group), key=lambda r: r.get("openSeq", r.get("closeSeq", 0)))
+
+
 def group_findings(ledger: Path, group: str) -> list[tuple[Path, dict, dict]]:
     return [(p, state, f) for p, state in sibling_states(ledger) for f in state["findings"] if f["group"] == group]
 
@@ -93,13 +103,34 @@ def rounds_used(ledger: Path, group: str, plan: bool) -> int:
     return sum(1 for r in group_rounds(ledger, group) if (r["phase"] == "plan") == plan)
 
 
+def plan_streak(ledger: Path, group: str) -> int:
+    """Plan rounds since the group's last passed plan round: a new topic starts the count again."""
+    streak = 0
+    for r in ordered_rounds(ledger, group):
+        if r["phase"] == "plan":
+            streak = 0 if r["closed"] and overall(r["tracks"]) == "PASS" else streak + 1
+    return streak
+
+
 def next_seq(ledger: Path) -> int:
     """Global order of events across ledgers; wall clocks can tie, a counter cannot."""
     seqs = [0]
     for _, state in sibling_states(ledger):
-        seqs += [r.get("closeSeq", 0) for r in state["rounds"]]
+        seqs += [r.get(key, 0) for r in state["rounds"] for key in ("openSeq", "closeSeq")]
         seqs += [f.get("fixedSeq", 0) for f in state["findings"]]
     return max(seqs) + 1
+
+
+def next_finding_id(ledger: Path, group: str) -> str:
+    numbers = [int(f["id"][1:]) for _, _, f in group_findings(ledger, group)]
+    return f"F{max(numbers, default=0) + 1}"
+
+
+def latest_closed_round(ledger: Path, group: str) -> dict:
+    closed = [r for r in group_rounds(ledger, group) if r["closed"]]
+    if not closed:
+        raise ValueError(f"group {group} has no closed round; triage only after `close` succeeds")
+    return max(closed, key=lambda r: r.get("closeSeq", 0))
 
 
 def chain_depth(ledger: Path, group: str) -> int:
@@ -115,21 +146,27 @@ def chain_depth(ledger: Path, group: str) -> int:
 
 def blocking(finding: dict) -> bool:
     """A finding keeps its group incomplete until verified (or, for control type, self-closed) or downgraded."""
-    return finding["status"] in ("open", "fixed")
+    return finding["status"] in ("open", "reopened", "fixed")
 
 
-def group_status(ledger: Path, group: str) -> dict:
-    rounds = group_rounds(ledger, group)
-    findings = [f for _, _, f in group_findings(ledger, group)]
-    reasons: list[str] = []
+def group_status(ledger: Path, group: str, chain: bool = True) -> dict:
+    rounds = ordered_rounds(ledger, group)
     if not rounds:
-        reasons.append("the group has no rounds")
-    if any(not r["closed"] for r in rounds):
-        reasons.append("a round is still open")
+        raise ValueError(f"group {group} has no rounds")
+    findings = [f for _, _, f in group_findings(ledger, group)]
+    closed = [r for r in rounds if r["closed"]]
+    open_round = next((r for r in rounds if not r["closed"]), None)
+    code_rounds = sum(1 for r in rounds if r["phase"] != "plan")
+    plan_passed = any(r["phase"] == "plan" and overall(r["tracks"]) == "PASS" for r in closed)
     unresolved = [f["id"] for f in findings if blocking(f)]
+    gaps = [f["id"] for f in findings if f["source"] == "plan-gap" and blocking(f)]
+    reasons: list[str] = []
+    if open_round:
+        reasons.append("a round is still open")
+    if not code_rounds:
+        reasons.append("no code round yet")
     if unresolved:
         reasons.append(f"findings not verified or downgraded: {', '.join(unresolved)}")
-    closed = [r for r in rounds if r["closed"]]
     if closed:
         last = max(closed, key=lambda r: r.get("closeSeq", 0))
         fresh = [
@@ -139,51 +176,65 @@ def group_status(ledger: Path, group: str) -> dict:
         ]
         if fresh:
             reasons.append(f"the last round raised new design findings: {', '.join(fresh)}")
-    gaps = [f["id"] for f in findings if f["source"] == "plan-gap" and blocking(f)]
     complete = not reasons
-    if any(not r["closed"] for r in rounds):
-        action = "record every track and close the open round"
+    predecessors = sorted({r["succeeds"] for r in rounds if r.get("succeeds")})
+    # The group's own work is not proof: a fresh group must find nothing important itself.
+    # Findings taken over from the previous group were raised there, not here.
+    raised = [f["id"] for f in findings if f["class"] == "design" and f["status"] != "downgraded" and "from" not in f]
+    converged = bool(
+        chain and complete and predecessors and not raised and all(group_status(ledger, p, False)["complete"] for p in predecessors)
+    )
+    if open_round:
+        state = "plan-open" if open_round["phase"] == "plan" else "code-open"
     elif gaps:
-        action = "plan gap open: revise the plan, then open a plan round to verify it"
+        state = "plan-open"
+    elif not code_rounds:
+        state = "plan-pass" if plan_passed else "plan-open"
+    elif converged:
+        state = "converged"
+    elif not complete and code_rounds >= CODE_ROUND_CAP:
+        state = "cap-reached"
+    else:
+        state = "code-closed"
+    if state in ("plan-open", "code-open") and open_round:
+        action = "record every track and close the open round"
+    elif state == "plan-open":
+        action = (
+            "revise the plan, `triage fixed --commit <plan commit>`, then open a plan round: a PASS verifies the fix"
+            if gaps
+            else "open a plan round and fix its findings until one passes"
+        )
+    elif state == "plan-pass":
+        action = "open a code round (--phase initial)"
+    elif state == "cap-reached":
+        action = f"code round cap reached: open a fresh group (--succeeds {group}); its unresolved findings move to the new group"
+    elif state == "converged":
+        action = "review converged"
     elif unresolved:
-        action = "fix the open findings, then verify them in the next round (只核实关闭)"
+        action = "fix the open or reopened findings, then verify them in the next round (只核实关闭)"
     elif not complete:
         action = "open another round in this group"
+    elif predecessors:
+        action = f"this fresh group raised design findings ({', '.join(raised)}): open another fresh group (--succeeds {group}) to confirm"
     else:
-        action = "group complete"
+        action = f"open a fresh group (--succeeds {group}) for one full-scope round"
     return {
         "group": group,
+        "state": state,
         "complete": complete,
+        "converged": converged,
         "reasons": reasons,
-        "planRounds": sum(1 for r in rounds if r["phase"] == "plan"),
-        "codeRounds": sum(1 for r in rounds if r["phase"] != "plan"),
-        "findings": {s: sum(1 for f in findings if f["status"] == s) for s in ("open", "fixed", "verified", "downgraded")},
+        "planRounds": len(rounds) - code_rounds,
+        "codeRounds": code_rounds,
+        "findings": {s: sum(1 for f in findings if f["status"] == s) for s in FINDING_STATES},
+        "succeeds": predecessors,
+        "raisedDesignFindings": raised,
         "nextAction": action,
     }
 
 
 def status(args: argparse.Namespace) -> int:
-    ledger = validate_ledger_path(args.ledger, args.package)
-    result = group_status(ledger, args.group)
-    predecessors = {r["succeeds"] for r in group_rounds(ledger, args.group) if r.get("succeeds")}
-    result["succeeds"] = sorted(predecessors)
-    # The group's own work is not proof: a fresh group must find nothing important. A fresh group
-    # that raised design findings (even if it fixed and verified them) needs another fresh group.
-    raised = [f["id"] for _, _, f in group_findings(ledger, args.group) if f["class"] == "design" and f["status"] != "downgraded"]
-    result["raisedDesignFindings"] = raised
-    result["converged"] = bool(
-        result["complete"] and predecessors and not raised and all(group_status(ledger, p)["complete"] for p in predecessors)
-    )
-    if result["complete"]:
-        if result["converged"]:
-            result["nextAction"] = "review converged"
-        elif predecessors:
-            result["nextAction"] = f"this fresh group raised design findings ({', '.join(raised)}): open another fresh group (--succeeds {args.group}) to confirm"
-        else:
-            result["nextAction"] = f"open a fresh group (--succeeds {args.group}) for one full-scope round"
-    elif result["codeRounds"] >= CODE_ROUND_CAP:
-        result["nextAction"] = f"code round cap reached: open a fresh group (--succeeds {args.group}); unresolved findings stay with it"
-    return emit(result)
+    return emit(group_status(validate_ledger_path(args.ledger, args.package), args.group))
 
 
 def summary(state: dict, round_: dict, ledger: Path) -> dict:
@@ -209,23 +260,58 @@ def emit(payload: dict) -> int:
     return 0
 
 
+def check_predecessor(ledger: Path, group: str, predecessor: str) -> None:
+    if predecessor == group:
+        raise ValueError("a group cannot succeed itself")
+    if group_rounds(ledger, group):
+        raise ValueError("--succeeds belongs on the first round of a fresh group")
+    previous = group_status(ledger, predecessor, False)
+    if not (previous["complete"] or previous["state"] == "cap-reached"):
+        raise ValueError(
+            f"predecessor group {predecessor} is {previous['state']}; a fresh group follows a complete group or one at the code-round cap"
+        )
+
+
+def take_over(ledger: Path, predecessor: str, group: str) -> list[str]:
+    """Moves the predecessor's unresolved findings to the new group, so the chain can still complete."""
+    moved: list[str] = []
+    for path, state in sibling_states(ledger):
+        changed = False
+        for f in state["findings"]:
+            if f["group"] == predecessor and blocking(f):
+                f["group"], f["from"] = group, predecessor
+                moved.append(f["id"])
+                changed = True
+        if changed:
+            save(path, state)
+    return moved
+
+
 def open_round(args: argparse.Namespace) -> int:
     ledger = validate_ledger_path(args.ledger, args.package)
     path = state_path(ledger)
     state = load(path)
     if state["rounds"] and not state["rounds"][-1]["closed"]:
         raise ValueError(f"round {state['rounds'][-1]['round']} is still open; record every track and close it first")
+    tracks: dict = {}
+    for spec in args.track:
+        label, _, leaf = spec.partition("=")
+        label = label.strip()
+        if not label or label in tracks:
+            raise ValueError(f"empty or duplicate track: {spec!r}")
+        tracks[label] = {"leaf": leaf.strip() or None, "verdict": None, "report": None}
     is_plan = args.phase == "plan"
     used = rounds_used(ledger, args.group, is_plan)
     warnings: list[str] = []
     if is_plan:
-        if used + 1 >= PLAN_WARN_ROUND:
+        streak = plan_streak(ledger, args.group)
+        if streak + 1 >= PLAN_WARN_ROUND:
             warnings.append(
-                f"plan round {used + 1} of group {args.group}: check whether the review is stuck in local detail and whether the requirement can be narrowed at its root"
+                f"plan round {streak + 1} of group {args.group} since its last passed plan round: check whether the review is stuck in local detail and whether the requirement can be narrowed at its root"
             )
     else:
         if used >= CODE_ROUND_CAP:
-            raise ValueError(f"group {args.group} has used {used} code rounds (cap {CODE_ROUND_CAP}); open the next round with a fresh group id")
+            raise ValueError(f"group {args.group} has used {used} code rounds (cap {CODE_ROUND_CAP}); open the next round with a fresh group id (--succeeds)")
         existing = group_rounds(ledger, args.group)
         gaps = [f["id"] for _, _, f in group_findings(ledger, args.group) if f["source"] == "plan-gap" and blocking(f)]
         if gaps:
@@ -234,17 +320,16 @@ def open_round(args: argparse.Namespace) -> int:
             r["phase"] == "plan" and r["closed"] and overall(r["tracks"]) == "PASS" for r in existing
         ):
             raise ValueError(f"group {args.group} has no plan round closed with PASS; the plan must pass before code is reviewed")
-    if args.succeeds and chain_depth(ledger, args.succeeds) + 1 >= GROUP_CHAIN_WARN:
-        warnings.append(
-            f"{chain_depth(ledger, args.succeeds) + 1} fresh groups in a row have not converged: stop and decide whether the requirement can be cut near its root, or ask the Owner"
-        )
-    tracks: dict = {}
-    for spec in args.track:
-        label, _, leaf = spec.partition("=")
-        label = label.strip()
-        if not label or label in tracks:
-            raise ValueError(f"empty or duplicate track: {spec!r}")
-        tracks[label] = {"leaf": leaf.strip() or None, "verdict": None, "report": None}
+    taken: list[str] = []
+    if args.succeeds:
+        check_predecessor(ledger, args.group, args.succeeds)
+        depth = chain_depth(ledger, args.succeeds) + 1
+        if depth >= GROUP_CHAIN_WARN:
+            warnings.append(
+                f"{depth} fresh groups in a row have not converged: stop and decide whether the requirement can be cut near its root, or ask the Owner"
+            )
+        taken = take_over(ledger, args.succeeds, args.group)
+        state = load(path)
     round_ = {
         "round": len(state["rounds"]) + 1,
         "ledger": ledger.name,
@@ -253,12 +338,15 @@ def open_round(args: argparse.Namespace) -> int:
         "phase": args.phase,
         "tracks": tracks,
         "closed": False,
+        "openSeq": next_seq(ledger),
     }
     if args.succeeds:
         round_["succeeds"] = args.succeeds
     state["rounds"].append(round_)
     save(path, state)
     payload = {"round": round_["round"], "group": args.group, "groupRound": used + 1, "tracks": list(tracks)}
+    if taken:
+        payload["takenOver"] = taken
     if warnings:
         payload["warnings"] = warnings
     return emit(payload)
@@ -281,6 +369,26 @@ def record(args: argparse.Namespace) -> int:
     return emit({"round": round_["round"], "track": args.track, "verdict": args.verdict, "pending": pending})
 
 
+def verify_plan_gaps(ledger: Path, round_: dict) -> list[str]:
+    """A passing plan round verifies the plan-gap fixes recorded before it opened."""
+    verified: list[str] = []
+    for path, state in sibling_states(ledger):
+        changed = False
+        for f in state["findings"]:
+            if (
+                f["group"] == round_["group"]
+                and f["source"] == "plan-gap"
+                and f["status"] == "fixed"
+                and f.get("fixedSeq", 0) < round_.get("openSeq", 0)
+            ):
+                f["status"] = "verified"
+                verified.append(f["id"])
+                changed = True
+        if changed:
+            save(path, state)
+    return verified
+
+
 def close(args: argparse.Namespace) -> int:
     ledger = validate_ledger_path(args.ledger, args.package)
     path = state_path(ledger)
@@ -292,7 +400,11 @@ def close(args: argparse.Namespace) -> int:
     round_["closed"] = True
     round_["closeSeq"] = next_seq(ledger)
     save(path, state)
-    return emit(summary(state, round_, ledger))
+    verified = verify_plan_gaps(ledger, round_) if round_["phase"] == "plan" and overall(round_["tracks"]) == "PASS" else []
+    result = summary(state, round_, ledger)
+    if verified:
+        result["verifiedPlanGaps"] = verified
+    return emit(result)
 
 
 def export(args: argparse.Namespace) -> int:
@@ -329,20 +441,26 @@ def closed_round_of_group(state: dict, group: str, number: int) -> dict:
 def triage(args: argparse.Namespace) -> int:
     ledger = validate_ledger_path(args.ledger, args.package)
     action = args.action
+    # Without --round, triage refers to the group's latest closed round (round numbers are per ledger).
+    chosen = lambda: (  # noqa: E731
+        latest_closed_round(ledger, args.group)
+        if args.round is None
+        else closed_round_of_group(load(state_path(ledger)), args.group, args.round)
+    )
     if action == "add":
+        if not (args.source and args.klass and args.severity and args.summary and args.summary.strip()):
+            raise ValueError("add needs --source, --class, --severity and --summary")
         path = state_path(ledger)
         state = load(path)
-        if args.round is None or not (args.source and args.klass and args.summary and args.summary.strip()):
-            raise ValueError("add needs --round, --source, --class and --summary")
-        closed_round_of_group(state, args.group, args.round)
-        count = len(group_findings(ledger, args.group))
+        round_ = chosen()
         finding = {
-            "id": f"F{count + 1}",
+            "id": next_finding_id(ledger, args.group),
             "group": args.group,
-            "ledger": ledger.name,
-            "round": args.round,
+            "ledger": round_.get("ledger", ledger.name),
+            "round": round_["round"],
             "source": args.source,
             "class": args.klass,
+            "severity": args.severity,
             "summary": args.summary.strip(),
             "status": "open",
             "reopens": 0,
@@ -354,8 +472,8 @@ def triage(args: argparse.Namespace) -> int:
         raise ValueError(f"{action} needs --id")
     path, state, finding = find_finding(ledger, args.group, args.id)
     if action == "fixed":
-        if finding["status"] != "open":
-            raise ValueError(f"{finding['id']} is {finding['status']}; only an open finding can be marked fixed")
+        if finding["status"] not in ("open", "reopened"):
+            raise ValueError(f"{finding['id']} is {finding['status']}; only an open or reopened finding can be marked fixed")
         if not (args.commit and args.commit.strip()):
             raise ValueError("fixed needs --commit")
         finding["fixCommit"] = args.commit.strip()
@@ -369,11 +487,9 @@ def triage(args: argparse.Namespace) -> int:
     elif action == "verify":
         if finding["status"] != "fixed":
             raise ValueError(f"{finding['id']} is {finding['status']}; verify only a fixed finding")
-        if args.round is None:
-            raise ValueError("verify needs --round (the closed round of this group that checked the fix)")
-        round_ = closed_round_of_group(load(state_path(ledger)), args.group, args.round)
+        round_ = chosen()
         if round_.get("closeSeq", 0) <= finding["fixedSeq"]:
-            raise ValueError(f"round {args.round} closed before {finding['id']} was fixed; verify in a later round")
+            raise ValueError(f"round {round_['round']} closed before {finding['id']} was fixed; verify in a later round")
         finding["status"] = "verified"
     elif action == "reopen":
         if finding["status"] not in ("fixed", "verified"):
@@ -383,7 +499,7 @@ def triage(args: argparse.Namespace) -> int:
             raise ValueError(
                 f"{finding['id']} would be reopened {reopens} times; state first whether the requirement can be cut at its root (--root-cut '<one sentence>')"
             )
-        finding["reopens"], finding["status"] = reopens, "open"
+        finding["reopens"], finding["status"] = reopens, "reopened"
         if args.root_cut and args.root_cut.strip():
             finding["rootCut"] = args.root_cut.strip()
     elif action == "downgrade":
@@ -408,7 +524,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = common(sub.add_parser("open", help="open a round and register the tracks it must run"))
     p.add_argument("--group", required=True, help="review-group id; a group stops at CODE_ROUND_CAP code rounds")
     p.add_argument("--phase", required=True, choices=PHASES)
-    p.add_argument("--succeeds", help="the complete group whose full-scope re-review this group is")
+    p.add_argument("--succeeds", help="first round of a fresh group: the complete (or capped) group it re-reviews; its unresolved findings move here")
     p.add_argument("--track", action="append", required=True, help="`Track A` or `Track A=<subagent_type>`; repeat per track")
     p.set_defaults(handler=open_round)
 
@@ -425,9 +541,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("action", choices=("add", "fixed", "verify", "reopen", "downgrade"))
     p.add_argument("--group", required=True)
     p.add_argument("--id")
-    p.add_argument("--round", type=int)
+    p.add_argument("--round", type=int, help="closed round of this ledger; default: the group's latest closed round")
     p.add_argument("--source", choices=SOURCES)
     p.add_argument("--class", dest="klass", choices=CLASSES)
+    p.add_argument("--severity", choices=SEVERITIES)
     p.add_argument("--summary")
     p.add_argument("--commit")
     p.add_argument("--self-verified", action="store_true")
@@ -435,7 +552,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--reason")
     p.set_defaults(handler=triage)
 
-    p = common(sub.add_parser("status", help="say whether a group is complete and what to do next"))
+    p = common(sub.add_parser("status", help="print a group's state and the next action"))
     p.add_argument("--group", required=True)
     p.set_defaults(handler=status)
 

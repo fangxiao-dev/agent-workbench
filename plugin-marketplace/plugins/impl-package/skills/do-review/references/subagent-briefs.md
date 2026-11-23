@@ -96,10 +96,12 @@ When the caller names a model or `subagent_type` for a track (registered through
 
 ```text
 Reviewers are strict by nature. Before forwarding, accepting or acting on a finding, read it as a principal engineer would:
-- Only user-visible behavior and data safety block. Everything else is a non-blocking backlog item.
-- For a feature that is simple from the outside, cut coarsely near the root; do not add fine branches, copy or acceptance.
-- Decide per finding whether the plan missed it (plan-gap: revise the plan first) or the code did not follow the plan (impl-drift: fix the code).
-- If the same kind of finding comes back a second time, first ask whether the requirement can be cut near its root instead of patching again.
+- Only user-visible behavior and data safety block. For a feature that is simple from the outside, cut coarsely near the root; no fine branches, copy or acceptance.
+- Plan first: a plan gap is revised and passes a plan round before code is fixed; never send plan and code fixes together.
+- The same kind of finding a second time (also across two groups): first ask whether the requirement can be cut near its root instead of patching again.
+- P2: fix it in passing when it costs almost nothing; only the P2 that cannot be fixed in passing goes to the backlog, with a reason.
+- Fix briefs state the rule behavior as the basis; test names carry the rule-case ID; the receipt ends with a rule -> test table.
+- When direction changes mid-task, interrupt the session and confirm it received the change.
 Pass this block on when briefing any session that triages review findings.
 ```
 
