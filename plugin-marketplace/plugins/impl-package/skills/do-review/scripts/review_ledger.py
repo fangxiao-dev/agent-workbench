@@ -68,7 +68,12 @@ def validate_ledger_path(value: str, package: Path | None = None) -> Path:
         return path
 
     root, attempt, directory = package_review_directory(package)
-    path = (candidate if candidate.is_absolute() else root / candidate).resolve()
+    if candidate.is_absolute():
+        path = candidate.resolve()
+    else:
+        # A repo-relative path (starting with the package path) is as valid as a package-relative one.
+        from_cwd = candidate.resolve()
+        path = from_cwd if from_cwd.is_relative_to(root) else (root / candidate).resolve()
     if path.parent != directory or not LEDGER_NAME.fullmatch(path.name):
         raise ValueError(
             "ledger path must be in the current package Attempt's "

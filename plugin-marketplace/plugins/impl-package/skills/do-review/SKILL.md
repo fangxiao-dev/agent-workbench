@@ -31,7 +31,7 @@ allowed-tools:
 - **Finding acceptance/dedup/classification**：leaf 输出先是 candidate evidence，parent 写入唯一 canonical ledger 后才采信；按 broken invariant/observable failure 去重，不按 path/reviewer。blocker 是业务数据、money、inventory、order、customer state、安全或 runtime-visible product data 风险；follow-up 真实但不阻断；backlog 是非紧急清理。证据不足只能 disputed/downgraded/out-of-scope/`UNCERTAIN`，不能变成 verified blocker。
 - **Track C 合同缺口**：coverage 的“合同缺口（待裁决）”非空时，由父级转 Owner 或走 Spec 修订，不进入 finding closure。
 - **Track C source recheck**：finding 被接受并归类为 Spec fidelity 后，移交 implementation 前做一次 fresh independent reviewer source recheck，范围限 accepted finding、fixed-head 的 immutable Decision/Spec/`contract-design.md`（若有）和直接引用的 Ticket/cross-module authority；结果只记录一次，不能再派第二次。记录为 sources uniquely decide、require contract revision 或 leave an owner decision；source recheck 不可用或 incomplete 阻断 handoff，不能跳过；未触及的旧 package 缺 `contract-design.md` 本身不是 gap。
-- **Loop convergence**：口径只有一个，见 [review-topology.md](references/review-topology.md) 的 Review group continuation。每组对自己提出的问题负责到底：先审方案（`--phase plan`）直到通过，再审代码；每条接受的问题用 `review_rounds.py triage` 归类为 plan-gap 或 impl-drift，修复后由同一组核实关闭；组内问题全部 verified 或被降级、且最近一轮没有新的设计类问题，该组才算完成；完成不等于收敛，必须再换一组全新审阅者做一轮全量，只有新组自己没有提出设计类问题才算收敛，否则新组接手这些问题，再换下一组确认，一直审到收敛。同组代码轮最多 5 轮是兜底，不设跨组总轮数上限。parent 在采信 finding 前先用资深工程负责人的视角过滤：只有用户可见行为和数据安全阻断，其余记 backlog；同类问题第二次出现先判断能否在源头收窄需求。严重度与设计类/控制类归类由 parent 在 evidence verification、dedup、classification 后判断，控制类由 parent 直接修，不再开轮。只看对本 ReviewRun 的 phase 与 change unit 有价值的 finding；backlog 和属于其他阶段的候选只记录、转交。
+- **Loop convergence**：口径只有一个，见 [review-topology.md](references/review-topology.md) 的 Review group continuation：组状态与问题状态的转移表由 `review_rounds.py status --group` 给出，每一步都是一条命令。收敛 = 一个全新审阅组完成且自己没提出设计类问题，否则新组接手这些问题，再换下一组确认；同组代码轮最多 5 轮是兜底，不设跨组总轮数上限。只有用户可见行为与数据安全算阻断，parent 采信 finding 前先用资深工程负责人的视角过滤；同类问题第二次出现先做源头裁剪。严重度与设计类/控制类归类由 parent 在 evidence verification、dedup、classification 后判断，控制类由 parent 直接修，不再开轮。只看对本 ReviewRun 的 phase 与 change unit 有价值的 finding；backlog 和属于其他阶段的候选只记录、转交。
 - **Closure ≠ terminal**：`finding-closure` 只核对命名 findings，不能替代 `terminal-final`；`terminal-final` 在已知仍会改变实现或合同的事项闭合后启动，必须固定最终 implementation `HEAD`，按终审 admission 规则处理候选轨。沿用已 PASS 的轨不等于用 closure 顶替终审：closure 只核对点名 findings；沿用 PASS 的依据是该轨输入未变、结论继续成立。两者依据不同，不可互相替代。
 
 ## 1. Create One Immutable ReviewRun
@@ -54,11 +54,11 @@ allowed-tools:
 
 ## 3. Dispatch Independent Rounds
 
-0. 派发前用 `scripts/review_rounds.py open --ledger <ledger> --group <组 id> --phase <phase> --track <轨>…` 登记本轮要跑的全部轨；每条轨返回后立即 `record --track <轨> --verdict <V> --report <报告>`；全部返回后 `close`。有轨缺失时 `close` 拒绝并列出缺的轨；`close` 成功前不得派修复、不得写 canonical summary、不得报告本轮结论；`export` 只在 `close` 之后可用，输出本轮汇总和待分诊的报告。同一审阅组满 5 个代码轮后 `open` 拒绝，必须换新组 id；方案审阅用 `--phase plan`，第 3 轮起 `open` 只警告。`close` 之后用 `triage add/fixed/verify/reopen/downgrade` 登记并跟踪本组的问题，`status --group` 判断本组是否完成。
+0. 派发前用 `scripts/review_rounds.py open --ledger <ledger> --group <组 id> --phase <phase> --track <轨>…` 登记本轮要跑的全部轨；每条轨返回后立即 `record --track <轨> --verdict <V> --report <报告>`；全部返回后 `close`。有轨缺失时 `close` 拒绝并列出缺的轨；`close` 成功前不得派修复、不得写 canonical summary、不得报告本轮结论；`export` 只在 `close` 之后可用，输出本轮汇总和待分诊的报告。同一审阅组满 5 个代码轮后 `open` 拒绝，必须换新组并带 `--succeeds <旧组>`（未决问题随之转到新组）；方案审阅用 `--phase plan`。`close` 之后按转移表用 `triage add/fixed/verify/reopen/downgrade` 登记并推进本组的问题，`status --group` 给出状态与下一步。
 1. 先读 [subagent-briefs.md](references/subagent-briefs.md)：common block 每轮使用，closure brief 只给 Closure verification，anti-duplicate addendum 只在 round 1 后使用。派发 matching leaf，不让 generic subagent 自己拼 track brief（调用方指定了 subagent 类型时，parent 按 subagent-briefs.md 的 Caller-Assigned Leaf 补全 skill 路径和 leaf 合同）；传入 verified reviewer `SKILL.md` path、canonical ledger path 和 leaf 独占的 report artifact path。brief 由 parent 固定，避免 generic worker 临场改变 track 合同。
 
 2. Round 1 不传 prior findings；后续只传 parent 已验证的上一轮 canonical context，不传 raw reviewer output。第 2 轮起续用同一审阅组的 leaf 会话，每轮写明“重新分析”或“只核实关闭”，组内问题全部核实关闭（或降级）且最近一轮没有新的设计类问题后，换全新一组做一轮全量审阅（同组代码轮最多 5 轮为兜底），规则见 [review-topology.md](references/review-topology.md) 的 Review group continuation，普通审阅与终审都适用。按已解析 topology 与 matching leaf 执行本轮审查，逐项返回 PASS/FAIL/UNCERTAIN；canonical context 保持轮次之间的证据边界。
-3. timeout、cancellation、`PARTIAL` 或缺 evidence 都是 incomplete，不是 PASS。等待所有 required active tracks；Loop 中已记录 converged 的 track 不算 missing，其他 incomplete 会阻断，除非用户授权了该精确 degraded topology。否则“没有返回”会被错误收敛为通过。
+3. timeout、cancellation、`PARTIAL` 或缺 evidence 都是 incomplete，不是 PASS。等待本轮登记的全部 track（核实轮只登记所需的轨，其余轨沿用上轮 PASS）；缺失或 incomplete 会阻断，除非用户授权了该精确 degraded topology。否则“没有返回”会被错误收敛为通过。
 
 ## 4. Canonicalize The Round
 
@@ -67,7 +67,7 @@ allowed-tools:
 2. Impl-Package target 在 ledger 原子更新后，主控按 [output-templates.md](references/output-templates.md) 形成 Canonical Finding Summary，调用 `python <plugin-root>/scripts/review_track_stats.py record --package <package>`，把本轮完整 accepted finding 集合写入 package trail 的 `review.canonical_summary` fact。`findingKey` 按 broken invariant/observable failure 稳定命名；多轨共同发现保留全部 `tracks`。记录失败使本轮 canonicalization `INCOMPLETE`，不得只留下 Markdown ledger 或从 reviewer prose 推导统计。
 3. Track C 的 source recheck 属于当前 ReviewRun 的 post-classification check，不创建新 phase/lifecycle；其它 accepted finding 和 unaccepted candidate 不触发它。将 recheck 限在已接受的 Spec fidelity finding，避免重复派发或把未采信候选升级成 handoff 阻断。
 
-4. Loop 在分类后应用 topology 的 track lifecycle/convergence 规则；`finding-closure` 不能冒充 `terminal-final`，terminal result 必须在最终 implementation `HEAD` 以完整适用 topology 复核。只有完成分类与最终 HEAD 复核，收敛或 terminal PASS 才有完整证据。terminal-final 落盘 output-templates 中的 `review.terminal_summary`，运行时核对 required 结果与同一 ReviewRun 的有效复用证据。
+4. Loop 在分类后按 topology 的 review group 转移表推进（`status --group`）；`finding-closure` 不能冒充 `terminal-final`，terminal result 必须在最终 implementation `HEAD` 以完整适用 topology 复核。只有完成分类与最终 HEAD 复核，收敛或 terminal PASS 才有完整证据。terminal-final 落盘 output-templates 中的 `review.terminal_summary`，运行时核对 required 结果与同一 ReviewRun 的有效复用证据。
 
 ## 5. Report
 
