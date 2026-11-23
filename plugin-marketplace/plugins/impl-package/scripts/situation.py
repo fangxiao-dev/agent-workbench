@@ -1123,7 +1123,7 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                     errors.append(f"evidenceIndex[{key}] kind 无效")
                     continue
                 required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
-                optional = {"inputRef", "outputRef", "manualBy", "artifactSha256"} if kind == "journey-step" else set()
+                optional = {"inputRef", "outputRef", "manualBy", "artifactSha256", "route"} if kind == "journey-step" else set()
                 allowed = required | optional | {"invalidatedBy", "timing", "recordedAt", "carriedForward"}
                 if kind not in fields_by_kind or not required <= set(record) or set(record) - allowed:
                     errors.append(f"evidenceIndex[{key}] {kind!r} evidence 字段不完整或含未知字段")
@@ -1157,6 +1157,8 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                     for field in ("inputRef", "outputRef"):
                         if field in record and (not isinstance(record[field], str) or not record[field].strip()):
                             errors.append(f"evidenceIndex[{key}] {field} 必须是非空业务对象标识")
+                    if "route" in record and record["route"] not in {"R1", "R2", "R3"}:
+                        errors.append(f"evidenceIndex[{key}] route 必须是 R1、R2 或 R3")
                     run_id, journey_id, step_id, actor, entry = (record.get(field) for field in ("runId", "journeyId", "stepId", "actor", "entry"))
                     if not all(isinstance(value, str) and value.strip() for value in (run_id, journey_id, step_id, actor, entry)) or key != f"journey:{run_id}:{step_id}":
                         errors.append(f"evidenceIndex[{key}] Journey evidence key 或字段无效")

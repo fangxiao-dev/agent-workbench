@@ -27,6 +27,10 @@ from .state_core import (
 )
 
 
+# 复验路由：R1 文案/格式，R2 状态显隐，R3 因果链（见 run-acceptance）。
+REVERIFY_ROUTES = ("R1", "R2", "R3")
+
+
 def _package_relative_artifact(package: Path, value: Any, field: str, *, must_exist: bool, local_ok: bool = False) -> str:
     if not isinstance(value, str) or not value.strip():
         raise StateError(f"{field} must be a non-empty package-relative path")
@@ -218,7 +222,7 @@ def _validate_journey_evidence_index(
         "review": {"ticket"},
         "release": set(),
     }
-    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef", "manualBy", "artifactSha256"}}
+    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef", "manualBy", "artifactSha256", "route"}}
     for evidence_key, records in index.items():
         if not isinstance(evidence_key, str) or not evidence_key or not isinstance(records, list):
             raise StateError(f"evidenceIndex[{evidence_key}] must map an evidenceKey to a list")
@@ -260,6 +264,8 @@ def _validate_journey_evidence_index(
                 for field in ("inputRef", "outputRef"):
                     if field in record and (not isinstance(record[field], str) or not record[field].strip()):
                         raise StateError(f"evidenceIndex[{evidence_key}] {field} must be a non-empty business object identifier")
+                if "route" in record and record["route"] not in REVERIFY_ROUTES:
+                    raise StateError(f"evidenceIndex[{evidence_key}] route must be one of {', '.join(REVERIFY_ROUTES)}")
                 if evidence_key != f"journey:{run_id}:{step_id}":
                     raise StateError(f"evidenceIndex[{evidence_key}] must use journey:<runId>:<stepId>")
                 step = spec["steps"].get(step_id)
@@ -366,7 +372,7 @@ def _normalize_journey_evidence(
         "review": {"ticket"},
         "release": set(),
     }
-    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef", "manualBy"}}
+    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef", "manualBy", "route"}}
     if not isinstance(kind, str) or kind not in fields_by_kind:
         raise StateError("3.6 evidence kind must be journey-step, run-setup, suite, review, or release")
     required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
@@ -380,6 +386,8 @@ def _normalize_journey_evidence(
         for field in ("inputRef", "outputRef"):
             if field in record and (not isinstance(record[field], str) or not record[field].strip()):
                 raise StateError(f"Journey evidence {field} must be a non-empty business object identifier")
+        if "route" in record and record["route"] not in REVERIFY_ROUTES:
+            raise StateError(f"Journey evidence route must be one of {', '.join(REVERIFY_ROUTES)}")
     if "timing" in record and record["timing"] not in TIMINGS:
         raise StateError("invalid evidence timing")
     if "recordedAt" in record:

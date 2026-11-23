@@ -1334,6 +1334,35 @@ def test_local_screenshot_resolves_to_the_main_worktree_from_a_linked_worktree(t
     assert added.returncode == 0, added.stderr
 
 
+def test_journey_step_evidence_records_the_reverify_route(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    shot = repo / "output/qa/run-1/J1-S1.png"
+    shot.parent.mkdir(parents=True)
+    shot.write_bytes(b"fixture image")
+    record = _journey_record(revision, "J1-S1", artifact="output/qa/run-1/J1-S1.png", manual_by="张三")
+    record["route"] = "R2"
+
+    added = _cli(repo, package, "evidence", "add", input_value=record)
+
+    assert added.returncode == 0, added.stderr
+    assert _state(package)["evidenceIndex"]["journey:run-1:J1-S1"][0]["route"] == "R2"
+    assert engine._validate_state(package, _state(package)) is not None
+
+
+def test_journey_step_evidence_rejects_an_unknown_route(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    shot = repo / "output/qa/run-1/J1-S1.png"
+    shot.parent.mkdir(parents=True)
+    shot.write_bytes(b"fixture image")
+    record = _journey_record(revision, "J1-S1", artifact="output/qa/run-1/J1-S1.png", manual_by="张三")
+    record["route"] = "R9"
+
+    rejected = _cli(repo, package, "evidence", "add", input_value=record)
+
+    assert rejected.returncode != 0
+    assert "route" in rejected.stderr
+
+
 def test_local_screenshot_must_exist_and_stay_under_output_qa(tmp_path: Path) -> None:
     repo, package, revision = _init_v36(tmp_path)
     missing = _cli(repo, package, "evidence", "add", input_value=_journey_record(
