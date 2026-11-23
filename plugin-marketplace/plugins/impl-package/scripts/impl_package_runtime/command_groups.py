@@ -158,7 +158,7 @@ Screenshots and other raw artifacts (traces, full logs, DB dumps) are never comm
   journey-step surface=page: artifact is a Playwright trace .zip, or an image (.png/.jpg/.jpeg/.webp) together with manualBy; the file may be a package file or output/qa/<runId>/...
   journey-step surface=file: artifact is the produced file itself (not .md/.txt/.log); no manualBy
   journey-step surface=log: any package file; no manualBy
-Artifact paths are relative to the package directory (or start with output/qa/, relative to the repo root) and the file must already exist."""
+Artifact paths are relative to the package directory (or start with output/qa/, relative to the main worktree) and the file must already exist."""
 
 TRAIL_APPEND_TERMINAL_SUMMARY = """
 

@@ -532,11 +532,14 @@ def _find_git_root(path: Path) -> Path | None:
 
 
 def evidence_artifact_base(package: Path, relative: PurePosixPath) -> Path:
-    """Evidence under output/qa/ is git-ignored local output at the repo root, not part of the package."""
+    """Evidence under output/qa/ is git-ignored local output in the main worktree, not part of the package.
+
+    The main worktree is the parent of the git common dir, so every linked worktree resolves to the same root.
+    """
     if relative.parts[:2] == ("output", "qa") and len(relative.parts) > 2:
-        for parent in (package.resolve(), *package.resolve().parents):
-            if (parent / ".git").exists():
-                return parent
+        code, common_dir, _ = _git_result(package, "rev-parse", "--path-format=absolute", "--git-common-dir")
+        if code == 0 and common_dir:
+            return Path(common_dir).resolve().parent
     return package
 
 

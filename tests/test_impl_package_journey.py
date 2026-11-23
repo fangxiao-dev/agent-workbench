@@ -1317,6 +1317,23 @@ def test_page_manual_walkthrough_accepts_git_ignored_local_screenshot(tmp_path: 
     )["journeys"][0]["manualWalkthroughs"] == [{"stepId": "J1-S1", "manualBy": "张三"}]
 
 
+def test_local_screenshot_resolves_to_the_main_worktree_from_a_linked_worktree(tmp_path: Path) -> None:
+    repo, package, revision = _init_v36(tmp_path)
+    linked = tmp_path / "linked-wt"
+    _git(repo, "worktree", "add", "--detach", str(linked), "HEAD")
+    linked_package = linked / package.relative_to(repo)
+    shutil.copytree(package, linked_package, dirs_exist_ok=True)  # runtime state is not tracked in git
+    shot = repo / "output/qa/run-1/J1-S1.png"
+    shot.parent.mkdir(parents=True)
+    shot.write_bytes(b"fixture image")
+    assert not (linked / "output/qa/run-1/J1-S1.png").exists()
+
+    added = _cli(linked, linked_package, "evidence", "add", input_value=_journey_record(
+        revision, "J1-S1", artifact="output/qa/run-1/J1-S1.png", manual_by="张三"))
+
+    assert added.returncode == 0, added.stderr
+
+
 def test_local_screenshot_must_exist_and_stay_under_output_qa(tmp_path: Path) -> None:
     repo, package, revision = _init_v36(tmp_path)
     missing = _cli(repo, package, "evidence", "add", input_value=_journey_record(
