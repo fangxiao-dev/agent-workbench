@@ -21,12 +21,14 @@ dependency 逐候选呈现；缺席候选带类型和受影响的 `subject` 或 
 
 主控按当前 dependency、授权、已知实际冲突和在途工作判断资源准入；相同 `resource_key` 本身不等于冲突。恢复旧 Attempt 时，只读旧 trail/候选清单以及 Execution Record、checkpoint、handoff，沿用其中仍成立的授权和资源限制，不另建 blocker fact，也不重写旧记录。
 
-写代码的 worker（任何模型）在专属 worktree 中工作，做法固定：
+写代码的 worker（任何模型）在专属 worktree 中工作，worktree 按角色固定复用，不按任务新建（每次新建都要重装依赖、目录也会越积越多）：
 
-- brief 给出 `git worktree add .worktrees/<slug> <集成 sha> -b <分支>` 和该 worktree 的绝对路径（或主控先建好），worker 只在其中工作，结束时报分支与 SHA。
+- 每个写代码的角色（如修复、补测试）一个 worktree，路径 `.worktrees/<slug>`。首次派活时，brief 给出 `git worktree add .worktrees/<slug> <集成 sha> -b <分支>` 和该 worktree 的绝对路径（或主控先建好）；worker 只在分配给它的 worktree 中工作，结束时报分支与 SHA。
+- 同一角色接新任务时，在原 worktree 里 `git switch -c <新分支> <集成 sha>`；切换前工作区必须干净，有未提交改动先报告，不强制清理。依赖与构建缓存随 worktree 保留。
+- 只有两个写代码的 worker 需要同时改代码时，才另建 worktree。集成 worktree 只给主控合并用，worker 不在其中切分支。
 - 不使用 Agent 工具的 `isolation: "worktree"`：它从默认分支切出，缺未推送的集成分支和实施包；worker 停下后未改动的 worktree 会被自动清理。
 - 写代码的 worker 可用 SendMessage 续派，会接着在原 worktree 工作；续派前确认该 worktree 还在。CLI 起法用 `--cwd` 指向它。
-- 合入后由主控删除分支和 worktree。
+- 合入后由主控只删除已合入的分支；worktree 留给原角色继续用，包收尾时再统一删除，删除前核对分支已合入、没有未提交改动。
 
 新 worktree 承担 format、lint 或 typecheck 前，先确认能解析所需 binary、shim 和本地依赖。完成声明用 diff、mtime 或命令输出证明；carrier 失败与产物失败分别处理。
 
