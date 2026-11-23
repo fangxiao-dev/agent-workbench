@@ -63,10 +63,12 @@ def save(path: Path, state: dict) -> None:
     os.replace(temporary, path)
 
 
-def current_open(state: dict) -> dict:
+def current_open(state: dict, group: str | None = None) -> dict:
     rounds = state["rounds"]
     if not rounds or rounds[-1]["closed"]:
         raise ValueError("no open round; run `open` first")
+    if group is not None and rounds[-1]["group"] != group:
+        raise ValueError(f"the open round belongs to group {rounds[-1]['group']}, not {group}")
     return rounds[-1]
 
 
@@ -356,7 +358,7 @@ def open_round(args: argparse.Namespace) -> int:
 def record(args: argparse.Namespace) -> int:
     path = state_path(validate_ledger_path(args.ledger, args.package))
     state = load(path)
-    round_ = current_open(state)
+    round_ = current_open(state, args.group)
     track = round_["tracks"].get(args.track)
     if track is None:
         raise ValueError(f"track {args.track!r} is not registered for round {round_['round']}: {', '.join(round_['tracks'])}")
@@ -394,7 +396,7 @@ def close(args: argparse.Namespace) -> int:
     ledger = validate_ledger_path(args.ledger, args.package)
     path = state_path(ledger)
     state = load(path)
-    round_ = current_open(state)
+    round_ = current_open(state, args.group)
     missing = [label for label, t in round_["tracks"].items() if t["verdict"] is None]
     if missing:
         raise ValueError(f"round {round_['round']} cannot close; missing tracks: {', '.join(missing)}")
@@ -530,12 +532,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(handler=open_round)
 
     p = common(sub.add_parser("record", help="record one track's return in the open round"))
+    p.add_argument("--group", help="optional: must be the open round's group")
     p.add_argument("--track", required=True)
     p.add_argument("--verdict", required=True, choices=VERDICTS)
     p.add_argument("--report", required=True, help="the track's report artifact path")
     p.set_defaults(handler=record)
 
     p = common(sub.add_parser("close", help="close the open round; refuses while any track is missing"))
+    p.add_argument("--group", help="optional: must be the open round's group")
     p.set_defaults(handler=close)
 
     p = common(sub.add_parser("triage", help="record and track the group's accepted findings"))

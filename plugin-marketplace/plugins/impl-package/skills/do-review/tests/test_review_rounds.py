@@ -371,6 +371,46 @@ class ReviewRoundsTests(unittest.TestCase):
     def test_status_of_a_group_without_rounds_is_an_error(self) -> None:
         self.assertEqual(self.run_cli("status", "--group", "nobody")[0], 2)
 
+    def test_record_and_close_accept_a_matching_group_and_reject_another(self) -> None:
+        self.open("g1", "Track A")
+        code, _, err = self.run_cli("record", "--group", "g2", "--track", "Track A", "--verdict", "PASS", "--report", "a.md")
+        self.assertEqual(code, 2)
+        self.assertIn("g1", err)
+        self.assertEqual(self.run_cli("record", "--group", "g1", "--track", "Track A", "--verdict", "PASS", "--report", "a.md")[0], 0)
+        code, _, err = self.run_cli("close", "--group", "g2")
+        self.assertEqual(code, 2)
+        self.assertIn("g1", err)
+        self.assertEqual(self.run_cli("close", "--group", "g1")[0], 0)
+
+    def test_ledger_accepts_package_relative_and_repo_relative_paths(self) -> None:
+        with TemporaryDirectory() as tmp:
+            repo = Path(tmp).resolve()
+            package = repo / "docs" / "pkg"
+            (package / ".impl-package").mkdir(parents=True)
+            (package / ".impl-package" / "state.json").write_text(json.dumps({"attempt": {"id": "initial"}}), encoding="utf-8")
+            reviews = package / "execution" / "initial" / "reviews"
+            reviews.mkdir(parents=True)
+            (reviews / "2611211200-demo-abc1234.md").write_text("# ledger\n", encoding="utf-8")
+            previous = Path.cwd()
+            os.chdir(repo)
+            try:
+                for ledger in (
+                    "execution/initial/reviews/2611211200-demo-abc1234.md",
+                    "docs/pkg/execution/initial/reviews/2611211200-demo-abc1234.md",
+                ):
+                    out, err = io.StringIO(), io.StringIO()
+                    with redirect_stdout(out), redirect_stderr(err):
+                        code = self.module.main(["status", "--package", "docs/pkg", "--ledger", ledger, "--group", "g1"])
+                    self.assertIn("no rounds", err.getvalue(), ledger)  # path accepted; the group is just empty
+                    self.assertEqual(code, 2)
+                out, err = io.StringIO(), io.StringIO()
+                with redirect_stdout(out), redirect_stderr(err):
+                    code = self.module.main(["status", "--package", "docs/pkg", "--ledger", "elsewhere/2611211200-demo-abc1234.md", "--group", "g1"])
+                self.assertEqual(code, 2)
+                self.assertIn("ledger path must be in", err.getvalue())
+            finally:
+                os.chdir(previous)
+
     def test_old_state_without_findings_still_loads(self) -> None:
         self.open("g1", "Track A")
         path = self.ledger.with_suffix(".rounds.json")
