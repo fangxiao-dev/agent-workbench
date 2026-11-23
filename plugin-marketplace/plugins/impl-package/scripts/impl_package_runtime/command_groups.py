@@ -150,7 +150,7 @@ EVIDENCE_ADD_EPILOG = """Every record needs kind, artifact, revision, environmen
   suite:        {"kind":"suite","suiteId":"<id>","artifact":"<package-relative file>","revision":"<commit>","environment":"<Spec environment>","conclusion":"supporting"}
   review:       {"kind":"review","ticket":"T01","artifact":"execution/<attempt>/reviews/<file>","revision":"<commit>","environment":"local","conclusion":"supporting"}
   release:      {"kind":"release","artifact":"<package-relative file>","revision":"<commit>","environment":"local","conclusion":"supporting"}
-Optional (journey-step): inputRef, outputRef, manualBy, route (R1 text/format | R2 state visibility | R3 causal chain; the re-verification route the controller chose)."""
+Optional (journey-step): inputRef, outputRef, manualBy, testFile+testCase (R1 only: artifact is component test output), route (R1 text/format | R2 state visibility | R3 causal chain; the re-verification route the controller chose)."""
 
 
 EVIDENCE_ADD_RULES = """

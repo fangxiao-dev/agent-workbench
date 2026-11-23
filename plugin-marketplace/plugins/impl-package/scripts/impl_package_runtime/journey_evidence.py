@@ -154,6 +154,16 @@ def _validate_journey_surface_evidence(
     if surface == "page":
         if "artifactSha256" in record:
             raise StateError("page Journey evidence cannot include artifactSha256")
+        if "testFile" in record or "testCase" in record:
+            # R1 复验不截图：artifact 是组件测试的原始输出，记录写明测试文件与用例名。
+            if record.get("route") != "R1":
+                raise StateError("testFile/testCase (component test output as page evidence) is only valid with route R1")
+            for field in ("testFile", "testCase"):
+                if not isinstance(record.get(field), str) or not record[field].strip():
+                    raise StateError(f"R1 test-output evidence requires a non-empty {field}")
+            if "manualBy" in record:
+                raise StateError("R1 test-output evidence cannot include manualBy")
+            return None
         if "manualBy" in record:
             manual_by = record["manualBy"]
             if not isinstance(manual_by, str) or not manual_by.strip():
@@ -222,7 +232,7 @@ def _validate_journey_evidence_index(
         "review": {"ticket"},
         "release": set(),
     }
-    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef", "manualBy", "artifactSha256", "route"}}
+    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef", "manualBy", "artifactSha256", "route", "testFile", "testCase"}}
     for evidence_key, records in index.items():
         if not isinstance(evidence_key, str) or not evidence_key or not isinstance(records, list):
             raise StateError(f"evidenceIndex[{evidence_key}] must map an evidenceKey to a list")
@@ -372,7 +382,7 @@ def _normalize_journey_evidence(
         "review": {"ticket"},
         "release": set(),
     }
-    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef", "manualBy", "route"}}
+    optional_fields_by_kind = {"journey-step": {"inputRef", "outputRef", "manualBy", "route", "testFile", "testCase"}}
     if not isinstance(kind, str) or kind not in fields_by_kind:
         raise StateError("3.6 evidence kind must be journey-step, run-setup, suite, review, or release")
     required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]

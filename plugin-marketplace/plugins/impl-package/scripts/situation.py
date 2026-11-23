@@ -1123,7 +1123,7 @@ def _state_ticket_errors(state: StateView, tickets: dict[str, TicketInfo]) -> li
                     errors.append(f"evidenceIndex[{key}] kind 无效")
                     continue
                 required = {"kind", "artifact", "revision", "environment", "conclusion"} | fields_by_kind[kind]
-                optional = {"inputRef", "outputRef", "manualBy", "artifactSha256", "route"} if kind == "journey-step" else set()
+                optional = {"inputRef", "outputRef", "manualBy", "artifactSha256", "route", "testFile", "testCase"} if kind == "journey-step" else set()
                 allowed = required | optional | {"invalidatedBy", "timing", "recordedAt", "carriedForward"}
                 if kind not in fields_by_kind or not required <= set(record) or set(record) - allowed:
                     errors.append(f"evidenceIndex[{key}] {kind!r} evidence 字段不完整或含未知字段")
