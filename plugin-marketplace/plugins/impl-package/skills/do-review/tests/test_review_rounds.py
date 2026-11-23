@@ -217,7 +217,7 @@ class ReviewRoundsTests(unittest.TestCase):
         self.add("g1", 1)
         self.triage("fixed", "--group", "g1", "--id", "F1", "--commit", "a")
         reopened = self.triage("reopen", "--group", "g1", "--id", "F1")[1]
-        self.assertEqual((reopened["reopens"], reopened["status"]), (1, "reopened"))
+        self.assertEqual((reopened["reopens"], reopened["status"]), (1, "open"))
         self.triage("fixed", "--group", "g1", "--id", "F1", "--commit", "b")
         code, _, err = self.triage("reopen", "--group", "g1", "--id", "F1")
         self.assertEqual(code, 2)
@@ -306,11 +306,12 @@ class ReviewRoundsTests(unittest.TestCase):
         self.run_round("g2", "initial", "PASS", succeeds="g1")
         self.assertEqual(self.state_of("g2"), "converged")
 
-    def test_state_is_cap_reached_when_five_code_rounds_leave_findings_unresolved(self) -> None:
+    def test_cap_reached_flag_when_five_code_rounds_leave_findings_unresolved(self) -> None:
         for _ in range(5):
             self.run_round("g1", "initial", "FAIL")
         self.add("g1", 5)
-        self.assertEqual(self.state_of("g1"), "cap-reached")
+        status = self.run_cli("status", "--group", "g1")[1]
+        self.assertEqual((status["state"], status["capReached"]), ("code-closed", True))
         self.assertEqual(self.open("g1", "Track A")[0], 2)
 
     def test_fresh_group_takes_over_unresolved_findings_and_the_chain_can_converge(self) -> None:

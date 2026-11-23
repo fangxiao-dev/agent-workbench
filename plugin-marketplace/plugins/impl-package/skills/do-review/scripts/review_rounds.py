@@ -8,9 +8,9 @@ verdict all start from a closed round.
 
 A review group owns the findings it raises. `triage` records each accepted finding
 (source plan-gap | impl-drift, class design | control, severity P0 | P1 | P2) and moves
-it open -> fixed -> verified (or reopened, downgraded). `status` derives the group
-state (plan-open, plan-pass, code-open, code-closed, converged, cap-reached) and the
-next action. references/review-topology.md lists the same states and transitions.
+it open -> fixed -> verified (a failed verification reopens it; or downgraded). `status`
+derives the group state (plan-open, plan-pass, code-open, code-closed, converged), the
+`capReached` flag and the next action. references/review-topology.md lists the same states and transitions.
 
 Round counts are only a backstop: plan rounds warn from PLAN_WARN_ROUND on (counted
 since the last passed plan round), code rounds stop at CODE_ROUND_CAP and need a fresh
@@ -39,7 +39,7 @@ PHASES = ("plan", "initial", "finding-closure", "terminal-final")
 SOURCES = ("plan-gap", "impl-drift")
 CLASSES = ("design", "control")
 SEVERITIES = ("P0", "P1", "P2")
-FINDING_STATES = ("open", "fixed", "verified", "reopened", "downgraded")
+FINDING_STATES = ("open", "fixed", "verified", "downgraded")
 VERDICTS = ("PASS", "FAIL", "UNCERTAIN", "INCOMPLETE")
 
 
@@ -146,7 +146,7 @@ def chain_depth(ledger: Path, group: str) -> int:
 
 def blocking(finding: dict) -> bool:
     """A finding keeps its group incomplete until verified (or, for control type, self-closed) or downgraded."""
-    return finding["status"] in ("open", "reopened", "fixed")
+    return finding["status"] in ("open", "fixed")
 
 
 def group_status(ledger: Path, group: str, chain: bool = True) -> dict:
@@ -192,10 +192,10 @@ def group_status(ledger: Path, group: str, chain: bool = True) -> dict:
         state = "plan-pass" if plan_passed else "plan-open"
     elif converged:
         state = "converged"
-    elif not complete and code_rounds >= CODE_ROUND_CAP:
-        state = "cap-reached"
     else:
         state = "code-closed"
+    # Not a state of its own: a group that used its code rounds and is still incomplete.
+    capped = state == "code-closed" and not complete and code_rounds >= CODE_ROUND_CAP
     if state in ("plan-open", "code-open") and open_round:
         action = "record every track and close the open round"
     elif state == "plan-open":
@@ -206,12 +206,12 @@ def group_status(ledger: Path, group: str, chain: bool = True) -> dict:
         )
     elif state == "plan-pass":
         action = "open a code round (--phase initial)"
-    elif state == "cap-reached":
+    elif capped:
         action = f"code round cap reached: open a fresh group (--succeeds {group}); its unresolved findings move to the new group"
     elif state == "converged":
         action = "review converged"
     elif unresolved:
-        action = "fix the open or reopened findings, then verify them in the next round (只核实关闭)"
+        action = "fix the open findings, then verify them in the next round (只核实关闭)"
     elif not complete:
         action = "open another round in this group"
     elif predecessors:
@@ -223,6 +223,7 @@ def group_status(ledger: Path, group: str, chain: bool = True) -> dict:
         "state": state,
         "complete": complete,
         "converged": converged,
+        "capReached": capped,
         "reasons": reasons,
         "planRounds": len(rounds) - code_rounds,
         "codeRounds": code_rounds,
@@ -266,7 +267,7 @@ def check_predecessor(ledger: Path, group: str, predecessor: str) -> None:
     if group_rounds(ledger, group):
         raise ValueError("--succeeds belongs on the first round of a fresh group")
     previous = group_status(ledger, predecessor, False)
-    if not (previous["complete"] or previous["state"] == "cap-reached"):
+    if not (previous["complete"] or previous["capReached"]):
         raise ValueError(
             f"predecessor group {predecessor} is {previous['state']}; a fresh group follows a complete group or one at the code-round cap"
         )
@@ -472,8 +473,8 @@ def triage(args: argparse.Namespace) -> int:
         raise ValueError(f"{action} needs --id")
     path, state, finding = find_finding(ledger, args.group, args.id)
     if action == "fixed":
-        if finding["status"] not in ("open", "reopened"):
-            raise ValueError(f"{finding['id']} is {finding['status']}; only an open or reopened finding can be marked fixed")
+        if finding["status"] != "open":
+            raise ValueError(f"{finding['id']} is {finding['status']}; only an open finding can be marked fixed")
         if not (args.commit and args.commit.strip()):
             raise ValueError("fixed needs --commit")
         finding["fixCommit"] = args.commit.strip()
@@ -499,7 +500,7 @@ def triage(args: argparse.Namespace) -> int:
             raise ValueError(
                 f"{finding['id']} would be reopened {reopens} times; state first whether the requirement can be cut at its root (--root-cut '<one sentence>')"
             )
-        finding["reopens"], finding["status"] = reopens, "reopened"
+        finding["reopens"], finding["status"] = reopens, "open"
         if args.root_cut and args.root_cut.strip():
             finding["rootCut"] = args.root_cut.strip()
     elif action == "downgrade":

@@ -223,9 +223,11 @@ class ThreeTrackContractTests(unittest.TestCase):
     def test_topology_states_are_the_states_the_script_derives(self) -> None:
         group = markdown_section(TOPOLOGY_PATH.read_text(encoding="utf-8"), "Review group continuation")
         script = (DO_REVIEW_DIR / "scripts" / "review_rounds.py").read_text(encoding="utf-8")
-        for state in ("plan-open", "plan-pass", "code-open", "code-closed", "converged", "cap-reached", "open", "fixed", "verified", "reopened", "downgraded"):
+        for state in ("plan-open", "plan-pass", "code-open", "code-closed", "converged", "open", "fixed", "verified", "downgraded"):
             self.assertIn(f"`{state}`", group)
             self.assertIn(f'"{state}"', script)
+        self.assertIn("capReached", group)
+        self.assertIn("capReached", script)
 
     def test_skill_triggers_on_final_review_and_gates_fixes_on_a_closed_round(self) -> None:
         skill = SKILL_PATH.read_text(encoding="utf-8")

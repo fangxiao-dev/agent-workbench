@@ -49,20 +49,18 @@ Principles (everything else is the tables):
 | `plan-open` | a plan round is open, or no plan round has passed yet, or a plan-gap is not yet verified | `open --phase plan --track …`, `record` each track, `close`. PASS → `plan-pass`, and the close verifies every `fixed` plan-gap recorded before that round opened. Not PASS → `triage add`, revise the plan, `triage fixed --commit <plan commit>` before the next plan round opens. Each `open` from the third plan round since the last PASS warns (no block): check for local detail and for a root cut |
 | `plan-pass` | a plan round passed, no code round yet, no open plan-gap | `open --phase initial …` → `code-open`. A group without a plan starts here |
 | `code-open` | a code round is open | `record` each track, `close` → `code-closed` |
-| `code-closed` | the latest round is closed; the group is not complete, converged or capped | `triage add` each accepted finding (`--source plan-gap` → `plan-open`; `impl-drift` → the implementer fixes, `triage fixed --commit`). Next round `只核实关闭`: `triage verify` or `triage reopen`. **Group complete** = every finding verified or downgraded and the latest round raised no new design-type finding → `open --group <new> --succeeds <this>` for a fresh group |
+| `code-closed` | the latest round is closed and the group is not converged | `triage add` each accepted finding (`--source plan-gap` → `plan-open`; `impl-drift` → the implementer fixes, `triage fixed --commit`). Next round `只核实关闭`: `triage verify` or `triage reopen`. **Group complete** = every finding verified or downgraded and the latest round raised no new design-type finding → `open --group <new> --succeeds <this>` for a fresh group |
 | `converged` | the group is complete, follows a complete group, and raised no design-type finding itself | stop |
-| `cap-reached` | at most 5 code rounds per group and the group is still incomplete | `open` refuses; `open --group <new> --succeeds <this>` moves the unresolved findings to the new group |
 
-A complete group is not proof. The fresh group (new leaves, no prior sessions, full scope) either raises nothing important and converges, or raises design-type findings, owns them, completes, and is followed by another fresh group. There is no total round cap across groups; three fresh groups in a row without convergence make `open` warn: cut the requirement near its root, or ask the Owner.
+A group runs at most 5 code rounds: once it has used them and is still incomplete, `status` prints `capReached`, `open` refuses, and `open --group <new> --succeeds <this>` moves the unresolved findings to the new group. A complete group is not proof. The fresh group (new leaves, no prior sessions, full scope) either raises nothing important and converges, or raises design-type findings, owns them, completes, and is followed by another fresh group. There is no total round cap across groups; three fresh groups in a row without convergence make `open` warn: cut the requirement near its root, or ask the Owner.
 
 ### Finding states
 
 | State | Set by | Next |
 | --- | --- | --- |
-| `open` | `triage add --source plan-gap\|impl-drift --class design\|control --severity P0\|P1\|P2 --summary …` (`--round` defaults to the group's latest closed round) | the original implementer fixes, resumed: `triage fixed --commit`. The parent fixes control-type findings itself with `--self-verified` (→ `verified`) |
-| `fixed` | `triage fixed` | the same group's next round: `triage verify` (round defaults to the group's latest closed round) or `triage reopen` |
+| `open` | `triage add --source plan-gap\|impl-drift --class design\|control --severity P0\|P1\|P2 --summary …` (`--round` defaults to the group's latest closed round), or `triage reopen` | the original implementer fixes, resumed: `triage fixed --commit`. The parent fixes control-type findings itself with `--self-verified` (→ `verified`) |
+| `fixed` | `triage fixed` | the same group's next round: `triage verify` (round defaults to the group's latest closed round), or `triage reopen` back to `open` (the second reopen of one finding needs `--root-cut "<one sentence>"`) |
 | `verified` | `triage verify`, `--self-verified`, or a passing plan round for a plan-gap | closed |
-| `reopened` | `triage reopen`; the second reopen of one finding needs `--root-cut "<one sentence>"` | fix again: `triage fixed` |
 | `downgraded` | `triage downgrade --reason "<why>"`, parent only | backlog; no longer blocks. P2 is not downgraded by default: fix it in passing when it costs almost nothing, downgrade only the P2 that cannot be fixed in passing |
 
 ### Dispatch rules
