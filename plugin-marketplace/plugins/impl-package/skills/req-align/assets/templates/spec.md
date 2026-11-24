@@ -68,6 +68,7 @@
 - 接口与 seam：
 - 上游 / 下游依赖：
 - 兼容或迁移窗口：
+- 规则层落点（项目声明业务规则层时填写，否则写 `not-applicable`；填法见 plugin `references/business-rule-layer.md`）：
 
 ## 5. 错误边界 / 失败恢复
 
