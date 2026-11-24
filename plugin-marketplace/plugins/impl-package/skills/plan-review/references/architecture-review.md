@@ -6,6 +6,8 @@
 
 对每条 material 新路径或集成至少构造一个真实生产失败场景：上游超时、下游部分成功、重复消息、重复执行、顺序变化、陈旧数据、权限错误、部署版本不一致或回滚中断。只选择与计划实际相关的场景。
 
+项目声明业务规则层时，按 [业务规则层](../../../references/business-rule-layer.md) 核对：每个业务值有规则编号与唯一产出模块，交付层只读结论，不在交付层另写判断、阈值、日期推算或权限分支；Ticket 验收引用项目登记的确定性检查。标注检查通过不等于已收束。
+
 确认计划说明失败由谁观察和处理、状态如何恢复、用户看到什么，以及 contract 改变是否交由 owner 决定。
 
 存在明确 SLO、availability、latency、durability 或 error budget 时，检查降级、重试、容量和 rollout 是否符合可靠性 contract。若 accepted findings 形成两个以上 workstreams，按需给出简短 dependency map，标出共享 contract、migration gate、integration point、合并冲突面和真正可独立的 lane；不要为了形式拆分任务。

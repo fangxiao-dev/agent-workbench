@@ -27,7 +27,7 @@ Git commit / worktree：<commit 或 worktree 路径>
 ```text
 <共用头部>
 任务：只审范围与结构。
-检查：完整性（Spec 每个 Journey step 与 ticket 级套件都被某张 Ticket 认领，Rule Matrix 每行落到 AC）、范围（真实消费者、旧入口、NOT in scope）、顺序（依赖、迁移窗口、第一个可见 step）、结构（组件责任、依赖方向、数据流、失败隔离）。参考 references/scope-review.md、architecture-review.md。
+检查：完整性（Spec 每个 Journey step 与 ticket 级套件都被某张 Ticket 认领，Rule Matrix 每行落到 AC）、范围（真实消费者、旧入口、NOT in scope）、顺序（依赖、迁移窗口、第一个可见 step）、结构（组件责任、依赖方向、数据流、失败隔离）、规则层（项目声明时：按 plugin references/business-rule-layer.md 核对规则层落点与交付层是否另写判断/计算）。参考 references/scope-review.md、architecture-review.md。
 输出：Verdict（cleared|revise|owner-decision|blocked）、material findings、editorial notes。
 ```
 

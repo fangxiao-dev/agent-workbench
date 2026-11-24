@@ -30,6 +30,9 @@ initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一
 5. 选择 `contract-design.md` disposition：默认 `detailed`；只有所有精确语义都已由 `spec.md` 完整承担时才使用 `not-required` 并写明理由；结构会遮蔽行为/验收主线，或同一 canonical model 被多个 operation/module 消费时保持 `detailed`。
    - 常见误判：为了少一个文件而选择 `not-required`，会把多个 operation 共享的精确 shape 藏进行为散文，实施者仍需猜测。
 
+6. 项目声明了业务规则层时，读 [业务规则层](../../../../references/business-rule-layer.md)，为本次每个业务值确定规则层落点：规则编号、产出模块、读取它的交付层，涉及时再定时钟入口与可见性判定。说不出规则来源的逻辑先补规则或挪进规则层，不为通过检查编造编号。
+   - 常见误判：只把“加 `@rule` 标注”当要求，会让标注合规而逻辑仍散落在交付层；标注只是追溯手段，目标是收束。
+
 完成标准：正式写入前，每个 current contract surface、所需规范设计与唯一承载位置都已确定，交互输入、operation 语义与字段 authority/producer 已闭合。
 
 ## 设计与写入
