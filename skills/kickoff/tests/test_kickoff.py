@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for the kickoff state machine CLI (stdlib unittest only).
 
-Run: python -m unittest discover -s C:/Users/Xiao/.claude/skills/kickoff/tests -v
+Run: python -m unittest discover -s tests -v
 """
 
 import json
