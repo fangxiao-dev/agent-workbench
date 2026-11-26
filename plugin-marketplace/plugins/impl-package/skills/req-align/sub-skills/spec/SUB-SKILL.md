@@ -20,11 +20,16 @@ initial spec-only 必须验证 Decision evidence 对当前 delta 适用；同一
 
 1. 读取 current `spec.md`、存在时的 `contract-design.md`、repository facts 与 [Spec Gate](../../references/spec-gate.md)；本次创建或修订 Spec 时补齐从属文件。
    - 常见误判：只读本轮 delta 或漏读从属文件，会把旧的 current truth 当成完整 Spec。
-2. 重建当前完整的 Spec 设计范围，逐项列出 API operations、persistence models、cross-module seams 与 public read models；结果是 current truth，不是本轮 delta 日志。修改 schema、引用、lineage 或公开接口时，沿受影响的既有消费者追踪到可观察终态，并在现有 Spec/contract-design 中分别写清修改范围与兼容性验收范围；下游实现不在修改范围，不等于免除兼容性验收。仅跟进实际受影响路径，不穷举下游。
+2. 重建当前完整的 Spec 设计范围，逐项列出 API operations、persistence models、cross-module seams 与 public read models，有副作用的 operation（含后台任务、seam consumer、回调等非 API 写入者）写明写入的状态/字段与允许执行的状态；结果是 current truth，不是本轮 delta 日志。修改 schema、引用、lineage 或公开接口时，沿受影响的既有消费者追踪到可观察终态，并在现有 Spec/contract-design 中分别写清修改范围与兼容性验收范围；下游实现不在修改范围，不等于免除兼容性验收。仅跟进实际受影响路径，不穷举下游。
    - 常见误判：把 delta 日志当设计范围，会让未变化但仍被实现消费的 surface 从 Gate 覆盖中消失。
-3. 对非空 contract surfaces 执行 contract coherence check：调用方能取得每个 required input；有副作用、并发或重试语义的 operation 已逐项关闭 identity、重复/stale 结果与恢复；每个可观察字段，以及行为/状态机/工作流表与错误边界表中每一个用户可见结果，都有唯一 authority，并能指到承载它的 read-model 字段与实际 producer。使用现有 `spec.md` 或 disposition 为 `detailed` 的 `contract-design.md` 表达；命中幂等键 / CAS / 版本号、多个来源写同一个目标字段、替换 / 撤回 / 恢复语义、terminal/finalized 状态被再次进入、materialize 或 replay、跨存储提交（两个 store 各自提交）、final authority 与 editable projection 共用同一 identity、声明值 vs 检测值任一触发时，该 contract surface 必须用结果矩阵，均不命中时维持散文，避免固定 artifact 或矩阵膨胀。
-   - 矩阵必须有“禁止残留”一列，逐个失败点列出禁止留下的 source、draft、lineage、audit 或 pending object。
+3. 对非空 contract surfaces 执行 contract coherence check：调用方能取得每个 required input；有副作用、并发或重试语义的 operation 已逐项关闭 identity、重复/stale 结果与恢复；每个可观察字段，以及行为/状态机/工作流表与错误边界表中每一个用户可见结果，都有唯一 authority，并能指到承载它的 read-model 字段与实际 producer。使用现有 `spec.md` 或 disposition 为 `detailed` 的 `contract-design.md` 表达。
+   - 动作模型触发：查设计范围的写入列，同一状态/字段被两个以上 operation 写入，或某 operation 在终态下仍允许执行，相关部分必须用动作模型；表里不易看出的常见形态同样触发：幂等键 / CAS / 版本号、替换 / 撤回 / 恢复语义、terminal/finalized 状态被再次进入、materialize 或 replay、跨存储提交（两个 store 各自提交）、final authority 与 editable projection 共用同一 identity、声明值 vs 检测值。均不命中时维持散文。
+   - 动作模型不新增 artifact：§3 行为表每行是一个动作（`条件 / 状态` 是前提，`结果 / 下一状态` 是效果，写清改了哪些状态），§2 写不变量。
+   - 安全不变量：任何动作顺序之后都不能出现的状态，逐个失败点列出禁止残留的 source、draft、lineage、audit 或 pending object。一个动作读取（含前提）或写入、另一个动作写入同一状态时，即使两者写入的字段不同，也对这对动作检查交错执行（A 读取后 B 写入，A 再写入；迟到、重复或作废后的执行）之后不变量仍成立。
+   - 可恢复性：从任一可达状态（含失败、作废、上游合同改写之后）都有一串前提成立的动作走到完成，或走到 §3/§5 已定义结果的恢复终点；执行清理或恢复的动作不能被它要清理的状态阻断。
+   - 改一个前提时，重查所有不变量与可恢复性，不只查本次要修的那一条。
    - 常见误判：coherence 只覆盖字段或 happy-path 规则，会遗漏行为/状态机/工作流表与错误边界表中的用户可见结果，以及 identity、stale/retry 或残留对象，两个实施者就能得到不同的恢复结果。
+   - 常见误判：只逐个 operation 检查结果，会漏掉多个 operation 交错之后的状态；只防“不该通过的通过”，会放过卡死在某个状态出不来的设计，反之亦然。
 4. 关闭会影响 authority、identity、permission、delivery、nullability、CAS、recovery 或 public shape 的选择；能在当前对话解决的 blocker 只保留在 working output，必须暂停、跨 session 或等待外部条件时才持久化简短的 `Spec Gate Blocked`。
    - 常见误判：把可在当前对话解决的 blocker 持久化，或把必须等待外部条件的 blocker 留在 working output，会分别污染 durable artifact 或让下一个 session 看不到真实阻塞。
 5. 选择 `contract-design.md` disposition：默认 `detailed`；只有所有精确语义都已由 `spec.md` 完整承担时才使用 `not-required` 并写明理由；结构会遮蔽行为/验收主线，或同一 canonical model 被多个 operation/module 消费时保持 `detailed`。

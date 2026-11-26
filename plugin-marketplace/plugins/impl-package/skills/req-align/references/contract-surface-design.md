@@ -13,7 +13,7 @@ Plan 只拥有实现位置、代码组织、library/provider、migration SQL、�
 Contract surface 非空时，在现有 Spec contract ensemble 中完成以下一致性检查；使用 table、schema、typed pseudocode 或 prose 均可，不要求新增 artifact 或固定矩阵。
 
 - **Interaction closure：**调用方提交的每个 required input 都必须来自前序 response、调用方可访问的 read model、调用方天然拥有的稳定输入，或范围内明确存在的外部 authority。来源不可取得、只存在于 server/private state 或依赖未声明旁路时，交互不闭合。
-- **Operation semantics：**operation 存在副作用、并发或重试风险时，逐项定义适用的 operation identity、CAS/idempotency boundary、exact retry、同 identity 不同 payload、stale request、成功后响应丢失与恢复结果。机制按 operation 风险选择；统一声明所有 mutation 使用某机制，不能替代逐项语义。
+- **Operation semantics：**operation 存在副作用、并发或重试风险时，逐项定义适用的 operation identity、CAS/idempotency boundary、exact retry、同 identity 不同 payload、stale request、成功后响应丢失与恢复结果。机制按 operation 风险选择；统一声明所有 mutation 使用某机制，不能替代逐项语义。命中 Spec SUB-SKILL 动作模型触发条件的部分，按该处用 §3 动作行与 §2 不变量表达，逐项语义之外还要满足：安全不变量在交错执行后成立，且从任一可达状态都有前提成立的动作走到完成或已定义结果的恢复终点，清理或恢复动作不被它要清理的状态阻断。
 - **Authority and realizability：**每个影响可观察行为的 request、response、event 与 public projection 字段，以及行为/状态机/工作流表与错误边界表中每一个用户可见结果，都有唯一 authority、承载它的 read-model 字段、实际 producer 和消费目的。多个来源表达同一事实时必须确定优先级或消除重复；无法从已声明 state/seam 产生的输出不是 implementation-ready contract。
 
 任一项不成立时返回设计阶段关闭缺口；需要 owner 或外部输入才能选择时，Spec Gate `BLOCKED`。

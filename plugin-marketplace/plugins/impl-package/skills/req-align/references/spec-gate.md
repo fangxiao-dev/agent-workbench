@@ -10,9 +10,9 @@ Gate 读取当前 `spec.md`、其“Spec 设计范围”、从属 `contract-desi
 
 Spec 只有同时满足以下条件才可 PASSED：
 
-- 设计范围列出当前全部具体 API operations、persistence models、cross-module seams 与 public read models，并为每项指向唯一规范 owner；
+- 设计范围列出当前全部具体 API operations、persistence models、cross-module seams 与 public read models，并为每项指向唯一规范 owner；有副作用的 operation（含非 API 写入者）写明写入的状态与允许执行的状态；
 - 每个 declared surface 满足 [Contract Surface Design](contract-surface-design.md) 的适用下限；
-- contract coherence 已闭合：required input 可取得；有副作用、并发或重试风险的 operation 已逐项定义 identity、重复/stale 结果与恢复；每个可观察字段，以及行为/状态机/工作流表与错误边界表中每一个用户可见结果，都有唯一 authority，并能指到承载它的 read-model 字段与实际 producer；
+- contract coherence 已闭合：required input 可取得；有副作用、并发或重试风险的 operation 已逐项定义 identity、重复/stale 结果与恢复；每个可观察字段，以及行为/状态机/工作流表与错误边界表中每一个用户可见结果，都有唯一 authority，并能指到承载它的 read-model 字段与实际 producer；触发动作模型的部分，安全不变量在交错执行后成立，且不存在走不出的可达状态；
 - 八个 behavior-contract 章节 substantive，behavior、state/workflow、permission/boundary、error/recovery 与 canonical model 内部一致；
 - 每个 promise/constraint 映射到 observable evidence，需要 Owner 本人验的项指定 owner；
 - Journeys、Rule Matrix、Required Suites 三张表齐全：每个 step 是某角色亲手做或亲自收到的事（页面步有具名控件，`记录` 步不是第 1 步），有入口类型、操作入口、观察表面、预期与承接，每条 Journey 有 `取证：浏览器走查` 或 `取证：Playwright（理由：…）`——Playwright 无理由或理由不是精确测量即不通过，每条规则有 Source、oracle 并指向已登记套件，`package check-spec` 无遗漏章节，触及 tenant/RBAC/隐私/幂等/数据完整性时有包级 safety 套件，Environment 为明确字符串，Spec 不含 Ticket ID；
@@ -24,7 +24,7 @@ Spec 只有同时满足以下条件才可 PASSED：
 
 Gate 可以发现设计范围与正文之间的明显漏项；发现后返回 Preflight 修正范围与设计。若 Plan 仍需决定可观察语义或 canonical contract，记录 exact missing contract 并 `BLOCKED`，不交给 planning。
 
-完整交互中存在无法取得的 required input、未裁决的重复 authority、未闭合的 retry/concurrency/recovery 语义，或没有 authoritative producer 的承诺输出时，Gate 必须 `BLOCKED`。先报告最小断点；不要求为无相关风险的 operation 发明幂等、恢复或额外持久化机制。
+完整交互中存在无法取得的 required input、未裁决的重复 authority、未闭合的 retry/concurrency/recovery 语义、动作模型中交错执行后被破坏的不变量或走不出的可达状态，或没有 authoritative producer 的承诺输出时，Gate 必须 `BLOCKED`。先报告最小断点；不要求为无相关风险的 operation 发明幂等、恢复或额外持久化机制。
 
 `spec.md`/`contract-design.md` 不得包含 stable-doc backfill maps、durable-delta queues、Composition、worker steps、verification command logs 或 tracker publication metadata。
 
