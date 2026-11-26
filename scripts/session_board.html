@@ -59,6 +59,35 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 .gchip:hover{background:rgba(255,255,255,.1);color:#eef3f7}
 .gchip[aria-pressed=true]{background:#eef3f7;border-color:#eef3f7;color:#16202a;font-weight:650}
 .gchip b{font-weight:500;color:#8598a6;font-variant-numeric:tabular-nums}
+/* Tags: one preset color per tag, derived per surface (dark bar/drawer vs light card) instead of 12 styles. */
+.tchip{--c:#7BAEE8;display:inline-flex;align-items:center;gap:2px;border-radius:999px;font-size:12px;border:1px solid color-mix(in srgb,var(--c) 25%,transparent);background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c)}
+.tchip .nm{display:inline-flex;align-items:center;gap:6px;padding:5px 4px 5px 10px;border:0;background:none;color:inherit;font-size:12px;white-space:nowrap;border-radius:999px}
+.tchip .nm b{font-weight:500;opacity:.72;font-variant-numeric:tabular-nums}
+.tchip:hover{background:color-mix(in srgb,var(--c) 24%,transparent)}
+.tchip[data-on=true]{background:color-mix(in srgb,var(--c) 32%,transparent);border-color:color-mix(in srgb,var(--c) 55%,transparent);color:#fff}
+.tchip .x{padding:5px 9px 5px 3px;border:0;background:none;color:inherit;opacity:.55;font-size:13px;line-height:1;border-radius:999px}
+.tchip .x:hover{opacity:1}
+.tchip.add{border-style:dashed;border-color:rgba(255,255,255,.22);background:none;color:#93a3b0;padding:5px 11px}
+.mchip{--c:#7BAEE8;display:inline-flex;align-items:center;max-width:112px;padding:2px 8px;border:0;border-radius:999px;font:inherit;font-size:11px;background:color-mix(in srgb,var(--c) 20%,transparent);color:color-mix(in srgb,var(--c) 55%,#1c2732);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mchip span{overflow:hidden;text-overflow:ellipsis}
+.mchip:hover{background:color-mix(in srgb,var(--c) 32%,transparent)}
+.mchip.add{background:none;box-shadow:inset 0 0 0 1px rgba(30,45,60,.16);color:#67757f;padding:2px 7px;opacity:.55}
+.mchip.add:hover{opacity:1}
+.tmenu{position:fixed;z-index:60;min-width:200px;max-height:320px;overflow:auto;padding:6px;border-radius:10px;background:#141b22;border:1px solid rgba(255,255,255,.12);box-shadow:0 18px 44px rgba(0,0,0,.55)}
+.tmenu button{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border-radius:6px;background:none;border:0;color:#c6d3dd;font-size:12px;text-align:left}
+.tmenu button:hover{background:rgba(255,255,255,.08);color:#fff}
+.tmenu .sw{width:10px;height:10px;border-radius:3px;background:var(--c);flex:none}
+.tmenu .ck{margin-left:auto;color:#7fded0}
+.tmenu .hint{color:#6f8090;padding:4px 8px;font-size:11px}
+.tnew{position:fixed;z-index:61;width:216px;padding:10px;border-radius:12px;background:#141b22;border:1px solid rgba(255,255,255,.12);box-shadow:0 18px 44px rgba(0,0,0,.55)}
+.tnew input{width:100%;padding:6px 8px;border:1px solid rgba(255,255,255,.12);border-radius:7px;background:rgba(255,255,255,.05);color:#eaf1f6;font-size:12px;outline:0}
+.tnew .sws{display:flex;flex-wrap:wrap;gap:7px;margin:9px 0}
+.tnew .sw{width:20px;height:20px;border-radius:50%;border:2px solid transparent;background:var(--c);cursor:pointer}
+.tnew .sw[aria-pressed=true]{border-color:#fff}
+.tnew .row{display:flex;justify-content:flex-end;gap:6px}
+.tnew button.go{padding:4px 10px;border-radius:7px;border:0;background:#3fae9f;color:#0d1519;font-weight:650;font-size:12px}
+.tnew button.cancel{padding:4px 8px;border-radius:7px;border:0;background:none;color:#93a3b0;font-size:12px}
+.tagrow{display:flex;flex-wrap:wrap;gap:6px;margin:1px 0 10px}
 .banner{margin:12px var(--gutter) 0;padding:7px 12px;border-left:2px solid var(--warn);border-radius:0 6px 6px 0;background:#fbf1de;color:#6b4a14;font-size:12.5px}
 
 /* ---- board: page > lane (glass) > card (solid) ---- */
@@ -249,7 +278,7 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 <div id="tip" role="tooltip"></div>
 <div id="scrim"></div><section id="panel" aria-label="看板助手">
   <div class="ph"><span data-i="chat"></span>看板助手<button class="ib" id="pclose" aria-label="关闭助手"><span data-i="close"></span></button></div>
-  <div id="plog"><div class="bub sys">可以说：“把 7 天没有新消息的会话全部搁置”。助手只会改看板状态、分组和备注。</div></div>
+  <div id="plog"><div class="bub sys">可以说：“把 7 天没有新消息的会话全部搁置”。助手只会改看板状态、标签和备注。</div></div>
   <form id="pform"><input id="pinput" placeholder="告诉助手要整理什么…" autocomplete="off" aria-label="给助手的指令"><button type="submit">发送</button></form>
 </section>
 <aside id="drawer" role="dialog" aria-label="会话详情" aria-hidden="true"></aside>
@@ -279,14 +308,13 @@ const colFold=JSON.parse(localStorage.getItem('board.colfold')||'{}');
 const $=s=>document.querySelector(s);
 const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e};
 document.querySelectorAll('[data-i]').forEach(s=>s.replaceChildren(icon(s.dataset.i)));
-let items=[],busy=false,dragging=false,openId=null,filter='all',groupFilter='',showRemoved=false,showAgents=false;const cap={};
+let items=[],boardTags=[],tagFilter=0,tagsExpanded=false,busy=false,dragging=false,openId=null,filter='all',showRemoved=false,showAgents=false;const cap={};
 const fold=JSON.parse(localStorage.getItem('board.fold')||'{}'); // lane|dir -> collapsed; the shelved lane starts collapsed
 const rootOf=i=>(i.cwd||'').replace(/[\\/]\.(claude[\\/])?worktrees[\\/].*$/i,'');
 const dirName=r=>r.split(/[\\/]/).filter(Boolean).pop()||'未知目录';
 
 const ago=v=>{const s=Date.now()/1000-(typeof v==='number'?v:Date.parse(v)/1000);if(!(s>=0))return '';if(s<90)return '刚刚';if(s<3600)return Math.round(s/60)+' 分钟前';if(s<86400)return Math.round(s/3600)+' 小时前';return Math.round(s/86400)+' 天前'};
 const clean=t=>String(t||'').replace(/[`*#>_]/g,'').replace(/\s+/g,' ').trim().slice(0,240);
-const tint=name=>{const h=[...name].reduce((a,c)=>(a*31+c.charCodeAt(0))%360,7);return `--dot:hsl(${h} 42% 44%)`};
 // a pending decision stays pending until handled, even if newer messages arrived
 const attention=i=>i.summary&&i.summary.attention||'';
 const preview=i=>{const s=i.summary;if(s&&s.summary)return{text:s.summary,ai:true,stale:s.stale};const e=i.events.find(x=>x.kind==='assistant')||i.events[0];return{text:e?clean(e.text):'',ai:false}};
@@ -305,7 +333,7 @@ function md(text){const root=el('div','md');let para=[],list=null,code=null;
     if(li){flush();const ord=/\d/.test(li[2]);if(!list||list.ord!==ord){list={ord,node:el(ord?'ol':'ul')};root.append(list.node)}const n=el('li',li[1].length>=2?'sub':'');inline(n,li[3]);list.node.append(n);continue}
     list=null;para.push(raw.trim())}
   flush();if(code){const pre=el('pre');pre.append(el('code','',code.join('\n')));root.append(pre)}return root}
-const hay=i=>[i.title,i.cwd,i.group_name,i.note,i.summary&&i.summary.summary].join(' ').toLowerCase();
+const hay=i=>[i.title,i.cwd,i.note,i.summary&&i.summary.summary,(i.tags||[]).map(t=>t.name).join(' ')].join(' ').toLowerCase();
 
 async function api(path,data){const r=await fetch(path,data?{method:'POST',headers:{'Content-Type':'application/json','X-Board-Token':token},body:JSON.stringify(data)}:{headers:{'X-Board-Token':token}});if(r.status===403&&!sessionStorage.getItem('reloaded')){sessionStorage.setItem('reloaded','1');location.reload();throw Error('服务已重启，正在重新加载')}sessionStorage.removeItem('reloaded');const v=await r.json();if(!r.ok||v.ok===false)throw Error(v.error||'请求失败');return v}
 const RANGES=[['1h','近 1 小时'],['today','今天'],['7d','近 7 天']];
@@ -325,7 +353,7 @@ function paintUsage(){const box=$('#usage');if(!box)return;
   [['自动整理',s],['我的指令',c]].forEach(([label,n])=>{const line=el('div');line.append(label+' ');line.append(el('b','',unit(n)));tip.append(line)});
   box.hidden=false}
 let toastTimer;function report(m){const t=$('#toast');t.textContent=m;t.classList.toggle('hidden',!m);clearTimeout(toastTimer);if(m)toastTimer=setTimeout(()=>t.classList.add('hidden'),5000)}
-function apply(res){items=res.items;if(res.recent_days)recentDays=res.recent_days;
+function apply(res){items=res.items;if(res.tags)boardTags=res.tags;if(res.recent_days)recentDays=res.recent_days;
   if(res.refresh_seconds&&res.refresh_seconds!==refreshSeconds){refreshSeconds=res.refresh_seconds;armRefresh()}
   showUsage(res.usage);render()}
 async function refresh(sync=true){if(busy)return;busy=true;$('#refresh').disabled=true;try{
@@ -340,7 +368,7 @@ async function refresh(sync=true){if(busy)return;busy=true;$('#refresh').disable
       const next=await api('/api/items');apply(next);st=next.summary||{}}
     $('#sync').textContent=new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+' 同步'+(errors?' · '+errors+' 项失败':'');}
 }catch(e){$('#sync').textContent='同步失败';$('#syncdot').classList.add('bad');report('更新失败：'+e.message)}finally{busy=false;$('#refresh').disabled=false}}
-async function update(id,data){const item=items.find(i=>i.id===id),before=item&&{...item};if(item){Object.assign(item,data.mark_read?{unread:false}:data);if(data.attention_generation!=null)item.pending=false;render()}
+async function update(id,data){const item=items.find(i=>i.id===id),before=item&&{...item};if(item){const local={...data};if(local.tags)local.tags=local.tags.map(t=>boardTags.find(x=>x.id===t)).filter(Boolean);Object.assign(item,data.mark_read?{unread:false}:local);if(data.attention_generation!=null)item.pending=false;render()}
   try{await api('/api/items/'+encodeURIComponent(id),data);refresh(false);return true}catch(e){if(item){Object.assign(item,before);render()}report('保存失败：'+e.message);return false}}
 
 function card(i,dupes){
@@ -354,7 +382,8 @@ function card(i,dupes){
   const a=attention(i);if(a&&i.pending){const w=el('div','att');w.append(icon('chat'),el('span','',a));c.append(w)}
   const m=el('div','meta');
   if(i.agent){const g=el('span','chip agent');g.append(el('span','','后台'));m.append(g)}
-  if(i.group_name){const g=el('span','chip',undefined);g.style.cssText=tint(i.group_name);g.append(el('span','',i.group_name));m.append(g)}
+  for(const t of (i.tags||[]).slice(0,3)){const b=el('button','mchip');b.style.setProperty('--c',t.color);b.title='更换或移除标签';b.append(el('span','',t.name));b.onclick=e=>{e.stopPropagation();tagMenu(b,i)};m.append(b)}
+  if((i.tags||[]).length<3){const b=el('button','mchip add');b.title='添加标签';b.append('+');b.onclick=e=>{e.stopPropagation();tagMenu(b,i)};m.append(b)}
   if(i.link){const g=el('a','go');g.href=i.link;g.append('打开',icon('ext'));g.addEventListener('click',e=>{e.stopPropagation();update(i.id,{mark_read:true,read_generation:i.generation,read_cursor:i.cursor})});c.append(g)}
   if(m.childElementCount)c.append(m);
   c.addEventListener('click',()=>openDrawer(i.id));c.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target===c)openDrawer(i.id)});
@@ -380,9 +409,48 @@ function showTip(anchor,text){const tip=$('#tip');tip.textContent=text;tip.class
   tip.style.width=w+'px';tip.style.left=Math.max(12,Math.min(r.left,innerWidth-w-12))+'px';
   const h=tip.offsetHeight;tip.style.top=(r.bottom+8+h>innerHeight-8?Math.max(8,r.top-h-8):r.bottom+8)+'px'}
 function hideTip(){$('#tip').classList.remove('on')}
+// ---- tags ----
+const TAG_COLORS=[['冰川蓝','#7BAEE8'],['钴蓝','#6489DB'],['湖水青','#59B8CA'],['翡翠绿','#55B8A5'],['薄荷绿','#83C9A1'],['橄榄绿','#A7B974'],['琥珀黄','#DFC174'],['杏橙','#E5A36E'],['珊瑚红','#DF8585'],['玫瑰粉','#D58DB3'],['薰衣草紫','#AC9BDF'],['雾霭灰蓝','#97A6BA']];
+function closePopovers(){document.querySelectorAll('.tmenu,.tnew').forEach(n=>n.remove())}
+function placePop(node,anchor){document.body.append(node);const r=anchor.getBoundingClientRect(),h=node.offsetHeight,w=node.offsetWidth;
+  node.style.left=Math.max(8,Math.min(r.left,innerWidth-w-8))+'px';
+  node.style.top=(r.bottom+6+h>innerHeight-8?Math.max(8,r.top-h-6):r.bottom+6)+'px';node._anchor=anchor}
+// One menu for card and drawer: tick a tag to attach it, tick again to remove it.
+function tagMenu(anchor,item){const open=document.querySelector('.tmenu');closePopovers();if(open&&open._anchor===anchor)return;
+  const m=el('div','tmenu');
+  if(!boardTags.length)m.append(el('div','hint','还没有标签，用标签栏末尾的 + 新建'));
+  const ids=new Set((item.tags||[]).map(t=>t.id));
+  for(const t of boardTags){const b=el('button');b.style.setProperty('--c',t.color);
+    b.append(el('span','sw'),el('span','',t.name),el('span','ck',ids.has(t.id)?'✓':''));
+    b.onclick=async()=>{const next=ids.has(t.id)?[...ids].filter(x=>x!==t.id):[...ids,t.id];
+      if(next.length>3)return report('每个会话最多 3 个标签');
+      closePopovers();await update(item.id,{tags:next})};
+    m.append(b)}
+  placePop(m,anchor)}
+function newTagPop(anchor){const open=document.querySelector('.tnew');closePopovers();if(open&&open._anchor===anchor)return;
+  const box=el('div','tnew'),input=el('input');input.placeholder='标签名';input.maxLength=20;input.setAttribute('aria-label','标签名');
+  let color=TAG_COLORS[0][1];
+  const sws=el('div','sws'),paint=()=>sws.querySelectorAll('.sw').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.c===color)));
+  for(const [name,c] of TAG_COLORS){const b=el('button','sw');b.type='button';b.style.setProperty('--c',c);b.dataset.c=c;b.title=name;b.onclick=()=>{color=c;paint()};sws.append(b)}paint();
+  const row=el('div','row'),cancel=el('button','cancel','取消'),go=el('button','go','创建');
+  cancel.onclick=closePopovers;
+  go.onclick=async()=>{const name=input.value.trim();if(!name){input.focus();return}
+    try{const r=await api('/api/tags',{name,color});boardTags=[...boardTags,r.tag];closePopovers();render();await refresh(false)}catch(e){report('新建失败：'+e.message)}};
+  input.addEventListener('keydown',e=>{if(e.key==='Enter')go.click();if(e.key==='Escape')closePopovers()});
+  row.append(cancel,go);box.append(input,sws,row);placePop(box,anchor);input.focus()}
+function tagBarChip(t,n){const wrap=el('span','tchip');wrap.style.setProperty('--c',t.color);wrap.dataset.on=String(tagFilter===t.id);
+  const nm=el('button','nm');nm.setAttribute('aria-pressed',String(tagFilter===t.id));nm.append(el('span','',t.name));
+  if(n)nm.append(el('b','',String(n)));
+  nm.onclick=()=>{tagFilter=tagFilter===t.id?0:t.id;render()};
+  const x=el('button','x','×');x.title='删除标签「'+t.name+'」';x.setAttribute('aria-label',x.title);
+  x.onclick=async()=>{if(!confirm('删除标签「'+t.name+'」？会从所有会话上移除，不影响会话本身。'))return;
+    try{await api('/api/tags/'+t.id,{delete:true});boardTags=boardTags.filter(v=>v.id!==t.id);
+      items.forEach(i=>{if(i.tags)i.tags=i.tags.filter(v=>v.id!==t.id)});
+      if(tagFilter===t.id)tagFilter=0;render();await refresh(false)}catch(e){report('删除失败：'+e.message)}};
+  wrap.append(nm,x);return wrap}
 function visible(){const q=$('#search').value.toLowerCase().trim();
   // Untitled sessions are almost always background helpers (e.g. prompt suggestions); keep them off the board.
-  return items.filter(i=>(i.events.length>0||(i.summary&&i.summary.summary))&&(showAgents||!i.agent)&&Boolean(i.hidden)===showRemoved&&(!groupFilter||i.group_name===groupFilter)&&(!q||hay(i).includes(q))&&
+  return items.filter(i=>(i.events.length>0||(i.summary&&i.summary.summary))&&(showAgents||!i.agent)&&Boolean(i.hidden)===showRemoved&&(!tagFilter||(i.tags||[]).some(t=>t.id===tagFilter))&&(!q||hay(i).includes(q))&&
     (filter!=='todo'||pending(i)))}
 
 function render(){if(dragging)return;
@@ -407,7 +475,7 @@ function render(){if(dragging)return;
     const body=el('div','cards');
     if(!rows.length)body.append(el('div','empty',showRemoved?'':(filter==='focus'?'当前没有进行中的会话':'拖到这里')));
     const laneCount={};for(const i of rows){const t=clean(i.title);laneCount[t]=(laneCount[t]||0)+1}
-    const forceOpen=filter!=='all'||Boolean(groupFilter)||Boolean($('#search').value.trim());
+    const forceOpen=filter!=='all'||Boolean(tagFilter)||Boolean($('#search').value.trim());
     for(const g of groupRows(rows))body.append(groupEl(name,g,laneCount,forceOpen));
     col.append(body);
     col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('over')});col.addEventListener('dragleave',e=>{if(!col.contains(e.relatedTarget))col.classList.remove('over')});
@@ -434,9 +502,22 @@ function render(){if(dragging)return;
       if(pv.scrollHeight>pv.clientHeight+2){pv.dataset.clip='1'}else{delete pv.dataset.clip}
     }
   });
-  const gs=$('#groups'),counts=new Map();items.filter(i=>Boolean(i.hidden)===showRemoved&&i.group_name).forEach(i=>counts.set(i.group_name,(counts.get(i.group_name)||0)+1));
-  if(groupFilter&&!counts.has(groupFilter))groupFilter='';
-  gs.replaceChildren();if(counts.size){const mk=(label,val,n)=>{const b=el('button','gchip');b.setAttribute('aria-pressed',String(groupFilter===val));b.append(label);if(n!==undefined)b.append(el('b','',String(n)));b.onclick=()=>{groupFilter=val;render()};gs.append(b)};mk('全部分组','');[...counts].sort().forEach(([g,n])=>mk(g,g,n))}
+  const gs=$('#groups'),counts=new Map();items.filter(i=>!i.hidden).forEach(i=>(i.tags||[]).forEach(t=>counts.set(t.id,(counts.get(t.id)||0)+1)));
+  if(tagFilter&&!counts.has(tagFilter))tagFilter=0;
+  gs.replaceChildren();
+  const all=el('button','gchip','全部分组');all.setAttribute('aria-pressed',String(!tagFilter));all.onclick=()=>{tagFilter=0;render()};gs.append(all);
+  // 5 tags by default, up to 10 once expanded; the rest stay behind 更多.
+  const shown=boardTags.slice(0,tagsExpanded?10:5),rest=boardTags.slice(shown.length);
+  for(const t of shown)gs.append(tagBarChip(t,counts.get(t.id)||0));
+  if(rest.length){const more=el('button','gchip');more.append('更多');more.setAttribute('aria-expanded',String(tagsExpanded));
+    more.onclick=()=>{if(!tagsExpanded&&boardTags.length<=10){tagsExpanded=true;render();return}
+      const open=document.querySelector('.tmenu');closePopovers();if(open&&open._anchor===more)return;
+      const m=el('div','tmenu');
+      rest.forEach(t=>{const b=el('button');b.style.setProperty('--c',t.color);b.append(el('span','sw'),el('span','',t.name),el('b','',String(counts.get(t.id)||0)));
+        b.onclick=()=>{closePopovers();tagFilter=tagFilter===t.id?0:t.id;render()};m.append(b)});
+      placePop(m,more)};
+    gs.append(more)}
+  const add=el('button','gchip');add.title='新建标签';add.setAttribute('aria-label','新建标签');add.append('+');add.onclick=()=>newTagPop(add);gs.append(add);
   const tn=items.filter(i=>!i.hidden&&!i.agent&&pending(i)).length;const te=$('#todo-n');te.textContent=tn?String(tn):'';te.classList.toggle('hidden',!tn);
   const an=items.filter(i=>i.agent&&!i.hidden).length;$('#agents-n').textContent=an;$('#agents-n').classList.toggle('hidden',!an);$('#agents').setAttribute('aria-pressed',String(showAgents));
   const rn=items.filter(i=>i.hidden).length;$('#removed-n').textContent=rn;$('#removed-n').classList.toggle('hidden',!rn);
@@ -463,17 +544,19 @@ function renderDrawer(){const i=items.find(x=>x.id===openId);if(!i)return;const 
   const st=el('div','states');st.setAttribute('role','group');st.setAttribute('aria-label','我的状态');
   for(const [name,,label] of STATES){const b=el('button');b.type='button';b.title=label||name;b.setAttribute('aria-pressed',String(colOf(i)===name));b.append(label||name);b.onclick=()=>update(i.id,{state:name});st.append(b)}
   d.append(st);
-  const g=el('input');g.placeholder='分组';g.setAttribute('aria-label','分组');g.value=i.group_name;g.setAttribute('list','glist');
-  const dl=el('datalist');dl.id='glist';[...new Set(items.map(v=>v.group_name).filter(Boolean))].forEach(v=>{const o=el('option');o.value=v;dl.append(o)});
+  const tagrow=el('div','tagrow');
+  for(const t of (i.tags||[])){const b=el('button','tchip');b.type='button';b.style.setProperty('--c',t.color);b.title='更换或移除「'+t.name+'」';b.append(el('span','nm',t.name));b.onclick=()=>tagMenu(b,i);tagrow.append(b)}
+  if((i.tags||[]).length<3){const b=el('button','tchip add');b.type='button';b.append('+ 添加标签');b.onclick=()=>tagMenu(b,i);tagrow.append(b)}
+  d.append(tagrow);
   const n=el('textarea');n.placeholder='备注';n.setAttribute('aria-label','备注');n.value=i.note;
-  const save=async()=>{const data={};if(g.value!==i.group_name)data.group_name=g.value;if(n.value!==i.note)data.note=n.value;if(!Object.keys(data).length)return;if(await update(i.id,data)){saved.textContent='已保存';setTimeout(()=>saved.textContent='',1500)}};
-  g.addEventListener('change',save);n.addEventListener('blur',save);
+  const save=async()=>{if(n.value===i.note)return;if(await update(i.id,{note:n.value})){saved.textContent='已保存';setTimeout(()=>saved.textContent='',1500)}};
+  n.addEventListener('blur',save);
   const fields=el('div','fields'),
         nb=el('button','nb');nb.type='button';
   const noteVisible=()=>noteOpen.has(i.id)||!!i.note;
   const paint=()=>{nb.textContent='';nb.append(icon('note'),'备注');nb.setAttribute('aria-pressed',String(noteVisible()));n.classList.toggle('hidden',!noteVisible())};
   nb.onclick=()=>{noteOpen.has(i.id)?noteOpen.delete(i.id):noteOpen.add(i.id);paint()};
-  fields.append(g,nb);paint();d.append(fields,dl,n);
+  fields.append(nb);paint();d.append(fields,n);
   const s=i.summary;
   if(s&&s.summary){const lab=el('div','lab');lab.append(icon('spark'),'摘要');const box=el('div','sum',s.summary);
     const a=attention(i);if(a){const w=el('div','att');w.append(icon('alert'),el('span','',a));box.append(w)}
@@ -491,8 +574,9 @@ function renderDrawer(){const i=items.find(x=>x.id===openId);if(!i)return;const 
     const t=el('button','tg',isOpen?'收起':'展开全文');t.type='button';
     t.onclick=()=>{const o=b.classList.toggle('open');b.classList.toggle('clip',!o);t.textContent=o?'收起':'展开全文';o?expanded.add(b.dataset.key):expanded.delete(b.dataset.key)};b.append(t)}))}
 
-$('#scrim').onclick=closeDrawer;document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer()});
-$('#refresh').onclick=()=>refresh();window.addEventListener('scroll',hideTip,true);$('#search').addEventListener('input',render);
+$('#scrim').onclick=closeDrawer;document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePopovers();closeDrawer()}});
+document.addEventListener('click',e=>{if(!e.target.closest('.tmenu,.tnew,.tchip,.mchip'))closePopovers()},true);
+$('#refresh').onclick=()=>refresh();window.addEventListener('scroll',()=>{hideTip();closePopovers()},true);$('#search').addEventListener('input',render);
 $('#agents').onclick=()=>{showAgents=!showAgents;render()};
 const ask=()=>{$('#panel').classList.toggle('on');$('#ask').setAttribute('aria-pressed',String($('#panel').classList.contains('on')));if($('#panel').classList.contains('on'))$('#pinput').focus()};
 $('#ask').onclick=ask;$('#pclose').onclick=ask;

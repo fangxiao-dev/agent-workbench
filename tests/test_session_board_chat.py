@@ -38,8 +38,8 @@ def make_db(tmp_path, rows):
 def test_tools_require_a_selector_and_can_bulk_archive(tmp_path, monkeypatch):
     dbpath = make_db(tmp_path, [('a', 'old one', '自动', 9), ('b', 'fresh one', '自动', 1)])
     monkeypatch.setattr(chat, '_rows', lambda _db, _home: [
-        {'id': 'a', 'title': 'old one', 'lane': '暂不关注', 'runtime': '空闲', 'days_since_activity': 9.0, 'group_name': '', 'note': '', 'background': False},
-        {'id': 'b', 'title': 'fresh one', 'lane': '待查看', 'runtime': '空闲', 'days_since_activity': 1.0, 'group_name': '', 'note': '', 'background': False}])
+        {'id': 'a', 'title': 'old one', 'lane': '暂不关注', 'runtime': '空闲', 'days_since_activity': 9.0, 'tags': [], 'note': '', 'background': False},
+        {'id': 'b', 'title': 'fresh one', 'lane': '待查看', 'runtime': '空闲', 'days_since_activity': 1.0, 'tags': [], 'note': '', 'background': False}])
     try:
         chat.update_items(dbpath, tmp_path, {'state': '已完成'})
         assert False, 'selector required'
@@ -55,7 +55,7 @@ def test_tools_require_a_selector_and_can_bulk_archive(tmp_path, monkeypatch):
 def test_cli_exposes_the_same_capability(tmp_path, capsys, monkeypatch):
     dbpath = make_db(tmp_path, [('a', 'old one', '自动', 9)])
     monkeypatch.setattr(chat, '_rows', lambda _db, _home: [
-        {'id': 'a', 'title': 'old one', 'lane': '暂不关注', 'runtime': '空闲', 'days_since_activity': 9.0, 'group_name': '', 'note': '', 'background': False}])
+        {'id': 'a', 'title': 'old one', 'lane': '暂不关注', 'runtime': '空闲', 'days_since_activity': 9.0, 'tags': [], 'note': '', 'background': False}])
     from scripts import session_board_cli as cli
     assert cli.main(['--db', str(dbpath), 'set', '--no-activity-days', '7', '--state', '暂不关注']) == 0
     assert 'changed' in capsys.readouterr().out

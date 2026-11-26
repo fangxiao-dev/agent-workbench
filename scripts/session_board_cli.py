@@ -23,13 +23,13 @@ def main(argv: list[str] | None = None) -> int:
     p_list.add_argument("--title", help="标题包含")
     p_list.add_argument("--limit", type=int, default=40)
 
-    p_set = sub.add_parser("set", help="批量修改状态/分组/备注/隐藏")
+    p_set = sub.add_parser("set", help="批量修改状态/标签/备注/隐藏")
     p_set.add_argument("--lane", choices=["进行中", "待查看", "已完成", "暂不关注", "全部"])
     p_set.add_argument("--title", help="标题包含")
     p_set.add_argument("--ids", help="逗号分隔的会话 ID")
     p_set.add_argument("--no-activity-days", type=float, help="最近活动早于 N 天")
     p_set.add_argument("--state", choices=list(chat.STATES))
-    p_set.add_argument("--group")
+    p_set.add_argument("--tags", help="逗号分隔的标签名；替换原有标签")
     p_set.add_argument("--note")
     p_set.add_argument("--hidden", choices=["true", "false"])
 
@@ -46,10 +46,12 @@ def main(argv: list[str] | None = None) -> int:
             payload["ids"] = [i.strip() for i in args.ids.split(",") if i.strip()]
         if args.no_activity_days is not None:
             payload["no_activity_days"] = args.no_activity_days
-        for key in ("state", "group", "note"):
+        for key in ("state", "note"):
             value = getattr(args, key)
             if value is not None:
-                payload["group_name" if key == "group" else key] = value
+                payload[key] = value
+        if args.tags is not None:
+            payload["tags"] = [tag.strip() for tag in args.tags.split(",") if tag.strip()]
         if args.hidden:
             payload["hidden"] = args.hidden == "true"
         try:

@@ -36,13 +36,15 @@ def test_incremental_incomplete_and_user_state(tmp_path):
     assert board.sync(dbpath, home)['ok']
     item = board.list_items(dbpath, home)[0]
     assert [e['text'] for e in item['events']] == ['start']
-    board.update_item(dbpath, item['id'], {'state': '已完成', 'group_name': 'alpha', 'note': 'keep'})
+    tag = board.create_tag(dbpath, 'alpha', board.TAG_COLORS[0])
+    board.update_item(dbpath, item['id'], {'state': '已完成', 'tags': [tag['id']], 'note': 'keep'})
     with source.open('ab') as f:
         f.write(b'"assistant","message":{"role":"assistant","content":"done"}}\n')
     assert board.sync(dbpath, home)['ok']
     item = board.list_items(dbpath, home)[0]
     assert {e['text'] for e in item['events']} == {'start', 'done'}
-    assert (item['state'], item['group_name'], item['note']) == ('已完成', 'alpha', 'keep')
+    assert (item['state'], item['note']) == ('已完成', 'keep')
+    assert [t['name'] for t in item['tags']] == ['alpha']
     assert board.sync(dbpath, home)['ok']
     assert len(board.list_items(dbpath, home)[0]['events']) == 2
 
@@ -357,6 +359,43 @@ def test_summary_round_skips_when_nothing_moved(tmp_path):
     assert session_board_summary.progress()['total'] == 0   # nothing new: the round owes no calls
 
 
+def test_tags_are_global_and_capped_per_session(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    source.write_bytes(record('user', 'go'))
+    board.sync(dbpath, home)
+    ident = board.list_items(dbpath, home)[0]['id']
+    with sqlite3.connect(dbpath) as db:
+        db.execute("DELETE FROM meta WHERE key='tags'")
+        db.execute("UPDATE items SET group_name='旧分组' WHERE id=?", (ident,))
+    board.open_db(dbpath).close()   # reopening migrates the old free-text group into a tag
+    db = board.open_db(dbpath)
+    migrated = board.tags_index(db)
+    db.close()
+    assert [(t['name'], t['count']) for t in migrated] == [('旧分组', 1)]
+    tag = board.create_tag(dbpath, '测试', board.TAG_COLORS[3])
+    for args in (('测试', board.TAG_COLORS[4]), ('颜色不对', '#123456')):
+        try:
+            board.create_tag(dbpath, *args)
+            assert False, 'duplicate name or non-preset color'
+        except ValueError:
+            pass
+    with sqlite3.connect(dbpath) as db:
+        extra = [db.execute("INSERT INTO tags(name,color) VALUES(?,?)", (f't{i}', board.TAG_COLORS[i])).lastrowid
+                 for i in range(4, 8)]
+    try:
+        board.update_item(dbpath, ident, {'tags': extra})
+        assert False, 'per-session cap'
+    except ValueError:
+        pass
+    board.update_item(dbpath, ident, {'tags': [tag['id'], migrated[0]['id']]})
+    assert sorted(t['name'] for t in board.list_items(dbpath, home)[0]['tags']) == sorted(['测试', '旧分组'])
+    board.delete_tag(dbpath, tag['id'])
+    assert [t['name'] for t in board.list_items(dbpath, home)[0]['tags']] == ['旧分组']
+    db = board.open_db(dbpath)
+    assert '测试' not in {t['name'] for t in board.tags_index(db)}
+    db.close()
+
+
 def test_summary_ids_limited_to_running_lane(tmp_path, monkeypatch):
     home, source, dbpath = setup_source(tmp_path)
     source.write_bytes(record('user', 'go', entrypoint='claude-desktop', origin={'kind': 'human'}))
@@ -455,11 +494,15 @@ def test_server_rejects_foreign_origin_and_host(tmp_path):
         payload = json.loads(client.getresponse().read())
         assert isinstance(payload['summary'], dict)   # the page needs the round state to know when a refresh ends
         item = payload['items'][0]
-        client.request('POST', '/api/items/' + item['id'], body=json.dumps({'state': '进行中', 'group_name': 'test'}), headers=headers)
+        client.request('POST', '/api/tags', body=json.dumps({'name': 'test', 'color': board.TAG_COLORS[1]}), headers=headers)
+        tag = json.loads(client.getresponse().read())['tag']
+        client.request('POST', '/api/items/' + item['id'], body=json.dumps({'state': '进行中', 'tags': [tag['id']]}), headers=headers)
         assert client.getresponse().status == 200
         client.request('GET', '/api/items', headers={'X-Board-Token': 'known-test-token'})
-        updated = json.loads(client.getresponse().read())['items'][0]
-        assert (updated['state'], updated['group_name']) == ('进行中', 'test')
+        payload = json.loads(client.getresponse().read())
+        updated = payload['items'][0]
+        assert (updated['state'], [t['name'] for t in updated['tags']]) == ('进行中', ['test'])
+        assert [(t['name'], t['count']) for t in payload['tags']] == [('test', 1)]
         client.close()
     finally:
         server.shutdown()
@@ -507,13 +550,15 @@ def test_compacted_session_links_through_host_conversation(tmp_path):
     (home / 'sessions').mkdir()
     (home / 'sessions' / '1.json').write_text(json.dumps(
         {'sessionId': child.stem, 'hostSessionId': 'local_' + parent, 'status': 'busy'}))
-    board.update_item(dbpath, parent, {'state': '进行中', 'group_name': '工作台', 'note': 'keep me'})
+    tag = board.create_tag(dbpath, '工作台', board.TAG_COLORS[2])
+    board.update_item(dbpath, parent, {'state': '进行中', 'tags': [tag['id']], 'note': 'keep me'})
     board.sync(dbpath, home)
     items = board.list_items(dbpath, home)
     assert [item['id'] for item in items] == [child.stem]
     assert board.superseded_ids(dbpath) == {parent}
     # the continuation inherits the triage the user did on the earlier card
-    assert (items[0]['state'], items[0]['group_name'], items[0]['note']) == ('进行中', '工作台', 'keep me')
+    assert (items[0]['state'], items[0]['note']) == ('进行中', 'keep me')
+    assert [t['name'] for t in items[0]['tags']] == ['工作台']
 
 
 def test_temp_dir_workers_stay_off_the_board(tmp_path):

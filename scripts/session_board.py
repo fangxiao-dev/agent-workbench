@@ -35,6 +35,10 @@ SYNC_LOCK = threading.Lock()
 HOST = session_board_hosts.get_host()   # swap here to support another host
 LIVE_LOCK = threading.Lock()
 LIVE_CACHE = {}
+# The 12 preset tag colors; a new tag must pick one of these so tags stay distinguishable.
+TAG_COLORS = ("#7BAEE8", "#6489DB", "#59B8CA", "#55B8A5", "#83C9A1", "#A7B974",
+              "#DFC174", "#E5A36E", "#DF8585", "#D58DB3", "#AC9BDF", "#97A6BA")
+MAX_TAGS = 3   # per session, as shown on the card
 
 
 def open_db(path: Path) -> sqlite3.Connection:
@@ -65,9 +69,25 @@ def open_db(path: Path) -> sqlite3.Connection:
       summary TEXT NOT NULL, attention TEXT NOT NULL, created_at REAL NOT NULL,
       error TEXT NOT NULL DEFAULT '', attempted_at REAL NOT NULL DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, color TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS item_tags (
+      item_id TEXT NOT NULL, tag_id INTEGER NOT NULL, PRIMARY KEY(item_id, tag_id)
+    );
     """)
     with db:
         db.execute('BEGIN IMMEDIATE')
+        # One-time: the single free-text group each item used to carry becomes a real tag.
+        if not db.execute("SELECT 1 FROM meta WHERE key='tags'").fetchone():
+            if 'group_name' in {row['name'] for row in db.execute('PRAGMA table_info(items)')}:
+                names = [row[0] for row in db.execute(
+                    "SELECT DISTINCT group_name FROM items WHERE group_name<>'' ORDER BY group_name")]
+                for index, name in enumerate(names):
+                    db.execute("INSERT OR IGNORE INTO tags(name,color) VALUES(?,?)", (name, TAG_COLORS[index % len(TAG_COLORS)]))
+                db.execute("INSERT OR IGNORE INTO item_tags(item_id,tag_id) "
+                           "SELECT id,(SELECT id FROM tags WHERE name=items.group_name) FROM items WHERE group_name<>''")
+            db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('tags','1')")
         for table, columns in {
             'items': {'prefix_len': 'INTEGER NOT NULL DEFAULT 0', 'prefix_hash': "TEXT NOT NULL DEFAULT ''",
                       'aligning': 'INTEGER NOT NULL DEFAULT 0', 'entrypoint': 'TEXT', 'fork_of': 'TEXT',
@@ -264,12 +284,17 @@ def _sync(db_path: Path, home: Path) -> dict:
                 db.execute("UPDATE items SET fork_of=? WHERE id=? AND ifnull(fork_of,'')=''", (previous, ident))
         # The newer transcript replaces the earlier card, so the user's triage has to follow it.
         for link in db.execute("SELECT id, fork_of FROM items WHERE ifnull(fork_of,'')<>''").fetchall():
-            prior = db.execute("SELECT state, group_name, note, hidden FROM items WHERE id=?",
+            prior = db.execute("SELECT state, note, hidden FROM items WHERE id=?",
                                (link["fork_of"],)).fetchone()
-            if prior:
-                db.execute("UPDATE items SET state=?, group_name=?, note=?, hidden=? "
-                           "WHERE id=? AND state='自动' AND group_name='' AND note='' AND hidden=0",
-                           (prior["state"], prior["group_name"], prior["note"], prior["hidden"], link["id"]))
+            if not prior:
+                continue
+            moved = db.execute(
+                "UPDATE items SET state=?, note=?, hidden=? WHERE id=? AND state='自动' AND note='' AND hidden=0"
+                " AND NOT EXISTS(SELECT 1 FROM item_tags WHERE item_id=items.id)",
+                (prior["state"], prior["note"], prior["hidden"], link["id"])).rowcount
+            if moved:
+                db.execute("INSERT OR IGNORE INTO item_tags(item_id,tag_id)"
+                           " SELECT ?, tag_id FROM item_tags WHERE item_id=?", (link["id"], link["fork_of"]))
     with db:
         # Older syncs stored background-task notifications as events; they are not messages.
         for marker in (HOST.injected_prefixes):
@@ -400,23 +425,73 @@ def list_items(db_path: Path, home: Path) -> list[dict]:
             depth += 1
             walk = parents.get(walk)
         item["forks"] = depth
-        for field in ("path", "identity", "prefix_hash", "prefix_len", "fork_of"):
+        item["tags"] = tags_of(db, item["id"])
+        for field in ("path", "identity", "prefix_hash", "prefix_len", "fork_of", "group_name"):
             item.pop(field, None)
         items.append(item)
     db.close()
     return items
 
 
+def tags_of(db, item_id: str) -> list[dict]:
+    return [dict(row) for row in db.execute(
+        "SELECT t.id, t.name, t.color FROM item_tags it JOIN tags t ON t.id=it.tag_id"
+        " WHERE it.item_id=? ORDER BY t.name", (item_id,))]
+
+
+def tags_index(db) -> list[dict]:
+    """Every tag with how many sessions carry it; the top bar renders this."""
+    return [dict(row) for row in db.execute(
+        "SELECT t.id, t.name, t.color, COUNT(it.item_id) AS count FROM tags t"
+        " LEFT JOIN item_tags it ON it.tag_id=t.id GROUP BY t.id ORDER BY t.name")]
+
+
+def replace_tags(db, ident: str, ids: list[int]) -> None:
+    db.execute("DELETE FROM item_tags WHERE item_id=?", (ident,))
+    db.executemany("INSERT INTO item_tags(item_id,tag_id) VALUES(?,?)", [(ident, tag) for tag in ids])
+
+
+def create_tag(db_path: Path, name: str, color: str) -> dict:
+    name = (name or "").strip()
+    if not 0 < len(name) <= 20 or color not in TAG_COLORS:
+        raise ValueError("标签名需为 1–20 字，颜色需从预设中选择")
+    db = open_db(db_path)
+    try:
+        with db:
+            if db.execute("SELECT 1 FROM tags WHERE name=?", (name,)).fetchone():
+                raise ValueError("标签已存在")
+            db.execute("INSERT INTO tags(name,color) VALUES(?,?)", (name, color))
+            row = db.execute("SELECT id,name,color FROM tags WHERE name=?", (name,)).fetchone()
+    finally:
+        db.close()
+    return dict(row)
+
+
+def delete_tag(db_path: Path, tag_id: int) -> None:
+    db = open_db(db_path)
+    try:
+        with db:
+            if not db.execute("DELETE FROM tags WHERE id=?", (tag_id,)).rowcount:
+                raise ValueError("标签不存在")
+            db.execute("DELETE FROM item_tags WHERE tag_id=?", (tag_id,))
+    finally:
+        db.close()
+
+
 def update_item(db_path: Path, ident: str, data: dict) -> None:
-    allowed = {"state", "group_name", "note", "hidden", "mark_read", "read_generation", "read_cursor",
+    allowed = {"state", "note", "hidden", "tags", "mark_read", "read_generation", "read_cursor",
                "attention_generation", "attention_position"}
     if not UUID.fullmatch(ident) or not isinstance(data, dict) or not data or set(data) - allowed:
         raise ValueError("无效请求")
     if "state" in data and data["state"] not in ("待查看", "进行中", "暂不关注", "已完成"):
         raise ValueError("无效状态")
-    for key, limit in (("group_name", 100), ("note", 2000)):
-        if key in data and (not isinstance(data[key], str) or len(data[key]) > limit):
-            raise ValueError("内容过长或格式错误")
+    if "note" in data and (not isinstance(data["note"], str) or len(data["note"]) > 2000):
+        raise ValueError("内容过长或格式错误")
+    if "tags" in data:
+        ids = data["tags"]
+        if (not isinstance(ids, list) or len(ids) > MAX_TAGS or len(set(map(str, ids))) != len(ids)
+                or any(type(tag) is not int for tag in ids)):
+            raise ValueError(f"每个会话最多 {MAX_TAGS} 个标签")
     if any(key in data and not isinstance(data[key], bool) for key in ("hidden", "mark_read")):
         raise ValueError("无效标记")
     if data.get("mark_read") and any(type(data.get(key)) is not int or data[key] < 0 for key in ("read_generation", "read_cursor")):
@@ -430,9 +505,14 @@ def update_item(db_path: Path, ident: str, data: dict) -> None:
             row = db.execute("SELECT * FROM items WHERE id=?", (ident,)).fetchone()
             if row is None:
                 raise ValueError("会话不存在")
-            for key in ("state", "group_name", "note", "hidden"):
+            for key in ("state", "note", "hidden"):
                 if key in data:
                     db.execute(f"UPDATE items SET {key}=? WHERE id=?", (data[key], ident))
+            if "tags" in data:
+                known = {r[0] for r in db.execute("SELECT id FROM tags")}
+                if set(data["tags"]) - known:
+                    raise ValueError("标签不存在，请刷新后重试")
+                replace_tags(db, ident, data["tags"])
             if data.get("mark_read"):
                 requested = (data['read_generation'], data['read_cursor'])
                 current = (row['generation'], row['cursor'])
@@ -511,10 +591,11 @@ def make_handler(db_path: Path, home: Path, token: str, port: int, summary_comma
                     days = recent_days(db)
                     usage = usage_ranges(db)
                     cadence = refresh_seconds(db)
+                    tags = tags_index(db)
                 finally:
                     db.close()
                 return self.reply(200, {"items": list_items(db_path, home), "recent_days": days,
-                                        "usage": usage, "refresh_seconds": cadence,
+                                        "usage": usage, "refresh_seconds": cadence, "tags": tags,
                                         "summary": session_board_summary.progress()})
             return self.reply(404, {"error": "未找到"})
 
@@ -552,6 +633,15 @@ def make_handler(db_path: Path, home: Path, token: str, port: int, summary_comma
                             db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('refresh_seconds',?)", (str(cadence),))
                     db.close()
                     return self.reply(200, {"ok": True, "recent_days": days, "refresh_seconds": cadence})
+                if path == "/api/tags":
+                    if not isinstance(data, dict):
+                        raise ValueError("请求无效")
+                    return self.reply(200, {"tag": create_tag(db_path, data.get("name"), data.get("color"))})
+                if path.startswith("/api/tags/"):
+                    if not (isinstance(data, dict) and data.get("delete") is True):
+                        raise ValueError("请求无效")
+                    delete_tag(db_path, int(path.removeprefix("/api/tags/")))
+                    return self.reply(200, {"ok": True})
                 if path.startswith("/api/items/"):
                     update_item(db_path, path.removeprefix("/api/items/"), data)
                     return self.reply(200, {"ok": True})

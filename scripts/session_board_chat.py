@@ -17,12 +17,12 @@ STATES = ("进行中", "最近", "已完成", "暂不关注")
 LANE_IN = {"待查看": "最近"}
 STATE_OUT = {"最近": "待查看"}
 SYSTEM = ("你是会话看板的助手。用户会用自然语言让你整理看板状态。"
-          "只能通过提供的工具修改看板状态、分组和备注；不能删除或修改原生会话。"
+          "只能通过提供的工具修改看板状态、标签和备注；不能删除或修改原生会话。"
           "先核对再动手：先用 list_items 看结果数量，再执行 update_items，最后用一两句中文说明改了什么。"
           "如果用户的要求会影响到大量会话或语义不清，先问一句再执行。")
 
 TOOLS = [
-    {"name": "list_items", "description": "列出看板上的会话（含栏位、最近活动时间、分组、是否后台会话）。",
+    {"name": "list_items", "description": "列出看板上的会话（含栏位、最近活动时间、标签、是否后台会话）。",
      "input_schema": {"type": "object", "properties": {
          "lane": {"type": "string", "enum": list(STATES) + ["全部"], "description": "只看某一栏"},
          "title_contains": {"type": "string"},
@@ -37,7 +37,7 @@ TOOLS = [
          "no_activity_days": {"type": "number", "minimum": 0, "description": "最近活动早于 N 天"},
          "clear_attention": {"type": "boolean", "description": "清除这些会话的需关注标记"},
          "state": {"type": "string", "enum": list(STATES)},
-         "group_name": {"type": "string"},
+         "tags": {"type": "array", "items": {"type": "string"}, "description": "替换成这些标签（用 list_items 里看到的名字，最多 3 个）"},
          "note": {"type": "string"},
          "hidden": {"type": "boolean"}},
          "required": []}},
@@ -73,7 +73,7 @@ def _rows(db_path: Path, home: Path) -> list[dict]:
     continued = {r[0] for r in db.execute("SELECT fork_of FROM items WHERE ifnull(fork_of,'')<>''")}
     out = []
     days = sb.recent_days(db)
-    for row in db.execute("""SELECT id,title,cwd,group_name,note,state,source_time,hidden,entrypoint,human,
+    for row in db.execute("""SELECT id,title,cwd,note,state,source_time,hidden,entrypoint,human,
                                     attention_generation, attention_position,
                                     (SELECT MAX(event_time) FROM events WHERE item_id=items.id) AS last_event,
                                     (SELECT attention FROM summaries WHERE item_id=items.id) AS attention,
@@ -93,7 +93,8 @@ def _rows(db_path: Path, home: Path) -> list[dict]:
         out.append({"id": row["id"], "title": row["title"] or "", "lane": "最近" if lane == "待查看" else lane,
                     "pending": pending, "attention": row["attention"] or "",
                     "runtime": runtime, "days_since_activity": round((now - activity) / 86400, 1),
-                    "group_name": row["group_name"], "note": row["note"], "background": background})
+                    "tags": [tag["name"] for tag in sb.tags_of(db, row["id"])],
+                    "note": row["note"], "background": background})
     db.close()
     return out
 
@@ -116,9 +117,10 @@ def list_items(db_path: Path, home: Path, args: dict) -> dict:
 
 
 def update_items(db_path: Path, home: Path, args: dict) -> dict:
-    changes = {k: args[k] for k in ("state", "group_name", "note", "hidden") if k in args}
+    changes = {k: args[k] for k in ("state", "note", "hidden") if k in args}
     clear_attention = bool(args.get("clear_attention"))
-    if not changes and not clear_attention:
+    tags = args.get("tags")
+    if not changes and not clear_attention and tags is None:
         raise ValueError("没有要修改的字段")
     if "state" in changes:
         if changes["state"] not in STATES:
@@ -141,9 +143,20 @@ def update_items(db_path: Path, home: Path, args: dict) -> dict:
         rows = [r for r in rows if r["days_since_activity"] >= cutoff]
     if len(rows) > MAX_BULK:
         raise ValueError(f"命中 {len(rows)} 个会话，超过单次上限 {MAX_BULK}，请缩小范围")
+    if tags is not None and (not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags)):
+        raise ValueError("标签参数无效")
     db = sqlite3.connect(db_path, timeout=20)
     try:
         with db:
+            tag_ids = None
+            if tags is not None:
+                known = {name: ident for ident, name in db.execute("SELECT id,name FROM tags")}
+                missing = [tag for tag in tags if tag not in known]
+                if missing:
+                    raise ValueError("未知标签：" + "、".join(missing) + "；现有：" + "、".join(sorted(known)))
+                tag_ids = [known[tag] for tag in tags]
+                if len(tag_ids) > 3:
+                    raise ValueError("每个会话最多 3 个标签")
             for row in rows:
                 sets, values = [], []
                 for key, value in changes.items():
@@ -151,6 +164,10 @@ def update_items(db_path: Path, home: Path, args: dict) -> dict:
                     values.append(int(value) if key == "hidden" else value)
                 if sets:
                     db.execute(f"UPDATE items SET {', '.join(sets)} WHERE id=?", (*values, row["id"]))
+                if tag_ids is not None:
+                    db.execute("DELETE FROM item_tags WHERE item_id=?", (row["id"],))
+                    db.executemany("INSERT INTO item_tags(item_id,tag_id) VALUES(?,?)",
+                                   [(row["id"], tag) for tag in tag_ids])
                 if clear_attention:
                     # Acknowledge the summary that raised the flag; a newer summary raises it again.
                     db.execute("UPDATE items SET attention_generation=ifnull("
