@@ -55,6 +55,19 @@ class HostAdapter:
 
     worker_paths: tuple[str, ...] = ()
     uses_temp = False          # True for hosts whose one-off workers run in the OS temp dir
+    injected_prefixes: tuple[str, ...] = ()   # harness traffic that looks like a user line but is not
+
+    def hints(self, record: dict) -> tuple[str, str]:
+        """(title, cwd) carried by one transcript line; either may be empty."""
+        return "", ""
+
+    def message(self, record: dict) -> tuple[str, str, str] | None:
+        """(role, text, timestamp) when the line is conversation; None for bookkeeping and wrappers."""
+        return None
+
+    def clean_text(self, text: str) -> str:
+        """Undo this host's storage wrappers before text is shown."""
+        return text
 
     def is_background(self, title: str, entrypoint: str, human: int, cwd: str = "") -> bool:
         """Whether an item is a worker/sub session that should stay off the board."""
@@ -70,11 +83,58 @@ def under(path: str, root: str) -> bool:
     return os.path.normcase(os.path.abspath(path)).startswith(os.path.normcase(os.path.abspath(root)) + os.sep)
 
 
+PASTED = re.compile(r"^<pasted_content[^>]*>\s*", re.I)
+INJECTED_TAG = re.compile(r"^<[a-z][a-z0-9_-]*[\s>]", re.I)
+
+
+def strip_pasted(text: str) -> str:
+    text = PASTED.sub("", str(text).strip()).strip()
+    if text.lower().endswith("</pasted_content>"):
+        text = text[:-len("</pasted_content>")].strip()
+    return text
+
+
 class ClaudeDesktopHost(HostAdapter):
     """Claude Code / Claude Desktop: JSONL transcripts under ~/.claude/projects plus a live-agent CLI."""
 
     name = "claude-desktop"
     uses_temp = True   # one-off CLI workers (magpie and friends) run inside the OS temp dir
+    # Harness traffic that arrives as a "user" line but is not the human: system notices, command echoes,
+    # relays between sessions. Extend here rather than editing the parser.
+    injected_prefixes = ("[Request interrupted", "[SYSTEM NOTIFICATION", "[SUGGESTION MODE",
+                         "Another Claude session sent a message")
+
+    def hints(self, record: dict) -> tuple[str, str]:
+        title = record.get("customTitle") if record.get("type") == "custom-title" else None
+        cwd = record.get("cwd")
+        return (title[:200] if isinstance(title, str) else "",
+                cwd[:1000] if isinstance(cwd, str) else "")
+
+    def message(self, record: dict) -> tuple[str, str, str] | None:
+        kind = record.get("type")
+        if kind not in ("user", "assistant") or record.get("isSidechain") or record.get("isMeta"):
+            return None
+        message = record.get("message")
+        if not isinstance(message, dict) or message.get("role") != kind:
+            return None
+        content = message.get("content")
+        if isinstance(content, str):
+            text = content
+        elif isinstance(content, list):
+            text = chr(10).join(str(block.get("text", "")) for block in content
+                             if isinstance(block, dict) and block.get("type") == "text")
+        else:
+            return None
+        text = strip_pasted(text)
+        # Injected wrappers (<task-notification>, <system-reminder>, ...) are not conversation.
+        if not text or (kind == "user" and (INJECTED_TAG.match(text) or text.startswith(self.injected_prefixes))):
+            return None
+        if kind == "assistant" and text.lower().rstrip(".") == "no response requested":
+            return None
+        return kind, text[:2000], str(record.get("timestamp") or "")[:40]
+
+    def clean_text(self, text: str) -> str:
+        return strip_pasted(text)
 
     def transcripts(self, home: Path) -> list[Path]:
         projects = home / "projects"

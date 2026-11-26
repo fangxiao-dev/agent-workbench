@@ -82,7 +82,8 @@ def _rows(db_path: Path, home: Path) -> list[dict]:
                              FROM items WHERE hidden=0 ORDER BY source_time DESC"""):
         if row["id"] in continued:
             continue  # continued by a newer rewind/fork file
-        if (row["entrypoint"] or "").startswith("sdk") or (not row["title"] and not row["human"]):
+        background = sb.HOST.is_background(row["title"], row["entrypoint"] or "", row["human"], row["cwd"] or "")
+        if background:
             continue  # background/sub sessions stay out of scope
         runtime = live.get(row["id"], {}).get("status", "未知")
         activity = sb.parse_activity([{"event_time": row["last_event"]}]) or row["source_time"]
@@ -92,7 +93,7 @@ def _rows(db_path: Path, home: Path) -> list[dict]:
         out.append({"id": row["id"], "title": row["title"] or "", "lane": "最近" if lane == "待查看" else lane,
                     "pending": pending, "attention": row["attention"] or "",
                     "runtime": runtime, "days_since_activity": round((now - activity) / 86400, 1),
-                    "group_name": row["group_name"], "note": row["note"], "background": bool((row["entrypoint"] or "").startswith("sdk") or (not row["title"] and not row["human"]))})
+                    "group_name": row["group_name"], "note": row["note"], "background": background})
     db.close()
     return out
 

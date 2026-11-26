@@ -67,7 +67,13 @@ python D:\CodeSpacegent-workbench\scripts\session_board_cli.py set --no-activit
 看板界面 · 助手工具 · CLI
 ```
 
-宿主相关的逻辑都收在 `scripts/session_board_hosts.py`：`transcripts()` 发现会话文件、`classify()` 解析入口与 rewind 来源、`live()` 提供运行状态和跳转链接、`is_background()` 判断后台会话。看板核心（同步、状态、摘要、助手、CLI）只依赖这套接口，不直接读 `~/.claude` 的任何路径。
+宿主相关的逻辑都收在 `scripts/session_board_hosts.py`，核心只调接口、不认识 transcript 格式：
+
+- `transcripts()` 发现会话文件；`classify()` 给出入口、是否人工发起、续接自哪一段；`live()` 给运行状态与 Desktop 链接。
+- `hints(record)` 从一行记录里取标题和 cwd；`message(record)` 返回 `(role, text, time)`，不是对话就返回 None；`clean_text(text)` 去掉该宿主的存储包装。
+- `is_background(...)` 判断后台/子会话：`injected_prefixes` 列出“看起来像用户消息、其实是 harness 流量”的前缀（系统通知、命令回显、会话间转发的消息），`worker_paths` / `uses_temp` 列出 worker 的工作目录。
+
+这些都是宿主类的属性或方法，扩展时改规则、不改解析代码。看板核心（同步、状态、摘要、助手、CLI）不直接读 `~/.claude` 的任何路径。
 
 接入新宿主（例如 Codex）只需实现一个 `HostAdapter` 子类并在 `HOSTS` 里注册，不用改同步、看板或助手逻辑。当前 `ClaudeDesktopHost` 是唯一实现，`tests/test_session_board.py::test_board_runs_on_any_host_adapter` 用一个假宿主验证了这条缝。
 

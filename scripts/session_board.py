@@ -31,7 +31,6 @@ INITIAL_BYTES = 128 * 1024
 HEAD_BYTES = 256 * 1024
 MAX_LINE = 4 * 1024 * 1024
 UUID = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
-INJECTED = re.compile(r"^(<[a-z][a-z-]*[\s>]|\[Request interrupted)")
 SYNC_LOCK = threading.Lock()
 HOST = session_board_hosts.get_host()   # swap here to support another host
 LIVE_LOCK = threading.Lock()
@@ -81,30 +80,6 @@ def open_db(path: Path) -> sqlite3.Connection:
                 if name not in existing:
                     db.execute(f'ALTER TABLE {table} ADD COLUMN {name} {definition}')
     return db
-
-
-def visible_text(record: dict) -> tuple[str, str] | None:
-    kind = record.get("type")
-    if kind not in ("user", "assistant") or record.get("isSidechain") or record.get("isMeta"):
-        return None
-    message = record.get("message")
-    if not isinstance(message, dict) or message.get("role") != kind:
-        return None
-    content = message.get("content")
-    if isinstance(content, str):
-        text = content
-    elif isinstance(content, list):
-        text = "\n".join(str(block.get("text", "")) for block in content
-                         if isinstance(block, dict) and block.get("type") == "text")
-    else:
-        return None
-    text = text.strip()
-    # Harness-injected wrappers (<task-notification>, <system-reminder>, ...) are not conversation.
-    if not text or (kind == "user" and INJECTED.match(text)):
-        return None
-    if kind == "assistant" and text.lower().rstrip(".") == "no response requested":
-        return None
-    return kind, text[:2000]
 
 
 def classify(path: Path) -> tuple[str, int, str]:
@@ -180,16 +155,18 @@ def sync_file(db: sqlite3.Connection, path: Path, now: float) -> None:
                 continue
             if not isinstance(record, dict):
                 continue
-            if record.get("type") == "custom-title" and isinstance(record.get("customTitle"), str):
-                title = record["customTitle"][:200]
-            if isinstance(record.get("cwd"), str):
-                cwd = record["cwd"][:1000]
-            text = visible_text(record)
-            if text:
+            hinted_title, hinted_cwd = HOST.hints(record)
+            if hinted_title:
+                title = hinted_title[:200]
+            if hinted_cwd:
+                cwd = hinted_cwd[:1000]
+            message = HOST.message(record)
+            if message:
+                role, text, stamp = message
                 event_count += 1
                 if event_count > 40:
                     limited = True
-                events.append((ident, generation, position, text[0], text[1], str(record.get("timestamp") or "")[:40]))
+                events.append((ident, generation, position, role, text, stamp))
     with db:
         db.execute('BEGIN IMMEDIATE')
         latest = db.execute('SELECT cursor,generation,identity FROM items WHERE id=?', (ident,)).fetchone()
@@ -294,6 +271,9 @@ def _sync(db_path: Path, home: Path) -> dict:
                            "WHERE id=? AND state='自动' AND group_name='' AND note='' AND hidden=0",
                            (prior["state"], prior["group_name"], prior["note"], prior["hidden"], link["id"]))
     with db:
+        # Older syncs stored background-task notifications as events; they are not messages.
+        for marker in (HOST.injected_prefixes):
+            db.execute("DELETE FROM events WHERE text LIKE ?", ('%' + marker + '%',))
         db.execute("DELETE FROM events WHERE item_id IN (SELECT id FROM items WHERE source_time < ?)", (now - WEEK,))
         db.execute("DELETE FROM summaries WHERE item_id IN (SELECT id FROM items WHERE source_time < ?)", (now - WEEK,))
     db.close()
@@ -393,6 +373,8 @@ def list_items(db_path: Path, home: Path) -> list[dict]:
         item["title"] = item["title"] or info.get("name") or ""
         item["events"] = [dict(event) for event in db.execute(
             "SELECT generation,position,kind,text,event_time FROM events WHERE item_id=? ORDER BY generation DESC,position DESC LIMIT 8", (item["id"],))]
+        for event in item["events"]:
+            event["text"] = HOST.clean_text(event["text"])
         # Activity means the last real message: the host also rewrites bookkeeping lines, which bump the file
         # mtime without anything happening in the conversation.
         item["activity"] = parse_activity(item["events"]) or item["source_time"]
@@ -474,10 +456,10 @@ def summary_ids(db_path: Path, home: Path) -> set[str]:
     days = recent_days(db)
     wanted = set()
     try:
-        for row in db.execute("""SELECT id,title,entrypoint,human,state,source_time,
+        for row in db.execute("""SELECT id,title,entrypoint,human,state,source_time,cwd,
                               (SELECT MAX(event_time) FROM events WHERE item_id=items.id) AS last_event
                               FROM items WHERE hidden=0"""):
-            if (row['entrypoint'] or '').startswith('sdk') or (not row['title'] and not row['human']):
+            if HOST.is_background(row['title'], row['entrypoint'] or '', row['human'], row['cwd'] or ''):
                 continue
             if (row['title'] or '').strip().lower().startswith('btw'):
                 continue

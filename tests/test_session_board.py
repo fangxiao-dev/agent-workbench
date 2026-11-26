@@ -10,6 +10,7 @@ import http.client
 from pathlib import Path
 
 from scripts import session_board as board
+from scripts import session_board_hosts
 from scripts import session_board_summary
 from scripts import session_board_ollama
 
@@ -249,18 +250,24 @@ def test_legacy_schema_columns_are_added(tmp_path):
 
 
 def test_injected_wrappers_are_not_conversation():
+    host = session_board_hosts.ClaudeDesktopHost()
     for text in ('<task-notification>x</task-notification>', '<system-reminder>x</system-reminder>', '<command-name>/model</command-name>'):
-        assert board.visible_text({'type': 'user', 'message': {'role': 'user', 'content': text}}) is None
-    assert board.visible_text({'type': 'user', 'message': {'role': 'user', 'content': '<pasted_content id="1">hi</pasted_content>'}})
+        assert host.message({'type': 'user', 'message': {'role': 'user', 'content': text}}) is None
+    assert host.message({'type': 'user', 'message': {'role': 'user', 'content': '<pasted_content id="1">hi</pasted_content>'}})[:2] == ('user', 'hi')
+    relayed = '<pasted_content id="2"> Another Claude session sent a message: <agent-message>x</agent-message>'
+    assert host.message({'type': 'user', 'message': {'role': 'user', 'content': relayed}}) is None
 
 
 def test_boilerplate_reply_is_not_an_event():
-    assert board.visible_text({'type': 'assistant', 'message': {'role': 'assistant', 'content': 'No response requested.'}}) is None
+    assert session_board_hosts.ClaudeDesktopHost().message(
+        {'type': 'assistant', 'message': {'role': 'assistant', 'content': 'No response requested.'}}) is None
 
 
 def test_untrusted_tool_content_filtered():
-    assert board.visible_text({'type': 'user', 'message': {'role': 'user', 'content': [{'type': 'tool_result', 'content': 'secret'}]}}) is None
-    assert board.visible_text({'type': 'assistant', 'message': {'role': 'assistant', 'content': [{'type': 'thinking', 'thinking': 'hidden'}, {'type': 'text', 'text': '<b>plain</b>'}]}}) == ('assistant', '<b>plain</b>')
+    host = session_board_hosts.ClaudeDesktopHost()
+    assert host.message({'type': 'user', 'message': {'role': 'user', 'content': [{'type': 'tool_result', 'content': 'secret'}]}}) is None
+    assert host.message({'type': 'assistant', 'message': {'role': 'assistant', 'content': [
+        {'type': 'thinking', 'thinking': 'hidden'}, {'type': 'text', 'text': '<b>plain</b>'}]}})[:2] == ('assistant', '<b>plain</b>')
 
 
 def test_reject_invalid_mutation(tmp_path):
@@ -525,6 +532,20 @@ def test_summary_waits_for_the_refresh_gap(tmp_path):
     assert board.list_items(dbpath, home)[0]['summary']['summary'] == 'two'
 
 
+def test_background_notifications_are_not_messages(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    note = '<pasted_content id="e1">' + chr(10) + '<system-reminder>' + chr(10) + '[SYSTEM NOTIFICATION - NOT USER INPUT]' + chr(10) + '<task-notification>job done</task-notification>'
+    source.write_bytes(titled() + record('user', note))
+    board.sync(dbpath, home)
+    assert board.list_items(dbpath, home)[0]['events'] == []
+    # a real paste keeps its text and loses the wrapper tag
+    with source.open('ab') as stream:
+        stream.write(record('user', '<pasted_content id="e2">' + chr(10) + '重做这一版'))
+    board.sync(dbpath, home)
+    item = board.list_items(dbpath, home)[0]
+    assert [e['text'] for e in item['events']] == ['重做这一版']
+
+
 def test_board_runs_on_any_host_adapter(tmp_path, monkeypatch):
     """The core must not care which host produced the transcripts."""
     from scripts import session_board_hosts as hosts
@@ -537,6 +558,7 @@ def test_board_runs_on_any_host_adapter(tmp_path, monkeypatch):
         name = 'fake'
         def transcripts(self, _home): return [source]
         def classify(self, _path): return ('fake-entry', 1, '')
+        def message(self, record): return (record['type'], record['message']['content'], '')
         def live(self, _home): return {source.stem: {'status': '运行中', 'link': '', 'name': 'fake session'}}
 
     monkeypatch.setattr(board, 'HOST', FakeHost())
