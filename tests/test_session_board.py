@@ -359,6 +359,32 @@ def test_summary_round_skips_when_nothing_moved(tmp_path):
     assert session_board_summary.progress()['total'] == 0   # nothing new: the round owes no calls
 
 
+def test_repeated_rewinds_collapse_into_the_newest_card(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    parent = source.stem
+    source.write_bytes(titled('同一个会话') + record('user', 'first'))
+    board.sync(dbpath, home)
+    first = source.with_name('44444444-4444-4444-8444-444444444444.jsonl')
+    first.write_bytes(titled('同一个会话') + record('assistant', 'branch one', requestSessionId=parent))
+    second = source.with_name('55555555-5555-4555-8555-555555555555.jsonl')
+    second.write_bytes(titled('同一个会话') + record('assistant', 'branch two', requestSessionId=parent))
+    os.utime(first, (time.time() - 600, time.time() - 600))
+    board.sync(dbpath, home)
+    items = board.list_items(dbpath, home)
+    assert [item['id'] for item in items] == [second.stem]
+    assert board.superseded_ids(dbpath) == {parent, first.stem}
+
+
+def test_conversation_in_the_head_is_found_when_the_tail_is_attachments(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    filler = b''.join(record('attachment', 'x' * 900) for _ in range(200))   # pushes the message out of the tail window
+    source.write_bytes(record('user', 'the only message') + filler)
+    assert source.stat().st_size > 128 * 1024
+    board.sync(dbpath, home)
+    item = board.list_items(dbpath, home)[0]
+    assert [event['text'] for event in item['events']] == ['the only message']
+
+
 def test_continuation_stays_visible_without_its_own_origin(tmp_path):
     home, source, dbpath = setup_source(tmp_path)
     parent = source.stem

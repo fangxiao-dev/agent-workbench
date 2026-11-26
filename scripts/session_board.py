@@ -151,42 +151,55 @@ def sync_file(db: sqlite3.Connection, path: Path, now: float) -> None:
                 start = stream.tell()
                 warning = '部分过大记录正在跳过'
         cursor = start
-        while not aligning:
-            position = stream.tell()
-            line = stream.readline(MAX_LINE + 1)
-            if not line:
-                break
-            if len(line) > MAX_LINE:
-                cursor = stream.tell()
-                aligning = not line.endswith(b'\n')
-                warning = '部分过大记录已跳过'
-                limited = True
-                if aligning:
+        def pump(stop_at, track):
+            nonlocal cursor, title, cwd, limited, warning, event_count, aligning
+            while not aligning:
+                position = stream.tell()
+                if stop_at is not None and position >= stop_at:
                     break
-                continue
-            if not line.endswith(b"\n"):
-                break
-            cursor = stream.tell()
-            try:
-                record = json.loads(line)
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                warning = '部分记录格式无效，已跳过'
-                limited = True
-                continue
-            if not isinstance(record, dict):
-                continue
-            hinted_title, hinted_cwd = HOST.hints(record)
-            if hinted_title:
-                title = hinted_title[:200]
-            if hinted_cwd:
-                cwd = hinted_cwd[:1000]
-            message = HOST.message(record)
-            if message:
-                role, text, stamp = message
-                event_count += 1
-                if event_count > 40:
+                line = stream.readline(MAX_LINE + 1)
+                if not line:
+                    break
+                if len(line) > MAX_LINE:
+                    if track:
+                        cursor = stream.tell()
+                    aligning = not line.endswith(b'\n')
+                    warning = '部分过大记录已跳过'
                     limited = True
-                events.append((ident, generation, position, role, text, stamp))
+                    if aligning:
+                        break
+                    continue
+                if not line.endswith(b"\n"):
+                    break
+                if track:
+                    cursor = stream.tell()
+                try:
+                    record = json.loads(line)
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    warning = '部分记录格式无效，已跳过'
+                    limited = True
+                    continue
+                if not isinstance(record, dict):
+                    continue
+                hinted_title, hinted_cwd = HOST.hints(record)
+                if hinted_title:
+                    title = hinted_title[:200]
+                if hinted_cwd:
+                    cwd = hinted_cwd[:1000]
+                message = HOST.message(record)
+                if message:
+                    role, text, stamp = message
+                    event_count += 1
+                    if event_count > 40:
+                        limited = True
+                    events.append((ident, generation, position, role, text, stamp))
+
+        pump(None, True)
+        if not events and start > 0 and not aligning:
+            # Some transcripts keep the conversation in the head with only attachments after it; the
+            # tail window would leave the card empty, so read the head once without moving the cursor.
+            stream.seek(0)
+            pump(HEAD_BYTES, False)
     with db:
         db.execute('BEGIN IMMEDIATE')
         latest = db.execute('SELECT cursor,generation,identity FROM items WHERE id=?', (ident,)).fetchone()
@@ -288,6 +301,14 @@ def _sync(db_path: Path, home: Path) -> dict:
     except OSError:
         db.close()
         return {"ok": False, "error": "扫描会话目录失败"}
+    # Sessions whose first scan only saw attachments kept an empty card; re-read them once so the
+    # head fallback can pick the conversation up.
+    for stale in db.execute("SELECT path FROM items WHERE title<>'' AND human=1 AND hidden=0"
+                            " AND NOT EXISTS(SELECT 1 FROM events WHERE item_id=items.id)").fetchall():
+        try:
+            sync_file(db, Path(stale["path"]), now)
+        except (OSError, ValueError, sqlite3.Error):
+            continue
     # A session that continues another one (compaction keeps the Desktop conversation, not the file id).
     with db:
         for ident, info in live_sessions(home, fresh=True).items():
@@ -338,11 +359,26 @@ def superseded_ids(db_path: Path) -> set[str]:
     """Sessions a newer rewind/fork/compaction file continues; they should not appear as separate cards."""
     db = open_db(db_path)
     try:
-        ids = {row["id"] for row in db.execute("SELECT id FROM items")}
-        parents = {row["fork_of"] for row in db.execute("SELECT fork_of FROM items WHERE ifnull(fork_of,'')<>''")}
+        return _dead_ids(db)
     finally:
         db.close()
-    return {parent for parent in parents if parent in ids}
+
+
+def _dead_ids(db) -> set[str]:
+    known = {row["id"] for row in db.execute("SELECT id FROM items")}
+    rows = [row for row in db.execute(
+        "SELECT id, fork_of, title, source_time FROM items WHERE ifnull(fork_of,'')<>''") if row["fork_of"] in known]
+    dead = {row["fork_of"] for row in rows}
+    # Rewinding from the same point leaves the parent with several continuations; only the one written
+    # last is current. A branch the user renamed carries its own title and keeps its own card.
+    newest = {}
+    for row in rows:
+        key = (row["fork_of"], (row["title"] or "").strip())
+        if key not in newest or row["source_time"] > newest[key][0]:
+            newest[key] = (row["source_time"], row["id"])
+    dead.update(row["id"] for row in rows
+                if newest[(row["fork_of"], (row["title"] or "").strip())][1] != row["id"])
+    return dead
 
 
 def add_usage(db_path: Path, kind: str, usage: dict) -> None:
@@ -412,7 +448,7 @@ def parse_activity(events: list[dict]) -> float:
 def list_items(db_path: Path, home: Path) -> list[dict]:
     db = open_db(db_path)
     live = live_sessions(home)
-    superseded = {r["fork_of"] for r in db.execute("SELECT fork_of FROM items WHERE ifnull(fork_of,'')<>''")}
+    superseded = _dead_ids(db)
     parents = {row["id"]: row["fork_of"] for row in db.execute("SELECT id, fork_of FROM items")}
     items = []
     for row in db.execute("SELECT * FROM items ORDER BY source_time DESC"):
