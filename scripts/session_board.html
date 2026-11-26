@@ -13,7 +13,7 @@
   --gutter:34px;
   --f:Inter,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
 *{box-sizing:border-box}html{height:100%}
-body{margin:0;min-height:100%;display:flex;flex-direction:column;color:var(--ink);font:14px/1.5 var(--f);
+body{margin:0;min-height:100%;display:flex;flex-direction:column;color:var(--ink);font:14px/1.5 var(--f);background:#f4f6f8}
   background:radial-gradient(620px 460px at 16% 30%,#cfeee6 0,rgba(207,238,230,0) 62%),radial-gradient(680px 500px at 78% 26%,#d7e6fb 0,rgba(215,230,251,0) 64%),radial-gradient(560px 420px at 46% 88%,#ddf2ec 0,rgba(221,242,236,0) 60%),radial-gradient(900px 460px at 50% -14%,#fff 0,rgba(255,255,255,0) 58%),#f4f7f9;background-attachment:fixed
 button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;border:0;background:none}
 :focus-visible{outline:2px solid #8096ad;outline-offset:3px}
@@ -210,7 +210,10 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 @media(max-width:900px){.board{grid-template-columns:none!important;grid-auto-flow:column;grid-auto-columns:minmax(300px,86vw);overflow-x:auto;scroll-snap-type:x mandatory}
   .col{scroll-snap-align:start}.archive{grid-auto-flow:row}.top,.groups,.intro,.banner{padding-left:18px;padding-right:18px}.board{padding-left:18px;padding-right:18px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+#bg{position:fixed;inset:0;z-index:0;display:block;pointer-events:none}
+.page{position:relative;z-index:1}
 </style></head><body>
+<canvas id="bg" aria-hidden="true"></canvas>
 <header class="top">
   <div class="brand"><span class="logo"><i></i><i></i><i></i></span>Session <span class="z">看板</span></div>
   <label class="search"><span data-i="search"></span><input id="search" type="search" placeholder="搜索会话" aria-label="搜索会话"></label>
@@ -436,4 +439,99 @@ $('#pform').onsubmit=async e=>{e.preventDefault();const input=$('#pinput'),text=
 $('#removed').onclick=()=>{showRemoved=!showRemoved;render()};
 document.querySelectorAll('#filters button').forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll('#filters button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));render()});
 refresh();setInterval(()=>refresh(),30000);
-</script></body></html>
+</script><script>
+/* Background: a jittered lattice of dots that leans away from the cursor.
+   A fixed canvas, so the frosted lanes have something to show through. */
+(function () {
+  const cv = document.getElementById('bg'), cx = cv.getContext('2d');
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const C = {spacing: 36, jitter: 7, size: 2.2, reach: 150, strength: 2.4, damp: .86, link: 68, drift: .18};
+  const DOT = '84,110,130', GLOW = '125,211,252';
+  let W = 0, H = 0, cols = 0, rows = 0, pts = [], raf = 0, last = 0;
+  const m = {x: -9e3, y: -9e3, on: false};
+
+  function build() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cols = Math.ceil(W / C.spacing) + 1; rows = Math.ceil(H / C.spacing) + 1;
+    const ox = (W - (cols - 1) * C.spacing) / 2, oy = (H - (rows - 1) * C.spacing) / 2;
+    pts = [];
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+      const x = ox + i * C.spacing + (Math.random() - .5) * C.jitter * 1.6;
+      const y = oy + j * C.spacing + (Math.random() - .5) * C.jitter * 1.6;
+      pts.push({hx: x, hy: y, x, y, vx: 0, vy: 0, a: Math.random() * 6.2832, sp: .12 + Math.random() * .3, ph: Math.random() * 6.2832});
+    }
+  }
+
+  function step(dt) {
+    const r2 = C.reach * C.reach, drift = calm ? 0 : C.drift * dt * .06;
+    for (const p of pts) {
+      if (drift) {
+        p.hx += Math.cos(p.a) * p.sp * drift; p.hy += Math.sin(p.a) * p.sp * drift;
+        p.ph += dt * .001;
+        if (p.hx < -20) p.hx += W + 40; else if (p.hx > W + 20) p.hx -= W + 40;
+        if (p.hy < -20) p.hy += H + 40; else if (p.hy > H + 20) p.hy -= H + 40;
+      }
+      if (m.on) {
+        const dx = p.x - m.x, dy = p.y - m.y, d2 = dx * dx + dy * dy;
+        if (d2 < r2 && d2 > .01) {
+          const d = Math.sqrt(d2), f = (1 - d / C.reach) * C.strength;
+          p.vx += dx / d * f; p.vy += dy / d * f;
+        }
+      }
+      p.vx += (p.hx - p.x) * .05; p.vy += (p.hy - p.y) * .05;
+      p.vx *= C.damp; p.vy *= C.damp;
+      p.x += p.vx; p.y += p.vy;
+    }
+  }
+
+  function paint() {
+    cx.clearRect(0, 0, W, H);
+    cx.lineWidth = .7;
+    const R2 = C.link * C.link;
+    const at = (i, j) => (i < 0 || j < 0 || i >= cols || j >= rows) ? null : pts[j * cols + i];
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+      const p = pts[j * cols + i];
+      for (const q of [at(i + 1, j), at(i, j + 1), at(i + 1, j + 1), at(i - 1, j + 1)]) {
+        if (!q) continue;
+        const dx = p.x - q.x, dy = p.y - q.y, d2 = dx * dx + dy * dy;
+        if (d2 > R2) continue;
+        cx.strokeStyle = 'rgba(' + DOT + ',' + (.11 * (1 - Math.sqrt(d2) / C.link)).toFixed(3) + ')';
+        cx.beginPath(); cx.moveTo(p.x, p.y); cx.lineTo(q.x, q.y); cx.stroke();
+      }
+    }
+    if (m.on) {
+      const g = cx.createRadialGradient(m.x, m.y, 0, m.x, m.y, 150);
+      g.addColorStop(0, 'rgba(' + GLOW + ',.13)'); g.addColorStop(1, 'rgba(' + GLOW + ',0)');
+      cx.fillStyle = g; cx.fillRect(m.x - 150, m.y - 150, 300, 300);
+    }
+    cx.fillStyle = 'rgba(' + DOT + ',.3)';
+    for (const p of pts) {
+      const r = C.size * (calm ? 1 : 1 + Math.sin(p.ph) * .22);
+      cx.beginPath(); cx.arc(p.x, p.y, r, 0, 6.2832); cx.fill();
+    }
+  }
+
+  function frame(now) {
+    const dt = Math.min(50, now - (last || now)); last = now;
+    step(dt); paint();
+    raf = requestAnimationFrame(frame);
+  }
+
+  addEventListener('pointermove', e => { m.x = e.clientX; m.y = e.clientY; m.on = true; }, {passive: true});
+  addEventListener('pointerleave', () => { m.on = false; });
+  addEventListener('blur', () => { m.on = false; });
+  let rt = 0;
+  addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { build(); if (calm) paint(); }, 150); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (raf) cancelAnimationFrame(raf); raf = 0; }
+    else if (!raf) { last = 0; raf = requestAnimationFrame(frame); }
+  });
+  build(); paint();
+  if (!calm) raf = requestAnimationFrame(frame);
+})();
+</script>
+</body></html>
