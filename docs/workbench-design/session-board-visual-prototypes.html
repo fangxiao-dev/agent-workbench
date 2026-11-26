@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Session 看板 · 视觉方向原型</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#EDF0F3;color:#12161c;font:14px/1.55 "Segoe UI","Microsoft YaHei UI","PingFang SC",sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1320px;margin:0 auto;padding:28px 24px 40px}
+.intro{margin:0 0 6px}
+.intro h1{margin:0 0 6px;font-size:20px;letter-spacing:-.01em}
+.intro p{margin:0;color:#5C6675;font-size:13px;max-width:820px}
+.v{margin-top:22px;padding:18px 22px 20px;border-radius:12px;background:var(--bg);box-shadow:inset 0 0 0 1px rgba(16,24,40,.07)}
+.vh{display:flex;align-items:baseline;gap:10px;margin:0 0 14px}
+.vh b{font-size:14.5px;letter-spacing:.01em}
+.vh span{color:#7A8494;font-size:12.5px}
+.board{display:grid;grid-template-columns:1.3fr 1.3fr 84px 84px;gap:26px;align-items:start}
+.lane{min-width:0}
+.lhead{display:flex;align-items:center;gap:7px;padding:0 0 9px;border-bottom:1px solid var(--line);font:600 11px/1 var(--f);letter-spacing:.12em;color:#6B7480}
+.lhead i{width:6px;height:6px;border-radius:50%;background:var(--tone);flex:none}
+.lhead em{margin-left:auto;font:500 11.5px/1 var(--f);letter-spacing:0;color:#98A1AD;font-style:normal;font-variant-numeric:tabular-nums}
+.rows{display:flex;flex-direction:column;padding-top:10px}
+.c{position:relative;cursor:pointer}
+.r1{display:flex;align-items:flex-start;gap:7px}
+.c h3{flex:1;min-width:0;margin:0;font-weight:600;overflow-wrap:anywhere}
+.c time{flex:none;font-variant-numeric:tabular-nums;white-space:nowrap}
+.c .pv{margin:5px 0 0;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.c .pd{margin:6px 0 0;display:flex;align-items:center;gap:6px;color:#8A5E12}
+.c .pd i{width:5px;height:5px;border-radius:50%;background:#C08A24;flex:none}
+.c .meta{margin-top:6px;display:flex;align-items:center;gap:6px;color:var(--ink3)}
+.c .meta b{font-weight:500}
+.c .meta span::before{content:'';display:inline-block;width:4px;height:4px;margin-right:5px;border-radius:1px;background:#B9C0CA;vertical-align:1px}
+.st{flex:none;width:13px;height:13px;margin-top:2px;border-radius:50%;border:1.6px solid currentColor}
+.st.run{color:#369F94}
+.st.done{color:#3B6FD4;background:currentColor;border:0;border-radius:3px;width:10px;height:10px;margin:4px 1.5px 0 1.5px}
+.st.idle{color:#AEB6C2;border-width:0;background:currentColor;width:8px;height:8px;margin:5px 2.5px 0 2.5px}
+.rail{min-width:0}
+.rail .lhead{border-bottom:0;flex-direction:row;align-items:center;gap:5px;padding-top:1px;letter-spacing:.02em;font-weight:500;font-size:11.5px;color:#98A1AD;white-space:nowrap}
+.rail .lhead em{margin:0 0 0 1px;font-size:11px}
+.rail .lhead i{margin-left:auto;order:3;width:9px;height:9px;border-right:1.4px solid #C2C9D2;border-bottom:1.4px solid #C2C9D2;transform:rotate(-45deg);border-radius:0;background:none;flex:none}
+/* A — Airy minimal: no lane surface, whitespace does the separation */
+.vA{--bg:#F8FAFC;--line:#E7ECF1;--tone:#369F94;--ink3:#8A94A6}
+.vA .rows{gap:6px}
+.vA .c{background:#fff;border:1px solid var(--line);border-radius:8px;padding:11px 13px 10px;transition:border-color .15s,box-shadow .15s}
+.vA .c:hover{border-color:#D2DAE3;box-shadow:0 2px 8px rgba(17,24,39,.05)}
+.vA .c h3{font-size:14px;line-height:1.4;color:#12161C}
+.vA .c time{font-size:11.5px;color:var(--ink3);margin-top:2px}
+.vA .c .pv{font-size:12.5px;line-height:1.6;color:#4B5563}
+.vA .c .pd{font-size:12px}
+.vA .c .meta{font-size:11.5px}
+/* B — Soft glass: content-hugging frosted trays */
+.vB{--bg:linear-gradient(180deg,#EEF6F7,#F7FBFC);--line:rgba(23,58,63,.10);--tone:#369F94;--ink3:#8A969B}
+.vB .board{gap:18px}
+.vB .lane:not(.rail){background:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.85);border-radius:12px;padding:11px 12px 12px;backdrop-filter:blur(10px);box-shadow:0 1px 2px rgba(23,58,63,.05)}
+.vB .lane:not(.rail) .lhead{border-bottom:1px solid rgba(23,58,63,.08)}
+.vB .rows{gap:8px}
+.vB .c{background:rgba(255,255,255,.86);border:1px solid rgba(255,255,255,.95);border-radius:10px;padding:11px 13px 10px;box-shadow:0 6px 18px rgba(23,58,63,.06)}
+.vB .c:hover{background:#fff;box-shadow:0 10px 26px rgba(23,58,63,.09)}
+.vB .c h3{font-size:14px;line-height:1.4;color:#16232A}
+.vB .c time{font-size:11.5px;color:var(--ink3);margin-top:2px}
+.vB .c .pv{font-size:12.5px;line-height:1.6;color:#4E5C63}
+.vB .c .pd{font-size:12px}
+.vB .c .meta{font-size:11.5px}
+/* C — Compact pro: dense hairline rows, container only on state */
+.vC{--bg:#F7F8FA;--line:#E8EBEF;--tone:#369F94;--ink3:#8B94A2}
+.vC .board{gap:28px}
+.vC .lhead{font-size:10.5px;letter-spacing:.08em;color:#8B94A2}
+.vC .rows{padding-top:2px}
+.vC .c{margin:0 -8px;padding:9px 8px 10px;border-bottom:1px solid var(--line);border-radius:4px;transition:background .12s}
+.vC .c:hover{background:#fff}
+.vC .c h3{font-size:13.5px;line-height:1.35;color:#11151B}
+.vC .c time{font-size:11px;color:var(--ink3);margin-top:2px}
+.vC .c .pv{font-size:12.5px;line-height:1.45;color:#4C5563;-webkit-line-clamp:2;margin-top:3px}
+.vC .c .pd{font-size:11.5px;margin-top:4px}
+.vC .c .meta{font-size:11px;margin-top:3px}
+.vC .rail .lhead{color:#9AA3B0}
+.note{margin:14px 0 0;font-size:12px;color:#6E7988}
+</style></head><body>
+<div class="wrap">
+  <div class="intro">
+    <h1>Session 看板 · 三个视觉方向</h1>
+    <p>同一组会话数据、同样的列与状态，只有视觉语言不同。这版原型先定方向，不做交互。</p>
+  </div>
+
+  <section class="v vA" data-v="A">
+    <div class="vh"><b>A · Airy Minimal</b><span>冷白、无泳道、留白分列；卡片是唯一实体表面，线细影淡</span></div>
+    <div class="board"></div>
+    <p class="note">视觉重心落在标题上：状态用 13px 环形图标，待办是一条安静的灰琥珀文字，时间退到右上角。</p>
+  </section>
+
+  <section class="v vB" data-v="B">
+    <div class="vh"><b>B · Soft Glass</b><span>淡青环境色、半透明托盘、柔和景深；托盘只包住内容，不拉满高度</span></div>
+    <div class="board"></div>
+    <p class="note">玻璃只出现在浮层与列托盘，卡片仍是实体白，避免整屏半透明导致的发灰。</p>
+  </section>
+
+  <section class="v vC" data-v="C">
+    <div class="vh"><b>C · Compact Pro</b><span>Linear 式高密度：列表行 + 发丝分隔，只有悬停才出现表面</span></div>
+    <div class="board"></div>
+    <p class="note">一屏能读到的会话最多；代价是行与行的边界靠对齐和节奏维持，不适合很长的摘要。</p>
+  </section>
+</div>
+<script>
+const LANES = [
+  ['进行中', 'run', [
+    {t: '员工助手需求对齐', s: 'run', pv: '第 8 轮方案包审阅完成，检出 1 项 P0、8 项 P1，待按审阅意见补齐。', pd: '确认 2 项业务边界', ago: '刚刚', g: '员工助手'},
+    {t: '手搓看板', s: 'run', pv: '视觉重做完成，已修复图标与 SVG 渲染问题，字体已生效。', pd: '确认是否保留内联字体', ago: '3 分钟前'},
+    {t: '看板提交与 UI 组件库调研', s: 'run', pv: '后端测试通过，待确认视觉方案。', ago: '10 分钟前', g: '看板项目'},
+  ]],
+  ['待查看', 'todo', [
+    {t: '对账模板重构', s: 'idle', pv: '已拆出 CSV 归一化模块，等待下一轮样例。', ago: '1 小时前', g: 'kaispan-dev'},
+    {t: '财务导出 EXTF', s: 'done', pv: '导出链路打通，剩余 2 个字段未映射。', ago: '3 小时前', g: 'kaispan-dev'},
+    {t: 'paperclip test', s: 'idle', pv: 'ACP 调研结论已落盘，等调用方确认。', ago: '昨天', g: 'prototype-git'},
+  ]],
+  ['已完成', 'done', []],
+  ['搁置', 'mute', []],
+];
+const COUNT = {'进行中': 3, '待查看': 20, '已完成': 0, '搁置': 66};
+
+function card(it) {
+  const c = document.createElement('article');
+  c.className = 'c';
+  const r1 = document.createElement('div');
+  r1.className = 'r1';
+  r1.innerHTML = `<span class="st ${it.s}"></span><h3>${it.t}</h3><time>${it.ago}</time>`;
+  c.append(r1);
+  const pv = document.createElement('p');
+  pv.className = 'pv';
+  pv.textContent = it.pv;
+  c.append(pv);
+  if (it.pd) {
+    const pd = document.createElement('p');
+    pd.className = 'pd';
+    pd.innerHTML = '<i></i>';
+    pd.append(it.pd);
+    c.append(pd);
+  }
+  if (it.g) {
+    const m = document.createElement('div');
+    m.className = 'meta';
+    const g = document.createElement('span');
+    g.textContent = it.g;
+    m.append(g);
+    c.append(m);
+  }
+  return c;
+}
+
+for (const board of document.querySelectorAll('.board')) {
+  for (const [name, tone, items] of LANES) {
+    const lane = document.createElement('section');
+    lane.className = 'lane' + (items.length ? '' : ' rail');
+    const head = document.createElement('div');
+    head.className = 'lhead';
+    head.innerHTML = `<i></i><span>${name}</span><em>${COUNT[name]}</em>`;
+    lane.append(head);
+    const rows = document.createElement('div');
+    rows.className = 'rows';
+    items.forEach(i => rows.append(card(i)));
+    lane.append(rows);
+    board.append(lane);
+  }
+}
+</script>
+</body></html>
