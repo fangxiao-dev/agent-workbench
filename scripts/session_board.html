@@ -135,7 +135,8 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
   background:rgba(248,251,254,.9);
   backdrop-filter:blur(18px) saturate(125%);-webkit-backdrop-filter:blur(18px) saturate(125%);
   box-shadow:0 12px 30px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.6);
-  cursor:pointer;transition:background var(--t1) var(--ease),border-color var(--t1) var(--ease),box-shadow var(--t1) var(--ease)}
+  cursor:pointer;transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transform-style:preserve-3d;
+  transition:background var(--t1) var(--ease),border-color var(--t1) var(--ease),box-shadow var(--t1) var(--ease),transform .16s var(--ease)}
 .card:hover{border-color:rgba(255,255,255,.85);background:rgba(252,254,255,.97);box-shadow:0 16px 36px rgba(0,0,0,.38),inset 0 1px 0 #fff}
 .card.sel{border-color:#3fae9f;box-shadow:0 0 0 2px rgba(47,176,158,.35),0 12px 30px rgba(0,0,0,.3)}
 .card.dragging{opacity:.4}
@@ -314,6 +315,7 @@ const $=s=>document.querySelector(s);
 const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e};
 document.querySelectorAll('[data-i]').forEach(s=>s.replaceChildren(icon(s.dataset.i)));
 let items=[],boardTags=[],tagFilter=0,tagsExpanded=false,busy=false,dragging=false,openId=null,filter='all',showRemoved=false,showAgents=false;const cap={};
+const coarse=matchMedia('(pointer:coarse)').matches,reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const fold=JSON.parse(localStorage.getItem('board.fold')||'{}'); // lane|dir -> collapsed; the shelved lane starts collapsed
 const rootOf=i=>(i.cwd||'').replace(/[\\/]\.(claude[\\/])?worktrees[\\/].*$/i,'');
 const dirName=r=>r.split(/[\\/]/).filter(Boolean).pop()||'未知目录';
@@ -392,7 +394,13 @@ function card(i,dupes){
   if(i.link){const g=el('a','go');g.href=i.link;g.append('打开',icon('ext'));g.addEventListener('click',e=>{e.stopPropagation();update(i.id,{mark_read:true,read_generation:i.generation,read_cursor:i.cursor})});c.append(g)}
   if(m.childElementCount)c.append(m);
   c.addEventListener('click',()=>openDrawer(i.id));c.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target===c)openDrawer(i.id)});
-  c.addEventListener('dragstart',e=>{dragging=true;c.classList.add('dragging');e.dataTransfer.setData('text/plain',i.id);e.dataTransfer.effectAllowed='move'});
+  // A slight mouse-following tilt; transform only, so nothing reflows (no row height or column width change).
+  if(!coarse&&!reduceMotion)c.addEventListener('pointermove',e=>{if(dragging||e.pointerType!=='mouse')return;
+    const r=c.getBoundingClientRect();
+    c.style.setProperty('--ry',((e.clientX-r.left)/r.width-.5)*4+'deg');
+    c.style.setProperty('--rx',((e.clientY-r.top)/r.height-.5)*-4+'deg')});
+  c.addEventListener('pointerleave',()=>{c.style.removeProperty('--rx');c.style.removeProperty('--ry')});
+  c.addEventListener('dragstart',e=>{dragging=true;c.classList.add('dragging');c.style.removeProperty('--rx');c.style.removeProperty('--ry');e.dataTransfer.setData('text/plain',i.id);e.dataTransfer.effectAllowed='move'});
   c.addEventListener('dragend',()=>{dragging=false;c.classList.remove('dragging');document.querySelectorAll('.col.over').forEach(x=>x.classList.remove('over'))});
   return c}
 
