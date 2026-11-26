@@ -240,14 +240,26 @@ def _sync(db_path: Path, home: Path) -> dict:
     if relink:  # links now also follow compaction; recompute every transcript's parent once
         with db:
             db.execute("UPDATE items SET entrypoint=NULL")
-    for old in db.execute("SELECT id,path FROM items WHERE entrypoint IS NULL").fetchall():
-        try:
-            entry, human, parent = classify(Path(old['path']))
-        except OSError:
-            entry, human, parent = '', 0, ''
+    def reclassify(rows) -> None:
+        for old in rows:
+            try:
+                entry, human, parent = classify(Path(old['path']))
+            except OSError:
+                continue
+            if not entry and not parent:
+                continue  # the transcript has not written its metadata yet
+            with db:
+                db.execute("UPDATE items SET entrypoint=?,human=?,fork_of=CASE WHEN ?<>'' THEN ? ELSE ifnull(fork_of,'') END WHERE id=?",
+                           (entry, human, parent, parent, old['id']))
+
+    reclassify(db.execute("SELECT id,path FROM items WHERE entrypoint IS NULL").fetchall())
+    # A transcript can be synced before it writes its entrypoint (rewind and fresh Desktop segments do);
+    # retry those on a slow clock instead of leaving them classified as background forever.
+    stamp = db.execute("SELECT value FROM meta WHERE key='reclassify_at'").fetchone()
+    if now - (float(stamp['value']) if stamp else 0) > 600:
+        reclassify(db.execute("SELECT id,path FROM items WHERE ifnull(entrypoint,'')=''").fetchall())
         with db:
-            db.execute("UPDATE items SET entrypoint=?,human=?,fork_of=CASE WHEN ?<>'' THEN ? ELSE ifnull(fork_of,'') END WHERE id=?",
-                       (entry, human, parent, parent, old['id']))
+            db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('reclassify_at',?)", (str(now),))
     if relink:
         with db:
             db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('links','4')")
@@ -284,7 +296,7 @@ def _sync(db_path: Path, home: Path) -> dict:
                 db.execute("UPDATE items SET fork_of=? WHERE id=? AND ifnull(fork_of,'')=''", (previous, ident))
         # The newer transcript replaces the earlier card, so the user's triage has to follow it.
         for link in db.execute("SELECT id, fork_of FROM items WHERE ifnull(fork_of,'')<>''").fetchall():
-            prior = db.execute("SELECT state, note, hidden FROM items WHERE id=?",
+            prior = db.execute("SELECT state, note, hidden, human, entrypoint FROM items WHERE id=?",
                                (link["fork_of"],)).fetchone()
             if not prior:
                 continue
@@ -295,6 +307,13 @@ def _sync(db_path: Path, home: Path) -> dict:
             if moved:
                 db.execute("INSERT OR IGNORE INTO item_tags(item_id,tag_id)"
                            " SELECT ?, tag_id FROM item_tags WHERE item_id=?", (link["id"], link["fork_of"]))
+            # A continuation replays its history first, so its own first record says nothing about who
+            # started it: it belongs to the same card as its parent.
+            if prior["human"]:
+                db.execute("UPDATE items SET human=1 WHERE id=? AND human=0", (link["id"],))
+            if prior["entrypoint"]:
+                db.execute("UPDATE items SET entrypoint=? WHERE id=? AND ifnull(entrypoint,'')=''",
+                           (prior["entrypoint"], link["id"]))
         # One-time: items stored before agent-launched briefs were recognised as workers get re-read.
         if not db.execute("SELECT 1 FROM meta WHERE key='human-rule'").fetchone():
             for row in db.execute("SELECT id, path FROM items WHERE title='' AND human=1").fetchall():

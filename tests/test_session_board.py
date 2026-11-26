@@ -359,6 +359,36 @@ def test_summary_round_skips_when_nothing_moved(tmp_path):
     assert session_board_summary.progress()['total'] == 0   # nothing new: the round owes no calls
 
 
+def test_continuation_stays_visible_without_its_own_origin(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    parent = source.stem
+    source.write_bytes(record('user', 'first question', entrypoint='claude-desktop-3p', origin={'kind': 'human'}))
+    board.sync(dbpath, home)
+    # A rewound/compacted segment starts by replaying the old conversation, so its own first user
+    # record carries no origin — it must still count as part of the same session.
+    child = source.with_name('33333333-3333-4333-8333-333333333333.jsonl')
+    child.write_bytes(record('user', 'This session is being continued from a previous conversation that ran out of context.',
+                             entrypoint='claude-desktop-3p', requestSessionId=parent))
+    board.sync(dbpath, home)
+    item = next(i for i in board.list_items(dbpath, home) if i['id'] == child.stem)
+    assert item['agent'] is False
+
+
+def test_entrypoint_is_relearned_when_written_late(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    source.write_bytes(record('user', 'hello'))
+    board.sync(dbpath, home)
+    with sqlite3.connect(dbpath) as db:
+        assert db.execute("SELECT ifnull(entrypoint,'') FROM items").fetchone()[0] == ''
+    with source.open('ab') as stream:
+        stream.write(record('assistant', 'hi', entrypoint='claude-desktop-3p'))
+    with sqlite3.connect(dbpath) as db:   # let the slow retry run on the next sync
+        db.execute("UPDATE meta SET value='0' WHERE key='reclassify_at'")
+    board.sync(dbpath, home)
+    with sqlite3.connect(dbpath) as db:
+        assert db.execute("SELECT entrypoint FROM items").fetchone()[0] == 'claude-desktop-3p'
+
+
 def test_agent_launched_briefs_are_workers_not_sessions(tmp_path):
     home, source, dbpath = setup_source(tmp_path)
     brief = ('<pasted_content id="1">' + chr(10) +
