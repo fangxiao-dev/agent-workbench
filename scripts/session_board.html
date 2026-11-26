@@ -420,7 +420,7 @@ function render(){if(dragging)return;
   $('#removed').setAttribute('aria-pressed',String(showRemoved));$('#banner').classList.toggle('hidden',!showRemoved);
   const f=document.activeElement;if(openId&&!($('#drawer').contains(f)&&/^(INPUT|TEXTAREA)$/.test(f.tagName)))renderDrawer()}
 
-function openDrawer(id){openId=id;renderDrawer(true);document.querySelectorAll('.card').forEach(c=>c.classList.toggle('sel',c.dataset.id===id))}
+function openDrawer(id){openId=id;const seen=items.find(x=>x.id===id);if(seen&&seen.unread)update(id,{mark_read:true,read_generation:seen.generation,read_cursor:seen.cursor});renderDrawer(true);document.querySelectorAll('.card').forEach(c=>c.classList.toggle('sel',c.dataset.id===id))}
 function closeDrawer(){openId=null;$('#drawer').classList.remove('open');$('#scrim').classList.remove('on');$('#drawer').setAttribute('aria-hidden','true');document.querySelectorAll('.card.sel').forEach(c=>c.classList.remove('sel'))}
 function renderDrawer(){const i=items.find(x=>x.id===openId);if(!i)return;const d=$('#drawer');d.replaceChildren();
   const head=el('div','dh'),dot=el('span','st '+execOf(i));
