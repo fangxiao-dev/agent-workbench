@@ -72,7 +72,8 @@ def open_db(path: Path) -> sqlite3.Connection:
         for table, columns in {
             'items': {'prefix_len': 'INTEGER NOT NULL DEFAULT 0', 'prefix_hash': "TEXT NOT NULL DEFAULT ''",
                       'aligning': 'INTEGER NOT NULL DEFAULT 0', 'entrypoint': 'TEXT', 'fork_of': 'TEXT',
-                      'human': 'INTEGER NOT NULL DEFAULT 0', 'fork_of': 'TEXT'},
+                      'human': 'INTEGER NOT NULL DEFAULT 0', 'fork_of': 'TEXT',
+                      'attention_generation': 'INTEGER NOT NULL DEFAULT -1', 'attention_position': 'INTEGER NOT NULL DEFAULT -1'},
             'summaries': {'attempted_at': 'REAL NOT NULL DEFAULT 0'},
         }.items():
             existing = {row['name'] for row in db.execute(f'PRAGMA table_info({table})')}
@@ -397,6 +398,10 @@ def list_items(db_path: Path, home: Path) -> list[dict]:
         if item['summary'] and item['events']:
             latest = item['events'][0]
             item['summary']['stale'] = (summary['generation'], summary['position']) < (latest['generation'], latest['position'])
+        # 待处理 is the summary's "needs you" flag, acknowledged per summary version: a newer one raises it again.
+        item['pending'] = bool(item['summary'] and item['summary']['attention']
+                               and (summary['generation'], summary['position'])
+                               > (row['attention_generation'], row['attention_position']))
         depth, walk, seen = 0, parents.get(item["id"]), set()
         while walk and walk in parents and walk not in seen:
             seen.add(walk)
@@ -411,7 +416,8 @@ def list_items(db_path: Path, home: Path) -> list[dict]:
 
 
 def update_item(db_path: Path, ident: str, data: dict) -> None:
-    allowed = {"state", "group_name", "note", "hidden", "mark_read", "read_generation", "read_cursor"}
+    allowed = {"state", "group_name", "note", "hidden", "mark_read", "read_generation", "read_cursor",
+               "attention_generation", "attention_position"}
     if not UUID.fullmatch(ident) or not isinstance(data, dict) or not data or set(data) - allowed:
         raise ValueError("无效请求")
     if "state" in data and data["state"] not in ("待查看", "进行中", "暂不关注", "已完成"):
@@ -423,6 +429,9 @@ def update_item(db_path: Path, ident: str, data: dict) -> None:
         raise ValueError("无效标记")
     if data.get("mark_read") and any(type(data.get(key)) is not int or data[key] < 0 for key in ("read_generation", "read_cursor")):
         raise ValueError("缺少已展示位置")
+    if "attention_generation" in data or "attention_position" in data:
+        if any(type(data.get(key)) is not int or data[key] < 0 for key in ("attention_generation", "attention_position")):
+            raise ValueError("缺少待处理位置")
     db = open_db(db_path)
     try:
         with db:
@@ -441,6 +450,9 @@ def update_item(db_path: Path, ident: str, data: dict) -> None:
                 if requested >= previous:
                     db.execute("UPDATE items SET read_generation=?,read_cursor=?,read_at=? WHERE id=?",
                                (*requested, time.time(), ident))
+            if "attention_generation" in data:
+                db.execute("UPDATE items SET attention_generation=?,attention_position=? WHERE id=?",
+                           (data["attention_generation"], data["attention_position"], ident))
     finally:
         db.close()
 

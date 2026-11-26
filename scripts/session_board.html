@@ -283,7 +283,7 @@ const tint=name=>{const h=[...name].reduce((a,c)=>(a*31+c.charCodeAt(0))%360,7);
 const attention=i=>i.summary&&i.summary.attention||'';
 const preview=i=>{const s=i.summary;if(s&&s.summary)return{text:s.summary,ai:true,stale:s.stale};const e=i.events.find(x=>x.kind==='assistant')||i.events[0];return{text:e?clean(e.text):'',ai:false}};
 const expanded=new Set();const noteOpen=new Set();const previewOpen=new Set();
-const pending=i=>Boolean(attention(i));   // '待处理' = the assistant flagged a decision/blocker
+const pending=i=>Boolean(i.pending);   // server-side: the summary flagged something, not yet acknowledged
 function md(text){const root=el('div','md');let para=[],list=null,code=null;
   const inline=(to,t)=>{const re=/(\*\*[^*]+\*\*|`[^`]+`)/g;let last=0,m;while((m=re.exec(t))){if(m.index>last)to.append(t.slice(last,m.index));to.append(m[0][0]==='`'?el('code','',m[0].slice(1,-1)):el('strong','',m[0].slice(2,-2)));last=m.index+m[0].length}if(last<t.length)to.append(t.slice(last))};
   const flush=()=>{if(para.length){const p=el('p');para.forEach((l,k)=>{if(k)p.append(document.createElement('br'));inline(p,l)});root.append(p);para=[]}};
@@ -318,7 +318,7 @@ function paintUsage(){const box=$('#usage');if(!box)return;
   box.hidden=false}
 let toastTimer;function report(m){const t=$('#toast');t.textContent=m;t.classList.toggle('hidden',!m);clearTimeout(toastTimer);if(m)toastTimer=setTimeout(()=>t.classList.add('hidden'),5000)}
 async function refresh(sync=true){if(busy)return;busy=true;$('#refresh').disabled=true;try{if(sync){const s=await api('/api/sync',{});$('#sync').textContent=new Date(s.time*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+' 同步'+(s.errors?' · '+s.errors+' 项失败':'');$('#syncdot').classList.remove('bad')}const res=await api('/api/items');items=res.items;if(res.recent_days)recentDays=res.recent_days;showUsage(res.usage);render()}catch(e){$('#sync').textContent='同步失败';$('#syncdot').classList.add('bad');report('更新失败：'+e.message)}finally{busy=false;$('#refresh').disabled=false}}
-async function update(id,data){const item=items.find(i=>i.id===id),before=item&&{...item};if(item){Object.assign(item,data.mark_read?{unread:false}:data);render()}
+async function update(id,data){const item=items.find(i=>i.id===id),before=item&&{...item};if(item){Object.assign(item,data.mark_read?{unread:false}:data);if(data.attention_generation!=null)item.pending=false;render()}
   try{await api('/api/items/'+encodeURIComponent(id),data);refresh(false);return true}catch(e){if(item){Object.assign(item,before);render()}report('保存失败：'+e.message);return false}}
 
 function card(i,dupes){
@@ -329,7 +329,7 @@ function card(i,dupes){
   const p=preview(i);if(p.text){const pv=el('p','pv'+(p.ai?' ai':'')+(p.stale?' stale':''));if(p.ai){const mk=el('span','mk');mk.append(icon('spark'));pv.append(mk)}pv.append(p.text);if(previewOpen.has(i.id))pv.classList.add('open');
     pv.addEventListener('mouseenter',()=>{if(pv.dataset.clip)showTip(pv,p.text)});
     pv.addEventListener('mouseleave',hideTip);c.append(pv)}
-  const a=attention(i);if(a){const w=el('div','att');w.append(icon('chat'),el('span','',a));c.append(w)}
+  const a=attention(i);if(a&&i.pending){const w=el('div','att');w.append(icon('chat'),el('span','',a));c.append(w)}
   const m=el('div','meta');
   if(i.agent){const g=el('span','chip agent');g.append(el('span','','后台'));m.append(g)}
   if(i.group_name){const g=el('span','chip',undefined);g.style.cssText=tint(i.group_name);g.append(el('span','',i.group_name));m.append(g)}
@@ -343,7 +343,7 @@ function card(i,dupes){
 function groupRows(rows){const m=new Map();for(const i of rows){const r=rootOf(i);if(!m.has(r))m.set(r,{root:r,name:dirName(r),rows:[]});m.get(r).rows.push(i)}
   const live=g=>g.rows.some(i=>i.runtime==='运行中'),last=g=>Math.max(...g.rows.map(act));
   return [...m.values()].sort((a,b)=>live(b)-live(a)||last(b)-last(a))}
-function groupEl(lane,g,nameCount){const k=lane+'|'+g.root,closed=k in fold?fold[k]:['暂不关注','已完成'].includes(lane);
+function groupEl(lane,g,nameCount,forceOpen){const k=lane+'|'+g.root,closed=!forceOpen&&(k in fold?fold[k]:['暂不关注','已完成'].includes(lane));
   const w=el('div','group'),h=el('button','grp');h.type='button';h.setAttribute('aria-expanded',String(!closed));h.title='工作区：'+g.root;
   const chev=icon('chev');chev.classList.add('chev');h.append(chev,icon('folder'),el('span','nm',g.name));
   const need=g.rows.filter(pending).length,fresh=g.rows.filter(i=>i.unread).length;
@@ -385,7 +385,8 @@ function render(){if(dragging)return;
     const body=el('div','cards');
     if(!rows.length)body.append(el('div','empty',showRemoved?'':(filter==='focus'?'当前没有进行中的会话':'拖到这里')));
     const laneCount={};for(const i of rows){const t=clean(i.title);laneCount[t]=(laneCount[t]||0)+1}
-    for(const g of groupRows(rows))body.append(groupEl(name,g,laneCount));
+    const forceOpen=filter!=='all'||Boolean(groupFilter)||Boolean($('#search').value.trim());
+    for(const g of groupRows(rows))body.append(groupEl(name,g,laneCount,forceOpen));
     col.append(body);
     col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('over')});col.addEventListener('dragleave',e=>{if(!col.contains(e.relatedTarget))col.classList.remove('over')});
     col.addEventListener('drop',e=>{e.preventDefault();col.classList.remove('over');const id=e.dataTransfer.getData('text/plain'),it=items.find(x=>x.id===id);dragging=false;if(it&&colOf(it)!==name)update(id,{state:name});else render()});
@@ -420,7 +421,10 @@ function render(){if(dragging)return;
   $('#removed').setAttribute('aria-pressed',String(showRemoved));$('#banner').classList.toggle('hidden',!showRemoved);
   const f=document.activeElement;if(openId&&!($('#drawer').contains(f)&&/^(INPUT|TEXTAREA)$/.test(f.tagName)))renderDrawer()}
 
-function openDrawer(id){openId=id;const seen=items.find(x=>x.id===id);if(seen&&seen.unread)update(id,{mark_read:true,read_generation:seen.generation,read_cursor:seen.cursor});renderDrawer(true);document.querySelectorAll('.card').forEach(c=>c.classList.toggle('sel',c.dataset.id===id))}
+function openDrawer(id){openId=id;const seen=items.find(x=>x.id===id);
+  if(seen&&seen.unread)update(id,{mark_read:true,read_generation:seen.generation,read_cursor:seen.cursor});
+  if(seen&&seen.pending&&seen.summary)update(id,{attention_generation:seen.summary.generation,attention_position:seen.summary.position});
+  renderDrawer(true);document.querySelectorAll('.card').forEach(c=>c.classList.toggle('sel',c.dataset.id===id))}
 function closeDrawer(){openId=null;$('#drawer').classList.remove('open');$('#scrim').classList.remove('on');$('#drawer').setAttribute('aria-hidden','true');document.querySelectorAll('.card.sel').forEach(c=>c.classList.remove('sel'))}
 function renderDrawer(){const i=items.find(x=>x.id===openId);if(!i)return;const d=$('#drawer');d.replaceChildren();
   const head=el('div','dh'),dot=el('span','st '+execOf(i));

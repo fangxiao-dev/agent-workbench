@@ -484,6 +484,28 @@ def test_temp_dir_workers_stay_off_the_board(tmp_path):
     assert item['agent'] is True
 
 
+def test_attention_flag_clears_once_acknowledged(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    source.write_bytes(titled('待办') + record('user', 'go'))
+    board.sync(dbpath, home)
+    ident = board.list_items(dbpath, home)[0]['id']
+    db = board.open_db(dbpath)
+    with db:
+        db.execute("INSERT INTO summaries VALUES(?,?,0,'做到一半','需要拍板',?, '', 0)",
+                   (ident, 2, time.time()))
+    db.close()
+    item = board.list_items(dbpath, home)[0]
+    assert item['pending'] is True
+    board.update_item(dbpath, ident, {'attention_generation': item['summary']['generation'],
+                                      'attention_position': item['summary']['position']})
+    assert board.list_items(dbpath, home)[0]['pending'] is False
+    db = board.open_db(dbpath)
+    with db:
+        db.execute("UPDATE summaries SET generation=3 WHERE item_id=?", (ident,))
+    db.close()
+    assert board.list_items(dbpath, home)[0]['pending'] is True   # a newer summary raises it again
+
+
 def test_board_runs_on_any_host_adapter(tmp_path, monkeypatch):
     """The core must not care which host produced the transcripts."""
     from scripts import session_board_hosts as hosts

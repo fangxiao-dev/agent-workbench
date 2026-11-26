@@ -27,6 +27,7 @@ TOOLS = [
          "lane": {"type": "string", "enum": list(STATES) + ["全部"], "description": "只看某一栏"},
          "title_contains": {"type": "string"},
          "no_activity_days": {"type": "number", "minimum": 0, "description": "只列最近活动早于 N 天的会话"},
+         "attention_only": {"type": "boolean", "description": "只列被标记为待我处理的会话"},
          "limit": {"type": "integer", "minimum": 1, "maximum": 200}}}},
     {"name": "update_items", "description": "批量修改看板会话的状态 / 分组 / 备注 / 是否在看板隐藏。必须提供至少一个选择条件。",
      "input_schema": {"type": "object", "properties": {
@@ -34,6 +35,7 @@ TOOLS = [
          "title_contains": {"type": "string"},
          "ids": {"type": "array", "items": {"type": "string"}, "description": "直接指定的会话 ID"},
          "no_activity_days": {"type": "number", "minimum": 0, "description": "最近活动早于 N 天"},
+         "clear_attention": {"type": "boolean", "description": "清除这些会话的待我处理标记"},
          "state": {"type": "string", "enum": list(STATES)},
          "group_name": {"type": "string"},
          "note": {"type": "string"},
@@ -72,7 +74,11 @@ def _rows(db_path: Path, home: Path) -> list[dict]:
     out = []
     days = sb.recent_days(db)
     for row in db.execute("""SELECT id,title,cwd,group_name,note,state,source_time,hidden,entrypoint,human,
-                                    (SELECT MAX(event_time) FROM events WHERE item_id=items.id) AS last_event
+                                    attention_generation, attention_position,
+                                    (SELECT MAX(event_time) FROM events WHERE item_id=items.id) AS last_event,
+                                    (SELECT attention FROM summaries WHERE item_id=items.id) AS attention,
+                                    (SELECT generation FROM summaries WHERE item_id=items.id) AS summary_generation,
+                                    (SELECT position FROM summaries WHERE item_id=items.id) AS summary_position
                              FROM items WHERE hidden=0 ORDER BY source_time DESC"""):
         if row["id"] in continued:
             continue  # continued by a newer rewind/fork file
@@ -80,7 +86,11 @@ def _rows(db_path: Path, home: Path) -> list[dict]:
             continue  # background/sub sessions stay out of scope
         runtime = live.get(row["id"], {}).get("status", "未知")
         activity = sb.parse_activity([{"event_time": row["last_event"]}]) or row["source_time"]
-        out.append({"id": row["id"], "title": row["title"] or "", "lane": "最近" if column_of(row["state"], runtime, activity, now, days) == "待查看" else column_of(row["state"], runtime, activity, now, days),
+        lane = column_of(row["state"], runtime, activity, now, days)
+        pending = bool(row["attention"] and (row["summary_generation"], row["summary_position"])
+                       > (row["attention_generation"], row["attention_position"]))
+        out.append({"id": row["id"], "title": row["title"] or "", "lane": "最近" if lane == "待查看" else lane,
+                    "pending": pending, "attention": row["attention"] or "",
                     "runtime": runtime, "days_since_activity": round((now - activity) / 86400, 1),
                     "group_name": row["group_name"], "note": row["note"], "background": bool((row["entrypoint"] or "").startswith("sdk") or (not row["title"] and not row["human"]))})
     db.close()
@@ -98,13 +108,16 @@ def list_items(db_path: Path, home: Path, args: dict) -> dict:
     if args.get("no_activity_days") is not None:
         cutoff = float(args["no_activity_days"])
         rows = [r for r in rows if r["days_since_activity"] >= cutoff]
+    if args.get("attention_only"):
+        rows = [r for r in rows if r.get("pending")]
     limit = int(args.get("limit") or 40)
     return {"count": len(rows), "items": rows[:limit]}
 
 
 def update_items(db_path: Path, home: Path, args: dict) -> dict:
     changes = {k: args[k] for k in ("state", "group_name", "note", "hidden") if k in args}
-    if not changes:
+    clear_attention = bool(args.get("clear_attention"))
+    if not changes and not clear_attention:
         raise ValueError("没有要修改的字段")
     if "state" in changes:
         if changes["state"] not in STATES:
@@ -135,7 +148,14 @@ def update_items(db_path: Path, home: Path, args: dict) -> dict:
                 for key, value in changes.items():
                     sets.append(f"{key}=?")
                     values.append(int(value) if key == "hidden" else value)
-                db.execute(f"UPDATE items SET {', '.join(sets)} WHERE id=?", (*values, row["id"]))
+                if sets:
+                    db.execute(f"UPDATE items SET {', '.join(sets)} WHERE id=?", (*values, row["id"]))
+                if clear_attention:
+                    # Acknowledge the summary that raised the flag; a newer summary raises it again.
+                    db.execute("UPDATE items SET attention_generation=ifnull("
+                               "(SELECT generation FROM summaries WHERE item_id=items.id),-1),"
+                               " attention_position=ifnull((SELECT position FROM summaries WHERE item_id=items.id),-1)"
+                               " WHERE id=?", (row["id"],))
     finally:
         db.close()
     return {"changed": len(rows), "titles": [r["title"][:30] for r in rows[:10]]}
