@@ -121,7 +121,7 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 .att{display:flex;align-items:center;gap:7px;margin:6px 0 0;color:#8a5a17;font-size:12px;font-weight:550;line-height:1.45}
 .att svg{width:14px;height:14px;flex:none;margin-top:0}
 .att span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.meta{display:flex;align-items:center;gap:7px;margin:7px 0 0;color:#66727f;font-size:11px;min-height:20px}
+.meta{display:flex;align-items:center;gap:7px;margin:7px 0 0;color:#66727f;font-size:11px}
 .chip{display:inline-flex;align-items:center;gap:5px;max-width:190px;padding:2px 7px;border-radius:var(--r1);background:#e8eef4;color:#4d5b67;font-size:11px;white-space:nowrap}
 .chip span{overflow:hidden;text-overflow:ellipsis}
 .chip.agent{background:transparent;color:#71808c;box-shadow:inset 0 0 0 1px #dbe3ea}
@@ -304,7 +304,7 @@ function card(i,dupes){
   if(i.agent){const g=el('span','chip agent');g.append(el('span','','后台'));m.append(g)}
   if(i.group_name){const g=el('span','chip',undefined);g.style.cssText=tint(i.group_name);g.append(el('span','',i.group_name));m.append(g)}
   if(i.link){const g=el('a','go');g.href=i.link;g.append('打开',icon('ext'));g.addEventListener('click',e=>{e.stopPropagation();update(i.id,{mark_read:true,read_generation:i.generation,read_cursor:i.cursor})});m.append(g)}
-  c.append(m);
+  if(m.childElementCount)c.append(m);
   c.addEventListener('click',()=>openDrawer(i.id));c.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target===c)openDrawer(i.id)});
   c.addEventListener('dragstart',e=>{dragging=true;c.classList.add('dragging');e.dataTransfer.setData('text/plain',i.id);e.dataTransfer.effectAllowed='move'});
   c.addEventListener('dragend',()=>{dragging=false;c.classList.remove('dragging');document.querySelectorAll('.col.over').forEach(x=>x.classList.remove('over'))});
