@@ -12,7 +12,6 @@ import sqlite3
 import subprocess
 import sys
 import threading
-import tempfile
 import time
 from collections import deque
 from datetime import datetime
@@ -345,14 +344,6 @@ def usage_ranges(db) -> dict:
             "7d": usage_totals(db, now - 7 * 86400)}
 
 
-def in_temp(cwd: str) -> bool:
-    """Worker CLI runs happen in the OS temp dir; the board is for desktop conversations."""
-    if not cwd:
-        return False
-    root = os.path.normcase(os.path.abspath(tempfile.gettempdir())) + os.sep
-    return os.path.normcase(os.path.abspath(cwd)).startswith(root)
-
-
 def recent_days(db) -> int:
     # How far back the 最近 lane reaches; chosen in the lane header, one day unless stored otherwise.
     row = db.execute("SELECT value FROM meta WHERE key='recent_days'").fetchone()
@@ -383,9 +374,8 @@ def list_items(db_path: Path, home: Path) -> list[dict]:
         if row["id"] in superseded:
             continue  # continued by a newer rewind/fork file
         item = dict(row)
-        # Background/sub sessions: launched through the SDK, untitled without a human start, or run from a temp dir.
-        item['agent'] = bool((row['entrypoint'] or '').startswith('sdk') or (not row['title'] and not row['human'])
-                             or in_temp(row['cwd']))
+        # Background/sub sessions are the host's call: SDK workers, untitled sessions, temp-dir runs.
+        item['agent'] = HOST.is_background(row['title'], row['entrypoint'] or '', row['human'], row['cwd'] or '')
         info = live.get(item["id"], {})
         item["runtime"] = info.get("status", "未知")
         item["link"] = info.get("link", "")
@@ -567,12 +557,15 @@ def main():
     parser.add_argument("--port", type=int, default=43188)
     parser.add_argument("--db", type=Path, required=True, help="看板数据库路径；包含会话文本，请选择私有位置")
     parser.add_argument("--claude-home", type=Path, default=Path.home() / ".claude")
+    parser.add_argument("--worker-path", action="append", default=[], metavar="DIR",
+                        help="该目录下的会话按后台 worker 处理，可重复；系统临时目录已默认包含")
     summaries = parser.add_mutually_exclusive_group()
     summaries.add_argument("--summary-command", help="JSON 字符串数组；配置后会将所选会话文本发送给此命令")
     summaries.add_argument("--ollama-model", help="启用本机 Ollama 摘要；会向本机服务发送所选会话文本")
     summaries.add_argument("--deepseek-model", nargs="?", const="deepseek-v4-flash",
                            help="启用 DeepSeek 摘要（默认 deepseek-v4-flash）；会把所选会话文本发送给 DeepSeek")
     args = parser.parse_args()
+    HOST.worker_paths = tuple(args.worker_path)
     if not 1 <= args.port <= 65535:
         parser.error("端口必须在 1 到 65535 之间")
     try:

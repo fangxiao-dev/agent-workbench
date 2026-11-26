@@ -8,9 +8,11 @@ The board core (sync, items, summaries, chat) only talks to this interface, so a
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,15 +53,28 @@ class HostAdapter:
         """Host-specific fields stored per item; the core treats them as opaque."""
         return {"entrypoint": source.entrypoint, "human": source.human, "fork_of": source.fork_of}
 
-    def is_background(self, title: str, entrypoint: str, human: int) -> bool:
+    worker_paths: tuple[str, ...] = ()
+    uses_temp = False          # True for hosts whose one-off workers run in the OS temp dir
+
+    def is_background(self, title: str, entrypoint: str, human: int, cwd: str = "") -> bool:
         """Whether an item is a worker/sub session that should stay off the board."""
-        return (entrypoint or "").startswith("sdk") or (not title and not human)
+        if (entrypoint or "").startswith("sdk") or (not title and not human):
+            return True
+        roots = (tempfile.gettempdir(), *self.worker_paths) if self.uses_temp else self.worker_paths
+        return any(under(cwd, root) for root in roots)
+
+
+def under(path: str, root: str) -> bool:
+    if not path or not root:
+        return False
+    return os.path.normcase(os.path.abspath(path)).startswith(os.path.normcase(os.path.abspath(root)) + os.sep)
 
 
 class ClaudeDesktopHost(HostAdapter):
     """Claude Code / Claude Desktop: JSONL transcripts under ~/.claude/projects plus a live-agent CLI."""
 
     name = "claude-desktop"
+    uses_temp = True   # one-off CLI workers (magpie and friends) run inside the OS temp dir
 
     def transcripts(self, home: Path) -> list[Path]:
         projects = home / "projects"
