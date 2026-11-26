@@ -38,7 +38,7 @@ def summarize(command: list[str], payload: dict, timeout: int = 60) -> dict:
             "usage": usage if isinstance(usage, dict) else None}
 
 
-def update_summaries(db_path, command: list[str], wanted: set[str] | None = None) -> None:
+def update_summaries(db_path, command: list[str], wanted: set[str] | None = None, min_gap: int = 30) -> None:
     if not _LOCK.acquire(blocking=False):
         return
     try:
@@ -57,6 +57,7 @@ def update_summaries(db_path, command: list[str], wanted: set[str] | None = None
         if wanted is not None:
             ids = [ident for ident in ids if ident in wanted]
         attempted = 0
+        now = time.time()
         for ident in ids:
             item = db.execute("SELECT * FROM items WHERE id=? AND hidden=0", (ident,)).fetchone()
             events = db.execute("SELECT generation,position,kind,text,event_time FROM events WHERE item_id=? ORDER BY generation DESC,position DESC LIMIT 12", (ident,)).fetchall()
@@ -64,8 +65,10 @@ def update_summaries(db_path, command: list[str], wanted: set[str] | None = None
                 continue
             newest = events[0]
             previous = db.execute("SELECT * FROM summaries WHERE item_id=?", (ident,)).fetchone()
+            # Only when the conversation moved since the last summary, and never faster than the refresh interval.
             if previous and ((previous['generation'], previous['position']) >= (newest['generation'], newest['position'])
-                             or (previous['error'] and time.time() - previous['attempted_at'] < 300)):
+                             or (previous['attempted_at'] and now - previous['attempted_at'] < min_gap)
+                             or (previous['error'] and now - previous['attempted_at'] < max(min_gap, 300))):
                 continue
             payload = {"title": item['title'], "note": item['note'], "scope": "最近最多12条消息",
                        "events": [{"kind": e['kind'], "text": e['text'], "time": e['event_time']} for e in reversed(events)]}

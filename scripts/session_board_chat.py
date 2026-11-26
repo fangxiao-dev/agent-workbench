@@ -27,7 +27,7 @@ TOOLS = [
          "lane": {"type": "string", "enum": list(STATES) + ["全部"], "description": "只看某一栏"},
          "title_contains": {"type": "string"},
          "no_activity_days": {"type": "number", "minimum": 0, "description": "只列最近活动早于 N 天的会话"},
-         "attention_only": {"type": "boolean", "description": "只列被标记为待我处理的会话"},
+         "attention_only": {"type": "boolean", "description": "只列被标记为需关注的会话"},
          "limit": {"type": "integer", "minimum": 1, "maximum": 200}}}},
     {"name": "update_items", "description": "批量修改看板会话的状态 / 分组 / 备注 / 是否在看板隐藏。必须提供至少一个选择条件。",
      "input_schema": {"type": "object", "properties": {
@@ -35,7 +35,7 @@ TOOLS = [
          "title_contains": {"type": "string"},
          "ids": {"type": "array", "items": {"type": "string"}, "description": "直接指定的会话 ID"},
          "no_activity_days": {"type": "number", "minimum": 0, "description": "最近活动早于 N 天"},
-         "clear_attention": {"type": "boolean", "description": "清除这些会话的待我处理标记"},
+         "clear_attention": {"type": "boolean", "description": "清除这些会话的需关注标记"},
          "state": {"type": "string", "enum": list(STATES)},
          "group_name": {"type": "string"},
          "note": {"type": "string"},

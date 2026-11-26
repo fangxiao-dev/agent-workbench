@@ -357,7 +357,7 @@ def test_summary_failure_preserves_previous_text(tmp_path):
     with source.open('ab') as stream:
         stream.write(record('assistant', 'second'))
     board.sync(dbpath, home)
-    session_board_summary.update_summaries(dbpath, [sys.executable, '-c', 'raise SystemExit(1)'])
+    session_board_summary.update_summaries(dbpath, [sys.executable, '-c', 'raise SystemExit(1)'], min_gap=0)
     summary = board.list_items(dbpath, home)[0]['summary']
     assert summary['summary'] == 'ok'
     assert summary['error'].startswith('摘要生成失败')
@@ -504,6 +504,25 @@ def test_attention_flag_clears_once_acknowledged(tmp_path):
         db.execute("UPDATE summaries SET generation=3 WHERE item_id=?", (ident,))
     db.close()
     assert board.list_items(dbpath, home)[0]['pending'] is True   # a newer summary raises it again
+
+
+def test_summary_waits_for_the_refresh_gap(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    source.write_bytes(titled() + record('assistant', 'first'))
+    board.sync(dbpath, home)
+    first = [sys.executable, '-c', 'import json; print(json.dumps({"summary": "one", "attention": ""}))']
+    second = [sys.executable, '-c', 'import json; print(json.dumps({"summary": "two", "attention": ""}))']
+    session_board_summary.update_summaries(dbpath, first, min_gap=0)
+    assert board.list_items(dbpath, home)[0]['summary']['summary'] == 'one'
+    with source.open('ab') as stream:
+        stream.write(record('assistant', 'second'))
+    board.sync(dbpath, home)
+    # a new message arrived, but the last call is inside the gap: keep the old text
+    session_board_summary.update_summaries(dbpath, second, min_gap=300)
+    assert board.list_items(dbpath, home)[0]['summary']['summary'] == 'one'
+    # past the gap it refreshes
+    session_board_summary.update_summaries(dbpath, second, min_gap=0)
+    assert board.list_items(dbpath, home)[0]['summary']['summary'] == 'two'
 
 
 def test_board_runs_on_any_host_adapter(tmp_path, monkeypatch):

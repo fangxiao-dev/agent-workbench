@@ -345,6 +345,16 @@ def usage_ranges(db) -> dict:
             "7d": usage_totals(db, now - 7 * 86400)}
 
 
+def refresh_seconds(db) -> int:
+    """How often the board syncs and may re-summarise; the page and the background loop share it."""
+    row = db.execute("SELECT value FROM meta WHERE key='refresh_seconds'").fetchone()
+    try:
+        seconds = int(row["value"]) if row else 30
+    except (TypeError, ValueError):
+        seconds = 30
+    return seconds if seconds in (30, 60, 300) else 30
+
+
 def recent_days(db) -> int:
     # How far back the 最近 lane reaches; chosen in the lane header, one day unless stored otherwise.
     row = db.execute("SELECT value FROM meta WHERE key='recent_days'").fetchone()
@@ -518,9 +528,11 @@ def make_handler(db_path: Path, home: Path, token: str, port: int, summary_comma
                 try:
                     days = recent_days(db)
                     usage = usage_ranges(db)
+                    cadence = refresh_seconds(db)
                 finally:
                     db.close()
-                return self.reply(200, {"items": list_items(db_path, home), "recent_days": days, "usage": usage})
+                return self.reply(200, {"items": list_items(db_path, home), "recent_days": days,
+                                        "usage": usage, "refresh_seconds": cadence})
             return self.reply(404, {"error": "未找到"})
 
         def do_POST(self):
@@ -548,13 +560,17 @@ def make_handler(db_path: Path, home: Path, token: str, port: int, summary_comma
                         return self.reply(502, {"error": f"助手调用失败：{exc}"})
                 if path == "/api/settings":
                     days = data.get("recent_days") if isinstance(data, dict) else None
-                    if days not in (1, 3, 7):
-                        raise ValueError("时间范围无效")
+                    cadence = data.get("refresh_seconds") if isinstance(data, dict) else None
+                    if days not in (1, 3, 7) and cadence not in (30, 60, 300):
+                        raise ValueError("设置无效")
                     db = open_db(db_path)
                     with db:
-                        db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('recent_days',?)", (str(days),))
+                        if days in (1, 3, 7):
+                            db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('recent_days',?)", (str(days),))
+                        if cadence in (30, 60, 300):
+                            db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('refresh_seconds',?)", (str(cadence),))
                     db.close()
-                    return self.reply(200, {"ok": True, "recent_days": days})
+                    return self.reply(200, {"ok": True, "recent_days": days, "refresh_seconds": cadence})
                 if path.startswith("/api/items/"):
                     update_item(db_path, path.removeprefix("/api/items/"), data)
                     return self.reply(200, {"ok": True})
@@ -595,14 +611,21 @@ def main():
     stop = threading.Event()
 
     def watch():
+        cadence = 30
         while not stop.is_set():
             try:
                 result = sync(args.db, args.claude_home)
+                db = open_db(args.db)
+                try:
+                    cadence = refresh_seconds(db)
+                finally:
+                    db.close()
                 if result.get('ok') and command:
-                    session_board_summary.update_summaries(args.db, command, summary_ids(args.db, args.claude_home))
+                    session_board_summary.update_summaries(args.db, command, summary_ids(args.db, args.claude_home),
+                                                           min_gap=cadence)
             except (OSError, sqlite3.Error):
                 print('后台同步失败；请检查数据库和会话目录权限', flush=True)
-            stop.wait(30)
+            stop.wait(cadence)
 
     threading.Thread(target=watch, daemon=True).start()
     print(f"Session 看板：http://127.0.0.1:{args.port}", flush=True)

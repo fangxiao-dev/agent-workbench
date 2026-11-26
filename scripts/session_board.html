@@ -37,7 +37,15 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 .seg button:hover{background:rgba(255,255,255,.08);color:#e8eef3}
 .seg button[aria-pressed=true]{background:rgba(255,255,255,.12);color:#fff;font-weight:650}
 #filters em{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:var(--r1);background:rgba(255,255,255,.14);color:#dbe6ee;font:500 11px/1.5 var(--f);font-style:normal;font-variant-numeric:tabular-nums}
-.right{margin-left:auto;display:flex;align-items:center;gap:10px;color:#8fa0ad;font-size:12px;font-variant-numeric:tabular-nums}
+.right{margin-left:auto;display:flex;align-items:center;gap:10px;color:#8fa0ad;font-size:12px;font-variant-numeric:tabular-nums;position:relative}
+.syncbtn{display:inline-flex;align-items:center;gap:7px;padding:4px 8px;border-radius:var(--r2);color:#8fa0ad;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.syncbtn:hover{background:rgba(255,255,255,.08);color:#eaf1f6}
+.syncbtn i{font-style:normal;font-size:9px;opacity:.7}
+.hmen{position:absolute;top:calc(100% + 8px);right:0;display:none;min-width:110px;padding:5px;border-radius:10px;background:#141b22;border:1px solid rgba(255,255,255,.1);box-shadow:0 16px 40px rgba(0,0,0,.5);z-index:30}
+.hmen.on{display:block}
+.hmen button{display:block;width:100%;padding:6px 9px;border-radius:6px;text-align:left;color:#c6d3dd;font-size:11.5px;white-space:nowrap}
+.hmen button:hover{background:rgba(255,255,255,.08);color:#fff}
+.hmen button[aria-checked=true]{color:#7fded0}
 .syncdot{width:7px;height:7px;border-radius:50%;background:#12a18b}.syncdot.bad{background:var(--danger)}
 .ib{position:relative;display:grid;place-items:center;width:30px;height:30px;border:1px solid transparent;border-radius:var(--r2);color:#a9b8c4}
 .ib:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12)}
@@ -227,8 +235,8 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 <header class="top">
   <div class="brand"><span class="logo"><i></i><i></i><i></i></span>Session <span class="z">看板</span></div>
   <label class="search"><span data-i="search"></span><input id="search" type="search" placeholder="搜索会话" aria-label="搜索会话"></label>
-  <div class="seg" id="filters" role="group" aria-label="筛选"><button data-f="all" aria-pressed="true">全部</button><button data-f="focus" aria-pressed="false" title="只看进行中的会话">专注</button><button data-f="todo" aria-pressed="false" title="AI 判定需要你拍板，或出现阻塞">待我处理<em id="todo-n"></em></button></div>
-  <div class="right"><span class="syncdot" id="syncdot"></span><span id="sync">同步中</span>
+  <div class="seg" id="filters" role="group" aria-label="筛选"><button data-f="all" aria-pressed="true">全部</button><button data-f="focus" aria-pressed="false" title="只看进行中的会话">专注</button><button data-f="todo" aria-pressed="false" title="AI 判定需要你拍板，或出现阻塞">需关注<em id="todo-n"></em></button></div>
+  <div class="right"><button class="syncbtn" id="syncbtn" type="button" aria-haspopup="menu" aria-expanded="false" title="刷新间隔"><span class="syncdot" id="syncdot"></span><span id="sync">同步中</span><i>▾</i></button><div class="hmen" id="hmen" role="menu"></div>
     <button class="ib" id="refresh" title="立即同步" aria-label="立即同步"><span data-i="refresh"></span></button>
     <button class="ib" id="agents" title="显示后台 / 子会话" aria-label="显示后台 / 子会话" aria-pressed="false"><span data-i="bot"></span><span class="n hidden" id="agents-n"></span></button>
     <button class="ib" id="ask" title="让助手整理看板" aria-label="让助手整理看板" aria-pressed="false"><span data-i="chat"></span></button>
@@ -317,7 +325,9 @@ function paintUsage(){const box=$('#usage');if(!box)return;
   [['自动整理',s],['我的指令',c]].forEach(([label,n])=>{const line=el('div');line.append(label+' ');line.append(el('b','',unit(n)));tip.append(line)});
   box.hidden=false}
 let toastTimer;function report(m){const t=$('#toast');t.textContent=m;t.classList.toggle('hidden',!m);clearTimeout(toastTimer);if(m)toastTimer=setTimeout(()=>t.classList.add('hidden'),5000)}
-async function refresh(sync=true){if(busy)return;busy=true;$('#refresh').disabled=true;try{if(sync){const s=await api('/api/sync',{});$('#sync').textContent=new Date(s.time*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+' 同步'+(s.errors?' · '+s.errors+' 项失败':'');$('#syncdot').classList.remove('bad')}const res=await api('/api/items');items=res.items;if(res.recent_days)recentDays=res.recent_days;showUsage(res.usage);render()}catch(e){$('#sync').textContent='同步失败';$('#syncdot').classList.add('bad');report('更新失败：'+e.message)}finally{busy=false;$('#refresh').disabled=false}}
+async function refresh(sync=true){if(busy)return;busy=true;$('#refresh').disabled=true;try{if(sync){const s=await api('/api/sync',{});$('#sync').textContent=new Date(s.time*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+' 同步'+(s.errors?' · '+s.errors+' 项失败':'');$('#syncdot').classList.remove('bad')}const res=await api('/api/items');items=res.items;if(res.recent_days)recentDays=res.recent_days;
+    if(res.refresh_seconds&&res.refresh_seconds!==refreshSeconds){refreshSeconds=res.refresh_seconds;armRefresh()}
+    showUsage(res.usage);render()}catch(e){$('#sync').textContent='同步失败';$('#syncdot').classList.add('bad');report('更新失败：'+e.message)}finally{busy=false;$('#refresh').disabled=false}}
 async function update(id,data){const item=items.find(i=>i.id===id),before=item&&{...item};if(item){Object.assign(item,data.mark_read?{unread:false}:data);if(data.attention_generation!=null)item.pending=false;render()}
   try{await api('/api/items/'+encodeURIComponent(id),data);refresh(false);return true}catch(e){if(item){Object.assign(item,before);render()}report('保存失败：'+e.message);return false}}
 
@@ -347,7 +357,7 @@ function groupEl(lane,g,nameCount,forceOpen){const k=lane+'|'+g.root,closed=!for
   const w=el('div','group'),h=el('button','grp');h.type='button';h.setAttribute('aria-expanded',String(!closed));h.title='工作区：'+g.root;
   const chev=icon('chev');chev.classList.add('chev');h.append(chev,icon('folder'),el('span','nm',g.name));
   const need=g.rows.filter(pending).length,fresh=g.rows.filter(i=>i.unread).length;
-  if(need)h.append(el('span','agg need',need+' 待处理'));if(fresh)h.append(el('span','agg fresh',fresh+' 新结果'));
+  if(need)h.append(el('span','agg need',need+' 需关注'));if(fresh)h.append(el('span','agg fresh',fresh+' 新结果'));
   if(need)h.title+=' · '+need+' 个需要你拍板';
   h.onclick=()=>{fold[k]=!closed;localStorage.setItem('board.fold',JSON.stringify(fold));render()};w.append(h);
   if(!closed){const l=el('div','glist'),n=cap[k]||8;g.rows.slice(0,n).forEach(i=>l.append(card(i,nameCount[clean(i.title)])));
@@ -491,7 +501,21 @@ $('#removed').onclick=()=>{showRemoved=!showRemoved;render()};
 let resizeTimer=0;
 addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(!dragging)render()},120)});
 document.querySelectorAll('#filters button').forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll('#filters button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));render()});
-refresh();setInterval(()=>refresh(),30000);
+const REFRESH=[[30,'30 秒'],[60,'1 分钟'],[300,'5 分钟']];
+let refreshSeconds=30,refreshTimer=0;
+function armRefresh(){clearTimeout(refreshTimer);refreshTimer=setTimeout(async()=>{await refresh();armRefresh()},refreshSeconds*1000)}
+(function(){
+  const menu=$('#hmen'),btn=$('#syncbtn');
+  REFRESH.forEach(([secs,label])=>{const b=el('button');b.type='button';b.dataset.s=String(secs);b.setAttribute('role','menuitemradio');b.textContent=label;
+    b.onclick=async()=>{menu.querySelectorAll('button').forEach(x=>x.setAttribute('aria-checked',String(x.dataset.s===String(secs))));
+      await setRefresh(secs);menu.classList.remove('on');btn.setAttribute('aria-expanded','false')};menu.append(b)});
+  btn.onclick=e=>{e.stopPropagation();const open=menu.classList.toggle('on');btn.setAttribute('aria-expanded',String(open));
+    if(open)menu.querySelectorAll('button').forEach(x=>x.setAttribute('aria-checked',String(x.dataset.s===String(refreshSeconds))))};
+  document.addEventListener('click',e=>{if(!menu.contains(e.target)&&e.target!==btn){menu.classList.remove('on');btn.setAttribute('aria-expanded','false')}});
+})();
+async function setRefresh(secs){refreshSeconds=secs;armRefresh();
+  try{await api('/api/settings',{refresh_seconds:secs})}catch(e){report('刷新间隔保存失败：'+e.message)}}
+refresh().finally(armRefresh);
 </script><script>
 /* Background: a jittered lattice of dots that leans away from the cursor.
    A fixed canvas, so the frosted lanes have something to show through. */
