@@ -1,10 +1,14 @@
 # Session 看板：本地运行
 
-可在任意工作目录运行：
+看板代码只在 `feat/session-board` 分支上，主仓库切到别的分支时这些文件就不在工作区里，正在跑的服务读不到页面会直接报错。所以从独立 worktree 启动：
 
 ```powershell
-python D:\CodeSpace\agent-workbench\scripts\session_board.py --db "D:\vibe-code-life\SessionBoard\board.sqlite3"
+git -C D:\CodeSpace\agent-workbench worktree add D:\vibe-code-life\SessionBoard\app feat/session-board   # 仅首次
+python D:\vibe-code-life\SessionBoard\app\scripts\session_board.py --db "D:\vibe-code-life\SessionBoard\board.sqlite3" --deepseek-model deepseek-v4-flash
 ```
+
+改动看板代码要去这个 worktree（`D:\vibe-code-life\SessionBoard\app`）提交，主仓库那份只在切到 `feat/session-board` 时才存在。服务在启动时把 Python 模块读进内存，但页面 HTML 每次请求都从磁盘读，所以改 HTML 刷新即可生效，改 Python 要重启。
+
 
 打开程序输出的 `http://127.0.0.1:43188`。进程默认每 30 秒同步，页面关闭后仍继续；按 Ctrl+C 停止服务。顶栏的同步时间可以点开选刷新间隔（30 秒 / 1 分钟 / 5 分钟），页面和后台循环共用同一个值，记在看板库里。默认仅发现最近七天有活动的本机 Claude session；已有 item 的用户设置不会因为超出扫描窗口被移除。首次发现的 session 仅读取记录末尾一段，界面会显示覆盖限制。
 
