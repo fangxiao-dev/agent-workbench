@@ -46,11 +46,7 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 .ib .n{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 4px;border-radius:var(--pill);background:rgba(255,255,255,.16);color:#e6eef4;font-size:10px;line-height:15px;text-align:center;font-variant-numeric:tabular-nums}
 
 /* ---- page head ---- */
-.intro{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:24px var(--gutter) 0}
-.intro h1{margin:0 0 6px;font-size:27px;font-weight:650;letter-spacing:-.9px;color:#f2f7fa}
-.intro .sub{margin:0;color:#8fa0ad;font-size:13px}
-.intro .hint{color:#7f8f9c;font-size:12px;white-space:nowrap;padding-bottom:3px}
-.groups{display:flex;gap:6px;padding:16px var(--gutter) 0;flex-wrap:wrap}.groups:empty{display:none}
+.groups{display:flex;gap:6px;padding:30px var(--gutter) 0;flex-wrap:wrap}.groups:empty{display:none}
 .gchip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid rgba(255,255,255,.12);border-radius:var(--r2);background:rgba(255,255,255,.05);color:#b9c7d2;font-size:12px}
 .gchip:hover{background:rgba(255,255,255,.1);color:#eef3f7}
 .gchip[aria-pressed=true]{background:#eef3f7;border-color:#eef3f7;color:#16202a;font-weight:650}
@@ -220,9 +216,9 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 .utip{padding:7px 10px;line-height:1.65;color:#c6d3dd;white-space:nowrap;font-variant-numeric:tabular-nums}.utip b{color:#eaf1f6;font-weight:600}
 .usage.menu .umen{display:block}.usage.menu .utip{display:none}.usage:hover .utip{display:block}
 
-@media(max-width:1100px){.top{gap:12px}.search{min-width:150px}.intro{padding-top:18px}.intro h1{font-size:23px}}
+@media(max-width:1100px){.top{gap:12px}.search{min-width:150px}}
 @media(max-width:1100px){.board{grid-template-columns:none!important;grid-auto-flow:column;grid-auto-columns:minmax(300px,86vw);overflow-x:auto;scroll-snap-type:x mandatory}
-  .col{scroll-snap-align:start}.archive{grid-auto-flow:row}.top,.groups,.intro,.banner{padding-left:18px;padding-right:18px}.board{padding-left:18px;padding-right:18px}}
+  .col{scroll-snap-align:start}.archive{grid-auto-flow:row}.top,.groups,.banner{padding-left:18px;padding-right:18px}.board{padding-left:18px;padding-right:18px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 #bg{position:fixed;inset:0;z-index:0;display:block;pointer-events:none}
 .page{position:relative;z-index:1}
@@ -239,7 +235,6 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
     <button class="ib" id="removed" title="已移除" aria-label="已移除" aria-pressed="false"><span data-i="trash"></span><span class="n hidden" id="removed-n"></span></button></div>
 </header>
 <main class="page">
-<div class="intro"><div><h1>工作台</h1><p class="sub">关注正在发生的事，继续手头的工作。</p></div><span class="hint" id="intro-hint"></span></div>
 <div class="groups" id="groups"></div><div class="banner hidden" id="banner">正在查看已移除的会话，点开可恢复。</div>
 <main class="board" id="board"></main>
 </main>
@@ -419,7 +414,6 @@ function render(){if(dragging)return;
   const gs=$('#groups'),counts=new Map();items.filter(i=>Boolean(i.hidden)===showRemoved&&i.group_name).forEach(i=>counts.set(i.group_name,(counts.get(i.group_name)||0)+1));
   if(groupFilter&&!counts.has(groupFilter))groupFilter='';
   gs.replaceChildren();if(counts.size){const mk=(label,val,n)=>{const b=el('button','gchip');b.setAttribute('aria-pressed',String(groupFilter===val));b.append(label);if(n!==undefined)b.append(el('b','',String(n)));b.onclick=()=>{groupFilter=val;render()};gs.append(b)};mk('全部分组','');[...counts].sort().forEach(([g,n])=>mk(g,g,n))}
-  const hint=$('#intro-hint');if(hint)hint.textContent=vis.length+' 个会话 · '+vis.filter(pending).length+' 项待处理';
   const tn=items.filter(i=>!i.hidden&&!i.agent&&pending(i)).length;const te=$('#todo-n');te.textContent=tn?String(tn):'';te.classList.toggle('hidden',!tn);
   const an=items.filter(i=>i.agent&&!i.hidden).length;$('#agents-n').textContent=an;$('#agents-n').classList.toggle('hidden',!an);$('#agents').setAttribute('aria-pressed',String(showAgents));
   const rn=items.filter(i=>i.hidden).length;$('#removed-n').textContent=rn;$('#removed-n').classList.toggle('hidden',!rn);
