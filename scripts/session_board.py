@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 from collections import deque
+from datetime import datetime
 try:
     from scripts import session_board_chat, session_board_hosts, session_board_summary
 except ModuleNotFoundError:
@@ -304,6 +305,16 @@ def superseded_ids(db_path: Path) -> set[str]:
     return {parent for parent in parents if parent in ids}
 
 
+def parse_activity(events: list[dict]) -> float:
+    for event in events:
+        stamp = event.get("event_time") or ""
+        try:
+            return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            continue
+    return 0.0
+
+
 def list_items(db_path: Path, home: Path) -> list[dict]:
     db = open_db(db_path)
     live = live_sessions(home)
@@ -322,6 +333,9 @@ def list_items(db_path: Path, home: Path) -> list[dict]:
         item["title"] = item["title"] or info.get("name") or ""
         item["events"] = [dict(event) for event in db.execute(
             "SELECT generation,position,kind,text,event_time FROM events WHERE item_id=? ORDER BY generation DESC,position DESC LIMIT 8", (item["id"],))]
+        # Activity means the last real message: the host also rewrites bookkeeping lines, which bump the file
+        # mtime without anything happening in the conversation.
+        item["activity"] = parse_activity(item["events"]) or item["source_time"]
         if not item["title"]:
             # Untitled sessions still need a recognizable label; derive one from the first human message.
             first = next((e["text"] for e in reversed(item["events"]) if e["kind"] == "user"), "")
@@ -388,13 +402,16 @@ def summary_ids(db_path: Path, home: Path) -> set[str]:
     db = open_db(db_path)
     wanted = set()
     try:
-        for row in db.execute("SELECT id,title,entrypoint,human,state,source_time FROM items WHERE hidden=0"):
+        for row in db.execute("""SELECT id,title,entrypoint,human,state,source_time,
+                              (SELECT MAX(event_time) FROM events WHERE item_id=items.id) AS last_event
+                              FROM items WHERE hidden=0"""):
             if (row['entrypoint'] or '').startswith('sdk') or (not row['title'] and not row['human']):
                 continue
             if (row['title'] or '').strip().lower().startswith('btw'):
                 continue
+            activity = parse_activity([{'event_time': row['last_event']}]) or row['source_time']
             column = session_board_chat.column_of(row['state'], live.get(row['id'], {}).get('status', '未知'),
-                                                  row['source_time'], time.time())
+                                                  activity, time.time())
             if column == '进行中':
                 wanted.add(row['id'])
     finally:

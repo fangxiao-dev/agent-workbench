@@ -246,7 +246,8 @@ const icon=n=>{const s=document.createElementNS('http://www.w3.org/2000/svg','sv
 const STATES=[['进行中','run'],['待查看','todo'],['已完成','done'],['暂不关注','mute','搁置']];
 // Untriaged ('自动') items are placed by facts: running -> in progress, active within a day -> to review, else shelved.
 const ACTIVE=30*60; // recent activity keeps a session in 进行中, but it is not proof the agent is working
-const ageOf=i=>Date.now()/1000-i.source_time;
+const act=i=>i.activity||i.source_time;  // last real message, not the file mtime the host keeps rewriting
+const ageOf=i=>Date.now()/1000-act(i);
 const colOf=i=>i.state!=='自动'?i.state:(i.runtime==='运行中'||ageOf(i)<=ACTIVE)?'进行中':ageOf(i)<86400?'待查看':'暂不关注';
 const EXEC={exec:'执行中',done:'本轮结束',idle:'空闲',unk:'状态未知',active:'近期活跃'};
 // only claim what the host can prove: busy, finished its turn (idle with an unread result), idle, or unknown
@@ -294,7 +295,7 @@ function card(i,dupes){
   const c=el('article','card'+(i.runtime==='运行中'?' run':'')+(attention(i)?' warn':'')+(i.id===openId?' sel':''));c.tabIndex=0;c.draggable=true;c.dataset.id=i.id;
   const r=el('div','row');const ek=execOf(i),d=el('span','st '+ek);d.title=EXEC[ek]+(ek==='active'?'（最近 30 分钟有活动）':'');
   const h3=el('h3','title',clean(i.title).slice(0,120));if(dupes&&dupes>1){const tag=el('span','dupe','·'+i.id.slice(0,4));tag.title='同名会话，用 ID 前缀区分';h3.append(tag)}
-  r.append(d,h3,el('time','t',ago(i.source_time)));if(i.unread){const n=el('span','new');n.title='有新内容';r.append(n)}c.append(r);
+  r.append(d,h3,el('time','t',ago(act(i))));if(i.unread){const n=el('span','new');n.title='有新内容';r.append(n)}c.append(r);
   const p=preview(i);if(p.text){const pv=el('p','pv'+(p.ai?' ai':'')+(p.stale?' stale':''));if(p.ai){const mk=el('span','mk');mk.append(icon('spark'));pv.append(mk)}pv.append(p.text);if(previewOpen.has(i.id))pv.classList.add('open');
     pv.addEventListener('mouseenter',()=>{if(pv.dataset.clip)showTip(pv,p.text)});
     pv.addEventListener('mouseleave',hideTip);c.append(pv)}
@@ -310,7 +311,7 @@ function card(i,dupes){
   return c}
 
 function groupRows(rows){const m=new Map();for(const i of rows){const r=rootOf(i);if(!m.has(r))m.set(r,{root:r,name:dirName(r),rows:[]});m.get(r).rows.push(i)}
-  const live=g=>g.rows.some(i=>i.runtime==='运行中'),last=g=>Math.max(...g.rows.map(i=>i.source_time));
+  const live=g=>g.rows.some(i=>i.runtime==='运行中'),last=g=>Math.max(...g.rows.map(act));
   return [...m.values()].sort((a,b)=>live(b)-live(a)||last(b)-last(a))}
 function groupEl(lane,g,nameCount){const k=lane+'|'+g.root,closed=k in fold?fold[k]:['暂不关注','已完成'].includes(lane);
   const w=el('div','group'),h=el('button','grp');h.type='button';h.setAttribute('aria-expanded',String(!closed));h.title='工作区：'+g.root;
@@ -335,7 +336,7 @@ function visible(){const q=$('#search').value.toLowerCase().trim();
 function render(){if(dragging)return;
   const vis=visible(),board=$('#board'),top=board.scrollLeft,collapsed=[];board.replaceChildren();
   for(const [name,tone,label] of STATES){
-    const rows=vis.filter(i=>colOf(i)===name).sort((a,b)=>(b.runtime==='运行中')-(a.runtime==='运行中')||b.source_time-a.source_time);
+    const rows=vis.filter(i=>colOf(i)===name).sort((a,b)=>(b.runtime==='运行中')-(a.runtime==='运行中')||act(b)-act(a));
     if(colCollapsed(name)){collapsed.push({name,label:label||name,count:rows.length,need:rows.some(pending)});continue}
     const col=el('section','col');col.dataset.tone=tone;
     const h=el('button','colhead');h.type='button';h.title='收起'+(label||name);h.setAttribute('aria-label',h.title);
@@ -384,7 +385,7 @@ function openDrawer(id){openId=id;renderDrawer(true);document.querySelectorAll('
 function closeDrawer(){openId=null;$('#drawer').classList.remove('open');$('#scrim').classList.remove('on');$('#drawer').setAttribute('aria-hidden','true');document.querySelectorAll('.card.sel').forEach(c=>c.classList.remove('sel'))}
 function renderDrawer(){const i=items.find(x=>x.id===openId);if(!i)return;const d=$('#drawer');d.replaceChildren();
   const head=el('div','dh'),dot=el('span','st '+execOf(i));
-  head.append(dot,EXEC[execOf(i)]+' · '+ago(i.source_time));
+  head.append(dot,EXEC[execOf(i)]+' · '+ago(act(i)));
   const saved=el('span','saved');head.append(saved);
   const x=el('button','ib');x.title='关闭';x.setAttribute('aria-label','关闭');x.append(icon('close'));x.onclick=closeDrawer;head.append(x);
   d.append(head,el('h2','',clean(i.title).slice(0,160)));
