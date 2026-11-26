@@ -465,10 +465,13 @@ def test_compacted_session_links_through_host_conversation(tmp_path):
     (home / 'sessions').mkdir()
     (home / 'sessions' / '1.json').write_text(json.dumps(
         {'sessionId': child.stem, 'hostSessionId': 'local_' + parent, 'status': 'busy'}))
+    board.update_item(dbpath, parent, {'state': '进行中', 'group_name': '工作台', 'note': 'keep me'})
     board.sync(dbpath, home)
     items = board.list_items(dbpath, home)
     assert [item['id'] for item in items] == [child.stem]
     assert board.superseded_ids(dbpath) == {parent}
+    # the continuation inherits the triage the user did on the earlier card
+    assert (items[0]['state'], items[0]['group_name'], items[0]['note']) == ('进行中', '工作台', 'keep me')
 
 
 def test_board_runs_on_any_host_adapter(tmp_path, monkeypatch):

@@ -278,6 +278,14 @@ def _sync(db_path: Path, home: Path) -> dict:
             previous = info.get("previous")
             if previous:
                 db.execute("UPDATE items SET fork_of=? WHERE id=?", (previous, ident))
+        # The newer transcript replaces the earlier card, so the user's triage has to follow it.
+        for link in db.execute("SELECT id, fork_of FROM items WHERE ifnull(fork_of,'')<>''").fetchall():
+            prior = db.execute("SELECT state, group_name, note, hidden FROM items WHERE id=?",
+                               (link["fork_of"],)).fetchone()
+            if prior:
+                db.execute("UPDATE items SET state=?, group_name=?, note=?, hidden=? "
+                           "WHERE id=? AND state='自动' AND group_name='' AND note='' AND hidden=0",
+                           (prior["state"], prior["group_name"], prior["note"], prior["hidden"], link["id"]))
     with db:
         db.execute("DELETE FROM events WHERE item_id IN (SELECT id FROM items WHERE source_time < ?)", (now - WEEK,))
         db.execute("DELETE FROM summaries WHERE item_id IN (SELECT id FROM items WHERE source_time < ?)", (now - WEEK,))
