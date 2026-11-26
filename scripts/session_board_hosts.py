@@ -17,6 +17,7 @@ from pathlib import Path
 
 UUID = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
 HEAD_BYTES = 256 * 1024
+TAIL_BYTES = 256 * 1024
 
 
 @dataclass(frozen=True)
@@ -38,7 +39,7 @@ class HostAdapter:
         raise NotImplementedError
 
     def classify(self, path: Path) -> tuple[str, int, str]:
-        """(entrypoint, human_started, session this file was rewound/forked from)"""
+        """(entrypoint, human_started, session this file rewinds, forks or compacts from)"""
         raise NotImplementedError
 
     def live(self, home: Path) -> dict[str, dict]:
@@ -68,21 +69,34 @@ class ClaudeDesktopHost(HostAdapter):
     def classify(self, path: Path) -> tuple[str, int, str]:
         entry, human, parent = "", -1, ""
         refs: dict[str, int] = {}
-        with path.open("rb") as stream:
-            for line in stream.read(HEAD_BYTES).splitlines()[:400]:
+
+        def scan(block: bytes, meta: bool) -> None:
+            nonlocal entry, human
+            lines = block.splitlines()
+            for line in (lines[:400] if meta else lines):
                 try:
                     record = json.loads(line)
                 except ValueError:  # includes the line cut off at the window edge
                     continue
                 if not isinstance(record, dict):
                     continue
-                if not entry and isinstance(record.get("entrypoint"), str):
-                    entry = record["entrypoint"][:40]
-                if human < 0 and record.get("type") == "user" and not record.get("isMeta"):
-                    human = int(isinstance(record.get("origin"), dict))
+                if meta:
+                    if not entry and isinstance(record.get("entrypoint"), str):
+                        entry = record["entrypoint"][:40]
+                    if human < 0 and record.get("type") == "user" and not record.get("isMeta"):
+                        human = int(isinstance(record.get("origin"), dict))
                 ref = record.get("requestSessionId")
                 if isinstance(ref, str) and UUID.fullmatch(ref) and ref != path.stem:
                     refs[ref] = refs.get(ref, 0) + 1
+
+        with path.open("rb") as stream:
+            scan(stream.read(HEAD_BYTES), True)
+            # Compaction starts a new transcript that replays the whole conversation and only then
+            # points back at the episode it continues, so the newest link has to be read from the tail.
+            size = path.stat().st_size
+            if size > HEAD_BYTES:
+                stream.seek(size - TAIL_BYTES)
+                scan(stream.read().split(b"\n", 1)[-1], False)
         if refs:
             parent = max(refs, key=refs.get)
         return entry, max(human, 0), parent
@@ -112,9 +126,13 @@ class ClaudeDesktopHost(HostAdapter):
                 if not observed:
                     continue
                 status = "运行中" if observed.get("status") == "busy" else "空闲" if observed.get("status") == "idle" else "未知"
-                link = ("claude://claude.ai/epitaxy/" + host
-                        if isinstance(host, str) and re.fullmatch(r"local_[0-9a-f-]{36}", host, re.I) else "")
-                result[ident] = {"status": status, "link": link, "name": str(data.get("name") or "")[:200]}
+                conversation = host if isinstance(host, str) else ""
+                link = "claude://claude.ai/epitaxy/" + conversation if re.fullmatch(r"local_[0-9a-f-]{36}", conversation, re.I) else ""
+                # The Desktop conversation id outlives a compaction while the transcript id changes,
+                # so it names the earlier transcript this one continues ("" once they are the same episode).
+                previous = conversation[6:] if conversation and conversation[6:].lower() != ident.lower() else ""
+                result[ident] = {"status": status, "link": link, "name": str(data.get("name") or "")[:200],
+                                 "previous": previous}
             except (OSError, ValueError, TypeError):
                 continue
         return result

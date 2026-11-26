@@ -67,9 +67,11 @@ python D:\CodeSpacegent-workbench\scripts\session_board_cli.py set --no-activit
 
 接入新宿主（例如 Codex）只需实现一个 `HostAdapter` 子类并在 `HOSTS` 里注册，不用改同步、看板或助手逻辑。当前 `ClaudeDesktopHost` 是唯一实现，`tests/test_session_board.py::test_board_runs_on_any_host_adapter` 用一个假宿主验证了这条缝。
 
-## rewind / 分叉
+## rewind / 分叉 / 压缩
 
 Claude Code 在 rewind 或 fork 后会写新的 transcript 文件，其中记录里的 `requestSessionId` 指回原会话，Desktop 里仍是同一个会话。适配层解析出这层关系并写入 `items.fork_of`：看板只显示最新那一段，被继续的旧文件不再单独成卡；抽屉顶部提示“含 N 段历史”。若分叉点很早，旧分支独有的内容不会出现在新文件里，只会保留在磁盘上——这一点尚未在 Desktop 侧核实。
+
+上下文压缩同样会换一个 transcript 文件，但新文件先整段重放旧历史，指回旧会话的 `requestSessionId` 落在文件中段，靠读首尾都取不到；因此压缩另走一条更确定的信号：本机 session 元数据里的 `hostSessionId`（Desktop 会话 id）在压缩前后不变，而 `sessionId`（transcript id）会变。同步时用它把新文件链接到旧文件，效果与 rewind 一致。应用内“新建分叉会话”会分配新的 Desktop 会话 id，因此不会被并掉。
 
 ### 卡片区域规格
 

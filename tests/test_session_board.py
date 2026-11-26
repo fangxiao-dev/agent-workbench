@@ -321,7 +321,7 @@ def test_summary_ids_limited_to_running_lane(tmp_path, monkeypatch):
     source.write_bytes(record('user', 'go', entrypoint='claude-desktop', origin={'kind': 'human'}))
     board.sync(dbpath, home)
     ident = board.list_items(dbpath, home)[0]['id']
-    live = lambda status: (lambda _home: {ident: {'status': status, 'link': '', 'name': ''}})
+    live = lambda status: (lambda _home, fresh=False: {ident: {'status': status, 'link': '', 'name': ''}})
 
     monkeypatch.setattr(board, 'live_sessions', live('运行中'))
     assert board.summary_ids(dbpath, home) == {ident}
@@ -437,6 +437,39 @@ def test_rewound_session_merges_into_one_card(tmp_path):
     assert len(items) == 1
     assert items[0]['id'] == child.stem and items[0]['forks'] == 1
     assert board.superseded_ids(dbpath) == {parent}
+
+def test_compacted_session_merges_into_one_card(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    parent = source.stem
+    source.write_bytes(titled('同一个会话') + record('user', 'first'))
+    board.sync(dbpath, home)
+    # compaction replays the whole history into a new file and only then points back at the old one
+    child = source.with_name('33333333-3333-4333-8333-333333333333.jsonl')
+    filler = record('user', 'x' * 4000) * 80  # taller than the head window classify reads
+    child.write_bytes(titled('同一个会话') + filler + record('assistant', 'continued', requestSessionId=parent))
+    board.sync(dbpath, home)
+    items = board.list_items(dbpath, home)
+    assert len(items) == 1
+    assert items[0]['id'] == child.stem
+    assert board.superseded_ids(dbpath) == {parent}
+
+
+def test_compacted_session_links_through_host_conversation(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    parent = source.stem
+    source.write_bytes(record('user', 'first'))
+    board.sync(dbpath, home)
+    # compaction keeps the Desktop conversation id and starts a new transcript id
+    child = source.with_name('44444444-4444-4444-8444-444444444444.jsonl')
+    child.write_bytes(record('user', 'first') + record('assistant', 'continued'))
+    (home / 'sessions').mkdir()
+    (home / 'sessions' / '1.json').write_text(json.dumps(
+        {'sessionId': child.stem, 'hostSessionId': 'local_' + parent, 'status': 'busy'}))
+    board.sync(dbpath, home)
+    items = board.list_items(dbpath, home)
+    assert [item['id'] for item in items] == [child.stem]
+    assert board.superseded_ids(dbpath) == {parent}
+
 
 def test_board_runs_on_any_host_adapter(tmp_path, monkeypatch):
     """The core must not care which host produced the transcripts."""

@@ -56,6 +56,7 @@ def open_db(path: Path) -> sqlite3.Connection:
       kind TEXT NOT NULL, text TEXT NOT NULL, event_time TEXT NOT NULL DEFAULT '',
       PRIMARY KEY(item_id, generation, position)
     );
+    CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS summaries (
       item_id TEXT PRIMARY KEY, generation INTEGER NOT NULL, position INTEGER NOT NULL,
       summary TEXT NOT NULL, attention TEXT NOT NULL, created_at REAL NOT NULL,
@@ -205,11 +206,11 @@ def sync_file(db: sqlite3.Connection, path: Path, now: float) -> None:
                       (SELECT rowid FROM events WHERE item_id=? ORDER BY generation DESC,position DESC LIMIT 40)""", (ident, ident))
 
 
-def live_sessions(home: Path) -> dict:
+def live_sessions(home: Path, fresh: bool = False) -> dict:
     key = str(home.resolve())
     with LIVE_LOCK:
         cached = LIVE_CACHE.get(key)
-        if cached and time.monotonic() - cached[0] < 5:
+        if cached and not fresh and time.monotonic() - cached[0] < 5:
             return cached[1]
         result = _live_sessions(home)
         LIVE_CACHE[key] = (time.monotonic(), result)
@@ -232,6 +233,10 @@ def _sync(db_path: Path, home: Path) -> dict:
     if not HOST.transcripts(home):
         db.close()
         return {"ok": False, "error": f"宿主 {HOST.name} 没有可读取的会话"}
+    relink = db.execute("SELECT 1 FROM meta WHERE key='links'").fetchone() is None
+    if relink:  # links now also follow compaction; recompute every transcript's parent once
+        with db:
+            db.execute("UPDATE items SET entrypoint=NULL")
     for old in db.execute("SELECT id,path FROM items WHERE entrypoint IS NULL").fetchall():
         try:
             entry, human, parent = classify(Path(old['path']))
@@ -239,6 +244,9 @@ def _sync(db_path: Path, home: Path) -> dict:
             entry, human, parent = '', 0, ''
         with db:
             db.execute("UPDATE items SET entrypoint=?,human=?,fork_of=? WHERE id=?", (entry, human, parent, old['id']))
+    if relink:
+        with db:
+            db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('links','2')")
     try:
         known = {row['id']: row for row in db.execute("SELECT id,source_time,cursor,error,identity FROM items")}
         for path in HOST.transcripts(home):
@@ -264,6 +272,12 @@ def _sync(db_path: Path, home: Path) -> dict:
     except OSError:
         db.close()
         return {"ok": False, "error": "扫描会话目录失败"}
+    # A session that continues another one (compaction keeps the Desktop conversation, not the file id).
+    with db:
+        for ident, info in live_sessions(home, fresh=True).items():
+            previous = info.get("previous")
+            if previous:
+                db.execute("UPDATE items SET fork_of=? WHERE id=?", (previous, ident))
     with db:
         db.execute("DELETE FROM events WHERE item_id IN (SELECT id FROM items WHERE source_time < ?)", (now - WEEK,))
         db.execute("DELETE FROM summaries WHERE item_id IN (SELECT id FROM items WHERE source_time < ?)", (now - WEEK,))
@@ -272,7 +286,7 @@ def _sync(db_path: Path, home: Path) -> dict:
 
 
 def superseded_ids(db_path: Path) -> set[str]:
-    """Sessions that a newer rewind/fork file continues; they should not appear as separate cards."""
+    """Sessions a newer rewind/fork/compaction file continues; they should not appear as separate cards."""
     db = open_db(db_path)
     try:
         ids = {row["id"] for row in db.execute("SELECT id FROM items")}
