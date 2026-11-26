@@ -72,8 +72,8 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 .mchip{--c:#7BAEE8;display:inline-flex;align-items:center;max-width:112px;padding:2px 8px;border:0;border-radius:999px;font:inherit;font-size:11px;background:color-mix(in srgb,var(--c) 20%,transparent);color:color-mix(in srgb,var(--c) 55%,#1c2732);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mchip span{overflow:hidden;text-overflow:ellipsis}
 .mchip:hover{background:color-mix(in srgb,var(--c) 32%,transparent)}
-.mchip.add{justify-content:center;width:20px;height:20px;padding:0;background:none;box-shadow:inset 0 0 0 1px rgba(30,45,60,.24);color:#4d5b67;font-size:14px;line-height:1;opacity:.8}
-.mchip.add:hover{opacity:1;background:rgba(30,45,60,.08)}
+.mchip.add{padding:1px 8px;background:none;box-shadow:inset 0 0 0 1px rgba(30,45,60,.22);color:#4d5b67;font-size:11px;opacity:.75}
+.mchip.add:hover{opacity:1;background:rgba(30,45,60,.06)}
 .tmenu{position:fixed;z-index:60;min-width:200px;max-height:320px;overflow:auto;padding:6px;border-radius:10px;background:#141b22;border:1px solid rgba(255,255,255,.12);box-shadow:0 18px 44px rgba(0,0,0,.55)}
 .tmenu button{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border-radius:6px;background:none;border:0;color:#c6d3dd;font-size:12px;text-align:left}
 .tmenu button:hover{background:rgba(255,255,255,.08);color:#fff}
@@ -385,7 +385,7 @@ function card(i,dupes){
   const m=el('div','meta');
   if(i.agent){const g=el('span','chip agent');g.append(el('span','','后台'));m.append(g)}
   for(const t of (i.tags||[]).slice(0,3)){const b=el('button','mchip');b.style.setProperty('--c',t.color);b.title='更换或移除标签';b.append(el('span','',t.name));b.onclick=e=>{e.stopPropagation();tagMenu(b,i)};m.append(b)}
-  if((i.tags||[]).length<3){const b=el('button','mchip add');b.title='添加标签';b.append('+');b.onclick=e=>{e.stopPropagation();tagMenu(b,i)};m.append(b)}
+  if((i.tags||[]).length<3){const b=el('button','mchip add','+ 标签');b.title='给这个会话打标签';b.onclick=e=>{e.stopPropagation();tagMenu(b,i)};m.append(b)}
   if(i.link){const g=el('a','go');g.href=i.link;g.append('打开',icon('ext'));g.addEventListener('click',e=>{e.stopPropagation();update(i.id,{mark_read:true,read_generation:i.generation,read_cursor:i.cursor})});c.append(g)}
   if(m.childElementCount)c.append(m);
   c.addEventListener('click',()=>openDrawer(i.id));c.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target===c)openDrawer(i.id)});
