@@ -63,7 +63,8 @@ def main() -> None:
         raise SystemExit("模型返回的 JSON 无法解析") from exc
     summary = " ".join(str(result["summary"]).split())
     # keep the full text here; the card clamps visually and the drawer shows it all
-    print(json.dumps({"summary": summary[:400], "attention": str(result.get("attention", ""))[:60]}, ensure_ascii=False))
+    print(json.dumps({"summary": summary[:400], "attention": str(result.get("attention", ""))[:60],
+                      "usage": data.get("usage") or {}}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

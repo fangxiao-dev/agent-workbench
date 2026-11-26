@@ -10,6 +10,14 @@ import time
 _LOCK = threading.Lock()
 
 
+def _record_usage(db_path, usage: dict) -> None:
+    try:
+        from scripts import session_board as board  # imported late: the board imports this module
+    except ModuleNotFoundError:
+        import session_board as board
+    board.add_usage(db_path, "summary", usage)
+
+
 def summarize(command: list[str], payload: dict, timeout: int = 60) -> dict:
     if not command or any(not isinstance(arg, str) or not arg for arg in command):
         raise ValueError("摘要命令格式无效")
@@ -25,7 +33,9 @@ def summarize(command: list[str], payload: dict, timeout: int = 60) -> dict:
         raise ValueError("摘要命令没有返回有效 JSON") from exc
     if not isinstance(response, dict) or not isinstance(response.get("summary"), str) or not isinstance(response.get("attention", ""), str):
         raise ValueError("摘要结果需要 summary 和 attention 文本")
-    return {"summary": response["summary"][:2000], "attention": response.get("attention", "")[:1000]}
+    usage = response.get("usage")
+    return {"summary": response["summary"][:2000], "attention": response.get("attention", "")[:1000],
+            "usage": usage if isinstance(usage, dict) else None}
 
 
 def update_summaries(db_path, command: list[str], wanted: set[str] | None = None) -> None:
@@ -61,6 +71,8 @@ def update_summaries(db_path, command: list[str], wanted: set[str] | None = None
                        "events": [{"kind": e['kind'], "text": e['text'], "time": e['event_time']} for e in reversed(events)]}
             try:
                 result = summarize(command, payload)
+                if result.get("usage"):
+                    _record_usage(db_path, result["usage"])
                 with db:
                     db.execute("""INSERT INTO summaries VALUES(?,?,?,?,?,?, '', ?) ON CONFLICT(item_id) DO UPDATE SET
                       generation=excluded.generation,position=excluded.position,summary=excluded.summary,

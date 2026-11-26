@@ -141,6 +141,15 @@ def update_items(db_path: Path, home: Path, args: dict) -> dict:
     return {"changed": len(rows), "titles": [r["title"][:30] for r in rows[:10]]}
 
 
+def _count_usage(db_path: Path, usage) -> None:
+    if not isinstance(usage, dict):
+        return
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from scripts import session_board as sb
+    sb.add_usage(db_path, "chat", usage)
+
+
 def run_tool(db_path: Path, home: Path, name: str, args: dict) -> dict:
     if name == "list_items":
         return list_items(db_path, home, args or {})
@@ -160,6 +169,7 @@ def chat(db_path: Path, home: Path, message: str, timeout: int = 90) -> dict:
                                                   "anthropic-version": "2023-06-01"}, method="POST")
         with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=timeout) as response:
             data = json.loads(response.read(2 * 1024 * 1024))
+        _count_usage(db_path, data.get("usage"))
         blocks = data.get("content") or []
         if data.get("stop_reason") != "tool_use":
             text = "".join(b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text").strip()
