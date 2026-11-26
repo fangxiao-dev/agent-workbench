@@ -1,206 +1,39 @@
 #!/usr/bin/env python3
-"""Deterministic kickoff state machine.
+"""Deterministic kickoff state machine CLI.
 
-Single source of truth: PIPELINE defines stages, transitions, switches, gates,
-triage loops, and per-stage principles. Both the runtime gate engine and the
-Mermaid diagram generator read directly from PIPELINE. Only Python 3 stdlib is
-used.
+Single source of truth lives in ../pipeline.json. Runtime gate evaluation lives
+in engine.py and Mermaid diagram generation lives in diagram.py. Only Python 3
+stdlib is used.
 """
 
 import argparse
-import json
 import os
 import sys
-from datetime import datetime, timezone
 
-STATE_FILENAME = "kickoff-state.json"
-DEFAULT_STAGING_DIR = os.path.join(".", "output", "kickoff")
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
 
-DIAGRAM_BEGIN = "<!-- BEGIN:PIPELINE_DIAGRAM -->"
-DIAGRAM_END = "<!-- END:PIPELINE_DIAGRAM -->"
-
-# ------------------------------------------------------------------ PIPELINE
-# Single source of truth for both runtime execution and diagram generation.
-
-PIPELINE = {
-    "name": "kickoff",
-    "initial": "init",
-    "terminal": "ready",
-    "convergence_limit": 2,
-    "high_round_limit": 4,
-    "stages": [
-        {
-            "id": "init",
-            "label": "init",
-            "note": "唯一必停点: confirm",
-            "optional_switch": None,
-            "triage": False,
-            "skills": [],
-            "principles": [
-                "向 Owner 复述目标、输入清单、环节开关与代理分工，等 Owner 明确确认后再推进（全程唯一必停点）。",
-                "把已有文档/记忆里已回答的部分先列出来，不重复劳动。",
-                "不把假设当结论：不确定的写成待确认项，而不是直接写成决定。",
-            ],
-        },
-        {
-            "id": "discover",
-            "label": "discover",
-            "note": "可选, 默认 on",
-            "optional_switch": "discover",
-            "triage": False,
-            "skills": ["req-discover"],
-            "principles": [
-                "先读材料与原型梳理未知项；本阶段不建包、不写 Decision/Spec。",
-                "有 PE 时未知项先交 PE 收敛，仅业务取舍升级 Owner。",
-                "记录冲突与缺口，产出可供 decision 阶段直接使用的依据。",
-            ],
-        },
-        {
-            "id": "decision",
-            "label": "decision",
-            "note": None,
-            "optional_switch": None,
-            "triage": True,
-            "skills": ["/impl-package:req-align"],
-            "principles": [
-                "有原型时先按主题写“原型基线”，再逐条写差异与理由。",
-                "角色=权限集合，不把“某角色能否操作”当独立业务分支。",
-                "交 Owner 裁定的事项必须已有 PE 判定。",
-                "审阅意见先四类分诊（往下钻 / 根部裁剪+人工兜底 / 交 PE / 驳回），不照单全收。",
-                "外部/合规确认（如税务师书面确认）做成上线前门控开关，不阻塞 Decision/Spec。",
-            ],
-        },
-        {
-            "id": "spec",
-            "label": "spec",
-            "note": None,
-            "optional_switch": None,
-            "triage": True,
-            "skills": ["/impl-package:req-align"],
-            "principles": [
-                "严格对齐已过门的 Decision 与原型，不新增未过门的行为合同。",
-                "改动现行规则、接口、表约束或测试入口前，先核现行代码与规则分册，不凭记忆写。",
-                "每次修订同步核对 spec.md（正文 / Rule Matrix / Journeys）与 contract-design.md 口径一致，先过 check-spec 等确定性校验再交 reviewer 复验。",
-                "续用同一 reviewer；审阅回来先分诊再改。",
-                "连续两轮都在加分支，就停下来回看原型并过 PE，判断能否从根部裁剪。",
-            ],
-        },
-        {
-            "id": "plan",
-            "label": "plan",
-            "note": "可选, 默认 on",
-            "optional_switch": "plan",
-            "triage": True,
-            "skills": ["/impl-package:impl-planning", "/impl-package:plan-review"],
-            "principles": [
-                "写 Plan 前先核实上游合同与代码/工具链现实（首稿写法与防线见 impl-planning）。",
-                "送审前先在隔离环境跑通确定性校验（如 check-spec / package init / package validate），清零格式与覆盖错误再进审阅。",
-                "按 plan-review 派发独立 plan-reviewer（大包可分轨并行），并保持 PE 参与根部裁剪；审阅意见先四类分诊再批量修订。",
-                "若修订回改了上游合同（Decision / Spec / contract-design），记轮次时加 --touched-upstream，并重跑确定性校验与受影响合同复验。",
-                "修订 material findings 后须走 focused-closure-verification 复验清零，记 --verdict clean 后过门进入 ready。",
-            ],
-        },
-        {
-            "id": "ready",
-            "label": "ready",
-            "note": None,
-            "optional_switch": None,
-            "triage": False,
-            "skills": [],
-            "principles": [
-                "用人话向 Owner 汇报：做什么 / 不做什么。",
-                "标出关键决定，PE 拍板项单独标注。",
-                "给出计划分块与顺序。",
-                "列出仍待 Owner 定事项（在哪 / 现状 / 为什么 / 建议），一句话结论：可以开工 / 还差什么。",
-                "交接实施主控时标明干净基线分支、单票局部 vs 包级门禁边界，以及票据是否保持 Draft 由实施主控初始化。",
-            ],
-        },
-    ],
-    "transitions": [
-        {
-            "src": "init",
-            "dst": "discover",
-            "when": {"discover": True},
-            "gates": ["owner_confirmed"],
-            "style": "solid",
-        },
-        {
-            "src": "init",
-            "dst": "decision",
-            "when": {"discover": False},
-            "gates": ["owner_confirmed", "pkg_bound", "role:pe?"],
-            "style": "dashed",
-        },
-        {
-            "src": "discover",
-            "dst": "decision",
-            "when": {"discover": True},
-            "gates": ["owner_confirmed", "pkg_bound", "role:pe?"],
-            "style": "solid",
-        },
-        {
-            "src": "decision",
-            "dst": "spec",
-            "when": {},
-            "gates": ["owner_confirmed", "role:reviewer", "rounds>=1", "last_round_clean"],
-            "style": "solid",
-        },
-        {
-            "src": "spec",
-            "dst": "plan",
-            "when": {"plan": True},
-            "gates": ["owner_confirmed", "role:reviewer", "rounds>=1", "last_round_clean"],
-            "style": "solid",
-        },
-        {
-            "src": "spec",
-            "dst": "ready",
-            "when": {"plan": False},
-            "gates": ["owner_confirmed", "rounds>=1", "last_round_clean"],
-            "style": "dashed",
-        },
-        {
-            "src": "plan",
-            "dst": "ready",
-            "when": {"plan": True},
-            "gates": ["owner_confirmed", "role:plan-reviewer", "rounds>=1", "last_round_clean"],
-            "style": "solid",
-        },
-    ],
-}
-
-STAGES = {s["id"]: s for s in PIPELINE["stages"]}
-PRINCIPLES = {s["id"]: s["principles"] for s in PIPELINE["stages"]}
-TRIAGE_STAGES = [s["id"] for s in PIPELINE["stages"] if s["triage"]]
-ADVANCE_TARGETS = [s["id"] for s in PIPELINE["stages"] if s["id"] != PIPELINE["initial"]]
-
-GATE_LABELS = {
-    "owner_confirmed": "owner_confirmed",
-    "pkg_bound": "pkg_bound",
-    "role:pe?": "pe(if on)",
-    "role:reviewer": "reviewer",
-    "role:plan-reviewer": "plan-reviewer",
-    "rounds>=1": "rounds>=1",
-    "last_round_clean": "last=clean",
-}
-
-FLOW = """\
-流程：
-  init -> confirm -> discover(可选,默认on) -> bind-pkg -> decision -> spec -> plan(可选,默认on) -> ready
-
-职责分工：
-  - kickoff       管编排与输入契约：状态机、角色池(pe/reviewer/plan-reviewer)、分诊轮次、阶段门禁、阶段 Skill 与原则。
-  - 下游 Skill    管单阶段方法：req-discover、/impl-package:req-align、/impl-package:impl-planning + /impl-package:plan-review。
-  - 审阅者        负责挑全漏洞（只读、独立），不替 Owner 做业务取舍；decision/spec 续用 reviewer，plan 登记独立 plan-reviewer 池。
-  - 主控 + PE     负责四类分诊与根部裁剪，把业务取舍升级给 Owner。
-
-两段式落点：
-  - init --slug 先写暂存 <staging-dir>/<slug>.json；
-  - bind-pkg 再迁到 <pkg>/kickoff-state.json 并绑定 pkg_dir。
-"""
-
-
-# ---------------------------------------------------------------- utilities
+from diagram import render_mermaid, sync_markdown_diagram  # noqa: E402
+from engine import (  # noqa: E402
+    ADVANCE_TARGETS,
+    DEFAULT_STAGING_DIR,
+    FLOW,
+    PIPELINE,
+    PRINCIPLES,
+    STAGES,
+    STATE_FILENAME,
+    TRIAGE_STAGES,
+    add_history,
+    fail,
+    gate_advance,
+    load_state,
+    next_command,
+    now,
+    resolve_state_path,
+    rounds_for,
+    save_state,
+)
 
 
 def _force_utf8():
@@ -209,267 +42,6 @@ def _force_utf8():
             stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
         except Exception:
             pass
-
-
-def now():
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def fail(msg, code=2):
-    print(f"错误: {msg}", file=sys.stderr)
-    sys.exit(code)
-
-
-def load_state(path):
-    if not path or not os.path.isfile(path):
-        fail(f"状态文件不存在: {path}")
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def save_state(path, state):
-    parent = os.path.dirname(os.path.abspath(path))
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-
-
-def add_history(state, action, **extra):
-    entry = {"action": action, "ts": now()}
-    entry.update(extra)
-    state.setdefault("history", []).append(entry)
-
-
-def resolve_state_path(args):
-    pkg = getattr(args, "pkg", None)
-    state = getattr(args, "state", None)
-    if pkg and state:
-        fail("--pkg 与 --state 只能选其一")
-    if not pkg and not state:
-        fail("必须提供 --pkg <dir> 或 --state <path>")
-    if pkg:
-        return os.path.join(pkg, STATE_FILENAME)
-    return state
-
-
-def rounds_for(state, stage):
-    return [r for r in state.get("rounds", []) if r.get("stage") == stage]
-
-
-# ----------------------------------------------------------- pipeline engine
-
-
-def _matches_when(when, switches):
-    return all(switches.get(k) == v for k, v in when.items())
-
-
-def _check_gate(gate, state, src_stage):
-    if gate == "owner_confirmed":
-        if not state.get("owner_confirmed"):
-            return "尚未 Owner 确认：先运行 confirm（owner_confirmed=false）"
-    elif gate == "pkg_bound":
-        if not state.get("pkg_dir"):
-            return "包目录未绑定：先运行 bind-pkg 或在 init 时用 --pkg"
-    elif gate == "role:pe?":
-        if state["switches"].get("pe") and not state.get("agents", {}).get("pe"):
-            return "PE 未登记：先运行 register --role pe"
-    elif gate == "role:reviewer":
-        if not state.get("agents", {}).get("reviewer"):
-            return "未登记 reviewer：先运行 register --role reviewer"
-    elif gate == "role:plan-reviewer":
-        if not state.get("agents", {}).get("plan_reviewers"):
-            return "未登记 plan-reviewer：先运行 register --role plan-reviewer --agent-id <id>"
-    elif gate == "rounds>=1":
-        if len(rounds_for(state, src_stage)) < 1:
-            return f"{src_stage} 阶段尚无分诊轮次：先运行 round --stage {src_stage}"
-    elif gate == "last_round_clean":
-        rs = rounds_for(state, src_stage)
-        if rs and rs[-1].get("verdict") != "clean":
-            verdict = rs[-1].get("verdict") or "open"
-            return (
-                f"{src_stage} 阶段最后一轮（#{rs[-1]['round']}）结论为 {verdict}，"
-                f"尚未清零：复验通过后再记录 round --stage {src_stage} --verdict clean"
-            )
-    else:
-        raise ValueError(f"未知门禁标识: {gate}")
-    return None
-
-
-def _active_outgoing(stage, switches):
-    return [
-        t for t in PIPELINE["transitions"]
-        if t["src"] == stage and _matches_when(t["when"], switches)
-    ]
-
-
-def next_command(state, state_path):
-    stage = state["stage"]
-    sw = state["switches"]
-    script = os.path.abspath(__file__)
-    p = f"python {script}"
-    pkg_dir = state.get("pkg_dir")
-    loc = f"--pkg {pkg_dir}" if pkg_dir else f"--state {os.path.abspath(state_path)}"
-
-    outgoing = _active_outgoing(stage, sw)
-    if not outgoing:
-        return "已完成 kickoff，可进入下游执行阶段。"
-
-    edge = outgoing[0]
-    for gate in edge["gates"]:
-        if gate == "owner_confirmed" and not state.get("owner_confirmed"):
-            return f"{p} confirm {loc}"
-        if gate == "pkg_bound" and not pkg_dir:
-            return f"{p} bind-pkg --state {os.path.abspath(state_path)} --pkg <包目录>"
-        if gate == "role:pe?" and sw.get("pe") and not state.get("agents", {}).get("pe"):
-            return f"{p} register {loc} --role pe --agent-id <pe-agent-id>"
-        if gate == "role:reviewer" and not state.get("agents", {}).get("reviewer"):
-            return f"{p} register {loc} --role reviewer --agent-id <reviewer-agent-id>"
-        if gate == "role:plan-reviewer" and not state.get("agents", {}).get("plan_reviewers"):
-            return f"{p} register {loc} --role plan-reviewer --agent-id <plan-reviewer-agent-id>"
-        if gate == "rounds>=1" and len(rounds_for(state, stage)) < 1:
-            return (
-                f"{p} round {loc} --stage {stage} "
-                '--verdict open|clean --summary "<本轮分诊摘要>"'
-            )
-        if gate == "last_round_clean":
-            rs = rounds_for(state, stage)
-            if rs and rs[-1].get("verdict") != "clean":
-                return (
-                    f"{p} round {loc} --stage {stage} "
-                    '--verdict clean --summary "<复验清零摘要>"'
-                )
-
-    return f"{p} advance {edge['dst']} {loc}"
-
-
-def _gate_advance(state, target, artifacts):
-    errs = []
-    sw = state["switches"]
-    stage = state["stage"]
-
-    confirm_err = _check_gate("owner_confirmed", state, stage)
-    if confirm_err:
-        errs.append(confirm_err)
-
-    for art in artifacts:
-        if not os.path.exists(art):
-            errs.append(f"声明的阶段产出不存在: {art}")
-
-    candidates = [t for t in PIPELINE["transitions"] if t["dst"] == target]
-    active = [t for t in candidates if _matches_when(t["when"], sw)]
-
-    if not active:
-        sw_name = STAGES[target].get("optional_switch")
-        if sw_name:
-            errs.append(f"{sw_name} 环节已关闭（switches.{sw_name}=false）")
-        else:
-            errs.append(f"当前开关配置下无法进入 {target}")
-        return errs
-
-    matched = next((t for t in active if t["src"] == stage), None)
-    if matched is None:
-        expected = " / ".join(t["src"] for t in active)
-        errs.append(f"当前阶段为 {stage}，进入 {target} 需处于 {expected}")
-        chosen = active[0]
-    else:
-        chosen = matched
-
-    for gate in chosen["gates"]:
-        if gate == "owner_confirmed":
-            continue
-        err = _check_gate(gate, state, chosen["src"])
-        if err:
-            errs.append(err)
-
-    return errs
-
-
-# ----------------------------------------------------------- diagram mapper
-
-
-def render_mermaid(pipeline=PIPELINE):
-    lines = ["flowchart TD"]
-    terminal = pipeline["terminal"]
-    initial = pipeline["initial"]
-    limit = pipeline["convergence_limit"]
-
-    for st in pipeline["stages"]:
-        sid = st["id"]
-        label = st["label"]
-        if st.get("note"):
-            label = f"{label}<br/>({st['note']})"
-        if sid == terminal:
-            lines.append(f'    {sid}(["{label}"])')
-        else:
-            lines.append(f'    {sid}["{label}"]')
-
-    lines.append("")
-
-    for t in pipeline["transitions"]:
-        src, dst = t["src"], t["dst"]
-        arrow = "-.->" if t.get("style") == "dashed" else "-->"
-        conds = [f"{k}={'on' if v else 'off'}" for k, v in t.get("when", {}).items()]
-        gates = [
-            GATE_LABELS.get(g, g)
-            for g in t.get("gates", [])
-            if g != "owner_confirmed" or src == initial
-        ]
-        parts = []
-        if conds:
-            parts.append(" & ".join(conds))
-        if gates:
-            parts.append(" & ".join(gates))
-        edge_label = "<br/>".join(parts)
-        if edge_label:
-            lines.append(f'    {src} {arrow}|"{edge_label}"| {dst}')
-        else:
-            lines.append(f"    {src} {arrow} {dst}")
-
-    triage_nodes = [st["id"] for st in pipeline["stages"] if st.get("triage")]
-    if triage_nodes:
-        lines.append("")
-        for sid in triage_nodes:
-            lines.append(f'    {sid} -->|"round (连续{limit}轮 added>0 警告)"| {sid}')
-
-    return "\n".join(lines) + "\n"
-
-
-def sync_markdown_diagram(md_path, diagram_text, check_only=False):
-    if not os.path.isfile(md_path):
-        fail(f"Markdown 文件不存在: {md_path}")
-    with open(md_path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    start_idx = content.find(DIAGRAM_BEGIN)
-    end_idx = content.find(DIAGRAM_END)
-    if start_idx == -1 or end_idx == -1 or end_idx < start_idx:
-        fail(
-            f"{md_path} 缺少图表标记 {DIAGRAM_BEGIN} ... {DIAGRAM_END}"
-        )
-
-    fenced = f"{DIAGRAM_BEGIN}\n```mermaid\n{diagram_text.rstrip()}\n```\n{DIAGRAM_END}"
-    updated = content[:start_idx] + fenced + content[end_idx + len(DIAGRAM_END):]
-
-    if check_only:
-        if updated != content:
-            print(
-                f"[diagram] {md_path} 中的流程图已过时，请运行：\n"
-                f"  python {os.path.abspath(__file__)} diagram --sync-md {md_path}",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        print(f"[diagram] {md_path} 流程图已是最新。")
-        return
-
-    if updated == content:
-        print(f"[diagram] {md_path} 无变化，已是最新。")
-        return
-
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write(updated)
-    print(f"[diagram] 已刷新 {md_path} 中的流程图。")
 
 
 # --------------------------------------------------------------- commands
@@ -699,7 +271,7 @@ def cmd_advance(args):
     target = args.target
     artifacts = args.artifact or []
 
-    errs = _gate_advance(state, target, artifacts)
+    errs = gate_advance(state, target, artifacts)
     if errs:
         print(f"[门禁拦截] 无法进入 {target}：", file=sys.stderr)
         for e in errs:

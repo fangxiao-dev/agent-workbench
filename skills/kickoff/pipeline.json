@@ -1,0 +1,156 @@
+{
+  "name": "kickoff",
+  "initial": "init",
+  "terminal": "ready",
+  "convergence_limit": 2,
+  "high_round_limit": 4,
+  "gate_labels": {
+    "owner_confirmed": "owner_confirmed",
+    "pkg_bound": "pkg_bound",
+    "role:pe?": "pe(if on)",
+    "role:reviewer": "reviewer",
+    "role:plan-reviewer": "plan-reviewer",
+    "rounds>=1": "rounds>=1",
+    "last_round_clean": "last=clean"
+  },
+  "flow_help": "流程：\n  init -> confirm -> discover(可选,默认on) -> bind-pkg -> decision -> spec -> plan(可选,默认on) -> ready\n\n职责分工：\n  - kickoff       管编排与输入契约：状态机、角色池(pe/reviewer/plan-reviewer)、分诊轮次、阶段门禁、阶段 Skill 与原则。\n  - 下游 Skill    管单阶段方法：req-discover、/impl-package:req-align、/impl-package:impl-planning + /impl-package:plan-review。\n  - 审阅者        负责挑全漏洞（只读、独立），不替 Owner 做业务取舍；decision/spec 续用 reviewer，plan 登记独立 plan-reviewer 池。\n  - 主控 + PE     负责四类分诊与根部裁剪，把业务取舍升级给 Owner。\n\n两段式落点：\n  - init --slug 先写暂存 <staging-dir>/<slug>.json；\n  - bind-pkg 再迁到 <pkg>/kickoff-state.json 并绑定 pkg_dir。\n",
+  "stages": [
+    {
+      "id": "init",
+      "label": "init",
+      "note": "唯一必停点: confirm",
+      "optional_switch": null,
+      "triage": false,
+      "skills": [],
+      "principles": [
+        "向 Owner 复述目标、输入清单、环节开关与代理分工，等 Owner 明确确认后再推进（全程唯一必停点）。",
+        "把已有文档/记忆里已回答的部分先列出来，不重复劳动。",
+        "不把假设当结论：不确定的写成待确认项，而不是直接写成决定。"
+      ]
+    },
+    {
+      "id": "discover",
+      "label": "discover",
+      "note": "可选, 默认 on",
+      "optional_switch": "discover",
+      "triage": false,
+      "skills": ["req-discover"],
+      "principles": [
+        "先读材料与原型梳理未知项；本阶段不建包、不写 Decision/Spec。",
+        "有 PE 时未知项先交 PE 收敛，仅业务取舍升级 Owner。",
+        "记录冲突与缺口，产出可供 decision 阶段直接使用的依据。"
+      ]
+    },
+    {
+      "id": "decision",
+      "label": "decision",
+      "note": null,
+      "optional_switch": null,
+      "triage": true,
+      "skills": ["/impl-package:req-align"],
+      "principles": [
+        "有原型时先按主题写“原型基线”，再逐条写差异与理由。",
+        "角色=权限集合，不把“某角色能否操作”当独立业务分支。",
+        "交 Owner 裁定的事项必须已有 PE 判定。",
+        "审阅意见先四类分诊（往下钻 / 根部裁剪+人工兜底 / 交 PE / 驳回），不照单全收。",
+        "外部/合规确认（如税务师书面确认）做成上线前门控开关，不阻塞 Decision/Spec。"
+      ]
+    },
+    {
+      "id": "spec",
+      "label": "spec",
+      "note": null,
+      "optional_switch": null,
+      "triage": true,
+      "skills": ["/impl-package:req-align"],
+      "principles": [
+        "严格对齐已过门的 Decision 与原型，不新增未过门的行为合同。",
+        "改动现行规则、接口、表约束或测试入口前，先核现行代码与规则分册，不凭记忆写。",
+        "每次修订同步核对 spec.md（正文 / Rule Matrix / Journeys）与 contract-design.md 口径一致，先过 check-spec 等确定性校验再交 reviewer 复验。",
+        "续用同一 reviewer；审阅回来先分诊再改。",
+        "连续两轮都在加分支，就停下来回看原型并过 PE，判断能否从根部裁剪。"
+      ]
+    },
+    {
+      "id": "plan",
+      "label": "plan",
+      "note": "可选, 默认 on",
+      "optional_switch": "plan",
+      "triage": true,
+      "skills": ["/impl-package:impl-planning", "/impl-package:plan-review"],
+      "principles": [
+        "写 Plan 前先核实上游合同与代码/工具链现实（首稿写法与防线见 impl-planning）。",
+        "送审前先在隔离环境跑通确定性校验（如 check-spec / package init / package validate），清零格式与覆盖错误再进审阅。",
+        "按 plan-review 派发独立 plan-reviewer（大包可分轨并行），并保持 PE 参与根部裁剪；审阅意见先四类分诊再批量修订。",
+        "若修订回改了上游合同（Decision / Spec / contract-design），记轮次时加 --touched-upstream，并重跑确定性校验与受影响合同复验。",
+        "修订 material findings 后须走 focused-closure-verification 复验清零，记 --verdict clean 后过门进入 ready。"
+      ]
+    },
+    {
+      "id": "ready",
+      "label": "ready",
+      "note": null,
+      "optional_switch": null,
+      "triage": false,
+      "skills": [],
+      "principles": [
+        "用人话向 Owner 汇报：做什么 / 不做什么。",
+        "标出关键决定，PE 拍板项单独标注。",
+        "给出计划分块与顺序。",
+        "列出仍待 Owner 定事项（在哪 / 现状 / 为什么 / 建议），一句话结论：可以开工 / 还差什么。",
+        "交接实施主控时标明干净基线分支、单票局部 vs 包级门禁边界，以及票据是否保持 Draft 由实施主控初始化。"
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "src": "init",
+      "dst": "discover",
+      "when": {"discover": true},
+      "gates": ["owner_confirmed"],
+      "style": "solid"
+    },
+    {
+      "src": "init",
+      "dst": "decision",
+      "when": {"discover": false},
+      "gates": ["owner_confirmed", "pkg_bound", "role:pe?"],
+      "style": "dashed"
+    },
+    {
+      "src": "discover",
+      "dst": "decision",
+      "when": {"discover": true},
+      "gates": ["owner_confirmed", "pkg_bound", "role:pe?"],
+      "style": "solid"
+    },
+    {
+      "src": "decision",
+      "dst": "spec",
+      "when": {},
+      "gates": ["owner_confirmed", "role:reviewer", "rounds>=1", "last_round_clean"],
+      "style": "solid"
+    },
+    {
+      "src": "spec",
+      "dst": "plan",
+      "when": {"plan": true},
+      "gates": ["owner_confirmed", "role:reviewer", "rounds>=1", "last_round_clean"],
+      "style": "solid"
+    },
+    {
+      "src": "spec",
+      "dst": "ready",
+      "when": {"plan": false},
+      "gates": ["owner_confirmed", "rounds>=1", "last_round_clean"],
+      "style": "dashed"
+    },
+    {
+      "src": "plan",
+      "dst": "ready",
+      "when": {"plan": true},
+      "gates": ["owner_confirmed", "role:plan-reviewer", "rounds>=1", "last_round_clean"],
+      "style": "solid"
+    }
+  ]
+}

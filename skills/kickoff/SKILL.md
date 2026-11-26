@@ -5,8 +5,8 @@ description: 新需求从探索到可开工的一键编排：先复述理解等 
 
 # Kickoff
 
-本 skill 只做编排。主链、输入契约、常驻角色登记、审阅分诊与阶段门禁都由
-`scripts/kickoff.py` 强制；各阶段“怎么做”交给被调用的 skill 与审阅者。
+本 skill 只做编排。流程、阶段 Skill、门禁与硬原则声明在 `pipeline.json`，由
+`scripts/kickoff.py`（`engine.py` + `diagram.py`）强制执行；各阶段“怎么做”交给被调用的 skill 与审阅者。
 
 ## 职责分工
 
@@ -47,39 +47,39 @@ flowchart TD
 
 ## 命令
 
-脚本路径：`~/.claude/skills/kickoff/scripts/kickoff.py`（下以 `KICKOFF` 代称）。
+脚本路径：相对本 skill 目录的 `scripts/kickoff.py`（以当前已加载 `SKILL.md` 所在目录为基准，不假设宿主安装路径）。
 
 ```bash
 # 1. 初始化（--pkg 直接绑定，或 --slug 暂存）
-python ~/.claude/skills/kickoff/scripts/kickoff.py init --slug <slug> \
+python scripts/kickoff.py init --slug <slug> \
   --research <path|none> [--research ...] --prototype <path|none> \
   [--discover on|off] [--pe on|off] [--plan on|off] [--goal ...] [--docs ...]
 
 # 2. 复述对齐后，Owner 确认（唯一必停点）
-python ~/.claude/skills/kickoff/scripts/kickoff.py confirm --state <path> --note "..."
+python scripts/kickoff.py confirm --state <path> --note "..."
 
 # 3. 探索阶段登记常驻 PE
-python ~/.claude/skills/kickoff/scripts/kickoff.py register --state <path> --role pe --agent-id <id>
+python scripts/kickoff.py register --state <path> --role pe --agent-id <id>
 
 # 4. 暂存状态迁入包目录
-python ~/.claude/skills/kickoff/scripts/kickoff.py bind-pkg --state <path> --pkg <dir>
+python scripts/kickoff.py bind-pkg --state <path> --pkg <dir>
 
 # 5. 设计/计划：登记审阅者并记录每轮分诊（--verdict 默认 open，复验清零后记 clean；回改上游合同加 --touched-upstream；补录历史阶段加 --backfill）
-python ~/.claude/skills/kickoff/scripts/kickoff.py register --pkg <dir> --role reviewer --agent-id <id>
-python ~/.claude/skills/kickoff/scripts/kickoff.py register --pkg <dir> --role plan-reviewer --agent-id <id> [--label scope|risk|delivery]
-python ~/.claude/skills/kickoff/scripts/kickoff.py round --pkg <dir> --stage decision|spec|plan \
+python scripts/kickoff.py register --pkg <dir> --role reviewer --agent-id <id>
+python scripts/kickoff.py register --pkg <dir> --role plan-reviewer --agent-id <id> [--label scope|risk|delivery]
+python scripts/kickoff.py round --pkg <dir> --stage decision|spec|plan \
   --added N --cut N --pe N --rejected N --verdict open|clean [--touched-upstream] --summary "本轮分诊摘要"
 
 # 6. 过门进入下一阶段（门禁不满足会一次列出全部原因；可选 --artifact 登记产出路径）
-python ~/.claude/skills/kickoff/scripts/kickoff.py advance discover|decision|spec|plan|ready --pkg <dir> [--artifact <path>]
+python scripts/kickoff.py advance discover|decision|spec|plan|ready --pkg <dir> [--artifact <path>]
 
 # 7. 随时查看状态与下一步有效命令
-python ~/.claude/skills/kickoff/scripts/kickoff.py status --pkg <dir>
+python scripts/kickoff.py status --pkg <dir>
 
-# 8. 从声明式 PIPELINE 自动生成 / 同步主链 Mermaid 图（改动 PIPELINE 后执行）
-python ~/.claude/skills/kickoff/scripts/kickoff.py diagram
-python ~/.claude/skills/kickoff/scripts/kickoff.py diagram --sync-md ~/.claude/skills/kickoff/SKILL.md
-python ~/.claude/skills/kickoff/scripts/kickoff.py diagram --sync-md ~/.claude/skills/kickoff/SKILL.md --check
+# 8. 从外部 pipeline.json 自动生成 / 同步主链 Mermaid 图（改动 pipeline.json 后执行）
+python scripts/kickoff.py diagram
+python scripts/kickoff.py diagram --sync-md SKILL.md
+python scripts/kickoff.py diagram --sync-md SKILL.md --check
 ```
 
 ## 门禁与熔断（由 CLI 强制，纯流程不解析下游文档）
