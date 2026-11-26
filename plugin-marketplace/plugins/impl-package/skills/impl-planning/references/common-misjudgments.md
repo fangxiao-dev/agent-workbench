@@ -9,6 +9,8 @@
 - patch 重述整份历史范围，会把未变化的 evidence 和 gate 重新混入当前 delta，无法判断真正受影响的边界。
 - 为新 package 顺手创建 DAG，会重新引入 Ticket/Task 双层状态和两个 acceptance authority。
 - 只审 Plan 文本、不审跨 Ticket 的 coverage/ownership/order，会让一个局部看似完整的 candidate 直接进入执行。
+- 写 Plan 前不核查 Schema 非空列的既有写入方、门禁/Harness 真实 CLI 参数或干净基线分支，会让首票直接破构建或把机械错误拖到 Plan Review 才暴露。
+- 把机械校验留到 `plan-review` 之后再跑，会让审阅者把精力耗在格式、套件名或覆盖缺口上，而非架构与风险。
 
 ## 并行与调度安排
 
@@ -27,6 +29,7 @@
 - 只让后端接线 Ticket 通过，会把 UI 形状错误或组件复用错误隐藏在“UI 已实现”的笼统声明里。
 - 引用整份文档会让 Ticket 看似有依据，却无法判断实际依赖哪条 authority；引用 `contract-design.md` 只停在章节级而不点名 entry point，等于把一大节都当成了下游默认要读的上下文。
 - 只写“有测试”而不写入口、owner 和 coverage，会把不可执行、重叠或部分可证的 AC 留到执行末端才暴露。
+- 把生成 `gate.md` 写进尾票会与 Final Gate 形成循环依赖；把规则分册修改全堆到尾票会违背“先改规则再改代码”，使中间票的规则依据滞后。
 
 ## State 与发布边界
 
