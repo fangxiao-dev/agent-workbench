@@ -359,6 +359,20 @@ def test_summary_round_skips_when_nothing_moved(tmp_path):
     assert session_board_summary.progress()['total'] == 0   # nothing new: the round owes no calls
 
 
+def test_agent_launched_briefs_are_workers_not_sessions(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    brief = ('<pasted_content id="1">' + chr(10) +
+             'Human: <system-reminder>Codebase and user instructions are shown below' + chr(10) +
+             '</pasted_content>')
+    source.write_bytes(record('user', brief, entrypoint='cli', origin={'kind': 'human'}))
+    other = source.with_name('22222222-2222-4222-8222-222222222222.jsonl')
+    other.write_bytes(record('user', 'please fix the build', entrypoint='cli', origin={'kind': 'human'}))
+    board.sync(dbpath, home)
+    items = {item['id']: item for item in board.list_items(dbpath, home)}
+    assert items[source.stem]['agent'] is True    # another agent's brief, not the human opening a session
+    assert items[other.stem]['agent'] is False
+
+
 def test_tags_are_global_and_capped_per_session(tmp_path):
     home, source, dbpath = setup_source(tmp_path)
     source.write_bytes(record('user', 'go'))

@@ -295,6 +295,16 @@ def _sync(db_path: Path, home: Path) -> dict:
             if moved:
                 db.execute("INSERT OR IGNORE INTO item_tags(item_id,tag_id)"
                            " SELECT ?, tag_id FROM item_tags WHERE item_id=?", (link["id"], link["fork_of"]))
+        # One-time: items stored before agent-launched briefs were recognised as workers get re-read.
+        if not db.execute("SELECT 1 FROM meta WHERE key='human-rule'").fetchone():
+            for row in db.execute("SELECT id, path FROM items WHERE title='' AND human=1").fetchall():
+                try:
+                    _, human, _ = HOST.classify(Path(row["path"]))
+                except (OSError, ValueError):
+                    continue
+                if not human:
+                    db.execute("UPDATE items SET human=0 WHERE id=?", (row["id"],))
+            db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('human-rule','1')")
     with db:
         # Older syncs stored background-task notifications as events; they are not messages.
         for marker in (HOST.injected_prefixes):
