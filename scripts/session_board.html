@@ -210,6 +210,15 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 .note{margin-top:12px;color:#7f8f9c;font-size:12px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:80;padding:9px 16px;border-radius:var(--r2);background:#3a4756;color:#f2f5f8;font-size:13px;border:1px solid rgba(255,255,255,.16);box-shadow:0 12px 34px rgba(0,0,0,.45)}
 .hidden{display:none!important}
+.usage{position:fixed;left:16px;bottom:14px;z-index:6;display:flex;align-items:center;gap:8px;padding:4px 10px 4px 4px;border-radius:var(--pill);font-size:11px;color:#93a3b0;background:rgba(18,25,32,.78);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(10px);font-variant-numeric:tabular-nums}
+.urange{padding:3px 8px;border-radius:var(--pill);color:#b6c5d1;font-size:11px;white-space:nowrap}
+.urange:hover{background:rgba(255,255,255,.08);color:#eaf1f6}
+.utotal{color:#eaf1f6;font-weight:600}
+.umen,.utip{position:absolute;left:0;bottom:calc(100% + 6px);display:none;padding:5px;border-radius:10px;background:#141b22;border:1px solid rgba(255,255,255,.1);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+.umen{min-width:120px}.umen button{display:block;width:100%;padding:6px 9px;border-radius:6px;text-align:left;color:#c6d3dd;font-size:11.5px;white-space:nowrap}
+.umen button:hover{background:rgba(255,255,255,.08);color:#fff}.umen button[aria-checked=true]{color:#7fded0}
+.utip{padding:7px 10px;line-height:1.65;color:#c6d3dd;white-space:nowrap;font-variant-numeric:tabular-nums}.utip b{color:#eaf1f6;font-weight:600}
+.usage.menu .umen{display:block}.usage.menu .utip{display:none}.usage:hover .utip{display:block}
 
 @media(max-width:1100px){.top{gap:12px}.search{min-width:150px}.intro{padding-top:18px}.intro h1{font-size:23px}}
 @media(max-width:900px){.board{grid-template-columns:none!important;grid-auto-flow:column;grid-auto-columns:minmax(300px,86vw);overflow-x:auto;scroll-snap-type:x mandatory}
@@ -242,6 +251,12 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 </section>
 <aside id="drawer" role="dialog" aria-label="会话详情" aria-hidden="true"></aside>
 <div class="toast hidden" id="toast" role="alert"></div>
+<div class="usage" id="usage" hidden>
+  <button class="urange" id="urange" type="button" aria-haspopup="menu" aria-expanded="false">今天 ▾</button>
+  <span class="utotal" id="utotal"></span>
+  <div class="utip" id="utip"></div>
+  <div class="umen" id="umenu" role="menu"></div>
+</div>
 <script>
 const token='__BOARD_TOKEN__';
 const P={search:'<circle cx="11" cy="11" r="8" /> <path d="m21 21-4.3-4.3" />',refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" />',trash:'<path d="M3 6h18" /> <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /> <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /> <line x1="10" x2="10" y1="11" y2="17" /> <line x1="14" x2="14" y1="11" y2="17" />',folder:'<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />',ext:'<path d="M15 3h6v6" /> <path d="M10 14 21 3" /> <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />',close:'<path d="M18 6 6 18" /> <path d="m6 6 12 12" />',alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" />',bot:'<path d="M12 8V4H8" /> <rect width="16" height="12" x="4" y="8" rx="2" /> <path d="M2 14h2" /> <path d="M20 14h2" /> <path d="M15 13v2" /> <path d="M9 13v2" />',chat:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />',exec:'<path d="M20 12a8 8 0 1 1-4.7-7.3"/>',active:'<rect x="5.5" y="5.5" width="13" height="13" rx="3.5"/>',idle:'<path d="M7 12h10"/>',done:'<rect x="5.5" y="5.5" width="13" height="13" rx="3.5" fill="currentColor" stroke="none"/>',unk:'<rect x="5.5" y="5.5" width="13" height="13" rx="3.5" stroke-dasharray="2.5 3"/>',note:'<path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4" /> <path d="M2 6h4" /> <path d="M2 10h4" /> <path d="M2 14h4" /> <path d="M2 18h4" /> <path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z" />',chev:'<path d="m6 9 6 6 6-6" />',spark:'<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" /> <path d="M20 3v4" /> <path d="M22 5h-4" /> <path d="M4 17v2" /> <path d="M5 18H3" />'};
@@ -290,8 +305,24 @@ function md(text){const root=el('div','md');let para=[],list=null,code=null;
 const hay=i=>[i.title,i.cwd,i.group_name,i.note,i.summary&&i.summary.summary].join(' ').toLowerCase();
 
 async function api(path,data){const r=await fetch(path,data?{method:'POST',headers:{'Content-Type':'application/json','X-Board-Token':token},body:JSON.stringify(data)}:{headers:{'X-Board-Token':token}});if(r.status===403&&!sessionStorage.getItem('reloaded')){sessionStorage.setItem('reloaded','1');location.reload();throw Error('服务已重启，正在重新加载')}sessionStorage.removeItem('reloaded');const v=await r.json();if(!r.ok||v.ok===false)throw Error(v.error||'请求失败');return v}
+const RANGES=[['1h','近 1 小时'],['today','今天'],['7d','近 7 天']];
+let usageRange=localStorage.getItem('board.usageRange')||'today',usageData={};
+const unit=n=>{const a=Math.abs(n);
+  if(a>=1e9)return (n/1e9).toFixed(a>=1e10?0:1).replace(/\.0$/,'')+'B';
+  if(a>=1e6)return (n/1e6).toFixed(a>=1e7?0:1).replace(/\.0$/,'')+'M';
+  if(a>=1e3)return (n/1e3).toFixed(a>=1e4?0:1).replace(/\.0$/,'')+'K';
+  return String(n)};
+function showUsage(usage){usageData=usage||{};paintUsage()}
+function paintUsage(){const box=$('#usage');if(!box)return;
+  const rows=usageData[usageRange]||{},sum=rows.summary||[0,0],chat=rows.chat||[0,0];
+  const s=sum[0]+sum[1],c=chat[0]+chat[1],name=(RANGES.find(r=>r[0]===usageRange)||RANGES[1])[1];
+  $('#urange').textContent=name+' ▾';$('#urange').setAttribute('aria-expanded',String(box.classList.contains('menu')));
+  $('#utotal').textContent=unit(s+c);
+  const tip=$('#utip');tip.replaceChildren();
+  [['自动整理',s],['我的指令',c]].forEach(([label,n])=>{const line=el('div');line.append(label+' ');line.append(el('b','',unit(n)));tip.append(line)});
+  box.hidden=false}
 let toastTimer;function report(m){const t=$('#toast');t.textContent=m;t.classList.toggle('hidden',!m);clearTimeout(toastTimer);if(m)toastTimer=setTimeout(()=>t.classList.add('hidden'),5000)}
-async function refresh(sync=true){if(busy)return;busy=true;$('#refresh').disabled=true;try{if(sync){const s=await api('/api/sync',{});$('#sync').textContent=new Date(s.time*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+' 同步'+(s.errors?' · '+s.errors+' 项失败':'');$('#syncdot').classList.remove('bad')}const res=await api('/api/items');items=res.items;if(res.recent_days)recentDays=res.recent_days;render()}catch(e){$('#sync').textContent='同步失败';$('#syncdot').classList.add('bad');report('更新失败：'+e.message)}finally{busy=false;$('#refresh').disabled=false}}
+async function refresh(sync=true){if(busy)return;busy=true;$('#refresh').disabled=true;try{if(sync){const s=await api('/api/sync',{});$('#sync').textContent=new Date(s.time*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+' 同步'+(s.errors?' · '+s.errors+' 项失败':'');$('#syncdot').classList.remove('bad')}const res=await api('/api/items');items=res.items;if(res.recent_days)recentDays=res.recent_days;showUsage(res.usage);render()}catch(e){$('#sync').textContent='同步失败';$('#syncdot').classList.add('bad');report('更新失败：'+e.message)}finally{busy=false;$('#refresh').disabled=false}}
 async function update(id,data){const item=items.find(i=>i.id===id),before=item&&{...item};if(item){Object.assign(item,data.mark_read?{unread:false}:data);render()}
   try{await api('/api/items/'+encodeURIComponent(id),data);refresh(false);return true}catch(e){if(item){Object.assign(item,before);render()}report('保存失败：'+e.message);return false}}
 
@@ -454,6 +485,11 @@ $('#pform').onsubmit=async e=>{e.preventDefault();const input=$('#pinput'),text=
     await refresh(false)}catch(err){waiting.remove();bubble('出错了：'+err.message,'sys')}
   finally{btn.disabled=false;input.focus()}};
 $('#removed').onclick=()=>{showRemoved=!showRemoved;render()};
+(function(){const box=$('#usage'),menu=$('#umenu');
+  RANGES.forEach(([k,label])=>{const b=el('button');b.type='button';b.dataset.k=k;b.setAttribute('role','menuitemradio');b.textContent=label;
+    b.onclick=()=>{usageRange=k;localStorage.setItem('board.usageRange',k);menu.querySelectorAll('button').forEach(x=>x.setAttribute('aria-checked',String(x.dataset.k===k)));box.classList.remove('menu');paintUsage()};menu.append(b)});
+  $('#urange').onclick=e=>{e.stopPropagation();menu.querySelectorAll('button').forEach(x=>x.setAttribute('aria-checked',String(x.dataset.k===usageRange)));box.classList.toggle('menu')};
+  document.addEventListener('click',e=>{if(!box.contains(e.target))box.classList.remove('menu')});})();
 document.querySelectorAll('#filters button').forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll('#filters button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));render()});
 refresh();setInterval(()=>refresh(),30000);
 </script><script>

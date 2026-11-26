@@ -58,6 +58,8 @@ def open_db(path: Path) -> sqlite3.Connection:
       PRIMARY KEY(item_id, generation, position)
     );
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS usage (at REAL NOT NULL, kind TEXT NOT NULL,
+      in_tokens INTEGER NOT NULL DEFAULT 0, out_tokens INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS summaries (
       item_id TEXT PRIMARY KEY, generation INTEGER NOT NULL, position INTEGER NOT NULL,
       summary TEXT NOT NULL, attention TEXT NOT NULL, created_at REAL NOT NULL,
@@ -305,6 +307,40 @@ def superseded_ids(db_path: Path) -> set[str]:
     return {parent for parent in parents if parent in ids}
 
 
+def add_usage(db_path: Path, kind: str, usage: dict) -> None:
+    # One row per model call: "summary" is the automatic digest, "chat" is what the user asked for.
+    try:
+        prompt = int(usage.get("input_tokens") or 0)
+        answer = int(usage.get("output_tokens") or 0)
+    except (TypeError, ValueError, AttributeError):
+        return
+    if prompt <= 0 and answer <= 0:
+        return
+    db = open_db(db_path)
+    try:
+        with db:
+            db.execute("INSERT INTO usage(at,kind,in_tokens,out_tokens) VALUES(?,?,?,?)",
+                       (time.time(), kind, prompt, answer))
+    finally:
+        db.close()
+
+
+def usage_totals(db, since: float) -> dict:
+    totals = {kind: [0, 0] for kind in ("summary", "chat")}
+    for row in db.execute("SELECT kind, SUM(in_tokens), SUM(out_tokens) FROM usage WHERE at>=? GROUP BY kind",
+                          (since,)):
+        if row[0] in totals:
+            totals[row[0]] = [int(row[1] or 0), int(row[2] or 0)]
+    return totals
+
+
+def usage_ranges(db) -> dict:
+    now = time.time()
+    midnight = time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1))
+    return {"1h": usage_totals(db, now - 3600), "today": usage_totals(db, midnight),
+            "7d": usage_totals(db, now - 7 * 86400)}
+
+
 def recent_days(db) -> int:
     # How far back the 最近 lane reaches; chosen in the lane header, one day unless stored otherwise.
     row = db.execute("SELECT value FROM meta WHERE key='recent_days'").fetchone()
@@ -466,9 +502,10 @@ def make_handler(db_path: Path, home: Path, token: str, port: int, summary_comma
                 db = open_db(db_path)
                 try:
                     days = recent_days(db)
+                    usage = usage_ranges(db)
                 finally:
                     db.close()
-                return self.reply(200, {"items": list_items(db_path, home), "recent_days": days})
+                return self.reply(200, {"items": list_items(db_path, home), "recent_days": days, "usage": usage})
             return self.reply(404, {"error": "未找到"})
 
         def do_POST(self):
