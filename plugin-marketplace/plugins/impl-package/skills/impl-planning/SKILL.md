@@ -17,7 +17,7 @@ description: 当已有批准的 Decision/Spec，需要创建 initial/patch plan�
 ## 流程
 
 1. initial 读取已批准 Decision、`spec.md`、从属 `contract-design.md` disposition 及当前代码/测试事实，确认 D/S gate 已通过；未触及的既有 Spec 可暂缺该文件，同一 package 的 patch/update 沿用 initial bundle approval。
-2. 在创建或更新 Plan，或更新 state 前执行 admission backstop：若下一步仍需决定可观察行为、data identity、permission、concurrency、recovery 或 public shape，或 contract surface 命中幂等键 / CAS / 版本号、多个来源写同一个目标字段、替换 / 撤回 / 恢复语义、跨存储提交（两个 store 各自提交）或声明值 vs 检测值但 Spec 只有规则没有结果矩阵，或新 package 的 Spec 缺 Journey、规则矩阵、必需套件清单（套件清单是合同，Plan 不补造），停止 planning，明确缺失合同并路由 `/impl-package:req-align` 重新确认当前 Spec；不得创建或更新 Plan/state，也不得在 Plan 中补第二套 DTO/schema。误判提醒见 [Admission 与计划](references/common-misjudgments.md#admission-与计划)。
+2. 在创建或更新 Plan，或更新 state 前执行 admission backstop：若下一步仍需决定可观察行为、data identity、permission、concurrency、recovery 或 public shape，或 contract surface 命中 req-align 动作模型触发条件（同一状态被多个 operation 写入、终态下仍允许执行，或幂等键 / CAS / 版本号、替换 / 撤回 / 恢复、跨存储提交、声明值 vs 检测值等常见形态）但 Spec 没有动作、不变量与可恢复性，或新 package 的 Spec 缺 Journey、规则矩阵、必需套件清单（套件清单是合同，Plan 不补造），停止 planning，明确缺失合同并路由 `/impl-package:req-align` 重新确认当前 Spec；不得创建或更新 Plan/state，也不得在 Plan 中补第二套 DTO/schema。误判提醒见 [Admission 与计划](references/common-misjudgments.md#admission-与计划)。
 3. 判断是 initial 还是 patch；patch 只描述相对上次 terminal gate 的实际 delta。
 4. 在 Ticket 拆分子流程中，把每个 Decision/Spec 约束映射到具体 Ticket 的 Contract references 与 AC，并把 Journey step 与套件归属写进 Ticket 的 Coverage；Ticket 自身承载建设内容、逐项 evidence 与 Coverage。Plan 只提炼跨 Ticket 的实施与接线安排、typed dependency、共享资源、全局执行边界与 Planned Verification。
    - 并行判断：先核实真实 caller、复用入口、依赖产物、接线条件和验证可行性；结合冻结合同与当前资源，只提前开展能独立实施并验证的工作。
