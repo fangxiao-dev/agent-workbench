@@ -18,6 +18,7 @@ from pathlib import Path
 UUID = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
 HEAD_BYTES = 256 * 1024
 TAIL_BYTES = 256 * 1024
+REF = re.compile(rb'"requestSessionId"\s*:\s*"([0-9a-f-]{36})"', re.I)
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,14 @@ class ClaudeDesktopHost(HostAdapter):
             if size > HEAD_BYTES:
                 stream.seek(size - TAIL_BYTES)
                 scan(stream.read().split(b"\n", 1)[-1], False)
+            if not refs and size > HEAD_BYTES:
+                # Compaction and forks replay the history, so the pointer back sits mid-file and only
+                # a full pass finds it. This runs once per transcript, when the item is first seen.
+                stream.seek(0)
+                for match in REF.finditer(stream.read()):
+                    ref = match.group(1).decode().lower()
+                    if ref != path.stem:
+                        refs[ref] = refs.get(ref, 0) + 1
         if refs:
             parent = max(refs, key=refs.get)
         return entry, max(human, 0), parent

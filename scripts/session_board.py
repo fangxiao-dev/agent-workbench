@@ -236,7 +236,8 @@ def _sync(db_path: Path, home: Path) -> dict:
     if not HOST.transcripts(home):
         db.close()
         return {"ok": False, "error": f"宿主 {HOST.name} 没有可读取的会话"}
-    relink = db.execute("SELECT 1 FROM meta WHERE key='links'").fetchone() is None
+    marker = db.execute("SELECT value FROM meta WHERE key='links'").fetchone()
+    relink = marker is None or marker['value'] != '4'
     if relink:  # links now also follow compaction; recompute every transcript's parent once
         with db:
             db.execute("UPDATE items SET entrypoint=NULL")
@@ -246,10 +247,11 @@ def _sync(db_path: Path, home: Path) -> dict:
         except OSError:
             entry, human, parent = '', 0, ''
         with db:
-            db.execute("UPDATE items SET entrypoint=?,human=?,fork_of=? WHERE id=?", (entry, human, parent, old['id']))
+            db.execute("UPDATE items SET entrypoint=?,human=?,fork_of=CASE WHEN ?<>'' THEN ? ELSE ifnull(fork_of,'') END WHERE id=?",
+                       (entry, human, parent, parent, old['id']))
     if relink:
         with db:
-            db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('links','2')")
+            db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('links','4')")
     try:
         known = {row['id']: row for row in db.execute("SELECT id,source_time,cursor,error,identity FROM items")}
         for path in HOST.transcripts(home):
@@ -280,7 +282,7 @@ def _sync(db_path: Path, home: Path) -> dict:
         for ident, info in live_sessions(home, fresh=True).items():
             previous = info.get("previous")
             if previous:
-                db.execute("UPDATE items SET fork_of=? WHERE id=?", (previous, ident))
+                db.execute("UPDATE items SET fork_of=? WHERE id=? AND ifnull(fork_of,'')=''", (previous, ident))
         # The newer transcript replaces the earlier card, so the user's triage has to follow it.
         for link in db.execute("SELECT id, fork_of FROM items WHERE ifnull(fork_of,'')<>''").fetchall():
             prior = db.execute("SELECT state, group_name, note, hidden FROM items WHERE id=?",
@@ -364,8 +366,8 @@ def parse_activity(events: list[dict]) -> float:
 def list_items(db_path: Path, home: Path) -> list[dict]:
     db = open_db(db_path)
     live = live_sessions(home)
+    superseded = {r["fork_of"] for r in db.execute("SELECT fork_of FROM items WHERE ifnull(fork_of,'')<>''")}
     parents = {row["id"]: row["fork_of"] for row in db.execute("SELECT id, fork_of FROM items")}
-    superseded = {p for p in parents.values() if p}
     items = []
     for row in db.execute("SELECT * FROM items ORDER BY source_time DESC"):
         if row["id"] in superseded:
