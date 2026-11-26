@@ -325,9 +325,21 @@ function paintUsage(){const box=$('#usage');if(!box)return;
   [['自动整理',s],['我的指令',c]].forEach(([label,n])=>{const line=el('div');line.append(label+' ');line.append(el('b','',unit(n)));tip.append(line)});
   box.hidden=false}
 let toastTimer;function report(m){const t=$('#toast');t.textContent=m;t.classList.toggle('hidden',!m);clearTimeout(toastTimer);if(m)toastTimer=setTimeout(()=>t.classList.add('hidden'),5000)}
-async function refresh(sync=true){if(busy)return;busy=true;$('#refresh').disabled=true;try{if(sync){const s=await api('/api/sync',{});$('#sync').textContent=new Date(s.time*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+' 同步'+(s.errors?' · '+s.errors+' 项失败':'');$('#syncdot').classList.remove('bad')}const res=await api('/api/items');items=res.items;if(res.recent_days)recentDays=res.recent_days;
-    if(res.refresh_seconds&&res.refresh_seconds!==refreshSeconds){refreshSeconds=res.refresh_seconds;armRefresh()}
-    showUsage(res.usage);render()}catch(e){$('#sync').textContent='同步失败';$('#syncdot').classList.add('bad');report('更新失败：'+e.message)}finally{busy=false;$('#refresh').disabled=false}}
+function apply(res){items=res.items;if(res.recent_days)recentDays=res.recent_days;
+  if(res.refresh_seconds&&res.refresh_seconds!==refreshSeconds){refreshSeconds=res.refresh_seconds;armRefresh()}
+  showUsage(res.usage);render()}
+async function refresh(sync=true){if(busy)return;busy=true;$('#refresh').disabled=true;try{
+  let errors=0;
+  if(sync){$('#sync').textContent='同步中';const s=await api('/api/sync',{});errors=s.errors||0;$('#syncdot').classList.remove('bad')}
+  const res=await api('/api/items');apply(res);
+  // 一次刷新 = 同步 + 本轮所有 AI 摘要；队列清空后才算刷新结束，才盖同步时间。
+  if(sync){let st=res.summary||{},deadline=Date.now()+300000;
+    while(st.active&&Date.now()<deadline){
+      $('#sync').textContent=st.total?'摘要 '+st.done+'/'+st.total:'摘要中';
+      await new Promise(r=>setTimeout(r,1500));
+      const next=await api('/api/items');apply(next);st=next.summary||{}}
+    $('#sync').textContent=new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+' 同步'+(errors?' · '+errors+' 项失败':'');}
+}catch(e){$('#sync').textContent='同步失败';$('#syncdot').classList.add('bad');report('更新失败：'+e.message)}finally{busy=false;$('#refresh').disabled=false}}
 async function update(id,data){const item=items.find(i=>i.id===id),before=item&&{...item};if(item){Object.assign(item,data.mark_read?{unread:false}:data);if(data.attention_generation!=null)item.pending=false;render()}
   try{await api('/api/items/'+encodeURIComponent(id),data);refresh(false);return true}catch(e){if(item){Object.assign(item,before);render()}report('保存失败：'+e.message);return false}}
 

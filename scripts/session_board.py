@@ -514,7 +514,8 @@ def make_handler(db_path: Path, home: Path, token: str, port: int, summary_comma
                 finally:
                     db.close()
                 return self.reply(200, {"items": list_items(db_path, home), "recent_days": days,
-                                        "usage": usage, "refresh_seconds": cadence})
+                                        "usage": usage, "refresh_seconds": cadence,
+                                        "summary": session_board_summary.progress()})
             return self.reply(404, {"error": "未找到"})
 
         def do_POST(self):
@@ -529,9 +530,7 @@ def make_handler(db_path: Path, home: Path, token: str, port: int, summary_comma
                 if path == "/api/sync":
                     result = sync(db_path, home)
                     if result.get('ok') and summary_command:
-                        wanted = summary_ids(db_path, home)
-                        threading.Thread(target=session_board_summary.update_summaries,
-                                         args=(db_path, summary_command, wanted), daemon=True).start()
+                        session_board_summary.queue(db_path, summary_command, summary_ids(db_path, home))
                     return self.reply(200, result)
                 if path == "/api/chat":
                     if not isinstance(data, dict) or not isinstance(data.get("message"), str) or not data["message"].strip():

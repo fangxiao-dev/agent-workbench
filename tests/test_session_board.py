@@ -324,6 +324,39 @@ def test_summary_updates_only_for_new_events(tmp_path):
     assert first[0] == 'synthetic'
 
 
+def test_summary_round_is_finished_only_when_its_queue_drains(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    source.write_bytes(titled() + record('assistant', 'synthetic'))
+    board.sync(dbpath, home)
+    # 0.4s inside the command, so the round is observably active while it runs.
+    command = [sys.executable, '-c',
+               'import json,time; time.sleep(0.4); print(json.dumps({"summary": "s", "attention": ""}))']
+    worker = threading.Thread(target=session_board_summary.update_summaries, args=(dbpath, command))
+    worker.start()
+    deadline = time.time() + 5
+    seen = {}
+    while time.time() < deadline:
+        seen = session_board_summary.progress()
+        if seen['active'] and seen['total']:
+            break
+        time.sleep(0.02)
+    assert seen['active'] is True and seen['total'] == 1
+    worker.join(10)
+    done = session_board_summary.progress()
+    assert (done['active'], done['done'], done['total']) == (False, 1, 1)
+    assert done['finished_at'] > 0
+
+
+def test_summary_round_skips_when_nothing_moved(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    source.write_bytes(titled() + record('assistant', 'synthetic'))
+    board.sync(dbpath, home)
+    command = [sys.executable, '-c', 'import json; print(json.dumps({"summary": "s", "attention": ""}))']
+    session_board_summary.update_summaries(dbpath, command, min_gap=0)
+    session_board_summary.update_summaries(dbpath, command, min_gap=0)
+    assert session_board_summary.progress()['total'] == 0   # nothing new: the round owes no calls
+
+
 def test_summary_ids_limited_to_running_lane(tmp_path, monkeypatch):
     home, source, dbpath = setup_source(tmp_path)
     source.write_bytes(record('user', 'go', entrypoint='claude-desktop', origin={'kind': 'human'}))
@@ -420,6 +453,7 @@ def test_server_rejects_foreign_origin_and_host(tmp_path):
         assert client.getresponse().status == 200
         client.request('GET', '/api/items', headers={'X-Board-Token': 'known-test-token'})
         payload = json.loads(client.getresponse().read())
+        assert isinstance(payload['summary'], dict)   # the page needs the round state to know when a refresh ends
         item = payload['items'][0]
         client.request('POST', '/api/items/' + item['id'], body=json.dumps({'state': '进行中', 'group_name': 'test'}), headers=headers)
         assert client.getresponse().status == 200

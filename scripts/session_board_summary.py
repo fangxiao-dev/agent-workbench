@@ -8,6 +8,24 @@ import threading
 import time
 
 _LOCK = threading.Lock()
+# One refresh round = a sync plus every summary it queued. The round is finished only when this
+# queue drains; the page keeps "摘要 d/t" until then and stamps the sync time afterwards.
+_STATE_LOCK = threading.Lock()
+_STATUS = {"active": False, "done": 0, "total": 0, "finished_at": 0.0}
+MAX_ROUND = 8   # per-round cap, so one refresh cannot become an hour of model calls
+
+
+def progress() -> dict:
+    with _STATE_LOCK:
+        return dict(_STATUS)
+
+
+def queue(db_path, command: list[str], wanted: set[str] | None = None, min_gap: int = 30) -> None:
+    """Start a round in the background; it reads as active before the worker thread exists."""
+    with _STATE_LOCK:
+        _STATUS.update(active=True, done=0, total=0, finished_at=0.0)
+    threading.Thread(target=update_summaries, args=(db_path, command, wanted),
+                     kwargs={"min_gap": min_gap}, daemon=True).start()
 
 
 def _record_usage(db_path, usage: dict) -> None:
@@ -40,7 +58,9 @@ def summarize(command: list[str], payload: dict, timeout: int = 60) -> dict:
 
 def update_summaries(db_path, command: list[str], wanted: set[str] | None = None, min_gap: int = 30) -> None:
     if not _LOCK.acquire(blocking=False):
-        return
+        return  # a round is already running and will pick these up
+    with _STATE_LOCK:
+        _STATUS.update(active=True, done=0, total=0, finished_at=0.0)
     try:
         db = sqlite3.connect(db_path, timeout=20)
         db.row_factory = sqlite3.Row
@@ -56,7 +76,8 @@ def update_summaries(db_path, command: list[str], wanted: set[str] | None = None
             " AND NOT (ifnull(entrypoint,'') LIKE 'sdk%' OR (ifnull(title,'')='' AND human=0)) ORDER BY source_time DESC")]
         if wanted is not None:
             ids = [ident for ident in ids if ident in wanted]
-        attempted = 0
+        # Plan first so the round can announce how many model calls it owes.
+        jobs: list[tuple] = []
         now = time.time()
         for ident in ids:
             item = db.execute("SELECT * FROM items WHERE id=? AND hidden=0", (ident,)).fetchone()
@@ -70,6 +91,12 @@ def update_summaries(db_path, command: list[str], wanted: set[str] | None = None
                              or (previous['attempted_at'] and now - previous['attempted_at'] < min_gap)
                              or (previous['error'] and now - previous['attempted_at'] < max(min_gap, 300))):
                 continue
+            jobs.append((ident, item, newest, events))
+            if len(jobs) >= MAX_ROUND:
+                break
+        with _STATE_LOCK:
+            _STATUS["total"] = len(jobs)
+        for ident, item, newest, events in jobs:
             payload = {"title": item['title'], "note": item['note'], "scope": "最近最多12条消息",
                        "events": [{"kind": e['kind'], "text": e['text'], "time": e['event_time']} for e in reversed(events)]}
             try:
@@ -87,9 +114,10 @@ def update_summaries(db_path, command: list[str], wanted: set[str] | None = None
                     db.execute("""INSERT INTO summaries VALUES(?, -1, -1, '', '', 0, ?, ?)
                       ON CONFLICT(item_id) DO UPDATE SET error=excluded.error,attempted_at=excluded.attempted_at""",
                                (ident, '摘要生成失败：' + reason, time.time()))
-            attempted += 1
-            if attempted >= 8:
-                break
+            with _STATE_LOCK:
+                _STATUS["done"] += 1
         db.close()
     finally:
+        with _STATE_LOCK:
+            _STATUS.update(active=False, finished_at=time.time())
         _LOCK.release()
