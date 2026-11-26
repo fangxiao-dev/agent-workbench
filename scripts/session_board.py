@@ -305,6 +305,16 @@ def superseded_ids(db_path: Path) -> set[str]:
     return {parent for parent in parents if parent in ids}
 
 
+def recent_days(db) -> int:
+    # How far back the 最近 lane reaches; chosen in the lane header, one day unless stored otherwise.
+    row = db.execute("SELECT value FROM meta WHERE key='recent_days'").fetchone()
+    try:
+        days = int(row["value"]) if row else 1
+    except (TypeError, ValueError):
+        days = 1
+    return days if days in (1, 3, 7) else 1
+
+
 def parse_activity(events: list[dict]) -> float:
     for event in events:
         stamp = event.get("event_time") or ""
@@ -400,6 +410,7 @@ def summary_ids(db_path: Path, home: Path) -> set[str]:
     """Sessions worth a model call: the running lane only, minus background and "btw:" side questions."""
     live = live_sessions(home)
     db = open_db(db_path)
+    days = recent_days(db)
     wanted = set()
     try:
         for row in db.execute("""SELECT id,title,entrypoint,human,state,source_time,
@@ -411,7 +422,7 @@ def summary_ids(db_path: Path, home: Path) -> set[str]:
                 continue
             activity = parse_activity([{'event_time': row['last_event']}]) or row['source_time']
             column = session_board_chat.column_of(row['state'], live.get(row['id'], {}).get('status', '未知'),
-                                                  activity, time.time())
+                                                  activity, time.time(), days)
             if column == '进行中':
                 wanted.add(row['id'])
     finally:
@@ -452,7 +463,12 @@ def make_handler(db_path: Path, home: Path, token: str, port: int, summary_comma
             if path == "/api/items":
                 if not secrets.compare_digest(self.headers.get('X-Board-Token', ''), token):
                     return self.reply(403, {'error': '请求未授权'})
-                return self.reply(200, {"items": list_items(db_path, home)})
+                db = open_db(db_path)
+                try:
+                    days = recent_days(db)
+                finally:
+                    db.close()
+                return self.reply(200, {"items": list_items(db_path, home), "recent_days": days})
             return self.reply(404, {"error": "未找到"})
 
         def do_POST(self):
@@ -478,6 +494,15 @@ def make_handler(db_path: Path, home: Path, token: str, port: int, summary_comma
                         return self.reply(200, session_board_chat.chat(db_path, home, data["message"].strip()))
                     except (OSError, ValueError, KeyError) as exc:
                         return self.reply(502, {"error": f"助手调用失败：{exc}"})
+                if path == "/api/settings":
+                    days = data.get("recent_days") if isinstance(data, dict) else None
+                    if days not in (1, 3, 7):
+                        raise ValueError("时间范围无效")
+                    db = open_db(db_path)
+                    with db:
+                        db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES('recent_days',?)", (str(days),))
+                    db.close()
+                    return self.reply(200, {"ok": True, "recent_days": days})
                 if path.startswith("/api/items/"):
                     update_item(db_path, path.removeprefix("/api/items/"), data)
                     return self.reply(200, {"ok": True})

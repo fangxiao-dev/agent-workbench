@@ -16,6 +16,8 @@ def test_column_rule_uses_a_30_minute_window():
     assert chat.column_of('自动', '空闲', now - 60, now) == '进行中'        # idle but active just now
     assert chat.column_of('自动', '空闲', now - 2 * 3600, now) == '待查看'
     assert chat.column_of('自动', '空闲', now - 3 * 86400, now) == '暂不关注'
+    assert chat.column_of('自动', '空闲', now - 3 * 86400, now, 7) == '待查看'   # a wider 最近 window reaches back
+    assert chat.column_of('自动', '空闲', now - 9 * 86400, now, 7) == '暂不关注'
     assert chat.column_of('已完成', '运行中', now, now) == '已完成'
 
 

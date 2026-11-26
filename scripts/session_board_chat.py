@@ -11,9 +11,11 @@ from pathlib import Path
 ENDPOINT = "https://api.deepseek.com/anthropic/v1/messages"
 MODEL = "deepseek-v4-flash"
 ACTIVE_WINDOW = 30 * 60
-REVIEW_WINDOW = 24 * 3600
 MAX_BULK = 300
-STATES = ("进行中", "待查看", "已完成", "暂不关注")
+STATES = ("进行中", "最近", "已完成", "暂不关注")
+# The board stores this lane as 待查看 and shows it as 最近; the assistant only sees the shown name.
+LANE_IN = {"待查看": "最近"}
+STATE_OUT = {"最近": "待查看"}
 SYSTEM = ("你是会话看板的助手。用户会用自然语言让你整理看板状态。"
           "只能通过提供的工具修改看板状态、分组和备注；不能删除或修改原生会话。"
           "先核对再动手：先用 list_items 看结果数量，再执行 update_items，最后用一两句中文说明改了什么。"
@@ -47,15 +49,15 @@ def api_key() -> str:
     return (Path.home() / ".claude" / "secrets" / "deepseek.key").read_text(encoding="utf-8").strip()
 
 
-def column_of(state: str, runtime: str, source_time: float, now: float) -> str:
+def column_of(state: str, runtime: str, activity: float, now: float, recent_days: float = 1) -> str:
     """Same rule the board uses: user-set state wins, otherwise place by activity."""
     if state and state != "自动":
         return state
-    age = now - float(source_time or 0)
+    age = now - float(activity or 0)
     # A busy session can sit quiet for a while (long tool run), so "running" alone counts.
     if runtime == "运行中" or age <= ACTIVE_WINDOW:
         return "进行中"
-    return "待查看" if age <= REVIEW_WINDOW else "暂不关注"
+    return "待查看" if age <= recent_days * 86400 else "暂不关注"
 
 
 def _rows(db_path: Path, home: Path) -> list[dict]:
@@ -68,14 +70,18 @@ def _rows(db_path: Path, home: Path) -> list[dict]:
     db.row_factory = sqlite3.Row
     continued = {r[0] for r in db.execute("SELECT fork_of FROM items WHERE ifnull(fork_of,'')<>''")}
     out = []
-    for row in db.execute("SELECT id,title,cwd,group_name,note,state,source_time,hidden,entrypoint,human FROM items WHERE hidden=0 ORDER BY source_time DESC"):
+    days = sb.recent_days(db)
+    for row in db.execute("""SELECT id,title,cwd,group_name,note,state,source_time,hidden,entrypoint,human,
+                                    (SELECT MAX(event_time) FROM events WHERE item_id=items.id) AS last_event
+                             FROM items WHERE hidden=0 ORDER BY source_time DESC"""):
         if row["id"] in continued:
             continue  # continued by a newer rewind/fork file
         if (row["entrypoint"] or "").startswith("sdk") or (not row["title"] and not row["human"]):
             continue  # background/sub sessions stay out of scope
         runtime = live.get(row["id"], {}).get("status", "未知")
-        out.append({"id": row["id"], "title": row["title"] or "", "lane": column_of(row["state"], runtime, row["source_time"], now),
-                    "runtime": runtime, "days_since_activity": round((now - row["source_time"]) / 86400, 1),
+        activity = sb.parse_activity([{"event_time": row["last_event"]}]) or row["source_time"]
+        out.append({"id": row["id"], "title": row["title"] or "", "lane": "最近" if column_of(row["state"], runtime, activity, now, days) == "待查看" else column_of(row["state"], runtime, activity, now, days),
+                    "runtime": runtime, "days_since_activity": round((now - activity) / 86400, 1),
                     "group_name": row["group_name"], "note": row["note"], "background": bool((row["entrypoint"] or "").startswith("sdk") or (not row["title"] and not row["human"]))})
     db.close()
     return out
@@ -83,7 +89,7 @@ def _rows(db_path: Path, home: Path) -> list[dict]:
 
 def list_items(db_path: Path, home: Path, args: dict) -> dict:
     rows = _rows(db_path, home)
-    lane = args.get("lane")
+    lane = LANE_IN.get(args.get("lane"), args.get("lane"))
     if lane and lane != "全部":
         rows = [r for r in rows if r["lane"] == lane]
     needle = (args.get("title_contains") or "").strip().lower()
@@ -100,16 +106,19 @@ def update_items(db_path: Path, home: Path, args: dict) -> dict:
     changes = {k: args[k] for k in ("state", "group_name", "note", "hidden") if k in args}
     if not changes:
         raise ValueError("没有要修改的字段")
-    if "state" in changes and changes["state"] not in STATES:
-        raise ValueError("状态无效")
+    if "state" in changes:
+        if changes["state"] not in STATES:
+            raise ValueError("状态无效")
+        changes["state"] = STATE_OUT.get(changes["state"], changes["state"])
     if not any(k in args for k in ("lane", "title_contains", "ids", "no_activity_days")):
         raise ValueError("必须提供选择条件，避免误改全部会话")
     rows = _rows(db_path, home)
     if args.get("ids"):
         ids = set(args["ids"])
         rows = [r for r in rows if r["id"] in ids]
-    if args.get("lane") and args["lane"] != "全部":
-        rows = [r for r in rows if r["lane"] == args["lane"]]
+    lane = LANE_IN.get(args.get("lane"), args.get("lane"))
+    if lane and lane != "全部":
+        rows = [r for r in rows if r["lane"] == lane]
     needle = (args.get("title_contains") or "").strip().lower()
     if needle:
         rows = [r for r in rows if needle in r["title"].lower()]
