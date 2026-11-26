@@ -10,10 +10,10 @@ description: 新需求从探索到可开工的一键编排：先复述理解等 
 
 ## 职责分工
 
-- **kickoff**：编排主链、校验输入契约、登记常驻角色、记录分诊轮次、阶段门禁、按阶段注入硬原则。
-- **impl-package**：单阶段方法（`req-align` 出 Decision/Spec，`impl-planning` 出 Plan）。
-- **审阅者**：独立只读，负责挑全漏洞，不替 Owner 做业务取舍。
-- **主控 + PE**：负责四类分诊（往下钻 / 根部裁剪+人工兜底 / 交 PE / 驳回）与根部裁剪。
+- **kickoff（Pipeline）**：编排主链、校验输入契约、维护角色池（PE / 设计审阅者 / 计划审阅者）、记录分诊轮次、阶段门禁、按阶段提示对应 Skill 与硬原则，为主设计师降载。
+- **下游 Skill**：管单阶段怎么做与包内产物关系（`discover -> req-discover`，`decision / spec -> /impl-package:req-align`，`plan -> /impl-package:impl-planning + /impl-package:plan-review`）。
+- **审阅者**：独立只读，负责挑全漏洞，不替 Owner 做业务取舍；`decision/spec` 续用同一 `reviewer`，`plan` 按 `plan-review` 登记独立 `plan-reviewer`（支持多轨标签，便于后续推翻或复审时复用）。
+- **主控 + PE**：负责四类分诊（往下钻 / 根部裁剪+人工兜底 / 交 PE / 驳回）与根部裁剪，PE 贯穿 `discover` 至 `plan`。
 
 ## 主链
 
@@ -33,7 +33,7 @@ flowchart TD
     decision -->|"reviewer & rounds>=1 & last=clean"| spec
     spec -->|"plan=on<br/>reviewer & rounds>=1 & last=clean"| plan
     spec -.->|"plan=off<br/>rounds>=1 & last=clean"| ready
-    plan -->|"plan=on<br/>rounds>=1 & last=clean"| ready
+    plan -->|"plan=on<br/>plan-reviewer & rounds>=1 & last=clean"| ready
 
     decision -->|"round (连续2轮 added>0 警告)"| decision
     spec -->|"round (连续2轮 added>0 警告)"| spec
@@ -64,10 +64,11 @@ python ~/.claude/skills/kickoff/scripts/kickoff.py register --state <path> --rol
 # 4. 暂存状态迁入包目录
 python ~/.claude/skills/kickoff/scripts/kickoff.py bind-pkg --state <path> --pkg <dir>
 
-# 5. 设计/计划：每轮审阅后记录分诊（--verdict 默认 open，复验清零后记 clean；补录历史阶段加 --backfill）
+# 5. 设计/计划：登记审阅者并记录每轮分诊（--verdict 默认 open，复验清零后记 clean；回改上游合同加 --touched-upstream；补录历史阶段加 --backfill）
 python ~/.claude/skills/kickoff/scripts/kickoff.py register --pkg <dir> --role reviewer --agent-id <id>
+python ~/.claude/skills/kickoff/scripts/kickoff.py register --pkg <dir> --role plan-reviewer --agent-id <id> [--label scope|risk|delivery]
 python ~/.claude/skills/kickoff/scripts/kickoff.py round --pkg <dir> --stage decision|spec|plan \
-  --added N --cut N --pe N --rejected N --verdict open|clean --summary "本轮分诊摘要"
+  --added N --cut N --pe N --rejected N --verdict open|clean [--touched-upstream] --summary "本轮分诊摘要"
 
 # 6. 过门进入下一阶段（门禁不满足会一次列出全部原因；可选 --artifact 登记产出路径）
 python ~/.claude/skills/kickoff/scripts/kickoff.py advance discover|decision|spec|plan|ready --pkg <dir> [--artifact <path>]
@@ -85,10 +86,11 @@ python ~/.claude/skills/kickoff/scripts/kickoff.py diagram --sync-md ~/.claude/s
 
 - 所有 `advance` 前必须 `owner_confirmed=true`。
 - 进 `decision` 前必须已绑定包目录；`pe=on` 时必须已登记 PE。
-- 进 `spec` 前：已登记 reviewer、decision 至少 1 轮分诊且最后一轮 `--verdict clean`。
-- 进 `plan` / `ready` 前：对应阶段至少 1 轮分诊且最后一轮 `--verdict clean`；`plan=off` 时从 `spec` 直接到 `ready`。
-- `round` 默认校验 `--stage` 与当前阶段一致（防记串阶段）；补录历史阶段需显式传 `--backfill`。
-- 替换已登记的 `pe` / `reviewer` 时 CLI 打出 `[警告]`，防止误开新代理破坏续用原则。
+- 进 `spec` 前：已登记 `reviewer`、decision 至少 1 轮分诊且最后一轮 `--verdict clean`。
+- 进 `plan` 前：已登记 `reviewer`、spec 至少 1 轮分诊且最后一轮 `--verdict clean`；`plan=off` 时从 `spec` 直接到 `ready`。
+- 进 `ready`（`plan=on`）前：已登记至少 1 名 `plan-reviewer`、plan 至少 1 轮分诊且最后一轮 `--verdict clean`。
+- `round` 默认校验 `--stage` 与当前阶段一致（防记串阶段）；补录历史阶段需显式传 `--backfill`；`plan` 阶段若回改上游合同加 `--touched-upstream` 触发重验提醒。
+- 替换已登记的 `pe` / `reviewer` 时 CLI 打出 `[警告]`，防止误开新代理破坏续用原则；`plan-reviewer` 支持多轨追加与可选 `--label`，不触发替换警告。
 - 若传入 `--artifact <path>`，CLI 仅校验路径存在并登记到状态文件，不假设文件名也不解析文档内容（文档结构与内容由各阶段 skill 自行校验）。
 - 同一阶段连续 2 轮都 `added > 0` → CLI 打出 `[收敛警告]`，停下回看原型并过 PE 判断能否根部裁剪；同一阶段进入第 4 轮及以上 → CLI 打出 `[轮次提醒]`，确认是在收尾而非细节拉锯。
 

@@ -35,6 +35,7 @@ PIPELINE = {
             "note": "唯一必停点: confirm",
             "optional_switch": None,
             "triage": False,
+            "skills": [],
             "principles": [
                 "向 Owner 复述目标、输入清单、环节开关与代理分工，等 Owner 明确确认后再推进（全程唯一必停点）。",
                 "把已有文档/记忆里已回答的部分先列出来，不重复劳动。",
@@ -47,6 +48,7 @@ PIPELINE = {
             "note": "可选, 默认 on",
             "optional_switch": "discover",
             "triage": False,
+            "skills": ["req-discover"],
             "principles": [
                 "先读材料与原型梳理未知项；本阶段不建包、不写 Decision/Spec。",
                 "有 PE 时未知项先交 PE 收敛，仅业务取舍升级 Owner。",
@@ -59,6 +61,7 @@ PIPELINE = {
             "note": None,
             "optional_switch": None,
             "triage": True,
+            "skills": ["/impl-package:req-align"],
             "principles": [
                 "有原型时先按主题写“原型基线”，再逐条写差异与理由。",
                 "角色=权限集合，不把“某角色能否操作”当独立业务分支。",
@@ -73,6 +76,7 @@ PIPELINE = {
             "note": None,
             "optional_switch": None,
             "triage": True,
+            "skills": ["/impl-package:req-align"],
             "principles": [
                 "严格对齐已过门的 Decision 与原型，不新增未过门的行为合同。",
                 "改动现行规则、接口、表约束或测试入口前，先核现行代码与规则分册，不凭记忆写。",
@@ -87,10 +91,13 @@ PIPELINE = {
             "note": "可选, 默认 on",
             "optional_switch": "plan",
             "triage": True,
+            "skills": ["/impl-package:impl-planning", "/impl-package:plan-review"],
             "principles": [
-                "续用同一 reviewer 审实施计划。",
-                "计划切块遵循 Spec 合同边界，不自行发明行为合同。",
-                "每块给出验证方式与依赖顺序。",
+                "写 Plan 前先核实上游合同与代码/工具链现实（首稿写法与防线见 impl-planning）。",
+                "送审前先在隔离环境跑通确定性校验（如 check-spec / package init / package validate），清零格式与覆盖错误再进审阅。",
+                "按 plan-review 派发独立 plan-reviewer（大包可分轨并行），并保持 PE 参与根部裁剪；审阅意见先四类分诊再批量修订。",
+                "若修订回改了上游合同（Decision / Spec / contract-design），记轮次时加 --touched-upstream，并重跑确定性校验与受影响合同复验。",
+                "修订 material findings 后须走 focused-closure-verification 复验清零，记 --verdict clean 后过门进入 ready。",
             ],
         },
         {
@@ -99,11 +106,13 @@ PIPELINE = {
             "note": None,
             "optional_switch": None,
             "triage": False,
+            "skills": [],
             "principles": [
                 "用人话向 Owner 汇报：做什么 / 不做什么。",
                 "标出关键决定，PE 拍板项单独标注。",
                 "给出计划分块与顺序。",
                 "列出仍待 Owner 定事项（在哪 / 现状 / 为什么 / 建议），一句话结论：可以开工 / 还差什么。",
+                "交接实施主控时标明干净基线分支、单票局部 vs 包级门禁边界，以及票据是否保持 Draft 由实施主控初始化。",
             ],
         },
     ],
@@ -154,7 +163,7 @@ PIPELINE = {
             "src": "plan",
             "dst": "ready",
             "when": {"plan": True},
-            "gates": ["owner_confirmed", "rounds>=1", "last_round_clean"],
+            "gates": ["owner_confirmed", "role:plan-reviewer", "rounds>=1", "last_round_clean"],
             "style": "solid",
         },
     ],
@@ -170,6 +179,7 @@ GATE_LABELS = {
     "pkg_bound": "pkg_bound",
     "role:pe?": "pe(if on)",
     "role:reviewer": "reviewer",
+    "role:plan-reviewer": "plan-reviewer",
     "rounds>=1": "rounds>=1",
     "last_round_clean": "last=clean",
 }
@@ -179,9 +189,9 @@ FLOW = """\
   init -> confirm -> discover(可选,默认on) -> bind-pkg -> decision -> spec -> plan(可选,默认on) -> ready
 
 职责分工：
-  - kickoff       管编排与输入契约：状态机、角色登记、分诊轮次、阶段门禁、阶段原则。
-  - impl-package  管单阶段方法：req-align(Decision/Spec)、impl-planning(Plan) 等怎么做。
-  - 审阅者        负责挑全漏洞（只读、独立），不替 Owner 做业务取舍。
+  - kickoff       管编排与输入契约：状态机、角色池(pe/reviewer/plan-reviewer)、分诊轮次、阶段门禁、阶段 Skill 与原则。
+  - 下游 Skill    管单阶段方法：req-discover、/impl-package:req-align、/impl-package:impl-planning + /impl-package:plan-review。
+  - 审阅者        负责挑全漏洞（只读、独立），不替 Owner 做业务取舍；decision/spec 续用 reviewer，plan 登记独立 plan-reviewer 池。
   - 主控 + PE     负责四类分诊与根部裁剪，把业务取舍升级给 Owner。
 
 两段式落点：
@@ -268,6 +278,9 @@ def _check_gate(gate, state, src_stage):
     elif gate == "role:reviewer":
         if not state.get("agents", {}).get("reviewer"):
             return "未登记 reviewer：先运行 register --role reviewer"
+    elif gate == "role:plan-reviewer":
+        if not state.get("agents", {}).get("plan_reviewers"):
+            return "未登记 plan-reviewer：先运行 register --role plan-reviewer --agent-id <id>"
     elif gate == "rounds>=1":
         if len(rounds_for(state, src_stage)) < 1:
             return f"{src_stage} 阶段尚无分诊轮次：先运行 round --stage {src_stage}"
@@ -313,6 +326,8 @@ def next_command(state, state_path):
             return f"{p} register {loc} --role pe --agent-id <pe-agent-id>"
         if gate == "role:reviewer" and not state.get("agents", {}).get("reviewer"):
             return f"{p} register {loc} --role reviewer --agent-id <reviewer-agent-id>"
+        if gate == "role:plan-reviewer" and not state.get("agents", {}).get("plan_reviewers"):
+            return f"{p} register {loc} --role plan-reviewer --agent-id <plan-reviewer-agent-id>"
         if gate == "rounds>=1" and len(rounds_for(state, stage)) < 1:
             return (
                 f"{p} round {loc} --stage {stage} "
@@ -501,7 +516,7 @@ def cmd_init(args):
         "confirmed_at": None,
         "pkg_dir": pkg_dir,
         "staging_path": staging_path,
-        "agents": {"pe": None, "reviewer": None},
+        "agents": {"pe": None, "reviewer": None, "plan_reviewers": []},
         "rounds": [],
         "history": [],
     }
@@ -545,6 +560,27 @@ def cmd_register(args):
     agent_id = (args.agent_id or "").strip()
     if not agent_id:
         fail("--agent-id 不能为空")
+    if role == "plan-reviewer":
+        label = (args.label or "").strip()
+        pool = state.setdefault("agents", {}).setdefault("plan_reviewers", [])
+        existing = next((item for item in pool if item.get("agent_id") == agent_id), None)
+        if existing is not None:
+            if label:
+                existing["label"] = label
+            add_history(state, "register", role=role, agent_id=agent_id, label=label or None)
+            save_state(path, state)
+            tag = f" ({existing.get('label')})" if existing.get("label") else ""
+            print(f"[register] plan-reviewer 已存在并保留: {agent_id}{tag}（共 {len(pool)} 位）")
+            return
+        entry = {"agent_id": agent_id}
+        if label:
+            entry["label"] = label
+        pool.append(entry)
+        add_history(state, "register", role=role, agent_id=agent_id, label=label or None)
+        save_state(path, state)
+        tag = f" ({label})" if label else ""
+        print(f"[register] plan-reviewer += {agent_id}{tag}（共 {len(pool)} 位）")
+        return
     prev = state.setdefault("agents", {}).get(role)
     if prev and prev != agent_id:
         print(
@@ -581,20 +617,24 @@ def cmd_bind_pkg(args):
 def cmd_round(args):
     path = resolve_state_path(args)
     state = load_state(path)
-    if not state.get("agents", {}).get("reviewer"):
-        fail("未登记 reviewer：先运行 register --role reviewer --agent-id <id>")
-    summary = (args.summary or "").strip()
-    if not summary:
-        fail("--summary 不能为空，请记录本轮分诊摘要")
-    for name in ("added", "cut", "pe", "rejected"):
-        if getattr(args, name) < 0:
-            fail(f"--{name} 必须是非负整数")
     stage = args.stage
     if stage != state["stage"] and not args.backfill:
         fail(
             f"当前阶段为 {state['stage']}，不能记录 {stage} 阶段分诊"
             "（如确需补录历史阶段，请显式传 --backfill）"
         )
+    if stage == "plan":
+        if not state.get("agents", {}).get("plan_reviewers"):
+            fail("未登记 plan-reviewer：先运行 register --role plan-reviewer --agent-id <id>")
+    else:
+        if not state.get("agents", {}).get("reviewer"):
+            fail("未登记 reviewer：先运行 register --role reviewer --agent-id <id>")
+    summary = (args.summary or "").strip()
+    if not summary:
+        fail("--summary 不能为空，请记录本轮分诊摘要")
+    for name in ("added", "cut", "pe", "rejected"):
+        if getattr(args, name) < 0:
+            fail(f"--{name} 必须是非负整数")
     same = rounds_for(state, stage)
     number = len(same) + 1
     entry = {
@@ -612,6 +652,8 @@ def cmd_round(args):
     }
     if args.backfill:
         entry["backfill"] = True
+    if args.touched_upstream:
+        entry["touched_upstream"] = True
     state.setdefault("rounds", []).append(entry)
     add_history(
         state,
@@ -620,14 +662,21 @@ def cmd_round(args):
         round=number,
         verdict=args.verdict,
         backfill=args.backfill or None,
+        touched_upstream=args.touched_upstream or None,
     )
     save_state(path, state)
 
     c = entry["counts"]
+    upstream_tag = " [touched-upstream]" if args.touched_upstream else ""
     print(
-        f"[round] {stage} #{number} [{entry['verdict']}]: added={c['added']} cut={c['cut']} "
+        f"[round] {stage} #{number} [{entry['verdict']}]{upstream_tag}: added={c['added']} cut={c['cut']} "
         f"pe={c['pe']} rejected={c['rejected']} — {summary}"
     )
+    if args.touched_upstream:
+        print(
+            "\n[上游变更提醒] 本轮回改了上游合同（Decision / Spec / contract-design），\n"
+            "  请重跑 check-spec 等确定性校验，并确认受影响合同条款已完成复验。"
+        )
     limit = PIPELINE["convergence_limit"]
     recent = same[-(limit - 1):] + [entry] if limit > 1 else [entry]
     if len(recent) == limit and all(r["counts"]["added"] > 0 for r in recent):
@@ -665,6 +714,9 @@ def cmd_advance(args):
     save_state(path, state)
 
     print(f"[advance] {prev} -> {target}  已完成状态迁移。")
+    skills = STAGES[target].get("skills") or []
+    if skills:
+        print(f"\n[{target} 调用 Skill] {', '.join(skills)}")
     print(f"\n[{target} 硬原则]")
     for line in PRINCIPLES[target]:
         print(f"  - {line}")
@@ -692,7 +744,23 @@ def cmd_status(args):
         f"pe={'on' if sw['pe'] else 'off'} plan={'on' if sw['plan'] else 'off'}"
     )
     agents = state.get("agents", {})
-    print(f"  角色: pe={agents.get('pe') or '(未登记)'}  reviewer={agents.get('reviewer') or '(未登记)'}")
+    pr_list = agents.get("plan_reviewers") or []
+    pr_str = (
+        ", ".join(
+            f"{item['agent_id']}({item['label']})" if item.get("label") else item["agent_id"]
+            for item in pr_list
+        )
+        if pr_list
+        else "(未登记)"
+    )
+    print(
+        f"  角色: pe={agents.get('pe') or '(未登记)'}  "
+        f"reviewer={agents.get('reviewer') or '(未登记)'}  "
+        f"plan-reviewer={pr_str}"
+    )
+    skills = STAGES.get(state["stage"], {}).get("skills") or []
+    if skills:
+        print(f"  阶段 Skill: {', '.join(skills)}")
     if state.get("artifacts"):
         print("  阶段产出:")
         for st, paths in state["artifacts"].items():
@@ -710,8 +778,9 @@ def cmd_status(args):
             for r in rs:
                 c = r["counts"]
                 verdict = r.get("verdict") or "open"
+                up_tag = " [touched-upstream]" if r.get("touched_upstream") else ""
                 print(
-                    f"      #{r['round']} [{verdict}] added={c['added']} cut={c['cut']} "
+                    f"      #{r['round']} [{verdict}]{up_tag} added={c['added']} cut={c['cut']} "
                     f"pe={c['pe']} rejected={c['rejected']} — {r['summary']}"
                 )
 
@@ -766,11 +835,16 @@ def build_parser():
     p.add_argument("--note", default="")
     p.set_defaults(func=cmd_confirm)
 
-    p = sub.add_parser("register", help="登记常驻角色 PE / reviewer")
+    p = sub.add_parser("register", help="登记角色 PE / reviewer / plan-reviewer")
     p.add_argument("--pkg")
     p.add_argument("--state")
-    p.add_argument("--role", choices=["pe", "reviewer"], required=True)
+    p.add_argument("--role", choices=["pe", "reviewer", "plan-reviewer"], required=True)
     p.add_argument("--agent-id", required=True)
+    p.add_argument(
+        "--label",
+        default="",
+        help="可选：plan-reviewer 分轨或职责标签（如 scope / risk / delivery），便于后续复用",
+    )
     p.set_defaults(func=cmd_register)
 
     p = sub.add_parser("bind-pkg", help="把暂存状态迁到包目录并绑定 pkg_dir")
@@ -797,6 +871,11 @@ def build_parser():
         "--backfill",
         action="store_true",
         help="允许补录非当前阶段的历史分诊轮次",
+    )
+    p.add_argument(
+        "--touched-upstream",
+        action="store_true",
+        help="标记本轮修订回改了上游合同（Decision / Spec / contract-design），触发联动重验提醒",
     )
     p.add_argument("--summary", required=True, help="本轮分诊摘要（非空）")
     p.set_defaults(func=cmd_round)

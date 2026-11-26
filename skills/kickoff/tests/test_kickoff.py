@@ -100,6 +100,7 @@ class KickoffTest(unittest.TestCase):
         self.run_cli("round", "--pkg", pkg, "--stage", "spec", "--verdict", "clean", "--summary", "spec 分诊")
         self.run_cli("advance", "plan", "--pkg", pkg)
 
+        self.run_cli("register", "--pkg", pkg, "--role", "plan-reviewer", "--agent-id", "pr-a", "--label", "scope")
         self.run_cli("round", "--pkg", pkg, "--stage", "plan", "--verdict", "clean", "--summary", "plan 分诊")
         self.run_cli("advance", "ready", "--pkg", pkg)
 
@@ -107,6 +108,7 @@ class KickoffTest(unittest.TestCase):
         self.assertEqual(final["stage"], "ready")
         self.assertEqual(final["agents"]["pe"], "pe-1")
         self.assertEqual(final["agents"]["reviewer"], "rv-1")
+        self.assertEqual(final["agents"]["plan_reviewers"], [{"agent_id": "pr-a", "label": "scope"}])
 
     def test_skip_switches_chain_to_ready(self):
         pkg = self.path("pkg")
@@ -342,6 +344,93 @@ class KickoffTest(unittest.TestCase):
         out4 = self.run_cli("round", "--pkg", pkg, "--stage", "decision",
                             "--summary", "第4轮").stdout
         self.assertIn("轮次提醒", out4)
+
+    def _to_plan_stage(self, pkg):
+        self._to_decision_stage(pkg, "--discover", "off", "--pe", "off")
+        self.run_cli("register", "--pkg", pkg, "--role", "reviewer", "--agent-id", "rv-design")
+        self.run_cli("round", "--pkg", pkg, "--stage", "decision", "--verdict", "clean", "--summary", "decision clean")
+        self.run_cli("advance", "spec", "--pkg", pkg)
+        self.run_cli("round", "--pkg", pkg, "--stage", "spec", "--verdict", "clean", "--summary", "spec clean")
+        return self.run_cli("advance", "plan", "--pkg", pkg)
+
+    def test_plan_reviewer_pool_gate_and_next_command(self):
+        pkg = self.path("pkg")
+        adv = self._to_plan_stage(pkg).stdout
+        self.assertIn("/impl-package:impl-planning", adv)
+        self.assertIn("/impl-package:plan-review", adv)
+        self.assertIn("--role plan-reviewer", adv)
+
+        # 未登记 plan-reviewer 时，round 和 advance ready 均应拦截
+        err_round = self.run_fail("round", "--pkg", pkg, "--stage", "plan", "--summary", "plan 审阅")
+        self.assertIn("plan-reviewer", err_round)
+        err_adv = self.run_fail("advance", "ready", "--pkg", pkg)
+        self.assertIn("plan-reviewer", err_adv)
+
+        # 多轨追加不触发替换警告，同 ID 重复登记去重、可补标签且不传标签时保留原标签
+        o1 = self.run_cli("register", "--pkg", pkg, "--role", "plan-reviewer", "--agent-id", "pr-a", "--label", "scope").stdout
+        o2 = self.run_cli("register", "--pkg", pkg, "--role", "plan-reviewer", "--agent-id", "pr-b", "--label", "risk").stdout
+        o3 = self.run_cli("register", "--pkg", pkg, "--role", "plan-reviewer", "--agent-id", "pr-b", "--label", "risk-v2").stdout
+        o4 = self.run_cli("register", "--pkg", pkg, "--role", "plan-reviewer", "--agent-id", "pr-a").stdout
+        self.assertNotIn("[警告]", o1 + o2 + o3 + o4)
+
+        status = self.run_cli("status", "--pkg", pkg).stdout
+        self.assertIn("pr-a(scope)", status)
+        self.assertIn("pr-b(risk-v2)", status)
+        self.assertIn("阶段 Skill:", status)
+        self.assertIn("round --pkg", status)
+        self.assertIn("--stage plan", status)
+
+        r_open = self.run_cli("round", "--pkg", pkg, "--stage", "plan", "--summary", "首轮分诊").stdout
+        self.assertIn("--verdict clean", r_open)
+
+        r_clean = self.run_cli("round", "--pkg", pkg, "--stage", "plan", "--verdict", "clean", "--summary", "复验清零").stdout
+        self.assertIn("advance ready", r_clean)
+
+        state = self.read_state(self.path("pkg", "kickoff-state.json"))
+        self.assertEqual(
+            state["agents"]["plan_reviewers"],
+            [{"agent_id": "pr-a", "label": "scope"}, {"agent_id": "pr-b", "label": "risk-v2"}],
+        )
+
+    def test_round_stage_mismatch_checked_before_role(self):
+        pkg = self.path("pkg")
+        self._to_decision_stage(pkg, "--discover", "off", "--pe", "off")
+        err = self.run_fail("round", "--pkg", pkg, "--stage", "plan", "--summary", "错阶段")
+        self.assertIn("当前阶段为 decision", err)
+
+    def test_touched_upstream_flag_and_reminder(self):
+        pkg = self.path("pkg")
+        self._to_plan_stage(pkg)
+        self.run_cli("register", "--pkg", pkg, "--role", "plan-reviewer", "--agent-id", "pr-a")
+
+        r1 = self.run_cli(
+            "round", "--pkg", pkg, "--stage", "plan",
+            "--added", "1", "--touched-upstream",
+            "--summary", "回补 spec 最小视图 DTO",
+        ).stdout
+        self.assertIn("[touched-upstream]", r1)
+        self.assertIn("[上游变更提醒]", r1)
+
+        status = self.run_cli("status", "--pkg", pkg).stdout
+        self.assertIn("[touched-upstream]", status)
+
+        state = self.read_state(self.path("pkg", "kickoff-state.json"))
+        self.assertTrue(state["rounds"][-1]["touched_upstream"])
+
+    def test_legacy_state_without_plan_reviewers_key(self):
+        pkg = self.path("pkg")
+        self._to_plan_stage(pkg)
+        state_path = self.path("pkg", "kickoff-state.json")
+        state = self.read_state(state_path)
+        del state["agents"]["plan_reviewers"]
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+
+        status = self.run_cli("status", "--pkg", pkg).stdout
+        self.assertIn("plan-reviewer=(未登记)", status)
+        self.run_cli("register", "--pkg", pkg, "--role", "plan-reviewer", "--agent-id", "pr-legacy")
+        self.run_cli("round", "--pkg", pkg, "--stage", "plan", "--verdict", "clean", "--summary", "兼容旧状态")
+        self.run_cli("advance", "ready", "--pkg", pkg)
 
 
 if __name__ == "__main__":
