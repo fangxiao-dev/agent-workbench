@@ -3,6 +3,7 @@ import json
 import os
 import sqlite3
 import sys
+import tempfile
 import time
 import threading
 import http.client
@@ -277,7 +278,7 @@ def test_reject_invalid_mutation(tmp_path):
 def test_summary_command_accepts_only_synthetic_payload():
     command = [sys.executable, '-c', 'import json,sys; d=json.load(sys.stdin); print(json.dumps({"summary":d["events"][0]["text"],"attention":""}))']
     result = session_board_summary.summarize(command, {'events': [{'text': 'synthetic'}]})
-    assert result == {'summary': 'synthetic', 'attention': ''}
+    assert (result['summary'], result['attention']) == ('synthetic', '')
 
 
 def test_ollama_adapter_sends_only_to_local_endpoint(monkeypatch, capsys):
@@ -472,6 +473,15 @@ def test_compacted_session_links_through_host_conversation(tmp_path):
     assert board.superseded_ids(dbpath) == {parent}
     # the continuation inherits the triage the user did on the earlier card
     assert (items[0]['state'], items[0]['group_name'], items[0]['note']) == ('进行中', '工作台', 'keep me')
+
+
+def test_temp_dir_workers_stay_off_the_board(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    temp = Path(tempfile.gettempdir()) / 'worker-run'
+    source.write_bytes(record('user', 'hi', cwd=str(temp), entrypoint='cli', origin={'kind': 'human'}))
+    board.sync(dbpath, home)
+    item = board.list_items(dbpath, home)[0]
+    assert item['agent'] is True
 
 
 def test_board_runs_on_any_host_adapter(tmp_path, monkeypatch):

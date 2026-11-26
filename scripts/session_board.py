@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import secrets
 import shutil
@@ -11,6 +12,7 @@ import sqlite3
 import subprocess
 import sys
 import threading
+import tempfile
 import time
 from collections import deque
 from datetime import datetime
@@ -343,6 +345,14 @@ def usage_ranges(db) -> dict:
             "7d": usage_totals(db, now - 7 * 86400)}
 
 
+def in_temp(cwd: str) -> bool:
+    """Worker CLI runs happen in the OS temp dir; the board is for desktop conversations."""
+    if not cwd:
+        return False
+    root = os.path.normcase(os.path.abspath(tempfile.gettempdir())) + os.sep
+    return os.path.normcase(os.path.abspath(cwd)).startswith(root)
+
+
 def recent_days(db) -> int:
     # How far back the 最近 lane reaches; chosen in the lane header, one day unless stored otherwise.
     row = db.execute("SELECT value FROM meta WHERE key='recent_days'").fetchone()
@@ -373,8 +383,9 @@ def list_items(db_path: Path, home: Path) -> list[dict]:
         if row["id"] in superseded:
             continue  # continued by a newer rewind/fork file
         item = dict(row)
-        # Background/sub sessions: launched through the SDK, or untitled and not started by a human message.
-        item['agent'] = bool((row['entrypoint'] or '').startswith('sdk') or (not row['title'] and not row['human']))
+        # Background/sub sessions: launched through the SDK, untitled without a human start, or run from a temp dir.
+        item['agent'] = bool((row['entrypoint'] or '').startswith('sdk') or (not row['title'] and not row['human'])
+                             or in_temp(row['cwd']))
         info = live.get(item["id"], {})
         item["runtime"] = info.get("status", "未知")
         item["link"] = info.get("link", "")
