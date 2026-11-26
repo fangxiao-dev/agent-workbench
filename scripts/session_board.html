@@ -72,7 +72,7 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 .colhead{display:flex;align-items:center;gap:9px;flex:1;min-width:0;padding:2px 3px 12px;color:#e9f0f5;font-size:14px;font-weight:650;text-align:left}
 .colhead .mark{width:9px;height:9px;border-radius:3px;background:var(--tone);flex:none}
 .colhead .lb{letter-spacing:-.1px}
-.colhead .c{margin-left:auto;color:#8598a6;font-weight:500;font-size:12px;font-variant-numeric:tabular-nums}
+.colbar .c{flex:none;margin-left:auto;color:#8598a6;font-weight:500;font-size:12px;font-variant-numeric:tabular-nums}
 .colhead:hover .lb{color:#fff}
 .cards{display:flex;flex-direction:column;gap:12px;padding-bottom:2px}
 .win{flex:none;padding:2px 4px;border:1px solid rgba(255,255,255,.14);border-radius:6px;background:rgba(255,255,255,.06);color:#c6d3dd;font-size:11px;outline:0;cursor:pointer}
@@ -91,7 +91,6 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 .grp .chev{width:12px;height:12px;transition:transform var(--t1) var(--ease);opacity:.75;color:#7f8f9c}
 .grp[aria-expanded=false] .chev{transform:rotate(-90deg)}
 .grp svg{width:14px;height:14px;opacity:.8}.grp .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.grp .c{margin-left:auto;font-weight:400;color:#7f8f9c;font-size:11.5px;font-variant-numeric:tabular-nums}
 .glist{display:flex;flex-direction:column;gap:9px}
 
 /* ---- card: the solid surface ---- */
@@ -324,7 +323,7 @@ function groupEl(lane,g,nameCount){const k=lane+'|'+g.root,closed=k in fold?fold
   const need=g.rows.filter(pending).length,fresh=g.rows.filter(i=>i.unread).length;
   if(need)h.append(el('span','agg need',need+' 待处理'));if(fresh)h.append(el('span','agg fresh',fresh+' 新结果'));
   if(need)h.title+=' · '+need+' 个需要你拍板';
-  h.append(el('span','c',String(g.rows.length)));h.onclick=()=>{fold[k]=!closed;localStorage.setItem('board.fold',JSON.stringify(fold));render()};w.append(h);
+  h.onclick=()=>{fold[k]=!closed;localStorage.setItem('board.fold',JSON.stringify(fold));render()};w.append(h);
   if(!closed){const l=el('div','glist'),n=cap[k]||8;g.rows.slice(0,n).forEach(i=>l.append(card(i,nameCount[clean(i.title)])));
     if(g.rows.length>n){const b=el('button','more','还有 '+(g.rows.length-n)+' 个');b.onclick=()=>{cap[k]=n+8;render()};l.append(b)}w.append(l)}
   return w}
@@ -346,7 +345,7 @@ function render(){if(dragging)return;
     if(colCollapsed(name)&&filter!=='focus'){collapsed.push({name,label:label||name,count:rows.length,need:rows.some(pending)});continue}
     const col=el('section','col');col.dataset.tone=tone;
     const h=el('button','colhead');h.type='button';h.title='收起'+(label||name);h.setAttribute('aria-label',h.title);
-    h.append(el('span','mark'),el('span','lb',label||name),el('span','c',String(rows.length)));
+    h.append(el('span','mark'),el('span','lb',label||name));
     h.onclick=()=>{colFold[name]=true;localStorage.setItem('board.colfold',JSON.stringify(colFold));render()};
     const bar=el('div','colbar');bar.append(h);
     if(name==='待查看'){
@@ -355,6 +354,7 @@ function render(){if(dragging)return;
       sel.onchange=async()=>{recentDays=Number(sel.value);render();
         try{await api('/api/settings',{recent_days:recentDays})}catch(e){report('时间范围保存失败：'+e.message)}};
       bar.append(sel)}
+    bar.append(el('span','c',String(rows.length)));
     col.append(bar);
     const body=el('div','cards');
     if(!rows.length)body.append(el('div','empty',showRemoved?'':(filter==='focus'?'当前没有进行中的会话':'拖到这里')));
