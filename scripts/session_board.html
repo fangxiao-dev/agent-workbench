@@ -397,8 +397,8 @@ function card(i,dupes){
   // A slight mouse-following tilt; transform only, so nothing reflows (no row height or column width change).
   if(!coarse&&!reduceMotion)c.addEventListener('pointermove',e=>{if(dragging||e.pointerType!=='mouse')return;
     const r=c.getBoundingClientRect();
-    c.style.setProperty('--ry',((e.clientX-r.left)/r.width-.5)*4+'deg');
-    c.style.setProperty('--rx',((e.clientY-r.top)/r.height-.5)*-4+'deg')});
+    c.style.setProperty('--ry',((e.clientX-r.left)/r.width-.5)*10+'deg');
+    c.style.setProperty('--rx',((e.clientY-r.top)/r.height-.5)*-10+'deg')});
   c.addEventListener('pointerleave',()=>{c.style.removeProperty('--rx');c.style.removeProperty('--ry')});
   c.addEventListener('dragstart',e=>{dragging=true;c.classList.add('dragging');c.style.removeProperty('--rx');c.style.removeProperty('--ry');e.dataTransfer.setData('text/plain',i.id);e.dataTransfer.effectAllowed='move'});
   c.addEventListener('dragend',()=>{dragging=false;c.classList.remove('dragging');document.querySelectorAll('.col.over').forEach(x=>x.classList.remove('over'))});
