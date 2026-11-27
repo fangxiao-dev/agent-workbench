@@ -74,7 +74,7 @@ python3 -m scripts.session_board --db ~/SessionBoard/board.sqlite3 --port 43188 
 - **页面空白 / 打不开**：先 `-Action status`。进程在但 HTTP 不通，多半是手动从开发仓库启动的——那份工作区被切走后服务读不到 HTML。自启跑的是运行目录，不受影响；切回 `main` 再 `restart` 即可。
 - **端口被占**：`-Action stop` 会按命令行里的 `session_board.py` 找 python 进程，不按端口乱杀；确认只停看板进程。
 - **改了代码没生效**：HTML 每次请求都从磁盘读，改完刷新页面即可；`.py` 改动必须 `restart`。
-- **手机打开是 `{"error":"请求来源不允许"}`**：这次重启漏了 `-AllowOrigin https://<节点名>.ts.net`，或节点名变了（`tailscale status --json` 看 `Self.DNSName`）。
+- **手机打开是 `{"error":"请求来源不允许"}`**：看板启动时没带 `-AllowOrigin`。`restart`/`update` 会沿用正在跑那份的参数；进程本来就不在跑（比如刚开机且自启失败）时不会，需要显式带上 `-AllowOrigin https://<节点名>.ts.net`。节点名变了也要改。
 
 ## 开发时再读
 

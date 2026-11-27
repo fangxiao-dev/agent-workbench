@@ -122,6 +122,12 @@ function Update-Board {
     Start-Board
 }
 
+# restart/update 不带 -AllowOrigin 会悄悄关掉远程访问，沿用正在跑那个进程的参数。
+if (-not $AllowOrigin) {
+    $current = @(Get-BoardProcess) | Select-Object -First 1
+    if ($current -and $current.CommandLine -match '--allow-origin\s+(\S+)') { $AllowOrigin = $Matches[1].Trim('"') }
+}
+
 switch ($Action) {
     'stop' { Stop-Board }
     'start' { Start-Board }
