@@ -4,15 +4,14 @@
 
 ## Plugin 安装
 
-独立发布根位于 `plugin-marketplace/`。其中 Codex marketplace 位于 `.agents/plugins/marketplace.json`，Claude marketplace 位于 `.claude-plugin/marketplace.json`，ZCode marketplace 位于发布根目录的 `marketplace.json`；三者均以 `agent-workbench` 为 marketplace 名，并从 `./plugins/<plugin>` 读取同一份插件 payload。manifest 使用宿主各自支持的字段，但版本字段必须保持一致；Codex marketplace entry 本身不复制 plugin version。
+独立发布根位于 `plugin-marketplace/`。其中 Codex marketplace 位于 `.agents/plugins/marketplace.json`，Claude marketplace 位于 `.claude-plugin/marketplace.json`；两者均以 `agent-workbench` 为 marketplace 名，并从 `./plugins/<plugin>` 读取同一份插件 payload。manifest 使用宿主各自支持的字段，但版本字段必须保持一致；Codex marketplace entry 本身不复制 plugin version。
 
 插件 `impl-package` 的宿主 manifest：
 
 - `.codex-plugin/plugin.json`：skills + hooks（`./hooks/codex-hooks.json`，apply_patch 守卫与 SessionStart capsule）
 - `.claude-plugin/plugin.json`：skills + agents（3 个 review-track review agents）
-- `.zcode-plugin/plugin.json`：skills + hooks（`./hooks/zcode-hooks.json`，Edit/Write 守卫与 SessionStart capsule）+ agents（同一组 review-track 子代理，zcode 原生注册到 Settings → 子智能体）
 
-Claude manifest 声明 `./hooks/claude-hooks.json`（Edit/Write/MultiEdit 守卫与 SessionStart capsule，`activate` 经 `CLAUDE_CODE_SESSION_ID` 按 session 绑定）。ZCode hooks 使用独立文件名 `zcode-hooks.json` 而非 `hooks/hooks.json`，避免被 Claude Code 的插件 hook 自动发现机制意外拾取。ZCode 侧 `impl_package_hooks.py activate` 拿不到 session 环境变量时自动落为仓库级 default 绑定；Codex 仍按 session 绑定。
+Claude manifest 声明 `./hooks/claude-hooks.json`（Edit/Write/MultiEdit 守卫与 SessionStart capsule，`activate` 经 `CLAUDE_CODE_SESSION_ID` 按 session 绑定）。配置文件使用独立文件名而非自动发现的 `hooks/hooks.json`。
 
 ```powershell
 codex plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
@@ -20,16 +19,9 @@ codex plugin add impl-package@agent-workbench
 
 claude plugin marketplace add D:\path\to\agent-workbench\plugin-marketplace
 claude plugin install impl-package@agent-workbench --scope project
-
-# ZCode：客户端 Settings → 插件管理 → Discover → "+" 添加本地目录
-# D:\path\to\agent-workbench\plugin-marketplace
 ```
 
 插件目录就是安装产物，不执行 build。安装和更新会进入宿主缓存；manifest/marketplace 的版本元数据必须同步，更新后开启新会话。除下述 Codex 一次性诊断/bootstrap 外，Workbench 不包装插件生命周期命令，也不在未授权时修改用户级宿主状态。
-
-### DSH（自包含例外宿主）
-
-`dsh-impl-package` 与 `dsh-dispatch-scan` 不走上述 marketplace/link 体系：它们是 DSH profile bundle（manifest `dsh.bundle.patch` + agent preset），安装（`dsh plugin --profile desktop add "link:..."`）、卸载与 preset 同步全部自包含在插件目录与各自 README 内。它们不进入 `scripts/link_skill.py` 的 host 列表（DSH 侧 skills 由 preset 的 `customSkillDirs` 与 dsh 默认发现根承接），也不登记 registry——这是有意保留的薄适配例外，不算漏配。
 
 ## Plugin 生命周期：Agent 直接执行
 
@@ -40,7 +32,6 @@ claude plugin install impl-package@agent-workbench --scope project
 ```powershell
 codex plugin list
 claude plugin list
-grok plugin list
 ```
 
 ### Codex
@@ -75,21 +66,6 @@ claude plugin install impl-package@agent-workbench --scope <scope>
 
 `scripts/claude_setup.py audit` 是 Claude 宿主唯一的仓库包装入口，且只读：读取 `claude plugin marketplace list --json` 与 `claude plugin list --json`，对插件缓存目录（CLI 报告的 `installPath`）与 `plugin-marketplace/` 源树做 SHA-256 快照对比，并审计 `<claude-home>/skills` 下的 workbench skill 链接与陈旧链接。报告带审计 SHA 供前后对比；退出码 `0` 一致、`2` 有差异、`1` 运行错误。它没有 `apply`：安装、升级、重装仍按上面的原生 CLI 执行，skill 链接修复使用 `scripts/link_skill.py`。默认 home 优先 `CLAUDE_CONFIG_DIR`，否则 `~/.claude`，可用 `--claude-home` 覆盖。快照、差异、链接审计与报告渲染原语与 `codex_setup.py` 共享自 `scripts/host_setup_core.py`。
 
-### Grok
-
-Grok 直接使用本地 plugin 目录，不经 marketplace。
-
-```powershell
-# 升级或刷新
-grok plugin update impl-package
-
-# 重装
-grok plugin uninstall impl-package --confirm
-grok plugin install D:\path\to\agent-workbench\plugin-marketplace\plugins\impl-package --trust
-```
-
-一个宿主的命令失败后停止该宿主的后续步骤，并准确报告已发生的状态；不要把卸载成功、安装失败写成重装成功。执行后用对应的 `plugin list` 核对 enabled/version，检查宿主报告的 cache 或 installed root 是否包含目标版本；必要时比较 manifest 和关键 Skill 的哈希。最后开启新会话，让宿主重新加载插件内容。
-
 ## Codex 一次性更新诊断/bootstrap
 
 `scripts/codex_setup.py` 是唯一允许包装 Codex plugin CLI 的 lifecycle 入口。它只盘点当前仓库管理的 plugin、skills 和 agents；SHA-256 是内容一致性的唯一依据，UTF-8 文本统一换行为 LF 后计算，二进制使用原始字节，plugin version 只作说明。用户自行安装内容、`plugins/data`、staging 和宿主二进制不在范围内。
@@ -118,7 +94,7 @@ python scripts/codex_setup.py apply --expect-report <audit-sha> --prune-stale
 
 ### Codex agent inventory
 
-仓库根目录 `agents/` 是个人 Codex agent 的来源目录：子目录继续按目录 link 投影到 `$CODEX_HOME/agents/<name>`，顶层 `*.toml` 由 `codex_setup.py` 投影到 `$CODEX_HOME/agents/<name>.toml`。顶层 `*.md`（ZCode 子智能体格式）不进入 Codex inventory，手动复制到 `~/.zcode/agents/<name>.md` 安装，与同名 `.toml` role 保持同一来源。`frontend-worker`/`backend-worker` 采用薄壳模式：方法唯一源是 `skills/<name>/SKILL.md`（经 `link_skill.py` 链入各宿主），`.toml` 与 `.md` 的指令只引用该 skill 并保留载体契约（并行边界与返回格式）。新增或删除 inventory 条目不需要修改 setup 脚本；audit 会自动发现变化。现有未受管目标首次接管时使用：
+仓库根目录 `agents/` 是个人 Codex agent 的来源目录：子目录继续按目录 link 投影到 `$CODEX_HOME/agents/<name>`，顶层 `*.toml` 由 `codex_setup.py` 投影到 `$CODEX_HOME/agents/<name>.toml`。`frontend-worker`/`backend-worker` 采用薄壳模式：方法唯一源是 `skills/<name>/SKILL.md`（经 `link_skill.py` 链入各宿主），`.toml` 的指令只引用该 skill 并保留载体契约（并行边界与返回格式）。新增或删除 inventory 条目不需要修改 setup 脚本；audit 会自动发现变化。现有未受管目标首次接管时使用：
 
 ```powershell
 python scripts/codex_setup.py apply --expect-report <audit-sha> --adopt-agents
@@ -154,27 +130,26 @@ python plugin-marketplace/plugins/impl-package/scripts/install_codex_agents.py -
 - `agents` → `~/.agents/skills`（跨宿主共享的 Agent Skills 约定目录，非单一宿主）
 - `claude` → `~/.claude/skills`
 - `codex` → `~/.codex/skills`
-- `grok` → `~/.grok/skills`（可用 `GROK_HOME` 覆盖 grok 根）
 
 ## 调用方式
 
 ```bash
 # 单个 skill → 一个或多个宿主
-python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --host claude
-python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --host claude codex grok
+python3 /path/to/agent-workbench/scripts/link_skill.py git-commit --host claude
+python3 /path/to/agent-workbench/scripts/link_skill.py git-commit --host claude codex
 
 # 全部顶层 skills/*
 python3 /path/to/agent-workbench/scripts/link_skill.py --all --host claude
 
 # 自定义目标 skills 目录
-python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --to /path/to/skills
+python3 /path/to/agent-workbench/scripts/link_skill.py git-commit --to /path/to/skills
 
 # 只拆整树 link、建真实目录，不装 skill
 python3 /path/to/agent-workbench/scripts/link_skill.py --migrate-only --host claude
 
 # 卸载宿主侧 link（不删除 workbench skills/ 源头）
-python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --unlink --host claude
-python3 /path/to/agent-workbench/scripts/link_skill.py call-grok --uninstall --host claude grok
+python3 /path/to/agent-workbench/scripts/link_skill.py git-commit --unlink --host claude
+python3 /path/to/agent-workbench/scripts/link_skill.py git-commit --uninstall --host claude codex
 ```
 
 stdout 末行是 JSON summary（含 `platform`、`link_kind`、各 host 的 `linked|skipped|conflict`）。

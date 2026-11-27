@@ -462,7 +462,7 @@ def test_pre_tool_use_malformed_events_fail_open_with_optional_warning(tmp_path:
         assert "systemMessage" in warning
 
 
-def zcode_pre_tool_event(repo: Path, tool_name: str, tool_input: dict[str, object]) -> dict[str, object]:
+def file_edit_pre_tool_event(repo: Path, tool_name: str, tool_input: dict[str, object]) -> dict[str, object]:
     return {
         "session_id": "hook-test-session",
         "cwd": str(repo.resolve()),
@@ -477,12 +477,11 @@ def zcode_pre_tool_event(repo: Path, tool_name: str, tool_input: dict[str, objec
 NO_SESSION_ENV = {
     "CODEX_SESSION_ID": "",
     "CODEX_THREAD_ID": "",
-    "ZCODE_SESSION_ID": "",
     "CLAUDE_CODE_SESSION_ID": "",
 }
 
 
-def test_zcode_pre_tool_use_denies_edit_and_write_state_paths(tmp_path: Path) -> None:
+def test_edit_and_write_tool_events_deny_state_paths(tmp_path: Path) -> None:
     repo, _ = make_repo(tmp_path)
     state_rel = PACKAGE_REL.as_posix() + "/.impl-package/state.json"
     denied_cases = [
@@ -499,7 +498,7 @@ def test_zcode_pre_tool_use_denies_edit_and_write_state_paths(tmp_path: Path) ->
     ]
     for tool_name, tool_input in denied_cases:
         result = run_hook(
-            repo, "pre-tool-use", payload=zcode_pre_tool_event(repo, tool_name, tool_input)
+            repo, "pre-tool-use", payload=file_edit_pre_tool_event(repo, tool_name, tool_input)
         )
         output = assert_json_success(result)
         hook_output = output["hookSpecificOutput"]
@@ -512,7 +511,7 @@ def test_zcode_pre_tool_use_denies_edit_and_write_state_paths(tmp_path: Path) ->
     allowed = run_hook(
         repo,
         "pre-tool-use",
-        payload=zcode_pre_tool_event(
+        payload=file_edit_pre_tool_event(
             repo,
             "Write",
             {"file_path": PACKAGE_REL.as_posix() + "/.impl-package/progress.md", "content": "x"},
@@ -525,7 +524,7 @@ def test_zcode_pre_tool_use_denies_edit_and_write_state_paths(tmp_path: Path) ->
     fixture_result = run_hook(
         repo,
         "pre-tool-use",
-        payload=zcode_pre_tool_event(
+        payload=file_edit_pre_tool_event(
             repo,
             "Edit",
             {"file_path": "tests/fixtures/situations/example/.impl-package/state.json"},
@@ -559,7 +558,7 @@ def test_activate_falls_back_to_repository_default_binding_without_session_env(t
     assert json.loads(default_path.read_text(encoding="utf-8"))["session_id"] == "default"
 
     # Any session in the same repository resumes the capsule from a default binding.
-    context = capsule_text(session_start(repo, "arbitrary-zcode-session"))
+    context = capsule_text(session_start(repo, "arbitrary-session"))
     assert PACKAGE_REL.as_posix() in context
 
     # Explicit session bindings keep taking precedence over the default binding.

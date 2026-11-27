@@ -35,7 +35,13 @@ def test_parser_defaults_and_root_resolution(tmp_path: Path) -> None:
     orchestrator = load_orchestrator()
     args = orchestrator.build_parser().parse_args(["--topic", "docs/plan.md"])
     assert (args.agents, args.max_rounds, args.timeout_s) == ("codex,claude", 5, 300)
-    assert orchestrator.parse_agents("codex, claude, grok") == ["codex", "claude", "grok"]
+    assert orchestrator.parse_agents("codex, claude") == ["codex", "claude"]
+    try:
+        orchestrator.parse_agents("codex, claude, grok")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("grok is retired and must not be an accepted agent")
     target = tmp_path / "checkout" / "docs" / "plan.md"
     (tmp_path / "checkout" / ".git").mkdir(parents=True)
     target.parent.mkdir(parents=True)
@@ -99,26 +105,14 @@ def test_orchestrator_passes_legacy_codex_and_claude_configuration_to_executors(
     assert codex_args[codex_args.index("--effort") + 1] == "medium"
 
 
-def test_orchestrator_passes_explicit_grok_configuration_to_executor(monkeypatch, tmp_path: Path) -> None:
+def test_orchestrator_rejects_retired_grok_agent(monkeypatch, tmp_path: Path) -> None:
     orchestrator = load_orchestrator()
-    payload = {"convergences": [], "contests": [], "new_points": []}
-    calls = []
-
-    def fake_executor(script, arguments, prompt, root, timeout_s):
-        calls.append((script, arguments, prompt, root, timeout_s))
-        return json.dumps(payload)
-
-    monkeypatch.setattr(orchestrator, "run_executor", fake_executor)
-    assert orchestrator.run_grok("grok prompt", tmp_path, 10) == payload
-    assert calls == [
-        (
-            orchestrator.CALL_GROK,
-            ["--effort", "low", "--tools", "", "--no-subagents", "--overall-timeout-sec", "10"],
-            "grok prompt",
-            tmp_path,
-            10,
-        )
-    ]
+    try:
+        orchestrator.call_agent("grok", "prompt", tmp_path, None, False, 10)
+    except orchestrator.AdapterError as exc:
+        assert exc.code == "UNSUPPORTED_AGENT"
+    else:
+        raise AssertionError("grok is retired and must not be dispatched")
 
 
 def test_orchestrator_keeps_claude_business_json_repair_above_executor(monkeypatch, tmp_path: Path) -> None:

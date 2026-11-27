@@ -35,7 +35,7 @@ flowchart LR
 
 需要持续跟踪的复杂变更，可以使用 [Impl-Package](../plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md) 组织需求、计划、执行证据和验收。文件化规划、显式任务队列、进度页面以及交接能力，则帮助保存当前认识、展示剩余工作，并让新会话接续已有成果。
 
-你得到的不只是代码，还包括哪些结果已经验证、哪里仍有阻塞、下一步能做什么。工作台也提供与 Codex、Claude、Grok 等执行工具协作的方法，以及独立复核渠道；具体工具是否可用由运行环境决定。
+你得到的不只是代码，还包括哪些结果已经验证、哪里仍有阻塞、下一步能做什么。工作台也提供与 Codex、Claude 等执行工具协作的方法，以及独立复核渠道；具体工具是否可用由运行环境决定。
 
 ## 验证结果并控制风险
 
@@ -83,11 +83,9 @@ flowchart LR
 
 ## 在不同宿主上使用和维护同一套方法
 
-工作台将可复用内容集中维护，再通过不同宿主支持的方式使用：独立 Skills 按需链接；多能力套件通过插件安装；Agent 定义和适配工具提供相应执行角色。仓库包含 Codex、Claude、Grok、ZCode 等宿主的相关支持，具体安装和加载范围以各自配置为准。
+工作台将可复用内容集中维护，再通过不同宿主支持的方式使用：独立 Skills 按需链接；多能力套件通过插件安装；Agent 定义和适配工具提供相应执行角色。仓库包含 Codex、Claude 等宿主的相关支持，具体安装和加载范围以各自配置为准。
 
 其中，**Impl-Package** 将正式需求对齐、实施规划、执行跟踪、独立审查和知识回刷组合起来。它与独立的研究、探索、调度、UI 和知识能力协作，让复杂项目可以保留一致的工作依据。
-
-仓库也包含 **DSH 原生适配**：[`dsh-impl-package`](../plugin-marketplace/plugins/dsh-impl-package/README.md) 将现有任务包能力接入 DSH 的命令、工具和会话机制；[`dsh-dispatch-scan`](../plugin-marketplace/plugins/dsh-dispatch-scan/README.md) 在执行步骤前提醒检查可推进的并行工作。它们使用自己的插件配置，不应将主 marketplace 的安装方式理解为安装了所有适配。
 
 工作台自身也可以迭代：发现和审查第三方 Skills、编写或改进本地 Skills、记录已确认的优化偏好，并核对源文件与宿主安装态的差异。[setup-workbench](../skills/setup-workbench/SKILL.md) 支持安装态检查及其明确支持的更新流程；链接工具在冲突时保留现有内容并报告。
 

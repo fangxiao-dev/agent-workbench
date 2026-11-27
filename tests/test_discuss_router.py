@@ -32,8 +32,8 @@ def test_router_defaults_to_ledger_with_original_two_participants() -> None:
 def test_router_accepts_full_or_an_explicit_pair_only() -> None:
     router = load_router()
 
-    assert router.resolve_agents("full") == ["codex", "claude", "grok"]
-    assert router.resolve_agents("grok,codex") == ["grok", "codex"]
+    assert router.resolve_agents("full") == ["codex", "claude"]
+    assert router.resolve_agents("claude,codex") == ["claude", "codex"]
     for invalid in ("codex", "codex,claude,grok", "codex,codex"):
         try:
             router.resolve_agents(invalid)
@@ -51,7 +51,7 @@ def test_router_dispatches_modes_without_mixing_mode_and_participant_selection(m
     monkeypatch.setattr(router.blind_opening_then_ledger, "main", lambda argv: calls.append(("combined", argv)) or 12)
 
     assert router.main(["--topic", "T"]) == 10
-    assert router.main(["--mode", "blind", "--agents", "codex,grok", "--topic", "T"]) == 11
+    assert router.main(["--mode", "blind", "--agents", "claude,codex", "--topic", "T"]) == 11
     assert router.main(["--mode", "combined", "--agents", "full", "--topic", "T"]) == 12
 
     assert calls[0] == (
@@ -69,8 +69,8 @@ def test_router_dispatches_modes_without_mixing_mode_and_participant_selection(m
             "5",
         ],
     )
-    assert calls[1][0] == "blind" and "codex,grok" in calls[1][1] and "--max-rounds" not in calls[1][1]
-    assert calls[2][0] == "combined" and "codex,claude,grok" in calls[2][1] and "--max-rounds" in calls[2][1]
+    assert calls[1][0] == "blind" and "claude,codex" in calls[1][1] and "--max-rounds" not in calls[1][1]
+    assert calls[2][0] == "combined" and "codex,claude" in calls[2][1] and "--max-rounds" in calls[2][1]
 
 
 def test_model_overrides_default_and_forwarding():
@@ -88,7 +88,6 @@ def test_model_overrides_default_and_forwarding():
         else:
             raise AssertionError("Codex model and effort must be explicit")
         assert orchestrator.claude_model_args() == ["--model", "sonnet", "--effort", "high"]
-        assert orchestrator.grok_model_args() == ["--effort", "low"]
 
         args = discuss_router.build_parser().parse_args(
             ["--mode", "blind", "--topic", "t", "--codex-model", "gpt-6-astra", "--codex-effort", "low"]

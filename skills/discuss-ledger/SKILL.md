@@ -15,19 +15,19 @@ Mode and participants are separate choices. `discuss_router.py` only selects the
 | Setting | Default | Accepted values | Effect |
 | --- | --- | --- | --- |
 | `--mode` | `ledger` | `ledger`, `blind`, `combined` | Normal discussion, independent discovery, or Blind Opening followed by normal Ledger. |
-| `--agents` | `codex,claude` | `full`, or exactly two distinct names from `codex`, `claude`, `grok` | `full` expands to `codex,claude,grok`. One participant or a literal three-name list is rejected. |
+| `--agents` | `codex,claude` | `full`, or the two names `codex`, `claude` | `full` expands to `codex,claude`. One participant or any other list is rejected. |
 | `--max-rounds` | `5` | integer | Full participant cycles for `ledger` / `combined`. |
 | `--timeout-s` | `300` | integer | Per-agent, per-call timeout. |
 | `--session-dir` | unset (ephemeral) | directory | `blind` only: persist Codex/Claude sessions there and resume them on later runs with the same directory; resumed prompts start with “重新看” so participants re-read everything. |
-| `--<agent>-model` / `--<agent>-effort` | see below | `<agent>` is `codex`, `claude` or `grok` | Per-run model and reasoning-effort override; Codex requires both values explicitly. |
+| `--<agent>-model` / `--<agent>-effort` | see below | `<agent>` is `codex` or `claude` | Per-run model and reasoning-effort override; Codex requires both values explicitly. |
 
-Defaults: Claude runs the `sonnet` alias (the latest `sonnet`) at `high`; Grok runs call-grok's default model at `low`. For Codex, supply both `--codex-model` and `--codex-effort`, e.g. `--codex-model gpt-6-astra --codex-effort low`; the router forwards overrides to every mode. Do not pin model versions on your own.
+Defaults: Claude runs the `sonnet` alias (the latest `sonnet`) at `high`. For Codex, supply both `--codex-model` and `--codex-effort`, e.g. `--codex-model gpt-6-astra --codex-effort low`; the router forwards overrides to every mode. Do not pin model versions on your own.
 
 Dispatch: `ledger` → `discuss_orchestrator.py`; `blind` → `blind_opening.py` (writes only the independent-opening artifacts); `combined` → `blind_opening_then_ledger.py` (hands consolidated points to the unchanged Ledger workflow).
 
 ```powershell
 python <skill>\scripts\discuss_router.py --topic <target>
-python <skill>\scripts\discuss_router.py --mode blind --agents codex,grok --topic <target>
+python <skill>\scripts\discuss_router.py --mode blind --agents codex,claude --topic <target>
 python <skill>\scripts\discuss_router.py --mode combined --agents full --topic <target>
 ```
 

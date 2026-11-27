@@ -12,7 +12,7 @@ import discuss_orchestrator as orchestrator
 
 
 DEFAULT_AGENTS = ("codex", "claude")
-FULL_AGENTS = ("codex", "claude", "grok")
+FULL_AGENTS = ("codex", "claude")
 
 
 def resolve_agents(value: str) -> list[str]:
@@ -20,7 +20,7 @@ def resolve_agents(value: str) -> list[str]:
         return list(FULL_AGENTS)
     agents = orchestrator.parse_agents(value)
     if len(agents) != 2 or len(set(agents)) != 2:
-        raise ValueError("--agents must be full or exactly two distinct agents: codex, claude, grok")
+        raise ValueError("--agents must be full or exactly two distinct agents: codex, claude")
     return agents
 
 
@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", default=".", help="target project root")
     parser.add_argument("--topic", required=True, help="topic or target document")
     parser.add_argument("--slug", help="artifact or ledger slug")
-    parser.add_argument("--agents", default=",".join(DEFAULT_AGENTS), help="full, or exactly two of: codex, claude, grok")
+    parser.add_argument("--agents", default=",".join(DEFAULT_AGENTS), help="full, or exactly two of: codex, claude")
     parser.add_argument("--max-rounds", type=int, default=5, help="full participant cycles for ledger/combined (default 5)")
     parser.add_argument("--timeout-s", type=int, default=300, help="per-agent timeout in seconds")
     parser.add_argument("--output-dir", default=str(Path(tempfile.gettempdir()) / "discuss-ledger"), help="Blind Opening artifact directory")

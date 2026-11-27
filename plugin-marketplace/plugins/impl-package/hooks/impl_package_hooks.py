@@ -1,4 +1,4 @@
-"""Host lifecycle hooks for Impl-Package (Codex, ZCode and Claude Code).
+"""Host lifecycle hooks for Impl-Package (Codex and Claude Code).
 
 This module only protects machine-owned state and supplies a read-only resume
 capsule. Business state, acceptance, and Gate decisions remain owned by the
@@ -23,15 +23,14 @@ SITUATION_CLI = PLUGIN_ROOT / "scripts" / "situation.py"
 STATE_REL = PurePosixPath(".impl-package/state.json")
 BINDING_VERSION = 1
 CAPSULE_VERSION = 1
-# Repository-level binding used by hosts that do not expose a session id to
-# agent-run commands (ZCode). Explicit session bindings keep taking precedence.
+# Repository-level fallback: explicit session bindings take precedence when the
+# host exposes a session id to agent-run commands.
 DEFAULT_SESSION_ID = "default"
 # A UTF-8 byte ceiling also fits the host's 1200-character/token context budget.
 CAPSULE_CONTEXT_BUDGET = 1200
 SESSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
-# ZCode and Claude Code expose state edits as Edit/Write (ZCode aliases
-# ApplyPatch onto them) with the target path in tool_input instead of an
-# apply_patch command body.
+# Claude Code exposes state edits as Edit/Write with the target path in
+# tool_input instead of an apply_patch command body.
 FILE_EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "ApplyPatch")
 PATCH_HEADER_RE = re.compile(
     r"^\*\*\* (?:Add File|Update File|Delete File|Move to):\s*(.+?)\s*$",
@@ -56,7 +55,6 @@ def _session_id(explicit: str | None = None) -> str:
         explicit
         or os.environ.get("CODEX_SESSION_ID")
         or os.environ.get("CODEX_THREAD_ID")
-        or os.environ.get("ZCODE_SESSION_ID")
         or os.environ.get("CLAUDE_CODE_SESSION_ID")
     )
     if not value:

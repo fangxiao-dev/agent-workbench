@@ -15,7 +15,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", default=".", help="target project root")
     parser.add_argument("--topic", required=True, help="topic or target document")
     parser.add_argument("--slug", help="shared result and ledger slug")
-    parser.add_argument("--agents", default="codex,claude", help="comma list: codex, claude, grok")
+    parser.add_argument("--agents", default="codex,claude", help="comma list: codex, claude")
     parser.add_argument("--max-rounds", type=int, default=5, help="full participant cycles (default 5)")
     parser.add_argument("--timeout-s", type=int, default=300, help="per agent timeout in seconds")
     parser.add_argument("--output-dir", default=str(Path(tempfile.gettempdir()) / "discuss-ledger"))
