@@ -4,6 +4,15 @@
   "initial": "intake",
   "terminal": "closeout",
   "statuses": ["done", "active", "pending", "blocked", "attention"],
+  "transitions": [
+    {"src": "intake", "dst": "tickets", "label": "state.json 与 Ticket 可读"},
+    {"src": "tickets", "dst": "tickets", "label": "派发 → 返回 → 组合审阅 → 修复复验"},
+    {"src": "tickets", "dst": "final-review", "label": "全部 Ticket SATISFIED / RETIRED"},
+    {"src": "final-review", "dst": "final-review", "label": "分诊 → 修复 → 复验"},
+    {"src": "final-review", "dst": "final-verify", "label": "terminal-final 收敛"},
+    {"src": "final-verify", "dst": "gate", "label": "无 acceptance / evidence 缺口"},
+    {"src": "gate", "dst": "closeout", "label": "Gate pass 且无缺口冲突"}
+  ],
   "stages": [
     {
       "id": "intake",

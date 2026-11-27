@@ -34,6 +34,7 @@ def _register_local_package() -> None:
 _register_local_package()
 engine = importlib.import_module(f"{_PACKAGE_NAME}.engine")
 render = importlib.import_module(f"{_PACKAGE_NAME}.render")
+diagram = importlib.import_module(f"{_PACKAGE_NAME}.diagram")
 
 
 def _add_agent_fields(parser: argparse.ArgumentParser, required: bool = False) -> None:
@@ -127,6 +128,9 @@ def build_parser() -> argparse.ArgumentParser:
     batch_list = batch_actions.add_parser("list", help="列出审阅批次")
     batch_list.add_argument("--package", required=True)
     batch_list.add_argument("--json", action="store_true")
+    graph = commands.add_parser("diagram", help="从 pipeline.json 生成 Mermaid 主链图")
+    graph.add_argument("--sync-md", help="写回该 Markdown 的图表标记区")
+    graph.add_argument("--check", action="store_true", help="配合 --sync-md，只检查是否过时")
     return parser
 
 
@@ -181,6 +185,14 @@ def main(argv: list[str] | None = None) -> int:
             stream.reconfigure(errors="replace")
     args = build_parser().parse_args(argv)
     try:
+        if args.command == "diagram":
+            mermaid = diagram.render_mermaid(engine.PIPELINE)
+            if not args.sync_md:
+                sys.stdout.write(mermaid)
+            elif not diagram.sync_markdown(args.sync_md, mermaid, args.check):
+                print(f"dev-loop: {args.sync_md} 中的流程图已过时", file=sys.stderr)
+                return 1
+            return 0
         if args.command == "status":
             return _output(engine.status_view(args.package), args.json, render.status_text)
         if args.command == "config":

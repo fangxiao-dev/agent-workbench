@@ -64,6 +64,7 @@ DEV_LOOP status  --package <pkg> [--json]
 DEV_LOOP config  show|set-route --package <pkg> ...
 DEV_LOOP agent   register|update|replace|list --package <pkg> ...
 DEV_LOOP batch   register|update|close|list --package <pkg> ...
+DEV_LOOP diagram [--sync-md <file> [--check]]
 ```
 
 - `status`：包级主线（接入 / 恢复 → Ticket 推进 → 包级终审 → 最终验证 → Gate → 收尾）、Ticket 概览、活跃审阅批次与轮次、未派审 return、可续用 agent 与模型路由提示、下一步推荐命令。只读现有权威事实自动推导，不要求手动 `advance`。
@@ -72,6 +73,30 @@ DEV_LOOP batch   register|update|close|list --package <pkg> ...
 - `batch`：登记 / 更新 / 关闭跨 Ticket 的多返回组合审阅批次，记录受审版本、快照类型与逐票备注；未纳入任何批次的 return 继续显示欠审。
 
 本包只额外保存 `.impl-package/development-pipeline.json`（routing、agents、batches）；Ticket、Evidence、Gate 与审阅轮次仍读原处。写入成功后直接输出刷新后的状态。
+
+### 主链
+
+<!-- BEGIN:PIPELINE_DIAGRAM -->
+```mermaid
+flowchart TD
+    intake["接入"]
+    tickets["Ticket 并行推进"]
+    final-review["包级终审"]
+    final-verify["最终验证"]
+    gate["Gate"]
+    closeout(["收尾"])
+
+    intake -->|"state.json 与 Ticket 可读"| tickets
+    tickets -->|"派发 → 返回 → 组合审阅 → 修复复验"| tickets
+    tickets -->|"全部 Ticket SATISFIED / RETIRED"| final-review
+    final-review -->|"分诊 → 修复 → 复验"| final-review
+    final-review -->|"terminal-final 收敛"| final-verify
+    final-verify -->|"无 acceptance / evidence 缺口"| gate
+    gate -->|"Gate pass 且无缺口冲突"| closeout
+```
+<!-- END:PIPELINE_DIAGRAM -->
+
+图由 `pipeline.json` 生成，改动后执行 `DEV_LOOP diagram --sync-md <skill-dir>/SKILL.md`。连线只描述流程；实际状态由 `status` 按现有事实推导。
 
 ### 主线状态
 
