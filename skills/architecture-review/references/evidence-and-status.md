@@ -11,6 +11,7 @@ Assign exactly one status to each claimed capability:
 | `verified` | You saw direct evidence it works *and* fails closed: code path + a negative test or runtime probe, not just a happy path. |
 | `partial` | Works for the main path but a boundary (tenant, permission, error, concurrency) is unproven or weak. |
 | `design-only` | Designed/documented/seam exists, but no working implementation behind it. |
+| `unverified` | The inputs you were given do not cover it (e.g. only a controller and a page attached). Not a defect; list what you would need to see. |
 | `not-found` | Claimed, but no code/schema/test/runtime evidence located. |
 | `blocked` | Couldn't assess — missing access, un-runnable env, or a dependency not ready. Say *why*. |
 | `not-applicable` | Out of scope for this system/phase; record so it isn't mistaken for a gap. |
@@ -35,6 +36,7 @@ Status says how strong the evidence is; severity says how dangerous the gap is f
 | `verified` | No finding unless the implementation creates a separate risk. |
 | `partial` | Usually a follow-up or P1/P2 unless the missing boundary is a baseline P0 gate. |
 | `design-only` / `not-found` | P0 only when the capability is required for launch, security, money, permissions, tenant/file access, or the PR claims production readiness for it. |
+| `unverified` | Follow-up smoke test, never P0 by itself; P0 only if the project baseline names it as a P0 gate. |
 | `blocked` | Do not invent a defect; state what access/evidence is missing and whether the missing evidence blocks the decision. |
 | `not-applicable` | No finding; record why it is outside this system or phase. |
 

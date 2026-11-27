@@ -55,7 +55,8 @@ Copy the template to a scratch path. Fill in:
 
 ### Step 2 — Run the passes (cheap → expensive)
 
-- **Pass A — static / structural.** Schema & migrations, routes / contracts, guards, service scoping, tests, CI, config. Build the module map and map each claim to evidence. Most P0 gaps surface here. Also check the outer layers for parallel implementations of the same capability ([layer-model.md](references/layer-model.md) symptoms I1/P1).
+- **Pass A — static / structural.** Schema & migrations, routes / contracts, guards, service scoping, tests, CI, config. Build the module map and map each claim to evidence. Most P0 gaps surface here.
+- **Pass A′ — outer-layer reuse.** When the change splits permissions, adds an endpoint/DTO shape, or adds a component for an existing capability, answer Q1–Q3 of [references/package-checkpoint.md](references/package-checkpoint.md): single entry per surface, gate granularity, enforcing channel. A parallel implementation (symptoms I1/P1 in [layer-model.md](references/layer-model.md)) is a first-class architecture finding, not a style note — the user asked whether the *architecture* is OK.
 - **Pass B — runtime probes** (only for high-risk paths, only with a runnable env). Seed **≥2 tenants and ≥2 users**, one happy path, then the **negative** probes: cross-tenant read/write, missing grant, disabled membership, suspended org, expired access.
 - **Pass C — synthesis.** Convert gaps into P0 / P1 / P2. Separate *"out of scope"* from *"missing required foundation"*.
 
@@ -64,17 +65,20 @@ Copy the template to a scratch path. Fill in:
 ```
 ## Review conclusion
 Overall result · target · biggest risks · overstated claims · verified vs unverified capabilities
+## Outer-layer reuse (Q1–Q3)   (when Pass A′ applies: pass/fail per question · evidence · root-fix direction)
 ## P0 findings        (area · finding · evidence · risk · required action)
 ## P1 / P2 findings   (area · finding · evidence · risk · suggested action)
 ## Follow-up smoke tests
 ## Open decisions
 ```
 
-Completion criterion: every claim-ledger row has a status, and every P0 gate in the baseline is explicitly checked.
+The overall result answers the outer-layer questions and the P0 gates side by side; a failed Q1–Q3 is never demoted below findings that rest only on missing inputs.
+
+Completion criterion: every claim-ledger row has a status, every P0 gate in the baseline is explicitly checked, and Q1–Q3 are answered whenever Pass A′ applies.
 
 ## Status taxonomy — the anti-rubber-stamp core
 
-Every claimed capability gets exactly one status: `verified` · `partial` · `design-only` · `not-found` · `blocked` · `not-applicable`.
+Every claimed capability gets exactly one status: `verified` · `partial` · `design-only` · `unverified` · `not-found` · `blocked` · `not-applicable`. Use `unverified` when the inputs you were given simply do not cover the capability (e.g. only a controller and a page were attached); use `blocked` only when you tried and could not obtain evidence that is required.
 
 Do **not** mark something `verified` just because a UI hides the button, a doc says so, one happy-path demo runs, test data has one tenant, or only generic unit tests exist. More: [references/evidence-and-status.md](references/evidence-and-status.md).
 
@@ -85,6 +89,8 @@ Cite positive evidence as well as gaps: if `list()` and `detail()` are scoped bu
 ## P0 gates (fail-closed)
 
 Some defects mean "do not call this acceptable," no matter what else works — cross-tenant access, auth bypass, external side effects without idempotency, missing audit on money/permission changes. Check each baseline P0 explicitly and **fail closed** when evidence is missing.
+
+Fail-closed has two triggers only: (a) a P0 named by the project's baseline lacks evidence, or (b) there is positive evidence of a defect (e.g. a query with no tenant filter). Without a project baseline, gaps that exist only because the attached scope is narrow — no services, no tests, no schema — are `unverified` and go to **Follow-up smoke tests**, not to P0 and not into the overall verdict. Say what you would need to see to close them.
 
 ## Verify premises before you conclude
 
