@@ -30,8 +30,9 @@ Attempt ID: <attempt-id>
 - Journey steps: <J1-S1[, J1-S2 ...] | none>
 - Suites: <suite id[, ...] | none>
 - Required review: <none | review 范围与原因>
+- Rules: <HR-xxx[, ...] | none>（Spec“长期规则变更”为 skip 时删掉本行）
 
-Coverage 是 step 与套件归属的唯一来源，Spec 不点名 Ticket。steps 与 suites 不同时为 `none`；每个 step 和每个 ticket 级套件至少由一张 Ticket 认领。AC 写本票独有的可观察结果，Journey 与套件已覆盖的承诺引用 Spec，不在此复述。
+Coverage 是 step 与套件归属的唯一来源，Spec 不点名 Ticket。steps 与 suites 不同时为 `none`；每个 step 和每个 ticket 级套件至少由一张 Ticket 认领。Spec 声明了长期规则变更时，每个编号恰好由一张 Ticket 的 `Rules:` 认领；本票 add/modify 的编号必须有测试点名（`@rule <编号>` 注释或用例标题），remove 的编号不得再被代码或测试引用。AC 写本票独有的可观察结果，Journey 与套件已覆盖的承诺引用 Spec，不在此复述。
 
 ## 到达路径规则
 

@@ -134,6 +134,15 @@
 <!-- Kind：rule | safety；Scope：ticket | package。触及 tenant、RBAC/privacy、幂等或数据完整性时声明包级 safety 套件，未触及时在此写明理由。Environment 写明确字符串，记录按字符串精确匹配。 -->
 <!-- 当条件化 evidence-integrity 合同适用时，只加入相关的 false-PASS 反例，例如：归一化掩盖比较 drift、副作用后失败、rollback/invalidation 失败、不兼容投影输入或状态 shape 漂移。这些只是示例，不是必选场景。 -->
 
+### 长期规则变更
+
+Rule changes: skip
+
+| 编号 | 动作 | 分册 |
+| --- | --- | --- |
+
+<!-- 仓库有长期规则编号分册（如 `HR-xxx`）时，删掉 `Rule changes: skip`，逐行列出本包新增、修改、删除的编号（动作只写 add | modify | remove），无变更写 `Rule changes: none`。仓库没有这种机制时保留 `skip`。列出后，仓库的确定性脚本按分册 diff 核对清单、按 Ticket 的 `Rules:` 核对分配、按测试点名核对覆盖。 -->
+
 ## 8. 合同一致性
 
 - 跨章节一致性：
