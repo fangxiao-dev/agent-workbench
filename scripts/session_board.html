@@ -577,7 +577,7 @@ function renderDrawer(){const i=items.find(x=>x.id===openId);if(!i)return;const 
   if(s&&s.summary){const lab=el('div','lab');lab.append(icon('spark'),'摘要');const box=el('div','sum',s.summary);
     const a=attention(i);if(a){const w=el('div','att');w.append(icon('alert'),el('span','',a));box.append(w)}
     box.append(el('small','','AI 生成 · '+ago(s.created_at)+(s.stale?' · 之后又有新消息':'')));d.append(lab,box)}
-  const evs=i.events.slice(0,6).reverse();
+  const evs=i.events.slice(0,6);
   if(evs.length){d.append(el('div','lab','最近消息'));const m=el('div','msgs');
     for(const e of evs){const key=e.generation+':'+e.position,b=el('div','msg '+(e.kind==='user'?'user':'agent')+(expanded.has(key)?' open':''));b.dataset.key=key;
       const body=el('div','body');body.append(md(e.text));if(e.text.length>=2000)body.append(el('div','cut','…（只缓存了前 2000 字）'));b.append(body);m.append(b)}
