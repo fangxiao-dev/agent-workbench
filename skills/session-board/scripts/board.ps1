@@ -2,29 +2,48 @@ param(
     [ValidateSet('start', 'stop', 'restart', 'status')]
     [string]$Action = 'status',
     [int]$Port = 43188,
-    [string]$Db = 'D:\vibe-code-life\SessionBoard\board.sqlite3',
+    [string]$Db,
     [string]$Model = 'deepseek-v4-flash',
     [string]$Script,
     [switch]$NoSummary
 )
 
 $ErrorActionPreference = 'Stop'
+# PowerShell 5.1 has no $IsWindows; the whole 5.x line is Windows-only anyway.
+$IsWin = if ($PSVersionTable.PSVersion.Major -ge 6) { $IsWindows } else { $true }
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..\..')
-if (-not $Script) { $Script = Join-Path $repoRoot 'scripts\session_board.py' }
+if (-not $Script) { $Script = Join-Path $repoRoot 'scripts/session_board.py' }
 $Script = [System.IO.Path]::GetFullPath($Script)
+if (-not $Db) {
+    $Db = if ($IsWin) { 'D:\vibe-code-life\SessionBoard\board.sqlite3' }
+          else { Join-Path $HOME 'SessionBoard/board.sqlite3' }
+}
 $logDir = Split-Path -Parent $Db
 $log = Join-Path $logDir 'server.log'
 $errLog = Join-Path $logDir 'server.err.log'
 
 function Get-Python {
-    $cmd = Get-Command python -ErrorAction SilentlyContinue
-    if (-not $cmd) { throw '找不到 python，请先把 Python 加入 PATH' }
-    return $cmd.Source
+    foreach ($name in @('python', 'python3')) {
+        $cmd = Get-Command $name -ErrorAction SilentlyContinue
+        if ($cmd) { return $cmd.Source }
+    }
+    throw '找不到 python / python3，请先加入 PATH'
 }
 
 function Get-BoardProcess {
-    Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
-        Where-Object { $_.CommandLine -and ($_.CommandLine -like '*session_board.py*' -or $_.CommandLine -like '*scripts.session_board*') }
+    if ($IsWin) {
+        Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+            Where-Object { $_.CommandLine -and ($_.CommandLine -like '*session_board.py*' -or $_.CommandLine -like '*scripts.session_board*') } |
+            Select-Object ProcessId, CommandLine
+    } else {
+        foreach ($line in (& ps -axo pid=,command=)) {
+            if ($line -match 'session_board\.py|scripts\.session_board') {
+                $pidText, $cmd = $line.Trim() -split '\s+', 2
+                [pscustomobject]@{ ProcessId = [int]$pidText; CommandLine = $cmd }
+            }
+        }
+    }
 }
 
 function Get-Health {
@@ -61,11 +80,16 @@ function Start-Board {
     }
     if (@(Get-BoardProcess)) { Write-Output '看板已在运行，需要换参数请先 -Action stop'; return }
     if (Get-Health) { throw "端口 $Port 已被别的程序占用" }
-    if (-not (Test-Path -LiteralPath $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
-    $python = Get-Python
-    $moduleRoot = Split-Path -Parent (Split-Path -Parent $Script)
-    Start-Process -FilePath $python -ArgumentList (Get-Args) -WorkingDirectory $moduleRoot `
-        -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError $errLog | Out-Null
+    if (-not (Test-Path -LiteralPath $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+    $startArgs = @{
+        FilePath               = Get-Python
+        ArgumentList           = Get-Args
+        WorkingDirectory       = Split-Path -Parent (Split-Path -Parent $Script)
+        RedirectStandardOutput = $log
+        RedirectStandardError  = $errLog
+    }
+    if ($IsWin) { $startArgs.WindowStyle = 'Hidden' }
+    Start-Process @startArgs | Out-Null
     for ($i = 0; $i -lt 40; $i++) {
         Start-Sleep -Milliseconds 250
         if (Get-Health) {

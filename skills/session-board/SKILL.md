@@ -25,6 +25,24 @@ powershell -ExecutionPolicy Bypass -File skills\session-board\scripts\board.ps1 
 
 启动后浏览器打开脚本打印的 `http://127.0.0.1:43188`。日志在同目录的 `server.log` / `server.err.log`。
 
+## macOS / Linux
+
+同一个脚本在 PowerShell 7（`pwsh`）下可直接跑，`brew install --cask powershell` 装好后：
+
+```powershell
+pwsh -File skills/session-board/scripts/board.ps1 -Action start
+```
+
+脚本按系统自行切换：macOS 用 `python3`、看板库默认落在 `~/SessionBoard/board.sqlite3`（`-Db` 可覆盖）、进程查找改用 `ps -axo pid=,command=`，不再传 `-WindowStyle`（macOS 没有隐藏窗口）。
+
+机器上没有 pwsh 时，用等效的原生命令（在仓库根目录执行）：
+
+```bash
+python3 -m scripts.session_board --db ~/SessionBoard/board.sqlite3 --port 43188 --deepseek-model deepseek-v4-flash
+```
+
+停止：`pkill -f scripts.session_board`。健康检查：`curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:43188/`。
+
 ## 出问题先看这三件事
 
 - **页面空白 / 打不开**：先 `-Action status`。进程在但 HTTP 不通，多半是启动时用的那份工作区被切走了——看板代码只在 `main` 和 `feat/session-board` 上，仓库切到别的分支后服务读不到 HTML。切回 `main` 再 `restart`。
