@@ -78,6 +78,8 @@ Gate 只在 initial bundle 验证前置承诺是否完整兑现：
    - 运行 `package check-spec --spec <repo-relative spec.md>` 并处理列出的每个章节：补带 Source 的规则，或列入“无需验收的章节”；再由 reviewer 对照 Spec 规则与 Rule Matrix 做一次独立覆盖核对，从“无需验收的章节”读起（遗漏藏在那里）。
 6. blocking owner decision 与 ambiguity 为零。
    - 常见误判：把未决 owner decision 留到 Plan，Plan 就会被迫替 Spec 发明行为或数据合同。
+7. 简约性与复用核对已通过：未无硬理由为单权限或单角色新造平行视图或平行发现接口；多入口操作已明确单一查询源与共享组件归属；新增 API/DTO/表已对照业务承诺排除多余 surface；分散式并发/幂等/权限约定已评估收口；独立审阅输出已附减法清单（无则写“无”）。
+   - 常见误判：只查“漏了什么”而不反查“多造了什么”，会把本可在原入口按能力裁剪的需求固化成双轨页面与重复接口。
 
 follow-up 更新直接沿用 initial approval。
 

@@ -19,21 +19,22 @@ Spec 只有同时满足以下条件才可 PASSED：
 - 每个涉及权限或数据范围的 Journey 步骤在 `### Journey 变体` 写全变体信息（要读的数据；各变体的前置、预期、可观察表现、必验），或写“不适用”及理由；是否走过不在本 Gate 检查；
 - 展示、编辑或拒绝结果可以不产生新记录，发生权威状态转换时明确唯一记录、producer 与下游消费；
 - blocking owner decision、contract ambiguity 与 artifact authority conflict 为零；
+- 简约性与复用核对已通过：未无硬理由为单权限或单角色新造平行列表接口、平行 DTO 或独立平行页面（默认在原入口做服务端字段投影与能力位裁剪）；同一业务操作出现在 2 个以上入口时已明确单一查询源与共享组件归属；已对照业务承诺列出新增 API、独立 DTO 与新表清单并排除仅为绕开旧代码或方便写测试而新增的多余 surface；依赖多处写入口自觉遵守的并发锁、幂等或权限校验约定已评估能否收口到统一写通道或显式守卫；
 - 两个独立实施者可以选择不同内部实现，但不会产生不同 API、data identity、permission、concurrency、recovery 或 public shape。
 - initial artifact 已记录当前合同，所需 owner approval 已记录，Status、Gate result 与 handoff readiness 一致；正式阶段迁移以该 bundle 记录为依据。
 
 Gate 可以发现设计范围与正文之间的明显漏项；发现后返回 Preflight 修正范围与设计。若 Plan 仍需决定可观察语义或 canonical contract，记录 exact missing contract 并 `BLOCKED`，不交给 planning。
 
-完整交互中存在无法取得的 required input、未裁决的重复 authority、未闭合的 retry/concurrency/recovery 语义、动作模型中交错执行后被破坏的不变量或走不出的可达状态，或没有 authoritative producer 的承诺输出时，Gate 必须 `BLOCKED`。先报告最小断点；不要求为无相关风险的 operation 发明幂等、恢复或额外持久化机制。
+完整交互中存在无法取得的 required input、未裁决的重复 authority、未闭合的 retry/concurrency/recovery 语义、动作模型中交错执行后被破坏的不变量或走不出的可达状态、没有 authoritative producer 的承诺输出，或因权限/角色拆分新造平行视图或平行发现接口却无法给出“为何无法在原入口做字段投影与能力位裁剪”的硬理由时，Gate 必须 `BLOCKED`。先报告最小断点；不要求为无相关风险的 operation 发明幂等、恢复或额外持久化机制。
 
 `spec.md`/`contract-design.md` 不得包含 stable-doc backfill maps、durable-delta queues、Composition、worker steps、verification command logs 或 tracker publication metadata。
 
-## 覆盖核对（新 package）
+## 覆盖与简约性核对（新 package）
 
 Gate 的固定动作：
 
 1. 运行 `package check-spec --spec <repo-relative spec.md>`（无需 state），逐条处理列出的章节：补一条带 Source 的规则，或把该章节列入“无需验收的章节”。
-2. 独立覆盖核对：reviewer 对照 Spec 各章规则与 Rule Matrix，从作者声明的“无需验收的章节”开始读，遗漏通常藏在那里；同时逐步骤核对 Journeys，指出漏写变体的权限/数据范围步骤，挑战“不适用”理由；发现含验收相关规则的章节，回到 1。
+2. 独立双向核对：reviewer 对照 Spec 各章规则与 Rule Matrix，从作者声明的“无需验收的章节”开始读，遗漏通常藏在那里；逐步骤核对 Journeys，指出漏写变体的权限/数据范围步骤并挑战“不适用”理由；同时执行四项简约性与复用反查（平行视图拦截、多入口归属拦截、新增面比例审查、分散约定拦截），在审阅输出中附简短的**减法清单**（可合并或可取消的新增 surface；无则写“无”）。发现含验收相关规则的章节，回到 1。
 
 ## Blocked persistence
 

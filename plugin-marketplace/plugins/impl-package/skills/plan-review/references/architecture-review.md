@@ -8,6 +8,10 @@
 
 项目声明业务规则层时，按 [业务规则层](../../../references/business-rule-layer.md) 核对：每个业务值有规则编号与唯一产出模块，交付层只读结论，不在交付层另写判断、阈值、日期推算或权限分支；Ticket 验收引用项目登记的确定性检查。标注检查通过不等于已收束。
 
+多入口共享组件显式声明：当既有页面已有的交互面板或业务区块需要在新入口出现时，Plan 必须写明抽取复用哪个共享组件与查询源，禁止在不同入口静默复制一套平行页面或平行数据拉取逻辑。
+
+分散约定风险审查：对依赖多处写入口自觉遵守的并发锁、幂等或一致性约定，标出漏锁或行为漂移风险，并要求评估能否收口到统一写通道、事务封装或显式守卫。
+
 确认计划说明失败由谁观察和处理、状态如何恢复、用户看到什么，以及 contract 改变是否交由 owner 决定。
 
 存在明确 SLO、availability、latency、durability 或 error budget 时，检查降级、重试、容量和 rollout 是否符合可靠性 contract。若 accepted findings 形成两个以上 workstreams，按需给出简短 dependency map，标出共享 contract、migration gate、integration point、合并冲突面和真正可独立的 lane；不要为了形式拆分任务。
