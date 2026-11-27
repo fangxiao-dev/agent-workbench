@@ -1,9 +1,8 @@
-"""Mermaid diagram renderer and Markdown sync helper for kickoff."""
+"""Mermaid diagram rendering and Markdown synchronization for kickoff."""
 
 import os
-import sys
 
-from engine import CLI_SCRIPT_PATH, GATE_LABELS, PIPELINE, fail
+from .engine import CLI_SCRIPT_PATH, GATE_LABELS, PIPELINE, KickoffError
 
 DIAGRAM_BEGIN = "<!-- BEGIN:PIPELINE_DIAGRAM -->"
 DIAGRAM_END = "<!-- END:PIPELINE_DIAGRAM -->"
@@ -16,76 +15,74 @@ def render_mermaid(pipeline=PIPELINE):
     limit = pipeline["convergence_limit"]
     gate_labels = pipeline.get("gate_labels", GATE_LABELS)
 
-    for st in pipeline["stages"]:
-        sid = st["id"]
-        label = st["label"]
-        if st.get("note"):
-            label = f"{label}<br/>({st['note']})"
-        if sid == terminal:
-            lines.append(f'    {sid}(["{label}"])')
+    for stage in pipeline["stages"]:
+        stage_id = stage["id"]
+        label = stage["label"]
+        if stage.get("note"):
+            label = f"{label}<br/>({stage['note']})"
+        if stage_id == terminal:
+            lines.append(f'    {stage_id}(["{label}"])')
         else:
-            lines.append(f'    {sid}["{label}"]')
+            lines.append(f'    {stage_id}["{label}"]')
 
     lines.append("")
 
-    for t in pipeline["transitions"]:
-        src, dst = t["src"], t["dst"]
-        arrow = "-.->" if t.get("style") == "dashed" else "-->"
-        conds = [f"{k}={'on' if v else 'off'}" for k, v in t.get("when", {}).items()]
+    for transition in pipeline["transitions"]:
+        source, target = transition["src"], transition["dst"]
+        arrow = "-.->" if transition.get("style") == "dashed" else "-->"
+        conditions = [f"{key}={'on' if value else 'off'}" for key, value in transition.get("when", {}).items()]
         gates = [
-            gate_labels.get(g, g)
-            for g in t.get("gates", [])
-            if g != "owner_confirmed" or src == initial
+            gate_labels.get(gate, gate)
+            for gate in transition.get("gates", [])
+            if gate != "owner_confirmed" or source == initial
         ]
         parts = []
-        if conds:
-            parts.append(" & ".join(conds))
+        if conditions:
+            parts.append(" & ".join(conditions))
         if gates:
             parts.append(" & ".join(gates))
         edge_label = "<br/>".join(parts)
         if edge_label:
-            lines.append(f'    {src} {arrow}|"{edge_label}"| {dst}')
+            lines.append(f'    {source} {arrow}|"{edge_label}"| {target}')
         else:
-            lines.append(f"    {src} {arrow} {dst}")
+            lines.append(f"    {source} {arrow} {target}")
 
-    triage_nodes = [st["id"] for st in pipeline["stages"] if st.get("triage")]
+    triage_nodes = [stage["id"] for stage in pipeline["stages"] if stage.get("triage")]
     if triage_nodes:
         lines.append("")
-        for sid in triage_nodes:
-            lines.append(f'    {sid} -->|"round (连续{limit}轮 added>0 警告)"| {sid}')
+        for stage_id in triage_nodes:
+            lines.append(f'    {stage_id} -->|"round (连续{limit}轮 added>0 警告)"| {stage_id}')
 
     return "\n".join(lines) + "\n"
 
 
 def sync_markdown_diagram(md_path, diagram_text, check_only=False):
     if not os.path.isfile(md_path):
-        fail(f"Markdown 文件不存在: {md_path}")
-    with open(md_path, "r", encoding="utf-8") as f:
-        content = f.read()
+        raise KickoffError(f"Markdown 文件不存在: {md_path}")
+    with open(md_path, "r", encoding="utf-8") as stream:
+        content = stream.read()
 
-    start_idx = content.find(DIAGRAM_BEGIN)
-    end_idx = content.find(DIAGRAM_END)
-    if start_idx == -1 or end_idx == -1 or end_idx < start_idx:
-        fail(f"{md_path} 缺少图表标记 {DIAGRAM_BEGIN} ... {DIAGRAM_END}")
+    start_index = content.find(DIAGRAM_BEGIN)
+    end_index = content.find(DIAGRAM_END)
+    if start_index == -1 or end_index == -1 or end_index < start_index:
+        raise KickoffError(f"{md_path} 缺少图表标记 {DIAGRAM_BEGIN} ... {DIAGRAM_END}")
 
     fenced = f"{DIAGRAM_BEGIN}\n```mermaid\n{diagram_text.rstrip()}\n```\n{DIAGRAM_END}"
-    updated = content[:start_idx] + fenced + content[end_idx + len(DIAGRAM_END):]
+    updated = content[:start_index] + fenced + content[end_index + len(DIAGRAM_END):]
 
     if check_only:
         if updated != content:
-            print(
+            raise KickoffError(
                 f"[diagram] {md_path} 中的流程图已过时，请运行：\n"
                 f"  python {os.path.abspath(CLI_SCRIPT_PATH)} diagram --sync-md {md_path}",
-                file=sys.stderr,
+                code=1,
+                raw=True,
             )
-            sys.exit(1)
-        print(f"[diagram] {md_path} 流程图已是最新。")
-        return
+        return f"[diagram] {md_path} 流程图已是最新。"
 
     if updated == content:
-        print(f"[diagram] {md_path} 无变化，已是最新。")
-        return
+        return f"[diagram] {md_path} 无变化，已是最新。"
 
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write(updated)
-    print(f"[diagram] 已刷新 {md_path} 中的流程图。")
+    with open(md_path, "w", encoding="utf-8") as stream:
+        stream.write(updated)
+    return f"[diagram] 已刷新 {md_path} 中的流程图。"

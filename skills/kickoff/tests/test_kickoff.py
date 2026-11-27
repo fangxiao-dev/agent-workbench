@@ -4,6 +4,8 @@
 Run: python -m unittest discover -s tests -v
 """
 
+import importlib
+import importlib.util
 import json
 import os
 import shutil
@@ -11,9 +13,17 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.abspath(os.path.join(HERE, "..", "scripts", "kickoff.py"))
+CLI_SPEC = importlib.util.spec_from_file_location("_kickoff_cli_dynamic_test", SCRIPT)
+CLI = importlib.util.module_from_spec(CLI_SPEC)
+sys.modules[CLI_SPEC.name] = CLI
+CLI_SPEC.loader.exec_module(CLI)
+ENGINE = CLI.engine
+RENDER = CLI.render
+STORE = importlib.import_module(f"{CLI._PACKAGE_NAME}.store")
 
 
 class KickoffTest(unittest.TestCase):
@@ -431,6 +441,76 @@ class KickoffTest(unittest.TestCase):
         self.run_cli("register", "--pkg", pkg, "--role", "plan-reviewer", "--agent-id", "pr-legacy")
         self.run_cli("round", "--pkg", pkg, "--stage", "plan", "--verdict", "clean", "--summary", "兼容旧状态")
         self.run_cli("advance", "ready", "--pkg", pkg)
+
+
+    def test_optional_tools_on_discover_advance_and_status(self):
+        pkg = self.path("discover-pkg")
+        self.init_pkg(pkg)
+        self.run_cli("confirm", "--pkg", pkg)
+
+        advance = self.run_cli("advance", "discover", "--pkg", pkg).stdout
+        status = self.run_cli("status", "--pkg", pkg).stdout
+        for output in (advance, status):
+            self.assertIn("可选工具（不卡门禁）", output)
+            self.assertIn("/ponytail:ponytail-audit <目标模块目录>", output)
+            self.assertIn("when:", output)
+            self.assertIn("既有模块经历多轮迭代", output)
+            self.assertIn("fallback:", output)
+            self.assertIn("跨入口重复逻辑 / 单实现抽象 / 死代码 / 可合并文件", output)
+
+    def test_optional_tools_on_spec_advance_and_status(self):
+        pkg = self.path("spec-pkg")
+        self._to_decision_stage(pkg, "--discover", "off", "--pe", "off")
+        self.run_cli("register", "--pkg", pkg, "--role", "reviewer", "--agent-id", "rv")
+        self.run_cli("round", "--pkg", pkg, "--stage", "decision", "--verdict", "clean", "--summary", "decision clean")
+
+        advance = self.run_cli("advance", "spec", "--pkg", pkg).stdout
+        status = self.run_cli("status", "--pkg", pkg).stdout
+        for output in (advance, status):
+            self.assertIn("可选工具（不卡门禁）", output)
+            self.assertIn("Spec Gate 简约性反查（内建）", output)
+            self.assertIn("when:", output)
+            self.assertIn("合同冻结前，与独立覆盖核对一并执行", output)
+            self.assertIn("fallback:", output)
+            self.assertIn("零外部插件依赖", output)
+
+    def test_stages_without_optional_tools_do_not_render_empty_block(self):
+        pkg = self.path("plain-pkg")
+        self.init_pkg(pkg, "--discover", "off", "--pe", "off")
+        init_status = self.run_cli("status", "--pkg", pkg).stdout
+        self.assertNotIn("可选工具（不卡门禁）", init_status)
+
+        self.run_cli("confirm", "--pkg", pkg)
+        decision = self.run_cli("advance", "decision", "--pkg", pkg).stdout
+        decision_status = self.run_cli("status", "--pkg", pkg).stdout
+        self.assertNotIn("可选工具（不卡门禁）", decision)
+        self.assertNotIn("可选工具（不卡门禁）", decision_status)
+
+    def test_store_replaces_state_atomically(self):
+        path = self.path("atomic", "kickoff-state.json")
+        self.write(path, json.dumps({"old": True}))
+        with patch.object(STORE.os, "replace", side_effect=OSError("replace failed")):
+            with self.assertRaises(OSError):
+                STORE.save_state(path, {"new": True})
+        self.assertEqual(self.read_state(path), {"old": True})
+        self.assertEqual(os.listdir(os.path.dirname(path)), ["kickoff-state.json"])
+
+        STORE.save_state(path, {"new": True})
+        self.assertEqual(self.read_state(path), {"new": True})
+        self.assertEqual(os.listdir(os.path.dirname(path)), ["kickoff-state.json"])
+
+    def test_engine_and_render_are_directly_importable(self):
+        self.assertEqual(ENGINE.load_pipeline()["name"], "kickoff")
+        state = {
+            "stage": "init",
+            "switches": {"discover": True, "pe": True, "plan": True},
+            "owner_confirmed": False,
+            "pkg_dir": None,
+        }
+        self.assertIn(" confirm ", ENGINE.next_command(state, self.path("state.json"), SCRIPT))
+        tools = RENDER.optional_tools_lines(ENGINE.OPTIONAL_TOOLS["discover"])
+        self.assertIn("可选工具（不卡门禁）", tools[0])
+        self.assertEqual(RENDER.optional_tools_lines([]), [])
 
 
 if __name__ == "__main__":

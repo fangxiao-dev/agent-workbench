@@ -5,12 +5,11 @@ description: 新需求从探索到可开工的一键编排：先复述理解等 
 
 # Kickoff
 
-本 skill 只做编排。流程、阶段 Skill、门禁与硬原则声明在 `pipeline.json`，由
-`scripts/kickoff.py`（`engine.py` + `diagram.py`）强制执行；各阶段“怎么做”交给被调用的 skill 与审阅者。
+本 skill 只做编排。流程、阶段 Skill、门禁、硬原则与节点可选工具声明在 `pipeline.json`，由 `scripts/kickoff.py`（拆分为 `store.py` 状态读写、`engine.py` 规则与门禁引擎、`render.py` 文本渲染、`diagram.py` 流程图生成）强制执行；各阶段“怎么做”交给被调用的 skill 与审阅者。
 
 ## 职责分工
 
-- **kickoff（Pipeline）**：编排主链、校验输入契约、维护角色池（PE / 设计审阅者 / 计划审阅者）、记录分诊轮次、阶段门禁、按阶段提示对应 Skill 与硬原则，为主设计师降载。
+- **kickoff（Pipeline）**：编排主链、校验输入契约、维护角色池（PE / 设计审阅者 / 计划审阅者）、记录分诊轮次、阶段门禁、按阶段提示对应 Skill、硬原则与可选工具菜单（`optional_tools`，不卡门禁），为主设计师降载。
 - **下游 Skill**：管单阶段怎么做与包内产物关系（`discover -> req-discover`，`decision / spec -> /impl-package:req-align`，`plan -> /impl-package:impl-planning + /impl-package:plan-review`）。
 - **审阅者**：独立只读，负责挑全漏洞，不替 Owner 做业务取舍；`decision/spec` 续用同一 `reviewer`，`plan` 按 `plan-review` 登记独立 `plan-reviewer`（支持多轨标签，便于后续推翻或复审时复用）。
 - **主控 + PE**：负责四类分诊（往下钻 / 根部裁剪+人工兜底 / 交 PE / 驳回）与根部裁剪，PE 贯穿 `discover` 至 `plan`。
@@ -94,8 +93,7 @@ python scripts/kickoff.py diagram --sync-md SKILL.md --check
 - 若传入 `--artifact <path>`，CLI 仅校验路径存在并登记到状态文件，不假设文件名也不解析文档内容（文档结构与内容由各阶段 skill 自行校验）。
 - 同一阶段连续 2 轮都 `added > 0` → CLI 打出 `[收敛警告]`，停下回看原型并过 PE 判断能否根部裁剪；同一阶段进入第 4 轮及以上 → CLI 打出 `[轮次提醒]`，确认是在收尾而非细节拉锯。
 
-各阶段硬原则（init / discover / decision / spec / plan / ready）由 `advance` 与 `status`
-自动打印，按其执行即可。
+各阶段硬原则与可选工具菜单（init / discover / decision / spec / plan / ready）由 `advance` 与 `status` 自动打印，按其执行即可。节点可选工具（`optional_tools`）仅在适用时机提示，不卡门禁；对应插件不存在时直接按声明的 `fallback` 回退。实施与收口期工具（如代码 diff 瘦身审阅、临时妥协账本扫描）不进入只管到 `ready` 的 `kickoff`，由下游实施或收口编排按需挂载。
 
 ## 升级规则
 
