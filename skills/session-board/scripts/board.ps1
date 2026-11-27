@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('start', 'stop', 'restart', 'status')]
+    [ValidateSet('start', 'stop', 'restart', 'status', 'update')]
     [string]$Action = 'status',
     [int]$Port = 43188,
     [string]$Db,
@@ -105,16 +105,35 @@ function Start-Board {
     throw ("启动失败，检查 $errLog`n" + ($tail -join "`n"))
 }
 
+function Get-RepoState {
+    $head = & git -C $repoRoot rev-parse --short HEAD 2>$null
+    $dirty = @(& git -C $repoRoot status --porcelain --untracked-files=no 2>$null | Where-Object { $_ })
+    "$head$(if ($dirty.Count) { "（$($dirty.Count) 处未提交改动）" } else { '' })"
+}
+
+function Update-Board {
+    $dirty = @(& git -C $repoRoot status --porcelain --untracked-files=no | Where-Object { $_ })
+    if ($dirty.Count) { throw ("代码目录有未提交改动，先处理再 update：`n" + ($dirty -join "`n")) }
+    $before = & git -C $repoRoot rev-parse --short HEAD
+    & git -C $repoRoot pull --ff-only
+    if ($LASTEXITCODE -ne 0) { throw '拉取失败：本地与远端分叉，请手动处理' }
+    Write-Output ("代码 " + $before + ' -> ' + (& git -C $repoRoot rev-parse --short HEAD))
+    Stop-Board
+    Start-Board
+}
+
 switch ($Action) {
     'stop' { Stop-Board }
     'start' { Start-Board }
     'restart' { Stop-Board; Start-Board }
+    'update' { Update-Board }
     'status' {
         $running = @(Get-BoardProcess)
         $code = Get-Health
         if ($running) { Write-Output ("进程：" + (($running | ForEach-Object { $_.ProcessId }) -join ', ')) }
         else { Write-Output '进程：无' }
         Write-Output "HTTP：$(if ($code) { "$code http://127.0.0.1:$Port" } else { '无响应' })"
+        Write-Output "代码：$(Get-RepoState)  ($repoRoot)"
         if ($running -and -not $code) { Write-Output '进程在但页面不通：确认启动时的工作区还有 scripts/session_board.html，然后 restart' }
     }
 }
