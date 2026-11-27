@@ -38,7 +38,7 @@ One row per claimed capability / acceptance item. Status from the taxonomy; the 
 
 | Capability / acceptance item | Scope | Required by baseline? | Status | Evidence | Gap / next action |
 | --- | --- | --- | --- | --- | --- |
-| Example item | TODO | TODO: yes / no / out of scope | TODO: verified / partial / design-only / not-found / blocked / not-applicable | TODO | TODO |
+| Example item | TODO | TODO: yes / no / out of scope | TODO: verified / partial / design-only / unverified / not-found / blocked / not-applicable | TODO | TODO |
 
 ## 5. Module map + risk flags
 
@@ -83,6 +83,7 @@ Separate "not implemented because out of scope" from "missing required foundatio
 | Section | Content |
 | --- | --- |
 | Review conclusion | TODO: overall result · biggest risks · overstated claims · verified vs unverified |
+| Outer-layer reuse (Q1–Q3) | TODO: when the change splits permissions or adds endpoints/components — pass/fail per question · evidence · root-fix direction |
 | P0 findings | TODO: area · finding · evidence · risk · required action |
 | P1 / P2 findings | TODO |
 | Follow-up smoke tests | TODO |

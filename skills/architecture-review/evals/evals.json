@@ -106,6 +106,24 @@
         "Acknowledges durable audit evidence for job submit and lease state changes.",
         "Produces no P0 / critical / launch-blocking findings for the clean fixture, while allowing follow-up probes or residual risks."
       ]
+    },
+    {
+      "id": 7,
+      "name": "permission-split-parallel-views",
+      "prompt": "We split contract permissions so store managers can send and confirm contracts without seeing full profiles. Tests are green. Before we merge, is the architecture OK? PR description and key files attached.",
+      "files": [
+        "evals/fixtures/eval7/PR.md",
+        "evals/fixtures/eval7/documents.controller.ts",
+        "evals/fixtures/eval7/staff-page.tsx"
+      ],
+      "expected_output": "Accepts that splitting permissions is reasonable and that the minimal view hides sensitive fields, but flags the design as a parallel implementation in the interface layer (a query flag / permission check returns a different response shape for the same resource) and in the page layer (ContractTasksMinimal re-implements the dispatch/upload/confirm flow of ContractSection). Points out the maintenance and user-visible consequences, including mixed-permission users seeing two lists, and recommends a single entry with server-side capability projection (one resource, sensitive fields trimmed by capability, per-row action flags) and one shared component rendering actions from those flags. Does not treat green tests as proof the design is sound.",
+      "assertions": [
+        "Identifies the same documents resource returning different shapes by permission or query flag as an interface-layer parallel implementation, not merely a style issue.",
+        "Identifies ContractTasksMinimal as duplicating the dispatch / signed-upload / confirm flow (idempotency, upload, replay handling) already in ContractSection, i.e. a page-layer parallel implementation.",
+        "Notes the user-visible consequence that a user with profile access in some stores and contract-only access in others sees two separate lists on one page.",
+        "Recommends a single entry with server-side capability projection (sensitive fields trimmed by capability, per-row action flags such as canDispatch/canConfirm) and one shared component, rather than keeping or extending the minimal path.",
+        "Does not treat the permission split itself as the defect, and does not accept 'all tests green' as evidence the architecture is sound."
+      ]
     }
   ]
 }
