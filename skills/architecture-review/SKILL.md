@@ -1,16 +1,28 @@
 ---
 name: architecture-review
-description: Use when reviewing a project's architecture, including its module boundaries, dependency structure, runtime composition, or foundational design decisions.
+description: Use when reviewing a project's architecture — a foundation or large PR, a whole-system health audit across layers and modules, or a design/terminal checkpoint for one implementation package.
 metadata:
-  tags: architecture-review, platform-foundation, saas, tenant-isolation, audit, PR-review, production-readiness
+  tags: architecture-review, layered-audit, platform-foundation, saas, tenant-isolation, PR-review, production-readiness
   platforms: Claude, Codex, Gemini
 ---
 
 # Architecture Review
 
-Run an evidence-driven review of a system's architecture or platform foundation, and resist the strongest failure mode of reviews: **rubber-stamping**. A review earns its keep only when it separates what is *verified working* from what is merely *claimed, demoed, or designed*.
+Run an evidence-driven review of a system's architecture, and resist the strongest failure mode of reviews: **rubber-stamping**. A review earns its keep only when it separates what is *verified working* from what is merely *claimed, demoed, or designed*.
 
-This skill is a **methodology**, deliberately domain-agnostic. The project supplies the domain content (a baseline of *what to review*); the skill supplies the discipline (*how to review without fooling yourself*). A full worked example for a multi-tenant SaaS foundation ships in [examples/kaispan-saas-foundation.md](examples/kaispan-saas-foundation.md).
+The skill is a **methodology**, deliberately domain-agnostic. The project supplies the domain content (a baseline of *what to review*, a map of its layers); the skill supplies the discipline (*how to review without fooling yourself*).
+
+## Pick the mode first
+
+| Mode | Use when | Read |
+| --- | --- | --- |
+| **Foundation / PR review** | A foundational PR, a launch or production-readiness call, or "is this slice actually solid?" | The workflow below |
+| **System layered audit** | "How healthy is the system?", "which layer/module is worst?", planning what to fix first | [references/system-audit.md](references/system-audit.md) + [references/layer-model.md](references/layer-model.md) |
+| **Package checkpoint** | A design gate or terminal gate of one implementation package asks for an architecture check | [references/package-checkpoint.md](references/package-checkpoint.md) |
+
+All three share the core below: baseline vs instance, the status taxonomy, evidence discipline, and fail-closed P0 gates. Match depth to the ask: a quick check of one guard gets a compact inline answer with the same discipline, no scratch files.
+
+Completion criterion: the mode is named, and its reference (if any) has been read before judging.
 
 ## The one idea: baseline vs instance
 
@@ -18,90 +30,71 @@ Keep two kinds of artifact, and never let them bleed together:
 
 | Layer | What it is | Lifetime |
 | --- | --- | --- |
-| **Baseline** | The catalog of *review domains* + *P0 gates* for this class of system — "what must always be checked." | Durable; rarely changes |
-| **Instance** | One review's target, evidence, coverage, and findings. | One-off; lives in a scratch area |
+| **Baseline** | The catalog of *review domains* + *P0 gates* (and, for layered audits, the project's layer map and module list) — "what must always be checked." | Durable; rarely changes |
+| **Instance** | One review's target, evidence, coverage, scores, and findings. | One-off; lives in a scratch area |
 
-Why this matters: pour one PR's findings into the baseline and it rots into a changelog; re-derive the domains every review and coverage drifts. So a single review *copies* the blank instance template, fills it, and at the end only its **durable conclusions** graduate into issues / ADRs — the instance itself stays scratch.
+Pour one review's findings into the baseline and it rots into a changelog; re-derive the domains every review and coverage drifts. So a review *copies* the blank instance template, fills it, and only its **durable conclusions** graduate into issues / ADRs / guard tests — the instance stays scratch.
 
-- Blank instance template: [assets/review-template.md](assets/review-template.md) — copy it per review.
-- If the project has **no baseline yet**, build one first from [references/review-domains.md](references/review-domains.md) (a generic domain catalog you adapt to the system), then proceed.
+- Blank instance template: [assets/review-template.md](assets/review-template.md).
+- No baseline yet: build one from [references/review-domains.md](references/review-domains.md) (domains) and [references/layer-model.md](references/layer-model.md) (layers), naming only what applies to *this* system.
 
-## Match the depth to the ask
-
-Use the full baseline + instance workflow for broad foundation reviews, launch / production-readiness calls, or large PRs that claim multiple platform capabilities. For a small slice ("quick check this guard" / "does this repository look scoped?"), do a compact inline review with the same evidence discipline: claims, status, findings, and follow-up probes. Do not create scratch review files unless the user asked for artifacts or the review is broad enough to benefit from them.
-
-## Workflow
+## Foundation / PR review workflow
 
 ### Step 0 — Establish the baseline
 
-Find the project's review baseline (a checklist of domains + P0 gates). If none exists, draft one from [references/review-domains.md](references/review-domains.md), naming the domains that actually apply to *this* system. Read the baseline before judging — it tells you the coverage you owe and which missing evidence is launch-blocking rather than merely incomplete.
+Find the project's review baseline. Read it before judging — it tells you the coverage you owe and which missing evidence is launch-blocking rather than merely incomplete.
 
 ### Step 1 — Open an instance and scope the review
 
-Copy [assets/review-template.md](assets/review-template.md) to a scratch path (e.g. a gitignored `…/reviews/<target>-review.md`). Fill in:
+Copy the template to a scratch path. Fill in:
 
-- **Target**: PR / branch / commit, title, change size, whether a runnable environment exists.
-- **Resolved baselines**: premises you've confirmed and will *not* re-litigate (e.g. "identity provider is X", "manual subscription is the v0.1 baseline").
-- **Evidence inputs**: every external source you'll lean on. The discipline (full rules in [references/evidence-and-status.md](references/evidence-and-status.md)):
-  - A contributor's progress note is a **claim**, not evidence.
-  - A POC / reference repo is domain inspiration, not production truth — unless explicitly adopted as the runtime.
-  - Local checkout paths and one-off facts belong in the instance, never the baseline.
-- **Claim ledger**: extract every PR / user claim into a capability row before judging. For each row, record whether it is required by the baseline, what evidence exists, what negative evidence is missing, and the status.
+- **Target**: PR / branch / commit, change size, whether a runnable environment exists.
+- **Resolved baselines**: premises you've confirmed and will *not* re-litigate.
+- **Evidence inputs**: every source you'll lean on. A contributor's progress note is a **claim**, not evidence; a POC is inspiration, not production truth; local paths and one-off facts stay in the instance. Full rules: [references/evidence-and-status.md](references/evidence-and-status.md).
+- **Claim ledger**: every PR / user claim becomes a capability row — required by baseline?, evidence, missing negative evidence, status.
 
 ### Step 2 — Run the passes (cheap → expensive)
 
-Record evidence / gap / blocker per domain as you go.
-
-- **Pass A — static / structural** (no running system). Read schema & migrations, routes / API contracts, guards, service-layer scoping, tests, CI, config. Build the module map and map each claim to evidence. This is where most P0 gaps actually surface; do it first and thoroughly.
-- **Pass B — runtime probes** (only after Pass A flags high-risk paths, and only if a runnable env exists). Seed **≥2 tenants and ≥2 users**, run one happy path, then the **negative** probes: cross-tenant read/write, missing grant, disabled membership, suspended org, expired/invalid access. Negative probes are the whole point — a green happy path proves almost nothing.
-- **Pass C — synthesis**. Convert coverage gaps into P0 / P1 / P2 findings. Crucially, separate *"not implemented because out of scope"* from *"missing required foundation"* — conflating them is how scope-creep and real gaps both get mis-graded.
+- **Pass A — static / structural.** Schema & migrations, routes / contracts, guards, service scoping, tests, CI, config. Build the module map and map each claim to evidence. Most P0 gaps surface here. Also check the outer layers for parallel implementations of the same capability ([layer-model.md](references/layer-model.md) symptoms I1/P1).
+- **Pass B — runtime probes** (only for high-risk paths, only with a runnable env). Seed **≥2 tenants and ≥2 users**, one happy path, then the **negative** probes: cross-tenant read/write, missing grant, disabled membership, suspended org, expired access.
+- **Pass C — synthesis.** Convert gaps into P0 / P1 / P2. Separate *"out of scope"* from *"missing required foundation"*.
 
 ### Step 3 — Findings output
-
-Use this fixed structure so reviews are comparable over time:
 
 ```
 ## Review conclusion
 Overall result · target · biggest risks · overstated claims · verified vs unverified capabilities
-
 ## P0 findings        (area · finding · evidence · risk · required action)
 ## P1 / P2 findings   (area · finding · evidence · risk · suggested action)
-## Follow-up smoke tests   (specific manual/automated probes still owed)
-## Open decisions     (product/architecture choices blocking a final judgment)
+## Follow-up smoke tests
+## Open decisions
 ```
+
+Completion criterion: every claim-ledger row has a status, and every P0 gate in the baseline is explicitly checked.
 
 ## Status taxonomy — the anti-rubber-stamp core
 
-Every claimed capability gets exactly one status, and the bar for `verified` is deliberately high:
+Every claimed capability gets exactly one status: `verified` · `partial` · `design-only` · `not-found` · `blocked` · `not-applicable`.
 
-`verified` · `partial` · `design-only` · `not-found` · `blocked` · `not-applicable`
-
-Do **not** mark something `verified` just because:
-
-- a UI hides the button (hiding ≠ enforcing);
-- a doc says the capability exists;
-- one happy-path demo runs;
-- the test data has only one tenant / customer;
-- only generic unit tests exist, with no tenant / permission / audit / idempotency coverage.
-
-Full guidance and more anti-patterns: [references/evidence-and-status.md](references/evidence-and-status.md).
+Do **not** mark something `verified` just because a UI hides the button, a doc says so, one happy-path demo runs, test data has one tenant, or only generic unit tests exist. More: [references/evidence-and-status.md](references/evidence-and-status.md).
 
 ## Precision guardrail
 
-Calibrated reviews are stricter *and* fairer. Cite positive evidence as well as gaps: if `list()` and `detail()` are scoped but `stats()` is not, say exactly that. Treat `unverified` as "not enough evidence to claim verified," not as proof of a bug. Escalate to P0 only when the baseline, production-readiness claim, or defect risk makes the gap launch-blocking.
+Cite positive evidence as well as gaps: if `list()` and `detail()` are scoped but `stats()` is not, say exactly that. `unverified` means "not enough evidence," not "bug." Escalate to P0 only when the baseline, a readiness claim, or defect risk makes the gap blocking.
 
 ## P0 gates (fail-closed)
 
-Some defects mean "do not call this foundation acceptable," no matter what else works — e.g. cross-tenant data access, auth bypass, external side effects with no idempotency, missing audit on money/permission changes. The project's baseline names its own P0 set; the review must check each one explicitly and **fail closed** when evidence is missing rather than assuming it's fine. Generic P0 families are listed in [references/review-domains.md](references/review-domains.md).
+Some defects mean "do not call this acceptable," no matter what else works — cross-tenant access, auth bypass, external side effects without idempotency, missing audit on money/permission changes. Check each baseline P0 explicitly and **fail closed** when evidence is missing.
 
 ## Verify premises before you conclude
 
-A review that repeats a wrong premise is worse than no review. When you cite a fact — a line number, a section anchor, a config value — check it against the source rather than memory. If someone else's premise is wrong but the conclusion still holds, keep the conclusion and **correct the premise**; don't let false reasoning become the record.
+When you cite a fact — a line number, a config value, a subagent's claim — check it against the source. If a premise is wrong but the conclusion holds, keep the conclusion and **correct the premise**. If the conclusion falls, downgrade it and say why (e.g. "a DB trigger already blocks the delete").
 
 ## Lifecycle
 
-The instance is scratch. After the review: migrate durable decisions into issues / ADRs / architecture docs, and leave (or discard) the instance. Don't silently edit the reviewed system's docs or code to "fix" findings unless asked — the deliverable is the *findings*, not quiet rewrites.
+The instance is scratch. Afterwards, graduate durable conclusions into issues / ADRs / guard tests / architecture docs. Don't silently edit the reviewed system to "fix" findings unless asked — the deliverable is the findings.
 
-## Worked example
+## Worked examples
 
-[examples/kaispan-saas-foundation.md](examples/kaispan-saas-foundation.md) applies all of the above to a real multi-tenant B2B SaaS foundation: its ~16 review domains, its P0 gate list, and how a large foundational PR was graded (verified vs design-only vs scope-creep). Use it as the concrete model for adapting the generic catalog to a specific system.
+- [examples/kaispan-saas-foundation.md](examples/kaispan-saas-foundation.md) — foundation review of a multi-tenant SaaS: domains, P0 gates, grading a large PR.
+- [examples/kaispan-layered-audit.md](examples/kaispan-layered-audit.md) — system layered audit of the same product: layer map, slicing, verification downgrades, heatmap, remediation order.
