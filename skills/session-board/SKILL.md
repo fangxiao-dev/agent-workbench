@@ -46,7 +46,8 @@ powershell -ExecutionPolicy Bypass -File skills\session-board\scripts\board.ps1 
 服务不从开发仓库跑，固定跑 `D:\vibe-code-life\SessionBoard\app`：本仓库的 git worktree，分支 `board-live`，跟踪 `origin/main`，只用来运行、不在里面开发。
 
 - 启停都用那份脚本：`powershell -ExecutionPolicy Bypass -File D:\vibe-code-life\SessionBoard\app\skills\session-board\scripts\board.ps1 -Action restart -AllowOrigin https://xiao.tail1b6e93.ts.net`
-- 更新：`git -C D:\vibe-code-life\SessionBoard\app pull` 之后 restart；开发仓库改的代码要 commit → push → pull → restart 才生效
+- 更新用 `-Action update`：代码目录有已跟踪的未提交改动就拒绝，否则 `pull --ff-only` 后自动重启。开发仓库改的代码要先 commit → push 才会被拉到
+- `-Action status` 会打印当前 HEAD 和脏改动数，用来确认跑的是哪一份
 - 开发仓库随便切分支都不影响它（反过来也不生效，这是刻意的）
 - 数据库与日志仍在 `D:\vibe-code-life\SessionBoard\`，不在代码目录里
 
