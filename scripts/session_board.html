@@ -270,7 +270,7 @@ svg.i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stro
 <header class="top">
   <div class="brand"><span class="logo"><i></i><i></i><i></i></span>Session <span class="z">看板</span></div>
   <label class="search"><span data-i="search"></span><input id="search" type="search" placeholder="搜索会话" aria-label="搜索会话"></label>
-  <div class="seg" id="filters" role="group" aria-label="筛选"><button data-f="all" aria-pressed="true">全部</button><button data-f="focus" aria-pressed="false" title="只看进行中的会话">专注</button><button data-f="todo" aria-pressed="false" title="AI 判定需要你拍板，或出现阻塞">需关注<em id="todo-n"></em></button></div>
+  <div class="seg" id="filters" role="group" aria-label="筛选"><button data-f="all" aria-pressed="false">全部</button><button data-f="focus" aria-pressed="true" title="只看进行中的会话">专注</button><button data-f="todo" aria-pressed="false" title="AI 判定需要你拍板，或出现阻塞">需关注<em id="todo-n"></em></button></div>
   <div class="right"><button class="syncbtn" id="syncbtn" type="button" aria-haspopup="menu" aria-expanded="false" title="刷新间隔"><span class="syncdot" id="syncdot"></span><span id="sync">同步中</span><i>▾</i></button><div class="hmen" id="hmen" role="menu"></div>
     <button class="ib" id="refresh" title="立即同步" aria-label="立即同步"><span data-i="refresh"></span></button>
     <button class="ib" id="agents" title="显示后台 / 子会话" aria-label="显示后台 / 子会话" aria-pressed="false"><span data-i="bot"></span><span class="n hidden" id="agents-n"></span></button>
@@ -314,7 +314,7 @@ const colFold=JSON.parse(localStorage.getItem('board.colfold')||'{}');
 const $=s=>document.querySelector(s);
 const el=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e};
 document.querySelectorAll('[data-i]').forEach(s=>s.replaceChildren(icon(s.dataset.i)));
-let items=[],boardTags=[],tagFilter=0,tagsExpanded=false,busy=false,dragging=false,openId=null,filter='all',showRemoved=false,showAgents=false;const cap={};
+let items=[],boardTags=[],tagFilter=0,tagsExpanded=false,busy=false,dragging=false,openId=null,filter='focus',showRemoved=false,showAgents=false;const cap={};
 const coarse=matchMedia('(pointer:coarse)').matches,reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const fold=JSON.parse(localStorage.getItem('board.fold')||'{}'); // lane|dir -> collapsed; the shelved lane starts collapsed
 const rootOf=i=>(i.cwd||'').replace(/[\\/]\.(claude[\\/])?worktrees[\\/].*$/i,'');
