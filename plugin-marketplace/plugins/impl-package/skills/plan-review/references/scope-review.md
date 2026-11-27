@@ -4,6 +4,7 @@
 
 - 先做 freshness gate：确认计划声明的目标路径与 contract 仍存在、尚未被实施或 supersede，并与当前 branch/HEAD 和 active/deprecated 状态相符；历史计划不能被默认为当前 implementation-ready。
 - 从目标及必要 design/spec 中提取目标、验收条件、已接受约束、已定 contract 和明确非目标；计划改变或绕过它们时形成 conflict candidate，不能默认为工程自由度。
+- 上游合同简化退回权：若拆票发现上游 `spec.md` / `contract-design.md` 会逼出明显的双轨页面、重复接口或高同步维护面，不必机械顺着合同拆票，可直接提出 `contract-simplification candidate`，写清简化方案与维护面收益，经由上游合同修订流程（如 `kickoff` 的 `--touched-upstream`）退回 `req-align` 简化后再继续。
 - 找出仓库中已经存在且可以复用的能力、contract、脚本、测试资产或发布路径；把结果归入 `What already exists`。
 - 判断计划是否覆盖最小完整变更，而不是只实现 happy path 或留下无法验收的半套接线。
 - 检查 TODO、前置依赖、迁移窗口、owner 边界和与既有 design/spec 的范围冲突；列出所有真实消费者、跨平台镜像和仍依赖旧布局或旧 contract 的入口。
