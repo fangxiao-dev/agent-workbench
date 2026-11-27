@@ -359,6 +359,76 @@ def test_summary_round_skips_when_nothing_moved(tmp_path):
     assert session_board_summary.progress()['total'] == 0   # nothing new: the round owes no calls
 
 
+def test_repeated_rewinds_collapse_into_the_newest_card(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    parent = source.stem
+    source.write_bytes(titled('同一个会话') + record('user', 'first'))
+    board.sync(dbpath, home)
+    first = source.with_name('44444444-4444-4444-8444-444444444444.jsonl')
+    first.write_bytes(titled('同一个会话') + record('assistant', 'branch one', requestSessionId=parent))
+    second = source.with_name('55555555-5555-4555-8555-555555555555.jsonl')
+    second.write_bytes(titled('同一个会话') + record('assistant', 'branch two', requestSessionId=parent))
+    os.utime(first, (time.time() - 600, time.time() - 600))
+    board.sync(dbpath, home)
+    items = board.list_items(dbpath, home)
+    assert [item['id'] for item in items] == [second.stem]
+    assert board.superseded_ids(dbpath) == {parent, first.stem}
+
+
+def test_conversation_in_the_head_is_found_when_the_tail_is_attachments(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    filler = b''.join(record('attachment', 'x' * 900) for _ in range(200))   # pushes the message out of the tail window
+    source.write_bytes(record('user', 'the only message') + filler)
+    assert source.stat().st_size > 128 * 1024
+    board.sync(dbpath, home)
+    item = board.list_items(dbpath, home)[0]
+    assert [event['text'] for event in item['events']] == ['the only message']
+
+
+def test_continuation_stays_visible_without_its_own_origin(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    parent = source.stem
+    source.write_bytes(record('user', 'first question', entrypoint='claude-desktop-3p', origin={'kind': 'human'}))
+    board.sync(dbpath, home)
+    # A rewound/compacted segment starts by replaying the old conversation, so its own first user
+    # record carries no origin — it must still count as part of the same session.
+    child = source.with_name('33333333-3333-4333-8333-333333333333.jsonl')
+    child.write_bytes(record('user', 'This session is being continued from a previous conversation that ran out of context.',
+                             entrypoint='claude-desktop-3p', requestSessionId=parent))
+    board.sync(dbpath, home)
+    item = next(i for i in board.list_items(dbpath, home) if i['id'] == child.stem)
+    assert item['agent'] is False
+
+
+def test_entrypoint_is_relearned_when_written_late(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    source.write_bytes(record('user', 'hello'))
+    board.sync(dbpath, home)
+    with sqlite3.connect(dbpath) as db:
+        assert db.execute("SELECT ifnull(entrypoint,'') FROM items").fetchone()[0] == ''
+    with source.open('ab') as stream:
+        stream.write(record('assistant', 'hi', entrypoint='claude-desktop-3p'))
+    with sqlite3.connect(dbpath) as db:   # let the slow retry run on the next sync
+        db.execute("UPDATE meta SET value='0' WHERE key='reclassify_at'")
+    board.sync(dbpath, home)
+    with sqlite3.connect(dbpath) as db:
+        assert db.execute("SELECT entrypoint FROM items").fetchone()[0] == 'claude-desktop-3p'
+
+
+def test_agent_launched_briefs_are_workers_not_sessions(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    brief = ('<pasted_content id="1">' + chr(10) +
+             'Human: <system-reminder>Codebase and user instructions are shown below' + chr(10) +
+             '</pasted_content>')
+    source.write_bytes(record('user', brief, entrypoint='cli', origin={'kind': 'human'}))
+    other = source.with_name('22222222-2222-4222-8222-222222222222.jsonl')
+    other.write_bytes(record('user', 'please fix the build', entrypoint='cli', origin={'kind': 'human'}))
+    board.sync(dbpath, home)
+    items = {item['id']: item for item in board.list_items(dbpath, home)}
+    assert items[source.stem]['agent'] is True    # another agent's brief, not the human opening a session
+    assert items[other.stem]['agent'] is False
+
+
 def test_tags_are_global_and_capped_per_session(tmp_path):
     home, source, dbpath = setup_source(tmp_path)
     source.write_bytes(record('user', 'go'))

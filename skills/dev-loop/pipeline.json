@@ -1,0 +1,45 @@
+{
+  "name": "impl-package-development-pipeline",
+  "version": 1,
+  "initial": "intake",
+  "terminal": "closeout",
+  "statuses": ["done", "active", "pending", "blocked", "attention"],
+  "stages": [
+    {
+      "id": "intake",
+      "label": "接入",
+      "description": "接入或恢复实施包，核对新到的 intake 项。",
+      "default_status": "pending"
+    },
+    {
+      "id": "tickets",
+      "label": "Ticket 并行推进",
+      "description": "按依赖和状态并行推进可运行 Ticket。",
+      "default_status": "pending"
+    },
+    {
+      "id": "final-review",
+      "label": "包级终审",
+      "description": "收齐 worker return，完成 terminal-final 审阅与 findings 收敛。",
+      "default_status": "pending"
+    },
+    {
+      "id": "final-verify",
+      "label": "最终验证",
+      "description": "核对 acceptance、required suites 与最终证据。",
+      "default_status": "pending"
+    },
+    {
+      "id": "gate",
+      "label": "Gate",
+      "description": "根据权威验证结果记录包级 Gate。",
+      "default_status": "pending"
+    },
+    {
+      "id": "closeout",
+      "label": "收尾",
+      "description": "完成 Gate 后的收尾与稳定知识回刷。",
+      "default_status": "pending"
+    }
+  ]
+}

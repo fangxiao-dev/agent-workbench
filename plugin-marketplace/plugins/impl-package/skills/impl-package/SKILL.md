@@ -25,6 +25,7 @@ Impl-Package 把一次变更组织为可裁剪的链路：Decision/Spec contract
 | `impl-to-tickets` | `/impl-package:impl-planning` 的 Ticket-split | 创建独立验收切片 |
 | `impl-dispatcher` | `$dispatcher` | 候选选择、bounded brief、dependency/resource admission、dispatch/return/review 与 idle；进入执行阶段先读其「执行原则」四行 |
 | `impl-dev-with-track` | `/impl-package:dev-with-track` | 恢复执行、确定业务重点与候选范围、消费 Dispatcher 结果、推进 Ticket 与写 Gate |
+| — | `$dev-loop` | 包级流程状态与推进视图（`dev-loop status`）；业务裁决与写入门禁仍归本体系 |
 | `impl-monitor-progress` | `/impl-package:monitor-progress` | 打开实时进度页面，并可选创建只读主控监控 automation |
 | `impl-do-review` | `/impl-package:do-review` | 多 reviewer 编排、fail-closed 聚合 findings 并判断收敛 |
 | `impl-review-code` | `/impl-package:review-code` | 审查实现正确性、仓库规范与可维护性 |

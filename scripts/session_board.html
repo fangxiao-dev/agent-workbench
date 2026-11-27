@@ -463,7 +463,8 @@ function tagBarChip(t,n){const wrap=el('span','tchip');wrap.style.setProperty('-
   wrap.append(nm,x);return wrap}
 function visible(){const q=$('#search').value.toLowerCase().trim();
   // Untitled sessions are almost always background helpers (e.g. prompt suggestions); keep them off the board.
-  return items.filter(i=>(i.events.length>0||(i.summary&&i.summary.summary))&&(showAgents||!i.agent)&&Boolean(i.hidden)===showRemoved&&(!tagFilter||(i.tags||[]).some(t=>t.id===tagFilter))&&(!q||hay(i).includes(q))&&
+  // A just-rewound segment has its title before it has parsed events; keep the card instead of blinking it out.
+  return items.filter(i=>(i.events.length>0||(i.summary&&i.summary.summary)||(!i.agent&&i.title&&!i.title_derived))&&(showAgents||!i.agent)&&Boolean(i.hidden)===showRemoved&&(!tagFilter||(i.tags||[]).some(t=>t.id===tagFilter))&&(!q||hay(i).includes(q))&&
     (filter!=='todo'||pending(i)))}
 
 function render(){if(dragging)return;

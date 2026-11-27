@@ -87,6 +87,20 @@ PASTED = re.compile(r"^<pasted_content[^>]*>\s*", re.I)
 INJECTED_TAG = re.compile(r"^<[a-z][a-z0-9_-]*[\s>]", re.I)
 
 
+def user_text(record: dict) -> str:
+    """The text a transcript line carries, with this host's paste wrapper removed."""
+    message = record.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        text = chr(10).join(str(block.get("text", "")) for block in content
+                            if isinstance(block, dict) and block.get("type") == "text")
+    else:
+        return ""
+    return strip_pasted(text).lstrip()
+
+
 def strip_pasted(text: str) -> str:
     text = PASTED.sub("", str(text).strip()).strip()
     if text.lower().endswith("</pasted_content>"):
@@ -160,7 +174,12 @@ class ClaudeDesktopHost(HostAdapter):
                     if not entry and isinstance(record.get("entrypoint"), str):
                         entry = record["entrypoint"][:40]
                     if human < 0 and record.get("type") == "user" and not record.get("isMeta"):
-                        human = int(isinstance(record.get("origin"), dict))
+                        # A worker launched by another agent gets its whole brief as the first "user"
+                        # turn — a pasted block starting with "Human:" and carrying a system prompt, or
+                        # a history dump. It carries an origin, but the human did not start it.
+                        text = user_text(record)
+                        launched = text.startswith(("Human:", "<conversation_history"))
+                        human = int(isinstance(record.get("origin"), dict) and not launched)
                 ref = record.get("requestSessionId")
                 if isinstance(ref, str) and UUID.fullmatch(ref) and ref != path.stem:
                     refs[ref] = refs.get(ref, 0) + 1

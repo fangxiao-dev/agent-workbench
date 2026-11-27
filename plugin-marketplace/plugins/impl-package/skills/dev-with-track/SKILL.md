@@ -9,6 +9,8 @@ description: 当批准 implementation plan 正式开始或恢复执行、确定�
 
 本 Skill 按 3.6（Journey 验收）书写；`formatVersion` 不是 3.6 的旧 package 不再支持。
 
+流程状态与推进视图由 `dev-loop` 统一提供（`dev-loop status`）；本 Skill 保留业务裁决、Ticket 合同、Evidence 与 Gate。视图提示不替代本 Skill 的判断。
+
 ## 业务控制循环
 
 1. **刷新业务事实。** 优先消费匹配当前 session/package 的 `Impl-Package Resume Capsule v1`；缺失或失配时执行 Restore，取得 current Attempt、canonical Ticket state、blocker、候选与 situation。
