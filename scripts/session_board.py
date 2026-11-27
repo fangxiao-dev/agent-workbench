@@ -618,7 +618,13 @@ def summary_ids(db_path: Path, home: Path) -> set[str]:
     return wanted - superseded_ids(db_path)
 
 
-def make_handler(db_path: Path, home: Path, token: str, port: int, summary_command: list[str] | None = None):
+def make_handler(db_path: Path, home: Path, token: str, port: int,
+                 summary_command: list[str] | None = None, allow_origin: str | None = None):
+    allowed_origins = {f"http://127.0.0.1:{port}"}
+    if allow_origin:
+        allowed_origins.add(allow_origin)
+    allowed_hosts = {urlsplit(o).netloc for o in allowed_origins}
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -626,9 +632,8 @@ def make_handler(db_path: Path, home: Path, token: str, port: int, summary_comma
         def permitted(self, write=False):
             host = self.headers.get("Host", "")
             origin = self.headers.get("Origin")
-            expected = f"http://127.0.0.1:{port}"
-            return (host == f"127.0.0.1:{port}" and (not origin or origin == expected)
-                    and (not write or (origin == expected and secrets.compare_digest(self.headers.get("X-Board-Token", ""), token))))
+            return (host in allowed_hosts and (not origin or origin in allowed_origins)
+                    and (not write or (origin in allowed_origins and secrets.compare_digest(self.headers.get("X-Board-Token", ""), token))))
 
         def reply(self, status, body, content_type="application/json; charset=utf-8"):
             content = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -723,6 +728,8 @@ def main():
     parser.add_argument("--claude-home", type=Path, default=Path.home() / ".claude")
     parser.add_argument("--worker-path", action="append", default=[], metavar="DIR",
                         help="该目录下的会话按后台 worker 处理，可重复；系统临时目录已默认包含")
+    parser.add_argument("--allow-origin", metavar="https://host[:port]",
+                        help="额外放行一个浏览器来源；经反向代理（如 tailscale serve）访问时需要，写操作仍要 X-Board-Token")
     summaries = parser.add_mutually_exclusive_group()
     summaries.add_argument("--summary-command", help="JSON 字符串数组；配置后会将所选会话文本发送给此命令")
     summaries.add_argument("--ollama-model", help="启用本机 Ollama 摘要；会向本机服务发送所选会话文本")
@@ -732,6 +739,11 @@ def main():
     HOST.worker_paths = tuple(args.worker_path)
     if not 1 <= args.port <= 65535:
         parser.error("端口必须在 1 到 65535 之间")
+    allow_origin = args.allow_origin.rstrip("/") if args.allow_origin else None
+    if allow_origin:
+        parts = urlsplit(allow_origin)
+        if parts.scheme not in ("http", "https") or not parts.netloc or parts.path:
+            parser.error("--allow-origin 必须是 https://host[:port] 形式的来源")
     try:
         adapters = [('session_board_ollama.py', args.ollama_model), ('session_board_deepseek.py', args.deepseek_model)]
         chosen = next(((n, m) for n, m in adapters if m), None)
@@ -742,7 +754,7 @@ def main():
     if command is not None and (not isinstance(command, list) or not command or any(not isinstance(s, str) or not s for s in command)):
         parser.error("摘要命令必须是非空 JSON 字符串数组")
     token = secrets.token_urlsafe(32)
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(args.db, args.claude_home, token, args.port, command))
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(args.db, args.claude_home, token, args.port, command, allow_origin))
     server.daemon_threads = True
     stop = threading.Event()
 

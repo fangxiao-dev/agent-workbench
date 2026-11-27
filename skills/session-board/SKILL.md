@@ -22,8 +22,24 @@ powershell -ExecutionPolicy Bypass -File skills\session-board\scripts\board.ps1 
 - `-Model deepseek-v4-flash`（默认；摘要走 DeepSeek）
 - `-NoSummary`：不开摘要，不向任何模型服务发送会话文本
 - `-Script <session_board.py 路径>`：从别的工作区启动时使用
+- `-AllowOrigin https://<节点名>.ts.net`：经 `tailscale serve` 从手机访问时必带，否则服务端按来源不合法返回 403
 
 启动后浏览器打开脚本打印的 `http://127.0.0.1:43188`。日志在同目录的 `server.log` / `server.err.log`。
+
+## 手机远程访问（Tailscale）
+
+看板只监听 127.0.0.1，远程访问靠 `tailscale serve` 在 tailnet 内反向代理，不暴露公网：
+
+```powershell
+# 一次性：把 443 反代到本机看板（配置存在 tailscaled 里，重启后仍然有效）
+tailscale serve --bg 43188
+# 必须带 --allow-origin 重启看板，否则 ts.net 来源被拒
+powershell -ExecutionPolicy Bypass -File skills\session-board\scripts\board.ps1 -Action restart -AllowOrigin https://xiao.tail1b6e93.ts.net
+```
+
+手机装 Tailscale、登录同一账号后访问 `https://<节点名>.ts.net`（`tailscale status --json` 里的 `Self.DNSName`）。`tailscale serve` 只对 tailnet 内设备开放；要用 `--accept-routes` 之外的东西请先想清楚。电脑睡眠 / 关机 / 退出登录时远程不可用。
+
+登录自启：`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\SessionBoard.vbs` 会静默跑 `board.ps1 -Action start -AllowOrigin https://xiao.tail1b6e93.ts.net`；删掉该文件即取消自启。换机器部署时重建这个文件，节点名按 `Self.DNSName` 改。
 
 ## macOS / Linux
 
@@ -48,6 +64,7 @@ python3 -m scripts.session_board --db ~/SessionBoard/board.sqlite3 --port 43188 
 - **页面空白 / 打不开**：先 `-Action status`。进程在但 HTTP 不通，多半是启动时用的那份工作区被切走了——看板代码只在 `main` 和 `feat/session-board` 上，仓库切到别的分支后服务读不到 HTML。切回 `main` 再 `restart`。
 - **端口被占**：`-Action stop` 会按命令行里的 `session_board.py` 找 python 进程，不按端口乱杀；确认只停看板进程。
 - **改了代码没生效**：HTML 每次请求都从磁盘读，改完刷新页面即可；`.py` 改动必须 `restart`。
+- **手机打开是 `{"error":"请求来源不允许"}`**：这次重启漏了 `-AllowOrigin https://<节点名>.ts.net`，或节点名变了（`tailscale status --json` 看 `Self.DNSName`）。
 
 ## 开发时再读
 

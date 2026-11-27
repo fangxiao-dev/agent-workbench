@@ -541,6 +541,37 @@ def test_live_status_uses_cli_even_if_metadata_is_stale(tmp_path, monkeypatch):
     assert ident not in board.live_sessions(home)
 
 
+def test_server_allows_configured_origin(tmp_path):
+    home, source, dbpath = setup_source(tmp_path)
+    source.write_bytes(record('user', 'synthetic'))
+    origin = 'https://board.example.ts.net'
+    server = board.ThreadingHTTPServer(('127.0.0.1', 0), board.BaseHTTPRequestHandler)
+    port = server.server_address[1]
+    server.RequestHandlerClass = board.make_handler(dbpath, home, 'known-test-token', port, None, origin)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        client = http.client.HTTPConnection('127.0.0.1', port)
+        host = {'Host': 'board.example.ts.net'}
+        client.request('GET', '/', headers=host)
+        assert client.getresponse().status == 200
+        client.request('GET', '/api/items', headers={**host, 'X-Board-Token': 'known-test-token'})
+        assert client.getresponse().status == 200
+        client.request('POST', '/api/sync', body='{}', headers={**host, 'Origin': origin, 'X-Board-Token': 'known-test-token'})
+        assert client.getresponse().status == 200
+        # a page on another origin still cannot write, and an unknown host stays blocked
+        client.request('POST', '/api/sync', body='{}',
+                       headers={**host, 'Origin': 'http://attacker.test', 'X-Board-Token': 'known-test-token'})
+        assert client.getresponse().status == 403
+        client.request('GET', '/api/items', headers={'Host': 'attacker.test', 'X-Board-Token': 'known-test-token'})
+        assert client.getresponse().status == 403
+        client.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
 def test_server_rejects_foreign_origin_and_host(tmp_path):
     home, source, dbpath = setup_source(tmp_path)
     source.write_bytes(record('user', 'synthetic'))

@@ -5,6 +5,7 @@ param(
     [string]$Db,
     [string]$Model = 'deepseek-v4-flash',
     [string]$Script,
+    [string]$AllowOrigin,
     [switch]$NoSummary
 )
 
@@ -70,6 +71,7 @@ function Get-Args {
     # -m from the module root: the board imports its siblings as `scripts.*`, which only resolves
     # when the checkout root is on sys.path.
     $arguments = @('-m', 'scripts.session_board', '--db', $Db, '--port', "$Port")
+    if ($AllowOrigin) { $arguments += @('--allow-origin', $AllowOrigin) }
     if (-not $NoSummary) { $arguments += @('--deepseek-model', $Model) }
     return $arguments
 }
