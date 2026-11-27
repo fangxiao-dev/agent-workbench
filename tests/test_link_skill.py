@@ -47,8 +47,8 @@ def workbench(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     wb = tmp_path / "workbench"
     skills = wb / "skills"
     skills.mkdir(parents=True)
-    (skills / "call-grok").mkdir()
-    (skills / "call-grok" / "SKILL.md").write_text("# call-grok\n", encoding="utf-8")
+    (skills / "demo-skill").mkdir()
+    (skills / "demo-skill" / "SKILL.md").write_text("# demo-skill\n", encoding="utf-8")
     (skills / "alpha").mkdir()
     (skills / "alpha" / "SKILL.md").write_text("# alpha\n", encoding="utf-8")
     (skills / "beta").mkdir()
@@ -91,7 +91,7 @@ def test_platform_constants(workbench) -> None:
 
 def test_resolve_skill_and_missing(workbench) -> None:
     mod, _wb, skills = workbench
-    assert mod.resolve_skill_source("call-grok") == (skills / "call-grok").resolve()
+    assert mod.resolve_skill_source("demo-skill") == (skills / "demo-skill").resolve()
     assert mod.resolve_skill_source("bundle") == (skills / "bundle").resolve()
     with pytest.raises(FileNotFoundError):
         mod.resolve_skill_source("nope")
@@ -103,7 +103,7 @@ def test_resolve_skill_and_missing(workbench) -> None:
 
 def test_has_skill_md_nested_and_empty(workbench) -> None:
     mod, _wb, skills = workbench
-    assert mod.has_skill_md(skills / "call-grok") is True
+    assert mod.has_skill_md(skills / "demo-skill") is True
     assert mod.has_skill_md(skills / "bundle") is True
     assert mod.has_skill_md(skills / "empty-shell") is False
 
@@ -111,20 +111,20 @@ def test_has_skill_md_nested_and_empty(workbench) -> None:
 def test_link_then_skip(workbench, tmp_path: Path) -> None:
     mod, _wb, skills = workbench
     host_skills = tmp_path / "home" / ".claude" / "skills"
-    code = mod.main(["call-grok", "--to", str(host_skills), "--json"])
+    code = mod.main(["demo-skill", "--to", str(host_skills), "--json"])
     assert code == 0
-    dest = host_skills / "call-grok"
+    dest = host_skills / "demo-skill"
     assert dest.is_dir()
     assert (dest / "SKILL.md").is_file()
     assert_is_platform_link(mod, dest)
     target = mod.link_target(dest)
     assert target is not None
-    assert mod.same_path(target, skills / "call-grok")
+    assert mod.same_path(target, skills / "demo-skill")
 
-    code2 = mod.main(["call-grok", "--to", str(host_skills), "--json"])
+    code2 = mod.main(["demo-skill", "--to", str(host_skills), "--json"])
     assert code2 == 0
     root, items = mod.link_skills_to_root(
-        [skills / "call-grok"], host_skills, workbench_skills=skills
+        [skills / "demo-skill"], host_skills, workbench_skills=skills
     )
     assert root["action"] == "ok"
     assert items[0]["action"] == "skipped"
@@ -135,12 +135,12 @@ def test_conflict_real_directory(workbench, tmp_path: Path) -> None:
     mod, _wb, skills = workbench
     host_skills = tmp_path / "skills"
     host_skills.mkdir()
-    conflict = host_skills / "call-grok"
+    conflict = host_skills / "demo-skill"
     conflict.mkdir()
     (conflict / "other.txt").write_text("x", encoding="utf-8")
 
     root, items = mod.link_skills_to_root(
-        [skills / "call-grok"], host_skills, workbench_skills=skills
+        [skills / "demo-skill"], host_skills, workbench_skills=skills
     )
     assert root["action"] in {"ok", "created"}
     assert items[0]["action"] == "conflict"
@@ -152,15 +152,15 @@ def test_migrate_whole_tree_then_link(workbench, tmp_path: Path) -> None:
     make_dir_link(skills, host_skills)
     assert mod.is_link(host_skills)
 
-    code = mod.main(["call-grok", "--to", str(host_skills), "--json"])
+    code = mod.main(["demo-skill", "--to", str(host_skills), "--json"])
     assert code == 0
     assert host_skills.is_dir()
     assert not mod.is_link(host_skills), "skills root must be a real directory after migrate"
-    linked = host_skills / "call-grok"
+    linked = host_skills / "demo-skill"
     assert linked.is_dir()
     assert_is_platform_link(mod, linked)
     assert (linked / "SKILL.md").is_file()
-    assert (skills / "call-grok" / "SKILL.md").is_file()
+    assert (skills / "demo-skill" / "SKILL.md").is_file()
 
 
 def test_refuse_foreign_whole_tree(workbench, tmp_path: Path) -> None:
@@ -171,11 +171,11 @@ def test_refuse_foreign_whole_tree(workbench, tmp_path: Path) -> None:
     host_skills = tmp_path / "home" / ".codex" / "skills"
     make_dir_link(other, host_skills)
 
-    code = mod.main(["call-grok", "--to", str(host_skills), "--json"])
+    code = mod.main(["demo-skill", "--to", str(host_skills), "--json"])
     assert code == 1
     assert mod.is_link(host_skills)
     # foreign tree must not gain a workbench skill link silently
-    assert not (host_skills / "call-grok").exists() or mod.is_link(host_skills)
+    assert not (host_skills / "demo-skill").exists() or mod.is_link(host_skills)
 
 
 def test_all_links_top_level(workbench, tmp_path: Path) -> None:
@@ -184,7 +184,7 @@ def test_all_links_top_level(workbench, tmp_path: Path) -> None:
     code = mod.main(["--all", "--to", str(host_skills), "--json"])
     assert code == 0
     names = {p.name for p in host_skills.iterdir()}
-    assert names == {"call-grok", "alpha", "beta", "bundle"}
+    assert names == {"demo-skill", "alpha", "beta", "bundle"}
     assert "empty-shell" not in names
     assert (host_skills / "bundle" / "nested").is_dir()
     assert (host_skills / "bundle" / "nested" / "SKILL.md").is_file()
@@ -209,11 +209,11 @@ def test_multi_host_with_home(workbench, tmp_path: Path) -> None:
     mod, _wb, _skills = workbench
     home = tmp_path / "home"
     code = mod.main(
-        ["call-grok", "--host", "claude", "codex", "agents", "--home", str(home), "--json"]
+        ["demo-skill", "--host", "claude", "codex", "agents", "--home", str(home), "--json"]
     )
     assert code == 0
     for host in ("claude", "codex", "agents"):
-        dest = home / f".{host}" / "skills" / "call-grok"
+        dest = home / f".{host}" / "skills" / "demo-skill"
         assert dest.is_dir()
         assert_is_platform_link(mod, dest)
 
@@ -246,7 +246,7 @@ def test_json_summary_shape(workbench, tmp_path: Path, capsys: pytest.CaptureFix
 
 def test_same_path_normalizes_extended_prefix(workbench) -> None:
     mod, _wb, skills = workbench
-    a = skills / "call-grok"
+    a = skills / "demo-skill"
     b = Path("\\\\?\\" + str(a.resolve())) if IS_WINDOWS else a.resolve()
     if IS_WINDOWS:
         assert mod.same_path(a, b)
@@ -268,20 +268,20 @@ def test_host_skills_dir_paths(workbench, tmp_path: Path) -> None:
 def test_unlink_removes_host_link_keeps_source(workbench, tmp_path: Path) -> None:
     mod, _wb, skills = workbench
     host_skills = tmp_path / "skills-out"
-    assert mod.main(["call-grok", "--to", str(host_skills), "--json"]) == 0
-    dest = host_skills / "call-grok"
+    assert mod.main(["demo-skill", "--to", str(host_skills), "--json"]) == 0
+    dest = host_skills / "demo-skill"
     assert dest.is_dir()
     assert_is_platform_link(mod, dest)
 
-    code = mod.main(["call-grok", "--to", str(host_skills), "--unlink", "--json"])
+    code = mod.main(["demo-skill", "--to", str(host_skills), "--unlink", "--json"])
     assert code == 0
     assert not dest.exists()
     assert not mod.is_link(dest)
     # workbench source intact
-    assert (skills / "call-grok" / "SKILL.md").is_file()
+    assert (skills / "demo-skill" / "SKILL.md").is_file()
 
     # second unlink is skip
-    code2 = mod.main(["call-grok", "--to", str(host_skills), "--unlink", "--json"])
+    code2 = mod.main(["demo-skill", "--to", str(host_skills), "--unlink", "--json"])
     assert code2 == 0
 
 
@@ -289,11 +289,11 @@ def test_unlink_refuses_real_directory(workbench, tmp_path: Path) -> None:
     mod, _wb, skills = workbench
     host_skills = tmp_path / "skills-out"
     host_skills.mkdir()
-    real = host_skills / "call-grok"
+    real = host_skills / "demo-skill"
     real.mkdir()
     (real / "x.txt").write_text("keep", encoding="utf-8")
 
-    root, items = mod.unlink_skills_from_root([skills / "call-grok"], host_skills)
+    root, items = mod.unlink_skills_from_root([skills / "demo-skill"], host_skills)
     assert root["action"] == "ok"
     assert items[0]["action"] == "conflict"
     assert real.is_dir()
@@ -307,9 +307,9 @@ def test_unlink_refuses_foreign_link(workbench, tmp_path: Path) -> None:
     (other / "nested").mkdir()
     host_skills = tmp_path / "skills-out"
     host_skills.mkdir()
-    dest = host_skills / "call-grok"
+    dest = host_skills / "demo-skill"
     make_dir_link(other, dest)
 
-    root, items = mod.unlink_skills_from_root([skills / "call-grok"], host_skills)
+    root, items = mod.unlink_skills_from_root([skills / "demo-skill"], host_skills)
     assert items[0]["action"] == "conflict"
     assert mod.is_link(dest)

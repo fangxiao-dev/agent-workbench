@@ -13,7 +13,6 @@
 | review | `garrytan/gstack` | `npx skills add garrytan/gstack --skill review --full-depth -y --copy` | 已放入 `skills/gstack/review/` |
 | frontend-design | `anthropics/skills` | `npx skills add anthropics/skills@frontend-design -g -y` | 已放入 `skills/frontend-design/` |
 | skill-creator | `anthropics/skills` | 人工迁移 | 本地副本作为 `write-skill-smartly` 的内部方法论保留在 `skills/write-skill-smartly/sub-skills/skill-creator/`，不单独暴露给宿主；Codex `.system` 版本不受影响 |
-| ask-matt | `mattpocock/skills` | `npx skills add mattpocock/skills@ask-matt -g -y` | 已放入 `skills/ask-matt/`；已同步上游（phase boundaries / wayfinder 路由） |
 | diagnosing-bugs | `mattpocock/skills` | `npx skills add mattpocock/skills@diagnosing-bugs -g -y` | 本地维护副本位于 `skills/diagnosing-bugs/`；已 cherry-pick 上游 Redact + Phase 1 脱敏展示 |
 | bug-fix-tdd | `obra/superpowers` | 人工迁移并打薄 | 上游 skill 名为 `test-driven-development`；本地作为 `diagnosing-bugs` 的修复执行器，位于 `skills/diagnosing-bugs/sub-skills/bug-fix-tdd/SUB-SKILL.md`；原版保存在 deprecated Superpowers 归档 |
 | grill-me (retired) | `mattpocock/skills` | 历史登记 | 上游仅一行 `Run a /grilling session`；主仓不保留副本，由 `grilling` / `grill-me-smartly` 覆盖 |
@@ -22,7 +21,7 @@
 | prototype | `mattpocock/skills` | `npx skills add mattpocock/skills@prototype -g -y` | 已放入 `skills/prototype/`；已同步上游（HTML 单文件 demo / primary source） |
 | setup-matt-pocock-skills | `mattpocock/skills` | `npx skills add mattpocock/skills@setup-matt-pocock-skills -g -y` | 已放入 `skills/setup-matt-pocock-skills/`；已同步上游 |
 | tdd | `mattpocock/skills` | `npx skills add mattpocock/skills@tdd -g -y` | 已放入 `skills/tdd/`；已同步上游（reference-only red→green / seam） |
-| to-spec | `mattpocock/skills` | 人工迁移上游 `skills/engineering/to-spec` | Vendored 只读参考（上游 `391a270`），不进入 Impl-Package 主链；repo facts、testing seam 与 user-semantics synthesis 方法已吸收进 `req-align` |
+| to-spec (retired) | `mattpocock/skills` | 人工迁移上游 `skills/engineering/to-spec` | 已退休（上游 `391a270`）；repo facts、testing seam 与 user-semantics synthesis 方法已完全吸收进 `req-align`，本地副本已删除 |
 | to-tickets (retired) | `mattpocock/skills` | 历史本地分叉 | 本地 fork 已删除；Ticket splitting 已并入 `plugin-marketplace/plugins/impl-package/skills/impl-planning/`（上游基线 `391a270`），不再保留独立 skill |
 | domain-modeling | `mattpocock/skills` | `npx skills add mattpocock/skills@domain-modeling -g -y` | 已放入 `skills/domain-modeling/` |
 | codebase-design | `mattpocock/skills` | `npx skills add mattpocock/skills@codebase-design -g -y` | 已放入 `skills/codebase-design/` |
@@ -45,7 +44,6 @@
 | code-review | `supercent-io/skills-template` | `npx skills add supercent-io/skills-template@code-review -g -y` | 已放入 `plugin-marketplace/plugins/impl-package/skills/code-review/` |
 | git-workflow | `supercent-io/skills-template`（历史来源） | 历史命令：`npx skills add supercent-io/skills-template@git-workflow -g -y` | 本地维护分叉位于 `skills/git-workflow/`；上游在 2026-07-22 不可解析，后续不直接覆盖本地版本。 |
 | documentation-generator | `jorgealves/agent_skills` | `npx skills add jorgealves/agent_skills@documentation-generator -g -y` | 已放入 `skills/documentation-generator/` |
-| prompt-optimizer | `daymade/claude-code-skills` | `npx skills add daymade/claude-code-skills@prompt-optimizer -g -y` | 已放入 `skills/prompt-optimizer/` |
 | test-generator | `oimiragieo/agent-studio` | `npx skills add oimiragieo/agent-studio@test-generator -g -y` | 已放入 `skills/test-generator/` |
 | explain-diff-html | `geoffreylitt/a29df1b5f9865506e8952488eac3d524` | 人工迁移并本地改良 | 基于 Gist 的本地 fork，已放入 `skills/explain-diff-html/`；固定渲染器、schema 校验与离线安全边界为本地改动 |
 | impeccable | `pbakaus/impeccable` | 人工迁移 `.agents/skills/impeccable` | 已放入 `skills/impeccable/`；保留上游 4.2.2、Apache-2.0 LICENSE/NOTICE，并设置 `disable-model-invocation: true` |

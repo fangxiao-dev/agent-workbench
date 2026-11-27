@@ -9,4 +9,4 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-addopts = ["--ignore-glob=tests/test_codex_harness_*.py"]
+testpaths = ["tests"]

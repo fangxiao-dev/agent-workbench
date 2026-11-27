@@ -44,7 +44,7 @@ agent-workbench/
 
 ## 安装目标
 
-安装器支持 `claude`、`codex`、`grok` 三类宿主：
+安装器支持 `claude`、`codex` 两类宿主：
 
 - `skills/` 暴露到宿主的 `skills/`
 - `agents/*/` 暴露到宿主的 `agents/`

@@ -34,10 +34,15 @@ def test_claude_schema_omits_draft_metadata() -> None:
     assert schema["required"] == ["ideas", "new_points"]
 
 
-def test_blind_opening_registers_grok_executor() -> None:
+def test_blind_opening_rejects_retired_grok_executor() -> None:
     blind = load_module("blind_opening_grok_under_test", BLIND)
 
-    assert blind.executor_path("grok").name == "grok_task.py"
+    try:
+        blind.executor_path("grok")
+    except blind.BlindOpeningError:
+        pass
+    else:
+        raise AssertionError("grok is retired and must not resolve to an executor")
 
 
 def test_blind_opening_runs_claude_on_sonnet_high(monkeypatch, tmp_path: Path) -> None:
@@ -156,7 +161,8 @@ def test_combined_mode_refuses_to_overwrite_existing_ledger(tmp_path: Path) -> N
 
 def test_session_dir_persists_then_resumes_with_reread_lead(monkeypatch, tmp_path: Path) -> None:
     blind = load_module("blind_opening_session_under_test", BLIND)
-    blind.orchestrator.AGENT_MODELS["codex"].update(model="gpt-test", effort="medium")
+    monkeypatch.setitem(blind.orchestrator.AGENT_MODELS["codex"], "model", "gpt-test")
+    monkeypatch.setitem(blind.orchestrator.AGENT_MODELS["codex"], "effort", "medium")
     calls = []
     payload = {"ideas": [], "new_points": []}
 
@@ -184,7 +190,8 @@ def test_session_dir_persists_then_resumes_with_reread_lead(monkeypatch, tmp_pat
 
 def test_without_session_dir_stays_ephemeral(monkeypatch, tmp_path: Path) -> None:
     blind = load_module("blind_opening_ephemeral_under_test", BLIND)
-    blind.orchestrator.AGENT_MODELS["codex"].update(model="gpt-test", effort="medium")
+    monkeypatch.setitem(blind.orchestrator.AGENT_MODELS["codex"], "model", "gpt-test")
+    monkeypatch.setitem(blind.orchestrator.AGENT_MODELS["codex"], "effort", "medium")
     calls = []
     monkeypatch.setattr(
         blind.subprocess,

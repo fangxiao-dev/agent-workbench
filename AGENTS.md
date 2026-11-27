@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This repository is a multi-host agent-workbench for `codex`, `claude`, `grok`, and `zcode`.
+This repository is an agent-workbench for `codex` and `claude`.
 
 ## Source Of Truth
 
@@ -12,7 +12,7 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, `grok`, a
 - Keep changes host-neutral unless a host-specific behavior is required.
 - Preserve existing version numbers by default when updating plugins or other versioned artifacts; change versions (including build/cachebuster suffixes) only when the user explicitly requests it.
 - Unless the user explicitly specifies a remote branch, branch references mean local branches; for example, "merge into `develop`" means the local `develop` branch.
-- Do not mutate user-level host state (`~/.claude`, `~/.codex`, `~/.grok`, `~/.zcode`) unless the task explicitly asks for it.
+- Do not mutate user-level host state (`~/.claude`, `~/.codex`) unless the task explicitly asks for it.
 - Prefer updating skill-link installer logic and docs together so behavior and guidance stay aligned.
 - Preserve non-destructive skill linking: skip conflicts and report clearly.
 - To expose a standalone skill on a host, use `scripts/link_skill.py` (Windows junction / Unix symlink), not whole-tree `skills/` takeover.
@@ -53,4 +53,4 @@ This repository is a multi-host agent-workbench for `codex`, `claude`, `grok`, a
   - or `powershell -ExecutionPolicy Bypass -File tests/install.ps1` (wrapper)
 - If third-party registry logic changed, also run:
   - `powershell -ExecutionPolicy Bypass -File skills/import-third-party-skill/scripts/test-import-third-party-skill.ps1`
-- After plugin manifest or marketplace changes, validate all host manifests (Codex, Claude, ZCode) without installing into user-level host state.
+- After plugin manifest or marketplace changes, validate all host manifests (Codex, Claude) without installing into user-level host state.

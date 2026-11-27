@@ -21,20 +21,17 @@ SCHEMA_PATH = SKILL_DIR / "schemas" / "agent-result.schema.json"
 LEDGER_PARTICIPANT_PROMPT_PATH = SKILL_DIR / "references" / "ledger-participant-prompt.md"
 CALL_CODEX = SKILL_DIR.parent / "call-codex" / "scripts" / "call_codex.py"
 CALL_CLAUDE = SKILL_DIR.parent / "call-claude" / "scripts" / "call_claude.py"
-CALL_GROK = SKILL_DIR.parent / "call-grok" / "scripts" / "grok_task.py"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from discuss_ledger_core import ledger
 
 
-SUPPORTED_AGENTS = {"codex", "claude", "grok"}
+SUPPORTED_AGENTS = {"codex", "claude"}
 # Per-agent model / effort. Codex requires both values from the caller; CLI flags set them per run.
-# Grok model None means call-grok's default.
 AGENT_MODELS: dict[str, dict[str, str | None]] = {
     "codex": {"model": None, "effort": None},
     "claude": {"model": "sonnet", "effort": "high"},
-    "grok": {"model": None, "effort": "low"},
 }
 
 
@@ -73,12 +70,6 @@ def codex_model_args() -> list[str]:
 def claude_model_args() -> list[str]:
     setting = AGENT_MODELS["claude"]
     return ["--model", str(setting["model"]), "--effort", str(setting["effort"])]
-
-
-def grok_model_args() -> list[str]:
-    setting = AGENT_MODELS["grok"]
-    model = ["--model", setting["model"]] if setting["model"] else []
-    return [*model, "--effort", str(setting["effort"])]
 CLAUDE_SYSTEM_PROMPT = "You are a non-interactive discuss-ledger participant. Prefer Chinese unless the task explicitly requires another language. Return only the requested structured result."
 
 
@@ -102,7 +93,7 @@ def parse_agents(value: str) -> list[str]:
     agents = [part.strip().lower() for part in value.split(",") if part.strip()]
     unsupported = [agent for agent in agents if agent not in SUPPORTED_AGENTS]
     if unsupported:
-        raise ValueError(f"unsupported agents: {', '.join(unsupported)}; supported: codex, claude, grok")
+        raise ValueError(f"unsupported agents: {', '.join(unsupported)}; supported: codex, claude")
     if not agents:
         raise ValueError("at least one agent is required")
     return agents
@@ -488,27 +479,6 @@ def run_claude(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
     raise AdapterError("INVALID_JSON", "Claude did not return a valid agent result after repair")
 
 
-def run_grok(prompt: str, root: Path, timeout_s: int) -> dict[str, Any]:
-    text = run_executor(
-        CALL_GROK,
-        [
-            *grok_model_args(),
-            "--tools",
-            "",
-            "--no-subagents",
-            "--overall-timeout-sec",
-            str(timeout_s),
-        ],
-        prompt,
-        root,
-        timeout_s,
-    )
-    result = extract_agent_result_from_text(text)
-    if result is None:
-        raise AdapterError("INVALID_JSON", "Grok did not return a valid agent result")
-    return result
-
-
 def run_fake(agent: str, status: ledger.LedgerStatus) -> dict[str, Any]:
     if agent == "codex" and not status.open_points:
         return {
@@ -551,8 +521,6 @@ def call_agent(
         return run_codex(prompt, root, timeout_s)
     if agent == "claude":
         return run_claude(prompt, root, timeout_s)
-    if agent == "grok":
-        return run_grok(prompt, root, timeout_s)
     raise AdapterError("UNSUPPORTED_AGENT", agent)
 
 
@@ -628,7 +596,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", default=os.getcwd(), help="target project root")
     parser.add_argument("--topic", required=True, help="discussion topic or source document")
     parser.add_argument("--slug", help="ledger slug; defaults to topic-derived slug")
-    parser.add_argument("--agents", default="codex,claude", help="comma list: codex, claude, grok")
+    parser.add_argument("--agents", default="codex,claude", help="comma list: codex, claude")
     parser.add_argument("--max-rounds", type=int, default=5, help="full participant cycles (default 5)")
     parser.add_argument("--adapter-mode", choices=["real", "fake"], default="real")
     parser.add_argument("--fake", action="store_true", help="use deterministic fake adapters")

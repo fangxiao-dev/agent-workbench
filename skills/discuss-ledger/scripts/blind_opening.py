@@ -79,7 +79,6 @@ def executor_path(agent: str) -> Path:
     names = {
         "codex": SKILLS_DIR / "call-codex" / "scripts" / "call_codex.py",
         "claude": SKILLS_DIR / "call-claude" / "scripts" / "call_claude.py",
-        "grok": SKILLS_DIR / "call-grok" / "scripts" / "grok_task.py",
     }
     try:
         return names[agent]
@@ -148,18 +147,7 @@ def call_executor(
         else:
             command.append("--no-session-persistence")
     else:
-        command.extend(
-            [
-                *orchestrator.grok_model_args(),
-                "--tools",
-                "",
-                "--no-subagents",
-                "--rules",
-                "Return only one JSON object matching the caller-provided schema. Do not use Markdown fences or prose.",
-                "--overall-timeout-sec",
-                str(timeout_s),
-            ]
-        )
+        raise BlindOpeningError(f"unsupported agent: {agent}")
     completed = subprocess.run(command, text=True, capture_output=True, timeout=timeout_s + 15, check=False)
     try:
         envelope = json.loads(completed.stdout)
@@ -270,7 +258,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", default=".", help="target project root")
     parser.add_argument("--topic", required=True, help="topic or target document")
     parser.add_argument("--slug", help="result slug; defaults to topic-derived slug")
-    parser.add_argument("--agents", default="codex,claude", help="comma list: codex, claude, grok")
+    parser.add_argument("--agents", default="codex,claude", help="comma list: codex, claude")
     parser.add_argument("--timeout-s", type=int, default=300, help="per participant timeout in seconds")
     parser.add_argument("--output-dir", default=str(Path(tempfile.gettempdir()) / "discuss-ledger"))
     parser.add_argument("--fake", action="store_true", help="use deterministic fake participants")

@@ -43,9 +43,6 @@ def test_guide_uses_direct_cli_for_each_host() -> None:
         "claude plugin list",
         "claude plugin update impl-package@agent-workbench --scope <scope>",
         "claude plugin uninstall impl-package@agent-workbench --scope <scope> --yes",
-        "grok plugin list",
-        "grok plugin update impl-package",
-        "grok plugin install D:\\path\\to\\agent-workbench\\plugin-marketplace\\plugins\\impl-package --trust",
     )
 
     for command in commands:

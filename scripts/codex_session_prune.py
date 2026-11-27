@@ -24,9 +24,9 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Mapping, Protocol, Sequence
 
 try:
-    from scripts.codex_harness_cli import JsonRpcSession, app_server_command, initialize_params
+    from scripts.codex_app_server import JsonRpcSession, app_server_command, initialize_params
 except ModuleNotFoundError:  # pragma: no cover - direct script fallback
-    from codex_harness_cli import JsonRpcSession, app_server_command, initialize_params
+    from codex_app_server import JsonRpcSession, app_server_command, initialize_params
 
 
 UNKNOWN_PROJECT = "(unknown)"

@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 WORKBENCH_ROOT = Path(__file__).resolve().parents[1]
 SKILLS_ROOT = WORKBENCH_ROOT / "skills"
 
-HOST_NAMES = ("agents", "claude", "codex", "grok")
+HOST_NAMES = ("agents", "claude", "codex")
 
 EXIT_OK = 0
 EXIT_USAGE = 1
@@ -62,10 +62,6 @@ def host_skills_dir(host: str, *, home: Optional[Path] = None) -> Path:
     if host not in HOST_NAMES:
         raise ValueError(f"unknown host: {host}")
     base = home if home is not None else Path.home()
-    if host == "grok":
-        grok_home = os.environ.get("GROK_HOME")
-        if grok_home:
-            return abspath_nofollow(Path(grok_home)) / "skills"
     return abspath_nofollow(base / f".{host}" / "skills")
 
 
@@ -420,7 +416,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "skill",
         nargs="?",
-        help="Skill path under workbench skills/ (e.g. call-grok). Omit with --all or --migrate-only.",
+        help="Skill path under workbench skills/ (e.g. git-commit). Omit with --all or --migrate-only.",
     )
     p.add_argument(
         "--host",

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Low-level Codex CLI and App Server v2 JSON-RPC capabilities.
 
-This module intentionally has no Harness policy, Impl-Package, Parent Result,
-worktree, or verifier semantics. It can be imported by small standalone
-callers that need to drive one App Server session per worktree/task.
+This module intentionally has no Impl-Package, Parent Result, worktree, or
+verifier semantics. Standalone callers use it to drive one App Server session.
 """
 
 from __future__ import annotations
