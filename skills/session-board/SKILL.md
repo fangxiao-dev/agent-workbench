@@ -22,7 +22,7 @@ powershell -ExecutionPolicy Bypass -File skills\session-board\scripts\board.ps1 
 - `-Model deepseek-v4-flash`（默认；摘要走 DeepSeek）
 - `-NoSummary`：不开摘要，不向任何模型服务发送会话文本
 - `-Script <session_board.py 路径>`：从别的工作区启动时使用
-- `-AllowOrigin https://<节点名>.ts.net`：经 `tailscale serve` 从手机访问时必带，否则服务端按来源不合法返回 403
+- `-AllowOrigin https://host[:port]`：只在该来源不是本机 tailscale 节点名时才需要传（见下节），否则自动发现
 
 启动后浏览器打开脚本打印的 `http://127.0.0.1:43188`。日志在同目录的 `server.log` / `server.err.log`。
 
@@ -33,19 +33,19 @@ powershell -ExecutionPolicy Bypass -File skills\session-board\scripts\board.ps1 
 ```powershell
 # 一次性：把 443 反代到本机看板（配置存在 tailscaled 里，重启后仍然有效）
 tailscale serve --bg 43188
-# 必须带 --allow-origin 重启看板，否则 ts.net 来源被拒
-powershell -ExecutionPolicy Bypass -File skills\session-board\scripts\board.ps1 -Action restart -AllowOrigin https://xiao.tail1b6e93.ts.net
 ```
 
-手机装 Tailscale、登录同一账号后访问 `https://<节点名>.ts.net`（`tailscale status --json` 里的 `Self.DNSName`）。`tailscale serve` 只对 tailnet 内设备开放；要用 `--accept-routes` 之外的东西请先想清楚。电脑睡眠 / 关机 / 退出登录时远程不可用。
+启动时看板会问本机 tailscale 自己叫什么（`tailscale status --json` 的 `Self.DNSName`），把 `https://<节点名>.ts.net` 加进允许来源，所以不用手填节点名，改名也不用改配置；启动日志会打印 `远程：https://...`。tailscale 没装、没登录或没在跑时跳过这一步（本机访问不受影响），用别的反代地址则显式传 `-AllowOrigin`。
 
-登录自启：`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\SessionBoard.vbs` 会静默跑**运行目录**里的 `board.ps1 -Action start -AllowOrigin https://xiao.tail1b6e93.ts.net`；删掉该文件即取消自启。换机器部署时重建这个文件，节点名按 `Self.DNSName` 改。
+手机装 Tailscale、登录同一账号后访问同一个地址。`tailscale serve` 只对 tailnet 内设备开放。电脑睡眠 / 关机 / 退出登录时远程不可用。
+
+登录自启：`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\SessionBoard.vbs` 会静默跑**运行目录**里的 `board.ps1 -Action start`；删掉该文件即取消自启。
 
 ## 运行目录（服务跑的是哪份代码）
 
 服务不从开发仓库跑，固定跑 `D:\vibe-code-life\SessionBoard\app`：本仓库的 git worktree，分支 `board-live`，跟踪 `origin/main`，只用来运行、不在里面开发。
 
-- 启停都用那份脚本：`powershell -ExecutionPolicy Bypass -File D:\vibe-code-life\SessionBoard\app\skills\session-board\scripts\board.ps1 -Action restart -AllowOrigin https://xiao.tail1b6e93.ts.net`
+- 启停都用那份脚本：`powershell -ExecutionPolicy Bypass -File D:\vibe-code-life\SessionBoard\app\skills\session-board\scripts\board.ps1 -Action restart`
 - 更新用 `-Action update`：代码目录有已跟踪的未提交改动就拒绝，否则 `pull --ff-only` 后自动重启。开发仓库改的代码要先 commit → push 才会被拉到
 - `-Action status` 会打印当前 HEAD 和脏改动数，用来确认跑的是哪一份
 - 开发仓库随便切分支都不影响它（反过来也不生效，这是刻意的）
@@ -74,7 +74,7 @@ python3 -m scripts.session_board --db ~/SessionBoard/board.sqlite3 --port 43188 
 - **页面空白 / 打不开**：先 `-Action status`。进程在但 HTTP 不通，多半是手动从开发仓库启动的——那份工作区被切走后服务读不到 HTML。自启跑的是运行目录，不受影响；切回 `main` 再 `restart` 即可。
 - **端口被占**：`-Action stop` 会按命令行里的 `session_board.py` 找 python 进程，不按端口乱杀；确认只停看板进程。
 - **改了代码没生效**：HTML 每次请求都从磁盘读，改完刷新页面即可；`.py` 改动必须 `restart`。
-- **手机打开是 `{"error":"请求来源不允许"}`**：看板启动时没带 `-AllowOrigin`。`restart`/`update` 会沿用正在跑那份的参数；进程本来就不在跑（比如刚开机且自启失败）时不会，需要显式带上 `-AllowOrigin https://<节点名>.ts.net`。节点名变了也要改。
+- **手机打开是 `{"error":"请求来源不允许"}`**：看板启动时没拿到 ts.net 来源——多半是那一刻 tailscale 没在跑（没登录 / 服务没起），自动发现失败。确认 `tailscale status` 正常后 `-Action restart` 即可；改动过节点名或用了别的反代地址，重启也会重新发现。
 
 ## 开发时再读
 

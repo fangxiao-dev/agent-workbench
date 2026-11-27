@@ -721,6 +721,22 @@ def make_handler(db_path: Path, home: Path, token: str, port: int,
     return Handler
 
 
+def tailscale_origin() -> str | None:
+    """本机 tailscale 的 ts.net 名字，用来免手填 --allow-origin；没装或没登录就返回 None。"""
+    exe = shutil.which("tailscale")
+    if not exe and os.name == "nt":
+        local = Path(r"C:\Program Files\Tailscale\tailscale.exe")
+        exe = str(local) if local.exists() else None
+    if not exe:
+        return None
+    try:
+        out = subprocess.run([exe, "status", "--json"], capture_output=True, text=True, timeout=5)
+        name = json.loads(out.stdout or "{}").get("Self", {}).get("DNSName", "").rstrip(".")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return f"https://{name}" if name else None
+
+
 def main():
     parser = argparse.ArgumentParser(description="本地 Claude session 看板")
     parser.add_argument("--port", type=int, default=43188)
@@ -739,8 +755,8 @@ def main():
     HOST.worker_paths = tuple(args.worker_path)
     if not 1 <= args.port <= 65535:
         parser.error("端口必须在 1 到 65535 之间")
-    allow_origin = args.allow_origin.rstrip("/") if args.allow_origin else None
-    if allow_origin:
+    allow_origin = args.allow_origin.rstrip("/") if args.allow_origin else tailscale_origin()
+    if args.allow_origin:
         parts = urlsplit(allow_origin)
         if parts.scheme not in ("http", "https") or not parts.netloc or parts.path:
             parser.error("--allow-origin 必须是 https://host[:port] 形式的来源")
@@ -777,6 +793,8 @@ def main():
 
     threading.Thread(target=watch, daemon=True).start()
     print(f"Session 看板：http://127.0.0.1:{args.port}", flush=True)
+    if allow_origin:
+        print(f"远程：{allow_origin}", flush=True)
     try:
         server.serve_forever()
     finally:

@@ -572,6 +572,18 @@ def test_server_allows_configured_origin(tmp_path):
         thread.join()
 
 
+def test_tailscale_origin_reads_self_dnsname(monkeypatch):
+    monkeypatch.setattr(board.shutil, 'which', lambda _: 'tailscale')
+
+    class Result:
+        stdout = '{"Self": {"DNSName": "xiao.tail1b6e93.ts.net."}}'
+
+    monkeypatch.setattr(board.subprocess, 'run', lambda *a, **k: Result())
+    assert board.tailscale_origin() == 'https://xiao.tail1b6e93.ts.net'
+    Result.stdout = 'not json'
+    assert board.tailscale_origin() is None
+
+
 def test_server_rejects_foreign_origin_and_host(tmp_path):
     home, source, dbpath = setup_source(tmp_path)
     source.write_bytes(record('user', 'synthetic'))
