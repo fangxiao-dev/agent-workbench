@@ -856,5 +856,20 @@ class CliTest(_PackageMixin, unittest.TestCase):
                 self.assertEqual(stages["closeout"]["status"], "pending")
 
 
+class DiagramTest(unittest.TestCase):
+    def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run([sys.executable, str(SCRIPT), "diagram", *args], capture_output=True,
+                              text=True, encoding="utf-8", env={**os.environ, "PYTHONUTF8": "1"}, check=False)
+
+    def test_transitions_reference_declared_stages_and_skill_is_in_sync(self) -> None:
+        ids = set(engine.PIPELINE_STAGES)
+        for edge in engine.PIPELINE["transitions"]:
+            self.assertLessEqual({edge["src"], edge["dst"]}, ids)
+        skill = SCRIPT.parents[1] / "SKILL.md"
+        result = self._run("--sync-md", str(skill), "--check")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("flowchart TD", self._run().stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
