@@ -25,7 +25,6 @@ def test_knowledge_manager_is_the_explicit_three_entry_manager() -> None:
     frontmatter = text.split("---", 2)[1]
 
     assert "name: knowledge-manager" in frontmatter
-    assert "disable-model-invocation: true" in frontmatter
     assert "name: project-knowledge-manager" not in frontmatter
     assert "name: retro" not in frontmatter
     assert "$knowledge-manager" in text

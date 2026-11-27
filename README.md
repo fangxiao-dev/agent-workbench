@@ -6,7 +6,7 @@
 
 | 组 | 解决什么 | 入口 |
 |----|----------|------|
-| **开发主链** | 从想法到可验收交付的确定性流程 | [kickoff](skills/kickoff/SKILL.md) · [dev-loop](skills/dev-loop/SKILL.md) · [impl-package](plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md) |
+| **开发主链** | 设计骨架 + 执行骨架，串起 impl-package 的 skill | [kickoff](skills/kickoff/SKILL.md) · [dev-loop](skills/dev-loop/SKILL.md) · [impl-package](plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md) |
 | **Session 看板** | 同时看多个本机会话，知道谁在跑、谁卡住 | [session-board](skills/session-board/SKILL.md) |
 | **独立能力 Skills** | 单点问题：调研、设计、审查、验证、专项域 | [能力介绍](docs/capabilities.md) |
 
@@ -16,13 +16,16 @@
 
 ## 开发主链
 
-三者是一套系统的三层，不是三个并列的工具：
+[kickoff](skills/kickoff/SKILL.md) 和 [dev-loop](skills/dev-loop/SKILL.md) 是两个确定性骨架：一个管设计阶段，一个管执行阶段。它们自己不实现业务能力，而是把 impl-package 里的 skill 按阶段串起来，并规定什么时候停、什么时候审、什么时候能进入下一阶段。
 
-- **[kickoff](skills/kickoff/SKILL.md)** 是入口。新需求从研究材料、探索、方向对齐一路推进到“可以开工”，由状态机驱动，每个阶段有输入契约和门禁。
-- **[dev-loop](skills/dev-loop/SKILL.md)** 是执行骨架。普通任务走“写方案 → 审 → 实施 → 复审 → 收尾”的轻量闭环；实施包走基于 `pipeline.json` 的开发 Pipeline，决定谁在什么阶段做什么。
-- **[impl-package](plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md)** 是内部能力和状态层。它提供需求对齐、计划与 Ticket、独立审查、验收、稳定文档回刷，以及贯穿始终的 State / Evidence / Gate 记录。
+| 骨架 | 阶段 | 串联的能力 | 产出 |
+|------|------|------------|------|
+| [kickoff](skills/kickoff/SKILL.md) | 设计 | `req-discover` → `req-align` → `impl-planning` + `plan-review` | 可开工的实施包（Decision / Spec / Plan / Ticket） |
+| [dev-loop](skills/dev-loop/SKILL.md) | 执行 | `dev-with-track` → `do-review` → 最终验证 / Gate → `backfill-stable-docs` | 已验证、已审查、已回刷的交付 |
 
-整体在做一件事：**让每个阶段都有明确产物和下一位接手者能看懂的依据**。对话中断、换会话、换执行者，工作不会退回重来。上层（kickoff / dev-loop）负责流程推进，底层（impl-package）负责把过程留成可核对的事实。
+dev-loop 对普通任务还提供一条轻量闭环：写方案 → 审 → 实施 → 复审 → 收尾；只有实施包才进入上面的 Pipeline。
+
+[impl-package](plugin-marketplace/plugins/impl-package/skills/impl-package/SKILL.md) 是底层能力与状态层：每个 skill 只管单阶段方法，Ticket、Evidence、Gate、Decision/Spec 这些跨阶段事实由它保存。骨架负责推进流程，impl-package 负责让过程留成可核对的事实——对话中断、换会话、换执行者，工作不会退回重来。
 
 常用入口：
 
@@ -35,7 +38,7 @@
 
 ## Session 看板
 
-独立工具，和上面的开发主链**没有关系**：它只做一件事——把本机的 Claude / Desktop 会话收进一个四栏看板（进行中 / 最近 / 已完成 / 暂不关注），支持标签、分组、AI 摘要和 token 用量，方便快速判断哪些会话还在跑、哪些需要处理。数据只留在本机。
+Session 看板把本机的 Claude / Desktop 会话收进一个四栏看板（进行中 / 最近 / 已完成 / 暂不关注），支持标签、分组、AI 摘要和 token 用量，方便快速判断哪些会话还在跑、哪些需要处理。数据只留在本机。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File skills\session-board\scripts\board.ps1 -Action start

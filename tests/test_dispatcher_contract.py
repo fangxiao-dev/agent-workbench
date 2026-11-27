@@ -31,7 +31,7 @@ def test_dispatcher_uses_the_approved_five_step_loop() -> None:
     for marker in (
         "明确交付范围",
         "主动发现可推进工作",
-        "形成具体执行合同",
+        "选择执行者并委派",
         "核实返回并及时审查",
         "限定阻塞范围并继续安排",
     ):
